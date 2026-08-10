@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.15.1 on 2026-08-10.
+' Generated for SR-AGENT-DB-001 v0.16.0 on 2026-08-10.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: 4afb0e50b15365fec34b2e299e97c8fab7c25460.
-' Java baseline: mate-service@2ac26085b30afddb3a12412b76a937ed2139bd5a.
+' Design baseline: 6b6cf11b427dbbf4f6718adc9cec65b702b18d23.
+' Java baseline: mate-service@70d900ef8a40c85fe2364c2034791701c3543c13.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -24,6 +24,10 @@ skinparam classAttributeIconSize 0
 ' - mate-service baseline path and symbols:
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java
 '   AgentDefinitionServiceImpl.listAgents, getAgent, and updateAgent.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentErrorCode.java
+'   AgentErrorCode specific localized error codes.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/ApiExceptionHandler.java
+'   ApiExceptionHandler locale-aware error response mapping.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/validation/ResourceIdRules.java
 '   ResourceIdRules identifier patterns.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/UpdateAgentRequestVO.java
@@ -39,6 +43,7 @@ skinparam classAttributeIconSize 0
 ' Observed behavior: system_prompt columns are nullable TEXT fields.
 ' Observed behavior: Jackson omits null system_prompt component fields.
 ' Observed behavior: only model bindings have write Mapper operations.
+' Observed behavior: error codes and localization keys use identical names.
 ' Observed behavior: each DROP TABLE statement immediately precedes its CREATE.
 ' Design reason: pair each table drop with its create statement to follow the
 ' required deployment-script convention without changing table structure.

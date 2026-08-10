@@ -1,11 +1,11 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.15.1`<br>
+> 版本：`v0.16.0`<br>
 > 日期：`2026-08-10`<br>
 > 状态：目标设计 / Java Service 同步实现<br>
-> 设计仓库分析基线：`4afb0e50b15365fec34b2e299e97c8fab7c25460`<br>
-> Java 实现分析基线：`mate-service@2ac26085b30afddb3a12412b76a937ed2139bd5a`<br>
+> 设计仓库分析基线：`6b6cf11b427dbbf4f6718adc9cec65b702b18d23`<br>
+> Java 实现分析基线：`mate-service@70d900ef8a40c85fe2364c2034791701c3543c13`<br>
 > 输入 JSON 工作区 SHA-256：`b9aa4376e1b0859e698a69a487a2aca9c4bc73911d0f9fa5da89532229f6adf9`
 
 ## 1. 结论
@@ -34,10 +34,13 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 ### 2.2 Java 基线
 
-本次分析的 Java 提交为 `mate-service@2ac26085b30afddb3a12412b76a937ed2139bd5a`，相关路径：
+本次分析的 Java 提交为 `mate-service@70d900ef8a40c85fe2364c2034791701c3543c13`，相关路径：
 
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/ApiExceptionHandler.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentErrorCode.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentServiceException.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/validation/ResourceIdRules.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ListAgentResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/UpdateAgentRequestVO.java`
@@ -45,10 +48,15 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentDefinitionMapper.java`
 - `src/main/resources/mapper/AgentDefinitionMapper.xml`
 - `src/main/resources/application.yml`
+- `src/main/resources/messages.properties`
+- `src/main/resources/messages_en_US.properties`
+- `src/main/resources/messages_zh_CN.properties`
 - `src/main/resources/db/schema.sql`
+- `src/test/java/com/huawei/hicampus/mate/agentdefinition/controller/ApiExceptionHandlerTest.java`
+- `src/test/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentErrorMessageTest.java`
 - `src/test/java/com/huawei/hicampus/mate/agentdefinition/vo/AgentInfoJsonTest.java`
 
-该基线只保留 `listAgents`、`getAgent`、`updateAgent` 三项 Service 能力，实现五表聚合、批量列表查询以及最后写入生效的模型替换。初始化、旧管理查询、旧运行时查询和乐观锁模型替换能力及其 Controller、VO、异常和 Mapper 语句均已删除。模型绑定顺序列和 DTO 属性使用 `model_order` / `modelOrder`；可变 Request VO 和 DTO 使用 Lombok `@Data`；Java 注释和 Javadoc 使用中文。
+该基线只保留 `listAgents`、`getAgent`、`updateAgent` 三项 Service 能力，实现五表聚合、批量列表查询以及最后写入生效的模型替换。初始化、旧管理查询、旧运行时查询和乐观锁模型替换能力及其 Controller、VO、异常和 Mapper 语句均已删除。模型绑定顺序列和 DTO 属性使用 `model_order` / `modelOrder`；可变 Request VO 和 DTO 使用 Lombok `@Data`；Java 注释和 Javadoc 使用中文。异常使用具体的大写 snake_case 错误码，错误码同时作为国际化 key 和 `resCode`。
 
 本文只保存当前 JSON 字段，不增加多租户、历史版本、审计、Outbox、Session 或 Memory 表。Agent 固定版本只存储和展示，不查询不存在的历史表。
 
@@ -161,7 +169,7 @@ GET  /mate-service/v1/agents/{agentId}
 POST /mate-service/v1/agents/{agentId}
 ```
 
-Controller 和 `resCode` / `resMsg` / `result` 统一包装由接入工程实现。Java 仓库不保留旧 Controller，Service 接口严格只有上述三个方法。
+业务 Controller 和成功响应的 `result` 包装由接入工程实现。Java 仓库不保留旧业务 Controller，Service 接口严格只有上述三个方法；`ApiExceptionHandler` 负责将异常适配为 `resCode` / `resMsg`。
 
 ### 6.1 List Agents
 
@@ -205,7 +213,17 @@ Service 结果：
 
 更新采用最后写入生效：事务中锁定 Agent 当前行，删除旧模型绑定，按请求顺序插入新绑定，然后基于锁定行的当前版本将 `version` 递增一次。客户端不提交期望版本；即使模型列表未变化，成功请求仍递增一次版本。
 
-稳定错误码为：`AGENT_INVALID_PARAMETER`、`AGENT_NOT_FOUND`、`AGENT_DATA_CORRUPTION`。
+### 6.4 错误码与国际化
+
+本版将按类别归并的 `AGENT_INVALID_PARAMETER` 和 `AGENT_DATA_CORRUPTION` 替换为具体场景错误码。这是与 mate-service 错误模型对齐的架构调整，不改变 Agent 业务数据结构。
+
+- 请求解析与校验：`AGENT_REQUEST_BODY_INVALID`、`AGENT_REQUEST_VALIDATION_FAILED`、`AGENT_PAGE_INDEX_INVALID`、`AGENT_PAGE_SIZE_INVALID`、`AGENT_NAME_TOO_LONG`、`AGENT_DISPLAY_NAME_TOO_LONG`、`AGENT_VERSION_INVALID`、`AGENT_ID_REQUIRED`、`AGENT_ID_INVALID`、`AGENT_BINDING_MODELS_EMPTY`、`AGENT_MODEL_ID_REQUIRED`、`AGENT_MODEL_ID_INVALID`。
+- 业务规则：`AGENT_ID_MISMATCH`、`AGENT_MODEL_DUPLICATED`、`AGENT_NOT_FOUND`。
+- 存储数据完整性：`AGENT_VERSION_MISSING`、`AGENT_VERSION_UPDATE_FAILED`、`AGENT_MODEL_BINDING_MISSING`、`AGENT_PERMISSION_INVALID`、`AGENT_STORED_AGENT_ID_INVALID`、`AGENT_STORED_MODEL_ID_INVALID`、`AGENT_STORED_TOOL_ID_INVALID`、`AGENT_STORED_SKILL_ID_INVALID`、`AGENT_STORED_BOUND_AGENT_ID_INVALID`、`AGENT_USE_CASES_NOT_ARRAY`、`AGENT_USE_CASE_INVALID`、`AGENT_USE_CASES_PARSE_FAILED`。
+
+错误码枚举名、国际化资源 key 和响应 `resCode` 必须使用同一个大写 snake_case 值，例如 `AGENT_MODEL_DUPLICATED`。Service 异常只携带错误码和消息参数；`ApiExceptionHandler` 根据当前 Locale 解析 `resMsg`。默认与 `en_US` 资源使用英文，`zh_CN` 资源使用中文，且关闭系统 Locale 回退。
+
+Request VO 的 Jakarta Validation `message` 直接引用 `{AGENT_...}` 资源 key。参数和业务规则错误返回 HTTP 400，`AGENT_NOT_FOUND` 返回 HTTP 404，存储数据完整性错误返回 HTTP 500 并记录完整异常日志。
 
 ## 7. GaussDB 与事务
 
@@ -245,6 +263,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.16.0` | 2026-08-10 | 错误码拆分为具体场景；枚举名、国际化 key 和 `resCode` 统一为大写 snake_case；增加中英文消息和 Locale 适配 |
 | `v0.15.1` | 2026-08-10 | 列表 Service 返回类型由 `ListAgentResultResponseVO` 简化为 `ListAgentResponseVO`，避免 `ResultResponse` 语义重复 |
 | `v0.15.0` | 2026-08-07 | System Prompt 八个细分字段改为可空软约束；删除数据库非空和非空白硬约束；响应省略空字段并由管理前端动态展示 |
 | `v0.14.0` | 2026-08-06 | Service 严格收敛为列表、详情、更新三个方法；删除旧 Controller、VO、异常和不可达 Mapper 语句；Model、Tool、Skill ID 增加前缀加 32 位 UUID 校验；Java 与 SQL 代码注释改为中文 |
