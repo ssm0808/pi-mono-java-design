@@ -1,11 +1,11 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.15.0`<br>
-> 日期：`2026-08-07`<br>
+> 版本：`v0.15.1`<br>
+> 日期：`2026-08-10`<br>
 > 状态：目标设计 / Java Service 同步实现<br>
 > 设计仓库分析基线：`4afb0e50b15365fec34b2e299e97c8fab7c25460`<br>
-> Java 实现分析基线：`mate-service@737bccfbe825ad6db025e90f5577fdf172bf975b`<br>
+> Java 实现分析基线：`mate-service@2ac26085b30afddb3a12412b76a937ed2139bd5a`<br>
 > 输入 JSON 工作区 SHA-256：`b9aa4376e1b0859e698a69a487a2aca9c4bc73911d0f9fa5da89532229f6adf9`
 
 ## 1. 结论
@@ -34,11 +34,12 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 ### 2.2 Java 基线
 
-本次分析的 Java 提交为 `mate-service@737bccfbe825ad6db025e90f5577fdf172bf975b`，相关路径：
+本次分析的 Java 提交为 `mate-service@2ac26085b30afddb3a12412b76a937ed2139bd5a`，相关路径：
 
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/validation/ResourceIdRules.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ListAgentResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/UpdateAgentRequestVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/SystemPromptResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentDefinitionMapper.java`
@@ -147,7 +148,7 @@ Skill ID 必须符合 `^skill-[0-9a-fA-F]{32}$`；当前三接口没有 Skill �
 Java Service 提供：
 
 ```text
-listAgents(ListAgentRequestVO) -> ListAgentResultResponseVO
+listAgents(ListAgentRequestVO) -> ListAgentResponseVO
 getAgent(String agentId) -> AgentInfoResponseVO
 updateAgent(String agentId, UpdateAgentRequestVO) -> void
 ```
@@ -244,6 +245,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.15.1` | 2026-08-10 | 列表 Service 返回类型由 `ListAgentResultResponseVO` 简化为 `ListAgentResponseVO`，避免 `ResultResponse` 语义重复 |
 | `v0.15.0` | 2026-08-07 | System Prompt 八个细分字段改为可空软约束；删除数据库非空和非空白硬约束；响应省略空字段并由管理前端动态展示 |
 | `v0.14.0` | 2026-08-06 | Service 严格收敛为列表、详情、更新三个方法；删除旧 Controller、VO、异常和不可达 Mapper 语句；Model、Tool、Skill ID 增加前缀加 32 位 UUID 校验；Java 与 SQL 代码注释改为中文 |
 | `v0.13.0` | 2026-08-06 | Agent ID 统一约束为 `agent-` 加 32 位十六进制 UUID；请求 VO、Controller 和 Service 使用 `@AgentId`；可变 Request VO 和 DTO 统一使用 `@Data` |

@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.15.0 on 2026-08-07.
+' Generated for SR-AGENT-DB-001 v0.15.1 on 2026-08-10.
 ' Run from this directory: plantuml -tsvg diagram.puml
 ' Design baseline: 4afb0e50b15365fec34b2e299e97c8fab7c25460.
-' Java baseline: mate-service@737bccfbe825ad6db025e90f5577fdf172bf975b.
+' Java baseline: mate-service@2ac26085b30afddb3a12412b76a937ed2139bd5a.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
