@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.16.0 on 2026-08-10.
+' Generated for SR-AGENT-DB-001 v0.16.1 on 2026-08-10.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: 6b6cf11b427dbbf4f6718adc9cec65b702b18d23.
-' Java baseline: mate-service@70d900ef8a40c85fe2364c2034791701c3543c13.
+' Design baseline: 9c022124653e08eac93a7387f07a7abaa3fa49e0.
+' Java baseline: mate-service@b09def8fdbd3a35144f9da91059ecd4132232cae.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -28,6 +28,8 @@ skinparam classAttributeIconSize 0
 '   AgentErrorCode specific localized error codes.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/ApiExceptionHandler.java
 '   ApiExceptionHandler locale-aware error response mapping.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/AgentInfoResponseVO.java
+'   AgentInfoResponseVO root id response field.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/validation/ResourceIdRules.java
 '   ResourceIdRules identifier patterns.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/UpdateAgentRequestVO.java
@@ -44,6 +46,7 @@ skinparam classAttributeIconSize 0
 ' Observed behavior: Jackson omits null system_prompt component fields.
 ' Observed behavior: only model bindings have write Mapper operations.
 ' Observed behavior: error codes and localization keys use identical names.
+' Observed behavior: AgentInfo uses root id; nested Agent bindings use agentId.
 ' Observed behavior: each DROP TABLE statement immediately precedes its CREATE.
 ' Design reason: pair each table drop with its create statement to follow the
 ' required deployment-script convention without changing table structure.

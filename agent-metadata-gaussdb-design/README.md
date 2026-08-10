@@ -1,11 +1,11 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.16.0`<br>
+> 版本：`v0.16.1`<br>
 > 日期：`2026-08-10`<br>
 > 状态：目标设计 / Java Service 同步实现<br>
-> 设计仓库分析基线：`6b6cf11b427dbbf4f6718adc9cec65b702b18d23`<br>
-> Java 实现分析基线：`mate-service@70d900ef8a40c85fe2364c2034791701c3543c13`<br>
+> 设计仓库分析基线：`9c022124653e08eac93a7387f07a7abaa3fa49e0`<br>
+> Java 实现分析基线：`mate-service@b09def8fdbd3a35144f9da91059ecd4132232cae`<br>
 > 输入 JSON 工作区 SHA-256：`b9aa4376e1b0859e698a69a487a2aca9c4bc73911d0f9fa5da89532229f6adf9`
 
 ## 1. 结论
@@ -34,7 +34,7 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 ### 2.2 Java 基线
 
-本次分析的 Java 提交为 `mate-service@70d900ef8a40c85fe2364c2034791701c3543c13`，相关路径：
+本次分析的 Java 提交为 `mate-service@b09def8fdbd3a35144f9da91059ecd4132232cae`，相关路径：
 
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`
@@ -42,6 +42,7 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentErrorCode.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentServiceException.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/validation/ResourceIdRules.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/AgentInfoResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ListAgentResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/UpdateAgentRequestVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/SystemPromptResponseVO.java`
@@ -195,7 +196,7 @@ Service 结果：
 
 ### 6.2 Get Agent
 
-`AgentInfo` 展示完整 Agent 元数据，顶层使用 `agentId`，其余字段包括 `bindingModels`、`systemPrompt`、`useCases`、`bindingTools`、`bindingSkills`、`bindingAgents`、`permission` 和时间字段。新接口及嵌套对象固定使用 camelCase。
+`AgentInfo` 展示完整 Agent 元数据，顶层主键与元数据保持为 `id`，其余字段包括 `bindingModels`、`systemPrompt`、`useCases`、`bindingTools`、`bindingSkills`、`bindingAgents`、`permission` 和时间字段。`bindingAgents` 元素中的 `agent_id` 按 camelCase 转换为 `agentId`；路径参数和更新请求中的 `agentId` 也保持不变。
 
 ### 6.3 Update Agent
 
@@ -263,6 +264,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.16.1` | 2026-08-10 | `AgentInfoResponseVO` 顶层主键由 `agentId` 改为与元数据一致的 `id`；嵌套 Agent 绑定仍使用 `agentId` |
 | `v0.16.0` | 2026-08-10 | 错误码拆分为具体场景；枚举名、国际化 key 和 `resCode` 统一为大写 snake_case；增加中英文消息和 Locale 适配 |
 | `v0.15.1` | 2026-08-10 | 列表 Service 返回类型由 `ListAgentResultResponseVO` 简化为 `ListAgentResponseVO`，避免 `ResultResponse` 语义重复 |
 | `v0.15.0` | 2026-08-07 | System Prompt 八个细分字段改为可空软约束；删除数据库非空和非空白硬约束；响应省略空字段并由管理前端动态展示 |
