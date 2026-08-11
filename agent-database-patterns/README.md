@@ -1,7 +1,7 @@
 # 主流 Agent 数据库模式拆解与 pi-mono Java 采纳边界
 
 > 文档编号：`SR-DB-REF-001`
-> 版本：`v0.3.0`
+> 版本：`v0.3.1`
 > 日期：`2026-08-11`
 > 状态：参考设计
 > pi 源码基线：[`f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee`](https://github.com/badlogic/pi-mono/tree/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee)
@@ -352,6 +352,7 @@ PlantUML：[查看源码](./diagram.puml#L75)
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.3.1` | 2026-08-11 | 优化当前 Memory SR 采纳边界图：与 SR-MEM-001 v0.14.1 统一四表颜色语义，将当前逻辑关系与未来主题依赖分别表示为实线和虚线；不改变采纳边界 |
 | `v0.3.0` | 2026-08-11 | pi 基线更新至 `f0deb8d`；对齐 SR-MEM-001 v0.14四表设计；删除当前 SR的 Branch Cache、Label和通用 Branch能力；补充最近用户消息编辑、active path读取、内部审计历史、双口径汇总及 expected leaf/parent并发栅栏 |
 | `v0.2.0` | 2026-07-30 | 更新 pi 基线；纳入新 harness 和 SQLite 存储事实；当前 Memory SR 改为单 session 作用域、持久化 `leaf`、`retainedTail` 和独立 session state；移除当前 SR 的多租户及独立 leaf event 采纳结论 |
 | `v0.1.0` | 2026-07-20 | 拆解 OpenAI Agents SDK、LangGraph、Google ADK、Microsoft Agent Framework、AWS AgentCore、Anthropic Managed Agents 和 Letta 的公开数据库/持久化模式；建立五类数据平面与当前 pi Memory SR 采纳边界 |

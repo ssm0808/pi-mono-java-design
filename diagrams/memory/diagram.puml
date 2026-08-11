@@ -1,13 +1,24 @@
-' Generated for SR-MEM-001 v0.14 on 2026-08-11.
+' Generated for SR-MEM-001 v0.14.1 on 2026-08-11.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design repository baseline: e689e9e1b77a90190e665744d55c5df8e3b4132f.
+' Design repository baseline: 63c08ce77ab2dc102ecd141df81337857fb07cbb.
 ' Pi source baseline: f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee.
 
 @startuml memory-architecture
 !pragma layout smetana
-title CampusClaw Four-Table GaussDB Session Storage
+title CampusClaw Four-Table Session Architecture
+top to bottom direction
+
 skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam packageStyle rectangle
 skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam ArrowColor #53657D
+skinparam ArrowThickness 1.2
+skinparam PackageBorderColor #7A8699
+skinparam NoteBorderColor #B58B00
+skinparam NoteBackgroundColor #FFF8D9
 
 ' Source evidence:
 ' - badlogic/pi-mono@f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee
@@ -22,66 +33,79 @@ skinparam componentStyle rectangle
 ' Architecture change: centralized GaussDB keeps four tables and reconstructs
 ' the active path from parent_id without branch cache tables.
 ' Concurrency hardening: expected leaf and parent fences protect multi-Pod writes.
-' Design reason: preserve immutable edit history without a general branch UI.
+' Design reason: group command, query, and release flows into readable layers.
 
 actor "Agent Runtime" as runtime
 actor "Internal Auditor" as auditor
 actor "Database Release Platform" as release
 
-package "Java Session Layer" {
-  [Memory Session Application Service] as app
-  [Session Repository] as repository
-  [Session Storage] as storage
-  [Context Projector] as projector
+runtime -[hidden]right- auditor
+
+package "Java Session Layer" as javaLayer {
+  component "Memory Session\nApplication Service" as app #DCEBFF
+  component "Session Repository\nLifecycle" as repository #EEF3F8
+  component "Session Storage\nFenced commands" as storage #EEF3F8
+  component "Context Projector\nActive path to prompt" as projector #E4F4E8
+
+  repository -[hidden]right- storage
+  storage -[hidden]right- projector
+  app --> repository : session lifecycle
+  app --> storage : append and edit
+  app --> projector : project context
 }
 
-package "GaussDB Persistence Adapter" {
-  [Spring Transaction Manager] as tx
-  [MyBatis Session Mappers] as mappers
-  [Parent Chain Reader] as pathReader
+package "GaussDB Persistence Adapter" as adapter {
+  component "MyBatis Session\nMappers" as mappers #EEF3F8
+  component "Spring Transaction\nManager" as tx #FFE9CC
+  component "Parent Chain\nReader" as pathReader #E4F4E8
+
+  mappers -[hidden]right- tx
+  tx -[hidden]right- pathReader
+  tx --> mappers : atomic DML
 }
 
-database "Centralized GaussDB\nFour Session tables" as db
+database "Centralized GaussDB\nFour Session tables" as db #E8EEF7
 
-runtime --> app : create append edit read fork
-app --> repository : session lifecycle
-app --> storage : entry and path operations
+runtime --> app : commands and active reads
+auditor --> app : authorized audit page
+repository --> mappers : create open list fork delete
 storage --> tx : fenced write transaction
-tx --> mappers
-mappers --> db
-storage --> pathReader : active leaf
+app --> pathReader : load and validate active path
+mappers --> db : fixed SQL
 pathReader --> db : recursive parent chain
-pathReader --> projector : validated active path
-projector --> app : context and active summary
-auditor --> app : authorized all-entry page
-release --> db : apply DDL before rollout
+release --> db : versioned DDL before rollout
 
-note right of db
-t_sessions owns the active leaf.
-t_session_entries owns immutable parent links.
-t_session_sequences allocates per-session order.
-t_session_materialized stores activePath
-and lifetimeUsage summaries.
-There are no branch cache or label tables.
+note left of app
+One visible active path.
+Only its latest user message is editable.
+Old subtrees remain immutable and audit-only.
 end note
 
-note bottom of app
-Only the latest user message on the active path
-can be edited. The old subtree remains immutable.
-Ordinary reads expose only the active path.
-end note
+note right of db #EAF6ED
+t_sessions: active leaf
+t_session_entries: immutable parent links
+t_session_sequences: per-session order
+t_session_materialized: activePath + lifetimeUsage
 
-note bottom of release
-AgentService has DML permission only.
-Schema history and locks are outside
-the Session application schema.
+No branch cache or label tables.
 end note
 
 @enduml
 
 @startuml memory-write-transaction
-title CampusClaw Four-Table Session Write Transactions
+!pragma layout smetana
+title Fenced Append and Edit Transaction Protocol
+top to bottom direction
+
 skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam defaultTextAlignment left
+skinparam ArrowColor #53657D
+skinparam ArrowThickness 1.2
+skinparam PackageBorderColor #7A8699
+skinparam NoteBorderColor #B58B00
+skinparam NoteBackgroundColor #FFF8D9
 
 ' Source evidence:
 ' - badlogic/pi-mono@f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee
@@ -90,87 +114,70 @@ skinparam backgroundColor #FFFFFF
 ' - packages/storage/sqlite-node/src/sqlite/storage/session-materialized.ts
 ' Observed behavior: pi serializes writes in one process and updates seven
 ' categories of Session state in one SQLite transaction.
-' Target-only edit rule: a new user entry replaces the latest active user entry
-' by sharing its parent and becoming the new active leaf.
+' Target-only edit rule: a new user entry shares the old user entry parent and
+' becomes the new active leaf while the old subtree stays immutable.
 ' Architecture change: branch caches and label projection writes are removed.
 ' Concurrency hardening: lock session before sequence and require expected leaf.
-' Design reason: reject stale Runs while retaining immutable old-path evidence.
+' Design reason: show the common fence once and compare only divergent mutations.
 
-actor "Client or Runtime" as caller
-participant "Session Service" as service
-participant "Run Coordinator" as run
-database "Centralized GaussDB" as db
+rectangle "WRITE REQUEST\nAppendEntryDTO or EditLastUserMessageDTO" as request #DCEBFF
 
-alt create session
-  caller -> service : createSession
-  service -> db : BEGIN
-  service -> db : insert t_sessions with null active leaf
-  service -> db : insert t_session_sequences next_seq=1
-  service -> db : insert empty t_session_materialized
-  service -> db : COMMIT
-  service --> caller : session
-else append entry
-  caller -> service : append(expectedParent, entry)
-  service -> db : BEGIN
-  service -> db : lock t_sessions row
-  service -> service : require active leaf equals expectedParent
-  service -> service : reject leaf, branch_summary, and label
-  service -> db : lock t_session_sequences row
-  service -> db : insert t_session_entries
-  service -> db : advance next_seq
-  service -> db : update activePath and lifetimeUsage
-  service -> db : update t_sessions active leaf
-  service -> db : COMMIT
-  service --> caller : appended entry
-else edit latest user message
-  caller -> service : edit(target, expectedLeaf, new message)
-  service -> run : best-effort cancel active Run
-  service -> db : BEGIN
-  service -> db : lock t_sessions row
-  service -> service : require active leaf equals expectedLeaf
-  service -> db : read and validate active parent chain
-  service -> service : require target is nearest user message
-  service -> db : lock t_session_sequences row
-  service -> db : insert new user entry with target parent
-  service -> db : advance next_seq
-  service -> db : rebuild activePath; keep lifetimeUsage
-  service -> db : update t_sessions active leaf
-  service -> db : COMMIT
-  service --> caller : new active user entry
-else delete session
-  caller -> service : deleteSession
-  service -> db : BEGIN
-  service -> db : delete t_session_entries
-  service -> db : delete t_session_materialized
-  service -> db : delete t_session_sequences
-  service -> db : delete t_sessions
-  service -> db : COMMIT
-  service --> caller : deleted
-end
+package "One GaussDB Transaction" as transaction {
+  rectangle "1  SESSION FENCE\nBEGIN\nLock t_sessions FOR UPDATE\nCheck expectedParentEntryId or expectedLeafId\nReject stale state" as fence #FFE9CC
 
-note over service,db
-The lock order is always session row then sequence row.
-Any statement failure rolls back the complete operation.
-A stale parent or leaf never selects a newer path silently.
+  rectangle "2  SEQUENCE ALLOCATION\nLock t_session_sequences FOR UPDATE\nAllocate the next entry_seq" as sequence #FFE9CC
+
+  rectangle "3A  APPEND MUTATION\nReject leaf, branch_summary, and label\nInsert entry with parent = expected parent\nIncrement activePath and usage as applicable" as append #E4F4E8
+
+  rectangle "3B  EDIT MUTATION\nValidate the complete active parent chain\nRequire target = nearest user message\nInsert sibling with parent = target.parent_id\nRebuild activePath; keep lifetimeUsage" as edit #EEE8FF
+
+  rectangle "4  ATOMIC COMMIT\nAdvance next_seq\nPersist materialized payload\nMove active_leaf_id to the new entry\nCOMMIT" as commit #DCEBFF
+
+  fence --> sequence
+  sequence --> append : append
+  sequence --> edit : edit
+  append --> commit
+  edit --> commit
+  append -[hidden]right- edit
+}
+
+rectangle "FAIL CLOSED\nAny validation or DML failure rolls back the entire transaction.\nSequence, projection, and active leaf remain unchanged." as rollback #FDE8E7
+
+request --> fence
+rollback .up. transaction
+
+note left of edit
+Before BEGIN, edit requests make a
+best-effort cancellation of the old Run.
+The database fence remains authoritative.
 end note
 
-note over service,run
-Run cancellation is best effort.
-The expected-parent database fence is authoritative.
-External tool side effects are not rolled back by an edit.
+note right of commit
+Lock order is always:
+1. t_sessions
+2. t_session_sequences
+
+External Tool side effects are not rolled back.
 end note
 
 @enduml
 
 @startuml memory-data-model
-title CampusClaw Four-Table GaussDB Session Data Model
+!pragma layout smetana
+title CampusClaw Four-Table Session Data Model
 top to bottom direction
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
+skinparam roundcorner 8
 skinparam classAttributeIconSize 0
-skinparam classBorderColor #53657D
-skinparam classBackgroundColor #F7F9FC
+skinparam classBorderColor #697789
+skinparam classFontColor #1F2937
+skinparam defaultTextAlignment left
+skinparam ArrowColor #53657D
+skinparam ArrowThickness 1.2
+skinparam NoteBorderColor #B58B00
+skinparam NoteBackgroundColor #FFF8D9
 
 ' Source evidence:
 ' - badlogic/pi-mono@f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee
@@ -182,10 +189,9 @@ skinparam classBackgroundColor #F7F9FC
 ' entry materialized labels, generic moveTo, and arbitrary branch queries.
 ' Target adaptation: retain parent_id and active_leaf_id for immutable edits.
 ' Type adaptation: bounded VARCHAR, BIGINT, TIMESTAMPTZ(3), and JSONB.
-' Design reason: four tables are sufficient for one visible active path while
-' retaining old edited subtrees for authorized audit reads.
+' Design reason: use a two-by-two table grid instead of a 2331-pixel row.
 
-class "t_sessions" as sessions <<table>> {
+entity "t_sessions" as sessions <<session head>> #DCEBFF {
   id : varchar(128) [PK]
   --
   created_at : timestamptz(3)
@@ -195,7 +201,13 @@ class "t_sessions" as sessions <<table>> {
   active_leaf_id : varchar(128) [nullable]
 }
 
-class "t_session_entries" as entries <<immutable log>> {
+entity "t_session_sequences" as sequences <<allocator>> #FFE9CC {
+  session_id : varchar(128) [PK]
+  --
+  next_seq : bigint
+}
+
+entity "t_session_entries" as entries <<immutable log>> #E4F4E8 {
   session_id : varchar(128) [PK]
   id : varchar(128) [PK]
   --
@@ -206,13 +218,7 @@ class "t_session_entries" as entries <<immutable log>> {
   payload : jsonb
 }
 
-class "t_session_sequences" as sequences <<allocator>> {
-  session_id : varchar(128) [PK]
-  --
-  next_seq : bigint
-}
-
-class "t_session_materialized" as materialized <<projection>> {
+entity "t_session_materialized" as materialized <<projection>> #EEE8FF {
   session_id : varchar(128) [PK]
   --
   payload : jsonb
@@ -220,36 +226,49 @@ class "t_session_materialized" as materialized <<projection>> {
   lifetimeUsage : committed usage total
 }
 
-sessions .. entries : logical session ownership
-sessions .. entries : active_leaf_id selects current tip
-entries .. entries : parent_id preserves immutable paths
-sessions .. sequences : logical sequence ownership
-sessions .. materialized : logical projection ownership
+sessions -[hidden]right- sequences
+entries -[hidden]right- materialized
+sessions -[hidden]down- entries
+sequences -[hidden]down- materialized
 
-note right of entries
+sessions ..> entries : owns immutable entries
+sessions ..> entries : active_leaf_id selects tip
+sessions ..> sequences : one allocator
+sessions ..> materialized : one projection
+
+note bottom of entries #EAF6ED
+parent_id is the path fact.
 entry_seq is append order, not path membership.
-Ordinary reads follow parent_id from active_leaf_id.
-An edit inserts a sibling of the replaced user entry.
-Old descendants remain available to internal audit only.
+An edit inserts a sibling; old descendants stay audit-only.
 end note
 
-note right of materialized
+note bottom of materialized #F5F0FF
 activePath is rebuilt after edit and fork.
 lifetimeUsage never decreases when the active path changes.
-The projection can be rebuilt from committed entries.
+Both values are rebuildable from committed entries.
 end note
 
 note bottom of sessions
-There are no physical foreign keys in this version.
-Service transactions validate the active leaf,
-parent ownership, and sequence row.
+Dashed lines are logical relations, not physical foreign keys.
+Service transactions validate ownership, leaf, and sequence state.
 end note
 
 @enduml
 
 @startuml memory-context-rebuild
-title CampusClaw Active-Path Context Rebuild Without Branch Cache
+!pragma layout smetana
+title Active-Path Context Rebuild Without Branch Cache
+top to bottom direction
+
 skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam defaultTextAlignment center
+skinparam ArrowColor #53657D
+skinparam ArrowThickness 1.2
+skinparam PackageBorderColor #7A8699
+skinparam NoteBorderColor #B58B00
+skinparam NoteBackgroundColor #FFF8D9
 
 ' Source evidence:
 ' - badlogic/pi-mono@f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee
@@ -264,52 +283,53 @@ skinparam backgroundColor #FFFFFF
 ' and never stores or repairs a branch cache.
 ' Product constraint: ordinary paging and Context use only the active path;
 ' all-entry paging is an authorized internal audit operation.
-' Design reason: simplify writes for a product with one visible active path.
+' Design reason: separate active-path reconstruction from its three consumers.
 
-actor "Agent Runtime or UI" as caller
-participant "Session Service" as service
-participant "Parent Chain Reader" as reader
-database "Centralized GaussDB" as db
-participant "Context Projector" as projector
-actor "Internal Auditor" as auditor
+database "t_sessions\nactive_leaf_id" as sessions #DCEBFF
+database "t_session_entries\nparent_id + entry_seq" as entries #E4F4E8
 
-caller -> service : loadContext or pageEntries
-service -> db : read t_sessions.active_leaf_id
-db --> service : current leaf
-service -> reader : read active path
-reader -> db : recursive parent_id query
-db --> reader : leaf-to-root rows
-reader -> reader : validate same session and complete parents
-reader -> reader : reject cycles and excessive depth
-reader -> reader : reverse to entry_seq order
-reader --> service : validated active path
+sessions -[hidden]right- entries
 
-alt context request
-  service -> projector : active path
-  projector -> projector : trim at compaction boundary
-  projector -> projector : derive model, thinking, and tools
-  projector -> projector : project context messages
-  projector --> service : context snapshot
-  service --> caller : context
-else ordinary page request
-  service --> caller : active-path cursor page
-end
+rectangle "RECURSIVE CTE\nFollow parent_id\nleaf to root" as recursive #EEF3F8
+rectangle "PATH INTEGRITY GUARD\nSame session\nComplete parents\nNo repeated IDs or cycles\nConfigured depth limit" as guard #FFE9CC
+artifact "VALIDATED ACTIVE PATH\nroot to leaf" as path #E4F4E8
 
-auditor -> service : pageAllEntriesForAudit
-service -> db : query all entries by entry_seq
-db --> service : active and old-path entries
-service --> auditor : authorized audit page
+package "Ordinary Product Reads" as ordinary {
+  rectangle "ACTIVE-PATH PAGE\nCursor page for UI" as page #DCEBFF
+  rectangle "CONTEXT PROJECTOR\nCompaction trim\nModel + thinking + tools\nMessage projection" as projector #EEE8FF
+  rectangle "MODEL CONTEXT" as context #E4F4E8
 
-note over reader,db
-Missing parents, cross-session links, repeated IDs,
-cycles, and excessive depth are corruption errors.
-The service never falls back to all-entry ordering.
+  projector --> context
+  page -[hidden]right- projector
+}
+
+package "Internal Audit Only" as internal {
+  rectangle "ALL APPEND LOG ENTRIES\nORDER BY entry_seq" as allEntries #EEF1F5
+  rectangle "AUTHORIZED AUDIT PAGE" as audit #EEF1F5
+  allEntries --> audit
+}
+
+ordinary -[hidden]right- internal
+
+sessions --> recursive : current leaf
+entries --> recursive : parent lookup
+recursive --> guard : leaf-to-root rows
+guard --> path : reverse after validation
+path --> page
+path --> projector
+entries ..> allEntries : independent query
+
+note bottom of guard
+Missing parent, cross-session link, repeated ID,
+cycle, or excessive depth fails closed.
+There is no fallback to all-entry ordering.
 end note
 
-note over service,auditor
-Audit history is not model context and is not returned
-by ordinary UI endpoints. Imported historical leaf,
-branch_summary, and label entries remain audit-only.
+note bottom of audit #F3F4F6
+Audit history is never model context
+and is not returned by ordinary UI endpoints.
+Imported leaf, branch_summary, and label
+entries remain audit-only.
 end note
 
 @enduml

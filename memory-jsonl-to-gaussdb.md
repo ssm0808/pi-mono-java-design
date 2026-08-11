@@ -1,11 +1,11 @@
 # CampusClaw Java 四表 GaussDB Session 事件存储 SR 设计
 
 > 文档编号：SR-MEM-001<br>
-> 版本：v0.14<br>
+> 版本：v0.14.1<br>
 > 日期：2026-08-11<br>
 > 状态：设计评审稿<br>
 > pi 源码基线：[`f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee`](https://github.com/badlogic/pi-mono/tree/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee)<br>
-> 设计仓库分析基线：`e689e9e1b77a90190e665744d55c5df8e3b4132f`<br>
+> 设计仓库分析基线：`63c08ce77ab2dc102ecd141df81337857fb07cbb`<br>
 > CampusClaw Java 源码基线：无；本文 Java、GaussDB 和数据库发布机制均为 target-only design<br>
 > 数据库约束：集中式 GaussDB<br>
 > JDBC 约束：openGauss JDBC `6.0.0-htrunks.csi.gaussdb_kernel.opengaussjdbc.r1`
@@ -317,7 +317,7 @@ newUserMessage
 
 ![CampusClaw 四表 Session 写事务](./diagrams/memory/memory-write-transaction.svg)
 
-[查看 PlantUML 源码](./diagrams/memory/diagram.puml#L82)
+[查看 PlantUML 源码](./diagrams/memory/diagram.puml#L95)
 
 ### 6.1 Create
 
@@ -389,7 +389,7 @@ fork 只读取来源 Session 当前活动路径，按原顺序写入新 Session�
 
 ![CampusClaw 无缓存 Context 重建](./diagrams/memory/memory-context-rebuild.svg)
 
-[查看 PlantUML 源码](./diagrams/memory/diagram.puml#L250)
+[查看 PlantUML 源码](./diagrams/memory/diagram.puml#L258)
 
 ### 7.1 当前活动路径
 
@@ -538,6 +538,7 @@ plantuml -tsvg diagram.puml
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v0.14.1 | 2026-08-11 | 优化四张图的可视化表达：统一颜色语义，将写事务和 Context 长序列图收敛为栅栏流程与分层数据流，将数据模型调整为紧凑的四表布局；不改变 Schema、接口、事务和错误语义 |
 | v0.14 | 2026-08-11 | Session Schema从七表收敛为四表；删除 Branch Cache、Entry Label投影和通用 Branch能力；新增最近用户消息编辑、expected leaf/parent写入栅栏、active path分页、内部全历史审计分页，以及 activePath/lifetimeUsage双口径汇总 |
 | v0.13 | 2026-08-06 | 目标表采用 `t_` 前缀；不映射 pi migrations；数据库发布平台成为唯一升级权威；目标 DDL合并为最终状态 |
 | v0.12 | 2026-08-03 | 调整数据库中文列注释表述，不改变 DDL结构 |
