@@ -73,8 +73,9 @@ Event --> Memory : extract durable knowledge
 @enduml
 
 @startuml pi-memory-adoption-boundary
+' Current SR adoption boundary updated for SR-MEM-001 v0.14 on 2026-08-11.
 !pragma layout smetana
-title Pi Memory SR Adoption Boundary
+title CampusClaw Memory SR Adoption Boundary
 left to right direction
 
 skinparam backgroundColor #FFFFFF
@@ -83,25 +84,23 @@ skinparam roundcorner 8
 skinparam componentStyle rectangle
 skinparam ArrowColor #53657D
 
-' Source evidence: badlogic/pi-mono@fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc,
+' Source evidence: badlogic/pi-mono@f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee,
 ' packages/agent/src/harness/types.ts: SessionTreeEntry and SessionStorage;
 ' packages/agent/src/harness/session/session.ts: defaultContextEntryTransform and moveTo;
-' packages/storage/sqlite-node/src/sqlite/storage/index.ts: setLeafId and appendEntry.
-' Observed behavior: the new pi harness persists a session entry tree and leaf markers,
-' and rebuilds model context from the current leaf path.
-' Design reason: the current Memory SR should harden the session event plane without
-' presenting future checkpoint and long-term memory tables as current pi behavior.
-' Java divergence: GaussDB, revisions, idempotency, and strict corrupt-entry handling
-' are target-only architecture and reliability changes.
-' Product constraint: the current design has no tenant model.
+' packages/storage/sqlite-node/src/sqlite/storage/index.ts: readHead and appendEntry.
+' Observed behavior: pi persists seven Session tables, including parent links,
+' an active leaf, branch caches, and entry materialized labels.
+' Target-only product constraint: SR-MEM-001 v0.14 keeps four tables, exposes one
+' active path, and only allows editing the latest user message on that path.
+' Architecture change: parent links are read directly without branch cache tables.
+' Concurrency hardening: expected leaf and parent fences protect centralized writes.
+' Design reason: retain immutable old-path audit data without general branch APIs.
 
 package "Current SR Scope" #E9F7EF {
-  database "agent_session" as Session
-  database "agent_session_state" as State
-  database "session_entry" as Entry
-  database "session_label" as Label
-  database "session_file_operation" as FileOp
-  database "session_write_operation" as WriteOp
+  database "t_sessions\nactive leaf" as Session
+  database "t_session_entries\nimmutable parent paths" as Entry
+  database "t_session_sequences\nper-session order" as Sequence
+  database "t_session_materialized\nactivePath + lifetimeUsage" as Summary
 }
 
 package "Separate Future Topics" #F7F9FC {
@@ -111,14 +110,11 @@ package "Separate Future Topics" #F7F9FC {
   rectangle "Artifact Plane\nfile and object metadata" as Artifact
 }
 
-Session *--> Entry : owns immutable tree
-Session *--> State : owns current state
-State --> Entry : current leaf target
-Entry --> Entry : leaf marker and parent tree
-Entry *--> Label : derived projection
-Entry *--> FileOp : derived projection
-WriteOp --> Session : idempotent command
-WriteOp --> Entry : commits entries
+Session *--> Entry : owns immutable history
+Session --> Entry : active leaf target
+Entry --> Entry : parent path
+Session *--> Sequence : allocates entry_seq
+Session *--> Summary : current and lifetime projection
 
 AgentControl ..> Session : future resolved snapshot reference
 Session ..> RuntimeCheckpoint : future in-flight recovery
@@ -128,11 +124,12 @@ Entry ..> Artifact : future content reference
 note bottom of Entry
 The current source of truth remains
 the active session entry path.
-Leaf navigation is stored as an entry.
+Old edited paths are audit-only.
+There is no branch cache or label table.
 end note
 
 note bottom of LongMemory
-Not part of SR-MEM-001 v0.5.
+Not part of SR-MEM-001 v0.14.
 Requires independent lifecycle,
 retrieval, retention, and deletion design.
 end note
