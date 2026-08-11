@@ -1,0 +1,153 @@
+@startuml channel_feishu_architecture
+title CampusAgent Channel and Feishu Integration
+
+' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md
+' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1.openapi.yaml
+' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/README.md, PublicChatConnection and RuntimeSessionChannel
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java, baseline lines 33-168
+' Observed behavior: the fixed Java baseline has a coupled POST /api/chat SSE endpoint.
+' Target-only design: Feishu is terminated by a provider adapter in mate-service and calls the target Runtime HTTP API.
+' Design reason: provider identity, retries, rate limits, and message rendering must not leak into agent-service.
+
+skinparam backgroundColor #FFFFFF
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #475569
+skinparam defaultFontName sans-serif
+skinparam packageStyle rectangle
+
+cloud "Feishu Open Platform" as Feishu
+
+package "mate-service Channel layer" {
+  component "FeishuLongConnectionEventSource" as EventSource
+  component "ChannelInboundPort" as InboundPort
+  component "ChannelOrchestrator" as Orchestrator
+  component "ChannelRunWorker" as RunWorker
+  component "ChannelDeliveryWorker" as DeliveryWorker
+  component "RunEventProjector" as Projector
+  component "FeishuMessageGateway" as Gateway
+  component "AgentRuntimeChannelPort" as RuntimePort
+  database "Channel Store\nand Outbox" as Store
+  component "Secret Manager client" as Secrets
+}
+
+package "agent-service" {
+  component "Runtime HTTP Adapter" as RuntimeHttp
+  component "Session and Run core" as RuntimeCore
+  database "RuntimeSessionStore\nand Event Journal" as RuntimeStore
+}
+
+Feishu --> EventSource : im.message.receive_v1
+EventSource --> InboundPort : normalized inbound DTO
+InboundPort --> Orchestrator : durable accept
+Orchestrator --> Store : dedupe, bind, enqueue
+Store --> RunWorker : claim PROCESS_INBOUND
+RunWorker --> RuntimePort : ensure session and create run
+RuntimePort --> RuntimeHttp : HTTP and SSE
+RuntimeHttp --> RuntimeCore
+RuntimeCore --> RuntimeStore
+RuntimeCore --> RuntimeHttp : ordered run events
+RuntimeHttp --> RuntimePort : run_seq stream
+RuntimePort --> Projector : safe RunEvent DTO
+Projector --> Store : cursor, desired view, enqueue
+Store --> DeliveryWorker : claim delivery work
+DeliveryWorker --> Gateway : reply or replace
+Gateway --> Feishu : reply API and card PATCH
+EventSource --> Secrets : app credentials
+Gateway --> Secrets : token credentials
+
+note right of EventSource
+  SDK authentication and encryption end here.
+  The handler commits dedupe and outbox state
+  before returning within the provider deadline.
+end note
+
+note bottom of RuntimePort
+  Provider tenant, user, chat, event, and message
+  identifiers never cross this boundary.
+end note
+
+@enduml
+
+@startuml feishu_message_sequence
+title Feishu Message to Runtime Run Sequence
+
+' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1.openapi.yaml, createSession, createRun, and getRunEvents
+' Feishu evidence: im.message.receive_v1, message reply API, and message card PATCH API official documents
+' Target-only design: provider receipt and Runtime execution are separated by a durable outbox.
+' Design reason: the Feishu handler deadline is shorter than an Agent run and duplicate delivery is expected.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam ArrowColor #475569
+skinparam defaultFontName sans-serif
+
+autonumber
+actor "Feishu user" as User
+participant "Feishu Platform" as Feishu
+participant "FeishuEventSource" as Source
+participant "ChannelInboundPort" as Inbound
+database "Channel Store" as Store
+queue "Channel Outbox" as Outbox
+participant "ChannelRunWorker" as RunWorker
+participant "ChannelDeliveryWorker" as DeliveryWorker
+participant "Runtime HTTP API" as Runtime
+participant "RunEventProjector" as Projector
+participant "FeishuMessageGateway" as Gateway
+
+User -> Feishu : send text or rich text
+Feishu -> Source : im.message.receive_v1
+Source -> Source : SDK verify and normalize
+Source -> Inbound : accept inbound DTO
+Inbound -> Store : insert by account and message_id
+
+alt duplicate message_id
+  Store --> Inbound : existing receipt
+  Inbound --> Source : durable receipt
+  Source --> Feishu : handler returns within 3 seconds
+else first delivery
+  Inbound -> Store : resolve or create conversation binding
+  Inbound -> Outbox : enqueue PROCESS_INBOUND atomically
+  Store --> Inbound : accepted receipt
+  Inbound --> Source : durable receipt
+  Source --> Feishu : handler returns within 3 seconds
+
+  Outbox -> RunWorker : claim PROCESS_INBOUND with lease
+  RunWorker -> Runtime : PUT /sessions/{session_id}
+  Runtime --> RunWorker : 200 or 201 with ETag
+  RunWorker -> Runtime : POST /sessions/{session_id}/runs
+  note right
+    Idempotency-Key is derived from
+    channel account and provider message_id.
+  end note
+  Runtime --> RunWorker : 202 run_id and user_message_id
+  RunWorker -> Store : persist accepted run
+  RunWorker -> Outbox : enqueue CREATE_REPLY atomically
+  Outbox -> DeliveryWorker : claim CREATE_REPLY with lease
+  DeliveryWorker -> Gateway : create processing card
+  Gateway -> Feishu : POST /messages/{message_id}/reply with uuid
+  Feishu --> Gateway : provider reply message_id
+  Gateway --> DeliveryWorker : delivery receipt
+  DeliveryWorker -> Store : persist provider reply message_id
+
+  RunWorker -> Runtime : GET /runs/{run_id}/events as SSE
+  loop ordered events after persisted run_seq
+    Runtime --> Projector : RunEvent
+    Projector -> Store : persist cursor and desired card
+    Projector -> Outbox : enqueue or merge REPLACE_REPLY atomically
+    Outbox -> DeliveryWorker : claim coalesced REPLACE_REPLY
+    DeliveryWorker -> Gateway : replace projection version
+    Gateway -> Feishu : PATCH provider reply card
+  end
+
+  Runtime --> Projector : run.completed
+  Projector -> Store : persist terminal projection
+  Projector -> Outbox : enqueue FINALIZE_REPLY atomically
+  Outbox -> DeliveryWorker : claim FINALIZE_REPLY
+  DeliveryWorker -> Gateway : replace with final card
+  Gateway -> Feishu : PATCH provider reply card
+  Gateway --> DeliveryWorker : final delivery receipt
+  DeliveryWorker -> Store : mark delivery FINALIZED
+end
+
+@enduml

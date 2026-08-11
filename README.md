@@ -16,6 +16,7 @@
 - [CampusMate 公共 Chat WebSocket v2 客户端接入指南](./pi-mono-java-manager-driven-multi-agent-runtime/mate-chat-ws-v2-client-integration.md)
 - [CampusAgent 内部 Runtime WebSocket v2 AsyncAPI](./pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml)
 - [CampusAgent 内部 Runtime WebSocket v2 客户端接入指南](./pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2-client-integration.md)
+- [CampusAgent Channel 接口与飞书接入设计](./pi-mono-java-manager-driven-multi-agent-runtime/channel-feishu-v1-design.md)
 - [CampusMate Attachment Service：OBS + openGauss 设计](./campusmate-attachment-service/README.md)
 - [OpenClaw 与 CampusAgent WebSocket 设计对比](./openclaw-campusagent-websocket-comparison/README.md)
 - [AgentRuntimeTemplate 不可变运行模板设计](./agent-runtime-template/README.md)
