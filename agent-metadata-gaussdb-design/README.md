@@ -1,11 +1,11 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.16.1`<br>
-> 日期：`2026-08-10`<br>
-> 状态：目标设计 / Java Service 同步实现<br>
-> 设计仓库分析基线：`9c022124653e08eac93a7387f07a7abaa3fa49e0`<br>
-> Java 实现分析基线：`mate-service@b09def8fdbd3a35144f9da91059ecd4132232cae`<br>
+> 版本：`v0.17.0`<br>
+> 日期：`2026-08-11`<br>
+> 状态：目标设计 / Java Controller 同步实现<br>
+> 设计仓库分析基线：`70474ebf81450b7b310208da3de55726d98d6cce`<br>
+> Java 实现分析基线：`mate-service@24edb24cb689dcd210bf824d691d77d3e50196e1`<br>
 > 输入 JSON 工作区 SHA-256：`b9aa4376e1b0859e698a69a487a2aca9c4bc73911d0f9fa5da89532229f6adf9`
 
 ## 1. 结论
@@ -34,15 +34,17 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 ### 2.2 Java 基线
 
-本次分析的 Java 提交为 `mate-service@b09def8fdbd3a35144f9da91059ecd4132232cae`，相关路径：
+本次分析的 Java 提交为 `mate-service@24edb24cb689dcd210bf824d691d77d3e50196e1`，相关路径：
 
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/ApiExceptionHandler.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentErrorCode.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentServiceException.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/validation/ResourceIdRules.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/AgentInfoResponseVO.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ApiSuccessResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ListAgentResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/UpdateAgentRequestVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/SystemPromptResponseVO.java`
@@ -54,10 +56,11 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 - `src/main/resources/messages_zh_CN.properties`
 - `src/main/resources/db/schema.sql`
 - `src/test/java/com/huawei/hicampus/mate/agentdefinition/controller/ApiExceptionHandlerTest.java`
+- `src/test/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionControllerTest.java`
 - `src/test/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentErrorMessageTest.java`
 - `src/test/java/com/huawei/hicampus/mate/agentdefinition/vo/AgentInfoJsonTest.java`
 
-该基线只保留 `listAgents`、`getAgent`、`updateAgent` 三项 Service 能力，实现五表聚合、批量列表查询以及最后写入生效的模型替换。初始化、旧管理查询、旧运行时查询和乐观锁模型替换能力及其 Controller、VO、异常和 Mapper 语句均已删除。模型绑定顺序列和 DTO 属性使用 `model_order` / `modelOrder`；可变 Request VO 和 DTO 使用 Lombok `@Data`；Java 注释和 Javadoc 使用中文。异常使用具体的大写 snake_case 错误码，错误码同时作为国际化 key 和 `resCode`。
+该基线只保留 `listAgents`、`getAgent`、`updateAgent` 三项 Service 能力，并通过 `AgentDefinitionController` 暴露对应的三个 HTTP 接口。Controller 使用 Request/Response VO，路径 Agent ID 在边界完成格式校验，成功响应由 `ApiSuccessResponseVO` 包装；列表和详情把 Service 结果放入 `result`，更新成功时省略空 `result`。Service 实现五表聚合、批量列表查询以及最后写入生效的模型替换。初始化、旧管理查询、旧运行时查询和乐观锁模型替换能力及其 Controller、VO、异常和 Mapper 语句均已删除。模型绑定顺序列和 DTO 属性使用 `model_order` / `modelOrder`；可变 Request VO 和 DTO 使用 Lombok `@Data`；Java 注释和 Javadoc 使用中文。异常使用具体的大写 snake_case 错误码，错误码同时作为国际化 key 和 `resCode`。
 
 本文只保存当前 JSON 字段，不增加多租户、历史版本、审计、Outbox、Session 或 Memory 表。Agent 固定版本只存储和展示，不查询不存在的历史表。
 
@@ -152,7 +155,7 @@ Skill ID 必须符合 `^skill-[0-9a-fA-F]{32}$`；当前三接口没有 Skill �
 
 当前三接口不写入 Agent 绑定；读取时校验 `agent_id` 和 `bound_agent_id` 均符合 Agent ID 格式。未来增加写接口时，应在 Service 中继续校验目标 Agent 存在且不可重复绑定。
 
-## 6. Service 与目标接口
+## 6. Service 与 Controller 接口
 
 Java Service 提供：
 
@@ -162,7 +165,7 @@ getAgent(String agentId) -> AgentInfoResponseVO
 updateAgent(String agentId, UpdateAgentRequestVO) -> void
 ```
 
-目标 Controller 契约：
+`AgentDefinitionController` 已实现：
 
 ```text
 GET  /mate-service/v1/agents
@@ -170,7 +173,7 @@ GET  /mate-service/v1/agents/{agentId}
 POST /mate-service/v1/agents/{agentId}
 ```
 
-业务 Controller 和成功响应的 `result` 包装由接入工程实现。Java 仓库不保留旧业务 Controller，Service 接口严格只有上述三个方法；`ApiExceptionHandler` 负责将异常适配为 `resCode` / `resMsg`。
+成功响应使用 `ApiSuccessResponseVO<T>`，示例成功码为 `0`，消息为 `success`。该类是独立仓库中的最小可运行包装；接入 mate-service 主工程时，如已有公共响应类和成功码常量，应替换该示例类，不改变 Service 签名。`ApiExceptionHandler` 继续负责将异常适配为 `resCode` / `resMsg`。
 
 ### 6.1 List Agents
 
@@ -184,13 +187,17 @@ POST /mate-service/v1/agents/{agentId}
 
 Service 先查询总数和当前页主表，再按页内 Agent ID 分别批量读取四种绑定，避免逐 Agent 查询造成 N+1。
 
-Service 结果：
+Controller 响应：
 
 ```json
 {
-  "data": [],
-  "total": 0,
-  "pageIndex": 1
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "data": [],
+    "total": 0,
+    "pageIndex": 1
+  }
 }
 ```
 
@@ -213,6 +220,15 @@ Service 结果：
 路径与请求体 `agentId` 必须一致，并符合 `agent-` 加 32 位十六进制 UUID 的格式。`bindingModels` 必填、非空、元素不可重复，每个元素必须符合 `model-` 加 32 位十六进制 UUID 的格式。
 
 更新采用最后写入生效：事务中锁定 Agent 当前行，删除旧模型绑定，按请求顺序插入新绑定，然后基于锁定行的当前版本将 `version` 递增一次。客户端不提交期望版本；即使模型列表未变化，成功请求仍递增一次版本。
+
+更新成功响应不包含 `result`：
+
+```json
+{
+  "resCode": "0",
+  "resMsg": "success"
+}
+```
 
 ### 6.4 错误码与国际化
 
@@ -239,6 +255,7 @@ GaussDB Distributed 不支持物理外键，因此基础 DDL 使用逻辑关系�
 - Request/Response VO：Service 或 Controller 边界对象，字段校验位于 Request VO。
 - DTO：Mapper 与数据库交互对象。
 - Service：负责 VO/DTO 转换、跨字段和跨表校验、事务与聚合。
+- Controller：负责 HTTP 参数绑定、边界校验、Service 调用和成功响应包装。
 - Mapper：只使用 DTO、标量条件和受影响行数。
 - 不引入 PO、DO 或 Entity。
 - 可变 Request VO 和 DTO 使用 Lombok `@Data`；只读 Response VO 使用 `@Getter` 和不可变字段。
@@ -264,6 +281,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.17.0` | 2026-08-11 | 增加三个 HTTP 接口的 `AgentDefinitionController` 可运行示例；增加统一成功响应包装，路径参数校验和 MVC 测试 |
 | `v0.16.1` | 2026-08-10 | `AgentInfoResponseVO` 顶层主键由 `agentId` 改为与元数据一致的 `id`；嵌套 Agent 绑定仍使用 `agentId` |
 | `v0.16.0` | 2026-08-10 | 错误码拆分为具体场景；枚举名、国际化 key 和 `resCode` 统一为大写 snake_case；增加中英文消息和 Locale 适配 |
 | `v0.15.1` | 2026-08-10 | 列表 Service 返回类型由 `ListAgentResultResponseVO` 简化为 `ListAgentResponseVO`，避免 `ResultResponse` 语义重复 |

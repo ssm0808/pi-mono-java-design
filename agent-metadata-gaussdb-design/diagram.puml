@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.16.1 on 2026-08-10.
+' Generated for SR-AGENT-DB-001 v0.17.0 on 2026-08-11.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: 9c022124653e08eac93a7387f07a7abaa3fa49e0.
-' Java baseline: mate-service@b09def8fdbd3a35144f9da91059ecd4132232cae.
+' Design baseline: 70474ebf81450b7b310208da3de55726d98d6cce.
+' Java baseline: mate-service@24edb24cb689dcd210bf824d691d77d3e50196e1.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -28,6 +28,10 @@ skinparam classAttributeIconSize 0
 '   AgentErrorCode specific localized error codes.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/ApiExceptionHandler.java
 '   ApiExceptionHandler locale-aware error response mapping.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java
+'   AgentDefinitionController three HTTP endpoint mappings.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ApiSuccessResponseVO.java
+'   ApiSuccessResponseVO success envelope.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/AgentInfoResponseVO.java
 '   AgentInfoResponseVO root id response field.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/validation/ResourceIdRules.java
@@ -46,6 +50,9 @@ skinparam classAttributeIconSize 0
 ' Observed behavior: Jackson omits null system_prompt component fields.
 ' Observed behavior: only model bindings have write Mapper operations.
 ' Observed behavior: error codes and localization keys use identical names.
+' Observed behavior: the Controller exposes list, get, and update endpoints.
+' Observed behavior: successful reads wrap Service results under result.
+' Observed behavior: successful updates omit the null result field.
 ' Observed behavior: AgentInfo uses root id; nested Agent bindings use agentId.
 ' Observed behavior: each DROP TABLE statement immediately precedes its CREATE.
 ' Design reason: pair each table drop with its create statement to follow the
