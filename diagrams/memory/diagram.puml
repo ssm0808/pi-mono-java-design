@@ -1,6 +1,6 @@
-' Generated for SR-MEM-001 v0.14.1 on 2026-08-11.
+' Generated for SR-MEM-001 v0.14.2 on 2026-08-11.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design repository baseline: 63c08ce77ab2dc102ecd141df81337857fb07cbb.
+' Design repository baseline: b5b0d1ecc3419c5960cac394b683a635ac9f853e.
 ' Pi source baseline: f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee.
 
 @startuml memory-architecture
@@ -32,7 +32,7 @@ skinparam NoteBackgroundColor #FFF8D9
 ' allows editing the latest user message on that path.
 ' Architecture change: centralized GaussDB keeps four tables and reconstructs
 ' the active path from parent_id without branch cache tables.
-' Concurrency hardening: expected leaf and parent fences protect multi-Pod writes.
+' Concurrency hardening: expected path-end and parent checks protect multi-Pod writes.
 ' Design reason: group command, query, and release flows into readable layers.
 
 actor "Agent Runtime" as runtime
@@ -44,7 +44,7 @@ runtime -[hidden]right- auditor
 package "Java Session Layer" as javaLayer {
   component "Memory Session\nApplication Service" as app #DCEBFF
   component "Session Repository\nLifecycle" as repository #EEF3F8
-  component "Session Storage\nFenced commands" as storage #EEF3F8
+  component "Session Storage\nChecked commands" as storage #EEF3F8
   component "Context Projector\nActive path to prompt" as projector #E4F4E8
 
   repository -[hidden]right- storage
@@ -57,7 +57,7 @@ package "Java Session Layer" as javaLayer {
 package "GaussDB Persistence Adapter" as adapter {
   component "MyBatis Session\nMappers" as mappers #EEF3F8
   component "Spring Transaction\nManager" as tx #FFE9CC
-  component "Parent Chain\nReader" as pathReader #E4F4E8
+  component "Current Path\nReader" as pathReader #E4F4E8
 
   mappers -[hidden]right- tx
   tx -[hidden]right- pathReader
@@ -69,10 +69,10 @@ database "Centralized GaussDB\nFour Session tables" as db #E8EEF7
 runtime --> app : commands and active reads
 auditor --> app : authorized audit page
 repository --> mappers : create open list fork delete
-storage --> tx : fenced write transaction
+storage --> tx : checked write transaction
 app --> pathReader : load and validate active path
 mappers --> db : fixed SQL
-pathReader --> db : recursive parent chain
+pathReader --> db : follow parent_id
 release --> db : versioned DDL before rollout
 
 note left of app
@@ -82,7 +82,7 @@ Old subtrees remain immutable and audit-only.
 end note
 
 note right of db #EAF6ED
-t_sessions: active leaf
+t_sessions: current path end
 t_session_entries: immutable parent links
 t_session_sequences: per-session order
 t_session_materialized: activePath + lifetimeUsage
@@ -94,7 +94,7 @@ end note
 
 @startuml memory-write-transaction
 !pragma layout smetana
-title Fenced Append and Edit Transaction Protocol
+title Append and Edit Transaction Protocol
 top to bottom direction
 
 skinparam backgroundColor #FFFFFF
@@ -118,22 +118,22 @@ skinparam NoteBackgroundColor #FFF8D9
 ' becomes the new active leaf while the old subtree stays immutable.
 ' Architecture change: branch caches and label projection writes are removed.
 ' Concurrency hardening: lock session before sequence and require expected leaf.
-' Design reason: show the common fence once and compare only divergent mutations.
+' Design reason: show the common state check once and compare divergent mutations.
 
 rectangle "WRITE REQUEST\nAppendEntryDTO or EditLastUserMessageDTO" as request #DCEBFF
 
 package "One GaussDB Transaction" as transaction {
-  rectangle "1  SESSION FENCE\nBEGIN\nLock t_sessions FOR UPDATE\nCheck expectedParentEntryId or expectedLeafId\nReject stale state" as fence #FFE9CC
+  rectangle "1  CHECK CURRENT STATE\nBEGIN\nLock t_sessions FOR UPDATE\nCheck expectedParentEntryId or expectedLeafId\nReject stale state" as stateCheck #FFE9CC
 
   rectangle "2  SEQUENCE ALLOCATION\nLock t_session_sequences FOR UPDATE\nAllocate the next entry_seq" as sequence #FFE9CC
 
   rectangle "3A  APPEND MUTATION\nReject leaf, branch_summary, and label\nInsert entry with parent = expected parent\nIncrement activePath and usage as applicable" as append #E4F4E8
 
-  rectangle "3B  EDIT MUTATION\nValidate the complete active parent chain\nRequire target = nearest user message\nInsert sibling with parent = target.parent_id\nRebuild activePath; keep lifetimeUsage" as edit #EEE8FF
+  rectangle "3B  EDIT MUTATION\nValidate the complete current path\nRequire target = nearest user message\nInsert sibling with parent = target.parent_id\nRebuild activePath; keep lifetimeUsage" as edit #EEE8FF
 
   rectangle "4  ATOMIC COMMIT\nAdvance next_seq\nPersist materialized payload\nMove active_leaf_id to the new entry\nCOMMIT" as commit #DCEBFF
 
-  fence --> sequence
+  stateCheck --> sequence
   sequence --> append : append
   sequence --> edit : edit
   append --> commit
@@ -141,15 +141,15 @@ package "One GaussDB Transaction" as transaction {
   append -[hidden]right- edit
 }
 
-rectangle "FAIL CLOSED\nAny validation or DML failure rolls back the entire transaction.\nSequence, projection, and active leaf remain unchanged." as rollback #FDE8E7
+rectangle "FAIL CLOSED\nAny validation or DML failure rolls back the entire transaction.\nSequence, summary, and current path end remain unchanged." as rollback #FDE8E7
 
-request --> fence
+request --> stateCheck
 rollback .up. transaction
 
 note left of edit
 Before BEGIN, edit requests make a
 best-effort cancellation of the old Run.
-The database fence remains authoritative.
+The database state check is the final safeguard.
 end note
 
 note right of commit
@@ -218,7 +218,7 @@ entity "t_session_entries" as entries <<immutable log>> #E4F4E8 {
   payload : jsonb
 }
 
-entity "t_session_materialized" as materialized <<projection>> #EEE8FF {
+entity "t_session_materialized" as materialized <<rebuildable summary>> #EEE8FF {
   session_id : varchar(128) [PK]
   --
   payload : jsonb
@@ -232,12 +232,12 @@ sessions -[hidden]down- entries
 sequences -[hidden]down- materialized
 
 sessions ..> entries : owns immutable entries
-sessions ..> entries : active_leaf_id selects tip
+sessions ..> entries : active_leaf_id selects path end
 sessions ..> sequences : one allocator
-sessions ..> materialized : one projection
+sessions ..> materialized : one summary
 
 note bottom of entries #EAF6ED
-parent_id is the path fact.
+parent_id defines path membership.
 entry_seq is append order, not path membership.
 An edit inserts a sibling; old descendants stay audit-only.
 end note
@@ -257,7 +257,7 @@ end note
 
 @startuml memory-context-rebuild
 !pragma layout smetana
-title Active-Path Context Rebuild Without Branch Cache
+title Current Path Context Rebuild Without Path Cache
 top to bottom direction
 
 skinparam backgroundColor #FFFFFF
@@ -279,7 +279,7 @@ skinparam NoteBackgroundColor #FFF8D9
 ' - packages/agent/src/harness/session/session.ts: buildSessionContext
 ' Observed behavior: pi prefers validated branch cache rows and repairs them
 ' from session_entries.parent_id when missing or invalid.
-' Architecture change: CampusClaw always reads the authoritative parent chain
+' Architecture change: CampusClaw always follows parent_id from active_leaf_id
 ' and never stores or repairs a branch cache.
 ' Product constraint: ordinary paging and Context use only the active path;
 ' all-entry paging is an authorized internal audit operation.
@@ -304,7 +304,7 @@ package "Ordinary Product Reads" as ordinary {
 }
 
 package "Internal Audit Only" as internal {
-  rectangle "ALL APPEND LOG ENTRIES\nORDER BY entry_seq" as allEntries #EEF1F5
+  rectangle "ALL STORED ENTRIES\nORDER BY entry_seq" as allEntries #EEF1F5
   rectangle "AUTHORIZED AUDIT PAGE" as audit #EEF1F5
   allEntries --> audit
 }

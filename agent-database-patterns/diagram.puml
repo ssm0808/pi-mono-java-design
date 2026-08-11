@@ -73,7 +73,7 @@ Event --> Memory : extract durable knowledge
 @enduml
 
 @startuml pi-memory-adoption-boundary
-' Current SR adoption boundary updated for SR-MEM-001 v0.14.1 on 2026-08-11.
+' Current SR adoption boundary updated for SR-MEM-001 v0.14.2 on 2026-08-11.
 !pragma layout smetana
 title CampusClaw Memory SR Adoption Boundary
 top to bottom direction
@@ -94,16 +94,16 @@ skinparam NoteBackgroundColor #FFF8D9
 ' packages/storage/sqlite-node/src/sqlite/storage/index.ts: readHead and appendEntry.
 ' Observed behavior: pi persists seven Session tables, including parent links,
 ' an active leaf, branch caches, and entry materialized labels.
-' Target-only product constraint: SR-MEM-001 v0.14.1 keeps four tables, exposes one
+' Target-only product constraint: SR-MEM-001 v0.14.2 keeps four tables, exposes one
 ' active path, and only allows editing the latest user message on that path.
 ' Architecture change: parent links are read directly without branch cache tables.
-' Concurrency hardening: expected leaf and parent fences protect centralized writes.
+' Concurrency hardening: expected path-end and parent checks protect centralized writes.
 ' Design reason: align table colors with SR-MEM-001 and route future links one way.
 
 package "Current SR Scope" as CurrentScope #F4FAF6 {
-  database "t_sessions\nactive leaf" as Session #DCEBFF
+  database "t_sessions\ncurrent path end" as Session #DCEBFF
   database "t_session_sequences\nper-session order" as Sequence #FFE9CC
-  database "t_session_entries\nimmutable parent paths" as Entry #E4F4E8
+  database "t_session_entries\nimmutable history + parent_id" as Entry #E4F4E8
   database "t_session_materialized\nactivePath + lifetimeUsage" as Summary #EEE8FF
 
   Session -[hidden]right- Sequence
@@ -124,9 +124,9 @@ package "Separate Future Topics" as FutureScope #F7F9FC {
   RuntimeCheckpoint -[hidden]down- Artifact
 }
 
-Session --> Entry : owns history and selects active tip
+Session --> Entry : owns history and selects path end
 Session --> Sequence : allocates entry_seq
-Session --> Summary : current and lifetime projection
+Session --> Summary : current and lifetime summary
 
 Session ..> AgentControl : future resolved snapshot reference
 Session ..> RuntimeCheckpoint : future in-flight recovery
@@ -134,7 +134,7 @@ Entry ..> LongMemory : future extraction source
 Entry ..> Artifact : future content reference
 
 legend bottom
-|<#FFFFFF> Solid links | Current logical relations; active parent path is the source of truth |
+|<#FFFFFF> Solid links | Current relations; active_leaf_id and parent_id define the current path |
 |<#FFFFFF> Dashed links | Future boundaries with independent lifecycle and retention design |
 |<#FFF8D9> Product rule | Old paths are audit-only; no branch cache or label table |
 endlegend
