@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.18.8 on 2026-08-12.
+' Generated for SR-AGENT-DB-001 v0.18.9 on 2026-08-12.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: a8491805f3d2abeb61df0a1c13d90d4388058d81.
-' Java baseline: mate-service@f0c634a27da9807ae1e416460469db39407a20e2.
+' Design baseline: c892946d867ab1ee81f2684229b0343ce9733cc0.
+' Java baseline: mate-service@9dd5d85e2ed6561ad654b11f817ef572cc8bac7c.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -66,9 +66,10 @@ skinparam classAttributeIconSize 0
 ' do not validate pinned history; Runtime reads require an exact current match.
 ' Observed behavior: getRuntimeAgent resolves Tool and Agent bindings by typed
 ' identifier and optional version, then returns flat Tools and Agents.
-' Observed behavior: Runtime Tools expose nine fields including enabled and omit type, timestamps, and schemas.
-' Observed behavior: bound Runtime Agents expose seven execution fields and
-' omit type, timestamps, enabled, permissions, and recursive bindings.
+' Observed behavior: Runtime Tools expose ten fields including type and enabled and omit timestamps and schemas.
+' Observed behavior: bound Runtime Agents expose nine execution fields and
+' omit timestamps, permissions, and recursive bindings.
+' Observed behavior: root Runtime Agents expose type but omit timestamps.
 ' Observed behavior: Runtime systemPrompt values are composed strings.
 ' GaussDB divergence: physical foreign keys are optional because GaussDB
 ' Distributed does not support them; the base DDL uses logical relationships.
@@ -205,15 +206,15 @@ skinparam ParticipantBackgroundColor #F7F9FC
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentResponseVO.java
 '   RuntimeAgentResponseVO flat Tool and Agent response contract.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ToolDefinitionResponseVO.java
-'   ToolDefinitionResponseVO nine-field bindingTools element.
+'   ToolDefinitionResponseVO ten-field bindingTools element.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentDefinitionResponseVO.java
-'   RuntimeAgentDefinitionResponseVO seven-field bindingAgents element.
+'   RuntimeAgentDefinitionResponseVO nine-field bindingAgents element.
 ' - TOOL metadata JSON line 8 defines is_concurrency_safe; lines 14-23 define
 '   schemas that the Runtime Agent response intentionally omits.
 ' Observed behavior: getAgent returns binding identifiers and optional versions.
-' Observed behavior: getRuntimeAgent returns nine-field Tool and seven-field
+' Observed behavior: getRuntimeAgent returns ten-field Tool and nine-field
 ' bound Agent definitions without wrapper objects.
-' Both resolved response types omit type and timestamps; only Tool has enabled.
+' Root and resolved response types include type and omit timestamps.
 ' Observed behavior: root and bound Agent prompts use the same composition.
 ' Integration pending: ToolDefinitionMapper SQL is supplied by the Tool owner.
 ' Design reason: batch dependency queries avoid one query per binding.
@@ -277,7 +278,7 @@ end note
 note over Service,ToolMapper
   Tool SQL and Tool version storage are owned by the Tool module.
   The Agent module defines only the batch Mapper contract in this phase.
-  Runtime Tools expose nine fields and omit schemas, type, and timestamps.
+  Runtime Tools expose ten fields and omit schemas and timestamps.
   Missing concurrency safety defaults to false.
 end note
 
