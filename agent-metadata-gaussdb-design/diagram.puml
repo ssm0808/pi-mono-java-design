@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.17.0 on 2026-08-11.
+' Generated for SR-AGENT-DB-001 v0.18.0 on 2026-08-12.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: 70474ebf81450b7b310208da3de55726d98d6cce.
-' Java baseline: mate-service@24edb24cb689dcd210bf824d691d77d3e50196e1.
+' Design baseline: eb21f59af1a7e04010010094ff565baa862885ed.
+' Java baseline: mate-service@44644c6d95a11479b62651a1bc185d96e49b2b62.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -61,8 +61,10 @@ skinparam classAttributeIconSize 0
 ' Product constraint: only binding_models preserves input array order.
 ' Product constraint: Agent IDs use agent- plus a 32-character hexadecimal UUID.
 ' Product constraint: Model, Tool, and Skill IDs use typed prefixes plus UUIDs.
-' Target-only rule: future Agent binding writes must validate current targets;
-' pinned target versions do not require historical-version validation.
+' Target-only rule: future Agent binding writes validate current targets but
+' do not validate pinned history; Runtime reads require an exact current match.
+' Target-only API: getRuntimeAgent resolves Tool and Agent bindings by typed
+' identifier and optional version, then returns nested definitions.
 ' GaussDB divergence: physical foreign keys are optional because GaussDB
 ' Distributed does not support them; the base DDL uses logical relationships.
 ' DDL convention: each DROP TABLE IF EXISTS immediately precedes CREATE TABLE.
@@ -160,6 +162,98 @@ Base DDL omits physical foreign keys for
 GaussDB Distributed compatibility.
 The service maintains logical relationships
 inside transactions.
+end note
+
+@enduml
+
+@startuml runtime_agent_query_flow
+!theme plain
+title Runtime Agent Query Flow
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam sequenceArrowThickness 1
+skinparam ArrowColor #53657D
+skinparam ParticipantBorderColor #53657D
+skinparam ParticipantBackgroundColor #F7F9FC
+
+' Source evidence:
+' - mate-service baseline path and symbols:
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java
+'   AgentDefinitionController.getAgent.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java
+'   AgentDefinitionService.getAgent.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java
+'   AgentDefinitionServiceImpl.getAgent and loadAggregate.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentDefinitionMapper.java
+'   AgentDefinitionMapper.selectById.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentToolBindingMapper.java
+'   AgentToolBindingMapper.selectByAgentId.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentBindingMapper.java
+'   AgentBindingMapper.selectByAgentId.
+' Observed behavior: getAgent returns binding identifiers and optional versions.
+' Target-only API: getRuntimeAgent expands Tool and bound Agent definitions.
+' Target-only integration: ToolDefinitionMapper SQL is supplied by the Tool owner.
+' Design reason: batch dependency queries avoid one query per binding.
+' Security hardening: a missing, disabled, or unmatched dependency fails closed.
+' Product constraint: no partial Runtime Agent response is returned.
+' Data-model constraint: t_agent_definition stores only the current Agent version.
+
+actor "Runtime consumer" as Consumer
+participant AgentDefinitionController as Controller
+participant AgentDefinitionServiceImpl as Service
+participant AgentToolBindingMapper as ToolBindingMapper
+participant AgentBindingMapper as AgentBindingMapper
+participant AgentDefinitionMapper as DefinitionMapper
+participant ToolDefinitionMapper as ToolMapper
+participant Logger
+
+Consumer -> Controller: GET /mate-service/v1/agents/{agentId}/runtime
+Controller -> Controller: validate agentId
+Controller -> Service: getRuntimeAgent(agentId)
+Service -> DefinitionMapper: selectById(agentId)
+DefinitionMapper --> Service: root Agent definition
+
+alt root Agent missing or disabled
+  Service -> Logger: record root Agent context
+  Service --> Controller: throw specific error code
+else root Agent available
+  par load direct bindings
+    Service -> ToolBindingMapper: selectByAgentId(agentId)
+    ToolBindingMapper --> Service: Tool bindings
+  else
+    Service -> AgentBindingMapper: selectByAgentId(agentId)
+    AgentBindingMapper --> Service: Agent bindings
+  end
+
+  Service -> Service: create Tool id-version queries
+  Service -> ToolMapper: selectByBindings(tool queries)
+  ToolMapper --> Service: exact or latest Tool definitions
+  Service -> Service: create Agent id-version queries
+  Service -> DefinitionMapper: selectByBindings(agent queries)
+  DefinitionMapper --> Service: current matching Agent definitions
+
+  alt dependency missing, disabled, or version unmatched
+    Service -> Logger: record root id, dependency id, and version
+    Service --> Controller: throw specific error code
+  else every dependency resolved
+    Service -> Service: assemble nested Runtime Agent response
+    Service --> Controller: RuntimeAgentResponseVO
+    Controller --> Consumer: success envelope
+  end
+end
+
+note over Service,DefinitionMapper
+  A null binding version selects the latest definition.
+  A non-null version requires an exact id-version match.
+  The current Agent table cannot return historical versions.
+  Bound Agent definitions do not recursively expand bindings.
+end note
+
+note over Service,ToolMapper
+  Tool SQL and Tool version storage are owned by the Tool module.
+  The Agent module defines only the batch Mapper contract in this phase.
 end note
 
 @enduml
