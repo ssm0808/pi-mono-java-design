@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.18.5 on 2026-08-12.
+' Generated for SR-AGENT-DB-001 v0.18.6 on 2026-08-12.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: 772682427e6d3526c4c35fa21b8103346ee49e47.
-' Java baseline: mate-service@b4a421e4d840d51011cdafdac34f47f57a1e73b7.
+' Design baseline: 9be4d8363d3f7ca616205ad0c476803ff48099ff.
+' Java baseline: mate-service@25d72b67b165d0888def28ba731ac0a2bca7977e.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -67,6 +67,8 @@ skinparam classAttributeIconSize 0
 ' Observed behavior: getRuntimeAgent resolves Tool and Agent bindings by typed
 ' identifier and optional version, then returns flat Tools and Agents.
 ' Observed behavior: Runtime Tools expose isConcurrencySafe but omit schemas.
+' Observed behavior: bound Runtime Agents expose seven execution fields and
+' omit type, timestamps, enabled, permissions, and recursive bindings.
 ' Observed behavior: Runtime systemPrompt values are composed strings.
 ' GaussDB divergence: physical foreign keys are optional because GaussDB
 ' Distributed does not support them; the base DDL uses logical relationships.
@@ -205,12 +207,13 @@ skinparam ParticipantBackgroundColor #F7F9FC
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ToolDefinitionResponseVO.java
 '   ToolDefinitionResponseVO flat bindingTools element.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentDefinitionResponseVO.java
-'   RuntimeAgentDefinitionResponseVO flat bindingAgents element.
+'   RuntimeAgentDefinitionResponseVO seven-field bindingAgents element.
 ' - TOOL metadata JSON line 8 defines is_concurrency_safe; lines 14-23 define
 '   schemas that the Runtime Agent response intentionally omits.
 ' Observed behavior: getAgent returns binding identifiers and optional versions.
 ' Observed behavior: getRuntimeAgent flattens Tool definitions with concurrency
 ' safety and without schemas, and also flattens bound Agent definitions.
+' Observed behavior: bound Agent responses omit type, timestamps, and enabled.
 ' Observed behavior: root and bound Agent prompts use the same composition.
 ' Integration pending: ToolDefinitionMapper SQL is supplied by the Tool owner.
 ' Design reason: batch dependency queries avoid one query per binding.
