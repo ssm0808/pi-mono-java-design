@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.18.2 on 2026-08-12.
+' Generated for SR-AGENT-DB-001 v0.18.3 on 2026-08-12.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: ceefbf16f6759a357eb043846fe6868a14ef31d1.
-' Java baseline: mate-service@5fa0af6cff77e6b1d73bf17208a614edd48976aa.
+' Design baseline: 2d37138d6907faf0a844ee7341775df6b1eee276.
+' Java baseline: mate-service@21c966a721a2069e212bd536516eaf978c6ac0d6.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -21,6 +21,7 @@ skinparam classAttributeIconSize 0
 ' Source evidence:
 ' - AGENT metadata JSON lines 2-53 define root fields and four binding arrays.
 ' - binding_models is at line 11; binding_agents is at lines 37-42.
+' - TOOL metadata JSON line 8 defines is_concurrency_safe.
 ' - mate-service baseline path and symbols:
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java
 '   AgentDefinitionServiceImpl.listAgents, getAgent, and updateAgent.
@@ -65,6 +66,7 @@ skinparam classAttributeIconSize 0
 ' do not validate pinned history; Runtime reads require an exact current match.
 ' Observed behavior: getRuntimeAgent resolves Tool and Agent bindings by typed
 ' identifier and optional version, then returns flat Tools and nested Agents.
+' Observed behavior: Runtime Tools expose isConcurrencySafe but omit schemas.
 ' GaussDB divergence: physical foreign keys are optional because GaussDB
 ' Distributed does not support them; the base DDL uses logical relationships.
 ' DDL convention: each DROP TABLE IF EXISTS immediately precedes CREATE TABLE.
@@ -201,9 +203,11 @@ skinparam ParticipantBackgroundColor #F7F9FC
 '   RuntimeAgentResponseVO flat Tool and nested Agent response contract.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ToolDefinitionResponseVO.java
 '   ToolDefinitionResponseVO flat bindingTools element.
+' - TOOL metadata JSON line 8 defines is_concurrency_safe; lines 14-23 define
+'   schemas that the Runtime Agent response intentionally omits.
 ' Observed behavior: getAgent returns binding identifiers and optional versions.
-' Observed behavior: getRuntimeAgent flattens Tool definitions and nests bound
-' Agent definitions under their binding metadata.
+' Observed behavior: getRuntimeAgent flattens Tool definitions with concurrency
+' safety and without schemas, then nests bound Agent definitions.
 ' Integration pending: ToolDefinitionMapper SQL is supplied by the Tool owner.
 ' Design reason: batch dependency queries avoid one query per binding.
 ' Security hardening: a missing, disabled, or unmatched dependency fails closed.
@@ -239,7 +243,7 @@ else root Agent available
 
   Service -> Service: create Tool id-version queries
   Service -> ToolMapper: selectByBindings(tool queries)
-  ToolMapper --> Service: exact or latest Tool definitions
+  ToolMapper --> Service: Tool fields with concurrency safety
   Service -> Service: create Agent id-version queries
   Service -> DefinitionMapper: selectByBindings(agent queries)
   DefinitionMapper --> Service: current matching Agent definitions
@@ -264,6 +268,8 @@ end note
 note over Service,ToolMapper
   Tool SQL and Tool version storage are owned by the Tool module.
   The Agent module defines only the batch Mapper contract in this phase.
+  Runtime Tools omit input and output schemas.
+  Missing concurrency safety defaults to false.
 end note
 
 @enduml

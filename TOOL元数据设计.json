@@ -4,6 +4,7 @@
     "version": "tool当前版本。从1开始,每当tool被修改时版本号递增",
     "created_at": "创建时间",
     "updated_at": "更新时间",
+    "is_concurrency_safe": "工具是否支持并行。true表示支持并行，false表示不支持并行",
     "name": "tool名称",
     "display_name":"tool展示名称",
     "description": "tool描述",

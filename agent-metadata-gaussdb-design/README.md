@@ -1,13 +1,13 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.18.2`<br>
+> 版本：`v0.18.3`<br>
 > 日期：`2026-08-12`<br>
 > 状态：Java 接口已实现 / Tool Mapper SQL 待集成<br>
-> 设计仓库分析基线：`ceefbf16f6759a357eb043846fe6868a14ef31d1`<br>
-> Java 实现分析基线：`mate-service@5fa0af6cff77e6b1d73bf17208a614edd48976aa`<br>
+> 设计仓库分析基线：`2d37138d6907faf0a844ee7341775df6b1eee276`<br>
+> Java 实现分析基线：`mate-service@21c966a721a2069e212bd536516eaf978c6ac0d6`<br>
 > Agent JSON 工作区 SHA-256：`b9aa4376e1b0859e698a69a487a2aca9c4bc73911d0f9fa5da89532229f6adf9`<br>
-> Tool JSON 工作区 SHA-256：`4aad9feefbdb4984450bb9250007fac1c01c31f6b70fe59f5fbaa0d558a07a25`
+> Tool JSON 工作区 SHA-256：`3f4d88b30f4f22ef28e5356df0e5927adf43e34551384cec0883a895fcaa0746`
 
 ## 1. 结论
 
@@ -23,7 +23,7 @@
 
 System Prompt 的八个细分字段均为可空软约束。数据库不强制非空或非空白；响应只返回具有值的细分字段，管理前端按实际返回字段动态展示。
 
-已实现 `GET /mate-service/v1/agents/{agentId}/runtime`。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：`bindingTools` 直接平铺完整 Tool 元数据，被绑定 Agent 返回 `t_agent_definition` 的全部字段但不递归展开其绑定。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
+已实现 `GET /mate-service/v1/agents/{agentId}/runtime`。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：`bindingTools` 直接平铺 Runtime 所需 Tool 元数据，包含 `isConcurrencySafe`，不包含 `inputSchema` 或 `outputSchema`；被绑定 Agent 返回 `t_agent_definition` 的全部字段但不递归展开其绑定。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
 
 完整初始化 DDL 维护在 [`schema.sql`](./schema.sql)，本文不重复嵌入完整 SQL。
 
@@ -34,10 +34,12 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 - 基本字段、状态和名称：[`AGENT元数据设计.json` 第 2–10 行](../AGENT元数据设计.json#L2)。
 - 模型绑定和 System Prompt：[`第 11–21 行`](../AGENT元数据设计.json#L11)。
 - Use Cases、Tool、Skill、Agent 绑定及权限：[`第 22–53 行`](../AGENT元数据设计.json#L22)。
+- Tool 并行安全标志：[`TOOL元数据设计.json` 第 8 行](../TOOL元数据设计.json#L8)。
+- Tool 输入输出 Schema：[`TOOL元数据设计.json` 第 14–23 行](../TOOL元数据设计.json#L14)；该字段属于 Tool 元数据，但不进入 Runtime Agent 响应。
 
 ### 2.2 Java 基线
 
-本次分析的 Java 提交为 `mate-service@5fa0af6cff77e6b1d73bf17208a614edd48976aa`，相关路径：
+本次分析的 Java 提交为 `mate-service@21c966a721a2069e212bd536516eaf978c6ac0d6`，相关路径：
 
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`
@@ -152,7 +154,9 @@ GaussDB JSON/JSONB 类型参考：[Huawei Cloud GaussDB JSON/JSONB Types](https:
 
 Tool ID 必须符合 `^tool-[0-9a-fA-F]{32}$`；当前四个接口没有 Tool 写入请求，Service 在读取完整聚合时执行数据完整性校验。
 
-Runtime Agent 查询不把绑定版本仅作为展示字段。Service 将每个 `tool_id + tool_version` 转换为批量查询条件：`tool_version = NULL` 表示解析最新版本，非空表示必须精确匹配指定版本。Tool 定义 Mapper 返回完整 Tool 元数据，包括 `id`、`type`、`version`、时间、`enabled`、默认 `permission`、名称、描述、`source`、`input_schema` 和 `output_schema`。Tool 表及版本历史不属于本 Agent Schema；对应 Mapper SQL 由 Tool 模块负责人提供。
+Runtime Agent 查询不把绑定版本仅作为展示字段。Service 将每个 `tool_id + tool_version` 转换为批量查询条件：`tool_version = NULL` 表示解析最新版本，非空表示必须精确匹配指定版本。Tool 定义 Mapper 返回 Runtime 所需字段，包括 `id`、`type`、`version`、时间、`enabled`、`is_concurrency_safe`、默认 `permission`、名称、描述和 `source`。Tool 元数据自身继续保留 `input_schema` 和 `output_schema`，但 Runtime Agent 不读取、不校验也不返回这两个字段。Tool 表及版本历史不属于本 Agent Schema；对应 Mapper SQL 由 Tool 模块负责人提供。
+
+`is_concurrency_safe` 是布尔字段，表示运行时是否允许并行调用该 Tool；Java DTO 和响应 VO 使用 `isConcurrencySafe`。Tool 数据源未提供该字段时，Service 按安全默认值 `false` 返回，只有显式为 `true` 时才表示支持并行。
 
 如果任一 Tool 条件无匹配记录或匹配记录未启用，Service 必须记录根 Agent ID、Tool ID 和请求版本并终止整个 Runtime 查询。不得静默跳过该 Tool，也不得返回部分 `bindingTools`。
 
@@ -261,9 +265,9 @@ Controller 响应：
 
 ![Runtime Agent 查询流程](./runtime_agent_query_flow.svg)
 
-PlantUML：[查看源码](./diagram.puml#L169)
+PlantUML：[查看源码](./diagram.puml#L171)
 
-`RuntimeAgentResponseVO` 的根字段与 `AgentInfoResponseVO` 一致。`bindingTools` 的元素直接平铺为解析后的完整 Tool 元数据，不保留只包装 `toolId`、绑定版本和 `tool` 的中间对象；`bindingAgents` 继续使用“绑定信息 + 解析后的定义”结构：
+`RuntimeAgentResponseVO` 的根字段与 `AgentInfoResponseVO` 一致。`bindingTools` 的元素直接平铺为解析后的 Runtime Tool 元数据，不保留只包装 `toolId`、绑定版本和 `tool` 的中间对象；`bindingAgents` 继续使用“绑定信息 + 解析后的定义”结构：
 
 ```json
 {
@@ -296,19 +300,12 @@ PlantUML：[查看源码](./diagram.puml#L169)
         "createdAt": "2026-08-10T08:00:00+08:00",
         "updatedAt": "2026-08-11T08:00:00+08:00",
         "enabled": true,
+        "isConcurrencySafe": true,
         "permission": "allow",
         "name": "query-campus-map",
         "displayName": "Query Campus Map",
         "description": "Query a campus location",
-        "source": "builtin-toolset",
-        "inputSchema": {
-          "type": "object",
-          "properties": {}
-        },
-        "outputSchema": {
-          "type": "object",
-          "properties": {}
-        }
+        "source": "builtin-toolset"
       }
     ],
     "bindingSkills": [],
@@ -348,7 +345,7 @@ PlantUML：[查看源码](./diagram.puml#L169)
 
 `bindingTools[].version` 是本次实际解析出的 Tool 版本，必须有值。`t_agent_binding_tools.tool_version` 只用于选择最新版本或精确匹配固定版本，不在响应中重复展示。`bindingAgents[].version` 仍表示可空的绑定版本，嵌套 `agent.version` 表示实际解析出的 Agent 版本；绑定版本为空时按照全局 `NON_NULL` 策略省略。
 
-被绑定 Agent 的 `agent` 对象严格对应 `t_agent_definition`：包含标量字段、System Prompt、`useCases` 和时间字段，不包含 `bindingModels`、`bindingTools`、`bindingSkills`、`bindingAgents` 或聚合后的 `permission`。Tool 的 `inputSchema` 和 `outputSchema` 必须解析为 JSON 对象，不以转义后的 JSON 字符串返回。
+被绑定 Agent 的 `agent` 对象严格对应 `t_agent_definition`：包含标量字段、System Prompt、`useCases` 和时间字段，不包含 `bindingModels`、`bindingTools`、`bindingSkills`、`bindingAgents` 或聚合后的 `permission`。`bindingTools` 返回 `isConcurrencySafe`，不返回 Tool 的 `inputSchema` 和 `outputSchema`。
 
 Runtime 聚合采用 `REPEATABLE_READ` 只读事务，并执行以下流程：
 
@@ -379,7 +376,7 @@ List<AgentDefinitionDTO> selectByBindings(
 
 - 请求解析与校验：`AGENT_REQUEST_BODY_INVALID`、`AGENT_REQUEST_VALIDATION_FAILED`、`AGENT_PAGE_INDEX_INVALID`、`AGENT_PAGE_SIZE_INVALID`、`AGENT_NAME_TOO_LONG`、`AGENT_DISPLAY_NAME_TOO_LONG`、`AGENT_VERSION_INVALID`、`AGENT_ID_REQUIRED`、`AGENT_ID_INVALID`、`AGENT_BINDING_MODELS_EMPTY`、`AGENT_MODEL_ID_REQUIRED`、`AGENT_MODEL_ID_INVALID`。
 - 业务规则：`AGENT_ID_MISMATCH`、`AGENT_MODEL_DUPLICATED`、`AGENT_NOT_FOUND`、`AGENT_DISABLED`、`AGENT_BOUND_TOOL_DISABLED`、`AGENT_BOUND_AGENT_DISABLED`。
-- 存储数据完整性：`AGENT_VERSION_MISSING`、`AGENT_VERSION_UPDATE_FAILED`、`AGENT_MODEL_BINDING_MISSING`、`AGENT_PERMISSION_INVALID`、`AGENT_STORED_AGENT_ID_INVALID`、`AGENT_STORED_MODEL_ID_INVALID`、`AGENT_STORED_TOOL_ID_INVALID`、`AGENT_STORED_SKILL_ID_INVALID`、`AGENT_STORED_BOUND_AGENT_ID_INVALID`、`AGENT_USE_CASES_NOT_ARRAY`、`AGENT_USE_CASE_INVALID`、`AGENT_USE_CASES_PARSE_FAILED`、`AGENT_BOUND_TOOL_NOT_FOUND`、`AGENT_BOUND_TOOL_VERSION_MISSING`、`AGENT_BOUND_TOOL_SCHEMA_INVALID`、`AGENT_BOUND_TOOL_DEFINITION_DUPLICATED`、`AGENT_BOUND_AGENT_NOT_FOUND`、`AGENT_BOUND_AGENT_VERSION_MISSING`、`AGENT_BOUND_AGENT_DEFINITION_DUPLICATED`。
+- 存储数据完整性：`AGENT_VERSION_MISSING`、`AGENT_VERSION_UPDATE_FAILED`、`AGENT_MODEL_BINDING_MISSING`、`AGENT_PERMISSION_INVALID`、`AGENT_STORED_AGENT_ID_INVALID`、`AGENT_STORED_MODEL_ID_INVALID`、`AGENT_STORED_TOOL_ID_INVALID`、`AGENT_STORED_SKILL_ID_INVALID`、`AGENT_STORED_BOUND_AGENT_ID_INVALID`、`AGENT_USE_CASES_NOT_ARRAY`、`AGENT_USE_CASE_INVALID`、`AGENT_USE_CASES_PARSE_FAILED`、`AGENT_BOUND_TOOL_NOT_FOUND`、`AGENT_BOUND_TOOL_VERSION_MISSING`、`AGENT_BOUND_TOOL_DEFINITION_DUPLICATED`、`AGENT_BOUND_AGENT_NOT_FOUND`、`AGENT_BOUND_AGENT_VERSION_MISSING`、`AGENT_BOUND_AGENT_DEFINITION_DUPLICATED`。
 
 Runtime 新增错误码参数固定如下；绑定版本为空时，Service 向消息参数传递本地化前的固定字面量 `latest`：
 
@@ -389,7 +386,6 @@ Runtime 新增错误码参数固定如下；绑定版本为空时，Service 向�
 | `AGENT_BOUND_TOOL_NOT_FOUND` | 根 Agent ID、Tool ID、绑定版本或 `latest` | 存储完整性 |
 | `AGENT_BOUND_TOOL_DISABLED` | 根 Agent ID、Tool ID、实际版本 | 业务规则 |
 | `AGENT_BOUND_TOOL_VERSION_MISSING` | 根 Agent ID、Tool ID | 存储完整性 |
-| `AGENT_BOUND_TOOL_SCHEMA_INVALID` | 根 Agent ID、Tool ID、Schema 字段名 | 存储完整性 |
 | `AGENT_BOUND_TOOL_DEFINITION_DUPLICATED` | 根 Agent ID、Tool ID、绑定版本或 `latest` | 存储完整性 |
 | `AGENT_BOUND_AGENT_NOT_FOUND` | 根 Agent ID、目标 Agent ID、绑定版本或 `latest` | 存储完整性 |
 | `AGENT_BOUND_AGENT_DISABLED` | 根 Agent ID、目标 Agent ID、实际版本 | 业务规则 |
@@ -441,6 +437,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.18.3` | 2026-08-12 | Tool 元数据增加布尔字段 `is_concurrency_safe`；Runtime Tool 增加 `isConcurrencySafe` 并移除 `inputSchema`、`outputSchema`、Schema 校验及专用错误码 |
 | `v0.18.2` | 2026-08-12 | 将 Runtime `bindingTools` 元素改为完整 Tool 元数据平铺结构，删除 `toolId`、绑定版本和 `tool` 中间包装层；同步 Java 实现、测试和源码基线 |
 | `v0.18.1` | 2026-08-12 | 同步 `getRuntimeAgent` Java 实现、最终源码基线、Agent 批量版本查询 XML、Runtime VO、错误码和测试；保留 Tool Mapper SQL 集成边界 |
 | `v0.18.0` | 2026-08-12 | 设计 `getRuntimeAgent` 接口；Tool 与绑定 Agent 按 ID/可空版本批量解析并返回嵌套完整定义；依赖缺失、禁用或版本不匹配时记录日志并整体失败 |
