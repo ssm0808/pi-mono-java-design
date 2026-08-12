@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.18.0 on 2026-08-12.
+' Generated for SR-AGENT-DB-001 v0.18.1 on 2026-08-12.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: eb21f59af1a7e04010010094ff565baa862885ed.
-' Java baseline: mate-service@44644c6d95a11479b62651a1bc185d96e49b2b62.
+' Design baseline: 819825b2c248294f25fc9986189fc2fae57b0f09.
+' Java baseline: mate-service@bc49de4cd9a1336eda704f87dab1c03f062084af.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -63,7 +63,7 @@ skinparam classAttributeIconSize 0
 ' Product constraint: Model, Tool, and Skill IDs use typed prefixes plus UUIDs.
 ' Target-only rule: future Agent binding writes validate current targets but
 ' do not validate pinned history; Runtime reads require an exact current match.
-' Target-only API: getRuntimeAgent resolves Tool and Agent bindings by typed
+' Observed behavior: getRuntimeAgent resolves Tool and Agent bindings by typed
 ' identifier and optional version, then returns nested definitions.
 ' GaussDB divergence: physical foreign keys are optional because GaussDB
 ' Distributed does not support them; the base DDL uses logical relationships.
@@ -186,15 +186,22 @@ skinparam ParticipantBackgroundColor #F7F9FC
 '   AgentDefinitionService.getAgent.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java
 '   AgentDefinitionServiceImpl.getAgent and loadAggregate.
+'   AgentDefinitionServiceImpl.getRuntimeAgent, resolveRuntimeTools,
+'   resolveRuntimeAgents, and indexDefinitions.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentDefinitionMapper.java
 '   AgentDefinitionMapper.selectById.
+'   AgentDefinitionMapper.selectByBindings.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentToolBindingMapper.java
 '   AgentToolBindingMapper.selectByAgentId.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentBindingMapper.java
 '   AgentBindingMapper.selectByAgentId.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/ToolDefinitionMapper.java
+'   ToolDefinitionMapper.selectByBindings.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentResponseVO.java
+'   RuntimeAgentResponseVO nested Runtime response contract.
 ' Observed behavior: getAgent returns binding identifiers and optional versions.
-' Target-only API: getRuntimeAgent expands Tool and bound Agent definitions.
-' Target-only integration: ToolDefinitionMapper SQL is supplied by the Tool owner.
+' Observed behavior: getRuntimeAgent expands Tool and bound Agent definitions.
+' Integration pending: ToolDefinitionMapper SQL is supplied by the Tool owner.
 ' Design reason: batch dependency queries avoid one query per binding.
 ' Security hardening: a missing, disabled, or unmatched dependency fails closed.
 ' Product constraint: no partial Runtime Agent response is returned.

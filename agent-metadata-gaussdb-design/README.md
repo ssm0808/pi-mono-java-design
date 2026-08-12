@@ -1,11 +1,11 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.18.0`<br>
+> 版本：`v0.18.1`<br>
 > 日期：`2026-08-12`<br>
-> 状态：现有管理接口已实现 / Runtime Agent 接口为目标设计<br>
-> 设计仓库分析基线：`eb21f59af1a7e04010010094ff565baa862885ed`<br>
-> Java 实现分析基线：`mate-service@44644c6d95a11479b62651a1bc185d96e49b2b62`<br>
+> 状态：Java 接口已实现 / Tool Mapper SQL 待集成<br>
+> 设计仓库分析基线：`819825b2c248294f25fc9986189fc2fae57b0f09`<br>
+> Java 实现分析基线：`mate-service@bc49de4cd9a1336eda704f87dab1c03f062084af`<br>
 > Agent JSON 工作区 SHA-256：`b9aa4376e1b0859e698a69a487a2aca9c4bc73911d0f9fa5da89532229f6adf9`<br>
 > Tool JSON 工作区 SHA-256：`4aad9feefbdb4984450bb9250007fac1c01c31f6b70fe59f5fbaa0d558a07a25`
 
@@ -23,7 +23,7 @@
 
 System Prompt 的八个细分字段均为可空软约束。数据库不强制非空或非空白；响应只返回具有值的细分字段，管理前端按实际返回字段动态展示。
 
-新增目标接口 `GET /mate-service/v1/agents/{agentId}/runtime`。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：Tool 返回完整 Tool 元数据，被绑定 Agent 返回 `t_agent_definition` 的全部字段但不递归展开其绑定。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
+已实现 `GET /mate-service/v1/agents/{agentId}/runtime`。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：Tool 返回完整 Tool 元数据，被绑定 Agent 返回 `t_agent_definition` 的全部字段但不递归展开其绑定。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
 
 完整初始化 DDL 维护在 [`schema.sql`](./schema.sql)，本文不重复嵌入完整 SQL。
 
@@ -37,7 +37,7 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 ### 2.2 Java 基线
 
-本次分析的 Java 提交为 `mate-service@44644c6d95a11479b62651a1bc185d96e49b2b62`，相关路径：
+本次分析的 Java 提交为 `mate-service@bc49de4cd9a1336eda704f87dab1c03f062084af`，相关路径：
 
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`
@@ -47,6 +47,11 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentServiceException.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/validation/ResourceIdRules.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/AgentInfoResponseVO.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentResponseVO.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeToolBindingResponseVO.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentBindingResponseVO.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ToolDefinitionResponseVO.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentDefinitionResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ApiSuccessResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ListAgentResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/UpdateAgentRequestVO.java`
@@ -54,6 +59,10 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentDefinitionMapper.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentToolBindingMapper.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/AgentBindingMapper.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/ToolDefinitionMapper.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/dto/ToolDefinitionDTO.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/dto/ToolVersionQueryDTO.java`
+- `src/main/java/com/huawei/hicampus/mate/agentdefinition/dto/AgentVersionQueryDTO.java`
 - `src/main/resources/mapper/AgentDefinitionMapper.xml`
 - `src/main/resources/application.yml`
 - `src/main/resources/messages.properties`
@@ -65,9 +74,9 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 - `src/test/java/com/huawei/hicampus/mate/agentdefinition/exception/AgentErrorMessageTest.java`
 - `src/test/java/com/huawei/hicampus/mate/agentdefinition/vo/AgentInfoJsonTest.java`
 
-该基线只保留 `listAgents`、`getAgent`、`updateAgent` 三项 Service 能力，并通过 `AgentDefinitionController` 暴露对应的三个 HTTP 接口。Controller 使用 Request/Response VO，路径 Agent ID 在边界完成格式校验，成功响应由 `ApiSuccessResponseVO` 包装；列表和详情把 Service 结果放入 `result`，更新成功时省略空 `result`。Service 实现五表聚合、批量列表查询以及最后写入生效的模型替换。模型绑定顺序列和 DTO 属性使用 `model_order` / `modelOrder`；可变 Request VO 和 DTO 使用 Lombok `@Data`；Java 注释和 Javadoc 使用中文。异常使用具体的大写 snake_case 错误码，错误码同时作为国际化 key 和 `resCode`。
+该基线提供 `listAgents`、`getAgent`、`getRuntimeAgent`、`updateAgent` 四项 Service 能力，并通过 `AgentDefinitionController` 暴露四个 HTTP 接口。Controller 使用 Request/Response VO，路径 Agent ID 在边界完成格式校验，成功响应由 `ApiSuccessResponseVO` 包装；读取结果放入 `result`，更新成功时省略空 `result`。Service 实现五表聚合、Runtime 依赖批量解析、批量列表查询以及最后写入生效的模型替换。模型绑定顺序列和 DTO 属性使用 `model_order` / `modelOrder`；可变 Request VO 和 DTO 使用 Lombok `@Data`；Java 注释和 Javadoc 使用中文。异常使用具体的大写 snake_case 错误码，错误码同时作为国际化 key 和 `resCode`。
 
-该 Java 基线没有 `getRuntimeAgent`、Runtime 专用 Response VO、Tool 定义 DTO/Mapper 或按绑定版本批量解析依赖的实现。因此第 6.4 节均属于目标设计，不得视为已观察到的 Java 行为。Tool 定义的数据库表、版本保存方式和 Mapper SQL 由 Tool 模块负责人提供；本设计只规定 Agent 模块使用的最小批量 Mapper 契约。
+`AgentDefinitionMapper.selectByBindings` 及其 MyBatis XML 已按 Agent ID/可空版本实现；`ToolDefinitionMapper.selectByBindings`、Tool DTO 和 Runtime VO 已实现。Tool 定义的数据库表、版本保存方式和 Mapper SQL 仍由 Tool 模块负责人提供，这是当前唯一未完成的 Runtime 数据源集成项；在该 SQL 到位前，有 Tool 绑定的 Runtime 查询不具备完整数据库运行条件。
 
 本文只保存当前 JSON 字段，不增加多租户、历史版本、审计、Outbox、Session 或 Memory 表。Agent 固定版本只存储和展示，不查询不存在的历史表。
 
@@ -110,7 +119,7 @@ Agent 路径参数、更新请求体和模型更新数组元素直接使用 Jaka
 
 ### 4.2 System Prompt
 
-八个 System Prompt 字段是可选的提示词组成部分：数据库使用可空 `TEXT`，不设置 `NOT NULL` 或非空白 `CHECK`。当前三个接口不写 System Prompt，因此不保留对应 Request VO；未来增加写入口时，不对这些字段增加 `@NotBlank`，管理界面可以提示建议填写，但不得阻止保存。本版仍不设置数据库或 Java 最大长度。
+八个 System Prompt 字段是可选的提示词组成部分：数据库使用可空 `TEXT`，不设置 `NOT NULL` 或非空白 `CHECK`。当前四个接口不写 System Prompt，因此不保留对应 Request VO；未来增加写入口时，不对这些字段增加 `@NotBlank`，管理界面可以提示建议填写，但不得阻止保存。本版仍不设置数据库或 Java 最大长度。
 
 应用使用 Jackson `NON_NULL` 输出策略，值为 `NULL` 的细分字段不出现在响应 JSON 中，管理前端按实际返回字段动态展示。未来写入时建议把空白字符串规范化为 `NULL`，避免同时保存 `NULL`、空字符串和纯空白字符串；该规范化属于数据清理，不构成必填校验。
 
@@ -142,7 +151,7 @@ GaussDB JSON/JSONB 类型参考：[Huawei Cloud GaussDB JSON/JSONB Types](https:
 
 同一 Tool 只能出现在一个权限数组，权限引用必须对应已绑定 Tool。输出按 `tool_id` 排序。
 
-Tool ID 必须符合 `^tool-[0-9a-fA-F]{32}$`；当前三接口没有 Tool 写入请求，Service 在读取完整聚合时执行数据完整性校验。
+Tool ID 必须符合 `^tool-[0-9a-fA-F]{32}$`；当前四个接口没有 Tool 写入请求，Service 在读取完整聚合时执行数据完整性校验。
 
 Runtime Agent 查询不把绑定版本仅作为展示字段。Service 将每个 `tool_id + tool_version` 转换为批量查询条件：`tool_version = NULL` 表示解析最新版本，非空表示必须精确匹配指定版本。Tool 定义 Mapper 返回完整 Tool 元数据，包括 `id`、`type`、`version`、时间、`enabled`、默认 `permission`、名称、描述、`source`、`input_schema` 和 `output_schema`。Tool 表及版本历史不属于本 Agent Schema；对应 Mapper SQL 由 Tool 模块负责人提供。
 
@@ -152,7 +161,7 @@ Runtime Agent 查询不把绑定版本仅作为展示字段。Service 将每个 
 
 主键为 `(agent_id, skill_id)`。`skill_version = NULL` 表示最新版本；不保存顺序，输出按 `skill_id` 排序。
 
-Skill ID 必须符合 `^skill-[0-9a-fA-F]{32}$`；当前三接口没有 Skill 写入请求，Service 在读取完整聚合时执行数据完整性校验。
+Skill ID 必须符合 `^skill-[0-9a-fA-F]{32}$`；当前四个接口没有 Skill 写入请求，Service 在读取完整聚合时执行数据完整性校验。
 
 ### 5.4 Agent 绑定 `t_agent_binding_agents`
 
@@ -164,7 +173,7 @@ Skill ID 必须符合 `^skill-[0-9a-fA-F]{32}$`；当前三接口没有 Skill �
 
 主键为 `(agent_id, bound_agent_id)`，禁止自绑定，并建立 `(bound_agent_id, agent_id)` 反向索引；固定版本不校验历史版本可用性。输出按 `bound_agent_id` 排序。
 
-当前三接口不写入 Agent 绑定；读取时校验 `agent_id` 和 `bound_agent_id` 均符合 Agent ID 格式。未来增加写接口时，应在 Service 中继续校验目标 Agent 存在且不可重复绑定。
+当前四个接口不写入 Agent 绑定；读取时校验 `agent_id` 和 `bound_agent_id` 均符合 Agent ID 格式。未来增加写接口时，应在 Service 中继续校验目标 Agent 存在且不可重复绑定。
 
 Runtime Agent 查询按照 `bound_agent_id + bound_agent_version` 批量读取主表。`bound_agent_version = NULL` 表示当前版本；非空时查询条件必须同时匹配 ID 和版本。由于 `t_agent_definition` 只保存当前版本，该查询只能验证固定版本是否与当前版本一致，不能恢复已经被新版本替换的历史定义。固定版本无匹配记录或目标 Agent 未启用时，Service 记录根 Agent ID、目标 Agent ID 和请求版本并终止整个查询。
 
@@ -172,18 +181,13 @@ Runtime Agent 查询按照 `bound_agent_id + bound_agent_version` 批量读取�
 
 ## 6. Service 与 Controller 接口
 
-Java Service 当前提供：
+Java Service 已提供：
 
 ```text
 listAgents(ListAgentRequestVO) -> ListAgentResponseVO
 getAgent(String agentId) -> AgentInfoResponseVO
-updateAgent(String agentId, UpdateAgentRequestVO) -> void
-```
-
-目标版本新增：
-
-```text
 getRuntimeAgent(String agentId) -> RuntimeAgentResponseVO
+updateAgent(String agentId, UpdateAgentRequestVO) -> void
 ```
 
 `AgentDefinitionController` 已实现：
@@ -191,13 +195,8 @@ getRuntimeAgent(String agentId) -> RuntimeAgentResponseVO
 ```text
 GET  /mate-service/v1/agents
 GET  /mate-service/v1/agents/{agentId}
+GET  /mate-service/v1/agents/{agentId}/runtime
 POST /mate-service/v1/agents/{agentId}
-```
-
-目标 Controller 新增：
-
-```text
-GET /mate-service/v1/agents/{agentId}/runtime
 ```
 
 成功响应使用 `ApiSuccessResponseVO<T>`，示例成功码为 `0`，消息为 `success`。该类是独立仓库中的最小可运行包装；接入 mate-service 主工程时，如已有公共响应类和成功码常量，应替换该示例类，不改变 Service 签名。`ApiExceptionHandler` 继续负责将异常适配为 `resCode` / `resMsg`。
@@ -428,7 +427,7 @@ GaussDB Distributed 不支持物理外键，因此基础 DDL 使用逻辑关系�
 
 现有 Mapper 操作继续保持：主表查询、分页、行锁和版本递增；Model 绑定查询、删除和批量插入；Tool、Skill、Agent 绑定只提供单个 Agent 和 Agent ID 集合查询。`AgentBindingMapper`、`AgentToolBindingMapper`、`AgentSkillBindingMapper` 不增加 `insertBatch`。
 
-Runtime Agent 目标设计只新增两个批量定义查询：`AgentDefinitionMapper.selectByBindings` 和 `ToolDefinitionMapper.selectByBindings`。查询条件分别使用 `AgentVersionQueryDTO` 和 `ToolVersionQueryDTO`，不使用 Map 或临时 VO 作为 Mapper 参数。Tool 定义 Mapper 不在 Agent 模块编写 SQL；同事提供实现后必须保持同一方法契约和 `resultType` 映射规则。
+Runtime Agent 已新增两个批量定义查询契约：`AgentDefinitionMapper.selectByBindings` 和 `ToolDefinitionMapper.selectByBindings`。查询条件分别使用 `AgentVersionQueryDTO` 和 `ToolVersionQueryDTO`，不使用 Map 或临时 VO 作为 Mapper 参数。Agent Mapper XML 已实现并使用 `resultType`；Tool 定义 Mapper 暂不在 Agent 模块编写 SQL，同事提供实现后必须保持同一方法契约和 `resultType` 映射规则。
 
 模型绑定类命名为 `AgentModelBindingDTO` 和 `AgentModelBindingMapper`，与 `AgentToolBindingDTO`、`AgentSkillBindingDTO` 风格一致。
 
@@ -447,6 +446,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.18.1` | 2026-08-12 | 同步 `getRuntimeAgent` Java 实现、最终源码基线、Agent 批量版本查询 XML、Runtime VO、错误码和测试；保留 Tool Mapper SQL 集成边界 |
 | `v0.18.0` | 2026-08-12 | 设计 `getRuntimeAgent` 接口；Tool 与绑定 Agent 按 ID/可空版本批量解析并返回嵌套完整定义；依赖缺失、禁用或版本不匹配时记录日志并整体失败 |
 | `v0.17.0` | 2026-08-11 | 增加三个 HTTP 接口的 `AgentDefinitionController` 可运行示例；增加统一成功响应包装，路径参数校验和 MVC 测试 |
 | `v0.16.1` | 2026-08-10 | `AgentInfoResponseVO` 顶层主键由 `agentId` 改为与元数据一致的 `id`；嵌套 Agent 绑定仍使用 `agentId` |
