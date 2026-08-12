@@ -1,11 +1,11 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.18.3`<br>
+> 版本：`v0.18.4`<br>
 > 日期：`2026-08-12`<br>
 > 状态：Java 接口已实现 / Tool Mapper SQL 待集成<br>
-> 设计仓库分析基线：`2d37138d6907faf0a844ee7341775df6b1eee276`<br>
-> Java 实现分析基线：`mate-service@21c966a721a2069e212bd536516eaf978c6ac0d6`<br>
+> 设计仓库分析基线：`d26770adf3f22d323b4da0d68f4222ad03edef95`<br>
+> Java 实现分析基线：`mate-service@5f32aad0db75f6cd5cf21c9283cb81c3c6323f62`<br>
 > Agent JSON 工作区 SHA-256：`b9aa4376e1b0859e698a69a487a2aca9c4bc73911d0f9fa5da89532229f6adf9`<br>
 > Tool JSON 工作区 SHA-256：`3f4d88b30f4f22ef28e5356df0e5927adf43e34551384cec0883a895fcaa0746`
 
@@ -21,7 +21,7 @@
 
 模型绑定全链路统一使用：元数据 `binding_models`、Java `bindingModels`、数据库 `t_agent_binding_models`、数据层 `AgentModelBindingDTO` / `AgentModelBindingMapper`。不保留 `model` 或 `models` 兼容别名。
 
-System Prompt 的八个细分字段均为可空软约束。数据库不强制非空或非空白；响应只返回具有值的细分字段，管理前端按实际返回字段动态展示。
+System Prompt 的八个细分字段均为可空软约束。数据库不强制非空或非空白；普通详情响应只返回具有值的细分字段，管理前端按实际返回字段动态展示。Runtime 响应将这些字段拼接为单一字符串。
 
 已实现 `GET /mate-service/v1/agents/{agentId}/runtime`。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：`bindingTools` 直接平铺 Runtime 所需 Tool 元数据，包含 `isConcurrencySafe`，不包含 `inputSchema` 或 `outputSchema`；被绑定 Agent 返回 `t_agent_definition` 的全部字段但不递归展开其绑定。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
 
@@ -39,7 +39,7 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 ### 2.2 Java 基线
 
-本次分析的 Java 提交为 `mate-service@21c966a721a2069e212bd536516eaf978c6ac0d6`，相关路径：
+本次分析的 Java 提交为 `mate-service@5f32aad0db75f6cd5cf21c9283cb81c3c6323f62`，相关路径：
 
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`
@@ -122,7 +122,9 @@ Agent 路径参数、更新请求体和模型更新数组元素直接使用 Jaka
 
 八个 System Prompt 字段是可选的提示词组成部分：数据库使用可空 `TEXT`，不设置 `NOT NULL` 或非空白 `CHECK`。当前四个接口不写 System Prompt，因此不保留对应 Request VO；未来增加写入口时，不对这些字段增加 `@NotBlank`，管理界面可以提示建议填写，但不得阻止保存。本版仍不设置数据库或 Java 最大长度。
 
-应用使用 Jackson `NON_NULL` 输出策略，值为 `NULL` 的细分字段不出现在响应 JSON 中，管理前端按实际返回字段动态展示。未来写入时建议把空白字符串规范化为 `NULL`，避免同时保存 `NULL`、空字符串和纯空白字符串；该规范化属于数据清理，不构成必填校验。
+普通 `getAgent` 和列表接口使用 Jackson `NON_NULL` 输出策略，值为 `NULL` 的细分字段不出现在结构化 `systemPrompt` 中，管理前端按实际返回字段动态展示。Runtime Agent 的根 Agent 和 `bindingAgents[].agent` 则把八个字段拼接为单一字符串，供模型直接作为 System Prompt 使用。
+
+Runtime 拼接顺序固定为 `role`、`objective`、`instructions`、`tool_policy`、`safety`、`completion`、`response_style`、`example`。每段去除首尾空白，跳过 `NULL`、空字符串和纯空白字符串，段间使用两个换行符 `\n\n`；全部字段为空时返回空字符串。未来写入时仍建议把空白字符串规范化为 `NULL`，该规范化属于数据清理，不构成必填校验。
 
 ### 4.3 Use Cases
 
@@ -180,7 +182,7 @@ Skill ID 必须符合 `^skill-[0-9a-fA-F]{32}$`；当前四个接口没有 Skill
 
 Runtime Agent 查询按照 `bound_agent_id + bound_agent_version` 批量读取主表。`bound_agent_version = NULL` 表示当前版本；非空时查询条件必须同时匹配 ID 和版本。由于 `t_agent_definition` 只保存当前版本，该查询只能验证固定版本是否与当前版本一致，不能恢复已经被新版本替换的历史定义。固定版本无匹配记录或目标 Agent 未启用时，Service 记录根 Agent ID、目标 Agent ID 和请求版本并终止整个查询。
 
-成功匹配后返回目标 Agent 在 `t_agent_definition` 中的全部字段，包括 System Prompt、`use_cases` 和时间字段，但不递归查询其模型、Tool、Skill 或 Agent 绑定，避免循环依赖和无界展开。未来若要读取历史版本，必须先引入独立的 Agent 历史版本模型；本版不以当前主表伪装历史查询能力。
+成功匹配后返回目标 Agent 在 `t_agent_definition` 中的全部标量信息，包括拼接后的字符串 `systemPrompt`、`use_cases` 和时间字段，但不递归查询其模型、Tool、Skill 或 Agent 绑定，避免循环依赖和无界展开。未来若要读取历史版本，必须先引入独立的 Agent 历史版本模型；本版不以当前主表伪装历史查询能力。
 
 ## 6. Service 与 Controller 接口
 
@@ -265,7 +267,7 @@ Controller 响应：
 
 ![Runtime Agent 查询流程](./runtime_agent_query_flow.svg)
 
-PlantUML：[查看源码](./diagram.puml#L171)
+PlantUML：[查看源码](./diagram.puml#L172)
 
 `RuntimeAgentResponseVO` 的根字段与 `AgentInfoResponseVO` 一致。`bindingTools` 的元素直接平铺为解析后的 Runtime Tool 元数据，不保留只包装 `toolId`、绑定版本和 `tool` 的中间对象；`bindingAgents` 继续使用“绑定信息 + 解析后的定义”结构：
 
@@ -286,9 +288,7 @@ PlantUML：[查看源码](./diagram.puml#L171)
     "bindingModels": [
       "model-550e8400e29b41d4a716446655440001"
     ],
-    "systemPrompt": {
-      "role": "Campus assistant"
-    },
+    "systemPrompt": "Campus assistant\n\nHelp users complete campus service tasks",
     "useCases": [
       "Campus service"
     ],
@@ -323,9 +323,7 @@ PlantUML：[查看源码](./diagram.puml#L171)
           "name": "map-specialist",
           "displayName": "Map Specialist",
           "description": "Campus map specialist",
-          "systemPrompt": {
-            "role": "Campus map specialist"
-          },
+          "systemPrompt": "Campus map specialist\n\nProvide accurate campus navigation",
           "useCases": [
             "Campus navigation"
           ]
@@ -345,7 +343,7 @@ PlantUML：[查看源码](./diagram.puml#L171)
 
 `bindingTools[].version` 是本次实际解析出的 Tool 版本，必须有值。`t_agent_binding_tools.tool_version` 只用于选择最新版本或精确匹配固定版本，不在响应中重复展示。`bindingAgents[].version` 仍表示可空的绑定版本，嵌套 `agent.version` 表示实际解析出的 Agent 版本；绑定版本为空时按照全局 `NON_NULL` 策略省略。
 
-被绑定 Agent 的 `agent` 对象严格对应 `t_agent_definition`：包含标量字段、System Prompt、`useCases` 和时间字段，不包含 `bindingModels`、`bindingTools`、`bindingSkills`、`bindingAgents` 或聚合后的 `permission`。`bindingTools` 返回 `isConcurrencySafe`，不返回 Tool 的 `inputSchema` 和 `outputSchema`。
+根 Agent 和被绑定 Agent 的 `systemPrompt` 都是相同规则拼接出的字符串，不返回八字段对象。被绑定 Agent 的 `agent` 对象包含主表标量信息、拼接后的 `systemPrompt`、`useCases` 和时间字段，不包含 `bindingModels`、`bindingTools`、`bindingSkills`、`bindingAgents` 或聚合后的 `permission`。`bindingTools` 返回 `isConcurrencySafe`，不返回 Tool 的 `inputSchema` 和 `outputSchema`。
 
 Runtime 聚合采用 `REPEATABLE_READ` 只读事务，并执行以下流程：
 
@@ -437,6 +435,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.18.4` | 2026-08-12 | Runtime 根 Agent 与绑定 Agent 的 `systemPrompt` 改为八个可选字段按固定顺序拼接的字符串；普通详情继续返回结构化对象 |
 | `v0.18.3` | 2026-08-12 | Tool 元数据增加布尔字段 `is_concurrency_safe`；Runtime Tool 增加 `isConcurrencySafe` 并移除 `inputSchema`、`outputSchema`、Schema 校验及专用错误码 |
 | `v0.18.2` | 2026-08-12 | 将 Runtime `bindingTools` 元素改为完整 Tool 元数据平铺结构，删除 `toolId`、绑定版本和 `tool` 中间包装层；同步 Java 实现、测试和源码基线 |
 | `v0.18.1` | 2026-08-12 | 同步 `getRuntimeAgent` Java 实现、最终源码基线、Agent 批量版本查询 XML、Runtime VO、错误码和测试；保留 Tool Mapper SQL 集成边界 |

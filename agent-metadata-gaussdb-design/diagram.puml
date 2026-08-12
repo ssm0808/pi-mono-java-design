@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.18.3 on 2026-08-12.
+' Generated for SR-AGENT-DB-001 v0.18.4 on 2026-08-12.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: 2d37138d6907faf0a844ee7341775df6b1eee276.
-' Java baseline: mate-service@21c966a721a2069e212bd536516eaf978c6ac0d6.
+' Design baseline: d26770adf3f22d323b4da0d68f4222ad03edef95.
+' Java baseline: mate-service@5f32aad0db75f6cd5cf21c9283cb81c3c6323f62.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -67,6 +67,7 @@ skinparam classAttributeIconSize 0
 ' Observed behavior: getRuntimeAgent resolves Tool and Agent bindings by typed
 ' identifier and optional version, then returns flat Tools and nested Agents.
 ' Observed behavior: Runtime Tools expose isConcurrencySafe but omit schemas.
+' Observed behavior: Runtime systemPrompt values are composed strings.
 ' GaussDB divergence: physical foreign keys are optional because GaussDB
 ' Distributed does not support them; the base DDL uses logical relationships.
 ' DDL convention: each DROP TABLE IF EXISTS immediately precedes CREATE TABLE.
@@ -208,6 +209,7 @@ skinparam ParticipantBackgroundColor #F7F9FC
 ' Observed behavior: getAgent returns binding identifiers and optional versions.
 ' Observed behavior: getRuntimeAgent flattens Tool definitions with concurrency
 ' safety and without schemas, then nests bound Agent definitions.
+' Observed behavior: root and bound Agent prompts use the same composition.
 ' Integration pending: ToolDefinitionMapper SQL is supplied by the Tool owner.
 ' Design reason: batch dependency queries avoid one query per binding.
 ' Security hardening: a missing, disabled, or unmatched dependency fails closed.
@@ -252,6 +254,7 @@ else root Agent available
     Service -> Logger: record root id, dependency id, and version
     Service --> Controller: throw specific error code
   else every dependency resolved
+    Service -> Service: compose root and bound Agent prompts
     Service -> Service: assemble flat Tools and nested Agents
     Service --> Controller: RuntimeAgentResponseVO
     Controller --> Consumer: success envelope
@@ -263,6 +266,7 @@ note over Service,DefinitionMapper
   A non-null version requires an exact id-version match.
   The current Agent table cannot return historical versions.
   Bound Agent definitions do not recursively expand bindings.
+  Runtime prompts join nonblank fields with a blank line.
 end note
 
 note over Service,ToolMapper
