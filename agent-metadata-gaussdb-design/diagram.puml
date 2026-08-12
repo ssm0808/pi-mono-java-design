@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.18.4 on 2026-08-12.
+' Generated for SR-AGENT-DB-001 v0.18.5 on 2026-08-12.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: d26770adf3f22d323b4da0d68f4222ad03edef95.
-' Java baseline: mate-service@5f32aad0db75f6cd5cf21c9283cb81c3c6323f62.
+' Design baseline: 772682427e6d3526c4c35fa21b8103346ee49e47.
+' Java baseline: mate-service@b4a421e4d840d51011cdafdac34f47f57a1e73b7.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -65,7 +65,7 @@ skinparam classAttributeIconSize 0
 ' Target-only rule: future Agent binding writes validate current targets but
 ' do not validate pinned history; Runtime reads require an exact current match.
 ' Observed behavior: getRuntimeAgent resolves Tool and Agent bindings by typed
-' identifier and optional version, then returns flat Tools and nested Agents.
+' identifier and optional version, then returns flat Tools and Agents.
 ' Observed behavior: Runtime Tools expose isConcurrencySafe but omit schemas.
 ' Observed behavior: Runtime systemPrompt values are composed strings.
 ' GaussDB divergence: physical foreign keys are optional because GaussDB
@@ -201,14 +201,16 @@ skinparam ParticipantBackgroundColor #F7F9FC
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/ToolDefinitionMapper.java
 '   ToolDefinitionMapper.selectByBindings.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentResponseVO.java
-'   RuntimeAgentResponseVO flat Tool and nested Agent response contract.
+'   RuntimeAgentResponseVO flat Tool and Agent response contract.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ToolDefinitionResponseVO.java
 '   ToolDefinitionResponseVO flat bindingTools element.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentDefinitionResponseVO.java
+'   RuntimeAgentDefinitionResponseVO flat bindingAgents element.
 ' - TOOL metadata JSON line 8 defines is_concurrency_safe; lines 14-23 define
 '   schemas that the Runtime Agent response intentionally omits.
 ' Observed behavior: getAgent returns binding identifiers and optional versions.
 ' Observed behavior: getRuntimeAgent flattens Tool definitions with concurrency
-' safety and without schemas, then nests bound Agent definitions.
+' safety and without schemas, and also flattens bound Agent definitions.
 ' Observed behavior: root and bound Agent prompts use the same composition.
 ' Integration pending: ToolDefinitionMapper SQL is supplied by the Tool owner.
 ' Design reason: batch dependency queries avoid one query per binding.
@@ -255,7 +257,7 @@ else root Agent available
     Service --> Controller: throw specific error code
   else every dependency resolved
     Service -> Service: compose root and bound Agent prompts
-    Service -> Service: assemble flat Tools and nested Agents
+    Service -> Service: assemble flat Tools and Agents
     Service --> Controller: RuntimeAgentResponseVO
     Controller --> Consumer: success envelope
   end
