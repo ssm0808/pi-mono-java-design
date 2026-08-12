@@ -1,11 +1,11 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.18.1`<br>
+> 版本：`v0.18.2`<br>
 > 日期：`2026-08-12`<br>
 > 状态：Java 接口已实现 / Tool Mapper SQL 待集成<br>
-> 设计仓库分析基线：`819825b2c248294f25fc9986189fc2fae57b0f09`<br>
-> Java 实现分析基线：`mate-service@bc49de4cd9a1336eda704f87dab1c03f062084af`<br>
+> 设计仓库分析基线：`ceefbf16f6759a357eb043846fe6868a14ef31d1`<br>
+> Java 实现分析基线：`mate-service@5fa0af6cff77e6b1d73bf17208a614edd48976aa`<br>
 > Agent JSON 工作区 SHA-256：`b9aa4376e1b0859e698a69a487a2aca9c4bc73911d0f9fa5da89532229f6adf9`<br>
 > Tool JSON 工作区 SHA-256：`4aad9feefbdb4984450bb9250007fac1c01c31f6b70fe59f5fbaa0d558a07a25`
 
@@ -23,7 +23,7 @@
 
 System Prompt 的八个细分字段均为可空软约束。数据库不强制非空或非空白；响应只返回具有值的细分字段，管理前端按实际返回字段动态展示。
 
-已实现 `GET /mate-service/v1/agents/{agentId}/runtime`。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：Tool 返回完整 Tool 元数据，被绑定 Agent 返回 `t_agent_definition` 的全部字段但不递归展开其绑定。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
+已实现 `GET /mate-service/v1/agents/{agentId}/runtime`。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：`bindingTools` 直接平铺完整 Tool 元数据，被绑定 Agent 返回 `t_agent_definition` 的全部字段但不递归展开其绑定。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
 
 完整初始化 DDL 维护在 [`schema.sql`](./schema.sql)，本文不重复嵌入完整 SQL。
 
@@ -37,7 +37,7 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 ### 2.2 Java 基线
 
-本次分析的 Java 提交为 `mate-service@bc49de4cd9a1336eda704f87dab1c03f062084af`，相关路径：
+本次分析的 Java 提交为 `mate-service@5fa0af6cff77e6b1d73bf17208a614edd48976aa`，相关路径：
 
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`
@@ -48,7 +48,6 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/validation/ResourceIdRules.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/AgentInfoResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentResponseVO.java`
-- `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeToolBindingResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentBindingResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ToolDefinitionResponseVO.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentDefinitionResponseVO.java`
@@ -264,7 +263,7 @@ Controller 响应：
 
 PlantUML：[查看源码](./diagram.puml#L169)
 
-`RuntimeAgentResponseVO` 的根字段与 `AgentInfoResponseVO` 一致。`bindingTools` 和 `bindingAgents` 使用“绑定信息 + 解析后的定义”嵌套结构，避免绑定版本与定义版本使用同名字段后失去语义：
+`RuntimeAgentResponseVO` 的根字段与 `AgentInfoResponseVO` 一致。`bindingTools` 的元素直接平铺为解析后的完整 Tool 元数据，不保留只包装 `toolId`、绑定版本和 `tool` 的中间对象；`bindingAgents` 继续使用“绑定信息 + 解析后的定义”结构：
 
 ```json
 {
@@ -291,28 +290,24 @@ PlantUML：[查看源码](./diagram.puml#L169)
     ],
     "bindingTools": [
       {
-        "toolId": "tool-550e8400e29b41d4a716446655440002",
+        "id": "tool-550e8400e29b41d4a716446655440002",
+        "type": "tool",
         "version": 2,
-        "tool": {
-          "id": "tool-550e8400e29b41d4a716446655440002",
-          "type": "tool",
-          "version": 2,
-          "createdAt": "2026-08-10T08:00:00+08:00",
-          "updatedAt": "2026-08-11T08:00:00+08:00",
-          "enabled": true,
-          "permission": "allow",
-          "name": "query-campus-map",
-          "displayName": "Query Campus Map",
-          "description": "Query a campus location",
-          "source": "builtin-toolset",
-          "inputSchema": {
-            "type": "object",
-            "properties": {}
-          },
-          "outputSchema": {
-            "type": "object",
-            "properties": {}
-          }
+        "createdAt": "2026-08-10T08:00:00+08:00",
+        "updatedAt": "2026-08-11T08:00:00+08:00",
+        "enabled": true,
+        "permission": "allow",
+        "name": "query-campus-map",
+        "displayName": "Query Campus Map",
+        "description": "Query a campus location",
+        "source": "builtin-toolset",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {}
         }
       }
     ],
@@ -351,7 +346,7 @@ PlantUML：[查看源码](./diagram.puml#L169)
 }
 ```
 
-绑定元素中的 `version` 是 Agent 配置的固定版本，可以为空；嵌套 `tool.version` 或 `agent.version` 是本次实际解析出的版本，必须有值。绑定版本为空时，响应按照全局 `NON_NULL` 策略省略该字段，调用方仍可从嵌套定义读取实际版本。
+`bindingTools[].version` 是本次实际解析出的 Tool 版本，必须有值。`t_agent_binding_tools.tool_version` 只用于选择最新版本或精确匹配固定版本，不在响应中重复展示。`bindingAgents[].version` 仍表示可空的绑定版本，嵌套 `agent.version` 表示实际解析出的 Agent 版本；绑定版本为空时按照全局 `NON_NULL` 策略省略。
 
 被绑定 Agent 的 `agent` 对象严格对应 `t_agent_definition`：包含标量字段、System Prompt、`useCases` 和时间字段，不包含 `bindingModels`、`bindingTools`、`bindingSkills`、`bindingAgents` 或聚合后的 `permission`。Tool 的 `inputSchema` 和 `outputSchema` 必须解析为 JSON 对象，不以转义后的 JSON 字符串返回。
 
@@ -446,6 +441,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.18.2` | 2026-08-12 | 将 Runtime `bindingTools` 元素改为完整 Tool 元数据平铺结构，删除 `toolId`、绑定版本和 `tool` 中间包装层；同步 Java 实现、测试和源码基线 |
 | `v0.18.1` | 2026-08-12 | 同步 `getRuntimeAgent` Java 实现、最终源码基线、Agent 批量版本查询 XML、Runtime VO、错误码和测试；保留 Tool Mapper SQL 集成边界 |
 | `v0.18.0` | 2026-08-12 | 设计 `getRuntimeAgent` 接口；Tool 与绑定 Agent 按 ID/可空版本批量解析并返回嵌套完整定义；依赖缺失、禁用或版本不匹配时记录日志并整体失败 |
 | `v0.17.0` | 2026-08-11 | 增加三个 HTTP 接口的 `AgentDefinitionController` 可运行示例；增加统一成功响应包装，路径参数校验和 MVC 测试 |

@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.18.1 on 2026-08-12.
+' Generated for SR-AGENT-DB-001 v0.18.2 on 2026-08-12.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: 819825b2c248294f25fc9986189fc2fae57b0f09.
-' Java baseline: mate-service@bc49de4cd9a1336eda704f87dab1c03f062084af.
+' Design baseline: ceefbf16f6759a357eb043846fe6868a14ef31d1.
+' Java baseline: mate-service@5fa0af6cff77e6b1d73bf17208a614edd48976aa.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -64,7 +64,7 @@ skinparam classAttributeIconSize 0
 ' Target-only rule: future Agent binding writes validate current targets but
 ' do not validate pinned history; Runtime reads require an exact current match.
 ' Observed behavior: getRuntimeAgent resolves Tool and Agent bindings by typed
-' identifier and optional version, then returns nested definitions.
+' identifier and optional version, then returns flat Tools and nested Agents.
 ' GaussDB divergence: physical foreign keys are optional because GaussDB
 ' Distributed does not support them; the base DDL uses logical relationships.
 ' DDL convention: each DROP TABLE IF EXISTS immediately precedes CREATE TABLE.
@@ -198,9 +198,12 @@ skinparam ParticipantBackgroundColor #F7F9FC
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/mapper/ToolDefinitionMapper.java
 '   ToolDefinitionMapper.selectByBindings.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentResponseVO.java
-'   RuntimeAgentResponseVO nested Runtime response contract.
+'   RuntimeAgentResponseVO flat Tool and nested Agent response contract.
+'   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ToolDefinitionResponseVO.java
+'   ToolDefinitionResponseVO flat bindingTools element.
 ' Observed behavior: getAgent returns binding identifiers and optional versions.
-' Observed behavior: getRuntimeAgent expands Tool and bound Agent definitions.
+' Observed behavior: getRuntimeAgent flattens Tool definitions and nests bound
+' Agent definitions under their binding metadata.
 ' Integration pending: ToolDefinitionMapper SQL is supplied by the Tool owner.
 ' Design reason: batch dependency queries avoid one query per binding.
 ' Security hardening: a missing, disabled, or unmatched dependency fails closed.
@@ -245,7 +248,7 @@ else root Agent available
     Service -> Logger: record root id, dependency id, and version
     Service --> Controller: throw specific error code
   else every dependency resolved
-    Service -> Service: assemble nested Runtime Agent response
+    Service -> Service: assemble flat Tools and nested Agents
     Service --> Controller: RuntimeAgentResponseVO
     Controller --> Consumer: success envelope
   end
