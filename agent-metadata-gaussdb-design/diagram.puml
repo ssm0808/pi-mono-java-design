@@ -1,7 +1,7 @@
-' Generated for SR-AGENT-DB-001 v0.18.7 on 2026-08-12.
+' Generated for SR-AGENT-DB-001 v0.18.8 on 2026-08-12.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design baseline: 8b7a85fbd107f89fabe904024d772187ec2cd79c.
-' Java baseline: mate-service@368eaf1459ea96a9d36a54342f10cda9fc009f3d.
+' Design baseline: a8491805f3d2abeb61df0a1c13d90d4388058d81.
+' Java baseline: mate-service@f0c634a27da9807ae1e416460469db39407a20e2.
 
 @startuml agent_metadata_gaussdb_model
 !pragma layout elk
@@ -66,7 +66,7 @@ skinparam classAttributeIconSize 0
 ' do not validate pinned history; Runtime reads require an exact current match.
 ' Observed behavior: getRuntimeAgent resolves Tool and Agent bindings by typed
 ' identifier and optional version, then returns flat Tools and Agents.
-' Observed behavior: Runtime Tools expose eight fields and omit type, timestamps, enabled, and schemas.
+' Observed behavior: Runtime Tools expose nine fields including enabled and omit type, timestamps, and schemas.
 ' Observed behavior: bound Runtime Agents expose seven execution fields and
 ' omit type, timestamps, enabled, permissions, and recursive bindings.
 ' Observed behavior: Runtime systemPrompt values are composed strings.
@@ -205,15 +205,15 @@ skinparam ParticipantBackgroundColor #F7F9FC
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentResponseVO.java
 '   RuntimeAgentResponseVO flat Tool and Agent response contract.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/ToolDefinitionResponseVO.java
-'   ToolDefinitionResponseVO eight-field bindingTools element.
+'   ToolDefinitionResponseVO nine-field bindingTools element.
 '   src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentDefinitionResponseVO.java
 '   RuntimeAgentDefinitionResponseVO seven-field bindingAgents element.
 ' - TOOL metadata JSON line 8 defines is_concurrency_safe; lines 14-23 define
 '   schemas that the Runtime Agent response intentionally omits.
 ' Observed behavior: getAgent returns binding identifiers and optional versions.
-' Observed behavior: getRuntimeAgent returns eight-field Tool and seven-field
+' Observed behavior: getRuntimeAgent returns nine-field Tool and seven-field
 ' bound Agent definitions without wrapper objects.
-' Both resolved response types omit type, timestamps, and enabled.
+' Both resolved response types omit type and timestamps; only Tool has enabled.
 ' Observed behavior: root and bound Agent prompts use the same composition.
 ' Integration pending: ToolDefinitionMapper SQL is supplied by the Tool owner.
 ' Design reason: batch dependency queries avoid one query per binding.
@@ -277,7 +277,7 @@ end note
 note over Service,ToolMapper
   Tool SQL and Tool version storage are owned by the Tool module.
   The Agent module defines only the batch Mapper contract in this phase.
-  Runtime Tools expose eight fields and omit schemas and admin metadata.
+  Runtime Tools expose nine fields and omit schemas, type, and timestamps.
   Missing concurrency safety defaults to false.
 end note
 

@@ -1,11 +1,11 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.18.7`<br>
+> 版本：`v0.18.8`<br>
 > 日期：`2026-08-12`<br>
 > 状态：Java 接口已实现 / Tool Mapper SQL 待集成<br>
-> 设计仓库分析基线：`8b7a85fbd107f89fabe904024d772187ec2cd79c`<br>
-> Java 实现分析基线：`mate-service@368eaf1459ea96a9d36a54342f10cda9fc009f3d`<br>
+> 设计仓库分析基线：`a8491805f3d2abeb61df0a1c13d90d4388058d81`<br>
+> Java 实现分析基线：`mate-service@f0c634a27da9807ae1e416460469db39407a20e2`<br>
 > Agent JSON 工作区 SHA-256：`b9aa4376e1b0859e698a69a487a2aca9c4bc73911d0f9fa5da89532229f6adf9`<br>
 > Tool JSON 工作区 SHA-256：`3f4d88b30f4f22ef28e5356df0e5927adf43e34551384cec0883a895fcaa0746`
 
@@ -23,7 +23,7 @@
 
 System Prompt 的八个细分字段均为可空软约束。数据库不强制非空或非空白；普通详情响应只返回具有值的细分字段，管理前端按实际返回字段动态展示。Runtime 响应将这些字段拼接为单一字符串。
 
-已实现 `GET /mate-service/v1/agents/{agentId}/runtime`。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：`bindingTools` 和 `bindingAgents` 均直接平铺解析后的精简 Runtime 定义；Tool 只返回 `id`、`version`、名称、描述、`permission`、`source` 和 `isConcurrencySafe` 八个字段；被绑定 Agent 只返回 `id`、`version`、名称、描述、`systemPrompt` 和 `useCases` 七个字段。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
+已实现 `GET /mate-service/v1/agents/{agentId}/runtime`。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：`bindingTools` 和 `bindingAgents` 均直接平铺解析后的精简 Runtime 定义；Tool 返回 `id`、`version`、`enabled`、名称、描述、`permission`、`source` 和 `isConcurrencySafe` 九个字段；被绑定 Agent 只返回 `id`、`version`、名称、描述、`systemPrompt` 和 `useCases` 七个字段。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
 
 完整初始化 DDL 维护在 [`schema.sql`](./schema.sql)，本文不重复嵌入完整 SQL。
 
@@ -39,7 +39,7 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 ### 2.2 Java 基线
 
-本次分析的 Java 提交为 `mate-service@368eaf1459ea96a9d36a54342f10cda9fc009f3d`，相关路径：
+本次分析的 Java 提交为 `mate-service@f0c634a27da9807ae1e416460469db39407a20e2`，相关路径：
 
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`
@@ -155,7 +155,7 @@ GaussDB JSON/JSONB 类型参考：[Huawei Cloud GaussDB JSON/JSONB Types](https:
 
 Tool ID 必须符合 `^tool-[0-9a-fA-F]{32}$`；当前四个接口没有 Tool 写入请求，Service 在读取完整聚合时执行数据完整性校验。
 
-Runtime Agent 查询不把绑定版本仅作为展示字段。Service 将每个 `tool_id + tool_version` 转换为批量查询条件：`tool_version = NULL` 表示解析最新版本，非空表示必须精确匹配指定版本。Tool 定义 Mapper 至少返回响应组装和启用状态校验所需字段；Service 校验 `enabled` 后，Runtime `bindingTools` 只保留 `id`、`version`、`name`、`displayName`、`description`、`permission`、`source` 和 `isConcurrencySafe`。Tool 元数据自身继续保留 `type`、时间、`enabled`、`input_schema` 和 `output_schema`，但这些字段不进入 Runtime 响应。Tool 表及版本历史不属于本 Agent Schema；对应 Mapper SQL 由 Tool 模块负责人提供。
+Runtime Agent 查询不把绑定版本仅作为展示字段。Service 将每个 `tool_id + tool_version` 转换为批量查询条件：`tool_version = NULL` 表示解析最新版本，非空表示必须精确匹配指定版本。Tool 定义 Mapper 至少返回响应组装和启用状态校验所需字段；Service 校验 `enabled` 后，Runtime `bindingTools` 保留 `id`、`version`、`enabled`、`name`、`displayName`、`description`、`permission`、`source` 和 `isConcurrencySafe`。Tool 元数据自身继续保留 `type`、时间、`input_schema` 和 `output_schema`，但这些字段不进入 Runtime 响应。Tool 表及版本历史不属于本 Agent Schema；对应 Mapper SQL 由 Tool 模块负责人提供。
 
 `is_concurrency_safe` 是布尔字段，表示运行时是否允许并行调用该 Tool；Java DTO 和响应 VO 使用 `isConcurrencySafe`。Tool 数据源未提供该字段时，Service 按安全默认值 `false` 返回，只有显式为 `true` 时才表示支持并行。
 
@@ -295,6 +295,7 @@ PlantUML：[查看源码](./diagram.puml#L174)
       {
         "id": "tool-550e8400e29b41d4a716446655440002",
         "version": 2,
+        "enabled": true,
         "name": "query-campus-map",
         "displayName": "Query Campus Map",
         "description": "Query a campus location",
@@ -330,7 +331,7 @@ PlantUML：[查看源码](./diagram.puml#L174)
 
 `bindingTools[].version` 和 `bindingAgents[].version` 分别是本次实际解析出的 Tool 与 Agent 版本，必须有值。绑定表中的可空版本只用于选择最新版本或精确匹配固定版本，不在响应中重复展示。
 
-`bindingTools` 只包含 `id`、`version`、`name`、`displayName`、`description`、`permission`、`source` 和 `isConcurrencySafe`；不返回 `type`、时间、`enabled`、`inputSchema` 或 `outputSchema`。根 Agent 和 `bindingAgents[]` 中被绑定 Agent 的 `systemPrompt` 都是相同规则拼接出的字符串，不返回八字段对象。平铺后的被绑定 Agent 只包含 `id`、`version`、`name`、`displayName`、`description`、`systemPrompt` 和 `useCases`；不返回 `type`、时间、`enabled`、各类绑定或聚合后的 `permission`。
+`bindingTools` 包含 `id`、`version`、`enabled`、`name`、`displayName`、`description`、`permission`、`source` 和 `isConcurrencySafe`；不返回 `type`、时间、`inputSchema` 或 `outputSchema`。根 Agent 和 `bindingAgents[]` 中被绑定 Agent 的 `systemPrompt` 都是相同规则拼接出的字符串，不返回八字段对象。平铺后的被绑定 Agent 只包含 `id`、`version`、`name`、`displayName`、`description`、`systemPrompt` 和 `useCases`；不返回 `type`、时间、`enabled`、各类绑定或聚合后的 `permission`。
 
 Runtime 聚合采用 `REPEATABLE_READ` 只读事务，并执行以下流程：
 
@@ -422,6 +423,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.18.8` | 2026-08-12 | Runtime `bindingTools` 在八个精简字段基础上恢复 `enabled`，形成九字段响应；被绑定 Agent 契约不变 |
 | `v0.18.7` | 2026-08-12 | Runtime `bindingTools` 精简为 `id`、`version`、名称、描述、`permission`、`source` 和 `isConcurrencySafe` 八个字段，移除 `type`、时间和 `enabled` |
 | `v0.18.6` | 2026-08-12 | Runtime `bindingAgents` 精简为 `id`、`version`、名称、描述、`systemPrompt` 和 `useCases` 七个字段，移除 `type`、时间和 `enabled` |
 | `v0.18.5` | 2026-08-12 | 将 Runtime `bindingAgents` 改为解析后 Agent 定义的平铺列表，删除 `agentId`、绑定版本和 `agent` 中间包装层 |
