@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.16.0 |
+| 文档版本 | 1.17.0 |
 | 状态 | 目标设计，尚未实施 |
 | 更新日期 | 2026-08-15 |
 | pi-mono 源码基线 | `fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc` |
@@ -326,6 +326,7 @@ Factory 组装 Agent，Manager 执行模型与工具，Pool、Hub 和 Store 保�
 | ManagedSessionPool | 当前 Pod 内 `session_id` 到 Session 和 active run 的映射 | 内存隔离、同 Pod 恢复、Agent 绑定、运行所有权和淘汰 |
 | ManagedRunHub | active run 的 partial Message、Tool、终态和 `run_seq` | 独立于物理连接维护同 Pod 恢复投影；不提供跨 Pod active-run 迁移 |
 | ConnectionAuthAdapter | 内部网关确认的调用服务身份 | 在 `101` 前消费现有私钥签名/JWT认证结果；不复制私有字段或向下游原样传递凭据 |
+| HttpCredentialAuthenticationFilter | HTTP `CallerAuthContext` | 首选校验 `X-HW-ID + Authorization` JWT，兼容校验 `X-HW-ID + X-HW-APPKEY`；拒绝混合凭据且校验失败不降级，两种 Adapter 输出同一不可变认证上下文 |
 | Attachment Service（mate-service） | openGauss 永久 `t_attachment` 身份/状态行、活动 `t_attachment_active_detail`；OBS 中以 `attachment_id` 为 Object Key 的正文 | 接收单文件 multipart，执行校验/扫描，提供外部状态轮询与内部 resolve/content，清理超过 24 小时仍未引用且不处于存储冲突隔离的附件；删除正文后清除活动明细并保留五字段 tombstone |
 | AttachmentResolver | 当前 Session、调用服务身份和有序附件 ID 列表 | 调用内部 batch resolve；全量校验成功后原子返回元数据快照并为全部记录单向设置 `referenced_at` |
 | AttachmentInputAssembler | Model 有效输入策略和 Attachment Service 内部 content 流 | 经内部鉴权的 content API 读取正文，校验大小/摘要/MIME，并转成 Provider 中立输入 |
@@ -737,6 +738,14 @@ loader 从已解析 Agent 目录读取 `settings.json`，以
 要求 `Idempotency-Key` 或 `If-Match`，每次成功 `POST` 都创建新
 Session。完整契约和失败清理顺序见
 [`CampusAgent Runtime HTTP API 设计`](chat-http-v1-design.md)。
+
+HTTP 认证契约明示支持两种二选一的公司凭据：默认示例和
+新客户端使用 `X-HW-ID + Authorization: Bearer <JWT>`，兼容客户端
+使用 `X-HW-ID + X-HW-APPKEY`。同时提供两组凭据返回
+`401 AUTH_CREDENTIAL_CONFLICT`；任一验证器失败后不尝试另一种凭据。
+两种公司认证库 Adapter 只向后续传递统一的不可变
+`CallerAuthContext`，Controller 和 Service 不分支处理凭据。
+`traceparent` 不再属于 HTTP API 契约；WebSocket Frame 的遥测语义不因此改动。
 
 ResultBean 只包装响应体，异常仍保留真实 HTTP status。错误码枚举名、
 MessageSource key 和 `resCode` 完全一致；`resMsg` 根据
@@ -2793,6 +2802,8 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
   Service 服务端签发并以大小写敏感唯一约束保证部署级全局唯一，`READY` 后
   不改绑、删除后不复用，且格式或唯一性不构成授权；
 - 认证凭据不进入 Agent 数据和协议事件；
+- HTTP 入站凭据在 JWT 与 APPKEY 中二选一，混合凭据被拒绝，
+  校验失败不降级，且只有统一 `CallerAuthContext` 进入授权链路；
 - RuntimeSessionStore 以数据库保存权威 Session、Message、RunRecord、幂等结果和
   revision，Managed Profile 不生成 Session JSONL；
 - Managed 和 Legacy 路径职责明确；
@@ -2802,6 +2813,7 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.17.0 | 2026-08-15 | HTTP 契约删除 traceparent；将 `X-HW-ID + Authorization` JWT 固定为首选接入方式，明示兼容 `X-HW-ID + X-HW-APPKEY`；增加混合凭据拒绝、校验失败不降级、统一 CallerAuthContext 认证适配层与第九个错误码 `AUTH_CREDENTIAL_CONFLICT` |
 | 1.16.0 | 2026-08-15 | 将第一个 HTTP Session 创建接口改为 `resCode/resMsg/result` ResultBean，保留真实 HTTP status；固定八个错误码、中英文资源和 Locale 回退；增加 standalone 兼容制品与 company 内部制品的 Maven profile 互斥替换设计 |
 | 1.15.0 | 2026-08-15 | 将 HTTP Session 创建冻结为无 Body 的 `POST /campusclaw-service/v1/agents/{agent_id}/sessions`，由 CampusClaw 生成 `session_id`；补充目录与 settings 校验、默认模型解析、SessionContext/AgentSession 组装、持久化与失败清理顺序；创建和查询共用已就绪 SessionResource，不暴露内部 Agent 版本，创建操作不使用 `Idempotency-Key` 或 `If-Match` |
 | 1.14.0 | 2026-08-15 | 将 `AGENT.binding_models` 编译为只读 `.campusagent/settings.json`，固定 `agentId/agentVersion/defaultModel/enabledModels` 格式及非空显式 allowlist 校验；定义 HTTP 新 Session 只提交 `agent_id`，初始化从目录默认模型解析并经 Model Manager 精确校验；补充目录、创建失败、模型与验收规则 |

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CampusAgent 内部 Runtime HTTP API
-  version: 1.5.0
+  version: 1.6.0
   description: |
     CampusAgent Runtime 面向 mate-service Runtime bridge 和获授权内部 SDK 的
     HTTP API。它是一组 Session、Run、Event、History 和 Model 资源接口，
@@ -18,7 +18,10 @@ servers:
   - url: http://localhost:3000/campusclaw-service/v1
     description: 本地开发
 security:
-  - internalGateway: []
+  - hwCallerId: []
+    jwtBearer: []
+  - hwCallerId: []
+    hwAppKey: []
 tags:
   - name: Sessions
     description: Runtime Session 生命周期
@@ -33,15 +36,17 @@ tags:
 x-source-evidence:
   status: target-only design; pi-mono-java HTTP API is not implemented
   repository: https://github.com/superheromeZzh/pi-mono-java
-  commit: 1f7a5423219edfa4519d8719f1cc8a188ed72873
+  commit: dff835743fc7f3c93e1154c3eb51028749867ca8
   sourceContract: chat-ws-v2.asyncapi.yaml@2.12.0
   observedPaths:
     - path: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java
-      symbols: WebSocket handshake at baseline lines 377-391
+      symbols: buildRoutes at baseline lines 237-274 and wireServerRoutes at lines 285-307 do not install an inbound authentication adapter; applyCorsHeaders only allows Authorization at lines 340-344
     - path: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java
       symbols: connection lifecycle and v1 commands at baseline lines 115-227; cumulative message updates at lines 422-459
     - path: modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java
       symbols: structured provider stream events at baseline lines 44-164
+    - path: modules/agent-core/src/main/java/com/campusclaw/agent/subagent/a2a/A2aAgentBackend.java
+      symbols: outbound A2A requests set X-HW-ID and X-HW-APPKEY at baseline lines 226-238
 x-http-design:
   operationCount: 13
   sessionIdOwner: CampusClaw
@@ -53,11 +58,15 @@ x-http-design:
   connectionStateRemoved: true
   canonicalEventCursor: run_seq
   eventJournal: target architecture change
+  authentication:
+    preferredMode: jwt
+    supportedModes: [jwt, appkey]
+    mixedCredentials: reject
+    fallbackAfterVerificationFailure: false
 paths:
   /agents/{agent_id}/sessions:
     parameters:
       - $ref: '#/components/parameters/AgentId'
-      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Sessions]
       summary: 创建 Runtime Session
@@ -71,6 +80,12 @@ paths:
         持久化 SessionRecord。创建过程不调用大模型，不创建
         Message 或 RunRecord。每次成功 POST 都创建一个新 Session；
         本 operation 不使用 Idempotency-Key 或 If-Match。
+        认证默认使用 X-HW-ID + Authorization: Bearer <JWT>。
+        为兼容公司 APPKEY/私钥凭据体系，也接受
+        X-HW-ID + X-HW-APPKEY。两种组合二选一；同时携带
+        Authorization 和 X-HW-APPKEY 返回 401 AUTH_CREDENTIAL_CONFLICT。
+        任一组合验证失败后都不降级尝试另一种凭据。
+      x-preferred-authentication: jwt
       responses:
         '201':
           description: Session 已完成初始化，可接受后续请求
@@ -110,22 +125,32 @@ paths:
                     resMsg: The agent_id format is invalid.
                     result: null
         '401':
-          description: 调用方身份认证失败
+          description: 调用方身份认证失败，或同时提供两组凭据
           headers:
             Content-Language: { $ref: '#/components/headers/ContentLanguage' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResultBean' }
               examples:
-                zh-CN:
+                unauthenticatedZhCn:
                   value:
                     resCode: UNAUTHENTICATED
                     resMsg: 调用方身份认证失败。
                     result: null
-                en-US:
+                unauthenticatedEnUs:
                   value:
                     resCode: UNAUTHENTICATED
                     resMsg: Caller authentication failed.
+                    result: null
+                credentialConflictZhCn:
+                  value:
+                    resCode: AUTH_CREDENTIAL_CONFLICT
+                    resMsg: 请求不能同时携带 JWT 和 APPKEY 凭据。
+                    result: null
+                credentialConflictEnUs:
+                  value:
+                    resCode: AUTH_CREDENTIAL_CONFLICT
+                    resMsg: JWT and APPKEY credentials must not be supplied together.
                     result: null
         '403':
           description: 当前调用方无权为该 Agent 创建 Session
@@ -234,7 +259,6 @@ paths:
   /sessions/{session_id}:
     parameters:
       - $ref: '#/components/parameters/SessionId'
-      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [Sessions]
       summary: 读取 Session 状态
@@ -271,7 +295,6 @@ paths:
   /sessions/{session_id}/runs:
     parameters:
       - $ref: '#/components/parameters/SessionId'
-      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Runs]
       summary: 提交用户消息并创建异步 Run
@@ -318,7 +341,6 @@ paths:
     parameters:
       - $ref: '#/components/parameters/SessionId'
       - $ref: '#/components/parameters/RunId'
-      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [Runs]
       summary: 读取 Run 快照或终态
@@ -338,7 +360,6 @@ paths:
     parameters:
       - $ref: '#/components/parameters/SessionId'
       - $ref: '#/components/parameters/RunId'
-      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Runs]
       summary: 向 active Run 追加文本指导
@@ -364,7 +385,6 @@ paths:
     parameters:
       - $ref: '#/components/parameters/SessionId'
       - $ref: '#/components/parameters/RunId'
-      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Runs]
       summary: 幂等请求终止 Run
@@ -385,7 +405,6 @@ paths:
     parameters:
       - $ref: '#/components/parameters/SessionId'
       - $ref: '#/components/parameters/RunId'
-      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [Events]
       summary: 消费或补拉 Run 有序事件
@@ -422,7 +441,6 @@ paths:
   /sessions/{session_id}/history:
     parameters:
       - $ref: '#/components/parameters/SessionId'
-      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [History]
       summary: 读取权威持久历史
@@ -448,7 +466,6 @@ paths:
   /sessions/{session_id}/models:
     parameters:
       - $ref: '#/components/parameters/SessionId'
-      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [Models]
       summary: 列出 Session 可用模型
@@ -465,7 +482,6 @@ paths:
   /sessions/{session_id}/model:
     parameters:
       - $ref: '#/components/parameters/SessionId'
-      - $ref: '#/components/parameters/TraceParent'
     put:
       tags: [Models]
       summary: 切换 Session 当前模型
@@ -493,7 +509,6 @@ paths:
   /sessions/{session_id}/thinking:
     parameters:
       - $ref: '#/components/parameters/SessionId'
-      - $ref: '#/components/parameters/TraceParent'
     put:
       tags: [Models]
       summary: 修改默认 thinking 披露级别
@@ -519,11 +534,27 @@ paths:
 
 components:
   securitySchemes:
-    internalGateway:
+    hwCallerId:
+      type: apiKey
+      in: header
+      name: X-HW-ID
+      description: |
+        公司调用方标识，必须与 jwtBearer 或 hwAppKey 其中之一组合使用。
+        Runtime 不得单独信任该 Header。
+    jwtBearer:
       type: http
       scheme: bearer
-      bearerFormat: deployment-specific
-      description: 公司现有内部 Gateway 服务认证；私有 Header、claim 和密钥格式不属于本规范。
+      bearerFormat: JWT
+      description: |
+        默认且首选的公司 JWT 凭据。必须与 X-HW-ID 同时提供。
+        claim、签名算法、issuer、audience 和密钥管理由公司认证库定义，不在本规范中伪造。
+    hwAppKey:
+      type: apiKey
+      in: header
+      name: X-HW-APPKEY
+      description: |
+        兼容的公司 APPKEY/私钥凭据体系，必须与 X-HW-ID 同时提供。
+        APPKEY 的签发、签名或校验算法由公司认证库定义。
   parameters:
     AgentId:
       name: agent_id
@@ -549,14 +580,6 @@ components:
       schema:
         type: string
         minLength: 8
-        maxLength: 128
-    TraceParent:
-      name: traceparent
-      in: header
-      required: false
-      schema:
-        type: string
-        minLength: 55
         maxLength: 128
     IfMatch:
       name: If-Match
@@ -1137,6 +1160,7 @@ components:
             - INVALID_REQUEST
             - INVALID_AGENT_ID
             - UNAUTHENTICATED
+            - AUTH_CREDENTIAL_CONFLICT
             - FORBIDDEN
             - AGENT_NOT_FOUND
             - AGENT_NOT_AVAILABLE

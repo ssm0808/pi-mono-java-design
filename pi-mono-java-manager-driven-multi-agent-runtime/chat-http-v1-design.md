@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.0 |
+| 文档版本 | 1.6.0 |
 | 状态 | 目标设计，尚未实施 |
-| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.5.0 |
+| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.6.0 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
-| pi-mono-java 源码基线 | `1f7a5423219edfa4519d8719f1cc8a188ed72873` |
+| pi-mono-java 源码基线 | `dff835743fc7f3c93e1154c3eb51028749867ca8` |
 | 更新日期 | 2026-08-15 |
 
 ## 1. 结论
@@ -42,9 +42,27 @@ HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session�
 `PUT /sessions/{session_id}/model`；删除后的 `session_id`
 永久禁止复用。
 
+该接口支持两套公司凭据，OpenAPI 使用“两个可选安全要求、
+每个要求内两个 Header 必须同时满足”表达。JWT 是文档、
+Swagger 示例和新客户端的默认选择；APPKEY 是明确公开的兼容契约，
+不得只藏在实现分支中。
+
+| 认证模式 | 必填 Header | 定位 | 约束 |
+|---|---|---|---|
+| JWT | `X-HW-ID` + `Authorization: Bearer <JWT>` | 首选/默认 | 公司 JWT 验证器负责 claim、签名、issuer 和 audience |
+| APPKEY | `X-HW-ID` + `X-HW-APPKEY` | 兼容 | 公司 APPKEY/私钥体系验证器负责具体校验算法 |
+
+两组凭据二选一。同时携带 `Authorization` 和 `X-HW-APPKEY`
+视为身份语义冲突，返回 HTTP `401` 和
+`AUTH_CREDENTIAL_CONFLICT`；任一组合缺失、格式错误或校验失败统一
+返回 `401 UNAUTHENTICATED`。选中一种模式且验证失败后禁止
+再尝试另一种模式，避免认证降级和身份混淆。
+`traceparent` 不属于本 HTTP API 契约。
+
 创建成功前，Runtime 必须完成以下初始化：
 
-1. 验证内部调用方和 PATH 中 `agent_id` 的资源 ID 格式；
+1. 通过统一认证适配层验证且仅生成一个不可变
+   `CallerAuthContext`，再验证 PATH 中 `agent_id` 的资源 ID 格式；
 2. 在受控根目录中解析 Agent 目录，拒绝路径或符号链接越界；
 3. 读取 `.campusagent/settings.json`，验证 `settings.agentId`
    与 PATH 值按 ASCII 字节完全一致，并固定 `agentVersion`；
@@ -164,7 +182,7 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 | `model.set` | `PUT /sessions/{session_id}/model` |
 | `thinking.set` | `PUT /sessions/{session_id}/thinking` |
 | EventFrame | SSE 或 JSON Run Event Journal |
-| RequestFrame `id` | HTTP request ID/trace context，不参与业务幂等 |
+| RequestFrame `id` | HTTP 请求关联由网关/框架处理，不参与业务幂等 |
 | connection generation/close code | 删除；改用 HTTP 状态、ETag 和幂等键 |
 
 ## 4. 状态、并发与恢复
@@ -213,6 +231,7 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 |---|---|---|---|
 | `400` | `INVALID_AGENT_ID` | `agent_id 格式不正确。` | `The agent_id format is invalid.` |
 | `401` | `UNAUTHENTICATED` | `调用方身份认证失败。` | `Caller authentication failed.` |
+| `401` | `AUTH_CREDENTIAL_CONFLICT` | `请求不能同时携带 JWT 和 APPKEY 凭据。` | `JWT and APPKEY credentials must not be supplied together.` |
 | `403` | `FORBIDDEN` | `当前调用方无权为该 Agent 创建 Session。` | `The caller is not allowed to create a Session for this Agent.` |
 | `404` | `AGENT_NOT_FOUND` | `指定的 Agent 不存在。` | `The specified Agent does not exist.` |
 | `422` | `AGENT_NOT_AVAILABLE` | `指定的 Agent 当前不可用。` | `The specified Agent is currently unavailable.` |
@@ -276,7 +295,7 @@ FQCN 和不可预期的 class loading。Maven Enforcer 必须在 `validate`
 
 ![ResultBeanFactory 公司内外双制品替换](http_result_bean_compatibility.svg)
 
-[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L1076)
+[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L1080)
 
 ### 6.3 错误与国际化实现
 
@@ -295,7 +314,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 1. `normal(result)` 的 JSON 精确为 `resCode/resMsg/result`；
 2. null、空集合、时间和嵌套 VO 的 Jackson 行为一致；
 3. 中英文 Locale、回退语言和 `Content-Language` 一致；
-4. 八个错误码的 HTTP status、`resCode`、`resMsg` 和
+4. 九个错误码的 HTTP status、`resCode`、`resMsg` 和
    `result=null` 一致；
 5. 公司 profile 的依赖树不包含兼容制品，standalone profile
    的依赖树不包含内部制品。
@@ -306,34 +325,54 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 ## 7. 安全与附件边界
 
-- 内部 Gateway 在每个 HTTP 请求上建立不可变调用服务身份；`session_id` 不是凭据。
+- `CredentialHeaderResolver` 只解析 `X-HW-ID`、`Authorization` 和
+  `X-HW-APPKEY`，并先拒绝缺失、不完整或混合凭据；Controller 不写
+  JWT/APPKEY 两套分支。
+- `JwtCredentialVerifier` 和 `AppKeyCredentialVerifier` 是公司认证库的
+  窄 Adapter，成功后都返回同一个不可变 `CallerAuthContext`；后续
+  Agent/Session 授权不知道凭据模式。
+- JWT 是文档和新客户端首选，不是服务端默认降级链。一旦选中模式，
+  校验失败必须终止。
+- 凭据只存在于认证边界，不记日志、不写 ResultBean、不进入
+  Service/Session/Prompt/History；`session_id` 不是凭据。
 - Runtime 对每个请求重新校验 Session、Agent、Model 和动作权限。
-- `traceparent` 使用标准 HTTP Header，不进入请求 JSON、Prompt 或数据库业务字段。
+- HTTP 契约不接收 `traceparent`。部署平台如需调用链遥测，由网关和
+  框架在契约外处理，不把它传入业务对象。
 - `agent_id`、`model_id` 和 `attachment_id` 均大小写敏感且不透明。
 - `POST /runs` 只接受文本、附件 ID 和 thinking；禁止 URL、MIME、文件名、
   Base64、OBS Object Key、tenant/user 字段。
 - Runtime 仍通过 Attachment Service 的内部 resolve/content API 获取可信元数据
   和有界字节流，不直连 OBS。
 
+![HTTP 双认证适配](http_dual_authentication.svg)
+
+[PlantUML 源码：`http_dual_authentication`](diagram.puml#L1148)
+
 ## 8. 源码证据与差异分类
 
 规范来源为仓库相对路径
-`pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml`，其声明的
-pi-mono-java 基线为 `1f7a5423219edfa4519d8719f1cc8a188ed72873`。
+`pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml`。本轮 HTTP
+认证设计额外核对 pi-mono-java 基线
+`dff835743fc7f3c93e1154c3eb51028749867ca8`。
 
 | 分类 | 证据或决策 |
 |---|---|
-| 观察到的行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java` 基线 377-391：当前使用 WebSocket Upgrade |
+| 观察到的行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java` 基线 285-307：当前使用 WebSocket Upgrade，其余请求交给 RouterFunctions Adapter |
 | 观察到的行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 115-227、422-459：v1 命令、断线生命周期和累计消息更新 |
 | 观察到的行为 | `modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java` 基线 44-164：结构化 provider 流事件 |
+| 观察到的行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java` 基线 237-307、340-344：当前 HTTP 路由未安装入站认证 Adapter，CORS 仅放行 Authorization Header |
+| 观察到的行为 | `modules/agent-core/src/main/java/com/campusclaw/agent/subagent/a2a/A2aAgentBackend.java` 基线 40-62、226-238：出站 A2A 请求已使用 `X-HW-ID + X-HW-APPKEY`，但它不是入站验证实现 |
 | 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
 | 产品约束 | 普通 JSON 响应使用 `resCode/resMsg/result`，错误码和国际化 key 一致；真实 HTTP status 仍保留 |
-| 安全加固 | 逐请求认证、Session-scoped 模型查询、附件只传 ID、ResultBean 错误脱敏 |
-| 架构改造 | 一组 HTTP 资源接口、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
+| 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
+| 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、附件只传 ID、ResultBean 错误脱敏 |
+| 架构改造 | 一组 HTTP 资源接口、统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
 
-公司内部 ResultBean 制品信息来自用户提供的集成约束，当前工作区不含
-对应实现或制品元数据。其坐标、FQCN、泛型返回类型和异常 Factory
-方法均必须在落地前依据真实内部 jar 补齐。除这一待校准适配点外，
+公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自
+用户提供的集成约束。当前工作区不含对应入站认证库或
+ResultBean 制品元数据。ResultBean 坐标/FQCN/方法，以及 JWT 和
+APPKEY 的 claim、签名、issuer、audience 与校验算法均必须在落地前
+依据真实内部制品补齐。除这些待校准适配点外，
 本文全部 HTTP 行为仍为 target-only design，不得表述为现有
 pi-mono-java 实现。
 
@@ -341,6 +380,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-08-15 | HTTP 契约删除 traceparent；增加首选 `X-HW-ID + Authorization` JWT 与兼容 `X-HW-ID + X-HW-APPKEY` 两组明示安全要求；固定混合凭据拒绝、验证失败不降级、统一 CallerAuthContext 适配层及 `AUTH_CREDENTIAL_CONFLICT` 中英文错误 |
 | 1.5.0 | 2026-08-15 | 第一个创建 Session 接口改为 `resCode/resMsg/result` ResultBean，保留真实 HTTP status；固定八个错误码及中英文消息、Accept-Language/Content-Language 规则；增加 standalone 兼容制品与 company 内部制品的 Maven profile 互斥替换设计 |
 | 1.4.0 | 2026-08-15 | 将创建 Session 改为无请求体的 `POST /agents/{agent_id}/sessions`，由 CampusClaw 生成 `session_id` 并从 Managed settings 解析默认模型；固定目录验证、模型校验、SessionContext/AgentSession 组装、持久化和失败清理顺序；创建和查询共用不含内部版本的 SessionResource，创建不使用 `Idempotency-Key` 或 `If-Match` |
 | 1.3.0 | 2026-08-15 | Session 创建请求收敛为只必填 `agent_id`；从 `.campusagent/settings.json` 读取 `agentVersion/defaultModel/enabledModels`，经 Model Manager 校验后初始化并返回有效模型；明确 Run 原子固化 Session 当前模型 |

@@ -1005,6 +1005,7 @@ title CampusClaw HTTP Session Creation
 ' Target design: mate-service supplies only agent_id and CampusClaw generates session_id.
 ' Target design: Managed settings chooses a default candidate and Model Manager remains authoritative.
 ' Target design: a successful POST returns a ready SessionResource without internal version fields.
+' Target design: one JWT or APPKEY adapter produces the same immutable CallerAuthContext.
 ' Design reason: keep Agent selection caller-visible while Runtime identity and revision stay server-owned.
 
 skinparam backgroundColor #FFFFFF
@@ -1025,6 +1026,7 @@ skinparam sequence {
 }
 
 actor "mate-service\nRuntime bridge" as Mate
+participant "CredentialAuthenticationFilter" as Auth
 participant "Runtime HTTP API" as API
 participant "AgentDirectoryResolver" as Resolver
 participant "ManagedSettingsLoader" as Settings
@@ -1035,8 +1037,10 @@ database "RuntimeSessionStore" as Store
 participant "ManagedSessionPool" as Pool
 participant "ResultBeanFactory" as ResultFactory
 
-Mate -> API : POST /agents/{agent_id}/sessions\nno request body
-API -> API : authenticate caller\nvalidate agent_id syntax
+Mate -> Auth : POST /agents/{agent_id}/sessions\nno request body and exactly one credential pair
+Auth -> Auth : reject mixed or incomplete headers\nverify JWT or APPKEY without fallback
+Auth --> API : immutable CallerAuthContext
+API -> API : authorize caller\nvalidate agent_id syntax
 API -> Resolver : resolve(agent_id)
 Resolver -> Resolver : verify controlled root, symlinks,\nand byte-exact directory identity
 Resolver --> API : agentCwd and bundle revision
@@ -1138,5 +1142,82 @@ note bottom of Contract
 The two artifacts must never coexist on one compile or runtime classpath.
 Internal coordinates, repository URLs, credentials, and unverified method names
 are not committed to the public repository.
+end note
+@enduml
+
+@startuml http_dual_authentication
+title CampusClaw HTTP Dual Authentication
+
+' Source evidence:
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java: buildRoutes lines 237-274, wireServerRoutes lines 285-307, applyCorsHeaders lines 340-344
+' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/subagent/a2a/A2aAgentBackend.java: HEADER_HW_ID and HEADER_HW_APPKEY lines 60-62, buildRequest lines 226-238
+' Observed behavior: current inbound HTTP routes do not install an authentication adapter.
+' Observed behavior: outbound A2A calls already send X-HW-ID and X-HW-APPKEY.
+' Target-only company constraint: inbound JWT uses X-HW-ID and Authorization; APPKEY uses X-HW-ID and X-HW-APPKEY.
+' Security hardening: mixed credentials are rejected and a failed verifier never falls back to another mode.
+' Architecture change: both verifiers return one immutable CallerAuthContext for shared authorization.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam participant {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+skinparam sequence {
+  LifeLineBorderColor #64748B
+  LifeLineBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F8FAFC
+}
+
+actor "Authorized internal caller" as Caller
+participant "CredentialAuthenticationFilter" as Filter
+participant "CredentialHeaderResolver" as Resolver
+participant "JwtCredentialVerifier" as Jwt
+participant "AppKeyCredentialVerifier" as AppKey
+participant "AgentAuthorizationService" as Authorization
+participant "SessionController" as Controller
+
+Caller -> Filter : HTTP request
+Filter -> Resolver : resolve X-HW-ID, Authorization, X-HW-APPKEY
+Resolver -> Resolver : require exactly one complete credential pair
+
+break Authorization and X-HW-APPKEY are both present
+  Resolver --> Filter : AUTH_CREDENTIAL_CONFLICT
+  Filter --> Caller : 401 ResultBean
+end
+
+break no complete credential pair
+  Resolver --> Filter : UNAUTHENTICATED
+  Filter --> Caller : 401 ResultBean
+end
+
+alt preferred JWT pair
+  Resolver --> Filter : JwtCredentialInput
+  Filter -> Jwt : verify with company JWT library
+  Jwt --> Filter : CallerAuthContext or UNAUTHENTICATED
+else compatible APPKEY pair
+  Resolver --> Filter : AppKeyCredentialInput
+  Filter -> AppKey : verify with company APPKEY library
+  AppKey --> Filter : CallerAuthContext or UNAUTHENTICATED
+end
+
+break selected verifier rejects
+  Filter --> Caller : 401 UNAUTHENTICATED\nno fallback
+end
+
+Filter -> Authorization : authorize immutable CallerAuthContext and agent_id
+Authorization --> Filter : allowed
+Filter -> Controller : authenticated request and CallerAuthContext
+Controller --> Caller : operation-specific ResultBean
+
+note over Resolver,AppKey
+Header names are case-insensitive under HTTP.
+Credential values remain opaque and are never logged,
+persisted, copied into ResultBean, or passed to Session state.
 end note
 @enduml
