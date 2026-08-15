@@ -24,7 +24,7 @@ UI
 
 ![mate-service 与 agent-service 服务责任边界](mate_agent_service_responsibility_boundary.svg)
 
-[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L89)
+[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L99)
 
 两项标识不要混淆：
 

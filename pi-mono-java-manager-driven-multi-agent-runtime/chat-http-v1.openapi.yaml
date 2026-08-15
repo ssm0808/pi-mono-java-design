@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CampusAgent 内部 Runtime HTTP API
-  version: 1.7.0
+  version: 1.7.1
   description: |
     CampusAgent Runtime 面向 mate-service Runtime bridge 和获授权内部 SDK 的
     HTTP API。它是一组 Session、Run、Event、History 和 Model 资源接口，
@@ -72,6 +72,8 @@ paths:
       tags: [Sessions]
       summary: 创建 Runtime Session
       operationId: createSession
+      x-review-status: confirmed
+      x-review-confirmed-at: '2026-08-15'
       description: |
         请求无 Body，不接受调用方指定的 session_id 或 model_id。
         Runtime 根据 PATH 中 agent_id 解析受控 Agent 目录，读取

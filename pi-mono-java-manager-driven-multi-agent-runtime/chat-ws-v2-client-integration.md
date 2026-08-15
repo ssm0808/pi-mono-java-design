@@ -929,7 +929,7 @@ browser or CampusMate client
 
 ![附件上传、引用与模型输入流程](managed_attachment_reference_lifecycle.svg)
 
-[PlantUML 源码：`managed_attachment_reference_lifecycle`](diagram.puml#L781)
+[PlantUML 源码：`managed_attachment_reference_lifecycle`](diagram.puml#L804)
 
 `agent-service` 不提供上传端点，不直连 OBS 或 openGauss。v1 也不给
 浏览器发放 OBS Bucket、地址、凭据或预签名 URL。OBS Object Key 精确等于
