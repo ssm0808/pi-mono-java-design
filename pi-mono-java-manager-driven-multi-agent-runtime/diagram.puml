@@ -11,6 +11,7 @@ title Metadata to CampusAgent Runtime Directory
 ' Target design: RuntimeSessionStore persists Session state in a shared database.
 ' Target design: Agent and Model IDs use resource prefixes plus 24 alphanumeric characters.
 ' Design reason: raw case-sensitive Agent IDs require a case-sensitive root and collision guard.
+' Target design: compiled settings.json carries Agent identity, version, default model, and model allowlist.
 ' Design reason: keep Agent-specific disclosure local while Managers remain runtime authorities.
 
 skinparam backgroundColor #FFFFFF
@@ -35,7 +36,7 @@ skinparam file {
 skinparam ArrowColor #475569
 
 rectangle "Resolved metadata input" as Input {
-  rectangle "AGENT\nid, system_prompt\nmodels, bindings, policy" as AgentMetadata
+  rectangle "AGENT\nid, version, system_prompt\nbinding_models, bindings, policy" as AgentMetadata
   rectangle "SKILL\nname, description, content\nskill and tool bindings" as SkillMetadata
   rectangle "TOOL\nid, name, description\nschema, source, permission" as ToolMetadata
 }
@@ -47,6 +48,7 @@ rectangle "Runtime bundle compiler" as Compiler {
 }
 
 rectangle "Controlled Agent directory\ncase-sensitive file system\n<agent-runtime-root>/<agent-id>/" as AgentDirectory {
+  file ".campusagent/settings.json\nagentId, agentVersion\ndefaultModel, enabledModels" as SettingsFile
   file ".campusagent/SYSTEM.md\nAgent instructions\nDirect Agent tool summaries" as SystemFile
   file ".campusagent/skills/<skill-name>/SKILL.md\nFrontmatter and Skill content" as SkillFile
   file ".campusagent/skills/<skill-name>/references/tools.json\nDirect Skill tool summaries" as SkillToolsFile
@@ -62,13 +64,15 @@ SkillMetadata --> Validate
 ToolMetadata --> Validate
 Validate --> Render
 Render --> Publish
+Publish --> SettingsFile : identity, version and binding_models
 Publish --> SystemFile : system_prompt and direct tools
 Publish --> SkillFile : name, description and content
 Publish --> SkillToolsFile : direct Skill tools
 
 AgentMetadata ..> AgentAuthority : publish metadata
 ToolMetadata ..> ToolManager : publish executable definition
-AgentMetadata ..> ModelManager : authorize model ids
+SettingsFile ..> ModelManager : model selection snapshot
+AgentMetadata ..> ModelManager : authoritative model bindings
 AgentDirectory ..> SessionStore : pinned bundle revision
 
 note right of SkillToolsFile
@@ -82,7 +86,13 @@ agent_id = agent_ + 24 alphanumeric characters
 model_id = model_ + 24 alphanumeric characters
 Compare IDs byte-for-byte.
 Reject Agent ID case-fold collisions.
-Verify directory and manifest identity.
+Verify directory and settings.json identity.
+end note
+
+note right of SettingsFile
+defaultModel is binding_models[0].
+enabledModels is a non-empty explicit allowlist.
+Model Manager still revalidates every selection and invocation.
 end note
 @enduml
 
@@ -159,6 +169,7 @@ title agent-service Internal Session and Context Assembly
 ' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java: handle
 ' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel, toLlmTools
 ' Observed behavior: Java currently reads conversation_id during Upgrade and uses one base cwd.
+' Observed behavior: AgentSession.initialize resolves a model before it creates the Agent.
 ' Java divergence: v2 authenticates Upgrade and maps closed Frames to a server-side SessionTransport.
 ' Architecture change: ManagedSessionTransport owns logical connection state; WebSocket is an adapter.
 ' Target design: globally unique session_id is the only SessionPool key; tenant and user stay upstream.
@@ -167,6 +178,7 @@ title agent-service Internal Session and Context Assembly
 ' Target design: mate-service is the internal Runtime client and supplies trusted session-affinity metadata.
 ' Target design: one Pod owns one active connection generation per Session.
 ' Target design: database history is authoritative; no target Session JSONL is generated.
+' Target design: Managed settings is a compiled per-Agent file that does not exist in the Java baseline.
 ' Design reason: isolate prompt, model, tool, persistence, and run recovery across Agents.
 
 skinparam backgroundColor #FFFFFF
@@ -192,6 +204,7 @@ participant "ChatWebSocketAdapter" as WS
 participant "SessionTransportFactory" as TransportFactory
 participant "ManagedSessionTransport" as Transport
 participant "AgentDirectoryResolver" as Resolver
+participant "ManagedSettingsLoader" as SettingsLoader
 participant "ManagedSessionPool" as Pool
 participant "ManagedAgentSessionFactory" as Factory
 participant "Model Manager" as ModelManager
@@ -213,10 +226,14 @@ WS -> Transport : connect(command, invocation metadata)
 Transport -> Resolver : resolve(agent_id)
 Resolver -> Resolver : normalize and verify controlled root
 Resolver --> Transport : agentCwd
-Transport -> Pool : open(session_id, agent_id, model_id?)
+Transport -> SettingsLoader : load(agentCwd/.campusagent/settings.json)
+SettingsLoader -> SettingsLoader : verify agentId and agentVersion\nrequire non-empty unique enabledModels\nrequire defaultModel in enabledModels
+SettingsLoader --> Transport : agentVersion, defaultModel, enabledModels
+Transport -> Pool : open(session_id, agent_id)
 
 alt mode=create
-  Pool -> ModelManager : resolveModel(agent_id, model_id)
+  Pool -> Pool : select requested model_id if supplied\notherwise settings.defaultModel
+  Pool -> ModelManager : resolveModel(agent_id, effective model_id)
   ModelManager --> Pool : ModelDescriptor
 else mode=resume
   Pool -> Store : load(session_id)
@@ -225,7 +242,7 @@ else mode=resume
   ModelManager --> Pool : current ModelDescriptor
 end
 
-Pool -> Factory : create(session_id, agent_id,\nagentCwd, descriptor, restored messages)
+Pool -> Factory : create(session_id, agent_id, agentVersion,\nagentCwd, descriptor, restored messages)
 Factory -> Factory : load controlled .campusagent\nSYSTEM.md and Skills
 Factory -> Factory : register read, get_tool_info, call_tool
 Factory -> Session : initialize isolated Session
@@ -247,6 +264,12 @@ note over Factory,Loop
 Managed prompt inputs:
 Agent SYSTEM, three generic tools,
 native Skill summaries, and cwd only.
+end note
+
+note over SettingsLoader,ModelManager
+The HTTP create request supplies agent_id only.
+The directory chooses the default candidate.
+Model Manager remains the final authority.
 end note
 
 note over Pool,Store

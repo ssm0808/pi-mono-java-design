@@ -2,12 +2,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.0 |
+| 文档版本 | 1.3.0 |
 | 状态 | 目标设计，尚未实施 |
-| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.1.0 |
+| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.3.0 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
 | pi-mono-java 源码基线 | `1f7a5423219edfa4519d8719f1cc8a188ed72873` |
-| 更新日期 | 2026-08-06 |
+| 更新日期 | 2026-08-15 |
 
 ## 1. 结论
 
@@ -22,7 +22,8 @@ WebSocket 的 `method + params` Frame。它是一组以 Session、Run、History�
 
 ## 2. 接口分组
 
-基础路径为 `/agent-service/internal/v1`。
+基础路径为 `/campusclaw-service/v1`。网关 Host 可按部署环境配置，
+不属于业务路径的版本契约。
 
 ### 2.1 Session 生命周期
 
@@ -33,9 +34,28 @@ WebSocket 的 `method + params` Frame。它是一组以 Session、Run、History�
 | `DELETE` | `/sessions/{session_id}` | 幂等请求删除 Session；停止新请求并异步清理 |
 
 HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session；网络恢复只需
-重新读取 Session、Run 或 History。相同 `session_id + agent_id + 初始 model_id`
-的 `PUT` 重试返回原 Session，不同不可变绑定返回 `409 SESSION_BINDING_CONFLICT`。
+重新读取 Session、Run 或 History。`session_id` 唯一标识 Session，
+`agent_id` 是创建后不可变的 Agent 绑定。创建请求只提交
+`agent_id`；Runtime 根据它解析受控 Agent 目录，读取
+`.campusagent/settings.json`，以 `defaultModel` 初始化 Session。相同
+`session_id + agent_id` 的 `PUT` 重试返回当前 Session；只有
+`agent_id` 不同时返回 `409 SESSION_BINDING_CONFLICT`。创建后的模型
+切换必须显式调用 `PUT /sessions/{session_id}/model`。
 删除后的 `session_id` 永久禁止复用。
+
+创建成功前，Runtime 必须完成以下初始化：
+
+1. 验证 `settings.agentId` 与请求 `agent_id` 按字节完全一致；
+2. 固定 `agentVersion`；
+3. 验证 `enabledModels` 非空、无重复且包含 `defaultModel`；
+4. 调用 `resolveModel(agent_id, defaultModel)` 获得有效模型 descriptor；
+5. 原子保存 Session 的 `agent_id/agent_version/current_model_id`，并创建
+   独立 `AgentSession + Agent`。
+
+`settings.json` 是发布快照，Model Manager 仍是模型绑定、启用状态和
+调用的最终权威。目录缺少有效默认模型时返回
+`422 AGENT_MODEL_NOT_CONFIGURED`，Model Manager 暂时不可用时返回
+`503 MANAGER_UNAVAILABLE`。
 
 ### 2.2 消息与 Run
 
@@ -49,7 +69,9 @@ HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session�
 
 `POST /runs` 原子持久化用户 Message、分配 `run_id` 并占用 active-run；成功返回
 `202 Accepted`、`Location`、`run_id` 和 `user_message_id`。响应表示已接受，不表示
-模型执行完成。`POST /runs`、Steer、Abort 和 Session 删除都必须携带
+模型执行完成。接受 Run 时服务端把 `session.current_model_id`
+原子固化到 `RunRecord.model_id`；同一 Run 的所有模型调用都使用该值，
+后续 Session 模型切换不影响已开始 Run。`POST /runs`、Steer、Abort 和 Session 删除都必须携带
 `Idempotency-Key`；相同键和相同规范化负载返回原结果，相同键不同负载返回
 `409 IDEMPOTENCY_CONFLICT`。
 
@@ -129,7 +151,7 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 | `410` | `EVENT_CURSOR_EXPIRED` |
 | `412` | `PRECONDITION_FAILED` |
 | `413` | `REQUEST_TOO_LARGE`、`ATTACHMENT_NOT_SUPPORTED` |
-| `422` | `INVALID_ATTACHMENT`、`ATTACHMENT_NOT_READY` |
+| `422` | `AGENT_MODEL_NOT_CONFIGURED`、`INVALID_ATTACHMENT`、`ATTACHMENT_NOT_READY` |
 | `429` | `RATE_LIMITED` |
 | `503` | `MANAGER_UNAVAILABLE` |
 
@@ -160,7 +182,7 @@ pi-mono-java 基线为 `1f7a5423219edfa4519d8719f1cc8a188ed72873`。
 | 观察到的行为 | `modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java` 基线 44-164：结构化 provider 流事件 |
 | 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
 | 安全加固 | 逐请求认证、Session-scoped 模型查询、附件只传 ID、统一脱敏 Problem |
-| 架构改造 | 一组 HTTP 资源接口、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
+| 架构改造 | 一组 HTTP 资源接口、编译生成的 Managed `settings.json`、目录默认模型初始化、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
 
 本文全部 HTTP 行为均为 target-only design，不得表述为现有 pi-mono-java 实现。
 
@@ -168,5 +190,7 @@ pi-mono-java 基线为 `1f7a5423219edfa4519d8719f1cc8a188ed72873`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-08-15 | Session 创建请求收敛为只必填 `agent_id`；从 `.campusagent/settings.json` 读取 `agentVersion/defaultModel/enabledModels`，经 Model Manager 校验后初始化并返回有效模型；明确 Run 原子固化 Session 当前模型 |
+| 1.2.0 | 2026-08-14 | 将 Runtime HTTP API 的统一基础路径调整为 `/campusclaw-service/v1`；明确 Session 同一性由 `session_id` 与不可变 `agent_id` 绑定确定，可切换的 `model_id` 不参与绑定冲突判断 |
 | 1.1.0 | 2026-08-06 | 将 HTTP 版重构为 Session、Run、事件/历史、模型配置四组共 13 个 operation；删除 connect/resume 与连接级状态，增加 SSE/JSON Event Journal、ETag 和 Session 删除语义 |
 | 1.0.0 | 2026-08-05 | 初版 HTTP 映射草稿 |

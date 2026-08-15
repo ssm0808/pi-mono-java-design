@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.13.1 |
+| 文档版本 | 1.14.0 |
 | 状态 | 目标设计，尚未实施 |
-| 更新日期 | 2026-08-05 |
+| 更新日期 | 2026-08-15 |
 | pi-mono 源码基线 | `fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc` |
 | pi-mono-java 源码基线 | `1f7a5423219edfa4519d8719f1cc8a188ed72873` |
 | OpenClaw 源码基线 | `b015925bc30f6a8363f290b07d5f8588e21422b8` |
@@ -78,6 +78,7 @@ call_tool
 <agent-runtime-root>/
 └── <agent-id>/
     └── .campusagent/
+        ├── settings.json
         ├── SYSTEM.md
         └── skills/
             └── <skill-name>/
@@ -312,7 +313,7 @@ Factory 组装 Agent，Manager 执行模型与工具，Pool、Hub 和 Store 保�
 | ChatOrchestrator（mate-service） | Chat 创建状态、公共命令状态机和产品策略 | 校验 connect 幂等、Chat 数量 `< 50`、护栏、意图和链式状态；只有选择 Runtime 路径才接受公共 `chat.send`，其他分支在接受前结束 |
 | Mate Chat Store | `chat_id -> session_id`、Chat 状态、Agent/Model 选择和公共 connect 幂等结果 | 保存 UI 可见 Chat 与内部 Runtime Session 的一对一映射；`CREATING -> ACTIVE` 后才公开成功 |
 | RuntimeWebSocketClient（mate-service） | 当前内部连接、RequestFrame 关联和 Runtime 事件订阅 | 以服务身份建立内部 WebSocket，重建而非透传 Frame；桥接快照、历史、run 和错误 |
-| Agent 元数据服务 | Agent 定义、models、Skill/Tool 绑定和 Agent 权限 | 为目录编译、模型授权和工具授权提供 Agent 视角 |
+| Agent 元数据服务 | Agent 定义、`binding_models`、Skill/Tool 绑定和 Agent 权限 | 为目录编译、模型授权和工具授权提供 Agent 视角 |
 | Skill 元数据或制品服务 | Skill 版本、name、description、content 或完整 `SKILL.md` | 提供可物化的 Skill 文档 |
 | Tool Manager | Tool 描述、Schema、状态、source、permission、执行实现 | 发现、授权、校验并执行逻辑工具 |
 | Model Manager | Model descriptor、状态、有效输入策略、实际 Provider 路由和模型调用 | 校验 Agent-model 绑定，声明可接受模态/MIME/数量/字节上限并流式执行 |
@@ -338,7 +339,7 @@ EventFrame `seq`、Ping/Pong、背压缓冲和 close code 都是逐跳独立的�
 
 ![mate-service 与 agent-service 服务责任边界](mate_agent_service_responsibility_boundary.svg)
 
-[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L89)
+[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L99)
 
 运行目录是 Manager 数据的模型披露投影，不是授权数据库。目录中的
 `tool_id` 只告诉模型“可能使用什么”；Tool Manager 仍在每次发现和执行时
@@ -358,10 +359,11 @@ EventFrame `seq`、Ping/Pong、背压缓冲和 close code 都是逐跳独立的�
 | 元数据字段 | 运行目录或运行时目标 | 消费者 | 规则 |
 |---|---|---|---|
 | `AGENT.id` | `<agent-runtime-root>/<agent-id>` | AgentDirectoryResolver、Manager、SessionPool | 必须匹配 `^agent_[0-9A-Za-z]{24}$`；作为大小写敏感的不透明 ID，目录解析必须限制在受控根目录 |
-| `AGENT.version` | 发布校验与审计 | Runtime bundle compiler、元数据服务 | 部署时固定；目录层级不增加版本目录 |
+| `AGENT.version` | `.campusagent/settings.json` 的 `agentVersion` | Runtime bundle compiler、Managed settings loader | 必须大于等于 1；会话创建时固定并用于审计和 revision 解析 |
 | `AGENT.enabled` | 发布与建 Session 校验 | 编译器、ManagedSessionPool | 非启用 Agent 不发布或拒绝建 Session |
 | `AGENT.system_prompt` | `.campusagent/SYSTEM.md` 的 `<agent_instructions>` | SystemPromptBuilder | 按固定字段顺序渲染 |
-| `AGENT.models` | Agent 模型允许集合 | Model Manager | 每个元素必须匹配 `^model_[0-9A-Za-z]{24}$`；不投影为本地文件，每次选择和调用重新校验 |
+| `AGENT.binding_models[0]` | `.campusagent/settings.json` 的 `defaultModel` | Managed settings loader、ManagedSessionPool | 列表必须非空；第一项是新 Session 默认模型 |
+| `AGENT.binding_models[]` | `.campusagent/settings.json` 的 `enabledModels` | Managed settings loader、Model Manager | 保留元数据顺序，元素唯一且匹配 `^model_[0-9A-Za-z]{24}$`；目录是发布快照，每次选择和调用仍由 Model Manager 重新校验 |
 | `AGENT.binding_tools` | SYSTEM 的 `<agent_tools>` | 模型 | 只写 Agent 直接绑定的 tool_id、name、description |
 | `AGENT.binding_skills` | `.campusagent/skills/<skill-name>` 集合 | Managed SkillLoader、模型 | 展开完整 Skill 依赖闭包并逐个物化 |
 | `AGENT.permission` | Agent Tool 策略 | Tool Manager | 参与发布校验和运行时最终授权 |
@@ -401,7 +403,7 @@ Profile 的编译和运行根目录必须位于大小写敏感文件系统；服
 验证这一能力，不满足时 fail closed。作为纵深防御，Agent 元数据服务和发布索引
 还要为每个 ID 保留 locale-independent ASCII lowercase collision key，只用于拒绝
 case-fold 冲突，绝不能把它当作规范 ID。Resolver 打开目录后必须将请求值、真实
-目录项和 manifest 中的 `agent.id` 按原始 ASCII 字节再次比较，不能只依赖
+目录项和 `settings.json.agentId` 按原始 ASCII 字节再次比较，不能只依赖
 `Path.exists()`；因此语法合法的大小写改写也不能落到另一个 Agent 的 cwd。
 
 `model_id` 是 Model Manager 资源 ID，不是 Provider 模型名。Model Manager
@@ -423,7 +425,7 @@ case-fold 冲突，绝不能把它当作规范 ID。Resolver 打开目录后必�
    key 冲突；
 4. 对目标路径规范化，并验证仍位于配置的根目录内；
 5. 拒绝指向根目录外的符号链接；
-6. 打开后校验目录项和 manifest `agent.id` 与请求 ID 字节完全一致；
+6. 打开后校验目录项和 `settings.json.agentId` 与请求 ID 字节完全一致；
 7. 使用受控根目录内的临时同级目录生成；
 8. 全量校验成功后原子替换 `<agent-id>` 目录。
 
@@ -436,11 +438,51 @@ agentCwd = AgentDirectoryResolver.resolve(agent_id)
 并验证：
 
 ```text
+<agentCwd>/.campusagent/settings.json
 <agentCwd>/.campusagent/SYSTEM.md
 <agentCwd>/.campusagent/skills/
 ```
 
-### 5.3 `SYSTEM.md`
+### 5.3 `settings.json`
+
+目录编译器把 `AGENT.id/version/binding_models` 投影为只读
+`<agentCwd>/.campusagent/settings.json`：
+固定的 pi-mono-java 基线中尚无该 Managed settings Schema，
+本节是基于仓库根目录
+[`AGENT元数据设计.json`](../AGENT元数据设计.json) 中
+`id/version/binding_models` 的 target-only 架构改造，不是对现有
+pi-mono-java 行为的描述。
+
+```json
+{
+  "agentId": "agent_011CZkYqphY8vELVzwCUpqiQ",
+  "agentVersion": 3,
+  "defaultModel": "model_011CZq2GkV8aD4NwP7sLmXfR",
+  "enabledModels": [
+    "model_011CZq2GkV8aD4NwP7sLmXfR",
+    "model_011CZr5TnW2bE7PxQ9kLmYhS"
+  ]
+}
+```
+
+编译规则如下：
+
+- 顶层只允许 `agentId/agentVersion/defaultModel/enabledModels`
+  四个必填字段，拒绝未知字段；
+- `agentId = AGENT.id`，`agentVersion = AGENT.version`；
+- `defaultModel = AGENT.binding_models[0]`；
+- `enabledModels = AGENT.binding_models`，保留元数据顺序；
+- `enabledModels` 必须非空且元素唯一，`defaultModel`
+  必须存在于 `enabledModels`；
+- 所有 ID 按原始 ASCII 字节比较，不做大小写归一化。
+
+该文件是不可变 Runtime bundle 的一部分，不与
+`~/.campusclaw/agent/settings.json` 或项目级 `.campusclaw/settings.json`
+合并，也不存储 Provider 模型名、凭据、base URL 或 header。
+`enabledModels` 是发布快照和初始选择边界，不是最终授权
+数据库；创建、切换和每次模型调用仍必须通过 Model Manager。
+
+### 5.4 `SYSTEM.md`
 
 编译器把 Agent 的业务指令写入 `<agent_instructions>`，把直接绑定的工具摘要
 写入 `<agent_tools>`；模型因此只在初始 Prompt 中看到 Agent 级工具。文件按
@@ -517,7 +559,7 @@ Tool 摘要从固定版本 TOOL 元数据解析。以下情况拒绝发布：
 - 同一 Agent 的两个直接绑定解析出冲突的 tool_id；
 - name 或 description 缺失。
 
-### 5.4 `SKILL.md`
+### 5.5 `SKILL.md`
 
 Skill 服务可以提供结构化字段或完整 `SKILL.md` 制品；编译器每次只接受一种
 输入，并把两种输入规范化为同一文件格式。
@@ -563,7 +605,7 @@ tool descriptions for discovery and execution.
 
 Skill 自有正文不得预先包含同名保留章节，避免不同输入模式产生重复协议。
 
-### 5.5 `references/tools.json`
+### 5.6 `references/tools.json`
 
 模型读取某个 Skill 后，只有在需要外部操作时才读取该 Skill 的
 `references/tools.json`。编译器只把该 Skill 直接绑定的逻辑工具写入文件，
@@ -593,7 +635,7 @@ Skill 自有正文不得预先包含同名保留章节，避免不同输入模�
 `references/tools.json` 是信息披露索引，不是 Tool 激活状态。读取该文件不会
 修改 Runtime 权限，Tool Manager 也不依赖“已读取”状态。
 
-### 5.6 Skill 依赖闭包
+### 5.7 Skill 依赖闭包
 
 编译器从 `AGENT.binding_skills` 递归展开依赖，解析并校验所有版本后，再为
 每个 Skill 独立生成目录。依赖展开路径为：
@@ -677,9 +719,17 @@ Session 映射；只有内部 Runtime connect 成功后，agent-service 才解�
 active-run 恢复点。公共 connect 成功响应写出后，UI 先收到投影后的可选快照，
 再按 mate-service 重新编号的顺序收到快照 cursor 之后的事件。
 
+HTTP Session 创建只提交 `agent_id`。Managed settings loader 从已解析
+Agent 目录读取 `settings.json`，以 `defaultModel` 作为新 Session 的
+候选模型，先校验其存在于非空 `enabledModels`，再调用
+`resolveModel(agent_id, defaultModel)` 取得权威 descriptor。因此请求
+不必指定模型，但创建成功前必须解析出有效模型。WebSocket
+协议若显式提供 `model_id`，它只能作为该协议的初始选择，
+不改变 `settings.json` 和 Model Manager 的双重校验边界。
+
 ![Managed Session 与 Context 组装](managed_session_context_assembly.svg)
 
-[PlantUML 源码](diagram.puml#L150)
+[PlantUML 源码](diagram.puml#L160)
 
 公共 `mode=create` 的职责顺序：
 
@@ -812,7 +862,7 @@ validation.
 
 ![Tool 渐进式发现与执行](progressive_tool_discovery_execution.svg)
 
-[PlantUML 源码](diagram.puml#L264)
+[PlantUML 源码](diagram.puml#L287)
 
 Agent 直接工具路径：
 
@@ -883,7 +933,7 @@ ModelEventStream invoke(
         ModelInvocationOptions options);
 ```
 
-`listModels` 根据 `AGENT.models` 返回当前可用集合；`resolveModel` 精确校验
+`listModels` 根据 `AGENT.binding_models` 返回当前可用集合；`resolveModel` 精确校验
 `agent_id + model_id`；`invoke` 每轮重新校验 Agent 绑定和 Model 状态。
 
 `ModelDescriptor` 至少提供 Java 构造 `Model` 所需的公开能力：
@@ -963,7 +1013,7 @@ Model Manager 持续返回文本、thinking、ToolCall 和终态事件；Provide
 
 ![Model Manager 流式调用](model_manager_streaming_flow.svg)
 
-[PlantUML 源码](diagram.puml#L599)
+[PlantUML 源码](diagram.puml#L622)
 
 具体映射如下：
 
@@ -1611,7 +1661,7 @@ mate-service 侧另设 `PublicChatConnection` 与 `RuntimeSessionChannel` 应用
 
 ![服务端 SessionTransport 依赖倒置](managed_session_transport_dependency_inversion.svg)
 
-[PlantUML 源码](diagram.puml#L534)
+[PlantUML 源码](diagram.puml#L557)
 
 ### 9.5 流式事件和 Message 投影
 
@@ -1909,7 +1959,7 @@ run 终态和最终 Message 必须先按 Session 的 `history_seq` 顺序提交�
 
 ![Managed WebSocket Session 协议](managed_websocket_session_protocol.svg)
 
-[PlantUML 源码](diagram.puml#L342)
+[PlantUML 源码](diagram.puml#L365)
 
 ### 9.11 附件引用与模型输入
 
@@ -2274,7 +2324,7 @@ resolve/content 接口重建附件输入；跨 Pod 共享不依赖本地盘、�
 
 ![附件引用、接受与模型输入生命周期](managed_attachment_reference_lifecycle.svg)
 
-[PlantUML 源码：`managed_attachment_reference_lifecycle`](diagram.puml#L781)
+[PlantUML 源码：`managed_attachment_reference_lifecycle`](diagram.puml#L804)
 
 ## 10. pi-mono-java 目标适配点
 
@@ -2323,8 +2373,10 @@ Agent 身份必须来自不可变 SessionContext，避免并发 Session 互相�
 - Skill 依赖循环或 name 冲突；
 - Skill 文档输入模式不唯一；
 - frontmatter 与元数据不一致；
-- `AGENT.id` 不匹配 `^agent_[0-9A-Za-z]{24}$`，或 `AGENT.models`
+- `AGENT.id` 不匹配 `^agent_[0-9A-Za-z]{24}$`，或 `AGENT.binding_models`
   中任一值不匹配 `^model_[0-9A-Za-z]{24}$`；
+- `AGENT.binding_models` 为空、存在重复项，或生成的
+  `defaultModel` 不在 `enabledModels` 中；
 - `agent-runtime-root` 不是大小写敏感文件系统，或 `AGENT.id` 与已有资源的
   ASCII lowercase collision key 冲突；
 - 路径越界或符号链接越界；
@@ -2358,6 +2410,8 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 - agent_id 或 model_id 的资源前缀、长度或字符集非法；
 - 语法合法的 Agent 目录或 Model 资源不存在；
 - SYSTEM 或 Skill 目录不可读；
+- `settings.json` 缺失、不可读、字段不封闭、`agentId` 与路径不一致，
+  或 `defaultModel/enabledModels` 不满足发布约束；
 - `mode=create` 缺少 mate-service 分配的 session_id、agent_id 或 model_id；
 - `mode=resume` 的 Session 不存在或已删除；
 - model_id 不属于当前 Agent；
@@ -2421,6 +2475,9 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 
 ### 12.1 目录编译器
 
+- `settings.json` 稳定输出 `agentId/agentVersion/defaultModel/enabledModels`；
+  `defaultModel` 等于 `binding_models[0]` 且必须出现在非空
+  `enabledModels` 中；
 - 同一输入重复编译得到字节一致的 SYSTEM、SKILL 和 tools.json；
 - 结构化 content 与等价完整 SKILL.md 生成一致的规范文件；
 - Agent SYSTEM 只包含 Agent 直接 Tool；
@@ -2452,7 +2509,8 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 
 ### 12.4 Model Manager
 
-- 新 Session 必须精确校验 model_id；
+- 新 Session 必须从 `settings.defaultModel` 解析并精确校验有效
+  `model_id`；HTTP 创建请求不必重复提交该 ID；
 - 恢复 Session 必须重新校验保存模型；
 - list/set model 只暴露当前 Agent 允许集合；
 - start、text、thinking、toolcall、done、error 事件映射正确；
@@ -2672,6 +2730,8 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 - 文档给出完整的元数据字段、文件和运行时消费者映射；
 - cwd 只由 agent_id 经受控 Resolver 产生；
 - Agent 运行目录能被 pi-mono-java 原生 SYSTEM 和 Skill 路径读取；
+- Agent 运行目录包含不可变的 `.campusagent/settings.json`，
+  可仅根据 `agent_id` 解析 Agent 版本、默认模型和允许模型集合；
 - Agent direct Tool 与 Skill Tool 保持两级渐进披露；
 - 模型实际可执行工具固定为三个；
 - 通用工具 description 完整表达发现和执行协议；
@@ -2711,6 +2771,7 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.14.0 | 2026-08-15 | 将 `AGENT.binding_models` 编译为只读 `.campusagent/settings.json`，固定 `agentId/agentVersion/defaultModel/enabledModels` 格式及非空显式 allowlist 校验；定义 HTTP 新 Session 只提交 `agent_id`，初始化从目录默认模型解析并经 Model Manager 精确校验；补充目录、创建失败、模型与验收规则 |
 | 1.13.1 | 2026-08-05 | 将内部 Runtime AsyncAPI 升至 2.12.0，按 method 暴露具名 Request/Success Response 和标准 reply，分别展示八类 Event；新增简化开发者指南、默认展开 JSON 示例的生成 HTML 和固定版本生成脚本；修正无附件模型输入策略误要求 `completed_at` 的 Schema 问题，并同步客户端指南 1.8.0；线上 Frame 结构和 Runtime 行为不变 |
 | 1.13.0 | 2026-08-04 | 增加 mate-service 公共 Chat WebSocket 与 agent-service 内部 Runtime WebSocket 的双协议边界；公共 create 自动生成 chat_id/session_id 并以 connect 幂等与 50 Chat 配额保护，公共 resume 只使用 chat_id；定义 Mate Chat Store、服务责任图、Agent Channel 接受边界、语义 Frame 桥接、逐跳连接/序列/背压、两次 HTTP 101 和恢复映射；收紧 Message/Tool/Error 投影与命令幂等负载；移除最终用户 IP 亲和假设，公共附件路径改用 chat_id；新增公共 AsyncAPI 1.0.0/指南 1.0.0，将内部 AsyncAPI/指南升至 2.11.0/1.7.0，并同步 Attachment Service 2.0.0 |
 | 1.12.0 | 2026-08-03 | 将 thinking 明确为 reasoning content 可见性而非推理开关或强度；第一版从 hidden/summary/full 收敛为 hidden/full，删除 thinking_summary 事件及摘要状态机，保留 hidden 占位与 thinking_redacted 序列语义；同步 AsyncAPI 2.10.0 和客户端指南 1.6.0 |
