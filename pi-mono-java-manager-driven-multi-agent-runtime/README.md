@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.18.1 |
+| 文档版本 | 1.19.0 |
 | 状态 | 目标设计，尚未实施 |
 | 更新日期 | 2026-08-15 |
 | pi-mono 源码基线 | `fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc` |
@@ -757,6 +757,11 @@ MessageSource key 和 `resCode` 完全一致；`resMsg` 根据
 当前基线未提供内部 Maven 坐标、FQCN 和异常 Factory 方法，
 落地前必须以真实内部 jar 校准，不得在公开 POM 中写入内部
 仓库 URL 或凭据。
+
+HTTP 接口逐个评审改以
+[`chat-http-v1-review.html`](chat-http-v1-review.html) 作为人类可读的主维护契约。
+`chat-http-v1.openapi.yaml` 暂时保留为过渡期机器投影，待用户后续
+明确决定后再废弃，本轮不删除。
 
 WebSocket 协议若显式提供 `model_id`，它只能作为该协议的初始选择，
 不改变 `settings.json` 和 Model Manager 的双重校验边界。
@@ -2814,6 +2819,7 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.19.0 | 2026-08-15 | 增加可直接打开的 `chat-http-v1-review.html`，将其固定为 HTTP 接口人类评审主维护契约；OpenAPI YAML 暂作过渡期机器投影，本轮不废弃 |
 | 1.18.1 | 2026-08-15 | 用户明确确认第一个 `POST /campusclaw-service/v1/agents/{agent_id}/sessions` operation；记录已确认评审状态，其余 12 个 HTTP operation 继续逐个对齐 |
 | 1.18.0 | 2026-08-15 | 将第一个 HTTP Session 创建接口的异常响应收敛为仅 `resCode/resMsg`，删除 `result` 字段；同步 OpenAPI Schema、错误示例和契约测试规则 |
 | 1.17.0 | 2026-08-15 | HTTP 契约删除 traceparent；将 `X-HW-ID + Authorization` JWT 固定为首选接入方式，明示兼容 `X-HW-ID + X-HW-APPKEY`；增加混合凭据拒绝、校验失败不降级、统一 CallerAuthContext 认证适配层与第九个错误码 `AUTH_CREDENTIAL_CONFLICT` |

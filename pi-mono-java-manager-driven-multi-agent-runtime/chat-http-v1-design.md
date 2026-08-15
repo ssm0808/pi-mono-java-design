@@ -2,10 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.7.1 |
+| 文档版本 | 1.8.0 |
 | 状态 | 目标设计，尚未实施 |
 | 接口评审状态 | `POST /agents/{agent_id}/sessions` 已确认；其余 operation 待逐个评审 |
-| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1 |
+| 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
+| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
 | pi-mono-java 源码基线 | `dff835743fc7f3c93e1154c3eb51028749867ca8` |
 | 更新日期 | 2026-08-15 |
@@ -25,6 +26,10 @@ WebSocket 的 `method + params` Frame。它是一组以 Session、Run、History�
 
 基础路径为 `/campusclaw-service/v1`。网关 Host 可按部署环境配置，
 不属于业务路径的版本契约。
+逐接口的展示、评审状态和已确认响应样例以
+[`chat-http-v1-review.html`](chat-http-v1-review.html) 为主维护文档。
+OpenAPI YAML 在迁移期内继续作为机器可读投影；本轮不删除也不宣告废弃，
+待用户后续明确决定。
 
 ### 2.1 Session 生命周期
 
@@ -381,6 +386,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.8.0 | 2026-08-15 | 增加仓库内可直接打开的 HTML 接口评审文档并固定为人类评审主维护契约；OpenAPI YAML 暂作过渡期机器投影，不在本轮废弃 |
 | 1.7.1 | 2026-08-15 | 用户明确确认第一个 `POST /agents/{agent_id}/sessions` operation；固定该 operation 的已确认评审状态，其余 12 个 operation 仍待逐个对齐 |
 | 1.7.0 | 2026-08-15 | 第一个 Session 创建接口的异常包装收敛为仅 `resCode/resMsg`，明确禁止序列化 `result`；同步 OpenAPI Schema、中英文错误示例和契约测试 |
 | 1.6.0 | 2026-08-15 | HTTP 契约删除 traceparent；增加首选 `X-HW-ID + Authorization` JWT 与兼容 `X-HW-ID + X-HW-APPKEY` 两组明示安全要求；固定混合凭据拒绝、验证失败不降级、统一 CallerAuthContext 适配层及 `AUTH_CREDENTIAL_CONFLICT` 中英文错误 |
