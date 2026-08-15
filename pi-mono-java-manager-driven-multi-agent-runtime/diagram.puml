@@ -1033,6 +1033,7 @@ participant "SessionIdGenerator" as Ids
 participant "ManagedAgentSessionFactory" as Factory
 database "RuntimeSessionStore" as Store
 participant "ManagedSessionPool" as Pool
+participant "ResultBeanFactory" as ResultFactory
 
 Mate -> API : POST /agents/{agent_id}/sessions\nno request body
 API -> API : authenticate caller\nvalidate agent_id syntax
@@ -1053,7 +1054,9 @@ API -> Store : atomically insert SessionRecord\nincluding internal agentVersion 
 Store --> API : committed
 API -> Pool : register(session_id, AgentSession)
 Pool --> API : registered
-API --> Mate : 201 Created plus Location\nsession_id, agent_id, model_id, state,\nthinking, active_run, created_at
+API -> ResultFactory : normal(SessionCreateResponseVO)
+ResultFactory --> API : resCode, resMsg, result
+API --> Mate : 201 Created plus Location\nResultBean with SessionResource in result
 
 note over API,Pool
 Before commit, any failure discards the in-memory Session
@@ -1067,5 +1070,73 @@ This operation has no Idempotency-Key or If-Match.
 Every successful POST creates a new Session.
 A lost successful response can produce an orphan Session,
 which background timeout cleanup must remove if unbound.
+end note
+@enduml
+
+@startuml http_result_bean_compatibility
+title ResultBeanFactory Standalone and Company Dependency Replacement
+
+' Source evidence:
+' pi-mono-java pom.xml: reactor modules and dependency management
+' pi-mono-java mate-campusclaw/pom.xml: Spring WebFlux application dependencies
+' pi-mono-java modules/coding-agent-cli/pom.xml: Spring WebFlux application dependencies
+' Observed behavior: the current source baseline has no ResultBeanFactory dependency or HTTP Session controller.
+' Target design: standalone and company Maven profiles provide one API-compatible ResultBean artifact.
+' Target design: controller source keeps ResultBeanFactory.getFactory().normal(result) unchanged.
+' Design reason: preserve company development experience without publishing internal repositories or code.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #94A3B8
+  FontColor #0F172A
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+skinparam ArrowColor #475569
+
+package "Unchanged business source" {
+  component "SessionController" as Controller
+  component "RuntimeApiExceptionHandler" as Handler
+}
+
+component "ResultBeanFactory API contract\nexact approved FQCN and signatures" as Contract
+
+package "standalone profile" {
+  component "campusclaw-result-bean-compat\nclean-room implementation" as Standalone
+}
+
+package "company profile" {
+  component "Company ResultBean artifact\nresolved from internal repository" as Company
+  component "Company Maven settings\nactive profile and credentials" as Settings
+}
+
+component "MessageSource\nen-US and zh-CN" as Messages
+component "Maven Enforcer\nexactly one provider" as Enforcer
+
+Controller --> Contract : getFactory().normal(result)
+Handler --> Contract : approved failure API
+Handler --> Messages : resolve error code and arguments
+Standalone ..> Contract : provides in standalone
+Company ..> Contract : provides in company
+Settings --> Company : resolves artifact
+Enforcer ..> Standalone : validate
+Enforcer ..> Company : validate
+
+note bottom of Contract
+The two artifacts must never coexist on one compile or runtime classpath.
+Internal coordinates, repository URLs, credentials, and unverified method names
+are not committed to the public repository.
 end note
 @enduml

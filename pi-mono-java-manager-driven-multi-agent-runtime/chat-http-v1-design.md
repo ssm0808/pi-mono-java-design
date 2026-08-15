@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.0 |
+| 文档版本 | 1.5.0 |
 | 状态 | 目标设计，尚未实施 |
-| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.4.0 |
+| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.5.0 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
 | pi-mono-java 源码基线 | `1f7a5423219edfa4519d8719f1cc8a188ed72873` |
 | 更新日期 | 2026-08-15 |
@@ -56,7 +56,8 @@ HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session�
    `read/get_tool_info/call_tool`，并创建独立 `AgentSession + Agent`；
 8. 原子保存包含 `agent_version` 和 bundle revision 的内部
    SessionRecord，并将已就绪 Session 注册到 SessionPool；
-9. 返回 `201 Created`、`Location` 和 SessionResource。
+9. 使用 `ResultBeanFactory.getFactory().normal(sessionResponseVO)` 包装
+   SessionResource，返回 `201 Created`、`Location` 和 ResultBean。
 
 初始化只组装运行对象，不调用大模型、不消耗 token，不创建
 Message 或 RunRecord；因此创建响应中 `state=idle` 且
@@ -65,21 +66,26 @@ Message 或 RunRecord；因此创建响应中 `state=idle` 且
 暴露 `session_id`，并丢弃未持久化的内存 Session。
 
 `settings.json` 是发布快照，Model Manager 仍是模型绑定、启用状态和
-调用的最终权威。目录缺少有效默认模型时返回
-`422 AGENT_MODEL_NOT_CONFIGURED`，Model Manager 暂时不可用时返回
-`503 MANAGER_UNAVAILABLE`。
+调用的最终权威。目录缺少有效默认模型时返回 HTTP `422`，
+响应体 `resCode=AGENT_MODEL_NOT_CONFIGURED`；Model Manager 暂时不可用时
+返回 HTTP `503`，响应体 `resCode=MANAGER_UNAVAILABLE`。
 
-创建响应和后续 `GET /sessions/{session_id}` 共用 SessionResource：
+创建响应的 `result` 和后续 `GET /sessions/{session_id}` 的业务资源
+共用 SessionResource。第一个接口的完整成功响应为：
 
 ```json
 {
-  "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-  "agent_id": "agent_011CZkYqphY8vELVzwCUpqiQ",
-  "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
-  "state": "idle",
-  "thinking": "hidden",
-  "active_run": null,
-  "created_at": "2026-08-15T11:30:00Z"
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "agent_id": "agent_011CZkYqphY8vELVzwCUpqiQ",
+    "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
+    "state": "idle",
+    "thinking": "hidden",
+    "active_run": null,
+    "created_at": "2026-08-15T11:30:00Z"
+  }
 }
 ```
 
@@ -173,30 +179,132 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 - Session 读取响应返回 `ETag`；配置写入使用 `If-Match`，Run 副作用写入使用
   `Idempotency-Key`，两类机制职责不混用。
 
-## 5. HTTP 状态与错误体
+## 5. ResultBean、HTTP 状态与国际化
 
-错误统一使用 `application/problem+json`，并增加稳定 `code`、`retryable`、
-`retry_after_ms` 和有界 `details`。主要映射如下：
+公司内部普通 JSON 接口使用 `resCode/resMsg/result` 三字段
+ResultBean，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
+草案的公司集成约束。本版先冻结第一个创建 Session 接口；
+其余 operation 的业务语义仍按后续逐个评审，但普通 JSON 响应
+最终也必须遵守同一包装。SSE 事件流和 HTTP `204` 无响应体
+不使用 ResultBean。
 
-| HTTP | 典型 code |
-|---|---|
-| `400` | `INVALID_REQUEST`、`INVALID_AGENT_ID` |
-| `401` | `UNAUTHENTICATED` |
-| `403` | `FORBIDDEN`、`MODEL_NOT_ALLOWED` |
-| `404` | `AGENT_NOT_FOUND`、`SESSION_NOT_FOUND`、`RUN_NOT_FOUND` |
-| `409` | `RUN_ACTIVE`、`IDEMPOTENCY_CONFLICT` |
-| `410` | `EVENT_CURSOR_EXPIRED` |
-| `412` | `PRECONDITION_FAILED` |
-| `413` | `REQUEST_TOO_LARGE`、`ATTACHMENT_NOT_SUPPORTED` |
-| `422` | `AGENT_NOT_AVAILABLE`、`AGENT_MODEL_NOT_CONFIGURED`、`INVALID_ATTACHMENT`、`ATTACHMENT_NOT_READY` |
-| `429` | `RATE_LIMITED` |
-| `500` | `SESSION_INITIALIZATION_FAILED` |
-| `503` | `MANAGER_UNAVAILABLE` |
+| 字段 | 成功 | 异常 | 调用方规则 |
+|---|---|---|---|
+| `resCode` | 固定字符串 `0` | 稳定大写 snake_case 错误码 | 只根据此字段分支，不解析 `resMsg` |
+| `resMsg` | 固定 `success` | 按 Locale 解析的人类可读文本 | 只用于展示和日志 |
+| `result` | SessionResource | 固定 `null` | 字段始终存在 |
 
-错误不得包含凭据、内部 Header、私有 claim、Prompt、原始 thinking、OBS 地址、
-Bucket、预签名 URL 或内部堆栈。
+ResultBean 只包装响应体，不把所有异常降级为 HTTP `200`。
+HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业务
+语义。例如：
 
-## 6. 安全与附件边界
+```json
+{
+  "resCode": "AGENT_MODEL_NOT_CONFIGURED",
+  "resMsg": "该 Agent 未配置有效的默认模型。",
+  "result": null
+}
+```
+
+第一个接口冻结的错误码、HTTP status 和中英文消息如下。
+错误码枚举名、MessageSource key 和 `resCode` 必须完全一致：
+
+| HTTP | `resCode` | `zh_CN` | `en_US` |
+|---|---|---|---|
+| `400` | `INVALID_AGENT_ID` | `agent_id 格式不正确。` | `The agent_id format is invalid.` |
+| `401` | `UNAUTHENTICATED` | `调用方身份认证失败。` | `Caller authentication failed.` |
+| `403` | `FORBIDDEN` | `当前调用方无权为该 Agent 创建 Session。` | `The caller is not allowed to create a Session for this Agent.` |
+| `404` | `AGENT_NOT_FOUND` | `指定的 Agent 不存在。` | `The specified Agent does not exist.` |
+| `422` | `AGENT_NOT_AVAILABLE` | `指定的 Agent 当前不可用。` | `The specified Agent is currently unavailable.` |
+| `422` | `AGENT_MODEL_NOT_CONFIGURED` | `该 Agent 未配置有效的默认模型。` | `The Agent has no valid default model configured.` |
+| `500` | `SESSION_INITIALIZATION_FAILED` | `Session 初始化失败。` | `Session initialization failed.` |
+| `503` | `MANAGER_UNAVAILABLE` | `Model Manager 暂时不可用，请稍后重试。` | `Model Manager is temporarily unavailable. Try again later.` |
+
+Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
+`en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
+JVM 系统 Locale。响应返回 `Content-Language`，其值为实际使用的
+`en-US` 或 `zh-CN`。Service 异常只携带错误码和有界参数；
+`@RestControllerAdvice` 负责 Locale 解析、消息格式化、HTTP status
+和 ResultBean 异常响应。
+
+异常响应不得包含凭据、内部 Header、私有 claim、Prompt、原始 thinking、
+OBS 地址、Bucket、预签名 URL 或内部堆栈。`503` 的重试建议通过
+标准 `Retry-After` Header 传递，不向 ResultBean 增加私有字段。
+
+## 6. Java 开发体验与内部制品替换
+
+### 6.1 代码边界
+
+Controller 接收和返回 VO，Service 返回未包装的 Response VO；
+ResultBean 不进入 Service、Session Factory、Runtime Store 或 Manager Adapter。
+创建 Session 的 Controller 目标代码形状为：
+
+```java
+SessionCreateResponseVO result = sessionService.createSession(agentId);
+return ResponseEntity.created(location)
+        .body(ResultBeanFactory.getFactory().normal(result));
+```
+
+这是 target-only 代码形状。当前 pi-mono-java 基线没有该 HTTP
+Controller，本地与设计仓库也没有公司内部 `ResultBeanFactory`
+的 Maven 坐标、完整包名或方法签名证据。因此不在设计中伪造
+内部 groupId/artifactId/version 或异常 Factory 方法；落地前必须以
+公司内部制品的实际 API 作为新的源码基线。
+
+### 6.2 双制品互斥模式
+
+为了同时满足公司外可构建和公司内直接拉取，使用两个 Maven
+profile 为同一个编译契约提供互斥实现：
+
+| profile | ResultBean 来源 | 使用场景 |
+|---|---|---|
+| `standalone` | `campusclaw-result-bean-compat` 清室兼容制品 | 默认激活；GitHub、本地和无内网 CI |
+| `company` | 公司内部真实 ResultBean 制品 | 由公司 Maven `settings.xml` 的 `activeProfiles` 自动激活 |
+
+`campusclaw-result-bean-compat` 只重新实现已批准公开的最小 API
+形状和 JSON 契约，不复制、反编译或发布公司内部源码。在获得
+合规批准和真实包名后，兼容制品提供与内部制品完全相同的
+FQCN、公共泛型签名和 Jackson 字段，因此 Controller 源码在两种
+profile 下保持同一行 `ResultBeanFactory.getFactory().normal(result)`。
+
+两个制品绝不能同时进入 compile/runtime classpath，否则会出现重复
+FQCN 和不可预期的 class loading。Maven Enforcer 必须在 `validate`
+阶段验证恰好一个 provider；公司内部仓库 URL、server ID 和凭据
+只位于公司管理的 `settings.xml`，不写入 Git 中的 POM。公司环境通过
+`activeProfiles` 激活 `company` 后，Maven 直接从内部仓库解析真实制品；
+业务代码不改 import、不改 Factory 调用。
+
+![ResultBeanFactory 公司内外双制品替换](http_result_bean_compatibility.svg)
+
+[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L1076)
+
+### 6.3 错误与国际化实现
+
+Java 使用 `RuntimeApiErrorCode` 枚举保存稳定错误码与 HTTP status，
+`RuntimeApiException` 只保存 error code 和消息参数。
+`RuntimeApiExceptionHandler` 使用 Spring `MessageSource` 和已固定的
+Locale 规则解析 `resMsg`，再调用公司制品实际支持的异常包装
+API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
+内部 Factory 的异常方法名；获得内部 jar 后再固定该适配。
+
+资源文件至少包含 `messages_en_US.properties` 和
+`messages_zh_CN.properties`。两份资源必须具有完全相同的 key 集合。
+启动测试和 CI 对枚举、`en_US`、`zh_CN` 执行集合等值校验；
+契约测试分别在 `standalone` 和 `company` profile 下断言：
+
+1. `normal(result)` 的 JSON 精确为 `resCode/resMsg/result`；
+2. null、空集合、时间和嵌套 VO 的 Jackson 行为一致；
+3. 中英文 Locale、回退语言和 `Content-Language` 一致；
+4. 八个错误码的 HTTP status、`resCode`、`resMsg` 和
+   `result=null` 一致；
+5. 公司 profile 的依赖树不包含兼容制品，standalone profile
+   的依赖树不包含内部制品。
+
+如果公司合规规则不允许兼容制品使用内部 FQCN，必须改用
+CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
+体验，但不能同时承诺业务源码 import 与内部类完全相同。
+
+## 7. 安全与附件边界
 
 - 内部 Gateway 在每个 HTTP 请求上建立不可变调用服务身份；`session_id` 不是凭据。
 - Runtime 对每个请求重新校验 Session、Agent、Model 和动作权限。
@@ -207,7 +315,7 @@ Bucket、预签名 URL 或内部堆栈。
 - Runtime 仍通过 Attachment Service 的内部 resolve/content API 获取可信元数据
   和有界字节流，不直连 OBS。
 
-## 7. 源码证据与差异分类
+## 8. 源码证据与差异分类
 
 规范来源为仓库相对路径
 `pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml`，其声明的
@@ -219,15 +327,21 @@ pi-mono-java 基线为 `1f7a5423219edfa4519d8719f1cc8a188ed72873`。
 | 观察到的行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 115-227、422-459：v1 命令、断线生命周期和累计消息更新 |
 | 观察到的行为 | `modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java` 基线 44-164：结构化 provider 流事件 |
 | 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
-| 安全加固 | 逐请求认证、Session-scoped 模型查询、附件只传 ID、统一脱敏 Problem |
-| 架构改造 | 一组 HTTP 资源接口、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
+| 产品约束 | 普通 JSON 响应使用 `resCode/resMsg/result`，错误码和国际化 key 一致；真实 HTTP status 仍保留 |
+| 安全加固 | 逐请求认证、Session-scoped 模型查询、附件只传 ID、ResultBean 错误脱敏 |
+| 架构改造 | 一组 HTTP 资源接口、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
 
-本文全部 HTTP 行为均为 target-only design，不得表述为现有 pi-mono-java 实现。
+公司内部 ResultBean 制品信息来自用户提供的集成约束，当前工作区不含
+对应实现或制品元数据。其坐标、FQCN、泛型返回类型和异常 Factory
+方法均必须在落地前依据真实内部 jar 补齐。除这一待校准适配点外，
+本文全部 HTTP 行为仍为 target-only design，不得表述为现有
+pi-mono-java 实现。
 
-## 8. 版本历史
+## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.0 | 2026-08-15 | 第一个创建 Session 接口改为 `resCode/resMsg/result` ResultBean，保留真实 HTTP status；固定八个错误码及中英文消息、Accept-Language/Content-Language 规则；增加 standalone 兼容制品与 company 内部制品的 Maven profile 互斥替换设计 |
 | 1.4.0 | 2026-08-15 | 将创建 Session 改为无请求体的 `POST /agents/{agent_id}/sessions`，由 CampusClaw 生成 `session_id` 并从 Managed settings 解析默认模型；固定目录验证、模型校验、SessionContext/AgentSession 组装、持久化和失败清理顺序；创建和查询共用不含内部版本的 SessionResource，创建不使用 `Idempotency-Key` 或 `If-Match` |
 | 1.3.0 | 2026-08-15 | Session 创建请求收敛为只必填 `agent_id`；从 `.campusagent/settings.json` 读取 `agentVersion/defaultModel/enabledModels`，经 Model Manager 校验后初始化并返回有效模型；明确 Run 原子固化 Session 当前模型 |
 | 1.2.0 | 2026-08-14 | 将 Runtime HTTP API 的统一基础路径调整为 `/campusclaw-service/v1`；明确 Session 同一性由 `session_id` 与不可变 `agent_id` 绑定确定，可切换的 `model_id` 不参与绑定冲突判断 |

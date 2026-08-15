@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CampusAgent 内部 Runtime HTTP API
-  version: 1.4.0
+  version: 1.5.0
   description: |
     CampusAgent Runtime 面向 mate-service Runtime bridge 和获授权内部 SDK 的
     HTTP API。它是一组 Session、Run、Event、History 和 Model 资源接口，
@@ -47,6 +47,8 @@ x-http-design:
   sessionIdOwner: CampusClaw
   createSessionRequestBody: none
   createSessionIdempotencyKey: false
+  createSessionResponseEnvelope: ResultBean
+  createSessionLocales: [en-US, zh-CN]
   eventTransports: [text/event-stream, application/json]
   connectionStateRemoved: true
   canonicalEventCursor: run_seq
@@ -74,23 +76,160 @@ paths:
           description: Session 已完成初始化，可接受后续请求
           headers:
             Location: { $ref: '#/components/headers/Location' }
+            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SessionResource' }
+              schema: { $ref: '#/components/schemas/SessionCreateResultBean' }
               example:
-                session_id: 01ARZ3NDEKTSV4RRFFQ69G5FAV
-                agent_id: agent_011CZkYqphY8vELVzwCUpqiQ
-                model_id: model_011CZq2GkV8aD4NwP7sLmXfR
-                state: idle
-                thinking: hidden
-                active_run: null
-                created_at: '2026-08-15T11:30:00Z'
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/Unprocessable' }
-        '500': { $ref: '#/components/responses/Problem' }
-        '503': { $ref: '#/components/responses/ManagerUnavailable' }
-        default: { $ref: '#/components/responses/Problem' }
+                resCode: '0'
+                resMsg: success
+                result:
+                  session_id: 01ARZ3NDEKTSV4RRFFQ69G5FAV
+                  agent_id: agent_011CZkYqphY8vELVzwCUpqiQ
+                  model_id: model_011CZq2GkV8aD4NwP7sLmXfR
+                  state: idle
+                  thinking: hidden
+                  active_run: null
+                  created_at: '2026-08-15T11:30:00Z'
+        '400':
+          description: PATH 中的 agent_id 格式无效
+          headers:
+            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              examples:
+                zh-CN:
+                  value:
+                    resCode: INVALID_AGENT_ID
+                    resMsg: agent_id 格式不正确。
+                    result: null
+                en-US:
+                  value:
+                    resCode: INVALID_AGENT_ID
+                    resMsg: The agent_id format is invalid.
+                    result: null
+        '401':
+          description: 调用方身份认证失败
+          headers:
+            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              examples:
+                zh-CN:
+                  value:
+                    resCode: UNAUTHENTICATED
+                    resMsg: 调用方身份认证失败。
+                    result: null
+                en-US:
+                  value:
+                    resCode: UNAUTHENTICATED
+                    resMsg: Caller authentication failed.
+                    result: null
+        '403':
+          description: 当前调用方无权为该 Agent 创建 Session
+          headers:
+            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              examples:
+                zh-CN:
+                  value:
+                    resCode: FORBIDDEN
+                    resMsg: 当前调用方无权为该 Agent 创建 Session。
+                    result: null
+                en-US:
+                  value:
+                    resCode: FORBIDDEN
+                    resMsg: The caller is not allowed to create a Session for this Agent.
+                    result: null
+        '404':
+          description: 指定的 Agent 不存在
+          headers:
+            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              examples:
+                zh-CN:
+                  value:
+                    resCode: AGENT_NOT_FOUND
+                    resMsg: 指定的 Agent 不存在。
+                    result: null
+                en-US:
+                  value:
+                    resCode: AGENT_NOT_FOUND
+                    resMsg: The specified Agent does not exist.
+                    result: null
+        '422':
+          description: Agent 不可用或未配置有效默认模型
+          headers:
+            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              examples:
+                agentNotAvailableZhCn:
+                  value:
+                    resCode: AGENT_NOT_AVAILABLE
+                    resMsg: 指定的 Agent 当前不可用。
+                    result: null
+                agentNotAvailableEnUs:
+                  value:
+                    resCode: AGENT_NOT_AVAILABLE
+                    resMsg: The specified Agent is currently unavailable.
+                    result: null
+                modelNotConfiguredZhCn:
+                  value:
+                    resCode: AGENT_MODEL_NOT_CONFIGURED
+                    resMsg: 该 Agent 未配置有效的默认模型。
+                    result: null
+                modelNotConfiguredEnUs:
+                  value:
+                    resCode: AGENT_MODEL_NOT_CONFIGURED
+                    resMsg: The Agent has no valid default model configured.
+                    result: null
+        '500':
+          description: Session 初始化失败
+          headers:
+            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              examples:
+                zh-CN:
+                  value:
+                    resCode: SESSION_INITIALIZATION_FAILED
+                    resMsg: Session 初始化失败。
+                    result: null
+                en-US:
+                  value:
+                    resCode: SESSION_INITIALIZATION_FAILED
+                    resMsg: Session initialization failed.
+                    result: null
+        '503':
+          description: Model Manager 暂时不可用
+          headers:
+            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+            Retry-After:
+              description: 建议重试前等待的秒数。
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              examples:
+                zh-CN:
+                  value:
+                    resCode: MANAGER_UNAVAILABLE
+                    resMsg: Model Manager 暂时不可用，请稍后重试。
+                    result: null
+                en-US:
+                  value:
+                    resCode: MANAGER_UNAVAILABLE
+                    resMsg: Model Manager is temporarily unavailable. Try again later.
+                    result: null
 
   /sessions/{session_id}:
     parameters:
@@ -444,12 +583,12 @@ components:
     Location:
       description: 已创建、已接受或异步状态资源的位置。
       schema: { type: string, format: uri-reference }
+    ContentLanguage:
+      description: resMsg 实际使用的语言。
+      schema:
+        type: string
+        enum: [en-US, zh-CN]
   responses:
-    BadRequest:
-      description: PATH 资源 ID 或其他请求语法无效
-      content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
     Problem:
       description: 结构化错误
       content:
@@ -477,11 +616,6 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     Unprocessable:
       description: Agent 不可用、缺少有效默认模型，或附件未就绪、无效或不符合模型输入策略
-      content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
-    ManagerUnavailable:
-      description: Model Manager 暂时不可用
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -678,6 +812,41 @@ components:
     SessionState:
       type: string
       enum: [idle, running]
+    SessionCreateResultBean:
+      type: object
+      additionalProperties: false
+      description: |
+        创建 Session 的公司标准成功包装。Java Controller 使用
+        ResultBeanFactory.getFactory().normal(result) 生成响应体。
+      required: [resCode, resMsg, result]
+      properties:
+        resCode:
+          type: string
+          const: '0'
+          description: 稳定成功码。
+        resMsg:
+          type: string
+          const: success
+        result:
+          $ref: '#/components/schemas/SessionResource'
+    ErrorResultBean:
+      type: object
+      additionalProperties: false
+      description: |
+        公司标准异常包装。resCode 同时是 Java 错误码枚举名和
+        MessageSource 资源 key；resMsg 按 Accept-Language 解析；异常时
+        result 固定为 null。
+      required: [resCode, resMsg, result]
+      properties:
+        resCode:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]{1,127}$'
+        resMsg:
+          type: string
+          minLength: 1
+          maxLength: 512
+        result:
+          type: 'null'
     SessionResource:
       type: object
       additionalProperties: false

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.15.0 |
+| 文档版本 | 1.16.0 |
 | 状态 | 目标设计，尚未实施 |
 | 更新日期 | 2026-08-15 |
 | pi-mono 源码基线 | `fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc` |
@@ -728,13 +728,25 @@ loader 从已解析 Agent 目录读取 `settings.json`，以
 权威 descriptor。全部外部配置校验通过后，CampusClaw 生成
 全局唯一 `session_id`，组装 SessionContext 和 `AgentSession + Agent`，
 持久化内部 `agent_version/revision`，再返回已就绪 Session。
-该过程不调用大模型，不创建 Message 或 RunRecord。创建和查询
-共用 SessionResource，对外字段为
+该过程不调用大模型，不创建 Message 或 RunRecord。创建响应使用
+`ResultBeanFactory.getFactory().normal(result)` 生成
+`resCode/resMsg/result`，其中 `result` 与查询共用 SessionResource，
+对外字段为
 `session_id/agent_id/model_id/state/thinking/active_run/created_at`；
 `agent_version` 与 record revision 只在 Runtime 内部保存。创建操作不
 要求 `Idempotency-Key` 或 `If-Match`，每次成功 `POST` 都创建新
 Session。完整契约和失败清理顺序见
 [`CampusAgent Runtime HTTP API 设计`](chat-http-v1-design.md)。
+
+ResultBean 只包装响应体，异常仍保留真实 HTTP status。错误码枚举名、
+MessageSource key 和 `resCode` 完全一致；`resMsg` 根据
+`Accept-Language` 在 `zh-CN/en-US` 中选择，响应同时返回
+`Content-Language`，异常 `result` 固定为 `null`。Java 实现使用
+`standalone` 清室兼容制品和 `company` 内部制品两个 Maven profile
+互斥提供 ResultBean API，业务源码在两种环境下保持不变。
+当前基线未提供内部 Maven 坐标、FQCN 和异常 Factory 方法，
+落地前必须以真实内部 jar 校准，不得在公开 POM 中写入内部
+仓库 URL 或凭据。
 
 WebSocket 协议若显式提供 `model_id`，它只能作为该协议的初始选择，
 不改变 `settings.json` 和 Model Manager 的双重校验边界。
@@ -2790,6 +2802,7 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.16.0 | 2026-08-15 | 将第一个 HTTP Session 创建接口改为 `resCode/resMsg/result` ResultBean，保留真实 HTTP status；固定八个错误码、中英文资源和 Locale 回退；增加 standalone 兼容制品与 company 内部制品的 Maven profile 互斥替换设计 |
 | 1.15.0 | 2026-08-15 | 将 HTTP Session 创建冻结为无 Body 的 `POST /campusclaw-service/v1/agents/{agent_id}/sessions`，由 CampusClaw 生成 `session_id`；补充目录与 settings 校验、默认模型解析、SessionContext/AgentSession 组装、持久化与失败清理顺序；创建和查询共用已就绪 SessionResource，不暴露内部 Agent 版本，创建操作不使用 `Idempotency-Key` 或 `If-Match` |
 | 1.14.0 | 2026-08-15 | 将 `AGENT.binding_models` 编译为只读 `.campusagent/settings.json`，固定 `agentId/agentVersion/defaultModel/enabledModels` 格式及非空显式 allowlist 校验；定义 HTTP 新 Session 只提交 `agent_id`，初始化从目录默认模型解析并经 Model Manager 精确校验；补充目录、创建失败、模型与验收规则 |
 | 1.13.1 | 2026-08-05 | 将内部 Runtime AsyncAPI 升至 2.12.0，按 method 暴露具名 Request/Success Response 和标准 reply，分别展示八类 Event；新增简化开发者指南、默认展开 JSON 示例的生成 HTML 和固定版本生成脚本；修正无附件模型输入策略误要求 `completed_at` 的 Schema 问题，并同步客户端指南 1.8.0；线上 Frame 结构和 Runtime 行为不变 |
