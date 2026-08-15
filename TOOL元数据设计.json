@@ -4,11 +4,12 @@
     "version": "tool当前版本。从1开始,每当tool被修改时版本号递增",
     "created_at": "创建时间",
     "updated_at": "更新时间",
+    "enabled": "tool是否启用。true表示启用，false表示禁用",
     "is_concurrency_safe": "工具是否支持并行。true表示支持并行，false表示不支持并行",
+    "permission": "工具权限，ask | allow | deny",
     "name": "tool名称",
     "display_name":"tool展示名称",
     "description": "tool描述",
-    "performance_hints":"tool性能优化建议",
     "source": "工具来源, builtin-toolset | mcp-toolset",
     "input_schema": {
         "type": "object",
@@ -19,9 +20,5 @@
         "type": "object",
         "properties": {},
         "required": []
-    },
-    "default_config": {
-        "enabled": "工具是否启用，true | false",
-        "permission": "工具权限，always_ask | always_allow"
     }
 }
