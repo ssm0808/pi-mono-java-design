@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.14.0 |
+| 文档版本 | 1.15.0 |
 | 状态 | 目标设计，尚未实施 |
 | 更新日期 | 2026-08-15 |
 | pi-mono 源码基线 | `fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc` |
@@ -719,12 +719,24 @@ Session 映射；只有内部 Runtime connect 成功后，agent-service 才解�
 active-run 恢复点。公共 connect 成功响应写出后，UI 先收到投影后的可选快照，
 再按 mate-service 重新编号的顺序收到快照 cursor 之后的事件。
 
-HTTP Session 创建只提交 `agent_id`。Managed settings loader 从已解析
-Agent 目录读取 `settings.json`，以 `defaultModel` 作为新 Session 的
-候选模型，先校验其存在于非空 `enabledModels`，再调用
-`resolveModel(agent_id, defaultModel)` 取得权威 descriptor。因此请求
-不必指定模型，但创建成功前必须解析出有效模型。WebSocket
-协议若显式提供 `model_id`，它只能作为该协议的初始选择，
+HTTP Session 创建使用
+`POST /campusclaw-service/v1/agents/{agent_id}/sessions`，请求无 Body，
+不接受调用方指定的 `session_id` 或 `model_id`。Managed settings
+loader 从已解析 Agent 目录读取 `settings.json`，以
+`defaultModel` 作为新 Session 候选模型，先校验其存在于非空
+`enabledModels`，再调用 `resolveModel(agent_id, defaultModel)` 取得
+权威 descriptor。全部外部配置校验通过后，CampusClaw 生成
+全局唯一 `session_id`，组装 SessionContext 和 `AgentSession + Agent`，
+持久化内部 `agent_version/revision`，再返回已就绪 Session。
+该过程不调用大模型，不创建 Message 或 RunRecord。创建和查询
+共用 SessionResource，对外字段为
+`session_id/agent_id/model_id/state/thinking/active_run/created_at`；
+`agent_version` 与 record revision 只在 Runtime 内部保存。创建操作不
+要求 `Idempotency-Key` 或 `If-Match`，每次成功 `POST` 都创建新
+Session。完整契约和失败清理顺序见
+[`CampusAgent Runtime HTTP API 设计`](chat-http-v1-design.md)。
+
+WebSocket 协议若显式提供 `model_id`，它只能作为该协议的初始选择，
 不改变 `settings.json` 和 Model Manager 的双重校验边界。
 
 ![Managed Session 与 Context 组装](managed_session_context_assembly.svg)
@@ -2412,7 +2424,9 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 - SYSTEM 或 Skill 目录不可读；
 - `settings.json` 缺失、不可读、字段不封闭、`agentId` 与路径不一致，
   或 `defaultModel/enabledModels` 不满足发布约束；
-- `mode=create` 缺少 mate-service 分配的 session_id、agent_id 或 model_id；
+- HTTP Session 创建的 `agent_id` 非法、Agent 不可用、Model Manager
+  不可用，或 Session 初始化/持久化失败；
+- WebSocket `mode=create` 缺少 mate-service 分配的 session_id、agent_id 或 model_id；
 - `mode=resume` 的 Session 不存在或已删除；
 - model_id 不属于当前 Agent；
 - session_id 格式非法；
@@ -2509,8 +2523,9 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 
 ### 12.4 Model Manager
 
-- 新 Session 必须从 `settings.defaultModel` 解析并精确校验有效
-  `model_id`；HTTP 创建请求不必重复提交该 ID；
+- HTTP 新 Session 只从 PATH 取得 `agent_id`，必须从
+  `settings.defaultModel` 解析并精确校验有效 `model_id`；
+  CampusClaw 生成 `session_id`，响应回显最终生效的 `model_id`；
 - 恢复 Session 必须重新校验保存模型；
 - list/set model 只暴露当前 Agent 允许集合；
 - start、text、thinking、toolcall、done、error 事件映射正确；
@@ -2732,6 +2747,10 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 - Agent 运行目录能被 pi-mono-java 原生 SYSTEM 和 Skill 路径读取；
 - Agent 运行目录包含不可变的 `.campusagent/settings.json`，
   可仅根据 `agent_id` 解析 Agent 版本、默认模型和允许模型集合；
+- HTTP 创建调用为无 Body 的
+  `POST /campusclaw-service/v1/agents/{agent_id}/sessions`，由 CampusClaw
+  生成 `session_id`，初始化期间不调用模型，并返回不含内部
+  `agent_version/revision` 的已就绪 SessionResource；
 - Agent direct Tool 与 Skill Tool 保持两级渐进披露；
 - 模型实际可执行工具固定为三个；
 - 通用工具 description 完整表达发现和执行协议；
@@ -2771,6 +2790,7 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.15.0 | 2026-08-15 | 将 HTTP Session 创建冻结为无 Body 的 `POST /campusclaw-service/v1/agents/{agent_id}/sessions`，由 CampusClaw 生成 `session_id`；补充目录与 settings 校验、默认模型解析、SessionContext/AgentSession 组装、持久化与失败清理顺序；创建和查询共用已就绪 SessionResource，不暴露内部 Agent 版本，创建操作不使用 `Idempotency-Key` 或 `If-Match` |
 | 1.14.0 | 2026-08-15 | 将 `AGENT.binding_models` 编译为只读 `.campusagent/settings.json`，固定 `agentId/agentVersion/defaultModel/enabledModels` 格式及非空显式 allowlist 校验；定义 HTTP 新 Session 只提交 `agent_id`，初始化从目录默认模型解析并经 Model Manager 精确校验；补充目录、创建失败、模型与验收规则 |
 | 1.13.1 | 2026-08-05 | 将内部 Runtime AsyncAPI 升至 2.12.0，按 method 暴露具名 Request/Success Response 和标准 reply，分别展示八类 Event；新增简化开发者指南、默认展开 JSON 示例的生成 HTML 和固定版本生成脚本；修正无附件模型输入策略误要求 `completed_at` 的 Schema 问题，并同步客户端指南 1.8.0；线上 Frame 结构和 Runtime 行为不变 |
 | 1.13.0 | 2026-08-04 | 增加 mate-service 公共 Chat WebSocket 与 agent-service 内部 Runtime WebSocket 的双协议边界；公共 create 自动生成 chat_id/session_id 并以 connect 幂等与 50 Chat 配额保护，公共 resume 只使用 chat_id；定义 Mate Chat Store、服务责任图、Agent Channel 接受边界、语义 Frame 桥接、逐跳连接/序列/背压、两次 HTTP 101 和恢复映射；收紧 Message/Tool/Error 投影与命令幂等负载；移除最终用户 IP 亲和假设，公共附件路径改用 chat_id；新增公共 AsyncAPI 1.0.0/指南 1.0.0，将内部 AsyncAPI/指南升至 2.11.0/1.7.0，并同步 Attachment Service 2.0.0 |

@@ -992,3 +992,80 @@ media_type, size_bytes, and SHA-256.
 File bodies are untrusted user data.
 end note
 @enduml
+
+@startuml http_session_creation
+title CampusClaw HTTP Session Creation
+
+' Source evidence:
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: initialize
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/context/ContextFileLoader.java: loadSystemPrompt
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillPromptFormatter.java: format
+' Observed behavior: AgentSession initialization resolves a model, loads context and skills, and creates an Agent.
+' Observed behavior: initialization does not itself invoke the model or create a Run.
+' Target design: mate-service supplies only agent_id and CampusClaw generates session_id.
+' Target design: Managed settings chooses a default candidate and Model Manager remains authoritative.
+' Target design: a successful POST returns a ready SessionResource without internal version fields.
+' Design reason: keep Agent selection caller-visible while Runtime identity and revision stay server-owned.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam participant {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+skinparam sequence {
+  LifeLineBorderColor #64748B
+  LifeLineBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F8FAFC
+}
+
+actor "mate-service\nRuntime bridge" as Mate
+participant "Runtime HTTP API" as API
+participant "AgentDirectoryResolver" as Resolver
+participant "ManagedSettingsLoader" as Settings
+participant "Model Manager" as Models
+participant "SessionIdGenerator" as Ids
+participant "ManagedAgentSessionFactory" as Factory
+database "RuntimeSessionStore" as Store
+participant "ManagedSessionPool" as Pool
+
+Mate -> API : POST /agents/{agent_id}/sessions\nno request body
+API -> API : authenticate caller\nvalidate agent_id syntax
+API -> Resolver : resolve(agent_id)
+Resolver -> Resolver : verify controlled root, symlinks,\nand byte-exact directory identity
+Resolver --> API : agentCwd and bundle revision
+API -> Settings : load(agentCwd/.campusagent/settings.json)
+Settings -> Settings : verify closed fields and agentId\npin agentVersion\nvalidate enabledModels and defaultModel
+Settings --> API : agentVersion, defaultModel, enabledModels
+API -> Models : resolveModel(agent_id, defaultModel)
+Models --> API : authoritative ModelDescriptor
+API -> Ids : generate globally unique session_id
+Ids --> API : session_id
+API -> Factory : create immutable SessionContext\nload SYSTEM and Skills\nregister three generic tools
+Factory -> Factory : construct AgentSession and Agent\nset state idle and thinking hidden\ndo not invoke the model
+Factory --> API : ready AgentSession
+API -> Store : atomically insert SessionRecord\nincluding internal agentVersion and revision
+Store --> API : committed
+API -> Pool : register(session_id, AgentSession)
+Pool --> API : registered
+API --> Mate : 201 Created plus Location\nsession_id, agent_id, model_id, state,\nthinking, active_run, created_at
+
+note over API,Pool
+Before commit, any failure discards the in-memory Session
+and does not expose session_id.
+After commit, state is idle and active_run is null.
+No Message or RunRecord exists.
+end note
+
+note over Mate,API
+This operation has no Idempotency-Key or If-Match.
+Every successful POST creates a new Session.
+A lost successful response can produce an orphan Session,
+which background timeout cleanup must remove if unbound.
+end note
+@enduml

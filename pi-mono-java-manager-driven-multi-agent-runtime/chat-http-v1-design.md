@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.3.0 |
+| 文档版本 | 1.4.0 |
 | 状态 | 目标设计，尚未实施 |
-| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.3.0 |
+| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.4.0 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
 | pi-mono-java 源码基线 | `1f7a5423219edfa4519d8719f1cc8a188ed72873` |
 | 更新日期 | 2026-08-15 |
@@ -29,33 +29,70 @@ WebSocket 的 `method + params` Frame。它是一组以 Session、Run、History�
 
 | Method | Path | 语义 |
 |---|---|---|
-| `PUT` | `/sessions/{session_id}` | 使用调用方分配的 ID 幂等创建 Session |
+| `POST` | `/agents/{agent_id}/sessions` | 根据 Agent 创建 Session，由 CampusClaw 分配 `session_id` |
 | `GET` | `/sessions/{session_id}` | 读取 Session、当前模型及 active-run 快照 |
 | `DELETE` | `/sessions/{session_id}` | 幂等请求删除 Session；停止新请求并异步清理 |
 
 HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session；网络恢复只需
-重新读取 Session、Run 或 History。`session_id` 唯一标识 Session，
-`agent_id` 是创建后不可变的 Agent 绑定。创建请求只提交
-`agent_id`；Runtime 根据它解析受控 Agent 目录，读取
-`.campusagent/settings.json`，以 `defaultModel` 初始化 Session。相同
-`session_id + agent_id` 的 `PUT` 重试返回当前 Session；只有
-`agent_id` 不同时返回 `409 SESSION_BINDING_CONFLICT`。创建后的模型
-切换必须显式调用 `PUT /sessions/{session_id}/model`。
-删除后的 `session_id` 永久禁止复用。
+重新读取 Session、Run 或 History。`POST /agents/{agent_id}/sessions`
+不包含 Request Body，不接受调用方指定的 `session_id` 或
+`model_id`。`agent_id` 是创建后不可变的 Agent 绑定；
+`session_id` 由 CampusClaw 生成，`model_id` 由 Agent 目录的
+`defaultModel` 决定。创建后的模型切换必须显式调用
+`PUT /sessions/{session_id}/model`；删除后的 `session_id`
+永久禁止复用。
 
 创建成功前，Runtime 必须完成以下初始化：
 
-1. 验证 `settings.agentId` 与请求 `agent_id` 按字节完全一致；
-2. 固定 `agentVersion`；
-3. 验证 `enabledModels` 非空、无重复且包含 `defaultModel`；
-4. 调用 `resolveModel(agent_id, defaultModel)` 获得有效模型 descriptor；
-5. 原子保存 Session 的 `agent_id/agent_version/current_model_id`，并创建
-   独立 `AgentSession + Agent`。
+1. 验证内部调用方和 PATH 中 `agent_id` 的资源 ID 格式；
+2. 在受控根目录中解析 Agent 目录，拒绝路径或符号链接越界；
+3. 读取 `.campusagent/settings.json`，验证 `settings.agentId`
+   与 PATH 值按 ASCII 字节完全一致，并固定 `agentVersion`；
+4. 验证 `enabledModels` 非空、无重复且包含 `defaultModel`；
+5. 调用 `resolveModel(agent_id, defaultModel)` 获得有效模型 descriptor；
+6. 在所有外部配置校验通过后生成全局唯一、删除后不复用的
+   `session_id`；
+7. 组装不可变 SessionContext，加载 `SYSTEM.md` 和 Skills，注册
+   `read/get_tool_info/call_tool`，并创建独立 `AgentSession + Agent`；
+8. 原子保存包含 `agent_version` 和 bundle revision 的内部
+   SessionRecord，并将已就绪 Session 注册到 SessionPool；
+9. 返回 `201 Created`、`Location` 和 SessionResource。
+
+初始化只组装运行对象，不调用大模型、不消耗 token，不创建
+Message 或 RunRecord；因此创建响应中 `state=idle` 且
+`active_run=null`。`thinking=hidden` 来自 Runtime 的 Session 默认值，
+不写入 Managed `settings.json`。任一步在 SessionRecord 提交前失败都不
+暴露 `session_id`，并丢弃未持久化的内存 Session。
 
 `settings.json` 是发布快照，Model Manager 仍是模型绑定、启用状态和
 调用的最终权威。目录缺少有效默认模型时返回
 `422 AGENT_MODEL_NOT_CONFIGURED`，Model Manager 暂时不可用时返回
 `503 MANAGER_UNAVAILABLE`。
+
+创建响应和后续 `GET /sessions/{session_id}` 共用 SessionResource：
+
+```json
+{
+  "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "agent_id": "agent_011CZkYqphY8vELVzwCUpqiQ",
+  "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
+  "state": "idle",
+  "thinking": "hidden",
+  "active_run": null,
+  "created_at": "2026-08-15T11:30:00Z"
+}
+```
+
+`agent_version` 和内部 record revision 只在 CampusClaw 持久化，不进入
+SessionResource。创建操作不要求 `Idempotency-Key` 或 `If-Match`；
+每次成功 `POST` 都创建新 Session。如果持久化已成功但响应在网络中
+丢失，无条件重试会再创建一个 Session；未被 mate-service 绑定的
+孤立 Session 由后台超时清理。其他副作用接口的幂等或并发规则属于
+各自 operation，不由创建 Session 接口继承。
+
+![HTTP Session 创建](http_session_creation.svg)
+
+[PlantUML 源码：`http_session_creation`](diagram.puml#L996)
 
 ### 2.2 消息与 Run
 
@@ -110,7 +147,7 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 
 | WebSocket v2 | HTTP v1 |
 |---|---|
-| `connect(mode=create)` | `PUT /sessions/{session_id}` |
+| `connect(mode=create)` | `POST /agents/{agent_id}/sessions`；CampusClaw 生成 `session_id` |
 | `connect(mode=resume)` | 无对应命令；重新 `GET` Session/Run/History |
 | `chat.send` | `POST /sessions/{session_id}/runs` |
 | `chat.steer` | `POST .../runs/{run_id}/steers` |
@@ -143,16 +180,17 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 
 | HTTP | 典型 code |
 |---|---|
-| `400` | `INVALID_REQUEST` |
+| `400` | `INVALID_REQUEST`、`INVALID_AGENT_ID` |
 | `401` | `UNAUTHENTICATED` |
 | `403` | `FORBIDDEN`、`MODEL_NOT_ALLOWED` |
-| `404` | `SESSION_NOT_FOUND`、`RUN_NOT_FOUND` |
-| `409` | `RUN_ACTIVE`、`IDEMPOTENCY_CONFLICT`、`SESSION_BINDING_CONFLICT` |
+| `404` | `AGENT_NOT_FOUND`、`SESSION_NOT_FOUND`、`RUN_NOT_FOUND` |
+| `409` | `RUN_ACTIVE`、`IDEMPOTENCY_CONFLICT` |
 | `410` | `EVENT_CURSOR_EXPIRED` |
 | `412` | `PRECONDITION_FAILED` |
 | `413` | `REQUEST_TOO_LARGE`、`ATTACHMENT_NOT_SUPPORTED` |
-| `422` | `AGENT_MODEL_NOT_CONFIGURED`、`INVALID_ATTACHMENT`、`ATTACHMENT_NOT_READY` |
+| `422` | `AGENT_NOT_AVAILABLE`、`AGENT_MODEL_NOT_CONFIGURED`、`INVALID_ATTACHMENT`、`ATTACHMENT_NOT_READY` |
 | `429` | `RATE_LIMITED` |
+| `500` | `SESSION_INITIALIZATION_FAILED` |
 | `503` | `MANAGER_UNAVAILABLE` |
 
 错误不得包含凭据、内部 Header、私有 claim、Prompt、原始 thinking、OBS 地址、
@@ -182,7 +220,7 @@ pi-mono-java 基线为 `1f7a5423219edfa4519d8719f1cc8a188ed72873`。
 | 观察到的行为 | `modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java` 基线 44-164：结构化 provider 流事件 |
 | 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
 | 安全加固 | 逐请求认证、Session-scoped 模型查询、附件只传 ID、统一脱敏 Problem |
-| 架构改造 | 一组 HTTP 资源接口、编译生成的 Managed `settings.json`、目录默认模型初始化、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
+| 架构改造 | 一组 HTTP 资源接口、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
 
 本文全部 HTTP 行为均为 target-only design，不得表述为现有 pi-mono-java 实现。
 
@@ -190,6 +228,7 @@ pi-mono-java 基线为 `1f7a5423219edfa4519d8719f1cc8a188ed72873`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-08-15 | 将创建 Session 改为无请求体的 `POST /agents/{agent_id}/sessions`，由 CampusClaw 生成 `session_id` 并从 Managed settings 解析默认模型；固定目录验证、模型校验、SessionContext/AgentSession 组装、持久化和失败清理顺序；创建和查询共用不含内部版本的 SessionResource，创建不使用 `Idempotency-Key` 或 `If-Match` |
 | 1.3.0 | 2026-08-15 | Session 创建请求收敛为只必填 `agent_id`；从 `.campusagent/settings.json` 读取 `agentVersion/defaultModel/enabledModels`，经 Model Manager 校验后初始化并返回有效模型；明确 Run 原子固化 Session 当前模型 |
 | 1.2.0 | 2026-08-14 | 将 Runtime HTTP API 的统一基础路径调整为 `/campusclaw-service/v1`；明确 Session 同一性由 `session_id` 与不可变 `agent_id` 绑定确定，可切换的 `model_id` 不参与绑定冲突判断 |
 | 1.1.0 | 2026-08-06 | 将 HTTP 版重构为 Session、Run、事件/历史、模型配置四组共 13 个 operation；删除 connect/resume 与连接级状态，增加 SSE/JSON Event Journal、ETag 和 Session 删除语义 |
