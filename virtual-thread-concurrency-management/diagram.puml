@@ -1,0 +1,233 @@
+' pi-mono-java source baseline: dff835743fc7f3c93e1154c3eb51028749867ca8
+' Source evidence: modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java:60-61,218-253
+' Source evidence: modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java:207-272
+' Source evidence: modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:160-179
+' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java:113-175
+' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/stream/EventStream.java:54-88
+' Observed behavior: runs, provider readers, and parallel tools create new virtual threads per task.
+' Java divergence: the current stream buffer is unbounded and no deployment-level admission gate exists.
+' Target-only design: HTTP and SSE admission, leases, bounded queues, and the 100-run profile are proposals.
+' Design reason: virtual threads isolate blocking tasks; leases protect scarce memory and downstream capacity.
+' Architecture change: replace three overlapping documents with one capacity-governance model.
+@startuml virtual_thread_capacity_overview
+title CampusClaw Virtual-Thread Concurrency Management
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontColor #111827
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultTextAlignment center
+skinparam ArrowColor #374151
+
+actor "Internal HTTP Client" as client
+
+rectangle "HTTP and SSE Boundary" {
+  component "POST Run API\nauthenticate and validate" as post
+  component "GET Event API\nSSE or JSON" as event_api
+  component "SSE Subscription Gate\nconnection and byte budget" as sse_gate
+}
+
+rectangle "Runtime Capacity Boundary" {
+  component "Runtime Health Gate\nOPEN / PRESSURE / SHEDDING / DRAINING" as health
+  component "Run Capacity Manager\ncount and weighted bytes" as run_gate
+  queue "Bounded PendingRun Queue\nitems, bytes, and time" as queue
+  component "Virtual-Thread Executor\none new thread per accepted run" as executor
+  component "Agent Loop" as loop
+}
+
+rectangle "Phase-Local Capacity" {
+  component "Model Gate" as model_gate
+  component "Tool Gate\nglobal and per-run" as tool_gate
+  component "Store Gate" as store_gate
+  component "Attachment Gate" as attachment_gate
+}
+
+database "RuntimeSessionStore\nauthoritative run state" as store
+database "Bounded Run Event Journal\nordered run sequence" as journal
+cloud "Model / Tool / Attachment Services" as services
+
+client --> post : create an idempotent run
+post --> health : check admission state
+health --> run_gate : acquire run lease
+run_gate --> queue : wait only within all bounds
+run_gate --> store : atomically accept the run
+store --> executor : dispatch after acceptance
+executor --> loop : create one virtual thread
+loop --> model_gate
+loop --> tool_gate
+loop --> store_gate
+loop --> attachment_gate
+model_gate --> services
+tool_gate --> services
+attachment_gate --> services
+store_gate --> store
+loop --> journal : append typed events
+
+client --> event_api : subscribe or page events
+event_api --> sse_gate : acquire subscription lease
+sse_gate --> journal : read after Last-Event-ID
+journal --> event_api : ordered bounded events
+
+note bottom of executor
+  A virtual thread is created for a task,
+  then terminates. It is never borrowed,
+  returned, preloaded, or reused.
+end note
+
+note bottom of run_gate
+  Business capacity is limited here.
+  Live virtual-thread count is diagnostic,
+  not the normal admission control.
+end note
+
+note bottom of event_api
+  HTTP lifetime, run lifetime, and
+  SSE subscription lifetime are separate.
+end note
+@enduml
+
+' Source evidence: modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java:218-253
+' Source evidence: modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:160-179
+' Observed behavior: one Agent rejects a second concurrent run and starts a new virtual thread for a run.
+' Target-only design: acceptance owns a bounded RunLease before a run virtual thread is submitted.
+' Design reason: no accepted record or virtual thread may exist before capacity and persistence succeed.
+@startuml run_admission_and_execution
+title Run Admission, Execution, and Exact Lease Release
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontColor #111827
+skinparam shadowing false
+skinparam defaultTextAlignment center
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #374151
+
+actor "Internal HTTP Client" as client
+participant "Run HTTP Resource" as http
+participant "Session Run Slot" as slot
+participant "Run Capacity Manager" as capacity
+queue "Bounded PendingRun Queue" as queue
+database "RuntimeSessionStore" as store
+participant "Virtual-Thread Executor" as executor
+participant "Agent Loop" as loop
+participant "Phase Gates" as phase_gates
+database "Event Journal" as journal
+
+client -> http : POST run with Idempotency-Key
+http -> http : authenticate, authorize, and validate
+http -> slot : reserve ADMITTING
+
+alt another run is active
+  slot --> client : 409 RUN_ACTIVE
+else run slot reserved
+  slot -> capacity : acquire count and weighted bytes
+  alt capacity is available
+    capacity --> slot : idempotent RunLease
+  else queue has item and byte capacity
+    capacity -> queue : enqueue immutable PendingRun
+    alt lease granted before timeout
+      queue --> slot : RunLease
+    else timeout or cancellation
+      queue --> slot : admission rejected
+      slot -> slot : clear ADMITTING
+      slot --> client : 429 or 503 with Retry-After
+    end
+  else queue is full or runtime is shedding
+    capacity --> slot : admission rejected
+    slot -> slot : clear ADMITTING
+    slot --> client : 429 or 503 with Retry-After
+  end
+end
+
+slot -> store : atomically persist message, run, and idempotency result
+store --> slot : accepted run identifier
+slot --> client : 202 Accepted
+slot -> executor : submit accepted run
+executor -> loop : start one new virtual thread
+
+loop -> phase_gates : acquire only the current resource lease
+phase_gates --> loop : bounded result or timeout
+loop -> store : persist terminal state first
+store --> loop : terminal committed
+loop -> journal : append terminal event
+loop -> capacity : close RunLease exactly once
+loop -> slot : ACTIVE to READY
+
+note over capacity, queue
+  Pending work stores descriptors only.
+  It owns no run thread or downstream lease.
+end note
+
+note over loop, phase_gates
+  Cancellation must close downstream I/O
+  before all leases are released.
+end note
+@enduml
+
+' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/stream/EventStream.java:14-27,54-88
+' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java:77-112
+' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java:316-350
+' Java divergence: the current channel is unbounded and each delta carries a cumulative partial message.
+' Target-only design: bounded typed deltas, one accumulator, journal recovery, and slow-subscriber eviction.
+' Design reason: a slow SSE client must not retain unbounded memory or control the run lifecycle.
+@startuml bounded_sse_and_downstream
+title Bounded Model Stream and SSE Slow-Consumer Isolation
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontColor #111827
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultTextAlignment center
+skinparam ArrowColor #374151
+
+cloud "Model Provider" as provider
+component "Shared Model Client" as model_client
+
+rectangle "Run-Local Path" {
+  queue "Model Channel\n256 events AND 256 KiB" as model_channel
+  component "Single Message Accumulator" as accumulator
+  component "Typed Delta Coalescer\n50 ms OR 8 KiB" as coalescer
+  database "Bounded Event Journal\nrun_seq and terminal" as journal
+}
+
+rectangle "Subscription-Local Path" {
+  component "SSE Subscriber" as subscriber
+  queue "Send Buffer\n1 MiB per subscription" as send_buffer
+  component "Node Byte Budget\n64 MiB aggregate" as node_budget
+  component "SSE Writer with timeout" as writer
+}
+
+database "RuntimeSessionStore\nterminal and history" as store
+actor "Fast Client" as fast
+actor "Slow Client" as slow
+
+provider --> model_client : bounded streaming response
+model_client --> model_channel : producer waits when full
+model_channel --> accumulator : consume in order
+accumulator --> coalescer : delta only
+coalescer --> journal : ordered event
+accumulator --> store : persist terminal first
+store --> journal : terminal committed
+
+journal --> subscriber : resume after run_seq
+subscriber --> node_budget : reserve serialized bytes
+node_budget --> send_buffer : budget granted
+send_buffer --> writer : ordered SSE frame
+writer --> fast : write succeeds
+writer --> node_budget : release sent bytes
+
+send_buffer --> slow : write cannot keep up
+node_budget --> writer : local or node budget exhausted
+writer --> slow : close only this subscription
+writer --> subscriber : cancel subscription lease
+
+note bottom of model_channel
+  Model backpressure is independent
+  from SSE client backpressure.
+end note
+
+note bottom of journal
+  The run continues after disconnect.
+  History remains authoritative after
+  the bounded journal cursor expires.
+end note
+@enduml

@@ -2,6 +2,13 @@
 
 本仓库用于管理 `pi-mono-java` 的设计文档。
 
+## 当前 Runtime 主线
+
+- [CampusAgent Runtime HTTP API 设计](./pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md)
+- [CampusClaw 虚拟线程并发管理设计](./virtual-thread-concurrency-management/README.md)：虚拟线程、100 active Run 准入、资源隔离和 DFX 的唯一主文档
+- [CampusAgent Runtime：pi-mono-java Manager 驱动的多 Agent 运行设计](./pi-mono-java-manager-driven-multi-agent-runtime/README.md)
+- [AgentRuntimeTemplate 不可变运行模板设计](./agent-runtime-template/README.md)
+
 ## 文档
 
 - [Command SR 设计](./pi-mono-java-command-SR设计.md)
@@ -11,7 +18,6 @@
 - [Anthropic Managed Agents 公开模型](./anthropic-managed-agents-public-model/README.md)
 - [主流 Agent 数据库模式拆解与 pi-mono Java 采纳边界](./agent-database-patterns/README.md)
 - [Agent 元数据 GaussDB 表设计](./agent-metadata-gaussdb-design/README.md)
-- [CampusAgent Runtime：pi-mono-java Manager 驱动的多 Agent 运行设计](./pi-mono-java-manager-driven-multi-agent-runtime/README.md)
 - [CampusMate 公共 Chat WebSocket v2 AsyncAPI](./pi-mono-java-manager-driven-multi-agent-runtime/mate-chat-ws-v2.asyncapi.yaml)
 - [CampusMate 公共 Chat WebSocket v2 客户端接入指南](./pi-mono-java-manager-driven-multi-agent-runtime/mate-chat-ws-v2-client-integration.md)
 - [CampusAgent 内部 Runtime WebSocket v2 AsyncAPI](./pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml)
@@ -19,8 +25,6 @@
 - [CampusAgent Channel 接口与飞书接入设计](./pi-mono-java-manager-driven-multi-agent-runtime/channel-feishu-v1-design.md)
 - [CampusMate Attachment Service：OBS + openGauss 设计](./campusmate-attachment-service/README.md)
 - [OpenClaw 与 CampusAgent WebSocket 设计对比](./openclaw-campusagent-websocket-comparison/README.md)
-- [AgentRuntimeTemplate 不可变运行模板设计](./agent-runtime-template/README.md)
-- [CampusClaw 两节点高并发治理设计](./campusclaw-high-concurrency-governance/README.md)
 - [pi-mono Java 集中式 GaussDB 会话记忆系统 SR 设计](./memory-jsonl-to-gaussdb.md)
 
 ## 约定
