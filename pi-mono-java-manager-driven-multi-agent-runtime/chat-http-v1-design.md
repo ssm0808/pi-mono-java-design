@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.6.0 |
+| 文档版本 | 1.7.0 |
 | 状态 | 目标设计，尚未实施 |
-| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.6.0 |
+| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.0 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
 | pi-mono-java 源码基线 | `dff835743fc7f3c93e1154c3eb51028749867ca8` |
 | 更新日期 | 2026-08-15 |
@@ -199,8 +199,9 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 
 ## 5. ResultBean、HTTP 状态与国际化
 
-公司内部普通 JSON 接口使用 `resCode/resMsg/result` 三字段
-ResultBean，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
+公司内部普通 JSON 接口的成功响应使用
+`resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
+`resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
 草案的公司集成约束。本版先冻结第一个创建 Session 接口；
 其余 operation 的业务语义仍按后续逐个评审，但普通 JSON 响应
 最终也必须遵守同一包装。SSE 事件流和 HTTP `204` 无响应体
@@ -210,7 +211,7 @@ ResultBean，不使用 RFC 9457 `application/problem+json`。这是相对原 HTT
 |---|---|---|---|
 | `resCode` | 固定字符串 `0` | 稳定大写 snake_case 错误码 | 只根据此字段分支，不解析 `resMsg` |
 | `resMsg` | 固定 `success` | 按 Locale 解析的人类可读文本 | 只用于展示和日志 |
-| `result` | SessionResource | 固定 `null` | 字段始终存在 |
+| `result` | SessionResource | 不出现 | 仅成功响应读取 |
 
 ResultBean 只包装响应体，不把所有异常降级为 HTTP `200`。
 HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业务
@@ -219,8 +220,7 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 ```json
 {
   "resCode": "AGENT_MODEL_NOT_CONFIGURED",
-  "resMsg": "该 Agent 未配置有效的默认模型。",
-  "result": null
+  "resMsg": "该 Agent 未配置有效的默认模型。"
 }
 ```
 
@@ -314,8 +314,8 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 1. `normal(result)` 的 JSON 精确为 `resCode/resMsg/result`；
 2. null、空集合、时间和嵌套 VO 的 Jackson 行为一致；
 3. 中英文 Locale、回退语言和 `Content-Language` 一致；
-4. 九个错误码的 HTTP status、`resCode`、`resMsg` 和
-   `result=null` 一致；
+4. 九个错误码的 HTTP status、`resCode`、`resMsg` 一致，
+   且响应均不包含 `result` 字段；
 5. 公司 profile 的依赖树不包含兼容制品，standalone profile
    的依赖树不包含内部制品。
 
@@ -363,7 +363,7 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 | 观察到的行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java` 基线 237-307、340-344：当前 HTTP 路由未安装入站认证 Adapter，CORS 仅放行 Authorization Header |
 | 观察到的行为 | `modules/agent-core/src/main/java/com/campusclaw/agent/subagent/a2a/A2aAgentBackend.java` 基线 40-62、226-238：出站 A2A 请求已使用 `X-HW-ID + X-HW-APPKEY`，但它不是入站验证实现 |
 | 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
-| 产品约束 | 普通 JSON 响应使用 `resCode/resMsg/result`，错误码和国际化 key 一致；真实 HTTP status 仍保留 |
+| 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、附件只传 ID、ResultBean 错误脱敏 |
 | 架构改造 | 一组 HTTP 资源接口、统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
@@ -380,6 +380,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.0 | 2026-08-15 | 第一个 Session 创建接口的异常包装收敛为仅 `resCode/resMsg`，明确禁止序列化 `result`；同步 OpenAPI Schema、中英文错误示例和契约测试 |
 | 1.6.0 | 2026-08-15 | HTTP 契约删除 traceparent；增加首选 `X-HW-ID + Authorization` JWT 与兼容 `X-HW-ID + X-HW-APPKEY` 两组明示安全要求；固定混合凭据拒绝、验证失败不降级、统一 CallerAuthContext 适配层及 `AUTH_CREDENTIAL_CONFLICT` 中英文错误 |
 | 1.5.0 | 2026-08-15 | 第一个创建 Session 接口改为 `resCode/resMsg/result` ResultBean，保留真实 HTTP status；固定八个错误码及中英文消息、Accept-Language/Content-Language 规则；增加 standalone 兼容制品与 company 内部制品的 Maven profile 互斥替换设计 |
 | 1.4.0 | 2026-08-15 | 将创建 Session 改为无请求体的 `POST /agents/{agent_id}/sessions`，由 CampusClaw 生成 `session_id` 并从 Managed settings 解析默认模型；固定目录验证、模型校验、SessionContext/AgentSession 组装、持久化和失败清理顺序；创建和查询共用不含内部版本的 SessionResource，创建不使用 `Idempotency-Key` 或 `If-Match` |

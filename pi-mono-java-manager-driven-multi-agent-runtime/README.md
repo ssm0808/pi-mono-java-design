@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.17.0 |
+| 文档版本 | 1.18.0 |
 | 状态 | 目标设计，尚未实施 |
 | 更新日期 | 2026-08-15 |
 | pi-mono 源码基线 | `fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc` |
@@ -750,7 +750,8 @@ HTTP 认证契约明示支持两种二选一的公司凭据：默认示例和
 ResultBean 只包装响应体，异常仍保留真实 HTTP status。错误码枚举名、
 MessageSource key 和 `resCode` 完全一致；`resMsg` 根据
 `Accept-Language` 在 `zh-CN/en-US` 中选择，响应同时返回
-`Content-Language`，异常 `result` 固定为 `null`。Java 实现使用
+`Content-Language`；异常响应只包含 `resCode/resMsg`，不序列化
+`result` 字段。Java 实现使用
 `standalone` 清室兼容制品和 `company` 内部制品两个 Maven profile
 互斥提供 ResultBean API，业务源码在两种环境下保持不变。
 当前基线未提供内部 Maven 坐标、FQCN 和异常 Factory 方法，
@@ -2813,6 +2814,7 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.18.0 | 2026-08-15 | 将第一个 HTTP Session 创建接口的异常响应收敛为仅 `resCode/resMsg`，删除 `result` 字段；同步 OpenAPI Schema、错误示例和契约测试规则 |
 | 1.17.0 | 2026-08-15 | HTTP 契约删除 traceparent；将 `X-HW-ID + Authorization` JWT 固定为首选接入方式，明示兼容 `X-HW-ID + X-HW-APPKEY`；增加混合凭据拒绝、校验失败不降级、统一 CallerAuthContext 认证适配层与第九个错误码 `AUTH_CREDENTIAL_CONFLICT` |
 | 1.16.0 | 2026-08-15 | 将第一个 HTTP Session 创建接口改为 `resCode/resMsg/result` ResultBean，保留真实 HTTP status；固定八个错误码、中英文资源和 Locale 回退；增加 standalone 兼容制品与 company 内部制品的 Maven profile 互斥替换设计 |
 | 1.15.0 | 2026-08-15 | 将 HTTP Session 创建冻结为无 Body 的 `POST /campusclaw-service/v1/agents/{agent_id}/sessions`，由 CampusClaw 生成 `session_id`；补充目录与 settings 校验、默认模型解析、SessionContext/AgentSession 组装、持久化与失败清理顺序；创建和查询共用已就绪 SessionResource，不暴露内部 Agent 版本，创建操作不使用 `Idempotency-Key` 或 `If-Match` |

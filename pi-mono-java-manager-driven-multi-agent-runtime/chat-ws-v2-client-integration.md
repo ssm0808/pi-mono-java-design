@@ -89,7 +89,7 @@ DISCONNECTED
 
 ![客户端接入与恢复流程](frontend_websocket_client_integration.svg)
 
-[PlantUML 源码：`frontend_websocket_client_integration`](diagram.puml#L663)
+[PlantUML 源码：`frontend_websocket_client_integration`](diagram.puml#L686)
 
 ## 3. 最短可运行流程
 
