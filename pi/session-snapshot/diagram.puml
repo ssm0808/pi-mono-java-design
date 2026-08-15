@@ -1,0 +1,244 @@
+@startuml session_snapshot_state_model
+title Session State Layers and CampusClaw Target Model
+
+' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
+' packages/protocol/src/schemas.ts, SessionSnapshotSchema, lines 241-258
+' packages/protocol/src/schemas.ts, TranscriptItemSchema and TranscriptProgressSchema, lines 120-231
+' packages/server/src/sessions.ts, normalizedSnapshot and broadcastSnapshot, lines 276-297
+' packages/agent/src/harness/agent-harness.ts, SuspendedOperation, LaneSnapshot, and SessionSnapshot, lines 140-180
+' packages/agent/src/harness/session/types.ts, operation, tool, queue, and deferred write records, lines 87-200
+' packages/agent/src/harness/reducer.ts, LaneState, lines 79-109
+' Source evidence (pi-mono-java dff835743fc7f3c93e1154c3eb51028749867ca8):
+' modules/agent-core/src/main/java/com/campusclaw/agent/state/AgentStateSnapshot.java, lines 21-36
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/SessionManager.java, lines 160-225 and 304-339
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java, lines 222-243
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java, handleGetState, lines 365-374
+' Observed behavior: pi-mono exposes a client-replaceable snapshot with transcript, runtime
+' phase, revision, and queued steer messages.
+' Observed behavior: pi-mono durable records retain richer operation, queue, deferred write,
+' and tool recovery state than the public protocol snapshot.
+' Java divergence: AgentStateSnapshot is process-local, while Java session reload restores
+' messages but does not apply persisted model or thinking changes.
+' Target design: CampusClaw separates the bounded Session aggregate, owned history records,
+' the private RuntimeCheckpoint, and the public GetSession snapshot.
+' Architecture change: cross-process active Run recovery requires a durable checkpoint or
+' equivalent operation log; this is not implemented by the current Java baseline.
+' Design reason: the confirmed create response remains separate from the proposed GET snapshot
+' so review of the second operation cannot silently change the first operation.
+
+top to bottom direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam packageStyle rectangle
+skinparam class {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  ArrowColor #475569
+  FontColor #0F172A
+  AttributeFontColor #0F172A
+  StereotypeFontColor #475569
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #94A3B8
+  FontColor #0F172A
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+skinparam ArrowColor #475569
+
+package "Observed pi-mono" as PiObserved {
+  class "ProtocolSessionSnapshot" as PiSnapshot <<observed_public>> {
+    +id: string
+    +createdAt: timestamp
+    +updatedAt: timestamp
+    +phase: SessionPhase
+    +model: ModelRef
+    +thinkingLevel: ThinkingLevel
+    +revision: long
+    +transcript: TranscriptItem[*]
+    +queuedSteer: UserTranscriptItem[*]
+    +queuedSteerCount: int
+    +attached: boolean
+    +locked: boolean
+  }
+
+  class "DurableRuntimeState" as PiDurable <<observed_internal>> {
+    +operation: OperationState?
+    +stepAttempt: StepAttempt?
+    +toolBatch: ToolBatch?
+    +pendingSteer: Entry[*]
+    +pendingFollowUp: Entry[*]
+    +pendingNextRun: Entry[*]
+    +pendingWrites: Entry[*]
+    +deferredHandle: DeferredHandle?
+    +replayPolicy: ReplayPolicy
+  }
+
+  PiSnapshot .. PiDurable : public view is not checkpoint
+}
+
+package "Observed pi-mono-java" as JavaObserved {
+  class "AgentStateSnapshot" as JavaState <<observed_process_local>> {
+    +systemPrompt: string
+    +model: Model
+    +thinkingLevel: ThinkingLevel
+    +tools: AgentTool[*]
+    +messages: Message[*]
+    +streaming: boolean
+    +streamMessage: Message?
+    +pendingToolCalls: string[*]
+    +error: string?
+  }
+
+  class "CurrentWebSocketGetState" as JavaGetState <<observed_public_summary>> {
+    +conversationId: string
+    +isStreaming: boolean
+    +model: string
+    +thinkingLevel: string
+    +messageCount: int
+  }
+
+  JavaState ..> JavaGetState : narrow live projection
+}
+
+package "CampusClaw target" as CampusTarget {
+  class "ManagedSessionAggregate" as Session <<internal_target>> {
+    +sessionId: SessionId
+    +agentId: AgentId
+    +agentVersion: string
+    +bundleRevision: string
+    +currentModelId: ModelId
+    +thinking: ThinkingLevel
+    +state: idle | running | deleting
+    +activeRunId: RunId?
+    +historySeq: long
+    +revision: long
+    +createdAt: timestamp
+    +updatedAt: timestamp
+    +deleteRequestedAt: timestamp?
+  }
+
+  class "RuntimeCheckpoint" as Checkpoint <<private_recovery>> {
+    +runId: RunId
+    +operation: OperationState
+    +stepAttempt: StepAttempt
+    +phase: RunPhase
+    +streamMessage: Message?
+    +openContents: OpenContent[*]
+    +activeTools: ActiveTool[*]
+    +queuedSteers: Steer[*]
+    +pendingWrites: Entry[*]
+    +recoveryHandle: RecoveryHandle?
+  }
+
+  class "MessageRecord" as MessageRecord <<owned_record>> {
+    +messageId: MessageId
+    +historySeq: long
+    +status: MessageStatus
+  }
+
+  class "RunRecord" as RunRecord <<owned_record>> {
+    +runId: RunId
+    +modelId: ModelId
+    +thinking: ThinkingLevel
+    +state: RunState
+    +outcome: RunOutcome?
+  }
+
+  class "IdempotencyRecord" as IdempotencyRecord <<owned_record>> {
+    +key: string
+    +requestHash: string
+    +originalResult: object
+  }
+
+  class "RunEventEntry" as RunEvent <<owned_bounded_record>> {
+    +runId: RunId
+    +runSeq: long
+    +safeEvent: object
+  }
+
+  class "AttachmentMetadata" as AttachmentMetadata <<owned_reference>> {
+    +attachmentId: AttachmentId
+    +safeMetadata: object
+  }
+
+  class "CreateSessionResponseVO" as CreateResult <<confirmed_public>> {
+    +sessionId: SessionId
+    +agentId: AgentId
+    +modelId: ModelId
+    +state: idle
+    +thinking: ThinkingLevel
+    +activeRun: null
+    +createdAt: timestamp
+  }
+
+  class "GetSessionResponseVO" as GetSnapshot <<proposed_public>> {
+    +sessionId: SessionId
+    +agentId: AgentId
+    +modelId: ModelId
+    +thinking: ThinkingLevel
+    +state: idle | running
+    +historySeq: long
+    +createdAt: timestamp
+    +updatedAt: timestamp
+  }
+
+  class "ActiveRunResponseVO" as ActiveRun <<proposed_public>> {
+    +runId: RunId
+    +state: queued | running | aborting | suspended
+    +phase: RunPhase
+    +startedAt: timestamp
+    +runSeq: long
+    +modelId: ModelId
+    +thinking: ThinkingLevel
+    +messageSnapshot: StreamingMessage?
+    +openContents: OpenContentProjection[*]
+    +activeTools: ActiveToolProjection[*]
+    +queuedSteers: QueuedSteerProjection[*]
+  }
+
+  class "SessionSnapshotProjector" as Projector <<target_service>> {
+    +project(session, checkpoint): GetSessionResponseVO
+  }
+
+  Session "1" o-- "0..1" Checkpoint : private active state
+  Session "1" o-- "0..*" MessageRecord : owns separately
+  Session "1" o-- "0..*" RunRecord : owns separately
+  Session "1" o-- "0..*" IdempotencyRecord : owns separately
+  RunRecord "1" o-- "0..*" RunEvent : bounded journal
+  Session "1" o-- "0..*" AttachmentMetadata : safe references
+  Session ..> CreateResult : confirmed projection
+  Session --> Projector
+  Checkpoint --> Projector
+  Projector --> GetSnapshot : atomic safe projection
+  GetSnapshot "1" *-- "0..1" ActiveRun : null when idle
+}
+
+PiSnapshot ..> Projector : public snapshot evidence
+PiDurable ..> Checkpoint : recovery evidence
+JavaState ..> Projector : live state evidence
+
+note right of Session
+The Session identity does not include modelId.
+Changing the default model keeps the same Session.
+Each Run freezes its own modelId and thinking value.
+end note
+
+note right of GetSnapshot
+The strong ETag identifies the complete public projection.
+It changes with Session revision, active run sequence,
+or history watermark. Full history remains paginated.
+end note
+
+note bottom of Checkpoint
+Credentials, caller claims, system prompts, Java objects,
+raw tool context, stack traces, and replay internals are
+never part of the public snapshot.
+end note
+@enduml
