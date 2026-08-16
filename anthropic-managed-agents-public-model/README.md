@@ -1,8 +1,8 @@
 # Anthropic Managed Agents 公开模型（官方契约基线）
 
-> 文档版本：`v0.3.0`<br>
-> 状态：公开契约基线，已补充 Agent ID 公开形状证据<br>
-> 资料核对日期：`2026-08-03`<br>
+> 文档版本：`v0.4.0`<br>
+> 状态：公开契约基线，已补充 Session 历史查询与断线恢复语义<br>
+> 资料核对日期：`2026-08-16`<br>
 > 范围：仅提取 Anthropic 公开的 Managed Agents 模型，不掺入我们的 Tool/Agent 元数据设计。
 
 ## 1. 本轮结论
@@ -38,7 +38,8 @@ Managed Agents 是 Anthropic 托管服务，本轮没有可对齐的官方开源
 
 - 源码提交：`N/A`。
 - 实现路径和类符号：`N/A`。
-- 事实基线：Anthropic 官方文档和 API Reference，访问日期为 `2026-08-03`。
+- 事实基线：Anthropic 官方文档和 API Reference，本轮 Session 事件契约
+  核对日期为 `2026-08-16`。
 
 Anthropic 官方 TypeScript SDK 可作为公开请求/响应类型的补充契约证据；本文固定
 SDK commit `3b45cd3b69c956ac63384fdb09ce1d8109f3fa80`，但该客户端源码不是
@@ -63,7 +64,10 @@ Managed Agents 服务端实现，不能据此推断内部 ID 生成算法、存�
 | Environment API | [Environments API](https://platform.claude.com/docs/en/api/beta/environments) | `cloud` / `self_hosted` 配置联合 |
 | Session | [Start a session](https://platform.claude.com/docs/en/managed-agents/sessions) | Agent 引用、版本锁定、单次覆盖 |
 | Session API | [Create Session API Reference](https://platform.claude.com/docs/en/api/beta/sessions/create) | `POST /v1/sessions` 请求联合类型和解析快照响应 |
+| Session 操作 | [Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations) | Retrieve、Archive、Delete 及历史保留语义 |
 | Events | [Session event stream](https://platform.claude.com/docs/en/managed-agents/events-and-streaming) | 任务启动、Tool 调用、确认与回传 |
+| Event History API | [List Events API Reference](https://platform.claude.com/docs/en/api/beta/sessions/events/list) | Session 持久化事件历史、顺序、过滤和分页 |
+| Thread History API | [List Session Thread Events](https://platform.claude.com/docs/en/api/typescript/beta/sessions/threads/events/list) | Multiagent Thread 级历史查询 |
 | Vault | [Authenticate with vaults](https://platform.claude.com/docs/en/managed-agents/vaults) | Session 级凭据、MCP 和环境变量凭据 |
 | Memory | [Using agent memory](https://platform.claude.com/docs/en/managed-agents/memory) | Memory Store 资源和 Session 挂载 |
 | Multiagent | [Multiagent orchestration](https://platform.claude.com/docs/en/managed-agents/multiagent-orchestration) | Coordinator、Roster、Thread 和共享边界 |
@@ -111,6 +115,54 @@ PlantUML：[查看源码](./diagram.puml#L71)
 `POST /v1/sessions` 本身不发送任务给模型。后续 `POST /v1/sessions/{id}/events` 中的 `user.message` 才使 Session 从 `idle` 进入 `running` 并启动 Agent turn。
 
 图中的版本解析、完整替换、解析快照、独立 Sandbox 和事件启动边界来自公开文档。`Config Resolver`、`Resource and Skill Mounter`、`Tool Registry` 等参与者及其精确先后顺序是用于解释职责的逻辑推断，不表示 Anthropic 已公开这些内部服务或源码符号。
+
+#### 4.2.2 Session 对话历史查询与恢复展示
+
+核心结论：Anthropic Managed Agents 不是通过 `GET /v1/sessions/{session_id}`
+返回一份 transcript 快照。Session retrieve 读取 Session 资源与当前状态；
+对话和运行历史的权威入口是持久化 Event History。
+
+| 目的 | 官方接口 | 语义 |
+|---|---|---|
+| 读取 Session | `GET /v1/sessions/{session_id}` | Session 资源、配置和当前状态，不是对话历史列表 |
+| 读取 Session 历史 | `GET /v1/sessions/{session_id}/events` | 按 `processed_at` 排序的持久化事件历史 |
+| 读取 Thread 列表 | `GET /v1/sessions/{session_id}/threads` | Multiagent 中发现主 Thread 和子 Thread |
+| 读取 Thread 历史 | `GET /v1/sessions/{session_id}/threads/{thread_id}/events` | 单个 Agent Thread 的持久化事件 |
+| Session 实时事件 | `GET /v1/sessions/{session_id}/events/stream` | Session 级 SSE；可选订阅 message/thinking preview |
+| Thread 实时事件 | `GET /v1/sessions/{session_id}/threads/{thread_id}/stream` | 单个 Thread 的 SSE，子 Agent preview 不跨 Thread 投递 |
+
+`GET .../events` 支持 `limit`、`page`、`order=asc|desc`、事件类型过滤以及
+`created_at[gt|gte|lt|lte]` 时间过滤。`page` 是不透明游标，响应使用
+`data/next_page/prev_page`；默认按 `processed_at` 升序，即时间正序。
+
+恢复对话展示的客户端流程是：
+
+1. retrieve Session，获取当前 `idle/running/rescheduling/terminated` 状态；
+2. 用 `GET .../events?order=asc` 遍历分页，将 `user.message`、`agent.message`、
+   Tool、Session 状态和其他需要展示的持久化事件投影为时间线；
+3. 打开 `/events/stream` 接收新事件；如果需要逐字预览，使用
+   `event_deltas[]=agent.message`；
+4. `event_start/event_delta` 只是临时 preview，按 `(event_id, content index)` 累积；
+   收到同 ID 的完整 `agent.message` 后，必须用它替换 preview；
+5. 断线后重新打开 stream，并重新查询 Event History，按 event ID 去重和对账。
+
+Anthropic 明确规定：`event_start/event_delta` 不持久化、不支持断线重放，
+丢失的 delta 不能再请求；断线期间产生的完整 buffered `agent.message`
+会出现在 Event History 中，它才是权威记录。因此界面恢复本质上是
+“持久化事件重放 + 临时 preview 对账”，而不是获取一个带 transcript 的
+SessionSnapshot。
+
+![Anthropic Managed Agents Session 历史与恢复展示](./managed_agents_session_history_recovery.svg)
+
+PlantUML：[查看源码](./diagram.puml#L446)
+
+该图的“Conversation reducer”是根据官方 Event History 和 preview 对账要求得出的
+客户端责任推断；Anthropic 没有公开其 Console 内部前端类名或 reducer 实现。
+官方只明确公开了 API、事件顺序、preview 对账规则和断线恢复要求。
+
+Archive 会阻止新事件但保留历史；Delete 会永久删除 Session record、events 和
+关联 sandbox。Session history 保留到删除为止，但 sandbox 状态只保留创建后 30 天；
+会话历史可恢复不等于原 sandbox 文件状态永久可恢复。
 
 ### 4.3 Session 级数据与凭据
 
@@ -409,7 +461,7 @@ Agent 可通过以下形状成为 Coordinator：
 
 ## 10. 图表维护与校验
 
-本主题的四个图统一维护在 [diagram.puml](./diagram.puml) 中。图源只使用英文和 ASCII；SVG 是 PlantUML 生成物，不得手工编辑。
+本主题的五个图统一维护在 [diagram.puml](./diagram.puml) 中。图源只使用英文和 ASCII；SVG 是 PlantUML 生成物，不得手工编辑。
 
 标准生成命令：
 
@@ -421,6 +473,7 @@ plantuml -tsvg diagram.puml
 
 | 版本 | 日期 | 变化 |
 |---|---|---|
+| `v0.4.0` | 2026-08-16 | 核对官方 Session operations、Event List、Thread Event 和 streaming 契约；明确对话历史通过 `GET /v1/sessions/{session_id}/events` 查询，断线展示通过持久化 Event History 重放、SSE 重连和 buffered `agent.message` 对账恢复；增加 Multiagent Thread 级接口和恢复时序图 |
 | `v0.3.0` | 2026-08-03 | 固定官方 TypeScript SDK 契约证据；记录 Create Agent 的服务端 ID 与当前 `agent_` 加 24 位字母数字示例，区分顶层新建 ID 和被引用 Agent ID；明确公开类型未承诺正则、生成算法或排序，当前 `claude-*` 模型示例仍处于开放 string 类型；并修正 Update Agent 的可选 `version` 乐观锁语义 |
 | `v0.2.0` | 2026-07-21 | 增加 Session 基于版本化 Agent 配置创建的顺序图，区分官方观察行为与服务端逻辑推断；更新根文档索引 |
 | `v0.1.0` | 2026-07-18 | 建立 Anthropic Managed Agents 官方公开契约基线；整理资源、Agent 字段、三类 Tool、Session、Vault、Memory、Skill、Multiagent 和 Deployment；未加入目标元数据设计 |

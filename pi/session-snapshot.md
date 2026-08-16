@@ -1,474 +1,128 @@
-# SessionSnapshot 设计说明
+# pi 协议层 SessionSnapshot 源码模型
 
 ## 文档信息
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | 1.1.0 |
-| 状态 | 提案，待接口评审确认 |
-| 主题 | SessionSnapshot 的边界、内容与恢复语义 |
-| pi-mono 基线 | `086c32e74530564922d011ade23ff582c9d63116` |
-| pi-mono-java 基线 | `dff835743fc7f3c93e1154c3eb51028749867ca8` |
-| 更新日期 | 2026-08-15 |
+| 文档版本 | 2.0.0 |
+| 状态 | pi-mono 已观察源码事实 |
+| 主题 | `packages/protocol` 对外 `SessionSnapshot` 及其直接类型 |
+| pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
+| 更新日期 | 2026-08-16 |
 
-## 1. 定义
+## 1. 范围
 
-`SessionSnapshot` 是在某一个确定版本上，对 Session 当前可观察状态的一次原子快照。
+本文只展示 pi-mono 对外协议层 `SessionSnapshotSchema` 的实际结构。
+不混入以下对象：
 
-它的目标是让客户端能够：
+- Agent Harness 内部同名 `SessionSnapshot`、lane 或 durable recovery state；
+- pi-mono-java `AgentStateSnapshot`；
+- CampusClaw Session 聚合、Runtime Checkpoint 或 HTTP Response VO；
+- 我们的 GetSession 目标设计。
 
-1. 重建 Session 当前界面；
-2. 判断 Session 是否存在执行中的 Run；
-3. 恢复正在生成的 assistant 消息和运行中的工具；
-4. 确认已接受但尚未消费的 steer；
-5. 从明确的历史水位和事件水位继续读取后续数据；
-6. 基于一致性版本安全地修改模型或 thinking。
+上述内容需要分析时必须使用独立主题和独立图，不再放入本图。
 
-`SessionSnapshot` 不是以下对象：
+## 2. 源码证据
 
-- Session 的完整持久化日志；
-- 下一次发送给模型的完整上下文；
-- Java `AgentStateSnapshot` 的网络序列化结果；
-- 服务端崩溃恢复所需的完整 Runtime Checkpoint；
-- 数据库表或运行时对象的直接镜像。
-
-## 2. 概念边界
-
-| 概念 | 面向对象 | 主要内容 | 对外暴露 |
-|---|---|---|---|
-| SessionSnapshot | 客户端 | 当前配置、状态、历史水位、Active Run 安全投影 | 是 |
-| Session History | 客户端与审计 | 已持久化消息、Run 终态、usage 等 | 通过独立 history 接口 |
-| Model Context | 模型调用 | compaction、分支、系统提示词和扩展处理后的 messages | 否 |
-| Runtime Checkpoint | 服务端恢复 | operation、step、队列、pending write、deferred、tool replay 等 | 否 |
-| AgentStateSnapshot | Java 进程内代码 | Agent 当前内存对象的线程安全副本 | 否 |
+| 仓库相对路径 | 符号 | 基线行 |
+|---|---|---:|
+| `packages/protocol/src/schemas.ts` | `SessionPhaseSchema`、`ThinkingLevelSchema`、`ModelRefSchema` | 26-51 |
+| `packages/protocol/src/schemas.ts` | Content 和 `UsageSchema` | 78-118 |
+| `packages/protocol/src/schemas.ts` | `UserTranscriptItemSchema`、`AssistantTranscriptItemSchema`、`ToolTranscriptItemSchema` | 120-199 |
+| `packages/protocol/src/schemas.ts` | `SessionSnapshotSchema` | 241-258 |
+| `packages/server/src/sessions.ts` | `normalizedSnapshot()`、`forConnection()`、`broadcastSnapshot()` | 276-304 |
 
 ## 3. 类图
 
-![Session 快照分层与 CampusClaw 目标模型](session-snapshot/session_snapshot_state_model.svg)
+![pi 协议层 SessionSnapshot 类图](session-snapshot/pi_protocol_session_snapshot.svg)
 
-[PlantUML 源码：`session_snapshot_state_model`](session-snapshot/diagram.puml#L1)
+[PlantUML 源码：`pi_protocol_session_snapshot`](session-snapshot/diagram.puml#L1)
 
-图中将四类对象明确分开：pi-mono 对外协议快照、pi-mono 内部恢复日志、
-pi-mono-java 进程内状态，以及 CampusClaw 内部 Session 聚合与对外安全投影。
-已确认的创建 Session 结果与待评审的 GetSession 快照也在图中作为两个边界对象，
-避免第二个接口的字段候选反向改变已确认的第一个接口。
+类图仅保留 `SessionSnapshot` 根对象及它直接使用的模型、枚举、Transcript
+联合类型和 Usage。Content 只在字段类型中标明可用联合，避免把图扩展成
+整个 pi Runtime 架构图。
 
-## 4. pi-mono 已观察行为
+## 4. SessionSnapshot 顶层字段
 
-### 4.1 对外协议快照
+| 字段 | 类型 | 必填 | 源码语义 |
+|---|---|---:|---|
+| `id` | string | 是 | Session ID，非空字符串 |
+| `name` | string | 否 | 可选 Session 名称 |
+| `cwd` | string | 是 | Session 工作目录，非空 |
+| `createdAt` | non-negative integer | 是 | 创建时间戳 |
+| `updatedAt` | non-negative integer | 是 | 更新时间戳 |
+| `phase` | `SessionPhase` | 是 | Session 当前运行阶段 |
+| `model` | `ModelRef` | 是 | `{provider, id}` 模型引用 |
+| `thinkingLevel` | `ThinkingLevel` | 是 | 当前 thinking 级别 |
+| `attached` | boolean | 是 | 相对当前连接是否已 attach |
+| `locked` | boolean | 是 | Server 是否持有该 live Session Runtime |
+| `revision` | non-negative integer | 是 | 快照修订号 |
+| `transcript` | `TranscriptItem[]` | 是 | 客户端可见的完整 Transcript 投影 |
+| `queuedSteer` | `UserTranscriptItem[]` | 是 | 已接受但尚未消费的 steer |
+| `queuedSteerCount` | non-negative integer | 是 | 待消费 steer 数量 |
 
-pi-mono 的协议层 `SessionSnapshotSchema` 定义了以下字段：
+`SessionPhase` 的实际枚举为：
 
-- `id`；
-- `name`；
-- `cwd`；
-- `createdAt`；
-- `updatedAt`；
-- `phase`；
-- `model`；
-- `thinkingLevel`；
-- `attached`；
-- `locked`；
-- `revision`；
-- `transcript`；
-- `queuedSteer`；
-- `queuedSteerCount`。
+```text
+idle | turn | compaction | branch_summary | retry
+```
 
-源码证据：
+`ThinkingLevel` 的实际枚举为：
 
-- `packages/protocol/src/schemas.ts`，`SessionSnapshotSchema`，基线行 241；
-- `packages/protocol/src/schemas.ts`，`TranscriptItemSchema`，基线行 120；
-- `packages/protocol/src/schemas.ts`，`TranscriptProgressSchema`，基线行 203；
-- `packages/server/src/sessions.ts`，`normalizedSnapshot`，基线行 276。
+```text
+off | minimal | low | medium | high | xhigh | max
+```
 
-pi-mono 将快照定义为权威状态，增量事件用于从一个快照版本推进到下一个状态。assistant 消息可以处于 `streaming`，工具条目可以处于 `running`，因此客户端重连后不只知道“正在运行”，还能够恢复已生成内容和运行中工具。
+## 5. TranscriptItem 联合类型
 
-### 4.2 phase
+### 5.1 UserTranscriptItem
 
-pi-mono 对外协议中的 Session phase 包括：
-
-| phase | 含义 |
+| 字段 | 语义 |
 |---|---|
-| `idle` | 没有执行中的操作 |
-| `turn` | 正在处理模型轮次 |
-| `compaction` | 正在压缩上下文 |
-| `branch_summary` | 正在生成分支摘要 |
-| `retry` | 正在重试模型请求 |
-
-工具执行没有单独作为 Session phase，而是通过状态为 `running` 的 tool transcript item 表达。
-
-### 4.3 transcript
-
-pi-mono 的 transcript 是面向客户端的显示投影，包括：
-
-- user item；
-- assistant item：`streaming`、`complete`、`error`、`aborted`；
-- tool item：`running`、`complete`、`error`。
-
-它不是模型请求上下文。模型上下文还会受到 compaction、分支选择、扩展转换和系统提示词的影响。
-
-### 4.4 queuedSteer
-
-pi-mono 在 SessionSnapshot 中返回完整的 `queuedSteer` 和 `queuedSteerCount`。这使重连客户端能够确认 steer 已经被服务端接受，但尚未被当前 Run 消费，从而避免重复提交。
-
-### 4.5 连接相关字段
-
-`attached` 是相对于当前连接的状态，同一个 Session 对不同连接可能有不同的值。`locked` 表示服务端是否已经独占获取 Session Runtime。
-
-这两个字段属于 pi Server 的连接和运行时管理语义，不属于 CampusClaw HTTP Session 的固有业务状态。
-
-## 5. pi-mono 内部恢复模型
-
-pi-mono Agent Harness 定义了比对外 SessionSnapshot 更详细的内部状态，包括：
-
-- lane 和 leafId；
-- operation ID、operation kind；
-- `running`、`suspended`、`aborting`；
-- steer、follow-up、next-run 队列；
-- pending writes；
-- 未完成工具调用；
-- deferred handle；
-- 缺失的工具或模型；
-- compaction 和 retry 状态；
-- operation intent 和 step attempt；
-- usage 和工具 replay policy。
-
-源码证据：
-
-- `packages/agent/src/harness/agent-harness.ts`，`SuspendedOperation`、`LaneSnapshot`、`SessionSnapshot`，基线行 140；
-- `packages/agent/src/harness/session/types.ts`，`OperationStartedRecord`，基线行 87；
-- `packages/agent/src/harness/session/types.ts`，`ToolStartedRecord`，基线行 150；
-- `packages/agent/src/harness/session/types.ts`，`QueueEnqueuedRecord`，基线行 162；
-- `packages/agent/src/harness/reducer.ts`，`LaneState`，基线行 79。
-
-这些字段属于 Runtime Checkpoint，不应直接通过 HTTP 暴露。其原因包括：
-
-- `effectiveArgs` 可能包含敏感工具参数；
-- extension `resumeData` 属于内部扩展状态；
-- pending write 和 replay policy 会把客户端绑定到服务端实现；
-- 客户端不需要理解服务端恢复算法。
-
-当前基线中，Agent Harness 的恢复和 watch 能力尚未完全实现：
-
-- `AgentHarness.create` 遇到已有 record 时抛出 `HarnessNotImplemented("create.restore")`；
-- `watchSession()` 返回未实现错误。
-
-因此这部分是明确的内部目标模型和恢复协议依据，不能描述成已经完整可用的生产行为。
-
-## 6. pi-mono 旧 SessionManager 的持久化语义
-
-pi-mono coding-agent 的 JSONL SessionManager 持久化：
-
-- Session header：ID、timestamp、cwd、parentSession；
-- message；
-- model change；
-- thinking level change；
-- compaction；
-- branch summary；
-- custom entry；
-- custom message；
-- label；
-- session info。
-
-记录通过 `id` 和 `parentId` 形成会话树。`buildSessionContext` 沿当前分支恢复有效 model、thinking level 和经过 compaction 的 messages。
-
-源码证据：
-
-- `packages/coding-agent/src/core/session-manager.ts`，`SessionHeader` 和 `SessionEntry`，基线行 32；
-- `packages/coding-agent/src/core/session-manager.ts`，`getSessionContextSettings`，基线行 362；
-- `packages/coding-agent/src/core/session-manager.ts`，`buildContextEntries`，基线行 418；
-- `packages/coding-agent/src/core/session-manager.ts`，`buildSessionContext`，基线行 461。
-
-该持久化日志是构建 Session 状态的事实来源，不等同于对外 SessionSnapshot。
-
-## 7. pi-mono-java 已观察行为
-
-### 7.1 AgentStateSnapshot
-
-Java `AgentStateSnapshot` 包含：
-
-- `systemPrompt`；
-- `model`；
-- `thinkingLevel`；
-- `tools`；
-- `messages`；
-- `streaming`；
-- `streamMessage`；
-- `pendingToolCalls`；
-- `error`。
-
-源码证据：
-
-- `modules/agent-core/src/main/java/com/campusclaw/agent/state/AgentStateSnapshot.java`，`AgentStateSnapshot`，基线行 21；
-- `modules/agent-core/src/main/java/com/campusclaw/agent/state/AgentState.java`，`snapshot()`，基线行 266。
-
-`AgentState.snapshot()` 在读锁内生成副本，能够保证这些 AgentState 字段的一致读取。但该锁不覆盖 SessionManager、Run 事件序号和持久化历史水位。CampusClaw 要生成完整 HTTP SessionSnapshot，需要建立 Session 级一致性边界，避免不同字段来自不同时间点。
-
-`AgentStateSnapshot` 是进程内对象，不能直接作为 API DTO。以下内容不得直接暴露：
-
-- system prompt；
-- `AgentTool` 实例；
-- 原始 `Model` 对象；
-- 内部异常和堆栈；
-- 未脱敏工具参数；
-- 凭据和 Provider 内部状态。
-
-### 7.2 WebSocket get_state
-
-当前 Java WebSocket `get_state` 只返回：
-
-- `conversation_id`；
-- `isStreaming`；
-- `model`；
-- `thinkingLevel`；
-- `messageCount`。
-
-源码证据：
-
-- `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java`，`handleGetState`，基线行 365。
-
-该结构是状态摘要，不足以作为断线恢复快照，因为它无法恢复：
-
-- 正在生成的 assistant 内容；
-- 运行中工具；
-- open content；
-- steer 队列；
-- aborting 或 suspended 状态；
-- 历史和事件消费水位。
-
-### 7.3 Java 持久化缺口
-
-Java SessionManager 会写入 `model_change` 和 `thinking_level_change`，但 `loadSession()` 恢复时只提取 message。SessionPool 随后使用 `baseConfig` 初始化 Agent，再恢复 messages。
-
-源码证据：
-
-- `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/SessionManager.java`，`loadSession`，基线行 160；
-- 同文件，`extractMessages`，基线行 204；
-- 同文件，`appendModelChange`，基线行 304；
-- 同文件，`appendThinkingLevelChange`，基线行 326；
-- `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java`，`createSessionWithPersistence`，基线行 204。
-
-因此当前 Java 在进程重启或 SessionPool 淘汰后，可能丢失 Session 已切换的模型和 thinking。这与“一个 Session 可以切换模型”的产品语义不一致。
-
-当前 Java 也没有持久化 Run ID、step、工具执行状态、steer 队列和 pending write，因此尚不能承诺 active Run 的跨进程恢复。
-
-## 8. CampusClaw 内部 Session 应包含什么
-
-### 8.1 有界的 Session 聚合根
-
-SessionRecord 保存稳定、有界、能参与事务判定的状态：
-
-| 分类 | 内部字段 | 设计语义 |
-|---|---|---|
-| 稳定身份 | `session_id`、`agent_id` | Session ID 全局唯一且不复用；Agent 绑定创建后不变 |
-| Agent 版本 | `agent_version`、`bundle_revision` | 精确重建当时已校验的 Agent 运行目录，不对外暴露 |
-| Session 默认配置 | `current_model_id`、`thinking` | 可修改，但不参与 Session 身份；每个 Run 接受时再冻结实际值 |
-| 生命周期 | `state`、`created_at`、`updated_at`、`delete_requested_at?` | 内部可表达 `idle/running/deleting`；删除是异步时保留请求时间 |
-| Active Run 引用 | `active_run_id?` | 一个 Session 最多只有一个 active Run；详细运行状态不嵌入 SessionRecord |
-| History 水位 | `history_seq` | 已提交的权威 Message/RunRecord 的 Session 级最大序号 |
-| 并发版本 | `revision` | Session 元数据的数据库乐观并发版本；不直接等同于对外 ETag |
-
-Session 身份与模型无关。切换 `current_model_id` 不会创建新 Session，也不会改变
-已在 RunRecord 中冻结的 `model_id`。
-
-### 8.2 Session 拥有但不嵌入的记录
-
-下列对象按 `session_id` 归属 Session，但必须分开持久化，不能作为无限增长数组
-放进 SessionRecord：
-
-- MessageRecord 及其 `history_seq`；
-- RunRecord，包含 Run 冻结的 model/thinking、终态、usage 和错误投影；
-- IdempotencyRecord，保存副作用接口的规范化请求与原结果；
-- 有界 Run Event Journal，用 `run_seq` 支持 SSE/JSON 断点续读；
-- 附件元数据快照或引用，附件本体仍由专门存储服务管理。
-
-### 8.3 Runtime Checkpoint
-
-如果产品承诺 active Run 跨进程恢复，还需要独立 Runtime Checkpoint 或等价操作日志，
-至少保存 operation/step、当前 phase、流式 Message、open content、未完成 tool、
-steer/follow-up 队列、abort/suspend 状态、pending durable write 与必要的恢复句柄。
-
-它属于 Session 的服务端恢复状态，但不是 SessionRecord 字段集，更不是 HTTP DTO。
-
-### 8.4 不应保存或重复的内容
-
-SessionRecord 不保存 JWT、APPKEY、Caller claim、连接 Header、system prompt、Java `Model`
-或 `AgentTool` 对象、原始工具执行上下文与堆栈。system prompt、Skill、Tool 摘要和
-Model descriptor 应通过已固定的 `agent_version/bundle_revision` 重建，避免在每个 Session
-中重复一份大型、可变的运行目录镜像。
-
-## 9. CampusClaw 目标 SessionSnapshot
-
-以下结构是目标设计提案，不是当前 pi-mono-java 已实现行为。
-
-```json
-{
-  "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
-  "agent_id": "agent_01JY8VZY4CRQN4PJW8M94D1B2C",
-  "model_id": "model_current",
-  "thinking": "hidden",
-  "state": "running",
-  "history_seq": 42,
-  "created_at": "2026-08-15T10:00:00Z",
-  "updated_at": "2026-08-15T10:05:00Z",
-  "active_run": {
-    "run_id": "run_01JY8X2E3R4T5Y6U7I8O9P0A1S",
-    "state": "running",
-    "phase": "turn",
-    "started_at": "2026-08-15T10:04:00Z",
-    "run_seq": 18,
-    "model_id": "model_frozen_for_run",
-    "thinking": "hidden",
-    "message_snapshot": {
-      "message_id": "msg_01JY8X3A4S5D6F7G8H9J0K1L2Z",
-      "role": "assistant",
-      "status": "streaming",
-      "content": []
-    },
-    "open_contents": {},
-    "active_tools": [],
-    "queued_steers": []
-  }
-}
-```
-
-HTTP 响应使用 ETag 表示整个快照的一致性版本：
-
-```http
-ETag: "snp-zQfM5yN8x2"
-Cache-Control: no-store
-```
-
-该强 ETag 是不透明的完整表示版本，可由
-`Session revision + active run_id/run_seq + history_seq` 的规范化组合或快照哈希生成。
-如已使用 ETag，响应体不强制重复
-返回 `revision`。
-
-## 10. 字段语义
-
-### 10.1 Session 层
-
-| 字段 | 必填 | 语义 |
-|---|---|---|
-| `session_id` | 是 | Session 稳定身份，不受模型切换影响 |
-| `agent_id` | 是 | Session 不可变的 Agent 绑定 |
-| `model_id` | 是 | Session 当前默认模型，供后续 Run 使用 |
-| `thinking` | 是 | Session 当前默认 thinking 配置 |
-| `state` | 是 | `idle` 或 `running` |
-| `history_seq` | 是 | 快照所覆盖的持久历史水位，idle 时仍然存在 |
-| `created_at` | 是 | Session 创建时间 |
-| `updated_at` | 是 | Session 配置、Run 生命周期或权威 History 提交的最近持久化变化时间；不要为每个 token delta 写库 |
-| `active_run` | 是 | idle 时为 null，running 时为 Active Run 快照 |
-
-### 10.2 Active Run 层
-
-| 字段 | 必填 | 语义 |
-|---|---|---|
-| `run_id` | 是 | 当前 Active Run 身份 |
-| `state` | 是 | Run 当前控制状态，例如 queued、running、aborting、suspended |
-| `phase` | 是 | Run 当前执行阶段，最终枚举待接口评审确认 |
-| `started_at` | 是 | Run 接受或开始时间，最终语义待确认 |
-| `run_seq` | 是 | 快照已覆盖的 Run 事件水位 |
-| `model_id` | 是 | Run 接受时原子固化的模型 |
-| `thinking` | 是 | Run 接受时原子固化的 thinking |
-| `message_snapshot` | 是 | 当前正在生成的 assistant 消息安全投影；没有时为 null |
-| `open_contents` | 是 | 尚未闭合的文本、thinking 或工具参数增量 |
-| `active_tools` | 是 | 运行中工具的脱敏投影 |
-| `queued_steers` | 是 | 已接受但尚未消费的 steer 消息投影 |
-
-## 11. 一致性约束
-
-### 11.1 Session 状态与 Active Run
-
-```text
-state = idle    => active_run = null
-state = running => active_run != null
-```
-
-服务端必须在同一个一致性边界内读取 `state` 和 `active_run`，禁止返回 `state=idle` 但仍携带 Active Run 的撕裂快照。
-
-### 11.2 模型语义
-
-```text
-Session.model_id
-  = Session 当前默认模型
-
-ActiveRun.model_id
-  = Run 接受时固化的实际模型
-```
-
-当 Session 在 Run 执行期间允许切换默认模型时，两个 model ID 可以不同。这不产生新的 Session，也不改变 Session 身份。
-
-### 11.3 thinking 语义
-
-thinking 与模型采用相同规则：顶层是 Session 当前默认值，Active Run 中是该 Run 接受时固化的值。
-
-### 11.4 水位语义
-
-```text
-history_seq
-  = 当前快照已经覆盖的持久历史最大序号
-
-run_seq
-  = 当前快照已经覆盖的 Run 事件最大序号
-```
-
-客户端加载快照后，只消费大于对应水位的后续记录或事件。
-
-### 11.5 ETag
-
-ETag 标识整个 SessionSnapshot 的版本，而不只是某一个字段。模型、thinking、state、history_seq 或 Active Run 发生可观察变化时，都必须产生新的 ETag。
-
-## 12. 不进入 SessionSnapshot 的内容
-
-以下字段明确排除：
-
-- 完整历史 transcript；
-- system prompt；
-- 完整工具定义和工具实现对象；
-- Provider 凭据、认证状态和密钥；
-- 原始工具执行上下文；
-- 未脱敏工具参数；
-- Java exception、stack trace；
-- pending write；
-- extension resumeData；
-- tool replay policy；
-- pi-mono 的 `attached`、`locked` 和 CLI `cwd`；
-- 仅供模型调用的最终 context messages。
-
-## 13. 对当前第二个 HTTP 接口的影响
-
-目标接口：
-
-```http
-GET /campusclaw-service/v1/sessions/{session_id}
-```
-
-当前评审方向应定义为：
-
-> 返回足以恢复客户端界面和事件消费的权威 Session 快照，但不返回完整持久历史，也不暴露服务端 Runtime Checkpoint。
-
-相对于当前 SessionResource / ActiveRunSnapshot 提案，建议后续评审以下增量：
-
-1. Session 层增加 `updated_at`；
-2. Session 层始终返回 `history_seq`；
-3. Active Run 增加明确的 `state`；
-4. Active Run 增加执行 `phase`；
-5. Active Run 增加 `started_at`；
-6. Active Run 增加 `queued_steers`；
-7. 使用 ETag 作为快照一致性版本；
-8. Java 实现建立 Session 级原子快照边界；
-9. Java 恢复流程必须恢复 model 和 thinking；
-10. 若承诺跨进程恢复 Active Run，必须增加持久化 Runtime Checkpoint 或等价操作日志。
-11. 创建 Session 使用 `CreateSessionResponseVO`，GetSession 使用
-    `GetSessionResponseVO`；如要继续共用同一
-    `SessionResource`，必须明确重开已确认的第一个接口评审。
-
-以上内容仍是第二个接口的设计提案，只有在接口评审明确确认后，才能固化为正式契约。
-
-## 14. 版本历史
+| `id` | Transcript item ID |
+| `role` | 固定为 `user` |
+| `content` | `TextContent` 或 `ImageContent` 数组 |
+| `timestamp` | 非负时间戳 |
+
+### 5.2 AssistantTranscriptItem
+
+共享字段为 `id/role/content/model/responseModel?/usage?/timestamp`，其中
+`role=assistant`，`content` 可包含 `TextContent`、`ThinkingContent` 和
+`ToolCallContent`。
+
+| `status` | 附加约束 |
+|---|---|
+| `streaming` | 无 `stopReason` |
+| `complete` | `stopReason=stop \| length \| toolUse` |
+| `error` | `stopReason=error`，可有 `errorMessage` |
+| `aborted` | `stopReason=aborted`，可有 `errorMessage` |
+
+### 5.3 ToolTranscriptItem
+
+共享字段为
+`id/role/toolCallId/toolName/input/content/details?/usage?/timestamp`，其中
+`role=tool`，`content` 可包含 `TextContent` 或 `ImageContent`。
+
+| `status` | `isError` |
+|---|---:|
+| `running` | `false` |
+| `complete` | `false` |
+| `error` | `true` |
+
+## 6. 快照语义
+
+- pi 注释明确快照是权威状态，`TranscriptProgress` 是从一个快照版本推进的
+  归一化增量活动，但 `TranscriptProgress` 不是 `SessionSnapshot` 字段。
+- `transcript` 可同时表达 streaming assistant 和 running tool，因此客户端可直接
+  用快照替换本地可见状态。
+- `transcript` 是显示投影，不等于下一次模型调用使用的最终 context。
+- `attached` 由 Server 按当前连接重写；它不是所有客户端共享的 Session 固有值。
+- `locked` 由 Server 的 live Session 包装层设为 `true`。
+
+## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.1.0 | 2026-08-15 | 增加 PlantUML 类图，明确内部 Session 聚合根、独立归属记录、Runtime Checkpoint 和 GetSession 投影的边界；收紧 ETag 与创建/GetSession Response VO 语义 |
-| 1.0.0 | 2026-08-15 | 基于 pi-mono 和 pi-mono-java 源码建立 SessionSnapshot 独立设计说明 |
+| 2.0.0 | 2026-08-16 | 根据用户反馈收紧范围；删除 Harness 内部状态、pi-mono-java 和 CampusClaw 目标设计，类图只展示 pi 协议层 SessionSnapshot 及直接类型 |
+| 1.1.0 | 2026-08-15 | 增加跨实现比较与目标模型图，后续已按主题边界拆分 |
+| 1.0.0 | 2026-08-15 | 建立 SessionSnapshot 初始分析 |

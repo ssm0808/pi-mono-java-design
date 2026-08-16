@@ -442,3 +442,82 @@ API -->> Client : event stream
 Client --> User : result
 
 @enduml
+
+@startuml managed_agents_session_history_recovery
+title Anthropic Managed Agents Session History and Display Recovery
+
+' Official source evidence accessed 2026-08-16:
+' https://platform.claude.com/docs/en/api/beta/sessions/events/list
+' https://platform.claude.com/docs/en/api/typescript/beta/sessions/threads/events/list
+' https://platform.claude.com/docs/en/managed-agents/events-and-streaming
+' https://platform.claude.com/docs/en/managed-agents/session-operations
+' Observed behavior: GET Session retrieves the session resource, while persisted conversation
+' history is listed from GET /v1/sessions/{session_id}/events.
+' Observed behavior: event_start and event_delta are best-effort stream previews; they are never
+' persisted or replayed, and the buffered agent.message is the authoritative record.
+' Observed behavior: multiagent child histories and live previews are thread-scoped.
+' Design reason: the client rebuilds display state from persisted events, opens the live stream,
+' and replaces temporary previews when the authoritative buffered event arrives.
+
+autonumber
+hide footbox
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam sequenceArrowThickness 1
+skinparam sequenceParticipantBorderColor #53657D
+skinparam sequenceParticipantBackgroundColor #F7F9FC
+skinparam ArrowColor #53657D
+skinparam LifeLineBorderColor #90A0B5
+skinparam responseMessageBelowArrow true
+skinparam sequenceMessageAlign center
+
+actor User
+boundary "Client UI" as Client
+control "Conversation reducer" as Reducer
+boundary "Session API" as SessionAPI
+boundary "Event History API" as HistoryAPI
+boundary "Event Stream API" as StreamAPI
+
+User -> Client : Open an existing session
+Client -> SessionAPI : GET /v1/sessions/{session_id}
+SessionAPI --> Client : Session resource and current status
+
+loop Until next_page is null
+  Client -> HistoryAPI : GET /v1/sessions/{session_id}/events\norder=asc, limit, page
+  HistoryAPI --> Client : data, next_page, prev_page
+  Client -> Reducer : Apply persisted events in order
+end
+Reducer --> Client : Rebuilt authoritative conversation display
+
+opt Multiagent session
+  Client -> SessionAPI : GET /v1/sessions/{session_id}/threads
+  SessionAPI --> Client : Primary and child threads
+  loop Each visible thread
+    Client -> HistoryAPI : GET /v1/sessions/{session_id}/threads/{thread_id}/events
+    HistoryAPI --> Client : Persisted thread events
+    Client -> Reducer : Build the thread timeline
+  end
+end
+
+Client -> StreamAPI : GET /v1/sessions/{session_id}/events/stream\nevent_deltas[]=agent.message
+StreamAPI -->> Client : event_start and event_delta previews
+Client -> Reducer : Accumulate preview by event ID and content index
+Reducer --> Client : Render temporary text
+StreamAPI -->> Client : Buffered agent.message with the same event ID
+Client -> Reducer : Replace preview with authoritative event
+Reducer --> Client : Render committed message
+
+... Network disconnect ...
+
+Client -> StreamAPI : Reopen the stream
+Client -> HistoryAPI : List persisted event history again
+HistoryAPI --> Client : Buffered events emitted while disconnected
+Client -> Reducer : Deduplicate by event ID and reconcile display
+Reducer --> Client : Recovered conversation display
+
+note over Client, StreamAPI
+Missed event deltas cannot be requested again.
+Only persisted buffered events restore authoritative history.
+end note
+
+@enduml
