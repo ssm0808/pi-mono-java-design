@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.9.0 |
+| 文档版本 | 1.10.0 |
 | 状态 | 目标设计，尚未实施 |
 | 接口评审状态 | `POST /agents/{agent_id}/sessions` 已确认；`GET /sessions/{session_id}` 评审中；其余 operation 待逐个评审 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
@@ -10,6 +10,7 @@
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 源码基线 | `dff835743fc7f3c93e1154c3eb51028749867ca8` |
+| Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | 更新日期 | 2026-08-16 |
 
 ## 1. 结论
@@ -37,7 +38,7 @@ OpenAPI YAML 在迁移期内继续作为机器可读投影；本轮不删除也�
 | Method | Path | 语义 |
 |---|---|---|
 | `POST` | `/agents/{agent_id}/sessions` | 根据 Agent 创建 Session，由 CampusClaw 分配 `session_id` |
-| `GET` | `/sessions/{session_id}` | 读取 Session 当前状态、配置和 active Run 摘要 |
+| `GET` | `/sessions/{session_id}` | 读取 Session 当前配置、粗粒度状态和 active Run 指针 |
 | `DELETE` | `/sessions/{session_id}` | 幂等请求删除 Session；停止新请求并异步清理 |
 
 HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session；网络恢复只需
@@ -127,10 +128,11 @@ GetSession 评审而隐式扩张。第一个接口的完整成功响应为：
 GET /campusclaw-service/v1/sessions/{session_id}
 ```
 
-该接口按 `session_id` 读取已经存在的 Session 权威视图，不创建或恢复
-Session，不调用模型，也不消耗 token。当前提案使用独立的
-`GetSessionResponseVO`；它可以返回查询和恢复需要的水位及 active Run
-摘要，而不改变第一个接口已经确认的创建响应。
+该接口按 `session_id` 读取已经存在的 Session 当前资源，不创建或恢复
+Session，不调用模型、不消耗 token，也不为了查询而实时调用 Model Manager。
+它是 Session 控制面的只读入口，用于确认资源存在及访问权、读取当前默认
+配置、判断是否存在 active Run，并取得后续 GetRun 的定位指针。当前提案使用
+独立的 `GetSessionResponseVO`，不改变第一个接口已经确认的创建响应。
 
 | 字段 | 当前提案 | 具体作用 |
 |---|---|---|
@@ -139,20 +141,15 @@ Session，不调用模型，也不消耗 token。当前提案使用独立的
 | `model_id` | 必填 | Session 当前默认模型；允许后续切换 |
 | `state` | `idle \| running` | 只回答 Session 当前是否存在 active Run |
 | `thinking` | `hidden \| full` | Session 默认的 reasoning content 披露级别，不表示推理强度 |
-| `history_seq` | 非负整数 | 本快照已经覆盖的最大权威 History 序号；`0` 表示尚无历史 |
-| `active_run` | object 或 `null` | active Run 的稳定摘要；idle 时为 `null` |
+| `active_run` | object 或 `null` | active Run 指针；仅含 `run_id` 和 `queued \| running` 状态，idle 时为 `null` |
 | `created_at` | RFC 3339 | Session 创建时间 |
 | `updated_at` | RFC 3339 | Session 资源最后更新时间 |
 
-`history_seq` 是 Session 范围内单调递增的提交水位，不是消息数量，也不是
-分页 cursor。客户端可先读取该快照，再通过 History API 补齐到该水位；
-active Run 的增量事件继续按 Run 范围的 `run_seq` 恢复，从而区分长期权威
-历史与正在生成的流式状态。
-
-`active_run.state` 当前只取 `queued | running`。`active_run.phase` 在 queued
-阶段为 `null`，执行中当前提案取 `turn | compaction | retry`。
-pi 的 `branch_summary` 只在 CampusClaw 实现分支摘要功能后公开；工具执行仍
-属于 `turn`，详细工具状态由 GetRun 返回，不新增 `tool_execution` phase。
+`active_run.state` 只取 `queued | running`，用于让调用方决定是否立即读取
+GetRun。`phase`、该 Run 固化的 `model_id/thinking`、partial Message、open
+content、工具和 steer 队列全部属于 GetRun，不在此处复制。`history_seq` 和
+分页 cursor 属于 History API；`run_seq` 属于 Run Event API。这样
+GetSession 的响应大小固定，不承担聊天恢复快照职责。
 
 当前响应提案为：
 
@@ -166,13 +163,9 @@ pi 的 `branch_summary` 只在 CampusClaw 实现分支摘要功能后公开；�
     "model_id": "claude-sonnet-4-5",
     "state": "running",
     "thinking": "hidden",
-    "history_seq": 42,
     "active_run": {
       "run_id": "run_01JY8X2E3R4T5Y6U7I8O9P0A1S",
-      "state": "running",
-      "phase": "turn",
-      "model_id": "claude-sonnet-4-5",
-      "thinking": "hidden"
+      "state": "running"
     },
     "created_at": "2026-08-15T10:30:00+08:00",
     "updated_at": "2026-08-16T09:15:21+08:00"
@@ -191,11 +184,25 @@ pi 的 `thinkingLevel` 表示推理强度，可取
 正交概念。若本轮直接拆成 `thinking_visibility + reasoning_effort`，必须明确
 重开第一个接口，而不能静默改变已确认契约。
 
-GetSession 当前不返回 `name`、完整 `transcript`、`queuedSteer`、`attached`
-或 `locked`。用户可见会话名称属于 mate-service 的 Chat 元数据；完成的
-Message/RunRecord 由 History API 分页返回，active Message、open content、
-工具和 steer 队列由 GetRun 返回；`attached` 是 pi 的连接相对状态，`locked`
-是 live Runtime 的内部独占状态，均不是 CampusClaw 公共 Session 属性。
+GetSession 当前不返回 `name`、`history_seq`、完整 `transcript`、
+`queuedSteer`、`phase`、`attached` 或 `locked`。用户可见会话名称属于
+mate-service 的 Chat 元数据；完成的 Message/RunRecord 由 History API
+分页返回；active Message、open content、工具、steer 队列和执行阶段由
+GetRun 返回；`attached` 是 pi 的连接相对状态，`locked` 是 live Runtime 的
+内部独占状态，均不是 CampusClaw 公共 Session 属性。
+
+| 读取需求 | 负责接口 |
+|---|---|
+| Session 当前默认 `model_id/thinking`、`idle/running` 和 active Run 指针 | `GET /sessions/{session_id}` |
+| 已提交 Message/RunRecord、`history_seq` 和分页 cursor | `GET /sessions/{session_id}/history` |
+| active/terminal Run 的 phase、固化配置、partial Message、工具和 steer 状态 | `GET /sessions/{session_id}/runs/{run_id}` |
+| Run 的实时增量及 `run_seq` 恢复 | `GET /sessions/{session_id}/runs/{run_id}/events` |
+
+读取成功返回 `ETag` 和 `Cache-Control: no-store`。当前推荐仅将 `ETag` 用于
+后续 Model/Thinking 配置写入的 `If-Match` 并发控制，不给本 GET 增加
+`If-None-Match/304` 分支。不存在和已删除的 Session 当前推荐统一返回
+`404 SESSION_NOT_FOUND`，避免泄露历史状态。这两点与 `active_run` 指针粒度
+仍在主维护 HTML 中等待第二个接口的最终确认。
 
 本小节和主维护 HTML 中的第二个接口仍是评审提案，尚未确认；OpenAPI 本轮
 不随该提案更新。
@@ -282,10 +289,10 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
   `410 EVENT_CURSOR_EXPIRED`，客户端改用 Run 快照和 History 恢复。
 - Session 读取响应返回 `ETag`；配置写入使用 `If-Match`，Run 副作用写入使用
   `Idempotency-Key`，两类机制职责不混用。
-- `Session.state` 只表达是否存在 active Run；执行阶段下沉到
-  `active_run.phase`，避免把 pi 的执行过程枚举误当成 Session 生命周期状态。
-- `history_seq` 是已提交 History 的 Session 级水位；`run_seq` 是单个 Run 的
-  事件游标，二者不能互换。
+- `Session.state` 只表达是否存在 active Run；执行阶段由 GetRun 返回，避免把
+  pi 的执行过程枚举误当成 Session 生命周期状态。
+- `history_seq` 只由 History API 返回，`run_seq` 只由 Run Event API 返回；
+  GetSession 不复制任何恢复水位。
 
 ## 5. ResultBean、HTTP 状态与国际化
 
@@ -459,11 +466,13 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 | 观察到的行为 | `modules/agent-core/src/main/java/com/campusclaw/agent/subagent/a2a/A2aAgentBackend.java` 基线 40-62、226-238：出站 A2A 请求已使用 `X-HW-ID + X-HW-APPKEY`，但它不是入站验证实现 |
 | 观察到的行为 | pi-mono `packages/protocol/src/schemas.ts` 基线 38-45、241-258：协议 `SessionSnapshot` 顶层包含 `phase`、`thinkingLevel`、完整 `transcript`、连接相对 `attached` 和 live Runtime `locked` |
 | 观察到的行为 | pi-mono `packages/protocol/src/schemas.ts` 基线 26-35：`ThinkingLevel` 取 `off/minimal/low/medium/high/xhigh/max`，表达推理强度 |
+| 观察到的行为 | Anthropic TypeScript SDK `src/resources/beta/sessions/sessions.ts` 基线 638-710：Managed Agents 的 Session 是控制面资源，包含 Agent 快照、环境/资源、预算/用量、标题/元数据和状态，但不内嵌 transcript 或 active Run 恢复快照 |
 | 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、附件只传 ID、ResultBean 错误脱敏 |
 | 架构改造 | 一组 HTTP 资源接口、统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
+| 架构改造 | CampusClaw GetSession 收敛为配置、粗粒度状态和 active Run 指针；History 水位归 History API，执行 phase 与恢复详情归 GetRun，实时增量归 Run Event API。相较 Anthropic，Agent 发布快照、环境、Vault、预算、用量、标题和业务元数据不由本 Session 资源拥有 |
 
 公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自
 用户提供的集成约束。当前工作区不含对应入站认证库或
@@ -477,6 +486,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.10.0 | 2026-08-16 | 收窄 GetSession：删除 `history_seq` 和 active Run 的 phase/model/thinking，只保留 Session 当前配置、`idle/running` 与 `run_id/state` 指针；明确 History、GetRun、Run Event 的职责边界；主维护 HTML 同时展示已确认的第一个接口与评审中的第二个接口，OpenAPI 未更新 |
 | 1.9.0 | 2026-08-16 | 将主维护 HTML 切换为第二个 GetSession 接口评审；增加 `history_seq` 水位、Session state 与 active Run phase 分工、thinking 可见性与 pi 推理强度的语义隔离，以及 transcript/name/attached/locked 的边界；第二个接口仍未确认，OpenAPI 未更新 |
 | 1.8.0 | 2026-08-15 | 增加仓库内可直接打开的 HTML 接口评审文档并固定为人类评审主维护契约；OpenAPI YAML 暂作过渡期机器投影，不在本轮废弃 |
 | 1.7.1 | 2026-08-15 | 用户明确确认第一个 `POST /agents/{agent_id}/sessions` operation；固定该 operation 的已确认评审状态，其余 12 个 operation 仍待逐个对齐 |

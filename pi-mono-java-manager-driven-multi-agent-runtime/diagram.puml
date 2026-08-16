@@ -1229,16 +1229,20 @@ title CampusClaw GetSession Response Proposal
 ' packages/protocol/src/schemas.ts, ThinkingLevelSchema, lines 26-35
 ' packages/protocol/src/schemas.ts, SessionPhaseSchema, lines 38-45
 ' packages/protocol/src/schemas.ts, SessionSnapshotSchema, lines 241-258
+' Source evidence (anthropic-sdk-typescript 64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff):
+' src/resources/beta/sessions/sessions.ts, Session, lines 638-710
 ' Source evidence (CampusClaw design repository):
 ' pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml,
 ' ThinkingLevel schema near baseline line 1602
 ' Observed behavior: pi exposes phase, reasoning effort, transcript, attached, and locked
 ' in its protocol snapshot.
+' Observed behavior: Anthropic exposes a control-plane Session resource without transcript
+' or an active Run recovery snapshot.
 ' Product constraint: the confirmed CampusClaw thinking field is disclosure visibility.
-' Architecture change: GetSession separates Session state from active Run phase and uses
-' historySeq as the committed History watermark.
-' Design reason: unbounded transcript and active streaming details are read from History
-' and GetRun instead of being embedded in GetSession.
+' Architecture change: GetSession exposes current configuration, coarse state, and only
+' an active Run pointer. History owns historySeq; GetRun owns phase and recovery details.
+' Design reason: keep the Session control resource bounded and avoid duplicating data
+' from History, GetRun, and Run Event APIs.
 ' Target-only design: these wire-contract types are not existing pi-mono-java classes.
 
 left to right direction
@@ -1266,15 +1270,12 @@ class GetSessionResult <<target_wire_contract>> {
   +sessionId: string
   +agentId: string
   +modelId: string
-  +historySeq: integer
   +createdAt: timestamp
   +updatedAt: timestamp
 }
 
 class ActiveRunSummary <<target_wire_contract>> {
   +runId: string
-  +modelId: string
-  +phase: RunPhase?
 }
 
 enum SessionState {
@@ -1287,12 +1288,6 @@ enum ActiveRunState {
   running
 }
 
-enum RunPhase {
-  turn
-  compaction
-  retry
-}
-
 enum ThinkingVisibility {
   hidden
   full
@@ -1302,17 +1297,14 @@ GetSessionResult --> "1" SessionState : state
 GetSessionResult --> "1" ThinkingVisibility : thinking
 GetSessionResult o-- "0..1" ActiveRunSummary : activeRun
 ActiveRunSummary --> "1" ActiveRunState : state
-ActiveRunSummary --> "0..1" RunPhase : phase
-ActiveRunSummary --> "1" ThinkingVisibility : thinking
 
 note bottom of GetSessionResult
-historySeq is the greatest committed History sequence
-covered by this snapshot. It is not a message count
-or a pagination cursor.
+This resource contains no History watermark, transcript,
+Run phase, stream content, tool state, or steer queue.
 end note
 
 note bottom of ActiveRunSummary
-phase is null while queued. GetRun owns active message,
-open content, tool, and queued steer details.
+GetRun owns phase, frozen model and thinking,
+active message, open content, tools, and steers.
 end note
 @enduml
