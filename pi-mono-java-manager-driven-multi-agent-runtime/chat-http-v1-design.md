@@ -2,14 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.8.0 |
+| 文档版本 | 1.9.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | `POST /agents/{agent_id}/sessions` 已确认；其余 operation 待逐个评审 |
+| 接口评审状态 | `POST /agents/{agent_id}/sessions` 已确认；`GET /sessions/{session_id}` 评审中；其余 operation 待逐个评审 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
+| pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 源码基线 | `dff835743fc7f3c93e1154c3eb51028749867ca8` |
-| 更新日期 | 2026-08-15 |
+| 更新日期 | 2026-08-16 |
 
 ## 1. 结论
 
@@ -36,7 +37,7 @@ OpenAPI YAML 在迁移期内继续作为机器可读投影；本轮不删除也�
 | Method | Path | 语义 |
 |---|---|---|
 | `POST` | `/agents/{agent_id}/sessions` | 根据 Agent 创建 Session，由 CampusClaw 分配 `session_id` |
-| `GET` | `/sessions/{session_id}` | 读取 Session、当前模型及 active-run 快照 |
+| `GET` | `/sessions/{session_id}` | 读取 Session 当前状态、配置和 active Run 摘要 |
 | `DELETE` | `/sessions/{session_id}` | 幂等请求删除 Session；停止新请求并异步清理 |
 
 HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session；网络恢复只需
@@ -94,8 +95,8 @@ Message 或 RunRecord；因此创建响应中 `state=idle` 且
 响应体 `resCode=AGENT_MODEL_NOT_CONFIGURED`；Model Manager 暂时不可用时
 返回 HTTP `503`，响应体 `resCode=MANAGER_UNAVAILABLE`。
 
-创建响应的 `result` 和后续 `GET /sessions/{session_id}` 的业务资源
-共用 SessionResource。第一个接口的完整成功响应为：
+已确认的第一个接口使用 `SessionCreateResponseVO`，其字段不因后续
+GetSession 评审而隐式扩张。第一个接口的完整成功响应为：
 
 ```json
 {
@@ -114,11 +115,90 @@ Message 或 RunRecord；因此创建响应中 `state=idle` 且
 ```
 
 `agent_version` 和内部 record revision 只在 CampusClaw 持久化，不进入
-SessionResource。创建操作不要求 `Idempotency-Key` 或 `If-Match`；
+创建响应。创建操作不要求 `Idempotency-Key` 或 `If-Match`；
 每次成功 `POST` 都创建新 Session。如果持久化已成功但响应在网络中
 丢失，无条件重试会再创建一个 Session；未被 mate-service 绑定的
 孤立 Session 由后台超时清理。其他副作用接口的幂等或并发规则属于
 各自 operation，不由创建 Session 接口继承。
+
+#### 2.1.1 第二个接口当前提案：读取 Session
+
+```http
+GET /campusclaw-service/v1/sessions/{session_id}
+```
+
+该接口按 `session_id` 读取已经存在的 Session 权威视图，不创建或恢复
+Session，不调用模型，也不消耗 token。当前提案使用独立的
+`GetSessionResponseVO`；它可以返回查询和恢复需要的水位及 active Run
+摘要，而不改变第一个接口已经确认的创建响应。
+
+| 字段 | 当前提案 | 具体作用 |
+|---|---|---|
+| `session_id` | 必填 | Session 不透明标识 |
+| `agent_id` | 必填 | 创建后不可变的 Agent 绑定 |
+| `model_id` | 必填 | Session 当前默认模型；允许后续切换 |
+| `state` | `idle \| running` | 只回答 Session 当前是否存在 active Run |
+| `thinking` | `hidden \| full` | Session 默认的 reasoning content 披露级别，不表示推理强度 |
+| `history_seq` | 非负整数 | 本快照已经覆盖的最大权威 History 序号；`0` 表示尚无历史 |
+| `active_run` | object 或 `null` | active Run 的稳定摘要；idle 时为 `null` |
+| `created_at` | RFC 3339 | Session 创建时间 |
+| `updated_at` | RFC 3339 | Session 资源最后更新时间 |
+
+`history_seq` 是 Session 范围内单调递增的提交水位，不是消息数量，也不是
+分页 cursor。客户端可先读取该快照，再通过 History API 补齐到该水位；
+active Run 的增量事件继续按 Run 范围的 `run_seq` 恢复，从而区分长期权威
+历史与正在生成的流式状态。
+
+`active_run.state` 当前只取 `queued | running`。`active_run.phase` 在 queued
+阶段为 `null`，执行中当前提案取 `turn | compaction | retry`。
+pi 的 `branch_summary` 只在 CampusClaw 实现分支摘要功能后公开；工具执行仍
+属于 `turn`，详细工具状态由 GetRun 返回，不新增 `tool_execution` phase。
+
+当前响应提案为：
+
+```json
+{
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
+    "agent_id": "agent_01JY8VZY4CRQN4PJW8M94D1B2C",
+    "model_id": "claude-sonnet-4-5",
+    "state": "running",
+    "thinking": "hidden",
+    "history_seq": 42,
+    "active_run": {
+      "run_id": "run_01JY8X2E3R4T5Y6U7I8O9P0A1S",
+      "state": "running",
+      "phase": "turn",
+      "model_id": "claude-sonnet-4-5",
+      "thinking": "hidden"
+    },
+    "created_at": "2026-08-15T10:30:00+08:00",
+    "updated_at": "2026-08-16T09:15:21+08:00"
+  }
+}
+```
+
+![GetSession 当前响应提案](http_get_session_response.svg)
+
+[PlantUML 源码：`http_get_session_response`](diagram.puml#L1225)
+
+pi 的 `thinkingLevel` 表示推理强度，可取
+`off | minimal | low | medium | high | xhigh | max`；CampusClaw 当前已经确认的
+`thinking` 表示 reasoning content 可见性，只取 `hidden | full`。当前推荐保持
+已确认语义；需要推理强度时新增 `reasoning_effort`，避免同一个字段混合两个
+正交概念。若本轮直接拆成 `thinking_visibility + reasoning_effort`，必须明确
+重开第一个接口，而不能静默改变已确认契约。
+
+GetSession 当前不返回 `name`、完整 `transcript`、`queuedSteer`、`attached`
+或 `locked`。用户可见会话名称属于 mate-service 的 Chat 元数据；完成的
+Message/RunRecord 由 History API 分页返回，active Message、open content、
+工具和 steer 队列由 GetRun 返回；`attached` 是 pi 的连接相对状态，`locked`
+是 live Runtime 的内部独占状态，均不是 CampusClaw 公共 Session 属性。
+
+本小节和主维护 HTML 中的第二个接口仍是评审提案，尚未确认；OpenAPI 本轮
+不随该提案更新。
 
 ![HTTP Session 创建](http_session_creation.svg)
 
@@ -202,6 +282,10 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
   `410 EVENT_CURSOR_EXPIRED`，客户端改用 Run 快照和 History 恢复。
 - Session 读取响应返回 `ETag`；配置写入使用 `If-Match`，Run 副作用写入使用
   `Idempotency-Key`，两类机制职责不混用。
+- `Session.state` 只表达是否存在 active Run；执行阶段下沉到
+  `active_run.phase`，避免把 pi 的执行过程枚举误当成 Session 生命周期状态。
+- `history_seq` 是已提交 History 的 Session 级水位；`run_seq` 是单个 Run 的
+  事件游标，二者不能互换。
 
 ## 5. ResultBean、HTTP 状态与国际化
 
@@ -217,7 +301,7 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 |---|---|---|---|
 | `resCode` | 固定字符串 `0` | 稳定大写 snake_case 错误码 | 只根据此字段分支，不解析 `resMsg` |
 | `resMsg` | 固定 `success` | 按 Locale 解析的人类可读文本 | 只用于展示和日志 |
-| `result` | SessionResource | 不出现 | 仅成功响应读取 |
+| `result` | operation 对应 Response VO | 不出现 | 仅成功响应读取 |
 
 ResultBean 只包装响应体，不把所有异常降级为 HTTP `200`。
 HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业务
@@ -244,6 +328,11 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 | `422` | `AGENT_MODEL_NOT_CONFIGURED` | `该 Agent 未配置有效的默认模型。` | `The Agent has no valid default model configured.` |
 | `500` | `SESSION_INITIALIZATION_FAILED` | `Session 初始化失败。` | `Session initialization failed.` |
 | `503` | `MANAGER_UNAVAILABLE` | `Model Manager 暂时不可用，请稍后重试。` | `Model Manager is temporarily unavailable. Try again later.` |
+
+第二个 GetSession 接口当前提案使用
+`INVALID_SESSION_ID`、`UNAUTHENTICATED`、`AUTH_CREDENTIAL_CONFLICT`、
+`FORBIDDEN` 和 `SESSION_NOT_FOUND`；仍保持异常体只有
+`resCode/resMsg`。这些 operation-specific 错误尚未随接口确认而冻结。
 
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
 `en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
@@ -368,6 +457,8 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 | 观察到的行为 | `modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java` 基线 44-164：结构化 provider 流事件 |
 | 观察到的行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java` 基线 237-307、340-344：当前 HTTP 路由未安装入站认证 Adapter，CORS 仅放行 Authorization Header |
 | 观察到的行为 | `modules/agent-core/src/main/java/com/campusclaw/agent/subagent/a2a/A2aAgentBackend.java` 基线 40-62、226-238：出站 A2A 请求已使用 `X-HW-ID + X-HW-APPKEY`，但它不是入站验证实现 |
+| 观察到的行为 | pi-mono `packages/protocol/src/schemas.ts` 基线 38-45、241-258：协议 `SessionSnapshot` 顶层包含 `phase`、`thinkingLevel`、完整 `transcript`、连接相对 `attached` 和 live Runtime `locked` |
+| 观察到的行为 | pi-mono `packages/protocol/src/schemas.ts` 基线 26-35：`ThinkingLevel` 取 `off/minimal/low/medium/high/xhigh/max`，表达推理强度 |
 | 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
@@ -386,6 +477,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.9.0 | 2026-08-16 | 将主维护 HTML 切换为第二个 GetSession 接口评审；增加 `history_seq` 水位、Session state 与 active Run phase 分工、thinking 可见性与 pi 推理强度的语义隔离，以及 transcript/name/attached/locked 的边界；第二个接口仍未确认，OpenAPI 未更新 |
 | 1.8.0 | 2026-08-15 | 增加仓库内可直接打开的 HTML 接口评审文档并固定为人类评审主维护契约；OpenAPI YAML 暂作过渡期机器投影，不在本轮废弃 |
 | 1.7.1 | 2026-08-15 | 用户明确确认第一个 `POST /agents/{agent_id}/sessions` operation；固定该 operation 的已确认评审状态，其余 12 个 operation 仍待逐个对齐 |
 | 1.7.0 | 2026-08-15 | 第一个 Session 创建接口的异常包装收敛为仅 `resCode/resMsg`，明确禁止序列化 `result`；同步 OpenAPI Schema、中英文错误示例和契约测试 |

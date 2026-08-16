@@ -1221,3 +1221,98 @@ Credential values remain opaque and are never logged,
 persisted, copied into ResultBean, or passed to Session state.
 end note
 @enduml
+
+@startuml http_get_session_response
+title CampusClaw GetSession Response Proposal
+
+' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
+' packages/protocol/src/schemas.ts, ThinkingLevelSchema, lines 26-35
+' packages/protocol/src/schemas.ts, SessionPhaseSchema, lines 38-45
+' packages/protocol/src/schemas.ts, SessionSnapshotSchema, lines 241-258
+' Source evidence (CampusClaw design repository):
+' pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml,
+' ThinkingLevel schema near baseline line 1602
+' Observed behavior: pi exposes phase, reasoning effort, transcript, attached, and locked
+' in its protocol snapshot.
+' Product constraint: the confirmed CampusClaw thinking field is disclosure visibility.
+' Architecture change: GetSession separates Session state from active Run phase and uses
+' historySeq as the committed History watermark.
+' Design reason: unbounded transcript and active streaming details are read from History
+' and GetRun instead of being embedded in GetSession.
+' Target-only design: these wire-contract types are not existing pi-mono-java classes.
+
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  ArrowColor #475569
+  FontColor #0F172A
+  AttributeFontColor #0F172A
+  StereotypeFontColor #475569
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+skinparam ArrowColor #475569
+
+class GetSessionResult <<target_wire_contract>> {
+  +sessionId: string
+  +agentId: string
+  +modelId: string
+  +historySeq: integer
+  +createdAt: timestamp
+  +updatedAt: timestamp
+}
+
+class ActiveRunSummary <<target_wire_contract>> {
+  +runId: string
+  +modelId: string
+  +phase: RunPhase?
+}
+
+enum SessionState {
+  idle
+  running
+}
+
+enum ActiveRunState {
+  queued
+  running
+}
+
+enum RunPhase {
+  turn
+  compaction
+  retry
+}
+
+enum ThinkingVisibility {
+  hidden
+  full
+}
+
+GetSessionResult --> "1" SessionState : state
+GetSessionResult --> "1" ThinkingVisibility : thinking
+GetSessionResult o-- "0..1" ActiveRunSummary : activeRun
+ActiveRunSummary --> "1" ActiveRunState : state
+ActiveRunSummary --> "0..1" RunPhase : phase
+ActiveRunSummary --> "1" ThinkingVisibility : thinking
+
+note bottom of GetSessionResult
+historySeq is the greatest committed History sequence
+covered by this snapshot. It is not a message count
+or a pagination cursor.
+end note
+
+note bottom of ActiveRunSummary
+phase is null while queued. GetRun owns active message,
+open content, tool, and queued steer details.
+end note
+@enduml

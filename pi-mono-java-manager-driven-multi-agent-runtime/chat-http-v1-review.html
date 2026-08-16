@@ -1,978 +1,104 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>CampusClaw HTTP API Review</title>
-<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>CampusClaw Service API - GET /sessions/{session_id}</title>
+  <style>
+    :root { color-scheme: light dark; background: light-dark(#f7f8fa, #11151b); }
+    body { margin: 0; padding: 16px; background: inherit; }
+    main { width: min(1400px, 100%); margin: 0 auto; }
+  </style>
 </head>
 <body>
-<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="CampusClaw HTTP API Review" srcdoc="&lt;!doctype html&gt;
-&lt;html lang=&quot;en&quot;&gt;
-&lt;head&gt;
-&lt;meta charset=&quot;utf-8&quot;&gt;
-&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
-&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
-&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
-&lt;title&gt;CampusClaw HTTP API Review&lt;/title&gt;
-&lt;style&gt;:root {
-  color-scheme: light dark;
-  background-color: var(
-    --background,
-    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
-  ) !important;
-
-  /* Agent-facing contract; keep in sync with SKILL.md. */
-  --background: var(
-    --color-background-primary,
-    light-dark(rgb(255 255 255), rgb(24 24 24))
-  );
-  --foreground: var(
-    --color-text-primary,
-    light-dark(rgb(26 28 31), rgb(255 255 255))
-  );
-  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
-  --card-foreground: var(
-    --color-text-primary,
-    light-dark(rgb(26 28 31), rgb(255 255 255))
-  );
-  --popover: var(
-    --color-background-secondary,
-    light-dark(rgb(255 255 255), rgb(45 45 45))
-  );
-  --popover-foreground: var(
-    --color-text-primary,
-    light-dark(rgb(26 28 31), rgb(255 255 255))
-  );
-  --primary: var(
-    --color-text-info,
-    light-dark(rgb(51 156 255), rgb(131 195 255))
-  );
-  --primary-foreground: var(
-    --color-text-inverse,
-    light-dark(rgb(255 255 255), rgb(13 13 13))
-  );
-  --secondary: var(
-    --color-background-secondary,
-    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
-  );
-  --secondary-foreground: var(
-    --color-text-primary,
-    light-dark(rgb(26 28 31), rgb(255 255 255))
-  );
-  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
-  --muted-foreground: var(
-    --color-text-secondary,
-    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
-  );
-  --accent: var(
-    --color-background-info,
-    light-dark(rgb(229 242 255), rgb(13 39 63))
-  );
-  --accent-foreground: var(
-    --color-text-info,
-    light-dark(rgb(51 156 255), rgb(131 195 255))
-  );
-  --destructive: var(
-    --color-text-warning,
-    light-dark(rgb(226 85 7), rgb(255 133 73))
-  );
-  --border: var(
-    --color-border-secondary,
-    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
-  );
-  --input: var(
-    --color-border-primary,
-    light-dark(
-      rgb(26 28 31 / 11.8%),
-      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
-    )
-  );
-  --ring: var(
-    --color-ring-primary,
-    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
-  );
-  --font-size-base: var(--font-text-md-size, 14px);
-  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
-  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
-  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
-  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
-  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
-  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
-  --viz-series-1: var(--primary);
-  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
-  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
-  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
-  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
-  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
-
-  /* Internal implementation variables; not part of the agent contract. */
-  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
-  --font-mono:
-    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
-    monospace;
-  --font-size-normal: max(11px, var(--font-size-base));
-  --font-size-tooltip: calc(var(--font-size-base) - 1px);
-  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
-  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
-  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
-  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
-  --font-weight-normal: 430;
-  --font-weight-medium: 500;
-  --line-height-normal: calc(var(--font-size-normal) * 1.5);
-  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
-  --line-height-small: calc(var(--font-size-small) + 4px);
-  --radius: var(--border-radius-lg, 12.5px);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-2xl: calc(var(--radius) * 1.6);
-  --radius-full: 9999px;
-  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
-  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
-
-  /* Legacy aliases; not part of the current agent contract. */
-  --viz-bg: transparent;
-  --viz-panel: var(--card);
-  --viz-border: var(--border);
-  --viz-text: var(--foreground);
-  --viz-muted: var(--muted-foreground);
-  --viz-accent: var(--primary);
-  --viz-accent-text: var(--primary-foreground);
-  --viz-accent-bg: var(--accent);
-  --viz-font-size: var(--font-size-base);
-  --viz-warning: var(--destructive);
-}
-
-:root[data-theme=&quot;light&quot;] {
-  color-scheme: light;
-}
-
-:root[data-theme=&quot;dark&quot;] {
-  color-scheme: dark;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html &gt; body {
-  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
-  --color-background-primary: var(
-    --background,
-    light-dark(rgb(255 255 255), rgb(24 24 24))
-  );
-  --color-text-primary: var(
-    --foreground,
-    light-dark(rgb(26 28 31), rgb(255 255 255))
-  );
-  --color-border-secondary: var(
-    --border,
-    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
-  );
-
-  margin: 0;
-  padding: 5px;
-  color: var(--foreground);
-  background: transparent !important;
-  font-family: var(--font-sans);
-  font-size: var(--font-size-normal);
-  font-weight: var(--font-weight-normal);
-  line-height: var(--line-height-normal);
-}
-
-a {
-  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
-  cursor: pointer;
-  font-weight: var(--font-weight-medium, 500);
-  text-decoration: none;
-  text-underline-offset: 2px;
-}
-
-a:is(:hover, :focus-visible) {
-  text-decoration-line: underline;
-  text-decoration-style: dashed;
-  text-decoration-thickness: 0.5px;
-}
-
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-p {
-  margin-block: 0;
-}
-
-h1 {
-  font-size: var(--font-size-h1);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.25;
-}
-
-h2 {
-  font-size: var(--font-size-h2);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.25;
-}
-
-h3,
-h4,
-h5,
-h6 {
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.3;
-}
-
-b,
-strong,
-th {
-  font-weight: var(--font-weight-medium);
-}
-
-code:not(pre code) {
-  display: inline;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  corner-shape: superellipse(1.5);
-  background: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-  overflow-wrap: anywhere;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-  word-break: break-word;
-}
-
-.table-responsive {
-  width: 100%;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  color: var(--foreground);
-  font: inherit;
-  text-align: start;
-}
-
-.table :is(th, td) {
-  padding-block: 10px;
-  padding-inline: 0 24px;
-  overflow-wrap: anywhere;
-  border-bottom: 1px solid var(--border);
-  text-align: start;
-  vertical-align: top;
-}
-
-.table-responsive &gt; .table :is(th, td) {
-  overflow-wrap: break-word;
-}
-
-.table :is(th, td):last-child {
-  padding-inline-end: 0;
-}
-
-.table :is(caption, thead th) {
-  font-weight: 600;
-}
-
-.table thead th {
-  padding-block: 8px;
-  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
-}
-
-.table tbody tr:last-child :is(th, td) {
-  border-bottom: 0;
-}
-
-.table.table-sm :is(th, td) {
-  padding-block: 6px;
-}
-
-.table.table-sm :is(th, td):not(:last-child) {
-  padding-inline-end: 16px;
-}
-
-.table :is(.text-end, [align=&quot;right&quot;]) {
-  text-align: end;
-  font-variant-numeric: tabular-nums;
-}
-
-.table :is(.text-center, [align=&quot;center&quot;]) {
-  text-align: center;
-}
-
-.table .text-nowrap {
-  white-space: nowrap;
-}
-
-#widget {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  padding: 0;
-  background: transparent !important;
-}
-
-.card {
-  min-width: 0;
-  padding: 12px;
-  overflow: hidden;
-  overflow-wrap: break-word;
-  border-radius: var(--radius-2xl);
-  corner-shape: superellipse(1.5);
-  color: var(--card-foreground);
-  background: var(--card);
-}
-
-#widget &gt; :not(.card) {
-  width: 100% !important;
-  max-width: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.tooltip {
-  position: fixed;
-  z-index: 50;
-  top: 0;
-  left: 0;
-  width: max-content;
-  max-width: min(
-    20rem,
-    var(--tooltip-available-width, calc(100vw - 10px)),
-    calc(100vw - 10px)
-  );
-  max-height: min(
-    var(--tooltip-available-height, calc(100vh - 10px)),
-    calc(100vh - 10px)
-  );
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  corner-shape: superellipse(1.5);
-  color: var(--popover-foreground);
-  background: var(--popover);
-  box-shadow: none;
-  font-size: var(--font-size-tooltip);
-  line-height: var(--line-height-tooltip);
-  overflow-wrap: break-word;
-  white-space: normal;
-  pointer-events: none;
-  user-select: none;
-}
-
-.viz-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
-  gap: 10px;
-}
-
-.viz-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.viz-stat-value {
-  font-size: var(--font-size-h2);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.25;
-}
-
-.viz-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.viz-badge {
-  padding: 3px 8px;
-  border-radius: var(--radius-full);
-  color: var(--accent-foreground);
-  background: var(--accent);
-  font-weight: var(--font-weight-medium);
-}
-
-small,
-.text-small,
-.viz-badge {
-  font-size: var(--font-size-small);
-  line-height: var(--line-height-small);
-}
-
-.text-muted {
-  color: var(--muted-foreground);
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.viz-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.viz-controls &gt; .form-label {
-  display: grid;
-  min-width: min(100%, 260px);
-  flex: 1 1 280px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 2px 12px;
-  margin-bottom: 0;
-}
-
-.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
-  grid-column: 1 / -1;
-}
-
-.btn,
-.form-check-input,
-.form-control,
-.form-range,
-.form-select {
-  font: inherit;
-}
-
-.btn {
-  appearance: button;
-  display: inline-flex;
-  inline-size: fit-content;
-  max-inline-size: 100%;
-  min-height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  margin: 0;
-  padding: 0 8px;
-  -webkit-app-region: no-drag;
-  border: 1px solid var(--input);
-  border-radius: var(--radius-lg);
-  corner-shape: superellipse(1.5);
-  color: var(--secondary-foreground);
-  background: var(--secondary);
-  cursor: var(--cursor-interaction, pointer);
-  text-align: center;
-  text-decoration: none;
-  white-space: nowrap;
-  user-select: none;
-  -webkit-font-smoothing: antialiased;
-}
-
-.btn:is(.btn-block, .viz-tile) {
-  inline-size: 100%;
-}
-
-.btn.viz-tile {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-a.btn {
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.btn:not(:disabled):hover {
-  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
-}
-
-.btn-primary {
-  border-color: transparent;
-  color: var(--primary-foreground);
-  background: var(--foreground);
-  background-clip: padding-box;
-}
-
-.btn-primary .text-muted {
-  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
-}
-
-.btn-primary:not(:disabled):hover {
-  background: color-mix(in srgb, var(--foreground) 80%, transparent);
-  background-clip: padding-box;
-}
-
-.btn-ghost {
-  border-color: transparent;
-  color: var(--muted-foreground);
-  background: transparent;
-}
-
-.btn-ghost:not(:disabled):hover {
-  color: var(--foreground);
-  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
-}
-
-.btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-[data-lucide] {
-  stroke-width: 1.6;
-}
-
-.form-label {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--foreground);
-}
-
-.form-control {
-  display: block;
-  width: 100%;
-  min-height: 28px;
-  padding: 0 8px;
-  outline: none;
-  border: 1px solid var(--input);
-  border-radius: var(--radius-lg);
-  corner-shape: superellipse(1.5);
-  color: var(--foreground);
-  background: var(--secondary);
-}
-
-.form-control::placeholder {
-  color: var(--muted-foreground);
-}
-
-.form-control[type=&quot;file&quot;] {
-  padding: 0;
-  overflow: hidden;
-  cursor: var(--cursor-interaction, pointer);
-}
-
-.form-control[type=&quot;file&quot;]::file-selector-button {
-  min-height: 26px;
-  margin-right: 8px;
-  padding: 0 8px;
-  border: 0;
-  border-right: 1px solid var(--input);
-  color: var(--secondary-foreground);
-  background: var(--secondary);
-  cursor: inherit;
-  font: inherit;
-}
-
-.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
-  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
-}
-
-.form-control-color[type=&quot;color&quot;] {
-  width: 40px;
-  height: 28px;
-  padding: 3px;
-  cursor: var(--cursor-interaction, pointer);
-}
-
-.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
-  border: 0;
-  border-radius: calc(var(--radius-lg) - 4px);
-  corner-shape: superellipse(1.5);
-}
-
-textarea.form-control {
-  height: auto;
-  min-height: 72px;
-  padding: 8px 10px;
-  resize: vertical;
-}
-
-.form-control:focus-visible {
-  border-color: var(--ring);
-  box-shadow: inset 0 0 0 1px var(--ring);
-}
-
-.form-control:disabled,
-.form-select:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.form-select {
-  appearance: none;
-  display: block;
-  width: 100%;
-  min-height: 28px;
-  margin: 0;
-  padding: 0 32px 0 8px;
-  outline: none;
-  border: 1px solid var(--input);
-  border-radius: var(--radius-lg);
-  corner-shape: superellipse(1.5);
-  color: var(--foreground);
-  background-color: var(--secondary);
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
-    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
-  background-position:
-    calc(100% - 14px) 50%,
-    calc(100% - 10px) 50%;
-  background-repeat: no-repeat;
-  background-size: 4px 4px;
-  cursor: var(--cursor-interaction, default);
-}
-
-.form-select:not(:disabled):hover {
-  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
-}
-
-.form-select:focus-visible {
-  border-color: var(--ring);
-  box-shadow: inset 0 0 0 1px var(--ring);
-}
-
-.form-check {
-  display: flex;
-  min-height: 20px;
-  align-items: center;
-  gap: 6px;
-}
-
-.form-check-input {
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  margin: 0;
-  border: 1px solid var(--input);
-  color: var(--primary-foreground);
-  background-color: transparent;
-  cursor: var(--cursor-interaction, default);
-  transition:
-    background-color 150ms,
-    border-color 150ms,
-    box-shadow 150ms;
-}
-
-.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
-  border-color: var(--input);
-  border-radius: var(--radius-sm);
-  corner-shape: superellipse(1.5);
-  background-color: var(--secondary);
-  box-shadow: var(--shadow-sm);
-}
-
-.form-check:not(.form-switch)
-  .form-check-input:not(:disabled):not(:checked):hover {
-  background-color: var(--card);
-}
-
-.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
-  border-color: var(--primary);
-  background-color: var(--primary);
-}
-
-.form-check:not(.form-switch)
-  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: var(--primary-foreground);
-  content: &quot;&quot;;
-  mask: var(--checkmark-image) center / 12px 12px no-repeat;
-}
-
-.form-check-input[type=&quot;radio&quot;] {
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-full);
-}
-
-.form-check-input[type=&quot;radio&quot;]:checked {
-  border: 2px solid var(--primary);
-  background:
-    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
-    var(--primary);
-}
-
-.form-check:not(.form-switch) .form-check-input:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-.form-check:not(.form-switch) .form-check-input:disabled {
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
-  cursor: not-allowed;
-}
-
-.form-switch .form-check-input:disabled,
-.form-switch .form-check-input:disabled + .form-check-label {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.form-check-label {
-  color: var(--foreground);
-  cursor: var(--cursor-interaction, default);
-}
-
-.form-switch .form-check-input {
-  position: relative;
-  width: 32px;
-  height: 20px;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: var(--muted);
-  box-shadow: none;
-  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
-}
-
-.form-switch .form-check-input::before {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 16px;
-  height: 16px;
-  box-sizing: border-box;
-  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
-  border-radius: var(--radius-full);
-  background: light-dark(var(--primary-foreground), var(--foreground));
-  box-shadow: var(--shadow-sm);
-  content: &quot;&quot;;
-  transform: translate(2px, -50%);
-  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
-}
-
-.form-switch .form-check-input:checked {
-  background: var(--primary);
-}
-
-.form-switch .form-check-input:checked::before {
-  transform: translate(14px, -50%);
-}
-
-.form-switch .form-check-input:focus-visible {
-  box-shadow: 0 0 0 2px var(--ring);
-}
-
-.form-range {
-  appearance: none;
-  display: block;
-  width: 100%;
-  height: 28px;
-  flex: 1;
-  margin: 0;
-  padding: 0;
-  outline: none;
-  border: 0;
-  accent-color: var(--primary);
-  background: linear-gradient(
-      color-mix(in srgb, var(--foreground) 7%, transparent),
-      color-mix(in srgb, var(--foreground) 7%, transparent)
-    )
-    center / 100% 2px no-repeat;
-}
-
-.form-range::-webkit-slider-runnable-track {
-  height: 28px;
-  background: transparent;
-}
-
-.form-range::-webkit-slider-thumb {
-  appearance: none;
-  width: 20px;
-  height: 20px;
-  margin-top: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  background: light-dark(var(--primary-foreground), var(--foreground));
-}
-
-.form-range:focus-visible::-webkit-slider-thumb {
-  border-color: var(--ring);
-  box-shadow: inset 0 0 0 1px var(--ring);
-}
-
-.form-range::-moz-range-track {
-  height: 28px;
-  background: transparent;
-}
-
-.form-range::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  background: light-dark(var(--primary-foreground), var(--foreground));
-}
-
-.form-range:focus-visible::-moz-range-thumb {
-  border-color: var(--ring);
-  box-shadow: inset 0 0 0 1px var(--ring);
-}
-
-.form-range:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.btn:not(.btn-primary, .viz-tile):is(
-    [aria-pressed=&quot;true&quot;],
-    [aria-selected=&quot;true&quot;],
-    .is-selected
-  ) {
-  border-color: var(--primary);
-  color: var(--primary-foreground);
-  background: var(--primary);
-}
-
-.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
-  border-color: var(--primary);
-  box-shadow: inset 0 0 0 1px var(--primary);
-}
-
-.btn:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-svg {
-  display: block;
-  max-width: 100%;
-  height: auto;
-}
-
-#widget &gt; svg {
-  width: 100%;
-}
-
-/* Model-authored chart rules can otherwise stretch icons after these styles load. */
-svg.lucide {
-  display: block;
-  width: 16px !important;
-  height: 16px !important;
-  flex: none;
-  margin: 0 !important;
-  stroke-width: 1.6;
-}
-
-.text-warning,
-.text-destructive {
-  color: var(--destructive);
-}
-
-html&gt;body{padding:0}&lt;/style&gt;
-&lt;/head&gt;
-&lt;body&gt;
-&lt;div id=&quot;campusclaw-session-create-v15&quot;&gt;
-  &lt;style&gt;
-    #campusclaw-session-create-v15 {
+  <main>
+<div id="company-api-review-get-sessions-session-id-e9a8f3eb">
+  <style>
+    #company-api-review-get-sessions-session-id-e9a8f3eb {
       color-scheme: light dark;
       color: light-dark(#17202a, #edf2f7);
-      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       width: 100%;
     }
-    #campusclaw-session-create-v15 * { box-sizing: border-box; }
-    #campusclaw-session-create-v15 h2,
-    #campusclaw-session-create-v15 h3,
-    #campusclaw-session-create-v15 p { margin: 0; }
-    #campusclaw-session-create-v15 code,
-    #campusclaw-session-create-v15 pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    #campusclaw-session-create-v15 .api-shell {
+    #company-api-review-get-sessions-session-id-e9a8f3eb * { box-sizing: border-box; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb h2,
+    #company-api-review-get-sessions-session-id-e9a8f3eb h3,
+    #company-api-review-get-sessions-session-id-e9a8f3eb p { margin: 0; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb code,
+    #company-api-review-get-sessions-session-id-e9a8f3eb pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .api-shell {
       overflow: hidden;
       border: 1px solid light-dark(#d8dee6, #37414d);
       border-radius: 12px;
       background: light-dark(#f7f8fa, #11151b);
     }
-    #campusclaw-session-create-v15 .topbar,
-    #campusclaw-session-create-v15 .operation-head,
-    #campusclaw-session-create-v15 .row,
-    #campusclaw-session-create-v15 .tabs,
-    #campusclaw-session-create-v15 .profile-switch,
-    #campusclaw-session-create-v15 .actions {
+    #company-api-review-get-sessions-session-id-e9a8f3eb .topbar,
+    #company-api-review-get-sessions-session-id-e9a8f3eb .operation-head,
+    #company-api-review-get-sessions-session-id-e9a8f3eb .row,
+    #company-api-review-get-sessions-session-id-e9a8f3eb .tabs,
+    #company-api-review-get-sessions-session-id-e9a8f3eb .actions {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
       gap: 9px;
     }
-    #campusclaw-session-create-v15 .topbar {
+    #company-api-review-get-sessions-session-id-e9a8f3eb .topbar {
       justify-content: space-between;
       padding: 15px 17px;
       background: light-dark(#ffffff, #1a2028);
       border-bottom: 1px solid light-dark(#d8dee6, #37414d);
     }
-    #campusclaw-session-create-v15 h2 { font-size: 18px; font-weight: 600; }
-    #campusclaw-session-create-v15 h3 { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
-    #campusclaw-session-create-v15 .tag {
+    #company-api-review-get-sessions-session-id-e9a8f3eb h2 { font-size: 18px; font-weight: 500; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb h3 { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .tag {
       padding: 2px 8px;
       border: 1px solid light-dark(#d8dee6, #37414d);
       border-radius: 999px;
       background: light-dark(#f2f5f8, #222a34);
       font-size: 12px;
     }
-    #campusclaw-session-create-v15 .base,
-    #campusclaw-session-create-v15 .muted { color: light-dark(#5f6b78, #aab4c0); font-size: 13px; }
-    #campusclaw-session-create-v15 .operation {
+    #company-api-review-get-sessions-session-id-e9a8f3eb .base,
+    #company-api-review-get-sessions-session-id-e9a8f3eb .muted { color: light-dark(#5f6b78, #aab4c0); font-size: 13px; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .operation {
       margin: 15px;
       overflow: hidden;
       border: 1px solid light-dark(#1f883d, #3fb950);
       border-radius: 9px;
       background: light-dark(#ffffff, #1a2028);
     }
-    #campusclaw-session-create-v15 .operation-head {
+    #company-api-review-get-sessions-session-id-e9a8f3eb .operation-head {
       padding: 13px 15px;
       background: light-dark(#eaf8ee, #15331f);
       border-bottom: 1px solid light-dark(#d8dee6, #37414d);
     }
-    #campusclaw-session-create-v15 .method {
+    #company-api-review-get-sessions-session-id-e9a8f3eb .method {
       padding: 6px 11px;
       border-radius: 5px;
       background: light-dark(#1f883d, #3fb950);
       color: light-dark(#ffffff, #07150b);
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 500;
     }
-    #campusclaw-session-create-v15 .path { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
-    #campusclaw-session-create-v15 .section {
+    #company-api-review-get-sessions-session-id-e9a8f3eb .path { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .section {
       padding: 15px;
       border-bottom: 1px solid light-dark(#d8dee6, #37414d);
     }
-    #campusclaw-session-create-v15 .section:last-child { border-bottom: 0; }
-    #campusclaw-session-create-v15 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    #campusclaw-session-create-v15 th,
-    #campusclaw-session-create-v15 td {
+    #company-api-review-get-sessions-session-id-e9a8f3eb .section:last-child { border-bottom: 0; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .section-title { justify-content: space-between; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .description { line-height: 1.6; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb th,
+    #company-api-review-get-sessions-session-id-e9a8f3eb td {
       padding: 8px;
       text-align: left;
       vertical-align: top;
       border-bottom: 1px solid light-dark(#e5e9ef, #303944);
     }
-    #campusclaw-session-create-v15 th { color: light-dark(#5f6b78, #aab4c0); font-weight: 600; }
-    #campusclaw-session-create-v15 tbody tr:last-child td { border-bottom: 0; }
-    #campusclaw-session-create-v15 pre {
+    #company-api-review-get-sessions-session-id-e9a8f3eb th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb tbody tr:last-child td { border-bottom: 0; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb pre {
       margin: 10px 0 0;
       padding: 13px;
       overflow-x: auto;
@@ -981,7 +107,7 @@ html&gt;body{padding:0}&lt;/style&gt;
       font-size: 12px;
       line-height: 1.5;
     }
-    #campusclaw-session-create-v15 button {
+    #company-api-review-get-sessions-session-id-e9a8f3eb button {
       appearance: none;
       border: 1px solid light-dark(#d8dee6, #37414d);
       border-radius: 6px;
@@ -991,499 +117,309 @@ html&gt;body{padding:0}&lt;/style&gt;
       font: inherit;
       cursor: pointer;
     }
-    #campusclaw-session-create-v15 button[aria-selected=&quot;true&quot;],
-    #campusclaw-session-create-v15 button[aria-pressed=&quot;true&quot;] {
+    #company-api-review-get-sessions-session-id-e9a8f3eb button[aria-selected="true"],
+    #company-api-review-get-sessions-session-id-e9a8f3eb button[aria-pressed="true"] {
       border-color: light-dark(#0969da, #58a6ff);
       background: light-dark(#eaf3ff, #132b46);
       color: light-dark(#0969da, #58a6ff);
     }
-    #campusclaw-session-create-v15 .panel[hidden] { display: none; }
-    #campusclaw-session-create-v15 .status-ok { color: light-dark(#1a7f37, #3fb950); font-weight: 700; }
-    #campusclaw-session-create-v15 .status-error { color: light-dark(#cf222e, #ff7b72); font-weight: 700; }
-    #campusclaw-session-create-v15 .profile-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin-top: 10px;
-    }
-    #campusclaw-session-create-v15 .profile-card {
-      padding: 12px;
-      border: 1px solid light-dark(#d8dee6, #37414d);
-      border-radius: 7px;
-      background: light-dark(#f7f8fa, #11151b);
-    }
-    #campusclaw-session-create-v15 .profile-card[data-active=&quot;false&quot;] { display: none; }
-    #campusclaw-session-create-v15 .decisions {
+    #company-api-review-get-sessions-session-id-e9a8f3eb .review-form {
       margin: 0 15px 15px;
       padding: 15px;
       border: 1px solid light-dark(#d8dee6, #37414d);
       border-radius: 9px;
       background: light-dark(#ffffff, #1a2028);
     }
-    #campusclaw-session-create-v15 .decision-grid {
+    #company-api-review-get-sessions-session-id-e9a8f3eb .question-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
     }
-    #campusclaw-session-create-v15 fieldset { margin: 0; padding: 0; border: 0; }
-    #campusclaw-session-create-v15 legend { margin-bottom: 7px; font-size: 13px; font-weight: 600; }
-    #campusclaw-session-create-v15 label { display: flex; gap: 6px; margin: 7px 0; font-size: 13px; }
-    #campusclaw-session-create-v15 .submit {
+    #company-api-review-get-sessions-session-id-e9a8f3eb fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb label input { margin-top: 3px; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .option-copy { display: grid; min-width: 0; gap: 2px; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .option-label { font-weight: 500; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .option-detail {
+      color: light-dark(#5f6b78, #aab4c0);
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .submit {
       margin-top: 12px;
       border-color: light-dark(#0969da, #58a6ff);
       background: light-dark(#0969da, #58a6ff);
       color: light-dark(#ffffff, #07111e);
-      font-weight: 600;
+      font-weight: 500;
+    }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .empty { margin-top: 8px; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .prompt-output {
+      margin-top: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
     @media (max-width: 680px) {
-      #campusclaw-session-create-v15 .profile-grid,
-      #campusclaw-session-create-v15 .decision-grid { grid-template-columns: 1fr; }
-      #campusclaw-session-create-v15 .operation,
-      #campusclaw-session-create-v15 .decisions { margin-left: 9px; margin-right: 9px; }
-      #campusclaw-session-create-v15 .table-wrap { overflow-x: auto; }
+      #company-api-review-get-sessions-session-id-e9a8f3eb .question-grid { grid-template-columns: 1fr; }
+      #company-api-review-get-sessions-session-id-e9a8f3eb .operation,
+      #company-api-review-get-sessions-session-id-e9a8f3eb .review-form { margin-left: 9px; margin-right: 9px; }
+      #company-api-review-get-sessions-session-id-e9a8f3eb .table-wrap { overflow-x: auto; }
     }
-  &lt;/style&gt;
+  </style>
 
-  &lt;div class=&quot;api-shell&quot; aria-label=&quot;创建 Runtime Session 接口&quot;&gt;
-    &lt;header class=&quot;topbar&quot;&gt;
-      &lt;div class=&quot;row&quot;&gt;
-        &lt;h2&gt;CampusClaw Service API&lt;/h2&gt;
-        &lt;span class=&quot;tag&quot;&gt;1.7.1&lt;/span&gt;
-        &lt;span class=&quot;tag&quot;&gt;Internal&lt;/span&gt;
-        &lt;span class=&quot;tag&quot;&gt;已确认&lt;/span&gt;
-      &lt;/div&gt;
-      &lt;code class=&quot;base&quot;&gt;/campusclaw-service/v1&lt;/code&gt;
-    &lt;/header&gt;
-
-    &lt;article class=&quot;operation&quot;&gt;
-      &lt;header class=&quot;operation-head&quot;&gt;
-        &lt;span class=&quot;method&quot;&gt;POST&lt;/span&gt;
-        &lt;code class=&quot;path&quot;&gt;/agents/{agent_id}/sessions&lt;/code&gt;
-        &lt;span class=&quot;muted&quot;&gt;创建 Runtime Session&lt;/span&gt;
-      &lt;/header&gt;
-
-      &lt;section class=&quot;section&quot;&gt;
-        &lt;div class=&quot;row&quot; style=&quot;justify-content:space-between&quot;&gt;
-          &lt;h3&gt;请求&lt;/h3&gt;
-          &lt;div class=&quot;profile-switch&quot; aria-label=&quot;认证模式&quot;&gt;
-            &lt;button type=&quot;button&quot; data-auth=&quot;jwt&quot; aria-pressed=&quot;true&quot;&gt;JWT 首选&lt;/button&gt;
-            &lt;button type=&quot;button&quot; data-auth=&quot;appkey&quot; aria-pressed=&quot;false&quot;&gt;APPKEY 兼容&lt;/button&gt;
-          &lt;/div&gt;
-        &lt;/div&gt;
-        &lt;div class=&quot;table-wrap&quot;&gt;
-          &lt;table&gt;
-            &lt;thead&gt;&lt;tr&gt;&lt;th&gt;位置&lt;/th&gt;&lt;th&gt;名称&lt;/th&gt;&lt;th&gt;必填&lt;/th&gt;&lt;th&gt;约束&lt;/th&gt;&lt;th&gt;说明&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
-            &lt;tbody&gt;
-              &lt;tr&gt;&lt;td&gt;path&lt;/td&gt;&lt;td&gt;&lt;code&gt;agent_id&lt;/code&gt;&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;&lt;code&gt;^agent_[0-9A-Za-z]{24}$&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Session 的不可变 Agent 绑定&lt;/td&gt;&lt;/tr&gt;
-              &lt;tr&gt;&lt;td&gt;header&lt;/td&gt;&lt;td&gt;&lt;code&gt;X-HW-ID&lt;/code&gt;&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;公司调用方标识&lt;/td&gt;&lt;td&gt;必须与下方任一凭据组合&lt;/td&gt;&lt;/tr&gt;
-              &lt;tr data-jwt-row&gt;&lt;td&gt;header&lt;/td&gt;&lt;td&gt;&lt;code&gt;Authorization&lt;/code&gt;&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;&lt;code&gt;Bearer &amp;lt;JWT&amp;gt;&lt;/code&gt;&lt;/td&gt;&lt;td&gt;默认且首选&lt;/td&gt;&lt;/tr&gt;
-              &lt;tr data-appkey-row hidden&gt;&lt;td&gt;header&lt;/td&gt;&lt;td&gt;&lt;code&gt;X-HW-APPKEY&lt;/code&gt;&lt;/td&gt;&lt;td&gt;是&lt;/td&gt;&lt;td&gt;APPKEY/私钥凭据&lt;/td&gt;&lt;td&gt;公司旧客户端兼容&lt;/td&gt;&lt;/tr&gt;
-              &lt;tr&gt;&lt;td&gt;header&lt;/td&gt;&lt;td&gt;&lt;code&gt;Accept-Language&lt;/code&gt;&lt;/td&gt;&lt;td&gt;否&lt;/td&gt;&lt;td&gt;&lt;code&gt;zh-CN | en-US&lt;/code&gt;&lt;/td&gt;&lt;td&gt;异常 resMsg 语言；默认 en-US&lt;/td&gt;&lt;/tr&gt;
-              &lt;tr&gt;&lt;td&gt;body&lt;/td&gt;&lt;td&gt;—&lt;/td&gt;&lt;td&gt;否&lt;/td&gt;&lt;td&gt;无请求体&lt;/td&gt;&lt;td&gt;不提交 session_id 或 model_id&lt;/td&gt;&lt;/tr&gt;
-            &lt;/tbody&gt;
-          &lt;/table&gt;
-        &lt;/div&gt;
-        &lt;pre&gt;&lt;code data-auth-example&gt;POST /campusclaw-service/v1/agents/agent_011CZkYqphY8vELVzwCUpqiQ/sessions
-X-HW-ID: mate-service
-Authorization: Bearer &amp;lt;JWT&amp;gt;
-Accept-Language: zh-CN&lt;/code&gt;&lt;/pre&gt;
-        &lt;p class=&quot;muted&quot; style=&quot;margin-top:10px&quot;&gt;两组凭据二选一；同时携带 &lt;code&gt;Authorization&lt;/code&gt; 和 &lt;code&gt;X-HW-APPKEY&lt;/code&gt; 返回 &lt;code&gt;401 AUTH_CREDENTIAL_CONFLICT&lt;/code&gt;。校验失败不降级。&lt;/p&gt;
-      &lt;/section&gt;
-
-      &lt;section class=&quot;section&quot;&gt;
-        &lt;div class=&quot;row&quot; style=&quot;justify-content:space-between&quot;&gt;
-          &lt;h3&gt;响应&lt;/h3&gt;
-          &lt;div class=&quot;profile-switch&quot; aria-label=&quot;响应语言&quot;&gt;
-            &lt;button type=&quot;button&quot; data-locale=&quot;zh-CN&quot; aria-pressed=&quot;true&quot;&gt;中文&lt;/button&gt;
-            &lt;button type=&quot;button&quot; data-locale=&quot;en-US&quot; aria-pressed=&quot;false&quot;&gt;English&lt;/button&gt;
-          &lt;/div&gt;
-        &lt;/div&gt;
-        &lt;div class=&quot;tabs&quot; role=&quot;tablist&quot;&gt;
-          &lt;button type=&quot;button&quot; role=&quot;tab&quot; data-status=&quot;201&quot; aria-selected=&quot;true&quot;&gt;201&lt;/button&gt;
-          &lt;button type=&quot;button&quot; role=&quot;tab&quot; data-status=&quot;400&quot; aria-selected=&quot;false&quot;&gt;400&lt;/button&gt;
-          &lt;button type=&quot;button&quot; role=&quot;tab&quot; data-status=&quot;401&quot; aria-selected=&quot;false&quot;&gt;401&lt;/button&gt;
-          &lt;button type=&quot;button&quot; role=&quot;tab&quot; data-status=&quot;403&quot; aria-selected=&quot;false&quot;&gt;403&lt;/button&gt;
-          &lt;button type=&quot;button&quot; role=&quot;tab&quot; data-status=&quot;404&quot; aria-selected=&quot;false&quot;&gt;404&lt;/button&gt;
-          &lt;button type=&quot;button&quot; role=&quot;tab&quot; data-status=&quot;422&quot; aria-selected=&quot;false&quot;&gt;422&lt;/button&gt;
-          &lt;button type=&quot;button&quot; role=&quot;tab&quot; data-status=&quot;500&quot; aria-selected=&quot;false&quot;&gt;500&lt;/button&gt;
-          &lt;button type=&quot;button&quot; role=&quot;tab&quot; data-status=&quot;503&quot; aria-selected=&quot;false&quot;&gt;503&lt;/button&gt;
-        &lt;/div&gt;
-        &lt;div class=&quot;panel&quot; data-panel=&quot;201&quot;&gt;
-          &lt;p&gt;&lt;span class=&quot;status-ok&quot;&gt;201 Created&lt;/span&gt;　&lt;code&gt;Location&lt;/code&gt;、&lt;code&gt;Content-Language&lt;/code&gt; 与 ResultBean。&lt;/p&gt;
-          &lt;pre&gt;&lt;code&gt;Location: /campusclaw-service/v1/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV
-Content-Language: en-US
-
-{
-  &quot;resCode&quot;: &quot;0&quot;,
-  &quot;resMsg&quot;: &quot;success&quot;,
-  &quot;result&quot;: {
-    &quot;session_id&quot;: &quot;01ARZ3NDEKTSV4RRFFQ69G5FAV&quot;,
-    &quot;agent_id&quot;: &quot;agent_011CZkYqphY8vELVzwCUpqiQ&quot;,
-    &quot;model_id&quot;: &quot;model_011CZq2GkV8aD4NwP7sLmXfR&quot;,
-    &quot;state&quot;: &quot;idle&quot;,
-    &quot;thinking&quot;: &quot;hidden&quot;,
-    &quot;active_run&quot;: null,
-    &quot;created_at&quot;: &quot;2026-08-15T11:30:00Z&quot;
-  }
-}&lt;/code&gt;&lt;/pre&gt;
-        &lt;/div&gt;
-        &lt;div class=&quot;panel&quot; data-panel=&quot;error&quot; hidden&gt;
-          &lt;p&gt;&lt;span class=&quot;status-error&quot; data-http-label&gt;&lt;/span&gt;　&lt;span data-error-summary&gt;&lt;/span&gt;&lt;/p&gt;
-          &lt;pre&gt;&lt;code data-error-code&gt;&lt;/code&gt;&lt;/pre&gt;
-        &lt;/div&gt;
-      &lt;/section&gt;
-
-      &lt;section class=&quot;section&quot;&gt;
-        &lt;div class=&quot;row&quot; style=&quot;justify-content:space-between&quot;&gt;
-          &lt;h3&gt;ResultBeanFactory 依赖&lt;/h3&gt;
-          &lt;div class=&quot;profile-switch&quot; aria-label=&quot;Maven profile&quot;&gt;
-            &lt;button type=&quot;button&quot; data-profile=&quot;standalone&quot; aria-pressed=&quot;true&quot;&gt;standalone&lt;/button&gt;
-            &lt;button type=&quot;button&quot; data-profile=&quot;company&quot; aria-pressed=&quot;false&quot;&gt;company&lt;/button&gt;
-          &lt;/div&gt;
-        &lt;/div&gt;
-        &lt;pre&gt;&lt;code&gt;return ResponseEntity.created(location)
-    .body(ResultBeanFactory.getFactory().normal(result));&lt;/code&gt;&lt;/pre&gt;
-        &lt;div class=&quot;profile-grid&quot;&gt;
-          &lt;div class=&quot;profile-card&quot; data-profile-card=&quot;standalone&quot; data-active=&quot;true&quot;&gt;
-            &lt;h3&gt;campusclaw-result-bean-compat&lt;/h3&gt;
-            &lt;p class=&quot;muted&quot;&gt;默认构建；清室实现经批准的最小 FQCN、签名和 JSON 契约。&lt;/p&gt;
-          &lt;/div&gt;
-          &lt;div class=&quot;profile-card&quot; data-profile-card=&quot;company&quot; data-active=&quot;false&quot;&gt;
-            &lt;h3&gt;公司内部 ResultBean 制品&lt;/h3&gt;
-            &lt;p class=&quot;muted&quot;&gt;由公司 settings.xml 激活并解析；仓库 URL 与凭据不进入 Git。&lt;/p&gt;
-          &lt;/div&gt;
-        &lt;/div&gt;
-      &lt;/section&gt;
-    &lt;/article&gt;
-
-    &lt;section class=&quot;decisions&quot; aria-label=&quot;评审状态&quot;&gt;
-      &lt;h3&gt;评审状态：已确认&lt;/h3&gt;
-      &lt;p class=&quot;muted&quot;&gt;已冻结当前 method/path、Session 初始化语义、双认证契约、ResultBean 成功/异常结构、错误码与国际化规则。&lt;/p&gt;
-    &lt;/section&gt;
-  &lt;/div&gt;
-
-  &lt;script&gt;
-    (() =&gt; {
-      const root = document.getElementById(&#x27;campusclaw-session-create-v15&#x27;);
-      const statusButtons = Array.from(root.querySelectorAll(&#x27;[data-status]&#x27;));
-      const successPanel = root.querySelector(&#x27;[data-panel=&quot;201&quot;]&#x27;);
-      const errorPanel = root.querySelector(&#x27;[data-panel=&quot;error&quot;]&#x27;);
-      const httpLabel = root.querySelector(&#x27;[data-http-label]&#x27;);
-      const errorSummary = root.querySelector(&#x27;[data-error-summary]&#x27;);
-      const errorCode = root.querySelector(&#x27;[data-error-code]&#x27;);
-      const authExample = root.querySelector(&#x27;[data-auth-example]&#x27;);
-      const jwtRow = root.querySelector(&#x27;[data-jwt-row]&#x27;);
-      const appKeyRow = root.querySelector(&#x27;[data-appkey-row]&#x27;);
-      let selectedStatus = &#x27;201&#x27;;
-      let selectedLocale = &#x27;zh-CN&#x27;;
-      const errors = {
-        &#x27;400&#x27;: { code: &#x27;INVALID_AGENT_ID&#x27;, zh: &#x27;agent_id 格式不正确。&#x27;, en: &#x27;The agent_id format is invalid.&#x27; },
-        &#x27;401&#x27;: {
-          code: &#x27;UNAUTHENTICATED&#x27;,
-          zh: &#x27;调用方身份认证失败。&#x27;,
-          en: &#x27;Caller authentication failed.&#x27;,
-          alternateCode: &#x27;AUTH_CREDENTIAL_CONFLICT&#x27;,
-          alternateZh: &#x27;请求不能同时携带 JWT 和 APPKEY 凭据。&#x27;,
-          alternateEn: &#x27;JWT and APPKEY credentials must not be supplied together.&#x27;
-        },
-        &#x27;403&#x27;: { code: &#x27;FORBIDDEN&#x27;, zh: &#x27;当前调用方无权为该 Agent 创建 Session。&#x27;, en: &#x27;The caller is not allowed to create a Session for this Agent.&#x27; },
-        &#x27;404&#x27;: { code: &#x27;AGENT_NOT_FOUND&#x27;, zh: &#x27;指定的 Agent 不存在。&#x27;, en: &#x27;The specified Agent does not exist.&#x27; },
-        &#x27;422&#x27;: { code: &#x27;AGENT_MODEL_NOT_CONFIGURED&#x27;, zh: &#x27;该 Agent 未配置有效的默认模型。&#x27;, en: &#x27;The Agent has no valid default model configured.&#x27; },
-        &#x27;500&#x27;: { code: &#x27;SESSION_INITIALIZATION_FAILED&#x27;, zh: &#x27;Session 初始化失败。&#x27;, en: &#x27;Session initialization failed.&#x27; },
-        &#x27;503&#x27;: { code: &#x27;MANAGER_UNAVAILABLE&#x27;, zh: &#x27;Model Manager 暂时不可用，请稍后重试。&#x27;, en: &#x27;Model Manager is temporarily unavailable. Try again later.&#x27; }
+  <div class="api-shell" data-api-shell aria-live="polite"></div>
+  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.9.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 评审中"},"operation":{"method":"GET","path":"/sessions/{session_id}","summary":"读取 Session 状态","description":"按 session_id 只读获取已存在 Session 的权威资源视图：当前默认模型、thinking 投影、Session 状态、权威 History 水位和可选 active Run 摘要。完整历史通过 History API 分页获取，流式 Message、open content、工具和 steer 队列通过 GetRun 获取。该 GET 不创建或恢复 Session、不调用模型，也不消耗 token。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"CampusClaw 生成的不透明 Session 标识；区分大小写，删除后不复用"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"错误消息语言；缺省使用 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体，也不接受 model_id 或 thinking 等覆盖参数。","example":null},"responses":[{"status":"200","label":"OK","summary":"返回当前 Session 资源视图；idle 时 active_run 为 null，running 时返回 active Run 摘要。","headers":{"ETag":"\"snp-zQfM5yN8x2\"","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"session_id":"01JY8W6M8D9K4H2Q7P3V5N1R0T","agent_id":"agent_01JY8VZY4CRQN4PJW8M94D1B2C","model_id":"claude-sonnet-4-5","state":"running","thinking":"hidden","history_seq":42,"active_run":{"run_id":"run_01JY8X2E3R4T5Y6U7I8O9P0A1S","state":"running","phase":"turn","model_id":"claude-sonnet-4-5","thinking":"hidden"},"created_at":"2026-08-15T10:30:00+08:00","updated_at":"2026-08-16T09:15:21+08:00"}}}},{"status":"400","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权读取该 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权访问该 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to access this Session."}}},{"status":"404","label":"Not Found","summary":"Session 不存在；GET 不会隐式创建或恢复 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}}]},"review":{"questions":[{"id":"history_watermark","legend":"history_seq 如何返回","options":[{"label":"Session 顶层必填（推荐）","value":"history_seq 始终返回，0 表示尚无权威历史；它是快照已覆盖的最大 History 序号，不是消息数量或分页 cursor","selected":true},{"label":"仅 active Run 返回","value":"idle Session 不返回 history_seq，只在 active Run 快照中返回水位","selected":false},{"label":"不返回","value":"GetSession 不提供 History 水位，调用方直接分页读取最新 History","selected":false}]},{"id":"state_phase","legend":"state 和 phase 如何分工","options":[{"label":"Session state + Run phase（推荐）","value":"Session.state 只取 idle/running；active_run.state 取 queued/running；queued 时 phase=null，running 时 phase 取 turn/compaction/retry；branch_summary 留到分支功能实现后再公开","selected":true},{"label":"顶层直接返回 pi phase","value":"Session 顶层返回 idle/turn/compaction/branch_summary/retry，不再单独区分 Session state 和 active Run phase","selected":false},{"label":"只返回 state","value":"不公开 phase，只通过 state 和 active_tools 表达运行状态","selected":false}]},{"id":"thinking_semantics","legend":"thinking 表达什么","options":[{"label":"保持 hidden/full（推荐）","value":"保持已确认创建接口的语义：thinking 表示 reasoning content 可见性，取 hidden/full；若后续支持推理强度，另增 reasoning_effort=off/minimal/low/medium/high/xhigh/max","selected":true},{"label":"本轮拆分两个字段","value":"改为 thinking_visibility=hidden/full 和 reasoning_effort=off/minimal/low/medium/high/xhigh/max，同时重开已确认的第一个接口","selected":false}]},{"id":"transcript_boundary","legend":"GetSession 是否返回 transcript","options":[{"label":"不返回（推荐）","value":"GetSession 不返回无界 transcript；已持久化 Message/RunRecord 通过 History API 分页，active Run 详情通过 GetRun 读取","selected":true},{"label":"返回最近有界记录","value":"GetSession 嵌入最近 N 条投影，并增加 has_more/cursor 语义","selected":false},{"label":"返回完整 transcript","value":"像 pi 协议快照一样返回完整 transcript，接受响应无界增长","selected":false}]}],"followUpTitle":"提交第二个接口调整","promptPrefix":"继续调整 GET /campusclaw-service/v1/sessions/{session_id}","promptSuffix":"请按这些选择更新主维护 HTML、设计文档和当前接口展示；不要更新 OpenAPI。"}}</script>
+  <script>
+    (() => {
+      const root = document.getElementById('company-api-review-get-sessions-session-id-e9a8f3eb');
+      const model = JSON.parse(root.querySelector('[data-review-model]').textContent);
+      const api = model.api;
+      const operation = model.operation;
+      const review = model.review || { questions: [] };
+      const shell = root.querySelector('[data-api-shell]');
+      const make = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
       };
-      const authButtons = Array.from(root.querySelectorAll(&#x27;[data-auth]&#x27;));
-      authButtons.forEach((button) =&gt; button.addEventListener(&#x27;click&#x27;, () =&gt; {
-        const mode = button.dataset.auth;
-        authButtons.forEach((item) =&gt; item.setAttribute(&#x27;aria-pressed&#x27;, String(item === button)));
-        jwtRow.hidden = mode !== &#x27;jwt&#x27;;
-        appKeyRow.hidden = mode !== &#x27;appkey&#x27;;
-        authExample.textContent = mode === &#x27;jwt&#x27;
-          ? &#x27;POST /campusclaw-service/v1/agents/agent_011CZkYqphY8vELVzwCUpqiQ/sessions\nX-HW-ID: mate-service\nAuthorization: Bearer &lt;JWT&gt;\nAccept-Language: zh-CN&#x27;
-          : &#x27;POST /campusclaw-service/v1/agents/agent_011CZkYqphY8vELVzwCUpqiQ/sessions\nX-HW-ID: mate-service\nX-HW-APPKEY: &lt;APPKEY&gt;\nAccept-Language: zh-CN&#x27;;
-      }));
-      const drawResponse = () =&gt; {
-        const success = selectedStatus === &#x27;201&#x27;;
-        successPanel.hidden = !success;
-        errorPanel.hidden = success;
-        if (success) return;
-        const item = errors[selectedStatus];
-        const message = selectedLocale === &#x27;zh-CN&#x27; ? item.zh : item.en;
-        httpLabel.textContent = `${selectedStatus} Error`;
-        errorSummary.textContent = item.alternateCode ? `${item.code} / ${item.alternateCode}` : item.code;
-        const primary = JSON.stringify({ resCode: item.code, resMsg: message }, null, 2);
-        if (item.alternateCode) {
-          const alternateMessage = selectedLocale === &#x27;zh-CN&#x27; ? item.alternateZh : item.alternateEn;
-          const alternate = JSON.stringify({ resCode: item.alternateCode, resMsg: alternateMessage }, null, 2);
-          errorCode.textContent = `Content-Language: ${selectedLocale}\n\n${primary}\n\n混合凭据时：\n${alternate}`;
-          return;
-        }
-        errorCode.textContent = `Content-Language: ${selectedLocale}\n\n${primary}`;
+      const append = (parent, ...children) => {
+        children.filter(Boolean).forEach((child) => parent.appendChild(child));
+        return parent;
       };
-      statusButtons.forEach((button) =&gt; button.addEventListener(&#x27;click&#x27;, () =&gt; {
-        selectedStatus = button.dataset.status;
-        statusButtons.forEach((item) =&gt; item.setAttribute(&#x27;aria-selected&#x27;, String(item === button)));
-        drawResponse();
-      }));
-      const localeButtons = Array.from(root.querySelectorAll(&#x27;[data-locale]&#x27;));
-      localeButtons.forEach((button) =&gt; button.addEventListener(&#x27;click&#x27;, () =&gt; {
-        selectedLocale = button.dataset.locale;
-        localeButtons.forEach((item) =&gt; item.setAttribute(&#x27;aria-pressed&#x27;, String(item === button)));
-        drawResponse();
-      }));
-      const profileButtons = Array.from(root.querySelectorAll(&#x27;[data-profile]&#x27;));
-      const profileCards = Array.from(root.querySelectorAll(&#x27;[data-profile-card]&#x27;));
-      profileButtons.forEach((button) =&gt; button.addEventListener(&#x27;click&#x27;, () =&gt; {
-        const profile = button.dataset.profile;
-        profileButtons.forEach((item) =&gt; item.setAttribute(&#x27;aria-pressed&#x27;, String(item === button)));
-        profileCards.forEach((card) =&gt; { card.dataset.active = String(card.dataset.profileCard === profile); });
-      }));
-      drawResponse();
-    })();
-  &lt;/script&gt;
-&lt;/div&gt;
+      const code = (text, className) => make('code', className || '', text);
+      const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      const fullPath = `${api.basePath.replace(/\/$/, '')}/${operation.path.replace(/^\//, '')}`;
 
-&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
-&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
-&lt;script&gt;
-(() =&gt; {
-  if (window.FloatingUIDOM == null) {
-    return;
-  }
-  const { autoUpdate, computePosition, flip, offset, shift, size } =
-    window.FloatingUIDOM;
-  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
-  const tooltipId = `codex-visualization-tooltip-${
-    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
-  }`;
-  const tooltipGap = 5;
-  const hoverDelay = 700;
-  const skipDelay = 300;
-  let activeTrigger = null;
-  let pendingTrigger = null;
-  let tooltip = null;
-  let openTimeout = null;
-  let autoUpdateCleanup = null;
-  let positionRequest = 0;
-  let skipDelayUntil = 0;
+      const topbar = make('header', 'topbar');
+      const titleRow = make('div', 'row');
+      append(titleRow, make('h2', '', api.title), make('span', 'tag', api.version));
+      if (api.visibility) titleRow.appendChild(make('span', 'tag', api.visibility));
+      append(topbar, titleRow, code(api.basePath, 'base'));
 
-  const getTrigger = (target) =&gt;
-    target?.nodeType === Node.ELEMENT_NODE
-      ? target.closest(&quot;[data-tooltip]&quot;)
-      : null;
-  const containsTarget = (trigger, target) =&gt;
-    target?.nodeType != null &amp;&amp; trigger.contains(target);
-  const getContent = (trigger) =&gt;
-    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
-  const getPlacement = (trigger) =&gt; {
-    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
-    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
-  };
-  const getTooltip = () =&gt; {
-    if (tooltip == null) {
-      tooltip = document.createElement(&quot;div&quot;);
-      tooltip.id = tooltipId;
-      tooltip.className = &quot;tooltip&quot;;
-      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
-    }
-    return tooltip;
-  };
-  const setDescribedBy = (trigger, described) =&gt; {
-    const ids = new Set(
-      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
-        .split(/\s+/)
-        .filter(Boolean),
-    );
-    if (described) {
-      ids.add(tooltipId);
-    } else {
-      ids.delete(tooltipId);
-    }
-    if (ids.size === 0) {
-      trigger.removeAttribute(&quot;aria-describedby&quot;);
-    } else {
-      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
-    }
-  };
-  const clearOpenTimeout = () =&gt; {
-    if (openTimeout != null) {
-      window.clearTimeout(openTimeout);
-      openTimeout = null;
-    }
-    pendingTrigger = null;
-  };
-  const closeTooltip = (activateSkipDelay = true) =&gt; {
-    clearOpenTimeout();
-    positionRequest += 1;
-    autoUpdateCleanup?.();
-    autoUpdateCleanup = null;
-    if (activeTrigger == null) {
-      return;
-    }
-    setDescribedBy(activeTrigger, false);
-    activeTrigger = null;
-    tooltip?.remove();
-    if (activateSkipDelay) {
-      skipDelayUntil = Date.now() + skipDelay;
-    }
-  };
-  const updatePosition = (trigger, floating) =&gt; {
-    const request = ++positionRequest;
-    void computePosition(trigger, floating, {
-      middleware: [
-        offset(tooltipGap),
-        flip({ padding: tooltipGap }),
-        shift({ padding: tooltipGap }),
-        size({
-          padding: tooltipGap,
-          apply({ availableHeight, availableWidth, elements }) {
-            elements.floating.style.setProperty(
-              &quot;--tooltip-available-width&quot;,
-              `${Math.max(0, availableWidth)}px`,
-            );
-            elements.floating.style.setProperty(
-              &quot;--tooltip-available-height&quot;,
-              `${Math.max(0, availableHeight)}px`,
-            );
-          },
-        }),
-      ],
-      placement: getPlacement(trigger),
-      strategy: &quot;fixed&quot;,
-    })
-      .then(({ x, y }) =&gt; {
-        if (activeTrigger !== trigger || request !== positionRequest) {
-          return;
+      const article = make('article', 'operation');
+      const operationHead = make('header', 'operation-head');
+      append(operationHead,
+        make('span', 'method', operation.method.toUpperCase()),
+        code(operation.path, 'path'),
+        make('span', 'muted', operation.summary));
+      article.appendChild(operationHead);
+
+      const purpose = make('section', 'section');
+      append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
+      article.appendChild(purpose);
+
+      const authModes = operation.authModes || [];
+      if (authModes.length) {
+        const authSection = make('section', 'section');
+        const authTitle = make('div', 'row section-title');
+        const authTabs = make('div', 'tabs');
+        const authBody = make('div', '');
+        append(authTitle, make('h3', '', '认证'), authTabs);
+        append(authSection, authTitle, authBody);
+        article.appendChild(authSection);
+        let selectedAuth = authModes.find((item) => item.preferred) || authModes[0];
+        const renderAuth = () => {
+          authTabs.querySelectorAll('button').forEach((button) => {
+            button.setAttribute('aria-pressed', String(button.dataset.authId === selectedAuth.id));
+          });
+          authBody.replaceChildren();
+          const wrap = make('div', 'table-wrap');
+          const table = make('table', '');
+          const head = make('thead', '');
+          const headRow = make('tr', '');
+          ['Header', '必填', '示例值', '说明'].forEach((item) => headRow.appendChild(make('th', '', item)));
+          head.appendChild(headRow);
+          const body = make('tbody', '');
+          selectedAuth.headers.forEach((header) => {
+            const row = make('tr', '');
+            append(row,
+              append(make('td', ''), code(header.name)),
+              make('td', '', header.required ? '是' : '否'),
+              append(make('td', ''), code(header.value)),
+              make('td', '', header.description));
+            body.appendChild(row);
+          });
+          append(table, head, body);
+          wrap.appendChild(table);
+          const request = [
+            `${operation.method.toUpperCase()} ${fullPath}`,
+            ...selectedAuth.headers.map((header) => `${header.name}: ${header.value}`)
+          ].join('\n');
+          append(authBody, wrap, append(make('pre', ''), code(request)));
+        };
+        authModes.forEach((mode) => {
+          const button = make('button', '', mode.label);
+          button.type = 'button';
+          button.dataset.authId = mode.id;
+          button.setAttribute('aria-pressed', String(mode.id === selectedAuth.id));
+          button.addEventListener('click', () => {
+            selectedAuth = mode;
+            renderAuth();
+          });
+          authTabs.appendChild(button);
+        });
+        renderAuth();
+      }
+
+      const requestSection = make('section', 'section');
+      requestSection.appendChild(make('h3', '', '参数与请求体'));
+      const parameters = operation.parameters || [];
+      if (parameters.length) {
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        ['位置', '名称', '必填', '约束', '说明'].forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        parameters.forEach((parameter) => {
+          const row = make('tr', '');
+          append(row,
+            make('td', '', parameter.in),
+            append(make('td', ''), code(parameter.name)),
+            make('td', '', parameter.required ? '是' : '否'),
+            append(make('td', ''), code(parameter.schema || '—')),
+            make('td', '', parameter.description));
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        requestSection.appendChild(wrap);
+      } else {
+        requestSection.appendChild(make('p', 'muted empty', '无 path/query/header 业务参数。'));
+      }
+      const requestBody = operation.requestBody || {};
+      requestSection.appendChild(make('p', 'muted empty', requestBody.description || '无请求体。'));
+      if (requestBody.example !== undefined && requestBody.example !== null) {
+        requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
+      }
+      article.appendChild(requestSection);
+
+      const responseSection = make('section', 'section');
+      const responseTitle = make('div', 'row section-title');
+      const localeTabs = make('div', 'tabs');
+      append(responseTitle, make('h3', '', '响应'), localeTabs);
+      const statusTabs = make('div', 'tabs');
+      const responseBody = make('div', '');
+      append(responseSection, responseTitle, statusTabs, responseBody);
+      article.appendChild(responseSection);
+      const responses = operation.responses;
+      const responseIdentity = (response) => response.id || response.status;
+      let selectedResponse = responses[0];
+      let selectedLocale = Object.keys(selectedResponse.bodies || {})[0] || 'default';
+      const renderResponse = () => {
+        statusTabs.querySelectorAll('button').forEach((button) => {
+          button.setAttribute('aria-selected', String(button.dataset.responseId === responseIdentity(selectedResponse)));
+        });
+        const locales = Object.keys(selectedResponse.bodies || {});
+        if (!locales.includes(selectedLocale)) selectedLocale = locales[0] || 'default';
+        localeTabs.replaceChildren();
+        locales.forEach((locale) => {
+          const button = make('button', '', locale);
+          button.type = 'button';
+          button.setAttribute('aria-pressed', String(locale === selectedLocale));
+          button.addEventListener('click', () => {
+            selectedLocale = locale;
+            renderResponse();
+          });
+          localeTabs.appendChild(button);
+        });
+        responseBody.replaceChildren();
+        responseBody.appendChild(make('p', 'description', `${selectedResponse.status} ${selectedResponse.label} — ${selectedResponse.summary}`));
+        const responseHeaders = { ...(selectedResponse.headers || {}) };
+        if (selectedLocale !== 'default' && Object.hasOwn(responseHeaders, 'Content-Language')) {
+          responseHeaders['Content-Language'] = selectedLocale;
         }
-        const scale = window.devicePixelRatio || 1;
-        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
-        floating.style.visibility = &quot;visible&quot;;
-      })
-      .catch(() =&gt; {
-        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
-          closeTooltip(false);
-        }
+        const headerLines = Object.entries(responseHeaders).map(([name, value]) => `${name}: ${value}`);
+        const payload = selectedResponse.bodies ? selectedResponse.bodies[selectedLocale] : null;
+        const output = [...headerLines, headerLines.length ? '' : null, payload === undefined ? null : pretty(payload)]
+          .filter((item) => item !== null).join('\n');
+        responseBody.appendChild(append(make('pre', ''), code(output)));
+      };
+      responses.forEach((response) => {
+        const button = make('button', '', response.tabLabel || response.status);
+        button.type = 'button';
+        button.dataset.responseId = responseIdentity(response);
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-selected', String(response === selectedResponse));
+        button.addEventListener('click', () => {
+          selectedResponse = response;
+          renderResponse();
+        });
+        statusTabs.appendChild(button);
       });
-  };
-  const openTooltip = (trigger) =&gt; {
-    const content = getContent(trigger);
-    if (!trigger.isConnected || content.length === 0) {
-      return;
-    }
-    clearOpenTimeout();
-    if (activeTrigger === trigger) {
-      return;
-    }
-    closeTooltip();
-    const floating = getTooltip();
-    floating.textContent = content;
-    floating.style.visibility = &quot;hidden&quot;;
-    floating.style.transform = &quot;translate(0, 0)&quot;;
-    document.body.appendChild(floating);
-    activeTrigger = trigger;
-    setDescribedBy(trigger, true);
-    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
-      updatePosition(trigger, floating);
-    });
-  };
-  const requestOpen = (trigger, immediate = false) =&gt; {
-    if (
-      getContent(trigger).length === 0 ||
-      activeTrigger === trigger ||
-      pendingTrigger === trigger
-    ) {
-      return;
-    }
-    clearOpenTimeout();
-    pendingTrigger = trigger;
-    const delay =
-      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
-        ? 0
-        : hoverDelay;
-    if (delay === 0) {
-      openTooltip(trigger);
-      return;
-    }
-    openTimeout = window.setTimeout(() =&gt; {
-      openTimeout = null;
-      pendingTrigger = null;
-      openTooltip(trigger);
-    }, delay);
-  };
-  const handlePointerOpen = (event) =&gt; {
-    if (event.pointerType === &quot;touch&quot;) {
-      return;
-    }
-    const trigger = getTrigger(event.target);
-    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
-      return;
-    }
-    requestOpen(trigger);
-  };
-  const handleLeave = (event) =&gt; {
-    const trigger = getTrigger(event.target);
-    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
-      return;
-    }
-    if (activeTrigger === trigger || pendingTrigger === trigger) {
-      closeTooltip();
-    }
-  };
-  const handleFocusIn = (event) =&gt; {
-    const trigger = getTrigger(event.target);
-    if (trigger?.matches(&quot;:focus-visible&quot;)) {
-      requestOpen(trigger, true);
-    }
-  };
-  const handleKeyDown = (event) =&gt; {
-    if (event.key === &quot;Escape&quot;) {
-      closeTooltip();
-    }
-  };
-  const handleContextMenu = (event) =&gt; {
-    const trigger = getTrigger(event.target);
-    if (activeTrigger === trigger || pendingTrigger === trigger) {
-      closeTooltip();
-    }
-  };
-  const destroy = () =&gt; {
-    closeTooltip(false);
-    document.removeEventListener(&quot;pointerover&quot;, handlePointerOpen);
-    document.removeEventListener(&quot;pointerout&quot;, handleLeave);
-    document.removeEventListener(&quot;focusin&quot;, handleFocusIn);
-    document.removeEventListener(&quot;focusout&quot;, handleLeave);
-    document.removeEventListener(&quot;keydown&quot;, handleKeyDown);
-    document.removeEventListener(&quot;contextmenu&quot;, handleContextMenu);
-    tooltip = null;
-  };
+      renderResponse();
 
-  document.addEventListener(&quot;pointerover&quot;, handlePointerOpen);
-  document.addEventListener(&quot;pointerout&quot;, handleLeave);
-  document.addEventListener(&quot;focusin&quot;, handleFocusIn);
-  document.addEventListener(&quot;focusout&quot;, handleLeave);
-  document.addEventListener(&quot;keydown&quot;, handleKeyDown);
-  document.addEventListener(&quot;contextmenu&quot;, handleContextMenu);
-  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
-})();
-&lt;/script&gt;
-&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
-&lt;script&gt;
-(() =&gt; {
-  const initialize = () =&gt; {
-    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
-  };
-  if (globalThis.lucide != null) {
-    initialize();
-    return;
-  }
-  document
-    .getElementById(&quot;codex-visualization-lucide&quot;)
-    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
-})();
-&lt;/script&gt;
+      append(shell, topbar, article);
 
-&lt;/body&gt;
-&lt;/html&gt;
-"></iframe>
+      const questions = review.questions || [];
+      if (questions.length) {
+        const form = make('form', 'review-form');
+        form.appendChild(make('h3', '', '继续调整'));
+        const questionGrid = make('div', 'question-grid');
+        questions.forEach((question) => {
+          const fieldset = make('fieldset', '');
+          fieldset.appendChild(make('legend', '', question.legend));
+          question.options.forEach((option, index) => {
+            const label = make('label', '');
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = question.id;
+            input.value = option.value;
+            input.checked = option.selected || (!question.options.some((item) => item.selected) && index === 0);
+            const optionCopy = make('span', 'option-copy');
+            append(optionCopy,
+              make('span', 'option-label', option.label),
+              make('span', 'option-detail', option.value));
+            append(label, input, optionCopy);
+            fieldset.appendChild(label);
+          });
+          questionGrid.appendChild(fieldset);
+        });
+        form.appendChild(questionGrid);
+        const actions = make('div', 'actions');
+        const submit = make('button', 'submit', '提交调整意见');
+        submit.type = 'submit';
+        const formStatus = make('span', 'muted', '');
+        formStatus.setAttribute('role', 'status');
+        formStatus.setAttribute('aria-live', 'polite');
+        append(actions, submit, formStatus);
+        form.appendChild(actions);
+        const promptOutput = make('pre', 'prompt-output', '');
+        promptOutput.hidden = true;
+        form.appendChild(promptOutput);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const selections = questions.map((question) => `- ${question.legend}：${data.get(question.id)}`).join('\n');
+          const promptSuffix = review.promptSuffix || '请按这些选择更新主维护契约、设计文档和当前接口展示。';
+          const prompt = `${review.promptPrefix}\n${selections}\n${promptSuffix}`;
+          if (!window.openai || typeof window.openai.sendFollowUpMessage !== 'function') {
+            promptOutput.textContent = prompt;
+            promptOutput.hidden = false;
+            try {
+              await navigator.clipboard.writeText(prompt);
+              formStatus.textContent = '调整提示已复制，请粘贴到对话中。';
+            } catch (error) {
+              formStatus.textContent = '请复制下方调整提示并发送到对话中。';
+            }
+            return;
+          }
+          formStatus.textContent = '正在提交…';
+          try {
+            await window.openai.sendFollowUpMessage({ prompt, title: review.followUpTitle });
+            formStatus.textContent = '已提交。';
+          } catch (error) {
+            formStatus.textContent = '提交失败，请重试。';
+          }
+        });
+        shell.appendChild(form);
+      }
+    })();
+  </script>
+</div>
+
+  </main>
 </body>
 </html>
