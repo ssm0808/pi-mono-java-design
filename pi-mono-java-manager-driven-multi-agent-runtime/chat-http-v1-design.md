@@ -2,23 +2,22 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.26.0 |
+| 文档版本 | 1.27.0 |
 | 状态 | 目标设计，尚未实施 |
 | 接口评审状态 | 十一个 operation 均已确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
-| WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
+| 端到端传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均为 HTTP；执行响应使用请求范围内 SSE |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 源码基线 | `195746614096312d4e93afb029d387837db78e0b` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | Anthropic Managed Agents 文档核对 | 2026-08-17；`managed-agents-2026-04-01` beta |
-| 更新日期 | 2026-08-17 |
+| 更新日期 | 2026-08-18 |
 
 ## 1. 结论
 
-HTTP 版不是把全部命令收进一个 `/chat` 接口，也不是让调用方继续提交
-WebSocket 的 `method + params` Frame。当前目标资源模型以 Session、Entry、Event
-和 Model 为边界；一次用户输入触发的执行不是调用方可见的一等 Run 资源。
+当前目标资源模型以 Session、Entry、Event 和 Model 为边界；一次用户输入触发的
+执行不是调用方可见的一等 Run 资源。
 调用方通过 Session Event 提交输入，通过同一 POST 的 SSE 观察实时过程，并通过
 同一路径的 GET 分页读取持久化 Entry。
 
@@ -27,6 +26,11 @@ WebSocket 的 `method + params` Frame。当前目标资源模型以 Session、En
 `session_id`。文件正文继续由文件服务承载，Runtime HTTP API
 只接受 `file_ids`。
 
+端到端传输已经统一为两跳 HTTP+SSE：浏览器先调用 mate-service 公共 HTTP，
+mate-service 再调用本文定义的 CampusClaw 内部 HTTP。两跳分别认证、限流和投影，
+mate-service 不得把内部 SSE 字节透明转发给浏览器。公共 mate-service 的路径、VO、
+错误码和事件投影尚未逐项评审；本文不能被当作浏览器直连契约。
+
 ## 2. 接口分组
 
 基础路径为 `/campusclaw-service/v1`。网关 Host 可按部署环境配置，
@@ -34,7 +38,8 @@ WebSocket 的 `method + params` Frame。当前目标资源模型以 Session、En
 逐接口的展示、评审状态和已确认响应样例以
 [`chat-http-v1-review.html`](chat-http-v1-review.html) 为主维护文档。
 OpenAPI YAML 在迁移期内继续作为机器可读投影；本轮不删除也不宣告废弃，
-待用户后续明确决定。
+待用户后续明确决定。其 1.7.1 仍含被当前设计替代的旧 Run 资源，已经标记为
+非权威并内联原外部 Schema 依赖；不得用于覆盖 HTML 和本文的十一项结论。
 
 ### 2.1 Session 生命周期
 
@@ -164,7 +169,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 
 ![GetSession 已确认响应](http_get_session_response.svg)
 
-[PlantUML 源码：`http_get_session_response`](diagram.puml#L1341)
+[PlantUML 源码：`http_get_session_response`](diagram.puml#L648)
 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
@@ -177,7 +182,6 @@ GetSession 当前不返回 `name`、`history_seq`、完整 `transcript`、
 mate-service 的 Chat 元数据；完成的 MessageEntry 由 GET Session Events API
 分页返回；active Message、open content、工具和执行阶段通过发起请求的 SSE
 实时观察；`attached` 是 pi 的连接相对状态，`locked` 是 live Runtime 的
-内部独占状态，均不是 CampusClaw 公共 Session 属性。
 
 | 读取需求 | 负责接口 |
 |---|---|
@@ -238,13 +242,13 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 
 ![HTTP Session 逻辑删除](http_delete_session.svg)
 
-[PlantUML 源码：`http_delete_session`](diagram.puml#L1412)
+[PlantUML 源码：`http_delete_session`](diagram.puml#L719)
 
 本小节和主维护 HTML 中的第三个接口已经用户确认。OpenAPI 本轮仍不更新。
 
 ![HTTP Session 创建](http_session_creation.svg)
 
-[PlantUML 源码：`http_session_creation`](diagram.puml#L1111)
+[PlantUML 源码：`http_session_creation`](diagram.puml#L418)
 
 ### 2.2 消息与 Session Event
 
@@ -286,7 +290,7 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 
 ![HTTP 执行资源模型对比](http_execution_resource_model.svg)
 
-[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L1633)
+[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L940)
 
 #### 2.2.2 第四个已确认接口：提交用户事件并直接流式返回
 
@@ -421,7 +425,7 @@ ToolResult Entry 是权威事实，调用方按 `entry_id/entry_seq` 与本地�
 
 ![HTTP Session Event 直接流式返回](http_session_event_stream.svg)
 
-[PlantUML 源码：`http_session_event_stream`](diagram.puml#L1512)
+[PlantUML 源码：`http_session_event_stream`](diagram.puml#L819)
 
 第四接口已经确认：冻结路径、`user.message` 请求、`message + file_ids`、同一 POST
 直接 SSE、无公共 `run_id`、无 `Idempotency-Key`、成功事件顺序与持久化语义，
@@ -560,7 +564,7 @@ Message。CampusClaw 的 `entry_seq` 和 HTTP page 分页均为 target-only 服�
 
 ![HTTP Session Events 开放分页](http_session_event_list.svg)
 
-[PlantUML 源码：`http_session_event_list`](diagram.puml#L1721)
+[PlantUML 源码：`http_session_event_list`](diagram.puml#L1028)
 
 ### 2.4 模型与 Session 配置
 
@@ -667,7 +671,7 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 
 ![HTTP Session 模型与深度思考配置](http_session_model_configuration.svg)
 
-[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1811)
+[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1118)
 
 ### 2.5 Session 执行控制（已确认）
 
@@ -755,24 +759,21 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 
 [PlantUML 源码：`http_session_execution_controls`](diagram.puml#L99)
 
-## 3. WebSocket 到 HTTP 的语义映射
+## 3. 两跳 HTTP+SSE 边界
 
-| WebSocket v2 | HTTP v1 |
-|---|---|
-| `connect(mode=create)` | `POST /agents/{agent_id}/sessions`；CampusClaw 生成 `session_id` |
-| `connect(mode=resume)` | 无对应命令；重新 `GET` Session/Events |
-| `chat.send` | `POST /sessions/{session_id}/events`，请求 `type=user.message` 并直接返回 SSE |
-| `chat.steer` | `POST /sessions/{session_id}/steers` |
-| `chat.followUp` | `POST /sessions/{session_id}/follow-ups` |
-| `chat.abort` | `POST /sessions/{session_id}/abort` |
-| `chat.history` | `GET /sessions/{session_id}/events` |
-| `session.get` | `GET /sessions/{session_id}` |
-| `models.list` | `GET /sessions/{session_id}/models` |
-| `model.set` | `PUT /sessions/{session_id}/model` |
-| `thinking.set` | `PUT /sessions/{session_id}/thinking` |
-| EventFrame | 当前 POST 的 SSE；权威恢复边界是持久化 Entry，不是公共 Run Event Journal |
-| RequestFrame `id` | HTTP 请求关联由网关/框架处理，不参与业务幂等 |
-| connection generation/close code | 删除；改用 HTTP 状态、ETag 和 operation-specific 并发语义 |
+| 边界 | 普通操作 | 实时执行 | 标识范围 | 当前评审状态 |
+|---|---|---|---|---|
+| 浏览器/UI → mate-service | 独立 HTTP 请求与响应 | 提交消息的 HTTP 响应在本次执行期间输出 SSE | 公共 `chat_id` | 只确认传输形态；路径、VO、错误和 Event Schema 待逐项评审 |
+| mate-service → CampusClaw | 本文十一个 HTTP operation | `POST /sessions/{session_id}/events` 直接输出 SSE | 内部 `session_id` | 十一个 operation 均已确认 |
+
+两跳不是同一条物理连接，也不是一份字节透明协议。mate-service 需要终止公共认证、
+解析内部事件、移除 Runtime 私有字段、映射安全错误并重新编码公共 SSE。内部
+`session_id`、凭据、Provider 配置和工具私有数据不得越过公共边界。
+
+每次初始用户消息、Steer、FollowUp 或 Abort 都是新的 HTTP 请求。只有初始
+`POST /events` 返回本次 active execution 的 SSE；Steer 和 FollowUp 成功后进入
+该执行的队列，后续产物继续出现在仍打开的执行流中。正常 `stream.end`、流内错误
+或网络中断都会结束当前响应，后续用户消息再建立新的请求。
 
 ## 4. 状态、并发与恢复
 
@@ -968,7 +969,7 @@ FQCN 和不可预期的 class loading。Maven Enforcer 必须在 `validate`
 
 ![ResultBeanFactory 公司内外双制品替换](http_result_bean_compatibility.svg)
 
-[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L1196)
+[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L503)
 
 ### 6.3 错误与国际化实现
 
@@ -1020,13 +1021,13 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 ![HTTP 双认证适配](http_dual_authentication.svg)
 
-[PlantUML 源码：`http_dual_authentication`](diagram.puml#L1264)
+[PlantUML 源码：`http_dual_authentication`](diagram.puml#L571)
 
 ## 8. 源码证据与差异分类
 
-规范来源为仓库相对路径
-`pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml`。本轮 HTTP
-认证、事件和 Session 配置设计额外核对 pi-mono-java 基线
+本设计以 pi-mono 和 pi-mono-java 源码行为为实现证据，不再以已删除的
+WebSocket/AsyncAPI 目标草案为规范来源。本轮 HTTP 认证、事件和 Session 配置设计
+核对 pi-mono-java 基线
 `195746614096312d4e93afb029d387837db78e0b`。本轮资源模型比较还核对了
 Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 `managed-agents-2026-04-01` beta 契约。
@@ -1064,6 +1065,9 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 观察到的行为 | pi-mono `packages/agent/src/agent.ts` 基线 347-358、486-535：`activeRun` 是进程内执行对象，同一 Agent 已有 activeRun 时拒绝新 prompt，finally 清理；它不是持久化、可查询的 RunRecord |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java` 基线 140-160：现有 HTTP POST 直接将消息、工具开始/结束和 done 映射为 SSE；现有名称与负载较窄，目标契约重命名并补充分离的持久化 ToolResultEntry |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 252-273 与 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java` 基线 153-177：WebSocket prompt 只接受非空文本，先追加 JSONL UserMessage 再调用 prompt，并以 `isStreaming` 拒绝并发；没有附件 ID、Run ID 或幂等存储 |
+| 架构变更 | 浏览器/UI 到 mate-service、mate-service 到 CampusClaw 两跳目标传输统一为 HTTP+SSE；删除连接首帧、Frame RPC、连接 generation、close code 和 AsyncAPI 目标契约 |
+| 架构变更 | mate-service 终止公共 HTTP/SSE 并以服务身份调用内部 HTTP/SSE；两跳分别鉴权和投影，内部流不得字节透明转发 |
+| 待评审目标设计 | mate-service 公共 HTTP 的路径、请求/响应 VO、错误码和 SSE Event Schema 尚未确认；本设计只确认传输形态和责任边界 |
 | 观察到的行为 | pi-mono-java `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` 基线 183-194、218-268：`startExecution` 通过 executionLock 保证单次 current execution，并在虚拟线程执行结束时清理；没有共享数据库 active-run 唯一约束或执行任务 |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/session-manager.ts` 基线 46-156、1057-1149、1260-1303：Session Entry 使用 `id/parentId` 组成 append-only tree，`getBranch()` 返回当前 leaf 路径，`getEntries()` 返回全部 Entry；Entry 类型还包含模型、thinking、compaction、branch summary 和扩展状态 |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/SessionEntry.java` 基线 18-38 与 `SessionManager.java` 基线 188-296：JSONL Entry 保留 `id/parentId/type/message`，当前恢复主要线性提取 Message；没有 HTTP 分页、`entry_seq` 或不透明 page |
@@ -1104,6 +1108,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.27.0 | 2026-08-18 | 用户确认浏览器/UI 到 mate-service、mate-service 到 CampusClaw 两跳均统一为 HTTP+SSE；新增两跳独立认证和安全事件投影边界，删除旧 WebSocket 语义映射及 AsyncAPI 规范依赖；公共 mate-service 路径、VO、错误和 Event Schema 明确留待后续逐接口评审；过渡期 OpenAPI 内联旧外部 Schema 以保持可解析，但仍是滞后且非权威的 1.7.1 投影 |
 | 1.26.0 | 2026-08-17 | 用户确认 POST Steers、POST FollowUps 和 POST Abort 三个 Session 执行控制接口；保持 1.25.0 的 Session scope、原 POST Events SSE 观察、Steer/FollowUp `202` 和 Abort `204` 设计不变；明确 `202` 只返回 `session_id/accepted_at`，不新增控制 ID 或预分配 `entry_id`；十一个 HTTP operation 至此全部确认；OpenAPI 未更新 |
 | 1.25.0 | 2026-08-17 | 按用户要求新增三个待确认 Session 执行控制接口：POST Steers、POST FollowUps 和 POST Abort；保持无公共 Run 的 Session scope，区分 Steer“下一次模型调用前”与 FollowUp“原本将结束时”的投递时机，固定 FIFO/one-at-a-time/Steer 优先；控制消息实际投递后复用 `user.message`，Abort 清空未投递队列并等待 idle 后幂等返回 `204`；新增 pi/pi-mono-java 证据、错误码和 PlantUML；OpenAPI 未更新 |
 | 1.24.0 | 2026-08-17 | 用户确认剩余三个 Session 配置接口：冻结 GET Session Models 的 `current_model_id + models:string[]`、PUT Session Model 的 idle/If-Match/能力归一规则，以及 PUT Session Thinking 的 boolean 深度思考语义和错误码；至此当前八个 HTTP operation 均已确认；OpenAPI 未更新 |

@@ -1,12 +1,12 @@
 @startuml channel_feishu_architecture
-title CampusAgent Channel and Feishu Integration
+title Historical CampusAgent Channel and Feishu Integration
 
 ' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md
 ' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1.openapi.yaml
-' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/README.md, PublicChatConnection and RuntimeSessionChannel
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java, baseline lines 33-168
 ' Observed behavior: the fixed Java baseline has a coupled POST /api/chat SSE endpoint.
-' Target-only design: Feishu is terminated by a provider adapter in mate-service and calls the target Runtime HTTP API.
+' Historical target-only design: this Run-based diagram is frozen and must not be used for implementation.
+' Current target: both service hops use HTTP and execution-scoped SSE; the Channel mapping requires a new review.
 ' Design reason: provider identity, retries, rate limits, and message rendering must not leak into agent-service.
 
 skinparam backgroundColor #FFFFFF
@@ -70,11 +70,12 @@ end note
 @enduml
 
 @startuml feishu_message_sequence
-title Feishu Message to Runtime Run Sequence
+title Historical Feishu Message to Runtime Run Sequence
 
 ' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1.openapi.yaml, createSession, createRun, and getRunEvents
 ' Feishu evidence: im.message.receive_v1, message reply API, and message card PATCH API official documents
-' Target-only design: provider receipt and Runtime execution are separated by a durable outbox.
+' Historical target-only design: provider receipt and Runtime execution were separated by a durable outbox.
+' Current target: this Run-based sequence is frozen and requires redesign against Session Events.
 ' Design reason: the Feishu handler deadline is shorter than an Agent run and duplicate delivery is expected.
 
 skinparam backgroundColor #FFFFFF

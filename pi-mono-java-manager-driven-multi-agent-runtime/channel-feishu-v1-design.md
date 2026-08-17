@@ -2,12 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.0 |
-| 状态 | 受 Runtime HTTP 1.16.0 资源模型变更影响，待重新评审 |
-| 更新日期 | 2026-08-17 |
+| 文档版本 | 1.2.0 |
+| 状态 | 历史方案，冻结；不得作为实现契约，待按端到端 HTTP+SSE 重新评审 |
+| 更新日期 | 2026-08-18 |
 | 设计仓基线 | `e5a8ab2f428bb046390f558a82bfe7ceea881413` |
-| Runtime HTTP 基线 | [`chat-http-v1-design.md`](chat-http-v1-design.md) 1.16.0；[`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml) 1.7.1 是尚未同步的过渡期机器契约 |
-| Runtime 事件 Schema 基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml) 2.12.0 |
+| Runtime HTTP 基线 | [`chat-http-v1-design.md`](chat-http-v1-design.md) 1.27.0；[`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml) 1.7.1 是滞后且非权威的过渡期机器投影 |
 | pi-mono-java 源码基线 | `1f7a5423219edfa4519d8719f1cc8a188ed72873` |
 | 飞书证据查询日期 | 2026-08-11 |
 
@@ -20,6 +19,12 @@
 > 旧方案影响记录，不能作为当前实现契约。尤其是 Worker 在 Runtime 已接受消息后、
 > 本地保存结果前崩溃时，现契约缺少无歧义重试和独立 SSE 恢复边界；必须单独评审
 > Channel 场景后再更新端口、表结构、时序图和验收规则。
+
+> [!NOTE]
+> 当前总体架构已经确认浏览器/UI 到 mate-service、mate-service 到 CampusClaw
+> 两跳均使用 HTTP+SSE。本文保留的 Run、独立 Run SSE、`run_seq` 和相关图表只用于
+> 记录旧方案为何失效；新实现不得采纳。飞书官方 SDK 长连接属于飞书平台入站适配，
+> 不等于 mate-service 对浏览器公开 WebSocket。
 
 Channel 层应位于 `mate-service`，对外终止飞书协议，对内作为
 CampusAgent Runtime HTTP 客户端。飞书 `tenant_key`、`open_id`、`chat_id`、
@@ -573,5 +578,6 @@ Spring Controller 不直接调用 Runtime Client；长连接回调和未来 Webh
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-08-18 | 同步总体架构结论：浏览器/UI 到 mate-service、mate-service 到 CampusClaw 均使用 HTTP+SSE；删除已失效 AsyncAPI 基线链接，明确本文全部 Run/独立 SSE 图表仅是冻结的旧方案影响记录，待按当前十一项 Session/Entry 接口重新评审 |
 | 1.1.0 | 2026-08-17 | Runtime HTTP 改为无公共 `run_id` 的 Session Event 直连 SSE 后，标记原 Run/独立 SSE/幂等键方案整体待重新评审；记录 Channel Outbox 在无幂等接受和无独立恢复流情况下的崩溃歧义，禁止继续把 1.0.0 映射、表结构和时序图作为实现契约 |
 | 1.0.0 | 2026-08-11 | 首版 Channel 应用端口与飞书接入设计；定义长连接入站、`message_id` 去重、Conversation/Session 绑定、Runtime HTTP+SSE 编排、卡片流式投影、Outbox 和崩溃恢复 |

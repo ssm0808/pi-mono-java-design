@@ -212,17 +212,17 @@ end note
 @enduml
 
 @startuml mate_agent_service_responsibility_boundary
-title Public Chat and Runtime Service Responsibilities
+title End-to-End HTTP and SSE Service Responsibilities
 
-' pi-mono-java baseline: 1f7a5423219edfa4519d8719f1cc8a188ed72873
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java:260-285 run(), 377-391 wireServerRoutes()
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java:115-135 handle(), 168-188 buildCloseHook()
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java:186-202 getOrCreate(), 324-378 persistence
-' Observed behavior: Java v1 routes /api/ws/chat directly to a handler and resolves one conversation-backed AgentSession.
-' Target-only design: the mate-service public WebSocket, chat_id/session_id split, and internal WebSocket bridge do not exist in the baseline.
-' Architecture change: mate-service owns public Chat orchestration; agent-service owns Runtime Session execution.
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java: buildRoutes and wireServerRoutes
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java: handleChat, wireSink, and forwardEvent
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java: getOrCreate and persistence methods
+' Observed behavior: the Java baseline has an HTTP POST that returns SSE and also retains a separate WebSocket implementation.
+' Target-only design: the mate-service public HTTP contract and its SSE projection are not implemented in the fixed baseline.
+' Architecture change: both hops use HTTP request-response, and execution responses stream SSE for the lifetime of one execution.
 ' Product constraint: the UI receives chat_id only; session_id remains an internal Runtime identifier.
-' Design reason: separate user-facing Chat lifecycle from durable Agent Runtime identity and execution.
+' Security hardening: mate-service terminates public auth and projects internal events instead of forwarding bytes transparently.
+' Design reason: keep user-facing Chat lifecycle separate from durable Runtime Session identity and execution.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -243,159 +243,33 @@ skinparam database {
 
 left to right direction
 
-rectangle "Agent UI\n\nOpen public WebSocket\nSend agent_id, model_id, idempotency_key\nKeep chat_id\nRender public Chat Frames\nNever receive session_id" as UI #EFF6FF
+rectangle "Agent UI\n\nCall public HTTP operations\nUse chat_id only\nRead execution-scoped SSE\nClose on stream end or error\nNever receive session_id" as UI #EFF6FF
 
-rectangle "mate-service\n\nOwn public WebSocket and user authentication\nValidate protocol and connect idempotency\nEnforce fewer than 50 active Chats\nValidate product Agent and Model availability\nGenerate chat_id and session_id\nPersist Chat mapping and status\nRun guardrail, intent, and chain state\nOwn the internal Runtime WebSocket client\nRebuild public and internal Frames" as Mate #FFF7ED
+rectangle "mate-service\n\nOwn public HTTP and SSE\nAuthenticate the end user\nOwn Chat metadata and chat_id\nMap chat_id to session_id\nRun guardrails and orchestration\nCall CampusClaw with service identity\nProject safe public events and errors" as Mate #FFF7ED
 
-rectangle "agent-service\n\nOwn internal Runtime WebSocket\nAuthenticate the calling service\nAuthoritatively validate Agent and Model\nCreate or restore Runtime Session\nBind Agent, Model, and bundle revision\nBuild Context and execute Model and Tools\nOwn Run, Message, and Runtime history" as Agent #ECFDF5
+rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nAuthenticate the calling service\nOwn Runtime Session and session_id\nValidate Agent and Model\nBuild Context and execute Model and Tools\nPersist current-branch Entries\nOwn Steer, FollowUp, and Abort" as Runtime #ECFDF5
 
-database "Mate Chat Store\n\nchat_id -> session_id\nChat state\nAgent and Model selection\nconnect idempotency result" as MateStore
+database "Mate Chat Store\n\nchat_id to session_id\nChat name and product state\nUser ownership" as MateStore
 
-database "RuntimeSessionStore\n\nSession state\nMessage and Run history\nAgent, Model, and bundle revision" as RuntimeStore
+database "RuntimeSessionStore\n\nSession state and configuration\nCurrent-branch Entries\nInternal execution state" as RuntimeStore
 
-UI <--> Mate : Public WebSocket\nchat_id scope\npublic connection, request id, and seq
-Mate <--> Agent : Internal WebSocket\nsession_id scope\nindependent connection, request id, and seq
-Mate --> MateStore : Own and update
-Agent --> RuntimeStore : Own and update
+UI <--> Mate : public HTTP requests\nResultBean, 204, or scoped SSE\nchat_id scope
+Mate <--> Runtime : internal HTTP requests\nResultBean, 204, or scoped SSE\nsession_id scope
+Mate --> MateStore : own and update
+Runtime --> RuntimeStore : own and update
 
 note bottom of Mate
-The bridge is semantic, not byte-transparent.
-HTTP 101, connection_id, generation, request id,
-event seq, Ping/Pong, flow control, and close are hop-local.
-This URL is an Agent Channel: only Runtime-routed sends
-are accepted; other product channels use other contracts.
+The public and internal hops are independent contracts.
+mate-service does not forward the internal stream byte for byte.
+Public paths, VOs, errors, and event projection require
+a separate operation-by-operation review.
 end note
 
-note bottom of Agent
-Runtime never reads chat_id, tenant_id, or user_id.
-It uses session_id as the only Session key.
-end note
-@enduml
-
-@startuml managed_session_context_assembly
-title agent-service Internal Session and Context Assembly
-
-' Source evidence:
-' pi-mono packages/ai/src/types.ts: Context
-' pi-mono packages/coding-agent/src/core/system-prompt.ts: buildSystemPrompt
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: initialize
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java: getOrCreate
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java: websocket route
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java: handle
-' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel, toLlmTools
-' Observed behavior: Java currently reads conversation_id during Upgrade and uses one base cwd.
-' Observed behavior: AgentSession.initialize resolves a model before it creates the Agent.
-' Java divergence: v2 authenticates Upgrade and maps closed Frames to a server-side SessionTransport.
-' Architecture change: ManagedSessionTransport owns logical connection state; WebSocket is an adapter.
-' Target design: globally unique session_id is the only SessionPool key; tenant and user stay upstream.
-' Target design: a wss URI starts establishment; HTTP 101 establishes WebSocket transport.
-' Target design: HTTP Upgrade and the first connect RequestFrame are separate protocol phases.
-' Target design: mate-service is the internal Runtime client and supplies trusted session-affinity metadata.
-' Target design: one Pod owns one active connection generation per Session.
-' Target design: database history is authoritative; no target Session JSONL is generated.
-' Target design: Managed settings is a compiled per-Agent file that does not exist in the Java baseline.
-' Design reason: isolate prompt, model, tool, persistence, and run recovery across Agents.
-
-skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-skinparam participant {
-  BackgroundColor #F8FAFC
-  BorderColor #475569
-  FontColor #0F172A
-}
-skinparam ArrowColor #475569
-skinparam sequence {
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F8FAFC
-}
-
-actor "mate-service\nRuntime bridge" as Client
-participant "Trusted internal Gateway" as Auth
-participant "ChatWebSocketAdapter" as WS
-participant "SessionTransportFactory" as TransportFactory
-participant "ManagedSessionTransport" as Transport
-participant "AgentDirectoryResolver" as Resolver
-participant "ManagedSettingsLoader" as SettingsLoader
-participant "ManagedSessionPool" as Pool
-participant "ManagedAgentSessionFactory" as Factory
-participant "Model Manager" as ModelManager
-participant "AgentSession" as Session
-participant "AgentLoop" as Loop
-participant "ManagedRunHub" as Hub
-database "RuntimeSessionStore\nshared database" as Store
-
-Client -> Client : call WebSocket library\nconnect(wss URI)
-Client -> Auth : open one TCP connection\nthen TLS\nthen HTTP/1.1 GET\n/agent-service/internal/v1/ws/chat\nwith Upgrade and service auth context
-Auth -> Auth : validate existing private-key or JWT auth\napply trusted Session affinity\nand validate Upgrade
-Auth --> Client : HTTP/1.1 101 Switching Protocols
-Auth --> WS : immutable connection auth context
-WS -> TransportFactory : open(auth context)
-TransportFactory --> WS : per-connection transport
-Client -> WS : WebSocket Text Frame\nRequestFrame connect\nmode, session_id, agent_id, model_id?
-WS -> WS : validate closed Frame
-WS -> Transport : connect(command, invocation metadata)
-Transport -> Resolver : resolve(agent_id)
-Resolver -> Resolver : normalize and verify controlled root
-Resolver --> Transport : agentCwd
-Transport -> SettingsLoader : load(agentCwd/.campusagent/settings.json)
-SettingsLoader -> SettingsLoader : verify agentId and agentVersion\nrequire non-empty unique enabledModels\nrequire defaultModel in enabledModels
-SettingsLoader --> Transport : agentVersion, defaultModel, enabledModels
-Transport -> Pool : open(session_id, agent_id)
-
-alt mode=create
-  Pool -> Pool : select requested model_id if supplied\notherwise settings.defaultModel
-  Pool -> ModelManager : resolveModel(agent_id, effective model_id)
-  ModelManager --> Pool : ModelDescriptor
-else mode=resume
-  Pool -> Store : load(session_id)
-  Store --> Pool : Session, messages, revisions,\nand saved model_id
-  Pool -> ModelManager : resolveModel(agent_id, effective model_id)
-  ModelManager --> Pool : current ModelDescriptor
-end
-
-Pool -> Factory : create(session_id, agent_id, agentVersion,\nagentCwd, descriptor, restored messages)
-Factory -> Factory : load controlled .campusagent\nSYSTEM.md and Skills
-Factory -> Factory : register read, get_tool_info, call_tool
-Factory -> Session : initialize isolated Session
-Session -> Loop : systemPrompt, messages, AgentTools
-Loop -> Loop : map AgentTools to Context.tools
-Loop --> Pool : ready
-Pool -> Hub : get active run for session_id
-Transport -> Pool : increment connection generation\nand replace the old connection
-Transport -> Hub : atomically register logical subscription\nand capture same-Pod cursor plus snapshot
-Hub --> Transport : active_run snapshot and buffered publisher
-Transport --> WS : SessionConnectResult
-WS --> Client : ResponseFrame payload with session_id,\nconnection_generation, model, limits,\nfeatures and active_run
-WS -> Transport : subscribe to events() after response write
-Hub --> Transport : SessionEvents after snapshot cursor
-Transport --> WS : ordered typed events
-WS --> Client : EventFrames with connection seq
-
-note over Factory,Loop
-Managed prompt inputs:
-Agent SYSTEM, three generic tools,
-native Skill summaries, and cwd only.
-end note
-
-note over SettingsLoader,ModelManager
-The HTTP create request supplies agent_id only.
-The directory chooses the default candidate.
-Model Manager remains the final authority.
-end note
-
-note over Pool,Store
-Isolation key:
-globally unique session_id
-agent_id is an immutable binding.
-Tenant and user belong upstream.
-Pool retains AgentSession and the active-run reference; transport only subscribes.
-AgentSession and AgentLoop execute; Hub maintains recovery state.
-User-IP affinity is not a distributed owner.
-Pod restart rebuilds from the database and marks the old run interrupted.
+note bottom of Runtime
+Each user-message POST owns one bounded SSE response.
+Steer and FollowUp are separate HTTP requests that enqueue
+into the active execution. Abort is another HTTP request.
+The Runtime does not read chat_id or end-user identity.
 end note
 @enduml
 
@@ -477,263 +351,6 @@ Prompt disclosure never grants permission.
 end note
 @enduml
 
-@startuml managed_websocket_session_protocol
-title agent-service Internal Runtime WebSocket Protocol
-
-' Source evidence:
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java: websocket route
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java: handle, onAgentEvent
-' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/event/MessageUpdateEvent.java: message, assistantMessageEvent
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java: typed deltas
-' OpenClaw baseline: b015925bc30f6a8363f290b07d5f8588e21422b8, Gateway Protocol v4
-' openclaw packages/gateway-protocol/src/schema/frames.ts: RequestFrameSchema, GatewayFrameSchema
-' openclaw packages/gateway-protocol/src/schema/logs-chat.ts: ChatDeltaEventSchema
-' openclaw docs/gateway/clients.md: Recover state after reconnect
-' openclaw src/gateway/server-broadcast.ts: createGatewayBroadcaster
-' Observed behavior: Java v1 captures one Session per connection, emits cumulative Message updates,
-' and aborts AgentSession when the WebSocket closes.
-' Java divergence: v2 maps Frame payloads to typed SessionTransport requests and events.
-' Architecture change: one connection is scoped to one caller-owned session and Agent, unlike OpenClaw Gateway multiplexing.
-' Target design: the existing internal Gateway authenticates server callers before HTTP 101.
-' Target design: agent-service does not model tenant or user identity and does not forward inbound credentials.
-' Target design: calling connect with a wss URI does not mean WebSocket is already established.
-' Target design: HTTP 101 establishes transport; connect RequestFrame binds the Runtime Session.
-' Target design: typed structured delta is intrinsic to protocol v2; only full_thinking is optional.
-' Target design: chat.send acceptance returns the persisted user message id before origin run events.
-' Target design: every state-changing success response precedes its causal event.
-' Target design: one Pod permits one active connection generation and replaces the old connection on resume.
-' Target design: trusted Session affinity is best effort; there is no Redis owner or cross-Pod run forwarding.
-' Target design: database history survives Pod restart; the old active run becomes interrupted.
-' Design reason: provide auditable ToB isolation and race-free recovery without moving run ownership to transport.
-
-skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-skinparam participant {
-  BackgroundColor #F8FAFC
-  BorderColor #475569
-  FontColor #0F172A
-}
-skinparam ArrowColor #475569
-skinparam sequence {
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F8FAFC
-}
-
-actor "mate-service\nRuntime bridge" as Client
-participant "Trusted internal Gateway" as Auth
-participant "ChatWebSocketAdapter" as WS
-participant "ManagedSessionTransport" as Transport
-participant "ManagedSessionPool" as Pool
-participant "ManagedRunHub" as Hub
-participant "AgentSession" as Session
-participant "Thinking projection" as Projection
-database "RuntimeSessionStore\nshared database" as Store
-
-Client -> Client : call WebSocket library\nconnect(wss URI)
-Client -> Auth : open one TCP connection\nthen TLS\nthen HTTP/1.1 GET\n/agent-service/internal/v1/ws/chat\nwith Upgrade and service auth context
-Auth -> Auth : validate existing private-key or JWT auth\napply trusted Session affinity\nreject business query and validate Upgrade
-Auth --> Client : HTTP/1.1 101 Switching Protocols
-Auth -> WS : immutable auth context
-WS -> Transport : create per-connection transport
-Client -> WS : WebSocket Text Frame within 5 seconds\nRequestFrame connect\nmode, session_id, agent_id, model_id?
-WS -> WS : validate closed Frame
-WS -> Transport : connect(command, invocation metadata)
-Transport -> Pool : resolve session_id or create binding\nand validate effective model
-Transport -> Pool : increment connection generation\nand replace an old same-Pod connection
-Pool -> Hub : atomic subscribe and snapshot
-Hub --> Transport : cursor, active_run, buffered publisher
-Transport --> WS : SessionConnectResult
-WS --> Client : ResponseFrame payload with connection_id,\nconnection_generation, session_id, agent_id,\nmodel, active_run and effective full_thinking
-WS -> Transport : subscribe to events()
-Hub --> Transport : events after cursor
-
-alt idle session
-  Client -> WS : RequestFrame chat.send\ntext, attachments, or both\nwith idempotency_key?
-  WS -> Transport : request(ChatSend, metadata)
-  Transport -> Pool : atomically create primary run
-  Pool -> Store : persist user Message, run,\nidempotency result and revisions
-  Pool -> Session : prompt(message?, ordered attachments?)
-  Pool --> Transport : run_id, user_message_id, accepted
-  Transport --> WS : SessionResponse
-  WS --> Client : ResponseFrame ok with payload
-  Session -> Hub : AssistantMessageEvent delta
-  Hub -> Projection : project for fixed run policy
-  Projection --> Hub : visible update or redacted placeholder;\nredact Tool secrets and bound details
-  Hub -> Store : persist completed content blocks;\nstore full redacted oversized Tool results
-  Hub -> Hub : increment run_seq and update snapshot
-  Hub --> Transport : typed SessionEvents
-  Transport --> WS : run, message, and tool events
-  WS -> WS : increment connection seq
-  WS --> Client : EventFrames; oversized Tool data uses\npreview, size, truncated and result_ref
-else active session
-  Client -> WS : RequestFrame chat.send
-  WS -> Transport : request(ChatSend, metadata)
-  Transport --> WS : RUN_ACTIVE
-  WS --> Client : ResponseFrame error
-end
-
-alt transport disconnects while run is active on the same Pod
-  Client -x WS : connection closed
-  WS -> Transport : close()
-  Transport -> Hub : unsubscribe only
-  note over Pool,Session
-  The run continues.
-  No AgentSession abort is called.
-  end note
-  Session -> Hub : further deltas or terminal event
-  Hub -> Store : persist completed blocks, final Message\nand run outcome
-  Client -> Auth : reconnect and authenticate
-  Auth --> Client : 101 Switching Protocols
-  Auth -> WS : new immutable auth context
-  WS -> Transport : create new transport
-  Client -> WS : RequestFrame connect for same session_id
-  WS -> Transport : connect(command, metadata)
-  Transport -> Pool : resolve existing Session and increment generation
-  Pool -> Hub : replace old connection; atomic subscribe and snapshot
-  Hub --> Transport : cursor, history watermark, frozen model/thinking,\npartial Message or null, open contents, active tools
-  Transport --> WS : SessionConnectResult
-  WS --> Client : ResponseFrame snapshot first
-  WS -[#EF4444]> Client : old generation closes as 4409 SESSION_REPLACED
-  WS -> Transport : subscribe to events()
-  Hub --> Transport : deltas with run_seq after snapshot
-  Transport --> WS : typed post-snapshot events
-  WS --> Client : EventFrames may arrive immediately
-  Client -> Client : validate connection seq and buffer
-  Client -> WS : chat.history(run_id, through history_seq)
-  WS -> Store : read authoritative messages,\nRunRecords and tool results
-  Store --> WS : history through watermark
-  WS --> Client : history response
-  Client -> Client : apply history and snapshot,\nthen release buffered run_seq events
-end
-
-alt Pod restarts during an active run
-  Session -x Hub : process state is lost
-  Store -> Pool : load Session, messages, revisions,\nand last complete content blocks
-  Pool -> Store : mark old RunRecord and Message interrupted
-  note over Pool,Store
-  Open block tails before text_end, thinking_end,
-  or toolcall_end are not guaranteed to persist.
-  No cross-Pod run continuation is promised.
-  end note
-  Client -> WS : resume and request chat.history
-  WS -> Store : read authoritative interrupted history
-  Store --> WS : interrupted Message and RunRecord
-  WS --> Client : history response
-end
-
-alt explicit abort
-  Client -> WS : RequestFrame chat.abort(run_id)
-  WS -> Transport : request(ChatAbort, metadata)
-  Transport -> Pool : abort active run idempotently
-  Pool -> Session : abort()
-  Pool --> Transport : accepted
-  Transport --> WS : SessionResponse
-  WS --> Client : ResponseFrame before causal event
-  Session -> Hub : run.completed(aborted)
-else slow consumer
-  WS --> Client : close 1013
-  note over Client,Hub
-  No delta is silently dropped.
-  Reconnect obtains a new snapshot.
-  end note
-end
-
-note over WS,Hub
-Event seq is connection-local.
-run_seq is continuous across reconnects.
-Suppressed thinking content uses redacted placeholders.
-Snapshot response is sent before post-cursor deltas.
-Typed structured delta is a protocol v2 invariant.
-Methods are chat.send, chat.steer, chat.abort, chat.history,
-session.get, models.list, model.set, and thinking.set.
-chat.steer is text-only in service API v1.
-end note
-
-note over Client,WS
-The wss URI is an establishment request.
-Before HTTP 101, failures use HTTP status.
-After HTTP 101, messages are WebSocket Frames.
-HTTP Upgrade does not create a Runtime Session.
-Service API v1 and Frame protocol v2 evolve independently.
-end note
-
-note over Client,Session
-Core runtime identities:
-connection_id, session_id, agent_id,
-model_id, message_id, and run_id.
-Frame id and tool_call_id are local correlations.
-end note
-@enduml
-
-@startuml managed_session_transport_dependency_inversion
-title Managed Session Transport Dependency Inversion
-
-' OpenClaw baseline: b015925bc30f6a8363f290b07d5f8588e21422b8, Gateway Protocol v4
-' Source: packages/sdk/src/types.ts (OpenClawTransport, ConnectableOpenClawTransport)
-' Source: packages/sdk/src/transport.ts (GatewayClientTransport)
-' Source: src/gateway/server-methods/shared-types.ts (GatewayRequestHandler, RespondFn)
-' Source: src/gateway/server/ws-types.ts (GatewayWsClient)
-' Source: src/gateway/server-broadcast.ts (createGatewayBroadcaster)
-' Observed behavior: OpenClaw fully inverts the client SDK transport dependency.
-' Observed behavior: OpenClaw server handlers are frame-neutral, but broadcast still owns WebSocket objects.
-' Current Java behavior: ChatWebSocketHandler directly owns AgentSession command and close behavior.
-' Target design: CampusAgent exposes one server-side SessionTransport per physical connection.
-' Target design: one same-Pod connection generation owns Session writes; close does not abort a run.
-' Design reason: keep Session and run semantics independent from WebSocket while preserving a small API.
-
-skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam componentStyle rectangle
-skinparam packageStyle rectangle
-skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-skinparam ArrowColor #475569
-
-package "Network adapters" as Adapters {
-  component "ChatWebSocketAdapter\nFrame codec, trace context,\nseq, flow control, close codes" as WebSocketAdapter
-  component "Future REST plus SSE adapter\nnot part of protocol v2" as FutureAdapter
-}
-
-package "Application ports" as Ports {
-  interface "SessionTransportFactory\nopen(authContext)" as TransportFactory
-  interface "SessionTransport\nconnect(command, metadata)\nrequest(request, metadata)\nevents()\nclose()" as TransportPort
-}
-
-package "Managed runtime" as Runtime {
-  component "ManagedSessionTransport\nstate: NEW, CONNECTING,\nCONNECTED, CLOSED" as ManagedTransport
-  component "ManagedSessionPool" as Pool
-  component "ManagedRunHub" as Hub
-  database "RuntimeSessionStore" as Store
-  component "Model and Tool Managers" as Managers
-}
-
-WebSocketAdapter --> TransportFactory : immutable auth context
-TransportFactory --> ManagedTransport : create per connection
-ManagedTransport ..|> TransportPort
-WebSocketAdapter --> TransportPort : typed connect and requests
-TransportPort --> WebSocketAdapter : Flow Publisher of SessionEvents
-ManagedTransport --> Pool : Session commands
-ManagedTransport --> Hub : atomic snapshot and event stream
-ManagedTransport --> Store : authoritative history and idempotency
-ManagedTransport --> Managers : propagated Trace Context
-FutureAdapter ..> TransportPort : future adapter only
-
-note bottom of Ports
-The port contains no WebSocket, JSON,
-Spring session, or close-code types.
-end note
-
-note bottom of Runtime
-close removes the subscription only.
-Pool retains the run reference; AgentSession and AgentLoop execute; Hub maintains recovery state.
-The database survives Pod restart; in-memory runs do not.
-end note
-@enduml
-
 @startuml model_manager_streaming_flow
 title Model Manager Provider Streaming Flow
 
@@ -795,316 +412,6 @@ note over Provider,ModelManager
 The Provider maps events only.
 Tool execution remains in AgentLoop.
 No fallback to built-in providers.
-end note
-@enduml
-
-@startuml frontend_websocket_client_integration
-title agent-service Internal Runtime WebSocket Client Integration
-
-' pi-mono-java baseline: 1f7a5423219edfa4519d8719f1cc8a188ed72873
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java (configureRoutes)
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java (handle, onAgentEvent)
-' Source: modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java (typed event records)
-' Current Java behavior: the browser-facing v1 client replaces accumulated Message snapshots.
-' Target design: a calling service or server SDK authenticates to the Runtime and binds one session.
-' Target design: typed structured delta is intrinsic to protocol v2; full_thinking is optional.
-' Target design: chat.send response precedes origin run events and returns the user message id.
-' Target design: the existing internal Gateway authenticates callers on the canonical agent-service path.
-' Target design: one same-Pod connection generation replaces the previous connection on resume.
-' Target design: database history reports interrupted after Pod restart.
-' Design reason: a client must implement request correlation, reduction, and recovery from the contract alone.
-
-skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-skinparam participant {
-  BackgroundColor #F8FAFC
-  BorderColor #475569
-  FontColor #0F172A
-}
-skinparam ArrowColor #475569
-skinparam sequence {
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F8FAFC
-}
-
-actor "Agent UI" as Browser
-participant "mate-service\nRuntime bridge" as Client
-participant "ChatWebSocketAdapter" as WS
-participant "ManagedSessionPool" as Pool
-participant "ManagedRunHub" as Hub
-participant "Client reducer" as Reducer
-database "RuntimeSessionStore\ndatabase history" as History
-
-opt public Chat protocol
-  Browser -> Client : public WebSocket scoped by chat_id\nseparate connection, id, seq, and flow control
-end
-
-Client -> WS : establish internal wss through Gateway\n/agent-service/internal/v1/ws/chat
-WS --> Client : HTTP 101
-Client -> WS : req connect create or resume
-WS -> Pool : bind session and agent
-Pool -> Hub : atomic snapshot and cursor
-Hub --> Pool : active_run or null
-Pool --> WS : connect result
-WS --> Client : res connect payload first
-Client -> Reducer : enter sync and buffer post-snapshot events
-
-alt idle session
-  Client -> WS : req chat.send\ntext, attachments, or both\nand idempotency key
-  WS -> Pool : persist user message and\natomically reserve run
-  Pool --> WS : run_id and user_message_id
-  WS --> Client : res chat.send before origin events
-  Client -> Reducer : reconcile optimistic user message
-  Hub --> WS : run, message, and tool events
-  WS --> Client : typed EventFrames
-  Client -> Reducer : verify seq and run_seq\nthen reduce by content_index
-  WS --> Client : message.completed\nthen run.completed
-  Client -> Reducer : replace partial message\nthen clear active run
-else active session
-  Client -> WS : req chat.send
-  WS --> Client : res error RUN_ACTIVE
-end
-
-alt sequence gap or recoverable close
-  Client -> Client : backoff and open new socket generation
-  Client -> WS : req connect mode resume
-  WS -> Pool : increment connection generation\nand replace the old same-Pod socket
-  WS -> Hub : atomic snapshot and cursor
-  Hub --> WS : run_seq N, history_seq H, frozen model/thinking,\npartial message, open contents, active tools
-  WS --> Client : res connect snapshot first
-  Hub --> WS : events with run_seq greater than N
-  WS --> Client : post-snapshot EventFrames may arrive
-  Client -> Reducer : validate connection seq and buffer
-  Client -> WS : req chat.history(run_id, through H)
-  WS -> History : read prior run messages and tool results
-  History --> WS : history through watermark
-  WS --> Client : res history
-  Client -> Reducer : apply history, snapshot, and open state
-  Client -> Reducer : release buffered events in run_seq order
-else run ended while offline
-  Client -> WS : req chat.history
-  WS -> History : read messages and run records
-  History --> WS : ordered history items
-  WS --> Client : res authoritative history
-  Client -> Reducer : reconcile by message_id and run_id
-end
-
-opt Pod restarted
-  Client -> WS : resume, then req chat.history
-  WS -> History : load last complete blocks and terminal records
-  History --> WS : interrupted Message and RunRecord
-  WS --> Client : authoritative interrupted history
-  Client -> Reducer : mark the old response interrupted;\ndo not invent an unfinished tail
-end
-
-note over Browser,Client
-Browser authentication and public Chat transport belong to mate-service.
-The browser receives chat_id, never session_id or Runtime credentials.
-The bridge maps chat_id to session_id and rebuilds Frames.
-end note
-
-note over Client,Reducer
-Protocol v2 always uses typed structured delta.
-Only full_thinking is capability-negotiated.
-Suppressed thinking updates use redacted placeholders.
-Request id selects the pending payload decoder.
-State-changing responses precede causal events.
-end note
-@enduml
-
-@startuml managed_attachment_reference_lifecycle
-title Managed attachment OBS-backed reference lifecycle
-
-' Source evidence (pi-mono fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc):
-' packages/agent/src/agent.ts, prompt(), lines 336-395
-' packages/ai/src/types.ts, ImageContent, lines 345-349
-' Source evidence (pi-mono-java 1f7a5423219edfa4519d8719f1cc8a188ed72873):
-' modules/ai/src/main/java/com/campusclaw/ai/types/UserMessage.java, lines 20-31
-' modules/ai/src/main/java/com/campusclaw/ai/types/ContentBlock.java, lines 17-24
-' modules/ai/src/main/java/com/campusclaw/ai/types/ImageContent.java, lines 9-18
-' docs/plans/ws-chat-followups.md, lines 12-37
-' Observed behavior: both baselines can carry inline image content but do not
-' define a generic attachment_id or an external Attachment Service.
-' Target design: mate-service streams original bytes to shared OBS, records
-' permanent identity state plus active lifecycle detail in shared openGauss,
-' and exposes fixed HTTP upload, batch resolve, and content streaming APIs.
-' Target design: the private OBS Object Key is exactly attachment_id; it is not
-' an authorization token and never includes a prefix, path, or filename.
-' Target design: deletion removes active detail and retains a five-field
-' permanent DELETED tombstone in the t_attachment main table.
-' Design reason: keep large-object transfer off the Chat control plane, support
-' cross-Pod reads without local files, prevent metadata forgery, and retain
-' reproducible public metadata snapshots in Runtime history.
-
-skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam sequence {
-  ArrowColor #334155
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F8FAFC
-}
-
-actor "End user" as User
-participant "CampusMate client" as Client
-participant "mate-service\nAttachment Service" as Attach
-participant "background worker" as Worker
-database "openGauss\nt_attachment\nt_attachment_active_detail" as DB
-database "private OBS\nObject Key = attachment_id" as OBS
-participant "mate-service\nRuntime client" as Upstream
-participant "ChatWebSocketAdapter" as WS
-participant "ManagedSessionTransport" as Transport
-database "RuntimeSessionStore" as Store
-participant "AttachmentInputAssembler" as Assembler
-participant "Model Manager Provider" as Model
-
-User -> Client : select one file
-Client -> Attach : POST /mate-service/v1/chats/{chat_id}/attachments\nmultipart file + X-Attachment-Size\nPrefer respond-async or wait=N
-Attach -> Attach : authorize user and session;\nrequire size 1..20 MiB and safe filename
-Attach -> Attach : generate opaque attachment_id
-Attach -> DB : INSERT t_attachment row\nand t_attachment_active_detail\nin one transaction
-DB --> Attach : committed
-Attach -> OBS : put(attachment_id, bounded stream,\nexpected_size_bytes) with create-only semantics
-Attach -> Attach : count bytes, verify file-part EOF,\nand compute SHA-256 with backpressure
-
-alt upload failed or actual size mismatch
-  Attach -> OBS : delete(attachment_id) if an object may exist
-  Attach -> DB : mark main FAILED;\nset bounded error_code in active detail
-  Attach --> Client : bounded HTTP error
-else OBS write succeeded
-  OBS --> Attach : stored object completion
-  Attach -> DB : update main PROCESSING;\nset size_bytes and SHA-256 in active detail
-  Attach --> Client : 202 + Location + Retry-After\nunless wait reaches READY
-  Worker -> DB : claim short scan lease in active detail\nusing retry time, lease, and row version
-  Worker -> OBS : open(attachment_id) as stream
-  OBS --> Worker : bounded byte stream
-  Worker -> Worker : verify size and digest;\nsniff MIME and scan security;\nnever execute JavaScript
-  Worker -> DB : mark main READY, BLOCKED, or FAILED;\nset detected MIME or bounded error_code;\nclear phase lease fields
-  Client -> Attach : GET /mate-service/v1/chats/{chat_id}/attachments/{attachment_id}
-  Attach -> DB : read authorized main and active detail
-  DB --> Attach : status and public metadata
-  Attach --> Client : 200 attachment resource
-end
-
-User -> Client : send text, attachments, or both
-Client -> Upstream : application chat request
-Upstream -> WS : RequestFrame chat.send\nordered attachment_ids + idempotency_key
-WS -> Transport : typed SessionRequest + auth context
-Transport -> Store : lookup accepted idempotency result
-
-alt accepted result exists with the same payload
-  Store --> Transport : original run_id and user_message_id
-  Transport --> WS : accepted result
-  WS --> Upstream : ResponseFrame before causal events
-else first attempt
-  Transport -> Transport : acquire Session single-writer guard;\nreject a different active run
-  Transport -> Attach : POST /mate-service/internal/v1/attachments:resolve\nservice token + session_id + ordered IDs
-  Attach -> DB : short transaction: lock main and detail;\nrequire same session, READY,\nactive detail present, and not expired
-  alt any attachment is invalid
-    DB --> Attach : rollback all changes
-    Attach --> Transport : one safe batch error
-    Transport --> WS : failed ResponseFrame; no run
-  else all attachments are valid
-    Attach -> DB : atomically preserve first referenced_at\nand set expires_at=NULL\nusing row_version compare-and-set
-    DB --> Attach : committed public snapshots
-    Attach --> Transport : ordered id, filename, media type,\nsize, and SHA-256
-    Transport -> Store : commit user Message snapshots,\nidempotency result, run,\nand active run state
-    Store --> Transport : run_id and user_message_id
-    Transport --> WS : accepted result
-    WS --> Upstream : ResponseFrame before run events
-
-    Transport -> Assembler : ordered public snapshots
-    loop each attachment
-      Assembler -> Attach : GET /mate-service/internal/v1/sessions/{session_id}/\nattachments/{attachment_id}/content\nwith expected SHA-256
-      Attach -> DB : require main READY, same session,\nreferenced_at not null, and matching digest
-      DB --> Attach : authorized active metadata
-      Attach -> OBS : open(attachment_id)
-      OBS --> Attach : original byte stream
-      Attach --> Assembler : bounded proxy stream
-      Assembler -> Assembler : verify length and SHA-256;\nconstruct provider-neutral input
-    end
-    Assembler -> Model : optional text plus ordered attachments
-    Model --> Transport : model stream
-  end
-end
-
-group Public deletion
-  Client -> Attach : DELETE unreferenced attachment
-  Attach -> DB : conditional update to DELETING
-  alt attachment is already referenced
-    DB --> Attach : conflict
-    Attach --> Client : 409 ATTACHMENT_REFERENCED
-  else OBJECT_KEY_CONFLICT quarantine
-    DB --> Attach : retain FAILED active detail
-    Attach --> Client : bounded 503; audited reconciliation required
-  else deletion accepted
-    DB --> Attach : DELETING
-    Attach --> Client : 202
-    Worker -> DB : claim deletion lease in active detail
-    Worker -> OBS : delete(attachment_id) with retry;\nnot found is success
-    Worker -> DB : transaction: delete active detail;\nmark main DELETED and set deleted_at
-  end
-end
-
-group Session deletion
-  Upstream -> Transport : stop or abort Runtime Session
-  Upstream -> Attach : delete all attachments for session_id
-  Attach -> DB : mark normal non-DELETED rows DELETING; exclude quarantine
-  Worker -> OBS : delete each attachment_id with retry
-  Worker -> DB : delete each active detail and retain\npermanent five-field DELETED tombstones
-  Attach --> Upstream : storage cleanup remains pending if quarantine exists
-end
-
-note over Client,OBS
-Clients never access OBS directly.
-The private Object Key is exactly attachment_id.
-It has no prefix, path, filename, or public URL.
-Knowing the ID is not authorization.
-Upload retries create a new attachment_id.
-Create-only conflict keeps FAILED detail for audited reconciliation
-and never overwrites or deletes an object of unproven ownership.
-The file body exists only in OBS; openGauss stores metadata.
-end note
-
-note over Attach,DB
-The permanent main row retains only attachment_id, session_id,
-status, created_at, and deleted_at after deletion.
-The active detail exists only before DELETED.
-referenced_at not null means the Session has referenced the file.
-Referenced rows clear expires_at and cannot be deleted alone.
-If Runtime persistence later fails, conservative retention lasts
-until Session deletion; there is no release protocol.
-end note
-
-note over DB,Worker
-Active detail roles:
-filename is display metadata only.
-detected_media_type and expected/actual sizes enforce content policy.
-SHA-256 protects upload, scan, proxy, and Runtime integrity.
-referenced_at and expires_at govern one-way reference and 24-hour cleanup.
-error_code records a bounded safe failure reason.
-attempt_count, next_attempt_at, lease_owner, lease_until,
-and row_version provide retry, crash recovery, and race protection.
-end note
-
-note over WS,Attach
-The WebSocket carries only ordered attachment_ids.
-agent-service has no OBS endpoint, credentials, or direct access.
-Object Key equality does not widen its authorization.
-end note
-
-note over Store,Model
-Runtime history stores exactly attachment_id, filename,
-media_type, size_bytes, and SHA-256.
-File bodies are untrusted user data.
 end note
 @enduml
 
@@ -1348,7 +655,7 @@ title CampusClaw GetSession Confirmed Response
 ' Source evidence (anthropic-sdk-typescript 64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff):
 ' src/resources/beta/sessions/sessions.ts, Session, lines 638-710
 ' Source evidence (CampusClaw design repository):
-' pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml,
+' pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md,
 ' ThinkingLevel schema near baseline line 1602
 ' Observed behavior: pi exposes phase, reasoning effort, transcript, attached, and locked
 ' in its protocol snapshot.
@@ -1644,7 +951,7 @@ title CampusClaw Execution Resource Model Decision Record
 ' not the lifecycle of work inside the created Session.
 ' CampusClaw target evidence:
 ' chat-http-v1-design.md, section 2.2.1, execution resource model decision
-' chat-ws-v2.asyncapi.yaml, chat.send and Run event contracts, lines 1742-1802 and 2955-2984
+' chat-http-v1-design.md, confirmed Session Event and execution resource decisions
 ' Target-only decision: neither pi baseline exposes this managed Session HTTP contract.
 ' Design reason: use Session Entry history as the recovery unit and avoid a redundant
 ' public run resource when callers only submit messages and observe Session output.

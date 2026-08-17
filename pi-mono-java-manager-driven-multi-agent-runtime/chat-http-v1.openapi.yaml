@@ -1,17 +1,25 @@
 openapi: 3.1.0
 info:
-  title: CampusAgent 内部 Runtime HTTP API
+  title: CampusAgent 内部 Runtime HTTP API（过渡期滞后投影）
   version: 1.7.1
   description: |
-    CampusAgent Runtime 面向 mate-service Runtime bridge 和获授权内部 SDK 的
-    HTTP API。它是一组 Session、Run、Event、History 和 Model 资源接口，
-    不是 WebSocket Frame RPC 的单接口包装。
+    本文件是尚未同步当前十一项已确认接口的过渡期机器投影，不是评审权威，
+    仍含已被 Session Event 资源模型替代的旧 Run 路径和 Schema。
+    当前契约以 chat-http-v1-review.html 和 chat-http-v1-design.md 为准。
+    本文件原先引用的旧 AsyncAPI Schema 已机械内联，以便删除失效的
+    WebSocket 规范后仍可独立解析；内联不表示继续认可旧 Run 设计。
   contact:
     name: CampusAgent
   license:
     name: MIT
     identifier: MIT
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+x-contract-status:
+  authority: transitional-non-authoritative
+  currentOperationCount: 11
+  staleRunOperationsPresent: true
+  authoritativeHumanContract: chat-http-v1-review.html
+  authoritativeDesign: chat-http-v1-design.md
 servers:
   - url: https://agent-service.internal/campusclaw-service/v1
     description: 生产内部 Gateway
@@ -33,43 +41,13 @@ tags:
     description: 数据库权威 Message 与 RunRecord 历史
   - name: Models
     description: Session-scoped 模型发现和配置
-x-source-evidence:
-  status: target-only design; pi-mono-java HTTP API is not implemented
-  repository: https://github.com/superheromeZzh/pi-mono-java
-  commit: dff835743fc7f3c93e1154c3eb51028749867ca8
-  sourceContract: chat-ws-v2.asyncapi.yaml@2.12.0
-  observedPaths:
-    - path: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java
-      symbols: buildRoutes at baseline lines 237-274 and wireServerRoutes at lines 285-307 do not install an inbound authentication adapter; applyCorsHeaders only allows Authorization at lines 340-344
-    - path: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java
-      symbols: connection lifecycle and v1 commands at baseline lines 115-227; cumulative message updates at lines 422-459
-    - path: modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java
-      symbols: structured provider stream events at baseline lines 44-164
-    - path: modules/agent-core/src/main/java/com/campusclaw/agent/subagent/a2a/A2aAgentBackend.java
-      symbols: outbound A2A requests set X-HW-ID and X-HW-APPKEY at baseline lines 226-238
-x-http-design:
-  operationCount: 13
-  sessionIdOwner: CampusClaw
-  createSessionRequestBody: none
-  createSessionIdempotencyKey: false
-  createSessionResponseEnvelope: ResultBean
-  createSessionErrorFields: [resCode, resMsg]
-  createSessionLocales: [en-US, zh-CN]
-  eventTransports: [text/event-stream, application/json]
-  connectionStateRemoved: true
-  canonicalEventCursor: run_seq
-  eventJournal: target architecture change
-  authentication:
-    preferredMode: jwt
-    supportedModes: [jwt, appkey]
-    mixedCredentials: reject
-    fallbackAfterVerificationFailure: false
 paths:
   /agents/{agent_id}/sessions:
     parameters:
       - $ref: '#/components/parameters/AgentId'
     post:
-      tags: [Sessions]
+      tags:
+        - Sessions
       summary: 创建 Runtime Session
       operationId: createSession
       x-review-status: confirmed
@@ -93,11 +71,14 @@ paths:
         '201':
           description: Session 已完成初始化，可接受后续请求
           headers:
-            Location: { $ref: '#/components/headers/Location' }
-            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+            Location:
+              $ref: '#/components/headers/Location'
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SessionCreateResultBean' }
+              schema:
+                $ref: '#/components/schemas/SessionCreateResultBean'
               example:
                 resCode: '0'
                 resMsg: success
@@ -112,10 +93,12 @@ paths:
         '400':
           description: PATH 中的 agent_id 格式无效
           headers:
-            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              schema:
+                $ref: '#/components/schemas/ErrorResultBean'
               examples:
                 zh-CN:
                   value:
@@ -128,10 +111,12 @@ paths:
         '401':
           description: 调用方身份认证失败，或同时提供两组凭据
           headers:
-            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              schema:
+                $ref: '#/components/schemas/ErrorResultBean'
               examples:
                 unauthenticatedZhCn:
                   value:
@@ -152,10 +137,12 @@ paths:
         '403':
           description: 当前调用方无权为该 Agent 创建 Session
           headers:
-            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              schema:
+                $ref: '#/components/schemas/ErrorResultBean'
               examples:
                 zh-CN:
                   value:
@@ -168,10 +155,12 @@ paths:
         '404':
           description: 指定的 Agent 不存在
           headers:
-            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              schema:
+                $ref: '#/components/schemas/ErrorResultBean'
               examples:
                 zh-CN:
                   value:
@@ -184,10 +173,12 @@ paths:
         '422':
           description: Agent 不可用或未配置有效默认模型
           headers:
-            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              schema:
+                $ref: '#/components/schemas/ErrorResultBean'
               examples:
                 agentNotAvailableZhCn:
                   value:
@@ -208,10 +199,12 @@ paths:
         '500':
           description: Session 初始化失败
           headers:
-            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              schema:
+                $ref: '#/components/schemas/ErrorResultBean'
               examples:
                 zh-CN:
                   value:
@@ -224,13 +217,17 @@ paths:
         '503':
           description: Model Manager 暂时不可用
           headers:
-            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
             Retry-After:
               description: 建议重试前等待的秒数。
-              schema: { type: integer, minimum: 1 }
+              schema:
+                type: integer
+                minimum: 1
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorResultBean' }
+              schema:
+                $ref: '#/components/schemas/ErrorResultBean'
               examples:
                 zh-CN:
                   value:
@@ -240,26 +237,31 @@ paths:
                   value:
                     resCode: MANAGER_UNAVAILABLE
                     resMsg: Model Manager is temporarily unavailable. Try again later.
-
   /sessions/{session_id}:
     parameters:
       - $ref: '#/components/parameters/SessionId'
     get:
-      tags: [Sessions]
+      tags:
+        - Sessions
       summary: 读取 Session 状态
       operationId: getSession
       responses:
         '200':
           description: Session、当前模型及可选 active-run 快照
           headers:
-            ETag: { $ref: '#/components/headers/ETag' }
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SessionResource' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        default: { $ref: '#/components/responses/Problem' }
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
     delete:
-      tags: [Sessions]
+      tags:
+        - Sessions
       summary: 幂等请求删除 Session
       operationId: deleteSession
       parameters:
@@ -268,20 +270,24 @@ paths:
         '202':
           description: 已停止接受新操作并进入异步清理
           headers:
-            Location: { $ref: '#/components/headers/Location' }
+            Location:
+              $ref: '#/components/headers/Location'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SessionDeletionAccepted' }
+              schema:
+                $ref: '#/components/schemas/SessionDeletionAccepted'
         '204':
           description: Session 已删除或同一删除已完成
-        '404': { $ref: '#/components/responses/NotFound' }
-        default: { $ref: '#/components/responses/Problem' }
-
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
   /sessions/{session_id}/runs:
     parameters:
       - $ref: '#/components/parameters/SessionId'
     post:
-      tags: [Runs]
+      tags:
+        - Runs
       summary: 提交用户消息并创建异步 Run
       operationId: createRun
       parameters:
@@ -290,20 +296,27 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/RunCreateRequest' }
+            schema:
+              $ref: '#/components/schemas/RunCreateRequest'
       responses:
         '202':
           description: 用户消息、幂等结果和 active-run 已原子提交
           headers:
-            Location: { $ref: '#/components/headers/Location' }
+            Location:
+              $ref: '#/components/headers/Location'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RunAccepted' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/Unprocessable' }
-        default: { $ref: '#/components/responses/Problem' }
+              schema:
+                $ref: '#/components/schemas/RunAccepted'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        default:
+          $ref: '#/components/responses/Problem'
     get:
-      tags: [Runs]
+      tags:
+        - Runs
       summary: 分页列出 Session 的 Run
       operationId: listRuns
       parameters:
@@ -318,35 +331,42 @@ paths:
           description: Run 分页
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RunList' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        default: { $ref: '#/components/responses/Problem' }
-
+              schema:
+                $ref: '#/components/schemas/RunList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
   /sessions/{session_id}/runs/{run_id}:
     parameters:
       - $ref: '#/components/parameters/SessionId'
       - $ref: '#/components/parameters/RunId'
     get:
-      tags: [Runs]
+      tags:
+        - Runs
       summary: 读取 Run 快照或终态
       operationId: getRun
       responses:
         '200':
           description: Run 权威资源
           headers:
-            ETag: { $ref: '#/components/headers/ETag' }
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RunResource' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        default: { $ref: '#/components/responses/Problem' }
-
+              schema:
+                $ref: '#/components/schemas/RunResource'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
   /sessions/{session_id}/runs/{run_id}/steers:
     parameters:
       - $ref: '#/components/parameters/SessionId'
       - $ref: '#/components/parameters/RunId'
     post:
-      tags: [Runs]
+      tags:
+        - Runs
       summary: 向 active Run 追加文本指导
       operationId: steerRun
       parameters:
@@ -355,23 +375,28 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/SteerRequest' }
+            schema:
+              $ref: '#/components/schemas/SteerRequest'
       responses:
         '202':
           description: Steering 已接受
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SteerAccepted' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        default: { $ref: '#/components/responses/Problem' }
-
+              schema:
+                $ref: '#/components/schemas/SteerAccepted'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Problem'
   /sessions/{session_id}/runs/{run_id}/abort:
     parameters:
       - $ref: '#/components/parameters/SessionId'
       - $ref: '#/components/parameters/RunId'
     post:
-      tags: [Runs]
+      tags:
+        - Runs
       summary: 幂等请求终止 Run
       operationId: abortRun
       parameters:
@@ -381,17 +406,21 @@ paths:
           description: Abort 已接受或返回原幂等结果
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AbortAccepted' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        default: { $ref: '#/components/responses/Problem' }
-
+              schema:
+                $ref: '#/components/schemas/AbortAccepted'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Problem'
   /sessions/{session_id}/runs/{run_id}/events:
     parameters:
       - $ref: '#/components/parameters/SessionId'
       - $ref: '#/components/parameters/RunId'
     get:
-      tags: [Events]
+      tags:
+        - Events
       summary: 消费或补拉 Run 有序事件
       operationId: getRunEvents
       description: |
@@ -401,17 +430,24 @@ paths:
         - name: Last-Event-ID
           in: header
           description: SSE 恢复游标；与 after_run_seq 同时提供时必须相等。
-          schema: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+          schema:
+            type: string
+            pattern: ^(0|[1-9][0-9]*)$
         - name: after_run_seq
           in: query
-          schema: { type: integer, minimum: 0, default: 0 }
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
         - $ref: '#/components/parameters/Limit'
       responses:
         '200':
           description: SSE 流或 JSON 事件页
           headers:
             Cache-Control:
-              schema: { type: string, const: no-cache }
+              schema:
+                type: string
+                const: no-cache
           content:
             text/event-stream:
               schema:
@@ -419,15 +455,18 @@ paths:
               x-sse-event-schema:
                 $ref: '#/components/schemas/RunEvent'
             application/json:
-              schema: { $ref: '#/components/schemas/RunEventPage' }
-        '410': { $ref: '#/components/responses/Gone' }
-        default: { $ref: '#/components/responses/Problem' }
-
+              schema:
+                $ref: '#/components/schemas/RunEventPage'
+        '410':
+          $ref: '#/components/responses/Gone'
+        default:
+          $ref: '#/components/responses/Problem'
   /sessions/{session_id}/history:
     parameters:
       - $ref: '#/components/parameters/SessionId'
     get:
-      tags: [History]
+      tags:
+        - History
       summary: 读取权威持久历史
       operationId: getSessionHistory
       parameters:
@@ -435,24 +474,30 @@ paths:
         - $ref: '#/components/parameters/Limit200'
         - name: run_id
           in: query
-          schema: { $ref: '#/components/schemas/RunId' }
+          schema:
+            $ref: '#/components/schemas/RunId'
         - name: through_history_seq
           in: query
-          schema: { type: integer, minimum: 0 }
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: 按 history_seq 从旧到新排列的 Message 和 RunRecord
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/HistoryResult' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        default: { $ref: '#/components/responses/Problem' }
-
+              schema:
+                $ref: '#/components/schemas/HistoryResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
   /sessions/{session_id}/models:
     parameters:
       - $ref: '#/components/parameters/SessionId'
     get:
-      tags: [Models]
+      tags:
+        - Models
       summary: 列出 Session 可用模型
       operationId: listSessionModels
       responses:
@@ -460,15 +505,18 @@ paths:
           description: 当前 Agent、调用身份和部署策略共同允许的模型
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ModelsListResult' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        default: { $ref: '#/components/responses/Problem' }
-
+              schema:
+                $ref: '#/components/schemas/ModelsListResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Problem'
   /sessions/{session_id}/model:
     parameters:
       - $ref: '#/components/parameters/SessionId'
     put:
-      tags: [Models]
+      tags:
+        - Models
       summary: 切换 Session 当前模型
       operationId: setSessionModel
       parameters:
@@ -477,25 +525,32 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ModelChangeRequest' }
+            schema:
+              $ref: '#/components/schemas/ModelChangeRequest'
       responses:
         '200':
           description: 模型已切换
           headers:
-            ETag: { $ref: '#/components/headers/ETag' }
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ModelSetResult' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '412': { $ref: '#/components/responses/PreconditionFailed' }
-        '422': { $ref: '#/components/responses/Unprocessable' }
-        default: { $ref: '#/components/responses/Problem' }
-
+              schema:
+                $ref: '#/components/schemas/ModelSetResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        default:
+          $ref: '#/components/responses/Problem'
   /sessions/{session_id}/thinking:
     parameters:
       - $ref: '#/components/parameters/SessionId'
     put:
-      tags: [Models]
+      tags:
+        - Models
       summary: 修改默认 thinking 披露级别
       operationId: setSessionThinking
       parameters:
@@ -504,19 +559,24 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ThinkingChangeRequest' }
+            schema:
+              $ref: '#/components/schemas/ThinkingChangeRequest'
       responses:
         '200':
           description: 默认披露级别已更新
           headers:
-            ETag: { $ref: '#/components/headers/ETag' }
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ThinkingSetResult' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '412': { $ref: '#/components/responses/PreconditionFailed' }
-        default: { $ref: '#/components/responses/Problem' }
-
+              schema:
+                $ref: '#/components/schemas/ThinkingSetResult'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   securitySchemes:
     hwCallerId:
@@ -546,17 +606,20 @@ components:
       in: path
       required: true
       description: 创建后不可变的 Agent 绑定。
-      schema: { $ref: '#/components/schemas/AgentId' }
+      schema:
+        $ref: '#/components/schemas/AgentId'
     SessionId:
       name: session_id
       in: path
       required: true
-      schema: { $ref: '#/components/schemas/SessionId' }
+      schema:
+        $ref: '#/components/schemas/SessionId'
     RunId:
       name: run_id
       in: path
       required: true
-      schema: { $ref: '#/components/schemas/RunId' }
+      schema:
+        $ref: '#/components/schemas/RunId'
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -571,113 +634,467 @@ components:
       in: header
       required: true
       description: 最近一次 Session 响应的强 ETag。
-      schema: { type: string, minLength: 3, maxLength: 128 }
+      schema:
+        type: string
+        minLength: 3
+        maxLength: 128
     Cursor:
       name: cursor
       in: query
-      schema: { type: string, minLength: 1, maxLength: 1024 }
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 1024
     Limit:
       name: limit
       in: query
-      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
     Limit200:
       name: limit
       in: query
-      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
   headers:
     ETag:
       description: 资源强版本标识。
-      schema: { type: string }
+      schema:
+        type: string
     Location:
       description: 已创建、已接受或异步状态资源的位置。
-      schema: { type: string, format: uri-reference }
+      schema:
+        type: string
+        format: uri-reference
     ContentLanguage:
       description: resMsg 实际使用的语言。
       schema:
         type: string
-        enum: [en-US, zh-CN]
+        enum:
+          - en-US
+          - zh-CN
   responses:
     Problem:
       description: 结构化错误
       content:
         application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+          schema:
+            $ref: '#/components/schemas/Problem'
     NotFound:
       description: Agent、Session 或 Run 不存在
       content:
         application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+          schema:
+            $ref: '#/components/schemas/Problem'
     Conflict:
       description: active Run、Agent 绑定或幂等冲突
       content:
         application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+          schema:
+            $ref: '#/components/schemas/Problem'
     Gone:
       description: Event Journal 已无法从请求游标继续
       content:
         application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+          schema:
+            $ref: '#/components/schemas/Problem'
     PreconditionFailed:
       description: If-Match 与当前 Session 版本不一致
       content:
         application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+          schema:
+            $ref: '#/components/schemas/Problem'
     Unprocessable:
       description: Agent 不可用、缺少有效默认模型，或附件未就绪、无效或不符合模型输入策略
       content:
         application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+          schema:
+            $ref: '#/components/schemas/Problem'
   schemas:
     SessionId:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/SessionId'
+      allOf:
+        - $ref: '#/components/schemas/Identifier'
+      description: |
+        mate-service Runtime bridge 在 connect 中提供其为 Chat 生成的内部 session_id。服务端用它创建
+        或恢复 CampusAgent Runtime Session。该值必须在 CampusAgent Runtime
+        部署范围内全局唯一，删除
+        后不得复用；推荐使用 UUIDv7 或 ULID，不接受仅在某个 tenant 或 user
+        内唯一的短 ID。
     AgentId:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/AgentId'
+      type: string
+      minLength: 30
+      maxLength: 30
+      pattern: ^agent_[0-9A-Za-z]{24}$
+      example: agent_011CZkYqphY8vELVzwCUpqiQ
+      description: |
+        Agent 元数据服务签发的、大小写敏感且不透明的资源 ID。agent-service
+        只按本 Schema 解析并将完整值交给 Agent Manager 校验，不负责签发。
+        调用方不得解析 24 位后缀、推断生成时间或其他业务含义，也不得依赖
+        字典序进行新旧或优先级排序。调用方在 connect 中提供 agent_id，并在
+        创建 CampusAgent Runtime Session 时固定绑定；恢复时，不一致的值导致
+        请求失败。该 ID 不是授权凭据，逐请求授权仍由 Manager 执行。本前缀和
+        正则是 CampusAgent 自身的协议约束，不代表
+        Anthropic API 对资源 ID 的官方正则定义。
     ModelId:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ModelId'
+      type: string
+      minLength: 30
+      maxLength: 30
+      pattern: ^model_[0-9A-Za-z]{24}$
+      example: model_011CZq2GkV8aD4NwP7sLmXfR
+      description: |
+        model-service 签发的、大小写敏感且不透明的 CampusModel Manager 资源
+        ID。agent-service 只按本 Schema 解析并将完整值交给 Model Manager
+        校验，不负责签发。该资源在 Model Manager 内映射为私有
+        provider_model_id/descriptor；
+        Anthropic 等 Provider 自身的模型 ID 不是 `model_...` 资源 ID，也不直接
+        暴露为本字段。调用方不得解析 24 位后缀、推断 Provider 或其他业务含义，
+        也不得依赖字典序进行新旧或优先级排序。调用方在创建 Session 时提供
+        model_id，或在恢复和 model.set 时请求切换；active run 存在时不执行
+        切换，每个 run 固化实际使用的模型。该 ID 不是授权凭据，Agent-model
+        允许关系仍由 Model Manager 校验。本前缀和正则是 CampusAgent 自身
+        的协议约束，不代表 Anthropic API 对资源 ID 的官方正则定义。
     RunId:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/RunId'
+      allOf:
+        - $ref: '#/components/schemas/Identifier'
+      description: |
+        服务端首次接受新的 chat.send 时生成 run_id；同一 idempotency_key 且
+        负载一致的重试返回原 run_id，负载不一致时返回 IDEMPOTENCY_CONFLICT；连接
+        断开或重连不会改变该值。
     MessageId:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/MessageId'
+      allOf:
+        - $ref: '#/components/schemas/Identifier'
+      description: 服务端持久化一条消息时生成 message_id，并在消息事件及历史结果中返回。
     AttachmentId:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/AttachmentId'
+      type: string
+      minLength: 35
+      maxLength: 35
+      pattern: ^attachment_[0-9A-Za-z]{24}$
+      example: attachment_011CZm8VpK4rNs6WtY2hDqfB
+      description: |
+        上层 Attachment Service 在服务端签发的不透明资源 ID。固定前缀后是
+        24 位 ASCII 大小写字母或数字，总长 35；ID 大小写敏感，客户端和
+        Runtime 必须按原始字节比较，不得自行生成、转小写、解析后缀或推断
+        时间、顺序和归属。
+
+        一个 Attachment Service 部署内必须用经实际 openGauss/JDBC 验证的
+        大小写敏感比较语义和数据库主键唯一约束保证全局唯一；生成碰撞时
+        重新签发。唯一约束必须
+        覆盖活动记录和永久 issued-ID/tombstone，物理删除不能释放 ID。ID 从
+        签发起绑定同一上传记录，READY 后不得重新指向其他内容，DELETED 后
+        不得复用。
+
+        格式正确和全局唯一都不构成授权，也不扩展 CampusAgent Runtime
+        Session 路由。每次首次接受的新 chat.send 仍必须结合不可变调用服务
+        身份和当前 session_id 解析；已接受幂等重试直接读取冻结结果，不重新
+        解析。调用方不能用 URL、路径或对象存储 key 替代该值。接受时冻结
+        filename、media_type、size_bytes 和 sha256 元数据快照。
     ThinkingLevel:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ThinkingLevel'
+      type: string
+      enum:
+        - hidden
+        - full
+      description: |
+        当前连接的 reasoning content 可见性。该字段不控制模型是否
+        推理或推理强度。full 只有在 connect 返回的
+        features.capabilities 包含 full_thinking 时才合法；capability 只开放
+        选择上限，不会自动把级别切换为 full。
     ModelsListResult:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ModelsListResult'
+      type: object
+      additionalProperties: false
+      required:
+        - models
+        - effective_model_id
+      properties:
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelSummary'
+        effective_model_id:
+          $ref: '#/components/schemas/ModelId'
     ModelSetResult:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ModelSetResult'
+      type: object
+      additionalProperties: false
+      description: 目标模型已通过当前 AttachmentContextPlan 校验并持久化为 Session 有效模型。
+      required:
+        - model
+      properties:
+        model:
+          $ref: '#/components/schemas/ModelSummary'
     ThinkingSetResult:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ThinkingSetResult'
+      type: object
+      additionalProperties: false
+      required:
+        - thinking
+      properties:
+        thinking:
+          $ref: '#/components/schemas/ThinkingLevel'
     SafeErrorDetails:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/SafeErrorDetails'
+      type: object
+      maxProperties: 32
+      propertyNames:
+        maxLength: 128
+      additionalProperties:
+        $ref: '#/components/schemas/SafeErrorDetailValue'
+      description: |
+        只允许有界、脱敏、可操作的诊断字段。规范化 JSON 的 UTF-8 大小
+        不得超过 16384 字节；不得包含凭据、内部 Header、私有 claim、
+        堆栈、Prompt、原始 thinking 或执行器秘密。无法安全投影时应省略。
+      x-maxSerializedBytes: 16384
+      x-maxDepth: 2
+      x-maxStringUtf8Bytes: 4096
     Timestamp:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/Timestamp'
+      type: string
+      format: date-time
     TextContent:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/TextContent'
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - text
+      properties:
+        type:
+          const: text
+        text:
+          type: string
+          minLength: 1
     ThinkingContent:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ThinkingContent'
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - disclosure
+      properties:
+        type:
+          const: thinking
+        text:
+          type: string
+          minLength: 1
+        disclosure:
+          type: string
+          enum:
+            - hidden
+            - full
+      allOf:
+        - if:
+            properties:
+              disclosure:
+                const: hidden
+            required:
+              - disclosure
+          then:
+            not:
+              required:
+                - text
+        - if:
+            properties:
+              disclosure:
+                const: full
+            required:
+              - disclosure
+          then:
+            required:
+              - text
+      description: |
+        Thinking 内容块始终占用原 content_index，因此 hidden 投影也保留
+        一个不含 text 的占位块，后续可见块的索引不会前移。
+        disclosure=full 只允许出现在有效 capability 包含 full_thinking 的连接投影中。
     ToolCallContent:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ToolCallContent'
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - tool_call_id
+        - tool_id
+        - arguments
+      properties:
+        type:
+          const: tool_call
+        tool_call_id:
+          $ref: '#/components/schemas/ToolCallId'
+        tool_id:
+          $ref: '#/components/schemas/Identifier'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 256
+        arguments:
+          $ref: '#/components/schemas/ToolParametersProjection'
     ToolResultContent:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ToolResultContent'
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - tool_call_id
+        - status
+      properties:
+        type:
+          const: tool_result
+        tool_call_id:
+          $ref: '#/components/schemas/ToolCallId'
+        status:
+          type: string
+          enum:
+            - done
+            - error
+            - aborted
+        result:
+          $ref: '#/components/schemas/ToolValueProjection'
+        error:
+          $ref: '#/components/schemas/Error'
+      allOf:
+        - if:
+            properties:
+              status:
+                const: done
+            required:
+              - status
+          then:
+            required:
+              - result
+            not:
+              required:
+                - error
+        - if:
+            properties:
+              status:
+                const: error
+            required:
+              - status
+          then:
+            required:
+              - error
+            not:
+              required:
+                - result
+        - if:
+            properties:
+              status:
+                const: aborted
+            required:
+              - status
+          then:
+            not:
+              anyOf:
+                - required:
+                    - result
+                - required:
+                    - error
     AttachmentContent:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/AttachmentContent'
+      type: object
+      additionalProperties: false
+      description: |
+        已接受用户消息中的稳定附件快照，用于 RuntimeSessionStore、
+        chat.history 和 UI 恢复。
+        字段来自 Attachment Service 的可信描述，不来自 chat.send。它只允许
+        出现在 role=user 的持久化 Message；不包含 URL、OBS Bucket、认证凭据、
+        预签名 URL、Base64 或任何运行时凭据。filename 仅用于转义后的 UI
+        显示，不能解释为路径。
+      required:
+        - type
+        - attachment_id
+        - filename
+        - media_type
+        - size_bytes
+        - sha256
+      properties:
+        type:
+          const: attachment
+        attachment_id:
+          $ref: '#/components/schemas/AttachmentId'
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 512
+          pattern: ^[^\x00-\x1F\x7F/\\]+$
+          description: Attachment Service 清理控制字符后的显示名；调用方渲染时仍必须转义。
+        media_type:
+          $ref: '#/components/schemas/AttachmentMediaType'
+        size_bytes:
+          type: integer
+          minimum: 1
+          maximum: 20971520
+        sha256:
+          $ref: '#/components/schemas/Sha256'
     OpenContentState:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/OpenContentState'
+      oneOf:
+        - $ref: '#/components/schemas/OpenTextContentState'
+        - $ref: '#/components/schemas/OpenThinkingContentState'
+        - $ref: '#/components/schemas/OpenToolCallContentState'
     ActiveTool:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ActiveTool'
+      type: object
+      additionalProperties: false
+      required:
+        - tool_call_id
+        - tool_id
+        - status
+        - parameters
+      properties:
+        tool_call_id:
+          $ref: '#/components/schemas/ToolCallId'
+        tool_id:
+          $ref: '#/components/schemas/Identifier'
+        name:
+          type: string
+          maxLength: 256
+        status:
+          type: string
+          enum:
+            - starting
+            - running
+        parameters:
+          $ref: '#/components/schemas/ToolParametersProjection'
+          description: 开始执行前已经完成脱敏和大小投影的业务 parameters。
     Usage:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/Usage'
+      type: object
+      additionalProperties: false
+      properties:
+        input_tokens:
+          type: integer
+          minimum: 0
+        output_tokens:
+          type: integer
+          minimum: 0
+        cached_input_tokens:
+          type: integer
+          minimum: 0
+        total_tokens:
+          type: integer
+          minimum: 0
     RunTerminalError:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/RunTerminalError'
+      oneOf:
+        - $ref: '#/components/schemas/Error'
+        - $ref: '#/components/schemas/RunInterruptedError'
     ProjectedMessage:
       type: object
       additionalProperties: false
-      required: [message_id, role, status, content, created_at]
+      required:
+        - message_id
+        - role
+        - status
+        - content
+        - created_at
       properties:
-        message_id: { $ref: '#/components/schemas/MessageId' }
-        role: { type: string, enum: [user, assistant, tool] }
-        status: { type: string, enum: [streaming, completed, aborted, error, interrupted] }
+        message_id:
+          $ref: '#/components/schemas/MessageId'
+        role:
+          type: string
+          enum:
+            - user
+            - assistant
+            - tool
+        status:
+          type: string
+          enum:
+            - streaming
+            - completed
+            - aborted
+            - error
+            - interrupted
         content:
           type: array
           items:
@@ -687,15 +1104,21 @@ components:
               - $ref: '#/components/schemas/ToolCallContent'
               - $ref: '#/components/schemas/ToolResultContent'
               - $ref: '#/components/schemas/AttachmentContent'
-        created_at: { $ref: '#/components/schemas/Timestamp' }
-        completed_at: { $ref: '#/components/schemas/Timestamp' }
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        completed_at:
+          $ref: '#/components/schemas/Timestamp'
       allOf:
         - if:
-            properties: { role: { const: user } }
-            required: [role]
+            properties:
+              role:
+                const: user
+            required:
+              - role
           then:
             properties:
-              status: { const: completed }
+              status:
+                const: completed
               content:
                 oneOf:
                   - type: array
@@ -707,97 +1130,165 @@ components:
                   - type: array
                     minItems: 1
                     maxItems: 32
-                    items: { $ref: '#/components/schemas/AttachmentContent' }
+                    items:
+                      $ref: '#/components/schemas/AttachmentContent'
                   - type: array
                     minItems: 2
                     maxItems: 33
                     prefixItems:
                       - $ref: '#/components/schemas/TextContent'
-                    items: { $ref: '#/components/schemas/AttachmentContent' }
+                    items:
+                      $ref: '#/components/schemas/AttachmentContent'
         - if:
-            properties: { status: { const: streaming } }
-            required: [status]
+            properties:
+              status:
+                const: streaming
+            required:
+              - status
           then:
             properties:
-              role: { const: assistant }
+              role:
+                const: assistant
               completed_at: false
           else:
-            required: [completed_at]
+            required:
+              - completed_at
             properties:
-              completed_at: { $ref: '#/components/schemas/Timestamp' }
+              completed_at:
+                $ref: '#/components/schemas/Timestamp'
     TerminalProjectedMessage:
       allOf:
         - $ref: '#/components/schemas/ProjectedMessage'
         - type: object
-          required: [completed_at]
+          required:
+            - completed_at
           properties:
-            status: { type: string, enum: [completed, aborted, error, interrupted] }
+            status:
+              type: string
+              enum:
+                - completed
+                - aborted
+                - error
+                - interrupted
     StreamingProjectedMessage:
       allOf:
         - $ref: '#/components/schemas/ProjectedMessage'
         - type: object
           properties:
-            role: { const: assistant }
-            status: { const: streaming }
+            role:
+              const: assistant
+            status:
+              const: streaming
             completed_at: false
     TerminalAssistantProjectedMessage:
       allOf:
         - $ref: '#/components/schemas/TerminalProjectedMessage'
         - type: object
           properties:
-            role: { const: assistant }
+            role:
+              const: assistant
     ActiveRunSnapshot:
       type: object
       additionalProperties: false
-      required: [run_id, run_seq, history_seq, model_id, thinking, message_snapshot, open_contents, active_tools]
+      required:
+        - run_id
+        - run_seq
+        - history_seq
+        - model_id
+        - thinking
+        - message_snapshot
+        - open_contents
+        - active_tools
       properties:
-        run_id: { $ref: '#/components/schemas/RunId' }
-        run_seq: { type: integer, minimum: 0 }
-        history_seq: { type: integer, minimum: 0 }
-        model_id: { $ref: '#/components/schemas/ModelId' }
-        thinking: { $ref: '#/components/schemas/ThinkingLevel' }
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        run_seq:
+          type: integer
+          minimum: 0
+        history_seq:
+          type: integer
+          minimum: 0
+        model_id:
+          $ref: '#/components/schemas/ModelId'
+        thinking:
+          $ref: '#/components/schemas/ThinkingLevel'
         message_snapshot:
           oneOf:
             - $ref: '#/components/schemas/StreamingProjectedMessage'
             - type: 'null'
         open_contents:
           type: object
-          propertyNames: { pattern: '^(0|[1-9][0-9]*)$' }
-          additionalProperties: { $ref: '#/components/schemas/OpenContentState' }
+          propertyNames:
+            pattern: ^(0|[1-9][0-9]*)$
+          additionalProperties:
+            $ref: '#/components/schemas/OpenContentState'
         active_tools:
           type: array
-          items: { $ref: '#/components/schemas/ActiveTool' }
+          items:
+            $ref: '#/components/schemas/ActiveTool'
     RunRecord:
       type: object
       additionalProperties: false
-      required: [run_id, model_id, outcome, completed_at]
+      required:
+        - run_id
+        - model_id
+        - outcome
+        - completed_at
       properties:
-        run_id: { $ref: '#/components/schemas/RunId' }
+        run_id:
+          $ref: '#/components/schemas/RunId'
         model_id:
           $ref: '#/components/schemas/ModelId'
           description: Run 接受时从 Session 当前模型原子固化的实际模型。
-        outcome: { type: string, enum: [done, aborted, error, interrupted] }
-        completed_at: { $ref: '#/components/schemas/Timestamp' }
-        usage: { $ref: '#/components/schemas/Usage' }
-        stop_reason: { type: string, maxLength: 256 }
-        error: { $ref: '#/components/schemas/RunTerminalError' }
+        outcome:
+          type: string
+          enum:
+            - done
+            - aborted
+            - error
+            - interrupted
+        completed_at:
+          $ref: '#/components/schemas/Timestamp'
+        usage:
+          $ref: '#/components/schemas/Usage'
+        stop_reason:
+          type: string
+          maxLength: 256
+        error:
+          $ref: '#/components/schemas/RunTerminalError'
     HistoryMessageItem:
       type: object
       additionalProperties: false
-      required: [type, history_seq, run_id, message]
+      required:
+        - type
+        - history_seq
+        - run_id
+        - message
       properties:
-        type: { const: message }
-        history_seq: { type: integer, minimum: 1 }
-        run_id: { $ref: '#/components/schemas/RunId' }
-        message: { $ref: '#/components/schemas/TerminalProjectedMessage' }
+        type:
+          const: message
+        history_seq:
+          type: integer
+          minimum: 1
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        message:
+          $ref: '#/components/schemas/TerminalProjectedMessage'
     HistoryRunItem:
       type: object
       additionalProperties: false
-      required: [type, history_seq, run]
+      required:
+        - type
+        - history_seq
+        - run
       properties:
-        type: { const: run }
-        history_seq: { type: integer, minimum: 1 }
-        run: { $ref: '#/components/schemas/RunRecord' }
+        type:
+          const: run
+        history_seq:
+          type: integer
+          minimum: 1
+        run:
+          $ref: '#/components/schemas/RunRecord'
     HistoryItem:
       oneOf:
         - $ref: '#/components/schemas/HistoryMessageItem'
@@ -810,23 +1301,35 @@ components:
     HistoryResult:
       type: object
       additionalProperties: false
-      required: [items, has_more]
+      required:
+        - items
+        - has_more
       properties:
         items:
           type: array
-          items: { $ref: '#/components/schemas/HistoryItem' }
-        next_cursor: { type: string, minLength: 1, maxLength: 1024 }
-        has_more: { type: boolean }
+          items:
+            $ref: '#/components/schemas/HistoryItem'
+        next_cursor:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        has_more:
+          type: boolean
     SessionState:
       type: string
-      enum: [idle, running]
+      enum:
+        - idle
+        - running
     SessionCreateResultBean:
       type: object
       additionalProperties: false
       description: |
         创建 Session 的公司标准成功包装。Java Controller 使用
         ResultBeanFactory.getFactory().normal(result) 生成响应体。
-      required: [resCode, resMsg, result]
+      required:
+        - resCode
+        - resMsg
+        - result
       properties:
         resCode:
           type: string
@@ -844,11 +1347,13 @@ components:
         公司标准异常包装。resCode 同时是 Java 错误码枚举名和
         MessageSource 资源 key；resMsg 按 Accept-Language 解析。
         异常响应只序列化 resCode 和 resMsg，不得包含 result 字段。
-      required: [resCode, resMsg]
+      required:
+        - resCode
+        - resMsg
       properties:
         resCode:
           type: string
-          pattern: '^[A-Z][A-Z0-9_]{1,127}$'
+          pattern: ^[A-Z][A-Z0-9_]{1,127}$
         resMsg:
           type: string
           minLength: 1
@@ -856,21 +1361,33 @@ components:
     SessionResource:
       type: object
       additionalProperties: false
-      required: [session_id, agent_id, model_id, state, thinking, active_run, created_at]
+      required:
+        - session_id
+        - agent_id
+        - model_id
+        - state
+        - thinking
+        - active_run
+        - created_at
       properties:
-        session_id: { $ref: '#/components/schemas/SessionId' }
-        agent_id: { $ref: '#/components/schemas/AgentId' }
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        agent_id:
+          $ref: '#/components/schemas/AgentId'
         model_id:
           $ref: '#/components/schemas/ModelId'
           description: Session 当前实际生效的 Campus Model 资源 ID。
-        state: { $ref: '#/components/schemas/SessionState' }
-        thinking: { $ref: '#/components/schemas/ThinkingLevel' }
+        state:
+          $ref: '#/components/schemas/SessionState'
+        thinking:
+          $ref: '#/components/schemas/ThinkingLevel'
         active_run:
           description: state=idle 时必须为 null；state=running 时必须为 active Run 快照。
           oneOf:
             - $ref: '#/components/schemas/ActiveRunSnapshot'
             - type: 'null'
-        created_at: { $ref: '#/components/schemas/Timestamp' }
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
       examples:
         - session_id: 01ARZ3NDEKTSV4RRFFQ69G5FAV
           agent_id: agent_011CZkYqphY8vELVzwCUpqiQ
@@ -882,12 +1399,22 @@ components:
     SessionDeletionAccepted:
       type: object
       additionalProperties: false
-      required: [session_id, state, accepted, idempotent]
+      required:
+        - session_id
+        - state
+        - accepted
+        - idempotent
       properties:
-        session_id: { $ref: '#/components/schemas/SessionId' }
-        state: { type: string, const: deleting }
-        accepted: { type: boolean, const: true }
-        idempotent: { type: boolean }
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        state:
+          type: string
+          const: deleting
+        accepted:
+          type: boolean
+          const: true
+        idempotent:
+          type: boolean
     RunCreateRequest:
       type: object
       additionalProperties: false
@@ -899,41 +1426,73 @@ components:
           type: array
           maxItems: 32
           uniqueItems: true
-          items: { $ref: '#/components/schemas/AttachmentId' }
-        thinking: { $ref: '#/components/schemas/ThinkingLevel' }
+          items:
+            $ref: '#/components/schemas/AttachmentId'
+        thinking:
+          $ref: '#/components/schemas/ThinkingLevel'
       anyOf:
-        - required: [message]
+        - required:
+            - message
           properties:
-            message: { minLength: 1 }
-        - required: [attachment_ids]
+            message:
+              minLength: 1
+        - required:
+            - attachment_ids
           properties:
-            attachment_ids: { minItems: 1 }
+            attachment_ids:
+              minItems: 1
       examples:
         - message: 查询订单 20260730001
         - message: 分析附件中的订单数据
-          attachment_ids: [attachment_011CZm8VpK4rNs6WtY2hDqfB]
+          attachment_ids:
+            - attachment_011CZm8VpK4rNs6WtY2hDqfB
     RunAccepted:
       type: object
       additionalProperties: false
-      required: [run_id, user_message_id, accepted, idempotent]
+      required:
+        - run_id
+        - user_message_id
+        - accepted
+        - idempotent
       properties:
-        run_id: { $ref: '#/components/schemas/RunId' }
-        user_message_id: { $ref: '#/components/schemas/MessageId' }
-        accepted: { type: boolean, const: true }
-        idempotent: { type: boolean }
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        user_message_id:
+          $ref: '#/components/schemas/MessageId'
+        accepted:
+          type: boolean
+          const: true
+        idempotent:
+          type: boolean
     RunState:
       type: string
-      enum: [queued, running, done, aborted, error, interrupted]
+      enum:
+        - queued
+        - running
+        - done
+        - aborted
+        - error
+        - interrupted
     RunResource:
       type: object
       additionalProperties: false
-      required: [run_id, session_id, state, model_id, thinking]
+      required:
+        - run_id
+        - session_id
+        - state
+        - model_id
+        - thinking
       properties:
-        run_id: { $ref: '#/components/schemas/RunId' }
-        session_id: { $ref: '#/components/schemas/SessionId' }
-        state: { $ref: '#/components/schemas/RunState' }
-        model_id: { $ref: '#/components/schemas/ModelId' }
-        thinking: { $ref: '#/components/schemas/ThinkingLevel' }
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        state:
+          $ref: '#/components/schemas/RunState'
+        model_id:
+          $ref: '#/components/schemas/ModelId'
+        thinking:
+          $ref: '#/components/schemas/ThinkingLevel'
         active_snapshot:
           oneOf:
             - $ref: '#/components/schemas/ActiveRunSnapshot'
@@ -944,146 +1503,545 @@ components:
             - type: 'null'
       allOf:
         - if:
-            properties: { state: { const: running } }
-            required: [state]
-          then:
-            required: [active_snapshot]
             properties:
-              active_snapshot: { $ref: '#/components/schemas/ActiveRunSnapshot' }
+              state:
+                const: running
+            required:
+              - state
+          then:
+            required:
+              - active_snapshot
+            properties:
+              active_snapshot:
+                $ref: '#/components/schemas/ActiveRunSnapshot'
         - if:
-            properties: { state: { enum: [done, aborted, error, interrupted] } }
-            required: [state]
-          then:
-            required: [terminal_record]
             properties:
-              terminal_record: { $ref: '#/components/schemas/RunRecord' }
+              state:
+                enum:
+                  - done
+                  - aborted
+                  - error
+                  - interrupted
+            required:
+              - state
+          then:
+            required:
+              - terminal_record
+            properties:
+              terminal_record:
+                $ref: '#/components/schemas/RunRecord'
     RunList:
       type: object
       additionalProperties: false
-      required: [items, has_more]
+      required:
+        - items
+        - has_more
       properties:
         items:
           type: array
-          items: { $ref: '#/components/schemas/RunResource' }
-        next_cursor: { type: string, minLength: 1, maxLength: 1024 }
-        has_more: { type: boolean }
+          items:
+            $ref: '#/components/schemas/RunResource'
+        next_cursor:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        has_more:
+          type: boolean
     SteerRequest:
       type: object
       additionalProperties: false
-      required: [message]
+      required:
+        - message
       properties:
-        message: { type: string, minLength: 1, maxLength: 262144 }
+        message:
+          type: string
+          minLength: 1
+          maxLength: 262144
     SteerAccepted:
       type: object
       additionalProperties: false
-      required: [run_id, user_message_id, accepted, idempotent]
+      required:
+        - run_id
+        - user_message_id
+        - accepted
+        - idempotent
       properties:
-        run_id: { $ref: '#/components/schemas/RunId' }
-        user_message_id: { $ref: '#/components/schemas/MessageId' }
-        accepted: { type: boolean }
-        idempotent: { type: boolean }
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        user_message_id:
+          $ref: '#/components/schemas/MessageId'
+        accepted:
+          type: boolean
+        idempotent:
+          type: boolean
     AbortAccepted:
       type: object
       additionalProperties: false
-      required: [run_id, accepted, idempotent]
+      required:
+        - run_id
+        - accepted
+        - idempotent
       properties:
-        run_id: { $ref: '#/components/schemas/RunId' }
-        accepted: { type: boolean }
-        idempotent: { type: boolean }
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        accepted:
+          type: boolean
+        idempotent:
+          type: boolean
     ModelChangeRequest:
       type: object
       additionalProperties: false
-      required: [model_id]
+      required:
+        - model_id
       properties:
-        model_id: { $ref: '#/components/schemas/ModelId' }
+        model_id:
+          $ref: '#/components/schemas/ModelId'
     ThinkingChangeRequest:
       type: object
       additionalProperties: false
-      required: [level]
+      required:
+        - level
       properties:
-        level: { $ref: '#/components/schemas/ThinkingLevel' }
+        level:
+          $ref: '#/components/schemas/ThinkingLevel'
     RunStartedPayload:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/RunStartedPayload'
+      type: object
+      additionalProperties: false
+      required:
+        - agent_id
+        - session_id
+        - run_id
+        - run_seq
+        - timestamp
+        - model_id
+        - thinking
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/AgentId'
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        run_seq:
+          type: integer
+          minimum: 1
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        model_id:
+          $ref: '#/components/schemas/ModelId'
+        thinking:
+          $ref: '#/components/schemas/ThinkingLevel'
+          description: 该 run 在当前连接上的冻结有效 thinking 投影；恢复快照必须返回相同语义。
     MessageStartedPayload:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/MessageStartedPayload'
+      type: object
+      additionalProperties: false
+      required:
+        - agent_id
+        - session_id
+        - run_id
+        - message_id
+        - run_seq
+        - timestamp
+        - role
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/AgentId'
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        message_id:
+          $ref: '#/components/schemas/MessageId'
+        run_seq:
+          type: integer
+          minimum: 1
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        role:
+          type: string
+          enum:
+            - assistant
     MessageUpdatedPayload:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/MessageUpdatedPayload'
+      type: object
+      additionalProperties: false
+      description: |
+        content_index 在同一 message_id 内标识最终 content 数组位置。每个位置
+        遵循匹配类型的 start -> update* -> end；Thinking update 可以是 delta
+        或不含内容的 redacted 占位。不同位置可以交错。客户端先按
+        run_seq 去重和检查缺口，再应用 update。快照 open_contents 可以初始化
+        一个在重连前已经 start 的位置，因此快照后的第一帧可以直接是 delta。
+      required:
+        - agent_id
+        - session_id
+        - run_id
+        - message_id
+        - run_seq
+        - content_index
+        - timestamp
+        - update
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/AgentId'
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        message_id:
+          $ref: '#/components/schemas/MessageId'
+        run_seq:
+          type: integer
+          minimum: 1
+        content_index:
+          type: integer
+          minimum: 0
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        update:
+          $ref: '#/components/schemas/AssistantMessageUpdate'
     ToolStartedPayload:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ToolStartedPayload'
+      type: object
+      additionalProperties: false
+      required:
+        - agent_id
+        - session_id
+        - run_id
+        - run_seq
+        - timestamp
+        - tool_call_id
+        - tool_id
+        - parameters
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/AgentId'
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        run_seq:
+          type: integer
+          minimum: 1
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        tool_call_id:
+          $ref: '#/components/schemas/ToolCallId'
+        tool_id:
+          $ref: '#/components/schemas/Identifier'
+        name:
+          type: string
+          maxLength: 256
+        parameters:
+          $ref: '#/components/schemas/ToolParametersProjection'
+          description: |
+            Tool Manager 实际执行的业务 parameters 经脱敏和有界投影后的值。
+            这不包含 agent-service 向执行器注入的 access-token、内部 Header
+            或其他运行时秘密。
     ToolUpdatedPayload:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ToolUpdatedPayload'
+      type: object
+      additionalProperties: false
+      required:
+        - agent_id
+        - session_id
+        - run_id
+        - run_seq
+        - timestamp
+        - tool_call_id
+        - tool_id
+        - update
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/AgentId'
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        run_seq:
+          type: integer
+          minimum: 1
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        tool_call_id:
+          $ref: '#/components/schemas/ToolCallId'
+        tool_id:
+          $ref: '#/components/schemas/Identifier'
+        update:
+          $ref: '#/components/schemas/ToolProgressUpdate'
     ToolCompletedPayload:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/ToolCompletedPayload'
+      type: object
+      additionalProperties: false
+      required:
+        - agent_id
+        - session_id
+        - run_id
+        - run_seq
+        - timestamp
+        - tool_call_id
+        - tool_id
+        - status
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/AgentId'
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        run_seq:
+          type: integer
+          minimum: 1
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        tool_call_id:
+          $ref: '#/components/schemas/ToolCallId'
+        tool_id:
+          $ref: '#/components/schemas/Identifier'
+        status:
+          type: string
+          enum:
+            - done
+            - error
+            - aborted
+        result:
+          $ref: '#/components/schemas/ToolValueProjection'
+        error:
+          $ref: '#/components/schemas/Error'
+      allOf:
+        - if:
+            properties:
+              status:
+                const: done
+            required:
+              - status
+          then:
+            required:
+              - result
+            not:
+              required:
+                - error
+        - if:
+            properties:
+              status:
+                const: error
+            required:
+              - status
+          then:
+            required:
+              - error
+            not:
+              required:
+                - result
+        - if:
+            properties:
+              status:
+                const: aborted
+            required:
+              - status
+          then:
+            not:
+              anyOf:
+                - required:
+                    - result
+                - required:
+                    - error
     MessageCompletedPayload:
       type: object
       additionalProperties: false
-      required: [agent_id, session_id, run_id, message_id, run_seq, timestamp, message]
+      required:
+        - agent_id
+        - session_id
+        - run_id
+        - message_id
+        - run_seq
+        - timestamp
+        - message
       properties:
-        agent_id: { $ref: '#/components/schemas/AgentId' }
-        session_id: { $ref: '#/components/schemas/SessionId' }
-        run_id: { $ref: '#/components/schemas/RunId' }
-        message_id: { $ref: '#/components/schemas/MessageId' }
-        run_seq: { type: integer, minimum: 1 }
-        timestamp: { $ref: '#/components/schemas/Timestamp' }
-        message: { $ref: '#/components/schemas/TerminalAssistantProjectedMessage' }
+        agent_id:
+          $ref: '#/components/schemas/AgentId'
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        message_id:
+          $ref: '#/components/schemas/MessageId'
+        run_seq:
+          type: integer
+          minimum: 1
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        message:
+          $ref: '#/components/schemas/TerminalAssistantProjectedMessage'
     RunCompletedPayload:
-      $ref: './chat-ws-v2.asyncapi.yaml#/components/schemas/RunCompletedPayload'
+      type: object
+      additionalProperties: false
+      description: |
+        每个 run_id 恰好发送一次，是该 run 的最后一个事件。outcome=error
+        或 interrupted 时必须携带 error；outcome=done 或 aborted 时不得携带
+        error。它之后不得再出现相同 run_id 的 EventFrame。Pod 重启期间无
+        活动连接可消费事件时，interrupted 终态可以只通过 chat.history 恢复。
+      required:
+        - agent_id
+        - session_id
+        - run_id
+        - run_seq
+        - timestamp
+        - outcome
+      properties:
+        agent_id:
+          $ref: '#/components/schemas/AgentId'
+        session_id:
+          $ref: '#/components/schemas/SessionId'
+        run_id:
+          $ref: '#/components/schemas/RunId'
+        run_seq:
+          type: integer
+          minimum: 1
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        outcome:
+          type: string
+          enum:
+            - done
+            - aborted
+            - error
+            - interrupted
+        usage:
+          $ref: '#/components/schemas/Usage'
+        stop_reason:
+          type: string
+          maxLength: 256
+        error:
+          $ref: '#/components/schemas/RunTerminalError'
+      allOf:
+        - if:
+            properties:
+              outcome:
+                const: error
+            required:
+              - outcome
+          then:
+            required:
+              - error
+            properties:
+              error:
+                $ref: '#/components/schemas/Error'
+        - if:
+            properties:
+              outcome:
+                const: interrupted
+            required:
+              - outcome
+          then:
+            required:
+              - error
+            properties:
+              error:
+                $ref: '#/components/schemas/RunInterruptedError'
+        - if:
+            properties:
+              outcome:
+                enum:
+                  - done
+                  - aborted
+            required:
+              - outcome
+          then:
+            not:
+              required:
+                - error
     HttpRunStartedEvent:
       type: object
       additionalProperties: false
-      required: [event, payload]
+      required:
+        - event
+        - payload
       properties:
-        event: { type: string, const: run.started }
-        payload: { $ref: '#/components/schemas/RunStartedPayload' }
+        event:
+          type: string
+          const: run.started
+        payload:
+          $ref: '#/components/schemas/RunStartedPayload'
     HttpMessageStartedEvent:
       type: object
       additionalProperties: false
-      required: [event, payload]
+      required:
+        - event
+        - payload
       properties:
-        event: { type: string, const: message.started }
-        payload: { $ref: '#/components/schemas/MessageStartedPayload' }
+        event:
+          type: string
+          const: message.started
+        payload:
+          $ref: '#/components/schemas/MessageStartedPayload'
     HttpMessageUpdatedEvent:
       type: object
       additionalProperties: false
-      required: [event, payload]
+      required:
+        - event
+        - payload
       properties:
-        event: { type: string, const: message.updated }
-        payload: { $ref: '#/components/schemas/MessageUpdatedPayload' }
+        event:
+          type: string
+          const: message.updated
+        payload:
+          $ref: '#/components/schemas/MessageUpdatedPayload'
     HttpToolStartedEvent:
       type: object
       additionalProperties: false
-      required: [event, payload]
+      required:
+        - event
+        - payload
       properties:
-        event: { type: string, const: tool.started }
-        payload: { $ref: '#/components/schemas/ToolStartedPayload' }
+        event:
+          type: string
+          const: tool.started
+        payload:
+          $ref: '#/components/schemas/ToolStartedPayload'
     HttpToolUpdatedEvent:
       type: object
       additionalProperties: false
-      required: [event, payload]
+      required:
+        - event
+        - payload
       properties:
-        event: { type: string, const: tool.updated }
-        payload: { $ref: '#/components/schemas/ToolUpdatedPayload' }
+        event:
+          type: string
+          const: tool.updated
+        payload:
+          $ref: '#/components/schemas/ToolUpdatedPayload'
     HttpToolCompletedEvent:
       type: object
       additionalProperties: false
-      required: [event, payload]
+      required:
+        - event
+        - payload
       properties:
-        event: { type: string, const: tool.completed }
-        payload: { $ref: '#/components/schemas/ToolCompletedPayload' }
+        event:
+          type: string
+          const: tool.completed
+        payload:
+          $ref: '#/components/schemas/ToolCompletedPayload'
     HttpMessageCompletedEvent:
       type: object
       additionalProperties: false
-      required: [event, payload]
+      required:
+        - event
+        - payload
       properties:
-        event: { type: string, const: message.completed }
-        payload: { $ref: '#/components/schemas/MessageCompletedPayload' }
+        event:
+          type: string
+          const: message.completed
+        payload:
+          $ref: '#/components/schemas/MessageCompletedPayload'
     HttpRunCompletedEvent:
       type: object
       additionalProperties: false
-      required: [event, payload]
+      required:
+        - event
+        - payload
       properties:
-        event: { type: string, const: run.completed }
-        payload: { $ref: '#/components/schemas/RunCompletedPayload' }
+        event:
+          type: string
+          const: run.completed
+        payload:
+          $ref: '#/components/schemas/RunCompletedPayload'
     RunEvent:
       description: |
         payload.run_seq 是 Run 内的唯一权威游标。SSE event 行等于 event，
@@ -1111,18 +2069,31 @@ components:
     RunEventPage:
       type: object
       additionalProperties: false
-      required: [items, next_after_run_seq, has_more, terminal]
+      required:
+        - items
+        - next_after_run_seq
+        - has_more
+        - terminal
       properties:
         items:
           type: array
-          items: { $ref: '#/components/schemas/RunEvent' }
-        next_after_run_seq: { type: integer, minimum: 0 }
-        has_more: { type: boolean }
-        terminal: { type: boolean }
+          items:
+            $ref: '#/components/schemas/RunEvent'
+        next_after_run_seq:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+        terminal:
+          type: boolean
     Problem:
       type: object
       additionalProperties: false
-      required: [type, title, status, code]
+      required:
+        - type
+        - title
+        - status
+        - code
       properties:
         type:
           type: string
@@ -1180,4 +2151,658 @@ components:
         details:
           $ref: '#/components/schemas/SafeErrorDetails'
       dependentRequired:
-        retry_after_ms: [retryable]
+        retry_after_ms:
+          - retryable
+    Identifier:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: ^[A-Za-z0-9][A-Za-z0-9._-]*$
+    AttachmentMediaType:
+      type: string
+      minLength: 3
+      maxLength: 127
+      pattern: ^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$
+      description: Attachment Service 通过内容嗅探得到并规范化为小写的可信 MIME type。
+    Sha256:
+      type: string
+      pattern: ^[0-9a-f]{64}$
+      description: Attachment Service 对不可变原始内容计算并验证的十六进制 SHA-256。
+    ToolCallId:
+      allOf:
+        - $ref: '#/components/schemas/Identifier'
+      description: |
+        模型或 CampusAgent Runtime 为一个 run 内的工具调用提供 tool_call_id。
+        服务端用它
+        关联 toolcall 内容和 Tool Manager 事件；它不参与 Session 路由。
+    SafeJsonScalar:
+      oneOf:
+        - type: string
+          maxLength: 65536
+          x-maxUtf8Bytes: 65536
+        - type: number
+        - type: boolean
+        - type: 'null'
+    SafeJsonLeafContainer:
+      oneOf:
+        - $ref: '#/components/schemas/SafeJsonScalar'
+        - type: array
+          maxItems: 128
+          items:
+            $ref: '#/components/schemas/SafeJsonScalar'
+        - type: object
+          maxProperties: 128
+          propertyNames:
+            maxLength: 128
+          additionalProperties:
+            $ref: '#/components/schemas/SafeJsonScalar'
+      description: 最多一层容器；容器成员只能是有界标量。
+    SafeJsonObject:
+      type: object
+      maxProperties: 128
+      propertyNames:
+        maxLength: 128
+      additionalProperties:
+        $ref: '#/components/schemas/SafeJsonLeafContainer'
+      description: Tool parameters 的有界 JSON object 投影。
+      x-maxDepth: 2
+      x-maxSerializedBytes: 524288
+    CompleteToolParametersProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - truncated
+        - value
+      properties:
+        truncated:
+          const: false
+        value:
+          $ref: '#/components/schemas/SafeJsonObject'
+      description: 完整脱敏 parameters；value 必须是 JSON object。
+    ToolResultRef:
+      type: string
+      minLength: 1
+      maxLength: 256
+      description: |
+        agent-service 为已持久的完整脱敏工具值生成的不透明引用。
+        调用方不得解析或将它当作 URL、存储 key 或授权凭据；服务 API v1
+        不提供通过 result_ref 读取完整值的公开接口。
+    TruncatedToolValueProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - truncated
+        - preview
+        - original_size_bytes
+        - result_ref
+      properties:
+        truncated:
+          const: true
+        preview:
+          type: string
+          maxLength: 65536
+          description: 对完整脱敏值生成的有界文本预览；不保证本身是可解析 JSON。
+          x-maxUtf8Bytes: 65536
+        original_size_bytes:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+          description: 完整脱敏值的规范化 JSON UTF-8 字节数。
+        result_ref:
+          $ref: '#/components/schemas/ToolResultRef'
+      description: |
+        完整脱敏值会导致 Frame 超限时的有界投影。agent-service 先将
+        完整脱敏值保存到 RuntimeSessionStore，再在流式事件和历史中
+        返回本对象。
+    ToolParametersProjection:
+      oneOf:
+        - $ref: '#/components/schemas/CompleteToolParametersProjection'
+        - $ref: '#/components/schemas/TruncatedToolValueProjection'
+      description: 工具 parameters 的完整脱敏投影或超限引用投影。
+    SafeJsonValue:
+      oneOf:
+        - $ref: '#/components/schemas/SafeJsonScalar'
+        - type: array
+          maxItems: 128
+          items:
+            $ref: '#/components/schemas/SafeJsonLeafContainer'
+        - type: object
+          maxProperties: 128
+          propertyNames:
+            maxLength: 128
+          additionalProperties:
+            $ref: '#/components/schemas/SafeJsonLeafContainer'
+      description: |
+        Tool 业务值的有界 JSON 投影。标准 JSON Schema 验证结构、项数和
+        字符数；agent-service 还必须在序列化前验证规范化 JSON 的
+        UTF-8 总字节数。
+      x-maxDepth: 2
+      x-maxSerializedBytes: 524288
+    CompleteToolValueProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - truncated
+        - value
+      properties:
+        truncated:
+          const: false
+        value:
+          $ref: '#/components/schemas/SafeJsonValue'
+      description: |
+        脱敏后的完整业务 parameters 或 result。服务端必须先移除凭据、
+        内部 Header、执行器秘密和不允许披露的字段，再计算规范化 JSON
+        UTF-8 字节数。value 最多 524288 字节，且只有完整 Frame 不超过
+        协商上限时才使用此形态。
+      x-maxValueSerializedBytes: 524288
+    ToolValueProjection:
+      oneOf:
+        - $ref: '#/components/schemas/CompleteToolValueProjection'
+        - $ref: '#/components/schemas/TruncatedToolValueProjection'
+      description: |
+        工具业务值的唯一对外投影。`truncated=false` 时 value 是完整脱敏值；
+        `truncated=true` 时只返回预览和不透明引用。两种形态都不得包含凭据、
+        内部 Header 或执行器秘密。
+    ErrorCode:
+      type: string
+      minLength: 1
+      maxLength: 128
+      description: |
+        当前稳定错误码如下。调用方必须为未知字符串保留 UNKNOWN 分支；新增
+        可恢复错误码不改变 Frame 结构，不能导致客户端反序列化失败。
+        INVALID_ATTACHMENT 同时覆盖不存在、越权、未绑定、删除、过期、
+        BLOCKED 和 FAILED，避免资源枚举或安全状态泄露；
+        ATTACHMENT_NOT_READY 只在调用服务与 Session 授权通过后返回，
+        通常 retryable=true；ATTACHMENT_NOT_SUPPORTED 表示可信类型、数量或
+        字节数不符合当前有效 ModelInputPolicy，调用方应更换模型或附件。
+        RUN_INTERRUPTED 不是请求错误码，只能出现在 RunInterruptedError。
+      not:
+        const: RUN_INTERRUPTED
+      x-known-values:
+        - INVALID_REQUEST
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - UNSUPPORTED_PROTOCOL
+        - AGENT_NOT_FOUND
+        - SESSION_NOT_FOUND
+        - MODEL_REQUIRED
+        - MODEL_NOT_ALLOWED
+        - IDEMPOTENCY_CONFLICT
+        - RUN_ACTIVE
+        - RUN_NOT_FOUND
+        - INVALID_ATTACHMENT
+        - ATTACHMENT_NOT_READY
+        - ATTACHMENT_NOT_SUPPORTED
+        - MANAGER_AUTH_FAILED
+        - MANAGER_UNAVAILABLE
+    SafeErrorDetailScalar:
+      oneOf:
+        - type: string
+          maxLength: 4096
+          x-maxUtf8Bytes: 4096
+        - type: number
+        - type: boolean
+        - type: 'null'
+    SafeErrorDetailValue:
+      oneOf:
+        - $ref: '#/components/schemas/SafeErrorDetailScalar'
+        - type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/SafeErrorDetailScalar'
+        - type: object
+          maxProperties: 32
+          propertyNames:
+            maxLength: 128
+          additionalProperties:
+            $ref: '#/components/schemas/SafeErrorDetailScalar'
+      description: 最多一层容器的有界诊断值；容器内不允许继续嵌套。
+      x-maxDepth: 2
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        details:
+          $ref: '#/components/schemas/SafeErrorDetails'
+        retryable:
+          type: boolean
+          default: false
+          description: 省略等价于 false；只说明同一业务操作是否适合稍后重试。
+        retry_after_ms:
+          type: integer
+          minimum: 0
+          description: 仅当 retryable=true 时有效；副作用请求仍必须复用原 idempotency_key。
+      allOf:
+        - if:
+            required:
+              - retry_after_ms
+          then:
+            required:
+              - retryable
+            properties:
+              retryable:
+                const: true
+        - if:
+            properties:
+              code:
+                const: ATTACHMENT_NOT_READY
+            required:
+              - code
+          then:
+            required:
+              - retryable
+              - retry_after_ms
+            properties:
+              retryable:
+                const: true
+        - if:
+            properties:
+              code:
+                enum:
+                  - INVALID_ATTACHMENT
+                  - ATTACHMENT_NOT_SUPPORTED
+            required:
+              - code
+          then:
+            properties:
+              retryable:
+                const: false
+            not:
+              required:
+                - retry_after_ms
+    OpenTextContentState:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+      properties:
+        type:
+          const: text
+    OpenThinkingContentState:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - disclosure
+      properties:
+        type:
+          const: thinking
+        disclosure:
+          type: string
+          enum:
+            - hidden
+            - full
+    OpenToolCallContentState:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - tool_call_id
+        - tool_id
+        - arguments_delta
+      properties:
+        type:
+          const: tool_call
+        tool_call_id:
+          $ref: '#/components/schemas/ToolCallId'
+        tool_id:
+          $ref: '#/components/schemas/Identifier'
+        name:
+          type: string
+          maxLength: 256
+        arguments_delta:
+          type: string
+          maxLength: 262144
+          description: 已累计但可能仍不是合法 JSON 的参数文本；最终以 toolcall_end.arguments 为准。
+    RunInterruptedError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          const: RUN_INTERRUPTED
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        details:
+          $ref: '#/components/schemas/SafeErrorDetails'
+      description: |
+        RuntimeSessionStore 在确认 Pod 重启导致旧 active run 无法继续时生成的
+        持久化终态原因。它不是 ErrorResponseFrame 的请求错误，也不允许
+        retryable/retry_after_ms；调用方不应对原 run_id 重试，可发起新的
+        chat.send。
+    TextStartUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+      properties:
+        type:
+          const: text_start
+    TextDeltaUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - delta
+      properties:
+        type:
+          const: text_delta
+        delta:
+          type: string
+          minLength: 1
+    TextEndUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+      properties:
+        type:
+          const: text_end
+    ThinkingStartUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - disclosure
+      properties:
+        type:
+          const: thinking_start
+        disclosure:
+          type: string
+          enum:
+            - hidden
+            - full
+          description: 当前连接对该 thinking 块的有效投影级别。
+    ThinkingDeltaUpdate:
+      type: object
+      additionalProperties: false
+      description: |
+        只在当前连接对 run 的投影级别为 full 且有效 capability 包含
+        full_thinking 时发送。hidden 连接在同一 run_seq 位置收到
+        thinking_redacted，使 run_seq 在不同投影中仍保持稳定连续。
+      required:
+        - type
+        - delta
+      properties:
+        type:
+          const: thinking_delta
+        delta:
+          type: string
+          minLength: 1
+    ThinkingRedactedUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - redacted_type
+      properties:
+        type:
+          const: thinking_redacted
+        redacted_type:
+          type: string
+          enum:
+            - delta
+      description: |
+        不含 thinking 内容的序列占位。服务端对每个被当前连接投影策略抑制的
+        canonical thinking_delta 发送一条，使同一 run
+        在断线前后保持连续的 run_seq 域。客户端只推进序列，不创建可见正文。
+    ThinkingEndUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+      properties:
+        type:
+          const: thinking_end
+    ToolCallStartUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - tool_call_id
+        - tool_id
+      properties:
+        type:
+          const: toolcall_start
+        tool_call_id:
+          $ref: '#/components/schemas/ToolCallId'
+        tool_id:
+          $ref: '#/components/schemas/Identifier'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 256
+    ToolCallDeltaUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - tool_call_id
+        - delta
+      properties:
+        type:
+          const: toolcall_delta
+        tool_call_id:
+          $ref: '#/components/schemas/ToolCallId'
+        delta:
+          type: string
+          minLength: 1
+          maxLength: 262144
+          description: |
+            Tool arguments 的 JSON 文本片段，本次片段可能不是合法 JSON。客户端只
+            追加保存，不逐帧解析；toolcall_end.arguments 是权威的
+            ToolValueProjection。truncated=false 时 value 才是完整脱敏对象。
+    ToolCallEndUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - tool_call_id
+        - arguments
+      properties:
+        type:
+          const: toolcall_end
+        tool_call_id:
+          $ref: '#/components/schemas/ToolCallId'
+        arguments:
+          $ref: '#/components/schemas/ToolParametersProjection'
+    AssistantMessageUpdate:
+      oneOf:
+        - $ref: '#/components/schemas/TextStartUpdate'
+        - $ref: '#/components/schemas/TextDeltaUpdate'
+        - $ref: '#/components/schemas/TextEndUpdate'
+        - $ref: '#/components/schemas/ThinkingStartUpdate'
+        - $ref: '#/components/schemas/ThinkingDeltaUpdate'
+        - $ref: '#/components/schemas/ThinkingRedactedUpdate'
+        - $ref: '#/components/schemas/ThinkingEndUpdate'
+        - $ref: '#/components/schemas/ToolCallStartUpdate'
+        - $ref: '#/components/schemas/ToolCallDeltaUpdate'
+        - $ref: '#/components/schemas/ToolCallEndUpdate'
+    ToolProgressUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        message:
+          type: string
+          maxLength: 4096
+        progress:
+          type: number
+          minimum: 0
+          maximum: 1
+        data:
+          $ref: '#/components/schemas/ToolValueProjection'
+      description: |
+        progress 是脱敏后的有界状态投影。message 最多 4096 字符；data
+        必须使用 ToolValueProjection，因此完整脱敏值上限为 524288 字节；
+        超限时使用 preview、original_size_bytes、truncated=true 和 result_ref。
+        服务端必须在发送或持久化前移除凭据、内部 Header、执行器秘密和
+        不允许披露的字段。
+    ModelInputPolicy:
+      type: object
+      additionalProperties: false
+      description: |
+        Model Manager 返回的当前 Agent 与 Model 的有效输入策略。调用方用它在
+        上传和 chat.send 前完成 UI 预检；CampusAgent Runtime 仍以 Attachment Service
+        返回的可信大小和 MIME 重新校验。数量和字节限制作用于下一次模型调用
+        的完整 AttachmentContextPlan，包括当前有效 transcript 中仍保留的历史
+        附件与本次新附件，而不只是 attachment_ids。max_attachments=0 表示该模型只接受
+        无附件消息，此时 media type 数组和两个字节限制都必须为空或为零。
+      required:
+        - modalities
+        - attachment_media_types
+        - max_attachments
+        - max_attachment_bytes
+        - max_total_attachment_bytes
+      properties:
+        modalities:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          contains:
+            const: text
+          items:
+            type: string
+            enum:
+              - text
+              - image
+              - document
+          description: |
+            当前有效 Model 能消费的规范化输入模态。CampusAgent 的对话模型必须
+            支持 text，但单次 chat.send 可以只包含附件；CampusAgent Runtime
+            不为此类请求合成隐藏文本。
+        attachment_media_types:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AttachmentMediaType'
+          description: 经过 Agent、Model、部署和 Attachment Service 策略求交集后的精确 MIME allowlist。
+        max_attachments:
+          type: integer
+          minimum: 0
+          maximum: 32
+        max_attachment_bytes:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        max_total_attachment_bytes:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+      allOf:
+        - if:
+            properties:
+              max_attachments:
+                const: 0
+            required:
+              - max_attachments
+          then:
+            properties:
+              modalities:
+                maxItems: 1
+              attachment_media_types:
+                maxItems: 0
+              max_attachment_bytes:
+                const: 0
+              max_total_attachment_bytes:
+                const: 0
+        - if:
+            properties:
+              max_attachments:
+                minimum: 1
+            required:
+              - max_attachments
+          then:
+            properties:
+              attachment_media_types:
+                minItems: 1
+              max_attachment_bytes:
+                minimum: 1
+              max_total_attachment_bytes:
+                minimum: 1
+              modalities:
+                anyOf:
+                  - contains:
+                      const: image
+                  - contains:
+                      const: document
+      x-runtime-constraints:
+        - max_attachment_bytes must be less than or equal to max_total_attachment_bytes
+        - MIME, count and byte checks use trusted Attachment Service metadata, not Frame metadata
+    ModelSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - model_id
+        - name
+        - input
+      properties:
+        model_id:
+          $ref: '#/components/schemas/ModelId'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 256
+        reasoning:
+          type: boolean
+        context_window:
+          type: integer
+          minimum: 1
+        max_output_tokens:
+          type: integer
+          minimum: 1
+        input:
+          $ref: '#/components/schemas/ModelInputPolicy'
+x-source-evidence:
+  status: target-only design; pi-mono-java HTTP API is not implemented
+  repository: https://github.com/superheromeZzh/pi-mono-java
+  commit: dff835743fc7f3c93e1154c3eb51028749867ca8
+  legacySchemaBundle: former WebSocket AsyncAPI 2.12.0 schemas inlined on 2026-08-18; source document removed
+  observedPaths:
+    - path: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java
+      symbols: buildRoutes at baseline lines 237-274 and wireServerRoutes at lines 285-307 do not install an inbound authentication adapter; applyCorsHeaders only allows Authorization at lines 340-344
+    - path: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java
+      symbols: connection lifecycle and v1 commands at baseline lines 115-227; cumulative message updates at lines 422-459
+    - path: modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java
+      symbols: structured provider stream events at baseline lines 44-164
+    - path: modules/agent-core/src/main/java/com/campusclaw/agent/subagent/a2a/A2aAgentBackend.java
+      symbols: outbound A2A requests set X-HW-ID and X-HW-APPKEY at baseline lines 226-238
+x-http-design:
+  operationCount: 13
+  sessionIdOwner: CampusClaw
+  createSessionRequestBody: none
+  createSessionIdempotencyKey: false
+  createSessionResponseEnvelope: ResultBean
+  createSessionErrorFields:
+    - resCode
+    - resMsg
+  createSessionLocales:
+    - en-US
+    - zh-CN
+  eventTransports:
+    - text/event-stream
+    - application/json
+  connectionStateRemoved: true
+  canonicalEventCursor: run_seq
+  eventJournal: target architecture change
+  authentication:
+    preferredMode: jwt
+    supportedModes:
+      - jwt
+      - appkey
+    mixedCredentials: reject
+    fallbackAfterVerificationFailure: false
