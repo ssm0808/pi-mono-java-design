@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.23.0 |
+| 文档版本 | 1.23.1 |
 | 状态 | 目标设计，尚未实施 |
 | 接口评审状态 | 前五个 operation 已确认；后三个 Session 模型与 thinking 配置 operation 待本轮确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
@@ -591,18 +591,20 @@ Agent 配置中的稳定顺序，不分页。`models` 可以为空；Session 保
   "result": {
     "current_model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
     "models": [
-      {"model_id": "model_011CZq2GkV8aD4NwP7sLmXfR"},
-      {"model_id": "model_011CZq2GkV8aD4NwP7sLmXfS"}
+      "model_011CZq2GkV8aD4NwP7sLmXfR",
+      "model_011CZq2GkV8aD4NwP7sLmXfS"
     ]
   }
 }
 ```
 
-每个候选模型只包含 `model_id`。模型名称、供应商和能力等展示信息不属于当前
-Session Runtime 接口，由 mate-service 自己的模型目录或 Model Manager 元数据接口
-解析。Model Manager 的 `base_url`、凭据是否存在、价格、上下文窗口、最大输出
-token、Headers 和供应商请求配置都不进入契约。Model Manager 不可用复用第一个
-接口已经冻结的 `503 MANAGER_UNAVAILABLE`。
+`models` 的类型是 `string[]`，数组元素直接是 `model_id`。只有当候选项需要增加
+独立属性时才有理由改为对象数组；当前没有扩展字段，因此不保留无意义的对象层。
+模型名称、供应商和能力等展示信息不属于当前 Session Runtime 接口，由 mate-service
+自己的模型目录或 Model Manager 元数据接口解析。Model Manager 的 `base_url`、
+凭据是否存在、价格、上下文窗口、最大输出 token、Headers 和供应商请求配置都不
+进入契约。Model Manager 不可用复用第一个接口已经冻结的
+`503 MANAGER_UNAVAILABLE`。
 
 #### 2.4.2 PUT Session Model
 
@@ -964,9 +966,9 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
 | 产品约束 | Session `thinking` 是是否启用深度思考的 boolean；`false` 映射为 pi 的 `off`，`true` 使用模型和 Agent 的受管非 `off` 推理强度，不公开具体等级 |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、文件只传 ID、ResultBean 错误脱敏 |
-| 安全加固 | Session 模型列表只暴露 `model_id`，不返回名称、供应商、能力、base URL、凭据状态、价格、token 上限或供应商请求配置；`thinking=true` 不代表允许披露原始思考过程 |
+| 安全加固 | Session 模型列表通过 `string[]` 只暴露 `model_id`，不返回名称、供应商、能力、base URL、凭据状态、价格、token 上限或供应商请求配置；`thinking=true` 不代表允许披露原始思考过程 |
 | 架构改造 | 统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、请求范围内 POST SSE、断线后执行继续、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
-| 待确认目标设计 | GET Session Models 实时返回 Agent allowlist、调用身份和部署策略的交集，不分页；`current_model_id` 允许因管理面后续停用而不在 `models` 中 |
+| 待确认目标设计 | GET Session Models 以 `string[]` 实时返回 Agent allowlist、调用身份和部署策略交集中的 `model_id`，不分页；`current_model_id` 允许因管理面后续停用而不在 `models` 中 |
 | 待确认目标设计 | PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功统一返回完整 SessionResource 和 ETag，相同值验证后按无变化成功返回；模型、深度思考设置和资源版本原子更新 |
 | 待确认目标设计 | 深度思考开关只作用于之后接受的用户事件；当前模型不支持时开启返回 `422`，模型切换到不支持深度思考的目标模型时原子归一为 `false` |
 | 已确认架构 | `POST /sessions/{session_id}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `run_id`；成功流按 User、Assistant 三阶段、工具执行、ToolResult、最终 Assistant、Session idle、stream end 排序；`user.message`、`assistant.message.completed`、`tool.result` 与 `entry_seq` 是权威历史 |
@@ -990,6 +992,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.23.1 | 2026-08-17 | 按用户修正将 GET Session Models 的 `models` 从仅含 `model_id` 的对象数组进一步收窄为 `string[]`；候选项当前没有独立扩展字段，不保留无意义的对象层；OpenAPI 未更新 |
 | 1.23.0 | 2026-08-17 | 按用户意见收窄后三个 Session 配置接口：GET Models 的候选模型只展示 `model_id`；将 Session `thinking` 从 `hidden\|full` 内容披露级别改为是否启用深度思考的 boolean，并同步 CreateSession、GetSession、Event execution snapshot 和两个配置 PUT；`false` 映射为 pi `off`，`true` 使用受管非 `off` 强度且不表示披露原始思考过程；当前模型不支持时开启返回 `422 THINKING_NOT_SUPPORTED`，模型切换到不支持深度思考的目标时自动归一为 `false`；OpenAPI 未更新 |
 | 1.22.0 | 2026-08-17 | 一次展示剩余三个 Session 配置接口的待确认目标设计：GET Models 返回实时可选集合及安全最小模型 descriptor；PUT Model 与 PUT Thinking 仅允许 idle、强制 If-Match、成功复用完整 SessionResource 和 ETag；明确 `thinking=hidden|full` 延续已确认的内容披露语义而非 pi 推理强度，full 受披露策略约束且不追溯历史；新增源码证据和 PlantUML，OpenAPI 未更新 |
 | 1.21.0 | 2026-08-17 | 用户确认第五个 GET Session Events 接口的最后两项：只返回当前分支，只公开 `user.message`、`assistant.message.completed`、`tool.result` 三类持久化对话 Entry；第五接口整体标记为已确认。澄清 page 的不透明性属于 HTTP 契约，客户端只能原样回传且不得解析、修改或构造，数据库内部仍可按 `entry_seq` 做 Keyset Pagination；OpenAPI 未更新 |

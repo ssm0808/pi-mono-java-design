@@ -1752,10 +1752,10 @@ group List available models
   API -> Store : authorize and read Agent binding\nand current model_id
   Store --> API : agent_id, enabledModels, current model_id
   API -> Models : list callable models for Agent and caller
-  Models --> API : model_id values in enabled order
+  Models --> API : ordered model_id string array
   API -> ResultBeanFactory : normal(ModelListResponseVO)
   ResultBeanFactory --> API : resCode, resMsg, result
-  API --> Caller : 200 OK\ncurrent_model_id and models
+  API --> Caller : 200 OK\ncurrent_model_id and models string array
 end
 
 group Change current model
@@ -1792,7 +1792,7 @@ group Change future deep-thinking default
 end
 
 note over API,Models
-The public model list contains model_id only.
+The public models field is a string array of model_id values.
 Names and display metadata come from the caller model catalog.
 The current model can be absent when it was disabled later.
 end note
