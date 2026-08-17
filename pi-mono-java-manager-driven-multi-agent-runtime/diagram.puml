@@ -1052,7 +1052,7 @@ Models --> API : authoritative ModelDescriptor
 API -> Ids : generate globally unique session_id
 Ids --> API : session_id
 API -> Factory : create immutable SessionContext\nload SYSTEM and Skills\nregister three generic tools
-Factory -> Factory : construct AgentSession and Agent\nset state idle and thinking hidden\ndo not invoke the model
+Factory -> Factory : construct AgentSession and Agent\nset state idle and thinking false\ndo not invoke the model
 Factory --> API : ready AgentSession
 API -> Store : atomically insert SessionRecord\nincluding internal agentVersion and revision
 Store --> API : committed
@@ -1239,7 +1239,7 @@ title CampusClaw GetSession Confirmed Response
 ' in its protocol snapshot.
 ' Observed behavior: Anthropic exposes a control-plane Session resource without transcript
 ' or an active Run recovery snapshot.
-' Product constraint: the confirmed CampusClaw thinking field is disclosure visibility.
+' Product constraint: CampusClaw exposes a boolean deep-thinking switch instead of effort levels.
 ' Architecture change: the confirmed response removes the former public active Run pointer.
 ' Design reason: Session state is the coarse control-plane signal; Entry History and the
 ' initiating POST stream own durable recovery and live execution detail.
@@ -1279,13 +1279,13 @@ enum SessionState {
   running
 }
 
-enum ThinkingVisibility {
-  hidden
-  full
+enum DeepThinkingSwitch {
+  false
+  true
 }
 
 GetSessionResult --> "1" SessionState : state
-GetSessionResult --> "1" ThinkingVisibility : thinking
+GetSessionResult --> "1" DeepThinkingSwitch : thinking
 
 note bottom of GetSessionResult
 This is the confirmed public Session resource.
@@ -1694,7 +1694,7 @@ end note
 @enduml
 
 @startuml http_session_model_configuration
-title HTTP Session Model and Disclosure Configuration
+title HTTP Session Model and Deep-Thinking Configuration
 
 ' Source evidence (pi-mono commit 086c32e74530564922d011ade23ff582c9d63116):
 ' packages/coding-agent/src/core/agent-session.ts, setModel and setThinkingLevel,
@@ -1708,11 +1708,11 @@ title HTTP Session Model and Disclosure Configuration
 ' modules/ai/src/main/java/com/campusclaw/ai/types/Model.java, lines 34-47
 ' modules/ai/src/main/java/com/campusclaw/ai/types/ThinkingLevel.java, lines 16-42
 ' Observed behavior: both pi baselines can list models and change the active model.
-' Their thinkingLevel values control model reasoning effort rather than content disclosure.
-' Product constraint: the confirmed HTTP Session thinking field controls reasoning-content
-' disclosure with hidden or full values and must not be redefined by these operations.
-' Security hardening: model discovery is Session-scoped, secrets and provider request details
-' are omitted, and full disclosure requires caller, Agent, and deployment policy approval.
+' Their thinkingLevel values control model reasoning effort.
+' Product constraint: HTTP thinking is a boolean deep-thinking switch; false maps to off,
+' while true maps to a managed non-off level supported by the current model and Agent.
+' Security hardening: model discovery is Session-scoped and exposes only model_id;
+' raw reasoning content is never enabled by the public deep-thinking switch.
 ' Architecture change: HTTP configuration writes require an idle Session and a matching ETag.
 ' Design reason: prevent a configuration change from racing with an active execution while
 ' returning the common Session resource after every successful mutation.
@@ -1744,7 +1744,6 @@ participant "Credential\nAdapter" as Auth
 participant "Session Configuration\nAPI" as API
 database "Runtime Session\nStore" as Store
 participant "Model Manager" as Models
-participant "Disclosure Policy" as Policy
 participant ResultBeanFactory
 
 group List available models
@@ -1753,7 +1752,7 @@ group List available models
   API -> Store : authorize and read Agent binding\nand current model_id
   Store --> API : agent_id, enabledModels, current model_id
   API -> Models : list callable models for Agent and caller
-  Models --> API : safe model descriptors in enabled order
+  Models --> API : model_id values in enabled order
   API -> ResultBeanFactory : normal(ModelListResponseVO)
   ResultBeanFactory --> API : resCode, resMsg, result
   API --> Caller : 200 OK\ncurrent_model_id and models
@@ -1765,24 +1764,27 @@ group Change current model
   API -> Store : authorize, require idle, compare ETag
   Store --> API : current Session resource
   API -> Models : resolve and authorize target model
-  Models --> API : authoritative safe descriptor
-  API -> Store : atomically update model and ETag
+  Models --> API : authoritative model and reasoning capability
+  opt target model does not support deep thinking
+    API -> API : normalize thinking to false
+  end
+  API -> Store : atomically update model, thinking, and ETag
   Store --> API : updated Session resource and ETag
   API -> ResultBeanFactory : normal(SessionResponseVO)
   ResultBeanFactory --> API : resCode, resMsg, result
   API --> Caller : 200 OK\nSession resource and ETag
 end
 
-group Change future disclosure default
-  Caller -> Auth : PUT /sessions/{session_id}/thinking\nIf-Match and hidden or full
+group Change future deep-thinking default
+  Caller -> Auth : PUT /sessions/{session_id}/thinking\nIf-Match and boolean thinking
   Auth -> API : immutable CallerAuthContext
   API -> Store : authorize, require idle, compare ETag
   Store --> API : current Session resource
-  opt requested value is full
-    API -> Policy : authorize full reasoning-content disclosure
-    Policy --> API : allow or 403
+  opt requested value is true
+    API -> Models : verify current model supports reasoning
+    Models --> API : managed non-off level or 422
   end
-  API -> Store : atomically update future disclosure and ETag
+  API -> Store : atomically update deep-thinking switch and ETag
   Store --> API : updated Session resource and ETag
   API -> ResultBeanFactory : normal(SessionResponseVO)
   ResultBeanFactory --> API : resCode, resMsg, result
@@ -1790,14 +1792,14 @@ group Change future disclosure default
 end
 
 note over API,Models
-The public model list excludes base URLs, credentials,
-prices, token limits, and provider request configuration.
+The public model list contains model_id only.
+Names and display metadata come from the caller model catalog.
 The current model can be absent when it was disabled later.
 end note
 
-note over API,Policy
-thinking is disclosure visibility, not reasoning effort.
-The change applies only to executions accepted afterward
-and never reprojects completed history retroactively.
+note over API,Models
+thinking controls whether deep thinking is enabled.
+It never authorizes raw reasoning-content disclosure.
+The change applies only to executions accepted afterward.
 end note
 @enduml

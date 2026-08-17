@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.22.0 |
+| 文档版本 | 1.23.0 |
 | 状态 | 目标设计，尚未实施 |
 | 接口评审状态 | 前五个 operation 已确认；后三个 Session 模型与 thinking 配置 operation 待本轮确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
@@ -88,7 +88,7 @@ Swagger 示例和新客户端的默认选择；APPKEY 是明确公开的兼容�
    SessionResource，返回 `201 Created`、`Location` 和 ResultBean。
 
 初始化只组装运行对象，不调用大模型、不消耗 token，也不创建 MessageEntry；
-因此创建响应中 `state=idle`。`thinking=hidden` 来自 Runtime 的 Session 默认值，
+因此创建响应中 `state=idle`。`thinking=false` 表示默认不启用深度思考，
 不写入 Managed `settings.json`。任一步在 SessionRecord 提交前失败都不
 暴露 `session_id`，并丢弃未持久化的内存 Session。
 
@@ -109,7 +109,7 @@ GetSession 评审而隐式扩张。第一个接口的完整成功响应为：
     "agent_id": "agent_011CZkYqphY8vELVzwCUpqiQ",
     "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
     "state": "idle",
-    "thinking": "hidden",
+    "thinking": false,
     "created_at": "2026-08-15T11:30:00Z"
   }
 }
@@ -140,7 +140,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 | `agent_id` | string | 创建后不可变的 Agent 绑定 |
 | `model_id` | string | Session 当前默认模型；允许后续切换 |
 | `state` | `idle \| running` | 只回答 Session 当前是否存在 active execution |
-| `thinking` | `hidden \| full` | Session 默认的 reasoning content 披露级别，不表示推理强度 |
+| `thinking` | boolean | 是否对后续用户消息启用深度思考；不表示披露原始思考过程 |
 | `created_at` | RFC 3339 timestamp | Session 创建时间 |
 | `updated_at` | RFC 3339 timestamp | Session 资源最后更新时间 |
 
@@ -155,7 +155,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
     "agent_id": "agent_01JY8VZY4CRQN4PJW8M94D1B2C",
     "model_id": "claude-sonnet-4-5",
     "state": "running",
-    "thinking": "hidden",
+    "thinking": true,
     "created_at": "2026-08-15T10:30:00+08:00",
     "updated_at": "2026-08-16T09:15:21+08:00"
   }
@@ -166,12 +166,11 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 
 [PlantUML 源码：`http_get_session_response`](diagram.puml#L1226)
 
-pi 的 `thinkingLevel` 表示推理强度，可取
-`off | minimal | low | medium | high | xhigh | max`；CampusClaw 当前已经确认的
-`thinking` 表示 reasoning content 可见性，只取 `hidden | full`。已确认保持
-已确认语义；需要推理强度时新增 `reasoning_effort`，避免同一个字段混合两个
-正交概念。若本轮直接拆成 `thinking_visibility + reasoning_effort`，必须明确
-重开第一个接口，而不能静默改变已确认契约。
+pi 的 `thinkingLevel` 表示多级推理强度，可取
+`off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
+boolean：`false` 映射为 `off`；`true` 使用当前模型和 Agent 配置的受管非 `off`
+推理强度，不把具体等级开放给调用方。该开关只控制是否启用深度思考，不表示
+披露模型原始思考过程；公共响应和事件仍只返回允许展示的 Assistant 内容。
 
 GetSession 当前不返回 `name`、`history_seq`、完整 `transcript`、
 `queuedSteer`、`phase`、`attached` 或 `locked`。用户可见会话名称属于
@@ -567,9 +566,9 @@ Message。CampusClaw 的 `entry_seq` 和 HTTP page 分页均为 target-only 服�
 
 | Method | Path | 语义 |
 |---|---|---|
-| `GET` | `/sessions/{session_id}/models` | 列出当前 Agent 和调用身份可用模型 |
+| `GET` | `/sessions/{session_id}/models` | 列出当前 Agent 和调用身份可用的 `model_id` |
 | `PUT` | `/sessions/{session_id}/model` | 切换 Session 当前模型 |
-| `PUT` | `/sessions/{session_id}/thinking` | 修改默认 thinking 披露级别 |
+| `PUT` | `/sessions/{session_id}/thinking` | 开启或关闭 Session 深度思考 |
 
 这三个 operation 当前是待确认目标设计。模型列表使用 Session scope，而不是公开
 `/agents/{agent_id}/models`，避免调用方绕过 Session 绑定查询其他 Agent。两个 PUT
@@ -592,23 +591,18 @@ Agent 配置中的稳定顺序，不分页。`models` 可以为空；Session 保
   "result": {
     "current_model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
     "models": [
-      {
-        "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
-        "name": "Claude Sonnet 4.5",
-        "provider": "anthropic",
-        "input_modalities": ["text", "image"],
-        "supports_reasoning": true
-      }
+      {"model_id": "model_011CZq2GkV8aD4NwP7sLmXfR"},
+      {"model_id": "model_011CZq2GkV8aD4NwP7sLmXfS"}
     ]
   }
 }
 ```
 
-公共 descriptor 只包含模型选择器和输入能力判断所需的 `model_id`、`name`、
-`provider`、`input_modalities` 和 `supports_reasoning`。Model Manager 的
-`base_url`、凭据是否存在、价格、上下文窗口、最大输出 token、Headers 和供应商
-请求配置都不进入契约。Model Manager 不可用复用第一个接口已经冻结的
-`503 MANAGER_UNAVAILABLE`。
+每个候选模型只包含 `model_id`。模型名称、供应商和能力等展示信息不属于当前
+Session Runtime 接口，由 mate-service 自己的模型目录或 Model Manager 元数据接口
+解析。Model Manager 的 `base_url`、凭据是否存在、价格、上下文窗口、最大输出
+token、Headers 和供应商请求配置都不进入契约。Model Manager 不可用复用第一个
+接口已经冻结的 `503 MANAGER_UNAVAILABLE`。
 
 #### 2.4.2 PUT Session Model
 
@@ -626,6 +620,10 @@ Runtime 必须实时确认目标模型仍属于上述可选集合；不存在、
 Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`、
 `updated_at` 和新 `ETag`：
 
+若切换前 `thinking=true`，但目标模型不支持深度思考，Runtime 在同一原子配置变更
+中将 `thinking` 归一为 `false`，而不是留下不可执行的 Session 配置。目标模型支持
+深度思考时保持原值。
+
 ```json
 {
   "resCode": "0",
@@ -635,7 +633,7 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
     "agent_id": "agent_01JY8VZY4CRQN4PJW8M94D1B2C",
     "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS",
     "state": "idle",
-    "thinking": "hidden",
+    "thinking": false,
     "created_at": "2026-08-15T10:30:00+08:00",
     "updated_at": "2026-08-17T14:20:31+08:00"
   }
@@ -644,23 +642,20 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 
 #### 2.4.3 PUT Session Thinking
 
-`PUT /sessions/{session_id}/thinking` 延续 CreateSession 和 GetSession 已确认的字段
-语义，请求只包含：
+`PUT /sessions/{session_id}/thinking` 开启或关闭后续用户消息的深度思考，请求只包含：
 
 ```json
 {
-  "thinking": "full"
+  "thinking": true
 }
 ```
 
-`thinking=hidden|full` 表示 reasoning content 的披露级别，不是 pi 的
-`thinkingLevel` 推理强度。变更只作为后续新接受 `user.message` 的默认投影；不会
-重投影已完成历史，也不会影响已经开始的执行。请求 `full` 时还必须通过调用方、
-Agent 和部署的披露策略校验，否则返回
-`403 THINKING_DISCLOSURE_FORBIDDEN`。成功响应同样复用完整 SessionResource 和
-新 `ETag`。本接口不接受 `level` 或 `reasoning_effort`；未来若需要让调用方控制
-模型推理强度，应新增正交的 `reasoning_effort` 设计，不能改变已确认
-`thinking` 的含义。
+`false` 映射为 pi 的 `off`；`true` 由 Runtime 映射到当前模型和 Agent 配置的受管
+非 `off` 推理强度。调用方不选择 `minimal/low/medium/high/xhigh/max` 等具体等级。
+当前模型不支持深度思考时，请求 `true` 返回 `422 THINKING_NOT_SUPPORTED`；请求
+`false` 始终允许。变更只作用于之后接受的 `user.message`，不会影响已开始或已完成
+的执行。成功响应同样复用完整 SessionResource 和新 `ETag`。原始思考过程的披露
+是独立安全策略，不由这个布尔开关开启，也不进入本接口契约。
 
 两个 PUT 都不接收 `Idempotency-Key`。Session 正在执行时返回
 `409 SESSION_BUSY`，不会排队配置变更；成功写入必须将 Session 配置、内部配置记录
@@ -668,7 +663,7 @@ Agent 和部署的披露策略校验，否则返回
 `ResultBeanFactory.getFactory().normal(sessionResponseVO)` 包装，所有异常仍只包含
 `resCode/resMsg`。
 
-![HTTP Session 模型与披露配置](http_session_model_configuration.svg)
+![HTTP Session 模型与深度思考配置](http_session_model_configuration.svg)
 
 [PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1696)
 
@@ -801,14 +796,14 @@ operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑
 | HTTP | `resCode` | 适用 operation | 语义 |
 |---|---|---|---|
 | `400` | `INVALID_MODEL_REQUEST` | PUT Model | 请求体缺失、格式错误或含未知字段 |
-| `400` | `INVALID_THINKING_REQUEST` | PUT Thinking | 请求体缺失、值不属于 `hidden\|full` 或含未知字段 |
-| `403` | `THINKING_DISCLOSURE_FORBIDDEN` | PUT Thinking | 当前披露策略不允许 `full` |
+| `400` | `INVALID_THINKING_REQUEST` | PUT Thinking | 请求体缺失、`thinking` 不是 boolean 或含未知字段 |
 | `409` | `SESSION_BUSY` | 两个 PUT | active execution 存在，配置变更不排队 |
 | `412` | `SESSION_VERSION_MISMATCH` | 两个 PUT | `If-Match` 与当前 ETag 不一致 |
 | `422` | `MODEL_NOT_AVAILABLE` | PUT Model | 目标模型不在实时可选集合中 |
+| `422` | `THINKING_NOT_SUPPORTED` | PUT Thinking | 请求开启深度思考，但当前模型不支持 |
 | `428` | `IF_MATCH_REQUIRED` | 两个 PUT | 缺少必填 `If-Match` |
 | `500` | `SESSION_MODEL_UPDATE_FAILED` | PUT Model | 模型配置和资源版本未能原子更新 |
-| `500` | `SESSION_THINKING_UPDATE_FAILED` | PUT Thinking | 披露配置和资源版本未能原子更新 |
+| `500` | `SESSION_THINKING_UPDATE_FAILED` | PUT Thinking | 深度思考配置和资源版本未能原子更新 |
 | `503` | `MANAGER_UNAVAILABLE` | GET Models、PUT Model | Model Manager 暂时不可用；复用第一个接口错误码 |
 
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
@@ -967,13 +962,13 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
-| 产品约束 | 已确认 Session `thinking=hidden|full` 表示 reasoning content 披露级别；后三个接口不得把它改写成 pi 的推理强度。未来若开放推理强度，使用正交 `reasoning_effort` 设计 |
+| 产品约束 | Session `thinking` 是是否启用深度思考的 boolean；`false` 映射为 pi 的 `off`，`true` 使用模型和 Agent 的受管非 `off` 推理强度，不公开具体等级 |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、文件只传 ID、ResultBean 错误脱敏 |
-| 安全加固 | Session 模型列表只暴露选择与输入能力所需安全字段，不返回 base URL、凭据状态、价格、token 上限或供应商请求配置；`thinking=full` 还要经过调用方、Agent 和部署披露策略授权 |
+| 安全加固 | Session 模型列表只暴露 `model_id`，不返回名称、供应商、能力、base URL、凭据状态、价格、token 上限或供应商请求配置；`thinking=true` 不代表允许披露原始思考过程 |
 | 架构改造 | 统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、请求范围内 POST SSE、断线后执行继续、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
 | 待确认目标设计 | GET Session Models 实时返回 Agent allowlist、调用身份和部署策略的交集，不分页；`current_model_id` 允许因管理面后续停用而不在 `models` 中 |
-| 待确认目标设计 | PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功统一返回完整 SessionResource 和 ETag，相同值验证后按无变化成功返回；模型、披露设置和资源版本原子更新 |
-| 待确认目标设计 | thinking 披露变更只作用于之后接受的用户事件，不追溯重投影历史；这是 HTTP 产品投影，不是 pi 或 pi-mono-java 已有 thinking-level 行为 |
+| 待确认目标设计 | PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功统一返回完整 SessionResource 和 ETag，相同值验证后按无变化成功返回；模型、深度思考设置和资源版本原子更新 |
+| 待确认目标设计 | 深度思考开关只作用于之后接受的用户事件；当前模型不支持时开启返回 `422`，模型切换到不支持深度思考的目标模型时原子归一为 `false` |
 | 已确认架构 | `POST /sessions/{session_id}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `run_id`；成功流按 User、Assistant 三阶段、工具执行、ToolResult、最终 Assistant、Session idle、stream end 排序；`user.message`、`assistant.message.completed`、`tool.result` 与 `entry_seq` 是权威历史 |
 | 设计原因 | pi 本身依靠 MessageEntry 重建对话，不依赖公共 Run；mate-service 当前只需要提交消息、观察实时输出和读取持久化 Session Events，无需承担额外 Run 生命周期 |
 | 已确认设计 | Assistant Message 使用 `assistant.message.started/delta/completed` 三阶段；前两者是不可恢复预览，completed 是完整持久化 Entry。该语义借鉴 Anthropic 的 preview/final 分层，但名称采用 CampusClaw 领域语言 |
@@ -995,6 +990,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.23.0 | 2026-08-17 | 按用户意见收窄后三个 Session 配置接口：GET Models 的候选模型只展示 `model_id`；将 Session `thinking` 从 `hidden\|full` 内容披露级别改为是否启用深度思考的 boolean，并同步 CreateSession、GetSession、Event execution snapshot 和两个配置 PUT；`false` 映射为 pi `off`，`true` 使用受管非 `off` 强度且不表示披露原始思考过程；当前模型不支持时开启返回 `422 THINKING_NOT_SUPPORTED`，模型切换到不支持深度思考的目标时自动归一为 `false`；OpenAPI 未更新 |
 | 1.22.0 | 2026-08-17 | 一次展示剩余三个 Session 配置接口的待确认目标设计：GET Models 返回实时可选集合及安全最小模型 descriptor；PUT Model 与 PUT Thinking 仅允许 idle、强制 If-Match、成功复用完整 SessionResource 和 ETag；明确 `thinking=hidden|full` 延续已确认的内容披露语义而非 pi 推理强度，full 受披露策略约束且不追溯历史；新增源码证据和 PlantUML，OpenAPI 未更新 |
 | 1.21.0 | 2026-08-17 | 用户确认第五个 GET Session Events 接口的最后两项：只返回当前分支，只公开 `user.message`、`assistant.message.completed`、`tool.result` 三类持久化对话 Entry；第五接口整体标记为已确认。澄清 page 的不透明性属于 HTTP 契约，客户端只能原样回传且不得解析、修改或构造，数据库内部仍可按 `entry_seq` 做 Keyset Pagination；OpenAPI 未更新 |
 | 1.20.0 | 2026-08-17 | 修正第五接口 cursor 和跨接口事件示例：删除可被 Base64 解码为 `created_at` 的伪不透明 page，改用客户端不可解释的示例 token，并明确示例为 `limit=3`、下一页从 `entry_seq=20` 继续；第五接口持久化类型从 `assistant.message` 对齐为第四接口的 `assistant.message.completed`，建立三类持久化事件的同名同字段映射，临时 SSE 事件仍不进入历史；OpenAPI 未更新 |
