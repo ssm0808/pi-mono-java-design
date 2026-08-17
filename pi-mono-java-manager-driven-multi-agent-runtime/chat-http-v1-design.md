@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.20.0 |
+| 文档版本 | 1.21.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | 前四个 operation 已确认；第五个 GET Session Events operation 已确定同路径资源边界和 `page/next_page` 开放分页，事件范围仍在评审 |
+| 接口评审状态 | 前五个 operation 已确认；第五个 GET Session Events 只返回当前分支中的三类持久化对话 Entry |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
@@ -440,7 +440,7 @@ GET Session Events 返回 `user.message`、`assistant.message.completed` 和 `to
 事件订阅接口，只有在出现多观察者、独立重连或需要观察超出原请求生命周期的执行时
 才重新评估；当前接口不新增该端点。
 
-#### 2.3.1 第五个接口：分页读取 Session Events（评审中）
+#### 2.3.1 第五个接口：分页读取 Session Events（已确认）
 
 ```http
 GET /campusclaw-service/v1/sessions/{session_id}/events?limit=3
@@ -451,7 +451,7 @@ Authorization: Bearer <JWT>
 本接口服务两个直接用途：首次加载一个长 Session 的持久化对话，以及
 `POST /events` 断线后重新读取权威记录。用户已经选择与 Anthropic List Events
 相同方向的资源和分页边界：GET 与 POST 共用 `/events` 路径，分页只使用
-`page/next_page`，不接受 `after_entry_seq`，也不建立固定快照水位。当前推荐只投影
+`page/next_page`，不接受 `after_entry_seq`，也不建立固定快照水位。已确认只投影
 Session 当前分支中的三类公共 Entry：`user.message`、`assistant.message.completed` 和
 `tool.result`。pi 的 `model_change`、`thinking_level_change`、`compaction`、
 `branch_summary`、`custom`、`label` 和 `session_info` 仍可用于 Runtime 内部重建，
@@ -459,20 +459,21 @@ Session 当前分支中的三类公共 Entry：`user.message`、`assistant.messa
 
 已经确定使用开放的不透明 page 分页：
 
-| 参数 | 当前提案 | 作用 |
+| 参数 | 已确认设计 | 作用 |
 |---|---|---|
 | `limit` | 可选，默认 `100`，范围 `1..200` | 限制本页最多返回的持久化事件数量 |
 | `page` | 后续页可选，不透明字符串 | 使用上一响应的 `next_page` 继续读取；第一页不传 |
 
-`page` 只绑定 Session、选定的事件范围和下一读取位置，不包含历史上界。它必须被
-调用方当成完全不透明的字符串，示例值不编码可见的 `created_at` 或 `entry_seq`；服务端
-可以使用带完整性保护的密文或随机查询键实现，但不能要求调用方解析或构造。
+`page` 只绑定 Session、已确认的当前分支事件范围和下一读取位置，不包含历史上界。
+不透明是 HTTP 契约边界，不要求数据库存储相同字符串，也不等同于游标内容必须在技术上
+无法解码。客户端只能原样回传，不得解析、修改、构造或依赖内部字段；服务端内部可以
+按 `entry_seq` 做 Keyset Pagination，并使用带完整性保护的 token 或随机查询键签发 page。
 持久化 Entry 始终按 `entry_seq` 从小到大排列；执行期间追加的新 Entry 可以进入
 后续页面。因此分页不是一次冻结的历史快照，如果事件持续追加，调用方可能继续获得
 新的 `next_page`。无效、损坏、过期或属于其他 Session 的 page 统一返回
 `400 INVALID_EVENT_LIST_QUERY`。
 
-当前提案的成功响应为：
+已确认的成功响应为：
 
 ```json
 {
@@ -525,7 +526,7 @@ Session 当前分支中的三类公共 Entry：`user.message`、`assistant.messa
 
 上例明确对应 `limit=3`。调用方下一次请求原样传入
 `page=page_q7K2mN9vR4xT8cL5`，下一页从 `entry_seq=20` 的最终
-`assistant.message.completed` 继续。客户端不能从 page 字符串推导下一序号或时间。
+`assistant.message.completed` 继续。客户端不得从 page 字符串推导下一序号或时间。
 
 第五接口只返回第四接口 SSE 中可恢复的持久化事件，映射如下：
 
@@ -547,8 +548,8 @@ SSE `data` 对齐。第四接口因此在持久化 `user.message`、
 已持久化事件，不表示 Session 后续不会追加事件。Session 正在执行时允许读取，调用方
 只会看到已经完成持久化的 Entry，不会看到内存中的 preview。由于 POST SSE 不返回
 List Events 的 page，断线恢复必须从第一页重新分页，并按 `entry_id/entry_seq` 去重；
-这是严格采用 page-only 分页后已经接受的效率取舍。当前仍需确认两项：是否只返回
-当前分支，以及是否只公开三类对话 Entry。
+这是严格采用 page-only 分页后已经接受的效率取舍。事件范围已确认只包含当前分支；
+公共类型已确认只包含三类持久化对话 Entry，不返回废弃分支、内部控制 Entry 或临时事件。
 
 pi-mono 的 `SessionManager` 将所有 Entry 以 `id/parentId` 组织为 append-only tree，
 `getBranch()` 返回当前 leaf 到 root 的有序路径，`getEntries()` 返回完整 Entry 集合。
@@ -612,15 +613,15 @@ Session Event 的并发、连接和恢复规则当前为：
 - `entry_seq` 只由持久化 Entry 分配；临时事件不消耗序号。GetSession 不返回
   事件水位，第五个接口也不接受 `entry_seq` 作为分页参数；它只使用不透明 page。
 - Pod 重启时如何终止或恢复 active execution、是否持久化 partial Assistant Entry，
-  仍需在持久化 Events 与错误事件评审中冻结。
+  不属于已确认的前五个 HTTP operation 契约，留待执行恢复实现设计。
 
 ## 5. ResultBean、HTTP 状态与国际化
 
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。本版已经确认前四个 operation，并正在评审
-第五个 GET Session Events operation；其余 operation 的业务语义仍按后续逐个评审，但普通 JSON 响应
+草案的公司集成约束。本版已经确认前五个 operation；其余 operation 的业务语义
+仍按后续逐个评审，但普通 JSON 响应
 最终也必须遵守同一包装。SSE 事件流和 HTTP `204` 无响应体
 不使用 ResultBean。
 
@@ -692,11 +693,10 @@ HTTP status。以下错误码和消息已经随第四个接口确认冻结：
 | `500` | `EVENT_ACCEPTANCE_FAILED` | `用户事件接收失败。` | `User event acceptance failed.` |
 | SSE | `SESSION_EXECUTION_FAILED` | `Session 执行失败。` | `Session execution failed.` |
 
-第五个 GET Session Events 接口当前提案使用
+第五个 GET Session Events 接口已确认使用
 `INVALID_SESSION_ID`、`INVALID_EVENT_LIST_QUERY`、`UNAUTHENTICATED`、
 `AUTH_CREDENTIAL_CONFLICT`、`FORBIDDEN`、`SESSION_NOT_FOUND` 和
-`EVENT_LIST_FAILED`。这些事件查询错误仍随
-第五接口一起评审，尚未冻结。
+`EVENT_LIST_FAILED`。这些事件查询错误已随第五接口确认而冻结。
 
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
 `en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
@@ -857,9 +857,9 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 已确认设计 | Assistant Message 使用 `assistant.message.started/delta/completed` 三阶段；前两者是不可恢复预览，completed 是完整持久化 Entry。该语义借鉴 Anthropic 的 preview/final 分层，但名称采用 CampusClaw 领域语言 |
 | 已确认设计 | CreateSession 和 GetSession 删除旧公共 Run 模型遗留的 `active_run` 字段；Session 粗粒度执行状态只由 `state=idle/running` 表达 |
 | 已确认设计 | Session Event 请求使用 `type=user.message`、`message + file_ids`，不接受业务 metadata 或 `Idempotency-Key`；这是目标产品约束，不是 pi 已有 HTTP 契约 |
-| 已确定设计 | GET 与 POST 共用 `/sessions/{session_id}/events`；GET 只使用 `limit + page/next_page` 开放分页，不接受 `after_entry_seq`，不公开固定快照水位；page 是客户端不可解释的服务端游标，不以可见 Base64 时间戳充当不透明游标；这是借鉴 Anthropic 的目标架构选择 |
+| 已确认设计 | GET 与 POST 共用 `/sessions/{session_id}/events`；GET 只使用 `limit + page/next_page` 开放分页，不接受 `after_entry_seq`，不公开固定快照水位；page 是客户端只能原样回传且不得解析、修改或构造的服务端游标，数据库内部可继续使用 `entry_seq` Keyset Pagination；这是借鉴 Anthropic 的目标架构选择 |
 | 跨接口一致性 | 第五接口复用第四接口三类持久化事件的名称和字段：`user.message`、`assistant.message.completed`、`tool.result`；实时 preview、工具执行状态和流控制事件不进入分页历史 |
-| 待确认设计 | GET Session Events 当前推荐只投影当前分支的三类持久化事件，是否公开完整 Entry 树或控制 Entry 仍在评审 |
+| 已确认设计 | GET Session Events 只投影当前分支中的 `user.message`、`assistant.message.completed` 和 `tool.result`；不公开废弃分支、完整 Entry 树或内部控制 Entry |
 
 公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自
 用户提供的集成约束。当前工作区不含对应入站认证库或
@@ -873,6 +873,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.21.0 | 2026-08-17 | 用户确认第五个 GET Session Events 接口的最后两项：只返回当前分支，只公开 `user.message`、`assistant.message.completed`、`tool.result` 三类持久化对话 Entry；第五接口整体标记为已确认。澄清 page 的不透明性属于 HTTP 契约，客户端只能原样回传且不得解析、修改或构造，数据库内部仍可按 `entry_seq` 做 Keyset Pagination；OpenAPI 未更新 |
 | 1.20.0 | 2026-08-17 | 修正第五接口 cursor 和跨接口事件示例：删除可被 Base64 解码为 `created_at` 的伪不透明 page，改用客户端不可解释的示例 token，并明确示例为 `limit=3`、下一页从 `entry_seq=20` 继续；第五接口持久化类型从 `assistant.message` 对齐为第四接口的 `assistant.message.completed`，建立三类持久化事件的同名同字段映射，临时 SSE 事件仍不进入历史；OpenAPI 未更新 |
 | 1.19.0 | 2026-08-17 | 用户选择 Anthropic 风格的第五接口资源和分页边界：GET 与 POST 共用 `/sessions/{session_id}/events`，删除 `/history`、`after_entry_seq`、固定 `snapshot_entry_seq`、`next_cursor` 和 410 cursor 错误；GET 使用开放式 `limit + page/next_page`，断线后从第一页重新读取并按 `entry_id/entry_seq` 去重；事件范围仍在评审，OpenAPI 未更新 |
 | 1.18.0 | 2026-08-17 | 用户确认调整后的前四个接口：CreateSession/GetSession 删除 `active_run`，只由 Session `state` 表达粗粒度执行状态；Session Event 冻结 `INVALID_EVENT_REQUEST`、`SESSION_BUSY`、`EVENT_ACCEPTANCE_FAILED` 及流建立后 `stream.error/SESSION_EXECUTION_FAILED` 再关闭连接的失败语义；启动第五个 Session History 评审，提出当前分支、三类公共 Entry、`after_entry_seq + limit` 首页和固定快照 cursor 后续页；OpenAPI 未更新 |

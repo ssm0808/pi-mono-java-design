@@ -1604,7 +1604,7 @@ end note
 @enduml
 
 @startuml http_session_event_list
-title CampusClaw Session Event List Pagination Proposal
+title CampusClaw Session Event List Pagination
 
 ' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
 ' packages/coding-agent/src/core/session-manager.ts, SessionEntry, lines 46-156
@@ -1680,7 +1680,7 @@ API --> Caller : 200 OK\nevents and next_page
 
 note over API,Store
 Only committed user.message, assistant.message.completed,
-and tool.result entries are public in this proposal.
+and tool.result entries on the current branch are public.
 Items are sorted by entry_seq ascending.
 There is no fixed snapshot watermark. Later persisted
 entries may become eligible on a subsequent page.
