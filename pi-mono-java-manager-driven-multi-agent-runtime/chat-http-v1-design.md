@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.10.0 |
+| 文档版本 | 1.10.1 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | `POST /agents/{agent_id}/sessions` 已确认；`GET /sessions/{session_id}` 评审中；其余 operation 待逐个评审 |
+| 接口评审状态 | `POST /agents/{agent_id}/sessions`、`GET /sessions/{session_id}` 已确认；其余 operation 待逐个评审 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
@@ -122,7 +122,7 @@ GetSession 评审而隐式扩张。第一个接口的完整成功响应为：
 孤立 Session 由后台超时清理。其他副作用接口的幂等或并发规则属于
 各自 operation，不由创建 Session 接口继承。
 
-#### 2.1.1 第二个接口当前提案：读取 Session
+#### 2.1.1 第二个已确认接口：读取 Session
 
 ```http
 GET /campusclaw-service/v1/sessions/{session_id}
@@ -131,10 +131,10 @@ GET /campusclaw-service/v1/sessions/{session_id}
 该接口按 `session_id` 读取已经存在的 Session 当前资源，不创建或恢复
 Session，不调用模型、不消耗 token，也不为了查询而实时调用 Model Manager。
 它是 Session 控制面的只读入口，用于确认资源存在及访问权、读取当前默认
-配置、判断是否存在 active Run，并取得后续 GetRun 的定位指针。当前提案使用
+配置、判断是否存在 active Run，并取得后续 GetRun 的定位指针。已确认契约使用
 独立的 `GetSessionResponseVO`，不改变第一个接口已经确认的创建响应。
 
-| 字段 | 当前提案 | 具体作用 |
+| 字段 | 已确认契约 | 具体作用 |
 |---|---|---|
 | `session_id` | 必填 | Session 不透明标识 |
 | `agent_id` | 必填 | 创建后不可变的 Agent 绑定 |
@@ -173,13 +173,13 @@ GetSession 的响应大小固定，不承担聊天恢复快照职责。
 }
 ```
 
-![GetSession 当前响应提案](http_get_session_response.svg)
+![GetSession 已确认响应](http_get_session_response.svg)
 
 [PlantUML 源码：`http_get_session_response`](diagram.puml#L1225)
 
 pi 的 `thinkingLevel` 表示推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`；CampusClaw 当前已经确认的
-`thinking` 表示 reasoning content 可见性，只取 `hidden | full`。当前推荐保持
+`thinking` 表示 reasoning content 可见性，只取 `hidden | full`。已确认保持
 已确认语义；需要推理强度时新增 `reasoning_effort`，避免同一个字段混合两个
 正交概念。若本轮直接拆成 `thinking_visibility + reasoning_effort`，必须明确
 重开第一个接口，而不能静默改变已确认契约。
@@ -198,14 +198,13 @@ GetRun 返回；`attached` 是 pi 的连接相对状态，`locked` 是 live Runt
 | active/terminal Run 的 phase、固化配置、partial Message、工具和 steer 状态 | `GET /sessions/{session_id}/runs/{run_id}` |
 | Run 的实时增量及 `run_seq` 恢复 | `GET /sessions/{session_id}/runs/{run_id}/events` |
 
-读取成功返回 `ETag` 和 `Cache-Control: no-store`。当前推荐仅将 `ETag` 用于
+读取成功返回 `ETag` 和 `Cache-Control: no-store`。已确认仅将 `ETag` 用于
 后续 Model/Thinking 配置写入的 `If-Match` 并发控制，不给本 GET 增加
-`If-None-Match/304` 分支。不存在和已删除的 Session 当前推荐统一返回
-`404 SESSION_NOT_FOUND`，避免泄露历史状态。这两点与 `active_run` 指针粒度
-仍在主维护 HTML 中等待第二个接口的最终确认。
+`If-None-Match/304` 分支。不存在和已删除的 Session 统一返回
+`404 SESSION_NOT_FOUND`，避免泄露历史状态；`active_run` 固定为只含
+`run_id/state` 的指针。
 
-本小节和主维护 HTML 中的第二个接口仍是评审提案，尚未确认；OpenAPI 本轮
-不随该提案更新。
+本小节和主维护 HTML 中的第二个接口已经用户确认。OpenAPI 本轮仍不更新。
 
 ![HTTP Session 创建](http_session_creation.svg)
 
@@ -299,7 +298,7 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。本版先冻结第一个创建 Session 接口；
+草案的公司集成约束。本版已经冻结创建 Session 和 GetSession 两个接口；
 其余 operation 的业务语义仍按后续逐个评审，但普通 JSON 响应
 最终也必须遵守同一包装。SSE 事件流和 HTTP `204` 无响应体
 不使用 ResultBean。
@@ -336,10 +335,10 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 | `500` | `SESSION_INITIALIZATION_FAILED` | `Session 初始化失败。` | `Session initialization failed.` |
 | `503` | `MANAGER_UNAVAILABLE` | `Model Manager 暂时不可用，请稍后重试。` | `Model Manager is temporarily unavailable. Try again later.` |
 
-第二个 GetSession 接口当前提案使用
+第二个 GetSession 接口已确认使用
 `INVALID_SESSION_ID`、`UNAUTHENTICATED`、`AUTH_CREDENTIAL_CONFLICT`、
 `FORBIDDEN` 和 `SESSION_NOT_FOUND`；仍保持异常体只有
-`resCode/resMsg`。这些 operation-specific 错误尚未随接口确认而冻结。
+`resCode/resMsg`。这些 operation-specific 错误已随第二个接口确认而冻结。
 
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
 `en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
@@ -486,6 +485,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.10.1 | 2026-08-17 | 用户确认第二个 `GET /sessions/{session_id}` operation；冻结 `active_run={run_id,state}`、ETag 仅用于配置写并发控制、不存在与已删除统一返回 `404 SESSION_NOT_FOUND`，并将双接口 HTML 更新为均已确认；OpenAPI 未更新 |
 | 1.10.0 | 2026-08-16 | 收窄 GetSession：删除 `history_seq` 和 active Run 的 phase/model/thinking，只保留 Session 当前配置、`idle/running` 与 `run_id/state` 指针；明确 History、GetRun、Run Event 的职责边界；主维护 HTML 同时展示已确认的第一个接口与评审中的第二个接口，OpenAPI 未更新 |
 | 1.9.0 | 2026-08-16 | 将主维护 HTML 切换为第二个 GetSession 接口评审；增加 `history_seq` 水位、Session state 与 active Run phase 分工、thinking 可见性与 pi 推理强度的语义隔离，以及 transcript/name/attached/locked 的边界；第二个接口仍未确认，OpenAPI 未更新 |
 | 1.8.0 | 2026-08-15 | 增加仓库内可直接打开的 HTML 接口评审文档并固定为人类评审主维护契约；OpenAPI YAML 暂作过渡期机器投影，不在本轮废弃 |
