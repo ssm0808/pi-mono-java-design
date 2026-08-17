@@ -1383,7 +1383,7 @@ alt existing live Session
   Worker -> SessionPool : remove and release runtime objects
   Worker -> Store : purge History, RunRecord, Event Journal,\nidempotency records, and Session payload
   Store -> Store : retain session_id and deleted_at tombstone
-  Worker -> Store : complete cleanup work item
+  Worker -> Store : complete and delete cleanup work item
 else missing, deleting, or deleted
   Store --> API : idempotent no-op
   API --> Caller : 204 No Content
@@ -1400,5 +1400,11 @@ end note
 note over Store,Worker
 mate-service Chat metadata and Attachment Service objects
 are outside this operation's ownership boundary.
+end note
+
+note right of Store
+The permanent tombstone has exactly two fields:
+session_id and deleted_at.
+Cleanup state, retries, errors, and owner data stay out.
 end note
 @enduml

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.11.0 |
+| 文档版本 | 1.11.1 |
 | 状态 | 目标设计，尚未实施 |
 | 接口评审状态 | `POST /agents/{agent_id}/sessions`、`GET /sessions/{session_id}` 已确认；`DELETE /sessions/{session_id}` 评审中；其余 operation 待逐个评审 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
@@ -230,13 +230,20 @@ CampusClaw 对该 Runtime Session 的管理。当前推荐语义是：服务端�
 | 不存在、删除中或已删除 | 对具有删除 scope 的调用方统一返回 `204` | 保证网络重试幂等，不暴露 tombstone 状态 |
 | 幂等与并发 Header | 不要求 `Idempotency-Key` 或 `If-Match` | URI 和持久化 tombstone 已提供幂等语义；删除不是配置修改 |
 | Runtime 清理范围 | History、RunRecord、Run Event Journal、幂等记录和内存运行对象 | 避免已删除 Session 继续占用 Runtime 资源 |
-| 最小保留 | `session_id` 和 `deleted_at` tombstone | 禁止 Session ID 复用，并支持删除重试去重 |
+| 最小保留 | tombstone 严格只包含 `session_id` 和 `deleted_at` | 禁止 Session ID 复用，并支持删除重试去重 |
 | 不属于本接口 | mate-service Chat 名称/业务元数据、附件对象 | 它们分别由 mate-service 和 Attachment Service 拥有 |
 
 逻辑删除与清理任务必须在同一持久化事务中提交。如果该事务失败，
 返回 `500 SESSION_DELETE_FAILED`，Session 不得停留在部分删除状态。事务
 提交后的 abort、内存释放或物理清理失败由持久化任务重试；已删除
 Session 对公共 API 仍然不可见。
+
+tombstone 字段集合已对齐：若落地为 `t_session_tombstone`，则该表永久记录
+严格只有 `session_id` 和 `deleted_at`，不增加 `purged_at`、`cleanup_state`、
+`owner_scope` 或 Session 业务快照。内部重试次数、租约、错误和清理进度属于
+短期 `t_session_cleanup_task`，清理完成后删除任务记录。由于 tombstone 不保留
+owner 信息，对“不存在/已删除”的重复删除只能依据 `CallerAuthContext` 的动作级
+Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 
 认证继续沿用前两个接口已确认的 JWT 首选和 APPKEY 兼容契约，混合
 凭据仍返回 `401 AUTH_CREDENTIAL_CONFLICT`。语法无效的 `session_id` 返回
@@ -533,6 +540,7 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 | 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
+| 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、附件只传 ID、ResultBean 错误脱敏 |
 | 架构改造 | 一组 HTTP 资源接口、统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
 | 架构改造 | CampusClaw GetSession 收敛为配置、粗粒度状态和 active Run 指针；History 水位归 History API，执行 phase 与恢复详情归 GetRun，实时增量归 Run Event API。相较 Anthropic，Agent 发布快照、环境、Vault、预算、用量、标题和业务元数据不由本 Session 资源拥有 |
@@ -549,6 +557,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.11.1 | 2026-08-17 | 对齐第三个接口的永久 tombstone 字段：严格只保留 `session_id`、`deleted_at`；清理状态、重试信息和 owner 不进入 tombstone，由短期清理任务承载；第三个接口整体仍在评审中，OpenAPI 未更新 |
 | 1.11.0 | 2026-08-17 | 启动第三个 `DELETE /sessions/{session_id}` operation 评审；提案在持久化逻辑删除和清理任务后返回 `204`、active Run 自动 abort、重复删除统一 `204`、清理 Runtime 数据并仅保留最小 tombstone；增加 pi/pi-mono-java 删除与释放行为证据，前两个已确认接口不变，OpenAPI 未更新 |
 | 1.10.1 | 2026-08-17 | 用户确认第二个 `GET /sessions/{session_id}` operation；冻结 `active_run={run_id,state}`、ETag 仅用于配置写并发控制、不存在与已删除统一返回 `404 SESSION_NOT_FOUND`，并将双接口 HTML 更新为均已确认；OpenAPI 未更新 |
 | 1.10.0 | 2026-08-16 | 收窄 GetSession：删除 `history_seq` 和 active Run 的 phase/model/thinking，只保留 Session 当前配置、`idle/running` 与 `run_id/state` 指针；明确 History、GetRun、Run Event 的职责边界；主维护 HTML 同时展示已确认的第一个接口与评审中的第二个接口，OpenAPI 未更新 |
