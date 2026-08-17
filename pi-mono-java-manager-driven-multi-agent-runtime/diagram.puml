@@ -1603,8 +1603,8 @@ It remains in version history only.
 end note
 @enduml
 
-@startuml http_session_history
-title CampusClaw Session History Pagination Proposal
+@startuml http_session_event_list
+title CampusClaw Session Event List Pagination Proposal
 
 ' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
 ' packages/coding-agent/src/core/session-manager.ts, SessionEntry, lines 46-156
@@ -1619,10 +1619,12 @@ title CampusClaw Session History Pagination Proposal
 ' branch is the path from the selected leaf to the root.
 ' Java divergence: the Java baseline persists parentId but currently restores messages by
 ' scanning the JSONL file linearly rather than exposing a branch-aware HTTP history API.
-' Target-only design: entry_seq, snapshot_entry_seq, opaque cursors, and ResultBean paging
-' do not exist in either source baseline.
-' Design reason: accept the last durable SSE sequence on the first page, then freeze one
-' bounded snapshot so concurrent appends cannot make pagination unbounded.
+' External reference (Anthropic Managed Agents docs checked 2026-08-17):
+' GET /v1/sessions/{session_id}/events uses opaque page and next_page pagination.
+' Target-only design: entry_seq, opaque pages, ResultBean paging, and the GET endpoint
+' do not exist in either pi source baseline.
+' Design reason: align the public pagination boundary with Anthropic and intentionally
+' avoid a fixed snapshot watermark or an after_entry_seq query.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -1648,44 +1650,45 @@ skinparam note {
 
 actor Caller
 participant "Credential\nAdapter" as Auth
-participant "Session History\nAPI" as API
+participant "Session Events\nAPI" as API
 database "Runtime Session\nStore" as Store
-participant "History Cursor\nCodec" as Cursor
+participant "Page Cursor\nCodec" as Cursor
 participant ResultBeanFactory
 
 alt first page
-  Caller -> Auth : GET /sessions/{session_id}/history\nafter_entry_seq and limit
+  Caller -> Auth : GET /sessions/{session_id}/events\nlimit, no page
   Auth -> API : immutable CallerAuthContext
-  API -> API : validate session_id and first-page parameters
-  API -> Store : authorize and read current branch\nafter sequence through committed high watermark
-  Store --> API : public entries and snapshot_entry_seq
-  API -> Cursor : encode session, branch snapshot,\nwatermark, and next position
-  Cursor --> API : next_cursor or null
+  API -> API : validate session_id and limit
+  API -> Store : authorize and read first public entries\nin entry_seq ascending order
+  Store --> API : persisted public entries
+  API -> Cursor : encode session, scope, and next position
+  Cursor --> API : next_page or null
 else next page
-  Caller -> Auth : GET /sessions/{session_id}/history\ncursor only
+  Caller -> Auth : GET /sessions/{session_id}/events\npage from previous next_page
   Auth -> API : immutable CallerAuthContext
-  API -> Cursor : verify and decode opaque cursor
-  Cursor --> API : bound session, branch snapshot,\nwatermark, and next position
-  API -> Store : authorize and read next page\nthrough fixed snapshot_entry_seq
-  Store --> API : public entries
+  API -> Cursor : verify and decode opaque page
+  Cursor --> API : bound session, scope, and next position
+  API -> Store : authorize and read after next position
+  Store --> API : persisted public entries, including\nlater appends when they follow the cursor
   API -> Cursor : encode next position if more remain
-  Cursor --> API : next_cursor or null
+  Cursor --> API : next_page or null
 end
 
-API -> ResultBeanFactory : normal(HistoryResponseVO)
+API -> ResultBeanFactory : normal(SessionEventListResponseVO)
 ResultBeanFactory --> API : resCode, resMsg, result
-API --> Caller : 200 OK\nitems, snapshot_entry_seq, next_cursor
+API --> Caller : 200 OK\nevents and next_page
 
 note over API,Store
 Only committed user.message, assistant.message,
 and tool.result entries are public in this proposal.
 Items are sorted by entry_seq ascending.
-An active execution may append later entries, but they
-remain outside the fixed snapshot for this pagination walk.
+There is no fixed snapshot watermark. Later persisted
+entries may become eligible on a subsequent page.
 end note
 
 note over API,Cursor
-An expired cursor returns 410 HISTORY_CURSOR_EXPIRED.
-The caller can restart after its last consumed entry_seq.
+next_page null means no more persisted events at response time.
+It does not mean the Session cannot append future events.
+An invalid or expired page returns 400 INVALID_EVENT_LIST_QUERY.
 end note
 @enduml
