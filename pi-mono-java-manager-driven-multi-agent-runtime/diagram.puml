@@ -97,7 +97,7 @@ end note
 @enduml
 
 @startuml http_session_execution_controls
-title HTTP Session Execution Control Proposal
+title HTTP Session Execution Control Design
 
 ' Source evidence (pi-mono commit 086c32e74530564922d011ade23ff582c9d63116):
 ' packages/coding-agent/src/core/agent-session.ts, steer, followUp, clearQueue, and abort,

@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.25.0 |
+| 文档版本 | 1.26.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | 前八个 operation 已确认；Steer、FollowUp、Abort 三个执行控制 operation 待确认 |
+| 接口评审状态 | 十一个 operation 均已确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
@@ -669,7 +669,7 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 
 [PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1811)
 
-### 2.5 Session 执行控制
+### 2.5 Session 执行控制（已确认）
 
 | Method | Path | 语义 |
 |---|---|---|
@@ -677,7 +677,7 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 | `POST` | `/sessions/{session_id}/follow-ups` | 在当前执行原本将结束时追加 FollowUp Message |
 | `POST` | `/sessions/{session_id}/abort` | 中止当前 active execution 并清空未投递控制消息 |
 
-三个 operation 当前是待确认目标设计。它们使用 Session scope，而不是
+三个 operation 已经确认。它们使用 Session scope，而不是
 `/runs/{run_id}`：CampusClaw 已确认不公开 Run，并且一个 Session 同时至多只有一个
 active execution，因此 `session_id` 已能无歧义确定控制目标。Steer 和 FollowUp
 采用复数资源路径表示向队列追加一条消息；Abort 不创建可查询资源，因此使用
@@ -713,9 +713,11 @@ Steer 只在 `Session.state=running` 时接受。它不会立即打断正在进�
 }
 ```
 
-`202` 只表示消息已进入当前 active execution 的运行队列，不创建公共 `steer_id`，
-也不立即分配 `entry_seq`。消息实际投递时才成为当前分支中的持久化
-`user.message`，沿发起执行的既有 SSE 流发送，并由 GET Session Events 查询。
+`202` 只表示消息已进入当前 active execution 的运行队列，不创建公共
+`steer_id`/`follow_up_id`，也不预分配或返回 `entry_id/entry_seq`。消息实际投递
+并持久化时才成为当前分支中的 `user.message`，沿发起执行的既有 SSE
+流发送，并由 GET Session Events 查询。调用方通过该 Session 的原 SSE 顺序观察
+投递结果，本版不建立控制请求到最终 Entry 的独立公开关联资源。
 
 #### 2.5.2 POST Session FollowUp
 
@@ -760,9 +762,9 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 | `connect(mode=create)` | `POST /agents/{agent_id}/sessions`；CampusClaw 生成 `session_id` |
 | `connect(mode=resume)` | 无对应命令；重新 `GET` Session/Events |
 | `chat.send` | `POST /sessions/{session_id}/events`，请求 `type=user.message` 并直接返回 SSE |
-| `chat.steer` | `POST /sessions/{session_id}/steers`，待确认 |
-| `chat.followUp` | `POST /sessions/{session_id}/follow-ups`，待确认 |
-| `chat.abort` | `POST /sessions/{session_id}/abort`，待确认 |
+| `chat.steer` | `POST /sessions/{session_id}/steers` |
+| `chat.followUp` | `POST /sessions/{session_id}/follow-ups` |
+| `chat.abort` | `POST /sessions/{session_id}/abort` |
 | `chat.history` | `GET /sessions/{session_id}/events` |
 | `session.get` | `GET /sessions/{session_id}` |
 | `models.list` | `GET /sessions/{session_id}/models` |
@@ -777,7 +779,7 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 Session Event 的并发、连接和恢复规则当前为：
 
 - 每个 Session 同一时刻只允许一个 active execution。第二个并发初始
-  `user.message` 返回 `409 SESSION_BUSY`；待确认的 Steer/FollowUp 是仅在 running
+  `user.message` 返回 `409 SESSION_BUSY`；已确认的 Steer/FollowUp 是仅在 running
   状态下追加到该 active execution 的显式例外，不创建第二个 execution。
 - 用户 MessageEntry 持久化并开始执行后，不依赖发起 HTTP 连接继续存活；连接关闭
   不等于 interrupt。
@@ -789,20 +791,20 @@ Session Event 的并发、连接和恢复规则当前为：
   User MessageEntry。
 - `Session.state` 只表达 `idle/running` 粗粒度状态。模型请求、工具执行或消息生成
   阶段通过实时事件表达，不新增公共 Run phase。
-- 待确认的 Steer/FollowUp 队列分别保持 FIFO，固定 `one-at-a-time`，且 Steer 优先；
+- Steer/FollowUp 队列分别保持 FIFO，固定 `one-at-a-time`，且 Steer 优先；
   Abort 清空两类尚未投递消息。控制请求断线不会撤销已经成功接受的队列追加或中止。
 - `entry_seq` 只由持久化 Entry 分配；临时事件不消耗序号。GetSession 不返回
   事件水位，第五个接口也不接受 `entry_seq` 作为分页参数；它只使用不透明 page。
 - Pod 重启时如何终止或恢复 active execution、是否持久化 partial Assistant Entry，
-  不属于已确认的八个 HTTP operation 契约，留待执行恢复实现设计。
+  不属于已确认的十一个 HTTP operation 契约，留待执行恢复实现设计。
 
 ## 5. ResultBean、HTTP 状态与国际化
 
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。本版前八个 operation 已确认；本节三个执行控制
-operation 待确认。所有普通 JSON 响应都遵守同一包装，SSE 事件流和 HTTP
+草案的公司集成约束。本版十一个 operation 均已确认。所有普通 JSON 响应都
+遵守同一包装，SSE 事件流和 HTTP
 `204` 无响应体不使用 ResultBean。
 
 | 字段 | 成功 | 异常 | 调用方规则 |
@@ -895,7 +897,7 @@ operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑
 | `500` | `SESSION_THINKING_UPDATE_FAILED` | PUT Thinking | 深度思考配置和资源版本未能原子更新 |
 | `503` | `MANAGER_UNAVAILABLE` | GET Models、PUT Model | Model Manager 暂时不可用；复用第一个接口错误码 |
 
-三个待确认执行控制接口复用公共认证、授权、Session 标识和不存在错误，并新增：
+三个已确认执行控制接口复用公共认证、授权、Session 标识和不存在错误，并新增：
 
 | HTTP | `resCode` | 适用 operation | 语义 |
 |---|---|---|---|
@@ -1077,8 +1079,8 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 已确认目标设计 | GET Session Models 以 `string[]` 实时返回 Agent allowlist、调用身份和部署策略交集中的 `model_id`，不分页；`current_model_id` 允许因管理面后续停用而不在 `models` 中 |
 | 已确认目标设计 | PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功统一返回完整 SessionResource 和 ETag，相同值验证后按无变化成功返回；模型、深度思考设置和资源版本原子更新 |
 | 已确认目标设计 | 深度思考开关只作用于之后接受的用户事件；当前模型不支持时开启返回 `422`，模型切换到不支持深度思考的目标模型时原子归一为 `false` |
-| 待确认目标设计 | Steer 和 FollowUp 使用 Session scope 的独立 POST；只在 running 时按 FIFO、`one-at-a-time` 入队，Steer 优先；实际投递时统一成为既有 `user.message`，不新增公共控制 Entry 类型 |
-| 待确认目标设计 | Abort 使用 Session scope 的幂等 POST，无请求体；级联取消模型、工具和子 Agent，清空未投递控制消息，等待 idle 后返回 `204`；idle 时也是 `204` |
+| 已确认目标设计 | Steer 和 FollowUp 使用 Session scope 的独立 POST；只在 running 时按 FIFO、`one-at-a-time` 入队，Steer 优先；实际投递时统一成为既有 `user.message`，不新增公共控制 Entry 类型 |
+| 已确认目标设计 | Abort 使用 Session scope 的幂等 POST，无请求体；级联取消模型、工具和子 Agent，清空未投递控制消息，等待 idle 后返回 `204`；idle 时也是 `204` |
 | 产品约束 | 首版 Steer/FollowUp 仅接受文本，不开放 pi 的 inline images、扩展命令、Prompt Template 展开或队列模式配置；不复用已经冻结为直接 SSE 的 POST Events operation |
 | 架构改造 | pi-mono-java 需要新增 FollowUp 能力，并将当前 Steer“入队前直接持久化 UserMessage”调整为实际投递时才产生公共 `user.message`，避免工具结果与排队消息的历史顺序错位 |
 | 已确认架构 | `POST /sessions/{session_id}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `run_id`；成功流按 User、Assistant 三阶段、工具执行、ToolResult、最终 Assistant、Session idle、stream end 排序；`user.message`、`assistant.message.completed`、`tool.result` 与 `entry_seq` 是权威历史 |
@@ -1102,6 +1104,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.26.0 | 2026-08-17 | 用户确认 POST Steers、POST FollowUps 和 POST Abort 三个 Session 执行控制接口；保持 1.25.0 的 Session scope、原 POST Events SSE 观察、Steer/FollowUp `202` 和 Abort `204` 设计不变；明确 `202` 只返回 `session_id/accepted_at`，不新增控制 ID 或预分配 `entry_id`；十一个 HTTP operation 至此全部确认；OpenAPI 未更新 |
 | 1.25.0 | 2026-08-17 | 按用户要求新增三个待确认 Session 执行控制接口：POST Steers、POST FollowUps 和 POST Abort；保持无公共 Run 的 Session scope，区分 Steer“下一次模型调用前”与 FollowUp“原本将结束时”的投递时机，固定 FIFO/one-at-a-time/Steer 优先；控制消息实际投递后复用 `user.message`，Abort 清空未投递队列并等待 idle 后幂等返回 `204`；新增 pi/pi-mono-java 证据、错误码和 PlantUML；OpenAPI 未更新 |
 | 1.24.0 | 2026-08-17 | 用户确认剩余三个 Session 配置接口：冻结 GET Session Models 的 `current_model_id + models:string[]`、PUT Session Model 的 idle/If-Match/能力归一规则，以及 PUT Session Thinking 的 boolean 深度思考语义和错误码；至此当前八个 HTTP operation 均已确认；OpenAPI 未更新 |
 | 1.23.1 | 2026-08-17 | 按用户修正将 GET Session Models 的 `models` 从仅含 `model_id` 的对象数组进一步收窄为 `string[]`；候选项当前没有独立扩展字段，不保留无意义的对象层；OpenAPI 未更新 |
