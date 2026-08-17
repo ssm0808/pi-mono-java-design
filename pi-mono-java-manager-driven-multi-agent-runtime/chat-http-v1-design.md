@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.24.0 |
+| 文档版本 | 1.25.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | 八个 operation 均已确认 |
+| 接口评审状态 | 前八个 operation 已确认；Steer、FollowUp、Abort 三个执行控制 operation 待确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
@@ -164,7 +164,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 
 ![GetSession 已确认响应](http_get_session_response.svg)
 
-[PlantUML 源码：`http_get_session_response`](diagram.puml#L1226)
+[PlantUML 源码：`http_get_session_response`](diagram.puml#L1341)
 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
@@ -238,13 +238,13 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 
 ![HTTP Session 逻辑删除](http_delete_session.svg)
 
-[PlantUML 源码：`http_delete_session`](diagram.puml#L1297)
+[PlantUML 源码：`http_delete_session`](diagram.puml#L1412)
 
 本小节和主维护 HTML 中的第三个接口已经用户确认。OpenAPI 本轮仍不更新。
 
 ![HTTP Session 创建](http_session_creation.svg)
 
-[PlantUML 源码：`http_session_creation`](diagram.puml#L996)
+[PlantUML 源码：`http_session_creation`](diagram.puml#L1111)
 
 ### 2.2 消息与 Session Event
 
@@ -286,7 +286,7 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 
 ![HTTP 执行资源模型对比](http_execution_resource_model.svg)
 
-[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L1518)
+[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L1633)
 
 #### 2.2.2 第四个已确认接口：提交用户事件并直接流式返回
 
@@ -421,7 +421,7 @@ ToolResult Entry 是权威事实，调用方按 `entry_id/entry_seq` 与本地�
 
 ![HTTP Session Event 直接流式返回](http_session_event_stream.svg)
 
-[PlantUML 源码：`http_session_event_stream`](diagram.puml#L1397)
+[PlantUML 源码：`http_session_event_stream`](diagram.puml#L1512)
 
 第四接口已经确认：冻结路径、`user.message` 请求、`message + file_ids`、同一 POST
 直接 SSE、无公共 `run_id`、无 `Idempotency-Key`、成功事件顺序与持久化语义，
@@ -560,7 +560,7 @@ Message。CampusClaw 的 `entry_seq` 和 HTTP page 分页均为 target-only 服�
 
 ![HTTP Session Events 开放分页](http_session_event_list.svg)
 
-[PlantUML 源码：`http_session_event_list`](diagram.puml#L1606)
+[PlantUML 源码：`http_session_event_list`](diagram.puml#L1721)
 
 ### 2.4 模型与 Session 配置
 
@@ -667,7 +667,91 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 
 ![HTTP Session 模型与深度思考配置](http_session_model_configuration.svg)
 
-[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1696)
+[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1811)
+
+### 2.5 Session 执行控制
+
+| Method | Path | 语义 |
+|---|---|---|
+| `POST` | `/sessions/{session_id}/steers` | 向当前 active execution 优先追加 Steering Message |
+| `POST` | `/sessions/{session_id}/follow-ups` | 在当前执行原本将结束时追加 FollowUp Message |
+| `POST` | `/sessions/{session_id}/abort` | 中止当前 active execution 并清空未投递控制消息 |
+
+三个 operation 当前是待确认目标设计。它们使用 Session scope，而不是
+`/runs/{run_id}`：CampusClaw 已确认不公开 Run，并且一个 Session 同时至多只有一个
+active execution，因此 `session_id` 已能无歧义确定控制目标。Steer 和 FollowUp
+采用复数资源路径表示向队列追加一条消息；Abort 不创建可查询资源，因此使用
+幂等动作路径 `/abort`。
+
+#### 2.5.1 POST Session Steer
+
+Steer 只在 `Session.state=running` 时接受。它不会立即打断正在进行的模型响应或工具
+调用，而是在当前 Assistant Turn 及其工具调用结束后、下一次模型调用前注入。首版
+固定 `one-at-a-time`：同类消息保持 FIFO，每个下一轮最多投递一条；只要 Steer 队列
+非空，就不会先投递 FollowUp。
+
+请求只包含文本：
+
+```json
+{
+  "message": "先只分析异常订单，不要导出报告。"
+}
+```
+
+`message` 必须包含非空白字符，最大 262144 个字符。首版不接受 `file_ids`、
+`model_id`、`thinking`、metadata、队列模式或 `Idempotency-Key`。成功返回
+`202 Accepted` 和最窄 ResultBean：
+
+```json
+{
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
+    "accepted_at": "2026-08-17T15:10:00Z"
+  }
+}
+```
+
+`202` 只表示消息已进入当前 active execution 的运行队列，不创建公共 `steer_id`，
+也不立即分配 `entry_seq`。消息实际投递时才成为当前分支中的持久化
+`user.message`，沿发起执行的既有 SSE 流发送，并由 GET Session Events 查询。
+
+#### 2.5.2 POST Session FollowUp
+
+FollowUp 使用相同的文本约束和 `202` 响应形状，但投递时机不同：它只在当前执行已
+没有工具调用和 Steering Message、原本将自然结束时投递，然后在同一 active
+execution 中继续下一轮。多个 FollowUp 保持 FIFO 并按 `one-at-a-time` 投递。
+Session 已经 idle 时不把 FollowUp 静默转换成新交互，而是返回
+`409 SESSION_NOT_RUNNING`；调用方应改用 `POST /sessions/{session_id}/events`。
+
+#### 2.5.3 POST Session Abort
+
+Abort 无请求体，不接收原因、`run_id`、`If-Match` 或 `Idempotency-Key`。Runtime
+中止当前模型请求、工具执行和子 Agent，清空尚未投递的 Steer/FollowUp，并等待
+Session 收敛为 `idle` 后返回 `204 No Content`。若请求到达时 Session 已经 idle，
+同样返回 `204`，避免执行自然结束与 Abort 请求之间的竞态迫使调用方处理伪错误。
+
+原 `POST /events` SSE 在中止后发送：
+
+```text
+event: session.status.idle
+data: {"status":"idle"}
+
+event: stream.end
+data: {"reason":"aborted"}
+```
+
+尚未投递的控制消息不会成为公共 `user.message`；已经投递的消息仍保留在历史中。
+Abort 不删除 Session 或已完成 Entry，也不新增公共 `aborted` 历史事件类型。
+
+三个控制接口不复用 `POST /events`，因为后者已经冻结为提交初始
+`user.message` 并直接返回 SSE。若让同一 HTTP operation 根据 `type` 在 SSE、
+ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约不稳定。
+
+![HTTP Session 执行控制](http_session_execution_controls.svg)
+
+[PlantUML 源码：`http_session_execution_controls`](diagram.puml#L99)
 
 ## 3. WebSocket 到 HTTP 的语义映射
 
@@ -676,8 +760,9 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 | `connect(mode=create)` | `POST /agents/{agent_id}/sessions`；CampusClaw 生成 `session_id` |
 | `connect(mode=resume)` | 无对应命令；重新 `GET` Session/Events |
 | `chat.send` | `POST /sessions/{session_id}/events`，请求 `type=user.message` 并直接返回 SSE |
-| `chat.steer` | 待评审是否建模为运行中的 Session Event |
-| `chat.abort` | 待评审是否建模为 Session interrupt Event |
+| `chat.steer` | `POST /sessions/{session_id}/steers`，待确认 |
+| `chat.followUp` | `POST /sessions/{session_id}/follow-ups`，待确认 |
+| `chat.abort` | `POST /sessions/{session_id}/abort`，待确认 |
 | `chat.history` | `GET /sessions/{session_id}/events` |
 | `session.get` | `GET /sessions/{session_id}` |
 | `models.list` | `GET /sessions/{session_id}/models` |
@@ -691,8 +776,9 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 
 Session Event 的并发、连接和恢复规则当前为：
 
-- 每个 Session 同一时刻只允许一个 active execution。第二个并发
-  `user.message` 返回 `409 SESSION_BUSY`，不进入服务端排队。
+- 每个 Session 同一时刻只允许一个 active execution。第二个并发初始
+  `user.message` 返回 `409 SESSION_BUSY`；待确认的 Steer/FollowUp 是仅在 running
+  状态下追加到该 active execution 的显式例外，不创建第二个 execution。
 - 用户 MessageEntry 持久化并开始执行后，不依赖发起 HTTP 连接继续存活；连接关闭
   不等于 interrupt。
 - 直接流式 POST 不使用浏览器 `EventSource` 自动重连，也不接受
@@ -703,6 +789,8 @@ Session Event 的并发、连接和恢复规则当前为：
   User MessageEntry。
 - `Session.state` 只表达 `idle/running` 粗粒度状态。模型请求、工具执行或消息生成
   阶段通过实时事件表达，不新增公共 Run phase。
+- 待确认的 Steer/FollowUp 队列分别保持 FIFO，固定 `one-at-a-time`，且 Steer 优先；
+  Abort 清空两类尚未投递消息。控制请求断线不会撤销已经成功接受的队列追加或中止。
 - `entry_seq` 只由持久化 Entry 分配；临时事件不消耗序号。GetSession 不返回
   事件水位，第五个接口也不接受 `entry_seq` 作为分页参数；它只使用不透明 page。
 - Pod 重启时如何终止或恢复 active execution、是否持久化 partial Assistant Entry，
@@ -713,8 +801,9 @@ Session Event 的并发、连接和恢复规则当前为：
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。本版八个 operation 均已确认，所有普通 JSON 响应都遵守同一
-包装。SSE 事件流和 HTTP `204` 无响应体不使用 ResultBean。
+草案的公司集成约束。本版前八个 operation 已确认；本节三个执行控制
+operation 待确认。所有普通 JSON 响应都遵守同一包装，SSE 事件流和 HTTP
+`204` 无响应体不使用 ResultBean。
 
 | 字段 | 成功 | 异常 | 调用方规则 |
 |---|---|---|---|
@@ -806,6 +895,21 @@ operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑
 | `500` | `SESSION_THINKING_UPDATE_FAILED` | PUT Thinking | 深度思考配置和资源版本未能原子更新 |
 | `503` | `MANAGER_UNAVAILABLE` | GET Models、PUT Model | Model Manager 暂时不可用；复用第一个接口错误码 |
 
+三个待确认执行控制接口复用公共认证、授权、Session 标识和不存在错误，并新增：
+
+| HTTP | `resCode` | 适用 operation | 语义 |
+|---|---|---|---|
+| `400` | `INVALID_STEER_REQUEST` | POST Steer | `message` 缺失、空白、过长或存在未知字段 |
+| `400` | `INVALID_FOLLOW_UP_REQUEST` | POST FollowUp | `message` 缺失、空白、过长或存在未知字段 |
+| `409` | `SESSION_NOT_RUNNING` | POST Steer、FollowUp | Session 已经 idle，没有可追加消息的 active execution |
+| `500` | `STEER_ACCEPTANCE_FAILED` | POST Steer | 状态检查和 Steer 入队未能原子完成 |
+| `500` | `FOLLOW_UP_ACCEPTANCE_FAILED` | POST FollowUp | 状态检查和 FollowUp 入队未能原子完成 |
+| `500` | `SESSION_ABORT_FAILED` | POST Abort | 取消、清空队列或 idle 收敛失败 |
+
+Abort 在 Session 已经 idle 时仍返回 `204`，不使用 `SESSION_NOT_RUNNING`。Steer 和
+FollowUp 的响应结果不确定时不得无条件重试，否则可能重复入队；本轮评审仍可决定
+是否引入业务幂等标识。
+
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
 `en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
 JVM 系统 Locale。响应返回 `Content-Language`，其值为实际使用的
@@ -862,7 +966,7 @@ FQCN 和不可预期的 class loading。Maven Enforcer 必须在 `validate`
 
 ![ResultBeanFactory 公司内外双制品替换](http_result_bean_compatibility.svg)
 
-[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L1081)
+[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L1196)
 
 ### 6.3 错误与国际化实现
 
@@ -914,7 +1018,7 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 ![HTTP 双认证适配](http_dual_authentication.svg)
 
-[PlantUML 源码：`http_dual_authentication`](diagram.puml#L1149)
+[PlantUML 源码：`http_dual_authentication`](diagram.puml#L1264)
 
 ## 8. 源码证据与差异分类
 
@@ -951,6 +1055,10 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 观察到的行为 | pi-mono `packages/agent/src/types.ts` 基线 430-443 与 `packages/agent/src/agent-loop.ts` 基线 767-795：`AgentEvent` 将 `message_start/update/end` 和 `tool_execution_start/update/end` 分层；工具执行结束后再生成并发送 ToolResult Message |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 781-806：Tool execution start/update/end 继续传给扩展层；公共 HTTP 契约有意只映射 started/completed，并以持久化 `tool.result` 承载权威结果 |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 的 `PromptOptions` 基线 2629-2649：单次 prompt 可带 images；`expandPromptTemplates`、`streamingBehavior`、`source` 和 preflight callback 是 CLI/RPC Runtime 控制，不是通用业务消息字段；`model_id/thinking` 不在该参数中 |
+| 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 1336-1404、1516-1556：`steer` 在当前 Assistant Turn 和工具调用后、下一次模型调用前入队；`followUp` 在 Agent 原本将停止时入队；`clearQueue` 清空两类队列，`abort` 取消运行并等待 idle |
+| 观察到的行为 | pi-mono `packages/agent/src/agent.ts` 基线 275-319、350-390、456-492：Steer/FollowUp 使用独立队列，默认 `one-at-a-time`；Steer 在 FollowUp 之前 drain；`abort` 取消当前进程内 active run |
+| 观察到的行为 | pi-mono `packages/coding-agent/src/modes/rpc/rpc-mode.ts` 基线 418-430：RPC 已分别暴露 `steer`、`follow_up` 和 `abort` 命令，但没有 CampusClaw HTTP、ResultBean 或 Session scope 契约 |
+| 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 199-210、275-288 与 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java` 基线 165-177、240-251：WebSocket 已有 text-only `steer` 和 `abort`，Steer 当前立即写 JSONL UserMessage，Abort 级联取消子 Agent；尚无 FollowUp 命令或三个 HTTP operation |
 | 观察到的行为 | pi-mono `packages/agent/src/agent.ts` 基线 347-358、486-535：`activeRun` 是进程内执行对象，同一 Agent 已有 activeRun 时拒绝新 prompt，finally 清理；它不是持久化、可查询的 RunRecord |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java` 基线 140-160：现有 HTTP POST 直接将消息、工具开始/结束和 done 映射为 SSE；现有名称与负载较窄，目标契约重命名并补充分离的持久化 ToolResultEntry |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 252-273 与 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java` 基线 153-177：WebSocket prompt 只接受非空文本，先追加 JSONL UserMessage 再调用 prompt，并以 `isStreaming` 拒绝并发；没有附件 ID、Run ID 或幂等存储 |
@@ -969,6 +1077,10 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 已确认目标设计 | GET Session Models 以 `string[]` 实时返回 Agent allowlist、调用身份和部署策略交集中的 `model_id`，不分页；`current_model_id` 允许因管理面后续停用而不在 `models` 中 |
 | 已确认目标设计 | PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功统一返回完整 SessionResource 和 ETag，相同值验证后按无变化成功返回；模型、深度思考设置和资源版本原子更新 |
 | 已确认目标设计 | 深度思考开关只作用于之后接受的用户事件；当前模型不支持时开启返回 `422`，模型切换到不支持深度思考的目标模型时原子归一为 `false` |
+| 待确认目标设计 | Steer 和 FollowUp 使用 Session scope 的独立 POST；只在 running 时按 FIFO、`one-at-a-time` 入队，Steer 优先；实际投递时统一成为既有 `user.message`，不新增公共控制 Entry 类型 |
+| 待确认目标设计 | Abort 使用 Session scope 的幂等 POST，无请求体；级联取消模型、工具和子 Agent，清空未投递控制消息，等待 idle 后返回 `204`；idle 时也是 `204` |
+| 产品约束 | 首版 Steer/FollowUp 仅接受文本，不开放 pi 的 inline images、扩展命令、Prompt Template 展开或队列模式配置；不复用已经冻结为直接 SSE 的 POST Events operation |
+| 架构改造 | pi-mono-java 需要新增 FollowUp 能力，并将当前 Steer“入队前直接持久化 UserMessage”调整为实际投递时才产生公共 `user.message`，避免工具结果与排队消息的历史顺序错位 |
 | 已确认架构 | `POST /sessions/{session_id}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `run_id`；成功流按 User、Assistant 三阶段、工具执行、ToolResult、最终 Assistant、Session idle、stream end 排序；`user.message`、`assistant.message.completed`、`tool.result` 与 `entry_seq` 是权威历史 |
 | 设计原因 | pi 本身依靠 MessageEntry 重建对话，不依赖公共 Run；mate-service 当前只需要提交消息、观察实时输出和读取持久化 Session Events，无需承担额外 Run 生命周期 |
 | 已确认设计 | Assistant Message 使用 `assistant.message.started/delta/completed` 三阶段；前两者是不可恢复预览，completed 是完整持久化 Entry。该语义借鉴 Anthropic 的 preview/final 分层，但名称采用 CampusClaw 领域语言 |
@@ -990,6 +1102,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.25.0 | 2026-08-17 | 按用户要求新增三个待确认 Session 执行控制接口：POST Steers、POST FollowUps 和 POST Abort；保持无公共 Run 的 Session scope，区分 Steer“下一次模型调用前”与 FollowUp“原本将结束时”的投递时机，固定 FIFO/one-at-a-time/Steer 优先；控制消息实际投递后复用 `user.message`，Abort 清空未投递队列并等待 idle 后幂等返回 `204`；新增 pi/pi-mono-java 证据、错误码和 PlantUML；OpenAPI 未更新 |
 | 1.24.0 | 2026-08-17 | 用户确认剩余三个 Session 配置接口：冻结 GET Session Models 的 `current_model_id + models:string[]`、PUT Session Model 的 idle/If-Match/能力归一规则，以及 PUT Session Thinking 的 boolean 深度思考语义和错误码；至此当前八个 HTTP operation 均已确认；OpenAPI 未更新 |
 | 1.23.1 | 2026-08-17 | 按用户修正将 GET Session Models 的 `models` 从仅含 `model_id` 的对象数组进一步收窄为 `string[]`；候选项当前没有独立扩展字段，不保留无意义的对象层；OpenAPI 未更新 |
 | 1.23.0 | 2026-08-17 | 按用户意见收窄后三个 Session 配置接口：GET Models 的候选模型只展示 `model_id`；将 Session `thinking` 从 `hidden\|full` 内容披露级别改为是否启用深度思考的 boolean，并同步 CreateSession、GetSession、Event execution snapshot 和两个配置 PUT；`false` 映射为 pi `off`，`true` 使用受管非 `off` 强度且不表示披露原始思考过程；当前模型不支持时开启返回 `422 THINKING_NOT_SUPPORTED`，模型切换到不支持深度思考的目标时自动归一为 `false`；OpenAPI 未更新 |

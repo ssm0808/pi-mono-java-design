@@ -96,6 +96,121 @@ Model Manager still revalidates every selection and invocation.
 end note
 @enduml
 
+@startuml http_session_execution_controls
+title HTTP Session Execution Control Proposal
+
+' Source evidence (pi-mono commit 086c32e74530564922d011ade23ff582c9d63116):
+' packages/coding-agent/src/core/agent-session.ts, steer, followUp, clearQueue, and abort,
+' lines 1336-1404 and 1516-1556
+' packages/agent/src/agent.ts, steer, followUp, abort, and queue drain order,
+' lines 275-319, 350-390, and 456-492
+' packages/coding-agent/src/modes/rpc/rpc-mode.ts, steer, follow_up, and abort,
+' lines 418-430
+' Source evidence (pi-mono-java commit 195746614096312d4e93afb029d387837db78e0b):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/
+' ChatWebSocketHandler.java, command dispatch and handleSteer, lines 199-210 and 275-288
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/
+' AgentSession.java, abort and steer, lines 165-177 and 240-251
+' Observed behavior: pi keeps separate steering and follow-up queues, drains steering first,
+' and aborts the current in-process run. Java currently exposes text-only steer and abort.
+' Java divergence: Java has no follow-up command and persists steer before actual delivery.
+' Target-only design: three HTTP operations use Session scope because no public Run exists.
+' Product constraint: v1 accepts text only, fixes one-at-a-time FIFO behavior, and projects
+' a delivered control message as the existing durable user.message entry type.
+' Design reason: separate control responses from the existing POST Events SSE response.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequence {
+  ArrowColor #475569
+  ActorBorderColor #475569
+  ActorFontColor #0F172A
+  LifeLineBorderColor #94A3B8
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantFontColor #0F172A
+  GroupBorderColor #64748B
+  GroupFontColor #334155
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+
+actor Caller
+participant "Credential\nAdapter" as Auth
+participant "Session Control\nAPI" as API
+database "Runtime Session\nStore" as Store
+collections "Active Execution\nQueues" as Queue
+participant "AgentSession" as Session
+participant "Existing POST Events\nSSE Stream" as SSE
+participant ResultBeanFactory
+
+group Queue a Steering Message
+  Caller -> Auth : POST /sessions/{session_id}/steers\nmessage only
+  Auth -> API : immutable CallerAuthContext
+  API -> Store : authorize and require running Session
+  Store --> API : active execution handle
+  API -> Queue : append Steer atomically in FIFO order
+  Queue --> API : accepted_at
+  API -> ResultBeanFactory : normal(ControlAcceptedResponseVO)
+  ResultBeanFactory --> API : resCode, resMsg, result
+  API --> Caller : 202 Accepted
+end
+
+group Queue a FollowUp Message
+  Caller -> Auth : POST /sessions/{session_id}/follow-ups\nmessage only
+  Auth -> API : immutable CallerAuthContext
+  API -> Store : authorize and require running Session
+  Store --> API : active execution handle
+  API -> Queue : append FollowUp atomically in FIFO order
+  Queue --> API : accepted_at
+  API -> ResultBeanFactory : normal(ControlAcceptedResponseVO)
+  ResultBeanFactory --> API : resCode, resMsg, result
+  API --> Caller : 202 Accepted
+end
+
+alt current Assistant turn and tools complete with Steer queued
+  Session -> Queue : drain one Steer before FollowUp
+  Queue --> Session : next user message
+  Session -> Store : append durable user.message on delivery
+  Store --> SSE : user.message with entry_id and entry_seq
+  Session -> Session : continue with next model invocation
+else Agent would stop and only FollowUp is queued
+  Session -> Queue : drain one FollowUp
+  Queue --> Session : next user message
+  Session -> Store : append durable user.message on delivery
+  Store --> SSE : user.message with entry_id and entry_seq
+  Session -> Session : continue active execution
+end
+
+group Abort current execution idempotently
+  Caller -> Auth : POST /sessions/{session_id}/abort\nno request body
+  Auth -> API : immutable CallerAuthContext
+  API -> Store : authorize and load Session
+  Store --> API : active execution or idle
+  opt execution is active
+    API -> Session : abort model, tools, and subagents
+    API -> Queue : clear undelivered Steer and FollowUp
+    API -> Session : wait for idle
+    Session --> SSE : session.status.idle
+    Session --> SSE : stream.end reason aborted
+  end
+  API --> Caller : 204 No Content after idle
+end
+
+note over API,Queue
+Steer and FollowUp require a running Session.
+An idle request returns 409 SESSION_NOT_RUNNING.
+Abort on an idle Session is a successful no-op.
+No control id or public Run resource is created.
+end note
+@enduml
+
 @startuml mate_agent_service_responsibility_boundary
 title Public Chat and Runtime Service Responsibilities
 

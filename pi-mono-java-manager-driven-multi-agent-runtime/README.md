@@ -340,7 +340,7 @@ EventFrame `seq`、Ping/Pong、背压缓冲和 close code 都是逐跳独立的�
 
 ![mate-service 与 agent-service 服务责任边界](mate_agent_service_responsibility_boundary.svg)
 
-[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L99)
+[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L214)
 
 运行目录是 Manager 数据的模型披露投影，不是授权数据库。目录中的
 `tool_id` 只告诉模型“可能使用什么”；Tool Manager 仍在每次发现和执行时
@@ -778,7 +778,7 @@ WebSocket 协议若显式提供 `model_id`，它只能作为该协议的初始�
 
 ![Managed Session 与 Context 组装](managed_session_context_assembly.svg)
 
-[PlantUML 源码](diagram.puml#L160)
+[PlantUML 源码](diagram.puml#L275)
 
 公共 `mode=create` 的职责顺序：
 
@@ -911,7 +911,7 @@ validation.
 
 ![Tool 渐进式发现与执行](progressive_tool_discovery_execution.svg)
 
-[PlantUML 源码](diagram.puml#L287)
+[PlantUML 源码](diagram.puml#L402)
 
 Agent 直接工具路径：
 
@@ -1062,7 +1062,7 @@ Model Manager 持续返回文本、thinking、ToolCall 和终态事件；Provide
 
 ![Model Manager 流式调用](model_manager_streaming_flow.svg)
 
-[PlantUML 源码](diagram.puml#L622)
+[PlantUML 源码](diagram.puml#L737)
 
 具体映射如下：
 
@@ -1710,7 +1710,7 @@ mate-service 侧另设 `PublicChatConnection` 与 `RuntimeSessionChannel` 应用
 
 ![服务端 SessionTransport 依赖倒置](managed_session_transport_dependency_inversion.svg)
 
-[PlantUML 源码](diagram.puml#L557)
+[PlantUML 源码](diagram.puml#L672)
 
 ### 9.5 流式事件和 Message 投影
 
@@ -2008,7 +2008,7 @@ run 终态和最终 Message 必须先按 Session 的 `history_seq` 顺序提交�
 
 ![Managed WebSocket Session 协议](managed_websocket_session_protocol.svg)
 
-[PlantUML 源码](diagram.puml#L365)
+[PlantUML 源码](diagram.puml#L480)
 
 ### 9.11 附件引用与模型输入
 
@@ -2373,7 +2373,7 @@ resolve/content 接口重建附件输入；跨 Pod 共享不依赖本地盘、�
 
 ![附件引用、接受与模型输入生命周期](managed_attachment_reference_lifecycle.svg)
 
-[PlantUML 源码：`managed_attachment_reference_lifecycle`](diagram.puml#L804)
+[PlantUML 源码：`managed_attachment_reference_lifecycle`](diagram.puml#L919)
 
 ## 10. pi-mono-java 目标适配点
 

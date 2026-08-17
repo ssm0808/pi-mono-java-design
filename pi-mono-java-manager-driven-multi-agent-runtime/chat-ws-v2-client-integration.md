@@ -89,7 +89,7 @@ DISCONNECTED
 
 ![客户端接入与恢复流程](frontend_websocket_client_integration.svg)
 
-[PlantUML 源码：`frontend_websocket_client_integration`](diagram.puml#L686)
+[PlantUML 源码：`frontend_websocket_client_integration`](diagram.puml#L801)
 
 ## 3. 最短可运行流程
 
@@ -929,7 +929,7 @@ browser or CampusMate client
 
 ![附件上传、引用与模型输入流程](managed_attachment_reference_lifecycle.svg)
 
-[PlantUML 源码：`managed_attachment_reference_lifecycle`](diagram.puml#L804)
+[PlantUML 源码：`managed_attachment_reference_lifecycle`](diagram.puml#L919)
 
 `agent-service` 不提供上传端点，不直连 OBS 或 openGauss。v1 也不给
 浏览器发放 OBS Bucket、地址、凭据或预签名 URL。OBS Object Key 精确等于
