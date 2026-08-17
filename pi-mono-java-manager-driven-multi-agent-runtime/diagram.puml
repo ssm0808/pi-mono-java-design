@@ -1310,7 +1310,7 @@ end note
 @enduml
 
 @startuml http_delete_session
-title CampusClaw HTTP Session Logical Deletion Proposal
+title CampusClaw HTTP Session Logical Deletion Confirmed Design
 
 ' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
 ' packages/coding-agent/src/core/agent-session.ts, AgentSession.dispose, lines 789-805
@@ -1406,5 +1406,122 @@ note right of Store
 The permanent tombstone has exactly two fields:
 session_id and deleted_at.
 Cleanup state, retries, errors, and owner data stay out.
+end note
+@enduml
+
+@startuml http_create_run
+title CampusClaw HTTP Asynchronous Run Acceptance Proposal
+
+' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
+' packages/coding-agent/src/core/agent-session.ts, _handleAgentEvent, _runAgentPrompt,
+' and prompt, lines 609-680, 1063-1074, and 1116-1273
+' packages/agent/src/agent.ts, prompt and runWithLifecycle, lines 347-358 and 486-535
+' Source evidence (pi-mono-java dff835743fc7f3c93e1154c3eb51028749867ca8):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java,
+' handleChat and cancellation flow, lines 53-136
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java,
+' handlePrompt, lines 252-273
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java,
+' prompt and abort, lines 153-177
+' modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java,
+' prompt and startExecution, lines 183-194 and 218-268
+' Target contract evidence:
+' chat-ws-v2.asyncapi.yaml, ChatSendParams and ChatSendResult, lines 1742-1802 and 2955-2984
+' chat-ws-v2.asyncapi.yaml, attachment acceptance order, lines 4666-4698
+' Observed behavior: both pi implementations invoke prompt against one in-memory active
+' execution; the current Java HTTP handler couples execution to an SSE response.
+' Target-only design: neither baseline has a durable HTTP Run resource, run ID,
+' idempotency result, shared active-run constraint, or dispatch work item.
+' Architecture change: the local acceptance transaction persists the user Message,
+' queued RunRecord, active pointer, idempotency result, and t_run_dispatch_task.
+' Design reason: retries cannot duplicate user messages, and execution does not depend
+' on the lifetime of the accepting HTTP connection.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequence {
+  ArrowColor #475569
+  ActorBorderColor #475569
+  ActorFontColor #0F172A
+  LifeLineBorderColor #94A3B8
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantFontColor #0F172A
+  GroupBorderColor #64748B
+  GroupFontColor #334155
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+
+actor Caller
+participant "Credential\nAdapter" as Auth
+participant "CreateRun\nAPI" as API
+database "Runtime Session\nStore" as Store
+participant "Attachment\nService" as Attachment
+participant "Model\nManager" as Manager
+participant "Run Dispatch\nWorker" as Worker
+participant "Managed Run\nHub" as Hub
+participant AgentSession
+
+Caller -> Auth : POST /sessions/{session_id}/runs\ncredentials, Idempotency-Key, JSON body
+Auth -> API : immutable CallerAuthContext
+API -> API : validate session_id, key, and strict request body
+API -> Store : findAcceptedResult(session_id, createRun, key)
+
+alt accepted key with equivalent canonical payload
+  Store --> API : original runId and userMessageId
+  API --> Caller : 202 ResultBean with original IDs
+else accepted key with different canonical payload
+  Store --> API : payload fingerprint conflict
+  API --> Caller : 409 IDEMPOTENCY_CONFLICT\nResultBean error without result
+else key has no accepted result
+  Store --> API : not found
+  API -> Store : load live Session and authorize createRun
+  Store --> API : current model, thinking, history attachments, active pointer
+  API -> API : reject an existing active Run
+  API -> Attachment : batch resolve, authorize, and mark referenced\nfor the complete ordered attachment set
+  Attachment --> API : trusted metadata snapshots
+  API -> Manager : resolve current model and input policy
+  Manager --> API : authoritative model descriptor and limits
+  API -> API : validate historical plus new attachment context
+  API -> Store : atomic accept(user Message, queued RunRecord,\nactive pointer, idempotency result, dispatch task)
+
+  alt acceptance transaction commits first
+    Store --> API : committed runId and userMessageId
+    API --> Caller : 202 Accepted\nLocation plus narrow ResultBean
+    Worker -> Store : claim t_run_dispatch_task
+    Worker -> Hub : register and start frozen Run
+    Hub -> AgentSession : prompt(user Message, attachment snapshots)
+    AgentSession --> Hub : structured events and terminal result
+    Hub -> Store : persist Run events, Messages, and terminal RunRecord
+    Store -> Store : clear active pointer and complete dispatch task
+  else concurrent active-run constraint loses
+    Store --> API : no local side effects committed
+    API --> Caller : 409 RUN_ACTIVE\nResultBean error without result
+  else acceptance transaction fails
+    Store --> API : no local side effects committed
+    API --> Caller : 500 RUN_ACCEPTANCE_FAILED\nResultBean error without result
+  end
+end
+
+note over API,Store
+Only a committed acceptance consumes the idempotency key.
+All pre-acceptance failures can retry with the same key.
+end note
+
+note over Attachment,Store
+There is no cross-service XA transaction.
+A referenced attachment mark may remain conservatively after a local failure.
+end note
+
+note over Caller,Worker
+The HTTP connection may close after 202 without aborting the Run.
+GetRun, Run Events, and History expose progress and terminal state.
 end note
 @enduml

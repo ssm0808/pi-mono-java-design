@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.11.1 |
+| 文档版本 | 1.12.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | `POST /agents/{agent_id}/sessions`、`GET /sessions/{session_id}` 已确认；`DELETE /sessions/{session_id}` 评审中；其余 operation 待逐个评审 |
+| 接口评审状态 | Session 生命周期的三个 operation 已确认；`POST /sessions/{session_id}/runs` 评审中；其余 operation 待逐个评审 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
@@ -206,7 +206,7 @@ GetRun 返回；`attached` 是 pi 的连接相对状态，`locked` 是 live Runt
 
 本小节和主维护 HTML 中的第二个接口已经用户确认。OpenAPI 本轮仍不更新。
 
-#### 2.1.2 第三个评审中接口：删除 Session
+#### 2.1.2 第三个已确认接口：删除 Session
 
 ```http
 DELETE /campusclaw-service/v1/sessions/{session_id}
@@ -215,14 +215,14 @@ Authorization: Bearer <JWT>
 ```
 
 该接口不只是把 Session 从当前 Pod 的内存池中移除，而是结束
-CampusClaw 对该 Runtime Session 的管理。当前推荐语义是：服务端先原子
+CampusClaw 对该 Runtime Session 的管理。已确认语义是：服务端先原子
 持久化 `DELETING` 状态和可重试的清理任务，然后返回 `204 No Content`。
 从持久化成功开始，GetSession、创建 Run 和配置写入都不再能访问
 该 Session；后台 Worker 完成物理清理，但不向调用方暴露删除任务
 状态。因此 `204` 表示“逻辑删除已完成”，不表示所有存储介质上的
 字节已经擦除。
 
-| 契约点 | 当前推荐提案 | 设计原因 |
+| 契约点 | 已确认契约 | 设计原因 |
 |---|---|---|
 | Request Body | 无 | 删除目标由 URI 唯一确定 |
 | 成功响应 | `204 No Content`，无 ResultBean | HTTP `204` 不允许业务响应体 |
@@ -254,10 +254,7 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 
 [PlantUML 源码：`http_delete_session`](diagram.puml#L1312)
 
-本接口仍在评审中，尚未确认。主维护 HTML 要求本轮对齐四个决策：
-`204` 逻辑删除边界还是 `202` 删除任务、active Run 自动 abort 还是返回
-`409`、重复删除统一 `204` 还是不存在返回 `404`，以及 Runtime History
-物理清理还是按合规策略归档。OpenAPI 本轮不更新。
+本小节和主维护 HTML 中的第三个接口已经用户确认。OpenAPI 本轮仍不更新。
 
 ![HTTP Session 创建](http_session_creation.svg)
 
@@ -280,6 +277,100 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 后续 Session 模型切换不影响已开始 Run。`POST /runs`、Steer 和 Abort 必须携带
 `Idempotency-Key`；相同键和相同规范化负载返回原结果，相同键不同负载返回
 `409 IDEMPOTENCY_CONFLICT`。
+
+#### 2.2.1 第四个评审中接口：创建 Run
+
+```http
+POST /campusclaw-service/v1/sessions/{session_id}/runs
+X-HW-ID: <CALLER_ID>
+Authorization: Bearer <JWT>
+Idempotency-Key: <OPAQUE_KEY>
+Content-Type: application/json
+```
+
+该接口把一条新的用户输入提交给已经存在的 Session，并创建一个可独立查询的
+异步 Run。它不是“同步聊天”接口：成功响应只表示输入和执行意图已被可靠接受，
+不等待首个 token、工具调用或最终 Assistant Message。调用方随后通过 GetRun、
+Run Events 和 History 观察过程与终态；客户端关闭或 HTTP 请求连接中断不会终止
+已经接受的 Run，终止必须显式调用 Abort Run。
+
+当前请求提案为：
+
+```json
+{
+  "message": "请分析附件中的订单数据，并列出异常项。",
+  "attachment_ids": [
+    "attachment_011CZm8VpK4rNs6WtY2hDqfB"
+  ]
+}
+```
+
+| 字段 | 当前推荐约束 | 具体作用 |
+|---|---|---|
+| `message` | 可选；提供时包含至少一个非空白字符，最多 262144 个字符 | 用户文本；校验时可判断空白，但持久化和幂等比较使用原始值，不做 trim |
+| `attachment_ids` | 可选；最多 32 个，元素唯一、大小写敏感并保留请求顺序 | 引用已由 Attachment Service 绑定当前 Session 的附件 |
+
+`message` 和 `attachment_ids` 至少有一项有效值，允许纯文本、纯附件以及
+文本加附件三种形态。纯附件请求不生成隐藏默认 Prompt。服务端只接受
+`attachment_id`，不接受 URL、MIME、文件名、Base64、OBS key、`model_id`、
+tenant 或 user。当前推荐请求也不接受 `thinking`：在接受边界中固化 Session
+当前 `model_id` 和默认 `thinking`。是否允许单次降低 thinking 披露级别是本轮
+明确待确认项。
+
+`Idempotency-Key` 必填，长度为 8 到 128 个可见 ASCII 字符，作用域为
+`(session_id, createRun)`，并在 Session 删除前保留。规范化负载由原始
+`message` 值和有序 `attachment_ids` 组成；省略 `attachment_ids` 与空数组
+等价。服务端必须先查询已经接受的同键结果，再检查 active Run 或重新解析附件：
+同键同负载始终返回原 `run_id/user_message_id`，即使原 Run 已完成或依赖服务
+当前不可用；同键不同负载返回 `409 IDEMPOTENCY_CONFLICT`。所有接受前错误都
+不占用幂等键，调用方可以用原键重试。
+
+推荐接受顺序如下：
+
+1. 完成双凭据认证、Session 动作授权，以及 PATH、Header 和 JSON 严格校验；
+2. 查询已接受的幂等结果；命中时校验负载指纹并立即返回原结果；
+3. 读取未删除 Session，检查当前没有 active Run；
+4. 向 Attachment Service 批量解析整组附件，验证 Session 绑定和 READY 状态，
+   单向标记 `referenced_at`，并对“有效历史附件 + 本次附件”执行完整模型输入策略校验；
+5. 解析 Session 当前模型的权威 descriptor，固化 `model_id/thinking`，生成
+   `run_id` 和 `user_message_id`；
+6. 在 CampusClaw 本地同一事务中持久化用户 Message、`queued` RunRecord、
+   Session active-run 指针、幂等结果和持久化执行任务；
+7. 返回 `202 Accepted`，后台执行器领取任务并将 Run 推进到 `running` 和终态。
+
+第 6 步的数据库唯一约束必须保证每个 Session 至多一个 active Run；两个不同
+幂等键并发提交时只能有一个成功，另一请求返回 `409 RUN_ACTIVE`。CampusClaw
+事务与 Attachment Service 的 `referenced_at` 更新之间没有跨服务 XA：若附件已
+标记引用但第 6 步失败，引用标记保守保留并由附件生命周期对账处理；不得因此
+返回虚假的 `run_id`，也不得消费幂等键。Run 一旦接受，后续模型输入读取或
+Provider 调用失败属于 Run 终态错误，不再改写本接口的 `202`。
+
+当前推荐成功响应保持最窄结构：
+
+```json
+{
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "run_id": "run_01JY8X2E3R4T5Y6U7I8O9P0A1S",
+    "user_message_id": "msg_01JY8X2E3R4T5Y6U7I8O9P0B2T"
+  }
+}
+```
+
+`202` 已经表达 accepted，因而不重复返回常量 `accepted=true`；是否为幂等重试
+是服务端实现细节，也不返回 `idempotent`。Run 的 `state`、固化后的
+`model_id/thinking`、执行 phase 和终态由 GetRun 负责。响应同时返回指向
+GetRun 的 `Location`、`Cache-Control: no-store` 和实际 `Content-Language`。
+
+![HTTP 异步 Run 接受边界](http_create_run.svg)
+
+[PlantUML 源码：`http_create_run`](diagram.puml#L1412)
+
+本轮需要对齐四个决策：成功使用 `202` 还是 `201`、已有 active Run 时返回
+`409` 还是排队、是否允许单次 Run 降低 `thinking`，以及成功 `result` 只返回
+两个 ID 还是返回 Run 摘要。前三个 Session operation 保持已确认状态，OpenAPI
+本轮不更新。
 
 ### 2.3 事件与历史
 
@@ -351,7 +442,7 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。本版已经冻结创建 Session 和 GetSession 两个接口；
+草案的公司集成约束。本版已经冻结 Session 生命周期三个接口；
 其余 operation 的业务语义仍按后续逐个评审，但普通 JSON 响应
 最终也必须遵守同一包装。SSE 事件流和 HTTP `204` 无响应体
 不使用 ResultBean。
@@ -393,11 +484,11 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 `FORBIDDEN` 和 `SESSION_NOT_FOUND`；仍保持异常体只有
 `resCode/resMsg`。这些 operation-specific 错误已随第二个接口确认而冻结。
 
-第三个 DeleteSession 接口当前提案为：成功返回无响应体的
+第三个 DeleteSession 接口已确认：成功返回无响应体的
 `204`；失败使用 `INVALID_SESSION_ID`、`UNAUTHENTICATED`、
 `AUTH_CREDENTIAL_CONFLICT`、`FORBIDDEN` 和 `SESSION_DELETE_FAILED`。
-不存在、删除中或已删除按当前推荐语义统一返回 `204`，因此不新增
-`SESSION_NOT_FOUND`。以下错误码和消息仍处于评审中：
+不存在、删除中或已删除按已确认语义统一返回 `204`，因此不新增
+`SESSION_NOT_FOUND`。以下错误码和消息已经冻结：
 
 | HTTP | `resCode` | `zh_CN` | `en_US` |
 |---|---|---|---|
@@ -406,6 +497,28 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 | `401` | `AUTH_CREDENTIAL_CONFLICT` | `请求不能同时携带 JWT 和 APPKEY 凭据。` | `JWT and APPKEY credentials must not be supplied together.` |
 | `403` | `FORBIDDEN` | `当前调用方无权删除该 Session。` | `The caller is not allowed to delete this Session.` |
 | `500` | `SESSION_DELETE_FAILED` | `Session 删除失败。` | `Session deletion failed.` |
+
+第四个 CreateRun 接口当前提案成功返回 `202` ResultBean，失败仍只有
+`resCode/resMsg`。附件不存在、越权、未绑定、已删除或其他不可披露状态统一为
+`INVALID_ATTACHMENT`，避免资源枚举；附件属于当前 Session 但尚未 READY 时才
+返回可重试的 `ATTACHMENT_NOT_READY`。以下错误码和消息仍处于评审中：
+
+| HTTP | `resCode` | `zh_CN` | `en_US` |
+|---|---|---|---|
+| `400` | `INVALID_SESSION_ID` | `session_id 格式不正确。` | `The session_id format is invalid.` |
+| `400` | `INVALID_IDEMPOTENCY_KEY` | `Idempotency-Key 格式不正确。` | `The Idempotency-Key format is invalid.` |
+| `400` | `INVALID_RUN_REQUEST` | `Run 请求内容不符合约束。` | `The Run request does not satisfy the required constraints.` |
+| `401` | `UNAUTHENTICATED` | `调用方身份认证失败。` | `Caller authentication failed.` |
+| `401` | `AUTH_CREDENTIAL_CONFLICT` | `请求不能同时携带 JWT 和 APPKEY 凭据。` | `JWT and APPKEY credentials must not be supplied together.` |
+| `403` | `FORBIDDEN` | `当前调用方无权在该 Session 中创建 Run。` | `The caller is not allowed to create a Run in this Session.` |
+| `404` | `SESSION_NOT_FOUND` | `指定的 Session 不存在。` | `The specified Session does not exist.` |
+| `409` | `RUN_ACTIVE` | `该 Session 已存在正在执行的 Run。` | `The Session already has an active Run.` |
+| `409` | `IDEMPOTENCY_CONFLICT` | `Idempotency-Key 已用于不同的请求内容。` | `The Idempotency-Key was already used with different request content.` |
+| `409` | `ATTACHMENT_NOT_READY` | `附件尚未准备就绪，请稍后重试。` | `The attachment is not ready. Try again later.` |
+| `422` | `INVALID_ATTACHMENT` | `请求包含无效附件。` | `The request contains an invalid attachment.` |
+| `422` | `ATTACHMENT_NOT_SUPPORTED` | `当前模型不支持该附件输入。` | `The current model does not support the attachment input.` |
+| `500` | `RUN_ACCEPTANCE_FAILED` | `Run 接收失败。` | `Run acceptance failed.` |
+| `503` | `RUNTIME_DEPENDENCY_UNAVAILABLE` | `Runtime 依赖服务暂时不可用，请稍后重试。` | `A Runtime dependency is temporarily unavailable. Try again later.` |
 
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
 `en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
@@ -507,8 +620,10 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 - HTTP 契约不接收 `traceparent`。部署平台如需调用链遥测，由网关和
   框架在契约外处理，不把它传入业务对象。
 - `agent_id`、`model_id` 和 `attachment_id` 均大小写敏感且不透明。
-- `POST /runs` 只接受文本、附件 ID 和 thinking；禁止 URL、MIME、文件名、
-  Base64、OBS Object Key、tenant/user 字段。
+- `POST /runs` 只接受文本和附件 ID；当前提案不接受单次 `thinking` 覆盖，
+  并禁止 URL、MIME、文件名、Base64、OBS Object Key、tenant/user 字段。
+- `Idempotency-Key` 只作为作用域内去重键，调用方不得放入凭据或个人信息；
+  服务端日志只记录有界摘要，不记录原值。
 - Runtime 仍通过 Attachment Service 的内部 resolve/content API 获取可信元数据
   和有界字节流，不直连 OBS。
 
@@ -537,12 +652,18 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 | 观察到的行为 | pi-mono `packages/coding-agent/src/modes/interactive/components/session-selector.ts` 基线 598-630：交互模式删除直接将 Session JSONL 移入回收站，失败时回退为 unlink；这是本地文件行为，不是服务端删除事务 |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java` 基线 143-157、204-274：`remove()` 只从内存 Map 移除并关闭 `SessionManager`；JSONL 可在后续创建时恢复，闲置淘汰也只释放内存对象 |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 168-210 与 `modules/agent-core/src/main/java/com/campusclaw/agent/AgentSession.java` 基线 165-177：断连或 abort 能停止流和子 Agent，但当前没有 DeleteSession HTTP 操作 |
+| 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 609-680、1063-1074、1116-1273：`prompt` 构造文本和可选 inline image 的 UserMessage，等待 Agent 执行，并在 `message_end` 将消息追加到 SessionManager；没有独立 HTTP Run 资源、`run_id` 或持久化幂等结果 |
+| 观察到的行为 | pi-mono `packages/agent/src/agent.ts` 基线 347-358、486-535：`activeRun` 是进程内执行对象，同一 Agent 已有 activeRun 时拒绝新 prompt，finally 清理；它不是持久化、可查询的 RunRecord |
+| 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java` 基线 53-136：现有 HTTP POST 把 prompt 生命周期绑定到 SSE 响应，并在取消时 abort；没有先持久化异步 Run 再返回的接受边界 |
+| 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 252-273 与 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java` 基线 153-177：WebSocket prompt 只接受非空文本，先追加 JSONL UserMessage 再调用 prompt，并以 `isStreaming` 拒绝并发；没有附件 ID、Run ID 或幂等存储 |
+| 观察到的行为 | pi-mono-java `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` 基线 183-194、218-268：`startExecution` 通过 executionLock 保证单次 current execution，并在虚拟线程执行结束时清理；没有共享数据库 active-run 唯一约束或执行任务 |
 | 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、附件只传 ID、ResultBean 错误脱敏 |
 | 架构改造 | 一组 HTTP 资源接口、统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
+| 架构改造 | CreateRun 将当前进程内 `prompt` 调用提升为持久化异步 Run：用户 Message、RunRecord、Session active 指针、幂等结果和 `t_run_dispatch_task` 在本地事务中提交；执行与 HTTP 连接解耦，跨服务附件引用采用无 XA 的保守标记与后台对账 |
 | 架构改造 | CampusClaw GetSession 收敛为配置、粗粒度状态和 active Run 指针；History 水位归 History API，执行 phase 与恢复详情归 GetRun，实时增量归 Run Event API。相较 Anthropic，Agent 发布快照、环境、Vault、预算、用量、标题和业务元数据不由本 Session 资源拥有 |
 
 公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自
@@ -557,6 +678,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.12.0 | 2026-08-17 | 用户确认第三个 DeleteSession 接口，冻结 `204` 逻辑删除、active Run 自动 abort、重复删除统一 `204`、Runtime 数据清理和仅含 `session_id/deleted_at` 的永久 tombstone；启动第四个 CreateRun 评审，提出持久化异步接受边界、必填幂等键、文本/附件输入、单 active Run、最窄 `202` ResultBean 与错误国际化；增加 pi/pi-mono-java prompt/并发/HTTP SSE 源码证据和 PlantUML，OpenAPI 未更新 |
 | 1.11.1 | 2026-08-17 | 对齐第三个接口的永久 tombstone 字段：严格只保留 `session_id`、`deleted_at`；清理状态、重试信息和 owner 不进入 tombstone，由短期清理任务承载；第三个接口整体仍在评审中，OpenAPI 未更新 |
 | 1.11.0 | 2026-08-17 | 启动第三个 `DELETE /sessions/{session_id}` operation 评审；提案在持久化逻辑删除和清理任务后返回 `204`、active Run 自动 abort、重复删除统一 `204`、清理 Runtime 数据并仅保留最小 tombstone；增加 pi/pi-mono-java 删除与释放行为证据，前两个已确认接口不变，OpenAPI 未更新 |
 | 1.10.1 | 2026-08-17 | 用户确认第二个 `GET /sessions/{session_id}` operation；冻结 `active_run={run_id,state}`、ETag 仅用于配置写并发控制、不存在与已删除统一返回 `404 SESSION_NOT_FOUND`，并将双接口 HTML 更新为均已确认；OpenAPI 未更新 |
