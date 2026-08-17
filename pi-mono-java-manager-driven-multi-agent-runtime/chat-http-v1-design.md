@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.27.0 |
+| 文档版本 | 1.28.0 |
 | 状态 | 目标设计，尚未实施 |
 | 接口评审状态 | 十一个 operation 均已确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
-| OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
+| 机器契约 | 不维护；过渡期 OpenAPI 已于 2026-08-18 明确废弃并删除 |
 | 端到端传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均为 HTTP；执行响应使用请求范围内 SSE |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 源码基线 | `195746614096312d4e93afb029d387837db78e0b` |
@@ -37,9 +37,10 @@ mate-service 不得把内部 SSE 字节透明转发给浏览器。公共 mate-se
 不属于业务路径的版本契约。
 逐接口的展示、评审状态和已确认响应样例以
 [`chat-http-v1-review.html`](chat-http-v1-review.html) 为主维护文档。
-OpenAPI YAML 在迁移期内继续作为机器可读投影；本轮不删除也不宣告废弃，
-待用户后续明确决定。其 1.7.1 仍含被当前设计替代的旧 Run 资源，已经标记为
-非权威并内联原外部 Schema 依赖；不得用于覆盖 HTML 和本文的十一项结论。
+过渡期 OpenAPI 1.7.1 因长期滞后且仍包含已经被替代的旧 Run 资源，已经由用户
+明确批准废弃并从仓库删除。当前不维护机器可读契约；实现和后续评审只能依据
+HTML 主契约与本文。若未来需要重新提供机器契约，必须从已确认内容重新生成并建立
+同步门禁，不得从 Git 历史恢复旧 YAML 后继续修改。
 
 ### 2.1 Session 生命周期
 
@@ -58,9 +59,9 @@ HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session�
 `PUT /sessions/{session_id}/model`；删除后的 `session_id`
 永久禁止复用。
 
-该接口支持两套公司凭据，OpenAPI 使用“两个可选安全要求、
-每个要求内两个 Header 必须同时满足”表达。JWT 是文档、
-Swagger 示例和新客户端的默认选择；APPKEY 是明确公开的兼容契约，
+该接口支持两套公司凭据，HTML 主契约通过两个认证选项明确展示每种模式中
+必须同时满足的 Header。JWT 是文档、交互示例和新客户端的默认选择；
+APPKEY 是明确公开的兼容契约，
 不得只藏在实现分支中。
 
 | 认证模式 | 必填 Header | 定位 | 约束 |
@@ -194,7 +195,7 @@ mate-service 的 Chat 元数据；完成的 MessageEntry 由 GET Session Events 
 `If-None-Match/304` 分支。不存在和已删除的 Session 统一返回
 `404 SESSION_NOT_FOUND`，避免泄露历史状态。
 
-本小节和主维护 HTML 中的第二个接口已经用户确认。OpenAPI 本轮仍不更新。
+本小节和主维护 HTML 中的第二个接口已经用户确认。
 
 #### 2.1.2 第三个已确认接口：删除 Session
 
@@ -244,7 +245,7 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 
 [PlantUML 源码：`http_delete_session`](diagram.puml#L719)
 
-本小节和主维护 HTML 中的第三个接口已经用户确认。OpenAPI 本轮仍不更新。
+本小节和主维护 HTML 中的第三个接口已经用户确认。
 
 ![HTTP Session 创建](http_session_creation.svg)
 
@@ -429,7 +430,7 @@ ToolResult Entry 是权威事实，调用方按 `entry_id/entry_seq` 与本地�
 
 第四接口已经确认：冻结路径、`user.message` 请求、`message + file_ids`、同一 POST
 直接 SSE、无公共 `run_id`、无 `Idempotency-Key`、成功事件顺序与持久化语义，
-以及流建立后使用 `stream.error` 再关闭连接的失败语义。OpenAPI 本轮仍不更新。
+以及流建立后使用 `stream.error` 再关闭连接的失败语义。
 
 ### 2.3 持久化事件与恢复
 
@@ -1108,6 +1109,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.28.0 | 2026-08-18 | 用户明确批准废弃并删除过渡期 OpenAPI 1.7.1；当前契约权威收敛为 HTML 主维护文档与本文，不再维护第三份机器投影；未来如需机器契约必须从已确认内容重新生成并建立同步门禁，禁止恢复旧 YAML 继续修改 |
 | 1.27.0 | 2026-08-18 | 用户确认浏览器/UI 到 mate-service、mate-service 到 CampusClaw 两跳均统一为 HTTP+SSE；新增两跳独立认证和安全事件投影边界，删除旧 WebSocket 语义映射及 AsyncAPI 规范依赖；公共 mate-service 路径、VO、错误和 Event Schema 明确留待后续逐接口评审；过渡期 OpenAPI 内联旧外部 Schema 以保持可解析，但仍是滞后且非权威的 1.7.1 投影 |
 | 1.26.0 | 2026-08-17 | 用户确认 POST Steers、POST FollowUps 和 POST Abort 三个 Session 执行控制接口；保持 1.25.0 的 Session scope、原 POST Events SSE 观察、Steer/FollowUp `202` 和 Abort `204` 设计不变；明确 `202` 只返回 `session_id/accepted_at`，不新增控制 ID 或预分配 `entry_id`；十一个 HTTP operation 至此全部确认；OpenAPI 未更新 |
 | 1.25.0 | 2026-08-17 | 按用户要求新增三个待确认 Session 执行控制接口：POST Steers、POST FollowUps 和 POST Abort；保持无公共 Run 的 Session scope，区分 Steer“下一次模型调用前”与 FollowUp“原本将结束时”的投递时机，固定 FIFO/one-at-a-time/Steer 优先；控制消息实际投递后复用 `user.message`，Abort 清空未投递队列并等待 idle 后幂等返回 `204`；新增 pi/pi-mono-java 证据、错误码和 PlantUML；OpenAPI 未更新 |

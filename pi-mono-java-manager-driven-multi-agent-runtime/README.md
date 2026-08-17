@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.0.0 |
+| 文档版本 | 2.1.0 |
 | 状态 | 目标设计，尚未实施 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
-| 设计仓分析基线 | `47041c823c11b5a06049fbc92b7f170cf3745dc7` |
+| 设计仓分析基线 | `aac09b0371045f13edffa0cf35be73105585fbbb` |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 源码基线 | `195746614096312d4e93afb029d387837db78e0b` |
 | 更新日期 | 2026-08-18 |
@@ -40,11 +40,27 @@ SSE 在这里不是永久在线的 Session 订阅，也不是单独的第二条�
 当前逐接口评审的权威顺序为：
 
 1. [`chat-http-v1-review.html`](chat-http-v1-review.html)：面向人的主维护契约，按已确认的 Swagger 风格卡片展示十一项 CampusClaw operation；
-2. [`chat-http-v1-design.md`](chat-http-v1-design.md)：字段语义、状态、错误、源码证据和设计原因；
-3. [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)：过渡期机器投影，当前版本明显滞后，不得覆盖前两项结论。
+2. [`chat-http-v1-design.md`](chat-http-v1-design.md)：字段语义、状态、错误、源码证据和设计原因。
+
+OpenAPI 已经明确废弃并从仓库删除。当前不维护第三份机器契约，也不允许实现根据
+历史 OpenAPI 恢复旧 Run、History 或事件字段。若未来重新需要机器可读契约，必须
+从已确认 HTML 和设计文档建立新的生成与同步流程，不能恢复已删除文件继续增量修改。
 
 旧 WebSocket/AsyncAPI 文档已从当前仓库删除，历史内容只能从 Git 历史读取，不再是
 目标契约或新实现输入。
+
+### 2.1 HTML-first 契约校验
+
+仓库使用 [`validate-chat-http-v1.py`](validate-chat-http-v1.py) 校验 HTML 主契约，
+替代已删除 OpenAPI 的 lint 入口：
+
+```bash
+python3 validate-chat-http-v1.py
+```
+
+校验覆盖十一项静态接口与 review model、HTML/设计文档版本一致性、JavaScript 语法、
+无脚本可读内容、响应式规则、PlantUML/SVG 生成、图链接与源码行锚点，以及
+`git diff --check`。脚本还会阻止已废弃 OpenAPI 文件或其当前引用重新进入仓库。
 
 ## 3. 两跳服务责任
 
@@ -269,12 +285,13 @@ CampusClaw 只消费有序 `file_ids`，通过内部受权 resolve/content 接�
 2. 浏览器断线后公共 Chat 层如何对账内部已持久化 Entry；
 3. Pod 重启时 active execution 的中断或恢复策略；
 4. 公司 `ResultBeanFactory`、JWT 和 APPKEY 库在开源/本地环境的兼容 Adapter 发布方式；
-5. 过渡期 OpenAPI 的正式废弃时间和替代机器契约。
+5. 若未来需要机器可读契约，其格式、生成源和同步门禁需要重新评审。
 
 ## 10. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.0 | 2026-08-18 | 用户明确批准废弃并删除过渡期 OpenAPI；契约权威收敛为 HTML 主维护文档与 Markdown 设计依据，禁止从历史 OpenAPI 恢复旧 Run 模型；增加仓库内 HTML-first 契约校验入口 |
 | 2.0.0 | 2026-08-18 | 用户确认 mate-service 公共和 CampusClaw 内部两跳均统一为 HTTP+SSE；删除旧 WebSocket/AsyncAPI 规范，重写当前架构入口并明确公共 mate-service HTTP 字段仍待逐项评审 |
 | 1.20.0 | 2026-08-17 | 历史版本开始将内部 Runtime 交互从显式 Run 调整为 Session Event 直连 SSE |
 | 1.19.0 及更早 | 2026-08-17 及更早 | 历史 WebSocket/Run 方案；仅可从 Git 历史查看，不再是当前设计依据 |

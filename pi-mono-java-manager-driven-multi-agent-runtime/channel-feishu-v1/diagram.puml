@@ -2,7 +2,6 @@
 title Historical CampusAgent Channel and Feishu Integration
 
 ' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md
-' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1.openapi.yaml
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java, baseline lines 33-168
 ' Observed behavior: the fixed Java baseline has a coupled POST /api/chat SSE endpoint.
 ' Historical target-only design: this Run-based diagram is frozen and must not be used for implementation.
@@ -72,7 +71,7 @@ end note
 @startuml feishu_message_sequence
 title Historical Feishu Message to Runtime Run Sequence
 
-' Source evidence: pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1.openapi.yaml, createSession, createRun, and getRunEvents
+' Historical design source: channel-feishu-v1-design.md version 1.0.0, frozen Run mapping
 ' Feishu evidence: im.message.receive_v1, message reply API, and message card PATCH API official documents
 ' Historical target-only design: provider receipt and Runtime execution were separated by a durable outbox.
 ' Current target: this Run-based sequence is frozen and requires redesign against Session Events.

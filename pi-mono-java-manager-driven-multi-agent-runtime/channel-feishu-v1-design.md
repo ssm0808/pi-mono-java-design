@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.2.0 |
+| 文档版本 | 1.3.0 |
 | 状态 | 历史方案，冻结；不得作为实现契约，待按端到端 HTTP+SSE 重新评审 |
 | 更新日期 | 2026-08-18 |
-| 设计仓基线 | `e5a8ab2f428bb046390f558a82bfe7ceea881413` |
-| Runtime HTTP 基线 | [`chat-http-v1-design.md`](chat-http-v1-design.md) 1.27.0；[`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml) 1.7.1 是滞后且非权威的过渡期机器投影 |
+| 设计仓基线 | `aac09b0371045f13edffa0cf35be73105585fbbb` |
+| Runtime HTTP 基线 | [`chat-http-v1-design.md`](chat-http-v1-design.md) 1.28.0；HTML 主契约为 [`chat-http-v1-review.html`](chat-http-v1-review.html) |
 | pi-mono-java 源码基线 | `1f7a5423219edfa4519d8719f1cc8a188ed72873` |
 | 飞书证据查询日期 | 2026-08-11 |
 
@@ -100,11 +100,12 @@ Tool Manager 或 Model Manager。
 `ChannelOrchestrator`、Channel Store 和 `RunEventProjector` 不依赖飞书 SDK 类型；
 agent-service 也不依赖 Channel DTO。
 
-本专题不新增一份通用 Channel OpenAPI，原因是：
+本专题不新增机器契约，原因是：
 
 1. 飞书长连接的 wire contract 由飞书 SDK 和开放平台掌握；
 2. Channel 层内部跨组件契约是 Java 应用端口和持久化任务；
-3. Channel 到 Runtime 继续使用已有 [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)。
+3. Channel 到 Runtime 只能依据已确认的 HTML 主契约和 HTTP 设计文档实现；
+   已删除的过渡期 OpenAPI 不再是客户端生成或合约验证输入。
 
 未来支持飞书商店应用时，新增的 Webhook Controller 只终止飞书回调协议，
 仍映射到相同 `ChannelInboundPort`。
@@ -275,7 +276,7 @@ Conversation 创建时固定 Channel 账号当时的 `agent_id + model_id`。账
 
 ![飞书消息到 Runtime Run 时序](channel-feishu-v1/feishu_message_sequence.svg)
 
-[PlantUML 源码：`feishu_message_sequence`](channel-feishu-v1/diagram.puml#L72)
+[PlantUML 源码：`feishu_message_sequence`](channel-feishu-v1/diagram.puml#L71)
 
 关键接受边界如下：
 
@@ -515,7 +516,7 @@ NEW -> ACCEPTED -> PROCESSING -> RUNNING -> COMPLETED
 | `ChannelRunWorker` | application | Channel Outbox、`AgentRuntimeChannelPort`、`RunEventProjector` |
 | `ChannelDeliveryWorker` | application | Channel Outbox、`ChannelMessageGateway`、delivery repository |
 | `RunEventProjector` | application | delivery repository、Channel outbox |
-| `RuntimeHttpChannelAdapter` | infrastructure | Runtime OpenAPI client、SSE parser、Gateway service credentials |
+| `RuntimeHttpChannelAdapter` | infrastructure | 按已确认 HTML/设计实现的强类型 Runtime HTTP client、SSE parser、Gateway service credentials |
 
 Spring Controller 不直接调用 Runtime Client；长连接回调和未来 Webhook Controller
 都只调用 `ChannelInboundPort`。Service 负责 VO/DTO 转换、幂等和跨记录业务规则。
@@ -525,7 +526,7 @@ Spring Controller 不直接调用 Runtime Client；长连接回调和未来 Webh
 ### 13.1 合约测试
 
 - 使用飞书 SDK 事件类型验证 `im.message.receive_v1` 到 DTO 的映射；
-- 使用 Runtime OpenAPI 验证 Session、Run、Event、Run 查询和 History 客户端；
+- 使用已确认的 Runtime HTTP 请求、ResultBean、SSE 和错误样例建立消费者合约测试；
 - 使用飞书 Sandbox 验证回复 `uuid`、话题回复、卡片 PATCH 和 token 权限；
 - 对所有供应商错误保留未知 code 分支，不依赖错误文案判断可重试性。
 
@@ -578,6 +579,7 @@ Spring Controller 不直接调用 Runtime Client；长连接回调和未来 Webh
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-08-18 | 同步用户明确废弃 OpenAPI 的决定：删除过渡期机器契约引用，冻结方案的 Runtime 客户端与合约测试改为只引用 HTML 主契约和 HTTP 设计文档；本文的 Run 映射仍不得用于实现 |
 | 1.2.0 | 2026-08-18 | 同步总体架构结论：浏览器/UI 到 mate-service、mate-service 到 CampusClaw 均使用 HTTP+SSE；删除已失效 AsyncAPI 基线链接，明确本文全部 Run/独立 SSE 图表仅是冻结的旧方案影响记录，待按当前十一项 Session/Entry 接口重新评审 |
 | 1.1.0 | 2026-08-17 | Runtime HTTP 改为无公共 `run_id` 的 Session Event 直连 SSE 后，标记原 Run/独立 SSE/幂等键方案整体待重新评审；记录 Channel Outbox 在无幂等接受和无独立恢复流情况下的崩溃歧义，禁止继续把 1.0.0 映射、表结构和时序图作为实现契约 |
 | 1.0.0 | 2026-08-11 | 首版 Channel 应用端口与飞书接入设计；定义长连接入站、`message_id` 去重、Conversation/Session 绑定、Runtime HTTP+SSE 编排、卡片流式投影、Outbox 和崩溃恢复 |
