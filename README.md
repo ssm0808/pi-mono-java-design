@@ -1,42 +1,48 @@
 # pi-mono-java Design
 
-本仓库用于管理 `pi-mono-java` 的设计文档。
+本仓库用于维护 CampusClaw、mate-service 与 pi-mono-java 的目标设计和源码研究。
 
-## 当前 Runtime 主线
+## 当前规范性设计
 
-- [CampusAgent Runtime HTTP API 设计](./pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md)
-- [CampusClaw 虚拟线程并发管理设计](./virtual-thread-concurrency-management/README.md)：虚拟线程、100 active Run 准入、资源隔离和 DFX 的唯一主文档
-- [CampusAgent Runtime：pi-mono-java Manager 驱动的多 Agent 运行设计](./pi-mono-java-manager-driven-multi-agent-runtime/README.md)
-- [AgentRuntimeTemplate 不可变运行模板设计](./agent-runtime-template/README.md)
+- [CampusClaw Runtime 总体设计](./pi-mono-java-manager-driven-multi-agent-runtime/README.md)：两跳 HTTP+SSE、十一项内部 Runtime operation、Manager 与数据边界。
+- [CampusClaw Runtime HTTP API](./pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md)：接口语义、状态、错误和源码证据。
+- [Runtime HTTP API HTML 评审页](./pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-review.html)：面向人的主维护契约，可直接在浏览器打开。
+- [虚拟线程并发管理](./virtual-thread-concurrency-management/README.md)：内部 active execution、容量准入、背压与 DFX。
+- [AgentRuntimeTemplate](./agent-runtime-template/README.md)：不可变 Agent 模板、revision pinning、加载缓存与回收。
+- [CampusMate 文件服务](./campusmate-attachment-service/README.md)：文件上传、扫描、OBS/openGauss 边界和内部 Runtime 解析。
 
-## 文档
+Runtime HTTP 接口不维护 OpenAPI。已经确认的 HTML 是人类评审主契约，Markdown
+负责设计理由和源码证据。文件服务仍维护独立 OpenAPI；它不能被当作 Runtime
+OpenAPI，也不能恢复已经废弃的 Run 或 WebSocket 资源。
 
+## 支撑设计
+
+- [Agent 数据库模式](./agent-database-patterns/README.md)
+- [Agent 元数据 GaussDB 表设计](./agent-metadata-gaussdb-design/README.md)
+- [集中式 GaussDB 会话记忆](./memory-jsonl-to-gaussdb.md)
 - [Command SR 设计](./pi-mono-java-command-SR设计.md)
 - [Skill Command SR 设计](./pi-mono-java-skill-command-SR设计.md)
-- [主流 Agent Tool/Agent 元数据机制调研与统一设计](./config-to-tool-agent-research/README.md)
-- [主流 Agent 平台 Agent、Tool 与 Skill 创建官方文档](./主流Agent平台Agent-Tool-Skill创建官方文档.md)
+
+## 源码与产品研究
+
+- [pi Session Context 与当前分支](./pi-mono-agent-session-context/README.md)
+- [pi SessionSnapshot 类图与语义](./pi/session-snapshot.md)
+- [主流 Agent Tool/Agent 元数据机制](./config-to-tool-agent-research/README.md)
 - [Anthropic Managed Agents 公开模型](./anthropic-managed-agents-public-model/README.md)
-- [主流 Agent 数据库模式拆解与 pi-mono Java 采纳边界](./agent-database-patterns/README.md)
-- [Agent 元数据 GaussDB 表设计](./agent-metadata-gaussdb-design/README.md)
-- [CampusMate 公共 Chat WebSocket v2 AsyncAPI](./pi-mono-java-manager-driven-multi-agent-runtime/mate-chat-ws-v2.asyncapi.yaml)
-- [CampusMate 公共 Chat WebSocket v2 客户端接入指南](./pi-mono-java-manager-driven-multi-agent-runtime/mate-chat-ws-v2-client-integration.md)
-- [CampusAgent 内部 Runtime WebSocket v2 AsyncAPI](./pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml)
-- [CampusAgent 内部 Runtime WebSocket v2 客户端接入指南](./pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2-client-integration.md)
-- [CampusAgent Channel 接口与飞书接入设计](./pi-mono-java-manager-driven-multi-agent-runtime/channel-feishu-v1-design.md)
-- [CampusMate Attachment Service：OBS + openGauss 设计](./campusmate-attachment-service/README.md)
-- [OpenClaw 与 CampusAgent WebSocket 设计对比](./openclaw-campusagent-websocket-comparison/README.md)
-- [pi-mono Java 集中式 GaussDB 会话记忆系统 SR 设计](./memory-jsonl-to-gaussdb.md)
+- [主流 Agent 平台 Agent、Tool 与 Skill 官方文档](./主流Agent平台Agent-Tool-Skill创建官方文档.md)
 
-## 约定
+## 已废弃内容
 
-- Markdown 是设计文档的唯一源文件。
-- 类图使用标准 UML 关系线表达真实语义。
-- 排版辅助关系不得显示为设计语义。
-- 新建或修改的设计图使用 PlantUML 源码并提交生成后的 SVG；Markdown 引用 SVG，不复制维护第二份图形定义。
-- 每组 PlantUML 图统一使用 `diagram.puml`，在图源目录执行 `plantuml -tsvg diagram.puml`；SVG 不得手工修改。
-- PlantUML 图源中的标题、元素名称、关系标签、分支/循环标签、注释和源码注释必须只使用英文，技术标识必须使用 ASCII；图源不得包含任何非 ASCII 字符。Markdown 正文和图注可以使用中文。
-- 文档变更通过版本号记录。
-- 每项源自 pi 的设计必须给出指向固定 commit 的可点击源码链接，并标明仓库相对路径、符号或行号，说明从源码观察到的行为。
-- 文档信息必须记录分析时使用的 pi commit；行号只对该基线负责。
-- Java 目标设计必须同时说明设计原因；与 pi 不一致时必须明确标注为产品约束、安全强化或架构改造，不得写成 pi 原生行为。
-- 核心行为先用简洁的自然语言说明“什么时候可以执行、会发生什么”；框架组件、状态机和并发控制等实现细节放在行为说明之后。禁止性约束应同时说明负责组件和替代路径，不得用否定句代替能力定义。
+当前目标传输统一为 HTTP+SSE。WebSocket、AsyncAPI、连接级 resume、公开 Run、
+Run Events、RunRecord 和旧 Channel 方案已经从工作树清除；如需追溯只能查看 Git
+历史。新实现不得从历史文件恢复这些模型。
+
+## 文档约定
+
+- 设计文档使用 Markdown；接口 HTML 是 Runtime HTTP 的人类评审主契约。
+- 设计图使用 PlantUML，统一维护 `diagram.puml` 并提交生成后的 SVG；禁止手改 SVG。
+- PlantUML 图源只使用英文 ASCII；Markdown 正文和图注可以使用中文。
+- 源码对齐设计记录固定 commit、仓库相对路径和相关符号或基线行号。
+- 区分源码观察、目标设计和设计原因；差异标记为产品约束、安全加固或架构改造。
+- 数据库表使用 `t_` 前缀和小写 snake_case，SQL `COMMENT ON` 使用中文。
+- 设计行为变更同步更新文档版本和版本历史。

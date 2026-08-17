@@ -1,28 +1,19 @@
-' Generated for SR-ATTACHMENT-001 v2.0.0 on 2026-08-04.
+' Generated for CampusMate File Service v3.0.0 on 2026-08-18.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design repository baseline: ecf31bc55ca1923dd1c7f90d50ee6763963b7da9.
-' Target-only design: no corresponding Attachment Service implementation exists.
+' Design repository baseline: 2b747808e93609a4fc71d919dbd72bcd56a6e502.
+' pi-mono baseline: 086c32e74530564922d011ade23ff582c9d63116.
+' pi-mono-java baseline: 195746614096312d4e93afb029d387837db78e0b.
+' Target-only design: neither source baseline implements this managed file service.
 
-@startuml attachment_upload_and_scan_flow
-title Attachment streaming upload and asynchronous scan
+@startuml file_upload_and_scan_flow
+title File Streaming Upload and Asynchronous Scan
 
-' Source evidence (pi-mono fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc):
-' packages/agent/src/agent.ts, prompt(), lines 336-395
-' packages/ai/src/types.ts, ImageContent, lines 345-349
-' Source evidence (pi-mono-java 1f7a5423219edfa4519d8719f1cc8a188ed72873):
-' modules/ai/src/main/java/com/campusclaw/ai/types/UserMessage.java, lines 20-31
-' modules/ai/src/main/java/com/campusclaw/ai/types/ContentBlock.java, lines 17-24
-' modules/ai/src/main/java/com/campusclaw/ai/types/ImageContent.java, lines 9-18
-' docs/plans/ws-chat-followups.md, lines 12-37
-' External evidence:
-' Huawei OBS Java SDK streaming upload: obs_21_0602.html and obs_21_0604.html
-' RFC 7240: respond-async and wait HTTP preferences
-' Observed behavior: both source baselines support inline image content but do
-' not implement a generic attachment upload, scan, state, or OBS reference API.
-' Target design: mate-service authorizes a public chat_id, resolves its internal
-' session_id from Mate Chat Store, streams one known-length file to shared OBS,
-' persists Runtime-bound metadata in openGauss, and scans before READY.
-' Design reason: keep file bytes out of Chat Frames, local disk, and database rows.
+' Source evidence:
+' pi-mono packages/agent/src/agent.ts, prompt
+' pi-mono packages/ai/src/types.ts, ImageContent
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/ImageContent.java, ImageContent
+' Observed behavior: both baselines accept inline image content but have no generic upload and scan API.
+' Architecture change: mate-service streams files to private OBS and stores metadata in openGauss.
 ' Security hardening: uploaded scripts remain untrusted bytes and are never executed.
 
 skinparam backgroundColor #FFFFFF
@@ -38,101 +29,68 @@ skinparam sequence {
   GroupBackgroundColor #F8FAFC
 }
 
-actor "CampusMate client" as Client
-participant "mate-service\nAttachment API Pod A" as API
-database "Mate Chat Store\nchat_id to session_id" as ChatStore
-database "Shared openGauss" as DB
-participant "Shared private OBS" as OBS
-participant "Scan Worker Pod B" as Worker
-participant "Security Scanner" as Scanner
+actor "CampusMate Client" as client
+participant "mate-service File API" as api
+database "Mate Chat Store" as chats
+database "Shared openGauss" as db
+participant "Private OBS" as obs
+participant "Scan Worker" as worker
+participant "Security Scanner" as scanner
 
-Client -> API : POST /mate-service/v1/chats/{chat_id}/attachments\nfile, size, and Prefer
-API -> ChatStore : authorize user and chat_id;\nresolve internal session_id
-ChatStore --> API : authorized session_id
-API -> API : validate 1..20 MiB\nand sanitized filename
-API -> API : generate attachment_id; use it\nas the exact OBS Object Key
-API -> DB : INSERT t_attachment(session_id)\nand t_attachment_active_detail
-DB --> API : committed row
-API -> OBS : streaming PUT(contentLength)\nwhile count and SHA-256
-OBS --> API : immutable object persisted
-API -> API : require actual size = declared size;\nverify file part EOF after N bytes
-API -> DB : UPDATE main status=PROCESSING;\nset detail size and digest
-DB --> API : detail row_version advanced
+client -> api : POST /v1/chats/{chat_id}/attachments\nJWT, file, X-File-Size, and Prefer
+api -> chats : authorize chat_id and resolve session_id
+chats --> api : authorized session_id
+api -> api : normalize filename and validate size
+api -> api : generate file_id
+api -> db : insert t_file and t_file_active_detail
+db --> api : identity committed
+api -> obs : create-only streaming PUT by file_id
+obs --> api : immutable object persisted
+api -> api : verify length, EOF, and SHA-256
+api -> db : set PROCESSING and trusted digest
+db --> api : update committed
 
-alt Prefer wait=N and scan reaches a terminal state within min(N,10)
-  API -> Worker : make PROCESSING task eligible
-  Worker -> DB : claim short lease and commit
-  Worker -> OBS : streaming GET immutable object
-  OBS --> Worker : bounded content stream
-  Worker -> Scanner : sniff MIME and scan stream
-  Scanner --> Worker : safe, blocked, or terminal failure
-  alt safe result
-    Worker -> DB : conditional UPDATE READY;\nrelease lease
-    DB --> API : READY observed
-    API --> Client : 201 READY and Location
-  else blocked result
-    Worker -> DB : conditional UPDATE BLOCKED;\nrelease lease
-    DB --> API : BLOCKED observed
-    API --> Client : 422 and Location
-  else terminal scan failure
-    Worker -> DB : conditional UPDATE FAILED;\nrelease lease
-    DB --> API : FAILED observed
-    API --> Client : 503 and Location
-  end
-else default or respond-async, or wait expires
-  API --> Client : 202 PROCESSING, Location, Retry-After
-  Worker -> DB : claim short lease and commit
-  Worker -> OBS : streaming GET immutable object
-  OBS --> Worker : bounded content stream
-  Worker -> Scanner : sniff MIME and scan stream
-  Scanner --> Worker : safe, blocked, or failure
-  Worker -> DB : conditional terminal/retry update;\nrelease lease
+alt Prefer wait and READY within at most 10 seconds
+  worker -> db : claim short scan lease and commit
+  worker -> obs : streaming GET by file_id
+  obs --> worker : bounded byte stream
+  worker -> scanner : sniff MIME and scan stream
+  scanner --> worker : safe
+  worker -> db : conditional READY update
+  api --> client : 201 ResultBean with READY resource
+else default, asynchronous, or wait expires
+  api --> client : 202 ResultBean with PROCESSING resource
+  worker -> db : claim short scan lease and commit
+  worker -> obs : streaming GET by file_id
+  obs --> worker : bounded byte stream
+  worker -> scanner : sniff MIME and scan stream
+  scanner --> worker : safe, blocked, or failure
+  worker -> db : conditional terminal or retry update
 end
 
-Client -> API : GET /mate-service/v1/chats/{chat_id}/attachments/{id}
-API -> ChatStore : authorize chat and resolve session_id
-ChatStore --> API : authorized session_id
-API -> DB : read by session_id and attachment_id
-DB --> API : current safe projection
-API --> Client : chat_id plus safe status projection;\nno session_id
-
-note over API,OBS
+note over api,obs
 No Pod-local file and no complete byte array.
-At most 1 MiB of application in-flight buffers
-per upload. OBS slowdown propagates backpressure.
-Create-only conflict marks the ID FAILED and does not
-overwrite or delete an object of unproven ownership.
+file_id is the exact OBS Object Key.
+Create-only conflict enters audited quarantine.
 end note
 
-note over DB,Worker
+note over db,worker
 OBS I/O and scanning never hold a DB transaction.
-An expired lease can be recovered by another Pod.
-Only READY can be resolved for chat.send.
+Only READY files can be resolved by CampusClaw.
 end note
 @enduml
 
-@startuml attachment_obs_opengauss_storage_split
+@startuml file_obs_opengauss_storage_split
 !pragma layout elk
-title Attachment OBS and openGauss responsibility split
-left to right direction
+title File OBS and openGauss Responsibility Split
 
-' Source evidence (pi-mono fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc):
-' packages/ai/src/types.ts, ImageContent, lines 345-349
-' Source evidence (pi-mono-java 1f7a5423219edfa4519d8719f1cc8a188ed72873):
-' modules/ai/src/main/java/com/campusclaw/ai/types/ImageContent.java, lines 9-18
-' External evidence: openGauss 7.0.0-RC3 SQL Reference, Binary Types.
-' Observed behavior: source images are inline base64; neither baseline defines
-' a shared large-object authority for generic PDF, script, or document inputs.
-' Target design: shared OBS owns immutable bytes and shared openGauss owns the
-' resource directory, state machine, authorization binding, and worker leases.
-' Target design: Mate Chat Store alone owns chat_id to session_id mappings;
-' attachment tables store only the resolved Runtime session_id.
-' Architecture change: multiple Pods depend only on shared durable services,
-' never on process memory, local disk, sticky routing, or a stored key mapping.
-' Target design: the exact private OBS Object Key is attachment_id; there is no
-' object_key column, prefix, directory, file-name component, or ETag column.
-' Design reason: isolate large-object throughput from relational state queries,
-' WAL, database replication, and database backup and restore operations.
+' Source evidence:
+' pi-mono packages/ai/src/types.ts, ImageContent
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/ImageContent.java, ImageContent
+' Observed behavior: source images are inline; neither baseline defines a shared large-object authority.
+' Architecture change: OBS owns immutable bytes and openGauss owns identity, state, and worker leases.
+' Product constraint: Mate Chat Store alone owns chat_id to session_id mappings.
+' Design reason: isolate large-object throughput from relational state and database backup.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -143,94 +101,63 @@ skinparam ComponentBackgroundColor #F8FAFC
 skinparam DatabaseBorderColor #475569
 skinparam DatabaseBackgroundColor #F8FAFC
 
-rectangle "mate-service deployment" as Mate {
-  component "Attachment API Pod A" as PodA
-  component "Attachment API Pod B" as PodB
-  component "Scan/Delete Worker Pod C" as PodC
-  interface "AttachmentContentStore" as Port
-  component "ObsAttachmentContentStore" as Adapter
-
-  PodA --> Port : stream by attachment_id
-  PodB --> Port : stream by attachment_id
-  PodC --> Port : stat/delete by attachment_id
-  Port -down-> Adapter : implemented by
+rectangle "mate-service Deployment" as mate {
+  component "File API Pod A" as a
+  component "File API Pod B" as b
+  component "Scan and Delete Worker" as worker
+  interface "FileContentStore" as port
+  component "ObsFileContentStore" as adapter
+  a --> port : stream by file_id
+  b --> port : stream by file_id
+  worker --> port : stat or delete by file_id
+  port --> adapter : implemented by
 }
 
-database "Mate Chat Store\nchat_id to session_id mapping" as ChatStore
-
-database "Shared openGauss\nmetadata ledger" as DB {
-  rectangle "t_attachment\npermanent identity/status" as Row {
-    card "attachment_id PK" as AId
-    card "session_id" as SId
-    card "status" as Status
-    card "created_at" as Created
-    card "deleted_at" as Deleted
-  }
-  rectangle "t_attachment_active_detail\nremoved after content deletion" as Detail {
-    card "attachment_id PK/FK" as DetailId
-    card "filename, MIME, size, SHA-256" as Integrity
-    card "referenced_at and expires_at" as Reference
-    card "error, lease, retry, row_version" as Lease
-  }
-  Row -- Detail : one-to-one while active
+database "Mate Chat Store\nchat_id to session_id" as chats
+database "Shared openGauss" as db {
+  rectangle "t_file\npermanent identity and status" as main
+  rectangle "t_file_active_detail\nremoved after content deletion" as detail
+  main -- detail : one-to-one while active
 }
+cloud "Private OBS\nimmutable file bytes" as obs
+component "CampusClaw" as runtime
 
-cloud "Shared private OBS\nimmutable file bytes" as OBS
-component "agent-service Pod D" as Agent
+a --> chats : authorize chat and resolve Session
+b --> chats : authorize chat and resolve Session
+a --> db : metadata transactions
+b --> db : metadata transactions
+worker --> db : lease and state transactions
+adapter --> obs : TLS and private bucket
+runtime --> b : internal resolve and content stream
 
-PodA --> DB : metadata transactions
-PodB --> DB : metadata transactions
-PodC --> DB : short lease and state transactions
-PodA --> ChatStore : authorize chat_id; resolve session_id
-PodB --> ChatStore : authorize chat_id; resolve session_id
-Adapter --> OBS : TLS, private bucket, SSE
-Agent --> PodB : internal resolve and content stream
-
-note bottom of DB
-No BLOB, BYTEA, Base64, URL, or credentials.
-No Object Key, ETag, or declared MIME column.
-No chat_id or Chat-to-Session mapping column.
-After deletion only the permanent five-field
-DELETED identity row remains as an ID tombstone.
+note bottom of db
+t_file retains file_id, session_id, status,
+created_at, and deleted_at as a permanent tombstone.
+Active detail owns filename, trusted MIME, size,
+digest, reference, expiry, retry, and lease fields.
 end note
 
-note bottom of ChatStore
-This is the sole authority for Chat ownership
-and chat_id to session_id mapping. Public clients
-never receive the internal session_id.
+note bottom of obs
+One immutable object per file_id.
+The exact Object Key equals file_id.
+There is no second resource id, prefix, or file-name part.
 end note
 
-note bottom of OBS
-One original object per attachment_id.
-The exact Object Key equals attachment_id.
-There is no prefix, directory, or file-name part.
-The private bucket and authorization remain required.
-end note
-
-note bottom of Mate
-Pod memory contains bounded in-flight chunks only.
-There is no local file, temporary directory,
-authoritative Java Map, or complete file cache.
+note bottom of mate
+No BLOB, URL, credential, local file,
+authoritative in-memory map, or complete file cache.
 end note
 @enduml
 
-@startuml attachment_cross_pod_resolution_flow
-title Cross-Pod attachment resolution and content streaming
+@startuml file_cross_pod_resolution_flow
+title Cross-Pod File Resolution and Content Streaming
 
-' Source evidence (pi-mono fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc):
-' packages/agent/src/agent.ts, prompt(), lines 336-395
-' Source evidence (pi-mono-java 1f7a5423219edfa4519d8719f1cc8a188ed72873):
-' modules/ai/src/main/java/com/campusclaw/ai/types/UserMessage.java, lines 20-31
-' modules/ai/src/main/java/com/campusclaw/ai/types/ContentBlock.java, lines 17-24
-' docs/plans/ws-chat-followups.md, lines 12-37
-' Observed behavior: the current Java message union has no generic attachment
-' reference or cross-service content resolver.
-' Target design: agent-service resolves one ordered attachment batch atomically,
-' then streams each fixed attachment through mate-service using the stored digest.
-' Security hardening: agent-service never receives OBS URLs, bucket names, or
-' credentials; knowing an attachment_id alone does not authorize bucket access.
-' Design reason: the upload Pod and read Pod can differ because both use the same
-' shared openGauss directory and private OBS content authority.
+' Source evidence:
+' pi-mono packages/agent/src/agent.ts, prompt
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java, prompt
+' Observed behavior: neither baseline has a generic file reference or cross-service content resolver.
+' Architecture change: CampusClaw resolves ordered file_ids and streams verified content through mate-service.
+' Security hardening: CampusClaw receives no OBS location or credential and validates length and digest.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -245,72 +172,57 @@ skinparam sequence {
   GroupBackgroundColor #F8FAFC
 }
 
-participant "agent-service Pod D" as Agent
-participant "Attachment API Pod B" as API
-database "Shared openGauss" as DB
-participant "Shared private OBS" as OBS
-participant "Model input adapter" as Model
+participant "CampusClaw" as runtime
+participant "mate-service File API" as api
+database "Shared openGauss" as db
+participant "Private OBS" as obs
+participant "Model Input Adapter" as model
 
-Agent -> API : POST /internal/v1/attachments:resolve\nservice token, session_id, ordered IDs
-API -> API : authenticate immutable\nagent-service principal
-API -> DB : BEGIN; lock all IDs in stable order
-DB --> API : matching rows
-API -> API : require same session, READY,\nnot expired or deleted
+runtime -> api : POST /internal/v1/files:resolve\nservice credential, sessionId, ordered fileIds
+api -> api : select exactly one auth mode
+api -> db : begin and lock all IDs in stable order
+db --> api : matching rows
+api -> api : require same Session, READY, and active
 
-alt any item fails authorization or state validation
-  API -> DB : ROLLBACK
-  API --> Agent : one safe INVALID_ATTACHMENT\nor ATTACHMENT_NOT_READY
+alt any file fails validation
+  api -> db : rollback
+  api --> runtime : ErrorResponse without result
 else complete batch is valid
-  API -> DB : preserve first referenced_at; clear expiry;\nincrement detail row_version; COMMIT
-  DB --> API : complete ordered snapshots
-  API --> Agent : attachment_id, filename, MIME,\nsize and SHA-256 in request order
+  api -> db : preserve referenced_at and clear expiry
+  db --> api : ordered trusted snapshots
+  api --> runtime : ResultBean with ordered files
 end
 
-loop each accepted attachment in request order
-  Agent -> API : GET content\nsession_id, attachment_id, expected SHA-256
-  API -> DB : authorize READY row with referenced_at;\nread trusted active detail
-  DB --> API : size, digest, and detected MIME
-  API -> OBS : streaming GET by attachment_id
-  OBS --> API : bounded original byte stream
-  API --> Agent : application/octet-stream\nContent-Length and digest
-  Agent -> Agent : incrementally verify exact size\nand SHA-256
-  Agent -> Model : provider-neutral untrusted content
+loop each accepted file
+  runtime -> api : GET content with session_id, file_id, and expected SHA-256
+  api -> db : authorize READY and referenced file
+  db --> api : size, digest, and trusted MIME
+  api -> obs : streaming GET by file_id
+  obs --> api : bounded original bytes
+  api --> runtime : binary stream, length, and SHA-256
+  runtime -> runtime : incrementally verify length and digest
+  runtime -> model : provider-neutral untrusted content
 end
 
-note over Agent,API
-Resolve is all-or-nothing. No partial run starts.
-Response order equals request order.
-There is no content_version because each ID
-maps to one immutable object and digest.
+note over runtime,api
+Resolve is all-or-nothing and preserves request order.
+Runtime stores only a trusted metadata snapshot with the User Entry.
 end note
 
-note over API,OBS
-The content stream propagates cancellation and
-backpressure. It never creates a local file or
-materializes the complete object in Pod memory.
-end note
-
-note over Agent,Model
-PDF and scripts are untrusted user content.
-They cannot become system or tool instructions.
-JavaScript is stored and read, never executed.
+note over api,obs
+Backpressure and cancellation propagate through the content stream.
+No local file or complete in-memory object is created.
 end note
 @enduml
 
-@startuml attachment_deletion_and_reconciliation
-title Attachment deletion and reconciliation
+@startuml file_deletion_and_reconciliation
+title File Deletion and Reconciliation
 
-' Source evidence (pi-mono-java 1f7a5423219edfa4519d8719f1cc8a188ed72873):
-' docs/plans/ws-chat-followups.md, lines 12-37
-' Observed behavior: the baseline lists attachment transport as future work and
-' therefore has no implemented deletion, tombstone, lease, or reconciliation flow.
-' Target design: public deletion is scoped by chat_id, which mate-service resolves
-' to one internal session_id; referenced content remains until Chat deletion drives
-' Runtime Session cleanup.
-' Architecture change: OBS and openGauss do not use XA; conditional state changes,
-' short leases, idempotent object operations, and periodic reconciliation recover faults.
-' Product constraint: this version has no cross-Session reuse, content versioning, restore,
-' reference-counted retention claim, or resumable multipart upload.
+' Source evidence:
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java, abort
+' Observed behavior: the baseline has no generic file tombstone, lease, or reconciliation flow.
+' Architecture change: conditional database state, short leases, and idempotent OBS operations replace XA.
+' Product constraint: referenced files are retained until Chat and Runtime Session cleanup.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -325,92 +237,76 @@ skinparam sequence {
   GroupBackgroundColor #F8FAFC
 }
 
-actor "CampusMate client" as Client
-participant "mate-service" as Mate
-participant "agent-service" as Agent
-database "Mate Chat Store\nchat_id to session_id" as ChatStore
-database "Shared openGauss" as DB
-participant "Delete/Reconcile Worker" as Worker
-participant "Shared private OBS" as OBS
+actor "CampusMate Client" as client
+participant "mate-service" as mate
+participant "CampusClaw" as runtime
+database "Mate Chat Store" as chats
+database "Shared openGauss" as db
+participant "Delete and Reconcile Worker" as worker
+participant "Private OBS" as obs
 
-group Single attachment deletion
-  Client -> Mate : DELETE /mate-service/v1/chats/{chat_id}/attachments/{id}
-  Mate -> ChatStore : authorize chat_id; resolve session_id
-  ChatStore --> Mate : authorized session_id
-  Mate -> DB : conditional read and state update
-  alt referenced_at is not null
-    DB --> Mate : referenced attachment
-    Mate --> Client : 409 ATTACHMENT_REFERENCED
-  else OBJECT_KEY_CONFLICT quarantine
-    DB --> Mate : retain FAILED active detail
-    Mate --> Client : bounded 503; audited reconciliation required
-  else referenced_at is null or already deleting
-    DB --> Mate : DELETING persisted or already present
-    Mate --> Client : 202 deletion registered
+group Delete one unreferenced file
+  client -> mate : DELETE /v1/chats/{chat_id}/attachments/{file_id}
+  mate -> chats : authorize chat and resolve session_id
+  chats --> mate : authorized session_id
+  mate -> db : conditional state update
+  alt file is referenced
+    db --> mate : referenced_at is set
+    mate --> client : 409 FILE_REFERENCED
+  else object-key conflict quarantine
+    db --> mate : retain FAILED active detail
+    mate --> client : bounded 503
+  else unreferenced or already deleting
+    db --> mate : DELETING persisted or already present
+    mate --> client : 202 ResultBean
   end
 end
 
-group Privileged security revocation
-  Mate -> DB : conditional READY to BLOCKED
-  DB --> Mate : revocation persisted
-  Mate -> Agent : reject future resolve and content
-  Agent -> Agent : fail or abort run if bytes are unread
+group Chat and Runtime Session deletion
+  client -> mate : delete Chat
+  mate -> chats : authorize chat and load session_id
+  chats --> mate : authorized session_id
+  mate -> runtime : DELETE Runtime Session
+  runtime --> mate : Session hidden and execution stopped
+  mate -> db : mark normal Session files DELETING
+  db --> mate : cleanup registered
 end
 
-group Chat deletion and Runtime Session cleanup
-  Client -> Mate : delete Chat
-  Mate -> ChatStore : authorize chat_id; load session_id
-  ChatStore --> Mate : authorized session_id
-  Mate -> Agent : stop or abort Runtime Session
-  Agent --> Mate : Runtime no longer reads attachments
-  Mate -> DB : mark normal Session attachments DELETING;\nexclude OBJECT_KEY_CONFLICT quarantine
-  DB --> Mate : deletion registered; quarantine count
-  Mate --> Client : Chat hidden; storage cleanup pending if quarantined
-end
-
-group Background delete on any Pod
-  Worker -> DB : claim expired DELETING lease; commit
-  DB --> Worker : attachment_id and detail row_version
-  Worker -> OBS : idempotent DELETE by attachment_id
-  alt object deleted or already absent
-    OBS --> Worker : success or NotFound
-    Worker -> DB : one transaction: DELETE active detail;\nUPDATE main DELETED and deleted_at
-  else temporary OBS failure
-    OBS --> Worker : retryable failure
-    Worker -> DB : increment attempt_count; set\nnext_attempt_at; clear lease
+group Background delete
+  worker -> db : claim expired DELETING lease and commit
+  db --> worker : file_id and row_version
+  worker -> obs : idempotent DELETE by file_id
+  alt deleted or NotFound
+    obs --> worker : success
+    worker -> db : delete active detail and mark DELETED
+  else temporary failure
+    obs --> worker : retryable error
+    worker -> db : schedule bounded retry and release lease
   end
 end
 
 group Audited reconciliation
-  Worker -> DB : find stale normal rows or quarantined\nFAILED OBJECT_KEY_CONFLICT rows
-  DB --> Worker : candidate rows
-  Worker -> OBS : stat by attachment_id
-  alt UPLOADING row and complete matching object exists
-    OBS --> Worker : object metadata
-    Worker -> DB : recover PROCESSING or fail safely
-  else quarantined conflict and object is absent
-    OBS --> Worker : NotFound
-    Worker -> DB : DELETE active detail;\nmark main DELETED and set deleted_at
-  else orphan or invalid object
-    OBS --> Worker : object state
-    Worker -> OBS : cleanup only after ownership proof
-    Worker -> DB : mark FAILED; or after safe delete,\nDELETE active detail and mark main DELETED
+  worker -> db : find stale or quarantined rows
+  db --> worker : candidate file_ids
+  worker -> obs : stat by file_id
+  alt owned valid object
+    obs --> worker : matching object
+    worker -> db : recover processing or delete safely
+  else object absent
+    obs --> worker : NotFound
+    worker -> db : remove detail and mark DELETED
   end
 end
 
-note over DB,OBS
-No distributed XA transaction is required.
-Database state is authoritative for eligibility;
-OBS is authoritative for original file bytes.
-NotFound is successful for an idempotent delete.
+note over db,obs
+Database state controls eligibility.
+OBS controls original-byte existence.
+NotFound succeeds for idempotent deletion.
 end note
 
-note over Mate,DB
-Unreferenced attachments expire after 24 hours.
-After deletion, only attachment_id, session_id,
-status=DELETED, created_at, and deleted_at remain.
-The attachment tables never store chat_id; public
-responses project chat_id and never expose session_id.
+note over mate,db
+After deletion only file_id, session_id, status,
+created_at, and deleted_at remain.
 The ID is never issued again.
 end note
 @enduml

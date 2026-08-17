@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.28.0 |
+| 文档版本 | 1.29.0 |
 | 状态 | 目标设计，尚未实施 |
 | 接口评审状态 | 十一个 operation 均已确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
@@ -182,7 +182,8 @@ GetSession 当前不返回 `name`、`history_seq`、完整 `transcript`、
 `queuedSteer`、`phase`、`attached` 或 `locked`。用户可见会话名称属于
 mate-service 的 Chat 元数据；完成的 MessageEntry 由 GET Session Events API
 分页返回；active Message、open content、工具和执行阶段通过发起请求的 SSE
-实时观察；`attached` 是 pi 的连接相对状态，`locked` 是 live Runtime 的
+实时观察；`attached` 是 pi 的连接相对状态，`locked` 是 pi live Runtime 的
+进程内互斥状态，两者都不是可恢复的 Session 持久属性，因此不进入本接口。
 
 | 读取需求 | 负责接口 |
 |---|---|
@@ -263,7 +264,8 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 | `GET` | `/sessions/{session_id}/events` | 使用 `page/next_page` 分页读取权威持久化 Entry |
 
 公共契约不再包含 `run_id`、GetRun、Run Events、Run Abort 或 Run Steer。
-中止和运行中追加指导是否建模为新的 Session Event，留待各自逐项评审。
+中止和运行中追加指导已经分别确认为 Session 范围的 Abort、Steer 与 FollowUp
+operation，不创建公共执行资源，也不复用 POST Events 的请求体。
 CreateSession 和 GetSession 已同步删除旧模型遗留的公共执行指针。
 
 #### 2.2.1 已确认架构决策：执行不是公共 Run 资源
@@ -289,7 +291,7 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 | 断线恢复 | 从第一页查询持久化 Events 并去重，不重放 POST | 按 Session 事件流与历史恢复 |
 | 设计差异 | 请求范围内直接流式返回，保留产品自己的命名 | 发送与订阅是两个 HTTP 请求 |
 
-![HTTP 执行资源模型对比](http_execution_resource_model.svg)
+![Session Event、内部执行与 Entry 恢复边界](http_execution_resource_model.svg)
 
 [PlantUML 源码：`http_execution_resource_model`](diagram.puml#L940)
 
@@ -565,7 +567,7 @@ Message。CampusClaw 的 `entry_seq` 和 HTTP page 分页均为 target-only 服�
 
 ![HTTP Session Events 开放分页](http_session_event_list.svg)
 
-[PlantUML 源码：`http_session_event_list`](diagram.puml#L1028)
+[PlantUML 源码：`http_session_event_list`](diagram.puml#L992)
 
 ### 2.4 模型与 Session 配置
 
@@ -672,7 +674,7 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 
 ![HTTP Session 模型与深度思考配置](http_session_model_configuration.svg)
 
-[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1118)
+[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1082)
 
 ### 2.5 Session 执行控制（已确认）
 
@@ -911,8 +913,8 @@ operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑
 | `500` | `SESSION_ABORT_FAILED` | POST Abort | 取消、清空队列或 idle 收敛失败 |
 
 Abort 在 Session 已经 idle 时仍返回 `204`，不使用 `SESSION_NOT_RUNNING`。Steer 和
-FollowUp 的响应结果不确定时不得无条件重试，否则可能重复入队；本轮评审仍可决定
-是否引入业务幂等标识。
+FollowUp 的响应结果不确定时不得无条件重试，否则可能重复入队。已确认契约不提供
+业务幂等标识或 `Idempotency-Key`；调用方需要把不确定结果作为业务对账异常处理。
 
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
 `en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
@@ -1027,8 +1029,9 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 ## 8. 源码证据与差异分类
 
 本设计以 pi-mono 和 pi-mono-java 源码行为为实现证据，不再以已删除的
-WebSocket/AsyncAPI 目标草案为规范来源。本轮 HTTP 认证、事件和 Session 配置设计
-核对 pi-mono-java 基线
+HTML 主维护契约与本文是当前 Runtime HTTP 规范来源；已删除的 WebSocket、AsyncAPI
+和 OpenAPI 只能作为 Git 历史，不能作为实现输入。本轮 HTTP 认证、事件和 Session
+配置设计核对 pi-mono-java 基线
 `195746614096312d4e93afb029d387837db78e0b`。本轮资源模型比较还核对了
 Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 `managed-agents-2026-04-01` beta 契约。
@@ -1109,6 +1112,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.29.0 | 2026-08-18 | 全仓清理后补齐 GetSession 对 attached/locked 的完整边界；把 Steer/FollowUp/Abort 从旧“待评审”描述改为十一项已确认契约；明确控制消息不提供业务幂等键；同步 HTML 版本并清除主图中的 RunRecord、History 和 run_id 残留 |
 | 1.28.0 | 2026-08-18 | 用户明确批准废弃并删除过渡期 OpenAPI 1.7.1；当前契约权威收敛为 HTML 主维护文档与本文，不再维护第三份机器投影；未来如需机器契约必须从已确认内容重新生成并建立同步门禁，禁止恢复旧 YAML 继续修改 |
 | 1.27.0 | 2026-08-18 | 用户确认浏览器/UI 到 mate-service、mate-service 到 CampusClaw 两跳均统一为 HTTP+SSE；新增两跳独立认证和安全事件投影边界，删除旧 WebSocket 语义映射及 AsyncAPI 规范依赖；公共 mate-service 路径、VO、错误和 Event Schema 明确留待后续逐接口评审；过渡期 OpenAPI 内联旧外部 Schema 以保持可解析，但仍是滞后且非权威的 1.7.1 投影 |
 | 1.26.0 | 2026-08-17 | 用户确认 POST Steers、POST FollowUps 和 POST Abort 三个 Session 执行控制接口；保持 1.25.0 的 Session scope、原 POST Events SSE 观察、Steer/FollowUp `202` 和 Abort `204` 设计不变；明确 `202` 只返回 `session_id/accepted_at`，不新增控制 ID 或预分配 `entry_id`；十一个 HTTP operation 至此全部确认；OpenAPI 未更新 |

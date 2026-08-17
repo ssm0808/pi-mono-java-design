@@ -57,7 +57,7 @@ rectangle "Controlled Agent directory\ncase-sensitive file system\n<agent-runtim
 database "Agent metadata authority\nAgent model and binding policy" as AgentAuthority
 database "Tool Manager authority\nTool schema, status,\npermission and execution" as ToolManager
 database "Model Manager authority\nModel descriptor,\nallowlist and invocation" as ModelManager
-database "RuntimeSessionStore\nSession, Message, RunRecord,\nhistory sequence and revisions" as SessionStore
+database "RuntimeSessionStore\nSession, current-branch Entry,\ninternal execution state and revisions" as SessionStore
 
 AgentMetadata --> Validate
 SkillMetadata --> Validate
@@ -402,8 +402,8 @@ loop stream events
   Provider --> Loop : AssistantMessageEvent
 end
 
-alt explicit run abort
-  Client -> Loop : chat.abort(run_id)
+alt Session-scoped abort
+  Client -> Loop : POST /sessions/{session_id}/abort
   Loop -> Provider : cancel model subscription
   Provider -> ModelManager : close stream
 end
@@ -663,7 +663,7 @@ title CampusClaw GetSession Confirmed Response
 ' or an active Run recovery snapshot.
 ' Product constraint: CampusClaw exposes a boolean deep-thinking switch instead of effort levels.
 ' Architecture change: the confirmed response removes the former public active Run pointer.
-' Design reason: Session state is the coarse control-plane signal; Entry History and the
+' Design reason: Session state is the coarse control-plane signal; GET Session Events and the
 ' initiating POST stream own durable recovery and live execution detail.
 ' Target-only design: these wire-contract types are not existing pi-mono-java classes.
 
@@ -712,7 +712,7 @@ GetSessionResult --> "1" DeepThinkingSwitch : thinking
 note bottom of GetSessionResult
 This is the confirmed public Session resource.
 State is idle or running and carries no execution identity.
-History cursors and live progress belong to other operations.
+GET Session Events cursors and live progress belong to other operations.
 end note
 @enduml
 
@@ -788,7 +788,7 @@ alt existing live Session
   Worker -> Execution : ensure active execution is stopped
   Execution -> AgentSession : abort() if still active
   Worker -> SessionPool : remove and release runtime objects
-  Worker -> Store : purge History, internal execution state,\nand Session payload
+  Worker -> Store : purge Entries, internal execution state,\nand Session payload
   Store -> Store : retain session_id and deleted_at tombstone
   Worker -> Store : complete and delete cleanup work item
 else missing, deleting, or deleted
@@ -833,7 +833,7 @@ title CampusClaw Session Event Direct POST Stream
 ' one active in-memory execution. The Java HTTP handler already returns SSE from POST.
 ' Java divergence: the baseline aborts execution when the client cancels the SSE response.
 ' Target-only design: the public API persists MessageEntry records and has no public run ID.
-' Architecture change: a disconnected client does not abort accepted execution; History is
+' Architecture change: a disconnected client does not abort accepted execution; GET Session Events is
 ' the recovery source, and replaying the side-effecting POST is forbidden.
 ' Design reason: preserve direct streaming while separating transient message and tool
 ' execution progress from authoritative User, Assistant, and ToolResult entries.
@@ -932,31 +932,22 @@ end note
 
 note over Caller,Store
 This POST has no application idempotency key.
-After disconnect, do not replay it automatically; read History.
+After disconnect, do not replay it automatically; call GET Session Events.
 The accepted execution continues without the HTTP client.
 end note
 @enduml
 
 @startuml http_execution_resource_model
-title CampusClaw Execution Resource Model Decision Record
+title Session Event, Internal Execution, and Entry Recovery Boundary
 
 ' Source evidence verified on 2026-08-17:
 ' https://platform.claude.com/docs/en/managed-agents/events-and-streaming
 ' https://platform.claude.com/docs/en/managed-agents/sessions
-' https://platform.claude.com/docs/en/managed-agents/session-operations
-' https://platform.claude.com/docs/en/managed-agents/scheduled-deployments
-' Anthropic observed behavior: user.message events drive Session work; queued events have
-' processed_at=null; Session status and Session Events expose execution progress.
-' Anthropic observed behavior: Deployment Run tracks Session creation success or failure,
-' not the lifecycle of work inside the created Session.
-' CampusClaw target evidence:
-' chat-http-v1-design.md, section 2.2.1, execution resource model decision
-' chat-http-v1-design.md, confirmed Session Event and execution resource decisions
-' Target-only decision: neither pi baseline exposes this managed Session HTTP contract.
-' Design reason: use Session Entry history as the recovery unit and avoid a redundant
-' public run resource when callers only submit messages and observe Session output.
-' Confirmed later on 2026-08-17: Session Events replace the earlier public Run decision.
-' Architecture impact: the old active_run field was removed from CreateSession and GetSession.
+' pi-mono packages/coding-agent/src/core/session-manager.ts, getBranch and appendMessage
+' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java, startExecution
+' Observed behavior: both pi baselines rebuild conversation context from messages and entries.
+' Target-only decision: CampusClaw exposes Session Events and keeps execution identity internal.
+' Design reason: one public recovery model avoids duplicated lifecycle and cursor semantics.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -970,58 +961,31 @@ skinparam rectangle {
   BackgroundColor #F8FAFC
   FontColor #0F172A
 }
-skinparam package {
-  BorderColor #64748B
-  BackgroundColor #FFFFFF
-  FontColor #0F172A
-}
-skinparam note {
-  BackgroundColor #FFF7ED
-  BorderColor #C2410C
-  FontColor #7C2D12
-}
 
 actor Caller
-rectangle "One user input" as Input
+rectangle "POST /sessions/{id}/events\nuser.message and direct SSE" as SendEvent
+rectangle "ActiveExecution\ninternal Session state" as Execution
+rectangle "Transient Preview\nstarted, delta, tool lifecycle" as Preview
+rectangle "Persisted Entry\nentry_id and entry_seq" as Entry
+rectangle "GET /sessions/{id}/events\ncurrent-branch recovery" as GetEvents
+rectangle "Session Controls\nsteer, follow-up, abort" as Controls
 
-package "Selected: Session Events and Entry History" as CandidateA {
-  rectangle "POST /sessions/{id}/events\nuser.message + direct SSE" as SendEvent
-  rectangle "Internal active execution\nno public run_id" as Execution
-  rectangle "Transient message previews" as Preview
-  rectangle "Persisted MessageEntry\nentry_id + entry_seq" as Entry
-  rectangle "Session History recovery" as History
-}
-
-package "Superseded: caller-visible Run" as CandidateB {
-  rectangle "POST /sessions/{id}/runs" as CreateRun
-  rectangle "Run\nrun_id + frozen snapshot" as Run
-  rectangle "GetRun / Run Events" as RunObserve
-  rectangle "Abort / Steer by run_id" as RunControl
-  rectangle "Per-Run recovery and audit" as RunAudit
-}
-
-Caller --> Input
-Input --> SendEvent : selected contract
-SendEvent --> Execution : start one internal execution
+Caller --> SendEvent : submit one user input
+SendEvent --> Execution : accept and start
 Execution --> Preview : stream live progress
-Execution --> Entry : persist authoritative facts
-Entry --> History : recover after disconnect
+Execution --> Entry : commit authoritative facts
+Entry --> GetEvents : recover after disconnect
+Caller --> Controls : independent HTTP requests
+Controls --> Execution : queue or cancel
 
-Input ..> CreateRun : superseded design
-CreateRun --> Run
-Run --> RunObserve
-Run --> RunControl
-Run --> RunAudit
-
-note bottom of CandidateA
-Confirmed later on 2026-08-17.
-No public run_id or Run-scoped API.
-Direct POST SSE is a CampusClaw transport choice.
+note bottom of Execution
+Execution has no caller-visible identity.
+Session state is idle or running.
 end note
 
-note bottom of CandidateB
-The 1.15.0 public Run decision is superseded.
-It remains in version history only.
+note bottom of GetEvents
+Only user.message, assistant.message.completed,
+and tool.result are returned with opaque pagination.
 end note
 @enduml
 

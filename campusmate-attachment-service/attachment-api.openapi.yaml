@@ -1,65 +1,49 @@
 openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
-  title: CampusMate Attachment Service API
-  version: 2.0.0
+  title: CampusMate File Service API
+  version: 3.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
   description: |
-    CampusMate 中由 mate-service 承载的附件服务目标契约。
+    mate-service 文件服务目标契约。公共接口按 chat_id 鉴权，内部接口按
+    session_id 为 CampusClaw 解析文件。file_id 是唯一资源 ID，同时是私有
+    OBS 的完整 Object Key；不存在第二套文件资源 ID 或 Object Key 映射。
 
-    文件正文只保存到共享私有 OBS，Object Key 精确等于服务端生成的
-    attachment_id。openGauss 使用永久身份/状态主表和仅活动期明细表，
-    不保存第二套 Object Key 映射。所有上传和读取均为流式处理，不使用 Pod 本地文件
-    或完整内存副本。
-
-    公共接口只接受 Mate Chat 的 chat_id。mate-service 先鉴权 Chat，并从权威
-    Mate Chat Store 解析内部 session_id；公共请求和响应不披露 session_id。
-    t_attachment 与 t_attachment_active_detail 只保存 Runtime 绑定所需数据，
-    不保存 chat_id 或映射。内部 agent-service resolve/content 接口继续使用
-    session_id。
-
-    本文件是 target-only 设计，不表示现有 Java 服务已经实现这些端点。
-  contact:
-    name: CampusMate Platform
+    普通 JSON 成功响应使用 resCode/resMsg/result，异常响应仅使用
+    resCode/resMsg。二进制 content 响应不包装。JSON 字段使用 lowerCamelCase。
+    本契约是 target-only design，不表示现有 Java 服务已实现这些 operation。
 servers:
-  - url: https://api.example.com/mate-service
-    description: 生产网关示例；公共调用方只使用 HTTPS
-  - url: http://localhost:3000/mate-service
-    description: 本地开发示例
+  - url: https://{host}/mate-service
+    description: 部署网关；host 由环境配置
+    variables:
+      host:
+        default: api.campusmate.internal
 tags:
-  - name: Public attachments
-    description: CampusMate 客户端使用的上传、查询和删除接口
+  - name: Public files
+    description: CampusMate 客户端使用的 Chat 文件接口
   - name: Internal runtime
-    description: agent-service 使用的服务间解析和内容流接口
+    description: CampusClaw 使用的内部文件解析和内容流接口
 paths:
   /v1/chats/{chat_id}/attachments:
     post:
-      tags:
-        - Public attachments
-      operationId: uploadAttachment
-      summary: 流式上传单个附件
+      tags: [Public files]
+      operationId: uploadFile
+      summary: 流式上传单个文件
       description: |
-        验证调用用户和 Mate Chat，并从 Mate Chat Store 解析内部 session_id 后，
-        服务端生成 attachment_id，并将它原样作为
-        完整 OBS Object Key；openGauss 在一个事务中创建 UPLOADING 主表记录和
-        活动明细，再把唯一的 file part 直接流式写入 OBS。实际字节数必须与
-        X-Attachment-Size 完全一致；
-        OBS 只读取声明长度后，服务端仍必须验证 file part 已到 EOF。
-
-        OBS PUT 使用 create-only。若同名对象已经存在，服务端不得覆盖、删除
-        来源不明的对象或在不可重放的上传流中更换 ID；当前记录进入 FAILED，
-        活动明细写入 OBJECT_KEY_CONFLICT 并退出普通 24 小时清理，调用方收到
-        有界 503 后以新的上传请求取得新 ID。只有受审计对账确认对象归属并
-        安全删除或确认 NotFound 后，才删除明细并留下 DELETED tombstone。
-
-        省略 Prefer 或使用 respond-async 时，在 OBS 写入成功且状态提交为
-        PROCESSING 后返回 202。使用 wait=N 时最多等待 min(N, 10) 秒。
-        本契约每个请求只接受一个 Prefer 值。
+        验证 JWT 和 Chat 后解析内部 session_id，生成 file_id，并以该 ID
+        作为完整 OBS Object Key。上传使用 create-only，实际字节数必须与
+        X-File-Size 一致。省略 Prefer 或 respond-async 时在 PROCESSING
+        提交后返回 202；wait=N 最多等待 10 秒。
       security:
-        - CampusMateAccessToken: []
+        - CallerId: []
+          BearerJwt: []
       parameters:
         - $ref: '#/components/parameters/ChatId'
-        - $ref: '#/components/parameters/AttachmentSize'
+        - $ref: '#/components/parameters/FileSize'
         - $ref: '#/components/parameters/Prefer'
+        - $ref: '#/components/parameters/AcceptLanguage'
       requestBody:
         required: true
         content:
@@ -67,51 +51,45 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required:
-                - file
+              required: [file]
               properties:
                 file:
                   type: string
                   format: binary
-                  x-require-content-disposition-filename: true
                   description: |
-                    唯一文件 part。Content-Disposition 必须携带 filename；
-                    服务端进行 Unicode NFC 规范化并移除控制字符和路径分隔符，
-                    结果必须为 1..512 个 Unicode code point，否则返回 400。
-                    文件名只作为不可信显示名；Content-Type
-                    是不可信请求数据，本版不持久化，也不能替代服务端内容嗅探。
-                    只有扫描器产生的 detected media type 可以进入可信元数据。
+                    唯一 file part，必须携带 filename。服务端进行 NFC 规范化，
+                    清除控制字符和路径分隔符；调用方 Content-Type 不可信。
       responses:
         '201':
-          description: 在 wait 窗口内完成扫描，附件已经 READY
+          description: wait 窗口内完成扫描，文件已 READY
           headers:
             Location:
-              $ref: '#/components/headers/AttachmentLocation'
-            Preference-Applied:
-              $ref: '#/components/headers/PreferenceAppliedWait'
+              $ref: '#/components/headers/FileLocation'
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AttachmentResource'
+                $ref: '#/components/schemas/FileResourceResponse'
               examples:
                 ready:
-                  $ref: '#/components/examples/ReadyAttachment'
+                  $ref: '#/components/examples/ReadyFileResponse'
         '202':
-          description: 文件已经写入 OBS，扫描正在异步进行
+          description: 文件正文已持久化，正在异步扫描
           headers:
             Location:
-              $ref: '#/components/headers/AttachmentLocation'
+              $ref: '#/components/headers/FileLocation'
             Retry-After:
               $ref: '#/components/headers/RetryAfter'
-            Preference-Applied:
-              $ref: '#/components/headers/PreferenceApplied'
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AttachmentResource'
+                $ref: '#/components/schemas/FileResourceResponse'
               examples:
                 processing:
-                  $ref: '#/components/examples/ProcessingAttachment'
+                  $ref: '#/components/examples/ProcessingFileResponse'
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -121,139 +99,143 @@ paths:
         '404':
           $ref: '#/components/responses/ChatNotFound'
         '413':
-          $ref: '#/components/responses/AttachmentTooLarge'
+          $ref: '#/components/responses/FileTooLarge'
         '422':
-          $ref: '#/components/responses/AttachmentBlocked'
+          $ref: '#/components/responses/FileBlocked'
         '503':
-          $ref: '#/components/responses/AttachmentDependencyUnavailable'
-  /v1/chats/{chat_id}/attachments/{attachment_id}:
+          $ref: '#/components/responses/FileDependencyUnavailable'
+  /v1/chats/{chat_id}/attachments/{file_id}:
     get:
-      tags:
-        - Public attachments
-      operationId: getAttachment
-      summary: 查询附件状态
+      tags: [Public files]
+      operationId: getFile
+      summary: 查询文件状态
       description: |
-        返回当前 PROCESSING、READY、BLOCKED、FAILED、DELETING 或 DELETED
-        状态。当前 Chat 的授权调用方可以读取 DELETED tombstone 的公共投影，
-        用于确认异步删除已完成。公共响应返回 chat_id，不返回账本保存的
-        session_id；活动明细已被清除。响应不包含 OBS
-        Bucket、Endpoint、URL 或存储凭据。
+        返回当前文件的安全公共投影。公共响应包含 chatId，不包含内部
+        sessionId、OBS URL、Bucket、Endpoint 或凭据。
       security:
-        - CampusMateAccessToken: []
+        - CallerId: []
+          BearerJwt: []
       parameters:
         - $ref: '#/components/parameters/ChatId'
-        - $ref: '#/components/parameters/AttachmentId'
+        - $ref: '#/components/parameters/FileId'
+        - $ref: '#/components/parameters/AcceptLanguage'
       responses:
         '200':
-          description: 当前附件资源
+          description: 当前文件资源
+          headers:
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AttachmentResource'
+                $ref: '#/components/schemas/FileResourceResponse'
               examples:
                 ready:
-                  $ref: '#/components/examples/ReadyAttachment'
-                processing:
-                  $ref: '#/components/examples/ProcessingAttachment'
+                  $ref: '#/components/examples/ReadyFileResponse'
                 deleted:
-                  $ref: '#/components/examples/DeletedAttachment'
+                  $ref: '#/components/examples/DeletedFileResponse'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/PublicAttachmentNotFound'
+          $ref: '#/components/responses/PublicFileNotFound'
         '503':
-          $ref: '#/components/responses/AttachmentDependencyUnavailable'
+          $ref: '#/components/responses/FileDependencyUnavailable'
     delete:
-      tags:
-        - Public attachments
-      operationId: deleteAttachment
-      summary: 删除尚未被消息引用的附件
+      tags: [Public files]
+      operationId: deleteFile
+      summary: 异步删除未引用文件
       description: |
-        未引用附件被条件更新为 DELETING，由 Worker 异步删除 OBS 正文。
-        OBS 删除成功或返回 NotFound 后，一个数据库事务删除活动明细并把永久
-        主表更新为 DELETED/deleted_at。已引用附件不能单独删除。对 DELETING
-        或 DELETED 重复调用保持幂等。
-        `FAILED + OBJECT_KEY_CONFLICT` 是来源不明对象的隔离记录，公共 DELETE
-        不改变其状态并返回有界 503；只有受审计 reconciliation 确认归属并
-        安全删除或确认 NotFound 后，才能删除活动明细并收束 tombstone。
+        未引用文件进入 DELETING。OBS 删除成功或 NotFound 后删除活动明细并
+        留下永久 DELETED tombstone。已引用文件返回 FILE_REFERENCED。
+        对 DELETING 或 DELETED 重复调用保持幂等。
       security:
-        - CampusMateAccessToken: []
+        - CallerId: []
+          BearerJwt: []
       parameters:
         - $ref: '#/components/parameters/ChatId'
-        - $ref: '#/components/parameters/AttachmentId'
+        - $ref: '#/components/parameters/FileId'
+        - $ref: '#/components/parameters/AcceptLanguage'
       responses:
         '202':
-          description: 删除已经登记或此前已经登记
+          description: 删除已登记或此前已登记
           headers:
             Location:
-              $ref: '#/components/headers/AttachmentLocation'
+              $ref: '#/components/headers/FileLocation'
             Retry-After:
               $ref: '#/components/headers/RetryAfter'
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AttachmentResource'
+                $ref: '#/components/schemas/FileResourceResponse'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/PublicAttachmentNotFound'
+          $ref: '#/components/responses/PublicFileNotFound'
         '409':
-          $ref: '#/components/responses/AttachmentReferenced'
+          $ref: '#/components/responses/FileReferenced'
         '503':
-          $ref: '#/components/responses/AttachmentDependencyUnavailable'
-  /internal/v1/attachments:resolve:
+          $ref: '#/components/responses/FileDependencyUnavailable'
+  /internal/v1/files:resolve:
     post:
-      tags:
-        - Internal runtime
-      operationId: resolveAttachments
-      summary: 为一个 Runtime Session 原子解析附件集合
+      tags: [Internal runtime]
+      operationId: resolveFiles
+      summary: 为 Runtime Session 原子解析有序文件集合
       description: |
-        只允许 agent-service 的服务身份调用。Attachment Service 在一个短
-        openGauss 事务内校验全部 ID 都属于 session_id、状态为 READY、未删除
-        且未过期，然后原子保留首次 referenced_at 并清空 expires_at。
-        referenced_at 非空就是已引用状态，不保存重复的 referenced 布尔列。
-        任一项失败时整体回滚。不存在、跨 Session、
-        删除、过期或终态失败投影为 INVALID_ATTACHMENT；只有已确认当前
-        Session 归属的 UPLOADING/PROCESSING 才投影为 ATTACHMENT_NOT_READY。
+        只允许 CampusClaw 服务身份调用。JWT 模式使用 X-HW-ID +
+        Authorization，APPKEY 模式使用 X-HW-ID + X-HW-APPKEY；两组凭据
+        二选一，混用返回 AUTH_CREDENTIAL_CONFLICT，验证失败不得降级。
 
-        返回数组严格保持 attachment_ids 的请求顺序。attachment_id 同时是私有
-        Bucket 内的 Object Key，但不是访问能力；响应不包含 Bucket、Endpoint、
-        OBS URL 或凭据。
+        在一个短事务内校验全部 fileIds 属于 sessionId、状态 READY、未删除且
+        未过期，然后保留首次 referenced_at 并清空 expires_at。任一项失败
+        整体回滚。响应 files 严格保持请求顺序。
       security:
-        - AgentServiceAccessToken: []
+        - CallerId: []
+          BearerJwt: []
+        - CallerId: []
+          AppKey: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ResolveAttachmentsRequest'
+              $ref: '#/components/schemas/ResolveFilesRequest'
             examples:
-              oneAttachment:
+              oneFile:
                 value:
-                  session_id: 01ARZ3NDEKTSV4RRFFQ69G5FAV
-                  attachment_ids:
-                    - attachment_011CZm8VpK4rNs6WtY2hDqfB
+                  sessionId: session_01JY8X2E3R4T5Y6U7I8O9P0A1B
+                  fileIds:
+                    - file_01JY8X2E3R4T5Y6U7I8O9P0A1S
       responses:
         '200':
-          description: 全部附件已原子解析并写入首次 referenced_at
+          description: 全部文件已解析并原子建立首次引用
+          headers:
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResolveAttachmentsResponse'
+                $ref: '#/components/schemas/ResolveFilesResponse'
               examples:
                 resolved:
                   value:
-                    session_id: 01ARZ3NDEKTSV4RRFFQ69G5FAV
-                    attachments:
-                      - attachment_id: attachment_011CZm8VpK4rNs6WtY2hDqfB
-                        filename: orders.pdf
-                        media_type: application/pdf
-                        size_bytes: 182734
-                        sha256: 3b6f75a86ac2f94c6b20252a66f4d71a7b37b1f48e325ef1698025c813b31c5f
+                    resCode: '0'
+                    resMsg: success
+                    result:
+                      sessionId: session_01JY8X2E3R4T5Y6U7I8O9P0A1B
+                      files:
+                        - fileId: file_01JY8X2E3R4T5Y6U7I8O9P0A1S
+                          filename: orders.pdf
+                          mediaType: application/pdf
+                          sizeBytes: 182734
+                          sha256: 3b6f75a86ac2f94c6b20252a66f4d71a7b37b1f48e325ef1698025c813b31c5f
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -261,31 +243,33 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/InvalidAttachment'
+          $ref: '#/components/responses/InvalidFile'
         '409':
-          $ref: '#/components/responses/AttachmentNotReady'
+          $ref: '#/components/responses/FileNotReady'
         '503':
-          $ref: '#/components/responses/AttachmentDependencyUnavailable'
-  /internal/v1/sessions/{session_id}/attachments/{attachment_id}/content:
+          $ref: '#/components/responses/FileDependencyUnavailable'
+  /internal/v1/sessions/{session_id}/files/{file_id}/content:
     get:
-      tags:
-        - Internal runtime
-      operationId: streamAttachmentContent
-      summary: 向 agent-service 流式代理不可变附件正文
+      tags: [Internal runtime]
+      operationId: streamFileContent
+      summary: 向 CampusClaw 流式代理不可变文件正文
       description: |
-        只读取 READY 且 referenced_at 非空的活动明细。服务端校验主表和明细后，
-        直接把 attachment_id 作为完整 OBS Object Key 并流式代理正文；不创建
-        本地文件，也不聚合完整 byte 数组。调用方必须提供 resolve 返回的
-        SHA-256，并在接收时再次增量校验实际长度和摘要。
+        只读取 READY 且 referenced_at 非空的文件。mate-service 校验 Session
+        归属和期望 SHA-256 后，按 file_id 从 OBS 流式代理正文。二进制成功
+        响应不使用 ResultBean。
       security:
-        - AgentServiceAccessToken: []
+        - CallerId: []
+          BearerJwt: []
+        - CallerId: []
+          AppKey: []
       parameters:
         - $ref: '#/components/parameters/SessionId'
-        - $ref: '#/components/parameters/AttachmentId'
-        - $ref: '#/components/parameters/ExpectedAttachmentSha256'
+        - $ref: '#/components/parameters/FileId'
+        - $ref: '#/components/parameters/ExpectedFileSha256'
+        - $ref: '#/components/parameters/AcceptLanguage'
       responses:
         '200':
-          description: 附件原始字节流
+          description: 文件原始字节流，不使用 ResultBean
           headers:
             Content-Length:
               description: openGauss 账本中的可信实际字节数
@@ -295,7 +279,7 @@ paths:
                 format: int64
                 minimum: 1
                 maximum: 20971520
-            X-Attachment-SHA256:
+            X-File-SHA256:
               description: 与 resolve 快照相同的原始内容 SHA-256
               required: true
               schema:
@@ -310,601 +294,489 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/InvalidAttachment'
+          $ref: '#/components/responses/InvalidFile'
         '409':
-          $ref: '#/components/responses/AttachmentContentMismatch'
+          $ref: '#/components/responses/FileContentMismatch'
         '503':
-          $ref: '#/components/responses/AttachmentDependencyUnavailable'
+          $ref: '#/components/responses/FileDependencyUnavailable'
 components:
   securitySchemes:
-    CampusMateAccessToken:
+    CallerId:
+      type: apiKey
+      in: header
+      name: X-HW-ID
+      description: 公司调用方身份 Header；必须与一种凭据 Header 同时出现。
+    BearerJwt:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: |
-        CampusMate 现有用户认证生成的短期访问令牌。具体 Header claim 和
-        签名配置属于私有部署契约，不在本专题复制。
-    AgentServiceAccessToken:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: |
-        agent-service 面向 mate-service 的短期 service-to-service access token。
-        不能复用入站用户令牌或 OBS 长期凭据。
+      description: 首选公司 JWT 凭据。验证 claim、签名、issuer 和 audience。
+    AppKey:
+      type: apiKey
+      in: header
+      name: X-HW-APPKEY
+      description: 仅内部 operation 兼容的公司 APPKEY/私钥凭据。
   parameters:
     ChatId:
       name: chat_id
       in: path
       required: true
-      description: |
-        mate-service 签发的业务 Chat ID。Attachment Service 将它视为不透明值，
-        使用当前认证上下文在 Mate Chat Store 中鉴权并解析内部 session_id；
-        该值不写入附件表。
+      description: mate-service 管理的业务 Chat ID。
       schema:
         $ref: '#/components/schemas/ChatId'
     SessionId:
       name: session_id
       in: path
       required: true
-      description: |
-        仅供内部 agent-service 接口使用、在 Runtime 部署范围内全局唯一且删除后
-        不复用的 Session ID。公共附件接口不得接受或披露该值。
+      description: 仅供内部 Runtime API 使用的 CampusClaw Session ID。
       schema:
         $ref: '#/components/schemas/SessionId'
-    AttachmentId:
-      name: attachment_id
+    FileId:
+      name: file_id
       in: path
       required: true
-      description: Attachment Service 签发的大小写敏感不透明 ID。
+      description: 文件服务签发的大小写敏感不透明 ID。
       schema:
-        $ref: '#/components/schemas/AttachmentId'
-    AttachmentSize:
-      name: X-Attachment-Size
+        $ref: '#/components/schemas/FileId'
+    FileSize:
+      name: X-File-Size
       in: header
       required: true
-      description: |
-        file part 的准确字节数，不是 multipart HTTP Body 的 Content-Length。
-        服务端用实际计数流复核该值。
+      description: file part 的准确字节数，不是 multipart HTTP Body 长度。
       schema:
         type: integer
         format: int64
         minimum: 1
         maximum: 20971520
-      example: 182734
     Prefer:
       name: Prefer
       in: header
       required: false
-      description: |
-        RFC 7240 客户端响应偏好。本契约每次请求只接受 respond-async 或 wait=N
-        其中一个值；N 为最多 10 位的非负十进制秒数，实际等待上限为 10 秒。
-        省略时默认异步。
+      description: 仅接受 respond-async 或 wait=N；服务端等待上限为 10 秒。
       schema:
         type: string
         maxLength: 16
         pattern: '^(respond-async|wait=(0|[1-9][0-9]{0,9}))$'
-      examples:
-        asynchronous:
-          value: respond-async
-        waitUpToTenSeconds:
-          value: wait=30
-    ExpectedAttachmentSha256:
-      name: X-Expected-Attachment-SHA256
+    ExpectedFileSha256:
+      name: X-Expected-File-SHA256
       in: header
       required: true
-      description: resolve 或历史快照中的原始内容 SHA-256。
+      description: resolve 或持久化 Entry 快照中的原始内容 SHA-256。
       schema:
         $ref: '#/components/schemas/Sha256'
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      required: false
+      description: 错误消息期望语言；至少支持 zh-CN 与 en-US。
+      schema:
+        type: string
+        maxLength: 128
   headers:
-    AttachmentLocation:
-      description: 当前附件状态资源的绝对或相对 URL
+    FileLocation:
+      description: 当前文件状态资源的绝对或相对 URL
       required: true
       schema:
         type: string
         format: uri-reference
-      example: /mate-service/v1/chats/chat_011CZm8VpK4rNs6WtY2hDqfB/attachments/attachment_011CZm8VpK4rNs6WtY2hDqfB
-    AttachmentLocationIfCreated:
-      description: |
-        只在上传已创建持久附件资源时返回的状态 URL。如果失败发生在
-        可用资源建立之前，该 Header 省略。
-      schema:
-        type: string
-        format: uri-reference
+      example: /mate-service/v1/chats/chat_01JY8X2E3R4T5Y6U7I8O9P0A1C/attachments/file_01JY8X2E3R4T5Y6U7I8O9P0A1S
     RetryAfter:
       description: 建议再次查询状态前等待的秒数
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 60
+      example: 2
+    ContentLanguage:
+      description: resMsg 实际使用的语言
       required: true
       schema:
-        type: integer
-        minimum: 1
-        maximum: 60
-      example: 2
-    RetryAfterIfRetryable:
-      description: 仅在 retryable=true 时返回的建议重试秒数
-      required: false
-      schema:
-        type: integer
-        minimum: 1
-        maximum: 60
-      example: 2
-    PreferenceApplied:
-      description: |
-        服务端采用的 RFC 7240 偏好。省略 Prefer 时可以不返回；
-        wait=N 回显服务端实际采用的 min(N, 10)。
-      schema:
         type: string
-        pattern: '^(respond-async|wait=([0-9]|10))$'
-    PreferenceAppliedWait:
-      description: 服务端采用的 RFC 7240 wait 偏好
-      schema:
-        type: string
-        pattern: '^wait=([0-9]|10)$'
-      example: wait=10
+        enum: [zh-CN, en-US]
   responses:
     InvalidRequest:
-      description: 请求结构、multipart、Prefer、长度声明或实际长度无效
+      description: 请求结构、Header、multipart 或实际长度无效
+      headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
       content:
-        application/problem+json:
+        application/json:
           schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            code: ATTACHMENT_SIZE_MISMATCH
-            message: Actual file size does not match X-Attachment-Size.
-            retryable: false
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            zhCN:
+              value:
+                resCode: INVALID_REQUEST
+                resMsg: 请求参数无效。
+            enUS:
+              value:
+                resCode: INVALID_REQUEST
+                resMsg: The request is invalid.
     Unauthenticated:
-      description: 缺少或无法验证访问令牌
+      description: 凭据缺失、无效或 JWT/APPKEY 混用
+      headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
       content:
-        application/problem+json:
+        application/json:
           schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            code: UNAUTHENTICATED
-            message: Authentication is required.
-            retryable: false
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            unauthenticated:
+              value:
+                resCode: UNAUTHENTICATED
+                resMsg: Authentication is required.
+            credentialConflict:
+              value:
+                resCode: AUTH_CREDENTIAL_CONFLICT
+                resMsg: JWT and APPKEY credentials cannot be used together.
     Forbidden:
-      description: 已认证身份不允许调用该接口
+      description: 已认证身份无权调用
+      headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
       content:
-        application/problem+json:
+        application/json:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorResponse'
           example:
-            code: FORBIDDEN
-            message: The caller is not allowed to perform this operation.
-            retryable: false
+            resCode: FORBIDDEN
+            resMsg: The caller is not allowed to perform this operation.
     ChatNotFound:
-      description: Chat 不存在、当前用户无权访问或没有有效 Runtime Session 映射
+      description: Chat 不存在、不可见或没有有效 Session 映射
+      headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
       content:
-        application/problem+json:
+        application/json:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorResponse'
           example:
-            code: CHAT_NOT_FOUND
-            message: The chat was not found.
-            retryable: false
-    PublicAttachmentNotFound:
-      description: |
-        Chat 不存在、无权访问或没有有效 Runtime Session 映射时返回
-        CHAT_NOT_FOUND；Chat 已授权但附件不存在、不属于其内部 Session 或不可见时
-        返回 INVALID_ATTACHMENT。两种响应均不披露 session_id。
+            resCode: CHAT_NOT_FOUND
+            resMsg: The chat was not found.
+    PublicFileNotFound:
+      description: Chat 或文件不可见的非泄露响应
+      headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
       content:
-        application/problem+json:
+        application/json:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorResponse'
           examples:
             chatNotFound:
               value:
-                code: CHAT_NOT_FOUND
-                message: The chat was not found.
-                retryable: false
-            invalidAttachment:
+                resCode: CHAT_NOT_FOUND
+                resMsg: The chat was not found.
+            invalidFile:
               value:
-                code: INVALID_ATTACHMENT
-                message: The attachment is not available for this chat.
-                retryable: false
-    InvalidAttachment:
-      description: |
-        附件不存在、跨 Session、过期或对当前调用方不可见的统一非泄露响应。
-        Runtime resolve/content 还会把已删除、BLOCKED 和 FAILED 记录投影为该错误。
+                resCode: INVALID_FILE
+                resMsg: The file is not available for this chat.
+    InvalidFile:
+      description: 文件不存在、跨 Session、过期、删除或不可用
+      headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
       content:
-        application/problem+json:
+        application/json:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorResponse'
           example:
-            code: INVALID_ATTACHMENT
-            message: The attachment is not available for this session.
-            retryable: false
-    AttachmentTooLarge:
+            resCode: INVALID_FILE
+            resMsg: The file is not available for this session.
+    FileTooLarge:
       description: 声明或实际大小超过 20 MiB
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            code: ATTACHMENT_TOO_LARGE
-            message: The attachment exceeds the 20 MiB limit.
-            retryable: false
-    AttachmentBlocked:
-      description: 在 wait 窗口内确认安全扫描拒绝该文件
       headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            resCode: FILE_TOO_LARGE
+            resMsg: The file exceeds the 20 MiB limit.
+    FileBlocked:
+      description: 安全扫描拒绝该文件
+      headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
         Location:
-          $ref: '#/components/headers/AttachmentLocation'
-        Preference-Applied:
-          $ref: '#/components/headers/PreferenceApplied'
+          $ref: '#/components/headers/FileLocation'
       content:
-        application/problem+json:
+        application/json:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorResponse'
           example:
-            code: ATTACHMENT_BLOCKED
-            message: The attachment was rejected by the content security policy.
-            retryable: false
-    AttachmentReferenced:
-      description: 附件已经进入对应 Runtime Session 消息历史，不能单独删除
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            code: ATTACHMENT_REFERENCED
-            message: Delete the chat to remove a referenced attachment.
-            retryable: false
-    AttachmentNotReady:
-      description: 已授权附件仍在上传或处理
+            resCode: FILE_BLOCKED
+            resMsg: The file was rejected by the content security policy.
+    FileReferenced:
+      description: 文件已经进入 Session Entry，不能单独删除
       headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            resCode: FILE_REFERENCED
+            resMsg: Delete the chat to remove a referenced file.
+    FileNotReady:
+      description: 已授权文件仍在上传或处理
+      headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
         Retry-After:
           $ref: '#/components/headers/RetryAfter'
       content:
-        application/problem+json:
+        application/json:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ErrorResponse'
           example:
-            code: ATTACHMENT_NOT_READY
-            message: The attachment is still being processed.
-            retryable: true
-            retry_after_ms: 2000
-    AttachmentContentMismatch:
+            resCode: FILE_NOT_READY
+            resMsg: The file is still being processed.
+    FileContentMismatch:
       description: 期望 SHA-256 与权威账本不一致
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            code: ATTACHMENT_CONTENT_MISMATCH
-            message: The requested content digest does not match the attachment.
-            retryable: false
-    AttachmentDependencyUnavailable:
-      description: |
-        当前请求的 openGauss/OBS 依赖不可用，或 wait 窗口内附件已
-        进入终态 FAILED。若上传已稳定进入 PROCESSING，只是后台扫描器
-        暂时不可用，则保持 PROCESSING 并返回 202，不使用本终态响应。
-        `OBJECT_KEY_CONFLICT` 也使用该非泄露 HTTP 投影，但 retryable=false，
-        同一 ID 只能等待受审计对账；上传方应发起新的上传请求取得新 ID。
       headers:
-        Retry-After:
-          $ref: '#/components/headers/RetryAfterIfRetryable'
-        Location:
-          $ref: '#/components/headers/AttachmentLocationIfCreated'
-        Preference-Applied:
-          $ref: '#/components/headers/PreferenceApplied'
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
       content:
-        application/problem+json:
+        application/json:
           schema:
-            $ref: '#/components/schemas/Error'
-          examples:
-            temporarilyUnavailable:
-              value:
-                code: ATTACHMENT_STORAGE_UNAVAILABLE
-                message: Attachment storage is temporarily unavailable.
-                retryable: true
-                retry_after_ms: 2000
-            quarantinedObjectKeyConflict:
-              value:
-                code: ATTACHMENT_STORAGE_UNAVAILABLE
-                message: Attachment storage requires integrity reconciliation.
-                retryable: false
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            resCode: FILE_CONTENT_MISMATCH
+            resMsg: The requested content digest does not match the file.
+    FileDependencyUnavailable:
+      description: openGauss、OBS 或处理依赖暂时不可用
+      headers:
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            resCode: FILE_STORAGE_UNAVAILABLE
+            resMsg: File storage is temporarily unavailable.
   schemas:
     ChatId:
       type: string
       minLength: 1
       maxLength: 128
       pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
-      description: |
-        mate-service 管理的不透明业务 Chat ID。其签发规则由 Mate Chat 契约负责；
-        Attachment Service 只校验安全的路径段语法并通过 Mate Chat Store 鉴权解析。
-      examples:
-        - chat_011CZm8VpK4rNs6WtY2hDqfB
+      examples: [chat_01JY8X2E3R4T5Y6U7I8O9P0A1C]
     SessionId:
       type: string
       minLength: 1
       maxLength: 128
       pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
-      description: 与 CampusAgent Runtime WebSocket SessionId 契约一致，不接受冒号或路径分隔符。
-      examples:
-        - 01ARZ3NDEKTSV4RRFFQ69G5FAV
-    AttachmentId:
+      examples: [session_01JY8X2E3R4T5Y6U7I8O9P0A1B]
+    FileId:
       type: string
-      minLength: 35
-      maxLength: 35
-      pattern: '^attachment_[0-9A-Za-z]{24}$'
-      description: 大小写敏感，删除后也不得复用。
-      examples:
-        - attachment_011CZm8VpK4rNs6WtY2hDqfB
-    AttachmentStatus:
+      minLength: 31
+      maxLength: 31
+      pattern: '^file_[0-9A-Za-z]{26}$'
+      description: 大小写敏感；删除后永久不得复用。
+      examples: [file_01JY8X2E3R4T5Y6U7I8O9P0A1S]
+    FileStatus:
       type: string
-      description: |
-        常规扫描只从 PROCESSING 进入 READY、BLOCKED 或 FAILED。
-        已 READY 内容在后续安全撤销时可由特权控制面转为 BLOCKED；
-        转换后立即拒绝新的 resolve/content，不会撤回已经交给模型的字节。
-      enum:
-        - UPLOADING
-        - PROCESSING
-        - READY
-        - BLOCKED
-        - FAILED
-        - DELETING
-        - DELETED
+      enum: [UPLOADING, PROCESSING, READY, BLOCKED, FAILED, DELETING, DELETED]
     Sha256:
       type: string
       minLength: 64
       maxLength: 64
       pattern: '^[0-9a-f]{64}$'
-      examples:
-        - 3b6f75a86ac2f94c6b20252a66f4d71a7b37b1f48e325ef1698025c813b31c5f
-    MediaType:
-      type: string
-      minLength: 3
-      maxLength: 127
-      pattern: '^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$'
-      description: 无参数且使用 Locale.ROOT 规范化为小写的 MIME type/subtype。
-      examples:
-        - application/pdf
     DisplayFilename:
       type: string
       minLength: 1
       maxLength: 512
       pattern: '^[^\x00-\x1F\x7F/\\]+$'
-      description: |
-        服务端清除控制字符和路径分隔符后的显示名。调用方渲染时仍须转义。
-    AttachmentResource:
-      description: |
-        面向公共 Chat API 的附件投影。活动附件返回运行元数据；DELETED 返回
-        tombstone 的安全投影。两者都包含 chat_id 且不包含内部 session_id。
-      oneOf:
-        - $ref: '#/components/schemas/ActiveAttachmentResource'
-        - $ref: '#/components/schemas/DeletedAttachmentResource'
-    ActiveAttachmentStatus:
+    MediaType:
       type: string
-      enum:
-        - UPLOADING
-        - PROCESSING
-        - READY
-        - BLOCKED
-        - FAILED
-        - DELETING
-    ActiveAttachmentResource:
+      minLength: 3
+      maxLength: 127
+      pattern: '^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$'
+    FileResource:
       type: object
       additionalProperties: false
-      required:
-        - attachment_id
-        - chat_id
-        - status
-        - filename
-        - expected_size_bytes
-        - created_at
+      required: [fileId, chatId, status, createdAt]
       properties:
-        attachment_id:
-          $ref: '#/components/schemas/AttachmentId'
-        chat_id:
+        fileId:
+          $ref: '#/components/schemas/FileId'
+        chatId:
           $ref: '#/components/schemas/ChatId'
         status:
-          $ref: '#/components/schemas/ActiveAttachmentStatus'
+          $ref: '#/components/schemas/FileStatus'
         filename:
           $ref: '#/components/schemas/DisplayFilename'
-        media_type:
+        mediaType:
           $ref: '#/components/schemas/MediaType'
-          description: 只有内容嗅探完成后才出现的可信 detected media type。
-        expected_size_bytes:
+        expectedSizeBytes:
           type: integer
           format: int64
           minimum: 1
           maximum: 20971520
-        size_bytes:
+        sizeBytes:
           type: integer
           format: int64
           minimum: 1
           maximum: 20971520
         sha256:
           $ref: '#/components/schemas/Sha256'
-        referenced_at:
+        referencedAt:
           type: string
           format: date-time
-          description: 出现即表示已经被当前 Session 引用；值为首次成功 resolve 时间。
-        expires_at:
+        expiresAt:
           type: string
           format: date-time
-          description: 只在尚未引用时出现，用于 24 小时自动清理。
-        error_code:
+        errorCode:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]{0,63}$'
+        createdAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+    FileResourceResponse:
+      type: object
+      additionalProperties: false
+      required: [resCode, resMsg, result]
+      properties:
+        resCode:
+          type: string
+          const: '0'
+        resMsg:
           type: string
           minLength: 1
-          maxLength: 64
-          pattern: '^[A-Z][A-Z0-9_]{0,63}$'
-        created_at:
-          type: string
-          format: date-time
-      allOf:
-        - if:
-            properties:
-              status:
-                const: READY
-            required:
-              - status
-          then:
-            required:
-              - media_type
-              - size_bytes
-              - sha256
-      oneOf:
-        - required:
-            - referenced_at
-          not:
-            required:
-              - expires_at
-        - required:
-            - expires_at
-          not:
-            required:
-              - referenced_at
-    DeletedAttachmentResource:
+          maxLength: 512
+        result:
+          $ref: '#/components/schemas/FileResource'
+    ResolveFilesRequest:
       type: object
       additionalProperties: false
-      required:
-        - attachment_id
-        - chat_id
-        - status
-        - created_at
-        - deleted_at
+      required: [sessionId, fileIds]
       properties:
-        attachment_id:
-          $ref: '#/components/schemas/AttachmentId'
-        chat_id:
-          $ref: '#/components/schemas/ChatId'
-        status:
-          type: string
-          const: DELETED
-        created_at:
-          type: string
-          format: date-time
-        deleted_at:
-          type: string
-          format: date-time
-    ResolveAttachmentsRequest:
-      type: object
-      additionalProperties: false
-      required:
-        - session_id
-        - attachment_ids
-      properties:
-        session_id:
+        sessionId:
           $ref: '#/components/schemas/SessionId'
-        attachment_ids:
+        fileIds:
           type: array
           minItems: 1
           maxItems: 32
           uniqueItems: true
-          description: 顺序有语义，响应 attachments 必须保持相同顺序。
           items:
-            $ref: '#/components/schemas/AttachmentId'
-    ResolvedAttachment:
+            $ref: '#/components/schemas/FileId'
+    ResolvedFile:
       type: object
       additionalProperties: false
-      required:
-        - attachment_id
-        - filename
-        - media_type
-        - size_bytes
-        - sha256
+      required: [fileId, filename, mediaType, sizeBytes, sha256]
       properties:
-        attachment_id:
-          $ref: '#/components/schemas/AttachmentId'
+        fileId:
+          $ref: '#/components/schemas/FileId'
         filename:
           $ref: '#/components/schemas/DisplayFilename'
-        media_type:
+        mediaType:
           $ref: '#/components/schemas/MediaType'
-        size_bytes:
+        sizeBytes:
           type: integer
           format: int64
           minimum: 1
           maximum: 20971520
         sha256:
           $ref: '#/components/schemas/Sha256'
-    ResolveAttachmentsResponse:
+    ResolvedFilesResult:
       type: object
       additionalProperties: false
-      required:
-        - session_id
-        - attachments
+      required: [sessionId, files]
       properties:
-        session_id:
+        sessionId:
           $ref: '#/components/schemas/SessionId'
-        attachments:
+        files:
           type: array
           minItems: 1
           maxItems: 32
           items:
-            $ref: '#/components/schemas/ResolvedAttachment'
-    ErrorDetailValue:
-      oneOf:
-        - type: string
-          maxLength: 1024
-        - type: integer
-        - type: number
-        - type: boolean
-    Error:
+            $ref: '#/components/schemas/ResolvedFile'
+    ResolveFilesResponse:
       type: object
       additionalProperties: false
-      required:
-        - code
-        - message
-        - retryable
+      required: [resCode, resMsg, result]
       properties:
-        code:
+        resCode:
+          type: string
+          const: '0'
+        resMsg:
+          type: string
+          minLength: 1
+          maxLength: 512
+        result:
+          $ref: '#/components/schemas/ResolvedFilesResult'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [resCode, resMsg]
+      properties:
+        resCode:
           type: string
           enum:
             - INVALID_REQUEST
             - UNAUTHENTICATED
+            - AUTH_CREDENTIAL_CONFLICT
             - FORBIDDEN
             - CHAT_NOT_FOUND
-            - INVALID_ATTACHMENT
-            - ATTACHMENT_TOO_LARGE
-            - ATTACHMENT_SIZE_MISMATCH
-            - ATTACHMENT_NOT_READY
-            - ATTACHMENT_BLOCKED
-            - ATTACHMENT_REFERENCED
-            - ATTACHMENT_CONTENT_MISMATCH
-            - ATTACHMENT_STORAGE_UNAVAILABLE
-            - ATTACHMENT_SCAN_UNAVAILABLE
-        message:
+            - INVALID_FILE
+            - FILE_TOO_LARGE
+            - FILE_SIZE_MISMATCH
+            - FILE_NOT_READY
+            - FILE_BLOCKED
+            - FILE_REFERENCED
+            - FILE_CONTENT_MISMATCH
+            - FILE_STORAGE_UNAVAILABLE
+        resMsg:
           type: string
           minLength: 1
           maxLength: 512
-        retryable:
-          type: boolean
-        retry_after_ms:
-          type: integer
-          minimum: 1
-          maximum: 60000
-        details:
-          type: object
-          maxProperties: 16
-          additionalProperties:
-            $ref: '#/components/schemas/ErrorDetailValue'
   examples:
-    ProcessingAttachment:
+    ProcessingFileResponse:
       value:
-        attachment_id: attachment_011CZm8VpK4rNs6WtY2hDqfB
-        chat_id: chat_011CZm8VpK4rNs6WtY2hDqfB
-        status: PROCESSING
-        filename: orders.pdf
-        expected_size_bytes: 182734
-        size_bytes: 182734
-        sha256: 3b6f75a86ac2f94c6b20252a66f4d71a7b37b1f48e325ef1698025c813b31c5f
-        expires_at: '2026-08-04T10:00:00.000Z'
-        created_at: '2026-08-03T10:00:00.000Z'
-    ReadyAttachment:
+        resCode: '0'
+        resMsg: success
+        result:
+          fileId: file_01JY8X2E3R4T5Y6U7I8O9P0A1S
+          chatId: chat_01JY8X2E3R4T5Y6U7I8O9P0A1C
+          status: PROCESSING
+          filename: orders.pdf
+          expectedSizeBytes: 182734
+          sizeBytes: 182734
+          sha256: 3b6f75a86ac2f94c6b20252a66f4d71a7b37b1f48e325ef1698025c813b31c5f
+          expiresAt: '2026-08-19T10:00:00.000Z'
+          createdAt: '2026-08-18T10:00:00.000Z'
+    ReadyFileResponse:
       value:
-        attachment_id: attachment_011CZm8VpK4rNs6WtY2hDqfB
-        chat_id: chat_011CZm8VpK4rNs6WtY2hDqfB
-        status: READY
-        filename: orders.pdf
-        media_type: application/pdf
-        expected_size_bytes: 182734
-        size_bytes: 182734
-        sha256: 3b6f75a86ac2f94c6b20252a66f4d71a7b37b1f48e325ef1698025c813b31c5f
-        expires_at: '2026-08-04T10:00:00.000Z'
-        created_at: '2026-08-03T10:00:00.000Z'
-    DeletedAttachment:
+        resCode: '0'
+        resMsg: success
+        result:
+          fileId: file_01JY8X2E3R4T5Y6U7I8O9P0A1S
+          chatId: chat_01JY8X2E3R4T5Y6U7I8O9P0A1C
+          status: READY
+          filename: orders.pdf
+          mediaType: application/pdf
+          expectedSizeBytes: 182734
+          sizeBytes: 182734
+          sha256: 3b6f75a86ac2f94c6b20252a66f4d71a7b37b1f48e325ef1698025c813b31c5f
+          expiresAt: '2026-08-19T10:00:00.000Z'
+          createdAt: '2026-08-18T10:00:00.000Z'
+    DeletedFileResponse:
       value:
-        attachment_id: attachment_011CZm8VpK4rNs6WtY2hDqfB
-        chat_id: chat_011CZm8VpK4rNs6WtY2hDqfB
-        status: DELETED
-        created_at: '2026-08-03T10:00:00.000Z'
-        deleted_at: '2026-08-04T11:30:00.000Z'
+        resCode: '0'
+        resMsg: success
+        result:
+          fileId: file_01JY8X2E3R4T5Y6U7I8O9P0A1S
+          chatId: chat_01JY8X2E3R4T5Y6U7I8O9P0A1C
+          status: DELETED
+          createdAt: '2026-08-18T10:00:00.000Z'
+          deletedAt: '2026-08-18T11:30:00.000Z'

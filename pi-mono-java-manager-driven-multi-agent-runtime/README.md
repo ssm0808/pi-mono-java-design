@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.1.0 |
+| 文档版本 | 2.2.0 |
 | 状态 | 目标设计，尚未实施 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
-| 设计仓分析基线 | `aac09b0371045f13edffa0cf35be73105585fbbb` |
+| 设计仓分析基线 | `2b747808e93609a4fc71d919dbd72bcd56a6e502` |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 源码基线 | `195746614096312d4e93afb029d387837db78e0b` |
 | 更新日期 | 2026-08-18 |
@@ -255,7 +255,7 @@ RuntimeSessionStore 保存 Session 配置、当前分支 Entry、内部执行状
 模式详见 [`Agent 数据库模式`](../agent-database-patterns/README.md)。
 
 文件上传、扫描、OBS 正文、openGauss 元数据和删除生命周期属于独立文件服务，
-详见 [`CampusMate Attachment Service`](../campusmate-attachment-service/README.md)。
+详见 [`CampusMate 文件服务`](../campusmate-attachment-service/README.md)。
 CampusClaw 只消费有序 `file_ids`，通过内部受权 resolve/content 接口取得可信
 元数据和有界内容，不直连 OBS，也不把文件名、URL、MIME 或 Object Key 当作调用方
 可伪造的 Session Event 字段。
@@ -291,6 +291,7 @@ CampusClaw 只消费有序 `file_ids`，通过内部受权 resolve/content 接�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.2.0 | 2026-08-18 | 全仓清理 WebSocket、公开 Run 和重复历史专题；Runtime HTTP 契约同步到 1.29.0；并发治理统一为内部 ActiveExecution，模板专题统一为 exact revision；文件服务统一使用 file_id、ResultBean、lowerCamelCase 和公司双鉴权边界 |
 | 2.1.0 | 2026-08-18 | 用户明确批准废弃并删除过渡期 OpenAPI；契约权威收敛为 HTML 主维护文档与 Markdown 设计依据，禁止从历史 OpenAPI 恢复旧 Run 模型；增加仓库内 HTML-first 契约校验入口 |
 | 2.0.0 | 2026-08-18 | 用户确认 mate-service 公共和 CampusClaw 内部两跳均统一为 HTTP+SSE；删除旧 WebSocket/AsyncAPI 规范，重写当前架构入口并明确公共 mate-service HTTP 字段仍待逐项评审 |
 | 1.20.0 | 2026-08-17 | 历史版本开始将内部 Runtime 交互从显式 Run 调整为 Session Event 直连 SSE |
