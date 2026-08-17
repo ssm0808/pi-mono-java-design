@@ -1694,7 +1694,7 @@ end note
 @enduml
 
 @startuml http_session_model_configuration
-title HTTP Session Model and Deep-Thinking Configuration
+title HTTP Session Model and Deep-Thinking Confirmed Configuration
 
 ' Source evidence (pi-mono commit 086c32e74530564922d011ade23ff582c9d63116):
 ' packages/coding-agent/src/core/agent-session.ts, setModel and setThinkingLevel,
@@ -1709,7 +1709,7 @@ title HTTP Session Model and Deep-Thinking Configuration
 ' modules/ai/src/main/java/com/campusclaw/ai/types/ThinkingLevel.java, lines 16-42
 ' Observed behavior: both pi baselines can list models and change the active model.
 ' Their thinkingLevel values control model reasoning effort.
-' Product constraint: HTTP thinking is a boolean deep-thinking switch; false maps to off,
+' Confirmed product constraint: HTTP thinking is a boolean deep-thinking switch; false maps to off,
 ' while true maps to a managed non-off level supported by the current model and Agent.
 ' Security hardening: model discovery is Session-scoped and exposes only model_id;
 ' raw reasoning content is never enabled by the public deep-thinking switch.
