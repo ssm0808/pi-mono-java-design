@@ -1066,8 +1066,8 @@ note over API,Pool
 Before commit, any failure discards the in-memory Session
 and does not expose session_id.
 After commit, state is idle and no MessageEntry exists.
-The previously confirmed active_run field is pending review
-because the public Run resource was superseded.
+The response contains only Session identity, current defaults,
+coarse state, and creation time.
 end note
 
 note over Mate,API
@@ -1224,7 +1224,7 @@ end note
 @enduml
 
 @startuml http_get_session_response
-title CampusClaw GetSession Previous Response Snapshot
+title CampusClaw GetSession Confirmed Response
 
 ' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
 ' packages/protocol/src/schemas.ts, ThinkingLevelSchema, lines 26-35
@@ -1240,10 +1240,9 @@ title CampusClaw GetSession Previous Response Snapshot
 ' Observed behavior: Anthropic exposes a control-plane Session resource without transcript
 ' or an active Run recovery snapshot.
 ' Product constraint: the confirmed CampusClaw thinking field is disclosure visibility.
-' Superseded design: GetSession exposed an active Run pointer under the former public Run model.
-' Architecture change: Session Events have no public run ID, so activeRun must be revisited.
-' Design reason: preserve the previously confirmed snapshot without claiming that its
-' activeRun field remains compatible with the selected Session Event resource model.
+' Architecture change: the confirmed response removes the former public active Run pointer.
+' Design reason: Session state is the coarse control-plane signal; Entry History and the
+' initiating POST stream own durable recovery and live execution detail.
 ' Target-only design: these wire-contract types are not existing pi-mono-java classes.
 
 left to right direction
@@ -1275,17 +1274,8 @@ class GetSessionResult <<target_wire_contract>> {
   +updatedAt: timestamp
 }
 
-class ActiveRunSummary <<target_wire_contract>> {
-  +runId: string
-}
-
 enum SessionState {
   idle
-  running
-}
-
-enum ActiveRunState {
-  queued
   running
 }
 
@@ -1296,18 +1286,11 @@ enum ThinkingVisibility {
 
 GetSessionResult --> "1" SessionState : state
 GetSessionResult --> "1" ThinkingVisibility : thinking
-GetSessionResult o-- "0..1" ActiveRunSummary : activeRun
-ActiveRunSummary --> "1" ActiveRunState : state
 
 note bottom of GetSessionResult
-This is the 1.10.1 response snapshot.
-The activeRun field is pending review.
-Other confirmed Session fields remain unchanged.
-end note
-
-note bottom of ActiveRunSummary
-This type depends on the superseded public Run model.
-The current recommendation is to remove it.
+This is the confirmed public Session resource.
+State is idle or running and carries no execution identity.
+History cursors and live progress belong to other operations.
 end note
 @enduml
 
@@ -1482,39 +1465,47 @@ else Session is idle
   API --> Caller : user.message\nentry_id and entry_seq
   API -> AgentSession : prompt(user message, file snapshots)
 
-  loop each Assistant MessageEntry
-    AgentSession --> API : message_start
-    API --> Caller : assistant.message.started\nentry_id, no entry_seq
-    loop provider increments
-      AgentSession --> API : message_update
-      API --> Caller : assistant.message.delta\nentry_id and typed delta
+  alt execution completes
+    loop each Assistant MessageEntry
+      AgentSession --> API : message_start
+      API --> Caller : assistant.message.started\nentry_id, no entry_seq
+      loop provider increments
+        AgentSession --> API : message_update
+        API --> Caller : assistant.message.delta\nentry_id and typed delta
+      end
+      AgentSession --> API : message_end with complete message
+      API -> Store : persist complete Assistant MessageEntry
+      Store --> API : entry_seq
+      API --> Caller : assistant.message.completed\ncomplete message and entry_seq
+      opt tool calls require another model turn
+        AgentSession --> API : tool_execution_start
+        API --> Caller : tool.execution.started\ntool_call_id and tool_name
+        AgentSession --> API : tool_execution_end
+        API --> Caller : tool.execution.completed\ntool_call_id, tool_name, is_error
+        AgentSession --> API : ToolResult message_start and message_end
+        API -> Store : persist complete ToolResultEntry
+        Store --> API : tool result entry_id and entry_seq
+        API --> Caller : tool.result\ncomplete result and entry_seq
+      end
     end
-    AgentSession --> API : message_end with complete message
-    API -> Store : persist complete Assistant MessageEntry
-    Store --> API : entry_seq
-    API --> Caller : assistant.message.completed\ncomplete message and entry_seq
-    opt tool calls require another model turn
-      AgentSession --> API : tool_execution_start
-      API --> Caller : tool.execution.started\ntool_call_id and tool_name
-      AgentSession --> API : tool_execution_end
-      API --> Caller : tool.execution.completed\ntool_call_id, tool_name, is_error
-      AgentSession --> API : ToolResult message_start and message_end
-      API -> Store : persist complete ToolResultEntry
-      Store --> API : tool result entry_id and entry_seq
-      API --> Caller : tool.result\ncomplete result and entry_seq
-    end
-  end
 
-  AgentSession --> API : agent_end
-  API -> Store : clear active execution and persist final entries
-  API --> Caller : session.status.idle
-  API --> Caller : stream.end\nreason completed
+    AgentSession --> API : agent_end
+    API -> Store : clear active execution and persist final entries
+    API --> Caller : session.status.idle
+    API --> Caller : stream.end\nreason completed
+  else execution fails after stream start
+    AgentSession --> API : execution failure
+    API -> Store : retain completed entries and clear active execution
+    API --> Caller : stream.error\nSESSION_EXECUTION_FAILED and localized message
+    API -> API : close stream without stream.end
+  end
 end
 
 note over API,Caller
 Message previews and tool execution events are transient.
 User, completed Assistant, and ToolResult entries are authoritative.
 Session idle and stream end are non-history control events.
+Stream error is a terminal non-history event and closes the response.
 end note
 
 note over Caller,Store
@@ -1543,7 +1534,7 @@ title CampusClaw Execution Resource Model Decision Record
 ' Design reason: use Session Entry history as the recovery unit and avoid a redundant
 ' public run resource when callers only submit messages and observe Session output.
 ' Confirmed later on 2026-08-17: Session Events replace the earlier public Run decision.
-' Architecture impact: the old active_run field and Run-scoped operations must be revisited.
+' Architecture impact: the old active_run field was removed from CreateSession and GetSession.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -1609,5 +1600,92 @@ end note
 note bottom of CandidateB
 The 1.15.0 public Run decision is superseded.
 It remains in version history only.
+end note
+@enduml
+
+@startuml http_session_history
+title CampusClaw Session History Pagination Proposal
+
+' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
+' packages/coding-agent/src/core/session-manager.ts, SessionEntry, lines 46-156
+' packages/coding-agent/src/core/session-manager.ts, append methods, lines 1057-1149
+' packages/coding-agent/src/core/session-manager.ts, getBranch and getEntries, lines 1260-1303
+' Source evidence (pi-mono-java 223b6ba85d7ec80bfd4db23036fa46895294f3d0):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/SessionEntry.java,
+' SessionEntry record and factories, lines 18-38
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/SessionManager.java,
+' extractMessages and appendMessage, lines 188-296
+' Observed behavior: pi stores append-only entries linked by id and parentId, and its active
+' branch is the path from the selected leaf to the root.
+' Java divergence: the Java baseline persists parentId but currently restores messages by
+' scanning the JSONL file linearly rather than exposing a branch-aware HTTP history API.
+' Target-only design: entry_seq, snapshot_entry_seq, opaque cursors, and ResultBean paging
+' do not exist in either source baseline.
+' Design reason: accept the last durable SSE sequence on the first page, then freeze one
+' bounded snapshot so concurrent appends cannot make pagination unbounded.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequence {
+  ArrowColor #475569
+  ActorBorderColor #475569
+  ActorFontColor #0F172A
+  LifeLineBorderColor #94A3B8
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantFontColor #0F172A
+  GroupBorderColor #64748B
+  GroupFontColor #334155
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+
+actor Caller
+participant "Credential\nAdapter" as Auth
+participant "Session History\nAPI" as API
+database "Runtime Session\nStore" as Store
+participant "History Cursor\nCodec" as Cursor
+participant ResultBeanFactory
+
+alt first page
+  Caller -> Auth : GET /sessions/{session_id}/history\nafter_entry_seq and limit
+  Auth -> API : immutable CallerAuthContext
+  API -> API : validate session_id and first-page parameters
+  API -> Store : authorize and read current branch\nafter sequence through committed high watermark
+  Store --> API : public entries and snapshot_entry_seq
+  API -> Cursor : encode session, branch snapshot,\nwatermark, and next position
+  Cursor --> API : next_cursor or null
+else next page
+  Caller -> Auth : GET /sessions/{session_id}/history\ncursor only
+  Auth -> API : immutable CallerAuthContext
+  API -> Cursor : verify and decode opaque cursor
+  Cursor --> API : bound session, branch snapshot,\nwatermark, and next position
+  API -> Store : authorize and read next page\nthrough fixed snapshot_entry_seq
+  Store --> API : public entries
+  API -> Cursor : encode next position if more remain
+  Cursor --> API : next_cursor or null
+end
+
+API -> ResultBeanFactory : normal(HistoryResponseVO)
+ResultBeanFactory --> API : resCode, resMsg, result
+API --> Caller : 200 OK\nitems, snapshot_entry_seq, next_cursor
+
+note over API,Store
+Only committed user.message, assistant.message,
+and tool.result entries are public in this proposal.
+Items are sorted by entry_seq ascending.
+An active execution may append later entries, but they
+remain outside the fixed snapshot for this pagination walk.
+end note
+
+note over API,Cursor
+An expired cursor returns 410 HISTORY_CURSOR_EXPIRED.
+The caller can restart after its last consumed entry_seq.
 end note
 @enduml

@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.17.0 |
+| 文档版本 | 1.18.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | Session 生命周期三个 operation 的既有决策保留；第四个 Session Event operation 的完整成功事件序列已确认，流内异常仍待评审；第一、二接口的 `active_run` 字段因公共 Run 被取消而待回看 |
+| 接口评审状态 | 前四个 operation 已确认；CreateSession/GetSession 已删除公共执行指针，Session Event 已冻结成功流、流内异常和错误码；第五个 Session History operation 正在评审 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
@@ -41,7 +41,7 @@ OpenAPI YAML 在迁移期内继续作为机器可读投影；本轮不删除也�
 | Method | Path | 语义 |
 |---|---|---|
 | `POST` | `/agents/{agent_id}/sessions` | 根据 Agent 创建 Session，由 CampusClaw 分配 `session_id` |
-| `GET` | `/sessions/{session_id}` | 读取 Session 当前配置和粗粒度状态；原 `active_run` 字段待回看 |
+| `GET` | `/sessions/{session_id}` | 读取 Session 当前配置和 `idle/running` 粗粒度状态 |
 | `DELETE` | `/sessions/{session_id}` | 逻辑删除 Session，使其对 API 立即不可见，并异步清理 Runtime 数据 |
 
 HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session；网络恢复只需
@@ -88,8 +88,7 @@ Swagger 示例和新客户端的默认选择；APPKEY 是明确公开的兼容�
    SessionResource，返回 `201 Created`、`Location` 和 ResultBean。
 
 初始化只组装运行对象，不调用大模型、不消耗 token，也不创建 MessageEntry；
-因此创建响应中 `state=idle`。先前确认的 `active_run=null` 依赖公共 Run 模型，
-将在第四接口完成后回看。`thinking=hidden` 来自 Runtime 的 Session 默认值，
+因此创建响应中 `state=idle`。`thinking=hidden` 来自 Runtime 的 Session 默认值，
 不写入 Managed `settings.json`。任一步在 SessionRecord 提交前失败都不
 暴露 `session_id`，并丢弃未持久化的内存 Session。
 
@@ -111,7 +110,6 @@ GetSession 评审而隐式扩张。第一个接口的完整成功响应为：
     "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
     "state": "idle",
     "thinking": "hidden",
-    "active_run": null,
     "created_at": "2026-08-15T11:30:00Z"
   }
 }
@@ -124,7 +122,7 @@ GetSession 评审而隐式扩张。第一个接口的完整成功响应为：
 孤立 Session 由后台超时清理。其他副作用接口的幂等或并发规则属于
 各自 operation，不由创建 Session 接口继承。
 
-#### 2.1.1 第二个先前确认接口：读取 Session（`active_run` 待回看）
+#### 2.1.1 第二个已确认接口：读取 Session
 
 ```http
 GET /campusclaw-service/v1/sessions/{session_id}
@@ -133,26 +131,20 @@ GET /campusclaw-service/v1/sessions/{session_id}
 该接口按 `session_id` 读取已经存在的 Session 当前资源，不创建或恢复
 Session，不调用模型、不消耗 token，也不为了查询而实时调用 Model Manager。
 它是 Session 控制面的只读入口，用于确认资源存在及访问权、读取当前默认配置和
-`idle/running` 粗粒度状态。1.10.1 曾在显式 Run 前提下确认 `active_run` 指针；
-第四接口改为无公共 Run 的 Session Event 后，该字段已经失去资源目标，因此被
-重新打开，不能继续作为当前目标契约冻结。其余字段和错误语义仍保留既有确认。
+`idle/running` 粗粒度状态。Session 当前是否正在处理用户事件只由 `state` 表达，
+不返回独立执行资源或执行详情。
 
-| 字段 | 1.10.1 先前确认 | 当前状态 |
+| 字段 | 类型 | 当前契约 |
 |---|---|---|
-| `session_id` | 必填 | Session 不透明标识 |
-| `agent_id` | 必填 | 创建后不可变的 Agent 绑定 |
-| `model_id` | 必填 | Session 当前默认模型；允许后续切换 |
+| `session_id` | string | Session 不透明标识 |
+| `agent_id` | string | 创建后不可变的 Agent 绑定 |
+| `model_id` | string | Session 当前默认模型；允许后续切换 |
 | `state` | `idle \| running` | 只回答 Session 当前是否存在 active execution |
 | `thinking` | `hidden \| full` | Session 默认的 reasoning content 披露级别，不表示推理强度 |
-| `active_run` | object 或 `null` | 待回看；当前推荐删除，因为公共 `run_id` 已取消 |
-| `created_at` | RFC 3339 | Session 创建时间 |
-| `updated_at` | RFC 3339 | Session 资源最后更新时间 |
+| `created_at` | RFC 3339 timestamp | Session 创建时间 |
+| `updated_at` | RFC 3339 timestamp | Session 资源最后更新时间 |
 
-下面保留 1.10.1 的历史响应快照，便于下一次回看时明确看到被影响的字段；它不再
-代表无公共 Run 模型下的最终响应。当前推荐只保留 Session 自身配置、
-`idle/running` 和时间字段，History cursor 继续归 History API。
-
-先前确认的响应快照为：
+已确认成功响应为：
 
 ```json
 {
@@ -164,10 +156,6 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
     "model_id": "claude-sonnet-4-5",
     "state": "running",
     "thinking": "hidden",
-    "active_run": {
-      "run_id": "run_01JY8X2E3R4T5Y6U7I8O9P0A1S",
-      "state": "running"
-    },
     "created_at": "2026-08-15T10:30:00+08:00",
     "updated_at": "2026-08-16T09:15:21+08:00"
   }
@@ -201,11 +189,9 @@ mate-service 的 Chat 元数据；完成的 MessageEntry 由 History API
 读取成功返回 `ETag` 和 `Cache-Control: no-store`。已确认仅将 `ETag` 用于
 后续 Model/Thinking 配置写入的 `If-Match` 并发控制，不给本 GET 增加
 `If-None-Match/304` 分支。不存在和已删除的 Session 统一返回
-`404 SESSION_NOT_FOUND`，避免泄露历史状态。`active_run` 去留将在第四接口事件组
-评审完成后单独确认。
+`404 SESSION_NOT_FOUND`，避免泄露历史状态。
 
-本小节除 `active_run` 外的既有决策保持确认；主维护 HTML 明示该字段待回看。
-OpenAPI 本轮仍不更新。
+本小节和主维护 HTML 中的第二个接口已经用户确认。OpenAPI 本轮仍不更新。
 
 #### 2.1.2 第三个已确认接口：删除 Session
 
@@ -253,7 +239,7 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 
 ![HTTP Session 逻辑删除](http_delete_session.svg)
 
-[PlantUML 源码：`http_delete_session`](diagram.puml#L1314)
+[PlantUML 源码：`http_delete_session`](diagram.puml#L1297)
 
 本小节和主维护 HTML 中的第三个接口已经用户确认。OpenAPI 本轮仍不更新。
 
@@ -274,8 +260,7 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 
 公共契约不再包含 `run_id`、GetRun、Run Events、Run Abort 或 Run Steer。
 中止和运行中追加指导是否建模为新的 Session Event，留待各自逐项评审。
-因此第一个和第二个接口中原先确认的 `active_run` 字段发生了真实依赖冲突，
-必须在第四接口完成后回看，不能继续把它描述为稳定的公共 Run 指针。
+CreateSession 和 GetSession 已同步删除旧模型遗留的公共执行指针。
 
 #### 2.2.1 已确认架构决策：执行不是公共 Run 资源
 
@@ -302,9 +287,9 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 
 ![HTTP 执行资源模型对比](http_execution_resource_model.svg)
 
-[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L1527)
+[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L1518)
 
-#### 2.2.2 第四个接口：提交用户事件并直接流式返回
+#### 2.2.2 第四个已确认接口：提交用户事件并直接流式返回
 
 ```http
 POST /campusclaw-service/v1/sessions/{session_id}/events
@@ -406,6 +391,19 @@ event: stream.end
 data: {"reason":"completed"}
 ```
 
+若 SSE 响应已经开始后执行失败，服务端先清理 active execution，再发送一个
+`stream.error`，随后直接关闭当前流；失败流不再发送 `stream.end`。`data` 仍是
+单行 JSON，使用稳定 `resCode` 和按 `Accept-Language` 解析的 `resMsg`：
+
+```text
+event: stream.error
+data: {"resCode":"SESSION_EXECUTION_FAILED","resMsg":"Session 执行失败。"}
+```
+
+流内错误不会伪造成 `assistant.message.completed`，也不会自动持久化一条错误
+Assistant MessageEntry。失败前已经完成持久化的 User、Assistant 或 ToolResult
+Entry 仍可从 History 读取；尚未持久化的 preview 不可恢复。
+
 `started` 和 `delta` 没有独立持久化序号，不能作为断线恢复来源；三者使用同一个
 预分配 `entry_id` 关联。`tool.execution.started/completed` 同样只是实时生命周期；
 `tool.result` 才是权威 ToolResultEntry。公共契约不暴露 pi 内部的
@@ -423,24 +421,118 @@ SSE `data` 固定为单行 JSON，每个 frame 以一个空行结束。只有
 
 ![HTTP Session Event 直接流式返回](http_session_event_stream.svg)
 
-[PlantUML 源码：`http_session_event_stream`](diagram.puml#L1414)
+[PlantUML 源码：`http_session_event_stream`](diagram.puml#L1397)
 
-第四接口仍处于评审中。已冻结路径、`user.message` 请求、`message + file_ids`、
-同一 POST 直接 SSE、无公共 `run_id`、无 `Idempotency-Key`，以及成功流中的 User、
-Assistant、工具执行、ToolResult、Session idle 和 stream end 事件顺序与持久化语义。
-流建立后的异常事件和完整错误码仍待确认。OpenAPI 本轮不更新。
+第四接口已经确认：冻结路径、`user.message` 请求、`message + file_ids`、同一 POST
+直接 SSE、无公共 `run_id`、无 `Idempotency-Key`、成功事件顺序与持久化语义，
+以及流建立后使用 `stream.error` 再关闭连接的失败语义。OpenAPI 本轮仍不更新。
 
 ### 2.3 历史与恢复
 
 | Method | Path | 语义 |
 |---|---|---|
-| `GET` | `/sessions/{session_id}/history` | 按 `entry_seq` 分页读取权威 MessageEntry 历史 |
+| `GET` | `/sessions/{session_id}/history` | 按 `entry_seq` 分页读取当前分支的权威对话 Entry 历史 |
 
 History 保存 User、Assistant 和 ToolResult 等持久化 Entry，不保存
 `assistant.message.started` 或 `assistant.message.delta`。断线后客户端使用 History
 恢复完整消息，不尝试按 SSE delta 游标重建原 HTTP 流。是否增加独立的 Session
 事件订阅接口，只有在出现多观察者、独立重连或需要观察超出原请求生命周期的执行时
 才重新评估；当前接口不新增该端点。
+
+#### 2.3.1 第五个接口：读取 Session History（评审中）
+
+```http
+GET /campusclaw-service/v1/sessions/{session_id}/history?after_entry_seq=16&limit=100
+X-HW-ID: <CALLER_ID>
+Authorization: Bearer <JWT>
+```
+
+本接口服务两个直接用途：首次加载一个长 Session 的持久化对话，以及
+`POST /events` 断线后从最后确认的 SSE `id: entry_seq` 继续恢复。当前推荐只投影
+Session 当前分支中的三类公共 Entry：`user.message`、`assistant.message` 和
+`tool.result`。pi 的 `model_change`、`thinking_level_change`、`compaction`、
+`branch_summary`、`custom`、`label` 和 `session_info` 仍可用于 Runtime 内部重建，
+但不自动成为调用方可见的对话协议。
+
+当前推荐使用“可见序号首页 + 固定快照 cursor”的混合分页：
+
+| 参数 | 当前提案 | 作用 |
+|---|---|---|
+| `after_entry_seq` | 首页可选，默认 `0`，包含性下界之外读取 | 只返回 `entry_seq` 更大的 Entry，可直接承接 SSE 断线位置 |
+| `limit` | 首页可选，默认 `100`，范围 `1..200` | 限制单页 Entry 数量 |
+| `cursor` | 后续页可选，不透明字符串 | 固定首页的 Session、当前分支、`snapshot_entry_seq` 和下一读取位置 |
+
+`cursor` 与 `after_entry_seq/limit` 互斥。首页建立固定的
+`snapshot_entry_seq`，后续页面只读取该水位以内的 Entry，因此执行期间新增的 Entry
+不会让一次分页无限延长。游标过期返回 `410 HISTORY_CURSOR_EXPIRED`；调用方可以用
+已经消费的最后一个 `entry_seq` 重新发起首页请求。
+
+当前提案的成功响应为：
+
+```json
+{
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "items": [
+      {
+        "type": "user.message",
+        "entry_id": "entry_100",
+        "entry_seq": 17,
+        "message": "请分析这些订单文件，并列出异常项。",
+        "file_ids": ["file_01JY8X2E3R4T5Y6U7I8O9P0A1S"],
+        "created_at": "2026-08-17T10:00:00Z"
+      },
+      {
+        "type": "assistant.message",
+        "entry_id": "entry_101",
+        "entry_seq": 18,
+        "message": {
+          "role": "assistant",
+          "content": [
+            {"type": "text", "text": "我先查询异常订单。"},
+            {
+              "type": "tool_call",
+              "tool_call_id": "call_201",
+              "name": "query_abnormal_orders",
+              "arguments": {"scope": "uploaded_files"}
+            }
+          ]
+        },
+        "finish_reason": "tool_call",
+        "created_at": "2026-08-17T10:00:02Z"
+      },
+      {
+        "type": "tool.result",
+        "entry_id": "entry_102",
+        "entry_seq": 19,
+        "tool_call_id": "call_201",
+        "tool_name": "query_abnormal_orders",
+        "content": [{"type": "text", "text": "发现 3 条异常订单。"}],
+        "is_error": false,
+        "created_at": "2026-08-17T10:00:04Z"
+      }
+    ],
+    "snapshot_entry_seq": 20,
+    "next_cursor": "eyJzbmFwc2hvdCI6MjAsImFmdGVyIjoxOX0"
+  }
+}
+```
+
+`items` 始终按 `entry_seq` 从小到大排列；`next_cursor=null` 表示当前固定快照已经
+读完。Session 正在执行时允许读取 History，调用方只会看到请求开始前已经完成
+持久化的 Entry，不会看到内存中的 preview。当前仍需确认三项：是否只返回当前分支、
+是否采用混合分页，以及是否只公开三类对话 Entry。
+
+pi-mono 的 `SessionManager` 将所有 Entry 以 `id/parentId` 组织为 append-only tree，
+`getBranch()` 返回当前 leaf 到 root 的有序路径，`getEntries()` 返回完整 Entry 集合。
+pi-mono-java 当前 `SessionManager` 同样写入 `id/parentId`，但恢复实现主要线性提取
+Message。CampusClaw 的 `entry_seq`、固定快照游标和 HTTP 分页均为 target-only
+服务端设计；选择“当前分支”是产品投影，不应表述为 pi 已有分页接口。
+
+![HTTP Session History 分页](http_session_history.svg)
+
+[PlantUML 源码：`http_session_history`](diagram.puml#L1606)
 
 ### 2.4 模型与 Session 配置
 
@@ -478,7 +570,7 @@ History 保存 User、Assistant 和 ToolResult 等持久化 Entry，不保存
 Session Event 的并发、连接和恢复规则当前为：
 
 - 每个 Session 同一时刻只允许一个 active execution。第二个并发
-  `user.message` 当前提案返回 `409 SESSION_BUSY`，错误码仍待整体确认。
+  `user.message` 返回 `409 SESSION_BUSY`，不进入服务端排队。
 - 用户 MessageEntry 持久化并开始执行后，不依赖发起 HTTP 连接继续存活；连接关闭
   不等于 interrupt。
 - 直接流式 POST 不使用浏览器 `EventSource` 自动重连，也不接受
@@ -488,8 +580,8 @@ Session Event 的并发、连接和恢复规则当前为：
   User MessageEntry。
 - `Session.state` 只表达 `idle/running` 粗粒度状态。模型请求、工具执行或消息生成
   阶段通过实时事件表达，不新增公共 Run phase。
-- `entry_seq` 只由持久化 Entry 分配；临时事件不消耗序号。GetSession 是否返回
-  History 水位仍由 GetSession 回看决定。
+- `entry_seq` 只由持久化 Entry 分配；临时事件不消耗序号。GetSession 不返回
+  History 水位；第五个 History 接口负责快照水位和分页恢复。
 - Pod 重启时如何终止或恢复 active execution、是否持久化 partial Assistant Entry，
   仍需在 History 与错误事件评审中冻结。
 
@@ -498,8 +590,8 @@ Session Event 的并发、连接和恢复规则当前为：
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。本版保留 Session 生命周期三个接口的既有决策，并正在评审
-第四个 Session Event operation；其余 operation 的业务语义仍按后续逐个评审，但普通 JSON 响应
+草案的公司集成约束。本版已经确认前四个 operation，并正在评审
+第五个 Session History operation；其余 operation 的业务语义仍按后续逐个评审，但普通 JSON 响应
 最终也必须遵守同一包装。SSE 事件流和 HTTP `204` 无响应体
 不使用 ResultBean。
 
@@ -557,7 +649,7 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 第四个 Session Event 接口的成功响应是 `200 text/event-stream`，不使用
 ResultBean。流建立前的失败仍使用真实 HTTP status 和只包含
 `resCode/resMsg` 的 JSON；流建立后的失败通过流内错误事件表达，不能再改变
-HTTP status。以下名称是当前同步提案，除前三个接口复用的通用错误外尚未冻结：
+HTTP status。以下错误码和消息已经随第四个接口确认冻结：
 
 | HTTP | `resCode` | `zh_CN` | `en_US` |
 |---|---|---|---|
@@ -568,11 +660,14 @@ HTTP status。以下名称是当前同步提案，除前三个接口复用的通
 | `403` | `FORBIDDEN` | `当前调用方无权向该 Session 提交用户事件。` | `The caller is not allowed to submit an event to this Session.` |
 | `404` | `SESSION_NOT_FOUND` | `指定的 Session 不存在。` | `The specified Session does not exist.` |
 | `409` | `SESSION_BUSY` | `该 Session 正在处理另一条用户消息。` | `The Session is processing another user message.` |
-| `409` | `FILE_NOT_READY` | `文件尚未准备就绪，请稍后重试。` | `The file is not ready. Try again later.` |
-| `422` | `INVALID_FILE` | `请求包含无效文件。` | `The request contains an invalid file.` |
-| `422` | `FILE_NOT_SUPPORTED` | `当前模型不支持该文件输入。` | `The current model does not support the file input.` |
 | `500` | `EVENT_ACCEPTANCE_FAILED` | `用户事件接收失败。` | `User event acceptance failed.` |
-| `503` | `RUNTIME_DEPENDENCY_UNAVAILABLE` | `Runtime 依赖服务暂时不可用，请稍后重试。` | `A Runtime dependency is temporarily unavailable. Try again later.` |
+| SSE | `SESSION_EXECUTION_FAILED` | `Session 执行失败。` | `Session execution failed.` |
+
+第五个 Session History 接口当前提案使用
+`INVALID_SESSION_ID`、`INVALID_HISTORY_QUERY`、`UNAUTHENTICATED`、
+`AUTH_CREDENTIAL_CONFLICT`、`FORBIDDEN`、`SESSION_NOT_FOUND`、
+`HISTORY_CURSOR_EXPIRED` 和 `HISTORY_READ_FAILED`。这些 History 专用错误仍随
+第五接口一起评审，尚未冻结。
 
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
 `en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
@@ -719,6 +814,8 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java` 基线 140-160：现有 HTTP POST 直接将消息、工具开始/结束和 done 映射为 SSE；现有名称与负载较窄，目标契约重命名并补充分离的持久化 ToolResultEntry |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 252-273 与 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java` 基线 153-177：WebSocket prompt 只接受非空文本，先追加 JSONL UserMessage 再调用 prompt，并以 `isStreaming` 拒绝并发；没有附件 ID、Run ID 或幂等存储 |
 | 观察到的行为 | pi-mono-java `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` 基线 183-194、218-268：`startExecution` 通过 executionLock 保证单次 current execution，并在虚拟线程执行结束时清理；没有共享数据库 active-run 唯一约束或执行任务 |
+| 观察到的行为 | pi-mono `packages/coding-agent/src/core/session-manager.ts` 基线 46-156、1057-1149、1260-1303：Session Entry 使用 `id/parentId` 组成 append-only tree，`getBranch()` 返回当前 leaf 路径，`getEntries()` 返回全部 Entry；Entry 类型还包含模型、thinking、compaction、branch summary 和扩展状态 |
+| 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/SessionEntry.java` 基线 18-38 与 `SessionManager.java` 基线 188-296：JSONL Entry 保留 `id/parentId/type/message`，当前恢复主要线性提取 Message；没有 HTTP 分页、`entry_seq` 或固定快照 cursor |
 | 产品约束 | Session/Message、文件引用和 Manager 权威保持不变；执行轮次不是调用方可见的公共 Run，权威恢复单元是 Session Entry |
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
@@ -728,8 +825,9 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 已确认架构 | `POST /sessions/{session_id}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `run_id`；成功流按 User、Assistant 三阶段、工具执行、ToolResult、最终 Assistant、Session idle、stream end 排序，User/Assistant/ToolResult Entry 与 `entry_seq` 是权威历史 |
 | 设计原因 | pi 本身依靠 MessageEntry 重建对话，不依赖公共 Run；mate-service 当前只需要提交消息、观察实时输出和恢复 Session History，无需承担额外 Run 生命周期 |
 | 已确认设计 | Assistant Message 使用 `assistant.message.started/delta/completed` 三阶段；前两者是不可恢复预览，completed 是完整持久化 Entry。该语义借鉴 Anthropic 的 preview/final 分层，但名称采用 CampusClaw 领域语言 |
-| 待回看设计 | GetSession 和 CreateSession 原 `active_run` 字段依赖已取消的公共 Run 资源；主维护 HTML 保留历史快照并明确标记，后续单独确认字段删除 |
+| 已确认设计 | CreateSession 和 GetSession 删除旧公共 Run 模型遗留的 `active_run` 字段；Session 粗粒度执行状态只由 `state=idle/running` 表达 |
 | 已确认设计 | Session Event 请求使用 `type=user.message`、`message + file_ids`，不接受业务 metadata 或 `Idempotency-Key`；这是目标产品约束，不是 pi 已有 HTTP 契约 |
+| 待确认设计 | Session History 当前推荐只投影当前分支的三类公共对话 Entry，首页使用 `after_entry_seq/limit`，后续页使用固定 `snapshot_entry_seq` 的不透明 cursor；这是 target-only HTTP 设计 |
 
 公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自
 用户提供的集成约束。当前工作区不含对应入站认证库或
@@ -743,6 +841,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.18.0 | 2026-08-17 | 用户确认调整后的前四个接口：CreateSession/GetSession 删除 `active_run`，只由 Session `state` 表达粗粒度执行状态；Session Event 冻结 `INVALID_EVENT_REQUEST`、`SESSION_BUSY`、`EVENT_ACCEPTANCE_FAILED` 及流建立后 `stream.error/SESSION_EXECUTION_FAILED` 再关闭连接的失败语义；启动第五个 Session History 评审，提出当前分支、三类公共 Entry、`after_entry_seq + limit` 首页和固定快照 cursor 后续页；OpenAPI 未更新 |
 | 1.17.0 | 2026-08-17 | 恢复并冻结第四接口此前已确认的完整成功事件序列：`user.message`、Assistant Message 三阶段、`tool.execution.started/completed`、持久化 `tool.result`、下一条 Assistant Message、`session.status.idle` 和 `stream.end`；区分实时工具生命周期与权威 ToolResultEntry，不公开内部 `tool_execution_update`；流内异常与完整错误码继续评审；更新 pi-mono-java 源码基线，OpenAPI 未更新 |
 | 1.16.0 | 2026-08-17 | 后续评审替代 1.15.0 显式 Run 结论：第四接口改为 `POST /sessions/{session_id}/events`，提交 `type=user.message` 与 `message + file_ids`，同一 POST 以 SSE 直接返回且不创建公共 `run_id`；确认 `assistant.message.started/delta/completed` 分别表示消息边界、临时增量和权威持久化 Entry；断线后执行继续并通过 History 恢复，禁止重放 POST；第一、二接口的 `active_run` 因资源依赖冲突标记待回看；OpenAPI 未更新 |
 | 1.15.0 | 2026-08-17 | 用户确认第四个 CreateRun 接口：冻结扁平 `message + attachment_ids`、Session 当前 `model_id/thinking` 快照、无业务 metadata、`202` 最窄 ResultBean、单 active Run 和中英文错误；按用户修正删除 `Idempotency-Key` Header、重放结果、冲突错误码及本地幂等存储，明确网络结果不确定时先查 Session/History；OpenAPI 未更新 |
