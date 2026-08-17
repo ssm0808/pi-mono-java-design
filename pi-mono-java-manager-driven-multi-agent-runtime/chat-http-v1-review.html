@@ -99,6 +99,17 @@
     #company-api-review-post-agents-agent-id-sessions-fb65ca69 .section:last-child { border-bottom: 0; }
     #company-api-review-post-agents-agent-id-sessions-fb65ca69 .section-title { justify-content: space-between; }
     #company-api-review-post-agents-agent-id-sessions-fb65ca69 .description { line-height: 1.6; }
+    #company-api-review-post-agents-agent-id-sessions-fb65ca69 .decision-gate {
+      border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
+      background: light-dark(#f5f9ff, #122337);
+    }
+    #company-api-review-post-agents-agent-id-sessions-fb65ca69 .decision-notice {
+      margin-top: 10px;
+      color: light-dark(#8250df, #d2a8ff);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-post-agents-agent-id-sessions-fb65ca69 .gate-only .contract-detail { display: none; }
     #company-api-review-post-agents-agent-id-sessions-fb65ca69 table { width: 100%; border-collapse: collapse; font-size: 13px; }
     #company-api-review-post-agents-agent-id-sessions-fb65ca69 th,
     #company-api-review-post-agents-agent-id-sessions-fb65ca69 td {
@@ -146,6 +157,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
     }
+    #company-api-review-post-agents-agent-id-sessions-fb65ca69 .question-grid-single { grid-template-columns: 1fr; }
     #company-api-review-post-agents-agent-id-sessions-fb65ca69 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
     #company-api-review-post-agents-agent-id-sessions-fb65ca69 legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
     #company-api-review-post-agents-agent-id-sessions-fb65ca69 label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
@@ -179,7 +191,7 @@
   </style>
 
   <div class="api-shell" data-api-shell aria-live="polite"></div>
-  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.12.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"POST","path":"/agents/{agent_id}/sessions","summary":"创建 Runtime Session","description":"根据 agent_id 创建一个全新的 Runtime Session。CampusClaw 生成 session_id，从 Agent 发布快照读取 defaultModel 并由 Model Manager 校验，然后完成上下文、Skills、Tools、AgentSession 和持久化初始化。该操作无请求体，不调用模型、不创建 Run，也不消耗 token；每次成功 POST 都创建新 Session。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"agent_id","required":true,"schema":"^agent_[0-9A-Za-z]{24}$","description":"创建后不可变的 Agent 绑定；区分大小写"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"错误消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不接受 session_id、model_id 或 thinking。","example":null},"responses":[{"status":"201","label":"Created","summary":"Session 已完成初始化和持久化，可以接受后续请求；初始 state=idle，active_run=null。","headers":{"Location":"/campusclaw-service/v1/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"session_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","agent_id":"agent_011CZkYqphY8vELVzwCUpqiQ","model_id":"model_011CZq2GkV8aD4NwP7sLmXfR","state":"idle","thinking":"hidden","active_run":null,"created_at":"2026-08-15T11:30:00Z"}}}},{"status":"400","label":"Bad Request","summary":"agent_id 不符合资源标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_AGENT_ID","resMsg":"agent_id 格式不正确。"},"en-US":{"resCode":"INVALID_AGENT_ID","resMsg":"The agent_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权为该 Agent 创建 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权为该 Agent 创建 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to create a Session for this Agent."}}},{"status":"404","label":"Not Found","summary":"指定的 Agent 不存在。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_NOT_FOUND","resMsg":"指定的 Agent 不存在。"},"en-US":{"resCode":"AGENT_NOT_FOUND","resMsg":"The specified Agent does not exist."}}},{"id":"422-agent-not-available","status":"422","tabLabel":"422 · AGENT_NOT_AVAILABLE","label":"Unprocessable Content","summary":"Agent 存在，但当前不可用于创建 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_NOT_AVAILABLE","resMsg":"指定的 Agent 当前不可用。"},"en-US":{"resCode":"AGENT_NOT_AVAILABLE","resMsg":"The specified Agent is currently unavailable."}}},{"id":"422-agent-model-not-configured","status":"422","tabLabel":"422 · AGENT_MODEL_NOT_CONFIGURED","label":"Unprocessable Content","summary":"Agent 没有可由 Model Manager 解析的有效默认模型。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_MODEL_NOT_CONFIGURED","resMsg":"该 Agent 未配置有效的默认模型。"},"en-US":{"resCode":"AGENT_MODEL_NOT_CONFIGURED","resMsg":"The Agent has no valid default model configured."}}},{"status":"500","label":"Internal Server Error","summary":"Session 运行对象或持久化初始化失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_INITIALIZATION_FAILED","resMsg":"Session 初始化失败。"},"en-US":{"resCode":"SESSION_INITIALIZATION_FAILED","resMsg":"Session initialization failed."}}},{"status":"503","label":"Service Unavailable","summary":"Model Manager 暂时不可用，调用方可按 Retry-After 重试。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"MANAGER_UNAVAILABLE","resMsg":"Model Manager 暂时不可用，请稍后重试。"},"en-US":{"resCode":"MANAGER_UNAVAILABLE","resMsg":"Model Manager is temporarily unavailable. Try again later."}}}]},"review":{"questions":[]}}</script>
+  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.13.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"POST","path":"/agents/{agent_id}/sessions","summary":"创建 Runtime Session","description":"根据 agent_id 创建一个全新的 Runtime Session。CampusClaw 生成 session_id，从 Agent 发布快照读取 defaultModel 并由 Model Manager 校验，然后完成上下文、Skills、Tools、AgentSession 和持久化初始化。该操作无请求体，不调用模型、不创建 Run，也不消耗 token；每次成功 POST 都创建新 Session。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"agent_id","required":true,"schema":"^agent_[0-9A-Za-z]{24}$","description":"创建后不可变的 Agent 绑定；区分大小写"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"错误消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不接受 session_id、model_id 或 thinking。","example":null},"responses":[{"status":"201","label":"Created","summary":"Session 已完成初始化和持久化，可以接受后续请求；初始 state=idle，active_run=null。","headers":{"Location":"/campusclaw-service/v1/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"session_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","agent_id":"agent_011CZkYqphY8vELVzwCUpqiQ","model_id":"model_011CZq2GkV8aD4NwP7sLmXfR","state":"idle","thinking":"hidden","active_run":null,"created_at":"2026-08-15T11:30:00Z"}}}},{"status":"400","label":"Bad Request","summary":"agent_id 不符合资源标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_AGENT_ID","resMsg":"agent_id 格式不正确。"},"en-US":{"resCode":"INVALID_AGENT_ID","resMsg":"The agent_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权为该 Agent 创建 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权为该 Agent 创建 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to create a Session for this Agent."}}},{"status":"404","label":"Not Found","summary":"指定的 Agent 不存在。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_NOT_FOUND","resMsg":"指定的 Agent 不存在。"},"en-US":{"resCode":"AGENT_NOT_FOUND","resMsg":"The specified Agent does not exist."}}},{"id":"422-agent-not-available","status":"422","tabLabel":"422 · AGENT_NOT_AVAILABLE","label":"Unprocessable Content","summary":"Agent 存在，但当前不可用于创建 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_NOT_AVAILABLE","resMsg":"指定的 Agent 当前不可用。"},"en-US":{"resCode":"AGENT_NOT_AVAILABLE","resMsg":"The specified Agent is currently unavailable."}}},{"id":"422-agent-model-not-configured","status":"422","tabLabel":"422 · AGENT_MODEL_NOT_CONFIGURED","label":"Unprocessable Content","summary":"Agent 没有可由 Model Manager 解析的有效默认模型。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_MODEL_NOT_CONFIGURED","resMsg":"该 Agent 未配置有效的默认模型。"},"en-US":{"resCode":"AGENT_MODEL_NOT_CONFIGURED","resMsg":"The Agent has no valid default model configured."}}},{"status":"500","label":"Internal Server Error","summary":"Session 运行对象或持久化初始化失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_INITIALIZATION_FAILED","resMsg":"Session 初始化失败。"},"en-US":{"resCode":"SESSION_INITIALIZATION_FAILED","resMsg":"Session initialization failed."}}},{"status":"503","label":"Service Unavailable","summary":"Model Manager 暂时不可用，调用方可按 Retry-After 重试。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"MANAGER_UNAVAILABLE","resMsg":"Model Manager 暂时不可用，请稍后重试。"},"en-US":{"resCode":"MANAGER_UNAVAILABLE","resMsg":"Model Manager is temporarily unavailable. Try again later."}}}]},"review":{"questions":[]}}</script>
   <script>
     (() => {
       const root = document.getElementById('company-api-review-post-agents-agent-id-sessions-fb65ca69');
@@ -209,7 +221,9 @@
       append(topbar, titleRow, code(api.basePath, 'base'));
 
       const methodClass = operation.method.toLowerCase();
-      const article = make('article', `operation operation-${methodClass}`);
+      const decisionGate = review.decisionGate;
+      const gateClass = decisionGate && decisionGate.hideOperationDetails ? ' gate-only' : '';
+      const article = make('article', `operation operation-${methodClass}${gateClass}`);
       const operationHead = make('header', 'operation-head');
       append(operationHead,
         make('span', `method method-${methodClass}`, operation.method.toUpperCase()),
@@ -221,9 +235,33 @@
       append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
       article.appendChild(purpose);
 
+      if (decisionGate) {
+        const gateSection = make('section', 'section decision-gate');
+        append(gateSection,
+          make('h3', '', decisionGate.title),
+          make('p', 'description', decisionGate.description));
+        const comparison = decisionGate.comparison;
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        comparison.columns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        comparison.rows.forEach((items) => {
+          const row = make('tr', '');
+          items.forEach((item) => row.appendChild(make('td', '', item)));
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        append(gateSection, wrap, make('p', 'decision-notice', decisionGate.detailNotice));
+        article.appendChild(gateSection);
+      }
+
       const authModes = operation.authModes || [];
       if (authModes.length) {
-        const authSection = make('section', 'section');
+        const authSection = make('section', 'section contract-detail');
         const authTitle = make('div', 'row section-title');
         const authTabs = make('div', 'tabs');
         const authBody = make('div', '');
@@ -274,7 +312,7 @@
         renderAuth();
       }
 
-      const requestSection = make('section', 'section');
+      const requestSection = make('section', 'section contract-detail');
       requestSection.appendChild(make('h3', '', '参数与请求体'));
       const parameters = operation.parameters || [];
       if (parameters.length) {
@@ -308,7 +346,7 @@
       }
       article.appendChild(requestSection);
 
-      const responseSection = make('section', 'section');
+      const responseSection = make('section', 'section contract-detail');
       const responseTitle = make('div', 'row section-title');
       const localeTabs = make('div', 'tabs');
       append(responseTitle, make('h3', '', '响应'), localeTabs);
@@ -370,6 +408,7 @@
         const form = make('form', 'review-form');
         form.appendChild(make('h3', '', '继续调整'));
         const questionGrid = make('div', 'question-grid');
+        if (questions.length === 1) questionGrid.classList.add('question-grid-single');
         questions.forEach((question) => {
           const fieldset = make('fieldset', '');
           fieldset.appendChild(make('legend', '', question.legend));
@@ -518,6 +557,17 @@
     #company-api-review-get-sessions-session-id-e9a8f3eb .section:last-child { border-bottom: 0; }
     #company-api-review-get-sessions-session-id-e9a8f3eb .section-title { justify-content: space-between; }
     #company-api-review-get-sessions-session-id-e9a8f3eb .description { line-height: 1.6; }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .decision-gate {
+      border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
+      background: light-dark(#f5f9ff, #122337);
+    }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .decision-notice {
+      margin-top: 10px;
+      color: light-dark(#8250df, #d2a8ff);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .gate-only .contract-detail { display: none; }
     #company-api-review-get-sessions-session-id-e9a8f3eb table { width: 100%; border-collapse: collapse; font-size: 13px; }
     #company-api-review-get-sessions-session-id-e9a8f3eb th,
     #company-api-review-get-sessions-session-id-e9a8f3eb td {
@@ -565,6 +615,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
     }
+    #company-api-review-get-sessions-session-id-e9a8f3eb .question-grid-single { grid-template-columns: 1fr; }
     #company-api-review-get-sessions-session-id-e9a8f3eb fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
     #company-api-review-get-sessions-session-id-e9a8f3eb legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
     #company-api-review-get-sessions-session-id-e9a8f3eb label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
@@ -598,7 +649,7 @@
   </style>
 
   <div class="api-shell" data-api-shell aria-live="polite"></div>
-  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.12.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"GET","path":"/sessions/{session_id}","summary":"读取 Session 当前资源","description":"按 session_id 只读获取已存在 Session 的当前默认配置、粗粒度运行状态和 active Run 指针。state 只取 idle/running；thinking 表示默认 reasoning content 可见性，只取 hidden/full；active_run 为 null，或仅含 run_id 与 queued/running state。该接口不创建或恢复 Session，不调用模型，不实时校验 Model Manager，也不返回 History 水位、transcript、Run phase、流式内容、工具或 steer 队列。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"CampusClaw 生成的不透明 Session 标识；区分大小写，删除后不复用"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"错误消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不接受 model_id、thinking 或恢复参数。","example":null},"responses":[{"status":"200","label":"OK","summary":"返回当前 Session 资源；idle 时 active_run=null，running 时只返回 active Run 指针。","headers":{"ETag":"\"snp-zQfM5yN8x2\"","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"session_id":"01JY8W6M8D9K4H2Q7P3V5N1R0T","agent_id":"agent_01JY8VZY4CRQN4PJW8M94D1B2C","model_id":"claude-sonnet-4-5","state":"running","thinking":"hidden","active_run":{"run_id":"run_01JY8X2E3R4T5Y6U7I8O9P0A1S","state":"running"},"created_at":"2026-08-15T10:30:00+08:00","updated_at":"2026-08-16T09:15:21+08:00"}}}},{"status":"400","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权读取该 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权访问该 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to access this Session."}}},{"status":"404","label":"Not Found","summary":"Session 不存在或已删除；GET 不会隐式创建或恢复 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}}]},"review":{"questions":[]}}</script>
+  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.13.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"GET","path":"/sessions/{session_id}","summary":"读取 Session 当前资源","description":"按 session_id 只读获取已存在 Session 的当前默认配置、粗粒度运行状态和 active Run 指针。state 只取 idle/running；thinking 表示默认 reasoning content 可见性，只取 hidden/full；active_run 为 null，或仅含 run_id 与 queued/running state。该接口不创建或恢复 Session，不调用模型，不实时校验 Model Manager，也不返回 History 水位、transcript、Run phase、流式内容、工具或 steer 队列。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"CampusClaw 生成的不透明 Session 标识；区分大小写，删除后不复用"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"错误消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不接受 model_id、thinking 或恢复参数。","example":null},"responses":[{"status":"200","label":"OK","summary":"返回当前 Session 资源；idle 时 active_run=null，running 时只返回 active Run 指针。","headers":{"ETag":"\"snp-zQfM5yN8x2\"","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"session_id":"01JY8W6M8D9K4H2Q7P3V5N1R0T","agent_id":"agent_01JY8VZY4CRQN4PJW8M94D1B2C","model_id":"claude-sonnet-4-5","state":"running","thinking":"hidden","active_run":{"run_id":"run_01JY8X2E3R4T5Y6U7I8O9P0A1S","state":"running"},"created_at":"2026-08-15T10:30:00+08:00","updated_at":"2026-08-16T09:15:21+08:00"}}}},{"status":"400","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权读取该 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权访问该 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to access this Session."}}},{"status":"404","label":"Not Found","summary":"Session 不存在或已删除；GET 不会隐式创建或恢复 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}}]},"review":{"questions":[]}}</script>
   <script>
     (() => {
       const root = document.getElementById('company-api-review-get-sessions-session-id-e9a8f3eb');
@@ -628,7 +679,9 @@
       append(topbar, titleRow, code(api.basePath, 'base'));
 
       const methodClass = operation.method.toLowerCase();
-      const article = make('article', `operation operation-${methodClass}`);
+      const decisionGate = review.decisionGate;
+      const gateClass = decisionGate && decisionGate.hideOperationDetails ? ' gate-only' : '';
+      const article = make('article', `operation operation-${methodClass}${gateClass}`);
       const operationHead = make('header', 'operation-head');
       append(operationHead,
         make('span', `method method-${methodClass}`, operation.method.toUpperCase()),
@@ -640,9 +693,33 @@
       append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
       article.appendChild(purpose);
 
+      if (decisionGate) {
+        const gateSection = make('section', 'section decision-gate');
+        append(gateSection,
+          make('h3', '', decisionGate.title),
+          make('p', 'description', decisionGate.description));
+        const comparison = decisionGate.comparison;
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        comparison.columns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        comparison.rows.forEach((items) => {
+          const row = make('tr', '');
+          items.forEach((item) => row.appendChild(make('td', '', item)));
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        append(gateSection, wrap, make('p', 'decision-notice', decisionGate.detailNotice));
+        article.appendChild(gateSection);
+      }
+
       const authModes = operation.authModes || [];
       if (authModes.length) {
-        const authSection = make('section', 'section');
+        const authSection = make('section', 'section contract-detail');
         const authTitle = make('div', 'row section-title');
         const authTabs = make('div', 'tabs');
         const authBody = make('div', '');
@@ -693,7 +770,7 @@
         renderAuth();
       }
 
-      const requestSection = make('section', 'section');
+      const requestSection = make('section', 'section contract-detail');
       requestSection.appendChild(make('h3', '', '参数与请求体'));
       const parameters = operation.parameters || [];
       if (parameters.length) {
@@ -727,7 +804,7 @@
       }
       article.appendChild(requestSection);
 
-      const responseSection = make('section', 'section');
+      const responseSection = make('section', 'section contract-detail');
       const responseTitle = make('div', 'row section-title');
       const localeTabs = make('div', 'tabs');
       append(responseTitle, make('h3', '', '响应'), localeTabs);
@@ -789,6 +866,7 @@
         const form = make('form', 'review-form');
         form.appendChild(make('h3', '', '继续调整'));
         const questionGrid = make('div', 'question-grid');
+        if (questions.length === 1) questionGrid.classList.add('question-grid-single');
         questions.forEach((question) => {
           const fieldset = make('fieldset', '');
           fieldset.appendChild(make('legend', '', question.legend));
@@ -937,6 +1015,17 @@
     #company-api-review-delete-sessions-session-id-9c3da2a0 .section:last-child { border-bottom: 0; }
     #company-api-review-delete-sessions-session-id-9c3da2a0 .section-title { justify-content: space-between; }
     #company-api-review-delete-sessions-session-id-9c3da2a0 .description { line-height: 1.6; }
+    #company-api-review-delete-sessions-session-id-9c3da2a0 .decision-gate {
+      border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
+      background: light-dark(#f5f9ff, #122337);
+    }
+    #company-api-review-delete-sessions-session-id-9c3da2a0 .decision-notice {
+      margin-top: 10px;
+      color: light-dark(#8250df, #d2a8ff);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-delete-sessions-session-id-9c3da2a0 .gate-only .contract-detail { display: none; }
     #company-api-review-delete-sessions-session-id-9c3da2a0 table { width: 100%; border-collapse: collapse; font-size: 13px; }
     #company-api-review-delete-sessions-session-id-9c3da2a0 th,
     #company-api-review-delete-sessions-session-id-9c3da2a0 td {
@@ -984,6 +1073,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
     }
+    #company-api-review-delete-sessions-session-id-9c3da2a0 .question-grid-single { grid-template-columns: 1fr; }
     #company-api-review-delete-sessions-session-id-9c3da2a0 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
     #company-api-review-delete-sessions-session-id-9c3da2a0 legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
     #company-api-review-delete-sessions-session-id-9c3da2a0 label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
@@ -1017,7 +1107,7 @@
   </style>
 
   <div class="api-shell" data-api-shell aria-live="polite"></div>
-  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.12.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"DELETE","path":"/sessions/{session_id}","summary":"删除 Runtime Session","description":"不可逆地结束一个 Runtime Session。服务端先持久化逻辑删除状态和清理任务，使后续 GetSession、创建 Run 和配置写入立即不可见或不可用；存在 active Run 时主动 abort，并在后台清理 Runtime History、Run Event Journal、幂等记录和内存资源。永久 tombstone 严格只包含 session_id 和 deleted_at；清理状态、重试信息和 owner 不进入 tombstone，由短期内部清理任务承载。该接口不删除 mate-service 的 Chat 名称、业务元数据或附件，它们仍由 mate-service 负责。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"CampusClaw 生成的不透明 Session 标识；区分大小写"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不需要 Idempotency-Key 或 If-Match。DELETE 的 URI 与持久化 tombstone 共同提供幂等语义。","example":null},"responses":[{"status":"204","label":"No Content","summary":"逻辑删除和持久化清理任务已经提交；Session 对 API 立即不可见，物理清理在后台重试完成。成功响应没有 ResultBean。","headers":{"Cache-Control":"no-store"},"bodies":{"default":""}},{"status":"400","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权删除该 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权删除该 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to delete this Session."}}},{"status":"500","label":"Internal Server Error","summary":"逻辑删除与持久化清理任务未能原子提交；Session 不应进入部分删除状态。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_DELETE_FAILED","resMsg":"Session 删除失败。"},"en-US":{"resCode":"SESSION_DELETE_FAILED","resMsg":"Session deletion failed."}}}]},"review":{"questions":[]}}</script>
+  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.13.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"DELETE","path":"/sessions/{session_id}","summary":"删除 Runtime Session","description":"不可逆地结束一个 Runtime Session。服务端先持久化逻辑删除状态和清理任务，使后续 GetSession、创建 Run 和配置写入立即不可见或不可用；存在 active Run 时主动 abort，并在后台清理 Runtime History、Run Event Journal、幂等记录和内存资源。永久 tombstone 严格只包含 session_id 和 deleted_at；清理状态、重试信息和 owner 不进入 tombstone，由短期内部清理任务承载。该接口不删除 mate-service 的 Chat 名称、业务元数据或附件，它们仍由 mate-service 负责。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"CampusClaw 生成的不透明 Session 标识；区分大小写"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不需要 Idempotency-Key 或 If-Match。DELETE 的 URI 与持久化 tombstone 共同提供幂等语义。","example":null},"responses":[{"status":"204","label":"No Content","summary":"逻辑删除和持久化清理任务已经提交；Session 对 API 立即不可见，物理清理在后台重试完成。成功响应没有 ResultBean。","headers":{"Cache-Control":"no-store"},"bodies":{"default":""}},{"status":"400","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权删除该 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权删除该 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to delete this Session."}}},{"status":"500","label":"Internal Server Error","summary":"逻辑删除与持久化清理任务未能原子提交；Session 不应进入部分删除状态。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_DELETE_FAILED","resMsg":"Session 删除失败。"},"en-US":{"resCode":"SESSION_DELETE_FAILED","resMsg":"Session deletion failed."}}}]},"review":{"questions":[]}}</script>
   <script>
     (() => {
       const root = document.getElementById('company-api-review-delete-sessions-session-id-9c3da2a0');
@@ -1047,7 +1137,9 @@
       append(topbar, titleRow, code(api.basePath, 'base'));
 
       const methodClass = operation.method.toLowerCase();
-      const article = make('article', `operation operation-${methodClass}`);
+      const decisionGate = review.decisionGate;
+      const gateClass = decisionGate && decisionGate.hideOperationDetails ? ' gate-only' : '';
+      const article = make('article', `operation operation-${methodClass}${gateClass}`);
       const operationHead = make('header', 'operation-head');
       append(operationHead,
         make('span', `method method-${methodClass}`, operation.method.toUpperCase()),
@@ -1059,9 +1151,33 @@
       append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
       article.appendChild(purpose);
 
+      if (decisionGate) {
+        const gateSection = make('section', 'section decision-gate');
+        append(gateSection,
+          make('h3', '', decisionGate.title),
+          make('p', 'description', decisionGate.description));
+        const comparison = decisionGate.comparison;
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        comparison.columns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        comparison.rows.forEach((items) => {
+          const row = make('tr', '');
+          items.forEach((item) => row.appendChild(make('td', '', item)));
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        append(gateSection, wrap, make('p', 'decision-notice', decisionGate.detailNotice));
+        article.appendChild(gateSection);
+      }
+
       const authModes = operation.authModes || [];
       if (authModes.length) {
-        const authSection = make('section', 'section');
+        const authSection = make('section', 'section contract-detail');
         const authTitle = make('div', 'row section-title');
         const authTabs = make('div', 'tabs');
         const authBody = make('div', '');
@@ -1112,7 +1228,7 @@
         renderAuth();
       }
 
-      const requestSection = make('section', 'section');
+      const requestSection = make('section', 'section contract-detail');
       requestSection.appendChild(make('h3', '', '参数与请求体'));
       const parameters = operation.parameters || [];
       if (parameters.length) {
@@ -1146,7 +1262,7 @@
       }
       article.appendChild(requestSection);
 
-      const responseSection = make('section', 'section');
+      const responseSection = make('section', 'section contract-detail');
       const responseTitle = make('div', 'row section-title');
       const localeTabs = make('div', 'tabs');
       append(responseTitle, make('h3', '', '响应'), localeTabs);
@@ -1208,6 +1324,7 @@
         const form = make('form', 'review-form');
         form.appendChild(make('h3', '', '继续调整'));
         const questionGrid = make('div', 'question-grid');
+        if (questions.length === 1) questionGrid.classList.add('question-grid-single');
         questions.forEach((question) => {
           const fieldset = make('fieldset', '');
           fieldset.appendChild(make('legend', '', question.legend));
@@ -1356,6 +1473,17 @@
     #company-api-review-post-sessions-session-id-runs-aa6b1a4d .section:last-child { border-bottom: 0; }
     #company-api-review-post-sessions-session-id-runs-aa6b1a4d .section-title { justify-content: space-between; }
     #company-api-review-post-sessions-session-id-runs-aa6b1a4d .description { line-height: 1.6; }
+    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .decision-gate {
+      border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
+      background: light-dark(#f5f9ff, #122337);
+    }
+    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .decision-notice {
+      margin-top: 10px;
+      color: light-dark(#8250df, #d2a8ff);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .gate-only .contract-detail { display: none; }
     #company-api-review-post-sessions-session-id-runs-aa6b1a4d table { width: 100%; border-collapse: collapse; font-size: 13px; }
     #company-api-review-post-sessions-session-id-runs-aa6b1a4d th,
     #company-api-review-post-sessions-session-id-runs-aa6b1a4d td {
@@ -1403,6 +1531,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
     }
+    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .question-grid-single { grid-template-columns: 1fr; }
     #company-api-review-post-sessions-session-id-runs-aa6b1a4d fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
     #company-api-review-post-sessions-session-id-runs-aa6b1a4d legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
     #company-api-review-post-sessions-session-id-runs-aa6b1a4d label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
@@ -1436,7 +1565,7 @@
   </style>
 
   <div class="api-shell" data-api-shell aria-live="polite"></div>
-  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.12.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 评审中"},"operation":{"method":"POST","path":"/sessions/{session_id}/runs","summary":"提交用户输入并创建异步 Run","description":"向已有 Session 提交一条新的用户消息，并创建一个异步 Run。请求可携带文本、附件 ID，或两者同时携带；服务端在接受边界内固化 Session 当前 model_id 和 thinking，持久化用户消息、Run、active-run 占位、幂等结果与执行任务后立即返回，不等待模型输出。HTTP 连接断开不会终止已接受的 Run。模型输出、工具调用和终态通过 GetRun、Run Events 与 History 获取。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"已经存在且未删除的 Session 标识；区分大小写"},{"in":"header","name":"Idempotency-Key","required":true,"schema":"8-128 个可见 ASCII 字符","description":"作用域为 session_id + createRun；等价重试返回原 run_id 和 user_message_id，同键不同负载返回 409"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":true,"contentType":"application/json","description":"message 与 attachment_ids 至少提供一项。message 提供时必须非空且最多 262144 个字符；attachment_ids 最多 32 个、不可重复并保留顺序。只接受 Attachment Service 签发并绑定当前 Session 的 attachment_id，不接受 URL、MIME、文件名、Base64、model_id 或调用方身份字段。当前推荐不允许单次 thinking 覆盖。","example":{"message":"请分析附件中的订单数据，并列出异常项。","attachment_ids":["attachment_011CZm8VpK4rNs6WtY2hDqfB"]}},"responses":[{"status":"202","label":"Accepted","summary":"用户消息、Run、active-run 占位、幂等结果与执行任务已经持久化；返回不代表模型执行完成。等价幂等重试始终返回相同两个 ID。","headers":{"Location":"/campusclaw-service/v1/sessions/01JY8W6M8D9K4H2Q7P3V5N1R0T/runs/run_01JY8X2E3R4T5Y6U7I8O9P0A1S","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"run_id":"run_01JY8X2E3R4T5Y6U7I8O9P0A1S","user_message_id":"msg_01JY8X2E3R4T5Y6U7I8O9P0B2T"}}}},{"id":"400-invalid-session-id","status":"400","tabLabel":"400 · INVALID_SESSION_ID","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"400-invalid-idempotency-key","status":"400","tabLabel":"400 · INVALID_IDEMPOTENCY_KEY","label":"Bad Request","summary":"Idempotency-Key 缺失或格式不正确。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_IDEMPOTENCY_KEY","resMsg":"Idempotency-Key 格式不正确。"},"en-US":{"resCode":"INVALID_IDEMPOTENCY_KEY","resMsg":"The Idempotency-Key format is invalid."}}},{"id":"400-invalid-run-request","status":"400","tabLabel":"400 · INVALID_RUN_REQUEST","label":"Bad Request","summary":"请求体不是合法对象，包含未知字段，或文本与附件约束不满足。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_RUN_REQUEST","resMsg":"Run 请求内容不符合约束。"},"en-US":{"resCode":"INVALID_RUN_REQUEST","resMsg":"The Run request does not satisfy the required constraints."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权在该 Session 中创建 Run。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权在该 Session 中创建 Run。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to create a Run in this Session."}}},{"status":"404","label":"Not Found","summary":"Session 不存在或已删除。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}},{"id":"409-run-active","status":"409","tabLabel":"409 · RUN_ACTIVE","label":"Conflict","summary":"Session 已经存在 active Run；本接口不排队创建第二个 Run。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"RUN_ACTIVE","resMsg":"该 Session 已存在正在执行的 Run。"},"en-US":{"resCode":"RUN_ACTIVE","resMsg":"The Session already has an active Run."}}},{"id":"409-idempotency-conflict","status":"409","tabLabel":"409 · IDEMPOTENCY_CONFLICT","label":"Conflict","summary":"同一作用域中的 Idempotency-Key 已用于不同的规范化请求负载。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"IDEMPOTENCY_CONFLICT","resMsg":"Idempotency-Key 已用于不同的请求内容。"},"en-US":{"resCode":"IDEMPOTENCY_CONFLICT","resMsg":"The Idempotency-Key was already used with different request content."}}},{"id":"409-attachment-not-ready","status":"409","tabLabel":"409 · ATTACHMENT_NOT_READY","label":"Conflict","summary":"附件属于当前 Session，但尚未达到 READY；调用方可按 Retry-After 重试。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"ATTACHMENT_NOT_READY","resMsg":"附件尚未准备就绪，请稍后重试。"},"en-US":{"resCode":"ATTACHMENT_NOT_READY","resMsg":"The attachment is not ready. Try again later."}}},{"id":"422-invalid-attachment","status":"422","tabLabel":"422 · INVALID_ATTACHMENT","label":"Unprocessable Content","summary":"附件不存在、越权、未绑定当前 Session、已删除或处于不可披露的无效状态；统一错误避免枚举。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_ATTACHMENT","resMsg":"请求包含无效附件。"},"en-US":{"resCode":"INVALID_ATTACHMENT","resMsg":"The request contains an invalid attachment."}}},{"id":"422-attachment-not-supported","status":"422","tabLabel":"422 · ATTACHMENT_NOT_SUPPORTED","label":"Unprocessable Content","summary":"可信附件类型、数量或总字节数不符合当前模型输入策略。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"ATTACHMENT_NOT_SUPPORTED","resMsg":"当前模型不支持该附件输入。"},"en-US":{"resCode":"ATTACHMENT_NOT_SUPPORTED","resMsg":"The current model does not support the attachment input."}}},{"status":"500","label":"Internal Server Error","summary":"用户消息、Run、active-run 占位、幂等结果与执行任务未能原子提交；不得返回 run_id。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"RUN_ACCEPTANCE_FAILED","resMsg":"Run 接收失败。"},"en-US":{"resCode":"RUN_ACCEPTANCE_FAILED","resMsg":"Run acceptance failed."}}},{"status":"503","label":"Service Unavailable","summary":"Model Manager 或 Attachment Service 暂时不可用，且 Run 尚未被接受；调用方可使用相同 Idempotency-Key 重试。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"RUNTIME_DEPENDENCY_UNAVAILABLE","resMsg":"Runtime 依赖服务暂时不可用，请稍后重试。"},"en-US":{"resCode":"RUNTIME_DEPENDENCY_UNAVAILABLE","resMsg":"A Runtime dependency is temporarily unavailable. Try again later."}}}]},"review":{"questions":[{"id":"run_acceptance_status","legend":"成功状态与完成边界","options":[{"label":"202 已接受（推荐）","value":"持久化用户消息、Run、active-run 占位、幂等结果和执行任务后返回 202；模型执行尚未完成","selected":true},{"label":"201 已创建","value":"Run 资源创建后返回 201；仍不等待模型执行完成","selected":false}]},{"id":"active_run_policy","legend":"Session 已有 active Run 时","options":[{"label":"返回 409（推荐）","value":"返回 RUN_ACTIVE，不在本接口排队；运行中的补充指令由后续 Steer 接口负责","selected":true},{"label":"排队下一个 Run","value":"允许创建 queued Run，并增加队列顺序、取消和故障恢复语义","selected":false}]},{"id":"per_run_thinking","legend":"是否允许本次 Run 覆盖 thinking","options":[{"label":"不允许覆盖（推荐）","value":"请求体不含 thinking；接受时固化 Session 当前默认 thinking，配置修改走独立接口","selected":true},{"label":"允许降低披露级别","value":"请求可带 hidden/full，但只能等于或低于 Session 默认值；该字段参与幂等负载比较","selected":false}]},{"id":"run_acceptance_result","legend":"成功 result 返回哪些字段","options":[{"label":"只返回两个 ID（推荐）","value":"只返回 run_id 和 user_message_id；accepted=true 是 202 的重复表达，state/model/thinking 由 GetRun 返回","selected":true},{"label":"返回 Run 摘要","value":"额外返回 state、model_id 和 thinking 固化值，接受响应与 GetRun 使用同一摘要结构","selected":false}]}],"followUpTitle":"提交第四个接口调整","promptPrefix":"继续调整 POST /campusclaw-service/v1/sessions/{session_id}/runs","promptSuffix":"请按这些选择更新主维护 HTML、设计文档和当前接口展示；不要更新 OpenAPI，也不要重新打开前三个已确认接口。"}}</script>
+  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.13.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 架构前置评审"},"operation":{"method":"POST","path":"/sessions/{session_id}/runs","summary":"候选 A：提交用户输入并创建异步 Run","description":"Run 表示一个 Session 中由一次用户输入触发的一轮独立执行。它不是新的 Session，也不是一次底层模型请求；一个 Run 可以包含多次模型调用、工具调用、重试和多个 Assistant Message。候选 A 将这一轮执行作为调用方可见的一等资源；候选 B 则像 Anthropic Managed Agents 一样只公开 Session Events，把执行轮次留在服务端内部。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"已经存在且未删除的 Session 标识；区分大小写"},{"in":"header","name":"Idempotency-Key","required":true,"schema":"8-128 个可见 ASCII 字符","description":"作用域为 session_id + createRun；等价重试返回原 run_id 和 user_message_id，同键不同负载返回 409"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":true,"contentType":"application/json","description":"message 与 attachment_ids 至少提供一项。message 提供时必须非空且最多 262144 个字符；attachment_ids 最多 32 个、不可重复并保留顺序。只接受 Attachment Service 签发并绑定当前 Session 的 attachment_id，不接受 URL、MIME、文件名、Base64、model_id 或调用方身份字段。当前推荐不允许单次 thinking 覆盖。","example":{"message":"请分析附件中的订单数据，并列出异常项。","attachment_ids":["attachment_011CZm8VpK4rNs6WtY2hDqfB"]}},"responses":[{"status":"202","label":"Accepted","summary":"用户消息、Run、active-run 占位、幂等结果与执行任务已经持久化；返回不代表模型执行完成。等价幂等重试始终返回相同两个 ID。","headers":{"Location":"/campusclaw-service/v1/sessions/01JY8W6M8D9K4H2Q7P3V5N1R0T/runs/run_01JY8X2E3R4T5Y6U7I8O9P0A1S","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"run_id":"run_01JY8X2E3R4T5Y6U7I8O9P0A1S","user_message_id":"msg_01JY8X2E3R4T5Y6U7I8O9P0B2T"}}}},{"id":"400-invalid-session-id","status":"400","tabLabel":"400 · INVALID_SESSION_ID","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"400-invalid-idempotency-key","status":"400","tabLabel":"400 · INVALID_IDEMPOTENCY_KEY","label":"Bad Request","summary":"Idempotency-Key 缺失或格式不正确。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_IDEMPOTENCY_KEY","resMsg":"Idempotency-Key 格式不正确。"},"en-US":{"resCode":"INVALID_IDEMPOTENCY_KEY","resMsg":"The Idempotency-Key format is invalid."}}},{"id":"400-invalid-run-request","status":"400","tabLabel":"400 · INVALID_RUN_REQUEST","label":"Bad Request","summary":"请求体不是合法对象，包含未知字段，或文本与附件约束不满足。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_RUN_REQUEST","resMsg":"Run 请求内容不符合约束。"},"en-US":{"resCode":"INVALID_RUN_REQUEST","resMsg":"The Run request does not satisfy the required constraints."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权在该 Session 中创建 Run。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权在该 Session 中创建 Run。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to create a Run in this Session."}}},{"status":"404","label":"Not Found","summary":"Session 不存在或已删除。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}},{"id":"409-run-active","status":"409","tabLabel":"409 · RUN_ACTIVE","label":"Conflict","summary":"Session 已经存在 active Run；本接口不排队创建第二个 Run。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"RUN_ACTIVE","resMsg":"该 Session 已存在正在执行的 Run。"},"en-US":{"resCode":"RUN_ACTIVE","resMsg":"The Session already has an active Run."}}},{"id":"409-idempotency-conflict","status":"409","tabLabel":"409 · IDEMPOTENCY_CONFLICT","label":"Conflict","summary":"同一作用域中的 Idempotency-Key 已用于不同的规范化请求负载。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"IDEMPOTENCY_CONFLICT","resMsg":"Idempotency-Key 已用于不同的请求内容。"},"en-US":{"resCode":"IDEMPOTENCY_CONFLICT","resMsg":"The Idempotency-Key was already used with different request content."}}},{"id":"409-attachment-not-ready","status":"409","tabLabel":"409 · ATTACHMENT_NOT_READY","label":"Conflict","summary":"附件属于当前 Session，但尚未达到 READY；调用方可按 Retry-After 重试。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"ATTACHMENT_NOT_READY","resMsg":"附件尚未准备就绪，请稍后重试。"},"en-US":{"resCode":"ATTACHMENT_NOT_READY","resMsg":"The attachment is not ready. Try again later."}}},{"id":"422-invalid-attachment","status":"422","tabLabel":"422 · INVALID_ATTACHMENT","label":"Unprocessable Content","summary":"附件不存在、越权、未绑定当前 Session、已删除或处于不可披露的无效状态；统一错误避免枚举。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_ATTACHMENT","resMsg":"请求包含无效附件。"},"en-US":{"resCode":"INVALID_ATTACHMENT","resMsg":"The request contains an invalid attachment."}}},{"id":"422-attachment-not-supported","status":"422","tabLabel":"422 · ATTACHMENT_NOT_SUPPORTED","label":"Unprocessable Content","summary":"可信附件类型、数量或总字节数不符合当前模型输入策略。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"ATTACHMENT_NOT_SUPPORTED","resMsg":"当前模型不支持该附件输入。"},"en-US":{"resCode":"ATTACHMENT_NOT_SUPPORTED","resMsg":"The current model does not support the attachment input."}}},{"status":"500","label":"Internal Server Error","summary":"用户消息、Run、active-run 占位、幂等结果与执行任务未能原子提交；不得返回 run_id。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"RUN_ACCEPTANCE_FAILED","resMsg":"Run 接收失败。"},"en-US":{"resCode":"RUN_ACCEPTANCE_FAILED","resMsg":"Run acceptance failed."}}},{"status":"503","label":"Service Unavailable","summary":"Model Manager 或 Attachment Service 暂时不可用，且 Run 尚未被接受；调用方可使用相同 Idempotency-Key 重试。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"RUNTIME_DEPENDENCY_UNAVAILABLE","resMsg":"Runtime 依赖服务暂时不可用，请稍后重试。"},"en-US":{"resCode":"RUNTIME_DEPENDENCY_UNAVAILABLE","resMsg":"A Runtime dependency is temporarily unavailable. Try again later."}}}]},"review":{"decisionGate":{"title":"先确认：每轮执行是否是一等资源","description":"这个选择决定是否应当存在 /runs、run_id、GetRun、Run Events、按 run_id Abort/Steer，以及 GetSession 中的 active_run 指针。Anthropic Managed Agents 采用候选 B：user.message 事件驱动 Session，执行状态归 Session，事件的 processed_at=null 表示仍在队列中。","hideOperationDetails":true,"comparison":{"columns":["对比项","候选 A · 显式 Run","候选 B · Session Events"],"rows":[["提交用户输入","POST /sessions/{id}/runs","POST /sessions/{id}/events，发送 user.message"],["接收结果标识","run_id + user_message_id","用户事件 event_id"],["执行状态归属","独立 Run 资源","Session 状态"],["执行过程","Run Events","Session Events"],["中止与 steer","针对 run_id 的 Abort / Steer","user.interrupt / 后续 user.message"],["多轮区分","每轮一个 run_id","依靠事件序列和 Session 状态"],["并发语义","一个 active Run，冲突返回 409","事件可排在先前事件后；processed_at=null 表示排队"],["断线恢复与审计","按 run_id 精确恢复、查询错误/耗时/模型快照","按 Session 事件游标恢复，轮次边界由调用方推导"],["对现有设计的影响","保持已确认 GetSession.active_run 和后续 Run API","需要重开 GetSession，并重构 GetRun、Run Events、Abort、Steer 和 History 设计"]]},"detailNotice":"字段评审已暂停。本轮只确认资源模型；候选 A 的 Header、请求体、响应和错误码草案会在选择显式 Run 后重新展示。"},"questions":[{"id":"execution_resource_model","legend":"调用方是否需要看见独立 Run 资源","options":[{"label":"显式 Run 资源（推荐）","value":"每次用户输入创建独立 run_id；调用方可按轮查询、恢复、中止、steer 和审计，保持 GetSession.active_run 与后续 Run API","selected":true},{"label":"Session 事件模型","value":"像 Anthropic 一样发送 user.message 事件；只公开 event_id、Session 状态和事件流，Run 仅作为内部实现，并重开受影响的已确认 GetSession 契约","selected":false}]}],"followUpTitle":"确认执行资源模型","promptPrefix":"继续第四个接口的架构前置评审","promptSuffix":"请先按这个选择确认每轮执行是否是一等资源；本轮不要继续确认字段。不要更新 OpenAPI。若选择 Session 事件模型，请明确列出需要重开的已确认契约。"}}</script>
   <script>
     (() => {
       const root = document.getElementById('company-api-review-post-sessions-session-id-runs-aa6b1a4d');
@@ -1466,7 +1595,9 @@
       append(topbar, titleRow, code(api.basePath, 'base'));
 
       const methodClass = operation.method.toLowerCase();
-      const article = make('article', `operation operation-${methodClass}`);
+      const decisionGate = review.decisionGate;
+      const gateClass = decisionGate && decisionGate.hideOperationDetails ? ' gate-only' : '';
+      const article = make('article', `operation operation-${methodClass}${gateClass}`);
       const operationHead = make('header', 'operation-head');
       append(operationHead,
         make('span', `method method-${methodClass}`, operation.method.toUpperCase()),
@@ -1478,9 +1609,33 @@
       append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
       article.appendChild(purpose);
 
+      if (decisionGate) {
+        const gateSection = make('section', 'section decision-gate');
+        append(gateSection,
+          make('h3', '', decisionGate.title),
+          make('p', 'description', decisionGate.description));
+        const comparison = decisionGate.comparison;
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        comparison.columns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        comparison.rows.forEach((items) => {
+          const row = make('tr', '');
+          items.forEach((item) => row.appendChild(make('td', '', item)));
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        append(gateSection, wrap, make('p', 'decision-notice', decisionGate.detailNotice));
+        article.appendChild(gateSection);
+      }
+
       const authModes = operation.authModes || [];
       if (authModes.length) {
-        const authSection = make('section', 'section');
+        const authSection = make('section', 'section contract-detail');
         const authTitle = make('div', 'row section-title');
         const authTabs = make('div', 'tabs');
         const authBody = make('div', '');
@@ -1531,7 +1686,7 @@
         renderAuth();
       }
 
-      const requestSection = make('section', 'section');
+      const requestSection = make('section', 'section contract-detail');
       requestSection.appendChild(make('h3', '', '参数与请求体'));
       const parameters = operation.parameters || [];
       if (parameters.length) {
@@ -1565,7 +1720,7 @@
       }
       article.appendChild(requestSection);
 
-      const responseSection = make('section', 'section');
+      const responseSection = make('section', 'section contract-detail');
       const responseTitle = make('div', 'row section-title');
       const localeTabs = make('div', 'tabs');
       append(responseTitle, make('h3', '', '响应'), localeTabs);
@@ -1627,6 +1782,7 @@
         const form = make('form', 'review-form');
         form.appendChild(make('h3', '', '继续调整'));
         const questionGrid = make('div', 'question-grid');
+        if (questions.length === 1) questionGrid.classList.add('question-grid-single');
         questions.forEach((question) => {
           const fieldset = make('fieldset', '');
           fieldset.appendChild(make('legend', '', question.legend));

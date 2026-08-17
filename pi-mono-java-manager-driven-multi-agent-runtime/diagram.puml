@@ -1525,3 +1525,88 @@ The HTTP connection may close after 202 without aborting the Run.
 GetRun, Run Events, and History expose progress and terminal state.
 end note
 @enduml
+
+@startuml http_execution_resource_model
+title CampusClaw Execution Resource Model Decision
+
+' Source evidence verified on 2026-08-17:
+' https://platform.claude.com/docs/en/managed-agents/events-and-streaming
+' https://platform.claude.com/docs/en/managed-agents/sessions
+' https://platform.claude.com/docs/en/managed-agents/session-operations
+' https://platform.claude.com/docs/en/managed-agents/scheduled-deployments
+' Anthropic observed behavior: user.message events drive Session work; queued events have
+' processed_at=null; Session status and Session Events expose execution progress.
+' Anthropic observed behavior: Deployment Run tracks Session creation success or failure,
+' not the lifecycle of work inside the created Session.
+' CampusClaw target evidence:
+' chat-http-v1-design.md, section 2.2.1, execution resource model decision
+' chat-ws-v2.asyncapi.yaml, chat.send and Run event contracts, lines 1742-1802 and 2955-2984
+' Target-only decision: neither pi baseline exposes a durable HTTP Run or Session Events API.
+' Design reason: confirm the caller-visible recovery and audit unit before field review.
+' Architecture impact: Candidate B conflicts with the confirmed GetSession active_run field.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 16
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam defaultFontColor #0F172A
+skinparam ArrowColor #64748B
+skinparam rectangle {
+  BorderColor #64748B
+  BackgroundColor #F8FAFC
+  FontColor #0F172A
+}
+skinparam package {
+  BorderColor #64748B
+  BackgroundColor #FFFFFF
+  FontColor #0F172A
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+
+actor Caller
+rectangle "One user input" as Input
+
+package "Candidate A: caller-visible Run" as CandidateA {
+  rectangle "POST /sessions/{id}/runs" as CreateRun
+  rectangle "Run\nrun_id + frozen model snapshot" as Run
+  rectangle "GetRun / Run Events" as RunObserve
+  rectangle "Abort / Steer by run_id" as RunControl
+  rectangle "Per-Run recovery and audit" as RunAudit
+}
+
+package "Candidate B: Session Events" as CandidateB {
+  rectangle "POST /sessions/{id}/events\nuser.message" as SendEvent
+  rectangle "Session state\nidle / running / rescheduling / terminated" as SessionState
+  rectangle "Session Event Stream\nevent_id + processed_at" as SessionObserve
+  rectangle "user.interrupt / user.message" as SessionControl
+  rectangle "Session-level recovery and audit" as SessionAudit
+}
+
+Caller --> Input
+Input --> CreateRun : choose A
+CreateRun --> Run : create one execution round
+Run --> RunObserve
+Run --> RunControl
+Run --> RunAudit
+
+Input --> SendEvent : choose B
+SendEvent --> SessionState : enqueue event
+SessionState --> SessionObserve
+SessionState --> SessionControl
+SessionState --> SessionAudit
+
+note bottom of CandidateA
+Keeps the confirmed GetSession active_run pointer.
+Field review continues only after this model is accepted.
+end note
+
+note bottom of CandidateB
+Requires reopening GetSession and redesigning
+GetRun, Run Events, Abort, Steer, and History boundaries.
+end note
+@enduml

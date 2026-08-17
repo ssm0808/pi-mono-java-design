@@ -2,22 +2,25 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.12.0 |
+| 文档版本 | 1.13.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | Session 生命周期的三个 operation 已确认；`POST /sessions/{session_id}/runs` 评审中；其余 operation 待逐个评审 |
+| 接口评审状态 | Session 生命周期的三个 operation 已确认；第四个接口处于“显式 Run 还是 Session Events”的架构前置评审；其余 operation 待逐个评审 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 源码基线 | `dff835743fc7f3c93e1154c3eb51028749867ca8` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
+| Anthropic Managed Agents 文档核对 | 2026-08-17；`managed-agents-2026-04-01` beta |
 | 更新日期 | 2026-08-17 |
 
 ## 1. 结论
 
 HTTP 版不是把全部命令收进一个 `/chat` 接口，也不是让调用方继续提交
-WebSocket 的 `method + params` Frame。它是一组以 Session、Run、History、Event
-和 Model 为资源边界的内部 API，共 13 个 operation。
+WebSocket 的 `method + params` Frame。已确认部分以 Session 为资源边界；若第四个
+接口选择候选 A，完整设计将以 Session、Run、History、Event 和 Model 为资源边界，
+共 13 个 operation。若选择候选 B，operation 数量和资源边界必须随 Session Events
+方案重新计算。
 
 调用方仍是 `mate-service` Runtime bridge 或明确获授权的内部服务端 SDK。
 浏览器不直连 Runtime；公共 `chat_id` 仍由 mate-service 映射为内部
@@ -262,6 +265,10 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 
 ### 2.2 消息与 Run
 
+以下 operation 分组是“候选 A：显式 Run 资源”的接口清单，不代表 Run 资源模型
+已经确认。若选择“候选 B：Session Events”，本分组的路径、资源边界以及已经
+确认的 GetSession `active_run` 都需要重新评审。
+
 | Method | Path | 语义 |
 |---|---|---|
 | `POST` | `/sessions/{session_id}/runs` | 提交用户文本/附件并创建异步 Run |
@@ -270,7 +277,8 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 | `POST` | `/sessions/{session_id}/runs/{run_id}/steers` | 向 active Run 追加文本指导 |
 | `POST` | `/sessions/{session_id}/runs/{run_id}/abort` | 幂等请求终止 Run |
 
-`POST /runs` 原子持久化用户 Message、分配 `run_id` 并占用 active-run；成功返回
+候选 A 中，`POST /runs` 原子持久化用户 Message、分配 `run_id` 并占用
+active-run；成功返回
 `202 Accepted`、`Location`、`run_id` 和 `user_message_id`。响应表示已接受，不表示
 模型执行完成。接受 Run 时服务端把 `session.current_model_id`
 原子固化到 `RunRecord.model_id`；同一 Run 的所有模型调用都使用该值，
@@ -278,7 +286,72 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 `Idempotency-Key`；相同键和相同规范化负载返回原结果，相同键不同负载返回
 `409 IDEMPOTENCY_CONFLICT`。
 
-#### 2.2.1 第四个评审中接口：创建 Run
+#### 2.2.1 第四个接口架构前置评审：每轮执行是否是一等资源
+
+`Run` 可以理解为：一个 Session 中，由一次用户输入触发的一轮独立执行。
+
+```text
+Session：持续保存整段会话上下文
+  ├─ Run 1：用户问“分析订单”
+  ├─ Run 2：用户问“只看异常订单”
+  └─ Run 3：用户问“导出报告”
+```
+
+它不是新的 Session，也不是一次底层模型请求。一个 Run 可能包含多次模型调用、
+工具调用、重试和多个 Assistant Message。如果它成为调用方可见的一等资源，
+`POST /sessions/{session_id}/runs` 的完整作用才是：
+
+1. 持久化本次用户消息；
+2. 为本轮执行分配 `run_id`；
+3. 固化本轮使用的 `model_id`、`thinking` 和附件快照；
+4. 占用 Session 唯一的 active Run 位置；
+5. 创建后台执行任务；
+6. 立即返回 `202`，不等待模型执行结束。
+
+`run_id` 随后用于查询本轮状态和阶段、接收增量事件、Abort 或 Steer 本轮、
+区分 Session 内的多轮执行、在 HTTP 断线后恢复，以及独立记录本轮错误、耗时和
+模型快照。
+
+Anthropic Managed Agents 选择了不同的对外模型。官方文档将 Session 定义为
+事件驱动状态机：调用方通过 `POST /v1/sessions/{session_id}/events` 发送
+`user.message`，响应返回已经接收并由服务端分配 `event_id` 的用户事件；执行状态
+由 Session 的 `idle | running | rescheduling | terminated` 和 Session Event
+Stream 表达。事件排在先前事件后时 `processed_at=null`，而不是创建独立的
+Session Run。[Anthropic Send Events API](https://platform.claude.com/docs/en/api/cli/beta/sessions/events/send)、
+[Session event stream](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)、
+[Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations)
+
+Anthropic 创建 Session 后可以再发送事件，也可以用 `initial_events` 在创建时
+直接进入 `running`；这些初始事件会在创建响应前校验并持久化，但不会在创建响应
+中回显。[Start a session](https://platform.claude.com/docs/en/managed-agents/sessions)
+其名为 Deployment Run 的资源只记录一次 Deployment 触发是否成功创建 Session，
+成功时关联 `session_id`，明确不跟踪 Session 执行生命周期，因此不等同于这里的
+Session Run。[Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)、
+[Deployment Runs API](https://platform.claude.com/docs/en/api/beta/deployment_runs)
+
+| 对比项 | 候选 A：CampusClaw 显式 Run | 候选 B：Session Events |
+|---|---|---|
+| 提交用户输入 | `POST /sessions/{id}/runs` | `POST /sessions/{id}/events`，发送 `user.message` |
+| 接收结果标识 | `run_id`、`user_message_id` | 用户事件 `event_id` |
+| 执行状态归属 | 独立 Run 资源 | Session 状态 |
+| 执行过程 | Run Events | Session Events |
+| 中止与 Steer | 针对 `run_id` 的 Abort / Steer | `user.interrupt` / 后续 `user.message` |
+| 多轮区分 | 每轮一个 `run_id` | 依靠事件序列和 Session 状态 |
+| 并发语义 | 一个 active Run，冲突返回 `409` | 事件可排在先前事件后，`processed_at=null` 表示尚未处理 |
+| 断线恢复与审计 | 按 `run_id` 精确恢复，独立记录错误、耗时和模型快照 | 按 Session 事件游标恢复，轮次边界由调用方推导 |
+| 对现有设计的影响 | 保持 GetSession `active_run` 以及 GetRun、Run Events、Abort、Steer | 必须重开 GetSession，并重构上述 Run operation 与 History 边界 |
+
+![HTTP 执行资源模型对比](http_execution_resource_model.svg)
+
+[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L1529)
+
+本轮只确认一个核心问题：mate-service 是否需要精确查询、恢复、中止、Steer 和
+审计“某一轮执行”。如果需要，推荐候选 A，将 Run 公开为一等资源；如果调用方
+只需发送消息、监听事件和读取 Session 状态，则选择候选 B，把 Run 保留为
+CampusClaw 内部实现。选择候选 B 会形成与已确认 GetSession `active_run` 的直接
+冲突，因此必须明确重开第二个接口，不能静默替换。
+
+#### 2.2.2 候选 A 条件式接口预览：创建 Run
 
 ```http
 POST /campusclaw-service/v1/sessions/{session_id}/runs
@@ -367,12 +440,14 @@ GetRun 的 `Location`、`Cache-Control: no-store` 和实际 `Content-Language`�
 
 [PlantUML 源码：`http_create_run`](diagram.puml#L1412)
 
-本轮需要对齐四个决策：成功使用 `202` 还是 `201`、已有 active Run 时返回
-`409` 还是排队、是否允许单次 Run 降低 `thinking`，以及成功 `result` 只返回
-两个 ID 还是返回 Run 摘要。前三个 Session operation 保持已确认状态，OpenAPI
-本轮不更新。
+以上 Header、请求体、响应与错误码只是候选 A 的条件式预览，本轮不确认这些
+字段。只有显式 Run 资源模型确认后，才继续对齐 `202/201`、active Run 冲突或
+排队、单次 `thinking` 覆盖和成功 `result` 字段。OpenAPI 本轮不更新。
 
 ### 2.3 事件与历史
+
+以下 Run Event Journal 仍属于候选 A；候选 B 会改为 Session Event Stream，
+不使用 `run_id/run_seq` 作为对外恢复边界。
 
 | Method | Path | 语义 |
 |---|---|---|
@@ -409,19 +484,21 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 |---|---|
 | `connect(mode=create)` | `POST /agents/{agent_id}/sessions`；CampusClaw 生成 `session_id` |
 | `connect(mode=resume)` | 无对应命令；重新 `GET` Session/Run/History |
-| `chat.send` | `POST /sessions/{session_id}/runs` |
-| `chat.steer` | `POST .../runs/{run_id}/steers` |
-| `chat.abort` | `POST .../runs/{run_id}/abort` |
+| `chat.send` | 候选 A：`POST /sessions/{session_id}/runs`；候选 B：发送 `user.message` 到 `/sessions/{session_id}/events` |
+| `chat.steer` | 候选 A：`POST .../runs/{run_id}/steers`；候选 B：发送后续 `user.message` |
+| `chat.abort` | 候选 A：`POST .../runs/{run_id}/abort`；候选 B：发送 `user.interrupt` |
 | `chat.history` | `GET /sessions/{session_id}/history` |
 | `session.get` | `GET /sessions/{session_id}` |
 | `models.list` | `GET /sessions/{session_id}/models` |
 | `model.set` | `PUT /sessions/{session_id}/model` |
 | `thinking.set` | `PUT /sessions/{session_id}/thinking` |
-| EventFrame | SSE 或 JSON Run Event Journal |
+| EventFrame | 候选 A：Run Event Journal；候选 B：Session Event Stream |
 | RequestFrame `id` | HTTP 请求关联由网关/框架处理，不参与业务幂等 |
 | connection generation/close code | 删除；改用 HTTP 状态、ETag 和幂等键 |
 
 ## 4. 状态、并发与恢复
+
+以下规则是候选 A 的当前预览，不在资源模型确认前冻结：
 
 - 每个 Session 同一时刻只允许一个 active Run；冲突返回 `409 RUN_ACTIVE`。
 - Run 接受后不依赖发起 HTTP 连接存活；连接关闭不等于 Abort。
@@ -498,10 +575,11 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 | `403` | `FORBIDDEN` | `当前调用方无权删除该 Session。` | `The caller is not allowed to delete this Session.` |
 | `500` | `SESSION_DELETE_FAILED` | `Session 删除失败。` | `Session deletion failed.` |
 
-第四个 CreateRun 接口当前提案成功返回 `202` ResultBean，失败仍只有
+第四个接口若选择候选 A，当前条件式提案成功返回 `202` ResultBean，失败仍只有
 `resCode/resMsg`。附件不存在、越权、未绑定、已删除或其他不可披露状态统一为
 `INVALID_ATTACHMENT`，避免资源枚举；附件属于当前 Session 但尚未 READY 时才
-返回可重试的 `ATTACHMENT_NOT_READY`。以下错误码和消息仍处于评审中：
+返回可重试的 `ATTACHMENT_NOT_READY`。以下错误码和消息仅用于预览，尚未进入
+字段评审：
 
 | HTTP | `resCode` | `zh_CN` | `en_US` |
 |---|---|---|---|
@@ -620,7 +698,7 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 - HTTP 契约不接收 `traceparent`。部署平台如需调用链遥测，由网关和
   框架在契约外处理，不把它传入业务对象。
 - `agent_id`、`model_id` 和 `attachment_id` 均大小写敏感且不透明。
-- `POST /runs` 只接受文本和附件 ID；当前提案不接受单次 `thinking` 覆盖，
+- 候选 A 的 `POST /runs` 只接受文本和附件 ID；当前提案不接受单次 `thinking` 覆盖，
   并禁止 URL、MIME、文件名、Base64、OBS Object Key、tenant/user 字段。
 - `Idempotency-Key` 只作为作用域内去重键，调用方不得放入凭据或个人信息；
   服务端日志只记录有界摘要，不记录原值。
@@ -636,7 +714,9 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 规范来源为仓库相对路径
 `pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml`。本轮 HTTP
 认证设计额外核对 pi-mono-java 基线
-`dff835743fc7f3c93e1154c3eb51028749867ca8`。
+`dff835743fc7f3c93e1154c3eb51028749867ca8`。本轮资源模型比较还核对了
+Anthropic Managed Agents 官方文档在 2026-08-17 公开的
+`managed-agents-2026-04-01` beta 契约。
 
 | 分类 | 证据或决策 |
 |---|---|
@@ -648,6 +728,10 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 | 观察到的行为 | pi-mono `packages/protocol/src/schemas.ts` 基线 38-45、241-258：协议 `SessionSnapshot` 顶层包含 `phase`、`thinkingLevel`、完整 `transcript`、连接相对 `attached` 和 live Runtime `locked` |
 | 观察到的行为 | pi-mono `packages/protocol/src/schemas.ts` 基线 26-35：`ThinkingLevel` 取 `off/minimal/low/medium/high/xhigh/max`，表达推理强度 |
 | 观察到的行为 | Anthropic TypeScript SDK `src/resources/beta/sessions/sessions.ts` 基线 638-710：Managed Agents 的 Session 是控制面资源，包含 Agent 快照、环境/资源、预算/用量、标题/元数据和状态，但不内嵌 transcript 或 active Run 恢复快照 |
+| 观察到的行为 | Anthropic [Session event stream](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)：Managed Agents 的交互是事件驱动；`user.message` 启动或继续工作，事件在更早事件之后排队时 `processed_at=null`，中止通过 `user.interrupt` 表达 |
+| 观察到的行为 | Anthropic [Send Events API](https://platform.claude.com/docs/en/api/cli/beta/sessions/events/send)：`POST /v1/sessions/{session_id}/events` 返回服务端已接收的事件及其 `event_id`，普通 Session 交互没有独立的 Session Run ID |
+| 观察到的行为 | Anthropic [Start a session](https://platform.claude.com/docs/en/managed-agents/sessions) 与 [Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations)：Session 维护跨多次交互的历史，事件驱动 `idle/running/rescheduling/terminated` 状态；`initial_events` 可让新 Session 直接进入 running |
+| 观察到的行为 | Anthropic [Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)：Deployment Run 是 Deployment 触发的追加记录，只跟踪 Session 创建成功或失败；成功后通过 `session_id` 转到 Session Event Stream，不跟踪 Session 执行生命周期 |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 789-805：`AgentSession.dispose()` 中止重试、压缩、分支、bash 和 Agent 运行，断开扩展并释放内存资源；它未定义 HTTP 逻辑删除或持久化 tombstone |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/modes/interactive/components/session-selector.ts` 基线 598-630：交互模式删除直接将 Session JSONL 移入回收站，失败时回退为 unlink；这是本地文件行为，不是服务端删除事务 |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java` 基线 143-157、204-274：`remove()` 只从内存 Map 移除并关闭 `SessionManager`；JSONL 可在后续创建时恢复，闲置淘汰也只释放内存对象 |
@@ -657,14 +741,15 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java` 基线 53-136：现有 HTTP POST 把 prompt 生命周期绑定到 SSE 响应，并在取消时 abort；没有先持久化异步 Run 再返回的接受边界 |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 252-273 与 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java` 基线 153-177：WebSocket prompt 只接受非空文本，先追加 JSONL UserMessage 再调用 prompt，并以 `isStreaming` 拒绝并发；没有附件 ID、Run ID 或幂等存储 |
 | 观察到的行为 | pi-mono-java `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` 基线 183-194、218-268：`startExecution` 通过 executionLock 保证单次 current execution，并在虚拟线程执行结束时清理；没有共享数据库 active-run 唯一约束或执行任务 |
-| 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
+| 产品约束 | Session/Message、附件引用和 Manager 权威保持不变；执行轮次是否公开为 Run 尚未确认 |
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、附件只传 ID、ResultBean 错误脱敏 |
 | 架构改造 | 一组 HTTP 资源接口、统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
-| 架构改造 | CreateRun 将当前进程内 `prompt` 调用提升为持久化异步 Run：用户 Message、RunRecord、Session active 指针、幂等结果和 `t_run_dispatch_task` 在本地事务中提交；执行与 HTTP 连接解耦，跨服务附件引用采用无 XA 的保守标记与后台对账 |
-| 架构改造 | CampusClaw GetSession 收敛为配置、粗粒度状态和 active Run 指针；History 水位归 History API，执行 phase 与恢复详情归 GetRun，实时增量归 Run Event API。相较 Anthropic，Agent 发布快照、环境、Vault、预算、用量、标题和业务元数据不由本 Session 资源拥有 |
+| 待确认架构 | 候选 A 将当前进程内 `prompt` 调用提升为持久化异步 Run：用户 Message、RunRecord、Session active 指针、幂等结果和 `t_run_dispatch_task` 在本地事务中提交；候选 B 只公开 Session Events，并将 Run 保留为内部实现 |
+| 设计原因 | 若 mate-service 需要按轮精确恢复、中止、Steer 和审计，显式 `run_id` 能提供稳定边界；若只需要发送消息、监听事件和读取 Session 状态，Session Events 的对外模型更窄 |
+| 已确认设计及其条件影响 | 当前 CampusClaw GetSession 已收敛为配置、粗粒度状态和 active Run 指针；选择候选 A 时，History 水位归 History API，执行 phase 与恢复详情归 GetRun，实时增量归 Run Event API；选择候选 B 时必须重开该边界。相较 Anthropic，Agent 发布快照、环境、Vault、预算、用量、标题和业务元数据不由本 Session 资源拥有 |
 
 公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自
 用户提供的集成约束。当前工作区不含对应入站认证库或
@@ -678,6 +763,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.13.0 | 2026-08-17 | 将第四个接口退回架构前置评审：先确认“每轮执行是否成为调用方可见的一等 Run 资源”，再评审字段；增加显式 Run 与 Anthropic 风格 Session Events 的身份、状态、事件、中止、并发、恢复和审计对比，明确选择 Events 会重开已确认 GetSession `active_run`；原 CreateRun 字段契约降级为候选 A 条件式预览；核对 Anthropic `managed-agents-2026-04-01` 官方契约并新增资源模型 PlantUML，OpenAPI 未更新 |
 | 1.12.0 | 2026-08-17 | 用户确认第三个 DeleteSession 接口，冻结 `204` 逻辑删除、active Run 自动 abort、重复删除统一 `204`、Runtime 数据清理和仅含 `session_id/deleted_at` 的永久 tombstone；启动第四个 CreateRun 评审，提出持久化异步接受边界、必填幂等键、文本/附件输入、单 active Run、最窄 `202` ResultBean 与错误国际化；增加 pi/pi-mono-java prompt/并发/HTTP SSE 源码证据和 PlantUML，OpenAPI 未更新 |
 | 1.11.1 | 2026-08-17 | 对齐第三个接口的永久 tombstone 字段：严格只保留 `session_id`、`deleted_at`；清理状态、重试信息和 owner 不进入 tombstone，由短期清理任务承载；第三个接口整体仍在评审中，OpenAPI 未更新 |
 | 1.11.0 | 2026-08-17 | 启动第三个 `DELETE /sessions/{session_id}` operation 评审；提案在持久化逻辑删除和清理任务后返回 `204`、active Run 自动 abort、重复删除统一 `204`、清理 Runtime 数据并仅保留最小 tombstone；增加 pi/pi-mono-java 删除与释放行为证据，前两个已确认接口不变，OpenAPI 未更新 |
