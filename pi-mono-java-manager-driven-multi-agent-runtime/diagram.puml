@@ -1001,7 +1001,7 @@ title CampusClaw HTTP Session Creation
 ' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/context/ContextFileLoader.java: loadSystemPrompt
 ' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillPromptFormatter.java: format
 ' Observed behavior: AgentSession initialization resolves a model, loads context and skills, and creates an Agent.
-' Observed behavior: initialization does not itself invoke the model or create a Run.
+' Observed behavior: initialization does not itself invoke the model or start execution.
 ' Target design: mate-service supplies only agent_id and CampusClaw generates session_id.
 ' Target design: Managed settings chooses a default candidate and Model Manager remains authoritative.
 ' Target design: a successful POST returns a ready SessionResource without internal version fields.
@@ -1065,8 +1065,9 @@ API --> Mate : 201 Created plus Location\nResultBean with SessionResource in res
 note over API,Pool
 Before commit, any failure discards the in-memory Session
 and does not expose session_id.
-After commit, state is idle and active_run is null.
-No Message or RunRecord exists.
+After commit, state is idle and no MessageEntry exists.
+The previously confirmed active_run field is pending review
+because the public Run resource was superseded.
 end note
 
 note over Mate,API
@@ -1223,7 +1224,7 @@ end note
 @enduml
 
 @startuml http_get_session_response
-title CampusClaw GetSession Response Proposal
+title CampusClaw GetSession Previous Response Snapshot
 
 ' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
 ' packages/protocol/src/schemas.ts, ThinkingLevelSchema, lines 26-35
@@ -1239,10 +1240,10 @@ title CampusClaw GetSession Response Proposal
 ' Observed behavior: Anthropic exposes a control-plane Session resource without transcript
 ' or an active Run recovery snapshot.
 ' Product constraint: the confirmed CampusClaw thinking field is disclosure visibility.
-' Architecture change: GetSession exposes current configuration, coarse state, and only
-' an active Run pointer. History owns historySeq; GetRun owns phase and recovery details.
-' Design reason: keep the Session control resource bounded and avoid duplicating data
-' from History, GetRun, and Run Event APIs.
+' Superseded design: GetSession exposed an active Run pointer under the former public Run model.
+' Architecture change: Session Events have no public run ID, so activeRun must be revisited.
+' Design reason: preserve the previously confirmed snapshot without claiming that its
+' activeRun field remains compatible with the selected Session Event resource model.
 ' Target-only design: these wire-contract types are not existing pi-mono-java classes.
 
 left to right direction
@@ -1299,13 +1300,14 @@ GetSessionResult o-- "0..1" ActiveRunSummary : activeRun
 ActiveRunSummary --> "1" ActiveRunState : state
 
 note bottom of GetSessionResult
-This resource contains no History watermark, transcript,
-Run phase, stream content, tool state, or steer queue.
+This is the 1.10.1 response snapshot.
+The activeRun field is pending review.
+Other confirmed Session fields remain unchanged.
 end note
 
 note bottom of ActiveRunSummary
-GetRun owns phase, frozen model and thinking,
-active message, open content, tools, and steers.
+This type depends on the superseded public Run model.
+The current recommendation is to remove it.
 end note
 @enduml
 
@@ -1327,7 +1329,7 @@ title CampusClaw HTTP Session Logical Deletion Confirmed Design
 ' Observed behavior: pi-mono-java SessionPool.remove only removes the in-memory entry and
 ' closes SessionManager; persisted JSONL can still be restored.
 ' Target-only design: no current pi-mono-java HTTP delete operation, durable deletion state,
-' cleanup work item, event-journal purge, or tombstone implements this sequence.
+' cleanup work item or tombstone implements this sequence.
 ' Architecture change: logical deletion and a durable cleanup work item commit atomically.
 ' Design reason: the API becomes idempotent immediately without exposing cleanup-job state.
 
@@ -1357,7 +1359,7 @@ actor Caller
 participant "Credential\nAdapter" as Auth
 participant "DeleteSession\nAPI" as API
 database "Runtime Session\nStore" as Store
-participant "Managed Run\nHub" as Hub
+participant "Session Execution\nCoordinator" as Execution
 participant AgentSession
 participant SessionPool
 participant "Cleanup\nWorker" as Worker
@@ -1368,20 +1370,20 @@ API -> API : validate session_id and authorize delete
 API -> Store : beginLogicalDelete(session_id)
 
 alt existing live Session
-  Store -> Store : transaction: mark DELETING, reject new work,\nenqueue durable cleanup, capture activeRunId
+  Store -> Store : transaction: mark DELETING, reject new work,\nenqueue durable cleanup, capture execution state
   Store --> API : committed DeletePlan
-  API -> Hub : block new Run and configuration commands
-  opt activeRunId exists
-    API -> Hub : requestAbort(activeRunId)
-    Hub -> AgentSession : abort()
+  API -> Execution : block new events and configuration commands
+  opt active execution exists
+    API -> Execution : request abort
+    Execution -> AgentSession : abort()
   end
   API -> SessionPool : remove(session_id)
   API --> Caller : 204 No Content
   Worker -> Store : claim cleanup work item
-  Worker -> Hub : ensure active Run is terminal aborted
-  Hub -> AgentSession : abort() if still active
+  Worker -> Execution : ensure active execution is stopped
+  Execution -> AgentSession : abort() if still active
   Worker -> SessionPool : remove and release runtime objects
-  Worker -> Store : purge History, RunRecord, Event Journal,\nidempotency records, and Session payload
+  Worker -> Store : purge History, internal execution state,\nand Session payload
   Store -> Store : retain session_id and deleted_at tombstone
   Worker -> Store : complete and delete cleanup work item
 else missing, deleting, or deleted
@@ -1398,7 +1400,7 @@ Physical cleanup remains retryable and internal.
 end note
 
 note over Store,Worker
-mate-service Chat metadata and Attachment Service objects
+mate-service Chat metadata and File Service objects
 are outside this operation's ownership boundary.
 end note
 
@@ -1409,34 +1411,27 @@ Cleanup state, retries, errors, and owner data stay out.
 end note
 @enduml
 
-@startuml http_create_run
-title CampusClaw HTTP Asynchronous Run Acceptance
+@startuml http_session_event_stream
+title CampusClaw Session Event Direct POST Stream
 
 ' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
-' packages/coding-agent/src/core/agent-session.ts, _handleAgentEvent, _runAgentPrompt,
-' and prompt, lines 609-680, 1063-1074, and 1116-1273
-' packages/agent/src/agent.ts, prompt and runWithLifecycle, lines 347-358 and 486-535
+' packages/agent/src/types.ts, AgentEvent, lines 391-412
+' packages/agent/src/agent-loop.ts, runAgentLoop and runLoop, lines 89-109 and 150-222
+' packages/coding-agent/src/core/agent-session.ts, _handleAgentEvent and prompt,
+' lines 609-680 and 1116-1273
 ' Source evidence (pi-mono-java dff835743fc7f3c93e1154c3eb51028749867ca8):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java,
-' handleChat and cancellation flow, lines 53-136
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java,
-' handlePrompt, lines 252-273
+' handleChat, wireSink, and forwardEvent, lines 53-136
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java,
 ' prompt and abort, lines 153-177
-' modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java,
-' prompt and startExecution, lines 183-194 and 218-268
-' Target contract evidence:
-' chat-ws-v2.asyncapi.yaml, ChatSendParams and ChatSendResult, lines 1742-1802 and 2955-2984
-' chat-ws-v2.asyncapi.yaml, attachment acceptance order, lines 4666-4698
-' Observed behavior: both pi implementations invoke prompt against one in-memory active
-' execution; the current Java HTTP handler couples execution to an SSE response.
-' Target-only design: neither baseline has a durable HTTP Run resource, run ID,
-' shared active-run constraint, or dispatch work item.
-' Architecture change: the local acceptance transaction persists the user Message,
-' queued RunRecord, active pointer, and t_run_dispatch_task.
-' Product constraint: CreateRun does not accept an application idempotency key.
-' Design reason: execution does not depend on the lifetime of the accepting HTTP
-' connection, while an ambiguous response requires Session and History inspection.
+' Observed behavior: both pi baselines emit message start, update, and end events around
+' one active in-memory execution. The Java HTTP handler already returns SSE from POST.
+' Java divergence: the baseline aborts execution when the client cancels the SSE response.
+' Target-only design: the public API persists MessageEntry records and has no public run ID.
+' Architecture change: a disconnected client does not abort accepted execution; History is
+' the recovery source, and replaying the side-effecting POST is forbidden.
+' Design reason: preserve direct streaming while separating transient previews from the
+' authoritative completed Assistant MessageEntry.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -1462,58 +1457,61 @@ skinparam note {
 
 actor Caller
 participant "Credential\nAdapter" as Auth
-participant "CreateRun\nAPI" as API
+participant "Session Event\nAPI" as API
 database "Runtime Session\nStore" as Store
-participant "Attachment\nService" as Attachment
+participant "File\nService" as FileService
 participant "Model\nManager" as Manager
-participant "Run Dispatch\nWorker" as Worker
-participant "Managed Run\nHub" as Hub
 participant AgentSession
 
-Caller -> Auth : POST /sessions/{session_id}/runs\ncredentials and JSON body
+Caller -> Auth : POST /sessions/{session_id}/events\ncredentials and user.message JSON
 Auth -> API : immutable CallerAuthContext
 API -> API : validate session_id and strict request body
-API -> Store : load live Session and authorize createRun
-Store --> API : current model, thinking, history attachments, active pointer
-API -> API : reject an existing active Run
-API -> Attachment : batch resolve, authorize, and mark referenced\nfor the complete ordered attachment set
-Attachment --> API : trusted metadata snapshots
-API -> Manager : resolve current model and input policy
-Manager --> API : authoritative model descriptor and limits
-API -> API : validate historical plus new attachment context
-API -> Store : atomic accept(user Message, queued RunRecord,\nactive pointer, dispatch task)
+API -> Store : load live Session and authorize event submission
+Store --> API : current model, thinking, and execution state
 
-alt acceptance transaction commits first
-  Store --> API : committed runId and userMessageId
-  API --> Caller : 202 Accepted\nLocation plus narrow ResultBean
-  Worker -> Store : claim t_run_dispatch_task
-  Worker -> Hub : register and start frozen Run
-  Hub -> AgentSession : prompt(user Message, attachment snapshots)
-  AgentSession --> Hub : structured events and terminal result
-  Hub -> Store : persist Run events, Messages, and terminal RunRecord
-  Store -> Store : clear active pointer and complete dispatch task
-else concurrent active-run constraint loses
-  Store --> API : no local side effects committed
-  API --> Caller : 409 RUN_ACTIVE\nResultBean error without result
-else acceptance transaction fails
-  Store --> API : no local side effects committed
-  API --> Caller : 500 RUN_ACCEPTANCE_FAILED\nResultBean error without result
+alt another execution is active
+  API --> Caller : 409 SESSION_BUSY\nJSON error without result
+else Session is idle
+  API -> FileService : resolve and authorize ordered file_ids
+  FileService --> API : trusted file snapshots
+  API -> Manager : resolve current model and input policy
+  Manager --> API : authoritative model descriptor and limits
+  API -> Store : persist User MessageEntry and mark active execution
+  Store --> API : user entry_id and entry_seq
+  API --> Caller : 200 text/event-stream
+  API --> Caller : proposed user message persistence event
+  API -> AgentSession : prompt(user message, file snapshots)
+
+  loop each Assistant MessageEntry
+    AgentSession --> API : message_start
+    API --> Caller : assistant.message.started\nentry_id, no entry_seq
+    loop provider increments
+      AgentSession --> API : message_update
+      API --> Caller : assistant.message.delta\nentry_id and typed delta
+    end
+    AgentSession --> API : message_end with complete message
+    API -> Store : persist complete Assistant MessageEntry
+    Store --> API : entry_seq
+    API --> Caller : assistant.message.completed\ncomplete message and entry_seq
+    opt tool calls require another model turn
+      AgentSession --> API : tool execution and ToolResult events\nnames pending review
+    end
+  end
+
+  AgentSession --> API : agent_end
+  API -> Store : clear active execution and persist final entries
+  API --> Caller : proposed Session idle and stream end events
 end
 
+note over API,Caller
+SSE started and delta events are transient previews.
+Only completed MessageEntry records are authoritative and recoverable.
+end note
+
 note over Caller,Store
-CreateRun has no application idempotency key.
-After an ambiguous transport failure, inspect Session and History
-before deciding whether to issue a new POST.
-end note
-
-note over Attachment,Store
-There is no cross-service XA transaction.
-A referenced attachment mark may remain conservatively after a local failure.
-end note
-
-note over Caller,Worker
-The HTTP connection may close after 202 without aborting the Run.
-GetRun, Run Events, and History expose progress and terminal state.
+This POST has no application idempotency key.
+After disconnect, do not replay it automatically; read History.
+The accepted execution continues without the HTTP client.
 end note
 @enduml
 
@@ -1532,10 +1530,11 @@ title CampusClaw Execution Resource Model Decision Record
 ' CampusClaw target evidence:
 ' chat-http-v1-design.md, section 2.2.1, execution resource model decision
 ' chat-ws-v2.asyncapi.yaml, chat.send and Run event contracts, lines 1742-1802 and 2955-2984
-' Target-only decision: neither pi baseline exposes a durable HTTP Run or Session Events API.
-' Design reason: confirm the caller-visible recovery and audit unit before field review.
-' Confirmed decision on 2026-08-17: Candidate A is the CampusClaw public resource model.
-' Architecture impact: Candidate B remains an Anthropic reference and is not selected.
+' Target-only decision: neither pi baseline exposes this managed Session HTTP contract.
+' Design reason: use Session Entry history as the recovery unit and avoid a redundant
+' public run resource when callers only submit messages and observe Session output.
+' Confirmed later on 2026-08-17: Session Events replace the earlier public Run decision.
+' Architecture impact: the old active_run field and Run-scoped operations must be revisited.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -1563,42 +1562,43 @@ skinparam note {
 actor Caller
 rectangle "One user input" as Input
 
-package "Selected: caller-visible Run" as CandidateA {
+package "Selected: Session Events and Entry History" as CandidateA {
+  rectangle "POST /sessions/{id}/events\nuser.message + direct SSE" as SendEvent
+  rectangle "Internal active execution\nno public run_id" as Execution
+  rectangle "Transient message previews" as Preview
+  rectangle "Persisted MessageEntry\nentry_id + entry_seq" as Entry
+  rectangle "Session History recovery" as History
+}
+
+package "Superseded: caller-visible Run" as CandidateB {
   rectangle "POST /sessions/{id}/runs" as CreateRun
-  rectangle "Run\nrun_id + frozen model snapshot" as Run
+  rectangle "Run\nrun_id + frozen snapshot" as Run
   rectangle "GetRun / Run Events" as RunObserve
   rectangle "Abort / Steer by run_id" as RunControl
   rectangle "Per-Run recovery and audit" as RunAudit
 }
 
-package "Reference only: Session Events" as CandidateB {
-  rectangle "POST /sessions/{id}/events\nuser.message" as SendEvent
-  rectangle "Session state\nidle / running / rescheduling / terminated" as SessionState
-  rectangle "Session Event Stream\nevent_id + processed_at" as SessionObserve
-  rectangle "user.interrupt / user.message" as SessionControl
-  rectangle "Session-level recovery and audit" as SessionAudit
-}
-
 Caller --> Input
-Input --> CreateRun : selected contract
-CreateRun --> Run : create one execution round
+Input --> SendEvent : selected contract
+SendEvent --> Execution : start one internal execution
+Execution --> Preview : stream live progress
+Execution --> Entry : persist authoritative facts
+Entry --> History : recover after disconnect
+
+Input ..> CreateRun : superseded design
+CreateRun --> Run
 Run --> RunObserve
 Run --> RunControl
 Run --> RunAudit
 
-Input ..> SendEvent : unselected reference
-SendEvent --> SessionState : enqueue event
-SessionState --> SessionObserve
-SessionState --> SessionControl
-SessionState --> SessionAudit
-
 note bottom of CandidateA
-Confirmed on 2026-08-17.
-Keeps GetSession active_run and Run-scoped APIs.
+Confirmed later on 2026-08-17.
+No public run_id or Run-scoped API.
+Direct POST SSE is a CampusClaw transport choice.
 end note
 
 note bottom of CandidateB
-Not selected for the CampusClaw public contract.
-Its durable event and preview semantics remain useful references.
+The 1.15.0 public Run decision is superseded.
+It remains in version history only.
 end note
 @enduml

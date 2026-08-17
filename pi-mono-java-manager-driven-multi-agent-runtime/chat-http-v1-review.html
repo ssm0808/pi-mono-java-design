@@ -219,7 +219,7 @@
   </style>
 
   <div class="api-shell" data-api-shell aria-live="polite"></div>
-  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.15.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"POST","path":"/agents/{agent_id}/sessions","summary":"创建 Runtime Session","description":"根据 agent_id 创建一个全新的 Runtime Session。CampusClaw 生成 session_id，从 Agent 发布快照读取 defaultModel 并由 Model Manager 校验，然后完成上下文、Skills、Tools、AgentSession 和持久化初始化。该操作无请求体，不调用模型、不创建 Run，也不消耗 token；每次成功 POST 都创建新 Session。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"agent_id","required":true,"schema":"^agent_[0-9A-Za-z]{24}$","description":"创建后不可变的 Agent 绑定；区分大小写"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"错误消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不接受 session_id、model_id 或 thinking。","example":null},"responses":[{"status":"201","label":"Created","summary":"Session 已完成初始化和持久化，可以接受后续请求；初始 state=idle，active_run=null。","headers":{"Location":"/campusclaw-service/v1/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"session_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","agent_id":"agent_011CZkYqphY8vELVzwCUpqiQ","model_id":"model_011CZq2GkV8aD4NwP7sLmXfR","state":"idle","thinking":"hidden","active_run":null,"created_at":"2026-08-15T11:30:00Z"}}}},{"status":"400","label":"Bad Request","summary":"agent_id 不符合资源标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_AGENT_ID","resMsg":"agent_id 格式不正确。"},"en-US":{"resCode":"INVALID_AGENT_ID","resMsg":"The agent_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权为该 Agent 创建 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权为该 Agent 创建 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to create a Session for this Agent."}}},{"status":"404","label":"Not Found","summary":"指定的 Agent 不存在。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_NOT_FOUND","resMsg":"指定的 Agent 不存在。"},"en-US":{"resCode":"AGENT_NOT_FOUND","resMsg":"The specified Agent does not exist."}}},{"id":"422-agent-not-available","status":"422","tabLabel":"422 · AGENT_NOT_AVAILABLE","label":"Unprocessable Content","summary":"Agent 存在，但当前不可用于创建 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_NOT_AVAILABLE","resMsg":"指定的 Agent 当前不可用。"},"en-US":{"resCode":"AGENT_NOT_AVAILABLE","resMsg":"The specified Agent is currently unavailable."}}},{"id":"422-agent-model-not-configured","status":"422","tabLabel":"422 · AGENT_MODEL_NOT_CONFIGURED","label":"Unprocessable Content","summary":"Agent 没有可由 Model Manager 解析的有效默认模型。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_MODEL_NOT_CONFIGURED","resMsg":"该 Agent 未配置有效的默认模型。"},"en-US":{"resCode":"AGENT_MODEL_NOT_CONFIGURED","resMsg":"The Agent has no valid default model configured."}}},{"status":"500","label":"Internal Server Error","summary":"Session 运行对象或持久化初始化失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_INITIALIZATION_FAILED","resMsg":"Session 初始化失败。"},"en-US":{"resCode":"SESSION_INITIALIZATION_FAILED","resMsg":"Session initialization failed."}}},{"status":"503","label":"Service Unavailable","summary":"Model Manager 暂时不可用，调用方可按 Retry-After 重试。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"MANAGER_UNAVAILABLE","resMsg":"Model Manager 暂时不可用，请稍后重试。"},"en-US":{"resCode":"MANAGER_UNAVAILABLE","resMsg":"Model Manager is temporarily unavailable. Try again later."}}}]},"review":{"questions":[]}}</script>
+  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.16.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认（active_run 待回看）"},"operation":{"method":"POST","path":"/agents/{agent_id}/sessions","summary":"创建 Runtime Session","description":"根据 agent_id 创建一个全新的 Runtime Session。CampusClaw 生成 session_id，从 Agent 发布快照读取 defaultModel 并由 Model Manager 校验，然后完成上下文、Skills、Tools、AgentSession 和持久化初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session。该接口原先确认的 active_run=null 字段依赖已被后续取消的公共 Run 模型，字段去留需要在事件接口完成后回看。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"agent_id","required":true,"schema":"^agent_[0-9A-Za-z]{24}$","description":"创建后不可变的 Agent 绑定；区分大小写"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"错误消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不接受 session_id、model_id 或 thinking。","example":null},"responses":[{"status":"201","label":"Created","summary":"Session 已完成初始化和持久化，可以接受后续请求；初始 state=idle，active_run=null。","headers":{"Location":"/campusclaw-service/v1/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"session_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","agent_id":"agent_011CZkYqphY8vELVzwCUpqiQ","model_id":"model_011CZq2GkV8aD4NwP7sLmXfR","state":"idle","thinking":"hidden","active_run":null,"created_at":"2026-08-15T11:30:00Z"}}}},{"status":"400","label":"Bad Request","summary":"agent_id 不符合资源标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_AGENT_ID","resMsg":"agent_id 格式不正确。"},"en-US":{"resCode":"INVALID_AGENT_ID","resMsg":"The agent_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权为该 Agent 创建 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权为该 Agent 创建 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to create a Session for this Agent."}}},{"status":"404","label":"Not Found","summary":"指定的 Agent 不存在。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_NOT_FOUND","resMsg":"指定的 Agent 不存在。"},"en-US":{"resCode":"AGENT_NOT_FOUND","resMsg":"The specified Agent does not exist."}}},{"id":"422-agent-not-available","status":"422","tabLabel":"422 · AGENT_NOT_AVAILABLE","label":"Unprocessable Content","summary":"Agent 存在，但当前不可用于创建 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_NOT_AVAILABLE","resMsg":"指定的 Agent 当前不可用。"},"en-US":{"resCode":"AGENT_NOT_AVAILABLE","resMsg":"The specified Agent is currently unavailable."}}},{"id":"422-agent-model-not-configured","status":"422","tabLabel":"422 · AGENT_MODEL_NOT_CONFIGURED","label":"Unprocessable Content","summary":"Agent 没有可由 Model Manager 解析的有效默认模型。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_MODEL_NOT_CONFIGURED","resMsg":"该 Agent 未配置有效的默认模型。"},"en-US":{"resCode":"AGENT_MODEL_NOT_CONFIGURED","resMsg":"The Agent has no valid default model configured."}}},{"status":"500","label":"Internal Server Error","summary":"Session 运行对象或持久化初始化失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_INITIALIZATION_FAILED","resMsg":"Session 初始化失败。"},"en-US":{"resCode":"SESSION_INITIALIZATION_FAILED","resMsg":"Session initialization failed."}}},{"status":"503","label":"Service Unavailable","summary":"Model Manager 暂时不可用，调用方可按 Retry-After 重试。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"MANAGER_UNAVAILABLE","resMsg":"Model Manager 暂时不可用，请稍后重试。"},"en-US":{"resCode":"MANAGER_UNAVAILABLE","resMsg":"Model Manager is temporarily unavailable. Try again later."}}}]},"review":{"questions":[]}}</script>
   <script>
     (() => {
       const root = document.getElementById('company-api-review-post-agents-agent-id-sessions-fb65ca69');
@@ -717,7 +717,7 @@
   </style>
 
   <div class="api-shell" data-api-shell aria-live="polite"></div>
-  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.15.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"GET","path":"/sessions/{session_id}","summary":"读取 Session 当前资源","description":"按 session_id 只读获取已存在 Session 的当前默认配置、粗粒度运行状态和 active Run 指针。state 只取 idle/running；thinking 表示默认 reasoning content 可见性，只取 hidden/full；active_run 为 null，或仅含 run_id 与 queued/running state。该接口不创建或恢复 Session，不调用模型，不实时校验 Model Manager，也不返回 History 水位、transcript、Run phase、流式内容、工具或 steer 队列。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"CampusClaw 生成的不透明 Session 标识；区分大小写，删除后不复用"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"错误消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不接受 model_id、thinking 或恢复参数。","example":null},"responses":[{"status":"200","label":"OK","summary":"返回当前 Session 资源；idle 时 active_run=null，running 时只返回 active Run 指针。","headers":{"ETag":"\"snp-zQfM5yN8x2\"","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"session_id":"01JY8W6M8D9K4H2Q7P3V5N1R0T","agent_id":"agent_01JY8VZY4CRQN4PJW8M94D1B2C","model_id":"claude-sonnet-4-5","state":"running","thinking":"hidden","active_run":{"run_id":"run_01JY8X2E3R4T5Y6U7I8O9P0A1S","state":"running"},"created_at":"2026-08-15T10:30:00+08:00","updated_at":"2026-08-16T09:15:21+08:00"}}}},{"status":"400","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权读取该 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权访问该 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to access this Session."}}},{"status":"404","label":"Not Found","summary":"Session 不存在或已删除；GET 不会隐式创建或恢复 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}}]},"review":{"questions":[]}}</script>
+  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.16.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认（active_run 待回看）"},"operation":{"method":"GET","path":"/sessions/{session_id}","summary":"读取 Session 当前资源","description":"按 session_id 只读获取已存在 Session 的当前默认配置和粗粒度运行状态。该接口不创建或恢复 Session，不调用模型，也不实时校验 Model Manager。此前确认的 active_run 指针依赖公共 Run 资源；当前已改为 Session Event 模型，因此该字段将在事件接口完成后回看，当前响应快照仅用于保留先前决策。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"CampusClaw 生成的不透明 Session 标识；区分大小写，删除后不复用"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"错误消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不接受 model_id、thinking 或恢复参数。","example":null},"responses":[{"status":"200","label":"OK","summary":"返回当前 Session 资源；idle 时 active_run=null，running 时只返回 active Run 指针。","headers":{"ETag":"\"snp-zQfM5yN8x2\"","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"session_id":"01JY8W6M8D9K4H2Q7P3V5N1R0T","agent_id":"agent_01JY8VZY4CRQN4PJW8M94D1B2C","model_id":"claude-sonnet-4-5","state":"running","thinking":"hidden","active_run":{"run_id":"run_01JY8X2E3R4T5Y6U7I8O9P0A1S","state":"running"},"created_at":"2026-08-15T10:30:00+08:00","updated_at":"2026-08-16T09:15:21+08:00"}}}},{"status":"400","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权读取该 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权访问该 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to access this Session."}}},{"status":"404","label":"Not Found","summary":"Session 不存在或已删除；GET 不会隐式创建或恢复 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}}]},"review":{"questions":[]}}</script>
   <script>
     (() => {
       const root = document.getElementById('company-api-review-get-sessions-session-id-e9a8f3eb');
@@ -1215,7 +1215,7 @@
   </style>
 
   <div class="api-shell" data-api-shell aria-live="polite"></div>
-  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.15.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"DELETE","path":"/sessions/{session_id}","summary":"删除 Runtime Session","description":"不可逆地结束一个 Runtime Session。服务端先持久化逻辑删除状态和清理任务，使后续 GetSession、创建 Run 和配置写入立即不可见或不可用；存在 active Run 时主动 abort，并在后台清理 Runtime History、Run Event Journal、幂等记录和内存资源。永久 tombstone 严格只包含 session_id 和 deleted_at；清理状态、重试信息和 owner 不进入 tombstone，由短期内部清理任务承载。该接口不删除 mate-service 的 Chat 名称、业务元数据或附件，它们仍由 mate-service 负责。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"CampusClaw 生成的不透明 Session 标识；区分大小写"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不需要 Idempotency-Key 或 If-Match。DELETE 的 URI 与持久化 tombstone 共同提供幂等语义。","example":null},"responses":[{"status":"204","label":"No Content","summary":"逻辑删除和持久化清理任务已经提交；Session 对 API 立即不可见，物理清理在后台重试完成。成功响应没有 ResultBean。","headers":{"Cache-Control":"no-store"},"bodies":{"default":""}},{"status":"400","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权删除该 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权删除该 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to delete this Session."}}},{"status":"500","label":"Internal Server Error","summary":"逻辑删除与持久化清理任务未能原子提交；Session 不应进入部分删除状态。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_DELETE_FAILED","resMsg":"Session 删除失败。"},"en-US":{"resCode":"SESSION_DELETE_FAILED","resMsg":"Session deletion failed."}}}]},"review":{"questions":[]}}</script>
+  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.16.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"DELETE","path":"/sessions/{session_id}","summary":"删除 Runtime Session","description":"不可逆地结束一个 Runtime Session。服务端先持久化逻辑删除状态和清理任务，使后续 GetSession、提交用户事件和配置写入立即不可见或不可用；存在 active execution 时主动 abort，并在后台清理 Runtime History、内部执行状态和内存资源。永久 tombstone 严格只包含 session_id 和 deleted_at；清理状态、重试信息和 owner 不进入 tombstone，由短期内部清理任务承载。该接口不删除 mate-service 的 Chat 名称、业务元数据或附件，它们仍由 mate-service 负责。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"CampusClaw 生成的不透明 Session 标识；区分大小写"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不需要 Idempotency-Key 或 If-Match。DELETE 的 URI 与持久化 tombstone 共同提供幂等语义。","example":null},"responses":[{"status":"204","label":"No Content","summary":"逻辑删除和持久化清理任务已经提交；Session 对 API 立即不可见，物理清理在后台重试完成。成功响应没有 ResultBean。","headers":{"Cache-Control":"no-store"},"bodies":{"default":""}},{"status":"400","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权删除该 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权删除该 Session。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to delete this Session."}}},{"status":"500","label":"Internal Server Error","summary":"逻辑删除与持久化清理任务未能原子提交；Session 不应进入部分删除状态。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_DELETE_FAILED","resMsg":"Session 删除失败。"},"en-US":{"resCode":"SESSION_DELETE_FAILED","resMsg":"Session deletion failed."}}}]},"review":{"questions":[]}}</script>
   <script>
     (() => {
       const root = document.getElementById('company-api-review-delete-sessions-session-id-9c3da2a0');
@@ -1507,67 +1507,67 @@
   </script>
 </div>
 
-<div id="company-api-review-post-sessions-session-id-runs-aa6b1a4d">
+<div id="company-api-review-post-sessions-session-id-events-db6cd0d3">
   <style>
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 {
       color-scheme: light dark;
       color: light-dark(#17202a, #edf2f7);
       font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       width: 100%;
       margin-block-end: 16px;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d * { box-sizing: border-box; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d h2,
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d h3,
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d p { margin: 0; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d code,
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .api-shell {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 * { box-sizing: border-box; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 h2,
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 h3,
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 p { margin: 0; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 code,
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .api-shell {
       overflow: hidden;
       border: 1px solid light-dark(#d8dee6, #37414d);
       border-radius: 12px;
       background: light-dark(#f7f8fa, #11151b);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .topbar,
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .operation-head,
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .row,
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .tabs,
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .actions {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .topbar,
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .operation-head,
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .row,
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .tabs,
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .actions {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
       gap: 9px;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .topbar {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .topbar {
       justify-content: space-between;
       padding: 15px 17px;
       background: light-dark(#ffffff, #1a2028);
       border-bottom: 1px solid light-dark(#d8dee6, #37414d);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d h2 { font-size: 18px; font-weight: 500; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d h3 { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .tag {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 h2 { font-size: 18px; font-weight: 500; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 h3 { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .tag {
       padding: 2px 8px;
       border: 1px solid light-dark(#d8dee6, #37414d);
       border-radius: 999px;
       background: light-dark(#f2f5f8, #222a34);
       font-size: 12px;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .base,
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .muted { color: light-dark(#5f6b78, #aab4c0); font-size: 13px; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .operation {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .base,
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .muted { color: light-dark(#5f6b78, #aab4c0); font-size: 13px; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .operation {
       margin: 15px;
       overflow: hidden;
       border: 1px solid light-dark(#1f883d, #3fb950);
       border-radius: 9px;
       background: light-dark(#ffffff, #1a2028);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .operation-head {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .operation-head {
       padding: 13px 15px;
       background: light-dark(#eaf8ee, #15331f);
       border-bottom: 1px solid light-dark(#d8dee6, #37414d);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .method {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .method {
       padding: 6px 11px;
       border-radius: 5px;
       background: light-dark(#1f883d, #3fb950);
@@ -1575,46 +1575,46 @@
       font-size: 13px;
       font-weight: 500;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .operation-delete {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .operation-delete {
       border-color: light-dark(#cf222e, #f85149);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .operation-delete .operation-head {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .operation-delete .operation-head {
       background: light-dark(#fff1f0, #3a1d1d);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .method-delete {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .method-delete {
       background: light-dark(#cf222e, #f85149);
       color: #ffffff;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .path { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .section {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .path { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .section {
       padding: 15px;
       border-bottom: 1px solid light-dark(#d8dee6, #37414d);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .section:last-child { border-bottom: 0; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .section-title { justify-content: space-between; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .description { line-height: 1.6; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .decision-gate {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .section:last-child { border-bottom: 0; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .section-title { justify-content: space-between; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .description { line-height: 1.6; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .decision-gate {
       border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
       background: light-dark(#f5f9ff, #122337);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .decision-notice {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .decision-notice {
       margin-top: 10px;
       color: light-dark(#8250df, #d2a8ff);
       font-weight: 500;
       line-height: 1.5;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .gate-only .contract-detail { display: none; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d th,
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d td {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .gate-only .contract-detail { display: none; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 th,
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 td {
       padding: 8px;
       text-align: left;
       vertical-align: top;
       border-bottom: 1px solid light-dark(#e5e9ef, #303944);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d tbody tr:last-child td { border-bottom: 0; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d pre {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 tbody tr:last-child td { border-bottom: 0; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 pre {
       margin: 10px 0 0;
       padding: 13px;
       overflow-x: auto;
@@ -1623,7 +1623,7 @@
       font-size: 12px;
       line-height: 1.5;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d button {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 button {
       appearance: none;
       border: 1px solid light-dark(#d8dee6, #37414d);
       border-radius: 6px;
@@ -1633,65 +1633,65 @@
       font: inherit;
       cursor: pointer;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d button[aria-selected="true"],
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d button[aria-pressed="true"] {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 button[aria-selected="true"],
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 button[aria-pressed="true"] {
       border-color: light-dark(#0969da, #58a6ff);
       background: light-dark(#eaf3ff, #132b46);
       color: light-dark(#0969da, #58a6ff);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .review-form {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .review-form {
       margin: 0 15px 15px;
       padding: 15px;
       border: 1px solid light-dark(#d8dee6, #37414d);
       border-radius: 9px;
       background: light-dark(#ffffff, #1a2028);
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .question-grid {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .question-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .question-grid-single { grid-template-columns: 1fr; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d label input { margin-top: 3px; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .option-copy { display: grid; min-width: 0; gap: 2px; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .option-label { font-weight: 500; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .option-detail {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .question-grid-single { grid-template-columns: 1fr; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 label input { margin-top: 3px; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .option-copy { display: grid; min-width: 0; gap: 2px; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .option-label { font-weight: 500; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .option-detail {
       color: light-dark(#5f6b78, #aab4c0);
       line-height: 1.45;
       overflow-wrap: anywhere;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .submit {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .submit {
       margin-top: 12px;
       border-color: light-dark(#0969da, #58a6ff);
       background: light-dark(#0969da, #58a6ff);
       color: light-dark(#ffffff, #07111e);
       font-weight: 500;
     }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .empty { margin-top: 8px; }
-    #company-api-review-post-sessions-session-id-runs-aa6b1a4d .prompt-output {
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .empty { margin-top: 8px; }
+    #company-api-review-post-sessions-session-id-events-db6cd0d3 .prompt-output {
       margin-top: 10px;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
     @media (max-width: 680px) {
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .question-grid { grid-template-columns: 1fr; }
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .operation,
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .review-form { margin-left: 9px; margin-right: 9px; }
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .table-wrap { overflow: visible; }
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .table-wrap thead { display: none; }
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .table-wrap table,
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .table-wrap tbody,
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .table-wrap tr,
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .table-wrap td { display: block; width: 100%; }
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .table-wrap tr {
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .question-grid { grid-template-columns: 1fr; }
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .operation,
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .review-form { margin-left: 9px; margin-right: 9px; }
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .table-wrap { overflow: visible; }
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .table-wrap thead { display: none; }
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .table-wrap table,
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .table-wrap tbody,
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .table-wrap tr,
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .table-wrap td { display: block; width: 100%; }
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .table-wrap tr {
         padding: 7px 0;
         border-bottom: 1px solid light-dark(#e5e9ef, #303944);
       }
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .table-wrap tbody tr:last-child { border-bottom: 0; }
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .table-wrap td {
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .table-wrap tbody tr:last-child { border-bottom: 0; }
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .table-wrap td {
         display: grid;
         grid-template-columns: 86px minmax(0, 1fr);
         gap: 8px;
@@ -1699,12 +1699,12 @@
         border-bottom: 0;
         overflow-wrap: anywhere;
       }
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d .table-wrap td::before {
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 .table-wrap td::before {
         content: attr(data-label);
         color: light-dark(#5f6b78, #aab4c0);
         font-weight: 500;
       }
-      #company-api-review-post-sessions-session-id-runs-aa6b1a4d pre {
+      #company-api-review-post-sessions-session-id-events-db6cd0d3 pre {
         overflow-x: visible;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
@@ -1713,10 +1713,10 @@
   </style>
 
   <div class="api-shell" data-api-shell aria-live="polite"></div>
-  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.15.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 已确认"},"operation":{"method":"POST","path":"/sessions/{session_id}/runs","summary":"提交用户输入并创建异步 Run","description":"第四个接口已经确认。本接口在 Session idle 时接受一条用于启动新一轮执行的用户输入，原子持久化用户 Message、创建 run_id、固化本轮配置快照并创建后台任务；成功响应不等待模型执行。运行中的 steer、follow-up、工具结果或中止属于当前 Run 的后续输入，不通过本接口创建新 Run。网络结果不确定时先读取 Session 与 History，再决定是否发起新的 Run。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"已经存在且未删除的 Session 标识；区分大小写"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":true,"contentType":"application/json","description":"已确认使用扁平的 message + attachment_ids，至少提供一项。message 提供时必须非空且最多 262144 个字符；attachment_ids 最多 32 个、不可重复并保留顺序。只接受 Attachment Service 签发并绑定当前 Session 的 attachment_id。不接收 model_id、thinking、metadata、instructions、tool choice、timeout、priority、URL、MIME、文件名、Base64、client_request_id 或调用方身份字段；接受时原子固化 Session 当前 model_id/thinking。","example":{"message":"请分析附件中的订单数据，并列出异常项。","attachment_ids":["attachment_011CZm8VpK4rNs6WtY2hDqfB"]}},"responses":[{"status":"202","label":"Accepted","summary":"用户消息、Run、active-run 占位与执行任务已经持久化；返回不代表模型执行完成。每次成功接受的 POST 都创建一个新的 Run。","headers":{"Location":"/campusclaw-service/v1/sessions/01JY8W6M8D9K4H2Q7P3V5N1R0T/runs/run_01JY8X2E3R4T5Y6U7I8O9P0A1S","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"en-US":{"resCode":"0","resMsg":"success","result":{"run_id":"run_01JY8X2E3R4T5Y6U7I8O9P0A1S","user_message_id":"msg_01JY8X2E3R4T5Y6U7I8O9P0B2T"}}}},{"id":"400-invalid-session-id","status":"400","tabLabel":"400 · INVALID_SESSION_ID","label":"Bad Request","summary":"session_id 不符合标识格式。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"400-invalid-run-request","status":"400","tabLabel":"400 · INVALID_RUN_REQUEST","label":"Bad Request","summary":"请求体不是合法对象，包含未知字段，或文本与附件约束不满足。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_RUN_REQUEST","resMsg":"Run 请求内容不符合约束。"},"en-US":{"resCode":"INVALID_RUN_REQUEST","resMsg":"The Run request does not satisfy the required constraints."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权在该 Session 中创建 Run。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权在该 Session 中创建 Run。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to create a Run in this Session."}}},{"status":"404","label":"Not Found","summary":"Session 不存在或已删除。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}},{"id":"409-run-active","status":"409","tabLabel":"409 · RUN_ACTIVE","label":"Conflict","summary":"Session 已经存在 active Run；本接口不排队创建第二个 Run。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"RUN_ACTIVE","resMsg":"该 Session 已存在正在执行的 Run。"},"en-US":{"resCode":"RUN_ACTIVE","resMsg":"The Session already has an active Run."}}},{"id":"409-attachment-not-ready","status":"409","tabLabel":"409 · ATTACHMENT_NOT_READY","label":"Conflict","summary":"附件属于当前 Session，但尚未达到 READY；调用方可按 Retry-After 重试。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"ATTACHMENT_NOT_READY","resMsg":"附件尚未准备就绪，请稍后重试。"},"en-US":{"resCode":"ATTACHMENT_NOT_READY","resMsg":"The attachment is not ready. Try again later."}}},{"id":"422-invalid-attachment","status":"422","tabLabel":"422 · INVALID_ATTACHMENT","label":"Unprocessable Content","summary":"附件不存在、越权、未绑定当前 Session、已删除或处于不可披露的无效状态；统一错误避免枚举。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_ATTACHMENT","resMsg":"请求包含无效附件。"},"en-US":{"resCode":"INVALID_ATTACHMENT","resMsg":"The request contains an invalid attachment."}}},{"id":"422-attachment-not-supported","status":"422","tabLabel":"422 · ATTACHMENT_NOT_SUPPORTED","label":"Unprocessable Content","summary":"可信附件类型、数量或总字节数不符合当前模型输入策略。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"ATTACHMENT_NOT_SUPPORTED","resMsg":"当前模型不支持该附件输入。"},"en-US":{"resCode":"ATTACHMENT_NOT_SUPPORTED","resMsg":"The current model does not support the attachment input."}}},{"status":"500","label":"Internal Server Error","summary":"用户消息、Run、active-run 占位与执行任务未能原子提交；不得返回 run_id。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"RUN_ACCEPTANCE_FAILED","resMsg":"Run 接收失败。"},"en-US":{"resCode":"RUN_ACCEPTANCE_FAILED","resMsg":"Run acceptance failed."}}},{"status":"503","label":"Service Unavailable","summary":"Model Manager 或 Attachment Service 暂时不可用，且 Run 尚未被接受；调用方可按 Retry-After 发起新的请求。若响应结果不确定，必须先查 Session 与 History。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"RUNTIME_DEPENDENCY_UNAVAILABLE","resMsg":"Runtime 依赖服务暂时不可用，请稍后重试。"},"en-US":{"resCode":"RUNTIME_DEPENDENCY_UNAVAILABLE","resMsg":"A Runtime dependency is temporarily unavailable. Try again later."}}}]},"review":{"questions":[]}}</script>
+  <script type="application/json" data-review-model>{"api":{"title":"CampusClaw Service API","version":"1.16.0-proposal","basePath":"/campusclaw-service/v1","visibility":"Internal · 评审中（Assistant 消息事件已确认）"},"operation":{"method":"POST","path":"/sessions/{session_id}/events","summary":"提交用户消息并流式返回 Session 执行事件","description":"向既有 Session 提交一个 user.message，持久化用户 MessageEntry，并在同一个 HTTP POST 响应中以 SSE 推送本次执行产生的消息和工具事件。公共契约不创建 run_id；一次用户消息可触发多次模型调用、工具调用和多条 Assistant MessageEntry。已确认每条 Assistant MessageEntry 使用 assistant.message.started、assistant.message.delta、assistant.message.completed 三阶段：前两者是不可恢复的实时预览，completed 是已持久化的权威完整消息。网络断开不取消执行，调用方不得自动重放 POST，应通过 History 恢复权威 Entry。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"公司 JWT"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"公司 APPKEY 凭据"}]}],"parameters":[{"in":"path","name":"session_id","required":true,"schema":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$","description":"已经存在且未删除的 Session 标识；区分大小写"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"流建立前 JSON 异常和流内 stream.error 消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":true,"contentType":"application/json","description":"请求 type 固定为 user.message；message 和 file_ids 至少提供一项。message 提供时必须包含非空白字符并保留原始值；file_ids 是由文件服务签发、绑定当前 Session 的不透明标识，最多 32 个、不可重复并保留顺序。不接收 model_id、thinking、metadata、instructions、tool choice、timeout、priority、URL、MIME、文件名、Base64、client_request_id 或 Idempotency-Key。","example":{"type":"user.message","message":"请分析这些订单文件，并列出异常项。","file_ids":["file_01JY8X2E3R4T5Y6U7I8O9P0A1S"]}},"responses":[{"status":"200","label":"OK","summary":"用户消息已被接受并开始返回 SSE。普通成功流不使用 ResultBean；assistant.message.completed 是可恢复的权威 Entry，stream.end 表示本次 HTTP 流正常结束。除三个已确认的 Assistant 消息事件外，示例中的用户确认、Session 状态和流终止事件名称仍待后续逐组评审。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"default":"id: 17\nevent: user.message.persisted\ndata: {\"entry_id\":\"entry_user_01JY8X2E3R4T5Y6U7I8O9P0A1S\",\"entry_seq\":17}\n\nevent: session.state.changed\ndata: {\"state\":\"running\"}\n\nevent: assistant.message.started\ndata: {\"entry_id\":\"entry_assistant_01JY8X2E3R4T5Y6U7I8O9P0B2T\",\"role\":\"assistant\"}\n\nevent: assistant.message.delta\ndata: {\"entry_id\":\"entry_assistant_01JY8X2E3R4T5Y6U7I8O9P0B2T\",\"delta\":{\"type\":\"text\",\"text\":\"发现 3 条异常订单。\"}}\n\nid: 18\nevent: assistant.message.completed\ndata: {\"entry_id\":\"entry_assistant_01JY8X2E3R4T5Y6U7I8O9P0B2T\",\"entry_seq\":18,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"发现 3 条异常订单。\"}]},\"finish_reason\":\"stop\"}\n\nevent: session.state.changed\ndata: {\"state\":\"idle\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"}},{"id":"400-invalid-session-id","status":"400","tabLabel":"400 · INVALID_SESSION_ID","label":"Bad Request","summary":"流建立前发现 session_id 不符合标识格式；异常 JSON 只有 resCode 和 resMsg。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"session_id 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The session_id format is invalid."}}},{"id":"400-invalid-event-request","status":"400","tabLabel":"400 · INVALID_EVENT_REQUEST","label":"Bad Request","summary":"请求体不是合法的 user.message，包含未知字段，或 message/file_ids 约束不满足。错误码名称仍待本接口整体确认。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_EVENT_REQUEST","resMsg":"用户事件请求内容不符合约束。"},"en-US":{"resCode":"INVALID_EVENT_REQUEST","resMsg":"The user event request does not satisfy the required constraints."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"凭据缺失、不完整、格式错误或所选凭据校验失败。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"401-auth-credential-conflict","status":"401","tabLabel":"401 · AUTH_CREDENTIAL_CONFLICT","label":"Unauthorized","summary":"请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"请求不能同时携带 JWT 和 APPKEY 凭据。"},"en-US":{"resCode":"AUTH_CREDENTIAL_CONFLICT","resMsg":"JWT and APPKEY credentials must not be supplied together."}}},{"status":"403","label":"Forbidden","summary":"调用方已认证，但无权向该 Session 提交用户事件。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"FORBIDDEN","resMsg":"当前调用方无权向该 Session 提交用户事件。"},"en-US":{"resCode":"FORBIDDEN","resMsg":"The caller is not allowed to submit an event to this Session."}}},{"status":"404","label":"Not Found","summary":"Session 不存在或已删除。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}},{"status":"409","label":"Conflict","summary":"Session 正在处理另一个用户事件；当前提案不排队接受第二个 user.message。错误码名称仍待本接口整体确认。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_BUSY","resMsg":"该 Session 正在处理另一条用户消息。"},"en-US":{"resCode":"SESSION_BUSY","resMsg":"The Session is processing another user message."}}},{"id":"500-before-stream","status":"500","tabLabel":"500 · 流建立前","label":"Internal Server Error","summary":"用户 MessageEntry 未能持久化，且 SSE 响应尚未开始；返回普通 JSON 异常。错误码名称仍待本接口整体确认。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"EVENT_ACCEPTANCE_FAILED","resMsg":"用户事件接收失败。"},"en-US":{"resCode":"EVENT_ACCEPTANCE_FAILED","resMsg":"User event acceptance failed."}}},{"id":"200-stream-error","status":"200","tabLabel":"200 · 流内异常","label":"SSE already started","summary":"SSE 响应开始后发生执行异常，HTTP status 已不能改变；发送 stream.error，随后关闭流。该事件名称与错误分层仍待后续确认。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"default":"event: stream.error\ndata: {\"resCode\":\"SESSION_EXECUTION_FAILED\",\"resMsg\":\"Session 执行失败。\"}\n"}}]},"review":{"questions":[{"id":"tool_event_layers","legend":"下一步：工具事件如何分层","options":[{"label":"事实与进度分离（推荐）","value":"工具调用和最终 ToolResult 作为可恢复的会话事实；started/updated/completed 仅表示实时执行进度","selected":true},{"label":"只暴露开始与结果","value":"不提供工具增量进度，只推送工具开始和最终结果","selected":false},{"label":"不公开工具事件","value":"调用方只看到 Assistant Message，工具过程完全由 Runtime 内部处理","selected":false}]}],"followUpTitle":"继续对齐工具事件","promptPrefix":"继续调整 POST /campusclaw-service/v1/sessions/{session_id}/events 的工具事件契约","promptSuffix":"Assistant Message 的 started/delta/completed 三阶段已经确认，请保持不变；请逐项展示工具调用事实、执行进度和最终 ToolResult 的区别。"}}</script>
   <script>
     (() => {
-      const root = document.getElementById('company-api-review-post-sessions-session-id-runs-aa6b1a4d');
+      const root = document.getElementById('company-api-review-post-sessions-session-id-events-db6cd0d3');
       const model = JSON.parse(root.querySelector('[data-review-model]').textContent);
       const api = model.api;
       const operation = model.operation;

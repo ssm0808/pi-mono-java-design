@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.19.0 |
+| 文档版本 | 1.20.0 |
 | 状态 | 目标设计，尚未实施 |
-| 更新日期 | 2026-08-15 |
+| 更新日期 | 2026-08-17 |
 | pi-mono 源码基线 | `fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc` |
 | pi-mono-java 源码基线 | `1f7a5423219edfa4519d8719f1cc8a188ed72873` |
 | OpenClaw 源码基线 | `b015925bc30f6a8363f290b07d5f8588e21422b8` |
@@ -729,11 +729,13 @@ loader 从已解析 Agent 目录读取 `settings.json`，以
 权威 descriptor。全部外部配置校验通过后，CampusClaw 生成
 全局唯一 `session_id`，组装 SessionContext 和 `AgentSession + Agent`，
 持久化内部 `agent_version/revision`，再返回已就绪 Session。
-该过程不调用大模型，不创建 Message 或 RunRecord。创建响应使用
+该过程不调用大模型，不创建 MessageEntry 或启动执行。创建响应使用
 `ResultBeanFactory.getFactory().normal(result)` 生成
 `resCode/resMsg/result`，其中 `result` 与查询共用 SessionResource，
-对外字段为
-`session_id/agent_id/model_id/state/thinking/active_run/created_at`；
+对外字段先前确认为
+`session_id/agent_id/model_id/state/thinking/active_run/created_at`；其中
+`active_run` 依赖的公共 HTTP Run 模型已经被后续 Session Event 决策替代，
+该字段当前标记为待回看，不能继续视为最终稳定契约。
 `agent_version` 与 record revision 只在 Runtime 内部保存。创建操作不
 要求 `Idempotency-Key` 或 `If-Match`，每次成功 `POST` 都创建新
 Session。完整契约和失败清理顺序见
@@ -762,6 +764,14 @@ HTTP 接口逐个评审改以
 [`chat-http-v1-review.html`](chat-http-v1-review.html) 作为人类可读的主维护契约。
 `chat-http-v1.openapi.yaml` 暂时保留为过渡期机器投影，待用户后续
 明确决定后再废弃，本轮不删除。
+
+第四个 HTTP 接口当前改为
+`POST /campusclaw-service/v1/sessions/{session_id}/events`：请求提交
+`type=user.message`、`message + file_ids`，并在同一个 POST 响应中直接返回 SSE，
+不创建公共 `run_id`。Assistant Message 使用
+`assistant.message.started/delta/completed` 三阶段；前两者是实时预览，
+`completed` 是已持久化的权威 MessageEntry。断线后读取 History，禁止自动重放
+这个副作用 POST。完整状态和未决事件组以 HTTP 主维护 HTML 为准。
 
 WebSocket 协议若显式提供 `model_id`，它只能作为该协议的初始选择，
 不改变 `settings.json` 和 Model Manager 的双重校验边界。
@@ -2819,6 +2829,7 @@ agent-service 只有在内部 Upgrade、`connect`、Agent、Session 和 Model �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.20.0 | 2026-08-17 | 同步 HTTP 第四接口改为 Session Event 直连 SSE：取消公共 HTTP `run_id`，请求采用 `type=user.message` 与 `message + file_ids`，确认 Assistant Message 的 started/delta/completed 预览与持久化分层；将 HTTP Session 响应中依赖旧 Run 模型的 `active_run` 标记待回看；OpenAPI 未更新 |
 | 1.19.0 | 2026-08-15 | 增加可直接打开的 `chat-http-v1-review.html`，将其固定为 HTTP 接口人类评审主维护契约；OpenAPI YAML 暂作过渡期机器投影，本轮不废弃 |
 | 1.18.1 | 2026-08-15 | 用户明确确认第一个 `POST /campusclaw-service/v1/agents/{agent_id}/sessions` operation；记录已确认评审状态，其余 12 个 HTTP operation 继续逐个对齐 |
 | 1.18.0 | 2026-08-15 | 将第一个 HTTP Session 创建接口的异常响应收敛为仅 `resCode/resMsg`，删除 `result` 字段；同步 OpenAPI Schema、错误示例和契约测试规则 |

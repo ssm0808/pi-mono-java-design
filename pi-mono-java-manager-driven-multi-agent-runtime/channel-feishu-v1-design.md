@@ -2,16 +2,24 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
-| 状态 | 目标设计，尚未实施 |
-| 更新日期 | 2026-08-11 |
+| 文档版本 | 1.1.0 |
+| 状态 | 受 Runtime HTTP 1.16.0 资源模型变更影响，待重新评审 |
+| 更新日期 | 2026-08-17 |
 | 设计仓基线 | `e5a8ab2f428bb046390f558a82bfe7ceea881413` |
-| Runtime HTTP 基线 | [`chat-http-v1-design.md`](chat-http-v1-design.md) 1.1.0、[`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml) 1.1.0 |
+| Runtime HTTP 基线 | [`chat-http-v1-design.md`](chat-http-v1-design.md) 1.16.0；[`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml) 1.7.1 是尚未同步的过渡期机器契约 |
 | Runtime 事件 Schema 基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml) 2.12.0 |
 | pi-mono-java 源码基线 | `1f7a5423219edfa4519d8719f1cc8a188ed72873` |
 | 飞书证据查询日期 | 2026-08-11 |
 
 ## 1. 结论
+
+> [!IMPORTANT]
+> 1.0.0 按公共 Run、独立 Run SSE、`Idempotency-Key` 和 `run_seq` 设计 Channel
+> Worker。Runtime HTTP 1.16.0 已改为 `POST /sessions/{session_id}/events` 直接返回
+> SSE，不再公开 `run_id`，也不接受 `Idempotency-Key`。因此本文第 2 至 14 节保留为
+> 旧方案影响记录，不能作为当前实现契约。尤其是 Worker 在 Runtime 已接受消息后、
+> 本地保存结果前崩溃时，现契约缺少无歧义重试和独立 SSE 恢复边界；必须单独评审
+> Channel 场景后再更新端口、表结构、时序图和验收规则。
 
 Channel 层应位于 `mate-service`，对外终止飞书协议，对内作为
 CampusAgent Runtime HTTP 客户端。飞书 `tenant_key`、`open_id`、`chat_id`、
@@ -20,8 +28,9 @@ Tool Manager 或 Model Manager。
 
 飞书企业自建应用的首选入站传输是官方 SDK 长连接。事件处理器只完成
 验真、规范化、按飞书 `message_id` 去重、Conversation 绑定和 Outbox 入库，
-在 3 秒内返回。创建 Runtime Session/Run、消费 SSE、更新飞书卡片都由
-异步 Worker 完成。
+在 3 秒内返回。异步 Worker 与 Runtime 的具体交互方式需要按上述 1.16.0 影响
+重新设计；1.0.0 曾由 Worker 创建 Runtime Session/Run、消费独立 SSE 并更新
+飞书卡片。
 
 通用 Channel 契约拆成四类应用端口：
 
@@ -278,7 +287,10 @@ Conversation 创建时固定 Channel 账号当时的 `agent_id + model_id`。账
 8. `run.completed` 触发终态卡片和本地终态；若 SSE 游标过期，则用 Run 与
    History 权威数据恢复。
 
-## 7. Channel 到 Runtime HTTP 映射
+## 7. Channel 到 Runtime HTTP 映射（1.0.0 旧方案，已失效）
+
+下表只记录公共 Run 方案下的原设计，不能用于生成当前 Runtime 客户端。当前第四
+接口的唯一有效评审面是 [`chat-http-v1-review.html`](chat-http-v1-review.html)。
 
 | Channel 动作 | Runtime HTTP | 说明 |
 |---|---|---|
@@ -561,4 +573,5 @@ Spring Controller 不直接调用 Runtime Client；长连接回调和未来 Webh
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-08-17 | Runtime HTTP 改为无公共 `run_id` 的 Session Event 直连 SSE 后，标记原 Run/独立 SSE/幂等键方案整体待重新评审；记录 Channel Outbox 在无幂等接受和无独立恢复流情况下的崩溃歧义，禁止继续把 1.0.0 映射、表结构和时序图作为实现契约 |
 | 1.0.0 | 2026-08-11 | 首版 Channel 应用端口与飞书接入设计；定义长连接入站、`message_id` 去重、Conversation/Session 绑定、Runtime HTTP+SSE 编排、卡片流式投影、Outbox 和崩溃恢复 |
