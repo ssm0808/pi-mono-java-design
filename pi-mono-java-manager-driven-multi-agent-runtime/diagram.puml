@@ -1679,7 +1679,7 @@ ResultBeanFactory --> API : resCode, resMsg, result
 API --> Caller : 200 OK\nevents and next_page
 
 note over API,Store
-Only committed user.message, assistant.message,
+Only committed user.message, assistant.message.completed,
 and tool.result entries are public in this proposal.
 Items are sorted by entry_seq ascending.
 There is no fixed snapshot watermark. Later persisted
