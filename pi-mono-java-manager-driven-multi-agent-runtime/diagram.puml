@@ -1527,7 +1527,7 @@ end note
 @enduml
 
 @startuml http_execution_resource_model
-title CampusClaw Execution Resource Model Decision
+title CampusClaw Execution Resource Model Decision Record
 
 ' Source evidence verified on 2026-08-17:
 ' https://platform.claude.com/docs/en/managed-agents/events-and-streaming
@@ -1543,7 +1543,8 @@ title CampusClaw Execution Resource Model Decision
 ' chat-ws-v2.asyncapi.yaml, chat.send and Run event contracts, lines 1742-1802 and 2955-2984
 ' Target-only decision: neither pi baseline exposes a durable HTTP Run or Session Events API.
 ' Design reason: confirm the caller-visible recovery and audit unit before field review.
-' Architecture impact: Candidate B conflicts with the confirmed GetSession active_run field.
+' Confirmed decision on 2026-08-17: Candidate A is the CampusClaw public resource model.
+' Architecture impact: Candidate B remains an Anthropic reference and is not selected.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -1571,7 +1572,7 @@ skinparam note {
 actor Caller
 rectangle "One user input" as Input
 
-package "Candidate A: caller-visible Run" as CandidateA {
+package "Selected: caller-visible Run" as CandidateA {
   rectangle "POST /sessions/{id}/runs" as CreateRun
   rectangle "Run\nrun_id + frozen model snapshot" as Run
   rectangle "GetRun / Run Events" as RunObserve
@@ -1579,7 +1580,7 @@ package "Candidate A: caller-visible Run" as CandidateA {
   rectangle "Per-Run recovery and audit" as RunAudit
 }
 
-package "Candidate B: Session Events" as CandidateB {
+package "Reference only: Session Events" as CandidateB {
   rectangle "POST /sessions/{id}/events\nuser.message" as SendEvent
   rectangle "Session state\nidle / running / rescheduling / terminated" as SessionState
   rectangle "Session Event Stream\nevent_id + processed_at" as SessionObserve
@@ -1588,25 +1589,25 @@ package "Candidate B: Session Events" as CandidateB {
 }
 
 Caller --> Input
-Input --> CreateRun : choose A
+Input --> CreateRun : selected contract
 CreateRun --> Run : create one execution round
 Run --> RunObserve
 Run --> RunControl
 Run --> RunAudit
 
-Input --> SendEvent : choose B
+Input ..> SendEvent : unselected reference
 SendEvent --> SessionState : enqueue event
 SessionState --> SessionObserve
 SessionState --> SessionControl
 SessionState --> SessionAudit
 
 note bottom of CandidateA
-Keeps the confirmed GetSession active_run pointer.
-Field review continues only after this model is accepted.
+Confirmed on 2026-08-17.
+Keeps GetSession active_run and Run-scoped APIs.
 end note
 
 note bottom of CandidateB
-Requires reopening GetSession and redesigning
-GetRun, Run Events, Abort, Steer, and History boundaries.
+Not selected for the CampusClaw public contract.
+Its durable event and preview semantics remain useful references.
 end note
 @enduml
