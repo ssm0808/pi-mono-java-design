@@ -1410,7 +1410,7 @@ end note
 @enduml
 
 @startuml http_create_run
-title CampusClaw HTTP Asynchronous Run Acceptance Proposal
+title CampusClaw HTTP Asynchronous Run Acceptance
 
 ' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
 ' packages/coding-agent/src/core/agent-session.ts, _handleAgentEvent, _runAgentPrompt,
@@ -1431,11 +1431,12 @@ title CampusClaw HTTP Asynchronous Run Acceptance Proposal
 ' Observed behavior: both pi implementations invoke prompt against one in-memory active
 ' execution; the current Java HTTP handler couples execution to an SSE response.
 ' Target-only design: neither baseline has a durable HTTP Run resource, run ID,
-' idempotency result, shared active-run constraint, or dispatch work item.
+' shared active-run constraint, or dispatch work item.
 ' Architecture change: the local acceptance transaction persists the user Message,
-' queued RunRecord, active pointer, idempotency result, and t_run_dispatch_task.
-' Design reason: retries cannot duplicate user messages, and execution does not depend
-' on the lifetime of the accepting HTTP connection.
+' queued RunRecord, active pointer, and t_run_dispatch_task.
+' Product constraint: CreateRun does not accept an application idempotency key.
+' Design reason: execution does not depend on the lifetime of the accepting HTTP
+' connection, while an ambiguous response requires Session and History inspection.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -1469,50 +1470,40 @@ participant "Run Dispatch\nWorker" as Worker
 participant "Managed Run\nHub" as Hub
 participant AgentSession
 
-Caller -> Auth : POST /sessions/{session_id}/runs\ncredentials, Idempotency-Key, JSON body
+Caller -> Auth : POST /sessions/{session_id}/runs\ncredentials and JSON body
 Auth -> API : immutable CallerAuthContext
-API -> API : validate session_id, key, and strict request body
-API -> Store : findAcceptedResult(session_id, createRun, key)
+API -> API : validate session_id and strict request body
+API -> Store : load live Session and authorize createRun
+Store --> API : current model, thinking, history attachments, active pointer
+API -> API : reject an existing active Run
+API -> Attachment : batch resolve, authorize, and mark referenced\nfor the complete ordered attachment set
+Attachment --> API : trusted metadata snapshots
+API -> Manager : resolve current model and input policy
+Manager --> API : authoritative model descriptor and limits
+API -> API : validate historical plus new attachment context
+API -> Store : atomic accept(user Message, queued RunRecord,\nactive pointer, dispatch task)
 
-alt accepted key with equivalent canonical payload
-  Store --> API : original runId and userMessageId
-  API --> Caller : 202 ResultBean with original IDs
-else accepted key with different canonical payload
-  Store --> API : payload fingerprint conflict
-  API --> Caller : 409 IDEMPOTENCY_CONFLICT\nResultBean error without result
-else key has no accepted result
-  Store --> API : not found
-  API -> Store : load live Session and authorize createRun
-  Store --> API : current model, thinking, history attachments, active pointer
-  API -> API : reject an existing active Run
-  API -> Attachment : batch resolve, authorize, and mark referenced\nfor the complete ordered attachment set
-  Attachment --> API : trusted metadata snapshots
-  API -> Manager : resolve current model and input policy
-  Manager --> API : authoritative model descriptor and limits
-  API -> API : validate historical plus new attachment context
-  API -> Store : atomic accept(user Message, queued RunRecord,\nactive pointer, idempotency result, dispatch task)
-
-  alt acceptance transaction commits first
-    Store --> API : committed runId and userMessageId
-    API --> Caller : 202 Accepted\nLocation plus narrow ResultBean
-    Worker -> Store : claim t_run_dispatch_task
-    Worker -> Hub : register and start frozen Run
-    Hub -> AgentSession : prompt(user Message, attachment snapshots)
-    AgentSession --> Hub : structured events and terminal result
-    Hub -> Store : persist Run events, Messages, and terminal RunRecord
-    Store -> Store : clear active pointer and complete dispatch task
-  else concurrent active-run constraint loses
-    Store --> API : no local side effects committed
-    API --> Caller : 409 RUN_ACTIVE\nResultBean error without result
-  else acceptance transaction fails
-    Store --> API : no local side effects committed
-    API --> Caller : 500 RUN_ACCEPTANCE_FAILED\nResultBean error without result
-  end
+alt acceptance transaction commits first
+  Store --> API : committed runId and userMessageId
+  API --> Caller : 202 Accepted\nLocation plus narrow ResultBean
+  Worker -> Store : claim t_run_dispatch_task
+  Worker -> Hub : register and start frozen Run
+  Hub -> AgentSession : prompt(user Message, attachment snapshots)
+  AgentSession --> Hub : structured events and terminal result
+  Hub -> Store : persist Run events, Messages, and terminal RunRecord
+  Store -> Store : clear active pointer and complete dispatch task
+else concurrent active-run constraint loses
+  Store --> API : no local side effects committed
+  API --> Caller : 409 RUN_ACTIVE\nResultBean error without result
+else acceptance transaction fails
+  Store --> API : no local side effects committed
+  API --> Caller : 500 RUN_ACCEPTANCE_FAILED\nResultBean error without result
 end
 
-note over API,Store
-Only a committed acceptance consumes the idempotency key.
-All pre-acceptance failures can retry with the same key.
+note over Caller,Store
+CreateRun has no application idempotency key.
+After an ambiguous transport failure, inspect Session and History
+before deciding whether to issue a new POST.
 end note
 
 note over Attachment,Store

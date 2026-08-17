@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.14.0 |
+| 文档版本 | 1.15.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | Session 生命周期的三个 operation 已确认；第四个接口已确认显式 Run 资源模型，正在评审 CreateRun 输入；其余 operation 待逐个评审 |
+| 接口评审状态 | Session 生命周期的三个 operation 与第四个 CreateRun operation 已确认；其余 operation 待逐个评审 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
@@ -280,9 +280,9 @@ Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
 `202 Accepted`、`Location`、`run_id` 和 `user_message_id`。响应表示已接受，不表示
 模型执行完成。接受 Run 时服务端把 `session.current_model_id`
 原子固化到 `RunRecord.model_id`；同一 Run 的所有模型调用都使用该值，
-后续 Session 模型切换不影响已开始 Run。`POST /runs`、Steer 和 Abort 必须携带
-`Idempotency-Key`；相同键和相同规范化负载返回原结果，相同键不同负载返回
-`409 IDEMPOTENCY_CONFLICT`。
+后续 Session 模型切换不影响已开始 Run。已确认的 `POST /runs` 不接收
+`Idempotency-Key`，每次成功接受的请求都会创建一个新 Run；Steer 和 Abort 的
+重试语义留待各自 operation 评审，不从 CreateRun 继承。
 
 #### 2.2.1 已确认架构决策：每轮执行是显式 Run 资源
 
@@ -341,20 +341,19 @@ Session Run。[Scheduled deployments](https://platform.claude.com/docs/en/manage
 
 ![HTTP 执行资源模型对比](http_execution_resource_model.svg)
 
-[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L1529)
+[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L1520)
 
 用户已在 2026-08-17 选择显式 Run：mate-service 可以按 `run_id` 精确查询、恢复、
 中止、Steer 和审计某一轮执行。实现仍借鉴 Anthropic 的持久化事件、权威完整事件
 与非权威增量预览分层，但不取消 Run 资源，也不重开已确认的 GetSession
 `active_run`。
 
-#### 2.2.2 第四个评审中接口：创建 Run
+#### 2.2.2 第四个已确认接口：创建 Run
 
 ```http
 POST /campusclaw-service/v1/sessions/{session_id}/runs
 X-HW-ID: <CALLER_ID>
 Authorization: Bearer <JWT>
-Idempotency-Key: <OPAQUE_KEY>
 Content-Type: application/json
 ```
 
@@ -364,7 +363,7 @@ Content-Type: application/json
 Run Events 和 History 观察过程与终态；客户端关闭或 HTTP 请求连接中断不会终止
 已经接受的 Run，终止必须显式调用 Abort Run。
 
-当前请求提案为：
+已确认请求为：
 
 ```json
 {
@@ -375,15 +374,15 @@ Run Events 和 History 观察过程与终态；客户端关闭或 HTTP 请求连
 }
 ```
 
-| 字段 | 当前推荐约束 | 具体作用 |
+| 字段 | 已确认约束 | 具体作用 |
 |---|---|---|
-| `message` | 可选；提供时包含至少一个非空白字符，最多 262144 个字符 | 用户文本；校验时可判断空白，但持久化和幂等比较使用原始值，不做 trim |
+| `message` | 可选；提供时包含至少一个非空白字符，最多 262144 个字符 | 用户文本；校验时可判断空白，持久化时保留原始值，不做 trim |
 | `attachment_ids` | 可选；最多 32 个，元素唯一、大小写敏感并保留请求顺序 | 引用已由 Attachment Service 绑定当前 Session 的附件 |
 
 `message` 和 `attachment_ids` 至少有一项有效值，允许纯文本、纯附件以及
 文本加附件三种形态。纯附件请求不生成隐藏默认 Prompt。
 
-当前推荐保持最窄业务输入，不把所有 pi `PromptOptions` 暴露为 HTTP 字段。pi 的
+已确认保持最窄业务输入，不把所有 pi `PromptOptions` 暴露为 HTTP 字段。pi 的
 `AgentSession.prompt()` 除图片外还接受 `expandPromptTemplates`、
 `streamingBehavior=steer|followUp`、`source` 和内部 preflight callback；后四者分别
 属于命令展开、运行中队列策略、Runtime 来源标记和进程内回调，不是 mate-service
@@ -393,48 +392,36 @@ Steer/FollowUp 由后续独立 operation 表达，因此不接收 `streamingBeha
 请求也不接收 URL、MIME、文件名、Base64、OBS key、tenant、user、system
 instructions、tool choice、timeout、priority 或任意 provider 参数。认证负责调用方
 身份；Agent 定义负责系统指令和工具；Attachment Service 负责附件正文；Runtime
-策略负责超时、重试和调度。`Idempotency-Key` 已承担客户端重复提交标识，不再增加
-`client_request_id`。
+策略负责超时、重试和调度。请求采用扁平的 `message + attachment_ids`，不接收
+`content[]`、单 Run `model_id/thinking` 覆盖、业务 `metadata` 或
+`client_request_id`；接受时原子读取并固化 Session 当前 `model_id/thinking`。
 
-本轮需要确认两类可能的额外输入：
+本接口不接收 `Idempotency-Key`，也不提供应用级请求重放去重。每次成功接受的
+`POST` 都会产生新的 `run_id` 和 `user_message_id`。若调用方在读取响应前遇到
+连接中断或超时，不能直接自动重试；应先读取 GetSession 的 `active_run`，并结合
+History 中最近的用户 Message 判断原请求是否已经接受，再决定是否发起一个新的
+Run。服务端不通过隐式负载匹配猜测两次请求是否相同。
 
-1. 是否继续使用扁平的 `message + attachment_ids`，还是改为可排序、可扩展的
-   `content[]` typed blocks；前者与 pi 的“text + images”边界更接近，Java VO
-   校验也更直接，当前推荐前者；
-2. 是否允许请求用 `model_id/thinking` 覆盖单 Run。当前推荐不允许：CreateRun
-   原子固化 Session 当前模型和 thinking；模型或 thinking 的持久切换由 Session
-   配置 operation 完成。若担心配置读取与 Run 创建之间的竞争，可后续评审
-   `If-Match` 配置前置条件，而不是复制可变配置到请求体。
-
-`Idempotency-Key` 必填，长度为 8 到 128 个可见 ASCII 字符，作用域为
-`(session_id, createRun)`，并在 Session 删除前保留。规范化负载由原始
-`message` 值和有序 `attachment_ids` 组成；省略 `attachment_ids` 与空数组
-等价。服务端必须先查询已经接受的同键结果，再检查 active Run 或重新解析附件：
-同键同负载始终返回原 `run_id/user_message_id`，即使原 Run 已完成或依赖服务
-当前不可用；同键不同负载返回 `409 IDEMPOTENCY_CONFLICT`。所有接受前错误都
-不占用幂等键，调用方可以用原键重试。
-
-推荐接受顺序如下：
+已确认接受顺序如下：
 
 1. 完成双凭据认证、Session 动作授权，以及 PATH、Header 和 JSON 严格校验；
-2. 查询已接受的幂等结果；命中时校验负载指纹并立即返回原结果；
-3. 读取未删除 Session，检查当前没有 active Run；
-4. 向 Attachment Service 批量解析整组附件，验证 Session 绑定和 READY 状态，
+2. 读取未删除 Session，检查当前没有 active Run；
+3. 向 Attachment Service 批量解析整组附件，验证 Session 绑定和 READY 状态，
    单向标记 `referenced_at`，并对“有效历史附件 + 本次附件”执行完整模型输入策略校验；
-5. 解析 Session 当前模型的权威 descriptor，固化 `model_id/thinking`，生成
+4. 解析 Session 当前模型的权威 descriptor，固化 `model_id/thinking`，生成
    `run_id` 和 `user_message_id`；
-6. 在 CampusClaw 本地同一事务中持久化用户 Message、`queued` RunRecord、
-   Session active-run 指针、幂等结果和持久化执行任务；
-7. 返回 `202 Accepted`，后台执行器领取任务并将 Run 推进到 `running` 和终态。
+5. 在 CampusClaw 本地同一事务中持久化用户 Message、`queued` RunRecord、
+   Session active-run 指针和持久化执行任务；
+6. 返回 `202 Accepted`，后台执行器领取任务并将 Run 推进到 `running` 和终态。
 
-第 6 步的数据库唯一约束必须保证每个 Session 至多一个 active Run；两个不同
-幂等键并发提交时只能有一个成功，另一请求返回 `409 RUN_ACTIVE`。CampusClaw
+第 5 步的数据库唯一约束必须保证每个 Session 至多一个 active Run；两个并发
+CreateRun 请求只能有一个成功，另一请求返回 `409 RUN_ACTIVE`。CampusClaw
 事务与 Attachment Service 的 `referenced_at` 更新之间没有跨服务 XA：若附件已
-标记引用但第 6 步失败，引用标记保守保留并由附件生命周期对账处理；不得因此
-返回虚假的 `run_id`，也不得消费幂等键。Run 一旦接受，后续模型输入读取或
-Provider 调用失败属于 Run 终态错误，不再改写本接口的 `202`。
+标记引用但第 5 步失败，引用标记保守保留并由附件生命周期对账处理；不得因此
+返回虚假的 `run_id`。Run 一旦接受，后续模型输入读取或 Provider 调用失败属于
+Run 终态错误，不再改写本接口的 `202`。
 
-当前推荐成功响应保持最窄结构：
+已确认成功响应保持最窄结构：
 
 ```json
 {
@@ -447,8 +434,7 @@ Provider 调用失败属于 Run 终态错误，不再改写本接口的 `202`。
 }
 ```
 
-`202` 已经表达 accepted，因而不重复返回常量 `accepted=true`；是否为幂等重试
-是服务端实现细节，也不返回 `idempotent`。Run 的 `state`、固化后的
+`202` 已经表达 accepted，因而不重复返回常量 `accepted=true`。Run 的 `state`、固化后的
 `model_id/thinking`、执行 phase 和终态由 GetRun 负责。响应同时返回指向
 GetRun 的 `Location`、`Cache-Control: no-store` 和实际 `Content-Language`。
 
@@ -456,10 +442,10 @@ GetRun 的 `Location`、`Cache-Control: no-store` 和实际 `Content-Language`�
 
 [PlantUML 源码：`http_create_run`](diagram.puml#L1412)
 
-显式 Run 资源模型已经确认。本轮只评审 CreateRun 输入：输入结构、是否允许单 Run
-覆盖 `model_id/thinking`，以及是否接受非模型业务 metadata。成功状态、active Run
-冲突或排队、成功 `result` 和错误码仍是后续决策，不因本轮展示而确认。OpenAPI
-本轮不更新。
+第四个 CreateRun 接口已经确认：采用扁平 `message + attachment_ids`，不允许
+单 Run 覆盖 `model_id/thinking`，不接受业务 metadata，不接收
+`Idempotency-Key`；成功状态、单 active Run 约束、最窄成功 `result` 和错误码均按
+本小节与主维护 HTML 冻结。OpenAPI 本轮不更新。
 
 ### 2.3 事件与历史
 
@@ -511,12 +497,12 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 | `thinking.set` | `PUT /sessions/{session_id}/thinking` |
 | EventFrame | Run Event Journal；事件机制借鉴 Anthropic，但恢复和控制边界仍是 `run_id` |
 | RequestFrame `id` | HTTP 请求关联由网关/框架处理，不参与业务幂等 |
-| connection generation/close code | 删除；改用 HTTP 状态、ETag 和幂等键 |
+| connection generation/close code | 删除；改用 HTTP 状态、ETag 和 operation-specific 并发语义 |
 
 ## 4. 状态、并发与恢复
 
-资源模型已经确认，但以下并发、终态和恢复细节仍是 CreateRun 及后续接口的当前
-提案，尚未逐项冻结：
+CreateRun 的并发和接受边界已经确认；GetRun、Run Event 及后续写接口的终态和
+恢复细节仍待逐项冻结：
 
 - 每个 Session 同一时刻只允许一个 active Run；冲突返回 `409 RUN_ACTIVE`。
 - Run 接受后不依赖发起 HTTP 连接存活；连接关闭不等于 Abort。
@@ -525,8 +511,8 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
   错误码为 `RUN_INTERRUPTED`。
 - SSE 断线优先以 `Last-Event-ID` 继续；Event Journal 已过保留水位时返回
   `410 EVENT_CURSOR_EXPIRED`，客户端改用 Run 快照和 History 恢复。
-- Session 读取响应返回 `ETag`；配置写入使用 `If-Match`，Run 副作用写入使用
-  `Idempotency-Key`，两类机制职责不混用。
+- Session 读取响应返回 `ETag`，配置写入使用 `If-Match`。CreateRun 不使用
+  `Idempotency-Key`；Steer 和 Abort 的重试语义在各自 operation 评审中决定。
 - `Session.state` 只表达是否存在 active Run；执行阶段由 GetRun 返回，避免把
   pi 的执行过程枚举误当成 Session 生命周期状态。
 - `history_seq` 只由 History API 返回，`run_seq` 只由 Run Event API 返回；
@@ -537,7 +523,7 @@ WebSocket 设计的架构改造。终态 Message 和 RunRecord 仍写入权威 H
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。本版已经冻结 Session 生命周期三个接口；
+草案的公司集成约束。本版已经冻结 Session 生命周期三个接口和 CreateRun；
 其余 operation 的业务语义仍按后续逐个评审，但普通 JSON 响应
 最终也必须遵守同一包装。SSE 事件流和 HTTP `204` 无响应体
 不使用 ResultBean。
@@ -593,23 +579,20 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 | `403` | `FORBIDDEN` | `当前调用方无权删除该 Session。` | `The caller is not allowed to delete this Session.` |
 | `500` | `SESSION_DELETE_FAILED` | `Session 删除失败。` | `Session deletion failed.` |
 
-第四个接口当前提案成功返回 `202` ResultBean，失败仍只有
+第四个 CreateRun 接口已确认成功返回 `202` ResultBean，失败仍只有
 `resCode/resMsg`。附件不存在、越权、未绑定、已删除或其他不可披露状态统一为
 `INVALID_ATTACHMENT`，避免资源枚举；附件属于当前 Session 但尚未 READY 时才
-返回可重试的 `ATTACHMENT_NOT_READY`。以下错误码和消息仅用于预览，尚未进入
-字段评审：
+返回可重试的 `ATTACHMENT_NOT_READY`。以下错误码和消息已经冻结：
 
 | HTTP | `resCode` | `zh_CN` | `en_US` |
 |---|---|---|---|
 | `400` | `INVALID_SESSION_ID` | `session_id 格式不正确。` | `The session_id format is invalid.` |
-| `400` | `INVALID_IDEMPOTENCY_KEY` | `Idempotency-Key 格式不正确。` | `The Idempotency-Key format is invalid.` |
 | `400` | `INVALID_RUN_REQUEST` | `Run 请求内容不符合约束。` | `The Run request does not satisfy the required constraints.` |
 | `401` | `UNAUTHENTICATED` | `调用方身份认证失败。` | `Caller authentication failed.` |
 | `401` | `AUTH_CREDENTIAL_CONFLICT` | `请求不能同时携带 JWT 和 APPKEY 凭据。` | `JWT and APPKEY credentials must not be supplied together.` |
 | `403` | `FORBIDDEN` | `当前调用方无权在该 Session 中创建 Run。` | `The caller is not allowed to create a Run in this Session.` |
 | `404` | `SESSION_NOT_FOUND` | `指定的 Session 不存在。` | `The specified Session does not exist.` |
 | `409` | `RUN_ACTIVE` | `该 Session 已存在正在执行的 Run。` | `The Session already has an active Run.` |
-| `409` | `IDEMPOTENCY_CONFLICT` | `Idempotency-Key 已用于不同的请求内容。` | `The Idempotency-Key was already used with different request content.` |
 | `409` | `ATTACHMENT_NOT_READY` | `附件尚未准备就绪，请稍后重试。` | `The attachment is not ready. Try again later.` |
 | `422` | `INVALID_ATTACHMENT` | `请求包含无效附件。` | `The request contains an invalid attachment.` |
 | `422` | `ATTACHMENT_NOT_SUPPORTED` | `当前模型不支持该附件输入。` | `The current model does not support the attachment input.` |
@@ -716,10 +699,10 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 - HTTP 契约不接收 `traceparent`。部署平台如需调用链遥测，由网关和
   框架在契约外处理，不把它传入业务对象。
 - `agent_id`、`model_id` 和 `attachment_id` 均大小写敏感且不透明。
-- `POST /runs` 当前推荐只接受文本和附件 ID，不接受单次 `thinking` 覆盖，
+- `POST /runs` 已确认只接受文本和附件 ID，不接受单次 `thinking` 覆盖，
   并禁止 URL、MIME、文件名、Base64、OBS Object Key、tenant/user 字段。
-- `Idempotency-Key` 只作为作用域内去重键，调用方不得放入凭据或个人信息；
-  服务端日志只记录有界摘要，不记录原值。
+- `POST /runs` 不接收 `Idempotency-Key`，网络结果不确定时调用方必须先读取
+  Session 和 History，禁止把无条件重试描述为安全行为。
 - Runtime 仍通过 Attachment Service 的内部 resolve/content API 获取可信元数据
   和有界字节流，不直连 OBS。
 
@@ -760,16 +743,16 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java` 基线 53-136：现有 HTTP POST 把 prompt 生命周期绑定到 SSE 响应，并在取消时 abort；没有先持久化异步 Run 再返回的接受边界 |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 252-273 与 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java` 基线 153-177：WebSocket prompt 只接受非空文本，先追加 JSONL UserMessage 再调用 prompt，并以 `isStreaming` 拒绝并发；没有附件 ID、Run ID 或幂等存储 |
 | 观察到的行为 | pi-mono-java `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` 基线 183-194、218-268：`startExecution` 通过 executionLock 保证单次 current execution，并在虚拟线程执行结束时清理；没有共享数据库 active-run 唯一约束或执行任务 |
-| 产品约束 | Session/Message、附件引用和 Manager 权威保持不变；执行轮次是否公开为 Run 尚未确认 |
+| 产品约束 | Session/Message、附件引用和 Manager 权威保持不变；执行轮次公开为调用方可见的 Run |
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、附件只传 ID、ResultBean 错误脱敏 |
 | 架构改造 | 一组 HTTP 资源接口、统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
-| 已确认架构 | 将当前进程内 `prompt` 调用提升为调用方可见的持久化异步 Run：用户 Message、RunRecord、Session active 指针、幂等结果和 `t_run_dispatch_task` 在本地事务中提交；事件作为 Run 内事实流，不替代 `run_id` |
+| 已确认架构 | 将当前进程内 `prompt` 调用提升为调用方可见的持久化异步 Run：用户 Message、RunRecord、Session active 指针和 `t_run_dispatch_task` 在本地事务中提交；事件作为 Run 内事实流，不替代 `run_id` |
 | 设计原因 | mate-service 需要按轮精确恢复、中止、Steer 和审计，显式 `run_id` 提供稳定边界；Anthropic 的持久化事件、权威完整事件和临时增量分层作为 Run Event Journal 的实现参考 |
 | 已确认设计 | CampusClaw GetSession 收敛为配置、粗粒度状态和 active Run 指针；History 水位归 History API，执行 phase 与恢复详情归 GetRun，实时增量归 Run Event API。相较 Anthropic，Agent 发布快照、环境、Vault、预算、用量、标题和业务元数据不由本 Session 资源拥有 |
-| 待确认输入 | CreateRun 当前推荐只接收 `message + attachment_ids`，并原子固化 Session 当前 `model_id/thinking`；是否改为 `content[]`、是否允许单 Run 配置覆盖、是否接受非模型业务 metadata 仍在评审中 |
+| 已确认设计 | CreateRun 只接收扁平 `message + attachment_ids`，原子固化 Session 当前 `model_id/thinking`，不接受业务 metadata 或 `Idempotency-Key`；这是产品约束，不是 pi 已有行为 |
 
 公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自
 用户提供的集成约束。当前工作区不含对应入站认证库或
@@ -783,6 +766,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.15.0 | 2026-08-17 | 用户确认第四个 CreateRun 接口：冻结扁平 `message + attachment_ids`、Session 当前 `model_id/thinking` 快照、无业务 metadata、`202` 最窄 ResultBean、单 active Run 和中英文错误；按用户修正删除 `Idempotency-Key` Header、重放结果、冲突错误码及本地幂等存储，明确网络结果不确定时先查 Session/History；OpenAPI 未更新 |
 | 1.14.0 | 2026-08-17 | 用户选择候选 A，确认每轮执行是调用方可见的显式 Run 资源；恢复 GetSession `active_run`、GetRun、Run Events、Abort 和 Steer 的既定边界；第四接口进入输入评审，依据 pi `PromptOptions` 区分文本/附件业务输入与模板展开、运行中队列、来源和 callback 等内部控制，提出扁平字段或 `content[]`、Session 配置快照或单 Run 覆盖、是否接受 metadata 三项决策；OpenAPI 未更新 |
 | 1.13.0 | 2026-08-17 | 将第四个接口退回架构前置评审：先确认“每轮执行是否成为调用方可见的一等 Run 资源”，再评审字段；增加显式 Run 与 Anthropic 风格 Session Events 的身份、状态、事件、中止、并发、恢复和审计对比，明确选择 Events 会重开已确认 GetSession `active_run`；原 CreateRun 字段契约降级为候选 A 条件式预览；核对 Anthropic `managed-agents-2026-04-01` 官方契约并新增资源模型 PlantUML，OpenAPI 未更新 |
 | 1.12.0 | 2026-08-17 | 用户确认第三个 DeleteSession 接口，冻结 `204` 逻辑删除、active Run 自动 abort、重复删除统一 `204`、Runtime 数据清理和仅含 `session_id/deleted_at` 的永久 tombstone；启动第四个 CreateRun 评审，提出持久化异步接受边界、必填幂等键、文本/附件输入、单 active Run、最窄 `202` ResultBean 与错误国际化；增加 pi/pi-mono-java prompt/并发/HTTP SSE 源码证据和 PlantUML，OpenAPI 未更新 |
