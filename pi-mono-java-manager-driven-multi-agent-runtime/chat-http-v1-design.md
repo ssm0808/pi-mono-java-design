@@ -2,14 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.21.0 |
+| 文档版本 | 1.22.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | 前五个 operation 已确认；第五个 GET Session Events 只返回当前分支中的三类持久化对话 Entry |
+| 接口评审状态 | 前五个 operation 已确认；后三个 Session 模型与 thinking 配置 operation 待本轮确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
-| pi-mono-java 源码基线 | `223b6ba85d7ec80bfd4db23036fa46895294f3d0` |
+| pi-mono-java 源码基线 | `195746614096312d4e93afb029d387837db78e0b` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | Anthropic Managed Agents 文档核对 | 2026-08-17；`managed-agents-2026-04-01` beta |
 | 更新日期 | 2026-08-17 |
@@ -571,10 +571,106 @@ Message。CampusClaw 的 `entry_seq` 和 HTTP page 分页均为 target-only 服�
 | `PUT` | `/sessions/{session_id}/model` | 切换 Session 当前模型 |
 | `PUT` | `/sessions/{session_id}/thinking` | 修改默认 thinking 披露级别 |
 
-模型列表使用 Session scope，而不是公开 `/agents/{agent_id}/models`，避免调用方
-绕过 Session 绑定查询其他 Agent。Model/Thinking 变更只允许在 Session idle、
-没有 active execution 时执行，并要求 `If-Match` 携带最近一次 Session `ETag`；并发版本不一致返回
-`412 PRECONDITION_FAILED`。
+这三个 operation 当前是待确认目标设计。模型列表使用 Session scope，而不是公开
+`/agents/{agent_id}/models`，避免调用方绕过 Session 绑定查询其他 Agent。两个 PUT
+只允许在 Session `idle` 时执行，并要求 `If-Match` 携带最近一次 Session `ETag`：
+缺失返回 `428 IF_MATCH_REQUIRED`，版本不一致返回
+`412 SESSION_VERSION_MISMATCH`。相同值仍完成权限和可用性校验，随后按无变化成功
+返回，`updated_at` 和 `ETag` 保持不变。
+
+#### 2.4.1 GET Session Models
+
+`GET /sessions/{session_id}/models` 实时读取 Model Manager，而不是返回创建 Session
+时的固定快照。结果是 Agent `enabledModels`、当前调用身份和部署策略的交集，保持
+Agent 配置中的稳定顺序，不分页。`models` 可以为空；Session 保存的
+`current_model_id` 若在创建后被管理员停用，也允许暂时不在 `models` 中。
+
+```json
+{
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "current_model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
+    "models": [
+      {
+        "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
+        "name": "Claude Sonnet 4.5",
+        "provider": "anthropic",
+        "input_modalities": ["text", "image"],
+        "supports_reasoning": true
+      }
+    ]
+  }
+}
+```
+
+公共 descriptor 只包含模型选择器和输入能力判断所需的 `model_id`、`name`、
+`provider`、`input_modalities` 和 `supports_reasoning`。Model Manager 的
+`base_url`、凭据是否存在、价格、上下文窗口、最大输出 token、Headers 和供应商
+请求配置都不进入契约。Model Manager 不可用复用第一个接口已经冻结的
+`503 MANAGER_UNAVAILABLE`。
+
+#### 2.4.2 PUT Session Model
+
+`PUT /sessions/{session_id}/model` 的请求只包含：
+
+```json
+{
+  "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS"
+}
+```
+
+Runtime 必须实时确认目标模型仍属于上述可选集合；不存在、未绑定或调用方无权使用
+统一返回 `422 MODEL_NOT_AVAILABLE`，不泄露模型目录。成功后只改变后续
+`user.message` 使用的 Session 默认模型，不影响已完成历史，也不生成公共对话
+Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`、
+`updated_at` 和新 `ETag`：
+
+```json
+{
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
+    "agent_id": "agent_01JY8VZY4CRQN4PJW8M94D1B2C",
+    "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS",
+    "state": "idle",
+    "thinking": "hidden",
+    "created_at": "2026-08-15T10:30:00+08:00",
+    "updated_at": "2026-08-17T14:20:31+08:00"
+  }
+}
+```
+
+#### 2.4.3 PUT Session Thinking
+
+`PUT /sessions/{session_id}/thinking` 延续 CreateSession 和 GetSession 已确认的字段
+语义，请求只包含：
+
+```json
+{
+  "thinking": "full"
+}
+```
+
+`thinking=hidden|full` 表示 reasoning content 的披露级别，不是 pi 的
+`thinkingLevel` 推理强度。变更只作为后续新接受 `user.message` 的默认投影；不会
+重投影已完成历史，也不会影响已经开始的执行。请求 `full` 时还必须通过调用方、
+Agent 和部署的披露策略校验，否则返回
+`403 THINKING_DISCLOSURE_FORBIDDEN`。成功响应同样复用完整 SessionResource 和
+新 `ETag`。本接口不接受 `level` 或 `reasoning_effort`；未来若需要让调用方控制
+模型推理强度，应新增正交的 `reasoning_effort` 设计，不能改变已确认
+`thinking` 的含义。
+
+两个 PUT 都不接收 `Idempotency-Key`。Session 正在执行时返回
+`409 SESSION_BUSY`，不会排队配置变更；成功写入必须将 Session 配置、内部配置记录
+和资源版本原子提交。普通成功响应继续由
+`ResultBeanFactory.getFactory().normal(sessionResponseVO)` 包装，所有异常仍只包含
+`resCode/resMsg`。
+
+![HTTP Session 模型与披露配置](http_session_model_configuration.svg)
+
+[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1696)
 
 ## 3. WebSocket 到 HTTP 的语义映射
 
@@ -698,6 +794,23 @@ HTTP status。以下错误码和消息已经随第四个接口确认冻结：
 `AUTH_CREDENTIAL_CONFLICT`、`FORBIDDEN`、`SESSION_NOT_FOUND` 和
 `EVENT_LIST_FAILED`。这些事件查询错误已随第五接口确认而冻结。
 
+后三个待确认接口复用公共认证、授权、Session 标识和不存在错误，并新增以下
+operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑定和无权使用，
+避免模型目录枚举：
+
+| HTTP | `resCode` | 适用 operation | 语义 |
+|---|---|---|---|
+| `400` | `INVALID_MODEL_REQUEST` | PUT Model | 请求体缺失、格式错误或含未知字段 |
+| `400` | `INVALID_THINKING_REQUEST` | PUT Thinking | 请求体缺失、值不属于 `hidden\|full` 或含未知字段 |
+| `403` | `THINKING_DISCLOSURE_FORBIDDEN` | PUT Thinking | 当前披露策略不允许 `full` |
+| `409` | `SESSION_BUSY` | 两个 PUT | active execution 存在，配置变更不排队 |
+| `412` | `SESSION_VERSION_MISMATCH` | 两个 PUT | `If-Match` 与当前 ETag 不一致 |
+| `422` | `MODEL_NOT_AVAILABLE` | PUT Model | 目标模型不在实时可选集合中 |
+| `428` | `IF_MATCH_REQUIRED` | 两个 PUT | 缺少必填 `If-Match` |
+| `500` | `SESSION_MODEL_UPDATE_FAILED` | PUT Model | 模型配置和资源版本未能原子更新 |
+| `500` | `SESSION_THINKING_UPDATE_FAILED` | PUT Thinking | 披露配置和资源版本未能原子更新 |
+| `503` | `MANAGER_UNAVAILABLE` | GET Models、PUT Model | Model Manager 暂时不可用；复用第一个接口错误码 |
+
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
 `en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
 JVM 系统 Locale。响应返回 `Content-Language`，其值为实际使用的
@@ -773,7 +886,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 1. `normal(result)` 的 JSON 精确为 `resCode/resMsg/result`；
 2. null、空集合、时间和嵌套 VO 的 Jackson 行为一致；
 3. 中英文 Locale、回退语言和 `Content-Language` 一致；
-4. 九个错误码的 HTTP status、`resCode`、`resMsg` 一致，
+4. 全部已定义错误码的 HTTP status、`resCode`、`resMsg` 一致，
    且响应均不包含 `result` 字段；
 5. 公司 profile 的依赖树不包含兼容制品，standalone profile
    的依赖树不包含内部制品。
@@ -812,8 +925,8 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 规范来源为仓库相对路径
 `pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml`。本轮 HTTP
-认证与事件设计额外核对 pi-mono-java 基线
-`223b6ba85d7ec80bfd4db23036fa46895294f3d0`。本轮资源模型比较还核对了
+认证、事件和 Session 配置设计额外核对 pi-mono-java 基线
+`195746614096312d4e93afb029d387837db78e0b`。本轮资源模型比较还核对了
 Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 `managed-agents-2026-04-01` beta 契约。
 
@@ -826,6 +939,10 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 观察到的行为 | `modules/agent-core/src/main/java/com/campusclaw/agent/subagent/a2a/A2aAgentBackend.java` 基线 40-62、226-238：出站 A2A 请求已使用 `X-HW-ID + X-HW-APPKEY`，但它不是入站验证实现 |
 | 观察到的行为 | pi-mono `packages/protocol/src/schemas.ts` 基线 38-45、241-258：协议 `SessionSnapshot` 顶层包含 `phase`、`thinkingLevel`、完整 `transcript`、连接相对 `attached` 和 live Runtime `locked` |
 | 观察到的行为 | pi-mono `packages/protocol/src/schemas.ts` 基线 26-35：`ThinkingLevel` 取 `off/minimal/low/medium/high/xhigh/max`，表达推理强度 |
+| 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 1586-1600、1684-1730：`setModel` 校验模型凭据、持久化模型变更并按新模型能力收敛 `thinkingLevel`；`setThinkingLevel` 将请求推理强度限制到模型支持范围并持久化变更 |
+| 观察到的行为 | pi-mono `packages/ai/src/types.ts` 基线 793-809 与 `packages/ai/src/models.ts` 基线 900-910：Model descriptor 包含 provider、reasoning、input、cost、contextWindow、maxTokens 等内部能力；支持的推理强度由 `off/minimal/low/medium/high/xhigh/max` 与模型映射共同决定 |
+| 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 289-363：现有 WebSocket 命令支持 set model、list models 和 set thinking level；模型列表还暴露 contextWindow、maxTokens、cost 和 hasCredentials，thinking level 取 Java `ThinkingLevel` 推理强度 |
+| 观察到的行为 | pi-mono-java `modules/ai/src/main/java/com/campusclaw/ai/types/Model.java` 基线 34-47 与 `ThinkingLevel.java` 基线 16-42：Java Model 同样包含 baseUrl、cost、headers、apiKey 等不适合公共 HTTP 的内部字段；Java 推理强度当前为 `off/minimal/low/medium/high/xhigh` |
 | 观察到的行为 | Anthropic TypeScript SDK `src/resources/beta/sessions/sessions.ts` 基线 638-710：Managed Agents 的 Session 是控制面资源，包含 Agent 快照、环境/资源、预算/用量、标题/元数据和状态，但不内嵌 transcript 或 active Run 恢复快照 |
 | 观察到的行为 | Anthropic [Session event stream](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)：Managed Agents 的交互是事件驱动；`user.message` 启动或继续工作，事件在更早事件之后排队时 `processed_at=null`，中止通过 `user.interrupt` 表达 |
 | 观察到的行为 | Anthropic [Send Events API](https://platform.claude.com/docs/en/api/cli/beta/sessions/events/send)：`POST /v1/sessions/{session_id}/events` 返回服务端已接收的事件及其 `event_id`，普通 Session 交互没有独立的 Session Run ID |
@@ -850,8 +967,13 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
+| 产品约束 | 已确认 Session `thinking=hidden|full` 表示 reasoning content 披露级别；后三个接口不得把它改写成 pi 的推理强度。未来若开放推理强度，使用正交 `reasoning_effort` 设计 |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、文件只传 ID、ResultBean 错误脱敏 |
+| 安全加固 | Session 模型列表只暴露选择与输入能力所需安全字段，不返回 base URL、凭据状态、价格、token 上限或供应商请求配置；`thinking=full` 还要经过调用方、Agent 和部署披露策略授权 |
 | 架构改造 | 统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、请求范围内 POST SSE、断线后执行继续、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
+| 待确认目标设计 | GET Session Models 实时返回 Agent allowlist、调用身份和部署策略的交集，不分页；`current_model_id` 允许因管理面后续停用而不在 `models` 中 |
+| 待确认目标设计 | PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功统一返回完整 SessionResource 和 ETag，相同值验证后按无变化成功返回；模型、披露设置和资源版本原子更新 |
+| 待确认目标设计 | thinking 披露变更只作用于之后接受的用户事件，不追溯重投影历史；这是 HTTP 产品投影，不是 pi 或 pi-mono-java 已有 thinking-level 行为 |
 | 已确认架构 | `POST /sessions/{session_id}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `run_id`；成功流按 User、Assistant 三阶段、工具执行、ToolResult、最终 Assistant、Session idle、stream end 排序；`user.message`、`assistant.message.completed`、`tool.result` 与 `entry_seq` 是权威历史 |
 | 设计原因 | pi 本身依靠 MessageEntry 重建对话，不依赖公共 Run；mate-service 当前只需要提交消息、观察实时输出和读取持久化 Session Events，无需承担额外 Run 生命周期 |
 | 已确认设计 | Assistant Message 使用 `assistant.message.started/delta/completed` 三阶段；前两者是不可恢复预览，completed 是完整持久化 Entry。该语义借鉴 Anthropic 的 preview/final 分层，但名称采用 CampusClaw 领域语言 |
@@ -873,6 +995,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.22.0 | 2026-08-17 | 一次展示剩余三个 Session 配置接口的待确认目标设计：GET Models 返回实时可选集合及安全最小模型 descriptor；PUT Model 与 PUT Thinking 仅允许 idle、强制 If-Match、成功复用完整 SessionResource 和 ETag；明确 `thinking=hidden|full` 延续已确认的内容披露语义而非 pi 推理强度，full 受披露策略约束且不追溯历史；新增源码证据和 PlantUML，OpenAPI 未更新 |
 | 1.21.0 | 2026-08-17 | 用户确认第五个 GET Session Events 接口的最后两项：只返回当前分支，只公开 `user.message`、`assistant.message.completed`、`tool.result` 三类持久化对话 Entry；第五接口整体标记为已确认。澄清 page 的不透明性属于 HTTP 契约，客户端只能原样回传且不得解析、修改或构造，数据库内部仍可按 `entry_seq` 做 Keyset Pagination；OpenAPI 未更新 |
 | 1.20.0 | 2026-08-17 | 修正第五接口 cursor 和跨接口事件示例：删除可被 Base64 解码为 `created_at` 的伪不透明 page，改用客户端不可解释的示例 token，并明确示例为 `limit=3`、下一页从 `entry_seq=20` 继续；第五接口持久化类型从 `assistant.message` 对齐为第四接口的 `assistant.message.completed`，建立三类持久化事件的同名同字段映射，临时 SSE 事件仍不进入历史；OpenAPI 未更新 |
 | 1.19.0 | 2026-08-17 | 用户选择 Anthropic 风格的第五接口资源和分页边界：GET 与 POST 共用 `/sessions/{session_id}/events`，删除 `/history`、`after_entry_seq`、固定 `snapshot_entry_seq`、`next_cursor` 和 410 cursor 错误；GET 使用开放式 `limit + page/next_page`，断线后从第一页重新读取并按 `entry_id/entry_seq` 去重；事件范围仍在评审，OpenAPI 未更新 |
