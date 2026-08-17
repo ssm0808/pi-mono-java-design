@@ -2,14 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.16.0 |
+| 文档版本 | 1.17.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | Session 生命周期三个 operation 的既有决策保留；第四个 Session Event operation 评审中，Assistant Message 三阶段已确认；第一、二接口的 `active_run` 字段因公共 Run 被取消而待回看 |
+| 接口评审状态 | Session 生命周期三个 operation 的既有决策保留；第四个 Session Event operation 的完整成功事件序列已确认，流内异常仍待评审；第一、二接口的 `active_run` 字段因公共 Run 被取消而待回看 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
-| pi-mono-java 源码基线 | `dff835743fc7f3c93e1154c3eb51028749867ca8` |
+| pi-mono-java 源码基线 | `223b6ba85d7ec80bfd4db23036fa46895294f3d0` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | Anthropic Managed Agents 文档核对 | 2026-08-17；`managed-agents-2026-04-01` beta |
 | 更新日期 | 2026-08-17 |
@@ -302,7 +302,7 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 
 ![HTTP 执行资源模型对比](http_execution_resource_model.svg)
 
-[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L1518)
+[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L1527)
 
 #### 2.2.2 第四个接口：提交用户事件并直接流式返回
 
@@ -343,35 +343,77 @@ Session 当前 `model_id/thinking`，作为本次 active execution 的内部快�
 解析或用户 Entry 持久化错误，使用真实 HTTP status 和只含 `resCode/resMsg` 的
 JSON；响应开始后发生的错误只能以流内错误事件表达。
 
-已确认每条 Assistant MessageEntry 使用以下三阶段：
+成功流的完整事件顺序已经确认。`user.message` 先确认用户 Entry 已持久化；每条
+Assistant MessageEntry 使用三阶段；需要调用工具时先返回工具执行生命周期，再返回
+权威 `tool.result` Entry；最终 Assistant 消息结束后依次返回
+`session.status.idle` 和 `stream.end`。
 
 | SSE event | 含义 | 持久化 | 客户端处理 |
 |---|---|---|---|
+| `user.message` | 确认本次请求的 User MessageEntry 已持久化 | 是 | 记录 `entry_id/entry_seq`，作为本次执行的输入事实 |
 | `assistant.message.started` | 声明一条 Assistant MessageEntry 开始生成，并分配关联 `entry_id` | 否 | 建立消息占位和后续 delta 的关联边界 |
 | `assistant.message.delta` | 推送这条消息的临时增量 | 否 | 按顺序拼接，仅用于实时展示 |
 | `assistant.message.completed` | 返回已经封闭和持久化的完整 Assistant MessageEntry | 是 | 使用完整消息替换本地拼接预览，并记录 `entry_seq` |
+| `tool.execution.started` | `tool_call_id` 对应的工具开始执行 | 否 | 展示实时执行状态；参数以此前 Assistant tool-call 内容为准 |
+| `tool.execution.completed` | 工具执行生命周期结束 | 否 | 结束实时执行状态；`is_error` 仅说明执行结果类别 |
+| `tool.result` | 返回已持久化的完整 ToolResultEntry | 是 | 以 `tool_call_id` 关联工具调用，并记录 `entry_id/entry_seq` 与权威结果 |
+| `session.status.idle` | 本次 active execution 已清理，Session 回到 idle | 否 | 更新粗粒度 Session 状态 |
+| `stream.end` | 本次 POST 的成功事件流正常结束 | 否 | 停止读取流；不是可恢复的 History Entry |
 
 `completed` 只表示一条 Assistant MessageEntry 完成，不表示整个用户事件已经处理
 结束。若其 `finish_reason=tool_call`，Runtime 可以继续执行工具并产生新的 Assistant
 MessageEntry。一次请求因此可能包含多组三阶段事件。
 
 ```text
+id: 17
+event: user.message
+data: {"entry_id":"entry_100","entry_seq":17}
+
 event: assistant.message.started
-data: {"entry_id":"entry_assistant_01JY8X2E3R4T5Y6U7I8O9P0B2T","role":"assistant"}
+data: {"entry_id":"entry_101","role":"assistant"}
 
 event: assistant.message.delta
-data: {"entry_id":"entry_assistant_01JY8X2E3R4T5Y6U7I8O9P0B2T","delta":{"type":"text","text":"发现 3 条异常订单。"}}
+data: {"entry_id":"entry_101","delta":{"type":"text","text":"我先查询异常订单。"}}
 
 id: 18
 event: assistant.message.completed
-data: {"entry_id":"entry_assistant_01JY8X2E3R4T5Y6U7I8O9P0B2T","entry_seq":18,"message":{"role":"assistant","content":[{"type":"text","text":"发现 3 条异常订单。"}]},"finish_reason":"stop"}
+data: {"entry_id":"entry_101","entry_seq":18,"message":{"role":"assistant","content":[{"type":"text","text":"我先查询异常订单。"},{"type":"tool_call","tool_call_id":"call_201","name":"query_abnormal_orders","arguments":{"scope":"uploaded_files"}}]},"finish_reason":"tool_call"}
+
+event: tool.execution.started
+data: {"tool_call_id":"call_201","tool_name":"query_abnormal_orders"}
+
+event: tool.execution.completed
+data: {"tool_call_id":"call_201","tool_name":"query_abnormal_orders","is_error":false}
+
+id: 19
+event: tool.result
+data: {"entry_id":"entry_102","entry_seq":19,"tool_call_id":"call_201","tool_name":"query_abnormal_orders","content":[{"type":"text","text":"发现 3 条异常订单。"}],"is_error":false}
+
+event: assistant.message.started
+data: {"entry_id":"entry_103","role":"assistant"}
+
+event: assistant.message.delta
+data: {"entry_id":"entry_103","delta":{"type":"text","text":"发现 3 条异常订单。"}}
+
+id: 20
+event: assistant.message.completed
+data: {"entry_id":"entry_103","entry_seq":20,"message":{"role":"assistant","content":[{"type":"text","text":"发现 3 条异常订单。"}]},"finish_reason":"stop"}
+
+event: session.status.idle
+data: {"status":"idle"}
+
+event: stream.end
+data: {"reason":"completed"}
 ```
 
 `started` 和 `delta` 没有独立持久化序号，不能作为断线恢复来源；三者使用同一个
-预分配 `entry_id` 关联。`completed` 中的完整消息才是权威结果。SSE `data` 固定为
-单行 JSON，每个 frame 以一个空行结束。工具事件、用户消息持久化确认、Session
-状态和流结束事件仍按后续评审逐组冻结；主维护 HTML 中出现的这些名称是当前提案，
-不是本轮确认内容。
+预分配 `entry_id` 关联。`tool.execution.started/completed` 同样只是实时生命周期；
+`tool.result` 才是权威 ToolResultEntry。公共契约不暴露 pi 内部的
+`tool_execution_update`，避免把工具私有的 partial result 结构固化为跨工具协议。
+SSE `data` 固定为单行 JSON，每个 frame 以一个空行结束。只有
+`user.message`、`assistant.message.completed` 和 `tool.result` 使用 `id: entry_seq`；
+`session.status.idle` 必须在 active execution 已清理且本轮权威 Entry 已持久化后发送，
+随后 `stream.end` 关闭正常成功流。
 
 本接口不接收 `Idempotency-Key`。网络断开不取消已经接受的 active execution，
 客户端也不得自动重放这个 POST，因为重放会持久化另一条 User MessageEntry。
@@ -384,9 +426,9 @@ data: {"entry_id":"entry_assistant_01JY8X2E3R4T5Y6U7I8O9P0B2T","entry_seq":18,"m
 [PlantUML 源码：`http_session_event_stream`](diagram.puml#L1414)
 
 第四接口仍处于评审中。已冻结路径、`user.message` 请求、`message + file_ids`、
-同一 POST 直接 SSE、无公共 `run_id`、无 `Idempotency-Key`，以及 Assistant Message
-三阶段的名称与持久化语义。工具事件、Session/流控制事件和完整错误码仍待逐组确认。
-OpenAPI 本轮不更新。
+同一 POST 直接 SSE、无公共 `run_id`、无 `Idempotency-Key`，以及成功流中的 User、
+Assistant、工具执行、ToolResult、Session idle 和 stream end 事件顺序与持久化语义。
+流建立后的异常事件和完整错误码仍待确认。OpenAPI 本轮不更新。
 
 ### 2.3 历史与恢复
 
@@ -646,8 +688,8 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 规范来源为仓库相对路径
 `pi-mono-java-manager-driven-multi-agent-runtime/chat-ws-v2.asyncapi.yaml`。本轮 HTTP
-认证设计额外核对 pi-mono-java 基线
-`dff835743fc7f3c93e1154c3eb51028749867ca8`。本轮资源模型比较还核对了
+认证与事件设计额外核对 pi-mono-java 基线
+`223b6ba85d7ec80bfd4db23036fa46895294f3d0`。本轮资源模型比较还核对了
 Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 `managed-agents-2026-04-01` beta 契约。
 
@@ -670,10 +712,11 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java` 基线 143-157、204-274：`remove()` 只从内存 Map 移除并关闭 `SessionManager`；JSONL 可在后续创建时恢复，闲置淘汰也只释放内存对象 |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 168-210 与 `modules/agent-core/src/main/java/com/campusclaw/agent/AgentSession.java` 基线 165-177：断连或 abort 能停止流和子 Agent，但当前没有 DeleteSession HTTP 操作 |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 609-680、1063-1074、1116-1273：`prompt` 构造文本和可选 inline image 的 UserMessage，等待 Agent 执行，并在 `message_end` 将消息追加到 SessionManager；没有独立 HTTP Run 资源、`run_id` 或持久化幂等结果 |
-| 观察到的行为 | pi-mono `packages/agent/src/types.ts` 基线 391-412 与 `packages/agent/src/agent-loop.ts` 基线 89-109、150-222：`AgentEvent` 将 `message_start/update/end` 和 `tool_execution_start/update/end` 分层；一次 prompt 的工具循环可以产生多条 Assistant 与 ToolResult Message |
+| 观察到的行为 | pi-mono `packages/agent/src/types.ts` 基线 430-443 与 `packages/agent/src/agent-loop.ts` 基线 767-795：`AgentEvent` 将 `message_start/update/end` 和 `tool_execution_start/update/end` 分层；工具执行结束后再生成并发送 ToolResult Message |
+| 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 781-806：Tool execution start/update/end 继续传给扩展层；公共 HTTP 契约有意只映射 started/completed，并以持久化 `tool.result` 承载权威结果 |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 的 `PromptOptions` 基线 2629-2649：单次 prompt 可带 images；`expandPromptTemplates`、`streamingBehavior`、`source` 和 preflight callback 是 CLI/RPC Runtime 控制，不是通用业务消息字段；`model_id/thinking` 不在该参数中 |
 | 观察到的行为 | pi-mono `packages/agent/src/agent.ts` 基线 347-358、486-535：`activeRun` 是进程内执行对象，同一 Agent 已有 activeRun 时拒绝新 prompt，finally 清理；它不是持久化、可查询的 RunRecord |
-| 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java` 基线 53-136：现有 HTTP POST 直接返回 SSE，将 `message_start/update/end`、工具开始/结束和 done 映射为事件，并在客户端取消时 abort |
+| 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java` 基线 140-160：现有 HTTP POST 直接将消息、工具开始/结束和 done 映射为 SSE；现有名称与负载较窄，目标契约重命名并补充分离的持久化 ToolResultEntry |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 252-273 与 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java` 基线 153-177：WebSocket prompt 只接受非空文本，先追加 JSONL UserMessage 再调用 prompt，并以 `isStreaming` 拒绝并发；没有附件 ID、Run ID 或幂等存储 |
 | 观察到的行为 | pi-mono-java `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` 基线 183-194、218-268：`startExecution` 通过 executionLock 保证单次 current execution，并在虚拟线程执行结束时清理；没有共享数据库 active-run 唯一约束或执行任务 |
 | 产品约束 | Session/Message、文件引用和 Manager 权威保持不变；执行轮次不是调用方可见的公共 Run，权威恢复单元是 Session Entry |
@@ -682,7 +725,7 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、文件只传 ID、ResultBean 错误脱敏 |
 | 架构改造 | 统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、请求范围内 POST SSE、断线后执行继续、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
-| 已确认架构 | `POST /sessions/{session_id}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `run_id`，User/Assistant/ToolResult Entry 与 `entry_seq` 是权威历史 |
+| 已确认架构 | `POST /sessions/{session_id}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `run_id`；成功流按 User、Assistant 三阶段、工具执行、ToolResult、最终 Assistant、Session idle、stream end 排序，User/Assistant/ToolResult Entry 与 `entry_seq` 是权威历史 |
 | 设计原因 | pi 本身依靠 MessageEntry 重建对话，不依赖公共 Run；mate-service 当前只需要提交消息、观察实时输出和恢复 Session History，无需承担额外 Run 生命周期 |
 | 已确认设计 | Assistant Message 使用 `assistant.message.started/delta/completed` 三阶段；前两者是不可恢复预览，completed 是完整持久化 Entry。该语义借鉴 Anthropic 的 preview/final 分层，但名称采用 CampusClaw 领域语言 |
 | 待回看设计 | GetSession 和 CreateSession 原 `active_run` 字段依赖已取消的公共 Run 资源；主维护 HTML 保留历史快照并明确标记，后续单独确认字段删除 |
@@ -700,6 +743,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.17.0 | 2026-08-17 | 恢复并冻结第四接口此前已确认的完整成功事件序列：`user.message`、Assistant Message 三阶段、`tool.execution.started/completed`、持久化 `tool.result`、下一条 Assistant Message、`session.status.idle` 和 `stream.end`；区分实时工具生命周期与权威 ToolResultEntry，不公开内部 `tool_execution_update`；流内异常与完整错误码继续评审；更新 pi-mono-java 源码基线，OpenAPI 未更新 |
 | 1.16.0 | 2026-08-17 | 后续评审替代 1.15.0 显式 Run 结论：第四接口改为 `POST /sessions/{session_id}/events`，提交 `type=user.message` 与 `message + file_ids`，同一 POST 以 SSE 直接返回且不创建公共 `run_id`；确认 `assistant.message.started/delta/completed` 分别表示消息边界、临时增量和权威持久化 Entry；断线后执行继续并通过 History 恢复，禁止重放 POST；第一、二接口的 `active_run` 因资源依赖冲突标记待回看；OpenAPI 未更新 |
 | 1.15.0 | 2026-08-17 | 用户确认第四个 CreateRun 接口：冻结扁平 `message + attachment_ids`、Session 当前 `model_id/thinking` 快照、无业务 metadata、`202` 最窄 ResultBean、单 active Run 和中英文错误；按用户修正删除 `Idempotency-Key` Header、重放结果、冲突错误码及本地幂等存储，明确网络结果不确定时先查 Session/History；OpenAPI 未更新 |
 | 1.14.0 | 2026-08-17 | 用户选择候选 A，确认每轮执行是调用方可见的显式 Run 资源；恢复 GetSession `active_run`、GetRun、Run Events、Abort 和 Steer 的既定边界；第四接口进入输入评审，依据 pi `PromptOptions` 区分文本/附件业务输入与模板展开、运行中队列、来源和 callback 等内部控制，提出扁平字段或 `content[]`、Session 配置快照或单 Run 覆盖、是否接受 metadata 三项决策；OpenAPI 未更新 |
