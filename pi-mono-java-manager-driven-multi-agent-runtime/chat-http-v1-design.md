@@ -2,16 +2,16 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.10.1 |
+| 文档版本 | 1.11.0 |
 | 状态 | 目标设计，尚未实施 |
-| 接口评审状态 | `POST /agents/{agent_id}/sessions`、`GET /sessions/{session_id}` 已确认；其余 operation 待逐个评审 |
+| 接口评审状态 | `POST /agents/{agent_id}/sessions`、`GET /sessions/{session_id}` 已确认；`DELETE /sessions/{session_id}` 评审中；其余 operation 待逐个评审 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | OpenAPI | [`chat-http-v1.openapi.yaml`](chat-http-v1.openapi.yaml)，1.7.1，过渡期机器契约 |
 | WebSocket 语义基线 | [`chat-ws-v2.asyncapi.yaml`](chat-ws-v2.asyncapi.yaml)，2.12.0 |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 源码基线 | `dff835743fc7f3c93e1154c3eb51028749867ca8` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
-| 更新日期 | 2026-08-16 |
+| 更新日期 | 2026-08-17 |
 
 ## 1. 结论
 
@@ -39,7 +39,7 @@ OpenAPI YAML 在迁移期内继续作为机器可读投影；本轮不删除也�
 |---|---|---|
 | `POST` | `/agents/{agent_id}/sessions` | 根据 Agent 创建 Session，由 CampusClaw 分配 `session_id` |
 | `GET` | `/sessions/{session_id}` | 读取 Session 当前配置、粗粒度状态和 active Run 指针 |
-| `DELETE` | `/sessions/{session_id}` | 幂等请求删除 Session；停止新请求并异步清理 |
+| `DELETE` | `/sessions/{session_id}` | 逻辑删除 Session，使其对 API 立即不可见，并异步清理 Runtime 数据 |
 
 HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session；网络恢复只需
 重新读取 Session、Run 或 History。`POST /agents/{agent_id}/sessions`
@@ -206,6 +206,52 @@ GetRun 返回；`attached` 是 pi 的连接相对状态，`locked` 是 live Runt
 
 本小节和主维护 HTML 中的第二个接口已经用户确认。OpenAPI 本轮仍不更新。
 
+#### 2.1.2 第三个评审中接口：删除 Session
+
+```http
+DELETE /campusclaw-service/v1/sessions/{session_id}
+X-HW-ID: <CALLER_ID>
+Authorization: Bearer <JWT>
+```
+
+该接口不只是把 Session 从当前 Pod 的内存池中移除，而是结束
+CampusClaw 对该 Runtime Session 的管理。当前推荐语义是：服务端先原子
+持久化 `DELETING` 状态和可重试的清理任务，然后返回 `204 No Content`。
+从持久化成功开始，GetSession、创建 Run 和配置写入都不再能访问
+该 Session；后台 Worker 完成物理清理，但不向调用方暴露删除任务
+状态。因此 `204` 表示“逻辑删除已完成”，不表示所有存储介质上的
+字节已经擦除。
+
+| 契约点 | 当前推荐提案 | 设计原因 |
+|---|---|---|
+| Request Body | 无 | 删除目标由 URI 唯一确定 |
+| 成功响应 | `204 No Content`，无 ResultBean | HTTP `204` 不允许业务响应体 |
+| active Run | 接受删除并自动 abort，终态收敛为 `aborted` | 删除 Session 是更强的终止意图，不要求调用方编排两个接口 |
+| 不存在、删除中或已删除 | 对具有删除 scope 的调用方统一返回 `204` | 保证网络重试幂等，不暴露 tombstone 状态 |
+| 幂等与并发 Header | 不要求 `Idempotency-Key` 或 `If-Match` | URI 和持久化 tombstone 已提供幂等语义；删除不是配置修改 |
+| Runtime 清理范围 | History、RunRecord、Run Event Journal、幂等记录和内存运行对象 | 避免已删除 Session 继续占用 Runtime 资源 |
+| 最小保留 | `session_id` 和 `deleted_at` tombstone | 禁止 Session ID 复用，并支持删除重试去重 |
+| 不属于本接口 | mate-service Chat 名称/业务元数据、附件对象 | 它们分别由 mate-service 和 Attachment Service 拥有 |
+
+逻辑删除与清理任务必须在同一持久化事务中提交。如果该事务失败，
+返回 `500 SESSION_DELETE_FAILED`，Session 不得停留在部分删除状态。事务
+提交后的 abort、内存释放或物理清理失败由持久化任务重试；已删除
+Session 对公共 API 仍然不可见。
+
+认证继续沿用前两个接口已确认的 JWT 首选和 APPKEY 兼容契约，混合
+凭据仍返回 `401 AUTH_CREDENTIAL_CONFLICT`。语法无效的 `session_id` 返回
+`400 INVALID_SESSION_ID`；资源存在但调用方无权删除时返回
+`403 FORBIDDEN`。异常响应只有 `resCode/resMsg`，不包含 `result`。
+
+![HTTP Session 逻辑删除](http_delete_session.svg)
+
+[PlantUML 源码：`http_delete_session`](diagram.puml#L1312)
+
+本接口仍在评审中，尚未确认。主维护 HTML 要求本轮对齐四个决策：
+`204` 逻辑删除边界还是 `202` 删除任务、active Run 自动 abort 还是返回
+`409`、重复删除统一 `204` 还是不存在返回 `404`，以及 Runtime History
+物理清理还是按合规策略归档。OpenAPI 本轮不更新。
+
 ![HTTP Session 创建](http_session_creation.svg)
 
 [PlantUML 源码：`http_session_creation`](diagram.puml#L996)
@@ -224,7 +270,7 @@ GetRun 返回；`attached` 是 pi 的连接相对状态，`locked` 是 live Runt
 `202 Accepted`、`Location`、`run_id` 和 `user_message_id`。响应表示已接受，不表示
 模型执行完成。接受 Run 时服务端把 `session.current_model_id`
 原子固化到 `RunRecord.model_id`；同一 Run 的所有模型调用都使用该值，
-后续 Session 模型切换不影响已开始 Run。`POST /runs`、Steer、Abort 和 Session 删除都必须携带
+后续 Session 模型切换不影响已开始 Run。`POST /runs`、Steer 和 Abort 必须携带
 `Idempotency-Key`；相同键和相同规范化负载返回原结果，相同键不同负载返回
 `409 IDEMPOTENCY_CONFLICT`。
 
@@ -339,6 +385,20 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 `INVALID_SESSION_ID`、`UNAUTHENTICATED`、`AUTH_CREDENTIAL_CONFLICT`、
 `FORBIDDEN` 和 `SESSION_NOT_FOUND`；仍保持异常体只有
 `resCode/resMsg`。这些 operation-specific 错误已随第二个接口确认而冻结。
+
+第三个 DeleteSession 接口当前提案为：成功返回无响应体的
+`204`；失败使用 `INVALID_SESSION_ID`、`UNAUTHENTICATED`、
+`AUTH_CREDENTIAL_CONFLICT`、`FORBIDDEN` 和 `SESSION_DELETE_FAILED`。
+不存在、删除中或已删除按当前推荐语义统一返回 `204`，因此不新增
+`SESSION_NOT_FOUND`。以下错误码和消息仍处于评审中：
+
+| HTTP | `resCode` | `zh_CN` | `en_US` |
+|---|---|---|---|
+| `400` | `INVALID_SESSION_ID` | `session_id 格式不正确。` | `The session_id format is invalid.` |
+| `401` | `UNAUTHENTICATED` | `调用方身份认证失败。` | `Caller authentication failed.` |
+| `401` | `AUTH_CREDENTIAL_CONFLICT` | `请求不能同时携带 JWT 和 APPKEY 凭据。` | `JWT and APPKEY credentials must not be supplied together.` |
+| `403` | `FORBIDDEN` | `当前调用方无权删除该 Session。` | `The caller is not allowed to delete this Session.` |
+| `500` | `SESSION_DELETE_FAILED` | `Session 删除失败。` | `Session deletion failed.` |
 
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
 `en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
@@ -466,11 +526,15 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 | 观察到的行为 | pi-mono `packages/protocol/src/schemas.ts` 基线 38-45、241-258：协议 `SessionSnapshot` 顶层包含 `phase`、`thinkingLevel`、完整 `transcript`、连接相对 `attached` 和 live Runtime `locked` |
 | 观察到的行为 | pi-mono `packages/protocol/src/schemas.ts` 基线 26-35：`ThinkingLevel` 取 `off/minimal/low/medium/high/xhigh/max`，表达推理强度 |
 | 观察到的行为 | Anthropic TypeScript SDK `src/resources/beta/sessions/sessions.ts` 基线 638-710：Managed Agents 的 Session 是控制面资源，包含 Agent 快照、环境/资源、预算/用量、标题/元数据和状态，但不内嵌 transcript 或 active Run 恢复快照 |
+| 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 789-805：`AgentSession.dispose()` 中止重试、压缩、分支、bash 和 Agent 运行，断开扩展并释放内存资源；它未定义 HTTP 逻辑删除或持久化 tombstone |
+| 观察到的行为 | pi-mono `packages/coding-agent/src/modes/interactive/components/session-selector.ts` 基线 598-630：交互模式删除直接将 Session JSONL 移入回收站，失败时回退为 unlink；这是本地文件行为，不是服务端删除事务 |
+| 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java` 基线 143-157、204-274：`remove()` 只从内存 Map 移除并关闭 `SessionManager`；JSONL 可在后续创建时恢复，闲置淘汰也只释放内存对象 |
+| 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 168-210 与 `modules/agent-core/src/main/java/com/campusclaw/agent/AgentSession.java` 基线 165-177：断连或 abort 能停止流和子 Agent，但当前没有 DeleteSession HTTP 操作 |
 | 产品约束 | Session/Run/Message、附件引用、单 active Run、Manager 权威保持不变 |
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、附件只传 ID、ResultBean 错误脱敏 |
-| 架构改造 | 一组 HTTP 资源接口、统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、异步 Session 删除 |
+| 架构改造 | 一组 HTTP 资源接口、统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、SSE/JSON Event Journal、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
 | 架构改造 | CampusClaw GetSession 收敛为配置、粗粒度状态和 active Run 指针；History 水位归 History API，执行 phase 与恢复详情归 GetRun，实时增量归 Run Event API。相较 Anthropic，Agent 发布快照、环境、Vault、预算、用量、标题和业务元数据不由本 Session 资源拥有 |
 
 公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自
@@ -485,6 +549,7 @@ pi-mono-java 实现。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.11.0 | 2026-08-17 | 启动第三个 `DELETE /sessions/{session_id}` operation 评审；提案在持久化逻辑删除和清理任务后返回 `204`、active Run 自动 abort、重复删除统一 `204`、清理 Runtime 数据并仅保留最小 tombstone；增加 pi/pi-mono-java 删除与释放行为证据，前两个已确认接口不变，OpenAPI 未更新 |
 | 1.10.1 | 2026-08-17 | 用户确认第二个 `GET /sessions/{session_id}` operation；冻结 `active_run={run_id,state}`、ETag 仅用于配置写并发控制、不存在与已删除统一返回 `404 SESSION_NOT_FOUND`，并将双接口 HTML 更新为均已确认；OpenAPI 未更新 |
 | 1.10.0 | 2026-08-16 | 收窄 GetSession：删除 `history_seq` 和 active Run 的 phase/model/thinking，只保留 Session 当前配置、`idle/running` 与 `run_id/state` 指针；明确 History、GetRun、Run Event 的职责边界；主维护 HTML 同时展示已确认的第一个接口与评审中的第二个接口，OpenAPI 未更新 |
 | 1.9.0 | 2026-08-16 | 将主维护 HTML 切换为第二个 GetSession 接口评审；增加 `history_seq` 水位、Session state 与 active Run phase 分工、thinking 可见性与 pi 推理强度的语义隔离，以及 transcript/name/attached/locked 的边界；第二个接口仍未确认，OpenAPI 未更新 |

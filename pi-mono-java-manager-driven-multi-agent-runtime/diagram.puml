@@ -1308,3 +1308,97 @@ GetRun owns phase, frozen model and thinking,
 active message, open content, tools, and steers.
 end note
 @enduml
+
+@startuml http_delete_session
+title CampusClaw HTTP Session Logical Deletion Proposal
+
+' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
+' packages/coding-agent/src/core/agent-session.ts, AgentSession.dispose, lines 789-805
+' packages/coding-agent/src/modes/interactive/components/session-selector.ts,
+' deleteSessionFile, lines 598-630
+' Source evidence (pi-mono-java dff835743fc7f3c93e1154c3eb51028749867ca8):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java,
+' remove, createSessionWithPersistence, evictIdle, and closeQuietly, lines 143-157 and 204-274
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java,
+' buildCloseHook and abort command, lines 168-210
+' modules/agent-core/src/main/java/com/campusclaw/agent/AgentSession.java, abort, lines 165-177
+' Observed behavior: pi dispose stops active work and releases runtime resources, while
+' interactive deletion removes the local JSONL file.
+' Observed behavior: pi-mono-java SessionPool.remove only removes the in-memory entry and
+' closes SessionManager; persisted JSONL can still be restored.
+' Target-only design: no current pi-mono-java HTTP delete operation, durable deletion state,
+' cleanup work item, event-journal purge, or tombstone implements this sequence.
+' Architecture change: logical deletion and a durable cleanup work item commit atomically.
+' Design reason: the API becomes idempotent immediately without exposing cleanup-job state.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequence {
+  ArrowColor #475569
+  ActorBorderColor #475569
+  ActorFontColor #0F172A
+  LifeLineBorderColor #94A3B8
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantFontColor #0F172A
+  GroupBorderColor #64748B
+  GroupFontColor #334155
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+
+actor Caller
+participant "Credential\nAdapter" as Auth
+participant "DeleteSession\nAPI" as API
+database "Runtime Session\nStore" as Store
+participant "Managed Run\nHub" as Hub
+participant AgentSession
+participant SessionPool
+participant "Cleanup\nWorker" as Worker
+
+Caller -> Auth : DELETE /sessions/{session_id}\nexactly one credential pair, no body
+Auth -> API : immutable CallerAuthContext
+API -> API : validate session_id and authorize delete
+API -> Store : beginLogicalDelete(session_id)
+
+alt existing live Session
+  Store -> Store : transaction: mark DELETING, reject new work,\nenqueue durable cleanup, capture activeRunId
+  Store --> API : committed DeletePlan
+  API -> Hub : block new Run and configuration commands
+  opt activeRunId exists
+    API -> Hub : requestAbort(activeRunId)
+    Hub -> AgentSession : abort()
+  end
+  API -> SessionPool : remove(session_id)
+  API --> Caller : 204 No Content
+  Worker -> Store : claim cleanup work item
+  Worker -> Hub : ensure active Run is terminal aborted
+  Hub -> AgentSession : abort() if still active
+  Worker -> SessionPool : remove and release runtime objects
+  Worker -> Store : purge History, RunRecord, Event Journal,\nidempotency records, and Session payload
+  Store -> Store : retain session_id and deleted_at tombstone
+  Worker -> Store : complete cleanup work item
+else missing, deleting, or deleted
+  Store --> API : idempotent no-op
+  API --> Caller : 204 No Content
+else atomic commit failed
+  Store --> API : failure, no partial deletion
+  API --> Caller : 500 SESSION_DELETE_FAILED\nResultBean error without result
+end
+
+note over API,Store
+Logical deletion is complete at 204.
+Physical cleanup remains retryable and internal.
+end note
+
+note over Store,Worker
+mate-service Chat metadata and Attachment Service objects
+are outside this operation's ownership boundary.
+end note
+@enduml
