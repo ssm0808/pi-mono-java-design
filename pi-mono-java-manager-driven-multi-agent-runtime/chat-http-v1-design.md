@@ -2,29 +2,30 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.29.0 |
-| 状态 | 目标设计，尚未实施 |
+| 文档版本 | 1.30.0 |
+| 状态 | 十一个接口已实现并通过真实进程与 openGauss 验证 |
 | 接口评审状态 | 十一个 operation 均已确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | 机器契约 | 不维护；过渡期 OpenAPI 已于 2026-08-18 明确废弃并删除 |
 | 端到端传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均为 HTTP；执行响应使用请求范围内 SSE |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
-| pi-mono-java 源码基线 | `195746614096312d4e93afb029d387837db78e0b` |
+| pi-mono-java 设计分析基线 | `195746614096312d4e93afb029d387837db78e0b` |
+| pi-mono-java 实现基线 | `8691e8800f05f28afe22499050c29220ef5b7475` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | Anthropic Managed Agents 文档核对 | 2026-08-17；`managed-agents-2026-04-01` beta |
 | 更新日期 | 2026-08-18 |
 
 ## 1. 结论
 
-当前目标资源模型以 Session、Entry、Event 和 Model 为边界；一次用户输入触发的
+当前已实现资源模型以 Session、Entry、Event 和 Model 为边界；一次用户输入触发的
 执行不是调用方可见的一等 Run 资源。
 调用方通过 Session Event 提交输入，通过同一 POST 的 SSE 观察实时过程，并通过
 同一路径的 GET 分页读取持久化 Entry。
 
 调用方仍是 `mate-service` Runtime bridge 或明确获授权的内部服务端 SDK。
 浏览器不直连 Runtime；公共 `chat_id` 仍由 mate-service 映射为内部
-`session_id`。文件正文继续由文件服务承载，Runtime HTTP API
-只接受 `file_ids`。
+`session_id`。Runtime HTTP API 只接受 `file_ids`，当前实现不解析或下载文件内容，
+而是把 ID 按固定 `[File IDs]` 提示块附加到用户消息。
 
 端到端传输已经统一为两跳 HTTP+SSE：浏览器先调用 mate-service 公共 HTTP，
 mate-service 再调用本文定义的 CampusClaw 内部 HTTP。两跳分别认证、限流和投影，
@@ -66,39 +67,38 @@ APPKEY 是明确公开的兼容契约，
 
 | 认证模式 | 必填 Header | 定位 | 约束 |
 |---|---|---|---|
-| JWT | `X-HW-ID` + `Authorization: Bearer <JWT>` | 首选/默认 | 公司 JWT 验证器负责 claim、签名、issuer 和 audience |
-| APPKEY | `X-HW-ID` + `X-HW-APPKEY` | 兼容 | 公司 APPKEY/私钥体系验证器负责具体校验算法 |
+| JWT | `X-HW-ID` + `Authorization: Bearer <JWT>` | 首选/默认 | CampusClaw 校验完整组合和 Bearer 形状；真实性由上游 mate-service 验证 |
+| APPKEY | `X-HW-ID` + `X-HW-APPKEY` | 兼容 | CampusClaw 校验完整组合；真实性由上游 mate-service 验证 |
 
 两组凭据二选一。同时携带 `Authorization` 和 `X-HW-APPKEY`
 视为身份语义冲突，返回 HTTP `401` 和
-`AUTH_CREDENTIAL_CONFLICT`；任一组合缺失、格式错误或校验失败统一
-返回 `401 UNAUTHENTICATED`。选中一种模式且验证失败后禁止
-再尝试另一种模式，避免认证降级和身份混淆。
+`AUTH_CREDENTIAL_CONFLICT`；任一组合缺失、重复或格式错误统一
+返回 `401 UNAUTHENTICATED`。CampusClaw 不把 `X-HW-ID` 作为 Session owner，
+也不在本服务内重复实现公司 JWT/APPKEY 算法；该部署边界依赖 mate-service
+在转发前完成凭据真实性和业务授权验证。
 
 创建成功前，Runtime 必须完成以下初始化：
 
-1. 通过统一认证适配层验证且仅生成一个不可变
+1. 通过统一认证适配层完成 Header 形状校验并生成一个不可变
    `CallerAuthContext`，再验证 PATH 中 `agent_id` 的资源 ID 格式；
 2. 在受控根目录中解析 Agent 目录，拒绝路径或符号链接越界；
-3. 读取 `.campusagent/settings.json`，验证 `settings.agentId`
-   与 PATH 值按 ASCII 字节完全一致，并固定 `agentVersion`；
+3. 读取 `.campusagent/settings.json` 的 `defaultModel` 与 `enabledModels`；
 4. 验证 `enabledModels` 非空、无重复且包含 `defaultModel`；
 5. 调用 `resolveModel(agent_id, defaultModel)` 获得有效模型 descriptor；
 6. 在所有外部配置校验通过后生成全局唯一、删除后不复用的
    `session_id`；
-7. 组装不可变 SessionContext，加载 `SYSTEM.md` 和 Skills，注册
-   `read/get_tool_info/call_tool`，并创建独立 `AgentSession + Agent`；
-8. 原子保存包含 `agent_version` 和 bundle revision 的内部
-   SessionRecord，并将已就绪 Session 注册到 SessionPool；
-9. 使用 `ResultBeanFactory.getFactory().normal(sessionResponseVO)` 包装
-   SessionResource，返回 `201 Created`、`Location` 和 ResultBean。
+7. 保存 Session；首次执行时加载 `SYSTEM.md` 和 Skills，只注册 `read` 工具，
+   并创建独立 `AgentSession + Agent`；
+8. 由 `ResultBeanAdapter` 包装 SessionResource，返回 `201 Created`、
+   `Location` 和 ResultBean。公司工程以 Bean 替换适配器后，在适配器内部调用
+   真实 `ResultBeanFactory.getFactory().normal(sessionResponseVO)`。
 
 初始化只组装运行对象，不调用大模型、不消耗 token，也不创建 MessageEntry；
 因此创建响应中 `state=idle`。`thinking=false` 表示默认不启用深度思考，
 不写入 Managed `settings.json`。任一步在 SessionRecord 提交前失败都不
 暴露 `session_id`，并丢弃未持久化的内存 Session。
 
-`settings.json` 是发布快照，Model Manager 仍是模型绑定、启用状态和
+`settings.json` 是受控 Agent 目录配置，Model Manager 仍是模型绑定、启用状态和
 调用的最终权威。目录缺少有效默认模型时返回 HTTP `422`，
 响应体 `resCode=AGENT_MODEL_NOT_CONFIGURED`；Model Manager 暂时不可用时
 返回 HTTP `503`，响应体 `resCode=MANAGER_UNAVAILABLE`。
@@ -170,7 +170,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 
 ![GetSession 已确认响应](http_get_session_response.svg)
 
-[PlantUML 源码：`http_get_session_response`](diagram.puml#L648)
+[PlantUML 源码：`http_get_session_response`](diagram.puml#L612)
 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
@@ -207,8 +207,10 @@ Authorization: Bearer <JWT>
 ```
 
 该接口不只是把 Session 从当前 Pod 的内存池中移除，而是结束
-CampusClaw 对该 Runtime Session 的管理。已确认语义是：服务端先原子
-持久化 `DELETING` 状态和可重试的清理任务，然后返回 `204 No Content`。
+CampusClaw 对该 Runtime Session 的管理。已确认且已实现语义是：存在 active
+execution 时返回 `409 SESSION_BUSY`，不会隐式 abort；调用方先显式调用 Abort，
+再重试删除。idle 时服务端原子写入 tombstone 和可重试清理任务，然后返回
+`204 No Content`。
 从持久化成功开始，GetSession、提交用户事件和配置写入都不再能访问
 该 Session；后台 Worker 完成物理清理，但不向调用方暴露删除任务
 状态。因此 `204` 表示“逻辑删除已完成”，不表示所有存储介质上的
@@ -218,39 +220,39 @@ CampusClaw 对该 Runtime Session 的管理。已确认语义是：服务端先�
 |---|---|---|
 | Request Body | 无 | 删除目标由 URI 唯一确定 |
 | 成功响应 | `204 No Content`，无 ResultBean | HTTP `204` 不允许业务响应体 |
-| active execution | 接受删除并自动 abort | 删除 Session 是更强的终止意图，不要求调用方先调用中止接口 |
-| 不存在、删除中或已删除 | 对具有删除 scope 的调用方统一返回 `204` | 保证网络重试幂等，不暴露 tombstone 状态 |
+| active execution | 返回 `409 SESSION_BUSY` | 删除不隐式改变执行；避免清理与模型、工具副作用竞态 |
+| 不存在或已删除 | 统一返回 `204` | 保证网络重试幂等，不暴露 tombstone 状态 |
 | 幂等与并发 Header | 不要求 `Idempotency-Key` 或 `If-Match` | URI 和持久化 tombstone 已提供幂等语义；删除不是配置修改 |
 | Runtime 清理范围 | 持久化 Entry、内部执行状态和内存运行对象 | 避免已删除 Session 继续占用 Runtime 资源 |
 | 最小保留 | tombstone 严格只包含 `session_id` 和 `deleted_at` | 禁止 Session ID 复用，并支持删除重试去重 |
-| 不属于本接口 | mate-service Chat 名称/业务元数据、附件对象 | 它们分别由 mate-service 和 Attachment Service 拥有 |
+| 不属于本接口 | mate-service Chat 名称/业务元数据、文件对象 | 它们不属于 Runtime Session 删除事务 |
 
 逻辑删除与清理任务必须在同一持久化事务中提交。如果该事务失败，
 返回 `500 SESSION_DELETE_FAILED`，Session 不得停留在部分删除状态。事务
-提交后的 abort、内存释放或物理清理失败由持久化任务重试；已删除
+提交后的内存释放或物理清理失败由持久化任务重试；已删除
 Session 对公共 API 仍然不可见。
 
 tombstone 字段集合已对齐：若落地为 `t_session_tombstone`，则该表永久记录
 严格只有 `session_id` 和 `deleted_at`，不增加 `purged_at`、`cleanup_state`、
 `owner_scope` 或 Session 业务快照。内部重试次数、租约、错误和清理进度属于
 短期 `t_session_cleanup_task`，清理完成后删除任务记录。由于 tombstone 不保留
-owner 信息，对“不存在/已删除”的重复删除只能依据 `CallerAuthContext` 的动作级
-Session 删除 scope 授权，不得依赖 tombstone 重建资源所属关系。
+owner 信息。`X-HW-ID` 不作为 Session owner；对不存在或已删除资源的重复删除
+仅依赖完整凭据 Header 形状，真实性和动作授权由上游 mate-service 保证。
 
 认证继续沿用前两个接口已确认的 JWT 首选和 APPKEY 兼容契约，混合
 凭据仍返回 `401 AUTH_CREDENTIAL_CONFLICT`。语法无效的 `session_id` 返回
-`400 INVALID_SESSION_ID`；资源存在但调用方无权删除时返回
-`403 FORBIDDEN`。异常响应只有 `resCode/resMsg`，不包含 `result`。
+`400 INVALID_SESSION_ID`；运行中的 Session 返回 `409 SESSION_BUSY`。
+异常响应只有 `resCode/resMsg`，不包含 `result`。
 
 ![HTTP Session 逻辑删除](http_delete_session.svg)
 
-[PlantUML 源码：`http_delete_session`](diagram.puml#L719)
+[PlantUML 源码：`http_delete_session`](diagram.puml#L683)
 
 本小节和主维护 HTML 中的第三个接口已经用户确认。
 
 ![HTTP Session 创建](http_session_creation.svg)
 
-[PlantUML 源码：`http_session_creation`](diagram.puml#L418)
+[PlantUML 源码：`http_session_creation`](diagram.puml#L414)
 
 ### 2.2 消息与 Session Event
 
@@ -293,7 +295,7 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 
 ![Session Event、内部执行与 Entry 恢复边界](http_execution_resource_model.svg)
 
-[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L940)
+[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L889)
 
 #### 2.2.2 第四个已确认接口：提交用户事件并直接流式返回
 
@@ -320,7 +322,7 @@ Content-Type: application/json
 |---|---|---|
 | `type` | 必填；固定为 `user.message` | 声明本请求提交一条用户消息事件 |
 | `message` | 可选；提供时包含至少一个非空白字符，最多 262144 个字符 | 用户文本；校验可判断空白，持久化保留原始值 |
-| `file_ids` | 可选；最多 32 个，元素唯一、大小写敏感并保留顺序 | 引用已由文件服务绑定当前 Session 的文件 |
+| `file_ids` | 可选；最多 32 个，元素唯一、大小写敏感并保留顺序 | 按固定 `[File IDs]` 提示块追加给模型，不解析文件正文 |
 
 `message` 和 `file_ids` 至少有一项有效值。请求不接收 `model_id`、`thinking`、
 业务 metadata、instructions、tool choice、timeout、priority、URL、MIME、文件名、
@@ -330,8 +332,8 @@ Session 当前 `model_id/thinking`，作为本次 active execution 的内部快�
 
 成功使用 `200 OK` 和 `Content-Type: text/event-stream`，不使用 ResultBean。
 浏览器原生 `EventSource` 不能发送 POST，调用方必须使用支持流式响应的 HTTP 客户端，
-例如 `fetch` 的 `ReadableStream`。在响应头尚未提交前发生的认证、校验、授权、文件
-解析或用户 Entry 持久化错误，使用真实 HTTP status 和只含 `resCode/resMsg` 的
+例如 `fetch` 的 `ReadableStream`。在响应头尚未提交前发生的认证形状、请求校验、
+容量占用或用户 Entry 持久化错误，使用真实 HTTP status 和只含 `resCode/resMsg` 的
 JSON；响应开始后发生的错误只能以流内错误事件表达。
 
 成功流的完整事件顺序已经确认。`user.message` 先确认用户 Entry 已持久化；每条
@@ -428,7 +430,7 @@ ToolResult Entry 是权威事实，调用方按 `entry_id/entry_seq` 与本地�
 
 ![HTTP Session Event 直接流式返回](http_session_event_stream.svg)
 
-[PlantUML 源码：`http_session_event_stream`](diagram.puml#L819)
+[PlantUML 源码：`http_session_event_stream`](diagram.puml#L769)
 
 第四接口已经确认：冻结路径、`user.message` 请求、`message + file_ids`、同一 POST
 直接 SSE、无公共 `run_id`、无 `Idempotency-Key`、成功事件顺序与持久化语义，
@@ -559,21 +561,22 @@ List Events 的 page，断线恢复必须从第一页重新分页，并按 `entr
 
 pi-mono 的 `SessionManager` 将所有 Entry 以 `id/parentId` 组织为 append-only tree，
 `getBranch()` 返回当前 leaf 到 root 的有序路径，`getEntries()` 返回完整 Entry 集合。
-pi-mono-java 当前 `SessionManager` 同样写入 `id/parentId`，但恢复实现主要线性提取
-Message。CampusClaw 的 `entry_seq` 和 HTTP page 分页均为 target-only 服务端设计；
-选择“当前分支”是产品投影，不应表述为 pi 已有分页接口。Anthropic 的
+pi-mono-java 的旧 `SessionManager` 同样写入 `id/parentId`，但恢复实现主要线性提取
+Message。`entry_seq` 和 HTTP page 分页不是 pi 原生接口；它们已在实现提交
+`8691e880` 的 `MyBatisRuntimeSessionRepository` 中落地。选择“当前分支”仍是
+CampusClaw 产品投影，不应表述为 pi 已有分页接口。Anthropic 的
 `GET /v1/sessions/{session_id}/events` 同样返回不透明 `next_page`，没有公开固定
 快照水位；CampusClaw 借鉴这一分页边界，但仍以自己的 Entry 类型和 ResultBean 返回。
 
 ![HTTP Session Events 开放分页](http_session_event_list.svg)
 
-[PlantUML 源码：`http_session_event_list`](diagram.puml#L992)
+[PlantUML 源码：`http_session_event_list`](diagram.puml#L942)
 
 ### 2.4 模型与 Session 配置
 
 | Method | Path | 语义 |
 |---|---|---|
-| `GET` | `/sessions/{session_id}/models` | 列出当前 Agent 和调用身份可用的 `model_id` |
+| `GET` | `/sessions/{session_id}/models` | 列出 Agent 目录 allowlist 与 Runtime 当前可用模型交集中的 `model_id` |
 | `PUT` | `/sessions/{session_id}/model` | 切换 Session 当前模型 |
 | `PUT` | `/sessions/{session_id}/thinking` | 开启或关闭 Session 深度思考 |
 
@@ -587,7 +590,7 @@ Message。CampusClaw 的 `entry_seq` 和 HTTP page 分页均为 target-only 服�
 #### 2.4.1 GET Session Models
 
 `GET /sessions/{session_id}/models` 实时读取 Model Manager，而不是返回创建 Session
-时的固定快照。结果是 Agent `enabledModels`、当前调用身份和部署策略的交集，保持
+时的固定快照。结果是 Agent `enabledModels` 与 Runtime 当前可用模型的交集，保持
 Agent 配置中的稳定顺序，不分页。`models` 可以为空；Session 保存的
 `current_model_id` 若在创建后被管理员停用，也允许暂时不在 `models` 中。
 
@@ -668,13 +671,13 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 
 两个 PUT 都不接收 `Idempotency-Key`。Session 正在执行时返回
 `409 SESSION_BUSY`，不会排队配置变更；成功写入必须将 Session 配置、内部配置记录
-和资源版本原子提交。普通成功响应继续由
-`ResultBeanFactory.getFactory().normal(sessionResponseVO)` 包装，所有异常仍只包含
+和资源版本原子提交。普通成功响应由 `ResultBeanAdapter.normal(...)` 包装；
+公司替换 Bean 内部调用 `ResultBeanFactory.getFactory().normal(...)`。所有异常仍只包含
 `resCode/resMsg`。
 
 ![HTTP Session 模型与深度思考配置](http_session_model_configuration.svg)
 
-[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1082)
+[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1030)
 
 ### 2.5 Session 执行控制（已确认）
 
@@ -760,7 +763,7 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 
 ![HTTP Session 执行控制](http_session_execution_controls.svg)
 
-[PlantUML 源码：`http_session_execution_controls`](diagram.puml#L99)
+[PlantUML 源码：`http_session_execution_controls`](diagram.puml#L97)
 
 ## 3. 两跳 HTTP+SSE 边界
 
@@ -836,7 +839,6 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 | `400` | `INVALID_AGENT_ID` | `agent_id 格式不正确。` | `The agent_id format is invalid.` |
 | `401` | `UNAUTHENTICATED` | `调用方身份认证失败。` | `Caller authentication failed.` |
 | `401` | `AUTH_CREDENTIAL_CONFLICT` | `请求不能同时携带 JWT 和 APPKEY 凭据。` | `JWT and APPKEY credentials must not be supplied together.` |
-| `403` | `FORBIDDEN` | `当前调用方无权为该 Agent 创建 Session。` | `The caller is not allowed to create a Session for this Agent.` |
 | `404` | `AGENT_NOT_FOUND` | `指定的 Agent 不存在。` | `The specified Agent does not exist.` |
 | `422` | `AGENT_NOT_AVAILABLE` | `指定的 Agent 当前不可用。` | `The specified Agent is currently unavailable.` |
 | `422` | `AGENT_MODEL_NOT_CONFIGURED` | `该 Agent 未配置有效的默认模型。` | `The Agent has no valid default model configured.` |
@@ -844,13 +846,13 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 | `503` | `MANAGER_UNAVAILABLE` | `Model Manager 暂时不可用，请稍后重试。` | `Model Manager is temporarily unavailable. Try again later.` |
 
 第二个 GetSession 接口已确认使用
-`INVALID_SESSION_ID`、`UNAUTHENTICATED`、`AUTH_CREDENTIAL_CONFLICT`、
-`FORBIDDEN` 和 `SESSION_NOT_FOUND`；仍保持异常体只有
+`INVALID_SESSION_ID`、`UNAUTHENTICATED`、`AUTH_CREDENTIAL_CONFLICT`
+和 `SESSION_NOT_FOUND`；仍保持异常体只有
 `resCode/resMsg`。这些 operation-specific 错误已随第二个接口确认而冻结。
 
 第三个 DeleteSession 接口已确认：成功返回无响应体的
 `204`；失败使用 `INVALID_SESSION_ID`、`UNAUTHENTICATED`、
-`AUTH_CREDENTIAL_CONFLICT`、`FORBIDDEN` 和 `SESSION_DELETE_FAILED`。
+`AUTH_CREDENTIAL_CONFLICT`、`SESSION_BUSY` 和 `SESSION_DELETE_FAILED`。
 不存在、删除中或已删除按已确认语义统一返回 `204`，因此不新增
 `SESSION_NOT_FOUND`。以下错误码和消息已经冻结：
 
@@ -859,7 +861,7 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 | `400` | `INVALID_SESSION_ID` | `session_id 格式不正确。` | `The session_id format is invalid.` |
 | `401` | `UNAUTHENTICATED` | `调用方身份认证失败。` | `Caller authentication failed.` |
 | `401` | `AUTH_CREDENTIAL_CONFLICT` | `请求不能同时携带 JWT 和 APPKEY 凭据。` | `JWT and APPKEY credentials must not be supplied together.` |
-| `403` | `FORBIDDEN` | `当前调用方无权删除该 Session。` | `The caller is not allowed to delete this Session.` |
+| `409` | `SESSION_BUSY` | `该 Session 正在处理另一条用户消息。` | `The Session is processing another user message.` |
 | `500` | `SESSION_DELETE_FAILED` | `Session 删除失败。` | `Session deletion failed.` |
 
 第四个 Session Event 接口的成功响应是 `200 text/event-stream`，不使用
@@ -873,7 +875,6 @@ HTTP status。以下错误码和消息已经随第四个接口确认冻结：
 | `400` | `INVALID_EVENT_REQUEST` | `用户事件请求内容不符合约束。` | `The user event request does not satisfy the required constraints.` |
 | `401` | `UNAUTHENTICATED` | `调用方身份认证失败。` | `Caller authentication failed.` |
 | `401` | `AUTH_CREDENTIAL_CONFLICT` | `请求不能同时携带 JWT 和 APPKEY 凭据。` | `JWT and APPKEY credentials must not be supplied together.` |
-| `403` | `FORBIDDEN` | `当前调用方无权向该 Session 提交用户事件。` | `The caller is not allowed to submit an event to this Session.` |
 | `404` | `SESSION_NOT_FOUND` | `指定的 Session 不存在。` | `The specified Session does not exist.` |
 | `409` | `SESSION_BUSY` | `该 Session 正在处理另一条用户消息。` | `The Session is processing another user message.` |
 | `500` | `EVENT_ACCEPTANCE_FAILED` | `用户事件接收失败。` | `User event acceptance failed.` |
@@ -881,7 +882,7 @@ HTTP status。以下错误码和消息已经随第四个接口确认冻结：
 
 第五个 GET Session Events 接口已确认使用
 `INVALID_SESSION_ID`、`INVALID_EVENT_LIST_QUERY`、`UNAUTHENTICATED`、
-`AUTH_CREDENTIAL_CONFLICT`、`FORBIDDEN`、`SESSION_NOT_FOUND` 和
+`AUTH_CREDENTIAL_CONFLICT`、`SESSION_NOT_FOUND` 和
 `EVENT_LIST_FAILED`。这些事件查询错误已随第五接口确认而冻结。
 
 后三个已确认接口复用公共认证、授权、Session 标识和不存在错误，并新增以下
@@ -932,59 +933,50 @@ OBS 地址、Bucket、预签名 URL 或内部堆栈。`503` 的重试建议通�
 ### 6.1 代码边界
 
 Controller 接收和返回 VO，Service 返回未包装的 Response VO；
-ResultBean 不进入 Service、Session Factory、Runtime Store 或 Manager Adapter。
-创建 Session 的 Controller 目标代码形状为：
+ResultBean 不进入 Service、Runtime Store 或 Manager Adapter。
+实现基线中的 Controller 代码形状为：
 
 ```java
-SessionCreateResponseVO result = sessionService.createSession(agentId);
+var view = sessionService.create(agentId);
 return ResponseEntity.created(location)
-        .body(ResultBeanFactory.getFactory().normal(result));
+        .body(resultBeanAdapter.normal(view.resource()));
 ```
 
-这是 target-only 代码形状。当前 pi-mono-java 基线没有该 HTTP
-Controller，本地与设计仓库也没有公司内部 `ResultBeanFactory`
-的 Maven 坐标、完整包名或方法签名证据。因此不在设计中伪造
-内部 groupId/artifactId/version 或异常 Factory 方法；落地前必须以
-公司内部制品的实际 API 作为新的源码基线。
+这是实现提交 `8691e880` 的已观察代码形状。`ResultBeanAdapter` 是稳定的
+Controller 边界，独立仓由 `StandaloneResultBeanAdapter` 生成已确认 JSON；
+公司工程提供替换 Bean，在 Bean 内调用真实
+`ResultBeanFactory.getFactory().normal(result)`。当前没有公司制品 Maven 坐标、
+完整包名或方法签名证据，因此不在设计中伪造依赖。
 
-### 6.2 双制品互斥模式
+### 6.2 公司 Bean 替换模式
 
-为了同时满足公司外可构建和公司内直接拉取，使用两个 Maven
-profile 为同一个编译契约提供互斥实现：
+为了同时满足公司外可构建和公司内直接拉取，使用 Spring Bean 替换，而不是
+在开源仓伪造与公司类同名的 FQCN：
 
-| profile | ResultBean 来源 | 使用场景 |
+| 环境 | ResultBean 来源 | 使用场景 |
 |---|---|---|
-| `standalone` | `campusclaw-result-bean-compat` 清室兼容制品 | 默认激活；GitHub、本地和无内网 CI |
-| `company` | 公司内部真实 ResultBean 制品 | 由公司 Maven `settings.xml` 的 `activeProfiles` 自动激活 |
+| 独立仓 | `StandaloneResultBeanAdapter` | GitHub、本地和无内网 CI |
+| 公司工程 | 公司自定义 `ResultBeanAdapter` Bean | Maven 从内部仓库解析真实制品，适配器内部使用公司 Factory |
 
-`campusclaw-result-bean-compat` 只重新实现已批准公开的最小 API
-形状和 JSON 契约，不复制、反编译或发布公司内部源码。在获得
-合规批准和真实包名后，兼容制品提供与内部制品完全相同的
-FQCN、公共泛型签名和 Jackson 字段，因此 Controller 源码在两种
-profile 下保持同一行 `ResultBeanFactory.getFactory().normal(result)`。
+公司内部仓库 URL、server ID 和凭据只位于公司管理的 `settings.xml`，不写入
+Git。Controller 和 Service 不需要知道公司类的 FQCN；替换发生在依赖注入边界，
+因而不存在两个同名兼容制品同时进入 classpath 的风险。
 
-两个制品绝不能同时进入 compile/runtime classpath，否则会出现重复
-FQCN 和不可预期的 class loading。Maven Enforcer 必须在 `validate`
-阶段验证恰好一个 provider；公司内部仓库 URL、server ID 和凭据
-只位于公司管理的 `settings.xml`，不写入 Git 中的 POM。公司环境通过
-`activeProfiles` 激活 `company` 后，Maven 直接从内部仓库解析真实制品；
-业务代码不改 import、不改 Factory 调用。
+![ResultBeanAdapter 公司内外 Bean 替换](http_result_bean_compatibility.svg)
 
-![ResultBeanFactory 公司内外双制品替换](http_result_bean_compatibility.svg)
-
-[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L503)
+[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L485)
 
 ### 6.3 错误与国际化实现
 
-Java 使用 `RuntimeApiErrorCode` 枚举保存稳定错误码与 HTTP status，
+Java 使用 `RuntimeErrorCode` 枚举保存稳定错误码，
 `RuntimeApiException` 只保存 error code 和消息参数。
 `RuntimeApiExceptionHandler` 使用 Spring `MessageSource` 和已固定的
 Locale 规则解析 `resMsg`，再调用公司制品实际支持的异常包装
 API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 内部 Factory 的异常方法名；获得内部 jar 后再固定该适配。
 
-资源文件至少包含 `messages_en_US.properties` 和
-`messages_zh_CN.properties`。两份资源必须具有完全相同的 key 集合。
+资源文件包含默认英文 `messages.properties` 和
+中文 `messages_zh_CN.properties`。两份资源必须具有完全相同的 key 集合。
 启动测试和 CI 对枚举、`en_US`、`zh_CN` 执行集合等值校验；
 契约测试分别在 `standalone` 和 `company` profile 下断言：
 
@@ -1002,29 +994,28 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 ## 7. 安全与附件边界
 
-- `CredentialHeaderResolver` 只解析 `X-HW-ID`、`Authorization` 和
+- `RuntimeRequestAuthenticator` 只解析 `X-HW-ID`、`Authorization` 和
   `X-HW-APPKEY`，并先拒绝缺失、不完整或混合凭据；Controller 不写
   JWT/APPKEY 两套分支。
-- `JwtCredentialVerifier` 和 `AppKeyCredentialVerifier` 是公司认证库的
-  窄 Adapter，成功后都返回同一个不可变 `CallerAuthContext`；后续
-  Agent/Session 授权不知道凭据模式。
-- JWT 是文档和新客户端首选，不是服务端默认降级链。一旦选中模式，
-  校验失败必须终止。
+- 当前 CampusClaw 只校验 Header 组合与 Bearer 形状并生成不可变
+  `CallerAuthContext`；JWT/APPKEY 真实性和业务授权由上游 mate-service 完成。
+- JWT 是文档和新客户端首选，不是服务端默认降级链；两种 Header 同时存在立即拒绝。
 - 凭据只存在于认证边界，不记日志、不写 ResultBean、不进入
   Service/Session/Prompt/Event；`session_id` 不是凭据。
-- Runtime 对每个请求重新校验 Session、Agent、Model 和动作权限。
+- Runtime 对每个请求重新校验 Session、Agent 和 Model 资源状态，但不把凭据 ID
+  当作 owner；动作权限由上游保证。
 - `agent_id`、`model_id` 和 `file_id` 均大小写敏感且不透明。
 - `POST /sessions/{session_id}/events` 已确认只接受 `user.message`、文本和文件 ID，
   不接受单次 `thinking` 覆盖，
   并禁止 URL、MIME、文件名、Base64、OBS Object Key、tenant/user 字段。
 - 该 POST 不接收 `Idempotency-Key`，网络结果不确定时调用方必须先读取
   Session 和持久化 Events，禁止把无条件重试描述为安全行为。
-- Runtime 仍通过文件服务的内部 resolve/content API 获取可信元数据
-  和有界字节流，不直连 OBS。
+- Runtime 不调用文件服务或 OBS；它只把有序 `file_ids` 编码成固定
+  `[File IDs]` 文本块并加入本次用户提示。
 
 ![HTTP 双认证适配](http_dual_authentication.svg)
 
-[PlantUML 源码：`http_dual_authentication`](diagram.puml#L571)
+[PlantUML 源码：`http_dual_authentication`](diagram.puml#L545)
 
 ## 8. 源码证据与差异分类
 
@@ -1069,6 +1060,10 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 观察到的行为 | pi-mono `packages/agent/src/agent.ts` 基线 347-358、486-535：`activeRun` 是进程内执行对象，同一 Agent 已有 activeRun 时拒绝新 prompt，finally 清理；它不是持久化、可查询的 RunRecord |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java` 基线 140-160：现有 HTTP POST 直接将消息、工具开始/结束和 done 映射为 SSE；现有名称与负载较窄，目标契约重命名并补充分离的持久化 ToolResultEntry |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 252-273 与 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java` 基线 153-177：WebSocket prompt 只接受非空文本，先追加 JSONL UserMessage 再调用 prompt，并以 `isStreaming` 拒绝并发；没有附件 ID、Run ID 或幂等存储 |
+| 已实现行为 | pi-mono-java 实现提交 `8691e880` 的 `CampusClawApplication` 和 `CampusClawCliLauncher`：默认启动 Spring Boot MVC，显式 `cli` 子命令启动非 Web CLI 上下文 |
+| 已实现行为 | 同提交的 `RuntimeSessionController`、`RuntimeEventController`、`RuntimeSessionConfigurationController` 和 `RuntimeSessionControlController`：11 个已确认 HTTP+SSE operation 均已落地 |
+| 已实现行为 | 同提交的 `MyBatisRuntimeSessionRepository` 与 `session_schema.sql`：Session、当前分支 Entry、严格 `entry_seq`、tombstone 和清理任务已在 openGauss 实现 |
+| 已实现行为 | 同提交的 `RuntimeRequestAuthenticator`：只校验双凭据 Header 形状；真实性和授权由上游 mate-service 完成，凭据 ID 不作为 Session owner |
 | 架构变更 | 浏览器/UI 到 mate-service、mate-service 到 CampusClaw 两跳目标传输统一为 HTTP+SSE；删除连接首帧、Frame RPC、连接 generation、close code 和 AsyncAPI 目标契约 |
 | 架构变更 | mate-service 终止公共 HTTP/SSE 并以服务身份调用内部 HTTP/SSE；两跳分别鉴权和投影，内部流不得字节透明转发 |
 | 待评审目标设计 | mate-service 公共 HTTP 的路径、请求/响应 VO、错误码和 SSE Event Schema 尚未确认；本设计只确认传输形态和责任边界 |
@@ -1081,14 +1076,14 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
 | 产品约束 | Session `thinking` 是是否启用深度思考的 boolean；`false` 映射为 pi 的 `off`，`true` 使用模型和 Agent 的受管非 `off` 推理强度，不公开具体等级 |
-| 安全加固 | 双凭据二选一、拒绝混合凭据、校验失败不降级、逐请求认证、Session-scoped 模型查询、文件只传 ID、ResultBean 错误脱敏 |
+| 安全加固 | 双凭据二选一、拒绝混合凭据、逐请求 Header 形状校验、Session-scoped 模型查询、文件只传 ID、ResultBean 错误脱敏；真实性与动作授权明确由上游完成 |
 | 安全加固 | Session 模型列表通过 `string[]` 只暴露 `model_id`，不返回名称、供应商、能力、base URL、凭据状态、价格、token 上限或供应商请求配置；`thinking=true` 不代表允许披露原始思考过程 |
-| 架构改造 | 统一 `CallerAuthContext` 的双认证 Adapter、CampusClaw 生成 Session ID、编译生成的 Managed `settings.json`、目录默认模型初始化、ResultBeanFactory 双制品互斥替换、ETag 并发控制、请求范围内 POST SSE、断线后执行继续、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
-| 已确认目标设计 | GET Session Models 以 `string[]` 实时返回 Agent allowlist、调用身份和部署策略交集中的 `model_id`，不分页；`current_model_id` 允许因管理面后续停用而不在 `models` 中 |
-| 已确认目标设计 | PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功统一返回完整 SessionResource 和 ETag，相同值验证后按无变化成功返回；模型、深度思考设置和资源版本原子更新 |
-| 已确认目标设计 | 深度思考开关只作用于之后接受的用户事件；当前模型不支持时开启返回 `422`，模型切换到不支持深度思考的目标模型时原子归一为 `false` |
-| 已确认目标设计 | Steer 和 FollowUp 使用 Session scope 的独立 POST；只在 running 时按 FIFO、`one-at-a-time` 入队，Steer 优先；实际投递时统一成为既有 `user.message`，不新增公共控制 Entry 类型 |
-| 已确认目标设计 | Abort 使用 Session scope 的幂等 POST，无请求体；级联取消模型、工具和子 Agent，清空未投递控制消息，等待 idle 后返回 `204`；idle 时也是 `204` |
+| 架构改造 | 统一 `CallerAuthContext` 的双 Header 形状解析、CampusClaw 生成 Session ID、直接 Agent 目录解析、ResultBeanAdapter 替换点、ETag 并发控制、请求范围内 POST SSE、断线后执行继续、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
+| 已实现行为 | GET Session Models 以 `string[]` 实时返回 Agent allowlist 与当前可用模型交集中的 `model_id`，不分页；`current_model_id` 允许因管理面后续停用而不在 `models` 中 |
+| 已实现行为 | PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功返回完整 SessionResource 和 ETag，相同值验证后按无变化成功返回；模型、深度思考设置和资源版本原子更新 |
+| 已实现行为 | 深度思考开关只作用于之后接受的用户事件；当前模型不支持时开启返回 `422`，模型切换到不支持深度思考的目标模型时原子归一为 `false` |
+| 已实现行为 | Steer 和 FollowUp 使用 Session scope 的独立 POST；只在 running 时按 `one-at-a-time` 入队，Steer 优先；实际投递时统一成为既有 `user.message`，不新增公共控制 Entry 类型 |
+| 已实现行为 | Abort 使用 Session scope 的幂等 POST，无请求体；级联取消模型、工具和子 Agent，清空未投递控制消息，等待 idle 后返回 `204`；idle 时也是 `204` |
 | 产品约束 | 首版 Steer/FollowUp 仅接受文本，不开放 pi 的 inline images、扩展命令、Prompt Template 展开或队列模式配置；不复用已经冻结为直接 SSE 的 POST Events operation |
 | 架构改造 | pi-mono-java 需要新增 FollowUp 能力，并将当前 Steer“入队前直接持久化 UserMessage”调整为实际投递时才产生公共 `user.message`，避免工具结果与排队消息的历史顺序错位 |
 | 已确认架构 | `POST /sessions/{session_id}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `run_id`；成功流按 User、Assistant 三阶段、工具执行、ToolResult、最终 Assistant、Session idle、stream end 排序；`user.message`、`assistant.message.completed`、`tool.result` 与 `entry_seq` 是权威历史 |
@@ -1100,18 +1095,17 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 跨接口一致性 | 第五接口复用第四接口三类持久化事件的名称和字段：`user.message`、`assistant.message.completed`、`tool.result`；实时 preview、工具执行状态和流控制事件不进入分页历史 |
 | 已确认设计 | GET Session Events 只投影当前分支中的 `user.message`、`assistant.message.completed` 和 `tool.result`；不公开废弃分支、完整 Entry 树或内部控制 Entry |
 
-公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自
-用户提供的集成约束。当前工作区不含对应入站认证库或
-ResultBean 制品元数据。ResultBean 坐标/FQCN/方法，以及 JWT 和
-APPKEY 的 claim、签名、issuer、audience 与校验算法均必须在落地前
-依据真实内部制品补齐。除这些待校准适配点外，
-本文全部 HTTP 行为仍为 target-only design，不得表述为现有
-pi-mono-java 实现。
+公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自用户提供的
+集成约束。当前工作区不含对应内部制品元数据，因此实现通过
+`ResultBeanAdapter` 保留替换点，并把凭据真实性和动作授权明确放在上游
+mate-service。除公共 mate-service API 仍待逐项评审外，本文描述的 CampusClaw
+11 个 HTTP operation 已在 pi-mono-java 提交 `8691e880` 中实现。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.30.0 | 2026-08-18 | 对齐实现提交 `8691e880`：状态改为已实现；删除 active execution 返回 409 而非隐式 abort；`file_ids` 改为固定提示块；鉴权明确为形状校验；ResultBean 改为可替换 Adapter；移除服务内 owner/403 契约 |
 | 1.29.0 | 2026-08-18 | 全仓清理后补齐 GetSession 对 attached/locked 的完整边界；把 Steer/FollowUp/Abort 从旧“待评审”描述改为十一项已确认契约；明确控制消息不提供业务幂等键；同步 HTML 版本并清除主图中的 RunRecord、History 和 run_id 残留 |
 | 1.28.0 | 2026-08-18 | 用户明确批准废弃并删除过渡期 OpenAPI 1.7.1；当前契约权威收敛为 HTML 主维护文档与本文，不再维护第三份机器投影；未来如需机器契约必须从已确认内容重新生成并建立同步门禁，禁止恢复旧 YAML 继续修改 |
 | 1.27.0 | 2026-08-18 | 用户确认浏览器/UI 到 mate-service、mate-service 到 CampusClaw 两跳均统一为 HTTP+SSE；新增两跳独立认证和安全事件投影边界，删除旧 WebSocket 语义映射及 AsyncAPI 规范依赖；公共 mate-service 路径、VO、错误和 Event Schema 明确留待后续逐接口评审；过渡期 OpenAPI 内联旧外部 Schema 以保持可解析，但仍是滞后且非权威的 1.7.1 投影 |

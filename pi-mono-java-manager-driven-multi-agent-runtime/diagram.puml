@@ -1,17 +1,15 @@
 @startuml metadata_runtime_directory_mapping
 title Metadata to CampusAgent Runtime Directory
 
-' Source evidence:
-' pi-mono packages/coding-agent/src/core/skills.ts: Skill, loadSkillFromFile, formatSkillsForPrompt
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/context/ContextFileLoader.java: loadSystemPrompt
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: loadSkills
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java.
 ' Observed behavior: pi and pi-mono-java discover Skill metadata from SKILL.md frontmatter.
-' Java divergence: the target compiler materializes only one controlled Agent directory.
-' Target design: the Managed loader reads .campusagent only; legacy code keeps .campusclaw.
-' Target design: RuntimeSessionStore persists Session state in a shared database.
+' Observed behavior: the Runtime reads one controlled .campusagent directory directly and does not cache it.
+' Observed behavior: RuntimeSessionStore persists Session state in a shared database.
 ' Target design: Agent and Model IDs use resource prefixes plus 24 alphanumeric characters.
 ' Design reason: raw case-sensitive Agent IDs require a case-sensitive root and collision guard.
-' Target design: compiled settings.json carries Agent identity, version, default model, and model allowlist.
+' Target-only design: a future metadata compiler may publish the controlled Agent directory.
 ' Design reason: keep Agent-specific disclosure local while Managers remain runtime authorities.
 
 skinparam backgroundColor #FFFFFF
@@ -48,7 +46,7 @@ rectangle "Runtime bundle compiler" as Compiler {
 }
 
 rectangle "Controlled Agent directory\ncase-sensitive file system\n<agent-runtime-root>/<agent-id>/" as AgentDirectory {
-  file ".campusagent/settings.json\nagentId, agentVersion\ndefaultModel, enabledModels" as SettingsFile
+  file ".campusagent/settings.json\ndefaultModel, enabledModels" as SettingsFile
   file ".campusagent/SYSTEM.md\nAgent instructions\nDirect Agent tool summaries" as SystemFile
   file ".campusagent/skills/<skill-name>/SKILL.md\nFrontmatter and Skill content" as SkillFile
   file ".campusagent/skills/<skill-name>/references/tools.json\nDirect Skill tool summaries" as SkillToolsFile
@@ -73,7 +71,7 @@ AgentMetadata ..> AgentAuthority : publish metadata
 ToolMetadata ..> ToolManager : publish executable definition
 SettingsFile ..> ModelManager : model selection snapshot
 AgentMetadata ..> ModelManager : authoritative model bindings
-AgentDirectory ..> SessionStore : pinned bundle revision
+AgentDirectory ..> SessionStore : resolved working directory
 
 note right of SkillToolsFile
 Only tool_id, name and description.
@@ -86,11 +84,11 @@ agent_id = agent_ + 24 alphanumeric characters
 model_id = model_ + 24 alphanumeric characters
 Compare IDs byte-for-byte.
 Reject Agent ID case-fold collisions.
-Verify directory and settings.json identity.
+Verify the directory and file boundary.
 end note
 
 note right of SettingsFile
-defaultModel is binding_models[0].
+defaultModel must be present in enabledModels.
 enabledModels is a non-empty explicit allowlist.
 Model Manager still revalidates every selection and invocation.
 end note
@@ -106,15 +104,13 @@ title HTTP Session Execution Control Design
 ' lines 275-319, 350-390, and 456-492
 ' packages/coding-agent/src/modes/rpc/rpc-mode.ts, steer, follow_up, and abort,
 ' lines 418-430
-' Source evidence (pi-mono-java commit 195746614096312d4e93afb029d387837db78e0b):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/
-' ChatWebSocketHandler.java, command dispatch and handleSteer, lines 199-210 and 275-288
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/
-' AgentSession.java, abort and steer, lines 165-177 and 240-251
+' Source evidence (pi-mono-java commit 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionControlController.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java.
 ' Observed behavior: pi keeps separate steering and follow-up queues, drains steering first,
-' and aborts the current in-process run. Java currently exposes text-only steer and abort.
-' Java divergence: Java has no follow-up command and persists steer before actual delivery.
-' Target-only design: three HTTP operations use Session scope because no public Run exists.
+' and aborts the current in-process run. Java now exposes text-only steer, follow-up, and abort.
+' Observed behavior: three HTTP operations use Session scope because no public Run exists.
 ' Product constraint: v1 accepts text only, fixes one-at-a-time FIFO behavior, and projects
 ' a delivered control message as the existing durable user.message entry type.
 ' Design reason: separate control responses from the existing POST Events SSE response.
@@ -148,29 +144,29 @@ database "Runtime Session\nStore" as Store
 collections "Active Execution\nQueues" as Queue
 participant "AgentSession" as Session
 participant "Existing POST Events\nSSE Stream" as SSE
-participant ResultBeanFactory
+participant ResultBeanAdapter
 
 group Queue a Steering Message
   Caller -> Auth : POST /sessions/{session_id}/steers\nmessage only
   Auth -> API : immutable CallerAuthContext
-  API -> Store : authorize and require running Session
+  API -> Store : require running Session
   Store --> API : active execution handle
   API -> Queue : append Steer atomically in FIFO order
   Queue --> API : accepted_at
-  API -> ResultBeanFactory : normal(ControlAcceptedResponseVO)
-  ResultBeanFactory --> API : resCode, resMsg, result
+  API -> ResultBeanAdapter : normal(ControlAcceptedResponseVO)
+  ResultBeanAdapter --> API : resCode, resMsg, result
   API --> Caller : 202 Accepted
 end
 
 group Queue a FollowUp Message
   Caller -> Auth : POST /sessions/{session_id}/follow-ups\nmessage only
   Auth -> API : immutable CallerAuthContext
-  API -> Store : authorize and require running Session
+  API -> Store : require running Session
   Store --> API : active execution handle
   API -> Queue : append FollowUp atomically in FIFO order
   Queue --> API : accepted_at
-  API -> ResultBeanFactory : normal(ControlAcceptedResponseVO)
-  ResultBeanFactory --> API : resCode, resMsg, result
+  API -> ResultBeanAdapter : normal(ControlAcceptedResponseVO)
+  ResultBeanAdapter --> API : resCode, resMsg, result
   API --> Caller : 202 Accepted
 end
 
@@ -191,7 +187,7 @@ end
 group Abort current execution idempotently
   Caller -> Auth : POST /sessions/{session_id}/abort\nno request body
   Auth -> API : immutable CallerAuthContext
-  API -> Store : authorize and load Session
+  API -> Store : load Session
   Store --> API : active execution or idle
   opt execution is active
     API -> Session : abort model, tools, and subagents
@@ -214,11 +210,11 @@ end note
 @startuml mate_agent_service_responsibility_boundary
 title End-to-End HTTP and SSE Service Responsibilities
 
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java: buildRoutes and wireServerRoutes
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java: handleChat, wireSink, and forwardEvent
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java: getOrCreate and persistence methods
-' Observed behavior: the Java baseline has an HTTP POST that returns SSE and also retains a separate WebSocket implementation.
-' Target-only design: the mate-service public HTTP contract and its SSE projection are not implemented in the fixed baseline.
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java.
+' Observed behavior: the CampusClaw internal HTTP POST returns execution-scoped SSE without a public WebSocket path.
+' Target-only design: the mate-service public HTTP contract and its SSE projection are not implemented in this repository.
 ' Architecture change: both hops use HTTP request-response, and execution responses stream SSE for the lifetime of one execution.
 ' Product constraint: the UI receives chat_id only; session_id remains an internal Runtime identifier.
 ' Security hardening: mate-service terminates public auth and projects internal events instead of forwarding bytes transparently.
@@ -247,7 +243,7 @@ rectangle "Agent UI\n\nCall public HTTP operations\nUse chat_id only\nRead execu
 
 rectangle "mate-service\n\nOwn public HTTP and SSE\nAuthenticate the end user\nOwn Chat metadata and chat_id\nMap chat_id to session_id\nRun guardrails and orchestration\nCall CampusClaw with service identity\nProject safe public events and errors" as Mate #FFF7ED
 
-rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nAuthenticate the calling service\nOwn Runtime Session and session_id\nValidate Agent and Model\nBuild Context and execute Model and Tools\nPersist current-branch Entries\nOwn Steer, FollowUp, and Abort" as Runtime #ECFDF5
+rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nValidate service credential header shape\nOwn Runtime Session and session_id\nValidate Agent and Model\nBuild Context and execute Model and read tool\nPersist current-branch Entries\nOwn Steer, FollowUp, and Abort" as Runtime #ECFDF5
 
 database "Mate Chat Store\n\nchat_id to session_id\nChat name and product state\nUser ownership" as MateStore
 
@@ -418,17 +414,14 @@ end note
 @startuml http_session_creation
 title CampusClaw HTTP Session Creation
 
-' Source evidence:
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: initialize
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/context/ContextFileLoader.java: loadSystemPrompt
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillPromptFormatter.java: format
-' Observed behavior: AgentSession initialization resolves a model, loads context and skills, and creates an Agent.
-' Observed behavior: initialization does not itself invoke the model or start execution.
-' Target design: mate-service supplies only agent_id and CampusClaw generates session_id.
-' Target design: Managed settings chooses a default candidate and Model Manager remains authoritative.
-' Target design: a successful POST returns a ready SessionResource without internal version fields.
-' Target design: one JWT or APPKEY adapter produces the same immutable CallerAuthContext.
-' Design reason: keep Agent selection caller-visible while Runtime identity and revision stay server-owned.
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, create.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java, resolve.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java, create.
+' Observed behavior: mate-service supplies only agent_id and CampusClaw generates session_id.
+' Observed behavior: settings chooses a default model candidate and the model manager validates it.
+' Observed behavior: creation persists an idle Session and does not initialize AgentSession or invoke a model.
+' Design reason: defer expensive runtime initialization until the first accepted user event.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -448,46 +441,35 @@ skinparam sequence {
 }
 
 actor "mate-service\nRuntime bridge" as Mate
-participant "CredentialAuthenticationFilter" as Auth
+participant "RuntimeRequestAuthenticator" as Auth
 participant "Runtime HTTP API" as API
 participant "AgentDirectoryResolver" as Resolver
-participant "ManagedSettingsLoader" as Settings
 participant "Model Manager" as Models
 participant "SessionIdGenerator" as Ids
-participant "ManagedAgentSessionFactory" as Factory
 database "RuntimeSessionStore" as Store
-participant "ManagedSessionPool" as Pool
-participant "ResultBeanFactory" as ResultFactory
+participant "ResultBeanAdapter" as ResultAdapter
 
 Mate -> Auth : POST /agents/{agent_id}/sessions\nno request body and exactly one credential pair
-Auth -> Auth : reject mixed or incomplete headers\nverify JWT or APPKEY without fallback
+Auth -> Auth : reject mixed or incomplete headers\nvalidate credential shape
 Auth --> API : immutable CallerAuthContext
-API -> API : authorize caller\nvalidate agent_id syntax
+API -> API : validate agent_id syntax
 API -> Resolver : resolve(agent_id)
-Resolver -> Resolver : verify controlled root, symlinks,\nand byte-exact directory identity
-Resolver --> API : agentCwd and bundle revision
-API -> Settings : load(agentCwd/.campusagent/settings.json)
-Settings -> Settings : verify closed fields and agentId\npin agentVersion\nvalidate enabledModels and defaultModel
-Settings --> API : agentVersion, defaultModel, enabledModels
-API -> Models : resolveModel(agent_id, defaultModel)
+Resolver -> Resolver : verify controlled root and symlink boundary\nload settings.json
+Resolver --> API : agent directory, defaultModel, enabledModels
+API -> Models : resolveDefaultModel(snapshot)
 Models --> API : authoritative ModelDescriptor
 API -> Ids : generate globally unique session_id
 Ids --> API : session_id
-API -> Factory : create immutable SessionContext\nload SYSTEM and Skills\nregister three generic tools
-Factory -> Factory : construct AgentSession and Agent\nset state idle and thinking false\ndo not invoke the model
-Factory --> API : ready AgentSession
-API -> Store : atomically insert SessionRecord\nincluding internal agentVersion and revision
+API -> Store : insert SessionRecord\nstate idle, thinking false, version 1
 Store --> API : committed
-API -> Pool : register(session_id, AgentSession)
-Pool --> API : registered
-API -> ResultFactory : normal(SessionCreateResponseVO)
-ResultFactory --> API : resCode, resMsg, result
+API -> ResultAdapter : normal(CreateSessionResponseVO)
+ResultAdapter --> API : resCode, resMsg, result
 API --> Mate : 201 Created plus Location\nResultBean with SessionResource in result
 
-note over API,Pool
-Before commit, any failure discards the in-memory Session
-and does not expose session_id.
-After commit, state is idle and no MessageEntry exists.
+note over API,Store
+Before commit, a failure does not expose session_id.
+After commit, state is idle and no MessageEntry or AgentSession exists.
+AgentSession is initialized lazily by the first user event.
 The response contains only Session identity, current defaults,
 coarse state, and creation time.
 end note
@@ -501,16 +483,15 @@ end note
 @enduml
 
 @startuml http_result_bean_compatibility
-title ResultBeanFactory Standalone and Company Dependency Replacement
+title ResultBeanAdapter Standalone and Company Replacement
 
-' Source evidence:
-' pi-mono-java pom.xml: reactor modules and dependency management
-' pi-mono-java mate-campusclaw/pom.xml: Spring WebFlux application dependencies
-' pi-mono-java modules/coding-agent-cli/pom.xml: Spring WebFlux application dependencies
-' Observed behavior: the current source baseline has no ResultBeanFactory dependency or HTTP Session controller.
-' Target design: standalone and company Maven profiles provide one API-compatible ResultBean artifact.
-' Target design: controller source keeps ResultBeanFactory.getFactory().normal(result) unchanged.
-' Design reason: preserve company development experience without publishing internal repositories or code.
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/result/ResultBeanAdapter.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/result/StandaloneResultBeanAdapter.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
+' Observed behavior: controllers depend on ResultBeanAdapter and standalone code provides the approved JSON shape.
+' Java divergence: the internal ResultBeanFactory artifact is not available in the standalone repository.
+' Design reason: company code replaces one Spring bean without inventing an internal FQCN or duplicate class.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -533,52 +514,43 @@ skinparam note {
 }
 skinparam ArrowColor #475569
 
-package "Unchanged business source" {
+package "Business source" {
   component "SessionController" as Controller
   component "RuntimeApiExceptionHandler" as Handler
 }
 
-component "ResultBeanFactory API contract\nexact approved FQCN and signatures" as Contract
-
-package "standalone profile" {
-  component "campusclaw-result-bean-compat\nclean-room implementation" as Standalone
-}
-
-package "company profile" {
-  component "Company ResultBean artifact\nresolved from internal repository" as Company
-  component "Company Maven settings\nactive profile and credentials" as Settings
-}
+interface "ResultBeanAdapter" as Contract
+component "StandaloneResultBeanAdapter\nresCode, resMsg, result" as Standalone
+component "Company ResultBeanAdapter Bean" as CompanyAdapter
+component "Company ResultBeanFactory" as Company
+component "Company Maven settings" as Settings
 
 component "MessageSource\nen-US and zh-CN" as Messages
-component "Maven Enforcer\nexactly one provider" as Enforcer
 
-Controller --> Contract : getFactory().normal(result)
-Handler --> Contract : approved failure API
+Controller --> Contract : normal(result)
+Handler --> Contract : error(code, message)
 Handler --> Messages : resolve error code and arguments
-Standalone ..> Contract : provides in standalone
-Company ..> Contract : provides in company
+Standalone ..|> Contract
+CompanyAdapter ..|> Contract
+CompanyAdapter --> Company : getFactory().normal(result)
 Settings --> Company : resolves artifact
-Enforcer ..> Standalone : validate
-Enforcer ..> Company : validate
 
 note bottom of Contract
-The two artifacts must never coexist on one compile or runtime classpath.
-Internal coordinates, repository URLs, credentials, and unverified method names
-are not committed to the public repository.
+Standalone builds do not define a fake company FQCN.
+Internal coordinates, repository URLs, credentials, and unverified methods
+remain outside the public repository.
 end note
 @enduml
 
 @startuml http_dual_authentication
 title CampusClaw HTTP Dual Authentication
 
-' Source evidence:
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java: buildRoutes lines 237-274, wireServerRoutes lines 285-307, applyCorsHeaders lines 340-344
-' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/subagent/a2a/A2aAgentBackend.java: HEADER_HW_ID and HEADER_HW_APPKEY lines 60-62, buildRequest lines 226-238
-' Observed behavior: current inbound HTTP routes do not install an authentication adapter.
-' Observed behavior: outbound A2A calls already send X-HW-ID and X-HW-APPKEY.
-' Target-only company constraint: inbound JWT uses X-HW-ID and Authorization; APPKEY uses X-HW-ID and X-HW-APPKEY.
-' Security hardening: mixed credentials are rejected and a failed verifier never falls back to another mode.
-' Architecture change: both verifiers return one immutable CallerAuthContext for shared authorization.
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/auth/RuntimeRequestAuthenticator.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeAuthenticationInterceptor.java.
+' Observed behavior: inbound JWT uses X-HW-ID and Authorization; APPKEY uses X-HW-ID and X-HW-APPKEY.
+' Observed behavior: CampusClaw validates header shape only and never treats the credential ID as session ownership.
+' Security boundary: mate-service verifies credential authenticity and action authorization before forwarding.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -597,13 +569,10 @@ skinparam sequence {
   GroupBackgroundColor #F8FAFC
 }
 
-actor "Authorized internal caller" as Caller
-participant "CredentialAuthenticationFilter" as Filter
-participant "CredentialHeaderResolver" as Resolver
-participant "JwtCredentialVerifier" as Jwt
-participant "AppKeyCredentialVerifier" as AppKey
-participant "AgentAuthorizationService" as Authorization
-participant "SessionController" as Controller
+actor "mate-service" as Caller
+participant "RuntimeAuthenticationInterceptor" as Filter
+participant "RuntimeRequestAuthenticator" as Resolver
+participant "Runtime Controller" as Controller
 
 Caller -> Filter : HTTP request
 Filter -> Resolver : resolve X-HW-ID, Authorization, X-HW-APPKEY
@@ -619,26 +588,21 @@ break no complete credential pair
   Filter --> Caller : 401 ResultBean
 end
 
-alt preferred JWT pair
-  Resolver --> Filter : JwtCredentialInput
-  Filter -> Jwt : verify with company JWT library
-  Jwt --> Filter : CallerAuthContext or UNAUTHENTICATED
-else compatible APPKEY pair
-  Resolver --> Filter : AppKeyCredentialInput
-  Filter -> AppKey : verify with company APPKEY library
-  AppKey --> Filter : CallerAuthContext or UNAUTHENTICATED
+alt JWT pair with non-empty Bearer token
+  Resolver --> Filter : CallerAuthContext(JWT)
+else APPKEY pair with non-empty key
+  Resolver --> Filter : CallerAuthContext(APPKEY)
 end
 
-break selected verifier rejects
-  Filter --> Caller : 401 UNAUTHENTICATED\nno fallback
-end
+Filter -> Controller : request with auth context
+Controller --> Caller : normal HTTP or SSE response
 
-Filter -> Authorization : authorize immutable CallerAuthContext and agent_id
-Authorization --> Filter : allowed
-Filter -> Controller : authenticated request and CallerAuthContext
-Controller --> Caller : operation-specific ResultBean
+note over Caller,Resolver
+mate-service verifies credential authenticity and action authorization.
+CampusClaw validates only the mutually exclusive header shape.
+end note
 
-note over Resolver,AppKey
+note over Resolver,Controller
 Header names are case-insensitive under HTTP.
 Credential values remain opaque and are never logged,
 persisted, copied into ResultBean, or passed to Session state.
@@ -654,9 +618,9 @@ title CampusClaw GetSession Confirmed Response
 ' packages/protocol/src/schemas.ts, SessionSnapshotSchema, lines 241-258
 ' Source evidence (anthropic-sdk-typescript 64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff):
 ' src/resources/beta/sessions/sessions.ts, Session, lines 638-710
-' Source evidence (CampusClaw design repository):
-' pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md,
-' ThinkingLevel schema near baseline line 1602
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, get.
 ' Observed behavior: pi exposes phase, reasoning effort, transcript, attached, and locked
 ' in its protocol snapshot.
 ' Observed behavior: Anthropic exposes a control-plane Session resource without transcript
@@ -665,7 +629,7 @@ title CampusClaw GetSession Confirmed Response
 ' Architecture change: the confirmed response removes the former public active Run pointer.
 ' Design reason: Session state is the coarse control-plane signal; GET Session Events and the
 ' initiating POST stream own durable recovery and live execution detail.
-' Target-only design: these wire-contract types are not existing pi-mono-java classes.
+' Observed behavior: these wire-contract fields exist in GetSessionResponseVO.
 
 left to right direction
 skinparam backgroundColor #FFFFFF
@@ -688,7 +652,7 @@ skinparam note {
 }
 skinparam ArrowColor #475569
 
-class GetSessionResult <<target_wire_contract>> {
+class GetSessionResult <<implemented_wire_contract>> {
   +sessionId: string
   +agentId: string
   +modelId: string
@@ -723,19 +687,15 @@ title CampusClaw HTTP Session Logical Deletion Confirmed Design
 ' packages/coding-agent/src/core/agent-session.ts, AgentSession.dispose, lines 789-805
 ' packages/coding-agent/src/modes/interactive/components/session-selector.ts,
 ' deleteSessionFile, lines 598-630
-' Source evidence (pi-mono-java dff835743fc7f3c93e1154c3eb51028749867ca8):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/SessionPool.java,
-' remove, createSessionWithPersistence, evictIdle, and closeQuietly, lines 143-157 and 204-274
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java,
-' buildCloseHook and abort command, lines 168-210
-' modules/agent-core/src/main/java/com/campusclaw/agent/AgentSession.java, abort, lines 165-177
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, delete.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java, beginDeletion.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/SessionCleanupWorker.java.
 ' Observed behavior: pi dispose stops active work and releases runtime resources, while
 ' interactive deletion removes the local JSONL file.
-' Observed behavior: pi-mono-java SessionPool.remove only removes the in-memory entry and
-' closes SessionManager; persisted JSONL can still be restored.
-' Target-only design: no current pi-mono-java HTTP delete operation, durable deletion state,
-' cleanup work item or tombstone implements this sequence.
-' Architecture change: logical deletion and a durable cleanup work item commit atomically.
+' Observed behavior: the implemented repository returns BUSY for a running session and does not abort it.
+' Observed behavior: tombstone insertion, cleanup task insertion, and session deletion commit atomically.
+' Architecture change: logical deletion and a durable cleanup work item replace local JSONL deletion.
 ' Design reason: the API becomes idempotent immediately without exposing cleanup-job state.
 
 skinparam backgroundColor #FFFFFF
@@ -764,35 +724,25 @@ actor Caller
 participant "Credential\nAdapter" as Auth
 participant "DeleteSession\nAPI" as API
 database "Runtime Session\nStore" as Store
-participant "Session Execution\nCoordinator" as Execution
-participant AgentSession
-participant SessionPool
 participant "Cleanup\nWorker" as Worker
 
 Caller -> Auth : DELETE /sessions/{session_id}\nexactly one credential pair, no body
 Auth -> API : immutable CallerAuthContext
-API -> API : validate session_id and authorize delete
+API -> API : validate session_id
 API -> Store : beginLogicalDelete(session_id)
 
-alt existing live Session
-  Store -> Store : transaction: mark DELETING, reject new work,\nenqueue durable cleanup, capture execution state
-  Store --> API : committed DeletePlan
-  API -> Execution : block new events and configuration commands
-  opt active execution exists
-    API -> Execution : request abort
-    Execution -> AgentSession : abort()
-  end
-  API -> SessionPool : remove(session_id)
+alt existing idle Session
+  Store -> Store : transaction: insert tombstone, enqueue cleanup,\ndelete session row
+  Store --> API : DELETED
   API --> Caller : 204 No Content
   Worker -> Store : claim cleanup work item
-  Worker -> Execution : ensure active execution is stopped
-  Execution -> AgentSession : abort() if still active
-  Worker -> SessionPool : remove and release runtime objects
-  Worker -> Store : purge Entries, internal execution state,\nand Session payload
-  Store -> Store : retain session_id and deleted_at tombstone
+  Worker -> Store : complete remaining cleanup
   Worker -> Store : complete and delete cleanup work item
-else missing, deleting, or deleted
-  Store --> API : idempotent no-op
+else existing running Session
+  Store --> API : BUSY
+  API --> Caller : 409 SESSION_BUSY\nResultBean error without result
+else missing or deleted
+  Store --> API : NOT_FOUND
   API --> Caller : 204 No Content
 else atomic commit failed
   Store --> API : failure, no partial deletion
@@ -805,8 +755,8 @@ Physical cleanup remains retryable and internal.
 end note
 
 note over Store,Worker
-mate-service Chat metadata and File Service objects
-are outside this operation's ownership boundary.
+mate-service Chat metadata and file objects
+are outside this operation boundary.
 end note
 
 note right of Store
@@ -824,15 +774,14 @@ title CampusClaw Session Event Direct POST Stream
 ' packages/agent/src/agent-loop.ts, emitToolExecutionEnd and emitToolResultMessage,
 ' lines 767-795
 ' packages/coding-agent/src/core/agent-session.ts, _handleAgentEvent, lines 781-806
-' Source evidence (pi-mono-java 223b6ba85d7ec80bfd4db23036fa46895294f3d0):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatHandler.java,
-' forwardEvent, lines 140-160
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java,
-' prompt and abort, lines 153-177
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventController.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java.
 ' Observed behavior: both pi baselines emit message start, update, and end events around
 ' one active in-memory execution. The Java HTTP handler already returns SSE from POST.
-' Java divergence: the baseline aborts execution when the client cancels the SSE response.
-' Target-only design: the public API persists MessageEntry records and has no public run ID.
+' Observed behavior: the implemented API persists MessageEntry records and has no public run ID.
+' Java divergence: unlike the old baseline, client disconnect only detaches the bounded subscriber.
 ' Architecture change: a disconnected client does not abort accepted execution; GET Session Events is
 ' the recovery source, and replaying the side-effecting POST is forbidden.
 ' Design reason: preserve direct streaming while separating transient message and tool
@@ -864,28 +813,28 @@ actor Caller
 participant "Credential\nAdapter" as Auth
 participant "Session Event\nAPI" as API
 database "Runtime Session\nStore" as Store
-participant "File\nService" as FileService
+participant "Prompt\nLoader" as Prompt
 participant "Model\nManager" as Manager
 participant AgentSession
 
 Caller -> Auth : POST /sessions/{session_id}/events\ncredentials and user.message JSON
 Auth -> API : immutable CallerAuthContext
 API -> API : validate session_id and strict request body
-API -> Store : load live Session and authorize event submission
+API -> Store : load live Session
 Store --> API : current model, thinking, and execution state
 
 alt another execution is active
   API --> Caller : 409 SESSION_BUSY\nJSON error without result
 else Session is idle
-  API -> FileService : resolve and authorize ordered file_ids
-  FileService --> API : trusted file snapshots
+  API -> Prompt : append ordered file_ids as fixed text block
+  Prompt --> API : user prompt
   API -> Manager : resolve current model and input policy
   Manager --> API : authoritative model descriptor and limits
   API -> Store : persist User MessageEntry and mark active execution
   Store --> API : user entry_id and entry_seq
   API --> Caller : 200 text/event-stream
   API --> Caller : user.message\nentry_id and entry_seq
-  API -> AgentSession : prompt(user message, file snapshots)
+  API -> AgentSession : prompt(user prompt)
 
   alt execution completes
     loop each Assistant MessageEntry
@@ -944,9 +893,10 @@ title Session Event, Internal Execution, and Entry Recovery Boundary
 ' https://platform.claude.com/docs/en/managed-agents/events-and-streaming
 ' https://platform.claude.com/docs/en/managed-agents/sessions
 ' pi-mono packages/coding-agent/src/core/session-manager.ts, getBranch and appendMessage
-' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java, startExecution
+' pi-mono-java commit 8691e8800f05f28afe22499050c29220ef5b7475,
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java
 ' Observed behavior: both pi baselines rebuild conversation context from messages and entries.
-' Target-only decision: CampusClaw exposes Session Events and keeps execution identity internal.
+' Observed behavior: CampusClaw exposes Session Events and keeps execution identity internal.
 ' Design reason: one public recovery model avoids duplicated lifecycle and cursor semantics.
 
 skinparam backgroundColor #FFFFFF
@@ -996,19 +946,17 @@ title CampusClaw Session Event List Pagination
 ' packages/coding-agent/src/core/session-manager.ts, SessionEntry, lines 46-156
 ' packages/coding-agent/src/core/session-manager.ts, append methods, lines 1057-1149
 ' packages/coding-agent/src/core/session-manager.ts, getBranch and getEntries, lines 1260-1303
-' Source evidence (pi-mono-java 223b6ba85d7ec80bfd4db23036fa46895294f3d0):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/SessionEntry.java,
-' SessionEntry record and factories, lines 18-38
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/SessionManager.java,
-' extractMessages and appendMessage, lines 188-296
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventCursorCodec.java.
 ' Observed behavior: pi stores append-only entries linked by id and parentId, and its active
 ' branch is the path from the selected leaf to the root.
-' Java divergence: the Java baseline persists parentId but currently restores messages by
-' scanning the JSONL file linearly rather than exposing a branch-aware HTTP history API.
+' Java divergence: the old Java baseline scanned JSONL linearly; the implemented repository
+' now reads the current branch through parentId and entry_seq.
 ' External reference (Anthropic Managed Agents docs checked 2026-08-17):
 ' GET /v1/sessions/{session_id}/events uses opaque page and next_page pagination.
-' Target-only design: entry_seq, opaque pages, ResultBean paging, and the GET endpoint
-' do not exist in either pi source baseline.
+' Observed behavior: entry_seq, opaque pages, ResultBean paging, and the GET endpoint
+' exist in the implementation commit but not in the original pi source baselines.
 ' Design reason: align the public pagination boundary with Anthropic and intentionally
 ' avoid a fixed snapshot watermark or an after_entry_seq query.
 
@@ -1039,29 +987,29 @@ participant "Credential\nAdapter" as Auth
 participant "Session Events\nAPI" as API
 database "Runtime Session\nStore" as Store
 participant "Page Cursor\nCodec" as Cursor
-participant ResultBeanFactory
+participant ResultBeanAdapter
 
 alt first page
   Caller -> Auth : GET /sessions/{session_id}/events\nlimit, no page
   Auth -> API : immutable CallerAuthContext
   API -> API : validate session_id and limit
-  API -> Store : authorize and read first public entries\nin entry_seq ascending order
+  API -> Store : read first public entries\nin entry_seq ascending order
   Store --> API : persisted public entries
-  API -> Cursor : encode session, scope, and next position
+  API -> Cursor : encode session, expiry, and next position
   Cursor --> API : next_page or null
 else next page
   Caller -> Auth : GET /sessions/{session_id}/events\npage from previous next_page
   Auth -> API : immutable CallerAuthContext
   API -> Cursor : verify and decode opaque page
-  Cursor --> API : bound session, scope, and next position
-  API -> Store : authorize and read after next position
+  Cursor --> API : bound session, expiry, and next position
+  API -> Store : read after next position
   Store --> API : persisted public entries, including\nlater appends when they follow the cursor
   API -> Cursor : encode next position if more remain
   Cursor --> API : next_page or null
 end
 
-API -> ResultBeanFactory : normal(SessionEventListResponseVO)
-ResultBeanFactory --> API : resCode, resMsg, result
+API -> ResultBeanAdapter : normal(SessionEventListResponseVO)
+ResultBeanAdapter --> API : resCode, resMsg, result
 API --> Caller : 200 OK\nevents and next_page
 
 note over API,Store
@@ -1087,12 +1035,10 @@ title HTTP Session Model and Deep-Thinking Confirmed Configuration
 ' lines 1586-1600 and 1684-1730
 ' packages/ai/src/types.ts, Model, lines 793-809
 ' packages/ai/src/models.ts, getSupportedThinkingLevels, lines 900-910
-' Source evidence (pi-mono-java commit 195746614096312d4e93afb029d387837db78e0b):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/
-' ChatWebSocketHandler.java, handleSetModel, handleListModels, and handleSetThinkingLevel,
-' lines 289-363
-' modules/ai/src/main/java/com/campusclaw/ai/types/Model.java, lines 34-47
-' modules/ai/src/main/java/com/campusclaw/ai/types/ThinkingLevel.java, lines 16-42
+' Source evidence (pi-mono-java commit 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/CatalogRuntimeModelManager.java.
 ' Observed behavior: both pi baselines can list models and change the active model.
 ' Their thinkingLevel values control model reasoning effort.
 ' Confirmed product constraint: HTTP thinking is a boolean deep-thinking switch; false maps to off,
@@ -1130,41 +1076,41 @@ participant "Credential\nAdapter" as Auth
 participant "Session Configuration\nAPI" as API
 database "Runtime Session\nStore" as Store
 participant "Model Manager" as Models
-participant ResultBeanFactory
+participant ResultBeanAdapter
 
 group List available models
   Caller -> Auth : GET /sessions/{session_id}/models
   Auth -> API : immutable CallerAuthContext
-  API -> Store : authorize and read Agent binding\nand current model_id
+  API -> Store : read Agent binding and current model_id
   Store --> API : agent_id, enabledModels, current model_id
-  API -> Models : list callable models for Agent and caller
+  API -> Models : list callable models for Agent
   Models --> API : ordered model_id string array
-  API -> ResultBeanFactory : normal(ModelListResponseVO)
-  ResultBeanFactory --> API : resCode, resMsg, result
+  API -> ResultBeanAdapter : normal(ModelListResponseVO)
+  ResultBeanAdapter --> API : resCode, resMsg, result
   API --> Caller : 200 OK\ncurrent_model_id and models string array
 end
 
 group Change current model
   Caller -> Auth : PUT /sessions/{session_id}/model\nIf-Match and model_id
   Auth -> API : immutable CallerAuthContext
-  API -> Store : authorize, require idle, compare ETag
+  API -> Store : require idle and compare ETag
   Store --> API : current Session resource
-  API -> Models : resolve and authorize target model
+  API -> Models : resolve target model
   Models --> API : authoritative model and reasoning capability
   opt target model does not support deep thinking
     API -> API : normalize thinking to false
   end
   API -> Store : atomically update model, thinking, and ETag
   Store --> API : updated Session resource and ETag
-  API -> ResultBeanFactory : normal(SessionResponseVO)
-  ResultBeanFactory --> API : resCode, resMsg, result
+  API -> ResultBeanAdapter : normal(SessionResponseVO)
+  ResultBeanAdapter --> API : resCode, resMsg, result
   API --> Caller : 200 OK\nSession resource and ETag
 end
 
 group Change future deep-thinking default
   Caller -> Auth : PUT /sessions/{session_id}/thinking\nIf-Match and boolean thinking
   Auth -> API : immutable CallerAuthContext
-  API -> Store : authorize, require idle, compare ETag
+  API -> Store : require idle and compare ETag
   Store --> API : current Session resource
   opt requested value is true
     API -> Models : verify current model supports reasoning
@@ -1172,8 +1118,8 @@ group Change future deep-thinking default
   end
   API -> Store : atomically update deep-thinking switch and ETag
   Store --> API : updated Session resource and ETag
-  API -> ResultBeanFactory : normal(SessionResponseVO)
-  ResultBeanFactory --> API : resCode, resMsg, result
+  API -> ResultBeanAdapter : normal(SessionResponseVO)
+  ResultBeanAdapter --> API : resCode, resMsg, result
   API --> Caller : 200 OK\nSession resource and ETag
 end
 

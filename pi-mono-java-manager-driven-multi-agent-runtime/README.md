@@ -2,12 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.2.0 |
-| 状态 | 目标设计，尚未实施 |
+| 文档版本 | 2.3.0 |
+| 状态 | CampusClaw 内部 11 个接口已实现；mate-service 公共接口待评审 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
 | 设计仓分析基线 | `2b747808e93609a4fc71d919dbd72bcd56a6e502` |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
-| pi-mono-java 源码基线 | `195746614096312d4e93afb029d387837db78e0b` |
+| pi-mono-java 设计分析基线 | `195746614096312d4e93afb029d387837db78e0b` |
+| pi-mono-java 实现基线 | `8691e8800f05f28afe22499050c29220ef5b7475` |
 | 更新日期 | 2026-08-18 |
 
 ## 1. 当前结论
@@ -33,7 +34,7 @@ SSE 在这里不是永久在线的 Session 订阅，也不是单独的第二条�
 
 ![mate-service 与 CampusClaw HTTP+SSE 责任边界](mate_agent_service_responsibility_boundary.svg)
 
-[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L214)
+[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L210)
 
 ## 2. 契约权威顺序
 
@@ -127,9 +128,9 @@ Session、Entry 和 SSE 恢复，不获得 `run_id`，也不存在 GetRun 或 Ru
 }
 ```
 
-异常响应只有 `resCode` 和国际化 `resMsg`，没有 `result`。Java 目标开发体验为
-`ResultBeanFactory.getFactory().normal(result)`；本地开发通过兼容 Adapter 保持同样
-调用形式，公司环境直接解析内部仓库依赖。
+异常响应只有 `resCode` 和国际化 `resMsg`，没有 `result`。当前 Java 实现统一调用
+`ResultBeanAdapter.normal(result)`；独立仓提供默认实现，公司环境以 Bean 替换并在
+适配器内部调用真实 `ResultBeanFactory.getFactory().normal(result)`。
 
 鉴权默认展示 `X-HW-ID + Authorization: Bearer <JWT>`，同时兼容
 `X-HW-ID + X-HW-APPKEY`。两套凭据只能二选一；混合凭据拒绝，已选模式验证失败后
@@ -182,7 +183,7 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 - Session 粗粒度状态只有 `idle/running`；模型、工具或消息阶段通过实时事件表达。
 - `thinking` 是“是否启用深度思考”的 boolean，不是原始推理披露等级。
 - 持久化 Session Entry 使用 `entry_id + parent_id` 形成树；公共 GET Events 首版只返回当前分支。
-- 文件正文由文件服务持有；Runtime 接口只接收有序 `file_ids` 并通过内部受权接口解析内容。
+- Runtime 只接收有序 `file_ids`，不解析或下载文件正文；ID 按固定 `[File IDs]` 提示块传给模型。
 - Model Manager、Tool Manager 和 Agent 目录仍是模型、工具和 Agent 配置的最终权威。
 
 ## 7. Manager 与多 Agent Runtime 核心
@@ -207,10 +208,9 @@ mate-service 不得字节透明转发内部流。它至少要保证：
                     └── tools.json
 ```
 
-`settings.json` 固定 `agentId`、`agentVersion`、`defaultModel` 和
-`enabledModels`；Session 创建时校验目录边界、manifest 身份和 Model Manager
-权威配置。不可变 revision、current activation 和精确恢复规则以
-[`AgentRuntimeTemplate` 设计](../agent-runtime-template/README.md)为准。
+`settings.json` 提供 `defaultModel` 和 `enabledModels`；Session 创建时校验目录边界、
+默认模型与 Model Manager 当前可用性。Runtime 直接读取这个受控目录，不再依赖独立
+Agent Runtime Template 仓库，也不在内存中缓存目录快照。
 
 ![元数据到 Runtime 目录映射](metadata_runtime_directory_mapping.svg)
 
@@ -218,7 +218,7 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 
 ### 7.2 Tool Manager 渐进发现
 
-模型只直接注册三个通用工具：
+目标 Manager 架构曾规划三个通用工具：
 
 ```text
 read
@@ -226,14 +226,15 @@ get_tool_info
 call_tool
 ```
 
-Agent `SYSTEM.md` 和 Skill `references/tools.json` 只披露逻辑工具摘要。模型先用
+当前实现为了收窄权限，只注册 `read`。以下 Tool Manager 渐进发现仍是未实现的后续
+架构方向：Agent `SYSTEM.md` 和 Skill `references/tools.json` 只披露逻辑工具摘要。模型先用
 `get_tool_info(tool_id)` 从 Tool Manager 取得实时 Schema，再用
 `call_tool(tool_id, parameters)` 执行；摘要披露不等于授权，执行前必须重新验证
 Agent 绑定、工具状态、权限和输入 Schema。
 
 ![Tool Manager 渐进发现与执行](progressive_tool_discovery_execution.svg)
 
-[PlantUML 源码：`progressive_tool_discovery_execution`](diagram.puml#L276)
+[PlantUML 源码：`progressive_tool_discovery_execution`](diagram.puml#L272)
 
 ### 7.3 Model Manager 流式适配
 
@@ -245,20 +246,18 @@ base URL 或成本字段公开给 mate-service。
 
 ![Model Manager 流式调用](model_manager_streaming_flow.svg)
 
-[PlantUML 源码：`model_manager_streaming_flow`](diagram.puml#L354)
+[PlantUML 源码：`model_manager_streaming_flow`](diagram.puml#L350)
 
 ### 7.4 数据与附件边界
 
-RuntimeSessionStore 保存 Session 配置、当前分支 Entry、内部执行状态和必要的
-文件元数据快照。Session Entry 的 `entry_id/parent_id` 树与当前分支重建详见
+RuntimeSessionStore 保存 Session 配置、当前分支 Entry 和内部执行状态，不保存
+文件正文或文件元数据快照。Session Entry 的 `entry_id/parent_id` 树与当前分支重建详见
 [`pi Session Context 分析`](../pi-mono-agent-session-context/README.md)；数据库通用
 模式详见 [`Agent 数据库模式`](../agent-database-patterns/README.md)。
 
-文件上传、扫描、OBS 正文、openGauss 元数据和删除生命周期属于独立文件服务，
-详见 [`CampusMate 文件服务`](../campusmate-attachment-service/README.md)。
-CampusClaw 只消费有序 `file_ids`，通过内部受权 resolve/content 接口取得可信
-元数据和有界内容，不直连 OBS，也不把文件名、URL、MIME 或 Object Key 当作调用方
-可伪造的 Session Event 字段。
+文件上传、扫描、正文、元数据和删除生命周期不属于 CampusClaw Runtime。
+CampusClaw 只消费有序 `file_ids`，把它们编码为固定文本块；它不调用 resolve/content、
+不直连 OBS，也不接受文件名、URL、MIME、Base64 或 Object Key。
 
 ## 8. 源码证据与目标差异
 
@@ -267,9 +266,10 @@ CampusClaw 只消费有序 `file_ids`，通过内部受权 resolve/content 接�
 | 观察到的 pi 行为 | `packages/coding-agent/src/core/session-manager.ts` 的 Session Entry 以 `id/parentId` 构成 append-only tree；`getBranch()` 重建当前分支 |
 | 观察到的 pi 行为 | `packages/coding-agent/src/core/agent-session.ts` 的 `prompt`、`steer`、`followUp` 和 `abort` 驱动一次进程内 active execution，但不要求公共 Run 资源 |
 | 观察到的 pi 行为 | `packages/agent/src/types.ts` 与 `packages/agent/src/agent-loop.ts` 区分 Message 与 Tool execution 生命周期 |
-| 观察到的 Java 行为 | `modules/coding-agent-cli/.../ServerMode.java` 同时注册当前 HTTP/SSE 和 WebSocket 路由；这只是迁移前实现证据 |
-| 观察到的 Java 行为 | `modules/coding-agent-cli/.../ChatHandler.java` 已用单个 POST 返回 SSE，但当前客户端取消会 abort，事件和持久化契约也比目标设计窄 |
-| 观察到的 Java 行为 | `modules/coding-agent-cli/.../ChatWebSocketHandler.java` 当前提供 prompt/steer/abort 和模型配置命令；它不是目标传输契约 |
+| 迁移前 Java 行为 | 旧 `ServerMode`、`ChatHandler` 和 `ChatWebSocketHandler` 曾同时提供 HTTP/SSE 与 WebSocket；已在实现提交中删除 |
+| 已实现 Java 行为 | `RuntimeSessionController`、`RuntimeEventController`、`RuntimeSessionConfigurationController` 与 `RuntimeSessionControlController` 实现 11 个 Spring MVC HTTP+SSE 接口 |
+| 已实现 Java 行为 | `RuntimeEventStream`、`RuntimeSseDispatcher` 和 `RuntimeSseEmitterSubscriber` 提供有界请求级 SSE；断线不 abort |
+| 已实现 Java 行为 | `MyBatisRuntimeSessionRepository` 使用 openGauss 保存 Session、当前分支 Entry、严格序号、tombstone 和清理任务 |
 | 架构变更 | 两跳目标传输统一为 HTTP+SSE，删除连接首帧、Frame RPC、连接 generation、WebSocket close code 和 AsyncAPI |
 | 产品约束 | 浏览器只识别 `chat_id`，CampusClaw 只识别 `session_id`；公共接口不泄露 Runtime 标识 |
 | 安全加固 | 每个 HTTP 请求独立认证；凭据只在认证 Adapter 中存在；SSE 事件经过 mate-service 安全投影 |
@@ -284,13 +284,14 @@ CampusClaw 只消费有序 `file_ids`，通过内部受权 resolve/content 接�
 1. mate-service 公共 Chat HTTP 的资源路径、VO、错误码、分页和 SSE Event Schema；
 2. 浏览器断线后公共 Chat 层如何对账内部已持久化 Entry；
 3. Pod 重启时 active execution 的中断或恢复策略；
-4. 公司 `ResultBeanFactory`、JWT 和 APPKEY 库在开源/本地环境的兼容 Adapter 发布方式；
+4. 公司 `ResultBeanFactory` 真实制品坐标和 `ResultBeanAdapter` 公司 Bean 的落地方式；
 5. 若未来需要机器可读契约，其格式、生成源和同步门禁需要重新评审。
 
 ## 10. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.0 | 2026-08-18 | 对齐实现提交 `8691e880`：内部 11 个接口标记已实现；删除改为 running 时 409；鉴权明确为上游真实性验证；文件 ID 改为固定提示块；移除 Agent Runtime Template 依赖 |
 | 2.2.0 | 2026-08-18 | 全仓清理 WebSocket、公开 Run 和重复历史专题；Runtime HTTP 契约同步到 1.29.0；并发治理统一为内部 ActiveExecution，模板专题统一为 exact revision；文件服务统一使用 file_id、ResultBean、lowerCamelCase 和公司双鉴权边界 |
 | 2.1.0 | 2026-08-18 | 用户明确批准废弃并删除过渡期 OpenAPI；契约权威收敛为 HTML 主维护文档与 Markdown 设计依据，禁止从历史 OpenAPI 恢复旧 Run 模型；增加仓库内 HTML-first 契约校验入口 |
 | 2.0.0 | 2026-08-18 | 用户确认 mate-service 公共和 CampusClaw 内部两跳均统一为 HTTP+SSE；删除旧 WebSocket/AsyncAPI 规范，重写当前架构入口并明确公共 mate-service HTTP 字段仍待逐项评审 |

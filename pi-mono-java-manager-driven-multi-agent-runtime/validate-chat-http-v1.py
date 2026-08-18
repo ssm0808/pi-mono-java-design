@@ -128,7 +128,42 @@ def validate_review_models(models):
         require(operation.get("description"), f"Operation has no purpose: {key}")
         require(len(operation.get("authModes", [])) == 2, f"Authentication modes are incomplete: {key}")
         require(operation.get("responses"), f"Operation has no responses: {key}")
+        validate_response_contract(key, operation)
     require(operations == EXPECTED_OPERATIONS, "HTML operation set does not match the confirmed contract")
+
+
+def response_codes(operation):
+    codes = set()
+    for response in operation["responses"]:
+        for body in response.get("bodies", {}).values():
+            if isinstance(body, dict) and body.get("resCode"):
+                codes.add((response.get("status"), body["resCode"]))
+    return codes
+
+
+def validate_response_contract(key, operation):
+    require(all(response.get("status") != "403" for response in operation["responses"]),
+            f"Service-local FORBIDDEN response is not implemented: {key}")
+    for response in operation["responses"]:
+        if response.get("status") in {"200", "201", "202", "204"}:
+            continue
+        for body in response.get("bodies", {}).values():
+            if isinstance(body, dict):
+                require("result" not in body, f"Error response contains result: {key}")
+    codes = response_codes(operation)
+    if key == ("DELETE", "/sessions/{session_id}"):
+        require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
+    elif key == ("POST", "/sessions/{session_id}/events"):
+        require(("503", "RUNTIME_CAPACITY_EXCEEDED") in codes,
+                "POST Events is missing the runtime capacity response")
+        require("[File IDs]" in operation["requestBody"]["description"],
+                "POST Events must document raw file ID prompt encoding")
+    elif key in {
+        ("POST", "/sessions/{session_id}/steers"),
+        ("POST", "/sessions/{session_id}/follow-ups"),
+    }:
+        require(("429", "CONTROL_QUEUE_FULL") in codes,
+                f"Control operation is missing the bounded queue response: {key}")
 
 
 def validate_executable_scripts(scripts):
