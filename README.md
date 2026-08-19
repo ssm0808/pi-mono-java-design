@@ -7,6 +7,7 @@
 - [CampusClaw Runtime 总体设计](./pi-mono-java-manager-driven-multi-agent-runtime/README.md)：两跳 HTTP+SSE、十一项内部 Runtime operation、Manager 与数据边界。
 - [CampusClaw Runtime HTTP API](./pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md)：接口语义、状态、错误和源码证据。
 - [Runtime HTTP API HTML 评审页](./pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-review.html)：面向人的主维护契约，可直接在浏览器打开。
+- [Runtime HTTP 测试 Agent](./pi-mono-java-http-test-agent/README.md)：基于已确认契约规划、拉起、执行和维护分层回归测试。
 - [虚拟线程并发管理](./virtual-thread-concurrency-management/README.md)：内部 active execution、容量准入、背压与 DFX。
 - [AgentRuntimeTemplate](./agent-runtime-template/README.md)：不可变 Agent 模板、revision pinning、加载缓存与回收。
 - [CampusMate 文件服务](./campusmate-attachment-service/README.md)：文件上传、扫描、OBS/openGauss 边界和内部 Runtime 解析。

@@ -1,0 +1,209 @@
+@startuml http_test_agent_architecture
+title CampusClaw HTTP Test Agent Architecture
+
+' Source evidence: pi-mono-java commit 2e3962f408d81d03c00f533363ed1c09e455550f.
+' Source paths: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
+' Source paths: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java.
+' Test paths: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeHttpProcessOpenGaussIT.java.
+' Observed behavior: route tests and opt-in process/OpenGauss integration tests exist, but default CI only runs Maven verify.
+' Design reason: deterministic contract and state oracles must remain authoritative while the agent plans, launches, and maintains tests.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam ArrowColor #35516F
+skinparam DefaultFontName Arial
+
+actor "Developer or CI" as trigger
+database "Git candidate ref\nand merge base" as git
+artifact "Canonical HTTP review HTML\n11 review models" as contract
+artifact "Versioned case catalog\nand fixtures" as catalog
+
+package "HTTP Test Agent" {
+  component "Baseline Resolver" as resolver
+  component "Contract Extractor" as extractor
+  component "Change Impact Analyzer" as impact
+  component "Deterministic Test Planner" as planner
+  component "Environment Provisioner" as provisioner
+  component "Test Executor" as executor
+  component "Oracle and Evidence Collector" as oracle
+  component "Case Maintenance Proposer" as maintainer
+}
+
+node "Ephemeral Test Environment" {
+  component "Packaged CampusClaw JAR" as jar
+  database "Pinned OpenGauss" as db
+  component "Fake Model SSE Server" as modelstub
+  folder "Managed Agent Fixture" as agentfixture
+  component "Random Local Port" as port
+}
+
+package "Deterministic Test Layers" {
+  component "Contract Drift and Route Inventory" as drift
+  component "MockMvc HTTP Contract Matrix" as mvc
+  component "Service and State Invariants" as service
+  component "Database, Concurrency, and Recovery" as databaseTests
+  component "Packaged Process HTTP and SSE" as processTests
+  component "Mirror and Company Adapter Compatibility" as compatibility
+}
+
+artifact "Machine-readable evidence\nJUnit XML, logs, diffs, seeds" as evidence
+artifact "Required-check verdict\nand maintenance proposal" as verdict
+
+trigger --> resolver : candidate ref
+git --> resolver
+contract --> extractor
+catalog --> planner
+resolver --> impact
+extractor --> impact
+impact --> planner
+planner --> provisioner
+provisioner --> jar
+provisioner --> db
+provisioner --> modelstub
+provisioner --> agentfixture
+provisioner --> port
+planner --> executor
+jar --> executor
+db --> executor
+modelstub --> executor
+agentfixture --> executor
+executor --> drift
+executor --> mvc
+executor --> service
+executor --> databaseTests
+executor --> processTests
+executor --> compatibility
+drift --> oracle
+mvc --> oracle
+service --> oracle
+databaseTests --> oracle
+processTests --> oracle
+compatibility --> oracle
+oracle --> evidence
+oracle --> verdict
+extractor --> maintainer
+impact --> maintainer
+oracle --> maintainer
+maintainer --> verdict : proposed catalog delta
+
+note right of planner
+  Large or uncertain changes select the full suite.
+  The agent may narrow execution only when impact
+  evidence is complete and mandatory invariants remain.
+end note
+
+note right of oracle
+  Pass and fail decisions come from checked-in
+  assertions and schemas, never from model judgment.
+end note
+@enduml
+
+@startuml http_test_execution_sequence
+title HTTP Test Agent Execution Sequence
+
+' Source evidence: pi-mono-java commit 2e3962f408d81d03c00f533363ed1c09e455550f.
+' CI path: .github/workflows/ci.yml.
+' Process test path: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeHttpProcessOpenGaussIT.java.
+' Observed behavior: integration tests require explicit JAR and OpenGauss properties and can skip when prerequisites are absent.
+' Design reason: required gates must provision dependencies and fail closed instead of silently skipping.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam DefaultFontName Arial
+
+actor "CI or Developer" as caller
+participant "HTTP Test Agent" as agent
+participant "Git and Contract" as source
+participant "Environment Controller" as env
+participant "Maven and Test Runners" as runner
+participant "Deterministic Oracle" as oracle
+database "Evidence Store" as store
+
+caller -> agent : test(candidateRef, mergeBase, mode)
+agent -> source : resolve immutable commits
+source --> agent : source commit and contract version
+
+alt missing or ambiguous baseline
+  agent --> caller : BLOCKED_BASELINE, no tests claimed
+else baseline resolved
+  agent -> source : extract operations and compute diff
+  source --> agent : operation model and changed symbols
+  agent -> agent : classify impact and expand case catalog
+  alt contract, routing, persistence, build, or uncertain large change
+    agent -> agent : select full regression matrix
+  else bounded implementation change
+    agent -> agent : select impacted cases plus mandatory invariants
+  end
+  agent -> env : create isolated home, ports, database, and stubs
+  env --> agent : readiness evidence
+  alt required dependency unavailable
+    agent -> env : collect diagnostics and cleanup
+    agent --> caller : FAIL_ENVIRONMENT, no silent skip
+  else environment ready
+    agent -> runner : static drift and fast contract tests
+    runner --> oracle : raw results
+    oracle -> runner : continue only if foundation passes
+    runner -> runner : service, database, concurrency, process, SSE
+    runner --> oracle : JUnit XML, HTTP traces, database assertions
+    oracle -> store : signed manifest, logs, seeds, timings
+    oracle -> env : cleanup and verify no leaked process
+    oracle --> agent : deterministic verdict and gaps
+    agent -> agent : draft additive case updates when needed
+    agent --> caller : pass, fail, or review-required report
+  end
+end
+@enduml
+
+@startuml http_test_case_maintenance
+title HTTP Test Case Maintenance Lifecycle
+
+' Contract evidence: design repository chat-http-v1-review.html version 1.30.0.
+' Test evidence: pi-mono-java commit 2e3962f408d81d03c00f533363ed1c09e455550f runtime API route and process tests.
+' Observed behavior: current tests are code-owned and do not have a separate requirement-to-case inventory.
+' Design reason: case changes must be reviewable, traceable, and unable to weaken an accepted contract automatically.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam DefaultFontName Arial
+
+start
+:Read canonical contract version;
+:Read candidate diff and current case catalog;
+
+if (Contract changed?) then (yes)
+  :Create contract delta;
+  :Generate new or changed case proposals;
+elseif (Route or behavior changed?) then (yes)
+  :Map changed symbols to operations and invariants;
+  :Generate missing regression proposals;
+else (no)
+  :Keep catalog unchanged;
+endif
+
+:Run catalog validation and selected tests;
+
+if (Existing assertion is weakened or removed?) then (yes)
+  :Require explicit human approval and contract reference;
+  if (Approved?) then (yes)
+    :Record replacement and version history;
+  else (no)
+    :Reject catalog update;
+    stop
+  endif
+else (no)
+  :Accept additive maintenance proposal for review;
+endif
+
+if (Operation retired by confirmed contract?) then (yes)
+  :Keep a route tombstone test;
+  :Mark old cases retired with replacement reference;
+else (no)
+  :Keep active case IDs stable;
+endif
+
+:Merge only after catalog, code, and evidence agree;
+stop
+@enduml
