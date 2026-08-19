@@ -20,17 +20,17 @@ CATALOG = TOPIC_DIR / "test-case-catalog.json"
 PUML = TOPIC_DIR / "diagram.puml"
 
 EXPECTED_OPERATIONS = [
-    ("createSession", "POST", "/campusclaw-service/v1/agents/{agent_id}/sessions"),
-    ("getSession", "GET", "/campusclaw-service/v1/sessions/{session_id}"),
-    ("deleteSession", "DELETE", "/campusclaw-service/v1/sessions/{session_id}"),
-    ("submitUserEvent", "POST", "/campusclaw-service/v1/sessions/{session_id}/events"),
-    ("listSessionEvents", "GET", "/campusclaw-service/v1/sessions/{session_id}/events"),
-    ("listSessionModels", "GET", "/campusclaw-service/v1/sessions/{session_id}/models"),
-    ("changeSessionModel", "PUT", "/campusclaw-service/v1/sessions/{session_id}/model"),
-    ("changeSessionThinking", "PUT", "/campusclaw-service/v1/sessions/{session_id}/thinking"),
-    ("appendSteer", "POST", "/campusclaw-service/v1/sessions/{session_id}/steers"),
-    ("appendFollowUp", "POST", "/campusclaw-service/v1/sessions/{session_id}/follow-ups"),
-    ("abortSession", "POST", "/campusclaw-service/v1/sessions/{session_id}/abort"),
+    ("createSession", "创建会话", "POST", "/campusclaw-service/v1/agents/{agent_id}/sessions"),
+    ("getSession", "查询会话", "GET", "/campusclaw-service/v1/sessions/{session_id}"),
+    ("deleteSession", "删除会话", "DELETE", "/campusclaw-service/v1/sessions/{session_id}"),
+    ("submitUserMessage", "提交用户消息", "POST", "/campusclaw-service/v1/sessions/{session_id}/events"),
+    ("listSessionEvents", "查询会话事件", "GET", "/campusclaw-service/v1/sessions/{session_id}/events"),
+    ("listSessionModels", "查询可用模型", "GET", "/campusclaw-service/v1/sessions/{session_id}/models"),
+    ("changeSessionModel", "切换会话模型", "PUT", "/campusclaw-service/v1/sessions/{session_id}/model"),
+    ("changeSessionThinking", "设置深度思考", "PUT", "/campusclaw-service/v1/sessions/{session_id}/thinking"),
+    ("appendSteer", "追加引导消息", "POST", "/campusclaw-service/v1/sessions/{session_id}/steers"),
+    ("appendFollowUp", "追加后续消息", "POST", "/campusclaw-service/v1/sessions/{session_id}/follow-ups"),
+    ("abortSession", "中止会话执行", "POST", "/campusclaw-service/v1/sessions/{session_id}/abort"),
 ]
 EXPECTED_BLOCKS = [
     "http_test_agent_architecture",
@@ -110,10 +110,15 @@ def validate_contract(catalog: dict, contract_ref: str | None) -> None:
         fail(f"unexpected API base paths: {sorted(base_paths)}")
 
     extracted = [
-        (model["operation"]["method"], model["api"]["basePath"] + model["operation"]["path"])
+        (
+            model["operation"]["operationKey"],
+            model["operation"]["shortName"],
+            model["operation"]["method"],
+            model["api"]["basePath"] + model["operation"]["path"],
+        )
         for model in parser.models
     ]
-    expected = [(method, path) for _, method, path in EXPECTED_OPERATIONS]
+    expected = EXPECTED_OPERATIONS
     if extracted != expected:
         fail(f"review operation inventory differs from expected order: {extracted}")
 
@@ -134,7 +139,7 @@ def validate_catalog(catalog: dict) -> None:
     if catalog["catalogVersion"] != "1.0.0":
         fail("catalogVersion must match the design document version 1.0.0")
     operations = [
-        (item["operationKey"], item["method"], item["path"])
+        (item["operationKey"], item["shortName"], item["method"], item["path"])
         for item in catalog["operations"]
     ]
     if operations != EXPECTED_OPERATIONS:

@@ -160,7 +160,7 @@ end
 @startuml http_test_case_maintenance
 title HTTP Test Case Maintenance Lifecycle
 
-' Contract evidence: design repository chat-http-v1-review.html version 1.30.0.
+' Contract evidence: design repository chat-http-v1-review.html version 1.33.0.
 ' Test evidence: pi-mono-java commit 2e3962f408d81d03c00f533363ed1c09e455550f runtime API route and process tests.
 ' Observed behavior: current tests are code-owned and do not have a separate requirement-to-case inventory.
 ' Design reason: case changes must be reviewable, traceable, and unable to weaken an accepted contract automatically.

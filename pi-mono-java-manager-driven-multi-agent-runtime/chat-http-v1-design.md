@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.30.0 |
+| 文档版本 | 1.33.0 |
 | 状态 | 十一个接口已实现并通过真实进程与 openGauss 验证 |
 | 接口评审状态 | 十一个 operation 均已确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
@@ -10,10 +10,10 @@
 | 端到端传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均为 HTTP；执行响应使用请求范围内 SSE |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 设计分析基线 | `195746614096312d4e93afb029d387837db78e0b` |
-| pi-mono-java 实现基线 | `8691e8800f05f28afe22499050c29220ef5b7475` |
+| pi-mono-java 实现基线 | `f899547d120ce06aec27ecf5dbb448a7851a942a` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | Anthropic Managed Agents 文档核对 | 2026-08-17；`managed-agents-2026-04-01` beta |
-| 更新日期 | 2026-08-18 |
+| 更新日期 | 2026-08-19 |
 
 ## 1. 结论
 
@@ -45,11 +45,11 @@ HTML 主契约与本文。若未来需要重新提供机器契约，必须从已
 
 ### 2.1 Session 生命周期
 
-| Method | Path | 语义 |
-|---|---|---|
-| `POST` | `/agents/{agent_id}/sessions` | 根据 Agent 创建 Session，由 CampusClaw 分配 `session_id` |
-| `GET` | `/sessions/{session_id}` | 读取 Session 当前配置和 `idle/running` 粗粒度状态 |
-| `DELETE` | `/sessions/{session_id}` | 逻辑删除 Session，使其对 API 立即不可见，并异步清理 Runtime 数据 |
+| 接口简称 | operationKey | Method | Path | 语义 |
+|---|---|---|---|---|
+| 创建会话 | `createSession` | `POST` | `/agents/{agent_id}/sessions` | 根据 Agent 创建 Session，由 CampusClaw 分配 `session_id` |
+| 查询会话 | `getSession` | `GET` | `/sessions/{session_id}` | 读取 Session 当前配置和 `idle/running` 粗粒度状态 |
+| 删除会话 | `deleteSession` | `DELETE` | `/sessions/{session_id}` | 逻辑删除 Session，使其对 API 立即不可见，并异步清理 Runtime 数据 |
 
 HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session；网络恢复只需
 重新读取 Session 或持久化 Session Events。`POST /agents/{agent_id}/sessions`
@@ -81,8 +81,8 @@ APPKEY 是明确公开的兼容契约，
 
 1. 通过统一认证适配层完成 Header 形状校验并生成一个不可变
    `CallerAuthContext`，再验证 PATH 中 `agent_id` 的资源 ID 格式；
-2. 在受控根目录中解析 Agent 目录，拒绝路径或符号链接越界；
-3. 读取 `.campusagent/settings.json` 的 `defaultModel` 与 `enabledModels`；
+2. 在受控根目录中解析 `agent/{agent_id}/.campusclaw/`，拒绝路径或符号链接越界；
+3. 读取 `agent/{agent_id}/.campusclaw/settings.json` 的 `defaultModel` 与 `enabledModels`；
 4. 验证 `enabledModels` 非空、无重复且包含 `defaultModel`；
 5. 调用 `resolveModel(agent_id, defaultModel)` 获得有效模型 descriptor；
 6. 在所有外部配置校验通过后生成全局唯一、删除后不复用的
@@ -97,6 +97,11 @@ APPKEY 是明确公开的兼容契约，
 因此创建响应中 `state=idle`。`thinking=false` 表示默认不启用深度思考，
 不写入 Managed `settings.json`。任一步在 SessionRecord 提交前失败都不
 暴露 `session_id`，并丢弃未持久化的内存 Session。
+
+HTTP V1 对同一目录中的文件契约仍固定为 `settings.json`、`SYSTEM.md` 和
+`skills/`。本次只将目录位置统一为 `.campusclaw`，不将 CLI 物化文件
+`setting.json` 和 `systemPrompt.md` 当作 HTTP 同义文件。如果部署同时使用两个入口，
+Manager 必须确保 HTTP 所需文件完整，不得让 HTTP 读取 CLI 物化过程中的半成品。
 
 `settings.json` 是受控 Agent 目录配置，Model Manager 仍是模型绑定、启用状态和
 调用的最终权威。目录缺少有效默认模型时返回 HTTP `422`，
@@ -170,7 +175,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 
 ![GetSession 已确认响应](http_get_session_response.svg)
 
-[PlantUML 源码：`http_get_session_response`](diagram.puml#L612)
+[PlantUML 源码：`http_get_session_response`](diagram.puml#L613)
 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
@@ -246,13 +251,13 @@ owner 信息。`X-HW-ID` 不作为 Session owner；对不存在或已删除资�
 
 ![HTTP Session 逻辑删除](http_delete_session.svg)
 
-[PlantUML 源码：`http_delete_session`](diagram.puml#L683)
+[PlantUML 源码：`http_delete_session`](diagram.puml#L684)
 
 本小节和主维护 HTML 中的第三个接口已经用户确认。
 
 ![HTTP Session 创建](http_session_creation.svg)
 
-[PlantUML 源码：`http_session_creation`](diagram.puml#L414)
+[PlantUML 源码：`http_session_creation`](diagram.puml#L415)
 
 ### 2.2 消息与 Session Event
 
@@ -260,10 +265,10 @@ owner 信息。`X-HW-ID` 不作为 Session owner；对不存在或已删除资�
 但该轮执行只存在于 Runtime 内部，不作为调用方可查询、控制或持久化的公共
 `Run` 资源。Session 与 Entry 才是公共恢复边界。
 
-| Method | Path | 语义 |
-|---|---|---|
-| `POST` | `/sessions/{session_id}/events` | 提交 `user.message`，并在同一响应中以 SSE 返回本次执行事件 |
-| `GET` | `/sessions/{session_id}/events` | 使用 `page/next_page` 分页读取权威持久化 Entry |
+| 接口简称 | operationKey | Method | Path | 语义 |
+|---|---|---|---|---|
+| 提交用户消息 | `submitUserMessage` | `POST` | `/sessions/{session_id}/events` | 提交 `user.message`，并在同一响应中以 SSE 返回本次执行事件 |
+| 查询会话事件 | `listSessionEvents` | `GET` | `/sessions/{session_id}/events` | 使用 `page/next_page` 分页读取权威持久化 Entry |
 
 公共契约不再包含 `run_id`、GetRun、Run Events、Run Abort 或 Run Steer。
 中止和运行中追加指导已经分别确认为 Session 范围的 Abort、Steer 与 FollowUp
@@ -295,7 +300,7 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 
 ![Session Event、内部执行与 Entry 恢复边界](http_execution_resource_model.svg)
 
-[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L889)
+[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L890)
 
 #### 2.2.2 第四个已确认接口：提交用户事件并直接流式返回
 
@@ -430,7 +435,7 @@ ToolResult Entry 是权威事实，调用方按 `entry_id/entry_seq` 与本地�
 
 ![HTTP Session Event 直接流式返回](http_session_event_stream.svg)
 
-[PlantUML 源码：`http_session_event_stream`](diagram.puml#L769)
+[PlantUML 源码：`http_session_event_stream`](diagram.puml#L770)
 
 第四接口已经确认：冻结路径、`user.message` 请求、`message + file_ids`、同一 POST
 直接 SSE、无公共 `run_id`、无 `Idempotency-Key`、成功事件顺序与持久化语义，
@@ -438,9 +443,9 @@ ToolResult Entry 是权威事实，调用方按 `entry_id/entry_seq` 与本地�
 
 ### 2.3 持久化事件与恢复
 
-| Method | Path | 语义 |
-|---|---|---|
-| `GET` | `/sessions/{session_id}/events` | 使用 `page/next_page` 分页读取当前分支的权威持久化 Entry |
+| 接口简称 | operationKey | Method | Path | 语义 |
+|---|---|---|---|---|
+| 查询会话事件 | `listSessionEvents` | `GET` | `/sessions/{session_id}/events` | 使用 `page/next_page` 分页读取当前分支的权威持久化 Entry |
 
 GET Session Events 返回 `user.message`、`assistant.message.completed` 和 `tool.result`
 三类持久化 Entry，不返回 `assistant.message.started` 或 `assistant.message.delta`。断线后客户端重新分页读取
@@ -570,15 +575,15 @@ CampusClaw 产品投影，不应表述为 pi 已有分页接口。Anthropic 的
 
 ![HTTP Session Events 开放分页](http_session_event_list.svg)
 
-[PlantUML 源码：`http_session_event_list`](diagram.puml#L942)
+[PlantUML 源码：`http_session_event_list`](diagram.puml#L943)
 
 ### 2.4 模型与 Session 配置
 
-| Method | Path | 语义 |
-|---|---|---|
-| `GET` | `/sessions/{session_id}/models` | 列出 Agent 目录 allowlist 与 Runtime 当前可用模型交集中的 `model_id` |
-| `PUT` | `/sessions/{session_id}/model` | 切换 Session 当前模型 |
-| `PUT` | `/sessions/{session_id}/thinking` | 开启或关闭 Session 深度思考 |
+| 接口简称 | operationKey | Method | Path | 语义 |
+|---|---|---|---|---|
+| 查询可用模型 | `listSessionModels` | `GET` | `/sessions/{session_id}/models` | 列出 Agent 目录 allowlist 与 Runtime 当前可用模型交集中的 `model_id` |
+| 切换会话模型 | `changeSessionModel` | `PUT` | `/sessions/{session_id}/model` | 切换 Session 当前模型 |
+| 设置深度思考 | `changeSessionThinking` | `PUT` | `/sessions/{session_id}/thinking` | 开启或关闭 Session 深度思考 |
 
 这三个 operation 已确认。模型列表使用 Session scope，而不是公开
 `/agents/{agent_id}/models`，避免调用方绕过 Session 绑定查询其他 Agent。两个 PUT
@@ -677,15 +682,15 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 
 ![HTTP Session 模型与深度思考配置](http_session_model_configuration.svg)
 
-[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1030)
+[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1031)
 
 ### 2.5 Session 执行控制（已确认）
 
-| Method | Path | 语义 |
-|---|---|---|
-| `POST` | `/sessions/{session_id}/steers` | 向当前 active execution 优先追加 Steering Message |
-| `POST` | `/sessions/{session_id}/follow-ups` | 在当前执行原本将结束时追加 FollowUp Message |
-| `POST` | `/sessions/{session_id}/abort` | 中止当前 active execution 并清空未投递控制消息 |
+| 接口简称 | operationKey | Method | Path | 语义 |
+|---|---|---|---|---|
+| 追加引导消息 | `appendSteer` | `POST` | `/sessions/{session_id}/steers` | 向当前 active execution 优先追加 Steering Message |
+| 追加后续消息 | `appendFollowUp` | `POST` | `/sessions/{session_id}/follow-ups` | 在当前执行原本将结束时追加 FollowUp Message |
+| 中止会话执行 | `abortSession` | `POST` | `/sessions/{session_id}/abort` | 中止当前 active execution 并清空未投递控制消息 |
 
 三个 operation 已经确认。它们使用 Session scope，而不是
 `/runs/{run_id}`：CampusClaw 已确认不公开 Run，并且一个 Session 同时至多只有一个
@@ -763,7 +768,7 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 
 ![HTTP Session 执行控制](http_session_execution_controls.svg)
 
-[PlantUML 源码：`http_session_execution_controls`](diagram.puml#L97)
+[PlantUML 源码：`http_session_execution_controls`](diagram.puml#L98)
 
 ## 3. 两跳 HTTP+SSE 边界
 
@@ -964,7 +969,7 @@ Git。Controller 和 Service 不需要知道公司类的 FQCN；替换发生在�
 
 ![ResultBeanAdapter 公司内外 Bean 替换](http_result_bean_compatibility.svg)
 
-[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L485)
+[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L486)
 
 ### 6.3 错误与国际化实现
 
@@ -1015,7 +1020,7 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 ![HTTP 双认证适配](http_dual_authentication.svg)
 
-[PlantUML 源码：`http_dual_authentication`](diagram.puml#L545)
+[PlantUML 源码：`http_dual_authentication`](diagram.puml#L546)
 
 ## 8. 源码证据与差异分类
 
@@ -1105,6 +1110,9 @@ mate-service。除公共 mate-service API 仍待逐项评审外，本文描述�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.33.0 | 2026-08-19 | 按用户确认在主 API 评审页的每个接口卡片中同时展示中文接口简称和可见的 `operationKey` 英文简称；保持机器标识与设计表、测试清单一致 |
+| 1.32.0 | 2026-08-19 | 按用户确认在主 API 评审页和设计文档中为 11 个 operation 增加统一中文接口简称；补充稳定的 `operationKey` 对照，并将提交用户消息接口统一命名为 `submitUserMessage` |
+| 1.31.0 | 2026-08-19 | 按用户确认将 HTTP V1 受控 Agent 目录改为 `agent/{agent_id}/.campusclaw/`；保留 `settings.json` / `SYSTEM.md` / `skills/` 文件契约，明确不隐式兼容 CLI 的异名文件 |
 | 1.30.0 | 2026-08-18 | 对齐实现提交 `8691e880`：状态改为已实现；删除 active execution 返回 409 而非隐式 abort；`file_ids` 改为固定提示块；鉴权明确为形状校验；ResultBean 改为可替换 Adapter；移除服务内 owner/403 契约 |
 | 1.29.0 | 2026-08-18 | 全仓清理后补齐 GetSession 对 attached/locked 的完整边界；把 Steer/FollowUp/Abort 从旧“待评审”描述改为十一项已确认契约；明确控制消息不提供业务幂等键；同步 HTML 版本并清除主图中的 RunRecord、History 和 run_id 残留 |
 | 1.28.0 | 2026-08-18 | 用户明确批准废弃并删除过渡期 OpenAPI 1.7.1；当前契约权威收敛为 HTML 主维护文档与本文，不再维护第三份机器投影；未来如需机器契约必须从已确认内容重新生成并建立同步门禁，禁止恢复旧 YAML 继续修改 |
@@ -1136,7 +1144,7 @@ mate-service。除公共 mate-service API 仍待逐项评审外，本文描述�
 | 1.6.0 | 2026-08-15 | HTTP 契约删除 traceparent；增加首选 `X-HW-ID + Authorization` JWT 与兼容 `X-HW-ID + X-HW-APPKEY` 两组明示安全要求；固定混合凭据拒绝、验证失败不降级、统一 CallerAuthContext 适配层及 `AUTH_CREDENTIAL_CONFLICT` 中英文错误 |
 | 1.5.0 | 2026-08-15 | 第一个创建 Session 接口改为 `resCode/resMsg/result` ResultBean，保留真实 HTTP status；固定八个错误码及中英文消息、Accept-Language/Content-Language 规则；增加 standalone 兼容制品与 company 内部制品的 Maven profile 互斥替换设计 |
 | 1.4.0 | 2026-08-15 | 将创建 Session 改为无请求体的 `POST /agents/{agent_id}/sessions`，由 CampusClaw 生成 `session_id` 并从 Managed settings 解析默认模型；固定目录验证、模型校验、SessionContext/AgentSession 组装、持久化和失败清理顺序；创建和查询共用不含内部版本的 SessionResource，创建不使用 `Idempotency-Key` 或 `If-Match` |
-| 1.3.0 | 2026-08-15 | Session 创建请求收敛为只必填 `agent_id`；从 `.campusagent/settings.json` 读取 `agentVersion/defaultModel/enabledModels`，经 Model Manager 校验后初始化并返回有效模型；明确 Run 原子固化 Session 当前模型 |
+| 1.3.0 | 2026-08-15 | Session 创建请求收敛为只必填 `agent_id`；当时从旧受控 Agent 目录读取 `agentVersion/defaultModel/enabledModels`，经 Model Manager 校验后初始化并返回有效模型；明确 Run 原子固化 Session 当前模型 |
 | 1.2.0 | 2026-08-14 | 将 Runtime HTTP API 的统一基础路径调整为 `/campusclaw-service/v1`；明确 Session 同一性由 `session_id` 与不可变 `agent_id` 绑定确定，可切换的 `model_id` 不参与绑定冲突判断 |
 | 1.1.0 | 2026-08-06 | 将 HTTP 版重构为 Session、Run、事件/历史、模型配置四组共 13 个 operation；删除 connect/resume 与连接级状态，增加 SSE/JSON Event Journal、ETag 和 Session 删除语义 |
 | 1.0.0 | 2026-08-05 | 初版 HTTP 映射草稿 |

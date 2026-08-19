@@ -3,7 +3,7 @@
   "status": "target-only",
   "description": "Initial machine-maintained test inventory for the confirmed CampusClaw Runtime HTTP V1 contract.",
   "contract": {
-    "version": "1.30.0",
+    "version": "1.33.0",
     "reviewDocument": "../pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-review.html",
     "designDocument": "../pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md",
     "expectedOperationCount": 11,
@@ -15,7 +15,7 @@
     "retryPolicy": "none in required gates"
   },
   "evidenceRegistry": {
-    "CONTRACT": "design:pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-review.html@1.30.0",
+    "CONTRACT": "design:pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-review.html@1.33.0",
     "SESSION_CONTROLLER": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java#RuntimeSessionController@2e3962f4:51",
     "EVENT_CONTROLLER": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java#RuntimeEventController@2e3962f4:58",
     "CONFIG_CONTROLLER": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java#RuntimeSessionConfigurationController@2e3962f4:55",
@@ -94,6 +94,7 @@
   "operations": [
     {
       "operationKey": "createSession",
+      "shortName": "创建会话",
       "method": "POST",
       "path": "/campusclaw-service/v1/agents/{agent_id}/sessions",
       "evidenceRefs": ["CONTRACT", "SESSION_CONTROLLER"],
@@ -107,6 +108,7 @@
     },
     {
       "operationKey": "getSession",
+      "shortName": "查询会话",
       "method": "GET",
       "path": "/campusclaw-service/v1/sessions/{session_id}",
       "evidenceRefs": ["CONTRACT", "SESSION_CONTROLLER"],
@@ -119,6 +121,7 @@
     },
     {
       "operationKey": "deleteSession",
+      "shortName": "删除会话",
       "method": "DELETE",
       "path": "/campusclaw-service/v1/sessions/{session_id}",
       "evidenceRefs": ["CONTRACT", "SESSION_CONTROLLER", "DATABASE_IT"],
@@ -131,7 +134,8 @@
       ]
     },
     {
-      "operationKey": "submitUserEvent",
+      "operationKey": "submitUserMessage",
+      "shortName": "提交用户消息",
       "method": "POST",
       "path": "/campusclaw-service/v1/sessions/{session_id}/events",
       "evidenceRefs": ["CONTRACT", "EVENT_CONTROLLER", "EVENT_SERVICE", "PROCESS_IT"],
@@ -149,6 +153,7 @@
     },
     {
       "operationKey": "listSessionEvents",
+      "shortName": "查询会话事件",
       "method": "GET",
       "path": "/campusclaw-service/v1/sessions/{session_id}/events",
       "evidenceRefs": ["CONTRACT", "EVENT_CONTROLLER", "EVENT_SERVICE", "DATABASE_IT"],
@@ -163,6 +168,7 @@
     },
     {
       "operationKey": "listSessionModels",
+      "shortName": "查询可用模型",
       "method": "GET",
       "path": "/campusclaw-service/v1/sessions/{session_id}/models",
       "evidenceRefs": ["CONTRACT", "CONFIG_CONTROLLER"],
@@ -175,6 +181,7 @@
     },
     {
       "operationKey": "changeSessionModel",
+      "shortName": "切换会话模型",
       "method": "PUT",
       "path": "/campusclaw-service/v1/sessions/{session_id}/model",
       "evidenceRefs": ["CONTRACT", "CONFIG_CONTROLLER", "DATABASE_IT"],
@@ -189,6 +196,7 @@
     },
     {
       "operationKey": "changeSessionThinking",
+      "shortName": "设置深度思考",
       "method": "PUT",
       "path": "/campusclaw-service/v1/sessions/{session_id}/thinking",
       "evidenceRefs": ["CONTRACT", "CONFIG_CONTROLLER", "DATABASE_IT"],
@@ -203,6 +211,7 @@
     },
     {
       "operationKey": "appendSteer",
+      "shortName": "追加引导消息",
       "method": "POST",
       "path": "/campusclaw-service/v1/sessions/{session_id}/steers",
       "evidenceRefs": ["CONTRACT", "CONTROL_CONTROLLER", "PROCESS_IT"],
@@ -216,6 +225,7 @@
     },
     {
       "operationKey": "appendFollowUp",
+      "shortName": "追加后续消息",
       "method": "POST",
       "path": "/campusclaw-service/v1/sessions/{session_id}/follow-ups",
       "evidenceRefs": ["CONTRACT", "CONTROL_CONTROLLER", "PROCESS_IT"],
@@ -229,6 +239,7 @@
     },
     {
       "operationKey": "abortSession",
+      "shortName": "中止会话执行",
       "method": "POST",
       "path": "/campusclaw-service/v1/sessions/{session_id}/abort",
       "evidenceRefs": ["CONTRACT", "CONTROL_CONTROLLER", "PROCESS_IT"],

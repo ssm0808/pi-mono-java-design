@@ -5,7 +5,7 @@
 | 文档版本 | 1.0.0 |
 | 状态 | 目标设计，尚未在 `pi-mono-java` 落地 |
 | 设计目标 | 基于已确认 HTTP 契约自动规划、拉起、执行和维护回归测试 |
-| HTTP 契约版本 | `1.30.0`，十一项 operation 均已确认 |
+| HTTP 契约版本 | `1.33.0`，十一项 operation 均已确认 |
 | 设计仓分析基线 | `e6df5fc87e5a6ae9f09af64efcf76091939b7446` |
 | pi-mono-java 当前检出基线 | `195746614096312d4e93afb029d387837db78e0b`，`main`，存在用户未提交改动 |
 | pi-mono-java HTTP V1 实现分析基线 | `2e3962f408d81d03c00f533363ed1c09e455550f`，分支 `codex/campusclaw-http-v1` |
@@ -67,19 +67,19 @@ SHA-256 和 11 个 operation key，任何无法解析、重复或缺失都直接
 基础路径为 `/campusclaw-service/v1`。下表是 Agent 启动时必须从 HTML 主契约重新提取并
 与用例目录核对的冻结清单。
 
-| # | Operation key | Method | Path | 主要响应 |
-|---:|---|---|---|---|
-| 1 | `createSession` | `POST` | `/agents/{agent_id}/sessions` | `201` ResultBean |
-| 2 | `getSession` | `GET` | `/sessions/{session_id}` | `200` ResultBean + ETag |
-| 3 | `deleteSession` | `DELETE` | `/sessions/{session_id}` | `204` |
-| 4 | `submitUserEvent` | `POST` | `/sessions/{session_id}/events` | `200 text/event-stream` |
-| 5 | `listSessionEvents` | `GET` | `/sessions/{session_id}/events` | `200` ResultBean |
-| 6 | `listSessionModels` | `GET` | `/sessions/{session_id}/models` | `200` ResultBean |
-| 7 | `changeSessionModel` | `PUT` | `/sessions/{session_id}/model` | `200` ResultBean + ETag |
-| 8 | `changeSessionThinking` | `PUT` | `/sessions/{session_id}/thinking` | `200` ResultBean + ETag |
-| 9 | `appendSteer` | `POST` | `/sessions/{session_id}/steers` | `202` ResultBean |
-| 10 | `appendFollowUp` | `POST` | `/sessions/{session_id}/follow-ups` | `202` ResultBean |
-| 11 | `abortSession` | `POST` | `/sessions/{session_id}/abort` | `204` |
+| # | 接口简称 | Operation key | Method | Path | 主要响应 |
+|---:|---|---|---|---|---|
+| 1 | 创建会话 | `createSession` | `POST` | `/agents/{agent_id}/sessions` | `201` ResultBean |
+| 2 | 查询会话 | `getSession` | `GET` | `/sessions/{session_id}` | `200` ResultBean + ETag |
+| 3 | 删除会话 | `deleteSession` | `DELETE` | `/sessions/{session_id}` | `204` |
+| 4 | 提交用户消息 | `submitUserMessage` | `POST` | `/sessions/{session_id}/events` | `200 text/event-stream` |
+| 5 | 查询会话事件 | `listSessionEvents` | `GET` | `/sessions/{session_id}/events` | `200` ResultBean |
+| 6 | 查询可用模型 | `listSessionModels` | `GET` | `/sessions/{session_id}/models` | `200` ResultBean |
+| 7 | 切换会话模型 | `changeSessionModel` | `PUT` | `/sessions/{session_id}/model` | `200` ResultBean + ETag |
+| 8 | 设置深度思考 | `changeSessionThinking` | `PUT` | `/sessions/{session_id}/thinking` | `200` ResultBean + ETag |
+| 9 | 追加引导消息 | `appendSteer` | `POST` | `/sessions/{session_id}/steers` | `202` ResultBean |
+| 10 | 追加后续消息 | `appendFollowUp` | `POST` | `/sessions/{session_id}/follow-ups` | `202` ResultBean |
+| 11 | 中止会话执行 | `abortSession` | `POST` | `/sessions/{session_id}/abort` | `204` |
 
 WebSocket、公开 Run、旧 `/api/chat` 和旧 `/api/skills` 不属于当前 Runtime HTTP V1。
 Agent 应保留路由 tombstone 测试，防止大改动时把这些已废弃接口重新暴露出来。
@@ -461,7 +461,7 @@ Agent 不得自动：
 | 分类 | 内容 |
 |---|---|
 | 已观察行为 | 11 个 Spring MVC HTTP operation、现有 route/service/repository 测试和手动可运行的进程/openGauss IT |
-| 产品约束 | HTML 1.30.0 是主契约；普通成功 ResultBean、异常无 result、204/SSE 不包装；无公开 Run/WebSocket |
+| 产品约束 | HTML 1.33.0 是主契约；普通成功 ResultBean、异常无 result、204/SSE 不包装；无公开 Run/WebSocket |
 | 安全加固 | 测试不持有真实凭据、默认断网、敏感日志扫描、Agent 不自动弱化断言 |
 | 架构改造 | 新增契约抽取、用例目录、影响分析、环境控制器、Failsafe 必跑门禁和证据包 |
 | 目标-only | openGauss 镜像 digest、CI 资源规格、company profile 制品和 mutation 工具尚未在当前代码仓落地 |
