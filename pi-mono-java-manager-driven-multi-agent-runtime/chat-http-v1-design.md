@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.33.0 |
+| 文档版本 | 1.34.0 |
 | 状态 | 十一个接口已实现并通过真实进程与 openGauss 验证 |
 | 接口评审状态 | 十一个 operation 均已确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
@@ -10,7 +10,7 @@
 | 端到端传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均为 HTTP；执行响应使用请求范围内 SSE |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 设计分析基线 | `195746614096312d4e93afb029d387837db78e0b` |
-| pi-mono-java 实现基线 | `f899547d120ce06aec27ecf5dbb448a7851a942a` |
+| pi-mono-java 实现基线 | `972f98cadde4273d5dcf51ddd19c3218d0a3d8a7` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | Anthropic Managed Agents 文档核对 | 2026-08-17；`managed-agents-2026-04-01` beta |
 | 更新日期 | 2026-08-19 |
@@ -914,6 +914,7 @@ operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑
 | `400` | `INVALID_STEER_REQUEST` | POST Steer | `message` 缺失、空白、过长或存在未知字段 |
 | `400` | `INVALID_FOLLOW_UP_REQUEST` | POST FollowUp | `message` 缺失、空白、过长或存在未知字段 |
 | `409` | `SESSION_NOT_RUNNING` | POST Steer、FollowUp | Session 已经 idle，没有可追加消息的 active execution |
+| `503` | `SESSION_EXECUTION_UNAVAILABLE` | POST Steer、FollowUp、Abort | Session 为 running，但请求未命中持有 active execution 的 Runtime 实例；返回 `Retry-After: 3` |
 | `500` | `STEER_ACCEPTANCE_FAILED` | POST Steer | 状态检查和 Steer 入队未能原子完成 |
 | `500` | `FOLLOW_UP_ACCEPTANCE_FAILED` | POST FollowUp | 状态检查和 FollowUp 入队未能原子完成 |
 | `500` | `SESSION_ABORT_FAILED` | POST Abort | 取消、清空队列或 idle 收敛失败 |
@@ -1069,6 +1070,8 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 已实现行为 | 同提交的 `RuntimeSessionController`、`RuntimeEventController`、`RuntimeSessionConfigurationController` 和 `RuntimeSessionControlController`：11 个已确认 HTTP+SSE operation 均已落地 |
 | 已实现行为 | 同提交的 `MyBatisRuntimeSessionRepository` 与 `session_schema.sql`：Session、当前分支 Entry、严格 `entry_seq`、tombstone 和清理任务已在 openGauss 实现 |
 | 已实现行为 | 同提交的 `RuntimeRequestAuthenticator`：只校验双凭据 Header 形状；真实性和授权由上游 mate-service 完成，凭据 ID 不作为 Session owner |
+| 已实现行为 | pi-mono-java 实现提交 `972f98ca`：`FileAgentDirectoryResolver` 直接返回 `agent/{agent_id}/.campusclaw/` 真实运行根目录；`RuntimeEventService`、`RuntimeEventQueryService`、`RuntimeExecutionCoordinator` 分别承担事件提交、历史查询和执行协调 |
+| 架构改造 | 同提交将错误码、HTTP 状态、国际化 key 与 `Retry-After` 收口到 `RuntimeErrorCode`；running Session 未命中本机 active execution 时显式返回 `503 SESSION_EXECUTION_UNAVAILABLE`，不把进程归属问题误报为通用 500 |
 | 架构变更 | 浏览器/UI 到 mate-service、mate-service 到 CampusClaw 两跳目标传输统一为 HTTP+SSE；删除连接首帧、Frame RPC、连接 generation、close code 和 AsyncAPI 目标契约 |
 | 架构变更 | mate-service 终止公共 HTTP/SSE 并以服务身份调用内部 HTTP/SSE；两跳分别鉴权和投影，内部流不得字节透明转发 |
 | 待评审目标设计 | mate-service 公共 HTTP 的路径、请求/响应 VO、错误码和 SSE Event Schema 尚未确认；本设计只确认传输形态和责任边界 |
@@ -1104,12 +1107,14 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 集成约束。当前工作区不含对应内部制品元数据，因此实现通过
 `ResultBeanAdapter` 保留替换点，并把凭据真实性和动作授权明确放在上游
 mate-service。除公共 mate-service API 仍待逐项评审外，本文描述的 CampusClaw
-11 个 HTTP operation 已在 pi-mono-java 提交 `8691e880` 中实现。
+11 个 HTTP operation 已在 pi-mono-java 提交 `8691e880` 中实现，并由提交
+`972f98ca` 完成运行根目录、事件职责和多实例错误边界整改。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.34.0 | 2026-08-19 | 对齐实现提交 `972f98ca`：记录 `.campusclaw` 真实运行根目录、事件提交/查询/执行协调职责拆分；Steer、FollowUp、Abort 在 running Session 未命中本机 active execution 时新增 `503 SESSION_EXECUTION_UNAVAILABLE` 和 `Retry-After: 3` |
 | 1.33.0 | 2026-08-19 | 按用户确认在主 API 评审页的每个接口卡片中同时展示中文接口简称和可见的 `operationKey` 英文简称；保持机器标识与设计表、测试清单一致 |
 | 1.32.0 | 2026-08-19 | 按用户确认在主 API 评审页和设计文档中为 11 个 operation 增加统一中文接口简称；补充稳定的 `operationKey` 对照，并将提交用户消息接口统一命名为 `submitUserMessage` |
 | 1.31.0 | 2026-08-19 | 按用户确认将 HTTP V1 受控 Agent 目录改为 `agent/{agent_id}/.campusclaw/`；保留 `settings.json` / `SYSTEM.md` / `skills/` 文件契约，明确不隐式兼容 CLI 的异名文件 |
