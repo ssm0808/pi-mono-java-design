@@ -42,7 +42,8 @@
       <li>生产浏览器只调用 mate-service 公共 HTTP/SSE；mate-service 终止认证、执行授权、维护公共 Chat 到内部 Session 的映射并投影安全 Event。</li>
       <li>产品主界面只展示 Agent、Chat、消息、附件、模型、深度思考、工具活动和粗粒度执行状态。</li>
       <li><code>session_id</code>、ETag、Runtime 凭据、原始 JSON、SSE frame 和内部错误只允许进入内部诊断入口，且生产构建默认不可达。</li>
-      <li>Steer、FollowUp、Abort 在产品中分别命名为“立即调整方向”“完成后继续”“停止”；运行态默认“完成后继续”。</li>
+      <li>Steer、FollowUp、Abort 在产品中分别命名为“调整方向”“加入队列”“停止”。运行态 Composer 只显示当前跟进方式；desktop 默认“调整方向”，设置可改为“加入队列”，<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。</li>
+      <li>“调整方向”不宣称立即中断当前模型或工具；它在当前 Assistant Turn 与工具结束后的下一次模型调用前送达。“加入队列”只在当前执行本会自然结束时送达。</li>
       <li>工具 started/completed/result 合并为一个可展开活动卡；持久化 completed/result 替换瞬时 preview。</li>
       <li>断线后禁止重放副作用 POST；公共客户端重新读取持久化历史并去重。</li>
       <li>Agent 目录、Chat 列表与标题、附件上传、模型友好名称和 public SSE 均标为目标态公共契约，不宣称 Runtime 已实现。</li>

@@ -62,8 +62,10 @@ end note
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventType.java (RuntimeEventType).
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java (projectMessageStart, projectMessageUpdate, projectToolStart, projectToolEnd).
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java (toHistoryEvent, toSseData).
+' Product-reference evidence: ChatGPT.app webview/assets/app-initial-BCLYDefw.js (followUpQueueMode, K9s) and webview/assets/zh-CN-ByRVSIXt.js.
 ' Observed behavior: persistent entries and transient execution events share one request-scoped SSE response.
-' Design reason: the UI projects protocol events into stable conversation objects and presents execution controls in user language.
+' Observed Codex behavior: desktop follow-up mode defaults to steer; a modifier submits one message with the inverse mode.
+' Design reason: the UI projects protocol events into stable conversation objects and uses one current follow-up mode instead of two persistent choices.
 
 title Runtime events to product UI projection
 left to right direction
@@ -83,8 +85,8 @@ rectangle "Frontend projection" as Projection {
 }
 
 rectangle "User controls while running" as Controls {
-  component "Adjust direction now" as Adjust
-  component "Continue when complete" as Continue
+  component "Adjust direction\n(default)" as Adjust
+  component "Queue follow-up\n(configured or one-shot inverse)" as Continue
   component "Stop" as Stop
 }
 
@@ -107,5 +109,8 @@ note bottom of SessionState
 Network loss does not replay the POST.
 Reload persistent history and deduplicate
 by the public event identity.
+
+Adjust direction does not interrupt the
+current model call or tool execution.
 end note
 @enduml

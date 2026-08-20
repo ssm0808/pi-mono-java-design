@@ -2,14 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.0 |
-| 状态 | Proposed；三个关键界面状态和 Codex-inspired 视觉方向待确认 |
-| 界面评审状态 | `firstUse`、`idleConversation`、`runningConversation` 均待确认 |
+| 文档版本 | 0.3.0 |
+| 状态 | Proposed；执行中跟进交互已对齐 Codex desktop，三个关键界面状态和视觉方向待确认 |
+| 界面评审状态 | `firstUse`、`idleConversation` 待确认；`runningConversation` 跟进交互已确认、界面待确认 |
 | 主设计依据 | [`README.md`](README.md)，维护源码证据、目标差异、设计理由、状态与 Design Token |
 | 人类评审界面 | [`frontend-review.html`](frontend-review.html)，集中展示低保真、高保真和待确认项 |
 | 图源 | [`diagram.puml`](diagram.puml)，生成两张架构 SVG |
-| HTTP 设计风格基线 | 当前工作区 `chat-http-v1-design.md` 1.37.0 与 `chat-http-v1-review.html` 1.37.0；设计仓 `246cfd035103a1720fd6446554559f0247cc5c84` |
+| HTTP 设计风格基线 | 当前工作区 `chat-http-v1-design.md` 1.37.0 与 `chat-http-v1-review.html` 1.37.0；设计仓 `a012462527c1c25f912cb94113f28ed7d96d2761` |
 | Codex 视觉证据 | 本机 `ChatGPT.app` 26.814.41407（build 6720）中的 light-theme CSS Token；`app.asar` SHA-256 `8fba32f8baa6d984b0f0f4149d3da46221e3adb3b52836f85fe65e31e655a8c0` |
+| Codex 跟进交互证据 | 同一安装包 `webview/assets/app-initial-BCLYDefw.js` 的 `followUpQueueMode`、`K9s()`、submit action，以及 `webview/assets/zh-CN-ByRVSIXt.js` 的 Composer 文案 |
 | pi-mono-java 前端源码基线 | `origin/main@3a6358bc9dd5837cdf5ac866fc0761298372510a` |
 | Postman 核对 | 2026-08-20；只读核对 `Agent Runtime` collection 及真实 SSE 响应 |
 | 更新日期 | 2026-08-20 |
@@ -23,8 +24,9 @@ Agent 工作台。主界面只暴露用户能够理解并需要决策的概念�
 
 本轮提出一个桌面优先的单工作区方案：左侧会话导航、中央对话、顶部 Session 能力、
 底部 Composer。工具生命周期合并为对话内活动卡；运行中 `Steer`、`FollowUp`、`Abort`
-分别产品化为“立即调整方向”“完成后继续”“停止”。现有调试能力可以保留，但只能作为
-内部构建中的开发者诊断入口，不能继续充当产品首页。
+分别产品化为“调整方向”“加入队列”“停止”。Composer 像 Codex desktop 一样只呈现当前
+跟进模式，默认“调整方向”，而不是同时展示两个常驻选择。现有调试能力可以保留，但只能
+作为内部构建中的开发者诊断入口，不能继续充当产品首页。
 
 视觉采用 Codex-inspired 而非品牌复制：以黑白中性层级、原生工具感、紧凑活动表达和
 少量状态色为主，保留 CampusClaw 自有名称与图形，不使用 OpenAI/Codex 商标或标志。
@@ -64,6 +66,8 @@ Agent 工作台。主界面只暴露用户能够理解并需要决策的概念�
 | `RuntimeEntryCodec.java:94-107` | SSE data 与 GET history 的持久化事件投影共享 Entry 数据。 |
 | Postman `Agent Runtime` collection | Session、Configuration、Events、Control 四组请求与源码 11 个 operation 一致；真实 `POST /events` 响应按 frame 展示大量 delta，证明原始事件视图适合诊断，不适合终端用户阅读。 |
 | 本机 `ChatGPT.app` 26.814.41407 的 `app.asar` light-theme Token | 可观察到 `gray-0/50/75/100/500/750/900`、近黑 primary solid、5%/10% alpha border、灰色 user message background、green success 与 blue focus/link；这是 Codex-inspired 视觉证据，不是公开品牌规范。 |
+| 同一 `app.asar` 的 `webview/assets/app-initial-BCLYDefw.js`：`followUpQueueMode`、`K9s()`、`composer.submitButtonTooltip.*` 与 submit telemetry | Codex desktop 的跟进模式取值为 `steer` / `queue`，desktop 默认 `steer`；`Cmd/Ctrl+Shift+Enter` 对单条消息执行相反模式；已排队消息支持送入当前运行、编辑、删除、重试与恢复。历史 `interrupt` 配置会归一为 `steer`。 |
+| 同一 `app.asar` 的 `webview/assets/zh-CN-ByRVSIXt.js` | 产品文案使用“调整方向”“加入队列”“停止”；“调整方向”的说明是提交但不中断正在运行的模型，而不是立即中止当前模型或工具。 |
 | [OpenAI 官方 Codex use cases](https://developers.openai.com/codex/use-cases) | 官方将 Codex 表述为理解代码、构建/测试、评审并交付任务的工作界面；官方未公开可复制的 Codex Design Token，因此具体色值以本机可观察资源和本设计决策为依据。 |
 
 ### 3.2 已确认契约约束
@@ -83,7 +87,8 @@ Agent 工作台。主界面只暴露用户能够理解并需要决策的概念�
 |---|---|---|
 | 产品主界面不再直接调用内部 Runtime V1 | 架构变化 | 浏览器需要稳定的公共 Chat/Agent 资源，而不是内部 Session 标识和凭据。 |
 | 隐藏凭据、ETag、原始 SSE 与内部错误 | 安全加固 | 降低凭据暴露、内部实现泄漏和错误信息越界风险。 |
-| 将 Steer/FollowUp/Abort 改为用户语言 | 产品约束 | 用户决策是“现在改变方向”“完成后继续”“停止”，不是选择内部 queue operation。 |
+| 将 Steer/FollowUp/Abort 改为用户语言 | 产品约束 | 用户决策是“调整方向”“加入队列”“停止”，不是选择内部 operation；命名与 Codex desktop 对齐。 |
+| 运行中只显示当前跟进模式，默认 Steer | 产品约束 | Codex desktop 的 Composer 以一个可配置默认行为和单次反转快捷键工作；两个常驻模式会增加不必要决策并偏离参照实现。 |
 | 将工具事件合并为活动卡 | 产品约束 | 保留执行透明度，同时避免 started/completed/result 三段协议噪音。 |
 | 保留独立开发者诊断入口 | 架构变化 | 保留接口联调效率，但与面向用户的路由、权限和构建产物隔离。 |
 | 采用 Codex-inspired 而非复制 Codex 品牌 | 产品约束 | 复用工具型工作台的层级和密度，不使用 OpenAI/Codex 商标，也不声称存在官方公开 Token。 |
@@ -129,14 +134,14 @@ Agent 工作台。主界面只暴露用户能够理解并需要决策的概念�
 |---|---|---|---|---|
 | 首次进入 | `firstUse` | 待确认 | 低保真评审板 | Agent 目录和公共 Chat 创建属于 mate-service 目标态 |
 | 常规对话 | `idleConversation` | 待确认 | 低保真 + 高保真常规态 | 复用已确认 Session/Event 能力，经公共 bridge 投影 |
-| 执行中 | `runningConversation` | 待确认 | 低保真 + 高保真运行态 | FollowUp、Steer、Abort 产品化，不暴露内部 operation 名称 |
+| 执行中 | `runningConversation` | 跟进交互已确认；界面待确认 | 低保真 + 高保真运行态 | FollowUp、Steer、Abort 产品化，不暴露内部 operation 名称 |
 
 | 区域 | 主要内容 | 用户动作 | 默认隐藏内容 |
 |---|---|---|---|
 | 左侧导航 | 新建会话、最近会话、Agent 中心、设置 | 创建、切换、搜索会话 | `session_id`、接口地址 |
 | 顶部栏 | Agent 名称、自动保存、模型、深度思考、粗粒度状态 | 切换 idle Session 的模型/思考；运行时停止 | ETag、资源版本、Provider 凭据 |
 | 对话画布 | User/Assistant turn、附件、工具活动卡、错误恢复提示 | 阅读、展开工具详情、复制结果 | SSE frame、瞬时 Entry ID |
-| Composer | 附件、输入、发送；运行时控制模式 | 发送新消息、立即调整方向、完成后继续 | operation path、内部请求体 |
+| Composer | 附件、输入、发送；运行时当前跟进模式 | 发送新消息、调整方向、加入队列 | operation path、内部请求体 |
 | 开发者诊断 | 请求摘要、原始事件、内部标识 | 复制调试信息 | 仅内部构建和授权角色可见 |
 
 ### 6.1 低保真设计
@@ -157,10 +162,11 @@ Agent 工作台。主界面只暴露用户能够理解并需要决策的概念�
 
 ### 6.3 高保真：执行中
 
-![CampusClaw 高保真执行中](high-fidelity-running-v3.png)
+![CampusClaw 高保真执行中](high-fidelity-running-v4.png)
 
-运行态只增加必要的进度、停止操作与 Composer 模式，不改变导航和会话身份。图中“立即
-调整方向”已由用户主动选中；产品默认应选“完成后继续”，减少无意改变当前执行方向的风险。
+运行态只增加必要的进度、停止操作与 Composer 跟进方式，不改变导航和会话身份。v4 移除
+两个常驻模式胶囊，默认动作显示为“调整方向”，并提示可用 `⌘/Ctrl+Shift+Enter` 将本条
+消息改为“加入队列”；这与 Codex desktop 的默认模式和单次反转行为一致。
 
 ## 7. 关键状态与交互
 
@@ -184,11 +190,29 @@ Chat 标题或用户会话列表接口。
 ### 7.3 Running 对话
 
 - 顶部状态改为“执行中”，显示“停止”。
-- Composer 展示两个互斥模式：“完成后继续”（默认，映射 FollowUp）与“立即调整方向”
-  （显式选择，映射 Steer）。
-- 成功接受控制消息后显示“已加入本次执行”，不虚构 Entry ID 或已持久化状态。
+- Composer 只显示当前跟进处理方式，不同时展示两个互斥胶囊。desktop 默认“调整方向”，
+  设置中的“跟进处理方式”可改为“加入队列”。
+- `Enter` 按当前默认方式提交；`Cmd/Ctrl+Shift+Enter` 只对本条消息使用相反方式，不修改设置。
+- “调整方向”映射内部 Steer：服务端接受后，不中断当前正在进行的模型调用或工具；它在
+  当前 Assistant Turn 及其工具结束后、下一次模型调用前优先送达。因此禁止使用“立即调整”
+  或会让用户误解为硬中断的文案。
+- “加入队列”映射内部 FollowUp：只有当前执行本会自然结束时才送达，并在同一 active
+  execution 中继续。Steer 队列优先于 FollowUp 队列。
+- 成功接受后分别显示“已接受调整”或“已加入队列”，不虚构 Entry ID、送达时间或已经
+  持久化；HTTP `202` 目前只返回 `session_id` 与 `accepted_at`。
+- 有排队消息时，在 Composer 上方显示紧凑队列列表，可编辑、删除、重试，且允许将一条
+  排队消息“调整方向”送入当前运行。公共 bridge 提供稳定控制项 ID 与查询能力前，刷新后
+  不承诺还原未送达队列，也不把本地 optimistic key 伪装为 Runtime ID。
 - 队列已满时保留输入并给出可重试提示；响应结果不确定时不自动重发。
 - Stop 映射 Abort；成功后等待 Session 回到 idle，不把 Stop 解释为删除。
+
+| 产品动作 | 当前内部 HTTP operation | 接受结果 | 产品解释 |
+|---|---|---|---|
+| 调整方向 | `POST /sessions/{session_id}/steers` | `202` | 已接受，在下一次模型调用前优先送达；不表示当前模型或工具已被中断 |
+| 加入队列 | `POST /sessions/{session_id}/follow-ups` | `202` | 已入 FollowUp 队列，在执行本会自然结束时送达 |
+| 停止 | `POST /sessions/{session_id}/abort` | `204` | 请求中止 active execution，并清空尚未送达的两类跟进 |
+
+这些路径只用于 bridge/adapter 对齐当前 HTTP 设计，不进入产品文案或浏览器可见诊断信息。
 
 ### 7.4 断线与恢复
 
@@ -238,7 +262,7 @@ Chat 标题或用户会话列表接口。
 | `--text-secondary` | `#5D5D5D` | 次要信息，对应 `gray-500` |
 | `--border-subtle` | `rgba(13,13,13,.05)` | 分隔线、低强调边界 |
 | `--border-default` | `rgba(13,13,13,.10)` | Composer 和活动卡边界 |
-| `--action-primary` | `#181818` | 新建、发送、加入执行，对应 `gray-900` |
+| `--action-primary` | `#181818` | 新建、发送、调整方向或加入队列，对应 `gray-900` |
 | `--action-primary-hover` | `#303030` | 主动作 hover，对应 `gray-700` |
 | `--status-running` | `#00A240` | 执行中状态点和小面积进度，对应 `green-500` |
 | `--status-success` | `#008635` | 已完成，对应 `green-600` |
@@ -255,7 +279,8 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 
 - 正文与交互文字至少满足 WCAG 2.2 AA；状态不能只靠颜色表达。
 - 所有图标按钮具有可读名称；主要命中区至少 44 × 44 CSS px。
-- `Enter` 发送、`Shift+Enter` 换行；运行中发送前明确显示当前控制模式。
+- `Enter` 按当前跟进方式发送，`Shift+Enter` 换行；运行中通过动作名称明确当前方式。
+- `Cmd/Ctrl+Shift+Enter` 对单条运行中消息临时反转“调整方向”与“加入队列”，不改变默认设置。
 - Tool Activity 使用可聚焦的 disclosure；展开状态通过 `aria-expanded` 表达。
 - 流式文本更新使用低打扰 live region，避免每个 token 都被读屏播报。
 - `prefers-reduced-motion` 下取消 spinner 旋转，保留静态状态文本。
@@ -280,6 +305,7 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 | 模型友好名称与能力说明 | Runtime Models 只返回 `model_id:string[]` | 模型目录 |
 | 浏览器安全 Event Schema | 内部 SSE 不能字节透明转发 | mate-service event projector |
 | 浏览器认证、权限和审计 | Runtime 只做内部 Header 形状校验 | mate-service / 网关 |
+| 可恢复的排队项 ID、列表与队列管理 | Steer/FollowUp 的 `202` 无控制项 ID，Runtime 无公开队列查询/修改接口 | mate-service bridge + Runtime 目标契约 |
 
 因此，高保真稿是已确认 Runtime 能力上的产品体验目标，不应表述为现有后端已经提供了
 全部页面数据。公共 bridge 契约完成前，只能使用 mock adapter 或内部开发环境验证界面。
@@ -291,7 +317,7 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 - `409 SESSION_NOT_RUNNING`：刷新 Session；允许用户改为新的普通消息。
 - `412 SESSION_VERSION_MISMATCH`：刷新模型/思考状态，再让用户确认是否继续修改。
 - `422` 能力错误：在具体控件旁展示；保留原 Session 配置。
-- `429 CONTROL_QUEUE_FULL`：保留 Composer 内容，提示等待或停止。
+- `429 CONTROL_QUEUE_FULL`：保留 Composer 内容，提示等待、切换跟进方式或停止。
 - `503`：读取 `Retry-After`，显示可重试状态；不要泄漏执行实例归属信息。
 - Tool error：活动卡默认展开；提供“复制诊断摘要”，不直接展示原始私有 payload。
 - 长会话：历史虚拟化；分页向上加载；持久化 turn 与 streaming turn 使用稳定 key。
@@ -315,7 +341,8 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 - 视觉回归：1440、1280、1024、768 四个宽度。
 - 状态测试：first use、idle、running、aborted、stream error、offline recovery。
 - Event projector 测试：delta 合并、completed 替换、tool result 合并、重复 Entry 去重。
-- 控制测试：running 默认 FollowUp、显式 Steer、Abort、队列满、响应不确定不重试。
+- 控制测试：desktop running 默认 Steer、设置切换 Queue、单条快捷键反转、Abort、Steer 优先、
+  队列满、响应不确定不重试、刷新后不虚构未送达队列。
 - 配置测试：idle 才能改模型/思考、ETag 冲突刷新、模型切换关闭不支持的 thinking。
 - 安全测试：生产 DOM、网络日志和错误 UI 不出现内部凭据、`session_id`、ETag 或原始 SSE。
 - 可访问性：键盘全流程、焦点顺序、读屏 streaming、色彩对比、reduced motion。
@@ -327,16 +354,16 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 - Markdown 不包含 Mermaid；所有图片和 PlantUML 行锚点存在。
 - `frontend-review.html` 可独立打开，三个 `screenKey`、版本、评审状态和图片均可见。
 - 低保真 HTML 可独立打开，三个状态均在首屏评审板中可见。
-- 两张 v3 高保真 PNG 可解码，尺寸一致，且符合 Codex-inspired 黑白中性体系。
+- 常规态 v3 与运行态 v4 高保真 PNG 可解码，尺寸一致，且符合 Codex-inspired 黑白中性体系。
 - `git diff --check` 通过。
 
 ## 16. 高保真生成说明
 
-两张 v3 视觉稿使用内置 imagegen 的 `ui-mockup` 编辑路径生成：以此前高保真稿为布局
-与内容参考，只替换视觉系统；运行态同时以 v3 常规态为风格参考。最终约束重点是：
+常规态 v3 与运行态 v4 使用内置 imagegen 的 `ui-mockup` 编辑路径生成：以此前高保真稿为
+布局与内容参考；运行态 v4 在 v3 基础上只改 Composer 跟进交互。最终约束重点是：
 完整产品视口、无右侧设置栏、隐藏内部协议字段、对话内工具卡、Codex-inspired 黑白
-中性表面、近黑主动作、少量绿色状态与蓝色焦点；运行态只改变状态、进度和 Composer
-控制。实际实现以本设计文档的字段、Token 与交互规则为准。
+中性表面、近黑主动作、少量绿色状态与蓝色焦点；运行态采用一个当前模式、可配置默认值
+和单次反转快捷键。实际实现以本设计文档的字段、Token 与交互规则为准。
 
 [查看两次生成使用的完整 Prompt](imagegen-prompts.md)
 
@@ -344,5 +371,6 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.3.0 | 2026-08-20 | 对照本机 Codex desktop 实现，将运行中跟进改为单一当前模式：desktop 默认“调整方向”，可配置“加入队列”，`Cmd/Ctrl+Shift+Enter` 单次反转；明确 Steer 不硬中断当前模型/工具、队列 UI 与现有 HTTP 控制项身份缺口；更新低保真、运行态 v4、评审页、ADR 与图。 |
 | 0.2.0 | 2026-08-20 | 对齐 Runtime HTTP 1.37.0 的属性表、权威顺序、稳定评审键、证据分类和 HTML 评审风格；新增 `frontend-review.html`；依据本机 Codex/ChatGPT 应用可观察 Token 将视觉改为 Codex-inspired 黑白中性体系，并生成常规态与运行态 v3 高保真稿。 |
 | 0.1.0 | 2026-08-20 | 基于现有 Vue 调试台、Runtime V1 源码、精确契约和 Postman 实测，提出低保真三状态、高保真常规/运行态、产品边界和公共契约缺口。 |

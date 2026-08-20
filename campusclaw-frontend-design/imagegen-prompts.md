@@ -4,13 +4,16 @@
 |---|---|
 | 生成方式 | Codex 内置 imagegen |
 | 用例分类 | `ui-mockup` |
-| 最终方向 | v3，Codex-inspired light theme |
+| 最终方向 | 常规态 v3；执行中 v4，Codex-aligned follow-up composer |
 | 视觉证据 | 本机 `ChatGPT.app` 26.814.41407 light-theme Token；非公开品牌规范 |
 | 日期 | 2026-08-20 |
 
 v1 暖色稿和 v2 钴蓝稿保留为过程制品，不再被主设计文档引用。v3 只借鉴 Codex 的
 中性层级、工具型工作台密度和状态表达，保留 CampusClaw 品牌，不复制 OpenAI/Codex
 商标、图形或未公开资产。
+
+执行中 v4 继续使用同一视觉系统，只更新跟进交互：移除两个常驻模式胶囊，改为一个当前
+模式“调整方向”，并给出将本条消息“加入队列”的快捷键提示。
 
 ## 常规对话 v3
 
@@ -63,3 +66,28 @@ Constraints: no OpenAI logo, no Codex wordmark, no orange/coral/peach/sand/beige
 ```
 
 输出：`high-fidelity-running-v3.png`
+
+## 执行中 v4
+
+编辑目标：`high-fidelity-running-v3.png`。
+
+```text
+Use case: ui-mockup
+Asset type: final Codex-aligned execution-in-progress desktop web application mockup for CampusClaw
+Input images: Image 1 is the authoritative edit target.
+Primary request: Preserve the entire existing screen exactly, but update only the running composer controls to match Codex desktop follow-up behavior.
+Preserve exactly: the full 16:10 viewport, sidebar, top bar, CampusClaw identity, all session names, user message, running status, stop control, progress card, three task rows and states, spacing, monochrome visual system, green status accents, typography, and all content outside the bottom composer.
+Required composer edit:
+- Remove the two persistent mode chips labeled "立即调整方向" and "完成后继续".
+- Add one compact neutral current-mode selector labeled exactly "调整方向" with a small downward chevron. It should feel like a native Codex-style control, not a segmented toggle.
+- Add a quiet shortcut hint next to it reading exactly "⌘⇧↵ 本条加入队列".
+- Keep the placeholder exactly "补充新的要求…".
+- Change the near-black primary action button label to exactly "调整方向".
+- Keep the attachment icon and generous composer input area.
+Interaction communicated by the visual: desktop default is Adjust direction; Command+Shift+Enter queues only this message. Do not show both modes as simultaneous choices and do not suggest that Adjust direction interrupts the current tool.
+Visual system: main #FFFFFF, shell #F9F9F9/#F3F3F3, text #282828/#5D5D5D, subtle 1px neutral borders, near-black #181818 primary action, green #00A240/#008635 only for running/completed state, blue only for tiny focus or link affordances.
+Style/medium: realistic shippable native-feeling Agent workbench, calm, crisp Chinese typography, implementation-ready controls.
+Constraints: no OpenAI logo, no Codex wordmark, no orange/coral/peach/sand/beige, no bright blue primary controls, no gradients, glassmorphism, neon, charts, right inspector, device frame, watermark, extra logos, or invented text. Do not crop any application edge. Do not alter anything outside the composer.
+```
+
+输出：`high-fidelity-running-v4.png`

@@ -186,7 +186,7 @@
       <header class="topbar">
         <div class="row">
           <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">0.2.0</span>
+          <span class="tag">0.3.0</span>
           <span class="tag">Product · 待确认</span>
         </div>
         <code class="base">HTTP V1 1.37.0 aligned · Codex-inspired</code>
@@ -253,16 +253,16 @@
           <strong>执行中控制</strong>
           <span class="screen-name">执行中</span>
           <code class="screen-key">runningConversation</code>
-          <span class="muted">待确认</span>
+          <span class="muted">跟进交互已确认 · 界面待确认</span>
         </header>
         <div class="screen-grid">
           <figure>
-            <a href="high-fidelity-running-v3.png"><img src="high-fidelity-running-v3.png" alt="CampusClaw Codex-inspired 执行中高保真稿"></a>
-            <figcaption>v3：保持同一产品壳，只增加 Agent 活动、停止和 Composer 控制模式；绿色同时配合 spinner/check 与状态文字。</figcaption>
+            <a href="high-fidelity-running-v4.png"><img src="high-fidelity-running-v4.png" alt="CampusClaw Codex-inspired 执行中高保真稿"></a>
+            <figcaption>v4：跟随 Codex desktop 使用一个当前跟进方式；默认“调整方向”，快捷键可将本条消息“加入队列”。</figcaption>
           </figure>
           <div class="screen-detail">
-            <section class="section"><h3>作用</h3><p class="description">让用户看懂 Agent 正在做什么，并通过“立即调整方向”“完成后继续”“停止”控制唯一 active execution。</p></section>
-            <section class="section"><h3>主要评审点</h3><ul class="review-points"><li>默认模式是否应为“完成后继续”。</li><li>绿色运行点与完成 check 的区分是否清晰。</li><li>停止是否保持小型轮廓按钮，避免与主动作竞争。</li></ul></section>
+            <section class="section"><h3>作用</h3><p class="description">让用户看懂 Agent 正在做什么，并通过“调整方向”“加入队列”“停止”控制唯一 active execution。</p></section>
+            <section class="section"><h3>主要评审点</h3><ul class="review-points"><li>当前跟进方式是否在发送前足够清楚，且无需两个常驻胶囊。</li><li>绿色运行点与完成 check 的区分是否清晰。</li><li>停止是否保持小型轮廓按钮，避免与主动作竞争。</li></ul></section>
           </div>
         </div>
       </article>
@@ -284,7 +284,7 @@
         <h2>本轮确认项</h2>
         <details class="review-question" open><summary>1. 是否确认三状态信息架构？</summary><p><code>firstUse</code>、<code>idleConversation</code>、<code>runningConversation</code> 作为首版稳定评审和测试边界。</p></details>
         <details class="review-question" open><summary>2. 是否确认 Codex-inspired 视觉方向？</summary><p>黑白中性层级、近黑主动作、少量绿色状态、蓝色仅用于焦点/链接；保留 CampusClaw 自有品牌。</p></details>
-        <details class="review-question"><summary>3. 是否确认执行中控制命名？</summary><p>“立即调整方向”映射 Steer，“完成后继续”映射 FollowUp，“停止”映射 Abort，默认选择“完成后继续”。</p></details>
+        <details class="review-question" open><summary>3. 已确认：跟进交互与 Codex desktop 一致</summary><p>desktop 默认“调整方向”，设置可切换“加入队列”；<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。“调整方向”不会硬中断当前模型或工具。</p></details>
         <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="imagegen-prompts.md">查看 ImageGen Prompts</a></div>
       </section>
     </div>

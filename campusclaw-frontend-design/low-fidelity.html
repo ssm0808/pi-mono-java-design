@@ -95,9 +95,9 @@
     .step { flex: 1; height: 7px; border: 1px solid var(--line); background: var(--paper); }
     .step.done { background: var(--dark); }
     .control-composer { margin: 0 42px 22px; border: 2px solid var(--dark); border-radius: 10px; padding: 10px; }
-    .mode-row { display: flex; gap: 7px; margin-bottom: 8px; }
-    .mode { padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 10px; }
-    .mode.active { border-color: var(--dark); background: var(--soft); color: var(--ink); font-weight: 700; }
+    .follow-up-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); font-size: 10px; }
+    .follow-up-mode { padding: 6px 9px; border: 1px solid var(--dark); border-radius: 7px; background: var(--soft); color: var(--ink); font-weight: 700; }
+    .follow-up-shortcut { font-family: ui-monospace, monospace; }
     .control-input { display: flex; align-items: center; color: var(--muted); font-size: 12px; }
     .control-input button { margin-left: auto; border: 1px solid var(--dark); border-radius: 7px; background: var(--dark); color: #fff; padding: 7px 10px; }
     .screen-note { position: absolute; right: 12px; bottom: 10px; color: var(--muted); font: 10px ui-monospace, monospace; }
@@ -198,10 +198,10 @@
           </div>
         </div>
         <div class="control-composer">
-          <div class="mode-row"><span class="mode">立即调整方向</span><span class="mode active">完成后继续</span></div>
-          <div class="control-input">补充新的要求…<button>加入执行 ↑</button></div>
+          <div class="follow-up-row"><span class="follow-up-mode">调整方向⌄</span><span class="follow-up-shortcut">⌘⇧↵ 本条加入队列</span></div>
+          <div class="control-input">补充新的要求…<button>调整方向 ↑</button></div>
         </div>
-        <div class="screen-note">立即调整方向 → Steer · 完成后继续 → FollowUp · 停止 → Abort</div>
+        <div class="screen-note">默认：调整方向 → Steer · 单次反转：加入队列 → FollowUp · 停止 → Abort</div>
       </section>
     </div>
   </div>
