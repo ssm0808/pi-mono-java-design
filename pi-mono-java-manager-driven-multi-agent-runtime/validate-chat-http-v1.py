@@ -360,7 +360,7 @@ def main() -> int:
     validate_removed_contract()
     run(["git", "diff", "--check"], cwd=REPOSITORY_ROOT)
     mode = "full" if args.full else "fast"
-    print(f"HTML-first API contract validation passed: {len(models)} operations, {len(selected)} diagram topics ({mode})")
+    print(f"Source-first API contract validation passed: {len(models)} operations, {len(selected)} diagram topics ({mode})")
     return 0
 
 

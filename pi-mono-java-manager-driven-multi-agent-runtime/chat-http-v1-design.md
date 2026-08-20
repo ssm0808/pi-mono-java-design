@@ -189,7 +189,7 @@ mate-service 的 Chat 元数据；完成的 MessageEntry 由 GET Session Events 
 `If-None-Match/304` 分支。不存在和已删除的 Session 统一返回
 `404 SESSION_NOT_FOUND`，避免泄露历史状态。
 
-本小节和主维护 HTML 中的第二个接口已经用户确认。
+本小节和生成的 HTML 评审页中的第二个接口已经用户确认。
 
 #### 2.1.2 第三个已确认接口：删除 Session
 
@@ -241,7 +241,7 @@ owner 信息。`X-HW-ID` 不作为 Session owner；对不存在或已删除资�
 
 [PlantUML 源码：`http_delete_session`](diagrams/session-lifecycle/diagram.puml#L153)
 
-本小节和主维护 HTML 中的第三个接口已经用户确认。
+本小节和生成的 HTML 评审页中的第三个接口已经用户确认。
 
 ![HTTP Session 创建](diagrams/session-lifecycle/http_session_creation.svg)
 
@@ -980,8 +980,8 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 ## 8. 源码证据与差异分类
 
-本设计以 pi-mono 和 pi-mono-java 源码行为为实现证据；HTML 主维护契约与本文是
-当前 Runtime HTTP 规范来源。已删除的 WebSocket、AsyncAPI
+本设计以 pi-mono 和 pi-mono-java 源码行为为实现证据；共享 JSON 契约、生成的 HTML
+评审页与本文是当前 Runtime HTTP 规范来源。已删除的 WebSocket、AsyncAPI
 和 OpenAPI 只能作为 Git 历史，不能作为实现输入。本轮 HTTP 认证、事件和 Session
 配置设计核对 pi-mono-java 当前实现基线
 `9e7cc8952937a697fe2c16ff0de287b32bc4c891`。本轮资源模型比较还核对了
