@@ -13,6 +13,12 @@ ROOT = Path(__file__).resolve().parent
 HTML_PATH = ROOT / "chat-http-v1-review.html"
 DESIGN_PATH = ROOT / "chat-http-v1-design.md"
 EXPECTED_OPERATION_COUNT = 11
+EXPECTED_AGENT_ID_PATTERN = "^agent-[0-9a-fA-F]{32}$"
+EXPECTED_TYPED_ID_PATTERNS = {
+    "agent": EXPECTED_AGENT_ID_PATTERN,
+    "tool": "^tool-[0-9a-fA-F]{32}$",
+    "skill": "^skill-[0-9a-fA-F]{32}$",
+}
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agent_id}/sessions"),
     ("GET", "/sessions/{session_id}"),
@@ -109,6 +115,8 @@ def validate_html():
     require(re.search(r"content:\s*attr\(data-label\)", html) is not None,
             "Responsive labeled table rows are missing")
     require("traceparent" not in html, "Forbidden traceparent found in the HTML contract")
+    require(re.search(r"agent_[0-9A-Za-z]{24}", html) is None,
+            "Legacy Agent ID example found in the HTML contract")
     return models
 
 
@@ -141,7 +149,22 @@ def response_codes(operation):
     return codes
 
 
+def values_for_key(value, key):
+    if isinstance(value, dict):
+        for current_key, current_value in value.items():
+            if current_key == key:
+                yield current_value
+            yield from values_for_key(current_value, key)
+    elif isinstance(value, list):
+        for item in value:
+            yield from values_for_key(item, key)
+
+
 def validate_response_contract(key, operation):
+    for agent_id in values_for_key(operation.get("responses", []), "agent_id"):
+        require(isinstance(agent_id, str)
+                and re.fullmatch(EXPECTED_AGENT_ID_PATTERN, agent_id) is not None,
+                f"Invalid Agent ID response example: {key}")
     require(all(response.get("status") != "403" for response in operation["responses"]),
             f"Service-local FORBIDDEN response is not implemented: {key}")
     for response in operation["responses"]:
@@ -151,7 +174,9 @@ def validate_response_contract(key, operation):
             if isinstance(body, dict):
                 require("result" not in body, f"Error response contains result: {key}")
     codes = response_codes(operation)
-    if key == ("DELETE", "/sessions/{session_id}"):
+    if key == ("POST", "/agents/{agent_id}/sessions"):
+        validate_create_session_contract(operation)
+    elif key == ("DELETE", "/sessions/{session_id}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
     elif key == ("POST", "/sessions/{session_id}/events"):
         require(("503", "RUNTIME_CAPACITY_EXCEEDED") in codes,
@@ -164,6 +189,21 @@ def validate_response_contract(key, operation):
     }:
         require(("429", "CONTROL_QUEUE_FULL") in codes,
                 f"Control operation is missing the bounded queue response: {key}")
+
+
+def validate_create_session_contract(operation):
+    agent_parameter = next(
+        (parameter for parameter in operation["parameters"] if parameter.get("name") == "agent_id"), None)
+    require(agent_parameter is not None, "Create Session is missing agent_id")
+    require(agent_parameter.get("schema") == EXPECTED_AGENT_ID_PATTERN,
+            "Create Session uses the wrong Agent ID pattern")
+    created = next((response for response in operation["responses"] if response.get("status") == "201"), None)
+    require(created is not None, "Create Session is missing the 201 response")
+    body = created.get("bodies", {}).get("en-US", {})
+    result = body.get("result", {})
+    require(result.get("thinking") is True, "Create Session must initialize thinking=true")
+    require(re.fullmatch(EXPECTED_AGENT_ID_PATTERN, result.get("agent_id", "")) is not None,
+            "Create Session response uses an invalid Agent ID example")
 
 
 def validate_executable_scripts(scripts):
@@ -187,6 +227,9 @@ def validate_plantuml_and_svg():
 
 
 def validate_markdown_links():
+    design = DESIGN_PATH.read_text()
+    for resource_type, pattern in EXPECTED_TYPED_ID_PATTERNS.items():
+        require(pattern in design, f"Design is missing the {resource_type} ID rule")
     for markdown_path in ROOT.rglob("*.md"):
         content = markdown_path.read_text()
         require("```mermaid" not in content, f"Mermaid is forbidden: {markdown_path.relative_to(ROOT)}")

@@ -2,18 +2,19 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.34.0 |
-| 状态 | 十一个接口已实现并通过真实进程与 openGauss 验证 |
+| 文档版本 | 1.35.0 |
+| 状态 | 十一个接口已实现；Agent ID 与 Session 初始 thinking 的 1.35.0 目标契约待实现 |
 | 接口评审状态 | 十一个 operation 均已确认 |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
 | 机器契约 | 不维护；过渡期 OpenAPI 已于 2026-08-18 明确废弃并删除 |
 | 端到端传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均为 HTTP；执行响应使用请求范围内 SSE |
+| 设计仓分析基线 | `ef2141e0b096e7c792afe4f4f8cd58fbd1a8a331` |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 设计分析基线 | `195746614096312d4e93afb029d387837db78e0b` |
-| pi-mono-java 实现基线 | `972f98cadde4273d5dcf51ddd19c3218d0a3d8a7` |
+| pi-mono-java 实现基线 | `9e7cc8952937a697fe2c16ff0de287b32bc4c891` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | Anthropic Managed Agents 文档核对 | 2026-08-17；`managed-agents-2026-04-01` beta |
-| 更新日期 | 2026-08-19 |
+| 更新日期 | 2026-08-20 |
 
 ## 1. 结论
 
@@ -60,6 +61,14 @@ HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session�
 `PUT /sessions/{session_id}/model`；删除后的 `session_id`
 永久禁止复用。
 
+`agent_id` 与 mate-service/Java 中的 `agentId` 是同一个逻辑标识，固定符合
+`^agent-[0-9a-fA-F]{32}$`。同一类型化 ID 约定还覆盖
+`toolId` / `tool_id` 的 `^tool-[0-9a-fA-F]{32}$` 以及
+`skillId` / `skill_id` 的 `^skill-[0-9a-fA-F]{32}$`。类型前缀为小写，
+前缀与 UUID 之间只有一个 `-`，32 位十六进制 UUID 载荷不保留
+内部连字符。调用方和 Runtime 均不得构造下划线前缀的旧 ID 别名。
+本次不改变 `model_id`、`session_id` 或 `file_id` 的现有格式。
+
 该接口支持两套公司凭据，HTML 主契约通过两个认证选项明确展示每种模式中
 必须同时满足的 Header。JWT 是文档、交互示例和新客户端的默认选择；
 APPKEY 是明确公开的兼容契约，
@@ -80,7 +89,8 @@ APPKEY 是明确公开的兼容契约，
 创建成功前，Runtime 必须完成以下初始化：
 
 1. 通过统一认证适配层完成 Header 形状校验并生成一个不可变
-   `CallerAuthContext`，再验证 PATH 中 `agent_id` 的资源 ID 格式；
+   `CallerAuthContext`，再按 `^agent-[0-9a-fA-F]{32}$` 验证 PATH 中
+   `agent_id`；
 2. 在受控根目录中解析 `agent/{agent_id}/.campusclaw/`，拒绝路径或符号链接越界；
 3. 读取 `agent/{agent_id}/.campusclaw/settings.json` 的 `defaultModel` 与 `enabledModels`；
 4. 验证 `enabledModels` 非空、无重复且包含 `defaultModel`；
@@ -94,8 +104,9 @@ APPKEY 是明确公开的兼容契约，
    真实 `ResultBeanFactory.getFactory().normal(sessionResponseVO)`。
 
 初始化只组装运行对象，不调用大模型、不消耗 token，也不创建 MessageEntry；
-因此创建响应中 `state=idle`。`thinking=false` 表示默认不启用深度思考，
-不写入 Managed `settings.json`。任一步在 SessionRecord 提交前失败都不
+因此创建响应中 `state=idle`。目标契约固定以 `thinking=true` 启用后续
+用户消息的深度思考，且不把该默认值写入 Managed `settings.json`。
+任一步在 SessionRecord 提交前失败都不
 暴露 `session_id`，并丢弃未持久化的内存 Session。
 
 HTTP V1 对同一目录中的文件契约仍固定为 `settings.json`、`SYSTEM.md` 和
@@ -117,10 +128,10 @@ GetSession 评审而隐式扩张。第一个接口的完整成功响应为：
   "resMsg": "success",
   "result": {
     "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-    "agent_id": "agent_011CZkYqphY8vELVzwCUpqiQ",
+    "agent_id": "agent-550e8400e29b41d4a716446655440000",
     "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
     "state": "idle",
-    "thinking": false,
+    "thinking": true,
     "created_at": "2026-08-15T11:30:00Z"
   }
 }
@@ -163,7 +174,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
   "resMsg": "success",
   "result": {
     "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
-    "agent_id": "agent_01JY8VZY4CRQN4PJW8M94D1B2C",
+    "agent_id": "agent-550e8400e29b41d4a716446655440000",
     "model_id": "claude-sonnet-4-5",
     "state": "running",
     "thinking": true,
@@ -175,7 +186,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 
 ![GetSession 已确认响应](http_get_session_response.svg)
 
-[PlantUML 源码：`http_get_session_response`](diagram.puml#L613)
+[PlantUML 源码：`http_get_session_response`](diagram.puml#L626)
 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
@@ -251,13 +262,13 @@ owner 信息。`X-HW-ID` 不作为 Session owner；对不存在或已删除资�
 
 ![HTTP Session 逻辑删除](http_delete_session.svg)
 
-[PlantUML 源码：`http_delete_session`](diagram.puml#L684)
+[PlantUML 源码：`http_delete_session`](diagram.puml#L697)
 
 本小节和主维护 HTML 中的第三个接口已经用户确认。
 
 ![HTTP Session 创建](http_session_creation.svg)
 
-[PlantUML 源码：`http_session_creation`](diagram.puml#L415)
+[PlantUML 源码：`http_session_creation`](diagram.puml#L418)
 
 ### 2.2 消息与 Session Event
 
@@ -300,7 +311,7 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 
 ![Session Event、内部执行与 Entry 恢复边界](http_execution_resource_model.svg)
 
-[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L890)
+[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L903)
 
 #### 2.2.2 第四个已确认接口：提交用户事件并直接流式返回
 
@@ -435,7 +446,7 @@ ToolResult Entry 是权威事实，调用方按 `entry_id/entry_seq` 与本地�
 
 ![HTTP Session Event 直接流式返回](http_session_event_stream.svg)
 
-[PlantUML 源码：`http_session_event_stream`](diagram.puml#L770)
+[PlantUML 源码：`http_session_event_stream`](diagram.puml#L783)
 
 第四接口已经确认：冻结路径、`user.message` 请求、`message + file_ids`、同一 POST
 直接 SSE、无公共 `run_id`、无 `Idempotency-Key`、成功事件顺序与持久化语义，
@@ -575,7 +586,7 @@ CampusClaw 产品投影，不应表述为 pi 已有分页接口。Anthropic 的
 
 ![HTTP Session Events 开放分页](http_session_event_list.svg)
 
-[PlantUML 源码：`http_session_event_list`](diagram.puml#L943)
+[PlantUML 源码：`http_session_event_list`](diagram.puml#L956)
 
 ### 2.4 模型与 Session 配置
 
@@ -647,7 +658,7 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
   "resMsg": "success",
   "result": {
     "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
-    "agent_id": "agent_01JY8VZY4CRQN4PJW8M94D1B2C",
+    "agent_id": "agent-550e8400e29b41d4a716446655440000",
     "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS",
     "state": "idle",
     "thinking": false,
@@ -682,7 +693,7 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 
 ![HTTP Session 模型与深度思考配置](http_session_model_configuration.svg)
 
-[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1031)
+[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1044)
 
 ### 2.5 Session 执行控制（已确认）
 
@@ -768,7 +779,7 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 
 ![HTTP Session 执行控制](http_session_execution_controls.svg)
 
-[PlantUML 源码：`http_session_execution_controls`](diagram.puml#L98)
+[PlantUML 源码：`http_session_execution_controls`](diagram.puml#L101)
 
 ## 3. 两跳 HTTP+SSE 边界
 
@@ -970,7 +981,7 @@ Git。Controller 和 Service 不需要知道公司类的 FQCN；替换发生在�
 
 ![ResultBeanAdapter 公司内外 Bean 替换](http_result_bean_compatibility.svg)
 
-[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L486)
+[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L499)
 
 ### 6.3 错误与国际化实现
 
@@ -1011,6 +1022,9 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 - Runtime 对每个请求重新校验 Session、Agent 和 Model 资源状态，但不把凭据 ID
   当作 owner；动作权限由上游保证。
 - `agent_id`、`model_id` 和 `file_id` 均大小写敏感且不透明。
+- Agent、Tool 和 Skill 标识分别必须匹配 `^agent-[0-9a-fA-F]{32}$`、
+  `^tool-[0-9a-fA-F]{32}$` 和 `^skill-[0-9a-fA-F]{32}$`；不接受无前缀、
+  错误类型前缀、带内部连字符的 UUID 或下划线旧格式。
 - `POST /sessions/{session_id}/events` 已确认只接受 `user.message`、文本和文件 ID，
   不接受单次 `thinking` 覆盖，
   并禁止 URL、MIME、文件名、Base64、OBS Object Key、tenant/user 字段。
@@ -1021,15 +1035,15 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 ![HTTP 双认证适配](http_dual_authentication.svg)
 
-[PlantUML 源码：`http_dual_authentication`](diagram.puml#L546)
+[PlantUML 源码：`http_dual_authentication`](diagram.puml#L559)
 
 ## 8. 源码证据与差异分类
 
-本设计以 pi-mono 和 pi-mono-java 源码行为为实现证据，不再以已删除的
-HTML 主维护契约与本文是当前 Runtime HTTP 规范来源；已删除的 WebSocket、AsyncAPI
+本设计以 pi-mono 和 pi-mono-java 源码行为为实现证据；HTML 主维护契约与本文是
+当前 Runtime HTTP 规范来源。已删除的 WebSocket、AsyncAPI
 和 OpenAPI 只能作为 Git 历史，不能作为实现输入。本轮 HTTP 认证、事件和 Session
-配置设计核对 pi-mono-java 基线
-`195746614096312d4e93afb029d387837db78e0b`。本轮资源模型比较还核对了
+配置设计核对 pi-mono-java 当前实现基线
+`9e7cc8952937a697fe2c16ff0de287b32bc4c891`。本轮资源模型比较还核对了
 Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 `managed-agents-2026-04-01` beta 契约。
 
@@ -1071,6 +1085,8 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 已实现行为 | 同提交的 `MyBatisRuntimeSessionRepository` 与 `session_schema.sql`：Session、当前分支 Entry、严格 `entry_seq`、tombstone 和清理任务已在 openGauss 实现 |
 | 已实现行为 | 同提交的 `RuntimeRequestAuthenticator`：只校验双凭据 Header 形状；真实性和授权由上游 mate-service 完成，凭据 ID 不作为 Session owner |
 | 已实现行为 | pi-mono-java 实现提交 `972f98ca`：`FileAgentDirectoryResolver` 直接返回 `agent/{agent_id}/.campusclaw/` 真实运行根目录；`RuntimeEventService`、`RuntimeEventQueryService`、`RuntimeExecutionCoordinator` 分别承担事件提交、历史查询和执行协调 |
+| 当前实现差异 | pi-mono-java `9e7cc895` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/RuntimeApiConstants.java` 仍定义 `AGENT_ID_PATTERN = ^agent_[0-9A-Za-z]{24}$`；`RuntimeSessionService.newSession` 仍调用 `setThinking(false)` |
+| 当前实现差异 | 同基线 `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql` 的 `t_sessions.agent_id` 仍为 `VARCHAR(30)`，无法存储 38 字符的新 Agent ID；实现前必须迁移为至少 38 字符，本设计推荐与元数据存储统一为 `VARCHAR(64)` |
 | 架构改造 | 同提交将错误码、HTTP 状态、国际化 key 与 `Retry-After` 收口到 `RuntimeErrorCode`；running Session 未命中本机 active execution 时显式返回 `503 SESSION_EXECUTION_UNAVAILABLE`，不把进程归属问题误报为通用 500 |
 | 架构变更 | 浏览器/UI 到 mate-service、mate-service 到 CampusClaw 两跳目标传输统一为 HTTP+SSE；删除连接首帧、Frame RPC、连接 generation、close code 和 AsyncAPI 目标契约 |
 | 架构变更 | mate-service 终止公共 HTTP/SSE 并以服务身份调用内部 HTTP/SSE；两跳分别鉴权和投影，内部流不得字节透明转发 |
@@ -1084,6 +1100,8 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径 |
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
 | 产品约束 | Session `thinking` 是是否启用深度思考的 boolean；`false` 映射为 pi 的 `off`，`true` 使用模型和 Agent 的受管非 `off` 推理强度，不公开具体等级 |
+| 产品约束 | Agent、Tool、Skill ID 分别使用 `agent-`、`tool-`、`skill-` 加去连字符的 32 位十六进制 UUID；camelCase 与 snake_case 字段不得引入不同的值或旧格式别名 |
+| 产品约束 | Create Runtime Session 成功时必须返回并持久化 `thinking=true` |
 | 安全加固 | 双凭据二选一、拒绝混合凭据、逐请求 Header 形状校验、Session-scoped 模型查询、文件只传 ID、ResultBean 错误脱敏；真实性与动作授权明确由上游完成 |
 | 安全加固 | Session 模型列表通过 `string[]` 只暴露 `model_id`，不返回名称、供应商、能力、base URL、凭据状态、价格、token 上限或供应商请求配置；`thinking=true` 不代表允许披露原始思考过程 |
 | 架构改造 | 统一 `CallerAuthContext` 的双 Header 形状解析、CampusClaw 生成 Session ID、直接 Agent 目录解析、ResultBeanAdapter 替换点、ETag 并发控制、请求范围内 POST SSE、断线后执行继续、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
@@ -1108,12 +1126,15 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 `ResultBeanAdapter` 保留替换点，并把凭据真实性和动作授权明确放在上游
 mate-service。除公共 mate-service API 仍待逐项评审外，本文描述的 CampusClaw
 11 个 HTTP operation 已在 pi-mono-java 提交 `8691e880` 中实现，并由提交
-`972f98ca` 完成运行根目录、事件职责和多实例错误边界整改。
+`972f98ca` 完成运行根目录、事件职责和多实例错误边界整改。本版的类型化
+Agent/Tool/Skill ID 与 `thinking=true` 创建默认值是相对 `9e7cc895` 的目标契约，
+不得表述为当前 Java 已实现行为。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.35.0 | 2026-08-20 | 按用户决定将 Agent、Tool、Skill ID 固定为类型前缀加去连字符的 32 位十六进制 UUID；Create Runtime Session 成功时初始化 `thinking=true`；记录当前 Java 旧正则、`thinking=false` 和 `agent_id VARCHAR(30)` 实现差异 |
 | 1.34.0 | 2026-08-19 | 对齐实现提交 `972f98ca`：记录 `.campusclaw` 真实运行根目录、事件提交/查询/执行协调职责拆分；Steer、FollowUp、Abort 在 running Session 未命中本机 active execution 时新增 `503 SESSION_EXECUTION_UNAVAILABLE` 和 `Retry-After: 3` |
 | 1.33.0 | 2026-08-19 | 按用户确认在主 API 评审页的每个接口卡片中同时展示中文接口简称和可见的 `operationKey` 英文简称；保持机器标识与设计表、测试清单一致 |
 | 1.32.0 | 2026-08-19 | 按用户确认在主 API 评审页和设计文档中为 11 个 operation 增加统一中文接口简称；补充稳定的 `operationKey` 对照，并将提交用户消息接口统一命名为 `submitUserMessage` |

@@ -2,14 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.3.0 |
-| 状态 | CampusClaw 内部 11 个接口已实现；mate-service 公共接口待评审 |
+| 文档版本 | 2.5.0 |
+| 状态 | CampusClaw 内部 11 个接口已实现；资源 ID 和 Session 初始 thinking 的新契约待实现；mate-service 公共接口待评审 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
-| 设计仓分析基线 | `2b747808e93609a4fc71d919dbd72bcd56a6e502` |
+| 设计仓分析基线 | `ef2141e0b096e7c792afe4f4f8cd58fbd1a8a331` |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 设计分析基线 | `195746614096312d4e93afb029d387837db78e0b` |
-| pi-mono-java 实现基线 | `8691e8800f05f28afe22499050c29220ef5b7475` |
-| 更新日期 | 2026-08-18 |
+| pi-mono-java 实现基线 | `9e7cc8952937a697fe2c16ff0de287b32bc4c891` |
+| 更新日期 | 2026-08-20 |
 
 ## 1. 当前结论
 
@@ -34,7 +34,7 @@ SSE 在这里不是永久在线的 Session 订阅，也不是单独的第二条�
 
 ![mate-service 与 CampusClaw HTTP+SSE 责任边界](mate_agent_service_responsibility_boundary.svg)
 
-[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L210)
+[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L214)
 
 ## 2. 契约权威顺序
 
@@ -99,7 +99,7 @@ CampusClaw 不读取 `chat_id`、最终用户身份或公共 Chat 名称。它�
 
 | # | Method | Path | 响应形态 | 作用 |
 |---:|---|---|---|---|
-| 1 | `POST` | `/agents/{agent_id}/sessions` | `201` ResultBean | 创建并初始化 Session；默认模型由 Agent 配置选择 |
+| 1 | `POST` | `/agents/{agent_id}/sessions` | `201` ResultBean | 创建并初始化 Session；默认模型由 Agent 配置选择，`thinking=true` |
 | 2 | `GET` | `/sessions/{session_id}` | `200` ResultBean | 读取当前模型、是否深度思考和 `idle/running` 状态 |
 | 3 | `DELETE` | `/sessions/{session_id}` | `204` | 逻辑删除并安排 Runtime 数据清理，只保留最小 tombstone |
 | 4 | `POST` | `/sessions/{session_id}/events` | `200 text/event-stream` | 提交 `user.message` 并直接流式执行 |
@@ -179,6 +179,7 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 ## 6. Runtime 内部设计不变量
 
 - 一个 Session 绑定一个不可变 `agent_id`，允许切换 `model_id`；模型不是 Session 身份的一部分。
+- `agentId` / `agent_id`、`toolId` / `tool_id` 和 `skillId` / `skill_id` 共用类型化资源 ID 规则：小写类型前缀、一个 `-` 和去掉连字符的 32 位十六进制 UUID。
 - Session 名称属于 mate-service Chat 元数据，不存入 CampusClaw Runtime Session。
 - Session 粗粒度状态只有 `idle/running`；模型、工具或消息阶段通过实时事件表达。
 - `thinking` 是“是否启用深度思考”的 boolean，不是原始推理披露等级。
@@ -195,10 +196,21 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 元数据发布程序把 AGENT、SKILL 和 TOOL 的固定 revision 编译为受控 Agent
 运行目录。Runtime 不在请求期间临时拼接租户路径，也不接受调用方提供 cwd：
 
+| 逻辑字段 | 正则 | 示例 |
+|---|---|---|
+| `agentId` / `agent_id` | `^agent-[0-9a-fA-F]{32}$` | `agent-550e8400e29b41d4a716446655440000` |
+| `toolId` / `tool_id` | `^tool-[0-9a-fA-F]{32}$` | `tool-550e8400e29b41d4a716446655440002` |
+| `skillId` / `skill_id` | `^skill-[0-9a-fA-F]{32}$` | `skill-550e8400e29b41d4a716446655440001` |
+
+前缀必须与资源类型一致，UUID 载荷不得保留内部连字符，也不接受无前缀或
+下划线前缀的旧 ID。这一规则与 JSON/Java 的 camelCase 或 HTTP/存储的
+snake_case 命名无关；不引入别名转换。本次不改变 `model_id`、`session_id` 和
+`file_id` 的现有契约。
+
 ```text
-<agent-runtime-root>/
+agent/
 └── <agent-id>/
-    └── .campusagent/
+    └── .campusclaw/
         ├── settings.json
         ├── SYSTEM.md
         └── skills/
@@ -208,9 +220,12 @@ mate-service 不得字节透明转发内部流。它至少要保证：
                     └── tools.json
 ```
 
+HTTP V1 的当前目录契约固定为 `agent/{agent_id}/.campusclaw/`。
 `settings.json` 提供 `defaultModel` 和 `enabledModels`；Session 创建时校验目录边界、
 默认模型与 Model Manager 当前可用性。Runtime 直接读取这个受控目录，不再依赖独立
 Agent Runtime Template 仓库，也不在内存中缓存目录快照。
+这次只统一目录位置：HTTP 文件名仍为 `settings.json` / `SYSTEM.md` / `skills/`，
+不将 CLI 物化器的 `setting.json` / `systemPrompt.md` 隐式视为同一文件契约。
 
 ![元数据到 Runtime 目录映射](metadata_runtime_directory_mapping.svg)
 
@@ -234,7 +249,7 @@ Agent 绑定、工具状态、权限和输入 Schema。
 
 ![Tool Manager 渐进发现与执行](progressive_tool_discovery_execution.svg)
 
-[PlantUML 源码：`progressive_tool_discovery_execution`](diagram.puml#L272)
+[PlantUML 源码：`progressive_tool_discovery_execution`](diagram.puml#L276)
 
 ### 7.3 Model Manager 流式适配
 
@@ -246,7 +261,7 @@ base URL 或成本字段公开给 mate-service。
 
 ![Model Manager 流式调用](model_manager_streaming_flow.svg)
 
-[PlantUML 源码：`model_manager_streaming_flow`](diagram.puml#L350)
+[PlantUML 源码：`model_manager_streaming_flow`](diagram.puml#L354)
 
 ### 7.4 数据与附件边界
 
@@ -270,7 +285,9 @@ CampusClaw 只消费有序 `file_ids`，把它们编码为固定文本块；它�
 | 已实现 Java 行为 | `RuntimeSessionController`、`RuntimeEventController`、`RuntimeSessionConfigurationController` 与 `RuntimeSessionControlController` 实现 11 个 Spring MVC HTTP+SSE 接口 |
 | 已实现 Java 行为 | `RuntimeEventStream`、`RuntimeSseDispatcher` 和 `RuntimeSseEmitterSubscriber` 提供有界请求级 SSE；断线不 abort |
 | 已实现 Java 行为 | `MyBatisRuntimeSessionRepository` 使用 openGauss 保存 Session、当前分支 Entry、严格序号、tombstone 和清理任务 |
+| 当前 Java 差异 | `RuntimeApiConstants.AGENT_ID_PATTERN` 仍为 `^agent_[0-9A-Za-z]{24}$`，`RuntimeSessionService.newSession` 仍写入 `thinking=false`，`session_schema.sql` 的 `agent_id` 仍为 `VARCHAR(30)` |
 | 架构变更 | 两跳目标传输统一为 HTTP+SSE，删除连接首帧、Frame RPC、连接 generation、WebSocket close code 和 AsyncAPI |
+| 架构变更 | CampusClaw 目标契约改为 `agent-` / `tool-` / `skill-` 加 32 位十六进制 UUID；Session 创建成功时固定 `thinking=true`，实现需同步放宽 `t_sessions.agent_id` |
 | 产品约束 | 浏览器只识别 `chat_id`，CampusClaw 只识别 `session_id`；公共接口不泄露 Runtime 标识 |
 | 安全加固 | 每个 HTTP 请求独立认证；凭据只在认证 Adapter 中存在；SSE 事件经过 mate-service 安全投影 |
 
@@ -291,6 +308,8 @@ CampusClaw 只消费有序 `file_ids`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.5.0 | 2026-08-20 | 将 Agent、Tool、Skill ID 统一为类型前缀加去连字符的 32 位十六进制 UUID；Create Runtime Session 初始化 `thinking=true`；记录当前 Java 正则、默认值和列长度差异 |
+| 2.4.0 | 2026-08-19 | HTTP V1 受控 Agent 目录调整为 `agent/{agent_id}/.campusclaw/`；本次仅统一目录位置，保留已确认的 HTTP 文件契约 |
 | 2.3.0 | 2026-08-18 | 对齐实现提交 `8691e880`：内部 11 个接口标记已实现；删除改为 running 时 409；鉴权明确为上游真实性验证；文件 ID 改为固定提示块；移除 Agent Runtime Template 依赖 |
 | 2.2.0 | 2026-08-18 | 全仓清理 WebSocket、公开 Run 和重复历史专题；Runtime HTTP 契约同步到 1.29.0；并发治理统一为内部 ActiveExecution，模板专题统一为 exact revision；文件服务统一使用 file_id、ResultBean、lowerCamelCase 和公司双鉴权边界 |
 | 2.1.0 | 2026-08-18 | 用户明确批准废弃并删除过渡期 OpenAPI；契约权威收敛为 HTML 主维护文档与 Markdown 设计依据，禁止从历史 OpenAPI 恢复旧 Run 模型；增加仓库内 HTML-first 契约校验入口 |
