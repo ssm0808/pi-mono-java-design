@@ -2,15 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
-| 状态 | 目标设计，尚未在 `pi-mono-java` 落地 |
+| 文档版本 | 1.1.0 |
+| 状态 | 首版执行器与仓库 Skill 已落地到 `codex/campusclaw-tdd-agent`，当前实现契约漂移预期为红 |
 | 设计目标 | 基于已确认 HTTP 契约自动规划、拉起、执行和维护回归测试 |
-| HTTP 契约版本 | `1.33.0`，十一项 operation 均已确认 |
-| 设计仓分析基线 | `e6df5fc87e5a6ae9f09af64efcf76091939b7446` |
-| pi-mono-java 当前检出基线 | `195746614096312d4e93afb029d387837db78e0b`，`main`，存在用户未提交改动 |
-| pi-mono-java HTTP V1 实现分析基线 | `2e3962f408d81d03c00f533363ed1c09e455550f`，分支 `codex/campusclaw-http-v1` |
+| HTTP 契约版本 | `1.37.0`，十一项 operation 均已确认 |
+| 设计仓分析基线 | `8ab8eef47b2dc0d9e21ae0ca0bd7617f8a158a32`；运行时仍另记工作树状态与 SHA-256 |
+| 当前 HTML 契约 SHA-256 | `5c1f235bd04017390bf2a8fd603d176b5f9a3babc019e33cee192ce132672604` |
+| pi-mono-java 实现分析基线 | `1f801dbb82bdda30478e3354e685e3153b179a0c`，`origin/main` |
 | 初始机器用例目录 | [`test-case-catalog.json`](test-case-catalog.json) |
-| 更新日期 | 2026-08-19 |
+| 更新日期 | 2026-08-20 |
 
 ## 1. 结论
 
@@ -37,7 +37,7 @@
 测试 Agent 按以下顺序读取契约：
 
 1. [`chat-http-v1-review.html`](../pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-review.html)：
-   HTTP V1 的人类主维护契约，内嵌 11 个 `data-review-model` JSON；
+   HTTP V1 的人类主维护契约，在 `api-review-models` 中内嵌 11 个 operation model；
 2. [`chat-http-v1-design.md`](../pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md)：
    状态、并发、SSE、错误和恢复原因；
 3. 本目录的 [`test-case-catalog.json`](test-case-catalog.json)：
@@ -46,14 +46,15 @@
    契约。
 
 Runtime HTTP 接口当前不维护 OpenAPI。Agent 必须从 HTML 中的结构化 review model 提取
-operation，而不是从历史 Git 恢复已经废弃的 OpenAPI。提取结果必须固定契约版本、文件
-SHA-256 和 11 个 operation key，任何无法解析、重复或缺失都直接阻止测试开始。
+operation，而不是从历史 Git 恢复已经废弃的 OpenAPI。提取结果必须记录契约版本、文件
+SHA-256、设计提交、工作树状态和 11 个 operation key，任何无法解析、重复或缺失都直接
+阻止测试开始。设计工作树可处于未提交状态，以支持设计阶段 TDD；报告必须显式标记
+`sourceDirty=true`，不得把它表述成稳定发布基线。
 
 ### 2.2 代码基线差异
 
-当前 `/Users/z/pi-mono-java` 检出的 `main` 位于 `1957466140...`，仍包含旧
-`/api/*` RouterFunction 接口；已确认的 `/campusclaw-service/v1/*` 实现在仓库可读取的
-`2e3962f408...`。因此 Agent 每次运行必须显式接收不可变 `candidate_commit` 和
+当前 HTTP V1 的 11 个 Spring MVC operation 已存在于 `pi-mono-java` 基线
+`1f801dbb...`。Agent 每次运行仍必须显式接收不可变 `candidate_commit` 和
 `merge_base_commit`：
 
 - 不根据当前目录名猜分支；
@@ -86,12 +87,12 @@ Agent 应保留路由 tombstone 测试，防止大改动时把这些已废弃接
 
 ## 4. 已观察实现与测试现状
 
-以下均是 `pi-mono-java` 提交 `2e3962f408...` 的已观察行为。
+以下均是 `pi-mono-java` 提交 `1f801dbb...` 的已观察行为。
 
 | 观察项 | 源码证据 | 结论 |
 |---|---|---|
 | 11 个 HTTP operation | `RuntimeSessionController` 51-78、`RuntimeEventController` 58-86、`RuntimeSessionConfigurationController` 55-82、`RuntimeSessionControlController` 50-75 | 已使用 Spring MVC Controller 实现 |
-| 双认证形状 | `RuntimeRequestAuthenticator.authenticate` 31-58、`singleHeader` 65-75 | JWT/APPKEY 二选一，混合或重复 Header 拒绝 |
+| 调用上下文边界 | `RuntimeRequestAuthenticator.authenticate`、`RuntimeWebMvcConfiguration.addInterceptors` 27-30 | 当前 JWT/APPKEY 形状校验覆盖全部 V1 路径；1.37.0 目标全部移除 Runtime 本地认证 |
 | 错误与语言 | `RuntimeExceptionHandler` 42-93、`RuntimeRequestContext` 30-37 | 异常无 `result`，支持 `zh-CN/en-US`，部分错误带 `Retry-After` |
 | 请求严格性 | `UserEventRequestVO` 23-48、`ChangeModelRequestVO` 25-57、`ChangeThinkingRequestVO` 22-52、`ControlMessageRequestVO` 23-54 | 写请求拒绝未知字段；类型和长度由 Jackson/Bean Validation/Service 共同约束 |
 | Event 业务约束 | `RuntimeEventService.validate` 381-392、`parseLimit` 411-427 | message/file_ids 至少一个、文件 ID 唯一、分页范围 1..200 |
@@ -111,13 +112,16 @@ Agent 应保留路由 tombstone 测试，防止大改动时把这些已废弃接
 1. HTML 主契约没有自动投影为测试清单，新增/删除路由不会直接触发契约漂移失败。
 2. `*IT` 没有绑定 Failsafe；默认 `verify` 不运行真实数据库和跨进程用例。
 3. 真实进程 IT 依赖外部系统属性并允许 skip，CI 没有自动拉起 openGauss。
-4. 11 个 operation 的双认证、两种语言、错误码和严格字段矩阵没有统一参数化。
+4. 11 个 operation 的调用上下文透传、两种语言、错误码和严格字段矩阵没有统一参数化。
 5. 跨进程场景集中在一个长测试中；失败时定位成本高，也难按变更影响选择子场景。
 6. 没有“测试断言被削弱”“测试数量下降但无契约变更”“已废弃路由复活”的独立门禁。
 7. `modules/*` 与 `mate-campusclaw` 是同步镜像，当前缺少一次生成、分层复用和差异检查策略，
    容易重复耗时或漏测镜像装配。
 8. 没有对客户端断线后执行继续、流内错误、容量失败、数据库故障和进程重启形成统一的
    可复现证据包。
+9. 1.37.0 的类型化 Agent/Session ID、初始 `thinking=true`、无 Runtime 本地认证、受控 thinking
+   事件投影和 Submit 请求删除 `type` 尚未实现；首轮 L0 必须报告实现漂移，而不能因旧测试
+   全绿而通过。
 
 ## 5. 目标架构
 
@@ -154,9 +158,9 @@ Agent 的解释与建议进入报告，但不能覆盖失败退出码。
 
 ## 6. 用例目录模型
 
-[`test-case-catalog.json`](test-case-catalog.json) 是本设计提供的初始机器用例目录。
-它不是新的 HTTP 契约，而是主契约的测试投影。目标代码仓落地时建议将其放到
-`tests/http-agent/test-case-catalog.json`，由测试运行器和 CI 共同消费。
+[`test-case-catalog.json`](test-case-catalog.json) 是本设计提供的机器用例目录。
+它不是新的 HTTP 契约，而是主契约的测试投影，并持续留在本设计仓维护。代码仓执行器
+通过显式 `--design-repo` 只读消费本目录；不得在代码仓复制第二份目录形成双重权威。
 
 ### 6.1 单个用例字段
 
@@ -181,19 +185,17 @@ Agent 的解释与建议进入报告，但不能覆盖失败退出码。
 
 | 模板 | 展开范围 | 必要断言 |
 |---|---|---|
-| `AUTH_JWT_OK` | 11 个接口 | `X-HW-ID + Bearer` 被接受，凭据不进入响应/日志 |
-| `AUTH_APPKEY_OK` | 11 个接口 | `X-HW-ID + X-HW-APPKEY` 被接受 |
-| `AUTH_MISSING_OR_MALFORMED` | 11 个接口 | 缺失、不完整、空白、坏 Bearer、重复 Header 均为 `401 UNAUTHENTICATED` |
-| `AUTH_CONFLICT` | 11 个接口 | JWT 与 APPKEY 同时存在为 `401 AUTH_CREDENTIAL_CONFLICT`，不降级 |
+| `AUTH_*`（retired） | 不再展开 | 保留历史用例 ID，防止旧 Runtime 本地 `401` 契约被误认为仍 active |
+| `NO_BUSINESS_AUTH` | 全部 11 项 operation | JWT、APPKEY、两者共存、缺失或坏形状均不触发 Runtime 本地认证；Header 不进入响应/日志 |
 | `LOCALE_ZH_EN_FALLBACK` | 全部错误码 | `zh-CN`、`en-US` 和未知语言回退；`Content-Language` 与实际文本一致 |
 | `ERROR_ENVELOPE` | 全部非 SSE 错误 | 响应只有 `resCode/resMsg`，不得出现 `result` 或敏感信息 |
 | `SUCCESS_ENVELOPE` | 普通 JSON 成功 | 精确包含 `resCode="0"/resMsg="success"/result` |
 | `NO_BODY_204` | Delete、Abort | 空 Body，不使用 ResultBean |
 | `NO_RESULTBEAN_SSE` | POST Events | `text/event-stream`，frame 中不得出现顶层 ResultBean |
-| `IDENTIFIER_BOUNDARY` | agent/session/model ID | 最小、最大、非法首字符、非法字符、大小写敏感 |
+| `IDENTIFIER_BOUNDARY` | agent/session/model ID | 类型前缀 + 32 位十六进制、错前缀、内部连字符、长度、旧下划线格式和大小写 |
 
-认证模板的“成功”只表示请求通过认证边界；业务层可以由固定桩返回该 operation 的最窄成功
-结果。业务错误与认证错误分开，避免一个失败掩盖另一个边界。
+调用上下文模板只断言 Runtime 不根据 Header 组合、共存、形状或真实性产生本地认证结果；
+业务层可由固定桩返回该 operation 的最窄成功或业务错误。真实性与动作授权由上游负责。
 
 ## 7. 分层测试策略
 
@@ -217,11 +219,11 @@ Agent 的解释与建议进入报告，但不能覆盖失败退出码。
 
 | Operation | P0/P1 核心用例 |
 |---|---|
-| Create Session | 无 Body 成功、Location/初始字段；Agent 不存在/不可用/默认模型错误；Manager 503 + Retry-After；初始化失败不泄露 `session_id`；每次 POST 创建不同 Session |
+| Create Session | 无 Body 成功、类型化 Agent/Session ID、`thinking=true`、Location/初始字段；Agent 不存在/不可用/默认模型错误；Manager 503 + Retry-After；初始化失败不泄露 `session_id`；每次 POST 创建不同 Session |
 | Get Session | idle/running 两态；强 ETag 与 no-store；不存在/已删除 404；查询不调用 Model Manager；不返回 transcript、内部版本或执行详情 |
 | Delete Session | idle 原子 tombstone + cleanup task + 204；不存在/已删除重复 204；running 409 且不隐式 Abort；事务失败不部分删除；tombstone 仅两字段 |
-| Submit Event | 文本、仅 file_ids、两者兼有；空白/超长/重复/33 个 file IDs/未知字段；并发第二请求 409；容量 503；持久化前错误；无工具/有工具 SSE 精确顺序；流内错误；断连继续、GET 恢复；Abort 终态 |
-| List Events | 默认/1/200 limit；0/201/非整数；合法、篡改、过期、跨 Session page；按 `entry_seq` 升序；只返回当前分支三类持久化 Entry；running 时不暴露 preview；`next_page=null` 语义 |
+| Submit Event | 文本、仅 file_ids、两者兼有；出现冗余 `type`、非法 JSON、空白/超长/重复/33 个 file IDs/未知字段；并发第二请求 409；容量 503；持久化前错误；thinking=true 的三阶段投影与 completed 持久化、thinking=false 完全不产生；无工具/有工具 SSE 精确顺序；流内错误；断连继续、GET 恢复；Abort 终态 |
+| List Events | 默认/1/200 limit；0/201/非整数；合法、篡改、过期、跨 Session page；按 `entry_seq` 升序；始终返回三类持久化 Entry，当前 thinking=true 时增加 thinking completed；thinking 状态变化使旧 page 失效；running 时不暴露 preview；`next_page=null` 语义 |
 | List Models | allowlist 与可用集合的稳定交集；空列表；当前模型可不在列表；Manager 503；禁止泄露 provider、URL、凭据、价格和 token 配置 |
 | Change Model | 正常切换 + 新 ETag；同值不变；缺失/弱/旧 If-Match；busy 409；模型不可用 422；Manager 503；切到不支持 thinking 的模型原子归一；数据库失败回滚 |
 | Change Thinking | true/false；同值不变；字符串/数字/null/未知字段；缺失/旧 If-Match；busy 409；不支持时 422；关闭始终允许；数据库失败回滚 |
@@ -280,11 +282,11 @@ Spring MVC 默认可能忽略它们。测试目录将其标记为 `proposed`，�
 - 人工以 PR 标签、提交参数或发布任务请求全量。
 
 可以增加“文件数/变更行数”阈值作为成本保护，但不能把它作为唯一判定；一次只改一行的
-认证绕过也必须全量。
+调用上下文边界、认证拦截器或 Header 处理变化也必须全量。
 
 ### 9.3 affected-only 的最低保留集
 
-即使变更很小，仍始终执行：契约抽取、路由清单、双认证核心矩阵、错误/语言资源集合、
+即使变更很小，仍始终执行：契约抽取、路由清单、调用上下文无本地认证矩阵、错误/语言资源集合、
 ResultBean 形状、所有 P0 用例的编译与目录校验、变更模块单测以及一个打包启动 smoke。
 
 ## 10. 自动拉起与执行流程
@@ -370,7 +372,7 @@ review required` 分类。环境失败不计为产品通过；允许单独重跑
 
 ### 12.1 自动维护规则
 
-- 新 operation：先出现契约变更，再生成新的 operation key、P0 happy path、认证矩阵、错误
+- 新 operation：先出现契约变更，再生成新的 operation key、P0 happy path、调用上下文矩阵、错误
   包装和 route inventory 用例；缺任一项不得合并。
 - 新字段/状态/错误：生成边界、未知值、兼容性和负向泄漏用例，并保留旧 case ID。
 - 实现重构但契约未变：只更新 source evidence 和 fixture，不修改预期。
@@ -431,7 +433,7 @@ Agent 不得自动：
 
 ### 阶段 B：补全用例矩阵
 
-1. 用动态测试展开 11 operation 的认证、语言、错误 envelope 和 ID 边界。
+1. 用动态测试展开 11 operation 的调用上下文、语言、错误 envelope 和 ID 边界。
 2. 补齐 SSE 断连、流内错误、工具路径、容量失败和恢复。
 3. 补齐 openGauss 故障、删除重试、并发 POST/PUT 和游标隔离。
 4. 增加旧 `/api/*`、WebSocket 和公开 Run 的 tombstone 路由测试。
@@ -441,7 +443,7 @@ Agent 不得自动：
 1. 生成 `plan.json` 和变更影响报告；未识别变更自动全量。
 2. 生成新增用例 proposal 和 source evidence 更新，禁止自动弱化。
 3. 夜间运行 mutation/故障注入，按存活 mutation 生成候选用例。
-4. 接入公司 ResultBean/认证 Adapter profile 后执行同一契约矩阵。
+4. 接入公司 ResultBean/调用上下文 Adapter profile 后执行同一契约矩阵。
 
 ## 15. 验收标准
 
@@ -453,22 +455,24 @@ Agent 不得自动：
 - Agent 提出的用例维护补丁包含 requirement refs、source evidence 和新增断言；弱化补丁不能
   自动合并。
 - 主模块和 `mate-campusclaw` 的公开 HTTP 行为保持一致。
-- 所有 11 operation 至少有 P0 happy path、auth、error envelope 和资源不存在/状态冲突
-  等适用负向用例。
+- 所有 11 operation 至少有 P0 happy path、适用的 auth/no-auth、error envelope 和资源不存在/
+  状态冲突等负向用例。
 
 ## 16. 差异分类
 
 | 分类 | 内容 |
 |---|---|
 | 已观察行为 | 11 个 Spring MVC HTTP operation、现有 route/service/repository 测试和手动可运行的进程/openGauss IT |
-| 产品约束 | HTML 1.33.0 是主契约；普通成功 ResultBean、异常无 result、204/SSE 不包装；无公开 Run/WebSocket |
+| 产品约束 | HTML 1.37.0 是主契约；普通成功 ResultBean、异常无 result、204/SSE 不包装；无公开 Run/WebSocket；用例目录只在设计仓维护 |
 | 安全加固 | 测试不持有真实凭据、默认断网、敏感日志扫描、Agent 不自动弱化断言 |
 | 架构改造 | 新增契约抽取、用例目录、影响分析、环境控制器、Failsafe 必跑门禁和证据包 |
-| 目标-only | openGauss 镜像 digest、CI 资源规格、company profile 制品和 mutation 工具尚未在当前代码仓落地 |
+| 已落地能力 | 代码仓执行器、仓库 Skill、契约抽取、变更分级、JUnit 证据、固定 digest openGauss 和 Failsafe 入口 |
+| 目标-only | CI 资源规格、company profile 制品、精确 case-to-test 绑定和 mutation 工具尚未落地 |
 | 待契约校准 | 无 Body operation 收到 Body、GET 未知 Query、Abort 额外 Header 的精确拒绝 status/resCode |
 
 ## 17. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-08-20 | 对齐 HTTP V1 1.37.0 和实现基线 `1f801dbb`；目录继续留在设计仓；退役本地认证矩阵，新增全接口调用上下文/no-auth、类型化 ID、`thinking=true`、thinking 事件可见性、Submit 删除 `type`、设计基线证据和实现漂移失败门禁；记录首版执行器、Skill、openGauss 与 Failsafe 落地 |
 | 1.0.0 | 2026-08-19 | 初版：对齐 HTTP V1 1.30.0 和实现分析提交 `2e3962f4`；建立 11 operation 用例模型、分层测试、自动环境、变更感知、全量回退、证据与防弱化维护流程 |

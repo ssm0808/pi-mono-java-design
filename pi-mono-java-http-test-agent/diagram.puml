@@ -1,7 +1,7 @@
 @startuml http_test_agent_architecture
 title CampusClaw HTTP Test Agent Architecture
 
-' Source evidence: pi-mono-java commit 2e3962f408d81d03c00f533363ed1c09e455550f.
+' Source evidence: pi-mono-java commit 1f801dbb82bdda30478e3354e685e3153b179a0c.
 ' Source paths: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
 ' Source paths: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java.
 ' Test paths: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeHttpProcessOpenGaussIT.java.
@@ -18,7 +18,7 @@ skinparam DefaultFontName Arial
 actor "Developer or CI" as trigger
 database "Git candidate ref\nand merge base" as git
 artifact "Canonical HTTP review HTML\n11 review models" as contract
-artifact "Versioned case catalog\nand fixtures" as catalog
+artifact "Design-repository case catalog\nand fixtures" as catalog
 
 package "HTTP Test Agent" {
   component "Baseline Resolver" as resolver
@@ -40,7 +40,7 @@ node "Ephemeral Test Environment" {
 }
 
 package "Deterministic Test Layers" {
-  component "Contract Drift and Route Inventory" as drift
+  component "Contract and Implementation Drift" as drift
   component "MockMvc HTTP Contract Matrix" as mvc
   component "Service and State Invariants" as service
   component "Database, Concurrency, and Recovery" as databaseTests
@@ -103,7 +103,7 @@ end note
 @startuml http_test_execution_sequence
 title HTTP Test Agent Execution Sequence
 
-' Source evidence: pi-mono-java commit 2e3962f408d81d03c00f533363ed1c09e455550f.
+' Source evidence: pi-mono-java commit 1f801dbb82bdda30478e3354e685e3153b179a0c.
 ' CI path: .github/workflows/ci.yml.
 ' Process test path: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeHttpProcessOpenGaussIT.java.
 ' Observed behavior: integration tests require explicit JAR and OpenGauss properties and can skip when prerequisites are absent.
@@ -160,8 +160,8 @@ end
 @startuml http_test_case_maintenance
 title HTTP Test Case Maintenance Lifecycle
 
-' Contract evidence: design repository chat-http-v1-review.html version 1.33.0.
-' Test evidence: pi-mono-java commit 2e3962f408d81d03c00f533363ed1c09e455550f runtime API route and process tests.
+' Contract evidence: design repository chat-http-v1-review.html version 1.37.0.
+' Test evidence: pi-mono-java commit 1f801dbb82bdda30478e3354e685e3153b179a0c runtime API route and process tests.
 ' Observed behavior: current tests are code-owned and do not have a separate requirement-to-case inventory.
 ' Design reason: case changes must be reviewable, traceable, and unable to weaken an accepted contract automatically.
 

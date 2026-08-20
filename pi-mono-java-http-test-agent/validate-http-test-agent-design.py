@@ -52,7 +52,7 @@ VALID_LAYERS = {
 
 
 class ReviewModelParser(HTMLParser):
-    """Collect JSON text from script elements carrying data-review-model."""
+    """Collect JSON operation models from current or legacy review HTML."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -61,7 +61,10 @@ class ReviewModelParser(HTMLParser):
         self.models: list[dict] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "script" and any(name == "data-review-model" for name, _ in attrs):
+        attributes = dict(attrs)
+        is_current_bundle = attributes.get("id") == "api-review-models"
+        is_legacy_model = "data-review-model" in attributes
+        if tag == "script" and (is_current_bundle or is_legacy_model):
             self._capturing = True
             self._parts = []
 
@@ -71,7 +74,8 @@ class ReviewModelParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "script" and self._capturing:
-            self.models.append(json.loads("".join(self._parts)))
+            value = json.loads("".join(self._parts))
+            self.models.extend(value if isinstance(value, list) else [value])
             self._capturing = False
             self._parts = []
 
@@ -121,6 +125,14 @@ def validate_contract(catalog: dict, contract_ref: str | None) -> None:
     expected = EXPECTED_OPERATIONS
     if extracted != expected:
         fail(f"review operation inventory differs from expected order: {extracted}")
+    authenticated = {
+        model["operation"]["operationKey"]
+        for model in parser.models
+        if model["operation"].get("authModes")
+    }
+    expected_authenticated: set[str] = set()
+    if authenticated != expected_authenticated:
+        fail(f"selective authentication scope differs: {sorted(authenticated)}")
 
 
 def iter_cases(catalog: dict):
@@ -136,14 +148,21 @@ def iter_cases(catalog: dict):
 
 
 def validate_catalog(catalog: dict) -> None:
-    if catalog["catalogVersion"] != "1.0.0":
-        fail("catalogVersion must match the design document version 1.0.0")
+    if catalog["catalogVersion"] != "1.1.0":
+        fail("catalogVersion must match the design document version 1.1.0")
     operations = [
         (item["operationKey"], item["shortName"], item["method"], item["path"])
         for item in catalog["operations"]
     ]
     if operations != EXPECTED_OPERATIONS:
         fail(f"catalog operation inventory differs from the frozen 11 operations: {operations}")
+    templates = {item["id"]: item for item in catalog["globalTemplates"]}
+    all_operations = {item[0] for item in EXPECTED_OPERATIONS}
+    for case_id in ("HTA-TPL-AUTH-SUCCESS", "HTA-TPL-AUTH-INVALID", "HTA-TPL-AUTH-CONFLICT"):
+        if templates[case_id].get("status") != "retired":
+            fail(f"{case_id} must be retired after removal of Runtime-local authentication")
+    if set(templates["HTA-TPL-NO-BUSINESS-AUTH"]["appliesTo"]) != all_operations:
+        fail("no-business-auth template does not cover all eleven operations")
 
     evidence = set(catalog["evidenceRegistry"])
     seen: set[str] = set()
