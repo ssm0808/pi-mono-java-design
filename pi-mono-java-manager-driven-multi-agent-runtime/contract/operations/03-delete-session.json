@@ -1,0 +1,103 @@
+{
+  "operation": {
+    "shortName": "删除会话",
+    "operationKey": "deleteSession",
+    "method": "DELETE",
+    "path": "/sessions/{session_id}",
+    "summary": "删除 Runtime Session",
+    "description": "幂等逻辑删除 idle Session，并在同一事务中写入只含 session_id、deleted_at 的永久 tombstone 和短期异步清理任务。Session 存在 active execution 时不自动中止，而是返回 409 SESSION_BUSY；调用方应先调用 Abort，再重试删除。成功返回 204，重复删除同样返回 204。",
+    "parameters": [
+      {
+        "$ref": "parameters.sessionId",
+        "description": "CampusClaw 生成的不透明 Session 标识；区分大小写"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体；不需要 Idempotency-Key 或 If-Match。DELETE 的 URI 与持久化 tombstone 共同提供幂等语义。",
+      "example": null
+    },
+    "responses": [
+      {
+        "status": "204",
+        "label": "No Content",
+        "summary": "逻辑删除和持久化清理任务已经提交；Session 对 API 立即不可见，物理清理在后台重试完成。成功响应没有 ResultBean。",
+        "headers": {
+          "Cache-Control": "no-store"
+        },
+        "bodies": {
+          "default": ""
+        }
+      },
+      {
+        "status": "400",
+        "label": "Bad Request",
+        "summary": "session_id 不符合标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "session_id 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The session_id format is invalid."
+          }
+        }
+      },
+      {
+        "$ref": "responses.unauthenticated"
+      },
+      {
+        "$ref": "responses.authCredentialConflict"
+      },
+      {
+        "status": "409",
+        "label": "Conflict",
+        "summary": "Session 存在 active execution；删除不会隐式中止执行。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_BUSY",
+            "resMsg": "该 Session 正在处理另一条用户消息。"
+          },
+          "en-US": {
+            "resCode": "SESSION_BUSY",
+            "resMsg": "The Session is processing another user message."
+          }
+        }
+      },
+      {
+        "status": "500",
+        "label": "Internal Server Error",
+        "summary": "逻辑删除与持久化清理任务未能原子提交；Session 不应进入部分删除状态。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_DELETE_FAILED",
+            "resMsg": "Session 删除失败。"
+          },
+          "en-US": {
+            "resCode": "SESSION_DELETE_FAILED",
+            "resMsg": "Session deletion failed."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [
+
+    ]
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "operation": {
+    "shortName": "查询会话",
+    "operationKey": "getSession",
+    "method": "GET",
+    "path": "/sessions/{session_id}",
+    "summary": "读取 Session 当前资源",
+    "description": "按 session_id 只读获取已存在 Session 的当前默认配置和粗粒度运行状态。该接口不创建或恢复 Session，不调用模型，也不实时校验 Model Manager。state 仅表达 Session 当前是 idle 还是 running；thinking 是是否对后续用户消息启用深度思考的布尔开关，不表示披露原始思考过程。",
+    "parameters": [
+      {
+        "$ref": "parameters.sessionId",
+        "description": "CampusClaw 生成的不透明 Session 标识；区分大小写，删除后不复用"
+      },
+      {
+        "$ref": "parameters.acceptLanguage",
+        "description": "错误消息语言；缺失或不支持时回退 en-US"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体；不接受 model_id、thinking 或恢复参数。",
+      "example": null
+    },
+    "responses": [
+      {
+        "status": "200",
+        "label": "OK",
+        "summary": "返回当前 Session 资源、粗粒度 state 和深度思考开关。",
+        "headers": {
+          "ETag": "\"snp-zQfM5yN8x2\"",
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
+              "agent_id": "agent-550e8400e29b41d4a716446655440000",
+              "model_id": "claude-sonnet-4-5",
+              "state": "running",
+              "thinking": true,
+              "created_at": "2026-08-15T10:30:00+08:00",
+              "updated_at": "2026-08-16T09:15:21+08:00"
+            }
+          }
+        }
+      },
+      {
+        "status": "400",
+        "label": "Bad Request",
+        "summary": "session_id 不符合标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "session_id 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The session_id format is invalid."
+          }
+        }
+      },
+      {
+        "$ref": "responses.unauthenticated"
+      },
+      {
+        "$ref": "responses.authCredentialConflict"
+      },
+      {
+        "status": "404",
+        "label": "Not Found",
+        "summary": "Session 不存在或已删除；GET 不会隐式创建或恢复 Session。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [
+
+    ]
+  }
+}

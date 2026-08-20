@@ -1,0 +1,63 @@
+@startuml model_manager_streaming_flow
+title Model Manager Provider Streaming Flow
+
+' Source evidence:
+' pi-mono packages/ai/src/types.ts: Model, Context, AssistantMessageEvent
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProvider.java: ApiProvider
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java: ApiProviderRegistry
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/SimpleStreamOptions.java: metadata
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java: event records
+' Observed behavior: Java dispatches by Model.api to a Spring-discovered ApiProvider.
+' Architecture change: one MODEL_MANAGER Api routes every managed model through Model Manager.
+' Design reason: model_id selects the model while agent_id authorizes it for the current Agent.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam participant {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+skinparam sequence {
+  LifeLineBorderColor #64748B
+  LifeLineBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F8FAFC
+}
+
+actor Client
+participant "AgentLoop" as Loop
+participant "CampusClawAiService" as AiService
+participant "ApiProviderRegistry" as Registry
+participant "ModelManagerApiProvider" as Provider
+participant "Model Manager" as ModelManager
+
+Client -> Loop : prompt
+Loop -> AiService : stream(model, Context, options)
+AiService -> Registry : getProvider(MODEL_MANAGER)
+Registry --> AiService : ModelManagerApiProvider
+AiService -> Provider : streamSimple(model, Context, metadata)
+Provider -> Provider : require immutable agent_id,\nsession_id, and Trace Context
+Provider -> ModelManager : invoke(agent_id, model.id,\nContext, mapped options)
+ModelManager -> ModelManager : revalidate Agent model binding
+
+loop stream events
+  ModelManager --> Provider : start, content delta,\ntool call, done or error
+  Provider --> Loop : AssistantMessageEvent
+end
+
+alt Session-scoped abort
+  Client -> Loop : POST /sessions/{session_id}/abort
+  Loop -> Provider : cancel model subscription
+  Provider -> ModelManager : close stream
+end
+
+note over Provider,ModelManager
+The Provider maps events only.
+Tool execution remains in AgentLoop.
+No fallback to built-in providers.
+end note
+@enduml

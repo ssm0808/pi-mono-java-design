@@ -1,0 +1,61 @@
+@startuml mate_agent_service_responsibility_boundary
+title End-to-End HTTP and SSE Service Responsibilities
+
+' Source evidence (pi-mono-java 9e7cc8952937a697fe2c16ff0de287b32bc4c891):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java.
+' Observed behavior: the CampusClaw internal HTTP POST returns execution-scoped SSE without a public WebSocket path.
+' Target-only design: the mate-service public HTTP contract and its SSE projection are not implemented in this repository.
+' Architecture change: both hops use HTTP request-response, and execution responses stream SSE for the lifetime of one execution.
+' Product constraint: the UI receives chat_id only; session_id remains an internal Runtime identifier.
+' Security hardening: mate-service terminates public auth and projects internal events instead of forwarding bytes transparently.
+' Design reason: keep user-facing Chat lifecycle separate from durable Runtime Session identity and execution.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 18
+skinparam defaultFontName Arial
+skinparam defaultFontColor #0F172A
+skinparam ArrowColor #64748B
+skinparam ArrowThickness 1.5
+skinparam rectangle {
+  BorderColor #94A3B8
+  FontColor #0F172A
+}
+skinparam database {
+  BorderColor #94A3B8
+  BackgroundColor #F8FAFC
+  FontColor #334155
+}
+
+left to right direction
+
+rectangle "Agent UI\n\nCall public HTTP operations\nUse chat_id only\nRead execution-scoped SSE\nClose on stream end or error\nNever receive session_id" as UI #EFF6FF
+
+rectangle "mate-service\n\nOwn public HTTP and SSE\nAuthenticate the end user\nOwn Chat metadata and chat_id\nMap chat_id to session_id\nRun guardrails and orchestration\nCall CampusClaw with service identity\nProject safe public events and errors" as Mate #FFF7ED
+
+rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nValidate service credential header shape\nOwn Runtime Session and session_id\nValidate Agent and Model\nBuild Context and execute Model and read tool\nPersist current-branch Entries\nOwn Steer, FollowUp, and Abort" as Runtime #ECFDF5
+
+database "Mate Chat Store\n\nchat_id to session_id\nChat name and product state\nUser ownership" as MateStore
+
+database "RuntimeSessionStore\n\nSession state and configuration\nCurrent-branch Entries\nInternal execution state" as RuntimeStore
+
+UI <--> Mate : public HTTP requests\nResultBean, 204, or scoped SSE\nchat_id scope
+Mate <--> Runtime : internal HTTP requests\nResultBean, 204, or scoped SSE\nsession_id scope
+Mate --> MateStore : own and update
+Runtime --> RuntimeStore : own and update
+
+note bottom of Mate
+The public and internal hops are independent contracts.
+mate-service does not forward the internal stream byte for byte.
+Public paths, VOs, errors, and event projection require
+a separate operation-by-operation review.
+end note
+
+note bottom of Runtime
+Each user-message POST owns one bounded SSE response.
+Steer and FollowUp are separate HTTP requests that enqueue
+into the active execution. Abort is another HTTP request.
+The Runtime does not read chat_id or end-user identity.
+end note
+@enduml

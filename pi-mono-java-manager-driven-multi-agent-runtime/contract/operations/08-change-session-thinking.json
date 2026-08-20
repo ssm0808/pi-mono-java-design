@@ -1,0 +1,222 @@
+{
+  "operation": {
+    "shortName": "设置深度思考",
+    "operationKey": "changeSessionThinking",
+    "method": "PUT",
+    "path": "/sessions/{session_id}/thinking",
+    "summary": "开启或关闭 Session 深度思考",
+    "description": "在 Session 处于 idle 时，将 thinking 设置为是否对后续 user.message 启用深度思考。false 映射为关闭推理；true 使用当前模型和 Agent 的受管非 off 推理强度，不向调用方暴露具体等级。该开关不表示披露模型原始思考过程，公共事件仍只返回允许展示的 Assistant 内容。",
+    "parameters": [
+      {
+        "$ref": "parameters.sessionId"
+      },
+      {
+        "in": "header",
+        "name": "If-Match",
+        "required": true,
+        "schema": "strong ETag",
+        "description": "最近一次 GET Session 或成功配置变更返回的 ETag；缺失返回 428，不匹配返回 412"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "description": "只接受布尔字段 thinking；不接受 level、reasoning_effort、模型参数、客户端 capability 或 Idempotency-Key。",
+      "example": {
+        "thinking": true
+      }
+    },
+    "responses": [
+      {
+        "status": "200",
+        "label": "OK",
+        "summary": "返回更新后的完整 Session 资源。相同值按无变化成功返回，updated_at 和 ETag 保持不变。",
+        "headers": {
+          "ETag": "\"snp-P4tR8vL2xC6\"",
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
+              "agent_id": "agent-550e8400e29b41d4a716446655440000",
+              "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": true,
+              "created_at": "2026-08-15T10:30:00+08:00",
+              "updated_at": "2026-08-17T14:25:09+08:00"
+            }
+          }
+        }
+      },
+      {
+        "id": "400-invalid-session-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_SESSION_ID",
+        "label": "Bad Request",
+        "summary": "session_id 不符合标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "session_id 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The session_id format is invalid."
+          }
+        }
+      },
+      {
+        "id": "400-invalid-thinking-request",
+        "status": "400",
+        "tabLabel": "400 · INVALID_THINKING_REQUEST",
+        "label": "Bad Request",
+        "summary": "JSON 非法、缺少 thinking、thinking 不是布尔值或包含未知字段。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_THINKING_REQUEST",
+            "resMsg": "深度思考设置请求不符合约束。"
+          },
+          "en-US": {
+            "resCode": "INVALID_THINKING_REQUEST",
+            "resMsg": "The deep-thinking setting request is invalid."
+          }
+        }
+      },
+      {
+        "$ref": "responses.unauthenticated"
+      },
+      {
+        "$ref": "responses.authCredentialConflict",
+        "summary": "请求同时携带 Authorization 和 X-HW-APPKEY。"
+      },
+      {
+        "id": "422-thinking-not-supported",
+        "status": "422",
+        "tabLabel": "422 · THINKING_NOT_SUPPORTED",
+        "label": "Unprocessable Content",
+        "summary": "请求 thinking=true，但当前模型不支持深度思考。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "THINKING_NOT_SUPPORTED",
+            "resMsg": "当前模型不支持深度思考。"
+          },
+          "en-US": {
+            "resCode": "THINKING_NOT_SUPPORTED",
+            "resMsg": "The current model does not support deep thinking."
+          }
+        }
+      },
+      {
+        "status": "404",
+        "label": "Not Found",
+        "summary": "Session 不存在或已删除。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        }
+      },
+      {
+        "status": "409",
+        "label": "Conflict",
+        "summary": "Session 正在处理 user.message；深度思考开关变更不影响当前执行，也不会排队。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_BUSY",
+            "resMsg": "该 Session 正在处理另一条用户消息。"
+          },
+          "en-US": {
+            "resCode": "SESSION_BUSY",
+            "resMsg": "The Session is processing another user message."
+          }
+        }
+      },
+      {
+        "status": "412",
+        "label": "Precondition Failed",
+        "summary": "If-Match 与当前 Session ETag 不一致；调用方应重新 GET Session 后决定是否重试。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_VERSION_MISMATCH",
+            "resMsg": "Session 已发生变化，请刷新后重试。"
+          },
+          "en-US": {
+            "resCode": "SESSION_VERSION_MISMATCH",
+            "resMsg": "The Session has changed. Refresh it before retrying."
+          }
+        }
+      },
+      {
+        "status": "428",
+        "label": "Precondition Required",
+        "summary": "请求缺少必填 If-Match Header。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "IF_MATCH_REQUIRED",
+            "resMsg": "修改 Session 配置必须携带 If-Match。"
+          },
+          "en-US": {
+            "resCode": "IF_MATCH_REQUIRED",
+            "resMsg": "If-Match is required to modify Session configuration."
+          }
+        }
+      },
+      {
+        "status": "500",
+        "label": "Internal Server Error",
+        "summary": "Session thinking、内部配置记录和 ETag 未能原子更新。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_THINKING_UPDATE_FAILED",
+            "resMsg": "Session 深度思考设置更新失败。"
+          },
+          "en-US": {
+            "resCode": "SESSION_THINKING_UPDATE_FAILED",
+            "resMsg": "Failed to update the Session deep-thinking setting."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [
+
+    ]
+  }
+}

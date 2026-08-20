@@ -1,0 +1,174 @@
+{
+  "operation": {
+    "shortName": "创建会话",
+    "operationKey": "createSession",
+    "method": "POST",
+    "path": "/agents/{agent_id}/sessions",
+    "summary": "创建 Runtime Session",
+    "description": "根据 agent_id 创建一个全新的 Runtime Session。CampusClaw 生成 session_id，直接从受控 agent/{agent_id}/.campusclaw/ 目录读取 settings.json、SYSTEM.md 和 skills/，解析并校验默认模型，然后完成 Session 持久化；AgentSession 在首次执行时惰性初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session，默认 thinking=true。",
+    "parameters": [
+      {
+        "$ref": "parameters.agentId"
+      },
+      {
+        "$ref": "parameters.acceptLanguage",
+        "description": "错误消息语言；缺失或不支持时回退 en-US"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体；不接受 session_id、model_id 或 thinking。",
+      "example": null
+    },
+    "responses": [
+      {
+        "status": "201",
+        "label": "Created",
+        "summary": "Session 已完成初始化和持久化，可以接受后续请求；初始 state=idle、thinking=true。",
+        "headers": {
+          "Location": "/campusclaw-service/v1/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+              "agent_id": "agent-550e8400e29b41d4a716446655440000",
+              "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "state": "idle",
+              "thinking": true,
+              "created_at": "2026-08-15T11:30:00Z"
+            }
+          }
+        }
+      },
+      {
+        "status": "400",
+        "label": "Bad Request",
+        "summary": "agent_id 不符合资源标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_AGENT_ID",
+            "resMsg": "agent_id 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_AGENT_ID",
+            "resMsg": "The agent_id format is invalid."
+          }
+        }
+      },
+      {
+        "$ref": "responses.unauthenticated"
+      },
+      {
+        "$ref": "responses.authCredentialConflict"
+      },
+      {
+        "status": "404",
+        "label": "Not Found",
+        "summary": "指定的 Agent 不存在。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "AGENT_NOT_FOUND",
+            "resMsg": "指定的 Agent 不存在。"
+          },
+          "en-US": {
+            "resCode": "AGENT_NOT_FOUND",
+            "resMsg": "The specified Agent does not exist."
+          }
+        }
+      },
+      {
+        "id": "422-agent-not-available",
+        "status": "422",
+        "tabLabel": "422 · AGENT_NOT_AVAILABLE",
+        "label": "Unprocessable Content",
+        "summary": "Agent 存在，但当前不可用于创建 Session。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "AGENT_NOT_AVAILABLE",
+            "resMsg": "指定的 Agent 当前不可用。"
+          },
+          "en-US": {
+            "resCode": "AGENT_NOT_AVAILABLE",
+            "resMsg": "The specified Agent is currently unavailable."
+          }
+        }
+      },
+      {
+        "id": "422-agent-model-not-configured",
+        "status": "422",
+        "tabLabel": "422 · AGENT_MODEL_NOT_CONFIGURED",
+        "label": "Unprocessable Content",
+        "summary": "Agent 没有可由 Model Manager 解析的有效默认模型。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "AGENT_MODEL_NOT_CONFIGURED",
+            "resMsg": "该 Agent 未配置有效的默认模型。"
+          },
+          "en-US": {
+            "resCode": "AGENT_MODEL_NOT_CONFIGURED",
+            "resMsg": "The Agent has no valid default model configured."
+          }
+        }
+      },
+      {
+        "status": "500",
+        "label": "Internal Server Error",
+        "summary": "Session 运行对象或持久化初始化失败。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_INITIALIZATION_FAILED",
+            "resMsg": "Session 初始化失败。"
+          },
+          "en-US": {
+            "resCode": "SESSION_INITIALIZATION_FAILED",
+            "resMsg": "Session initialization failed."
+          }
+        }
+      },
+      {
+        "status": "503",
+        "label": "Service Unavailable",
+        "summary": "Model Manager 暂时不可用，调用方可按 Retry-After 重试。",
+        "headers": {
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "Model Manager 暂时不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "Model Manager is temporarily unavailable. Try again later."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [
+
+    ]
+  }
+}

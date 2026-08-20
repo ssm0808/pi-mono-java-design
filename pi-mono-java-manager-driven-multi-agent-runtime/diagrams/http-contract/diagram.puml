@@ -1,0 +1,126 @@
+@startuml http_result_bean_compatibility
+title ResultBeanAdapter Standalone and Company Replacement
+
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/result/ResultBeanAdapter.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/result/StandaloneResultBeanAdapter.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
+' Observed behavior: controllers depend on ResultBeanAdapter and standalone code provides the approved JSON shape.
+' Java divergence: the internal ResultBeanFactory artifact is not available in the standalone repository.
+' Design reason: company code replaces one Spring bean without inventing an internal FQCN or duplicate class.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #94A3B8
+  FontColor #0F172A
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+skinparam ArrowColor #475569
+
+package "Business source" {
+  component "SessionController" as Controller
+  component "RuntimeApiExceptionHandler" as Handler
+}
+
+interface "ResultBeanAdapter" as Contract
+component "StandaloneResultBeanAdapter\nresCode, resMsg, result" as Standalone
+component "Company ResultBeanAdapter Bean" as CompanyAdapter
+component "Company ResultBeanFactory" as Company
+component "Company Maven settings" as Settings
+
+component "MessageSource\nen-US and zh-CN" as Messages
+
+Controller --> Contract : normal(result)
+Handler --> Contract : error(code, message)
+Handler --> Messages : resolve error code and arguments
+Standalone ..|> Contract
+CompanyAdapter ..|> Contract
+CompanyAdapter --> Company : getFactory().normal(result)
+Settings --> Company : resolves artifact
+
+note bottom of Contract
+Standalone builds do not define a fake company FQCN.
+Internal coordinates, repository URLs, credentials, and unverified methods
+remain outside the public repository.
+end note
+@enduml
+
+@startuml http_dual_authentication
+title CampusClaw HTTP Dual Authentication
+
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/auth/RuntimeRequestAuthenticator.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeAuthenticationInterceptor.java.
+' Observed behavior: inbound JWT uses X-HW-ID and Authorization; APPKEY uses X-HW-ID and X-HW-APPKEY.
+' Observed behavior: CampusClaw validates header shape only and never treats the credential ID as session ownership.
+' Security boundary: mate-service verifies credential authenticity and action authorization before forwarding.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam participant {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+skinparam sequence {
+  LifeLineBorderColor #64748B
+  LifeLineBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F8FAFC
+}
+
+actor "mate-service" as Caller
+participant "RuntimeAuthenticationInterceptor" as Filter
+participant "RuntimeRequestAuthenticator" as Resolver
+participant "Runtime Controller" as Controller
+
+Caller -> Filter : HTTP request
+Filter -> Resolver : resolve X-HW-ID, Authorization, X-HW-APPKEY
+Resolver -> Resolver : require exactly one complete credential pair
+
+break Authorization and X-HW-APPKEY are both present
+  Resolver --> Filter : AUTH_CREDENTIAL_CONFLICT
+  Filter --> Caller : 401 ResultBean
+end
+
+break no complete credential pair
+  Resolver --> Filter : UNAUTHENTICATED
+  Filter --> Caller : 401 ResultBean
+end
+
+alt JWT pair with non-empty Bearer token
+  Resolver --> Filter : CallerAuthContext(JWT)
+else APPKEY pair with non-empty key
+  Resolver --> Filter : CallerAuthContext(APPKEY)
+end
+
+Filter -> Controller : request with auth context
+Controller --> Caller : normal HTTP or SSE response
+
+note over Caller,Resolver
+mate-service verifies credential authenticity and action authorization.
+CampusClaw validates only the mutually exclusive header shape.
+end note
+
+note over Resolver,Controller
+Header names are case-insensitive under HTTP.
+Credential values remain opaque and are never logged,
+persisted, copied into ResultBean, or passed to Session state.
+end note
+@enduml

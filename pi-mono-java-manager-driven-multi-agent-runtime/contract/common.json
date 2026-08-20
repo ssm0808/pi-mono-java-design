@@ -1,0 +1,120 @@
+{
+  "api": {
+    "title": "CampusClaw Service API",
+    "version": "1.36.0",
+    "basePath": "/campusclaw-service/v1",
+    "visibility": "Internal · 已确认"
+  },
+  "resourceIdPatterns": {
+    "agent": "^agent-[0-9a-fA-F]{32}$",
+    "tool": "^tool-[0-9a-fA-F]{32}$",
+    "skill": "^skill-[0-9a-fA-F]{32}$"
+  },
+  "authModes": [
+    {
+      "id": "jwt",
+      "label": "JWT 首选",
+      "preferred": true,
+      "headers": [
+        {
+          "name": "X-HW-ID",
+          "value": "<CALLER_ID>",
+          "required": true,
+          "description": "公司调用方标识"
+        },
+        {
+          "name": "Authorization",
+          "value": "Bearer <JWT>",
+          "required": true,
+          "description": "上游 mate-service 已验证的公司 JWT；本服务校验 Bearer Header 形状"
+        }
+      ]
+    },
+    {
+      "id": "appkey",
+      "label": "APPKEY 兼容",
+      "preferred": false,
+      "headers": [
+        {
+          "name": "X-HW-ID",
+          "value": "<CALLER_ID>",
+          "required": true,
+          "description": "公司调用方标识"
+        },
+        {
+          "name": "X-HW-APPKEY",
+          "value": "<APPKEY>",
+          "required": true,
+          "description": "上游 mate-service 已验证的 APPKEY；本服务校验 Header 形状"
+        }
+      ]
+    }
+  ],
+  "parameters": {
+    "agentId": {
+      "in": "path",
+      "name": "agent_id",
+      "required": true,
+      "schema": {
+        "$ref": "resourceIdPatterns.agent"
+      },
+      "description": "创建后不可变的 Agent 绑定；格式为 agent- 加去掉连字符的 32 位十六进制 UUID"
+    },
+    "sessionId": {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "description": "已经存在且未删除的 Session 标识；区分大小写"
+    },
+    "acceptLanguage": {
+      "in": "header",
+      "name": "Accept-Language",
+      "required": false,
+      "schema": "zh-CN | en-US",
+      "description": "异常消息语言；缺失或不支持时回退 en-US"
+    }
+  },
+  "responses": {
+    "unauthenticated": {
+      "id": "401-unauthenticated",
+      "status": "401",
+      "tabLabel": "401 · UNAUTHENTICATED",
+      "label": "Unauthorized",
+      "summary": "凭据 Header 缺失、不完整、重复或格式错误；凭据真实性由上游 mate-service 验证。",
+      "headers": {
+        "Content-Language": "zh-CN"
+      },
+      "bodies": {
+        "zh-CN": {
+          "resCode": "UNAUTHENTICATED",
+          "resMsg": "调用方身份认证失败。"
+        },
+        "en-US": {
+          "resCode": "UNAUTHENTICATED",
+          "resMsg": "Caller authentication failed."
+        }
+      }
+    },
+    "authCredentialConflict": {
+      "id": "401-auth-credential-conflict",
+      "status": "401",
+      "tabLabel": "401 · AUTH_CREDENTIAL_CONFLICT",
+      "label": "Unauthorized",
+      "summary": "请求同时携带 Authorization 和 X-HW-APPKEY，两套身份语义冲突。",
+      "headers": {
+        "Content-Language": "zh-CN"
+      },
+      "bodies": {
+        "zh-CN": {
+          "resCode": "AUTH_CREDENTIAL_CONFLICT",
+          "resMsg": "请求不能同时携带 JWT 和 APPKEY 凭据。"
+        },
+        "en-US": {
+          "resCode": "AUTH_CREDENTIAL_CONFLICT",
+          "resMsg": "JWT and APPKEY credentials must not be supplied together."
+        }
+      }
+    }
+  }
+}

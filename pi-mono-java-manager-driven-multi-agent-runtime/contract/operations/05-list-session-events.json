@@ -1,0 +1,197 @@
+{
+  "operation": {
+    "shortName": "查询会话事件",
+    "operationKey": "listSessionEvents",
+    "method": "GET",
+    "path": "/sessions/{session_id}/events",
+    "summary": "分页读取 Session 持久化事件",
+    "description": "从与 POST 相同的 Events 集合路径分页读取当前 Session 分支中已经持久化的 user.message、assistant.message.completed 和 tool.result，不返回废弃分支或内部控制 Entry。GET 事件的 type 等于第四接口的 SSE event 名称，其余字段等于同一持久化 Entry 的 SSE data；started/delta、工具执行状态和流控制事件不会进入历史。示例明确使用 limit=3；next_page 是服务端签发的不透明游标，客户端只能原样回传，不得解析、修改或自行构造，下一页从 entry_seq=20 的最终 assistant.message.completed 继续。",
+    "parameters": [
+      {
+        "$ref": "parameters.sessionId"
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": "integer 1..200; default 100",
+        "description": "限制本页最多返回的持久化事件数量；下方成功示例使用 limit=3"
+      },
+      {
+        "in": "query",
+        "name": "page",
+        "required": false,
+        "schema": "opaque string",
+        "description": "后续页原样使用上一响应的 next_page；第一页不传。客户端不得解析、修改或自行构造；游标只表示当前分支的继续位置，不包含固定历史上界"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体。成功示例对应第一页 ?limit=3；后续请求原样传入上一响应的 next_page。limit 可在每页指定。",
+      "example": null
+    },
+    "responses": [
+      {
+        "status": "200",
+        "label": "OK",
+        "summary": "以下为 limit=3 的第一页：按 entry_seq 从小到大返回三个持久化事件，next_page 指向 entry_seq=20；next_page=null 才表示响应时刻没有更多事件。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "type": "user.message",
+                  "entry_id": "entry_100",
+                  "entry_seq": 17,
+                  "message": "请分析这些订单文件，并列出异常项。",
+                  "file_ids": [
+                    "file_01JY8X2E3R4T5Y6U7I8O9P0A1S"
+                  ],
+                  "created_at": "2026-08-17T10:00:00Z"
+                },
+                {
+                  "type": "assistant.message.completed",
+                  "entry_id": "entry_101",
+                  "entry_seq": 18,
+                  "message": {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "我先查询异常订单。"
+                      },
+                      {
+                        "type": "tool_call",
+                        "tool_call_id": "call_201",
+                        "name": "query_abnormal_orders",
+                        "arguments": {
+                          "scope": "uploaded_files"
+                        }
+                      }
+                    ]
+                  },
+                  "finish_reason": "tool_call",
+                  "created_at": "2026-08-17T10:00:02Z"
+                },
+                {
+                  "type": "tool.result",
+                  "entry_id": "entry_102",
+                  "entry_seq": 19,
+                  "tool_call_id": "call_201",
+                  "tool_name": "query_abnormal_orders",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "发现 3 条异常订单。"
+                    }
+                  ],
+                  "is_error": false,
+                  "created_at": "2026-08-17T10:00:04Z"
+                }
+              ],
+              "next_page": "page_q7K2mN9vR4xT8cL5"
+            }
+          }
+        }
+      },
+      {
+        "id": "400-invalid-session-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_SESSION_ID",
+        "label": "Bad Request",
+        "summary": "session_id 不符合标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "session_id 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The session_id format is invalid."
+          }
+        }
+      },
+      {
+        "id": "400-invalid-event-list-query",
+        "status": "400",
+        "tabLabel": "400 · INVALID_EVENT_LIST_QUERY",
+        "label": "Bad Request",
+        "summary": "limit 越界，或 page 损坏、过期或不是本 Session 签发的分页游标。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_EVENT_LIST_QUERY",
+            "resMsg": "事件分页参数不符合约束。"
+          },
+          "en-US": {
+            "resCode": "INVALID_EVENT_LIST_QUERY",
+            "resMsg": "The event pagination parameters are invalid."
+          }
+        }
+      },
+      {
+        "$ref": "responses.unauthenticated"
+      },
+      {
+        "$ref": "responses.authCredentialConflict",
+        "summary": "请求同时携带 Authorization 和 X-HW-APPKEY。"
+      },
+      {
+        "status": "404",
+        "label": "Not Found",
+        "summary": "Session 不存在或已删除。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        }
+      },
+      {
+        "status": "500",
+        "label": "Internal Server Error",
+        "summary": "服务端未能读取或投影 Session 持久化事件。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_LIST_FAILED",
+            "resMsg": "Session 持久化事件读取失败。"
+          },
+          "en-US": {
+            "resCode": "EVENT_LIST_FAILED",
+            "resMsg": "Failed to list persisted events for the Session."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [
+
+    ]
+  }
+}

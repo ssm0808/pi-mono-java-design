@@ -1,0 +1,108 @@
+@startuml http_session_model_configuration
+title HTTP Session Model and Deep-Thinking Confirmed Configuration
+
+' Source evidence (pi-mono commit 086c32e74530564922d011ade23ff582c9d63116):
+' packages/coding-agent/src/core/agent-session.ts, setModel and setThinkingLevel,
+' lines 1586-1600 and 1684-1730
+' packages/ai/src/types.ts, Model, lines 793-809
+' packages/ai/src/models.ts, getSupportedThinkingLevels, lines 900-910
+' Source evidence (pi-mono-java commit 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/CatalogRuntimeModelManager.java.
+' Observed behavior: both pi baselines can list models and change the active model.
+' Their thinkingLevel values control model reasoning effort.
+' Confirmed product constraint: HTTP thinking is a boolean deep-thinking switch; false maps to off,
+' while true maps to a managed non-off level supported by the current model and Agent.
+' Security hardening: model discovery is Session-scoped and exposes only model_id;
+' raw reasoning content is never enabled by the public deep-thinking switch.
+' Architecture change: HTTP configuration writes require an idle Session and a matching ETag.
+' Design reason: prevent a configuration change from racing with an active execution while
+' returning the common Session resource after every successful mutation.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequence {
+  ArrowColor #475569
+  ActorBorderColor #475569
+  ActorFontColor #0F172A
+  LifeLineBorderColor #94A3B8
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantFontColor #0F172A
+  GroupBorderColor #64748B
+  GroupFontColor #334155
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+
+actor Caller
+participant "Credential\nAdapter" as Auth
+participant "Session Configuration\nAPI" as API
+database "Runtime Session\nStore" as Store
+participant "Model Manager" as Models
+participant ResultBeanAdapter
+
+group List available models
+  Caller -> Auth : GET /sessions/{session_id}/models
+  Auth -> API : immutable CallerAuthContext
+  API -> Store : read Agent binding and current model_id
+  Store --> API : agent_id, enabledModels, current model_id
+  API -> Models : list callable models for Agent
+  Models --> API : ordered model_id string array
+  API -> ResultBeanAdapter : normal(ModelListResponseVO)
+  ResultBeanAdapter --> API : resCode, resMsg, result
+  API --> Caller : 200 OK\ncurrent_model_id and models string array
+end
+
+group Change current model
+  Caller -> Auth : PUT /sessions/{session_id}/model\nIf-Match and model_id
+  Auth -> API : immutable CallerAuthContext
+  API -> Store : require idle and compare ETag
+  Store --> API : current Session resource
+  API -> Models : resolve target model
+  Models --> API : authoritative model and reasoning capability
+  opt target model does not support deep thinking
+    API -> API : normalize thinking to false
+  end
+  API -> Store : atomically update model, thinking, and ETag
+  Store --> API : updated Session resource and ETag
+  API -> ResultBeanAdapter : normal(SessionResponseVO)
+  ResultBeanAdapter --> API : resCode, resMsg, result
+  API --> Caller : 200 OK\nSession resource and ETag
+end
+
+group Change future deep-thinking default
+  Caller -> Auth : PUT /sessions/{session_id}/thinking\nIf-Match and boolean thinking
+  Auth -> API : immutable CallerAuthContext
+  API -> Store : require idle and compare ETag
+  Store --> API : current Session resource
+  opt requested value is true
+    API -> Models : verify current model supports reasoning
+    Models --> API : managed non-off level or 422
+  end
+  API -> Store : atomically update deep-thinking switch and ETag
+  Store --> API : updated Session resource and ETag
+  API -> ResultBeanAdapter : normal(SessionResponseVO)
+  ResultBeanAdapter --> API : resCode, resMsg, result
+  API --> Caller : 200 OK\nSession resource and ETag
+end
+
+note over API,Models
+The public models field is a string array of model_id values.
+Names and display metadata come from the caller model catalog.
+The current model can be absent when it was disabled later.
+end note
+
+note over API,Models
+thinking controls whether deep thinking is enabled.
+It never authorizes raw reasoning-content disclosure.
+The change applies only to executions accepted afterward.
+end note
+@enduml

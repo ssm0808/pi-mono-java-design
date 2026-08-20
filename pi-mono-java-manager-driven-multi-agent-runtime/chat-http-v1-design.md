@@ -2,13 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.35.0 |
-| 状态 | 十一个接口已实现；Agent ID 与 Session 初始 thinking 的 1.35.0 目标契约待实现 |
+| 文档版本 | 1.36.0 |
+| 状态 | 十一个接口已实现；Agent ID 与 Session 初始 thinking 的新目标契约待实现；1.36.0 只优化契约维护方式 |
 | 接口评审状态 | 十一个 operation 均已确认 |
-| 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，主维护文档 |
-| 机器契约 | 不维护；过渡期 OpenAPI 已于 2026-08-18 明确废弃并删除 |
+| 精确契约源 | [`contract/common.json`](contract/common.json) 与 [`contract/operations/`](contract/operations/) |
+| 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，由精确契约源生成 |
+| 对外机器契约 | 不维护；结构化 JSON 只作为 HTML 生成源，不替代已废弃 OpenAPI |
 | 端到端传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均为 HTTP；执行响应使用请求范围内 SSE |
-| 设计仓分析基线 | `ef2141e0b096e7c792afe4f4f8cd58fbd1a8a331` |
+| 设计仓分析基线 | `a63f2fcb9633bae95d082b508f8f2b4c9af72754` |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 设计分析基线 | `195746614096312d4e93afb029d387837db78e0b` |
 | pi-mono-java 实现基线 | `9e7cc8952937a697fe2c16ff0de287b32bc4c891` |
@@ -37,12 +38,17 @@ mate-service 不得把内部 SSE 字节透明转发给浏览器。公共 mate-se
 
 基础路径为 `/campusclaw-service/v1`。网关 Host 可按部署环境配置，
 不属于业务路径的版本契约。
-逐接口的展示、评审状态和已确认响应样例以
-[`chat-http-v1-review.html`](chat-http-v1-review.html) 为主维护文档。
+精确字段、认证、请求、响应和错误由
+[`contract/common.json`](contract/common.json) 与十一份
+[`contract/operations/*.json`](contract/operations/) 唯一维护；
+[`chat-http-v1-review.html`](chat-http-v1-review.html) 是生成后供人评审的主界面，
+本文只保留跨接口语义、源码证据、目标差异和设计理由。生成页与源 model 的字节级
+一致性由校验脚本保证，禁止手工修改 HTML。
 过渡期 OpenAPI 1.7.1 因长期滞后且仍包含已经被替代的旧 Run 资源，已经由用户
-明确批准废弃并从仓库删除。当前不维护机器可读契约；实现和后续评审只能依据
-HTML 主契约与本文。若未来需要重新提供机器契约，必须从已确认内容重新生成并建立
-同步门禁，不得从 Git 历史恢复旧 YAML 后继续修改。
+明确批准废弃并从仓库删除。当前不发布 OpenAPI 等标准机器契约；仓库内 JSON 只是
+HTML 的规范化生成源。实现和后续评审依据生成后的 HTML、对应 JSON model 与本文
+设计理由。若未来需要重新提供标准机器契约，必须从当前 JSON 源生成并建立同步门禁，
+不得从 Git 历史恢复旧 YAML 后继续修改。
 
 ### 2.1 Session 生命周期
 
@@ -61,10 +67,8 @@ HTTP 没有 `connect(mode=resume)`。每个请求独立认证和定位 Session�
 `PUT /sessions/{session_id}/model`；删除后的 `session_id`
 永久禁止复用。
 
-`agent_id` 与 mate-service/Java 中的 `agentId` 是同一个逻辑标识，固定符合
-`^agent-[0-9a-fA-F]{32}$`。同一类型化 ID 约定还覆盖
-`toolId` / `tool_id` 的 `^tool-[0-9a-fA-F]{32}$` 以及
-`skillId` / `skill_id` 的 `^skill-[0-9a-fA-F]{32}$`。类型前缀为小写，
+`agent_id` 与 mate-service/Java 中的 `agentId` 是同一个逻辑标识；Agent、Tool、
+Skill 的精确正则只在 [`contract/common.json`](contract/common.json) 定义。类型前缀为小写，
 前缀与 UUID 之间只有一个 `-`，32 位十六进制 UUID 载荷不保留
 内部连字符。调用方和 Runtime 均不得构造下划线前缀的旧 ID 别名。
 本次不改变 `model_id`、`session_id` 或 `file_id` 的现有格式。
@@ -89,7 +93,7 @@ APPKEY 是明确公开的兼容契约，
 创建成功前，Runtime 必须完成以下初始化：
 
 1. 通过统一认证适配层完成 Header 形状校验并生成一个不可变
-   `CallerAuthContext`，再按 `^agent-[0-9a-fA-F]{32}$` 验证 PATH 中
+   `CallerAuthContext`，再按共享契约中的 Agent ID 正则验证 PATH 中
    `agent_id`；
 2. 在受控根目录中解析 `agent/{agent_id}/.campusclaw/`，拒绝路径或符号链接越界；
 3. 读取 `agent/{agent_id}/.campusclaw/settings.json` 的 `defaultModel` 与 `enabledModels`；
@@ -120,22 +124,9 @@ Manager 必须确保 HTTP 所需文件完整，不得让 HTTP 读取 CLI 物化�
 返回 HTTP `503`，响应体 `resCode=MANAGER_UNAVAILABLE`。
 
 已确认的第一个接口使用 `SessionCreateResponseVO`，其字段不因后续
-GetSession 评审而隐式扩张。第一个接口的完整成功响应为：
-
-```json
-{
-  "resCode": "0",
-  "resMsg": "success",
-  "result": {
-    "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-    "agent_id": "agent-550e8400e29b41d4a716446655440000",
-    "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
-    "state": "idle",
-    "thinking": true,
-    "created_at": "2026-08-15T11:30:00Z"
-  }
-}
-```
+GetSession 评审而隐式扩张。完整参数、成功响应与错误示例只维护在
+[`01-create-session.json`](contract/operations/01-create-session.json)，并由
+HTML 主契约展示。
 
 `agent_version` 和内部 record revision 只在 CampusClaw 持久化，不进入
 创建响应。创建操作不要求 `Idempotency-Key` 或 `If-Match`；
@@ -166,27 +157,13 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 | `created_at` | RFC 3339 timestamp | Session 创建时间 |
 | `updated_at` | RFC 3339 timestamp | Session 资源最后更新时间 |
 
-已确认成功响应为：
+精确字段表和响应示例由
+[`02-get-session.json`](contract/operations/02-get-session.json) 维护；本文只记录
+字段的资源边界和设计原因。
 
-```json
-{
-  "resCode": "0",
-  "resMsg": "success",
-  "result": {
-    "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
-    "agent_id": "agent-550e8400e29b41d4a716446655440000",
-    "model_id": "claude-sonnet-4-5",
-    "state": "running",
-    "thinking": true,
-    "created_at": "2026-08-15T10:30:00+08:00",
-    "updated_at": "2026-08-16T09:15:21+08:00"
-  }
-}
-```
+![GetSession 已确认响应](diagrams/session-lifecycle/http_get_session_response.svg)
 
-![GetSession 已确认响应](http_get_session_response.svg)
-
-[PlantUML 源码：`http_get_session_response`](diagram.puml#L626)
+[PlantUML 源码：`http_get_session_response`](diagrams/session-lifecycle/diagram.puml#L82)
 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
@@ -260,15 +237,15 @@ owner 信息。`X-HW-ID` 不作为 Session owner；对不存在或已删除资�
 `400 INVALID_SESSION_ID`；运行中的 Session 返回 `409 SESSION_BUSY`。
 异常响应只有 `resCode/resMsg`，不包含 `result`。
 
-![HTTP Session 逻辑删除](http_delete_session.svg)
+![HTTP Session 逻辑删除](diagrams/session-lifecycle/http_delete_session.svg)
 
-[PlantUML 源码：`http_delete_session`](diagram.puml#L697)
+[PlantUML 源码：`http_delete_session`](diagrams/session-lifecycle/diagram.puml#L153)
 
 本小节和主维护 HTML 中的第三个接口已经用户确认。
 
-![HTTP Session 创建](http_session_creation.svg)
+![HTTP Session 创建](diagrams/session-lifecycle/http_session_creation.svg)
 
-[PlantUML 源码：`http_session_creation`](diagram.puml#L418)
+[PlantUML 源码：`http_session_creation`](diagrams/session-lifecycle/diagram.puml#L1)
 
 ### 2.2 消息与 Session Event
 
@@ -309,9 +286,9 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 | 断线恢复 | 从第一页查询持久化 Events 并去重，不重放 POST | 按 Session 事件流与历史恢复 |
 | 设计差异 | 请求范围内直接流式返回，保留产品自己的命名 | 发送与订阅是两个 HTTP 请求 |
 
-![Session Event、内部执行与 Entry 恢复边界](http_execution_resource_model.svg)
+![Session Event、内部执行与 Entry 恢复边界](diagrams/execution-control/http_execution_resource_model.svg)
 
-[PlantUML 源码：`http_execution_resource_model`](diagram.puml#L903)
+[PlantUML 源码：`http_execution_resource_model`](diagrams/execution-control/diagram.puml#L114)
 
 #### 2.2.2 第四个已确认接口：提交用户事件并直接流式返回
 
@@ -444,9 +421,9 @@ ToolResult Entry 是权威事实，调用方按 `entry_id/entry_seq` 与本地�
 未持久化的 delta 不补拉。该行为是相对 pi-mono-java 当前
 `ChatHandler.wireSink()`“客户端取消即 abort”的架构改造。
 
-![HTTP Session Event 直接流式返回](http_session_event_stream.svg)
+![HTTP Session Event 直接流式返回](diagrams/session-events/http_session_event_stream.svg)
 
-[PlantUML 源码：`http_session_event_stream`](diagram.puml#L783)
+[PlantUML 源码：`http_session_event_stream`](diagrams/session-events/diagram.puml#L1)
 
 第四接口已经确认：冻结路径、`user.message` 请求、`message + file_ids`、同一 POST
 直接 SSE、无公共 `run_id`、无 `Idempotency-Key`、成功事件顺序与持久化语义，
@@ -584,9 +561,9 @@ CampusClaw 产品投影，不应表述为 pi 已有分页接口。Anthropic 的
 `GET /v1/sessions/{session_id}/events` 同样返回不透明 `next_page`，没有公开固定
 快照水位；CampusClaw 借鉴这一分页边界，但仍以自己的 Entry 类型和 ResultBean 返回。
 
-![HTTP Session Events 开放分页](http_session_event_list.svg)
+![HTTP Session Events 开放分页](diagrams/session-events/http_session_event_list.svg)
 
-[PlantUML 源码：`http_session_event_list`](diagram.puml#L956)
+[PlantUML 源码：`http_session_event_list`](diagrams/session-events/diagram.puml#L121)
 
 ### 2.4 模型与 Session 配置
 
@@ -610,19 +587,8 @@ CampusClaw 产品投影，不应表述为 pi 已有分页接口。Anthropic 的
 Agent 配置中的稳定顺序，不分页。`models` 可以为空；Session 保存的
 `current_model_id` 若在创建后被管理员停用，也允许暂时不在 `models` 中。
 
-```json
-{
-  "resCode": "0",
-  "resMsg": "success",
-  "result": {
-    "current_model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
-    "models": [
-      "model_011CZq2GkV8aD4NwP7sLmXfR",
-      "model_011CZq2GkV8aD4NwP7sLmXfS"
-    ]
-  }
-}
-```
+精确响应示例由
+[`06-list-session-models.json`](contract/operations/06-list-session-models.json) 维护。
 
 `models` 的类型是 `string[]`，数组元素直接是 `model_id`。只有当候选项需要增加
 独立属性时才有理由改为对象数组；当前没有扩展字段，因此不保留无意义的对象层。
@@ -634,13 +600,8 @@ Agent 配置中的稳定顺序，不分页。`models` 可以为空；Session 保
 
 #### 2.4.2 PUT Session Model
 
-`PUT /sessions/{session_id}/model` 的请求只包含：
-
-```json
-{
-  "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS"
-}
-```
+`PUT /sessions/{session_id}/model` 的请求只包含 `model_id`；精确请求和响应示例由
+[`07-change-session-model.json`](contract/operations/07-change-session-model.json) 维护。
 
 Runtime 必须实时确认目标模型仍属于上述可选集合；不存在、未绑定或调用方无权使用
 统一返回 `422 MODEL_NOT_AVAILABLE`，不泄露模型目录。成功后只改变后续
@@ -652,31 +613,11 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 中将 `thinking` 归一为 `false`，而不是留下不可执行的 Session 配置。目标模型支持
 深度思考时保持原值。
 
-```json
-{
-  "resCode": "0",
-  "resMsg": "success",
-  "result": {
-    "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
-    "agent_id": "agent-550e8400e29b41d4a716446655440000",
-    "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS",
-    "state": "idle",
-    "thinking": false,
-    "created_at": "2026-08-15T10:30:00+08:00",
-    "updated_at": "2026-08-17T14:20:31+08:00"
-  }
-}
-```
-
 #### 2.4.3 PUT Session Thinking
 
-`PUT /sessions/{session_id}/thinking` 开启或关闭后续用户消息的深度思考，请求只包含：
-
-```json
-{
-  "thinking": true
-}
-```
+`PUT /sessions/{session_id}/thinking` 开启或关闭后续用户消息的深度思考，请求只包含
+`thinking`；精确请求和响应示例由
+[`08-change-session-thinking.json`](contract/operations/08-change-session-thinking.json) 维护。
 
 `false` 映射为 pi 的 `off`；`true` 由 Runtime 映射到当前模型和 Agent 配置的受管
 非 `off` 推理强度。调用方不选择 `minimal/low/medium/high/xhigh/max` 等具体等级。
@@ -691,9 +632,9 @@ Event。响应复用完整 SessionResource，使调用方一次刷新 `model_id`
 公司替换 Bean 内部调用 `ResultBeanFactory.getFactory().normal(...)`。所有异常仍只包含
 `resCode/resMsg`。
 
-![HTTP Session 模型与深度思考配置](http_session_model_configuration.svg)
+![HTTP Session 模型与深度思考配置](diagrams/session-configuration/http_session_model_configuration.svg)
 
-[PlantUML 源码：`http_session_model_configuration`](diagram.puml#L1044)
+[PlantUML 源码：`http_session_model_configuration`](diagrams/session-configuration/diagram.puml#L1)
 
 ### 2.5 Session 执行控制（已确认）
 
@@ -777,9 +718,9 @@ Abort 不删除 Session 或已完成 Entry，也不新增公共 `aborted` 历史
 `user.message` 并直接返回 SSE。若让同一 HTTP operation 根据 `type` 在 SSE、
 ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约不稳定。
 
-![HTTP Session 执行控制](http_session_execution_controls.svg)
+![HTTP Session 执行控制](diagrams/execution-control/http_session_execution_controls.svg)
 
-[PlantUML 源码：`http_session_execution_controls`](diagram.puml#L101)
+[PlantUML 源码：`http_session_execution_controls`](diagrams/execution-control/diagram.puml#L1)
 
 ## 3. 两跳 HTTP+SSE 边界
 
@@ -979,9 +920,9 @@ Controller 边界，独立仓由 `StandaloneResultBeanAdapter` 生成已确认 J
 Git。Controller 和 Service 不需要知道公司类的 FQCN；替换发生在依赖注入边界，
 因而不存在两个同名兼容制品同时进入 classpath 的风险。
 
-![ResultBeanAdapter 公司内外 Bean 替换](http_result_bean_compatibility.svg)
+![ResultBeanAdapter 公司内外 Bean 替换](diagrams/http-contract/http_result_bean_compatibility.svg)
 
-[PlantUML 源码：`http_result_bean_compatibility`](diagram.puml#L499)
+[PlantUML 源码：`http_result_bean_compatibility`](diagrams/http-contract/diagram.puml#L1)
 
 ### 6.3 错误与国际化实现
 
@@ -1022,8 +963,8 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 - Runtime 对每个请求重新校验 Session、Agent 和 Model 资源状态，但不把凭据 ID
   当作 owner；动作权限由上游保证。
 - `agent_id`、`model_id` 和 `file_id` 均大小写敏感且不透明。
-- Agent、Tool 和 Skill 标识分别必须匹配 `^agent-[0-9a-fA-F]{32}$`、
-  `^tool-[0-9a-fA-F]{32}$` 和 `^skill-[0-9a-fA-F]{32}$`；不接受无前缀、
+- Agent、Tool 和 Skill 标识必须匹配 [`contract/common.json`](contract/common.json)
+  中各自唯一的类型化资源 ID 正则；不接受无前缀、
   错误类型前缀、带内部连字符的 UUID 或下划线旧格式。
 - `POST /sessions/{session_id}/events` 已确认只接受 `user.message`、文本和文件 ID，
   不接受单次 `thinking` 覆盖，
@@ -1033,9 +974,9 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 - Runtime 不调用文件服务或 OBS；它只把有序 `file_ids` 编码成固定
   `[File IDs]` 文本块并加入本次用户提示。
 
-![HTTP 双认证适配](http_dual_authentication.svg)
+![HTTP 双认证适配](diagrams/http-contract/http_dual_authentication.svg)
 
-[PlantUML 源码：`http_dual_authentication`](diagram.puml#L559)
+[PlantUML 源码：`http_dual_authentication`](diagrams/http-contract/diagram.puml#L61)
 
 ## 8. 源码证据与差异分类
 
@@ -1134,6 +1075,7 @@ Agent/Tool/Skill ID 与 `thinking=true` 创建默认值是相对 `9e7cc895` 的�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.36.0 | 2026-08-20 | 不改变十一项已确认接口语义；建立共享契约与 operation JSON 单一编辑源，HTML 改为严格生成物并共享一份 CSS/JavaScript/聚合 model；PlantUML 按九个主题拆分以隔离 SVG 和源码行锚点；校验增加 fast/full 两级与生成字节比对 |
 | 1.35.0 | 2026-08-20 | 按用户决定将 Agent、Tool、Skill ID 固定为类型前缀加去连字符的 32 位十六进制 UUID；Create Runtime Session 成功时初始化 `thinking=true`；记录当前 Java 旧正则、`thinking=false` 和 `agent_id VARCHAR(30)` 实现差异 |
 | 1.34.0 | 2026-08-19 | 对齐实现提交 `972f98ca`：记录 `.campusclaw` 真实运行根目录、事件提交/查询/执行协调职责拆分；Steer、FollowUp、Abort 在 running Session 未命中本机 active execution 时新增 `503 SESSION_EXECUTION_UNAVAILABLE` 和 `Retry-After: 3` |
 | 1.33.0 | 2026-08-19 | 按用户确认在主 API 评审页的每个接口卡片中同时展示中文接口简称和可见的 `operationKey` 英文简称；保持机器标识与设计表、测试清单一致 |

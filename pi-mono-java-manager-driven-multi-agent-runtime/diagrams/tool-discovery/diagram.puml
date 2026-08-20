@@ -1,0 +1,77 @@
+@startuml progressive_tool_discovery_execution
+title Progressive Tool Discovery and Execution
+
+' Source evidence:
+' pi-mono packages/coding-agent/src/core/skills.ts: formatSkillsForPrompt
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillPromptFormatter.java: format
+' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: AgentTool
+' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: toLlmTools
+' Observed behavior: Java sends every registered AgentTool name, description and schema to the model.
+' Architecture change: business tools are disclosed as logical ids and executed by two generic tools.
+' Design reason: Tool Manager owns live schema, authorization and execution without dynamic registration.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam participant {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+skinparam sequence {
+  LifeLineBorderColor #64748B
+  LifeLineBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F8FAFC
+}
+
+actor User
+participant Model
+participant "read" as Read
+participant "get_tool_info" as GetInfo
+participant "call_tool" as CallTool
+database "Agent SYSTEM.md" as AgentSystem
+database "Skill files" as SkillFiles
+participant "Tool Manager" as ToolManager
+database "Agent metadata authority" as AgentAuthority
+
+Model -> AgentSystem : receive direct Agent tool summaries\nin system prompt
+
+alt task matches a Skill
+  Model -> Read : read(SKILL.md)
+  Read -> SkillFiles : load Skill content
+  SkillFiles --> Read : instructions
+  Read --> Model : Skill instructions
+  opt Skill needs an external operation
+    Model -> Read : read(references/tools.json)
+    Read -> SkillFiles : load direct Skill tool summaries
+    SkillFiles --> Read : tool_id, name, description
+    Read --> Model : logical Skill tools
+  end
+end
+
+Model -> GetInfo : get_tool_info(tool_id)
+GetInfo -> ToolManager : getToolInfo(agent_id, tool_id)
+ToolManager -> AgentAuthority : validate Agent binding and policy
+AgentAuthority --> ToolManager : authorized binding
+ToolManager --> GetInfo : live description and schemas
+GetInfo --> Model : tool metadata
+
+Model -> CallTool : call_tool(tool_id, parameters)
+CallTool -> ToolManager : callTool(agent_id, session_id,\ntool_id, parameters)
+ToolManager -> AgentAuthority : revalidate binding and permission
+AgentAuthority --> ToolManager : current policy
+ToolManager -> ToolManager : validate status and input schema
+ToolManager -> ToolManager : execute and validate output
+ToolManager --> CallTool : result or structured error
+CallTool --> Model : Tool result
+Model --> User : final response
+
+note over GetInfo,CallTool
+Their descriptions define the protocol:
+discover the live schema before execution.
+Prompt disclosure never grants permission.
+end note
+@enduml

@@ -1,0 +1,165 @@
+@startuml http_session_execution_controls
+title HTTP Session Execution Control Design
+
+' Source evidence (pi-mono commit 086c32e74530564922d011ade23ff582c9d63116):
+' packages/coding-agent/src/core/agent-session.ts, steer, followUp, clearQueue, and abort,
+' lines 1336-1404 and 1516-1556
+' packages/agent/src/agent.ts, steer, followUp, abort, and queue drain order,
+' lines 275-319, 350-390, and 456-492
+' packages/coding-agent/src/modes/rpc/rpc-mode.ts, steer, follow_up, and abort,
+' lines 418-430
+' Source evidence (pi-mono-java commit 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionControlController.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java.
+' Observed behavior: pi keeps separate steering and follow-up queues, drains steering first,
+' and aborts the current in-process run. Java now exposes text-only steer, follow-up, and abort.
+' Observed behavior: three HTTP operations use Session scope because no public Run exists.
+' Product constraint: v1 accepts text only, fixes one-at-a-time FIFO behavior, and projects
+' a delivered control message as the existing durable user.message entry type.
+' Design reason: separate control responses from the existing POST Events SSE response.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequence {
+  ArrowColor #475569
+  ActorBorderColor #475569
+  ActorFontColor #0F172A
+  LifeLineBorderColor #94A3B8
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantFontColor #0F172A
+  GroupBorderColor #64748B
+  GroupFontColor #334155
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+
+actor Caller
+participant "Credential\nAdapter" as Auth
+participant "Session Control\nAPI" as API
+database "Runtime Session\nStore" as Store
+collections "Active Execution\nQueues" as Queue
+participant "AgentSession" as Session
+participant "Existing POST Events\nSSE Stream" as SSE
+participant ResultBeanAdapter
+
+group Queue a Steering Message
+  Caller -> Auth : POST /sessions/{session_id}/steers\nmessage only
+  Auth -> API : immutable CallerAuthContext
+  API -> Store : require running Session
+  Store --> API : active execution handle
+  API -> Queue : append Steer atomically in FIFO order
+  Queue --> API : accepted_at
+  API -> ResultBeanAdapter : normal(ControlAcceptedResponseVO)
+  ResultBeanAdapter --> API : resCode, resMsg, result
+  API --> Caller : 202 Accepted
+end
+
+group Queue a FollowUp Message
+  Caller -> Auth : POST /sessions/{session_id}/follow-ups\nmessage only
+  Auth -> API : immutable CallerAuthContext
+  API -> Store : require running Session
+  Store --> API : active execution handle
+  API -> Queue : append FollowUp atomically in FIFO order
+  Queue --> API : accepted_at
+  API -> ResultBeanAdapter : normal(ControlAcceptedResponseVO)
+  ResultBeanAdapter --> API : resCode, resMsg, result
+  API --> Caller : 202 Accepted
+end
+
+alt current Assistant turn and tools complete with Steer queued
+  Session -> Queue : drain one Steer before FollowUp
+  Queue --> Session : next user message
+  Session -> Store : append durable user.message on delivery
+  Store --> SSE : user.message with entry_id and entry_seq
+  Session -> Session : continue with next model invocation
+else Agent would stop and only FollowUp is queued
+  Session -> Queue : drain one FollowUp
+  Queue --> Session : next user message
+  Session -> Store : append durable user.message on delivery
+  Store --> SSE : user.message with entry_id and entry_seq
+  Session -> Session : continue active execution
+end
+
+group Abort current execution idempotently
+  Caller -> Auth : POST /sessions/{session_id}/abort\nno request body
+  Auth -> API : immutable CallerAuthContext
+  API -> Store : load Session
+  Store --> API : active execution or idle
+  opt execution is active
+    API -> Session : abort model, tools, and subagents
+    API -> Queue : clear undelivered Steer and FollowUp
+    API -> Session : wait for idle
+    Session --> SSE : session.status.idle
+    Session --> SSE : stream.end reason aborted
+  end
+  API --> Caller : 204 No Content after idle
+end
+
+note over API,Queue
+Steer and FollowUp require a running Session.
+An idle request returns 409 SESSION_NOT_RUNNING.
+Abort on an idle Session is a successful no-op.
+No control id or public Run resource is created.
+end note
+@enduml
+
+@startuml http_execution_resource_model
+title Session Event, Internal Execution, and Entry Recovery Boundary
+
+' Source evidence verified on 2026-08-17:
+' https://platform.claude.com/docs/en/managed-agents/events-and-streaming
+' https://platform.claude.com/docs/en/managed-agents/sessions
+' pi-mono packages/coding-agent/src/core/session-manager.ts, getBranch and appendMessage
+' pi-mono-java commit 8691e8800f05f28afe22499050c29220ef5b7475,
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java
+' Observed behavior: both pi baselines rebuild conversation context from messages and entries.
+' Observed behavior: CampusClaw exposes Session Events and keeps execution identity internal.
+' Design reason: one public recovery model avoids duplicated lifecycle and cursor semantics.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 16
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam defaultFontColor #0F172A
+skinparam ArrowColor #64748B
+skinparam rectangle {
+  BorderColor #64748B
+  BackgroundColor #F8FAFC
+  FontColor #0F172A
+}
+
+actor Caller
+rectangle "POST /sessions/{id}/events\nuser.message and direct SSE" as SendEvent
+rectangle "ActiveExecution\ninternal Session state" as Execution
+rectangle "Transient Preview\nstarted, delta, tool lifecycle" as Preview
+rectangle "Persisted Entry\nentry_id and entry_seq" as Entry
+rectangle "GET /sessions/{id}/events\ncurrent-branch recovery" as GetEvents
+rectangle "Session Controls\nsteer, follow-up, abort" as Controls
+
+Caller --> SendEvent : submit one user input
+SendEvent --> Execution : accept and start
+Execution --> Preview : stream live progress
+Execution --> Entry : commit authoritative facts
+Entry --> GetEvents : recover after disconnect
+Caller --> Controls : independent HTTP requests
+Controls --> Execution : queue or cancel
+
+note bottom of Execution
+Execution has no caller-visible identity.
+Session state is idle or running.
+end note
+
+note bottom of GetEvents
+Only user.message, assistant.message.completed,
+and tool.result are returned with opaque pagination.
+end note
+@enduml

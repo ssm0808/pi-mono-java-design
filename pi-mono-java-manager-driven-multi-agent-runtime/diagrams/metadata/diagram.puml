@@ -1,0 +1,99 @@
+@startuml metadata_runtime_directory_mapping
+title Metadata to CampusAgent Runtime Directory
+
+' Source evidence (pi-mono-java 9e7cc8952937a697fe2c16ff0de287b32bc4c891):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java.
+' Observed behavior: pi and pi-mono-java discover Skill metadata from SKILL.md frontmatter.
+' Observed behavior: the Runtime reads one controlled Agent directory directly and does not cache it.
+' Observed behavior: HTTP V1 reads agent/{agent_id}/.campusclaw while retaining its existing filenames.
+' Observed behavior: RuntimeSessionStore persists Session state in a shared database.
+' Observed behavior: RuntimeApiConstants still accepts agent_ plus 24 alphanumeric characters.
+' Architecture change: Agent, Tool, and Skill IDs use typed prefixes plus 32 hex UUID characters.
+' Design reason: align Runtime identifiers with the metadata authority and reject untyped aliases.
+' Target-only design: a future metadata compiler may publish the controlled Agent directory.
+' Design reason: keep Agent-specific disclosure local while Managers remain runtime authorities.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam rectangle {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam database {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
+}
+skinparam file {
+  BackgroundColor #F0FDF4
+  BorderColor #16A34A
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+
+rectangle "Resolved metadata input" as Input {
+  rectangle "AGENT\nid, version, system_prompt\nbinding_models, bindings, policy" as AgentMetadata
+  rectangle "SKILL\nname, description, content\nskill and tool bindings" as SkillMetadata
+  rectangle "TOOL\nid, name, description\nschema, source, permission" as ToolMetadata
+}
+
+rectangle "Runtime bundle compiler" as Compiler {
+  rectangle "Validate versions, IDs,\ndependency closure,\ncase-fold conflicts and policy" as Validate
+  rectangle "Render prompt and\nSkill resources" as Render
+  rectangle "Publish Agent directory\natomically" as Publish
+}
+
+rectangle "Controlled Agent directory\ncase-sensitive file system\nagent/<agent-id>/.campusclaw/" as AgentDirectory {
+  file "settings.json\ndefaultModel, enabledModels" as SettingsFile
+  file "SYSTEM.md\nAgent instructions\nDirect Agent tool summaries" as SystemFile
+  file "skills/<skill-name>/SKILL.md\nFrontmatter and Skill content" as SkillFile
+  file "skills/<skill-name>/references/tools.json\nDirect Skill tool summaries" as SkillToolsFile
+}
+
+database "Agent metadata authority\nAgent model and binding policy" as AgentAuthority
+database "Tool Manager authority\nTool schema, status,\npermission and execution" as ToolManager
+database "Model Manager authority\nModel descriptor,\nallowlist and invocation" as ModelManager
+database "RuntimeSessionStore\nSession, current-branch Entry,\ninternal execution state and revisions" as SessionStore
+
+AgentMetadata --> Validate
+SkillMetadata --> Validate
+ToolMetadata --> Validate
+Validate --> Render
+Render --> Publish
+Publish --> SettingsFile : identity, version and binding_models
+Publish --> SystemFile : system_prompt and direct tools
+Publish --> SkillFile : name, description and content
+Publish --> SkillToolsFile : direct Skill tools
+
+AgentMetadata ..> AgentAuthority : publish metadata
+ToolMetadata ..> ToolManager : publish executable definition
+SettingsFile ..> ModelManager : model selection snapshot
+AgentMetadata ..> ModelManager : authoritative model bindings
+AgentDirectory ..> SessionStore : resolved working directory
+
+note right of SkillToolsFile
+Only tool_id, name and description.
+Schemas stay in Tool Manager.
+Child Skill tools are not merged.
+end note
+
+note left of AgentDirectory
+agent_id = agent- + 32 hex UUID characters
+tool_id = tool- + 32 hex UUID characters
+skill_id = skill- + 32 hex UUID characters
+UUID payloads contain no hyphens.
+Compare IDs byte-for-byte.
+Reject Agent ID case-fold collisions.
+Verify the directory and file boundary.
+end note
+
+note right of SettingsFile
+defaultModel must be present in enabledModels.
+enabledModels is a non-empty explicit allowlist.
+Model Manager still revalidates every selection and invocation.
+end note
+@enduml

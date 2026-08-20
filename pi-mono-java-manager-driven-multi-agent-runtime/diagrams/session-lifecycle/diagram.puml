@@ -1,0 +1,237 @@
+@startuml http_session_creation
+title CampusClaw HTTP Session Creation
+
+' Source evidence (pi-mono-java 9e7cc8952937a697fe2c16ff0de287b32bc4c891):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, create.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java, resolve.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java, create.
+' Observed behavior: mate-service supplies only agent_id and CampusClaw generates session_id.
+' Observed behavior: settings chooses a default model candidate and the model manager validates it.
+' Observed behavior: current Java accepts agent_ plus 24 alphanumeric characters and persists thinking false.
+' Architecture change: target Agent IDs use agent- plus 32 hex UUID characters.
+' Product constraint: successful target creation persists thinking true.
+' Observed behavior: creation persists an idle Session and does not initialize AgentSession or invoke a model.
+' Design reason: defer expensive runtime initialization until the first accepted user event.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam participant {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+skinparam sequence {
+  LifeLineBorderColor #64748B
+  LifeLineBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F8FAFC
+}
+
+actor "mate-service\nRuntime bridge" as Mate
+participant "RuntimeRequestAuthenticator" as Auth
+participant "Runtime HTTP API" as API
+participant "AgentDirectoryResolver" as Resolver
+participant "Model Manager" as Models
+participant "SessionIdGenerator" as Ids
+database "RuntimeSessionStore" as Store
+participant "ResultBeanAdapter" as ResultAdapter
+
+Mate -> Auth : POST /agents/{agent_id}/sessions\nno request body and exactly one credential pair
+Auth -> Auth : reject mixed or incomplete headers\nvalidate credential shape
+Auth --> API : immutable CallerAuthContext
+API -> API : validate agent- plus 32 hex UUID characters
+API -> Resolver : resolve(agent_id)
+Resolver -> Resolver : verify controlled root and symlink boundary\nload settings.json
+Resolver --> API : agent directory, defaultModel, enabledModels
+API -> Models : resolveDefaultModel(snapshot)
+Models --> API : authoritative ModelDescriptor
+API -> Ids : generate globally unique session_id
+Ids --> API : session_id
+API -> Store : insert SessionRecord\nstate idle, thinking true, version 1
+Store --> API : committed
+API -> ResultAdapter : normal(CreateSessionResponseVO)
+ResultAdapter --> API : resCode, resMsg, result
+API --> Mate : 201 Created plus Location\nResultBean with SessionResource in result
+
+note over API,Store
+Before commit, a failure does not expose session_id.
+After commit, state is idle and no MessageEntry or AgentSession exists.
+The persisted deep-thinking switch is true.
+AgentSession is initialized lazily by the first user event.
+The response contains only Session identity, current defaults,
+coarse state, and creation time.
+end note
+
+note over Mate,API
+This operation has no Idempotency-Key or If-Match.
+Every successful POST creates a new Session.
+A lost successful response can produce an orphan Session,
+which background timeout cleanup must remove if unbound.
+end note
+
+note over API,Store
+The target agent_id has 38 characters.
+Widen the current VARCHAR(30) column to VARCHAR(64)
+before enabling the new identifier contract.
+end note
+@enduml
+
+@startuml http_get_session_response
+title CampusClaw GetSession Confirmed Response
+
+' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
+' packages/protocol/src/schemas.ts, ThinkingLevelSchema, lines 26-35
+' packages/protocol/src/schemas.ts, SessionPhaseSchema, lines 38-45
+' packages/protocol/src/schemas.ts, SessionSnapshotSchema, lines 241-258
+' Source evidence (anthropic-sdk-typescript 64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff):
+' src/resources/beta/sessions/sessions.ts, Session, lines 638-710
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, get.
+' Observed behavior: pi exposes phase, reasoning effort, transcript, attached, and locked
+' in its protocol snapshot.
+' Observed behavior: Anthropic exposes a control-plane Session resource without transcript
+' or an active Run recovery snapshot.
+' Product constraint: CampusClaw exposes a boolean deep-thinking switch instead of effort levels.
+' Architecture change: the confirmed response removes the former public active Run pointer.
+' Design reason: Session state is the coarse control-plane signal; GET Session Events and the
+' initiating POST stream own durable recovery and live execution detail.
+' Observed behavior: these wire-contract fields exist in GetSessionResponseVO.
+
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  ArrowColor #475569
+  FontColor #0F172A
+  AttributeFontColor #0F172A
+  StereotypeFontColor #475569
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+skinparam ArrowColor #475569
+
+class GetSessionResult <<implemented_wire_contract>> {
+  +sessionId: string
+  +agentId: string
+  +modelId: string
+  +createdAt: timestamp
+  +updatedAt: timestamp
+}
+
+enum SessionState {
+  idle
+  running
+}
+
+enum DeepThinkingSwitch {
+  false
+  true
+}
+
+GetSessionResult --> "1" SessionState : state
+GetSessionResult --> "1" DeepThinkingSwitch : thinking
+
+note bottom of GetSessionResult
+This is the confirmed public Session resource.
+State is idle or running and carries no execution identity.
+GET Session Events cursors and live progress belong to other operations.
+end note
+@enduml
+
+@startuml http_delete_session
+title CampusClaw HTTP Session Logical Deletion Confirmed Design
+
+' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
+' packages/coding-agent/src/core/agent-session.ts, AgentSession.dispose, lines 789-805
+' packages/coding-agent/src/modes/interactive/components/session-selector.ts,
+' deleteSessionFile, lines 598-630
+' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, delete.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java, beginDeletion.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/SessionCleanupWorker.java.
+' Observed behavior: pi dispose stops active work and releases runtime resources, while
+' interactive deletion removes the local JSONL file.
+' Observed behavior: the implemented repository returns BUSY for a running session and does not abort it.
+' Observed behavior: tombstone insertion, cleanup task insertion, and session deletion commit atomically.
+' Architecture change: logical deletion and a durable cleanup work item replace local JSONL deletion.
+' Design reason: the API becomes idempotent immediately without exposing cleanup-job state.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequence {
+  ArrowColor #475569
+  ActorBorderColor #475569
+  ActorFontColor #0F172A
+  LifeLineBorderColor #94A3B8
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantFontColor #0F172A
+  GroupBorderColor #64748B
+  GroupFontColor #334155
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+
+actor Caller
+participant "Credential\nAdapter" as Auth
+participant "DeleteSession\nAPI" as API
+database "Runtime Session\nStore" as Store
+participant "Cleanup\nWorker" as Worker
+
+Caller -> Auth : DELETE /sessions/{session_id}\nexactly one credential pair, no body
+Auth -> API : immutable CallerAuthContext
+API -> API : validate session_id
+API -> Store : beginLogicalDelete(session_id)
+
+alt existing idle Session
+  Store -> Store : transaction: insert tombstone, enqueue cleanup,\ndelete session row
+  Store --> API : DELETED
+  API --> Caller : 204 No Content
+  Worker -> Store : claim cleanup work item
+  Worker -> Store : complete remaining cleanup
+  Worker -> Store : complete and delete cleanup work item
+else existing running Session
+  Store --> API : BUSY
+  API --> Caller : 409 SESSION_BUSY\nResultBean error without result
+else missing or deleted
+  Store --> API : NOT_FOUND
+  API --> Caller : 204 No Content
+else atomic commit failed
+  Store --> API : failure, no partial deletion
+  API --> Caller : 500 SESSION_DELETE_FAILED\nResultBean error without result
+end
+
+note over API,Store
+Logical deletion is complete at 204.
+Physical cleanup remains retryable and internal.
+end note
+
+note over Store,Worker
+mate-service Chat metadata and file objects
+are outside this operation boundary.
+end note
+
+note right of Store
+The permanent tombstone has exactly two fields:
+session_id and deleted_at.
+Cleanup state, retries, errors, and owner data stay out.
+end note
+@enduml

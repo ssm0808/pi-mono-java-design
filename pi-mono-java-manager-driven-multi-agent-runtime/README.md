@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.5.0 |
+| 文档版本 | 2.6.0 |
 | 状态 | CampusClaw 内部 11 个接口已实现；资源 ID 和 Session 初始 thinking 的新契约待实现；mate-service 公共接口待评审 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
-| 设计仓分析基线 | `ef2141e0b096e7c792afe4f4f8cd58fbd1a8a331` |
+| 设计仓分析基线 | `a63f2fcb9633bae95d082b508f8f2b4c9af72754` |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 设计分析基线 | `195746614096312d4e93afb029d387837db78e0b` |
 | pi-mono-java 实现基线 | `9e7cc8952937a697fe2c16ff0de287b32bc4c891` |
@@ -32,36 +32,56 @@ SSE 在这里不是永久在线的 Session 订阅，也不是单独的第二条�
 其后续 Assistant、Tool 和状态事件继续由当前仍然打开的执行 SSE 输出；Abort 终止
 当前执行并使该流收敛。
 
-![mate-service 与 CampusClaw HTTP+SSE 责任边界](mate_agent_service_responsibility_boundary.svg)
+![mate-service 与 CampusClaw HTTP+SSE 责任边界](diagrams/service-boundary/mate_agent_service_responsibility_boundary.svg)
 
-[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagram.puml#L214)
+[PlantUML 源码：`mate_agent_service_responsibility_boundary`](diagrams/service-boundary/diagram.puml#L1)
 
 ## 2. 契约权威顺序
 
-当前逐接口评审的权威顺序为：
+当前逐接口评审的维护顺序为：
 
-1. [`chat-http-v1-review.html`](chat-http-v1-review.html)：面向人的主维护契约，按已确认的 Swagger 风格卡片展示十一项 CampusClaw operation；
-2. [`chat-http-v1-design.md`](chat-http-v1-design.md)：字段语义、状态、错误、源码证据和设计原因。
+1. [`contract/common.json`](contract/common.json) 与 [`contract/operations/`](contract/operations/)：唯一可编辑的精确契约源；共享 ID、认证和公共响应只定义一次；
+2. [`chat-http-v1-review.html`](chat-http-v1-review.html)：由结构化契约生成的主要人类评审界面，不允许手工修改；
+3. [`chat-http-v1-design.md`](chat-http-v1-design.md)：只维护源码证据、目标差异和设计原因，不承担逐字段契约复制。
 
-OpenAPI 已经明确废弃并从仓库删除。当前不维护第三份机器契约，也不允许实现根据
-历史 OpenAPI 恢复旧 Run、History 或事件字段。若未来重新需要机器可读契约，必须
-从已确认 HTML 和设计文档建立新的生成与同步流程，不能恢复已删除文件继续增量修改。
+[`render_chat_http_v1.py`](render_chat_http_v1.py) 将共享定义和十一份 operation model
+展开为一个 standalone HTML。生成页只包含一份共享 CSS、一份共享 JavaScript 和一份
+聚合 JSON model，同时保留十一份无脚本可读的静态 operation；校验会重新生成并做
+字节级比较，防止静态内容、交互模型和源文件漂移。
+
+OpenAPI 已经明确废弃并从仓库删除。仓库内 JSON 是 HTML 的规范化生成源，不是对外
+发布的 OpenAPI，也不允许实现根据历史 OpenAPI 恢复旧 Run、History 或事件字段。
+若未来重新需要标准机器契约，应从这些已确认 JSON model 生成新的投影并建立同步
+门禁，不能恢复已删除文件继续增量修改。
 
 旧 WebSocket/AsyncAPI 文档已从当前仓库删除，历史内容只能从 Git 历史读取，不再是
 目标契约或新实现输入。
 
 ### 2.1 HTML-first 契约校验
 
-仓库使用 [`validate-chat-http-v1.py`](validate-chat-http-v1.py) 校验 HTML 主契约，
-替代已删除 OpenAPI 的 lint 入口：
+修改契约源后先重新生成 HTML，再运行快速校验：
 
 ```bash
+python3 render_chat_http_v1.py
 python3 validate-chat-http-v1.py
 ```
 
-校验覆盖十一项静态接口与 review model、HTML/设计文档版本一致性、JavaScript 语法、
-无脚本可读内容、响应式规则、PlantUML/SVG 生成、图链接与源码行锚点，以及
-`git diff --check`。脚本还会阻止已废弃 OpenAPI 文件或其当前引用重新进入仓库。
+修改 PlantUML 时只生成发生变化的设计主题；需要强制重建全部主题时增加 `--full`：
+
+```bash
+python3 render_diagrams.py
+python3 render_diagrams.py --full
+```
+
+提交前或 CI 使用完整校验：
+
+```bash
+python3 validate-chat-http-v1.py --full
+```
+
+快速模式校验契约源、HTML 字节同步、单份 JavaScript、无脚本内容、响应式规则、
+Markdown 链接和受影响的 PlantUML 主题。完整模式再校验所有主题 SVG。两种模式都会
+阻止已废弃 OpenAPI 文件或其当前引用重新进入仓库，并执行 `git diff --check`。
 
 ## 3. 两跳服务责任
 
@@ -179,7 +199,7 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 ## 6. Runtime 内部设计不变量
 
 - 一个 Session 绑定一个不可变 `agent_id`，允许切换 `model_id`；模型不是 Session 身份的一部分。
-- `agentId` / `agent_id`、`toolId` / `tool_id` 和 `skillId` / `skill_id` 共用类型化资源 ID 规则：小写类型前缀、一个 `-` 和去掉连字符的 32 位十六进制 UUID。
+- `agentId` / `agent_id`、`toolId` / `tool_id` 和 `skillId` / `skill_id` 共用类型化资源 ID 规则；精确正则只在 [`contract/common.json`](contract/common.json) 定义。
 - Session 名称属于 mate-service Chat 元数据，不存入 CampusClaw Runtime Session。
 - Session 粗粒度状态只有 `idle/running`；模型、工具或消息阶段通过实时事件表达。
 - `thinking` 是“是否启用深度思考”的 boolean，不是原始推理披露等级。
@@ -196,16 +216,11 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 元数据发布程序把 AGENT、SKILL 和 TOOL 的固定 revision 编译为受控 Agent
 运行目录。Runtime 不在请求期间临时拼接租户路径，也不接受调用方提供 cwd：
 
-| 逻辑字段 | 正则 | 示例 |
-|---|---|---|
-| `agentId` / `agent_id` | `^agent-[0-9a-fA-F]{32}$` | `agent-550e8400e29b41d4a716446655440000` |
-| `toolId` / `tool_id` | `^tool-[0-9a-fA-F]{32}$` | `tool-550e8400e29b41d4a716446655440002` |
-| `skillId` / `skill_id` | `^skill-[0-9a-fA-F]{32}$` | `skill-550e8400e29b41d4a716446655440001` |
-
-前缀必须与资源类型一致，UUID 载荷不得保留内部连字符，也不接受无前缀或
-下划线前缀的旧 ID。这一规则与 JSON/Java 的 camelCase 或 HTTP/存储的
-snake_case 命名无关；不引入别名转换。本次不改变 `model_id`、`session_id` 和
-`file_id` 的现有契约。
+精确格式和生成示例由 [`contract/common.json`](contract/common.json) 与
+[`01-create-session.json`](contract/operations/01-create-session.json) 维护。设计语义固定为：
+小写资源类型前缀、一个连字符、去掉内部连字符的 32 位十六进制 UUID；前缀必须与
+资源类型一致，不接受无前缀或下划线前缀旧 ID，也不引入 camelCase/snake_case 值别名。
+本次不改变 `model_id`、`session_id` 和 `file_id` 的现有契约。
 
 ```text
 agent/
@@ -227,9 +242,9 @@ Agent Runtime Template 仓库，也不在内存中缓存目录快照。
 这次只统一目录位置：HTTP 文件名仍为 `settings.json` / `SYSTEM.md` / `skills/`，
 不将 CLI 物化器的 `setting.json` / `systemPrompt.md` 隐式视为同一文件契约。
 
-![元数据到 Runtime 目录映射](metadata_runtime_directory_mapping.svg)
+![元数据到 Runtime 目录映射](diagrams/metadata/metadata_runtime_directory_mapping.svg)
 
-[PlantUML 源码：`metadata_runtime_directory_mapping`](diagram.puml#L1)
+[PlantUML 源码：`metadata_runtime_directory_mapping`](diagrams/metadata/diagram.puml#L1)
 
 ### 7.2 Tool Manager 渐进发现
 
@@ -247,9 +262,9 @@ call_tool
 `call_tool(tool_id, parameters)` 执行；摘要披露不等于授权，执行前必须重新验证
 Agent 绑定、工具状态、权限和输入 Schema。
 
-![Tool Manager 渐进发现与执行](progressive_tool_discovery_execution.svg)
+![Tool Manager 渐进发现与执行](diagrams/tool-discovery/progressive_tool_discovery_execution.svg)
 
-[PlantUML 源码：`progressive_tool_discovery_execution`](diagram.puml#L276)
+[PlantUML 源码：`progressive_tool_discovery_execution`](diagrams/tool-discovery/diagram.puml#L1)
 
 ### 7.3 Model Manager 流式适配
 
@@ -259,9 +274,9 @@ Agent 目录决定默认模型候选，Model Manager 仍是模型 descriptor、�
 转换为已确认的 Assistant/Tool SSE 事件，不把 Provider model ID、API Key、
 base URL 或成本字段公开给 mate-service。
 
-![Model Manager 流式调用](model_manager_streaming_flow.svg)
+![Model Manager 流式调用](diagrams/model-manager/model_manager_streaming_flow.svg)
 
-[PlantUML 源码：`model_manager_streaming_flow`](diagram.puml#L354)
+[PlantUML 源码：`model_manager_streaming_flow`](diagrams/model-manager/diagram.puml#L1)
 
 ### 7.4 数据与附件边界
 
@@ -308,6 +323,7 @@ CampusClaw 只消费有序 `file_ids`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.0 | 2026-08-20 | 建立共享契约与十一份 operation JSON 单一编辑源；HTML 改为单份 CSS/JavaScript/聚合 model 的严格生成物；PlantUML 按九个设计主题拆分；校验增加 fast/full 两级并按生成结果做字节同步检查 |
 | 2.5.0 | 2026-08-20 | 将 Agent、Tool、Skill ID 统一为类型前缀加去连字符的 32 位十六进制 UUID；Create Runtime Session 初始化 `thinking=true`；记录当前 Java 正则、默认值和列长度差异 |
 | 2.4.0 | 2026-08-19 | HTTP V1 受控 Agent 目录调整为 `agent/{agent_id}/.campusclaw/`；本次仅统一目录位置，保留已确认的 HTTP 文件契约 |
 | 2.3.0 | 2026-08-18 | 对齐实现提交 `8691e880`：内部 11 个接口标记已实现；删除改为 running 时 409；鉴权明确为上游真实性验证；文件 ID 改为固定提示块；移除 Agent Runtime Template 依赖 |
