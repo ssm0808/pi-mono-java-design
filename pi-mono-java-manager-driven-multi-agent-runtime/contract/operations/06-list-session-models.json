@@ -62,13 +62,6 @@
         }
       },
       {
-        "$ref": "responses.unauthenticated"
-      },
-      {
-        "$ref": "responses.authCredentialConflict",
-        "summary": "请求同时携带 Authorization 和 X-HW-APPKEY。"
-      },
-      {
         "status": "404",
         "label": "Not Found",
         "summary": "Session 不存在或已删除。",

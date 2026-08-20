@@ -5,7 +5,7 @@
     "method": "PUT",
     "path": "/sessions/{session_id}/thinking",
     "summary": "开启或关闭 Session 深度思考",
-    "description": "在 Session 处于 idle 时，将 thinking 设置为是否对后续 user.message 启用深度思考。false 映射为关闭推理；true 使用当前模型和 Agent 的受管非 off 推理强度，不向调用方暴露具体等级。该开关不表示披露模型原始思考过程，公共事件仍只返回允许展示的 Assistant 内容。",
+    "description": "在 Session 处于 idle 时，将 thinking 设置为是否对后续 user.message 启用深度思考。false 映射为关闭推理且 POST /events 不发送 thinking 事件；true 使用当前模型和 Agent 的受管非 off 推理强度，并开放 assistant.thinking.started/delta/completed SSE，其中 completed 持久化。GET /events 按查询时 Session 当前 thinking 状态决定是否返回 assistant.thinking.completed；状态切换后旧 page 失效，调用方须从第一页重新查询。调用方不选择具体推理等级。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -44,7 +44,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
+              "session_id": "session-550e8400e29b41d4a716446655440003",
               "agent_id": "agent-550e8400e29b41d4a716446655440000",
               "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS",
               "state": "idle",
@@ -94,13 +94,6 @@
             "resMsg": "The deep-thinking setting request is invalid."
           }
         }
-      },
-      {
-        "$ref": "responses.unauthenticated"
-      },
-      {
-        "$ref": "responses.authCredentialConflict",
-        "summary": "请求同时携带 Authorization 和 X-HW-APPKEY。"
       },
       {
         "id": "422-thinking-not-supported",

@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{session_id}/events",
     "summary": "分页读取 Session 持久化事件",
-    "description": "从与 POST 相同的 Events 集合路径分页读取当前 Session 分支中已经持久化的 user.message、assistant.message.completed 和 tool.result，不返回废弃分支或内部控制 Entry。GET 事件的 type 等于第四接口的 SSE event 名称，其余字段等于同一持久化 Entry 的 SSE data；started/delta、工具执行状态和流控制事件不会进入历史。示例明确使用 limit=3；next_page 是服务端签发的不透明游标，客户端只能原样回传，不得解析、修改或自行构造，下一页从 entry_seq=20 的最终 assistant.message.completed 继续。",
+    "description": "从与 POST 相同的 Events 集合路径分页读取当前 Session 分支中的持久化事件。当前 Session thinking=true 时返回 user.message、assistant.thinking.completed、assistant.message.completed 和 tool.result；thinking=false 时过滤全部 assistant.thinking.completed。thinking started/delta、message preview、工具执行状态和流控制事件不进入历史。page 绑定签发时的 thinking 状态；开关改变后旧 page 无效，调用方必须从第一页重读。示例假设当前 thinking=true 且 limit=3，下一页从 entry_seq=20 的 tool.result 继续。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -38,7 +38,7 @@
       {
         "status": "200",
         "label": "OK",
-        "summary": "以下为 limit=3 的第一页：按 entry_seq 从小到大返回三个持久化事件，next_page 指向 entry_seq=20；next_page=null 才表示响应时刻没有更多事件。",
+        "summary": "以下假设当前 Session thinking=true：limit=3 的第一页按 entry_seq 返回用户消息、完整 thinking 和完整 Assistant 消息，next_page 指向 entry_seq=20；thinking=false 时同一查询过滤 thinking 事件。",
         "headers": {
           "Cache-Control": "no-store",
           "Content-Language": "en-US"
@@ -60,9 +60,21 @@
                   "created_at": "2026-08-17T10:00:00Z"
                 },
                 {
+                  "type": "assistant.thinking.completed",
+                  "entry_id": "entry_thinking_101",
+                  "entry_seq": 18,
+                  "assistant_entry_id": "entry_101",
+                  "content_index": 0,
+                  "content": {
+                    "type": "thinking",
+                    "text": "我需要先定位异常订单。"
+                  },
+                  "created_at": "2026-08-17T10:00:01Z"
+                },
+                {
                   "type": "assistant.message.completed",
                   "entry_id": "entry_101",
-                  "entry_seq": 18,
+                  "entry_seq": 19,
                   "message": {
                     "role": "assistant",
                     "content": [
@@ -82,21 +94,6 @@
                   },
                   "finish_reason": "tool_call",
                   "created_at": "2026-08-17T10:00:02Z"
-                },
-                {
-                  "type": "tool.result",
-                  "entry_id": "entry_102",
-                  "entry_seq": 19,
-                  "tool_call_id": "call_201",
-                  "tool_name": "query_abnormal_orders",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "发现 3 条异常订单。"
-                    }
-                  ],
-                  "is_error": false,
-                  "created_at": "2026-08-17T10:00:04Z"
                 }
               ],
               "next_page": "page_q7K2mN9vR4xT8cL5"
@@ -143,13 +140,6 @@
             "resMsg": "The event pagination parameters are invalid."
           }
         }
-      },
-      {
-        "$ref": "responses.unauthenticated"
-      },
-      {
-        "$ref": "responses.authCredentialConflict",
-        "summary": "请求同时携带 Authorization 和 X-HW-APPKEY。"
       },
       {
         "status": "404",

@@ -1,15 +1,17 @@
 @startuml http_session_creation
 title CampusClaw HTTP Session Creation
 
-' Source evidence (pi-mono-java 9e7cc8952937a697fe2c16ff0de287b32bc4c891):
+' Source evidence (pi-mono-java 1f801dbb82bdda30478e3354e685e3153b179a0c):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, create.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java, resolve.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java, create.
 ' Observed behavior: mate-service supplies only agent_id and CampusClaw generates session_id.
 ' Observed behavior: settings chooses a default model candidate and the model manager validates it.
 ' Observed behavior: current Java accepts agent_ plus 24 alphanumeric characters and persists thinking false.
-' Architecture change: target Agent IDs use agent- plus 32 hex UUID characters.
+' Observed behavior: RandomSessionIdGenerator.nextId returns 26 Crockford Base32 characters with no prefix.
+' Architecture change: target Agent and Session IDs use a type prefix plus 32 hex UUID characters.
 ' Product constraint: successful target creation persists thinking true.
+' Product constraint: all Runtime operations carry integration-context headers without local validation.
 ' Observed behavior: creation persists an idle Session and does not initialize AgentSession or invoke a model.
 ' Design reason: defer expensive runtime initialization until the first accepted user event.
 
@@ -31,7 +33,6 @@ skinparam sequence {
 }
 
 actor "mate-service\nRuntime bridge" as Mate
-participant "RuntimeRequestAuthenticator" as Auth
 participant "Runtime HTTP API" as API
 participant "AgentDirectoryResolver" as Resolver
 participant "Model Manager" as Models
@@ -39,9 +40,8 @@ participant "SessionIdGenerator" as Ids
 database "RuntimeSessionStore" as Store
 participant "ResultBeanAdapter" as ResultAdapter
 
-Mate -> Auth : POST /agents/{agent_id}/sessions\nno request body and exactly one credential pair
-Auth -> Auth : reject mixed or incomplete headers\nvalidate credential shape
-Auth --> API : immutable CallerAuthContext
+Mate -> API : POST /agents/{agent_id}/sessions\ncontext headers and no request body
+API -> API : do not validate integration credentials
 API -> API : validate agent- plus 32 hex UUID characters
 API -> Resolver : resolve(agent_id)
 Resolver -> Resolver : verify controlled root and symlink boundary\nload settings.json
@@ -49,7 +49,7 @@ Resolver --> API : agent directory, defaultModel, enabledModels
 API -> Models : resolveDefaultModel(snapshot)
 Models --> API : authoritative ModelDescriptor
 API -> Ids : generate globally unique session_id
-Ids --> API : session_id
+Ids --> API : session- plus 32 hex UUID characters
 API -> Store : insert SessionRecord\nstate idle, thinking true, version 1
 Store --> API : committed
 API -> ResultAdapter : normal(CreateSessionResponseVO)
@@ -63,6 +63,12 @@ The persisted deep-thinking switch is true.
 AgentSession is initialized lazily by the first user event.
 The response contains only Session identity, current defaults,
 coarse state, and creation time.
+end note
+
+note over API,Ids
+The target session_id has the session- prefix
+and a 32-character hexadecimal UUID payload.
+UUID hyphens and legacy unprefixed IDs are rejected.
 end note
 
 note over Mate,API
@@ -123,7 +129,7 @@ skinparam note {
 skinparam ArrowColor #475569
 
 class GetSessionResult <<implemented_wire_contract>> {
-  +sessionId: string
+  +sessionId: session- plus 32 hex UUID characters
   +agentId: string
   +modelId: string
   +createdAt: timestamp
@@ -166,6 +172,7 @@ title CampusClaw HTTP Session Logical Deletion Confirmed Design
 ' Observed behavior: the implemented repository returns BUSY for a running session and does not abort it.
 ' Observed behavior: tombstone insertion, cleanup task insertion, and session deletion commit atomically.
 ' Architecture change: logical deletion and a durable cleanup work item replace local JSONL deletion.
+' Product constraint: all Runtime operations carry integration-context headers without local validation.
 ' Design reason: the API becomes idempotent immediately without exposing cleanup-job state.
 
 skinparam backgroundColor #FFFFFF
@@ -191,13 +198,12 @@ skinparam note {
 }
 
 actor Caller
-participant "Credential\nAdapter" as Auth
 participant "DeleteSession\nAPI" as API
 database "Runtime Session\nStore" as Store
 participant "Cleanup\nWorker" as Worker
 
-Caller -> Auth : DELETE /sessions/{session_id}\nexactly one credential pair, no body
-Auth -> API : immutable CallerAuthContext
+Caller -> API : DELETE /sessions/{session_id}\ncontext headers and no body
+API -> API : do not validate integration credentials
 API -> API : validate session_id
 API -> Store : beginLogicalDelete(session_id)
 

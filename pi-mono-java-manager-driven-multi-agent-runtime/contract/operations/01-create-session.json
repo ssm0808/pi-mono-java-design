@@ -27,7 +27,7 @@
         "label": "Created",
         "summary": "Session 已完成初始化和持久化，可以接受后续请求；初始 state=idle、thinking=true。",
         "headers": {
-          "Location": "/campusclaw-service/v1/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "Location": "/campusclaw-service/v1/sessions/session-550e8400e29b41d4a716446655440003",
           "Content-Language": "en-US"
         },
         "bodies": {
@@ -35,7 +35,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+              "session_id": "session-550e8400e29b41d4a716446655440003",
               "agent_id": "agent-550e8400e29b41d4a716446655440000",
               "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
               "state": "idle",
@@ -62,12 +62,6 @@
             "resMsg": "The agent_id format is invalid."
           }
         }
-      },
-      {
-        "$ref": "responses.unauthenticated"
-      },
-      {
-        "$ref": "responses.authCredentialConflict"
       },
       {
         "status": "404",

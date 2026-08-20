@@ -14,9 +14,10 @@ title HTTP Session Model and Deep-Thinking Confirmed Configuration
 ' Their thinkingLevel values control model reasoning effort.
 ' Confirmed product constraint: HTTP thinking is a boolean deep-thinking switch; false maps to off,
 ' while true maps to a managed non-off level supported by the current model and Agent.
-' Security hardening: model discovery is Session-scoped and exposes only model_id;
-' raw reasoning content is never enabled by the public deep-thinking switch.
+' Security hardening: model discovery is Session-scoped and exposes only model_id.
 ' Architecture change: HTTP configuration writes require an idle Session and a matching ETag.
+' Architecture change: completed thinking content becomes conditionally public in POST and GET events.
+' Product constraint: all Runtime operations carry integration-context headers without local validation.
 ' Design reason: prevent a configuration change from racing with an active execution while
 ' returning the common Session resource after every successful mutation.
 
@@ -43,15 +44,14 @@ skinparam note {
 }
 
 actor Caller
-participant "Credential\nAdapter" as Auth
 participant "Session Configuration\nAPI" as API
 database "Runtime Session\nStore" as Store
 participant "Model Manager" as Models
 participant ResultBeanAdapter
 
 group List available models
-  Caller -> Auth : GET /sessions/{session_id}/models
-  Auth -> API : immutable CallerAuthContext
+  Caller -> API : GET /sessions/{session_id}/models\ncontext headers
+  API -> API : do not validate integration credentials
   API -> Store : read Agent binding and current model_id
   Store --> API : agent_id, enabledModels, current model_id
   API -> Models : list callable models for Agent
@@ -62,8 +62,8 @@ group List available models
 end
 
 group Change current model
-  Caller -> Auth : PUT /sessions/{session_id}/model\nIf-Match and model_id
-  Auth -> API : immutable CallerAuthContext
+  Caller -> API : PUT /sessions/{session_id}/model\ncontext headers, If-Match, and model_id
+  API -> API : do not validate integration credentials
   API -> Store : require idle and compare ETag
   Store --> API : current Session resource
   API -> Models : resolve target model
@@ -79,8 +79,8 @@ group Change current model
 end
 
 group Change future deep-thinking default
-  Caller -> Auth : PUT /sessions/{session_id}/thinking\nIf-Match and boolean thinking
-  Auth -> API : immutable CallerAuthContext
+  Caller -> API : PUT /sessions/{session_id}/thinking\ncontext headers, If-Match, and boolean thinking
+  API -> API : do not validate integration credentials
   API -> Store : require idle and compare ETag
   Store --> API : current Session resource
   opt requested value is true
@@ -102,7 +102,9 @@ end note
 
 note over API,Models
 thinking controls whether deep thinking is enabled.
-It never authorizes raw reasoning-content disclosure.
 The change applies only to executions accepted afterward.
+POST emits thinking events only for executions accepted with true.
+GET includes durable completed thinking only while the current
+Session thinking value is true; old pages expire after a toggle.
 end note
 @enduml

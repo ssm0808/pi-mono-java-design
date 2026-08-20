@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{session_id}/events",
     "summary": "提交用户消息并流式返回 Session 执行事件",
-    "description": "向既有 Session 提交一个 user.message，持久化用户 MessageEntry，并在同一个 HTTP POST 响应中以 SSE 推送完整成功事件序列。一次用户消息可触发多次模型调用、工具调用和多条 Assistant MessageEntry。已确认 user.message、Assistant 消息三阶段、tool.execution.started/completed、持久化 tool.result、session.status.idle 和 stream.end。三个持久化事件的 SSE event 名称和 data 字段与 GET /events 的事件对象对齐；GET 对象仅额外把 SSE event 名称放入 type 字段。网络断开不取消执行，调用方不得自动重放 POST；应通过同一路径的 GET 从头分页读取持久化事件，并按 entry_id/entry_seq 与本地完整事件去重。",
+    "description": "向既有 Session 提交一个 user.message，持久化用户 MessageEntry，并在同一个 HTTP POST 响应中以 SSE 推送完整成功事件序列。一次用户消息可触发多次模型调用、工具调用和多条 Assistant MessageEntry。执行快照 thinking=true 时，Runtime 额外投影 assistant.thinking.started/delta/completed，其中 completed 持久化；thinking=false 时不发送任何 thinking 事件。四类持久化事件的 SSE event 名称和 data 字段与 GET /events 的事件对象对齐；GET 对象仅额外把 SSE event 名称放入 type 字段，并按查询时 Session 当前 thinking 状态决定 thinking completed 是否可见。网络断开不取消执行，调用方不得自动重放 POST；应通过同一路径的 GET 从头分页读取持久化事件，并按 entry_id/entry_seq 与本地完整事件去重。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -18,9 +18,8 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "提交固定 type=user.message，并提供 message、file_ids 至少一项。file_ids 最多 32 个、元素唯一且保留顺序；Runtime 不解析或下载文件，而是把 ID 按固定 [File IDs] 提示块追加到用户消息。请求不接受 model_id、thinking、metadata 或 Idempotency-Key。",
+      "description": "提供 message、file_ids 至少一项；本接口的路径和操作语义已固定为提交 user.message，无需请求体重复声明类型。file_ids 最多 32 个、元素唯一且保留顺序；Runtime 不解析或下载文件，而是把 ID 按固定 [File IDs] 提示块追加到用户消息。请求不接受 type、model_id、thinking、metadata 或 Idempotency-Key。",
       "example": {
-        "type": "user.message",
         "message": "请分析这些订单文件，并列出异常项。",
         "file_ids": [
           "file_01JY8X2E3R4T5Y6U7I8O9P0A1S"
@@ -31,14 +30,14 @@
       {
         "status": "200",
         "label": "OK",
-        "summary": "用户消息已持久化并开始返回 SSE。成功流不使用 ResultBean；user.message、assistant.message.completed 和 tool.result 是带 entry_seq 的权威 Entry，工具执行事件是实时进度，session.status.idle 后以 stream.end 正常关闭本次流。",
+        "summary": "用户消息已持久化并开始返回 SSE。成功流不使用 ResultBean；user.message、assistant.thinking.completed、assistant.message.completed 和 tool.result 是带 entry_seq 的权威 Entry；thinking=true 时开放 thinking 生命周期事件，thinking=false 时不产生；session.status.idle 后以 stream.end 正常关闭本次流。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
           "Content-Language": "en-US"
         },
         "bodies": {
-          "default": "id: 17\nevent: user.message\ndata: {\"entry_id\":\"entry_100\",\"entry_seq\":17,\"message\":\"请分析这些订单文件，并列出异常项。\",\"file_ids\":[\"file_01JY8X2E3R4T5Y6U7I8O9P0A1S\"],\"created_at\":\"2026-08-17T10:00:00Z\"}\n\nevent: assistant.message.started\ndata: {\"entry_id\":\"entry_101\",\"role\":\"assistant\"}\n\nevent: assistant.message.delta\ndata: {\"entry_id\":\"entry_101\",\"delta\":{\"type\":\"text\",\"text\":\"我先查询异常订单。\"}}\n\nid: 18\nevent: assistant.message.completed\ndata: {\"entry_id\":\"entry_101\",\"entry_seq\":18,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"我先查询异常订单。\"},{\"type\":\"tool_call\",\"tool_call_id\":\"call_201\",\"name\":\"query_abnormal_orders\",\"arguments\":{\"scope\":\"uploaded_files\"}}]},\"finish_reason\":\"tool_call\",\"created_at\":\"2026-08-17T10:00:02Z\"}\n\nevent: tool.execution.started\ndata: {\"tool_call_id\":\"call_201\",\"tool_name\":\"query_abnormal_orders\"}\n\nevent: tool.execution.completed\ndata: {\"tool_call_id\":\"call_201\",\"tool_name\":\"query_abnormal_orders\",\"is_error\":false}\n\nid: 19\nevent: tool.result\ndata: {\"entry_id\":\"entry_102\",\"entry_seq\":19,\"tool_call_id\":\"call_201\",\"tool_name\":\"query_abnormal_orders\",\"content\":[{\"type\":\"text\",\"text\":\"发现 3 条异常订单。\"}],\"is_error\":false,\"created_at\":\"2026-08-17T10:00:04Z\"}\n\nevent: assistant.message.started\ndata: {\"entry_id\":\"entry_103\",\"role\":\"assistant\"}\n\nevent: assistant.message.delta\ndata: {\"entry_id\":\"entry_103\",\"delta\":{\"type\":\"text\",\"text\":\"发现 3 条异常订单。\"}}\n\nid: 20\nevent: assistant.message.completed\ndata: {\"entry_id\":\"entry_103\",\"entry_seq\":20,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"发现 3 条异常订单。\"}]},\"finish_reason\":\"stop\",\"created_at\":\"2026-08-17T10:00:06Z\"}\n\nevent: session.status.idle\ndata: {\"status\":\"idle\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"
+          "default": "id: 17\nevent: user.message\ndata: {\"entry_id\":\"entry_100\",\"entry_seq\":17,\"message\":\"请分析这些订单文件，并列出异常项。\",\"file_ids\":[\"file_01JY8X2E3R4T5Y6U7I8O9P0A1S\"],\"created_at\":\"2026-08-17T10:00:00Z\"}\n\nevent: assistant.message.started\ndata: {\"entry_id\":\"entry_101\",\"role\":\"assistant\"}\n\nevent: assistant.thinking.started\ndata: {\"assistant_entry_id\":\"entry_101\",\"content_index\":0}\n\nevent: assistant.thinking.delta\ndata: {\"assistant_entry_id\":\"entry_101\",\"content_index\":0,\"delta\":{\"type\":\"thinking\",\"text\":\"我需要先定位异常订单。\"}}\n\nid: 18\nevent: assistant.thinking.completed\ndata: {\"entry_id\":\"entry_thinking_101\",\"entry_seq\":18,\"assistant_entry_id\":\"entry_101\",\"content_index\":0,\"content\":{\"type\":\"thinking\",\"text\":\"我需要先定位异常订单。\"},\"created_at\":\"2026-08-17T10:00:01Z\"}\n\nevent: assistant.message.delta\ndata: {\"entry_id\":\"entry_101\",\"delta\":{\"type\":\"text\",\"text\":\"我先查询异常订单。\"}}\n\nid: 19\nevent: assistant.message.completed\ndata: {\"entry_id\":\"entry_101\",\"entry_seq\":19,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"我先查询异常订单。\"},{\"type\":\"tool_call\",\"tool_call_id\":\"call_201\",\"name\":\"query_abnormal_orders\",\"arguments\":{\"scope\":\"uploaded_files\"}}]},\"finish_reason\":\"tool_call\",\"created_at\":\"2026-08-17T10:00:02Z\"}\n\nevent: tool.execution.started\ndata: {\"tool_call_id\":\"call_201\",\"tool_name\":\"query_abnormal_orders\"}\n\nevent: tool.execution.completed\ndata: {\"tool_call_id\":\"call_201\",\"tool_name\":\"query_abnormal_orders\",\"is_error\":false}\n\nid: 20\nevent: tool.result\ndata: {\"entry_id\":\"entry_102\",\"entry_seq\":20,\"tool_call_id\":\"call_201\",\"tool_name\":\"query_abnormal_orders\",\"content\":[{\"type\":\"text\",\"text\":\"发现 3 条异常订单。\"}],\"is_error\":false,\"created_at\":\"2026-08-17T10:00:04Z\"}\n\nevent: assistant.message.started\ndata: {\"entry_id\":\"entry_103\",\"role\":\"assistant\"}\n\nevent: assistant.message.delta\ndata: {\"entry_id\":\"entry_103\",\"delta\":{\"type\":\"text\",\"text\":\"发现 3 条异常订单。\"}}\n\nid: 21\nevent: assistant.message.completed\ndata: {\"entry_id\":\"entry_103\",\"entry_seq\":21,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"发现 3 条异常订单。\"}]},\"finish_reason\":\"stop\",\"created_at\":\"2026-08-17T10:00:06Z\"}\n\nevent: session.status.idle\ndata: {\"status\":\"idle\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"
         }
       },
       {
@@ -67,7 +66,7 @@
         "status": "400",
         "tabLabel": "400 · INVALID_EVENT_REQUEST",
         "label": "Bad Request",
-        "summary": "请求体不是合法的 user.message，包含未知字段，或 message/file_ids 约束不满足。",
+        "summary": "请求体 JSON 非法、包含未知字段，或 message/file_ids 约束不满足。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN"
@@ -81,18 +80,6 @@
             "resCode": "INVALID_EVENT_REQUEST",
             "resMsg": "The user event request does not satisfy the required constraints."
           }
-        }
-      },
-      {
-        "$ref": "responses.unauthenticated",
-        "headers": {
-          "Content-Type": "application/json"
-        }
-      },
-      {
-        "$ref": "responses.authCredentialConflict",
-        "headers": {
-          "Content-Type": "application/json"
         }
       },
       {

@@ -44,7 +44,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
+              "session_id": "session-550e8400e29b41d4a716446655440003",
               "agent_id": "agent-550e8400e29b41d4a716446655440000",
               "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS",
               "state": "idle",
@@ -94,13 +94,6 @@
             "resMsg": "The model change request is invalid."
           }
         }
-      },
-      {
-        "$ref": "responses.unauthenticated"
-      },
-      {
-        "$ref": "responses.authCredentialConflict",
-        "summary": "请求同时携带 Authorization 和 X-HW-APPKEY。"
       },
       {
         "status": "404",

@@ -6,7 +6,7 @@ title CampusClaw Session Event Direct POST Stream
 ' packages/agent/src/agent-loop.ts, emitToolExecutionEnd and emitToolResultMessage,
 ' lines 767-795
 ' packages/coding-agent/src/core/agent-session.ts, _handleAgentEvent, lines 781-806
-' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' Source evidence (pi-mono-java 1f801dbb82bdda30478e3354e685e3153b179a0c):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventController.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java.
@@ -18,6 +18,10 @@ title CampusClaw Session Event Direct POST Stream
 ' the recovery source, and replaying the side-effecting POST is forbidden.
 ' Design reason: preserve direct streaming while separating transient message and tool
 ' execution progress from authoritative User, Assistant, and ToolResult entries.
+' Observed behavior: internal thinking start, delta, and end events exist, but RuntimeEventProjector
+' emits text deltas only and RuntimeEntryCodec currently excludes ThinkingContent from the public contract.
+' Architecture change: the target contract projects thinking events only when the accepted execution
+' snapshots thinking true; assistant.thinking.completed becomes a durable recoverable entry.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -42,15 +46,14 @@ skinparam note {
 }
 
 actor Caller
-participant "Credential\nAdapter" as Auth
 participant "Session Event\nAPI" as API
 database "Runtime Session\nStore" as Store
 participant "Prompt\nLoader" as Prompt
 participant "Model\nManager" as Manager
 participant AgentSession
 
-Caller -> Auth : POST /sessions/{session_id}/events\ncredentials and user.message JSON
-Auth -> API : immutable CallerAuthContext
+Caller -> API : POST /sessions/{session_id}/events\ncontext headers and message or file_ids JSON
+API -> API : do not validate integration credentials
 API -> API : validate session_id and strict request body
 API -> Store : load live Session
 Store --> API : current model, thinking, and execution state
@@ -75,6 +78,18 @@ else Session is idle
       loop provider increments
         AgentSession --> API : message_update
         API --> Caller : assistant.message.delta\nentry_id and typed delta
+      end
+      opt execution snapshot thinking is true
+        AgentSession --> API : thinking_start
+        API --> Caller : assistant.thinking.started\nassistant_entry_id and content_index
+        loop provider thinking increments
+          AgentSession --> API : thinking_delta
+          API --> Caller : assistant.thinking.delta\ntemporary thinking text
+        end
+        AgentSession --> API : thinking_end with complete thinking content
+        API -> Store : persist complete ThinkingContent entry
+        Store --> API : thinking entry_id and entry_seq
+        API --> Caller : assistant.thinking.completed\ncomplete thinking content and entry_seq
       end
       AgentSession --> API : message_end with complete message
       API -> Store : persist complete Assistant MessageEntry
@@ -107,6 +122,8 @@ end
 note over API,Caller
 Message previews and tool execution events are transient.
 User, completed Assistant, and ToolResult entries are authoritative.
+Completed Thinking entries are authoritative when the execution
+snapshot has thinking true; thinking started and delta are transient.
 Session idle and stream end are non-history control events.
 Stream error is a terminal non-history event and closes the response.
 end note
@@ -136,8 +153,11 @@ title CampusClaw Session Event List Pagination
 ' GET /v1/sessions/{session_id}/events uses opaque page and next_page pagination.
 ' Observed behavior: entry_seq, opaque pages, ResultBean paging, and the GET endpoint
 ' exist in the implementation commit but not in the original pi source baselines.
+' Java divergence: current RuntimeEntryCodec excludes ThinkingContent from public history.
+' Architecture change: target GET visibility depends on the current Session thinking value.
 ' Design reason: align the public pagination boundary with Anthropic and intentionally
-' avoid a fixed snapshot watermark or an after_entry_seq query.
+' avoid a fixed snapshot watermark or an after_entry_seq query while binding the cursor
+' to the thinking visibility state used to construct the page.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -162,28 +182,37 @@ skinparam note {
 }
 
 actor Caller
-participant "Credential\nAdapter" as Auth
 participant "Session Events\nAPI" as API
 database "Runtime Session\nStore" as Store
 participant "Page Cursor\nCodec" as Cursor
 participant ResultBeanAdapter
 
 alt first page
-  Caller -> Auth : GET /sessions/{session_id}/events\nlimit, no page
-  Auth -> API : immutable CallerAuthContext
+  Caller -> API : GET /sessions/{session_id}/events\ncontext headers, limit, no page
+  API -> API : do not validate integration credentials
   API -> API : validate session_id and limit
-  API -> Store : read first public entries\nin entry_seq ascending order
-  Store --> API : persisted public entries
-  API -> Cursor : encode session, expiry, and next position
+  API -> Store : read current Session thinking\nand first current-branch entries
+  Store --> API : thinking state and persisted entries
+  alt current Session thinking is true
+    API -> API : include assistant.thinking.completed
+  else current Session thinking is false
+    API -> API : filter assistant.thinking.completed
+  end
+  API -> Cursor : encode session, thinking state,\nexpiry, and next position
   Cursor --> API : next_page or null
 else next page
-  Caller -> Auth : GET /sessions/{session_id}/events\npage from previous next_page
-  Auth -> API : immutable CallerAuthContext
+  Caller -> API : GET /sessions/{session_id}/events\ncontext headers and previous next_page
+  API -> API : do not validate integration credentials
   API -> Cursor : verify and decode opaque page
-  Cursor --> API : bound session, expiry, and next position
-  API -> Store : read after next position
-  Store --> API : persisted public entries, including\nlater appends when they follow the cursor
-  API -> Cursor : encode next position if more remain
+  Cursor --> API : bound session, thinking state,\nexpiry, and next position
+  API -> Store : read current Session thinking
+  Store --> API : current thinking state
+  break current thinking differs from cursor state
+    API --> Caller : 400 INVALID_EVENT_LIST_QUERY\nrestart from the first page
+  end
+  API -> Store : read after next position and apply\nthe current thinking visibility rule
+  Store --> API : eligible persisted entries, including\nlater appends after the cursor
+  API -> Cursor : encode current thinking state\nand next position if more remain
   Cursor --> API : next_page or null
 end
 
@@ -192,8 +221,11 @@ ResultBeanAdapter --> API : resCode, resMsg, result
 API --> Caller : 200 OK\nevents and next_page
 
 note over API,Store
-Only committed user.message, assistant.message.completed,
-and tool.result entries on the current branch are public.
+Committed user.message, assistant.message.completed, and tool.result
+entries on the current branch are always eligible.
+assistant.thinking.completed is eligible only when the current
+Session thinking value is true. Disabling hides stored thinking
+without deleting it; re-enabling can reveal it again.
 Items are sorted by entry_seq ascending.
 There is no fixed snapshot watermark. Later persisted
 entries may become eligible on a subsequent page.
@@ -203,5 +235,7 @@ note over API,Cursor
 next_page null means no more persisted events at response time.
 It does not mean the Session cannot append future events.
 An invalid or expired page returns 400 INVALID_EVENT_LIST_QUERY.
+Changing Session thinking also invalidates an old page because
+the page is bound to the previous visibility state.
 end note
 @enduml

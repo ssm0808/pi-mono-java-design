@@ -52,12 +52,6 @@
         }
       },
       {
-        "$ref": "responses.unauthenticated"
-      },
-      {
-        "$ref": "responses.authCredentialConflict"
-      },
-      {
         "status": "409",
         "label": "Conflict",
         "summary": "Session 存在 active execution；删除不会隐式中止执行。",

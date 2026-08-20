@@ -36,7 +36,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "session_id": "01JY8W6M8D9K4H2Q7P3V5N1R0T",
+              "session_id": "session-550e8400e29b41d4a716446655440003",
               "accepted_at": "2026-08-17T15:10:00Z"
             }
           }
@@ -81,13 +81,6 @@
             "resMsg": "The Steering Message request is invalid."
           }
         }
-      },
-      {
-        "$ref": "responses.unauthenticated"
-      },
-      {
-        "$ref": "responses.authCredentialConflict",
-        "summary": "请求同时携带 Authorization 和 X-HW-APPKEY。"
       },
       {
         "status": "404",

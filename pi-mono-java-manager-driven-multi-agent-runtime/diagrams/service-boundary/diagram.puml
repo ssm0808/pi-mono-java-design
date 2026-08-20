@@ -1,7 +1,7 @@
 @startuml mate_agent_service_responsibility_boundary
 title End-to-End HTTP and SSE Service Responsibilities
 
-' Source evidence (pi-mono-java 9e7cc8952937a697fe2c16ff0de287b32bc4c891):
+' Source evidence (pi-mono-java 1f801dbb82bdda30478e3354e685e3153b179a0c):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java.
 ' Observed behavior: the CampusClaw internal HTTP POST returns execution-scoped SSE without a public WebSocket path.
@@ -34,7 +34,7 @@ rectangle "Agent UI\n\nCall public HTTP operations\nUse chat_id only\nRead execu
 
 rectangle "mate-service\n\nOwn public HTTP and SSE\nAuthenticate the end user\nOwn Chat metadata and chat_id\nMap chat_id to session_id\nRun guardrails and orchestration\nCall CampusClaw with service identity\nProject safe public events and errors" as Mate #FFF7ED
 
-rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nValidate service credential header shape\nOwn Runtime Session and session_id\nValidate Agent and Model\nBuild Context and execute Model and read tool\nPersist current-branch Entries\nOwn Steer, FollowUp, and Abort" as Runtime #ECFDF5
+rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nReceive request context without credential checks\nOwn Runtime Session and session_id\nValidate Agent and Model\nBuild Context and execute Model and read tool\nPersist current-branch Entries\nOwn Steer, FollowUp, and Abort" as Runtime #ECFDF5
 
 database "Mate Chat Store\n\nchat_id to session_id\nChat name and product state\nUser ownership" as MateStore
 

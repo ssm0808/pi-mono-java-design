@@ -77,7 +77,7 @@ def resolve_value(common: dict[str, Any], value: Any) -> Any:
 def expand_model(common: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
     operation = copy.deepcopy(source.get("operation"))
     require(isinstance(operation, dict), "operation source must contain an operation object")
-    operation.setdefault("authModes", copy.deepcopy(common["authModes"]))
+    operation.setdefault("requestHeaderExamples", copy.deepcopy(common["requestHeaderExamples"]))
     operation["parameters"] = [resolve_entry(common, item) for item in operation.get("parameters", [])]
     operation["responses"] = [resolve_entry(common, item) for item in operation.get("responses", [])]
     model = {
@@ -97,7 +97,10 @@ def validate_model(model: dict[str, Any]) -> None:
     for key in ("shortName", "operationKey", "method", "path", "summary", "description"):
         require(isinstance(operation.get(key), str) and operation[key], f"operation.{key} is required")
     require(operation["method"] in {"GET", "POST", "PUT", "DELETE"}, "Unsupported HTTP method")
-    require(isinstance(operation.get("authModes"), list) and operation["authModes"], "authModes are required")
+    require(
+        isinstance(operation.get("requestHeaderExamples"), list) and operation["requestHeaderExamples"],
+        "requestHeaderExamples are required",
+    )
     require(isinstance(operation.get("parameters"), list), "parameters must be an array")
     require(isinstance(operation.get("requestBody"), dict), "requestBody must be an object")
     require(isinstance(operation.get("responses"), list) and operation["responses"], "responses are required")
@@ -161,7 +164,7 @@ def render_static(model: dict[str, Any]) -> str:
     full_path = f'{api["basePath"].rstrip("/")}/{operation["path"].lstrip("/")}'
     method = operation["method"].lower()
     auth_blocks = []
-    for auth_index, mode in enumerate(operation["authModes"]):
+    for auth_index, mode in enumerate(operation["requestHeaderExamples"]):
         rows = [
             [item["name"], "是" if item["required"] else "否", item["value"], item["description"]]
             for item in mode["headers"]
@@ -199,7 +202,7 @@ def render_static(model: dict[str, Any]) -> str:
         f'<span class="operation-name">{html.escape(operation["shortName"])}</span>'
         f'<code class="operation-key">{html.escape(operation["operationKey"])}</code></header>'
         f'<section class="section"><h3>作用</h3><p class="description">{html.escape(operation["description"])}</p></section>'
-        f'<section class="section contract-detail auth-section"><h3>认证</h3>{"".join(auth_blocks)}</section>'
+        f'<section class="section contract-detail auth-section"><h3>调用上下文 Header</h3>{"".join(auth_blocks)}</section>'
         '<section class="section contract-detail request-section"><h3>参数与请求体</h3>'
         f'{parameter_html}<p class="muted empty">{html.escape(request_body.get("description", "无请求体。"))}</p>'
         f'{request_example}</section>'

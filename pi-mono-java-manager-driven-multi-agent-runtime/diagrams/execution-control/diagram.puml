@@ -17,6 +17,7 @@ title HTTP Session Execution Control Design
 ' Observed behavior: three HTTP operations use Session scope because no public Run exists.
 ' Product constraint: v1 accepts text only, fixes one-at-a-time FIFO behavior, and projects
 ' a delivered control message as the existing durable user.message entry type.
+' Product constraint: all Runtime operations carry integration-context headers without local validation.
 ' Design reason: separate control responses from the existing POST Events SSE response.
 
 skinparam backgroundColor #FFFFFF
@@ -42,7 +43,6 @@ skinparam note {
 }
 
 actor Caller
-participant "Credential\nAdapter" as Auth
 participant "Session Control\nAPI" as API
 database "Runtime Session\nStore" as Store
 collections "Active Execution\nQueues" as Queue
@@ -51,8 +51,8 @@ participant "Existing POST Events\nSSE Stream" as SSE
 participant ResultBeanAdapter
 
 group Queue a Steering Message
-  Caller -> Auth : POST /sessions/{session_id}/steers\nmessage only
-  Auth -> API : immutable CallerAuthContext
+  Caller -> API : POST /sessions/{session_id}/steers\ncontext headers and message only
+  API -> API : do not validate integration credentials
   API -> Store : require running Session
   Store --> API : active execution handle
   API -> Queue : append Steer atomically in FIFO order
@@ -63,8 +63,8 @@ group Queue a Steering Message
 end
 
 group Queue a FollowUp Message
-  Caller -> Auth : POST /sessions/{session_id}/follow-ups\nmessage only
-  Auth -> API : immutable CallerAuthContext
+  Caller -> API : POST /sessions/{session_id}/follow-ups\ncontext headers and message only
+  API -> API : do not validate integration credentials
   API -> Store : require running Session
   Store --> API : active execution handle
   API -> Queue : append FollowUp atomically in FIFO order
@@ -89,8 +89,8 @@ else Agent would stop and only FollowUp is queued
 end
 
 group Abort current execution idempotently
-  Caller -> Auth : POST /sessions/{session_id}/abort\nno request body
-  Auth -> API : immutable CallerAuthContext
+  Caller -> API : POST /sessions/{session_id}/abort\ncontext headers and no request body
+  API -> API : do not validate integration credentials
   API -> Store : load Session
   Store --> API : active execution or idle
   opt execution is active
@@ -138,7 +138,7 @@ skinparam rectangle {
 }
 
 actor Caller
-rectangle "POST /sessions/{id}/events\nuser.message and direct SSE" as SendEvent
+rectangle "POST /sessions/{id}/events\nmessage and file_ids, direct SSE" as SendEvent
 rectangle "ActiveExecution\ninternal Session state" as Execution
 rectangle "Transient Preview\nstarted, delta, tool lifecycle" as Preview
 rectangle "Persisted Entry\nentry_id and entry_seq" as Entry
@@ -159,7 +159,7 @@ Session state is idle or running.
 end note
 
 note bottom of GetEvents
-Only user.message, assistant.message.completed,
-and tool.result are returned with opaque pagination.
+user.message, assistant.message.completed, and tool.result are eligible.
+assistant.thinking.completed depends on current Session thinking.
 end note
 @enduml

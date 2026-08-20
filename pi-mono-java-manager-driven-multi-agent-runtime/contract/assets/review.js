@@ -68,9 +68,9 @@
     const authTitle = make('div', 'row section-title');
     const authTabs = make('div', 'tabs');
     const authBody = make('div', '');
-    append(authTitle, make('h3', '', '认证'), authTabs);
+    append(authTitle, make('h3', '', '调用上下文 Header'), authTabs);
     append(authSection, authTitle, authBody);
-    let selectedAuth = operation.authModes.find((item) => item.preferred) || operation.authModes[0];
+    let selectedAuth = operation.requestHeaderExamples.find((item) => item.preferred) || operation.requestHeaderExamples[0];
     const renderAuth = () => {
       authTabs.querySelectorAll('button').forEach((button) => {
         button.setAttribute('aria-pressed', String(button.dataset.authId === selectedAuth.id));
@@ -88,7 +88,7 @@
       ].join('\n');
       append(authBody, table(['Header', '必填', '示例值', '说明'], rows), append(make('pre', ''), code(request)));
     };
-    operation.authModes.forEach((mode) => {
+    operation.requestHeaderExamples.forEach((mode) => {
       const button = make('button', '', mode.label);
       button.type = 'button';
       button.dataset.authId = mode.id;

@@ -59,14 +59,18 @@ end note
 @enduml
 
 @startuml http_dual_authentication
-title CampusClaw HTTP Dual Authentication
+title CampusClaw Upstream-Validated Request Context
 
-' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' Source evidence (pi-mono-java 1f801dbb82bdda30478e3354e685e3153b179a0c):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/auth/RuntimeRequestAuthenticator.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeAuthenticationInterceptor.java.
 ' Observed behavior: inbound JWT uses X-HW-ID and Authorization; APPKEY uses X-HW-ID and X-HW-APPKEY.
-' Observed behavior: CampusClaw validates header shape only and never treats the credential ID as session ownership.
-' Security boundary: mate-service verifies credential authenticity and action authorization before forwarding.
+' Observed behavior: RuntimeWebMvcConfiguration currently applies authentication to every Runtime path.
+' Architecture change: the target Runtime removes pre-Controller and Controller-local credential checks.
+' Product constraint: all eleven operations carry the shared integration-context header examples.
+' Product constraint: Runtime does not require complete pairs, reject mixed headers, parse Bearer shape,
+' or expose local authentication errors. Both credential headers may coexist.
+' Security boundary: upstream verifies credential authenticity and action authorization before forwarding.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -86,41 +90,25 @@ skinparam sequence {
 }
 
 actor "mate-service" as Caller
-participant "RuntimeAuthenticationInterceptor" as Filter
-participant "RuntimeRequestAuthenticator" as Resolver
 participant "Runtime Controller" as Controller
+participant "Runtime Service" as Service
 
-Caller -> Filter : HTTP request
-Filter -> Resolver : resolve X-HW-ID, Authorization, X-HW-APPKEY
-Resolver -> Resolver : require exactly one complete credential pair
+Caller -> Controller : any of eleven Runtime operations\nX-HW-ID and Authorization or X-HW-APPKEY
+Controller -> Controller : bind operation inputs\nwithout credential validation
+Controller -> Service : execute operation
+Service --> Controller : operation result or SSE publisher
+Controller --> Caller : normal HTTP, SSE, or business error response
 
-break Authorization and X-HW-APPKEY are both present
-  Resolver --> Filter : AUTH_CREDENTIAL_CONFLICT
-  Filter --> Caller : 401 ResultBean
-end
-
-break no complete credential pair
-  Resolver --> Filter : UNAUTHENTICATED
-  Filter --> Caller : 401 ResultBean
-end
-
-alt JWT pair with non-empty Bearer token
-  Resolver --> Filter : CallerAuthContext(JWT)
-else APPKEY pair with non-empty key
-  Resolver --> Filter : CallerAuthContext(APPKEY)
-end
-
-Filter -> Controller : request with auth context
-Controller --> Caller : normal HTTP or SSE response
-
-note over Caller,Resolver
-mate-service verifies credential authenticity and action authorization.
-CampusClaw validates only the mutually exclusive header shape.
+note over Caller,Controller
+Upstream verifies credential authenticity and action authorization.
+Runtime does not check completeness, mutual exclusion, Bearer shape,
+or whether Authorization and X-HW-APPKEY are both present.
 end note
 
-note over Resolver,Controller
+note over Controller,Service
 Header names are case-insensitive under HTTP.
 Credential values remain opaque and are never logged,
-persisted, copied into ResultBean, or passed to Session state.
+persisted, copied into ResultBean, or used as Session ownership.
+Runtime declares no local authentication error codes.
 end note
 @enduml

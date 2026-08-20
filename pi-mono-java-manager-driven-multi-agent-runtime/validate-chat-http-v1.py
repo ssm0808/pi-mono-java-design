@@ -99,11 +99,12 @@ def read_design_version() -> str:
 
 def validate_common_contract(common: dict[str, Any]) -> None:
     patterns = common.get("resourceIdPatterns", {})
-    require(set(patterns) == {"agent", "tool", "skill"}, "Typed resource ID patterns are incomplete")
+    require(set(patterns) == {"agent", "tool", "skill", "session"}, "Typed resource ID patterns are incomplete")
     valid_ids = {
         "agent": "agent-550e8400e29b41d4a716446655440000",
         "tool": "tool-550e8400e29b41d4a716446655440002",
         "skill": "skill-550e8400e29b41d4a716446655440001",
+        "session": "session-550e8400e29b41d4a716446655440003",
     }
     for resource_type, pattern in patterns.items():
         require(re.fullmatch(pattern, valid_ids[resource_type]) is not None, f"Invalid {resource_type} ID pattern")
@@ -116,6 +117,15 @@ def validate_common_contract(common: dict[str, Any]) -> None:
         agent_parameter["schema"] == {"$ref": "resourceIdPatterns.agent"},
         "Agent path parameter must reference the single Agent ID rule",
     )
+    session_parameter = common["parameters"]["sessionId"]
+    require(
+        session_parameter["schema"] == {"$ref": "resourceIdPatterns.session"},
+        "Session path parameter must reference the single Session ID rule",
+    )
+    header_examples = common.get("requestHeaderExamples", [])
+    require(len(header_examples) == 2, "Shared request header examples are incomplete")
+    require("互斥检查" in json.dumps(header_examples, ensure_ascii=False),
+            "Request header contract must state that Runtime does not reject coexistence")
 
 
 def parse_generated_models(parser: ContractHtmlParser) -> tuple[list[dict[str, Any]], list[str]]:
@@ -143,7 +153,7 @@ def validate_html(models: list[dict[str, Any]]) -> None:
     require(len(scripts) == 1, "HTML must contain exactly one shared executable script")
     validate_executable_script(scripts[0])
     visible_text = " ".join(parser.visible_text)
-    for heading in ("作用", "认证", "参数与请求体", "响应"):
+    for heading in ("作用", "调用上下文 Header", "参数与请求体", "响应"):
         require(heading in visible_text, f"No-JavaScript contract is missing {heading}")
     require(len(visible_text) > 10000, "No-JavaScript contract content is unexpectedly small")
     require(re.search(r"@media\s*\(max-width:\s*680px\)", html_source) is not None,
@@ -152,6 +162,12 @@ def validate_html(models: list[dict[str, Any]]) -> None:
             "Responsive labeled table rows are missing")
     require("traceparent" not in html_source, "Forbidden traceparent found in the HTML contract")
     require(re.search(r"agent_[0-9A-Za-z]{24}", html_source) is None, "Legacy Agent ID found in HTML")
+    require("01JY8W6M8D9K4H2Q7P3V5N1R0T" not in html_source, "Legacy Session ID found in HTML")
+    require("无需业务认证 Header。" not in visible_text, "An operation unexpectedly omits request headers")
+    require("AUTH_CREDENTIAL_CONFLICT" not in html_source,
+            "Removed Runtime-local credential conflict remains in HTML")
+    require("UNAUTHENTICATED" not in html_source,
+            "Removed Runtime-local unauthenticated error remains in HTML")
     require(len(html_source.encode("utf-8")) < 300_000, "Generated HTML unexpectedly exceeds 300 KB")
 
 
@@ -195,16 +211,28 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
         require(key not in operations, f"Duplicate operation: {key}")
         operations.add(key)
         require("已确认" in model["api"]["visibility"], f"Operation is not confirmed: {key}")
-        require(len(operation["authModes"]) == 2, f"Authentication modes are incomplete: {key}")
+        require(len(operation["requestHeaderExamples"]) == 2, f"Request header examples are incomplete: {key}")
+        header_names = {
+            header["name"]
+            for example in operation["requestHeaderExamples"]
+            for header in example["headers"]
+        }
+        require({"X-HW-ID", "Authorization", "X-HW-APPKEY"} <= header_names,
+                f"Integration request headers are incomplete: {key}")
         require(operation["responses"], f"Operation has no responses: {key}")
-        validate_response_contract(patterns["agent"], key, operation)
+        validate_response_contract(patterns["agent"], patterns["session"], key, operation)
     require(operations == EXPECTED_OPERATIONS, "Operation inventory differs from the confirmed contract")
 
 
-def validate_response_contract(agent_pattern: str, key: tuple[str, str], operation: dict[str, Any]) -> None:
+def validate_response_contract(
+    agent_pattern: str, session_pattern: str, key: tuple[str, str], operation: dict[str, Any]
+) -> None:
     for agent_id in values_for_key(operation["responses"], "agent_id"):
         require(isinstance(agent_id, str) and re.fullmatch(agent_pattern, agent_id) is not None,
                 f"Invalid Agent ID response example: {key}")
+    for session_id in values_for_key(operation["responses"], "session_id"):
+        require(isinstance(session_id, str) and re.fullmatch(session_pattern, session_id) is not None,
+                f"Invalid Session ID response example: {key}")
     require(all(response["status"] != "403" for response in operation["responses"]),
             f"Service-local FORBIDDEN response is not implemented: {key}")
     for response in operation["responses"]:
@@ -214,23 +242,48 @@ def validate_response_contract(agent_pattern: str, key: tuple[str, str], operati
             if isinstance(body, dict):
                 require("result" not in body, f"Error response contains result: {key}")
     codes = response_codes(operation)
+    forbidden_auth_codes = {("401", "UNAUTHENTICATED"), ("401", "AUTH_CREDENTIAL_CONFLICT")}
+    require(not (forbidden_auth_codes & codes), f"Runtime-local authentication error is forbidden: {key}")
     if key == ("POST", "/agents/{agent_id}/sessions"):
-        validate_create_session(agent_pattern, operation)
+        validate_create_session(agent_pattern, session_pattern, operation)
     elif key == ("DELETE", "/sessions/{session_id}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
     elif key == ("POST", "/sessions/{session_id}/events"):
         require(("503", "RUNTIME_CAPACITY_EXCEEDED") in codes, "POST Events is missing runtime capacity")
         require("[File IDs]" in operation["requestBody"]["description"], "POST Events must define file ID encoding")
+        require(set(operation["requestBody"]["example"]) == {"message", "file_ids"},
+                "POST Events request must contain only message and file_ids")
+        require("type=user.message" not in operation["requestBody"]["description"],
+                "POST Events request still documents a redundant type field")
+        success = next(response for response in operation["responses"] if response["status"] == "200")
+        stream = success["bodies"]["default"]
+        for event_type in (
+            "assistant.thinking.started", "assistant.thinking.delta", "assistant.thinking.completed"
+        ):
+            require(f"event: {event_type}" in stream, f"POST Events is missing {event_type}")
+        require("\"entry_seq\":18" in stream and "\"type\":\"thinking\"" in stream,
+                "Completed thinking must be a durable recoverable event")
+    elif key == ("GET", "/sessions/{session_id}/events"):
+        success = next(response for response in operation["responses"] if response["status"] == "200")
+        event_types = {event["type"] for event in success["bodies"]["en-US"]["result"]["events"]}
+        require("assistant.thinking.completed" in event_types,
+                "GET Events must show the thinking=true projection")
+        require("thinking=false" in operation["description"] and "旧 page 无效" in operation["description"],
+                "GET Events must define current-thinking filtering and cursor invalidation")
     elif key in {("POST", "/sessions/{session_id}/steers"), ("POST", "/sessions/{session_id}/follow-ups")}:
         require(("429", "CONTROL_QUEUE_FULL") in codes, f"Control queue limit is missing: {key}")
 
 
-def validate_create_session(agent_pattern: str, operation: dict[str, Any]) -> None:
+def validate_create_session(agent_pattern: str, session_pattern: str, operation: dict[str, Any]) -> None:
     parameter = next((item for item in operation["parameters"] if item["name"] == "agent_id"), None)
     require(parameter is not None and parameter["schema"] == agent_pattern, "Create Session Agent ID rule differs")
     created = next((item for item in operation["responses"] if item["status"] == "201"), None)
     require(created is not None, "Create Session is missing 201")
     result = created["bodies"]["en-US"]["result"]
+    require(re.fullmatch(session_pattern, result.get("session_id", "")) is not None,
+            "Create Session response must use the typed Session ID rule")
+    location = created.get("headers", {}).get("Location", "")
+    require(location.endswith("/" + result["session_id"]), "Create Session Location differs from session_id")
     require(result.get("thinking") is True, "Create Session must initialize thinking=true")
 
 
@@ -238,10 +291,13 @@ def validate_source_deduplication() -> None:
     for operation_path in sorted((CONTRACT_ROOT / "operations").glob("*.json")):
         source = json.loads(operation_path.read_text(encoding="utf-8"))
         operation = source["operation"]
-        require("authModes" not in operation, f"Shared authentication duplicated in {operation_path.name}")
+        require("requestHeaderExamples" not in operation,
+                f"Shared request headers duplicated in {operation_path.name}")
         references = [item.get("$ref") for item in operation["responses"] if isinstance(item, dict)]
-        require("responses.unauthenticated" in references, f"Shared authentication error missing in {operation_path.name}")
-        require("responses.authCredentialConflict" in references, f"Shared conflict error missing in {operation_path.name}")
+        require("responses.unauthenticated" not in references,
+                f"Runtime-local authentication error found in {operation_path.name}")
+        require("responses.authCredentialConflict" not in references,
+                f"Runtime-local credential conflict found in {operation_path.name}")
 
 
 def diagram_sources() -> list[Path]:
