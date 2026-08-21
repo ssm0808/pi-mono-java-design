@@ -1,0 +1,258 @@
+@startuml provider_identity_model
+title Provider Identity and Runtime Contract
+
+' Source evidence:
+' pi-mono packages/ai/src/models.ts: Provider (lines 88-149), MutableModels (lines 225-230), createProvider (lines 739-862)
+' pi-mono packages/ai/src/types.ts: ProviderId (lines 35-76), Model (lines 820-850)
+' Observed behavior: provider.id is the registry key and Model.provider selects the owning provider.
+' Design reason: identity, protocol dispatch, model identity, and mutable connection data must remain separate.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam class {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+  ArrowColor #475569
+}
+
+class ProviderIdentity {
+  +providerId: string
+}
+
+class ProviderRuntimeContract {
+  +displayName: string
+  +baseUrl: optional string
+  +headers: optional map
+  +auth: required
+  +getModels(): Model[]
+  +refreshModels(): optional
+  +filterModels(): optional
+  +stream(model, context, options)
+  +cancelDeferred(): optional
+}
+
+class ModelIdentity {
+  +providerId: string
+  +modelId: string
+}
+
+class ModelDescriptor {
+  +modelId: string
+  +apiId: string
+  +capabilities
+  +limits
+  +cost
+}
+
+class ApiProtocol {
+  +apiId: string
+  +stream implementation
+}
+
+ProviderIdentity "1" *-- "1" ProviderRuntimeContract : identifies
+ProviderIdentity "1" *-- "0..*" ModelIdentity : owns
+ModelIdentity "1" *-- "1" ModelDescriptor : describes
+ModelDescriptor --> ApiProtocol : dispatches by apiId
+ProviderRuntimeContract --> ApiProtocol : supplies one or more
+
+note right of ProviderIdentity
+Only providerId determines identity.
+Name, URL, credentials, and apiId
+may change without changing identity.
+end note
+
+note bottom of ModelIdentity
+Runtime model key is
+(providerId, modelId).
+end note
+@enduml
+
+@startuml generic_provider_boundary
+title Generic Model Manager Provider Boundary
+
+' Source evidence:
+' pi-mono packages/ai/src/models.ts: ModelsImpl.requireProvider and stream (lines 628-695)
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java: resolveProvider (lines 141-147)
+' mate-service README.md: model gateway gap (line 116)
+' Architecture change: Java resolves an AiProvider by model.providerId instead of resolving an ApiProvider by model.api.
+' Security hardening: upstream endpoints, credentials, provider ids, and vendor model ids remain inside mate-service.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam database {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+
+package "pi-mono-java Runtime" {
+  [AgentLoop] as Loop
+  [CampusClawAiService] as AiService
+  [AiProviderRegistry] as Registry
+  [MateServiceModelManagerProvider\nproviderId = mate-model-manager] as GenericProvider
+  [ManagedModelCatalogClient] as CatalogClient
+  [ManagedModelInvocationClient] as InvocationClient
+}
+
+package "mate-service" {
+  [Internal Model Manager API] as ManagerApi
+  [Model Authorization] as Authorization
+  [Provider Router] as Router
+  database "t_model_provider\nt_model_definition\nt_agent_binding_models" as Catalog
+  [Secret Store] as Secrets
+  [Upstream Protocol Adapters] as Adapters
+}
+
+cloud "Upstream LLM Services" as Vendors
+
+Loop --> AiService : model + Context + options
+AiService --> Registry : get(model.providerId)
+Registry --> GenericProvider
+GenericProvider --> CatalogClient
+GenericProvider --> InvocationClient
+CatalogClient --> ManagerApi : HTTPS JSON
+InvocationClient --> ManagerApi : HTTPS SSE
+ManagerApi --> Authorization : agentId + modelId
+Authorization --> Catalog
+ManagerApi --> Router
+Router --> Catalog
+Router --> Secrets : credentialRef
+Router --> Adapters
+Adapters --> Vendors
+
+note bottom of GenericProvider
+The Runtime sees one provider and opaque modelIds.
+It never receives upstream credentials or endpoints.
+end note
+@enduml
+
+@startuml model_manager_invocation_sequence
+title Model Manager Provider Invocation Sequence
+
+' Source evidence:
+' pi-mono packages/ai/src/models.ts: Provider.stream and ModelsImpl.stream (lines 136-142 and 667-695)
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java: event protocol (lines 14-164)
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/RuntimeModelManager.java: current list and resolve port (lines 20-39)
+' mate-service src/main/resources/db/schema.sql: t_agent_binding_models (lines 59-73)
+' Target-only design: mate-service model catalog, resolution, invocation, and cancellation APIs do not exist yet.
+' Design reason: authorization is rechecked at invocation time and streaming remains compatible with AgentLoop.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam participant {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+skinparam sequence {
+  LifeLineBorderColor #64748B
+  LifeLineBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F8FAFC
+}
+
+actor Client
+participant "AgentLoop" as Loop
+participant "CampusClawAiService" as AiService
+participant "AiProviderRegistry" as Registry
+participant "MateServiceModelManagerProvider" as Provider
+participant "mate-service Model Manager" as Manager
+participant "Upstream Adapter" as Adapter
+
+Client -> Loop : submit prompt
+Loop -> AiService : stream(model, Context, options)
+AiService -> Registry : get(model.providerId)
+Registry --> AiService : generic Provider
+AiService -> Provider : streamSimple(model, Context, options)
+Provider -> Provider : create invocationId
+Provider -> Manager : POST /agents/{agentId}/model-invocations\nmodelId + sessionId + Context + safe options
+Manager -> Manager : authenticate caller
+Manager -> Manager : atomically check current Agent binding,\nmodel status, provider status, and credentialRef
+Manager -> Adapter : invoke private upstream model
+
+loop AssistantMessageEvent-compatible SSE
+  Adapter --> Manager : provider-specific delta
+  Manager --> Provider : start, content lifecycle, done or error
+  Provider --> Loop : AssistantMessageEvent
+end
+
+alt Runtime abort
+  Loop -> Provider : cancel subscription
+  Provider -> Manager : DELETE /model-invocations/{invocationId}
+  Manager -> Adapter : abort upstream request
+end
+
+note over Provider,Manager
+No automatic POST replay after an unknown outcome.
+Tool execution stays in AgentLoop.
+end note
+@enduml
+
+@startuml java_provider_alignment
+title Java Provider Alignment with pi-mono
+
+' Source evidence:
+' pi-mono packages/ai/src/models.ts: Provider and Models registry keyed by provider.id
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java: registry keyed by Api (lines 22-152)
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/Provider.java: closed enum with CUSTOM (lines 19-37)
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/config/CustomModelLoader.java: every custom model uses Provider.CUSTOM (lines 92-123)
+' Java divergence: the current Java design models protocol adapters as providers and cannot preserve arbitrary provider identity.
+' Architecture change: add open ProviderId and ApiId values, resolve AiProvider by providerId, and keep protocol routing internal.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam class {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+  ArrowColor #475569
+}
+
+package "Current Java" {
+  enum ProviderEnum
+  enum ApiEnum
+  class ModelCurrent
+  interface ApiProvider
+  class ApiProviderRegistryCurrent
+  ModelCurrent --> ProviderEnum
+  ModelCurrent --> ApiEnum
+  ApiProviderRegistryCurrent --> ApiProvider : keyed by ApiEnum
+}
+
+package "Target Java" {
+  class ProviderId
+  class ApiId
+  class ModelTarget
+  interface AiProvider
+  class AiProviderRegistry
+  interface ProtocolAdapter
+  class ProtocolAdapterRegistry
+  class MateServiceModelManagerProvider
+  ModelTarget --> ProviderId
+  ModelTarget --> ApiId
+  AiProviderRegistry --> AiProvider : keyed by ProviderId
+  AiProvider --> ProtocolAdapterRegistry : optional internal dispatch
+  ProtocolAdapterRegistry --> ProtocolAdapter : keyed by ApiId
+  MateServiceModelManagerProvider ..|> AiProvider
+}
+
+ProviderEnum ..> ProviderId : deprecate enum boundary
+ApiEnum ..> ApiId : preserve known constants
+ApiProvider ..> ProtocolAdapter : rename responsibility
+@enduml
