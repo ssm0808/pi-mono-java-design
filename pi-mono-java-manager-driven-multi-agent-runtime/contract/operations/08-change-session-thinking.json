@@ -3,7 +3,7 @@
     "shortName": "设置深度思考",
     "operationKey": "changeSessionThinking",
     "method": "PUT",
-    "path": "/sessions/{session_id}/thinking",
+    "path": "/sessions/{sessionId}/thinking",
     "summary": "开启或关闭 Session 深度思考",
     "description": "在 Session 处于 idle 时，将 thinking 设置为是否对后续 user.message 启用深度思考。false 映射为关闭推理且 POST /events 不发送 thinking 事件；true 使用当前模型和 Agent 的受管非 off 推理强度，并开放 assistant.thinking.started/delta/completed SSE，其中 completed 持久化。GET /events 按查询时 Session 当前 thinking 状态决定是否返回 assistant.thinking.completed；状态切换后旧 page 失效，调用方须从第一页重新查询。调用方不选择具体推理等级。",
     "parameters": [
@@ -24,7 +24,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "只接受布尔字段 thinking；不接受 level、reasoning_effort、模型参数、客户端 capability 或 Idempotency-Key。",
+      "description": "只接受布尔字段 thinking；不接受 level、reasoningEffort、模型参数、客户端 capability 或 Idempotency-Key。",
       "example": {
         "thinking": true
       }
@@ -33,7 +33,7 @@
       {
         "status": "200",
         "label": "OK",
-        "summary": "返回更新后的完整 Session 资源。相同值按无变化成功返回，updated_at 和 ETag 保持不变。",
+        "summary": "返回更新后的完整 Session 资源。相同值按无变化成功返回，updatedAt 和 ETag 保持不变。",
         "headers": {
           "ETag": "\"snp-P4tR8vL2xC6\"",
           "Cache-Control": "no-store",
@@ -44,13 +44,13 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "session_id": "session-550e8400e29b41d4a716446655440003",
-              "agent_id": "agent-550e8400e29b41d4a716446655440000",
-              "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
               "state": "idle",
               "thinking": true,
-              "created_at": "2026-08-15T10:30:00+08:00",
-              "updated_at": "2026-08-17T14:25:09+08:00"
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:25:09+08:00"
             }
           }
         }
@@ -60,18 +60,18 @@
         "status": "400",
         "tabLabel": "400 · INVALID_SESSION_ID",
         "label": "Bad Request",
-        "summary": "session_id 不符合标识格式。",
+        "summary": "sessionId 不符合标识格式。",
         "headers": {
           "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
             "resCode": "INVALID_SESSION_ID",
-            "resMsg": "session_id 格式不正确。"
+            "resMsg": "sessionId 格式不正确。"
           },
           "en-US": {
             "resCode": "INVALID_SESSION_ID",
-            "resMsg": "The session_id format is invalid."
+            "resMsg": "The sessionId format is invalid."
           }
         }
       },

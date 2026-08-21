@@ -2,14 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.7.0 |
-| 状态 | CampusClaw 内部 11 个接口已实现；类型化资源 ID、Session 初始 thinking、调用上下文 Header、thinking 事件投影和消息请求精简的新契约待实现；mate-service 公共接口待评审 |
+| 文档版本 | 2.8.0 |
+| 状态 | CampusClaw 内部 11 个接口已在 HTTP 1.37 实现分支落地；公共字段统一为 lowerCamelCase 的 1.38 目标契约待实现；mate-service 公共接口待评审 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
-| 设计仓分析基线 | `3488d3d4091ca637e75310c3d28c2ee01ea5f589` |
+| 设计仓分析基线 | `b902de281d9ab0ddfdcfec2ff8616279e5c421a1` |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 设计分析基线 | `195746614096312d4e93afb029d387837db78e0b` |
 | pi-mono-java 实现基线 | `1f801dbb82bdda30478e3354e685e3153b179a0c` |
-| 更新日期 | 2026-08-20 |
+| pi-mono-java 字段命名核对基线 | `304eda06ff603fc9b6bbcaad0c296cc151a7defb`（`codex/runtime-http-contract-v137`） |
+| 更新日期 | 2026-08-21 |
 
 ## 1. 当前结论
 
@@ -57,6 +58,11 @@ OpenAPI 已经明确废弃并从仓库删除。仓库内 JSON 是 HTML 的规范
 旧 WebSocket/AsyncAPI 文档已从当前仓库删除，历史内容只能从 Git 历史读取，不再是
 目标契约或新实现输入。
 
+当前 CampusClaw HTTP 契约中的路径参数、查询参数、请求体、普通响应和 SSE `data`
+字段统一使用 lowerCamelCase。HTTP Header 保持标准或公司既有原名，例如
+`X-HW-ID`、`Authorization`、`X-HW-APPKEY`、`If-Match`、`Accept-Language`；事件类型值、
+错误码和类型化 ID 值不因字段命名调整而改变，也不提供 snake_case 字段别名。
+
 ### 2.1 源驱动契约校验
 
 修改契约源后先重新生成 HTML，再运行快速校验：
@@ -91,10 +97,10 @@ mate-service 面向浏览器和业务客户端，负责：
 
 - 用户认证、产品权限、配额、护栏、意图和业务编排；
 - 用户可见的 Chat 资源和名称；
-- 保存 `chat_id -> session_id` 的私有映射；
+- 保存 `chat_id -> sessionId` 的私有映射；
 - 将公共 HTTP 请求映射为 CampusClaw 内部 HTTP 请求；
 - 消费内部 SSE，过滤内部字段和错误，再投影为公共 SSE；
-- 保证 `session_id`、内部凭据、Provider 配置和工具私有数据不泄露给浏览器。
+- 保证 `sessionId`、内部凭据、Provider 配置和工具私有数据不泄露给浏览器。
 
 公共 mate-service HTTP 的具体路径、请求 VO、ResultBean、错误码和 SSE Event 投影
 尚未逐项评审。本次只确认传输形态为 HTTP+SSE，不擅自把 CampusClaw 的内部路径
@@ -104,14 +110,14 @@ mate-service 面向浏览器和业务客户端，负责：
 
 CampusClaw 面向 mate-service Runtime client 和明确获授权的内部服务端 SDK，负责：
 
-- Runtime Session 生命周期和 `session_id`；
+- Runtime Session 生命周期和 `sessionId`；
 - Agent、Model、thinking 配置和受控目录解析；
 - MessageEntry 当前分支、模型执行、Tool 执行和持久化；
 - Session 内单 active execution、Steer/FollowUp 队列和 Abort；
 - 内部 HTTP 鉴权、ResultBean、SSE 事件和错误国际化。
 
 CampusClaw 不读取 `chat_id`、最终用户身份或公共 Chat 名称。它只按内部
-`session_id` 定位 Session。
+`sessionId` 定位 Session。
 
 ## 4. CampusClaw 已确认接口
 
@@ -119,20 +125,20 @@ CampusClaw 不读取 `chat_id`、最终用户身份或公共 Chat 名称。它�
 
 | # | Method | Path | 响应形态 | 作用 |
 |---:|---|---|---|---|
-| 1 | `POST` | `/agents/{agent_id}/sessions` | `201` ResultBean | 创建并初始化 Session；默认模型由 Agent 配置选择，`thinking=true` |
-| 2 | `GET` | `/sessions/{session_id}` | `200` ResultBean | 读取当前模型、是否深度思考和 `idle/running` 状态 |
-| 3 | `DELETE` | `/sessions/{session_id}` | `204` | 逻辑删除并安排 Runtime 数据清理，只保留最小 tombstone |
-| 4 | `POST` | `/sessions/{session_id}/events` | `200 text/event-stream` | 提交 `user.message` 并直接流式执行 |
-| 5 | `GET` | `/sessions/{session_id}/events` | `200` ResultBean | 使用不透明 `page/next_page` 分页读取当前分支的持久化对话 Entry |
-| 6 | `GET` | `/sessions/{session_id}/models` | `200` ResultBean | 返回可用 `model_id` 字符串数组 |
-| 7 | `PUT` | `/sessions/{session_id}/model` | `200` ResultBean | 修改后续用户消息使用的 Session 默认模型 |
-| 8 | `PUT` | `/sessions/{session_id}/thinking` | `200` ResultBean | 开关后续用户消息是否启用深度思考 |
-| 9 | `POST` | `/sessions/{session_id}/steers` | `202` ResultBean | 向 running Session 的当前执行追加优先指导 |
-| 10 | `POST` | `/sessions/{session_id}/follow-ups` | `202` ResultBean | 在 Agent 原本将停止时追加后续消息 |
-| 11 | `POST` | `/sessions/{session_id}/abort` | `204` | 中止当前执行并清空尚未投递的控制消息 |
+| 1 | `POST` | `/agents/{agentId}/sessions` | `201` ResultBean | 创建并初始化 Session；默认模型由 Agent 配置选择，`thinking=true` |
+| 2 | `GET` | `/sessions/{sessionId}` | `200` ResultBean | 读取当前模型、是否深度思考和 `idle/running` 状态 |
+| 3 | `DELETE` | `/sessions/{sessionId}` | `204` | 逻辑删除并安排 Runtime 数据清理，只保留最小 tombstone |
+| 4 | `POST` | `/sessions/{sessionId}/events` | `200 text/event-stream` | 提交 `user.message` 并直接流式执行 |
+| 5 | `GET` | `/sessions/{sessionId}/events` | `200` ResultBean | 使用不透明 `page/nextPage` 分页读取当前分支的持久化对话 Entry |
+| 6 | `GET` | `/sessions/{sessionId}/models` | `200` ResultBean | 返回可用 `modelId` 字符串数组 |
+| 7 | `PUT` | `/sessions/{sessionId}/model` | `200` ResultBean | 修改后续用户消息使用的 Session 默认模型 |
+| 8 | `PUT` | `/sessions/{sessionId}/thinking` | `200` ResultBean | 开关后续用户消息是否启用深度思考 |
+| 9 | `POST` | `/sessions/{sessionId}/steers` | `202` ResultBean | 向 running Session 的当前执行追加优先指导 |
+| 10 | `POST` | `/sessions/{sessionId}/follow-ups` | `202` ResultBean | 在 Agent 原本将停止时追加后续消息 |
+| 11 | `POST` | `/sessions/{sessionId}/abort` | `204` | 中止当前执行并清空尚未投递的控制消息 |
 
 公共资源没有 `Run`。一次用户输入会触发内部 active execution，但调用方使用
-Session、Entry 和 SSE 恢复，不获得 `run_id`，也不存在 GetRun 或 Run Events。
+Session、Entry 和 SSE 恢复，不获得 `runId`，也不存在 GetRun 或 Run Events。
 
 ## 5. HTTP 与 SSE 行为
 
@@ -160,19 +166,19 @@ Session、Entry 和 SSE 恢复，不获得 `run_id`，也不存在 GetRun 或 Ru
 
 ### 5.2 执行 SSE
 
-`POST /sessions/{session_id}/events` 直接返回一次执行的 SSE。确认的正常顺序是：
+`POST /sessions/{sessionId}/events` 直接返回一次执行的 SSE。确认的正常顺序是：
 
 ```text
 user.message
 assistant.message.started
 assistant.message.delta
-assistant.message.completed      finish_reason=tool_call
+assistant.message.completed      finishReason=tool_call
 tool.execution.started
 tool.execution.completed
 tool.result
 assistant.message.started
 assistant.message.delta
-assistant.message.completed      finish_reason=stop
+assistant.message.completed      finishReason=stop
 session.status.idle
 stream.end
 ```
@@ -187,7 +193,7 @@ POST SSE 返回 `assistant.thinking.started/delta/completed`，其中 completed 
 `assistant.thinking.completed`；开关改变会使旧 page 失效并要求从第一页重读。
 
 POST 已接受用户 Entry 后，客户端断开不取消执行，也不得自动重放该 POST。客户端
-重新分页读取 GET Events，以 `entry_id/entry_seq` 去重；尚未持久化的临时 delta
+重新分页读取 GET Events，以 `entryId/entrySeq` 去重；尚未持久化的临时 delta
 不补拉。
 
 ### 5.3 mate-service 的 SSE 桥接约束
@@ -195,7 +201,7 @@ POST 已接受用户 Entry 后，客户端断开不取消执行，也不得自�
 mate-service 不得字节透明转发内部流。它至少要保证：
 
 - 公共和内部两跳分别认证、限流和记录审计；
-- 内部 `session_id` 和内部错误细节不进入公共事件；
+- 内部 `sessionId` 和内部错误细节不进入公共事件；
 - 每一跳都正确处理下游取消和上游执行继续之间的关系；
 - 仅在公共投影已经完成后发送公共终态；
 - 背压、超时和代理缓冲配置适用于 `text/event-stream`。
@@ -205,13 +211,13 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 
 ## 6. Runtime 内部设计不变量
 
-- 一个 Session 绑定一个不可变 `agent_id`，允许切换 `model_id`；模型不是 Session 身份的一部分。
-- `agentId` / `agent_id`、`toolId` / `tool_id`、`skillId` / `skill_id` 和 `sessionId` / `session_id` 共用类型化资源 ID 规则；精确正则只在 [`contract/common.json`](contract/common.json) 定义。
+- 一个 Session 绑定一个不可变 `agentId`，允许切换 `modelId`；模型不是 Session 身份的一部分。
+- 公共标识字段固定命名为 `agentId`、`toolId`、`skillId` 和 `sessionId`；对应值共用类型化资源 ID 规则，精确正则只在 [`contract/common.json`](contract/common.json) 定义。
 - Session 名称属于 mate-service Chat 元数据，不存入 CampusClaw Runtime Session。
 - Session 粗粒度状态只有 `idle/running`；模型、工具或消息阶段通过实时事件表达。
 - `thinking` 是“是否启用深度思考”的 boolean，不是原始推理披露等级。
-- 持久化 Session Entry 使用 `entry_id + parent_id` 形成树；公共 GET Events 首版只返回当前分支。
-- Runtime 只接收有序 `file_ids`，不解析或下载文件正文；ID 按固定 `[File IDs]` 提示块传给模型。
+- 持久化 Session Entry 使用 `id + parentId` 形成树；公共 GET Events 首版只返回当前分支。
+- Runtime 只接收有序 `fileIds`，不解析或下载文件正文；ID 按固定 `[File IDs]` 提示块传给模型。
 - Model Manager、Tool Manager 和 Agent 目录仍是模型、工具和 Agent 配置的最终权威。
 
 ## 7. Manager 与多 Agent Runtime 核心
@@ -227,7 +233,7 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 [`01-create-session.json`](contract/operations/01-create-session.json) 维护。设计语义固定为：
 小写资源类型前缀、一个连字符、去掉内部连字符的 32 位十六进制 UUID；前缀必须与
 资源类型一致，不接受无前缀或下划线前缀旧 ID，也不引入 camelCase/snake_case 值别名。
-本次不改变 `model_id`、`session_id` 和 `file_id` 的现有契约。
+本次不改变 `modelId`、`sessionId` 和 `fileId` 的现有契约。
 
 ```text
 agent/
@@ -242,7 +248,7 @@ agent/
                     └── tools.json
 ```
 
-HTTP V1 的当前目录契约固定为 `agent/{agent_id}/.campusclaw/`。
+HTTP V1 的当前目录契约固定为 `agent/{agentId}/.campusclaw/`。
 `settings.json` 提供 `defaultModel` 和 `enabledModels`；Session 创建时校验目录边界、
 默认模型与 Model Manager 当前可用性。Runtime 直接读取这个受控目录，不再依赖独立
 Agent Runtime Template 仓库，也不在内存中缓存目录快照。
@@ -265,8 +271,8 @@ call_tool
 
 当前实现为了收窄权限，只注册 `read`。以下 Tool Manager 渐进发现仍是未实现的后续
 架构方向：Agent `SYSTEM.md` 和 Skill `references/tools.json` 只披露逻辑工具摘要。模型先用
-`get_tool_info(tool_id)` 从 Tool Manager 取得实时 Schema，再用
-`call_tool(tool_id, parameters)` 执行；摘要披露不等于授权，执行前必须重新验证
+`get_tool_info(toolId)` 从 Tool Manager 取得实时 Schema，再用
+`call_tool(toolId, parameters)` 执行；摘要披露不等于授权，执行前必须重新验证
 Agent 绑定、工具状态、权限和输入 Schema。
 
 ![Tool Manager 渐进发现与执行](diagrams/tool-discovery/progressive_tool_discovery_execution.svg)
@@ -276,8 +282,8 @@ Agent 绑定、工具状态、权限和输入 Schema。
 ### 7.3 Model Manager 流式适配
 
 Agent 目录决定默认模型候选，Model Manager 仍是模型 descriptor、可用性、凭据和
-调用的最终权威。Session 可以在 idle 时切换 `model_id`；每次用户事件接受时读取
-当前 `model_id/thinking` 形成内部执行快照。Provider 的结构化增量由 Runtime
+调用的最终权威。Session 可以在 idle 时切换 `modelId`；每次用户事件接受时读取
+当前 `modelId/thinking` 形成内部执行快照。Provider 的结构化增量由 Runtime
 转换为已确认的 Assistant/Tool SSE 事件，不把 Provider model ID、API Key、
 base URL 或成本字段公开给 mate-service。
 
@@ -288,12 +294,12 @@ base URL 或成本字段公开给 mate-service。
 ### 7.4 数据与附件边界
 
 RuntimeSessionStore 保存 Session 配置、当前分支 Entry 和内部执行状态，不保存
-文件正文或文件元数据快照。Session Entry 的 `entry_id/parent_id` 树与当前分支重建详见
+文件正文或文件元数据快照。Session Entry 的 `id/parentId` 树与当前分支重建详见
 [`pi Session Context 分析`](../pi-mono-agent-session-context/README.md)；数据库通用
 模式详见 [`Agent 数据库模式`](../agent-database-patterns/README.md)。
 
 文件上传、扫描、正文、元数据和删除生命周期不属于 CampusClaw Runtime。
-CampusClaw 只消费有序 `file_ids`，把它们编码为固定文本块；它不调用 resolve/content、
+CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它不调用 resolve/content、
 不直连 OBS，也不接受文件名、URL、MIME、Base64 或 Object Key。
 
 ## 8. 源码证据与目标差异
@@ -309,12 +315,14 @@ CampusClaw 只消费有序 `file_ids`，把它们编码为固定文本块；它�
 | 已实现 Java 行为 | `MyBatisRuntimeSessionRepository` 使用 openGauss 保存 Session、当前分支 Entry、严格序号、tombstone 和清理任务 |
 | 当前 Java 差异 | `RuntimeApiConstants.AGENT_ID_PATTERN` 仍为旧下划线格式，`SESSION_ID_PATTERN` 仍为通用字符串；`RandomSessionIdGenerator` 仍生成无前缀的 26 位 Crockford Base32；`RuntimeSessionService.newSession` 仍写入 `thinking=false`，`session_schema.sql` 的 `agent_id` 仍为 `VARCHAR(30)` |
 | 当前 Java 差异 | `RuntimeWebMvcConfiguration` 当前把认证拦截器应用到全部 Runtime 路径；`UserEventRequestVO` 当前仍要求 `type=user.message` |
+| 当前 Java 差异 | 字段命名核对基线 `304eda06` 的四个 Runtime Controller 仍使用 `{agent_id}` / `{session_id}` 路径变量；请求/响应 VO 的 `@JsonProperty`、`@JsonSetter` 以及 `RuntimeEntryCodec` / `RuntimeEventProjector` 仍输出 snake_case。1.38 lowerCamelCase 是相对该实现的契约变更 |
 | 已实现 Java 行为 | AI 层 `AssistantMessageEvent` 存在 thinking start/delta/end；Runtime 对外 `RuntimeEventType` 无 thinking 类型，`RuntimeEventProjector` 与 `RuntimeEntryCodec` 会过滤原始思考内容 |
 | 架构变更 | 两跳目标传输统一为 HTTP+SSE，删除连接首帧、Frame RPC、连接 generation、WebSocket close code 和 AsyncAPI |
 | 架构变更 | CampusClaw 目标契约改为 `agent-` / `tool-` / `skill-` / `session-` 加 32 位十六进制 UUID；Session 创建成功时固定 `thinking=true`，实现需同步放宽 `t_sessions.agent_id` 并替换 Session ID 生成器 |
 | 架构变更 | 十一个接口全部保留调用上下文 Header，但移除 Runtime 应用内的凭据组合与格式校验及对应 401；提交用户消息的请求体删除冗余 `type` 字段 |
 | 架构变更 | `thinking=true` 时将内部 thinking 生命周期投影为公共 SSE，并持久化 completed 供 GET 恢复；GET 根据 Session 当前 thinking 状态过滤，状态变化使旧 page 失效 |
-| 产品约束 | 浏览器只识别 `chat_id`，CampusClaw 只识别 `session_id`；公共接口不泄露 Runtime 标识 |
+| 架构变更 | CampusClaw HTTP 的 path/query/JSON/SSE 字段统一为 lowerCamelCase；Header 原名、事件类型值、错误码和 ID 值保持不变，不接受 snake_case 字段别名 |
+| 产品约束 | 浏览器只识别尚待评审的 `chat_id`，CampusClaw 内部契约只识别 `sessionId`；公共接口不泄露 Runtime 标识 |
 | 安全边界 | 调用上下文 Header 的检查由上游负责，Runtime 不复制认证策略；thinking 内容仅在开关为 true 时按事件契约返回 |
 
 源码证据的完整 commit、符号、行号和逐项设计理由见
@@ -334,6 +342,7 @@ CampusClaw 只消费有序 `file_ids`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.8.0 | 2026-08-21 | 将 CampusClaw HTTP 的路径参数、查询参数、请求体、普通响应和 SSE data 字段统一为 lowerCamelCase；保留全部 HTTP Header 原名以及事件类型值、错误码和 ID 值；新增源模型命名门禁并记录当前 Java snake_case 实现差异 |
 | 2.7.0 | 2026-08-20 | 将 Session ID 统一为 `session-` 加去连字符的 32 位十六进制 UUID；全部十一项接口携带调用上下文 Header，但 Runtime 不做凭据组合、互斥、格式或真实性检查；提交消息请求删除冗余 `type`；thinking=true 时开放并持久化 thinking completed，GET 按当前开关过滤 |
 | 2.6.0 | 2026-08-20 | 建立共享契约与十一份 operation JSON 单一编辑源；HTML 改为单份 CSS/JavaScript/聚合 model 的严格生成物；PlantUML 按九个设计主题拆分；校验增加 fast/full 两级并按生成结果做字节同步检查 |
 | 2.5.0 | 2026-08-20 | 将 Agent、Tool、Skill ID 统一为类型前缀加去连字符的 32 位十六进制 UUID；Create Runtime Session 初始化 `thinking=true`；记录当前 Java 正则、默认值和列长度差异 |

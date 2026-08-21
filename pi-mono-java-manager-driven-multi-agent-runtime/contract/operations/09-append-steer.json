@@ -3,7 +3,7 @@
     "shortName": "追加引导消息",
     "operationKey": "appendSteer",
     "method": "POST",
-    "path": "/sessions/{session_id}/steers",
+    "path": "/sessions/{sessionId}/steers",
     "summary": "向当前执行追加 Steering Message",
     "description": "仅在 Session 处于 running 时接受一条 Steering Message。服务端将其按接收顺序加入当前 active execution 的 Steer 队列，在当前 Assistant Turn 及其工具调用结束后、下一次模型调用前优先投递。成功只表示队列已接受，不创建公共 Run 或 Steer 资源；消息实际投递时才作为既有 user.message 写入当前分支并通过原 SSE 流发送。首版固定 one-at-a-time，并且 Steer 队列优先于 FollowUp 队列。",
     "parameters": [
@@ -17,7 +17,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "只接受 message；必须包含非空白字符且最多 262144 个字符。首版不接受 file_ids、model_id、thinking、metadata、队列模式或 Idempotency-Key。",
+      "description": "只接受 message；必须包含非空白字符且最多 262144 个字符。首版不接受 fileIds、modelId、thinking、metadata、队列模式或 Idempotency-Key。",
       "example": {
         "message": "先只分析异常订单，不要导出报告。"
       }
@@ -36,8 +36,8 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "session_id": "session-550e8400e29b41d4a716446655440003",
-              "accepted_at": "2026-08-17T15:10:00Z"
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "acceptedAt": "2026-08-17T15:10:00Z"
             }
           }
         }
@@ -47,18 +47,18 @@
         "status": "400",
         "tabLabel": "400 · INVALID_SESSION_ID",
         "label": "Bad Request",
-        "summary": "session_id 不符合标识格式。",
+        "summary": "sessionId 不符合标识格式。",
         "headers": {
           "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
             "resCode": "INVALID_SESSION_ID",
-            "resMsg": "session_id 格式不正确。"
+            "resMsg": "sessionId 格式不正确。"
           },
           "en-US": {
             "resCode": "INVALID_SESSION_ID",
-            "resMsg": "The session_id format is invalid."
+            "resMsg": "The sessionId format is invalid."
           }
         }
       },

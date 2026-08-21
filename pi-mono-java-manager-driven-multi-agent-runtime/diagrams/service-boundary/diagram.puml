@@ -7,7 +7,7 @@ title End-to-End HTTP and SSE Service Responsibilities
 ' Observed behavior: the CampusClaw internal HTTP POST returns execution-scoped SSE without a public WebSocket path.
 ' Target-only design: the mate-service public HTTP contract and its SSE projection are not implemented in this repository.
 ' Architecture change: both hops use HTTP request-response, and execution responses stream SSE for the lifetime of one execution.
-' Product constraint: the UI receives chat_id only; session_id remains an internal Runtime identifier.
+' Product constraint: the UI receives chat_id only; sessionId remains an internal Runtime identifier.
 ' Security hardening: mate-service terminates public auth and projects internal events instead of forwarding bytes transparently.
 ' Design reason: keep user-facing Chat lifecycle separate from durable Runtime Session identity and execution.
 
@@ -30,18 +30,18 @@ skinparam database {
 
 left to right direction
 
-rectangle "Agent UI\n\nCall public HTTP operations\nUse chat_id only\nRead execution-scoped SSE\nClose on stream end or error\nNever receive session_id" as UI #EFF6FF
+rectangle "Agent UI\n\nCall public HTTP operations\nUse chat_id only\nRead execution-scoped SSE\nClose on stream end or error\nNever receive sessionId" as UI #EFF6FF
 
-rectangle "mate-service\n\nOwn public HTTP and SSE\nAuthenticate the end user\nOwn Chat metadata and chat_id\nMap chat_id to session_id\nRun guardrails and orchestration\nCall CampusClaw with service identity\nProject safe public events and errors" as Mate #FFF7ED
+rectangle "mate-service\n\nOwn public HTTP and SSE\nAuthenticate the end user\nOwn Chat metadata and chat_id\nMap public Chat ID to internal Session ID\nRun guardrails and orchestration\nCall CampusClaw with service identity\nProject safe public events and errors" as Mate #FFF7ED
 
-rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nReceive request context without credential checks\nOwn Runtime Session and session_id\nValidate Agent and Model\nBuild Context and execute Model and read tool\nPersist current-branch Entries\nOwn Steer, FollowUp, and Abort" as Runtime #ECFDF5
+rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nReceive request context without credential checks\nOwn Runtime Session and sessionId\nValidate Agent and Model\nBuild Context and execute Model and read tool\nPersist current-branch Entries\nOwn Steer, FollowUp, and Abort" as Runtime #ECFDF5
 
-database "Mate Chat Store\n\nchat_id to session_id\nChat name and product state\nUser ownership" as MateStore
+database "Mate Chat Store\n\nPublic Chat ID to internal Session ID\nChat name and product state\nUser ownership" as MateStore
 
 database "RuntimeSessionStore\n\nSession state and configuration\nCurrent-branch Entries\nInternal execution state" as RuntimeStore
 
 UI <--> Mate : public HTTP requests\nResultBean, 204, or scoped SSE\nchat_id scope
-Mate <--> Runtime : internal HTTP requests\nResultBean, 204, or scoped SSE\nsession_id scope
+Mate <--> Runtime : internal HTTP requests\nResultBean, 204, or scoped SSE\nsessionId scope
 Mate --> MateStore : own and update
 Runtime --> RuntimeStore : own and update
 

@@ -5,11 +5,15 @@ title CampusClaw HTTP Session Creation
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, create.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java, resolve.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java, create.
-' Observed behavior: mate-service supplies only agent_id and CampusClaw generates session_id.
+' Source evidence (pi-mono-java 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java, create.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/CreateSessionResponseVO.java.
+' Observed behavior: the current Java wire path and response still use agent_id and session_id.
 ' Observed behavior: settings chooses a default model candidate and the model manager validates it.
 ' Observed behavior: current Java accepts agent_ plus 24 alphanumeric characters and persists thinking false.
 ' Observed behavior: RandomSessionIdGenerator.nextId returns 26 Crockford Base32 characters with no prefix.
 ' Architecture change: target Agent and Session IDs use a type prefix plus 32 hex UUID characters.
+' Architecture change: target HTTP path and payload fields use lowerCamelCase while header names stay unchanged.
 ' Product constraint: successful target creation persists thinking true.
 ' Product constraint: all Runtime operations carry integration-context headers without local validation.
 ' Observed behavior: creation persists an idle Session and does not initialize AgentSession or invoke a model.
@@ -40,15 +44,15 @@ participant "SessionIdGenerator" as Ids
 database "RuntimeSessionStore" as Store
 participant "ResultBeanAdapter" as ResultAdapter
 
-Mate -> API : POST /agents/{agent_id}/sessions\ncontext headers and no request body
+Mate -> API : POST /agents/{agentId}/sessions\ncontext headers and no request body
 API -> API : do not validate integration credentials
 API -> API : validate agent- plus 32 hex UUID characters
-API -> Resolver : resolve(agent_id)
+API -> Resolver : resolve(agentId)
 Resolver -> Resolver : verify controlled root and symlink boundary\nload settings.json
 Resolver --> API : agent directory, defaultModel, enabledModels
 API -> Models : resolveDefaultModel(snapshot)
 Models --> API : authoritative ModelDescriptor
-API -> Ids : generate globally unique session_id
+API -> Ids : generate globally unique sessionId
 Ids --> API : session- plus 32 hex UUID characters
 API -> Store : insert SessionRecord\nstate idle, thinking true, version 1
 Store --> API : committed
@@ -57,7 +61,7 @@ ResultAdapter --> API : resCode, resMsg, result
 API --> Mate : 201 Created plus Location\nResultBean with SessionResource in result
 
 note over API,Store
-Before commit, a failure does not expose session_id.
+Before commit, a failure does not expose sessionId.
 After commit, state is idle and no MessageEntry or AgentSession exists.
 The persisted deep-thinking switch is true.
 AgentSession is initialized lazily by the first user event.
@@ -66,7 +70,7 @@ coarse state, and creation time.
 end note
 
 note over API,Ids
-The target session_id has the session- prefix
+The target sessionId has the session- prefix
 and a 32-character hexadecimal UUID payload.
 UUID hyphens and legacy unprefixed IDs are rejected.
 end note
@@ -79,7 +83,7 @@ which background timeout cleanup must remove if unbound.
 end note
 
 note over API,Store
-The target agent_id has 38 characters.
+The database agent_id value has 38 characters.
 Widen the current VARCHAR(30) column to VARCHAR(64)
 before enabling the new identifier contract.
 end note
@@ -97,12 +101,16 @@ title CampusClaw GetSession Confirmed Response
 ' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, get.
+' Source evidence (pi-mono-java 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java.
+' Observed behavior: JsonProperty currently exposes snake_case response fields.
 ' Observed behavior: pi exposes phase, reasoning effort, transcript, attached, and locked
 ' in its protocol snapshot.
 ' Observed behavior: Anthropic exposes a control-plane Session resource without transcript
 ' or an active Run recovery snapshot.
 ' Product constraint: CampusClaw exposes a boolean deep-thinking switch instead of effort levels.
 ' Architecture change: the confirmed response removes the former public active Run pointer.
+' Architecture change: target response fields use lowerCamelCase and do not accept snake_case aliases.
 ' Design reason: Session state is the coarse control-plane signal; GET Session Events and the
 ' initiating POST stream own durable recovery and live execution detail.
 ' Observed behavior: these wire-contract fields exist in GetSessionResponseVO.
@@ -167,11 +175,15 @@ title CampusClaw HTTP Session Logical Deletion Confirmed Design
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, delete.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java, beginDeletion.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/SessionCleanupWorker.java.
+' Source evidence (pi-mono-java 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java, delete.
+' Observed behavior: the current Java delete path still names the variable session_id.
 ' Observed behavior: pi dispose stops active work and releases runtime resources, while
 ' interactive deletion removes the local JSONL file.
 ' Observed behavior: the implemented repository returns BUSY for a running session and does not abort it.
 ' Observed behavior: tombstone insertion, cleanup task insertion, and session deletion commit atomically.
 ' Architecture change: logical deletion and a durable cleanup work item replace local JSONL deletion.
+' Architecture change: the target HTTP path variable is sessionId; database column names remain snake_case.
 ' Product constraint: all Runtime operations carry integration-context headers without local validation.
 ' Design reason: the API becomes idempotent immediately without exposing cleanup-job state.
 
@@ -202,10 +214,10 @@ participant "DeleteSession\nAPI" as API
 database "Runtime Session\nStore" as Store
 participant "Cleanup\nWorker" as Worker
 
-Caller -> API : DELETE /sessions/{session_id}\ncontext headers and no body
+Caller -> API : DELETE /sessions/{sessionId}\ncontext headers and no body
 API -> API : do not validate integration credentials
-API -> API : validate session_id
-API -> Store : beginLogicalDelete(session_id)
+API -> API : validate sessionId
+API -> Store : beginLogicalDelete(sessionId)
 
 alt existing idle Session
   Store -> Store : transaction: insert tombstone, enqueue cleanup,\ndelete session row

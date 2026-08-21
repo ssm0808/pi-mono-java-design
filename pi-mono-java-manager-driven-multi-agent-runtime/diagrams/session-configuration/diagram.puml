@@ -10,13 +10,18 @@ title HTTP Session Model and Deep-Thinking Confirmed Configuration
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/CatalogRuntimeModelManager.java.
+' Source evidence (pi-mono-java commit 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/AvailableModelsResponseVO.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/ChangeModelRequestVO.java.
+' Observed behavior: current Java paths and model fields are snake_case.
 ' Observed behavior: both pi baselines can list models and change the active model.
 ' Their thinkingLevel values control model reasoning effort.
 ' Confirmed product constraint: HTTP thinking is a boolean deep-thinking switch; false maps to off,
 ' while true maps to a managed non-off level supported by the current model and Agent.
-' Security hardening: model discovery is Session-scoped and exposes only model_id.
+' Security hardening: model discovery is Session-scoped and exposes only modelId.
 ' Architecture change: HTTP configuration writes require an idle Session and a matching ETag.
 ' Architecture change: completed thinking content becomes conditionally public in POST and GET events.
+' Architecture change: target HTTP fields use lowerCamelCase while If-Match keeps its header spelling.
 ' Product constraint: all Runtime operations carry integration-context headers without local validation.
 ' Design reason: prevent a configuration change from racing with an active execution while
 ' returning the common Session resource after every successful mutation.
@@ -50,19 +55,19 @@ participant "Model Manager" as Models
 participant ResultBeanAdapter
 
 group List available models
-  Caller -> API : GET /sessions/{session_id}/models\ncontext headers
+  Caller -> API : GET /sessions/{sessionId}/models\ncontext headers
   API -> API : do not validate integration credentials
-  API -> Store : read Agent binding and current model_id
-  Store --> API : agent_id, enabledModels, current model_id
+  API -> Store : read Agent binding and current modelId
+  Store --> API : agentId, enabledModels, current modelId
   API -> Models : list callable models for Agent
-  Models --> API : ordered model_id string array
+  Models --> API : ordered modelId string array
   API -> ResultBeanAdapter : normal(ModelListResponseVO)
   ResultBeanAdapter --> API : resCode, resMsg, result
-  API --> Caller : 200 OK\ncurrent_model_id and models string array
+  API --> Caller : 200 OK\ncurrentModelId and models string array
 end
 
 group Change current model
-  Caller -> API : PUT /sessions/{session_id}/model\ncontext headers, If-Match, and model_id
+  Caller -> API : PUT /sessions/{sessionId}/model\ncontext headers, If-Match, and modelId
   API -> API : do not validate integration credentials
   API -> Store : require idle and compare ETag
   Store --> API : current Session resource
@@ -79,7 +84,7 @@ group Change current model
 end
 
 group Change future deep-thinking default
-  Caller -> API : PUT /sessions/{session_id}/thinking\ncontext headers, If-Match, and boolean thinking
+  Caller -> API : PUT /sessions/{sessionId}/thinking\ncontext headers, If-Match, and boolean thinking
   API -> API : do not validate integration credentials
   API -> Store : require idle and compare ETag
   Store --> API : current Session resource
@@ -95,7 +100,7 @@ group Change future deep-thinking default
 end
 
 note over API,Models
-The public models field is a string array of model_id values.
+The public models field is a string array of modelId values.
 Names and display metadata come from the caller model catalog.
 The current model can be absent when it was disabled later.
 end note
