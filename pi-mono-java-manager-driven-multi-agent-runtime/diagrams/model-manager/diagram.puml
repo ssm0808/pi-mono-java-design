@@ -50,7 +50,7 @@ loop stream events
 end
 
 alt Session-scoped abort
-  Client -> Loop : POST /sessions/{session_id}/abort
+  Client -> Loop : POST /sessions/{sessionId}/abort
   Loop -> Provider : cancel model subscription
   Provider -> ModelManager : close stream
 end

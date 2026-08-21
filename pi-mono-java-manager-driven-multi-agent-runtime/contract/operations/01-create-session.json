@@ -3,9 +3,9 @@
     "shortName": "创建会话",
     "operationKey": "createSession",
     "method": "POST",
-    "path": "/agents/{agent_id}/sessions",
+    "path": "/agents/{agentId}/sessions",
     "summary": "创建 Runtime Session",
-    "description": "根据 agent_id 创建一个全新的 Runtime Session。CampusClaw 生成 session_id，直接从受控 agent/{agent_id}/.campusclaw/ 目录读取 settings.json、SYSTEM.md 和 skills/，解析并校验默认模型，然后完成 Session 持久化；AgentSession 在首次执行时惰性初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session，默认 thinking=true。",
+    "description": "根据 agentId 创建一个全新的 Runtime Session。CampusClaw 生成 sessionId，直接从受控 agent/{agentId}/.campusclaw/ 目录读取 settings.json、SYSTEM.md 和 skills/，解析并校验默认模型，然后完成 Session 持久化；AgentSession 在首次执行时惰性初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session，默认 thinking=true。",
     "parameters": [
       {
         "$ref": "parameters.agentId"
@@ -18,7 +18,7 @@
     "requestBody": {
       "required": false,
       "contentType": null,
-      "description": "无请求体；不接受 session_id、model_id 或 thinking。",
+      "description": "无请求体；不接受 sessionId、modelId 或 thinking。",
       "example": null
     },
     "responses": [
@@ -35,12 +35,12 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "session_id": "session-550e8400e29b41d4a716446655440003",
-              "agent_id": "agent-550e8400e29b41d4a716446655440000",
-              "model_id": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfR",
               "state": "idle",
               "thinking": true,
-              "created_at": "2026-08-15T11:30:00Z"
+              "createdAt": "2026-08-15T11:30:00Z"
             }
           }
         }
@@ -48,18 +48,18 @@
       {
         "status": "400",
         "label": "Bad Request",
-        "summary": "agent_id 不符合资源标识格式。",
+        "summary": "agentId 不符合资源标识格式。",
         "headers": {
           "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
             "resCode": "INVALID_AGENT_ID",
-            "resMsg": "agent_id 格式不正确。"
+            "resMsg": "agentId 格式不正确。"
           },
           "en-US": {
             "resCode": "INVALID_AGENT_ID",
-            "resMsg": "The agent_id format is invalid."
+            "resMsg": "The agentId format is invalid."
           }
         }
       },

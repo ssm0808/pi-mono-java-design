@@ -92,7 +92,7 @@ def expand_model(common: dict[str, Any], source: dict[str, Any]) -> dict[str, An
 def validate_model(model: dict[str, Any]) -> None:
     api = model["api"]
     operation = model["operation"]
-    for key in ("title", "version", "basePath", "visibility"):
+    for key in ("title", "version", "basePath", "visibility", "fieldNaming", "headerNaming"):
         require(isinstance(api.get(key), str) and api[key], f"api.{key} is required")
     for key in ("shortName", "operationKey", "method", "path", "summary", "description"):
         require(isinstance(operation.get(key), str) and operation[key], f"operation.{key} is required")
@@ -192,7 +192,9 @@ def render_static(model: dict[str, Any]) -> str:
         '<div data-static-review>'
         '<header class="topbar"><div class="row">'
         f'<h2>{html.escape(api["title"])}</h2><span class="tag">{html.escape(api["version"])}</span>'
-        f'<span class="tag">{html.escape(api["visibility"])}</span></div>'
+        f'<span class="tag">{html.escape(api["visibility"])}</span>'
+        f'<span class="tag">字段：{html.escape(api["fieldNaming"])}</span>'
+        f'<span class="tag">Header：{html.escape(api["headerNaming"])}</span></div>'
         f'<code class="base">{html.escape(api["basePath"])}</code></header>'
         f'<article class="operation operation-{method}">'
         '<header class="operation-head">'

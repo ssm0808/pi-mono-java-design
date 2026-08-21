@@ -25,18 +25,21 @@ DESIGN_PATH = ROOT / "chat-http-v1-design.md"
 CONTRACT_ROOT = ROOT / "contract"
 EXPECTED_OPERATION_COUNT = 11
 EXPECTED_OPERATIONS = {
-    ("POST", "/agents/{agent_id}/sessions"),
-    ("GET", "/sessions/{session_id}"),
-    ("DELETE", "/sessions/{session_id}"),
-    ("POST", "/sessions/{session_id}/events"),
-    ("GET", "/sessions/{session_id}/events"),
-    ("GET", "/sessions/{session_id}/models"),
-    ("PUT", "/sessions/{session_id}/model"),
-    ("PUT", "/sessions/{session_id}/thinking"),
-    ("POST", "/sessions/{session_id}/steers"),
-    ("POST", "/sessions/{session_id}/follow-ups"),
-    ("POST", "/sessions/{session_id}/abort"),
+    ("POST", "/agents/{agentId}/sessions"),
+    ("GET", "/sessions/{sessionId}"),
+    ("DELETE", "/sessions/{sessionId}"),
+    ("POST", "/sessions/{sessionId}/events"),
+    ("GET", "/sessions/{sessionId}/events"),
+    ("GET", "/sessions/{sessionId}/models"),
+    ("PUT", "/sessions/{sessionId}/model"),
+    ("PUT", "/sessions/{sessionId}/thinking"),
+    ("POST", "/sessions/{sessionId}/steers"),
+    ("POST", "/sessions/{sessionId}/follow-ups"),
+    ("POST", "/sessions/{sessionId}/abort"),
 }
+EXPECTED_CONTEXT_HEADERS = {"X-HW-ID", "Authorization", "X-HW-APPKEY"}
+EXPECTED_PARAMETER_HEADERS = {"Accept-Language", "If-Match"}
+LOWER_CAMEL_FIELD = re.compile(r"^[a-z][A-Za-z0-9]*$")
 
 
 class ContractHtmlParser(HTMLParser):
@@ -98,6 +101,9 @@ def read_design_version() -> str:
 
 
 def validate_common_contract(common: dict[str, Any]) -> None:
+    api = common.get("api", {})
+    require(api.get("fieldNaming") == "lowerCamelCase", "Public field naming rule must be lowerCamelCase")
+    require(api.get("headerNaming") == "保留原名", "HTTP Header naming rule must preserve existing names")
     patterns = common.get("resourceIdPatterns", {})
     require(set(patterns) == {"agent", "tool", "skill", "session"}, "Typed resource ID patterns are incomplete")
     valid_ids = {
@@ -113,17 +119,25 @@ def validate_common_contract(common: dict[str, Any]) -> None:
         hyphenated_id = f"{resource_type}-550e8400-e29b-41d4-a716-446655440000"
         require(re.fullmatch(pattern, hyphenated_id) is None, f"{resource_type} pattern accepts UUID hyphens")
     agent_parameter = common["parameters"]["agentId"]
+    require(agent_parameter["name"] == "agentId", "Agent path parameter must use lowerCamelCase")
     require(
         agent_parameter["schema"] == {"$ref": "resourceIdPatterns.agent"},
         "Agent path parameter must reference the single Agent ID rule",
     )
     session_parameter = common["parameters"]["sessionId"]
+    require(session_parameter["name"] == "sessionId", "Session path parameter must use lowerCamelCase")
     require(
         session_parameter["schema"] == {"$ref": "resourceIdPatterns.session"},
         "Session path parameter must reference the single Session ID rule",
     )
     header_examples = common.get("requestHeaderExamples", [])
     require(len(header_examples) == 2, "Shared request header examples are incomplete")
+    header_names = {
+        header["name"]
+        for example in header_examples
+        for header in example["headers"]
+    }
+    require(header_names == EXPECTED_CONTEXT_HEADERS, "Shared HTTP Header names changed unexpectedly")
     require("互斥检查" in json.dumps(header_examples, ensure_ascii=False),
             "Request header contract must state that Runtime does not reject coexistence")
 
@@ -155,6 +169,8 @@ def validate_html(models: list[dict[str, Any]]) -> None:
     visible_text = " ".join(parser.visible_text)
     for heading in ("作用", "调用上下文 Header", "参数与请求体", "响应"):
         require(heading in visible_text, f"No-JavaScript contract is missing {heading}")
+    require("字段：lowerCamelCase" in visible_text, "HTML does not expose the public field naming rule")
+    require("Header：保留原名" in visible_text, "HTML does not expose the preserved Header naming rule")
     require(len(visible_text) > 10000, "No-JavaScript contract content is unexpectedly small")
     require(re.search(r"@media\s*\(max-width:\s*680px\)", html_source) is not None,
             "Responsive breakpoint for a 360px viewport is missing")
@@ -217,20 +233,57 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
             for example in operation["requestHeaderExamples"]
             for header in example["headers"]
         }
-        require({"X-HW-ID", "Authorization", "X-HW-APPKEY"} <= header_names,
-                f"Integration request headers are incomplete: {key}")
+        require(header_names == EXPECTED_CONTEXT_HEADERS, f"Integration request Header names changed: {key}")
+        parameter_headers = {
+            parameter["name"] for parameter in operation["parameters"] if parameter["in"] == "header"
+        }
+        require(parameter_headers <= EXPECTED_PARAMETER_HEADERS, f"Operation request Header names changed: {key}")
+        validate_public_field_names(key, operation)
         require(operation["responses"], f"Operation has no responses: {key}")
         validate_response_contract(patterns["agent"], patterns["session"], key, operation)
     require(operations == EXPECTED_OPERATIONS, "Operation inventory differs from the confirmed contract")
 
 
+def validate_public_field_names(key: tuple[str, str], operation: dict[str, Any]) -> None:
+    placeholders = re.findall(r"{([^}]+)}", operation["path"])
+    require(all(LOWER_CAMEL_FIELD.fullmatch(name) for name in placeholders),
+            f"Path parameter is not lowerCamelCase: {key}")
+    for parameter in operation["parameters"]:
+        if parameter["in"] in {"path", "query"}:
+            require(LOWER_CAMEL_FIELD.fullmatch(parameter["name"]) is not None,
+                    f"Public parameter is not lowerCamelCase: {key} {parameter['name']}")
+    request_example = operation["requestBody"].get("example")
+    if request_example is not None:
+        validate_payload_keys(request_example, f"request example {key}")
+    for response in operation["responses"]:
+        for locale, body in response.get("bodies", {}).items():
+            context = f"response {response['status']} {locale} {key}"
+            if isinstance(body, (dict, list)):
+                validate_payload_keys(body, context)
+            elif isinstance(body, str):
+                for field in re.findall(r'"([A-Za-z][A-Za-z0-9_]*)"\s*:', body):
+                    require(LOWER_CAMEL_FIELD.fullmatch(field) is not None,
+                            f"SSE field is not lowerCamelCase: {context} {field}")
+
+
+def validate_payload_keys(value: Any, context: str) -> None:
+    if isinstance(value, dict):
+        for field, nested in value.items():
+            require(LOWER_CAMEL_FIELD.fullmatch(field) is not None,
+                    f"Payload field is not lowerCamelCase: {context} {field}")
+            validate_payload_keys(nested, context)
+    elif isinstance(value, list):
+        for item in value:
+            validate_payload_keys(item, context)
+
+
 def validate_response_contract(
     agent_pattern: str, session_pattern: str, key: tuple[str, str], operation: dict[str, Any]
 ) -> None:
-    for agent_id in values_for_key(operation["responses"], "agent_id"):
+    for agent_id in values_for_key(operation["responses"], "agentId"):
         require(isinstance(agent_id, str) and re.fullmatch(agent_pattern, agent_id) is not None,
                 f"Invalid Agent ID response example: {key}")
-    for session_id in values_for_key(operation["responses"], "session_id"):
+    for session_id in values_for_key(operation["responses"], "sessionId"):
         require(isinstance(session_id, str) and re.fullmatch(session_pattern, session_id) is not None,
                 f"Invalid Session ID response example: {key}")
     require(all(response["status"] != "403" for response in operation["responses"]),
@@ -244,15 +297,15 @@ def validate_response_contract(
     codes = response_codes(operation)
     forbidden_auth_codes = {("401", "UNAUTHENTICATED"), ("401", "AUTH_CREDENTIAL_CONFLICT")}
     require(not (forbidden_auth_codes & codes), f"Runtime-local authentication error is forbidden: {key}")
-    if key == ("POST", "/agents/{agent_id}/sessions"):
+    if key == ("POST", "/agents/{agentId}/sessions"):
         validate_create_session(agent_pattern, session_pattern, operation)
-    elif key == ("DELETE", "/sessions/{session_id}"):
+    elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
-    elif key == ("POST", "/sessions/{session_id}/events"):
+    elif key == ("POST", "/sessions/{sessionId}/events"):
         require(("503", "RUNTIME_CAPACITY_EXCEEDED") in codes, "POST Events is missing runtime capacity")
         require("[File IDs]" in operation["requestBody"]["description"], "POST Events must define file ID encoding")
-        require(set(operation["requestBody"]["example"]) == {"message", "file_ids"},
-                "POST Events request must contain only message and file_ids")
+        require(set(operation["requestBody"]["example"]) == {"message", "fileIds"},
+                "POST Events request must contain only message and fileIds")
         require("type=user.message" not in operation["requestBody"]["description"],
                 "POST Events request still documents a redundant type field")
         success = next(response for response in operation["responses"] if response["status"] == "200")
@@ -261,29 +314,29 @@ def validate_response_contract(
             "assistant.thinking.started", "assistant.thinking.delta", "assistant.thinking.completed"
         ):
             require(f"event: {event_type}" in stream, f"POST Events is missing {event_type}")
-        require("\"entry_seq\":18" in stream and "\"type\":\"thinking\"" in stream,
+        require("\"entrySeq\":18" in stream and "\"type\":\"thinking\"" in stream,
                 "Completed thinking must be a durable recoverable event")
-    elif key == ("GET", "/sessions/{session_id}/events"):
+    elif key == ("GET", "/sessions/{sessionId}/events"):
         success = next(response for response in operation["responses"] if response["status"] == "200")
         event_types = {event["type"] for event in success["bodies"]["en-US"]["result"]["events"]}
         require("assistant.thinking.completed" in event_types,
                 "GET Events must show the thinking=true projection")
         require("thinking=false" in operation["description"] and "旧 page 无效" in operation["description"],
                 "GET Events must define current-thinking filtering and cursor invalidation")
-    elif key in {("POST", "/sessions/{session_id}/steers"), ("POST", "/sessions/{session_id}/follow-ups")}:
+    elif key in {("POST", "/sessions/{sessionId}/steers"), ("POST", "/sessions/{sessionId}/follow-ups")}:
         require(("429", "CONTROL_QUEUE_FULL") in codes, f"Control queue limit is missing: {key}")
 
 
 def validate_create_session(agent_pattern: str, session_pattern: str, operation: dict[str, Any]) -> None:
-    parameter = next((item for item in operation["parameters"] if item["name"] == "agent_id"), None)
+    parameter = next((item for item in operation["parameters"] if item["name"] == "agentId"), None)
     require(parameter is not None and parameter["schema"] == agent_pattern, "Create Session Agent ID rule differs")
     created = next((item for item in operation["responses"] if item["status"] == "201"), None)
     require(created is not None, "Create Session is missing 201")
     result = created["bodies"]["en-US"]["result"]
-    require(re.fullmatch(session_pattern, result.get("session_id", "")) is not None,
+    require(re.fullmatch(session_pattern, result.get("sessionId", "")) is not None,
             "Create Session response must use the typed Session ID rule")
     location = created.get("headers", {}).get("Location", "")
-    require(location.endswith("/" + result["session_id"]), "Create Session Location differs from session_id")
+    require(location.endswith("/" + result["sessionId"]), "Create Session Location differs from sessionId")
     require(result.get("thinking") is True, "Create Session must initialize thinking=true")
 
 

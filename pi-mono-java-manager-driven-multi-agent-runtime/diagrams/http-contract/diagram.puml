@@ -107,6 +107,8 @@ end note
 
 note over Controller,Service
 Header names are case-insensitive under HTTP.
+Their standard and company spellings remain unchanged
+when path and payload fields move to lowerCamelCase.
 Credential values remain opaque and are never logged,
 persisted, copied into ResultBean, or used as Session ownership.
 Runtime declares no local authentication error codes.

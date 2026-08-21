@@ -10,6 +10,11 @@ title CampusClaw Session Event Direct POST Stream
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventController.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java.
+' Source evidence (pi-mono-java 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/UserEventRequestVO.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java.
+' Observed behavior: current Java request, history, and SSE payload fields are snake_case.
 ' Observed behavior: both pi baselines emit message start, update, and end events around
 ' one active in-memory execution. The Java HTTP handler already returns SSE from POST.
 ' Observed behavior: the implemented API persists MessageEntry records and has no public run ID.
@@ -22,6 +27,7 @@ title CampusClaw Session Event Direct POST Stream
 ' emits text deltas only and RuntimeEntryCodec currently excludes ThinkingContent from the public contract.
 ' Architecture change: the target contract projects thinking events only when the accepted execution
 ' snapshots thinking true; assistant.thinking.completed becomes a durable recoverable entry.
+' Architecture change: target request and SSE data fields use lowerCamelCase; event names remain unchanged.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -52,58 +58,58 @@ participant "Prompt\nLoader" as Prompt
 participant "Model\nManager" as Manager
 participant AgentSession
 
-Caller -> API : POST /sessions/{session_id}/events\ncontext headers and message or file_ids JSON
+Caller -> API : POST /sessions/{sessionId}/events\ncontext headers and message or fileIds JSON
 API -> API : do not validate integration credentials
-API -> API : validate session_id and strict request body
+API -> API : validate sessionId and strict request body
 API -> Store : load live Session
 Store --> API : current model, thinking, and execution state
 
 alt another execution is active
   API --> Caller : 409 SESSION_BUSY\nJSON error without result
 else Session is idle
-  API -> Prompt : append ordered file_ids as fixed text block
+  API -> Prompt : append ordered fileIds as fixed text block
   Prompt --> API : user prompt
   API -> Manager : resolve current model and input policy
   Manager --> API : authoritative model descriptor and limits
   API -> Store : persist User MessageEntry and mark active execution
-  Store --> API : user entry_id and entry_seq
+  Store --> API : user entryId and entrySeq
   API --> Caller : 200 text/event-stream
-  API --> Caller : user.message\nentry_id and entry_seq
+  API --> Caller : user.message\nentryId and entrySeq
   API -> AgentSession : prompt(user prompt)
 
   alt execution completes
     loop each Assistant MessageEntry
       AgentSession --> API : message_start
-      API --> Caller : assistant.message.started\nentry_id, no entry_seq
+      API --> Caller : assistant.message.started\nentryId, no entrySeq
       loop provider increments
         AgentSession --> API : message_update
-        API --> Caller : assistant.message.delta\nentry_id and typed delta
+        API --> Caller : assistant.message.delta\nentryId and typed delta
       end
       opt execution snapshot thinking is true
         AgentSession --> API : thinking_start
-        API --> Caller : assistant.thinking.started\nassistant_entry_id and content_index
+        API --> Caller : assistant.thinking.started\nassistantEntryId and contentIndex
         loop provider thinking increments
           AgentSession --> API : thinking_delta
           API --> Caller : assistant.thinking.delta\ntemporary thinking text
         end
         AgentSession --> API : thinking_end with complete thinking content
         API -> Store : persist complete ThinkingContent entry
-        Store --> API : thinking entry_id and entry_seq
-        API --> Caller : assistant.thinking.completed\ncomplete thinking content and entry_seq
+        Store --> API : thinking entryId and entrySeq
+        API --> Caller : assistant.thinking.completed\ncomplete thinking content and entrySeq
       end
       AgentSession --> API : message_end with complete message
       API -> Store : persist complete Assistant MessageEntry
-      Store --> API : entry_seq
-      API --> Caller : assistant.message.completed\ncomplete message and entry_seq
+      Store --> API : entrySeq
+      API --> Caller : assistant.message.completed\ncomplete message and entrySeq
       opt tool calls require another model turn
         AgentSession --> API : tool_execution_start
-        API --> Caller : tool.execution.started\ntool_call_id and tool_name
+        API --> Caller : tool.execution.started\ntoolCallId and toolName
         AgentSession --> API : tool_execution_end
-        API --> Caller : tool.execution.completed\ntool_call_id, tool_name, is_error
+        API --> Caller : tool.execution.completed\ntoolCallId, toolName, isError
         AgentSession --> API : ToolResult message_start and message_end
         API -> Store : persist complete ToolResultEntry
-        Store --> API : tool result entry_id and entry_seq
-        API --> Caller : tool.result\ncomplete result and entry_seq
+        Store --> API : tool result entryId and entrySeq
+        API --> Caller : tool.result\ncomplete result and entrySeq
       end
     end
 
@@ -145,19 +151,23 @@ title CampusClaw Session Event List Pagination
 ' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventCursorCodec.java.
+' Source evidence (pi-mono-java 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/EventPageResponseVO.java.
+' Observed behavior: current Java exposes next_page while the target field is nextPage.
 ' Observed behavior: pi stores append-only entries linked by id and parentId, and its active
 ' branch is the path from the selected leaf to the root.
 ' Java divergence: the old Java baseline scanned JSONL linearly; the implemented repository
-' now reads the current branch through parentId and entry_seq.
+' now reads the current branch through parentId and entrySeq.
 ' External reference (Anthropic Managed Agents docs checked 2026-08-17):
 ' GET /v1/sessions/{session_id}/events uses opaque page and next_page pagination.
-' Observed behavior: entry_seq, opaque pages, ResultBean paging, and the GET endpoint
+' Observed behavior: entrySeq, opaque pages, ResultBean paging, and the GET endpoint
 ' exist in the implementation commit but not in the original pi source baselines.
 ' Java divergence: current RuntimeEntryCodec excludes ThinkingContent from public history.
 ' Architecture change: target GET visibility depends on the current Session thinking value.
 ' Design reason: align the public pagination boundary with Anthropic and intentionally
-' avoid a fixed snapshot watermark or an after_entry_seq query while binding the cursor
+' avoid a fixed snapshot watermark or an afterEntrySeq query while binding the cursor
 ' to the thinking visibility state used to construct the page.
+' Architecture change: CampusClaw target path and payload fields use lowerCamelCase.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -188,9 +198,9 @@ participant "Page Cursor\nCodec" as Cursor
 participant ResultBeanAdapter
 
 alt first page
-  Caller -> API : GET /sessions/{session_id}/events\ncontext headers, limit, no page
+  Caller -> API : GET /sessions/{sessionId}/events\ncontext headers, limit, no page
   API -> API : do not validate integration credentials
-  API -> API : validate session_id and limit
+  API -> API : validate sessionId and limit
   API -> Store : read current Session thinking\nand first current-branch entries
   Store --> API : thinking state and persisted entries
   alt current Session thinking is true
@@ -199,9 +209,9 @@ alt first page
     API -> API : filter assistant.thinking.completed
   end
   API -> Cursor : encode session, thinking state,\nexpiry, and next position
-  Cursor --> API : next_page or null
+  Cursor --> API : nextPage or null
 else next page
-  Caller -> API : GET /sessions/{session_id}/events\ncontext headers and previous next_page
+  Caller -> API : GET /sessions/{sessionId}/events\ncontext headers and previous nextPage
   API -> API : do not validate integration credentials
   API -> Cursor : verify and decode opaque page
   Cursor --> API : bound session, thinking state,\nexpiry, and next position
@@ -213,12 +223,12 @@ else next page
   API -> Store : read after next position and apply\nthe current thinking visibility rule
   Store --> API : eligible persisted entries, including\nlater appends after the cursor
   API -> Cursor : encode current thinking state\nand next position if more remain
-  Cursor --> API : next_page or null
+  Cursor --> API : nextPage or null
 end
 
 API -> ResultBeanAdapter : normal(SessionEventListResponseVO)
 ResultBeanAdapter --> API : resCode, resMsg, result
-API --> Caller : 200 OK\nevents and next_page
+API --> Caller : 200 OK\nevents and nextPage
 
 note over API,Store
 Committed user.message, assistant.message.completed, and tool.result
@@ -226,13 +236,13 @@ entries on the current branch are always eligible.
 assistant.thinking.completed is eligible only when the current
 Session thinking value is true. Disabling hides stored thinking
 without deleting it; re-enabling can reveal it again.
-Items are sorted by entry_seq ascending.
+Items are sorted by entrySeq ascending.
 There is no fixed snapshot watermark. Later persisted
 entries may become eligible on a subsequent page.
 end note
 
 note over API,Cursor
-next_page null means no more persisted events at response time.
+nextPage null means no more persisted events at response time.
 It does not mean the Session cannot append future events.
 An invalid or expired page returns 400 INVALID_EVENT_LIST_QUERY.
 Changing Session thinking also invalidates an old page because

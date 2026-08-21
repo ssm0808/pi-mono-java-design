@@ -3,9 +3,9 @@
     "shortName": "切换会话模型",
     "operationKey": "changeSessionModel",
     "method": "PUT",
-    "path": "/sessions/{session_id}/model",
+    "path": "/sessions/{sessionId}/model",
     "summary": "切换 Session 当前模型",
-    "description": "在 Session 处于 idle 时，将后续 user.message 使用的默认模型切换为指定 model_id。服务端实时验证该模型仍属于当前 Session 的可选模型集合，成功后写入 Session 配置并更新 ETag；不会创建消息事件，也不会影响已经完成的历史。若原 thinking=true 而目标模型不支持深度思考，服务端在同一事务中将 thinking 归一为 false。请求与当前 model_id 相同仍会做权限和可用性校验，校验通过后按无变化成功返回，updated_at 和 ETag 保持不变。",
+    "description": "在 Session 处于 idle 时，将后续 user.message 使用的默认模型切换为指定 modelId。服务端实时验证该模型仍属于当前 Session 的可选模型集合，成功后写入 Session 配置并更新 ETag；不会创建消息事件，也不会影响已经完成的历史。若原 thinking=true 而目标模型不支持深度思考，服务端在同一事务中将 thinking 归一为 false。请求与当前 modelId 相同仍会做权限和可用性校验，校验通过后按无变化成功返回，updatedAt 和 ETag 保持不变。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -24,9 +24,9 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "只接受 model_id；不接受 provider、base_url、thinking、reasoning_effort、请求级凭据或 Idempotency-Key。",
+      "description": "只接受 modelId；不接受 provider、baseUrl、thinking、reasoningEffort、请求级凭据或 Idempotency-Key。",
       "example": {
-        "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS"
+        "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS"
       }
     },
     "responses": [
@@ -44,13 +44,13 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "session_id": "session-550e8400e29b41d4a716446655440003",
-              "agent_id": "agent-550e8400e29b41d4a716446655440000",
-              "model_id": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
               "state": "idle",
               "thinking": false,
-              "created_at": "2026-08-15T10:30:00+08:00",
-              "updated_at": "2026-08-17T14:20:31+08:00"
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:20:31+08:00"
             }
           }
         }
@@ -60,18 +60,18 @@
         "status": "400",
         "tabLabel": "400 · INVALID_SESSION_ID",
         "label": "Bad Request",
-        "summary": "session_id 不符合标识格式。",
+        "summary": "sessionId 不符合标识格式。",
         "headers": {
           "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
             "resCode": "INVALID_SESSION_ID",
-            "resMsg": "session_id 格式不正确。"
+            "resMsg": "sessionId 格式不正确。"
           },
           "en-US": {
             "resCode": "INVALID_SESSION_ID",
-            "resMsg": "The session_id format is invalid."
+            "resMsg": "The sessionId format is invalid."
           }
         }
       },
@@ -80,7 +80,7 @@
         "status": "400",
         "tabLabel": "400 · INVALID_MODEL_REQUEST",
         "label": "Bad Request",
-        "summary": "JSON 非法、缺少 model_id、model_id 格式错误或包含未知字段。",
+        "summary": "JSON 非法、缺少 modelId、modelId 格式错误或包含未知字段。",
         "headers": {
           "Content-Language": "zh-CN"
         },
@@ -152,7 +152,7 @@
       {
         "status": "422",
         "label": "Unprocessable Content",
-        "summary": "model_id 不在当前 Agent 目录 allowlist 与 Runtime 可用模型的实时交集中；不区分不存在、未绑定或无权使用，避免模型枚举。",
+        "summary": "modelId 不在当前 Agent 目录 allowlist 与 Runtime 可用模型的实时交集中；不区分不存在、未绑定或无权使用，避免模型枚举。",
         "headers": {
           "Content-Language": "zh-CN"
         },

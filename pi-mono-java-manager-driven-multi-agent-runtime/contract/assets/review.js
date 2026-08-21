@@ -46,6 +46,8 @@
     const titleRow = make('div', 'row');
     append(titleRow, make('h2', '', api.title), make('span', 'tag', api.version));
     if (api.visibility) titleRow.appendChild(make('span', 'tag', api.visibility));
+    titleRow.appendChild(make('span', 'tag', `字段：${api.fieldNaming}`));
+    titleRow.appendChild(make('span', 'tag', `Header：${api.headerNaming}`));
     append(topbar, titleRow, code(api.basePath, 'base'));
 
     const methodClass = operation.method.toLowerCase();

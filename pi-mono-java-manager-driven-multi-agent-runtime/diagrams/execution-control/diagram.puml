@@ -12,12 +12,16 @@ title HTTP Session Execution Control Design
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionControlController.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java.
+' Source evidence (pi-mono-java commit 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/ControlMessageAcceptedResponseVO.java.
+' Observed behavior: current Java paths, session_id, and accepted_at response fields are snake_case.
 ' Observed behavior: pi keeps separate steering and follow-up queues, drains steering first,
 ' and aborts the current in-process run. Java now exposes text-only steer, follow-up, and abort.
 ' Observed behavior: three HTTP operations use Session scope because no public Run exists.
 ' Product constraint: v1 accepts text only, fixes one-at-a-time FIFO behavior, and projects
 ' a delivered control message as the existing durable user.message entry type.
 ' Product constraint: all Runtime operations carry integration-context headers without local validation.
+' Architecture change: target path and response fields use lowerCamelCase; header names remain unchanged.
 ' Design reason: separate control responses from the existing POST Events SSE response.
 
 skinparam backgroundColor #FFFFFF
@@ -51,24 +55,24 @@ participant "Existing POST Events\nSSE Stream" as SSE
 participant ResultBeanAdapter
 
 group Queue a Steering Message
-  Caller -> API : POST /sessions/{session_id}/steers\ncontext headers and message only
+  Caller -> API : POST /sessions/{sessionId}/steers\ncontext headers and message only
   API -> API : do not validate integration credentials
   API -> Store : require running Session
   Store --> API : active execution handle
   API -> Queue : append Steer atomically in FIFO order
-  Queue --> API : accepted_at
+  Queue --> API : acceptedAt
   API -> ResultBeanAdapter : normal(ControlAcceptedResponseVO)
   ResultBeanAdapter --> API : resCode, resMsg, result
   API --> Caller : 202 Accepted
 end
 
 group Queue a FollowUp Message
-  Caller -> API : POST /sessions/{session_id}/follow-ups\ncontext headers and message only
+  Caller -> API : POST /sessions/{sessionId}/follow-ups\ncontext headers and message only
   API -> API : do not validate integration credentials
   API -> Store : require running Session
   Store --> API : active execution handle
   API -> Queue : append FollowUp atomically in FIFO order
-  Queue --> API : accepted_at
+  Queue --> API : acceptedAt
   API -> ResultBeanAdapter : normal(ControlAcceptedResponseVO)
   ResultBeanAdapter --> API : resCode, resMsg, result
   API --> Caller : 202 Accepted
@@ -78,18 +82,18 @@ alt current Assistant turn and tools complete with Steer queued
   Session -> Queue : drain one Steer before FollowUp
   Queue --> Session : next user message
   Session -> Store : append durable user.message on delivery
-  Store --> SSE : user.message with entry_id and entry_seq
+  Store --> SSE : user.message with entryId and entrySeq
   Session -> Session : continue with next model invocation
 else Agent would stop and only FollowUp is queued
   Session -> Queue : drain one FollowUp
   Queue --> Session : next user message
   Session -> Store : append durable user.message on delivery
-  Store --> SSE : user.message with entry_id and entry_seq
+  Store --> SSE : user.message with entryId and entrySeq
   Session -> Session : continue active execution
 end
 
 group Abort current execution idempotently
-  Caller -> API : POST /sessions/{session_id}/abort\ncontext headers and no request body
+  Caller -> API : POST /sessions/{sessionId}/abort\ncontext headers and no request body
   API -> API : do not validate integration credentials
   API -> Store : load Session
   Store --> API : active execution or idle
@@ -138,10 +142,10 @@ skinparam rectangle {
 }
 
 actor Caller
-rectangle "POST /sessions/{id}/events\nmessage and file_ids, direct SSE" as SendEvent
+rectangle "POST /sessions/{id}/events\nmessage and fileIds, direct SSE" as SendEvent
 rectangle "ActiveExecution\ninternal Session state" as Execution
 rectangle "Transient Preview\nstarted, delta, tool lifecycle" as Preview
-rectangle "Persisted Entry\nentry_id and entry_seq" as Entry
+rectangle "Persisted Entry\nentryId and entrySeq" as Entry
 rectangle "GET /sessions/{id}/events\ncurrent-branch recovery" as GetEvents
 rectangle "Session Controls\nsteer, follow-up, abort" as Controls
 
