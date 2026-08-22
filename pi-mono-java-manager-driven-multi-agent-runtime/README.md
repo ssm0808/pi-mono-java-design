@@ -2,15 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.8.0 |
-| 状态 | CampusClaw 内部 11 个接口已在 HTTP 1.37 实现分支落地；公共字段统一为 lowerCamelCase 的 1.38 目标契约待实现；mate-service 公共接口待评审 |
+| 文档版本 | 2.9.0 |
+| 状态 | CampusClaw 内部 11 个接口已在 HTTP 1.37 实现分支落地；lowerCamelCase 1.38 与工具系统 1.0 为目标设计、待实现；mate-service 公共接口待评审 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
 | 设计仓分析基线 | `b902de281d9ab0ddfdcfec2ff8616279e5c421a1` |
-| pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
-| pi-mono-java 设计分析基线 | `195746614096312d4e93afb029d387837db78e0b` |
-| pi-mono-java 实现基线 | `1f801dbb82bdda30478e3354e685e3153b179a0c` |
+| pi-mono 源码基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
+| pi-mono-java 实现基线 | `d0efb2fd18f2f2a7db121a1cbd4f039348a8094a` |
 | pi-mono-java 字段命名核对基线 | `304eda06ff603fc9b6bbcaad0c296cc151a7defb`（`codex/runtime-http-contract-v137`） |
-| 更新日期 | 2026-08-21 |
+| OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
+| 更新日期 | 2026-08-22 |
 
 ## 1. 当前结论
 
@@ -218,7 +218,9 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 - `thinking` 是“是否启用深度思考”的 boolean，不是原始推理披露等级。
 - 持久化 Session Entry 使用 `id + parentId` 形成树；公共 GET Events 首版只返回当前分支。
 - Runtime 只接收有序 `fileIds`，不解析或下载文件正文；ID 按固定 `[File IDs]` 提示块传给模型。
-- Model Manager、Tool Manager 和 Agent 目录仍是模型、工具和 Agent 配置的最终权威。
+- Model Manager 是模型 descriptor、可用性和凭据的最终权威；Mate 是远端工具绑定、授权
+  与执行的最终权威；`AgentRuntimeManager` 发布的受管目录是 Session 使用的 Agent、Skill
+  和直接 Child 身份快照。内存中不再规划独立的动态 `ToolCatalog` 或 Tool Manager 摘要缓存。
 
 ## 7. Manager 与多 Agent Runtime 核心
 
@@ -226,58 +228,55 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 
 ### 7.1 Agent 发布目录
 
-元数据发布程序把 AGENT、SKILL 和 TOOL 的固定 revision 编译为受控 Agent
-运行目录。Runtime 不在请求期间临时拼接租户路径，也不接受调用方提供 cwd：
-
-精确格式和生成示例由 [`contract/common.json`](contract/common.json) 与
-[`01-create-session.json`](contract/operations/01-create-session.json) 维护。设计语义固定为：
-小写资源类型前缀、一个连字符、去掉内部连字符的 32 位十六进制 UUID；前缀必须与
-资源类型一致，不接受无前缀或下划线前缀旧 ID，也不引入 camelCase/snake_case 值别名。
-本次不改变 `modelId`、`sessionId` 和 `fileId` 的现有契约。
+目标工具系统统一 CLI、HTTP、Cron 和 Child 使用的受管目录。精确资源 ID 格式仍由
+[`contract/common.json`](contract/common.json) 与
+[`01-create-session.json`](contract/operations/01-create-session.json) 维护；工具专题只定义
+目录内容、缓存和刷新语义：
 
 ```text
-agent/
-└── <agent-id>/
-    └── .campusclaw/
-        ├── settings.json
-        ├── SYSTEM.md
-        └── skills/
-            └── <skill-name>/
-                ├── SKILL.md
-                └── references/
-                    └── tools.json
+agent/{agentId}/.campusclaw/
+├── agent.json
+├── settings.json
+├── SYSTEM.md
+├── agents/{agentName}.json
+└── skills/{skillName}/
+    ├── skill.json
+    ├── SKILL.md
+    ├── references/
+    └── templates/
 ```
 
-HTTP V1 的当前目录契约固定为 `agent/{agentId}/.campusclaw/`。
-`settings.json` 提供 `defaultModel` 和 `enabledModels`；Session 创建时校验目录边界、
-默认模型与 Model Manager 当前可用性。Runtime 直接读取这个受控目录，不再依赖独立
-Agent Runtime Template 仓库，也不在内存中缓存目录快照。
-这次只统一目录位置：HTTP 文件名仍为 `settings.json` / `SYSTEM.md` / `skills/`，
-不将 CLI 物化器的 `setting.json` / `systemPrompt.md` 隐式视为同一文件契约。
+`agent.json` 只保存当前 Agent 身份；`settings.json` 保存 default model 与
+`bindingModels`；`agents/{agentName}.json` 保存一个可直接调用 Child 的身份和固定版本；
+`skill.json` 保存 `schemaVersion=1`、ID、名称和版本。名称必须与路径逐字符一致并在所属
+索引内唯一。目录不保存远端工具列表，Skill references 只包含真实参考资料。
+
+`AgentRuntimeManager.prepare(agentId)` 是纯缓存优先：完整目录直接使用，缺失或不完整时
+访问 Mate，并用同级临时树完成校验后发布。显式 `refresh(agentId)` 只由受管 CLI
+`/reload` 或未来管理流程调用；失败保留旧目录和旧 Session。HTTP active execution 创建
+轻量 Session 前也调用 `prepare`，不再维护独立 `FileAgentDirectoryResolver` 文件契约。
+这些均是 target-only 架构改造；当前 Java 仍使用两套文件名并原地物化。
 
 ![元数据到 Runtime 目录映射](diagrams/metadata/metadata_runtime_directory_mapping.svg)
 
 [PlantUML 源码：`metadata_runtime_directory_mapping`](diagrams/metadata/diagram.puml#L1)
 
-### 7.2 Tool Manager 渐进发现
+### 7.2 关闭的内置工具与 Mate 实时发现
 
-目标 Manager 架构曾规划三个通用工具：
+工具系统的唯一主设计是
+[pi-mono-java 工具系统设计](../pi-mono-java-tool-system/README.md)，精确模型契约见
+[12 个内置工具契约](../pi-mono-java-tool-system/built-in-tool-contracts.md)。首版只支持 12 个
+PascalCase 内置工具，由四个启动期严格 profile 装配；不再规划旧三工具抽象、动态
+`ToolCatalog`、Java Extension 工具或 Skill 工具激活。
 
-```text
-read
-get_tool_info
-call_tool
-```
+`ListMateTools({skillName?})` 无参数查询当前 Agent，有名称时通过本地 `skill.json` 索引
+解析 Skill ID。每次调用实时查询 Mate，输出稳定 JSON，只包含 scope 与每项
+name、description、inputSchema。`CallMateTool({tool,args?})` 无状态转发，不要求本地先
+list；Mate 负责最终绑定校验、凭据、授权和执行。
 
-当前实现为了收窄权限，只注册 `read`。以下 Tool Manager 渐进发现仍是未实现的后续
-架构方向：Agent `SYSTEM.md` 和 Skill `references/tools.json` 只披露逻辑工具摘要。模型先用
-`get_tool_info(toolId)` 从 Tool Manager 取得实时 Schema，再用
-`call_tool(toolId, parameters)` 执行；摘要披露不等于授权，执行前必须重新验证
-Agent 绑定、工具状态、权限和输入 Schema。
+![Mate 工具实时发现](../pi-mono-java-tool-system/list_mate_tools_sequence.svg)
 
-![Tool Manager 渐进发现与执行](diagrams/tool-discovery/progressive_tool_discovery_execution.svg)
-
-[PlantUML 源码：`progressive_tool_discovery_execution`](diagrams/tool-discovery/diagram.puml#L1)
+[PlantUML 源码：`list_mate_tools_sequence`](../pi-mono-java-tool-system/diagram.puml#L210)
 
 ### 7.3 Model Manager 流式适配
 
@@ -317,13 +316,19 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 | 当前 Java 差异 | `RuntimeWebMvcConfiguration` 当前把认证拦截器应用到全部 Runtime 路径；`UserEventRequestVO` 当前仍要求 `type=user.message` |
 | 当前 Java 差异 | 字段命名核对基线 `304eda06` 的四个 Runtime Controller 仍使用 `{agent_id}` / `{session_id}` 路径变量；请求/响应 VO 的 `@JsonProperty`、`@JsonSetter` 以及 `RuntimeEntryCodec` / `RuntimeEventProjector` 仍输出 snake_case。1.38 lowerCamelCase 是相对该实现的契约变更 |
 | 已实现 Java 行为 | AI 层 `AssistantMessageEvent` 存在 thinking start/delta/end；Runtime 对外 `RuntimeEventType` 无 thinking 类型，`RuntimeEventProjector` 与 `RuntimeEntryCodec` 会过滤原始思考内容 |
+| 当前 Java 差异 | CLI `AgentSession` 仍聚合 ToolCatalog、Skill 激活、reload 和委派；HTTP 仍以独立 resolver 与硬编码 Read 装配；AgentRuntimeManager 仍写旧文件名和 Skill 工具快照 |
 | 架构变更 | 两跳目标传输统一为 HTTP+SSE，删除连接首帧、Frame RPC、连接 generation、WebSocket close code 和 AsyncAPI |
 | 架构变更 | CampusClaw 目标契约改为 `agent-` / `tool-` / `skill-` / `session-` 加 32 位十六进制 UUID；Session 创建成功时固定 `thinking=true`，实现需同步放宽 `t_sessions.agent_id` 并替换 Session ID 生成器 |
 | 架构变更 | 十一个接口全部保留调用上下文 Header，但移除 Runtime 应用内的凭据组合与格式校验及对应 401；提交用户消息的请求体删除冗余 `type` 字段 |
 | 架构变更 | `thinking=true` 时将内部 thinking 生命周期投影为公共 SSE，并持久化 completed 供 GET 恢复；GET 根据 Session 当前 thinking 状态过滤，状态变化使旧 page 失效 |
 | 架构变更 | CampusClaw HTTP 的 path/query/JSON/SSE 字段统一为 lowerCamelCase；Header 原名、事件类型值、错误码和 ID 值保持不变，不接受 snake_case 字段别名 |
+| 架构变更 | CLI、HTTP、Cron、Child 共用轻量 AgentSession 和工厂；12 个内置工具由启动期 profile 装配，工具实例按 Session 新建 |
+| 架构变更 | 受管目录统一身份文件、缓存优先 prepare 与显式原子 refresh；Skill 和 Child 通过目录名称索引解析，不保存远端工具列表 |
+| 架构变更 | Mate 发现改为 `ListMateTools({skillName?})` 稳定 JSON 与实时查询；Child 改为同 JVM 隔离 Execution，Cron 和 Loop 状态回归各自 Host |
 | 产品约束 | 浏览器只识别尚待评审的 `chat_id`，CampusClaw 内部契约只识别 `sessionId`；公共接口不泄露 Runtime 标识 |
+| 产品约束 | 不提供旧工具名、旧 Cron payload、Java Extension SDK、ACP/HTTP/A2A Child 或兼容执行器 |
 | 安全边界 | 调用上下文 Header 的检查由上游负责，Runtime 不复制认证策略；thinking 内容仅在开关为 true 时按事件契约返回 |
+| 安全加固 | 工具参数先做 JSON Schema 校验；目录完整发布、名称/版本/ancestry 校验和模型 bindingModels 白名单阻止不完整或越界执行 |
 
 源码证据的完整 commit、符号、行号和逐项设计理由见
 [`chat-http-v1-design.md`](chat-http-v1-design.md) 的“源码证据与差异分类”。
@@ -342,6 +347,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.9.0 | 2026-08-22 | 工具与受管目录目标改为引用工具系统 1.0：删除三工具渐进发现和 Skill 工具快照结论，统一四入口轻量 Session、12 个内置工具、缓存优先 prepare、显式 refresh、Mate 实时发现和同 JVM Child Execution |
 | 2.8.0 | 2026-08-21 | 将 CampusClaw HTTP 的路径参数、查询参数、请求体、普通响应和 SSE data 字段统一为 lowerCamelCase；保留全部 HTTP Header 原名以及事件类型值、错误码和 ID 值；新增源模型命名门禁并记录当前 Java snake_case 实现差异 |
 | 2.7.0 | 2026-08-20 | 将 Session ID 统一为 `session-` 加去连字符的 32 位十六进制 UUID；全部十一项接口携带调用上下文 Header，但 Runtime 不做凭据组合、互斥、格式或真实性检查；提交消息请求删除冗余 `type`；thinking=true 时开放并持久化 thinking completed，GET 按当前开关过滤 |
 | 2.6.0 | 2026-08-20 | 建立共享契约与十一份 operation JSON 单一编辑源；HTML 改为单份 CSS/JavaScript/聚合 model 的严格生成物；PlantUML 按九个设计主题拆分；校验增加 fast/full 两级并按生成结果做字节同步检查 |

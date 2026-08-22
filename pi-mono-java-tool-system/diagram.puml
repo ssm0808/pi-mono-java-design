@@ -1,0 +1,369 @@
+@startuml tool_system_architecture
+title CampusClaw Built-in Tool System Target Architecture
+
+' Source evidence: pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java, AgentTool
+' Source evidence: pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java, ToolExecutionPipeline
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java, AgentSession
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/catalog/ToolCatalog.java, ToolCatalog
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, AgentRuntimeManager
+' Observed behavior: the Java baseline uses a large CLI session, catalog discovery, extension tools, and separate HTTP assembly.
+' Architecture change: the target has exactly twelve built-in tools and one lightweight session assembly path.
+' Design reason: entry points share execution semantics while hosts retain persistence and lifecycle ownership.
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+left to right direction
+
+package "Hosts" {
+  component "CLI Host" as CLI
+  component "HTTP Host" as HTTP
+  component "Cron Host" as CRON
+  component "Child Host" as CHILD
+}
+
+package "Common session runtime" {
+  component "AgentSessionFactory" as SF
+  component "Lightweight AgentSession" as SESSION
+  component "ToolExecutionPipeline" as PIPE
+  component "Immutable hook chain" as HOOKS
+}
+
+package "Built-in tool assembly" {
+  component "Strict tool profiles" as PROFILES
+  component "ConfiguredToolAssembler" as ASSEMBLER
+  component "BuiltInToolFactory" as FACTORY
+  component "Fresh tool instances\nper session" as TOOLS
+}
+
+package "Shared application dependencies" {
+  component "File operations" as OPS
+  component "Bash executor" as BASH
+  component "FileMutationQueue" as FMQ
+  component "MateToolClient" as MATE
+  component "Cron services" as CRONSVC
+}
+
+package "Managed runtime" {
+  component "AgentRuntimeManager" as ARM
+  folder "agent/{agentId}/.campusclaw" as DIR
+  component "Skill package discovery" as PKG
+}
+
+CLI --> SF : create CLI session
+HTTP --> SF : create active execution session
+CRON --> SF : create scheduled execution session
+CHILD --> SF : create child execution session
+SF --> SESSION
+SESSION --> PIPE
+PIPE --> HOOKS
+SF --> ASSEMBLER
+ASSEMBLER --> PROFILES
+ASSEMBLER --> FACTORY
+FACTORY --> TOOLS
+FACTORY --> OPS
+FACTORY --> BASH
+FACTORY --> FMQ
+FACTORY --> MATE
+FACTORY --> CRONSVC
+SF --> ARM : prepare managed agent
+ARM --> DIR
+DIR --> PKG : skills only
+DIR --> ASSEMBLER : identity and name indexes
+
+note bottom of PROFILES
+BuiltInToolName and ToolEntryPoint
+are closed enums.
+No dynamic registration or Java Extension SDK.
+end note
+
+note bottom of SESSION
+Same model, prompt, tools, hooks,
+errors, cancellation, and event semantics.
+Host persistence is outside this component.
+end note
+@enduml
+
+@startuml agent_session_assembly
+title AgentSession Assembly for Four Entry Points
+
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/cli/CampusClawCommand.java, createAgentSession
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java, createEngine
+' Source evidence: pi-mono-java modules/cron/src/main/java/com/campusclaw/cron/engine/CronJobExecutor.java, execute
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/TransientAgentRunner.java, run
+' Observed behavior: each entry point currently assembles or creates its Agent differently.
+' Architecture change: one factory creates a fresh lightweight session for all entry points.
+' Design reason: common behavior prevents tool, hook, cancellation, and model-policy drift.
+
+skinparam shadowing false
+actor "Host" as HOST
+collections "Current large CLI AgentSession" as CURRENT
+participant "AgentSessionFactory" as SF
+participant "AgentRuntimeManager" as ARM
+participant "ModelBindingResolver" as MODEL
+participant "ConfiguredToolAssembler" as TA
+participant "BuiltInToolFactory" as TF
+participant "HookChainProvider" as HP
+participant "AgentSession" as SESSION
+
+note over HOST
+Entry point is one of:
+CLI, RUNTIME, CRON, CHILD_AGENT
+end note
+
+CURRENT -> HOST : move JSONL, templates, reload, and Loop ownership
+CURRENT -> SF : move common assembly
+CURRENT -> SESSION : retain only execution semantics
+
+HOST -> SF : create(request, entryPoint)
+SF -> ARM : prepare(agentId)
+ARM --> SF : immutable managed runtime
+SF -> MODEL : resolve allowed model and thinking
+MODEL --> SF : execution model snapshot
+SF -> TA : assemble(entryPoint, context)
+TA -> TA : read strict replacement profile
+loop for each configured BuiltInToolName
+  TA -> TF : create(name, immutable context)
+  TF --> TA : fresh AgentTool instance
+end
+TA --> SF : ordered immutable tool list
+SF -> HP : hooksFor(entryPoint)
+HP --> SF : ordered immutable chain
+SF -> SESSION : new(model, prompt, tools, hooks, cancellation)
+SESSION --> SF : ready
+SF --> HOST : fresh session
+
+note over SF,SESSION
+The factory does not own JSONL, database state,
+CLI reload state, Loop state, or host shutdown.
+end note
+@enduml
+
+@startuml managed_runtime_refresh
+title Managed Runtime Prepare and Explicit Refresh
+
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, prepare and materialize
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java, reload
+' Observed behavior: prepare is cache-first but currently materializes in place and has no explicit atomic refresh operation.
+' Security hardening: target creation and refresh validate a complete sibling tree before atomic publication.
+' Design reason: refresh failure must preserve the previous directory and active session.
+
+skinparam shadowing false
+actor "Managed CLI" as CLI
+participant "AgentRuntimeManager" as ARM
+participant "Per-agent lock" as LOCK
+participant "MateServiceClient" as MATE
+collections "Sibling temp directory" as TEMP
+database "Published directory" as LIVE
+participant "AgentSessionFactory" as SF
+
+group prepare(agentId)
+  CLI -> ARM : prepare(agentId)
+  ARM -> LIVE : validate completeness
+  alt complete cache exists
+    LIVE --> ARM : immutable runtime
+    ARM --> CLI : cached runtime
+  else missing or incomplete
+    ARM -> LOCK : lock(agentId)
+    ARM -> MATE : fetch agent, direct skills, direct agents
+    MATE --> ARM : remote snapshot
+    ARM -> TEMP : write complete managed tree
+    ARM -> TEMP : validate names, IDs, versions, and files
+    ARM -> LIVE : atomically publish validated tree
+    ARM -> LOCK : unlock
+    ARM --> CLI : prepared runtime
+  end
+end
+
+group explicit refresh from /reload
+  CLI -> ARM : refresh(agentId)
+  ARM -> LOCK : lock(agentId)
+  ARM -> MATE : fetch fresh remote snapshot
+  MATE --> ARM : remote snapshot
+  ARM -> TEMP : build and validate replacement
+  alt replacement valid
+    ARM -> LIVE : atomic replace
+    ARM -> LOCK : unlock
+    ARM --> CLI : refreshed runtime
+    CLI -> SF : rebuild lightweight session
+    SF --> CLI : new session
+    alt current model remains usable
+      CLI -> CLI : preserve model and thinking
+    else new default model is usable
+      CLI -> CLI : switch model and notify user
+    else no usable default
+      CLI -> LIVE : restore previous published tree
+      CLI -> CLI : keep old session
+    end
+  else fetch, build, or validation fails
+    ARM -> LOCK : unlock
+    ARM --> CLI : refresh error
+    CLI -> CLI : keep old directory and session
+  end
+end
+
+note over CLI,SF
+Messages, thinking, and SessionLoopController survive reload.
+Application tool profiles are not reloaded.
+end note
+@enduml
+
+@startuml list_mate_tools_sequence
+title ListMateTools Live Discovery
+
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateTool.java, execute
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java, listTools and queryToolMetaByIds
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, materialized skill identity gap
+' Observed behavior: the baseline accepts agent_id or skill_id and returns formatted text.
+' Architecture change: target input accepts only optional skillName and output is stable JSON without internal IDs.
+' Design reason: local name indexes preserve usability while Mate remains the live authorization and metadata source.
+
+skinparam shadowing false
+actor "Model" as MODEL
+participant "ListMateTools" as TOOL
+collections "Managed name indexes" as INDEX
+participant "MateToolClient" as CLIENT
+participant "Binding API" as BINDING
+participant "Tool metadata batch API" as META
+
+MODEL -> TOOL : {skillName?}
+alt skillName absent
+  TOOL -> CLIENT : listAgentTools(currentAgentId)
+  CLIENT -> BINDING : query agent binding tool IDs
+else skillName present
+  TOOL -> INDEX : resolve exact skill name
+  INDEX --> TOOL : skillId or error
+  TOOL -> CLIENT : listSkillTools(skillId)
+  CLIENT -> BINDING : query skill binding tool IDs
+end
+BINDING --> CLIENT : ordered internal tool IDs
+alt no bindings
+  CLIENT --> TOOL : empty list
+else bindings exist
+  CLIENT -> META : batch query metadata by IDs
+  META --> CLIENT : unordered metadata records
+  CLIENT -> CLIENT : join by ID and restore binding order
+  CLIENT --> TOOL : internal metadata list
+end
+TOOL -> TOOL : project scope and tools
+TOOL --> MODEL : stable JSON
+
+note over TOOL,MODEL
+Visible fields per item:
+name, description, inputSchema
+
+Hidden fields:
+IDs, permission, outputSchema,
+and concurrency metadata
+end note
+
+note over TOOL,CLIENT
+Every invocation performs a live query.
+No list cache and no mandatory list-before-call state.
+end note
+@enduml
+
+@startuml subagent_execution_sequence
+title Bound Child Agent Execution
+
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentBindingResolver.java, resolve and validate
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/TransientAgentRunner.java, run
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/delegation/InvokeAgentTool.java, execute
+' Source evidence: pi-mono packages/coding-agent/examples/extensions/subagent/index.ts, runSingleAgent
+' Source evidence: opencode packages/opencode/src/tool/task.ts, TaskTool
+' Observed behavior: Java uses after-hook delegation and placeholder authorization; pi demonstrates subprocess isolation; OpenCode creates a child session.
+' Architecture change: target uses a first-class Agent tool and in-JVM isolated child session.
+' Product constraint: only directly bound child names are callable and maximum depth defaults to one.
+
+skinparam shadowing false
+actor "Parent model" as MODEL
+participant "BoundAgentTool" as TOOL
+participant "AgentBindingResolver" as RESOLVER
+participant "AgentRuntimeManager" as ARM
+participant "SubagentExecutionService" as SERVICE
+participant "OneShotSubagentRunner" as RUNNER
+participant "AgentSessionFactory" as SF
+participant "Child AgentSession" as CHILD
+
+MODEL -> TOOL : Agent({agentName, task})
+TOOL -> RESOLVER : resolve exact direct binding
+RESOLVER -> RESOLVER : check enabled and fixed version
+RESOLVER -> RESOLVER : check depth and ancestry cycle
+alt validation fails
+  RESOLVER --> TOOL : rejection
+  TOOL --> MODEL : text result, isError=true
+else binding valid
+  RESOLVER --> TOOL : bound child identity
+  TOOL -> SERVICE : execute(context, child, task)
+  SERVICE -> ARM : prepare(childAgentId)
+  ARM --> SERVICE : child managed runtime
+  SERVICE -> RUNNER : run isolated execution
+  RUNNER -> SF : create CHILD_AGENT session
+  SF --> RUNNER : fresh child session
+  RUNNER -> CHILD : prompt(task)
+  CHILD --> RUNNER : high-level progress events
+  RUNNER --> SERVICE : final assistant text
+  SERVICE --> TOOL : execution result
+  TOOL --> MODEL : final child text
+end
+
+note over SERVICE,CHILD
+Child cwd, prompt, skills, messages, and tools are isolated.
+Parent cancellation propagates to the child.
+No reasoning or child history is returned.
+end note
+@enduml
+
+@startuml tool_batch_scheduling
+title Per-tool Batch Scheduling with Sequential Barriers
+
+' Source evidence: pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java, executeAll
+' Source evidence: pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionMode.java, ToolExecutionMode
+' Observed behavior: the Java baseline applies one execution mode to the complete batch and validates after the before hook.
+' Architecture change: target mode is declared per AgentTool and schema validation occurs before hooks.
+' Design reason: read-only calls can overlap without allowing state-changing tools to cross a barrier.
+
+skinparam shadowing false
+actor "Agent loop" as LOOP
+participant "Batch planner" as PLAN
+participant "Virtual-thread executor" as VTE
+participant "Tool pipeline" as PIPE
+collections "Ordered results" as RESULTS
+
+LOOP -> PLAN : ordered calls [P1, P2, S3, P4, P5, S6]
+PLAN -> PLAN : partition adjacent PARALLEL runs
+
+group parallel run P1, P2
+  PLAN -> VTE : submit P1 and P2
+  VTE -> PIPE : validate schema, before, execute, after, event
+  VTE -> PIPE : validate schema, before, execute, after, event
+  VTE --> PLAN : join both
+  PLAN -> RESULTS : append P1 then P2
+end
+
+group sequential barrier S3
+  PLAN -> PIPE : validate schema, before, execute, after, event
+  PIPE --> PLAN : S3 result
+  PLAN -> RESULTS : append S3
+end
+
+group parallel run P4, P5
+  PLAN -> VTE : submit P4 and P5
+  VTE -> PIPE : execute each call independently
+  VTE --> PLAN : join both
+  PLAN -> RESULTS : append P4 then P5
+end
+
+group sequential barrier S6
+  PLAN -> PIPE : execute S6
+  PIPE --> PLAN : S6 result
+  PLAN -> RESULTS : append S6
+end
+
+RESULTS --> LOOP : [R1, R2, R3, R4, R5, R6]
+
+note over PLAN,PIPE
+Default executionMode is SEQUENTIAL.
+Handlers must be thread-safe.
+Failures become text results with isError=true.
+end note
+@enduml
