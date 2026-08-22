@@ -2,13 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.0 |
+| 文档版本 | 1.2.0 |
 | 状态 | 目标设计；资源模型已确认；接口 4、5 已冻结，接口 1-3 保持候选 |
 | 设计日期 | 2026-08-22 |
 | pi-mono 源码基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | pi-mono-java 源码基线 | `d0efb2fd18f2f2a7db121a1cbd4f039348a8094a` |
 | mate-service 源码基线 | `6d5e6f3714e1cf8744d187a4796ca06300ad7e33` |
-| 设计仓分析基线 | `370abecf427ea0ebed72659d5788c9b1276a10f8` |
+| 设计仓分析基线 | `11e53de2c2c4a7e5cb498b163995aec6c4580bb4` |
 | 适用边界 | pi-mono-java Runtime ↔ mate-service 内部 Model Manager |
 
 ## 1. 结论
@@ -41,6 +41,12 @@ pi-mono-java。
 转换为 Responses 请求，并把 Responses SSE 转换为 `AssistantMessageEvent`。调用接口不携带
 `agentId`，也不在调用时校验 Agent 绑定；这是 CampusClaw 与 CampusMate 互信前提下的
 产品授权决策，不应误写为 mate-service 当前已实现行为。
+
+创建接口的请求体是可直接发送给 OpenAI Responses 兼容上游的语义载荷。Provider 在
+进入 Mate 前完成唯一一次 `AgentLoop Context -> Responses JSON` 转换；Mate 不再把
+`input`、`tools`、reasoning 或其他已接受字段转换为 Chat Completions、厂商 DTO 或
+自定义消息。Mate 只把目录 `model` 的值替换为私有 `upstreamModelId`，并在 HTTP
+连接层注入 endpoint、凭据和受控 headers。仅支持 Chat Completions 的上游不属于本接口。
 
 ## 2. 术语和身份边界
 
@@ -144,7 +150,8 @@ Provider 结构化增量。`pi-mono-java-manager-driven-multi-agent-runtime/chat
 
 - OpenAI [Create a model response](https://developers.openai.com/api/reference/typescript/resources/beta/subresources/responses/methods/create)
   定义 `POST /responses`、字符串或 item 数组输入、流式 Response 事件以及包含 `id/model`
-  的 Response 对象。
+  的 Response 对象；官方示例直接使用 `input_text/input_image`、function tool、
+  `reasoning` 和 `stream=true`。本接口使用相同字段和嵌套结构，不建立第二套输入模型。
 - OpenAI Responses 类型说明把 `reasoning.encrypted_content` 定义为 `store=false` 等无状态
   场景下重放 reasoning item 的包含项；本设计据此对齐 pi-mono 的 reasoning 签名保留。
 - OpenAI [Cancel a response](https://developers.openai.com/api/reference/cli/resources/beta/subresources/responses/methods/cancel)
@@ -206,7 +213,7 @@ Mate-service 内部模型描述投影为 pi-mono-java `Model` 时采用：
 | `ManagedModelCatalogClient` | 调用全局目录、Agent 可调用目录和原子解析接口。 |
 | `ManagedModelInvocationClient` | 发送 Responses JSON、接收 Responses SSE，并按 response ID 显式取消。 |
 | mate-service Model Manager | 管理真实 Provider、模型、凭据引用、路由、限流、调用和审计。 |
-| mate-service OpenAI 代理 | 替换请求 `model`、注入私有连接配置，并把响应 `model` 改回 Mate 模型 ID。 |
+| mate-service OpenAI 透明代理 | 校验 Responses 子集，不重组请求体；只替换请求 `model`、注入私有连接配置，并把响应 `model` 改回 Mate 模型 ID。 |
 | `AgentLoop` | 维护上下文、执行 Tool、继续下一轮模型调用。 |
 
 ## 6. MateService 运行时接口清单
@@ -229,6 +236,9 @@ Provider 管理 CRUD、凭据轮换、模型发布和 Agent 绑定管理属于�
 
 - JSON 使用 Jackson 默认 lower camel case；不得配置全局 `SNAKE_CASE`。Java Controller
   使用 Request/Response VO，只有真实字段例外才增加显式 Jackson 属性注解。
+- 接口 4、5 的 OpenAI Responses wire 字段是明确例外：保留
+  `max_output_tokens/input_text/input_image/function_call` 等官方 snake_case 名称，使用
+  字段级 Jackson 映射，不得改成 lower camel case，也不得启用全局 `SNAKE_CASE`。
 - 普通 JSON 成功返回 `{"resCode":"0","resMsg":"success","result":...}`；错误只返回
   `resCode/resMsg` 并使用真实 HTTP 状态。接口 4 的成功 SSE 和接口 5 的成功 Response
   对象为 Responses 兼容例外，不使用 ResultBean。
@@ -323,8 +333,9 @@ pi-mono-java 的 `RuntimeModelManager.resolveAvailableModel` 必须覆盖现有�
 ### 6.5 接口 4：创建流式模型调用
 
 `POST /responses` 使用 OpenAI Responses 请求和成功 SSE 结构。它是 Responses 线协议的
-受控子集，不接收 `AgentLoop` 的 Java 对象，也不接收 `agentId`、`sessionId` 或
-`invocationId`：
+透明受控子集，不接收 `AgentLoop` 的 Java 对象，也不接收 `agentId`、`sessionId` 或
+`invocationId`。将请求中的目录 `model` 替换成真实上游模型 ID 后，body 可以直接发往
+配置的 OpenAI Responses 兼容 `POST /responses`，不需要协议或消息结构转换：
 
 ```json
 {
@@ -386,21 +397,32 @@ pi-mono-java 的 `RuntimeModelManager.resolveAvailableModel` 必须覆盖现有�
 | `temperature` | 可选；Responses 数值语义 | 不支持该选项的模型返回 `MODEL_OPTION_UNSUPPORTED` |
 | `reasoning` | 可选 Responses reasoning 对象 | effort 等值按目录能力校验 |
 | `include` | 可选；首版只允许 `reasoning.encrypted_content` | 支持 `store=false` 下的无状态 reasoning 重放 |
-| `stream` | 必填且只能为 `true` | 成功响应始终为 SSE |
-| `store` | 可选；缺省归一为 `false`；显式 `true` 拒绝 | Mate 不建立可检索的服务端会话 |
-| `background` | 可选；缺省或 `false` | 首版只支持前台流式调用 |
+| `stream` | 必填且只能为 `true` | 原值转发；成功响应始终为 SSE |
+| `store` | 必填且只能为 `false` | 原值转发；Mate 不补默认值，也不建立可检索的服务端会话 |
+| `background` | 必填且只能为 `false` | 原值转发；首版只支持前台流式调用 |
 
 `previous_response_id`、`conversation`、`metadata`、`apiKey`、`baseUrl`、任意请求
 headers、`providerId`、`upstreamModelId`、Chat Completions `messages` 和未列出的 Responses
 字段均不支持；`stream_options` 也不进入首版白名单。未知或不支持字段返回
-`400 INVALID_RESPONSE_REQUEST`。
+`400 INVALID_RESPONSE_REQUEST`。透明代理表示“已接受的 Responses 字段不转换”，不表示
+无条件透传任意字段。
 
-Mate 只对白名单请求做路由转换：把 `model` 替换为私有 `upstreamModelId`，注入私有
-endpoint、凭据和受控 headers。上游返回后，`response.id` 原样透传；所有 SSE Response
-对象中的 `response.model` 改回请求中的 Mate 模型 ID。其余成功事件保持 OpenAI
-Responses 结构，包括 `response.created`、output item 生命周期、文本/reasoning/函数参数
-增量和 `response.completed/response.incomplete/response.failed/error`。这不是字节透传，
-但保持 Responses 事件和字段语义。
+Mate 解析请求只用于认证、字段白名单、能力和限额校验。校验成功后以原始 JSON 语义树
+构造上游请求，只修改 `model` 的值；`input`、`instructions`、`tools`、
+`max_output_tokens`、`temperature`、`reasoning`、`include`、`stream`、`store`
+和 `background` 的字段名、嵌套结构、数组顺序和值均不得重组、降级或丢弃。JSON
+重新编码导致的属性顺序或空白变化不属于协议转换。
+
+Mate 在 HTTP 连接层注入私有 endpoint、凭据和受控 headers；这些值不进入 body。上游必须
+原生支持 OpenAI Responses 协议。Mate 不允许把该请求转换为 `/chat/completions`、厂商
+消息格式或另一个模型 API；不兼容的目录路由返回 `MODEL_UNAVAILABLE`，后续如需
+Chat Completions 必须设计独立 `apiId` 和 operation。
+
+上游返回后，`response.id` 原样透传；所有 SSE Response 对象中的 `response.model`
+改回请求中的 Mate 模型 ID。其余成功事件保持 OpenAI Responses 结构，包括
+`response.created`、output item 生命周期、文本/reasoning/函数参数增量和
+`response.completed/response.incomplete/response.failed/error`。这是语义透明代理，
+不是字节透传。
 
 发送首个 SSE 字节前的失败使用普通 ResultBean。SSE 已开始后不再改写 HTTP 状态，错误
 使用 Responses `error`、`response.failed` 或 `response.incomplete`。Tool 实际执行和下一轮
@@ -433,7 +455,7 @@ response ID。ID 大小写敏感且只能原样传回；Mate 不生成第二套�
 
 ![Model Manager 调用时序](model_manager_invocation_sequence.svg)
 
-[PlantUML 源码：`model_manager_invocation_sequence`](diagram.puml#L142)
+[PlantUML 源码：`model_manager_invocation_sequence`](diagram.puml#L141)
 
 ## 7. MateService 私有领域模型
 
@@ -544,6 +566,10 @@ public interface ManagedModelInvocationClient {
 Controller/API 边界使用 `*RequestVO/*ResponseVO`，Mapper 和内部传输使用 DTO，符合
 mate-service 现有分层。
 
+Mate-service 的 create Request VO 必须按字段显式保留 OpenAI wire 名称；Service 在同一
+Responses JSON 语义树上完成校验和 `model` 值替换，再交给上游 HTTP client。不得先转换
+为 Chat Completions VO、厂商 VO 或另一组“统一消息”DTO 后重新组装请求。
+
 现有 `RuntimeModelManager` 可保留为 Runtime 业务端口，但实现改为：
 
 | 方法 | 目标行为 |
@@ -570,14 +596,15 @@ mate-service 现有分层。
 | `SimpleStreamOptions.temperature()` | `temperature` | 仅模型支持时发送 |
 | `SimpleStreamOptions.reasoning()` | `reasoning.effort` | 使用目录 `thinkingLevelMap` 映射 |
 
-Provider 固定发送数组形式 `input`、`stream=true` 和 `store=false`。收到
+Provider 固定发送数组形式 `input`、`stream=true`、`store=false` 和
+`background=false`，确保 Provider 输出在替换 `model` 后可直接调用 Responses 上游。收到
 `response.created` 后保存 `response.id`；订阅取消时已知 ID 则调用 cancel operation，未知
 ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；调用方取消映射为
 `StopReason.ABORTED`，传输或上游失败映射为 `StopReason.ERROR`。
 
 ![Java Provider 与 pi-mono 对齐](java_provider_alignment.svg)
 
-[PlantUML 源码：`java_provider_alignment`](diagram.puml#L223)
+[PlantUML 源码：`java_provider_alignment`](diagram.puml#L225)
 
 ## 9. 一致性、失败与安全
 
@@ -598,7 +625,7 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 
 | HTTP/流阶段 | 错误码/事件 | 语义 |
 |---|---|---|
-| `400` | `INVALID_RESPONSE_REQUEST` | JSON 无法读取、字段不在白名单、`stream/store/background` 值非法或模型 ID 为空/超长。 |
+| `400` | `INVALID_RESPONSE_REQUEST` | JSON 无法读取、字段不在白名单、`stream/store/background` 缺失或值非法，或模型 ID 为空/超长。 |
 | `401` | `UNAUTHENTICATED`、`AUTH_CREDENTIAL_CONFLICT` | 内部调用方认证失败。 |
 | `403` | `FORBIDDEN` | 调用方无 Model Manager 权限。 |
 | `404` | `MODEL_NOT_FOUND`、`RESPONSE_NOT_ACTIVE` | 目录模型不存在，或 cancel 目标不再活动。 |
@@ -619,6 +646,8 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 - Provider 管理面必须验证 endpoint scheme、DNS/IP 边界和允许域，防止 SSRF；运行时
   调用不能覆盖 endpoint。
 - Runtime 不能透传任意 headers、metadata 或 provider options，所有字段采用 allowlist。
+- Mate 对已接受的 Responses body 只允许替换 `model` 值；禁止对 `input/tools/reasoning`
+  做协议转换，也禁止静默删除字段后继续调用。
 - 调用授权只依据有效服务凭据；请求中不存在可伪造的 `agentId`。
 - reasoning summary 和 `encrypted_content` 可以按 Responses 协议进入 SSE/历史重放，但不得
   写入普通日志或错误消息。
@@ -635,11 +664,13 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 | 架构改造 | Mate-service 新增模型目录、Agent 可调用解析、调用和取消能力。 | 当前代码只有模型 ID 绑定，无法形成可执行 Provider。 |
 | 架构改造 | Model Manager 作为 mate-service 内部组件向 Runtime 提供安全描述和调用流；公共 Session API 仍只暴露模型 ID。 | 细化现有 Manager 最终权威设计，同时不扩大浏览器可见面。 |
 | 架构改造 | 调用线协议从自定义 Context/AssistantMessageEvent 改为 OpenAI Responses request/SSE。 | Mate 均为 OpenAI 类型模型，复用成熟协议并把 Java 映射职责留在 Provider。 |
+| 架构改造 | Mate 调用端改为 Responses 语义透明代理，已接受 body 只替换 `model` 值。 | 让 Provider 生成的请求可直接调用 Responses 兼容 LLM，避免 Mate 再维护消息转换器。 |
 | 架构改造 | response ID 直接透传，响应 `model` 改写为 Mate 模型 ID。 | 取消无需第二套调用 ID，同时保持 Mate 模型抽象不泄露上游路由。 |
 | 安全加固 | Runtime 只看到单一通用 Provider；mate-service 托管上游配置和 secret。 | 避免凭据扩散、任意 endpoint/header 注入和多处协议实现漂移。 |
 | 产品约束 | 调用接口不携带 `agentId`，不校验 Agent 绑定。 | CampusClaw 与 CampusMate 互信，Agent 绑定只用于模型选择。 |
 | 产品约束 | 模型 ID 采用目录返回的 1-64 字符不透明值，不强制类型化 UUID。 | 兼容实际模型管理器 ID；调用方不得自行解析格式。 |
 | 产品约束 | 创建请求不支持幂等键或自动重放。 | 网络结果未知时重放可能造成重复模型消费。 |
+| 产品约束 | `stream/store/background` 必须显式为 `true/false/false`。 | 让安全策略在 Provider 生成请求时确定，Mate 无需补写 body 默认值。 |
 | OpenAI 兼容扩展 | `POST /responses/{responseId}/cancel` 可取消前台活动流。 | 官方 cancel 只保证 background response；Mate 需服务 AgentLoop 的前台取消。 |
 | OpenAI 兼容例外 | create 成功 SSE 和 cancel 成功 Response 不使用公司 ResultBean。 | 保持 Responses 客户端与事件解析兼容；所有非 2xx 仍使用公司错误体。 |
 | 产品约束 | 不允许自动模型 fallback。 | 保持用户选择、成本、能力和审计结果可解释。 |
@@ -657,7 +688,8 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 5. 实现 `MateServiceModelManagerProvider` 与目录 ETag 缓存，替换
    `CatalogRuntimeModelManager` 生产 Bean；本地开发仍可显式启用 catalog fallback。
 6. 实现 Responses create/cancel HTTP client；复用并补齐 Java Responses 映射器的图片、
-   Tool 图片结果、reasoning 签名、取消、背压、超时和审计行为。
+   Tool 图片结果、reasoning 签名、取消、背压、超时和审计行为；Mate 侧只实现
+   Responses 校验和 `model` 值替换，不实现协议转换器。
 7. 生产配置关闭 Runtime 直连上游和内置 fallback；删除旧兼容路由前运行双栈契约测试。
 
 ## 12. 验收标准
@@ -669,10 +701,15 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 - 全局目录 ETag 未变化返回 304；刷新失败不清空 Provider 上次成功目录。
 - 文本、用户图片、Assistant 历史、函数调用、Tool 文本/图片结果和 reasoning item 均能
   从 AgentLoop Context 无损转换为 Responses `input[]`；Tool 仍由 AgentLoop 执行。
+- 捕获 Provider 发给 Mate 的 JSON 和 Mate 发给上游的 JSON；把后者 `model` 改回目录值
+  后，两者必须语义相等，尤其 `input/tools/reasoning` 不得重组、降级或丢失。
+- 目录路由的上游必须原生支持 OpenAI Responses；仅支持 Chat Completions 或厂商消息格式
+  时返回明确错误，不在 Mate 内部转换。
 - Mate 把请求的目录模型 ID 替换为私有上游模型 ID，并在每个 Response 对象中改回目录
   模型 ID；Runtime 和日志不出现私有路由。
 - `response.created.response.id` 原样进入 AssistantMessage，并可用于 cancel path。
-- `stream=false`、`store=true`、`background=true`、未知字段和未知模型分别得到已冻结错误。
+- `stream/store/background` 缺失、值不符合 `true/false/false`、未知字段和未知模型分别
+  得到已冻结错误。
 - SSE 首字节前使用 ResultBean 错误；SSE 开始后使用 Responses 错误/失败/不完整事件。
 - 活动取消返回 `200 status=cancelled` 并关闭原流；再次取消、已完成或未知 ID 返回 404。
 - 正常完成和取消竞争时只产生一个终态；网络结果未知时 Provider 不重放 create POST。
@@ -696,5 +733,6 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-08-22 | 将 create operation 冻结为 OpenAI Responses 语义透明代理；Provider 完成唯一一次 Context 转换，Mate 对已接受 body 只替换 `model` 值，并要求显式 `stream=true/store=false/background=false`；禁止 Responses-to-Chat 或厂商协议转换。 |
 | 1.1.0 | 2026-08-22 | 确认 MateService 托管调用资源模型；冻结 OpenAI Responses create/cancel 接口、模型和 response ID 映射、无状态输入、错误与取消语义；补充 pi-mono 对齐差异。 |
 | 1.0.0 | 2026-08-21 | 基于 pi-mono、pi-mono-java 和 mate-service 当前源码，明确 Provider 身份、完整运行契约、Java 对齐方案、MateService 私有领域模型与五项运行时接口候选；建立资源模型决策门。 |

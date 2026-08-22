@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "MateService OpenAI Responses Provider API",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "basePath": "/mate-service/internal/v1",
     "visibility": "Internal · 已冻结"
   },
@@ -9,7 +9,7 @@
     "method": "POST",
     "path": "/responses",
     "summary": "创建前台流式模型响应",
-    "description": "接收受控的 OpenAI Responses 请求，按 Mate 目录模型 ID 解析私有上游并返回 Responses SSE。调用只校验服务身份，不接收 agentId；每次 POST 都创建新的模型消费，网络结果未知时不得自动重放。",
+    "description": "接收可直接调用 OpenAI Responses 兼容 LLM 的请求体。Provider 在进入 Mate 前完成 AgentLoop Context 到 Responses JSON 的唯一一次转换；Mate 校验受控子集后只替换 model 值并注入连接层凭据，不转换 input、tools、reasoning 或事件结构。调用只校验服务身份，不接收 agentId；网络结果未知时不得自动重放。",
     "authModes": [
       {
         "id": "jwt",
@@ -69,7 +69,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "OpenAI Responses 线结构的 v1 白名单。model 为 1-64 字符、大小写敏感的 Mate 目录 ID；input 可为字符串或数组。Provider 对 AgentLoop 始终发送数组。stream 必须为 true；store/background 只能缺省或 false。不支持 Idempotency-Key、previous_response_id、conversation、metadata、messages、stream_options 或任意连接配置。",
+      "description": "OpenAI Responses 语义透明子集。model 为 1-64 字符、大小写敏感的 Mate 目录 ID；input 可为字符串或数组，Provider 对 AgentLoop 始终发送数组。stream、store、background 必须显式为 true、false、false。除把 model 替换为 upstreamModelId 外，Mate 必须原样保留已接受字段的名称、嵌套结构、数组顺序和值；请求可直接发送到原生 Responses 上游，不转换为 Chat Completions 或厂商 DTO。不支持 Idempotency-Key、previous_response_id、conversation、metadata、messages、stream_options、未知字段或任意连接配置。",
       "example": {
         "model": "managed-coding-model",
         "instructions": "You are a coding assistant.",
@@ -157,7 +157,7 @@
       {
         "status": "200",
         "label": "OK",
-        "summary": "返回 OpenAI Responses SSE；response.id 透传上游，所有 Response 对象的 model 改回 Mate 模型 ID。事件覆盖 response.created、output item 生命周期、文本/reasoning/函数参数增量，以及 response.completed、response.incomplete、response.failed 和 error；SSE 建立后的失败不再改写 HTTP 状态。",
+        "summary": "返回 OpenAI Responses SSE；response.id 透传上游，所有 Response 对象的 model 改回 Mate 模型 ID。除 model 值外不转换事件类型或 payload；事件覆盖 response.created、output item 生命周期、文本/reasoning/函数参数增量，以及 response.completed、response.incomplete、response.failed 和 error。SSE 建立后的失败不再改写 HTTP 状态。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store"
@@ -171,7 +171,7 @@
         "status": "400",
         "tabLabel": "400 · INVALID_RESPONSE_REQUEST",
         "label": "Bad Request",
-        "summary": "请求无法读取、字段不在白名单、model 为空或超长，或 stream/store/background 值不符合 v1。",
+        "summary": "请求无法读取、字段不在白名单、model 为空或超长，或 stream/store/background 缺失或不等于 true/false/false。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN"
@@ -330,7 +330,7 @@
         "status": "503",
         "tabLabel": "503 · MODEL_UNAVAILABLE",
         "label": "Service Unavailable",
-        "summary": "模型、Provider、endpoint 或 credential 当前不可用。",
+        "summary": "模型、Provider、endpoint 或 credential 当前不可用，或目录路由的上游不原生支持 OpenAI Responses。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN",
@@ -394,6 +394,6 @@
     "questions": [],
     "followUpTitle": "调整创建 Response 接口",
     "promptPrefix": "继续调整 POST /mate-service/internal/v1/responses",
-    "promptSuffix": "请同步更新 model-manager-provider-contract 的主 Markdown、结构化评审模型、HTML 和 PlantUML。"
+    "promptSuffix": "请保持 Responses 透明代理边界：Mate 对已接受 body 只替换 model 值，不得新增 Responses-to-Chat 或厂商协议转换；同步更新主 Markdown、结构化评审模型、HTML 和 PlantUML。"
   }
 }

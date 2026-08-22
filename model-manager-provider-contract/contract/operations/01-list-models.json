@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "MateService Model Manager Provider API",
-    "version": "1.1.0-proposal",
+    "version": "1.2.0-proposal",
     "basePath": "/mate-service/internal/v1",
     "visibility": "Internal · 接口字段待评审"
   },

@@ -80,6 +80,7 @@ title Generic Model Manager Provider Boundary
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java: buildParams and handleResponseEvent
 ' mate-service README.md: model gateway gap (line 116)
 ' Architecture change: Java resolves an AiProvider by model.providerId instead of resolving an ApiProvider by model.api.
+' Architecture change: accepted Responses payloads are forwarded without protocol conversion; model is the only body value patched by Mate.
 ' Security hardening: upstream endpoints, credentials, provider ids, and vendor model ids remain inside mate-service.
 
 skinparam backgroundColor #FFFFFF
@@ -110,10 +111,9 @@ package "pi-mono-java Runtime" {
 package "mate-service" {
   [Internal Model Manager API] as ManagerApi
   [Model Authorization] as Authorization
-  [OpenAI Responses Router] as Router
+  [OpenAI Responses Transparent Proxy] as Router
   database "t_model_provider\nt_model_definition\nt_agent_binding_models" as Catalog
   [Secret Store] as Secrets
-  [OpenAI Responses Proxy] as Adapters
 }
 
 cloud "Upstream LLM Services" as Vendors
@@ -127,11 +127,10 @@ CatalogClient --> ManagerApi : HTTPS JSON
 InvocationClient --> ManagerApi : Responses JSON and SSE
 ManagerApi --> Authorization : catalog operations 2 and 3 only
 Authorization --> Catalog
-ManagerApi --> Router : exact Mate modelId
+ManagerApi --> Router : exact Mate modelId\nand unchanged Responses body
 Router --> Catalog
 Router --> Secrets : credentialRef
-Router --> Adapters
-Adapters --> Vendors
+Router --> Vendors : same Responses body and SSE\nmodel value patched
 
 note bottom of GenericProvider
 The Runtime sees one provider and opaque modelIds.
@@ -150,6 +149,7 @@ title Mate OpenAI Responses Invocation and Cancellation
 ' OpenAI API: POST /responses and POST /responses/{response_id}/cancel
 ' Target-only design: mate-service Responses create and foreground cancel operations do not exist yet.
 ' Product authorization: invocation authenticates the service caller and does not receive or validate agentId.
+' Transparent proxy rule: Provider performs the only Context conversion; Mate patches model but does not convert the Responses payload.
 ' OpenAI compatibility extension: Mate cancels active foreground streams although official cancel requires background=true.
 
 skinparam backgroundColor #FFFFFF
@@ -182,16 +182,16 @@ Loop -> AiService : stream(model, Context, options)
 AiService -> Registry : get(model.providerId)
 Registry --> AiService : generic Provider
 AiService -> Provider : streamSimple(model, Context, options)
-Provider -> Provider : convert Context to Responses input array
-Provider -> Manager : POST /responses\nmodel + input + tools + safe options
+Provider -> Provider : convert Context once\nto a direct Responses request
+Provider -> Manager : POST /responses\ncomplete Responses payload
 Manager -> Manager : authenticate service caller
-Manager -> Manager : validate request allowlist\nand resolve exact Mate modelId
-Manager -> Manager : replace model with upstreamModelId\nand inject endpoint and credential
-Manager -> OpenAI : POST /responses\nstream=true and store=false
+Manager -> Manager : validate without reshaping\nand resolve exact Mate modelId
+Manager -> Manager : clone payload and patch model only\ninject endpoint and credential at HTTP layer
+Manager -> OpenAI : POST /responses\nsame input, tools, reasoning, and options
 
 loop OpenAI Responses SSE
   OpenAI --> Manager : Responses event
-  Manager -> Manager : preserve response.id\nand rewrite response.model
+  Manager -> Manager : preserve event payload\nrewrite response.model only
   Manager --> Provider : Responses event
   Provider -> Provider : store responseId and map event
   Provider --> Loop : AssistantMessageEvent
@@ -215,6 +215,8 @@ end
 
 note over Provider,Manager
 No automatic create POST replay after an unknown outcome.
+No Responses-to-Chat or vendor protocol conversion in Mate.
+Every routed upstream must support OpenAI Responses natively.
 Cancellation emits no synthetic Responses terminal event.
 Tool execution stays in AgentLoop.
 end note
