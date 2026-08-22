@@ -1,0 +1,399 @@
+{
+  "api": {
+    "title": "MateService OpenAI Responses Provider API",
+    "version": "1.1.0",
+    "basePath": "/mate-service/internal/v1",
+    "visibility": "Internal · 已冻结"
+  },
+  "operation": {
+    "method": "POST",
+    "path": "/responses",
+    "summary": "创建前台流式模型响应",
+    "description": "接收受控的 OpenAI Responses 请求，按 Mate 目录模型 ID 解析私有上游并返回 Responses SSE。调用只校验服务身份，不接收 agentId；每次 POST 都创建新的模型消费，网络结果未知时不得自动重放。",
+    "authModes": [
+      {
+        "id": "jwt",
+        "label": "JWT 首选",
+        "preferred": true,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "<CALLER_ID>",
+            "required": true,
+            "description": "公司内部调用方标识"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer <JWT>",
+            "required": true,
+            "description": "公司 JWT；不得与 X-HW-APPKEY 同时提供"
+          }
+        ]
+      },
+      {
+        "id": "appkey",
+        "label": "APPKEY 兼容",
+        "preferred": false,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "<CALLER_ID>",
+            "required": true,
+            "description": "公司内部调用方标识"
+          },
+          {
+            "name": "X-HW-APPKEY",
+            "value": "<APPKEY>",
+            "required": true,
+            "description": "公司 APPKEY；不得与 Authorization 同时提供"
+          }
+        ]
+      }
+    ],
+    "parameters": [
+      {
+        "in": "header",
+        "name": "Accept",
+        "required": true,
+        "schema": "text/event-stream",
+        "description": "成功响应固定为 Responses SSE；浏览器 EventSource 不能发起该 POST"
+      },
+      {
+        "in": "header",
+        "name": "Accept-Language",
+        "required": false,
+        "schema": "zh-CN | en-US",
+        "description": "仅用于首个 SSE 字节发送前的 ResultBean 错误；缺失或不支持时回退 en-US"
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "description": "OpenAI Responses 线结构的 v1 白名单。model 为 1-64 字符、大小写敏感的 Mate 目录 ID；input 可为字符串或数组。Provider 对 AgentLoop 始终发送数组。stream 必须为 true；store/background 只能缺省或 false。不支持 Idempotency-Key、previous_response_id、conversation、metadata、messages、stream_options 或任意连接配置。",
+      "example": {
+        "model": "managed-coding-model",
+        "instructions": "You are a coding assistant.",
+        "input": [
+          {
+            "type": "reasoning",
+            "id": "rs_01",
+            "summary": [],
+            "encrypted_content": "<ENCRYPTED_REASONING>"
+          },
+          {
+            "type": "message",
+            "id": "msg_01",
+            "role": "assistant",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "text": "I will inspect the file.",
+                "annotations": []
+              }
+            ]
+          },
+          {
+            "type": "function_call",
+            "id": "fc_01",
+            "call_id": "call_01",
+            "name": "read_file",
+            "arguments": "{\"path\":\"/workspace/README.md\"}"
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "call_01",
+            "output": "file content"
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "请结合这张图片继续分析"
+              },
+              {
+                "type": "input_image",
+                "detail": "auto",
+                "image_url": "data:image/png;base64,<BASE64_IMAGE>"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "read_file",
+            "description": "Read a local file",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            },
+            "strict": false
+          }
+        ],
+        "max_output_tokens": 4096,
+        "temperature": 0.2,
+        "reasoning": {
+          "effort": "medium",
+          "summary": "auto"
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ],
+        "stream": true,
+        "store": false,
+        "background": false
+      }
+    },
+    "responses": [
+      {
+        "status": "200",
+        "label": "OK",
+        "summary": "返回 OpenAI Responses SSE；response.id 透传上游，所有 Response 对象的 model 改回 Mate 模型 ID。事件覆盖 response.created、output item 生命周期、文本/reasoning/函数参数增量，以及 response.completed、response.incomplete、response.failed 和 error；SSE 建立后的失败不再改写 HTTP 状态。",
+        "headers": {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-store"
+        },
+        "bodies": {
+          "default": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_01\",\"object\":\"response\",\"status\":\"in_progress\",\"model\":\"managed-coding-model\",\"output\":[]}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":1,\"output_index\":0,\"item\":{\"id\":\"msg_02\",\"type\":\"message\",\"status\":\"in_progress\",\"role\":\"assistant\",\"content\":[]}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":2,\"item_id\":\"msg_02\",\"output_index\":0,\"content_index\":0,\"delta\":\"分析结果\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":3,\"response\":{\"id\":\"resp_01\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"managed-coding-model\",\"output\":[{\"id\":\"msg_02\",\"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"分析结果\",\"annotations\":[]}]}]}}"
+        }
+      },
+      {
+        "id": "400-invalid-response-request",
+        "status": "400",
+        "tabLabel": "400 · INVALID_RESPONSE_REQUEST",
+        "label": "Bad Request",
+        "summary": "请求无法读取、字段不在白名单、model 为空或超长，或 stream/store/background 值不符合 v1。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_RESPONSE_REQUEST",
+            "resMsg": "模型响应请求不符合接口约束。"
+          },
+          "en-US": {
+            "resCode": "INVALID_RESPONSE_REQUEST",
+            "resMsg": "The model response request does not satisfy the API contract."
+          }
+        }
+      },
+      {
+        "id": "401-unauthenticated",
+        "status": "401",
+        "tabLabel": "401 · UNAUTHENTICATED",
+        "label": "Unauthorized",
+        "summary": "凭据缺失、不完整、无效或已过期。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "UNAUTHENTICATED",
+            "resMsg": "调用方身份认证失败。"
+          },
+          "en-US": {
+            "resCode": "UNAUTHENTICATED",
+            "resMsg": "Caller authentication failed."
+          }
+        }
+      },
+      {
+        "id": "401-auth-conflict",
+        "status": "401",
+        "tabLabel": "401 · AUTH_CREDENTIAL_CONFLICT",
+        "label": "Unauthorized",
+        "summary": "JWT 与 APPKEY 两组凭据同时出现。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "AUTH_CREDENTIAL_CONFLICT",
+            "resMsg": "一次请求只能使用一种认证方式。"
+          },
+          "en-US": {
+            "resCode": "AUTH_CREDENTIAL_CONFLICT",
+            "resMsg": "Use exactly one authentication mode per request."
+          }
+        }
+      },
+      {
+        "status": "403",
+        "label": "Forbidden",
+        "summary": "调用方已认证但没有调用模型代理的权限。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "FORBIDDEN",
+            "resMsg": "调用方无权调用模型代理。"
+          },
+          "en-US": {
+            "resCode": "FORBIDDEN",
+            "resMsg": "The caller is not allowed to invoke the model proxy."
+          }
+        }
+      },
+      {
+        "status": "404",
+        "label": "Not Found",
+        "summary": "model 没有精确匹配 Mate 目录中的模型。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MODEL_NOT_FOUND",
+            "resMsg": "指定的模型不存在。"
+          },
+          "en-US": {
+            "resCode": "MODEL_NOT_FOUND",
+            "resMsg": "The requested model does not exist."
+          }
+        }
+      },
+      {
+        "status": "422",
+        "label": "Unprocessable Content",
+        "summary": "目录模型不支持请求的图片、reasoning、temperature 或其他已知选项。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MODEL_OPTION_UNSUPPORTED",
+            "resMsg": "指定模型不支持请求中的选项。"
+          },
+          "en-US": {
+            "resCode": "MODEL_OPTION_UNSUPPORTED",
+            "resMsg": "The requested option is not supported by the selected model."
+          }
+        }
+      },
+      {
+        "status": "429",
+        "label": "Too Many Requests",
+        "summary": "Mate 或上游模型达到限流阈值；调用方不得盲目重放结果未知的 POST。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MODEL_RATE_LIMITED",
+            "resMsg": "模型调用过于频繁，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "MODEL_RATE_LIMITED",
+            "resMsg": "Model invocation is rate limited. Try again later."
+          }
+        }
+      },
+      {
+        "status": "502",
+        "label": "Bad Gateway",
+        "summary": "上游在 SSE 建立前返回协议错误或无效响应。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "UPSTREAM_MODEL_ERROR",
+            "resMsg": "上游模型服务返回错误。"
+          },
+          "en-US": {
+            "resCode": "UPSTREAM_MODEL_ERROR",
+            "resMsg": "The upstream model service returned an error."
+          }
+        }
+      },
+      {
+        "id": "503-model-unavailable",
+        "status": "503",
+        "tabLabel": "503 · MODEL_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "模型、Provider、endpoint 或 credential 当前不可用。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MODEL_UNAVAILABLE",
+            "resMsg": "指定模型当前不可用。"
+          },
+          "en-US": {
+            "resCode": "MODEL_UNAVAILABLE",
+            "resMsg": "The requested model is currently unavailable."
+          }
+        }
+      },
+      {
+        "id": "503-manager-unavailable",
+        "status": "503",
+        "tabLabel": "503 · MANAGER_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "目录、Secret Store 或 Model Manager 暂时不可用。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "Model Manager 暂时不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "Model Manager is temporarily unavailable. Try again later."
+          }
+        }
+      },
+      {
+        "status": "504",
+        "label": "Gateway Timeout",
+        "summary": "在 SSE 建立前，Mate 等待上游响应超时。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MODEL_INVOCATION_TIMEOUT",
+            "resMsg": "模型调用超时。"
+          },
+          "en-US": {
+            "resCode": "MODEL_INVOCATION_TIMEOUT",
+            "resMsg": "The model invocation timed out."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "followUpTitle": "调整创建 Response 接口",
+    "promptPrefix": "继续调整 POST /mate-service/internal/v1/responses",
+    "promptSuffix": "请同步更新 model-manager-provider-contract 的主 Markdown、结构化评审模型、HTML 和 PlantUML。"
+  }
+}

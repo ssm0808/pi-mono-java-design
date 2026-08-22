@@ -1,15 +1,15 @@
 {
   "api": {
     "title": "MateService Model Manager Provider API",
-    "version": "1.0.0-proposal",
+    "version": "1.1.0-proposal",
     "basePath": "/mate-service/internal/v1",
-    "visibility": "Internal · 资源模型待确认"
+    "visibility": "Internal · 接口字段待评审"
   },
   "operation": {
     "method": "GET",
     "path": "/models",
     "summary": "读取通用 Provider 的全局模型目录",
-    "description": "为 pi-mono-java 的 MateServiceModelManagerProvider 提供不含 Agent 授权的全局安全模型描述，支持 ETag 条件读取。该 operation 只有在确认“单一通用 Provider，MateService 托管调用”资源模型后才进入逐字段冻结。",
+    "description": "为 pi-mono-java 的 MateServiceModelManagerProvider 提供不含 Agent 授权的全局安全模型描述，支持 ETag 条件读取。MateService 托管调用的资源模型已经确认，但本 operation 的字段仍是待后续评审的同步候选。",
     "authModes": [
       {
         "id": "jwt",
@@ -91,7 +91,7 @@
               "catalogRevision": 42,
               "models": [
                 {
-                  "modelId": "model-550e8400e29b41d4a716446655440000",
+                  "modelId": "managed-coding-model",
                   "displayName": "Managed General Model",
                   "reasoningSupported": true,
                   "thinkingLevelMap": {
@@ -211,66 +211,9 @@
     ]
   },
   "review": {
-    "decisionGate": {
-      "title": "先确认 Provider 资源模型",
-      "description": "Provider 对接可以由 MateService 托管真实上游调用，也可以只下发配置后由 Runtime 直连厂商。两种方案的身份、秘密边界和接口集合不同，必须先选定。",
-      "detailNotice": "当前推荐第一种方案。GET /models 的字段、认证和响应只是该方案下的条件草案；确认资源模型后再逐接口冻结。",
-      "hideOperationDetails": true,
-      "comparison": {
-        "columns": [
-          "关注点",
-          "A · 通用 Provider + MateService 托管调用",
-          "B · 目录下发 + Runtime 直连厂商"
-        ],
-        "rows": [
-          [
-            "Runtime Provider 身份",
-            "固定 mate-model-manager；模型使用不透明 modelId",
-            "每个上游 Provider 都要进入 Runtime"
-          ],
-          [
-            "凭据与端点",
-            "只留在 MateService 和 Secret Store",
-            "必须安全下发或在每个 Runtime 配置"
-          ],
-          [
-            "协议适配",
-            "MateService 集中实现，Java 只映射统一事件",
-            "Java 为所有厂商维护协议适配器"
-          ],
-          [
-            "Agent 授权",
-            "MateService 在调用前原子重验",
-            "依赖 Runtime 快照，仍需另建远程授权检查"
-          ],
-          [
-            "推荐结论",
-            "推荐：秘密边界窄，符合现有 Manager 最终权威设计",
-            "不推荐：凭据扩散且与通用 Provider 目标冲突"
-          ]
-        ]
-      }
-    },
-    "questions": [
-      {
-        "id": "provider_resource_model",
-        "legend": "Provider 资源模型",
-        "options": [
-          {
-            "label": "MateService 托管调用（推荐）",
-            "value": "Runtime 只注册 mate-model-manager；MateService 管理并调用真实上游 Provider。",
-            "selected": true
-          },
-          {
-            "label": "Runtime 直连厂商",
-            "value": "MateService 只提供目录/配置，Runtime 注册并调用每个真实上游 Provider。",
-            "selected": false
-          }
-        ]
-      }
-    ],
-    "followUpTitle": "确认 Provider 资源模型",
-    "promptPrefix": "继续评审 MateService Model Manager Provider API",
-    "promptSuffix": "请按选择更新 model-manager-provider-contract 的 Markdown、结构化评审模型、HTML 和 PlantUML；资源模型确认前不要把后续 operation 标记为已确认。"
+    "questions": [],
+    "followUpTitle": "继续评审模型目录接口",
+    "promptPrefix": "继续评审 GET /mate-service/internal/v1/models",
+    "promptSuffix": "请只调整接口 1 的主维护 HTML、设计文档和结构化评审模型；不要改变已冻结的 Responses create/cancel 契约。"
   }
 }

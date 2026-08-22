@@ -31,7 +31,7 @@ class ProviderRuntimeContract {
   +refreshModels(): optional
   +filterModels(): optional
   +stream(model, context, options)
-  +cancelDeferred(): optional
+  +cancelActiveResponse(responseId): optional
 }
 
 class ModelIdentity {
@@ -75,7 +75,9 @@ title Generic Model Manager Provider Boundary
 
 ' Source evidence:
 ' pi-mono packages/ai/src/models.ts: ModelsImpl.requireProvider and stream (lines 628-695)
+' pi-mono packages/ai/src/api/openai-responses.ts: buildParams and stream (lines 99-189 and 273-344)
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java: resolveProvider (lines 141-147)
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java: buildParams and handleResponseEvent
 ' mate-service README.md: model gateway gap (line 116)
 ' Architecture change: Java resolves an AiProvider by model.providerId instead of resolving an ApiProvider by model.api.
 ' Security hardening: upstream endpoints, credentials, provider ids, and vendor model ids remain inside mate-service.
@@ -100,7 +102,7 @@ package "pi-mono-java Runtime" {
   [AgentLoop] as Loop
   [CampusClawAiService] as AiService
   [AiProviderRegistry] as Registry
-  [MateServiceModelManagerProvider\nproviderId = mate-model-manager] as GenericProvider
+  [MateServiceModelManagerProvider\nproviderId = mate-model-manager\napiId = openai-responses] as GenericProvider
   [ManagedModelCatalogClient] as CatalogClient
   [ManagedModelInvocationClient] as InvocationClient
 }
@@ -108,10 +110,10 @@ package "pi-mono-java Runtime" {
 package "mate-service" {
   [Internal Model Manager API] as ManagerApi
   [Model Authorization] as Authorization
-  [Provider Router] as Router
+  [OpenAI Responses Router] as Router
   database "t_model_provider\nt_model_definition\nt_agent_binding_models" as Catalog
   [Secret Store] as Secrets
-  [Upstream Protocol Adapters] as Adapters
+  [OpenAI Responses Proxy] as Adapters
 }
 
 cloud "Upstream LLM Services" as Vendors
@@ -122,10 +124,10 @@ Registry --> GenericProvider
 GenericProvider --> CatalogClient
 GenericProvider --> InvocationClient
 CatalogClient --> ManagerApi : HTTPS JSON
-InvocationClient --> ManagerApi : HTTPS SSE
-ManagerApi --> Authorization : agentId + modelId
+InvocationClient --> ManagerApi : Responses JSON and SSE
+ManagerApi --> Authorization : catalog operations 2 and 3 only
 Authorization --> Catalog
-ManagerApi --> Router
+ManagerApi --> Router : exact Mate modelId
 Router --> Catalog
 Router --> Secrets : credentialRef
 Router --> Adapters
@@ -138,15 +140,17 @@ end note
 @enduml
 
 @startuml model_manager_invocation_sequence
-title Model Manager Provider Invocation Sequence
+title Mate OpenAI Responses Invocation and Cancellation
 
 ' Source evidence:
-' pi-mono packages/ai/src/models.ts: Provider.stream and ModelsImpl.stream (lines 136-142 and 667-695)
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java: event protocol (lines 14-164)
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/RuntimeModelManager.java: current list and resolve port (lines 20-39)
-' mate-service src/main/resources/db/schema.sql: t_agent_binding_models (lines 59-73)
-' Target-only design: mate-service model catalog, resolution, invocation, and cancellation APIs do not exist yet.
-' Design reason: authorization is rechecked at invocation time and streaming remains compatible with AgentLoop.
+' pi-mono packages/ai/src/api/openai-responses.ts: stream and buildParams (lines 99-189 and 273-344)
+' pi-mono packages/ai/src/api/openai-responses-shared.ts: convertResponsesMessages and processResponsesStream (lines 131-342 and 500-792)
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java: buildParams, handleResponseEvent, and convertInputItems
+' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel and consumeStream (lines 198-288)
+' OpenAI API: POST /responses and POST /responses/{response_id}/cancel
+' Target-only design: mate-service Responses create and foreground cancel operations do not exist yet.
+' Product authorization: invocation authenticates the service caller and does not receive or validate agentId.
+' OpenAI compatibility extension: Mate cancels active foreground streams although official cancel requires background=true.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -170,34 +174,48 @@ participant "AgentLoop" as Loop
 participant "CampusClawAiService" as AiService
 participant "AiProviderRegistry" as Registry
 participant "MateServiceModelManagerProvider" as Provider
-participant "mate-service Model Manager" as Manager
-participant "Upstream Adapter" as Adapter
+participant "mate-service Responses Proxy" as Manager
+participant "OpenAI Responses Endpoint" as OpenAI
 
 Client -> Loop : submit prompt
 Loop -> AiService : stream(model, Context, options)
 AiService -> Registry : get(model.providerId)
 Registry --> AiService : generic Provider
 AiService -> Provider : streamSimple(model, Context, options)
-Provider -> Provider : create invocationId
-Provider -> Manager : POST /agents/{agentId}/model-invocations\nmodelId + sessionId + Context + safe options
-Manager -> Manager : authenticate caller
-Manager -> Manager : atomically check current Agent binding,\nmodel status, provider status, and credentialRef
-Manager -> Adapter : invoke private upstream model
+Provider -> Provider : convert Context to Responses input array
+Provider -> Manager : POST /responses\nmodel + input + tools + safe options
+Manager -> Manager : authenticate service caller
+Manager -> Manager : validate request allowlist\nand resolve exact Mate modelId
+Manager -> Manager : replace model with upstreamModelId\nand inject endpoint and credential
+Manager -> OpenAI : POST /responses\nstream=true and store=false
 
-loop AssistantMessageEvent-compatible SSE
-  Adapter --> Manager : provider-specific delta
-  Manager --> Provider : start, content lifecycle, done or error
+loop OpenAI Responses SSE
+  OpenAI --> Manager : Responses event
+  Manager -> Manager : preserve response.id\nand rewrite response.model
+  Manager --> Provider : Responses event
+  Provider -> Provider : store responseId and map event
   Provider --> Loop : AssistantMessageEvent
 end
 
-alt Runtime abort
+alt Abort after response.created
   Loop -> Provider : cancel subscription
-  Provider -> Manager : DELETE /model-invocations/{invocationId}
-  Manager -> Adapter : abort upstream request
+  Provider -> Manager : POST /responses/{responseId}/cancel
+  Manager -> OpenAI : abort active foreground stream
+  Manager --> Provider : 200 Response with status cancelled
+  Manager --> Provider : close original SSE
+  Provider --> Loop : StopReason.ABORTED
+else Abort before response.created
+  Loop -> Provider : cancel subscription
+  Provider -> Manager : close create stream
+  Provider --> Loop : StopReason.ABORTED
+else Response already terminal
+  Provider -> Manager : POST /responses/{responseId}/cancel
+  Manager --> Provider : 404 RESPONSE_NOT_ACTIVE
 end
 
 note over Provider,Manager
-No automatic POST replay after an unknown outcome.
+No automatic create POST replay after an unknown outcome.
+Cancellation emits no synthetic Responses terminal event.
 Tool execution stays in AgentLoop.
 end note
 @enduml
@@ -207,7 +225,9 @@ title Java Provider Alignment with pi-mono
 
 ' Source evidence:
 ' pi-mono packages/ai/src/models.ts: Provider and Models registry keyed by provider.id
+' pi-mono packages/ai/src/api/openai-responses-shared.ts: Context conversion and Responses stream processing
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java: registry keyed by Api (lines 22-152)
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java: partial Responses mapper
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/Provider.java: closed enum with CUSTOM (lines 19-37)
 ' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/config/CustomModelLoader.java: every custom model uses Provider.CUSTOM (lines 92-123)
 ' Java divergence: the current Java design models protocol adapters as providers and cannot preserve arbitrary provider identity.
@@ -244,12 +264,14 @@ package "Target Java" {
   interface ProtocolAdapter
   class ProtocolAdapterRegistry
   class MateServiceModelManagerProvider
+  class OpenAIResponsesMapper
   ModelTarget --> ProviderId
   ModelTarget --> ApiId
   AiProviderRegistry --> AiProvider : keyed by ProviderId
   AiProvider --> ProtocolAdapterRegistry : optional internal dispatch
   ProtocolAdapterRegistry --> ProtocolAdapter : keyed by ApiId
   MateServiceModelManagerProvider ..|> AiProvider
+  MateServiceModelManagerProvider --> OpenAIResponsesMapper : Context and SSE mapping
 }
 
 ProviderEnum ..> ProviderId : deprecate enum boundary
