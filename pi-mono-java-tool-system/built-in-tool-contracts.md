@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
+| 文档版本 | 1.1.0 |
 | 状态 | 目标设计，待实现 |
 | 更新日期 | 2026-08-22 |
 | pi-mono-java 源码基线 | `d0efb2fd18f2f2a7db121a1cbd4f039348a8094a` |
@@ -42,6 +42,10 @@
 - 配置决定工具是否暴露，可用条件只在调用时检查。已配置但缺少上下文的工具返回
   `unavailable` 错误，不从本轮工具列表中消失。
 
+每个受管 Session 必须持有由 `PreparedAgentRuntime.agentRoot()` 构造的不可变
+`AgentWorkspaceBoundary`。其本地文件边界精确为整个 `agent/{agentId}`；模型、Host
+或工具参数不能改写该 root。
+
 ## 2. 文件与命令工具
 
 ### 2.1 `Read`
@@ -59,8 +63,22 @@
 }
 ```
 
-可用条件：Session 具有 `cwd` 和 `ReadOperations`。文本输出保留当前行号、截断和错误
-语义；图片输出使用图片 ContentBlock。路径必须受 Session `cwd` 的既有读取边界约束。
+可用条件：Session 具有 `AgentWorkspaceBoundary` 和 `ReadOperations`。文本输出
+保留当前行号与截断形式；图片输出使用图片 ContentBlock。
+
+Read 路径边界固定如下：
+
+- 读取根是整个 `agent/{agentId}`，包含其 `.campusclaw` 子树；
+- 相对路径基于该根解析，绝对路径仅在归一化后仍位于该根内时可用；
+- 任何路径分量为符号链接、真实路径越界、指向其他 Agent 目录或目标不是可读
+  普通文件时拒绝；
+- 越界结果使用稳定的当前工作区错误文本和 `isError=true`，不回显其他 Agent
+  ID、其他根目录或解析后物理路径；
+- Child Session 从 Child 自己的 `agent/{childAgentId}` 构造新边界，不继承父边界。
+
+`Glob`、`Grep`、`ListDirectory`、`Edit` 和 `Write` 使用相同的边界解析器，从而
+保证该规则是 Agent 本地工作区隔离，而不是 `Read` 的孤立特例。详见
+[Read 工作区隔离设计](README.md#44-agent-工作区边界与-read)。
 
 ### 2.2 `Bash`
 
@@ -78,6 +96,9 @@
 
 可用条件：Session 具有 `cwd` 和 Bash executor。输出继续执行当前的合并、截断、退出码
 和取消语义。该工具可以改变进程外状态，因此固定为 `SEQUENTIAL`。
+
+首版四入口缺省 profile 均不包含 `Bash`。仅设置子进程 cwd 不是文件系统沙箱；
+在独立 Bash 沙箱设计和验收完成前，受管 Agent 的生产配置不得显式启用该工具。
 
 ### 2.3 `Edit`
 
@@ -372,7 +393,7 @@ Child 有可用 default model 时优先使用；没有时继承父执行的 mode
 | 工具 | CLI | Runtime | Cron | Child |
 |---|:---:|:---:|:---:|:---:|
 | `Read` | ✓ | ✓ | ✓ | ✓ |
-| `Bash` | ✓ |  |  |  |
+| `Bash` |  |  |  |  |
 | `Edit` | ✓ |  |  |  |
 | `Write` | ✓ |  |  |  |
 | `Glob` | ✓ | ✓ | ✓ | ✓ |
@@ -388,6 +409,9 @@ Child 有可用 default model 时优先使用；没有时继承父执行的 mode
 `ListMateTools`、`CallMateTool`、`Agent` 和 `Cron` 仍在缺省工具列表中，但调用返回
 unavailable；非交互 CLI 的 `Loop` 同理。
 
+`Bash` 保留为内置契约但本版默认全部禁用。任何重新启用必须先改变安全设计，
+不能被视为不影响 Agent 隔离的普通 profile 调整。
+
 ## 7. 源码观察与目标差异
 
 | 分类 | 基线事实或目标差异 |
@@ -396,10 +420,14 @@ unavailable；非交互 CLI 的 `Loop` 同理。
 | 源码观察 | 当前模型名为小写或 lowerCamelCase，目录工具为 `ls`，子 Agent 同时存在 `spawn_agent` 与 `invoke_agent` 路径。 |
 | 源码观察 | 当前 `ToolExecutionPipeline` 在 before hook 后才校验 Schema，并以一个全局 mode 执行整批调用。 |
 | 源码观察 | 当前 `CronTool` 接受 `model/system_prompt/tools`，`ListMateTool` 接受 `agent_id/skill_id` 并输出自然语言。 |
+| 源码观察 | 当前 `ReadTool` 使用自身 cwd 做路径边界，其他文件工具没有 Session 级公共边界对象。 |
+| 源码观察 | 当前 `BashExecutor` 只设置子进程 cwd，不是文件系统沙箱。 |
 | 架构改造 | 增加 `AgentTool.executionMode()`，默认 `SEQUENTIAL`，并改为逐工具规划相邻并行段与串行 barrier。 |
 | 架构改造 | 工具名硬切 PascalCase，Schema 校验移到 before hook 之前，12 个 Schema 成为唯一模型契约。 |
 | 产品约束 | 只允许直接绑定 Child；不提供全局枚举、旧工具名、旧 Cron payload 或 Java Extension 兼容。 |
 | 安全加固 | 所有工具拒绝未知字段；受管目录名称、ID、版本与调用 ancestry 在执行前校验。 |
+| 安全加固 | 本地文件工具共用 `agent/{agentId}` 边界，拒绝符号链接和任何越界路径。 |
+| 产品约束 | 四入口缺省 profile 均禁用未沙箱化 `Bash`，避免绕过 Agent 工作区边界。 |
 
 主要证据路径：
 
@@ -418,4 +446,5 @@ unavailable；非交互 CLI 的 `Loop` 同理。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-08-22 | 将 Read 与本地文件工具边界固定为整个 `agent/{agentId}`，新增跨 Agent 路径、符号链接、非普通文件、错误脱敏和 Child 独立根契约；四入口默认禁用未沙箱化 Bash。 |
 | 1.0.0 | 2026-08-22 | 冻结 12 个 PascalCase 内置工具的输入、输出、可用条件、缺省 profile 和逐工具并发模式。 |

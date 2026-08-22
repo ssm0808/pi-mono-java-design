@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
+| 文档版本 | 1.1.0 |
 | 状态 | 目标设计，待实现 |
 | 更新日期 | 2026-08-22 |
 | 设计仓分析基线 | `b902de281d9ab0ddfdcfec2ff8616279e5c421a1` |
@@ -37,6 +37,12 @@ CLI、HTTP Runtime、Cron 和 Child Agent 使用同一个轻量 `AgentSession` �
 公共 Session 的是消息持久化、CLI JSONL、模板、`/reload`、Loop Controller、HTTP
 active execution 注册、Cron Job 生命周期和宿主关闭策略。
 
+所有受管 Agent 的本地文件边界固定为它自己的
+`agent/{agentId}` 整个目录。`Read`、`Glob`、`Grep`、`ListDirectory`、`Edit` 和
+`Write` 共用同一个不可变工作区边界，不得通过相对路径、绝对路径或符号
+链接读写其他 Agent 目录。首版四入口的缺省配置均不暴露未沙箱化的
+`Bash`；否则仅靠设置进程 cwd 不能保证 Agent 目录隔离。
+
 因此，“四入口的 AgentSession 是否一致”的精确定义是：**实现与执行语义一致，实例、
 状态、profile 和 Host 生命周期不相同**。HTTP Session 只在一次 active execution 期间
 存在；它从数据库恢复消息，执行结束立即关闭，不是常驻内存 Session。
@@ -53,6 +59,7 @@ active execution 注册、Cron Job 生命周期和宿主关闭策略。
 
 - 内置工具名、参数、输出、可用条件与并发模式；
 - 四入口的工具配置、Session 装配与 Host 责任；
+- 受管 Agent 工作区边界与本地文件工具隔离；
 - 受管 Agent/Skill/Child 目录、缓存优先 prepare 与显式 refresh；
 - Mate 工具发现与调用；
 - Child Agent Execution；
@@ -97,6 +104,8 @@ Runtime HTTP 的资源、ResultBean、SSE、Entry 和数据库契约仍由
 | 当前 Loop 依赖进程级 `LoopManager` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/loop/LoopManager.java`、`LoopTool.java` |
 | 当前 Cron payload 可以保存 model、system prompt 和 allowed tools | `modules/cron/src/main/java/com/campusclaw/cron/model/CronPayload.java`、`engine/CronJobExecutor.java`、`tool/CronTool.java` |
 | `FileMutationQueue` 由应用级配置共享 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/ops/ToolOpsConfig.java` |
+| 当前 `ReadTool` 使用 cwd 做字法与真实路径边界，但公共边界对象尚未存在 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java`、`util/PathUtils.java` |
+| 当前 `BashTool` 只把 cwd 设置为子进程工作目录，命令仍可读取 cwd 之外 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/bash/BashTool.java`、`BashExecutor.java` |
 
 ### 3.2 pi 与 OpenCode 仅作对照
 
@@ -123,6 +132,8 @@ OpenCode 的 `TaskTool` 会为 Child 创建独立 Session，适合作为“父�
 | 架构改造 | 逐工具并发模式和串行 barrier | 允许只读吞吐，不让写操作跨越顺序边界 |
 | 安全加固 | Schema 在 hook 前校验，未知字段被拒绝 | hook 和执行器只处理已验证结构 |
 | 安全加固 | 受管目录使用同级临时树、完整校验和发布事务 | 不向 Session 暴露半成品，刷新失败保留旧版本 |
+| 安全加固 | 每个受管 Session 固化 `agent/{agentId}` 工作区边界 | 阻止文件工具读写兄弟 Agent 目录，Child 也不继承父边界 |
+| 产品约束 | 四入口缺省 profile 均禁用未沙箱化 `Bash` | 仅设置子进程 cwd 无法阻止 shell 读取其他 Agent 目录 |
 | 产品约束 | Child 只能按直接绑定名称调用，默认最大深度 1 | 保持调用面可解释，避免隐式全局发现和递归爆炸 |
 | 架构改造 | `ListMateTools` 实时查询且不落盘 | Mate 持有实时绑定和元数据，本地只保存身份映射 |
 | 产品约束 | 不在本地执行 permission，也不要求 list-before-call | Mate 是授权和凭据最终责任方 |
@@ -168,7 +179,6 @@ campusclaw:
   tools:
     cli:
       - Read
-      - Bash
       - Edit
       - Write
       - Glob
@@ -215,6 +225,10 @@ campusclaw:
 6. CLI 参数、Agent `settings.json`、Cron payload 和 Child 文件不能扩大或缩小 profile；
 7. profile 决定模型可见能力，不承担运行时上下文检查。
 
+`Bash` 仍属于关闭的 12 个内置工具之一，但四入口缺省 profile 均不包含它。
+未引入操作系统级文件系统沙箱前，受管 Agent 的生产配置不得显式加回
+`Bash`。重新启用它属于安全边界扩张，必须先建立独立沙箱设计和验收。
+
 ### 4.3 工具装配接口
 
 ```java
@@ -227,7 +241,8 @@ public interface BuiltInToolFactory {
 }
 ```
 
-`ToolAssemblyContext` 是不可变值对象，至少固化：入口、Session cwd、受管 Agent 身份、
+`ToolAssemblyContext` 是不可变值对象，至少固化：入口、`AgentWorkspaceBoundary`、
+受管 Agent 身份、
 Skill 名称索引、Child 名称索引、执行深度与 ancestry、模型快照、取消域，以及可选的
 `SessionLoopController` 和 Cron 上下文。文件 operations、Bash executor、Mate client、
 `FileMutationQueue`、Cron Service 等应用级协作者可以共享，但 `AgentTool` 实例必须由
@@ -236,6 +251,43 @@ Factory 为每个 Session 新建。
 任何工具实现都不得把 Session 的 agentId、cwd、凭据、绑定列表或 Loop 状态写入 Spring
 单例。共享协作者必须线程安全；`FileMutationQueue` 保持进程级，确保跨 Session 的同路径
 写操作仍串行。
+
+### 4.4 Agent 工作区边界与 `Read`
+
+![Read 的 Agent 工作区隔离](read_agent_workspace_isolation.svg)
+
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L371)
+
+目标新增不可变边界值对象：
+
+```java
+public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
+```
+
+`root` 与 `realRoot` 只能由 `AgentSessionFactory` 从已验证的
+`PreparedAgentRuntime.agentRoot()` 构造，其精确范围是整个 `agent/{agentId}`，而不是全局
+`agent/` 目录，也不是其中的 `.campusclaw/` 子目录。模型参数、Agent 配置和 Host
+请求都不能覆盖该边界。
+
+`Read` 不再自行使用 cwd 拼接路径，而是调用共享的
+`WorkspacePathResolver.resolveReadableFile(boundary, path)`，固定执行：
+
+1. 拒绝空路径、NUL 字符和无效 Path；
+2. 相对路径基于 `boundary.root` 解析，绝对路径不改变边界；
+3. 字法归一化后必须仍以 `boundary.root` 为前缀；
+4. 遍历已存在的路径分量，拒绝任何符号链接；
+5. 最终真实路径必须仍位于 `boundary.realRoot` 下；
+6. 只接受可读的普通文件，目录、设备、FIFO 和 socket 均拒绝；
+7. 读取失败进入统一文本错误与 `isError=true`，不向模型回显其他 Agent
+   的 ID、根目录或真实路径。
+
+`AgentRuntimeManager` 发布受管树时必须确保树内没有符号链接，且远端文件始终
+物化为本 Agent 目录内的新普通文件，不保留外部文件的硬链接身份。这与禁用
+未沙箱化 `Bash` 共同排除了在工作区内制造跨 Agent 链接的通道。
+
+`Glob`、`Grep`、`ListDirectory`、`Edit` 和 `Write` 必须使用同一边界与 resolver；
+否则只能声明“`Read` 不越界”，不能声明“Agent 工作区隔离”。Mate 远端工具与
+Bound Subagent 是独立授权边界，不获得当前 JVM 的本地文件 Path。
 
 ## 5. 公共轻量 AgentSession
 
@@ -248,13 +300,14 @@ Factory 为每个 Session 新建。
 `AgentSessionFactory.create` 每次执行以下固定步骤：
 
 1. 对受管入口调用 `AgentRuntimeManager.prepare(agentId)`；
-2. 解析当前 Agent 的 SYSTEM、cwd、Skill 和 Child 名称索引；
-3. 用 `bindingModels` 与 Model Manager 当前可用凭据求可用模型集合；
-4. 构造不可变 `ToolAssemblyContext`；
-5. 按入口 profile 顺序为每个名称创建新的工具实例；
-6. 安装有序不可变 hook 链；
-7. 创建新的轻量 `AgentSession`、`AgentState`、消息队列和取消域；
-8. 把 Session 返回给 Host，由 Host 恢复消息、订阅事件并管理关闭。
+2. 用已验证的 `PreparedAgentRuntime.agentRoot()` 构造 `AgentWorkspaceBoundary`；
+3. 解析当前 Agent 的 SYSTEM、Skill 和 Child 名称索引；
+4. 用 `bindingModels` 与 Model Manager 当前可用凭据求可用模型集合；
+5. 构造不可变 `ToolAssemblyContext`；
+6. 按入口 profile 顺序为每个名称创建新的工具实例；
+7. 安装有序不可变 hook 链；
+8. 创建新的轻量 `AgentSession`、`AgentState`、消息队列和取消域；
+9. 把 Session 返回给 Host，由 Host 恢复消息、订阅事件并管理关闭。
 
 首版生产 before/after hook 链为空，但接口保留。链在 Session 创建时复制为不可变列表，
 Session 运行期间不得注册、移除或重排 handler。单次工具调用内按列表顺序执行；不同并行
@@ -337,6 +390,10 @@ agent/{agentId}/.campusclaw/
 
 目录是 `AgentRuntimeManager` 的只读发布物。除 `prepare` 首次创建和显式 `refresh` 外，
 Session、工具、Skill loader 和 Host 都不得修改它。
+
+`agent/{agentId}` 整个目录是该 Agent 的唯一本地工作区边界。`.campusclaw`
+是工作区内的受管子树，不是 Session 的 cwd 或独立读取根。同级其他
+`agent/{otherAgentId}` 既不进入边界，也不通过符号链接、硬链接或绝对路径暴露。
 
 `agent.json` 只保存当前 Agent 身份，不复制 bindings：
 
@@ -529,6 +586,9 @@ SYSTEM、Skill 和 `child-agent` profile 全部来自 Child runtime。Child 有�
 时优先，否则继承父执行的 model 与 thinking；任何模型最终都必须位于 Child 的
 `bindingModels` 且当前具备凭据。
 
+Child 同时必须从自己的 `PreparedAgentRuntime.agentRoot()` 构造新
+`AgentWorkspaceBoundary`，不得继承父 Session 的 root、realRoot 或已验证 Path。
+
 默认最大深度为 `1`，可以通过应用配置收窄或扩大；首版产品验收按 `1`。每跳检查自绑定、
 ancestry 循环、深度、enabled 和固定版本。Child 可以内部运行多个 LLM turn，但父侧只
 看到目标、工具开始/结束、完成等高层进度，不能看到 reasoning 或完整历史。父取消必须
@@ -626,6 +686,8 @@ scripts/sync-mate-campusclaw.sh
 
 - 四入口缺省 profile 精确匹配第 4.2 节；
 - 任一入口显式空数组时模型无工具；
+- 四入口缺省 profile 都不包含 `Bash`；
+- 受管 Agent 生产配置在沙箱专题落地前不得加回 `Bash`；
 - 未知、重复、旧名或大小写错误阻止启动；
 - `/reload` 不改变应用工具 profile；
 - 同一入口连续创建两个 Session，每个内置工具实例不同；
@@ -650,6 +712,12 @@ scripts/sync-mate-campusclaw.sh
 - 成功 reload 保留消息、thinking、Loop Controller；
 - 任意目录不存在 `references/tools.json`；
 - HTTP 冷目录创建调用 `prepare`，不走独立 resolver。
+- 相对路径和位于本 Agent 根内的绝对路径可读；
+- `..`、指向其他 Agent 的绝对路径、符号链接和非普通文件均拒绝；
+- 越界错误为 `isError=true`，不向模型回显其他 Agent ID 或物理路径；
+- `Read`、`Glob`、`Grep`、`ListDirectory`、`Edit` 和 `Write` 共用同一个 Session
+  边界；
+- Child 只能读自己的 `agent/{childAgentId}`，无法复用父 Session 的已验证路径；
 
 ### 13.4 Mate、Child、Cron 与 Loop
 
@@ -671,14 +739,15 @@ scripts/sync-mate-campusclaw.sh
 建议按依赖顺序实施：
 
 1. 冻结 `BuiltInToolName`、配置绑定和 12 个 Schema；
-2. 增加逐工具 execution mode 并改造 Pipeline；
-3. 实现工厂、不可变上下文和公共轻量 Session；
-4. 迁移 CLI 与 HTTP Host；
-5. 统一目录、prepare/refresh 和模型解析；
-6. 实现 Mate 名称发现；
-7. 迁移 Child Execution、Cron 和 Loop；
-8. 删除动态目录、Extension、旧委派和兼容代码；
-9. 同步 `mate-campusclaw` 并完成全量回归。
+2. 实现 `AgentWorkspaceBoundary`、共享路径 resolver 和受管树链接校验；
+3. 增加逐工具 execution mode 并改造 Pipeline；
+4. 实现工厂、不可变上下文和公共轻量 Session；
+5. 迁移 CLI 与 HTTP Host；
+6. 统一目录、prepare/refresh 和模型解析；
+7. 实现 Mate 名称发现；
+8. 迁移 Child Execution、Cron 和 Loop；
+9. 删除动态目录、Extension、旧委派和兼容代码；
+10. 同步 `mate-campusclaw` 并完成全量回归。
 
 本设计为 target-only，不能因为文档完成就把目标能力标为已实现。每个实现 PR 都应引用
 本页基线，列出实际落地的目标项和仍存在的源码差异。
@@ -687,4 +756,5 @@ scripts/sync-mate-campusclaw.sh
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-08-22 | 将受管 Agent 的本地文件边界固定为整个 `agent/{agentId}`，新增公共工作区边界、Read 路径解析、Child 根隔离和跨 Agent 验收；四入口缺省 profile 禁用未沙箱化 Bash。 |
 | 1.0.0 | 2026-08-22 | 冻结 12 个内置工具、四入口轻量 Session、严格 profile、统一受管目录、缓存优先与显式 refresh、Mate 实时发现、同 JVM Child Execution、Cron/Loop Host 边界和迁移清单。 |

@@ -367,3 +367,70 @@ Handlers must be thread-safe.
 Failures become text results with isError=true.
 end note
 @enduml
+
+@startuml read_agent_workspace_isolation
+title Read Agent Workspace Isolation
+
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java, execute
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/util/PathUtils.java, resolveReadPath
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, prepare and requireValidAgentId
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java, agentRoot
+' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/bash/BashExecutor.java, execute
+' Source evidence: pi-mono packages/coding-agent/src/core/tools/read.ts, createReadToolDefinition
+' Observed behavior: Java Read checks a cwd boundary, while the target has no immutable per-session workspace boundary yet.
+' Java divergence: the target root is the complete agent/{agentId} directory and a child receives its own independent root.
+' Security hardening: lexical paths, absolute paths, symlinks, and real paths cannot escape the current agent root.
+' Product constraint: un-sandboxed Bash is disabled in all default managed-agent profiles.
+
+skinparam shadowing false
+skinparam backgroundColor white
+
+actor "Model in Agent A" as MODEL_A
+actor "Model in Child B" as MODEL_B
+participant "Read" as READ_A
+participant "WorkspacePathResolver" as RESOLVER_A
+collections "AgentWorkspaceBoundary A\nroot=agent/A\nrealRoot=real(agent/A)" as BOUNDARY_A
+database "agent/A" as ROOT_A
+database "agent/B" as ROOT_B
+participant "Child Read" as READ_B
+collections "AgentWorkspaceBoundary B\nroot=agent/B\nrealRoot=real(agent/B)" as BOUNDARY_B
+
+MODEL_A -> READ_A : Read({path})
+READ_A -> RESOLVER_A : resolveReadableFile(boundaryA, path)
+RESOLVER_A -> BOUNDARY_A : obtain immutable root and realRoot
+RESOLVER_A -> RESOLVER_A : normalize and reject symlink components
+alt normalized and real path are inside agent/A
+  RESOLVER_A -> ROOT_A : open readable regular file
+  ROOT_A --> READ_A : bytes
+  READ_A --> MODEL_A : content, isError=false
+else path reaches agent/B or another external path
+  RESOLVER_A --> READ_A : workspace access denied
+  READ_A --> MODEL_A : sanitized text, isError=true
+end
+
+MODEL_B -> READ_B : Read({path})
+READ_B -> BOUNDARY_B : use child boundary only
+BOUNDARY_B -> ROOT_B : open child file
+
+note over ROOT_A
+The boundary includes the complete agent/A tree,
+including agent/A/.campusclaw.
+Sibling agent roots are never included.
+end note
+
+note over RESOLVER_A
+Read, Glob, Grep, ListDirectory,
+Edit, and Write share this resolver.
+Managed runtime publication rejects links.
+end note
+
+note over ROOT_B
+A child never inherits a parent root,
+realRoot, or validated path.
+end note
+
+note over READ_A
+Un-sandboxed Bash is absent from
+all default managed-agent profiles.
+end note
+@enduml
