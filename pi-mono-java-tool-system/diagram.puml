@@ -1,436 +1,521 @@
 @startuml tool_system_architecture
-title CampusClaw Built-in Tool System Target Architecture
-
-' Source evidence: pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java, AgentTool
-' Source evidence: pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java, ToolExecutionPipeline
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java, AgentSession
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/catalog/ToolCatalog.java, ToolCatalog
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, AgentRuntimeManager
-' Observed behavior: the Java baseline uses a large CLI session, catalog discovery, extension tools, and separate HTTP assembly.
-' Architecture change: the target has exactly twelve built-in tools and one lightweight session assembly path.
-' Design reason: entry points share execution semantics while hosts retain persistence and lifecycle ownership.
-
+title CampusClaw Tool System Target Architecture
 skinparam componentStyle rectangle
 skinparam shadowing false
-left to right direction
+skinparam defaultTextAlignment center
 
-package "Hosts" {
-  component "CLI Host" as CLI
-  component "HTTP Host" as HTTP
-  component "Cron Host" as CRON
-  component "Child Host" as CHILD
+' Source evidence (CampusClaw d649866):
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: AgentTool
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: execute, executeAll
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: initialize, configureRuntimeTools
+' Observed behavior: the current CLI session combines catalogs, reload, skills,
+' delegation, and tool assembly; the Runtime path has separate assembly logic.
+' Design reason: one closed factory and one light session factory keep all managed
+' entry points aligned while Hosts retain their own persistence and lifecycle.
+
+package "Managed Hosts" {
+  [Runtime Host] as RuntimeHost
+  [Cron Host] as CronHost
+  [Child Execution Host] as ChildHost
 }
 
-package "Common session runtime" {
-  component "AgentSessionFactory" as SF
-  component "Lightweight AgentSession" as SESSION
-  component "ToolExecutionPipeline" as PIPE
-  component "Immutable hook chain" as HOOKS
+package "Common Session Layer" {
+  [AgentSessionFactory] as SessionFactory
+  [AgentSession] as Session
+  [ConfiguredToolAssembler] as Assembler
+  [BuiltInToolFactory] as ToolFactory
+  [ToolExecutionPipeline] as Pipeline
+  [Immutable hook chain] as Hooks
 }
 
-package "Built-in tool assembly" {
-  component "Strict tool profiles" as PROFILES
-  component "ConfiguredToolAssembler" as ASSEMBLER
-  component "BuiltInToolFactory" as FACTORY
-  component "Fresh tool instances\nper session" as TOOLS
+package "Active Built-in Tools" {
+  [Read]
+  [Find]
+  [Grep]
+  [Ls]
+  [Cron]
+  [ListMateTools]
+  [CallMateTool]
+  [Agent]
 }
 
-package "Shared application dependencies" {
-  component "File operations" as OPS
-  component "Bash executor" as BASH
-  component "FileMutationQueue" as FMQ
-  component "MateToolClient" as MATE
-  component "Cron services" as CRONSVC
+package "Shared Application Services" {
+  [AgentRuntimeManager] as RuntimeManager
+  [AgentWorkspaceBoundary] as Workspace
+  [MateToolClient] as MateClient
+  [MateToolResolutionCache] as MateCache
+  [Cron Service] as CronService
+  [SubagentExecutionService] as ChildService
 }
 
-package "Managed runtime" {
-  component "AgentRuntimeManager" as ARM
-  folder "agent/{agentId}/.campusclaw" as DIR
-  component "Skill package discovery" as PKG
-}
+RuntimeHost --> SessionFactory : RUNTIME
+CronHost --> SessionFactory : CRON
+ChildHost --> SessionFactory : CHILD_AGENT
+SessionFactory --> RuntimeManager : prepare(agentId)
+SessionFactory --> Workspace : create per session
+SessionFactory --> Assembler : immutable context
+Assembler --> ToolFactory
+ToolFactory --> Read
+ToolFactory --> Find
+ToolFactory --> Grep
+ToolFactory --> Ls
+ToolFactory --> Cron
+ToolFactory --> ListMateTools
+ToolFactory --> CallMateTool
+ToolFactory --> Agent
+SessionFactory --> Session : new instance
+Session --> Pipeline
+Pipeline --> Hooks
+ListMateTools --> MateClient
+ListMateTools --> MateCache : update one source
+CallMateTool --> MateCache : resolve by name
+CallMateTool --> MateClient : discover or execute
+Cron --> CronService
+Agent --> ChildService
+Read --> Workspace
+Find --> Workspace
+Grep --> Workspace
+Ls --> Workspace
 
-CLI --> SF : create CLI session
-HTTP --> SF : create active execution session
-CRON --> SF : create scheduled execution session
-CHILD --> SF : create child execution session
-SF --> SESSION
-SESSION --> PIPE
-PIPE --> HOOKS
-SF --> ASSEMBLER
-ASSEMBLER --> PROFILES
-ASSEMBLER --> FACTORY
-FACTORY --> TOOLS
-FACTORY --> OPS
-FACTORY --> BASH
-FACTORY --> FMQ
-FACTORY --> MATE
-FACTORY --> CRONSVC
-SF --> ARM : prepare managed agent
-ARM --> DIR
-DIR --> PKG : skills only
-DIR --> ASSEMBLER : identity and name indexes
-
-note bottom of PROFILES
-BuiltInToolName and ToolEntryPoint
-are closed enums.
-No dynamic registration or Java Extension SDK.
+note bottom of ToolFactory
+Only Read, Find, Grep, Ls, Cron,
+ListMateTools, CallMateTool, Agent.
+No dynamic catalog or extension tools.
 end note
 
-note bottom of SESSION
-Same model, prompt, tools, hooks,
-errors, cancellation, and event semantics.
-Host persistence is outside this component.
+note bottom of Workspace
+Root is agent/{agentId}.
+Reject symlink and realpath escape.
 end note
 @enduml
 
 @startuml agent_session_assembly
-title AgentSession Assembly for Four Entry Points
-
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/cli/CampusClawCommand.java, createAgentSession
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java, createEngine
-' Source evidence: pi-mono-java modules/cron/src/main/java/com/campusclaw/cron/engine/CronJobExecutor.java, execute
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/TransientAgentRunner.java, run
-' Observed behavior: each entry point currently assembles or creates its Agent differently.
-' Architecture change: one factory creates a fresh lightweight session for all entry points.
-' Design reason: common behavior prevents tool, hook, cancellation, and model-policy drift.
-
+title Three Entry Points Use One Session Assembly Contract
 skinparam shadowing false
-actor "Host" as HOST
-collections "Current large CLI AgentSession" as CURRENT
-participant "AgentSessionFactory" as SF
-participant "AgentRuntimeManager" as ARM
-participant "ModelBindingResolver" as MODEL
-participant "ConfiguredToolAssembler" as TA
-participant "BuiltInToolFactory" as TF
-participant "HookChainProvider" as HP
-participant "AgentSession" as SESSION
 
-note over HOST
-Entry point is one of:
-CLI, RUNTIME, CRON, CHILD_AGENT
+' Source evidence (CampusClaw d649866):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java: prepare
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: initialize
+' Observed behavior: current entry paths do not share one small session factory.
+' Design reason: parent and child use the same AgentSession type and factory but
+' receive different instances, state, workspaces, tools, and cancellation scopes.
+
+actor "Runtime request" as Runtime
+actor "Cron trigger" as Cron
+actor "Agent tool" as AgentTool
+participant "Runtime Host" as RH
+participant "Cron Host" as CH
+participant "Child Execution Host" as EH
+participant "AgentSessionFactory" as Factory
+participant "AgentRuntimeManager" as Manager
+participant "ConfiguredToolAssembler" as Tools
+participant "AgentSession" as Session
+
+alt Runtime execution
+  Runtime -> RH : begin(agentId, sessionId)
+  RH -> Factory : create(RUNTIME, agentId, context)
+else Cron execution
+  Cron -> CH : trigger(job.agentId)
+  CH -> Factory : create(CRON, agentId, context)
+else Child execution
+  AgentTool -> EH : begin(boundChild, task)
+  EH -> Factory : create(CHILD_AGENT, childAgentId, context)
+end
+
+Factory -> Manager : prepare(agentId)
+Manager --> Factory : PreparedAgentRuntime
+Factory -> Factory : resolve SYSTEM, models,\nworkspace, skill and child indexes
+Factory -> Tools : assemble(entryPoint, immutableContext)
+Tools --> Factory : new tool instances in profile order
+Factory -> Session ++ : new AgentSession(state, tools, hooks, cancelScope)
+Session --> Factory : ready
+Factory --> RH : Runtime session instance
+Factory --> CH : Cron session instance
+Factory --> EH : Child session instance
+
+note over RH,EH
+Each Host restores or owns its own state,
+events, progress, and close policy.
 end note
 
-CURRENT -> HOST : move JSONL, templates, reload, and Loop ownership
-CURRENT -> SF : move common assembly
-CURRENT -> SESSION : retain only execution semantics
-
-HOST -> SF : create(request, entryPoint)
-SF -> ARM : prepare(agentId)
-ARM --> SF : immutable managed runtime
-SF -> MODEL : resolve allowed model and thinking
-MODEL --> SF : execution model snapshot
-SF -> TA : assemble(entryPoint, context)
-TA -> TA : read strict replacement profile
-loop for each configured BuiltInToolName
-  TA -> TF : create(name, immutable context)
-  TF --> TA : fresh AgentTool instance
-end
-TA --> SF : ordered immutable tool list
-SF -> HP : hooksFor(entryPoint)
-HP --> SF : ordered immutable chain
-SF -> SESSION : new(model, prompt, tools, hooks, cancellation)
-SESSION --> SF : ready
-SF --> HOST : fresh session
-
-note over SF,SESSION
-The factory does not own JSONL, database state,
-CLI reload state, Loop state, or host shutdown.
+note over Factory,Session
+Same type and assembly semantics.
+Never the same Session instance.
 end note
 @enduml
 
 @startuml managed_runtime_refresh
 title Managed Runtime Prepare and Explicit Refresh
-
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, prepare and materialize
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java, reload
-' Observed behavior: prepare is cache-first but currently materializes in place and has no explicit atomic refresh operation.
-' Security hardening: target creation and refresh validate a complete sibling tree before atomic publication.
-' Design reason: refresh failure must preserve the previous directory and active session.
-
 skinparam shadowing false
-actor "Managed CLI" as CLI
-participant "AgentRuntimeManager" as ARM
-participant "Per-agent lock" as LOCK
-participant "MateServiceClient" as MATE
-collections "Sibling temp directory" as TEMP
-database "Published directory" as LIVE
-participant "AgentSessionFactory" as SF
+
+' Source evidence (CampusClaw d649866):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java:
+' prepare, materialize, isRuntimeComplete
+' Observed behavior: current materialization writes the managed tree directly and
+' generates references/tools.json.
+' Design reason: candidate-tree publication prevents partial reads; explicit
+' management refresh changes only future sessions and never tool configuration.
+
+actor "Session Host" as Host
+actor "Management workflow" as Admin
+participant "AgentRuntimeManager" as Manager
+participant "Per-agent lock" as Lock
+participant "Mate directory client" as Mate
+participant "Sibling candidate tree" as Candidate
+database "Published agent/{agentId}" as Published
 
 group prepare(agentId)
-  CLI -> ARM : prepare(agentId)
-  ARM -> LIVE : validate completeness
-  alt complete cache exists
-    LIVE --> ARM : immutable runtime
-    ARM --> CLI : cached runtime
+  Host -> Manager : prepare(agentId)
+  Manager -> Published : validate complete tree
+  alt cache is complete
+    Published --> Manager : PreparedAgentRuntime
+    Manager --> Host : immutable runtime snapshot
   else missing or incomplete
-    ARM -> LOCK : lock(agentId)
-    ARM -> MATE : fetch agent, direct skills, direct agents
-    MATE --> ARM : remote snapshot
-    ARM -> TEMP : write complete managed tree
-    ARM -> TEMP : validate names, IDs, versions, and files
-    ARM -> LIVE : atomically publish validated tree
-    ARM -> LOCK : unlock
-    ARM --> CLI : prepared runtime
-  end
-end
-
-group explicit refresh from /reload
-  CLI -> ARM : refresh(agentId)
-  ARM -> LOCK : lock(agentId)
-  ARM -> MATE : fetch fresh remote snapshot
-  MATE --> ARM : remote snapshot
-  ARM -> TEMP : build and validate replacement
-  alt replacement valid
-    ARM -> LIVE : atomic replace
-    ARM -> LOCK : unlock
-    ARM --> CLI : refreshed runtime
-    CLI -> SF : rebuild lightweight session
-    SF --> CLI : new session
-    alt current model remains usable
-      CLI -> CLI : preserve model and thinking
-    else new default model is usable
-      CLI -> CLI : switch model and notify user
-    else no usable default
-      CLI -> LIVE : restore previous published tree
-      CLI -> CLI : keep old session
+    Manager -> Lock : acquire(agentId)
+    Manager -> Published : validate again
+    alt another caller published a valid tree
+      Published --> Manager : PreparedAgentRuntime
+    else still invalid
+      Manager -> Mate : fetch agent, settings, SYSTEM,\nskills, and direct children
+      Mate --> Manager : source data
+      Manager -> Candidate : write complete candidate
+      Manager -> Candidate : validate names, IDs, versions,\nmodels, paths, and no symlinks
+      alt candidate is valid
+        Manager -> Published : atomic publish
+      else build or validation failed
+        Manager -> Candidate : discard candidate
+        note right
+        Keep the old published tree.
+        end note
+      end
     end
-  else fetch, build, or validation fails
-    ARM -> LOCK : unlock
-    ARM --> CLI : refresh error
-    CLI -> CLI : keep old directory and session
+    Manager -> Lock : release
+    Manager --> Host : runtime or explicit error
   end
 end
 
-note over CLI,SF
-Messages, thinking, and SessionLoopController survive reload.
-Application tool profiles are not reloaded.
+group refresh(agentId)
+  Admin -> Manager : refresh(agentId)
+  Manager -> Lock : acquire(agentId)
+  Manager -> Mate : force fetch complete directory source
+  Mate --> Manager : source data
+  Manager -> Candidate : build and validate
+  alt valid
+    Manager -> Published : atomic replace
+    Manager --> Admin : refreshed runtime
+  else failed
+    Manager -> Candidate : discard candidate
+    Manager --> Admin : error; old tree retained
+  end
+  Manager -> Lock : release
+end
+
+note over Published
+No references/tools.json.
+Existing sessions retain their snapshots.
+New sessions use the published tree.
 end note
 @enduml
 
 @startuml list_mate_tools_sequence
 title ListMateTools Live Discovery
-
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateTool.java, execute
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java, listTools and queryToolMetaByIds
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, materialized skill identity gap
-' Observed behavior: the baseline accepts agent_id or skill_id and returns formatted text.
-' Architecture change: target input accepts only optional skillName and output is stable JSON without internal IDs.
-' Design reason: local name indexes preserve usability while Mate remains the live authorization and metadata source.
-
 skinparam shadowing false
-actor "Model" as MODEL
-participant "ListMateTools" as TOOL
-collections "Managed name indexes" as INDEX
-participant "MateToolClient" as CLIENT
-participant "Binding API" as BINDING
-participant "Tool metadata batch API" as META
 
-MODEL -> TOOL : {skillName?}
-alt skillName absent
-  TOOL -> CLIENT : listAgentTools(currentAgentId)
-  CLIENT -> BINDING : query agent binding tool IDs
-else skillName present
-  TOOL -> INDEX : resolve exact skill name
-  INDEX --> TOOL : skillId or error
-  TOOL -> CLIENT : listSkillTools(skillId)
-  CLIENT -> BINDING : query skill binding tool IDs
+' Source evidence (CampusClaw d649866):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateTool.java: execute
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java: refresh
+' Observed behavior: current List writes one flat name-to-ID map and Call depends
+' on a prior successful List.
+' Design reason: List remains live while a successful response updates only its
+' source cache, so listing one Skill cannot erase tools from another source.
+
+actor Model
+participant "ListMateTools" as List
+participant "SkillNameIndex" as Index
+participant "MateToolClient" as Client
+participant "Mate binding API" as Binding
+participant "Mate metadata API" as Meta
+participant "Session source cache" as Cache
+
+Model -> List : {skillName?}
+alt no skillName
+  List -> Client : listAgentTools(currentAgentId)
+  Client -> Binding : list ordered Agent tool IDs
+  Binding --> Client : [toolId...]
+  Client -> Meta : batch get metadata(toolIds)
+  Meta --> Client : metadata by toolId
+  Client -> Client : join by ID and restore binding order
+  Client --> List : internal tool records
+  List -> Cache : replace Agent source map
+  List -> List : project scope={type:agent}
+else exact direct Skill name
+  List -> Index : resolve(skillName)
+  Index --> List : skillId or error
+  List -> Client : listSkillTools(skillId)
+  Client -> Binding : list ordered Skill tool IDs
+  Binding --> Client : [toolId...]
+  Client -> Meta : batch get metadata(toolIds)
+  Meta --> Client : metadata by toolId
+  Client -> Client : join by ID and restore binding order
+  Client --> List : internal tool records
+  List -> Cache : replace this Skill source map
+  List -> List : project scope={type:skill,name}
 end
-BINDING --> CLIENT : ordered internal tool IDs
-alt no bindings
-  CLIENT --> TOOL : empty list
-else bindings exist
-  CLIENT -> META : batch query metadata by IDs
-  META --> CLIENT : unordered metadata records
-  CLIENT -> CLIENT : join by ID and restore binding order
-  CLIENT --> TOOL : internal metadata list
-end
-TOOL -> TOOL : project scope and tools
-TOOL --> MODEL : stable JSON
+List --> Model : stable JSON: scope +\nname, description, inputSchema
 
-note over TOOL,MODEL
-Visible fields per item:
-name, description, inputSchema
-
-Hidden fields:
-IDs, permission, outputSchema,
-and concurrency metadata
+note over List
+Do not expose agentId, skillId, toolId,
+permission, outputSchema, or execution mode.
+Every List queries Mate.
 end note
+@enduml
 
-note over TOOL,CLIENT
-Every invocation performs a live query.
-No list cache and no mandatory list-before-call state.
+@startuml call_mate_tool_sequence
+title CallMateTool Name Resolution and Single-flight Refresh
+skinparam shadowing false
+
+' Source evidence (CampusClaw d649866):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java: invokeTool
+' Observed behavior: current Call fails when a prior List did not populate the
+' name-to-ID cache.
+' Design reason: a cache miss is resolved inside Call. Discovery may retry, but
+' the actual Mate execution is sent at most once to avoid duplicated effects.
+
+actor Model
+participant "CallMateTool" as Call
+participant "Session resolution cache" as Cache
+participant "Session single-flight" as Flight
+participant "MateToolClient" as Client
+participant "Mate APIs" as Mate
+
+Model -> Call : {tool, args?}
+Call -> Cache : resolve(toolName)
+alt cache hit
+  Cache --> Call : toolId
+else cache miss
+  Cache --> Call : missing
+  Call -> Flight : join or start full discovery
+  activate Flight
+  Flight -> Client : listAgentTools(currentAgentId)
+  Client -> Mate : discover Agent tools
+  Mate --> Client : ordered records
+  Client --> Flight : Agent records
+  loop every directly bound Skill
+    Flight -> Client : listSkillTools(skillId)
+    Client -> Mate : discover Skill tools
+    Mate --> Client : ordered records
+    Client --> Flight : Skill records
+  end
+  Flight -> Flight : merge all sources
+  alt same name maps to different IDs
+    Flight --> Call : discovery conflict
+    Call --> Model : isError=true
+  else every source succeeded
+    Flight -> Cache : atomically replace full snapshot
+    Flight --> Call : discovery complete
+    Call -> Cache : resolve(toolName) again
+    alt still missing
+      Cache --> Call : missing
+      Call --> Model : isError=true
+    else resolved
+      Cache --> Call : toolId
+    end
+  else discovery failed
+    Flight --> Call : error; old snapshot retained
+    Call --> Model : isError=true
+  end
+  deactivate Flight
+end
+
+opt one toolId was resolved
+  Call -> Client : callTool(toolId, args or {}, context)
+  Client -> Mate : execute exactly once
+  Mate --> Client : result or error
+  Client --> Call : result or error
+  Call --> Model : ToolResultMessage
+end
+
+note over Mate
+Never replay execute after timeout,
+disconnect, or Mate error.
 end note
 @enduml
 
 @startuml subagent_execution_sequence
-title Bound Child Agent Execution
-
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentBindingResolver.java, resolve and validate
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/TransientAgentRunner.java, run
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/delegation/InvokeAgentTool.java, execute
-' Source evidence: pi-mono packages/coding-agent/examples/extensions/subagent/index.ts, runSingleAgent
-' Source evidence: opencode packages/opencode/src/tool/task.ts, TaskTool
-' Observed behavior: Java uses after-hook delegation and placeholder authorization; pi demonstrates subprocess isolation; OpenCode creates a child session.
-' Architecture change: target uses a first-class Agent tool and in-JVM isolated child session.
-' Product constraint: only directly bound child names are callable and maximum depth defaults to one.
-
+title Direct Child Agent Execution Through Common SessionFactory
 skinparam shadowing false
-actor "Parent model" as MODEL
-participant "BoundAgentTool" as TOOL
-participant "AgentBindingResolver" as RESOLVER
-participant "AgentRuntimeManager" as ARM
-participant "SubagentExecutionService" as SERVICE
-participant "OneShotSubagentRunner" as RUNNER
-participant "AgentSessionFactory" as SF
-participant "Child AgentSession" as CHILD
 
-MODEL -> TOOL : Agent({agentName, task})
-TOOL -> RESOLVER : resolve exact direct binding
-RESOLVER -> RESOLVER : check enabled and fixed version
-RESOLVER -> RESOLVER : check depth and ancestry cycle
-alt validation fails
-  RESOLVER --> TOOL : rejection
-  TOOL --> MODEL : text result, isError=true
-else binding valid
-  RESOLVER --> TOOL : bound child identity
-  TOOL -> SERVICE : execute(context, child, task)
-  SERVICE -> ARM : prepare(childAgentId)
-  ARM --> SERVICE : child managed runtime
-  SERVICE -> RUNNER : run isolated execution
-  RUNNER -> SF : create CHILD_AGENT session
-  SF --> RUNNER : fresh child session
-  RUNNER -> CHILD : prompt(task)
-  CHILD --> RUNNER : high-level progress events
-  RUNNER --> SERVICE : final assistant text
-  SERVICE --> TOOL : execution result
-  TOOL --> MODEL : final child text
+' Source evidence (CampusClaw d649866):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/subagent/tool/SpawnAgentTool.java
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/delegation/InvokeAgentTool.java
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/TransientAgentRunner.java
+' pi packages/coding-agent/examples/extensions/subagent/index.ts
+' OpenCode packages/opencode/src/tool/task.ts
+' Observed behavior: current code has separate spawn and invoke paths plus a
+' session after-hook special case.
+' Design reason: one Agent tool resolves direct bindings and delegates creation
+' to the common AgentSessionFactory. Execution location is not a tool contract.
+
+actor "Parent model" as Model
+participant "Agent tool" as Agent
+participant "BoundAgentResolver" as Resolver
+participant "SubagentExecutionService" as Service
+participant "AgentRuntimeManager" as Manager
+participant "AgentSessionFactory" as Factory
+participant "Child AgentSession" as Child
+participant "Progress sink" as Progress
+
+Model -> Agent : {agentName, task}
+Agent -> Resolver : resolve direct binding
+Resolver -> Resolver : validate exact name, self, enabled,\nversion, depth=1, and ancestry
+Resolver --> Agent : BoundAgent or error
+Agent -> Service : execute(boundAgent, task, parentContext)
+Service -> Manager : prepare(childAgentId)
+Manager --> Service : PreparedAgentRuntime
+Service -> Service : validate fixed version and child model
+Service -> Factory : create(CHILD_AGENT, childAgentId, context)
+Factory --> Service : independent AgentSession instance
+Service -> Child ++ : run task with empty child messages
+loop high-level progress only
+  Child -> Service : target, tool start/end, completion
+  Service -> Progress : project progress
 end
+alt parent cancellation
+  Agent -> Service : cancel
+  Service -> Child : cancel child scope
+  Child --> Service : cancelled
+  Service --> Agent : cancellation error
+else child completes
+  Child --> Service : final non-empty Assistant text
+  deactivate Child
+  Service --> Agent : final text
+end
+Agent --> Model : ToolResultMessage
 
-note over SERVICE,CHILD
-Child cwd, prompt, skills, messages, and tools are isolated.
-Parent cancellation propagates to the child.
-No reasoning or child history is returned.
+note over Factory,Child
+Same AgentSession type and pipeline as the parent.
+Separate messages, workspace, SYSTEM, tools,
+cache, hooks, state, and cancellation scope.
 end note
 @enduml
 
 @startuml tool_batch_scheduling
-title Per-tool Batch Scheduling with Sequential Barriers
-
-' Source evidence: pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java, executeAll
-' Source evidence: pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionMode.java, ToolExecutionMode
-' Observed behavior: the Java baseline applies one execution mode to the complete batch and validates after the before hook.
-' Architecture change: target mode is declared per AgentTool and schema validation occurs before hooks.
-' Design reason: read-only calls can overlap without allowing state-changing tools to cross a barrier.
-
+title Tool Batch Scheduling with Sequential Barriers
 skinparam shadowing false
-actor "Agent loop" as LOOP
-participant "Batch planner" as PLAN
-participant "Virtual-thread executor" as VTE
-participant "Tool pipeline" as PIPE
-collections "Ordered results" as RESULTS
 
-LOOP -> PLAN : ordered calls [P1, P2, S3, P4, P5, S6]
-PLAN -> PLAN : partition adjacent PARALLEL runs
+' Source evidence (CampusClaw d649866):
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: AgentTool
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: executeAll
+' Observed behavior: the pipeline does not yet implement the target adjacent
+' parallel-segment planner.
+' Design reason: read-only tools may overlap, but Cron, Mate execution, and Child
+' execution preserve their model order as explicit barriers.
 
-group parallel run P1, P2
-  PLAN -> VTE : submit P1 and P2
-  VTE -> PIPE : validate schema, before, execute, after, event
-  VTE -> PIPE : validate schema, before, execute, after, event
-  VTE --> PLAN : join both
-  PLAN -> RESULTS : append P1 then P2
+participant "Batch planner" as Planner
+participant "Virtual thread executor" as Executor
+participant "Read call #1" as P1
+participant "Grep call #2" as P2
+participant "CallMateTool #3" as S3
+participant "Find call #4" as P4
+participant "Ls call #5" as P5
+collections "Ordered results" as Results
+
+Planner -> Planner : classify P, P, S, P, P
+group first parallel segment
+  Planner -> Executor : submit call #1
+  Executor -> P1 : validate, hooks, execute
+  Planner -> Executor : submit call #2
+  Executor -> P2 : validate, hooks, execute
+  P1 --> Executor : result #1
+  P2 --> Executor : result #2
+  Planner -> Executor : join segment
 end
-
-group sequential barrier S3
-  PLAN -> PIPE : validate schema, before, execute, after, event
-  PIPE --> PLAN : S3 result
-  PLAN -> RESULTS : append S3
+Planner -> S3 : execute sequential barrier
+S3 --> Planner : result #3
+group second parallel segment
+  Planner -> Executor : submit call #4
+  Executor -> P4 : validate, hooks, execute
+  Planner -> Executor : submit call #5
+  Executor -> P5 : validate, hooks, execute
+  P4 --> Executor : result #4
+  P5 --> Executor : result #5
+  Planner -> Executor : join segment
 end
+Planner -> Results : store #1, #2, #3, #4, #5
 
-group parallel run P4, P5
-  PLAN -> VTE : submit P4 and P5
-  VTE -> PIPE : execute each call independently
-  VTE --> PLAN : join both
-  PLAN -> RESULTS : append P4 then P5
-end
-
-group sequential barrier S6
-  PLAN -> PIPE : execute S6
-  PIPE --> PLAN : S6 result
-  PLAN -> RESULTS : append S6
-end
-
-RESULTS --> LOOP : [R1, R2, R3, R4, R5, R6]
-
-note over PLAN,PIPE
-Default executionMode is SEQUENTIAL.
-Handlers must be thread-safe.
-Failures become text results with isError=true.
+note over Planner
+PARALLEL: Read, Find, Grep, Ls, ListMateTools.
+SEQUENTIAL: Cron, CallMateTool, Agent.
+Results follow model call order, not completion order.
 end note
 @enduml
 
 @startuml read_agent_workspace_isolation
-title Read Agent Workspace Isolation
-
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java, execute
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/util/PathUtils.java, resolveReadPath
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, prepare and requireValidAgentId
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java, agentRoot
-' Source evidence: pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/bash/BashExecutor.java, execute
-' Source evidence: pi-mono packages/coding-agent/src/core/tools/read.ts, createReadToolDefinition
-' Observed behavior: Java Read checks a cwd boundary, while the target has no immutable per-session workspace boundary yet.
-' Java divergence: the target root is the complete agent/{agentId} directory and a child receives its own independent root.
-' Security hardening: lexical paths, absolute paths, symlinks, and real paths cannot escape the current agent root.
-' Product constraint: un-sandboxed Bash is disabled in all default managed-agent profiles.
-
+title Agent Workspace Boundary for Local Read-only Tools
 skinparam shadowing false
-skinparam backgroundColor white
 
-actor "Model in Agent A" as MODEL_A
-actor "Model in Child B" as MODEL_B
-participant "Read" as READ_A
-participant "WorkspacePathResolver" as RESOLVER_A
-collections "AgentWorkspaceBoundary A\nroot=agent/A\nrealRoot=real(agent/A)" as BOUNDARY_A
-database "agent/A" as ROOT_A
-database "agent/B" as ROOT_B
-participant "Child Read" as READ_B
-collections "AgentWorkspaceBoundary B\nroot=agent/B\nrealRoot=real(agent/B)" as BOUNDARY_B
+' Source evidence (CampusClaw d649866):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/util/PathUtils.java
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/bash/BashExecutor.java
+' pi packages/coding-agent/src/core/tools/read.ts, find.ts, grep.ts, ls.ts
+' Observed behavior: current Read checks cwd containment, while the remaining
+' tools do not share one session-bound Agent root. Bash cwd is not a sandbox.
+' Design reason: every local tool uses the same immutable root and rejects
+' symlink or realpath escape. Command and write tools are never assembled.
 
-MODEL_A -> READ_A : Read({path})
-READ_A -> RESOLVER_A : resolveReadableFile(boundaryA, path)
-RESOLVER_A -> BOUNDARY_A : obtain immutable root and realRoot
-RESOLVER_A -> RESOLVER_A : normalize and reject symlink components
-alt normalized and real path are inside agent/A
-  RESOLVER_A -> ROOT_A : open readable regular file
-  ROOT_A --> READ_A : bytes
-  READ_A --> MODEL_A : content, isError=false
-else path reaches agent/B or another external path
-  RESOLVER_A --> READ_A : workspace access denied
-  READ_A --> MODEL_A : sanitized text, isError=true
+actor Model
+participant "Read / Find / Grep / Ls" as Tool
+participant "WorkspacePathResolver" as Resolver
+participant "AgentWorkspaceBoundary" as Boundary
+participant "Read-only operations" as Operations
+database "agent/{agentId}" as Root
+database "agent/{otherAgentId}" as Other
+database "External path" as External
+
+Model -> Tool : path or search path
+Tool -> Resolver : resolve and validate(requestPath)
+Resolver -> Boundary : root + realRoot
+Boundary --> Resolver : immutable current Agent root
+Resolver -> Resolver : reject NUL and invalid path
+Resolver -> Resolver : resolve relative path against root
+Resolver -> Resolver : normalize lexical path
+alt lexical path escapes root
+  Resolver --> Tool : sanitized boundary error
+  Tool --> Model : isError=true
+else lexical path is inside root
+  Resolver -> Root : inspect each existing component
+  alt any component is a symlink
+    Root --> Resolver : symlink
+    Resolver --> Tool : sanitized boundary error
+    Tool --> Model : isError=true
+  else no symlink
+    Root --> Resolver : realpath and file type
+    alt realpath escapes or target type is invalid
+      Resolver --> Tool : sanitized boundary error
+      Tool --> Model : isError=true
+    else valid target inside current Agent root
+      Resolver --> Tool : ValidatedWorkspacePath
+      Tool -> Operations : read, find, grep, or list
+      Operations -> Root : access validated target
+      Root --> Operations : data
+      Operations --> Tool : bounded result
+      Tool --> Model : ToolResultMessage
+    end
+  end
 end
 
-MODEL_B -> READ_B : Read({path})
-READ_B -> BOUNDARY_B : use child boundary only
-BOUNDARY_B -> ROOT_B : open child file
-
-note over ROOT_A
-The boundary includes the complete agent/A tree,
-including agent/A/.campusclaw.
-Sibling agent roots are never included.
+Root -[hidden]-> Other
+Other -[hidden]-> External
+note over Other
+Never read sibling Agent data.
+Do not expose its ID or path in errors.
 end note
-
-note over RESOLVER_A
-Read, Glob, Grep, ListDirectory,
-Edit, and Write share this resolver.
-Managed runtime publication rejects links.
-end note
-
-note over ROOT_B
-A child never inherits a parent root,
-realRoot, or validated path.
-end note
-
-note over READ_A
-Un-sandboxed Bash is absent from
-all default managed-agent profiles.
+note over External
+Absolute paths do not widen the boundary.
 end note
 @enduml

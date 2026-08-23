@@ -1,11 +1,11 @@
 @startuml metadata_runtime_directory_mapping
 title Managed Metadata to CampusClaw Runtime Directory
 
-' Source evidence (pi-mono-java d0efb2fd18f2f2a7db121a1cbd4f039348a8094a):
+' Source evidence (CampusClaw d649866a6cae967ace18ceaeb9597edd47e5721e):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, prepare and materialize.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java, resolve.
-' Observed behavior: the Java baseline has two file contracts and materializes the CLI tree in place.
-' Architecture change: one managed tree serves CLI, Runtime, Cron, and Child entry points.
+' Observed behavior: the Java baseline has two file contracts and materializes the legacy CLI tree in place.
+' Architecture change: one managed tree serves Runtime, Cron, and Child entry points.
 ' Security hardening: a complete sibling tree is validated before publication.
 ' Design reason: sessions consume immutable identity indexes and never persist remote tool lists.
 
@@ -74,7 +74,7 @@ Input ..> MateAuthority : fetched only on cold prepare or refresh
 SettingsFile ..> ModelManager : intersect bindingModels with usable credentials
 AgentDirectory --> Indexes : scan exact names
 Indexes --> SessionFactory : Skill and direct Child resolution
-AgentDirectory --> SessionFactory : prompt, cwd, and model settings
+AgentDirectory --> SessionFactory : prompt, workspace, and model settings
 
 note right of AgentDirectory
 No remote tool list is written to disk.
