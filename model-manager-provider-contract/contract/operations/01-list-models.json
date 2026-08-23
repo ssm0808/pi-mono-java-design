@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "MateService Model Manager Provider API",
-    "version": "1.2.0-proposal",
+    "version": "1.3.0-proposal",
     "basePath": "/mate-service/internal/v1",
     "visibility": "Internal · 接口字段待评审"
   },
@@ -9,47 +9,8 @@
     "method": "GET",
     "path": "/models",
     "summary": "读取通用 Provider 的全局模型目录",
-    "description": "为 pi-mono-java 的 MateServiceModelManagerProvider 提供不含 Agent 授权的全局安全模型描述，支持 ETag 条件读取。MateService 托管调用的资源模型已经确认，但本 operation 的字段仍是待后续评审的同步候选。",
-    "authModes": [
-      {
-        "id": "jwt",
-        "label": "JWT 首选",
-        "preferred": true,
-        "headers": [
-          {
-            "name": "X-HW-ID",
-            "value": "<CALLER_ID>",
-            "required": true,
-            "description": "公司内部调用方标识"
-          },
-          {
-            "name": "Authorization",
-            "value": "Bearer <JWT>",
-            "required": true,
-            "description": "公司 JWT；不得与 X-HW-APPKEY 同时提供"
-          }
-        ]
-      },
-      {
-        "id": "appkey",
-        "label": "APPKEY 兼容",
-        "preferred": false,
-        "headers": [
-          {
-            "name": "X-HW-ID",
-            "value": "<CALLER_ID>",
-            "required": true,
-            "description": "公司内部调用方标识"
-          },
-          {
-            "name": "X-HW-APPKEY",
-            "value": "<APPKEY>",
-            "required": true,
-            "description": "公司 APPKEY；不得与 Authorization 同时提供"
-          }
-        ]
-      }
-    ],
+    "description": "为 pi-mono-java 的 MateServiceModelManagerProvider 提供不含 Agent 可调用性判断的全局安全模型描述，支持 ETag 条件读取。请求经内部网关到达，不携带应用层身份或凭据。MateService 托管调用的资源模型已经确认，但本 operation 的字段仍是待后续评审的同步候选。",
+    "authModes": [],
     "parameters": [
       {
         "in": "header",
@@ -129,64 +90,6 @@
         },
         "bodies": {
           "default": "(no body)"
-        }
-      },
-      {
-        "id": "401-unauthenticated",
-        "status": "401",
-        "tabLabel": "401 · UNAUTHENTICATED",
-        "label": "Unauthorized",
-        "summary": "凭据缺失、不完整、无效或已过期。",
-        "headers": {
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "UNAUTHENTICATED",
-            "resMsg": "调用方身份认证失败。"
-          },
-          "en-US": {
-            "resCode": "UNAUTHENTICATED",
-            "resMsg": "Caller authentication failed."
-          }
-        }
-      },
-      {
-        "id": "401-auth-conflict",
-        "status": "401",
-        "tabLabel": "401 · AUTH_CREDENTIAL_CONFLICT",
-        "label": "Unauthorized",
-        "summary": "JWT 与 APPKEY 两组凭据同时出现。",
-        "headers": {
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "AUTH_CREDENTIAL_CONFLICT",
-            "resMsg": "一次请求只能使用一种认证方式。"
-          },
-          "en-US": {
-            "resCode": "AUTH_CREDENTIAL_CONFLICT",
-            "resMsg": "Use exactly one authentication mode per request."
-          }
-        }
-      },
-      {
-        "status": "403",
-        "label": "Forbidden",
-        "summary": "调用方已认证但没有读取 Model Manager 目录的权限。",
-        "headers": {
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "FORBIDDEN",
-            "resMsg": "调用方无权访问模型目录。"
-          },
-          "en-US": {
-            "resCode": "FORBIDDEN",
-            "resMsg": "The caller is not allowed to access the model catalog."
-          }
         }
       },
       {

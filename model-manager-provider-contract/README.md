@@ -2,13 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.2.0 |
+| 文档版本 | 1.3.0 |
 | 状态 | 目标设计；资源模型已确认；接口 4、5 已冻结，接口 1-3 保持候选 |
-| 设计日期 | 2026-08-22 |
+| 设计日期 | 2026-08-23 |
 | pi-mono 源码基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | pi-mono-java 源码基线 | `d0efb2fd18f2f2a7db121a1cbd4f039348a8094a` |
 | mate-service 源码基线 | `6d5e6f3714e1cf8744d187a4796ca06300ad7e33` |
-| 设计仓分析基线 | `11e53de2c2c4a7e5cb498b163995aec6c4580bb4` |
+| 设计仓分析基线 | `0548aaf00a6f39d45bfd3652c9247d76f968fa6e` |
 | 适用边界 | pi-mono-java Runtime ↔ mate-service 内部 Model Manager |
 
 ## 1. 结论
@@ -20,7 +20,7 @@
 - `baseUrl`、headers 和凭据是可变连接配置；
 - `api` 是模型使用的协议/流实现，一个 Provider 可以同时承载多个 `api`；
 - 模型的运行时唯一键是 `(provider.id, model.id)`，不是单独的 `model.id`；
-- 一个可执行的 Provider 除身份外，还必须提供认证语义、模型目录和流式调用实现。
+- 一个可执行的 Provider 除身份外，还必须提供认证策略（允许为 `none`）、模型目录和流式调用实现。
 
 本设计推荐 pi-mono-java 对齐 pi-mono 的完整 Provider 模型，并在 Runtime 中只注册
 一个通用 Provider：
@@ -36,11 +36,12 @@ mate-service 内部可以管理多个真实上游 Provider，但只把不透明 
 和凭据均不得跨出 mate-service。模型调用也由 mate-service 完成，不把上游配置下发给
 pi-mono-java。
 
-资源模型已确认：MateService 托管调用，Runtime 不直连厂商。本版进一步冻结调用与取消
-接口：Mate 接受 OpenAI Responses 线协议，Runtime Provider 负责把 AgentLoop `Context`
-转换为 Responses 请求，并把 Responses SSE 转换为 `AssistantMessageEvent`。调用接口不携带
-`agentId`，也不在调用时校验 Agent 绑定；这是 CampusClaw 与 CampusMate 互信前提下的
-产品授权决策，不应误写为 mate-service 当前已实现行为。
+资源模型已确认：MateService 托管调用，Runtime 不直连厂商。本版进一步明确五个 Model
+Manager 接口统一依赖内部网关信任，CampusClaw 不发送应用层身份或凭据。Mate 接受
+OpenAI Responses 线协议，Runtime Provider 负责把 AgentLoop `Context` 转换为 Responses
+请求，并把 Responses SSE 转换为 `AssistantMessageEvent`。调用接口不携带 `agentId`，也
+不在调用时校验 Agent 绑定。免认证范围只限本文五个接口；CampusMate 其他接口保持未决。
+这是产品约束修正，不应误写为 mate-service 当前已实现行为。
 
 创建接口的请求体是可直接发送给 OpenAI Responses 兼容上游的语义载荷。Provider 在
 进入 Mate 前完成唯一一次 `AgentLoop Context -> Responses JSON` 转换；Mate 不再把
@@ -54,7 +55,7 @@ pi-mono-java。
 
 | 概念 | 身份键 | 作用 | 是否暴露给 Runtime |
 |---|---|---|---|
-| Runtime 通用 Provider | `mate-model-manager` | pi-mono-java 中模型目录、认证和流式调用的所有者 | 是，固定值 |
+| Runtime 通用 Provider | `mate-model-manager` | pi-mono-java 中模型目录、NoAuth 策略和流式调用的所有者 | 是，固定值 |
 | mate-service 上游 Provider | `providerId` | mate-service 内部区分不同供应商、租户端点或网关实例 | 否 |
 | Runtime 模型 | `(mate-model-manager, modelId)` | Runtime 选择和比较模型 | 是 |
 | 上游模型 | `(providerId, upstreamModelId)` | mate-service 路由到真实厂商模型 | 否 |
@@ -98,7 +99,7 @@ pi-mono-java。
 | 问题 | 最小信息 |
 |---|---|
 | 这个 Provider 是谁 | `provider.id` |
-| 这个 Provider 能否执行 | `id` + 认证语义 + 模型目录 + 对应 `api` 的 stream 实现 |
+| 这个 Provider 能否执行 | `id` + 认证策略（可为 `none`）+ 模型目录 + 对应 `api` 的 stream 实现 |
 
 ### 3.2 pi-mono-java 当前行为与不足
 
@@ -167,10 +168,10 @@ Provider 结构化增量。`pi-mono-java-manager-driven-multi-agent-runtime/chat
 | 身份 | `providerId` | 必需 | 唯一决定 Provider；Runtime 固定为 `mate-model-manager`。 |
 | 展示 | `displayName` | 必需但不参与身份 | 默认可等于 `providerId`。 |
 | 连接 | `baseUrl`、默认 headers | 可选 | 对通用 Provider 指向 mate-service，不是上游厂商地址。 |
-| 认证 | `auth` / service credential resolver | 必需 | 认证 Runtime 到 mate-service；不包含上游凭据。 |
+| 认证策略 | `auth` / `ProviderAuth` | 必需 | `MateServiceModelManagerProvider` 固定返回 `ProviderAuth.none()`；不解析或添加 CampusClaw→Mate 身份与凭据。 |
 | 目录 | `getModels()` | 必需 | 同步返回最后一次成功发布的模型目录。 |
 | 刷新 | `refreshModels()` | 动态目录必需 | 使用 `GET /models` + ETag 更新；失败保留上一成功目录。 |
-| 过滤 | `filterModels()` | 可选 | 只适合凭据维度过滤；Agent 授权不得塞入此无上下文函数。 |
+| 过滤 | `filterModels()` | 可选 | 通用 Provider 可按自身认证策略过滤；Mate Provider 为 NoAuth，Agent 可调用性不得塞入此无上下文函数。 |
 | 调用 | `stream/streamSimple` | 必需 | 调用 mate-service SSE 并映射统一事件。 |
 | 延迟结果 | `fetchDeferred/cancelDeferred` | 首版不支持 | 以后若上游出现异步 Job 再独立设计。 |
 
@@ -191,12 +192,12 @@ Mate-service 内部模型描述投影为 pi-mono-java `Model` 时采用：
 | `cost` | `cost`，按 pi 的每百万 token 费率语义 |
 | `contextWindow` | `contextWindow` |
 | `maxTokens` | `maxOutputTokens` |
-| `headers` | 空；调用上下文由受控 HTTP client 添加 |
-| `apiKey` | 删除；Provider 通过 service credential resolver 认证 |
+| `headers` | 空；HTTP client 只添加 `Accept`、`Accept-Language`、`If-None-Match`、`Content-Type` 等协议头 |
+| `apiKey` | 删除；CampusClaw→Mate 不携带凭据，上游凭据只由 Mate 托管并注入 |
 
-通用 Provider 的 `getModels()` 是全局目录，不承担 Agent 权限。接口 2、3 仍可在模型选择
-阶段提供 Agent 维度目录或解析，但已冻结的调用接口只依据服务身份和 `model` 目录 ID
-执行，不再次校验 Agent 绑定。
+通用 Provider 的 `getModels()` 是全局目录，不承担 Agent 可调用性判断。接口 2、3 仍可在
+模型选择阶段提供 Agent 维度目录或解析，但调用接口只依据 `model` 目录 ID 执行，不接收
+调用方身份，也不再次校验 Agent 绑定。
 
 ## 5. 总体架构
 
@@ -209,7 +210,7 @@ Mate-service 内部模型描述投影为 pi-mono-java `Model` 时采用：
 | 组件 | 职责 |
 |---|---|
 | `AiProviderRegistry` | 以开放 `ProviderId` 注册和解析完整 Provider。 |
-| `MateServiceModelManagerProvider` | 拥有通用 Provider 身份、目录缓存、服务认证和事件映射。 |
+| `MateServiceModelManagerProvider` | 拥有通用 Provider 身份、目录缓存、`ProviderAuth.none()` 策略和事件映射。 |
 | `ManagedModelCatalogClient` | 调用全局目录、Agent 可调用目录和原子解析接口。 |
 | `ManagedModelInvocationClient` | 发送 Responses JSON、接收 Responses SSE，并按 response ID 显式取消。 |
 | mate-service Model Manager | 管理真实 Provider、模型、凭据引用、路由、限流、调用和审计。 |
@@ -218,8 +219,8 @@ Mate-service 内部模型描述投影为 pi-mono-java `Model` 时采用：
 
 ## 6. MateService 运行时接口清单
 
-基础路径：`/mate-service/internal/v1`。这些接口只面向 pi-mono-java Runtime 或其他已授权
-内部服务，不是浏览器公共 API。
+基础路径：`/mate-service/internal/v1`。这些接口只允许经内部网关路由的服务调用，不是浏览器
+公共 API。网关准入与网络访问控制属于部署边界，不进入 CampusMate 业务 HTTP 契约。
 
 | # | Method | Path | Provider/Runtime 用途 | 当前状态 |
 |---:|---|---|---|---|
@@ -242,9 +243,10 @@ Provider 管理 CRUD、凭据轮换、模型发布和 Agent 绑定管理属于�
 - 普通 JSON 成功返回 `{"resCode":"0","resMsg":"success","result":...}`；错误只返回
   `resCode/resMsg` 并使用真实 HTTP 状态。接口 4 的成功 SSE 和接口 5 的成功 Response
   对象为 Responses 兼容例外，不使用 ResultBean。
-- 内部接口接受两种替代认证：`X-HW-ID + Authorization: Bearer <JWT>`，或
-  `X-HW-ID + X-HW-APPKEY`。一次请求必须且只能提供一组完整凭据；两组同时出现返回
-  `401 AUTH_CREDENTIAL_CONFLICT`。
+- 本文五个接口统一不接收应用层身份或凭据。CampusClaw 不发送 `X-HW-ID`、
+  `Authorization`、`X-HW-APPKEY`，Mate 也不解析 JWT/APPKEY 或定义相应业务错误。
+- 免认证决定只适用于本文五个 Model Manager 接口；CampusMate 其他接口的认证方式保持
+  未决。内部网关准入与网络访问控制属于部署配置，网关产生的认证类响应不属于本业务契约。
 - JSON 错误消息按 `Accept-Language` 国际化；稳定机器判断只依赖 `resCode`。
 - 不在业务 JSON 中发明 trace ID。分布式追踪由平台 HTTP instrumentation 处理。
 
@@ -306,7 +308,7 @@ If-None-Match: "model-catalog-42"
 `RuntimeModelManager.listAvailableModels`，不需要 Runtime 先下载全局目录再自行猜测
 权限。
 
-- 响应使用 `Cache-Control: no-store`，因为它是实时授权结果；
+- 响应使用 `Cache-Control: no-store`，因为它是实时可调用结果；
 - Agent 存在但当前无可调用模型时返回 `200` 和空数组；
 - Agent 不存在返回 `404 AGENT_NOT_FOUND`；
 - 不返回已绑定但当前停用或凭据不可用的模型。
@@ -328,7 +330,7 @@ If-None-Match: "model-catalog-42"
 
 pi-mono-java 的 `RuntimeModelManager.resolveAvailableModel` 必须覆盖现有默认实现并直接
 调用本接口，不能再先调用 list 再 resolve。Session 执行路径中的 `resolveModel` 也调用
-本接口，确保执行前重新授权。
+本接口，确保执行前重新校验可调用性。
 
 ### 6.5 接口 4：创建流式模型调用
 
@@ -407,7 +409,7 @@ headers、`providerId`、`upstreamModelId`、Chat Completions `messages` 和未�
 `400 INVALID_RESPONSE_REQUEST`。透明代理表示“已接受的 Responses 字段不转换”，不表示
 无条件透传任意字段。
 
-Mate 解析请求只用于认证、字段白名单、能力和限额校验。校验成功后以原始 JSON 语义树
+Mate 解析请求只用于字段白名单、能力、限额和模型路由校验。校验成功后以原始 JSON 语义树
 构造上游请求，只修改 `model` 的值；`input`、`instructions`、`tools`、
 `max_output_tokens`、`temperature`、`reasoning`、`include`、`stream`、`store`
 和 `background` 的字段名、嵌套结构、数组顺序和值均不得重组、降级或丢弃。JSON
@@ -455,7 +457,7 @@ response ID。ID 大小写敏感且只能原样传回；Mate 不生成第二套�
 
 ![Model Manager 调用时序](model_manager_invocation_sequence.svg)
 
-[PlantUML 源码：`model_manager_invocation_sequence`](diagram.puml#L141)
+[PlantUML 源码：`model_manager_invocation_sequence`](diagram.puml#L147)
 
 ## 7. MateService 私有领域模型
 
@@ -514,6 +516,16 @@ public record ProviderId(String value) {}
 
 public record ApiId(String value) {}
 
+public sealed interface ProviderAuth permits NoAuth {
+    static ProviderAuth none() {
+        return NoAuth.INSTANCE;
+    }
+}
+
+public enum NoAuth implements ProviderAuth {
+    INSTANCE
+}
+
 public interface AiProvider {
     ProviderId id();
 
@@ -541,6 +553,9 @@ public interface AiProvider {
 `ProtocolAdapterRegistry`，仅作为 Provider 内部复用能力。
 
 已知 Provider/API 可以提供常量，但反序列化和注册边界必须接受合法开放字符串。
+`ProviderAuth` 是完整 Provider 的通用扩展点；`MateServiceModelManagerProvider.auth()` 必须
+固定返回 `ProviderAuth.none()`。目录和调用客户端不得读取服务凭据，也不得为本文五个请求
+增加调用方身份或凭据 header。
 
 ### 8.2 Model Manager 客户端端口
 
@@ -604,7 +619,7 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 
 ![Java Provider 与 pi-mono 对齐](java_provider_alignment.svg)
 
-[PlantUML 源码：`java_provider_alignment`](diagram.puml#L225)
+[PlantUML 源码：`java_provider_alignment`](diagram.puml#L240)
 
 ## 9. 一致性、失败与安全
 
@@ -615,8 +630,8 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 - 创建 Response 时，Mate 必须按请求中的精确 `model` 目录 ID 解析当前模型、Provider、
   endpoint 和 credential；模型不存在返回 `MODEL_NOT_FOUND`，模型或依赖不可用返回
   `MODEL_UNAVAILABLE`。
-- 调用接口只校验服务调用方，不携带或重新校验 Agent 绑定。接口 2、3 的 Agent 目录结果
-  只服务模型选择，不是接口 4 的授权凭证。
+- 调用接口依赖内部网关可达性，不解析服务调用方身份，也不携带或重新校验 Agent 绑定。
+  接口 2、3 的 Agent 目录结果只服务模型选择，不是接口 4 的授权凭证。
 - 不得静默切换到内置模型、另一个 Mate 模型或另一个上游路由。
 - create 和 cancel 的活动状态迁移必须保证正常完成与取消只有一个胜者；Mate 内部并发
   机制不属于本对接契约。
@@ -626,8 +641,6 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 | HTTP/流阶段 | 错误码/事件 | 语义 |
 |---|---|---|
 | `400` | `INVALID_RESPONSE_REQUEST` | JSON 无法读取、字段不在白名单、`stream/store/background` 缺失或值非法，或模型 ID 为空/超长。 |
-| `401` | `UNAUTHENTICATED`、`AUTH_CREDENTIAL_CONFLICT` | 内部调用方认证失败。 |
-| `403` | `FORBIDDEN` | 调用方无 Model Manager 权限。 |
 | `404` | `MODEL_NOT_FOUND`、`RESPONSE_NOT_ACTIVE` | 目录模型不存在，或 cancel 目标不再活动。 |
 | `422` | `MODEL_OPTION_UNSUPPORTED` | 选定模型不支持请求能力。 |
 | `429` | `MODEL_RATE_LIMITED` | mate-service 或上游限流；可带 `Retry-After`。 |
@@ -648,7 +661,9 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 - Runtime 不能透传任意 headers、metadata 或 provider options，所有字段采用 allowlist。
 - Mate 对已接受的 Responses body 只允许替换 `model` 值；禁止对 `input/tools/reasoning`
   做协议转换，也禁止静默删除字段后继续调用。
-- 调用授权只依据有效服务凭据；请求中不存在可伪造的 `agentId`。
+- CampusClaw 调用本文五个接口时不发送应用层身份或凭据；Mate 不读取 `X-HW-ID`、
+  `Authorization`、`X-HW-APPKEY`。内部网关准入和网络 ACL 是部署边界，不定义为业务错误。
+- 该免认证约束不扩展到 CampusMate 其他接口；请求中仍不存在可伪造的 `agentId`。
 - reasoning summary 和 `encrypted_content` 可以按 Responses 协议进入 SSE/历史重放，但不得
   写入普通日志或错误消息。
 - 每个调用设置输入大小、Context token、输出 token、并发、执行时间和 SSE 缓冲上限。
@@ -656,6 +671,11 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
   记录完整提示词、工具参数、secret 或原始 thinking。
 
 ## 10. 差异分类
+
+实现差异结论同步修正：CampusClaw 当前没有 JWT/APPKEY 解析能力不再构成差距，因为本文
+五个接口的目标认证策略就是 `ProviderAuth.none()`。但
+`CustomModelLoader` 把上游 API Key 放入 `Model`、现有内置 Provider 直接连接厂商的行为
+仍违反 Mate 托管上游 endpoint、凭据和路由的架构边界。
 
 | 分类 | 设计差异 | 原因 |
 |---|---|---|
@@ -667,6 +687,7 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 | 架构改造 | Mate 调用端改为 Responses 语义透明代理，已接受 body 只替换 `model` 值。 | 让 Provider 生成的请求可直接调用 Responses 兼容 LLM，避免 Mate 再维护消息转换器。 |
 | 架构改造 | response ID 直接透传，响应 `model` 改写为 Mate 模型 ID。 | 取消无需第二套调用 ID，同时保持 Mate 模型抽象不泄露上游路由。 |
 | 安全加固 | Runtime 只看到单一通用 Provider；mate-service 托管上游配置和 secret。 | 避免凭据扩散、任意 endpoint/header 注入和多处协议实现漂移。 |
+| 产品约束 | 本文五个 Model Manager 接口经内部网关调用，不携带应用层身份或凭据。 | CampusClaw 与 CampusMate 的准入由内部网关和网络边界保证；其他 CampusMate 接口保持未决。 |
 | 产品约束 | 调用接口不携带 `agentId`，不校验 Agent 绑定。 | CampusClaw 与 CampusMate 互信，Agent 绑定只用于模型选择。 |
 | 产品约束 | 模型 ID 采用目录返回的 1-64 字符不透明值，不强制类型化 UUID。 | 兼容实际模型管理器 ID；调用方不得自行解析格式。 |
 | 产品约束 | 创建请求不支持幂等键或自动重放。 | 网络结果未知时重放可能造成重复模型消费。 |
@@ -678,15 +699,16 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 
 ## 11. 迁移顺序
 
-1. 在 Java 增加 `ProviderId/ApiId/AiProvider/AiProviderRegistry`，保留现有 enum 与
-   `ApiProviderRegistry` 兼容适配。
+1. 在 Java 增加 `ProviderId/ApiId/AiProvider/AiProviderRegistry` 和
+   `ProviderAuth.none()`，保留现有 enum 与 `ApiProviderRegistry` 兼容适配。
 2. 让内置 Provider 通过完整 Provider 包装现有协议适配器；新增测试证明同一
    `apiId` 可被两个不同 `providerId` 使用。
 3. 修改 `Model`，移除 `apiKey`，把 Provider/API 类型改为开放值对象；兼容读取旧配置。
 4. 在 mate-service 建立 Provider/模型私有目录和 Secret Store 引用，并统一 Agent 绑定与
    目录的 1-64 字符模型 ID 规则。
 5. 实现 `MateServiceModelManagerProvider` 与目录 ETag 缓存，替换
-   `CatalogRuntimeModelManager` 生产 Bean；本地开发仍可显式启用 catalog fallback。
+   `CatalogRuntimeModelManager` 生产 Bean；`auth()` 固定返回 NoAuth，HTTP client 不添加
+   身份或凭据 header；本地开发仍可显式启用 catalog fallback。
 6. 实现 Responses create/cancel HTTP client；复用并补齐 Java Responses 映射器的图片、
    Tool 图片结果、reasoning 签名、取消、背压、超时和审计行为；Mate 侧只实现
    Responses 校验和 `model` 值替换，不实现协议转换器。
@@ -694,10 +716,12 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 
 ## 12. 验收标准
 
-- 两个不同 Provider 使用同一 `apiId` 时可以同时注册、独立认证和调用。
+- 两个不同 Provider 使用同一 `apiId` 时可以同时注册、独立选择认证策略（包括 `none`）并调用。
 - 两个相同 `modelId` 只有在 Provider 不同时才可共存；模型比较使用二元键。
 - Runtime 模型目录和所有日志均不出现上游 base URL、credential、私有 Provider ID 或
   上游模型 ID。
+- 本文五个请求不包含 `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 或其他调用方身份/凭据；
+  operation 契约不定义对应 `401/403` 业务响应。
 - 全局目录 ETag 未变化返回 304；刷新失败不清空 Provider 上次成功目录。
 - 文本、用户图片、Assistant 历史、函数调用、Tool 文本/图片结果和 reasoning item 均能
   从 AgentLoop Context 无损转换为 Responses `input[]`；Tool 仍由 AgentLoop 执行。
@@ -721,6 +745,7 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 
 已确认资源模型：**单一通用 Provider，MateService 托管调用**。
 
+- 五个 Model Manager 接口：统一采用内部网关免应用层认证；其他 CampusMate 接口未决。
 - 接口 4 `POST /responses`：已冻结。
 - 接口 5 `POST /responses/{responseId}/cancel`：已冻结。
 - 接口 1-3：仍为候选，未因本次调用协议确认而自动获批。
@@ -733,6 +758,7 @@ ID 则关闭创建请求。SSE 正常事件沿用现有 Responses 解析器；�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-08-23 | 明确五个 Model Manager 接口采用内部网关免应用层认证；删除调用方身份头、JWT/APPKEY 解析及 401/403 业务契约；Java Mate Provider 固定使用 `ProviderAuth.none()`，Mate 托管并注入上游凭据的边界保持不变。 |
 | 1.2.0 | 2026-08-22 | 将 create operation 冻结为 OpenAI Responses 语义透明代理；Provider 完成唯一一次 Context 转换，Mate 对已接受 body 只替换 `model` 值，并要求显式 `stream=true/store=false/background=false`；禁止 Responses-to-Chat 或厂商协议转换。 |
 | 1.1.0 | 2026-08-22 | 确认 MateService 托管调用资源模型；冻结 OpenAI Responses create/cancel 接口、模型和 response ID 映射、无状态输入、错误与取消语义；补充 pi-mono 对齐差异。 |
 | 1.0.0 | 2026-08-21 | 基于 pi-mono、pi-mono-java 和 mate-service 当前源码，明确 Provider 身份、完整运行契约、Java 对齐方案、MateService 私有领域模型与五项运行时接口候选；建立资源模型决策门。 |

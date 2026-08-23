@@ -26,7 +26,7 @@ class ProviderRuntimeContract {
   +displayName: string
   +baseUrl: optional string
   +headers: optional map
-  +auth: required
+  +auth: ProviderAuth.none for Mate
   +getModels(): Model[]
   +refreshModels(): optional
   +filterModels(): optional
@@ -82,6 +82,8 @@ title Generic Model Manager Provider Boundary
 ' Architecture change: Java resolves an AiProvider by model.providerId instead of resolving an ApiProvider by model.api.
 ' Architecture change: accepted Responses payloads are forwarded without protocol conversion; model is the only body value patched by Mate.
 ' Security hardening: upstream endpoints, credentials, provider ids, and vendor model ids remain inside mate-service.
+' Product constraint: the five Model Manager operations carry no application identity or credential headers.
+' Deployment boundary: internal gateway admission and network controls are outside the CampusMate business HTTP contract.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -110,23 +112,25 @@ package "pi-mono-java Runtime" {
 
 package "mate-service" {
   [Internal Model Manager API] as ManagerApi
-  [Model Authorization] as Authorization
+  [Agent Model Availability] as Availability
   [OpenAI Responses Transparent Proxy] as Router
   database "t_model_provider\nt_model_definition\nt_agent_binding_models" as Catalog
   [Secret Store] as Secrets
 }
 
 cloud "Upstream LLM Services" as Vendors
+[Internal Gateway Trust Boundary] as Gateway
 
 Loop --> AiService : model + Context + options
 AiService --> Registry : get(model.providerId)
 Registry --> GenericProvider
 GenericProvider --> CatalogClient
 GenericProvider --> InvocationClient
-CatalogClient --> ManagerApi : HTTPS JSON
-InvocationClient --> ManagerApi : Responses JSON and SSE
-ManagerApi --> Authorization : catalog operations 2 and 3 only
-Authorization --> Catalog
+CatalogClient --> Gateway : HTTPS JSON and protocol headers
+InvocationClient --> Gateway : Responses JSON and SSE
+Gateway --> ManagerApi : no identity or credential headers
+ManagerApi --> Availability : catalog operations 2 and 3 only
+Availability --> Catalog
 ManagerApi --> Router : exact Mate modelId\nand unchanged Responses body
 Router --> Catalog
 Router --> Secrets : credentialRef
@@ -135,6 +139,8 @@ Router --> Vendors : same Responses body and SSE\nmodel value patched
 note bottom of GenericProvider
 The Runtime sees one provider and opaque modelIds.
 It never receives upstream credentials or endpoints.
+Mate Provider authentication is ProviderAuth.none.
+Other CampusMate APIs are outside this decision.
 end note
 @enduml
 
@@ -148,7 +154,8 @@ title Mate OpenAI Responses Invocation and Cancellation
 ' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel and consumeStream (lines 198-288)
 ' OpenAI API: POST /responses and POST /responses/{response_id}/cancel
 ' Target-only design: mate-service Responses create and foreground cancel operations do not exist yet.
-' Product authorization: invocation authenticates the service caller and does not receive or validate agentId.
+' Product constraint: all five operations rely on internal gateway reachability and carry no application credentials or identity.
+' Scope boundary: other CampusMate APIs are not covered by this no-auth decision.
 ' Transparent proxy rule: Provider performs the only Context conversion; Mate patches model but does not convert the Responses payload.
 ' OpenAI compatibility extension: Mate cancels active foreground streams although official cancel requires background=true.
 
@@ -174,6 +181,7 @@ participant "AgentLoop" as Loop
 participant "CampusClawAiService" as AiService
 participant "AiProviderRegistry" as Registry
 participant "MateServiceModelManagerProvider" as Provider
+participant "Internal Gateway" as Gateway
 participant "mate-service Responses Proxy" as Manager
 participant "OpenAI Responses Endpoint" as OpenAI
 
@@ -183,8 +191,8 @@ AiService -> Registry : get(model.providerId)
 Registry --> AiService : generic Provider
 AiService -> Provider : streamSimple(model, Context, options)
 Provider -> Provider : convert Context once\nto a direct Responses request
-Provider -> Manager : POST /responses\ncomplete Responses payload
-Manager -> Manager : authenticate service caller
+Provider -> Gateway : POST /responses\nprotocol headers only
+Gateway -> Manager : trusted internal route\nno app identity or credential
 Manager -> Manager : validate without reshaping\nand resolve exact Mate modelId
 Manager -> Manager : clone payload and patch model only\ninject endpoint and credential at HTTP layer
 Manager -> OpenAI : POST /responses\nsame input, tools, reasoning, and options
@@ -192,25 +200,32 @@ Manager -> OpenAI : POST /responses\nsame input, tools, reasoning, and options
 loop OpenAI Responses SSE
   OpenAI --> Manager : Responses event
   Manager -> Manager : preserve event payload\nrewrite response.model only
-  Manager --> Provider : Responses event
+  Manager --> Gateway : Responses event
+  Gateway --> Provider : Responses event
   Provider -> Provider : store responseId and map event
   Provider --> Loop : AssistantMessageEvent
 end
 
 alt Abort after response.created
   Loop -> Provider : cancel subscription
-  Provider -> Manager : POST /responses/{responseId}/cancel
+  Provider -> Gateway : POST /responses/{responseId}/cancel
+  Gateway -> Manager : trusted internal route
   Manager -> OpenAI : abort active foreground stream
-  Manager --> Provider : 200 Response with status cancelled
-  Manager --> Provider : close original SSE
+  Manager --> Gateway : 200 Response with status cancelled
+  Gateway --> Provider : 200 Response with status cancelled
+  Manager --> Gateway : close original SSE
+  Gateway --> Provider : close original SSE
   Provider --> Loop : StopReason.ABORTED
 else Abort before response.created
   Loop -> Provider : cancel subscription
-  Provider -> Manager : close create stream
+  Provider -> Gateway : close create stream
+  Gateway -> Manager : close create stream
   Provider --> Loop : StopReason.ABORTED
 else Response already terminal
-  Provider -> Manager : POST /responses/{responseId}/cancel
-  Manager --> Provider : 404 RESPONSE_NOT_ACTIVE
+  Provider -> Gateway : POST /responses/{responseId}/cancel
+  Gateway -> Manager : trusted internal route
+  Manager --> Gateway : 404 RESPONSE_NOT_ACTIVE
+  Gateway --> Provider : 404 RESPONSE_NOT_ACTIVE
 end
 
 note over Provider,Manager
@@ -265,6 +280,7 @@ package "Target Java" {
   class AiProviderRegistry
   interface ProtocolAdapter
   class ProtocolAdapterRegistry
+  class ProviderAuthNone
   class MateServiceModelManagerProvider
   class OpenAIResponsesMapper
   ModelTarget --> ProviderId
@@ -273,6 +289,7 @@ package "Target Java" {
   AiProvider --> ProtocolAdapterRegistry : optional internal dispatch
   ProtocolAdapterRegistry --> ProtocolAdapter : keyed by ApiId
   MateServiceModelManagerProvider ..|> AiProvider
+  MateServiceModelManagerProvider --> ProviderAuthNone : auth returns none
   MateServiceModelManagerProvider --> OpenAIResponsesMapper : Context and SSE mapping
 }
 
