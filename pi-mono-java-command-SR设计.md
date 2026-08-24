@@ -1,8 +1,8 @@
 # pi-mono Java Command SR 设计
 
 > 文档编号：SR-CMD-001<br>
-> 版本：v1.13<br>
-> 日期：2026-07-14<br>
+> 版本：v1.14<br>
+> 日期：2026-08-24<br>
 > 状态：设计基线<br>
 > pi 源码基线：[`bb959aae017eedc8edaa91d01d0475d483ea9371`](https://github.com/badlogic/pi-mono/tree/bb959aae017eedc8edaa91d01d0475d483ea9371)
 > Java GUI 源码基线：[`b99871a0321b73606a8f074c42050f28f52fdfca`](https://github.com/superheromeZzh/pi-mono-java/tree/b99871a0321b73606a8f074c42050f28f52fdfca)
@@ -819,6 +819,33 @@ final class DiagnosticCommands implements CommandContributor {
 
 日志包含 correlation ID、命令名、策略、耗时和安全错误码；参数字段使用白名单或脱敏摘要。
 
+### 14.4 DFX 分析
+
+本节基于本文记录的 pi 源码提交 `bb959aae017eedc8edaa91d01d0475d483ea9371` 和 Java GUI 提交 `b99871a0321b73606a8f074c42050f28f52fdfca`，评估 Java 目标命令链路的可靠性、可用性、性能、安全性、可运维性、可维护性和可测试性。表中“Java 目标”是本 SR 的目标设计；其中启动期原子发布、统一 `Dispatcher`/`ExecutionGate`、结构化错误和脱敏观测属于 Java 架构改造，不描述为 pi 已有能力。
+
+| DFX 维度 | Java 目标设计 | 主要风险与控制措施 | 验证与观测要求 |
+|---|---|---|---|
+| 可靠性（DFR） | `CommandInstaller` 在启动期校验全部定义后一次发布不可变 `CommandCatalogSnapshot`；`Dispatcher` 统一执行准入、取消、超时和异常映射。 | 定义缺失、重名或 Handler 缺失时快速失败，禁止部分目录对外可用；Handler 超时或取消后丢弃迟到结果；已有副作用必须由事务、幂等键或补偿机制恢复。 | 覆盖启动失败、空快照、迟到结果、取消、超时、运行时切换和关闭场景；记录 `COMMAND_BUSY`、`COMMAND_CANCELLED`、`COMMAND_TIMEOUT` 和 `COMMAND_FAILED` 的原因分布。 |
+| 可用性与可恢复性（DFA） | 命令目录使用启动快照，业务 Handler 失败不污染目录；补全异常返回空建议并保留诊断；未知 Slash 输入继续走 Skill 或普通 Prompt 路径。 | 下游服务不可用、客户端断开或能力端口缺失不能导致 Runtime 线程泄漏或目录损坏；`RUNTIME_TRANSITION` 和 `SHUTDOWN` 期间拒绝新调用并按期限清理在途调用。 | 通过故障注入验证网络、文件、认证和交互端口失败；检查应用重启后目录可重建、在途调用最终有明确结果、没有永久占用执行闸门的任务。 |
+| 性能（DFP） | Registry 查询使用不可变快照；补全只读取当前目录和缓存结果，不在每次键入时扫描资源；等待执行权不计入命令超时，Handler 和下游调用各自受期限控制。 | 大量命令、慢参数补全或独占命令排队可能阻塞 GUI；补全请求竞态可能显示旧结果。 | 以命令数、并发请求数和队列等待时间建立压测基线；验证客户端只展示最新补全版本，并分别统计 `parse/lookup`、补全、排队和 Handler 耗时。 |
+| 安全与隐私（DFS） | 所有可执行命令必须经过注册、统一 Parser、Dispatcher、ExecutionGate 和业务授权；日志只记录脱敏后的 `rawInput`、白名单参数摘要和安全错误码。 | 命令参数、导出/分享结果、认证状态和异常堆栈可能泄露敏感信息；GUI Local Action 不得绕过服务端准入，命令 Handler 不得自行拼接未授权资源路径。 | 对命令名、参数、输出、异常和审计事件执行 secret/token/个人信息脱敏测试；验证不同主体、会话和客户端能力下的拒绝结果一致且不泄露资源存在性。 |
+| 可运维性（DFO） | 每次调用关联 correlation ID，统一记录命令名、来源入口、策略、准入结果、排队时长、执行时长、取消原因和安全错误码；帮助、补全和审计共享目录快照。 | 只记录命令名会掩盖入口、排队和下游故障；高基数参数进入指标会造成监控成本和查询退化。 | 建立成功率、拒绝率、超时率、取消率、排队时长和 Handler 时长看板；按命令和失败原因配置告警，指标标签禁止使用原始参数、会话正文或用户输入全文。 |
+| 可维护性（DFM） | `CommandDefinition` 是命令元数据、策略、补全和 Handler 的单一事实源；新增命令只增加 Handler 与 Contributor，不在 Parser、GUI 或 Dispatcher 中增加命令名分支。 | 旧前端 `switch`、重复命令清单或 GUI 旁路会重新产生多个事实源；静态注册 Command 与动态 Skill Command 混用会造成生命周期和失败语义漂移。 | Catalog 契约测试断言精确名称、稳定顺序和策略；代码检查禁止新增客户端命令名分支，评审必须说明注册 Command 与 Skill Command 的边界。 |
+| 可测试性（DFT） | Parser、Catalog、Gate、Dispatcher、Handler 和 GUI 入口按层隔离；`CommandInteraction`、`CommandOutput`、下游服务和取消信号均可替换为 fake。 | 仅测试 Handler 成功路径无法发现并发、公平性、取消、脱敏和刷新提示回归；只测试聊天框会漏掉 Command Palette 和按钮入口。 | 保留 Definition、Parser、Gate、Dispatcher、Catalog、Handler 和 GUI 集成测试；增加共享/独占公平性、超时迟到结果、重复副作用、权限拒绝、补全竞态和故障注入用例。 |
+| 部署与演进（DFE） | 命令目录随应用版本启动发布；迁移按完整竖切片进行，旧入口在同一发布中停用；兼容别名必须有明确的移除版本。 | 前后端版本不一致可能导致旧命令变成不可识别输入；新增命令若缺少帮助、补全、权限和审计登记，会形成不可运维能力。 | 发布前执行目录差异、帮助/补全一致性和客户端契约检查；发布后按命令版本、未知命令率和 `COMMAND_NOT_FOUND` 监控兼容性。 |
+
+#### DFX 关键闭环
+
+命令的一次完整调用必须形成以下闭环：
+
+1. **准入**：身份、会话、能力和 `CommandExecutionPolicy` 检查通过后才进入 Handler。
+2. **执行**：由 `ExecutionGate` 管理共享/独占、取消、超时和运行时生命周期；Handler 只承担业务语义。
+3. **结果**：向 GUI 返回 `HANDLED`、`REJECTED` 或 `FAILED`，并携带稳定错误码、刷新提示和 correlation ID。
+4. **恢复**：失败、取消或超时不污染命令目录；有副作用的命令通过事务、幂等或补偿机制处理部分完成。
+5. **观测**：日志、指标和审计使用同一规范命令名，但不写入原始参数、会话正文或凭证。
+
+其中第 4 项的事务、幂等和补偿实现依赖具体业务服务，属于后续 LLD/领域设计；本 SR 只规定 `CommandExecutionPolicy` 和 Dispatcher 必须为这些机制保留接入边界。
+
 ## 15. 包结构建议
 
 ```text
@@ -956,3 +983,4 @@ rg -n '[^\x00-\x7F]' diagram.puml
 | v1.11 | 2026-07-14 | 移除 Java 目标中的 Prompt Command 路由，将输入优先级收敛为注册 Command、Skill Command 和普通 Prompt |
 | v1.12 | 2026-07-14 | 将面向用户的 `GUI Adapter` 统一更名为 `Agent UI`，明确结构化命令请求由服务端构造 Invocation，不再把 Adapter 作为独立架构组件 |
 | v1.13 | 2026-07-14 | 将统一分发顺序图收敛为 SR 级 User、Agent UI、Agent Gateway、Agent Runtime 和 Model Manager 协作，所有元素使用 participant 并补齐 activate/deactivate 生命周期 |
+| v1.14 | 2026-08-24 | 新增 Slash Command DFX 分析，覆盖可靠性、可用性、性能、安全、可运维性、可维护性、可测试性以及部署演进，并补充准入—执行—结果—恢复—观测闭环 |
