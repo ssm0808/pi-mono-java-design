@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "提交用户消息并流式返回 Session 执行事件",
-    "description": "向既有 Session 提交一个普通 user.message，斜杠开头文本也不会被解释为 Slash Command。接受消息前依据最新 Agent 目录校准模型；需要自动切换时，session.model.changed 及必要的 session.thinking.changed 先于 user.message 投影；没有具备凭据的 default 时拒绝且不写用户 Entry。一次执行可触发多次模型、工具和压缩。成功 STOP 静默越界只压缩而不重放；ERROR/LENGTH 溢出最多压缩恢复并重试一次。assistant.message.completed 与 session.compaction.completed 持久化完整 Usage；tool.execution.delta、session.compaction.started/failed 只瞬态投影，failed 固定包含 reason/willRetry/aborted/message。工具 delta 只含 toolCallId/toolName/delta，序列化、大小或背压失败只丢进度。网络断开不取消执行，调用方不得自动重放 POST；应通过 GET 分页恢复持久化事件。",
+    "description": "向既有 Session 提交一个普通 user.message，斜杠开头文本也不会被解释为 Slash Command。接受消息前依据最新 Agent 目录校准模型；需要自动切换时，session.model.changed 及必要的 session.thinking.changed 先于 user.message 投影；没有具备凭据的 default 时拒绝且不写用户 Entry。一次执行可触发多次模型、工具和压缩。成功 STOP 静默越界只压缩而不重放；ERROR/LENGTH 溢出最多压缩恢复并重试一次。公共 Agent 的实际请求输出上限与 recoverable LENGTH 判定一致；压缩重试后重载不会恢复已从在线上下文丢弃的 Assistant，内部排除 ID 不进入公共事件。assistant.message.completed 与 session.compaction.completed 持久化完整 Usage；tool.execution.delta、session.compaction.started/failed 只瞬态投影，failed 固定包含 reason/willRetry/aborted/message。工具 delta 只含 toolCallId/toolName/delta，序列化、大小或背压失败只丢进度。网络断开不取消执行，调用方不得自动重放 POST；应通过 GET 分页恢复持久化事件。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"

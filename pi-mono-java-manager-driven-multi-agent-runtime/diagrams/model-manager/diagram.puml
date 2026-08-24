@@ -12,6 +12,9 @@ title Model Manager Provider Streaming Flow
 ' modules/ai/src/main/java/com/campusclaw/ai/types/SimpleStreamOptions.java, metadata.
 ' modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java, event records.
 ' Observed behavior: Java dispatches by Model.api to a Spring-discovered ApiProvider.
+' Implemented source baseline (pi-mono-java bd26e7f81bac8f68be0c3523efe23b51f96c52e4):
+' modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java, buildStreamOptions.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/compaction/SessionCompactor.java, decide.
 ' Architecture change: one MODEL_MANAGER Api routes every managed model through Model Manager.
 ' Design reason: model_id selects the model while agent_id authorizes it for the current Agent.
 ' Architecture change: ManagedAgentSession owns compaction calls and preserves their returned Usage.
@@ -43,7 +46,7 @@ participant "Model Manager" as ModelManager
 
 Client -> Session : prompt
 Session -> Loop : prompt
-Loop -> AiService : stream(model, Context, options)
+Loop -> AiService : stream(model, Context, options)\nmodel max output if no caller override
 AiService -> Registry : getProvider(MODEL_MANAGER)
 Registry --> AiService : ModelManagerApiProvider
 AiService -> Provider : streamSimple(model, Context, metadata)
@@ -88,5 +91,6 @@ Compaction uses the same Agent model authority.
 The returned input, output, cache, total token, and USD cost fields
 are persisted with the compaction completion event.
 Summary calls have no tools or cache and use a fresh routing ID.
+Recoverable LENGTH compares the same desired max output sent on the request.
 end note
 @enduml

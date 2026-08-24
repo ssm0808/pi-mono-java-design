@@ -2,13 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.2.0 |
+| 文档版本 | 2.3.0 |
 | 状态 | 目标设计；PR 167 压缩细节已按 pi 固化并完成实现对齐 |
 | 更新日期 | 2026-08-24 |
-| 设计仓分析基线 | `e4cf448140de0a4a23a4106d0043f709ad2a56cd` |
+| 设计仓分析基线 | `bb967eebe1f62553e92480b3ea3808a664fbe73e` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
 | CampusClaw 压缩修订前基线 | `a7f78fed345a289833970cd7b78399f0e8e51d32` |
+| CampusClaw PR 167 审查头 | `bf28e72f94f29acd316eb872a250893ed54e3632` |
+| CampusClaw PR 167 对齐实现 | `bd26e7f81bac8f68be0c3523efe23b51f96c52e4` |
 | pi-mono 对照基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | 精确工具契约 | [8 个活动内置工具契约](built-in-tool-contracts.md) |
@@ -98,6 +100,8 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 当前 `ReadTool` 自行使用 cwd 做路径边界，`BashExecutor` 只设置子进程 cwd | `tool/read/ReadTool.java`、`util/PathUtils.java`、`tool/bash/BashExecutor.java` |
 | PR 167 按 TUI/CLI 包树删除了同时承载入口无关压缩和 Slash Command 的源码 | PR 167 `f60cc3e` 相对 merge base 的 `modules/coding-agent-cli/.../session`、`command`、`modes` 删除差异 |
 | 修订前公共压缩已恢复“至少保留末条消息”，但溢出、Usage、split-turn、重复摘要和摘要请求细节仍未完整对齐 pi | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java`、`session/compaction/SessionCompactor.java`，基线 `a7f78fed` |
+| 审查头在内存中排除了可重试 `LENGTH`，但压缩 Entry 只保存首条保留边界，重载会重新注入被丢弃响应；公共 Agent 也未显式传递模型输出上限 | `RuntimeEntryCodec.effectiveContextEntries`、`RuntimeEventProjector.projectCompactionCompleted`、`Agent.buildStreamOptions`，基线 `bf28e72f` |
+| 对齐实现持久化内部重试候选 Entry ID、重载时精确排除，并在无调用方覆盖时把 `model.maxTokens` 传入实际 Agent 请求 | 同上符号及 `RuntimeEventProjectorTest.reloadExcludesLengthResponseDiscardedBeforeCompactionRetry`，基线 `bd26e7f8` |
 
 ### 3.2 pi 与 OpenCode 对照
 
@@ -359,7 +363,7 @@ agent/{agentId}/.campusclaw/
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L690)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L701)
 
 ## 9. Mate 工具发现、缓存与执行
 
@@ -520,6 +524,10 @@ Usage 不可用时，从该位置以后估算尾部消息，文本与 JSON 参�
    候选中排除该失败 Assistant，成功后重试一次；第二次仍溢出时发出明确失败，不再进入
    “压缩—重试”循环。数据库恢复出的未处理失败溢出在接受下一条 prompt 前先压缩恢复。
 
+公共 Agent 在调用方没有显式覆盖时，必须把当前 `model.maxTokens` 作为实际请求输出上限；
+因此可恢复 `LENGTH` 比较的期望上限和 provider 收到的请求上限一致，不能被 OpenAI provider
+历史上的 32000 缺省上限静默改变。模型目录上限大于 32000 时必须同时验证请求参数和恢复判定。
+
 自动流程先执行 `prepare`；如果没有安全可压缩窗口则静默跳过，不投影 started/failed。
 切点只允许 User 或 Assistant，ToolResult 不能成为第一条保留消息。最后一条 Assistant
 即使独自超过 `keepRecentTokens` 也必须保留；同一轮被切掉的前缀单独摘要，再与历史摘要
@@ -535,7 +543,10 @@ ToolResult 最多 2000 字符。摘要调用无工具、cache 为 none、使用�
 
 Runtime 只在 prepare 成功后发 `session.compaction.started`。失败事件包含
 `reason/willRetry/aborted/message` 且不持久化；成功事件保存完整摘要、保留边界、压缩前后
-Token 和本次 Usage。CampusClaw 只追踪 PascalCase `Read`，不恢复 pi 的 Bash/Edit/Write、
+Token 和本次 Usage。`willRetry=true` 时还在持久化 payload 内保存 `_discardedEntryId`，重载
+按该 ID 精确排除已经从在线上下文移除的 `ERROR/LENGTH`；该内部字段不进入历史或 SSE
+公共事件。旧 Entry 缺少该字段时只回退识别压缩前最后一条可重试 Assistant。CampusClaw
+只追踪 PascalCase `Read`，不恢复 pi 的 Bash/Edit/Write、
 JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 ### 12.4 删除、禁用与替换
@@ -591,6 +602,8 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 - Slash 核心和四个处理器可用测试端口独立执行，但没有 Spring 自动注册或 HTTP 解析；
 - Usage/估算阈值、失效边界、显式/静默/Xiaomi/可恢复 length 溢出通过测试；
 - 成功 STOP 只压缩不重试，ERROR/LENGTH 最多重试一次，第二次溢出显式失败；
+- 公共 Agent 对大输出模型传递真实 `maxTokens`，LENGTH 恢复判定使用同一上限；
+- compaction completed → retry → reload 后不恢复被丢弃的 LENGTH，在线与重载上下文一致；
 - 超大末条 Assistant、ToolResult 安全切点、split-turn、重复摘要边界和 Read 路径继承通过测试；
 - 固定结构摘要、2000 字符截断、无工具/cache、Token 上限、瞬态重试和 Usage/Cost 合并通过测试；
 - 自动 prepare 空结果不发事件，失败回滚、取消 `aborted=true` 和完整摘要恢复通过测试。
@@ -615,6 +628,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.0 | 2026-08-24 | 处理 PR 167 审查意见：按 Entry ID 固化并排除压缩重试候选，保证在线与重载上下文一致；统一公共 Agent 实际请求与 LENGTH 判定的输出上限；记录审查头和对齐实现基线。 |
 | 2.2.0 | 2026-08-24 | 固定 pi 压缩细节：Usage/失效边界、成功 STOP 不重试、错误/length 单次恢复、超大末条保留、split-turn/重复摘要、结构化摘要、Read 路径继承、取消及瞬态摘要重试。 |
 | 2.1.0 | 2026-08-24 | 修订 PR 167 的 TUI 删除边界：保留未注册 Slash 核心及四个处理器，压缩与 Read 追踪迁入公共 Session；明确 Usage/领域事件和 refresh 后下一次执行懒解析。 |
 | 2.0.0 | 2026-08-23 | 收敛为 Runtime/Cron/Child 三入口与 8 个活动工具；删除 CLI/Loop、硬禁用 Bash/Edit/Write、将 Glob/ListDirectory 对齐为 Find/Ls；补充 Mate Session 缓存与 miss 自动刷新，并将 Child 统一为公共 AgentSessionFactory 创建的独立 Execution。 |

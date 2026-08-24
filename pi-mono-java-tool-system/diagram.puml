@@ -599,9 +599,12 @@ skinparam shadowing false
 ' packages/ai/src/utils/overflow.ts: isContextOverflow, isRecoverableLength
 ' Source evidence (CampusClaw PR 167 f60cc3e): shared compaction was removed with CLI sources.
 ' Source evidence (Java before alignment a7f78fed): only the last-message retention fix existed.
-' Target-only Java design: ManagedAgentSession and SessionCompactor own the full common behavior.
+' Reviewed Java baseline bf28e72f: compaction retry did not persist its discarded Entry identity.
+' Implemented Java baseline bd26e7f8: Agent.buildStreamOptions, RuntimeEntryCodec.effectiveContextEntries,
+' RuntimeEventProjector.projectCompactionCompleted, and SessionCompactor.decide.
+' Observed implementation: common compaction aligns request limits and restored retry context.
 ' Design reason: Runtime, Cron, and Child require one failure-safe context policy.
-' Java divergence: append-only database Entries replace pi JSONL entries; only Read paths are tracked.
+' Java divergence: append-only Entries use an internal discarded Entry ID; only Read paths are tracked.
 
 actor Host
 participant "ManagedAgentSession" as Session
@@ -622,7 +625,7 @@ opt stale ERROR or LENGTH overflow is recoverable
     Session -> Session : publish compacted context
   end
 end
-Session -> Agent : execute
+Session -> Agent : execute with model max output\nwhen no caller override exists
 Agent --> Session : Assistant with stop reason and Usage
 Session -> Compactor : decide by same model, boundary,\noverflow, Usage, and fallback estimate
 alt ERROR or LENGTH overflow and no prior recovery
@@ -637,9 +640,15 @@ alt ERROR or LENGTH overflow and no prior recovery
     alt summary succeeds
       Model --> Compactor : full summary and combined Usage
       Compactor --> Session : summary, retained messages, boundary
-      Session -> History : append compaction completed
+      Session -> History : append compaction completed\nwith internal discarded Entry ID
       Session -> Agent : retry original model call once
       Agent --> Session : final Assistant
+      Session -> History : append final Assistant
+      opt Host reloads the Session
+        Host -> History : load current branch
+        History --> Session : summary, retained, discarded, retry
+        Session -> Session : exclude exact discarded Entry ID
+      end
       opt second response still overflows
         Session --> Host : compaction.failed\nwillRetry=false
       end
@@ -677,6 +686,7 @@ Defaults: enabled=true, reserveTokens=16384,
 keepRecentTokens=20000. Disabled means no auto compaction.
 Safe cut points are User or Assistant; retain an oversized last Assistant.
 Update previous summaries and inherit sorted Read paths.
+Recoverable LENGTH uses the same max output sent to the model.
 end note
 
 note over Compactor,Model
@@ -684,6 +694,7 @@ Summary calls use no tools, no cache, and a fresh routing ID.
 History and split-turn max outputs are 80% and 50% of reserve.
 Blank summaries, tool calls, failures, and aborts never replace context.
 History entries are never deleted.
+The internal discarded Entry ID is never exposed in public events.
 end note
 @enduml
 
