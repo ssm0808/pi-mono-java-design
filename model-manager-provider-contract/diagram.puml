@@ -2,10 +2,10 @@
 title Provider Identity and Runtime Contract
 
 ' Source evidence:
-' pi-mono packages/ai/src/models.ts: Provider (lines 88-149), MutableModels (lines 225-230), createProvider (lines 739-862)
-' pi-mono packages/ai/src/types.ts: ProviderId (lines 35-76), Model (lines 820-850)
+' pi-mono packages/ai/src/models.ts: Provider, MutableModels, ModelsImpl, and createProvider
+' pi-mono packages/ai/src/types.ts: ProviderId, Model, SimpleStreamOptions, and ToolChoice
 ' Observed behavior: provider.id is the registry key and Model.provider selects the owning provider.
-' Design reason: identity, protocol dispatch, model identity, and mutable connection data must remain separate.
+' Design reason: provider identity, protocol dispatch, model identity, and connection configuration remain separate.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -24,14 +24,10 @@ class ProviderIdentity {
 
 class ProviderRuntimeContract {
   +displayName: string
-  +baseUrl: optional string
-  +headers: optional map
-  +auth: ProviderAuth.none for Mate
+  +auth: ProviderAuth.none
   +getModels(): Model[]
   +refreshModels(): optional
-  +filterModels(): optional
   +stream(model, context, options)
-  +cancelActiveResponse(responseId): optional
 }
 
 class ModelIdentity {
@@ -41,27 +37,27 @@ class ModelIdentity {
 
 class ModelDescriptor {
   +modelId: string
-  +apiId: string
+  +apiId: internal string
   +capabilities
   +limits
   +cost
 }
 
 class ApiProtocol {
-  +apiId: string
-  +stream implementation
+  +configuredApiId: openai-completions
+  +request and SSE implementation
 }
 
 ProviderIdentity "1" *-- "1" ProviderRuntimeContract : identifies
 ProviderIdentity "1" *-- "0..*" ModelIdentity : owns
 ModelIdentity "1" *-- "1" ModelDescriptor : describes
-ModelDescriptor --> ApiProtocol : dispatches by apiId
-ProviderRuntimeContract --> ApiProtocol : supplies one or more
+ModelDescriptor --> ApiProtocol : internal dispatch
+ProviderRuntimeContract --> ApiProtocol : fixed by configuration
 
 note right of ProviderIdentity
 Only providerId determines identity.
 Name, URL, credentials, and apiId
-may change without changing identity.
+do not participate in identity.
 end note
 
 note bottom of ModelIdentity
@@ -71,19 +67,17 @@ end note
 @enduml
 
 @startuml generic_provider_boundary
-title Generic Model Manager Provider Boundary
+title Generic Mate Chat Provider Boundary
 
 ' Source evidence:
-' pi-mono packages/ai/src/models.ts: ModelsImpl.requireProvider and stream (lines 628-695)
-' pi-mono packages/ai/src/api/openai-responses.ts: buildParams and stream (lines 99-189 and 273-344)
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java: resolveProvider (lines 141-147)
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java: buildParams and handleResponseEvent
-' mate-service README.md: model gateway gap (line 116)
-' Architecture change: Java resolves an AiProvider by model.providerId instead of resolving an ApiProvider by model.api.
-' Architecture change: accepted Responses payloads are forwarded without protocol conversion; model is the only body value patched by Mate.
-' Security hardening: upstream endpoints, credentials, provider ids, and vendor model ids remain inside mate-service.
-' Product constraint: the five Model Manager operations carry no application identity or credential headers.
-' Deployment boundary: internal gateway admission and network controls are outside the CampusMate business HTTP contract.
+' pi-mono packages/ai/src/models.ts: ModelsImpl.requireProvider and stream
+' pi-mono packages/ai/src/api/openai-completions.ts: stream, convertMessages, and usage parsing
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java: resolveProvider
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAICompletionsProvider.java: buildParams and parseUsage
+' mate-service README.md: current model gateway gap
+' Architecture change: Java resolves an AiProvider by model.providerId and uses an internally configured apiId.
+' Product constraint: CampusClaw and Mate exchange no application identity or credential headers.
+' Scope boundary: Mate routing, credentials, and upstream field adaptation are internal Mate concerns.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -105,17 +99,16 @@ package "pi-mono-java Runtime" {
   [AgentLoop] as Loop
   [CampusClawAiService] as AiService
   [AiProviderRegistry] as Registry
-  [MateServiceModelManagerProvider\nproviderId = mate-model-manager\napiId = openai-responses] as GenericProvider
+  [MateServiceModelManagerProvider\nproviderId = mate-model-manager\nauth = none] as GenericProvider
   [ManagedModelCatalogClient] as CatalogClient
   [ManagedModelInvocationClient] as InvocationClient
+  database "t_session_entries\nt_session_records\nt_session_stats" as SessionStore
 }
 
 package "mate-service" {
-  [Internal Model Manager API] as ManagerApi
-  [Agent Model Availability] as Availability
-  [OpenAI Responses Transparent Proxy] as Router
-  database "t_model_provider\nt_model_definition\nt_agent_binding_models" as Catalog
-  [Secret Store] as Secrets
+  [Internal Model Catalog API] as CatalogApi
+  [Mate Chat Endpoint\n/mate-service/v1/LLM/chat] as ChatApi
+  [Mate Model Routing] as Router
 }
 
 cloud "Upstream LLM Services" as Vendors
@@ -126,38 +119,33 @@ AiService --> Registry : get(model.providerId)
 Registry --> GenericProvider
 GenericProvider --> CatalogClient
 GenericProvider --> InvocationClient
+GenericProvider --> SessionStore : usage projection owned by Runtime
 CatalogClient --> Gateway : HTTPS JSON and protocol headers
-InvocationClient --> Gateway : Responses JSON and SSE
-Gateway --> ManagerApi : no identity or credential headers
-ManagerApi --> Availability : catalog operations 2 and 3 only
-Availability --> Catalog
-ManagerApi --> Router : exact Mate modelId\nand unchanged Responses body
-Router --> Catalog
-Router --> Secrets : credentialRef
-Router --> Vendors : same Responses body and SSE\nmodel value patched
+InvocationClient --> Gateway : Mate Chat JSON and SSE
+Gateway --> CatalogApi : no app identity or credentials
+Gateway --> ChatApi : no app identity or credentials
+ChatApi --> Router : validated Mate modelId and request
+Router --> Vendors : Mate-owned upstream invocation
 
 note bottom of GenericProvider
-The Runtime sees one provider and opaque modelIds.
-It never receives upstream credentials or endpoints.
-Mate Provider authentication is ProviderAuth.none.
-Other CampusMate APIs are outside this decision.
+The Runtime sees one provider and opaque Mate modelIds.
+The internal apiId defaults to openai-completions.
+The HTTP request never carries apiId or credentials.
 end note
 @enduml
 
 @startuml model_manager_invocation_sequence
-title Mate OpenAI Responses Invocation and Cancellation
+title Mate Foreground Chat Invocation and Disconnect Cancellation
 
 ' Source evidence:
-' pi-mono packages/ai/src/api/openai-responses.ts: stream and buildParams (lines 99-189 and 273-344)
-' pi-mono packages/ai/src/api/openai-responses-shared.ts: convertResponsesMessages and processResponsesStream (lines 131-342 and 500-792)
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java: buildParams, handleResponseEvent, and convertInputItems
-' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel and consumeStream (lines 198-288)
-' OpenAI API: POST /responses and POST /responses/{response_id}/cancel
-' Target-only design: mate-service Responses create and foreground cancel operations do not exist yet.
-' Product constraint: all five operations rely on internal gateway reachability and carry no application credentials or identity.
-' Scope boundary: other CampusMate APIs are not covered by this no-auth decision.
-' Transparent proxy rule: Provider performs the only Context conversion; Mate patches model but does not convert the Responses payload.
-' OpenAI compatibility extension: Mate cancels active foreground streams although official cancel requires background=true.
+' pi-mono packages/ai/src/api/openai-completions.ts: stream, convertMessages, tool calls, and usage parsing
+' pi-mono packages/agent/src/agent-loop.ts: runLoop and streamAssistantResponse
+' pi-mono packages/coding-agent/src/core/compaction/compaction.ts: completeSummarization with toolChoice none
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAICompletionsProvider.java: stream and parseUsage
+' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel and consumeStream
+' Target-only design: POST /mate-service/v1/LLM/chat does not exist in mate-service at the analyzed baseline.
+' Product constraint: cancellation closes the foreground request and has no separate cancel operation.
+' Architecture change: successful Chat SSE is returned without ResultBean or payload rewriting.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -182,58 +170,51 @@ participant "CampusClawAiService" as AiService
 participant "AiProviderRegistry" as Registry
 participant "MateServiceModelManagerProvider" as Provider
 participant "Internal Gateway" as Gateway
-participant "mate-service Responses Proxy" as Manager
-participant "OpenAI Responses Endpoint" as OpenAI
+participant "mate-service Chat Endpoint" as Mate
+participant "Upstream LLM" as Upstream
 
 Client -> Loop : submit prompt
 Loop -> AiService : stream(model, Context, options)
 AiService -> Registry : get(model.providerId)
-Registry --> AiService : generic Provider
+Registry --> AiService : Mate provider
 AiService -> Provider : streamSimple(model, Context, options)
-Provider -> Provider : convert Context once\nto a direct Responses request
-Provider -> Gateway : POST /responses\nprotocol headers only
-Gateway -> Manager : trusted internal route\nno app identity or credential
-Manager -> Manager : validate without reshaping\nand resolve exact Mate modelId
-Manager -> Manager : clone payload and patch model only\ninject endpoint and credential at HTTP layer
-Manager -> OpenAI : POST /responses\nsame input, tools, reasoning, and options
+Provider -> Provider : validate text-only context
+Provider -> Provider : map Context to messages, tools, and options
+Provider -> Gateway : POST /mate-service/v1/LLM/chat\nprotocol headers only
+Gateway -> Mate : trusted internal route\nno app identity or credentials
+Mate -> Upstream : Mate-owned invocation
 
-loop OpenAI Responses SSE
-  OpenAI --> Manager : Responses event
-  Manager -> Manager : preserve event payload\nrewrite response.model only
-  Manager --> Gateway : Responses event
-  Gateway --> Provider : Responses event
-  Provider -> Provider : store responseId and map event
+loop Raw OpenAI-style Chat SSE
+  Upstream --> Mate : data chunk
+  Mate --> Gateway : unchanged success chunk
+  Gateway --> Provider : unchanged success chunk
+  Provider -> Provider : map text, reasoning, tool calls, and usage
   Provider --> Loop : AssistantMessageEvent
 end
 
-alt Abort after response.created
+alt Normal completion
+  Upstream --> Mate : data: [DONE]
+  Mate --> Provider : data: [DONE]
+  Provider --> Loop : final AssistantMessage
+else Caller aborts
   Loop -> Provider : cancel subscription
-  Provider -> Gateway : POST /responses/{responseId}/cancel
-  Gateway -> Manager : trusted internal route
-  Manager -> OpenAI : abort active foreground stream
-  Manager --> Gateway : 200 Response with status cancelled
-  Gateway --> Provider : 200 Response with status cancelled
-  Manager --> Gateway : close original SSE
-  Gateway --> Provider : close original SSE
+  Provider -> Gateway : close request and SSE body
+  Gateway -> Mate : downstream disconnect
+  Mate -> Upstream : abort or close upstream request
   Provider --> Loop : StopReason.ABORTED
-else Abort before response.created
-  Loop -> Provider : cancel subscription
-  Provider -> Gateway : close create stream
-  Gateway -> Manager : close create stream
-  Provider --> Loop : StopReason.ABORTED
-else Response already terminal
-  Provider -> Gateway : POST /responses/{responseId}/cancel
-  Gateway -> Manager : trusted internal route
-  Manager --> Gateway : 404 RESPONSE_NOT_ACTIVE
-  Gateway --> Provider : 404 RESPONSE_NOT_ACTIVE
+else Error before SSE starts
+  Mate --> Provider : HTTP error and ResultBean
+  Provider --> Loop : StopReason.ERROR
+else Error after SSE starts
+  Mate --> Provider : event: error then close
+  Provider --> Loop : StopReason.ERROR
 end
 
-note over Provider,Manager
-No automatic create POST replay after an unknown outcome.
-No Responses-to-Chat or vendor protocol conversion in Mate.
-Every routed upstream must support OpenAI Responses natively.
-Cancellation emits no synthetic Responses terminal event.
+note over Provider,Mate
+No create POST replay after an unknown outcome.
+No responseId-based cancel request exists.
 Tool execution stays in AgentLoop.
+Mate upstream adaptation is outside this contract.
 end note
 @enduml
 
@@ -242,13 +223,12 @@ title Java Provider Alignment with pi-mono
 
 ' Source evidence:
 ' pi-mono packages/ai/src/models.ts: Provider and Models registry keyed by provider.id
-' pi-mono packages/ai/src/api/openai-responses-shared.ts: Context conversion and Responses stream processing
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java: registry keyed by Api (lines 22-152)
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java: partial Responses mapper
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/Provider.java: closed enum with CUSTOM (lines 19-37)
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/config/CustomModelLoader.java: every custom model uses Provider.CUSTOM (lines 92-123)
-' Java divergence: the current Java design models protocol adapters as providers and cannot preserve arbitrary provider identity.
-' Architecture change: add open ProviderId and ApiId values, resolve AiProvider by providerId, and keep protocol routing internal.
+' pi-mono packages/ai/src/api/openai-completions.ts: Chat conversion and stream processing
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java: registry keyed by Api
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAICompletionsProvider.java: current Chat mapper
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/Provider.java: closed enum with CUSTOM
+' Java divergence: current Java models protocol adapters as providers and cannot preserve arbitrary provider identity.
+' Architecture change: add open ProviderId and ApiId values, resolve AiProvider by providerId, and configure apiId internally.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -282,7 +262,8 @@ package "Target Java" {
   class ProtocolAdapterRegistry
   class ProviderAuthNone
   class MateServiceModelManagerProvider
-  class OpenAIResponsesMapper
+  class OpenAICompletionsMapper
+  class ModelManagerClientConfig
   ModelTarget --> ProviderId
   ModelTarget --> ApiId
   AiProviderRegistry --> AiProvider : keyed by ProviderId
@@ -290,10 +271,65 @@ package "Target Java" {
   ProtocolAdapterRegistry --> ProtocolAdapter : keyed by ApiId
   MateServiceModelManagerProvider ..|> AiProvider
   MateServiceModelManagerProvider --> ProviderAuthNone : auth returns none
-  MateServiceModelManagerProvider --> OpenAIResponsesMapper : Context and SSE mapping
+  MateServiceModelManagerProvider --> OpenAICompletionsMapper : Context and raw SSE mapping
+  MateServiceModelManagerProvider --> ModelManagerClientConfig : base URL, path, and apiId
 }
 
 ProviderEnum ..> ProviderId : deprecate enum boundary
 ApiEnum ..> ApiId : preserve known constants
 ApiProvider ..> ProtocolAdapter : rename responsibility
+@enduml
+
+@startuml token_usage_persistence
+title Session Usage Records and Statistics
+
+' Source evidence:
+' pi-mono packages/agent/src/harness/session/types.ts: UsageRecord and SessionStats
+' pi-mono packages/session-backends/sqlite-node/src/sqlite/migrations/001_initial.sql: records and session_stats
+' pi-mono packages/session-backends/sqlite-node/src/sqlite/repo.ts: appendRecord
+' pi-mono packages/session-backends/sqlite-node/src/sqlite/storage/session-stats.ts: addUsageToStats
+' pi-mono-java modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql: t_session_entries, t_session_sequences, and t_session_materialized
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java: assistantEntry and Usage.empty reconstruction
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java: appendLocked
+' Observed behavior: current centralized Java persistence drops AssistantMessage usage and has no record or stats write path.
+' Target-only design: add t_session_records and t_session_stats without changing the message branch leaf.
+' Design reason: usage is an immutable execution fact and must not become a branchable conversation entry.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam database {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
+}
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+
+[RuntimeEventProjector] as Projector
+[RuntimeSessionRepository] as Repository
+database "t_session_sequences\nshared next_seq" as Sequence
+database "t_session_entries\nbranchable messages" as Entries
+database "t_session_records\nimmutable usage records" as Records
+database "t_session_stats\nmaterialized totals" as Stats
+database "t_session_materialized\nnon-usage views" as Materialized
+
+Projector --> Repository : assistant message and Usage
+Repository --> Sequence : allocate two ordered sequence values
+Repository --> Entries : insert Assistant Entry\nupdate active leaf
+Repository --> Records : insert type = usage\ndo not update active leaf
+Repository --> Stats : increment message and usage totals
+Repository ..> Materialized : lifetimeUsage removed
+
+note bottom of Repository
+Assistant Entry, Usage Record, and Stats update
+commit or roll back in one database transaction.
+Missing upstream usage is stored as zero values,
+matching the pi Usage contract.
+end note
 @enduml

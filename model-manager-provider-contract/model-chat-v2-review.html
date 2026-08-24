@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>MateService Unified Chat Provider API - POST /LLM/chat</title>
+  <style>
+    :root { color-scheme: light dark; background: light-dark(#f7f8fa, #11151b); }
+    body { margin: 0; padding: 16px; background: inherit; }
+    main { width: min(1400px, 100%); margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <main>
+<div id="company-api-review-post-llm-chat-5fd38e9d">
+  <style>
+    #company-api-review-post-llm-chat-5fd38e9d {
+      color-scheme: light dark;
+      color: light-dark(#17202a, #edf2f7);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      width: 100%;
+      margin-block-end: 16px;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d * { box-sizing: border-box; }
+    #company-api-review-post-llm-chat-5fd38e9d h2,
+    #company-api-review-post-llm-chat-5fd38e9d h3,
+    #company-api-review-post-llm-chat-5fd38e9d p { margin: 0; }
+    #company-api-review-post-llm-chat-5fd38e9d code,
+    #company-api-review-post-llm-chat-5fd38e9d pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #company-api-review-post-llm-chat-5fd38e9d .api-shell {
+      overflow: hidden;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 12px;
+      background: light-dark(#f7f8fa, #11151b);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .topbar,
+    #company-api-review-post-llm-chat-5fd38e9d .operation-head,
+    #company-api-review-post-llm-chat-5fd38e9d .row,
+    #company-api-review-post-llm-chat-5fd38e9d .tabs,
+    #company-api-review-post-llm-chat-5fd38e9d .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .topbar {
+      justify-content: space-between;
+      padding: 15px 17px;
+      background: light-dark(#ffffff, #1a2028);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d h2 { font-size: 18px; font-weight: 500; }
+    #company-api-review-post-llm-chat-5fd38e9d h3 { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+    #company-api-review-post-llm-chat-5fd38e9d .tag {
+      padding: 2px 8px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 999px;
+      background: light-dark(#f2f5f8, #222a34);
+      font-size: 12px;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .base,
+    #company-api-review-post-llm-chat-5fd38e9d .muted { color: light-dark(#5f6b78, #aab4c0); font-size: 13px; }
+    #company-api-review-post-llm-chat-5fd38e9d .operation {
+      margin: 15px;
+      overflow: hidden;
+      border: 1px solid light-dark(#1f883d, #3fb950);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .operation-head {
+      padding: 13px 15px;
+      background: light-dark(#eaf8ee, #15331f);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .method {
+      padding: 6px 11px;
+      border-radius: 5px;
+      background: light-dark(#1f883d, #3fb950);
+      color: light-dark(#ffffff, #07150b);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .operation-delete {
+      border-color: light-dark(#cf222e, #f85149);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .operation-delete .operation-head {
+      background: light-dark(#fff1f0, #3a1d1d);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .method-delete {
+      background: light-dark(#cf222e, #f85149);
+      color: #ffffff;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .path { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+    #company-api-review-post-llm-chat-5fd38e9d .section {
+      padding: 15px;
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .section:last-child { border-bottom: 0; }
+    #company-api-review-post-llm-chat-5fd38e9d .section-title { justify-content: space-between; }
+    #company-api-review-post-llm-chat-5fd38e9d .description { line-height: 1.6; }
+    #company-api-review-post-llm-chat-5fd38e9d .decision-gate {
+      border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
+      background: light-dark(#f5f9ff, #122337);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .decision-notice {
+      margin-top: 10px;
+      color: light-dark(#8250df, #d2a8ff);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .gate-only .contract-detail { display: none; }
+    #company-api-review-post-llm-chat-5fd38e9d table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #company-api-review-post-llm-chat-5fd38e9d th,
+    #company-api-review-post-llm-chat-5fd38e9d td {
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
+    #company-api-review-post-llm-chat-5fd38e9d tbody tr:last-child td { border-bottom: 0; }
+    #company-api-review-post-llm-chat-5fd38e9d pre {
+      margin: 10px 0 0;
+      padding: 13px;
+      overflow-x: auto;
+      border-radius: 7px;
+      background: light-dark(#eef2f6, #0d1117);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d button {
+      appearance: none;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 6px;
+      background: light-dark(#ffffff, #1a2028);
+      color: light-dark(#17202a, #edf2f7);
+      padding: 7px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d button[aria-selected="true"],
+    #company-api-review-post-llm-chat-5fd38e9d button[aria-pressed="true"] {
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#eaf3ff, #132b46);
+      color: light-dark(#0969da, #58a6ff);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .review-form {
+      margin: 0 15px 15px;
+      padding: 15px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .question-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .question-grid-single { grid-template-columns: 1fr; }
+    #company-api-review-post-llm-chat-5fd38e9d fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #company-api-review-post-llm-chat-5fd38e9d legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
+    #company-api-review-post-llm-chat-5fd38e9d label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
+    #company-api-review-post-llm-chat-5fd38e9d label input { margin-top: 3px; }
+    #company-api-review-post-llm-chat-5fd38e9d .option-copy { display: grid; min-width: 0; gap: 2px; }
+    #company-api-review-post-llm-chat-5fd38e9d .option-label { font-weight: 500; }
+    #company-api-review-post-llm-chat-5fd38e9d .option-detail {
+      color: light-dark(#5f6b78, #aab4c0);
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .submit {
+      margin-top: 12px;
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#0969da, #58a6ff);
+      color: light-dark(#ffffff, #07111e);
+      font-weight: 500;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .empty { margin-top: 8px; }
+    #company-api-review-post-llm-chat-5fd38e9d .prompt-output {
+      margin-top: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d details { margin-top: 9px; }
+    #company-api-review-post-llm-chat-5fd38e9d summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .static-response {
+      padding: 8px 0;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-post-llm-chat-5fd38e9d .static-response:last-child { border-bottom: 0; }
+    #company-api-review-post-llm-chat-5fd38e9d .static-choice { margin-left: 8px; }
+    @media (max-width: 680px) {
+      #company-api-review-post-llm-chat-5fd38e9d .question-grid { grid-template-columns: 1fr; }
+      #company-api-review-post-llm-chat-5fd38e9d .operation,
+      #company-api-review-post-llm-chat-5fd38e9d .review-form { margin-left: 9px; margin-right: 9px; }
+      #company-api-review-post-llm-chat-5fd38e9d .table-wrap { overflow: visible; }
+      #company-api-review-post-llm-chat-5fd38e9d .table-wrap thead { display: none; }
+      #company-api-review-post-llm-chat-5fd38e9d .table-wrap table,
+      #company-api-review-post-llm-chat-5fd38e9d .table-wrap tbody,
+      #company-api-review-post-llm-chat-5fd38e9d .table-wrap tr,
+      #company-api-review-post-llm-chat-5fd38e9d .table-wrap td { display: block; width: 100%; }
+      #company-api-review-post-llm-chat-5fd38e9d .table-wrap tr {
+        padding: 7px 0;
+        border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+      }
+      #company-api-review-post-llm-chat-5fd38e9d .table-wrap tbody tr:last-child { border-bottom: 0; }
+      #company-api-review-post-llm-chat-5fd38e9d .table-wrap td {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 8px;
+        padding: 5px 0;
+        border-bottom: 0;
+        overflow-wrap: anywhere;
+      }
+      #company-api-review-post-llm-chat-5fd38e9d .table-wrap td::before {
+        content: attr(data-label);
+        color: light-dark(#5f6b78, #aab4c0);
+        font-weight: 500;
+      }
+      #company-api-review-post-llm-chat-5fd38e9d pre {
+        overflow-x: visible;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    }
+  </style>
+
+  <div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>MateService Unified Chat Provider API</h2><span class="tag">2.0.0</span><span class="tag">Internal · 已冻结</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-post"><header class="operation-head"><span class="method method-post">POST</span><code class="path">/LLM/chat</code><span class="muted">创建前台流式模型调用</span></header><section class="section"><h3>作用</h3><p class="description">CampusClaw 经内部网关调用 Mate 的统一 Chat 接口。请求不携带应用层身份或凭据，不包含 agentId、sessionId、apiId 或上游连接信息。Mate 成功时返回原始 OpenAI 风格 Chat SSE；CampusClaw Provider 负责 Context 转换和流解析。调用方取消通过关闭请求与 SSE 连接完成，不存在独立取消接口；网络结果未知时不得自动重放。</p></section><section class="section contract-detail"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">header</td><td data-label="名称">Accept</td><td data-label="必填">是</td><td data-label="约束">text/event-stream</td><td data-label="说明">成功响应固定为流式 SSE；浏览器 EventSource 不能发起该 POST</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US</td><td data-label="说明">仅用于 SSE 建立前的 ResultBean 错误；缺失或不支持时回退 en-US</td></tr></tbody></table></div><p class="muted empty">Mate 统一 Chat 请求。model、非空 messages、stream=true 和 stream_options.include_usage=true 必填。messages 只支持 system、user、assistant、tool 文本消息；assistant 可携带 tool_calls 及白名单推理重放字段。tools 只支持 function 的 name、description 和 parameters。tool_choice 可选且仅为 auto/none。max_output_tokens 是 Mate 扩展字段，CampusClaw 不改名、不截断。temperature 可选且范围 0-2。未知字段返回 400；已定义但目标模型不支持的可选参数允许 Mate 静默忽略。</p><pre><code>{
+  &quot;model&quot;: &quot;managed-coding-model&quot;,
+  &quot;messages&quot;: [
+    {
+      &quot;role&quot;: &quot;system&quot;,
+      &quot;content&quot;: &quot;You are a coding assistant.&quot;
+    },
+    {
+      &quot;role&quot;: &quot;user&quot;,
+      &quot;content&quot;: &quot;读取 README.md 并总结&quot;
+    },
+    {
+      &quot;role&quot;: &quot;assistant&quot;,
+      &quot;content&quot;: null,
+      &quot;reasoning_content&quot;: &quot;I need to read the file first.&quot;,
+      &quot;tool_calls&quot;: [
+        {
+          &quot;id&quot;: &quot;call_01&quot;,
+          &quot;type&quot;: &quot;function&quot;,
+          &quot;function&quot;: {
+            &quot;name&quot;: &quot;read_file&quot;,
+            &quot;arguments&quot;: &quot;{\&quot;path\&quot;:\&quot;README.md\&quot;}&quot;
+          }
+        }
+      ]
+    },
+    {
+      &quot;role&quot;: &quot;tool&quot;,
+      &quot;tool_call_id&quot;: &quot;call_01&quot;,
+      &quot;content&quot;: &quot;README file content&quot;
+    }
+  ],
+  &quot;tools&quot;: [
+    {
+      &quot;type&quot;: &quot;function&quot;,
+      &quot;function&quot;: {
+        &quot;name&quot;: &quot;read_file&quot;,
+        &quot;description&quot;: &quot;Read a local file&quot;,
+        &quot;parameters&quot;: {
+          &quot;type&quot;: &quot;object&quot;,
+          &quot;properties&quot;: {
+            &quot;path&quot;: {
+              &quot;type&quot;: &quot;string&quot;
+            }
+          },
+          &quot;required&quot;: [
+            &quot;path&quot;
+          ]
+        }
+      }
+    }
+  ],
+  &quot;tool_choice&quot;: &quot;auto&quot;,
+  &quot;max_output_tokens&quot;: 4096,
+  &quot;temperature&quot;: 0.2,
+  &quot;stream&quot;: true,
+  &quot;stream_options&quot;: {
+    &quot;include_usage&quot;: true
+  }
+}</code></pre></section><section class="section contract-detail"><h3>响应</h3><details class="static-response" open><summary><code>200 · Chat SSE</code> 200 OK — 返回原始 OpenAI 风格 Chat Completion chunks 和 [DONE]。Mate 不包装 ResultBean，不重写 id、model、choices、usage、finish_reason 或 reasoning 字段。usage chunk 允许缺失。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
+Cache-Control: no-store
+
+data: {&quot;id&quot;:&quot;chatcmpl_01&quot;,&quot;object&quot;:&quot;chat.completion.chunk&quot;,&quot;created&quot;:1787529600,&quot;model&quot;:&quot;upstream-model&quot;,&quot;choices&quot;:[{&quot;index&quot;:0,&quot;delta&quot;:{&quot;role&quot;:&quot;assistant&quot;,&quot;content&quot;:&quot;总结结果&quot;},&quot;finish_reason&quot;:null}]}
+
+data: {&quot;id&quot;:&quot;chatcmpl_01&quot;,&quot;object&quot;:&quot;chat.completion.chunk&quot;,&quot;created&quot;:1787529600,&quot;model&quot;:&quot;upstream-model&quot;,&quot;choices&quot;:[{&quot;index&quot;:0,&quot;delta&quot;:{},&quot;finish_reason&quot;:&quot;stop&quot;}]}
+
+data: {&quot;id&quot;:&quot;chatcmpl_01&quot;,&quot;object&quot;:&quot;chat.completion.chunk&quot;,&quot;created&quot;:1787529600,&quot;model&quot;:&quot;upstream-model&quot;,&quot;choices&quot;:[],&quot;usage&quot;:{&quot;prompt_tokens&quot;:120,&quot;completion_tokens&quot;:24,&quot;total_tokens&quot;:144,&quot;prompt_tokens_details&quot;:{&quot;cached_tokens&quot;:20},&quot;completion_tokens_details&quot;:{&quot;reasoning_tokens&quot;:8}}}
+
+data: [DONE]</code></pre></details></details><details class="static-response"><summary><code>200 · Stream Error</code> 200 SSE Error — SSE 建立后发生上游或传输错误；发送 Mate error event 后关闭连接，不发送 [DONE]。调用方主动取消只关闭连接，不发送本事件。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
+Cache-Control: no-store
+
+event: error
+data: {&quot;resCode&quot;:&quot;UPSTREAM_STREAM_ERROR&quot;,&quot;resMsg&quot;:&quot;The upstream model stream failed.&quot;}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_LLM_CHAT_REQUEST</code> 400 Bad Request — JSON 无法读取、model/messages 无效、消息或工具结构非法、存在未知字段，或 stream/include_usage 不等于 true。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;INVALID_LLM_CHAT_REQUEST&quot;,
+  &quot;resMsg&quot;: &quot;模型调用请求不符合接口约束。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;INVALID_LLM_CHAT_REQUEST&quot;,
+  &quot;resMsg&quot;: &quot;The model invocation request does not satisfy the API contract.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404</code> 404 Not Found — model 没有精确匹配 Mate 模型目录。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;MODEL_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;指定的模型不存在。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;MODEL_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;The requested model does not exist.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>429</code> 429 Too Many Requests — Mate 或上游达到限流阈值；调用方不得盲目重放结果未知的 POST。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;MODEL_RATE_LIMITED&quot;,
+  &quot;resMsg&quot;: &quot;模型调用过于频繁，请稍后重试。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;MODEL_RATE_LIMITED&quot;,
+  &quot;resMsg&quot;: &quot;Model invocation is rate limited. Try again later.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>502</code> 502 Bad Gateway — 上游在 SSE 建立前返回协议错误或无效响应。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;UPSTREAM_MODEL_ERROR&quot;,
+  &quot;resMsg&quot;: &quot;上游模型服务返回错误。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;UPSTREAM_MODEL_ERROR&quot;,
+  &quot;resMsg&quot;: &quot;The upstream model service returned an error.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>503 · MODEL_UNAVAILABLE</code> 503 Service Unavailable — 指定模型或其路由当前不可用。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;MODEL_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;指定模型当前不可用。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;MODEL_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;The requested model is currently unavailable.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>503 · MANAGER_UNAVAILABLE</code> 503 Service Unavailable — Mate Model Manager 暂时不可用。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;MANAGER_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;Model Manager 暂时不可用，请稍后重试。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;MANAGER_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;Model Manager is temporarily unavailable. Try again later.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>504</code> 504 Gateway Timeout — SSE 建立前等待模型响应超时。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;MODEL_INVOCATION_TIMEOUT&quot;,
+  &quot;resMsg&quot;: &quot;模型调用超时。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;MODEL_INVOCATION_TIMEOUT&quot;,
+  &quot;resMsg&quot;: &quot;The model invocation timed out.&quot;
+}</code></pre></details></details></section></article></div></div>
+  <script type="application/json" data-review-model>{"api":{"title":"MateService Unified Chat Provider API","version":"2.0.0","basePath":"/mate-service/v1","visibility":"Internal · 已冻结"},"operation":{"method":"POST","path":"/LLM/chat","summary":"创建前台流式模型调用","description":"CampusClaw 经内部网关调用 Mate 的统一 Chat 接口。请求不携带应用层身份或凭据，不包含 agentId、sessionId、apiId 或上游连接信息。Mate 成功时返回原始 OpenAI 风格 Chat SSE；CampusClaw Provider 负责 Context 转换和流解析。调用方取消通过关闭请求与 SSE 连接完成，不存在独立取消接口；网络结果未知时不得自动重放。","authModes":[],"parameters":[{"in":"header","name":"Accept","required":true,"schema":"text/event-stream","description":"成功响应固定为流式 SSE；浏览器 EventSource 不能发起该 POST"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"仅用于 SSE 建立前的 ResultBean 错误；缺失或不支持时回退 en-US"}],"requestBody":{"required":true,"contentType":"application/json","description":"Mate 统一 Chat 请求。model、非空 messages、stream=true 和 stream_options.include_usage=true 必填。messages 只支持 system、user、assistant、tool 文本消息；assistant 可携带 tool_calls 及白名单推理重放字段。tools 只支持 function 的 name、description 和 parameters。tool_choice 可选且仅为 auto/none。max_output_tokens 是 Mate 扩展字段，CampusClaw 不改名、不截断。temperature 可选且范围 0-2。未知字段返回 400；已定义但目标模型不支持的可选参数允许 Mate 静默忽略。","example":{"model":"managed-coding-model","messages":[{"role":"system","content":"You are a coding assistant."},{"role":"user","content":"读取 README.md 并总结"},{"role":"assistant","content":null,"reasoning_content":"I need to read the file first.","tool_calls":[{"id":"call_01","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"README.md\"}"}}]},{"role":"tool","tool_call_id":"call_01","content":"README file content"}],"tools":[{"type":"function","function":{"name":"read_file","description":"Read a local file","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}}],"tool_choice":"auto","max_output_tokens":4096,"temperature":0.2,"stream":true,"stream_options":{"include_usage":true}}},"responses":[{"id":"200-chat-stream","status":"200","tabLabel":"200 · Chat SSE","label":"OK","summary":"返回原始 OpenAI 风格 Chat Completion chunks 和 [DONE]。Mate 不包装 ResultBean，不重写 id、model、choices、usage、finish_reason 或 reasoning 字段。usage chunk 允许缺失。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store"},"bodies":{"default":"data: {\"id\":\"chatcmpl_01\",\"object\":\"chat.completion.chunk\",\"created\":1787529600,\"model\":\"upstream-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"总结结果\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl_01\",\"object\":\"chat.completion.chunk\",\"created\":1787529600,\"model\":\"upstream-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"chatcmpl_01\",\"object\":\"chat.completion.chunk\",\"created\":1787529600,\"model\":\"upstream-model\",\"choices\":[],\"usage\":{\"prompt_tokens\":120,\"completion_tokens\":24,\"total_tokens\":144,\"prompt_tokens_details\":{\"cached_tokens\":20},\"completion_tokens_details\":{\"reasoning_tokens\":8}}}\n\ndata: [DONE]"}},{"id":"200-stream-error","status":"200","tabLabel":"200 · Stream Error","label":"SSE Error","summary":"SSE 建立后发生上游或传输错误；发送 Mate error event 后关闭连接，不发送 [DONE]。调用方主动取消只关闭连接，不发送本事件。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store"},"bodies":{"default":"event: error\ndata: {\"resCode\":\"UPSTREAM_STREAM_ERROR\",\"resMsg\":\"The upstream model stream failed.\"}"}},{"id":"400-invalid-chat-request","status":"400","tabLabel":"400 · INVALID_LLM_CHAT_REQUEST","label":"Bad Request","summary":"JSON 无法读取、model/messages 无效、消息或工具结构非法、存在未知字段，或 stream/include_usage 不等于 true。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_LLM_CHAT_REQUEST","resMsg":"模型调用请求不符合接口约束。"},"en-US":{"resCode":"INVALID_LLM_CHAT_REQUEST","resMsg":"The model invocation request does not satisfy the API contract."}}},{"status":"404","label":"Not Found","summary":"model 没有精确匹配 Mate 模型目录。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"MODEL_NOT_FOUND","resMsg":"指定的模型不存在。"},"en-US":{"resCode":"MODEL_NOT_FOUND","resMsg":"The requested model does not exist."}}},{"status":"429","label":"Too Many Requests","summary":"Mate 或上游达到限流阈值；调用方不得盲目重放结果未知的 POST。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"MODEL_RATE_LIMITED","resMsg":"模型调用过于频繁，请稍后重试。"},"en-US":{"resCode":"MODEL_RATE_LIMITED","resMsg":"Model invocation is rate limited. Try again later."}}},{"status":"502","label":"Bad Gateway","summary":"上游在 SSE 建立前返回协议错误或无效响应。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UPSTREAM_MODEL_ERROR","resMsg":"上游模型服务返回错误。"},"en-US":{"resCode":"UPSTREAM_MODEL_ERROR","resMsg":"The upstream model service returned an error."}}},{"id":"503-model-unavailable","status":"503","tabLabel":"503 · MODEL_UNAVAILABLE","label":"Service Unavailable","summary":"指定模型或其路由当前不可用。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"MODEL_UNAVAILABLE","resMsg":"指定模型当前不可用。"},"en-US":{"resCode":"MODEL_UNAVAILABLE","resMsg":"The requested model is currently unavailable."}}},{"id":"503-manager-unavailable","status":"503","tabLabel":"503 · MANAGER_UNAVAILABLE","label":"Service Unavailable","summary":"Mate Model Manager 暂时不可用。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"MANAGER_UNAVAILABLE","resMsg":"Model Manager 暂时不可用，请稍后重试。"},"en-US":{"resCode":"MANAGER_UNAVAILABLE","resMsg":"Model Manager is temporarily unavailable. Try again later."}}},{"status":"504","label":"Gateway Timeout","summary":"SSE 建立前等待模型响应超时。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"MODEL_INVOCATION_TIMEOUT","resMsg":"模型调用超时。"},"en-US":{"resCode":"MODEL_INVOCATION_TIMEOUT","resMsg":"The model invocation timed out."}}}]},"review":{"questions":[],"followUpTitle":"调整 Mate Chat 接口","promptPrefix":"继续调整 POST /mate-service/v1/LLM/chat","promptSuffix":"请同步更新 model-manager-provider-contract 的主 Markdown、结构化评审模型、HTML 和 PlantUML；保持原始 Chat SSE、断连取消和内部网关免认证边界。"}}</script>
+  <script>
+    (() => {
+      const root = document.getElementById('company-api-review-post-llm-chat-5fd38e9d');
+      const model = JSON.parse(root.querySelector('[data-review-model]').textContent);
+      const api = model.api;
+      const operation = model.operation;
+      const review = model.review || { questions: [] };
+      const shell = root.querySelector('[data-api-shell]');
+      const make = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+      };
+      const append = (parent, ...children) => {
+        children.filter(Boolean).forEach((child) => parent.appendChild(child));
+        return parent;
+      };
+      const code = (text, className) => make('code', className || '', text);
+      const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      const fullPath = `${api.basePath.replace(/\/$/, '')}/${operation.path.replace(/^\//, '')}`;
+
+      const topbar = make('header', 'topbar');
+      const titleRow = make('div', 'row');
+      append(titleRow, make('h2', '', api.title), make('span', 'tag', api.version));
+      if (api.visibility) titleRow.appendChild(make('span', 'tag', api.visibility));
+      append(topbar, titleRow, code(api.basePath, 'base'));
+
+      const methodClass = operation.method.toLowerCase();
+      const decisionGate = review.decisionGate;
+      const gateClass = decisionGate && decisionGate.hideOperationDetails ? ' gate-only' : '';
+      const article = make('article', `operation operation-${methodClass}${gateClass}`);
+      const operationHead = make('header', 'operation-head');
+      append(operationHead,
+        make('span', `method method-${methodClass}`, operation.method.toUpperCase()),
+        code(operation.path, 'path'),
+        make('span', 'muted', operation.summary));
+      article.appendChild(operationHead);
+
+      const purpose = make('section', 'section');
+      append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
+      article.appendChild(purpose);
+
+      if (decisionGate) {
+        const gateSection = make('section', 'section decision-gate');
+        append(gateSection,
+          make('h3', '', decisionGate.title),
+          make('p', 'description', decisionGate.description));
+        const comparison = decisionGate.comparison;
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        comparison.columns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        comparison.rows.forEach((items) => {
+          const row = make('tr', '');
+          items.forEach((item, index) => {
+            const cell = make('td', '', item);
+            cell.dataset.label = comparison.columns[index] || '';
+            row.appendChild(cell);
+          });
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        append(gateSection, wrap, make('p', 'decision-notice', decisionGate.detailNotice));
+        article.appendChild(gateSection);
+      }
+
+      const authModes = operation.authModes || [];
+      if (authModes.length) {
+        const authSection = make('section', 'section contract-detail');
+        const authTitle = make('div', 'row section-title');
+        const authTabs = make('div', 'tabs');
+        const authBody = make('div', '');
+        append(authTitle, make('h3', '', '认证'), authTabs);
+        append(authSection, authTitle, authBody);
+        article.appendChild(authSection);
+        let selectedAuth = authModes.find((item) => item.preferred) || authModes[0];
+        const renderAuth = () => {
+          authTabs.querySelectorAll('button').forEach((button) => {
+            button.setAttribute('aria-pressed', String(button.dataset.authId === selectedAuth.id));
+          });
+          authBody.replaceChildren();
+          const wrap = make('div', 'table-wrap');
+          const table = make('table', '');
+          const head = make('thead', '');
+          const headRow = make('tr', '');
+          const authColumns = ['Header', '必填', '示例值', '说明'];
+          authColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+          head.appendChild(headRow);
+          const body = make('tbody', '');
+          selectedAuth.headers.forEach((header) => {
+            const row = make('tr', '');
+            const cells = [
+              append(make('td', ''), code(header.name)),
+              make('td', '', header.required ? '是' : '否'),
+              append(make('td', ''), code(header.value)),
+              make('td', '', header.description)
+            ];
+            cells.forEach((cell, index) => { cell.dataset.label = authColumns[index]; });
+            append(row, ...cells);
+            body.appendChild(row);
+          });
+          append(table, head, body);
+          wrap.appendChild(table);
+          const request = [
+            `${operation.method.toUpperCase()} ${fullPath}`,
+            ...selectedAuth.headers.map((header) => `${header.name}: ${header.value}`)
+          ].join('\n');
+          append(authBody, wrap, append(make('pre', ''), code(request)));
+        };
+        authModes.forEach((mode) => {
+          const button = make('button', '', mode.label);
+          button.type = 'button';
+          button.dataset.authId = mode.id;
+          button.setAttribute('aria-pressed', String(mode.id === selectedAuth.id));
+          button.addEventListener('click', () => {
+            selectedAuth = mode;
+            renderAuth();
+          });
+          authTabs.appendChild(button);
+        });
+        renderAuth();
+      }
+
+      const requestSection = make('section', 'section contract-detail');
+      requestSection.appendChild(make('h3', '', '参数与请求体'));
+      const parameters = operation.parameters || [];
+      if (parameters.length) {
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        const parameterColumns = ['位置', '名称', '必填', '约束', '说明'];
+        parameterColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        parameters.forEach((parameter) => {
+          const row = make('tr', '');
+          const cells = [
+            make('td', '', parameter.in),
+            append(make('td', ''), code(parameter.name)),
+            make('td', '', parameter.required ? '是' : '否'),
+            append(make('td', ''), code(parameter.schema || '—')),
+            make('td', '', parameter.description)
+          ];
+          cells.forEach((cell, index) => { cell.dataset.label = parameterColumns[index]; });
+          append(row, ...cells);
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        requestSection.appendChild(wrap);
+      } else {
+        requestSection.appendChild(make('p', 'muted empty', '无 path/query/header 业务参数。'));
+      }
+      const requestBody = operation.requestBody || {};
+      requestSection.appendChild(make('p', 'muted empty', requestBody.description || '无请求体。'));
+      if (requestBody.example !== undefined && requestBody.example !== null) {
+        requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
+      }
+      article.appendChild(requestSection);
+
+      const responseSection = make('section', 'section contract-detail');
+      const responseTitle = make('div', 'row section-title');
+      const localeTabs = make('div', 'tabs');
+      append(responseTitle, make('h3', '', '响应'), localeTabs);
+      const statusTabs = make('div', 'tabs');
+      const responseBody = make('div', '');
+      append(responseSection, responseTitle, statusTabs, responseBody);
+      article.appendChild(responseSection);
+      const responses = operation.responses;
+      const responseIdentity = (response) => response.id || response.status;
+      let selectedResponse = responses[0];
+      let selectedLocale = Object.keys(selectedResponse.bodies || {})[0] || 'default';
+      const renderResponse = () => {
+        statusTabs.querySelectorAll('button').forEach((button) => {
+          button.setAttribute('aria-selected', String(button.dataset.responseId === responseIdentity(selectedResponse)));
+        });
+        const locales = Object.keys(selectedResponse.bodies || {});
+        if (!locales.includes(selectedLocale)) selectedLocale = locales[0] || 'default';
+        localeTabs.replaceChildren();
+        locales.forEach((locale) => {
+          const button = make('button', '', locale);
+          button.type = 'button';
+          button.setAttribute('aria-pressed', String(locale === selectedLocale));
+          button.addEventListener('click', () => {
+            selectedLocale = locale;
+            renderResponse();
+          });
+          localeTabs.appendChild(button);
+        });
+        responseBody.replaceChildren();
+        responseBody.appendChild(make('p', 'description', `${selectedResponse.status} ${selectedResponse.label} — ${selectedResponse.summary}`));
+        const responseHeaders = { ...(selectedResponse.headers || {}) };
+        if (selectedLocale !== 'default' && Object.hasOwn(responseHeaders, 'Content-Language')) {
+          responseHeaders['Content-Language'] = selectedLocale;
+        }
+        const headerLines = Object.entries(responseHeaders).map(([name, value]) => `${name}: ${value}`);
+        const payload = selectedResponse.bodies ? selectedResponse.bodies[selectedLocale] : null;
+        const output = [...headerLines, headerLines.length ? '' : null, payload === undefined ? null : pretty(payload)]
+          .filter((item) => item !== null).join('\n');
+        responseBody.appendChild(append(make('pre', ''), code(output)));
+      };
+      responses.forEach((response) => {
+        const button = make('button', '', response.tabLabel || response.status);
+        button.type = 'button';
+        button.dataset.responseId = responseIdentity(response);
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-selected', String(response === selectedResponse));
+        button.addEventListener('click', () => {
+          selectedResponse = response;
+          renderResponse();
+        });
+        statusTabs.appendChild(button);
+      });
+      renderResponse();
+
+      shell.replaceChildren();
+      append(shell, topbar, article);
+
+      const questions = review.questions || [];
+      if (questions.length) {
+        const form = make('form', 'review-form');
+        form.appendChild(make('h3', '', '继续调整'));
+        const questionGrid = make('div', 'question-grid');
+        if (questions.length === 1) questionGrid.classList.add('question-grid-single');
+        questions.forEach((question) => {
+          const fieldset = make('fieldset', '');
+          fieldset.appendChild(make('legend', '', question.legend));
+          question.options.forEach((option, index) => {
+            const label = make('label', '');
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = question.id;
+            input.value = option.value;
+            input.checked = option.selected || (!question.options.some((item) => item.selected) && index === 0);
+            const optionCopy = make('span', 'option-copy');
+            append(optionCopy,
+              make('span', 'option-label', option.label),
+              make('span', 'option-detail', option.value));
+            append(label, input, optionCopy);
+            fieldset.appendChild(label);
+          });
+          questionGrid.appendChild(fieldset);
+        });
+        form.appendChild(questionGrid);
+        const actions = make('div', 'actions');
+        const submit = make('button', 'submit', '提交调整意见');
+        submit.type = 'submit';
+        const formStatus = make('span', 'muted', '');
+        formStatus.setAttribute('role', 'status');
+        formStatus.setAttribute('aria-live', 'polite');
+        append(actions, submit, formStatus);
+        form.appendChild(actions);
+        const promptOutput = make('pre', 'prompt-output', '');
+        promptOutput.hidden = true;
+        form.appendChild(promptOutput);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const selections = questions.map((question) => `- ${question.legend}：${data.get(question.id)}`).join('\n');
+          const promptSuffix = review.promptSuffix || '请按这些选择更新主维护契约、设计文档和当前接口展示。';
+          const prompt = `${review.promptPrefix}\n${selections}\n${promptSuffix}`;
+          if (!window.openai || typeof window.openai.sendFollowUpMessage !== 'function') {
+            promptOutput.textContent = prompt;
+            promptOutput.hidden = false;
+            try {
+              await navigator.clipboard.writeText(prompt);
+              formStatus.textContent = '调整提示已复制，请粘贴到对话中。';
+            } catch (error) {
+              formStatus.textContent = '请复制下方调整提示并发送到对话中。';
+            }
+            return;
+          }
+          formStatus.textContent = '正在提交…';
+          try {
+            await window.openai.sendFollowUpMessage({ prompt, title: review.followUpTitle });
+            formStatus.textContent = '已提交。';
+          } catch (error) {
+            formStatus.textContent = '提交失败，请重试。';
+          }
+        });
+        shell.appendChild(form);
+      }
+    })();
+  </script>
+</div>
+
+  </main>
+</body>
+</html>
