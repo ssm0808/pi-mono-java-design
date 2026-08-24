@@ -2,12 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.1.0 |
-| 状态 | 目标设计，待实现 |
+| 文档版本 | 2.2.0 |
+| 状态 | 目标设计；PR 167 压缩细节已按 pi 固化并完成实现对齐 |
 | 更新日期 | 2026-08-24 |
-| 设计仓分析基线 | `3fde5735cd27433c3e3e5e03a5ce39b297ad3b00` |
+| 设计仓分析基线 | `e4cf448140de0a4a23a4106d0043f709ad2a56cd` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
+| CampusClaw 压缩修订前基线 | `a7f78fed345a289833970cd7b78399f0e8e51d32` |
 | pi-mono 对照基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | 精确工具契约 | [8 个活动内置工具契约](built-in-tool-contracts.md) |
@@ -96,6 +97,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 当前 Cron payload 接受 model、system prompt 和 allowed tools，并依赖本地存储与 OS/进程调度 | `modules/cron/src/main/java/com/campusclaw/cron/tool/CronTool.java`、`model/CronPayload.java`、`engine/CronEngine.java` |
 | 当前 `ReadTool` 自行使用 cwd 做路径边界，`BashExecutor` 只设置子进程 cwd | `tool/read/ReadTool.java`、`util/PathUtils.java`、`tool/bash/BashExecutor.java` |
 | PR 167 按 TUI/CLI 包树删除了同时承载入口无关压缩和 Slash Command 的源码 | PR 167 `f60cc3e` 相对 merge base 的 `modules/coding-agent-cli/.../session`、`command`、`modes` 删除差异 |
+| 修订前公共压缩已恢复“至少保留末条消息”，但溢出、Usage、split-turn、重复摘要和摘要请求细节仍未完整对齐 pi | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java`、`session/compaction/SessionCompactor.java`，基线 `a7f78fed` |
 
 ### 3.2 pi 与 OpenCode 对照
 
@@ -104,6 +106,12 @@ pi 内置的 `read`、`grep`、`find` 和 `ls` 是本地只读工具语义的对
 cwd/model/tool override、parallel/chain 参数不成为 CampusClaw 契约。源码证据：
 `packages/coding-agent/src/core/tools/read.ts`、`grep.ts`、`find.ts`、`ls.ts`，以及
 [pi Subagent 示例](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/examples/extensions/subagent/index.ts)。
+
+公共压缩以 pi `packages/coding-agent/src/core/agent-session.ts` 的
+`_checkCompaction/_runAutoCompaction`、`packages/coding-agent/src/core/compaction/compaction.ts`
+的 `estimateContextTokens/findCutPoint/prepareCompaction/compact/generateSummaryWithUsage`、
+`packages/coding-agent/src/core/compaction/utils.ts` 的 `serializeConversation/extractFileOpsFromMessage`
+及 `packages/ai/src/utils/overflow.ts` 的 `isContextOverflow/isRecoverableLength` 为强制证据。
 
 OpenCode `TaskTool` 仅用于对照父子消息隔离、进度和取消，不继承它的权限、Session
 持久化或工具注册模型。源码证据：
@@ -117,6 +125,7 @@ OpenCode `TaskTool` 仅用于对照父子消息隔离、进度和取消，不继
 | 产品约束 | 删除 CLI/TUI 产品入口、Loop、旧名和兼容 payload | 产品没有交互终端生命周期，不承担首版兼容 |
 | 架构改造 | 三入口共用轻量 Session 与工厂 | 防止模型、hook、工具、错误和取消语义漂移 |
 | 架构改造 | 压缩与 Read 文件追踪迁入公共 Session | 入口删除不能让 Runtime、Cron、Child 丢失上下文治理 |
+| 架构改造 | Runtime 使用 append-only 数据库 Entry 保存摘要与边界 | 替代 pi JSONL compaction entry，同时保持历史不可变和模型恢复边界独立 |
 | 架构改造 | 保留未注册的 Slash 核心和四个处理器 | 命令语义可复用，但首版不增加 Host 或 HTTP 入口 |
 | 架构改造 | 删除 ToolCatalog、动态注册和 Java Extension 工具 | 启动期严格 profile 是唯一模型工具来源 |
 | 架构改造 | 逐工具并发模式与串行 barrier | 只读工具并行且有副作用工具不跨越顺序边界 |
@@ -124,6 +133,7 @@ OpenCode `TaskTool` 仅用于对照父子消息隔离、进度和取消，不继
 | 安全加固 | 每个 Session 固化 Agent 工作区边界 | 阻止本地工具读取兄弟 Agent 或外部路径 |
 | 安全加固 | Find/Grep 不在调用期下载二进制且不回退到 shell | TOB Runtime 的可执行依赖必须在部署和启动期受控 |
 | 安全加固 | 受管树在同级临时目录完整校验后发布 | Session 不读取半成品，refresh 失败保留旧树 |
+| 安全加固 | 拒绝空摘要、摘要 ToolCall、失败或取消摘要 | 不允许无效摘要覆盖可恢复的旧上下文 |
 | 架构改造 | Mate 名称到 ID 缓存按 Session 和来源维护 | 模型直接按名称调用，同时适配现有 ID 执行接口 |
 | 产品约束 | Call 缓存 miss 自动刷新，不强制模型先 List | 缓存是实现细节，不成为模型调用顺序 |
 | 产品约束 | Child 只按直接绑定名称调用，首版深度 1 | 避免全局枚举、循环和无边界递归 |
@@ -349,7 +359,7 @@ agent/{agentId}/.campusclaw/
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L648)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L690)
 
 ## 9. Mate 工具发现、缓存与执行
 
@@ -496,9 +506,37 @@ HTTP 接口，也不拦截 `POST /events` 中以 `/` 开头的普通消息。`/n
 [PlantUML 源码：`managed_session_compaction`](diagram.puml#L590)
 
 默认配置为 `enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`。执行正常结束后
-超过阈值则压缩；模型返回上下文溢出时，丢弃该错误 Assistant，压缩成功后最多重试一次。
-摘要失败不替换旧上下文，历史 Entry 不删除。成功结果保存完整摘要、保留边界、压缩前后
-Token 和本次 Usage，并供恢复模型上下文时使用。
+超过阈值则压缩；摘要瞬态重试默认开启、最多 3 次、基础退避 2000ms。`enabled=false`
+同时关闭阈值和溢出自动压缩。判定只接受当前
+provider/model 且晚于最新压缩边界的 Assistant。优先使用最后一条有效 Assistant Usage；
+Usage 不可用时，从该位置以后估算尾部消息，文本与 JSON 参数使用 `ceil(chars/4)`，image
+按 4800 chars。只有 Token 严格大于 `contextWindow-reserveTokens` 才触发阈值压缩。
+
+自动压缩必须区分两类溢出：
+
+1. 正常 `STOP` 且 Usage 已超过窗口是“静默成功溢出”。压缩包含成功 Assistant 的完整
+   上下文，向 Host 返回原成功答案，不重放已经成功的模型调用。
+2. `ERROR`、`LENGTH`、provider 显式 overflow 或可恢复 length 是“失败溢出”。只在压缩
+   候选中排除该失败 Assistant，成功后重试一次；第二次仍溢出时发出明确失败，不再进入
+   “压缩—重试”循环。数据库恢复出的未处理失败溢出在接受下一条 prompt 前先压缩恢复。
+
+自动流程先执行 `prepare`；如果没有安全可压缩窗口则静默跳过，不投影 started/failed。
+切点只允许 User 或 Assistant，ToolResult 不能成为第一条保留消息。最后一条 Assistant
+即使独自超过 `keepRecentTokens` 也必须保留；同一轮被切掉的前缀单独摘要，再与历史摘要
+合并 Usage/Cost。重复压缩更新上一次摘要并继承已排序的 `<read-files>`，边界始终指向
+当前上下文第一条保留消息。
+
+摘要使用固定 Goal/Constraints/Progress/Decisions/Next Steps/Critical Context 结构和
+`<conversation>/<previous-summary>` 标签，序列化 thinking、tool name 和 JSON 参数；单个
+ToolResult 最多 2000 字符。摘要调用无工具、cache 为 none、使用新的 routing session ID；
+历史摘要与轮次前缀输出上限分别是 reserve 的 80% 和 50%，且不超过模型 maxTokens；
+仅瞬态失败按有界退避重试。摘要为空、包含 ToolCall、失败或被取消时不替换旧上下文，
+历史 Entry 不删除。
+
+Runtime 只在 prepare 成功后发 `session.compaction.started`。失败事件包含
+`reason/willRetry/aborted/message` 且不持久化；成功事件保存完整摘要、保留边界、压缩前后
+Token 和本次 Usage。CampusClaw 只追踪 PascalCase `Read`，不恢复 pi 的 Bash/Edit/Write、
+JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 ### 12.4 删除、禁用与替换
 
@@ -551,7 +589,11 @@ Token 和本次 Usage，并供恢复模型上下文时使用。
 - 父与 Child Session 实例隔离但使用相同 Factory/执行语义；
 - Cron Job 按 Agent 隔离，触发时使用当前配置，不接受旧 payload 字段。
 - Slash 核心和四个处理器可用测试端口独立执行，但没有 Spring 自动注册或 HTTP 解析；
-- 阈值/溢出压缩、一次重试、失败回滚、完整摘要恢复和 Read 文件追踪通过测试。
+- Usage/估算阈值、失效边界、显式/静默/Xiaomi/可恢复 length 溢出通过测试；
+- 成功 STOP 只压缩不重试，ERROR/LENGTH 最多重试一次，第二次溢出显式失败；
+- 超大末条 Assistant、ToolResult 安全切点、split-turn、重复摘要边界和 Read 路径继承通过测试；
+- 固定结构摘要、2000 字符截断、无工具/cache、Token 上限、瞬态重试和 Usage/Cost 合并通过测试；
+- 自动 prepare 空结果不发事件，失败回滚、取消 `aborted=true` 和完整摘要恢复通过测试。
 
 ## 14. 文档治理与实现顺序
 
@@ -573,6 +615,7 @@ Token 和本次 Usage，并供恢复模型上下文时使用。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.2.0 | 2026-08-24 | 固定 pi 压缩细节：Usage/失效边界、成功 STOP 不重试、错误/length 单次恢复、超大末条保留、split-turn/重复摘要、结构化摘要、Read 路径继承、取消及瞬态摘要重试。 |
 | 2.1.0 | 2026-08-24 | 修订 PR 167 的 TUI 删除边界：保留未注册 Slash 核心及四个处理器，压缩与 Read 追踪迁入公共 Session；明确 Usage/领域事件和 refresh 后下一次执行懒解析。 |
 | 2.0.0 | 2026-08-23 | 收敛为 Runtime/Cron/Child 三入口与 8 个活动工具；删除 CLI/Loop、硬禁用 Bash/Edit/Write、将 Glob/ListDirectory 对齐为 Find/Ls；补充 Mate Session 缓存与 miss 自动刷新，并将 Child 统一为公共 AgentSessionFactory 创建的独立 Execution。 |
 | 1.1.0 | 2026-08-22 | 将本地文件边界固定为整个 `agent/{agentId}`，补充跨 Agent、符号链接、非普通文件和 Child 根隔离。 |

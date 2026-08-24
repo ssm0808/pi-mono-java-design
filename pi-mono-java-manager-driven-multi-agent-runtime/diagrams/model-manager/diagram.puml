@@ -3,7 +3,9 @@ title Model Manager Provider Streaming Flow
 
 ' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
 ' packages/ai/src/types.ts, Model, Context, AssistantMessageEvent, and Usage.
-' packages/coding-agent/src/core/agent-session.ts, auto compaction and overflow recovery.
+' packages/coding-agent/src/core/agent-session.ts, _checkCompaction and _runAutoCompaction.
+' packages/coding-agent/src/core/compaction/compaction.ts, generateSummaryWithUsage.
+' packages/ai/src/utils/overflow.ts, isContextOverflow and isRecoverableLength.
 ' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProvider.java, ApiProvider.
 ' modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java, ApiProviderRegistry.
@@ -54,7 +56,7 @@ loop stream events
   Provider --> Loop : AssistantMessageEvent
 end
 
-opt threshold or context overflow requires compaction
+opt a safe prepared threshold or overflow window exists
   Session -> AiService : completeSimple(model, summary Context, options)
   AiService -> Registry : getProvider(MODEL_MANAGER)
   Registry --> AiService : ModelManagerApiProvider
@@ -62,8 +64,10 @@ opt threshold or context overflow requires compaction
   Provider -> ModelManager : invoke authorized compaction request
   ModelManager --> Provider : completed summary with Usage
   Provider --> Session : full summary and Usage
-  alt context overflow and first recovery attempt
+  alt ERROR or LENGTH overflow and first recovery attempt
     Session -> Loop : continue execution once with compacted context
+  else successful STOP overflow
+    Session -> Session : preserve answer and do not replay
   end
 end
 
@@ -83,5 +87,6 @@ note over Session,ModelManager
 Compaction uses the same Agent model authority.
 The returned input, output, cache, total token, and USD cost fields
 are persisted with the compaction completion event.
+Summary calls have no tools or cache and use a fresh routing ID.
 end note
 @enduml

@@ -2,17 +2,18 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.39.0 |
-| 状态 | 十一个接口路径保持不变；本版补齐公共 Session 能力、Usage 和领域事件目标契约 |
+| 文档版本 | 1.40.0 |
+| 状态 | 十一个接口路径保持不变；本版固定 pi 压缩细节及失败取消语义 |
 | 接口评审状态 | 十一个 operation 均已确认 |
 | 精确契约源 | [`contract/common.json`](contract/common.json) 与 [`contract/operations/`](contract/operations/) |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，由精确契约源生成 |
 | 对外机器契约 | 不维护；结构化 JSON 只作为 HTML 生成源，不替代已废弃 OpenAPI |
 | 端到端传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均为 HTTP；执行响应使用请求范围内 SSE |
-| 设计仓分析基线 | `3fde5735cd27433c3e3e5e03a5ce39b297ad3b00` |
+| 设计仓分析基线 | `e4cf448140de0a4a23a4106d0043f709ad2a56cd` |
 | pi-mono 源码基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | pi-mono-java PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | pi-mono-java PR 167 merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
+| pi-mono-java 压缩修订前基线 | `a7f78fed345a289833970cd7b78399f0e8e51d32` |
 | OpenCode 源码基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | pi-mono-java 字段命名核对基线 | `304eda06ff603fc9b6bbcaad0c296cc151a7defb`（`codex/runtime-http-contract-v137`） |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
@@ -376,7 +377,7 @@ JSON；响应开始后发生的错误只能以流内错误事件表达。
 | `tool.result` | 返回已持久化的完整 ToolResultEntry | 是 | 以 `toolCallId` 关联工具调用，并记录 `entryId/entrySeq` 与权威结果 |
 | `session.compaction.started` | 公共 Session 开始阈值、溢出或手工压缩 | 否 | 显示压缩状态，不作为历史事实 |
 | `session.compaction.completed` | 压缩完成；包含原因、完整摘要、保留边界、压缩前后 Token 和 Usage | 是 | 保存恢复所需的最新压缩边界与摘要 |
-| `session.compaction.failed` | 压缩失败且旧上下文保持不变 | 否 | 可提示失败；不得推断原上下文已被修改 |
+| `session.compaction.failed` | 压缩失败且旧上下文保持不变；包含 `reason/willRetry/aborted/message` | 否 | `aborted=true` 表示取消；不得推断原上下文已被修改 |
 | `session.status.idle` | 本次 active execution 已清理，Session 回到 idle | 否 | 更新粗粒度 Session 状态 |
 | `stream.end` | 本次 POST 的成功事件流正常结束 | 否 | 停止读取流；不是可分页读取的持久化 Entry |
 
@@ -498,15 +499,39 @@ SSE `data` 固定为单行 JSON，每个 frame 以一个空行结束。只有
 #### 2.2.1 公共 Session 压缩能力
 
 压缩属于 `ManagedAgentSession`，不属于已删除的 TUI Host。默认配置沿用
-`enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`。Session 在达到阈值时
-主动压缩；模型返回上下文溢出时执行一次压缩并最多重试原模型调用一次，不允许形成
-无限“压缩—重试”循环。手工压缩原因 `manual` 供保留的 `/compact` 处理器调用，但首版
-没有 Host 注册该命令，也不增加 HTTP Compact operation。
+`enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`；`enabled=false` 同时关闭
+阈值和溢出自动压缩。摘要瞬态重试默认开启、最多 3 次、基础退避 2000ms。手工压缩原因
+`manual` 供保留的 `/compact` 处理器调用，但首版没有
+Host 注册该命令，也不增加 HTTP Compact operation。
 
-压缩先在候选上下文上生成完整摘要，成功后才发布新恢复边界。失败保留旧上下文，已经
-持久化的历史 Entry 一律不删除；关闭 Session 或父执行取消时，压缩和唯一一次重试共同
-响应取消。`FileOperationTracker` 随压缩核心迁移，首版只跟踪 `Read` 结果，以便摘要保留
-已读文件事实；Bash/Edit/Write 均未装配，也不参与追踪。
+自动判定对齐 pi `agent-session.ts::_checkCompaction/_runAutoCompaction`、
+`compaction.ts::estimateContextTokens/prepareCompaction/compact` 和
+`overflow.ts::isContextOverflow/isRecoverableLength`：只接受当前 provider/model 且晚于最新
+压缩边界的 Assistant。优先使用最后一条有效 Usage；不可用时估算后续消息，文本和 JSON
+参数使用 `ceil(chars/4)`，image 按 4800 chars。只有 Token 严格大于
+`contextWindow-reserveTokens` 才触发阈值压缩。
+
+正常 `STOP` 但 Usage 已越界表示模型调用成功：压缩完整上下文后保留并返回该答案，绝不
+重放。`ERROR`、`LENGTH`、显式 provider overflow 或可恢复 length 才从候选中排除失败
+Assistant，压缩成功后重试一次；第二次仍溢出发 `session.compaction.failed`，不再压缩重试。
+从数据库恢复出的未处理失败溢出在接受下一条 prompt 前先完成恢复压缩。
+
+自动压缩先 prepare；没有安全可压缩窗口时静默跳过，不发送 started/failed。安全切点只允许
+User 或 Assistant，ToolResult 不能成为第一条保留消息；单独超过 `keepRecentTokens` 的末条
+Assistant 仍必须保留。同轮前缀单独摘要并与历史摘要合并 Usage/Cost；重复压缩更新旧摘要、
+继承排序后的 `<read-files>`，并把 `firstKeptEntryId` 映射到当前上下文第一条保留消息。
+
+摘要使用固定结构和 `<conversation>/<previous-summary>` 标签，包含 thinking 与 tool JSON
+参数，单个 ToolResult 最多 2000 字符。请求不带工具、cache 为 none、使用新的 routing
+session ID；历史和 turn-prefix 输出上限分别为 reserve 的 80% 和 50%，且不超过模型
+maxTokens；只对瞬态摘要失败执行有界退避。摘要为空、包含 ToolCall、失败或取消时不发布
+新上下文，已经持久化的历史 Entry 一律不删除。`FileOperationTracker` 只跟踪 PascalCase
+`Read`；Bash/Edit/Write 均未装配，也不参与追踪。
+
+只有 prepare 成功后才投影 `session.compaction.started`。`session.compaction.failed` 固定为
+`reason/willRetry/aborted/message`，其中 `aborted=true` 只表示压缩或父执行被取消；它不持久化。
+`session.compaction.completed` 保存完整摘要、边界、压缩前后 Token 和本次 Usage，并原子累计
+Session lifetime Usage。
 
 ### 2.3 持久化事件与恢复
 
@@ -667,7 +692,7 @@ CampusClaw 产品投影，不应表述为 pi 已有分页接口。Anthropic 的
 
 ![HTTP Session Events 开放分页](diagrams/session-events/http_session_event_list.svg)
 
-[PlantUML 源码：`http_session_event_list`](diagrams/session-events/diagram.puml#L124)
+[PlantUML 源码：`http_session_event_list`](diagrams/session-events/diagram.puml#L135)
 
 ### 2.4 模型与 Session 配置
 
@@ -1112,6 +1137,8 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 观察到的行为 | PR 167 在 `f60cc3e` 删除 `modules/coding-agent-cli/.../command/` 中 Slash Registry、`ModelCommand`、`ThinkingCommand`、`CompactCommand`、`NameCommand`，同时删除 `.../compaction/Compactor`、`FileOperationTracker` 与旧大型 `AgentSession`；该删除按包边界发生，未先迁移入口无关能力 |
 | 观察到的行为 | PR 167 新增 `modules/coding-agent-cli/.../session/ManagedAgentSession.java` 和 `AgentSessionFactory.java`，但基线 Session 只持有 Runtime、入口、Agent 和工具，不包含阈值/溢出压缩、Usage 累计或 Host 无关 Slash 操作端口 |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 `5cd93f6` 中的 `compact()`、`autoCompact()`、`setModel()`、`setThinkingLevel()` 与 Session Entry 写入证明压缩及配置变更是 Agent Session 能力，不依赖终端绘制组件 |
+| 观察到的行为 | pi-mono-java `a7f78fed` 已恢复超大末条消息保留，但 `ManagedAgentSession`、`SessionCompactor` 和 `ContextOverflowDetector` 尚未完整实现 pi 的成功 STOP 不重试、Usage/失效边界、recoverable length、split-turn、重复摘要、结构化请求和瞬态摘要重试 |
+| 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts::_checkCompaction/_runAutoCompaction`、`core/compaction/compaction.ts::estimateContextTokens/findCutPoint/prepareCompaction/compact` 与 `packages/ai/src/utils/overflow.ts` 基线 `5cd93f6` 明确区分三类自动压缩，并固定安全切点、摘要选项和单次溢出恢复 |
 | 观察到的行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ServerMode.java` 基线 285-307：当前使用 WebSocket Upgrade，其余请求交给 RouterFunctions Adapter |
 | 观察到的行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/server/ChatWebSocketHandler.java` 基线 115-227、422-459：v1 命令、断线生命周期和累计消息更新 |
 | 观察到的行为 | `modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java` 基线 44-164：结构化 provider 流事件 |
@@ -1177,6 +1204,8 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 安全加固 | `tool.execution.delta` 不返回工具参数；序列化、大小和背压异常只丢进度，不得破坏最终 ToolResult 或 SSE 连接 |
 | 架构改造 | CampusClaw 生成类型化 Session ID、直接 Agent 目录解析、ResultBeanAdapter 替换点、ETag 并发控制、请求范围内 POST SSE、断线后执行继续、按 thinking 状态投影与查询 thinking completed、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
 | 架构改造 | 将压缩与 Read 文件追踪迁入 `ManagedAgentSession`；持久化 Assistant/Compaction Usage 并在 `t_session_materialized` 原子累计；历史查询与模型恢复使用不同投影 |
+| 架构改造 | Runtime append-only Entry 替代 pi JSONL compaction entry；成功 STOP 溢出不重放，失败/length 最多恢复一次，并以 persisted provider/model 和摘要边界阻止失效判定 |
+| 安全加固 | 空摘要、摘要 ToolCall、失败或取消摘要不能发布新恢复边界；failed.aborted 明确区分取消和普通失败 |
 | 架构改造 | 管理面 refresh 不修改 active execution 快照；下一次空闲执行按新目录懒校准模型，并在 User Entry 前原子投影配置变更 |
 | 已实现行为 | GET Session Models 以 `string[]` 实时返回 Agent allowlist 与当前可用模型交集中的 `modelId` 值，不分页；目标字段 `currentModelId` 允许因管理面后续停用而不在 `models` 中 |
 | 已实现行为 | PR 167 基线的 PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功返回完整 SessionResource 和 ETag，相同值按无变化成功返回 |
@@ -1202,13 +1231,15 @@ mate-service。除公共 mate-service API 仍待逐项评审外，本文描述�
 `972f98ca` 完成运行根目录、事件职责和多实例错误边界整改。字段命名核对基线
 `304eda06` 已实现 HTTP 1.37 的类型化 ID、`thinking=true`、全接口调用上下文 Header 且无
 Runtime 本地认证、请求体删除 `type` 和 thinking 事件可见性；1.38 的 lowerCamelCase
-wire fields 以及本版 1.39 的公共压缩、Usage、领域事件、工具 delta 与 refresh 懒校准，
+wire fields、1.39 的公共压缩/Usage/领域事件/工具 delta/refresh 懒校准，以及本版 1.40 的
+pi 压缩细节与 failed.aborted，
 均相对 PR 167 基线标记为目标设计，不得表述成该基线已有行为。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.40.0 | 2026-08-24 | 十一个路径不变；固定 pi 压缩的 Usage/边界/安全切点、成功 STOP 不重试、ERROR/LENGTH 单次恢复、split-turn/重复摘要、Read 路径继承及 `session.compaction.failed.aborted`。 |
 | 1.39.0 | 2026-08-24 | 保持十一个 HTTP 路径不变；明确不注册或解析 Slash Command；增加 Session `lifetimeUsage`、Assistant/Compaction Usage、模型/思考/压缩持久化领域事件、best-effort 工具 delta 与压缩瞬态事件；拆分公共历史和模型恢复投影，并固定 refresh 在下一次空闲执行前校准模型的事务与事件顺序 |
 | 1.38.0 | 2026-08-21 | 将 Path、Query、JSON 请求、普通 JSON 响应和 SSE data 字段统一为 lowerCamelCase；保留 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`、`If-Match` 等 HTTP Header 原名，以及事件类型值、错误码、枚举值和类型化 ID 值；新增契约校验门禁并记录 `304eda06` 的 snake_case 实现差异 |
 | 1.37.0 | 2026-08-20 | 将 Session ID 固定为 `session-` 加去连字符的 32 位十六进制 UUID；全部十一项操作携带共享调用上下文 Header，但 Runtime 不在 Controller 前或 Controller 内检查组合、共存、格式、真实性，也不声明本地认证错误；提交消息请求删除冗余 `type`；执行快照 `thinking=true` 时开放 thinking started/delta/completed 并持久化 completed，GET Events 按 Session 当前 thinking 状态过滤，状态切换使旧 page 失效 |

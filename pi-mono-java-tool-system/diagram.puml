@@ -555,7 +555,7 @@ package "Keep as host-neutral source" {
 }
 package "Move to common session" {
   [Threshold compaction] as Threshold
-  [Overflow compaction and one retry] as Overflow
+  [STOP preserve and error overflow one retry] as Overflow
   [Read file tracker] as Tracker
 }
 package "Delete" {
@@ -591,12 +591,17 @@ end note
 title Common Session Compaction and Overflow Recovery
 skinparam shadowing false
 
-' Source evidence (pi 5cd93f6):
-' packages/coding-agent/src/core/agent-session.ts: prompt and compaction recovery
-' packages/coding-agent/src/core/compaction.ts: compaction preparation and summary
+' Source evidence (pi 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
+' packages/coding-agent/src/core/agent-session.ts: _checkCompaction, _runAutoCompaction
+' packages/coding-agent/src/core/compaction/compaction.ts: estimateContextTokens,
+' findCutPoint, prepareCompaction, compact, generateSummaryWithUsage
+' packages/coding-agent/src/core/compaction/utils.ts: serializeConversation, extractFileOpsFromMessage
+' packages/ai/src/utils/overflow.ts: isContextOverflow, isRecoverableLength
 ' Source evidence (CampusClaw PR 167 f60cc3e): shared compaction was removed with CLI sources.
-' Target-only Java design: ManagedAgentSession and SessionCompactor own common behavior.
+' Source evidence (Java before alignment a7f78fed): only the last-message retention fix existed.
+' Target-only Java design: ManagedAgentSession and SessionCompactor own the full common behavior.
 ' Design reason: Runtime, Cron, and Child require one failure-safe context policy.
+' Java divergence: append-only database Entries replace pi JSONL entries; only Read paths are tracked.
 
 actor Host
 participant "ManagedAgentSession" as Session
@@ -607,40 +612,77 @@ participant "Model Manager" as Model
 database "Append-only history" as History
 
 Host -> Session : prompt(message)
+Session -> Compactor : decide restored context before prompt
+opt stale ERROR or LENGTH overflow is recoverable
+  Session -> Compactor : prepare without failed Assistant
+  Compactor --> Session : prepared window or none
+  opt prepared window exists
+    Session -> Model : summarize before accepting prompt
+    Model --> Session : summary and Usage
+    Session -> Session : publish compacted context
+  end
+end
 Session -> Agent : execute
-Agent --> Session : completed response or overflow error
-alt context overflow and no prior recovery
+Agent --> Session : Assistant with stop reason and Usage
+Session -> Compactor : decide by same model, boundary,\noverflow, Usage, and fallback estimate
+alt ERROR or LENGTH overflow and no prior recovery
   Session -> Session : remove failed Assistant from retry context
-  Session -> Compactor : compact(reason=overflow, willRetry=true)
+  Session -> Compactor : prepare compactable context
   Compactor -> Tracker : collect Read paths only
-  Compactor -> Model : summarize old context
-  alt summary succeeds
+  alt no safe compactable window
+    Compactor --> Session : none; emit no lifecycle event
+  else window prepared
+    Session --> Host : compaction.started\nreason=overflow, willRetry=true
+    Compactor -> Model : summarize history and optional turn prefix
+    alt summary succeeds
+      Model --> Compactor : full summary and combined Usage
+      Compactor --> Session : summary, retained messages, boundary
+      Session -> History : append compaction completed
+      Session -> Agent : retry original model call once
+      Agent --> Session : final Assistant
+      opt second response still overflows
+        Session --> Host : compaction.failed\nwillRetry=false
+      end
+    else summary fails or is cancelled
+      Model --> Compactor : error or abort
+      Compactor --> Session : failed
+      Session -> Session : retain old context
+      Session --> Host : compaction.failed with aborted flag
+    end
+  end
+else STOP succeeds but Usage is already over context window
+  Session -> Compactor : prepare full context including Assistant
+  alt window prepared
+    Session --> Host : compaction.started\nreason=overflow, willRetry=false
+    Compactor -> Model : summarize successful context
     Model --> Compactor : full summary and Usage
     Compactor --> Session : summary, retained messages, boundary
-    Session -> Agent : replace context and retry once
-    Agent --> Session : final result
     Session -> History : append compaction completed
-  else summary fails
-    Model --> Compactor : error
-    Compactor --> Session : failed
-    Session -> Session : retain old context
   end
-else normal completion exceeds threshold
-  Session -> Compactor : compact(reason=threshold, willRetry=false)
-  Compactor -> Model : summarize old context
-  alt summary succeeds
+  Session --> Host : return original successful answer; no replay
+else valid Usage or fallback estimate exceeds threshold
+  Session -> Compactor : prepare(reason=threshold)
+  opt window prepared
+    Session --> Host : compaction.started\nwillRetry=false
+    Compactor -> Model : summarize structured context
     Model --> Compactor : full summary and Usage
     Compactor --> Session : summary and retained messages
     Session -> History : append compaction completed
-  else summary fails
-    Session -> Session : retain old context
   end
 end
 Session --> Host : execution result
 
 note over Session,Compactor
 Defaults: enabled=true, reserveTokens=16384,
-keepRecentTokens=20000. At most one recovery retry.
+keepRecentTokens=20000. Disabled means no auto compaction.
+Safe cut points are User or Assistant; retain an oversized last Assistant.
+Update previous summaries and inherit sorted Read paths.
+end note
+
+note over Compactor,Model
+Summary calls use no tools, no cache, and a fresh routing ID.
+History and split-turn max outputs are 80% and 50% of reserve.
+Blank summaries, tool calls, failures, and aborts never replace context.
 History entries are never deleted.
 end note
 @enduml

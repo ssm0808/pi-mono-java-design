@@ -4,7 +4,10 @@ title CampusClaw Session Event Direct POST Stream
 ' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
 ' packages/agent/src/types.ts, AgentEvent.
 ' packages/agent/src/agent-loop.ts, tool execution events and ToolResult messages.
-' packages/coding-agent/src/core/agent-session.ts, compaction and Agent event handling.
+' packages/coding-agent/src/core/agent-session.ts, _checkCompaction and _runAutoCompaction.
+' packages/coding-agent/src/core/compaction/compaction.ts, estimateContextTokens,
+' prepareCompaction, compact, and generateSummaryWithUsage.
+' packages/ai/src/utils/overflow.ts, isContextOverflow and isRecoverableLength.
 ' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java.
@@ -15,6 +18,7 @@ title CampusClaw Session Event Direct POST Stream
 ' Architecture change: Assistant and compaction completions persist Usage and update lifetime Usage.
 ' Security hardening: tool delta omits arguments and is best-effort; dropping it never fails a tool.
 ' Design reason: keep transient progress separate from the durable history and recovery boundary.
+' Java divergence: Runtime database Entries replace pi JSONL compaction entries.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -91,16 +95,21 @@ loop each Assistant message
   end
 end
 
-opt threshold, overflow, or manual compaction
-  Session --> API : compaction.started
+opt prepared threshold, overflow, or manual compaction
+  Session --> API : compaction.started after safe window exists
   API --> Caller : session.compaction.started
-  alt compaction succeeds
-    Session --> API : full summary, boundary, tokens, Usage
+  alt structured summary succeeds
+    Session --> API : full summary, first kept boundary, tokens, Usage
     API -> Store : persist compaction and atomically add lifetimeUsage
     API --> Caller : session.compaction.completed
-  else compaction fails
-    Session --> API : failure with old context preserved
-    API --> Caller : session.compaction.failed
+    opt ERROR or LENGTH overflow and first recovery
+      Session -> Session : exclude failed Assistant and retry model once
+    else successful STOP overflow
+      Session -> Session : preserve answer; do not replay model call
+    end
+  else summary fails or is cancelled
+    Session --> API : old context preserved, aborted flag
+    API --> Caller : session.compaction.failed\nreason, willRetry, aborted, message
   end
 end
 
@@ -117,7 +126,9 @@ end note
 note over Session,Store
 Compaction completion stores the full summary and retained boundary.
 Failure never publishes a partial context and never deletes history.
-Overflow compaction can retry the model call at most once.
+Only ERROR or LENGTH overflow can retry the model call once.
+A second overflow emits failure and is never retried again.
+No safe prepared window means no compaction lifecycle event.
 end note
 @enduml
 
