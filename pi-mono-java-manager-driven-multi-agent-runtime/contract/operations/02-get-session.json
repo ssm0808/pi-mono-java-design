@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}",
     "summary": "读取 Session 当前资源",
-    "description": "按 sessionId 只读获取已存在 Session 的当前默认配置和粗粒度运行状态。该接口不创建或恢复 Session，不调用模型，也不实时校验 Model Manager。state 仅表达 Session 当前是 idle 还是 running；thinking 是是否对后续用户消息启用深度思考的布尔开关，同时控制 GET /events 是否返回已持久化的 assistant.thinking.completed。",
+    "description": "按 sessionId 只读获取已存在 Session 的当前默认配置、粗粒度运行状态和从创建至今原子累计的 lifetimeUsage。Token 字段为 input/output/cacheRead/cacheWrite/totalTokens，USD Cost 字段为 input/output/cacheRead/cacheWrite/total。该接口不创建或恢复 Session，不调用模型，也不实时校验 Model Manager。state 仅表达 Session 当前是 idle 还是 running；thinking 是是否对后续用户消息启用深度思考的布尔开关，同时控制 GET /events 是否返回已持久化的 assistant.thinking.completed。",
     "parameters": [
       {
         "$ref": "parameters.sessionId",
@@ -42,6 +42,20 @@
               "modelId": "claude-sonnet-4-5",
               "state": "running",
               "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
               "createdAt": "2026-08-15T10:30:00+08:00",
               "updatedAt": "2026-08-16T09:15:21+08:00"
             }

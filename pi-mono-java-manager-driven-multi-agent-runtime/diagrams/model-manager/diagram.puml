@@ -1,15 +1,18 @@
 @startuml model_manager_streaming_flow
 title Model Manager Provider Streaming Flow
 
-' Source evidence:
-' pi-mono packages/ai/src/types.ts: Model, Context, AssistantMessageEvent
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProvider.java: ApiProvider
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java: ApiProviderRegistry
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/SimpleStreamOptions.java: metadata
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java: event records
+' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
+' packages/ai/src/types.ts, Model, Context, AssistantMessageEvent, and Usage.
+' packages/coding-agent/src/core/agent-session.ts, auto compaction and overflow recovery.
+' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
+' modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProvider.java, ApiProvider.
+' modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java, ApiProviderRegistry.
+' modules/ai/src/main/java/com/campusclaw/ai/types/SimpleStreamOptions.java, metadata.
+' modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java, event records.
 ' Observed behavior: Java dispatches by Model.api to a Spring-discovered ApiProvider.
 ' Architecture change: one MODEL_MANAGER Api routes every managed model through Model Manager.
 ' Design reason: model_id selects the model while agent_id authorizes it for the current Agent.
+' Architecture change: ManagedAgentSession owns compaction calls and preserves their returned Usage.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -29,13 +32,15 @@ skinparam sequence {
 }
 
 actor Client
+participant "ManagedAgentSession" as Session
 participant "AgentLoop" as Loop
 participant "CampusClawAiService" as AiService
 participant "ApiProviderRegistry" as Registry
 participant "ModelManagerApiProvider" as Provider
 participant "Model Manager" as ModelManager
 
-Client -> Loop : prompt
+Client -> Session : prompt
+Session -> Loop : prompt
 Loop -> AiService : stream(model, Context, options)
 AiService -> Registry : getProvider(MODEL_MANAGER)
 Registry --> AiService : ModelManagerApiProvider
@@ -49,6 +54,19 @@ loop stream events
   Provider --> Loop : AssistantMessageEvent
 end
 
+opt threshold or context overflow requires compaction
+  Session -> AiService : completeSimple(model, summary Context, options)
+  AiService -> Registry : getProvider(MODEL_MANAGER)
+  Registry --> AiService : ModelManagerApiProvider
+  AiService -> Provider : streamSimple(model, summary Context, metadata)
+  Provider -> ModelManager : invoke authorized compaction request
+  ModelManager --> Provider : completed summary with Usage
+  Provider --> Session : full summary and Usage
+  alt context overflow and first recovery attempt
+    Session -> Loop : continue execution once with compacted context
+  end
+end
+
 alt Session-scoped abort
   Client -> Loop : POST /sessions/{sessionId}/abort
   Loop -> Provider : cancel model subscription
@@ -59,5 +77,11 @@ note over Provider,ModelManager
 The Provider maps events only.
 Tool execution remains in AgentLoop.
 No fallback to built-in providers.
+end note
+
+note over Session,ModelManager
+Compaction uses the same Agent model authority.
+The returned input, output, cache, total token, and USD cost fields
+are persisted with the compaction completion event.
 end note
 @enduml

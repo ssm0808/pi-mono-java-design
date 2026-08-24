@@ -2,11 +2,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.0.0 |
+| 文档版本 | 2.1.0 |
 | 状态 | 目标设计，待实现 |
-| 更新日期 | 2026-08-23 |
-| 设计仓分析基线 | `c2a495838134aa5e8bc535b906e7534b34779279` |
-| CampusClaw 源码基线 | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
+| 更新日期 | 2026-08-24 |
+| 设计仓分析基线 | `3fde5735cd27433c3e3e5e03a5ce39b297ad3b00` |
+| CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
+| CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
 | pi 对照基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | 上位设计 | [工具系统主设计](README.md) |
@@ -44,6 +45,10 @@
 `Read`、`Find`、`Grep`、`Ls` 共用由 `PreparedAgentRuntime.agentRoot()` 创建的不可变
 `AgentWorkspaceBoundary`。其根精确为当前 `agent/{agentId}`，不是进程 cwd，也不是
 `.campusclaw` 子目录。
+
+公共 Session 压缩、Usage 和 Slash Command 不增加或改变模型工具契约。压缩的
+`FileOperationTracker` 只识别 `Read` ToolCall；Slash core 及四个处理器首版不注册到任何
+Host，因此不会出现在工具列表或 HTTP 消息解析链中。
 
 ## 2. 本地只读工具
 
@@ -361,6 +366,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 | 安全加固 | 四个本地工具共用整个 `agent/{agentId}` 边界，拒绝符号链接和 realpath 越界。 |
 | 安全加固 | Find/Grep 的辅助能力随应用部署并在启动期校验，调用期间不下载二进制或回退到 shell。 |
 | 产品约束 | 不提供 CLI、写工具、Bash、Loop、旧名、旧 Cron payload 或 Extension 兼容。 |
+| 架构改造 | TUI/CLI 删除不改变 8 工具关闭集合；压缩迁入公共 Session，Slash 核心仅保留源码且不注册。 |
 
 主要证据路径与符号：
 
@@ -382,6 +388,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.0 | 2026-08-24 | 保持三入口 8 工具契约不变；补充公共压缩只追踪 Read、Slash 源码保留但不注册及 PackageManager 删除边界。 |
 | 2.0.0 | 2026-08-23 | 收敛为三入口、8 个活动工具；Read/Find/Grep/Ls 对齐 pi 并加 Agent 工作区边界；CallMateTool 增加 Session 缓存 miss 自动发现；Child 统一使用公共 SessionFactory；移除 CLI、写工具、Bash 和 Loop 契约。 |
 | 1.1.0 | 2026-08-22 | 旧方案：12 工具、四入口和 CLI/Loop；已由 2.0.0 取代。 |
 | 1.0.0 | 2026-08-22 | 旧方案：冻结首版内置工具契约；已由 2.0.0 取代。 |

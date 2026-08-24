@@ -1,13 +1,14 @@
 @startuml metadata_runtime_directory_mapping
 title Managed Metadata to CampusClaw Runtime Directory
 
-' Source evidence (CampusClaw d649866a6cae967ace18ceaeb9597edd47e5721e):
+' Source evidence (CampusClaw PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, prepare and materialize.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java, resolve.
 ' Observed behavior: the Java baseline has two file contracts and materializes the legacy CLI tree in place.
 ' Architecture change: one managed tree serves Runtime, Cron, and Child entry points.
 ' Security hardening: a complete sibling tree is validated before publication.
 ' Design reason: sessions consume immutable identity indexes and never persist remote tool lists.
+' Architecture change: refresh publishes metadata only; the next idle execution reconciles its model.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -56,6 +57,9 @@ database "Mate metadata authority\nAgent, Skill, Child bindings" as MateAuthorit
 database "Model Manager authority\nmodel availability and credentials" as ModelManager
 rectangle "AgentSessionFactory" as SessionFactory
 rectangle "Immutable name indexes" as Indexes
+database "Runtime Session store" as SessionStore
+rectangle "Next-execution model reconciler" as Reconciler
+rectangle "Active execution snapshot" as ActiveSnapshot
 
 AgentMetadata --> Resolve
 SkillMetadata --> Resolve
@@ -75,6 +79,10 @@ SettingsFile ..> ModelManager : intersect bindingModels with usable credentials
 AgentDirectory --> Indexes : scan exact names
 Indexes --> SessionFactory : Skill and direct Child resolution
 AgentDirectory --> SessionFactory : prompt, workspace, and model settings
+AgentDirectory --> Reconciler : read only before next idle execution
+SessionStore --> Reconciler : current model and thinking
+Reconciler --> SessionStore : optional atomic model/thinking\nchange entries before User Entry
+ActiveSnapshot ..> AgentDirectory : no mutation after refresh
 
 note right of AgentDirectory
 No remote tool list is written to disk.
@@ -86,5 +94,11 @@ note left of Manager
 Complete cache hits do not call Mate.
 Refresh failure keeps the old directory.
 No TTL or version-driven auto refresh.
+end note
+
+note bottom of Reconciler
+Keep the current model while it remains callable.
+Otherwise select the usable new default.
+Reject before accepting a User Entry if none exists.
 end note
 @enduml

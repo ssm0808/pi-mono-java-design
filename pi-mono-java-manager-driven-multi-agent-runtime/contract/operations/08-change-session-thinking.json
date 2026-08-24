@@ -5,7 +5,7 @@
     "method": "PUT",
     "path": "/sessions/{sessionId}/thinking",
     "summary": "开启或关闭 Session 深度思考",
-    "description": "在 Session 处于 idle 时，将 thinking 设置为是否对后续 user.message 启用深度思考。false 映射为关闭推理且 POST /events 不发送 thinking 事件；true 使用当前模型和 Agent 的受管非 off 推理强度，并开放 assistant.thinking.started/delta/completed SSE，其中 completed 持久化。GET /events 按查询时 Session 当前 thinking 状态决定是否返回 assistant.thinking.completed；状态切换后旧 page 失效，调用方须从第一页重新查询。调用方不选择具体推理等级。",
+    "description": "在 Session 处于 idle 时，将 thinking 设置为是否对后续 user.message 启用深度思考。false 映射为关闭推理且 POST /events 不发送 thinking 事件；true 使用当前模型和 Agent 的受管非 off 推理强度，并开放 assistant.thinking.started/delta/completed SSE，其中 completed 持久化。值变化时在同一事务中追加 reason=requested 的 session.thinking.changed；该领域事件历史可见但不成为模型上下文消息。GET /events 按查询时 Session 当前 thinking 状态决定是否返回 assistant.thinking.completed；状态切换后旧 page 失效，调用方须从第一页重新查询。相同值不追加事件。调用方不选择具体推理等级。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -49,6 +49,20 @@
               "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
               "state": "idle",
               "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
               "createdAt": "2026-08-15T10:30:00+08:00",
               "updatedAt": "2026-08-17T14:25:09+08:00"
             }

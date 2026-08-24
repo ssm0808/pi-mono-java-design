@@ -8,6 +8,7 @@ skinparam defaultTextAlignment center
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: AgentTool
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: execute, executeAll
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: initialize, configureRuntimeTools
+' PR 167 f60cc3e: TUI/CLI removal diff deleted entry-independent session capabilities.
 ' Observed behavior: the current CLI session combines catalogs, reload, skills,
 ' delegation, and tool assembly; the Runtime path has separate assembly logic.
 ' Design reason: one closed factory and one light session factory keep all managed
@@ -21,11 +22,17 @@ package "Managed Hosts" {
 
 package "Common Session Layer" {
   [AgentSessionFactory] as SessionFactory
-  [AgentSession] as Session
+  [ManagedAgentSession] as Session
+  [SessionCompactor] as Compactor
   [ConfiguredToolAssembler] as Assembler
   [BuiltInToolFactory] as ToolFactory
   [ToolExecutionPipeline] as Pipeline
   [Immutable hook chain] as Hooks
+}
+
+package "Retained Source Only" {
+  [SlashCommandRegistry] as Slash
+  [/model /thinking /compact /name] as SlashHandlers
 }
 
 package "Active Built-in Tools" {
@@ -65,7 +72,9 @@ ToolFactory --> CallMateTool
 ToolFactory --> Agent
 SessionFactory --> Session : new instance
 Session --> Pipeline
+Session --> Compactor : threshold and overflow
 Pipeline --> Hooks
+Slash --> SlashHandlers
 ListMateTools --> MateClient
 ListMateTools --> MateCache : update one source
 CallMateTool --> MateCache : resolve by name
@@ -86,6 +95,11 @@ end note
 note bottom of Workspace
 Root is agent/{agentId}.
 Reject symlink and realpath escape.
+end note
+
+note bottom of Slash
+No Host registration in version 1.
+No HTTP route or message interception.
 end note
 @enduml
 
@@ -110,7 +124,7 @@ participant "Child Execution Host" as EH
 participant "AgentSessionFactory" as Factory
 participant "AgentRuntimeManager" as Manager
 participant "ConfiguredToolAssembler" as Tools
-participant "AgentSession" as Session
+participant "ManagedAgentSession" as Session
 
 alt Runtime execution
   Runtime -> RH : begin(agentId, sessionId)
@@ -128,7 +142,7 @@ Manager --> Factory : PreparedAgentRuntime
 Factory -> Factory : resolve SYSTEM, models,\nworkspace, skill and child indexes
 Factory -> Tools : assemble(entryPoint, immutableContext)
 Tools --> Factory : new tool instances in profile order
-Factory -> Session ++ : new AgentSession(state, tools, hooks, cancelScope)
+Factory -> Session ++ : new ManagedAgentSession(state, tools, hooks, cancelScope)
 Session --> Factory : ready
 Factory --> RH : Runtime session instance
 Factory --> CH : Cron session instance
@@ -140,7 +154,7 @@ events, progress, and close policy.
 end note
 
 note over Factory,Session
-Same type and assembly semantics.
+Same type, compaction, and assembly semantics.
 Never the same Session instance.
 end note
 @enduml
@@ -518,4 +532,161 @@ end note
 note over External
 Absolute paths do not widen the boundary.
 end note
+@enduml
+
+@startuml tui_capability_migration
+title TUI and CLI Capability Migration Boundary
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+' Source evidence (CampusClaw PR 167 f60cc3e against d649866):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/modes
+' Observed behavior: the deleted package tree also owned compaction and Slash Command logic.
+' Architecture change: classify by responsibility before deleting a product entry point.
+' Design reason: shared session behavior must survive while terminal-only behavior is removed.
+
+rectangle "Former TUI and CLI tree" as Old
+package "Keep as host-neutral source" {
+  [Slash core and registry] as Slash
+  [/model /thinking /compact /name] as Handlers
+  [Session operation port] as Port
+}
+package "Move to common session" {
+  [Threshold compaction] as Threshold
+  [Overflow compaction and one retry] as Overflow
+  [Read file tracker] as Tracker
+}
+package "Delete" {
+  [TUI components and launchers] as Tui
+  [Interactive OneShot RPC ACP] as Modes
+  [JSONL auth settings tree] as Local
+  [Import export clipboard editor templates] as Terminal
+  [PackageManager extensions themes shortcuts] as Packages
+  [Loop OS cron installer notifications] as Legacy
+}
+
+Old --> Slash : keep
+Slash --> Handlers
+Handlers --> Port
+Old --> Threshold : move
+Old --> Overflow : move
+Old --> Tracker : move
+Old --> Tui : delete
+Old --> Modes : delete
+Old --> Local : delete
+Old --> Terminal : delete
+Old --> Packages : delete
+Old --> Legacy : delete
+
+note bottom of Port
+Version 1 has no Host implementation.
+Slash-looking HTTP messages stay user messages.
+Name ownership remains in mate-service.
+end note
+@enduml
+
+@startuml managed_session_compaction
+title Common Session Compaction and Overflow Recovery
+skinparam shadowing false
+
+' Source evidence (pi 5cd93f6):
+' packages/coding-agent/src/core/agent-session.ts: prompt and compaction recovery
+' packages/coding-agent/src/core/compaction.ts: compaction preparation and summary
+' Source evidence (CampusClaw PR 167 f60cc3e): shared compaction was removed with CLI sources.
+' Target-only Java design: ManagedAgentSession and SessionCompactor own common behavior.
+' Design reason: Runtime, Cron, and Child require one failure-safe context policy.
+
+actor Host
+participant "ManagedAgentSession" as Session
+participant "Agent loop" as Agent
+participant "SessionCompactor" as Compactor
+participant "FileOperationTracker" as Tracker
+participant "Model Manager" as Model
+database "Append-only history" as History
+
+Host -> Session : prompt(message)
+Session -> Agent : execute
+Agent --> Session : completed response or overflow error
+alt context overflow and no prior recovery
+  Session -> Session : remove failed Assistant from retry context
+  Session -> Compactor : compact(reason=overflow, willRetry=true)
+  Compactor -> Tracker : collect Read paths only
+  Compactor -> Model : summarize old context
+  alt summary succeeds
+    Model --> Compactor : full summary and Usage
+    Compactor --> Session : summary, retained messages, boundary
+    Session -> Agent : replace context and retry once
+    Agent --> Session : final result
+    Session -> History : append compaction completed
+  else summary fails
+    Model --> Compactor : error
+    Compactor --> Session : failed
+    Session -> Session : retain old context
+  end
+else normal completion exceeds threshold
+  Session -> Compactor : compact(reason=threshold, willRetry=false)
+  Compactor -> Model : summarize old context
+  alt summary succeeds
+    Model --> Compactor : full summary and Usage
+    Compactor --> Session : summary and retained messages
+    Session -> History : append compaction completed
+  else summary fails
+    Session -> Session : retain old context
+  end
+end
+Session --> Host : execution result
+
+note over Session,Compactor
+Defaults: enabled=true, reserveTokens=16384,
+keepRecentTokens=20000. At most one recovery retry.
+History entries are never deleted.
+end note
+@enduml
+
+@startuml refresh_next_execution
+title Refresh Affects the Next Idle Session Execution
+skinparam shadowing false
+
+' Source evidence (CampusClaw PR 167 f60cc3e): AgentRuntimeManager refresh and Runtime Session store.
+' Target-only Java design: RuntimeSessionModelReconciler runs before accepting user.message.
+' Architecture change: refresh does not mutate an active execution snapshot.
+' Design reason: make directory publication atomic while preserving execution consistency.
+
+actor Admin
+actor Caller
+participant "AgentRuntimeManager" as Runtime
+database "Published Agent directory" as Directory
+participant "RuntimeSessionModelReconciler" as Reconciler
+participant "Model Manager" as Models
+database "Session and Entry store" as Store
+participant "Execution Host" as Host
+
+Admin -> Runtime : refresh(agentId)
+Runtime -> Directory : atomically publish validated tree
+Runtime --> Admin : success
+note over Host
+Any active execution keeps its existing snapshot.
+end note
+
+Caller -> Reconciler : POST next user event for idle Session
+Reconciler -> Directory : load latest bindingModels and default
+Reconciler -> Models : resolve current model with credentials
+alt current model remains callable
+  Models --> Reconciler : current model
+else current model is invalid
+  Reconciler -> Models : resolve new default with credentials
+  alt default is callable
+    Models --> Reconciler : fallback model
+    Reconciler -> Store : atomically update model and optional thinking
+    Reconciler -> Store : append model and thinking changed entries
+    Store --> Caller : project configuration events first
+  else no callable default
+    Models --> Reconciler : unavailable
+    Reconciler --> Caller : reject before user.message
+  end
+end
+Reconciler -> Store : accept user.message and mark running
+Reconciler -> Host : start with reconciled immutable snapshot
 @enduml

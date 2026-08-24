@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}/events",
     "summary": "分页读取 Session 持久化事件",
-    "description": "从与 POST 相同的 Events 集合路径分页读取当前 Session 分支中的持久化事件。当前 Session thinking=true 时返回 user.message、assistant.thinking.completed、assistant.message.completed 和 tool.result；thinking=false 时过滤全部 assistant.thinking.completed。thinking started/delta、message preview、工具执行状态和流控制事件不进入历史。page 绑定签发时的 thinking 状态；开关改变后旧 page 无效，调用方必须从第一页重读。示例假设当前 thinking=true 且 limit=3，下一页从 entrySeq=20 的 tool.result 继续。",
+    "description": "从与 POST 相同的 Events 集合路径分页读取当前 Session 分支中的公共消息、领域事件和允许显示的 thinking。始终可见 user.message、assistant.message.completed、tool.result、session.model.changed、session.thinking.changed 和 session.compaction.completed；thinking=false 时只过滤 assistant.thinking.completed。assistant/compaction completed 含完整 Usage。thinking/message/tool delta、compaction started/failed 和流控制事件不进入历史。该公开投影与模型上下文恢复分离；恢复只消费消息、工具结果及最新压缩边界，不把模型或思考变更当作模型消息。page 绑定 thinking 状态；开关改变后旧 page 无效。示例使用 limit=7。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -15,7 +15,7 @@
         "name": "limit",
         "required": false,
         "schema": "integer 1..200; default 100",
-        "description": "限制本页最多返回的持久化事件数量；下方成功示例使用 limit=3"
+        "description": "限制本页最多返回的持久化事件数量；下方成功示例使用 limit=7"
       },
       {
         "in": "query",
@@ -31,14 +31,14 @@
     "requestBody": {
       "required": false,
       "contentType": null,
-      "description": "无请求体。成功示例对应第一页 ?limit=3；后续请求原样传入上一响应的 nextPage。limit 可在每页指定。",
+      "description": "无请求体。成功示例对应第一页 ?limit=7；后续请求原样传入上一响应的 nextPage。limit 可在每页指定。",
       "example": null
     },
     "responses": [
       {
         "status": "200",
         "label": "OK",
-        "summary": "以下假设当前 Session thinking=true：limit=3 的第一页按 entrySeq 返回用户消息、完整 thinking 和完整 Assistant 消息，nextPage 指向 entrySeq=20；thinking=false 时同一查询过滤 thinking 事件。",
+        "summary": "limit=7 的第一页按 entrySeq 返回模型/思考变更、用户消息、允许显示的 thinking、带 Usage 的完整 Assistant 和压缩完成。",
         "headers": {
           "Cache-Control": "no-store",
           "Content-Language": "en-US"
@@ -50,9 +50,27 @@
             "result": {
               "events": [
                 {
+                  "type": "session.model.changed",
+                  "entryId": "entry_model_100",
+                  "entrySeq": 17,
+                  "previousModelId": "model-old",
+                  "modelId": "model-default",
+                  "reason": "agentRefresh",
+                  "createdAt": "2026-08-17T09:59:59Z"
+                },
+                {
+                  "type": "session.thinking.changed",
+                  "entryId": "entry_thinking_100",
+                  "entrySeq": 18,
+                  "previousThinking": false,
+                  "thinking": true,
+                  "reason": "requested",
+                  "createdAt": "2026-08-17T09:59:59Z"
+                },
+                {
                   "type": "user.message",
                   "entryId": "entry_100",
-                  "entrySeq": 17,
+                  "entrySeq": 19,
                   "message": "请分析这些订单文件，并列出异常项。",
                   "fileIds": [
                     "file_01JY8X2E3R4T5Y6U7I8O9P0A1S"
@@ -62,7 +80,7 @@
                 {
                   "type": "assistant.thinking.completed",
                   "entryId": "entry_thinking_101",
-                  "entrySeq": 18,
+                  "entrySeq": 20,
                   "assistantEntryId": "entry_101",
                   "contentIndex": 0,
                   "content": {
@@ -74,29 +92,61 @@
                 {
                   "type": "assistant.message.completed",
                   "entryId": "entry_101",
-                  "entrySeq": 19,
+                  "entrySeq": 21,
                   "message": {
                     "role": "assistant",
                     "content": [
                       {
                         "type": "text",
-                        "text": "我先查询异常订单。"
-                      },
-                      {
-                        "type": "tool_call",
-                        "toolCallId": "call_201",
-                        "name": "query_abnormal_orders",
-                        "arguments": {
-                          "scope": "uploaded_files"
-                        }
+                        "text": "发现 3 条异常订单。"
                       }
                     ]
                   },
-                  "finishReason": "tool_call",
+                  "finishReason": "stop",
+                  "usage": {
+                    "input": 960,
+                    "output": 120,
+                    "cacheRead": 480,
+                    "cacheWrite": 64,
+                    "totalTokens": 1624,
+                    "cost": {
+                      "input": 0.00288,
+                      "output": 0.0018,
+                      "cacheRead": 0.000144,
+                      "cacheWrite": 0.00024,
+                      "total": 0.005064
+                    }
+                  },
                   "createdAt": "2026-08-17T10:00:02Z"
+                },
+                {
+                  "type": "session.compaction.completed",
+                  "entryId": "entry_compaction_101",
+                  "entrySeq": 22,
+                  "reason": "threshold",
+                  "summary": "已分析订单文件，发现 3 条异常订单；后续应输出异常清单。",
+                  "firstKeptEntryId": "entry_100",
+                  "tokensBefore": 19840,
+                  "estimatedTokensAfter": 4360,
+                  "willRetry": false,
+                  "usage": {
+                    "input": 720,
+                    "output": 96,
+                    "cacheRead": 0,
+                    "cacheWrite": 0,
+                    "totalTokens": 816,
+                    "cost": {
+                      "input": 0.00216,
+                      "output": 0.00144,
+                      "cacheRead": 0.0,
+                      "cacheWrite": 0.0,
+                      "total": 0.0036
+                    }
+                  },
+                  "createdAt": "2026-08-17T10:00:05Z"
                 }
               ],
-              "nextPage": "page_q7K2mN9vR4xT8cL5"
+              "nextPage": null
             }
           }
         }

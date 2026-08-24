@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/agents/{agentId}/sessions",
     "summary": "创建 Runtime Session",
-    "description": "根据 agentId 创建一个全新的 Runtime Session。CampusClaw 生成 sessionId，直接从受控 agent/{agentId}/.campusclaw/ 目录读取 settings.json、SYSTEM.md 和 skills/，解析并校验默认模型，然后完成 Session 持久化；AgentSession 在首次执行时惰性初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session，默认 thinking=true。",
+    "description": "根据 agentId 创建一个全新的 Runtime Session。CampusClaw 生成 sessionId，直接从受控 agent/{agentId}/.campusclaw/ 目录读取 settings.json、SYSTEM.md 和 skills/，解析并校验默认模型，然后完成 Session 持久化；AgentSession 在首次执行时惰性初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session，默认 thinking=true，lifetimeUsage 的 Token 与 USD Cost 明细全部为零。",
     "parameters": [
       {
         "$ref": "parameters.agentId"
@@ -40,6 +40,20 @@
               "modelId": "model_011CZq2GkV8aD4NwP7sLmXfR",
               "state": "idle",
               "thinking": true,
+              "lifetimeUsage": {
+                "input": 0,
+                "output": 0,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "totalTokens": 0,
+                "cost": {
+                  "input": 0.0,
+                  "output": 0.0,
+                  "cacheRead": 0.0,
+                  "cacheWrite": 0.0,
+                  "total": 0.0
+                }
+              },
               "createdAt": "2026-08-15T11:30:00Z"
             }
           }

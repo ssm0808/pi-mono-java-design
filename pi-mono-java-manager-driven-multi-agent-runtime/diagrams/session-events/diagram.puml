@@ -1,33 +1,20 @@
 @startuml http_session_event_stream
 title CampusClaw Session Event Direct POST Stream
 
-' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
-' packages/agent/src/types.ts, AgentEvent, lines 430-443
-' packages/agent/src/agent-loop.ts, emitToolExecutionEnd and emitToolResultMessage,
-' lines 767-795
-' packages/coding-agent/src/core/agent-session.ts, _handleAgentEvent, lines 781-806
-' Source evidence (pi-mono-java 1f801dbb82bdda30478e3354e685e3153b179a0c):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventController.java.
+' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
+' packages/agent/src/types.ts, AgentEvent.
+' packages/agent/src/agent-loop.ts, tool execution events and ToolResult messages.
+' packages/coding-agent/src/core/agent-session.ts, compaction and Agent event handling.
+' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java.
-' Source evidence (pi-mono-java 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/UserEventRequestVO.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java.
-' Observed behavior: current Java request, history, and SSE payload fields are snake_case.
-' Observed behavior: both pi baselines emit message start, update, and end events around
-' one active in-memory execution. The Java HTTP handler already returns SSE from POST.
-' Observed behavior: the implemented API persists MessageEntry records and has no public run ID.
-' Java divergence: unlike the old baseline, client disconnect only detaches the bounded subscriber.
-' Architecture change: a disconnected client does not abort accepted execution; GET Session Events is
-' the recovery source, and replaying the side-effecting POST is forbidden.
-' Design reason: preserve direct streaming while separating transient message and tool
-' execution progress from authoritative User, Assistant, and ToolResult entries.
-' Observed behavior: internal thinking start, delta, and end events exist, but RuntimeEventProjector
-' emits text deltas only and RuntimeEntryCodec currently excludes ThinkingContent from the public contract.
-' Architecture change: the target contract projects thinking events only when the accepted execution
-' snapshots thinking true; assistant.thinking.completed becomes a durable recoverable entry.
-' Architecture change: target request and SSE data fields use lowerCamelCase; event names remain unchanged.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java.
+' Observed behavior: PR 167 has a request-scoped SSE execution and durable message entries,
+' but it does not retain compaction or expose durable configuration-change events.
+' Architecture change: model reconciliation happens before accepting a User Entry.
+' Architecture change: Assistant and compaction completions persist Usage and update lifetime Usage.
+' Security hardening: tool delta omits arguments and is best-effort; dropping it never fails a tool.
+' Design reason: keep transient progress separate from the durable history and recovery boundary.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -53,199 +40,136 @@ skinparam note {
 
 actor Caller
 participant "Session Event\nAPI" as API
+participant "Model\nReconciler" as Reconciler
 database "Runtime Session\nStore" as Store
-participant "Prompt\nLoader" as Prompt
-participant "Model\nManager" as Manager
-participant AgentSession
+participant "ManagedAgentSession" as Session
+participant "Best-effort\nEvent Buffer" as Buffer
 
-Caller -> API : POST /sessions/{sessionId}/events\ncontext headers and message or fileIds JSON
-API -> API : do not validate integration credentials
-API -> API : validate sessionId and strict request body
-API -> Store : load live Session
-Store --> API : current model, thinking, and execution state
+Caller -> API : POST /sessions/{sessionId}/events\nmessage or fileIds JSON
+API -> Store : load idle Session
+Store --> API : current configuration and lifetimeUsage
+API -> Reconciler : reconcile latest Agent directory
 
-alt another execution is active
-  API --> Caller : 409 SESSION_BUSY\nJSON error without result
-else Session is idle
-  API -> Prompt : append ordered fileIds as fixed text block
-  Prompt --> API : user prompt
-  API -> Manager : resolve current model and input policy
-  Manager --> API : authoritative model descriptor and limits
-  API -> Store : persist User MessageEntry and mark active execution
-  Store --> API : user entryId and entrySeq
-  API --> Caller : 200 text/event-stream
-  API --> Caller : user.message\nentryId and entrySeq
-  API -> AgentSession : prompt(user prompt)
+alt current model is invalid and a usable default exists
+  Reconciler -> Store : atomically append model.changed\nand optional thinking.changed
+  Store --> API : updated configuration entries
+  API --> Caller : durable configuration events\nbefore user.message
+else no usable default exists
+  Reconciler --> API : model unavailable
+  API --> Caller : reject before SSE and User Entry
+else current model remains valid
+  Reconciler --> API : unchanged
+end
 
-  alt execution completes
-    loop each Assistant MessageEntry
-      AgentSession --> API : message_start
-      API --> Caller : assistant.message.started\nentryId, no entrySeq
-      loop provider increments
-        AgentSession --> API : message_update
-        API --> Caller : assistant.message.delta\nentryId and typed delta
-      end
-      opt execution snapshot thinking is true
-        AgentSession --> API : thinking_start
-        API --> Caller : assistant.thinking.started\nassistantEntryId and contentIndex
-        loop provider thinking increments
-          AgentSession --> API : thinking_delta
-          API --> Caller : assistant.thinking.delta\ntemporary thinking text
-        end
-        AgentSession --> API : thinking_end with complete thinking content
-        API -> Store : persist complete ThinkingContent entry
-        Store --> API : thinking entryId and entrySeq
-        API --> Caller : assistant.thinking.completed\ncomplete thinking content and entrySeq
-      end
-      AgentSession --> API : message_end with complete message
-      API -> Store : persist complete Assistant MessageEntry
-      Store --> API : entrySeq
-      API --> Caller : assistant.message.completed\ncomplete message and entrySeq
-      opt tool calls require another model turn
-        AgentSession --> API : tool_execution_start
-        API --> Caller : tool.execution.started\ntoolCallId and toolName
-        AgentSession --> API : tool_execution_end
-        API --> Caller : tool.execution.completed\ntoolCallId, toolName, isError
-        AgentSession --> API : ToolResult message_start and message_end
-        API -> Store : persist complete ToolResultEntry
-        Store --> API : tool result entryId and entrySeq
-        API --> Caller : tool.result\ncomplete result and entrySeq
-      end
+API -> Store : persist User Entry and mark running
+Store --> API : entryId and entrySeq
+API --> Caller : user.message
+API -> Session : prompt(user message)
+
+loop each Assistant message
+  Session --> API : message start and deltas
+  API --> Caller : assistant.message.started and deltas
+  opt thinking snapshot is true
+    Session --> API : thinking start, deltas, and completion
+    API -> Store : persist allowed completed thinking
+    API --> Caller : thinking lifecycle events
+  end
+  Session --> API : completed message with Usage
+  API -> Store : persist Assistant and atomically add lifetimeUsage
+  API --> Caller : assistant.message.completed with Usage
+
+  opt tool call
+    Session --> API : tool execution started
+    API --> Caller : tool.execution.started
+    loop tool progress
+      Session --> Buffer : toolCallId, toolName, delta
+      Buffer --> Caller : tool.execution.delta if serializable and writable
     end
-
-    AgentSession --> API : agent_end
-    API -> Store : clear active execution and persist final entries
-    API --> Caller : session.status.idle
-    API --> Caller : stream.end\nreason completed
-  else execution fails after stream start
-    AgentSession --> API : execution failure
-    API -> Store : retain completed entries and clear active execution
-    API --> Caller : stream.error\nSESSION_EXECUTION_FAILED and localized message
-    API -> API : close stream without stream.end
+    Session --> API : tool completed and final result
+    API -> Store : persist ToolResult Entry
+    API --> Caller : tool.execution.completed and tool.result
   end
 end
 
-note over API,Caller
-Message previews and tool execution events are transient.
-User, completed Assistant, and ToolResult entries are authoritative.
-Completed Thinking entries are authoritative when the execution
-snapshot has thinking true; thinking started and delta are transient.
-Session idle and stream end are non-history control events.
-Stream error is a terminal non-history event and closes the response.
+opt threshold, overflow, or manual compaction
+  Session --> API : compaction.started
+  API --> Caller : session.compaction.started
+  alt compaction succeeds
+    Session --> API : full summary, boundary, tokens, Usage
+    API -> Store : persist compaction and atomically add lifetimeUsage
+    API --> Caller : session.compaction.completed
+  else compaction fails
+    Session --> API : failure with old context preserved
+    API --> Caller : session.compaction.failed
+  end
+end
+
+Session --> API : execution complete
+API -> Store : clear active execution
+API --> Caller : session.status.idle and stream.end
+
+note over Buffer,Caller
+Tool delta has no arguments and is never persisted.
+Serialization, size, or backpressure failure drops only progress.
+The final ToolResult remains authoritative.
 end note
 
-note over Caller,Store
-This POST has no application idempotency key.
-After disconnect, do not replay it automatically; call GET Session Events.
-The accepted execution continues without the HTTP client.
+note over Session,Store
+Compaction completion stores the full summary and retained boundary.
+Failure never publishes a partial context and never deletes history.
+Overflow compaction can retry the model call at most once.
 end note
 @enduml
 
 @startuml http_session_event_list
-title CampusClaw Session Event List Pagination
+title CampusClaw Public History and Model Recovery Projections
 
-' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
-' packages/coding-agent/src/core/session-manager.ts, SessionEntry, lines 46-156
-' packages/coding-agent/src/core/session-manager.ts, append methods, lines 1057-1149
-' packages/coding-agent/src/core/session-manager.ts, getBranch and getEntries, lines 1260-1303
-' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventCursorCodec.java.
-' Source evidence (pi-mono-java 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/EventPageResponseVO.java.
-' Observed behavior: current Java exposes next_page while the target field is nextPage.
-' Observed behavior: pi stores append-only entries linked by id and parentId, and its active
-' branch is the path from the selected leaf to the root.
-' Java divergence: the old Java baseline scanned JSONL linearly; the implemented repository
-' now reads the current branch through parentId and entrySeq.
-' External reference (Anthropic Managed Agents docs checked 2026-08-17):
-' GET /v1/sessions/{session_id}/events uses opaque page and next_page pagination.
-' Observed behavior: entrySeq, opaque pages, ResultBean paging, and the GET endpoint
-' exist in the implementation commit but not in the original pi source baselines.
-' Java divergence: current RuntimeEntryCodec excludes ThinkingContent from public history.
-' Architecture change: target GET visibility depends on the current Session thinking value.
-' Design reason: align the public pagination boundary with Anthropic and intentionally
-' avoid a fixed snapshot watermark or an afterEntrySeq query while binding the cursor
-' to the thinking visibility state used to construct the page.
-' Architecture change: CampusClaw target path and payload fields use lowerCamelCase.
+' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
+' packages/coding-agent/src/core/session-manager.ts, SessionEntry and getBranch.
+' packages/coding-agent/src/core/agent-session.ts, model, thinking, and compaction entries.
+' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventQueryService.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java.
+' Observed behavior: PR 167 reads one durable branch for public history and execution restoration.
+' Architecture change: the same entries feed two explicit projections with different consumers.
+' Design reason: audit events belong in public history but must not become synthetic model messages.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam defaultFontSize 12
-skinparam sequence {
-  ArrowColor #475569
-  ActorBorderColor #475569
-  ActorFontColor #0F172A
-  LifeLineBorderColor #94A3B8
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
-  ParticipantBackgroundColor #F8FAFC
-  ParticipantFontColor #0F172A
-  GroupBorderColor #64748B
-  GroupFontColor #334155
+skinparam rectangle {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
 }
-skinparam note {
-  BackgroundColor #FFF7ED
-  BorderColor #C2410C
-  FontColor #7C2D12
+skinparam database {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
 }
+skinparam ArrowColor #475569
 
-actor Caller
-participant "Session Events\nAPI" as API
-database "Runtime Session\nStore" as Store
-participant "Page Cursor\nCodec" as Cursor
-participant ResultBeanAdapter
+database "Append-only current-branch Entries" as Entries
+rectangle "Public history projection" as Public
+rectangle "GET /sessions/{sessionId}/events" as GetEvents
+rectangle "Model recovery projection" as Recovery
+rectangle "ManagedAgentSession context" as Context
 
-alt first page
-  Caller -> API : GET /sessions/{sessionId}/events\ncontext headers, limit, no page
-  API -> API : do not validate integration credentials
-  API -> API : validate sessionId and limit
-  API -> Store : read current Session thinking\nand first current-branch entries
-  Store --> API : thinking state and persisted entries
-  alt current Session thinking is true
-    API -> API : include assistant.thinking.completed
-  else current Session thinking is false
-    API -> API : filter assistant.thinking.completed
-  end
-  API -> Cursor : encode session, thinking state,\nexpiry, and next position
-  Cursor --> API : nextPage or null
-else next page
-  Caller -> API : GET /sessions/{sessionId}/events\ncontext headers and previous nextPage
-  API -> API : do not validate integration credentials
-  API -> Cursor : verify and decode opaque page
-  Cursor --> API : bound session, thinking state,\nexpiry, and next position
-  API -> Store : read current Session thinking
-  Store --> API : current thinking state
-  break current thinking differs from cursor state
-    API --> Caller : 400 INVALID_EVENT_LIST_QUERY\nrestart from the first page
-  end
-  API -> Store : read after next position and apply\nthe current thinking visibility rule
-  Store --> API : eligible persisted entries, including\nlater appends after the cursor
-  API -> Cursor : encode current thinking state\nand next position if more remain
-  Cursor --> API : nextPage or null
-end
+Entries --> Public : messages, ToolResult, model/thinking changes,\ncompaction completed, allowed thinking
+Public --> GetEvents : entrySeq order and opaque page
 
-API -> ResultBeanAdapter : normal(SessionEventListResponseVO)
-ResultBeanAdapter --> API : resCode, resMsg, result
-API --> Caller : 200 OK\nevents and nextPage
+Entries --> Recovery : messages and ToolResult after latest boundary,\nplus latest complete compaction summary
+Recovery --> Context : model-ready messages only
 
-note over API,Store
-Committed user.message, assistant.message.completed, and tool.result
-entries on the current branch are always eligible.
-assistant.thinking.completed is eligible only when the current
-Session thinking value is true. Disabling hides stored thinking
-without deleting it; re-enabling can reveal it again.
-Items are sorted by entrySeq ascending.
-There is no fixed snapshot watermark. Later persisted
-entries may become eligible on a subsequent page.
+note right of Public
+Started, delta, failed, idle, end, and stream error
+events are transient and never enter GET history.
 end note
 
-note over API,Cursor
-nextPage null means no more persisted events at response time.
-It does not mean the Session cannot append future events.
-An invalid or expired page returns 400 INVALID_EVENT_LIST_QUERY.
-Changing Session thinking also invalidates an old page because
-the page is bound to the previous visibility state.
+note right of Recovery
+Model and thinking changes are audit facts.
+They are not converted to User or Assistant messages.
+Entries hidden behind compaction remain durable history.
 end note
 @enduml

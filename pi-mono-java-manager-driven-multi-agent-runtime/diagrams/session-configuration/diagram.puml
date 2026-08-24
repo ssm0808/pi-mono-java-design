@@ -1,16 +1,16 @@
 @startuml http_session_model_configuration
 title HTTP Session Model and Deep-Thinking Confirmed Configuration
 
-' Source evidence (pi-mono commit 086c32e74530564922d011ade23ff582c9d63116):
+' Source evidence (pi-mono commit 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
 ' packages/coding-agent/src/core/agent-session.ts, setModel and setThinkingLevel,
 ' lines 1586-1600 and 1684-1730
 ' packages/ai/src/types.ts, Model, lines 793-809
 ' packages/ai/src/models.ts, getSupportedThinkingLevels, lines 900-910
-' Source evidence (pi-mono-java commit 8691e8800f05f28afe22499050c29220ef5b7475):
+' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/CatalogRuntimeModelManager.java.
-' Source evidence (pi-mono-java commit 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
+' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/AvailableModelsResponseVO.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/ChangeModelRequestVO.java.
 ' Observed behavior: current Java paths and model fields are snake_case.
@@ -21,6 +21,7 @@ title HTTP Session Model and Deep-Thinking Confirmed Configuration
 ' Security hardening: model discovery is Session-scoped and exposes only modelId.
 ' Architecture change: HTTP configuration writes require an idle Session and a matching ETag.
 ' Architecture change: completed thinking content becomes conditionally public in POST and GET events.
+' Architecture change: actual configuration changes append durable domain events in the same transaction.
 ' Architecture change: target HTTP fields use lowerCamelCase while If-Match keeps its header spelling.
 ' Product constraint: all Runtime operations carry integration-context headers without local validation.
 ' Design reason: prevent a configuration change from racing with an active execution while
@@ -73,10 +74,14 @@ group Change current model
   Store --> API : current Session resource
   API -> Models : resolve target model
   Models --> API : authoritative model and reasoning capability
-  opt target model does not support deep thinking
-    API -> API : normalize thinking to false
+  alt requested model equals current model
+    API -> Store : no mutation and no domain event
+  else model changes
+    opt target model does not support deep thinking
+      API -> API : normalize thinking to false
+    end
+    API -> Store : atomically update model, thinking, ETag,\nmodel.changed reason requested,\nand optional thinking.changed reason modelCapability
   end
-  API -> Store : atomically update model, thinking, and ETag
   Store --> API : updated Session resource and ETag
   API -> ResultBeanAdapter : normal(SessionResponseVO)
   ResultBeanAdapter --> API : resCode, resMsg, result
@@ -92,7 +97,11 @@ group Change future deep-thinking default
     API -> Models : verify current model supports reasoning
     Models --> API : managed non-off level or 422
   end
-  API -> Store : atomically update deep-thinking switch and ETag
+  alt requested value equals current value
+    API -> Store : no mutation and no domain event
+  else thinking changes
+    API -> Store : atomically update thinking, ETag,\nand thinking.changed reason requested
+  end
   Store --> API : updated Session resource and ETag
   API -> ResultBeanAdapter : normal(SessionResponseVO)
   ResultBeanAdapter --> API : resCode, resMsg, result
@@ -111,5 +120,10 @@ The change applies only to executions accepted afterward.
 POST emits thinking events only for executions accepted with true.
 GET includes durable completed thinking only while the current
 Session thinking value is true; old pages expire after a toggle.
+end note
+
+note over API,Store
+Durable model.changed and thinking.changed entries are visible in GET Events.
+They are audit facts and are not restored as model conversation messages.
 end note
 @enduml

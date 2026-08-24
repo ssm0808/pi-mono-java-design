@@ -1,7 +1,7 @@
 @startuml http_session_creation
 title CampusClaw HTTP Session Creation
 
-' Source evidence (pi-mono-java 1f801dbb82bdda30478e3354e685e3153b179a0c):
+' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, create.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java, resolve.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java, create.
@@ -17,6 +17,7 @@ title CampusClaw HTTP Session Creation
 ' Product constraint: successful target creation persists thinking true.
 ' Product constraint: all Runtime operations carry integration-context headers without local validation.
 ' Observed behavior: creation persists an idle Session and does not initialize AgentSession or invoke a model.
+' Architecture change: the materialized Session starts with zero lifetime Usage.
 ' Design reason: defer expensive runtime initialization until the first accepted user event.
 
 skinparam backgroundColor #FFFFFF
@@ -54,7 +55,7 @@ API -> Models : resolveDefaultModel(snapshot)
 Models --> API : authoritative ModelDescriptor
 API -> Ids : generate globally unique sessionId
 Ids --> API : session- plus 32 hex UUID characters
-API -> Store : insert SessionRecord\nstate idle, thinking true, version 1
+API -> Store : insert SessionRecord\nstate idle, thinking true, version 1, zero lifetimeUsage
 Store --> API : committed
 API -> ResultAdapter : normal(CreateSessionResponseVO)
 ResultAdapter --> API : resCode, resMsg, result
@@ -92,16 +93,16 @@ end note
 @startuml http_get_session_response
 title CampusClaw GetSession Confirmed Response
 
-' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
+' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
 ' packages/protocol/src/schemas.ts, ThinkingLevelSchema, lines 26-35
 ' packages/protocol/src/schemas.ts, SessionPhaseSchema, lines 38-45
 ' packages/protocol/src/schemas.ts, SessionSnapshotSchema, lines 241-258
 ' Source evidence (anthropic-sdk-typescript 64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff):
 ' src/resources/beta/sessions/sessions.ts, Session, lines 638-710
-' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, get.
-' Source evidence (pi-mono-java 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
+' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java.
 ' Observed behavior: JsonProperty currently exposes snake_case response fields.
 ' Observed behavior: pi exposes phase, reasoning effort, transcript, attached, and locked
@@ -111,6 +112,7 @@ title CampusClaw GetSession Confirmed Response
 ' Product constraint: CampusClaw exposes a boolean deep-thinking switch instead of effort levels.
 ' Architecture change: the confirmed response removes the former public active Run pointer.
 ' Architecture change: target response fields use lowerCamelCase and do not accept snake_case aliases.
+' Architecture change: lifetimeUsage is atomically accumulated in t_session_materialized.
 ' Design reason: Session state is the coarse control-plane signal; GET Session Events and the
 ' initiating POST stream own durable recovery and live execution detail.
 ' Observed behavior: these wire-contract fields exist in GetSessionResponseVO.
@@ -136,12 +138,28 @@ skinparam note {
 }
 skinparam ArrowColor #475569
 
-class GetSessionResult <<implemented_wire_contract>> {
+class GetSessionResult <<target_wire_contract>> {
   +sessionId: session- plus 32 hex UUID characters
   +agentId: string
   +modelId: string
   +createdAt: timestamp
   +updatedAt: timestamp
+}
+
+class Usage <<target_wire_contract>> {
+  +input: long
+  +output: long
+  +cacheRead: long
+  +cacheWrite: long
+  +totalTokens: long
+}
+
+class Cost <<usd>> {
+  +input: decimal
+  +output: decimal
+  +cacheRead: decimal
+  +cacheWrite: decimal
+  +total: decimal
 }
 
 enum SessionState {
@@ -156,6 +174,8 @@ enum DeepThinkingSwitch {
 
 GetSessionResult --> "1" SessionState : state
 GetSessionResult --> "1" DeepThinkingSwitch : thinking
+GetSessionResult --> "1" Usage : lifetimeUsage
+Usage --> "1" Cost : cost
 
 note bottom of GetSessionResult
 This is the confirmed public Session resource.
@@ -167,15 +187,15 @@ end note
 @startuml http_delete_session
 title CampusClaw HTTP Session Logical Deletion Confirmed Design
 
-' Source evidence (pi-mono 086c32e74530564922d011ade23ff582c9d63116):
+' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
 ' packages/coding-agent/src/core/agent-session.ts, AgentSession.dispose, lines 789-805
 ' packages/coding-agent/src/modes/interactive/components/session-selector.ts,
 ' deleteSessionFile, lines 598-630
-' Source evidence (pi-mono-java 8691e8800f05f28afe22499050c29220ef5b7475):
+' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, delete.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java, beginDeletion.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/SessionCleanupWorker.java.
-' Source evidence (pi-mono-java 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
+' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java, delete.
 ' Observed behavior: the current Java delete path still names the variable session_id.
 ' Observed behavior: pi dispose stops active work and releases runtime resources, while

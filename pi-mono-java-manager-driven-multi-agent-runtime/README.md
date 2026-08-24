@@ -2,15 +2,16 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.0.0 |
-| 状态 | CampusClaw 内部 11 个接口已在 HTTP 1.37 实现分支落地；lowerCamelCase 1.38 与工具系统 2.0 为目标设计、待实现；mate-service 公共接口待评审 |
+| 文档版本 | 3.1.0 |
+| 状态 | CampusClaw 内部 11 个接口保持不变；HTTP 1.39、公共 Session 能力与 PR 167 TUI 删除边界为目标设计；mate-service 公共接口待评审 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
-| 设计仓分析基线 | `c2a495838134aa5e8bc535b906e7534b34779279` |
+| 设计仓分析基线 | `3fde5735cd27433c3e3e5e03a5ce39b297ad3b00` |
 | pi-mono 源码基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
-| CampusClaw 实现基线 | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
+| CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
+| CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
 | pi-mono-java 字段命名核对基线 | `304eda06ff603fc9b6bbcaad0c296cc151a7defb`（`codex/runtime-http-contract-v137`） |
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
-| 更新日期 | 2026-08-23 |
+| 更新日期 | 2026-08-24 |
 
 ## 1. 当前结论
 
@@ -258,6 +259,11 @@ execution 和 Child execution 创建轻量 Session 前都调用 `prepare`；Runt
 独立 `FileAgentDirectoryResolver` 文件契约。这些均是 target-only 架构改造；当前 Java
 仍使用两套文件名并原地物化。
 
+refresh 成功不修改活动 execution。空闲数据库 Session 在下一次接受用户 Entry 前读取新目录；
+当前模型失效时切换到具备凭据的新 default，原子持久化 `session.model.changed` 及必要的
+`session.thinking.changed`，并在 `user.message` 前投影。没有有效 default 时拒绝本次执行且
+不接受用户 Entry。
+
 ![元数据到 Runtime 目录映射](diagrams/metadata/metadata_runtime_directory_mapping.svg)
 
 [PlantUML 源码：`metadata_runtime_directory_mapping`](diagrams/metadata/diagram.puml#L1)
@@ -281,13 +287,31 @@ single-flight 自动发现当前 Agent 与全部直接绑定 Skill 的完整工�
 
 ![Mate 工具实时发现](../pi-mono-java-tool-system/list_mate_tools_sequence.svg)
 
-[PlantUML 源码：`list_mate_tools_sequence`](../pi-mono-java-tool-system/diagram.puml#L221)
+[PlantUML 源码：`list_mate_tools_sequence`](../pi-mono-java-tool-system/diagram.puml#L235)
 
 ![Mate 工具按名称解析与调用](../pi-mono-java-tool-system/call_mate_tool_sequence.svg)
 
-[PlantUML 源码：`call_mate_tool_sequence`](../pi-mono-java-tool-system/diagram.puml#L275)
+[PlantUML 源码：`call_mate_tool_sequence`](../pi-mono-java-tool-system/diagram.puml#L289)
 
-### 7.3 Model Manager 流式适配
+### 7.3 TUI 删除边界与公共 Session 能力
+
+CampusClaw 不再提供 CLI、TUI、OneShot、RPC 或 ACP 产品入口，但不能按包名整体删除：
+
+- 保留 Slash core、Registry、`/model`、`/thinking`、`/compact`、`/name` 处理器和单元测试，
+  Context 只依赖宿主无关 Session/Output 端口；首版任何 Host 都不注册；
+- 不增加 Slash 或 Compact HTTP 接口，不拦截斜杠开头的普通用户消息；`/name` 仍由
+  mate-service 管理 Chat 名称；
+- 阈值压缩、溢出压缩和最多一次重试迁入公共 `ManagedAgentSession`；失败保留旧上下文，
+  历史 Entry 不删除；默认 `enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`；
+- `FileOperationTracker` 只跟踪 `Read`；PackageManager、本地 Skill 安装/导入、剪贴板及其他
+  终端专属能力删除。
+
+Runtime 持久化 `assistant.message.completed` 和 `session.compaction.completed` 的完整 Usage，
+并在 `t_session_materialized` 原子累计 `lifetimeUsage`。模型/思考变更和压缩完成是领域历史；
+工具 delta、压缩 started/failed 是瞬态 SSE。公共历史查询与 Agent 模型上下文恢复使用不同
+投影，后者不把模型/思考变更事件转换为模型消息。
+
+### 7.4 Model Manager 流式适配
 
 Agent 目录决定默认模型候选，Model Manager 仍是模型 descriptor、可用性、凭据和
 调用的最终权威。Session 可以在 idle 时切换 `modelId`；每次用户事件接受时读取
@@ -299,7 +323,7 @@ base URL 或成本字段公开给 mate-service。
 
 [PlantUML 源码：`model_manager_streaming_flow`](diagrams/model-manager/diagram.puml#L1)
 
-### 7.4 数据与附件边界
+### 7.5 数据与附件边界
 
 RuntimeSessionStore 保存 Session 配置、当前分支 Entry 和内部执行状态，不保存
 文件正文或文件元数据快照。Session Entry 的 `id/parentId` 树与当前分支重建详见
@@ -335,6 +359,9 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 | 架构变更 | 受管目录统一身份文件、缓存优先 prepare 与显式原子 refresh；Skill 和 Child 通过目录名称索引解析，不保存远端工具列表 |
 | 架构变更 | Mate 发现改为 `ListMateTools({skillName?})` 稳定 JSON 与实时查询；Call 通过 Session 名称到 ID 缓存解析，miss 时 single-flight 自动刷新完整有效集合，实际执行不重试 |
 | 架构变更 | `Agent({agentName,task})` 只解析直接绑定 Child；公共 `AgentSessionFactory` 创建独立 Child Session 实例，父子使用相同类型和执行语义但隔离消息、工作区、工具与上下文 |
+| 架构变更 | TUI/CLI 删除按责任完成 keep/move/delete：Slash 核心保留但不注册，压缩和 Read 追踪迁入公共 Session，终端专属能力删除 |
+| 架构变更 | Assistant/Compaction Usage 持久化并累计 lifetimeUsage；模型、thinking、compaction 领域事件历史可见，工具 delta 与压缩 started/failed 保持瞬态 |
+| 架构变更 | refresh 只影响下一次空闲 Session 执行；模型懒校准事件先于 user.message，无有效 default 时不接受消息 |
 | 产品约束 | 浏览器只识别尚待评审的 `chat_id`，CampusClaw 内部契约只识别 `sessionId`；公共接口不泄露 Runtime 标识 |
 | 产品约束 | 不提供 CLI、Bash/Edit/Write、Loop、旧工具名、旧 Cron payload、Java Extension SDK、ACP/HTTP/A2A Child 或兼容执行器 |
 | 安全边界 | 调用上下文 Header 的检查由上游负责，Runtime 不复制认证策略；thinking 内容仅在开关为 true 时按事件契约返回 |
@@ -357,6 +384,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.1.0 | 2026-08-24 | 修订 PR 167 TUI 删除边界，保留未注册 Slash 核心并迁移公共压缩；HTTP 升级 1.39 Usage/领域事件/工具 delta，明确 refresh 后下一次执行懒校准。 |
 | 3.0.0 | 2026-08-23 | 工具系统升级到 2.0：收敛为 Runtime/Cron/Child 三入口和 8 个活动工具；删除 CLI/Loop 目标语义，硬禁用 Bash/Edit/Write；Mate Call 改为 Session 缓存 miss 自动发现且实际执行不重试；Child 统一经公共 AgentSessionFactory 创建独立 Session |
 | 2.9.0 | 2026-08-22 | 旧方案：工具与受管目录引用工具系统 1.0，采用四入口、12 个内置工具、CLI refresh 和旧 Child 执行表述；已由 3.0.0 取代 |
 | 2.8.0 | 2026-08-21 | 将 CampusClaw HTTP 的路径参数、查询参数、请求体、普通响应和 SSE data 字段统一为 lowerCamelCase；保留全部 HTTP Header 原名以及事件类型值、错误码和 ID 值；新增源模型命名门禁并记录当前 Java snake_case 实现差异 |
