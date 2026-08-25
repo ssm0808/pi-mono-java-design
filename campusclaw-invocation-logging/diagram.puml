@@ -1,0 +1,283 @@
+' Generated for CampusClaw Invocation Logging Design v1.0.0 on 2026-08-25.
+' Run from this directory: plantuml -tsvg diagram.puml
+' Design repository baseline: b905a642eb176547370bda33d5a350d536245678.
+' CampusClaw source baseline: 42eb8b0ccb98b512d886722f2ad7ce8340d5a77a.
+
+@startuml campusclaw_invocation_logging_architecture
+title CampusClaw Invocation Logging Architecture
+
+' Source evidence:
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:61-77, submit
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java:45-67, handlers
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java:156-217, completeExecution and logFailure
+' modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:105-156, streamSimple and decodeResponse
+' modules/coding-agent-cli/src/main/resources/application.yml:110-114, WARN logging baseline
+' Observed behavior: there is no common ingress access log, provider failures can become terminal error messages without a Throwable, and the final execution logger only logs a non-null Throwable.
+' Architecture change: add structured lifecycle events, an immutable diagnostic context, and explicit terminal outcome logging across servlet, virtual-thread, and Reactor boundaries.
+' Design reason: operators must distinguish calls that never reached CampusClaw from request rejection, accepted execution failure, downstream model failure, and client disconnect.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #475569
+skinparam ComponentBorderColor #475569
+skinparam ComponentBackgroundColor #F8FAFC
+skinparam DatabaseBorderColor #475569
+skinparam DatabaseBackgroundColor #F8FAFC
+
+actor "mate-service\nor internal SDK" as Caller
+
+rectangle "Caller Boundary" {
+  component "CampusClaw Client\nTarget-only in mate-service" as Client
+  component "Client Invocation Logger\ncaller-side transport outcome" as ClientLog
+}
+
+cloud "Gateway and Network" as Network
+
+rectangle "CampusClaw HTTP Boundary" {
+  component "Request Logging Filter\nrequest start and completion" as Filter
+  component "Runtime Controllers and Advice\noperation and result code" as Web
+  component "SSE Delivery Observer\ndisconnect and terminal outcome" as SseObserver
+}
+
+rectangle "CampusClaw Execution Boundary" {
+  component "RuntimeEventService\naccept user entry" as EventService
+  component "Immutable InvocationLogContext\nrequest, session, execution" as Context
+  component "RuntimeExecutionCoordinator\nauthoritative terminal outcome" as Coordinator
+  component "Agent and Tool Pipeline" as Agent
+}
+
+rectangle "CampusClaw Model Boundary" {
+  component "MateServiceModelManagerProvider" as Provider
+  component "Mate Chat SSE Parser\nstable failure stage and code" as Parser
+}
+
+rectangle "Logging Output" {
+  component "SLF4J Key-Value Events" as Slf4j
+  component "Spring Boot ECS Encoder" as Ecs
+  queue "Container stdout" as Stdout
+  component "Platform Collector and Search" as Collector
+}
+
+rectangle "CampusMate Model Manager" {
+  component "POST /mate-service/v1/LLM/chat" as ModelManager
+}
+
+Caller --> Client
+Client --> ClientLog : start and completion
+Client --> Network : HTTP or HTTP plus SSE
+Network --> Filter
+Filter --> Web
+Web --> EventService
+EventService --> Context : create and enrich
+EventService --> Coordinator
+Coordinator --> Agent
+Agent --> Provider
+Provider --> ModelManager
+ModelManager --> Parser : HTTP and SSE outcome
+Parser --> Provider
+Coordinator --> SseObserver
+
+Filter --> Slf4j
+Web --> Slf4j
+SseObserver --> Slf4j
+Coordinator --> Slf4j
+Provider --> Slf4j
+ClientLog --> Slf4j
+Slf4j --> Ecs
+Ecs --> Stdout
+Stdout --> Collector
+
+note bottom of Context
+MDC is not the source of truth after request-thread exit.
+The immutable context is passed explicitly to execution and model calls.
+end note
+
+note bottom of ClientLog
+If connect or routing fails before CampusClaw,
+only the caller can produce the failure log.
+end note
+
+note bottom of Slf4j
+No credentials, headers, prompts, message bodies,
+thinking, tool arguments, tool results, or raw SSE.
+end note
+@enduml
+
+@startuml campusclaw_failure_logging_sequence
+title Failure Diagnosis Across the CampusClaw Call
+
+' Source evidence:
+' modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java:80-133, accept, fail, and parseChunk
+' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java:100-107, terminal ERROR breaks without throwing
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java:223-240, persistAssistant
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeTerminalEventFactory.java:34-57, stream.error selection
+' Observed behavior: a model error can reach stream.error while RuntimeExecutionCoordinator receives no Throwable and therefore writes no failure log.
+' Architecture change: each boundary emits one start and one terminal event with a shared local diagnostic context and a stable failure stage.
+' Design reason: the absence and order of events must identify the failing boundary without logging payloads.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam sequence {
+  ArrowColor #334155
+  LifeLineBorderColor #64748B
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F8FAFC
+}
+
+actor "mate-service" as Caller
+participant "Caller Client Logger" as CallerLog
+participant "Network" as Network
+participant "Request Logging Filter" as Filter
+participant "Runtime Event API" as Api
+participant "Execution Coordinator" as Coordinator
+participant "Mate Model Provider" as Provider
+participant "Model Manager" as Manager
+participant "Structured Log Sink" as Logs
+
+Caller -> CallerLog : client.call.started
+Caller -> Network : POST Session Events
+
+alt Connection or routing fails before CampusClaw
+  Network --> Caller : connect, TLS, DNS, or route failure
+  CallerLog -> Logs : client.call.completed failure\nfailureStage=campusclaw_connect
+  note over Filter
+  No CampusClaw ingress event is expected.
+  end note
+else Request reaches CampusClaw
+  Network -> Filter : HTTP request
+  Filter -> Logs : http.request.started
+  Filter -> Api : dispatch validated route
+
+  alt Request rejected before SSE starts
+    Api --> Filter : 4xx or 5xx with stable resCode
+    Filter -> Logs : http.request.completed rejected or failed
+    Filter --> Network : JSON error
+    Network --> Caller : HTTP failure
+    CallerLog -> Logs : client.call.completed failure
+  else User entry is accepted
+    Api -> Coordinator : start execution
+    Coordinator -> Logs : execution.started
+    Coordinator -> Provider : invoke model
+    Provider -> Logs : model.invocation.started
+    Provider -> Manager : POST Mate Chat
+
+    alt Model HTTP, stream, or parser failure
+      Manager --> Provider : non-2xx, error event, invalid SSE, or close
+      Provider -> Logs : model.invocation.completed failure\nfailureStage and safe errorCode
+      Provider --> Coordinator : terminal StopReason.ERROR
+      Coordinator -> Logs : execution.completed failure\nerrorCode=SESSION_EXECUTION_FAILED
+      Coordinator --> Api : stream.error then close
+      Api -> Logs : sse.completed failure
+      Api --> Network : HTTP 200 stream.error
+      Network --> Caller : stream failure
+      CallerLog -> Logs : client.call.completed failure
+    else Client disconnects after acceptance
+      Caller --> Network : close response body
+      Network --> Api : write failure or async error
+      Api -> Logs : sse.disconnected\nexecutionContinues=true
+      Coordinator -> Manager : continue accepted execution
+      Coordinator -> Logs : execution.completed success or failure
+      CallerLog -> Logs : client.call.completed disconnected
+    else Normal completion
+      Manager --> Provider : valid chunks and DONE
+      Provider -> Logs : model.invocation.completed success
+      Provider --> Coordinator : terminal message
+      Coordinator -> Logs : execution.completed success
+      Coordinator --> Api : stream.end
+      Api -> Logs : sse.completed success
+      Api --> Network : close SSE
+      Network --> Caller : normal completion
+      CallerLog -> Logs : client.call.completed success
+    end
+  end
+end
+@enduml
+
+@startuml campusclaw_log_context_propagation
+title Diagnostic Context Propagation
+
+' Source evidence:
+' modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java:57-58 and 255-278, virtual-thread execution
+' modules/ai/src/main/java/com/campusclaw/ai/types/SimpleStreamOptions.java:32-44, current invocation options
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionContextFactory.java:53-65, execution context creation
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java:21-59, active execution state
+' Observed behavior: request identity is not captured, SimpleStreamOptions.sessionId is not populated by Runtime Agent assembly, and MDC does not cross all asynchronous boundaries by construction.
+' Architecture change: create a log-only immutable context, enrich it after persistence, and pass a safe AI diagnostic projection through stream options.
+' Design reason: explicit immutable data avoids thread-local loss and prevents credentials or request bodies from entering logging context.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #475569
+skinparam ClassBorderColor #475569
+skinparam ClassBackgroundColor #F8FAFC
+
+class "HttpRequestLogContext" as HttpContext {
+  requestId
+  parentRequestId
+  operation
+  method
+  routeTemplate
+  startNanos
+}
+
+class "RuntimeInvocationLogContext" as RuntimeContext {
+  requestId
+  operation
+  sessionId
+  agentId
+  userEntryId
+  modelId
+  startNanos
+}
+
+class "AiDiagnosticContext" as AiContext {
+  requestId
+  sessionId
+  userEntryId
+}
+
+class "ModelInvocationContext" as ModelContext {
+  modelInvocationId
+  providerId
+  modelId
+  attempt
+  startNanos
+}
+
+class "RuntimeActiveExecution" as ActiveExecution
+class "SimpleStreamOptions" as StreamOptions
+class "MateServiceModelManagerProvider" as Provider
+class "RuntimeExecutionCoordinator" as Coordinator
+class "Async HTTP Completion State" as AsyncState
+
+HttpContext --> RuntimeContext : enrich after session lookup and user-entry commit
+RuntimeContext *-- ActiveExecution : explicit immutable field
+RuntimeContext --> AiContext : safe projection only
+AiContext *-- StreamOptions : diagnostic field, never serialized upstream
+StreamOptions --> Provider
+Provider --> ModelContext : create per model attempt
+ModelContext --> Provider : exactly one terminal log
+RuntimeContext --> Coordinator : execution terminal log
+HttpContext *-- AsyncState : exactly one HTTP or SSE completion log
+
+note right of HttpContext
+Servlet MDC may mirror requestId while the request thread is active.
+It is cleared in finally and never used as async source of truth.
+end note
+
+note right of AiContext
+No caller headers, credentials, prompt text,
+tool arguments, thinking, or response model.
+end note
+
+note bottom of AsyncState
+Atomic terminal state prevents duplicate logs from
+onCompletion, onTimeout, onError, and write failure races.
+end note
+@enduml
