@@ -1,42 +1,52 @@
-# CampusClaw 调用日志设计
+# CampusClaw 后端日志与故障定位模块设计
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
-| 状态 | 目标设计；待 CampusClaw 实现，mate-service 调用端部分为 target-only |
+| 文档版本 | 1.1.0 |
+| 状态 | 目标设计；待 CampusClaw 实现，后端启动与调用链日志均纳入范围，mate-service 调用端部分为 target-only |
 | 设计日期 | 2026-08-25 |
-| 设计仓基线 | `b905a642eb176547370bda33d5a350d536245678` |
-| CampusClaw 源码基线 | `42eb8b0ccb98b512d886722f2ad7ce8340d5a77a`（`origin/main`） |
-| CampusClaw 本地核对头 | `2b666cc9ac97606d588904e9e80f3bd6ad8c72a7`；所引用源码与基线无差异 |
+| 设计仓基线 | `5ad704d218c51b83e758bdae9e7b7294793378d3`（v1.1 修改前） |
+| CampusClaw 源码基线 | `ecf416115207c4072183c6c8f843f6ee57b7fbc3`（`origin/main`） |
+| 初版调用链源码基线 | `42eb8b0ccb98b512d886722f2ad7ce8340d5a77a`；本次引用的运行代码在两基线间无差异 |
 | mate-service 源码基线 | `6d5e6f3714e1cf8744d187a4796ca06300ad7e33` |
 | 适用范围 | mate-service / 内部 SDK → CampusClaw Runtime → CampusMate Model Manager / Tool Service |
 | 关联设计 | [Runtime HTTP API](../pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md)、[Model Manager Provider](../model-manager-provider-contract/README.md) |
 
 ## 1. 结论
 
-当前“CampusClaw 调用失败但没有日志”不是单一日志级别问题，而是失败传播模型与日志边界
-共同形成的可观测性缺口：
+当前“CampusClaw 后端启动或调用失败但没有可定位日志”不是单一日志级别问题，而是启动状态、
+失败传播模型与日志边界共同形成的可观测性缺口：
 
-1. Runtime 没有统一的入站访问日志，无法先确认请求是否到达 CampusClaw；
-2. 请求体和参数错误只记录 `DEBUG`，而默认配置为 `WARN`，因此 400 类错误通常完全不可见；
-3. Mate Model Manager 的映射、HTTP、SSE 和解析错误会被转换成
+1. Spring Boot 入口只有 `SpringApplication.run(...)`，没有稳定的启动开始、必需依赖检查、就绪
+   或失败事件；默认 `WARN` 又隐藏框架启动成功和 ModelRegistry 初始化 INFO；
+2. 标准模块的 Hikari `initialization-fail-timeout` 默认是 `1`，而 `mate-campusclaw` 镜像是 `-1`，
+   镜像可能在数据库不可用时仍完成 Spring 启动；
+3. Runtime 没有统一的入站访问日志，无法先确认请求是否到达 CampusClaw；
+4. 请求体和参数错误只记录 `DEBUG`，而默认配置为 `WARN`，因此 400 类错误通常完全不可见；
+5. Mate Model Manager 的映射、HTTP、SSE 和解析错误会被转换成
    `AssistantMessage(stopReason=ERROR)`，不一定以 `Throwable` 结束执行；
-4. `RuntimeExecutionCoordinator` 只在最终 `Throwable != null` 时记录失败，导致调用方已经收到
+6. `RuntimeExecutionCoordinator` 只在最终 `Throwable != null` 时记录失败，导致调用方已经收到
    `stream.error`，服务端仍可能没有对应日志；
-5. 现有日志只有局部 `sessionId` 或异常堆栈，没有一次请求、一次执行和一次模型调用之间的
+7. 现有日志只有局部 `sessionId` 或异常堆栈，没有一次启动、请求、执行和模型调用之间的
    稳定关联信息；
-6. 如果 DNS、TLS、连接或路由在请求进入 CampusClaw 前失败，CampusClaw 本身不可能产生日志，
+8. 如果 DNS、TLS、连接或路由在请求进入 CampusClaw 前失败，CampusClaw 本身不可能产生日志，
    必须由调用端记录。
 
-目标方案增加四层结构化生命周期日志：调用端、CampusClaw HTTP、Runtime 执行、下游模型/
-工具调用。每层至少记录开始和唯一终态，使用显式不可变诊断上下文跨 Servlet、虚拟线程和
-Reactor 传递。日志只记录白名单元数据，不记录凭据、Header 值、Prompt、消息正文、thinking、
-工具参数/结果或原始 SSE。
+目标方案在 `coding-agent-cli` 内建立统一的后端可观测性逻辑模块，并覆盖五层结构化生命周期：
+后端启动、调用端、CampusClaw HTTP、Runtime 执行、下游模型/工具调用。启动模块在 Spring
+容器创建前注册监听器，运行必需数据库与 Agent 缓存目录检查，只有这些检查和 Web Server
+绑定全部成功后才记录 `campusclaw.startup.completed`。运行期每层至少记录开始和唯一终态，
+使用显式不可变诊断上下文跨 Servlet、虚拟线程和 Reactor 传递。日志只记录白名单元数据，
+不记录凭据、Header 值、Prompt、消息正文、thinking、工具参数/结果或原始 SSE。
 
 本设计不新增数据库表，不改变 11 个 Runtime HTTP 路径、请求/响应 VO、ResultBean 或 SSE
 公共字段，也不恢复已经删除的 `traceparent` 业务契约。公司网关若已有跨服务请求标识，可在
 实施时映射为日志 `parentRequestId`；具体 Header 名称当前没有源码证据，保持为集成校准点，
 不在本文中臆造。
+
+本仓库交付的是可实施设计，不会仅凭合入 Markdown 就改变后端运行行为。只有在
+`pi-mono-java` 按第 12、13、17 章完成代码、配置和真实进程失败矩阵后，才能宣称上述启动与
+调用定位保证已经生效；在此之前，当前后端仍保持第 2 章描述的缺口。
 
 ## 2. 已观察问题
 
@@ -80,11 +90,37 @@ MDC 不能作为这两条异步链路的可靠事实来源。当前 Runtime 创�
 `SimpleStreamOptions` 时也没有携带本次 HTTP 请求标识；`SimpleStreamOptions.sessionId` 虽已
 存在，Runtime Agent 装配没有设置它。
 
+### 2.4 后端启动状态缺少稳定事实
+
+`CampusClawApplication.main()` 当前直接调用 `SpringApplication.run(...)`，没有在容器创建前
+注册应用级启动监听器。因此只能依赖 Spring Boot、Hikari 和 Tomcat 的框架文本判断启动结果，
+没有可按稳定 `eventName/failureStage/errorCode` 查询的事实，也没有一个明确事件证明后端已经
+具备处理 Session 请求的基本条件。
+
+当前启动期已经存在若干可能失败的动作：
+
+- `BuiltInToolProperties.afterPropertiesSet()` 校验重复或未知工具；
+- `MateServiceModelManagerProvider.validateConfiguration()` 拒绝不支持的 API 配置；
+- `ModelRegistry.init()` 读取模型覆盖文件，但成功 INFO 会被默认 WARN 级别隐藏，覆盖文件解析
+  失败只降级为 WARN，不阻止启动；
+- MyBatis 加载 Mapper，但 Session 表、列和查询权限在第一次数据库访问前没有完整验证；
+- Agent 缓存根目录只在第一次重建 Agent 时创建并验证写入能力；
+- Web Server 可能因端口占用、地址不可绑定或证书/容器配置而失败。
+
+更关键的是，canonical `application.yml` 将 Hikari `initialization-fail-timeout` 默认为 `1`，
+而手工维护的 `mate-campusclaw/application.properties` 使用 `-1`。后者会跳过初始连接失败门禁，
+所以“Spring 已启动”不等于“Session 持久化已可用”。
+
 ## 3. 目标与非目标
 
 ### 3.1 目标
 
 - 每个到达 CampusClaw 的 Runtime HTTP 请求都有可检索的开始和唯一完成日志；
+- 每次后端进程启动都有 `startupId`，并且最终只能出现一个 `startup.completed` 或
+  `startup.failed`；
+- `startup.completed` 只在配置绑定、Bean 初始化、数据库连接与 Session 表只读校验、Agent
+  缓存根目录写入探针和 Web Server 端口绑定全部成功后输出；
+- 配置错误、数据库连接/Schema、目录权限、Bean 创建和端口占用使用稳定失败阶段与错误码；
 - 4xx、5xx、SSE 流内失败和客户端断线均有明确、互不混淆的结果；
 - 每个 active execution 和每次 Model Manager 调用都有开始、耗时与唯一终态；
 - `StopReason.ERROR` 即使没有 Throwable，也必须产生日志；
@@ -96,6 +132,8 @@ MDC 不能作为这两条异步链路的可靠事实来源。当前 Runtime 创�
 ### 3.2 非目标
 
 - 不记录或重放完整请求、响应和 SSE；
+- 不把 Model Manager、Mate Tool 或 CampusMate Runtime 的远端可用性作为默认启动硬依赖；这些
+  服务没有已确认的无副作用健康接口，运行期失败由对应调用日志定位；
 - 不把日志当作 Session 历史、审计账本或业务事件存储；
 - 不新增公开 Run 资源或改变“Session 同时只有一个 active execution”的产品模型；
 - 不在本次设计中新增公共 `X-Request-ID`、`traceparent` 或其他 HTTP 契约 Header；
@@ -112,6 +150,7 @@ MDC 不能作为这两条异步链路的可靠事实来源。当前 Runtime 创�
 
 | 边界 | 目标职责 | 当前状态 |
 |---|---|---|
+| CampusClaw startup | 记录进程启动、关键阶段、必需依赖检查、唯一就绪或失败终态 | 无应用级实现；canonical/mirror 数据库启动语义不一致 |
 | mate-service / 内部 SDK 调用端 | 记录 CampusClaw 请求开始、HTTP/SSE 完成、DNS/TLS/connect/route 失败 | mate-service 当前基线没有公共 Chat → CampusClaw Client；target-only |
 | CampusClaw HTTP | 记录请求到达、规范化 operation、HTTP status、ResultBean `resCode`、SSE 终态和耗时 | 缺少统一实现 |
 | Runtime execution | 记录用户 Entry 接受、执行开始/成功/失败/取消/超时，以及 Session 与执行关联 | 仅 Throwable 失败有一条局部 WARN |
@@ -121,8 +160,12 @@ MDC 不能作为这两条异步链路的可靠事实来源。当前 Runtime 创�
 
 ### 4.1 模块边界
 
-保持现有 `ai → agent-core → coding-agent-cli` 依赖方向：
+保持现有 `ai → agent-core → coding-agent-cli` 依赖方向。日志功能是逻辑模块，不新增一个反向依赖
+业务模块的 Maven artifact：
 
+- `modules/coding-agent-cli/.../observability/startup` 定义启动监听器、失败分类器、必需依赖检查
+  和 stderr 兜底；在 `CampusClawApplication` 调用 `run()` 前注册；
+- `modules/coding-agent-cli/.../observability/http` 与 `.../runtime` 定义访问和执行日志；
 - `modules/ai` 定义最小的 `AiDiagnosticContext`、模型调用阶段与 Provider 终态日志；
 - `modules/agent-core` 只把安全的诊断上下文传入每次 `SimpleStreamOptions`，不依赖 Web 类型；
 - `modules/coding-agent-cli` 定义 HTTP/Runtime 上下文、访问日志、执行日志和 SSE 生命周期；
@@ -136,7 +179,7 @@ MDC 不能作为这两条异步链路的可靠事实来源。当前 Runtime 创�
 
 ![诊断上下文传播](campusclaw_log_context_propagation.svg)
 
-[PlantUML 源码：`campusclaw_log_context_propagation`](diagram.puml#L201)
+[PlantUML 源码：`campusclaw_log_context_propagation`](diagram.puml#L333)
 
 ### 5.1 标识层次
 
@@ -188,7 +231,22 @@ IOException 和 execution terminal 回调。HTTP/SSE 完成状态使用原子 co
 所有 `eventName` 均为稳定英文机器标识；消息模板也使用英文，满足 CampusClaw 当前日志
 规范。日志消费者根据字段查询，不解析 message 文案。
 
-### 6.1 调用端事件
+### 6.1 后端启动事件
+
+| `eventName` | 级别 | 终态 | 必填字段 | 说明 |
+|---|---|---|---|---|
+| `campusclaw.startup.started` | INFO | 否 | `startupId/serviceName/processId` | LoggingSystem 初始化后立即记录；不记录命令行参数或环境变量 |
+| `campusclaw.startup.check.started` | INFO | 否 | `startupId/checkName/required` | 必需检查开始；用于识别检查阻塞位置 |
+| `campusclaw.startup.check.completed` | INFO/ERROR | 是 | started 字段 + `outcome/durationMs` | 每个检查唯一终态；失败时带 stage/code |
+| `campusclaw.startup.completed` | INFO | 是 | `startupId/outcome=success/serverPort/durationMs` | 仅在 ApplicationReadyEvent 且全部必需检查成功后记录 |
+| `campusclaw.startup.failed` | ERROR | 是 | `startupId/outcome=failure/failureStage/errorCode/durationMs/rootCauseClass` | 进程级失败唯一事实；保留 Spring Boot 非零退出语义 |
+| `campusclaw.shutdown.completed` | INFO | 是 | `startupId/outcome/reason/durationMs` | 正常 ContextClosed 或受控终止；崩溃/强杀不保证出现 |
+
+`startupId` 在创建 `SpringApplication` 前本地生成 UUID，并由程序化注册的监听器持有，因此 Bean
+创建之前的失败也能关联。`startup.failed` 是应用告警与检索的权威事件；Spring Boot 自带失败
+分析文本继续保留作为人工补充，但业务告警不得解析其文案。
+
+### 6.2 调用端事件
 
 | `eventName` | 级别 | 终态 | 必填字段 | 说明 |
 |---|---|---|---|---|
@@ -199,7 +257,7 @@ IOException 和 execution terminal 回调。HTTP/SSE 完成状态使用原子 co
 `campusclaw_stream`、`campusclaw_decode`。这一层是 target-only：当前 mate-service 基线只有
 Agent definition API，没有已实现的公共 Chat bridge 或 CampusClaw Client。
 
-### 6.2 HTTP 与 SSE 事件
+### 6.3 HTTP 与 SSE 事件
 
 | `eventName` | 级别 | 终态 | 必填字段 | 说明 |
 |---|---|---|---|---|
@@ -212,7 +270,7 @@ Agent definition API，没有已实现的公共 Chat bridge 或 CampusClaw Clien
 含具体 ID 或 page token 的原始 URI。异常处理器把稳定 `resCode` 放入 request-scoped
 诊断状态，Filter 在完成日志中读取；不通过解析 JSON 响应体获得错误码。
 
-### 6.3 Runtime 事件
+### 6.4 Runtime 事件
 
 | `eventName` | 级别 | 终态 | 必填字段 | 说明 |
 |---|---|---|---|---|
@@ -224,7 +282,7 @@ Agent definition API，没有已实现的公共 Chat bridge 或 CampusClaw Clien
 `outcome=failure/errorCode=SESSION_EXECUTION_FAILED`。`terminalReason=aborted` 记录
 `outcome=success/terminationReason=aborted`，除非取消清理本身失败。
 
-### 6.4 Model Manager 事件
+### 6.5 Model Manager 事件
 
 | `eventName` | 级别 | 终态 | 必填字段 | 说明 |
 |---|---|---|---|---|
@@ -254,6 +312,11 @@ Model Provider 必须在全部终态分支只写一次 completed：
 | `eventName` | string | 固定目录值，不拼接用户数据 |
 | `outcome` | `success \| failure \| unknown` | 与 ECS outcome 语义对齐；取消/断线另用 `terminationReason` |
 | `terminationReason` | string | `completed/aborted/disconnected/timeout/error/rejected` |
+| `startupId` | UUID string | 单次 JVM 启动生成；启动完成后继续用于关停事件 |
+| `serviceName` | string | 固定 `campusclaw-agent` 或 `mate-campusclaw`，不从不可信输入获取 |
+| `processId` | long | 当前 JVM PID；仅启动事件使用 |
+| `checkName` | string | 固定 `database/session_schema/agent_cache_root` 等检查名 |
+| `component` | string | 固定组件标识或脱敏 Bean 名，不记录任意异常消息 |
 | `requestId` | UUID string | CampusClaw 本地生成 |
 | `parentRequestId` | string | 仅可信网关适配存在时写入 |
 | `operation` | string | 11 个 operationKey 或固定内部 operation |
@@ -268,12 +331,21 @@ Model Provider 必须在全部终态分支只写一次 completed：
 | `failureStage` | string | 第 7.2 节稳定枚举 |
 | `errorCode` | string | 优先复用公开 resCode；内部诊断码不得对外返回 |
 | `exceptionClass` | string | Java 类名；只有最深失败事件附完整 Throwable |
+| `rootCauseClass` | string | 启动失败 cause chain 最深类型；不把 root cause message 复制为结构化字段 |
+| `sqlState` | string | 仅数据库失败记录标准 SQLSTATE；不记录 SQL 文本、URL 或用户名 |
 | `retryable` | boolean | 仅当既有错误/策略能证明时写入，不从 status 猜测 |
 
 ### 7.2 失败阶段
 
 | `failureStage` | 触发边界 | 典型错误 |
 |---|---|---|
+| `startup_logging` | LoggingSystem、Appender、Encoder 初始化 | `LOGGING_INITIALIZATION_FAILED` |
+| `startup_configuration` | YAML/properties、类型转换、Jakarta Validation、工具或 Provider 配置 | `CONFIG_BIND_FAILED`、`CONFIG_VALIDATION_FAILED` |
+| `startup_context` | Spring Bean 创建、依赖注入、MyBatis Mapper 初始化 | `BEAN_INITIALIZATION_FAILED`、`MAPPER_INITIALIZATION_FAILED` |
+| `startup_database_connect` | Hikari 建池、DNS/TLS/认证/连接超时 | `DATABASE_CONNECT_FAILED` |
+| `startup_database_schema` | Session 表/列不存在或 SELECT 权限不足 | `DATABASE_SCHEMA_INVALID` |
+| `startup_filesystem` | Agent 缓存根目录创建、符号链接或写入探针 | `AGENT_CACHE_ROOT_UNAVAILABLE` |
+| `startup_web_server` | 地址绑定、端口占用、Servlet 容器初始化 | `PORT_BIND_FAILED`、`WEB_SERVER_START_FAILED` |
 | `request_route` | 请求没有匹配 operation | 404 路由错误 |
 | `request_validation` | Path、Query、JSON、Bean Validation | `INVALID_*` |
 | `session_lookup` | Session/Agent/Model 查找 | `SESSION_NOT_FOUND`、`MANAGER_UNAVAILABLE` |
@@ -293,13 +365,81 @@ Model Provider 必须在全部终态分支只写一次 completed：
 内部诊断码只用于日志和指标，不增加 Runtime HTTP/SSE 契约错误码。若下游已经返回安全且
 稳定的 `resCode`，日志保留该码；不记录本地化 `resMsg` 和完整错误响应体。
 
-## 8. 失败诊断流程
+## 8. 后端启动诊断
+
+![CampusClaw 后端启动日志时序](campusclaw_startup_logging_sequence.svg)
+
+[PlantUML 源码：`campusclaw_startup_logging_sequence`](diagram.puml#L224)
+
+### 8.1 启动模块组成
+
+| 组件 | 注册时机 | 职责 |
+|---|---|---|
+| `CampusClawStartupLifecycle` | `SpringApplication.run()` 前通过 `addListeners` 注册 | 生成 startupId，跟踪当前阶段，接收 EnvironmentPrepared、WebServerInitialized、Ready、Failed 和 Closed 事件 |
+| `StartupFailureClassifier` | 普通 Java 对象，不依赖 Spring Bean | 遍历 cause chain，按异常类型和当前阶段生成稳定 stage/code/component |
+| `StartupDiagnosticGate` | `SmartInitializingSingleton` | 全部普通单例创建后、Context finishRefresh 与 Web Server connector 启动前顺序执行 required checks；任一失败使 refresh 失败 |
+| `DatabaseStartupCheck` | Gate 内 | 取得真实连接并对固定 Session 表/列执行只读零行查询，验证连接、Schema 和 SELECT 权限 |
+| `AgentCacheRootStartupCheck` | Gate 内 | 安全创建缓存根，拒绝符号链接，创建并删除随机临时文件验证写入能力 |
+| `StartupStderrFallback` | main 入口可直接使用 | LoggingSystem 无法初始化时写一条固定格式、脱敏的 stderr 失败摘要 |
+
+启动监听器必须程序化注册，不能只声明为 Spring Bean；否则配置绑定或 Bean 创建失败时监听器自身
+尚不存在。`StartupFailureClassifier` 不通过本地化 message 正则判断阶段，优先使用
+`BindException/BindValidationException/BeanCreationException/SQLException/PortInUseException` 等
+类型、失败 Bean 名和当前生命周期阶段。未知异常统一归入 `startup_context/STARTUP_FAILED`。
+
+### 8.2 必需检查与就绪语义
+
+启动顺序固定为：
+
+1. 创建 `startupId` 并注册监听器；
+2. 加载 LoggingSystem 和 Environment，写 `startup.started`；
+3. 绑定并校验配置，创建 Bean，加载 MyBatis Mapper；
+4. `StartupDiagnosticGate` 在 Context 完成 refresh 前执行 `database`、`session_schema`、
+   `agent_cache_root`；
+5. required checks 通过后，Web Server connector 绑定地址与端口；
+6. Spring 发布 `ApplicationReadyEvent` 后写唯一 `startup.completed`。
+
+数据库检查使用编译期固定 SQL，不接受配置或请求拼接表名。它对
+`t_sessions/t_session_tombstone/t_session_cleanup_task/t_session_entries/t_session_records/
+t_session_stats/t_session_sequences/t_session_materialized` 的必需列执行 `SELECT ... WHERE 1=0`，
+既不读业务数据也不修改数据库。数据库 DDL 仍只能由发布平台执行；应用不得自动建表、升级或
+修复权限。
+
+canonical 与 `mate-campusclaw` 的 Hikari `initialization-fail-timeout` 默认值必须统一为正值；
+即使 Hikari 配置被部署覆盖为延迟连接，显式 `DatabaseStartupCheck` 仍是最终 required gate。
+因此看到 `startup.completed` 可以确认数据库连接、Session 基线 Schema 的只读兼容性、Agent
+缓存目录和 HTTP 监听端口都可用。
+
+Model Manager、Mate Tool 和 CampusMate Runtime 默认只做 URI、超时和固定 API 值的本地配置
+校验，不在启动时发送网络探测。这些依赖没有源码确认的无副作用健康端点，而且把它们设为
+硬启动依赖会让暂时抖动扩大为整个 CampusClaw 不可启动。远端连接问题由第 6 章的调用终态
+日志定位；若公司平台提供正式健康接口，再以 target-only 集成项增加非阻塞检查。
+
+### 8.3 启动失败定位表
+
+| 最后事件 | `failureStage/errorCode` | 定位结论 |
+|---|---|---|
+| 只有 stderr `CAMPUSCLAW_STARTUP_FAILED` | `startup_logging/LOGGING_INITIALIZATION_FAILED` | 日志配置、Appender 或 Encoder 在结构化日志可用前失败 |
+| `startup.failed` | `startup_configuration/CONFIG_BIND_FAILED` | 环境变量值无法转换、必要 placeholder 缺失或 YAML/properties 错误 |
+| `startup.failed` | `startup_configuration/CONFIG_VALIDATION_FAILED` | Runtime duration/size、工具列表或 Provider API 配置非法 |
+| `startup.check.completed` failure | `startup_database_connect/DATABASE_CONNECT_FAILED` | 数据库 DNS、TLS、证书、认证、地址或连接超时 |
+| `startup.check.completed` failure | `startup_database_schema/DATABASE_SCHEMA_INVALID` | currentSchema、Session 表/列或 SELECT 权限与当前版本不兼容 |
+| `startup.check.completed` failure | `startup_filesystem/AGENT_CACHE_ROOT_UNAVAILABLE` | 缓存根目录权限、只读文件系统、符号链接或容量问题 |
+| `startup.failed` | `startup_web_server/PORT_BIND_FAILED` | SERVER_ADDRESS/SERVER_PORT 错误或端口已被占用 |
+| `startup.failed` | `startup_context/BEAN_INITIALIZATION_FAILED` | 通过 component 与 rootCauseClass 定位具体 Bean；完整堆栈只附在该终态 |
+| `startup.completed` 后首次调用失败 | 非 startup stage | 后端基础启动成功；按 request/execution/model/tool 日志继续定位远端或业务问题 |
+
+如果进程退出但 stdout 和 stderr 都不存在启动终态，故障位于 JVM 启动之前或容器采集之外，
+例如镜像命令、JRE、文件权限、OOMKill 或日志采集配置。部署平台必须保留进程 stdout/stderr 和
+容器 termination reason；应用内日志无法覆盖 JVM 尚未运行或被 `SIGKILL` 强制终止的场景。
+
+## 9. 调用失败诊断流程
 
 ![CampusClaw 调用失败诊断顺序](campusclaw_failure_logging_sequence.svg)
 
-[PlantUML 源码：`campusclaw_failure_logging_sequence`](diagram.puml#L107)
+[PlantUML 源码：`campusclaw_failure_logging_sequence`](diagram.puml#L130)
 
-### 8.1 通过事件缺口判断故障位置
+### 9.1 通过事件缺口判断故障位置
 
 | 已观察日志 | 结论 |
 |---|---|
@@ -311,7 +451,7 @@ Model Provider 必须在全部终态分支只写一次 completed：
 | 有 `sse.disconnected`，随后 execution.completed success | 调用端断线，但已接受执行继续并完成 |
 | 有 start，超过配置上限仍无 completed | 日志终态门禁或超时实现失效，应触发缺失终态告警 |
 
-### 8.2 错误日志所有权与去重
+### 9.2 错误日志所有权与去重
 
 同一失败允许有多个“边界终态摘要”，但完整异常堆栈只记录一次：
 
@@ -327,13 +467,34 @@ Model Provider 必须在全部终态分支只写一次 completed：
 `http.request.completed` 的服务器失败为主，Provider/Tool 终态用于根因下钻，避免一次错误
 触发多条同级事故告警。
 
-## 9. 结构化输出
+## 10. 结构化输出
 
 CampusClaw 基线使用 Spring Boot `3.4.1`、SLF4J 和 Logback，具备 Spring Boot 内置 ECS
 结构化 console encoder。目标使用 SLF4J 2 key-value API 写稳定字段，并由 Kubernetes profile
 输出单行 ECS JSON，不新增 Logstash encoder 依赖。
 
-失败示例（字段顺序不构成契约）：
+启动失败示例（字段顺序不构成契约，异常 message 与 SQL 文本不进入结构化字段）：
+
+```json
+{
+  "@timestamp": "2026-08-25T08:19:02.113Z",
+  "log.level": "ERROR",
+  "service.name": "campusclaw-agent",
+  "message": "backend startup failed",
+  "eventName": "campusclaw.startup.failed",
+  "startupId": "447b950e-55fc-4df1-b62a-5dd80c353797",
+  "outcome": "failure",
+  "failureStage": "startup_database_schema",
+  "errorCode": "DATABASE_SCHEMA_INVALID",
+  "component": "session_schema",
+  "checkName": "session_schema",
+  "sqlState": "42P01",
+  "durationMs": 2148,
+  "rootCauseClass": "org.postgresql.util.PSQLException"
+}
+```
+
+调用失败示例：
 
 ```json
 {
@@ -375,7 +536,7 @@ CampusClaw 基线使用 Spring Boot `3.4.1`、SLF4J 和 Logback，具备 Spring 
 }
 ```
 
-### 9.1 配置目标
+### 10.1 配置目标
 
 Canonical `application.yml` 保持应用大部分 Logger 为 WARN，仅为诊断事件包开启 INFO：
 
@@ -384,6 +545,7 @@ logging:
   level:
     root: WARN
     com.campusclaw: WARN
+    com.campusclaw.codingagent.observability.startup: INFO
     com.campusclaw.ai.observability: INFO
     com.campusclaw.codingagent.observability: INFO
 ```
@@ -408,15 +570,19 @@ logging.level.com.huawei.hicampus.mate.matecampusclaw.ai.observability=INFO
 logging.level.com.huawei.hicampus.mate.matecampusclaw.codingagent.observability=INFO
 logging.structured.format.console=ecs
 logging.structured.ecs.service.name=mate-campusclaw
+spring.datasource.hikari.initialization-fail-timeout=${GAUSSDB_INITIALIZATION_FAIL_TIMEOUT_MS:1}
 ```
 
 本地默认可以继续使用人类可读 console 格式，但字段和事件名必须相同。应用不在容器内维护
-滚动日志文件，避免与 stdout 采集重复和占满临时磁盘。
+滚动日志文件，避免与 stdout 采集重复和占满临时磁盘。`StartupStderrFallback` 不经过普通
+Appender，只在 LoggingSystem 本身失败时输出一行固定前缀摘要；正常启动不得重复写 stderr。
 
-### 9.2 级别
+### 10.2 级别
 
 | 场景 | 级别 |
 |---|---|
+| 启动开始、检查成功、就绪、正常关停 | INFO |
+| 启动必需检查失败、配置/Bean/端口初始化失败 | ERROR |
 | 开始、成功、正常 Abort、客户端断线 | INFO |
 | 400/404/409/412/422/428、下游 429/503/504、可恢复超时 | WARN |
 | 应用 5xx、持久化失败、模型协议/解析失败、未预期异常 | ERROR |
@@ -425,18 +591,21 @@ logging.structured.ecs.service.name=mate-campusclaw
 业务并发冲突 `SESSION_BUSY` 仍记录 WARN 便于诊断，但告警规则不按单条 WARN 触发；按窗口
 比例判断是否异常。
 
-## 10. 安全与数据最小化
+## 11. 安全与数据最小化
 
-### 10.1 允许字段
+### 11.1 允许字段
 
+- `startupId/serviceName/processId/checkName/component/serverPort`；
 - 已验证的 `agentId/sessionId/userEntryId/toolCallId`；
 - CampusClaw 请求目标 `providerId/modelId`；
 - operation、route template、HTTP status、稳定错误码、失败阶段、耗时、计数；
 - Java exception class；受控诊断 sink 中最深根因的堆栈。
 
-### 10.2 禁止字段
+### 11.2 禁止字段
 
 - `Authorization`、`X-HW-APPKEY`、`X-HW-ID` 的值及全部原始 Header；
+- JVM 命令行参数、完整环境变量、System properties、数据库 URL/用户名/密码、证书路径；
+- Agent 缓存绝对路径、容器挂载路径和主机名；启动检查只记录固定目标名；
 - JWT、Cookie、API Key、私有 claim、凭据模式；
 - 请求/响应 JSON、Prompt、User/Assistant 文本、文件名、文件正文、Base64；
 - thinking、reasoning 字段、签名及原始 SSE chunk；
@@ -452,12 +621,18 @@ logging.structured.ecs.service.name=mate-campusclaw
 当前 Runtime 契约已经明确 Header 值不得记日志，`sessionId` 不是凭据。本设计保持这一边界，
 也不在 CampusClaw 日志中引入公共 `chatId` 或最终用户身份。
 
-## 11. 代码改造映射
+## 12. 代码改造映射
 
-### 11.1 `modules/coding-agent-cli`
+### 12.1 `modules/coding-agent-cli`
 
 | 目标位置 | 改造 |
 |---|---|
+| `CampusClawApplication` | 改为显式创建 `SpringApplication`，在 `run()` 前生成 startupId 并注册 `CampusClawStartupLifecycle`；不吞异常，不把失败转换为零退出码 |
+| `observability/startup/CampusClawStartupLifecycle` | 记录 startup started/completed/failed/shutdown；维护原子进程终态和当前 phase |
+| `observability/startup/StartupFailureClassifier` | 以异常类型、Bean 名和 phase 映射稳定 stage/code；输出经过白名单过滤的诊断结果 |
+| `observability/startup/StartupDiagnosticGate` | 实现 `SmartInitializingSingleton`，在 Web Server connector 启动前运行 required checks，任一失败使 Context refresh 失败 |
+| `observability/startup/DatabaseStartupCheck` | 获取真实连接并验证八张 Session 表的固定列投影；只读、不执行 DDL/DML |
+| `observability/startup/AgentCacheRootStartupCheck` | 创建安全根目录并执行随机临时文件写入/删除探针；日志不包含真实路径 |
 | `runtimeapi/observability/RuntimeRequestLoggingFilter` | 生成 requestId、匹配 operation、记录开始和原子完成；注册 AsyncListener |
 | `runtimeapi/observability/HttpRequestLogContext` | 保存 HTTP 白名单上下文 |
 | `runtimeapi/observability/RuntimeInvocationLogContext` | 保存 Session/execution 白名单上下文 |
@@ -469,7 +644,7 @@ logging.structured.ecs.service.name=mate-campusclaw
 | `RuntimeSseEmitterSubscriber` | 接收诊断上下文，区分 disconnect、服务器写失败和正常终态；原子去重 |
 | Tool Pipeline / Mate Tool Client | 逐步迁移到统一 tool terminal 事件；删除同一异常的重复局部堆栈 |
 
-### 11.2 `modules/ai` 与 `agent-core`
+### 12.2 `modules/ai` 与 `agent-core`
 
 | 目标位置 | 改造 |
 |---|---|
@@ -480,12 +655,14 @@ logging.structured.ecs.service.name=mate-campusclaw
 | `MateChatSseParser` | 终态回调携带安全 code/stage；解析 `event:error` 的稳定 resCode，不保留完整 data |
 | `MateModelInvocationException` | 保留 diagnostic code/stage/retryable，不把安全诊断字段暴露为公共 SSE 扩展 |
 
-### 11.3 `mate-campusclaw` 镜像
+### 12.3 `mate-campusclaw` 镜像
 
 Java 改动只在 `modules/*` 完成，再运行 `scripts/sync-mate-campusclaw.sh`。镜像的
-`application.properties` 不由脚本覆盖，实施 PR 必须单独更新并通过镜像编译。
+`application.properties` 不由脚本覆盖，实施 PR 必须单独更新并通过镜像编译。启动监听器和
+required checks 随 Java 镜像同步；Hikari fail-fast、专用 INFO Logger 和 ECS 配置必须在手工
+properties 中显式对齐。
 
-### 11.4 mate-service 调用端
+### 12.4 mate-service 调用端
 
 当前 `mate-service@6d5e6f3` 没有 Browser Chat → CampusClaw 的实现，因此下列内容明确为
 target-only：
@@ -499,12 +676,18 @@ target-only：
 CampusClaw 自身日志功能不依赖该 Client 才能落地；但要定位“请求根本没有进入 CampusClaw”，
 调用端日志是必要条件。
 
-## 12. 测试设计
+## 13. 测试设计
 
-### 12.1 单元测试
+### 13.1 单元测试
 
 | 测试 | 核心断言 |
 |---|---|
+| `CampusClawStartupLifecycleTest` | started 后只允许 completed/failed 之一；ApplicationFailedEvent 在 Bean 创建前后均可捕获；异常继续向 Spring Boot 传播 |
+| `StartupFailureClassifierTest` | bind、validation、SQL connect/schema、filesystem、port、bean 和 unknown 分别映射稳定 stage/code，不依赖本地化 message |
+| `StartupDiagnosticGateTest` | required checks 按序执行，started/completed 一一配对，任一失败使 Context refresh 失败且 Web Server 不接受流量 |
+| `DatabaseStartupCheckTest` | 真实 PostgreSQL-compatible Testcontainer/测试库下验证连接、缺表、缺列、错误 Schema 和权限不足；所有 SQL 只读 |
+| `AgentCacheRootStartupCheckTest` | 可写目录成功；只读、普通文件、符号链接、创建/删除失败均返回稳定错误且不输出绝对路径 |
+| `StartupSensitiveLogContractTest` | 启动参数、环境变量、JDBC URL、用户名、密码、证书和真实目录哨兵值不出现在 stdout/stderr |
 | `RuntimeRequestLoggingFilterTest` | 每个请求一个 started、一个 completed；route 使用模板；4xx/5xx 含 status/code；无原始 URI/query/body |
 | `RuntimeExceptionHandlerLoggingTest` | validation、RuntimeApiException、unexpected 映射正确；无重复堆栈 |
 | `RuntimeExecutionCoordinatorLoggingTest` | `StopReason.ERROR + failure=null` 仍产出 execution failure；success/abort/timeout 各唯一终态 |
@@ -516,32 +699,43 @@ CampusClaw 自身日志功能不依赖该 Client 才能落地；但要定位“�
 Logger 测试使用 Logback `ListAppender` 捕获实际事件和 key-value，不 mock `Logger`，避免只验证
 方法调用而没有验证最终日志内容。
 
-### 12.2 集成测试
+### 13.2 集成测试
 
-1. 启动真实 CampusClaw 进程并捕获 stdout；
-2. 发送非法 JSON，断言 `http.request.started/completed`、400 和
+1. 启动真实 CampusClaw 进程并同时捕获 stdout/stderr，断言正常场景有唯一
+   `startup.started/completed`，且 completed 晚于全部 required check；
+2. 分别注入非法 duration/工具/API 配置、数据库 DNS/认证/SSL/缺表/缺列、只读缓存根和占用端口，
+   断言进程非零退出并出现对应 `startup.failed`；
+3. 让 Logback/ECS 配置初始化失败，断言至少出现固定前缀 stderr 兜底，且不包含 secret；
+4. 在 canonical 与生成的 `mate-campusclaw` 两种包名/配置中关闭数据库，断言都不能产生
+   `startup.completed`；
+5. 发送非法 JSON，断言 `http.request.started/completed`、400 和
    `INVALID_EVENT_REQUEST`；
-3. 使用 MockWebServer 返回 503 ResultBean，断言 `model_http` 与安全 resCode；
-4. 返回 200 SSE `event:error`，断言 model、execution、SSE 三个终态可关联，且 HTTP status
+6. 使用 MockWebServer 返回 503 ResultBean，断言 `model_http` 与安全 resCode；
+7. 返回 200 SSE `event:error`，断言 model、execution、SSE 三个终态可关联，且 HTTP status
    仍为 200；
-5. 返回非法 chunk 或在 `[DONE]` 前关闭，断言 `model_parse/model_stream`；
-6. 客户端在 User Entry 接受后断开，断言 `sse.disconnected` 且 execution 后续仍有终态；
-7. 解析每一行 JSON，检查 `service.name/eventName/requestId/outcome` 和敏感字段黑名单；
-8. 在生成的 `mate-campusclaw` 包名和手工 properties 下重复关键进程测试。
+8. 返回非法 chunk 或在 `[DONE]` 前关闭，断言 `model_parse/model_stream`；
+9. 客户端在 User Entry 接受后断开，断言 `sse.disconnected` 且 execution 后续仍有终态；
+10. 解析每一行 JSON，检查 `service.name/eventName/requestId/outcome` 和敏感字段黑名单；
+11. 在生成的 `mate-campusclaw` 包名和手工 properties 下重复关键进程测试。
 
-### 12.3 缺失终态门禁
+### 13.3 缺失终态门禁
 
 测试和运行告警都验证以下不变量：
 
 - 每个 `http.request.started` 在请求/流上限内出现一个 HTTP 或 SSE 终态；
+- 每个成功写出的 `startup.started` 最终只有一个 `startup.completed` 或 `startup.failed`；
+- `startup.completed` 之前每个 required `startup.check.started` 都有 success terminal；
 - 每个 `execution.started` 在最大执行时长加清理宽限内出现一个 execution.completed；
 - 每个 `model.invocation.started` 在响应总超时加宽限内出现一个 model completed；
 - started/terminal 的数量可以按 ID 一一配对，不允许重复或悬空。
 
-## 13. 运行与告警
+## 14. 运行与告警
 
-### 13.1 推荐查询
+### 14.1 推荐查询
 
+- 启动失败：`eventName=campusclaw.startup.failed`，按 `failureStage/errorCode/component` 聚合；
+- 数据库未就绪：`eventName=campusclaw.startup.check.completed AND checkName IN (database,session_schema) AND outcome=failure`；
+- 启动悬空：存在 `startup.started`，超过启动上限仍没有 completed/failed；
 - 调用失败：`eventName=campusclaw.execution.completed AND outcome=failure`；
 - 模型连接失败：`eventName=campusclaw.model.invocation.completed AND failureStage=model_connect`；
 - 上游流错误：`failureStage IN (model_stream, model_parse)`；
@@ -551,8 +745,11 @@ Logger 测试使用 Logback `ListAppender` 捕获实际事件和 key-value，不
   `execution.completed`；
 - 悬空调用：started 超过对应上限仍没有 terminal。
 
-### 13.2 告警基线
+### 14.2 告警基线
 
+- 单次 `startup.failed`、启动悬空或容器反复重启直接告警，不以请求失败率稀释；
+- `startup_database_schema` 和 `startup_configuration` 默认不可重试，提示修正发布配置或数据库
+  基线；`startup_database_connect` 可由部署平台按退避策略重启，但必须保留首个根因；
 - P1/P2 不按单条异常触发，使用 5 分钟窗口失败率和绝对数量；
 - `runtime_persistence`、连续 `model_parse` 和缺失 execution terminal 优先级高；
 - `SESSION_BUSY`、用户输入 400 和单次客户端断线默认不告警，只用于趋势；
@@ -563,25 +760,37 @@ Logger 测试使用 Logback `ListAppender` 捕获实际事件和 key-value，不
 必须在实施时对齐公司数据分级和成本政策；未获得平台依据前不把建议写成产品承诺。ERROR
 堆栈索引应限制 RBAC，访问日志与完整堆栈可以使用不同保留期。
 
-## 14. 发布顺序
+## 15. 发布顺序
 
-1. 先引入结构化事件模型、敏感字段测试和配置，不改变 Runtime 业务响应；
-2. 接入 HTTP started/completed，验证当前 4xx/5xx 均可见；
-3. 接入 execution context 和 `StopReason.ERROR` 终态，直接修复当前无日志路径；
-4. 接入 Mate Model Provider 分阶段终态；
-5. 接入 SSE disconnect 和 Tool 终态；
-6. 同步并验证 `mate-campusclaw` 镜像与手工 properties；
-7. 在预发布环境以全量 INFO 运行，核对日志量、字段、敏感数据和告警；
-8. mate-service 公共 Chat Client 实现时补调用端日志和平台跨服务关联适配。
+1. 先引入结构化事件模型、白名单 Builder、敏感字段测试和专用 Logger 配置，不改变 Runtime
+   业务响应；
+2. 接入程序化 startup lifecycle、stderr 兜底和启动失败分类，验证配置/Bean/端口错误；
+3. 接入 database/session_schema/agent_cache_root required checks，并统一 canonical/mirror Hikari
+   fail-fast；
+4. 接入 HTTP started/completed，验证当前 4xx/5xx 均可见；
+5. 接入 execution context 和 `StopReason.ERROR` 终态，直接修复当前无日志路径；
+6. 接入 Mate Model Provider 分阶段终态；
+7. 接入 SSE disconnect 和 Tool 终态；
+8. 同步并验证 `mate-campusclaw` Java 镜像与手工 properties；
+9. 在预发布环境执行真实进程失败矩阵，核对启动门禁、日志量、字段、敏感数据和告警；
+10. mate-service 公共 Chat Client 实现时补调用端日志和平台跨服务关联适配。
 
-回滚只需关闭专用 observability logger 或撤回日志实现，不影响 HTTP/SSE 业务契约和数据库。
-不得以临时把整个 `com.campusclaw` 调到 DEBUG 的方式替代本设计，因为那会放大日志量并可能
-暴露非白名单上下文。
+调用链日志可通过关闭专用 observability logger 回滚。启动 required checks 不能仅靠关闭 Logger
+回滚，因为它们定义 ready 语义；若新门禁误判，应回滚对应检查实现和 Hikari 配置，同时保留
+startup failed 事件。任何回滚都不执行数据库 DDL，也不改变 HTTP/SSE 契约。不得以临时把整个
+`com.campusclaw` 调到 DEBUG 的方式替代本设计，因为那会放大日志量并可能暴露非白名单上下文。
 
-## 15. 源码证据与差异分类
+## 16. 源码证据与差异分类
 
 | 分类 | 源码证据或目标决策 |
 |---|---|
+| 已观察行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/CampusClawApplication.java:29-33`：main 直接调用 `SpringApplication.run`，没有程序化启动监听器或应用级启动终态 |
+| 已观察行为 | `modules/coding-agent-cli/src/main/resources/application.yml:9-25`：canonical Hikari 默认 `initialization-fail-timeout=1`；`mate-campusclaw/src/main/resources/application.properties:39-51`：镜像默认 `-1`，数据库不可用时启动语义不同 |
+| 已观察行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java:90-107` 和 `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-92`：工具列表和 Provider API 在 Bean 初始化期校验，异常目前没有稳定 startup stage/code |
+| 已观察行为 | `modules/ai/src/main/java/com/campusclaw/ai/model/ModelRegistry.java:240-280`：启动加载模型并记录 INFO/WARN；INFO 被默认 WARN 阈值隐藏，用户覆盖解析失败会降级而不阻止启动 |
+| 已观察行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java:127-160`：Agent 缓存根和 staging 目录只在第一次 rebuild 时创建，启动就绪不证明目录可写 |
+| 已观察行为 | `modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:9-300` 使用八张 Session 表；`db/gaussdb/upgrade/README.md:3-18` 明确 DDL 只能由发布平台执行，应用启动不得迁移 Schema |
+| 已观察行为 | `scripts/sync-mate-campusclaw.sh:3-16,42-50`：Java 源码会重写包名同步，但 application 配置是手工维护文件，启动 Logger 与 Hikari 配置必须单独对齐 |
 | 已观察行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:61-77`：提交接口建立 SseEmitter、调用 Service 并注册 detach，没有请求或流生命周期日志 |
 | 已观察行为 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java:45-67,117-120`：validation 只记 DEBUG；RuntimeApiException 只在 5xx 记 ERROR |
 | 已观察行为 | `modules/coding-agent-cli/src/main/resources/application.yml:110-114`：root 与 `com.campusclaw` 默认 WARN；`application-k8s.yml:9-11` 只提升到 INFO |
@@ -596,13 +805,23 @@ Logger 测试使用 Logback `ListAppender` 捕获实际事件和 key-value，不
 | 已观察行为 | `modules/ai/src/main/java/com/campusclaw/ai/types/SimpleStreamOptions.java:32-44` 已有 provider options；`AgentSessionFactory.java:99-113` 使用 `new Agent(aiService)`，没有设置 Runtime 诊断上下文 |
 | 已观察行为 | 根 `pom.xml:30-32,130-139` 固定 Spring Boot 3.4.1、SLF4J 与 Logback；本地依赖已包含 Spring Boot ECS structured encoder，可不新增日志 encoder 依赖 |
 | Target-only | mate-service 基线没有公共 Chat bridge/CampusClaw Client；进入 CampusClaw 前的网络失败日志需在未来调用端实现 |
+| 架构变更 | 在 Spring 容器创建前注册 startup lifecycle，并以 `SmartInitializingSingleton` required gate 定义后端 ready；失败保留非零退出且不启动 Web Server connector |
+| 架构变更 | canonical 与 mirror 统一数据库 fail-fast；增加只读 Session Schema 和 Agent 缓存目录检查，不引入应用内 DDL |
 | 架构变更 | 新增显式不可变诊断上下文和分层生命周期事件；不以 MDC-only 跨异步边界 |
 | 架构变更 | `StopReason.ERROR` 成为 execution failure 日志条件，不再依赖 Throwable 是否存在 |
-| 安全加固 | 日志字段改为白名单，禁止 Header、凭据、Prompt、thinking、Tool 参数/结果和原始 SSE |
+| 安全加固 | 日志字段改为白名单，禁止启动参数、环境变量、JDBC URL、真实路径、Header、凭据、Prompt、thinking、Tool 参数/结果和原始 SSE |
 | 产品约束 | 不改变 11 个 HTTP operation、ResultBean、SSE、Session/Entry 恢复模型或无公共 Run 决策 |
+| 产品约束 | Model Manager、Mate Tool 和 CampusMate Runtime 默认不是启动硬依赖；无已确认健康端点时不发送网络预检 |
 
-## 16. 验收标准
+## 17. 验收标准
 
+- 正常启动只有一个 `startup.completed`，且它晚于 database、session_schema、agent_cache_root
+  三个 required check success 和 Web Server 绑定；
+- 非法配置、数据库断连/认证/SSL/缺表/缺列、缓存目录不可写和端口占用均非零退出，并有稳定
+  `failureStage/errorCode/component/rootCauseClass`；
+- canonical 与 `mate-campusclaw` 在数据库不可用时都不得输出 `startup.completed`；
+- LoggingSystem 初始化失败时 stderr 至少保留一条 `CAMPUSCLAW_STARTUP_FAILED` 脱敏摘要；
+- 启动日志不包含命令行、环境变量、JDBC URL、数据库用户名/密码、证书或真实缓存路径；
 - 非法请求、Session 不存在、并发冲突、事件接受失败均有入站开始和完成日志；
 - 当前 Mate Provider 的 mapping、connect、HTTP、Content-Type、error event、非法 chunk、提前
   close 和 cancel 全部有唯一模型终态；
@@ -617,19 +836,25 @@ Logger 测试使用 Logback `ListAppender` 捕获实际事件和 key-value，不
 - 相关 Java 测试、进程集成测试、Spotless、Checkstyle、镜像编译通过；
 - 设计 Markdown 无 Mermaid，PlantUML ASCII-only，SVG 与源码同步，链接和行锚有效。
 
-## 17. 待集成校准点
+## 18. 待集成校准点
 
 以下内容没有当前源码或公司制品证据，不应在实现中自行猜测：
 
 1. 公司网关可信跨服务 request/correlation ID 的 Header 名称、格式和信任边界；
 2. 集中日志平台的索引名、采集注解、RBAC、脱敏插件和最终保留周期；
 3. mate-service 公共 Chat API 及其 CampusClaw Client 的具体包、接口和公共 `chatId` 日志规则；
-4. 公司告警平台的规则格式和 on-call 路由。
+4. 公司告警平台的规则格式、启动悬空时限和 on-call 路由；
+5. Model Manager、Mate Tool、CampusMate Runtime 是否提供正式、无副作用且允许启动时调用的健康
+   接口；确认前不增加网络预检；
+6. GaussDB/openGauss 是否提供可移植的只读权限检查，以便在不执行 DML 的前提下额外验证
+   INSERT/UPDATE/DELETE 授权；当前 required check 只证明连接、表列和 SELECT 权限。
 
-这些校准点不阻塞 CampusClaw 本地 `requestId`、execution/model 终态和 ECS stdout 日志落地。
+这些校准点不阻塞 CampusClaw 本地 startup gate、`requestId`、execution/model 终态和 ECS stdout
+日志落地。
 
-## 18. 版本历史
+## 19. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-08-25 | 扩展为后端日志与故障定位模块；增加启动 lifecycle、必需数据库/Schema/缓存目录门禁、端口与配置失败分类、stderr 兜底、canonical/mirror fail-fast 对齐和真实进程失败矩阵。 |
 | 1.0.0 | 2026-08-25 | 基于当前无日志失败路径，新增调用端、HTTP/SSE、Runtime execution、Model/Tool 四层结构化日志设计，固定显式异步上下文、失败阶段、敏感字段白名单、测试与发布顺序。 |

@@ -1,12 +1,14 @@
-' Generated for CampusClaw Invocation Logging Design v1.0.0 on 2026-08-25.
+' Generated for CampusClaw Backend Logging and Diagnostics Design v1.1.0 on 2026-08-25.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design repository baseline: b905a642eb176547370bda33d5a350d536245678.
-' CampusClaw source baseline: 42eb8b0ccb98b512d886722f2ad7ce8340d5a77a.
+' Design repository baseline: 5ad704d218c51b83e758bdae9e7b7294793378d3.
+' CampusClaw source baseline: ecf416115207c4072183c6c8f843f6ee57b7fbc3.
 
 @startuml campusclaw_invocation_logging_architecture
-title CampusClaw Invocation Logging Architecture
+title CampusClaw Backend Logging and Diagnostics Architecture
 
 ' Source evidence:
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/CampusClawApplication.java:29-33, main
+' mate-campusclaw/src/main/resources/application.properties:35-53, mirror startup configuration
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:61-77, submit
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java:45-67, handlers
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java:156-217, completeExecution and logFailure
@@ -25,7 +27,16 @@ skinparam ComponentBackgroundColor #F8FAFC
 skinparam DatabaseBorderColor #475569
 skinparam DatabaseBackgroundColor #F8FAFC
 
+actor "Process Launcher" as Launcher
 actor "mate-service\nor internal SDK" as Caller
+
+rectangle "CampusClaw Startup Boundary" {
+  component "Startup Lifecycle\nstart, ready, failure, shutdown" as Startup
+  component "Required Startup Checks\ndatabase, schema, agent cache root" as StartupChecks
+}
+
+database "GaussDB Session Schema" as Database
+folder "Agent Cache Root" as AgentCache
 
 rectangle "Caller Boundary" {
   component "CampusClaw Client\nTarget-only in mate-service" as Client
@@ -64,6 +75,10 @@ rectangle "CampusMate Model Manager" {
 }
 
 Caller --> Client
+Launcher --> Startup : launch process
+Startup --> StartupChecks : run before ready
+StartupChecks --> Database : connect and read-only schema probe
+StartupChecks --> AgentCache : safe write and delete probe
 Client --> ClientLog : start and completion
 Client --> Network : HTTP or HTTP plus SSE
 Network --> Filter
@@ -79,6 +94,8 @@ Parser --> Provider
 Coordinator --> SseObserver
 
 Filter --> Slf4j
+Startup --> Slf4j
+StartupChecks --> Slf4j
 Web --> Slf4j
 SseObserver --> Slf4j
 Coordinator --> Slf4j
@@ -101,6 +118,12 @@ end note
 note bottom of Slf4j
 No credentials, headers, prompts, message bodies,
 thinking, tool arguments, tool results, or raw SSE.
+end note
+
+note bottom of StartupChecks
+startup.completed is emitted only after all required checks
+and the web server binding have succeeded.
+Remote model and tool services are lazy runtime dependencies.
 end note
 @enduml
 
@@ -196,6 +219,115 @@ else Request reaches CampusClaw
     end
   end
 end
+@enduml
+
+@startuml campusclaw_startup_logging_sequence
+title CampusClaw Backend Startup Diagnostics
+
+' Source evidence:
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/CampusClawApplication.java:29-33, main
+' modules/coding-agent-cli/src/main/resources/application.yml:9-34, datasource and server settings
+' mate-campusclaw/src/main/resources/application.properties:35-53, mirror datasource and server settings
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java:90-107, startup validation
+' modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-92, provider configuration validation
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java:127-160, lazy cache-root creation
+' Observed behavior: the application has no stable startup lifecycle event, the mirror disables Hikari initial failure, and schema plus cache-root readiness are not proven before the server reports ready.
+' Architecture change: register a pre-context lifecycle listener and run database, schema, and cache-root checks before the web-server connector starts.
+' Design reason: startup.completed must prove that the backend can accept and persist a basic Session request, while startup.failed must identify the failing stage without exposing configuration secrets.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam sequence {
+  ArrowColor #334155
+  LifeLineBorderColor #64748B
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F8FAFC
+}
+
+actor "Operator or Container" as Operator
+participant "SpringApplication" as Spring
+participant "Startup Lifecycle" as Lifecycle
+participant "Application Context" as Context
+participant "Web Server" as WebServer
+participant "Startup Diagnostic Gate" as Gate
+database "GaussDB" as Database
+participant "Agent Cache Root" as CacheRoot
+participant "Structured Log Sink" as Logs
+
+Operator -> Spring : launch backend
+Spring -> Lifecycle : environment prepared
+Lifecycle -> Logs : startup.started
+Spring -> Context : bind configuration and create beans
+
+alt Configuration or bean initialization fails
+  Context --> Spring : typed startup exception
+  Spring -> Lifecycle : ApplicationFailedEvent
+  Lifecycle -> Logs : startup.failed\nstage, code, component, root cause
+  Spring --> Operator : non-zero process exit
+else Context initialization succeeds
+  Context -> Gate : after all regular singletons
+  Gate -> Logs : startup.check.started database
+  Gate -> Database : connect
+
+  alt Database connection fails
+      Database --> Gate : SQL or pool exception
+      Gate -> Logs : startup.check.completed failure\nfailureStage=startup_database_connect
+      Gate --> Spring : required check exception
+      Spring -> Lifecycle : ApplicationFailedEvent
+      Lifecycle -> Logs : startup.failed\nerrorCode=DATABASE_CONNECT_FAILED
+      Spring --> Operator : non-zero process exit
+  else Database connects
+      Gate -> Database : fixed read-only Session schema probes
+    alt Schema or SELECT privilege is invalid
+        Database --> Gate : SQL exception
+        Gate -> Logs : startup.check.completed failure\nfailureStage=startup_database_schema
+        Gate --> Spring : required check exception
+        Spring -> Lifecycle : ApplicationFailedEvent
+        Lifecycle -> Logs : startup.failed\nerrorCode=DATABASE_SCHEMA_INVALID
+        Spring --> Operator : non-zero process exit
+    else Session schema is readable
+        Gate -> Logs : startup.check.completed success
+        Gate -> Logs : startup.check.started agent_cache_root
+        Gate -> CacheRoot : safe create, write, and delete probe
+      alt Cache root is unavailable
+          CacheRoot --> Gate : file-system exception
+          Gate -> Logs : startup.check.completed failure\nfailureStage=startup_filesystem
+          Gate --> Spring : required check exception
+          Spring -> Lifecycle : ApplicationFailedEvent
+          Lifecycle -> Logs : startup.failed\nerrorCode=AGENT_CACHE_ROOT_UNAVAILABLE
+          Spring --> Operator : non-zero process exit
+      else Cache root is writable
+          Gate -> Logs : startup.check.completed success
+          Gate --> Context : all required checks passed
+          Context -> WebServer : start connector and bind port
+        alt Web server binding fails
+          WebServer --> Spring : port or server exception
+          Spring -> Lifecycle : ApplicationFailedEvent
+          Lifecycle -> Logs : startup.failed\nfailureStage=startup_web_server
+          Spring --> Operator : non-zero process exit
+        else Web server binding succeeds
+          Spring -> Lifecycle : ApplicationReadyEvent
+          Lifecycle -> Logs : startup.completed\noutcome=success
+          Spring --> Operator : backend ready
+        end
+      end
+    end
+  end
+end
+
+note over Lifecycle, Logs
+If the logging system cannot initialize, write one sanitized
+CAMPUSCLAW_STARTUP_FAILED summary to stderr and keep non-zero exit.
+end note
+
+note over Gate, CacheRoot
+Remote model, tool, and CampusMate services are not probed here.
+They remain lazy runtime dependencies until an approved health API exists.
+end note
 @enduml
 
 @startuml campusclaw_log_context_propagation
