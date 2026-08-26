@@ -8,7 +8,7 @@
 - [CampusClaw Runtime HTTP API](./pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md)：接口语义、状态、错误和源码证据。
 - [Runtime HTTP API HTML 评审页](./pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-review.html)：面向人的主维护契约，可直接在浏览器打开。
 - [Runtime HTTP 测试 Agent](./pi-mono-java-http-test-agent/README.md)：基于已确认契约规划、拉起、执行和维护分层回归测试。
-- [CampusMate 统一客户端地址配置](./campusmate-shared-client-configuration/README.md)：Model Manager 与受管 Runtime 共享唯一 `campusmate.base-url`，各自保留路径和传输参数。
+- [CampusMate 统一客户端地址配置](./campusmate-shared-client-configuration/README.md)：Model Manager、受管 Runtime 与 Mate Tool 共享唯一 `campusmate.base-url`，各自保留路径和传输参数。
 - [MateService Model Manager Provider](./model-manager-provider-contract/README.md)：通用 Provider、Mate Chat SSE、断连取消与 Usage Record 契约。
 - [虚拟线程并发管理](./virtual-thread-concurrency-management/README.md)：内部 active execution、容量准入、背压与 DFX。
 - [AgentRuntimeTemplate](./agent-runtime-template/README.md)：不可变 Agent 模板、revision pinning、加载缓存与回收。

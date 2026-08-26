@@ -2,13 +2,16 @@
 title CampusMate Shared Base URL Configuration
 
 ' Source evidence:
-' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-108
+' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-140
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-76
 ' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeProperties.java:15-34
 ' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java:43-69 and 184-197
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/config/MateToolAutoConfiguration.java:31-81
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:41-83 and 132-320
+' pi-mono-java mate-campusclaw/scripts/install_value.sh:27-38
 ' mate-service src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java:38-67
-' Observed behavior: Model Manager and Runtime clients read different base URL keys and can target different origins.
-' Target-only design: both clients read campusmate.base-url while retaining separate paths, timeouts, and protocols.
+' Observed behavior: Model Manager, Runtime, and Mate Tool clients read three address keys and can target different origins.
+' Target-only design: all three clients read campusmate.base-url while retaining separate paths, timeouts, auth, and protocols.
 ' Architecture change: deployment owns one CampusMate origin and no child configuration can override its host.
 ' Security hardening: child paths are absolute service paths and cannot contain another origin.
 
@@ -32,38 +35,43 @@ rectangle "Deployment Configuration" {
   component "campusmate.base-url\nCAMPUSMATE_BASE_URL\nHTTP(S) origin only" as BaseUrl
   component "campusmate.model-manager\nchat path, API, SSE timeouts" as ModelConfig
   component "campusmate.runtime\nAgent and Skill paths, short timeouts" as RuntimeConfig
+  component "mate.endpoints\nTool discovery and execute paths" as ToolConfig
 }
 
 rectangle "CampusClaw" {
   component "MateServiceModelManagerProvider\nWebClient and Chat SSE" as ModelClient
   component "MateServiceClient\nJDK HttpClient and ResultBean" as RuntimeClient
-  component "MateToolClient\nseparate gateway client" as ToolClient
+  component "MateToolClient\nJDK HttpClient and execution credentials" as ToolClient
 }
 
 rectangle "CampusMate Service - Same Origin" {
   component "POST /mate-service/v1/LLM/chat" as ChatEndpoint
-  component "GET /mate-service/v1/agents/{agentId}/runtime" as AgentEndpoint
+  component "Agent APIs\nGET /mate-service/v1/agents/{agentId}\nGET /mate-service/v1/agents/{agentId}/runtime" as AgentEndpoint
   component "GET /mate-service/v1/skill/query/{skillId}" as SkillEndpoint
+  component "Mate Tool APIs\n/mate-service/v1/runtime/tools/..." as ToolEndpoint
 }
-
-component "mate.innerGWSerive\nTool gateway - out of scope" as ToolGateway
 
 BaseUrl --> ModelClient : same normalized origin
 BaseUrl --> RuntimeClient : same normalized origin
+BaseUrl --> ToolClient : same normalized origin
 ModelConfig --> ModelClient : path and transport options
 RuntimeConfig --> RuntimeClient : paths and transport options
+ToolConfig --> ToolClient : paths only
 ModelClient --> ChatEndpoint : Chat JSON and SSE
 RuntimeClient --> AgentEndpoint : runtime metadata
 RuntimeClient --> SkillEndpoint : skill metadata
-ToolClient --> ToolGateway : separate integration contract
+ToolClient --> AgentEndpoint : Agent tool bindings
+ToolClient --> SkillEndpoint : Skill tool bindings
+ToolClient --> ToolEndpoint : metadata and execute
 
 note bottom of BaseUrl
 The value is required and has no product default.
 It contains scheme, host, and optional port only.
 end note
 
-note bottom of ToolGateway
-Sharing the CampusMate origin does not merge
-the existing Mate Tool gateway configuration.
+note bottom of ToolClient
+The mate namespace remains a Tool feature namespace.
+It does not own another service address.
+Execution credentials and no-replay rules stay unchanged.
 end note
 @enduml

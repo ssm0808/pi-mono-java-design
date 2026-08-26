@@ -232,10 +232,10 @@ title Java Provider Alignment with pi-mono
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java: registry keyed by Api
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAICompletionsProvider.java: current Chat mapper
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/Provider.java: closed enum with CUSTOM
-' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-108, split CampusMate base URLs
+' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-140, three CampusMate address keys
 ' Java divergence: the initial d649866a6 baseline models protocol adapters as providers and cannot preserve arbitrary provider identity.
 ' Architecture change: add open ProviderId and ApiId values, resolve AiProvider by providerId, and configure apiId internally.
-' Architecture change: inject campusmate.base-url separately from Model Manager path, timeouts, and apiId.
+' Architecture change: Model Manager, Runtime, and Mate Tool share campusmate.base-url while keeping separate client rules.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false

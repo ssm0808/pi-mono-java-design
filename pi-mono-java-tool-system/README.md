@@ -2,15 +2,17 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.3.0 |
-| 状态 | 目标设计；PR 167 压缩细节已按 pi 固化并完成实现对齐 |
-| 更新日期 | 2026-08-24 |
+| 文档版本 | 2.4.0 |
+| 状态 | 目标设计；PR 167 压缩细节已对齐，Mate Tool 共享 CampusMate 地址待实现 |
+| 更新日期 | 2026-08-26 |
 | 设计仓分析基线 | `bb967eebe1f62553e92480b3ea3808a664fbe73e` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
 | CampusClaw 压缩修订前基线 | `a7f78fed345a289833970cd7b78399f0e8e51d32` |
 | CampusClaw PR 167 审查头 | `bf28e72f94f29acd316eb872a250893ed54e3632` |
 | CampusClaw PR 167 对齐实现 | `bd26e7f81bac8f68be0c3523efe23b51f96c52e4` |
+| CampusMate 地址配置复核基线 | `56be8eee59415a5f86658d6635a7b7e8891263d3` (`origin/main`) |
+| 本次设计仓修订基线 | `871b9be3cba4b32e4bc29fd784afbb98bc4842cf` |
 | pi-mono 对照基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | 精确工具契约 | [8 个活动内置工具契约](built-in-tool-contracts.md) |
@@ -55,7 +57,7 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 - 8 个活动内置工具的名称、Schema、输出、可用条件和并发模式；
 - Runtime、Cron、Child Agent 三入口的配置与 Session 装配；
 - 受管 Agent 工作区边界、目录 prepare/refresh 和 Skill/Child 名称索引；
-- Mate 工具发现、Session 名称到 ID 缓存和远端调用；
+- Mate 工具发现、Session 名称到 ID 缓存、远端调用和共享 CampusMate origin 边界；
 - Child Agent Execution、Cron 工具边界与实现迁移。
 - TUI/CLI 删除边界、公共 Session 压缩和宿主无关 Slash Command 源码边界。
 
@@ -95,6 +97,8 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 当前 Mate 工具以 `listMateTool/callMateTool` 暴露，List 刷新会话 name-to-ID 缓存，Call 强制先 List | `tool/mate/ListMateTool.java`、`CallMateTool.java`、`MateToolSessionCache.java` |
 | 当前缓存每次刷新先清空平面 Map，最近一次 Agent/Skill List 会覆盖此前来源 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java`，`refresh` |
 | 当前执行端点按 `toolId` 调用并要求完整 Mate 凭据 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java`，`invokeTool` |
+| 当前 Tool 客户端从 `mate.innerGWSerive` 读取独立地址，而它的 Agent、Skill、Tool 元数据和执行路径都位于 `/mate-service/...` | `modules/coding-agent-cli/src/main/resources/application.yml:129-140`、`config/MateToolAutoConfiguration.java:31-81`、`common/client/HttpMateToolClient.java:41-83,132-320` |
+| 当前部署脚本只把 Campus 内网服务地址导出为 `MATE_INNERGWSERIVE` | `mate-campusclaw/scripts/install_value.sh:27-38` |
 | 当前 Child 同时存在 `spawn_agent` 与 `invoke_agent` 两条路径，后者通过 Session after-hook 执行 | `subagent/tool/SpawnAgentTool.java`、`tool/delegation/InvokeAgentTool.java`、`session/AgentSession.java` |
 | 当前 Cron payload 接受 model、system prompt 和 allowed tools，并依赖本地存储与 OS/进程调度 | `modules/cron/src/main/java/com/campusclaw/cron/tool/CronTool.java`、`model/CronPayload.java`、`engine/CronEngine.java` |
 | 当前 `ReadTool` 自行使用 cwd 做路径边界，`BashExecutor` 只设置子进程 cwd | `tool/read/ReadTool.java`、`util/PathUtils.java`、`tool/bash/BashExecutor.java` |
@@ -140,6 +144,7 @@ OpenCode `TaskTool` 仅用于对照父子消息隔离、进度和取消，不继
 | 安全加固 | 拒绝空摘要、摘要 ToolCall、失败或取消摘要 | 不允许无效摘要覆盖可恢复的旧上下文 |
 | 架构改造 | Mate 名称到 ID 缓存按 Session 和来源维护 | 模型直接按名称调用，同时适配现有 ID 执行接口 |
 | 产品约束 | Call 缓存 miss 自动刷新，不强制模型先 List | 缓存是实现细节，不成为模型调用顺序 |
+| 架构改造 | Mate Tool 与 Model Manager、受管 Runtime 共用 `campusmate.base-url` | Mate 是 CampusMate 的 Tool 能力，不是独立部署服务 |
 | 产品约束 | Child 只按直接绑定名称调用，首版深度 1 | 避免全局枚举、循环和无边界递归 |
 
 ## 4. 关闭的公共接口与配置
@@ -406,6 +411,26 @@ single-flight 刷新当前 Agent 的完整有效集合：当前 Agent 直接工�
 网络中断、超时和 Mate 错误都不得自动重放。Mate 对当前 Agent 身份、凭据、实时绑定和
 权限做最终校验。
 
+### 9.3 CampusMate 连接地址
+
+Mate Tool 的目标地址由
+[CampusMate 统一客户端地址配置设计](../campusmate-shared-client-configuration/README.md)
+统一管理。`MateToolAutoConfiguration` 必须直接注入 `campusmate.base-url`，不得再读取
+`mate.innerGWSerive` 或 `MATE_INNERGWSERIVE`。`HttpMateToolClient` 的四类请求与 Model
+Manager、受管 Runtime 共享 scheme、host 和 port：
+
+```text
+campusmate.base-url + mate.endpoints.agent-info-path-prefix + agentId
+campusmate.base-url + mate.endpoints.skill-tools-query-path-prefix + skillId
+campusmate.base-url + mate.endpoints.tool-metadata-query-path
+campusmate.base-url + formatted(mate.endpoints.tool-execute-path-template, toolId)
+```
+
+`mate.tool.enabled` 与 `mate.endpoints.*` 继续属于工具专题：前者控制工具装配，后者保存
+发现和执行路径。它们不能携带完整 URL，也不能覆盖 CampusMate origin。此调整只改变
+连接地址权威；执行级凭据快照、发现允许空凭据、执行要求完整凭据、Session 缓存和
+执行 POST 不自动重放等契约保持不变。
+
 ## 10. Child Agent Execution
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
@@ -562,6 +587,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 | `spawn_agent`、`invoke_agent` 和 Session delegation after-hook | `Agent` + `SubagentExecutionService` |
 | ACP/HTTP/A2A SubAgent backend、registry、approval placeholder | 不进入首版 Child Agent Execution |
 | `references/tools.json` | Skill 身份索引 + Mate 实时发现和 Session 解析缓存 |
+| `mate.innerGWSerive` / `MATE_INNERGWSERIVE` | 删除；`MateToolAutoConfiguration` 与其他 CampusMate 客户端共读 `campusmate.base-url` / `CAMPUSMATE_BASE_URL` |
 | `FileAgentDirectoryResolver` 独立文件契约 | `AgentRuntimeManager.prepare` |
 | HTTP 硬编码 Read | `runtime` profile |
 | Cron model/system_prompt/tools payload | 触发时按当前受管 Agent 解析 |
@@ -594,6 +620,8 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 ### 13.3 Mate、Child 与 Cron
 
 - ListMateTools 每次实时查询，输出只含稳定公开字段并恢复绑定顺序；
+- ListMateTools、CallMateTool 与 Model Manager、受管 Runtime 的所有出站终端使用相同 scheme/host/port；
+- `mate.innerGWSerive` 和 `MATE_INNERGWSERIVE` 已删除，`mate.endpoints.*` 仍可独立配置合法 `/mate-service/` 路径；
 - 不同来源刷新互不覆盖，Session 间缓存隔离；
 - Call cache miss 只触发一次完整刷新，重名冲突失败，实际执行不自动重放；
 - Agent 校验直接绑定、固定版本、深度、循环、父取消和模型白名单；
@@ -616,7 +644,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 4. 实现工厂、不可变上下文和公共 Session；
 5. 迁移 Runtime Host 并删除 CLI 产品入口；
 6. 统一目录 prepare/refresh、Skill/Child 索引和模型解析；
-7. 实现 Mate 发现、Session 缓存和 miss 自动刷新；
+7. 先统一 CampusMate base URL，再实现 Mate 发现、Session 缓存和 miss 自动刷新；
 8. 迁移 Child Execution 与 Cron 工具；
 9. 删除动态目录、Extension、Loop、旧 delegation 和兼容入口；
 10. 同步生成镜像并完成全量回归。
@@ -628,6 +656,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.4.0 | 2026-08-26 | 按 Mate 即 CampusMate 的产品约束，删除 Mate Tool 独立地址目标配置，统一读取 `campusmate.base-url`；保留 Tool 路径、凭据和调用语义。 |
 | 2.3.0 | 2026-08-24 | 处理 PR 167 审查意见：按 Entry ID 固化并排除压缩重试候选，保证在线与重载上下文一致；统一公共 Agent 实际请求与 LENGTH 判定的输出上限；记录审查头和对齐实现基线。 |
 | 2.2.0 | 2026-08-24 | 固定 pi 压缩细节：Usage/失效边界、成功 STOP 不重试、错误/length 单次恢复、超大末条保留、split-turn/重复摘要、结构化摘要、Read 路径继承、取消及瞬态摘要重试。 |
 | 2.1.0 | 2026-08-24 | 修订 PR 167 的 TUI 删除边界：保留未注册 Slash 核心及四个处理器，压缩与 Read 追踪迁入公共 Session；明确 Usage/领域事件和 refresh 后下一次执行懒解析。 |
