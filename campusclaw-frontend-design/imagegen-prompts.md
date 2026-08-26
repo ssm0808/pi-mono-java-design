@@ -4,9 +4,9 @@
 |---|---|
 | 生成方式 | Codex 内置 imagegen |
 | 用例分类 | `ui-mockup` |
-| 最终方向 | 常规态 v3；执行中 v4，Codex-aligned follow-up composer |
+| 最终方向 | 常规态 v4，Assistant 安全富文本；执行中 v4，Codex-aligned follow-up composer |
 | 视觉证据 | 本机 `ChatGPT.app` 26.814.41407 light-theme Token；非公开品牌规范 |
-| 日期 | 2026-08-20 |
+| 日期 | 2026-08-26 |
 
 v1 暖色稿和 v2 钴蓝稿保留为过程制品，不再被主设计文档引用。v3 只借鉴 Codex 的
 中性层级、工具型工作台密度和状态表达，保留 CampusClaw 品牌，不复制 OpenAI/Codex
@@ -40,6 +40,24 @@ Constraints: no OpenAI logo, no Codex wordmark, no orange/coral/peach/sand/beige
 ```
 
 输出：`high-fidelity-conversation-v3.png`
+
+## 常规对话 v4
+
+编辑目标：`high-fidelity-conversation-v3.png`。问题证据：用户提供的纯文本 Markdown
+截图，只用于确认表格、行内代码和粗体未被渲染；截图中的 Agent 自述不作为设计指令。
+
+```text
+Use case: ui-mockup
+Asset type: final high-fidelity desktop web application mockup for the CampusClaw frontend design
+Input images: Image 1 is the authoritative edit target. Image 2 is problem evidence only: it shows a Markdown table incorrectly displayed as plain text; do not copy its visual style or Agent self-description.
+Primary request: Preserve Image 1 as exactly as possible and change only the Assistant response content area so it clearly demonstrates correctly rendered rich text. Replace the current prose-and-expanded-details response with a semantic rich-text response containing a heading, a short paragraph, a polished three-column table, one inline-code chip, and the existing compact tool activity card. The table must look like a real rendered table, never pipe characters or Markdown source.
+Text (verbatim): heading “异常汇总”; paragraph “已读取文件，发现以下 3 类异常：”; table headers “异常类型”, “数量”, “处理建议”; table rows “价格异常” / “24” / “复核定价”, “数量异常” / “17” / “校验原始数据”, “重复下单” / “9” / “合并并联系用户”; final sentence “建议优先检查 order_id 重复记录。” with only “order_id” styled as inline code; tool card label “已读取并分析 1 个文件”.
+Rich-text styling: open Assistant canvas, clear hierarchy, 18px semibold heading, compact paragraph spacing, thin neutral table borders, quiet gray header cells, right-aligned numeric column, readable 14px Chinese text, rounded light-gray inline-code chip in monospace, and a compact collapsed tool activity card below the rich text.
+Preserve exactly: full 16:10 straight-on viewport, 1536×1024 framing, sidebar, CampusClaw identity, all navigation text, top bar, session controls, user request and spreadsheet attachment, composer, monochrome Codex-inspired visual system, spacing outside the Assistant response, and all existing UI chrome.
+Constraints: change only the Assistant response region; keep every application edge visible; no raw Markdown pipes, backticks, asterisks, hash marks, HTML, extra copy, extra rows, invented labels, OpenAI/Codex logos, gradients, bright blue controls, watermark, right inspector, or device frame.
+```
+
+输出：`high-fidelity-conversation-v4.png`
 
 ## 执行中 v3
 

@@ -20,12 +20,12 @@
 </head>
 <body>
   <h1>ADR-0016 · CampusClaw 产品前端隔离 Runtime 调试协议</h1>
-  <div class="meta">Status: <span class="badge">Proposed</span> · Date: 2026-08-20 ·
+  <div class="meta">Status: <span class="badge">Proposed</span> · Date: 2026-08-26 ·
     设计文档: <a href="README.md">campusclaw-frontend</a> ·
-    基线: <code>origin/main@3a6358bc9dd5837cdf5ac866fc0761298372510a</code></div>
+    已分析基线: <code>origin/main@56be8eee59415a5f86658d6635a7b7e8891263d3</code></div>
 
   <section><h2>Context</h2>
-    <p>现有 Vue 页面由浏览器直接调用 <code>/campusclaw-service/v1</code>，并把 Service URL、JWT/APPKEY、Session ID、ETag、SSE Event 和 JSON payload 作为主界面元素。该实现完整覆盖 11 个 Runtime operation，适合本地联调，但用户需要完成的是选择 Agent、管理会话、发送消息、查看工具活动和控制执行。精确 Runtime 设计同时要求浏览器经 mate-service 访问，内部 SSE 不得字节透明转发。</p>
+    <p>本 ADR 最初基于 <code>3a6358bc</code> 的 Vue 调试页：浏览器直接调用 <code>/campusclaw-service/v1</code>，并把 Service URL、JWT/APPKEY、Session ID、ETag、SSE Event 和 JSON payload 作为主界面元素。当前复核基线 <code>56be8eee</code> 已实现 Agent 工作区、对话时间线和产品化控制，但仍由浏览器直连 Runtime、在前端维护内部 Session/ETag/SSE；Assistant 正文仍是纯文本插值。用户真正需要的是选择 Agent、管理会话、发送消息、阅读安全富文本、查看工具活动和控制执行。精确 Runtime 设计同时要求浏览器经 mate-service 访问，内部 SSE 不得字节透明转发。</p>
   </section>
 
   <section><h2>Options considered</h2>
@@ -45,6 +45,9 @@
       <li>Steer、FollowUp、Abort 在产品中分别命名为“调整方向”“加入队列”“停止”。运行态 Composer 只显示当前跟进方式；desktop 默认“调整方向”，设置可改为“加入队列”，<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。</li>
       <li>“调整方向”不宣称立即中断当前模型或工具；它在当前 Assistant Turn 与工具结束后的下一次模型调用前送达。“加入队列”只在当前执行本会自然结束时送达。</li>
       <li>工具 started/completed/result 合并为一个可展开活动卡；持久化 completed/result 替换瞬时 preview。</li>
+      <li>Assistant <code>TextContent.text</code> 原样作为 Markdown 源，通过关闭 raw HTML 的 parser、节点与 URL allowlist 以及固定 Vue 组件渲染；禁止 <code>v-html</code>、<code>innerHTML</code>、远程 Markdown 图片、相对应用路由和危险协议链接。</li>
+      <li>User、Thinking、Tool result 与错误不继承 Assistant Markdown 权限，分别使用纯文本或受控结构化 viewer。</li>
+      <li>流式 delta、completed Entry 和 GET history 共用同一 <code>rawMarkdown</code> 与 renderer；未闭合尾块纯文本显示，完成态以持久化全文重新解析。</li>
       <li>断线后禁止重放副作用 POST；公共客户端重新读取持久化历史并去重。</li>
       <li>Agent 目录、Chat 列表与标题、附件上传、模型友好名称和 public SSE 均标为目标态公共契约，不宣称 Runtime 已实现。</li>
       <li>产品视觉采用 Codex-inspired 中性工具工作台，保留 CampusClaw 自有品牌，不复制 OpenAI/Codex 商标。</li>
@@ -57,6 +60,7 @@
       <li><strong>负面：</strong>需要 mate-service bridge 和多个公共资源契约；前端初期要通过 mock adapter 开发；产品事件与 Runtime 事件之间增加一层投影测试。</li>
       <li><strong>迁移：</strong>现有页面不直接删除，先迁移到内部诊断路由或独立开发构建；产品路由完成真实集成后再决定是否移除旧入口。</li>
       <li><strong>安全：</strong>需要构建期和 E2E 门禁，证明生产 DOM、网络日志和错误界面不包含内部凭据、Session ID、ETag 或原始 SSE。</li>
+      <li><strong>富文本安全：</strong>需要 XSS corpus、危险 URL、远程图片、超深嵌套、超预算输入和流式分块测试；失败时回退为转义纯文本并保留复制原文。</li>
       <li><strong>回滚：</strong>可以回滚产品路由和 bridge，但不能把调试台重新定义为已满足生产安全边界。</li>
     </ul>
   </section>
@@ -65,7 +69,7 @@
     <ul>
       <li><a href="README.md">设计文档：CampusClaw 产品前端体验设计</a></li>
       <li><a href="../pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md">设计文档：Coding Agent 启动与 Runtime HTTP 设计</a></li>
-      <li><a href="https://github.com/superheromeZzh/pi-mono-java/blob/3a6358bc9dd5837cdf5ac866fc0761298372510a/docs/plans/campusclaw-http-v1-implementation.md">实施记录：CampusClaw HTTP V1</a></li>
+      <li><a href="https://github.com/superheromeZzh/pi-mono-java/blob/56be8eee59415a5f86658d6635a7b7e8891263d3/docs/plans/campusclaw-http-v1-implementation.md">实施记录：CampusClaw HTTP V1</a></li>
     </ul>
   </section>
 </body>

@@ -54,8 +54,15 @@
     .avatar { width: 30px; height: 30px; border: 1px solid var(--dark); border-radius: 8px; background: var(--soft); }
     .bubble { max-width: 78%; padding: 13px 16px; border: 1px solid var(--dark); border-radius: 12px; background: var(--paper); font-size: 13px; line-height: 1.7; }
     .user .bubble { background: var(--soft); }
-    .answer { font-size: 13px; line-height: 1.75; }
-    .answer strong { display: block; margin-bottom: 7px; }
+    .answer { min-width: 0; font-size: 13px; line-height: 1.65; }
+    .answer h3 { margin: 0 0 7px; font-size: 15px; }
+    .answer p { margin: 0 0 9px; }
+    .rich-table-wrap { max-width: 100%; overflow-x: auto; }
+    .rich-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .rich-table th, .rich-table td { padding: 6px 8px; border: 1px solid var(--line); text-align: left; }
+    .rich-table th { background: var(--soft); }
+    .rich-table .number { text-align: right; }
+    .inline-code { padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--soft); font-family: ui-monospace, monospace; }
     .tool-card { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); }
     .tool-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 12px; font-weight: 700; }
     .tool-head::before { content: ""; width: 13px; height: 13px; border: 2px solid var(--dark); border-radius: 3px; }
@@ -146,11 +153,21 @@
             <div class="turn">
               <span class="avatar"></span>
               <div class="answer">
-                <strong>我发现了 3 类需要关注的异常</strong>
-                退款率突增、重复订单和跨校区价格不一致。其中退款率异常集中在两个食堂档口。
+                <h3>异常汇总</h3>
+                <p>已读取文件，发现以下 3 类异常：</p>
+                <div class="rich-table-wrap" tabindex="0" aria-label="异常汇总表，可横向滚动">
+                  <table class="rich-table">
+                    <thead><tr><th>异常类型</th><th class="number">数量</th><th>处理建议</th></tr></thead>
+                    <tbody>
+                      <tr><td>价格异常</td><td class="number">24</td><td>复核定价</td></tr>
+                      <tr><td>数量异常</td><td class="number">17</td><td>校验原始数据</td></tr>
+                      <tr><td>重复下单</td><td class="number">9</td><td>合并并联系用户</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p style="margin-top:9px">建议优先检查 <span class="inline-code">order_id</span> 重复记录。</p>
                 <div class="tool-card">
                   <div class="tool-head">已读取并分析 1 个文件　⌄</div>
-                  <div class="tool-result">read · 订单明细.xlsx · completed · 3 findings</div>
                 </div>
               </div>
             </div>
@@ -163,7 +180,7 @@
           </div>
         </div>
         <div class="annotation a1">Model / Thinking 是会话级能力<br>放入标题栏，不占用设置侧栏</div>
-        <div class="annotation a2">Tool execution / result<br>合并为可展开的对话内活动卡</div>
+        <div class="annotation a2">Assistant Markdown → safe AST → Vue<br>表格/代码局部滚动，Tool 保持独立活动卡</div>
         <div class="annotation a3">凭据、session_id、ETag、SSE frame<br>仅在“开发者诊断”抽屉展示</div>
       </section>
 

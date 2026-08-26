@@ -58,6 +58,83 @@ Observed internal contract:
 end note
 @enduml
 
+@startuml assistant_rich_text_rendering
+' Source baseline: pi-mono-java origin/main 56be8eee59415a5f86658d6635a7b7e8891263d3.
+' Source evidence: frontend/src/components/ConversationTimeline.vue lines 37-49 (assistant text interpolation).
+' Source evidence: frontend/src/projectors/runtimeEventProjector.ts lines 40-55 (projectAssistantEvent) and 133-145 (text extraction).
+' Source evidence: frontend/src/style.css lines 784-789 (.assistant-message plain pre-wrap styling).
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java lines 149-176 and 215-238.
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java lines 67-88, 195-210, 430-442, and 557-601.
+' Observed behavior: assistant text is preserved across delta, completed entry, SSE, and history but the current Vue component renders it as plain text.
+' Target-only design: the Markdown parser, safe AST policy, Vue rich-text components, and rendering budget are not implemented at this baseline.
+' Security hardening: raw HTML, remote Markdown images, relative application routes, and dangerous URL schemes never become active DOM.
+' Design reason: use one raw Markdown source and one renderer so streaming, completion, and history recovery converge to equivalent UI.
+
+title Assistant safe rich-text rendering
+top to bottom direction
+
+rectangle "Runtime and public event input" as Input {
+  component "assistant.message.delta\ntext fragment" as Delta
+  component "assistant.message.completed\nfull persistent text" as Completed
+  component "GET history\nfull persistent text" as History
+}
+
+rectangle "Conversation projection" as Projection {
+  component "Assistant turn\nrawMarkdown and state" as Raw
+  component "Stable block boundary\nplus escaped streaming tail" as Stable
+}
+
+rectangle "Safe rich-text renderer" as Renderer {
+  component "Markdown parser\nraw HTML disabled" as Parser
+  component "AST allowlist\nURL policy and render budget" as Policy
+  component "Fixed Vue components\nno v-html or innerHTML" as Vue
+}
+
+rectangle "Assistant message UI" as UI {
+  component "Paragraphs, headings,\nlists, and quotes" as Prose
+  component "Scrollable semantic table" as Table
+  component "Inline code and code block\nwith text-only copy" as Code
+  component "Safe external link" as Link
+  component "Escaped plain-text fallback" as Fallback
+}
+
+Delta --> Raw : append source text
+Completed --> Raw : replace preview with authority
+History --> Raw : restore the same source text
+Raw --> Stable : throttle while streaming
+Stable --> Parser : stable blocks and safe tail
+Parser --> Policy : Markdown AST
+Policy --> Vue : allowed nodes and attributes
+Policy --> Fallback : rejected or over budget
+Vue --> Prose
+Vue --> Table
+Vue --> Code
+Vue --> Link
+
+note bottom of Input
+Observed source contract:
+- Runtime carries text, not HTML
+- completed and history are authoritative
+- tool result and thinking use separate UI paths
+end note
+
+note bottom of Renderer
+Security rules:
+- Escape raw HTML
+- Allow only absolute HTTP and HTTPS links
+- Block Markdown image network requests
+- Clamp heading levels inside the message
+- Preserve source text for fallback and copy
+end note
+
+note bottom of UI
+Responsive behavior:
+- Only table and code containers scroll horizontally
+- The page and composer never gain horizontal overflow
+- Screen readers are notified once on completion
+end note
+@enduml
+
 @startuml runtime_event_ui_projection
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventType.java (RuntimeEventType).
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java (projectMessageStart, projectMessageUpdate, projectToolStart, projectToolEnd).
