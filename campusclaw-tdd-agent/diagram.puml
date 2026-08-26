@@ -1,0 +1,199 @@
+@startuml campusclaw_tdd_agent_architecture
+title CampusClaw TDD Agent Architecture
+
+' Design baseline: pi-mono-java-design commit d2b9b4b6f4762e0e9734c144e3eb3273959e7e26.
+' Code baseline: pi-mono-java commit ae0ae7c164b031afacd862794e8914243913f113.
+' Source paths: modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java.
+' Source paths: modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java.
+' Source paths: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
+' Source paths: frontend/src/composables/useRuntimeApi.ts.
+' Observed behavior: current tests cover many modules, while CI runs only Maven verify and the legacy agent covers Runtime HTTP.
+' Design reason: an independent Codex quality engineer must maintain product knowledge and tests while deterministic executors decide pass or fail.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam ArrowColor #35516F
+skinparam DefaultFontName Arial
+
+actor "Product Designer" as designer
+actor "Product Developer" as developer
+cloud "Pull Request, Push, and Schedule Events" as events
+
+package "Independent Codex Quality Engineer" {
+  component "CampusClaw TDD Skill" as skill
+  component "Capability Inventory Sync" as inventory
+  component "Requirement and Risk Analyst" as analyst
+  component "Test Maintenance Planner" as maintainer
+  component "Failure Triage and Report" as triage
+}
+
+database "Capability Registry and Traceability Graph" as registry
+artifact "Accepted Design Contracts" as designs
+artifact "Implementation Source and Change Diff" as source
+
+package "Deterministic Automation Platform" {
+  component "Impact Selector" as selector
+  component "Java and Contract Adapter" as java
+  component "OpenGauss and Process Adapter" as process
+  component "Frontend and Browser Adapter" as frontend
+  component "Fault and Mutation Adapter" as fault
+  component "Evidence and Verdict Engine" as verdict
+}
+
+node "Isolated Git Worktree" as worktree
+artifact "Test-only Draft Pull Request" as testpr
+artifact "Capability Health Report" as report
+
+designer --> designs : reviewed behavior
+developer --> source : candidate change
+events --> skill : trigger mode
+designs --> inventory
+source --> inventory
+skill --> inventory
+inventory --> registry : versioned knowledge
+registry --> analyst
+designs --> analyst
+source --> analyst
+analyst --> selector : impact and required suites
+analyst --> maintainer : missing or stale coverage
+maintainer --> worktree : tests, fixtures, registry only
+worktree --> testpr
+selector --> java
+selector --> process
+selector --> frontend
+selector --> fault
+java --> verdict
+process --> verdict
+frontend --> verdict
+fault --> verdict
+verdict --> triage
+registry --> triage
+triage --> report
+triage --> maintainer : reproducible test gap
+
+note right of registry
+  Product knowledge is persistent and reviewable.
+  Chat memory is never the source of truth.
+end note
+
+note right of verdict
+  Checked-in assertions and contracts decide results.
+  The model explains evidence but cannot waive failures.
+end note
+
+note bottom of maintainer
+  The agent may change test assets and propose a draft PR.
+  It may not change product code, weaken assertions, or merge.
+end note
+@enduml
+
+@startuml design_to_test_maintenance
+title Design-to-Test Maintenance Loop
+
+' Design baseline: pi-mono-java-design commit d2b9b4b6f4762e0e9734c144e3eb3273959e7e26.
+' Code baseline: pi-mono-java commit ae0ae7c164b031afacd862794e8914243913f113.
+' Design paths: pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md and pi-mono-java-tool-system/README.md.
+' Test paths: modules/coding-agent-cli/src/test/java and modules/agent-core/src/test/java.
+' Observed behavior: design versions and implementation tests evolve independently and exact requirement-to-test binding is incomplete.
+' Design reason: mature requirements must create executable red tests before product implementation, while proposals must not block delivery.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam DefaultFontName Arial
+
+actor "Designer or Developer" as author
+participant "TDD Agent" as agent
+database "Capability Registry" as registry
+participant "Design Maturity Gate" as maturity
+participant "Coverage Analyzer" as coverage
+participant "Test Worktree" as worktree
+participant "Deterministic Runner" as runner
+participant "Human Reviewer" as reviewer
+
+author -> agent : design or code change
+agent -> registry : refresh source evidence and hashes
+agent -> maturity : classify each changed requirement
+
+alt proposed or research-only requirement
+  maturity --> agent : advisory only
+  agent -> registry : record target and open question
+else accepted, frozen, or implemented requirement
+  maturity --> agent : enforceable requirement
+  agent -> coverage : resolve requirement to cases and selectors
+  alt exact executable coverage exists
+    coverage --> agent : reuse or update impacted tests
+  else coverage missing or stale
+    coverage --> agent : coverage gap
+    agent -> worktree : add failing tests and fixtures
+    worktree -> reviewer : test-only draft pull request
+  end
+  agent -> runner : execute selected mandatory suites
+  runner --> agent : evidence, seed, logs, and verdict
+  agent -> registry : bind requirement, case, selector, and run
+  agent -> reviewer : analysis report and recommended action
+end
+
+note over agent,runner
+  Unmapped accepted P0 behavior is a failed coverage gate.
+  Environment failure is blocked, never passed or skipped.
+end note
+@enduml
+
+@startuml realtime_and_scheduled_detection
+title Real-time and Scheduled Detection
+
+' Code baseline: pi-mono-java commit ae0ae7c164b031afacd862794e8914243913f113.
+' CI path: .github/workflows/ci.yml lines 4-26.
+' Frontend paths: frontend/src/composables/useRuntimeApi.ts and frontend/src/projectors/runtimeEventProjector.ts.
+' Observed behavior: pull requests and pushes run Maven verification, but frontend and deep environment suites are not required.
+' Design reason: event-driven deterministic gates provide near-real-time detection, while Codex scheduled tasks perform deeper maintenance and triage.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam ArrowColor #35516F
+skinparam DefaultFontName Arial
+
+cloud "Pull Request or Push" as change
+cloud "Nightly Schedule" as nightly
+cloud "Release Candidate" as release
+
+component "Change Gate: seconds to minutes" as fast
+component "Independent Codex TDD Task: inventory and maintenance" as agent
+component "Nightly Deep Regression: full, fault, concurrency" as deep
+component "Release Qualification: packaged and mirror checks" as qualification
+
+database "Capability Registry" as registry
+artifact "Required Check" as check
+artifact "Test Maintenance Draft PR" as pr
+artifact "Evidence Bundle and Health Report" as evidence
+
+change --> fast
+registry --> fast : impact map and mandatory suites
+fast --> check
+fast --> evidence
+
+nightly --> agent
+registry --> agent
+agent --> deep
+deep --> evidence
+agent --> pr : only when coverage changes
+
+release --> qualification
+registry --> qualification
+qualification --> evidence
+qualification --> check
+
+note right of fast
+  This is code-change near-real-time detection.
+  It does not claim production health monitoring.
+end note
+
+note right of agent
+  A standalone task gets a fresh isolated worktree.
+  The repository skill restores the same engineering workflow.
+end note
+@enduml

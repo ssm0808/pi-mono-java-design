@@ -1,0 +1,354 @@
+{
+  "schemaVersion": "1.0.0",
+  "registryVersion": "2.0.0",
+  "product": "CampusClaw",
+  "generatedAt": "2026-08-26",
+  "baselines": {
+    "designRepository": {
+      "commit": "d2b9b4b6f4762e0e9734c144e3eb3273959e7e26",
+      "root": "."
+    },
+    "implementationRepository": {
+      "commit": "ae0ae7c164b031afacd862794e8914243913f113",
+      "rootHint": "pi-mono-java"
+    }
+  },
+  "maturityPolicy": {
+    "enforced": ["accepted", "frozen", "implemented"],
+    "advisory": ["proposed", "research"]
+  },
+  "coveragePolicy": {
+    "traceChain": "capabilityId -> requirementId -> caseId -> testSelector -> runEvidence",
+    "acceptedP0WithoutSelector": "fail",
+    "environmentUnavailable": "blocked",
+    "modelMayOverrideVerdict": false
+  },
+  "inventoryRoots": {
+    "design": [
+      "README.md",
+      "pi-mono-java-manager-driven-multi-agent-runtime",
+      "pi-mono-java-tool-system",
+      "campusclaw-frontend-design",
+      "agent-metadata-gaussdb-design",
+      "model-manager-provider-contract",
+      "campusmate-shared-client-configuration",
+      "campusmate-attachment-service",
+      "pi-mono-java-skill-command-SR设计.md",
+      "pi-mono-java-command-SR设计.md"
+    ],
+    "implementation": [
+      "README.md",
+      "modules",
+      "frontend",
+      "docs/designs",
+      ".github/workflows",
+      "mate-campusclaw"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "CC-CAP-001",
+      "name": "Runtime HTTP session and SSE contract",
+      "domain": "runtime-http",
+      "criticality": "P0",
+      "maturity": "accepted",
+      "coverageState": "partial",
+      "designRefs": [
+        "pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md",
+        "pi-mono-java-manager-driven-multi-agent-runtime/contract/common.json"
+      ],
+      "sourceEvidence": [
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java:RuntimeSessionController",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:RuntimeEventController"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-001",
+        "caseIds": ["HTTP-V1-CATALOG"],
+        "testSelectors": ["RuntimeSessionRoutesTest", "RuntimeEventRoutesTest", "RuntimeHttpProcessOpenGaussIT"]
+      }],
+      "adapters": ["http-contract", "java", "opengauss-process"],
+      "gap": "Legacy catalog is fixed at HTTP 1.37 while the accepted design contract is 1.41."
+    },
+    {
+      "id": "CC-CAP-002",
+      "name": "Session persistence, concurrency, and recovery",
+      "domain": "runtime-state",
+      "criticality": "P0",
+      "maturity": "implemented",
+      "coverageState": "partial",
+      "designRefs": ["pi-mono-java-manager-driven-multi-agent-runtime/README.md"],
+      "sourceEvidence": [
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeSessionRepository.java:RuntimeSessionRepository",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:MyBatisRuntimeSessionRepository"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-002",
+        "caseIds": ["STATE-PERSISTENCE-BASELINE"],
+        "testSelectors": ["MyBatisRuntimeSessionRepositoryTest", "RuntimeSessionServiceTest"]
+      }],
+      "adapters": ["java", "opengauss-process", "concurrency"],
+      "gap": "Exact recovery and concurrency invariants are not yet bound one requirement per case."
+    },
+    {
+      "id": "CC-CAP-003",
+      "name": "LLM providers, model registry, and normalized streaming",
+      "domain": "ai",
+      "criticality": "P0",
+      "maturity": "implemented",
+      "coverageState": "partial",
+      "designRefs": ["model-manager-provider-contract/README.md"],
+      "sourceEvidence": [
+        "modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java:CampusClawAiService",
+        "modules/ai/src/main/java/com/campusclaw/ai/model/ModelRegistry.java:ModelRegistry",
+        "modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java:ApiProviderRegistry"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-003",
+        "caseIds": ["AI-PROVIDER-STREAM-BASELINE"],
+        "testSelectors": ["CampusClawAiServiceTest", "ModelRegistryTest", "*ProviderTest"]
+      }],
+      "adapters": ["java", "model-sse-stub", "fault"],
+      "gap": "Provider contract parity and retry/error matrices need explicit cross-provider case IDs."
+    },
+    {
+      "id": "CC-CAP-004",
+      "name": "Agent loop, queueing, cancellation, and tool execution",
+      "domain": "agent-core",
+      "criticality": "P0",
+      "maturity": "implemented",
+      "coverageState": "partial",
+      "designRefs": ["pi-mono-java-tool-system/README.md"],
+      "sourceEvidence": [
+        "modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java:AgentLoop",
+        "modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:ToolExecutionPipeline"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-004",
+        "caseIds": ["AGENT-LOOP-BASELINE"],
+        "testSelectors": ["AgentLoopTest", "AgentLoopIntegrationTest", "ToolExecutionPipelineTest", "MessageQueueTest"]
+      }],
+      "adapters": ["java", "concurrency", "fault"],
+      "gap": "Cancellation and queue ordering are covered by tests but not traced to reviewed requirements."
+    },
+    {
+      "id": "CC-CAP-005",
+      "name": "Managed Agent and Skill directory lifecycle",
+      "domain": "managed-runtime",
+      "criticality": "P0",
+      "maturity": "implemented",
+      "coverageState": "partial",
+      "designRefs": ["anthropic-managed-agents-public-model/README.md", "pi-mono-java-skill-command-SR设计.md"],
+      "sourceEvidence": [
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java:FileAgentDirectoryResolver",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillLoader.java:SkillLoader"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-005",
+        "caseIds": ["MANAGED-DIRECTORY-BASELINE"],
+        "testSelectors": ["FileAgentDirectoryResolverTest", "SkillLoaderTest", "AgentSessionFactoryTest"]
+      }],
+      "adapters": ["java", "filesystem-fixture", "security"],
+      "gap": "Prepare/refresh lifecycle and malformed content require a complete failure matrix."
+    },
+    {
+      "id": "CC-CAP-006",
+      "name": "Context compaction and reload consistency",
+      "domain": "context-management",
+      "criticality": "P0",
+      "maturity": "accepted",
+      "coverageState": "partial",
+      "designRefs": ["pi-mono-java-manager-driven-multi-agent-runtime/README.md"],
+      "sourceEvidence": [
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/compaction/SessionCompactor.java:SessionCompactor",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/compaction/CompactionRetryClassifier.java:CompactionRetryClassifier"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-006",
+        "caseIds": ["COMPACTION-BOUNDARY-BASELINE"],
+        "testSelectors": ["SessionCompactorTest", "CompactionRetryClassifierTest", "ManagedAgentSessionTest"]
+      }],
+      "adapters": ["java", "opengauss-process", "property-based"],
+      "gap": "Boundary identity, tool-result pairing, retry, and reload parity need independent case bindings."
+    },
+    {
+      "id": "CC-CAP-007",
+      "name": "Workspace read tools and path isolation",
+      "domain": "workspace-tools",
+      "criticality": "P0",
+      "maturity": "implemented",
+      "coverageState": "partial",
+      "designRefs": ["pi-mono-java-tool-system/README.md", "pi-mono-java-tool-system/built-in-tool-contracts.md"],
+      "sourceEvidence": [
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/workspace/WorkspacePathResolver.java:WorkspacePathResolver",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/workspace/AgentWorkspaceBoundary.java:AgentWorkspaceBoundary"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-007",
+        "caseIds": ["WORKSPACE-ISOLATION-BASELINE"],
+        "testSelectors": ["WorkspacePathResolverTest", "ReadToolTest", "FindToolTest", "GrepToolTest", "LsToolTest"]
+      }],
+      "adapters": ["java", "filesystem-fixture", "security"],
+      "gap": "Symlink, traversal, overlap, encoding, and large-file boundaries require explicit case inventory."
+    },
+    {
+      "id": "CC-CAP-008",
+      "name": "Mate tool discovery, credentials, and invocation",
+      "domain": "mate-tools",
+      "criticality": "P0",
+      "maturity": "implemented",
+      "coverageState": "partial",
+      "designRefs": ["pi-mono-java-tool-system/README.md", "config-to-tool-agent-research/README.md"],
+      "sourceEvidence": [
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:HttpMateToolClient",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java:MateToolSessionCache",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java:CallMateTool"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-008",
+        "caseIds": ["MATE-TOOL-CONTRACT-BASELINE"],
+        "testSelectors": ["HttpMateToolClientTest", "MateToolSessionCacheTest", "CallMateToolTest", "ListMateToolsToolTest"]
+      }],
+      "adapters": ["java", "http-stub", "security"],
+      "gap": "Discovery schema-to-ID invocation and credential refresh need end-to-end contract cases."
+    },
+    {
+      "id": "CC-CAP-009",
+      "name": "Child Agent delegation and event projection",
+      "domain": "child-agent",
+      "criticality": "P1",
+      "maturity": "implemented",
+      "coverageState": "partial",
+      "designRefs": ["pi-mono-java-manager-driven-multi-agent-runtime/README.md"],
+      "sourceEvidence": [
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java:SubagentExecutionService",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/BoundAgentTool.java:BoundAgentTool"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-009",
+        "caseIds": ["CHILD-AGENT-BASELINE"],
+        "testSelectors": ["SubagentExecutionServiceTest", "BoundAgentToolTest"]
+      }],
+      "adapters": ["java", "model-sse-stub", "concurrency"],
+      "gap": "Depth, cancellation, isolation, and child event projection need reviewed boundary cases."
+    },
+    {
+      "id": "CC-CAP-010",
+      "name": "Managed Cron scheduling and isolated execution",
+      "domain": "cron",
+      "criticality": "P1",
+      "maturity": "implemented",
+      "coverageState": "partial",
+      "designRefs": ["pi-mono-java-manager-driven-multi-agent-runtime/README.md"],
+      "sourceEvidence": [
+        "modules/cron/src/main/java/com/campusclaw/cron/CronService.java:CronService",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java:ManagedCronSessionRunner"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-010",
+        "caseIds": ["CRON-EXECUTION-BASELINE"],
+        "testSelectors": ["CronServiceTest", "CronEngineTest", "CronJobExecutorTest", "ManagedCronSessionRunnerTest"]
+      }],
+      "adapters": ["java", "virtual-time", "concurrency"],
+      "gap": "Restart recovery, overlap, misfire, and workspace isolation need end-to-end cases."
+    },
+    {
+      "id": "CC-CAP-011",
+      "name": "CampusMate shared client, configuration, and model manager",
+      "domain": "campusmate-integration",
+      "criticality": "P0",
+      "maturity": "accepted",
+      "coverageState": "partial",
+      "designRefs": ["campusmate-shared-client-configuration/README.md", "model-manager-provider-contract/README.md"],
+      "sourceEvidence": [
+        "modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:MateServiceModelManagerProvider",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:HttpMateToolClient"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-011",
+        "caseIds": ["CAMPUSMATE-CLIENT-BASELINE"],
+        "testSelectors": ["MateServiceModelManagerProviderTest", "HttpMateToolClientTest"]
+      }],
+      "adapters": ["java", "http-contract", "http-stub"],
+      "gap": "Shared endpoint, header, timeout, and error mapping contracts are not tested as one cross-client matrix."
+    },
+    {
+      "id": "CC-CAP-012",
+      "name": "Runtime control plane registration and scheduling",
+      "domain": "control-plane",
+      "criticality": "P1",
+      "maturity": "implemented",
+      "coverageState": "partial",
+      "designRefs": ["pi-mono-java-manager-driven-multi-agent-runtime/README.md"],
+      "sourceEvidence": [
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/controlplane/api/NodeController.java:NodeController",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/controlplane/api/RuntimeController.java:RuntimeController"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-012",
+        "caseIds": ["CONTROL-PLANE-BASELINE"],
+        "testSelectors": ["NodeControllerTest", "RuntimeControllerTest"]
+      }],
+      "adapters": ["java", "http-contract", "security"],
+      "gap": "Authentication, restart persistence, liveness, and scheduling contention remain explicit design debt."
+    },
+    {
+      "id": "CC-CAP-013",
+      "name": "Product frontend conversation and activity flows",
+      "domain": "frontend",
+      "criticality": "P0",
+      "maturity": "accepted",
+      "coverageState": "partial",
+      "designRefs": ["campusclaw-frontend-design/README.md"],
+      "sourceEvidence": [
+        "frontend/src/composables/useRuntimeApi.ts:useRuntimeApi",
+        "frontend/src/projectors/runtimeEventProjector.ts:projectRuntimeEvents",
+        "frontend/src/App.vue:App"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-013",
+        "caseIds": ["FRONTEND-CONTRACT-BASELINE"],
+        "testSelectors": ["useRuntimeApi.test.ts", "runtimeEventProjector.test.ts", "richText.test.ts"]
+      }],
+      "adapters": ["vitest", "browser-e2e", "visual"],
+      "gap": "Only three Vitest files exist; submit, SSE uncertainty, reload, tool activity, and accessibility flows need browser tests."
+    },
+    {
+      "id": "CC-CAP-014",
+      "name": "Build, configuration, packaging, and mirror compatibility",
+      "domain": "delivery",
+      "criticality": "P0",
+      "maturity": "implemented",
+      "coverageState": "partial",
+      "designRefs": ["README.md", "campusmate-shared-client-configuration/README.md"],
+      "sourceEvidence": [
+        ".github/workflows/ci.yml:build",
+        "pom.xml:project",
+        "mate-campusclaw:pinned mirror"
+      ],
+      "requirements": [{
+        "id": "CC-REQ-014",
+        "caseIds": ["DELIVERY-BASELINE"],
+        "testSelectors": ["./mvnw -B verify", "npm run typecheck", "npm run test", "npm run build"]
+      }],
+      "adapters": ["maven", "frontend", "packaged-process", "mirror-diff"],
+      "gap": "Current required CI runs Maven only; frontend, packaged process, OpenGauss, and mirror gates are not required."
+    },
+    {
+      "id": "CC-CAP-015",
+      "name": "Attachment references across frontend and public bridge",
+      "domain": "attachment",
+      "criticality": "P1",
+      "maturity": "proposed",
+      "coverageState": "unbound",
+      "designRefs": ["campusmate-attachment-service/README.md", "campusclaw-frontend-design/README.md"],
+      "sourceEvidence": ["frontend/src/components/ConversationTimeline.vue:attachment-summary"],
+      "requirements": [{
+        "id": "CC-REQ-015",
+        "caseIds": [],
+        "testSelectors": []
+      }],
+      "adapters": ["http-contract", "browser-e2e", "security"],
+      "gap": "Public bridge contract is not confirmed, so this capability is tracked but remains advisory."
+    }
+  ]
+}
