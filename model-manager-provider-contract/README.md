@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.3.0 |
+| 文档版本 | 2.4.0 |
 | 状态 | 目标设计；Mate Chat 服务端已实现且契约已冻结，接口 1-3 保持候选 |
 | 设计日期 | 2026-08-26 |
 | pi-mono 源码基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
@@ -10,7 +10,7 @@
 | 当前 pi-mono-java 复核基线 | `56be8eee59415a5f86658d6635a7b7e8891263d3` (`origin/main`) |
 | mate-service 源码基线 | `956b547f5ca12ca89e68f73012f92a4406b0c9fa` |
 | 初始设计仓分析基线 | `3fde5735cd27433c3e3e5e03a5ce39b297ad3b00` |
-| 本次设计仓分析基线 | `79f9818c1b99788eeb8b7ff2dfb8f212f0217581` |
+| 本次设计仓分析基线 | `6b14fc087fa04bcd4efd69d4448c2ab282b53e87` |
 | 已纳入设计提交 | `78c01c9143d00b0973ff36e0d82bb87154dd81e2`（内部网关免认证） |
 | 适用边界 | pi-mono-java Runtime ↔ mate-service Model Manager |
 
@@ -107,7 +107,9 @@ Mate Chat Provider 和 Usage SQL 已经实现。本次新观察到的配置差�
   `campusmate.model-manager.base-url` 和 `campusmate.runtime.base-url`，且默认 origin 不同；
 - `application.yml:129-140` 与 `MateToolAutoConfiguration.java:31-81` 又让 Mate Tool
   从 `mate.innerGWSerive` 读取第三个地址，但其接口路径仍都在 `/mate-service/...`；
-- `MateServiceModelManagerProvider.java:68-76` 直接读取前者；
+- `MateServiceModelManagerProvider.java:68-90` 从 `campusmate.model-manager` 读取地址、path、
+  API 与传输超时，校验错误也使用该旧前缀；
+- `MateModelManagerProperties.java:17-24` 以 `campusmate.model-manager` 绑定模型能力默认值；
 - `AgentRuntimeProperties.java:15-34` 与 `MateServiceClient.java:184-197` 使后者成为另一个
   CampusMate 地址权威。
 
@@ -148,20 +150,25 @@ campusmate:
   base-url: ${CAMPUSMATE_BASE_URL}
   endpoints:
     model-chat-path: ${CAMPUSMATE_MODEL_CHAT_PATH:/mate-service/v1/LLM/chat}
-  model-manager:
-    api: ${CAMPUSMATE_MODEL_MANAGER_API:openai-completions}
+  model:
+    api: ${CAMPUSMATE_MODEL_API:openai-completions}
 ```
 
 - `campusmate.base-url` 是 Model Manager、受管 Runtime 与 Mate Tool 共享的部署 origin；
 - 它由 `CAMPUSMATE_BASE_URL` 显式提供，没有产品级默认地址；
 - `campusmate.endpoints.model-chat-path` 默认保留大小写 `/mate-service/v1/LLM/chat`；
+- `campusmate.model.api` 保存 CampusClaw 的内部模型协议选择；
 - `api` 只用于 CampusClaw 内部 `Model.api` 和协议适配器选择；
 - 当前唯一注册值为 `openai-completions`，配置为未注册值时启动失败；
 - Provider 不读取 `Model.baseUrl/apiKey/headers` 构造 Mate 请求。
 
-`campusmate.model-manager.base-url`、`campusmate.model-manager.chat-path` 和对应旧环境变量
-不再是目标配置，也不保留为可覆盖共享 origin 或复制 endpoint 的兼容别名。所有
+当前实现中的 `campusmate.model-manager.*` 与 `CAMPUSMATE_MODEL_MANAGER_*` 均不再是目标
+配置：地址迁移到 `campusmate.base-url`，Chat path 迁移到 `campusmate.endpoints`，API、能力与
+传输参数迁移到 `campusmate.model` 及 `CAMPUSMATE_MODEL_*`。不保留旧键兼容别名；所有
 CampusMate path 只在 `campusmate.endpoints` 中声明一次。
+
+这里仅调整配置命名空间。Model Manager 是产品组件名，`MateServiceModelManagerProvider`
+是 Java Provider 名，`mate-model-manager` 是 Provider ID，三者不因配置分组改名。
 
 ### 4.2 完整 Provider
 
@@ -186,7 +193,7 @@ public interface AiProvider {
 | `id()` | `ProviderId("mate-model-manager")` |
 | `auth()` | `ProviderAuth.none()` |
 | `Model.provider` | `mate-model-manager` |
-| `Model.api` | 配置项 `campusmate.model-manager.api`，默认 `openai-completions` |
+| `Model.api` | 配置项 `campusmate.model.api`，默认 `openai-completions` |
 | HTTP 地址 | `campusmate.base-url + campusmate.endpoints.model-chat-path` |
 | HTTP 凭据 | 无 |
 
@@ -419,7 +426,7 @@ data: {"resCode":"UPSTREAM_STREAM_ERROR","resMsg":"The upstream model stream fai
 
 ![Mate Chat 调用与断连取消](model_manager_invocation_sequence.svg)
 
-[PlantUML 源码：`model_manager_invocation_sequence`](diagram.puml#L143)
+[PlantUML 源码：`model_manager_invocation_sequence`](diagram.puml#L144)
 
 ## 7. AgentLoop 与 Chat 映射
 
@@ -461,7 +468,7 @@ public interface ManagedModelInvocationClient {
 
 ![Java Provider 与 pi 对齐](java_provider_alignment.svg)
 
-[PlantUML 源码：`java_provider_alignment`](diagram.puml#L228)
+[PlantUML 源码：`java_provider_alignment`](diagram.puml#L229)
 
 ## 8. Token 用量持久化
 
@@ -571,7 +578,7 @@ Session 创建时初始化 Stats，清理时删除 Records 和 Stats。
 
 ![Token Usage Record 与 Stats](token_usage_persistence.svg)
 
-[PlantUML 源码：`token_usage_persistence`](diagram.puml#L296)
+[PlantUML 源码：`token_usage_persistence`](diagram.puml#L300)
 
 ## 9. 一致性、安全和日志
 
@@ -593,6 +600,7 @@ Session 创建时初始化 Stats，清理时删除 Records 和 Stats。
 | 架构改造 | 成功响应改为原始 Chat SSE，不改写 model 或事件。 | CampusClaw Provider 直接复用 Chat 解析语义。 |
 | 架构改造 | Java 按 ProviderId 选择完整 Provider，apiId 仅内部配置。 | 对齐 pi Provider 身份，同时隐藏协议选择。 |
 | 架构改造 | Model Manager、受管 Runtime 与 Tool 共用一个 `campusmate` 配置树。 | Mate 与 CampusMate 是同一服务身份。 |
+| 架构改造 | 模型参数从 `campusmate.model-manager` 改为 `campusmate.model`。 | 配置分组表达模型能力，不重复组件名称。 |
 | 架构改造 | Chat path 移入 `campusmate.endpoints`；全部 7 个路径配置归并为 6 个唯一 operation。 | path 属于服务契约，Skill operation 不应由两个客户端重复配置。 |
 | 架构改造 | 新增 `t_session_records/t_session_stats`。 | 对齐 pi SQL，避免 Usage 成为分支 Entry。 |
 | 安全加固 | 子模块只配置 `/mate-service/` 路径，不能覆盖 host。 | 防止单个客户端被配置改道到其他 origin。 |
@@ -612,8 +620,10 @@ Mate 的上游模型映射、字段改名、endpoint、credential 注入、请�
 ## 11. 目标迁移顺序
 
 1. 引入开放 `ProviderId/ApiId/AiProvider/AiProviderRegistry` 和 `ProviderAuth.none()`；
-2. 增加共享 `campusmate.base-url` 与 `campusmate.endpoints`，删除独立地址、顶层 `mate` 和
-   客户端私有 path，并在启动时验证 URI、唯一 operation 与 apiId；
+2. 增加共享 `campusmate.base-url`、`campusmate.endpoints` 与 `campusmate.model`，删除独立
+   地址、顶层 `mate`、`campusmate.model-manager` 和客户端私有 path，将
+   `CAMPUSMATE_MODEL_MANAGER_*` 迁移为 `CAMPUSMATE_MODEL_*`，并在启动时验证 URI、唯一
+   operation 与 apiId；
 3. 实现 `MateServiceModelManagerProvider`，复用/提取 OpenAI Completions 转换与解析能力；
 4. 增加 `AssistantMessage.responseModel` 和 reasoning 重放支持；
 5. 实现 `/mate-service/v1/LLM/chat` 客户端，关闭 SDK 自动创建重试；
@@ -627,8 +637,8 @@ Mate 的上游模型映射、字段改名、endpoint、credential 注入、请�
 
 - 完整 URL 为 `${CAMPUSMATE_BASE_URL}/mate-service/v1/LLM/chat`，其 origin 与受管 Runtime、
   Mate Tool 请求完全一致；
-- `campusmate.model-manager.base-url`、`campusmate.model-manager.chat-path`、
-  `campusmate.runtime.base-url`、顶层 `mate.*` 及对应旧环境变量已删除；
+- `campusmate.model-manager.*`、`campusmate.runtime.base-url`、顶层 `mate.*` 及对应旧环境
+  变量已删除；模型参数只从 `campusmate.model.*` / `CAMPUSMATE_MODEL_*` 读取；
 - Chat 只从 `campusmate.endpoints.model-chat-path` 读取，Skill 查询只存在一个共享 endpoint 键；
 - 默认内部 apiId 为 `openai-completions`，未知配置导致启动失败且不发请求；
 - 请求不包含身份/凭据、Agent/Session、apiId 或上游连接信息；
@@ -672,7 +682,8 @@ Mate 的上游模型映射、字段改名、endpoint、credential 注入、请�
 - 内部网关免应用层认证；
 - `POST /mate-service/v1/LLM/chat` 请求、原始 SSE、错误、断连取消和不重试语义；
 - CampusClaw 内部 apiId 默认 `openai-completions` 且可配置；
-- Model Manager、受管 Runtime 与 Tool 共用唯一 `campusmate` 配置树、base URL 和 endpoint 目录；
+- Model Manager、受管 Runtime 与 Tool 共用唯一 `campusmate` 配置树、base URL 和 endpoint
+  目录；模型参数统一放在 `campusmate.model`；
 - pi 对齐的 Usage Record + Session Stats 持久化目标。
 
 仍为候选：接口 1-3 的目录字段、Mate 管理面和 Mate 内部上游适配实现。
@@ -686,6 +697,7 @@ Mate 的上游模型映射、字段改名、endpoint、credential 注入、请�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.4.0 | 2026-08-26 | 将目标模型配置分组从 `campusmate.model-manager` 简化为 `campusmate.model`，同步环境变量、Java 绑定、迁移与验收约束；Model Manager 组件名和 `mate-model-manager` Provider ID 保持不变。 |
 | 2.3.0 | 2026-08-26 | 统一到单一 `campusmate` 配置树；Chat path 移入 `campusmate.endpoints`，同步 7 个 path 配置归并为 6 个唯一 operation，并将 Mate Chat 更新为 mate-service 已实现行为。 |
 | 2.2.0 | 2026-08-26 | 将 Mate Tool 纳入共享 CampusMate origin，删除 `mate.innerGWSerive` 独立地址目标配置并同步验收范围。 |
 | 2.1.0 | 2026-08-26 | 将 Model Manager 地址收敛到 Model Manager 与受管 Runtime 共用的 `campusmate.base-url`，删除独立 base URL 目标配置，同步当前实现复核基线。 |

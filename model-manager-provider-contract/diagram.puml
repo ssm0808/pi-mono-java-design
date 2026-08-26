@@ -79,6 +79,7 @@ title Generic CampusMate Chat Provider Boundary
 ' Architecture change: Java resolves an AiProvider by model.providerId and uses an internally configured apiId.
 ' Observed behavior: mate-service implements POST /mate-service/v1/LLM/chat at baseline 956b547f.
 ' Architecture change: all clients read one campusmate tree with a shared base URL and endpoint catalog.
+' Architecture change: target model options bind to campusmate.model, not campusmate.model-manager.
 ' Product constraint: CampusClaw and Mate exchange no application identity or credential headers.
 ' Scope boundary: Mate routing, credentials, and upstream field adaptation are internal Mate concerns.
 
@@ -99,7 +100,7 @@ skinparam database {
 skinparam ArrowColor #475569
 
 package "pi-mono-java Runtime" {
-  [CampusMate Service Configuration\ncampusmate.base-url\ncampusmate.endpoints] as CampusMateConfig
+  [CampusMate Service Configuration\ncampusmate.base-url\ncampusmate.endpoints\ncampusmate.model] as CampusMateConfig
   [AgentLoop] as Loop
   [CampusClawAiService] as AiService
   [AiProviderRegistry] as Registry
@@ -238,6 +239,7 @@ title Java Provider Alignment with pi-mono
 ' Java divergence: the initial d649866a6 baseline models protocol adapters as providers and cannot preserve arbitrary provider identity.
 ' Architecture change: add open ProviderId and ApiId values, resolve AiProvider by providerId, and configure apiId internally.
 ' Architecture change: Model Manager, Runtime, and Tool clients share one campusmate tree and endpoint catalog.
+' Architecture change: model options bind to campusmate.model while component and provider names remain stable.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -274,7 +276,9 @@ package "Target Java" {
   class OpenAICompletionsMapper
   class CampusMateBaseUrlConfig
   class CampusMateEndpointConfig
-  class ModelManagerClientConfig
+  class ModelManagerClientConfig {
+    +prefix: campusmate.model
+  }
   ModelTarget --> ProviderId
   ModelTarget --> ApiId
   AiProviderRegistry --> AiProvider : keyed by ProviderId

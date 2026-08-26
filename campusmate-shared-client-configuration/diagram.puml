@@ -14,6 +14,7 @@ title CampusMate Configuration and Endpoint Deduplication
 ' Observed duplication: two keys normalize to GET /mate-service/v1/skill/query/{skillId}.
 ' Product constraint: Mate and CampusMate are one service identity.
 ' Architecture change: one campusmate tree owns one origin and six unique operation paths.
+' Architecture change: target model options move from campusmate.model-manager to campusmate.model.
 ' Security hardening: endpoint paths cannot carry another origin.
 ' Target-only server scope: Skill and Tool controllers were not found in the analyzed mate-service baseline.
 
@@ -47,7 +48,7 @@ rectangle "Observed Configuration\n3 service identities, 3 origins, 7 path keys"
 rectangle "Target Configuration\n1 service identity, 1 origin, 6 unique operation paths" as After {
   component "campusmate.base-url\nCAMPUSMATE_BASE_URL" as BaseUrl #DCFCE7
   component "campusmate.endpoints\nmodel-chat-path\nagent-info-path-template\nagent-runtime-path-template\nskill-info-path-template\ntool-metadata-query-path\ntool-execute-path-template" as Endpoints #DCFCE7
-  component "campusmate.model-manager\nAPI, capability, SSE timeouts" as ModelOptions
+  component "campusmate.model\nAPI, capability, SSE timeouts" as ModelOptions
   component "campusmate.runtime\ncache, short timeout, limits" as RuntimeOptions
   component "campusmate.tool.enabled" as ToolOptions
 }
@@ -91,6 +92,7 @@ end note
 
 note bottom of Endpoints
 No top-level mate configuration remains.
+No target campusmate.model-manager configuration remains.
 Every ID path uses one %s template.
 Paths start with /mate-service/ and contain no origin.
 end note
