@@ -63,10 +63,19 @@
     .rich-table th { background: var(--soft); }
     .rich-table .number { text-align: right; }
     .inline-code { padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--soft); font-family: ui-monospace, monospace; }
-    .tool-card { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); }
-    .tool-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 12px; font-weight: 700; }
+    .activity-stream { max-width: 100%; margin: 0 0 14px; }
+    .thinking-row { margin-bottom: 7px; color: var(--muted); font-size: 11px; }
+    .thinking-row summary { display: flex; align-items: center; gap: 7px; cursor: pointer; font-weight: 700; list-style: none; }
+    .thinking-row summary::-webkit-details-marker, .tool-card summary::-webkit-details-marker { display: none; }
+    .thinking-row summary::before { content: ""; width: 9px; height: 9px; border: 1px solid var(--dark); border-radius: 50%; background: var(--paper); }
+    .thinking-content { margin: 4px 0 0 17px; line-height: 1.45; white-space: pre-wrap; }
+    .tool-card { border: 1px solid var(--line); border-radius: 8px; background: var(--soft); }
+    .tool-head { display: flex; align-items: center; gap: 8px; padding: 9px 11px; font-size: 12px; font-weight: 700; cursor: pointer; list-style: none; }
     .tool-head::before { content: ""; width: 13px; height: 13px; border: 2px solid var(--dark); border-radius: 3px; }
-    .tool-result { border-top: 1px solid var(--line); padding: 10px 12px; color: var(--muted); font: 11px/1.5 ui-monospace, monospace; }
+    .tool-state { margin-left: auto; color: var(--muted); font-size: 10px; font-weight: 600; }
+    .tool-args { border-top: 1px solid var(--line); padding: 8px 11px; }
+    .arg-label { margin-bottom: 3px; color: var(--muted); font-size: 10px; font-weight: 700; }
+    .arg-line { color: var(--ink); font: 10px/1.45 ui-monospace, monospace; }
     .composer-wrap { padding: 0 70px 22px; }
     .composer { border: 2px solid var(--dark); border-radius: 12px; background: var(--paper); padding: 12px; }
     .composer-placeholder { min-height: 48px; color: var(--muted); font-size: 13px; }
@@ -95,12 +104,17 @@
     .running-top strong { font-size: 13px; }
     .running-top .stop { margin-left: auto; border: 2px solid var(--dark); border-radius: 7px; padding: 7px 10px; background: var(--paper); font-weight: 700; }
     .running-body { flex: 1; padding: 22px 42px; }
-    .progress { border: 1px solid var(--dark); border-radius: 9px; background: var(--soft); padding: 12px; }
+    .running-activity { font-size: 11px; }
+    .running-thinking { margin-bottom: 9px; }
     .progress-title { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; }
     .spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--dark); border-radius: 50%; }
-    .steps { display: flex; gap: 6px; margin-top: 12px; }
-    .step { flex: 1; height: 7px; border: 1px solid var(--line); background: var(--paper); }
-    .step.done { background: var(--dark); }
+    .running-thinking p { margin: 4px 0 0 22px; color: var(--muted); }
+    .running-tools { overflow: hidden; border: 1px solid var(--dark); border-radius: 9px; background: var(--soft); }
+    .running-tool { padding: 9px 11px; border-bottom: 1px solid var(--line); }
+    .running-tool:last-child { border-bottom: 0; }
+    .running-tool-head { display: flex; align-items: center; gap: 7px; font-weight: 800; }
+    .running-tool-head .tool-state { margin-left: auto; }
+    .running-tool-args { margin: 4px 0 0 20px; color: var(--muted); font: 9px/1.4 ui-monospace, monospace; }
     .control-composer { margin: 0 42px 22px; border: 2px solid var(--dark); border-radius: 10px; padding: 10px; }
     .follow-up-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); font-size: 10px; }
     .follow-up-mode { padding: 6px 9px; border: 1px solid var(--dark); border-radius: 7px; background: var(--soft); color: var(--ink); font-weight: 700; }
@@ -153,6 +167,19 @@
             <div class="turn">
               <span class="avatar"></span>
               <div class="answer">
+                <div class="activity-stream">
+                  <details class="thinking-row" open>
+                    <summary><span>已思考</span><span>⌄</span></summary>
+                    <div class="thinking-content">检查价格、数量与重复订单，再汇总异常。</div>
+                  </details>
+                  <details class="tool-card" open>
+                    <summary class="tool-head"><span>读取订单明细.xlsx</span><span class="tool-state">已完成</span></summary>
+                    <div class="tool-args">
+                      <div class="arg-label">输入参数</div>
+                      <div class="arg-line">file: 订单明细.xlsx　 sheet: 订单明细</div>
+                    </div>
+                  </details>
+                </div>
                 <h3>异常汇总</h3>
                 <p>已读取文件，发现以下 3 类异常：</p>
                 <div class="rich-table-wrap" tabindex="0" aria-label="异常汇总表，可横向滚动">
@@ -166,9 +193,6 @@
                   </table>
                 </div>
                 <p style="margin-top:9px">建议优先检查 <span class="inline-code">order_id</span> 重复记录。</p>
-                <div class="tool-card">
-                  <div class="tool-head">已读取并分析 1 个文件　⌄</div>
-                </div>
               </div>
             </div>
           </main>
@@ -180,7 +204,7 @@
           </div>
         </div>
         <div class="annotation a1">Model / Thinking 是会话级能力<br>放入标题栏，不占用设置侧栏</div>
-        <div class="annotation a2">Assistant Markdown → safe AST → Vue<br>表格/代码局部滚动，Tool 保持独立活动卡</div>
+        <div class="annotation a2">Thinking + Tool → 时序活动流<br>入参脱敏后用 inert key-value viewer 展示</div>
         <div class="annotation a3">凭据、session_id、ETag、SSE frame<br>仅在“开发者诊断”抽屉展示</div>
       </section>
 
@@ -209,9 +233,24 @@
         <header class="running-top"><span class="agent-avatar"></span><strong>运营分析 Agent</strong><span class="pill status">执行中</span><button class="stop">停止 ■</button></header>
         <div class="running-body">
           <div class="turn user"><div class="bubble">检查这批订单，并给出处理建议。</div></div>
-          <div class="progress">
-            <div class="progress-title"><span class="spinner"></span> 正在读取订单明细并检查异常…</div>
-            <div class="steps"><span class="step done"></span><span class="step done"></span><span class="step"></span><span class="step"></span></div>
+          <div class="running-activity">
+            <div class="running-thinking">
+              <div class="progress-title"><span class="spinner"></span> 思考中</div>
+              <p>先读取订单明细，再检查价格、数量与重复订单。</p>
+            </div>
+            <div class="running-tools">
+              <div class="running-tool">
+                <div class="running-tool-head"><span>▣</span><span>读取订单明细.xlsx</span><span class="tool-state">已完成</span></div>
+                <div class="running-tool-args">输入：file=订单明细.xlsx · sheet=订单明细</div>
+              </div>
+              <div class="running-tool">
+                <div class="running-tool-head"><span class="spinner"></span><span>检查价格与数量异常</span><span class="tool-state">进行中…</span></div>
+                <div class="running-tool-args">输入：fields=price,quantity · threshold=10%</div>
+              </div>
+              <div class="running-tool">
+                <div class="running-tool-head"><span>○</span><span>生成处理建议</span><span class="tool-state">等待中</span></div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="control-composer">

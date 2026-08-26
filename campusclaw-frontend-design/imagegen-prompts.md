@@ -4,7 +4,7 @@
 |---|---|
 | 生成方式 | Codex 内置 imagegen |
 | 用例分类 | `ui-mockup` |
-| 最终方向 | 常规态 v4，Assistant 安全富文本；执行中 v4，Codex-aligned follow-up composer |
+| 最终方向 | 常规态 v5，Thinking + Tool 入参 + Assistant 安全富文本；执行中 v5，展开思考 + 工具入参 |
 | 视觉证据 | 本机 `ChatGPT.app` 26.814.41407 light-theme Token；非公开品牌规范 |
 | 日期 | 2026-08-26 |
 
@@ -14,6 +14,9 @@ v1 暖色稿和 v2 钴蓝稿保留为过程制品，不再被主设计文档引�
 
 执行中 v4 继续使用同一视觉系统，只更新跟进交互：移除两个常驻模式胶囊，改为一个当前
 模式“调整方向”，并给出将本条消息“加入队列”的快捷键提示。
+
+v5 分别以两张 v4 为权威编辑目标，保留现有工具卡视觉，将 Thinking 放在工具附近，并为已开始的工具
+增加紧凑入参。常规态另做一次定点修正，删除首次编辑保留的重复工具卡。
 
 ## 常规对话 v3
 
@@ -109,3 +112,64 @@ Constraints: no OpenAI logo, no Codex wordmark, no orange/coral/peach/sand/beige
 ```
 
 输出：`high-fidelity-running-v4.png`
+
+## 常规对话 v5
+
+编辑目标：`high-fidelity-conversation-v4.png`。首次生成后，定点删除了最终答案下方因“保留现有工具卡”
+约束造成的重复卡；前置 Thinking 和展开入参卡未改动。
+
+```text
+Use case: ui-mockup
+Asset type: final high-fidelity idle-conversation desktop web application mockup for the CampusClaw frontend design, version v5
+Input images: Image 1 is the authoritative edit target.
+Primary request: Preserve the entire existing screen and its polished monochrome CampusClaw visual system, but refine only the central conversation content so completed thinking and the existing tool activity card form one compact chronological Agent activity stream before the final rich-text answer. Keep the current tool-card style that the user likes. Add the tool call input arguments visibly inside that card.
+Required conversation edit:
+- Keep the user request and spreadsheet attachment unchanged.
+- Before the final heading “异常汇总”, add a compact completed-thinking disclosure close to the tool card. It must show the label “已思考” with a small chevron and one directly visible muted plain-text line: “检查价格、数量与重复订单，再汇总异常。”
+- Immediately below it, show the existing neutral rounded tool activity card in an expanded compact state. Header text exactly “读取订单明细.xlsx”, with a small green completion check and status text exactly “已完成”.
+- Inside the expanded tool card, show a quiet section label exactly “输入参数” and one concise monospace key-value line exactly “file: 订单明细.xlsx   sheet: 订单明细”. Do not show internal IDs or absolute paths.
+- Place the existing final rich-text answer after the activity stream and preserve its semantic heading, short paragraph, three-column table, inline-code chip, and all exact table data already visible in Image 1.
+- Keep the tool and thinking surfaces compact enough that the final answer and bottom composer remain fully visible without clipping.
+Visual behavior: thinking is plain text, visually lighter than the final answer; tool arguments are escaped structured text, not Markdown; both sit in the same activity region but remain clearly separate rows. Use crisp 1px neutral borders, restrained radii, no heavy shadow.
+Preserve exactly: full 1536×1024 straight-on viewport, every application edge, sidebar, CampusClaw identity, all navigation copy, top bar, model/thinking/status controls, user message, attachment, bottom composer, monochrome palette, green status accents, typography, and layout outside the central conversation content.
+Text must render verbatim and remain readable.
+Constraints: no raw Markdown pipes, backticks, asterisks, hash marks, HTML, extra rows, invented IDs, absolute paths, secret values, OpenAI/Codex logos, bright blue primary controls, gradients, glassmorphism, right inspector, device frame, crop, or watermark.
+```
+
+定点修正：
+
+```text
+Use case: precise-object-edit
+Asset type: final high-fidelity idle-conversation desktop web application mockup for CampusClaw v5
+Input images: Image 1 is the authoritative edit target.
+Primary request: Remove only the duplicate collapsed tool activity card located below the sentence “建议优先检查 order_id 重复记录。” and above the bottom composer. Close the resulting vertical gap naturally so the final answer ends cleanly after that sentence.
+Preserve exactly: the completed thinking row “已思考” and its visible thought text, the expanded “读取订单明细.xlsx” tool card with “输入参数” and the file/sheet arguments, the entire “异常汇总” rich-text answer and table, the user request and attachment, all sidebar/top-bar/composer UI, exact typography, colors, spacing, full 1536×1024 viewport, and every application edge.
+Constraints: change only the duplicate bottom card and surrounding gap; do not alter, duplicate, or remove the earlier expanded tool card; do not change any text; no new elements, no crop, no watermark.
+```
+
+输出：`high-fidelity-conversation-v5.png`
+
+## 执行中 v5
+
+编辑目标：`high-fidelity-running-v4.png`。
+
+```text
+Use case: ui-mockup
+Asset type: final high-fidelity execution-in-progress desktop web application mockup for the CampusClaw frontend design, version v5
+Input images: Image 1 is the authoritative edit target.
+Primary request: Preserve the entire existing running-state screen and current compact vertical tool display style, but improve the central execution activity area. Add visible streaming thinking content immediately above the tool list, and add concise input-argument summaries to the completed and running tool rows.
+Required central activity edit:
+- Keep the existing user message, running status, stop control, sidebar, top bar, and bottom “调整方向” composer unchanged.
+- Replace the generic heading/progress summary above the existing three-row tool card with a compact open thinking disclosure. Header text exactly “思考中” with a restrained spinner. Directly beneath it, show one muted plain-text line exactly “先读取订单明细，再检查价格、数量与重复订单。”
+- Keep the existing rounded three-row tool activity card and its vertical dividers.
+- First row header exactly “读取订单明细.xlsx”, status exactly “已完成”, with green completion check. Add one smaller muted monospace line exactly “输入：file=订单明细.xlsx · sheet=订单明细”.
+- Second row header exactly “检查价格与数量异常”, status exactly “进行中…”, with the existing restrained running spinner. Add one smaller muted monospace line exactly “输入：fields=price,quantity · threshold=10%”.
+- Third row header exactly “生成处理建议”, status exactly “等待中”. Do not invent or show arguments for this row because it has not started.
+- The thinking disclosure and tool card must read as one chronological Agent activity stream, with thinking visually lighter and tool rows retaining the exact compact style and proportions the current design already uses.
+Visual behavior: thinking and arguments are plain/structured text, never Markdown; no raw internal toolCallId, file IDs, absolute paths, credentials, or JSON protocol noise. Preserve ample whitespace and keep the bottom composer fully visible.
+Preserve exactly: full viewport and every application edge, original CampusClaw identity, all sidebar sessions, top-bar controls, user bubble, “执行中” and “停止”, current monochrome Codex-inspired palette, green status accents, 1px neutral borders, crisp Chinese typography, and the current running composer with “调整方向”, “⌘⇧↵ 本条加入队列”, “补充新的要求…”, attachment icon, and near-black action button.
+Text must render verbatim and remain readable.
+Constraints: no extra controls, no dashboard chart, no internal IDs, no absolute paths, no secrets, no OpenAI/Codex logos, no bright blue primary controls, no gradients, glassmorphism, right inspector, device frame, crop, or watermark.
+```
+
+输出：`high-fidelity-running-v5.png`

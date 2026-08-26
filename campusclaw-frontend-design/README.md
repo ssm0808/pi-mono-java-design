@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.4.0 |
-| 状态 | Proposed；执行中跟进交互与 Assistant 富文本边界已设计，三个关键界面状态和视觉方向待确认 |
+| 文档版本 | 0.5.0 |
+| 状态 | Proposed；执行中跟进交互、Assistant 富文本边界、思考活动和工具入参展示已设计，三个关键界面状态和视觉方向待确认 |
 | 界面评审状态 | `firstUse`、`idleConversation` 待确认；`runningConversation` 跟进交互已确认、界面待确认 |
 | 主设计依据 | [`README.md`](README.md)，维护源码证据、目标差异、设计理由、状态与 Design Token |
 | 人类评审界面 | [`frontend-review.html`](frontend-review.html)，集中展示低保真、高保真和待确认项 |
@@ -11,7 +11,7 @@
 | HTTP 设计风格基线 | 当前工作区 `chat-http-v1-design.md` 1.38.0；设计仓 `c250e3f07536871d3d676242e552a5eb4346b0c7` |
 | Codex 视觉证据 | 本机 `ChatGPT.app` 26.814.41407（build 6720）中的 light-theme CSS Token；`app.asar` SHA-256 `8fba32f8baa6d984b0f0f4149d3da46221e3adb3b52836f85fe65e31e655a8c0` |
 | Codex 跟进交互证据 | 同一安装包 `webview/assets/app-initial-BCLYDefw.js` 的 `followUpQueueMode`、`K9s()`、submit action，以及 `webview/assets/zh-CN-ByRVSIXt.js` 的 Composer 文案 |
-| pi-mono-java 已分析源码基线 | `origin/main@56be8eee59415a5f86658d6635a7b7e8891263d3` |
+| pi-mono-java 已分析源码基线 | `bde123706305a41e51c9a47b22e6ad11bbd8204c`；相关证据文件在该 commit 上无本地修改 |
 | Postman 核对 | 2026-08-20；只读核对 `Agent Runtime` collection 及真实 SSE 响应 |
 | 更新日期 | 2026-08-26 |
 
@@ -23,14 +23,15 @@ Agent 工作台。主界面只暴露用户能够理解并需要决策的概念�
 原始 JSON 和 SSE frame 不进入产品主流程。
 
 本轮提出一个桌面优先的单工作区方案：左侧会话导航、中央对话、顶部 Session 能力、
-底部 Composer。工具生命周期合并为对话内活动卡；运行中 `Steer`、`FollowUp`、`Abort`
+底部 Composer。思考和工具调用按实际时间顺序组成对话内 Agent 活动流；工具生命周期合并为
+一张活动卡，并在安全投影后显示调用入参。运行中 `Steer`、`FollowUp`、`Abort`
 分别产品化为“调整方向”“加入队列”“停止”。Composer 像 Codex desktop 一样只呈现当前
 跟进模式，默认“调整方向”，而不是同时展示两个常驻选择。现有调试能力可以保留，但只能
 作为内部构建中的开发者诊断入口，不能继续充当产品首页。
 
 Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和固定 Vue 组件投影为安全
 富文本；表格、列表、引用、链接、行内代码和代码块均有明确样式、溢出和复制行为。用户
-原文、思考过程和工具原始结果不进入该 Markdown 渲染链，避免把不同信任边界的内容混成
+原文、思考过程、工具入参和工具原始结果不进入该 Markdown 渲染链，避免把不同信任边界的内容混成
 一个可执行 HTML 面。
 
 视觉采用 Codex-inspired 而非品牌复制：以黑白中性层级、原生工具感、紧凑活动表达和
@@ -64,15 +65,16 @@ Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和
 | 证据 | 已观察事实 |
 |---|---|
 | `frontend/src/App.vue:1-291` | 当前 Vue 前端已经形成 Agent 工作区壳、对话时间线、Composer 与运行中控制，但浏览器仍直接调用 Runtime V1，尚未落地 mate-service 公共 bridge。 |
-| `frontend/src/components/ConversationTimeline.vue:37-49` | Assistant 正文使用 Vue 文本插值直接输出 `turn.text`；Markdown 标记不会被解析。用户消息、thinking 和 tool result 也各自使用纯文本插值。 |
+| `frontend/src/components/ConversationTimeline.vue:37-65` | Assistant 正文使用 Vue 文本插值直接输出 `turn.text`；Thinking 是 Assistant body 内的一个“查看思考过程”折叠区；Tool 活动卡展开后只显示结果，不显示调用入参。 |
 | `frontend/src/style.css:784-789` | `.assistant-message` 仅设置 `white-space: pre-wrap` 和换行，没有标题、表格、引用、链接或代码块样式。 |
 | `frontend/package.json:13-21` | 运行依赖只有 Vue，没有 Markdown parser、AST renderer 或 sanitizer。 |
 | `frontend/src/composables/useRuntimeApi.ts:157-176, 311-352` | 浏览器直接调用 `/campusclaw-service/v1` 并消费请求范围 SSE；流事件的 `data` 先作为 JSON 解析，不产生服务端 HTML。 |
-| `frontend/src/projectors/runtimeEventProjector.ts:40-55, 133-145` | delta 按文本追加，completed 以持久化完整文本替换 preview；文本内容未被改写，足以作为 Markdown 源，但当前投影只有 `text:string`。 |
+| `frontend/src/projectors/runtimeEventProjector.ts:40-90, 112-145` | delta 按文本追加，completed 以完整文本替换 preview；Thinking 按 `assistantEntryId` 追加到 Assistant turn；Tool 只从 `tool.*` 事件读取名称、状态和结果，没有解析 Assistant completed 中的 `tool_call.arguments`。 |
+| `frontend/src/types/product.ts:22-37` | `AssistantTurn` 仅有单个 `thinking:string`；`ActivityTurn` 只有 `toolCallId`、`toolName`、`status` 和 `result`，尚无入参字段或安全投影类型。 |
 | `RuntimeSessionController`、`RuntimeEventController`、`RuntimeSessionConfigurationController`、`RuntimeSessionControlController` | 当前后端已实现 11 个内部 Session Runtime operation。 |
 | `RuntimeEventType.java:13-26` | 对外事件同时包含持久化消息、瞬时 Assistant delta、工具进度和流终止事件。 |
-| `RuntimeEventProjector.java:149-176, 215-238` | Assistant preview 与 completed 分离；文本 delta 原样进入 `delta.text`，完成消息持久化后替换 preview。 |
-| `RuntimeEntryCodec.java:67-88, 195-210, 430-442, 557-601` | Assistant `TextContent.text` 原样进入持久化 Entry，SSE 与 GET history 共享投影，未生成或信任 HTML。 |
+| `RuntimeEventProjector.java:149-213, 215-238, 257-285` | Assistant preview 与 completed 分离；Thinking started/delta/completed 按 `assistantEntryId + contentIndex` 投影；`tool.execution.*` 只携带 `toolCallId`、`toolName`、状态和 delta，不携带入参。 |
+| `RuntimeEntryCodec.java:67-88, 430-442, 512-517, 557-601` | `assistant.message.completed.message.content[]` 保留 `tool_call` 的 `toolCallId`、`name` 和结构化 `arguments`；这是工具入参的现有内部来源，前端可在工具开始前按 `toolCallId` 建立关联。 |
 | Postman `Agent Runtime` collection | Session、Configuration、Events、Control 四组请求与源码 11 个 operation 一致；真实 `POST /events` 响应按 frame 展示大量 delta，证明原始事件视图适合诊断，不适合终端用户阅读。 |
 | 本机 `ChatGPT.app` 26.814.41407 的 `app.asar` light-theme Token | 可观察到 `gray-0/50/75/100/500/750/900`、近黑 primary solid、5%/10% alpha border、灰色 user message background、green success 与 blue focus/link；这是 Codex-inspired 视觉证据，不是公开品牌规范。 |
 | 同一 `app.asar` 的 `webview/assets/app-initial-BCLYDefw.js`：`followUpQueueMode`、`K9s()`、`composer.submitButtonTooltip.*` 与 submit telemetry | Codex desktop 的跟进模式取值为 `steer` / `queue`，desktop 默认 `steer`；`Cmd/Ctrl+Shift+Enter` 对单条消息执行相反模式；已排队消息支持送入当前运行、编辑、删除、重试与恢复。历史 `interrupt` 配置会归一为 `steer`。 |
@@ -83,8 +85,8 @@ Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和
 
 - 每个 Session 同一时刻最多有一个 active execution。
 - `POST /sessions/{id}/events` 是请求范围 SSE；断线不等于中止，也不能自动重放 POST。
-- `user.message`、`assistant.message.completed`、`tool.result` 是可恢复的持久化 Entry。
-- `assistant.message.started/delta`、工具执行 started/completed 和流控制事件是瞬时状态。
+- `user.message`、`assistant.message.completed`、`assistant.thinking.completed` 和 `tool.result` 是可恢复的持久化 Entry；Thinking 历史只在该 Session 当前允许思考展示时返回。
+- `assistant.message.started/delta`、`assistant.thinking.started/delta`、工具执行 started/delta/completed 和流控制事件是瞬时状态。
 - Model 与 Thinking 只允许在 Session `idle` 时修改，并通过强 ETag 防止覆盖并发修改。
 - Steer 优先于 FollowUp；两者只在 `running` 时接受；Abort 在 `idle` 时也是幂等成功。
 - Runtime 只接收 `file_ids`，不负责浏览器文件上传、文件名和预览元数据。
@@ -99,6 +101,9 @@ Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和
 | 将 Steer/FollowUp/Abort 改为用户语言 | 产品约束 | 用户决策是“调整方向”“加入队列”“停止”，不是选择内部 operation；命名与 Codex desktop 对齐。 |
 | 运行中只显示当前跟进模式，默认 Steer | 产品约束 | Codex desktop 的 Composer 以一个可配置默认行为和单次反转快捷键工作；两个常驻模式会增加不必要决策并偏离参照实现。 |
 | 将工具事件合并为活动卡 | 产品约束 | 保留执行透明度，同时避免 started/completed/result 三段协议噪音。 |
+| 思考行与工具卡按事件顺序组成 Agent 活动流 | 产品约束 | 让用户在一个连续区域内理解“为什么调用”和“调用了什么”，又不把思考文本混入工具 payload。 |
+| 工具卡展示经安全投影的调用入参 | 产品约束 + 安全加固 | 入参能解释 Agent 的实际动作；浏览器只接收经 bridge 脱敏、截断和用户资源映射后的结构，不暴露密钥、内部 ID 或绝对路径。 |
+| 从 Assistant completed 中提取 ToolCallSpec 并按 `toolCallId` 关联工具生命周期 | 架构变化 | 现有 `tool.execution.*` 不含入参；只处理 `tool.*` 事件无法实现入参展示。 |
 | Assistant 正文使用安全 Markdown 富文本 | 产品约束 | 模型天然会输出表格、代码、列表和强调；纯文本会把结构标记直接暴露给用户。 |
 | 禁止原始 HTML、Markdown 图片和任意协议链接 | 安全加固 | 模型输出和外部内容均不可信；避免 XSS、跟踪像素、应用内路由欺骗与危险协议跳转。 |
 | 流式与历史消息共用同一 Markdown 源和渲染器 | 架构变化 | 保证 delta 预览、completed 替换与刷新恢复后的视觉结果一致。 |
@@ -117,6 +122,7 @@ Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和
 
 - 确认桌面端信息架构与三个关键状态。
 - 确认产品化执行控制、工具活动呈现与断线恢复文案。
+- 确认思考内容与工具调用的同区时序展示，以及工具入参的投影、脱敏、展开和降级规则。
 - 确认视觉方向、基础尺寸和色彩语义。
 - 确认 Assistant 富文本语法、流式稳定性、安全边界和响应式溢出规则。
 - 明确现有 11 个 Runtime operation 能支持什么，以及生产前端还缺哪些公共契约。
@@ -153,7 +159,7 @@ Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和
 |---|---|---|---|
 | 左侧导航 | 新建会话、最近会话、Agent 中心、设置 | 创建、切换、搜索会话 | `session_id`、接口地址 |
 | 顶部栏 | Agent 名称、自动保存、模型、深度思考、粗粒度状态 | 切换 idle Session 的模型/思考；运行时停止 | ETag、资源版本、Provider 凭据 |
-| 对话画布 | User turn、Assistant 安全富文本、附件、工具活动卡、错误恢复提示 | 阅读、选择文本、打开安全链接、复制正文/代码、展开工具详情 | SSE frame、瞬时 Entry ID、可执行 HTML |
+| 对话画布 | User turn、Agent 活动流（思考 + 工具卡 + 安全入参）、Assistant 安全富文本、附件、错误恢复提示 | 阅读、选择文本、打开安全链接、复制正文/代码、展开思考或工具详情 | SSE frame、瞬时 Entry ID、原始未脱敏入参、可执行 HTML |
 | Composer | 附件、输入、发送；运行时当前跟进模式 | 发送新消息、调整方向、加入队列 | operation path、内部请求体 |
 | 开发者诊断 | 请求摘要、原始事件、内部标识 | 复制调试信息 | 仅内部构建和授权角色可见 |
 
@@ -167,19 +173,18 @@ Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和
 
 ### 6.2 高保真：常规对话
 
-![CampusClaw 高保真常规对话](high-fidelity-conversation-v4.png)
+![CampusClaw 高保真常规对话](high-fidelity-conversation-v5.png)
 
-v4 在 Codex-inspired 黑白中性层级中加入 Assistant 富文本示例：标题、说明段落、三列表格、
-行内代码和折叠工具活动共享开放式正文，不退化为聊天气泡或原始 Markdown。表格使用中性
-表头和细边框，数值列可对齐；页面仍保留充足留白，不把执行过程做成监控 Dashboard。
+v5 保留 v4 的 Assistant 富文本，并在最终答案前增加紧凑 Agent 活动流：已完成思考以次要纯文本
+直接展示，后续工具卡沿用已确认的中性样式，并展示 `file` 与 `sheet` 入参。标题、说明段落、三列表格、
+行内代码仍使用开放式正文；思考、入参与结果均不经 Markdown 渲染。
 
 ### 6.3 高保真：执行中
 
-![CampusClaw 高保真执行中](high-fidelity-running-v4.png)
+![CampusClaw 高保真执行中](high-fidelity-running-v5.png)
 
-运行态只增加必要的进度、停止操作与 Composer 跟进方式，不改变导航和会话身份。v4 移除
-两个常驻模式胶囊，默认动作显示为“调整方向”，并提示可用 `⌘/Ctrl+Shift+Enter` 将本条
-消息改为“加入队列”；这与 Codex desktop 的默认模式和单次反转行为一致。
+运行态保留 v4 的停止操作与 Composer 跟进方式。v5 在原有三行工具活动卡上方增加展开的“思考中”纯文本，
+并在已完成和执行中的工具行显示紧凑入参摘要；未开始的工具不预先虚构入参。导航、会话身份和“调整方向”交互不变。
 
 ## 7. 关键状态与交互
 
@@ -245,13 +250,34 @@ Chat 标题或用户会话列表接口。
 | `user.message` | User turn | 以持久化完整数据替换本地 optimistic turn。 |
 | `assistant.message.started` | Assistant 占位 | 创建 streaming turn，不单独显示事件名。 |
 | `assistant.message.delta` | Assistant Markdown 源预览 | 顺序追加到 `rawMarkdown`；节流解析稳定块，未闭合尾块以纯文本预览。 |
-| `assistant.message.completed` | Assistant 完整 turn | 用持久化完整 `rawMarkdown` 替换 preview，执行最终解析并保存公开事件身份。 |
-| `tool.execution.started` | 活动卡 running | 与此前 Assistant tool call 关联。 |
+| `assistant.thinking.started/delta` | 活动流的思考行 | 运行时自动展开，按 `assistantEntryId + contentIndex` 追加纯文本，不进入 Markdown renderer。 |
+| `assistant.thinking.completed` | 完成思考行 | 以持久化全文替换 preview；默认保留一行可读内容并可折叠，不虚构摘要或耗时。 |
+| `assistant.message.completed` | Assistant 完整 turn + ToolCallSpec | 文本块用持久化完整 `rawMarkdown` 替换 preview；同时遍历 `tool_call` 块，按 `toolCallId` 缓存 `name + arguments`。 |
+| `tool.execution.started` | 活动卡 running | 按 `toolCallId` 与已缓存 ToolCallSpec 关联；卡片显示经安全投影的入参。 |
 | `tool.execution.completed` | 活动卡状态 | 结束 spinner；等待或合并 `tool.result`。 |
 | `tool.result` | 活动卡结果 | 成功默认折叠，失败默认展开；不另起聊天气泡。 |
 | `session.status.idle` | 顶部与 Composer idle | 关闭 running 控件，恢复普通发送。 |
 | `stream.end` | 本轮完成 | 根据 `completed/aborted` 展示轻量结束状态。 |
 | `stream.error` | 可恢复错误提示 | 保留已持久化 turn，提示重新读取历史，不生成伪 Assistant 消息。 |
+
+### 8.1 思考与工具活动流
+
+- 同一次 Assistant 轮次中连续的 Thinking 和 Tool 对象按事件出现顺序放入一个 Agent 活动区，
+  但仍保留各自的类型、关联键与信任边界；最终 Assistant 答案在该活动区之后显示。
+- Thinking 运行时以“思考中”标题和 spinner 展开，流式文本使用 `pre-wrap` 纯文本；用户主动
+  向上滚动后停止自动追尾。完成后标题改为“已思考”，短内容保留一行直接展示，
+  长内容在内部容器滚动并可折叠。不从文本自动生成新摘要，不在历史恢复时虚构耗时。
+- ToolCallSpec 来自 `assistant.message.completed.message.content[].tool_call`。前端必须遍历所有 content block，
+  即使该 Assistant 消息没有文本也不能丢弃 `toolCallId`、`name`和 `arguments`。
+- Tool Activity 以 `toolCallId` 合并 ToolCallSpec、execution started/delta/completed 和 result。如生命周期事件
+  早于 ToolCallSpec 到达，先创建无入参 placeholder，后续就地补全，不新建第二张卡。
+- 工具卡头部只显示用户可读动作、状态和 disclosure；展开区按“输入参数”、“输出结果”顺序显示。
+  运行中和失败卡默认展开；成功卡在最终答案完成后可折叠，v5 常规态为了评审入参而保持展开。
+- 入参使用受控 JSON/key-value viewer：字符串转义、数字和布尔保持类型、对象和数组可分层折叠；
+  不解析 Markdown、HTML、ANSI 或 URL，也不根据键名触发应用内动作。
+- mate-service bridge 对入参执行服务端字段 allowlist/脱敏、长度与层级预算、内部绝对路径与资源 ID 的
+  用户可读映射；敏感值统一显示“已隐藏”。前端可做二次防御，但不能把浏览器键名正则当作唯一脱敏边界。
+- 超出预算时显示已安全截断的前缀和“入参较长”提示，不提供复制原始未脱敏 payload 的产品入口。
 
 ## 9. Assistant 富文本设计
 
@@ -265,7 +291,8 @@ Chat 标题或用户会话列表接口。
 |---|---|---|
 | Assistant 正文 | 受限 Markdown → 语义 AST → 固定 Vue 组件 | 解决表格、列表、代码和强调的可读性，同时不信任模型生成 HTML。 |
 | User 正文 | 纯文本 `pre-wrap` | 忠实显示用户实际提交内容，避免把用户输入伪装成系统 UI 或可点击动作。 |
-| Thinking | 折叠区内纯文本 | 与最终答案保持视觉和安全边界，不鼓励把内部过程当正式文档。 |
+| Thinking | Agent 活动流内的可折叠纯文本行 | 运行时直接展示当前内容，完成后降低视觉权重；与最终答案和工具 payload 保持安全边界。 |
+| Tool arguments | 安全 JSON/key-value viewer | 解释工具实际输入；只渲染 bridge 脱敏和预算后的结构，不激活链接、HTML 或应用动作。 |
 | Tool result | 纯文本或按工具类型注册的结构化 viewer | 工具内容来自外部系统；不得自动继承 Assistant Markdown 权限。 |
 | Error / recovery | 纯文本产品文案 | 错误面不接受模型或下游返回的富文本，避免错误注入。 |
 
@@ -375,6 +402,8 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 - `Enter` 按当前跟进方式发送，`Shift+Enter` 换行；运行中通过动作名称明确当前方式。
 - `Cmd/Ctrl+Shift+Enter` 对单条运行中消息临时反转“调整方向”与“加入队列”，不改变默认设置。
 - Tool Activity 使用可聚焦的 disclosure；展开状态通过 `aria-expanded` 表达。
+- Thinking 与 Tool 使用独立 disclosure；读屏只在思考开始、工具状态变化和思考完成时播报简短状态，不逐 token 播报思考文本。
+- 入参 viewer 用语义化 description list/tree 表达键值和层级；被脱敏、被截断和无入参都有非颜色文字状态。
 - 流式文本更新使用低打扰 live region，避免每个 token 都被读屏播报。
 - 富文本保留语义标题、列表、引用、表格和代码；复制按钮具有包含语言/用途的可读名称。
 - `prefers-reduced-motion` 下取消 spinner 旋转，保留静态状态文本。
@@ -399,6 +428,7 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 | 模型友好名称与能力说明 | Runtime Models 只返回 `model_id:string[]` | 模型目录 |
 | 浏览器安全 Event Schema | 内部 SSE 不能字节透明转发 | mate-service event projector |
 | Assistant Markdown 原文保真 | Runtime `TextContent.text` 原样持久化并投影；公共 bridge 尚未逐项评审 | mate-service event projector 必须透传文本，不生成 HTML |
+| 浏览器安全的 Thinking 与 ToolCallSpec | 内部 `assistant.thinking.completed` 可恢复，Assistant completed 含原始 `tool_call.arguments`；公共投影未评审 | mate-service event projector 必须保留稳定关联身份，并对入参做服务端脱敏、资源映射和预算 |
 | 浏览器认证、权限和审计 | Runtime 只做内部 Header 形状校验 | mate-service / 网关 |
 | 可恢复的排队项 ID、列表与队列管理 | Steer/FollowUp 的 `202` 无控制项 ID，Runtime 无公开队列查询/修改接口 | mate-service bridge + Runtime 目标契约 |
 
@@ -415,6 +445,7 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 - `429 CONTROL_QUEUE_FULL`：保留 Composer 内容，提示等待、切换跟进方式或停止。
 - `503`：读取 `Retry-After`，显示可重试状态；不要泄漏执行实例归属信息。
 - Tool error：活动卡默认展开；提供“复制诊断摘要”，不直接展示原始私有 payload。
+- Tool arguments 投影失败：保留工具名称和状态，显示“入参不可用”；不回退到浏览器直接展示内部原始 `arguments`。
 - 长会话：历史虚拟化；分页向上加载；持久化 turn 与 streaming turn 使用稳定 key。
 - 大消息：输入区显示字符计数接近上限；附件最多 32 个，在选择阶段阻止超限。
 - 富文本解析失败或超出预算：该条消息回退为转义纯文本，保留复制原文；不得白屏、截断或
@@ -428,7 +459,7 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 ## 14. 实施分期
 
 1. **设计确认**：确认本文件的三状态结构、执行中控制命名和视觉方向。
-2. **前端壳与 mock adapter**：实现路由、导航、对话、活动卡、Composer、状态机与
+2. **前端壳与 mock adapter**：实现路由、导航、对话、思考/工具活动流、入参 viewer、Composer、状态机与
    `RichTextRenderer`，不接真实凭据。
 3. **公共 bridge 契约评审**：逐项确认 Agent、Chat、Attachment、Model Catalog 与 public SSE。
 4. **真实集成**：替换 mock adapter；实现历史去重、断线恢复、ETag 冲突和错误投影。
@@ -438,7 +469,8 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 
 - 视觉回归：1440、1280、1024、768 四个宽度。
 - 状态测试：first use、idle、running、aborted、stream error、offline recovery。
-- Event projector 测试：delta 合并、completed 替换、tool result 合并、重复 Entry 去重。
+- Event projector 测试：delta 合并、completed 替换、Thinking 顺序和恢复、无文本 Assistant 的 `tool_call.arguments` 提取、按 `toolCallId` 合并入参/生命周期/result、乱序补全和重复 Entry 去重。
+- 活动安全测试：入参敏感键、内部绝对路径、资源 ID、超深对象、超长数组、HTML/Markdown/URL 字符串和投影失败降级。
 - 富文本 golden 测试：段落、标题、列表、引用、链接、行内/块代码、GFM table 与未知节点降级。
 - 富文本流式测试：在每个字符边界切分表格、链接、强调和 fenced code，completed 与 history
   最终 DOM 结构等价，未闭合 tail 不泄漏为可执行节点。
@@ -459,15 +491,15 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 - Markdown 不包含 Mermaid；所有图片和 PlantUML 行锚点存在。
 - `frontend-review.html` 可独立打开，三个 `screenKey`、版本、评审状态和图片均可见。
 - 低保真 HTML 可独立打开，三个状态均在首屏评审板中可见。
-- 常规态 v4 与运行态 v4 高保真 PNG 可解码且包含完整产品视口；常规态明确显示渲染后的表格和
-  行内代码，不出现 Markdown 管道符或反引号源文本。
+- 常规态 v5 与运行态 v5 高保真 PNG 可解码且包含完整产品视口；两张稿均显示 Thinking 和工具入参，又不显示内部 ID、绝对路径或凭据；常规态仍明确显示渲染后的表格和行内代码。
 - `git diff --check` 通过。
 
 ## 17. 高保真生成说明
 
-常规态 v4 与运行态 v4 使用内置 imagegen 的 `ui-mockup` 编辑路径生成：常规态 v4 在 v3
-基础上只替换 Assistant 正文，以渲染后的异常汇总表、行内代码和工具活动卡验证富文本；
-运行态 v4 在此前常规视觉体系基础上只改 Composer 跟进交互。最终约束重点是：
+常规态 v5 与运行态 v5 使用内置 imagegen 的 `ui-mockup` 编辑路径，分别以 v4 为权威编辑目标生成。
+常规态 v5 将“已思考”、可见纯文本思考内容和展开的工具入参卡放在最终富文本答案之前，并通过一次
+定点修正删除因保留约束产生的重复工具卡。运行态 v5 保留原三行工具结构，在其上方增加展开思考，并仅对已开始的
+工具显示入参。最终约束重点是：
 完整产品视口、无右侧设置栏、隐藏内部协议字段、对话内工具卡、Codex-inspired 黑白
 中性表面、近黑主动作、少量绿色状态与蓝色焦点；运行态采用一个当前模式、可配置默认值
 和单次反转快捷键。实际实现以本设计文档的字段、Token 与交互规则为准。
@@ -478,6 +510,7 @@ Codex-inspired 视觉系统；它们不是 OpenAI 官方公开品牌规范。禁
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.5.0 | 2026-08-26 | 基于 `pi-mono-java@bde12370` 的 Thinking 持久化投影、Assistant `tool_call.arguments` 与工具生命周期实现，将思考与工具按时序组成 Agent 活动流；增加工具入参关联、服务端脱敏、资源映射、结构化 viewer、降级与测试规则；同步常规态/运行态 v5、低保真、评审面和 PlantUML/SVG。 |
 | 0.4.0 | 2026-08-26 | 基于 `pi-mono-java@56be8eee` 的当前 Vue 文本插值、事件投影和 Runtime 文本保真行为，新增 Assistant-only 安全 Markdown 设计：支持语法、信任边界、AST-to-Vue 渲染、链接/图片/HTML 策略、流式稳定尾块、复制/响应式/可访问性与安全测试；新增富文本 PlantUML/SVG、常规态 v4、低保真和评审面。 |
 | 0.3.0 | 2026-08-20 | 对照本机 Codex desktop 实现，将运行中跟进改为单一当前模式：desktop 默认“调整方向”，可配置“加入队列”，`Cmd/Ctrl+Shift+Enter` 单次反转；明确 Steer 不硬中断当前模型/工具、队列 UI 与现有 HTTP 控制项身份缺口；更新低保真、运行态 v4、评审页、ADR 与图。 |
 | 0.2.0 | 2026-08-20 | 对齐 Runtime HTTP 1.37.0 的属性表、权威顺序、稳定评审键、证据分类和 HTML 评审风格；新增 `frontend-review.html`；依据本机 Codex/ChatGPT 应用可观察 Token 将视觉改为 Codex-inspired 黑白中性体系，并生成常规态与运行态 v3 高保真稿。 |
