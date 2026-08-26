@@ -4,7 +4,8 @@
 |---|---|
 | 生成方式 | Codex 内置 imagegen |
 | 用例分类 | `ui-mockup` |
-| 最终方向 | 常规态 v5，Thinking + Tool 入参 + Assistant 安全富文本；执行中 v5，展开思考 + 工具入参 |
+| 最终方向 | v8：保留 v7 的活动布局，O1 以透明底原图直接显示，不再缩进深色品牌方块 |
+| 品牌图源 | `campusclaw-mark-o1.png`；确定性缩放/合成，不作为 imagegen 重绘目标 |
 | 视觉证据 | 本机 `ChatGPT.app` 26.814.41407 light-theme Token；非公开品牌规范 |
 | 日期 | 2026-08-26 |
 
@@ -17,6 +18,16 @@ v1 暖色稿和 v2 钴蓝稿保留为过程制品，不再被主设计文档引�
 
 v5 分别以两张 v4 为权威编辑目标，保留现有工具卡视觉，将 Thinking 放在工具附近，并为已开始的工具
 增加紧凑入参。常规态另做一次定点修正，删除首次编辑保留的重复工具卡。
+
+v6 分别以两张 v5 为权威编辑目标，imagegen 只调整暖中性配色。O1 不交给模型重绘；配色底稿完成后，
+从 `campusclaw-mark-o1.png` 以 Lanczos 缩放并确定性合成到侧栏品牌位与 Assistant 身份位。
+
+v7 分别以两张 v6 为权威编辑目标，并以独立 Codex activity layout 稿作为第二张布局参考；imagegen
+只改变 Assistant 活动区。完成后再次从权威 `campusclaw-mark-o1.png` 确定性合成品牌位，避免局部编辑
+重新解释 O1 像素。
+
+v8 不使用 imagegen。它以两张 v7 为底稿，先清除旧的小号品牌容器，再从权威
+`campusclaw-mark-o1.png` 以 Lanczos 等比缩放和 alpha 合成直接放置透明底 O1；活动区和其余界面不变。
 
 ## 常规对话 v3
 
@@ -173,3 +184,109 @@ Constraints: no extra controls, no dashboard chart, no internal IDs, no absolute
 ```
 
 输出：`high-fidelity-running-v5.png`
+
+## 常规对话 v6
+
+编辑目标：`high-fidelity-conversation-v5.png`。生成结果只是配色底稿，O1 后续确定性合成。
+
+```text
+Use case: precise-object-edit
+Asset type: final high-fidelity idle-conversation desktop web application mockup for CampusClaw, warm-neutral palette master for version v6
+Input images: Image 1 is the authoritative edit target.
+Primary request: Change only the application color palette from cool neutral gray to a restrained warm-neutral tool-workbench palette. Do not add or redraw the brand mark; leave the existing brand-mark containers and glyphs unchanged because an exact production asset will be composited afterward.
+Palette:
+- Main conversation canvas: #FFFCFA.
+- Sidebar and application shell: #F8F3F0.
+- User bubble, selected session, weak tool surfaces: #F4ECE8 and #EFE4DE.
+- Primary text: #2C2724. Secondary text: #6C625D.
+- Borders: #DED4CF or equivalent subtle warm gray.
+- Primary buttons and the existing top-left rounded-square brand tile: deep warm charcoal #2B2522 with white text.
+- Keep success and idle status green, restrained and unchanged in meaning.
+- Do not introduce coral accents anywhere yet; the selected O1 logo will be added deterministically after this edit.
+Preserve exactly: full 1536×1024 viewport, every edge, all Chinese and English copy, typography, icon shapes, brand wordmark, session list, top bar, user request, attachment, activity stream, thinking, tool card, tool arguments, Assistant rich text, table, inline code, bottom composer, spacing, sizes, borders, radii, and information hierarchy.
+Constraints: palette change only; no text changes, misspellings, reflow, crop, extra elements, removed elements, duplicated cards, layout changes, gradients, glassmorphism, or watermark.
+```
+
+输出底稿经确定性 O1 合成后保存为：`high-fidelity-conversation-v6.png`。
+
+## 执行中 v6
+
+编辑目标：`high-fidelity-running-v5.png`。生成结果只是配色底稿，O1 后续确定性合成。
+
+```text
+Use case: precise-object-edit
+Asset type: final high-fidelity execution-in-progress desktop web application mockup for CampusClaw, warm-neutral palette master for version v6
+Input images: Image 1 is the authoritative edit target.
+Primary request: Change only the application color palette from cool neutral gray to a restrained warm-neutral tool-workbench palette. Do not add or redraw the brand mark; leave the existing brand-mark containers and glyphs unchanged because an exact production asset will be composited afterward.
+Palette:
+- Main conversation canvas: #FFFCFA.
+- Sidebar and application shell: #F8F3F0.
+- User bubble, selected session, weak tool surfaces: #F4ECE8 and #EFE4DE.
+- Primary text: #2C2724. Secondary text: #6C625D.
+- Borders: #DED4CF or equivalent subtle warm gray.
+- Primary buttons and the existing top-left rounded-square brand tile: deep warm charcoal #2B2522 with white text.
+- Keep running and completed status green, restrained and unchanged in meaning.
+- Do not introduce coral accents anywhere yet; the selected O1 logo will be added deterministically after this edit.
+Preserve exactly: full viewport and every edge, all Chinese and English copy, typography, icon shapes, brand wordmark, session list, top bar, Agent chart avatar, user request, running status, stop control, thinking text and spinner, all three tool rows, arguments and states, bottom follow-up composer, spacing, sizes, borders, radii, and information hierarchy.
+Constraints: palette change only; no text changes, misspellings, reflow, crop, extra elements, removed elements, layout changes, gradients, glassmorphism, or watermark.
+```
+
+输出底稿经确定性 O1 合成后保存为：`high-fidelity-running-v6.png`。
+
+## 常规对话 v7
+
+编辑目标：`high-fidelity-conversation-v6.png`；第二张输入图只作为 Activity disclosure 的布局参考。
+
+```text
+Use case: precise-object-edit
+Image 1 is the authoritative CampusClaw O1 warm-neutral idle-conversation screen. Image 2 is only a layout reference for the activity region.
+Preserve every part of Image 1 outside the Assistant activity region: warm-neutral palette, sidebar, header, user bubble, final answer table, composer, typography, spacing, and full 1536x1024 viewport.
+Replace only the activity region with a compact vertical disclosure pattern:
+- one collapsed thinking row labeled "分析过程"; do not show raw chain-of-thought or invented duration;
+- one completed tool row labeled "读取 订单明细.xlsx" with a green check and status "3,482 行";
+- keep the tool row expanded for review, with one indented vertical detail body;
+- show "输入参数" first with file and sheet key-value rows, then "输出结果" with "已读取 3,482 行";
+- never use a left-right input/output layout and do not wrap the entire tool in a large card.
+Do not import Image 2's brand mark or palette. All Chinese text must be crisp and correct.
+```
+
+输出经 O1 确定性合成后保存为：`high-fidelity-conversation-v7.png`。
+
+## 执行中 v7
+
+编辑目标：`high-fidelity-running-v6.png`；第二张输入图只作为 Activity disclosure 的布局参考。
+
+```text
+Use case: precise-object-edit
+Image 1 is the authoritative CampusClaw O1 warm-neutral running screen. Image 2 is only a layout reference for the activity region.
+Preserve every part of Image 1 outside the Assistant activity region: warm-neutral palette, sidebar, header, user bubble, composer, typography, spacing, running and stop controls, and full viewport.
+Replace only the activity region with a compact vertical activity timeline:
+- the current thinking disclosure is expanded with title "正在分析订单数据" and safe user summary "先读取订单明细，再检查价格、数量与重复订单。";
+- one completed collapsed tool row "读取 订单明细.xlsx" with green check and status "3,482 行";
+- one current expanded tool row "检查价格与数量异常" with running status;
+- in its indented detail body show "输入参数" with fields and threshold, then "输出结果" with "等待工具返回…";
+- do not show any future or waiting tool before it starts;
+- never use a left-right input/output layout or one large activity card.
+Do not expose raw chain-of-thought and do not import Image 2's brand mark or palette. All Chinese text must be crisp and correct.
+```
+
+输出经 O1 确定性合成后保存为：`high-fidelity-running-v7.png`。
+
+## 常规对话与执行中 v8
+
+编辑目标：对应的 v7 PNG。此版本不调用生成模型，只做确定性像素合成。
+
+- 清除侧栏深色品牌方块；常规态同时清除 Assistant 的小号身份容器。
+- 从 `campusclaw-mark-o1.png` 进行保持宽高比的 Lanczos 缩放和 alpha 合成。
+- 透明区域保留为界面背景，不新增底板、描边、阴影或重新着色。
+- 常规态品牌位为 48 × 48 px，Assistant 身份位为 46 × 46 px；运行态品牌位为 48 × 48 px。
+- 活动 disclosure、工具详情、文案、配色与其他界面像素保持 v7 不变。
+
+输出：`high-fidelity-conversation-v8.png`、`high-fidelity-running-v8.png`。
+
+## O1 确定性合成规则
+
+- 图形权威只能是 `campusclaw-mark-o1.png`；不从截图描摹，不让 imagegen 重新解释。
+- 仅使用保持宽高比的 Lanczos 缩放和 alpha 合成；不得旋转、扭曲、拆分、重新着色或改变五个色块间距。
+- HTML 原型直接通过 `<img src="campusclaw-mark-o1.png">` 引用同一文件。
+- 产品品牌位默认直接显示透明底 O1，不增加会改变感知轮廓的深色 tile、描边、阴影或小号身份容器。

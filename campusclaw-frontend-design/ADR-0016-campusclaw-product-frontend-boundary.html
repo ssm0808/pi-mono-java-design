@@ -44,16 +44,17 @@
       <li><code>session_id</code>、ETag、Runtime 凭据、原始 JSON、SSE frame 和内部错误只允许进入内部诊断入口，且生产构建默认不可达。</li>
       <li>Steer、FollowUp、Abort 在产品中分别命名为“调整方向”“加入队列”“停止”。运行态 Composer 只显示当前跟进方式；desktop 默认“调整方向”，设置可改为“加入队列”，<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。</li>
       <li>“调整方向”不宣称立即中断当前模型或工具；它在当前 Assistant Turn 与工具结束后的下一次模型调用前送达。“加入队列”只在当前执行本会自然结束时送达。</li>
-      <li>工具 started/completed/result 合并为一个可展开活动卡；持久化 completed/result 替换瞬时 preview。</li>
-      <li>Thinking 与 Tool 按事件顺序组成 Agent 活动流；Thinking 运行时展开、完成后降权且可折叠，但始终是独立纯文本，不进入 Assistant Markdown 或 Tool viewer。</li>
+      <li>工具 started/completed/result 合并为一个紧凑 activity disclosure；执行中与失败项默认展开，成功项在最终答案出现后折叠，尚未开始的工具不显示。</li>
+      <li>工具展开详情始终按“输入参数 → 输出结果”纵向排列，不采用左右分栏；持久化 completed/result 就地替换瞬时 preview。</li>
+      <li>Thinking 与 Tool 按事件顺序组成 Agent 活动流；Thinking 运行时可展开、完成后折叠为“分析过程”。产品浏览器只接收面向用户的安全标题与摘要，不展示或接收原始私有推理。</li>
       <li>前端从 Assistant completed 的 <code>tool_call</code> 块提取 <code>toolCallId</code>、名称和入参，再按 <code>toolCallId</code> 合并 execution 与 result；不为后到元数据新建重复卡。</li>
       <li>产品工具卡只显示 mate-service bridge 经字段策略、脱敏、资源映射和预算后的入参；禁止暴露凭据、内部 ID、绝对路径和原始未脱敏 payload。入参 viewer 不激活 Markdown、HTML 或 URL。</li>
       <li>Assistant <code>TextContent.text</code> 原样作为 Markdown 源，通过关闭 raw HTML 的 parser、节点与 URL allowlist 以及固定 Vue 组件渲染；禁止 <code>v-html</code>、<code>innerHTML</code>、远程 Markdown 图片、相对应用路由和危险协议链接。</li>
-      <li>User、Thinking、Tool result 与错误不继承 Assistant Markdown 权限，分别使用纯文本或受控结构化 viewer。</li>
+      <li>User、Thinking 安全摘要、Tool result 与错误不继承 Assistant Markdown 权限，分别使用纯文本或受控结构化 viewer。</li>
       <li>流式 delta、completed Entry 和 GET history 共用同一 <code>rawMarkdown</code> 与 renderer；未闭合尾块纯文本显示，完成态以持久化全文重新解析。</li>
       <li>断线后禁止重放副作用 POST；公共客户端重新读取持久化历史并去重。</li>
       <li>Agent 目录、Chat 列表与标题、附件上传、模型友好名称和 public SSE 均标为目标态公共契约，不宣称 Runtime 已实现。</li>
-      <li>产品视觉采用 Codex-inspired 中性工具工作台，保留 CampusClaw 自有品牌，不复制 OpenAI/Codex 商标。</li>
+      <li>产品视觉保留 Codex-inspired 工具层级，采用已确认的 O1 原始图形资产和暖中性表面；O1 不通过生成模型重绘，也不复制 OpenAI/Codex 商标。</li>
     </ul>
   </section>
 
@@ -64,7 +65,7 @@
       <li><strong>迁移：</strong>现有页面不直接删除，先迁移到内部诊断路由或独立开发构建；产品路由完成真实集成后再决定是否移除旧入口。</li>
       <li><strong>安全：</strong>需要构建期和 E2E 门禁，证明生产 DOM、网络日志和错误界面不包含内部凭据、Session ID、ETag 或原始 SSE。</li>
       <li><strong>富文本安全：</strong>需要 XSS corpus、危险 URL、远程图片、超深嵌套、超预算输入和流式分块测试；失败时回退为转义纯文本并保留复制原文。</li>
-      <li><strong>活动数据安全：</strong>公共事件投影需要入参脱敏、资源映射、结构预算与投影失败测试；前端不得在公共投影缺失时回退显示内部原始入参。</li>
+      <li><strong>活动数据安全：</strong>公共事件投影需要安全思考摘要、入参脱敏、资源映射、结构预算与投影失败测试；前端不得在公共投影缺失时回退显示原始 ThinkingContent 或内部原始入参。</li>
       <li><strong>回滚：</strong>可以回滚产品路由和 bridge，但不能把调试台重新定义为已满足生产安全边界。</li>
     </ul>
   </section>

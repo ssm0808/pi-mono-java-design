@@ -142,12 +142,13 @@ end note
 ' Source evidence: frontend/src/types/product.ts lines 22-37 (AssistantTurn and ActivityTurn without arguments).
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java lines 149-213 and 257-285.
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java lines 67-88, 430-442, 512-517, and 557-601.
-' Product-reference evidence: ChatGPT.app webview/assets/app-initial-BCLYDefw.js (followUpQueueMode, K9s) and webview/assets/zh-CN-ByRVSIXt.js.
+' Product-reference evidence: ChatGPT.app 26.820.60940 webview/assets/tool-activity-disclosure-CZUjU0Tu.js, agent-activity-item-BL0IhzOn.js, reasoning-item-heading-Cdl3NWmT.js, and local-conversation-turn-Ngva_Lp3.js.
 ' Observed behavior: thinking is attached to the assistant body; the frontend activity card shows result only; tool lifecycle events omit arguments, while assistant completed content preserves tool_call arguments.
-' Target-only design: a chronological activity group and safe argument viewer are not implemented at this baseline.
+' Target-only design: a chronological activity group, safe thinking summary, and safe argument viewer are not implemented at this baseline.
 ' Security hardening: the public bridge redacts, maps, and budgets arguments before the browser renders inert structured text.
-' Observed Codex behavior: desktop follow-up mode defaults to steer; a modifier submits one message with the inverse mode.
-' Design reason: correlate ToolCallSpec, lifecycle, and result by toolCallId so thinking context and real tool inputs stay readable without exposing raw protocol data.
+' Security hardening: raw private reasoning remains internal; the browser receives only a user-facing thinking title and summary.
+' Observed Codex behavior: activity rows are compact disclosures; details are vertical and indented; the running item opens by default and completed items collapse.
+' Design reason: correlate ToolCallSpec, lifecycle, and result by toolCallId so safe thinking context and real tool inputs stay readable without exposing raw protocol data.
 
 title Runtime events to product UI projection
 left to right direction
@@ -165,8 +166,8 @@ rectangle "Frontend projection" as Projection {
   component "User turn" as UserTurn
   component "Streaming assistant turn" as AssistantTurn
   rectangle "Chronological Agent activity group" as ActivityGroup {
-    component "Thinking row\nplain text disclosure" as ThinkingRow
-    component "Expandable tool card\ninput before output" as ActivityCard
+    component "Thinking disclosure\nsafe title and summary" as ThinkingRow
+    component "Compact tool activity row\nvertical input then output" as ActivityCard
     component "Safe argument viewer\ninert key-value tree" as ArgumentViewer
   }
   component "Session and composer state" as SessionState
@@ -180,7 +181,7 @@ rectangle "User controls while running" as Controls {
 
 UserEvent --> UserTurn : persist and render
 AssistantEvents --> AssistantTurn : preview then replace with final
-ThinkingEvents --> ThinkingRow : stream then persist full text
+ThinkingEvents --> ThinkingRow : project safe display summary
 ToolSpec --> ActivityCard : correlate by toolCallId
 ToolEvents --> ActivityCard : merge lifecycle and result
 ActivityCard --> ArgumentViewer : render safe arguments
@@ -192,9 +193,17 @@ Stop --> SessionState : internal abort
 
 note bottom of ActivityCard
 Running and failed tools stay expanded.
-Successful tools may collapse after the final answer.
-Input appears before output in the same card.
+Successful tools collapse after the final answer.
+Input appears above output in one vertical detail body.
+Tools that have not started are not shown.
 No second card is created for late metadata.
+end note
+
+note bottom of ThinkingRow
+Running thinking may stay expanded.
+Completed thinking collapses to Analysis process.
+Never expose raw chain-of-thought.
+Do not invent a duration without timestamps.
 end note
 
 note bottom of ArgumentViewer
