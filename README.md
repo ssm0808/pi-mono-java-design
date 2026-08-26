@@ -1,51 +1,88 @@
-# pi-mono-java Design
+# CampusClaw / pi-mono-java 设计仓库
 
-本仓库用于维护 CampusClaw、mate-service 与 pi-mono-java 的目标设计和源码研究。
+> 导航版本：2.0.0<br>
+> 整理日期：2026-08-26<br>
+> 整理基线：`d2b9b4b6f4762e0e9734c144e3eb3273959e7e26`<br>
+> 变更性质：信息架构调整，不改变各专题的设计语义、接口决策或源码观察结论
 
-## 当前规范性设计
+本仓库维护 CampusClaw Runtime、mate-service 边界、pi-mono-java 目标设计，
+以及相关源码和产品研究。这是设计与契约资料仓库，不是产品源码仓库。
 
-- [CampusClaw Runtime 总体设计](./pi-mono-java-manager-driven-multi-agent-runtime/README.md)：两跳 HTTP+SSE、十一项内部 Runtime operation、Manager 与数据边界。
-- [CampusClaw Runtime HTTP API](./pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md)：接口语义、状态、错误和源码证据。
-- [Runtime HTTP API HTML 评审页](./pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-review.html)：面向人的主维护契约，可直接在浏览器打开。
-- [Runtime HTTP 测试 Agent](./pi-mono-java-http-test-agent/README.md)：基于已确认契约规划、拉起、执行和维护分层回归测试。
-- [CampusMate 统一配置与 Endpoint 目录](./campusmate-shared-client-configuration/README.md)：Mate 与 CampusMate 统一为单一 `campusmate` 配置树，三类客户端共享唯一 base URL，并将 7 个路径配置去重为 6 个 operation。
-- [CampusMate Model Manager Provider](./model-manager-provider-contract/README.md)：通用 Provider、CampusMate Chat SSE、断连取消与 Usage Record 契约。
-- [虚拟线程并发管理](./virtual-thread-concurrency-management/README.md)：内部 active execution、容量准入、背压与 DFX。
-- [AgentRuntimeTemplate](./agent-runtime-template/README.md)：不可变 Agent 模板、revision pinning、加载缓存与回收。
-- [CampusMate 文件服务](./campusmate-attachment-service/README.md)：文件上传、扫描、OBS/openGauss 边界和内部 Runtime 解析。
+## 1. 按问题快速找文档
 
-Runtime HTTP 接口不维护 OpenAPI。已经确认的 HTML 是人类评审主契约，Markdown
-负责设计理由和源码证据。文件服务仍维护独立 OpenAPI；它不能被当作 Runtime
-OpenAPI，也不能恢复已经废弃的 Run 或 WebSocket 资源。
+| 我想了解 | 首选入口 | 继续阅读 |
+|---|---|---|
+| CampusClaw 整体如何运行 | [多 Agent Runtime 总体设计](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | [HTTP API 设计](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)、[HTTP API 评审页](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html) |
+| Tool 如何装配、发现和执行 | [CampusClaw 工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具精确契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md) |
+| 前端如何展示 Runtime 状态 | [CampusClaw 前端体验设计](./01-总体架构/04-CampusClaw前端体验/README.md) | [前端评审页](./01-总体架构/04-CampusClaw前端体验/frontend-review.html) |
+| 文件、配置和 Model Manager 边界 | [服务与接口导航](./02-服务与接口/README.md) | 附件服务、共享配置、Provider 契约和 HTTP 测试 Agent |
+| 全产品测试与质量门禁 | [CampusClaw TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | 能力注册表、实时门禁、nightly 维护和测试防弱化 |
+| Session、Agent 元数据如何持久化 | [数据与存储导航](./03-数据与存储/README.md) | 会话记忆、Agent 元数据和通用数据库模式 |
+| Command 和 Skill Command 如何设计 | [命令与技能导航](./04-命令与技能/README.md) | [内置命令](./04-命令与技能/01-内置命令/README.md)、[技能命令](./04-命令与技能/02-技能命令/README.md) |
+| 查看 pi 或主流 Agent 平台证据 | [研究资料导航](./05-研究资料/README.md) | 配置生成 Tool/Agent、Anthropic、pi Session 和官方文档 |
+| 查看 Agent / Tool / Skill 元数据草案 | [元数据草案导航](./06-元数据草案/README.md) | 三份 JSON 草案 |
 
-## 支撑设计
+## 2. 目录地图
 
-- [Agent 数据库模式](./agent-database-patterns/README.md)
-- [Agent 元数据 GaussDB 表设计](./agent-metadata-gaussdb-design/README.md)
-- [集中式 GaussDB 会话记忆](./memory-jsonl-to-gaussdb.md)
-- [Command SR 设计](./pi-mono-java-command-SR设计.md)
-- [Skill Command SR 设计](./pi-mono-java-skill-command-SR设计.md)
+```text
+.
+├── 01-总体架构/             # Runtime、工具、并发、前端、日志
+├── 02-服务与接口/           # 附件、共享配置、Provider、测试与质量
+├── 03-数据与存储/           # Session 记忆、Agent 元数据、数据库模式
+├── 04-命令与技能/           # 内置命令与 Skill Command
+├── 05-研究资料/             # 源码分析、产品模型和官方资料
+└── 06-元数据草案/           # Agent、Tool、Skill JSON 草案
+```
 
-## 源码与产品研究
+一级目录的数字只用于固定阅读顺序；二级目录是可独立理解的设计专题。
+每个专题优先从 `README.md` 进入，再按需查看 `设计图/`、`接口契约/`、
+`操作/`、`页面资源/` 或 `示例/`。文件名中保留产品名、协议名和稳定的机器契约名，
+以避免破坏生成脚本和外部语义。
 
-- [pi Session Context 与当前分支](./pi-mono-agent-session-context/README.md)
-- [pi SessionSnapshot 类图与语义](./pi/session-snapshot.md)
-- [主流 Agent Tool/Agent 元数据机制](./config-to-tool-agent-research/README.md)
-- [Anthropic Managed Agents 公开模型](./anthropic-managed-agents-public-model/README.md)
-- [主流 Agent 平台 Agent、Tool 与 Skill 官方文档](./主流Agent平台Agent-Tool-Skill创建官方文档.md)
+## 3. Runtime 契约权威顺序
 
-## 已废弃内容
+1. [`接口契约/common.json`](./01-总体架构/01-CampusClaw多Agent运行时/接口契约/common.json) 和 [`接口契约/操作/`](./01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/) 是唯一可编辑的精确契约源。
+2. [`chat-http-v1-review.html`](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html) 是由契约源生成的主要人类评审界面。
+3. [`chat-http-v1-design.md`](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) 只维护源码证据、目标差异和设计理由。
+4. [Runtime HTTP 测试 Agent](./02-服务与接口/04-Runtime-HTTP测试Agent/README.md) 消费已确认契约，维护分层回归测试。
 
-当前目标传输统一为 HTTP+SSE。WebSocket、AsyncAPI、连接级 resume、公开 Run、
-Run Events、RunRecord 和旧 Channel 方案已经从工作树清除；如需追溯只能查看 Git
-历史。新实现不得从历史文件恢复这些模型。
+Runtime HTTP V1 不维护 OpenAPI。CampusMate 附件服务仍维护独立的
+[`attachment-api.openapi.yaml`](./02-服务与接口/01-CampusMate附件服务/attachment-api.openapi.yaml)，
+两者不可混用。
 
-## 文档约定
+## 4. 文档维护约定
 
-- 设计文档使用 Markdown；接口 HTML 是 Runtime HTTP 的人类评审主契约。
-- 设计图使用 PlantUML，统一维护 `diagram.puml` 并提交生成后的 SVG；禁止手改 SVG。
-- PlantUML 图源只使用英文 ASCII；Markdown 正文和图注可以使用中文。
-- 源码对齐设计记录固定 commit、仓库相对路径和相关符号或基线行号。
-- 区分源码观察、目标设计和设计原因；差异标记为产品约束、安全加固或架构改造。
-- 数据库表使用 `t_` 前缀和小写 snake_case，SQL `COMMENT ON` 使用中文。
-- 设计行为变更同步更新文档版本和版本历史。
+- 新专题先选择一级中文分类，再建立中文专题目录；不再向根目录平铺设计文件。
+- 专题入口统一使用 `README.md`，根 README 和所属分类 README 同时增加导航。
+- 设计图使用 PlantUML，每个图纸专题保留一份 `diagram.puml`，并提交生成后的 SVG。
+- `.puml` 内容只使用英文 ASCII；中文路径在源证据注释中使用 URL 百分号编码。
+- 代码对齐的设计必须记录源码 commit、仓库相对路径以及相关符号或基线行号。
+- 明确区分已观察源码行为、目标设计、产品约束、安全加固和架构改造。
+- 数据库表使用 `t_` 前缀和小写 snake_case；SQL `COMMENT ON` 使用中文。
+
+## 5. 维护命令
+
+Runtime HTTP 契约变更后：
+
+```bash
+cd '01-总体架构/01-CampusClaw多Agent运行时'
+python3 render_chat_http_v1.py
+python3 validate-chat-http-v1.py --full
+```
+
+单个图纸专题变更后，在其 `diagram.puml` 所在目录执行：
+
+```bash
+plantuml -tsvg diagram.puml
+```
+
+## 6. 已废弃方案
+
+当前目标不再使用浏览器 WebSocket、AsyncAPI、连接级 resume、公开 Run、Run Events、
+RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追溯，新实现不得恢复这些模型。
+
+## 7. 版本历史
+
+| 版本 | 日期 | 变更 |
+|---|---|---|
+| 2.0.0 | 2026-08-26 | 建立六个中文分类、中文专题目录和分类导航；将根目录平铺文档收敛到专题目录；同步更新契约、图纸和脚本路径 |

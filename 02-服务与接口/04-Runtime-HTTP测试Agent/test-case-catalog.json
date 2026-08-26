@@ -1,0 +1,282 @@
+{
+  "catalogVersion": "1.1.0",
+  "status": "target-only",
+  "description": "Initial machine-maintained test inventory for the confirmed CampusClaw Runtime HTTP V1 contract.",
+  "contract": {
+    "version": "1.37.0",
+    "reviewDocument": "../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html",
+    "designDocument": "../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md",
+    "expectedOperationCount": 11,
+    "implementationCommit": "1f801dbb82bdda30478e3354e685e3153b179a0c"
+  },
+  "defaults": {
+    "cleanup": "destroy the isolated process, database instance, random-port stub, and task-owned temporary directory",
+    "determinism": "fixed clock, fixed random seed, fixed cursor secret, scripted model output, and immutable candidate commit",
+    "retryPolicy": "none in required gates"
+  },
+  "evidenceRegistry": {
+    "CONTRACT": "design:01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html@1.37.0",
+    "SESSION_CONTROLLER": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java#RuntimeSessionController@1f801dbb",
+    "EVENT_CONTROLLER": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java#RuntimeEventController@1f801dbb",
+    "CONFIG_CONTROLLER": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java#RuntimeSessionConfigurationController@1f801dbb",
+    "CONTROL_CONTROLLER": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionControlController.java#RuntimeSessionControlController@1f801dbb",
+    "AUTH": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/auth/RuntimeRequestAuthenticator.java#authenticate@1f801dbb",
+    "ERRORS": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java#response@1f801dbb",
+    "EVENT_SERVICE": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java#submit@1f801dbb",
+    "PROCESS_IT": "pi-mono-java:modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeHttpProcessOpenGaussIT.java#packagedJarStreamsAndPagesPersistedEvents@1f801dbb",
+    "DATABASE_IT": "pi-mono-java:modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeSessionRepositoryOpenGaussIT.java@1f801dbb"
+  },
+  "globalTemplates": [
+    {
+      "id": "HTA-TPL-AUTH-SUCCESS",
+      "priority": "P0",
+      "layer": "mvc",
+      "status": "retired",
+      "appliesTo": ["submitUserMessage", "appendSteer", "appendFollowUp"],
+      "variants": ["jwt_pair", "appkey_pair"],
+      "oracle": ["request crosses the authentication boundary", "credential values are absent from response and logs"],
+      "evidenceRefs": ["CONTRACT", "AUTH"]
+    },
+    {
+      "id": "HTA-TPL-AUTH-INVALID",
+      "priority": "P0",
+      "layer": "mvc",
+      "status": "retired",
+      "appliesTo": ["submitUserMessage", "appendSteer", "appendFollowUp"],
+      "variants": ["missing_hw_id", "missing_credential", "blank_header", "malformed_bearer", "duplicate_hw_id", "duplicate_credential"],
+      "oracle": ["HTTP 401", "resCode is UNAUTHENTICATED", "result is absent"],
+      "evidenceRefs": ["CONTRACT", "AUTH", "ERRORS"]
+    },
+    {
+      "id": "HTA-TPL-AUTH-CONFLICT",
+      "priority": "P0",
+      "layer": "mvc",
+      "status": "retired",
+      "appliesTo": ["submitUserMessage", "appendSteer", "appendFollowUp"],
+      "variants": ["authorization_and_appkey"],
+      "oracle": ["HTTP 401", "resCode is AUTH_CREDENTIAL_CONFLICT", "no fallback verifier is invoked", "result is absent"],
+      "evidenceRefs": ["CONTRACT", "AUTH", "ERRORS"]
+    },
+    {
+      "id": "HTA-TPL-NO-BUSINESS-AUTH",
+      "priority": "P0",
+      "layer": "mvc",
+      "appliesTo": ["createSession", "getSession", "deleteSession", "submitUserMessage", "listSessionEvents", "listSessionModels", "changeSessionModel", "changeSessionThinking", "appendSteer", "appendFollowUp", "abortSession"],
+      "variants": ["jwt_context", "appkey_context", "both_context_modes", "missing_or_malformed_context"],
+      "oracle": ["request outcome is independent of credential completeness, coexistence, or shape", "Runtime never returns UNAUTHENTICATED or AUTH_CREDENTIAL_CONFLICT", "Header values are absent from response and logs"],
+      "evidenceRefs": ["CONTRACT", "AUTH"]
+    },
+    {
+      "id": "HTA-TPL-LOCALE",
+      "priority": "P0",
+      "layer": "mvc",
+      "appliesTo": ["all_error_responses"],
+      "variants": ["zh-CN", "en-US", "missing", "unsupported"],
+      "oracle": ["resCode is stable", "resMsg matches the selected bundle", "Content-Language is zh-CN or en-US", "unsupported language falls back to en-US"],
+      "evidenceRefs": ["CONTRACT", "ERRORS"]
+    },
+    {
+      "id": "HTA-TPL-ERROR-ENVELOPE",
+      "priority": "P0",
+      "layer": "static",
+      "appliesTo": ["all_non_stream_errors"],
+      "variants": ["every_declared_resCode"],
+      "oracle": ["body contains exactly resCode and resMsg", "result is absent", "credentials, prompts, thinking, URLs, and stack traces are absent"],
+      "evidenceRefs": ["CONTRACT", "ERRORS"]
+    },
+    {
+      "id": "HTA-TPL-SUCCESS-ENVELOPE",
+      "priority": "P0",
+      "layer": "static",
+      "appliesTo": ["ordinary_json_success"],
+      "variants": ["every_ordinary_success"],
+      "oracle": ["resCode equals string 0", "resMsg equals success", "result is present"],
+      "evidenceRefs": ["CONTRACT"]
+    },
+    {
+      "id": "HTA-TPL-IDENTIFIER-BOUNDARY",
+      "priority": "P0",
+      "layer": "mvc",
+      "appliesTo": ["agent_id", "session_id", "model_id"],
+      "variants": ["typed_prefix_and_32_hex", "missing_prefix", "wrong_resource_prefix", "uuid_with_internal_hyphens", "wrong_hex_length", "non_hex_payload", "legacy_underscore_prefix", "case_sensitive"],
+      "oracle": ["valid values reach the service", "invalid values return the operation-specific 400 code before service invocation"],
+      "evidenceRefs": ["CONTRACT", "SESSION_CONTROLLER", "EVENT_CONTROLLER", "CONFIG_CONTROLLER", "CONTROL_CONTROLLER"]
+    }
+  ],
+  "operations": [
+    {
+      "operationKey": "createSession",
+      "shortName": "创建会话",
+      "method": "POST",
+      "path": "/campusclaw-service/v1/agents/{agent_id}/sessions",
+      "evidenceRefs": ["CONTRACT", "SESSION_CONTROLLER"],
+      "cases": [
+        {"id": "HTA-SES-CREATE-001", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "create with a valid typed managed Agent ID and no business credentials", "oracle": ["HTTP 201", "Location references the generated session_id", "ResultBean contains only the create resource fields", "state is idle", "session_id matches ^session-[0-9a-fA-F]{32}$", "thinking is true"]},
+        {"id": "HTA-SES-CREATE-002", "priority": "P0", "layer": "service", "status": "active", "scenario": "Agent is missing, unavailable, or has no valid default model", "variants": ["AGENT_NOT_FOUND", "AGENT_NOT_AVAILABLE", "AGENT_MODEL_NOT_CONFIGURED"], "oracle": ["declared HTTP status and resCode", "no Session is persisted", "no session_id is exposed"]},
+        {"id": "HTA-SES-CREATE-003", "priority": "P0", "layer": "service", "status": "active", "scenario": "Model Manager is unavailable", "oracle": ["HTTP 503", "resCode is MANAGER_UNAVAILABLE", "Retry-After is present", "no Session is persisted"]},
+        {"id": "HTA-SES-CREATE-004", "priority": "P1", "layer": "database", "status": "active", "scenario": "runtime assembly or persistence fails before commit", "oracle": ["HTTP 500 SESSION_INITIALIZATION_FAILED", "database has no partial Session rows", "in-memory holder is released"]},
+        {"id": "HTA-SES-CREATE-005", "priority": "P1", "layer": "process", "status": "active", "scenario": "repeat a successful create request", "oracle": ["two distinct session_id values", "both Sessions are independently readable"]}
+      ]
+    },
+    {
+      "operationKey": "getSession",
+      "shortName": "查询会话",
+      "method": "GET",
+      "path": "/campusclaw-service/v1/sessions/{session_id}",
+      "evidenceRefs": ["CONTRACT", "SESSION_CONTROLLER"],
+      "cases": [
+        {"id": "HTA-SES-GET-001", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "read idle and running Session resources", "variants": ["idle", "running"], "oracle": ["HTTP 200", "strong ETag", "Cache-Control no-store", "complete GetSession resource"]},
+        {"id": "HTA-SES-GET-002", "priority": "P0", "layer": "service", "status": "active", "scenario": "Session is missing or tombstoned", "oracle": ["HTTP 404", "resCode is SESSION_NOT_FOUND", "Session is not recreated"]},
+        {"id": "HTA-SES-GET-003", "priority": "P1", "layer": "service", "status": "active", "scenario": "read does not consult Model Manager", "oracle": ["persisted resource is returned", "no model lookup occurs"]},
+        {"id": "HTA-SES-GET-004", "priority": "P1", "layer": "mvc", "status": "active", "scenario": "response minimization", "oracle": ["transcript, active execution details, internal version, provider data, and credentials are absent"]}
+      ]
+    },
+    {
+      "operationKey": "deleteSession",
+      "shortName": "删除会话",
+      "method": "DELETE",
+      "path": "/campusclaw-service/v1/sessions/{session_id}",
+      "evidenceRefs": ["CONTRACT", "SESSION_CONTROLLER", "DATABASE_IT"],
+      "cases": [
+        {"id": "HTA-SES-DELETE-001", "priority": "P0", "layer": "database", "status": "active", "scenario": "delete an idle Session", "oracle": ["HTTP 204 with empty body", "Session becomes immediately invisible", "tombstone and cleanup task commit atomically"]},
+        {"id": "HTA-SES-DELETE-002", "priority": "P0", "layer": "process", "status": "active", "scenario": "repeat delete for a missing or deleted Session", "oracle": ["HTTP 204 for every retry", "no body", "no duplicate tombstone"]},
+        {"id": "HTA-SES-DELETE-003", "priority": "P0", "layer": "concurrency", "status": "active", "scenario": "delete while the Session has an active execution", "oracle": ["HTTP 409 SESSION_BUSY", "execution is not aborted", "Session remains readable"]},
+        {"id": "HTA-SES-DELETE-004", "priority": "P1", "layer": "database", "status": "active", "scenario": "delete transaction fails", "oracle": ["HTTP 500 SESSION_DELETE_FAILED", "Session remains fully visible", "no partial tombstone or cleanup task"]},
+        {"id": "HTA-SES-DELETE-005", "priority": "P1", "layer": "database", "status": "active", "scenario": "cleanup retries after logical deletion", "oracle": ["tombstone has exactly session_id and deleted_at", "cleanup task is eventually removed", "Session data is purged without reusing the ID"]}
+      ]
+    },
+    {
+      "operationKey": "submitUserMessage",
+      "shortName": "提交用户消息",
+      "method": "POST",
+      "path": "/campusclaw-service/v1/sessions/{session_id}/events",
+      "evidenceRefs": ["CONTRACT", "EVENT_CONTROLLER", "EVENT_SERVICE", "PROCESS_IT"],
+      "cases": [
+        {"id": "HTA-EVT-SUBMIT-001", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "accept valid user.message input", "variants": ["message_only", "file_ids_only", "message_and_file_ids"], "oracle": ["HTTP 200 text/event-stream", "no ResultBean", "first durable frame is user.message"]},
+        {"id": "HTA-EVT-SUBMIT-002", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "reject invalid body", "variants": ["type_field_present", "malformed_json", "missing_message_and_files", "blank_message", "message_over_262144", "33_file_ids", "duplicate_file_ids", "blank_file_id", "unknown_field"], "oracle": ["HTTP 400 INVALID_EVENT_REQUEST before stream start", "service side effects do not occur"]},
+        {"id": "HTA-EVT-SUBMIT-003", "priority": "P0", "layer": "concurrency", "status": "active", "scenario": "second user event races with an active execution", "oracle": ["exactly one event is accepted", "the other receives HTTP 409 SESSION_BUSY", "only one User Entry is appended"]},
+        {"id": "HTA-EVT-SUBMIT-004", "priority": "P0", "layer": "service", "status": "active", "scenario": "global capacity is exhausted before acceptance", "oracle": ["HTTP 503 RUNTIME_CAPACITY_EXCEEDED", "Retry-After is present if contract requires it", "no User Entry is persisted"]},
+        {"id": "HTA-EVT-SUBMIT-005", "priority": "P0", "layer": "process", "status": "active", "scenario": "successful execution without tools", "oracle": ["exact order user.message, assistant.started, assistant.delta, assistant.completed, session.idle, stream.end", "durable frames carry id equal to entry_seq"]},
+        {"id": "HTA-EVT-SUBMIT-006", "priority": "P0", "layer": "process", "status": "active", "scenario": "successful execution with a tool call", "oracle": ["tool execution frames surround the durable tool.result", "a final Assistant message follows tool.result", "only durable event types appear in history"]},
+        {"id": "HTA-EVT-SUBMIT-007", "priority": "P0", "layer": "recovery", "status": "active", "scenario": "execution fails after HTTP headers are committed", "oracle": ["one stream.error frame with SESSION_EXECUTION_FAILED", "stream.end is absent", "completed durable Entries remain recoverable"]},
+        {"id": "HTA-EVT-SUBMIT-008", "priority": "P0", "layer": "recovery", "status": "active", "scenario": "client disconnects after event acceptance", "oracle": ["execution continues", "no automatic abort", "GET Events recovers committed Entries", "replaying POST is not attempted"]},
+        {"id": "HTA-EVT-SUBMIT-009", "priority": "P1", "layer": "database", "status": "active", "scenario": "User Entry persistence fails before stream start", "oracle": ["HTTP 500 EVENT_ACCEPTANCE_FAILED", "no running state or engine leak", "no partial Entry"]}
+        ,{"id": "HTA-EVT-SUBMIT-010", "priority": "P0", "layer": "process", "status": "active", "scenario": "project thinking lifecycle from the accepted execution snapshot", "variants": ["thinking_true", "thinking_false"], "oracle": ["thinking=true emits assistant.thinking.started, delta, and completed in order", "assistant.thinking.completed has its own entry_id and entry_seq and is persisted", "thinking=false emits and persists no thinking event", "Assistant completed content does not duplicate the thinking block"]}
+      ]
+    },
+    {
+      "operationKey": "listSessionEvents",
+      "shortName": "查询会话事件",
+      "method": "GET",
+      "path": "/campusclaw-service/v1/sessions/{session_id}/events",
+      "evidenceRefs": ["CONTRACT", "EVENT_CONTROLLER", "EVENT_SERVICE", "DATABASE_IT"],
+      "cases": [
+        {"id": "HTA-EVT-LIST-001", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "list first and subsequent pages", "variants": ["default_limit", "limit_1", "limit_200", "valid_next_page"], "oracle": ["HTTP 200 ResultBean", "events are ascending by entry_seq", "next_page is opaque or null"]},
+        {"id": "HTA-EVT-LIST-002", "priority": "P0", "layer": "service", "status": "active", "scenario": "reject invalid limit", "variants": ["zero", "201", "negative", "non_integer"], "oracle": ["HTTP 400 INVALID_EVENT_LIST_QUERY", "repository page query is not executed"]},
+        {"id": "HTA-EVT-LIST-003", "priority": "P0", "layer": "service", "status": "active", "scenario": "reject invalid page capability", "variants": ["tampered", "expired", "other_session", "malformed"], "oracle": ["HTTP 400 INVALID_EVENT_LIST_QUERY", "no cursor internals are exposed"]},
+        {"id": "HTA-EVT-LIST-004", "priority": "P0", "layer": "database", "status": "active", "scenario": "project only the current branch and durable public types", "oracle": ["only user.message, assistant.message.completed, and tool.result", "abandoned branch and preview/control events are absent"]},
+        {"id": "HTA-EVT-LIST-005", "priority": "P1", "layer": "concurrency", "status": "active", "scenario": "list while execution is running", "oracle": ["only already committed Entries are returned", "later Entries may appear on subsequent pages", "no partial Assistant data"]},
+        {"id": "HTA-EVT-LIST-006", "priority": "P1", "layer": "mvc", "status": "active", "scenario": "last page at response time", "oracle": ["next_page is JSON null", "response does not claim that the Session can never append later"]}
+        ,{"id": "HTA-EVT-LIST-007", "priority": "P0", "layer": "recovery", "status": "active", "scenario": "filter persisted thinking by current Session thinking state", "variants": ["thinking_true_includes_completed", "thinking_false_filters_completed", "thinking_change_invalidates_old_page"], "oracle": ["only assistant.thinking.completed is recoverable; started and delta stay absent", "thinking=false hides all persisted thinking completed entries", "a page issued under the previous thinking state returns INVALID_EVENT_LIST_QUERY after the state changes"]}
+      ]
+    },
+    {
+      "operationKey": "listSessionModels",
+      "shortName": "查询可用模型",
+      "method": "GET",
+      "path": "/campusclaw-service/v1/sessions/{session_id}/models",
+      "evidenceRefs": ["CONTRACT", "CONFIG_CONTROLLER"],
+      "cases": [
+        {"id": "HTA-MODEL-LIST-001", "priority": "P0", "layer": "service", "status": "active", "scenario": "return the ordered intersection of Agent allowlist and live models", "oracle": ["current_model_id is present", "models is a string array in Agent order"]},
+        {"id": "HTA-MODEL-LIST-002", "priority": "P0", "layer": "service", "status": "active", "scenario": "no candidate model is currently available", "oracle": ["HTTP 200", "models is empty", "current_model_id remains visible"]},
+        {"id": "HTA-MODEL-LIST-003", "priority": "P0", "layer": "service", "status": "active", "scenario": "Model Manager is unavailable", "oracle": ["HTTP 503 MANAGER_UNAVAILABLE", "Retry-After is present"]},
+        {"id": "HTA-MODEL-LIST-004", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "response minimization", "oracle": ["provider, base URL, credential state, price, context window, max tokens, and headers are absent"]}
+      ]
+    },
+    {
+      "operationKey": "changeSessionModel",
+      "shortName": "切换会话模型",
+      "method": "PUT",
+      "path": "/campusclaw-service/v1/sessions/{session_id}/model",
+      "evidenceRefs": ["CONTRACT", "CONFIG_CONTROLLER", "DATABASE_IT"],
+      "cases": [
+        {"id": "HTA-MODEL-PUT-001", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "change model with the current strong ETag", "oracle": ["HTTP 200", "full Session resource", "new strong ETag", "model_id is updated"]},
+        {"id": "HTA-MODEL-PUT-002", "priority": "P0", "layer": "service", "status": "active", "scenario": "set the same model", "oracle": ["HTTP 200", "updated_at and ETag remain unchanged after validation"]},
+        {"id": "HTA-MODEL-PUT-003", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "reject malformed model request", "variants": ["missing_model_id", "non_string", "invalid_pattern", "unknown_field"], "oracle": ["HTTP 400 INVALID_MODEL_REQUEST", "service update is not invoked"]},
+        {"id": "HTA-MODEL-PUT-004", "priority": "P0", "layer": "concurrency", "status": "active", "scenario": "precondition and active execution conflicts", "variants": ["missing_if_match_428", "stale_if_match_412", "running_409"], "oracle": ["declared status and resCode", "no configuration change"]},
+        {"id": "HTA-MODEL-PUT-005", "priority": "P0", "layer": "service", "status": "active", "scenario": "target model is unavailable or lacks thinking capability", "variants": ["MODEL_NOT_AVAILABLE", "normalize_thinking_false"], "oracle": ["unavailable returns 422 without enumeration", "unsupported target atomically sets thinking false on success"]},
+        {"id": "HTA-MODEL-PUT-006", "priority": "P1", "layer": "database", "status": "active", "scenario": "database update fails or two CAS updates race", "oracle": ["no partial configuration", "at most one CAS update succeeds", "failure maps to the declared code"]}
+      ]
+    },
+    {
+      "operationKey": "changeSessionThinking",
+      "shortName": "设置深度思考",
+      "method": "PUT",
+      "path": "/campusclaw-service/v1/sessions/{session_id}/thinking",
+      "evidenceRefs": ["CONTRACT", "CONFIG_CONTROLLER", "DATABASE_IT"],
+      "cases": [
+        {"id": "HTA-THINK-PUT-001", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "enable and disable thinking with current ETag", "variants": ["true", "false"], "oracle": ["HTTP 200", "full Session resource", "new ETag when value changes"]},
+        {"id": "HTA-THINK-PUT-002", "priority": "P0", "layer": "service", "status": "active", "scenario": "set the same thinking value", "oracle": ["HTTP 200", "updated_at and ETag remain unchanged"]},
+        {"id": "HTA-THINK-PUT-003", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "reject malformed thinking request", "variants": ["missing", "null", "string", "number", "unknown_field"], "oracle": ["HTTP 400 INVALID_THINKING_REQUEST", "service update is not invoked"]},
+        {"id": "HTA-THINK-PUT-004", "priority": "P0", "layer": "concurrency", "status": "active", "scenario": "precondition and active execution conflicts", "variants": ["missing_if_match_428", "stale_if_match_412", "running_409"], "oracle": ["declared status and resCode", "no configuration change"]},
+        {"id": "HTA-THINK-PUT-005", "priority": "P0", "layer": "service", "status": "active", "scenario": "current model does not support thinking", "oracle": ["enabling returns HTTP 422 THINKING_NOT_SUPPORTED", "disabling remains allowed"]},
+        {"id": "HTA-THINK-PUT-006", "priority": "P1", "layer": "database", "status": "active", "scenario": "atomic update fails", "oracle": ["HTTP 500 SESSION_THINKING_UPDATE_FAILED", "thinking and resource version are unchanged"]}
+      ]
+    },
+    {
+      "operationKey": "appendSteer",
+      "shortName": "追加引导消息",
+      "method": "POST",
+      "path": "/campusclaw-service/v1/sessions/{session_id}/steers",
+      "evidenceRefs": ["CONTRACT", "CONTROL_CONTROLLER", "PROCESS_IT"],
+      "cases": [
+        {"id": "HTA-CTRL-STEER-001", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "append a Steering Message to a running Session", "oracle": ["HTTP 202 ResultBean", "session_id and accepted_at only", "no public control ID"]},
+        {"id": "HTA-CTRL-STEER-002", "priority": "P0", "layer": "service", "status": "active", "scenario": "Session is idle or missing", "variants": ["SESSION_NOT_RUNNING", "SESSION_NOT_FOUND"], "oracle": ["declared status and code", "message is not queued"]},
+        {"id": "HTA-CTRL-STEER-003", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "reject invalid message", "variants": ["missing", "blank", "over_262144", "non_string", "unknown_field"], "oracle": ["HTTP 400 INVALID_STEER_REQUEST", "service is not invoked"]},
+        {"id": "HTA-CTRL-STEER-004", "priority": "P0", "layer": "concurrency", "status": "active", "scenario": "queue limit or natural-completion race", "oracle": ["full queue returns 429 CONTROL_QUEUE_FULL", "accepted message is never lost", "completion-first returns SESSION_NOT_RUNNING"]},
+        {"id": "HTA-CTRL-STEER-005", "priority": "P1", "layer": "process", "status": "active", "scenario": "multiple Steers and FollowUps are queued", "oracle": ["Steer FIFO", "one-at-a-time delivery", "Steer precedes FollowUp", "Entry is persisted only when delivered"]}
+      ]
+    },
+    {
+      "operationKey": "appendFollowUp",
+      "shortName": "追加后续消息",
+      "method": "POST",
+      "path": "/campusclaw-service/v1/sessions/{session_id}/follow-ups",
+      "evidenceRefs": ["CONTRACT", "CONTROL_CONTROLLER", "PROCESS_IT"],
+      "cases": [
+        {"id": "HTA-CTRL-FOLLOW-001", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "append a FollowUp Message to a running Session", "oracle": ["HTTP 202 ResultBean", "session_id and accepted_at only", "no public control ID"]},
+        {"id": "HTA-CTRL-FOLLOW-002", "priority": "P0", "layer": "service", "status": "active", "scenario": "Session is idle or missing", "variants": ["SESSION_NOT_RUNNING", "SESSION_NOT_FOUND"], "oracle": ["declared status and code", "message is not queued"]},
+        {"id": "HTA-CTRL-FOLLOW-003", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "reject invalid message", "variants": ["missing", "blank", "over_262144", "non_string", "unknown_field"], "oracle": ["HTTP 400 INVALID_FOLLOW_UP_REQUEST", "service is not invoked"]},
+        {"id": "HTA-CTRL-FOLLOW-004", "priority": "P0", "layer": "concurrency", "status": "active", "scenario": "queue limit or natural-completion race", "oracle": ["full queue returns 429 CONTROL_QUEUE_FULL", "accepted message is never lost", "completion-first returns SESSION_NOT_RUNNING"]},
+        {"id": "HTA-CTRL-FOLLOW-005", "priority": "P1", "layer": "process", "status": "active", "scenario": "multiple FollowUps are queued", "oracle": ["FIFO", "one-at-a-time delivery after Steers and tool work", "Entry is persisted only when delivered"]}
+      ]
+    },
+    {
+      "operationKey": "abortSession",
+      "shortName": "中止会话执行",
+      "method": "POST",
+      "path": "/campusclaw-service/v1/sessions/{session_id}/abort",
+      "evidenceRefs": ["CONTRACT", "CONTROL_CONTROLLER", "PROCESS_IT"],
+      "cases": [
+        {"id": "HTA-CTRL-ABORT-001", "priority": "P0", "layer": "process", "status": "active", "scenario": "abort a running Session", "oracle": ["model, tool, and sub-Agent cancellation propagates", "undelivered control queues are cleared", "HTTP 204 after idle convergence", "response body is empty"]},
+        {"id": "HTA-CTRL-ABORT-002", "priority": "P0", "layer": "process", "status": "active", "scenario": "abort an idle Session repeatedly", "oracle": ["every request returns HTTP 204", "Session remains available", "completed Entries remain unchanged"]},
+        {"id": "HTA-CTRL-ABORT-003", "priority": "P0", "layer": "service", "status": "active", "scenario": "abort a missing or deleted Session", "oracle": ["HTTP 404 SESSION_NOT_FOUND", "no new Session or tombstone mutation"]},
+        {"id": "HTA-CTRL-ABORT-004", "priority": "P0", "layer": "recovery", "status": "active", "scenario": "observe the original event stream after abort", "oracle": ["session.status.idle precedes stream.end", "stream.end reason is aborted", "stream.error is absent for successful abort"]}
+      ]
+    }
+  ],
+  "crossOperationCases": [
+    {"id": "HTA-E2E-001", "priority": "P0", "layer": "process", "status": "active", "scenario": "create, get, submit, finish SSE, list, configure, and delete", "oracle": ["all 11 applicable contracts compose without hidden state mismatch"], "evidenceRefs": ["CONTRACT", "PROCESS_IT", "DATABASE_IT"]},
+    {"id": "HTA-E2E-002", "priority": "P0", "layer": "process", "status": "active", "scenario": "running event stream receives Steer then FollowUp", "oracle": ["same stream contains delivered messages in priority order", "history contains the matching durable Entries"], "evidenceRefs": ["CONTRACT", "PROCESS_IT"]},
+    {"id": "HTA-E2E-003", "priority": "P0", "layer": "concurrency", "status": "active", "scenario": "submit, second submit, delete, abort, then delete", "oracle": ["second submit and running delete are 409", "abort converges to idle", "final delete is 204"], "evidenceRefs": ["CONTRACT", "PROCESS_IT"]},
+    {"id": "HTA-E2E-004", "priority": "P0", "layer": "recovery", "status": "active", "scenario": "disconnect and recover from paginated durable history", "oracle": ["execution is not canceled", "durable entries are recovered without replaying POST", "deduplication uses entry_id and entry_seq"], "evidenceRefs": ["CONTRACT", "EVENT_SERVICE"]},
+    {"id": "HTA-E2E-005", "priority": "P1", "layer": "compatibility", "status": "active", "scenario": "synchronize modules into mate-campusclaw", "oracle": ["route inventory is identical", "JSON and SSE fixtures pass unchanged", "mirror JAR starts successfully"], "evidenceRefs": ["CONTRACT", "PROCESS_IT"]},
+    {"id": "HTA-E2E-006", "priority": "P0", "layer": "static", "status": "active", "scenario": "retired public surfaces stay absent", "variants": ["legacy_api_chat", "public_websocket", "public_run_resource"], "oracle": ["no route is registered", "no current contract or client artifact references the retired surface"], "evidenceRefs": ["CONTRACT"]}
+    ,{"id": "HTA-E2E-007", "priority": "P0", "layer": "mvc", "status": "active", "scenario": "caller context boundary across all 11 operations", "oracle": ["all operations accept JWT, APPKEY, both, or malformed caller context without Runtime-local authentication", "no operation declares UNAUTHENTICATED or AUTH_CREDENTIAL_CONFLICT", "no global pre-Controller authentication interceptor changes this matrix"], "evidenceRefs": ["CONTRACT", "AUTH"]}
+  ],
+  "proposedCases": [
+    {"id": "HTA-PENDING-STRICT-001", "priority": "P2", "layer": "mvc", "status": "proposed", "scenario": "send a body to an operation whose confirmed request body is absent", "decisionNeeded": "freeze whether the server ignores or rejects the body and define the status/resCode", "evidenceRefs": ["CONTRACT"]},
+    {"id": "HTA-PENDING-STRICT-002", "priority": "P2", "layer": "mvc", "status": "proposed", "scenario": "send unknown query parameters to a GET operation that declares none", "decisionNeeded": "freeze whether the server ignores or rejects unknown query parameters", "evidenceRefs": ["CONTRACT"]},
+    {"id": "HTA-PENDING-STRICT-003", "priority": "P2", "layer": "mvc", "status": "proposed", "scenario": "send If-Match, Idempotency-Key, or abort reason to POST abort", "decisionNeeded": "freeze strict rejection behavior without inventing a new error code", "evidenceRefs": ["CONTRACT"]}
+  ]
+}
