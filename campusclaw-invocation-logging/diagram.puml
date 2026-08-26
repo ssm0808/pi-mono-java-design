@@ -1,18 +1,19 @@
-' Generated for CampusClaw Simplified Failure Logging Design v2.0.0 on 2026-08-26.
+' Generated for CampusClaw Simplified Failure Logging Design v2.1.0 on 2026-08-26.
 ' Run from this directory: plantuml -tsvg diagram.puml
 ' Main source baseline: 8f9f3c1b51cca5ffbc3501fc4a1cb9ac253124be.
 ' Reviewed PR baseline: 80e9f266e82b20aabfb1e7f8aa1aae142a41dec0.
-' Implemented source commit: 3e693810e75a0995e59aeea6bbb980523ae4f472.
+' Reviewed implementation commit: 3e693810e75a0995e59aeea6bbb980523ae4f472.
+' Implemented source commit: bbc1c94f663b0638f83d417975a0bc06dccf2f62.
 ' Source evidence:
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/error/RuntimeFailures.java: raise, record
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/error/RuntimeApiException.java: RuntimeApiException
-' modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateInvocationFailures.java: raise, record
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java: resolve
 ' modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateModelInvocationException.java: MateModelInvocationException
-' modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java: fail, streamFailure
+' modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java: fail, recordFailure
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java: handlers
-' Observed behavior: the reviewed PR logged selected Runtime failures but did not cover every Mate, startup, or typed execution failure.
-' Architecture change: keep one failure-event contract and thin module-local boundaries; carriers contain only stable error codes.
+' Observed behavior: the reviewed implementation used shared failure helpers that owned the logger and exception construction.
+' Architecture change: source classes log directly; shared behavior is limited to stable codes, carriers, response mapping, and field names.
 ' Design reason: operators need the original cause in service logs while callers and upper layers receive no raw error object.
+' Design reason: the logger name must identify the actual failure source and logging arguments must remain typed and visible.
 
 @startuml campusclaw_failure_boundary
 title CampusClaw Simplified Failure Boundary
@@ -32,20 +33,23 @@ skinparam sequence {
 
 actor Caller
 participant "Failure Source" as Source
-participant "Failure Boundary\nRuntimeFailures or MateInvocationFailures" as Boundary
 database "Service Log\nSLF4J and ECS" as Log
 participant "Code-only Carrier\nException or AssistantMessage" as Carrier
 participant "Public Boundary\nHTTP or SSE" as Public
 
 Caller -> Source : invoke operation
-Source -> Source : failure detected
-Source -> Boundary : original Throwable, stable code, safe context
-Boundary -> Log : campusclaw.failure\noperation and errorCode\noriginal stack trace
-Boundary -> Carrier : construct with errorCode only
+Source -> Source : catch or classify failure
+Source -> Log : own logger writes stable code, safe context, and cause
+Source -> Carrier : construct with errorCode only
 
-note over Boundary, Carrier
+note over Source, Carrier
 The original Throwable never enters the carrier.
 Cause is null and writable stack trace is disabled.
+end note
+
+note over Source
+Deterministic validation and state rejection have no raw cause.
+They create the code-only carrier without a synthetic stack log.
 end note
 
 alt Synchronous Runtime failure
