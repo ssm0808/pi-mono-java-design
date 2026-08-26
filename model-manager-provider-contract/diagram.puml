@@ -67,7 +67,7 @@ end note
 @enduml
 
 @startuml generic_provider_boundary
-title Generic Mate Chat Provider Boundary
+title Generic CampusMate Chat Provider Boundary
 
 ' Source evidence:
 ' pi-mono packages/ai/src/models.ts: ModelsImpl.requireProvider and stream
@@ -75,9 +75,10 @@ title Generic Mate Chat Provider Boundary
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java: resolveProvider
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAICompletionsProvider.java: buildParams and parseUsage
 ' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-108
-' mate-service README.md: current model gateway gap
+' mate-service src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/controller/LlmChatController.java:35-55
 ' Architecture change: Java resolves an AiProvider by model.providerId and uses an internally configured apiId.
-' Architecture change: Model Manager and managed Runtime clients read one shared campusmate.base-url.
+' Observed behavior: mate-service implements POST /mate-service/v1/LLM/chat at baseline 956b547f.
+' Architecture change: all clients read one campusmate tree with a shared base URL and endpoint catalog.
 ' Product constraint: CampusClaw and Mate exchange no application identity or credential headers.
 ' Scope boundary: Mate routing, credentials, and upstream field adaptation are internal Mate concerns.
 
@@ -98,7 +99,7 @@ skinparam database {
 skinparam ArrowColor #475569
 
 package "pi-mono-java Runtime" {
-  [Shared CampusMate Base URL\ncampusmate.base-url] as CampusMateBaseUrl
+  [CampusMate Service Configuration\ncampusmate.base-url\ncampusmate.endpoints] as CampusMateConfig
   [AgentLoop] as Loop
   [CampusClawAiService] as AiService
   [AiProviderRegistry] as Registry
@@ -122,8 +123,8 @@ AiService --> Registry : get(model.providerId)
 Registry --> GenericProvider
 GenericProvider --> CatalogClient
 GenericProvider --> InvocationClient
-CampusMateBaseUrl --> CatalogClient : shared origin
-CampusMateBaseUrl --> InvocationClient : shared origin
+CampusMateConfig --> CatalogClient : shared origin and paths
+CampusMateConfig --> InvocationClient : shared origin and model Chat path
 GenericProvider --> SessionStore : usage projection owned by Runtime
 CatalogClient --> Gateway : HTTPS JSON and protocol headers
 InvocationClient --> Gateway : Mate Chat JSON and SSE
@@ -140,7 +141,7 @@ end note
 @enduml
 
 @startuml model_manager_invocation_sequence
-title Mate Foreground Chat Invocation and Disconnect Cancellation
+title CampusMate Foreground Chat Invocation and Disconnect Cancellation
 
 ' Source evidence:
 ' pi-mono packages/ai/src/api/openai-completions.ts: stream, convertMessages, tool calls, and usage parsing
@@ -148,7 +149,8 @@ title Mate Foreground Chat Invocation and Disconnect Cancellation
 ' pi-mono packages/coding-agent/src/core/compaction/compaction.ts: completeSummarization with toolChoice none
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAICompletionsProvider.java: stream and parseUsage
 ' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel and consumeStream
-' Target-only design: POST /mate-service/v1/LLM/chat does not exist in mate-service at the analyzed baseline.
+' mate-service src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/controller/LlmChatController.java:35-55
+' Observed behavior: POST /mate-service/v1/LLM/chat exists in the analyzed mate-service baseline.
 ' Product constraint: cancellation closes the foreground request and has no separate cancel operation.
 ' Architecture change: successful Chat SSE is returned without ResultBean or payload rewriting.
 
@@ -235,7 +237,7 @@ title Java Provider Alignment with pi-mono
 ' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-140, three CampusMate address keys
 ' Java divergence: the initial d649866a6 baseline models protocol adapters as providers and cannot preserve arbitrary provider identity.
 ' Architecture change: add open ProviderId and ApiId values, resolve AiProvider by providerId, and configure apiId internally.
-' Architecture change: Model Manager, Runtime, and Mate Tool share campusmate.base-url while keeping separate client rules.
+' Architecture change: Model Manager, Runtime, and Tool clients share one campusmate tree and endpoint catalog.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -271,6 +273,7 @@ package "Target Java" {
   class MateServiceModelManagerProvider
   class OpenAICompletionsMapper
   class CampusMateBaseUrlConfig
+  class CampusMateEndpointConfig
   class ModelManagerClientConfig
   ModelTarget --> ProviderId
   ModelTarget --> ApiId
@@ -281,7 +284,8 @@ package "Target Java" {
   MateServiceModelManagerProvider --> ProviderAuthNone : auth returns none
   MateServiceModelManagerProvider --> OpenAICompletionsMapper : Context and raw SSE mapping
   MateServiceModelManagerProvider --> CampusMateBaseUrlConfig : shared origin
-  MateServiceModelManagerProvider --> ModelManagerClientConfig : path, timeouts, and apiId
+  MateServiceModelManagerProvider --> CampusMateEndpointConfig : model Chat path
+  MateServiceModelManagerProvider --> ModelManagerClientConfig : timeouts and apiId
 }
 
 ProviderEnum ..> ProviderId : deprecate enum boundary

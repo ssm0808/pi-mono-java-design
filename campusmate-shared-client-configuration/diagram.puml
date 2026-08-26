@@ -1,24 +1,27 @@
 @startuml campusmate_shared_base_url_configuration
-title CampusMate Shared Base URL Configuration
+title CampusMate Configuration and Endpoint Deduplication
 
 ' Source evidence:
 ' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-140
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-76
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeProperties.java:15-34
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java:43-69 and 184-197
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-76 and eventFlux
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java:43-113 and 184-197
 ' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/config/MateToolAutoConfiguration.java:31-81
-' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:41-83 and 132-320
-' pi-mono-java mate-campusclaw/scripts/install_value.sh:27-38
-' mate-service src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java:38-67
-' Observed behavior: Model Manager, Runtime, and Mate Tool clients read three address keys and can target different origins.
-' Target-only design: all three clients read campusmate.base-url while retaining separate paths, timeouts, auth, and protocols.
-' Architecture change: deployment owns one CampusMate origin and no child configuration can override its host.
-' Security hardening: child paths are absolute service paths and cannot contain another origin.
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:41-190 and 299-320
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/dto/SkillInfoResult.java:12-20
+' mate-service src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java:38-73
+' mate-service src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/controller/LlmChatController.java:35-55
+' Observed behavior: three configuration roots own three origins and seven path keys.
+' Observed duplication: two keys normalize to GET /mate-service/v1/skill/query/{skillId}.
+' Product constraint: Mate and CampusMate are one service identity.
+' Architecture change: one campusmate tree owns one origin and six unique operation paths.
+' Security hardening: endpoint paths cannot carry another origin.
+' Target-only server scope: Skill and Tool controllers were not found in the analyzed mate-service baseline.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam defaultFontSize 13
+skinparam componentStyle rectangle
 skinparam component {
   BackgroundColor #F8FAFC
   BorderColor #475569
@@ -31,47 +34,64 @@ skinparam rectangle {
 }
 skinparam ArrowColor #475569
 
-rectangle "Deployment Configuration" {
-  component "campusmate.base-url\nCAMPUSMATE_BASE_URL\nHTTP(S) origin only" as BaseUrl
-  component "campusmate.model-manager\nchat path, API, SSE timeouts" as ModelConfig
-  component "campusmate.runtime\nAgent and Skill paths, short timeouts" as RuntimeConfig
-  component "mate.endpoints\nTool discovery and execute paths" as ToolConfig
+rectangle "Observed Configuration\n3 service identities, 3 origins, 7 path keys" as Before {
+  component "campusmate.model-manager\nbase-url\nchat-path" as OldModel #FFF7ED
+  component "campusmate.runtime\nbase-url\nagent-runtime-path-template\nskill-info-query-path-template" as OldRuntime #FFF7ED
+  component "mate\ninnerGWSerive\nagent-info-path-prefix\nskill-tools-query-path-prefix\ntool-metadata-query-path\ntool-execute-path-template\ntool.enabled" as OldTool #FEE2E2
+  component "Duplicate operation\nGET /mate-service/v1/skill/query/{skillId}\nRuntime key + Tool key" as Duplicate #FECACA
+
+  OldRuntime --> Duplicate : key A
+  OldTool --> Duplicate : key B
 }
 
-rectangle "CampusClaw" {
-  component "MateServiceModelManagerProvider\nWebClient and Chat SSE" as ModelClient
-  component "MateServiceClient\nJDK HttpClient and ResultBean" as RuntimeClient
-  component "MateToolClient\nJDK HttpClient and execution credentials" as ToolClient
+rectangle "Target Configuration\n1 service identity, 1 origin, 6 unique operation paths" as After {
+  component "campusmate.base-url\nCAMPUSMATE_BASE_URL" as BaseUrl #DCFCE7
+  component "campusmate.endpoints\nmodel-chat-path\nagent-info-path-template\nagent-runtime-path-template\nskill-info-path-template\ntool-metadata-query-path\ntool-execute-path-template" as Endpoints #DCFCE7
+  component "campusmate.model-manager\nAPI, capability, SSE timeouts" as ModelOptions
+  component "campusmate.runtime\ncache, short timeout, limits" as RuntimeOptions
+  component "campusmate.tool.enabled" as ToolOptions
+}
+
+Before -down[#2563EB,dashed]-> After : unify service namespace\nand deduplicate Skill path
+
+rectangle "CampusClaw Clients" {
+  component "MateServiceModelManagerProvider" as ModelClient
+  component "MateServiceClient" as RuntimeClient
+  component "MateToolClient" as ToolClient
 }
 
 rectangle "CampusMate Service - Same Origin" {
   component "POST /mate-service/v1/LLM/chat" as ChatEndpoint
-  component "Agent APIs\nGET /mate-service/v1/agents/{agentId}\nGET /mate-service/v1/agents/{agentId}/runtime" as AgentEndpoint
-  component "GET /mate-service/v1/skill/query/{skillId}" as SkillEndpoint
-  component "Mate Tool APIs\n/mate-service/v1/runtime/tools/..." as ToolEndpoint
+  component "Agent operations\nGET /mate-service/v1/agents/{agentId}\nGET /mate-service/v1/agents/{agentId}/runtime" as AgentEndpoints
+  component "GET /mate-service/v1/skill/query/{skillId}" as SkillEndpoint #DBEAFE
+  component "Tool operations\nPOST /mate-service/v1/runtime/tools/query\nPOST /mate-service/v1/runtime/tools/{toolId}/execute" as ToolEndpoints
 }
 
-BaseUrl --> ModelClient : same normalized origin
-BaseUrl --> RuntimeClient : same normalized origin
-BaseUrl --> ToolClient : same normalized origin
-ModelConfig --> ModelClient : path and transport options
-RuntimeConfig --> RuntimeClient : paths and transport options
-ToolConfig --> ToolClient : paths only
-ModelClient --> ChatEndpoint : Chat JSON and SSE
-RuntimeClient --> AgentEndpoint : runtime metadata
-RuntimeClient --> SkillEndpoint : skill metadata
-ToolClient --> AgentEndpoint : Agent tool bindings
-ToolClient --> SkillEndpoint : Skill tool bindings
-ToolClient --> ToolEndpoint : metadata and execute
+BaseUrl --> ModelClient : shared origin
+BaseUrl --> RuntimeClient : shared origin
+BaseUrl --> ToolClient : shared origin
+Endpoints --> ModelClient : model Chat path
+Endpoints --> RuntimeClient : Agent Runtime + shared Skill path
+Endpoints --> ToolClient : Agent info + shared Skill + Tool paths
+ModelOptions --> ModelClient
+RuntimeOptions --> RuntimeClient
+ToolOptions --> ToolClient
 
-note bottom of BaseUrl
-The value is required and has no product default.
-It contains scheme, host, and optional port only.
+ModelClient --> ChatEndpoint
+RuntimeClient --> AgentEndpoints : Runtime projection
+RuntimeClient --> SkillEndpoint : full Skill projection
+ToolClient --> AgentEndpoints : bindingTools projection
+ToolClient --> SkillEndpoint : bindingTools projection
+ToolClient --> ToolEndpoints : metadata and execute
+
+note bottom of SkillEndpoint
+One HTTP operation and one configuration key.
+Two clients may keep different DTO projections.
 end note
 
-note bottom of ToolClient
-The mate namespace remains a Tool feature namespace.
-It does not own another service address.
-Execution credentials and no-replay rules stay unchanged.
+note bottom of Endpoints
+No top-level mate configuration remains.
+Every ID path uses one %s template.
+Paths start with /mate-service/ and contain no origin.
 end note
 @enduml

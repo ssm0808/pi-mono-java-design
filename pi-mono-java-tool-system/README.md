@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.4.0 |
-| 状态 | 目标设计；PR 167 压缩细节已对齐，Mate Tool 共享 CampusMate 地址待实现 |
+| 文档版本 | 2.5.0 |
+| 状态 | 目标设计；PR 167 压缩细节已对齐，CampusMate 单一配置树与 endpoint 去重待实现 |
 | 更新日期 | 2026-08-26 |
 | 设计仓分析基线 | `bb967eebe1f62553e92480b3ea3808a664fbe73e` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
@@ -12,7 +12,7 @@
 | CampusClaw PR 167 审查头 | `bf28e72f94f29acd316eb872a250893ed54e3632` |
 | CampusClaw PR 167 对齐实现 | `bd26e7f81bac8f68be0c3523efe23b51f96c52e4` |
 | CampusMate 地址配置复核基线 | `56be8eee59415a5f86658d6635a7b7e8891263d3` (`origin/main`) |
-| 本次设计仓修订基线 | `871b9be3cba4b32e4bc29fd784afbb98bc4842cf` |
+| 本次设计仓修订基线 | `79f9818c1b99788eeb8b7ff2dfb8f212f0217581` |
 | pi-mono 对照基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | 精确工具契约 | [8 个活动内置工具契约](built-in-tool-contracts.md) |
@@ -98,6 +98,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 当前缓存每次刷新先清空平面 Map，最近一次 Agent/Skill List 会覆盖此前来源 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java`，`refresh` |
 | 当前执行端点按 `toolId` 调用并要求完整 Mate 凭据 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java`，`invokeTool` |
 | 当前 Tool 客户端从 `mate.innerGWSerive` 读取独立地址，而它的 Agent、Skill、Tool 元数据和执行路径都位于 `/mate-service/...` | `modules/coding-agent-cli/src/main/resources/application.yml:129-140`、`config/MateToolAutoConfiguration.java:31-81`、`common/client/HttpMateToolClient.java:41-83,132-320` |
+| Runtime 与 Tool 客户端分别配置 `campusmate.runtime.skill-info-query-path-template` 和 `mate.endpoints.skill-tools-query-path-prefix`，但两者规范化后都是 `GET /mate-service/v1/skill/query/{skillId}` | `runtime/MateServiceClient.java:43-113`、`common/client/HttpMateToolClient.java:145-166`、`common/dto/SkillInfoResult.java:12-20` |
 | 当前部署脚本只把 Campus 内网服务地址导出为 `MATE_INNERGWSERIVE` | `mate-campusclaw/scripts/install_value.sh:27-38` |
 | 当前 Child 同时存在 `spawn_agent` 与 `invoke_agent` 两条路径，后者通过 Session after-hook 执行 | `subagent/tool/SpawnAgentTool.java`、`tool/delegation/InvokeAgentTool.java`、`session/AgentSession.java` |
 | 当前 Cron payload 接受 model、system prompt 和 allowed tools，并依赖本地存储与 OS/进程调度 | `modules/cron/src/main/java/com/campusclaw/cron/tool/CronTool.java`、`model/CronPayload.java`、`engine/CronEngine.java` |
@@ -144,7 +145,8 @@ OpenCode `TaskTool` 仅用于对照父子消息隔离、进度和取消，不继
 | 安全加固 | 拒绝空摘要、摘要 ToolCall、失败或取消摘要 | 不允许无效摘要覆盖可恢复的旧上下文 |
 | 架构改造 | Mate 名称到 ID 缓存按 Session 和来源维护 | 模型直接按名称调用，同时适配现有 ID 执行接口 |
 | 产品约束 | Call 缓存 miss 自动刷新，不强制模型先 List | 缓存是实现细节，不成为模型调用顺序 |
-| 架构改造 | Mate Tool 与 Model Manager、受管 Runtime 共用 `campusmate.base-url` | Mate 是 CampusMate 的 Tool 能力，不是独立部署服务 |
+| 架构改造 | Model Manager、受管 Runtime 与 Tool 共用单一 `campusmate` 配置树 | Mate 与 CampusMate 是同一个服务，不保留顶层 `mate` |
+| 架构改造 | Runtime 与 Tool 共用 `campusmate.endpoints.skill-info-path-template` | 两个旧键调用完全相同的 Skill HTTP operation |
 | 产品约束 | Child 只按直接绑定名称调用，首版深度 1 | 避免全局枚举、循环和无边界递归 |
 
 ## 4. 关闭的公共接口与配置
@@ -414,22 +416,26 @@ single-flight 刷新当前 Agent 的完整有效集合：当前 Agent 直接工�
 ### 9.3 CampusMate 连接地址
 
 Mate Tool 的目标地址由
-[CampusMate 统一客户端地址配置设计](../campusmate-shared-client-configuration/README.md)
-统一管理。`MateToolAutoConfiguration` 必须直接注入 `campusmate.base-url`，不得再读取
-`mate.innerGWSerive` 或 `MATE_INNERGWSERIVE`。`HttpMateToolClient` 的四类请求与 Model
-Manager、受管 Runtime 共享 scheme、host 和 port：
+[CampusMate 统一配置与 Endpoint 目录设计](../campusmate-shared-client-configuration/README.md)
+统一管理。`MateToolAutoConfiguration` 必须直接注入 `campusmate.base-url` 和
+`campusmate.endpoints.*`，不得再读取任何顶层 `mate.*` 或 `MATE_*` 应用变量。
+`HttpMateToolClient` 的四类请求与 Model Manager、受管 Runtime 共享 scheme、host、port
+和服务级 endpoint 目录：
 
 ```text
-campusmate.base-url + mate.endpoints.agent-info-path-prefix + agentId
-campusmate.base-url + mate.endpoints.skill-tools-query-path-prefix + skillId
-campusmate.base-url + mate.endpoints.tool-metadata-query-path
-campusmate.base-url + formatted(mate.endpoints.tool-execute-path-template, toolId)
+campusmate.base-url + formatted(campusmate.endpoints.agent-info-path-template, agentId)
+campusmate.base-url + formatted(campusmate.endpoints.skill-info-path-template, skillId)
+campusmate.base-url + campusmate.endpoints.tool-metadata-query-path
+campusmate.base-url + formatted(campusmate.endpoints.tool-execute-path-template, toolId)
 ```
 
-`mate.tool.enabled` 与 `mate.endpoints.*` 继续属于工具专题：前者控制工具装配，后者保存
-发现和执行路径。它们不能携带完整 URL，也不能覆盖 CampusMate origin。此调整只改变
-连接地址权威；执行级凭据快照、发现允许空凭据、执行要求完整凭据、Session 缓存和
-执行 POST 不自动重放等契约保持不变。
+`campusmate.tool.enabled` 只控制工具装配；所有 path 只由 `campusmate.endpoints` 保存。
+Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-template`，但仍可使用不同 DTO
+投影同一响应。此调整不改变执行级凭据快照、发现允许空凭据、执行要求完整凭据、Session
+缓存和执行 POST 不自动重放等契约。
+
+`ListMateTools`、`CallMateTool` 与 `MateToolClient` 是既有模型/Java 契约，不因 Spring
+配置树统一而改名。若要改模型可见工具名，必须独立评审 Schema、提示词和兼容性。
 
 ## 10. Child Agent Execution
 
@@ -587,7 +593,8 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 | `spawn_agent`、`invoke_agent` 和 Session delegation after-hook | `Agent` + `SubagentExecutionService` |
 | ACP/HTTP/A2A SubAgent backend、registry、approval placeholder | 不进入首版 Child Agent Execution |
 | `references/tools.json` | Skill 身份索引 + Mate 实时发现和 Session 解析缓存 |
-| `mate.innerGWSerive` / `MATE_INNERGWSERIVE` | 删除；`MateToolAutoConfiguration` 与其他 CampusMate 客户端共读 `campusmate.base-url` / `CAMPUSMATE_BASE_URL` |
+| 顶层 `mate.*` / `MATE_*` 应用变量 | 删除；地址、endpoint 与 Tool 开关分别迁入 `campusmate.base-url`、`campusmate.endpoints`、`campusmate.tool` |
+| 重复 Skill path 配置 | 删除；Runtime 与 Tool 共读 `campusmate.endpoints.skill-info-path-template` |
 | `FileAgentDirectoryResolver` 独立文件契约 | `AgentRuntimeManager.prepare` |
 | HTTP 硬编码 Read | `runtime` profile |
 | Cron model/system_prompt/tools payload | 触发时按当前受管 Agent 解析 |
@@ -621,7 +628,8 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 - ListMateTools 每次实时查询，输出只含稳定公开字段并恢复绑定顺序；
 - ListMateTools、CallMateTool 与 Model Manager、受管 Runtime 的所有出站终端使用相同 scheme/host/port；
-- `mate.innerGWSerive` 和 `MATE_INNERGWSERIVE` 已删除，`mate.endpoints.*` 仍可独立配置合法 `/mate-service/` 路径；
+- 顶层 `mate`、`mate.endpoints.*`、`mate.tool.enabled` 与 `MATE_*` 应用变量已删除；
+- Tool path 只从 `campusmate.endpoints` 读取，Skill path 与 Runtime 共用唯一配置键；
 - 不同来源刷新互不覆盖，Session 间缓存隔离；
 - Call cache miss 只触发一次完整刷新，重名冲突失败，实际执行不自动重放；
 - Agent 校验直接绑定、固定版本、深度、循环、父取消和模型白名单；
@@ -644,7 +652,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 4. 实现工厂、不可变上下文和公共 Session；
 5. 迁移 Runtime Host 并删除 CLI 产品入口；
 6. 统一目录 prepare/refresh、Skill/Child 索引和模型解析；
-7. 先统一 CampusMate base URL，再实现 Mate 发现、Session 缓存和 miss 自动刷新；
+7. 先统一 CampusMate 配置树和 endpoint 目录、去重 Skill path，再实现 Mate 发现、Session 缓存和 miss 自动刷新；
 8. 迁移 Child Execution 与 Cron 工具；
 9. 删除动态目录、Extension、Loop、旧 delegation 和兼容入口；
 10. 同步生成镜像并完成全量回归。
@@ -656,6 +664,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.5.0 | 2026-08-26 | 删除顶层 `mate` 目标配置；Tool 地址、path 和开关统一到 `campusmate`，并让 Runtime 与 Tool 共用唯一 Skill endpoint 配置。模型可见 Mate Tool 名称保持不变。 |
 | 2.4.0 | 2026-08-26 | 按 Mate 即 CampusMate 的产品约束，删除 Mate Tool 独立地址目标配置，统一读取 `campusmate.base-url`；保留 Tool 路径、凭据和调用语义。 |
 | 2.3.0 | 2026-08-24 | 处理 PR 167 审查意见：按 Entry ID 固化并排除压缩重试候选，保证在线与重载上下文一致；统一公共 Agent 实际请求与 LENGTH 判定的输出上限；记录审查头和对齐实现基线。 |
 | 2.2.0 | 2026-08-24 | 固定 pi 压缩细节：Usage/失效边界、成功 STOP 不重试、错误/length 单次恢复、超大末条保留、split-turn/重复摘要、结构化摘要、Read 路径继承、取消及瞬态摘要重试。 |
