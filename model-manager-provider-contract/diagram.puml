@@ -74,8 +74,10 @@ title Generic Mate Chat Provider Boundary
 ' pi-mono packages/ai/src/api/openai-completions.ts: stream, convertMessages, and usage parsing
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java: resolveProvider
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAICompletionsProvider.java: buildParams and parseUsage
+' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-108
 ' mate-service README.md: current model gateway gap
 ' Architecture change: Java resolves an AiProvider by model.providerId and uses an internally configured apiId.
+' Architecture change: Model Manager and managed Runtime clients read one shared campusmate.base-url.
 ' Product constraint: CampusClaw and Mate exchange no application identity or credential headers.
 ' Scope boundary: Mate routing, credentials, and upstream field adaptation are internal Mate concerns.
 
@@ -96,6 +98,7 @@ skinparam database {
 skinparam ArrowColor #475569
 
 package "pi-mono-java Runtime" {
+  [Shared CampusMate Base URL\ncampusmate.base-url] as CampusMateBaseUrl
   [AgentLoop] as Loop
   [CampusClawAiService] as AiService
   [AiProviderRegistry] as Registry
@@ -119,6 +122,8 @@ AiService --> Registry : get(model.providerId)
 Registry --> GenericProvider
 GenericProvider --> CatalogClient
 GenericProvider --> InvocationClient
+CampusMateBaseUrl --> CatalogClient : shared origin
+CampusMateBaseUrl --> InvocationClient : shared origin
 GenericProvider --> SessionStore : usage projection owned by Runtime
 CatalogClient --> Gateway : HTTPS JSON and protocol headers
 InvocationClient --> Gateway : Mate Chat JSON and SSE
@@ -227,8 +232,10 @@ title Java Provider Alignment with pi-mono
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java: registry keyed by Api
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAICompletionsProvider.java: current Chat mapper
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/Provider.java: closed enum with CUSTOM
-' Java divergence: current Java models protocol adapters as providers and cannot preserve arbitrary provider identity.
+' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-108, split CampusMate base URLs
+' Java divergence: the initial d649866a6 baseline models protocol adapters as providers and cannot preserve arbitrary provider identity.
 ' Architecture change: add open ProviderId and ApiId values, resolve AiProvider by providerId, and configure apiId internally.
+' Architecture change: inject campusmate.base-url separately from Model Manager path, timeouts, and apiId.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -241,7 +248,7 @@ skinparam class {
   ArrowColor #475569
 }
 
-package "Current Java" {
+package "Initial Java Baseline d649866a6" {
   enum ProviderEnum
   enum ApiEnum
   class ModelCurrent
@@ -263,6 +270,7 @@ package "Target Java" {
   class ProviderAuthNone
   class MateServiceModelManagerProvider
   class OpenAICompletionsMapper
+  class CampusMateBaseUrlConfig
   class ModelManagerClientConfig
   ModelTarget --> ProviderId
   ModelTarget --> ApiId
@@ -272,7 +280,8 @@ package "Target Java" {
   MateServiceModelManagerProvider ..|> AiProvider
   MateServiceModelManagerProvider --> ProviderAuthNone : auth returns none
   MateServiceModelManagerProvider --> OpenAICompletionsMapper : Context and raw SSE mapping
-  MateServiceModelManagerProvider --> ModelManagerClientConfig : base URL, path, and apiId
+  MateServiceModelManagerProvider --> CampusMateBaseUrlConfig : shared origin
+  MateServiceModelManagerProvider --> ModelManagerClientConfig : path, timeouts, and apiId
 }
 
 ProviderEnum ..> ProviderId : deprecate enum boundary

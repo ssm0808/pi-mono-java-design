@@ -1,0 +1,69 @@
+@startuml campusmate_shared_base_url_configuration
+title CampusMate Shared Base URL Configuration
+
+' Source evidence:
+' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-108
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-76
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeProperties.java:15-34
+' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java:43-69 and 184-197
+' mate-service src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java:38-67
+' Observed behavior: Model Manager and Runtime clients read different base URL keys and can target different origins.
+' Target-only design: both clients read campusmate.base-url while retaining separate paths, timeouts, and protocols.
+' Architecture change: deployment owns one CampusMate origin and no child configuration can override its host.
+' Security hardening: child paths are absolute service paths and cannot contain another origin.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #475569
+  FontColor #0F172A
+}
+skinparam ArrowColor #475569
+
+rectangle "Deployment Configuration" {
+  component "campusmate.base-url\nCAMPUSMATE_BASE_URL\nHTTP(S) origin only" as BaseUrl
+  component "campusmate.model-manager\nchat path, API, SSE timeouts" as ModelConfig
+  component "campusmate.runtime\nAgent and Skill paths, short timeouts" as RuntimeConfig
+}
+
+rectangle "CampusClaw" {
+  component "MateServiceModelManagerProvider\nWebClient and Chat SSE" as ModelClient
+  component "MateServiceClient\nJDK HttpClient and ResultBean" as RuntimeClient
+  component "MateToolClient\nseparate gateway client" as ToolClient
+}
+
+rectangle "CampusMate Service - Same Origin" {
+  component "POST /mate-service/v1/LLM/chat" as ChatEndpoint
+  component "GET /mate-service/v1/agents/{agentId}/runtime" as AgentEndpoint
+  component "GET /mate-service/v1/skill/query/{skillId}" as SkillEndpoint
+}
+
+component "mate.innerGWSerive\nTool gateway - out of scope" as ToolGateway
+
+BaseUrl --> ModelClient : same normalized origin
+BaseUrl --> RuntimeClient : same normalized origin
+ModelConfig --> ModelClient : path and transport options
+RuntimeConfig --> RuntimeClient : paths and transport options
+ModelClient --> ChatEndpoint : Chat JSON and SSE
+RuntimeClient --> AgentEndpoint : runtime metadata
+RuntimeClient --> SkillEndpoint : skill metadata
+ToolClient --> ToolGateway : separate integration contract
+
+note bottom of BaseUrl
+The value is required and has no product default.
+It contains scheme, host, and optional port only.
+end note
+
+note bottom of ToolGateway
+Sharing the CampusMate origin does not merge
+the existing Mate Tool gateway configuration.
+end note
+@enduml
