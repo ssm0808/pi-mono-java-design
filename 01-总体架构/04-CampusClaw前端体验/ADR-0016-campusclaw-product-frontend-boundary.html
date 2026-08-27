@@ -20,28 +20,31 @@
 </head>
 <body>
   <h1>ADR-0016 · CampusClaw 产品前端隔离 Runtime 调试协议</h1>
-  <div class="meta">Status: <span class="badge">Proposed</span> · Date: 2026-08-26 ·
+  <div class="meta">Status: <span class="badge">Proposed</span> · Date: 2026-08-26 · Credential boundary updated: 2026-08-27 ·
     设计文档: <a href="README.md">campusclaw-frontend</a> ·
-    已分析基线: <code>bde123706305a41e51c9a47b22e6ad11bbd8204c</code></div>
+    凭据复核基线: <code>320d790726a70aada6100052952d5494d2a378ac</code></div>
 
   <section><h2>Context</h2>
-    <p>本 ADR 最初基于 <code>3a6358bc</code> 的 Vue 调试页：浏览器直接调用 <code>/campusclaw-service/v1</code>，并把 Service URL、JWT/APPKEY、Session ID、ETag、SSE Event 和 JSON payload 作为主界面元素。当前复核基线 <code>bde12370</code> 已实现 Agent 工作区、对话时间线和产品化控制，但仍由浏览器直连 Runtime、在前端维护内部 Session/ETag/SSE；Thinking 仅作为 Assistant body 内的通用折叠区，Tool 卡只显示结果。Runtime 在 Assistant completed 中已保留 <code>tool_call.arguments</code>，但独立工具生命周期事件不携带入参，现有前端也未建立关联。用户需要在一个连续活动区中理解思考和工具调用，并看到安全入参。精确 Runtime 设计同时要求浏览器经 mate-service 访问，内部 SSE 不得字节透明转发。</p>
+    <p>早期 <code>3a6358bc</code> 调试页曾把 Service URL 和协议字段作为主界面元素；这只是历史证据，不能描述当前前端。当前复核基线 <code>320d7907</code> 已实现 Agent 工作区、对话时间线和产品化控制，仍由浏览器直连 Runtime 并在前端维护内部 Session/ETag/SSE，但不支持 JWT/APPKEY 凭据：没有凭据控件、秘密 <code>VITE_*</code> 配置、浏览器 credential store 或 <code>Authorization</code> / <code>X-HW-APPKEY</code> Header 注入路径。统一请求只携带非秘密 <code>X-HW-ID</code> 调用上下文，开发者诊断入口也只有 Agent ID 和 Session ID。</p>
+    <p>当前 Runtime 不执行本地集成凭据校验，因此无凭据的直接适配器可以用于受控内部调试；这不等于已经具备生产认证、授权或审计边界。精确 Runtime 设计仍要求生产浏览器经 mate-service 访问，内部 SSE 不得字节透明转发。公共链路必须补齐身份建立与动作授权，但不能通过给 Chat 页面增加 JWT/APPKEY 表单或把秘密编译进浏览器产物来补齐。</p>
   </section>
 
   <section><h2>Options considered</h2>
     <ul>
       <li><strong>继续把当前调试台扩展成产品</strong><br>Pro：改动最小，11 个接口已经接通。<br>Con：内部身份、Session、ETag 和事件模型泄漏到用户边界；信息架构仍围绕接口而不是任务。Rejected。</li>
-      <li><strong>产品页面继续直连 Runtime，但隐藏高级字段</strong><br>Pro：可以快速得到更漂亮的 UI。<br>Con：只隐藏视觉元素不能解决浏览器认证、授权、内部标识和 SSE 投影边界；前端仍耦合内部契约。Rejected。</li>
+      <li><strong>保持当前无凭据直接 Runtime 适配器并作为生产链路</strong><br>Pro：无需新增浏览器凭据能力，改动最小。<br>Con：只发送非秘密 <code>X-HW-ID</code> 不能建立生产用户身份、权限和审计；前端仍耦合内部标识与 SSE 契约。Rejected。</li>
       <li><strong>产品 UI 经 mate-service 公共 bridge，调试台隔离为内部诊断入口</strong><br>Pro：用户模型稳定；认证、Chat/Session 映射、错误脱敏和 Event 投影责任清晰；保留接口联调能力。<br>Con：需要新增并逐项评审 Agent、Chat、Attachment、Model Catalog 和 public SSE 契约；短期不能只靠现有 11 个接口完成生产集成。Chosen。</li>
     </ul>
-    <p><strong>选择理由：</strong>真实前端不是调试台的视觉换肤，而是资源边界和交互语言的产品化。bridge 缺口应显式设计，不能让浏览器为了赶进度继续依赖内部凭据与协议。</p>
+    <p><strong>选择理由：</strong>真实前端不是调试台的视觉换肤，而是资源边界和交互语言的产品化。当前前端没有凭据能力；bridge 缺口应显式设计，不能把“没有凭据”误当成“已经认证”，也不能为了赶进度把 JWT/APPKEY 收集责任塞回 Chat 页面。</p>
   </section>
 
   <section><h2>Decision</h2>
     <ul>
       <li>生产浏览器只调用 mate-service 公共 HTTP/SSE；mate-service 终止认证、执行授权、维护公共 Chat 到内部 Session 的映射并投影安全 Event。</li>
+      <li>CampusClaw 前端不提供 JWT/APPKEY 的输入、编辑、查看、存储、刷新或 Header 构造能力；<code>VITE_*</code> 只允许非秘密配置，当前直接适配器只发送非秘密 <code>X-HW-ID</code>。</li>
+      <li>生产浏览器身份由统一登录、mate-service 或网关边界建立；具体会话承载、续期和注销机制属于待评审公共 API 集成点，不从当前直接适配器推断。</li>
       <li>产品主界面只展示 Agent、Chat、消息、附件、模型、深度思考、工具活动和粗粒度执行状态。</li>
-      <li><code>session_id</code>、ETag、Runtime 凭据、原始 JSON、SSE frame 和内部错误只允许进入内部诊断入口，且生产构建默认不可达。</li>
+      <li><code>session_id</code>、ETag、原始 JSON、SSE frame 和内部错误只允许进入内部诊断入口，且生产构建默认不可达；JWT/APPKEY 不属于诊断字段，任何前端入口都不接受或展示它们。</li>
       <li>Steer、FollowUp、Abort 在产品中分别命名为“调整方向”“加入队列”“停止”。运行态 Composer 只显示当前跟进方式；desktop 默认“调整方向”，设置可改为“加入队列”，<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。</li>
       <li>“调整方向”不宣称立即中断当前模型或工具；它在当前 Assistant Turn 与工具结束后的下一次模型调用前送达。“加入队列”只在当前执行本会自然结束时送达。</li>
       <li>工具 started/completed/result 合并为一个紧凑 activity disclosure；执行中与失败项默认展开，成功项在最终答案出现后折叠，尚未开始的工具不显示。</li>
@@ -53,6 +56,7 @@
       <li>User、Thinking 安全摘要、Tool result 与错误不继承 Assistant Markdown 权限，分别使用纯文本或受控结构化 viewer。</li>
       <li>流式 delta、completed Entry 和 GET history 共用同一 <code>rawMarkdown</code> 与 renderer；未闭合尾块纯文本显示，完成态以持久化全文重新解析。</li>
       <li>断线后禁止重放副作用 POST；公共客户端重新读取持久化历史并去重。</li>
+      <li><code>401/403</code> 交给统一登录/权限流程；页面不弹出凭据框、不从 URL 或浏览器存储补采秘密，也不携带原请求自动重试副作用操作。</li>
       <li>Agent 目录、Chat 列表与标题、附件上传、模型友好名称和 public SSE 均标为目标态公共契约，不宣称 Runtime 已实现。</li>
       <li>产品视觉保留 Codex-inspired 工具层级，采用已确认的 O1 原始图形资产和暖中性表面；O1 不通过生成模型重绘，也不复制 OpenAI/Codex 商标。</li>
     </ul>
@@ -63,7 +67,7 @@
       <li><strong>正面：</strong>主界面围绕用户任务；内部身份与协议不越过浏览器边界；Runtime 可继续独立演进；诊断效率仍被保留。</li>
       <li><strong>负面：</strong>需要 mate-service bridge 和多个公共资源契约；前端初期要通过 mock adapter 开发；产品事件与 Runtime 事件之间增加一层投影测试。</li>
       <li><strong>迁移：</strong>现有页面不直接删除，先迁移到内部诊断路由或独立开发构建；产品路由完成真实集成后再决定是否移除旧入口。</li>
-      <li><strong>安全：</strong>需要构建期和 E2E 门禁，证明生产 DOM、网络日志和错误界面不包含内部凭据、Session ID、ETag 或原始 SSE。</li>
+      <li><strong>安全：</strong>需要构建期和 E2E 门禁，证明界面与开发者诊断不存在 JWT/APPKEY 控件，浏览器配置与请求适配器没有秘密注入路径，生产 DOM、网络日志和错误界面不包含真实凭据、Session ID、ETag 或原始 SSE。</li>
       <li><strong>富文本安全：</strong>需要 XSS corpus、危险 URL、远程图片、超深嵌套、超预算输入和流式分块测试；失败时回退为转义纯文本并保留复制原文。</li>
       <li><strong>活动数据安全：</strong>公共事件投影需要安全思考摘要、入参脱敏、资源映射、结构预算与投影失败测试；前端不得在公共投影缺失时回退显示原始 ThinkingContent 或内部原始入参。</li>
       <li><strong>回滚：</strong>可以回滚产品路由和 bridge，但不能把调试台重新定义为已满足生产安全边界。</li>

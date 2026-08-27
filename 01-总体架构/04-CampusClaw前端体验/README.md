@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.7.1 |
-| 状态 | Proposed；O1 品牌标识已确认，暖中性配色进入评审；思考与工具活动已按 Codex disclosure 模式收敛，工具输入和输出采用纵向详情布局 |
-| 界面评审状态 | `firstUse`、`idleConversation` 待确认；`runningConversation` 跟进交互已确认、界面待确认 |
+| 文档版本 | 0.8.0 |
+| 状态 | Proposed；前端不支持 JWT/APPKEY 凭据的边界已确认；O1 品牌标识已确认，暖中性配色进入评审；思考与工具活动已按 Codex disclosure 模式收敛 |
+| 界面评审状态 | 凭据无持有边界已确认；`firstUse`、`idleConversation` 待确认；`runningConversation` 跟进交互已确认、界面待确认 |
 | 主设计依据 | [`README.md`](README.md)，维护源码证据、目标差异、设计理由、状态与 Design Token |
 | 人类评审界面 | [`frontend-review.html`](frontend-review.html)，集中展示低保真、高保真和待确认项 |
 | 品牌标识资产 | [`campusclaw-mark-o1.png`](campusclaw-mark-o1.png)，原始透明 PNG；界面直接引用，不通过生成模型重绘，也不缩进深色品牌方块 |
@@ -14,16 +14,20 @@
 | Codex 视觉证据 | 本机 `ChatGPT.app` 26.814.41407（build 6720）中的 light-theme CSS Token；`app.asar` SHA-256 `8fba32f8baa6d984b0f0f4149d3da46221e3adb3b52836f85fe65e31e655a8c0` |
 | Codex 跟进交互证据 | 同一安装包 `webview/assets/app-initial-BCLYDefw.js` 的 `followUpQueueMode`、`K9s()`、submit action，以及 `webview/assets/zh-CN-ByRVSIXt.js` 的 Composer 文案 |
 | Codex 活动展示证据 | 本机 `ChatGPT.app` 26.820.60940（build 7119）的 `tool-activity-disclosure-CZUjU0Tu.js`、`agent-activity-item-BL0IhzOn.js`、`reasoning-item-heading-Cdl3NWmT.js`、`local-conversation-turn-Ngva_Lp3.js`；`app.asar` SHA-256 `c964aebbf9a6a0f70799d01215c611d8ef6ee63f816b3d57beccddd47a811fd9` |
-| pi-mono-java 已分析源码基线 | `bde123706305a41e51c9a47b22e6ad11bbd8204c`；相关证据文件在该 commit 上无本地修改 |
+| pi-mono-java 原体验证据基线 | `bde123706305a41e51c9a47b22e6ad11bbd8204c`；用于本文既有活动流与富文本分析 |
+| 本轮凭据复核源码基线 | `320d790726a70aada6100052952d5494d2a378ac`；`frontend/README.md`、`frontend/.env.example`、`frontend/src/App.vue`、`frontend/src/components/DevDiagnostics.vue`、`frontend/src/composables/useRuntimeApi.ts` 及 Runtime 路由测试在该 commit 上无本地修改 |
 | Postman 核对 | 2026-08-20；只读核对 `Agent Runtime` collection 及真实 SSE 响应 |
-| 更新日期 | 2026-08-26 |
+| 更新日期 | 2026-08-27 |
 
 ## 1. 结论
 
 CampusClaw 前端应从“把 HTTP/SSE operation 摊在页面上的本地调试台”改为面向任务的
 Agent 工作台。主界面只暴露用户能够理解并需要决策的概念：Agent、会话、消息、附件、
-模型、深度思考、执行状态与执行中控制。`Service URL`、JWT/APPKEY、`session_id`、ETag、
-原始 JSON 和 SSE frame 不进入产品主流程。
+模型、深度思考、执行状态与执行中控制。当前前端本身不支持 JWT/APPKEY：没有凭据输入、
+`VITE_*` 秘密配置、浏览器持久化或 `Authorization` / `X-HW-APPKEY` Header 注入路径；
+请求适配器只发送非秘密的 `X-HW-ID` 调用上下文。该现状不等于已经具备生产认证能力。
+产品设计保持浏览器凭据无持有，`Service URL`、`session_id`、ETag、原始 JSON 和 SSE frame
+也不进入产品主流程。
 
 本轮提出一个桌面优先的单工作区方案：左侧会话导航、中央对话、顶部 Session 能力、
 底部 Composer。思考和工具调用按实际时间顺序组成对话内 Agent 活动流；每次工具调用合并为
@@ -70,6 +74,11 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 
 | 证据 | 已观察事实 |
 |---|---|
+| `frontend/README.md:26-28, 40-58` | 当前工作台明确不提供 JWT/APPKEY 凭据编辑器，所有 `VITE_*` 只允许非秘密浏览器参数，并禁止把 Provider 凭据、JWT 或 APPKEY 编译进浏览器产物。 |
+| `frontend/.env.example:1-7` | 示例环境变量只包含 API 基址、非秘密 `callerId` 和 Agent 展示/内部 ID，没有 JWT、APPKEY、Token 或认证 Header 配置。 |
+| `frontend/src/App.vue:177-290`、`frontend/src/components/DevDiagnostics.vue:4-10, 13-25` | 产品工作区与开发者诊断入口只提供 Agent/Session、模型、Thinking、会话和执行控制；诊断入口也没有凭据输入或查看能力。 |
+| `frontend/src/composables/useRuntimeApi.ts:18-20, 480-495` | `requestRaw` 只统一附加 `Accept`、`Accept-Language` 和非秘密 `X-HW-ID`；没有构造 `Authorization` 或 `X-HW-APPKEY`，也没有 credential store。 |
+| `modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionRoutesTest.java:102-120` | 当前 Runtime 删除请求可在没有凭据 Header 时通过，JWT 与 APPKEY 同时出现也不由 Runtime 本地校验；当前直接调试链路依赖这一内部无本地认证边界。 |
 | `frontend/src/App.vue:1-291` | 当前 Vue 前端已经形成 Agent 工作区壳、对话时间线、Composer 与运行中控制，但浏览器仍直接调用 Runtime V1，尚未落地 mate-service 公共 bridge。 |
 | `frontend/src/components/ConversationTimeline.vue:37-65` | Assistant 正文使用 Vue 文本插值直接输出 `turn.text`；Thinking 是 Assistant body 内的一个“查看思考过程”折叠区；Tool 活动卡展开后只显示结果，不显示调用入参。 |
 | `frontend/src/style.css:784-789` | `.assistant-message` 仅设置 `white-space: pre-wrap` 和换行，没有标题、表格、引用、链接或代码块样式。 |
@@ -100,13 +109,16 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 - Steer 优先于 FollowUp；两者只在 `running` 时接受；Abort 在 `idle` 时也是幂等成功。
 - Runtime 只接收 `file_ids`，不负责浏览器文件上传、文件名和预览元数据。
 - 精确 Runtime 设计明确要求浏览器/UI 经 mate-service 调用，内部 SSE 不能字节透明转发。
+- 当前前端只传递非秘密 `X-HW-ID` 调用上下文，不支持 JWT/APPKEY 的输入、存储、刷新或 Header 注入；需要本地凭据认证的 Runtime 部署不属于该直接适配器的支持范围。
 
 ### 3.3 目标设计与分类
 
 | 目标差异 | 分类 | 理由 |
 |---|---|---|
-| 产品主界面不再直接调用内部 Runtime V1 | 架构变化 | 浏览器需要稳定的公共 Chat/Agent 资源，而不是内部 Session 标识和凭据。 |
-| 隐藏凭据、ETag、原始 SSE 与内部错误 | 安全加固 | 降低凭据暴露、内部实现泄漏和错误信息越界风险。 |
+| 产品主界面不再直接调用内部 Runtime V1 | 架构变化 | 当前直接适配器没有生产认证能力；浏览器还需要稳定的公共 Chat/Agent 资源，而不是内部 Session 标识。 |
+| 保持前端凭据无持有 | 产品约束 + 安全加固 | 当前实现已经没有 JWT/APPKEY 输入、配置、存储和注入路径；产品设计不新增凭据编辑器，也不把秘密放入浏览器构建、DOM、日志或诊断抽屉。 |
+| 生产认证由 mate-service / 网关边界完成 | Target-only architecture | 浏览器身份、登录态、授权与审计不由 Chat 页面收集原始凭据；具体会话承载和刷新机制必须在公共 API 评审时确认，不能从当前直接适配器推断。 |
+| 隐藏 ETag、原始 SSE 与内部错误 | 安全加固 | 降低内部实现泄漏和错误信息越界风险；凭据不是“隐藏字段”，而是前端不支持的数据。 |
 | 将 Steer/FollowUp/Abort 改为用户语言 | 产品约束 | 用户决策是“调整方向”“加入队列”“停止”，不是选择内部 operation；命名与 Codex desktop 对齐。 |
 | 运行中只显示当前跟进模式，默认 Steer | 产品约束 | Codex desktop 的 Composer 以一个可配置默认行为和单次反转快捷键工作；两个常驻模式会增加不必要决策并偏离参照实现。 |
 | 将工具事件合并为紧凑 activity disclosure | 产品约束 | 保留执行透明度，同时避免 started/completed/result 三段协议噪音；执行中默认展开，完成后折叠。 |
@@ -156,6 +168,8 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 生产链路必须是：浏览器调用 mate-service 公共 HTTP/SSE，mate-service 完成认证、授权、
 `chat_id` 与内部 `session_id` 映射、错误脱敏和 Event 投影，再调用 CampusClaw Runtime。
 当前仓库的直接 Runtime client 只能作为本地诊断基线，不能被描述为已满足生产安全边界。
+该 client 只携带非秘密 `X-HW-ID`，不支持 JWT/APPKEY；公共链路的身份建立不得通过给
+CampusClaw 页面增加凭据表单或把秘密写入 `VITE_*` 来补齐。
 
 ## 6. 信息架构与界面状态
 
@@ -171,10 +185,10 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 | 区域 | 主要内容 | 用户动作 | 默认隐藏内容 |
 |---|---|---|---|
 | 左侧导航 | 新建会话、最近会话、Agent 中心、设置 | 创建、切换、搜索会话 | `session_id`、接口地址 |
-| 顶部栏 | Agent 名称、自动保存、模型、深度思考、粗粒度状态 | 切换 idle Session 的模型/思考；运行时停止 | ETag、资源版本、Provider 凭据 |
+| 顶部栏 | Agent 名称、自动保存、模型、深度思考、粗粒度状态 | 切换 idle Session 的模型/思考；运行时停止 | ETag、资源版本；任何区域都不提供凭据入口 |
 | 对话画布 | User turn、Agent 活动流（思考 disclosure + 工具 activity + 安全入参）、Assistant 安全富文本、附件、错误恢复提示 | 阅读、选择文本、打开安全链接、复制正文/代码、展开思考或工具详情 | SSE frame、瞬时 Entry ID、原始未脱敏入参、可执行 HTML |
 | Composer | 附件、输入、发送；运行时当前跟进模式 | 发送新消息、调整方向、加入队列 | operation path、内部请求体 |
-| 开发者诊断 | 请求摘要、原始事件、内部标识 | 复制调试信息 | 仅内部构建和授权角色可见 |
+| 开发者诊断 | 请求摘要、原始事件、内部标识 | 复制调试信息 | 仅内部构建和授权角色可见；仍不接受或展示 JWT/APPKEY |
 
 ### 6.1 低保真设计
 
@@ -206,7 +220,7 @@ v8 保留 v7 的 Assistant 富文本和紧凑 activity disclosure，把 O1 从�
 
 1. 页面从 mate-service 获取当前用户可用的 Agent 目录。
 2. 用户选择 Agent 后创建公共 Chat；mate-service 在内部创建并绑定 Runtime Session。
-3. Session 创建、鉴权、默认模型和 `thinking` 初始化不以表单方式暴露。
+3. 用户身份由统一登录、mate-service 或网关边界建立；前端不显示凭据表单，也不接收、持久化或刷新 JWT/APPKEY。Session 创建、授权、默认模型和 `thinking` 初始化在后台完成。
 4. 若 Agent 目录或模型不可用，显示业务可读错误和重试，不显示内部错误响应。
 
 Agent 目录与公共 Chat 创建是目标态设计；当前 11 个 Runtime operation 没有 Agent 列表、
@@ -257,7 +271,7 @@ Chat 标题或用户会话列表接口。
 
 ![Runtime Event 到产品 UI 投影](runtime_event_ui_projection.svg)
 
-[PlantUML 源码：`runtime_event_ui_projection`](diagram.puml#L138)
+[PlantUML 源码：`runtime_event_ui_projection`](diagram.puml#L150)
 
 | Runtime 事件 | 产品 UI 对象 | 处理规则 |
 |---|---|---|
@@ -337,7 +351,7 @@ Chat 标题或用户会话列表接口。
 
 ![Assistant 安全富文本渲染](assistant_rich_text_rendering.svg)
 
-[PlantUML 源码：`assistant_rich_text_rendering`](diagram.puml#L61)
+[PlantUML 源码：`assistant_rich_text_rendering`](diagram.puml#L73)
 
 1. `RuntimeEventProjector` 只维护 `rawMarkdown`、streaming 状态和持久化消息身份，不保存 HTML。
 2. `RichTextRenderer` 使用关闭 raw HTML 的 Markdown parser 生成 AST；实现阶段选择具体依赖时需
@@ -454,7 +468,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 | 浏览器安全 Event Schema | 内部 SSE 不能字节透明转发 | mate-service event projector |
 | Assistant Markdown 原文保真 | Runtime `TextContent.text` 原样持久化并投影；公共 bridge 尚未逐项评审 | mate-service event projector 必须透传文本，不生成 HTML |
 | 浏览器安全的 Thinking 摘要与 ToolCallSpec | 内部 `assistant.thinking.completed` 可恢复但属于原始私有推理；Assistant completed 含原始 `tool_call.arguments`；公共投影未评审 | mate-service event projector 生成安全的 `thinkingDisplayTitle/thinkingDisplaySummary`，保留工具稳定关联身份，并对入参做服务端脱敏、资源映射和预算 |
-| 浏览器认证、权限和审计 | Runtime 只做内部 Header 形状校验 | mate-service / 网关 |
+| 浏览器认证、权限和审计 | 当前前端只发送非秘密 `X-HW-ID`，没有 JWT/APPKEY 输入、存储或注入能力；Runtime 当前不做本地凭据认证 | mate-service / 网关建立身份并执行授权；具体浏览器会话机制待公共 API 评审 |
 | 可恢复的排队项 ID、列表与队列管理 | Steer/FollowUp 的 `202` 无控制项 ID，Runtime 无公开队列查询/修改接口 | mate-service bridge + Runtime 目标契约 |
 
 因此，高保真稿是已确认 Runtime 能力上的产品体验目标，不应表述为现有后端已经提供了
@@ -462,7 +476,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 
 ## 12. 错误、边界与 DFX
 
-- `401/403`：交给统一登录/权限处理，不在 Chat 里展示凭据编辑器。
+- `401/403`：交给统一登录/权限处理；不弹出 JWT/APPKEY 输入框，不从 URL、表单或浏览器存储补采凭据，也不带原请求自动重试副作用操作。
 - `409 SESSION_BUSY`：普通发送切换到运行中控制，不自动重复请求。
 - `409 SESSION_NOT_RUNNING`：刷新 Session；允许用户改为新的普通消息。
 - `412 SESSION_VERSION_MISMATCH`：刷新模型/思考状态，再让用户确认是否继续修改。
@@ -485,7 +499,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 
 1. **设计确认**：确认本文件的三状态结构、执行中控制命名和视觉方向。
 2. **前端壳与 mock adapter**：实现路由、导航、对话、思考/工具活动流、入参 viewer、Composer、状态机与
-   `RichTextRenderer`，不接真实凭据。
+   `RichTextRenderer`；适配器保持无 JWT/APPKEY 能力，只使用非秘密 fixture 和调用上下文。
 3. **公共 bridge 契约评审**：逐项确认 Agent、Chat、Attachment、Model Catalog 与 public SSE。
 4. **真实集成**：替换 mock adapter；实现历史去重、断线恢复、ETag 冲突和错误投影。
 5. **诊断隔离**：把现有调试台迁移到内部路由或独立开发构建，验证生产包不可达。
@@ -507,7 +521,8 @@ check/“已完成”标签区分，不能只依赖颜色。
 - 控制测试：desktop running 默认 Steer、设置切换 Queue、单条快捷键反转、Abort、Steer 优先、
   队列满、响应不确定不重试、刷新后不虚构未送达队列。
 - 配置测试：idle 才能改模型/思考、ETag 冲突刷新、模型切换关闭不支持的 thinking。
-- 安全测试：生产 DOM、网络日志和错误 UI 不出现内部凭据、`session_id`、ETag 或原始 SSE。
+- 凭据负向测试：界面和开发者诊断均不存在 JWT/APPKEY 控件；构建配置不接受秘密 `VITE_*`；`requestRaw` 不构造 `Authorization` / `X-HW-APPKEY`；源码、构建产物、DOM、日志和错误 UI 不出现真实凭据。
+- 安全测试：生产 DOM、网络日志和错误 UI 不出现内部 `session_id`、ETag 或原始 SSE；工具与消息 fixture 只能使用显式假值。
 - 可访问性：键盘全流程、焦点顺序、读屏 streaming、色彩对比、reduced motion。
 
 ## 16. 验证要求
@@ -517,6 +532,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 - Markdown 不包含 Mermaid；所有图片和 PlantUML 行锚点存在。
 - `frontend-review.html` 可独立打开，三个 `screenKey`、版本、评审状态和图片均可见。
 - 低保真 HTML 可独立打开，三个状态均在首屏评审板中可见。
+- README、评审页、低保真和 ADR 都明确前端不支持 JWT/APPKEY，且不再声称凭据可在开发者诊断抽屉中查看。
 - `campusclaw-mark-o1.png` 可解码且保留 alpha；低保真 HTML 直接引用该资产，不存在 CSS 重绘或第二套图形定义。
 - 常规态 v8 与运行态 v8 高保真 PNG 可解码且包含完整产品视口；两张稿均以透明底原图直接显示 O1，显示安全思考摘要和纵向工具详情，不显示原始私有推理、内部 ID、绝对路径或凭据；常规态仍明确显示渲染后的表格和行内代码。
 - `git diff --check` 通过。
@@ -534,6 +550,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.8.0 | 2026-08-27 | 基于 `pi-mono-java@320d7907` 修正凭据边界：当前前端只发送非秘密 `X-HW-ID`，不支持 JWT/APPKEY 输入、配置、存储或 Header 注入；删除“凭据可在开发者诊断中查看”的错误设计，明确生产身份与授权由 mate-service / 网关承担且具体浏览器会话机制待评审；同步 ADR、评审页、低保真与 PlantUML/SVG。 |
 | 0.7.1 | 2026-08-26 | 修正 O1 在界面中被深色方块和过小身份容器弱化的问题；品牌位改为透明底原图直接显示并等比放大，同步常规态/运行态 v8、低保真与评审面。 |
 | 0.7.0 | 2026-08-26 | 对照本机 Codex activity disclosure 实现，将思考改为安全标题/摘要而非原始推理；工具改为紧凑活动行，执行中展开、完成后折叠，输入与输出始终纵向排列，未开始工具不显示；同步常规态/运行态 v7、低保真、评审面和 PlantUML/SVG。 |
 | 0.6.0 | 2026-08-26 | 确认 O1 为 CampusClaw 品牌标识，新增原始透明 PNG 权威资产；禁止生成式重绘，低保真/评审 HTML 直接引用同一文件，高保真 v6 采用确定性缩放与合成；将冷灰表面调整为暖白、暖灰和深暖黑，保留绿色运行/完成语义。 |

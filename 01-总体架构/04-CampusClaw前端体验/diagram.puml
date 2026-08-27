@@ -1,9 +1,14 @@
 @startuml frontend_product_boundary
-' Source evidence: frontend/src/App.vue (current debug console shell) and frontend/src/composables/useRuntimeApi.ts (useRuntimeApi, BASE_PATH).
+' Source baseline: pi-mono-java 320d790726a70aada6100052952d5494d2a378ac.
+' Source evidence: frontend/README.md lines 26-28 and 40-58.
+' Source evidence: frontend/.env.example lines 1-7.
+' Source evidence: frontend/src/App.vue lines 177-290 and frontend/src/components/DevDiagnostics.vue lines 4-25.
+' Source evidence: frontend/src/composables/useRuntimeApi.ts lines 18-20 and 480-495 (requestRaw).
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java.
-' Observed behavior: the current browser client calls the internal Runtime V1 contract directly and exposes credentials and protocol fields.
-' Design reason: the product UI must use a public bridge so internal session identifiers, credentials, ETags, and raw SSE payloads do not cross the browser boundary.
+' Source evidence: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionRoutesTest.java lines 102-120.
+' Observed behavior: the current browser client calls Runtime V1 directly, sends only non-secret X-HW-ID, and has no JWT or APPKEY editor, storage, or header injection path.
+' Target-only design: the product browser calls a public bridge; the exact browser login and session mechanism is pending API review.
+' Design reason: the lack of credential support is not production authentication; the public bridge owns identity, authorization, public resources, and safe event projection.
 
 title CampusClaw product frontend boundary
 left to right direction
@@ -11,6 +16,7 @@ left to right direction
 actor "Campus user" as User
 rectangle "Product frontend" as Frontend {
   component "Agent and chat workspace" as Workspace
+  component "Credentialless request adapter\nX-HW-ID context only" as RequestAdapter
   component "Product event projector" as Projector
   component "Developer diagnostics\n(internal build only)" as Diagnostics
 }
@@ -27,24 +33,29 @@ rectangle "CampusClaw Runtime V1" as Runtime {
 }
 
 User --> Workspace : chat tasks
-Workspace --> PublicApi : public HTTP and SSE
+Workspace --> RequestAdapter : product actions
+RequestAdapter --> PublicApi : target public HTTP and SSE
 PublicApi --> Policy
 Policy --> Mapping
 Mapping --> Sessions : internal HTTP
 Stream --> Policy : internal SSE events
 Policy --> Projector : public safe events
-Diagnostics ..> Sessions : local diagnostics only
+RequestAdapter ..> Sessions : current internal-only direct HTTP
+Stream ..> Projector : current internal-only direct SSE
+Diagnostics --> RequestAdapter : Agent and Session IDs only
 
 note bottom of Frontend
 Product constraints:
 - No Service URL or credential editor
+- No JWT or APPKEY env, storage, or header injection
 - No raw session_id, ETag, JSON, or SSE frames
 - Agent, chat, and attachment metadata use public resources
 end note
 
 note bottom of Mate
 Security hardening:
-- Terminate browser authentication
+- Establish identity outside Chat credential forms
+- Exact browser session mechanism remains pending
 - Authorize each action
 - Project internal errors and events
 - Do not byte-forward internal SSE
@@ -54,6 +65,7 @@ note bottom of Runtime
 Observed internal contract:
 - 11 Session Runtime operations
 - One active execution per Session
+- No Runtime-local integration credential validation
 - Persistent Entry history plus transient progress events
 end note
 @enduml

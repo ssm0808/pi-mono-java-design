@@ -143,7 +143,7 @@
     <div class="board-header">
       <div>
         <h1>CampusClaw 真实前端 · 低保真结构</h1>
-        <div class="subtitle">桌面优先 / 三个关键状态 / 技术协议默认隐藏</div>
+        <div class="subtitle">桌面优先 / 三个关键状态 / 前端不支持 JWT/APPKEY</div>
       </div>
       <div class="legend"><span>用户操作</span><span class="system">系统状态</span></div>
     </div>
@@ -217,7 +217,7 @@
         </div>
         <div class="annotation a1">Model / Thinking 是会话级能力<br>放入标题栏，不占用设置侧栏</div>
         <div class="annotation a2">安全分析摘要 + Tool → 时序活动流<br>输入在上、输出在下，不做左右分栏</div>
-        <div class="annotation a3">凭据、session_id、ETag、SSE frame<br>仅在“开发者诊断”抽屉展示</div>
+        <div class="annotation a3">前端不接受或展示 JWT/APPKEY<br>session_id、ETag、SSE 仅限开发诊断</div>
       </section>
 
       <section class="screen small-screen">
@@ -228,7 +228,7 @@
           <div class="welcome">
             <img class="welcome-symbol" src="campusclaw-mark-o1.png" alt="CampusClaw">
             <h2>今天想让 CampusClaw 做什么？</h2>
-            <p>先选择一个 Agent。创建 Session、鉴权和默认模型都由系统在后台完成。</p>
+            <p>先选择一个 Agent。身份由统一登录或网关建立；前端不接收 JWT/APPKEY，Session 与默认模型由系统在后台创建。</p>
             <div class="agent-grid">
               <div class="agent-card"><b>运营分析</b>数据检查、异常定位</div>
               <div class="agent-card"><b>校园运维</b>故障排查、方案生成</div>

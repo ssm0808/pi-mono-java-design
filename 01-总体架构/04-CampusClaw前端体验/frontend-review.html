@@ -240,10 +240,10 @@
         <div class="row">
           <img class="review-brand-mark" src="campusclaw-mark-o1.png" alt="">
           <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">0.7.1</span>
-          <span class="tag">Product · 待确认</span>
+          <span class="tag">0.8.0</span>
+          <span class="tag">Product · 凭据边界已确认</span>
         </div>
-        <code class="base">HTTP V1 1.38.0 aligned · O1 warm-neutral</code>
+        <code class="base">pi-mono-java 320d7907 · credentialless browser · O1 warm-neutral</code>
       </header>
 
       <section class="section">
@@ -259,6 +259,22 @@
           <li><a href="diagram.puml">diagram.puml</a>：架构图唯一图源。</li>
           <li><a href="low-fidelity.html">low-fidelity.html</a>：低保真布局源；PNG 为评审快照。</li>
         </ol>
+      </section>
+
+      <section class="section" id="credential-boundary">
+        <div class="section-title"><h2>已确认：前端不支持 JWT/APPKEY</h2><code class="screen-key">credentialBoundary</code></div>
+        <p class="description">当前前端没有凭据表单、秘密 <code>VITE_*</code> 配置、浏览器 credential store 或 <code>Authorization</code> / <code>X-HW-APPKEY</code> 注入路径；统一请求只发送非秘密 <code>X-HW-ID</code>。开发者诊断入口同样只处理 Agent ID 与 Session ID，不查看凭据。</p>
+        <div class="table-wrap" style="margin-top:12px">
+          <table>
+            <thead><tr><th>边界</th><th>设计结论</th></tr></thead>
+            <tbody>
+              <tr><td>当前内部调试链路</td><td>仅适用于 Runtime 不做本地凭据认证的受控环境；无凭据不等于生产已认证。</td></tr>
+              <tr><td>未来生产链路</td><td>统一登录、mate-service 或网关负责身份与授权；具体浏览器会话机制待公共 API 评审。</td></tr>
+              <tr><td>禁止补偿方式</td><td>不增加 JWT/APPKEY 编辑器，不把秘密写入 <code>VITE_*</code>、URL、DOM、日志或浏览器存储。</td></tr>
+              <tr><td><code>401/403</code></td><td>交给统一登录/权限流程，不弹出凭据框，也不自动重放副作用请求。</td></tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section class="section" id="brand-direction">
@@ -283,7 +299,7 @@
             <figcaption>首次进入状态目前使用三状态低保真板评审；Agent 目录和公共 Chat 创建仍是 mate-service 目标态。</figcaption>
           </figure>
           <div class="screen-detail">
-            <section class="section"><h3>作用</h3><p class="description">让用户先选择一个受管 Agent，再进入真实任务会话；创建 Runtime Session、认证和默认模型初始化均在后台完成。</p></section>
+            <section class="section"><h3>作用</h3><p class="description">让用户先选择一个受管 Agent，再进入真实任务会话；用户身份由统一登录、mate-service 或网关建立，前端不接收 JWT/APPKEY。Runtime Session 创建、授权和默认模型初始化均在后台完成。</p></section>
             <section class="section"><h3>主要评审点</h3><ul class="review-points"><li>是否以 Agent 能力而不是协议配置开始。</li><li>首次进入是否需要单独高保真稿。</li><li>Agent 卡片的名称、描述和权限提示是否足够。</li></ul></section>
           </div>
         </div>
@@ -303,7 +319,7 @@
             <figcaption>v8：O1 以透明底原图直接显示，不再缩进深色品牌方块；其余活动 disclosure 与纵向工具详情保持 v7 不变。</figcaption>
           </figure>
           <div class="screen-detail">
-            <section class="section"><h3>作用</h3><p class="description">围绕 Agent、Chat、消息、附件和工具活动完成日常任务。协议身份、ETag、原始 SSE 和凭据不进入产品主流程。</p></section>
+            <section class="section"><h3>作用</h3><p class="description">围绕 Agent、Chat、消息、附件和工具活动完成日常任务。协议身份、ETag 和原始 SSE 不进入产品主流程；JWT/APPKEY 不是隐藏的高级字段，而是前端不支持的数据。</p></section>
             <section class="section"><h3>主要评审点</h3><ul class="review-points"><li>安全的思考摘要与工具是否在同一 Agent 活动区中易于连续阅读，又保持独立信任边界。</li><li>工具详情是否按输入在上、输出在下阅读，并且不显示内部 ID、绝对路径或凭据。</li><li>Assistant-only 安全 Markdown 与 User/Thinking/Tool 专用 viewer 边界是否清楚。</li><li>表格和代码块是否只在自身容器横向滚动，不撑破对话区。</li></ul></section>
           </div>
         </div>
@@ -392,8 +408,9 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         <details class="review-question" open><summary>1. 是否确认三状态信息架构？</summary><p><code>firstUse</code>、<code>idleConversation</code>、<code>runningConversation</code> 作为首版稳定评审和测试边界。</p></details>
         <details class="review-question" open><summary>2. 已确认：O1 品牌标识；暖中性配色进入评审</summary><p>O1 使用原始透明 PNG，不生成式重绘，也不缩进深色品牌方块；暖白、暖灰与深暖黑构成工作台，珊瑚色仅用于品牌标识，绿色继续表达运行与完成。</p></details>
         <details class="review-question" open><summary>3. 已确认：跟进交互与 Codex desktop 一致</summary><p>desktop 默认“调整方向”，设置可切换“加入队列”；<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。“调整方向”不会硬中断当前模型或工具。</p></details>
-        <details class="review-question" open><summary>4. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
-        <details class="review-question" open><summary>5. 本轮方向：采用 Codex-inspired 活动 disclosure</summary><p>Thinking 只展示公共 bridge 生成的安全标题和摘要；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。原始推理、内部 ID、绝对路径和凭据都不进入产品浏览器。</p></details>
+        <details class="review-question" open><summary>4. 已确认：前端不支持 JWT/APPKEY</summary><p>当前只发送非秘密 <code>X-HW-ID</code>；不新增凭据表单、秘密构建配置、浏览器存储或认证 Header 注入。生产身份与授权由统一登录、mate-service 或网关承担，具体会话机制待公共 API 评审。</p></details>
+        <details class="review-question" open><summary>5. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
+        <details class="review-question" open><summary>6. 本轮方向：采用 Codex-inspired 活动 disclosure</summary><p>Thinking 只展示公共 bridge 生成的安全标题和摘要；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。原始推理、内部 ID、绝对路径和凭据都不进入产品浏览器。</p></details>
         <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="imagegen-prompts.md">查看 ImageGen Prompts</a></div>
       </section>
     </div>
