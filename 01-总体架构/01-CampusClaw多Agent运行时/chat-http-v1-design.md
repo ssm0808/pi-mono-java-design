@@ -2,14 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.41.0 |
-| 状态 | 十一个接口路径保持不变；本版固定压缩重试后的在线与重载上下文一致性 |
+| 文档版本 | 1.42.0 |
+| 状态 | 十一个接口路径保持不变；POST Events 新增 `access-token` 及仅 Mate execute 透传边界 |
 | 接口评审状态 | 十一个 operation 均已确认 |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，由精确契约源生成 |
 | 对外机器契约 | 不维护；结构化 JSON 只作为 HTML 生成源，不替代已废弃 OpenAPI |
 | 端到端传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均为 HTTP；执行响应使用请求范围内 SSE |
-| 设计仓分析基线 | `bb967eebe1f62553e92480b3ea3808a664fbe73e` |
+| 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | pi-mono 源码基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | pi-mono-java PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | pi-mono-java PR 167 merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -18,9 +18,10 @@
 | pi-mono-java PR 167 对齐实现 | `bd26e7f81bac8f68be0c3523efe23b51f96c52e4` |
 | OpenCode 源码基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | pi-mono-java 字段命名核对基线 | `304eda06ff603fc9b6bbcaad0c296cc151a7defb`（`codex/runtime-http-contract-v137`） |
+| pi-mono-java 凭据透传核对基线 | `320d790726a70aada6100052952d5494d2a378ac` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | Anthropic Managed Agents 文档核对 | 2026-08-17；`managed-agents-2026-04-01` beta |
-| 更新日期 | 2026-08-24 |
+| 更新日期 | 2026-08-27 |
 
 ## 1. 结论
 
@@ -67,7 +68,7 @@ CampusClaw 当前目标契约的命名边界为：
 | 位置 | 命名规则 |
 |---|---|
 | Path、Query、JSON 请求、普通 JSON 响应、SSE `data` | 字段统一使用 lowerCamelCase，例如 `sessionId`、`fileIds`、`entrySeq`、`nextPage` |
-| HTTP Header | 保持标准或公司既有原名，例如 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`、`If-Match`、`Accept-Language`、`Content-Language` |
+| HTTP Header | 保持标准或公司既有原名，例如 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`、`access-token`、`If-Match`、`Accept-Language`、`Content-Language` |
 | 字段值 | 事件类型值、错误码、`tool_call` 等枚举值和类型化 ID 值保持不变 |
 | 内部实现与源码证据 | SQL 列名、既有源码符号和外部参考契约保留其原生拼写，并明确标注为非当前 wire field |
 
@@ -78,6 +79,7 @@ CampusClaw 当前目标契约的命名边界为：
 | Operation | Header 示例 | Runtime 处理 | Runtime 错误 |
 |---|---|---|---|
 | 全部十一项 operation | `X-HW-ID + Authorization`；兼容 `X-HW-ID + X-HW-APPKEY` | Controller 接收调用上下文；不检查组合完整性、共存、格式或真实性 | 不声明 `UNAUTHENTICATED` / `AUTH_CREDENTIAL_CONFLICT` |
+| 仅 `POST /sessions/{sessionId}/events` | 上述 JWT 或 APPKEY 示例均额外必填 `access-token` | 捕获本次 execution 的四项入站 Header；仅 Mate 工具 execute 原名透传已提供值 | 不新增 Runtime 本地凭据校验错误 |
 
 JWT 是默认调用示例，APPKEY 是兼容示例；两类 Header 同时出现不会被 Runtime 拒绝。
 当前 Java 的全路径认证拦截器与此目标契约不同：目标实现移除前置拦截，也不把相同
@@ -323,8 +325,22 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 POST /campusclaw-service/v1/sessions/{sessionId}/events
 X-HW-ID: <CALLER_ID>
 Authorization: Bearer <JWT>
+access-token: <ACCESS_TOKEN>
 Content-Type: application/json
 ```
+
+APPKEY 兼容模式将 `Authorization` 替换为 `X-HW-APPKEY: <APPKEY>`，但
+`access-token` 同样必填。HTTP Header 匹配不区分大小写，契约和出站请求统一
+保留用户指定的 `access-token` 拼写，不改写为 `X-Access-Token`。
+
+接受请求时，Runtime 把收到的 `X-HW-ID`、`Authorization`、
+`X-HW-APPKEY` 和 `access-token` 复制到该次 active execution 的不可变瞬态快照。
+两类认证 Header 同时存在时不互斥，快照保留两者。只有 Agent 实际执行
+`CallMateTool` 并向 `POST /mate-service/v1/runtime/tools/{toolId}/execute` 发起请求时，
+才将快照中已提供的 Header 按原名透传。`ListMateTools`、Call cache miss 触发的
+Agent/Skill/metadata 发现、Model Manager chat、受管 Runtime 加载、配置请求及其他出站
+HTTP 请求不得携带这些凭据。快照不进入日志、Prompt、ResultBean、SSE/Event 或
+持久化存储，执行结束后即丢弃。这是相对当前 Java “发现也透传三项凭据”的安全加固。
 
 本接口已确认的请求形状为：
 
@@ -1104,11 +1120,15 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 - 全部十一项 operation 均携带共享调用上下文 Header 示例：首选
   `X-HW-ID + Authorization`，兼容 `X-HW-ID + X-HW-APPKEY`。
+- 仅 `POST /sessions/{sessionId}/events` 额外必填 `access-token`；该 Header 不成为其他
+  十个 operation 的共享 Header。
 - 目标实现移除进入 Controller 前的认证拦截，也不在 Controller 内调用
   `RuntimeRequestAuthenticator`。Runtime 不检查 Header 是否齐全、是否同时存在、Bearer
   形状或凭据真实性，不声明 `UNAUTHENTICATED` / `AUTH_CREDENTIAL_CONFLICT`。
 - JWT/APPKEY 真实性与动作授权由上游完成。两种凭据 Header 可以同时透传；Runtime 不据此
   分支、拒绝、降级或建立 Session owner。
+- POST Events 捕获的四项 Header 只存在于本次 execution 的瞬态快照；仅实际 Mate
+  execute 可以读取并原名透传已提供值，工具发现、模型和其他请求不得读取。
 - Header 值不记日志、不写 ResultBean、不进入 Session、Prompt 或 Event；`sessionId` 不是凭据。
 - Runtime 仍对每个请求校验适用的 Session、Agent、Model、ETag 和业务状态；这些是资源与
   业务契约检查，不是凭据认证。
@@ -1190,6 +1210,8 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 当前实现差异 | pi-mono-java `1f801dbb` 的 `RuntimeApiConstants` 16-18 行仍定义旧 Agent 格式和通用 `SESSION_ID_PATTERN`；`RandomSessionIdGenerator.nextId` 20-27 行仍生成无前缀的 26 位 Crockford Base32；`RuntimeSessionService.newSession` 仍调用 `setThinking(false)` |
 | 当前实现差异 | 同基线 `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql` 的 `t_sessions.agent_id` 仍为 `VARCHAR(30)`，无法存储 38 字符的新 Agent ID；实现前必须迁移为至少 38 字符，本设计推荐与元数据存储统一为 `VARCHAR(64)` |
 | 当前实现差异 | 同基线 `RuntimeWebMvcConfiguration.addInterceptors` 27-30 行在进入 Controller 前把认证拦截器应用到 `/campusclaw-service/v1/**` 全路径；目标契约移除该前置检查，且全部 Controller 都不调用认证组件。十一项操作只接收共享调用上下文 Header，不做组合、共存、格式或真实性检查，属于认证边界架构变更 |
+| 当前实现差异 | 凭据核对基线 `320d7907` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:61-69` 与 `RuntimeRequestContext.java:45-49` 只捕获 `X-HW-ID`、`X-HW-APPKEY`、`Authorization`，未接收 `access-token`。`common/dto/RequestHeaderInfo.java:81-90` 定义的出站名是 `X-Access-Token`，与目标契约原名不同，且 Runtime 当前未赋值 |
+| 当前实现差异 | 同基线 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:134-185` 的 `queryToolIdsByAgentId/queryToolIdsBySkillId/queryToolMetaByIds` 把 Mate 凭据发往发现端点；`invokeTool` 303-340 行与 `toHeaderInfo` 367-373 行只对 execute 透传原三项。目标改为发现端点无凭据、只有 execute 收到本次 POST Events 的四项瞬态 Header，属于安全加固 |
 | 当前实现差异 | 同基线 `UserEventRequestVO` 28-52 行仍声明、校验并解析 `type=user.message`；目标请求体删除该冗余字段，属于产品契约精简 |
 | 当前实现差异 | 字段命名核对基线 `304eda06`：`RuntimeSessionController`、`RuntimeEventController`、`RuntimeSessionConfigurationController` 和 `RuntimeSessionControlController` 的映射仍使用 `{agent_id}` / `{session_id}`；`CreateSessionResponseVO`、`GetSessionResponseVO`、`AvailableModelsResponseVO`、`EventPageResponseVO`、`ControlMessageAcceptedResponseVO`、`ChangeModelRequestVO`、`UserEventRequestVO` 以及 `RuntimeEntryCodec` / `RuntimeEventProjector` 仍显式读写 snake_case。1.38 lowerCamelCase 是相对该实现的架构变更 |
 | 观察到的行为 | 同基线 `modules/ai/.../AssistantMessageEvent.java` 29-56、92-117 行定义内部 `thinking_start/thinking_delta/thinking_end`；`RuntimeEventType` 13-23 行没有公开 thinking 类型，`RuntimeEventProjector.projectMessageUpdate` 128-140 行只投影文本 delta |
@@ -1204,14 +1226,14 @@ Anthropic Managed Agents 官方文档在 2026-08-17 公开的
 | 观察到的行为 | Anthropic [List Events API](https://platform.claude.com/docs/en/api/beta/sessions/events/list)：`GET /v1/sessions/{session_id}/events` 通过不透明 `page/next_page` 分页，并按 `processed_at` 排序；公开响应没有固定快照水位 |
 | 产品约束 | Session/Message、文件引用和 Manager 权威保持不变；执行轮次不是调用方可见的公共 Run，权威恢复单元是 Session Entry |
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
-| 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径；全部十一项操作携带共享调用上下文 Header，Runtime 不执行本地凭据认证 |
+| 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径；全部十一项操作携带共享调用上下文 Header，仅 POST Events 额外必填 `access-token`，Runtime 不执行本地凭据认证 |
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
 | 产品约束 | Session `thinking` 是是否启用深度思考的 boolean；`false` 映射为 pi 的 `off`，`true` 使用模型和 Agent 的受管非 `off` 推理强度，不公开具体等级 |
 | 产品约束 | Path、Query、JSON 与 SSE data 字段只使用 lowerCamelCase；HTTP Header 保留原名；事件类型值、错误码、枚举值和类型化 ID 值不改变，也不接受 snake_case 字段别名 |
 | 产品约束 | Agent、Tool、Skill、Session ID 分别使用 `agent-`、`tool-`、`skill-`、`session-` 加去连字符的 32 位十六进制 UUID；字段命名变化不得引入不同的 ID 值或旧格式别名 |
 | 产品约束 | Create Runtime Session 成功时必须返回并持久化 `thinking=true` |
 | 产品约束 | CampusClaw 不再提供 CLI/TUI/OneShot/RPC/ACP 产品入口；首版不注册 Slash Command，也不新增 Slash HTTP operation，但保留宿主无关 Registry 与 `/model`、`/thinking`、`/compact`、`/name` 源码能力 |
-| 安全边界 | 全部操作透传共享调用上下文 Header，但 Runtime 不判断凭据是否完整、互斥、Bearer 合法或真实，不声明本地认证错误；真实性与动作授权明确由上游完成 |
+| 安全边界 | Runtime 不判断凭据是否完整、互斥、Bearer 合法或真实；POST Events 四项 Header 只作 execution 瞬态快照，不持久化或记录，发现、模型及其他请求无凭据，只有实际 Mate execute 原名透传已提供值 |
 | 安全加固 | Session 模型列表通过 `string[]` 只暴露 `modelId` 值，不返回名称、供应商、能力、base URL、凭据状态、价格、token 上限或供应商请求配置；thinking 内容只按显式开关进入受控事件投影 |
 | 安全加固 | `tool.execution.delta` 不返回工具参数；序列化、大小和背压异常只丢进度，不得破坏最终 ToolResult 或 SSE 连接 |
 | 架构改造 | CampusClaw 生成类型化 Session ID、直接 Agent 目录解析、ResultBeanAdapter 替换点、ETag 并发控制、请求范围内 POST SSE、断线后执行继续、按 thinking 状态投影与查询 thinking completed、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
@@ -1244,13 +1266,15 @@ mate-service。除公共 mate-service API 仍待逐项评审外，本文描述�
 `304eda06` 已实现 HTTP 1.37 的类型化 ID、`thinking=true`、全接口调用上下文 Header 且无
 Runtime 本地认证、请求体删除 `type` 和 thinking 事件可见性；1.38 的 lowerCamelCase
 wire fields、1.39 的公共压缩/Usage/领域事件/工具 delta/refresh 懒校准、1.40 的
-pi 压缩细节与 failed.aborted，以及本版 1.41 的重试候选持久化排除和实际输出上限，
+pi 压缩细节与 failed.aborted，1.41 的重试候选持久化排除和实际输出上限，
+以及本版 1.42 的 POST Events `access-token` 和“只有 Mate execute 透传”安全边界，
 均相对 PR 167 基线标记为目标设计，不得表述成该基线已有行为。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.42.0 | 2026-08-27 | 十一个路径不变；POST Events 额外必填 `access-token`，四项入站 Header 仅作本次 execution 瞬态快照；工具发现、模型与其他请求不携带凭据，仅实际 Mate execute 原名透传已提供值。 |
 | 1.41.0 | 2026-08-24 | 十一个路径及公共事件字段不变；压缩重试在内部持久化被丢弃 Assistant Entry ID，重载精确排除且不公开；公共 Agent 实际请求与 recoverable LENGTH 使用相同模型输出上限。 |
 | 1.40.0 | 2026-08-24 | 十一个路径不变；固定 pi 压缩的 Usage/边界/安全切点、成功 STOP 不重试、ERROR/LENGTH 单次恢复、split-turn/重复摘要、Read 路径继承及 `session.compaction.failed.aborted`。 |
 | 1.39.0 | 2026-08-24 | 保持十一个 HTTP 路径不变；明确不注册或解析 Slash Command；增加 Session `lifetimeUsage`、Assistant/Compaction Usage、模型/思考/压缩持久化领域事件、best-effort 工具 delta 与压缩瞬态事件；拆分公共历史和模型恢复投影，并固定 refresh 在下一次空闲执行前校准模型的事务与事件顺序 |

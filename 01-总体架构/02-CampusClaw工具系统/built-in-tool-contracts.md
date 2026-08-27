@@ -2,12 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.2.0 |
-| 状态 | 目标设计；工具 Schema 不因压缩对齐变化 |
-| 更新日期 | 2026-08-24 |
-| 设计仓分析基线 | `e4cf448140de0a4a23a4106d0043f709ad2a56cd` |
+| 文档版本 | 2.3.0 |
+| 状态 | 目标设计；Mate 工具 Schema 不变，凭据可见边界收紧 |
+| 更新日期 | 2026-08-27 |
+| 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
+| CampusClaw 凭据透传核对基线 | `320d790726a70aada6100052952d5494d2a378ac` |
 | CampusClaw 压缩修订前基线 | `a7f78fed345a289833970cd7b78399f0e8e51d32` |
 | pi 对照基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
@@ -256,6 +257,8 @@ Skill 查询时 `scope` 固定为：
 
 每次 List 都访问 Mate，不使用查询结果缓存。成功后只更新该来源在当前 Session 的
 名称到 ID 缓存快照，以便 Call 复用；不得清空其他 Agent/Skill 来源。
+所有 Agent binding、Skill binding 和 Tool metadata 发现 HTTP 请求都不得携带
+`X-HW-ID`、`Authorization`、`X-HW-APPKEY` 或 `access-token`。
 
 可用条件：Session 具有当前受管 Agent、直接 Skill 索引、Mate 查询能力和 Session 缓存。
 
@@ -287,7 +290,13 @@ Skill 查询时 `scope` 固定为：
 业务失败或返回未知工具，都不进行自动重试，避免副作用重复。Mate 继续负责最终授权、
 凭据、参数校验与执行。
 
-可用条件：Session 具有当前受管 Agent、完整直接 Skill 索引、`MateToolClient`、执行凭据、
+`CallMateTool` 只在实际 execute HTTP 请求中读取本次 POST Events execution 的
+不可变瞬态快照，并原名透传其中已提供的 `X-HW-ID`、`Authorization`、
+`X-HW-APPKEY` 和 `access-token`。不生成缺失值，不改写为 `X-Access-Token`，不将
+快照传给发现、模型或其他出站请求。快照不写日志、Session、Prompt、
+ToolResult 或持久化存储，execution 结束即丢弃。
+
+可用条件：Session 具有当前受管 Agent、完整直接 Skill 索引、`MateToolClient`、当前 Host execution 凭据、
 Session 缓存和 single-flight 协调器。
 
 ## 5. `Agent`
@@ -361,9 +370,11 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 | 源码观察 | 当前本地工具仍以小写或 lowerCamelCase 暴露，并包含读写、命令、Loop 和两条 Child 调用路径。 |
 | 源码观察 | 当前 `ReadTool` 使用 cwd 边界；其他文件工具尚未共用 Session 级工作区边界。 |
 | 源码观察 | 当前 `MateToolSessionCache.refresh` 清空平面 Map，List 一次来源会覆盖其他来源，Call 要求先 List。 |
+| 源码观察 | 凭据核对基线 `320d7907` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:134-185,303-373` 显示三类发现请求会透传原三项 Mate 凭据，execute 也只透传原三项；`runtimeapi/web/RuntimeRequestContext.java:45-49` 未捕获入站 `access-token`。 |
 | 源码观察 | 当前 `CronTool` 接受 model、system prompt 和 allowed tools，并依赖本地存储/调度实现。 |
 | 架构改造 | 三入口只装配 8 个 PascalCase 工具，并按工具规划并行段与串行 barrier。 |
 | 架构改造 | Mate 缓存改为 Session 完整有效快照，Call miss 自动 single-flight 刷新发现。 |
+| 安全加固 | Agent/Skill/metadata 发现全部无凭据；只有 Mate execute 原名透传 POST Events 快照中已提供的四项 Header。 |
 | 架构改造 | Child 统一经公共 `AgentSessionFactory` 创建独立 Session，不再使用两条 delegation 工具路径。 |
 | 安全加固 | 四个本地工具共用整个 `agent/{agentId}` 边界，拒绝符号链接和 realpath 越界。 |
 | 安全加固 | Find/Grep 的辅助能力随应用部署并在启动期校验，调用期间不下载二进制或回退到 shell。 |
@@ -390,6 +401,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.0 | 2026-08-27 | 保持 8 个模型工具 Schema 不变；List 与 Call miss 发现不带执行凭据，只有实际 Mate execute 透传 POST Events execution 快照中已提供的四项 Header。 |
 | 2.2.0 | 2026-08-24 | 保持 8 个模型工具 Schema 不变；固定压缩只追踪 PascalCase Read，路径排序去重并跨重复摘要继承。 |
 | 2.1.0 | 2026-08-24 | 保持三入口 8 工具契约不变；补充公共压缩只追踪 Read、Slash 源码保留但不注册及 PackageManager 删除边界。 |
 | 2.0.0 | 2026-08-23 | 收敛为三入口、8 个活动工具；Read/Find/Grep/Ls 对齐 pi 并加 Agent 工作区边界；CallMateTool 增加 Session 缓存 miss 自动发现；Child 统一使用公共 SessionFactory；移除 CLI、写工具、Bash 和 Loop 契约。 |

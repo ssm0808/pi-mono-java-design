@@ -236,14 +236,15 @@ end note
 title ListMateTools Live Discovery
 skinparam shadowing false
 
-' Source evidence (CampusClaw d649866):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateTool.java: execute
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java: refresh
-' Observed behavior: current List writes one flat name-to-ID map and Call depends
-' on a prior successful List.
-' Design reason: List remains live while a successful response updates only its
-' source cache, so listing one Skill cannot erase tools from another source.
+' Source evidence (pi-mono-java 320d790726a70aada6100052952d5494d2a378ac):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateTool.java: execute.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java: refresh.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:
+' queryToolIdsByAgentId, queryToolIdsBySkillId, and queryToolMetaByIds.
+' Observed behavior: discovery currently receives the same three Mate credentials as execute.
+' Java divergence: current List writes one flat name-to-ID map and Call depends on a prior List.
+' Security hardening: Agent, Skill, and metadata discovery never receive execution credentials.
+' Design reason: List stays live and updates only its source cache without exposing credentials.
 
 actor Model
 participant "ListMateTools" as List
@@ -256,9 +257,9 @@ participant "Session source cache" as Cache
 Model -> List : {skillName?}
 alt no skillName
   List -> Client : listAgentTools(currentAgentId)
-  Client -> Binding : list ordered Agent tool IDs
+  Client -> Binding : list ordered Agent tool IDs\nno execution credential headers
   Binding --> Client : [toolId...]
-  Client -> Meta : batch get metadata(toolIds)
+  Client -> Meta : batch get metadata(toolIds)\nno execution credential headers
   Meta --> Client : metadata by toolId
   Client -> Client : join by ID and restore binding order
   Client --> List : internal tool records
@@ -268,9 +269,9 @@ else exact direct Skill name
   List -> Index : resolve(skillName)
   Index --> List : skillId or error
   List -> Client : listSkillTools(skillId)
-  Client -> Binding : list ordered Skill tool IDs
+  Client -> Binding : list ordered Skill tool IDs\nno execution credential headers
   Binding --> Client : [toolId...]
-  Client -> Meta : batch get metadata(toolIds)
+  Client -> Meta : batch get metadata(toolIds)\nno execution credential headers
   Meta --> Client : metadata by toolId
   Client -> Client : join by ID and restore binding order
   Client --> List : internal tool records
@@ -290,14 +291,17 @@ end note
 title CallMateTool Name Resolution and Single-flight Refresh
 skinparam shadowing false
 
-' Source evidence (CampusClaw d649866):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java: invokeTool
-' Observed behavior: current Call fails when a prior List did not populate the
-' name-to-ID cache.
-' Design reason: a cache miss is resolved inside Call. Discovery may retry, but
-' the actual Mate execution is sent at most once to avoid duplicated effects.
+' Source evidence (pi-mono-java 320d790726a70aada6100052952d5494d2a378ac):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:
+' invokeTool and toHeaderInfo.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/
+' RuntimeEventController.java: submit; RuntimeRequestContext.java: mateCredentials.
+' Observed behavior: discovery and execute receive three credentials; access-token is not captured.
+' Architecture change: a cache miss is resolved inside Call without any execution credentials.
+' Security hardening: only one Mate execute request receives the POST Events execution snapshot.
+' Design reason: discovery may retry, but execute and its credential exposure occur at most once.
 
 actor Model
 participant "CallMateTool" as Call
@@ -315,12 +319,12 @@ else cache miss
   Call -> Flight : join or start full discovery
   activate Flight
   Flight -> Client : listAgentTools(currentAgentId)
-  Client -> Mate : discover Agent tools
+  Client -> Mate : discover Agent tools\nno execution credential headers
   Mate --> Client : ordered records
   Client --> Flight : Agent records
   loop every directly bound Skill
     Flight -> Client : listSkillTools(skillId)
-    Client -> Mate : discover Skill tools
+    Client -> Mate : discover Skill tools\nno execution credential headers
     Mate --> Client : ordered records
     Client --> Flight : Skill records
   end
@@ -345,9 +349,9 @@ else cache miss
   deactivate Flight
 end
 
-opt one toolId was resolved
-  Call -> Client : callTool(toolId, args or {}, context)
-  Client -> Mate : execute exactly once
+opt one toolId and an execution snapshot were resolved
+  Call -> Client : callTool(toolId, args or {}, credentials, context)
+  Client -> Mate : execute exactly once\nforward received X-HW-ID, Authorization,\nX-HW-APPKEY, and access-token values only
   Mate --> Client : result or error
   Client --> Call : result or error
   Call --> Model : ToolResultMessage
@@ -356,6 +360,7 @@ end
 note over Mate
 Never replay execute after timeout,
 disconnect, or Mate error.
+Never send execution credentials to discovery.
 end note
 @enduml
 

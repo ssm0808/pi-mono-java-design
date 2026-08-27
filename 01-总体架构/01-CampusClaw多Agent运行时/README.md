@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.3.0 |
-| 状态 | CampusClaw 内部 11 个接口保持不变；HTTP 1.41、公共 Session 能力与 PR 167 TUI 删除边界为目标设计；mate-service 公共接口待评审 |
+| 文档版本 | 3.4.0 |
+| 状态 | CampusClaw 内部 11 个接口路径保持不变；HTTP 1.42 新增执行级工具凭据边界；mate-service 公共接口待评审 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
-| 设计仓分析基线 | `bb967eebe1f62553e92480b3ea3808a664fbe73e` |
+| 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | pi-mono 源码基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -13,8 +13,9 @@
 | CampusClaw PR 167 审查头 | `bf28e72f94f29acd316eb872a250893ed54e3632` |
 | CampusClaw PR 167 对齐实现 | `bd26e7f81bac8f68be0c3523efe23b51f96c52e4` |
 | pi-mono-java 字段命名核对基线 | `304eda06ff603fc9b6bbcaad0c296cc151a7defb`（`codex/runtime-http-contract-v137`） |
+| pi-mono-java 凭据透传核对基线 | `320d790726a70aada6100052952d5494d2a378ac` |
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
-| 更新日期 | 2026-08-24 |
+| 更新日期 | 2026-08-27 |
 
 ## 1. 当前结论
 
@@ -168,6 +169,13 @@ Session、Entry 和 SSE 恢复，不获得 `runId`，也不存在 GetRun 或 Run
 内部校验组合完整性、两类凭据是否同时存在、Bearer 形状或真实性，也不因此返回
 `UNAUTHENTICATED/AUTH_CREDENTIAL_CONFLICT`；这些检查由上游负责。
 
+`POST /sessions/{sessionId}/events` 在上述共享 Header 之外必填
+`access-token`。Runtime 只为该次 active execution 保留收到的
+`X-HW-ID`、`Authorization`、`X-HW-APPKEY` 与 `access-token`；只有实际
+`POST /mate-service/v1/runtime/tools/{toolId}/execute` 会原名透传已提供的值。
+工具发现、Model Manager、受管目录、配置加载和其他 HTTP 请求均不携带这个快照；
+快照不写日志、ResultBean、Prompt、Event 或持久化存储，执行结束即丢弃。
+
 ### 5.2 执行 SSE
 
 `POST /sessions/{sessionId}/events` 直接返回一次执行的 SSE。确认的正常顺序是：
@@ -294,7 +302,7 @@ single-flight 自动发现当前 Agent 与全部直接绑定 Skill 的完整工�
 
 ![Mate 工具按名称解析与调用](../02-CampusClaw工具系统/call_mate_tool_sequence.svg)
 
-[PlantUML 源码：`call_mate_tool_sequence`](../02-CampusClaw工具系统/diagram.puml#L289)
+[PlantUML 源码：`call_mate_tool_sequence`](../02-CampusClaw工具系统/diagram.puml#L290)
 
 ### 7.3 TUI 删除边界与公共 Session 能力
 
@@ -356,12 +364,14 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 | 已实现 Java 行为 | `MyBatisRuntimeSessionRepository` 使用 openGauss 保存 Session、当前分支 Entry、严格序号、tombstone 和清理任务 |
 | 当前 Java 差异 | `RuntimeApiConstants.AGENT_ID_PATTERN` 仍为旧下划线格式，`SESSION_ID_PATTERN` 仍为通用字符串；`RandomSessionIdGenerator` 仍生成无前缀的 26 位 Crockford Base32；`RuntimeSessionService.newSession` 仍写入 `thinking=false`，`session_schema.sql` 的 `agent_id` 仍为 `VARCHAR(30)` |
 | 当前 Java 差异 | `RuntimeWebMvcConfiguration` 当前把认证拦截器应用到全部 Runtime 路径；`UserEventRequestVO` 当前仍要求 `type=user.message` |
+| 当前 Java 差异 | 凭据核对基线 `320d7907` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:61-69` / `RuntimeRequestContext.java:45-49` 只捕获 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`，没有接收 `access-token`；`common/dto/RequestHeaderInfo.java:81-90` 使用的是不同拼写 `X-Access-Token`，且 Runtime 未赋值 |
+| 当前 Java 差异 | 同基线 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:134-185` 的 `queryToolIdsByAgentId/queryToolIdsBySkillId/queryToolMetaByIds` 当前会把 Mate 凭据发送到工具发现；`invokeTool/toHeaderInfo` 303-373 行只透传原三项。目标设计改为发现无凭据、仅 execute 透传本次 POST Events 快照中已提供的四项 Header，属于安全加固 |
 | 当前 Java 差异 | 字段命名核对基线 `304eda06` 的四个 Runtime Controller 仍使用 `{agent_id}` / `{session_id}` 路径变量；请求/响应 VO 的 `@JsonProperty`、`@JsonSetter` 以及 `RuntimeEntryCodec` / `RuntimeEventProjector` 仍输出 snake_case。1.38 lowerCamelCase 是相对该实现的契约变更 |
 | 已实现 Java 行为 | AI 层 `AssistantMessageEvent` 存在 thinking start/delta/end；Runtime 对外 `RuntimeEventType` 无 thinking 类型，`RuntimeEventProjector` 与 `RuntimeEntryCodec` 会过滤原始思考内容 |
 | 当前 Java 差异 | CLI `AgentSession` 仍聚合 ToolCatalog、Skill 激活、reload 和委派；HTTP 仍以独立 resolver 与硬编码 Read 装配；AgentRuntimeManager 仍写旧文件名和 Skill 工具快照 |
 | 架构变更 | 两跳目标传输统一为 HTTP+SSE，删除连接首帧、Frame RPC、连接 generation、WebSocket close code 和 AsyncAPI |
 | 架构变更 | CampusClaw 目标契约改为 `agent-` / `tool-` / `skill-` / `session-` 加 32 位十六进制 UUID；Session 创建成功时固定 `thinking=true`，实现需同步放宽 `t_sessions.agent_id` 并替换 Session ID 生成器 |
-| 架构变更 | 十一个接口全部保留调用上下文 Header，但移除 Runtime 应用内的凭据组合与格式校验及对应 401；提交用户消息的请求体删除冗余 `type` 字段 |
+| 架构变更 | 十一个接口全部保留调用上下文 Header，但移除 Runtime 应用内的凭据组合与格式校验及对应 401；POST Events 额外必填 `access-token`，四项收到的 Header 只作执行级瞬态快照并仅对实际 Mate execute 透传；请求体删除冗余 `type` 字段 |
 | 架构变更 | `thinking=true` 时将内部 thinking 生命周期投影为公共 SSE，并持久化 completed 供 GET 恢复；GET 根据 Session 当前 thinking 状态过滤，状态变化使旧 page 失效 |
 | 架构变更 | CampusClaw HTTP 的 path/query/JSON/SSE 字段统一为 lowerCamelCase；Header 原名、事件类型值、错误码和 ID 值保持不变，不接受 snake_case 字段别名 |
 | 架构变更 | Runtime、Cron、Child 共用轻量 AgentSession 和工厂；8 个活动内置工具由启动期 profile 装配，工具实例按 Session 新建 |
@@ -373,7 +383,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 | 架构变更 | refresh 只影响下一次空闲 Session 执行；模型懒校准事件先于 user.message，无有效 default 时不接受消息 |
 | 产品约束 | 浏览器只识别尚待评审的 `chat_id`，CampusClaw 内部契约只识别 `sessionId`；公共接口不泄露 Runtime 标识 |
 | 产品约束 | 不提供 CLI、Bash/Edit/Write、Loop、旧工具名、旧 Cron payload、Java Extension SDK、ACP/HTTP/A2A Child 或兼容执行器 |
-| 安全边界 | 调用上下文 Header 的检查由上游负责，Runtime 不复制认证策略；thinking 内容仅在开关为 true 时按事件契约返回 |
+| 安全边界 | 调用上下文 Header 的检查由上游负责；Runtime 只在 POST Events execution 内瞬态保留工具凭据，不记录、不持久化、不发往工具发现或模型请求；thinking 内容仅在开关为 true 时按事件契约返回 |
 | 安全加固 | 工具参数先做 JSON Schema 校验；目录完整发布、名称/版本/ancestry 校验和模型 bindingModels 白名单阻止不完整或越界执行 |
 
 源码证据的完整 commit、符号、行号和逐项设计理由见
@@ -393,6 +403,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.4.0 | 2026-08-27 | 同步 HTTP 1.42：POST Events 必填 `access-token`，四项入站 Header 仅作执行级瞬态快照，工具发现无凭据，只在实际 Mate execute 时原名透传已提供值。 |
 | 3.3.0 | 2026-08-24 | 同步工具系统 2.3 和 HTTP 1.41：LENGTH 判定使用实际请求输出上限，压缩重试候选按内部 Entry ID 持久化并在重载时精确排除。 |
 | 3.2.0 | 2026-08-24 | 固定 pi 压缩细节及 HTTP 1.40：成功 STOP 不重试、ERROR/LENGTH 单次恢复、Usage/边界/安全切点、split-turn/重复摘要、Read 路径继承和 failed.aborted。 |
 | 3.1.0 | 2026-08-24 | 修订 PR 167 TUI 删除边界，保留未注册 Slash 核心并迁移公共压缩；HTTP 升级 1.39 Usage/领域事件/工具 delta，明确 refresh 后下一次执行懒校准。 |

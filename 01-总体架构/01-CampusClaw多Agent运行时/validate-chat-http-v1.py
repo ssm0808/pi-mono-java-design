@@ -38,6 +38,8 @@ EXPECTED_OPERATIONS = {
     ("POST", "/sessions/{sessionId}/abort"),
 }
 EXPECTED_CONTEXT_HEADERS = {"X-HW-ID", "Authorization", "X-HW-APPKEY"}
+POST_EVENTS = ("POST", "/sessions/{sessionId}/events")
+POST_EVENTS_CONTEXT_HEADERS = EXPECTED_CONTEXT_HEADERS | {"access-token"}
 EXPECTED_PARAMETER_HEADERS = {"Accept-Language", "If-Match"}
 LOWER_CAMEL_FIELD = re.compile(r"^[a-z][A-Za-z0-9]*$")
 
@@ -233,7 +235,8 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
             for example in operation["requestHeaderExamples"]
             for header in example["headers"]
         }
-        require(header_names == EXPECTED_CONTEXT_HEADERS, f"Integration request Header names changed: {key}")
+        expected_headers = POST_EVENTS_CONTEXT_HEADERS if key == POST_EVENTS else EXPECTED_CONTEXT_HEADERS
+        require(header_names == expected_headers, f"Integration request Header names changed: {key}")
         parameter_headers = {
             parameter["name"] for parameter in operation["parameters"] if parameter["in"] == "header"
         }
@@ -302,6 +305,24 @@ def validate_response_contract(
     elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
     elif key == ("POST", "/sessions/{sessionId}/events"):
+        expected_example_headers = {
+            "jwt": {"X-HW-ID", "Authorization", "access-token"},
+            "appkey": {"X-HW-ID", "X-HW-APPKEY", "access-token"},
+        }
+        for example in operation["requestHeaderExamples"]:
+            names = {header["name"] for header in example["headers"]}
+            require(names == expected_example_headers.get(example["id"]),
+                    f"POST Events Header mode differs: {example['id']}")
+            access_token = next(
+                (header for header in example["headers"] if header["name"] == "access-token"), None
+            )
+            require(access_token is not None and access_token.get("required") is True
+                    and access_token.get("value") == "<ACCESS_TOKEN>",
+                    "POST Events must require access-token in every request Header example")
+        description = operation["description"]
+        for required_phrase in ("实际 Mate 工具 execute", "不持久化", "工具发现"):
+            require(required_phrase in description,
+                    f"POST Events credential boundary is incomplete: {required_phrase}")
         require(("503", "RUNTIME_CAPACITY_EXCEEDED") in codes, "POST Events is missing runtime capacity")
         require("[File IDs]" in operation["requestBody"]["description"], "POST Events must define file ID encoding")
         require(set(operation["requestBody"]["example"]) == {"message", "fileIds"},
@@ -344,8 +365,18 @@ def validate_source_deduplication() -> None:
     for operation_path in sorted((CONTRACT_ROOT / "操作").glob("*.json")):
         source = json.loads(operation_path.read_text(encoding="utf-8"))
         operation = source["operation"]
-        require("requestHeaderExamples" not in operation,
-                f"Shared request headers duplicated in {operation_path.name}")
+        if operation.get("operationKey") == "submitUserMessage":
+            examples = operation.get("requestHeaderExamples", [])
+            header_names = {
+                header["name"]
+                for example in examples
+                for header in example.get("headers", [])
+            }
+            require(len(examples) == 2 and header_names == POST_EVENTS_CONTEXT_HEADERS,
+                    "POST Events must override the shared Header examples only to add access-token")
+        else:
+            require("requestHeaderExamples" not in operation,
+                    f"Shared request headers duplicated in {operation_path.name}")
         references = [item.get("$ref") for item in operation["responses"] if isinstance(item, dict)]
         require("responses.unauthenticated" not in references,
                 f"Runtime-local authentication error found in {operation_path.name}")
