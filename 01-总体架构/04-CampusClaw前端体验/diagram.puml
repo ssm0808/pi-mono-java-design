@@ -1,14 +1,15 @@
 @startuml frontend_product_boundary
 ' Source baseline: pi-mono-java 320d790726a70aada6100052952d5494d2a378ac.
+' Reviewed implementation commit: pi-mono-java d03c08dbae870f19eee8d4fa79a707185f7a26b5 (Draft PR 181).
 ' Source evidence: frontend/README.md lines 26-28 and 40-58.
 ' Source evidence: frontend/.env.example lines 1-7.
 ' Source evidence: frontend/src/App.vue lines 177-290 and frontend/src/components/DevDiagnostics.vue lines 4-25.
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts lines 18-20 and 480-495 (requestRaw).
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
 ' Source evidence: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionRoutesTest.java lines 102-120.
-' Observed behavior: the current browser client calls Runtime V1 directly, sends only non-secret X-HW-ID, and has no JWT or APPKEY editor, storage, or header injection path.
-' Target-only design: the product browser calls a public bridge; the exact browser login and session mechanism is pending API review.
-' Design reason: the lack of credential support is not production authentication; the public bridge owns identity, authorization, public resources, and safe event projection.
+' Observed behavior: the current browser client calls Runtime V1 directly, sends only non-secret X-HW-ID, and has no JWT, APPKEY, or access-token editor, storage, or header injection path.
+' Target-only design: the product browser calls a public bridge; an isolated internal development build may provide event-only debug headers.
+' Design reason: diagnostic header transport is not production authentication; the public bridge owns identity, authorization, public resources, and safe event projection.
 
 title CampusClaw product frontend boundary
 left to right direction
@@ -16,7 +17,7 @@ left to right direction
 actor "Campus user" as User
 rectangle "Product frontend" as Frontend {
   component "Agent and chat workspace" as Workspace
-  component "Credentialless request adapter\nX-HW-ID context only" as RequestAdapter
+  component "Product request adapter\ncredentialless" as RequestAdapter
   component "Product event projector" as Projector
   component "Developer diagnostics\n(internal build only)" as Diagnostics
 }
@@ -42,12 +43,12 @@ Stream --> Policy : internal SSE events
 Policy --> Projector : public safe events
 RequestAdapter ..> Sessions : current internal-only direct HTTP
 Stream ..> Projector : current internal-only direct SSE
-Diagnostics --> RequestAdapter : Agent and Session IDs only
+Diagnostics --> RequestAdapter : product-safe diagnostics only
 
 note bottom of Frontend
 Product constraints:
-- No Service URL or credential editor
-- No JWT or APPKEY env, storage, or header injection
+- No product Service URL or credential editor
+- No JWT, APPKEY, or access-token product storage
 - No raw session_id, ETag, JSON, or SSE frames
 - Agent, chat, and attachment metadata use public resources
 end note
@@ -67,6 +68,89 @@ Observed internal contract:
 - One active execution per Session
 - No Runtime-local integration credential validation
 - Persistent Entry history plus transient progress events
+end note
+@enduml
+
+@startuml frontend_debug_header_flow
+' Source baseline: pi-mono-java 320d790726a70aada6100052952d5494d2a378ac.
+' Reviewed implementation commit: pi-mono-java d03c08dbae870f19eee8d4fa79a707185f7a26b5 (Draft PR 181).
+' Source evidence: frontend/src/components/DevDiagnostics.vue lines 1-26.
+' Source evidence: frontend/src/composables/useRuntimeApi.ts lines 139-155 and 480-497 (sendMessage and requestRaw).
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java lines 58-73 (submit).
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java lines 45-50 (mateCredentials).
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java lines 93-190 and 298-373.
+' Observed behavior: the current frontend has no credential controls and requestRaw always sends only non-secret X-HW-ID context.
+' Observed behavior: the source baseline captures three headers on event submission and also sends them on discovery requests.
+' Reviewed implementation: access-token is captured, discovery is credentialless, and only Mate tool execute receives the execution snapshot.
+' Target-only frontend design: the debug drawer and event-only browser header snapshot are not implemented at the reviewed commit.
+' Security hardening: fixed header names, memory-only values, event-only request scope, redacted diagnostics, and no automatic POST replay.
+' Design reason: developers need fast credential propagation tests without turning the product browser into a credential manager.
+
+title Internal debug header flow
+left to right direction
+
+actor "Developer" as Developer
+
+rectangle "Internal development frontend" as DevFrontend {
+  component "Debug header drawer\nfixed names and modes" as Drawer
+  component "In-memory header state\nclear on reload" as HeaderState
+  component "Event-only request adapter\nimmutable snapshot" as EventAdapter
+}
+
+rectangle "CampusClaw Runtime V1" as Runtime {
+  component "POST sessions/{sessionId}/events\nRuntimeEventController.submit" as Submit
+  component "RuntimeRequestContext\nexecution credential snapshot" as Snapshot
+  component "Agent execution context" as Execution
+}
+
+rectangle "mate-service" as Mate {
+  component "Agent, Skill, and tool metadata\ndiscovery without credentials" as Discovery
+  component "POST runtime/tools/{toolId}/execute\ncredential headers attached" as Execute
+}
+
+Developer --> Drawer : enter temporary values
+Drawer --> HeaderState : apply or clear
+HeaderState --> EventAdapter : snapshot on message submit
+EventAdapter --> Submit : initial event POST only
+Submit --> Snapshot : capture request headers
+Snapshot --> Execution : immutable for this execution
+Execution --> Discovery : discover tools
+Execution --> Execute : invoke a selected tool
+
+note bottom of Drawer
+Allowed header names:
+- X-HW-ID
+- Authorization
+- X-HW-APPKEY
+- access-token
+
+Secret inputs are masked by default.
+Browser DevTools can still inspect wire headers.
+end note
+
+note bottom of EventAdapter
+Never attach the debug snapshot to:
+- Session create, read, or delete
+- History, model, or thinking
+- Steer, FollowUp, or Abort
+
+Do not replay the event POST after disconnect.
+end note
+
+note bottom of Runtime
+Runtime transport behavior:
+- Capture values without authenticating them
+- Do not persist values in Session or events
+- Later edits affect only the next execution
+- Dual credentials are an internal diagnostic case
+end note
+
+note bottom of Mate
+Reviewed feature implementation:
+- Discovery receives no credential snapshot
+- Tool execute receives configured values
+- Missing required values fail before outbound call
+- Logs and errors show presence only
 end note
 @enduml
 

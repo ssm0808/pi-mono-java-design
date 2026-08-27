@@ -20,12 +20,13 @@
 </head>
 <body>
   <h1>ADR-0016 · CampusClaw 产品前端隔离 Runtime 调试协议</h1>
-  <div class="meta">Status: <span class="badge">Proposed</span> · Date: 2026-08-26 · Credential boundary updated: 2026-08-27 ·
+  <div class="meta">Status: <span class="badge">Proposed</span> · Date: 2026-08-26 · Debug header boundary updated: 2026-08-27 ·
     设计文档: <a href="README.md">campusclaw-frontend</a> ·
-    凭据复核基线: <code>320d790726a70aada6100052952d5494d2a378ac</code></div>
+    凭据复核基线: <code>320d790726a70aada6100052952d5494d2a378ac</code> ·
+    已评审实现: <code>d03c08dbae870f19eee8d4fa79a707185f7a26b5</code> (Draft PR 181)</div>
 
   <section><h2>Context</h2>
-    <p>早期 <code>3a6358bc</code> 调试页曾把 Service URL 和协议字段作为主界面元素；这只是历史证据，不能描述当前前端。当前复核基线 <code>320d7907</code> 已实现 Agent 工作区、对话时间线和产品化控制，仍由浏览器直连 Runtime 并在前端维护内部 Session/ETag/SSE，但不支持 JWT/APPKEY 凭据：没有凭据控件、秘密 <code>VITE_*</code> 配置、浏览器 credential store 或 <code>Authorization</code> / <code>X-HW-APPKEY</code> Header 注入路径。统一请求只携带非秘密 <code>X-HW-ID</code> 调用上下文，开发者诊断入口也只有 Agent ID 和 Session ID。</p>
+    <p>早期 <code>3a6358bc</code> 调试页曾把 Service URL 和协议字段作为主界面元素；这只是历史证据，不能描述当前前端。当前复核基线 <code>320d7907</code> 已实现 Agent 工作区、对话时间线和产品化控制，仍由浏览器直连 Runtime 并在前端维护内部 Session/ETag/SSE，但不支持 JWT/APPKEY 凭据：没有凭据控件、秘密 <code>VITE_*</code> 配置、浏览器 credential store 或 <code>Authorization</code> / <code>X-HW-APPKEY</code> Header 注入路径。统一请求只携带非秘密 <code>X-HW-ID</code> 调用上下文，开发者诊断入口也只有 Agent ID 和 Session ID。为快速验证凭据透传，本 ADR 在不改变产品边界的前提下，允许内部开发构建新增隔离的临时 Header 抽屉。</p>
     <p>当前 Runtime 不执行本地集成凭据校验，因此无凭据的直接适配器可以用于受控内部调试；这不等于已经具备生产认证、授权或审计边界。精确 Runtime 设计仍要求生产浏览器经 mate-service 访问，内部 SSE 不得字节透明转发。公共链路必须补齐身份建立与动作授权，但不能通过给 Chat 页面增加 JWT/APPKEY 表单或把秘密编译进浏览器产物来补齐。</p>
   </section>
 
@@ -33,18 +34,24 @@
     <ul>
       <li><strong>继续把当前调试台扩展成产品</strong><br>Pro：改动最小，11 个接口已经接通。<br>Con：内部身份、Session、ETag 和事件模型泄漏到用户边界；信息架构仍围绕接口而不是任务。Rejected。</li>
       <li><strong>保持当前无凭据直接 Runtime 适配器并作为生产链路</strong><br>Pro：无需新增浏览器凭据能力，改动最小。<br>Con：只发送非秘密 <code>X-HW-ID</code> 不能建立生产用户身份、权限和审计；前端仍耦合内部标识与 SSE 契约。Rejected。</li>
-      <li><strong>产品 UI 经 mate-service 公共 bridge，调试台隔离为内部诊断入口</strong><br>Pro：用户模型稳定；认证、Chat/Session 映射、错误脱敏和 Event 投影责任清晰；保留接口联调能力。<br>Con：需要新增并逐项评审 Agent、Chat、Attachment、Model Catalog 和 public SSE 契约；短期不能只靠现有 11 个接口完成生产集成。Chosen。</li>
+      <li><strong>产品 UI 经 mate-service 公共 bridge，调试台隔离为内部诊断入口</strong><br>Pro：用户模型稳定；认证、Chat/Session 映射、错误脱敏和 Event 投影责任清晰；诊断构建可通过仅内存 Header 快照保留接口联调能力。<br>Con：需要构建隔离、脱敏和请求范围测试；仍需逐项评审 Agent、Chat、Attachment、Model Catalog 和 public SSE 契约。Chosen。</li>
     </ul>
-    <p><strong>选择理由：</strong>真实前端不是调试台的视觉换肤，而是资源边界和交互语言的产品化。当前前端没有凭据能力；bridge 缺口应显式设计，不能把“没有凭据”误当成“已经认证”，也不能为了赶进度把 JWT/APPKEY 收集责任塞回 Chat 页面。</p>
+    <p><strong>选择理由：</strong>真实前端不是调试台的视觉换肤，而是资源边界和交互语言的产品化。不能把“没有凭据”误当成“已经认证”，也不能把内部诊断例外扩张成产品 Chat 的凭据管理责任。</p>
   </section>
 
   <section><h2>Decision</h2>
     <ul>
       <li>生产浏览器只调用 mate-service 公共 HTTP/SSE；mate-service 终止认证、执行授权、维护公共 Chat 到内部 Session 的映射并投影安全 Event。</li>
-      <li>CampusClaw 前端不提供 JWT/APPKEY 的输入、编辑、查看、存储、刷新或 Header 构造能力；<code>VITE_*</code> 只允许非秘密配置，当前直接适配器只发送非秘密 <code>X-HW-ID</code>。</li>
+      <li>生产产品路由不提供 JWT/APPKEY/<code>access-token</code> 的输入、编辑、查看、存储、刷新或 Header 构造能力；<code>VITE_*</code> 只允许非秘密配置。</li>
+      <li>内部开发构建可提供 <code>debugHeaders</code> 抽屉，但 Header 名称锁定为 <code>X-HW-ID</code>、<code>Authorization</code>、<code>X-HW-APPKEY</code> 和 <code>access-token</code>；不提供任意 key 编辑器。</li>
+      <li>诊断值只存在于当前页面内存与必需的输入元素中，不进入 <code>localStorage</code>、<code>sessionStorage</code>、IndexedDB、URL、<code>VITE_*</code>、遥测、日志或复制摘要；刷新、关闭页签或切换 API base 清除。</li>
+      <li>秘密输入默认遮蔽，但抽屉必须警示：真实值仍可被页面脚本、DOM 输入值与浏览器 DevTools 网络面板观察，因此只能在受控开发环境使用。</li>
+      <li>调试 Header 只在初始 <code>POST /sessions/{sessionId}/events</code> 发送前建立不可变快照；Session、历史、配置、Steer、FollowUp 和 Abort 不携带该快照，运行中编辑只影响下一次普通消息提交。</li>
+      <li>已评审特性提交 <code>d03c08db</code> 中，Agent/Skill/Tool metadata 发现不携带凭据快照；只有 Mate Tool execute 使用已配置值。Runtime 不校验凭据真实性、不持久化、不投影到 Event；PR 合并前不视为 <code>main</code> 现状。</li>
+      <li>诊断抽屉默认关闭，支持 JWT、APPKEY 和双凭据兼容模式。双凭据是仅用于调试 Runtime 透传的内部例外；不改变生产公共边界一次只选择一种认证模式的约束。</li>
       <li>生产浏览器身份由统一登录、mate-service 或网关边界建立；具体会话承载、续期和注销机制属于待评审公共 API 集成点，不从当前直接适配器推断。</li>
       <li>产品主界面只展示 Agent、Chat、消息、附件、模型、深度思考、工具活动和粗粒度执行状态。</li>
-      <li><code>session_id</code>、ETag、原始 JSON、SSE frame 和内部错误只允许进入内部诊断入口，且生产构建默认不可达；JWT/APPKEY 不属于诊断字段，任何前端入口都不接受或展示它们。</li>
+      <li><code>session_id</code>、ETag、原始 JSON、SSE frame 和内部错误只允许进入内部诊断入口，且生产构建默认不可达；凭据值只允许在诊断表单中遮蔽输入，请求摘要只显示“已配置/未配置”。</li>
       <li>Steer、FollowUp、Abort 在产品中分别命名为“调整方向”“加入队列”“停止”。运行态 Composer 只显示当前跟进方式；desktop 默认“调整方向”，设置可改为“加入队列”，<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。</li>
       <li>“调整方向”不宣称立即中断当前模型或工具；它在当前 Assistant Turn 与工具结束后的下一次模型调用前送达。“加入队列”只在当前执行本会自然结束时送达。</li>
       <li>工具 started/completed/result 合并为一个紧凑 activity disclosure；执行中与失败项默认展开，成功项在最终答案出现后折叠，尚未开始的工具不显示。</li>
@@ -64,10 +71,11 @@
 
   <section><h2>Consequences</h2>
     <ul>
-      <li><strong>正面：</strong>主界面围绕用户任务；内部身份与协议不越过浏览器边界；Runtime 可继续独立演进；诊断效率仍被保留。</li>
+      <li><strong>正面：</strong>主界面围绕用户任务；生产身份责任不回流到 Chat 页；Runtime 可继续独立演进；开发者能快速验证临时 Header 到 Tool execute 的透传。</li>
       <li><strong>负面：</strong>需要 mate-service bridge 和多个公共资源契约；前端初期要通过 mock adapter 开发；产品事件与 Runtime 事件之间增加一层投影测试。</li>
-      <li><strong>迁移：</strong>现有页面不直接删除，先迁移到内部诊断路由或独立开发构建；产品路由完成真实集成后再决定是否移除旧入口。</li>
-      <li><strong>安全：</strong>需要构建期和 E2E 门禁，证明界面与开发者诊断不存在 JWT/APPKEY 控件，浏览器配置与请求适配器没有秘密注入路径，生产 DOM、网络日志和错误界面不包含真实凭据、Session ID、ETag 或原始 SSE。</li>
+      <li><strong>迁移：</strong>现有页面不直接删除，先迁移到内部诊断路由或独立开发构建；仅在此构建中增加 Header 抽屉，产品路由完成真实集成后再决定是否移除旧入口。</li>
+      <li><strong>安全：</strong>需要构建期和 E2E 门禁，证明生产构建不存在凭据控件或 store；诊断构建不持久化、复制或记录秘密，只有提交消息 POST 收到快照，生产 DOM、网络日志和错误界面不包含真实凭据、Session ID、ETag 或原始 SSE。</li>
+      <li><strong>运维：</strong>跨源调试需网关/Runtime CORS 显式允许 <code>X-HW-ID</code>、<code>Authorization</code>、<code>X-HW-APPKEY</code> 和 <code>access-token</code>；不得使用无界通配的 Header 允许策略。</li>
       <li><strong>富文本安全：</strong>需要 XSS corpus、危险 URL、远程图片、超深嵌套、超预算输入和流式分块测试；失败时回退为转义纯文本并保留复制原文。</li>
       <li><strong>活动数据安全：</strong>公共事件投影需要安全思考摘要、入参脱敏、资源映射、结构预算与投影失败测试；前端不得在公共投影缺失时回退显示原始 ThinkingContent 或内部原始入参。</li>
       <li><strong>回滚：</strong>可以回滚产品路由和 bridge，但不能把调试台重新定义为已满足生产安全边界。</li>
