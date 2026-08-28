@@ -227,7 +227,7 @@
       border-radius: 10px;
       background: var(--surface);
     }
-    .debug-header-head, .debug-header-actions, .debug-modes {
+    .debug-header-head, .debug-header-title {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
@@ -239,32 +239,76 @@
       border-bottom: 1px solid var(--border);
       background: var(--surface-tertiary);
     }
-    .debug-header-body { padding: 14px; }
-    .debug-modes { margin: 10px 0 13px; }
-    .debug-mode {
-      padding: 5px 9px;
-      border: 1px solid var(--border);
-      border-radius: 7px;
+    .debug-header-title span { color: var(--muted); font-size: 12px; }
+    .debug-header-body { padding: 0 14px 12px; }
+    .debug-header-clear, .header-delete {
+      border: 0;
+      background: transparent;
       color: var(--muted);
-      font-size: 12px;
+      cursor: pointer;
+      font: inherit;
     }
-    .debug-mode.active { border-color: var(--text); background: var(--selected); color: var(--text); font-weight: 600; }
-    .debug-field-grid { display: grid; grid-template-columns: 150px minmax(0, 1fr) 70px; align-items: center; gap: 8px; }
-    .debug-field-grid + .debug-field-grid { margin-top: 8px; }
-    .debug-field-grid label { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .debug-field-grid input {
-      min-width: 0;
+    .debug-header-clear { padding: 5px 0; font-size: 12px; }
+    .debug-header-clear:hover, .header-delete:hover { color: var(--text); }
+    .header-grid-head, .header-row {
+      display: grid;
+      grid-template-columns: 34px minmax(150px, .75fr) minmax(220px, 1.25fr) 34px;
+      gap: 8px;
+      align-items: start;
+    }
+    .header-grid-head {
+      padding: 9px 0 6px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .header-row {
+      padding: 7px 0;
+      border-top: 1px solid var(--border);
+    }
+    .header-toggle { display: grid; min-height: 34px; place-items: center; }
+    .header-toggle input { width: 15px; height: 15px; margin: 0; accent-color: var(--primary); }
+    .header-cell { min-width: 0; }
+    .header-cell input {
       width: 100%;
-      padding: 8px 9px;
+      min-width: 0;
+      padding: 7px 8px;
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: 6px;
       background: var(--surface);
       color: var(--text);
+      font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
     }
-    .debug-field-grid small { color: var(--muted); font-size: 11px; }
-    .debug-safety-note { margin-top: 12px; padding: 9px 10px; border-left: 3px solid var(--danger); background: var(--surface-tertiary); color: var(--muted); font-size: 12px; line-height: 1.55; }
-    .debug-header-actions { justify-content: space-between; margin-top: 12px; }
-    .secondary-action { padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); }
+    .header-cell input::placeholder { color: var(--muted); }
+    .header-row.is-disabled .header-cell, .header-row.is-disabled .header-delete { opacity: .48; }
+    .header-row.has-error .header-cell input { border-color: var(--danger); }
+    .header-error {
+      display: block;
+      min-height: 0;
+      margin-top: 4px;
+      color: var(--danger);
+      font-size: 11px;
+    }
+    .header-error:empty { display: none; }
+    .header-delete { display: grid; width: 34px; height: 34px; padding: 0; place-items: center; font-size: 18px; }
+    .generated-headers { border-top: 1px solid var(--border); }
+    .generated-headers summary {
+      padding: 10px 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .generated-row {
+      display: grid;
+      grid-template-columns: minmax(150px, .75fr) minmax(220px, 1.25fr) auto;
+      gap: 8px;
+      padding: 7px 0;
+      border-top: 1px solid var(--border);
+      font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .generated-row span:nth-child(2) { overflow-wrap: anywhere; }
+    .generated-state { color: var(--muted); font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .generated-row.is-overridden span:nth-child(2) { text-decoration: line-through; opacity: .55; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
     @media (max-width: 960px) {
       .screen-grid { grid-template-columns: 1fr; }
@@ -276,7 +320,15 @@
       .screen-card { margin-right: 9px; margin-left: 9px; }
       .swatches { grid-template-columns: repeat(2, minmax(112px, 1fr)); }
       .table-wrap { overflow-x: auto; }
-      .debug-field-grid { grid-template-columns: 1fr; }
+      .header-grid-head { display: none; }
+      .header-row {
+        grid-template-columns: 34px minmax(0, 1fr) 34px;
+        padding: 10px 0;
+      }
+      .header-toggle { grid-row: 1 / span 2; }
+      .header-cell { grid-column: 2; }
+      .header-delete { grid-column: 3; grid-row: 1 / span 2; }
+      .generated-row { grid-template-columns: 1fr; }
       #debug-headers table, #debug-headers tbody, #debug-headers tr, #debug-headers td { display: block; }
       #debug-headers thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
       #debug-headers tr { padding: 7px 0; border-bottom: 1px solid var(--border); }
@@ -293,8 +345,8 @@
         <div class="row">
           <img class="review-brand-mark" src="campusclaw-mark-o1.png" alt="">
           <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">0.9.0</span>
-          <span class="tag">Product credentialless · Debug Headers proposed</span>
+          <span class="tag">1.0.0</span>
+          <span class="tag">Product credentialless · Generic Debug Headers in review</span>
         </div>
         <code class="base">pi-mono-java 320d7907 → d03c08db (PR 181) · event-only debug snapshot</code>
       </header>
@@ -323,7 +375,7 @@
             <tbody>
               <tr><td>当前内部调试链路</td><td>当前仍无凭据控件；目标诊断抽屉只用于 Runtime 透传调试，不建立生产身份。</td></tr>
               <tr><td>未来生产链路</td><td>统一登录、mate-service 或网关负责身份与授权；具体浏览器会话机制待公共 API 评审。</td></tr>
-              <tr><td>诊断例外</td><td>只在页面内存中接受四个固定 Header，仅附加到提交消息 POST；刷新或关闭页签清除。</td></tr>
+              <tr><td>诊断例外</td><td>只在页面内存中接受用户填写的 Key/Value Header，仅附加到提交消息 POST；刷新或关闭页签清除。</td></tr>
               <tr><td><code>401/403</code></td><td>交给统一登录/权限流程，不弹出凭据框，也不自动重放副作用请求。</td></tr>
             </tbody>
           </table>
@@ -331,21 +383,38 @@
       </section>
 
       <section class="section" id="debug-headers">
-        <div class="section-title"><h2>待确认：开发者调试 Header 抽屉</h2><code class="screen-key">debugHeaders</code></div>
-        <p class="description">入口位于内部构建顶部工具区，可在创建 Session 前或对话中打开。Header 名称固定，值只在当前页面内存中存活；这是一个 target-only 诊断能力。</p>
-        <div class="debug-header-specimen" aria-label="开发者调试 Header 抽屉示意">
-          <div class="debug-header-head"><strong>请求 Headers</strong><span class="muted">仅内存 · 刷新清除 · 仅 POST /events</span></div>
+        <div class="section-title"><h2>评审中：开发者请求 Headers</h2><code class="screen-key">debugHeaders</code></div>
+        <p class="description">入口位于内部构建顶部工具区。编辑器采用 Postman 风格的通用 Key/Value 表格，不预设凭据模式或 Header 名称。</p>
+        <div class="debug-header-specimen" aria-label="开发者请求 Headers 编辑器">
+          <div class="debug-header-head">
+            <div class="debug-header-title"><strong>Headers</strong><span id="debug-header-count">(0)</span></div>
+            <button class="debug-header-clear" id="debug-header-clear" type="button">全部清空</button>
+          </div>
           <div class="debug-header-body">
-            <div class="muted">凭据模式</div>
-            <div class="debug-modes" aria-label="凭据模式示意">
-              <span class="debug-mode">关闭</span><span class="debug-mode active">JWT</span><span class="debug-mode">APPKEY</span><span class="debug-mode">双凭据兼容</span>
+            <div class="header-grid" aria-label="自定义请求 Headers">
+              <div class="header-grid-head">
+                <span><span class="sr-only">启用</span></span>
+                <span>Key</span>
+                <span>Value</span>
+                <span><span class="sr-only">删除</span></span>
+              </div>
+              <div id="debug-header-rows">
+                <div class="header-row" data-header-row>
+                  <label class="header-toggle"><input class="header-enabled" type="checkbox" checked aria-label="启用此请求头"></label>
+                  <div class="header-cell"><input class="header-key" type="text" placeholder="Key" autocomplete="off" spellcheck="false" aria-label="Header Key"></div>
+                  <div class="header-cell"><input class="header-value" type="text" placeholder="Value" autocomplete="off" spellcheck="false" aria-label="Header Value"><span class="header-error" role="alert"></span></div>
+                  <button class="header-delete" type="button" aria-label="删除此请求头">×</button>
+                </div>
+              </div>
             </div>
-            <div class="debug-field-grid"><label for="debug-x-hw-id">X-HW-ID</label><input id="debug-x-hw-id" value="campusclaw-web" readonly><small>非秘密</small></div>
-            <div class="debug-field-grid"><label for="debug-authorization">Authorization</label><input id="debug-authorization" type="password" placeholder="Bearer &lt;JWT&gt;" readonly><small>默认遮蔽</small></div>
-            <div class="debug-field-grid"><label for="debug-appkey">X-HW-APPKEY</label><input id="debug-appkey" type="password" placeholder="&lt;APPKEY&gt;" readonly><small>JWT 模式不发送</small></div>
-            <div class="debug-field-grid"><label for="debug-access-token">access-token</label><input id="debug-access-token" type="password" placeholder="&lt;access-token&gt;" readonly><small>必需</small></div>
-            <div class="debug-safety-note">输入值会出现在页面内存、输入元素和浏览器 DevTools 网络面板中。请只在受控开发环境使用；应用日志、错误和复制摘要不得包含真实值。</div>
-            <div class="debug-header-actions"><button class="secondary-action" type="button">清空</button><span class="primary-action">应用到调试会话</span></div>
+            <details class="generated-headers">
+              <summary>隐藏的请求头 (4)</summary>
+              <div class="generated-row" data-generated-key="Accept"><span>Accept</span><span>text/event-stream</span><span class="generated-state">自动生成</span></div>
+              <div class="generated-row" data-generated-key="Content-Type"><span>Content-Type</span><span>application/json</span><span class="generated-state">自动生成</span></div>
+              <div class="generated-row" data-generated-key="Accept-Language"><span>Accept-Language</span><span>zh-CN</span><span class="generated-state">自动生成</span></div>
+              <div class="generated-row" data-generated-key="X-HW-ID"><span>X-HW-ID</span><span>campusclaw-web</span><span class="generated-state">自动生成</span></div>
+            </details>
+            <span class="sr-only" id="debug-header-live" aria-live="polite"></span>
           </div>
         </div>
         <div class="table-wrap" style="margin-top:12px">
@@ -355,7 +424,7 @@
               <tr><td data-label="请求">初始 <code>POST /sessions/{sessionId}/events</code></td><td data-label="是否附加调试 Header">是；发送时建立不可变快照。</td></tr>
               <tr><td data-label="请求">Session/历史/模型/Thinking</td><td data-label="是否附加调试 Header">否。</td></tr>
               <tr><td data-label="请求">Steer / FollowUp / Abort</td><td data-label="是否附加调试 Header">否；修改抽屉不改变正在执行的快照。</td></tr>
-              <tr><td data-label="请求">Mate 发现</td><td data-label="是否附加调试 Header">否；已评审后端特性提交 <code>d03c08db</code> 只在 Tool execute 下游请求中使用。</td></tr>
+              <tr><td data-label="请求">Mate 发现</td><td data-label="是否附加调试 Header">否；已评审后端特性提交 <code>d03c08db</code> 只在 Tool execute 下游请求中使用后端识别的凭据项。</td></tr>
             </tbody>
           </table>
         </div>
@@ -493,12 +562,186 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         <details class="review-question" open><summary>2. 已确认：O1 品牌标识；暖中性配色进入评审</summary><p>O1 使用原始透明 PNG，不生成式重绘，也不缩进深色品牌方块；暖白、暖灰与深暖黑构成工作台，珊瑚色仅用于品牌标识，绿色继续表达运行与完成。</p></details>
         <details class="review-question" open><summary>3. 已确认：跟进交互与 Codex desktop 一致</summary><p>desktop 默认“调整方向”，设置可切换“加入队列”；<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。“调整方向”不会硬中断当前模型或工具。</p></details>
         <details class="review-question" open><summary>4. 已确认：产品前端不持有 JWT/APPKEY</summary><p>生产身份与授权仍由统一登录、mate-service 或网关承担；产品 Chat 不出现凭据表单、秘密构建配置或浏览器持久化。</p></details>
-        <details class="review-question" open><summary>5. 是否确认隔离的 <code>debugHeaders</code> 诊断能力？</summary><p>固定四个 Header，关闭/JWT/APPKEY/双凭据四模式，只在页面内存中存活，仅附加到初始 <code>POST /events</code>；发现不透传，Tool execute 使用快照。</p></details>
+        <details class="review-question" open><summary>5. 评审中：隔离的 <code>debugHeaders</code> 诊断能力</summary><p>采用通用 Key/Value 表格、逐行启停、自动空白行和折叠的自动 Header；值只在页面内存中存活，仅附加到初始 <code>POST /events</code>。</p></details>
         <details class="review-question" open><summary>6. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
         <details class="review-question" open><summary>7. 本轮方向：采用 Codex-inspired 活动 disclosure</summary><p>Thinking 只展示公共 bridge 生成的安全标题和摘要；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。原始推理、内部 ID、绝对路径和凭据都不进入产品浏览器。</p></details>
         <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="imagegen-prompts.md">查看 ImageGen Prompts</a></div>
       </section>
     </div>
   </main>
+  <script>
+    (() => {
+      const root = document.getElementById("debug-headers");
+      const rows = document.getElementById("debug-header-rows");
+      const count = document.getElementById("debug-header-count");
+      const clear = document.getElementById("debug-header-clear");
+      const live = document.getElementById("debug-header-live");
+      const forbidden = new Set([
+        "accept-charset", "accept-encoding", "access-control-request-headers",
+        "access-control-request-method", "connection", "content-length", "cookie",
+        "cookie2", "date", "dnt", "expect", "host", "keep-alive", "origin",
+        "referer", "set-cookie", "te", "trailer", "transfer-encoding", "upgrade", "via"
+      ]);
+      const tokenPattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+
+      function createRow() {
+        const row = document.createElement("div");
+        row.className = "header-row";
+        row.dataset.headerRow = "";
+
+        const toggleLabel = document.createElement("label");
+        toggleLabel.className = "header-toggle";
+        const toggle = document.createElement("input");
+        toggle.className = "header-enabled";
+        toggle.type = "checkbox";
+        toggle.checked = true;
+        toggle.setAttribute("aria-label", "启用此请求头");
+        toggleLabel.append(toggle);
+
+        const keyCell = document.createElement("div");
+        keyCell.className = "header-cell";
+        const key = document.createElement("input");
+        key.className = "header-key";
+        key.type = "text";
+        key.placeholder = "Key";
+        key.autocomplete = "off";
+        key.spellcheck = false;
+        key.setAttribute("aria-label", "Header Key");
+        keyCell.append(key);
+
+        const valueCell = document.createElement("div");
+        valueCell.className = "header-cell";
+        const value = document.createElement("input");
+        value.className = "header-value";
+        value.type = "text";
+        value.placeholder = "Value";
+        value.autocomplete = "off";
+        value.spellcheck = false;
+        value.setAttribute("aria-label", "Header Value");
+        const error = document.createElement("span");
+        error.className = "header-error";
+        error.setAttribute("role", "alert");
+        valueCell.append(value, error);
+
+        const remove = document.createElement("button");
+        remove.className = "header-delete";
+        remove.type = "button";
+        remove.setAttribute("aria-label", "删除此请求头");
+        remove.textContent = "×";
+        row.append(toggleLabel, keyCell, valueCell, remove);
+        bindRow(row);
+        return row;
+      }
+
+      function rowFields(row) {
+        return {
+          enabled: row.querySelector(".header-enabled"),
+          key: row.querySelector(".header-key"),
+          value: row.querySelector(".header-value"),
+          error: row.querySelector(".header-error")
+        };
+      }
+
+      function isBlank(row) {
+        const fields = rowFields(row);
+        return fields.key.value.trim() === "" && fields.value.value === "";
+      }
+
+      function bindRow(row) {
+        const fields = rowFields(row);
+        row.querySelector(".header-delete").addEventListener("click", () => {
+          row.remove();
+          ensureTrailingRow();
+          validateRows();
+        });
+        fields.enabled.addEventListener("change", validateRows);
+        fields.key.addEventListener("input", handleInput);
+        fields.value.addEventListener("input", handleInput);
+      }
+
+      function handleInput() {
+        ensureTrailingRow();
+        validateRows();
+      }
+
+      function ensureTrailingRow() {
+        const allRows = [...rows.querySelectorAll("[data-header-row]")];
+        if (allRows.length === 0 || !isBlank(allRows[allRows.length - 1])) {
+          rows.append(createRow());
+        }
+      }
+
+      function setError(row, message) {
+        const fields = rowFields(row);
+        fields.error.textContent = message;
+        row.classList.toggle("has-error", message !== "");
+        fields.key.setAttribute("aria-invalid", message === "" ? "false" : "true");
+        fields.value.setAttribute("aria-invalid", message === "" ? "false" : "true");
+      }
+
+      function validateRows() {
+        const allRows = [...rows.querySelectorAll("[data-header-row]")];
+        const candidates = [];
+        const nameCounts = new Map();
+        let activeCount = 0;
+        const manualNames = new Set();
+
+        allRows.forEach((row) => {
+          const fields = rowFields(row);
+          const key = fields.key.value.trim();
+          const value = fields.value.value;
+          row.classList.toggle("is-disabled", !fields.enabled.checked);
+          setError(row, "");
+          if (!fields.enabled.checked || (key === "" && value === "")) return;
+
+          let message = "";
+          const normalized = key.toLowerCase();
+          if (key === "" || value === "") {
+            message = "Key 和 Value 需要同时填写";
+          } else if (!tokenPattern.test(key)) {
+            message = "Header Key 格式无效";
+          } else if (forbidden.has(normalized) || normalized.startsWith("proxy-") || normalized.startsWith("sec-")) {
+            message = "浏览器禁止设置这个 Header";
+          } else if (/\r|\n/.test(value)) {
+            message = "Header Value 不能包含换行";
+          }
+
+          if (message === "") {
+            candidates.push({ row, normalized });
+            nameCounts.set(normalized, (nameCounts.get(normalized) || 0) + 1);
+          } else {
+            setError(row, message);
+          }
+        });
+
+        candidates.forEach(({ row, normalized }) => {
+          if (nameCounts.get(normalized) > 1) {
+            setError(row, "Header Key 不能重复");
+            return;
+          }
+          manualNames.add(normalized);
+          activeCount += 1;
+        });
+
+        const errorCount = allRows.filter((row) => row.classList.contains("has-error")).length;
+
+        root.querySelectorAll("[data-generated-key]").forEach((generated) => {
+          const overridden = manualNames.has(generated.dataset.generatedKey.toLowerCase());
+          generated.classList.toggle("is-overridden", overridden);
+          generated.querySelector(".generated-state").textContent = overridden ? "已由手工值覆盖" : "自动生成";
+        });
+        count.textContent = `(${activeCount})`;
+        live.textContent = errorCount === 0 ? `已启用 ${activeCount} 个自定义请求头` : `有 ${errorCount} 个请求头需要修正`;
+      }
+
+      [...rows.querySelectorAll("[data-header-row]")].forEach(bindRow);
+      clear.addEventListener("click", () => {
+        rows.replaceChildren(createRow());
+        validateRows();
+        rows.querySelector(".header-key").focus();
+      });
+      validateRows();
+    })();
+  </script>
 </body>
 </html>

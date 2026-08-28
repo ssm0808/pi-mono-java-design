@@ -83,8 +83,10 @@ end note
 ' Observed behavior: the source baseline captures three headers on event submission and also sends them on discovery requests.
 ' Reviewed implementation: access-token is captured, discovery is credentialless, and only Mate tool execute receives the execution snapshot.
 ' Target-only frontend design: the debug drawer and event-only browser header snapshot are not implemented at the reviewed commit.
-' Security hardening: fixed header names, memory-only values, event-only request scope, redacted diagnostics, and no automatic POST replay.
-' Design reason: developers need fast credential propagation tests without turning the product browser into a credential manager.
+' Product-reference evidence: Postman request headers documentation reviewed 2026-08-28.
+' Product-reference evidence: opencode 849c2598 packages/app/src/components/dialog-custom-provider.tsx lines 273-315 and dialog-custom-provider-form.ts lines 97-128.
+' Security hardening: browser validation, memory-only values, event-only request scope, redacted diagnostics, and no automatic POST replay.
+' Design reason: a generic key-value table supports fast request debugging without freezing current credential names into the UI.
 
 title Internal debug header flow
 left to right direction
@@ -92,8 +94,8 @@ left to right direction
 actor "Developer" as Developer
 
 rectangle "Internal development frontend" as DevFrontend {
-  component "Debug header drawer\nfixed names and modes" as Drawer
-  component "In-memory header state\nclear on reload" as HeaderState
+  component "Generic header table\nKey-value rows and inline validation" as Drawer
+  component "In-memory enabled rows\nclear on reload" as HeaderState
   component "Event-only request adapter\nimmutable snapshot" as EventAdapter
 }
 
@@ -108,8 +110,8 @@ rectangle "mate-service" as Mate {
   component "POST runtime/tools/{toolId}/execute\ncredential headers attached" as Execute
 }
 
-Developer --> Drawer : enter temporary values
-Drawer --> HeaderState : apply or clear
+Developer --> Drawer : edit temporary rows
+Drawer --> HeaderState : update valid rows or clear
 HeaderState --> EventAdapter : snapshot on message submit
 EventAdapter --> Submit : initial event POST only
 Submit --> Snapshot : capture request headers
@@ -118,14 +120,15 @@ Execution --> Discovery : discover tools
 Execution --> Execute : invoke a selected tool
 
 note bottom of Drawer
-Allowed header names:
-- X-HW-ID
-- Authorization
-- X-HW-APPKEY
-- access-token
+No preset names or credential modes.
+Keep one trailing blank row.
+Generated headers stay collapsed.
+Manual values override generated values.
 
-Secret inputs are masked by default.
-Browser DevTools can still inspect wire headers.
+Reject invalid header tokens and CR/LF values.
+Reject case-insensitive duplicate custom names.
+Reject Fetch-forbidden request header names.
+Show errors only on the affected row.
 end note
 
 note bottom of EventAdapter
@@ -142,13 +145,13 @@ Runtime transport behavior:
 - Capture values without authenticating them
 - Do not persist values in Session or events
 - Later edits affect only the next execution
-- Dual credentials are an internal diagnostic case
+- Recognize credential fields by the backend contract
 end note
 
 note bottom of Mate
 Reviewed feature implementation:
 - Discovery receives no credential snapshot
-- Tool execute receives configured values
+- Tool execute receives recognized credential values
 - Missing required values fail before outbound call
 - Logs and errors show presence only
 end note
