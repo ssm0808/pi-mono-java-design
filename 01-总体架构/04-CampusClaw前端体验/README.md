@@ -2,15 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.0 |
-| 状态 | Proposed；产品前端无凭据边界已确认；内部调试 Header 的通用 Key/Value 方向、独立 `Headers` 面板与复用原诊断入口视觉已确认，交互细节进入评审；O1 品牌标识已确认，暖中性配色进入评审 |
-| 界面评审状态 | `credentialBoundary` 产品边界已确认；`debugHeaders` 通用表格、独立 `Headers` 命名与原诊断入口视觉已确认，交互细节待确认；`firstUse`、`idleConversation` 待确认；`runningConversation` 跟进交互已确认、界面待确认 |
+| 文档版本 | 1.2.0 |
+| 状态 | Proposed；产品前端无凭据边界已确认；内部调试 Header 的通用 Key/Value 方向、独立 `Headers` 面板、复用原诊断入口视觉及不展示自动生成 Header 已确认，交互细节进入评审；O1 品牌标识已确认，暖中性配色进入评审 |
+| 界面评审状态 | `credentialBoundary` 产品边界已确认；`debugHeaders` 通用表格、独立 `Headers` 命名、原诊断入口视觉与不展示自动生成 Header 已确认，交互细节待确认；`firstUse`、`idleConversation` 待确认；`runningConversation` 跟进交互已确认、界面待确认 |
 | 主设计依据 | [`README.md`](README.md)，维护源码证据、目标差异、设计理由、状态与 Design Token |
 | 人类评审界面 | [`frontend-review.html`](frontend-review.html)，集中展示低保真、高保真和待确认项 |
 | 品牌标识资产 | [`campusclaw-mark-o1.png`](campusclaw-mark-o1.png)，原始透明 PNG；界面直接引用，不通过生成模型重绘，也不缩进深色品牌方块 |
 | 图源 | [`diagram.puml`](diagram.puml)，生成四张架构 SVG |
 | 本专题修改基线 | 设计仓 `ee2c8e61800d95e609982e3ee354b1ee06f70fe4`；该提交中的原路径为 `campusclaw-frontend-design/`，当前路径为 `01-总体架构/04-CampusClaw前端体验/` |
-| 本轮设计仓基线 | `f27930d1cf457e594a83076ccd4b3358ab2172bb` |
+| 本轮设计仓基线 | `3cc234f068209c90639f812bcb8e1825301fa565` |
 | HTTP 设计风格基线 | 当前工作区 `chat-http-v1-design.md` 1.38.0；设计仓 `c250e3f07536871d3d676242e552a5eb4346b0c7` |
 | Codex 视觉证据 | 本机 `ChatGPT.app` 26.814.41407（build 6720）中的 light-theme CSS Token；`app.asar` SHA-256 `8fba32f8baa6d984b0f0f4149d3da46221e3adb3b52836f85fe65e31e655a8c0` |
 | Codex 跟进交互证据 | 同一安装包 `webview/assets/app-initial-BCLYDefw.js` 的 `followUpQueueMode`、`K9s()`、submit action，以及 `webview/assets/zh-CN-ByRVSIXt.js` 的 Composer 文案 |
@@ -149,7 +149,7 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 | 调试 Header 改为通用 Key/Value 表格 | 架构变化 + 产品约束 | 不把当前四项凭据误写成 UI 固定模式；组件可复用于后续调试请求。每行独立启停、删除，最后一行填写后自动生成新空行。 |
 | 独立 `Headers` 面板复用原开发者诊断入口视觉 | 产品约束（target-only） | Header 配置与 Agent/Session 诊断职责分离，但沿用已熟悉的虚线边界、暖灰表面和次级控件，保持内部工具一致，也避免将通用 Header 误表达成凭据管理卡片。 |
 | 浏览器受限名称与格式使用行内校验 | 安全加固 | UI 不预设可选 Header，但 `Host`、`Content-Length`、`Cookie`、`Origin`、`Sec-*`、`Proxy-*` 等 Fetch 禁止名称不能发送；无效 token、换行值和大小写不敏感的重复名称在对应行阻止提交。 |
-| 自动生成 Header 默认折叠，手工值优先 | 产品约束 | `Accept`、`Content-Type`、`Accept-Language`、`X-HW-ID` 等由请求适配器生成的值不占用主表；开发者显式填写同名 Header 时显示覆盖状态并采用手工值。 |
+| 自动生成 Header 不展示，手工值优先 | 产品约束 | 请求适配器生成的 Header 不渲染、不枚举；开发者显式填写同名 Header 时在请求合并阶段采用手工值，但 UI 不显示自动值或覆盖状态。 |
 | Header 只附加到提交消息 POST | 安全加固 + 架构变化 | Runtime 只在 `submit` 边界建立本次执行快照；Session 创建、查询、历史、配置、Steer、FollowUp 和 Abort 都不应接收这些秘密。 |
 | 生产认证由 mate-service / 网关边界完成 | Target-only architecture | 浏览器身份、登录态、授权与审计不由 Chat 页面收集原始凭据；具体会话承载和刷新机制必须在公共 API 评审时确认，不能从当前直接适配器推断。 |
 | 隐藏 ETag、原始 SSE 与内部错误 | 安全加固 | 降低内部实现泄漏和错误信息越界风险；凭据不是产品“隐藏字段”，只有内部诊断构建存在明确例外。 |
@@ -245,13 +245,13 @@ CampusClaw 页面增加凭据表单或把秘密写入 `VITE_*` 来补齐。
 | 表格元素 | 行为 |
 |---|---|
 | 启用 | 每行独立开关；关闭后保留 Key/Value，但不进入下一次请求快照和启用计数。 |
-| Key | 普通文本输入，不提供固定下拉选项或认证模式；比较、重复校验和覆盖判断均大小写不敏感。 |
+| Key | 普通文本输入，不提供固定下拉选项或认证模式；比较、重复校验和请求合并均大小写不敏感。 |
 | Value | 普通文本输入，不自动拼接 `Bearer`、替换变量或根据 Key 推断秘密类型。 |
 | 删除 | 删除当前行；表格始终保留一个空白尾行。 |
 | `Headers (n)` | `n` 只统计启用、完整且通过校验的自定义 Header。 |
-| 隐藏的请求头 | 默认折叠请求适配器自动生成的 Header；手工同名值覆盖自动值，并在折叠区显示覆盖状态。 |
 
 - 首屏只显示一条空白 Key/Value 行；任一输入被填写后自动生成下一条空白行，不需要“添加 Header”按钮。
+- 请求适配器自动生成的 Header 不渲染、不枚举，也不显示覆盖状态；开发者填写同名 Key 时仍在请求合并阶段采用手工值。
 - Key 和 Value 必须同时填写；空白尾行忽略。启用行的名称必须是合法 HTTP token，Value 不得含 CR/LF，同名自定义 Key 不得重复。
 - UI 允许自由输入，但 Fetch 禁止的请求头名称在对应行显示“浏览器禁止设置这个 Header”并阻止提交；不通过常驻说明或固定可选列表限制用户。
 - Header 修改即时写入当前页面内存，不提供“应用”“保存凭据”“从 URL 导入”“复制完整 curl”或“显示原始请求”。“全部清空”覆写内存和输入；关闭抽屉保留，刷新、关闭页签或切换 API base 清除。
@@ -601,7 +601,7 @@ check/“已完成”标签区分，不能只依赖颜色。
   队列满、响应不确定不重试、刷新后不虚构未送达队列。
 - 配置测试：idle 才能改模型/思考、ETag 冲突刷新、模型切换关闭不支持的 thinking。
 - 产品凭据负向测试：产品构建不存在 `debugHeaders` 入口和凭据 store；构建配置不接受秘密 `VITE_*`；产品 adapter 不构造 `Authorization` / `X-HW-APPKEY` / `access-token`。
-- 诊断 Header 测试：任意 Key/Value、新尾行、逐行启停、删除、清空、大小写不敏感重复、非法 token、CR/LF、Fetch 禁止名称、自动 Header 覆盖和启用计数；只有初始 `POST /events` 收到通过校验的快照，创建/查询/配置/控制请求均不携带。
+- 诊断 Header 测试：任意 Key/Value、新尾行、逐行启停、删除、清空、大小写不敏感重复、非法 token、CR/LF、Fetch 禁止名称、启用计数、自动 Header 不进入 DOM，以及手工同名值在请求合并阶段覆盖自动值；只有初始 `POST /events` 收到通过校验的快照，创建/查询/配置/控制请求均不携带。
 - 诊断 Header 视觉回归：宽屏和窄屏均使用独立 `Headers` 面板，复用原 `.dev-diagnostics` 的折叠、暖灰、虚线边界、输入和次级按钮层级；不出现 Agent/Session 诊断字段、独立凭据卡片、凭据模式或固定 Header 字段。
 - 诊断秘密生命周期测试：不写入 `localStorage`、`sessionStorage`、IndexedDB、URL、构建变量、日志、遥测和错误 UI；刷新、关闭页签、切换 API base 和点击清空后值不存在。
 - 请求快照测试：发送后编辑凭据不改变已接受 execution；SSE 中断、`401/403` 或超时均不自动重放消息 POST。
@@ -614,7 +614,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 - `.puml` ASCII-only；SVG 是同步生成物且为合法 XML。
 - Markdown 不包含 Mermaid；所有图片和 PlantUML 行锚点存在。
 - `frontend-review.html` 可独立打开，三个 `screenKey`、版本、评审状态和图片均可见。
-- `frontend-review.html` 的 Header 表格在原开发者诊断入口风格中可新增、启停、删除和清空行；启用计数、自动尾行、行内校验与自动 Header 覆盖状态同步更新，窄屏不横向溢出。
+- `frontend-review.html` 的 Header 表格在原开发者诊断入口风格中可新增、启停、删除和清空行；启用计数、自动尾行与行内校验同步更新，页面 DOM 不出现请求适配器自动生成的 Header，窄屏不横向溢出。
 - 低保真 HTML 可独立打开，三个状态均在首屏评审板中可见。
 - README、评审页、低保真和 ADR 都区分“生产产品路由无凭据”与“内部开发构建的临时 `debugHeaders`”，不把诊断能力宣称为生产认证。
 - `campusclaw-mark-o1.png` 可解码且保留 alpha；低保真 HTML 直接引用该资产，不存在 CSS 重绘或第二套图形定义。
@@ -634,6 +634,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-08-28 | 按用户确认删除“隐藏的请求头”区域及覆盖状态展示；`Headers` 面板只呈现可编辑的通用 Key/Value 行。请求适配器自动生成 Header 的内部行为不变，手工同名值仍在请求合并阶段优先。 |
 | 1.1.0 | 2026-08-28 | 按用户选择将通用 Header 编辑器保持为独立 `Headers` 面板，不与 Agent/Session 的“开发者诊断入口”合并；视觉复用原诊断入口的折叠 summary、暖灰次级表面、虚线边界、紧凑字号、38 px 输入和次级按钮；表格交互和请求边界不变，仍不提供凭据模式、固定 Header 或主动作。 |
 | 1.0.0 | 2026-08-28 | 按用户确认改用 Postman 风格的通用 Headers 表格：删除固定四 Header、认证模式、应用按钮和常驻说明；新增任意 Key/Value、逐行启停/删除、自动空白尾行、启用计数、折叠的自动 Header、手工覆盖状态和浏览器限制行内校验；补充 PI、OpenCode、Codex、DSH 与 Postman 对照证据。 |
 | 0.9.0 | 2026-08-27 | 在产品路由仍保持无凭据的前提下，新增 target-only `debugHeaders` 内部诊断设计：固定支持 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`、`access-token`，只在页面内存中存活，仅快照到初始 `POST /events`；对齐已评审实现 `pi-mono-java@d03c08db`，其 Agent/Skill/Tool 发现不透传、只有 Tool execute 使用四项快照；补充隔离、脱敏、CORS、断线不重放和验收规则。 |

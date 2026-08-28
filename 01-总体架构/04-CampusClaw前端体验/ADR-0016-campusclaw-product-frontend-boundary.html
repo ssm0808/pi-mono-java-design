@@ -46,7 +46,7 @@
       <li>内部开发构建可提供 <code>debugHeaders</code> 抽屉，采用 Postman 风格的通用 Key/Value 表格；不预设凭据模式、Header 名称或固定字段。</li>
       <li>Header 编辑器保持为独立 <code>Headers</code> 面板，不与 Agent/Session 的“开发者诊断入口”合并；它只在视觉上复用原诊断入口的折叠面板、暖灰次级表面、虚线边界、输入和次级按钮，不创建凭据卡片或认证主动作。</li>
       <li>每行包含启用、Key、Value 和删除；填写最后一个空白行后自动生成新空白行。Header 总数只统计启用、完整且通过校验的自定义项。</li>
-      <li>请求适配器自动生成的 Header 默认折叠；开发者填写同名 Key 时手工值优先，并在折叠区显示覆盖状态。</li>
+      <li>请求适配器自动生成的 Header 不渲染、不枚举；开发者填写同名 Key 时手工值仍在请求合并阶段优先，但界面不显示自动值或覆盖状态。</li>
       <li>启用行的 Key/Value 必须同时存在；Key 必须是合法 HTTP token，Value 不得包含 CR/LF，重复 Key 按大小写不敏感规则拒绝。Fetch 禁止的请求头名称使用行内错误阻止发送，而不是通过固定 Header 列表限制输入。</li>
       <li>诊断值只存在于当前页面内存与必需的输入元素中，不进入 <code>localStorage</code>、<code>sessionStorage</code>、IndexedDB、URL、<code>VITE_*</code>、遥测、日志或复制摘要；刷新、关闭页签或切换 API base 清除。</li>
       <li>编辑器不根据 Key 猜测值是否为秘密，也不自动修改或补全认证值。真实值可被页面脚本、DOM 输入值与浏览器 DevTools 网络面板观察，因此该能力只能存在于受控开发构建；风险规则写入设计和测试，不在表格中常驻显示说明注释。</li>

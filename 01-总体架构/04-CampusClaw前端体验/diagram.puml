@@ -122,7 +122,7 @@ Execution --> Execute : invoke a selected tool
 note bottom of Drawer
 No preset names or credential modes.
 Keep one trailing blank row.
-Generated headers stay collapsed.
+Generated headers are not rendered.
 Manual values override generated values.
 
 Reject invalid header tokens and CR/LF values.
