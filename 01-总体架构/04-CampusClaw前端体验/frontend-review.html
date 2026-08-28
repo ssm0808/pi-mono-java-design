@@ -219,40 +219,47 @@
     .tool-input dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
     .tool-output-label { display: block; margin-top: 10px; color: var(--muted); font-size: 11px; }
     .tool-output-result { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 13px; }
-    .debug-header-specimen {
-      max-width: 820px;
+    .headers-specimen {
+      width: 100%;
+      max-width: 680px;
+      min-width: 0;
       margin-top: 12px;
-      overflow: hidden;
-      border: 1px solid var(--border-strong);
-      border-radius: 10px;
-      background: var(--surface);
+      padding: 12px 16px;
+      border: 1px dashed var(--border-strong);
+      border-radius: 12px;
+      background: var(--surface-secondary);
+      color: var(--muted);
+      font-size: 12px;
     }
-    .debug-header-head, .debug-header-title {
+    .headers-specimen > summary {
       display: flex;
       align-items: center;
-      flex-wrap: wrap;
       gap: 8px;
+      cursor: pointer;
+      color: var(--text);
+      font-weight: 620;
     }
-    .debug-header-head {
-      justify-content: space-between;
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface-tertiary);
+    .headers-count { color: var(--muted); font-weight: 400; }
+    .headers-body {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
     }
-    .debug-header-title span { color: var(--muted); font-size: 12px; }
-    .debug-header-body { padding: 0 14px 12px; }
     .debug-header-clear, .header-delete {
-      border: 0;
-      background: transparent;
-      color: var(--muted);
+      min-height: 38px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
       cursor: pointer;
       font: inherit;
     }
-    .debug-header-clear { padding: 5px 0; font-size: 12px; }
-    .debug-header-clear:hover, .header-delete:hover { color: var(--text); }
+    .headers-actions { display: flex; justify-content: flex-end; padding-bottom: 4px; }
+    .debug-header-clear { padding: 0 10px; }
+    .debug-header-clear:hover, .header-delete:hover { border-color: var(--border-strong); }
     .header-grid-head, .header-row {
       display: grid;
-      grid-template-columns: 34px minmax(150px, .75fr) minmax(220px, 1.25fr) 34px;
+      grid-template-columns: 38px minmax(150px, .75fr) minmax(220px, 1.25fr) 38px;
       gap: 8px;
       align-items: start;
     }
@@ -265,15 +272,16 @@
       padding: 7px 0;
       border-top: 1px solid var(--border);
     }
-    .header-toggle { display: grid; min-height: 34px; place-items: center; }
+    .header-toggle { display: grid; min-height: 38px; place-items: center; }
     .header-toggle input { width: 15px; height: 15px; margin: 0; accent-color: var(--primary); }
     .header-cell { min-width: 0; }
     .header-cell input {
       width: 100%;
       min-width: 0;
-      padding: 7px 8px;
+      min-height: 38px;
+      padding: 0 10px;
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       background: var(--surface);
       color: var(--text);
       font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -289,7 +297,7 @@
       font-size: 11px;
     }
     .header-error:empty { display: none; }
-    .header-delete { display: grid; width: 34px; height: 34px; padding: 0; place-items: center; font-size: 18px; }
+    .header-delete { display: grid; width: 38px; height: 38px; padding: 0; place-items: center; font-size: 18px; }
     .generated-headers { border-top: 1px solid var(--border); }
     .generated-headers summary {
       padding: 10px 0;
@@ -322,7 +330,7 @@
       .table-wrap { overflow-x: auto; }
       .header-grid-head { display: none; }
       .header-row {
-        grid-template-columns: 34px minmax(0, 1fr) 34px;
+        grid-template-columns: 38px minmax(0, 1fr) 38px;
         padding: 10px 0;
       }
       .header-toggle { grid-row: 1 / span 2; }
@@ -345,8 +353,8 @@
         <div class="row">
           <img class="review-brand-mark" src="campusclaw-mark-o1.png" alt="">
           <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">1.0.0</span>
-          <span class="tag">Product credentialless · Generic Debug Headers in review</span>
+          <span class="tag">1.1.0</span>
+          <span class="tag">Product credentialless · Independent Headers panel in review</span>
         </div>
         <code class="base">pi-mono-java 320d7907 → d03c08db (PR 181) · event-only debug snapshot</code>
       </header>
@@ -383,29 +391,27 @@
       </section>
 
       <section class="section" id="debug-headers">
-        <div class="section-title"><h2>评审中：开发者请求 Headers</h2><code class="screen-key">debugHeaders</code></div>
-        <p class="description">入口位于内部构建顶部工具区。编辑器采用 Postman 风格的通用 Key/Value 表格，不预设凭据模式或 Header 名称。</p>
-        <div class="debug-header-specimen" aria-label="开发者请求 Headers 编辑器">
-          <div class="debug-header-head">
-            <div class="debug-header-title"><strong>Headers</strong><span id="debug-header-count">(0)</span></div>
-            <button class="debug-header-clear" id="debug-header-clear" type="button">全部清空</button>
-          </div>
-          <div class="debug-header-body">
+        <div class="section-title"><h2>评审中：Headers</h2><code class="screen-key">debugHeaders</code></div>
+        <p class="description"><code>Headers</code> 是独立面板，不与“开发者诊断入口”合并；它只复用原诊断入口的折叠面板、虚线边框、暖灰表面和次级按钮样式。</p>
+        <details class="headers-specimen" open aria-label="Headers 编辑器">
+          <summary><span>Headers</span><span class="headers-count" id="debug-header-count">(0)</span></summary>
+          <div class="headers-body">
+            <div class="headers-actions"><button class="debug-header-clear" id="debug-header-clear" type="button">全部清空</button></div>
             <div class="header-grid" aria-label="自定义请求 Headers">
-              <div class="header-grid-head">
-                <span><span class="sr-only">启用</span></span>
-                <span>Key</span>
-                <span>Value</span>
-                <span><span class="sr-only">删除</span></span>
-              </div>
-              <div id="debug-header-rows">
-                <div class="header-row" data-header-row>
-                  <label class="header-toggle"><input class="header-enabled" type="checkbox" checked aria-label="启用此请求头"></label>
-                  <div class="header-cell"><input class="header-key" type="text" placeholder="Key" autocomplete="off" spellcheck="false" aria-label="Header Key"></div>
-                  <div class="header-cell"><input class="header-value" type="text" placeholder="Value" autocomplete="off" spellcheck="false" aria-label="Header Value"><span class="header-error" role="alert"></span></div>
-                  <button class="header-delete" type="button" aria-label="删除此请求头">×</button>
+                <div class="header-grid-head">
+                  <span><span class="sr-only">启用</span></span>
+                  <span>Key</span>
+                  <span>Value</span>
+                  <span><span class="sr-only">删除</span></span>
                 </div>
-              </div>
+                <div id="debug-header-rows">
+                  <div class="header-row" data-header-row>
+                    <label class="header-toggle"><input class="header-enabled" type="checkbox" checked aria-label="启用此请求头"></label>
+                    <div class="header-cell"><input class="header-key" type="text" placeholder="Key" autocomplete="off" spellcheck="false" aria-label="Header Key"></div>
+                    <div class="header-cell"><input class="header-value" type="text" placeholder="Value" autocomplete="off" spellcheck="false" aria-label="Header Value"><span class="header-error" role="alert"></span></div>
+                    <button class="header-delete" type="button" aria-label="删除此请求头">×</button>
+                  </div>
+                </div>
             </div>
             <details class="generated-headers">
               <summary>隐藏的请求头 (4)</summary>
@@ -416,7 +422,7 @@
             </details>
             <span class="sr-only" id="debug-header-live" aria-live="polite"></span>
           </div>
-        </div>
+        </details>
         <div class="table-wrap" style="margin-top:12px">
           <table>
             <thead><tr><th>请求</th><th>是否附加调试 Header</th></tr></thead>
@@ -562,7 +568,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         <details class="review-question" open><summary>2. 已确认：O1 品牌标识；暖中性配色进入评审</summary><p>O1 使用原始透明 PNG，不生成式重绘，也不缩进深色品牌方块；暖白、暖灰与深暖黑构成工作台，珊瑚色仅用于品牌标识，绿色继续表达运行与完成。</p></details>
         <details class="review-question" open><summary>3. 已确认：跟进交互与 Codex desktop 一致</summary><p>desktop 默认“调整方向”，设置可切换“加入队列”；<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。“调整方向”不会硬中断当前模型或工具。</p></details>
         <details class="review-question" open><summary>4. 已确认：产品前端不持有 JWT/APPKEY</summary><p>生产身份与授权仍由统一登录、mate-service 或网关承担；产品 Chat 不出现凭据表单、秘密构建配置或浏览器持久化。</p></details>
-        <details class="review-question" open><summary>5. 评审中：隔离的 <code>debugHeaders</code> 诊断能力</summary><p>采用通用 Key/Value 表格、逐行启停、自动空白行和折叠的自动 Header；值只在页面内存中存活，仅附加到初始 <code>POST /events</code>。</p></details>
+        <details class="review-question" open><summary>5. 评审中：独立 <code>Headers</code> 面板</summary><p>通用 Key/Value 表格、逐行启停、自动空白行和折叠的自动 Header 保持不变；面板不与 Agent/Session 诊断入口合并，仅复用其视觉，值只在页面内存中存活，仅附加到初始 <code>POST /events</code>。</p></details>
         <details class="review-question" open><summary>6. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
         <details class="review-question" open><summary>7. 本轮方向：采用 Codex-inspired 活动 disclosure</summary><p>Thinking 只展示公共 bridge 生成的安全标题和摘要；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。原始推理、内部 ID、绝对路径和凭据都不进入产品浏览器。</p></details>
         <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="imagegen-prompts.md">查看 ImageGen Prompts</a></div>

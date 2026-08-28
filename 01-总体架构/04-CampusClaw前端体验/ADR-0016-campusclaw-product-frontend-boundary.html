@@ -44,6 +44,7 @@
       <li>生产浏览器只调用 mate-service 公共 HTTP/SSE；mate-service 终止认证、执行授权、维护公共 Chat 到内部 Session 的映射并投影安全 Event。</li>
       <li>生产产品路由不提供 JWT/APPKEY/<code>access-token</code> 的输入、编辑、查看、存储、刷新或 Header 构造能力；<code>VITE_*</code> 只允许非秘密配置。</li>
       <li>内部开发构建可提供 <code>debugHeaders</code> 抽屉，采用 Postman 风格的通用 Key/Value 表格；不预设凭据模式、Header 名称或固定字段。</li>
+      <li>Header 编辑器保持为独立 <code>Headers</code> 面板，不与 Agent/Session 的“开发者诊断入口”合并；它只在视觉上复用原诊断入口的折叠面板、暖灰次级表面、虚线边界、输入和次级按钮，不创建凭据卡片或认证主动作。</li>
       <li>每行包含启用、Key、Value 和删除；填写最后一个空白行后自动生成新空白行。Header 总数只统计启用、完整且通过校验的自定义项。</li>
       <li>请求适配器自动生成的 Header 默认折叠；开发者填写同名 Key 时手工值优先，并在折叠区显示覆盖状态。</li>
       <li>启用行的 Key/Value 必须同时存在；Key 必须是合法 HTTP token，Value 不得包含 CR/LF，重复 Key 按大小写不敏感规则拒绝。Fetch 禁止的请求头名称使用行内错误阻止发送，而不是通过固定 Header 列表限制输入。</li>
