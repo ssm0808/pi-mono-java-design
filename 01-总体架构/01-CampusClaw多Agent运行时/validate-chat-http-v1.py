@@ -133,6 +133,15 @@ def validate_common_contract(common: dict[str, Any]) -> None:
     require(re.fullmatch(command_names["builtin"], "Status") is None, "Builtin names must be lowercase")
     require(re.fullmatch(command_names["skill"], "skill:pdf") is not None, "Skill name pattern is invalid")
     require(re.fullmatch(command_names["skill"], "pdf") is None, "Skill names must use the skill: namespace")
+    for invalid_name in ("skill:-pdf", "skill:pdf-", "skill:pdf--tools", "skill:PDF"):
+        require(re.fullmatch(command_names["skill"], invalid_name) is None,
+                f"Skill name pattern accepts an invalid name: {invalid_name}")
+    require(common.get("commandLimits") == {
+        "skillNameCharacters": 64,
+        "skillCommandNameCharacters": 70,
+        "argumentsUtf16CodeUnits": 262144,
+        "fileIds": 32,
+    }, "Command limits differ from the confirmed contract")
     agent_parameter = common["parameters"]["agentId"]
     require(agent_parameter["name"] == "agentId", "Agent path parameter must use lowerCamelCase")
     require(

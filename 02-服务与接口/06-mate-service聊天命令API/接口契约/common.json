@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service Chat Command API",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only",
     "fieldNaming": "lowerCamelCase",
@@ -9,8 +9,14 @@
   },
   "commandNamePatterns": {
     "builtin": "^[a-z0-9-]+$",
-    "skill": "^skill:[a-z0-9-]+$",
+    "skill": "^skill:[a-z0-9]+(?:-[a-z0-9]+)*$",
     "commandId": "^command-[0-9a-f]{32}$"
+  },
+  "commandLimits": {
+    "skillNameCharacters": 64,
+    "skillCommandNameCharacters": 70,
+    "argumentsUtf16CodeUnits": 262144,
+    "fileIds": 32
   },
   "requestHeaderExamples": [
     {

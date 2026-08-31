@@ -71,8 +71,8 @@ fails application startup.
 end note
 
 note right of SkillCommandSource
-One dynamic source exposes
-skill:[a-z0-9-]+.
+One dynamic source exposes skill:<name>.
+Names are 1..64 chars and strict kebab-case.
 end note
 @enduml
 

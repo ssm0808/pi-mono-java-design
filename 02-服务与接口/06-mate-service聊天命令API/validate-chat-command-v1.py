@@ -108,7 +108,7 @@ def sse_payloads(stream: str) -> list[dict[str, Any]]:
 
 
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.0.2", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.0.3", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
     require("target-only" in common["api"]["visibility"], "Public contract must remain target-only")
     headers = {
@@ -117,6 +117,18 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
         for header in example["headers"]
     }
     require(headers == {"Authorization"}, "Public auth must not expose internal Header names")
+    command_names = common.get("commandNamePatterns", {})
+    require(re.fullmatch(command_names["skill"], "skill:pdf-tools") is not None,
+            "Public Skill command pattern is invalid")
+    for invalid_name in ("skill:-pdf", "skill:pdf-", "skill:pdf--tools", "skill:PDF"):
+        require(re.fullmatch(command_names["skill"], invalid_name) is None,
+                f"Public Skill pattern accepts an invalid name: {invalid_name}")
+    require(common.get("commandLimits") == {
+        "skillNameCharacters": 64,
+        "skillCommandNameCharacters": 70,
+        "argumentsUtf16CodeUnits": 262144,
+        "fileIds": 32,
+    }, "Public command limits differ from the confirmed contract")
     operations = {(model["operation"]["method"], model["operation"]["path"]) for model in models}
     require(operations == EXPECTED_OPERATIONS, "Public operation inventory differs")
     require(len(models) == 2, "Expected two public command operations")

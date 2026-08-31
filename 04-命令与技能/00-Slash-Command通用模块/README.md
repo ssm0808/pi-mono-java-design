@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.2 |
-| 设计日期 | 2026-08-31 |
+| 文档版本 | 1.0.3 |
+| 设计日期 | 2026-09-01 |
 | 设计仓基线 | `27484974eb106a7e43910d8e542de52a72c58102` |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 复核 HEAD | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
@@ -85,7 +85,18 @@ CommandHandler.execute(invocation) -> CompletionStage<CommandResultDTO>
 | `CommandExecutionService` | 维护命令生命周期和 SSE |
 
 Builtin 在 Spring 启动时生成不可变索引。名称必须匹配 `[a-z0-9-]+`；重名直接启动失败。
-Skill 使用 `skill:[a-z0-9-]+`，由一个动态 Source 和一个共享 Handler 处理。
+Skill 使用 `skill:<name>`，由一个动态 Source 和一个共享 Handler 处理。`<name>` 必须：
+
+- 长度为 1～64 个字符；
+- 只包含小写字母、数字和连字符；
+- 连字符不能位于首尾或连续出现；
+- 与 Skill 父目录名一致。
+
+精确格式为 `^[a-z0-9]+(?:-[a-z0-9]+)*$`。HTTP 层先移除 `skill:`，再复用同一个
+Skill 名称校验器，不维护第二套规则。该规则对齐
+[Agent Skills specification](https://agentskills.io/specification)；当前 CampusClaw
+`SkillLoader` 只校验 64 字符和字符集合，尚未拒绝首尾或连续连字符，也未要求名称与
+父目录一致，因此这里属于目标安全加固。
 
 Handler 只接收不可变 `CommandInvocation`。它不能依赖 Controller、调用自身 HTTP 接口，
 也不能获得宽泛可变 Session 门面。新增命令只新增 Contributor、Definition、Handler 和
@@ -130,10 +141,15 @@ Handler 只接收不可变 `CommandInvocation`。它不能依赖 Controller、�
 
 1. 命令存在且名称合法；
 2. Service 将省略的 `arguments` 归一为空字符串，将 `fileIds` 归一为空列表；
-3. `arguments` 最多 262144 字符，`fileIds` 最多 32 个；复用 Runtime 现有常量；
+3. `arguments` 与普通用户消息使用同一上限：最多 262144 个 UTF-16 代码单元；
+   `fileIds` 最多 32 个；
 4. Builtin 不接受附件；Skill 按普通用户消息规则接受附件；
 5. 当前 Session 状态允许本次不填参数或填写参数的执行；
 6. 全部通过后生成 `command-<32位小写十六进制UUID>`，再写入 `command.started`。
+
+`262144` 来自 CampusClaw 现有 `RuntimeApiConstants.MAX_MESSAGE_CHARACTERS` 和
+`UserEventRequestVO` 的 `@Size` 校验。它是复用普通消息限制的产品约束，不是 Agent Skills
+或各 Harness 的统一标准，也不表示模型上下文一定能够容纳同样长度。
 
 ## 6. 交互层解析
 
@@ -226,6 +242,7 @@ Session 序列，因此公开 `entrySeq` 可以有缺口，调用方不得重编
 ## 10. 验收重点
 
 - Builtin 重名时启动失败；Skill 与 Builtin 不冲突；新增命令不改中央分派；
+- Skill 名称拒绝超过 64 个字符、首尾连字符、连续连字符和父目录名称不一致；
 - 命令清单精确匹配，保留暂时不可用命令，并分别标明不填参数和填写参数时能否执行；
 - 清单失败不降级；未知命令、非法参数和 Builtin 附件在流建立前失败；
 - sidecar 不改变 active leaf，分支切换后的可见性和顺序正确；
@@ -235,6 +252,7 @@ Session 序列，因此公开 `entrySeq` 可以有缺口，调用方不得重编
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.0.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 的完整规则；参数上限明确为复用普通消息的 UTF-16 输入限制，不再表述为 Harness 通用规范 |
 | 1.0.2 | 2026-08-31 | 全文改为短句、动作式表格和先结论后细节的结构；不改变已确认行为 |
 | 1.0.1 | 2026-08-31 | 澄清 Command Catalog 是按 Session 上下文解析的逻辑注册表；面向用户和 HTTP 文案统一使用“命令清单”，避免与文件系统当前目录混淆 |
 | 1.0.0 | 2026-08-31 | 建立 Builtin/Skill 两类命令、可组合注册、结构化 HTTP、双层可用性、命令事件和 sidecar 持久化的唯一公共定义 |

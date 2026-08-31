@@ -15,7 +15,7 @@ Source -> Runtime : prepareCached(agentId)
 Runtime --> Source : latest complete Agent version
 Source -> Snapshot : skills()
 Snapshot --> Source : bound Skill metadata
-Source -> Source : map to skill:[a-z0-9-]+ descriptors
+Source -> Source : map validated 1..64 names to skill: namespace
 @enduml
 
 @startuml skill_acceptance

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.43.2 |
+| 文档版本 | 1.43.3 |
 | 状态 | 十三个内部 operation 已确认；Slash Command 命令清单与执行契约已确认 |
 | 接口评审状态 | 十三个 operation 均已确认 |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
@@ -24,8 +24,9 @@
 | pi-mono-java 字段命名核对基线 | `304eda06ff603fc9b6bbcaad0c296cc151a7defb`（`codex/runtime-http-contract-v137`） |
 | pi-mono-java 凭据透传核对基线 | `320d790726a70aada6100052952d5494d2a378ac` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
-| Anthropic Managed Agents 文档核对 | 2026-08-31；Session、Events、Skills 与 Session Operations 官方文档 |
-| 更新日期 | 2026-08-31 |
+| Anthropic Managed Agents 文档核对 | 2026-09-01；Session、Events、Skills 与 Session Operations 官方文档 |
+| Agent Skills 规范核对 | 2026-09-01；名称、目录和 `SKILL.md` frontmatter 规则 |
+| 更新日期 | 2026-09-01 |
 
 ## 1. 结论
 
@@ -359,7 +360,7 @@ HTTP 请求不得携带这些凭据。快照不进入日志、Prompt、ResultBea
 
 | 字段 | 当前契约 | 具体作用 |
 |---|---|---|
-| `message` | 可选；提供时包含至少一个非空白字符，最多 262144 个字符 | 用户文本；校验可判断空白，持久化保留原始值 |
+| `message` | 可选；提供时包含至少一个非空白字符，最多 262144 个 UTF-16 代码单元 | 用户文本；校验可判断空白，持久化保留原始值 |
 | `fileIds` | 可选；最多 32 个，元素唯一、大小写敏感并保留顺序 | 按固定 `[File IDs]` 提示块追加给模型，不解析文件正文 |
 
 URI 和 operation 已经唯一确定“提交 `user.message`”，请求体中的 `type` 不增加分派
@@ -840,7 +841,7 @@ Steer 只在 `Session.state=running` 时接受。它不会立即打断正在进�
 }
 ```
 
-`message` 必须包含非空白字符，最大 262144 个字符。首版不接受 `fileIds`、
+`message` 必须包含非空白字符，最大 262144 个 UTF-16 代码单元。首版不接受 `fileIds`、
 `modelId`、`thinking`、metadata、队列模式或 `Idempotency-Key`。成功返回
 `202 Accepted` 和最窄 ResultBean：
 
@@ -909,18 +910,24 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 |---|---|
 | `/` | 只用于交互层；HTTP `name` 不含 `/` |
 | Builtin 名称 | `[a-z0-9-]+` |
-| Skill 名称 | `skill:[a-z0-9-]+` |
+| Skill 名称 | `skill:<name>`；`<name>` 为 1～64 个字符，只使用小写字母、数字和连字符，连字符不能位于首尾或连续出现 |
 | 交互层命中 | 调用 Command API |
 | 交互层未命中 | 清单获取成功时，按普通消息发送 |
 | 清单获取失败 | 保留草稿并显示错误 |
 | API 未知名称 | 返回 `COMMAND_NOT_FOUND` |
+
+`<name>` 精确匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，并与 Skill 父目录名一致。
+HTTP 层移除 `skill:` 后复用统一的 Skill 名称校验器。该规则对齐
+[Agent Skills specification](https://agentskills.io/specification)，是相对当前
+CampusClaw 宽松 `SkillLoader` 的安全加固。
 
 命令描述符分别说明不填参数和填写参数时能否执行。暂时不可用的命令仍会显示。例如 Session
 运行中，`/model` 可以查看，但不能切换模型。精确字段见
 [`12-list-session-commands.json`](接口契约/操作/12-list-session-commands.json)。
 
 POST 只接收 `name`、`arguments` 和 `fileIds`。Service 统一处理省略值，并拒绝未知字段。
-Builtin 不接受附件；Skill 复用普通消息的 262144 字符和 32 个附件上限。每次已接受调用
+Builtin 不接受附件；Skill 复用普通消息的 262144 个 UTF-16 代码单元和 32 个附件上限。
+该长度是 HTTP 输入保护，不是模型上下文上限。每次已接受调用
 生成 `command-<32 lowercase hex>`。通用结果只有 `text` 和可选 `sourceEventSeq`。
 
 ![Command HTTP 接口与应用服务](设计图/Command/command_http_flow.svg)
@@ -1239,17 +1246,18 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 `d649866a6cae967ace18ceaeb9597edd47e5721e`。Slash Command 新契约额外核对 CampusClaw
 `c1311f69f504e7e799fa2467fd6a9d95b3f91b99`（命令与 Runtime Session 行为）和当前头
 `94abd2abcb03943daef5118115e4b4a21f1c4d5f`，并对比 pi、OpenCode、DeepSeek Harness、
-Codex Harness 及 2026-08-31 的 Anthropic Managed Agents 官方文档。
+Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Skills 规范。
 
 | 分类 | 证据或决策 |
 |---|---|
 | 观察到的当前 Java 行为 | CampusClaw `c1311f69` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/SlashCommandRegistry.java:21-67` 使用可变 Map，并在 Registry 内解析整段 Slash 文本；`SlashCommandSession.java:19-32` 暴露宽泛可变 Session 门面 |
 | 观察到的当前 Java 行为 | 同基线 `RuntimeSessionConfigurationService.java:78-163` 已有模型和 thinking 的查询/更新规则；`RuntimeSessionMapper.xml:132-190` 只查活动分支祖先，`session_schema.sql` 的 `t_sessions` 尚无 `display_name`，`t_session_records` 也尚无 `skill.snapshot` 记录 |
-| 观察到的 pi 行为 | pi `4af9d21d` 的 `packages/coding-agent/src/modes/interactive/interactive-mode.ts:675-772` 聚合 Builtin、Prompt、Extension 和 `skill:*`；`packages/coding-agent/src/core/agent-session.ts:3005-3012` 由 Session 保存名称变更，`rpc-mode.ts:657-708` 另提供 RPC 查询与命名 |
-| 观察到的 OpenCode 行为 | OpenCode `849c2598` 的 `packages/opencode/src/command/index.ts:65-169` 把内置、MCP 和 Skill 放入共享裸名空间并跳过冲突 Skill；`session/session.ts:693-710,755-757` 由 Session 领域更新 title |
-| 观察到的 DeepSeek Harness 行为 | DeepSeek Harness `141eb6fe` 的 `packages/interaction/commands/src/index.ts:53-123,245-300,328-437` 拆分 Definition、Registry 和 Executor，持久化 command lifecycle 并用 `sourceEventSeq` 关联结果；它仍在 Registry 中接收整段 Slash 文本 |
-| 观察到的 Codex 行为 | Codex `be33f80b` 的 `codex-rs/tui/src/slash_command.rs` / `slash_dispatch.rs` 在 TUI 中集中分派；App Server `thread/name/set`、`thread/compact/start`、`skills/list` 是结构化线程操作，并由 Thread 元数据保有名称 |
-| 观察到的 Claude 行为 | Anthropic [Sessions](https://platform.claude.com/docs/en/managed-agents/sessions)、[Events](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)、[Skills](https://platform.claude.com/docs/en/managed-agents/skills) 与 [Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations) 定义持久 Session、事件流和 Agent Skill 附着，但没有可直接复用的统一 Slash Command 或 Session rename 协议 |
+| 观察到的当前 Java 行为 | 同基线 `RuntimeApiConstants.java:18` 与 `UserEventRequestVO.java:28` 把普通消息上限固定为 262144；`Skill.java:25,34` 与 `SkillLoader.java:104-111,140-150` 只校验 64 字符和宽松字符集合，仍允许首尾或连续连字符，也允许缺少 frontmatter 名称时回退父目录名 |
+| 观察到的 pi 行为 | pi `4af9d21d` 的 `interactive-mode.ts:675-772` 聚合 Builtin、Prompt、Extension 和 `skill:*`；`skills.ts:92-111` 校验 64 字符、首尾和连续连字符；没有 262144 参数上限；`agent-session.ts:3005-3012` 由 Session 保存名称变更 |
+| 观察到的 OpenCode 行为 | OpenCode `849c2598` 的 `command/index.ts:65-169` 把内置、MCP 和 Skill 放入共享裸名空间并跳过冲突 Skill；`skill/index.ts:37-58` 只要求名称为字符串，没有严格命名规则或 262144 参数上限；`session/session.ts:693-710,755-757` 由 Session 领域更新 title |
+| 观察到的 DeepSeek Harness 行为 | DeepSeek Harness `141eb6fe` 的 `packages/interaction/commands/src/index.ts:53-123,245-300,328-437` 拆分 Definition、Registry 和 Executor，持久化 command lifecycle 并用 `sourceEventSeq` 关联结果；它没有 Agent Skill 包或 Skill Command 约定，也未提供这两个限制的依据 |
+| 观察到的 Codex 行为 | Codex `be33f80b` 的 TUI 集中分派 Slash；`core-skills/src/loader.rs:126,759-807` 有 64 字符上限，但字符规则更宽松且没有 262144 参数上限；App Server `thread/name/set`、`thread/compact/start`、`skills/list` 是结构化线程操作 |
+| 观察到的 Claude 行为 | Anthropic [Sessions](https://platform.claude.com/docs/en/managed-agents/sessions)、[Events](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)、[Skills](https://platform.claude.com/docs/en/managed-agents/skills) 与 [Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations) 定义持久 Session、事件流和 Agent Skill 附着；Skills 使用 Agent Skills 格式，但没有统一 Slash Command、Session rename 或 262144 调用参数协议 |
 | 观察到的行为 | PR 167 在 `f60cc3e` 删除 `modules/coding-agent-cli/.../command/` 中 Slash Registry、`ModelCommand`、`ThinkingCommand`、`CompactCommand`、`NameCommand`，同时删除 `.../compaction/Compactor`、`FileOperationTracker` 与旧大型 `AgentSession`；该删除按包边界发生，未先迁移入口无关能力 |
 | 观察到的行为 | PR 167 新增 `modules/coding-agent-cli/.../session/ManagedAgentSession.java` 和 `AgentSessionFactory.java`，但基线 Session 只持有 Runtime、入口、Agent 和工具，不包含阈值/溢出压缩、Usage 累计或 Host 无关 Slash 操作端口 |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 `5cd93f6` 中的 `compact()`、`autoCompact()`、`setModel()`、`setThinkingLevel()` 与 Session Entry 写入证明压缩及配置变更是 Agent Session 能力，不依赖终端绘制组件 |
@@ -1364,6 +1372,7 @@ pi 压缩细节与 failed.aborted，1.41 的重试候选持久化排除和实际
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.43.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 完整规则；Skill 参数明确复用普通消息的 UTF-16 输入上限；同步内部精确契约、Harness 证据和校验门禁。 |
 | 1.43.2 | 2026-08-31 | 以规则表和动作式短句统一 Slash Command 说明与审查文案；补齐 GetSession `displayName` 说明；不改变接口行为。 |
 | 1.43.1 | 2026-08-31 | 澄清 Command Catalog 是按 Session 上下文动态生成的逻辑命令清单；用户可见契约不再使用可能被理解为文件系统路径的“当前目录”。 |
 | 1.43.0 | 2026-08-31 | 新增命令目录和结构化命令执行两个 operation；SessionResource 增加 `displayName`；固定 Builtin/Skill、双层可用性、命令生命周期、sidecar Entry、`/name` 所有权和 Skill 调用快照。 |

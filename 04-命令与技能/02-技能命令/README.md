@@ -5,8 +5,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.0.2 |
-| 设计日期 | 2026-08-31 |
+| 文档版本 | 3.0.3 |
+| 设计日期 | 2026-09-01 |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 复核 HEAD | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
 | pi 基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
@@ -23,11 +23,23 @@ Skill 命令格式：
 | 规则 | 结论 |
 |---|---|
 | HTTP `name` | `skill:<name>`，不含 `/` |
-| Skill 名称 | `<name>` 匹配 `[a-z0-9-]+` |
+| Skill 名称 | 1～64 个字符；只使用小写字母、数字和连字符；连字符不能位于首尾或连续出现 |
+| 名称与目录 | `SKILL.md` 的 `name` 必填，并与父目录名一致 |
 | 命名冲突 | 与 Builtin 分属不同命名空间，不设置优先级 |
 | Session 状态 | 仅 `idle` 时可执行；`running` 时仍显示但标记不可用 |
-| 参数 | 最多 262144 字符 |
-| 附件 | 最多 32 个，复用普通用户消息规则 |
+| 参数 | 可选；长度限制与普通用户消息相同 |
+| 附件 | 可选；数量和校验规则与普通用户消息相同 |
+
+名称的精确格式为：
+
+```regex
+^[a-z0-9]+(?:-[a-z0-9]+)*$
+```
+
+`skill:` 是 CampusClaw 的命令命名空间，不属于 Skill 包名称。HTTP 层移除该前缀后，
+复用同一个 Skill 名称校验器。规则对齐
+[Agent Skills specification](https://agentskills.io/specification)；当前 `SkillLoader` 的
+`^[a-z0-9-]+$` 仍会接受 `-pdf`、`pdf-` 和 `pdf--tools`，目标实现必须补齐校验。
 
 ## 2. 命令清单如何生成
 
@@ -35,7 +47,8 @@ Skill 命令格式：
 
 1. 从 Session 取不变 `agentId`。
 2. 通过 `AgentRuntimeManager.prepareCached(agentId)` 读取最新 complete 版本，不触发远程刷新。
-3. 对直接绑定的 Skill 按名称稳定排序，生成 `skill:<name>` Descriptor。
+3. 校验 `SKILL.md` 名称、父目录名和绑定元数据一致，再按名称稳定排序并生成
+   `skill:<name>` Descriptor。
 4. 只返回名称、描述、可用性和输入提示；不返回正文、路径、Skill ID 或版本。
 
 `PreparedAgentRuntime.skills()` 和 `findSkill()` 已支持精确名称查找。目标设计在其上建立
@@ -136,16 +149,24 @@ Skill 都出现在命令清单中。这与 pi `skills.ts:347-356` 的语义一�
 
 | 分类 | 证据或决策 |
 |---|---|
+| 观察到的 CampusClaw 行为 | `RuntimeApiConstants.java:18` 定义普通消息上限 `262144`，`UserEventRequestVO.java:28` 通过 `@Size` 使用该上限；当前没有 Skill Command 参数上限实现 |
+| 观察到的 CampusClaw 行为 | `Skill.java:25,34` 定义 64 字符和宽松正则，`SkillLoader.java:104-111,140-150` 允许缺少 frontmatter 名称时回退父目录名，且未拒绝首尾或连续连字符 |
 | 观察到的行为 | `AgentRuntimeManager.java:194-253,323-363` 已校验并重建 Skill 元数据和完整 Markdown |
 | 观察到的行为 | `PreparedAgentRuntime.java:57-95` 已提供绑定 Skill 索引和精确名称查找 |
 | 观察到的行为 | `t_session_records` 已有私有 Record lane，但当前 `type` 只说明支持 usage；`skill.snapshot` 是目标扩展 |
+| pi 对照 | pi `4af9d21d` 的 `skills.ts:92-111` 校验 64 字符、首尾和连续连字符，并使用 `/skill:name`；没有 `262144` 参数上限 |
+| OpenCode 对照 | OpenCode `849c2598` 的 `skill/index.ts:37-58` 只要求名称为字符串；没有严格命名规则或 `262144` 参数上限 |
+| DeepSeek Harness 对照 | DeepSeek Harness `141eb6fe` 没有 Agent Skill 包或 Skill Command 约定，不能作为这两个限制的依据 |
+| Codex Harness 对照 | Codex `be33f80b` 的 `core-skills/src/loader.rs:126,759-807` 有 64 字符上限，但字符规则更宽松；没有 `262144` 参数上限 |
+| Claude Managed Agents 对照 | 2026-09-01 的 [Skills 文档](https://platform.claude.com/docs/en/managed-agents/skills) 使用 Agent Skills 格式，但没有 Slash 调用参数上限 |
 | 目标设计 | 动态 SkillCommandSource、共享 Handler、调用快照、附件与断线恢复均未在当前 CampusClaw 实现 |
-| 安全加固 | 受信任 Skill 指令、User 参数和附件分层；快照缺失时禁止回退到当前文件 |
-| 产品约束 | 只有 `skill:` 命名空间，不开放 pi 的 Prompt/Extension 或 OpenCode 的裸 Skill 名称 |
+| 安全加固 | 名称按 Agent Skills 完整规则校验；受信任 Skill 指令、User 参数和附件分层；快照缺失时禁止回退到当前文件 |
+| 产品约束 | 只有 `skill:` 命名空间；`arguments` 复用普通消息上限；不开放 pi 的 Prompt/Extension 或 OpenCode 的裸 Skill 名称 |
 
 ## 8. 验收清单
 
 - Skill 与 Builtin 即使底层名称相同也不冲突。
+- Skill 名称拒绝超过 64 个字符、首尾连字符、连续连字符、缺少 frontmatter 名称和父目录名称不一致。
 - 运行中命令清单仍返回 Skill，但执行在流建立前返回 `SESSION_BUSY`。
 - 快照不存在、不完整或与绑定名称不符时，用户 Entry、Record、command.started
   和 running 状态均不提交。
@@ -158,6 +179,7 @@ Skill 都出现在命令清单中。这与 pi `skills.ts:347-356` 的语义一�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.0.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 完整规则；参数和附件改为引用普通消息限制，并补齐五类 Harness 的依据边界 |
 | 3.0.2 | 2026-08-31 | 使用规则表和动作式短句简化命名、发现、快照与信任分层说明；不改变 Skill 行为 |
 | 3.0.1 | 2026-08-31 | 将面向读者的“目录”统一为“命令清单”，明确 Skill 发现不是文件系统目录扫描 |
 | 3.0.0 | 2026-08-31 | 废弃旧的本地资源扩展和 Reload 交互设计，收敛为 HTTP `/skill:name`、最新 Agent 解析、调用快照、信任分层和可恢复执行 |

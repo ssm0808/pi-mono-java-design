@@ -70,7 +70,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "提供 message、fileIds 至少一项；本接口的路径和操作语义已固定为提交 user.message，无需请求体重复声明类型。fileIds 最多 32 个、元素唯一且保留顺序；Runtime 不解析或下载文件，而是把 ID 按固定 [File IDs] 提示块追加到用户消息。请求不接受 type、modelId、thinking、metadata 或 Idempotency-Key。",
+      "description": "提供 message、fileIds 至少一项；message 提供时必须包含非空白字符，最多 262144 个 UTF-16 代码单元。本接口的路径和操作语义已固定为提交 user.message，无需请求体重复声明类型。fileIds 最多 32 个、元素唯一且保留顺序；Runtime 不解析或下载文件，而是把 ID 按固定 [File IDs] 提示块追加到用户消息。请求不接受 type、modelId、thinking、metadata 或 Idempotency-Key。",
       "example": {
         "message": "请分析这些订单文件，并列出异常项。",
         "fileIds": [

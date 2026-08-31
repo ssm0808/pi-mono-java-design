@@ -17,7 +17,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "只接受 message；必须包含非空白字符且最多 262144 个字符。首版不接受 fileIds、modelId、thinking、metadata、队列模式或 Idempotency-Key。",
+      "description": "只接受 message；必须包含非空白字符且最多 262144 个 UTF-16 代码单元。首版不接受 fileIds、modelId、thinking、metadata、队列模式或 Idempotency-Key。",
       "example": {
         "message": "分析完成后，再生成一份简短的管理层摘要。"
       }
