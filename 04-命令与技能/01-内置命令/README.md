@@ -5,7 +5,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.0.1 |
+| 文档版本 | 2.0.2 |
 | 设计日期 | 2026-08-31 |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 复核 HEAD | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
@@ -25,7 +25,7 @@ Builtin 是直接应用命令，不转换为模型提示词。所有 Builtin
 
 | 命令 | 无参行为 | 有参行为 | 运行中 |
 |---|---|---|---|
-| `/help [command]` | 列出当前 Session 可发现的命令，包括暂时不可用项 | 精确查询一条描述符，未知返回 `COMMAND_NOT_FOUND` | 查询和输入始终可用 |
+| `/help [command]` | 列出命令清单 | 查看指定命令详情 | 始终可用 |
 | `/status` | 返回 Session `state`、当前 `modelId` 和 `thinking` | 不接受参数 | 始终可用 |
 | `/name [displayName]` | 返回当前名称，未设置时明确显示未设置 | 更新 Session 名称 | 查询和更新都可用 |
 | `/model [modelId]` | 返回当前模型和可选模型 | 切换当前模型 | 查询可用；输入不可用，`SESSION_BUSY` |
@@ -150,5 +150,6 @@ last-commit-wins：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.0.2 | 2026-08-31 | 简化 `/help` 命令矩阵文案，改为“列出命令清单”“查看指定命令详情”“始终可用” |
 | 2.0.1 | 2026-08-31 | 将 `/help` 无参行为改述为列出当前 Session 可发现的命令，消除“当前目录”与文件系统目录的歧义 |
 | 2.0.0 | 2026-08-31 | 废弃旧 GUI/Extension 执行面设计，收敛为 HTTP v1 七个 Builtin、窄职责服务和 CampusClaw Session Name 所有权 |
