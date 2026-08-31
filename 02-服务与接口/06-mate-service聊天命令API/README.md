@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.1 |
+| 文档版本 | 1.0.2 |
 | 状态 | 两个公共 operation 已确认；target-only design |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
 | 人类评审契约 | [`chat-command-v1-review.html`](chat-command-v1-review.html)，由精确契约源生成 |
@@ -10,28 +10,26 @@
 | mate-service 源码基线 | `956b547f5ca12ca89e68f73012f92a4406b0c9fa` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
-| CampusClaw 内部 HTTP 契约 | `1.43.1` |
+| CampusClaw 内部 HTTP 契约 | `1.43.2` |
 | 更新日期 | 2026-08-31 |
 
 ## 1. 结论与边界
 
-mate-service 面向登录用户开放两个公共 HTTP operation：
+mate-service 向登录用户开放两个接口：
 
 | Method | Path | 响应 | 作用 |
 |---|---|---|---|
-| `GET` | `/mate-service/v1/chats/{chatId}/commands` | ResultBean | 查询当前 Chat 对应 Session 的命令清单 |
-| `POST` | `/mate-service/v1/chats/{chatId}/command` | 请求范围 SSE | 执行结构化 Builtin 或 Skill Command |
+| `GET` | `/mate-service/v1/chats/{chatId}/commands` | ResultBean | 查看命令清单 |
+| `POST` | `/mate-service/v1/chats/{chatId}/command` | 请求范围 SSE | 执行 Builtin 或 Skill 命令 |
 
-当前 mate-service 源码没有 Chat 资源、Chat→Runtime 映射、CampusClaw Runtime client 或
-命令 Controller，因此本设计全部属于 target-only design，不能描述为已实现行为。
-源码基线中 `AgentDefinitionController` 只提供 Agent 定义及 Runtime 配置读取；
-`LlmChatController` 的 `/mate-service/v1/LLM/chat` 是 Model Manager 兼容流接口，
-`LlmChatService`/`UpstreamChatCall` 可以透明转发模型响应体，但它既不解析 CampusClaw
-领域事件，也不承担 Chat 权限和 Session 映射，不能复用为本 API 的字节转发实现。
+当前 mate-service 没有 Chat 资源、Chat→Runtime 映射、Runtime client 或命令 Controller，
+所以两个接口都是 target-only design。
 
-`/name` 修改的是 CampusClaw 持久化 Session 的 `displayName`。mate-service 只维护
-`chatId -> sessionId` 稳定一对一映射，不保存名称副本，不把名称更新改写成本地 Chat
-元数据操作。
+现有 `/mate-service/v1/LLM/chat` 只代理 Model Manager 流。它不解析 CampusClaw 事件，
+也不处理 Chat 权限和 Session 映射，不能直接复用。
+
+`/name` 修改 CampusClaw Session 的 `displayName`。mate-service 只维护
+`chatId -> sessionId` 映射，不保存名称副本。
 
 ## 2. 目标组件
 
@@ -39,36 +37,32 @@ mate-service 面向登录用户开放两个公共 HTTP operation：
 
 [PlantUML 源码：`public_command_boundary`](设计图/diagram.puml#L1)
 
-目标职责如下：
+| 组件 | 职责 |
+|---|---|
+| `ChatCommandController` | 处理公共 VO、登录上下文和 HTTP/SSE |
+| `ChatSessionResolver` | 检查 Chat 权限，再解析唯一 `sessionId` |
+| `CampusClawCommandClient` | 使用内部凭据调用 Runtime 1.43.2 |
+| `PublicCommandEventProjector` | 解析内部 SSE，删除私有字段，再生成公共事件 |
+| `PublicCommandErrorMapper` | 把内部错误转换为稳定公共错误 |
 
-- `ChatCommandController` 只处理公共 VO、登录用户上下文和 HTTP/SSE 适配；
-- `ChatSessionResolver` 在完成 Chat 权限判断后解析稳定的一对一 `sessionId`，不得由客户端提交；
-- `CampusClawCommandClient` 以独立内部鉴权契约调用 Runtime 1.43，不透传浏览器
-  `Authorization`；
-- `PublicCommandEventProjector` 解析每一条内部 SSE，检查类型与字段，移除内部标识和
-  私有数据，再编码公共事件；
-- `PublicCommandErrorMapper` 把内部失败映射为稳定公共错误，不泄露 Session、Agent、Skill
-  版本、文件路径、Provider 或数据库细节。
-
-公共和内部鉴权是两个边界。浏览器的 `Authorization: Bearer <USER_ACCESS_TOKEN>` 只用于
-mate-service 用户认证和 Chat 权限；mate-service 调用 CampusClaw 时重新构造公司内部
-调用上下文及执行级 Header。任何一层都不能把 `chatId` 或 `sessionId` 当作凭据。
+浏览器 `Authorization` 只用于用户认证和 Chat 权限。mate-service 调用 CampusClaw 时
+重新构造内部 Header，不透传浏览器凭据。`chatId` 和 `sessionId` 都不是凭据。
 
 ## 3. 交互层解析
 
-交互层只有在文本第一个字符就是 `/` 时尝试 Slash 解析：
+交互层按以下顺序处理：
 
-1. 命令名截取到第一个空白字符，严格匹配命令清单中的小写 `name`；
-2. 剩余参数保持原始内容，包括内部换行，不做 trim 后重组；
-3. 命令清单请求成功且精确命中时，调用结构化 Command API；
-4. 命令清单请求成功但未命中时，整段文本按普通消息发送；
-5. 命令清单请求失败时保留 Slash 草稿并显示错误，禁止静默降级为普通消息。
+1. 仅当第一个字符是 `/` 时尝试解析；
+2. 命令名截取到第一个空白字符，并精确匹配小写 `name`；
+3. 参数保留原始内容，包括内部换行；
+4. 命中后调用 Command API；
+5. 清单获取成功但未命中时，按普通消息发送；
+6. 清单获取失败时，保留草稿并显示错误。
 
-`/` 只是交互层展示符号，HTTP `name` 不包含 `/`。直接调用结构化 API 时，未知名称
-严格返回 `COMMAND_NOT_FOUND`，不能沿用交互层“未命中按普通消息”的规则。
+HTTP `name` 不含 `/`。直接调用 API 时，未知名称返回 `COMMAND_NOT_FOUND`。
 
-命令清单返回七个 Builtin 和当前 Agent 绑定的 `skill:<name>`。已知命令即使暂时不可用
-仍返回；`available` 表示无参数调用，`input.available` 表示有参数提交，两者不得合并。
+命令清单返回七个 Builtin 和当前 Agent 绑定的 `skill:<name>`。暂时不可用的命令仍返回。
+`available` 表示不填参数时能否执行；`input.available` 表示填写参数时能否执行。
 精确字段和 running 示例见
 [`01-list-chat-commands.json`](接口契约/操作/01-list-chat-commands.json)。
 
@@ -84,14 +78,19 @@ mate-service 用户认证和 Chat 权限；mate-service 调用 CampusClaw 时重
 }
 ```
 
-`arguments` 和 `fileIds` 省略时由 Service 统一归一为空字符串和空列表；请求 VO 不设置
-字段默认值并拒绝未知字段。Builtin 不接受附件；Skill 复用普通消息的 262144 字符和
-32 个附件上限。mate-service 不自行解释 Skill 正文、模型参数或 Session 状态，只执行
-公共输入校验并让 CampusClaw 成为命令清单与 Admission Policy 的权威。
+| 请求规则 | 约束 |
+|---|---|
+| `name` | 必填；精确匹配命令清单；不含 `/` |
+| `arguments` | 省略时由 Service 归一为空字符串；最多 262144 字符 |
+| `fileIds` | 省略时由 Service 归一为空列表；最多 32 个 |
+| Builtin | 不接受附件 |
+| Skill | 接受与普通消息相同的附件 |
+| 其他字段 | 拒绝 |
 
-每次 CampusClaw 已接受调用都会返回 `command-<32 位小写十六进制 UUID>`。公共层保留
-该不透明关联 ID，但不构造或重写它。通用完成结果只有 `text` 与可选
-`sourceEventSeq`；不引入通用 Block 模型或命令专属公共 Response VO。
+请求 VO 不设置默认值。mate-service 只做公共输入校验；CampusClaw 决定命令是否可用。
+
+CampusClaw 为每次已接受调用生成 `command-<32 位小写十六进制 UUID>`。mate-service
+原样保留该 ID。通用结果只有 `text` 和可选 `sourceEventSeq`。
 
 ## 5. SSE 投影与错误
 
@@ -99,7 +98,7 @@ mate-service 用户认证和 Chat 权限；mate-service 调用 CampusClaw 时重
 
 [PlantUML 源码：`public_sse_projection`](设计图/diagram.puml#L23)
 
-mate-service 必须按事件解析内部流，不能字节透明转发。公共投影规则为：
+mate-service 必须解析内部事件，不能透明转发字节流：
 
 | 内部字段或事件 | 公共处理 |
 |---|---|
@@ -111,14 +110,12 @@ mate-service 必须按事件解析内部流，不能字节透明转发。公共�
 | Assistant、Tool 与 Session 状态事件 | 复用已确认公共字段子集，不透明字段删除 |
 | 未知内部事件或字段形状 | 不猜测；终止公共流并映射为安全错误 |
 
-流建立前失败使用真实 HTTP status 和 `resCode/resMsg` ResultBean。公共鉴权错误由
-mate-service 产生；内部 `SESSION_NOT_FOUND` 不直接泄露，映射为 Chat 侧语义。Skill
-快照等内部可用性原因统一映射为 `COMMAND_UNAVAILABLE`。流建立后若执行失败，先投影
-持久化 `command.failed`，再发送 `stream.error` 并关闭，不发送 `stream.end`。
+流建立前失败使用真实 HTTP status 和 ResultBean。mate-service 产生公共鉴权错误，并把
+内部 Session/Skill 细节映射为 Chat 侧错误。流建立后失败时，先投影
+`command.failed`，再发送 `stream.error` 并关闭；不发送 `stream.end`。
 
-Skill 或 Compact 被接受后，浏览器断线不自动中止 CampusClaw 执行。公共层不得因网络
-异常重放 POST；重新加载后应从公共持久化历史判断是否已有 terminal event。只有现有
-Stop/Abort 操作可以取消执行。
+Skill 或 Compact 接受后，浏览器断线不取消执行。客户端不能重放 POST；重新加载后从
+持久化历史查询结果。只有现有 Stop/Abort 操作可以取消。
 
 精确请求、成功流、流前错误和流内错误见
 [`02-execute-chat-command.json`](接口契约/操作/02-execute-chat-command.json)。
@@ -139,11 +136,11 @@ Slash 模块、Builtin、Skill 和内部 Runtime 契约分别见
 [通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)、
 [内置命令](../../04-命令与技能/01-内置命令/README.md)、
 [技能命令](../../04-命令与技能/02-技能命令/README.md) 与
-[CampusClaw HTTP 1.43.1](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)。
+[CampusClaw HTTP 1.43.2](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)。
 
 ## 7. 验收
 
-- GET 对 running Session 返回双层可用性，并保留暂不可用命令；
+- GET 对 running Session 分别标明不填参数和填写参数时能否执行，并保留暂不可用命令；
 - 命令清单请求失败时保留 Slash 草稿；请求成功但未命中才按普通消息发送；
 - POST 拒绝未知命令、非法参数、Builtin 附件与未知字段；
 - Chat 权限拒绝发生在 Session 解析和内部调用之前；
@@ -169,5 +166,6 @@ Mermaid 与 `git diff --check`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.0.2 | 2026-08-31 | 使用动作式短句、规则表和组件职责表简化全文；不改变公共 API 行为。 |
 | 1.0.1 | 2026-08-31 | 将公共交互文案统一为“命令清单”，明确其是 Chat/Session 上下文中的逻辑 Command Catalog，不是文件系统目录。 |
 | 1.0.0 | 2026-08-31 | 首次确认公共命令目录与结构化命令执行、ChatSessionResolver、独立鉴权、SSE 重新投影和 target-only 实现边界。 |

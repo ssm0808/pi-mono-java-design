@@ -5,7 +5,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.0.2 |
+| 文档版本 | 2.0.3 |
 | 设计日期 | 2026-08-31 |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 复核 HEAD | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
@@ -13,25 +13,28 @@
 
 ## 1. 范围
 
-v1 只提供七个 Builtin：`help`、`status`、`name`、`model`、
-`thinking`、`compact`、`skills`。不增加 `models`，模型目录并入
-`model` 的无参结果和 suggestions；不增加 `abort`，取消执行继续使用现有
-Stop/Abort API。
+v1 提供七个 Builtin：`help`、`status`、`name`、`model`、`thinking`、
+`compact`、`skills`。
 
-Builtin 是直接应用命令，不转换为模型提示词。所有 Builtin
-都拒绝非空 `fileIds`。
+- 不增加 `/models`：模型列表由 `/model` 返回；
+- 不增加 `/abort`：继续使用现有 Stop/Abort API；
+- Builtin 直接调用应用服务，不转换为模型提示词；
+- Builtin 不接受附件。
 
 ## 2. 命令矩阵
 
 | 命令 | 无参行为 | 有参行为 | 运行中 |
 |---|---|---|---|
 | `/help [command]` | 列出命令清单 | 查看指定命令详情 | 始终可用 |
-| `/status` | 返回 Session `state`、当前 `modelId` 和 `thinking` | 不接受参数 | 始终可用 |
-| `/name [displayName]` | 返回当前名称，未设置时明确显示未设置 | 更新 Session 名称 | 查询和更新都可用 |
-| `/model [modelId]` | 返回当前模型和可选模型 | 切换当前模型 | 查询可用；输入不可用，`SESSION_BUSY` |
-| `/thinking [on\|off]` | 返回当前开关 | 切换开关，只接受小写 `on` 或 `off` | 查询可用；输入不可用，`SESSION_BUSY` |
-| `/compact` | 执行一次手动压缩 | 不接受参数 | 不可用，`SESSION_BUSY` |
-| `/skills` | 列出当前 Agent 最新 complete 版本直接绑定的 Skill | 不接受参数 | 始终可用 |
+| `/status` | 查看状态、模型和深度思考 | 不支持 | 始终可用 |
+| `/name [displayName]` | 查看名称 | 修改名称 | 始终可用 |
+| `/model [modelId]` | 查看当前和可选模型 | 切换模型 | 仅查看 |
+| `/thinking [on\|off]` | 查看开关 | 开启或关闭 | 仅查看 |
+| `/compact` | 压缩上下文 | 不支持 | 不可用 |
+| `/skills` | 列出绑定的 Skill | 不支持 | 始终可用 |
+
+运行中修改 Model/Thinking、执行 Compact 或调用 Skill，统一返回 `SESSION_BUSY`。
+`/help` 遇到未知命令时返回 `COMMAND_NOT_FOUND`。
 
 `status` 不宣称当前上下文已使用量。CampusClaw 现有 `lifetimeUsage` 是会话
 生命期累计量，不等于下一次模型请求的有效上下文占用；两者混用会产生
@@ -43,26 +46,27 @@ Builtin 是直接应用命令，不转换为模型提示词。所有 Builtin
 
 ## 3. 每个 Builtin 的独立组件
 
-每个命令都有一个 Contributor、一个不可变 Definition 和一个 Handler：
+每个命令都有独立的 Contributor、Definition 和 Handler：
 
-```text
-HelpCommandContributor      -> HelpCommandHandler      -> CommandCatalogService
-StatusCommandContributor    -> StatusCommandHandler    -> SessionStatusQueryService
-NameCommandContributor      -> NameCommandHandler      -> SessionNamingService
-ModelCommandContributor     -> ModelCommandHandler     -> SessionModelConfigurationService
-ThinkingCommandContributor  -> ThinkingCommandHandler  -> SessionThinkingConfigurationService
-CompactCommandContributor   -> CompactCommandHandler   -> SessionCompactionApplicationService
-SkillsCommandContributor    -> SkillsCommandHandler    -> AgentSkillCatalogService
-```
+| 命令 | Handler 调用的应用服务 |
+|---|---|
+| Help | `CommandCatalogService` |
+| Status | `SessionStatusQueryService` |
+| Name | `SessionNamingService` |
+| Model | `SessionModelConfigurationService` |
+| Thinking | `SessionThinkingConfigurationService` |
+| Compact | `SessionCompactionApplicationService` |
+| Skills | `AgentSkillCatalogService` |
 
-`CommandExecutionService` 负责通用 Admission、`command.*` 生命周期和 SSE；
+`CommandExecutionService` 负责通用执行前检查、`command.*` 生命周期和 SSE；
 Handler 不复制通用逻辑。
 
-Model 和 Thinking 不绕过现有配置业务规则。目标实现将
-`RuntimeSessionConfigurationService` 中的领域修改抽到上述窄职责服务：已有
-PUT HTTP 适配器仍传入 `If-Match` 的预期版本，Command Handler 走同一服务的
-“服务端读取并原子更新”入口。这样复用模型可用性、thinking 能力收敛、
-idle 校验和领域事件，但不把 HTTP ETag 语义塞进命令请求体。
+Model 和 Thinking 继续复用现有配置规则。目标实现把
+`RuntimeSessionConfigurationService` 的修改逻辑抽到窄职责服务：
+
+- 现有 PUT API 继续使用 `If-Match`；
+- Command Handler 由服务端读取版本并原子更新；
+- 两个入口共用模型可用性、能力归一、idle 检查和领域事件。
 
 ![Builtin 执行](设计图/builtin_dispatch.svg)
 
@@ -72,15 +76,13 @@ idle 校验和领域事件，但不把 HTTP ETag 语义塞进命令请求体。
 
 ### 4.1 所有权
 
-`displayName` 是可持久化 Session 的领域属性，所以放在 CampusClaw，而不是
-mate-service：
+`displayName` 是 Session 的持久化属性，所以归 CampusClaw：
 
 - Session 被复制/Fork 时，新 Session 继承源 Session 在创建事务中读到的
   已规范化名称。当前 CampusClaw 还没有 Copy/Fork HTTP 实现，这是未来该操作的目标规则。
 - Session 资源本身返回 `displayName`；名称变化更新 `resourceVersion`。
 - `session.name.changed` 是 CampusClaw Session Event，可在断线后恢复。
-- mate-service 只解析当前用户有权访问的 Chat，然后稳定解析其 Session；
-  不保存第二份名称，避免双写和并发覆盖。
+- mate-service 只完成 Chat 权限检查和 Session 映射；不保存名称副本。
 
 pi `AgentSession.setSessionName`、OpenCode `Session.setTitle`、DeepSeek
 `SessionTitleService.rename` 和 Codex `thread/name/set` 都指向 Session/Thread 所有者。
@@ -150,6 +152,7 @@ last-commit-wins：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.0.3 | 2026-08-31 | 统一七个 Builtin 的动作式短句，简化运行状态和组件职责说明；不改变命令行为 |
 | 2.0.2 | 2026-08-31 | 简化 `/help` 命令矩阵文案，改为“列出命令清单”“查看指定命令详情”“始终可用” |
 | 2.0.1 | 2026-08-31 | 将 `/help` 无参行为改述为列出当前 Session 可发现的命令，消除“当前目录”与文件系统目录的歧义 |
 | 2.0.0 | 2026-08-31 | 废弃旧 GUI/Extension 执行面设计，收敛为 HTTP v1 七个 Builtin、窄职责服务和 CampusClaw Session Name 所有权 |

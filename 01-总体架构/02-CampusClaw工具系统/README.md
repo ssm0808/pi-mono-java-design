@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.6.0 |
+| 文档版本 | 2.6.1 |
 | 状态 | 目标设计；Mate 发现无凭据、仅 execute 透传 POST Events 执行快照待实现 |
-| 更新日期 | 2026-08-27 |
+| 更新日期 | 2026-08-31 |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -60,7 +60,7 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 - 受管 Agent 工作区边界、目录 prepare/refresh 和 Skill/Child 名称索引；
 - Mate 工具发现、Session 名称到 ID 缓存、远端调用和共享 CampusMate origin 边界；
 - Child Agent Execution、Cron 工具边界与实现迁移。
-- TUI/CLI 删除边界、公共 Session 压缩和宿主无关 Slash Command 源码边界。
+- TUI/CLI 删除边界和公共 Session 压缩；Slash 只保留与模型工具的隔离边界。
 
 Runtime HTTP 的资源、ResultBean、SSE、Entry 和数据库契约仍由
 [Manager 驱动的多 Agent Runtime 设计](../01-CampusClaw多Agent运行时/README.md)
@@ -69,7 +69,8 @@ Runtime HTTP 的资源、ResultBean、SSE、Entry 和数据库契约仍由
 ### 2.2 明确不在本专题范围
 
 - CLI、TUI、JSONL、one-shot、RPC、ACP 和 OS 调度安装产品入口；
-- Slash Command 的 Host 注册、HTTP 路由和普通消息解析；
+- Slash Command 的注册、HTTP 路由和命令行为，详见
+  [Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)；
 - 自定义工具、动态注册、公共 Extension SDK 和 Skill 本地工具激活；
 - `Bash` 沙箱、`Edit`/`Write` 工作区写入模型和旧工具名兼容；
 - 跨节点 Child 调度、常驻 Child worker、Runtime 租约和分布式取消；
@@ -138,7 +139,7 @@ OpenCode `TaskTool` 仅用于对照父子消息隔离、进度和取消，不继
 | 架构改造 | 三入口共用轻量 Session 与工厂 | 防止模型、hook、工具、错误和取消语义漂移 |
 | 架构改造 | 压缩与 Read 文件追踪迁入公共 Session | 入口删除不能让 Runtime、Cron、Child 丢失上下文治理 |
 | 架构改造 | Runtime 使用 append-only 数据库 Entry 保存摘要与边界 | 替代 pi JSONL compaction entry，同时保持历史不可变和模型恢复边界独立 |
-| 架构改造 | 保留未注册的 Slash 核心和四个处理器 | 命令语义可复用，但首版不增加 Host 或 HTTP 入口 |
+| 架构改造 | 用独立 HTTP Command 模块替换旧 Slash 原型 | Slash Command 不是模型工具，也不进入工具目录 |
 | 架构改造 | 删除 ToolCatalog、动态注册和 Java Extension 工具 | 启动期严格 profile 是唯一模型工具来源 |
 | 架构改造 | 逐工具并发模式与串行 barrier | 只读工具并行且有副作用工具不跨越顺序边界 |
 | 安全加固 | Schema 在 hook 前校验且拒绝未知字段 | hook 与执行器只处理已验证结构 |
@@ -247,7 +248,7 @@ public interface BuiltInToolFactory {
 
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L476)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L477)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -274,7 +275,7 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 
 ![三入口 Session 装配](agent_session_assembly.svg)
 
-[PlantUML 源码：`agent_session_assembly`](diagram.puml#L106)
+[PlantUML 源码：`agent_session_assembly`](diagram.puml#L107)
 
 `AgentSessionFactory.create` 固定执行：
 
@@ -312,7 +313,7 @@ default ToolExecutionMode executionMode() {
 
 ![逐工具批量调度](tool_batch_scheduling.svg)
 
-[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L425)
+[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L426)
 
 Batch planner 保持模型调用原始顺序，把连续 `PARALLEL` 调用组成并行段并等待整段完成；
 每个 `SEQUENTIAL` 调用是 barrier。结果按原始调用顺序回填，而不是按完成时间排序。
@@ -360,7 +361,7 @@ agent/{agentId}/.campusclaw/
 
 ![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
 
-[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L162)
+[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L163)
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
@@ -375,7 +376,7 @@ agent/{agentId}/.campusclaw/
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L706)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L707)
 
 ## 9. Mate 工具发现、缓存与执行
 
@@ -383,7 +384,7 @@ agent/{agentId}/.campusclaw/
 
 ![Mate 工具实时发现](list_mate_tools_sequence.svg)
 
-[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L235)
+[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L236)
 
 模型输入只有可选 `skillName`。无参数时查询当前 Agent；有名称时通过本地 Skill 索引解析
 ID。模型不能提交 agentId、skillId 或 toolId。
@@ -414,7 +415,7 @@ permission、outputSchema、并发属性或 Mate 原始信封。每次 List 都�
 
 ![CallMateTool 缓存解析与执行](call_mate_tool_sequence.svg)
 
-[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L290)
+[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L291)
 
 模型只提交 `{tool,args?}`，不提交 Skill、Agent、scope 或 toolId。Call 先按 toolName 查询
 Session `MateToolResolutionCache`；命中后使用内部 ID 调用 Mate。未命中时通过 Session 级
@@ -461,7 +462,7 @@ POST 不自动重放等其他契约不变。
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L367)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L368)
 
 模型只使用：
 
@@ -531,17 +532,17 @@ usableModels = settings.bindingModels
 产品不再支持 CLI/TUI，但首轮实现不移动 `modules/coding-agent-cli` Maven 模块或
 `campusclaw-coding-agent` artifact。删除 launcher/config、交互/one-shot/RPC/ACP、
 JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Runtime Spring Boot、
-公共 Session 和未注册的 Slash Command 核心。
+公共 Session 和 Runtime HTTP Slash Command 模块。
 
 ### 12.2 TUI 能力 keep/move/delete
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L542)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L543)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
-| Slash core、Registry、`/model`、`/thinking`、`/compact`、`/name` | Keep + 解耦 | 使用宿主无关 Session/Output 端口；保留单元测试 |
+| Slash core、Registry、`/model`、`/thinking`、`/compact`、`/name` | Replace | HTTP-only 通用模块；Builtin 独立 Handler，Skill 动态 Source |
 | 阈值压缩、上下文溢出压缩、一次重试 | Move | 公共 `ManagedAgentSession` |
 | `FileOperationTracker` | Move | 压缩核心，首版只追踪 `Read` |
 | TUI 组件、CLI launcher、Interactive/OneShot/RPC/ACP | Delete | CampusClaw 不再提供这些产品入口 |
@@ -550,15 +551,16 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 | PackageManager、本地 Skill 安装/链接/导入、Extension、主题、快捷键 | Delete | Skill 只来自受管目录 |
 | Loop、OS Cron installer、`--cron-tick`、TUI Cron 通知 | Delete | Loop 不活动；Cron 由 Runtime Host 管理 |
 
-首版任何 Host 都不注册 Slash Command，不增加 Slash、Compact、Fork、Tree、Import 或 Export
-HTTP 接口，也不拦截 `POST /events` 中以 `/` 开头的普通消息。`/name` 的未来 Session 端口
-必须由 Host 调用 mate-service，不能改变 Chat 名称的服务归属。
+Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执行结构化命令。
+`POST /events` 不解析 Slash 文本。`/name` 修改 CampusClaw Session 名称；mate-service
+只解析 Chat 到 Session 的映射。精确行为以
+[Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)为准。
 
 ### 12.3 公共 Session 压缩
 
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L595)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L596)
 
 默认配置为 `enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`。执行正常结束后
 超过阈值则压缩；摘要瞬态重试默认开启、最多 3 次、基础退避 2000ms。`enabled=false`
@@ -657,7 +659,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 - Agent 校验直接绑定、固定版本、深度、循环、父取消和模型白名单；
 - 父与 Child Session 实例隔离但使用相同 Factory/执行语义；
 - Cron Job 按 Agent 隔离，触发时使用当前配置，不接受旧 payload 字段。
-- Slash 核心和四个处理器可用测试端口独立执行，但没有 Spring 自动注册或 HTTP 解析；
+- Slash Command 与模型工具分开注册和测试，所有命令都不出现在模型工具清单中；
 - Usage/估算阈值、失效边界、显式/静默/Xiaomi/可恢复 length 溢出通过测试；
 - 成功 STOP 只压缩不重试，ERROR/LENGTH 最多重试一次，第二次溢出显式失败；
 - 公共 Agent 对大输出模型传递真实 `maxTokens`，LENGTH 恢复判定使用同一上限；
@@ -686,6 +688,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.1 | 2026-08-31 | 同步 Slash Command 最新设计：命令由独立 HTTP 模块提供，不进入模型工具清单；`/name` 由 CampusClaw 管理 Session 名称。 |
 | 2.6.0 | 2026-08-27 | POST Events 生成四项 Header 的 execution 瞬态快照；Mate Agent/Skill/metadata 发现全部无凭据，只有实际 Tool execute 原名透传快照中已提供值。 |
 | 2.5.0 | 2026-08-26 | 删除顶层 `mate` 目标配置；Tool 地址、path 和开关统一到 `campusmate`，并让 Runtime 与 Tool 共用唯一 Skill endpoint 配置。模型可见 Mate Tool 名称保持不变。 |
 | 2.4.0 | 2026-08-26 | 按 Mate 即 CampusMate 的产品约束，删除 Mate Tool 独立地址目标配置，统一读取 `campusmate.base-url`；保留 Tool 路径、凭据和调用语义。 |

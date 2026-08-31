@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.5.1 |
-| 状态 | CampusClaw 内部 HTTP 1.43.1 共 13 个 operation；新增 Slash Command 命令清单与执行；mate-service 命令公共契约已确认 |
+| 文档版本 | 3.5.2 |
+| 状态 | CampusClaw 内部 HTTP 1.43.2 共 13 个 operation；Slash Command 内外契约已确认 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
 | 设计仓分析基线 | `27484974eb106a7e43910d8e542de52a72c58102` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -230,17 +230,25 @@ SSE、移除内部标识并重新投影；其他公共交互仍需在各自契�
 
 ### 5.4 Slash Command
 
-Slash Command 的 `/` 只存在于交互层。HTTP 固定提交结构化
-`name + arguments + fileIds`，不把整段 Slash 文本交给 Runtime 解析。v1 只开放
-七个 Builtin（`help/status/name/model/thinking/compact/skills`）和
-`skill:<name>`；Extension 与 Prompt Command 不开放。
+| 规则 | v1 结论 |
+|---|---|
+| `/` | 只在交互层使用 |
+| HTTP 请求 | 提交 `name + arguments + fileIds` |
+| 命令类型 | 七个 Builtin 和 `skill:<name>` |
+| 未开放 | Extension、Prompt |
+| 普通消息接口 | 不解析 Slash 文本 |
 
-命令清单必须返回已知但暂时不可用的命令，并分别声明无参数调用和有参数提交的可用性。
-这里的“命令清单”是按 Session、Agent 快照与执行状态解析的逻辑 Command Catalog，
-与文件系统当前目录无关。
-`/name` 在 running 时仍可查询和更新；`/model`、`/thinking` 在 running 时可查询但不能
-修改；`/compact` 与 Skill 只允许 idle。每次已接受调用持久化命令生命周期，Skill 和
-Compact 不因 HTTP 断线自动中止。
+命令清单按 Session、Agent 快照和执行状态生成，与文件系统目录无关。暂时不可用的命令
+仍会显示。每条命令分别标明不填参数和填写参数时能否执行。
+
+| Session 运行中 | 行为 |
+|---|---|
+| Help、Status、Skills | 始终可用 |
+| Name | 可查看、可修改 |
+| Model、Thinking | 只能查看 |
+| Compact、Skill | 不可执行 |
+
+每次已接受调用都会持久化命令生命周期。Skill 和 Compact 不因 HTTP 断线自动中止。
 
 ![Command HTTP 边界](设计图/Command/command_http_flow.svg)
 
@@ -326,25 +334,23 @@ single-flight 自动发现当前 Agent 与全部直接绑定 Skill 的完整工�
 
 ![Mate 工具实时发现](../02-CampusClaw工具系统/list_mate_tools_sequence.svg)
 
-[PlantUML 源码：`list_mate_tools_sequence`](../02-CampusClaw工具系统/diagram.puml#L235)
+[PlantUML 源码：`list_mate_tools_sequence`](../02-CampusClaw工具系统/diagram.puml#L236)
 
 ![Mate 工具按名称解析与调用](../02-CampusClaw工具系统/call_mate_tool_sequence.svg)
 
-[PlantUML 源码：`call_mate_tool_sequence`](../02-CampusClaw工具系统/diagram.puml#L290)
+[PlantUML 源码：`call_mate_tool_sequence`](../02-CampusClaw工具系统/diagram.puml#L291)
 
 ### 7.3 HTTP-only Slash Command 与公共 Session 能力
 
-CampusClaw 不再提供 CLI、TUI、OneShot、RPC 或 ACP 产品入口。Slash v1 只经 HTTP
-开放；命令模块不能与交互层文本解析或 Controller 耦合：
+CampusClaw 不再提供 CLI、TUI、OneShot、RPC 或 ACP 产品入口。Slash v1 只通过 HTTP
+开放。命令模块遵循以下边界：
 
-- 用 Definition、Strategy Handler、Composite Registry、Contributor 和 Admission Policy
-  替换当前可变 Registry 与宽泛 `SlashCommandSession`；Builtin 重名在启动时失败；
-- Builtin 使用独立 Contributor/Handler，Skill 使用动态 Source 和共享 Handler；新增命令
-  不修改中央 `switch`；
-- 交互层只有在命令清单精确命中时调用 Command API；命令清单请求失败不静默降级，直接调用结构化 API
-  的未知名称返回 `COMMAND_NOT_FOUND`；
-- `/name` 由窄职责 `SessionNamingService` 更新 CampusClaw Session，不经过 mate-service
-  名称副本；
+- 不可变 Definition、Handler、Composite Registry、Contributor 和 Admission Policy
+  替换当前可变 Registry 与宽泛 `SlashCommandSession`；
+- Builtin 各自使用 Contributor/Handler；Skill 使用动态 Source 和共享 Handler；
+- 新增命令不修改中央 `switch`；Builtin 重名直接启动失败；
+- 清单命中后才调用 Command API；清单失败不降级；API 未知名称返回 `COMMAND_NOT_FOUND`；
+- `/name` 只调用 `SessionNamingService`，不经过 mate-service 名称副本；
 - 阈值压缩和溢出恢复迁入公共 `ManagedAgentSession`。成功 `STOP` 静默越界只压缩、不重放；
   `ERROR/LENGTH` 才排除失败 Assistant 并最多重试一次，第二次溢出显式失败；
 - 压缩使用最后有效 Usage 和尾部估算、压缩边界时间戳、安全 User/Assistant 切点；超大末条
@@ -438,6 +444,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.5.2 | 2026-08-31 | 同步 HTTP 1.43.2，以规则表和动作式短句统一 Slash Command 说明；不改变已确认行为。 |
 | 3.5.1 | 2026-08-31 | 同步 HTTP 1.43.1，将面向用户和 HTTP 的“命令目录”统一为“命令清单”，避免与文件系统当前目录混淆。 |
 | 3.5.0 | 2026-08-31 | 同步 HTTP 1.43：增加命令目录与结构化执行；明确 Builtin/Skill、`displayName` 所有权、sidecar Entry、Skill 快照和 mate-service 公共命令投影。 |
 | 3.4.0 | 2026-08-27 | 同步 HTTP 1.42：POST Events 必填 `access-token`，四项入站 Header 仅作执行级瞬态快照，工具发现无凭据，只在实际 Mate execute 时原名透传已提供值。 |

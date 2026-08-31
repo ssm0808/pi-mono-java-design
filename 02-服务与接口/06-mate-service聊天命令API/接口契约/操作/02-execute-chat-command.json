@@ -4,8 +4,8 @@
     "operationKey": "executeChatCommand",
     "method": "POST",
     "path": "/chats/{chatId}/command",
-    "summary": "执行结构化 Builtin 或 Skill Command 并返回公共 SSE",
-    "description": "交互层提交命令清单中精确命中的 name、arguments 和 fileIds；name 不含 Slash，mate-service 不接受未经解析的整段 Slash 文本。mate-service 在登录用户和 Chat 权限上下文中解析稳定 Session 映射，以独立内部凭据调用 CampusClaw，再解析内部 SSE、移除 sessionId、entryId、Agent/Skill ID、Skill 版本、受管路径和私有快照字段后重新编码公共事件。它不得字节级透明转发。arguments/fileIds 省略时由 Service 统一归一为空字符串和空列表，请求拒绝未知字段。Skill 与 Compact 被接受后，浏览器断线不会自动中止 CampusClaw 执行，客户端应从公共持久化历史对账，不得盲目重放 POST。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。",
+    "summary": "执行 Builtin 或 Skill 命令并流式返回结果",
+    "description": "交互层提交结构化 name、arguments 和 fileIds；name 不含 Slash。mate-service 验证登录用户和 Chat 权限，解析唯一 Session，并使用内部凭据调用 CampusClaw。它解析内部 SSE，删除 sessionId、entryId、Agent/Skill ID、版本、受管路径和私有快照，再生成公共事件。Service 统一处理省略字段并拒绝未知字段。Skill 或 Compact 接受后，浏览器断线不取消执行；客户端从持久化历史查询结果，不重放 POST。当前 mate-service 尚无 Chat→Runtime bridge，因此本接口是 target-only design。",
     "parameters": [
       {"$ref": "parameters.chatId"},
       {"$ref": "parameters.acceptLanguage", "description": "流建立前 ResultBean 与流内错误消息语言；缺失或不支持时回退 en-US"}
@@ -13,7 +13,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "name 必填并严格匹配命令清单中的小写名称，不得含 Slash。arguments 最多 262144 字符；fileIds 最多 32 个、元素唯一且保留顺序。Builtin 不接受附件，Skill 接受与普通消息相同附件。不接受 chatId、sessionId、modelId、thinking、metadata 或 Idempotency-Key。",
+      "description": "name 必填，使用命令清单中的小写名称且不含 Slash。arguments 最多 262144 字符。fileIds 最多 32 个，元素唯一并保留顺序。Builtin 不接受附件；Skill 接受普通消息附件。不接受 chatId、sessionId、modelId、thinking、metadata 或 Idempotency-Key。",
       "example": {
         "name": "skill:pdf",
         "arguments": "分析附件并总结",
@@ -108,7 +108,7 @@
         "status": "404",
         "tabLabel": "404 · COMMAND_NOT_FOUND",
         "label": "Not Found",
-        "summary": "name 不是当前 Session 命令清单中的精确命令名，包括清单返回后已经解绑的 Skill。",
+        "summary": "命令不存在，或 Skill 在清单返回后已解绑。",
         "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
         "bodies": {
           "zh-CN": {"resCode": "COMMAND_NOT_FOUND", "resMsg": "指定的命令不存在。"},
@@ -118,7 +118,7 @@
       {
         "status": "409",
         "label": "Conflict",
-        "summary": "命令要求 idle，但 Session 正在执行；查询和 name 更新不受此限制。",
+        "summary": "Session 正在执行；本次修改或执行只允许 idle。",
         "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
         "bodies": {
           "zh-CN": {"resCode": "SESSION_BUSY", "resMsg": "当前命令暂不可用。"},
@@ -130,7 +130,7 @@
         "status": "503",
         "tabLabel": "503 · COMMAND_UNAVAILABLE",
         "label": "Service Unavailable",
-        "summary": "Runtime 无法安全解析命令或建立 Skill 调用快照；内部细节不越过公共边界。",
+        "summary": "Runtime 无法解析命令或建立完整 Skill 快照。",
         "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN", "Retry-After": "3"},
         "bodies": {
           "zh-CN": {"resCode": "COMMAND_UNAVAILABLE", "resMsg": "命令暂时不可用。"},
@@ -142,7 +142,7 @@
         "status": "502",
         "tabLabel": "502 · 流建立前",
         "label": "Bad Gateway",
-        "summary": "CampusClaw 接受事务失败或返回无法安全映射的响应；命令未被接受。",
+        "summary": "CampusClaw 未接受命令，或响应无法安全映射。",
         "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
         "bodies": {
           "zh-CN": {"resCode": "RUNTIME_COMMAND_FAILED", "resMsg": "命令服务调用失败。"},

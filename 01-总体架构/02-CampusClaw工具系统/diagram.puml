@@ -30,9 +30,9 @@ package "Common Session Layer" {
   [Immutable hook chain] as Hooks
 }
 
-package "Retained Source Only" {
-  [SlashCommandRegistry] as Slash
-  [/model /thinking /compact /name] as SlashHandlers
+package "Separate HTTP Command Module" {
+  [CompositeCommandRegistry] as Slash
+  [Builtin and Skill handlers] as SlashHandlers
 }
 
 package "Active Built-in Tools" {
@@ -98,8 +98,9 @@ Reject symlink and realpath escape.
 end note
 
 note bottom of Slash
-No Host registration in version 1.
-No HTTP route or message interception.
+Structured HTTP only in version 1.
+Separate from the model tool list.
+POST events does not parse slash text.
 end note
 @enduml
 
@@ -553,10 +554,10 @@ skinparam shadowing false
 ' Design reason: shared session behavior must survive while terminal-only behavior is removed.
 
 rectangle "Former TUI and CLI tree" as Old
-package "Keep as host-neutral source" {
-  [Slash core and registry] as Slash
-  [/model /thinking /compact /name] as Handlers
-  [Session operation port] as Port
+package "Replace with HTTP command module" {
+  [Definition and composite registry] as Slash
+  [Builtin and Skill handlers] as Handlers
+  [Narrow application services] as Port
 }
 package "Move to common session" {
   [Threshold compaction] as Threshold
@@ -586,9 +587,9 @@ Old --> Packages : delete
 Old --> Legacy : delete
 
 note bottom of Port
-Version 1 has no Host implementation.
-Slash-looking HTTP messages stay user messages.
-Name ownership remains in mate-service.
+HTTP Command API is the only host.
+POST events keeps slash text as a user message.
+CampusClaw owns Session names.
 end note
 @enduml
 

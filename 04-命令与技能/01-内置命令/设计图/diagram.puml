@@ -17,36 +17,36 @@ Execution -> Admission : evaluate(descriptor, sessionState, input)
 Admission --> Execution : admitted
 Execution -> Repository : append command.started sidecar
 Execution -> Handler : execute(immutable invocation)
-Handler -> Service : query or mutate domain state
+Handler -> Service : read or update domain state
 Service --> Handler : text and optional sourceEventSeq
 Handler --> Execution : CommandResultDTO
 Execution -> Repository : append command.completed sidecar
 @enduml
 
 @startuml builtin_availability
-title Zero-Argument and Input Availability
+title Builtin Availability by Session State
 skinparam shadowing false
 
 ' Source evidence: codex@be33f80b codex-rs/tui/src/chatwidget/slash_dispatch.rs:134-157
 ' Observed behavior: Codex blocks commands by task state at dispatch time.
-' Target design: the catalog exposes separate availability for zero-argument and input invocation.
+' Target design: the catalog reports execution without and with arguments separately.
 
 state idle {
-  [*] --> AllBuiltinQueries
-  AllBuiltinQueries --> ModelChange
-  AllBuiltinQueries --> ThinkingChange
-  AllBuiltinQueries --> Compact
+  [*] --> AllBuiltins
+  AllBuiltins --> ModelChange
+  AllBuiltins --> ThinkingChange
+  AllBuiltins --> Compact
 }
 
 state running {
   [*] --> HelpStatusSkills
-  HelpStatusSkills --> NameQueryAndUpdate
-  HelpStatusSkills --> ModelAndThinkingQuery
+  HelpStatusSkills --> NameViewAndChange
+  HelpStatusSkills --> ModelThinkingViewOnly
 }
 
 note right of running
-model: available=true
-model input: available=false
+model without arguments: available=true
+model with arguments: input.available=false
 unavailableCode=SESSION_BUSY
 end note
 @enduml

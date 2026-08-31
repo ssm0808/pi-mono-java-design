@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.43.1 |
-| 状态 | 十三个内部 operation 已确认；新增 Slash Command 命令清单与结构化执行契约 |
+| 文档版本 | 1.43.2 |
+| 状态 | 十三个内部 operation 已确认；Slash Command 命令清单与执行契约已确认 |
 | 接口评审状态 | 十三个 operation 均已确认 |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，由精确契约源生成 |
@@ -34,11 +34,10 @@
 调用方通过 Session Event 提交输入，通过同一 POST 的 SSE 观察实时过程，并通过
 同一路径的 GET 分页读取持久化 Entry。
 
-HTTP 现扩展为十三个 operation，增加命令清单查询和结构化命令执行。
-`POST /sessions/{sessionId}/events` 仍不解释 Slash 文本，以 `/` 开头的文本在该接口中仍是普通
-`user.message`；交互层只在命令清单精确命中后调用新的 Command API。首版只开放
-Builtin 和 Skill，不开放 Extension 或 Prompt。`/name` 是 CampusClaw Session 的持久化
-领域能力；mate-service 只保存 Chat 到 Session 的稳定映射，不保存第二份名称。
+HTTP 现有十三个 operation，其中两个用于 Slash Command：查看命令清单和执行命令。
+普通消息接口不解析 Slash 文本。交互层命中命令清单后，才调用 Command API。
+v1 只开放 Builtin 和 Skill，不开放 Extension 或 Prompt。
+`/name` 归 CampusClaw Session；mate-service 只保存 Chat→Session 映射。
 
 调用方仍是 `mate-service` Runtime bridge 或明确获授权的内部服务端 SDK。
 浏览器不直连 Runtime；公共 `chat_id` 仍由 mate-service 映射为内部
@@ -180,6 +179,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 | `modelId` | string | Session 当前默认模型；允许后续切换 |
 | `state` | `idle \| running` | 只回答 Session 当前是否存在 active execution |
 | `thinking` | boolean | 是否对后续用户消息启用深度思考；同时控制 GET Events 是否返回已持久化的 thinking completed |
+| `displayName` | string or null | Session 显示名称；由 `/name` 查看或修改 |
 | `lifetimeUsage` | Usage | Session 创建以来持久化 Assistant 与 Compaction Usage 的原子累计值 |
 | `createdAt` | RFC 3339 timestamp | Session 创建时间 |
 | `updatedAt` | RFC 3339 timestamp | Session 资源最后更新时间 |
@@ -205,7 +205,7 @@ boolean：`false` 映射为 `off`；`true` 使用当前模型和 Agent 配置的
 用户事件时的快照决定是否生成 thinking 生命周期事件；GET Events 按查询时 Session
 当前值决定是否返回已持久化的 `assistant.thinking.completed`。
 
-GetSession 当前不返回 `name`、`historySeq`、完整 `transcript`、
+GetSession 使用 `displayName` 返回名称，但不返回 `name` 别名、`historySeq`、完整 `transcript`、
 `queuedSteer`、`phase`、`attached` 或 `locked`。用户可见会话名称属于
 mate-service 的 Chat 元数据；完成的 MessageEntry 由 GET Session Events API
 分页返回；active Message、open content、工具和执行阶段通过发起请求的 SSE
@@ -523,8 +523,8 @@ SSE `data` 固定为单行 JSON，每个 frame 以一个空行结束。只有
 压缩属于 `ManagedAgentSession`，不属于已删除的 TUI Host。默认配置沿用
 `enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`；`enabled=false` 同时关闭
 阈值和溢出自动压缩。摘要瞬态重试默认开启、最多 3 次、基础退避 2000ms。手工压缩原因
-`manual` 供保留的 `/compact` 处理器调用，但首版没有
-Host 注册该命令，也不增加 HTTP Compact operation。
+`manual` 供 `/compact` Handler 使用。该命令通过通用 `POST /command` 执行，
+不增加专用 Compact operation。
 
 自动判定对齐 pi `agent-session.ts::_checkCompaction/_runAutoCompaction`、
 `compaction.ts::estimateContextTokens/prepareCompaction/compact` 和
@@ -902,25 +902,26 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 
 | 接口简称 | operationKey | Method | Path | 语义 |
 |---|---|---|---|---|
-| 查询命令清单 | `listSessionCommands` | `GET` | `/sessions/{sessionId}/commands` | 返回已知 Builtin 与当前 Agent 绑定 Skill 的动态描述符 |
+| 查看命令清单 | `listSessionCommands` | `GET` | `/sessions/{sessionId}/commands` | 返回已知 Builtin 与当前 Agent 绑定 Skill 的动态描述符 |
 | 执行命令 | `executeSessionCommand` | `POST` | `/sessions/{sessionId}/command` | 接受结构化 `name + arguments + fileIds`，并在本次 HTTP 响应中返回 SSE |
 
-`/` 仅是交互层展示符；HTTP `name` 不包含 `/`。Builtin 使用
-`[a-z0-9-]+`，Skill 使用独立的 `skill:[a-z0-9-]+` 命名空间。交互层必须先成功
-取得命令清单，再对输入的小写命令名做精确匹配；未命中时按普通消息发送，命令清单请求失败时
-保留草稿并显示错误，不得静默降级。结构化 API 的未知名称则严格返回
-`COMMAND_NOT_FOUND`。
+| 规则 | 结论 |
+|---|---|
+| `/` | 只用于交互层；HTTP `name` 不含 `/` |
+| Builtin 名称 | `[a-z0-9-]+` |
+| Skill 名称 | `skill:[a-z0-9-]+` |
+| 交互层命中 | 调用 Command API |
+| 交互层未命中 | 清单获取成功时，按普通消息发送 |
+| 清单获取失败 | 保留草稿并显示错误 |
+| API 未知名称 | 返回 `COMMAND_NOT_FOUND` |
 
-目录描述符同时表达无参调用的 `available/unavailableCode` 和有参输入的
-`input.available/input.unavailableCode`。已知命令即使暂时不可用也保留在命令清单中；
-例如 running 时 `/model` 仍可查询，但参数提交显示 `SESSION_BUSY`。完整描述符与
-示例以 [`12-list-session-commands.json`](接口契约/操作/12-list-session-commands.json)
-为准。
+命令描述符分别说明不填参数和填写参数时能否执行。暂时不可用的命令仍会显示。例如 Session
+运行中，`/model` 可以查看，但不能切换模型。精确字段见
+[`12-list-session-commands.json`](接口契约/操作/12-list-session-commands.json)。
 
-POST 请求只接收 `name`、`arguments` 和 `fileIds`，未知字段拒绝。`arguments`、
-`fileIds` 由 Service 统一归一化，请求 VO 不配置默认值。Builtin 全部拒绝附件；
-Skill 复用普通消息的 262144 字符和 32 个 `fileIds` 上限。每次已接受调用生成
-`command-<32 lowercase hex>`，通用结果只包含 `text` 和可选 `sourceEventSeq`。
+POST 只接收 `name`、`arguments` 和 `fileIds`。Service 统一处理省略值，并拒绝未知字段。
+Builtin 不接受附件；Skill 复用普通消息的 262144 字符和 32 个附件上限。每次已接受调用
+生成 `command-<32 lowercase hex>`。通用结果只有 `text` 和可选 `sourceEventSeq`。
 
 ![Command HTTP 接口与应用服务](设计图/Command/command_http_flow.svg)
 
@@ -928,16 +929,17 @@ Skill 复用普通消息的 262144 字符和 32 个 `fileIds` 上限。每次已
 
 #### 2.6.1 执行、断线与事件
 
-流建立前的请求、命令、附件、状态或 Skill 快照错误使用真实 HTTP status 和
-ResultBean。流建立后持久化 `command.failed`，发送 `stream.error` 并关闭，不再发送
-`stream.end`。成功调用持久化 `command.started/command.completed`，并以
-`stream.end` 结束。`sourceEventSeq` 指向权威领域结果：名称、模型、thinking、压缩和
-Skill 分别指向对应 change/completed 事件；纯查询或同值更新可省略。
+流建立前失败使用真实 HTTP status 和 ResultBean。流建立后失败时，持久化
+`command.failed`，发送 `stream.error` 并关闭；不发送 `stream.end`。成功时持久化
+`command.started/command.completed`，最后发送 `stream.end`。
+
+`sourceEventSeq` 指向名称、模型、thinking、压缩或 Skill 的权威结果事件。查询和同值
+更新没有变化事件，可以省略该字段。
 私有 `t_session_records.record_seq` 与 Entry 共享 Session 持久化序列，因此公开
 `entrySeq` 允许出现缺口；Runtime 和调用方都不得重编号或用缺口推断私有 Record。
 
-Skill 和 Compact 在接受后不以 HTTP 断线为取消信号。返回端通过持久化事件对账，
-只有已有 Stop/Abort API 可以取消。精确 SSE 与错误契约由
+Skill 和 Compact 接受后不因 HTTP 断线取消。调用方通过持久化事件查询结果；
+只有现有 Stop/Abort API 可以取消。精确 SSE 与错误契约由
 [`13-execute-session-command.json`](接口契约/操作/13-execute-session-command.json) 维护。
 
 #### 2.6.2 Session 名称与 sidecar 历史
@@ -949,9 +951,9 @@ SessionResource 新增可空 `displayName`，对应 `t_sessions.display_name`。
 有效更新原子修改名称和 `resourceVersion`，并产生 `session.name.changed`。该命令不要求
 `If-Match`，允许 running 期间以数据库实际提交顺序 last-commit-wins。
 
-`command.*` 和 running 中的 `session.name.changed` 是 `t_session_entries` 中的非叶子推进型
-sidecar Entry：锚定提交时 active leaf，但不修改 active leaf。GET Events 将当前活动路径
-与锚定到该路径的 sidecar 按共享 `entrySeq` 合并。模型上下文投影器必须忽略
+`command.*` 和 running 中的 `session.name.changed` 是 sidecar Entry：它们参与
+`entrySeq` 推进，但不修改 active leaf。GET Events 将当前活动路径与锚定到该路径的
+sidecar 按 `entrySeq` 合并。模型上下文投影器必须忽略
 `command.*`、`session.name.changed` 和私有 `skill.snapshot`。
 
 ![Sidecar Entry 查询与投影](设计图/Command/command_sidecar_query.svg)
@@ -960,11 +962,10 @@ sidecar Entry：锚定提交时 active leaf，但不修改 active leaf。GET Eve
 
 #### 2.6.3 Skill 接受快照
 
-Skill 命令在同一接受事务中，于 Agent 锁内读取最新 complete Agent 版本的 Skill 元数据与
-完整正文，校验 idle/请求/附件，写入带 `commandId` 的活动 `user.message`，在
-`t_session_records` 内联保存完整 `skill.snapshot`，追加 `command.started` sidecar，并将
-Session 设为 running。快照每次调用独立保存，不跨调用去重；Agent 刷新或 Skill 删除后，
-历史重放仍使用调用时快照。Skill 正文进入受信任 Skill 指令层，参数与附件保持 User 输入层。
+Skill 接受事务依次完成：读取最新 complete Agent 版本、校验请求、写入 `user.message`、
+保存完整 `skill.snapshot`、追加 `command.started`，最后将 Session 设为 running。
+快照每次调用独立保存。Agent 刷新或 Skill 删除后，历史重放仍使用调用时快照。
+Skill 正文进入受信任指令层；参数和附件保持 User 输入层。
 
 模块、Builtin 行为、Skill 行为和名称所有权的唯一公共定义分别见
 [Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)、
@@ -1355,7 +1356,7 @@ Runtime 本地认证、请求体删除 `type` 和 thinking 事件可见性；1.3
 wire fields、1.39 的公共压缩/Usage/领域事件/工具 delta/refresh 懒校准、1.40 的
 pi 压缩细节与 failed.aborted，1.41 的重试候选持久化排除和实际输出上限，
 1.42 的 POST Events `access-token` 和“只有 Mate execute 透传”安全边界，以及
-1.43 新增的两个 Command operation、`displayName`、sidecar Entry 和 Skill 快照，
+1.43.x 新增的两个 Command operation、`displayName`、sidecar Entry 和 Skill 快照，
 均相对 PR 167 及 `c1311f69` 基线标记为目标设计，不得表述成已有行为。mate-service
 公共命令 API 同样是 target-only design。
 
@@ -1363,6 +1364,7 @@ pi 压缩细节与 failed.aborted，1.41 的重试候选持久化排除和实际
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.43.2 | 2026-08-31 | 以规则表和动作式短句统一 Slash Command 说明与审查文案；补齐 GetSession `displayName` 说明；不改变接口行为。 |
 | 1.43.1 | 2026-08-31 | 澄清 Command Catalog 是按 Session 上下文动态生成的逻辑命令清单；用户可见契约不再使用可能被理解为文件系统路径的“当前目录”。 |
 | 1.43.0 | 2026-08-31 | 新增命令目录和结构化命令执行两个 operation；SessionResource 增加 `displayName`；固定 Builtin/Skill、双层可用性、命令生命周期、sidecar Entry、`/name` 所有权和 Skill 调用快照。 |
 | 1.42.0 | 2026-08-27 | 十一个路径不变；POST Events 额外必填 `access-token`，四项入站 Header 仅作本次 execution 瞬态快照；工具发现、模型与其他请求不携带凭据，仅实际 Mate execute 原名透传已提供值。 |

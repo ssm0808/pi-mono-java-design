@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.3.0 |
+| 文档版本 | 2.3.1 |
 | 状态 | 目标设计；Mate 工具 Schema 不变，凭据可见边界收紧 |
-| 更新日期 | 2026-08-27 |
+| 更新日期 | 2026-08-31 |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -50,8 +50,9 @@
 
 公共 Session 压缩、Usage 和 Slash Command 不增加或改变模型工具契约。压缩的
 `FileOperationTracker` 只识别精确 PascalCase `Read` ToolCall，按路径去重、排序，并在
-重复压缩时继承旧摘要的 `<read-files>`；它不改变 Read 的输入、输出或执行模式。Slash core
-及四个处理器首版不注册到任何 Host，因此不会出现在工具列表或 HTTP 消息解析链中。
+重复压缩时继承旧摘要的 `<read-files>`；它不改变 Read 的输入、输出或执行模式。
+Slash Command 是独立应用模块，所有命令都不会出现在模型工具清单中。命令的注册、
+HTTP 和执行规则见 [Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)。
 
 ## 2. 本地只读工具
 
@@ -379,7 +380,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 | 安全加固 | 四个本地工具共用整个 `agent/{agentId}` 边界，拒绝符号链接和 realpath 越界。 |
 | 安全加固 | Find/Grep 的辅助能力随应用部署并在启动期校验，调用期间不下载二进制或回退到 shell。 |
 | 产品约束 | 不提供 CLI、写工具、Bash、Loop、旧名、旧 Cron payload 或 Extension 兼容。 |
-| 架构改造 | TUI/CLI 删除不改变 8 工具关闭集合；压缩迁入公共 Session，Slash 核心仅保留源码且不注册。 |
+| 架构改造 | TUI/CLI 删除不改变 8 工具关闭集合；压缩迁入公共 Session，Slash 由独立 HTTP 模块提供。 |
 
 主要证据路径与符号：
 
@@ -401,6 +402,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.1 | 2026-08-31 | 明确 Slash Command 由独立 HTTP 模块提供，命令不属于模型工具。 |
 | 2.3.0 | 2026-08-27 | 保持 8 个模型工具 Schema 不变；List 与 Call miss 发现不带执行凭据，只有实际 Mate execute 透传 POST Events execution 快照中已提供的四项 Header。 |
 | 2.2.0 | 2026-08-24 | 保持 8 个模型工具 Schema 不变；固定压缩只追踪 PascalCase Read，路径排序去重并跨重复摘要继承。 |
 | 2.1.0 | 2026-08-24 | 保持三入口 8 工具契约不变；补充公共压缩只追踪 Read、Slash 源码保留但不注册及 PackageManager 删除边界。 |

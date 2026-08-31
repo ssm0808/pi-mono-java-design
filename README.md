@@ -1,6 +1,6 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.1.1<br>
+> 导航版本：2.1.2<br>
 > 整理日期：2026-08-31<br>
 > Slash Command 设计基线：`27484974eb106a7e43910d8e542de52a72c58102`<br>
 > 变更性质：新增 Slash Command 通用模块及内部/公共 HTTP 契约
@@ -19,7 +19,7 @@
 | 全产品测试与质量门禁 | [CampusClaw TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | 能力注册表、实时门禁、nightly 维护和测试防弱化 |
 | Session、Agent 元数据如何持久化 | [数据与存储导航](./03-数据与存储/README.md) | 会话记忆、Agent 元数据和通用数据库模式 |
 | Command 和 Skill Command 如何设计 | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [内置命令](./04-命令与技能/01-内置命令/README.md)、[技能命令](./04-命令与技能/02-技能命令/README.md) |
-| 浏览器如何调用聊天命令 | [mate-service 聊天命令 API](./02-服务与接口/06-mate-service聊天命令API/README.md) | [公共 HTTP 评审页](./02-服务与接口/06-mate-service聊天命令API/chat-command-v1-review.html)、[内部 Runtime 1.43.1](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) |
+| 浏览器如何调用聊天命令 | [mate-service 聊天命令 API](./02-服务与接口/06-mate-service聊天命令API/README.md) | [公共 HTTP 评审页](./02-服务与接口/06-mate-service聊天命令API/chat-command-v1-review.html)、[内部 Runtime 1.43.2](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) |
 | 查看 pi 或主流 Agent 平台证据 | [研究资料导航](./05-研究资料/README.md) | 配置生成 Tool/Agent、Anthropic、pi Session 和官方文档 |
 | 查看 Agent / Tool / Skill 元数据草案 | [元数据草案导航](./06-元数据草案/README.md) | 三份 JSON 草案 |
 
@@ -90,6 +90,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.2 | 2026-08-31 | 简化 Slash Command 全套文档表述，同步 Runtime HTTP 1.43.2 导航。 |
 | 2.1.1 | 2026-08-31 | 将 Slash Command 用户文案统一为“命令清单”，并同步 Runtime HTTP 1.43.1 导航。 |
 | 2.1.0 | 2026-08-31 | 新增 Slash Command 通用模块、Builtin/Skill 新设计、Runtime HTTP 1.43 和 mate-service 公共聊天命令 API 导航。 |
 | 2.0.0 | 2026-08-26 | 建立六个中文分类、中文专题目录和分类导航；将根目录平铺文档收敛到专题目录；同步更新契约、图纸和脚本路径 |
