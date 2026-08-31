@@ -5,12 +5,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.0.3 |
+| 文档版本 | 3.0.4 |
 | 设计日期 | 2026-09-01 |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 复核 HEAD | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
 | pi 基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
-| 设计状态 | target-only；当前 Skill 仅有受管目录与模型自动发现，没有 HTTP Skill Command |
+| 设计状态 | target-only；当前 Skill 仅支持受管文件加载与模型自动发现，没有 HTTP Skill Command |
 
 ## 1. 结论
 
@@ -24,7 +24,7 @@ Skill 命令格式：
 |---|---|
 | HTTP `name` | `skill:<name>`，不含 `/` |
 | Skill 名称 | 1～64 个字符；只使用小写字母、数字和连字符；连字符不能位于首尾或连续出现 |
-| 名称与目录 | `SKILL.md` 的 `name` 必填，并与父目录名一致 |
+| 名称与文件夹 | `SKILL.md` 的 `name` 必填，并与所在文件夹同名 |
 | 命名冲突 | 与 Builtin 分属不同命名空间，不设置优先级 |
 | Session 状态 | 仅 `idle` 时可执行；`running` 时仍显示但标记不可用 |
 | 参数 | 可选；长度限制与普通用户消息相同 |
@@ -47,7 +47,7 @@ Skill 命令格式：
 
 1. 从 Session 取不变 `agentId`。
 2. 通过 `AgentRuntimeManager.prepareCached(agentId)` 读取最新 complete 版本，不触发远程刷新。
-3. 校验 `SKILL.md` 名称、父目录名和绑定元数据一致，再按名称稳定排序并生成
+3. 校验 `SKILL.md` 名称、所在文件夹名称和绑定元数据一致，再按名称稳定排序并生成
    `skill:<name>` Descriptor。
 4. 只返回名称、描述、可用性和输入提示；不返回正文、路径、Skill ID 或版本。
 
@@ -150,7 +150,7 @@ Skill 都出现在命令清单中。这与 pi `skills.ts:347-356` 的语义一�
 | 分类 | 证据或决策 |
 |---|---|
 | 观察到的 CampusClaw 行为 | `RuntimeApiConstants.java:18` 定义普通消息上限 `262144`，`UserEventRequestVO.java:28` 通过 `@Size` 使用该上限；当前没有 Skill Command 参数上限实现 |
-| 观察到的 CampusClaw 行为 | `Skill.java:25,34` 定义 64 字符和宽松正则，`SkillLoader.java:104-111,140-150` 允许缺少 frontmatter 名称时回退父目录名，且未拒绝首尾或连续连字符 |
+| 观察到的 CampusClaw 行为 | `Skill.java:25,34` 定义 64 字符和宽松正则；`SkillLoader.java:104-111,140-150` 在缺少 frontmatter 名称时使用 `SKILL.md` 所在文件夹名称，且未拒绝首尾或连续连字符 |
 | 观察到的行为 | `AgentRuntimeManager.java:194-253,323-363` 已校验并重建 Skill 元数据和完整 Markdown |
 | 观察到的行为 | `PreparedAgentRuntime.java:57-95` 已提供绑定 Skill 索引和精确名称查找 |
 | 观察到的行为 | `t_session_records` 已有私有 Record lane，但当前 `type` 只说明支持 usage；`skill.snapshot` 是目标扩展 |
@@ -166,7 +166,7 @@ Skill 都出现在命令清单中。这与 pi `skills.ts:347-356` 的语义一�
 ## 8. 验收清单
 
 - Skill 与 Builtin 即使底层名称相同也不冲突。
-- Skill 名称拒绝超过 64 个字符、首尾连字符、连续连字符、缺少 frontmatter 名称和父目录名称不一致。
+- Skill 名称拒绝超过 64 个字符、首尾连字符、连续连字符、缺少 frontmatter 名称和文件夹名称不一致。
 - 运行中命令清单仍返回 Skill，但执行在流建立前返回 `SESSION_BUSY`。
 - 快照不存在、不完整或与绑定名称不符时，用户 Entry、Record、command.started
   和 running 状态均不提交。
@@ -179,7 +179,8 @@ Skill 都出现在命令清单中。这与 pi `skills.ts:347-356` 的语义一�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.0.4 | 2026-09-01 | 命令相关表述只使用“命令清单”；Skill 文件位置统一表述为“文件夹” |
 | 3.0.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 完整规则；参数和附件改为引用普通消息限制，并补齐五类 Harness 的依据边界 |
 | 3.0.2 | 2026-08-31 | 使用规则表和动作式短句简化命名、发现、快照与信任分层说明；不改变 Skill 行为 |
-| 3.0.1 | 2026-08-31 | 将面向读者的“目录”统一为“命令清单”，明确 Skill 发现不是文件系统目录扫描 |
+| 3.0.1 | 2026-08-31 | 面向读者统一使用“命令清单”，明确 Skill 命令发现不依赖磁盘扫描 |
 | 3.0.0 | 2026-08-31 | 废弃旧的本地资源扩展和 Reload 交互设计，收敛为 HTTP `/skill:name`、最新 Agent 解析、调用快照、信任分层和可恢复执行 |

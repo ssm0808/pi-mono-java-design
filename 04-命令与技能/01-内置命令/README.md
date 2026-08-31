@@ -5,8 +5,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.0.3 |
-| 设计日期 | 2026-08-31 |
+| 文档版本 | 2.0.4 |
+| 设计日期 | 2026-09-01 |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 复核 HEAD | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
 | 设计状态 | target-only；现有保留 Command 尚未接入 Runtime HTTP |
@@ -134,7 +134,7 @@ last-commit-wins：
 |---|---|
 | 观察到的行为 | `CompactCommand.java:16-32` 当前允许自定义压缩指令；v1 改为无参，是产品约束 |
 | 观察到的行为 | `ThinkingCommand.java:30-45` 当前还兼容 `true/false`；v1 只对用户开放 `on/off` |
-| 观察到的行为 | `RuntimeSessionConfigurationService.java:78-163` 已有模型目录、模型/思考变更和 idle/ETag 校验 |
+| 观察到的行为 | `RuntimeSessionConfigurationService.java:78-163` 已有可选模型查询、模型/思考变更和 idle/ETag 校验 |
 | 观察到的行为 | `ManagedAgentSession.java:105` 已有压缩入口；命令不应自建另一套压缩实现 |
 | 目标设计 | 新增 Help/Status/Skills 与全部 Runtime Command 适配器；七个 Builtin 均为 target-only |
 | 架构变更 | Name 所有权转入 CampusClaw Session，替换 `NameCommand.java:13-14` 的旧注释 |
@@ -152,7 +152,8 @@ last-commit-wins：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.0.4 | 2026-09-01 | 命令相关表述统一使用“命令清单”，移除可能被理解为文件路径的用词 |
 | 2.0.3 | 2026-08-31 | 统一七个 Builtin 的动作式短句，简化运行状态和组件职责说明；不改变命令行为 |
 | 2.0.2 | 2026-08-31 | 简化 `/help` 命令矩阵文案，改为“列出命令清单”“查看指定命令详情”“始终可用” |
-| 2.0.1 | 2026-08-31 | 将 `/help` 无参行为改述为列出当前 Session 可发现的命令，消除“当前目录”与文件系统目录的歧义 |
+| 2.0.1 | 2026-08-31 | 将 `/help` 无参行为改述为列出当前 Session 可发现的命令，避免被理解为文件路径 |
 | 2.0.0 | 2026-08-31 | 废弃旧 GUI/Extension 执行面设计，收敛为 HTTP v1 七个 Builtin、窄职责服务和 CampusClaw Session Name 所有权 |

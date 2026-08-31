@@ -108,7 +108,7 @@ def sse_payloads(stream: str) -> list[dict[str, Any]]:
 
 
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.0.3", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.0.4", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
     require("target-only" in common["api"]["visibility"], "Public contract must remain target-only")
     headers = {
@@ -241,6 +241,7 @@ def validate_diagrams() -> None:
 def validate_markdown() -> None:
     content = DESIGN_PATH.read_text(encoding="utf-8")
     require("```mermaid" not in content, "Mermaid is forbidden")
+    require("目录" not in content, "Public Command design must use 命令清单 or an explicit file term")
     for target in re.findall(r"!\[[^\]]*\]\(([^)]+\.svg)\)", content):
         require((ROOT / target).exists(), f"Missing SVG link: {target}")
     for target, line_text in re.findall(r"\[[^\]]+\]\(([^)#]+\.puml)#L([0-9]+)\)", content):
@@ -257,6 +258,8 @@ def main() -> int:
     parser.parse_args()
     common, models = load_contract()
     validate_contract(common, models)
+    require("目录" not in json.dumps(models, ensure_ascii=False),
+            "Public Command contract must use 命令清单 or an explicit file term")
     validate_html(models)
     validate_diagrams()
     validate_markdown()

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.3 |
+| 文档版本 | 1.0.4 |
 | 状态 | 两个公共 operation 已确认；target-only design |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
 | 人类评审契约 | [`chat-command-v1-review.html`](chat-command-v1-review.html)，由精确契约源生成 |
@@ -10,7 +10,7 @@
 | mate-service 源码基线 | `956b547f5ca12ca89e68f73012f92a4406b0c9fa` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
-| CampusClaw 内部 HTTP 契约 | `1.43.3` |
+| CampusClaw 内部 HTTP 契约 | `1.43.4` |
 | 更新日期 | 2026-09-01 |
 
 ## 1. 结论与边界
@@ -41,7 +41,7 @@ mate-service 向登录用户开放两个接口：
 |---|---|
 | `ChatCommandController` | 处理公共 VO、登录上下文和 HTTP/SSE |
 | `ChatSessionResolver` | 检查 Chat 权限，再解析唯一 `sessionId` |
-| `CampusClawCommandClient` | 使用内部凭据调用 Runtime 1.43.3 |
+| `CampusClawCommandClient` | 使用内部凭据调用 Runtime 1.43.4 |
 | `PublicCommandEventProjector` | 解析内部 SSE，删除私有字段，再生成公共事件 |
 | `PublicCommandErrorMapper` | 把内部错误转换为稳定公共错误 |
 
@@ -136,7 +136,7 @@ Slash 模块、Builtin、Skill 和内部 Runtime 契约分别见
 [通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)、
 [内置命令](../../04-命令与技能/01-内置命令/README.md)、
 [技能命令](../../04-命令与技能/02-技能命令/README.md) 与
-[CampusClaw HTTP 1.43.3](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)。
+[CampusClaw HTTP 1.43.4](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)。
 
 ## 7. 验收
 
@@ -166,7 +166,8 @@ Mermaid 与 `git diff --check`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.0.4 | 2026-09-01 | 命令相关表述统一使用“命令清单”，不再借助文件系统概念解释 Command Catalog。 |
 | 1.0.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 完整规则；参数上限明确为与普通消息一致的 UTF-16 输入限制。 |
 | 1.0.2 | 2026-08-31 | 使用动作式短句、规则表和组件职责表简化全文；不改变公共 API 行为。 |
-| 1.0.1 | 2026-08-31 | 将公共交互文案统一为“命令清单”，明确其是 Chat/Session 上下文中的逻辑 Command Catalog，不是文件系统目录。 |
-| 1.0.0 | 2026-08-31 | 首次确认公共命令目录与结构化命令执行、ChatSessionResolver、独立鉴权、SSE 重新投影和 target-only 实现边界。 |
+| 1.0.1 | 2026-08-31 | 将公共交互文案统一为“命令清单”，明确其按 Chat/Session 上下文动态生成。 |
+| 1.0.0 | 2026-08-31 | 首次确认公共命令清单与结构化命令执行、ChatSessionResolver、独立鉴权、SSE 重新投影和 target-only 实现边界。 |

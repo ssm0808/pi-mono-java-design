@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.5.3 |
-| 状态 | CampusClaw 内部 HTTP 1.43.3 共 13 个 operation；Slash Command 内外契约已确认 |
+| 文档版本 | 3.5.4 |
+| 状态 | CampusClaw 内部 HTTP 1.43.4 共 13 个 operation；Slash Command 内外契约已确认 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
 | 设计仓分析基线 | `27484974eb106a7e43910d8e542de52a72c58102` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -239,10 +239,10 @@ SSE、移除内部标识并重新投影；其他公共交互仍需在各自契�
 | 普通消息接口 | 不解析 Slash 文本 |
 
 Skill 的 `<name>` 为 1～64 个字符，只使用小写字母、数字和连字符；连字符不能位于
-首尾或连续出现，名称必须与 Skill 父目录一致。Skill 参数和附件复用普通用户消息限制。
+首尾或连续出现，名称必须与 `SKILL.md` 所在文件夹同名。Skill 参数和附件复用普通用户消息限制。
 
-命令清单按 Session、Agent 快照和执行状态生成，与文件系统目录无关。暂时不可用的命令
-仍会显示。每条命令分别标明不填参数和填写参数时能否执行。
+命令清单按 Session、Agent 快照和执行状态生成，表示当前可以发现的命令及其可用性。
+暂时不可用的命令仍会显示。每条命令分别标明不填参数和填写参数时能否执行。
 
 | Session 运行中 | 行为 |
 |---|---|
@@ -447,10 +447,11 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.5.4 | 2026-09-01 | 同步 HTTP 1.43.4：Slash Command 统一使用“命令清单”，Skill 文件位置统一表述为“文件夹”。 |
 | 3.5.3 | 2026-09-01 | 同步 HTTP 1.43.3：补齐 Skill 名称规范，并明确参数复用普通消息的 UTF-16 输入上限。 |
 | 3.5.2 | 2026-08-31 | 同步 HTTP 1.43.2，以规则表和动作式短句统一 Slash Command 说明；不改变已确认行为。 |
-| 3.5.1 | 2026-08-31 | 同步 HTTP 1.43.1，将面向用户和 HTTP 的“命令目录”统一为“命令清单”，避免与文件系统当前目录混淆。 |
-| 3.5.0 | 2026-08-31 | 同步 HTTP 1.43：增加命令目录与结构化执行；明确 Builtin/Skill、`displayName` 所有权、sidecar Entry、Skill 快照和 mate-service 公共命令投影。 |
+| 3.5.1 | 2026-08-31 | 同步 HTTP 1.43.1，将面向用户和 HTTP 的相关表述统一为“命令清单”，避免被理解为文件路径。 |
+| 3.5.0 | 2026-08-31 | 同步 HTTP 1.43：增加命令清单与结构化执行；明确 Builtin/Skill、`displayName` 所有权、sidecar Entry、Skill 快照和 mate-service 公共命令投影。 |
 | 3.4.0 | 2026-08-27 | 同步 HTTP 1.42：POST Events 必填 `access-token`，四项入站 Header 仅作执行级瞬态快照，工具发现无凭据，只在实际 Mate execute 时原名透传已提供值。 |
 | 3.3.0 | 2026-08-24 | 同步工具系统 2.3 和 HTTP 1.41：LENGTH 判定使用实际请求输出上限，压缩重试候选按内部 Entry ID 持久化并在重载时精确排除。 |
 | 3.2.0 | 2026-08-24 | 固定 pi 压缩细节及 HTTP 1.40：成功 STOP 不重试、ERROR/LENGTH 单次恢复、Usage/边界/安全切点、split-turn/重复摘要、Read 路径继承和 failed.aborted。 |

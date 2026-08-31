@@ -23,6 +23,11 @@ REPOSITORY_ROOT = ROOT.parents[1]
 HTML_PATH = ROOT / "chat-http-v1-review.html"
 DESIGN_PATH = ROOT / "chat-http-v1-design.md"
 CONTRACT_ROOT = ROOT / "接口契约"
+SLASH_DESIGN_PATHS = (
+    REPOSITORY_ROOT / "04-命令与技能/00-Slash-Command通用模块/README.md",
+    REPOSITORY_ROOT / "04-命令与技能/01-内置命令/README.md",
+    REPOSITORY_ROOT / "04-命令与技能/02-技能命令/README.md",
+)
 EXPECTED_OPERATION_COUNT = 13
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
@@ -560,6 +565,18 @@ def validate_markdown_links() -> None:
             require(lines[line_number - 1].startswith("@startuml"), f"Anchor is not a diagram: {target}#L{line_number}")
 
 
+def validate_command_wording(models: list[dict[str, Any]]) -> None:
+    for path in SLASH_DESIGN_PATHS:
+        require("目录" not in path.read_text(encoding="utf-8"),
+                f"Slash Command design must use explicit wording: {path.relative_to(REPOSITORY_ROOT)}")
+    design_text = DESIGN_PATH.read_text(encoding="utf-8")
+    contract_text = json.dumps(models, ensure_ascii=False)
+    for wording in ("命令目录", "列出当前目录", "当前目录中的已知命令", "Skill 父目录", "回退父目录名"):
+        require(wording not in design_text, f"Runtime design contains ambiguous Command wording: {wording}")
+    for wording in ("命令目录", "列出当前目录", "当前目录中的已知命令"):
+        require(wording not in contract_text, f"Runtime contract contains ambiguous Command wording: {wording}")
+
+
 def validate_removed_contract() -> None:
     removed_name = "chat-http-v1." + "openapi.yaml"
     require(not (ROOT / removed_name).exists(), "Deprecated OpenAPI file still exists")
@@ -588,6 +605,7 @@ def main() -> int:
     selected = select_diagrams(sources, args.full)
     validate_rendered_diagrams(selected)
     validate_markdown_links()
+    validate_command_wording(models)
     validate_removed_contract()
     run(["git", "diff", "--check"], cwd=REPOSITORY_ROOT)
     mode = "full" if args.full else "fast"

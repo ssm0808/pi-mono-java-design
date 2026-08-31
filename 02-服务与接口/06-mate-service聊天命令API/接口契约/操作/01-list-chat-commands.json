@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/chats/{chatId}/commands",
     "summary": "列出当前 Chat 的 Builtin 和 Skill 命令",
-    "description": "mate-service 先验证登录用户和 Chat 权限，再把 chatId 解析为唯一 sessionId，并调用 CampusClaw。命令清单按当前 Chat/Session 状态动态生成，不是文件系统目录。清单保留暂时不可用的命令，但不暴露 sessionId、Agent/Skill ID、Skill 版本或受管路径。清单获取失败时，交互层保留 Slash 草稿并显示错误。当前 mate-service 尚无 Chat→Runtime bridge，因此本接口是 target-only design。",
+    "description": "mate-service 先验证登录用户和 Chat 权限，再把 chatId 解析为唯一 sessionId，并调用 CampusClaw。命令清单按当前 Chat/Session 状态动态生成，表示当前可以发现的命令及其可用性。清单保留暂时不可用的命令，但不暴露 sessionId、Agent/Skill ID、Skill 版本或受管路径。清单获取失败时，交互层保留 Slash 草稿并显示错误。当前 mate-service 尚无 Chat→Runtime bridge，因此本接口是 target-only design。",
     "parameters": [
       {"$ref": "parameters.chatId"},
       {"$ref": "parameters.acceptLanguage"}

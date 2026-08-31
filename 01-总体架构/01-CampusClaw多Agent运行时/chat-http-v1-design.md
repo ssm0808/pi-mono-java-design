@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.43.3 |
+| 文档版本 | 1.43.4 |
 | 状态 | 十三个内部 operation 已确认；Slash Command 命令清单与执行契约已确认 |
 | 接口评审状态 | 十三个 operation 均已确认 |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
@@ -25,7 +25,7 @@
 | pi-mono-java 凭据透传核对基线 | `320d790726a70aada6100052952d5494d2a378ac` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | Anthropic Managed Agents 文档核对 | 2026-09-01；Session、Events、Skills 与 Session Operations 官方文档 |
-| Agent Skills 规范核对 | 2026-09-01；名称、目录和 `SKILL.md` frontmatter 规则 |
+| Agent Skills 规范核对 | 2026-09-01；名称、Skill 文件夹和 `SKILL.md` frontmatter 规则 |
 | 更新日期 | 2026-09-01 |
 
 ## 1. 结论
@@ -916,7 +916,7 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 | 清单获取失败 | 保留草稿并显示错误 |
 | API 未知名称 | 返回 `COMMAND_NOT_FOUND` |
 
-`<name>` 精确匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，并与 Skill 父目录名一致。
+`<name>` 精确匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，并与 `SKILL.md` 所在文件夹同名。
 HTTP 层移除 `skill:` 后复用统一的 Skill 名称校验器。该规则对齐
 [Agent Skills specification](https://agentskills.io/specification)，是相对当前
 CampusClaw 宽松 `SkillLoader` 的安全加固。
@@ -1252,7 +1252,7 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 |---|---|
 | 观察到的当前 Java 行为 | CampusClaw `c1311f69` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/SlashCommandRegistry.java:21-67` 使用可变 Map，并在 Registry 内解析整段 Slash 文本；`SlashCommandSession.java:19-32` 暴露宽泛可变 Session 门面 |
 | 观察到的当前 Java 行为 | 同基线 `RuntimeSessionConfigurationService.java:78-163` 已有模型和 thinking 的查询/更新规则；`RuntimeSessionMapper.xml:132-190` 只查活动分支祖先，`session_schema.sql` 的 `t_sessions` 尚无 `display_name`，`t_session_records` 也尚无 `skill.snapshot` 记录 |
-| 观察到的当前 Java 行为 | 同基线 `RuntimeApiConstants.java:18` 与 `UserEventRequestVO.java:28` 把普通消息上限固定为 262144；`Skill.java:25,34` 与 `SkillLoader.java:104-111,140-150` 只校验 64 字符和宽松字符集合，仍允许首尾或连续连字符，也允许缺少 frontmatter 名称时回退父目录名 |
+| 观察到的当前 Java 行为 | 同基线 `RuntimeApiConstants.java:18` 与 `UserEventRequestVO.java:28` 把普通消息上限固定为 262144；`Skill.java:25,34` 与 `SkillLoader.java:104-111,140-150` 只校验 64 字符和宽松字符集合，仍允许首尾或连续连字符，并在缺少 frontmatter 名称时使用 `SKILL.md` 所在文件夹名称 |
 | 观察到的 pi 行为 | pi `4af9d21d` 的 `interactive-mode.ts:675-772` 聚合 Builtin、Prompt、Extension 和 `skill:*`；`skills.ts:92-111` 校验 64 字符、首尾和连续连字符；没有 262144 参数上限；`agent-session.ts:3005-3012` 由 Session 保存名称变更 |
 | 观察到的 OpenCode 行为 | OpenCode `849c2598` 的 `command/index.ts:65-169` 把内置、MCP 和 Skill 放入共享裸名空间并跳过冲突 Skill；`skill/index.ts:37-58` 只要求名称为字符串，没有严格命名规则或 262144 参数上限；`session/session.ts:693-710,755-757` 由 Session 领域更新 title |
 | 观察到的 DeepSeek Harness 行为 | DeepSeek Harness `141eb6fe` 的 `packages/interaction/commands/src/index.ts:53-123,245-300,328-437` 拆分 Definition、Registry 和 Executor，持久化 command lifecycle 并用 `sourceEventSeq` 关联结果；它没有 Agent Skill 包或 Skill Command 约定，也未提供这两个限制的依据 |
@@ -1372,10 +1372,11 @@ pi 压缩细节与 failed.aborted，1.41 的重试候选持久化排除和实际
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.43.4 | 2026-09-01 | Slash Command 统一使用“命令清单”；Skill 文件位置统一表述为“文件夹”；同步内部和公共审查文案。 |
 | 1.43.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 完整规则；Skill 参数明确复用普通消息的 UTF-16 输入上限；同步内部精确契约、Harness 证据和校验门禁。 |
 | 1.43.2 | 2026-08-31 | 以规则表和动作式短句统一 Slash Command 说明与审查文案；补齐 GetSession `displayName` 说明；不改变接口行为。 |
-| 1.43.1 | 2026-08-31 | 澄清 Command Catalog 是按 Session 上下文动态生成的逻辑命令清单；用户可见契约不再使用可能被理解为文件系统路径的“当前目录”。 |
-| 1.43.0 | 2026-08-31 | 新增命令目录和结构化命令执行两个 operation；SessionResource 增加 `displayName`；固定 Builtin/Skill、双层可用性、命令生命周期、sidecar Entry、`/name` 所有权和 Skill 调用快照。 |
+| 1.43.1 | 2026-08-31 | 澄清 Command Catalog 按 Session 上下文动态生成；用户可见契约统一使用“命令清单”。 |
+| 1.43.0 | 2026-08-31 | 新增命令清单和结构化命令执行两个 operation；SessionResource 增加 `displayName`；固定 Builtin/Skill、双层可用性、命令生命周期、sidecar Entry、`/name` 所有权和 Skill 调用快照。 |
 | 1.42.0 | 2026-08-27 | 十一个路径不变；POST Events 额外必填 `access-token`，四项入站 Header 仅作本次 execution 瞬态快照；工具发现、模型与其他请求不携带凭据，仅实际 Mate execute 原名透传已提供值。 |
 | 1.41.0 | 2026-08-24 | 十一个路径及公共事件字段不变；压缩重试在内部持久化被丢弃 Assistant Entry ID，重载精确排除且不公开；公共 Agent 实际请求与 recoverable LENGTH 使用相同模型输出上限。 |
 | 1.40.0 | 2026-08-24 | 十一个路径不变；固定 pi 压缩的 Usage/边界/安全切点、成功 STOP 不重试、ERROR/LENGTH 单次恢复、split-turn/重复摘要、Read 路径继承及 `session.compaction.failed.aborted`。 |
