@@ -1,0 +1,45 @@
+@startuml public_command_boundary
+title Public Chat Command Boundary
+skinparam shadowing false
+
+' Source evidence: mate-service@956b547f src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java:39-67
+' Source evidence: pi-mono-java@c1311f69 Runtime controllers expose only /campusclaw-service/v1 Session operations.
+' Observed behavior: the public Chat command bridge does not exist in the reviewed source.
+' Target-only design: mate-service resolves Chat ownership and calls structured Runtime command APIs.
+
+actor "Authenticated user" as User
+component "mate-service\nChatCommandController" as Mate
+component "ChatSessionResolver" as Resolver
+component "CampusClaw Runtime\nCommandController" as Runtime
+
+User -> Mate : /mate-service/v1/chats/{chatId}/commands
+Mate -> Resolver : resolve owned Chat
+Resolver --> Mate : stable sessionId
+Mate -> Runtime : /campusclaw-service/v1/sessions/{sessionId}/commands
+Runtime --> Mate : internal descriptors or SSE
+Mate --> User : public ResultBean or reprojected SSE
+@enduml
+
+@startuml public_sse_projection
+title SSE Parse and Reprojection
+skinparam shadowing false
+
+' Source evidence: mate-service@956b547f src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/service/UpstreamChatCall.java:19-31
+' Observed behavior: the current model proxy forwards bytes and has no CampusClaw event projector.
+' Architecture change: mate-service is not a byte-transparent proxy.
+' Design reason: public authentication, identifiers, and error semantics differ from the internal Runtime contract.
+
+participant Browser
+participant MateCommandBridge as Mate
+participant CampusClaw
+
+Browser -> Mate : POST structured Chat command
+Mate -> CampusClaw : POST structured Session command
+CampusClaw --> Mate : internal SSE frames
+loop each complete SSE frame
+  Mate -> Mate : parse event, id, data
+  Mate -> Mate : remove Session and private fields
+  Mate -> Mate : map internal errors and locale
+  Mate --> Browser : serialize public SSE frame
+end
+@enduml

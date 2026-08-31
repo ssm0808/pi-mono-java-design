@@ -1,323 +1,91 @@
-' Generated with PlantUML 1.2026.6
-' Run from this directory: plantuml -tsvg diagram.puml
-
-@startuml 01-skill-command-pipeline
-' pi source: packages/coding-agent/src/core/resource-loader.ts:603-624
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:555-570
-' pi source: packages/coding-agent/src/core/agent-session.ts:1173-1196
-' Observed behavior: loaded skills are projected into completion DTOs and expanded at invocation time without per-skill handlers.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
+@startuml skill_catalog
+title Skill Command Catalog Resolution
 skinparam shadowing false
-skinparam backgroundColor transparent
-title Skill Command Core Pipeline
 
-left to right direction
-rectangle "Resource Loader" as A
-rectangle "Loaded Skill List" as B
-rectangle "Autocomplete Mapping" as C
-rectangle "/skill:name" as D
-rectangle "Skill Command Expansion" as E
-rectangle "Expanded User Message" as F
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/runtime/PreparedAgentRuntime.java:57-95
+' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/modes/interactive/interactive-mode.ts:754-765
+' Observed behavior: both runtimes expose direct bound Skill name indexes.
+' Target design: every bound Skill is user-invocable under the skill: namespace.
 
-A --> B
-B --> C
-C --> D
-B --> E
-E --> F
+participant SkillCommandSource as Source
+participant AgentRuntimeManager as Runtime
+participant PreparedAgentRuntime as Snapshot
+
+Source -> Runtime : prepareCached(agentId)
+Runtime --> Source : latest complete Agent version
+Source -> Snapshot : skills()
+Snapshot --> Source : bound Skill metadata
+Source -> Source : map to skill:[a-z0-9-]+ descriptors
 @enduml
 
-@startuml 02-skill-discovery
-' pi source: packages/coding-agent/src/core/resource-loader.ts:333-410,603-624
-' pi source: packages/coding-agent/src/core/skills.ts:163-325,387-486
-' pi source: packages/coding-agent/src/core/package-manager.ts:184-188,2465-2489
-' Observed behavior: enabled sources are ordered, validated, canonical-path deduplicated, and name-deduplicated first-wins.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
+@startuml skill_acceptance
+title Atomic Skill Command Acceptance
 skinparam shadowing false
-skinparam backgroundColor transparent
-title pi Skill Discovery Flow
 
-rectangle DefaultResourceLoader.reload as A
-rectangle PackageManager.resolve as B
-rectangle "Enabled Skill Resources" as C
-rectangle loadSkills as D
-rectangle "Read SKILL.md Frontmatter" as E
-rectangle "Validate and Diagnose" as F
-rectangle "Canonical Path Dedupe" as G
-rectangle "Name Collision First Wins" as H
-rectangle "ResourceLoader Skills" as I
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/runtime/AgentRuntimeManager.java:81-112,275-293,425-433
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml:100-130
+' Observed behavior: Agent snapshots are validated and published under an Agent-scoped lock.
+' Target design: Skill content and Session acceptance commit as one replay-safe transaction.
 
-A --> B
-B --> C
-C --> D
-D --> E
-E --> F
-F --> G
-G --> H
-H --> I
+participant SkillCommandHandler as Handler
+participant AgentSkillSnapshotService as SnapshotService
+participant AgentRuntimeManager as Runtime
+database t_sessions as Sessions
+database t_session_entries as Entries
+database t_session_records as Records
+
+Handler -> SnapshotService : snapshotLatestBoundSkill(agentId, name)
+SnapshotService -> Runtime : read latest complete version under Agent lock
+Runtime --> SnapshotService : metadata and full SKILL.md
+SnapshotService --> Handler : immutable Skill snapshot
+Handler -> Sessions : lock and require idle
+Handler -> Entries : append active user.message with commandId
+Handler -> Records : append private skill.snapshot
+Handler -> Entries : append command.started sidecar
+Handler -> Sessions : state=running, active leaf=user.message
+note over Sessions,Records : One acceptance transaction
 @enduml
 
-@startuml 03-pi-skill-invocation
-' pi source: packages/coding-agent/src/core/agent-session.ts:1173-1196
-' Observed behavior: resolve metadata by exact name, read SKILL.md at invocation, strip frontmatter, wrap the body, and append free-text args.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
+@startuml skill_trust_layers
+title Skill and User Input Trust Layers
 skinparam shadowing false
-skinparam backgroundColor transparent
-hide footbox
-title pi Skill Command Invocation
 
-actor User as U
-participant AgentSession as S
-participant ResourceLoader as R
-participant SKILL.md as F
-participant Agent as A
+' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/core/agent-session.ts:1315-1343
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java:44-72
+' Observed behavior: current implementations concatenate or format Skill content for model use.
+' Security hardening: Skill instructions, user arguments, and attachments remain separate typed layers.
 
-U -> S : /skill:skill-creator demo-skill
-S -> R : getSkills and find name
-R --> S : Skill metadata
-S -> F : read UTF-8 content
-F --> S : frontmatter and body
-S -> S : strip frontmatter and wrap
-S -> A : skill block plus args
+rectangle "Trusted Skill instruction layer" as Trusted
+rectangle "User input layer\narguments" as User
+rectangle "User attachment layer\nfileIds" as Files
+rectangle "Model request assembler" as Assembler
+
+Trusted --> Assembler : exact invocation snapshot
+User --> Assembler : untrusted user content
+Files --> Assembler : ordinary attachment semantics
+
+note bottom of Assembler
+Never concatenate all layers into one untyped text value.
+disable-model-invocation affects automatic discovery only.
+end note
 @enduml
 
-@startuml 04-current-java-flow
-' Java source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/mode/InteractiveMode.java:1520-1542
-' Java source: frontend/src/chat/slashCommands.ts:33-76
-' Java source: frontend/src/App.vue:112-140
-' Java current-state diagram; pi source is not applicable.
-' Observed behavior: the legacy TUI maps Skills dynamically while the GUI uses a static slash-command list.
-' Design reason: expose both migration gaps without treating the legacy TUI as a target surface.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
+@startuml skill_replay
+title Skill Replay After Agent Refresh
 skinparam shadowing false
-skinparam backgroundColor transparent
-title Current Java Skill Command Flow
 
-left to right direction
-rectangle SkillLoader as A
-rectangle "Mutable SkillRegistry" as B
-rectangle "Legacy InteractiveMode" as C
-rectangle CommandSuggestion as D
-rectangle SkillExpander as E
-rectangle "AgentSession Prompt" as F
-rectangle "GUI Static Slash Registry" as G
-rectangle "GUI Slash Suggestions" as H
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/runtime/AgentRuntimeManager.java:131-153,366-380
+' Observed behavior: managed Agent refresh atomically replaces the published directory.
+' Target design: replay reads the invocation-local snapshot rather than the current directory.
 
-A --> B
-B --> C
-C --> D
-B --> E
-E --> F
-G --> H
-@enduml
+database t_session_records as Records
+participant SessionReplayService as Replay
+participant ModelRequestAssembler as Assembler
+collections "Current Agent files\nnew version or deleted Skill" as Current
 
-@startuml 05-target-architecture
-' pi source: packages/coding-agent/src/core/resource-loader.ts:333-410,603-624
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:555-570
-' pi source: packages/coding-agent/src/core/agent-session.ts:1173-1237
-' Java source: frontend/src/App.vue:112-180
-' Java product constraint: GUI is the only target presentation surface.
-' Java target-only architecture change: Agent Runtime parses commands and Skills Manager executes structured Skill invocations.
-' Design reason: preserve pi behavior while separating command routing from Skill execution ownership.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-title Java Skill Command Target Architecture
-
-rectangle "Package and Settings Resolver" as PM
-rectangle DefaultResourceLoader as RL
-rectangle SkillLoader as LS
-rectangle "Immutable SkillLoadResult" as LR
-rectangle "Agent UI" as GUI
-rectangle CommandCompletionService as CS
-rectangle "Agent Runtime" as AR
-rectangle SkillInvocation as SI
-rectangle "Skills Manager" as SM
-rectangle Agent as AG
-
-PM --> RL
-RL --> LS
-LS --> LR
-LR --> CS
-GUI --> CS : query
-CS --> GUI : suggestions
-GUI --> AR : submit
-AR ..> SI : creates
-AR --> SM : execute
-LR --> SM
-SM --> AR : effectiveText
-AR --> AG
-@enduml
-
-@startuml 06-reload
-' pi source: packages/coding-agent/src/core/agent-session.ts:2435-2456
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:5099-5125
-' Java source: frontend/src/App.vue:112-140
-' Java product divergence: reload refreshes GUI completion instead of a TUI provider.
-' Design reason: publish a complete SkillLoadResult before rebuilding completion, never expose clear-then-register intermediate state.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-hide footbox
-title Skill Command Reload
-
-actor User as U
-participant "Agent Runtime" as S
-participant ResourceLoader as R
-participant SkillLoader as L
-participant "Agent UI" as T
-
-U -> T : Invoke /reload
-T -> S : dispatch /reload
-S -> R : reload
-R -> L : load resolved skills
-L --> R : complete SkillLoadResult
-R -> R : replace current result
-S --> T : reload completed
-T -> T : rebuild autocomplete provider
-T --> U : new skill suggestions
-@enduml
-
-@startuml 07-routing
-' pi source: packages/coding-agent/src/core/agent-session.ts:1003-1028,1173-1237
-' Design reason: preserve registered-command priority, then expand Skill before ordinary prompt handling.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-title Skill Command Routing Priority
-
-start
-:User Input;
-if (Registered Command?) then (matched)
-  :Execute Handler;
-  stop
-else (not matched)
-  if (Skill Command?) then (matched)
-    :Expand Skill;
-  else (not matched)
-    :Ordinary Prompt;
-    ' Prompt Commands are intentionally unsupported.
-    ' Unknown slash text remains ordinary prompt input.
-    ' Future prompt assets use structured GUI actions.
-    ' They do not participate in this text router.
-  endif
-  :Agent;
-  stop
-endif
-@enduml
-
-@startuml 08-end-to-end-invocation
-' pi source: packages/coding-agent/src/core/agent-session.ts:1003-1028,1173-1237
-' Observed behavior: pi parses the raw /skill: command before reading and expanding the selected Skill.
-' Java target-only architecture change: Agent Runtime owns raw command parsing and passes a structured SkillInvocation.
-' Java platform mapping: Skills Manager owns Skill execution; its internal sequence is documented separately.
-' Design reason: separate Skill command orchestration from Skill execution and model invocation details.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-skinparam BoxPadding 4
-hide footbox
-autonumber
-title Skill Command Invocation Orchestration
-
-participant User
-participant "Agent UI" as UI
-participant "Agent Gateway" as Gateway
-participant "Agent Runtime" as Runtime
-participant "Skills Manager" as SkillsManager
-participant "Model Manager" as ModelManager
-
-User -> UI: Submit /skill:skill-creator demo-skill
-activate UI
-UI -> Gateway: submitPrompt(text)
-activate Gateway
-Gateway -> Runtime: prompt(context, text)
-activate Runtime
-
-Runtime -> Runtime: Parse Skill command\nname = skill-creator\narguments = demo-skill
-Runtime -> SkillsManager: execute(SkillInvocation)
-activate SkillsManager
-ref over SkillsManager
-  Skill execution sequence
-end ref
-SkillsManager --> Runtime: effectiveText
-deactivate SkillsManager
-
-Runtime -> ModelManager: invoke(effectiveText, context)
-activate ModelManager
-ModelManager --> Runtime: modelResponse
-deactivate ModelManager
-
-Runtime --> Gateway: agentResponse
-deactivate Runtime
-Gateway --> UI: agentResponse
-deactivate Gateway
-UI --> User: Display response
-deactivate UI
-@enduml
-
-@startuml 09-class-relationships
-' pi source: packages/coding-agent/src/core/resource-loader.ts:603-624
-' pi source: packages/coding-agent/src/core/agent-session.ts:1173-1237
-' Java source: frontend/src/App.vue:112-140
-' Java target-only architecture change: Agent Runtime creates SkillInvocation and Skills Manager executes it.
-' Design reason: express the Java GUI implementation boundary without installing Skill handlers in the static CommandRegistry.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-skinparam classAttributeIconSize 0
-title Java Skill Command Class Relationships
-
-interface ResourceLoader {
-  + getSkills(): SkillLoadResult
-  + reload()
-}
-class DefaultResourceLoader {
-  - skills: SkillLoadResult
-}
-class SkillLoader {
-  + load(resources): SkillLoadResult
-}
-class SkillInvocation {
-  + name: String
-  + arguments: String
-  + originalText: String
-}
-class "Skills Manager" as SkillsManager {
-  + execute(invocation): String
-}
-class CommandCompletionService {
-  + getSuggestions(prefix): List
-}
-class "Agent UI" as AgentUI <<frontend component>>
-class "Agent Runtime" as AgentRuntime {
-  - parseSkillCommand(text): SkillInvocation
-  - resolveUserInput(text): String
-}
-
-ResourceLoader <|.. DefaultResourceLoader
-DefaultResourceLoader --> SkillLoader
-AgentRuntime ..> SkillInvocation : creates
-AgentRuntime --> SkillsManager
-SkillsManager --> ResourceLoader
-CommandCompletionService --> ResourceLoader
-AgentUI --> CommandCompletionService
-AgentUI --> AgentRuntime
+Replay -> Records : load skill.snapshot by commandId
+Records --> Replay : exact metadata and full content
+Replay -> Assembler : trusted Skill layer
+Replay -> Assembler : historical user arguments and attachments
+Current -[#gray,dashed]-> Replay : not consulted
 @enduml

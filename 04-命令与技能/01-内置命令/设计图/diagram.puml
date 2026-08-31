@@ -1,511 +1,79 @@
-' Generated with PlantUML 1.2026.6
-' Run from this directory: plantuml -tsvg diagram.puml
-
-@startuml 01-source-to-target-overview
-' pi source: packages/coding-agent/src/core/slash-commands.ts:13-40
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:499-533,2541-2674
-' Observed behavior: pi separates command metadata, completion, routing, and execution.
-' Design reason: Java binds those concerns into one immutable command definition and one execution pipeline.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
+@startuml builtin_dispatch
+title Builtin Command Dispatch
 skinparam shadowing false
-skinparam backgroundColor transparent
-title From pi Built-in Semantics to Unified Java Commands
 
-left to right direction
-rectangle "pi Metadata\nname + description" as Metadata
-rectangle "pi Completion\nSlashCommand DTO" as Completion
-rectangle "pi Execution\nInteractiveMode branches" as Execution
-rectangle "pi Runtime Rules\nworkflow control flow" as RuntimeRules
-rectangle "Java CommandDefinition" as Definition
-rectangle "Registry + Dispatcher\n+ ExecutionGate" as Core
-rectangle "Java Agent UI" as Clients
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/command/builtin/ModelCommand.java:16-36
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/command/SlashCommandSession.java:19-32
+' Observed behavior: handlers currently depend on one broad mutable session facade.
+' Target design: every builtin handler depends on one narrow application service.
 
-Metadata --> Definition
-Completion --> Definition
-Execution --> Definition
-RuntimeRules --> Definition
-Definition --> Core
-Core --> Clients
+participant CommandExecutionService as Execution
+participant CommandAdmissionPolicy as Admission
+participant BuiltinHandler as Handler
+participant NarrowApplicationService as Service
+participant RuntimeSessionRepository as Repository
+
+Execution -> Admission : evaluate(descriptor, sessionState, input)
+Admission --> Execution : admitted
+Execution -> Repository : append command.started sidecar
+Execution -> Handler : execute(immutable invocation)
+Handler -> Service : query or mutate domain state
+Service --> Handler : text and optional sourceEventSeq
+Handler --> Execution : CommandResultDTO
+Execution -> Repository : append command.completed sidecar
 @enduml
 
-@startuml 02-pi-command-flow
-' pi source: packages/coding-agent/src/core/slash-commands.ts:13-40
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:499-570,2541-2715
-' Observed behavior: Built-in metadata feeds completion while command strings select TUI workflows before ordinary prompt routing.
-' Design reason: preserve the product order while making the split implementation visible.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
+@startuml builtin_availability
+title Zero-Argument and Input Availability
 skinparam shadowing false
-skinparam backgroundColor transparent
-title Current pi Built-in Command Flow
 
-left to right direction
-rectangle BUILTIN_SLASH_COMMANDS as Catalog
-rectangle "Autocomplete Mapping" as Autocomplete
-rectangle "Editor Submit" as Submit
-rectangle "Command String Branches" as Branches
-rectangle "Interactive Workflows" as Workflows
-rectangle "Streaming and Compaction Routing" as RuntimeRouting
-rectangle "Agent Prompt" as Agent
+' Source evidence: codex@be33f80b codex-rs/tui/src/chatwidget/slash_dispatch.rs:134-157
+' Observed behavior: Codex blocks commands by task state at dispatch time.
+' Target design: the catalog exposes separate availability for zero-argument and input invocation.
 
-Catalog --> Autocomplete
-Submit --> Branches
-Branches --> Workflows : matched Built-in
-Branches --> RuntimeRouting : not matched
-RuntimeRouting --> Agent
-@enduml
-
-@startuml 03-target-architecture
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:499-570,2541-2674
-' Java source: frontend/src/App.vue:112-180
-' Java source: frontend/src/chat/slashCommands.ts:13-122
-' Java product constraint: all commands are implemented by trusted internal developers and installed once at startup.
-' Java product constraint: GUI is the only target presentation surface.
-' Design reason: use one command core behind GUI chat input, command palette, and buttons.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-title Unified Java Command Architecture
-
-top to bottom direction
-package "Definition and Startup" {
-  component CommandContributor as Contributor
-  component CommandInstaller as Installer
-  Contributor --> Installer
+state idle {
+  [*] --> AllBuiltinQueries
+  AllBuiltinQueries --> ModelChange
+  AllBuiltinQueries --> ThinkingChange
+  AllBuiltinQueries --> Compact
 }
 
-package "Command Core" {
-  component CommandCatalogSnapshot as Snapshot
-  component CommandParser as Parser
-  component CommandDispatcher as Dispatcher
-  component CommandExecutionGate as Gate
-  component CommandCompletionService as Completion
-  Parser --> Dispatcher
-  Snapshot --> Dispatcher
-  Dispatcher --> Gate
-  Snapshot --> Completion
+state running {
+  [*] --> HelpStatusSkills
+  HelpStatusSkills --> NameQueryAndUpdate
+  HelpStatusSkills --> ModelAndThinkingQuery
 }
 
-package "Command Implementation" {
-  component CommandHandler as Handler
-  component "Constructor-Injected\nApplication Services" as Services
-  component "CommandInteraction\nand CommandOutput" as Ports
-  Handler --> Services
-  Handler --> Ports
-  Gate --> Handler
-}
-
-package "Presentation" {
-  component "Agent UI" as GUI
-  component "Chat Input" as ChatInput
-  component "Command Palette\nand Buttons" as Actions
-  component "Help View" as Help
-  Completion --> GUI
-  ChatInput --> GUI
-  Actions --> GUI
-  GUI --> Parser : text command
-  GUI --> Dispatcher : structured invocation
-  Snapshot --> Help
-}
-
-Installer --> Snapshot : publish once
-@enduml
-
-@startuml 04-unified-class-model
-' pi source: packages/coding-agent/src/core/slash-commands.ts:13-40
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:499-533,2541-2674
-' Observed behavior: pi Built-in behavior consists of metadata, optional completion, workflow execution, and implicit runtime rules.
-' Design reason: represent the complete Java command contract with one definition and no Built-in or Extension subtype.
-' Java architecture change: shared and exclusive command concurrency is explicit because GUI entry points and async callbacks can overlap.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-skinparam classAttributeIconSize 0
-title Unified Java Command Class Model
-
-interface CommandContributor {
-  + commands(): List<CommandDefinition>
-}
-
-class CommandDefinition <<record>> {
-  + String name
-  + String description
-  + CommandExecutionPolicy executionPolicy
-  + Optional<CommandArgumentCompleter> argumentCompleter
-  + CommandHandler handler
-}
-
-interface CommandHandler {
-  + handle(invocation, context): CompletionStage<CommandExecutionResult>
-}
-
-interface CommandArgumentCompleter {
-  + complete(prefix, context): CompletionStage<List<CommandCompletion>>
-}
-
-class CommandExecutionPolicy <<record>> {
-  + CommandExecutionMode mode
-  + CommandConcurrency concurrency
-  + boolean userCancellable
-  + Optional<Duration> timeout
-}
-
-enum CommandExecutionMode {
-  IMMEDIATE
-  REQUIRE_IDLE
-  ABORT_AGENT_AND_RUN
-  RUNTIME_TRANSITION
-  SHUTDOWN
-}
-
-enum CommandConcurrency {
-  SHARED
-  EXCLUSIVE
-}
-
-note right of CommandConcurrency
-  SHARED
-  Can overlap with SHARED
-  Conflicts with EXCLUSIVE
-
-  EXCLUSIVE
-  Conflicts with SHARED and EXCLUSIVE
-  Only one holder
+note right of running
+model: available=true
+model input: available=false
+unavailableCode=SESSION_BUSY
 end note
-
-class CommandInvocation <<record>> {
-  + String rawInput
-  + String name
-  + String arguments
-}
-
-class CommandContext <<record>> {
-  + CommandSession session
-  + CommandInteraction interaction
-  + CommandOutput output
-  + CommandCancellation cancellation
-}
-
-class CommandExecutionResult <<record>> {
-  + CommandOutcome outcome
-  + Set<CommandRefreshHint> refreshHints
-}
-
-class CommandCatalogSnapshot <<immutable>>
-class CommandInstaller
-interface CommandRegistry
-class CommandDispatcher
-class CommandExecutionGate
-
-CommandContributor "1" --> "1..*" CommandDefinition : declares
-CommandDefinition "1" *-- "1" CommandExecutionPolicy
-CommandDefinition "1" o-- "0..1" CommandArgumentCompleter
-CommandDefinition "1" o-- "1" CommandHandler
-CommandExecutionPolicy *-- CommandExecutionMode
-CommandExecutionPolicy *-- CommandConcurrency
-CommandInstaller ..> CommandContributor : collects
-CommandInstaller --> CommandRegistry : installs once
-CommandRegistry "1" *-- "1" CommandCatalogSnapshot
-CommandCatalogSnapshot "1" *-- "1..*" CommandDefinition
-CommandDispatcher --> CommandRegistry
-CommandDispatcher --> CommandExecutionGate
-CommandExecutionGate --> CommandExecutionPolicy
-CommandDispatcher --> CommandHandler
-CommandHandler ..> CommandInvocation
-CommandHandler ..> CommandContext
-CommandHandler ..> CommandExecutionResult
 @enduml
 
-@startuml 05-startup-installation
-' pi source: packages/coding-agent/src/core/slash-commands.ts:18-40
-' Java product constraint: the command set is static for one application process and has no dynamic command reload or unload.
-' Design reason: validate a complete local candidate and publish exactly once, so failure needs no runtime rollback.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
+@startuml session_name_update
+title Session Name Update Transaction
 skinparam shadowing false
-skinparam backgroundColor transparent
-hide footbox
-autonumber
-title One-Time Command Installation
 
-participant Spring as Spring
-participant "Command Contributors" as Contributors
-participant CommandInstaller as Installer
-participant CommandRegistry as Registry
+' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/core/agent-session.ts:3005-3012
+' Source evidence: deepseek-harness@141eb6fe packages/session/session-title/src/index.ts:343-383
+' Source evidence: codex@be33f80b codex-rs/app-server/src/request_processors/thread_processor.rs:1510-1541
+' Observed behavior: peer harnesses persist Session or Thread names in the owning runtime domain.
+' Architecture change: CampusClaw replaces the current NameCommand mate-service ownership comment.
 
-Spring -> Contributors : discover beans
-Spring -> Installer : install(contributors)
-Installer -> Contributors : collect definitions
-Contributors --> Installer : command lists
-Installer -> Installer : normalize optional completers
-Installer -> Installer : validate fields and duplicate names
-alt all definitions valid
-  Installer -> Registry : publish immutable snapshot
-  Registry --> Spring : startup ready
-else invalid definition or conflict
-  Installer --> Spring : fail startup with bean class diagnostics
-  note over Registry
-    Registry remains empty
-    Startup reports the validation error
-  end note
+participant NameCommandHandler as Handler
+participant SessionNamingService as Naming
+database t_sessions as Sessions
+database t_session_entries as Entries
+
+Handler -> Naming : changeDisplayName(sessionId, rawName)
+Naming -> Naming : trim and reject blank, controls, newline, or over 80 UTF-8 bytes
+Naming -> Sessions : lock current row
+alt same normalized value
+  Sessions --> Naming : unchanged success
+else changed value
+  Naming -> Sessions : update display_name, resource_version, updated_at
+  Naming -> Entries : append session.name.changed sidecar
 end
-@enduml
-
-@startuml 06-input-routing
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:2541-2715
-' pi source: packages/coding-agent/src/modes/rpc/rpc-types.ts:50-53
-' pi source: packages/coding-agent/src/modes/rpc/rpc-mode.ts:548-559
-' Java source: frontend/src/App.vue:112-180
-' Java source: frontend/src/types/ws.ts:96-108
-' Observed behavior: pi TUI parses Bash prefixes while pi RPC accepts a structured Bash request.
-' Java product divergence: the GUI-only target has no Shell capability and does not parse Bash prefixes.
-' Design reason: route GUI text through registered commands, Skills, and ordinary prompts only.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-title Java GUI Input Routing
-
-start
-:GUI text input;
-if (Registered command?) then (yes)
-  :CommandDispatcher;
-  :Return command result\nand finish input routing;
-  stop
-else (no)
-  if (Skill Command?) then (yes)
-    :Expand Skill;
-  else (no)
-    :Ordinary Prompt;
-    ' Prompt Commands are intentionally unsupported.
-    ' Unknown slash text remains ordinary prompt input.
-    ' Future prompt assets use structured GUI actions.
-    ' They do not participate in this text router.
-  endif
-  :Agent;
-  stop
-endif
-@enduml
-
-@startuml 07-dispatch-sequence
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:2541-2674; Java source: frontend/src/App.vue:142-180
-' Java target-only design: Agent Gateway and Agent Runtime are product architecture boundaries, not existing pi components.
-' Design reason: show SR-level command dispatch while keeping parser, catalog, gate, and handler details in LLD.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-hide footbox
-autonumber
-title Registered Command Dispatch
-participant User
-participant "Agent UI" as UI
-participant "Agent Gateway" as Gateway
-participant "Agent Runtime" as Runtime
-participant "Model Manager" as Models
-activate User
-User -> UI : Submit command
-activate UI
-UI -> Gateway : Command request
-activate Gateway
-Gateway -> Runtime : Dispatch with identity and session context
-activate Runtime
-alt Command accepted
-  opt Model-related command
-    Runtime -> Models : Apply model operation
-    activate Models
-    Models --> Runtime : Model operation result
-    deactivate Models
-  end
-  Runtime --> Gateway : Command result
-else Command rejected
-  Runtime --> Gateway : Rejection result
-end
-deactivate Runtime
-Gateway --> UI : Command response
-deactivate Gateway
-UI --> User : Display result
-deactivate UI
-deactivate User
-@enduml
-
-@startuml 08-execution-modes
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:2541-2674,5063-5071
-' pi source: packages/coding-agent/src/core/agent-session.ts:1641-1645
-' pi source: packages/coding-agent/src/core/agent-session-runtime.ts:167-175
-' Observed behavior: pi commands use five distinct runtime control-flow patterns without a policy type.
-' Design reason: a Java enum makes CommandExecutionGate exhaustive and prevents contradictory boolean combinations.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-title Command Execution Modes Derived from pi
-
-left to right direction
-rectangle IMMEDIATE
-rectangle REQUIRE_IDLE
-rectangle ABORT_AGENT_AND_RUN
-rectangle RUNTIME_TRANSITION
-rectangle SHUTDOWN
-
-rectangle "Run While Agent Active\nsession, hotkeys, copy" as Direct
-rectangle "Idle Required\nreload" as Idle
-rectangle "Abort Then Execute\ncompact" as Abort
-rectangle "Replace Runtime\nnew, import, resume, fork, clone" as Transition
-rectangle "Close Application\nquit" as Terminal
-
-IMMEDIATE --> Direct
-REQUIRE_IDLE --> Idle
-ABORT_AGENT_AND_RUN --> Abort
-RUNTIME_TRANSITION --> Transition
-SHUTDOWN --> Terminal
-@enduml
-
-@startuml 09-completion-flow
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:499-570
-' Observed behavior: pi maps Built-in metadata into completion DTOs and attaches model argument completion separately.
-' Java source: frontend/src/App.vue:112-140
-' Design reason: Java binds optional argument completion to CommandDefinition and exposes one catalog to all GUI command views.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-title Unified Command Completion Flow
-
-left to right direction
-rectangle CommandCatalogSnapshot as Catalog
-rectangle "Command Name Filter" as NameFilter
-rectangle "Resolved Command" as Resolved
-rectangle CommandArgumentCompleter as Completer
-rectangle "Completion Version Check" as VersionCheck
-rectangle "GUI Slash Suggestions" as Suggestions
-rectangle "GUI Command Palette" as Palette
-
-Catalog --> NameFilter
-NameFilter --> Suggestions : command-name stage
-NameFilter --> Palette : command-name stage
-Catalog --> Resolved : argument stage
-Resolved --> Completer
-Completer --> VersionCheck
-VersionCheck --> Suggestions : latest request results
-VersionCheck --> Palette : latest request results
-@enduml
-
-@startuml 10-client-adaptation
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:2541-2674
-' Java source: frontend/src/App.vue:142-180
-' Java architecture change: Command handlers must not construct Vue, WebSocket, browser, or desktop-container components.
-' Design reason: keep command behavior independent from GUI rendering and runtime capabilities.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-title Agent UI Command Interaction
-
-left to right direction
-component "Agent UI" as GUI
-component CommandDispatcher as Dispatcher
-component CommandHandler as Handler
-component CommandInteraction as Interaction
-component CommandOutput as Output
-component CommandExecutionResult as Result
-component "Application Services" as Services
-
-GUI --> Dispatcher
-Dispatcher --> Handler
-Handler --> Interaction
-Handler --> Output
-Handler --> Services
-Handler --> Result
-Result --> GUI : apply refresh hints
-@enduml
-
-@startuml 11-new-command-development
-' pi source: packages/coding-agent/src/core/slash-commands.ts:13-40
-' Java target-only workflow: internal developers add commands through contributors instead of editing a central string router.
-' Design reason: keep metadata, policy, completion, and execution together and make startup validation automatic.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-title New Internal Command Development
-
-left to right direction
-rectangle "Application Service" as Service
-rectangle "CommandHandler Bean" as Handler
-rectangle "CommandDefinition" as Definition
-rectangle "CommandContributor Bean" as Contributor
-rectangle "Startup Validation" as Validation
-rectangle "Command Catalog" as Catalog
-rectangle "Java GUI" as Clients
-
-Service --> Handler : constructor injection
-Handler --> Definition
-Definition --> Contributor
-Contributor --> Validation
-Validation --> Catalog
-Catalog --> Clients
-@enduml
-
-@startuml 12-migration-path
-' pi source: packages/coding-agent/src/modes/interactive/interactive-mode.ts:2541-2674
-' Java current-state migration: old command classes and client-side command-name branches must move one command at a time.
-' Design reason: preserve one complete execution path and prevent duplicate execution during migration.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-title Unified Command Migration Path
-
-left to right direction
-rectangle "M1\nDefinition + Parser + Snapshot" as M1
-rectangle "M2\nInstaller + Dispatcher + Gate" as M2
-rectangle "M3\nCatalog Completion + Help" as M3
-rectangle "M4\nInteraction + Output + Refresh" as M4
-rectangle "M5\nRuntime Transition Workflows" as M5
-rectangle "M6\nRemove Frontend Registry and Switch" as M6
-
-M1 --> M2
-M2 --> M3
-M3 --> M4
-M4 --> M5
-M5 --> M6
-@enduml
-
-@startuml 13-test-strategy
-' pi source: packages/coding-agent/src/core/slash-commands.ts:18-40
-' Java test strategy: exact catalog and policy contracts replace count-only or client-specific command tests.
-' Design reason: concentrate deterministic behavior in unit tests and keep only a small number of client integration tests.
-!theme plain
-!pragma layout smetana
-skinparam defaultFontName "SansSerif"
-skinparam shadowing false
-skinparam backgroundColor transparent
-title Unified Command Test Strategy
-
-rectangle "Unit Tests\nDefinition, Parser, Gate, Dispatcher" as Unit
-rectangle "Catalog Contract Tests\nNames, Order, Policies, Conflicts" as Contract
-rectangle "Handler Tests\nFake Services and Ports" as Handler
-rectangle "GUI Integration Tests\nInput, Palette, and Buttons" as Integration
-rectangle "Interactive Acceptance\nCompletion, Execution, Refresh" as Acceptance
-
-Unit --> Contract
-Contract --> Handler
-Handler --> Integration
-Integration --> Acceptance
+Naming --> Handler : text and optional sourceEventSeq
 @enduml

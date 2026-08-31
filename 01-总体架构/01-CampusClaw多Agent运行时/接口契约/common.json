@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Service API",
-    "version": "1.42.0",
+    "version": "1.43.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认",
     "fieldNaming": "lowerCamelCase",
@@ -11,7 +11,12 @@
     "agent": "^agent-[0-9a-fA-F]{32}$",
     "tool": "^tool-[0-9a-fA-F]{32}$",
     "skill": "^skill-[0-9a-fA-F]{32}$",
-    "session": "^session-[0-9a-fA-F]{32}$"
+    "session": "^session-[0-9a-fA-F]{32}$",
+    "command": "^command-[0-9a-f]{32}$"
+  },
+  "commandNamePatterns": {
+    "builtin": "^[a-z0-9-]+$",
+    "skill": "^skill:[a-z0-9-]+$"
   },
   "requestHeaderExamples": [
     {

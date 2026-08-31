@@ -39,6 +39,7 @@
             "result": {
               "sessionId": "session-550e8400e29b41d4a716446655440003",
               "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
               "modelId": "claude-sonnet-4-5",
               "state": "running",
               "thinking": true,

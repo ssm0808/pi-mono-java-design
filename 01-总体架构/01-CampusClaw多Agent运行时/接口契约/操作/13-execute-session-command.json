@@ -1,0 +1,176 @@
+{
+  "operation": {
+    "shortName": "执行会话命令",
+    "operationKey": "executeSessionCommand",
+    "method": "POST",
+    "path": "/sessions/{sessionId}/command",
+    "summary": "执行结构化 Builtin 或 Skill Command 并返回 SSE",
+    "description": "提交已由交互层解析的 name、arguments 和 fileIds；name 不含 Slash 前缀，Runtime 不接受未解析整段 Slash 文本。arguments 和 fileIds 省略时由 Service 归一为空字符串和空列表；请求拒绝未知字段。每次已接受调用生成 command- 加 32 位小写十六进制 UUID，并持久化 command.started 及 command.completed/failed。Skill 和 Compact 接受后断线不中止执行，调用方应从 GET Events 恢复，不重放 POST。该操作与 POST Events 使用相同执行级瞬时凭据边界：access-token 与调用上下文 Header 不校验、不持久化、不记录，只在 Skill 执行实际 Mate 工具 execute 请求中原名传递；目录、模型和其他请求不透传。",
+    "requestHeaderExamples": [
+      {
+        "id": "jwt",
+        "label": "JWT Header 示例",
+        "preferred": true,
+        "headers": [
+          {"name": "X-HW-ID", "value": "<CALLER_ID>", "required": true, "description": "公司调用方标识；只在本次 Skill 实际 Mate 工具 execute 中原名传递"},
+          {"name": "Authorization", "value": "Bearer <JWT>", "required": true, "description": "由上游校验；只在本次 Skill 实际 Mate 工具 execute 中原名传递"},
+          {"name": "access-token", "value": "<ACCESS_TOKEN>", "required": true, "description": "本次执行瞬时工具凭据；Runtime 不校验、不持久化、不记录"}
+        ]
+      },
+      {
+        "id": "appkey",
+        "label": "APPKEY Header 示例",
+        "preferred": false,
+        "headers": [
+          {"name": "X-HW-ID", "value": "<CALLER_ID>", "required": true, "description": "公司调用方标识；只在本次 Skill 实际 Mate 工具 execute 中原名传递"},
+          {"name": "X-HW-APPKEY", "value": "<APPKEY>", "required": true, "description": "由上游校验；可与 Authorization 同时出现，Runtime 不做互斥检查"},
+          {"name": "access-token", "value": "<ACCESS_TOKEN>", "required": true, "description": "本次执行瞬时工具凭据；Runtime 不校验、不持久化、不记录"}
+        ]
+      }
+    ],
+    "parameters": [
+      {"$ref": "parameters.sessionId"},
+      {"$ref": "parameters.acceptLanguage", "description": "流建立前 JSON 错误和流内错误的消息语言；缺失或不支持时回退 en-US"}
+    ],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "description": "name 必填且必须是目录中的精确小写名称；不得含 Slash。arguments 最多 262144 字符，fileIds 最多 32 个、元素唯一且保留顺序。Builtin 不接受附件；Skill 接受与普通用户消息相同的附件。不接受 type、sessionId、modelId、thinking、metadata 或 Idempotency-Key。",
+      "example": {
+        "name": "skill:pdf",
+        "arguments": "分析附件并总结",
+        "fileIds": ["file_01JY8X2E3R4T5Y6U7I8O9P0A1S"]
+      }
+    },
+    "responses": [
+      {
+        "id": "200-name-success",
+        "status": "200",
+        "tabLabel": "200 · Builtin 成功",
+        "label": "OK",
+        "summary": "命令已接受并返回 SSE；以 name 有效更新为例，领域事件位于 command.started 和 command.completed 之间。",
+        "headers": {"Content-Type": "text/event-stream", "Cache-Control": "no-store", "Content-Language": "zh-CN"},
+        "bodies": {
+          "default": "id: 31\nevent: command.started\ndata: {\"entryId\":\"entry_301\",\"entrySeq\":31,\"commandId\":\"command-550e8400e29b41d4a716446655440000\",\"name\":\"name\",\"kind\":\"builtin\",\"createdAt\":\"2026-08-31T10:00:00Z\"}\n\nid: 32\nevent: session.name.changed\ndata: {\"entryId\":\"entry_302\",\"entrySeq\":32,\"previousDisplayName\":null,\"displayName\":\"园区网络故障分析\",\"resourceVersion\":7,\"createdAt\":\"2026-08-31T10:00:00Z\"}\n\nid: 33\nevent: command.completed\ndata: {\"entryId\":\"entry_303\",\"entrySeq\":33,\"commandId\":\"command-550e8400e29b41d4a716446655440000\",\"name\":\"name\",\"result\":{\"text\":\"Session 名称已更新为：园区网络故障分析\",\"sourceEventSeq\":32},\"createdAt\":\"2026-08-31T10:00:00Z\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"
+        }
+      },
+      {
+        "id": "200-skill-success",
+        "status": "200",
+        "tabLabel": "200 · Skill 成功",
+        "label": "OK",
+        "summary": "Skill 调用的用户参数与附件作为 user.message 持久化，Skill 快照仅写私有 Record，最终结果指向 Assistant 完成事件。",
+        "headers": {"Content-Type": "text/event-stream", "Cache-Control": "no-store", "Content-Language": "zh-CN"},
+        "bodies": {
+          "default": "id: 41\nevent: user.message\ndata: {\"entryId\":\"entry_401\",\"entrySeq\":41,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"commandName\":\"skill:pdf\",\"message\":\"分析附件并总结\",\"fileIds\":[\"file_01JY8X2E3R4T5Y6U7I8O9P0A1S\"],\"createdAt\":\"2026-08-31T10:01:00Z\"}\n\nid: 43\nevent: command.started\ndata: {\"entryId\":\"entry_403\",\"entrySeq\":43,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"name\":\"skill:pdf\",\"kind\":\"skill\",\"createdAt\":\"2026-08-31T10:01:00Z\"}\n\nevent: assistant.message.started\ndata: {\"entryId\":\"entry_404\",\"role\":\"assistant\"}\n\nevent: assistant.message.delta\ndata: {\"entryId\":\"entry_404\",\"delta\":{\"type\":\"text\",\"text\":\"附件包含三类关键信息。\"}}\n\nid: 44\nevent: assistant.message.completed\ndata: {\"entryId\":\"entry_404\",\"entrySeq\":44,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"附件包含三类关键信息。\"}]},\"finishReason\":\"stop\",\"createdAt\":\"2026-08-31T10:01:03Z\"}\n\nid: 45\nevent: command.completed\ndata: {\"entryId\":\"entry_405\",\"entrySeq\":45,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"name\":\"skill:pdf\",\"result\":{\"text\":\"Skill 执行完成。\",\"sourceEventSeq\":44},\"createdAt\":\"2026-08-31T10:01:03Z\"}\n\nevent: session.status.idle\ndata: {\"status\":\"idle\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"
+        }
+      },
+      {
+        "id": "400-invalid-session-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_SESSION_ID",
+        "label": "Bad Request",
+        "summary": "sessionId 不符合标识格式。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "INVALID_SESSION_ID", "resMsg": "sessionId 格式不正确。"},
+          "en-US": {"resCode": "INVALID_SESSION_ID", "resMsg": "The sessionId format is invalid."}
+        }
+      },
+      {
+        "id": "400-invalid-command-request",
+        "status": "400",
+        "tabLabel": "400 · INVALID_COMMAND_REQUEST",
+        "label": "Bad Request",
+        "summary": "请求 JSON 非法、含未知字段，name/arguments/fileIds 不符合约束，或 Builtin 携带了附件。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "INVALID_COMMAND_REQUEST", "resMsg": "命令请求内容不符合约束。"},
+          "en-US": {"resCode": "INVALID_COMMAND_REQUEST", "resMsg": "The command request does not satisfy the required constraints."}
+        }
+      },
+      {
+        "id": "404-session-not-found",
+        "status": "404",
+        "tabLabel": "404 · SESSION_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "Session 不存在或已删除。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "SESSION_NOT_FOUND", "resMsg": "指定的 Session 不存在。"},
+          "en-US": {"resCode": "SESSION_NOT_FOUND", "resMsg": "The specified Session does not exist."}
+        }
+      },
+      {
+        "id": "404-command-not-found",
+        "status": "404",
+        "tabLabel": "404 · COMMAND_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "name 不是当前目录中的精确命令名，包括目录获取后已被解绑的 Skill。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "COMMAND_NOT_FOUND", "resMsg": "指定的命令不存在。"},
+          "en-US": {"resCode": "COMMAND_NOT_FOUND", "resMsg": "The specified command does not exist."}
+        }
+      },
+      {
+        "status": "409",
+        "label": "Conflict",
+        "summary": "该调用需要 idle，但 Session 正在执行；查询型命令和 name 更新不受此限制。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "SESSION_BUSY", "resMsg": "该 Session 正在执行，当前命令暂不可用。"},
+          "en-US": {"resCode": "SESSION_BUSY", "resMsg": "The Session is running and the requested command is unavailable."}
+        }
+      },
+      {
+        "id": "503-skill-snapshot-unavailable",
+        "status": "503",
+        "tabLabel": "503 · SKILL_SNAPSHOT_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "Skill 仍在绑定目录中，但最新 complete Agent 版本的完整正文或资源快照无法原子读取；未接受命令。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN", "Retry-After": "3"},
+        "bodies": {
+          "zh-CN": {"resCode": "SKILL_SNAPSHOT_UNAVAILABLE", "resMsg": "当前 Skill 调用快照不可用。"},
+          "en-US": {"resCode": "SKILL_SNAPSHOT_UNAVAILABLE", "resMsg": "The current Skill invocation snapshot is unavailable."}
+        }
+      },
+      {
+        "id": "503-runtime-capacity",
+        "status": "503",
+        "tabLabel": "503 · RUNTIME_CAPACITY_EXCEEDED",
+        "label": "Service Unavailable",
+        "summary": "Skill 执行需要新的 Agent execution，但全局执行容量已满；未接受命令。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN", "Retry-After": "3"},
+        "bodies": {
+          "zh-CN": {"resCode": "RUNTIME_CAPACITY_EXCEEDED", "resMsg": "Runtime 执行容量已满，请稍后重试。"},
+          "en-US": {"resCode": "RUNTIME_CAPACITY_EXCEEDED", "resMsg": "Runtime execution capacity is exhausted. Try again later."}
+        }
+      },
+      {
+        "id": "500-before-stream",
+        "status": "500",
+        "tabLabel": "500 · 流建立前",
+        "label": "Internal Server Error",
+        "summary": "命令接受事务未完整提交；不留下用户 Entry、快照、command.started 或 running 状态。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "COMMAND_ACCEPTANCE_FAILED", "resMsg": "命令接收失败。"},
+          "en-US": {"resCode": "COMMAND_ACCEPTANCE_FAILED", "resMsg": "Command acceptance failed."}
+        }
+      },
+      {
+        "id": "200-stream-error",
+        "status": "200",
+        "tabLabel": "200 · 流内异常",
+        "label": "SSE already started",
+        "summary": "流建立后 Handler 或 Agent 执行失败；先持久化 command.failed，再发 stream.error 并关闭，不发 stream.end。",
+        "headers": {"Content-Type": "text/event-stream", "Cache-Control": "no-store", "Content-Language": "zh-CN"},
+        "bodies": {
+          "default": "id: 52\nevent: command.failed\ndata: {\"entryId\":\"entry_502\",\"entrySeq\":52,\"commandId\":\"command-550e8400e29b41d4a716446655440002\",\"name\":\"skill:pdf\",\"resCode\":\"COMMAND_EXECUTION_FAILED\",\"resMsg\":\"命令执行失败。\",\"createdAt\":\"2026-08-31T10:02:01Z\"}\n\nevent: stream.error\ndata: {\"resCode\":\"COMMAND_EXECUTION_FAILED\",\"resMsg\":\"命令执行失败。\"}\n"
+        }
+      }
+    ]
+  },
+  "review": {"questions": []}
+}

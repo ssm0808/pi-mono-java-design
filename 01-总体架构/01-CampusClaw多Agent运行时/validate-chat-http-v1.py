@@ -23,7 +23,7 @@ REPOSITORY_ROOT = ROOT.parents[1]
 HTML_PATH = ROOT / "chat-http-v1-review.html"
 DESIGN_PATH = ROOT / "chat-http-v1-design.md"
 CONTRACT_ROOT = ROOT / "接口契约"
-EXPECTED_OPERATION_COUNT = 11
+EXPECTED_OPERATION_COUNT = 13
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
     ("GET", "/sessions/{sessionId}"),
@@ -36,9 +36,12 @@ EXPECTED_OPERATIONS = {
     ("POST", "/sessions/{sessionId}/steers"),
     ("POST", "/sessions/{sessionId}/follow-ups"),
     ("POST", "/sessions/{sessionId}/abort"),
+    ("GET", "/sessions/{sessionId}/commands"),
+    ("POST", "/sessions/{sessionId}/command"),
 }
 EXPECTED_CONTEXT_HEADERS = {"X-HW-ID", "Authorization", "X-HW-APPKEY"}
 POST_EVENTS = ("POST", "/sessions/{sessionId}/events")
+POST_COMMAND = ("POST", "/sessions/{sessionId}/command")
 POST_EVENTS_CONTEXT_HEADERS = EXPECTED_CONTEXT_HEADERS | {"access-token"}
 EXPECTED_PARAMETER_HEADERS = {"Accept-Language", "If-Match"}
 LOWER_CAMEL_FIELD = re.compile(r"^[a-z][A-Za-z0-9]*$")
@@ -107,12 +110,16 @@ def validate_common_contract(common: dict[str, Any]) -> None:
     require(api.get("fieldNaming") == "lowerCamelCase", "Public field naming rule must be lowerCamelCase")
     require(api.get("headerNaming") == "保留原名", "HTTP Header naming rule must preserve existing names")
     patterns = common.get("resourceIdPatterns", {})
-    require(set(patterns) == {"agent", "tool", "skill", "session"}, "Typed resource ID patterns are incomplete")
+    require(
+        set(patterns) == {"agent", "tool", "skill", "session", "command"},
+        "Typed resource ID patterns are incomplete",
+    )
     valid_ids = {
         "agent": "agent-550e8400e29b41d4a716446655440000",
         "tool": "tool-550e8400e29b41d4a716446655440002",
         "skill": "skill-550e8400e29b41d4a716446655440001",
         "session": "session-550e8400e29b41d4a716446655440003",
+        "command": "command-550e8400e29b41d4a716446655440004",
     }
     for resource_type, pattern in patterns.items():
         require(re.fullmatch(pattern, valid_ids[resource_type]) is not None, f"Invalid {resource_type} ID pattern")
@@ -120,6 +127,12 @@ def validate_common_contract(common: dict[str, Any]) -> None:
         require(re.fullmatch(pattern, legacy_id) is None, f"{resource_type} pattern accepts a legacy prefix")
         hyphenated_id = f"{resource_type}-550e8400-e29b-41d4-a716-446655440000"
         require(re.fullmatch(pattern, hyphenated_id) is None, f"{resource_type} pattern accepts UUID hyphens")
+    command_names = common.get("commandNamePatterns", {})
+    require(set(command_names) == {"builtin", "skill"}, "Command name patterns are incomplete")
+    require(re.fullmatch(command_names["builtin"], "status") is not None, "Builtin name pattern is invalid")
+    require(re.fullmatch(command_names["builtin"], "Status") is None, "Builtin names must be lowercase")
+    require(re.fullmatch(command_names["skill"], "skill:pdf") is not None, "Skill name pattern is invalid")
+    require(re.fullmatch(command_names["skill"], "pdf") is None, "Skill names must use the skill: namespace")
     agent_parameter = common["parameters"]["agentId"]
     require(agent_parameter["name"] == "agentId", "Agent path parameter must use lowerCamelCase")
     require(
@@ -186,7 +199,7 @@ def validate_html(models: list[dict[str, Any]]) -> None:
             "Removed Runtime-local credential conflict remains in HTML")
     require("UNAUTHENTICATED" not in html_source,
             "Removed Runtime-local unauthenticated error remains in HTML")
-    require(len(html_source.encode("utf-8")) < 300_000, "Generated HTML unexpectedly exceeds 300 KB")
+    require(len(html_source.encode("utf-8")) < 500_000, "Generated HTML unexpectedly exceeds 500 KB")
 
 
 def validate_executable_script(source: str) -> None:
@@ -235,7 +248,11 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
             for example in operation["requestHeaderExamples"]
             for header in example["headers"]
         }
-        expected_headers = POST_EVENTS_CONTEXT_HEADERS if key == POST_EVENTS else EXPECTED_CONTEXT_HEADERS
+        expected_headers = (
+            POST_EVENTS_CONTEXT_HEADERS
+            if key in {POST_EVENTS, POST_COMMAND}
+            else EXPECTED_CONTEXT_HEADERS
+        )
         require(header_names == expected_headers, f"Integration request Header names changed: {key}")
         parameter_headers = {
             parameter["name"] for parameter in operation["parameters"] if parameter["in"] == "header"
@@ -243,7 +260,9 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
         require(parameter_headers <= EXPECTED_PARAMETER_HEADERS, f"Operation request Header names changed: {key}")
         validate_public_field_names(key, operation)
         require(operation["responses"], f"Operation has no responses: {key}")
-        validate_response_contract(patterns["agent"], patterns["session"], key, operation)
+        validate_response_contract(
+            patterns["agent"], patterns["session"], patterns["command"], key, operation
+        )
     require(operations == EXPECTED_OPERATIONS, "Operation inventory differs from the confirmed contract")
 
 
@@ -281,7 +300,11 @@ def validate_payload_keys(value: Any, context: str) -> None:
 
 
 def validate_response_contract(
-    agent_pattern: str, session_pattern: str, key: tuple[str, str], operation: dict[str, Any]
+    agent_pattern: str,
+    session_pattern: str,
+    command_pattern: str,
+    key: tuple[str, str],
+    operation: dict[str, Any],
 ) -> None:
     for agent_id in values_for_key(operation["responses"], "agentId"):
         require(isinstance(agent_id, str) and re.fullmatch(agent_pattern, agent_id) is not None,
@@ -289,6 +312,9 @@ def validate_response_contract(
     for session_id in values_for_key(operation["responses"], "sessionId"):
         require(isinstance(session_id, str) and re.fullmatch(session_pattern, session_id) is not None,
                 f"Invalid Session ID response example: {key}")
+    for command_id in values_for_key(operation["responses"], "commandId"):
+        require(isinstance(command_id, str) and re.fullmatch(command_pattern, command_id) is not None,
+                f"Invalid Command ID response example: {key}")
     require(all(response["status"] != "403" for response in operation["responses"]),
             f"Service-local FORBIDDEN response is not implemented: {key}")
     for response in operation["responses"]:
@@ -302,6 +328,14 @@ def validate_response_contract(
     require(not (forbidden_auth_codes & codes), f"Runtime-local authentication error is forbidden: {key}")
     if key == ("POST", "/agents/{agentId}/sessions"):
         validate_create_session(agent_pattern, session_pattern, operation)
+    elif key in {
+        ("GET", "/sessions/{sessionId}"),
+        ("PUT", "/sessions/{sessionId}/model"),
+        ("PUT", "/sessions/{sessionId}/thinking"),
+    }:
+        success = next(response for response in operation["responses"] if response["status"] == "200")
+        result = next(body["result"] for body in success["bodies"].values() if isinstance(body, dict))
+        require("displayName" in result, f"SessionResource is missing displayName: {key}")
     elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
     elif key == ("POST", "/sessions/{sessionId}/events"):
@@ -337,6 +371,52 @@ def validate_response_contract(
             require(f"event: {event_type}" in stream, f"POST Events is missing {event_type}")
         require("\"entrySeq\":18" in stream and "\"type\":\"thinking\"" in stream,
                 "Completed thinking must be a durable recoverable event")
+    elif key == ("GET", "/sessions/{sessionId}/commands"):
+        success = next(response for response in operation["responses"] if response["status"] == "200")
+        commands = success["bodies"]["zh-CN"]["result"]["commands"]
+        names = {command["name"] for command in commands}
+        require(
+            {"help", "status", "name", "model", "thinking", "compact", "skills", "skill:pdf"} <= names,
+            "Command catalog example is incomplete",
+        )
+        model = next(command for command in commands if command["name"] == "model")
+        require(model["available"] is True and model["input"]["available"] is False,
+                "Running model descriptor must separate query and input availability")
+        require(model["input"]["unavailableCode"] == "SESSION_BUSY",
+                "Running model input must expose SESSION_BUSY")
+        skill = next(command for command in commands if command["name"] == "skill:pdf")
+        require(skill["kind"] == "skill" and skill["input"]["acceptsFiles"] is True,
+                "Skill catalog descriptor must advertise file support")
+    elif key == ("POST", "/sessions/{sessionId}/command"):
+        expected_example_headers = {
+            "jwt": {"X-HW-ID", "Authorization", "access-token"},
+            "appkey": {"X-HW-ID", "X-HW-APPKEY", "access-token"},
+        }
+        for example in operation["requestHeaderExamples"]:
+            names = {header["name"] for header in example["headers"]}
+            require(names == expected_example_headers.get(example["id"]),
+                    f"POST Command Header mode differs: {example['id']}")
+        require(set(operation["requestBody"]["example"]) == {"name", "arguments", "fileIds"},
+                "POST Command request must contain only name, arguments, and fileIds")
+        codes = response_codes(operation)
+        for expected in {
+            ("400", "INVALID_COMMAND_REQUEST"),
+            ("404", "COMMAND_NOT_FOUND"),
+            ("409", "SESSION_BUSY"),
+            ("503", "SKILL_SNAPSHOT_UNAVAILABLE"),
+            ("500", "COMMAND_ACCEPTANCE_FAILED"),
+        }:
+            require(expected in codes, f"POST Command is missing {expected}")
+        streams = [response["bodies"]["default"] for response in operation["responses"]
+                   if response["status"] == "200" and "default" in response.get("bodies", {})]
+        joined = "\n".join(streams)
+        for event_type in (
+            "command.started", "command.completed", "command.failed", "session.name.changed"
+        ):
+            require(f"event: {event_type}" in joined, f"POST Command is missing {event_type}")
+        require("event: stream.error" in joined, "POST Command stream failure is missing stream.error")
+        failed_stream = next(stream for stream in streams if "event: command.failed" in stream)
+        require("event: stream.end" not in failed_stream, "Failed command stream must not emit stream.end")
     elif key == ("GET", "/sessions/{sessionId}/events"):
         success = next(response for response in operation["responses"] if response["status"] == "200")
         event_types = {event["type"] for event in success["bodies"]["en-US"]["result"]["events"]}
@@ -359,13 +439,15 @@ def validate_create_session(agent_pattern: str, session_pattern: str, operation:
     location = created.get("headers", {}).get("Location", "")
     require(location.endswith("/" + result["sessionId"]), "Create Session Location differs from sessionId")
     require(result.get("thinking") is True, "Create Session must initialize thinking=true")
+    require("displayName" in result and result["displayName"] is None,
+            "Create Session must initialize displayName=null")
 
 
 def validate_source_deduplication() -> None:
     for operation_path in sorted((CONTRACT_ROOT / "操作").glob("*.json")):
         source = json.loads(operation_path.read_text(encoding="utf-8"))
         operation = source["operation"]
-        if operation.get("operationKey") == "submitUserMessage":
+        if operation.get("operationKey") in {"submitUserMessage", "executeSessionCommand"}:
             examples = operation.get("requestHeaderExamples", [])
             header_names = {
                 header["name"]
@@ -373,7 +455,7 @@ def validate_source_deduplication() -> None:
                 for header in example.get("headers", [])
             }
             require(len(examples) == 2 and header_names == POST_EVENTS_CONTEXT_HEADERS,
-                    "POST Events must override the shared Header examples only to add access-token")
+                    "Execution POST must override shared Header examples only to add access-token")
         else:
             require("requestHeaderExamples" not in operation,
                     f"Shared request headers duplicated in {operation_path.name}")

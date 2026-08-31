@@ -9,6 +9,9 @@
 | 模型管理 Provider 契约 | Model Manager、Chat SSE、断连取消和 Usage 持久化 | [设计](./03-模型管理Provider契约/README.md) |
 | Runtime HTTP 测试 Agent | 如何根据已确认契约维护分层回归测试 | [设计](./04-Runtime-HTTP测试Agent/README.md) |
 | CampusClaw TDD 测试 Agent | 如何以版本化能力注册表驱动全产品测试与质量门禁 | [设计](./05-CampusClaw-TDD测试Agent/README.md) |
+| mate-service 聊天命令 API | 公共 Chat 命令目录、结构化执行、鉴权和 SSE 重新投影 | [设计与契约](./06-mate-service聊天命令API/README.md) |
 
 精确 Runtime HTTP 契约位于
 [`01-总体架构/01-CampusClaw多Agent运行时/接口契约/`](../01-总体架构/01-CampusClaw多Agent运行时/接口契约/)。
+公共聊天命令契约位于
+[`06-mate-service聊天命令API/接口契约/`](./06-mate-service聊天命令API/接口契约/)。

@@ -1,0 +1,166 @@
+{
+  "operation": {
+    "shortName": "执行聊天命令",
+    "operationKey": "executeChatCommand",
+    "method": "POST",
+    "path": "/chats/{chatId}/command",
+    "summary": "执行结构化 Builtin 或 Skill Command 并返回公共 SSE",
+    "description": "交互层提交目录中精确命中的 name、arguments 和 fileIds；name 不含 Slash，mate-service 不接受未经解析的整段 Slash 文本。mate-service 在登录用户和 Chat 权限上下文中解析稳定 Session 映射，以独立内部凭据调用 CampusClaw，再解析内部 SSE、移除 sessionId、entryId、Agent/Skill ID、Skill 版本、受管路径和私有快照字段后重新编码公共事件。它不得字节级透明转发。arguments/fileIds 省略时由 Service 统一归一为空字符串和空列表，请求拒绝未知字段。Skill 与 Compact 被接受后，浏览器断线不会自动中止 CampusClaw 执行，客户端应从公共持久化历史对账，不得盲目重放 POST。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。",
+    "parameters": [
+      {"$ref": "parameters.chatId"},
+      {"$ref": "parameters.acceptLanguage", "description": "流建立前 ResultBean 与流内错误消息语言；缺失或不支持时回退 en-US"}
+    ],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "description": "name 必填并严格匹配目录小写名称，不得含 Slash。arguments 最多 262144 字符；fileIds 最多 32 个、元素唯一且保留顺序。Builtin 不接受附件，Skill 接受与普通消息相同附件。不接受 chatId、sessionId、modelId、thinking、metadata 或 Idempotency-Key。",
+      "example": {
+        "name": "skill:pdf",
+        "arguments": "分析附件并总结",
+        "fileIds": ["file-550e8400e29b41d4a716446655440010"]
+      }
+    },
+    "responses": [
+      {
+        "id": "200-name-success",
+        "status": "200",
+        "tabLabel": "200 · Builtin 成功",
+        "label": "OK",
+        "summary": "以 name 有效更新为例；公共事件不含 Runtime Session 或 Entry 标识。",
+        "headers": {"Content-Type": "text/event-stream", "Cache-Control": "no-store", "Content-Language": "zh-CN"},
+        "bodies": {
+          "default": "id: 31\nevent: command.started\ndata: {\"eventSeq\":31,\"commandId\":\"command-550e8400e29b41d4a716446655440000\",\"name\":\"name\",\"kind\":\"builtin\",\"occurredAt\":\"2026-08-31T10:00:00Z\"}\n\nid: 32\nevent: session.name.changed\ndata: {\"eventSeq\":32,\"previousDisplayName\":null,\"displayName\":\"园区网络故障分析\",\"resourceVersion\":7,\"occurredAt\":\"2026-08-31T10:00:00Z\"}\n\nid: 33\nevent: command.completed\ndata: {\"eventSeq\":33,\"commandId\":\"command-550e8400e29b41d4a716446655440000\",\"name\":\"name\",\"result\":{\"text\":\"Session 名称已更新为：园区网络故障分析\",\"sourceEventSeq\":32},\"occurredAt\":\"2026-08-31T10:00:00Z\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"
+        }
+      },
+      {
+        "id": "200-skill-success",
+        "status": "200",
+        "tabLabel": "200 · Skill 成功",
+        "label": "OK",
+        "summary": "Skill 参数和附件作为公共用户消息投影；Skill 快照、内部 Entry ID 和 Session ID 不公开。",
+        "headers": {"Content-Type": "text/event-stream", "Cache-Control": "no-store", "Content-Language": "zh-CN"},
+        "bodies": {
+          "default": "id: 41\nevent: user.message\ndata: {\"eventSeq\":41,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"commandName\":\"skill:pdf\",\"message\":\"分析附件并总结\",\"fileIds\":[\"file-550e8400e29b41d4a716446655440010\"],\"occurredAt\":\"2026-08-31T10:01:00Z\"}\n\nid: 43\nevent: command.started\ndata: {\"eventSeq\":43,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"name\":\"skill:pdf\",\"kind\":\"skill\",\"occurredAt\":\"2026-08-31T10:01:00Z\"}\n\nevent: assistant.message.started\ndata: {\"role\":\"assistant\"}\n\nevent: assistant.message.delta\ndata: {\"delta\":{\"type\":\"text\",\"text\":\"附件包含三类关键信息。\"}}\n\nid: 44\nevent: assistant.message.completed\ndata: {\"eventSeq\":44,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"附件包含三类关键信息。\"}]},\"finishReason\":\"stop\",\"occurredAt\":\"2026-08-31T10:01:03Z\"}\n\nid: 45\nevent: command.completed\ndata: {\"eventSeq\":45,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"name\":\"skill:pdf\",\"result\":{\"text\":\"Skill 执行完成。\",\"sourceEventSeq\":44},\"occurredAt\":\"2026-08-31T10:01:03Z\"}\n\nevent: session.status.idle\ndata: {\"status\":\"idle\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"
+        }
+      },
+      {
+        "id": "400-invalid-chat-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_CHAT_ID",
+        "label": "Bad Request",
+        "summary": "chatId 不符合公共 Chat 约束。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "INVALID_CHAT_ID", "resMsg": "chatId 格式不正确。"},
+          "en-US": {"resCode": "INVALID_CHAT_ID", "resMsg": "The chatId format is invalid."}
+        }
+      },
+      {
+        "id": "400-invalid-command-request",
+        "status": "400",
+        "tabLabel": "400 · INVALID_COMMAND_REQUEST",
+        "label": "Bad Request",
+        "summary": "JSON 非法、包含未知字段、字段越界、Builtin 携带附件或参数形状不符合命令定义。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "INVALID_COMMAND_REQUEST", "resMsg": "命令请求内容不符合约束。"},
+          "en-US": {"resCode": "INVALID_COMMAND_REQUEST", "resMsg": "The command request does not satisfy the required constraints."}
+        }
+      },
+      {
+        "id": "401-unauthenticated",
+        "status": "401",
+        "tabLabel": "401 · UNAUTHENTICATED",
+        "label": "Unauthorized",
+        "summary": "用户未登录或访问令牌无效。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "UNAUTHENTICATED", "resMsg": "请先登录。"},
+          "en-US": {"resCode": "UNAUTHENTICATED", "resMsg": "Authentication is required."}
+        }
+      },
+      {
+        "id": "403-chat-access-denied",
+        "status": "403",
+        "tabLabel": "403 · CHAT_ACCESS_DENIED",
+        "label": "Forbidden",
+        "summary": "用户无权执行该 Chat 的命令。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "CHAT_ACCESS_DENIED", "resMsg": "无权访问该 Chat。"},
+          "en-US": {"resCode": "CHAT_ACCESS_DENIED", "resMsg": "Access to the Chat is denied."}
+        }
+      },
+      {
+        "id": "404-chat-not-found",
+        "status": "404",
+        "tabLabel": "404 · CHAT_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "Chat 不存在、已删除，或没有有效 Session 映射。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "CHAT_NOT_FOUND", "resMsg": "指定的 Chat 不存在。"},
+          "en-US": {"resCode": "CHAT_NOT_FOUND", "resMsg": "The specified Chat does not exist."}
+        }
+      },
+      {
+        "id": "404-command-not-found",
+        "status": "404",
+        "tabLabel": "404 · COMMAND_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "name 不是当前目录中的精确命令名，包括目录返回后已经解绑的 Skill。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "COMMAND_NOT_FOUND", "resMsg": "指定的命令不存在。"},
+          "en-US": {"resCode": "COMMAND_NOT_FOUND", "resMsg": "The specified command does not exist."}
+        }
+      },
+      {
+        "status": "409",
+        "label": "Conflict",
+        "summary": "命令要求 idle，但 Session 正在执行；查询和 name 更新不受此限制。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "SESSION_BUSY", "resMsg": "当前命令暂不可用。"},
+          "en-US": {"resCode": "SESSION_BUSY", "resMsg": "The requested command is currently unavailable."}
+        }
+      },
+      {
+        "id": "503-command-unavailable",
+        "status": "503",
+        "tabLabel": "503 · COMMAND_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "Runtime 无法安全解析命令或建立 Skill 调用快照；内部细节不越过公共边界。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN", "Retry-After": "3"},
+        "bodies": {
+          "zh-CN": {"resCode": "COMMAND_UNAVAILABLE", "resMsg": "命令暂时不可用。"},
+          "en-US": {"resCode": "COMMAND_UNAVAILABLE", "resMsg": "The command is temporarily unavailable."}
+        }
+      },
+      {
+        "id": "502-runtime-command-failed",
+        "status": "502",
+        "tabLabel": "502 · 流建立前",
+        "label": "Bad Gateway",
+        "summary": "CampusClaw 接受事务失败或返回无法安全映射的响应；命令未被接受。",
+        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "RUNTIME_COMMAND_FAILED", "resMsg": "命令服务调用失败。"},
+          "en-US": {"resCode": "RUNTIME_COMMAND_FAILED", "resMsg": "The command service call failed."}
+        }
+      },
+      {
+        "id": "200-stream-error",
+        "status": "200",
+        "tabLabel": "200 · 流内异常",
+        "label": "SSE already started",
+        "summary": "流建立后执行失败；公共层先投影 command.failed，再发 stream.error 并关闭，不发 stream.end。",
+        "headers": {"Content-Type": "text/event-stream", "Cache-Control": "no-store", "Content-Language": "zh-CN"},
+        "bodies": {
+          "default": "id: 52\nevent: command.failed\ndata: {\"eventSeq\":52,\"commandId\":\"command-550e8400e29b41d4a716446655440002\",\"name\":\"skill:pdf\",\"resCode\":\"COMMAND_EXECUTION_FAILED\",\"resMsg\":\"命令执行失败。\",\"occurredAt\":\"2026-08-31T10:02:01Z\"}\n\nevent: stream.error\ndata: {\"resCode\":\"COMMAND_EXECUTION_FAILED\",\"resMsg\":\"命令执行失败。\"}\n"
+        }
+      }
+    ]
+  },
+  "review": {"questions": []}
+}

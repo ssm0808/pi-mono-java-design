@@ -1,0 +1,97 @@
+{
+  "operation": {
+    "shortName": "查询聊天命令",
+    "operationKey": "listChatCommands",
+    "method": "GET",
+    "path": "/chats/{chatId}/commands",
+    "summary": "返回当前 Chat 对应 Session 的结构化命令目录",
+    "description": "mate-service 在现有登录用户和 Chat 权限上下文中解析 chatId，经 ChatSessionResolver 得到稳定的一对一 sessionId，再调用 CampusClaw 内部命令目录。公共响应保留命令语义和双层可用性，但不暴露 sessionId、Agent/Skill ID、Skill 版本或受管文件路径。已知但暂时不可用的命令仍返回；目录失败是显式错误，交互层不得把 Slash 草稿静默降级为普通消息。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。",
+    "parameters": [
+      {"$ref": "parameters.chatId"},
+      {"$ref": "parameters.acceptLanguage"}
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体；不接受搜索、强制刷新或内部 Session 参数。",
+      "example": null
+    },
+    "responses": [
+      {
+        "status": "200",
+        "label": "OK",
+        "summary": "以 running Session 为例返回完整已知目录；model/thinking 可查不可改，compact/skill 不可执行。",
+        "headers": {"Cache-Control": "no-store", "Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {"name": "help", "kind": "builtin", "description": "列出命令或查询一条命令详情", "available": true, "unavailableCode": null, "input": {"mode": "optional", "available": true, "unavailableCode": null, "acceptsFiles": false, "placeholder": "command", "suggestions": ["help", "status", "name", "model", "thinking", "compact", "skills"]}},
+                {"name": "status", "kind": "builtin", "description": "查询 Session 状态、模型和 thinking", "available": true, "unavailableCode": null, "input": {"mode": "none", "available": false, "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED", "acceptsFiles": false, "placeholder": null, "suggestions": []}},
+                {"name": "name", "kind": "builtin", "description": "查询或更新 Session 名称", "available": true, "unavailableCode": null, "input": {"mode": "optional", "available": true, "unavailableCode": null, "acceptsFiles": false, "placeholder": "displayName", "suggestions": []}},
+                {"name": "model", "kind": "builtin", "description": "查询当前与可选模型，或切换模型", "available": true, "unavailableCode": null, "input": {"mode": "optional", "available": false, "unavailableCode": "SESSION_BUSY", "acceptsFiles": false, "placeholder": "modelId", "suggestions": ["claude-sonnet-4-5", "deepseek-v3-2"]}},
+                {"name": "thinking", "kind": "builtin", "description": "查询或切换深度思考", "available": true, "unavailableCode": null, "input": {"mode": "optional", "available": false, "unavailableCode": "SESSION_BUSY", "acceptsFiles": false, "placeholder": "on|off", "suggestions": ["on", "off"]}},
+                {"name": "compact", "kind": "builtin", "description": "执行一次手动上下文压缩", "available": false, "unavailableCode": "SESSION_BUSY", "input": {"mode": "none", "available": false, "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED", "acceptsFiles": false, "placeholder": null, "suggestions": []}},
+                {"name": "skills", "kind": "builtin", "description": "列出当前 Agent 绑定的 Skills", "available": true, "unavailableCode": null, "input": {"mode": "none", "available": false, "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED", "acceptsFiles": false, "placeholder": null, "suggestions": []}},
+                {"name": "skill:pdf", "kind": "skill", "description": "分析和生成 PDF 文档", "available": false, "unavailableCode": "SESSION_BUSY", "input": {"mode": "optional", "available": false, "unavailableCode": "SESSION_BUSY", "acceptsFiles": true, "placeholder": "request", "suggestions": []}}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "status": "400",
+        "label": "Bad Request",
+        "summary": "chatId 为空、过长或格式不符合公共 Chat 约束。",
+        "headers": {"Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "INVALID_CHAT_ID", "resMsg": "chatId 格式不正确。"},
+          "en-US": {"resCode": "INVALID_CHAT_ID", "resMsg": "The chatId format is invalid."}
+        }
+      },
+      {
+        "status": "401",
+        "label": "Unauthorized",
+        "summary": "用户未登录或访问令牌无效。",
+        "headers": {"Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "UNAUTHENTICATED", "resMsg": "请先登录。"},
+          "en-US": {"resCode": "UNAUTHENTICATED", "resMsg": "Authentication is required."}
+        }
+      },
+      {
+        "status": "403",
+        "label": "Forbidden",
+        "summary": "登录用户无权访问该 Chat；不得据此探测内部 Session。",
+        "headers": {"Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "CHAT_ACCESS_DENIED", "resMsg": "无权访问该 Chat。"},
+          "en-US": {"resCode": "CHAT_ACCESS_DENIED", "resMsg": "Access to the Chat is denied."}
+        }
+      },
+      {
+        "status": "404",
+        "label": "Not Found",
+        "summary": "Chat 不存在、已删除，或尚未建立有效 Runtime Session 映射。",
+        "headers": {"Content-Language": "zh-CN"},
+        "bodies": {
+          "zh-CN": {"resCode": "CHAT_NOT_FOUND", "resMsg": "指定的 Chat 不存在。"},
+          "en-US": {"resCode": "CHAT_NOT_FOUND", "resMsg": "The specified Chat does not exist."}
+        }
+      },
+      {
+        "status": "503",
+        "label": "Service Unavailable",
+        "summary": "CampusClaw 目录调用失败或当前 Agent 没有可用 complete 快照；UI 必须保留 Slash 草稿。",
+        "headers": {"Content-Language": "zh-CN", "Retry-After": "3"},
+        "bodies": {
+          "zh-CN": {"resCode": "COMMAND_CATALOG_UNAVAILABLE", "resMsg": "命令目录暂时不可用。"},
+          "en-US": {"resCode": "COMMAND_CATALOG_UNAVAILABLE", "resMsg": "The command catalog is temporarily unavailable."}
+        }
+      }
+    ]
+  },
+  "review": {"questions": []}
+}

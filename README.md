@@ -1,9 +1,9 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.0.0<br>
-> 整理日期：2026-08-26<br>
-> 整理基线：`d2b9b4b6f4762e0e9734c144e3eb3273959e7e26`<br>
-> 变更性质：信息架构调整，不改变各专题的设计语义、接口决策或源码观察结论
+> 导航版本：2.1.0<br>
+> 整理日期：2026-08-31<br>
+> Slash Command 设计基线：`27484974eb106a7e43910d8e542de52a72c58102`<br>
+> 变更性质：新增 Slash Command 通用模块及内部/公共 HTTP 契约
 
 本仓库维护 CampusClaw Runtime、mate-service 边界、pi-mono-java 目标设计，
 以及相关源码和产品研究。这是设计与契约资料仓库，不是产品源码仓库。
@@ -18,7 +18,8 @@
 | 文件、配置和 Model Manager 边界 | [服务与接口导航](./02-服务与接口/README.md) | 附件服务、共享配置、Provider 契约和 HTTP 测试 Agent |
 | 全产品测试与质量门禁 | [CampusClaw TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | 能力注册表、实时门禁、nightly 维护和测试防弱化 |
 | Session、Agent 元数据如何持久化 | [数据与存储导航](./03-数据与存储/README.md) | 会话记忆、Agent 元数据和通用数据库模式 |
-| Command 和 Skill Command 如何设计 | [命令与技能导航](./04-命令与技能/README.md) | [内置命令](./04-命令与技能/01-内置命令/README.md)、[技能命令](./04-命令与技能/02-技能命令/README.md) |
+| Command 和 Skill Command 如何设计 | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [内置命令](./04-命令与技能/01-内置命令/README.md)、[技能命令](./04-命令与技能/02-技能命令/README.md) |
+| 浏览器如何调用聊天命令 | [mate-service 聊天命令 API](./02-服务与接口/06-mate-service聊天命令API/README.md) | [公共 HTTP 评审页](./02-服务与接口/06-mate-service聊天命令API/chat-command-v1-review.html)、[内部 Runtime 1.43](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) |
 | 查看 pi 或主流 Agent 平台证据 | [研究资料导航](./05-研究资料/README.md) | 配置生成 Tool/Agent、Anthropic、pi Session 和官方文档 |
 | 查看 Agent / Tool / Skill 元数据草案 | [元数据草案导航](./06-元数据草案/README.md) | 三份 JSON 草案 |
 
@@ -29,7 +30,7 @@
 ├── 01-总体架构/             # Runtime、工具、并发、前端、日志
 ├── 02-服务与接口/           # 附件、共享配置、Provider、测试与质量
 ├── 03-数据与存储/           # Session 记忆、Agent 元数据、数据库模式
-├── 04-命令与技能/           # 内置命令与 Skill Command
+├── 04-命令与技能/           # Slash 通用模块、内置命令与 Skill Command
 ├── 05-研究资料/             # 源码分析、产品模型和官方资料
 └── 06-元数据草案/           # Agent、Tool、Skill JSON 草案
 ```
@@ -49,6 +50,10 @@
 Runtime HTTP V1 不维护 OpenAPI。CampusMate 附件服务仍维护独立的
 [`attachment-api.openapi.yaml`](./02-服务与接口/01-CampusMate附件服务/attachment-api.openapi.yaml)，
 两者不可混用。
+
+mate-service 聊天命令 API 采用相同的 source-first 维护方式，但保持独立公共认证和
+SSE 投影契约；其精确源与生成页位于
+[`02-服务与接口/06-mate-service聊天命令API/`](./02-服务与接口/06-mate-service聊天命令API/)。
 
 ## 4. 文档维护约定
 
@@ -85,4 +90,5 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.0 | 2026-08-31 | 新增 Slash Command 通用模块、Builtin/Skill 新设计、Runtime HTTP 1.43 和 mate-service 公共聊天命令 API 导航。 |
 | 2.0.0 | 2026-08-26 | 建立六个中文分类、中文专题目录和分类导航；将根目录平铺文档收敛到专题目录；同步更新契约、图纸和脚本路径 |

@@ -1,0 +1,138 @@
+@startuml slash_command_architecture
+title CampusClaw Slash Command Target Architecture
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/command/SlashCommandRegistry.java:21-49
+' Source evidence: deepseek-harness@141eb6fe packages/interaction/commands/src/index.ts:250-300
+' Observed behavior: CampusClaw has an unmanaged mutable registry and direct text execution.
+' Target design: HTTP adapters submit structured invocations to immutable and dynamic command sources.
+' Design reason: contributors and strategy handlers let commands evolve without a central switch.
+
+actor "Interaction client" as Client
+component "CommandController" as Controller
+component "CommandCatalogService" as Catalog
+component "CommandExecutionService" as Execution
+component "CompositeCommandRegistry" as Registry
+component "BuiltinCommandSource\nimmutable index" as Builtin
+component "SkillCommandSource\ndynamic view" as Skill
+component "CommandAdmissionPolicy" as Admission
+component "CommandHandler" as Handler
+component "Narrow application services" as Services
+
+Client --> Controller : structured name, arguments, fileIds
+Controller --> Catalog : list(context)
+Controller --> Execution : execute(invocation)
+Catalog --> Registry
+Execution --> Registry
+Registry --> Builtin
+Registry --> Skill
+Execution --> Admission
+Execution --> Handler
+Handler --> Services
+@enduml
+
+@startuml command_registration
+title Registration and Dispatch Without Central Branches
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/command/SlashCommandRegistry.java:22-37
+' Source evidence: opencode@849c2598 packages/opencode/src/command/index.ts:65-169
+' Observed behavior: current registries aggregate definitions by name and detect or skip collisions.
+' Target design: builtins fail startup on duplicates while skills occupy the skill: namespace.
+
+interface CommandDefinitionSource {
+  +list(context)
+  +find(context, name)
+}
+interface BuiltinCommandContributor {
+  +definition()
+}
+class ImmutableBuiltinCommandSource
+class SkillCommandSource
+class CompositeCommandRegistry
+class CommandDefinition
+class CommandDescriptor
+interface CommandHandler {
+  +execute(invocation)
+}
+
+BuiltinCommandContributor "1..*" --> ImmutableBuiltinCommandSource : startup collection
+ImmutableBuiltinCommandSource ..|> CommandDefinitionSource
+SkillCommandSource ..|> CommandDefinitionSource
+CompositeCommandRegistry o-- CommandDefinitionSource
+CommandDefinition *-- CommandDescriptor
+CommandDefinition --> CommandHandler
+
+note right of ImmutableBuiltinCommandSource
+Duplicate builtin name
+fails application startup.
+end note
+
+note right of SkillCommandSource
+One dynamic source exposes
+skill:[a-z0-9-]+.
+end note
+@enduml
+
+@startuml interaction_routing
+title Interaction Layer Slash Routing
+skinparam shadowing false
+
+' Source evidence: codex@be33f80b codex-rs/tui/src/chatwidget/slash_dispatch.rs:900-965
+' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/modes/interactive/interactive-mode.ts:675-772
+' Observed behavior: terminal harnesses parse and dispatch slash input inside their interaction host.
+' Architecture change: CampusClaw keeps parsing in the HTTP client and sends structured commands.
+
+start
+:User submits draft;
+if (First character is slash?) then (no)
+  :Send ordinary user message;
+  stop
+endif
+:Fetch command catalog;
+if (Catalog loaded?) then (no)
+  :Keep slash draft and show error;
+  stop
+endif
+:Parse exact lowercase name\nthrough first whitespace;
+:Preserve remaining argument text;
+if (Exact catalog match?) then (yes)
+  :POST structured Command request;
+else (no)
+  :Send ordinary user message;
+endif
+stop
+@enduml
+
+@startuml sidecar_history
+title Branch History With Sidecar Entries
+skinparam shadowing false
+
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml:132-190
+' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/resources/db/gaussdb/install/session_schema.sql:99-157
+' Observed behavior: current history reads only ancestors of active_leaf_id ordered by entry_seq.
+' Target design: command lifecycle and name events are sidecars anchored to active-path entries.
+
+rectangle "Active branch" {
+  object "user.message\nseq 11" as U
+  object "assistant.message.completed\nseq 15\nactive leaf" as A
+  U --> A : parent_id
+}
+rectangle "Sidecars" {
+  object "command.started\nseq 12" as CS
+  object "session.name.changed\nseq 13" as NC
+  object "command.completed\nseq 14" as CC
+}
+
+U --> CS : anchor only
+U --> NC : anchor only
+U --> CC : anchor only
+
+note bottom
+Sidecars do not replace active_leaf_id.
+GET Events merges active-path entries and sidecars by entry_seq.
+Model context projection ignores command.* and session.name.changed.
+end note
+@enduml

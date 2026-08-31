@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>mate-service Chat Command API - API Review</title>
+  <style>
+:root {
+  color-scheme: light dark;
+  background: light-dark(#f7f8fa, #11151b);
+}
+body {
+  margin: 0;
+  padding: 16px;
+  background: inherit;
+}
+main {
+  width: min(1400px, 100%);
+  margin: 0 auto;
+}
+.company-api-review {
+  width: 100%;
+  margin-block-end: 16px;
+  color: light-dark(#17202a, #edf2f7);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.company-api-review * { box-sizing: border-box; }
+.company-api-review h2,
+.company-api-review h3,
+.company-api-review p { margin: 0; }
+.company-api-review code,
+.company-api-review pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.company-api-review .api-shell {
+  overflow: hidden;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 12px;
+  background: light-dark(#f7f8fa, #11151b);
+}
+.company-api-review .topbar,
+.company-api-review .operation-head,
+.company-api-review .row,
+.company-api-review .tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.company-api-review .topbar {
+  justify-content: space-between;
+  padding: 15px 17px;
+  border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+  background: light-dark(#ffffff, #1a2028);
+}
+.company-api-review h2 { font-size: 18px; font-weight: 500; }
+.company-api-review h3 { margin-bottom: 10px; font-size: 14px; font-weight: 500; }
+.company-api-review .tag,
+.company-api-review .operation-name {
+  padding: 2px 8px;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 999px;
+  background: light-dark(#f2f5f8, #222a34);
+  font-size: 12px;
+}
+.company-api-review .base,
+.company-api-review .muted,
+.company-api-review .operation-key {
+  color: light-dark(#5f6b78, #aab4c0);
+  font-size: 13px;
+}
+.company-api-review .operation {
+  margin: 15px;
+  overflow: hidden;
+  border: 1px solid light-dark(#1f883d, #3fb950);
+  border-radius: 9px;
+  background: light-dark(#ffffff, #1a2028);
+}
+.company-api-review .operation-head {
+  padding: 13px 15px;
+  border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+  background: light-dark(#eaf8ee, #15331f);
+}
+.company-api-review .method {
+  padding: 6px 11px;
+  border-radius: 5px;
+  background: light-dark(#1f883d, #3fb950);
+  color: light-dark(#ffffff, #07150b);
+  font-size: 13px;
+  font-weight: 500;
+}
+.company-api-review .operation-delete { border-color: light-dark(#cf222e, #f85149); }
+.company-api-review .operation-delete .operation-head { background: light-dark(#fff1f0, #3a1d1d); }
+.company-api-review .method-delete { background: light-dark(#cf222e, #f85149); color: #ffffff; }
+.company-api-review .path { overflow-wrap: anywhere; font-size: 14px; font-weight: 500; }
+.company-api-review .section {
+  padding: 15px;
+  border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+}
+.company-api-review .section:last-child { border-bottom: 0; }
+.company-api-review .section-title { justify-content: space-between; }
+.company-api-review .description { line-height: 1.6; }
+.company-api-review table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.company-api-review th,
+.company-api-review td {
+  padding: 8px;
+  border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+  text-align: left;
+  vertical-align: top;
+}
+.company-api-review th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
+.company-api-review tbody tr:last-child td { border-bottom: 0; }
+.company-api-review pre {
+  margin: 10px 0 0;
+  padding: 13px;
+  overflow-x: auto;
+  border-radius: 7px;
+  background: light-dark(#eef2f6, #0d1117);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.company-api-review button {
+  appearance: none;
+  padding: 7px 10px;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 6px;
+  background: light-dark(#ffffff, #1a2028);
+  color: light-dark(#17202a, #edf2f7);
+  font: inherit;
+  cursor: pointer;
+}
+.company-api-review button[aria-selected="true"],
+.company-api-review button[aria-pressed="true"] {
+  border-color: light-dark(#0969da, #58a6ff);
+  background: light-dark(#eaf3ff, #132b46);
+  color: light-dark(#0969da, #58a6ff);
+}
+.company-api-review .empty { margin-top: 8px; }
+.company-api-review details { margin-top: 9px; }
+.company-api-review summary { cursor: pointer; font-size: 13px; font-weight: 500; line-height: 1.5; }
+.company-api-review .static-response {
+  padding: 8px 0;
+  border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+}
+.company-api-review .static-response:last-child { border-bottom: 0; }
+.company-api-review .static-choice { margin-left: 8px; }
+@media (max-width: 680px) {
+  body { padding: 8px; }
+  .company-api-review .operation { margin-right: 9px; margin-left: 9px; }
+  .company-api-review .table-wrap { overflow: visible; }
+  .company-api-review .table-wrap thead { display: none; }
+  .company-api-review .table-wrap table,
+  .company-api-review .table-wrap tbody,
+  .company-api-review .table-wrap tr,
+  .company-api-review .table-wrap td { display: block; width: 100%; }
+  .company-api-review .table-wrap tr {
+    padding: 7px 0;
+    border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+  }
+  .company-api-review .table-wrap tbody tr:last-child { border-bottom: 0; }
+  .company-api-review .table-wrap td {
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+    gap: 8px;
+    padding: 5px 0;
+    overflow-wrap: anywhere;
+    border-bottom: 0;
+  }
+  .company-api-review .table-wrap td::before {
+    content: attr(data-label);
+    color: light-dark(#5f6b78, #aab4c0);
+    font-weight: 500;
+  }
+  .company-api-review pre {
+    overflow-x: visible;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+}
+  </style>
+</head>
+<body>
+  <!-- Generated from 接口契约/common.json and 接口契约/操作/*.json. Do not edit this HTML directly. -->
+  <main>
+<section class="company-api-review" data-operation-review="listChatCommands" data-operation-index="0"><div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>mate-service Chat Command API</h2><span class="tag">1.0.0</span><span class="tag">Public · 已确认 · target-only</span><span class="tag">字段：lowerCamelCase</span><span class="tag">Header：保留原名</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-get"><header class="operation-head"><span class="method method-get">GET</span><code class="path">/chats/{chatId}/commands</code><span class="muted">返回当前 Chat 对应 Session 的结构化命令目录</span><span class="operation-name">查询聊天命令</span><code class="operation-key">listChatCommands</code></header><section class="section"><h3>作用</h3><p class="description">mate-service 在现有登录用户和 Chat 权限上下文中解析 chatId，经 ChatSessionResolver 得到稳定的一对一 sessionId，再调用 CampusClaw 内部命令目录。公共响应保留命令语义和双层可用性，但不暴露 sessionId、Agent/Skill ID、Skill 版本或受管文件路径。已知但暂时不可用的命令仍返回；目录失败是显式错误，交互层不得把 Slash 草稿静默降级为普通消息。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。</p></section><section class="section contract-detail auth-section"><h3>调用上下文 Header</h3><details class="static-choice" open><summary>登录用户 Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer &lt;USER_ACCESS_TOKEN&gt;</td><td data-label="说明">mate-service 验证登录用户并建立 Chat 权限上下文；不会原样转发到 CampusClaw</td></tr></tbody></table></div><pre><code>GET /mate-service/v1/chats/{chatId}/commands
+Authorization: Bearer &lt;USER_ACCESS_TOKEN&gt;</code></pre></details></section><section class="section contract-detail request-section"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">chatId</td><td data-label="必填">是</td><td data-label="约束">string, 1..128</td><td data-label="说明">用户有权访问的公共 Chat 标识；mate-service 通过稳定一对一映射解析内部 Session</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US</td><td data-label="说明">异常消息语言；缺失或不支持时回退 en-US</td></tr></tbody></table></div><p class="muted empty">无请求体；不接受搜索、强制刷新或内部 Session 参数。</p></section><section class="section contract-detail response-section"><h3>响应</h3><details class="static-response" open><summary><code>200</code> 200 OK — 以 running Session 为例返回完整已知目录；model/thinking 可查不可改，compact/skill 不可执行。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;commands&quot;: [
+      {
+        &quot;name&quot;: &quot;help&quot;,
+        &quot;kind&quot;: &quot;builtin&quot;,
+        &quot;description&quot;: &quot;列出命令或查询一条命令详情&quot;,
+        &quot;available&quot;: true,
+        &quot;unavailableCode&quot;: null,
+        &quot;input&quot;: {
+          &quot;mode&quot;: &quot;optional&quot;,
+          &quot;available&quot;: true,
+          &quot;unavailableCode&quot;: null,
+          &quot;acceptsFiles&quot;: false,
+          &quot;placeholder&quot;: &quot;command&quot;,
+          &quot;suggestions&quot;: [
+            &quot;help&quot;,
+            &quot;status&quot;,
+            &quot;name&quot;,
+            &quot;model&quot;,
+            &quot;thinking&quot;,
+            &quot;compact&quot;,
+            &quot;skills&quot;
+          ]
+        }
+      },
+      {
+        &quot;name&quot;: &quot;status&quot;,
+        &quot;kind&quot;: &quot;builtin&quot;,
+        &quot;description&quot;: &quot;查询 Session 状态、模型和 thinking&quot;,
+        &quot;available&quot;: true,
+        &quot;unavailableCode&quot;: null,
+        &quot;input&quot;: {
+          &quot;mode&quot;: &quot;none&quot;,
+          &quot;available&quot;: false,
+          &quot;unavailableCode&quot;: &quot;COMMAND_ARGUMENTS_NOT_SUPPORTED&quot;,
+          &quot;acceptsFiles&quot;: false,
+          &quot;placeholder&quot;: null,
+          &quot;suggestions&quot;: []
+        }
+      },
+      {
+        &quot;name&quot;: &quot;name&quot;,
+        &quot;kind&quot;: &quot;builtin&quot;,
+        &quot;description&quot;: &quot;查询或更新 Session 名称&quot;,
+        &quot;available&quot;: true,
+        &quot;unavailableCode&quot;: null,
+        &quot;input&quot;: {
+          &quot;mode&quot;: &quot;optional&quot;,
+          &quot;available&quot;: true,
+          &quot;unavailableCode&quot;: null,
+          &quot;acceptsFiles&quot;: false,
+          &quot;placeholder&quot;: &quot;displayName&quot;,
+          &quot;suggestions&quot;: []
+        }
+      },
+      {
+        &quot;name&quot;: &quot;model&quot;,
+        &quot;kind&quot;: &quot;builtin&quot;,
+        &quot;description&quot;: &quot;查询当前与可选模型，或切换模型&quot;,
+        &quot;available&quot;: true,
+        &quot;unavailableCode&quot;: null,
+        &quot;input&quot;: {
+          &quot;mode&quot;: &quot;optional&quot;,
+          &quot;available&quot;: false,
+          &quot;unavailableCode&quot;: &quot;SESSION_BUSY&quot;,
+          &quot;acceptsFiles&quot;: false,
+          &quot;placeholder&quot;: &quot;modelId&quot;,
+          &quot;suggestions&quot;: [
+            &quot;claude-sonnet-4-5&quot;,
+            &quot;deepseek-v3-2&quot;
+          ]
+        }
+      },
+      {
+        &quot;name&quot;: &quot;thinking&quot;,
+        &quot;kind&quot;: &quot;builtin&quot;,
+        &quot;description&quot;: &quot;查询或切换深度思考&quot;,
+        &quot;available&quot;: true,
+        &quot;unavailableCode&quot;: null,
+        &quot;input&quot;: {
+          &quot;mode&quot;: &quot;optional&quot;,
+          &quot;available&quot;: false,
+          &quot;unavailableCode&quot;: &quot;SESSION_BUSY&quot;,
+          &quot;acceptsFiles&quot;: false,
+          &quot;placeholder&quot;: &quot;on|off&quot;,
+          &quot;suggestions&quot;: [
+            &quot;on&quot;,
+            &quot;off&quot;
+          ]
+        }
+      },
+      {
+        &quot;name&quot;: &quot;compact&quot;,
+        &quot;kind&quot;: &quot;builtin&quot;,
+        &quot;description&quot;: &quot;执行一次手动上下文压缩&quot;,
+        &quot;available&quot;: false,
+        &quot;unavailableCode&quot;: &quot;SESSION_BUSY&quot;,
+        &quot;input&quot;: {
+          &quot;mode&quot;: &quot;none&quot;,
+          &quot;available&quot;: false,
+          &quot;unavailableCode&quot;: &quot;COMMAND_ARGUMENTS_NOT_SUPPORTED&quot;,
+          &quot;acceptsFiles&quot;: false,
+          &quot;placeholder&quot;: null,
+          &quot;suggestions&quot;: []
+        }
+      },
+      {
+        &quot;name&quot;: &quot;skills&quot;,
+        &quot;kind&quot;: &quot;builtin&quot;,
+        &quot;description&quot;: &quot;列出当前 Agent 绑定的 Skills&quot;,
+        &quot;available&quot;: true,
+        &quot;unavailableCode&quot;: null,
+        &quot;input&quot;: {
+          &quot;mode&quot;: &quot;none&quot;,
+          &quot;available&quot;: false,
+          &quot;unavailableCode&quot;: &quot;COMMAND_ARGUMENTS_NOT_SUPPORTED&quot;,
+          &quot;acceptsFiles&quot;: false,
+          &quot;placeholder&quot;: null,
+          &quot;suggestions&quot;: []
+        }
+      },
+      {
+        &quot;name&quot;: &quot;skill:pdf&quot;,
+        &quot;kind&quot;: &quot;skill&quot;,
+        &quot;description&quot;: &quot;分析和生成 PDF 文档&quot;,
+        &quot;available&quot;: false,
+        &quot;unavailableCode&quot;: &quot;SESSION_BUSY&quot;,
+        &quot;input&quot;: {
+          &quot;mode&quot;: &quot;optional&quot;,
+          &quot;available&quot;: false,
+          &quot;unavailableCode&quot;: &quot;SESSION_BUSY&quot;,
+          &quot;acceptsFiles&quot;: true,
+          &quot;placeholder&quot;: &quot;request&quot;,
+          &quot;suggestions&quot;: []
+        }
+      }
+    ]
+  }
+}</code></pre></details></details><details class="static-response"><summary><code>400</code> 400 Bad Request — chatId 为空、过长或格式不符合公共 Chat 约束。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;INVALID_CHAT_ID&quot;,
+  &quot;resMsg&quot;: &quot;chatId 格式不正确。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;INVALID_CHAT_ID&quot;,
+  &quot;resMsg&quot;: &quot;The chatId format is invalid.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>401</code> 401 Unauthorized — 用户未登录或访问令牌无效。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;UNAUTHENTICATED&quot;,
+  &quot;resMsg&quot;: &quot;请先登录。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;UNAUTHENTICATED&quot;,
+  &quot;resMsg&quot;: &quot;Authentication is required.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>403</code> 403 Forbidden — 登录用户无权访问该 Chat；不得据此探测内部 Session。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ACCESS_DENIED&quot;,
+  &quot;resMsg&quot;: &quot;无权访问该 Chat。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ACCESS_DENIED&quot;,
+  &quot;resMsg&quot;: &quot;Access to the Chat is denied.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404</code> 404 Not Found — Chat 不存在、已删除，或尚未建立有效 Runtime Session 映射。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;指定的 Chat 不存在。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;The specified Chat does not exist.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>503</code> 503 Service Unavailable — CampusClaw 目录调用失败或当前 Agent 没有可用 complete 快照；UI 必须保留 Slash 草稿。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Language: zh-CN
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;COMMAND_CATALOG_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;命令目录暂时不可用。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Language: en-US
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;COMMAND_CATALOG_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;The command catalog is temporarily unavailable.&quot;
+}</code></pre></details></details></section></article></div></div></section><section class="company-api-review" data-operation-review="executeChatCommand" data-operation-index="1"><div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>mate-service Chat Command API</h2><span class="tag">1.0.0</span><span class="tag">Public · 已确认 · target-only</span><span class="tag">字段：lowerCamelCase</span><span class="tag">Header：保留原名</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-post"><header class="operation-head"><span class="method method-post">POST</span><code class="path">/chats/{chatId}/command</code><span class="muted">执行结构化 Builtin 或 Skill Command 并返回公共 SSE</span><span class="operation-name">执行聊天命令</span><code class="operation-key">executeChatCommand</code></header><section class="section"><h3>作用</h3><p class="description">交互层提交目录中精确命中的 name、arguments 和 fileIds；name 不含 Slash，mate-service 不接受未经解析的整段 Slash 文本。mate-service 在登录用户和 Chat 权限上下文中解析稳定 Session 映射，以独立内部凭据调用 CampusClaw，再解析内部 SSE、移除 sessionId、entryId、Agent/Skill ID、Skill 版本、受管路径和私有快照字段后重新编码公共事件。它不得字节级透明转发。arguments/fileIds 省略时由 Service 统一归一为空字符串和空列表，请求拒绝未知字段。Skill 与 Compact 被接受后，浏览器断线不会自动中止 CampusClaw 执行，客户端应从公共持久化历史对账，不得盲目重放 POST。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。</p></section><section class="section contract-detail auth-section"><h3>调用上下文 Header</h3><details class="static-choice" open><summary>登录用户 Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer &lt;USER_ACCESS_TOKEN&gt;</td><td data-label="说明">mate-service 验证登录用户并建立 Chat 权限上下文；不会原样转发到 CampusClaw</td></tr></tbody></table></div><pre><code>POST /mate-service/v1/chats/{chatId}/command
+Authorization: Bearer &lt;USER_ACCESS_TOKEN&gt;</code></pre></details></section><section class="section contract-detail request-section"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">chatId</td><td data-label="必填">是</td><td data-label="约束">string, 1..128</td><td data-label="说明">用户有权访问的公共 Chat 标识；mate-service 通过稳定一对一映射解析内部 Session</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US</td><td data-label="说明">流建立前 ResultBean 与流内错误消息语言；缺失或不支持时回退 en-US</td></tr></tbody></table></div><p class="muted empty">name 必填并严格匹配目录小写名称，不得含 Slash。arguments 最多 262144 字符；fileIds 最多 32 个、元素唯一且保留顺序。Builtin 不接受附件，Skill 接受与普通消息相同附件。不接受 chatId、sessionId、modelId、thinking、metadata 或 Idempotency-Key。</p><pre><code>{
+  &quot;name&quot;: &quot;skill:pdf&quot;,
+  &quot;arguments&quot;: &quot;分析附件并总结&quot;,
+  &quot;fileIds&quot;: [
+    &quot;file-550e8400e29b41d4a716446655440010&quot;
+  ]
+}</code></pre></section><section class="section contract-detail response-section"><h3>响应</h3><details class="static-response" open><summary><code>200 · Builtin 成功</code> 200 OK — 以 name 有效更新为例；公共事件不含 Runtime Session 或 Entry 标识。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
+Cache-Control: no-store
+Content-Language: zh-CN
+
+id: 31
+event: command.started
+data: {&quot;eventSeq&quot;:31,&quot;commandId&quot;:&quot;command-550e8400e29b41d4a716446655440000&quot;,&quot;name&quot;:&quot;name&quot;,&quot;kind&quot;:&quot;builtin&quot;,&quot;occurredAt&quot;:&quot;2026-08-31T10:00:00Z&quot;}
+
+id: 32
+event: session.name.changed
+data: {&quot;eventSeq&quot;:32,&quot;previousDisplayName&quot;:null,&quot;displayName&quot;:&quot;园区网络故障分析&quot;,&quot;resourceVersion&quot;:7,&quot;occurredAt&quot;:&quot;2026-08-31T10:00:00Z&quot;}
+
+id: 33
+event: command.completed
+data: {&quot;eventSeq&quot;:33,&quot;commandId&quot;:&quot;command-550e8400e29b41d4a716446655440000&quot;,&quot;name&quot;:&quot;name&quot;,&quot;result&quot;:{&quot;text&quot;:&quot;Session 名称已更新为：园区网络故障分析&quot;,&quot;sourceEventSeq&quot;:32},&quot;occurredAt&quot;:&quot;2026-08-31T10:00:00Z&quot;}
+
+event: stream.end
+data: {&quot;reason&quot;:&quot;completed&quot;}
+</code></pre></details></details><details class="static-response"><summary><code>200 · Skill 成功</code> 200 OK — Skill 参数和附件作为公共用户消息投影；Skill 快照、内部 Entry ID 和 Session ID 不公开。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
+Cache-Control: no-store
+Content-Language: zh-CN
+
+id: 41
+event: user.message
+data: {&quot;eventSeq&quot;:41,&quot;commandId&quot;:&quot;command-550e8400e29b41d4a716446655440001&quot;,&quot;commandName&quot;:&quot;skill:pdf&quot;,&quot;message&quot;:&quot;分析附件并总结&quot;,&quot;fileIds&quot;:[&quot;file-550e8400e29b41d4a716446655440010&quot;],&quot;occurredAt&quot;:&quot;2026-08-31T10:01:00Z&quot;}
+
+id: 43
+event: command.started
+data: {&quot;eventSeq&quot;:43,&quot;commandId&quot;:&quot;command-550e8400e29b41d4a716446655440001&quot;,&quot;name&quot;:&quot;skill:pdf&quot;,&quot;kind&quot;:&quot;skill&quot;,&quot;occurredAt&quot;:&quot;2026-08-31T10:01:00Z&quot;}
+
+event: assistant.message.started
+data: {&quot;role&quot;:&quot;assistant&quot;}
+
+event: assistant.message.delta
+data: {&quot;delta&quot;:{&quot;type&quot;:&quot;text&quot;,&quot;text&quot;:&quot;附件包含三类关键信息。&quot;}}
+
+id: 44
+event: assistant.message.completed
+data: {&quot;eventSeq&quot;:44,&quot;message&quot;:{&quot;role&quot;:&quot;assistant&quot;,&quot;content&quot;:[{&quot;type&quot;:&quot;text&quot;,&quot;text&quot;:&quot;附件包含三类关键信息。&quot;}]},&quot;finishReason&quot;:&quot;stop&quot;,&quot;occurredAt&quot;:&quot;2026-08-31T10:01:03Z&quot;}
+
+id: 45
+event: command.completed
+data: {&quot;eventSeq&quot;:45,&quot;commandId&quot;:&quot;command-550e8400e29b41d4a716446655440001&quot;,&quot;name&quot;:&quot;skill:pdf&quot;,&quot;result&quot;:{&quot;text&quot;:&quot;Skill 执行完成。&quot;,&quot;sourceEventSeq&quot;:44},&quot;occurredAt&quot;:&quot;2026-08-31T10:01:03Z&quot;}
+
+event: session.status.idle
+data: {&quot;status&quot;:&quot;idle&quot;}
+
+event: stream.end
+data: {&quot;reason&quot;:&quot;completed&quot;}
+</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_CHAT_ID</code> 400 Bad Request — chatId 不符合公共 Chat 约束。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;INVALID_CHAT_ID&quot;,
+  &quot;resMsg&quot;: &quot;chatId 格式不正确。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;INVALID_CHAT_ID&quot;,
+  &quot;resMsg&quot;: &quot;The chatId format is invalid.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_COMMAND_REQUEST</code> 400 Bad Request — JSON 非法、包含未知字段、字段越界、Builtin 携带附件或参数形状不符合命令定义。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;INVALID_COMMAND_REQUEST&quot;,
+  &quot;resMsg&quot;: &quot;命令请求内容不符合约束。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;INVALID_COMMAND_REQUEST&quot;,
+  &quot;resMsg&quot;: &quot;The command request does not satisfy the required constraints.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>401 · UNAUTHENTICATED</code> 401 Unauthorized — 用户未登录或访问令牌无效。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;UNAUTHENTICATED&quot;,
+  &quot;resMsg&quot;: &quot;请先登录。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;UNAUTHENTICATED&quot;,
+  &quot;resMsg&quot;: &quot;Authentication is required.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>403 · CHAT_ACCESS_DENIED</code> 403 Forbidden — 用户无权执行该 Chat 的命令。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ACCESS_DENIED&quot;,
+  &quot;resMsg&quot;: &quot;无权访问该 Chat。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ACCESS_DENIED&quot;,
+  &quot;resMsg&quot;: &quot;Access to the Chat is denied.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404 · CHAT_NOT_FOUND</code> 404 Not Found — Chat 不存在、已删除，或没有有效 Session 映射。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;指定的 Chat 不存在。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;The specified Chat does not exist.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404 · COMMAND_NOT_FOUND</code> 404 Not Found — name 不是当前目录中的精确命令名，包括目录返回后已经解绑的 Skill。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;COMMAND_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;指定的命令不存在。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;COMMAND_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;The specified command does not exist.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>409</code> 409 Conflict — 命令要求 idle，但 Session 正在执行；查询和 name 更新不受此限制。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SESSION_BUSY&quot;,
+  &quot;resMsg&quot;: &quot;当前命令暂不可用。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SESSION_BUSY&quot;,
+  &quot;resMsg&quot;: &quot;The requested command is currently unavailable.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>503 · COMMAND_UNAVAILABLE</code> 503 Service Unavailable — Runtime 无法安全解析命令或建立 Skill 调用快照；内部细节不越过公共边界。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;COMMAND_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;命令暂时不可用。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;COMMAND_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;The command is temporarily unavailable.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>502 · 流建立前</code> 502 Bad Gateway — CampusClaw 接受事务失败或返回无法安全映射的响应；命令未被接受。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;RUNTIME_COMMAND_FAILED&quot;,
+  &quot;resMsg&quot;: &quot;命令服务调用失败。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;RUNTIME_COMMAND_FAILED&quot;,
+  &quot;resMsg&quot;: &quot;The command service call failed.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>200 · 流内异常</code> 200 SSE already started — 流建立后执行失败；公共层先投影 command.failed，再发 stream.error 并关闭，不发 stream.end。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
+Cache-Control: no-store
+Content-Language: zh-CN
+
+id: 52
+event: command.failed
+data: {&quot;eventSeq&quot;:52,&quot;commandId&quot;:&quot;command-550e8400e29b41d4a716446655440002&quot;,&quot;name&quot;:&quot;skill:pdf&quot;,&quot;resCode&quot;:&quot;COMMAND_EXECUTION_FAILED&quot;,&quot;resMsg&quot;:&quot;命令执行失败。&quot;,&quot;occurredAt&quot;:&quot;2026-08-31T10:02:01Z&quot;}
+
+event: stream.error
+data: {&quot;resCode&quot;:&quot;COMMAND_EXECUTION_FAILED&quot;,&quot;resMsg&quot;:&quot;命令执行失败。&quot;}
+</code></pre></details></details></section></article></div></div></section>
+  </main>
+  <script type="application/json" id="api-review-models">[{"api":{"title":"mate-service Chat Command API","version":"1.0.0","basePath":"/mate-service/v1","visibility":"Public · 已确认 · target-only","fieldNaming":"lowerCamelCase","headerNaming":"保留原名"},"operation":{"shortName":"查询聊天命令","operationKey":"listChatCommands","method":"GET","path":"/chats/{chatId}/commands","summary":"返回当前 Chat 对应 Session 的结构化命令目录","description":"mate-service 在现有登录用户和 Chat 权限上下文中解析 chatId，经 ChatSessionResolver 得到稳定的一对一 sessionId，再调用 CampusClaw 内部命令目录。公共响应保留命令语义和双层可用性，但不暴露 sessionId、Agent/Skill ID、Skill 版本或受管文件路径。已知但暂时不可用的命令仍返回；目录失败是显式错误，交互层不得把 Slash 草稿静默降级为普通消息。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。","parameters":[{"in":"path","name":"chatId","required":true,"schema":"string, 1..128","description":"用户有权访问的公共 Chat 标识；mate-service 通过稳定一对一映射解析内部 Session"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不接受搜索、强制刷新或内部 Session 参数。","example":null},"responses":[{"status":"200","label":"OK","summary":"以 running Session 为例返回完整已知目录；model/thinking 可查不可改，compact/skill 不可执行。","headers":{"Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"0","resMsg":"success","result":{"commands":[{"name":"help","kind":"builtin","description":"列出命令或查询一条命令详情","available":true,"unavailableCode":null,"input":{"mode":"optional","available":true,"unavailableCode":null,"acceptsFiles":false,"placeholder":"command","suggestions":["help","status","name","model","thinking","compact","skills"]}},{"name":"status","kind":"builtin","description":"查询 Session 状态、模型和 thinking","available":true,"unavailableCode":null,"input":{"mode":"none","available":false,"unavailableCode":"COMMAND_ARGUMENTS_NOT_SUPPORTED","acceptsFiles":false,"placeholder":null,"suggestions":[]}},{"name":"name","kind":"builtin","description":"查询或更新 Session 名称","available":true,"unavailableCode":null,"input":{"mode":"optional","available":true,"unavailableCode":null,"acceptsFiles":false,"placeholder":"displayName","suggestions":[]}},{"name":"model","kind":"builtin","description":"查询当前与可选模型，或切换模型","available":true,"unavailableCode":null,"input":{"mode":"optional","available":false,"unavailableCode":"SESSION_BUSY","acceptsFiles":false,"placeholder":"modelId","suggestions":["claude-sonnet-4-5","deepseek-v3-2"]}},{"name":"thinking","kind":"builtin","description":"查询或切换深度思考","available":true,"unavailableCode":null,"input":{"mode":"optional","available":false,"unavailableCode":"SESSION_BUSY","acceptsFiles":false,"placeholder":"on|off","suggestions":["on","off"]}},{"name":"compact","kind":"builtin","description":"执行一次手动上下文压缩","available":false,"unavailableCode":"SESSION_BUSY","input":{"mode":"none","available":false,"unavailableCode":"COMMAND_ARGUMENTS_NOT_SUPPORTED","acceptsFiles":false,"placeholder":null,"suggestions":[]}},{"name":"skills","kind":"builtin","description":"列出当前 Agent 绑定的 Skills","available":true,"unavailableCode":null,"input":{"mode":"none","available":false,"unavailableCode":"COMMAND_ARGUMENTS_NOT_SUPPORTED","acceptsFiles":false,"placeholder":null,"suggestions":[]}},{"name":"skill:pdf","kind":"skill","description":"分析和生成 PDF 文档","available":false,"unavailableCode":"SESSION_BUSY","input":{"mode":"optional","available":false,"unavailableCode":"SESSION_BUSY","acceptsFiles":true,"placeholder":"request","suggestions":[]}}]}}}},{"status":"400","label":"Bad Request","summary":"chatId 为空、过长或格式不符合公共 Chat 约束。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_CHAT_ID","resMsg":"chatId 格式不正确。"},"en-US":{"resCode":"INVALID_CHAT_ID","resMsg":"The chatId format is invalid."}}},{"status":"401","label":"Unauthorized","summary":"用户未登录或访问令牌无效。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"请先登录。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Authentication is required."}}},{"status":"403","label":"Forbidden","summary":"登录用户无权访问该 Chat；不得据此探测内部 Session。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"无权访问该 Chat。"},"en-US":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"Access to the Chat is denied."}}},{"status":"404","label":"Not Found","summary":"Chat 不存在、已删除，或尚未建立有效 Runtime Session 映射。","headers":{"Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_NOT_FOUND","resMsg":"指定的 Chat 不存在。"},"en-US":{"resCode":"CHAT_NOT_FOUND","resMsg":"The specified Chat does not exist."}}},{"status":"503","label":"Service Unavailable","summary":"CampusClaw 目录调用失败或当前 Agent 没有可用 complete 快照；UI 必须保留 Slash 草稿。","headers":{"Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"COMMAND_CATALOG_UNAVAILABLE","resMsg":"命令目录暂时不可用。"},"en-US":{"resCode":"COMMAND_CATALOG_UNAVAILABLE","resMsg":"The command catalog is temporarily unavailable."}}}],"requestHeaderExamples":[{"id":"user-token","label":"登录用户 Header 示例","preferred":true,"headers":[{"name":"Authorization","value":"Bearer \u003cUSER_ACCESS_TOKEN\u003e","required":true,"description":"mate-service 验证登录用户并建立 Chat 权限上下文；不会原样转发到 CampusClaw"}]}]},"review":{"questions":[]}},{"api":{"title":"mate-service Chat Command API","version":"1.0.0","basePath":"/mate-service/v1","visibility":"Public · 已确认 · target-only","fieldNaming":"lowerCamelCase","headerNaming":"保留原名"},"operation":{"shortName":"执行聊天命令","operationKey":"executeChatCommand","method":"POST","path":"/chats/{chatId}/command","summary":"执行结构化 Builtin 或 Skill Command 并返回公共 SSE","description":"交互层提交目录中精确命中的 name、arguments 和 fileIds；name 不含 Slash，mate-service 不接受未经解析的整段 Slash 文本。mate-service 在登录用户和 Chat 权限上下文中解析稳定 Session 映射，以独立内部凭据调用 CampusClaw，再解析内部 SSE、移除 sessionId、entryId、Agent/Skill ID、Skill 版本、受管路径和私有快照字段后重新编码公共事件。它不得字节级透明转发。arguments/fileIds 省略时由 Service 统一归一为空字符串和空列表，请求拒绝未知字段。Skill 与 Compact 被接受后，浏览器断线不会自动中止 CampusClaw 执行，客户端应从公共持久化历史对账，不得盲目重放 POST。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。","parameters":[{"in":"path","name":"chatId","required":true,"schema":"string, 1..128","description":"用户有权访问的公共 Chat 标识；mate-service 通过稳定一对一映射解析内部 Session"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"流建立前 ResultBean 与流内错误消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":true,"contentType":"application/json","description":"name 必填并严格匹配目录小写名称，不得含 Slash。arguments 最多 262144 字符；fileIds 最多 32 个、元素唯一且保留顺序。Builtin 不接受附件，Skill 接受与普通消息相同附件。不接受 chatId、sessionId、modelId、thinking、metadata 或 Idempotency-Key。","example":{"name":"skill:pdf","arguments":"分析附件并总结","fileIds":["file-550e8400e29b41d4a716446655440010"]}},"responses":[{"id":"200-name-success","status":"200","tabLabel":"200 · Builtin 成功","label":"OK","summary":"以 name 有效更新为例；公共事件不含 Runtime Session 或 Entry 标识。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"default":"id: 31\nevent: command.started\ndata: {\"eventSeq\":31,\"commandId\":\"command-550e8400e29b41d4a716446655440000\",\"name\":\"name\",\"kind\":\"builtin\",\"occurredAt\":\"2026-08-31T10:00:00Z\"}\n\nid: 32\nevent: session.name.changed\ndata: {\"eventSeq\":32,\"previousDisplayName\":null,\"displayName\":\"园区网络故障分析\",\"resourceVersion\":7,\"occurredAt\":\"2026-08-31T10:00:00Z\"}\n\nid: 33\nevent: command.completed\ndata: {\"eventSeq\":33,\"commandId\":\"command-550e8400e29b41d4a716446655440000\",\"name\":\"name\",\"result\":{\"text\":\"Session 名称已更新为：园区网络故障分析\",\"sourceEventSeq\":32},\"occurredAt\":\"2026-08-31T10:00:00Z\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"}},{"id":"200-skill-success","status":"200","tabLabel":"200 · Skill 成功","label":"OK","summary":"Skill 参数和附件作为公共用户消息投影；Skill 快照、内部 Entry ID 和 Session ID 不公开。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"default":"id: 41\nevent: user.message\ndata: {\"eventSeq\":41,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"commandName\":\"skill:pdf\",\"message\":\"分析附件并总结\",\"fileIds\":[\"file-550e8400e29b41d4a716446655440010\"],\"occurredAt\":\"2026-08-31T10:01:00Z\"}\n\nid: 43\nevent: command.started\ndata: {\"eventSeq\":43,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"name\":\"skill:pdf\",\"kind\":\"skill\",\"occurredAt\":\"2026-08-31T10:01:00Z\"}\n\nevent: assistant.message.started\ndata: {\"role\":\"assistant\"}\n\nevent: assistant.message.delta\ndata: {\"delta\":{\"type\":\"text\",\"text\":\"附件包含三类关键信息。\"}}\n\nid: 44\nevent: assistant.message.completed\ndata: {\"eventSeq\":44,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"附件包含三类关键信息。\"}]},\"finishReason\":\"stop\",\"occurredAt\":\"2026-08-31T10:01:03Z\"}\n\nid: 45\nevent: command.completed\ndata: {\"eventSeq\":45,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"name\":\"skill:pdf\",\"result\":{\"text\":\"Skill 执行完成。\",\"sourceEventSeq\":44},\"occurredAt\":\"2026-08-31T10:01:03Z\"}\n\nevent: session.status.idle\ndata: {\"status\":\"idle\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"}},{"id":"400-invalid-chat-id","status":"400","tabLabel":"400 · INVALID_CHAT_ID","label":"Bad Request","summary":"chatId 不符合公共 Chat 约束。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_CHAT_ID","resMsg":"chatId 格式不正确。"},"en-US":{"resCode":"INVALID_CHAT_ID","resMsg":"The chatId format is invalid."}}},{"id":"400-invalid-command-request","status":"400","tabLabel":"400 · INVALID_COMMAND_REQUEST","label":"Bad Request","summary":"JSON 非法、包含未知字段、字段越界、Builtin 携带附件或参数形状不符合命令定义。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_COMMAND_REQUEST","resMsg":"命令请求内容不符合约束。"},"en-US":{"resCode":"INVALID_COMMAND_REQUEST","resMsg":"The command request does not satisfy the required constraints."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"用户未登录或访问令牌无效。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"请先登录。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Authentication is required."}}},{"id":"403-chat-access-denied","status":"403","tabLabel":"403 · CHAT_ACCESS_DENIED","label":"Forbidden","summary":"用户无权执行该 Chat 的命令。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"无权访问该 Chat。"},"en-US":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"Access to the Chat is denied."}}},{"id":"404-chat-not-found","status":"404","tabLabel":"404 · CHAT_NOT_FOUND","label":"Not Found","summary":"Chat 不存在、已删除，或没有有效 Session 映射。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_NOT_FOUND","resMsg":"指定的 Chat 不存在。"},"en-US":{"resCode":"CHAT_NOT_FOUND","resMsg":"The specified Chat does not exist."}}},{"id":"404-command-not-found","status":"404","tabLabel":"404 · COMMAND_NOT_FOUND","label":"Not Found","summary":"name 不是当前目录中的精确命令名，包括目录返回后已经解绑的 Skill。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"COMMAND_NOT_FOUND","resMsg":"指定的命令不存在。"},"en-US":{"resCode":"COMMAND_NOT_FOUND","resMsg":"The specified command does not exist."}}},{"status":"409","label":"Conflict","summary":"命令要求 idle，但 Session 正在执行；查询和 name 更新不受此限制。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_BUSY","resMsg":"当前命令暂不可用。"},"en-US":{"resCode":"SESSION_BUSY","resMsg":"The requested command is currently unavailable."}}},{"id":"503-command-unavailable","status":"503","tabLabel":"503 · COMMAND_UNAVAILABLE","label":"Service Unavailable","summary":"Runtime 无法安全解析命令或建立 Skill 调用快照；内部细节不越过公共边界。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"COMMAND_UNAVAILABLE","resMsg":"命令暂时不可用。"},"en-US":{"resCode":"COMMAND_UNAVAILABLE","resMsg":"The command is temporarily unavailable."}}},{"id":"502-runtime-command-failed","status":"502","tabLabel":"502 · 流建立前","label":"Bad Gateway","summary":"CampusClaw 接受事务失败或返回无法安全映射的响应；命令未被接受。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"RUNTIME_COMMAND_FAILED","resMsg":"命令服务调用失败。"},"en-US":{"resCode":"RUNTIME_COMMAND_FAILED","resMsg":"The command service call failed."}}},{"id":"200-stream-error","status":"200","tabLabel":"200 · 流内异常","label":"SSE already started","summary":"流建立后执行失败；公共层先投影 command.failed，再发 stream.error 并关闭，不发 stream.end。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"default":"id: 52\nevent: command.failed\ndata: {\"eventSeq\":52,\"commandId\":\"command-550e8400e29b41d4a716446655440002\",\"name\":\"skill:pdf\",\"resCode\":\"COMMAND_EXECUTION_FAILED\",\"resMsg\":\"命令执行失败。\",\"occurredAt\":\"2026-08-31T10:02:01Z\"}\n\nevent: stream.error\ndata: {\"resCode\":\"COMMAND_EXECUTION_FAILED\",\"resMsg\":\"命令执行失败。\"}\n"}}],"requestHeaderExamples":[{"id":"user-token","label":"登录用户 Header 示例","preferred":true,"headers":[{"name":"Authorization","value":"Bearer \u003cUSER_ACCESS_TOKEN\u003e","required":true,"description":"mate-service 验证登录用户并建立 Chat 权限上下文；不会原样转发到 CampusClaw"}]}]},"review":{"questions":[]}}]</script>
+  <script>
+(() => {
+  const modelNode = document.getElementById('api-review-models');
+  if (!modelNode) return;
+  const models = JSON.parse(modelNode.textContent);
+  const roots = document.querySelectorAll('[data-operation-review]');
+  const make = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  };
+  const append = (parent, ...children) => {
+    children.filter(Boolean).forEach((child) => parent.appendChild(child));
+    return parent;
+  };
+  const code = (text, className) => make('code', className || '', text);
+  const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  const table = (columns, rows) => {
+    const wrap = make('div', 'table-wrap');
+    const element = make('table', '');
+    const head = make('thead', '');
+    const headRow = make('tr', '');
+    columns.forEach((column) => headRow.appendChild(make('th', '', column)));
+    head.appendChild(headRow);
+    const body = make('tbody', '');
+    rows.forEach((values) => {
+      const row = make('tr', '');
+      values.forEach((value, index) => {
+        const cell = make('td', '', value);
+        cell.dataset.label = columns[index];
+        row.appendChild(cell);
+      });
+      body.appendChild(row);
+    });
+    append(element, head, body);
+    wrap.appendChild(element);
+    return wrap;
+  };
+  const renderOperation = (root, model) => {
+    const api = model.api;
+    const operation = model.operation;
+    const shell = root.querySelector('[data-api-shell]');
+    if (!shell) return;
+    const fullPath = `${api.basePath.replace(/\/$/, '')}/${operation.path.replace(/^\//, '')}`;
+    const topbar = make('header', 'topbar');
+    const titleRow = make('div', 'row');
+    append(titleRow, make('h2', '', api.title), make('span', 'tag', api.version));
+    if (api.visibility) titleRow.appendChild(make('span', 'tag', api.visibility));
+    titleRow.appendChild(make('span', 'tag', `字段：${api.fieldNaming}`));
+    titleRow.appendChild(make('span', 'tag', `Header：${api.headerNaming}`));
+    append(topbar, titleRow, code(api.basePath, 'base'));
+
+    const methodClass = operation.method.toLowerCase();
+    const article = make('article', `operation operation-${methodClass}`);
+    const operationHead = make('header', 'operation-head');
+    append(
+      operationHead,
+      make('span', `method method-${methodClass}`, operation.method),
+      code(operation.path, 'path'),
+      make('span', 'muted', operation.summary),
+      make('span', 'operation-name', operation.shortName),
+      code(operation.operationKey, 'operation-key')
+    );
+    article.appendChild(operationHead);
+    const purpose = make('section', 'section');
+    append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
+    article.appendChild(purpose);
+
+    const authSection = make('section', 'section contract-detail auth-section');
+    const authTitle = make('div', 'row section-title');
+    const authTabs = make('div', 'tabs');
+    const authBody = make('div', '');
+    append(authTitle, make('h3', '', '调用上下文 Header'), authTabs);
+    append(authSection, authTitle, authBody);
+    let selectedAuth = operation.requestHeaderExamples.find((item) => item.preferred) || operation.requestHeaderExamples[0];
+    const renderAuth = () => {
+      authTabs.querySelectorAll('button').forEach((button) => {
+        button.setAttribute('aria-pressed', String(button.dataset.authId === selectedAuth.id));
+      });
+      authBody.replaceChildren();
+      const rows = selectedAuth.headers.map((header) => [
+        header.name,
+        header.required ? '是' : '否',
+        header.value,
+        header.description
+      ]);
+      const request = [
+        `${operation.method} ${fullPath}`,
+        ...selectedAuth.headers.map((header) => `${header.name}: ${header.value}`)
+      ].join('\n');
+      append(authBody, table(['Header', '必填', '示例值', '说明'], rows), append(make('pre', ''), code(request)));
+    };
+    operation.requestHeaderExamples.forEach((mode) => {
+      const button = make('button', '', mode.label);
+      button.type = 'button';
+      button.dataset.authId = mode.id;
+      button.addEventListener('click', () => {
+        selectedAuth = mode;
+        renderAuth();
+      });
+      authTabs.appendChild(button);
+    });
+    renderAuth();
+    article.appendChild(authSection);
+
+    const requestSection = make('section', 'section contract-detail request-section');
+    requestSection.appendChild(make('h3', '', '参数与请求体'));
+    if (operation.parameters.length) {
+      const rows = operation.parameters.map((parameter) => [
+        parameter.in,
+        parameter.name,
+        parameter.required ? '是' : '否',
+        parameter.schema || '—',
+        parameter.description
+      ]);
+      requestSection.appendChild(table(['位置', '名称', '必填', '约束', '说明'], rows));
+    } else {
+      requestSection.appendChild(make('p', 'muted empty', '无 path/query/header 业务参数。'));
+    }
+    const requestBody = operation.requestBody || {};
+    requestSection.appendChild(make('p', 'muted empty', requestBody.description || '无请求体。'));
+    if (requestBody.example !== undefined && requestBody.example !== null) {
+      requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
+    }
+    article.appendChild(requestSection);
+
+    const responseSection = make('section', 'section contract-detail response-section');
+    const responseTitle = make('div', 'row section-title');
+    const localeTabs = make('div', 'tabs');
+    const statusTabs = make('div', 'tabs');
+    const responseBody = make('div', '');
+    append(responseTitle, make('h3', '', '响应'), localeTabs);
+    append(responseSection, responseTitle, statusTabs, responseBody);
+    let selectedResponse = operation.responses[0];
+    let selectedLocale = Object.keys(selectedResponse.bodies)[0];
+    const responseIdentity = (response) => response.id || response.status;
+    const renderResponse = () => {
+      statusTabs.querySelectorAll('button').forEach((button) => {
+        button.setAttribute('aria-selected', String(button.dataset.responseId === responseIdentity(selectedResponse)));
+      });
+      const locales = Object.keys(selectedResponse.bodies);
+      if (!locales.includes(selectedLocale)) selectedLocale = locales[0];
+      localeTabs.replaceChildren();
+      locales.forEach((locale) => {
+        const button = make('button', '', locale);
+        button.type = 'button';
+        button.setAttribute('aria-pressed', String(locale === selectedLocale));
+        button.addEventListener('click', () => {
+          selectedLocale = locale;
+          renderResponse();
+        });
+        localeTabs.appendChild(button);
+      });
+      responseBody.replaceChildren();
+      responseBody.appendChild(
+        make('p', 'description', `${selectedResponse.status} ${selectedResponse.label} — ${selectedResponse.summary}`)
+      );
+      const headers = { ...(selectedResponse.headers || {}) };
+      if (selectedLocale !== 'default' && Object.hasOwn(headers, 'Content-Language')) {
+        headers['Content-Language'] = selectedLocale;
+      }
+      const headerLines = Object.entries(headers).map(([name, value]) => `${name}: ${value}`);
+      const payload = selectedResponse.bodies[selectedLocale];
+      const output = [...headerLines, headerLines.length ? '' : null, payload === undefined ? null : pretty(payload)]
+        .filter((item) => item !== null).join('\n');
+      responseBody.appendChild(append(make('pre', ''), code(output)));
+    };
+    operation.responses.forEach((response) => {
+      const button = make('button', '', response.tabLabel || response.status);
+      button.type = 'button';
+      button.dataset.responseId = responseIdentity(response);
+      button.setAttribute('role', 'tab');
+      button.addEventListener('click', () => {
+        selectedResponse = response;
+        renderResponse();
+      });
+      statusTabs.appendChild(button);
+    });
+    renderResponse();
+    article.appendChild(responseSection);
+    shell.replaceChildren(topbar, article);
+  };
+  roots.forEach((root, index) => {
+    if (models[index]) renderOperation(root, models[index]);
+  });
+})();
+  </script>
+</body>
+</html>

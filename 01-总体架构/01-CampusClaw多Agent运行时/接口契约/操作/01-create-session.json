@@ -37,6 +37,7 @@
             "result": {
               "sessionId": "session-550e8400e29b41d4a716446655440003",
               "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": null,
               "modelId": "model_011CZq2GkV8aD4NwP7sLmXfR",
               "state": "idle",
               "thinking": true,
