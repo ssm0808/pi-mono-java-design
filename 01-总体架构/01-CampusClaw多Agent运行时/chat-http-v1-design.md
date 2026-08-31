@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.43.0 |
-| 状态 | 十三个内部 operation 已确认；新增 Slash Command 目录与结构化执行契约 |
+| 文档版本 | 1.43.1 |
+| 状态 | 十三个内部 operation 已确认；新增 Slash Command 命令清单与结构化执行契约 |
 | 接口评审状态 | 十三个 operation 均已确认 |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，由精确契约源生成 |
@@ -34,9 +34,9 @@
 调用方通过 Session Event 提交输入，通过同一 POST 的 SSE 观察实时过程，并通过
 同一路径的 GET 分页读取持久化 Entry。
 
-HTTP 现扩展为十三个 operation，增加命令目录和结构化命令执行。
+HTTP 现扩展为十三个 operation，增加命令清单查询和结构化命令执行。
 `POST /sessions/{sessionId}/events` 仍不解释 Slash 文本，以 `/` 开头的文本在该接口中仍是普通
-`user.message`；交互层只在目录精确命中后调用新的 Command API。首版只开放
+`user.message`；交互层只在命令清单精确命中后调用新的 Command API。首版只开放
 Builtin 和 Skill，不开放 Extension 或 Prompt。`/name` 是 CampusClaw Session 的持久化
 领域能力；mate-service 只保存 Chat 到 Session 的稳定映射，不保存第二份名称。
 
@@ -902,17 +902,17 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 
 | 接口简称 | operationKey | Method | Path | 语义 |
 |---|---|---|---|---|
-| 查询命令目录 | `listSessionCommands` | `GET` | `/sessions/{sessionId}/commands` | 返回已知 Builtin 与当前 Agent 绑定 Skill 的动态描述符 |
+| 查询命令清单 | `listSessionCommands` | `GET` | `/sessions/{sessionId}/commands` | 返回已知 Builtin 与当前 Agent 绑定 Skill 的动态描述符 |
 | 执行命令 | `executeSessionCommand` | `POST` | `/sessions/{sessionId}/command` | 接受结构化 `name + arguments + fileIds`，并在本次 HTTP 响应中返回 SSE |
 
 `/` 仅是交互层展示符；HTTP `name` 不包含 `/`。Builtin 使用
 `[a-z0-9-]+`，Skill 使用独立的 `skill:[a-z0-9-]+` 命名空间。交互层必须先成功
-取得目录，再对输入的小写命令名做精确匹配；未命中时按普通消息发送，目录失败时
+取得命令清单，再对输入的小写命令名做精确匹配；未命中时按普通消息发送，命令清单请求失败时
 保留草稿并显示错误，不得静默降级。结构化 API 的未知名称则严格返回
 `COMMAND_NOT_FOUND`。
 
 目录描述符同时表达无参调用的 `available/unavailableCode` 和有参输入的
-`input.available/input.unavailableCode`。已知命令即使暂时不可用也保留在目录中；
+`input.available/input.unavailableCode`。已知命令即使暂时不可用也保留在命令清单中；
 例如 running 时 `/model` 仍可查询，但参数提交显示 `SESSION_BUSY`。完整描述符与
 示例以 [`12-list-session-commands.json`](接口契约/操作/12-list-session-commands.json)
 为准。
@@ -975,7 +975,7 @@ Session 设为 running。快照每次调用独立保存，不跨调用去重；A
 
 | 边界 | 普通操作 | 实时执行 | 标识范围 | 当前评审状态 |
 |---|---|---|---|---|
-| 浏览器/UI → mate-service | 独立 HTTP 请求与响应 | 提交消息或执行命令的 HTTP 响应输出 SSE | 公共 `chatId` | 命令目录与执行契约已单独确认 |
+| 浏览器/UI → mate-service | 独立 HTTP 请求与响应 | 提交消息或执行命令的 HTTP 响应输出 SSE | 公共 `chatId` | 命令清单与执行契约已单独确认 |
 | mate-service → CampusClaw | 本文十三个 HTTP operation | `POST /events` 或 `POST /command` 直接输出 SSE | 内部 `sessionId` | 十三个 operation 均已确认 |
 
 两跳不是同一条物理连接，也不是一份字节透明协议。mate-service 需要终止公共认证、
@@ -1363,6 +1363,7 @@ pi 压缩细节与 failed.aborted，1.41 的重试候选持久化排除和实际
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.43.1 | 2026-08-31 | 澄清 Command Catalog 是按 Session 上下文动态生成的逻辑命令清单；用户可见契约不再使用可能被理解为文件系统路径的“当前目录”。 |
 | 1.43.0 | 2026-08-31 | 新增命令目录和结构化命令执行两个 operation；SessionResource 增加 `displayName`；固定 Builtin/Skill、双层可用性、命令生命周期、sidecar Entry、`/name` 所有权和 Skill 调用快照。 |
 | 1.42.0 | 2026-08-27 | 十一个路径不变；POST Events 额外必填 `access-token`，四项入站 Header 仅作本次 execution 瞬态快照；工具发现、模型与其他请求不携带凭据，仅实际 Mate execute 原名透传已提供值。 |
 | 1.41.0 | 2026-08-24 | 十一个路径及公共事件字段不变；压缩重试在内部持久化被丢弃 Assistant Entry ID，重载精确排除且不公开；公共 Agent 实际请求与 recoverable LENGTH 使用相同模型输出上限。 |

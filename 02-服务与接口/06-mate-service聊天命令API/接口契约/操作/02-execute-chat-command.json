@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/chats/{chatId}/command",
     "summary": "执行结构化 Builtin 或 Skill Command 并返回公共 SSE",
-    "description": "交互层提交目录中精确命中的 name、arguments 和 fileIds；name 不含 Slash，mate-service 不接受未经解析的整段 Slash 文本。mate-service 在登录用户和 Chat 权限上下文中解析稳定 Session 映射，以独立内部凭据调用 CampusClaw，再解析内部 SSE、移除 sessionId、entryId、Agent/Skill ID、Skill 版本、受管路径和私有快照字段后重新编码公共事件。它不得字节级透明转发。arguments/fileIds 省略时由 Service 统一归一为空字符串和空列表，请求拒绝未知字段。Skill 与 Compact 被接受后，浏览器断线不会自动中止 CampusClaw 执行，客户端应从公共持久化历史对账，不得盲目重放 POST。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。",
+    "description": "交互层提交命令清单中精确命中的 name、arguments 和 fileIds；name 不含 Slash，mate-service 不接受未经解析的整段 Slash 文本。mate-service 在登录用户和 Chat 权限上下文中解析稳定 Session 映射，以独立内部凭据调用 CampusClaw，再解析内部 SSE、移除 sessionId、entryId、Agent/Skill ID、Skill 版本、受管路径和私有快照字段后重新编码公共事件。它不得字节级透明转发。arguments/fileIds 省略时由 Service 统一归一为空字符串和空列表，请求拒绝未知字段。Skill 与 Compact 被接受后，浏览器断线不会自动中止 CampusClaw 执行，客户端应从公共持久化历史对账，不得盲目重放 POST。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。",
     "parameters": [
       {"$ref": "parameters.chatId"},
       {"$ref": "parameters.acceptLanguage", "description": "流建立前 ResultBean 与流内错误消息语言；缺失或不支持时回退 en-US"}
@@ -13,7 +13,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "name 必填并严格匹配目录小写名称，不得含 Slash。arguments 最多 262144 字符；fileIds 最多 32 个、元素唯一且保留顺序。Builtin 不接受附件，Skill 接受与普通消息相同附件。不接受 chatId、sessionId、modelId、thinking、metadata 或 Idempotency-Key。",
+      "description": "name 必填并严格匹配命令清单中的小写名称，不得含 Slash。arguments 最多 262144 字符；fileIds 最多 32 个、元素唯一且保留顺序。Builtin 不接受附件，Skill 接受与普通消息相同附件。不接受 chatId、sessionId、modelId、thinking、metadata 或 Idempotency-Key。",
       "example": {
         "name": "skill:pdf",
         "arguments": "分析附件并总结",
@@ -108,7 +108,7 @@
         "status": "404",
         "tabLabel": "404 · COMMAND_NOT_FOUND",
         "label": "Not Found",
-        "summary": "name 不是当前目录中的精确命令名，包括目录返回后已经解绑的 Skill。",
+        "summary": "name 不是当前 Session 命令清单中的精确命令名，包括清单返回后已经解绑的 Skill。",
         "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
         "bodies": {
           "zh-CN": {"resCode": "COMMAND_NOT_FOUND", "resMsg": "指定的命令不存在。"},

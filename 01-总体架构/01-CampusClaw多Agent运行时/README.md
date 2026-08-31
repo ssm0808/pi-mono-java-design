@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.5.0 |
-| 状态 | CampusClaw 内部 HTTP 1.43 共 13 个 operation；新增 Slash Command 目录与执行；mate-service 命令公共契约已确认 |
+| 文档版本 | 3.5.1 |
+| 状态 | CampusClaw 内部 HTTP 1.43.1 共 13 个 operation；新增 Slash Command 命令清单与执行；mate-service 命令公共契约已确认 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
 | 设计仓分析基线 | `27484974eb106a7e43910d8e542de52a72c58102` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -146,7 +146,7 @@ CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` �
 | 9 | `POST` | `/sessions/{sessionId}/steers` | `202` ResultBean | 向 running Session 的当前执行追加优先指导 |
 | 10 | `POST` | `/sessions/{sessionId}/follow-ups` | `202` ResultBean | 在 Agent 原本将停止时追加后续消息 |
 | 11 | `POST` | `/sessions/{sessionId}/abort` | `204` | 中止当前执行并清空尚未投递的控制消息 |
-| 12 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回 Builtin 与当前 Agent Skill 的动态命令目录 |
+| 12 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回 Builtin 与当前 Agent Skill 的动态命令清单 |
 | 13 | `POST` | `/sessions/{sessionId}/command` | `200 text/event-stream` | 执行结构化 Builtin 或 Skill Command |
 
 公共资源没有 `Run`。一次用户输入会触发内部 active execution，但调用方使用
@@ -235,7 +235,9 @@ Slash Command 的 `/` 只存在于交互层。HTTP 固定提交结构化
 七个 Builtin（`help/status/name/model/thinking/compact/skills`）和
 `skill:<name>`；Extension 与 Prompt Command 不开放。
 
-命令目录必须返回已知但暂时不可用的命令，并分别声明无参数调用和有参数提交的可用性。
+命令清单必须返回已知但暂时不可用的命令，并分别声明无参数调用和有参数提交的可用性。
+这里的“命令清单”是按 Session、Agent 快照与执行状态解析的逻辑 Command Catalog，
+与文件系统当前目录无关。
 `/name` 在 running 时仍可查询和更新；`/model`、`/thinking` 在 running 时可查询但不能
 修改；`/compact` 与 Skill 只允许 idle。每次已接受调用持久化命令生命周期，Skill 和
 Compact 不因 HTTP 断线自动中止。
@@ -339,7 +341,7 @@ CampusClaw 不再提供 CLI、TUI、OneShot、RPC 或 ACP 产品入口。Slash v
   替换当前可变 Registry 与宽泛 `SlashCommandSession`；Builtin 重名在启动时失败；
 - Builtin 使用独立 Contributor/Handler，Skill 使用动态 Source 和共享 Handler；新增命令
   不修改中央 `switch`；
-- 交互层只有在目录精确命中时调用 Command API；目录失败不静默降级，直接调用结构化 API
+- 交互层只有在命令清单精确命中时调用 Command API；命令清单请求失败不静默降级，直接调用结构化 API
   的未知名称返回 `COMMAND_NOT_FOUND`；
 - `/name` 由窄职责 `SessionNamingService` 更新 CampusClaw Session，不经过 mate-service
   名称副本；
@@ -426,7 +428,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 以下内容尚未确认，不应由实现自行猜测：
 
-1. mate-service 除本次命令目录与命令执行以外的公共 Chat API、分页和消息 SSE Event Schema；
+1. mate-service 除本次命令清单与命令执行以外的公共 Chat API、分页和消息 SSE Event Schema；
 2. 浏览器断线后公共 Chat 层如何对账内部已持久化 Entry；
 3. Pod 重启时 active execution 的中断或恢复策略；
 4. 公司 `ResultBeanFactory` 真实制品坐标和 `ResultBeanAdapter` 公司 Bean 的落地方式；
@@ -436,6 +438,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.5.1 | 2026-08-31 | 同步 HTTP 1.43.1，将面向用户和 HTTP 的“命令目录”统一为“命令清单”，避免与文件系统当前目录混淆。 |
 | 3.5.0 | 2026-08-31 | 同步 HTTP 1.43：增加命令目录与结构化执行；明确 Builtin/Skill、`displayName` 所有权、sidecar Entry、Skill 快照和 mate-service 公共命令投影。 |
 | 3.4.0 | 2026-08-27 | 同步 HTTP 1.42：POST Events 必填 `access-token`，四项入站 Header 仅作执行级瞬态快照，工具发现无凭据，只在实际 Mate execute 时原名透传已提供值。 |
 | 3.3.0 | 2026-08-24 | 同步工具系统 2.3 和 HTTP 1.41：LENGTH 判定使用实际请求输出上限，压缩重试候选按内部 Entry ID 持久化并在重载时精确排除。 |

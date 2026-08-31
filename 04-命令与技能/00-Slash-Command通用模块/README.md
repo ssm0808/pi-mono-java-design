@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
+| 文档版本 | 1.0.1 |
 | 设计日期 | 2026-08-31 |
 | 设计仓基线 | `27484974eb106a7e43910d8e542de52a72c58102` |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -92,7 +92,11 @@ CommandHandler.execute(invocation) -> CompletionStage<CommandResultDTO>
 
 [PlantUML 源码：`command_registration`](设计图/diagram.puml#L35)
 
-### 3.2 目录与可用性
+### 3.2 命令清单（Command Catalog）与可用性
+
+代码层的 `CommandCatalogService` 和 `Catalog` 表示按当前 Session、Agent 快照与
+执行状态动态解析出的逻辑命令注册表，不是文件系统或项目的“当前目录”。面向用户、
+交互层和 HTTP 文案统一称为“命令清单”；只有类名和源码术语保留 Command Catalog。
 
 Descriptor 字段固定为：
 
@@ -113,8 +117,8 @@ input.suggestions
 `available` 表示无参调用在当前状态是否成立；`input.available` 表示是否
 允许提交参数。例如 Session 运行中的 `model` 仍可查询，所以
 `available=true`；但不可切换，所以 `input.available=false` 且
-`input.unavailableCode=SESSION_BUSY`。已知但暂时不可用的命令仍在目录中；
-未知名称不进入目录。
+`input.unavailableCode=SESSION_BUSY`。已知但暂时不可用的命令仍在命令清单中；
+未知名称不进入命令清单。
 
 ### 3.3 Admission Policy
 
@@ -132,12 +136,12 @@ Admission 在 Handler 前统一完成：
 ## 4. 交互层解析
 
 - 只有文本第一个字符是 `/` 才尝试 Slash 解析。
-- 命令名截取到第一个空白字符，严格匹配目录中的小写名称。
+- 命令名截取到第一个空白字符，严格匹配命令清单中的小写名称。
 - 参数保持除命令分隔符外的原始剩余内容，包括内部换行；HTTP 不再解析。
-- 成功取得目录且精确命中时调用 Command API。
-- 成功取得目录但未命中时，按普通消息发送。这是交互产品回退，
+- 成功取得命令清单且精确命中时调用 Command API。
+- 成功取得命令清单但未命中时，按普通消息发送。这是交互产品回退，
   不适用于直接结构化 API 调用。
-- 目录请求失败时保留 Slash 草稿并显示错误，不得静默降级为普通消息。
+- 命令清单请求失败时保留 Slash 草稿并显示错误，不得静默降级为普通消息。
 - 直接调用 Command API 但 `name` 未知时严格返回 `COMMAND_NOT_FOUND`。
 
 ![交互层路由](设计图/interaction_routing.svg)
@@ -146,7 +150,7 @@ Admission 在 Handler 前统一完成：
 
 ## 5. HTTP 与执行契约
 
-| 边界 | 目录 | 执行 |
+| 边界 | 命令清单 | 执行 |
 |---|---|---|
 | mate-service 公共 API | `GET /mate-service/v1/chats/{chatId}/commands` | `POST /mate-service/v1/chats/{chatId}/command` |
 | CampusClaw 内部 API | `GET /campusclaw-service/v1/sessions/{sessionId}/commands` | `POST /campusclaw-service/v1/sessions/{sessionId}/command` |
@@ -217,7 +221,7 @@ Model/Thinking 指向对应配置变化，Compact 指向
 
 - Builtin 重名启动失败；Skill 与 Builtin 无名称冲突；新增命令不修改中央分派。
 - Catalog 精确匹配，已知不可用命令仍可见，运行中双层可用性正确。
-- 目录失败不降级；结构化 API 未知命令、非法参数和 Builtin 附件在流前失败。
+- 命令清单请求失败不降级；结构化 API 未知命令、非法参数和 Builtin 附件在流前失败。
 - sidecar 不改变 active leaf，分支切换后查询顺序与可见性正确。
 - 公共/内部 JSON、SSE 和错误投影存在聚焦契约测试。
 
@@ -225,4 +229,5 @@ Model/Thinking 指向对应配置变化，Compact 指向
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.0.1 | 2026-08-31 | 澄清 Command Catalog 是按 Session 上下文解析的逻辑注册表；面向用户和 HTTP 文案统一使用“命令清单”，避免与文件系统当前目录混淆 |
 | 1.0.0 | 2026-08-31 | 建立 Builtin/Skill 两类命令、可组合注册、结构化 HTTP、双层可用性、命令事件和 sidecar 持久化的唯一公共定义 |

@@ -4,8 +4,8 @@
     "operationKey": "listChatCommands",
     "method": "GET",
     "path": "/chats/{chatId}/commands",
-    "summary": "返回当前 Chat 对应 Session 的结构化命令目录",
-    "description": "mate-service 在现有登录用户和 Chat 权限上下文中解析 chatId，经 ChatSessionResolver 得到稳定的一对一 sessionId，再调用 CampusClaw 内部命令目录。公共响应保留命令语义和双层可用性，但不暴露 sessionId、Agent/Skill ID、Skill 版本或受管文件路径。已知但暂时不可用的命令仍返回；目录失败是显式错误，交互层不得把 Slash 草稿静默降级为普通消息。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。",
+    "summary": "返回当前 Chat 对应 Session 的结构化命令清单",
+    "description": "mate-service 在现有登录用户和 Chat 权限上下文中解析 chatId，经 ChatSessionResolver 得到稳定的一对一 sessionId，再调用 CampusClaw 内部 Command Catalog。这里的命令清单是按 Chat/Session 上下文动态解析的逻辑集合，不是文件系统目录。公共响应保留命令语义和双层可用性，但不暴露 sessionId、Agent/Skill ID、Skill 版本或受管文件路径。已知但暂时不可用的命令仍返回；命令清单请求失败是显式错误，交互层不得把 Slash 草稿静默降级为普通消息。当前 mate-service 源码尚无 Chat→Runtime bridge，本 operation 是 target-only design。",
     "parameters": [
       {"$ref": "parameters.chatId"},
       {"$ref": "parameters.acceptLanguage"}
@@ -20,7 +20,7 @@
       {
         "status": "200",
         "label": "OK",
-        "summary": "以 running Session 为例返回完整已知目录；model/thinking 可查不可改，compact/skill 不可执行。",
+        "summary": "以 running Session 为例返回完整已知命令清单；model/thinking 可查不可改，compact/skill 不可执行。",
         "headers": {"Cache-Control": "no-store", "Content-Language": "zh-CN"},
         "bodies": {
           "zh-CN": {
@@ -84,10 +84,10 @@
       {
         "status": "503",
         "label": "Service Unavailable",
-        "summary": "CampusClaw 目录调用失败或当前 Agent 没有可用 complete 快照；UI 必须保留 Slash 草稿。",
+        "summary": "CampusClaw 命令清单调用失败或当前 Agent 没有可用 complete 快照；UI 必须保留 Slash 草稿。",
         "headers": {"Content-Language": "zh-CN", "Retry-After": "3"},
         "bodies": {
-          "zh-CN": {"resCode": "COMMAND_CATALOG_UNAVAILABLE", "resMsg": "命令目录暂时不可用。"},
+          "zh-CN": {"resCode": "COMMAND_CATALOG_UNAVAILABLE", "resMsg": "命令清单暂时不可用。"},
           "en-US": {"resCode": "COMMAND_CATALOG_UNAVAILABLE", "resMsg": "The command catalog is temporarily unavailable."}
         }
       }

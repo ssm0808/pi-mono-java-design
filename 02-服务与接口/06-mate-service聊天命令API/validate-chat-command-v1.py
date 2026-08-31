@@ -108,7 +108,7 @@ def sse_payloads(stream: str) -> list[dict[str, Any]]:
 
 
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.0.0", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.0.1", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
     require("target-only" in common["api"]["visibility"], "Public contract must remain target-only")
     headers = {

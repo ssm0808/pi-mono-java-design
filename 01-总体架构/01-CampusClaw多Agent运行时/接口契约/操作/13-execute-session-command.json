@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/command",
     "summary": "执行结构化 Builtin 或 Skill Command 并返回 SSE",
-    "description": "提交已由交互层解析的 name、arguments 和 fileIds；name 不含 Slash 前缀，Runtime 不接受未解析整段 Slash 文本。arguments 和 fileIds 省略时由 Service 归一为空字符串和空列表；请求拒绝未知字段。每次已接受调用生成 command- 加 32 位小写十六进制 UUID，并持久化 command.started 及 command.completed/failed。Skill 和 Compact 接受后断线不中止执行，调用方应从 GET Events 恢复，不重放 POST。该操作与 POST Events 使用相同执行级瞬时凭据边界：access-token 与调用上下文 Header 不校验、不持久化、不记录，只在 Skill 执行实际 Mate 工具 execute 请求中原名传递；目录、模型和其他请求不透传。",
+    "description": "提交已由交互层解析的 name、arguments 和 fileIds；name 不含 Slash 前缀，Runtime 不接受未解析整段 Slash 文本。arguments 和 fileIds 省略时由 Service 归一为空字符串和空列表；请求拒绝未知字段。每次已接受调用生成 command- 加 32 位小写十六进制 UUID，并持久化 command.started 及 command.completed/failed。Skill 和 Compact 接受后断线不中止执行，调用方应从 GET Events 恢复，不重放 POST。该操作与 POST Events 使用相同执行级瞬时凭据边界：access-token 与调用上下文 Header 不校验、不持久化、不记录，只在 Skill 执行实际 Mate 工具 execute 请求中原名传递；命令清单查询、模型和其他请求不透传。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -35,7 +35,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "name 必填且必须是目录中的精确小写名称；不得含 Slash。arguments 最多 262144 字符，fileIds 最多 32 个、元素唯一且保留顺序。Builtin 不接受附件；Skill 接受与普通用户消息相同的附件。不接受 type、sessionId、modelId、thinking、metadata 或 Idempotency-Key。",
+      "description": "name 必填且必须是命令清单中的精确小写名称；不得含 Slash。arguments 最多 262144 字符，fileIds 最多 32 个、元素唯一且保留顺序。Builtin 不接受附件；Skill 接受与普通用户消息相同的附件。不接受 type、sessionId、modelId、thinking、metadata 或 Idempotency-Key。",
       "example": {
         "name": "skill:pdf",
         "arguments": "分析附件并总结",
@@ -106,7 +106,7 @@
         "status": "404",
         "tabLabel": "404 · COMMAND_NOT_FOUND",
         "label": "Not Found",
-        "summary": "name 不是当前目录中的精确命令名，包括目录获取后已被解绑的 Skill。",
+        "summary": "name 不是当前 Session 命令清单中的精确命令名，包括清单获取后已被解绑的 Skill。",
         "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
         "bodies": {
           "zh-CN": {"resCode": "COMMAND_NOT_FOUND", "resMsg": "指定的命令不存在。"},
@@ -128,7 +128,7 @@
         "status": "503",
         "tabLabel": "503 · SKILL_SNAPSHOT_UNAVAILABLE",
         "label": "Service Unavailable",
-        "summary": "Skill 仍在绑定目录中，但最新 complete Agent 版本的完整正文或资源快照无法原子读取；未接受命令。",
+        "summary": "Skill 仍在当前 Agent 的绑定清单中，但最新 complete Agent 版本的完整正文或资源快照无法原子读取；未接受命令。",
         "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN", "Retry-After": "3"},
         "bodies": {
           "zh-CN": {"resCode": "SKILL_SNAPSHOT_UNAVAILABLE", "resMsg": "当前 Skill 调用快照不可用。"},

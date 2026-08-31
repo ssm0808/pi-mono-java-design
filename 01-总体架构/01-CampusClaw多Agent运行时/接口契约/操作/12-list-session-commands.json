@@ -4,8 +4,8 @@
     "operationKey": "listSessionCommands",
     "method": "GET",
     "path": "/sessions/{sessionId}/commands",
-    "summary": "返回当前 Session 的结构化命令目录",
-    "description": "按 Session 当前状态、模型能力和最新 complete Agent 版本生成命令目录。目录包含七个 Builtin 和当前 Agent 直接绑定的 skill:<name>；已知但暂时不可用的命令仍返回并附 unavailableCode。available 表示无参调用是否可用，input.available 表示当前是否可以提交参数。返回项不含 Slash 前缀、Skill ID、Skill 版本、正文或文件路径。该接口只读，不触发 Agent 刷新或模型请求。",
+    "summary": "返回当前 Session 的结构化命令清单",
+    "description": "按 Session 当前状态、模型能力和最新 complete Agent 版本生成命令清单。这里的命令清单是上下文相关的逻辑 Command Catalog，不是文件系统目录。清单包含七个 Builtin 和当前 Agent 直接绑定的 skill:<name>；已知但暂时不可用的命令仍返回并附 unavailableCode。available 表示无参调用是否可用，input.available 表示当前是否可以提交参数。返回项不含 Slash 前缀、Skill ID、Skill 版本、正文或文件路径。该接口只读，不触发 Agent 刷新或模型请求。",
     "parameters": [
       {"$ref": "parameters.sessionId"},
       {"$ref": "parameters.acceptLanguage"}
@@ -179,7 +179,7 @@
       {
         "status": "503",
         "label": "Service Unavailable",
-        "summary": "当前 Agent 没有可读取的 complete 运行时快照，无法安全生成 Skill 目录。",
+        "summary": "当前 Agent 没有可读取的 complete 运行时快照，无法安全生成 Skill 命令清单。",
         "headers": {"Content-Language": "zh-CN", "Retry-After": "3"},
         "bodies": {
           "zh-CN": {"resCode": "AGENT_NOT_AVAILABLE", "resMsg": "当前 Agent 运行时不可用。"},

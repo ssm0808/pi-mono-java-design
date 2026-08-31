@@ -5,7 +5,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.0.0 |
+| 文档版本 | 3.0.1 |
 | 设计日期 | 2026-08-31 |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 复核 HEAD | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
@@ -25,24 +25,24 @@ HTTP 请求中 `name` 为 `skill:<name>`，不含 `/`。`<name>` 必须符合
 或“重名时跳过 Skill”规则。
 
 Skill 只在 Session idle 时可执行。`arguments` 最大 262144 字符，
-`fileIds` 最多 32 个，完全复用普通用户消息附件契约。目录在 running 时
+`fileIds` 最多 32 个，完全复用普通用户消息附件契约。命令清单在 running 时
 仍返回 Skill Descriptor，但 `available=false`、`unavailableCode=SESSION_BUSY`。
 
-## 2. 目录发现
+## 2. 命令清单发现
 
-`SkillCommandSource` 不在 Spring 启动时固定 Skill，而是对每次目录请求：
+`SkillCommandSource` 不在 Spring 启动时固定 Skill，而是对每次命令清单请求：
 
 1. 从 Session 取不变 `agentId`。
 2. 通过 `AgentRuntimeManager.prepareCached(agentId)` 读取当前最新 complete 版本；
    不触发远程刷新。
 3. 对直接绑定的 Skill 按名称稳定排序，生成 `skill:<name>` Descriptor。
-4. 只返回安全元数据：名称、描述、可用性和输入提示；不在目录中返回
+4. 只返回安全元数据：名称、描述、可用性和输入提示；不在命令清单中返回
    Skill 正文、文件路径、Skill ID 或版本。
 
 `PreparedAgentRuntime.skills()` 和 `findSkill()` 已提供受管 Agent 快照的精确名称查找。
 目标设计在其上建立动态 Source，而不把每个 Skill 变成 Spring Bean。
 
-![Skill 目录解析](设计图/skill_catalog.svg)
+![Skill 命令清单解析](设计图/skill_catalog.svg)
 
 [PlantUML 源码：`skill_catalog`](设计图/diagram.puml#L1)
 
@@ -125,7 +125,7 @@ CampusClaw `SkillLoader.java:134-137` 已解析 `disable-model-invocation`，
 
 v1 固定其语义只是“禁止模型自动发现/调用”，不是“禁止用户显式调用”。
 所有当前 Agent 直接绑定且快照完整的 Skill 都必须出现在 `/skill:<name>`
-目录中。这与 pi `skills.ts:347-356` 的明示语义一致。
+命令清单中。这与 pi `skills.ts:347-356` 的明示语义一致。
 
 ## 6. 执行、断线和恢复
 
@@ -156,7 +156,7 @@ v1 固定其语义只是“禁止模型自动发现/调用”，不是“禁止�
 ## 8. 验收清单
 
 - Skill 与 Builtin 即使底层名称相同也不冲突。
-- 运行中目录仍返回 Skill，但执行在流建立前返回 `SESSION_BUSY`。
+- 运行中命令清单仍返回 Skill，但执行在流建立前返回 `SESSION_BUSY`。
 - 快照不存在、不完整或与绑定名称不符时，用户 Entry、Record、command.started
   和 running 状态均不提交。
 - `arguments` 与 `fileIds` 保持 User 输入层，Skill 正文保持受信任指令层。
@@ -168,4 +168,5 @@ v1 固定其语义只是“禁止模型自动发现/调用”，不是“禁止�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.0.1 | 2026-08-31 | 将面向读者的“目录”统一为“命令清单”，明确 Skill 发现不是文件系统目录扫描 |
 | 3.0.0 | 2026-08-31 | 废弃旧的本地资源扩展和 Reload 交互设计，收敛为 HTTP `/skill:name`、最新 Agent 解析、调用快照、信任分层和可恢复执行 |

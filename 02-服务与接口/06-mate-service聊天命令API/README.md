@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
+| 文档版本 | 1.0.1 |
 | 状态 | 两个公共 operation 已确认；target-only design |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
 | 人类评审契约 | [`chat-command-v1-review.html`](chat-command-v1-review.html)，由精确契约源生成 |
@@ -10,7 +10,7 @@
 | mate-service 源码基线 | `956b547f5ca12ca89e68f73012f92a4406b0c9fa` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
-| CampusClaw 内部 HTTP 契约 | `1.43.0` |
+| CampusClaw 内部 HTTP 契约 | `1.43.1` |
 | 更新日期 | 2026-08-31 |
 
 ## 1. 结论与边界
@@ -19,7 +19,7 @@ mate-service 面向登录用户开放两个公共 HTTP operation：
 
 | Method | Path | 响应 | 作用 |
 |---|---|---|---|
-| `GET` | `/mate-service/v1/chats/{chatId}/commands` | ResultBean | 查询当前 Chat 对应 Session 的命令目录 |
+| `GET` | `/mate-service/v1/chats/{chatId}/commands` | ResultBean | 查询当前 Chat 对应 Session 的命令清单 |
 | `POST` | `/mate-service/v1/chats/{chatId}/command` | 请求范围 SSE | 执行结构化 Builtin 或 Skill Command |
 
 当前 mate-service 源码没有 Chat 资源、Chat→Runtime 映射、CampusClaw Runtime client 或
@@ -58,16 +58,16 @@ mate-service 用户认证和 Chat 权限；mate-service 调用 CampusClaw 时重
 
 交互层只有在文本第一个字符就是 `/` 时尝试 Slash 解析：
 
-1. 命令名截取到第一个空白字符，严格匹配目录中的小写 `name`；
+1. 命令名截取到第一个空白字符，严格匹配命令清单中的小写 `name`；
 2. 剩余参数保持原始内容，包括内部换行，不做 trim 后重组；
-3. 目录成功且精确命中时，调用结构化 Command API；
-4. 目录成功但未命中时，整段文本按普通消息发送；
-5. 目录失败时保留 Slash 草稿并显示错误，禁止静默降级为普通消息。
+3. 命令清单请求成功且精确命中时，调用结构化 Command API；
+4. 命令清单请求成功但未命中时，整段文本按普通消息发送；
+5. 命令清单请求失败时保留 Slash 草稿并显示错误，禁止静默降级为普通消息。
 
 `/` 只是交互层展示符号，HTTP `name` 不包含 `/`。直接调用结构化 API 时，未知名称
 严格返回 `COMMAND_NOT_FOUND`，不能沿用交互层“未命中按普通消息”的规则。
 
-目录返回七个 Builtin 和当前 Agent 绑定的 `skill:<name>`。已知命令即使暂时不可用
+命令清单返回七个 Builtin 和当前 Agent 绑定的 `skill:<name>`。已知命令即使暂时不可用
 仍返回；`available` 表示无参数调用，`input.available` 表示有参数提交，两者不得合并。
 精确字段和 running 示例见
 [`01-list-chat-commands.json`](接口契约/操作/01-list-chat-commands.json)。
@@ -87,7 +87,7 @@ mate-service 用户认证和 Chat 权限；mate-service 调用 CampusClaw 时重
 `arguments` 和 `fileIds` 省略时由 Service 统一归一为空字符串和空列表；请求 VO 不设置
 字段默认值并拒绝未知字段。Builtin 不接受附件；Skill 复用普通消息的 262144 字符和
 32 个附件上限。mate-service 不自行解释 Skill 正文、模型参数或 Session 状态，只执行
-公共输入校验并让 CampusClaw 成为命令目录与 Admission Policy 的权威。
+公共输入校验并让 CampusClaw 成为命令清单与 Admission Policy 的权威。
 
 每次 CampusClaw 已接受调用都会返回 `command-<32 位小写十六进制 UUID>`。公共层保留
 该不透明关联 ID，但不构造或重写它。通用完成结果只有 `text` 与可选
@@ -139,12 +139,12 @@ Slash 模块、Builtin、Skill 和内部 Runtime 契约分别见
 [通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)、
 [内置命令](../../04-命令与技能/01-内置命令/README.md)、
 [技能命令](../../04-命令与技能/02-技能命令/README.md) 与
-[CampusClaw HTTP 1.43](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)。
+[CampusClaw HTTP 1.43.1](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)。
 
 ## 7. 验收
 
 - GET 对 running Session 返回双层可用性，并保留暂不可用命令；
-- 目录失败保留 Slash 草稿，目录成功但未命中才按普通消息发送；
+- 命令清单请求失败时保留 Slash 草稿；请求成功但未命中才按普通消息发送；
 - POST 拒绝未知命令、非法参数、Builtin 附件与未知字段；
 - Chat 权限拒绝发生在 Session 解析和内部调用之前；
 - 公共和内部鉴权 Header 不互相透传；
@@ -169,4 +169,5 @@ Mermaid 与 `git diff --check`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.0.1 | 2026-08-31 | 将公共交互文案统一为“命令清单”，明确其是 Chat/Session 上下文中的逻辑 Command Catalog，不是文件系统目录。 |
 | 1.0.0 | 2026-08-31 | 首次确认公共命令目录与结构化命令执行、ChatSessionResolver、独立鉴权、SSE 重新投影和 target-only 实现边界。 |
