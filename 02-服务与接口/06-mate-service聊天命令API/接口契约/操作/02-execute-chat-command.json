@@ -162,5 +162,36 @@
       }
     ]
   },
-  "review": {"questions": []}
+  "review": {
+    "businessView": {
+      "summary": "用户确认 Slash 命令后，前端提交命令名、参数和附件；mate-service 完成权限校验和内部 Session 映射，再把安全结果流式返回。",
+      "flow": [
+        {"actor": "前端", "action": "提交结构化命令请求", "outcome": "name 不带 /，保留原始参数"},
+        {"actor": "mate-service", "action": "校验用户、Chat 权限和请求字段", "outcome": "失败时直接返回稳定错误码"},
+        {"actor": "CampusClaw", "action": "执行 Builtin 或带调用快照的 Skill", "outcome": "命令接受后断线也继续执行"},
+        {"actor": "mate-service", "action": "过滤内部标识并投影公共事件", "outcome": "前端只接收可展示和可恢复的数据"}
+      ],
+      "requestFields": [
+        {"name": "name", "required": "是", "meaning": "要执行的命令名，不包含开头的 /", "example": "skill:pdf"},
+        {"name": "arguments", "required": "否", "meaning": "Slash 命令名后面的原始文本", "example": "分析附件并总结"},
+        {"name": "fileIds", "required": "否", "meaning": "用户已经上传的附件；只有 Skill 可以携带", "example": "[file-...]"}
+      ],
+      "scenarios": [
+        {
+          "title": "Builtin：/name 园区网络故障分析",
+          "steps": ["前端提交 name 和新的显示名称", "CampusClaw 更新 Session 名称", "mate-service 返回名称变化和命令完成事件"],
+          "outcome": "聊天标题更新，并显示命令执行成功"
+        },
+        {
+          "title": "Skill：/skill:pdf 分析附件并总结",
+          "steps": ["前端提交用户要求和附件 ID", "界面显示用户消息", "Assistant 内容逐步显示，最终结果进入历史"],
+          "outcome": "用户像普通对话一样看到流式回答"
+        }
+      ],
+      "notes": [
+        "浏览器断线不会取消已经接受的 Skill 或 Compact；重新加载后查询历史，不自动重复提交命令。"
+      ]
+    },
+    "questions": []
+  }
 }

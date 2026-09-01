@@ -93,5 +93,19 @@
       }
     ]
   },
-  "review": {"questions": []}
+  "review": {
+    "businessView": {
+      "summary": "用户在聊天输入框键入 Slash 时，前端调用本接口获取当前 Chat 可以展示的命令及其实时可用状态。",
+      "flow": [
+        {"actor": "用户", "action": "在输入框第一个字符输入 /", "outcome": "前端开始识别 Slash 命令"},
+        {"actor": "前端", "action": "携带 chatId 请求命令清单", "outcome": "不接触内部 sessionId"},
+        {"actor": "mate-service", "action": "校验登录用户和 Chat 权限，再解析内部 Session", "outcome": "向 CampusClaw 查询当前命令"},
+        {"actor": "前端", "action": "展示命令、参数提示和不可用原因", "outcome": "请求失败时保留用户草稿"}
+      ],
+      "notes": [
+        "评审时先确认命令是否应该出现、当前能否执行以及前端如何展示；完整 JSON 只用于研发核对字段。"
+      ]
+    },
+    "questions": []
+  }
 }

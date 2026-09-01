@@ -32,6 +32,9 @@ class ReviewHtmlParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.static_count = 0
+        self.business_count = 0
+        self.exact_contract_count = 0
+        self.open_exact_contract_count = 0
         self.styles: list[str] = []
         self.scripts: list[tuple[dict[str, str | None], str]] = []
         self.visible: list[str] = []
@@ -43,6 +46,12 @@ class ReviewHtmlParser(HTMLParser):
         attributes = dict(attrs)
         if "data-static-review" in attributes:
             self.static_count += 1
+        if "data-business-review" in attributes:
+            self.business_count += 1
+        if tag == "details" and "exact-contract" in (attributes.get("class") or "").split():
+            self.exact_contract_count += 1
+            if "open" in attributes:
+                self.open_exact_contract_count += 1
         if tag in {"style", "script"}:
             self.capture = tag
             self.attributes = attributes
@@ -108,7 +117,7 @@ def sse_payloads(stream: str) -> list[dict[str, Any]]:
 
 
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.0.4", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.0.5", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
     require("target-only" in common["api"]["visibility"], "Public contract must remain target-only")
     headers = {
@@ -134,6 +143,12 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
     require(len(models) == 2, "Expected two public command operations")
     for model in models:
         operation = model["operation"]
+        business_view = model["review"].get("businessView")
+        require(isinstance(business_view, dict), "Human review business view is required")
+        require(isinstance(business_view.get("summary"), str) and business_view["summary"],
+                "Human review summary is required")
+        require(isinstance(business_view.get("flow"), list) and business_view["flow"],
+                "Human review flow is required")
         require("target-only design" in operation["description"], "Operation must state target-only status")
         placeholders = re.findall(r"{([^}]+)}", operation["path"])
         require(all(LOWER_CAMEL.fullmatch(item) for item in placeholders), "Path fields must be lowerCamelCase")
@@ -193,6 +208,9 @@ def validate_html(models: list[dict[str, Any]]) -> None:
     parser = ReviewHtmlParser()
     parser.feed(source)
     require(parser.static_count == 2, "No-script operation count is wrong")
+    require(parser.business_count == 2, "Business review operation count is wrong")
+    require(parser.exact_contract_count == 2, "Exact contract fold count is wrong")
+    require(parser.open_exact_contract_count == 0, "Raw protocol must be folded by default")
     require(len(parser.styles) == 1, "Expected one shared style block")
     model_scripts = [json.loads(script) for attrs, script in parser.scripts
                      if attrs.get("type") == "application/json" and attrs.get("id") == "api-review-models"]
@@ -204,8 +222,12 @@ def validate_html(models: list[dict[str, Any]]) -> None:
         script_path.write_text(executable[0], encoding="utf-8")
         run(["node", "--check", str(script_path)])
     visible = " ".join(parser.visible)
-    for heading in ("作用", "调用上下文 Header", "参数与请求体", "响应"):
+    for heading in ("业务评审视图", "前后端怎么交互", "作用", "调用上下文 Header", "参数与请求体", "响应"):
         require(heading in visible, f"No-script review is missing {heading}")
+    require("研发实现用：查看原始 HTTP / JSON / SSE 报文" in visible,
+            "Raw protocol fold is missing")
+    require(source.index("data-business-review") < source.index("class=\"exact-contract\""),
+            "Business review must appear before the raw protocol")
     require("字段：lowerCamelCase" in visible and "Header：保留原名" in visible,
             "Review does not expose naming rules")
     require(re.search(r"@media\s*\(max-width:\s*680px\)", source) is not None,
