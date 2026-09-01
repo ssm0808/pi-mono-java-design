@@ -1,0 +1,53 @@
+@startuml public_chat_event_boundary
+title Public Chat Event Boundary
+skinparam shadowing false
+
+' Source evidence: mate-service@956b547f src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java:35-79
+' Source evidence: mate-service@956b547f src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/controller/LlmChatController.java:33-59
+' Source evidence: pi-mono-java@98d3999e modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:39-77
+' Observed behavior: mate-service has no public Chat-to-Runtime event bridge in the reviewed source.
+' Target-only design: mate-service authorizes Chat ownership and privately resolves chatId to sessionId.
+' Design reason: browser clients use a stable product Chat resource while Runtime owns Session execution.
+
+actor "Authenticated user" as User
+component "mate-service\nChatEventController" as Mate
+component "ChatSessionResolver" as Resolver
+component "CampusClaw Runtime\nRuntimeEventController" as Runtime
+
+User -> Mate : POST /mate-service/v1/chats/{chatId}/events
+Mate -> Mate : authenticate user and authorize Chat
+Mate -> Resolver : resolve owned Chat
+Resolver --> Mate : private sessionId
+Mate -> Runtime : POST /campusclaw-service/v1/sessions/{sessionId}/events
+Runtime --> Mate : internal execution-scoped SSE
+Mate --> User : reprojected public SSE
+@enduml
+
+@startuml public_chat_event_projection
+title Public Chat Event Reprojection
+skinparam shadowing false
+
+' Source evidence: mate-service@956b547f src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/service/UpstreamChatCall.java:35-73
+' Source evidence: pi-mono-java@98d3999e modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java:163-219,272-345,382-385
+' Observed behavior: the current mate-service model proxy forwards bytes and does not parse CampusClaw SSE frames.
+' Security hardening: raw thinking, internal identifiers, credentials, paths, tool payloads, and Runtime errors are removed.
+' Architecture change: the public Chat bridge parses, validates, maps, and serializes each complete SSE frame.
+
+participant Browser
+participant "PublicEventProjector" as Projector
+participant "CampusClaw Runtime" as Runtime
+
+Runtime --> Projector : internal event, id, and data
+loop each complete SSE frame
+  Projector -> Projector : validate known event and field shape
+  Projector -> Projector : map entrySeq to public eventSeq
+  Projector -> Projector : sanitize thinking and tool activity
+  Projector -> Projector : remove private fields and map errors
+  Projector --> Browser : serialize public SSE frame
+end
+note over Projector
+Unknown events fail closed.
+Accepted execution continues after browser disconnect.
+The POST is never replayed automatically.
+end note
+@enduml

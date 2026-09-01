@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.5.4 |
-| 状态 | CampusClaw 内部 HTTP 1.43.4 共 13 个 operation；Slash Command 内外契约已确认 |
+| 文档版本 | 3.5.5 |
+| 状态 | CampusClaw 内部 HTTP 1.43.4 共 13 个 operation；Slash Command 内外契约已确认；mate-service 普通消息 Events 路径已确认、其余评审中 |
 | 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
 | 设计仓分析基线 | `27484974eb106a7e43910d8e542de52a72c58102` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -116,6 +116,11 @@ mate-service 面向浏览器和业务客户端，负责：
 [mate-service 聊天命令 API](../../02-服务与接口/06-mate-service聊天命令API/README.md)。
 该接口不把 CampusClaw 的内部路径或内部 SSE 字节直接暴露给浏览器。
 
+普通消息已开始按单 operation 评审，用户确认路径为
+`POST /mate-service/v1/chats/{chatId}/events`。请求、认证、公共事件和错误建议见
+[mate-service 通用对话 Events API](../../02-服务与接口/07-mate-service通用对话API/README.md)；
+在该评审明确结束前，除路径与既有两跳边界外均不得标为已确认。
+
 ### 3.2 CampusClaw 内部 Runtime 边界
 
 CampusClaw 面向 mate-service Runtime client 和明确获授权的内部服务端 SDK，负责：
@@ -226,7 +231,8 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 - 背压、超时和代理缓冲配置适用于 `text/event-stream`。
 
 公共事件名和字段不与内部事件机械绑定。聊天命令 API 已确认由 mate-service 解析内部
-SSE、移除内部标识并重新投影；其他公共交互仍需在各自契约中逐项确认。
+SSE、移除内部标识并重新投影；普通消息 Events 已确认公共路径并进入逐项评审，当前
+推荐方案与待决项见其独立评审页，其他公共交互仍需在各自契约中逐项确认。
 
 ### 5.4 Slash Command
 
@@ -437,8 +443,8 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 以下内容尚未确认，不应由实现自行猜测：
 
-1. mate-service 除本次命令清单与命令执行以外的公共 Chat API、分页和消息 SSE Event Schema；
-2. 浏览器断线后公共 Chat 层如何对账内部已持久化 Entry；
+1. `POST /mate-service/v1/chats/{chatId}/events` 的公共事件命名、事件身份、Thinking 和 Tool 投影；路径已经用户确认；
+2. `GET /mate-service/v1/chats/{chatId}/events` 的分页、持久化 Event Schema，以及浏览器断线后如何对账内部 Entry；
 3. Pod 重启时 active execution 的中断或恢复策略；
 4. 公司 `ResultBeanFactory` 真实制品坐标和 `ResultBeanAdapter` 公司 Bean 的落地方式；
 5. 若未来需要机器可读契约，其格式、生成源和同步门禁需要重新评审。
@@ -447,6 +453,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.5.5 | 2026-09-01 | 记录 mate-service 普通消息 Events 公共路径已确认并链接单 operation 评审稿；事件命名、事件身份、Thinking/Tool 投影和 GET 恢复契约保持待确认。 |
 | 3.5.4 | 2026-09-01 | 同步 HTTP 1.43.4：Slash Command 统一使用“命令清单”，Skill 文件位置统一表述为“文件夹”。 |
 | 3.5.3 | 2026-09-01 | 同步 HTTP 1.43.3：补齐 Skill 名称规范，并明确参数复用普通消息的 UTF-16 输入上限。 |
 | 3.5.2 | 2026-08-31 | 同步 HTTP 1.43.2，以规则表和动作式短句统一 Slash Command 说明；不改变已确认行为。 |
