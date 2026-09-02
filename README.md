@@ -1,10 +1,10 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.3.1<br>
+> 导航版本：2.3.2<br>
 > 整理日期：2026-09-02<br>
 > Slash Command 设计基线：`27484974eb106a7e43910d8e542de52a72c58102`<br>
 > 通用对话 Events 三接口设计前基线：`743eca488ad559387706b5df54e2248a4124e5ef`<br>
-> 变更性质：增加 mate-service 通用对话 Events OpenAPI 3.1
+> 变更性质：修正 mate-service Events Swagger 请求头表达
 
 本仓库维护 CampusClaw Runtime、mate-service 边界、pi-mono-java 目标设计，
 以及相关源码和产品研究。这是设计与契约资料仓库，不是产品源码仓库。
@@ -96,6 +96,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.2 | 2026-09-02 | 修正 mate-service 通用对话 Events 的 Swagger 请求头表达：`X-HW-ID` 和 `access-token` 作为三个 operation 的必需 header parameter，JWT 与 APPKEY 作为二选一 security scheme，Mate 不声明 `Accept-Language`。 |
 | 2.3.1 | 2026-09-02 | 为 mate-service 通用对话 Events 三接口增加 OpenAPI 3.1；提交事件使用联合 Schema 和命名示例展示 message、interrupt 与 tool confirmation。 |
 | 2.3.0 | 2026-09-02 | 确认 mate-service 通用对话 Events 三接口：POST 提交、Chat 级 live SSE 和固定快照历史；同步事件类型、字段、错误与断线对账入口。 |
 | 2.2.0 | 2026-09-01 | 新增 `POST /mate-service/v1/chats/{chatId}/events` 单 operation 评审入口；路径已确认，公共事件命名、序列身份、Thinking 和 Tool 投影仍待确认。 |

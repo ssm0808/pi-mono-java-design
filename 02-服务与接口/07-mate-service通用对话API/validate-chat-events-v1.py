@@ -111,11 +111,13 @@ def validate_auth(operation: dict[str, Any]) -> None:
 
 
 def validate_common_model(model: dict[str, Any]) -> None:
-    require(model["api"]["version"] == "1.0.0", "Unexpected contract version")
+    require(model["api"]["version"] == "1.2.0", "Unexpected contract version")
     require(model["api"]["basePath"] == "/mate-service/v1", "Unexpected base path")
     require("已确认" in model["api"]["visibility"], "Contract must be confirmed")
     require(model["review"]["questions"] == [], "Confirmed contract must not contain review choices")
     validate_auth(model["operation"])
+    parameter_names = {item["name"] for item in model["operation"]["parameters"]}
+    require("Accept-Language" not in parameter_names, "Mate operations must not expose Accept-Language")
     for item in model["operation"]["responses"]:
         require(item["headers"].get("Cache-Control") == "no-store", f"Missing no-store: {item['id']}")
         for body in item["bodies"].values():
@@ -316,28 +318,46 @@ def validate_openapi(models: list[dict[str, Any]]) -> None:
     source = OPENAPI.read_text(encoding="utf-8")
     require("traceparent" not in source.lower(), "traceparent is forbidden")
     require("eventSeq" not in source, "OpenAPI must not expose eventSeq")
+    require("Accept-Language" not in source, "Mate OpenAPI must not expose Accept-Language")
     require("JWT 优先" in source and "不回退" in source, "Confirmed authentication precedence is missing")
 
 
 def validate_openapi_security(spec: dict[str, Any]) -> None:
     requirements = spec["security"]
     require(len(requirements) == 2, "OpenAPI must expose two authentication alternatives")
-    require(set(requirements[0]) == {"XHwId", "AccessToken", "BearerAuth"},
-            "JWT security requirement changed")
-    require(set(requirements[1]) == {"XHwId", "AccessToken", "AppKeyAuth"},
-            "APPKEY security requirement changed")
+    require(set(requirements[0]) == {"BearerAuth"}, "JWT security requirement changed")
+    require(set(requirements[1]) == {"AppKeyAuth"}, "APPKEY security requirement changed")
     require(all(value == [] for item in requirements for value in item.values()),
             "Security requirement scopes must be empty")
     schemes = spec["components"]["securitySchemes"]
-    require(schemes["XHwId"]["name"] == "X-HW-ID", "X-HW-ID security scheme changed")
-    require(schemes["AccessToken"]["name"] == "access-token", "access-token security scheme changed")
+    require(set(schemes) == {"BearerAuth", "AppKeyAuth"},
+            "Only credential alternatives belong in securitySchemes")
     require(schemes["AppKeyAuth"]["name"] == "X-HW-APPKEY", "APPKEY security scheme changed")
     require(schemes["BearerAuth"]["scheme"] == "bearer", "Bearer security scheme changed")
+    parameters = spec["components"]["parameters"]
+    validate_required_header(parameters["XHwIdHeader"], "X-HW-ID")
+    validate_required_header(parameters["AccessTokenHeader"], "access-token")
+    require("AcceptLanguage" not in parameters, "Accept-Language parameter must not exist")
+
+
+def validate_required_header(parameter: dict[str, Any], name: str) -> None:
+    require(parameter["name"] == name and parameter["in"] == "header" and parameter["required"] is True,
+            f"{name} must be a required header parameter")
+    schema = parameter["schema"]
+    require(schema["type"] == "string" and schema["minLength"] == 1,
+            f"{name} must be a non-empty string")
+
+
+def validate_operation_headers(operation: dict[str, Any], expected: list[str]) -> None:
+    refs = [item["$ref"].rsplit("/", 1)[-1] for item in operation["parameters"]]
+    require(refs == expected, "OpenAPI operation parameters changed")
+    require(operation["x-auth-precedence"] == "jwt", "JWT precedence extension changed")
 
 
 def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None:
     operation = spec["paths"]["/chats/{chatId}/events"]["post"]
     require(operation["operationId"] == "submitChatEvent", "Submit operationId changed")
+    validate_operation_headers(operation, ["ChatId", "XHwIdHeader", "AccessTokenHeader"])
     media = operation["requestBody"]["content"]["application/json"]
     require(media["schema"]["$ref"].endswith("/SubmitChatEventRequest"), "Submit request wrapper changed")
     examples = media["examples"]
@@ -371,6 +391,7 @@ def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None
 def validate_openapi_stream(spec: dict[str, Any]) -> None:
     operation = spec["paths"]["/chats/{chatId}/events/stream"]["get"]
     require(operation["operationId"] == "streamChatEvents", "Stream operationId changed")
+    validate_operation_headers(operation, ["ChatId", "XHwIdHeader", "AccessTokenHeader"])
     success = operation["responses"]["200"]
     media = success["content"]["text/event-stream"]
     require(media["schema"]["type"] == "string", "SSE wire schema must remain a string")
@@ -388,9 +409,9 @@ def validate_openapi_stream(spec: dict[str, Any]) -> None:
 def validate_openapi_history(spec: dict[str, Any], model: dict[str, Any]) -> None:
     operation = spec["paths"]["/chats/{chatId}/events"]["get"]
     require(operation["operationId"] == "listChatEvents", "History operationId changed")
-    refs = [item["$ref"].rsplit("/", 1)[-1] for item in operation["parameters"]]
-    require(refs == ["ChatId", "CreatedAtGte", "Limit", "Types", "Page", "AcceptLanguage"],
-            "OpenAPI history parameters changed")
+    validate_operation_headers(operation, [
+        "ChatId", "XHwIdHeader", "AccessTokenHeader", "CreatedAtGte", "Limit", "Types", "Page"
+    ])
     types = spec["components"]["schemas"]["HistoryEventType"]["enum"]
     require(set(types) == HISTORY_TYPES and len(types) == len(HISTORY_TYPES),
             "OpenAPI history types changed")

@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: mate-service General Chat Events API
-  version: 1.0.0
+  version: 1.2.0
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -16,12 +16,8 @@ tags:
   - name: Chat Events
     description: 公共 Chat 的用户事件、实时事件和权威历史
 security:
-  - XHwId: []
-    AccessToken: []
-    BearerAuth: []
-  - XHwId: []
-    AccessToken: []
-    AppKeyAuth: []
+  - BearerAuth: []
+  - AppKeyAuth: []
 paths:
   /chats/{chatId}/events:
     post:
@@ -37,9 +33,11 @@ paths:
         禁止盲目重放。Authorization 与 X-HW-APPKEY 同时存在时 JWT 优先；JWT 验证失败
         不回退到 APPKEY。
       x-operation-status: confirmed-target-only
+      x-auth-precedence: jwt
       parameters:
         - $ref: '#/components/parameters/ChatId'
-        - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/XHwIdHeader'
+        - $ref: '#/components/parameters/AccessTokenHeader'
       requestBody:
         required: true
         description: >
@@ -204,13 +202,15 @@ paths:
         使用服务端私有稳定顺序。提供 page 时不得同时提供 createdAtGte、limit 或 types。
         Authorization 与 X-HW-APPKEY 同时存在时 JWT 优先；JWT 验证失败不回退。
       x-operation-status: confirmed-target-only
+      x-auth-precedence: jwt
       parameters:
         - $ref: '#/components/parameters/ChatId'
+        - $ref: '#/components/parameters/XHwIdHeader'
+        - $ref: '#/components/parameters/AccessTokenHeader'
         - $ref: '#/components/parameters/CreatedAtGte'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Types'
         - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/AcceptLanguage'
       responses:
         '200':
           description: 固定快照中的一页权威事件
@@ -332,9 +332,11 @@ paths:
         SSE 建立后的异常直接关闭连接，客户端重开流并查询权威历史。Authorization 与
         X-HW-APPKEY 同时存在时 JWT 优先；JWT 验证失败不回退。
       x-operation-status: confirmed-target-only
+      x-auth-precedence: jwt
       parameters:
         - $ref: '#/components/parameters/ChatId'
-        - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/XHwIdHeader'
+        - $ref: '#/components/parameters/AccessTokenHeader'
       responses:
         '200':
           description: >
@@ -453,16 +455,6 @@ paths:
           $ref: '#/components/responses/ChatRuntimeUnavailable'
 components:
   securitySchemes:
-    XHwId:
-      type: apiKey
-      in: header
-      name: X-HW-ID
-      description: 必需的公司调用方身份，非空
-    AccessToken:
-      type: apiKey
-      in: header
-      name: access-token
-      description: 必需的当前调用上下文访问令牌，非空
     BearerAuth:
       type: http
       scheme: bearer
@@ -484,17 +476,22 @@ components:
         type: string
         minLength: 1
         maxLength: 64
-    AcceptLanguage:
-      name: Accept-Language
+    XHwIdHeader:
+      name: X-HW-ID
       in: header
-      required: false
-      description: 错误文案语言；缺失或不支持时回退 en-US
+      required: true
+      description: 必需的公司调用方身份
       schema:
         type: string
-        enum:
-          - zh-CN
-          - en-US
-        default: en-US
+        minLength: 1
+    AccessTokenHeader:
+      name: access-token
+      in: header
+      required: true
+      description: 必需的当前调用上下文访问令牌
+      schema:
+        type: string
+        minLength: 1
     CreatedAtGte:
       name: createdAtGte
       in: query
@@ -1214,9 +1211,10 @@ components:
           description: 稳定错误码；客户端只按该字段分支
         resMsg:
           type: string
-          description: 根据 Accept-Language 国际化后的安全文案
+          description: 由 Mate 公共国际化上下文生成的安全文案
 x-source-baselines:
   designRepositoryBeforeOpenApi: cb94cdb29eeda701116e24cb9fd5e23090f5a91a
+  designRepositoryBeforeHeaderCorrection: d3bdc83917b0b6951171be781b2377fd89d5040c
   campusClaw: 7e54b47f2539982f8f1855a0b6bb38b6ab8742ae
   pi: 5cd93f688aaab89dbb6dfa4aca535f21796ae185
   claudeManagedAgentsDocsCheckedAt: '2026-09-02'

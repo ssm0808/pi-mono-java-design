@@ -4,11 +4,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.0 |
+| 文档版本 | 1.2.0 |
 | 状态 | 三个 operation 已确认；待实现 |
 | 设计性质 | target-only；不得描述为当前 mate-service 或 CampusClaw 已实现行为 |
 | 设计仓变更前基线 | `743eca488ad559387706b5df54e2248a4124e5ef` |
 | OpenAPI 增补前基线 | `cb94cdb29eeda701116e24cb9fd5e23090f5a91a` |
+| Swagger 请求头修正前基线 | `d3bdc83917b0b6951171be781b2377fd89d5040c` |
 | CampusClaw 源码核对基线 | `7e54b47f2539982f8f1855a0b6bb38b6ab8742ae` |
 | pi 固定参考基线 | `badlogic/pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | Claude Managed Agents 公开文档核对日期 | 2026-09-02；Beta 公共契约，无可归因服务端源码 |
@@ -66,10 +67,20 @@ standalone HTML 是主要人类契约，三份 operation JSON 驱动该页面；
 | header | `access-token` | 是 | 当前调用上下文的访问令牌；非空字符串 |
 | header | `Authorization` | 条件必需 | `Bearer <JWT>`；与 `X-HW-APPKEY` 至少提供一个 |
 | header | `X-HW-APPKEY` | 条件必需 | 公司 AppKey；与 `Authorization` 至少提供一个 |
-| header | `Accept-Language` | 否 | `zh-CN` 或 `en-US`；缺失或不支持时使用 `en-US` |
 
 如果 `Authorization` 和 `X-HW-APPKEY` 同时存在，必须使用 JWT；JWT 无效时直接返回认证
 失败，不能回退到 AppKey。mate-service 先认证、授权 Chat，再解析私有 `sessionId`。
+
+OpenAPI 中，`X-HW-ID` 和 `access-token` 显式定义为每个 operation 的必需
+header parameter，因此 Swagger 会在三个接口的 Parameters 区直接展示。
+`Authorization` 和 `X-HW-APPKEY` 属于二选一认证凭据，仅在
+`securitySchemes` 中定义；`Authorization` 不再重复定义为普通 header
+parameter。`Content-Type: application/json` 由 `requestBody.content` 声明。
+
+Mate 这三个对外 operation 不声明 `Accept-Language`；Mate 公共国际化上下文
+负责确定错误文案语言，错误响应的 `Content-Language` 只表示实际使用的
+语言。后续 Claw HTTP Events 接口需要接收语言时，应在 Claw 契约中单独
+声明 `Accept-Language`，不从 Mate 契约隐式继承。
 
 ### 3.2 JSON 与时间
 
@@ -609,7 +620,8 @@ VO、Service 与错误组件名称。
 
 - Controller 使用独立 `*RequestVO` / `*ResponseVO`；字段级校验放请求 VO，Chat 状态、
   Tool Call 归属、固定快照和跨字段规则放 Service；
-- 请求 VO 不放默认值；`limit=100` 和 `Accept-Language=en-US` 在 Service 统一归一化；
+- 请求 VO 不放默认值；`limit=100` 在 Service 统一归一化；Mate 这三个
+  operation 不接收 `Accept-Language`；
 - `event.type` 使用受控联合类型反序列化；已知对象忽略未知字段，但未知 discriminator 拒绝；
 - 覆盖 message 的 text-only/file-only/mixed、文本 Unicode code point 边界、文件数量/重复/
   顺序、allow/deny 和 denyMessage 条件字段；
@@ -641,6 +653,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-02 | 按标准 Swagger 表达修正请求头：`X-HW-ID` 和 `access-token` 改为三个 operation 的必需 header parameter；JWT 和 APPKEY 保留为二选一 security scheme；Mate 删除 `Accept-Language` 请求声明，Claw 接口边界不变。 |
 | 1.1.0 | 2026-09-02 | 增加三接口 OpenAPI 3.1 机器契约；提交事件用 `oneOf + discriminator` 和四个命名示例展示三种用户事件；将 page 示例改为不可推断内部字段的 opaque cursor；接口行为保持 1.0.0。 |
 | 1.0.0 | 2026-09-02 | 确认 POST 提交、Chat 级 live SSE 和固定快照历史三个 operation；固定三种用户事件、五种实时事件、八种历史事件、四个 idle reason、`eventId` 身份、字段形状、双语错误和断线对账；整体替换 0.1.0 请求范围 SSE 评审稿。 |
 | 0.1.0 | 2026-09-01 | 建立单 POST 请求范围 SSE 初稿；该方案已由 1.0.0 替换。 |

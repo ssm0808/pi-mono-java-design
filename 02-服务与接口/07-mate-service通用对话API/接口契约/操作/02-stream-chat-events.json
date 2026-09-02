@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
@@ -69,13 +69,6 @@
         "required": true,
         "schema": "string, 1..64, case-sensitive",
         "description": "调用方有权访问的公共 Chat 标识；不接受内部 sessionId"
-      },
-      {
-        "in": "header",
-        "name": "Accept-Language",
-        "required": false,
-        "schema": "zh-CN | en-US; default en-US",
-        "description": "仅用于 SSE 建立前 JSON 错误；缺失或不支持时回退 en-US"
       }
     ],
     "requestBody": {
@@ -216,6 +209,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 GET /mate-service/v1/chats/{chatId}/events/stream",
-    "promptSuffix": "保持与三接口 1.0.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.2.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }
