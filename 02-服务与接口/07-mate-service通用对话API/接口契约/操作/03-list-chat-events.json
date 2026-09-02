@@ -1,15 +1,15 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.4.1",
+    "version": "1.4.2",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
   "operation": {
     "method": "GET",
     "path": "/chats/{chatId}/events",
-    "summary": "查询 Chat 权威事件历史",
-    "description": "按 createdAt 升序返回固定快照中的完整持久化事件。第一页捕获快照上界；page 携带过滤条件、上界和私有续读位置，后续页不混入新事件。相同 createdAt 使用服务端私有稳定顺序。历史包含三类 user event、completed message/thinking、Tool Call/Result 和 chat.status_idle，不包含 delta、ping 或内部事件。",
+    "summary": "查询 Chat 事件历史",
+    "description": "读取可用于界面恢复和审计的完整事件历史。结果按 createdAt 升序排列；首次查询会固定本次快照的上界，后续通过 page 继续读取，因此翻页期间产生的新事件不会混入当前快照。历史包含三类用户事件、已完成的消息与思考摘要、工具调用与结果，以及 chat.status_idle；不包含实时 delta、SSE ping 或内部事件。",
     "authModes": [
       {
         "id": "jwt",
@@ -102,7 +102,7 @@
     "requestBody": {
       "required": false,
       "contentType": null,
-      "description": "无请求体。首次请求使用过滤参数；翻页请求只使用 page。",
+      "description": "无需请求体。首次查询可提供过滤条件；继续读取同一固定快照时，只需原样回传 page。",
       "example": null
     },
     "responses": [
@@ -111,17 +111,28 @@
         "status": "200",
         "tabLabel": "200 · 固定快照页",
         "label": "OK",
-        "summary": "events 必需且可为空；仅还有下一页时返回非空 nextPage，否则省略。agent.message/thinking 只返回 phase=completed；八类事件均使用各自稳定 eventId。Tool Call、确认和结果原样共享同一 OpenAI toolCallId，但仍是三条独立审计事件。",
+        "summary": "示例假设 limit=10，展示上一轮执行被中断后继续对话，并拒绝一项会修改生产配置的工具调用，最后由 Agent 给出无变更风险的建议。events 是按时间排列的完整记录；还有下一页时返回 nextPage。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store"
         },
         "bodies": {
-          "default": {
+          "中断后继续对话的历史页": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
               "events": [
+                {
+                  "eventId": "aee903c130e048b9bc2894fc32cd63a8",
+                  "type": "user.interrupt",
+                  "createdAt": "2026-09-02T08:30:14.800Z"
+                },
+                {
+                  "eventId": "d4e3e8b9653047a99ac10396a17fe84d",
+                  "type": "chat.status_idle",
+                  "createdAt": "2026-09-02T08:30:15.000Z",
+                  "reason": "terminated"
+                },
                 {
                   "eventId": "b7ef45d40a854c33af7a36df871a21e8",
                   "type": "user.message",
@@ -129,7 +140,7 @@
                   "content": [
                     {
                       "type": "text",
-                      "text": "分析上传文件并给出处理建议"
+                      "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
                     },
                     {
                       "type": "file",
@@ -138,56 +149,58 @@
                   ]
                 },
                 {
-                  "eventId": "aee903c130e048b9bc2894fc32cd63a8",
-                  "type": "user.interrupt",
-                  "createdAt": "2026-09-02T08:30:15.500Z"
+                  "eventId": "4b3e522e7f6746be8781a2c8876fd1da",
+                  "type": "agent.thinking",
+                  "phase": "completed",
+                  "createdAt": "2026-09-02T08:30:15.680Z",
+                  "content": "已梳理巡检记录中的异常现象，并定位到需要进一步核查的上联链路。"
+                },
+                {
+                  "eventId": "c8de683be2ab4e25a8d97f7cf507c150",
+                  "type": "agent.tool_call",
+                  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
+                  "createdAt": "2026-09-02T08:30:16.000Z",
+                  "toolName": "isolate_campus_port",
+                  "arguments": {
+                    "deviceName": "SW-DC-01",
+                    "portName": "GigabitEthernet0/0/24"
+                  },
+                  "requiresConfirmation": true
+                },
+                {
+                  "eventId": "f13a8cb54e8a4c9081d4a6e26cb3ef72",
+                  "type": "chat.status_idle",
+                  "createdAt": "2026-09-02T08:30:16.200Z",
+                  "reason": "confirming"
                 },
                 {
                   "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
                   "type": "user.tool_confirmation",
-                  "createdAt": "2026-09-02T08:30:16.000Z",
+                  "createdAt": "2026-09-02T08:30:16.420Z",
                   "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
                   "result": "deny",
-                  "denyMessage": "不要执行会修改生产配置的操作"
+                  "denyMessage": "该操作会修改生产配置，请先给出无变更风险的处理建议。"
+                },
+                {
+                  "eventId": "89f8316e07ef4c9aa3fd056a91a182b0",
+                  "type": "agent.tool_result",
+                  "createdAt": "2026-09-02T08:30:16.600Z",
+                  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
+                  "content": "用户已拒绝，本次工具调用未执行。",
+                  "isError": true,
+                  "errorCode": "TOOL_CALL_DENIED"
                 },
                 {
                   "eventId": "d5c19f7c4b1642e6806aeb860752d99b",
                   "type": "agent.message",
                   "phase": "completed",
                   "createdAt": "2026-09-02T08:30:17.000Z",
-                  "content": "建议先隔离受影响端口，再核对上联链路。"
+                  "content": "已取消会修改生产配置的操作。建议先核查上联链路与告警时间线，再安排变更窗口处理。"
                 },
                 {
-                  "eventId": "4b3e522e7f6746be8781a2c8876fd1da",
-                  "type": "agent.thinking",
-                  "phase": "completed",
-                  "createdAt": "2026-09-02T08:30:17.305Z",
-                  "content": "已核对告警时间、设备范围和关联影响。"
-                },
-                {
-                  "eventId": "c8de683be2ab4e25a8d97f7cf507c150",
-                  "type": "agent.tool_call",
-                  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
-                  "createdAt": "2026-09-02T08:30:17.420Z",
-                  "toolName": "query_campus_alarm",
-                  "arguments": {
-                    "siteName": "东区园区"
-                  },
-                  "requiresConfirmation": true
-                },
-                {
-                  "eventId": "89f8316e07ef4c9aa3fd056a91a182b0",
-                  "type": "agent.tool_result",
-                  "createdAt": "2026-09-02T08:30:18.102Z",
-                  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
-                  "content": "用户拒绝执行。",
-                  "isError": true,
-                  "errorCode": "TOOL_CALL_DENIED"
-                },
-                {
-                  "eventId": "d4e3e8b9653047a99ac10396a17fe84d",
+                  "eventId": "0e93b7d8a4c94f1ba802c6e7259d3a41",
                   "type": "chat.status_idle",
-                  "createdAt": "2026-09-02T08:30:20.000Z",
+                  "createdAt": "2026-09-02T08:30:17.100Z",
                   "reason": "done"
                 }
               ],
@@ -400,6 +413,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 GET /mate-service/v1/chats/{chatId}/events",
-    "promptSuffix": "保持与三接口 1.4.1 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.4.2 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }

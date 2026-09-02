@@ -1,15 +1,15 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.4.1",
+    "version": "1.4.2",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
   "operation": {
     "method": "GET",
     "path": "/chats/{chatId}/events/stream",
-    "summary": "订阅 Chat 实时事件",
-    "description": "建立跨越多次 execution 和 idle 状态的 Chat 级长连接 SSE，从连接时刻开始发送 live 事件。它不重放、不接受 Last-Event-ID，也不在 chat.status_idle 后关闭。业务 frame 只使用 data: 完整 JSON，不使用 SSE event: 或 id:；可发送 : ping comment。断线后重开流并查询权威历史，按 eventId 对账。",
+    "summary": "实时接收 Chat 事件",
+    "description": "持续接收指定 Chat 从连接建立后产生的实时事件，连接可跨越多次执行和空闲状态。该流用于即时预览，不负责历史重放，也不会在 chat.status_idle 后关闭；业务帧只使用 data: 承载完整 JSON，保活使用 : ping 注释。断线后重新建立连接，并通过权威历史按 eventId 完成对账。",
     "authModes": [
       {
         "id": "jwt",
@@ -74,7 +74,7 @@
     "requestBody": {
       "required": false,
       "contentType": null,
-      "description": "无请求体；不接受 Last-Event-ID、after、eventSeq 或其他恢复参数。",
+      "description": "无需请求体。该实时流从连接建立时开始推送，不接受 Last-Event-ID、after、eventSeq 或其他恢复参数。",
       "example": null
     },
     "responses": [
@@ -83,13 +83,13 @@
         "status": "200",
         "tabLabel": "200 · Chat 实时流",
         "label": "OK",
-        "summary": "五类公共实时事件。message/thinking 的 delta 没有 createdAt，completed 复用同一 eventId 并带完整 content；Tool 与 idle 是一次性完整持久事件。agent.tool_call 同时带独立 eventId 和直接来自 OpenAI call_id / tool_calls[].id 的 toolCallId，agent.tool_result 原样引用后者。user.* 不在 SSE 中重复推送。",
+        "summary": "示例依次展示公开思考摘要、工具查询与结果、回复增量，以及 Chat 回到空闲状态。message/thinking 的 completed 与 delta 复用 eventId；user.* 不会在 SSE 中重复推送。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store"
         },
         "bodies": {
-          "default": "data: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"delta\",\"content\":\"正在核对告警时间线\"}\n\ndata: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:17.305Z\",\"content\":\"已核对告警时间、设备范围和关联影响。\"}\n\ndata: {\"eventId\":\"c8de683be2ab4e25a8d97f7cf507c150\",\"type\":\"agent.tool_call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-02T08:30:17.420Z\",\"toolName\":\"query_campus_alarm\",\"arguments\":{\"siteName\":\"东区园区\"},\"requiresConfirmation\":false}\n\n: ping\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-02T08:30:18.102Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":\"找到 3 条相关告警。\",\"isError\":false}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"建议先隔离受影响端口，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:19.451Z\",\"content\":\"建议先隔离受影响端口，再核对上联链路。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"chat.status_idle\",\"createdAt\":\"2026-09-02T08:30:20.000Z\",\"reason\":\"done\"}\n"
+          "一次完整的实时交互": "data: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"delta\",\"content\":\"正在梳理巡检记录与告警时间线……\"}\n\ndata: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:17.305Z\",\"content\":\"已完成巡检记录、告警时间线和影响范围的梳理。\"}\n\ndata: {\"eventId\":\"c8de683be2ab4e25a8d97f7cf507c150\",\"type\":\"agent.tool_call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-02T08:30:17.420Z\",\"toolName\":\"query_campus_alarm\",\"arguments\":{\"siteName\":\"东区园区\"},\"requiresConfirmation\":false}\n\n: ping\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-02T08:30:18.102Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":\"共检索到 3 条与本次异常相关的告警。\",\"isError\":false}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"结合巡检记录与告警信息，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:19.451Z\",\"content\":\"结合巡检记录与告警信息，建议先隔离受影响端口，并进一步核查上联链路状态。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"chat.status_idle\",\"createdAt\":\"2026-09-02T08:30:20.000Z\",\"reason\":\"done\"}\n"
         }
       },
       {
@@ -209,6 +209,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 GET /mate-service/v1/chats/{chatId}/events/stream",
-    "promptSuffix": "保持与三接口 1.4.1 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.4.2 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }

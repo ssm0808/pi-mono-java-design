@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: mate-service General Chat Events API
-  version: 1.4.1
+  version: 1.4.2
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -26,11 +26,10 @@ paths:
       operationId: submitChatEvent
       summary: 提交一条用户事件
       description: >
-        一次只提交 user.message、user.interrupt 或 user.tool_confirmation 中的一条，
-        并在 result.event 中返回服务端接受并持久化后的完整用户事件；该事件与历史接口中的
-        对应 user.* 事件复用同一 Schema。响应不是 execution 结果。
-        interrupt 与 message 不得批量提交；必须等待
-        chat.status_idle(reason=terminated) 后再提交 message。响应丢失时查询权威历史，
+        向指定 Chat 提交一项用户操作：发送消息、中断当前执行，或回复工具调用确认。
+        服务端接收并保存事件后，在 result.event 中返回与历史记录一致的完整用户事件；
+        Agent 的后续输出仍从实时流或历史查询获取。一次请求只接受一个事件；提交 interrupt
+        后，必须等待 chat.status_idle(reason=terminated) 再发送新消息。响应丢失时查询权威历史，
         禁止盲目重放。Authorization 与 X-HW-APPKEY 同时存在时 JWT 优先；JWT 验证失败
         不回退到 APPKEY。
       x-operation-status: confirmed-target-only
@@ -42,43 +41,44 @@ paths:
       requestBody:
         required: true
         description: >
-          一次请求只提交一个 event。Schema 使用 type discriminator 区分三种事件；
-          Swagger UI 使用命名示例分别展示发送消息、中断当前执行、允许工具调用和拒绝工具调用。
+          示例以“分析附件中的园区巡检记录”为主场景。一次请求只提交一个 event；Schema
+          使用 type discriminator 区分三种事件。Swagger UI 通过命名示例分别展示发送消息、
+          中断当前分析、允许隔离端口和拒绝高风险操作。
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/SubmitChatEventRequest'
             examples:
               userMessage:
-                summary: 发送包含文本与文件的用户消息
+                summary: 分析附件中的园区巡检记录
                 value:
                   event:
                     type: user.message
                     content:
                       - type: text
-                        text: 分析上传文件并给出处理建议
+                        text: 请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。
                       - type: file
                         fileId: 7f12d8a380964fdc8518f48be1cf6a42
               userInterrupt:
-                summary: 中断当前执行
+                summary: 中断当前正在执行的分析
                 value:
                   event:
                     type: user.interrupt
               toolConfirmationAllow:
-                summary: 允许本次工具调用
+                summary: 允许隔离受影响端口
                 value:
                   event:
                     type: user.tool_confirmation
                     toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
                     result: allow
               toolConfirmationDeny:
-                summary: 拒绝本次工具调用并说明原因
+                summary: 拒绝修改生产配置并要求替代方案
                 value:
                   event:
                     type: user.tool_confirmation
                     toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
                     result: deny
-                    denyMessage: 不要执行会修改生产配置的操作
+                    denyMessage: 该操作会修改生产配置，请先给出无变更风险的处理建议。
       responses:
         '200':
           description: 用户事件已接收并保存；不代表 Agent 执行已经完成
@@ -91,7 +91,7 @@ paths:
                 $ref: '#/components/schemas/SubmitChatEventResponse'
               examples:
                 userMessage:
-                  summary: 用户消息已接收并保存
+                  summary: 园区巡检分析请求已接收并保存
                   value:
                     resCode: '0'
                     resMsg: success
@@ -102,11 +102,11 @@ paths:
                         createdAt: '2026-09-02T08:30:15.123Z'
                         content:
                           - type: text
-                            text: 分析上传文件并给出处理建议
+                            text: 请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。
                           - type: file
                             fileId: 7f12d8a380964fdc8518f48be1cf6a42
                 userInterrupt:
-                  summary: 中断指令已接收并保存
+                  summary: 中断分析的指令已接收并保存
                   value:
                     resCode: '0'
                     resMsg: success
@@ -114,9 +114,9 @@ paths:
                       event:
                         eventId: aee903c130e048b9bc2894fc32cd63a8
                         type: user.interrupt
-                        createdAt: '2026-09-02T08:30:15.500Z'
+                        createdAt: '2026-09-02T08:30:14.800Z'
                 userToolConfirmation:
-                  summary: 工具确认结果已接收并保存
+                  summary: 拒绝高风险操作的结果已接收并保存
                   value:
                     resCode: '0'
                     resMsg: success
@@ -124,10 +124,10 @@ paths:
                       event:
                         eventId: 2781508bb1c9496f94a0454d0bf8c0f8
                         type: user.tool_confirmation
-                        createdAt: '2026-09-02T08:30:16.000Z'
+                        createdAt: '2026-09-02T08:30:16.420Z'
                         toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
                         result: deny
-                        denyMessage: 不要执行会修改生产配置的操作
+                        denyMessage: 该操作会修改生产配置，请先给出无变更风险的处理建议。
         '400':
           description: chatId、JSON、事件字段或 type 非法
           headers:
@@ -228,11 +228,12 @@ paths:
       tags:
         - Chat Events
       operationId: listChatEvents
-      summary: 查询 Chat 权威事件历史
+      summary: 查询 Chat 事件历史
       description: >
-        按 createdAt 升序返回固定快照中的完整持久化事件。第一页捕获查询上界；
-        page 携带过滤条件、固定上界和私有续读位置，后续页不混入新事件。同一 createdAt
-        使用服务端私有稳定顺序。提供 page 时不得同时提供 createdAtGte、limit 或 types。
+        读取可用于界面恢复和审计的完整事件历史。结果按 createdAt 升序排列；首次查询固定
+        本次快照的上界，后续通过 page 继续读取，因此翻页期间产生的新事件不会混入当前快照。
+        同一 createdAt 使用服务端私有稳定顺序。提供 page 时不得同时提供 createdAtGte、
+        limit 或 types。
         Authorization 与 X-HW-APPKEY 同时存在时 JWT 优先；JWT 验证失败不回退。
       x-operation-status: confirmed-target-only
       x-auth-precedence: jwt
@@ -246,7 +247,7 @@ paths:
         - $ref: '#/components/parameters/Page'
       responses:
         '200':
-          description: 固定快照中的一页权威事件
+          description: 返回固定快照中的一页完整事件；以下示例使用 limit=10
           headers:
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
@@ -254,27 +255,70 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListChatEventsResponse'
-              example:
-                resCode: '0'
-                resMsg: success
-                result:
-                  events:
-                    - eventId: b7ef45d40a854c33af7a36df871a21e8
-                      type: user.message
-                      createdAt: '2026-09-02T08:30:15.123Z'
-                      content:
-                        - type: text
-                          text: 分析上传文件并给出处理建议
-                    - eventId: d5c19f7c4b1642e6806aeb860752d99b
-                      type: agent.message
-                      phase: completed
-                      createdAt: '2026-09-02T08:30:19.451Z'
-                      content: 建议先隔离受影响端口，再核对上联链路。
-                    - eventId: d4e3e8b9653047a99ac10396a17fe84d
-                      type: chat.status_idle
-                      createdAt: '2026-09-02T08:30:20.000Z'
-                      reason: done
-                  nextPage: pg_4M7qK2vN9xR5dT8wC1hF6sL3
+              examples:
+                conversationRecovery:
+                  summary: 中断后继续对话并改用无变更方案（limit=10）
+                  value:
+                    resCode: '0'
+                    resMsg: success
+                    result:
+                      events:
+                        - eventId: aee903c130e048b9bc2894fc32cd63a8
+                          type: user.interrupt
+                          createdAt: '2026-09-02T08:30:14.800Z'
+                        - eventId: d4e3e8b9653047a99ac10396a17fe84d
+                          type: chat.status_idle
+                          createdAt: '2026-09-02T08:30:15.000Z'
+                          reason: terminated
+                        - eventId: b7ef45d40a854c33af7a36df871a21e8
+                          type: user.message
+                          createdAt: '2026-09-02T08:30:15.123Z'
+                          content:
+                            - type: text
+                              text: 请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。
+                            - type: file
+                              fileId: 7f12d8a380964fdc8518f48be1cf6a42
+                        - eventId: 4b3e522e7f6746be8781a2c8876fd1da
+                          type: agent.thinking
+                          phase: completed
+                          createdAt: '2026-09-02T08:30:15.680Z'
+                          content: 已梳理巡检记录中的异常现象，并定位到需要进一步核查的上联链路。
+                        - eventId: c8de683be2ab4e25a8d97f7cf507c150
+                          type: agent.tool_call
+                          toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
+                          createdAt: '2026-09-02T08:30:16.000Z'
+                          toolName: isolate_campus_port
+                          arguments:
+                            deviceName: SW-DC-01
+                            portName: GigabitEthernet0/0/24
+                          requiresConfirmation: true
+                        - eventId: f13a8cb54e8a4c9081d4a6e26cb3ef72
+                          type: chat.status_idle
+                          createdAt: '2026-09-02T08:30:16.200Z'
+                          reason: confirming
+                        - eventId: 2781508bb1c9496f94a0454d0bf8c0f8
+                          type: user.tool_confirmation
+                          createdAt: '2026-09-02T08:30:16.420Z'
+                          toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
+                          result: deny
+                          denyMessage: 该操作会修改生产配置，请先给出无变更风险的处理建议。
+                        - eventId: 89f8316e07ef4c9aa3fd056a91a182b0
+                          type: agent.tool_result
+                          createdAt: '2026-09-02T08:30:16.600Z'
+                          toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
+                          content: 用户已拒绝，本次工具调用未执行。
+                          isError: true
+                          errorCode: TOOL_CALL_DENIED
+                        - eventId: d5c19f7c4b1642e6806aeb860752d99b
+                          type: agent.message
+                          phase: completed
+                          createdAt: '2026-09-02T08:30:17.000Z'
+                          content: 已取消会修改生产配置的操作。建议先核查上联链路与告警时间线，再安排变更窗口处理。
+                        - eventId: 0e93b7d8a4c94f1ba802c6e7259d3a41
+                          type: chat.status_idle
+                          createdAt: '2026-09-02T08:30:17.100Z'
+                          reason: done
+                      nextPage: pg_4M7qK2vN9xR5dT8wC1hF6sL3
         '400':
           description: chatId、过滤条件或 page 非法
           headers:
@@ -357,13 +401,13 @@ paths:
       tags:
         - Chat Events
       operationId: streamChatEvents
-      summary: 订阅 Chat 实时事件
+      summary: 实时接收 Chat 事件
       description: >
-        建立跨越多次 execution 和 idle 状态的 Chat 级 SSE，从连接时刻开始发送 live
-        事件。业务 frame 只有 data: 完整 JSON，不使用 SSE event: 或 id:；服务端可以发送
-        : ping comment。接口不接受 Last-Event-ID、不重放，也不在 chat.status_idle 后关闭。
-        SSE 建立后的异常直接关闭连接，客户端重开流并查询权威历史。Authorization 与
-        X-HW-APPKEY 同时存在时 JWT 优先；JWT 验证失败不回退。
+        持续接收指定 Chat 从连接建立后产生的实时事件，连接可跨越多次执行和空闲状态。
+        该流用于即时预览，不负责历史重放，也不会在 chat.status_idle 后关闭；业务帧只使用
+        data: 承载完整 JSON，保活使用 : ping 注释。连接断开不取消执行；客户端重新建立连接，
+        并通过权威历史按 eventId 完成对账。Authorization 与 X-HW-APPKEY 同时存在时 JWT
+        优先；JWT 验证失败不回退。
       x-operation-status: confirmed-target-only
       x-auth-precedence: jwt
       parameters:
@@ -373,8 +417,9 @@ paths:
       responses:
         '200':
           description: >
-            data-only Chat 实时事件流。user.* 不在 SSE 中重复推送；delta 是临时 preview，
-            completed、Tool 和 idle 是权威持久事件。
+            Chat 实时事件流。示例依次展示公开思考摘要、工具查询与结果、回复增量，以及
+            Chat 回到空闲状态。user.* 不在 SSE 中重复推送；delta 是临时预览，
+            completed、Tool 和 idle 是权威记录。
           x-sse-data-schema:
             description: >
               SSE data JSON 的联合 Schema。message/thinking 的 delta 没有 createdAt；
@@ -438,22 +483,25 @@ paths:
                 type: string
                 description: >
                   每个业务 frame 是一行 data: 加完整 JSON；保活 frame 是 : ping comment。
-              example: |
-                data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.thinking","phase":"delta","content":"正在核对告警时间线"}
+              examples:
+                liveConversation:
+                  summary: 一次完整的实时交互
+                  value: |
+                    data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.thinking","phase":"delta","content":"正在梳理巡检记录与告警时间线……"}
 
-                data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.thinking","phase":"completed","createdAt":"2026-09-02T08:30:17.305Z","content":"已核对告警时间、设备范围和关联影响。"}
+                    data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.thinking","phase":"completed","createdAt":"2026-09-02T08:30:17.305Z","content":"已完成巡检记录、告警时间线和影响范围的梳理。"}
 
-                data: {"eventId":"c8de683be2ab4e25a8d97f7cf507c150","type":"agent.tool_call","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","createdAt":"2026-09-02T08:30:17.420Z","toolName":"query_campus_alarm","arguments":{"siteName":"东区园区"},"requiresConfirmation":false}
+                    data: {"eventId":"c8de683be2ab4e25a8d97f7cf507c150","type":"agent.tool_call","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","createdAt":"2026-09-02T08:30:17.420Z","toolName":"query_campus_alarm","arguments":{"siteName":"东区园区"},"requiresConfirmation":false}
 
-                : ping
+                    : ping
 
-                data: {"eventId":"89f8316e07ef4c9aa3fd056a91a182b0","type":"agent.tool_result","createdAt":"2026-09-02T08:30:18.102Z","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","content":"找到 3 条相关告警。","isError":false}
+                    data: {"eventId":"89f8316e07ef4c9aa3fd056a91a182b0","type":"agent.tool_result","createdAt":"2026-09-02T08:30:18.102Z","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","content":"共检索到 3 条与本次异常相关的告警。","isError":false}
 
-                data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"delta","content":"建议先隔离受影响端口，"}
+                    data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"delta","content":"结合巡检记录与告警信息，"}
 
-                data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"completed","createdAt":"2026-09-02T08:30:19.451Z","content":"建议先隔离受影响端口，再核对上联链路。"}
+                    data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"completed","createdAt":"2026-09-02T08:30:19.451Z","content":"结合巡检记录与告警信息，建议先隔离受影响端口，并进一步核查上联链路状态。"}
 
-                data: {"eventId":"d4e3e8b9653047a99ac10396a17fe84d","type":"chat.status_idle","createdAt":"2026-09-02T08:30:20.000Z","reason":"done"}
+                    data: {"eventId":"d4e3e8b9653047a99ac10396a17fe84d","type":"chat.status_idle","createdAt":"2026-09-02T08:30:20.000Z","reason":"done"}
         '400':
           description: chatId 非法；此响应只发生在 SSE 建立前
           headers:
@@ -1275,6 +1323,7 @@ x-source-baselines:
   designRepositoryBeforeOpenAiToolCallId: ecf4cc06619f7a02c467d7212a0a12d86ab56a9f
   designRepositoryBeforeFullEventReceipt: d29418845b6782185e296edd5f138f5e993ac044
   designRepositoryBeforeExampleCopyEdit: 5ac57bac4c58c0ae86630f591f1f699a065c9e4f
+  designRepositoryBeforeEventCopyEdit: 7887d55ed86033e7163494d0dda2f0bb85544a83
   campusClaw: 7e54b47f2539982f8f1855a0b6bb38b6ab8742ae
   pi: 5cd93f688aaab89dbb6dfa4aca535f21796ae185
   claudeManagedAgentsDocsCheckedAt: '2026-09-02'

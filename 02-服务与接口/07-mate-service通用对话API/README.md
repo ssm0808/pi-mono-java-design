@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.1 |
+| 文档版本 | 1.4.2 |
 | 状态 | 三个 operation 已确认；待实现 |
 | 设计性质 | target-only；不得描述为当前 mate-service 或 CampusClaw 已实现行为 |
 | 设计仓变更前基线 | `743eca488ad559387706b5df54e2248a4124e5ef` |
@@ -13,6 +13,7 @@
 | OpenAI Tool Call ID 修正前基线 | `ecf4cc06619f7a02c467d7212a0a12d86ab56a9f` |
 | 完整用户事件回执修正前基线 | `d29418845b6782185e296edd5f138f5e993ac044` |
 | 示例文案优化前基线 | `5ac57bac4c58c0ae86630f591f1f699a065c9e4f` |
+| Events 示例整体润色前基线 | `7887d55ed86033e7163494d0dda2f0bb85544a83` |
 | CampusClaw 源码核对基线 | `7e54b47f2539982f8f1855a0b6bb38b6ab8742ae` |
 | pi 固定参考基线 | `badlogic/pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | Claude Managed Agents 公开文档核对日期 | 2026-09-02；Beta 公共契约，无可归因服务端源码 |
@@ -28,8 +29,8 @@ Mate 对外只使用 `Chat/chatId/chat.*`；Claw 内部继续使用
 | # | 方法与路径 | 用途 | 返回 |
 |---:|---|---|---|
 | 1 | `POST /mate-service/v1/chats/{chatId}/events` | 提交一条用户事件 | 完整用户事件 JSON |
-| 2 | `GET /mate-service/v1/chats/{chatId}/events/stream` | 从连接时刻开始观察 Chat 的实时事件 | 长连接 SSE，仅 live preview 与实时通知 |
-| 3 | `GET /mate-service/v1/chats/{chatId}/events` | 查询可恢复、可审计的权威事件历史 | 固定快照分页 JSON |
+| 2 | `GET /mate-service/v1/chats/{chatId}/events/stream` | 实时接收 Chat 从连接建立后产生的事件 | 长连接 SSE，仅实时预览与通知 |
+| 3 | `GET /mate-service/v1/chats/{chatId}/events` | 读取可恢复、可审计的完整事件历史 | 固定快照分页 JSON |
 
 精确 operation 模型和生成后的主评审面：
 
@@ -140,10 +141,10 @@ UI 的请求示例下拉框提供四个命名示例：
 
 | 示例名 | 展示内容 |
 |---|---|
-| `userMessage` | 发送一条同时包含文本和文件的用户消息；也允许只有文本或只有文件 |
-| `userInterrupt` | 中断当前正在运行的执行 |
-| `toolConfirmationAllow` | 允许当前等待确认的工具调用，并省略 `denyMessage` |
-| `toolConfirmationDeny` | 拒绝当前等待确认的工具调用，并可说明拒绝原因 |
+| `userMessage` | 附上园区巡检记录，请 Agent 梳理异常告警并提出处理建议 |
+| `userInterrupt` | 中断当前正在执行的分析 |
+| `toolConfirmationAllow` | 允许隔离受影响端口，并省略 `denyMessage` |
+| `toolConfirmationDeny` | 拒绝修改生产配置，并要求 Agent 提供替代方案 |
 
 因此另外两种事件不会被塞进同一个庞大示例，也不会新增 endpoint；Schema 区通过
 `oneOf` 展开类型，Try it out 区通过 `examples` 切换具体请求。
@@ -153,14 +154,14 @@ UI 的请求示例下拉框提供四个命名示例：
 
 ### 4.1 `user.message`
 
-请求示例：发送一条同时包含文本和文件的用户消息。
+请求示例：用户附上园区巡检记录，请 Agent 梳理异常告警并提出处理建议。
 
 ```json
 {
   "event": {
     "type": "user.message",
     "content": [
-      {"type": "text", "text": "分析上传文件并给出处理建议"},
+      {"type": "text", "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"},
       {"type": "file", "fileId": "7f12d8a380964fdc8518f48be1cf6a42"}
     ]
   }
@@ -184,7 +185,7 @@ FollowUp 或队列项。同一 Chat 最多一个 active message execution。
 
 ### 4.2 `user.interrupt`
 
-请求示例：中断当前正在运行的执行。
+请求示例：用户中断当前正在执行的分析。
 
 ```json
 {
@@ -208,7 +209,7 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 
 ### 4.3 `user.tool_confirmation`
 
-请求示例：拒绝本次工具调用，并向 Agent 说明拒绝原因。
+请求示例：用户拒绝会修改生产配置的端口隔离操作，并请 Agent 改用无变更风险的方案。
 
 ```json
 {
@@ -216,7 +217,7 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
     "type": "user.tool_confirmation",
     "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
     "result": "deny",
-    "denyMessage": "不要执行会修改生产配置的操作"
+    "denyMessage": "该操作会修改生产配置，请先给出无变更风险的处理建议。"
   }
 }
 ```
@@ -233,7 +234,7 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 
 ### 4.4 完整用户事件成功响应
 
-用户消息已接收并保存：
+园区巡检分析请求已接收并保存：
 
 ```json
 {
@@ -247,7 +248,7 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
       "content": [
         {
           "type": "text",
-          "text": "分析上传文件并给出处理建议"
+          "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
         },
         {
           "type": "file",
@@ -259,7 +260,7 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 }
 ```
 
-中断指令已接收并保存：
+中断分析的指令已接收并保存：
 
 ```json
 {
@@ -269,13 +270,13 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
     "event": {
       "eventId": "aee903c130e048b9bc2894fc32cd63a8",
       "type": "user.interrupt",
-      "createdAt": "2026-09-02T08:30:15.500Z"
+      "createdAt": "2026-09-02T08:30:14.800Z"
     }
   }
 }
 ```
 
-工具确认结果已接收并保存：
+拒绝高风险操作的结果已接收并保存：
 
 ```json
 {
@@ -285,10 +286,10 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
     "event": {
       "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
       "type": "user.tool_confirmation",
-      "createdAt": "2026-09-02T08:30:16.000Z",
+      "createdAt": "2026-09-02T08:30:16.420Z",
       "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
       "result": "deny",
-      "denyMessage": "不要执行会修改生产配置的操作"
+      "denyMessage": "该操作会修改生产配置，请先给出无变更风险的处理建议。"
     }
   }
 }
@@ -333,27 +334,29 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 | 500 | `INTERNAL_ERROR` | 未预期的服务端错误 |
 | 503 | `CHAT_RUNTIME_UNAVAILABLE` | Claw 暂不可用，事件未被接受 |
 
-## 5. 接口二：订阅实时事件
+## 5. 接口二：实时接收 Chat 事件
 
 ```http
 GET /mate-service/v1/chats/{chatId}/events/stream
 Accept: text/event-stream
 ```
 
-连接成功后，服务端发送 `Content-Type: text/event-stream` 和
-`Cache-Control: no-store`。它是 Chat 级长连接：跨越多次 execution 和 idle 状态；出现
-`chat.status_idle` 不关闭连接。服务端可以用 SSE comment `: ping` 保活。
+连接成功后，服务端以 `text/event-stream` 持续推送该 Chat 的新事件，并通过
+`Cache-Control: no-store` 禁止缓存对话内容。连接可以跨越多次执行和空闲状态；收到
+`chat.status_idle` 只表示当前执行已经收敛，不会关闭连接。服务端可以使用 `: ping` 注释保活。
 
 ### 5.1 Frame 规则
 
 每个业务 frame 只有一行 `data:`，值是完整 JSON：
 
+以下示例展示同一条回复从实时增量收敛为完整记录：
+
 ```text
-data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.message","phase":"delta","content":"建议先隔离受影响端口，"}
+data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"delta","content":"结合巡检记录与告警信息，"}
 
 : ping
 
-data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.message","phase":"completed","createdAt":"2026-09-02T08:30:18.451Z","content":"建议先隔离受影响端口，再核对上联链路。"}
+data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"completed","createdAt":"2026-09-02T08:30:19.451Z","content":"结合巡检记录与告警信息，建议先隔离受影响端口，并进一步核查上联链路状态。"}
 ```
 
 不得发送 SSE `event:` 或 SSE `id:`。此接口从连接建立时刻开始发送 live 事件，不接受
@@ -375,18 +378,18 @@ data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.message","phas
 
 ### 5.3 `agent.message` 与 `agent.thinking`
 
-delta：
+实时增量（`phase=delta`）：
 
 ```json
 {
   "eventId": "4b3e522e7f6746be8781a2c8876fd1da",
   "type": "agent.thinking",
   "phase": "delta",
-  "content": "正在核对告警时间线"
+  "content": "正在梳理巡检记录与告警时间线……"
 }
 ```
 
-completed：
+完整记录（`phase=completed`）：
 
 ```json
 {
@@ -394,7 +397,7 @@ completed：
   "type": "agent.thinking",
   "phase": "completed",
   "createdAt": "2026-09-02T08:30:17.305Z",
-  "content": "已核对告警时间、设备范围和关联影响。"
+  "content": "已完成巡检记录、告警时间线和影响范围的梳理。"
 }
 ```
 
@@ -412,14 +415,19 @@ completed：
 
 ### 5.4 `agent.tool_call`
 
+示例：Agent 准备隔离受影响端口，并在执行前请求用户确认。
+
 ```json
 {
   "eventId": "c8de683be2ab4e25a8d97f7cf507c150",
   "type": "agent.tool_call",
   "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
-  "createdAt": "2026-09-02T08:30:16.420Z",
-  "toolName": "query_campus_alarm",
-  "arguments": {"siteName": "东区园区"},
+  "createdAt": "2026-09-02T08:30:16.000Z",
+  "toolName": "isolate_campus_port",
+  "arguments": {
+    "deviceName": "SW-DC-01",
+    "portName": "GigabitEthernet0/0/24"
+  },
   "requiresConfirmation": true
 }
 ```
@@ -440,14 +448,17 @@ completed：
 
 ### 5.5 `agent.tool_result`
 
+示例：用户拒绝工具调用后，服务端记录该操作未执行。
+
 ```json
 {
   "eventId": "89f8316e07ef4c9aa3fd056a91a182b0",
   "type": "agent.tool_result",
-  "createdAt": "2026-09-02T08:30:19.102Z",
+  "createdAt": "2026-09-02T08:30:16.600Z",
   "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
-  "content": "找到 3 条相关告警。",
-  "isError": false
+  "content": "用户已拒绝，本次工具调用未执行。",
+  "isError": true,
+  "errorCode": "TOOL_CALL_DENIED"
 }
 ```
 
@@ -495,10 +506,10 @@ SSE Header 尚未发送时，认证、授权、Chat 不存在和容量错误使�
 后不发送业务 `stream.error`；编码、网络或内部订阅异常直接结束传输。客户端重连并查询
 权威历史，不能依据连接关闭推断 execution 成败。
 
-## 6. 接口三：查询权威历史
+## 6. 接口三：查询 Chat 事件历史
 
 ```http
-GET /mate-service/v1/chats/{chatId}/events?createdAtGte=2026-09-02T08%3A30%3A00.000Z&limit=100&types=agent.message&types=chat.status_idle
+GET /mate-service/v1/chats/{chatId}/events?createdAtGte=2026-09-02T08%3A30%3A00.000Z&limit=2&types=user.message&types=agent.message
 Accept: application/json
 ```
 
@@ -538,7 +549,7 @@ inclusive `createdAtGte`，并按 `eventId` 去重。
 
 历史只包含完整权威事件，不包含 delta、SSE ping 或 Claw 私有事件。
 
-`user.message`：
+用户消息（`user.message`）：
 
 ```json
 {
@@ -546,31 +557,32 @@ inclusive `createdAtGte`，并按 `eventId` 去重。
   "type": "user.message",
   "createdAt": "2026-09-02T08:30:15.123Z",
   "content": [
-    {"type": "text", "text": "分析上传文件并给出处理建议"},
+    {"type": "text", "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"},
     {"type": "file", "fileId": "7f12d8a380964fdc8518f48be1cf6a42"}
   ]
 }
 ```
 
-`user.interrupt`：
+中断指令（`user.interrupt`）：
 
 ```json
 {
   "eventId": "aee903c130e048b9bc2894fc32cd63a8",
   "type": "user.interrupt",
-  "createdAt": "2026-09-02T08:31:01.016Z"
+  "createdAt": "2026-09-02T08:30:14.800Z"
 }
 ```
 
-`user.tool_confirmation`：
+工具确认结果（`user.tool_confirmation`）：
 
 ```json
 {
   "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
   "type": "user.tool_confirmation",
-  "createdAt": "2026-09-02T08:30:18.800Z",
+  "createdAt": "2026-09-02T08:30:16.420Z",
   "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
-  "result": "allow"
+  "result": "deny",
+  "denyMessage": "该操作会修改生产配置，请先给出无变更风险的处理建议。"
 }
 ```
 
@@ -580,7 +592,10 @@ inclusive `createdAtGte`，并按 `eventId` 去重。
 `eventId` 和 OpenAI `toolCallId`。UI 可以按 `toolCallId` 把 Tool Call、确认和结果关联
 展示，但历史仍保留三个独立 `eventId` 的审计事件。
 
-### 6.4 成功响应
+### 6.4 成功响应示例
+
+以下示例只查询用户消息和 Agent 回复，并设置 `limit=2`。服务端返回两条完整记录；当前
+固定快照仍有后续记录，因此同时返回 `nextPage`：
 
 ```json
 {
@@ -592,14 +607,17 @@ inclusive `createdAtGte`，并按 `eventId` 去重。
         "eventId": "b7ef45d40a854c33af7a36df871a21e8",
         "type": "user.message",
         "createdAt": "2026-09-02T08:30:15.123Z",
-        "content": [{"type": "text", "text": "分析上传文件并给出处理建议"}]
+        "content": [
+          {"type": "text", "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"},
+          {"type": "file", "fileId": "7f12d8a380964fdc8518f48be1cf6a42"}
+        ]
       },
       {
         "eventId": "4b3e522e7f6746be8781a2c8876fd1da",
         "type": "agent.message",
         "phase": "completed",
-        "createdAt": "2026-09-02T08:30:18.451Z",
-        "content": "建议先隔离受影响端口，再核对上联链路。"
+        "createdAt": "2026-09-02T08:30:17.000Z",
+        "content": "已取消会修改生产配置的操作。建议先核查上联链路与告警时间线，再安排变更窗口处理。"
       }
     ],
     "nextPage": "pg_4M7qK2vN9xR5dT8wC1hF6sL3"
@@ -756,6 +774,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.2 | 2026-09-02 | 整体润色三个 Events 接口的说明与示例，统一为真实、连贯的园区巡检场景，并为实时流和历史页增加命名示例；字段、Schema 和行为不变。 |
 | 1.4.1 | 2026-09-02 | 优化提交接口的示例摘要：统一采用业务场景在前、协议类型作为辅助标识的表达方式；字段、Schema 和行为不变。 |
 | 1.4.0 | 2026-09-02 | POST 成功响应改为在 `result.event` 返回完整、已持久化的 `user.message`、`user.interrupt` 或 `user.tool_confirmation`，并直接复用历史事件 Schema；响应仍不包含 Agent execution 结果。 |
 | 1.3.0 | 2026-09-02 | 将 `toolCallId` 改为直接使用 OpenAI Tool Call ID：Responses 取 `call_id`，Chat Completions 取 `tool_calls[].id`；`agent.tool_call` 增加必需 `toolCallId`，确认和结果原样引用；`eventId` 仍是独立的 32 位公共事件 ID；移除 `toolCallId` 正则和长度假设。 |

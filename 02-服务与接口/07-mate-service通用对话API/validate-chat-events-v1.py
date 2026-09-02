@@ -22,13 +22,16 @@ PUML = ROOT / "设计图" / "diagram.puml"
 OPENAPI = ROOT / "chat-events-v1.openapi.yaml"
 EVENT_ID = re.compile(r"^[0-9a-f]{32}$")
 TOOL_CALL_ID_EXAMPLE = "call_unLAR8MvFNptuiZK6K6HCy5k"
+EXAMPLE_REQUEST_TEXT = "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
 CREATED_AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 LOWER_CAMEL = re.compile(r"^[a-z][A-Za-z0-9]*$")
+STREAM_SUCCESS_VARIANT = "一次完整的实时交互"
+HISTORY_SUCCESS_VARIANT = "中断后继续对话的历史页"
 USER_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
 SUBMIT_RESPONSE_VARIANTS = {
-    "用户消息已接收（user.message）": "user.message",
-    "中断指令已接收（user.interrupt）": "user.interrupt",
-    "工具确认结果已接收（user.tool_confirmation）": "user.tool_confirmation",
+    "园区巡检分析请求已接收（user.message）": "user.message",
+    "中断分析的指令已接收（user.interrupt）": "user.interrupt",
+    "拒绝高风险操作的结果已接收（user.tool_confirmation）": "user.tool_confirmation",
 }
 STREAM_TYPES = {
     "agent.message",
@@ -117,7 +120,7 @@ def validate_auth(operation: dict[str, Any]) -> None:
 
 
 def validate_common_model(model: dict[str, Any]) -> None:
-    require(model["api"]["version"] == "1.4.1", "Unexpected contract version")
+    require(model["api"]["version"] == "1.4.2", "Unexpected contract version")
     require(model["api"]["basePath"] == "/mate-service/v1", "Unexpected base path")
     require("已确认" in model["api"]["visibility"], "Contract must be confirmed")
     require(model["review"]["questions"] == [], "Confirmed contract must not contain review choices")
@@ -157,6 +160,8 @@ def validate_submit(model: dict[str, Any]) -> None:
     require(event["type"] == "user.message", "Submit example must be user.message")
     require([item["type"] for item in event["content"]] == ["text", "file"],
             "Submit example must show text then file")
+    require(event["content"][0]["text"] == EXAMPLE_REQUEST_TEXT,
+            "Submit example must retain the confirmed user scenario")
     validate_event_id(event["content"][1]["fileId"], "submit fileId")
     accepted_bodies = response(model, "200-accepted")["bodies"]
     require(set(accepted_bodies) == set(SUBMIT_RESPONSE_VARIANTS),
@@ -268,7 +273,7 @@ def validate_stream(model: dict[str, Any]) -> None:
     require((operation["method"], operation["path"]) == ("GET", "/chats/{chatId}/events/stream"),
             "Stream operation changed")
     require(operation["requestBody"]["required"] is False, "Stream GET must not have a body")
-    stream = response(model, "200-live-stream")["bodies"]["default"]
+    stream = response(model, "200-live-stream")["bodies"][STREAM_SUCCESS_VARIANT]
     require("event: " not in stream and "\nid: " not in stream, "SSE event/id fields are forbidden")
     payloads = parse_sse(stream)
     require({item["type"] for item in payloads} == STREAM_TYPES, "SSE sample must cover all five types")
@@ -314,13 +319,18 @@ def validate_history(model: dict[str, Any]) -> None:
             "History operation changed")
     query_names = [item["name"] for item in operation["parameters"] if item["in"] == "query"]
     require(query_names == ["createdAtGte", "limit", "types", "page"], "History query parameters changed")
-    success = response(model, "200-history-page")["bodies"]["default"]
+    success = response(model, "200-history-page")["bodies"][HISTORY_SUCCESS_VARIANT]
     result = success["result"]
     require(set(result) == {"events", "nextPage"}, "History success example changed")
     events = result["events"]
     require({event["type"] for event in events} == HISTORY_TYPES, "History sample must cover all eight types")
     for event in events:
         validate_history_event(event)
+    require(len({event["eventId"] for event in events}) == len(events),
+            "History events must have independent eventId values")
+    idle_reasons = [event["reason"] for event in events if event["type"] == "chat.status_idle"]
+    require(idle_reasons == ["terminated", "confirming", "done"],
+            "History example must show interrupt, confirmation, and completion convergence")
     tool_events = {
         event["type"]: event
         for event in events
@@ -351,6 +361,20 @@ def validate_history(model: dict[str, Any]) -> None:
     require(required <= codes, f"Missing history errors: {sorted(required - codes)}")
 
 
+def validate_cross_operation_examples(models: list[dict[str, Any]]) -> None:
+    submit_bodies = response(models[0], "200-accepted")["bodies"]
+    submitted = {
+        event_type: submit_bodies[description]["result"]["event"]
+        for description, event_type in SUBMIT_RESPONSE_VARIANTS.items()
+    }
+    history_events = response(models[2], "200-history-page")["bodies"][HISTORY_SUCCESS_VARIANT][
+        "result"
+    ]["events"]
+    historical = {event["type"]: event for event in history_events if event["type"] in USER_TYPES}
+    require(submitted == historical,
+            "Submit receipts and history must show the same persisted user events")
+
+
 def validate_openapi(models: list[dict[str, Any]]) -> None:
     require(OPENAPI.is_file(), "OpenAPI document is missing")
     spec = load_openapi()
@@ -363,7 +387,7 @@ def validate_openapi(models: list[dict[str, Any]]) -> None:
     validate_openapi_security(spec)
     validate_openapi_tool_call_id(spec)
     validate_openapi_submit(spec, models[0])
-    validate_openapi_stream(spec)
+    validate_openapi_stream(spec, models[1])
     validate_openapi_history(spec, models[2])
     validate_openapi_errors(spec)
     source = OPENAPI.read_text(encoding="utf-8")
@@ -373,6 +397,9 @@ def validate_openapi(models: list[dict[str, Any]]) -> None:
     require("JWT 优先" in source and "不回退" in source, "Confirmed authentication precedence is missing")
     require("call_id" in source and "tool_calls[].id" in source,
             "OpenAI Tool Call ID source fields must be explicit")
+    require(spec["x-source-baselines"]["designRepositoryBeforeEventCopyEdit"]
+            == "7887d55ed86033e7163494d0dda2f0bb85544a83",
+            "Events copy-edit design baseline changed")
 
 
 def validate_openapi_security(spec: dict[str, Any]) -> None:
@@ -481,17 +508,17 @@ def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None
         require(success_examples[example_name]["value"] == model_success[event_type],
                 f"Submit success example drifted from review model: {event_type}")
     request_summaries = {
-        "userMessage": "发送包含文本与文件的用户消息",
-        "userInterrupt": "中断当前执行",
-        "toolConfirmationAllow": "允许本次工具调用",
-        "toolConfirmationDeny": "拒绝本次工具调用并说明原因",
+        "userMessage": "分析附件中的园区巡检记录",
+        "userInterrupt": "中断当前正在执行的分析",
+        "toolConfirmationAllow": "允许隔离受影响端口",
+        "toolConfirmationDeny": "拒绝修改生产配置并要求替代方案",
     }
     require({name: item["summary"] for name, item in examples.items()} == request_summaries,
             "Submit request example descriptions changed")
     response_summaries = {
-        "userMessage": "用户消息已接收并保存",
-        "userInterrupt": "中断指令已接收并保存",
-        "userToolConfirmation": "工具确认结果已接收并保存",
+        "userMessage": "园区巡检分析请求已接收并保存",
+        "userInterrupt": "中断分析的指令已接收并保存",
+        "userToolConfirmation": "拒绝高风险操作的结果已接收并保存",
     }
     require({name: item["summary"] for name, item in success_examples.items()} == response_summaries,
             "Submit response example descriptions changed")
@@ -522,21 +549,28 @@ def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None
             "Example copy-edit design baseline changed")
 
 
-def validate_openapi_stream(spec: dict[str, Any]) -> None:
+def validate_openapi_stream(spec: dict[str, Any], model: dict[str, Any]) -> None:
     operation = spec["paths"]["/chats/{chatId}/events/stream"]["get"]
     require(operation["operationId"] == "streamChatEvents", "Stream operationId changed")
     validate_operation_headers(operation, ["ChatId", "XHwIdHeader", "AccessTokenHeader"])
     success = operation["responses"]["200"]
     media = success["content"]["text/event-stream"]
     require(media["schema"]["type"] == "string", "SSE wire schema must remain a string")
-    payloads = parse_sse(media["example"])
+    examples = media["examples"]
+    require(set(examples) == {"liveConversation"}, "OpenAPI SSE named example changed")
+    example = examples["liveConversation"]
+    require(example["summary"] == STREAM_SUCCESS_VARIANT, "OpenAPI SSE example summary changed")
+    stream = example["value"]
+    model_stream = response(model, "200-live-stream")["bodies"][STREAM_SUCCESS_VARIANT]
+    require(stream == model_stream, "OpenAPI SSE example drifted from review model")
+    payloads = parse_sse(stream)
     require({item["type"] for item in payloads} == STREAM_TYPES,
             "OpenAPI SSE example must cover all five stream types")
     for payload in payloads:
         validate_stream_payload(payload)
     data_schema = success["x-sse-data-schema"]
     require(len(data_schema["oneOf"]) == 7, "SSE data schema must contain seven phase variants")
-    require("event: " not in media["example"] and "\nid: " not in media["example"],
+    require("event: " not in stream and "\nid: " not in stream,
             "OpenAPI SSE example must be data-only")
 
 
@@ -553,8 +587,16 @@ def validate_openapi_history(spec: dict[str, Any], model: dict[str, Any]) -> Non
     require(len(history["oneOf"]) == 8, "HistoryEvent must contain eight alternatives")
     require(set(history["discriminator"]["mapping"]) == HISTORY_TYPES,
             "HistoryEvent discriminator changed")
-    next_page = operation["responses"]["200"]["content"]["application/json"]["example"]["result"]["nextPage"]
-    model_page = response(model, "200-history-page")["bodies"]["default"]["result"]["nextPage"]
+    examples = operation["responses"]["200"]["content"]["application/json"]["examples"]
+    require(set(examples) == {"conversationRecovery"}, "OpenAPI history named example changed")
+    example = examples["conversationRecovery"]
+    require(example["summary"] == "中断后继续对话并改用无变更方案（limit=10）",
+            "OpenAPI history example summary changed")
+    value = example["value"]
+    model_value = response(model, "200-history-page")["bodies"][HISTORY_SUCCESS_VARIANT]
+    require(value == model_value, "OpenAPI history example drifted from review model")
+    next_page = value["result"]["nextPage"]
+    model_page = model_value["result"]["nextPage"]
     require(next_page == model_page, "Opaque page example drifted from review model")
     require(re.fullmatch(r"pg_[A-Za-z0-9]+", next_page) is not None,
             "Page example must not visibly encode a timestamp, sequence, or offset")
@@ -660,6 +702,7 @@ def main() -> None:
     validate_submit(models[0])
     validate_stream(models[1])
     validate_history(models[2])
+    validate_cross_operation_examples(models)
     validate_openapi(models)
     validate_html()
     validate_diagrams()

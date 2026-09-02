@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.4.1",
+    "version": "1.4.2",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
@@ -9,7 +9,7 @@
     "method": "POST",
     "path": "/chats/{chatId}/events",
     "summary": "提交一条用户事件",
-    "description": "一次只接受 user.message、user.interrupt 或 user.tool_confirmation 中的一条，并立即返回服务端接受并持久化后的完整用户事件。result.event 与历史接口中的对应 user.* 事件形状完全相同，但该响应不是 Agent 执行结果。interrupt 和 message 不得批量提交；必须等待 chat.status_idle(reason=terminated) 后再发 message。POST 响应丢失时查询权威历史，禁止盲目重放。",
+    "description": "向指定 Chat 提交一项用户操作：发送消息、中断当前执行，或回复工具调用确认。服务端接收并保存事件后，在 result.event 中返回与历史记录一致的完整用户事件；Agent 的后续输出仍从实时流或历史查询获取。一次请求只接受一个事件；提交 interrupt 后，必须等待 chat.status_idle(reason=terminated) 再发送新消息。POST 响应丢失时应查询权威历史，禁止盲目重放。",
     "authModes": [
       {
         "id": "jwt",
@@ -74,14 +74,14 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "示例展示发送一条同时包含文本和文件的用户消息。一次请求只提交一个 event；也可以提交 user.interrupt 中断当前执行，或以 user.tool_confirmation 回复 Tool 确认。user.message 的 content 长度为 1..5，仅允许 text/file；最多一个 text 且必须位于第一项，text 非空白且最多 2048 Unicode code point；最多四个不重复 file，fileId 匹配 ^[0-9a-f]{32}$。user.interrupt 只有 type。user.tool_confirmation 包含 toolCallId、result=allow|deny；toolCallId 必须原样回传 agent.tool_call.toolCallId，其值直接来自 OpenAI Responses call_id 或 Chat Completions tool_calls[].id，按大小写区分的不透明非空字符串处理，不施加正则。denyMessage 仅 deny 可省略或提供非空白的最多 2048 code point 字符串。已知对象忽略未知字段；未知 type、null 条件字段和批量事件非法。",
+      "description": "示例展示用户附上园区巡检记录，请 Agent 梳理异常告警并提出处理建议。一次请求只提交一个 event；也可以提交 user.interrupt 中断当前执行，或以 user.tool_confirmation 回复 Tool 确认。user.message 的 content 长度为 1..5，仅允许 text/file；最多一个 text 且必须位于第一项，text 非空白且最多 2048 Unicode code point；最多四个不重复 file，fileId 匹配 ^[0-9a-f]{32}$。user.interrupt 只有 type。user.tool_confirmation 包含 toolCallId、result=allow|deny；toolCallId 必须原样回传 agent.tool_call.toolCallId，其值直接来自 OpenAI Responses call_id 或 Chat Completions tool_calls[].id，按大小写区分的不透明非空字符串处理，不施加正则。denyMessage 仅 deny 可省略或提供非空白的最多 2048 code point 字符串。已知对象忽略未知字段；未知 type、null 条件字段和批量事件非法。",
       "example": {
         "event": {
           "type": "user.message",
           "content": [
             {
               "type": "text",
-              "text": "分析上传文件并给出处理建议"
+              "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
             },
             {
               "type": "file",
@@ -97,13 +97,13 @@
         "status": "200",
         "tabLabel": "200 · 已接受",
         "label": "OK",
-        "summary": "事件已接收并保存；result.event 返回可用于界面更新和历史对账的完整用户事件。Agent 执行结果需从实时流或历史查询获得。",
+        "summary": "示例分别展示消息、中断指令和工具确认结果被接收后的完整记录。result.event 可直接用于界面更新和历史对账；它不代表 Agent 已完成执行。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store"
         },
         "bodies": {
-          "用户消息已接收（user.message）": {
+          "园区巡检分析请求已接收（user.message）": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
@@ -114,7 +114,7 @@
                 "content": [
                   {
                     "type": "text",
-                    "text": "分析上传文件并给出处理建议"
+                    "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
                   },
                   {
                     "type": "file",
@@ -124,28 +124,28 @@
               }
             }
           },
-          "中断指令已接收（user.interrupt）": {
+          "中断分析的指令已接收（user.interrupt）": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
               "event": {
                 "eventId": "aee903c130e048b9bc2894fc32cd63a8",
                 "type": "user.interrupt",
-                "createdAt": "2026-09-02T08:30:15.500Z"
+                "createdAt": "2026-09-02T08:30:14.800Z"
               }
             }
           },
-          "工具确认结果已接收（user.tool_confirmation）": {
+          "拒绝高风险操作的结果已接收（user.tool_confirmation）": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
               "event": {
                 "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
                 "type": "user.tool_confirmation",
-                "createdAt": "2026-09-02T08:30:16.000Z",
+                "createdAt": "2026-09-02T08:30:16.420Z",
                 "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
                 "result": "deny",
-                "denyMessage": "不要执行会修改生产配置的操作"
+                "denyMessage": "该操作会修改生产配置，请先给出无变更风险的处理建议。"
               }
             }
           }
@@ -378,6 +378,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 POST /mate-service/v1/chats/{chatId}/events",
-    "promptSuffix": "保持与三接口 1.4.1 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.4.2 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }
