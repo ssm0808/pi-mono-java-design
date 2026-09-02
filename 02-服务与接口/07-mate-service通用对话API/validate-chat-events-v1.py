@@ -28,10 +28,15 @@ LOWER_CAMEL = re.compile(r"^[a-z][A-Za-z0-9]*$")
 STREAM_SUCCESS_VARIANT = "一次完整的实时交互"
 HISTORY_SUCCESS_VARIANT = "中断后继续对话的历史页"
 USER_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
+SUBMIT_MESSAGE_VARIANT = "园区巡检分析请求已接收（user.message）"
+SUBMIT_INTERRUPT_VARIANT = "中断分析的指令已接收（user.interrupt）"
+SUBMIT_CONFIRMATION_ALLOW_VARIANT = "允许隔离受影响端口的结果已接收（user.tool_confirmation · allow）"
+SUBMIT_CONFIRMATION_DENY_VARIANT = "拒绝高风险操作的结果已接收（user.tool_confirmation · deny）"
 SUBMIT_RESPONSE_VARIANTS = {
-    "园区巡检分析请求已接收（user.message）": "user.message",
-    "中断分析的指令已接收（user.interrupt）": "user.interrupt",
-    "拒绝高风险操作的结果已接收（user.tool_confirmation）": "user.tool_confirmation",
+    SUBMIT_MESSAGE_VARIANT: "user.message",
+    SUBMIT_INTERRUPT_VARIANT: "user.interrupt",
+    SUBMIT_CONFIRMATION_ALLOW_VARIANT: "user.tool_confirmation",
+    SUBMIT_CONFIRMATION_DENY_VARIANT: "user.tool_confirmation",
 }
 STREAM_TYPES = {
     "agent.message",
@@ -120,7 +125,7 @@ def validate_auth(operation: dict[str, Any]) -> None:
 
 
 def validate_common_model(model: dict[str, Any]) -> None:
-    require(model["api"]["version"] == "1.4.2", "Unexpected contract version")
+    require(model["api"]["version"] == "1.4.3", "Unexpected contract version")
     require(model["api"]["basePath"] == "/mate-service/v1", "Unexpected base path")
     require("已确认" in model["api"]["visibility"], "Contract must be confirmed")
     require(model["review"]["questions"] == [], "Confirmed contract must not contain review choices")
@@ -179,21 +184,29 @@ def validate_submit(model: dict[str, Any]) -> None:
         require(accepted_event["type"] == event_type,
                 f"Submit response type does not match variant: {event_type}")
         validate_history_event(accepted_event)
-        accepted_events[event_type] = accepted_event
-    require(set(accepted_events["user.message"]) == {"eventId", "type", "createdAt", "content"},
+        accepted_events[description] = accepted_event
+    message = accepted_events[SUBMIT_MESSAGE_VARIANT]
+    interrupt = accepted_events[SUBMIT_INTERRUPT_VARIANT]
+    allow_confirmation = accepted_events[SUBMIT_CONFIRMATION_ALLOW_VARIANT]
+    deny_confirmation = accepted_events[SUBMIT_CONFIRMATION_DENY_VARIANT]
+    require(set(message) == {"eventId", "type", "createdAt", "content"},
             "Submitted message must return the complete persisted event")
-    require(accepted_events["user.message"]["content"] == event["content"],
+    require(message["content"] == event["content"],
             "Submitted message response content drifted from the accepted request")
-    require(set(accepted_events["user.interrupt"]) == {"eventId", "type", "createdAt"},
+    require(set(interrupt) == {"eventId", "type", "createdAt"},
             "Submitted interrupt event shape changed")
-    confirmation = accepted_events["user.tool_confirmation"]
-    require(set(confirmation) == {
+    require(set(allow_confirmation) == {
+        "eventId", "type", "createdAt", "toolCallId", "result"
+    }, "Allowed confirmation must omit denyMessage")
+    require(set(deny_confirmation) == {
         "eventId", "type", "createdAt", "toolCallId", "result", "denyMessage"
-    }, "Submitted confirmation must return the complete persisted event")
-    require(confirmation["toolCallId"] == TOOL_CALL_ID_EXAMPLE and confirmation["result"] == "deny",
-            "Submitted confirmation response changed")
-    require(len({item["eventId"] for item in accepted_events.values()}) == len(USER_TYPES),
-            "Each submitted user event must have an independent eventId")
+    }, "Denied confirmation must retain denyMessage")
+    require(allow_confirmation["toolCallId"] == TOOL_CALL_ID_EXAMPLE
+            and allow_confirmation["result"] == "allow", "Allowed confirmation response changed")
+    require(deny_confirmation["toolCallId"] == TOOL_CALL_ID_EXAMPLE
+            and deny_confirmation["result"] == "deny", "Denied confirmation response changed")
+    require(len({item["eventId"] for item in accepted_events.values()}) == len(SUBMIT_RESPONSE_VARIANTS),
+            "Each submit response example must have an independent eventId")
     codes = {
         body["resCode"]
         for item in operation["responses"]
@@ -364,8 +377,9 @@ def validate_history(model: dict[str, Any]) -> None:
 def validate_cross_operation_examples(models: list[dict[str, Any]]) -> None:
     submit_bodies = response(models[0], "200-accepted")["bodies"]
     submitted = {
-        event_type: submit_bodies[description]["result"]["event"]
-        for description, event_type in SUBMIT_RESPONSE_VARIANTS.items()
+        "user.message": submit_bodies[SUBMIT_MESSAGE_VARIANT]["result"]["event"],
+        "user.interrupt": submit_bodies[SUBMIT_INTERRUPT_VARIANT]["result"]["event"],
+        "user.tool_confirmation": submit_bodies[SUBMIT_CONFIRMATION_DENY_VARIANT]["result"]["event"],
     }
     history_events = response(models[2], "200-history-page")["bodies"][HISTORY_SUCCESS_VARIANT][
         "result"
@@ -494,19 +508,17 @@ def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None
             "Confirmation required fields changed")
     success_media = operation["responses"]["200"]["content"]["application/json"]
     success_examples = success_media["examples"]
-    example_types = {
-        "userMessage": "user.message",
-        "userInterrupt": "user.interrupt",
-        "userToolConfirmation": "user.tool_confirmation",
+    example_variants = {
+        "userMessage": SUBMIT_MESSAGE_VARIANT,
+        "userInterrupt": SUBMIT_INTERRUPT_VARIANT,
+        "toolConfirmationAllow": SUBMIT_CONFIRMATION_ALLOW_VARIANT,
+        "toolConfirmationDeny": SUBMIT_CONFIRMATION_DENY_VARIANT,
     }
-    require(set(success_examples) == set(example_types), "Submit success named examples changed")
-    model_success = {
-        event_type: response(model, "200-accepted")["bodies"][description]
-        for description, event_type in SUBMIT_RESPONSE_VARIANTS.items()
-    }
-    for example_name, event_type in example_types.items():
-        require(success_examples[example_name]["value"] == model_success[event_type],
-                f"Submit success example drifted from review model: {event_type}")
+    require(set(success_examples) == set(example_variants), "Submit success named examples changed")
+    model_success = response(model, "200-accepted")["bodies"]
+    for example_name, variant in example_variants.items():
+        require(success_examples[example_name]["value"] == model_success[variant],
+                f"Submit success example drifted from review model: {variant}")
     request_summaries = {
         "userMessage": "分析附件中的园区巡检记录",
         "userInterrupt": "中断当前正在执行的分析",
@@ -518,7 +530,8 @@ def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None
     response_summaries = {
         "userMessage": "园区巡检分析请求已接收并保存",
         "userInterrupt": "中断分析的指令已接收并保存",
-        "userToolConfirmation": "拒绝高风险操作的结果已接收并保存",
+        "toolConfirmationAllow": "允许隔离受影响端口的结果已接收并保存",
+        "toolConfirmationDeny": "拒绝高风险操作的结果已接收并保存",
     }
     require({name: item["summary"] for name, item in success_examples.items()} == response_summaries,
             "Submit response example descriptions changed")
@@ -547,6 +560,9 @@ def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None
     require(spec["x-source-baselines"]["designRepositoryBeforeExampleCopyEdit"]
             == "5ac57bac4c58c0ae86630f591f1f699a065c9e4f",
             "Example copy-edit design baseline changed")
+    require(spec["x-source-baselines"]["designRepositoryBeforeAllowConfirmationExample"]
+            == "44a13fd95fcc4caec0f75e55291dc53fcc8daaf8",
+            "Allow confirmation example design baseline changed")
 
 
 def validate_openapi_stream(spec: dict[str, Any], model: dict[str, Any]) -> None:

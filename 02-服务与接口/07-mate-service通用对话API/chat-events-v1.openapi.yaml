@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: mate-service General Chat Events API
-  version: 1.4.2
+  version: 1.4.3
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -115,7 +115,19 @@ paths:
                         eventId: aee903c130e048b9bc2894fc32cd63a8
                         type: user.interrupt
                         createdAt: '2026-09-02T08:30:14.800Z'
-                userToolConfirmation:
+                toolConfirmationAllow:
+                  summary: 允许隔离受影响端口的结果已接收并保存
+                  value:
+                    resCode: '0'
+                    resMsg: success
+                    result:
+                      event:
+                        eventId: 61a4b8cf5e2d4f93a7c018b6d9e42f75
+                        type: user.tool_confirmation
+                        createdAt: '2026-09-02T08:30:16.420Z'
+                        toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
+                        result: allow
+                toolConfirmationDeny:
                   summary: 拒绝高风险操作的结果已接收并保存
                   value:
                     resCode: '0'
@@ -1324,6 +1336,7 @@ x-source-baselines:
   designRepositoryBeforeFullEventReceipt: d29418845b6782185e296edd5f138f5e993ac044
   designRepositoryBeforeExampleCopyEdit: 5ac57bac4c58c0ae86630f591f1f699a065c9e4f
   designRepositoryBeforeEventCopyEdit: 7887d55ed86033e7163494d0dda2f0bb85544a83
+  designRepositoryBeforeAllowConfirmationExample: 44a13fd95fcc4caec0f75e55291dc53fcc8daaf8
   campusClaw: 7e54b47f2539982f8f1855a0b6bb38b6ab8742ae
   pi: 5cd93f688aaab89dbb6dfa4aca535f21796ae185
   claudeManagedAgentsDocsCheckedAt: '2026-09-02'

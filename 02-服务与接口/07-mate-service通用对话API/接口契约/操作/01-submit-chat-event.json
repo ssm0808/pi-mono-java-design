@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.4.2",
+    "version": "1.4.3",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
@@ -97,7 +97,7 @@
         "status": "200",
         "tabLabel": "200 · 已接受",
         "label": "OK",
-        "summary": "示例分别展示消息、中断指令和工具确认结果被接收后的完整记录。result.event 可直接用于界面更新和历史对账；它不代表 Agent 已完成执行。",
+        "summary": "示例分别展示园区巡检分析请求、中断指令，以及允许或拒绝工具调用的确认结果被接收后的完整记录。result.event 可直接用于界面更新和历史对账；它不代表 Agent 已完成执行。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store"
@@ -135,7 +135,20 @@
               }
             }
           },
-          "拒绝高风险操作的结果已接收（user.tool_confirmation）": {
+          "允许隔离受影响端口的结果已接收（user.tool_confirmation · allow）": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "event": {
+                "eventId": "61a4b8cf5e2d4f93a7c018b6d9e42f75",
+                "type": "user.tool_confirmation",
+                "createdAt": "2026-09-02T08:30:16.420Z",
+                "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
+                "result": "allow"
+              }
+            }
+          },
+          "拒绝高风险操作的结果已接收（user.tool_confirmation · deny）": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
@@ -378,6 +391,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 POST /mate-service/v1/chats/{chatId}/events",
-    "promptSuffix": "保持与三接口 1.4.2 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.4.3 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }

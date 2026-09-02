@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.2 |
+| 文档版本 | 1.4.3 |
 | 状态 | 三个 operation 已确认；待实现 |
 | 设计性质 | target-only；不得描述为当前 mate-service 或 CampusClaw 已实现行为 |
 | 设计仓变更前基线 | `743eca488ad559387706b5df54e2248a4124e5ef` |
@@ -14,6 +14,7 @@
 | 完整用户事件回执修正前基线 | `d29418845b6782185e296edd5f138f5e993ac044` |
 | 示例文案优化前基线 | `5ac57bac4c58c0ae86630f591f1f699a065c9e4f` |
 | Events 示例整体润色前基线 | `7887d55ed86033e7163494d0dda2f0bb85544a83` |
+| 工具调用同意回执示例增补前基线 | `44a13fd95fcc4caec0f75e55291dc53fcc8daaf8` |
 | CampusClaw 源码核对基线 | `7e54b47f2539982f8f1855a0b6bb38b6ab8742ae` |
 | pi 固定参考基线 | `badlogic/pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | Claude Managed Agents 公开文档核对日期 | 2026-09-02；Beta 公共契约，无可归因服务端源码 |
@@ -276,7 +277,27 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 }
 ```
 
-拒绝高风险操作的结果已接收并保存：
+工具调用确认有两个互斥的响应示例。若用户允许隔离受影响端口，返回的完整事件中
+`result="allow"`，并且必须省略 `denyMessage`：
+
+```json
+{
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "event": {
+      "eventId": "61a4b8cf5e2d4f93a7c018b6d9e42f75",
+      "type": "user.tool_confirmation",
+      "createdAt": "2026-09-02T08:30:16.420Z",
+      "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
+      "result": "allow"
+    }
+  }
+}
+```
+
+若用户拒绝会修改生产配置的操作，返回的完整事件中 `result="deny"`，并保留用户给出的
+替代要求：
 
 ```json
 {
@@ -774,6 +795,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.3 | 2026-09-02 | 补充“允许工具调用”的提交成功响应示例，与既有拒绝示例并列展示；明确 `allow` 响应省略 `denyMessage`，字段、Schema 和行为不变。 |
 | 1.4.2 | 2026-09-02 | 整体润色三个 Events 接口的说明与示例，统一为真实、连贯的园区巡检场景，并为实时流和历史页增加命名示例；字段、Schema 和行为不变。 |
 | 1.4.1 | 2026-09-02 | 优化提交接口的示例摘要：统一采用业务场景在前、协议类型作为辅助标识的表达方式；字段、Schema 和行为不变。 |
 | 1.4.0 | 2026-09-02 | POST 成功响应改为在 `result.event` 返回完整、已持久化的 `user.message`、`user.interrupt` 或 `user.tool_confirmation`，并直接复用历史事件 Schema；响应仍不包含 Agent execution 结果。 |
