@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.3 |
+| 文档版本 | 1.4.4 |
 | 状态 | 三个 operation 已确认；待实现 |
 | 设计性质 | target-only；不得描述为当前 mate-service 或 CampusClaw 已实现行为 |
 | 设计仓变更前基线 | `743eca488ad559387706b5df54e2248a4124e5ef` |
@@ -15,6 +15,7 @@
 | 示例文案优化前基线 | `5ac57bac4c58c0ae86630f591f1f699a065c9e4f` |
 | Events 示例整体润色前基线 | `7887d55ed86033e7163494d0dda2f0bb85544a83` |
 | 工具调用同意回执示例增补前基线 | `44a13fd95fcc4caec0f75e55291dc53fcc8daaf8` |
+| 实时流工具交互示例增补前基线 | `d6e339478bbc7475a5b5f0aa4d5fdebd05bd1600` |
 | CampusClaw 源码核对基线 | `7e54b47f2539982f8f1855a0b6bb38b6ab8742ae` |
 | pi 固定参考基线 | `badlogic/pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | Claude Managed Agents 公开文档核对日期 | 2026-09-02；Beta 公共契约，无可归因服务端源码 |
@@ -521,7 +522,35 @@ Tool 被 interrupt 取消时不伪造 `agent.tool_result`；客户端由后续
 | `failed` | 当前 execution 失败，但 Chat 已恢复 idle | 是 |
 | `confirming` | execution 暂停，等待 Tool 确认 | 否，只允许对应 `user.tool_confirmation` 或 interrupt |
 
-### 5.7 流错误边界
+### 5.7 需要确认并同意执行的工具交互
+
+下面是 `StreamEvents` 中“用户同意后执行端口隔离”的完整响应示例：
+
+```text
+data: {"eventId":"5e9a24c8d7134f6baa10c9827d45e301","type":"agent.thinking","phase":"delta","content":"正在评估隔离受影响端口的范围与风险……"}
+
+data: {"eventId":"5e9a24c8d7134f6baa10c9827d45e301","type":"agent.thinking","phase":"completed","createdAt":"2026-09-02T08:30:16.000Z","content":"已确认异常集中在 SW-DC-01 的上联端口，隔离操作会修改生产配置。"}
+
+data: {"eventId":"6c7d8e9f01234567a89bcdef01234567","type":"agent.tool_call","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","createdAt":"2026-09-02T08:30:16.100Z","toolName":"isolate_campus_port","arguments":{"deviceName":"SW-DC-01","portName":"GigabitEthernet0/0/24"},"requiresConfirmation":true}
+
+data: {"eventId":"7d8e9f0123456789abcdef0123456789","type":"chat.status_idle","createdAt":"2026-09-02T08:30:16.200Z","reason":"confirming"}
+
+: ping
+
+data: {"eventId":"8e9f0123456789abcdef0123456789ab","type":"agent.tool_result","createdAt":"2026-09-02T08:30:16.800Z","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","content":"已隔离 SW-DC-01 的 GigabitEthernet0/0/24 端口。","isError":false}
+
+data: {"eventId":"9f0123456789abcdef0123456789abcd","type":"agent.message","phase":"delta","content":"已按确认完成端口隔离，"}
+
+data: {"eventId":"9f0123456789abcdef0123456789abcd","type":"agent.message","phase":"completed","createdAt":"2026-09-02T08:30:17.000Z","content":"已按确认完成端口隔离，建议继续观察上联链路告警并安排后续根因排查。"}
+
+data: {"eventId":"a0123456789abcdef0123456789abcde","type":"chat.status_idle","createdAt":"2026-09-02T08:30:17.100Z","reason":"done"}
+```
+
+`confirming` 与 `agent.tool_result` 之间，客户端通过提交事件接口发送
+`user.tool_confirmation(result="allow")`。该事件属于用户提交和权威历史，不在 SSE 中重复
+推送；确认被接受后，同一条 Chat 流继续发送工具结果、Agent 回复和最终 `done`。
+
+### 5.8 流错误边界
 
 SSE Header 尚未发送时，认证、授权、Chat 不存在和容量错误使用普通 JSON 错误。SSE 建立
 后不发送业务 `stream.error`；编码、网络或内部订阅异常直接结束传输。客户端重连并查询
@@ -795,6 +824,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.4 | 2026-09-02 | 为实时流增加“用户同意后执行端口隔离”的完整工具交互示例，覆盖 `tool_call`、`confirming`、POST 确认边界、`tool_result`、Agent 回复与最终 `done`；事件类型和字段不变。 |
 | 1.4.3 | 2026-09-02 | 补充“允许工具调用”的提交成功响应示例，与既有拒绝示例并列展示；明确 `allow` 响应省略 `denyMessage`，字段、Schema 和行为不变。 |
 | 1.4.2 | 2026-09-02 | 整体润色三个 Events 接口的说明与示例，统一为真实、连贯的园区巡检场景，并为实时流和历史页增加命名示例；字段、Schema 和行为不变。 |
 | 1.4.1 | 2026-09-02 | 优化提交接口的示例摘要：统一采用业务场景在前、协议类型作为辅助标识的表达方式；字段、Schema 和行为不变。 |

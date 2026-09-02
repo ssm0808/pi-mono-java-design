@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.4.3",
+    "version": "1.4.4",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
@@ -83,13 +83,14 @@
         "status": "200",
         "tabLabel": "200 · Chat 实时流",
         "label": "OK",
-        "summary": "示例依次展示公开思考摘要、工具查询与结果、回复增量，以及 Chat 回到空闲状态。message/thinking 的 completed 与 delta 复用 eventId；user.* 不会在 SSE 中重复推送。",
+        "summary": "两个命名示例分别展示无需确认的告警查询，以及用户同意后执行端口隔离。需要确认的流程会先发送 chat.status_idle(reason=confirming)；user.tool_confirmation 通过 POST 提交，不会在 SSE 中重复推送。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store"
         },
         "bodies": {
-          "一次完整的实时交互": "data: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"delta\",\"content\":\"正在梳理巡检记录与告警时间线……\"}\n\ndata: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:17.305Z\",\"content\":\"已完成巡检记录、告警时间线和影响范围的梳理。\"}\n\ndata: {\"eventId\":\"c8de683be2ab4e25a8d97f7cf507c150\",\"type\":\"agent.tool_call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-02T08:30:17.420Z\",\"toolName\":\"query_campus_alarm\",\"arguments\":{\"siteName\":\"东区园区\"},\"requiresConfirmation\":false}\n\n: ping\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-02T08:30:18.102Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":\"共检索到 3 条与本次异常相关的告警。\",\"isError\":false}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"结合巡检记录与告警信息，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:19.451Z\",\"content\":\"结合巡检记录与告警信息，建议先隔离受影响端口，并进一步核查上联链路状态。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"chat.status_idle\",\"createdAt\":\"2026-09-02T08:30:20.000Z\",\"reason\":\"done\"}\n"
+          "无需确认的告警查询": "data: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"delta\",\"content\":\"正在梳理巡检记录与告警时间线……\"}\n\ndata: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:17.305Z\",\"content\":\"已完成巡检记录、告警时间线和影响范围的梳理。\"}\n\ndata: {\"eventId\":\"c8de683be2ab4e25a8d97f7cf507c150\",\"type\":\"agent.tool_call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-02T08:30:17.420Z\",\"toolName\":\"query_campus_alarm\",\"arguments\":{\"siteName\":\"东区园区\"},\"requiresConfirmation\":false}\n\n: ping\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-02T08:30:18.102Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":\"共检索到 3 条与本次异常相关的告警。\",\"isError\":false}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"结合巡检记录与告警信息，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:19.451Z\",\"content\":\"结合巡检记录与告警信息，建议先隔离受影响端口，并进一步核查上联链路状态。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"chat.status_idle\",\"createdAt\":\"2026-09-02T08:30:20.000Z\",\"reason\":\"done\"}\n",
+          "同意后执行端口隔离": "data: {\"eventId\":\"5e9a24c8d7134f6baa10c9827d45e301\",\"type\":\"agent.thinking\",\"phase\":\"delta\",\"content\":\"正在评估隔离受影响端口的范围与风险……\"}\n\ndata: {\"eventId\":\"5e9a24c8d7134f6baa10c9827d45e301\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:16.000Z\",\"content\":\"已确认异常集中在 SW-DC-01 的上联端口，隔离操作会修改生产配置。\"}\n\ndata: {\"eventId\":\"6c7d8e9f01234567a89bcdef01234567\",\"type\":\"agent.tool_call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-02T08:30:16.100Z\",\"toolName\":\"isolate_campus_port\",\"arguments\":{\"deviceName\":\"SW-DC-01\",\"portName\":\"GigabitEthernet0/0/24\"},\"requiresConfirmation\":true}\n\ndata: {\"eventId\":\"7d8e9f0123456789abcdef0123456789\",\"type\":\"chat.status_idle\",\"createdAt\":\"2026-09-02T08:30:16.200Z\",\"reason\":\"confirming\"}\n\n: ping\n\ndata: {\"eventId\":\"8e9f0123456789abcdef0123456789ab\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-02T08:30:16.800Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":\"已隔离 SW-DC-01 的 GigabitEthernet0/0/24 端口。\",\"isError\":false}\n\ndata: {\"eventId\":\"9f0123456789abcdef0123456789abcd\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"已按确认完成端口隔离，\"}\n\ndata: {\"eventId\":\"9f0123456789abcdef0123456789abcd\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:17.000Z\",\"content\":\"已按确认完成端口隔离，建议继续观察上联链路告警并安排后续根因排查。\"}\n\ndata: {\"eventId\":\"a0123456789abcdef0123456789abcde\",\"type\":\"chat.status_idle\",\"createdAt\":\"2026-09-02T08:30:17.100Z\",\"reason\":\"done\"}\n"
         }
       },
       {
@@ -209,6 +210,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 GET /mate-service/v1/chats/{chatId}/events/stream",
-    "promptSuffix": "保持与三接口 1.4.3 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.4.4 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }

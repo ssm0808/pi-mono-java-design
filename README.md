@@ -1,10 +1,10 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.3.7<br>
+> 导航版本：2.3.8<br>
 > 整理日期：2026-09-02<br>
 > Slash Command 设计基线：`27484974eb106a7e43910d8e542de52a72c58102`<br>
 > 通用对话 Events 三接口设计前基线：`743eca488ad559387706b5df54e2248a4124e5ef`<br>
-> 变更性质：补充 mate-service 工具调用同意回执示例
+> 变更性质：补充 mate-service 实时流工具交互示例
 
 本仓库维护 CampusClaw Runtime、mate-service 边界、pi-mono-java 目标设计，
 以及相关源码和产品研究。这是设计与契约资料仓库，不是产品源码仓库。
@@ -96,6 +96,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.8 | 2026-09-02 | 为 mate-service 通用对话 Events 实时流补充“用户同意后执行端口隔离”的完整工具交互示例。 |
 | 2.3.7 | 2026-09-02 | 为 mate-service 通用对话 Events 提交接口补充“允许工具调用”的完整成功响应示例，并与拒绝示例并列展示。 |
 | 2.3.6 | 2026-09-02 | 整体润色 mate-service 通用对话 Events 三接口的说明与示例，统一为真实、连贯的园区巡检场景；字段、Schema 和行为不变。 |
 | 2.3.5 | 2026-09-02 | 优化 mate-service 通用对话 Events 提交接口的示例摘要，以业务场景描述请求和成功响应；契约字段与行为不变。 |

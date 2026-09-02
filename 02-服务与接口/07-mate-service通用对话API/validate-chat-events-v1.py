@@ -25,7 +25,8 @@ TOOL_CALL_ID_EXAMPLE = "call_unLAR8MvFNptuiZK6K6HCy5k"
 EXAMPLE_REQUEST_TEXT = "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
 CREATED_AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 LOWER_CAMEL = re.compile(r"^[a-z][A-Za-z0-9]*$")
-STREAM_SUCCESS_VARIANT = "一次完整的实时交互"
+STREAM_QUERY_VARIANT = "无需确认的告警查询"
+STREAM_CONFIRMATION_VARIANT = "同意后执行端口隔离"
 HISTORY_SUCCESS_VARIANT = "中断后继续对话的历史页"
 USER_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
 SUBMIT_MESSAGE_VARIANT = "园区巡检分析请求已接收（user.message）"
@@ -125,7 +126,7 @@ def validate_auth(operation: dict[str, Any]) -> None:
 
 
 def validate_common_model(model: dict[str, Any]) -> None:
-    require(model["api"]["version"] == "1.4.3", "Unexpected contract version")
+    require(model["api"]["version"] == "1.4.4", "Unexpected contract version")
     require(model["api"]["basePath"] == "/mate-service/v1", "Unexpected base path")
     require("已确认" in model["api"]["visibility"], "Contract must be confirmed")
     require(model["review"]["questions"] == [], "Confirmed contract must not contain review choices")
@@ -281,12 +282,7 @@ def validate_stream_payload(payload: dict[str, Any]) -> None:
         require(payload["reason"] in IDLE_REASONS, "Invalid idle reason")
 
 
-def validate_stream(model: dict[str, Any]) -> None:
-    operation = model["operation"]
-    require((operation["method"], operation["path"]) == ("GET", "/chats/{chatId}/events/stream"),
-            "Stream operation changed")
-    require(operation["requestBody"]["required"] is False, "Stream GET must not have a body")
-    stream = response(model, "200-live-stream")["bodies"][STREAM_SUCCESS_VARIANT]
+def validate_stream_example(stream: str, variant: str) -> None:
     require("event: " not in stream and "\nid: " not in stream, "SSE event/id fields are forbidden")
     payloads = parse_sse(stream)
     require({item["type"] for item in payloads} == STREAM_TYPES, "SSE sample must cover all five types")
@@ -300,7 +296,28 @@ def validate_stream(model: dict[str, Any]) -> None:
     tool_result = next(item for item in payloads if item["type"] == "agent.tool_result")
     require(tool_call["toolCallId"] == TOOL_CALL_ID_EXAMPLE, "Tool Call example must use OpenAI call_id")
     require(tool_result["toolCallId"] == tool_call["toolCallId"], "Tool Result must reference Tool Call ID")
+    idle_reasons = [item["reason"] for item in payloads if item["type"] == "chat.status_idle"]
+    if variant == STREAM_CONFIRMATION_VARIANT:
+        require(tool_call["requiresConfirmation"] is True, "Confirmed Tool example must require confirmation")
+        require(idle_reasons == ["confirming", "done"], "Confirmed Tool example status order changed")
+        require(tool_result["isError"] is False and "errorCode" not in tool_result,
+                "Approved Tool example must finish successfully")
+    else:
+        require(tool_call["requiresConfirmation"] is False, "Query Tool example must not require confirmation")
+        require(idle_reasons == ["done"], "Query Tool example must finish with done")
     require("stream.error" not in stream and "stream.end" not in stream, "Terminal stream events are forbidden")
+
+
+def validate_stream(model: dict[str, Any]) -> None:
+    operation = model["operation"]
+    require((operation["method"], operation["path"]) == ("GET", "/chats/{chatId}/events/stream"),
+            "Stream operation changed")
+    require(operation["requestBody"]["required"] is False, "Stream GET must not have a body")
+    streams = response(model, "200-live-stream")["bodies"]
+    require(set(streams) == {STREAM_QUERY_VARIANT, STREAM_CONFIRMATION_VARIANT},
+            "Stream response example variants changed")
+    for variant, stream in streams.items():
+        validate_stream_example(stream, variant)
 
 
 def validate_history_event(event: dict[str, Any]) -> None:
@@ -387,6 +404,20 @@ def validate_cross_operation_examples(models: list[dict[str, Any]]) -> None:
     historical = {event["type"]: event for event in history_events if event["type"] in USER_TYPES}
     require(submitted == historical,
             "Submit receipts and history must show the same persisted user events")
+    allow_event = submit_bodies[SUBMIT_CONFIRMATION_ALLOW_VARIANT]["result"]["event"]
+    confirmation_stream = response(models[1], "200-live-stream")["bodies"][STREAM_CONFIRMATION_VARIANT]
+    payloads = parse_sse(confirmation_stream)
+    tool_call = next(item for item in payloads if item["type"] == "agent.tool_call")
+    tool_result = next(item for item in payloads if item["type"] == "agent.tool_result")
+    confirming = next(
+        item for item in payloads if item["type"] == "chat.status_idle" and item["reason"] == "confirming"
+    )
+    require({allow_event["toolCallId"], tool_call["toolCallId"], tool_result["toolCallId"]}
+            == {TOOL_CALL_ID_EXAMPLE}, "Approved Tool examples must share one Tool Call ID")
+    require(confirming["createdAt"] < allow_event["createdAt"] < tool_result["createdAt"],
+            "Approved Tool confirmation must occur between confirming and Tool Result")
+    require(allow_event["eventId"] not in {item["eventId"] for item in payloads},
+            "Submitted confirmation must not be repeated in the SSE example")
 
 
 def validate_openapi(models: list[dict[str, Any]]) -> None:
@@ -573,21 +604,26 @@ def validate_openapi_stream(spec: dict[str, Any], model: dict[str, Any]) -> None
     media = success["content"]["text/event-stream"]
     require(media["schema"]["type"] == "string", "SSE wire schema must remain a string")
     examples = media["examples"]
-    require(set(examples) == {"liveConversation"}, "OpenAPI SSE named example changed")
-    example = examples["liveConversation"]
-    require(example["summary"] == STREAM_SUCCESS_VARIANT, "OpenAPI SSE example summary changed")
-    stream = example["value"]
-    model_stream = response(model, "200-live-stream")["bodies"][STREAM_SUCCESS_VARIANT]
-    require(stream == model_stream, "OpenAPI SSE example drifted from review model")
-    payloads = parse_sse(stream)
-    require({item["type"] for item in payloads} == STREAM_TYPES,
-            "OpenAPI SSE example must cover all five stream types")
-    for payload in payloads:
-        validate_stream_payload(payload)
+    example_variants = {
+        "alarmQuery": STREAM_QUERY_VARIANT,
+        "approvedPortIsolation": STREAM_CONFIRMATION_VARIANT,
+    }
+    require(set(examples) == set(example_variants), "OpenAPI SSE named examples changed")
+    model_streams = response(model, "200-live-stream")["bodies"]
+    for name, variant in example_variants.items():
+        example = examples[name]
+        require(example["summary"] == variant, f"OpenAPI SSE example summary changed: {name}")
+        stream = example["value"]
+        require(stream == model_streams[variant], f"OpenAPI SSE example drifted: {name}")
+        validate_stream_example(stream, variant)
+    confirmation_description = examples["approvedPortIsolation"]["description"]
+    require("user.tool_confirmation" in confirmation_description and "SSE" in confirmation_description,
+            "Approved Tool example must explain the out-of-band user event")
     data_schema = success["x-sse-data-schema"]
     require(len(data_schema["oneOf"]) == 7, "SSE data schema must contain seven phase variants")
-    require("event: " not in stream and "\nid: " not in stream,
-            "OpenAPI SSE example must be data-only")
+    require(spec["x-source-baselines"]["designRepositoryBeforeStreamToolInteractionExample"]
+            == "d6e339478bbc7475a5b5f0aa4d5fdebd05bd1600",
+            "Stream Tool interaction example design baseline changed")
 
 
 def validate_openapi_history(spec: dict[str, Any], model: dict[str, Any]) -> None:

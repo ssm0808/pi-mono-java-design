@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: mate-service General Chat Events API
-  version: 1.4.3
+  version: 1.4.4
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -429,9 +429,10 @@ paths:
       responses:
         '200':
           description: >
-            Chat 实时事件流。示例依次展示公开思考摘要、工具查询与结果、回复增量，以及
-            Chat 回到空闲状态。user.* 不在 SSE 中重复推送；delta 是临时预览，
-            completed、Tool 和 idle 是权威记录。
+            Chat 实时事件流。两个示例分别展示无需确认的告警查询，以及用户同意后执行端口
+            隔离。需要确认时，SSE 先发送 chat.status_idle(reason=confirming)；客户端通过
+            POST 提交 user.tool_confirmation，SSE 不重复发送该用户事件，随后继续发送工具结果
+            和 Agent 回复。delta 是临时预览，completed、Tool 和 idle 是权威记录。
           x-sse-data-schema:
             description: >
               SSE data JSON 的联合 Schema。message/thinking 的 delta 没有 createdAt；
@@ -496,8 +497,8 @@ paths:
                 description: >
                   每个业务 frame 是一行 data: 加完整 JSON；保活 frame 是 : ping comment。
               examples:
-                liveConversation:
-                  summary: 一次完整的实时交互
+                alarmQuery:
+                  summary: 无需确认的告警查询
                   value: |
                     data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.thinking","phase":"delta","content":"正在梳理巡检记录与告警时间线……"}
 
@@ -514,6 +515,29 @@ paths:
                     data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"completed","createdAt":"2026-09-02T08:30:19.451Z","content":"结合巡检记录与告警信息，建议先隔离受影响端口，并进一步核查上联链路状态。"}
 
                     data: {"eventId":"d4e3e8b9653047a99ac10396a17fe84d","type":"chat.status_idle","createdAt":"2026-09-02T08:30:20.000Z","reason":"done"}
+                approvedPortIsolation:
+                  summary: 同意后执行端口隔离
+                  description: >
+                    confirming 与 tool_result 两帧之间，客户端通过提交事件接口发送
+                    user.tool_confirmation(result=allow)；该用户事件不会在 SSE 中重复出现。
+                  value: |
+                    data: {"eventId":"5e9a24c8d7134f6baa10c9827d45e301","type":"agent.thinking","phase":"delta","content":"正在评估隔离受影响端口的范围与风险……"}
+
+                    data: {"eventId":"5e9a24c8d7134f6baa10c9827d45e301","type":"agent.thinking","phase":"completed","createdAt":"2026-09-02T08:30:16.000Z","content":"已确认异常集中在 SW-DC-01 的上联端口，隔离操作会修改生产配置。"}
+
+                    data: {"eventId":"6c7d8e9f01234567a89bcdef01234567","type":"agent.tool_call","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","createdAt":"2026-09-02T08:30:16.100Z","toolName":"isolate_campus_port","arguments":{"deviceName":"SW-DC-01","portName":"GigabitEthernet0/0/24"},"requiresConfirmation":true}
+
+                    data: {"eventId":"7d8e9f0123456789abcdef0123456789","type":"chat.status_idle","createdAt":"2026-09-02T08:30:16.200Z","reason":"confirming"}
+
+                    : ping
+
+                    data: {"eventId":"8e9f0123456789abcdef0123456789ab","type":"agent.tool_result","createdAt":"2026-09-02T08:30:16.800Z","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","content":"已隔离 SW-DC-01 的 GigabitEthernet0/0/24 端口。","isError":false}
+
+                    data: {"eventId":"9f0123456789abcdef0123456789abcd","type":"agent.message","phase":"delta","content":"已按确认完成端口隔离，"}
+
+                    data: {"eventId":"9f0123456789abcdef0123456789abcd","type":"agent.message","phase":"completed","createdAt":"2026-09-02T08:30:17.000Z","content":"已按确认完成端口隔离，建议继续观察上联链路告警并安排后续根因排查。"}
+
+                    data: {"eventId":"a0123456789abcdef0123456789abcde","type":"chat.status_idle","createdAt":"2026-09-02T08:30:17.100Z","reason":"done"}
         '400':
           description: chatId 非法；此响应只发生在 SSE 建立前
           headers:
@@ -1337,6 +1361,7 @@ x-source-baselines:
   designRepositoryBeforeExampleCopyEdit: 5ac57bac4c58c0ae86630f591f1f699a065c9e4f
   designRepositoryBeforeEventCopyEdit: 7887d55ed86033e7163494d0dda2f0bb85544a83
   designRepositoryBeforeAllowConfirmationExample: 44a13fd95fcc4caec0f75e55291dc53fcc8daaf8
+  designRepositoryBeforeStreamToolInteractionExample: d6e339478bbc7475a5b5f0aa4d5fdebd05bd1600
   campusClaw: 7e54b47f2539982f8f1855a0b6bb38b6ab8742ae
   pi: 5cd93f688aaab89dbb6dfa4aca535f21796ae185
   claudeManagedAgentsDocsCheckedAt: '2026-09-02'
