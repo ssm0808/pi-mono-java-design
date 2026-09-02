@@ -2,8 +2,8 @@
 title Builtin Command Dispatch
 skinparam shadowing false
 
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/command/builtin/ModelCommand.java:16-36
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/command/SlashCommandSession.java:19-32
+' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/builtin/ModelCommand.java:16-36
+' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/SlashCommandSession.java:19-32
 ' Observed behavior: handlers currently depend on one broad mutable session facade.
 ' Target design: every builtin handler depends on one narrow application service.
 
@@ -21,6 +21,78 @@ Handler -> Service : read or update domain state
 Service --> Handler : text and optional sourceEventSeq
 Handler --> Execution : CommandResultDTO
 Execution -> Repository : append command.completed sidecar
+@enduml
+
+@startuml builtin_implementation_alignment
+title Builtin Command Implementation Slices
+skinparam shadowing false
+
+' Source evidence: pi-mono-java@fc06c618 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java:14
+' Source evidence: pi-mono-java@fc06c618 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-73
+' Source evidence: pi-mono-java@fc06c618 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java:37-81
+' Observed behavior: the feature branch provides command discovery and the GET endpoint, but Definition has no admission or handler and POST execution is absent.
+' Target-only design: extend the existing skeleton and deliver builtins as dependent vertical slices.
+
+start
+:Existing fc06c618\nSources, registry, descriptors,\nand GET command list;
+:Slice 0A\nComplete Definition seams, startup checks,\nshared Skill validation, and exact error code;
+:Slice 0B\nInvocation, admission, handlers,\nexecution service, and POST SSE;
+:Slice 1\nSidecar lifecycle and recovery;
+:Slice 2\nHelp, Status, and Skills;
+:Slice 3\nSession Name;
+:Slice 4\nModel and Thinking;
+note right
+Reuse Runtime configuration domain rules.
+Do not call Controllers or fabricate ETags.
+end note
+:Slice 5\nCompact execution;
+note right
+Reserve the Runtime active execution slot.
+Reuse ManagedAgentSession manual compaction.
+end note
+:Synchronize modules to the generated corporate mirror;
+stop
+@enduml
+
+@startuml compact_command_execution
+title Compact Command Active Execution Boundary
+skinparam shadowing false
+
+' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java:105-108,177-183
+' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:68-108
+' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java:105-166
+' Observed behavior: user events reserve the active execution holder, but manual compaction has no HTTP acceptance path.
+' Target-only design: compact reserves the same per-Session execution capacity and survives client disconnect.
+
+participant CommandController as Controller
+participant CommandExecutionService as Execution
+participant RuntimeSessionEngineRegistry as Registry
+database RuntimeSessionRepository as Repository
+participant ManagedAgentSession as Session
+
+Controller -> Execution : execute compact with no arguments
+Execution -> Registry : lockOperation(sessionId)
+Execution -> Registry : register holder and capacity
+Execution -> Repository : accept compact and append command.started
+note right of Repository
+The acceptance transaction sets state=running.
+It does not change active_leaf_id.
+end note
+Execution -> Session : compact(null)
+Execution -> Registry : unlockOperation(sessionId)
+Session --> Execution : compaction lifecycle events
+Execution -> Registry : lockOperation(sessionId)
+alt completed
+  Execution -> Repository : append command.completed and mark idle
+else failed or aborted
+  Execution -> Repository : append command.failed and mark idle
+end
+Execution -> Registry : release holder and capacity
+Execution -> Registry : unlockOperation(sessionId)
+note over Controller,Session
+SSE detach stops delivery only.
+The accepted compaction continues until completion or explicit Abort.
+end note
 @enduml
 
 @startuml builtin_availability
