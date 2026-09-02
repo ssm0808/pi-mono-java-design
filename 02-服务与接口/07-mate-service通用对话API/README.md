@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.0 |
+| 文档版本 | 1.4.1 |
 | 状态 | 三个 operation 已确认；待实现 |
 | 设计性质 | target-only；不得描述为当前 mate-service 或 CampusClaw 已实现行为 |
 | 设计仓变更前基线 | `743eca488ad559387706b5df54e2248a4124e5ef` |
@@ -12,6 +12,7 @@
 | Swagger 请求头修正前基线 | `d3bdc83917b0b6951171be781b2377fd89d5040c` |
 | OpenAI Tool Call ID 修正前基线 | `ecf4cc06619f7a02c467d7212a0a12d86ab56a9f` |
 | 完整用户事件回执修正前基线 | `d29418845b6782185e296edd5f138f5e993ac044` |
+| 示例文案优化前基线 | `5ac57bac4c58c0ae86630f591f1f699a065c9e4f` |
 | CampusClaw 源码核对基线 | `7e54b47f2539982f8f1855a0b6bb38b6ab8742ae` |
 | pi 固定参考基线 | `badlogic/pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | Claude Managed Agents 公开文档核对日期 | 2026-09-02；Beta 公共契约，无可归因服务端源码 |
@@ -139,15 +140,20 @@ UI 的请求示例下拉框提供四个命名示例：
 
 | 示例名 | 展示内容 |
 |---|---|
-| `userMessage` | `user.message`，展示 text + file；也允许 text-only 或 file-only |
-| `userInterrupt` | `{"event":{"type":"user.interrupt"}}` |
-| `toolConfirmationAllow` | `user.tool_confirmation`，`result=allow`，省略 `denyMessage` |
-| `toolConfirmationDeny` | `user.tool_confirmation`，`result=deny`，可展示 `denyMessage` |
+| `userMessage` | 发送一条同时包含文本和文件的用户消息；也允许只有文本或只有文件 |
+| `userInterrupt` | 中断当前正在运行的执行 |
+| `toolConfirmationAllow` | 允许当前等待确认的工具调用，并省略 `denyMessage` |
+| `toolConfirmationDeny` | 拒绝当前等待确认的工具调用，并可说明拒绝原因 |
 
 因此另外两种事件不会被塞进同一个庞大示例，也不会新增 endpoint；Schema 区通过
 `oneOf` 展开类型，Try it out 区通过 `examples` 切换具体请求。
 
+示例摘要采用“业务场景在前、协议类型作为辅助标识”的表达方式。调用方可以先按场景
+选择示例，再通过标题中的类型或 JSON 的 `event.type` 确认精确协议类型。
+
 ### 4.1 `user.message`
+
+请求示例：发送一条同时包含文本和文件的用户消息。
 
 ```json
 {
@@ -178,6 +184,8 @@ FollowUp 或队列项。同一 Chat 最多一个 active message execution。
 
 ### 4.2 `user.interrupt`
 
+请求示例：中断当前正在运行的执行。
+
 ```json
 {
   "event": {
@@ -199,6 +207,8 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 必须是“提交 interrupt → 等待 terminated idle → 提交 message”。
 
 ### 4.3 `user.tool_confirmation`
+
+请求示例：拒绝本次工具调用，并向 Agent 说明拒绝原因。
 
 ```json
 {
@@ -223,7 +233,7 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 
 ### 4.4 完整用户事件成功响应
 
-提交 `user.message`：
+用户消息已接收并保存：
 
 ```json
 {
@@ -249,7 +259,7 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 }
 ```
 
-提交 `user.interrupt`：
+中断指令已接收并保存：
 
 ```json
 {
@@ -265,7 +275,7 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 }
 ```
 
-提交 `user.tool_confirmation`：
+工具确认结果已接收并保存：
 
 ```json
 {
@@ -746,6 +756,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.1 | 2026-09-02 | 优化提交接口的示例摘要：统一采用业务场景在前、协议类型作为辅助标识的表达方式；字段、Schema 和行为不变。 |
 | 1.4.0 | 2026-09-02 | POST 成功响应改为在 `result.event` 返回完整、已持久化的 `user.message`、`user.interrupt` 或 `user.tool_confirmation`，并直接复用历史事件 Schema；响应仍不包含 Agent execution 结果。 |
 | 1.3.0 | 2026-09-02 | 将 `toolCallId` 改为直接使用 OpenAI Tool Call ID：Responses 取 `call_id`，Chat Completions 取 `tool_calls[].id`；`agent.tool_call` 增加必需 `toolCallId`，确认和结果原样引用；`eventId` 仍是独立的 32 位公共事件 ID；移除 `toolCallId` 正则和长度假设。 |
 | 1.2.0 | 2026-09-02 | 按标准 Swagger 表达修正请求头：`X-HW-ID` 和 `access-token` 改为三个 operation 的必需 header parameter；JWT 和 APPKEY 保留为二选一 security scheme；Mate 删除 `Accept-Language` 请求声明，Claw 接口边界不变。 |

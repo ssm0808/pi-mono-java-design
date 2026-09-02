@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
@@ -74,7 +74,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "顶层固定为 event。示例是 user.message：content 长度 1..5，仅 text/file；最多一个 text 且必须第一项，text 非空白且最多 2048 Unicode code point；最多四个不重复 file，fileId 匹配 ^[0-9a-f]{32}$。user.interrupt 只有 type。user.tool_confirmation 包含 toolCallId、result=allow|deny；toolCallId 必须原样回传 agent.tool_call.toolCallId，其值直接来自 OpenAI Responses call_id 或 Chat Completions tool_calls[].id，按大小写区分的不透明非空字符串处理，不施加正则。denyMessage 仅 deny 可省略或提供非空白的最多 2048 code point 字符串。已知对象忽略未知字段；未知 type、null 条件字段和批量事件非法。",
+      "description": "示例展示发送一条同时包含文本和文件的用户消息。一次请求只提交一个 event；也可以提交 user.interrupt 中断当前执行，或以 user.tool_confirmation 回复 Tool 确认。user.message 的 content 长度为 1..5，仅允许 text/file；最多一个 text 且必须位于第一项，text 非空白且最多 2048 Unicode code point；最多四个不重复 file，fileId 匹配 ^[0-9a-f]{32}$。user.interrupt 只有 type。user.tool_confirmation 包含 toolCallId、result=allow|deny；toolCallId 必须原样回传 agent.tool_call.toolCallId，其值直接来自 OpenAI Responses call_id 或 Chat Completions tool_calls[].id，按大小写区分的不透明非空字符串处理，不施加正则。denyMessage 仅 deny 可省略或提供非空白的最多 2048 code point 字符串。已知对象忽略未知字段；未知 type、null 条件字段和批量事件非法。",
       "example": {
         "event": {
           "type": "user.message",
@@ -97,13 +97,13 @@
         "status": "200",
         "tabLabel": "200 · 已接受",
         "label": "OK",
-        "summary": "返回被接受并持久化的完整 user.* 事件；result.event 复用历史事件 Schema，不包含 Agent 执行结果。",
+        "summary": "事件已接收并保存；result.event 返回可用于界面更新和历史对账的完整用户事件。Agent 执行结果需从实时流或历史查询获得。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store"
         },
         "bodies": {
-          "user.message": {
+          "用户消息已接收（user.message）": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
@@ -124,7 +124,7 @@
               }
             }
           },
-          "user.interrupt": {
+          "中断指令已接收（user.interrupt）": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
@@ -135,7 +135,7 @@
               }
             }
           },
-          "user.tool_confirmation": {
+          "工具确认结果已接收（user.tool_confirmation）": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
@@ -378,6 +378,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 POST /mate-service/v1/chats/{chatId}/events",
-    "promptSuffix": "保持与三接口 1.4.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.4.1 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }

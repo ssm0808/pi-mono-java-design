@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: mate-service General Chat Events API
-  version: 1.4.0
+  version: 1.4.1
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -42,16 +42,15 @@ paths:
       requestBody:
         required: true
         description: >
-          顶层固定为 event。Schema 使用 type discriminator 区分三种事件；
-          Swagger UI 使用 examples 下拉框展示 message、interrupt、confirmation allow
-          和 confirmation deny。
+          一次请求只提交一个 event。Schema 使用 type discriminator 区分三种事件；
+          Swagger UI 使用命名示例分别展示发送消息、中断当前执行、允许工具调用和拒绝工具调用。
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/SubmitChatEventRequest'
             examples:
               userMessage:
-                summary: user.message · 文本与文件
+                summary: 发送包含文本与文件的用户消息
                 value:
                   event:
                     type: user.message
@@ -61,19 +60,19 @@ paths:
                       - type: file
                         fileId: 7f12d8a380964fdc8518f48be1cf6a42
               userInterrupt:
-                summary: user.interrupt · 终止当前执行树
+                summary: 中断当前执行
                 value:
                   event:
                     type: user.interrupt
               toolConfirmationAllow:
-                summary: user.tool_confirmation · 允许
+                summary: 允许本次工具调用
                 value:
                   event:
                     type: user.tool_confirmation
                     toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
                     result: allow
               toolConfirmationDeny:
-                summary: user.tool_confirmation · 拒绝并说明原因
+                summary: 拒绝本次工具调用并说明原因
                 value:
                   event:
                     type: user.tool_confirmation
@@ -82,7 +81,7 @@ paths:
                     denyMessage: 不要执行会修改生产配置的操作
       responses:
         '200':
-          description: 用户事件已被接受；不代表 execution 已完成
+          description: 用户事件已接收并保存；不代表 Agent 执行已经完成
           headers:
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
@@ -92,7 +91,7 @@ paths:
                 $ref: '#/components/schemas/SubmitChatEventResponse'
               examples:
                 userMessage:
-                  summary: 已接受并持久化的 user.message
+                  summary: 用户消息已接收并保存
                   value:
                     resCode: '0'
                     resMsg: success
@@ -107,7 +106,7 @@ paths:
                           - type: file
                             fileId: 7f12d8a380964fdc8518f48be1cf6a42
                 userInterrupt:
-                  summary: 已接受并持久化的 user.interrupt
+                  summary: 中断指令已接收并保存
                   value:
                     resCode: '0'
                     resMsg: success
@@ -117,7 +116,7 @@ paths:
                         type: user.interrupt
                         createdAt: '2026-09-02T08:30:15.500Z'
                 userToolConfirmation:
-                  summary: 已接受并持久化的 user.tool_confirmation
+                  summary: 工具确认结果已接收并保存
                   value:
                     resCode: '0'
                     resMsg: success
@@ -1275,6 +1274,7 @@ x-source-baselines:
   designRepositoryBeforeHeaderCorrection: d3bdc83917b0b6951171be781b2377fd89d5040c
   designRepositoryBeforeOpenAiToolCallId: ecf4cc06619f7a02c467d7212a0a12d86ab56a9f
   designRepositoryBeforeFullEventReceipt: d29418845b6782185e296edd5f138f5e993ac044
+  designRepositoryBeforeExampleCopyEdit: 5ac57bac4c58c0ae86630f591f1f699a065c9e4f
   campusClaw: 7e54b47f2539982f8f1855a0b6bb38b6ab8742ae
   pi: 5cd93f688aaab89dbb6dfa4aca535f21796ae185
   claudeManagedAgentsDocsCheckedAt: '2026-09-02'

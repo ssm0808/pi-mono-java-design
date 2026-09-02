@@ -25,6 +25,11 @@ TOOL_CALL_ID_EXAMPLE = "call_unLAR8MvFNptuiZK6K6HCy5k"
 CREATED_AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 LOWER_CAMEL = re.compile(r"^[a-z][A-Za-z0-9]*$")
 USER_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
+SUBMIT_RESPONSE_VARIANTS = {
+    "用户消息已接收（user.message）": "user.message",
+    "中断指令已接收（user.interrupt）": "user.interrupt",
+    "工具确认结果已接收（user.tool_confirmation）": "user.tool_confirmation",
+}
 STREAM_TYPES = {
     "agent.message",
     "agent.thinking",
@@ -112,7 +117,7 @@ def validate_auth(operation: dict[str, Any]) -> None:
 
 
 def validate_common_model(model: dict[str, Any]) -> None:
-    require(model["api"]["version"] == "1.4.0", "Unexpected contract version")
+    require(model["api"]["version"] == "1.4.1", "Unexpected contract version")
     require(model["api"]["basePath"] == "/mate-service/v1", "Unexpected base path")
     require("已确认" in model["api"]["visibility"], "Contract must be confirmed")
     require(model["review"]["questions"] == [], "Confirmed contract must not contain review choices")
@@ -154,9 +159,11 @@ def validate_submit(model: dict[str, Any]) -> None:
             "Submit example must show text then file")
     validate_event_id(event["content"][1]["fileId"], "submit fileId")
     accepted_bodies = response(model, "200-accepted")["bodies"]
-    require(set(accepted_bodies) == USER_TYPES, "Submit success variants changed")
+    require(set(accepted_bodies) == set(SUBMIT_RESPONSE_VARIANTS),
+            "Submit success descriptions changed")
     accepted_events: dict[str, dict[str, Any]] = {}
-    for event_type, accepted in accepted_bodies.items():
+    for description, event_type in SUBMIT_RESPONSE_VARIANTS.items():
+        accepted = accepted_bodies[description]
         require(set(accepted) == {"resCode", "resMsg", "result"},
                 f"Submit ResultBean shape changed: {event_type}")
         require(accepted["resCode"] == "0" and accepted["resMsg"] == "success",
@@ -466,10 +473,28 @@ def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None
         "userToolConfirmation": "user.tool_confirmation",
     }
     require(set(success_examples) == set(example_types), "Submit success named examples changed")
-    model_success = response(model, "200-accepted")["bodies"]
+    model_success = {
+        event_type: response(model, "200-accepted")["bodies"][description]
+        for description, event_type in SUBMIT_RESPONSE_VARIANTS.items()
+    }
     for example_name, event_type in example_types.items():
         require(success_examples[example_name]["value"] == model_success[event_type],
                 f"Submit success example drifted from review model: {event_type}")
+    request_summaries = {
+        "userMessage": "发送包含文本与文件的用户消息",
+        "userInterrupt": "中断当前执行",
+        "toolConfirmationAllow": "允许本次工具调用",
+        "toolConfirmationDeny": "拒绝本次工具调用并说明原因",
+    }
+    require({name: item["summary"] for name, item in examples.items()} == request_summaries,
+            "Submit request example descriptions changed")
+    response_summaries = {
+        "userMessage": "用户消息已接收并保存",
+        "userInterrupt": "中断指令已接收并保存",
+        "userToolConfirmation": "工具确认结果已接收并保存",
+    }
+    require({name: item["summary"] for name, item in success_examples.items()} == response_summaries,
+            "Submit response example descriptions changed")
     schemas = spec["components"]["schemas"]
     accepted_user_event = schemas["AcceptedUserEvent"]
     accepted_refs = {item["$ref"] for item in accepted_user_event["oneOf"]}
@@ -492,6 +517,9 @@ def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None
     require(spec["x-source-baselines"]["designRepositoryBeforeFullEventReceipt"]
             == "d29418845b6782185e296edd5f138f5e993ac044",
             "Full event receipt design baseline changed")
+    require(spec["x-source-baselines"]["designRepositoryBeforeExampleCopyEdit"]
+            == "5ac57bac4c58c0ae86630f591f1f699a065c9e4f",
+            "Example copy-edit design baseline changed")
 
 
 def validate_openapi_stream(spec: dict[str, Any]) -> None:
