@@ -4,13 +4,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.3.0 |
+| 文档版本 | 1.4.0 |
 | 状态 | 三个 operation 已确认；待实现 |
 | 设计性质 | target-only；不得描述为当前 mate-service 或 CampusClaw 已实现行为 |
 | 设计仓变更前基线 | `743eca488ad559387706b5df54e2248a4124e5ef` |
 | OpenAPI 增补前基线 | `cb94cdb29eeda701116e24cb9fd5e23090f5a91a` |
 | Swagger 请求头修正前基线 | `d3bdc83917b0b6951171be781b2377fd89d5040c` |
 | OpenAI Tool Call ID 修正前基线 | `ecf4cc06619f7a02c467d7212a0a12d86ab56a9f` |
+| 完整用户事件回执修正前基线 | `d29418845b6782185e296edd5f138f5e993ac044` |
 | CampusClaw 源码核对基线 | `7e54b47f2539982f8f1855a0b6bb38b6ab8742ae` |
 | pi 固定参考基线 | `badlogic/pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | Claude Managed Agents 公开文档核对日期 | 2026-09-02；Beta 公共契约，无可归因服务端源码 |
@@ -25,7 +26,7 @@ Mate 对外只使用 `Chat/chatId/chat.*`；Claw 内部继续使用
 
 | # | 方法与路径 | 用途 | 返回 |
 |---:|---|---|---|
-| 1 | `POST /mate-service/v1/chats/{chatId}/events` | 提交一条用户事件 | 普通 JSON 回执 |
+| 1 | `POST /mate-service/v1/chats/{chatId}/events` | 提交一条用户事件 | 完整用户事件 JSON |
 | 2 | `GET /mate-service/v1/chats/{chatId}/events/stream` | 从连接时刻开始观察 Chat 的实时事件 | 长连接 SSE，仅 live preview 与实时通知 |
 | 3 | `GET /mate-service/v1/chats/{chatId}/events` | 查询可恢复、可审计的权威事件历史 | 固定快照分页 JSON |
 
@@ -101,9 +102,9 @@ Mate 这三个对外 operation 不声明 `Accept-Language`；Mate 公共国际�
 ### 3.3 公共事件身份
 
 公共契约没有 `eventSeq`。每个持久化事件都有独立 `eventId`；`agent.message` 和
-`agent.thinking` 的多帧实时增量与最终完整事件复用同一个 `eventId`。POST 回执中的
-`eventId` 只标识被接受的那条 `user.*` 事件，不是 execution、Turn、Tool Call 或后续
-Agent 输出的关联 ID。
+`agent.thinking` 的多帧实时增量与最终完整事件复用同一个 `eventId`。POST
+`result.event.eventId` 只标识被接受的那条 `user.*` 事件，不是 execution、Turn、
+Tool Call 或后续 Agent 输出的关联 ID。
 
 执行边界由事件时间顺序和 `chat.status_idle` 识别，不增加 `turnId`、`runId` 或
 `messageEventId`。Tool 同时有两种不同身份：
@@ -220,15 +221,65 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 确认事件只在 Chat 的当前状态为 `confirming` 且 Tool Call 正在等待确认时接受。它会作为
 完整历史事件保留，以便审计和 UI 恢复；实时流不重复发送 `user.tool_confirmation`。
 
-### 4.4 成功回执
+### 4.4 完整用户事件成功响应
+
+提交 `user.message`：
 
 ```json
 {
   "resCode": "0",
   "resMsg": "success",
   "result": {
-    "eventId": "b7ef45d40a854c33af7a36df871a21e8",
-    "createdAt": "2026-09-02T08:30:15.123Z"
+    "event": {
+      "eventId": "b7ef45d40a854c33af7a36df871a21e8",
+      "type": "user.message",
+      "createdAt": "2026-09-02T08:30:15.123Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "分析上传文件并给出处理建议"
+        },
+        {
+          "type": "file",
+          "fileId": "7f12d8a380964fdc8518f48be1cf6a42"
+        }
+      ]
+    }
+  }
+}
+```
+
+提交 `user.interrupt`：
+
+```json
+{
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "event": {
+      "eventId": "aee903c130e048b9bc2894fc32cd63a8",
+      "type": "user.interrupt",
+      "createdAt": "2026-09-02T08:30:15.500Z"
+    }
+  }
+}
+```
+
+提交 `user.tool_confirmation`：
+
+```json
+{
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "event": {
+      "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
+      "type": "user.tool_confirmation",
+      "createdAt": "2026-09-02T08:30:16.000Z",
+      "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
+      "result": "deny",
+      "denyMessage": "不要执行会修改生产配置的操作"
+    }
   }
 }
 ```
@@ -237,11 +288,23 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 |---|---|---:|---|
 | `resCode` | string | 是 | 固定 `0` |
 | `resMsg` | string | 是 | 固定 `success` |
-| `result.eventId` | string | 是 | 被接受的 `user.*` 事件 ID；与历史中的该事件完全相同 |
-| `result.createdAt` | string | 是 | 服务端接受时间；与历史事件的 `createdAt` 完全相同 |
+| `result.event` | object | 是 | 服务端接受并持久化后的完整 `user.*` 事件；按 `type` 匹配三个事件 Schema 之一 |
+| `result.event.eventId` | string | 是 | 服务端生成的事件 ID；与历史中的该事件完全相同 |
+| `result.event.type` | string | 是 | 请求对应的 `user.message`、`user.interrupt` 或 `user.tool_confirmation` |
+| `result.event.createdAt` | string | 是 | 服务端接受并持久化该事件的时间；与历史记录完全相同 |
+| `result.event.content` | array | `user.message` 必需 | 服务端接受的完整文本/文件内容数组；形状与请求和历史 `UserMessageEvent` 一致 |
+| `result.event.toolCallId` | string | `user.tool_confirmation` 必需 | 原样保存的 OpenAI Tool Call ID；形状与历史确认事件一致 |
+| `result.event.result` | string | `user.tool_confirmation` 必需 | `allow` 或 `deny`；这是事件业务字段，不是外层 ResultBean 的 `result` 包络 |
+| `result.event.denyMessage` | string | 否 | 仅拒绝时可按实际持久化内容返回；允许时必须省略 |
 
-回执不回显请求，不返回 `acceptedAt`、`processedAt` 或执行结果。若客户端在收到回执前
-断线，结果不确定；本版本没有 Idempotency-Key，客户端必须查询历史，不能盲目重放 POST。
+`result.event` 复用历史接口的 `UserMessageEvent`、`UserInterruptEvent` 和
+`UserToolConfirmationEvent` Schema，不另外维护“精简回执事件”。响应会返回规范化后实际
+持久化的完整业务字段，并补充服务端字段 `eventId`、`createdAt`；不会返回 `acceptedAt`、
+`processedAt`、Agent 输出、execution 状态或后续 `chat.status_idle`。
+
+若客户端在收到响应前断线，提交结果仍然不确定；本版本没有 Idempotency-Key，客户端必须
+查询权威历史，不能盲目重放 POST。`user.*` 事件不进入 live SSE，因此不会因同时消费 SSE
+而重复收到这条提交事件。
 
 ### 4.5 提交接口错误
 
@@ -631,6 +694,7 @@ Claude Managed Agents 在核对日仍是 Beta 公共 API。公开文档不能证
 | 产品约束 | `interrupt + message` 不批量提交；终止完成后再提交消息，保证单 active execution |
 | 安全加固 | `agent.thinking` 只允许公开摘要；Tool 参数、结果和错误必须经过安全投影；内部 ID、路径、凭据和 private chain-of-thought 不出边界 |
 | 架构变化 | POST、live SSE、durable history 分离；live 流不重放，历史固定快照；用 `eventId` 对账，不公开内部 sequence |
+| 架构变化 | POST 成功时在 `result.event` 返回完整、已持久化的 `user.*` 事件，并与历史接口复用同一 Schema；这使创建响应可直接作为权威记录合并，同时不把 Agent execution 结果混入写入响应 |
 | 架构变化 | `eventId` 与 `toolCallId` 分离；`agent.tool_call` 显式公开 OpenAI `call_id` / `tool_calls[].id`，确认和结果原样引用该值。这是有意的 OpenAI 身份耦合，非 OpenAI Provider 不得伪造 `call_` ID；若要纳入本公共契约，必须另行版本决策 |
 | 架构变化 | 确认事件持久化，与 Tool Call 和 Tool Result 共享 `toolCallId`，同时各自保留独立 `eventId`，以满足恢复和审计 |
 | target-only | 新增 `user.interrupt`、`user.tool_confirmation`、独立 stream GET、固定快照历史和新的公共事件投影；这些均未在当前 Claw HTTP 层实现 |
@@ -648,6 +712,8 @@ VO、Service 与错误组件名称。
 - `event.type` 使用受控联合类型反序列化；已知对象忽略未知字段，但未知 discriminator 拒绝；
 - 覆盖 message 的 text-only/file-only/mixed、文本 Unicode code point 边界、文件数量/重复/
   顺序、allow/deny 和 denyMessage 条件字段；
+- 覆盖三种 POST 成功响应均只通过 `result.event` 返回完整持久化用户事件，并逐字段断言
+  与历史 `UserMessageEvent`、`UserInterruptEvent`、`UserToolConfirmationEvent` Schema 一致；
 - 覆盖 idle interrupt 冲突、interrupt 等待整棵执行树终止、confirming 时消息冲突、确认
   Tool Call 归属，以及中断 Tool 不伪造结果；
 - 覆盖 SSE 只有 `data:`、ping comment、五类事件、同 ID delta/completed、completed 覆盖
@@ -680,6 +746,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-09-02 | POST 成功响应改为在 `result.event` 返回完整、已持久化的 `user.message`、`user.interrupt` 或 `user.tool_confirmation`，并直接复用历史事件 Schema；响应仍不包含 Agent execution 结果。 |
 | 1.3.0 | 2026-09-02 | 将 `toolCallId` 改为直接使用 OpenAI Tool Call ID：Responses 取 `call_id`，Chat Completions 取 `tool_calls[].id`；`agent.tool_call` 增加必需 `toolCallId`，确认和结果原样引用；`eventId` 仍是独立的 32 位公共事件 ID；移除 `toolCallId` 正则和长度假设。 |
 | 1.2.0 | 2026-09-02 | 按标准 Swagger 表达修正请求头：`X-HW-ID` 和 `access-token` 改为三个 operation 的必需 header parameter；JWT 和 APPKEY 保留为二选一 security scheme；Mate 删除 `Accept-Language` 请求声明，Claw 接口边界不变。 |
 | 1.1.0 | 2026-09-02 | 增加三接口 OpenAPI 3.1 机器契约；提交事件用 `oneOf + discriminator` 和四个命名示例展示三种用户事件；将 page 示例改为不可推断内部字段的 opaque cursor；接口行为保持 1.0.0。 |

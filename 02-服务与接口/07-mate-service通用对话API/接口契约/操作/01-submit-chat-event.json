@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
@@ -9,7 +9,7 @@
     "method": "POST",
     "path": "/chats/{chatId}/events",
     "summary": "提交一条用户事件",
-    "description": "一次只接受 user.message、user.interrupt 或 user.tool_confirmation 中的一条，并立即返回该用户事件的 eventId 和 createdAt。响应不是执行结果。interrupt 和 message 不得批量提交；必须等待 chat.status_idle(reason=terminated) 后再发 message。POST 回执丢失时查询权威历史，禁止盲目重放。",
+    "description": "一次只接受 user.message、user.interrupt 或 user.tool_confirmation 中的一条，并立即返回服务端接受并持久化后的完整用户事件。result.event 与历史接口中的对应 user.* 事件形状完全相同，但该响应不是 Agent 执行结果。interrupt 和 message 不得批量提交；必须等待 chat.status_idle(reason=terminated) 后再发 message。POST 响应丢失时查询权威历史，禁止盲目重放。",
     "authModes": [
       {
         "id": "jwt",
@@ -97,18 +97,56 @@
         "status": "200",
         "tabLabel": "200 · 已接受",
         "label": "OK",
-        "summary": "只返回被接受的 user.* 事件身份和服务端创建时间；不回显请求，不返回执行结果。",
+        "summary": "返回被接受并持久化的完整 user.* 事件；result.event 复用历史事件 Schema，不包含 Agent 执行结果。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store"
         },
         "bodies": {
-          "default": {
+          "user.message": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "eventId": "b7ef45d40a854c33af7a36df871a21e8",
-              "createdAt": "2026-09-02T08:30:15.123Z"
+              "event": {
+                "eventId": "b7ef45d40a854c33af7a36df871a21e8",
+                "type": "user.message",
+                "createdAt": "2026-09-02T08:30:15.123Z",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "分析上传文件并给出处理建议"
+                  },
+                  {
+                    "type": "file",
+                    "fileId": "7f12d8a380964fdc8518f48be1cf6a42"
+                  }
+                ]
+              }
+            }
+          },
+          "user.interrupt": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "event": {
+                "eventId": "aee903c130e048b9bc2894fc32cd63a8",
+                "type": "user.interrupt",
+                "createdAt": "2026-09-02T08:30:15.500Z"
+              }
+            }
+          },
+          "user.tool_confirmation": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "event": {
+                "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
+                "type": "user.tool_confirmation",
+                "createdAt": "2026-09-02T08:30:16.000Z",
+                "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
+                "result": "deny",
+                "denyMessage": "不要执行会修改生产配置的操作"
+              }
             }
           }
         }
@@ -340,6 +378,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 POST /mate-service/v1/chats/{chatId}/events",
-    "promptSuffix": "保持与三接口 1.3.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.4.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }

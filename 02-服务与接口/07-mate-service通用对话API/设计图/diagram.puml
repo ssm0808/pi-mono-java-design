@@ -9,7 +9,7 @@ skinparam shadowing false
 ' Observed identity: OpenAI Responses call_id maps to Claw ToolCall.id and is written back for Tool results.
 ' Target-only design: Mate separates event submission, live Chat observation, and authoritative fixed-snapshot history.
 ' Design reason: a transport disconnect must not determine whether a write succeeded or whether an execution continues.
-' Architecture change: Mate publishes the OpenAI Tool Call ID unchanged while keeping eventId independent.
+' Architecture changes: Mate keeps eventId independent, publishes OpenAI Tool Call IDs, and returns the complete accepted user event.
 
 actor "Authorized client" as Client
 component "mate-service\nChat Events API" as Mate
@@ -23,7 +23,7 @@ Mate -> Resolver : resolve private Session
 Resolver --> Mate : sessionId
 Mate -> Claw : submit one user event
 Claw -> History : persist accepted event
-Mate --> Client : eventId and createdAt
+Mate --> Client : ResultBean with complete accepted user event
 
 Client -> Mate : GET /chats/{chatId}/events/stream
 Claw --> Mate : normalized live domain events

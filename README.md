@@ -96,6 +96,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.4 | 2026-09-02 | mate-service 通用对话 Events 的 POST 成功响应改为在 `result.event` 返回完整、已持久化的用户事件，并与历史事件复用同一 Schema。 |
 | 2.3.3 | 2026-09-02 | mate-service 通用对话 Events 的 `toolCallId` 改为直接使用 OpenAI Responses `call_id` / Chat Completions `tool_calls[].id`；与独立公共 `eventId` 分离，并同步三接口契约。 |
 | 2.3.2 | 2026-09-02 | 修正 mate-service 通用对话 Events 的 Swagger 请求头表达：`X-HW-ID` 和 `access-token` 作为三个 operation 的必需 header parameter，JWT 与 APPKEY 作为二选一 security scheme，Mate 不声明 `Accept-Language`。 |
 | 2.3.1 | 2026-09-02 | 为 mate-service 通用对话 Events 三接口增加 OpenAPI 3.1；提交事件使用联合 Schema 和命名示例展示 message、interrupt 与 tool confirmation。 |

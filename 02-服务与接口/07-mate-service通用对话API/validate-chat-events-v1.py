@@ -112,7 +112,7 @@ def validate_auth(operation: dict[str, Any]) -> None:
 
 
 def validate_common_model(model: dict[str, Any]) -> None:
-    require(model["api"]["version"] == "1.3.0", "Unexpected contract version")
+    require(model["api"]["version"] == "1.4.0", "Unexpected contract version")
     require(model["api"]["basePath"] == "/mate-service/v1", "Unexpected base path")
     require("已确认" in model["api"]["visibility"], "Contract must be confirmed")
     require(model["review"]["questions"] == [], "Confirmed contract must not contain review choices")
@@ -153,11 +153,35 @@ def validate_submit(model: dict[str, Any]) -> None:
     require([item["type"] for item in event["content"]] == ["text", "file"],
             "Submit example must show text then file")
     validate_event_id(event["content"][1]["fileId"], "submit fileId")
-    accepted = response(model, "200-accepted")["bodies"]["default"]
-    require(accepted["resCode"] == "0" and accepted["resMsg"] == "success", "Submit ResultBean changed")
-    require(set(accepted["result"]) == {"eventId", "createdAt"}, "Submit receipt contains redundant fields")
-    validate_event_id(accepted["result"]["eventId"], "submit receipt")
-    validate_created_at(accepted["result"]["createdAt"], "submit receipt")
+    accepted_bodies = response(model, "200-accepted")["bodies"]
+    require(set(accepted_bodies) == USER_TYPES, "Submit success variants changed")
+    accepted_events: dict[str, dict[str, Any]] = {}
+    for event_type, accepted in accepted_bodies.items():
+        require(set(accepted) == {"resCode", "resMsg", "result"},
+                f"Submit ResultBean shape changed: {event_type}")
+        require(accepted["resCode"] == "0" and accepted["resMsg"] == "success",
+                f"Submit ResultBean values changed: {event_type}")
+        require(set(accepted["result"]) == {"event"},
+                f"Submit result must contain only event: {event_type}")
+        accepted_event = accepted["result"]["event"]
+        require(accepted_event["type"] == event_type,
+                f"Submit response type does not match variant: {event_type}")
+        validate_history_event(accepted_event)
+        accepted_events[event_type] = accepted_event
+    require(set(accepted_events["user.message"]) == {"eventId", "type", "createdAt", "content"},
+            "Submitted message must return the complete persisted event")
+    require(accepted_events["user.message"]["content"] == event["content"],
+            "Submitted message response content drifted from the accepted request")
+    require(set(accepted_events["user.interrupt"]) == {"eventId", "type", "createdAt"},
+            "Submitted interrupt event shape changed")
+    confirmation = accepted_events["user.tool_confirmation"]
+    require(set(confirmation) == {
+        "eventId", "type", "createdAt", "toolCallId", "result", "denyMessage"
+    }, "Submitted confirmation must return the complete persisted event")
+    require(confirmation["toolCallId"] == TOOL_CALL_ID_EXAMPLE and confirmation["result"] == "deny",
+            "Submitted confirmation response changed")
+    require(len({item["eventId"] for item in accepted_events.values()}) == len(USER_TYPES),
+            "Each submitted user event must have an independent eventId")
     codes = {
         body["resCode"]
         for item in operation["responses"]
@@ -434,9 +458,40 @@ def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None
     confirmation = spec["components"]["schemas"]["UserToolConfirmationRequestEvent"]
     require(set(confirmation["required"]) == {"type", "toolCallId", "result"},
             "Confirmation required fields changed")
-    success = operation["responses"]["200"]["content"]["application/json"]["example"]
-    model_success = response(model, "200-accepted")["bodies"]["default"]
-    require(success == model_success, "Submit success example drifted from review model")
+    success_media = operation["responses"]["200"]["content"]["application/json"]
+    success_examples = success_media["examples"]
+    example_types = {
+        "userMessage": "user.message",
+        "userInterrupt": "user.interrupt",
+        "userToolConfirmation": "user.tool_confirmation",
+    }
+    require(set(success_examples) == set(example_types), "Submit success named examples changed")
+    model_success = response(model, "200-accepted")["bodies"]
+    for example_name, event_type in example_types.items():
+        require(success_examples[example_name]["value"] == model_success[event_type],
+                f"Submit success example drifted from review model: {event_type}")
+    schemas = spec["components"]["schemas"]
+    accepted_user_event = schemas["AcceptedUserEvent"]
+    accepted_refs = {item["$ref"] for item in accepted_user_event["oneOf"]}
+    expected_mapping = {
+        "user.message": "#/components/schemas/UserMessageEvent",
+        "user.interrupt": "#/components/schemas/UserInterruptEvent",
+        "user.tool_confirmation": "#/components/schemas/UserToolConfirmationEvent",
+    }
+    require(accepted_refs == set(expected_mapping.values()),
+            "AcceptedUserEvent must reuse all three persisted history event schemas")
+    require(accepted_user_event["discriminator"]["mapping"] == expected_mapping,
+            "AcceptedUserEvent discriminator mapping changed")
+    result_schema = schemas["SubmitChatEventResult"]
+    require(set(result_schema["required"]) == {"event"}
+            and set(result_schema["properties"]) == {"event"},
+            "Submit result must contain only the complete accepted event")
+    require(result_schema["properties"]["event"]["$ref"]
+            == "#/components/schemas/AcceptedUserEvent",
+            "Submit result event must reuse AcceptedUserEvent")
+    require(spec["x-source-baselines"]["designRepositoryBeforeFullEventReceipt"]
+            == "d29418845b6782185e296edd5f138f5e993ac044",
+            "Full event receipt design baseline changed")
 
 
 def validate_openapi_stream(spec: dict[str, Any]) -> None:
