@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>mate-service General Chat API - POST /chats/{chatId}/events</title>
+  <title>mate-service General Chat Events API - API Review</title>
   <style>
     :root { color-scheme: light dark; background: light-dark(#f7f8fa, #11151b); }
     body { margin: 0; padding: 16px; background: inherit; }
@@ -231,171 +231,1513 @@
     }
   </style>
 
-  <div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>mate-service General Chat API</h2><span class="tag">0.1.0</span><span class="tag">Public · 评审中 · target-only</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-post"><header class="operation-head"><span class="method method-post">POST</span><code class="path">/chats/{chatId}/events</code><span class="muted">提交一条普通 Chat 消息并流式返回执行事件</span></header><section class="section"><h3>作用</h3><p class="description">浏览器向已有 Chat 提交 message 和 fileIds。mate-service 先验证登录用户与 Chat 权限，再通过私有 chatId 到 sessionId 映射调用 CampusClaw Runtime。它逐帧解析内部 SSE，删除内部标识、凭据、原始思考、未经脱敏的工具数据与 Runtime 错误细节，然后输出公共 SSE。请求一旦被 Runtime 接受，浏览器断线不会取消执行，也不得自动重放 POST；恢复由后续 GET Chat Events 接口承担。当前 mate-service 源码中不存在该 Chat bridge，因此本操作是 target-only design。</p></section><section class="section contract-detail"><h3>认证</h3><details class="static-choice" open><summary>登录用户 Bearer Token（建议）</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer &lt;USER_ACCESS_TOKEN&gt;</td><td data-label="说明">mate-service 验证登录用户并建立 Chat 权限上下文；该值不会原样转发到 CampusClaw</td></tr></tbody></table></div><pre><code>POST /mate-service/v1/chats/{chatId}/events
-Authorization: Bearer &lt;USER_ACCESS_TOKEN&gt;</code></pre></details></section><section class="section contract-detail"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">chatId</td><td data-label="必填">是</td><td data-label="约束">string, 1..128</td><td data-label="说明">用户有权访问的公共 Chat 标识；不得提交内部 sessionId</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US</td><td data-label="说明">流建立前 ResultBean 与流内错误消息语言；缺失或不支持时回退 en-US</td></tr></tbody></table></div><p class="muted empty">message 可省略，但提供时必须非空白且最多 262144 个 UTF-16 代码单元；fileIds 可省略，最多 32 个匹配 ^file_[0-9A-Za-z]{26}$ 且互不重复的字符串，并保留顺序。message 与 fileIds 至少提供一项。拒绝未知字段，不接受 chatId、sessionId、modelId、thinking、metadata、type 或 Idempotency-Key。以 / 开头的 message 在本接口仍是普通消息，Slash 解析只属于已确认的交互层和结构化 Command API。文件归属和 READY 状态继续由 Runtime 接受消息后的附件 resolve 流程原子确认；公共层不得为了提前返回附件错误而改变已确认的 User Entry 接受顺序。</p><pre><code>{
-  &quot;message&quot;: &quot;分析附件中的园区告警并给出处理建议&quot;,
-  &quot;fileIds&quot;: [
-    &quot;file_01JY8X2E3R4T5Y6U7I8O9P0A1S&quot;
-  ]
-}</code></pre></section><section class="section contract-detail"><h3>响应</h3><details class="static-response" open><summary><code>200 · 正常完成</code> 200 OK — 一次请求范围 SSE；持久化事件使用公共 eventSeq，瞬时事件没有 id。示例按建议方案展示安全思考摘要和安全工具投影。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
+  <div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>mate-service General Chat Events API</h2><span class="tag">1.0.0</span><span class="tag">Public · 已确认 · target-only</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-post"><header class="operation-head"><span class="method method-post">POST</span><code class="path">/chats/{chatId}/events</code><span class="muted">提交一条用户事件</span></header><section class="section"><h3>作用</h3><p class="description">一次只接受 user.message、user.interrupt 或 user.tool_confirmation 中的一条，并立即返回该用户事件的 eventId 和 createdAt。响应不是执行结果。interrupt 和 message 不得批量提交；必须等待 chat.status_idle(reason=terminated) 后再发 message。POST 回执丢失时查询权威历史，禁止盲目重放。</p></section><section class="section contract-detail"><h3>认证</h3><details class="static-choice" open><summary>JWT 首选</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">&lt;CALLER_ID&gt;</td><td data-label="说明">公司调用方身份，非空</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">&lt;ACCESS_TOKEN&gt;</td><td data-label="说明">当前调用上下文访问令牌，非空</td></tr><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer &lt;JWT&gt;</td><td data-label="说明">首选公司 JWT；与 APPKEY 同时存在时使用 JWT，JWT 无效不回退</td></tr></tbody></table></div><pre><code>POST /mate-service/v1/chats/{chatId}/events
+X-HW-ID: &lt;CALLER_ID&gt;
+access-token: &lt;ACCESS_TOKEN&gt;
+Authorization: Bearer &lt;JWT&gt;</code></pre></details><details class="static-choice"><summary>APPKEY 兼容</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">&lt;CALLER_ID&gt;</td><td data-label="说明">公司调用方身份，非空</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">&lt;ACCESS_TOKEN&gt;</td><td data-label="说明">当前调用上下文访问令牌，非空</td></tr><tr><td data-label="Header">X-HW-APPKEY</td><td data-label="必填">是</td><td data-label="示例值">&lt;APPKEY&gt;</td><td data-label="说明">未提供 Authorization 时使用的公司 AppKey</td></tr></tbody></table></div><pre><code>POST /mate-service/v1/chats/{chatId}/events
+X-HW-ID: &lt;CALLER_ID&gt;
+access-token: &lt;ACCESS_TOKEN&gt;
+X-HW-APPKEY: &lt;APPKEY&gt;</code></pre></details></section><section class="section contract-detail"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">chatId</td><td data-label="必填">是</td><td data-label="约束">string, 1..64, case-sensitive</td><td data-label="说明">调用方有权访问的公共 Chat 标识；不施加额外正则，不接受内部 sessionId</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US; default en-US</td><td data-label="说明">错误文案语言；缺失或不支持时回退 en-US</td></tr></tbody></table></div><p class="muted empty">顶层固定为 event。示例是 user.message：content 长度 1..5，仅 text/file；最多一个 text 且必须第一项，text 非空白且最多 2048 Unicode code point；最多四个不重复 file，fileId 匹配 ^[0-9a-f]{32}$。user.interrupt 只有 type。user.tool_confirmation 包含 toolCallId、result=allow|deny；denyMessage 仅 deny 可省略或提供非空白的最多 2048 code point 字符串。已知对象忽略未知字段；未知 type、null 条件字段和批量事件非法。</p><pre><code>{
+  &quot;event&quot;: {
+    &quot;type&quot;: &quot;user.message&quot;,
+    &quot;content&quot;: [
+      {
+        &quot;type&quot;: &quot;text&quot;,
+        &quot;text&quot;: &quot;分析上传文件并给出处理建议&quot;
+      },
+      {
+        &quot;type&quot;: &quot;file&quot;,
+        &quot;fileId&quot;: &quot;7f12d8a380964fdc8518f48be1cf6a42&quot;
+      }
+    ]
+  }
+}</code></pre></section><section class="section contract-detail"><h3>响应</h3><details class="static-response" open><summary><code>200 · 已接受</code> 200 OK — 只返回被接受的 user.* 事件身份和服务端创建时间；不回显请求，不返回执行结果。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;eventId&quot;: &quot;b7ef45d40a854c33af7a36df871a21e8&quot;,
+    &quot;createdAt&quot;: &quot;2026-09-02T08:30:15.123Z&quot;
+  }
+}</code></pre></details></details><details class="static-response"><summary><code>400 · CHAT_ID_INVALID</code> 400 Bad Request — chatId 长度不在 1..64。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
 Cache-Control: no-store
 Content-Language: zh-CN
 
-id: 101
-event: user.message
-data: {&quot;eventSeq&quot;:101,&quot;message&quot;:&quot;分析附件中的园区告警并给出处理建议&quot;,&quot;fileIds&quot;:[&quot;file_01JY8X2E3R4T5Y6U7I8O9P0A1S&quot;],&quot;occurredAt&quot;:&quot;2026-09-01T10:00:00Z&quot;}
-
-event: assistant.message.started
-data: {&quot;role&quot;:&quot;assistant&quot;}
-
-event: assistant.thinking.started
-data: {&quot;displayTitle&quot;:&quot;正在分析&quot;}
-
-event: assistant.thinking.completed
-data: {&quot;displayTitle&quot;:&quot;分析完成&quot;,&quot;displaySummary&quot;:&quot;已核对告警时间、设备范围和关联影响。&quot;}
-
-event: tool.execution.started
-data: {&quot;activityId&quot;:&quot;activity-550e8400e29b41d4a716446655440020&quot;,&quot;displayName&quot;:&quot;查询园区告警&quot;,&quot;input&quot;:{&quot;siteName&quot;:&quot;东区园区&quot;}}
-
-id: 104
-event: tool.result
-data: {&quot;eventSeq&quot;:104,&quot;activityId&quot;:&quot;activity-550e8400e29b41d4a716446655440020&quot;,&quot;displayName&quot;:&quot;查询园区告警&quot;,&quot;status&quot;:&quot;succeeded&quot;,&quot;outputSummary&quot;:&quot;找到 3 条相关告警。&quot;,&quot;occurredAt&quot;:&quot;2026-09-01T10:00:02Z&quot;}
-
-event: assistant.message.delta
-data: {&quot;delta&quot;:{&quot;type&quot;:&quot;text&quot;,&quot;text&quot;:&quot;建议先隔离受影响端口，&quot;}}
-
-id: 106
-event: assistant.message.completed
-data: {&quot;eventSeq&quot;:106,&quot;message&quot;:{&quot;role&quot;:&quot;assistant&quot;,&quot;content&quot;:[{&quot;type&quot;:&quot;text&quot;,&quot;text&quot;:&quot;建议先隔离受影响端口，再核对上联链路和告警时间线。&quot;}]},&quot;finishReason&quot;:&quot;stop&quot;,&quot;occurredAt&quot;:&quot;2026-09-01T10:00:03Z&quot;}
-
-event: session.status.idle
-data: {&quot;status&quot;:&quot;idle&quot;}
-
-event: stream.end
-data: {&quot;reason&quot;:&quot;completed&quot;}
-</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_CHAT_ID</code> 400 Bad Request — chatId 不符合公共 Chat 标识约束。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
-Content-Language: zh-CN
-
 {
-  &quot;resCode&quot;: &quot;INVALID_CHAT_ID&quot;,
-  &quot;resMsg&quot;: &quot;chatId 格式不正确。&quot;
+  &quot;resCode&quot;: &quot;CHAT_ID_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;chatId 长度必须为 1 到 64 个字符。&quot;
 }</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: en-US
 
 {
-  &quot;resCode&quot;: &quot;INVALID_CHAT_ID&quot;,
-  &quot;resMsg&quot;: &quot;The chatId format is invalid.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_EVENT_REQUEST</code> 400 Bad Request — JSON 非法、仅有空白 message、没有消息和附件、附件重复、字段越界或含未知字段。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+  &quot;resCode&quot;: &quot;CHAT_ID_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;chatId must contain between 1 and 64 characters.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · CHAT_EVENT_INVALID</code> 400 Bad Request — JSON、content、fileId、toolCallId、result 或 denyMessage 不符合约束。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: zh-CN
 
 {
-  &quot;resCode&quot;: &quot;INVALID_EVENT_REQUEST&quot;,
-  &quot;resMsg&quot;: &quot;消息请求内容不符合约束。&quot;
+  &quot;resCode&quot;: &quot;CHAT_EVENT_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;事件内容不符合要求。&quot;
 }</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: en-US
 
 {
-  &quot;resCode&quot;: &quot;INVALID_EVENT_REQUEST&quot;,
-  &quot;resMsg&quot;: &quot;The message request does not satisfy the required constraints.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>401 · UNAUTHENTICATED</code> 401 Unauthorized — 用户未登录或访问令牌无效。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+  &quot;resCode&quot;: &quot;CHAT_EVENT_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;The event does not satisfy the required constraints.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · CHAT_EVENT_TYPE_INVALID</code> 400 Bad Request — event.type 不是三个受支持的用户事件之一。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_TYPE_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;事件 type 不受支持。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_TYPE_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;The event type is not supported.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>401 · UNAUTHENTICATED</code> 401 Unauthorized — 必要认证字段缺失或凭据无效；JWT 无效时不得回退 APPKEY。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: zh-CN
 
 {
   &quot;resCode&quot;: &quot;UNAUTHENTICATED&quot;,
-  &quot;resMsg&quot;: &quot;请先登录。&quot;
+  &quot;resMsg&quot;: &quot;调用方身份认证失败。&quot;
 }</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: en-US
 
 {
   &quot;resCode&quot;: &quot;UNAUTHENTICATED&quot;,
-  &quot;resMsg&quot;: &quot;Authentication is required.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>403 · CHAT_ACCESS_DENIED</code> 403 Forbidden — 用户无权向该 Chat 发送消息；权限拒绝必须发生在内部 Session 解析和 Runtime 调用之前。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+  &quot;resMsg&quot;: &quot;Caller authentication failed.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>403 · CHAT_ACCESS_DENIED</code> 403 Forbidden — 调用方无权访问该 Chat；拒绝发生在内部 Session 解析之前。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: zh-CN
 
 {
   &quot;resCode&quot;: &quot;CHAT_ACCESS_DENIED&quot;,
   &quot;resMsg&quot;: &quot;无权访问该 Chat。&quot;
 }</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: en-US
 
 {
   &quot;resCode&quot;: &quot;CHAT_ACCESS_DENIED&quot;,
-  &quot;resMsg&quot;: &quot;Access to the Chat is denied.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>404 · CHAT_NOT_FOUND</code> 404 Not Found — Chat 不存在、已删除，或没有可用的私有 Session 映射。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
-Content-Language: zh-CN
-
-{
-  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
-  &quot;resMsg&quot;: &quot;指定的 Chat 不存在。&quot;
-}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
-Content-Language: en-US
-
-{
-  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
-  &quot;resMsg&quot;: &quot;The specified Chat does not exist.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>409 · CHAT_BUSY</code> 409 Conflict — Chat 对应的 Runtime Session 已有 active execution；普通消息接口不把消息隐式改成 Steer 或 FollowUp。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
-Content-Language: zh-CN
-
-{
-  &quot;resCode&quot;: &quot;CHAT_BUSY&quot;,
-  &quot;resMsg&quot;: &quot;当前 Chat 正在执行，请稍后再试。&quot;
-}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
-Content-Language: en-US
-
-{
-  &quot;resCode&quot;: &quot;CHAT_BUSY&quot;,
-  &quot;resMsg&quot;: &quot;The Chat is currently running an execution.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>429 · CHAT_RATE_LIMITED</code> 429 Too Many Requests — 用户、租户或 Chat 的公共速率或配额限制被触发。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
-Content-Language: zh-CN
-Retry-After: 3
-
-{
-  &quot;resCode&quot;: &quot;CHAT_RATE_LIMITED&quot;,
-  &quot;resMsg&quot;: &quot;请求过于频繁，请稍后再试。&quot;
-}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
-Content-Language: en-US
-Retry-After: 3
-
-{
-  &quot;resCode&quot;: &quot;CHAT_RATE_LIMITED&quot;,
-  &quot;resMsg&quot;: &quot;Too many requests. Try again later.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>502 · RUNTIME_EVENT_FAILED</code> 502 Bad Gateway — CampusClaw 在流建立前拒绝请求，或内部响应不能被安全映射；不返回内部错误细节。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
-Content-Language: zh-CN
-
-{
-  &quot;resCode&quot;: &quot;RUNTIME_EVENT_FAILED&quot;,
-  &quot;resMsg&quot;: &quot;对话执行服务调用失败。&quot;
-}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
-Content-Language: en-US
-
-{
-  &quot;resCode&quot;: &quot;RUNTIME_EVENT_FAILED&quot;,
-  &quot;resMsg&quot;: &quot;The conversation execution service call failed.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>503 · CHAT_EXECUTION_UNAVAILABLE</code> 503 Service Unavailable — Runtime 容量不足、依赖不可用或 mate-service 无法建立安全的执行上下文。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
-Content-Language: zh-CN
-Retry-After: 3
-
-{
-  &quot;resCode&quot;: &quot;CHAT_EXECUTION_UNAVAILABLE&quot;,
-  &quot;resMsg&quot;: &quot;对话执行服务暂时不可用。&quot;
-}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
-Content-Language: en-US
-Retry-After: 3
-
-{
-  &quot;resCode&quot;: &quot;CHAT_EXECUTION_UNAVAILABLE&quot;,
-  &quot;resMsg&quot;: &quot;The conversation execution service is temporarily unavailable.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>200 · 流内异常</code> 200 SSE already started — 请求已被接受后执行失败。只发送公共 stream.error 并关闭，不发送 stream.end；accepted=true 明确禁止客户端把它当成未提交而自动重放。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
+  &quot;resMsg&quot;: &quot;You do not have permission to access this Chat.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404 · CHAT_NOT_FOUND</code> 404 Not Found — 公共 Chat 不存在。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
 Cache-Control: no-store
 Content-Language: zh-CN
 
-event: stream.error
-data: {&quot;resCode&quot;:&quot;CHAT_EXECUTION_FAILED&quot;,&quot;resMsg&quot;:&quot;对话执行失败，请刷新历史确认结果。&quot;,&quot;accepted&quot;:true}
-</code></pre></details></details></section></article><section class="review-form"><h3>继续调整</h3><div class="question-grid"><fieldset><legend>公共事件命名空间</legend><label><input type="radio" disabled checked><span class="option-copy"><span class="option-label">沿用现有事件名（建议）</span><span class="option-detail">沿用 Chat Command API 和前端投影已经使用的 user.message、assistant.*、tool.*、session.status.idle 与 stream.*；只收窄公共字段</span></span></label><label><input type="radio" disabled><span class="option-copy"><span class="option-label">全部改为 Chat 命名</span><span class="option-detail">把 session.status.idle 等 Session 范畴事件重命名为 chat.status.idle；公共资源更纯粹，但需要同步改造现有前端和 Command 事件投影</span></span></label></fieldset><fieldset><legend>公共持久化事件身份</legend><label><input type="radio" disabled checked><span class="option-copy"><span class="option-label">仅 eventSeq（建议）</span><span class="option-detail">沿用 Chat Command API：内部 entrySeq 映射为 eventSeq，允许私有记录造成序号缺口；后续 GET Events 也用 eventSeq 去重</span></span></label><label><input type="radio" disabled><span class="option-copy"><span class="option-label">eventId + eventSeq</span><span class="option-detail">额外生成稳定不透明 eventId；恢复语义更显式，但 mate-service 需要持久化 ID 映射</span></span></label></fieldset><fieldset><legend>Thinking 的公共投影</legend><label><input type="radio" disabled checked><span class="option-copy"><span class="option-label">安全标题与摘要（建议）</span><span class="option-detail">发送 displayTitle/displaySummary；原始 ThinkingContent 和逐 token thinking delta 永不进入浏览器，无安全摘要时只发通用状态</span></span></label><label><input type="radio" disabled><span class="option-copy"><span class="option-label">完全隐藏 Thinking</span><span class="option-detail">公共流不发送任何 assistant.thinking.* 事件，界面只展示 Assistant 和 Tool 活动</span></span></label></fieldset><fieldset><legend>Tool 的公共投影</legend><label><input type="radio" disabled checked><span class="option-copy"><span class="option-label">安全输入与结果摘要（建议）</span><span class="option-detail">服务端脱敏、截断并把内部资源映射为公共资源；用 activityId 关联生命周期，不公开 toolCallId、绝对路径、凭据或原始结果</span></span></label><label><input type="radio" disabled><span class="option-copy"><span class="option-label">只展示名称和状态</span><span class="option-detail">仅发送 displayName 与 running/succeeded/failed，不公开输入和结果摘要</span></span></label></fieldset></div></section></div></div>
-  <script type="application/json" data-review-model>{"api":{"title":"mate-service General Chat API","version":"0.1.0","basePath":"/mate-service/v1","visibility":"Public · 评审中 · target-only"},"operation":{"method":"POST","path":"/chats/{chatId}/events","summary":"提交一条普通 Chat 消息并流式返回执行事件","description":"浏览器向已有 Chat 提交 message 和 fileIds。mate-service 先验证登录用户与 Chat 权限，再通过私有 chatId 到 sessionId 映射调用 CampusClaw Runtime。它逐帧解析内部 SSE，删除内部标识、凭据、原始思考、未经脱敏的工具数据与 Runtime 错误细节，然后输出公共 SSE。请求一旦被 Runtime 接受，浏览器断线不会取消执行，也不得自动重放 POST；恢复由后续 GET Chat Events 接口承担。当前 mate-service 源码中不存在该 Chat bridge，因此本操作是 target-only design。","authModes":[{"id":"userBearer","label":"登录用户 Bearer Token（建议）","preferred":true,"headers":[{"name":"Authorization","value":"Bearer \u003cUSER_ACCESS_TOKEN\u003e","required":true,"description":"mate-service 验证登录用户并建立 Chat 权限上下文；该值不会原样转发到 CampusClaw"}]}],"parameters":[{"in":"path","name":"chatId","required":true,"schema":"string, 1..128","description":"用户有权访问的公共 Chat 标识；不得提交内部 sessionId"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"流建立前 ResultBean 与流内错误消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":true,"contentType":"application/json","description":"message 可省略，但提供时必须非空白且最多 262144 个 UTF-16 代码单元；fileIds 可省略，最多 32 个匹配 ^file_[0-9A-Za-z]{26}$ 且互不重复的字符串，并保留顺序。message 与 fileIds 至少提供一项。拒绝未知字段，不接受 chatId、sessionId、modelId、thinking、metadata、type 或 Idempotency-Key。以 / 开头的 message 在本接口仍是普通消息，Slash 解析只属于已确认的交互层和结构化 Command API。文件归属和 READY 状态继续由 Runtime 接受消息后的附件 resolve 流程原子确认；公共层不得为了提前返回附件错误而改变已确认的 User Entry 接受顺序。","example":{"message":"分析附件中的园区告警并给出处理建议","fileIds":["file_01JY8X2E3R4T5Y6U7I8O9P0A1S"]}},"responses":[{"id":"200-success","status":"200","tabLabel":"200 · 正常完成","label":"OK","summary":"一次请求范围 SSE；持久化事件使用公共 eventSeq，瞬时事件没有 id。示例按建议方案展示安全思考摘要和安全工具投影。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"default":"id: 101\nevent: user.message\ndata: {\"eventSeq\":101,\"message\":\"分析附件中的园区告警并给出处理建议\",\"fileIds\":[\"file_01JY8X2E3R4T5Y6U7I8O9P0A1S\"],\"occurredAt\":\"2026-09-01T10:00:00Z\"}\n\nevent: assistant.message.started\ndata: {\"role\":\"assistant\"}\n\nevent: assistant.thinking.started\ndata: {\"displayTitle\":\"正在分析\"}\n\nevent: assistant.thinking.completed\ndata: {\"displayTitle\":\"分析完成\",\"displaySummary\":\"已核对告警时间、设备范围和关联影响。\"}\n\nevent: tool.execution.started\ndata: {\"activityId\":\"activity-550e8400e29b41d4a716446655440020\",\"displayName\":\"查询园区告警\",\"input\":{\"siteName\":\"东区园区\"}}\n\nid: 104\nevent: tool.result\ndata: {\"eventSeq\":104,\"activityId\":\"activity-550e8400e29b41d4a716446655440020\",\"displayName\":\"查询园区告警\",\"status\":\"succeeded\",\"outputSummary\":\"找到 3 条相关告警。\",\"occurredAt\":\"2026-09-01T10:00:02Z\"}\n\nevent: assistant.message.delta\ndata: {\"delta\":{\"type\":\"text\",\"text\":\"建议先隔离受影响端口，\"}}\n\nid: 106\nevent: assistant.message.completed\ndata: {\"eventSeq\":106,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"建议先隔离受影响端口，再核对上联链路和告警时间线。\"}]},\"finishReason\":\"stop\",\"occurredAt\":\"2026-09-01T10:00:03Z\"}\n\nevent: session.status.idle\ndata: {\"status\":\"idle\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"}},{"id":"400-invalid-chat-id","status":"400","tabLabel":"400 · INVALID_CHAT_ID","label":"Bad Request","summary":"chatId 不符合公共 Chat 标识约束。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_CHAT_ID","resMsg":"chatId 格式不正确。"},"en-US":{"resCode":"INVALID_CHAT_ID","resMsg":"The chatId format is invalid."}}},{"id":"400-invalid-event-request","status":"400","tabLabel":"400 · INVALID_EVENT_REQUEST","label":"Bad Request","summary":"JSON 非法、仅有空白 message、没有消息和附件、附件重复、字段越界或含未知字段。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_EVENT_REQUEST","resMsg":"消息请求内容不符合约束。"},"en-US":{"resCode":"INVALID_EVENT_REQUEST","resMsg":"The message request does not satisfy the required constraints."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"用户未登录或访问令牌无效。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"请先登录。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Authentication is required."}}},{"id":"403-chat-access-denied","status":"403","tabLabel":"403 · CHAT_ACCESS_DENIED","label":"Forbidden","summary":"用户无权向该 Chat 发送消息；权限拒绝必须发生在内部 Session 解析和 Runtime 调用之前。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"无权访问该 Chat。"},"en-US":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"Access to the Chat is denied."}}},{"id":"404-chat-not-found","status":"404","tabLabel":"404 · CHAT_NOT_FOUND","label":"Not Found","summary":"Chat 不存在、已删除，或没有可用的私有 Session 映射。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_NOT_FOUND","resMsg":"指定的 Chat 不存在。"},"en-US":{"resCode":"CHAT_NOT_FOUND","resMsg":"The specified Chat does not exist."}}},{"id":"409-chat-busy","status":"409","tabLabel":"409 · CHAT_BUSY","label":"Conflict","summary":"Chat 对应的 Runtime Session 已有 active execution；普通消息接口不把消息隐式改成 Steer 或 FollowUp。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_BUSY","resMsg":"当前 Chat 正在执行，请稍后再试。"},"en-US":{"resCode":"CHAT_BUSY","resMsg":"The Chat is currently running an execution."}}},{"id":"429-chat-rate-limited","status":"429","tabLabel":"429 · CHAT_RATE_LIMITED","label":"Too Many Requests","summary":"用户、租户或 Chat 的公共速率或配额限制被触发。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"CHAT_RATE_LIMITED","resMsg":"请求过于频繁，请稍后再试。"},"en-US":{"resCode":"CHAT_RATE_LIMITED","resMsg":"Too many requests. Try again later."}}},{"id":"502-runtime-event-failed","status":"502","tabLabel":"502 · RUNTIME_EVENT_FAILED","label":"Bad Gateway","summary":"CampusClaw 在流建立前拒绝请求，或内部响应不能被安全映射；不返回内部错误细节。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"RUNTIME_EVENT_FAILED","resMsg":"对话执行服务调用失败。"},"en-US":{"resCode":"RUNTIME_EVENT_FAILED","resMsg":"The conversation execution service call failed."}}},{"id":"503-chat-execution-unavailable","status":"503","tabLabel":"503 · CHAT_EXECUTION_UNAVAILABLE","label":"Service Unavailable","summary":"Runtime 容量不足、依赖不可用或 mate-service 无法建立安全的执行上下文。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"CHAT_EXECUTION_UNAVAILABLE","resMsg":"对话执行服务暂时不可用。"},"en-US":{"resCode":"CHAT_EXECUTION_UNAVAILABLE","resMsg":"The conversation execution service is temporarily unavailable."}}},{"id":"200-stream-error","status":"200","tabLabel":"200 · 流内异常","label":"SSE already started","summary":"请求已被接受后执行失败。只发送公共 stream.error 并关闭，不发送 stream.end；accepted=true 明确禁止客户端把它当成未提交而自动重放。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"default":"event: stream.error\ndata: {\"resCode\":\"CHAT_EXECUTION_FAILED\",\"resMsg\":\"对话执行失败，请刷新历史确认结果。\",\"accepted\":true}\n"}}]},"review":{"questions":[{"id":"eventNamespace","legend":"公共事件命名空间","options":[{"label":"沿用现有事件名（建议）","value":"沿用 Chat Command API 和前端投影已经使用的 user.message、assistant.*、tool.*、session.status.idle 与 stream.*；只收窄公共字段","selected":true},{"label":"全部改为 Chat 命名","value":"把 session.status.idle 等 Session 范畴事件重命名为 chat.status.idle；公共资源更纯粹，但需要同步改造现有前端和 Command 事件投影","selected":false}]},{"id":"durableIdentity","legend":"公共持久化事件身份","options":[{"label":"仅 eventSeq（建议）","value":"沿用 Chat Command API：内部 entrySeq 映射为 eventSeq，允许私有记录造成序号缺口；后续 GET Events 也用 eventSeq 去重","selected":true},{"label":"eventId + eventSeq","value":"额外生成稳定不透明 eventId；恢复语义更显式，但 mate-service 需要持久化 ID 映射","selected":false}]},{"id":"thinkingProjection","legend":"Thinking 的公共投影","options":[{"label":"安全标题与摘要（建议）","value":"发送 displayTitle/displaySummary；原始 ThinkingContent 和逐 token thinking delta 永不进入浏览器，无安全摘要时只发通用状态","selected":true},{"label":"完全隐藏 Thinking","value":"公共流不发送任何 assistant.thinking.* 事件，界面只展示 Assistant 和 Tool 活动","selected":false}]},{"id":"toolProjection","legend":"Tool 的公共投影","options":[{"label":"安全输入与结果摘要（建议）","value":"服务端脱敏、截断并把内部资源映射为公共资源；用 activityId 关联生命周期，不公开 toolCallId、绝对路径、凭据或原始结果","selected":true},{"label":"只展示名称和状态","value":"仅发送 displayName 与 running/succeeded/failed，不公开输入和结果摘要","selected":false}]}],"followUpTitle":"提交 events 接口评审选择","promptPrefix":"继续调整 POST /mate-service/v1/chats/{chatId}/events","promptSuffix":"请按这些选择更新主维护 HTML、Markdown、PlantUML/SVG 和版本历史；在我明确确认前保持评审中，不要生成 OpenAPI。"}}</script>
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;Chat 不存在。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;The Chat does not exist.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>409 · CHAT_BUSY</code> 409 Conflict — Chat 正在执行或等待 Tool 确认，不能接受新的 user.message。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_BUSY&quot;,
+  &quot;resMsg&quot;: &quot;当前 Chat 不能接受新的用户消息。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_BUSY&quot;,
+  &quot;resMsg&quot;: &quot;The Chat cannot accept a new user message.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>409 · CHAT_NOT_RUNNING</code> 409 Conflict — idle Chat 没有可被 user.interrupt 终止的执行。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_RUNNING&quot;,
+  &quot;resMsg&quot;: &quot;当前 Chat 没有可中断的执行。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_RUNNING&quot;,
+  &quot;resMsg&quot;: &quot;The Chat has no running execution to interrupt.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>409 · TOOL_CONFIRMATION_NOT_PENDING</code> 409 Conflict — Tool Call 不存在、不属于该 Chat 或没有等待确认。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;TOOL_CONFIRMATION_NOT_PENDING&quot;,
+  &quot;resMsg&quot;: &quot;指定的 Tool Call 不在等待确认。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;TOOL_CONFIRMATION_NOT_PENDING&quot;,
+  &quot;resMsg&quot;: &quot;The specified Tool Call is not awaiting confirmation.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>503 · CHAT_RUNTIME_UNAVAILABLE</code> 503 Service Unavailable — Claw 暂不可用且事件没有被接受。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;CHAT_RUNTIME_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;对话执行服务暂时不可用。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;CHAT_RUNTIME_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;The conversation runtime is temporarily unavailable.&quot;
+}</code></pre></details></details></section></article></div></div>
+  <script type="application/json" data-review-model>{"api":{"title":"mate-service General Chat Events API","version":"1.0.0","basePath":"/mate-service/v1","visibility":"Public · 已确认 · target-only"},"operation":{"method":"POST","path":"/chats/{chatId}/events","summary":"提交一条用户事件","description":"一次只接受 user.message、user.interrupt 或 user.tool_confirmation 中的一条，并立即返回该用户事件的 eventId 和 createdAt。响应不是执行结果。interrupt 和 message 不得批量提交；必须等待 chat.status_idle(reason=terminated) 后再发 message。POST 回执丢失时查询权威历史，禁止盲目重放。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方身份，非空"},{"name":"access-token","value":"\u003cACCESS_TOKEN\u003e","required":true,"description":"当前调用上下文访问令牌，非空"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"首选公司 JWT；与 APPKEY 同时存在时使用 JWT，JWT 无效不回退"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方身份，非空"},{"name":"access-token","value":"\u003cACCESS_TOKEN\u003e","required":true,"description":"当前调用上下文访问令牌，非空"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"未提供 Authorization 时使用的公司 AppKey"}]}],"parameters":[{"in":"path","name":"chatId","required":true,"schema":"string, 1..64, case-sensitive","description":"调用方有权访问的公共 Chat 标识；不施加额外正则，不接受内部 sessionId"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US; default en-US","description":"错误文案语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":true,"contentType":"application/json","description":"顶层固定为 event。示例是 user.message：content 长度 1..5，仅 text/file；最多一个 text 且必须第一项，text 非空白且最多 2048 Unicode code point；最多四个不重复 file，fileId 匹配 ^[0-9a-f]{32}$。user.interrupt 只有 type。user.tool_confirmation 包含 toolCallId、result=allow|deny；denyMessage 仅 deny 可省略或提供非空白的最多 2048 code point 字符串。已知对象忽略未知字段；未知 type、null 条件字段和批量事件非法。","example":{"event":{"type":"user.message","content":[{"type":"text","text":"分析上传文件并给出处理建议"},{"type":"file","fileId":"7f12d8a380964fdc8518f48be1cf6a42"}]}}},"responses":[{"id":"200-accepted","status":"200","tabLabel":"200 · 已接受","label":"OK","summary":"只返回被接受的 user.* 事件身份和服务端创建时间；不回显请求，不返回执行结果。","headers":{"Content-Type":"application/json","Cache-Control":"no-store"},"bodies":{"default":{"resCode":"0","resMsg":"success","result":{"eventId":"b7ef45d40a854c33af7a36df871a21e8","createdAt":"2026-09-02T08:30:15.123Z"}}}},{"id":"400-chat-id-invalid","status":"400","tabLabel":"400 · CHAT_ID_INVALID","label":"Bad Request","summary":"chatId 长度不在 1..64。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_ID_INVALID","resMsg":"chatId 长度必须为 1 到 64 个字符。"},"en-US":{"resCode":"CHAT_ID_INVALID","resMsg":"chatId must contain between 1 and 64 characters."}}},{"id":"400-chat-event-invalid","status":"400","tabLabel":"400 · CHAT_EVENT_INVALID","label":"Bad Request","summary":"JSON、content、fileId、toolCallId、result 或 denyMessage 不符合约束。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_EVENT_INVALID","resMsg":"事件内容不符合要求。"},"en-US":{"resCode":"CHAT_EVENT_INVALID","resMsg":"The event does not satisfy the required constraints."}}},{"id":"400-chat-event-type-invalid","status":"400","tabLabel":"400 · CHAT_EVENT_TYPE_INVALID","label":"Bad Request","summary":"event.type 不是三个受支持的用户事件之一。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_EVENT_TYPE_INVALID","resMsg":"事件 type 不受支持。"},"en-US":{"resCode":"CHAT_EVENT_TYPE_INVALID","resMsg":"The event type is not supported."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"必要认证字段缺失或凭据无效；JWT 无效时不得回退 APPKEY。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"403-chat-access-denied","status":"403","tabLabel":"403 · CHAT_ACCESS_DENIED","label":"Forbidden","summary":"调用方无权访问该 Chat；拒绝发生在内部 Session 解析之前。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"无权访问该 Chat。"},"en-US":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"You do not have permission to access this Chat."}}},{"id":"404-chat-not-found","status":"404","tabLabel":"404 · CHAT_NOT_FOUND","label":"Not Found","summary":"公共 Chat 不存在。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_NOT_FOUND","resMsg":"Chat 不存在。"},"en-US":{"resCode":"CHAT_NOT_FOUND","resMsg":"The Chat does not exist."}}},{"id":"409-chat-busy","status":"409","tabLabel":"409 · CHAT_BUSY","label":"Conflict","summary":"Chat 正在执行或等待 Tool 确认，不能接受新的 user.message。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_BUSY","resMsg":"当前 Chat 不能接受新的用户消息。"},"en-US":{"resCode":"CHAT_BUSY","resMsg":"The Chat cannot accept a new user message."}}},{"id":"409-chat-not-running","status":"409","tabLabel":"409 · CHAT_NOT_RUNNING","label":"Conflict","summary":"idle Chat 没有可被 user.interrupt 终止的执行。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_NOT_RUNNING","resMsg":"当前 Chat 没有可中断的执行。"},"en-US":{"resCode":"CHAT_NOT_RUNNING","resMsg":"The Chat has no running execution to interrupt."}}},{"id":"409-tool-confirmation-not-pending","status":"409","tabLabel":"409 · TOOL_CONFIRMATION_NOT_PENDING","label":"Conflict","summary":"Tool Call 不存在、不属于该 Chat 或没有等待确认。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"TOOL_CONFIRMATION_NOT_PENDING","resMsg":"指定的 Tool Call 不在等待确认。"},"en-US":{"resCode":"TOOL_CONFIRMATION_NOT_PENDING","resMsg":"The specified Tool Call is not awaiting confirmation."}}},{"id":"503-chat-runtime-unavailable","status":"503","tabLabel":"503 · CHAT_RUNTIME_UNAVAILABLE","label":"Service Unavailable","summary":"Claw 暂不可用且事件没有被接受。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"CHAT_RUNTIME_UNAVAILABLE","resMsg":"对话执行服务暂时不可用。"},"en-US":{"resCode":"CHAT_RUNTIME_UNAVAILABLE","resMsg":"The conversation runtime is temporarily unavailable."}}}]},"review":{"questions":[],"followUpTitle":"三个接口已确认","promptPrefix":"更新 POST /mate-service/v1/chats/{chatId}/events","promptSuffix":"保持与三接口 1.0.0 契约、Markdown 和 PlantUML/SVG 同步；不要生成 OpenAPI。"}}</script>
   <script>
     (() => {
       const root = document.getElementById('company-api-review-post-chats-chatid-events-63d59214');
+      const model = JSON.parse(root.querySelector('[data-review-model]').textContent);
+      const api = model.api;
+      const operation = model.operation;
+      const review = model.review || { questions: [] };
+      const shell = root.querySelector('[data-api-shell]');
+      const make = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+      };
+      const append = (parent, ...children) => {
+        children.filter(Boolean).forEach((child) => parent.appendChild(child));
+        return parent;
+      };
+      const code = (text, className) => make('code', className || '', text);
+      const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      const fullPath = `${api.basePath.replace(/\/$/, '')}/${operation.path.replace(/^\//, '')}`;
+
+      const topbar = make('header', 'topbar');
+      const titleRow = make('div', 'row');
+      append(titleRow, make('h2', '', api.title), make('span', 'tag', api.version));
+      if (api.visibility) titleRow.appendChild(make('span', 'tag', api.visibility));
+      append(topbar, titleRow, code(api.basePath, 'base'));
+
+      const methodClass = operation.method.toLowerCase();
+      const decisionGate = review.decisionGate;
+      const gateClass = decisionGate && decisionGate.hideOperationDetails ? ' gate-only' : '';
+      const article = make('article', `operation operation-${methodClass}${gateClass}`);
+      const operationHead = make('header', 'operation-head');
+      append(operationHead,
+        make('span', `method method-${methodClass}`, operation.method.toUpperCase()),
+        code(operation.path, 'path'),
+        make('span', 'muted', operation.summary));
+      article.appendChild(operationHead);
+
+      const purpose = make('section', 'section');
+      append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
+      article.appendChild(purpose);
+
+      if (decisionGate) {
+        const gateSection = make('section', 'section decision-gate');
+        append(gateSection,
+          make('h3', '', decisionGate.title),
+          make('p', 'description', decisionGate.description));
+        const comparison = decisionGate.comparison;
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        comparison.columns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        comparison.rows.forEach((items) => {
+          const row = make('tr', '');
+          items.forEach((item, index) => {
+            const cell = make('td', '', item);
+            cell.dataset.label = comparison.columns[index] || '';
+            row.appendChild(cell);
+          });
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        append(gateSection, wrap, make('p', 'decision-notice', decisionGate.detailNotice));
+        article.appendChild(gateSection);
+      }
+
+      const authModes = operation.authModes || [];
+      if (authModes.length) {
+        const authSection = make('section', 'section contract-detail');
+        const authTitle = make('div', 'row section-title');
+        const authTabs = make('div', 'tabs');
+        const authBody = make('div', '');
+        append(authTitle, make('h3', '', '认证'), authTabs);
+        append(authSection, authTitle, authBody);
+        article.appendChild(authSection);
+        let selectedAuth = authModes.find((item) => item.preferred) || authModes[0];
+        const renderAuth = () => {
+          authTabs.querySelectorAll('button').forEach((button) => {
+            button.setAttribute('aria-pressed', String(button.dataset.authId === selectedAuth.id));
+          });
+          authBody.replaceChildren();
+          const wrap = make('div', 'table-wrap');
+          const table = make('table', '');
+          const head = make('thead', '');
+          const headRow = make('tr', '');
+          const authColumns = ['Header', '必填', '示例值', '说明'];
+          authColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+          head.appendChild(headRow);
+          const body = make('tbody', '');
+          selectedAuth.headers.forEach((header) => {
+            const row = make('tr', '');
+            const cells = [
+              append(make('td', ''), code(header.name)),
+              make('td', '', header.required ? '是' : '否'),
+              append(make('td', ''), code(header.value)),
+              make('td', '', header.description)
+            ];
+            cells.forEach((cell, index) => { cell.dataset.label = authColumns[index]; });
+            append(row, ...cells);
+            body.appendChild(row);
+          });
+          append(table, head, body);
+          wrap.appendChild(table);
+          const request = [
+            `${operation.method.toUpperCase()} ${fullPath}`,
+            ...selectedAuth.headers.map((header) => `${header.name}: ${header.value}`)
+          ].join('\n');
+          append(authBody, wrap, append(make('pre', ''), code(request)));
+        };
+        authModes.forEach((mode) => {
+          const button = make('button', '', mode.label);
+          button.type = 'button';
+          button.dataset.authId = mode.id;
+          button.setAttribute('aria-pressed', String(mode.id === selectedAuth.id));
+          button.addEventListener('click', () => {
+            selectedAuth = mode;
+            renderAuth();
+          });
+          authTabs.appendChild(button);
+        });
+        renderAuth();
+      }
+
+      const requestSection = make('section', 'section contract-detail');
+      requestSection.appendChild(make('h3', '', '参数与请求体'));
+      const parameters = operation.parameters || [];
+      if (parameters.length) {
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        const parameterColumns = ['位置', '名称', '必填', '约束', '说明'];
+        parameterColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        parameters.forEach((parameter) => {
+          const row = make('tr', '');
+          const cells = [
+            make('td', '', parameter.in),
+            append(make('td', ''), code(parameter.name)),
+            make('td', '', parameter.required ? '是' : '否'),
+            append(make('td', ''), code(parameter.schema || '—')),
+            make('td', '', parameter.description)
+          ];
+          cells.forEach((cell, index) => { cell.dataset.label = parameterColumns[index]; });
+          append(row, ...cells);
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        requestSection.appendChild(wrap);
+      } else {
+        requestSection.appendChild(make('p', 'muted empty', '无 path/query/header 业务参数。'));
+      }
+      const requestBody = operation.requestBody || {};
+      requestSection.appendChild(make('p', 'muted empty', requestBody.description || '无请求体。'));
+      if (requestBody.example !== undefined && requestBody.example !== null) {
+        requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
+      }
+      article.appendChild(requestSection);
+
+      const responseSection = make('section', 'section contract-detail');
+      const responseTitle = make('div', 'row section-title');
+      const localeTabs = make('div', 'tabs');
+      append(responseTitle, make('h3', '', '响应'), localeTabs);
+      const statusTabs = make('div', 'tabs');
+      const responseBody = make('div', '');
+      append(responseSection, responseTitle, statusTabs, responseBody);
+      article.appendChild(responseSection);
+      const responses = operation.responses;
+      const responseIdentity = (response) => response.id || response.status;
+      let selectedResponse = responses[0];
+      let selectedLocale = Object.keys(selectedResponse.bodies || {})[0] || 'default';
+      const renderResponse = () => {
+        statusTabs.querySelectorAll('button').forEach((button) => {
+          button.setAttribute('aria-selected', String(button.dataset.responseId === responseIdentity(selectedResponse)));
+        });
+        const locales = Object.keys(selectedResponse.bodies || {});
+        if (!locales.includes(selectedLocale)) selectedLocale = locales[0] || 'default';
+        localeTabs.replaceChildren();
+        locales.forEach((locale) => {
+          const button = make('button', '', locale);
+          button.type = 'button';
+          button.setAttribute('aria-pressed', String(locale === selectedLocale));
+          button.addEventListener('click', () => {
+            selectedLocale = locale;
+            renderResponse();
+          });
+          localeTabs.appendChild(button);
+        });
+        responseBody.replaceChildren();
+        responseBody.appendChild(make('p', 'description', `${selectedResponse.status} ${selectedResponse.label} — ${selectedResponse.summary}`));
+        const responseHeaders = { ...(selectedResponse.headers || {}) };
+        if (selectedLocale !== 'default' && Object.hasOwn(responseHeaders, 'Content-Language')) {
+          responseHeaders['Content-Language'] = selectedLocale;
+        }
+        const headerLines = Object.entries(responseHeaders).map(([name, value]) => `${name}: ${value}`);
+        const payload = selectedResponse.bodies ? selectedResponse.bodies[selectedLocale] : null;
+        const output = [...headerLines, headerLines.length ? '' : null, payload === undefined ? null : pretty(payload)]
+          .filter((item) => item !== null).join('\n');
+        responseBody.appendChild(append(make('pre', ''), code(output)));
+      };
+      responses.forEach((response) => {
+        const button = make('button', '', response.tabLabel || response.status);
+        button.type = 'button';
+        button.dataset.responseId = responseIdentity(response);
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-selected', String(response === selectedResponse));
+        button.addEventListener('click', () => {
+          selectedResponse = response;
+          renderResponse();
+        });
+        statusTabs.appendChild(button);
+      });
+      renderResponse();
+
+      shell.replaceChildren();
+      append(shell, topbar, article);
+
+      const questions = review.questions || [];
+      if (questions.length) {
+        const form = make('form', 'review-form');
+        form.appendChild(make('h3', '', '继续调整'));
+        const questionGrid = make('div', 'question-grid');
+        if (questions.length === 1) questionGrid.classList.add('question-grid-single');
+        questions.forEach((question) => {
+          const fieldset = make('fieldset', '');
+          fieldset.appendChild(make('legend', '', question.legend));
+          question.options.forEach((option, index) => {
+            const label = make('label', '');
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = question.id;
+            input.value = option.value;
+            input.checked = option.selected || (!question.options.some((item) => item.selected) && index === 0);
+            const optionCopy = make('span', 'option-copy');
+            append(optionCopy,
+              make('span', 'option-label', option.label),
+              make('span', 'option-detail', option.value));
+            append(label, input, optionCopy);
+            fieldset.appendChild(label);
+          });
+          questionGrid.appendChild(fieldset);
+        });
+        form.appendChild(questionGrid);
+        const actions = make('div', 'actions');
+        const submit = make('button', 'submit', '提交调整意见');
+        submit.type = 'submit';
+        const formStatus = make('span', 'muted', '');
+        formStatus.setAttribute('role', 'status');
+        formStatus.setAttribute('aria-live', 'polite');
+        append(actions, submit, formStatus);
+        form.appendChild(actions);
+        const promptOutput = make('pre', 'prompt-output', '');
+        promptOutput.hidden = true;
+        form.appendChild(promptOutput);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const selections = questions.map((question) => `- ${question.legend}：${data.get(question.id)}`).join('\n');
+          const promptSuffix = review.promptSuffix || '请按这些选择更新主维护契约、设计文档和当前接口展示。';
+          const prompt = `${review.promptPrefix}\n${selections}\n${promptSuffix}`;
+          if (!window.openai || typeof window.openai.sendFollowUpMessage !== 'function') {
+            promptOutput.textContent = prompt;
+            promptOutput.hidden = false;
+            try {
+              await navigator.clipboard.writeText(prompt);
+              formStatus.textContent = '调整提示已复制，请粘贴到对话中。';
+            } catch (error) {
+              formStatus.textContent = '请复制下方调整提示并发送到对话中。';
+            }
+            return;
+          }
+          formStatus.textContent = '正在提交…';
+          try {
+            await window.openai.sendFollowUpMessage({ prompt, title: review.followUpTitle });
+            formStatus.textContent = '已提交。';
+          } catch (error) {
+            formStatus.textContent = '提交失败，请重试。';
+          }
+        });
+        shell.appendChild(form);
+      }
+    })();
+  </script>
+</div>
+
+<div id="company-api-review-get-chats-chatid-events-stream-eeae21ca">
+  <style>
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca {
+      color-scheme: light dark;
+      color: light-dark(#17202a, #edf2f7);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      width: 100%;
+      margin-block-end: 16px;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca * { box-sizing: border-box; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca h2,
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca h3,
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca p { margin: 0; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca code,
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .api-shell {
+      overflow: hidden;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 12px;
+      background: light-dark(#f7f8fa, #11151b);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .topbar,
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .operation-head,
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .row,
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .tabs,
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .topbar {
+      justify-content: space-between;
+      padding: 15px 17px;
+      background: light-dark(#ffffff, #1a2028);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca h2 { font-size: 18px; font-weight: 500; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca h3 { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .tag {
+      padding: 2px 8px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 999px;
+      background: light-dark(#f2f5f8, #222a34);
+      font-size: 12px;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .base,
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .muted { color: light-dark(#5f6b78, #aab4c0); font-size: 13px; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .operation {
+      margin: 15px;
+      overflow: hidden;
+      border: 1px solid light-dark(#1f883d, #3fb950);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .operation-head {
+      padding: 13px 15px;
+      background: light-dark(#eaf8ee, #15331f);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .method {
+      padding: 6px 11px;
+      border-radius: 5px;
+      background: light-dark(#1f883d, #3fb950);
+      color: light-dark(#ffffff, #07150b);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .operation-delete {
+      border-color: light-dark(#cf222e, #f85149);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .operation-delete .operation-head {
+      background: light-dark(#fff1f0, #3a1d1d);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .method-delete {
+      background: light-dark(#cf222e, #f85149);
+      color: #ffffff;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .path { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .section {
+      padding: 15px;
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .section:last-child { border-bottom: 0; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .section-title { justify-content: space-between; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .description { line-height: 1.6; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .decision-gate {
+      border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
+      background: light-dark(#f5f9ff, #122337);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .decision-notice {
+      margin-top: 10px;
+      color: light-dark(#8250df, #d2a8ff);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .gate-only .contract-detail { display: none; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca th,
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca td {
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca tbody tr:last-child td { border-bottom: 0; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca pre {
+      margin: 10px 0 0;
+      padding: 13px;
+      overflow-x: auto;
+      border-radius: 7px;
+      background: light-dark(#eef2f6, #0d1117);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca button {
+      appearance: none;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 6px;
+      background: light-dark(#ffffff, #1a2028);
+      color: light-dark(#17202a, #edf2f7);
+      padding: 7px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca button[aria-selected="true"],
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca button[aria-pressed="true"] {
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#eaf3ff, #132b46);
+      color: light-dark(#0969da, #58a6ff);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .review-form {
+      margin: 0 15px 15px;
+      padding: 15px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .question-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .question-grid-single { grid-template-columns: 1fr; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca label input { margin-top: 3px; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .option-copy { display: grid; min-width: 0; gap: 2px; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .option-label { font-weight: 500; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .option-detail {
+      color: light-dark(#5f6b78, #aab4c0);
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .submit {
+      margin-top: 12px;
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#0969da, #58a6ff);
+      color: light-dark(#ffffff, #07111e);
+      font-weight: 500;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .empty { margin-top: 8px; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .prompt-output {
+      margin-top: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca details { margin-top: 9px; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .static-response {
+      padding: 8px 0;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .static-response:last-child { border-bottom: 0; }
+    #company-api-review-get-chats-chatid-events-stream-eeae21ca .static-choice { margin-left: 8px; }
+    @media (max-width: 680px) {
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .question-grid { grid-template-columns: 1fr; }
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .operation,
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .review-form { margin-left: 9px; margin-right: 9px; }
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .table-wrap { overflow: visible; }
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .table-wrap thead { display: none; }
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .table-wrap table,
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .table-wrap tbody,
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .table-wrap tr,
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .table-wrap td { display: block; width: 100%; }
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .table-wrap tr {
+        padding: 7px 0;
+        border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+      }
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .table-wrap tbody tr:last-child { border-bottom: 0; }
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .table-wrap td {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 8px;
+        padding: 5px 0;
+        border-bottom: 0;
+        overflow-wrap: anywhere;
+      }
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca .table-wrap td::before {
+        content: attr(data-label);
+        color: light-dark(#5f6b78, #aab4c0);
+        font-weight: 500;
+      }
+      #company-api-review-get-chats-chatid-events-stream-eeae21ca pre {
+        overflow-x: visible;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    }
+  </style>
+
+  <div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>mate-service General Chat Events API</h2><span class="tag">1.0.0</span><span class="tag">Public · 已确认 · target-only</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-get"><header class="operation-head"><span class="method method-get">GET</span><code class="path">/chats/{chatId}/events/stream</code><span class="muted">订阅 Chat 实时事件</span></header><section class="section"><h3>作用</h3><p class="description">建立跨越多次 execution 和 idle 状态的 Chat 级长连接 SSE，从连接时刻开始发送 live 事件。它不重放、不接受 Last-Event-ID，也不在 chat.status_idle 后关闭。业务 frame 只使用 data: 完整 JSON，不使用 SSE event: 或 id:；可发送 : ping comment。断线后重开流并查询权威历史，按 eventId 对账。</p></section><section class="section contract-detail"><h3>认证</h3><details class="static-choice" open><summary>JWT 首选</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">&lt;CALLER_ID&gt;</td><td data-label="说明">公司调用方身份，非空</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">&lt;ACCESS_TOKEN&gt;</td><td data-label="说明">当前调用上下文访问令牌，非空</td></tr><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer &lt;JWT&gt;</td><td data-label="说明">首选公司 JWT；与 APPKEY 同时存在时使用 JWT，JWT 无效不回退</td></tr></tbody></table></div><pre><code>GET /mate-service/v1/chats/{chatId}/events/stream
+X-HW-ID: &lt;CALLER_ID&gt;
+access-token: &lt;ACCESS_TOKEN&gt;
+Authorization: Bearer &lt;JWT&gt;</code></pre></details><details class="static-choice"><summary>APPKEY 兼容</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">&lt;CALLER_ID&gt;</td><td data-label="说明">公司调用方身份，非空</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">&lt;ACCESS_TOKEN&gt;</td><td data-label="说明">当前调用上下文访问令牌，非空</td></tr><tr><td data-label="Header">X-HW-APPKEY</td><td data-label="必填">是</td><td data-label="示例值">&lt;APPKEY&gt;</td><td data-label="说明">未提供 Authorization 时使用的公司 AppKey</td></tr></tbody></table></div><pre><code>GET /mate-service/v1/chats/{chatId}/events/stream
+X-HW-ID: &lt;CALLER_ID&gt;
+access-token: &lt;ACCESS_TOKEN&gt;
+X-HW-APPKEY: &lt;APPKEY&gt;</code></pre></details></section><section class="section contract-detail"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">chatId</td><td data-label="必填">是</td><td data-label="约束">string, 1..64, case-sensitive</td><td data-label="说明">调用方有权访问的公共 Chat 标识；不接受内部 sessionId</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US; default en-US</td><td data-label="说明">仅用于 SSE 建立前 JSON 错误；缺失或不支持时回退 en-US</td></tr></tbody></table></div><p class="muted empty">无请求体；不接受 Last-Event-ID、after、eventSeq 或其他恢复参数。</p></section><section class="section contract-detail"><h3>响应</h3><details class="static-response" open><summary><code>200 · Chat 实时流</code> 200 OK — 五类公共实时事件。message/thinking 的 delta 没有 createdAt，completed 复用同一 eventId 并带完整 content；Tool 与 idle 是一次性完整持久事件。user.* 不在 SSE 中重复推送。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
+Cache-Control: no-store
+
+data: {&quot;eventId&quot;:&quot;4b3e522e7f6746be8781a2c8876fd1da&quot;,&quot;type&quot;:&quot;agent.thinking&quot;,&quot;phase&quot;:&quot;delta&quot;,&quot;content&quot;:&quot;正在核对告警时间线&quot;}
+
+data: {&quot;eventId&quot;:&quot;4b3e522e7f6746be8781a2c8876fd1da&quot;,&quot;type&quot;:&quot;agent.thinking&quot;,&quot;phase&quot;:&quot;completed&quot;,&quot;createdAt&quot;:&quot;2026-09-02T08:30:17.305Z&quot;,&quot;content&quot;:&quot;已核对告警时间、设备范围和关联影响。&quot;}
+
+data: {&quot;eventId&quot;:&quot;c8de683be2ab4e25a8d97f7cf507c150&quot;,&quot;type&quot;:&quot;agent.tool_call&quot;,&quot;createdAt&quot;:&quot;2026-09-02T08:30:17.420Z&quot;,&quot;toolName&quot;:&quot;query_campus_alarm&quot;,&quot;arguments&quot;:{&quot;siteName&quot;:&quot;东区园区&quot;},&quot;requiresConfirmation&quot;:false}
+
+: ping
+
+data: {&quot;eventId&quot;:&quot;89f8316e07ef4c9aa3fd056a91a182b0&quot;,&quot;type&quot;:&quot;agent.tool_result&quot;,&quot;createdAt&quot;:&quot;2026-09-02T08:30:18.102Z&quot;,&quot;toolCallId&quot;:&quot;c8de683be2ab4e25a8d97f7cf507c150&quot;,&quot;content&quot;:&quot;找到 3 条相关告警。&quot;,&quot;isError&quot;:false}
+
+data: {&quot;eventId&quot;:&quot;d5c19f7c4b1642e6806aeb860752d99b&quot;,&quot;type&quot;:&quot;agent.message&quot;,&quot;phase&quot;:&quot;delta&quot;,&quot;content&quot;:&quot;建议先隔离受影响端口，&quot;}
+
+data: {&quot;eventId&quot;:&quot;d5c19f7c4b1642e6806aeb860752d99b&quot;,&quot;type&quot;:&quot;agent.message&quot;,&quot;phase&quot;:&quot;completed&quot;,&quot;createdAt&quot;:&quot;2026-09-02T08:30:19.451Z&quot;,&quot;content&quot;:&quot;建议先隔离受影响端口，再核对上联链路。&quot;}
+
+data: {&quot;eventId&quot;:&quot;d4e3e8b9653047a99ac10396a17fe84d&quot;,&quot;type&quot;:&quot;chat.status_idle&quot;,&quot;createdAt&quot;:&quot;2026-09-02T08:30:20.000Z&quot;,&quot;reason&quot;:&quot;done&quot;}
+</code></pre></details></details><details class="static-response"><summary><code>400 · CHAT_ID_INVALID</code> 400 Bad Request — SSE 建立前，chatId 长度不在 1..64。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ID_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;chatId 长度必须为 1 到 64 个字符。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ID_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;chatId must contain between 1 and 64 characters.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>401 · UNAUTHENTICATED</code> 401 Unauthorized — SSE 建立前认证失败。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;UNAUTHENTICATED&quot;,
+  &quot;resMsg&quot;: &quot;调用方身份认证失败。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;UNAUTHENTICATED&quot;,
+  &quot;resMsg&quot;: &quot;Caller authentication failed.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>403 · CHAT_ACCESS_DENIED</code> 403 Forbidden — SSE 建立前确认调用方无权访问该 Chat。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ACCESS_DENIED&quot;,
+  &quot;resMsg&quot;: &quot;无权访问该 Chat。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ACCESS_DENIED&quot;,
+  &quot;resMsg&quot;: &quot;You do not have permission to access this Chat.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404 · CHAT_NOT_FOUND</code> 404 Not Found — SSE 建立前确认 Chat 不存在。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;Chat 不存在。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;The Chat does not exist.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>503 · CHAT_RUNTIME_UNAVAILABLE</code> 503 Service Unavailable — SSE 建立前无法建立 Claw 内部订阅。SSE 已建立后的异常直接关闭连接，不发送 stream.error。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;CHAT_RUNTIME_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;对话执行服务暂时不可用。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;CHAT_RUNTIME_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;The conversation runtime is temporarily unavailable.&quot;
+}</code></pre></details></details></section></article></div></div>
+  <script type="application/json" data-review-model>{"api":{"title":"mate-service General Chat Events API","version":"1.0.0","basePath":"/mate-service/v1","visibility":"Public · 已确认 · target-only"},"operation":{"method":"GET","path":"/chats/{chatId}/events/stream","summary":"订阅 Chat 实时事件","description":"建立跨越多次 execution 和 idle 状态的 Chat 级长连接 SSE，从连接时刻开始发送 live 事件。它不重放、不接受 Last-Event-ID，也不在 chat.status_idle 后关闭。业务 frame 只使用 data: 完整 JSON，不使用 SSE event: 或 id:；可发送 : ping comment。断线后重开流并查询权威历史，按 eventId 对账。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方身份，非空"},{"name":"access-token","value":"\u003cACCESS_TOKEN\u003e","required":true,"description":"当前调用上下文访问令牌，非空"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"首选公司 JWT；与 APPKEY 同时存在时使用 JWT，JWT 无效不回退"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方身份，非空"},{"name":"access-token","value":"\u003cACCESS_TOKEN\u003e","required":true,"description":"当前调用上下文访问令牌，非空"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"未提供 Authorization 时使用的公司 AppKey"}]}],"parameters":[{"in":"path","name":"chatId","required":true,"schema":"string, 1..64, case-sensitive","description":"调用方有权访问的公共 Chat 标识；不接受内部 sessionId"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US; default en-US","description":"仅用于 SSE 建立前 JSON 错误；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体；不接受 Last-Event-ID、after、eventSeq 或其他恢复参数。","example":null},"responses":[{"id":"200-live-stream","status":"200","tabLabel":"200 · Chat 实时流","label":"OK","summary":"五类公共实时事件。message/thinking 的 delta 没有 createdAt，completed 复用同一 eventId 并带完整 content；Tool 与 idle 是一次性完整持久事件。user.* 不在 SSE 中重复推送。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store"},"bodies":{"default":"data: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"delta\",\"content\":\"正在核对告警时间线\"}\n\ndata: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:17.305Z\",\"content\":\"已核对告警时间、设备范围和关联影响。\"}\n\ndata: {\"eventId\":\"c8de683be2ab4e25a8d97f7cf507c150\",\"type\":\"agent.tool_call\",\"createdAt\":\"2026-09-02T08:30:17.420Z\",\"toolName\":\"query_campus_alarm\",\"arguments\":{\"siteName\":\"东区园区\"},\"requiresConfirmation\":false}\n\n: ping\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-02T08:30:18.102Z\",\"toolCallId\":\"c8de683be2ab4e25a8d97f7cf507c150\",\"content\":\"找到 3 条相关告警。\",\"isError\":false}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"建议先隔离受影响端口，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:19.451Z\",\"content\":\"建议先隔离受影响端口，再核对上联链路。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"chat.status_idle\",\"createdAt\":\"2026-09-02T08:30:20.000Z\",\"reason\":\"done\"}\n"}},{"id":"400-chat-id-invalid","status":"400","tabLabel":"400 · CHAT_ID_INVALID","label":"Bad Request","summary":"SSE 建立前，chatId 长度不在 1..64。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_ID_INVALID","resMsg":"chatId 长度必须为 1 到 64 个字符。"},"en-US":{"resCode":"CHAT_ID_INVALID","resMsg":"chatId must contain between 1 and 64 characters."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"SSE 建立前认证失败。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"403-chat-access-denied","status":"403","tabLabel":"403 · CHAT_ACCESS_DENIED","label":"Forbidden","summary":"SSE 建立前确认调用方无权访问该 Chat。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"无权访问该 Chat。"},"en-US":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"You do not have permission to access this Chat."}}},{"id":"404-chat-not-found","status":"404","tabLabel":"404 · CHAT_NOT_FOUND","label":"Not Found","summary":"SSE 建立前确认 Chat 不存在。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_NOT_FOUND","resMsg":"Chat 不存在。"},"en-US":{"resCode":"CHAT_NOT_FOUND","resMsg":"The Chat does not exist."}}},{"id":"503-chat-runtime-unavailable","status":"503","tabLabel":"503 · CHAT_RUNTIME_UNAVAILABLE","label":"Service Unavailable","summary":"SSE 建立前无法建立 Claw 内部订阅。SSE 已建立后的异常直接关闭连接，不发送 stream.error。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"CHAT_RUNTIME_UNAVAILABLE","resMsg":"对话执行服务暂时不可用。"},"en-US":{"resCode":"CHAT_RUNTIME_UNAVAILABLE","resMsg":"The conversation runtime is temporarily unavailable."}}}]},"review":{"questions":[],"followUpTitle":"三个接口已确认","promptPrefix":"更新 GET /mate-service/v1/chats/{chatId}/events/stream","promptSuffix":"保持与三接口 1.0.0 契约、Markdown 和 PlantUML/SVG 同步；不要生成 OpenAPI。"}}</script>
+  <script>
+    (() => {
+      const root = document.getElementById('company-api-review-get-chats-chatid-events-stream-eeae21ca');
+      const model = JSON.parse(root.querySelector('[data-review-model]').textContent);
+      const api = model.api;
+      const operation = model.operation;
+      const review = model.review || { questions: [] };
+      const shell = root.querySelector('[data-api-shell]');
+      const make = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+      };
+      const append = (parent, ...children) => {
+        children.filter(Boolean).forEach((child) => parent.appendChild(child));
+        return parent;
+      };
+      const code = (text, className) => make('code', className || '', text);
+      const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      const fullPath = `${api.basePath.replace(/\/$/, '')}/${operation.path.replace(/^\//, '')}`;
+
+      const topbar = make('header', 'topbar');
+      const titleRow = make('div', 'row');
+      append(titleRow, make('h2', '', api.title), make('span', 'tag', api.version));
+      if (api.visibility) titleRow.appendChild(make('span', 'tag', api.visibility));
+      append(topbar, titleRow, code(api.basePath, 'base'));
+
+      const methodClass = operation.method.toLowerCase();
+      const decisionGate = review.decisionGate;
+      const gateClass = decisionGate && decisionGate.hideOperationDetails ? ' gate-only' : '';
+      const article = make('article', `operation operation-${methodClass}${gateClass}`);
+      const operationHead = make('header', 'operation-head');
+      append(operationHead,
+        make('span', `method method-${methodClass}`, operation.method.toUpperCase()),
+        code(operation.path, 'path'),
+        make('span', 'muted', operation.summary));
+      article.appendChild(operationHead);
+
+      const purpose = make('section', 'section');
+      append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
+      article.appendChild(purpose);
+
+      if (decisionGate) {
+        const gateSection = make('section', 'section decision-gate');
+        append(gateSection,
+          make('h3', '', decisionGate.title),
+          make('p', 'description', decisionGate.description));
+        const comparison = decisionGate.comparison;
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        comparison.columns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        comparison.rows.forEach((items) => {
+          const row = make('tr', '');
+          items.forEach((item, index) => {
+            const cell = make('td', '', item);
+            cell.dataset.label = comparison.columns[index] || '';
+            row.appendChild(cell);
+          });
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        append(gateSection, wrap, make('p', 'decision-notice', decisionGate.detailNotice));
+        article.appendChild(gateSection);
+      }
+
+      const authModes = operation.authModes || [];
+      if (authModes.length) {
+        const authSection = make('section', 'section contract-detail');
+        const authTitle = make('div', 'row section-title');
+        const authTabs = make('div', 'tabs');
+        const authBody = make('div', '');
+        append(authTitle, make('h3', '', '认证'), authTabs);
+        append(authSection, authTitle, authBody);
+        article.appendChild(authSection);
+        let selectedAuth = authModes.find((item) => item.preferred) || authModes[0];
+        const renderAuth = () => {
+          authTabs.querySelectorAll('button').forEach((button) => {
+            button.setAttribute('aria-pressed', String(button.dataset.authId === selectedAuth.id));
+          });
+          authBody.replaceChildren();
+          const wrap = make('div', 'table-wrap');
+          const table = make('table', '');
+          const head = make('thead', '');
+          const headRow = make('tr', '');
+          const authColumns = ['Header', '必填', '示例值', '说明'];
+          authColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+          head.appendChild(headRow);
+          const body = make('tbody', '');
+          selectedAuth.headers.forEach((header) => {
+            const row = make('tr', '');
+            const cells = [
+              append(make('td', ''), code(header.name)),
+              make('td', '', header.required ? '是' : '否'),
+              append(make('td', ''), code(header.value)),
+              make('td', '', header.description)
+            ];
+            cells.forEach((cell, index) => { cell.dataset.label = authColumns[index]; });
+            append(row, ...cells);
+            body.appendChild(row);
+          });
+          append(table, head, body);
+          wrap.appendChild(table);
+          const request = [
+            `${operation.method.toUpperCase()} ${fullPath}`,
+            ...selectedAuth.headers.map((header) => `${header.name}: ${header.value}`)
+          ].join('\n');
+          append(authBody, wrap, append(make('pre', ''), code(request)));
+        };
+        authModes.forEach((mode) => {
+          const button = make('button', '', mode.label);
+          button.type = 'button';
+          button.dataset.authId = mode.id;
+          button.setAttribute('aria-pressed', String(mode.id === selectedAuth.id));
+          button.addEventListener('click', () => {
+            selectedAuth = mode;
+            renderAuth();
+          });
+          authTabs.appendChild(button);
+        });
+        renderAuth();
+      }
+
+      const requestSection = make('section', 'section contract-detail');
+      requestSection.appendChild(make('h3', '', '参数与请求体'));
+      const parameters = operation.parameters || [];
+      if (parameters.length) {
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        const parameterColumns = ['位置', '名称', '必填', '约束', '说明'];
+        parameterColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        parameters.forEach((parameter) => {
+          const row = make('tr', '');
+          const cells = [
+            make('td', '', parameter.in),
+            append(make('td', ''), code(parameter.name)),
+            make('td', '', parameter.required ? '是' : '否'),
+            append(make('td', ''), code(parameter.schema || '—')),
+            make('td', '', parameter.description)
+          ];
+          cells.forEach((cell, index) => { cell.dataset.label = parameterColumns[index]; });
+          append(row, ...cells);
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        requestSection.appendChild(wrap);
+      } else {
+        requestSection.appendChild(make('p', 'muted empty', '无 path/query/header 业务参数。'));
+      }
+      const requestBody = operation.requestBody || {};
+      requestSection.appendChild(make('p', 'muted empty', requestBody.description || '无请求体。'));
+      if (requestBody.example !== undefined && requestBody.example !== null) {
+        requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
+      }
+      article.appendChild(requestSection);
+
+      const responseSection = make('section', 'section contract-detail');
+      const responseTitle = make('div', 'row section-title');
+      const localeTabs = make('div', 'tabs');
+      append(responseTitle, make('h3', '', '响应'), localeTabs);
+      const statusTabs = make('div', 'tabs');
+      const responseBody = make('div', '');
+      append(responseSection, responseTitle, statusTabs, responseBody);
+      article.appendChild(responseSection);
+      const responses = operation.responses;
+      const responseIdentity = (response) => response.id || response.status;
+      let selectedResponse = responses[0];
+      let selectedLocale = Object.keys(selectedResponse.bodies || {})[0] || 'default';
+      const renderResponse = () => {
+        statusTabs.querySelectorAll('button').forEach((button) => {
+          button.setAttribute('aria-selected', String(button.dataset.responseId === responseIdentity(selectedResponse)));
+        });
+        const locales = Object.keys(selectedResponse.bodies || {});
+        if (!locales.includes(selectedLocale)) selectedLocale = locales[0] || 'default';
+        localeTabs.replaceChildren();
+        locales.forEach((locale) => {
+          const button = make('button', '', locale);
+          button.type = 'button';
+          button.setAttribute('aria-pressed', String(locale === selectedLocale));
+          button.addEventListener('click', () => {
+            selectedLocale = locale;
+            renderResponse();
+          });
+          localeTabs.appendChild(button);
+        });
+        responseBody.replaceChildren();
+        responseBody.appendChild(make('p', 'description', `${selectedResponse.status} ${selectedResponse.label} — ${selectedResponse.summary}`));
+        const responseHeaders = { ...(selectedResponse.headers || {}) };
+        if (selectedLocale !== 'default' && Object.hasOwn(responseHeaders, 'Content-Language')) {
+          responseHeaders['Content-Language'] = selectedLocale;
+        }
+        const headerLines = Object.entries(responseHeaders).map(([name, value]) => `${name}: ${value}`);
+        const payload = selectedResponse.bodies ? selectedResponse.bodies[selectedLocale] : null;
+        const output = [...headerLines, headerLines.length ? '' : null, payload === undefined ? null : pretty(payload)]
+          .filter((item) => item !== null).join('\n');
+        responseBody.appendChild(append(make('pre', ''), code(output)));
+      };
+      responses.forEach((response) => {
+        const button = make('button', '', response.tabLabel || response.status);
+        button.type = 'button';
+        button.dataset.responseId = responseIdentity(response);
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-selected', String(response === selectedResponse));
+        button.addEventListener('click', () => {
+          selectedResponse = response;
+          renderResponse();
+        });
+        statusTabs.appendChild(button);
+      });
+      renderResponse();
+
+      shell.replaceChildren();
+      append(shell, topbar, article);
+
+      const questions = review.questions || [];
+      if (questions.length) {
+        const form = make('form', 'review-form');
+        form.appendChild(make('h3', '', '继续调整'));
+        const questionGrid = make('div', 'question-grid');
+        if (questions.length === 1) questionGrid.classList.add('question-grid-single');
+        questions.forEach((question) => {
+          const fieldset = make('fieldset', '');
+          fieldset.appendChild(make('legend', '', question.legend));
+          question.options.forEach((option, index) => {
+            const label = make('label', '');
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = question.id;
+            input.value = option.value;
+            input.checked = option.selected || (!question.options.some((item) => item.selected) && index === 0);
+            const optionCopy = make('span', 'option-copy');
+            append(optionCopy,
+              make('span', 'option-label', option.label),
+              make('span', 'option-detail', option.value));
+            append(label, input, optionCopy);
+            fieldset.appendChild(label);
+          });
+          questionGrid.appendChild(fieldset);
+        });
+        form.appendChild(questionGrid);
+        const actions = make('div', 'actions');
+        const submit = make('button', 'submit', '提交调整意见');
+        submit.type = 'submit';
+        const formStatus = make('span', 'muted', '');
+        formStatus.setAttribute('role', 'status');
+        formStatus.setAttribute('aria-live', 'polite');
+        append(actions, submit, formStatus);
+        form.appendChild(actions);
+        const promptOutput = make('pre', 'prompt-output', '');
+        promptOutput.hidden = true;
+        form.appendChild(promptOutput);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const selections = questions.map((question) => `- ${question.legend}：${data.get(question.id)}`).join('\n');
+          const promptSuffix = review.promptSuffix || '请按这些选择更新主维护契约、设计文档和当前接口展示。';
+          const prompt = `${review.promptPrefix}\n${selections}\n${promptSuffix}`;
+          if (!window.openai || typeof window.openai.sendFollowUpMessage !== 'function') {
+            promptOutput.textContent = prompt;
+            promptOutput.hidden = false;
+            try {
+              await navigator.clipboard.writeText(prompt);
+              formStatus.textContent = '调整提示已复制，请粘贴到对话中。';
+            } catch (error) {
+              formStatus.textContent = '请复制下方调整提示并发送到对话中。';
+            }
+            return;
+          }
+          formStatus.textContent = '正在提交…';
+          try {
+            await window.openai.sendFollowUpMessage({ prompt, title: review.followUpTitle });
+            formStatus.textContent = '已提交。';
+          } catch (error) {
+            formStatus.textContent = '提交失败，请重试。';
+          }
+        });
+        shell.appendChild(form);
+      }
+    })();
+  </script>
+</div>
+
+<div id="company-api-review-get-chats-chatid-events-00808612">
+  <style>
+    #company-api-review-get-chats-chatid-events-00808612 {
+      color-scheme: light dark;
+      color: light-dark(#17202a, #edf2f7);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      width: 100%;
+      margin-block-end: 16px;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 * { box-sizing: border-box; }
+    #company-api-review-get-chats-chatid-events-00808612 h2,
+    #company-api-review-get-chats-chatid-events-00808612 h3,
+    #company-api-review-get-chats-chatid-events-00808612 p { margin: 0; }
+    #company-api-review-get-chats-chatid-events-00808612 code,
+    #company-api-review-get-chats-chatid-events-00808612 pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #company-api-review-get-chats-chatid-events-00808612 .api-shell {
+      overflow: hidden;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 12px;
+      background: light-dark(#f7f8fa, #11151b);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .topbar,
+    #company-api-review-get-chats-chatid-events-00808612 .operation-head,
+    #company-api-review-get-chats-chatid-events-00808612 .row,
+    #company-api-review-get-chats-chatid-events-00808612 .tabs,
+    #company-api-review-get-chats-chatid-events-00808612 .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .topbar {
+      justify-content: space-between;
+      padding: 15px 17px;
+      background: light-dark(#ffffff, #1a2028);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 h2 { font-size: 18px; font-weight: 500; }
+    #company-api-review-get-chats-chatid-events-00808612 h3 { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+    #company-api-review-get-chats-chatid-events-00808612 .tag {
+      padding: 2px 8px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 999px;
+      background: light-dark(#f2f5f8, #222a34);
+      font-size: 12px;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .base,
+    #company-api-review-get-chats-chatid-events-00808612 .muted { color: light-dark(#5f6b78, #aab4c0); font-size: 13px; }
+    #company-api-review-get-chats-chatid-events-00808612 .operation {
+      margin: 15px;
+      overflow: hidden;
+      border: 1px solid light-dark(#1f883d, #3fb950);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .operation-head {
+      padding: 13px 15px;
+      background: light-dark(#eaf8ee, #15331f);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .method {
+      padding: 6px 11px;
+      border-radius: 5px;
+      background: light-dark(#1f883d, #3fb950);
+      color: light-dark(#ffffff, #07150b);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .operation-delete {
+      border-color: light-dark(#cf222e, #f85149);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .operation-delete .operation-head {
+      background: light-dark(#fff1f0, #3a1d1d);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .method-delete {
+      background: light-dark(#cf222e, #f85149);
+      color: #ffffff;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .path { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+    #company-api-review-get-chats-chatid-events-00808612 .section {
+      padding: 15px;
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .section:last-child { border-bottom: 0; }
+    #company-api-review-get-chats-chatid-events-00808612 .section-title { justify-content: space-between; }
+    #company-api-review-get-chats-chatid-events-00808612 .description { line-height: 1.6; }
+    #company-api-review-get-chats-chatid-events-00808612 .decision-gate {
+      border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
+      background: light-dark(#f5f9ff, #122337);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .decision-notice {
+      margin-top: 10px;
+      color: light-dark(#8250df, #d2a8ff);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .gate-only .contract-detail { display: none; }
+    #company-api-review-get-chats-chatid-events-00808612 table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #company-api-review-get-chats-chatid-events-00808612 th,
+    #company-api-review-get-chats-chatid-events-00808612 td {
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
+    #company-api-review-get-chats-chatid-events-00808612 tbody tr:last-child td { border-bottom: 0; }
+    #company-api-review-get-chats-chatid-events-00808612 pre {
+      margin: 10px 0 0;
+      padding: 13px;
+      overflow-x: auto;
+      border-radius: 7px;
+      background: light-dark(#eef2f6, #0d1117);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 button {
+      appearance: none;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 6px;
+      background: light-dark(#ffffff, #1a2028);
+      color: light-dark(#17202a, #edf2f7);
+      padding: 7px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 button[aria-selected="true"],
+    #company-api-review-get-chats-chatid-events-00808612 button[aria-pressed="true"] {
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#eaf3ff, #132b46);
+      color: light-dark(#0969da, #58a6ff);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .review-form {
+      margin: 0 15px 15px;
+      padding: 15px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .question-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .question-grid-single { grid-template-columns: 1fr; }
+    #company-api-review-get-chats-chatid-events-00808612 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #company-api-review-get-chats-chatid-events-00808612 legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
+    #company-api-review-get-chats-chatid-events-00808612 label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
+    #company-api-review-get-chats-chatid-events-00808612 label input { margin-top: 3px; }
+    #company-api-review-get-chats-chatid-events-00808612 .option-copy { display: grid; min-width: 0; gap: 2px; }
+    #company-api-review-get-chats-chatid-events-00808612 .option-label { font-weight: 500; }
+    #company-api-review-get-chats-chatid-events-00808612 .option-detail {
+      color: light-dark(#5f6b78, #aab4c0);
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .submit {
+      margin-top: 12px;
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#0969da, #58a6ff);
+      color: light-dark(#ffffff, #07111e);
+      font-weight: 500;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .empty { margin-top: 8px; }
+    #company-api-review-get-chats-chatid-events-00808612 .prompt-output {
+      margin-top: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 details { margin-top: 9px; }
+    #company-api-review-get-chats-chatid-events-00808612 summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .static-response {
+      padding: 8px 0;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-get-chats-chatid-events-00808612 .static-response:last-child { border-bottom: 0; }
+    #company-api-review-get-chats-chatid-events-00808612 .static-choice { margin-left: 8px; }
+    @media (max-width: 680px) {
+      #company-api-review-get-chats-chatid-events-00808612 .question-grid { grid-template-columns: 1fr; }
+      #company-api-review-get-chats-chatid-events-00808612 .operation,
+      #company-api-review-get-chats-chatid-events-00808612 .review-form { margin-left: 9px; margin-right: 9px; }
+      #company-api-review-get-chats-chatid-events-00808612 .table-wrap { overflow: visible; }
+      #company-api-review-get-chats-chatid-events-00808612 .table-wrap thead { display: none; }
+      #company-api-review-get-chats-chatid-events-00808612 .table-wrap table,
+      #company-api-review-get-chats-chatid-events-00808612 .table-wrap tbody,
+      #company-api-review-get-chats-chatid-events-00808612 .table-wrap tr,
+      #company-api-review-get-chats-chatid-events-00808612 .table-wrap td { display: block; width: 100%; }
+      #company-api-review-get-chats-chatid-events-00808612 .table-wrap tr {
+        padding: 7px 0;
+        border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+      }
+      #company-api-review-get-chats-chatid-events-00808612 .table-wrap tbody tr:last-child { border-bottom: 0; }
+      #company-api-review-get-chats-chatid-events-00808612 .table-wrap td {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 8px;
+        padding: 5px 0;
+        border-bottom: 0;
+        overflow-wrap: anywhere;
+      }
+      #company-api-review-get-chats-chatid-events-00808612 .table-wrap td::before {
+        content: attr(data-label);
+        color: light-dark(#5f6b78, #aab4c0);
+        font-weight: 500;
+      }
+      #company-api-review-get-chats-chatid-events-00808612 pre {
+        overflow-x: visible;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    }
+  </style>
+
+  <div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>mate-service General Chat Events API</h2><span class="tag">1.0.0</span><span class="tag">Public · 已确认 · target-only</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-get"><header class="operation-head"><span class="method method-get">GET</span><code class="path">/chats/{chatId}/events</code><span class="muted">查询 Chat 权威事件历史</span></header><section class="section"><h3>作用</h3><p class="description">按 createdAt 升序返回固定快照中的完整持久化事件。第一页捕获快照上界；page 携带过滤条件、上界和私有续读位置，后续页不混入新事件。相同 createdAt 使用服务端私有稳定顺序。历史包含三类 user event、completed message/thinking、Tool Call/Result 和 chat.status_idle，不包含 delta、ping 或内部事件。</p></section><section class="section contract-detail"><h3>认证</h3><details class="static-choice" open><summary>JWT 首选</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">&lt;CALLER_ID&gt;</td><td data-label="说明">公司调用方身份，非空</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">&lt;ACCESS_TOKEN&gt;</td><td data-label="说明">当前调用上下文访问令牌，非空</td></tr><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer &lt;JWT&gt;</td><td data-label="说明">首选公司 JWT；与 APPKEY 同时存在时使用 JWT，JWT 无效不回退</td></tr></tbody></table></div><pre><code>GET /mate-service/v1/chats/{chatId}/events
+X-HW-ID: &lt;CALLER_ID&gt;
+access-token: &lt;ACCESS_TOKEN&gt;
+Authorization: Bearer &lt;JWT&gt;</code></pre></details><details class="static-choice"><summary>APPKEY 兼容</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">&lt;CALLER_ID&gt;</td><td data-label="说明">公司调用方身份，非空</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">&lt;ACCESS_TOKEN&gt;</td><td data-label="说明">当前调用上下文访问令牌，非空</td></tr><tr><td data-label="Header">X-HW-APPKEY</td><td data-label="必填">是</td><td data-label="示例值">&lt;APPKEY&gt;</td><td data-label="说明">未提供 Authorization 时使用的公司 AppKey</td></tr></tbody></table></div><pre><code>GET /mate-service/v1/chats/{chatId}/events
+X-HW-ID: &lt;CALLER_ID&gt;
+access-token: &lt;ACCESS_TOKEN&gt;
+X-HW-APPKEY: &lt;APPKEY&gt;</code></pre></details></section><section class="section contract-detail"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">chatId</td><td data-label="必填">是</td><td data-label="约束">string, 1..64, case-sensitive</td><td data-label="说明">调用方有权访问的公共 Chat 标识；不接受内部 sessionId</td></tr><tr><td data-label="位置">query</td><td data-label="名称">createdAtGte</td><td data-label="必填">否</td><td data-label="约束">RFC 3339 UTC with exactly 3 millisecond digits, inclusive</td><td data-label="说明">第一页的可选创建时间下界，例如 2026-09-02T08:30:00.000Z</td></tr><tr><td data-label="位置">query</td><td data-label="名称">limit</td><td data-label="必填">否</td><td data-label="约束">int32, 1..200, default 100</td><td data-label="说明">每页最大事件数；默认值由 Service 归一化</td></tr><tr><td data-label="位置">query</td><td data-label="名称">types</td><td data-label="必填">否</td><td data-label="约束">repeated enum; types=x&amp;types=y; OR; duplicates normalized</td><td data-label="说明">允许 user.message、user.interrupt、user.tool_confirmation、agent.message、agent.thinking、agent.tool_call、agent.tool_result、chat.status_idle；省略表示全部，空值或未知值非法</td></tr><tr><td data-label="位置">query</td><td data-label="名称">page</td><td data-label="必填">否</td><td data-label="约束">non-empty opaque string</td><td data-label="说明">固定快照下一页游标；提供时不得同时出现 createdAtGte、limit 或 types</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US; default en-US</td><td data-label="说明">错误文案语言；缺失或不支持时回退 en-US</td></tr></tbody></table></div><p class="muted empty">无请求体。首次请求使用过滤参数；翻页请求只使用 page。</p></section><section class="section contract-detail"><h3>响应</h3><details class="static-response" open><summary><code>200 · 固定快照页</code> 200 OK — events 必需且可为空；仅还有下一页时返回非空 nextPage，否则省略。agent.message/thinking 只返回 phase=completed；八类事件均使用各自稳定 eventId。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;events&quot;: [
+      {
+        &quot;eventId&quot;: &quot;b7ef45d40a854c33af7a36df871a21e8&quot;,
+        &quot;type&quot;: &quot;user.message&quot;,
+        &quot;createdAt&quot;: &quot;2026-09-02T08:30:15.123Z&quot;,
+        &quot;content&quot;: [
+          {
+            &quot;type&quot;: &quot;text&quot;,
+            &quot;text&quot;: &quot;分析上传文件并给出处理建议&quot;
+          },
+          {
+            &quot;type&quot;: &quot;file&quot;,
+            &quot;fileId&quot;: &quot;7f12d8a380964fdc8518f48be1cf6a42&quot;
+          }
+        ]
+      },
+      {
+        &quot;eventId&quot;: &quot;aee903c130e048b9bc2894fc32cd63a8&quot;,
+        &quot;type&quot;: &quot;user.interrupt&quot;,
+        &quot;createdAt&quot;: &quot;2026-09-02T08:30:15.500Z&quot;
+      },
+      {
+        &quot;eventId&quot;: &quot;2781508bb1c9496f94a0454d0bf8c0f8&quot;,
+        &quot;type&quot;: &quot;user.tool_confirmation&quot;,
+        &quot;createdAt&quot;: &quot;2026-09-02T08:30:16.000Z&quot;,
+        &quot;toolCallId&quot;: &quot;c8de683be2ab4e25a8d97f7cf507c150&quot;,
+        &quot;result&quot;: &quot;deny&quot;,
+        &quot;denyMessage&quot;: &quot;不要执行会修改生产配置的操作&quot;
+      },
+      {
+        &quot;eventId&quot;: &quot;d5c19f7c4b1642e6806aeb860752d99b&quot;,
+        &quot;type&quot;: &quot;agent.message&quot;,
+        &quot;phase&quot;: &quot;completed&quot;,
+        &quot;createdAt&quot;: &quot;2026-09-02T08:30:17.000Z&quot;,
+        &quot;content&quot;: &quot;建议先隔离受影响端口，再核对上联链路。&quot;
+      },
+      {
+        &quot;eventId&quot;: &quot;4b3e522e7f6746be8781a2c8876fd1da&quot;,
+        &quot;type&quot;: &quot;agent.thinking&quot;,
+        &quot;phase&quot;: &quot;completed&quot;,
+        &quot;createdAt&quot;: &quot;2026-09-02T08:30:17.305Z&quot;,
+        &quot;content&quot;: &quot;已核对告警时间、设备范围和关联影响。&quot;
+      },
+      {
+        &quot;eventId&quot;: &quot;c8de683be2ab4e25a8d97f7cf507c150&quot;,
+        &quot;type&quot;: &quot;agent.tool_call&quot;,
+        &quot;createdAt&quot;: &quot;2026-09-02T08:30:17.420Z&quot;,
+        &quot;toolName&quot;: &quot;query_campus_alarm&quot;,
+        &quot;arguments&quot;: {
+          &quot;siteName&quot;: &quot;东区园区&quot;
+        },
+        &quot;requiresConfirmation&quot;: true
+      },
+      {
+        &quot;eventId&quot;: &quot;89f8316e07ef4c9aa3fd056a91a182b0&quot;,
+        &quot;type&quot;: &quot;agent.tool_result&quot;,
+        &quot;createdAt&quot;: &quot;2026-09-02T08:30:18.102Z&quot;,
+        &quot;toolCallId&quot;: &quot;c8de683be2ab4e25a8d97f7cf507c150&quot;,
+        &quot;content&quot;: &quot;用户拒绝执行。&quot;,
+        &quot;isError&quot;: true,
+        &quot;errorCode&quot;: &quot;TOOL_CALL_DENIED&quot;
+      },
+      {
+        &quot;eventId&quot;: &quot;d4e3e8b9653047a99ac10396a17fe84d&quot;,
+        &quot;type&quot;: &quot;chat.status_idle&quot;,
+        &quot;createdAt&quot;: &quot;2026-09-02T08:30:20.000Z&quot;,
+        &quot;reason&quot;: &quot;done&quot;
+      }
+    ],
+    &quot;nextPage&quot;: &quot;eyJzbmFwc2hvdCI6IjIwMjYtMDktMDJUMDg6MzA6MjAuMDAwWiJ9&quot;
+  }
+}</code></pre></details></details><details class="static-response"><summary><code>400 · CHAT_ID_INVALID</code> 400 Bad Request — chatId 长度不在 1..64。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ID_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;chatId 长度必须为 1 到 64 个字符。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ID_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;chatId must contain between 1 and 64 characters.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · CHAT_EVENT_CREATED_AT_GTE_INVALID</code> 400 Bad Request — createdAtGte 不是规定的 UTC 毫秒时间。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_CREATED_AT_GTE_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;createdAtGte 必须是包含毫秒的 RFC 3339 UTC 时间。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_CREATED_AT_GTE_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;createdAtGte must be an RFC 3339 UTC timestamp with millisecond precision.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · CHAT_EVENT_LIMIT_INVALID</code> 400 Bad Request — limit 不是 1..200 的整数。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_LIMIT_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;limit 必须是 1 到 200 之间的整数。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_LIMIT_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;limit must be an integer between 1 and 200.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · CHAT_EVENT_TYPES_INVALID</code> 400 Bad Request — types 为空或含未知事件类型。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_TYPES_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;types 为空或包含不支持的事件类型。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_TYPES_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;types is empty or contains an unsupported event type.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · CHAT_EVENT_PAGE_CONFLICT</code> 400 Bad Request — page 与其他 query 参数同时出现。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_PAGE_CONFLICT&quot;,
+  &quot;resMsg&quot;: &quot;使用 page 时不能同时传入其他查询参数。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_PAGE_CONFLICT&quot;,
+  &quot;resMsg&quot;: &quot;No other query parameters may be provided together with page.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · CHAT_EVENT_PAGE_INVALID</code> 400 Bad Request — page 无法验证、已失效或不属于该 Chat。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_PAGE_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;page 无效，请重新发起第一页查询。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_EVENT_PAGE_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;page is invalid. Start a new query from the first page.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>401 · UNAUTHENTICATED</code> 401 Unauthorized — 必要认证字段缺失或凭据无效。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;UNAUTHENTICATED&quot;,
+  &quot;resMsg&quot;: &quot;调用方身份认证失败。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;UNAUTHENTICATED&quot;,
+  &quot;resMsg&quot;: &quot;Caller authentication failed.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>403 · CHAT_ACCESS_DENIED</code> 403 Forbidden — 调用方无权访问该 Chat。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ACCESS_DENIED&quot;,
+  &quot;resMsg&quot;: &quot;无权访问该 Chat。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_ACCESS_DENIED&quot;,
+  &quot;resMsg&quot;: &quot;You do not have permission to access this Chat.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404 · CHAT_NOT_FOUND</code> 404 Not Found — 公共 Chat 不存在。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;Chat 不存在。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;CHAT_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;The Chat does not exist.&quot;
+}</code></pre></details></details></section></article></div></div>
+  <script type="application/json" data-review-model>{"api":{"title":"mate-service General Chat Events API","version":"1.0.0","basePath":"/mate-service/v1","visibility":"Public · 已确认 · target-only"},"operation":{"method":"GET","path":"/chats/{chatId}/events","summary":"查询 Chat 权威事件历史","description":"按 createdAt 升序返回固定快照中的完整持久化事件。第一页捕获快照上界；page 携带过滤条件、上界和私有续读位置，后续页不混入新事件。相同 createdAt 使用服务端私有稳定顺序。历史包含三类 user event、completed message/thinking、Tool Call/Result 和 chat.status_idle，不包含 delta、ping 或内部事件。","authModes":[{"id":"jwt","label":"JWT 首选","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方身份，非空"},{"name":"access-token","value":"\u003cACCESS_TOKEN\u003e","required":true,"description":"当前调用上下文访问令牌，非空"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"首选公司 JWT；与 APPKEY 同时存在时使用 JWT，JWT 无效不回退"}]},{"id":"appkey","label":"APPKEY 兼容","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方身份，非空"},{"name":"access-token","value":"\u003cACCESS_TOKEN\u003e","required":true,"description":"当前调用上下文访问令牌，非空"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"未提供 Authorization 时使用的公司 AppKey"}]}],"parameters":[{"in":"path","name":"chatId","required":true,"schema":"string, 1..64, case-sensitive","description":"调用方有权访问的公共 Chat 标识；不接受内部 sessionId"},{"in":"query","name":"createdAtGte","required":false,"schema":"RFC 3339 UTC with exactly 3 millisecond digits, inclusive","description":"第一页的可选创建时间下界，例如 2026-09-02T08:30:00.000Z"},{"in":"query","name":"limit","required":false,"schema":"int32, 1..200, default 100","description":"每页最大事件数；默认值由 Service 归一化"},{"in":"query","name":"types","required":false,"schema":"repeated enum; types=x\u0026types=y; OR; duplicates normalized","description":"允许 user.message、user.interrupt、user.tool_confirmation、agent.message、agent.thinking、agent.tool_call、agent.tool_result、chat.status_idle；省略表示全部，空值或未知值非法"},{"in":"query","name":"page","required":false,"schema":"non-empty opaque string","description":"固定快照下一页游标；提供时不得同时出现 createdAtGte、limit 或 types"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US; default en-US","description":"错误文案语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"无请求体。首次请求使用过滤参数；翻页请求只使用 page。","example":null},"responses":[{"id":"200-history-page","status":"200","tabLabel":"200 · 固定快照页","label":"OK","summary":"events 必需且可为空；仅还有下一页时返回非空 nextPage，否则省略。agent.message/thinking 只返回 phase=completed；八类事件均使用各自稳定 eventId。","headers":{"Content-Type":"application/json","Cache-Control":"no-store"},"bodies":{"default":{"resCode":"0","resMsg":"success","result":{"events":[{"eventId":"b7ef45d40a854c33af7a36df871a21e8","type":"user.message","createdAt":"2026-09-02T08:30:15.123Z","content":[{"type":"text","text":"分析上传文件并给出处理建议"},{"type":"file","fileId":"7f12d8a380964fdc8518f48be1cf6a42"}]},{"eventId":"aee903c130e048b9bc2894fc32cd63a8","type":"user.interrupt","createdAt":"2026-09-02T08:30:15.500Z"},{"eventId":"2781508bb1c9496f94a0454d0bf8c0f8","type":"user.tool_confirmation","createdAt":"2026-09-02T08:30:16.000Z","toolCallId":"c8de683be2ab4e25a8d97f7cf507c150","result":"deny","denyMessage":"不要执行会修改生产配置的操作"},{"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"completed","createdAt":"2026-09-02T08:30:17.000Z","content":"建议先隔离受影响端口，再核对上联链路。"},{"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.thinking","phase":"completed","createdAt":"2026-09-02T08:30:17.305Z","content":"已核对告警时间、设备范围和关联影响。"},{"eventId":"c8de683be2ab4e25a8d97f7cf507c150","type":"agent.tool_call","createdAt":"2026-09-02T08:30:17.420Z","toolName":"query_campus_alarm","arguments":{"siteName":"东区园区"},"requiresConfirmation":true},{"eventId":"89f8316e07ef4c9aa3fd056a91a182b0","type":"agent.tool_result","createdAt":"2026-09-02T08:30:18.102Z","toolCallId":"c8de683be2ab4e25a8d97f7cf507c150","content":"用户拒绝执行。","isError":true,"errorCode":"TOOL_CALL_DENIED"},{"eventId":"d4e3e8b9653047a99ac10396a17fe84d","type":"chat.status_idle","createdAt":"2026-09-02T08:30:20.000Z","reason":"done"}],"nextPage":"eyJzbmFwc2hvdCI6IjIwMjYtMDktMDJUMDg6MzA6MjAuMDAwWiJ9"}}}},{"id":"400-chat-id-invalid","status":"400","tabLabel":"400 · CHAT_ID_INVALID","label":"Bad Request","summary":"chatId 长度不在 1..64。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_ID_INVALID","resMsg":"chatId 长度必须为 1 到 64 个字符。"},"en-US":{"resCode":"CHAT_ID_INVALID","resMsg":"chatId must contain between 1 and 64 characters."}}},{"id":"400-created-at-invalid","status":"400","tabLabel":"400 · CHAT_EVENT_CREATED_AT_GTE_INVALID","label":"Bad Request","summary":"createdAtGte 不是规定的 UTC 毫秒时间。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_EVENT_CREATED_AT_GTE_INVALID","resMsg":"createdAtGte 必须是包含毫秒的 RFC 3339 UTC 时间。"},"en-US":{"resCode":"CHAT_EVENT_CREATED_AT_GTE_INVALID","resMsg":"createdAtGte must be an RFC 3339 UTC timestamp with millisecond precision."}}},{"id":"400-limit-invalid","status":"400","tabLabel":"400 · CHAT_EVENT_LIMIT_INVALID","label":"Bad Request","summary":"limit 不是 1..200 的整数。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_EVENT_LIMIT_INVALID","resMsg":"limit 必须是 1 到 200 之间的整数。"},"en-US":{"resCode":"CHAT_EVENT_LIMIT_INVALID","resMsg":"limit must be an integer between 1 and 200."}}},{"id":"400-types-invalid","status":"400","tabLabel":"400 · CHAT_EVENT_TYPES_INVALID","label":"Bad Request","summary":"types 为空或含未知事件类型。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_EVENT_TYPES_INVALID","resMsg":"types 为空或包含不支持的事件类型。"},"en-US":{"resCode":"CHAT_EVENT_TYPES_INVALID","resMsg":"types is empty or contains an unsupported event type."}}},{"id":"400-page-conflict","status":"400","tabLabel":"400 · CHAT_EVENT_PAGE_CONFLICT","label":"Bad Request","summary":"page 与其他 query 参数同时出现。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_EVENT_PAGE_CONFLICT","resMsg":"使用 page 时不能同时传入其他查询参数。"},"en-US":{"resCode":"CHAT_EVENT_PAGE_CONFLICT","resMsg":"No other query parameters may be provided together with page."}}},{"id":"400-page-invalid","status":"400","tabLabel":"400 · CHAT_EVENT_PAGE_INVALID","label":"Bad Request","summary":"page 无法验证、已失效或不属于该 Chat。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_EVENT_PAGE_INVALID","resMsg":"page 无效，请重新发起第一页查询。"},"en-US":{"resCode":"CHAT_EVENT_PAGE_INVALID","resMsg":"page is invalid. Start a new query from the first page."}}},{"id":"401-unauthenticated","status":"401","tabLabel":"401 · UNAUTHENTICATED","label":"Unauthorized","summary":"必要认证字段缺失或凭据无效。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"UNAUTHENTICATED","resMsg":"调用方身份认证失败。"},"en-US":{"resCode":"UNAUTHENTICATED","resMsg":"Caller authentication failed."}}},{"id":"403-chat-access-denied","status":"403","tabLabel":"403 · CHAT_ACCESS_DENIED","label":"Forbidden","summary":"调用方无权访问该 Chat。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"无权访问该 Chat。"},"en-US":{"resCode":"CHAT_ACCESS_DENIED","resMsg":"You do not have permission to access this Chat."}}},{"id":"404-chat-not-found","status":"404","tabLabel":"404 · CHAT_NOT_FOUND","label":"Not Found","summary":"公共 Chat 不存在。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"CHAT_NOT_FOUND","resMsg":"Chat 不存在。"},"en-US":{"resCode":"CHAT_NOT_FOUND","resMsg":"The Chat does not exist."}}}]},"review":{"questions":[],"followUpTitle":"三个接口已确认","promptPrefix":"更新 GET /mate-service/v1/chats/{chatId}/events","promptSuffix":"保持与三接口 1.0.0 契约、Markdown 和 PlantUML/SVG 同步；不要生成 OpenAPI。"}}</script>
+  <script>
+    (() => {
+      const root = document.getElementById('company-api-review-get-chats-chatid-events-00808612');
       const model = JSON.parse(root.querySelector('[data-review-model]').textContent);
       const api = model.api;
       const operation = model.operation;

@@ -1,0 +1,221 @@
+{
+  "api": {
+    "title": "mate-service General Chat Events API",
+    "version": "1.0.0",
+    "basePath": "/mate-service/v1",
+    "visibility": "Public · 已确认 · target-only"
+  },
+  "operation": {
+    "method": "GET",
+    "path": "/chats/{chatId}/events/stream",
+    "summary": "订阅 Chat 实时事件",
+    "description": "建立跨越多次 execution 和 idle 状态的 Chat 级长连接 SSE，从连接时刻开始发送 live 事件。它不重放、不接受 Last-Event-ID，也不在 chat.status_idle 后关闭。业务 frame 只使用 data: 完整 JSON，不使用 SSE event: 或 id:；可发送 : ping comment。断线后重开流并查询权威历史，按 eventId 对账。",
+    "authModes": [
+      {
+        "id": "jwt",
+        "label": "JWT 首选",
+        "preferred": true,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "<CALLER_ID>",
+            "required": true,
+            "description": "公司调用方身份，非空"
+          },
+          {
+            "name": "access-token",
+            "value": "<ACCESS_TOKEN>",
+            "required": true,
+            "description": "当前调用上下文访问令牌，非空"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer <JWT>",
+            "required": true,
+            "description": "首选公司 JWT；与 APPKEY 同时存在时使用 JWT，JWT 无效不回退"
+          }
+        ]
+      },
+      {
+        "id": "appkey",
+        "label": "APPKEY 兼容",
+        "preferred": false,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "<CALLER_ID>",
+            "required": true,
+            "description": "公司调用方身份，非空"
+          },
+          {
+            "name": "access-token",
+            "value": "<ACCESS_TOKEN>",
+            "required": true,
+            "description": "当前调用上下文访问令牌，非空"
+          },
+          {
+            "name": "X-HW-APPKEY",
+            "value": "<APPKEY>",
+            "required": true,
+            "description": "未提供 Authorization 时使用的公司 AppKey"
+          }
+        ]
+      }
+    ],
+    "parameters": [
+      {
+        "in": "path",
+        "name": "chatId",
+        "required": true,
+        "schema": "string, 1..64, case-sensitive",
+        "description": "调用方有权访问的公共 Chat 标识；不接受内部 sessionId"
+      },
+      {
+        "in": "header",
+        "name": "Accept-Language",
+        "required": false,
+        "schema": "zh-CN | en-US; default en-US",
+        "description": "仅用于 SSE 建立前 JSON 错误；缺失或不支持时回退 en-US"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体；不接受 Last-Event-ID、after、eventSeq 或其他恢复参数。",
+      "example": null
+    },
+    "responses": [
+      {
+        "id": "200-live-stream",
+        "status": "200",
+        "tabLabel": "200 · Chat 实时流",
+        "label": "OK",
+        "summary": "五类公共实时事件。message/thinking 的 delta 没有 createdAt，completed 复用同一 eventId 并带完整 content；Tool 与 idle 是一次性完整持久事件。user.* 不在 SSE 中重复推送。",
+        "headers": {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-store"
+        },
+        "bodies": {
+          "default": "data: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"delta\",\"content\":\"正在核对告警时间线\"}\n\ndata: {\"eventId\":\"4b3e522e7f6746be8781a2c8876fd1da\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:17.305Z\",\"content\":\"已核对告警时间、设备范围和关联影响。\"}\n\ndata: {\"eventId\":\"c8de683be2ab4e25a8d97f7cf507c150\",\"type\":\"agent.tool_call\",\"createdAt\":\"2026-09-02T08:30:17.420Z\",\"toolName\":\"query_campus_alarm\",\"arguments\":{\"siteName\":\"东区园区\"},\"requiresConfirmation\":false}\n\n: ping\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-02T08:30:18.102Z\",\"toolCallId\":\"c8de683be2ab4e25a8d97f7cf507c150\",\"content\":\"找到 3 条相关告警。\",\"isError\":false}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"建议先隔离受影响端口，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-02T08:30:19.451Z\",\"content\":\"建议先隔离受影响端口，再核对上联链路。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"chat.status_idle\",\"createdAt\":\"2026-09-02T08:30:20.000Z\",\"reason\":\"done\"}\n"
+        }
+      },
+      {
+        "id": "400-chat-id-invalid",
+        "status": "400",
+        "tabLabel": "400 · CHAT_ID_INVALID",
+        "label": "Bad Request",
+        "summary": "SSE 建立前，chatId 长度不在 1..64。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_ID_INVALID",
+            "resMsg": "chatId 长度必须为 1 到 64 个字符。"
+          },
+          "en-US": {
+            "resCode": "CHAT_ID_INVALID",
+            "resMsg": "chatId must contain between 1 and 64 characters."
+          }
+        }
+      },
+      {
+        "id": "401-unauthenticated",
+        "status": "401",
+        "tabLabel": "401 · UNAUTHENTICATED",
+        "label": "Unauthorized",
+        "summary": "SSE 建立前认证失败。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "UNAUTHENTICATED",
+            "resMsg": "调用方身份认证失败。"
+          },
+          "en-US": {
+            "resCode": "UNAUTHENTICATED",
+            "resMsg": "Caller authentication failed."
+          }
+        }
+      },
+      {
+        "id": "403-chat-access-denied",
+        "status": "403",
+        "tabLabel": "403 · CHAT_ACCESS_DENIED",
+        "label": "Forbidden",
+        "summary": "SSE 建立前确认调用方无权访问该 Chat。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_ACCESS_DENIED",
+            "resMsg": "无权访问该 Chat。"
+          },
+          "en-US": {
+            "resCode": "CHAT_ACCESS_DENIED",
+            "resMsg": "You do not have permission to access this Chat."
+          }
+        }
+      },
+      {
+        "id": "404-chat-not-found",
+        "status": "404",
+        "tabLabel": "404 · CHAT_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "SSE 建立前确认 Chat 不存在。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_NOT_FOUND",
+            "resMsg": "Chat 不存在。"
+          },
+          "en-US": {
+            "resCode": "CHAT_NOT_FOUND",
+            "resMsg": "The Chat does not exist."
+          }
+        }
+      },
+      {
+        "id": "503-chat-runtime-unavailable",
+        "status": "503",
+        "tabLabel": "503 · CHAT_RUNTIME_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "SSE 建立前无法建立 Claw 内部订阅。SSE 已建立后的异常直接关闭连接，不发送 stream.error。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_RUNTIME_UNAVAILABLE",
+            "resMsg": "对话执行服务暂时不可用。"
+          },
+          "en-US": {
+            "resCode": "CHAT_RUNTIME_UNAVAILABLE",
+            "resMsg": "The conversation runtime is temporarily unavailable."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "followUpTitle": "三个接口已确认",
+    "promptPrefix": "更新 GET /mate-service/v1/chats/{chatId}/events/stream",
+    "promptSuffix": "保持与三接口 1.0.0 契约、Markdown 和 PlantUML/SVG 同步；不要生成 OpenAPI。"
+  }
+}

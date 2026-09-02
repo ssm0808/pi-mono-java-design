@@ -1,0 +1,411 @@
+{
+  "api": {
+    "title": "mate-service General Chat Events API",
+    "version": "1.0.0",
+    "basePath": "/mate-service/v1",
+    "visibility": "Public · 已确认 · target-only"
+  },
+  "operation": {
+    "method": "GET",
+    "path": "/chats/{chatId}/events",
+    "summary": "查询 Chat 权威事件历史",
+    "description": "按 createdAt 升序返回固定快照中的完整持久化事件。第一页捕获快照上界；page 携带过滤条件、上界和私有续读位置，后续页不混入新事件。相同 createdAt 使用服务端私有稳定顺序。历史包含三类 user event、completed message/thinking、Tool Call/Result 和 chat.status_idle，不包含 delta、ping 或内部事件。",
+    "authModes": [
+      {
+        "id": "jwt",
+        "label": "JWT 首选",
+        "preferred": true,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "<CALLER_ID>",
+            "required": true,
+            "description": "公司调用方身份，非空"
+          },
+          {
+            "name": "access-token",
+            "value": "<ACCESS_TOKEN>",
+            "required": true,
+            "description": "当前调用上下文访问令牌，非空"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer <JWT>",
+            "required": true,
+            "description": "首选公司 JWT；与 APPKEY 同时存在时使用 JWT，JWT 无效不回退"
+          }
+        ]
+      },
+      {
+        "id": "appkey",
+        "label": "APPKEY 兼容",
+        "preferred": false,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "<CALLER_ID>",
+            "required": true,
+            "description": "公司调用方身份，非空"
+          },
+          {
+            "name": "access-token",
+            "value": "<ACCESS_TOKEN>",
+            "required": true,
+            "description": "当前调用上下文访问令牌，非空"
+          },
+          {
+            "name": "X-HW-APPKEY",
+            "value": "<APPKEY>",
+            "required": true,
+            "description": "未提供 Authorization 时使用的公司 AppKey"
+          }
+        ]
+      }
+    ],
+    "parameters": [
+      {
+        "in": "path",
+        "name": "chatId",
+        "required": true,
+        "schema": "string, 1..64, case-sensitive",
+        "description": "调用方有权访问的公共 Chat 标识；不接受内部 sessionId"
+      },
+      {
+        "in": "query",
+        "name": "createdAtGte",
+        "required": false,
+        "schema": "RFC 3339 UTC with exactly 3 millisecond digits, inclusive",
+        "description": "第一页的可选创建时间下界，例如 2026-09-02T08:30:00.000Z"
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": "int32, 1..200, default 100",
+        "description": "每页最大事件数；默认值由 Service 归一化"
+      },
+      {
+        "in": "query",
+        "name": "types",
+        "required": false,
+        "schema": "repeated enum; types=x&types=y; OR; duplicates normalized",
+        "description": "允许 user.message、user.interrupt、user.tool_confirmation、agent.message、agent.thinking、agent.tool_call、agent.tool_result、chat.status_idle；省略表示全部，空值或未知值非法"
+      },
+      {
+        "in": "query",
+        "name": "page",
+        "required": false,
+        "schema": "non-empty opaque string",
+        "description": "固定快照下一页游标；提供时不得同时出现 createdAtGte、limit 或 types"
+      },
+      {
+        "in": "header",
+        "name": "Accept-Language",
+        "required": false,
+        "schema": "zh-CN | en-US; default en-US",
+        "description": "错误文案语言；缺失或不支持时回退 en-US"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体。首次请求使用过滤参数；翻页请求只使用 page。",
+      "example": null
+    },
+    "responses": [
+      {
+        "id": "200-history-page",
+        "status": "200",
+        "tabLabel": "200 · 固定快照页",
+        "label": "OK",
+        "summary": "events 必需且可为空；仅还有下一页时返回非空 nextPage，否则省略。agent.message/thinking 只返回 phase=completed；八类事件均使用各自稳定 eventId。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "eventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "type": "user.message",
+                  "createdAt": "2026-09-02T08:30:15.123Z",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "分析上传文件并给出处理建议"
+                    },
+                    {
+                      "type": "file",
+                      "fileId": "7f12d8a380964fdc8518f48be1cf6a42"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "aee903c130e048b9bc2894fc32cd63a8",
+                  "type": "user.interrupt",
+                  "createdAt": "2026-09-02T08:30:15.500Z"
+                },
+                {
+                  "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
+                  "type": "user.tool_confirmation",
+                  "createdAt": "2026-09-02T08:30:16.000Z",
+                  "toolCallId": "c8de683be2ab4e25a8d97f7cf507c150",
+                  "result": "deny",
+                  "denyMessage": "不要执行会修改生产配置的操作"
+                },
+                {
+                  "eventId": "d5c19f7c4b1642e6806aeb860752d99b",
+                  "type": "agent.message",
+                  "phase": "completed",
+                  "createdAt": "2026-09-02T08:30:17.000Z",
+                  "content": "建议先隔离受影响端口，再核对上联链路。"
+                },
+                {
+                  "eventId": "4b3e522e7f6746be8781a2c8876fd1da",
+                  "type": "agent.thinking",
+                  "phase": "completed",
+                  "createdAt": "2026-09-02T08:30:17.305Z",
+                  "content": "已核对告警时间、设备范围和关联影响。"
+                },
+                {
+                  "eventId": "c8de683be2ab4e25a8d97f7cf507c150",
+                  "type": "agent.tool_call",
+                  "createdAt": "2026-09-02T08:30:17.420Z",
+                  "toolName": "query_campus_alarm",
+                  "arguments": {
+                    "siteName": "东区园区"
+                  },
+                  "requiresConfirmation": true
+                },
+                {
+                  "eventId": "89f8316e07ef4c9aa3fd056a91a182b0",
+                  "type": "agent.tool_result",
+                  "createdAt": "2026-09-02T08:30:18.102Z",
+                  "toolCallId": "c8de683be2ab4e25a8d97f7cf507c150",
+                  "content": "用户拒绝执行。",
+                  "isError": true,
+                  "errorCode": "TOOL_CALL_DENIED"
+                },
+                {
+                  "eventId": "d4e3e8b9653047a99ac10396a17fe84d",
+                  "type": "chat.status_idle",
+                  "createdAt": "2026-09-02T08:30:20.000Z",
+                  "reason": "done"
+                }
+              ],
+              "nextPage": "eyJzbmFwc2hvdCI6IjIwMjYtMDktMDJUMDg6MzA6MjAuMDAwWiJ9"
+            }
+          }
+        }
+      },
+      {
+        "id": "400-chat-id-invalid",
+        "status": "400",
+        "tabLabel": "400 · CHAT_ID_INVALID",
+        "label": "Bad Request",
+        "summary": "chatId 长度不在 1..64。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_ID_INVALID",
+            "resMsg": "chatId 长度必须为 1 到 64 个字符。"
+          },
+          "en-US": {
+            "resCode": "CHAT_ID_INVALID",
+            "resMsg": "chatId must contain between 1 and 64 characters."
+          }
+        }
+      },
+      {
+        "id": "400-created-at-invalid",
+        "status": "400",
+        "tabLabel": "400 · CHAT_EVENT_CREATED_AT_GTE_INVALID",
+        "label": "Bad Request",
+        "summary": "createdAtGte 不是规定的 UTC 毫秒时间。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_EVENT_CREATED_AT_GTE_INVALID",
+            "resMsg": "createdAtGte 必须是包含毫秒的 RFC 3339 UTC 时间。"
+          },
+          "en-US": {
+            "resCode": "CHAT_EVENT_CREATED_AT_GTE_INVALID",
+            "resMsg": "createdAtGte must be an RFC 3339 UTC timestamp with millisecond precision."
+          }
+        }
+      },
+      {
+        "id": "400-limit-invalid",
+        "status": "400",
+        "tabLabel": "400 · CHAT_EVENT_LIMIT_INVALID",
+        "label": "Bad Request",
+        "summary": "limit 不是 1..200 的整数。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_EVENT_LIMIT_INVALID",
+            "resMsg": "limit 必须是 1 到 200 之间的整数。"
+          },
+          "en-US": {
+            "resCode": "CHAT_EVENT_LIMIT_INVALID",
+            "resMsg": "limit must be an integer between 1 and 200."
+          }
+        }
+      },
+      {
+        "id": "400-types-invalid",
+        "status": "400",
+        "tabLabel": "400 · CHAT_EVENT_TYPES_INVALID",
+        "label": "Bad Request",
+        "summary": "types 为空或含未知事件类型。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_EVENT_TYPES_INVALID",
+            "resMsg": "types 为空或包含不支持的事件类型。"
+          },
+          "en-US": {
+            "resCode": "CHAT_EVENT_TYPES_INVALID",
+            "resMsg": "types is empty or contains an unsupported event type."
+          }
+        }
+      },
+      {
+        "id": "400-page-conflict",
+        "status": "400",
+        "tabLabel": "400 · CHAT_EVENT_PAGE_CONFLICT",
+        "label": "Bad Request",
+        "summary": "page 与其他 query 参数同时出现。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_EVENT_PAGE_CONFLICT",
+            "resMsg": "使用 page 时不能同时传入其他查询参数。"
+          },
+          "en-US": {
+            "resCode": "CHAT_EVENT_PAGE_CONFLICT",
+            "resMsg": "No other query parameters may be provided together with page."
+          }
+        }
+      },
+      {
+        "id": "400-page-invalid",
+        "status": "400",
+        "tabLabel": "400 · CHAT_EVENT_PAGE_INVALID",
+        "label": "Bad Request",
+        "summary": "page 无法验证、已失效或不属于该 Chat。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_EVENT_PAGE_INVALID",
+            "resMsg": "page 无效，请重新发起第一页查询。"
+          },
+          "en-US": {
+            "resCode": "CHAT_EVENT_PAGE_INVALID",
+            "resMsg": "page is invalid. Start a new query from the first page."
+          }
+        }
+      },
+      {
+        "id": "401-unauthenticated",
+        "status": "401",
+        "tabLabel": "401 · UNAUTHENTICATED",
+        "label": "Unauthorized",
+        "summary": "必要认证字段缺失或凭据无效。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "UNAUTHENTICATED",
+            "resMsg": "调用方身份认证失败。"
+          },
+          "en-US": {
+            "resCode": "UNAUTHENTICATED",
+            "resMsg": "Caller authentication failed."
+          }
+        }
+      },
+      {
+        "id": "403-chat-access-denied",
+        "status": "403",
+        "tabLabel": "403 · CHAT_ACCESS_DENIED",
+        "label": "Forbidden",
+        "summary": "调用方无权访问该 Chat。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_ACCESS_DENIED",
+            "resMsg": "无权访问该 Chat。"
+          },
+          "en-US": {
+            "resCode": "CHAT_ACCESS_DENIED",
+            "resMsg": "You do not have permission to access this Chat."
+          }
+        }
+      },
+      {
+        "id": "404-chat-not-found",
+        "status": "404",
+        "tabLabel": "404 · CHAT_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "公共 Chat 不存在。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_NOT_FOUND",
+            "resMsg": "Chat 不存在。"
+          },
+          "en-US": {
+            "resCode": "CHAT_NOT_FOUND",
+            "resMsg": "The Chat does not exist."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "followUpTitle": "三个接口已确认",
+    "promptPrefix": "更新 GET /mate-service/v1/chats/{chatId}/events",
+    "promptSuffix": "保持与三接口 1.0.0 契约、Markdown 和 PlantUML/SVG 同步；不要生成 OpenAPI。"
+  }
+}

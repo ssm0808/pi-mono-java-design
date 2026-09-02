@@ -1,26 +1,63 @@
 {
   "api": {
-    "title": "mate-service General Chat API",
-    "version": "0.1.0",
+    "title": "mate-service General Chat Events API",
+    "version": "1.0.0",
     "basePath": "/mate-service/v1",
-    "visibility": "Public · 评审中 · target-only"
+    "visibility": "Public · 已确认 · target-only"
   },
   "operation": {
     "method": "POST",
     "path": "/chats/{chatId}/events",
-    "summary": "提交一条普通 Chat 消息并流式返回执行事件",
-    "description": "浏览器向已有 Chat 提交 message 和 fileIds。mate-service 先验证登录用户与 Chat 权限，再通过私有 chatId 到 sessionId 映射调用 CampusClaw Runtime。它逐帧解析内部 SSE，删除内部标识、凭据、原始思考、未经脱敏的工具数据与 Runtime 错误细节，然后输出公共 SSE。请求一旦被 Runtime 接受，浏览器断线不会取消执行，也不得自动重放 POST；恢复由后续 GET Chat Events 接口承担。当前 mate-service 源码中不存在该 Chat bridge，因此本操作是 target-only design。",
+    "summary": "提交一条用户事件",
+    "description": "一次只接受 user.message、user.interrupt 或 user.tool_confirmation 中的一条，并立即返回该用户事件的 eventId 和 createdAt。响应不是执行结果。interrupt 和 message 不得批量提交；必须等待 chat.status_idle(reason=terminated) 后再发 message。POST 回执丢失时查询权威历史，禁止盲目重放。",
     "authModes": [
       {
-        "id": "userBearer",
-        "label": "登录用户 Bearer Token（建议）",
+        "id": "jwt",
+        "label": "JWT 首选",
         "preferred": true,
         "headers": [
           {
-            "name": "Authorization",
-            "value": "Bearer <USER_ACCESS_TOKEN>",
+            "name": "X-HW-ID",
+            "value": "<CALLER_ID>",
             "required": true,
-            "description": "mate-service 验证登录用户并建立 Chat 权限上下文；该值不会原样转发到 CampusClaw"
+            "description": "公司调用方身份，非空"
+          },
+          {
+            "name": "access-token",
+            "value": "<ACCESS_TOKEN>",
+            "required": true,
+            "description": "当前调用上下文访问令牌，非空"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer <JWT>",
+            "required": true,
+            "description": "首选公司 JWT；与 APPKEY 同时存在时使用 JWT，JWT 无效不回退"
+          }
+        ]
+      },
+      {
+        "id": "appkey",
+        "label": "APPKEY 兼容",
+        "preferred": false,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "<CALLER_ID>",
+            "required": true,
+            "description": "公司调用方身份，非空"
+          },
+          {
+            "name": "access-token",
+            "value": "<ACCESS_TOKEN>",
+            "required": true,
+            "description": "当前调用上下文访问令牌，非空"
+          },
+          {
+            "name": "X-HW-APPKEY",
+            "value": "<APPKEY>",
+            "required": true,
+            "description": "未提供 Authorization 时使用的公司 AppKey"
           }
         ]
       }
@@ -30,83 +67,122 @@
         "in": "path",
         "name": "chatId",
         "required": true,
-        "schema": "string, 1..128",
-        "description": "用户有权访问的公共 Chat 标识；不得提交内部 sessionId"
+        "schema": "string, 1..64, case-sensitive",
+        "description": "调用方有权访问的公共 Chat 标识；不施加额外正则，不接受内部 sessionId"
       },
       {
         "in": "header",
         "name": "Accept-Language",
         "required": false,
-        "schema": "zh-CN | en-US",
-        "description": "流建立前 ResultBean 与流内错误消息语言；缺失或不支持时回退 en-US"
+        "schema": "zh-CN | en-US; default en-US",
+        "description": "错误文案语言；缺失或不支持时回退 en-US"
       }
     ],
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "message 可省略，但提供时必须非空白且最多 262144 个 UTF-16 代码单元；fileIds 可省略，最多 32 个匹配 ^file_[0-9A-Za-z]{26}$ 且互不重复的字符串，并保留顺序。message 与 fileIds 至少提供一项。拒绝未知字段，不接受 chatId、sessionId、modelId、thinking、metadata、type 或 Idempotency-Key。以 / 开头的 message 在本接口仍是普通消息，Slash 解析只属于已确认的交互层和结构化 Command API。文件归属和 READY 状态继续由 Runtime 接受消息后的附件 resolve 流程原子确认；公共层不得为了提前返回附件错误而改变已确认的 User Entry 接受顺序。",
+      "description": "顶层固定为 event。示例是 user.message：content 长度 1..5，仅 text/file；最多一个 text 且必须第一项，text 非空白且最多 2048 Unicode code point；最多四个不重复 file，fileId 匹配 ^[0-9a-f]{32}$。user.interrupt 只有 type。user.tool_confirmation 包含 toolCallId、result=allow|deny；denyMessage 仅 deny 可省略或提供非空白的最多 2048 code point 字符串。已知对象忽略未知字段；未知 type、null 条件字段和批量事件非法。",
       "example": {
-        "message": "分析附件中的园区告警并给出处理建议",
-        "fileIds": [
-          "file_01JY8X2E3R4T5Y6U7I8O9P0A1S"
-        ]
+        "event": {
+          "type": "user.message",
+          "content": [
+            {
+              "type": "text",
+              "text": "分析上传文件并给出处理建议"
+            },
+            {
+              "type": "file",
+              "fileId": "7f12d8a380964fdc8518f48be1cf6a42"
+            }
+          ]
+        }
       }
     },
     "responses": [
       {
-        "id": "200-success",
+        "id": "200-accepted",
         "status": "200",
-        "tabLabel": "200 · 正常完成",
+        "tabLabel": "200 · 已接受",
         "label": "OK",
-        "summary": "一次请求范围 SSE；持久化事件使用公共 eventSeq，瞬时事件没有 id。示例按建议方案展示安全思考摘要和安全工具投影。",
-        "headers": {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "default": "id: 101\nevent: user.message\ndata: {\"eventSeq\":101,\"message\":\"分析附件中的园区告警并给出处理建议\",\"fileIds\":[\"file_01JY8X2E3R4T5Y6U7I8O9P0A1S\"],\"occurredAt\":\"2026-09-01T10:00:00Z\"}\n\nevent: assistant.message.started\ndata: {\"role\":\"assistant\"}\n\nevent: assistant.thinking.started\ndata: {\"displayTitle\":\"正在分析\"}\n\nevent: assistant.thinking.completed\ndata: {\"displayTitle\":\"分析完成\",\"displaySummary\":\"已核对告警时间、设备范围和关联影响。\"}\n\nevent: tool.execution.started\ndata: {\"activityId\":\"activity-550e8400e29b41d4a716446655440020\",\"displayName\":\"查询园区告警\",\"input\":{\"siteName\":\"东区园区\"}}\n\nid: 104\nevent: tool.result\ndata: {\"eventSeq\":104,\"activityId\":\"activity-550e8400e29b41d4a716446655440020\",\"displayName\":\"查询园区告警\",\"status\":\"succeeded\",\"outputSummary\":\"找到 3 条相关告警。\",\"occurredAt\":\"2026-09-01T10:00:02Z\"}\n\nevent: assistant.message.delta\ndata: {\"delta\":{\"type\":\"text\",\"text\":\"建议先隔离受影响端口，\"}}\n\nid: 106\nevent: assistant.message.completed\ndata: {\"eventSeq\":106,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"建议先隔离受影响端口，再核对上联链路和告警时间线。\"}]},\"finishReason\":\"stop\",\"occurredAt\":\"2026-09-01T10:00:03Z\"}\n\nevent: session.status.idle\ndata: {\"status\":\"idle\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"
-        }
-      },
-      {
-        "id": "400-invalid-chat-id",
-        "status": "400",
-        "tabLabel": "400 · INVALID_CHAT_ID",
-        "label": "Bad Request",
-        "summary": "chatId 不符合公共 Chat 标识约束。",
+        "summary": "只返回被接受的 user.* 事件身份和服务端创建时间；不回显请求，不返回执行结果。",
         "headers": {
           "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
+          "Cache-Control": "no-store"
         },
         "bodies": {
-          "zh-CN": {
-            "resCode": "INVALID_CHAT_ID",
-            "resMsg": "chatId 格式不正确。"
-          },
-          "en-US": {
-            "resCode": "INVALID_CHAT_ID",
-            "resMsg": "The chatId format is invalid."
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "eventId": "b7ef45d40a854c33af7a36df871a21e8",
+              "createdAt": "2026-09-02T08:30:15.123Z"
+            }
           }
         }
       },
       {
-        "id": "400-invalid-event-request",
+        "id": "400-chat-id-invalid",
         "status": "400",
-        "tabLabel": "400 · INVALID_EVENT_REQUEST",
+        "tabLabel": "400 · CHAT_ID_INVALID",
         "label": "Bad Request",
-        "summary": "JSON 非法、仅有空白 message、没有消息和附件、附件重复、字段越界或含未知字段。",
+        "summary": "chatId 长度不在 1..64。",
         "headers": {
           "Content-Type": "application/json",
+          "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
-            "resCode": "INVALID_EVENT_REQUEST",
-            "resMsg": "消息请求内容不符合约束。"
+            "resCode": "CHAT_ID_INVALID",
+            "resMsg": "chatId 长度必须为 1 到 64 个字符。"
           },
           "en-US": {
-            "resCode": "INVALID_EVENT_REQUEST",
-            "resMsg": "The message request does not satisfy the required constraints."
+            "resCode": "CHAT_ID_INVALID",
+            "resMsg": "chatId must contain between 1 and 64 characters."
+          }
+        }
+      },
+      {
+        "id": "400-chat-event-invalid",
+        "status": "400",
+        "tabLabel": "400 · CHAT_EVENT_INVALID",
+        "label": "Bad Request",
+        "summary": "JSON、content、fileId、toolCallId、result 或 denyMessage 不符合约束。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_EVENT_INVALID",
+            "resMsg": "事件内容不符合要求。"
+          },
+          "en-US": {
+            "resCode": "CHAT_EVENT_INVALID",
+            "resMsg": "The event does not satisfy the required constraints."
+          }
+        }
+      },
+      {
+        "id": "400-chat-event-type-invalid",
+        "status": "400",
+        "tabLabel": "400 · CHAT_EVENT_TYPE_INVALID",
+        "label": "Bad Request",
+        "summary": "event.type 不是三个受支持的用户事件之一。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_EVENT_TYPE_INVALID",
+            "resMsg": "事件 type 不受支持。"
+          },
+          "en-US": {
+            "resCode": "CHAT_EVENT_TYPE_INVALID",
+            "resMsg": "The event type is not supported."
           }
         }
       },
@@ -115,19 +191,20 @@
         "status": "401",
         "tabLabel": "401 · UNAUTHENTICATED",
         "label": "Unauthorized",
-        "summary": "用户未登录或访问令牌无效。",
+        "summary": "必要认证字段缺失或凭据无效；JWT 无效时不得回退 APPKEY。",
         "headers": {
           "Content-Type": "application/json",
+          "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
             "resCode": "UNAUTHENTICATED",
-            "resMsg": "请先登录。"
+            "resMsg": "调用方身份认证失败。"
           },
           "en-US": {
             "resCode": "UNAUTHENTICATED",
-            "resMsg": "Authentication is required."
+            "resMsg": "Caller authentication failed."
           }
         }
       },
@@ -136,9 +213,10 @@
         "status": "403",
         "tabLabel": "403 · CHAT_ACCESS_DENIED",
         "label": "Forbidden",
-        "summary": "用户无权向该 Chat 发送消息；权限拒绝必须发生在内部 Session 解析和 Runtime 调用之前。",
+        "summary": "调用方无权访问该 Chat；拒绝发生在内部 Session 解析之前。",
         "headers": {
           "Content-Type": "application/json",
+          "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
         },
         "bodies": {
@@ -148,7 +226,7 @@
           },
           "en-US": {
             "resCode": "CHAT_ACCESS_DENIED",
-            "resMsg": "Access to the Chat is denied."
+            "resMsg": "You do not have permission to access this Chat."
           }
         }
       },
@@ -157,19 +235,20 @@
         "status": "404",
         "tabLabel": "404 · CHAT_NOT_FOUND",
         "label": "Not Found",
-        "summary": "Chat 不存在、已删除，或没有可用的私有 Session 映射。",
+        "summary": "公共 Chat 不存在。",
         "headers": {
           "Content-Type": "application/json",
+          "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
             "resCode": "CHAT_NOT_FOUND",
-            "resMsg": "指定的 Chat 不存在。"
+            "resMsg": "Chat 不存在。"
           },
           "en-US": {
             "resCode": "CHAT_NOT_FOUND",
-            "resMsg": "The specified Chat does not exist."
+            "resMsg": "The Chat does not exist."
           }
         }
       },
@@ -178,173 +257,96 @@
         "status": "409",
         "tabLabel": "409 · CHAT_BUSY",
         "label": "Conflict",
-        "summary": "Chat 对应的 Runtime Session 已有 active execution；普通消息接口不把消息隐式改成 Steer 或 FollowUp。",
+        "summary": "Chat 正在执行或等待 Tool 确认，不能接受新的 user.message。",
         "headers": {
           "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "CHAT_BUSY",
-            "resMsg": "当前 Chat 正在执行，请稍后再试。"
-          },
-          "en-US": {
-            "resCode": "CHAT_BUSY",
-            "resMsg": "The Chat is currently running an execution."
-          }
-        }
-      },
-      {
-        "id": "429-chat-rate-limited",
-        "status": "429",
-        "tabLabel": "429 · CHAT_RATE_LIMITED",
-        "label": "Too Many Requests",
-        "summary": "用户、租户或 Chat 的公共速率或配额限制被触发。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Content-Language": "zh-CN",
-          "Retry-After": "3"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "CHAT_RATE_LIMITED",
-            "resMsg": "请求过于频繁，请稍后再试。"
-          },
-          "en-US": {
-            "resCode": "CHAT_RATE_LIMITED",
-            "resMsg": "Too many requests. Try again later."
-          }
-        }
-      },
-      {
-        "id": "502-runtime-event-failed",
-        "status": "502",
-        "tabLabel": "502 · RUNTIME_EVENT_FAILED",
-        "label": "Bad Gateway",
-        "summary": "CampusClaw 在流建立前拒绝请求，或内部响应不能被安全映射；不返回内部错误细节。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "RUNTIME_EVENT_FAILED",
-            "resMsg": "对话执行服务调用失败。"
-          },
-          "en-US": {
-            "resCode": "RUNTIME_EVENT_FAILED",
-            "resMsg": "The conversation execution service call failed."
-          }
-        }
-      },
-      {
-        "id": "503-chat-execution-unavailable",
-        "status": "503",
-        "tabLabel": "503 · CHAT_EXECUTION_UNAVAILABLE",
-        "label": "Service Unavailable",
-        "summary": "Runtime 容量不足、依赖不可用或 mate-service 无法建立安全的执行上下文。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Content-Language": "zh-CN",
-          "Retry-After": "3"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "CHAT_EXECUTION_UNAVAILABLE",
-            "resMsg": "对话执行服务暂时不可用。"
-          },
-          "en-US": {
-            "resCode": "CHAT_EXECUTION_UNAVAILABLE",
-            "resMsg": "The conversation execution service is temporarily unavailable."
-          }
-        }
-      },
-      {
-        "id": "200-stream-error",
-        "status": "200",
-        "tabLabel": "200 · 流内异常",
-        "label": "SSE already started",
-        "summary": "请求已被接受后执行失败。只发送公共 stream.error 并关闭，不发送 stream.end；accepted=true 明确禁止客户端把它当成未提交而自动重放。",
-        "headers": {
-          "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
         },
         "bodies": {
-          "default": "event: stream.error\ndata: {\"resCode\":\"CHAT_EXECUTION_FAILED\",\"resMsg\":\"对话执行失败，请刷新历史确认结果。\",\"accepted\":true}\n"
+          "zh-CN": {
+            "resCode": "CHAT_BUSY",
+            "resMsg": "当前 Chat 不能接受新的用户消息。"
+          },
+          "en-US": {
+            "resCode": "CHAT_BUSY",
+            "resMsg": "The Chat cannot accept a new user message."
+          }
+        }
+      },
+      {
+        "id": "409-chat-not-running",
+        "status": "409",
+        "tabLabel": "409 · CHAT_NOT_RUNNING",
+        "label": "Conflict",
+        "summary": "idle Chat 没有可被 user.interrupt 终止的执行。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_NOT_RUNNING",
+            "resMsg": "当前 Chat 没有可中断的执行。"
+          },
+          "en-US": {
+            "resCode": "CHAT_NOT_RUNNING",
+            "resMsg": "The Chat has no running execution to interrupt."
+          }
+        }
+      },
+      {
+        "id": "409-tool-confirmation-not-pending",
+        "status": "409",
+        "tabLabel": "409 · TOOL_CONFIRMATION_NOT_PENDING",
+        "label": "Conflict",
+        "summary": "Tool Call 不存在、不属于该 Chat 或没有等待确认。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "TOOL_CONFIRMATION_NOT_PENDING",
+            "resMsg": "指定的 Tool Call 不在等待确认。"
+          },
+          "en-US": {
+            "resCode": "TOOL_CONFIRMATION_NOT_PENDING",
+            "resMsg": "The specified Tool Call is not awaiting confirmation."
+          }
+        }
+      },
+      {
+        "id": "503-chat-runtime-unavailable",
+        "status": "503",
+        "tabLabel": "503 · CHAT_RUNTIME_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "Claw 暂不可用且事件没有被接受。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "CHAT_RUNTIME_UNAVAILABLE",
+            "resMsg": "对话执行服务暂时不可用。"
+          },
+          "en-US": {
+            "resCode": "CHAT_RUNTIME_UNAVAILABLE",
+            "resMsg": "The conversation runtime is temporarily unavailable."
+          }
         }
       }
     ]
   },
   "review": {
-    "questions": [
-      {
-        "id": "eventNamespace",
-        "legend": "公共事件命名空间",
-        "options": [
-          {
-            "label": "沿用现有事件名（建议）",
-            "value": "沿用 Chat Command API 和前端投影已经使用的 user.message、assistant.*、tool.*、session.status.idle 与 stream.*；只收窄公共字段",
-            "selected": true
-          },
-          {
-            "label": "全部改为 Chat 命名",
-            "value": "把 session.status.idle 等 Session 范畴事件重命名为 chat.status.idle；公共资源更纯粹，但需要同步改造现有前端和 Command 事件投影",
-            "selected": false
-          }
-        ]
-      },
-      {
-        "id": "durableIdentity",
-        "legend": "公共持久化事件身份",
-        "options": [
-          {
-            "label": "仅 eventSeq（建议）",
-            "value": "沿用 Chat Command API：内部 entrySeq 映射为 eventSeq，允许私有记录造成序号缺口；后续 GET Events 也用 eventSeq 去重",
-            "selected": true
-          },
-          {
-            "label": "eventId + eventSeq",
-            "value": "额外生成稳定不透明 eventId；恢复语义更显式，但 mate-service 需要持久化 ID 映射",
-            "selected": false
-          }
-        ]
-      },
-      {
-        "id": "thinkingProjection",
-        "legend": "Thinking 的公共投影",
-        "options": [
-          {
-            "label": "安全标题与摘要（建议）",
-            "value": "发送 displayTitle/displaySummary；原始 ThinkingContent 和逐 token thinking delta 永不进入浏览器，无安全摘要时只发通用状态",
-            "selected": true
-          },
-          {
-            "label": "完全隐藏 Thinking",
-            "value": "公共流不发送任何 assistant.thinking.* 事件，界面只展示 Assistant 和 Tool 活动",
-            "selected": false
-          }
-        ]
-      },
-      {
-        "id": "toolProjection",
-        "legend": "Tool 的公共投影",
-        "options": [
-          {
-            "label": "安全输入与结果摘要（建议）",
-            "value": "服务端脱敏、截断并把内部资源映射为公共资源；用 activityId 关联生命周期，不公开 toolCallId、绝对路径、凭据或原始结果",
-            "selected": true
-          },
-          {
-            "label": "只展示名称和状态",
-            "value": "仅发送 displayName 与 running/succeeded/failed，不公开输入和结果摘要",
-            "selected": false
-          }
-        ]
-      }
-    ],
-    "followUpTitle": "提交 events 接口评审选择",
-    "promptPrefix": "继续调整 POST /mate-service/v1/chats/{chatId}/events",
-    "promptSuffix": "请按这些选择更新主维护 HTML、Markdown、PlantUML/SVG 和版本历史；在我明确确认前保持评审中，不要生成 OpenAPI。"
+    "questions": [],
+    "followUpTitle": "三个接口已确认",
+    "promptPrefix": "更新 POST /mate-service/v1/chats/{chatId}/events",
+    "promptSuffix": "保持与三接口 1.0.0 契约、Markdown 和 PlantUML/SVG 同步；不要生成 OpenAPI。"
   }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the in-review mate-service General Chat events operation."""
+"""Render the confirmed mate-service General Chat events operations."""
 
 from __future__ import annotations
 
@@ -9,7 +9,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
-MODEL = ROOT / "接口契约" / "操作" / "01-submit-chat-event.json"
+MODELS = (
+    ROOT / "接口契约" / "操作" / "01-submit-chat-event.json",
+    ROOT / "接口契约" / "操作" / "02-stream-chat-events.json",
+    ROOT / "接口契约" / "操作" / "03-list-chat-events.json",
+)
 OUTPUT = ROOT / "chat-events-v1-review.html"
 
 
@@ -29,8 +33,18 @@ def renderer_path() -> Path:
 
 
 def main() -> None:
+    command = [
+        "python3",
+        str(renderer_path()),
+        str(MODELS[0]),
+        str(OUTPUT),
+        "--standalone",
+        "--force",
+    ]
+    for model in MODELS[1:]:
+        command.extend(["--include", str(model)])
     subprocess.run(
-        ["python3", str(renderer_path()), str(MODEL), str(OUTPUT), "--standalone", "--force"],
+        command,
         cwd=ROOT,
         check=True,
     )
