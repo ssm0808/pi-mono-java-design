@@ -4,15 +4,17 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.2.0 |
+| 文档版本 | 1.3.0 |
 | 状态 | 三个 operation 已确认；待实现 |
 | 设计性质 | target-only；不得描述为当前 mate-service 或 CampusClaw 已实现行为 |
 | 设计仓变更前基线 | `743eca488ad559387706b5df54e2248a4124e5ef` |
 | OpenAPI 增补前基线 | `cb94cdb29eeda701116e24cb9fd5e23090f5a91a` |
 | Swagger 请求头修正前基线 | `d3bdc83917b0b6951171be781b2377fd89d5040c` |
+| OpenAI Tool Call ID 修正前基线 | `ecf4cc06619f7a02c467d7212a0a12d86ab56a9f` |
 | CampusClaw 源码核对基线 | `7e54b47f2539982f8f1855a0b6bb38b6ab8742ae` |
 | pi 固定参考基线 | `badlogic/pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | Claude Managed Agents 公开文档核对日期 | 2026-09-02；Beta 公共契约，无可归因服务端源码 |
+| OpenAI API 公开文档核对日期 | 2026-09-02 |
 | 更新日期 | 2026-09-02 |
 
 ## 1. 已确认接口
@@ -104,8 +106,17 @@ Mate 这三个对外 operation 不声明 `Accept-Language`；Mate 公共国际�
 Agent 输出的关联 ID。
 
 执行边界由事件时间顺序和 `chat.status_idle` 识别，不增加 `turnId`、`runId` 或
-`messageEventId`。Tool 的唯一例外是 `agent.tool_result.toolCallId`，它引用对应
-`agent.tool_call.eventId`。
+`messageEventId`。Tool 同时有两种不同身份：
+
+- `eventId` 是 Mate 为每条持久化事件生成的公共事件 ID；
+- `toolCallId` 是 OpenAI Tool Call 关联 ID。Responses API 直接使用 function call
+  的 `call_id`，Chat Completions API 直接使用 `tool_calls[].id`。
+
+`agent.tool_call`、`user.tool_confirmation` 和 `agent.tool_result` 使用完全相同的
+`toolCallId` 关联一次 Tool Call；三条事件各自仍有独立 `eventId`。
+`toolCallId` 区分大小写，在公共契约中是不透明非空字符串；不声明正则、
+最大长度或稳定前缀，客户端不得解析、修改或自行构造。Responses 返回的
+function call item `id`（例如 `fc_...`）不是本字段。
 
 ## 4. 接口一：提交用户事件
 
@@ -192,7 +203,7 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 {
   "event": {
     "type": "user.tool_confirmation",
-    "toolCallId": "c8de683be2ab4e25a8d97f7cf507c150",
+    "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
     "result": "deny",
     "denyMessage": "不要执行会修改生产配置的操作"
   }
@@ -202,7 +213,7 @@ interrupt 返回 `CHAT_NOT_RUNNING`。
 | 字段 | 类型 | 必需 | 允许值与语义 |
 |---|---|---:|---|
 | `type` | string | 是 | 固定 `user.tool_confirmation` |
-| `toolCallId` | string | 是 | `^[0-9a-f]{32}$`；必须引用等待确认的 `agent.tool_call.eventId` |
+| `toolCallId` | string | 是 | 原样回传等待确认的 `agent.tool_call.toolCallId`；直接来自 OpenAI `call_id` / `tool_calls[].id`，区分大小写且不透明，非空，无格式正则 |
 | `result` | string | 是 | `allow` 或 `deny` |
 | `denyMessage` | string | 否 | 仅 `deny` 可提供；可省略，提供时非空白且最多 2048 个 Unicode code point；`allow` 时必须省略 |
 
@@ -332,6 +343,7 @@ completed：
 {
   "eventId": "c8de683be2ab4e25a8d97f7cf507c150",
   "type": "agent.tool_call",
+  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
   "createdAt": "2026-09-02T08:30:16.420Z",
   "toolName": "query_campus_alarm",
   "arguments": {"siteName": "东区园区"},
@@ -341,16 +353,17 @@ completed：
 
 | 字段 | 类型 | 必需 | 允许值与语义 |
 |---|---|---:|---|
-| `eventId` | string | 是 | 同时充当公共 `toolCallId`；结果和确认都引用它 |
+| `eventId` | string | 是 | Tool Call 事件自己的 32 位小写十六进制事件 ID；不是 `toolCallId` |
 | `type` | string | 是 | 固定 `agent.tool_call` |
+| `toolCallId` | string | 是 | OpenAI Tool Call 关联 ID；Responses 取 `call_id`，Chat Completions 取 `tool_calls[].id`；区分大小写且不透明，非空，无格式正则 |
 | `createdAt` | string | 是 | Tool Call 被持久化的时间 |
 | `toolName` | string | 是 | 非空白，最多 128 个字符的稳定公开 Tool 名称 |
 | `arguments` | object | 是 | 允许空对象；仅包含已做公开安全投影的 JSON 参数 |
 | `requiresConfirmation` | boolean | 是 | `true` 表示执行前需要 `user.tool_confirmation` |
 
 当 `requiresConfirmation=true`，随后发送
-`chat.status_idle(reason="confirming")`。事件本身不重复 `toolCallId` 字段，因为
-`eventId` 已是唯一 Tool Call ID。
+`chat.status_idle(reason="confirming")`。客户端提交确认时必须原样回传该
+`toolCallId`，不得回传 `eventId` 或 OpenAI Responses function call item 的 `fc_...` ID。
 
 ### 5.5 `agent.tool_result`
 
@@ -359,7 +372,7 @@ completed：
   "eventId": "89f8316e07ef4c9aa3fd056a91a182b0",
   "type": "agent.tool_result",
   "createdAt": "2026-09-02T08:30:19.102Z",
-  "toolCallId": "c8de683be2ab4e25a8d97f7cf507c150",
+  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
   "content": "找到 3 条相关告警。",
   "isError": false
 }
@@ -370,7 +383,7 @@ completed：
 | `eventId` | string | 是 | Tool Result 自己的事件 ID，不等于 `toolCallId` |
 | `type` | string | 是 | 固定 `agent.tool_result` |
 | `createdAt` | string | 是 | 结果被持久化的时间 |
-| `toolCallId` | string | 是 | 引用对应 `agent.tool_call.eventId` |
+| `toolCallId` | string | 是 | 与对应 `agent.tool_call.toolCallId` 完全相同的 OpenAI Tool Call ID |
 | `content` | string | 是 | 公开结果文本；允许空字符串 |
 | `isError` | boolean | 是 | 是否为 Tool 失败结果 |
 | `errorCode` | string | 否 | 仅 `isError=true` 时可提供；提供时是非空白且最多 128 字符的稳定公开错误码；`isError=false` 时必须省略 |
@@ -483,15 +496,16 @@ inclusive `createdAtGte`，并按 `eventId` 去重。
   "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
   "type": "user.tool_confirmation",
   "createdAt": "2026-09-02T08:30:18.800Z",
-  "toolCallId": "c8de683be2ab4e25a8d97f7cf507c150",
+  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
   "result": "allow"
 }
 ```
 
 `agent.message` 和 `agent.thinking` 只保存 completed 形态，并保留
 `phase="completed"`；`agent.tool_call`、`agent.tool_result` 和
-`chat.status_idle` 与实时流的完整形态完全相同。UI 可以按 `toolCallId` 把确认和结果合并
-展示，但历史仍保留三个独立审计事件。
+`chat.status_idle` 与实时流的完整形态完全相同。`agent.tool_call` 同时保留它的
+`eventId` 和 OpenAI `toolCallId`。UI 可以按 `toolCallId` 把 Tool Call、确认和结果关联
+展示，但历史仍保留三个独立 `eventId` 的审计事件。
 
 ### 6.4 成功响应
 
@@ -531,7 +545,7 @@ inclusive `createdAtGte`，并按 `eventId` 去重。
 
 ![实时流与固定历史对账](设计图/public_chat_event_recovery.svg)
 
-[PlantUML 源码：`public_chat_event_recovery`](设计图/diagram.puml#L35)
+[PlantUML 源码：`public_chat_event_recovery`](设计图/diagram.puml#L44)
 
 恢复算法：
 
@@ -585,6 +599,9 @@ Claude 服务端实现事实。
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java` · append/query methods | 当前历史按内部 entry sequence 和当前分支读取，不是本设计的 createdAt 固定快照公共分页 |
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java` · abort methods；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java` · child cancellation | 当前取消可以等待主执行收敛，并向 Tool/Child Session 传播；idle abort 当前是 no-op，公共 idle interrupt 冲突是目标差异 |
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java` · permission handling | ASK/确认公共闭环尚未实现；`user.tool_confirmation` 是 target-only |
+| `pi-mono-java@7e54b47f` | `modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java:415-426,465-473,515-521,534-544` · `handleOutputItemAdded` / `handleOutputItemDone` / `convertAssistantInput` / `convertToolResultInput` | OpenAI Responses function call 的 `call_id` 被写入 `ToolCall.id`，后续 Tool Call 和 Tool Result 输入都把同一值写回 `callId`；该链路未使用 function call item `id` |
+| 同上 | `modules/ai/src/main/java/com/campusclaw/ai/types/ToolCall.java:24-28` · `ToolCall.id`；`modules/ai/src/main/java/com/campusclaw/ai/types/ToolResultMessage.java:26-32` · `toolCallId` | Claw 归一化模型使用独立 Tool Call ID 关联调用和结果 |
+| 同上 | `modules/ai/src/test/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProviderIntegrationTest.java:217-262` · `streamsToolCallResponse` | 测试明确区分 item `id="fc_1"` 和 `call_id="call_xyz"`，并断言归一化 `ToolCall.id()` 等于 `call_xyz` |
 | `pi@5cd93f68` | `packages/ai/src/types.ts` · `AssistantMessageEvent`；`packages/agent/src/types.ts` · `AgentEvent` | Provider 增量与 Agent message/tool 生命周期分层，Tool Call 使用独立 ID |
 | 同上 | `packages/agent/src/agent-loop.ts` · `streamAssistantResponse`；`packages/coding-agent/src/core/agent-session.ts` · `_handleAgentEvent` / `abort` | 增量用于 live update，完整 message end 才持久化；abort 等待执行变为 idle |
 | 同上 | `packages/protocol/src/schemas.ts` · `TranscriptProgressSchema` / `SessionSnapshotSchema`；`packages/server/src/sessions.ts` · `handleRuntimeEvent` / `broadcastSnapshot` | 临时 transcript progress 与权威 snapshot 是不同投影 |
@@ -597,6 +614,11 @@ Claude 服务端实现事实。
 - [Claude Managed Agents · List Session Events](https://platform.claude.com/docs/en/api/beta/sessions/events/list)：
   公开查询包含 created-at 条件、limit、order、page 和 types。本设计只采纳问题形态，
   将其收敛为升序固定快照、`createdAtGte/limit/types/page`。
+- [OpenAI Responses API](https://developers.openai.com/api/reference/typescript/resources/beta/subresources/responses/methods/create)：
+  function call output 同时有 item `id` 和用于对应 function call output 的 `call_id`；本契约
+  使用后者。
+- [OpenAI Chat Completions API](https://developers.openai.com/api/reference/cli/resources/chat/subresources/completions)：
+  Assistant 的 `tool_calls[].id` 与 Tool message 的 `tool_call_id` 关联同一次调用。
 
 Claude Managed Agents 在核对日仍是 Beta 公共 API。公开文档不能证明其内部表、sequence、
 游标编码或服务端调度实现，本设计没有对此作推断。
@@ -609,7 +631,8 @@ Claude Managed Agents 在核对日仍是 Beta 公共 API。公开文档不能证
 | 产品约束 | `interrupt + message` 不批量提交；终止完成后再提交消息，保证单 active execution |
 | 安全加固 | `agent.thinking` 只允许公开摘要；Tool 参数、结果和错误必须经过安全投影；内部 ID、路径、凭据和 private chain-of-thought 不出边界 |
 | 架构变化 | POST、live SSE、durable history 分离；live 流不重放，历史固定快照；用 `eventId` 对账，不公开内部 sequence |
-| 架构变化 | `agent.tool_call.eventId` 直接作为 toolCallId，减少重复字段；确认事件持久化以满足恢复和审计 |
+| 架构变化 | `eventId` 与 `toolCallId` 分离；`agent.tool_call` 显式公开 OpenAI `call_id` / `tool_calls[].id`，确认和结果原样引用该值。这是有意的 OpenAI 身份耦合，非 OpenAI Provider 不得伪造 `call_` ID；若要纳入本公共契约，必须另行版本决策 |
+| 架构变化 | 确认事件持久化，与 Tool Call 和 Tool Result 共享 `toolCallId`，同时各自保留独立 `eventId`，以满足恢复和审计 |
 | target-only | 新增 `user.interrupt`、`user.tool_confirmation`、独立 stream GET、固定快照历史和新的公共事件投影；这些均未在当前 Claw HTTP 层实现 |
 
 本设计没有读取或引用本地 mate-service 实现作为设计基线；Mate 三个 operation 全部按
@@ -631,8 +654,12 @@ VO、Service 与错误组件名称。
   preview、连接断开不取消 execution；
 - 覆盖历史八类事件、无 delta、createdAt inclusive、types OR/去重、固定快照不混入新事件、
   同时间稳定排序、无下一页时省略 `nextPage`；
-- 做 discovery-to-invocation 契约测试，证明公开 `toolName`、`eventId/toolCallId` 与 Claw
-  执行所需内部 Tool ID 不混用；
+- 做 discovery-to-invocation 契约测试，证明公开 `toolName`、事件 `eventId`、
+  OpenAI Responses `call_id` / Chat Completions `tool_calls[].id` 和 Claw 执行所需内部 Tool ID
+  不混用；Responses item `id=fc_...` 不得投影为 `toolCallId`；
+- 覆盖 `agent.tool_call -> user.tool_confirmation -> agent.tool_result` 的完整往返，断言三者
+  原样共享大小写敏感的 OpenAI `toolCallId`、各自使用独立 `eventId`，且实现不对
+  `toolCallId` 施加前缀、长度或正则校验；
 - 所有错误双语断言同时校验 HTTP、`resCode`、`Content-Language` 和无 `result`。
 
 ## 11. 生成与校验
@@ -653,6 +680,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-09-02 | 将 `toolCallId` 改为直接使用 OpenAI Tool Call ID：Responses 取 `call_id`，Chat Completions 取 `tool_calls[].id`；`agent.tool_call` 增加必需 `toolCallId`，确认和结果原样引用；`eventId` 仍是独立的 32 位公共事件 ID；移除 `toolCallId` 正则和长度假设。 |
 | 1.2.0 | 2026-09-02 | 按标准 Swagger 表达修正请求头：`X-HW-ID` 和 `access-token` 改为三个 operation 的必需 header parameter；JWT 和 APPKEY 保留为二选一 security scheme；Mate 删除 `Accept-Language` 请求声明，Claw 接口边界不变。 |
 | 1.1.0 | 2026-09-02 | 增加三接口 OpenAPI 3.1 机器契约；提交事件用 `oneOf + discriminator` 和四个命名示例展示三种用户事件；将 page 示例改为不可推断内部字段的 opaque cursor；接口行为保持 1.0.0。 |
 | 1.0.0 | 2026-09-02 | 确认 POST 提交、Chat 级 live SSE 和固定快照历史三个 operation；固定三种用户事件、五种实时事件、八种历史事件、四个 idle reason、`eventId` 身份、字段形状、双语错误和断线对账；整体替换 0.1.0 请求范围 SSE 评审稿。 |

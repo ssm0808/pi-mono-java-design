@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: mate-service General Chat Events API
-  version: 1.2.0
+  version: 1.3.0
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -69,14 +69,14 @@ paths:
                 value:
                   event:
                     type: user.tool_confirmation
-                    toolCallId: c8de683be2ab4e25a8d97f7cf507c150
+                    toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
                     result: allow
               toolConfirmationDeny:
                 summary: user.tool_confirmation · 拒绝并说明原因
                 value:
                   event:
                     type: user.tool_confirmation
-                    toolCallId: c8de683be2ab4e25a8d97f7cf507c150
+                    toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
                     result: deny
                     denyMessage: 不要执行会修改生产配置的操作
       responses:
@@ -410,11 +410,11 @@ paths:
 
                 data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.thinking","phase":"completed","createdAt":"2026-09-02T08:30:17.305Z","content":"已核对告警时间、设备范围和关联影响。"}
 
-                data: {"eventId":"c8de683be2ab4e25a8d97f7cf507c150","type":"agent.tool_call","createdAt":"2026-09-02T08:30:17.420Z","toolName":"query_campus_alarm","arguments":{"siteName":"东区园区"},"requiresConfirmation":false}
+                data: {"eventId":"c8de683be2ab4e25a8d97f7cf507c150","type":"agent.tool_call","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","createdAt":"2026-09-02T08:30:17.420Z","toolName":"query_campus_alarm","arguments":{"siteName":"东区园区"},"requiresConfirmation":false}
 
                 : ping
 
-                data: {"eventId":"89f8316e07ef4c9aa3fd056a91a182b0","type":"agent.tool_result","createdAt":"2026-09-02T08:30:18.102Z","toolCallId":"c8de683be2ab4e25a8d97f7cf507c150","content":"找到 3 条相关告警。","isError":false}
+                data: {"eventId":"89f8316e07ef4c9aa3fd056a91a182b0","type":"agent.tool_result","createdAt":"2026-09-02T08:30:18.102Z","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","content":"找到 3 条相关告警。","isError":false}
 
                 data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"delta","content":"建议先隔离受影响端口，"}
 
@@ -677,6 +677,14 @@ components:
       pattern: '^[0-9a-f]{32}$'
       description: 服务端生成的 32 位小写十六进制公共事件 ID
       example: b7ef45d40a854c33af7a36df871a21e8
+    ToolCallId:
+      type: string
+      minLength: 1
+      description: >
+        OpenAI Tool Call 关联标识。Responses API 直接使用 function call 的 call_id；
+        Chat Completions API 直接使用 tool_calls[].id。该值区分大小写且不透明，
+        Mate 和客户端只能原样传递、存储和比较，不得解析、修改、构造或依赖前缀。
+      example: call_unLAR8MvFNptuiZK6K6HCy5k
     FileId:
       type: string
       pattern: '^[0-9a-f]{32}$'
@@ -798,7 +806,7 @@ components:
           enum:
             - user.tool_confirmation
         toolCallId:
-          $ref: '#/components/schemas/EventId'
+          $ref: '#/components/schemas/ToolCallId'
         result:
           type: string
           enum:
@@ -936,7 +944,7 @@ components:
         createdAt:
           $ref: '#/components/schemas/CreatedAt'
         toolCallId:
-          $ref: '#/components/schemas/EventId'
+          $ref: '#/components/schemas/ToolCallId'
         result:
           type: string
           enum:
@@ -1014,10 +1022,14 @@ components:
           description: 完整权威公开摘要，不是 private chain-of-thought
     AgentToolCallEvent:
       type: object
+      description: >
+        一条 Tool Call 事件。eventId 标识该事件；toolCallId 直接使用 OpenAI Tool Call ID，
+        并由对应的确认与结果原样引用。
       additionalProperties: false
       required:
         - eventId
         - type
+        - toolCallId
         - createdAt
         - toolName
         - arguments
@@ -1029,6 +1041,8 @@ components:
           type: string
           enum:
             - agent.tool_call
+        toolCallId:
+          $ref: '#/components/schemas/ToolCallId'
         createdAt:
           $ref: '#/components/schemas/CreatedAt'
         toolName:
@@ -1062,7 +1076,7 @@ components:
         createdAt:
           $ref: '#/components/schemas/CreatedAt'
         toolCallId:
-          $ref: '#/components/schemas/EventId'
+          $ref: '#/components/schemas/ToolCallId'
         content:
           type: string
           description: 公开结果文本，允许空字符串
@@ -1215,6 +1229,8 @@ components:
 x-source-baselines:
   designRepositoryBeforeOpenApi: cb94cdb29eeda701116e24cb9fd5e23090f5a91a
   designRepositoryBeforeHeaderCorrection: d3bdc83917b0b6951171be781b2377fd89d5040c
+  designRepositoryBeforeOpenAiToolCallId: ecf4cc06619f7a02c467d7212a0a12d86ab56a9f
   campusClaw: 7e54b47f2539982f8f1855a0b6bb38b6ab8742ae
   pi: 5cd93f688aaab89dbb6dfa4aca535f21796ae185
   claudeManagedAgentsDocsCheckedAt: '2026-09-02'
+  openAiApiDocsCheckedAt: '2026-09-02'

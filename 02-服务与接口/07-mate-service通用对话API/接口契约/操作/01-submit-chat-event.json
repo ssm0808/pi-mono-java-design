@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
@@ -74,7 +74,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "顶层固定为 event。示例是 user.message：content 长度 1..5，仅 text/file；最多一个 text 且必须第一项，text 非空白且最多 2048 Unicode code point；最多四个不重复 file，fileId 匹配 ^[0-9a-f]{32}$。user.interrupt 只有 type。user.tool_confirmation 包含 toolCallId、result=allow|deny；denyMessage 仅 deny 可省略或提供非空白的最多 2048 code point 字符串。已知对象忽略未知字段；未知 type、null 条件字段和批量事件非法。",
+      "description": "顶层固定为 event。示例是 user.message：content 长度 1..5，仅 text/file；最多一个 text 且必须第一项，text 非空白且最多 2048 Unicode code point；最多四个不重复 file，fileId 匹配 ^[0-9a-f]{32}$。user.interrupt 只有 type。user.tool_confirmation 包含 toolCallId、result=allow|deny；toolCallId 必须原样回传 agent.tool_call.toolCallId，其值直接来自 OpenAI Responses call_id 或 Chat Completions tool_calls[].id，按大小写区分的不透明非空字符串处理，不施加正则。denyMessage 仅 deny 可省略或提供非空白的最多 2048 code point 字符串。已知对象忽略未知字段；未知 type、null 条件字段和批量事件非法。",
       "example": {
         "event": {
           "type": "user.message",
@@ -340,6 +340,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 POST /mate-service/v1/chats/{chatId}/events",
-    "promptSuffix": "保持与三接口 1.2.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.3.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }

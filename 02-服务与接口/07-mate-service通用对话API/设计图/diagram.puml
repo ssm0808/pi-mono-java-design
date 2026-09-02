@@ -4,9 +4,12 @@ skinparam shadowing false
 
 ' Source evidence: pi-mono-java@7e54b47f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java submitEvent/listEvents
 ' Source evidence: pi-mono-java@7e54b47f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java projection methods
+' Source evidence: pi-mono-java@7e54b47f modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java handleOutputItemAdded/handleOutputItemDone/convertToolResultInput
 ' Observed behavior: the current Claw HTTP layer has request-scoped POST SSE and history GET, but no independent long-lived stream GET.
+' Observed identity: OpenAI Responses call_id maps to Claw ToolCall.id and is written back for Tool results.
 ' Target-only design: Mate separates event submission, live Chat observation, and authoritative fixed-snapshot history.
 ' Design reason: a transport disconnect must not determine whether a write succeeded or whether an execution continues.
+' Architecture change: Mate publishes the OpenAI Tool Call ID unchanged while keeping eventId independent.
 
 actor "Authorized client" as Client
 component "mate-service\nChat Events API" as Mate
@@ -25,6 +28,12 @@ Mate --> Client : eventId and createdAt
 Client -> Mate : GET /chats/{chatId}/events/stream
 Claw --> Mate : normalized live domain events
 Mate --> Client : data-only SSE from connection time
+
+note right of Mate
+OpenAI Responses call_id becomes Claw ToolCall.id.
+Mate publishes it unchanged as toolCallId.
+Mate eventId remains a separate event identity.
+end note
 
 Client -> Mate : GET /chats/{chatId}/events
 Mate -> History : read fixed snapshot

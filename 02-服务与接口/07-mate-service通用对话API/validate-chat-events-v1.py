@@ -21,6 +21,7 @@ DESIGN = ROOT / "README.md"
 PUML = ROOT / "设计图" / "diagram.puml"
 OPENAPI = ROOT / "chat-events-v1.openapi.yaml"
 EVENT_ID = re.compile(r"^[0-9a-f]{32}$")
+TOOL_CALL_ID_EXAMPLE = "call_unLAR8MvFNptuiZK6K6HCy5k"
 CREATED_AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 LOWER_CAMEL = re.compile(r"^[a-z][A-Za-z0-9]*$")
 USER_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
@@ -111,7 +112,7 @@ def validate_auth(operation: dict[str, Any]) -> None:
 
 
 def validate_common_model(model: dict[str, Any]) -> None:
-    require(model["api"]["version"] == "1.2.0", "Unexpected contract version")
+    require(model["api"]["version"] == "1.3.0", "Unexpected contract version")
     require(model["api"]["basePath"] == "/mate-service/v1", "Unexpected base path")
     require("已确认" in model["api"]["visibility"], "Contract must be confirmed")
     require(model["review"]["questions"] == [], "Confirmed contract must not contain review choices")
@@ -130,6 +131,10 @@ def validate_common_model(model: dict[str, Any]) -> None:
 
 def validate_event_id(value: Any, context: str) -> None:
     require(isinstance(value, str) and EVENT_ID.fullmatch(value) is not None, f"Invalid eventId: {context}")
+
+
+def validate_tool_call_id(value: Any, context: str) -> None:
+    require(isinstance(value, str) and len(value) >= 1, f"Invalid toolCallId: {context}")
 
 
 def validate_created_at(value: Any, context: str) -> None:
@@ -208,15 +213,17 @@ def validate_stream_payload(payload: dict[str, Any]) -> None:
         validate_created_at(payload["createdAt"], payload["type"])
     if payload["type"] == "agent.tool_call":
         require(set(payload) == {
-            "eventId", "type", "createdAt", "toolName", "arguments", "requiresConfirmation"
+            "eventId", "type", "toolCallId", "createdAt", "toolName", "arguments", "requiresConfirmation"
         }, "Tool Call shape changed")
+        validate_tool_call_id(payload["toolCallId"], "tool call")
+        require(payload["toolCallId"] != payload["eventId"], "Tool Call identities must remain distinct")
         require(isinstance(payload["arguments"], dict), "Tool arguments must be an object")
         require(isinstance(payload["requiresConfirmation"], bool), "requiresConfirmation must be boolean")
     if payload["type"] == "agent.tool_result":
         allowed = {"eventId", "type", "createdAt", "toolCallId", "content", "isError", "errorCode"}
         require(set(payload) <= allowed and {"eventId", "type", "createdAt", "toolCallId", "content", "isError"} <= set(payload),
                 "Tool Result shape changed")
-        validate_event_id(payload["toolCallId"], "tool result toolCallId")
+        validate_tool_call_id(payload["toolCallId"], "tool result")
         require(isinstance(payload["content"], str) and isinstance(payload["isError"], bool),
                 "Invalid Tool Result values")
         require("errorCode" not in payload or payload["isError"], "errorCode is only allowed for errors")
@@ -240,6 +247,10 @@ def validate_stream(model: dict[str, Any]) -> None:
         pair = [item for item in payloads if item["type"] == event_type]
         require([item["phase"] for item in pair] == ["delta", "completed"], f"{event_type} phase order changed")
         require(pair[0]["eventId"] == pair[1]["eventId"], f"{event_type} must reuse eventId")
+    tool_call = next(item for item in payloads if item["type"] == "agent.tool_call")
+    tool_result = next(item for item in payloads if item["type"] == "agent.tool_result")
+    require(tool_call["toolCallId"] == TOOL_CALL_ID_EXAMPLE, "Tool Call example must use OpenAI call_id")
+    require(tool_result["toolCallId"] == tool_call["toolCallId"], "Tool Result must reference Tool Call ID")
     require("stream.error" not in stream and "stream.end" not in stream, "Terminal stream events are forbidden")
 
 
@@ -252,13 +263,14 @@ def validate_history_event(event: dict[str, Any]) -> None:
     if event["type"] in {"agent.message", "agent.thinking"}:
         require(event["phase"] == "completed", "History must contain completed text only")
     if event["type"] == "agent.tool_call":
-        require("toolCallId" not in event, "Tool Call must use eventId directly")
+        validate_tool_call_id(event["toolCallId"], "history Tool Call")
+        require(event["toolCallId"] != event["eventId"], "History Tool Call identities must remain distinct")
         require(isinstance(event["arguments"], dict), "Tool Call arguments must be an object")
     if event["type"] == "agent.tool_result":
-        validate_event_id(event["toolCallId"], "history Tool Result")
+        validate_tool_call_id(event["toolCallId"], "history Tool Result")
         require("errorCode" not in event or event["isError"], "History errorCode is only allowed for errors")
     if event["type"] == "user.tool_confirmation":
-        validate_event_id(event["toolCallId"], "history Tool Confirmation")
+        validate_tool_call_id(event["toolCallId"], "history Tool Confirmation")
         require(event["result"] in {"allow", "deny"}, "Invalid confirmation result")
         require(("denyMessage" in event) <= (event["result"] == "deny"), "denyMessage present for allow")
     if event["type"] == "chat.status_idle":
@@ -278,6 +290,13 @@ def validate_history(model: dict[str, Any]) -> None:
     require({event["type"] for event in events} == HISTORY_TYPES, "History sample must cover all eight types")
     for event in events:
         validate_history_event(event)
+    tool_events = {
+        event["type"]: event
+        for event in events
+        if event["type"] in {"user.tool_confirmation", "agent.tool_call", "agent.tool_result"}
+    }
+    tool_call_ids = {event["toolCallId"] for event in tool_events.values()}
+    require(tool_call_ids == {TOOL_CALL_ID_EXAMPLE}, "History Tool events must share the OpenAI Tool Call ID")
     require([event["createdAt"] for event in events] == sorted(event["createdAt"] for event in events),
             "History sample is not ordered by createdAt")
     require(isinstance(result["nextPage"], str) and result["nextPage"], "nextPage must be opaque and non-empty")
@@ -311,6 +330,7 @@ def validate_openapi(models: list[dict[str, Any]]) -> None:
         "description": "相对于公司网关的业务基础路径",
     }], "OpenAPI server base path changed")
     validate_openapi_security(spec)
+    validate_openapi_tool_call_id(spec)
     validate_openapi_submit(spec, models[0])
     validate_openapi_stream(spec)
     validate_openapi_history(spec, models[2])
@@ -320,6 +340,8 @@ def validate_openapi(models: list[dict[str, Any]]) -> None:
     require("eventSeq" not in source, "OpenAPI must not expose eventSeq")
     require("Accept-Language" not in source, "Mate OpenAPI must not expose Accept-Language")
     require("JWT 优先" in source and "不回退" in source, "Confirmed authentication precedence is missing")
+    require("call_id" in source and "tool_calls[].id" in source,
+            "OpenAI Tool Call ID source fields must be explicit")
 
 
 def validate_openapi_security(spec: dict[str, Any]) -> None:
@@ -338,6 +360,32 @@ def validate_openapi_security(spec: dict[str, Any]) -> None:
     validate_required_header(parameters["XHwIdHeader"], "X-HW-ID")
     validate_required_header(parameters["AccessTokenHeader"], "access-token")
     require("AcceptLanguage" not in parameters, "Accept-Language parameter must not exist")
+
+
+def validate_openapi_tool_call_id(spec: dict[str, Any]) -> None:
+    schemas = spec["components"]["schemas"]
+    schema = schemas["ToolCallId"]
+    require(schema["type"] == "string" and schema["minLength"] == 1,
+            "ToolCallId must be a non-empty string")
+    require("pattern" not in schema and "maxLength" not in schema,
+            "Opaque OpenAI ToolCallId must not have an invented format or length constraint")
+    require(schema["example"] == TOOL_CALL_ID_EXAMPLE, "ToolCallId example changed")
+    require("call_id" in schema["description"] and "tool_calls[].id" in schema["description"],
+            "ToolCallId provider mappings are missing")
+    for name in (
+        "UserToolConfirmationRequestEvent",
+        "UserToolConfirmationEvent",
+        "AgentToolCallEvent",
+        "AgentToolResultEvent",
+    ):
+        reference = schemas[name]["properties"]["toolCallId"]["$ref"]
+        require(reference == "#/components/schemas/ToolCallId", f"{name}.toolCallId schema changed")
+    required = set(schemas["AgentToolCallEvent"]["required"])
+    require("toolCallId" in required, "Agent Tool Call must publish toolCallId")
+    baselines = spec["x-source-baselines"]
+    require(baselines["designRepositoryBeforeOpenAiToolCallId"]
+            == "ecf4cc06619f7a02c467d7212a0a12d86ab56a9f", "Design baseline changed")
+    require(baselines["openAiApiDocsCheckedAt"] == "2026-09-02", "OpenAI docs check date changed")
 
 
 def validate_required_header(parameter: dict[str, Any], name: str) -> None:
@@ -374,6 +422,9 @@ def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None
             and "denyMessage" not in values["toolConfirmationAllow"], "Allow example changed")
     require(values["toolConfirmationDeny"]["result"] == "deny"
             and values["toolConfirmationDeny"]["denyMessage"], "Deny example changed")
+    require(values["toolConfirmationAllow"]["toolCallId"] == TOOL_CALL_ID_EXAMPLE
+            and values["toolConfirmationDeny"]["toolCallId"] == TOOL_CALL_ID_EXAMPLE,
+            "Confirmation examples must echo the OpenAI Tool Call ID")
     user_event = spec["components"]["schemas"]["UserEvent"]
     require(set(user_event["discriminator"]["mapping"]) == USER_TYPES, "UserEvent discriminator changed")
     require(len(user_event["oneOf"]) == 3, "UserEvent must contain three alternatives")

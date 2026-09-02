@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
@@ -111,7 +111,7 @@
         "status": "200",
         "tabLabel": "200 · 固定快照页",
         "label": "OK",
-        "summary": "events 必需且可为空；仅还有下一页时返回非空 nextPage，否则省略。agent.message/thinking 只返回 phase=completed；八类事件均使用各自稳定 eventId。",
+        "summary": "events 必需且可为空；仅还有下一页时返回非空 nextPage，否则省略。agent.message/thinking 只返回 phase=completed；八类事件均使用各自稳定 eventId。Tool Call、确认和结果原样共享同一 OpenAI toolCallId，但仍是三条独立审计事件。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store"
@@ -146,7 +146,7 @@
                   "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
                   "type": "user.tool_confirmation",
                   "createdAt": "2026-09-02T08:30:16.000Z",
-                  "toolCallId": "c8de683be2ab4e25a8d97f7cf507c150",
+                  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
                   "result": "deny",
                   "denyMessage": "不要执行会修改生产配置的操作"
                 },
@@ -167,6 +167,7 @@
                 {
                   "eventId": "c8de683be2ab4e25a8d97f7cf507c150",
                   "type": "agent.tool_call",
+                  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
                   "createdAt": "2026-09-02T08:30:17.420Z",
                   "toolName": "query_campus_alarm",
                   "arguments": {
@@ -178,7 +179,7 @@
                   "eventId": "89f8316e07ef4c9aa3fd056a91a182b0",
                   "type": "agent.tool_result",
                   "createdAt": "2026-09-02T08:30:18.102Z",
-                  "toolCallId": "c8de683be2ab4e25a8d97f7cf507c150",
+                  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
                   "content": "用户拒绝执行。",
                   "isError": true,
                   "errorCode": "TOOL_CALL_DENIED"
@@ -399,6 +400,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 GET /mate-service/v1/chats/{chatId}/events",
-    "promptSuffix": "保持与三接口 1.2.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.3.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }
