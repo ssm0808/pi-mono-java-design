@@ -1,0 +1,1222 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: mate-service General Chat Events API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >
+    Mate 对外的 Chat 事件提交、实时观察和权威历史接口。三个 operation 均为已确认的
+    target-only 契约；当前 CampusClaw HTTP 实现尚未完全对齐。
+servers:
+  - url: /mate-service/v1
+    description: 相对于公司网关的业务基础路径
+tags:
+  - name: Chat Events
+    description: 公共 Chat 的用户事件、实时事件和权威历史
+security:
+  - XHwId: []
+    AccessToken: []
+    BearerAuth: []
+  - XHwId: []
+    AccessToken: []
+    AppKeyAuth: []
+paths:
+  /chats/{chatId}/events:
+    post:
+      tags:
+        - Chat Events
+      operationId: submitChatEvent
+      summary: 提交一条用户事件
+      description: >
+        一次只提交 user.message、user.interrupt 或 user.tool_confirmation 中的一条，
+        并返回被接受的用户事件 eventId 和 createdAt。回执不是 execution 结果。
+        interrupt 与 message 不得批量提交；必须等待
+        chat.status_idle(reason=terminated) 后再提交 message。回执丢失时查询权威历史，
+        禁止盲目重放。Authorization 与 X-HW-APPKEY 同时存在时 JWT 优先；JWT 验证失败
+        不回退到 APPKEY。
+      x-operation-status: confirmed-target-only
+      parameters:
+        - $ref: '#/components/parameters/ChatId'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        description: >
+          顶层固定为 event。Schema 使用 type discriminator 区分三种事件；
+          Swagger UI 使用 examples 下拉框展示 message、interrupt、confirmation allow
+          和 confirmation deny。
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitChatEventRequest'
+            examples:
+              userMessage:
+                summary: user.message · 文本与文件
+                value:
+                  event:
+                    type: user.message
+                    content:
+                      - type: text
+                        text: 分析上传文件并给出处理建议
+                      - type: file
+                        fileId: 7f12d8a380964fdc8518f48be1cf6a42
+              userInterrupt:
+                summary: user.interrupt · 终止当前执行树
+                value:
+                  event:
+                    type: user.interrupt
+              toolConfirmationAllow:
+                summary: user.tool_confirmation · 允许
+                value:
+                  event:
+                    type: user.tool_confirmation
+                    toolCallId: c8de683be2ab4e25a8d97f7cf507c150
+                    result: allow
+              toolConfirmationDeny:
+                summary: user.tool_confirmation · 拒绝并说明原因
+                value:
+                  event:
+                    type: user.tool_confirmation
+                    toolCallId: c8de683be2ab4e25a8d97f7cf507c150
+                    result: deny
+                    denyMessage: 不要执行会修改生产配置的操作
+      responses:
+        '200':
+          description: 用户事件已被接受；不代表 execution 已完成
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitChatEventResponse'
+              example:
+                resCode: '0'
+                resMsg: success
+                result:
+                  eventId: b7ef45d40a854c33af7a36df871a21e8
+                  createdAt: '2026-09-02T08:30:15.123Z'
+        '400':
+          description: chatId、JSON、事件字段或 type 非法
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                chatIdInvalidZh:
+                  summary: CHAT_ID_INVALID · zh-CN
+                  value:
+                    resCode: CHAT_ID_INVALID
+                    resMsg: chatId 长度必须为 1 到 64 个字符。
+                chatIdInvalidEn:
+                  summary: CHAT_ID_INVALID · en-US
+                  value:
+                    resCode: CHAT_ID_INVALID
+                    resMsg: chatId must contain between 1 and 64 characters.
+                eventInvalidZh:
+                  summary: CHAT_EVENT_INVALID · zh-CN
+                  value:
+                    resCode: CHAT_EVENT_INVALID
+                    resMsg: 事件内容不符合要求。
+                eventInvalidEn:
+                  summary: CHAT_EVENT_INVALID · en-US
+                  value:
+                    resCode: CHAT_EVENT_INVALID
+                    resMsg: The event does not satisfy the required constraints.
+                eventTypeInvalidZh:
+                  summary: CHAT_EVENT_TYPE_INVALID · zh-CN
+                  value:
+                    resCode: CHAT_EVENT_TYPE_INVALID
+                    resMsg: 事件 type 不受支持。
+                eventTypeInvalidEn:
+                  summary: CHAT_EVENT_TYPE_INVALID · en-US
+                  value:
+                    resCode: CHAT_EVENT_TYPE_INVALID
+                    resMsg: The event type is not supported.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ChatAccessDenied'
+        '404':
+          $ref: '#/components/responses/ChatNotFound'
+        '409':
+          description: Chat 状态或 Tool 确认状态与提交事件冲突
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                chatBusyZh:
+                  summary: CHAT_BUSY · zh-CN
+                  value:
+                    resCode: CHAT_BUSY
+                    resMsg: 当前 Chat 不能接受新的用户消息。
+                chatBusyEn:
+                  summary: CHAT_BUSY · en-US
+                  value:
+                    resCode: CHAT_BUSY
+                    resMsg: The Chat cannot accept a new user message.
+                chatNotRunningZh:
+                  summary: CHAT_NOT_RUNNING · zh-CN
+                  value:
+                    resCode: CHAT_NOT_RUNNING
+                    resMsg: 当前 Chat 没有可中断的执行。
+                chatNotRunningEn:
+                  summary: CHAT_NOT_RUNNING · en-US
+                  value:
+                    resCode: CHAT_NOT_RUNNING
+                    resMsg: The Chat has no running execution to interrupt.
+                confirmationNotPendingZh:
+                  summary: TOOL_CONFIRMATION_NOT_PENDING · zh-CN
+                  value:
+                    resCode: TOOL_CONFIRMATION_NOT_PENDING
+                    resMsg: 指定的 Tool Call 不在等待确认。
+                confirmationNotPendingEn:
+                  summary: TOOL_CONFIRMATION_NOT_PENDING · en-US
+                  value:
+                    resCode: TOOL_CONFIRMATION_NOT_PENDING
+                    resMsg: The specified Tool Call is not awaiting confirmation.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ChatRuntimeUnavailable'
+    get:
+      tags:
+        - Chat Events
+      operationId: listChatEvents
+      summary: 查询 Chat 权威事件历史
+      description: >
+        按 createdAt 升序返回固定快照中的完整持久化事件。第一页捕获查询上界；
+        page 携带过滤条件、固定上界和私有续读位置，后续页不混入新事件。同一 createdAt
+        使用服务端私有稳定顺序。提供 page 时不得同时提供 createdAtGte、limit 或 types。
+        Authorization 与 X-HW-APPKEY 同时存在时 JWT 优先；JWT 验证失败不回退。
+      x-operation-status: confirmed-target-only
+      parameters:
+        - $ref: '#/components/parameters/ChatId'
+        - $ref: '#/components/parameters/CreatedAtGte'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Types'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: 固定快照中的一页权威事件
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListChatEventsResponse'
+              example:
+                resCode: '0'
+                resMsg: success
+                result:
+                  events:
+                    - eventId: b7ef45d40a854c33af7a36df871a21e8
+                      type: user.message
+                      createdAt: '2026-09-02T08:30:15.123Z'
+                      content:
+                        - type: text
+                          text: 分析上传文件并给出处理建议
+                    - eventId: d5c19f7c4b1642e6806aeb860752d99b
+                      type: agent.message
+                      phase: completed
+                      createdAt: '2026-09-02T08:30:19.451Z'
+                      content: 建议先隔离受影响端口，再核对上联链路。
+                    - eventId: d4e3e8b9653047a99ac10396a17fe84d
+                      type: chat.status_idle
+                      createdAt: '2026-09-02T08:30:20.000Z'
+                      reason: done
+                  nextPage: pg_4M7qK2vN9xR5dT8wC1hF6sL3
+        '400':
+          description: chatId、过滤条件或 page 非法
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                chatIdInvalidZh:
+                  summary: CHAT_ID_INVALID · zh-CN
+                  value:
+                    resCode: CHAT_ID_INVALID
+                    resMsg: chatId 长度必须为 1 到 64 个字符。
+                createdAtInvalidZh:
+                  summary: CHAT_EVENT_CREATED_AT_GTE_INVALID · zh-CN
+                  value:
+                    resCode: CHAT_EVENT_CREATED_AT_GTE_INVALID
+                    resMsg: createdAtGte 必须是包含毫秒的 RFC 3339 UTC 时间。
+                createdAtInvalidEn:
+                  summary: CHAT_EVENT_CREATED_AT_GTE_INVALID · en-US
+                  value:
+                    resCode: CHAT_EVENT_CREATED_AT_GTE_INVALID
+                    resMsg: createdAtGte must be an RFC 3339 UTC timestamp with millisecond precision.
+                limitInvalidZh:
+                  summary: CHAT_EVENT_LIMIT_INVALID · zh-CN
+                  value:
+                    resCode: CHAT_EVENT_LIMIT_INVALID
+                    resMsg: limit 必须是 1 到 200 之间的整数。
+                limitInvalidEn:
+                  summary: CHAT_EVENT_LIMIT_INVALID · en-US
+                  value:
+                    resCode: CHAT_EVENT_LIMIT_INVALID
+                    resMsg: limit must be an integer between 1 and 200.
+                typesInvalidZh:
+                  summary: CHAT_EVENT_TYPES_INVALID · zh-CN
+                  value:
+                    resCode: CHAT_EVENT_TYPES_INVALID
+                    resMsg: types 为空或包含不支持的事件类型。
+                typesInvalidEn:
+                  summary: CHAT_EVENT_TYPES_INVALID · en-US
+                  value:
+                    resCode: CHAT_EVENT_TYPES_INVALID
+                    resMsg: types is empty or contains an unsupported event type.
+                pageConflictZh:
+                  summary: CHAT_EVENT_PAGE_CONFLICT · zh-CN
+                  value:
+                    resCode: CHAT_EVENT_PAGE_CONFLICT
+                    resMsg: 使用 page 时不能同时传入其他查询参数。
+                pageConflictEn:
+                  summary: CHAT_EVENT_PAGE_CONFLICT · en-US
+                  value:
+                    resCode: CHAT_EVENT_PAGE_CONFLICT
+                    resMsg: No other query parameters may be provided together with page.
+                pageInvalidZh:
+                  summary: CHAT_EVENT_PAGE_INVALID · zh-CN
+                  value:
+                    resCode: CHAT_EVENT_PAGE_INVALID
+                    resMsg: page 无效，请重新发起第一页查询。
+                pageInvalidEn:
+                  summary: CHAT_EVENT_PAGE_INVALID · en-US
+                  value:
+                    resCode: CHAT_EVENT_PAGE_INVALID
+                    resMsg: page is invalid. Start a new query from the first page.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ChatAccessDenied'
+        '404':
+          $ref: '#/components/responses/ChatNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /chats/{chatId}/events/stream:
+    get:
+      tags:
+        - Chat Events
+      operationId: streamChatEvents
+      summary: 订阅 Chat 实时事件
+      description: >
+        建立跨越多次 execution 和 idle 状态的 Chat 级 SSE，从连接时刻开始发送 live
+        事件。业务 frame 只有 data: 完整 JSON，不使用 SSE event: 或 id:；服务端可以发送
+        : ping comment。接口不接受 Last-Event-ID、不重放，也不在 chat.status_idle 后关闭。
+        SSE 建立后的异常直接关闭连接，客户端重开流并查询权威历史。Authorization 与
+        X-HW-APPKEY 同时存在时 JWT 优先；JWT 验证失败不回退。
+      x-operation-status: confirmed-target-only
+      parameters:
+        - $ref: '#/components/parameters/ChatId'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: >
+            data-only Chat 实时事件流。user.* 不在 SSE 中重复推送；delta 是临时 preview，
+            completed、Tool 和 idle 是权威持久事件。
+          x-sse-data-schema:
+            description: >
+              SSE data JSON 的联合 Schema。message/thinking 的 delta 没有 createdAt；
+              completed 与同一逻辑事件的 delta 复用 eventId。
+            oneOf:
+              - type: object
+                additionalProperties: false
+                required:
+                  - eventId
+                  - type
+                  - phase
+                  - content
+                properties:
+                  eventId:
+                    $ref: '#/components/schemas/EventId'
+                  type:
+                    type: string
+                    enum:
+                      - agent.message
+                  phase:
+                    type: string
+                    enum:
+                      - delta
+                  content:
+                    type: string
+                    minLength: 1
+                    description: 本帧新追加的非空片段；允许只含空格或换行
+              - $ref: '#/components/schemas/AgentMessageCompletedEvent'
+              - type: object
+                additionalProperties: false
+                required:
+                  - eventId
+                  - type
+                  - phase
+                  - content
+                properties:
+                  eventId:
+                    $ref: '#/components/schemas/EventId'
+                  type:
+                    type: string
+                    enum:
+                      - agent.thinking
+                  phase:
+                    type: string
+                    enum:
+                      - delta
+                  content:
+                    type: string
+                    minLength: 1
+                    description: 本帧新追加的公开摘要片段；允许只含空格或换行
+              - $ref: '#/components/schemas/AgentThinkingCompletedEvent'
+              - $ref: '#/components/schemas/AgentToolCallEvent'
+              - $ref: '#/components/schemas/AgentToolResultEvent'
+              - $ref: '#/components/schemas/ChatStatusIdleEvent'
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >
+                  每个业务 frame 是一行 data: 加完整 JSON；保活 frame 是 : ping comment。
+              example: |
+                data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.thinking","phase":"delta","content":"正在核对告警时间线"}
+
+                data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.thinking","phase":"completed","createdAt":"2026-09-02T08:30:17.305Z","content":"已核对告警时间、设备范围和关联影响。"}
+
+                data: {"eventId":"c8de683be2ab4e25a8d97f7cf507c150","type":"agent.tool_call","createdAt":"2026-09-02T08:30:17.420Z","toolName":"query_campus_alarm","arguments":{"siteName":"东区园区"},"requiresConfirmation":false}
+
+                : ping
+
+                data: {"eventId":"89f8316e07ef4c9aa3fd056a91a182b0","type":"agent.tool_result","createdAt":"2026-09-02T08:30:18.102Z","toolCallId":"c8de683be2ab4e25a8d97f7cf507c150","content":"找到 3 条相关告警。","isError":false}
+
+                data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"delta","content":"建议先隔离受影响端口，"}
+
+                data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"completed","createdAt":"2026-09-02T08:30:19.451Z","content":"建议先隔离受影响端口，再核对上联链路。"}
+
+                data: {"eventId":"d4e3e8b9653047a99ac10396a17fe84d","type":"chat.status_idle","createdAt":"2026-09-02T08:30:20.000Z","reason":"done"}
+        '400':
+          description: chatId 非法；此响应只发生在 SSE 建立前
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Content-Language:
+              $ref: '#/components/headers/ContentLanguage'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                zh-CN:
+                  value:
+                    resCode: CHAT_ID_INVALID
+                    resMsg: chatId 长度必须为 1 到 64 个字符。
+                en-US:
+                  value:
+                    resCode: CHAT_ID_INVALID
+                    resMsg: chatId must contain between 1 and 64 characters.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ChatAccessDenied'
+        '404':
+          $ref: '#/components/responses/ChatNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ChatRuntimeUnavailable'
+components:
+  securitySchemes:
+    XHwId:
+      type: apiKey
+      in: header
+      name: X-HW-ID
+      description: 必需的公司调用方身份，非空
+    AccessToken:
+      type: apiKey
+      in: header
+      name: access-token
+      description: 必需的当前调用上下文访问令牌，非空
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 首选认证方式；与 APPKEY 同时存在时由服务端选择 JWT
+    AppKeyAuth:
+      type: apiKey
+      in: header
+      name: X-HW-APPKEY
+      description: 未提供 Authorization 时使用的公司 AppKey
+  parameters:
+    ChatId:
+      name: chatId
+      in: path
+      required: true
+      description: >
+        区分大小写的公共 Chat 标识，长度 1..64；不施加额外正则，不接受内部 sessionId。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      required: false
+      description: 错误文案语言；缺失或不支持时回退 en-US
+      schema:
+        type: string
+        enum:
+          - zh-CN
+          - en-US
+        default: en-US
+    CreatedAtGte:
+      name: createdAtGte
+      in: query
+      required: false
+      description: 首次查询的 inclusive 创建时间下界
+      schema:
+        $ref: '#/components/schemas/CreatedAt'
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: 每页最大事件数；默认值在 Service 归一化
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 200
+        default: 100
+    Types:
+      name: types
+      in: query
+      required: false
+      style: form
+      explode: true
+      description: >
+        重复 query 参数，使用 OR 语义；省略表示全部，空值或未知值非法，重复值归一化一次。
+      schema:
+        type: array
+        minItems: 1
+        items:
+          $ref: '#/components/schemas/HistoryEventType'
+      example:
+        - agent.message
+        - chat.status_idle
+    Page:
+      name: page
+      in: query
+      required: false
+      description: >
+        固定快照的非空 opaque cursor。客户端只能原样回传，不得解析、修改或构造；
+        提供时不得同时提供 createdAtGte、limit 或 types。
+      schema:
+        type: string
+        minLength: 1
+      example: pg_4M7qK2vN9xR5dT8wC1hF6sL3
+  headers:
+    CacheControl:
+      description: 禁止缓存包含对话内容的响应
+      schema:
+        type: string
+        enum:
+          - no-store
+      example: no-store
+    ContentLanguage:
+      description: 当前错误响应实际采用的语言
+      schema:
+        type: string
+        enum:
+          - zh-CN
+          - en-US
+  responses:
+    Unauthenticated:
+      description: 必要认证字段缺失或凭据无效
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            zh-CN:
+              value:
+                resCode: UNAUTHENTICATED
+                resMsg: 调用方身份认证失败。
+            en-US:
+              value:
+                resCode: UNAUTHENTICATED
+                resMsg: Caller authentication failed.
+    ChatAccessDenied:
+      description: 调用方无权访问该 Chat
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            zh-CN:
+              value:
+                resCode: CHAT_ACCESS_DENIED
+                resMsg: 无权访问该 Chat。
+            en-US:
+              value:
+                resCode: CHAT_ACCESS_DENIED
+                resMsg: You do not have permission to access this Chat.
+    ChatNotFound:
+      description: 公共 Chat 不存在
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            zh-CN:
+              value:
+                resCode: CHAT_NOT_FOUND
+                resMsg: Chat 不存在。
+            en-US:
+              value:
+                resCode: CHAT_NOT_FOUND
+                resMsg: The Chat does not exist.
+    TooManyRequests:
+      description: 调用方、租户或 Chat 触发公共限流；resMsg 由公司公共错误目录国际化
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
+        Retry-After:
+          description: 建议重试等待秒数
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            resCode: TOO_MANY_REQUESTS
+            resMsg: Too many requests. Try again later.
+    InternalError:
+      description: 未预期的服务端错误；resMsg 由公司公共错误目录国际化
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            resCode: INTERNAL_ERROR
+            resMsg: Internal server error.
+    ChatRuntimeUnavailable:
+      description: Claw 暂不可用；提交场景表示事件尚未被接受
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Content-Language:
+          $ref: '#/components/headers/ContentLanguage'
+        Retry-After:
+          description: 建议重试等待秒数
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            zh-CN:
+              value:
+                resCode: CHAT_RUNTIME_UNAVAILABLE
+                resMsg: 对话执行服务暂时不可用。
+            en-US:
+              value:
+                resCode: CHAT_RUNTIME_UNAVAILABLE
+                resMsg: The conversation runtime is temporarily unavailable.
+  schemas:
+    EventId:
+      type: string
+      pattern: '^[0-9a-f]{32}$'
+      description: 服务端生成的 32 位小写十六进制公共事件 ID
+      example: b7ef45d40a854c33af7a36df871a21e8
+    FileId:
+      type: string
+      pattern: '^[0-9a-f]{32}$'
+      description: 已上传文件的 32 位小写十六进制公共引用 ID
+      example: 7f12d8a380964fdc8518f48be1cf6a42
+    CreatedAt:
+      type: string
+      format: date-time
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
+      description: 包含三位毫秒的 RFC 3339 UTC 时间
+      example: '2026-09-02T08:30:15.123Z'
+    HistoryEventType:
+      type: string
+      enum:
+        - user.message
+        - user.interrupt
+        - user.tool_confirmation
+        - agent.message
+        - agent.thinking
+        - agent.tool_call
+        - agent.tool_result
+        - chat.status_idle
+    TextContentInput:
+      type: object
+      description: 请求中的文本内容；已知请求对象忽略未知属性
+      required:
+        - type
+        - text
+      properties:
+        type:
+          type: string
+          enum:
+            - text
+        text:
+          type: string
+          maxLength: 2048
+          pattern: '\S'
+          description: 非空白文本，最多 2048 个 Unicode code point
+    FileContentInput:
+      type: object
+      description: 请求中的文件引用；已知请求对象忽略未知属性
+      required:
+        - type
+        - fileId
+      properties:
+        type:
+          type: string
+          enum:
+            - file
+        fileId:
+          $ref: '#/components/schemas/FileId'
+    InputContentItem:
+      oneOf:
+        - $ref: '#/components/schemas/TextContentInput'
+        - $ref: '#/components/schemas/FileContentInput'
+      discriminator:
+        propertyName: type
+        mapping:
+          text: '#/components/schemas/TextContentInput'
+          file: '#/components/schemas/FileContentInput'
+    UserMessageRequestEvent:
+      type: object
+      description: >
+        content 长度 1..5；允许 text-only、file-only 或 text + files。最多一个 text，
+        且有 text 时必须位于第一项；最多四个 file；重复 fileId 非法。已知对象忽略未知属性。
+      required:
+        - type
+        - content
+      properties:
+        type:
+          type: string
+          enum:
+            - user.message
+        content:
+          type: array
+          minItems: 1
+          maxItems: 5
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/InputContentItem'
+          allOf:
+            - contains:
+                $ref: '#/components/schemas/TextContentInput'
+              minContains: 0
+              maxContains: 1
+            - contains:
+                $ref: '#/components/schemas/FileContentInput'
+              minContains: 0
+              maxContains: 4
+            - if:
+                contains:
+                  $ref: '#/components/schemas/TextContentInput'
+                minContains: 1
+              then:
+                prefixItems:
+                  - $ref: '#/components/schemas/TextContentInput'
+    UserInterruptRequestEvent:
+      type: object
+      description: 请求终止当前主 Agent、执行中 Tool 和 Child Agent 构成的执行树
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - user.interrupt
+    UserToolConfirmationRequestEvent:
+      type: object
+      description: >
+        对等待确认的 Tool Call 作出 allow 或 deny。denyMessage 仅 deny 时可提供；
+        allow 时必须省略。已知对象忽略未知属性。
+      required:
+        - type
+        - toolCallId
+        - result
+      properties:
+        type:
+          type: string
+          enum:
+            - user.tool_confirmation
+        toolCallId:
+          $ref: '#/components/schemas/EventId'
+        result:
+          type: string
+          enum:
+            - allow
+            - deny
+        denyMessage:
+          type: string
+          maxLength: 2048
+          pattern: '\S'
+      allOf:
+        - if:
+            properties:
+              result:
+                enum:
+                  - allow
+            required:
+              - result
+          then:
+            not:
+              type: object
+              properties:
+                denyMessage:
+                  type: string
+              required:
+                - denyMessage
+    UserEvent:
+      oneOf:
+        - $ref: '#/components/schemas/UserMessageRequestEvent'
+        - $ref: '#/components/schemas/UserInterruptRequestEvent'
+        - $ref: '#/components/schemas/UserToolConfirmationRequestEvent'
+      discriminator:
+        propertyName: type
+        mapping:
+          user.message: '#/components/schemas/UserMessageRequestEvent'
+          user.interrupt: '#/components/schemas/UserInterruptRequestEvent'
+          user.tool_confirmation: '#/components/schemas/UserToolConfirmationRequestEvent'
+    SubmitChatEventRequest:
+      type: object
+      description: 顶层只使用 event；已知请求对象忽略未知属性
+      required:
+        - event
+      properties:
+        event:
+          $ref: '#/components/schemas/UserEvent'
+    TextContent:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - text
+      properties:
+        type:
+          type: string
+          enum:
+            - text
+        text:
+          type: string
+    FileContent:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - fileId
+      properties:
+        type:
+          type: string
+          enum:
+            - file
+        fileId:
+          $ref: '#/components/schemas/FileId'
+    ContentItem:
+      oneOf:
+        - $ref: '#/components/schemas/TextContent'
+        - $ref: '#/components/schemas/FileContent'
+      discriminator:
+        propertyName: type
+        mapping:
+          text: '#/components/schemas/TextContent'
+          file: '#/components/schemas/FileContent'
+    UserMessageEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - type
+        - createdAt
+        - content
+      properties:
+        eventId:
+          $ref: '#/components/schemas/EventId'
+        type:
+          type: string
+          enum:
+            - user.message
+        createdAt:
+          $ref: '#/components/schemas/CreatedAt'
+        content:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/ContentItem'
+    UserInterruptEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - type
+        - createdAt
+      properties:
+        eventId:
+          $ref: '#/components/schemas/EventId'
+        type:
+          type: string
+          enum:
+            - user.interrupt
+        createdAt:
+          $ref: '#/components/schemas/CreatedAt'
+    UserToolConfirmationEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - type
+        - createdAt
+        - toolCallId
+        - result
+      properties:
+        eventId:
+          $ref: '#/components/schemas/EventId'
+        type:
+          type: string
+          enum:
+            - user.tool_confirmation
+        createdAt:
+          $ref: '#/components/schemas/CreatedAt'
+        toolCallId:
+          $ref: '#/components/schemas/EventId'
+        result:
+          type: string
+          enum:
+            - allow
+            - deny
+        denyMessage:
+          type: string
+          maxLength: 2048
+          pattern: '\S'
+      allOf:
+        - if:
+            properties:
+              result:
+                enum:
+                  - allow
+            required:
+              - result
+          then:
+            not:
+              type: object
+              properties:
+                denyMessage:
+                  type: string
+              required:
+                - denyMessage
+    AgentMessageCompletedEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - type
+        - phase
+        - createdAt
+        - content
+      properties:
+        eventId:
+          $ref: '#/components/schemas/EventId'
+        type:
+          type: string
+          enum:
+            - agent.message
+        phase:
+          type: string
+          enum:
+            - completed
+        createdAt:
+          $ref: '#/components/schemas/CreatedAt'
+        content:
+          type: string
+          description: 完整权威 Assistant 文本
+    AgentThinkingCompletedEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - type
+        - phase
+        - createdAt
+        - content
+      properties:
+        eventId:
+          $ref: '#/components/schemas/EventId'
+        type:
+          type: string
+          enum:
+            - agent.thinking
+        phase:
+          type: string
+          enum:
+            - completed
+        createdAt:
+          $ref: '#/components/schemas/CreatedAt'
+        content:
+          type: string
+          description: 完整权威公开摘要，不是 private chain-of-thought
+    AgentToolCallEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - type
+        - createdAt
+        - toolName
+        - arguments
+        - requiresConfirmation
+      properties:
+        eventId:
+          $ref: '#/components/schemas/EventId'
+        type:
+          type: string
+          enum:
+            - agent.tool_call
+        createdAt:
+          $ref: '#/components/schemas/CreatedAt'
+        toolName:
+          type: string
+          maxLength: 128
+          pattern: '\S'
+          description: 非空白的稳定公开 Tool 名称
+        arguments:
+          type: object
+          description: 允许空对象；只包含完成安全投影的公开 JSON 参数
+          additionalProperties: true
+        requiresConfirmation:
+          type: boolean
+    AgentToolResultEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - type
+        - createdAt
+        - toolCallId
+        - content
+        - isError
+      properties:
+        eventId:
+          $ref: '#/components/schemas/EventId'
+        type:
+          type: string
+          enum:
+            - agent.tool_result
+        createdAt:
+          $ref: '#/components/schemas/CreatedAt'
+        toolCallId:
+          $ref: '#/components/schemas/EventId'
+        content:
+          type: string
+          description: 公开结果文本，允许空字符串
+        isError:
+          type: boolean
+        errorCode:
+          type: string
+          maxLength: 128
+          pattern: '\S'
+          description: 仅 isError=true 时可提供的稳定公开错误码
+      allOf:
+        - if:
+            properties:
+              isError:
+                enum:
+                  - false
+            required:
+              - isError
+          then:
+            not:
+              type: object
+              properties:
+                errorCode:
+                  type: string
+              required:
+                - errorCode
+    ChatStatusIdleEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - type
+        - createdAt
+        - reason
+      properties:
+        eventId:
+          $ref: '#/components/schemas/EventId'
+        type:
+          type: string
+          enum:
+            - chat.status_idle
+        createdAt:
+          $ref: '#/components/schemas/CreatedAt'
+        reason:
+          type: string
+          enum:
+            - done
+            - terminated
+            - failed
+            - confirming
+    HistoryEvent:
+      oneOf:
+        - $ref: '#/components/schemas/UserMessageEvent'
+        - $ref: '#/components/schemas/UserInterruptEvent'
+        - $ref: '#/components/schemas/UserToolConfirmationEvent'
+        - $ref: '#/components/schemas/AgentMessageCompletedEvent'
+        - $ref: '#/components/schemas/AgentThinkingCompletedEvent'
+        - $ref: '#/components/schemas/AgentToolCallEvent'
+        - $ref: '#/components/schemas/AgentToolResultEvent'
+        - $ref: '#/components/schemas/ChatStatusIdleEvent'
+      discriminator:
+        propertyName: type
+        mapping:
+          user.message: '#/components/schemas/UserMessageEvent'
+          user.interrupt: '#/components/schemas/UserInterruptEvent'
+          user.tool_confirmation: '#/components/schemas/UserToolConfirmationEvent'
+          agent.message: '#/components/schemas/AgentMessageCompletedEvent'
+          agent.thinking: '#/components/schemas/AgentThinkingCompletedEvent'
+          agent.tool_call: '#/components/schemas/AgentToolCallEvent'
+          agent.tool_result: '#/components/schemas/AgentToolResultEvent'
+          chat.status_idle: '#/components/schemas/ChatStatusIdleEvent'
+    SubmitChatEventResult:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - createdAt
+      properties:
+        eventId:
+          $ref: '#/components/schemas/EventId'
+        createdAt:
+          $ref: '#/components/schemas/CreatedAt'
+    SubmitChatEventResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - resCode
+        - resMsg
+        - result
+      properties:
+        resCode:
+          type: string
+          enum:
+            - '0'
+        resMsg:
+          type: string
+          enum:
+            - success
+        result:
+          $ref: '#/components/schemas/SubmitChatEventResult'
+    ChatEventPage:
+      type: object
+      additionalProperties: false
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/HistoryEvent'
+        nextPage:
+          type: string
+          minLength: 1
+          description: >
+            仅当前固定快照还有下一页时返回；客户端只能原样回传，不得解析、修改或构造。
+          example: pg_4M7qK2vN9xR5dT8wC1hF6sL3
+    ListChatEventsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - resCode
+        - resMsg
+        - result
+      properties:
+        resCode:
+          type: string
+          enum:
+            - '0'
+        resMsg:
+          type: string
+          enum:
+            - success
+        result:
+          $ref: '#/components/schemas/ChatEventPage'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - resCode
+        - resMsg
+      properties:
+        resCode:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]*$'
+          description: 稳定错误码；客户端只按该字段分支
+        resMsg:
+          type: string
+          description: 根据 Accept-Language 国际化后的安全文案
+x-source-baselines:
+  designRepositoryBeforeOpenApi: cb94cdb29eeda701116e24cb9fd5e23090f5a91a
+  campusClaw: 7e54b47f2539982f8f1855a0b6bb38b6ab8742ae
+  pi: 5cd93f688aaab89dbb6dfa4aca535f21796ae185
+  claudeManagedAgentsDocsCheckedAt: '2026-09-02'

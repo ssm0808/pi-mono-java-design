@@ -19,6 +19,7 @@ from render_chat_events_v1 import MODELS, OUTPUT, ROOT, renderer_path
 REPOSITORY_ROOT = ROOT.parents[1]
 DESIGN = ROOT / "README.md"
 PUML = ROOT / "设计图" / "diagram.puml"
+OPENAPI = ROOT / "chat-events-v1.openapi.yaml"
 EVENT_ID = re.compile(r"^[0-9a-f]{32}$")
 CREATED_AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 LOWER_CAMEL = re.compile(r"^[a-z][A-Za-z0-9]*$")
@@ -65,6 +66,24 @@ def require(condition: bool, message: str) -> None:
 
 def run(command: list[str], cwd: Path = ROOT) -> None:
     subprocess.run(command, cwd=cwd, check=True)
+
+
+def load_openapi() -> dict[str, Any]:
+    require(shutil.which("ruby") is not None, "ruby is required for YAML validation")
+    program = (
+        "document = YAML.safe_load(File.read(ARGV[0]), permitted_classes: [], aliases: false); "
+        "puts JSON.generate(document)"
+    )
+    result = subprocess.run(
+        ["ruby", "-ryaml", "-rjson", "-e", program, str(OPENAPI)],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+    )
+    document = json.loads(result.stdout)
+    require(isinstance(document, dict), "OpenAPI root must be an object")
+    return document
 
 
 def validate_lower_camel(value: Any, context: str) -> None:
@@ -280,6 +299,139 @@ def validate_history(model: dict[str, Any]) -> None:
     require(required <= codes, f"Missing history errors: {sorted(required - codes)}")
 
 
+def validate_openapi(models: list[dict[str, Any]]) -> None:
+    require(OPENAPI.is_file(), "OpenAPI document is missing")
+    spec = load_openapi()
+    require(spec["openapi"] == "3.1.0", "OpenAPI version must be 3.1.0")
+    require(spec["info"]["version"] == models[0]["api"]["version"], "OpenAPI contract version drifted")
+    require(spec["servers"] == [{
+        "url": "/mate-service/v1",
+        "description": "相对于公司网关的业务基础路径",
+    }], "OpenAPI server base path changed")
+    validate_openapi_security(spec)
+    validate_openapi_submit(spec, models[0])
+    validate_openapi_stream(spec)
+    validate_openapi_history(spec, models[2])
+    validate_openapi_errors(spec)
+    source = OPENAPI.read_text(encoding="utf-8")
+    require("traceparent" not in source.lower(), "traceparent is forbidden")
+    require("eventSeq" not in source, "OpenAPI must not expose eventSeq")
+    require("JWT 优先" in source and "不回退" in source, "Confirmed authentication precedence is missing")
+
+
+def validate_openapi_security(spec: dict[str, Any]) -> None:
+    requirements = spec["security"]
+    require(len(requirements) == 2, "OpenAPI must expose two authentication alternatives")
+    require(set(requirements[0]) == {"XHwId", "AccessToken", "BearerAuth"},
+            "JWT security requirement changed")
+    require(set(requirements[1]) == {"XHwId", "AccessToken", "AppKeyAuth"},
+            "APPKEY security requirement changed")
+    require(all(value == [] for item in requirements for value in item.values()),
+            "Security requirement scopes must be empty")
+    schemes = spec["components"]["securitySchemes"]
+    require(schemes["XHwId"]["name"] == "X-HW-ID", "X-HW-ID security scheme changed")
+    require(schemes["AccessToken"]["name"] == "access-token", "access-token security scheme changed")
+    require(schemes["AppKeyAuth"]["name"] == "X-HW-APPKEY", "APPKEY security scheme changed")
+    require(schemes["BearerAuth"]["scheme"] == "bearer", "Bearer security scheme changed")
+
+
+def validate_openapi_submit(spec: dict[str, Any], model: dict[str, Any]) -> None:
+    operation = spec["paths"]["/chats/{chatId}/events"]["post"]
+    require(operation["operationId"] == "submitChatEvent", "Submit operationId changed")
+    media = operation["requestBody"]["content"]["application/json"]
+    require(media["schema"]["$ref"].endswith("/SubmitChatEventRequest"), "Submit request wrapper changed")
+    examples = media["examples"]
+    require(set(examples) == {
+        "userMessage",
+        "userInterrupt",
+        "toolConfirmationAllow",
+        "toolConfirmationDeny",
+    }, "Submit named examples changed")
+    values = {name: item["value"]["event"] for name, item in examples.items()}
+    require(values["userMessage"]["type"] == "user.message", "Message example changed")
+    require(values["userInterrupt"] == {"type": "user.interrupt"}, "Interrupt example changed")
+    require(values["toolConfirmationAllow"]["result"] == "allow"
+            and "denyMessage" not in values["toolConfirmationAllow"], "Allow example changed")
+    require(values["toolConfirmationDeny"]["result"] == "deny"
+            and values["toolConfirmationDeny"]["denyMessage"], "Deny example changed")
+    user_event = spec["components"]["schemas"]["UserEvent"]
+    require(set(user_event["discriminator"]["mapping"]) == USER_TYPES, "UserEvent discriminator changed")
+    require(len(user_event["oneOf"]) == 3, "UserEvent must contain three alternatives")
+    message = spec["components"]["schemas"]["UserMessageRequestEvent"]["properties"]["content"]
+    require((message["minItems"], message["maxItems"], message["uniqueItems"]) == (1, 5, True),
+            "Message content array constraints changed")
+    confirmation = spec["components"]["schemas"]["UserToolConfirmationRequestEvent"]
+    require(set(confirmation["required"]) == {"type", "toolCallId", "result"},
+            "Confirmation required fields changed")
+    success = operation["responses"]["200"]["content"]["application/json"]["example"]
+    model_success = response(model, "200-accepted")["bodies"]["default"]
+    require(success == model_success, "Submit success example drifted from review model")
+
+
+def validate_openapi_stream(spec: dict[str, Any]) -> None:
+    operation = spec["paths"]["/chats/{chatId}/events/stream"]["get"]
+    require(operation["operationId"] == "streamChatEvents", "Stream operationId changed")
+    success = operation["responses"]["200"]
+    media = success["content"]["text/event-stream"]
+    require(media["schema"]["type"] == "string", "SSE wire schema must remain a string")
+    payloads = parse_sse(media["example"])
+    require({item["type"] for item in payloads} == STREAM_TYPES,
+            "OpenAPI SSE example must cover all five stream types")
+    for payload in payloads:
+        validate_stream_payload(payload)
+    data_schema = success["x-sse-data-schema"]
+    require(len(data_schema["oneOf"]) == 7, "SSE data schema must contain seven phase variants")
+    require("event: " not in media["example"] and "\nid: " not in media["example"],
+            "OpenAPI SSE example must be data-only")
+
+
+def validate_openapi_history(spec: dict[str, Any], model: dict[str, Any]) -> None:
+    operation = spec["paths"]["/chats/{chatId}/events"]["get"]
+    require(operation["operationId"] == "listChatEvents", "History operationId changed")
+    refs = [item["$ref"].rsplit("/", 1)[-1] for item in operation["parameters"]]
+    require(refs == ["ChatId", "CreatedAtGte", "Limit", "Types", "Page", "AcceptLanguage"],
+            "OpenAPI history parameters changed")
+    types = spec["components"]["schemas"]["HistoryEventType"]["enum"]
+    require(set(types) == HISTORY_TYPES and len(types) == len(HISTORY_TYPES),
+            "OpenAPI history types changed")
+    history = spec["components"]["schemas"]["HistoryEvent"]
+    require(len(history["oneOf"]) == 8, "HistoryEvent must contain eight alternatives")
+    require(set(history["discriminator"]["mapping"]) == HISTORY_TYPES,
+            "HistoryEvent discriminator changed")
+    next_page = operation["responses"]["200"]["content"]["application/json"]["example"]["result"]["nextPage"]
+    model_page = response(model, "200-history-page")["bodies"]["default"]["result"]["nextPage"]
+    require(next_page == model_page, "Opaque page example drifted from review model")
+    require(re.fullmatch(r"pg_[A-Za-z0-9]+", next_page) is not None,
+            "Page example must not visibly encode a timestamp, sequence, or offset")
+
+
+def validate_openapi_errors(spec: dict[str, Any]) -> None:
+    def check_response(raw_response: dict[str, Any], context: str) -> None:
+        if "$ref" in raw_response:
+            return
+        content = raw_response.get("content", {}).get("application/json", {})
+        examples = list(content.get("examples", {}).values())
+        if "example" in content:
+            examples.append({"value": content["example"]})
+        for item in examples:
+            value = item["value"]
+            if isinstance(value, dict) and value.get("resCode") != "0":
+                require(set(value) == {"resCode", "resMsg"}, f"OpenAPI error leaks fields: {context}")
+
+    for path, path_item in spec["paths"].items():
+        for method, operation in path_item.items():
+            if method not in {"get", "post"}:
+                continue
+            for status, raw_response in operation["responses"].items():
+                if status != "200":
+                    check_response(raw_response, f"{method.upper()} {path} {status}")
+    for name, raw_response in spec["components"]["responses"].items():
+        check_response(raw_response, f"component response {name}")
+    error = spec["components"]["schemas"]["ErrorResponse"]
+    require(error["additionalProperties"] is False
+            and set(error["required"]) == {"resCode", "resMsg"}, "ErrorResponse shape changed")
+
+
 def validate_html() -> None:
     require(OUTPUT.is_file(), "Generated review HTML is missing")
     with tempfile.TemporaryDirectory() as directory:
@@ -353,6 +505,7 @@ def main() -> None:
     validate_submit(models[0])
     validate_stream(models[1])
     validate_history(models[2])
+    validate_openapi(models)
     validate_html()
     validate_diagrams()
     validate_markdown()

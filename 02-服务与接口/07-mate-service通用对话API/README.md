@@ -4,10 +4,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
+| 文档版本 | 1.1.0 |
 | 状态 | 三个 operation 已确认；待实现 |
 | 设计性质 | target-only；不得描述为当前 mate-service 或 CampusClaw 已实现行为 |
 | 设计仓变更前基线 | `743eca488ad559387706b5df54e2248a4124e5ef` |
+| OpenAPI 增补前基线 | `cb94cdb29eeda701116e24cb9fd5e23090f5a91a` |
 | CampusClaw 源码核对基线 | `7e54b47f2539982f8f1855a0b6bb38b6ab8742ae` |
 | pi 固定参考基线 | `badlogic/pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | Claude Managed Agents 公开文档核对日期 | 2026-09-02；Beta 公共契约，无可归因服务端源码 |
@@ -28,12 +29,14 @@ Mate 对外只使用 `Chat/chatId/chat.*`；Claw 内部继续使用
 精确 operation 模型和生成后的主评审面：
 
 - [三接口契约评审页](chat-events-v1-review.html)
+- [OpenAPI 3.1 机器契约](chat-events-v1.openapi.yaml)
 - [01 · 提交事件](接口契约/操作/01-submit-chat-event.json)
 - [02 · 订阅实时事件](接口契约/操作/02-stream-chat-events.json)
 - [03 · 查询事件历史](接口契约/操作/03-list-chat-events.json)
 
-本专题不生成 OpenAPI。三份 JSON 是可编辑的精确契约源，HTML 由它们生成；本 Markdown
-说明边界、字段语义、源码证据和设计理由。
+standalone HTML 是主要人类契约，三份 operation JSON 驱动该页面；OpenAPI 3.1 是同步的
+机器可读投影，用于 Swagger UI、代码生成和实现校验。本 Markdown 说明边界、字段语义、
+源码证据和设计理由。任何字段调整必须同时更新 operation model、OpenAPI 和校验器。
 
 ## 2. 资源与责任边界
 
@@ -107,6 +110,19 @@ Accept: application/json
 |---|---|---:|---|
 | `event` | object | 是 | `user.message`、`user.interrupt` 或 `user.tool_confirmation` 三种联合类型之一 |
 | `event.type` | string | 是 | 联合类型 discriminator；其他值返回 `CHAT_EVENT_TYPE_INVALID` |
+
+OpenAPI 使用 `event.oneOf + discriminator(propertyName=type)` 展示三个联合类型。Swagger
+UI 的请求示例下拉框提供四个命名示例：
+
+| 示例名 | 展示内容 |
+|---|---|
+| `userMessage` | `user.message`，展示 text + file；也允许 text-only 或 file-only |
+| `userInterrupt` | `{"event":{"type":"user.interrupt"}}` |
+| `toolConfirmationAllow` | `user.tool_confirmation`，`result=allow`，省略 `denyMessage` |
+| `toolConfirmationDeny` | `user.tool_confirmation`，`result=deny`，可展示 `denyMessage` |
+
+因此另外两种事件不会被塞进同一个庞大示例，也不会新增 endpoint；Schema 区通过
+`oneOf` 展开类型，Try it out 区通过 `examples` 切换具体请求。
 
 ### 4.1 `user.message`
 
@@ -488,7 +504,7 @@ inclusive `createdAtGte`，并按 `eventId` 去重。
         "content": "建议先隔离受影响端口，再核对上联链路。"
       }
     ],
-    "nextPage": "eyJzbmFwc2hvdCI6IjIwMjYtMDktMDJUMDg6MzA6MjAuMDAwWiJ9"
+    "nextPage": "pg_4M7qK2vN9xR5dT8wC1hF6sL3"
   }
 }
 ```
@@ -612,16 +628,19 @@ VO、Service 与错误组件名称。
 ```bash
 python3 render_chat_events_v1.py
 python3 validate-chat-events-v1.py
+npx --yes @redocly/cli lint chat-events-v1.openapi.yaml
 plantuml -tsvg 设计图/diagram.puml
 ```
 
-校验覆盖三份 operation 模型、生成 HTML 同步、JavaScript 语法、响应式样式、SSE frame、
-公共事件集合、lowerCamelCase、PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、
-全仓 Mermaid 禁用和 `git diff --check`。
+校验覆盖三份 operation 模型、OpenAPI 3.1 路径/安全方案/`oneOf`/命名示例、生成 HTML
+同步、JavaScript 语法、响应式样式、SSE frame、公共事件集合、lowerCamelCase、
+PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 禁用和
+`git diff --check`。
 
 ## 12. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-09-02 | 增加三接口 OpenAPI 3.1 机器契约；提交事件用 `oneOf + discriminator` 和四个命名示例展示三种用户事件；将 page 示例改为不可推断内部字段的 opaque cursor；接口行为保持 1.0.0。 |
 | 1.0.0 | 2026-09-02 | 确认 POST 提交、Chat 级 live SSE 和固定快照历史三个 operation；固定三种用户事件、五种实时事件、八种历史事件、四个 idle reason、`eventId` 身份、字段形状、双语错误和断线对账；整体替换 0.1.0 请求范围 SSE 评审稿。 |
 | 0.1.0 | 2026-09-01 | 建立单 POST 请求范围 SSE 初稿；该方案已由 1.0.0 替换。 |

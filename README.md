@@ -1,10 +1,10 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.3.0<br>
+> 导航版本：2.3.1<br>
 > 整理日期：2026-09-02<br>
 > Slash Command 设计基线：`27484974eb106a7e43910d8e542de52a72c58102`<br>
 > 通用对话 Events 三接口设计前基线：`743eca488ad559387706b5df54e2248a4124e5ef`<br>
-> 变更性质：确认 mate-service 通用对话 Events 三接口设计
+> 变更性质：增加 mate-service 通用对话 Events OpenAPI 3.1
 
 本仓库维护 CampusClaw Runtime、mate-service 边界、pi-mono-java 目标设计，
 以及相关源码和产品研究。这是设计与契约资料仓库，不是产品源码仓库。
@@ -21,7 +21,7 @@
 | Session、Agent 元数据如何持久化 | [数据与存储导航](./03-数据与存储/README.md) | 会话记忆、Agent 元数据和通用数据库模式 |
 | Command 和 Skill Command 如何设计 | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [内置命令](./04-命令与技能/01-内置命令/README.md)、[技能命令](./04-命令与技能/02-技能命令/README.md) |
 | 浏览器如何调用聊天命令 | [mate-service 聊天命令 API](./02-服务与接口/06-mate-service聊天命令API/README.md) | [公共 HTTP 评审页](./02-服务与接口/06-mate-service聊天命令API/chat-command-v1-review.html)、[内部 Runtime 1.43.4](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) |
-| 浏览器如何提交、观察和恢复普通 Chat | [mate-service 通用对话 Events API](./02-服务与接口/07-mate-service通用对话API/README.md) | [三接口契约页](./02-服务与接口/07-mate-service通用对话API/chat-events-v1-review.html)、[精确 operation models](./02-服务与接口/07-mate-service通用对话API/接口契约/操作/) |
+| 浏览器如何提交、观察和恢复普通 Chat | [mate-service 通用对话 Events API](./02-服务与接口/07-mate-service通用对话API/README.md) | [三接口契约页](./02-服务与接口/07-mate-service通用对话API/chat-events-v1-review.html)、[OpenAPI 3.1](./02-服务与接口/07-mate-service通用对话API/chat-events-v1.openapi.yaml)、[operation models](./02-服务与接口/07-mate-service通用对话API/接口契约/操作/) |
 | 查看 pi 或主流 Agent 平台证据 | [研究资料导航](./05-研究资料/README.md) | 配置生成 Tool/Agent、Anthropic、pi Session 和官方文档 |
 | 查看 Agent / Tool / Skill 元数据草案 | [元数据草案导航](./06-元数据草案/README.md) | 三份 JSON 草案 |
 
@@ -58,7 +58,7 @@ SSE 投影契约；其精确源与生成页位于
 [`02-服务与接口/06-mate-service聊天命令API/`](./02-服务与接口/06-mate-service聊天命令API/)。
 
 mate-service 通用对话 Events API 已确认事件提交、Chat 级 live SSE 和固定快照历史三个
-operation；精确模型和 standalone HTML 位于
+operation；standalone HTML 是主要人类契约，OpenAPI 3.1 是同步的机器契约，均位于
 [`02-服务与接口/07-mate-service通用对话API/`](./02-服务与接口/07-mate-service通用对话API/)。
 
 ## 4. 文档维护约定
@@ -96,6 +96,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.1 | 2026-09-02 | 为 mate-service 通用对话 Events 三接口增加 OpenAPI 3.1；提交事件使用联合 Schema 和命名示例展示 message、interrupt 与 tool confirmation。 |
 | 2.3.0 | 2026-09-02 | 确认 mate-service 通用对话 Events 三接口：POST 提交、Chat 级 live SSE 和固定快照历史；同步事件类型、字段、错误与断线对账入口。 |
 | 2.2.0 | 2026-09-01 | 新增 `POST /mate-service/v1/chats/{chatId}/events` 单 operation 评审入口；路径已确认，公共事件命名、序列身份、Thinking 和 Tool 投影仍待确认。 |
 | 2.1.4 | 2026-09-01 | Slash Command 统一使用“命令清单”，Skill 文件位置统一表述为“文件夹”，并同步 Runtime HTTP 1.43.4。 |

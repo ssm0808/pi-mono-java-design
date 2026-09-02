@@ -216,6 +216,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 GET /mate-service/v1/chats/{chatId}/events/stream",
-    "promptSuffix": "保持与三接口 1.0.0 契约、Markdown 和 PlantUML/SVG 同步；不要生成 OpenAPI。"
+    "promptSuffix": "保持与三接口 1.0.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }
