@@ -32,70 +32,208 @@ Execution --> Handler
 Handler --> Services
 @enduml
 
-@startuml command_registration
-title Registration and Dispatch Without Central Branches
+@startuml target_slash_command_boundaries
+title Target Slash Command Boundaries and Object Lifetimes
+top to bottom direction
 skinparam classAttributeIconSize 0
 skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+
+' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-75
+' Source evidence: pi-mono-java@fb49e86d modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java:37-81
+' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:68-108
+' Observed behavior: the unmerged GET path lets the Controller load a Session, resolve commands, and expose an internal DTO.
+' Target-only design: add application services, immutable Web VOs, one request catalog, and an ephemeral credential context.
+' Design reason: HTTP concerns, command resolution, mutable Runtime state, and outbound credentials need explicit ownership and lifetimes.
+
+package "Web API" {
+  class RuntimeCommandController <<Spring singleton>> {
+    +list(sessionId, locale)
+    +execute(sessionId, request)
+  }
+  class ExecuteCommandRequestVO <<request VO>> {
+    +name
+    +arguments
+    +fileIds
+  }
+  class CommandListResponseVO <<immutable response VO>>
+  class CommandDescriptorResponseVO <<immutable response VO>>
+}
+
+package "Application" {
+  class CommandCatalogService <<Spring singleton>> {
+    +list(sessionId, locale)
+  }
+  class CommandExecutionService <<Spring singleton>> {
+    +execute(sessionId, request, credentials)
+  }
+  class CommandInvocation <<immutable>>
+  class CommandExecutionContext <<per request>> {
+    +sessionSnapshot
+    +locale
+  }
+  class CommandCredentialContext <<ephemeral>>
+}
+
+package "Command core" {
+  class CompositeCommandRegistry <<Spring singleton>> {
+    +resolve(context): ResolvedCommandCatalog
+  }
+  interface CommandCatalogView {
+    +list()
+    +find(name)
+  }
+  class ResolvedCommandCatalog <<request snapshot>>
+  class CommandDefinition <<immutable>> {
+    +describe(context)
+    +admit(invocation, authoritativeState)
+    +execute(invocation, executionContext)
+  }
+}
+
+package "Runtime adapters" {
+  class RuntimeSessionRepository
+  class RuntimeSessionEngineRegistry
+}
+
+RuntimeCommandController ..> ExecuteCommandRequestVO : accepts
+RuntimeCommandController -down-> CommandCatalogService
+RuntimeCommandController -down-> CommandExecutionService
+RuntimeCommandController ..> CommandListResponseVO : returns
+CommandListResponseVO *-- CommandDescriptorResponseVO
+
+CommandCatalogService -down-> RuntimeSessionRepository : loads authorized Session
+CommandCatalogService -down-> CompositeCommandRegistry : resolves once
+CommandCatalogService ..> CommandListResponseVO : maps internal descriptors
+
+CommandExecutionService -down-> RuntimeSessionRepository : lifecycle sidecars
+CommandExecutionService -down-> RuntimeSessionEngineRegistry : operation lock and capacity
+CommandExecutionService -down-> CompositeCommandRegistry : resolves once
+CommandExecutionService ..> CommandInvocation : normalizes request
+CommandExecutionService ..> CommandExecutionContext : creates
+CommandExecutionService -down-> CommandDefinition : dispatches selected definition
+
+CompositeCommandRegistry -down-> ResolvedCommandCatalog : creates validated snapshot
+ResolvedCommandCatalog ..|> CommandCatalogView
+ResolvedCommandCatalog *-- CommandDefinition
+CommandExecutionContext --> CommandCatalogView : same resolved view
+CommandExecutionContext *-- CommandCredentialContext
+
+note right of RuntimeCommandController
+The Controller owns HTTP adaptation only.
+It does not load Session state or resolve commands.
+end note
+
+note right of ResolvedCommandCatalog
+One GET or POST owns one immutable catalog.
+List, Help, admission, and dispatch share it.
+Mutable state is rechecked at the owning lock or transaction.
+end note
+
+note right of CommandCredentialContext
+Raw credentials live only for this request.
+They are not logged, persisted, or added to prompts.
+end note
+@enduml
+
+@startuml target_command_resolution_classes
+title Target Command Resolution and Extension Classes
+left to right direction
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
 
 ' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/command/SlashCommandRegistry.java:22-37
+' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinitionSource.java:20-36
 ' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-75
-' Source evidence: opencode@849c2598 packages/opencode/src/command/index.ts:65-169
-' Observed behavior: the feature implementation resolves one merged list for both list and find, while each source still declares a redundant find method.
-' Target design: sources list definitions and the registry creates one validated catalog snapshot per request.
+' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/AgentRuntimeManager.java:275-293
+' Observed behavior: Composite resolution already merges lists, while each source still declares a redundant find operation.
+' Target-only design: sources only list definitions; builtin and Skill extensions meet at an immutable executable definition.
+' Design reason: new commands must not modify a central branch, and dynamic Skill discovery must not drift inside one request.
 
-interface CommandDefinitionSource {
-  +list(context)
+package "Resolution" {
+  interface CommandDefinitionSource {
+    +list(context)
+  }
+  class CompositeCommandRegistry <<Spring singleton>> {
+    +resolve(context): ResolvedCommandCatalog
+  }
+  interface CommandCatalogView
+  class ResolvedCommandCatalog <<request snapshot>> {
+    +list()
+    +find(name)
+  }
 }
-interface BuiltinCommandContributor {
-  +definition()
-}
-class ImmutableBuiltinCommandSource
-class SkillCommandSource
-class CompositeCommandRegistry {
-  +resolve(context)
-}
-class ResolvedCommandCatalog {
-  +list()
-  +find(name)
-}
-class CommandDefinition {
-  +describe(context)
-  +admit(invocation, authoritativeState)
-  +execute(invocation, executionContext)
-}
-class CommandDescriptorDTO
-interface CommandAdmissionPolicy
-interface CommandHandler {
-  +execute(invocation, executionContext)
-}
-class CommandExecutionContext
 
-BuiltinCommandContributor "1..*" --> ImmutableBuiltinCommandSource : startup collection
-ImmutableBuiltinCommandSource ..|> CommandDefinitionSource
-SkillCommandSource ..|> CommandDefinitionSource
-CompositeCommandRegistry o-- CommandDefinitionSource
+package "Executable definition" {
+  class CommandDefinition <<immutable>> {
+    +name
+    +kind
+    +describe(context)
+    +admit(invocation, authoritativeState)
+    +execute(invocation, executionContext)
+  }
+  class CommandDescriptorDTO <<internal projection>>
+  interface CommandAdmissionPolicy
+  interface CommandHandler {
+    +execute(invocation, executionContext)
+  }
+  class CommandExecutionContext <<per request>>
+}
+
+package "Builtin extension" {
+  class ImmutableBuiltinCommandSource <<Spring singleton>>
+  interface BuiltinCommandContributor {
+    +definition()
+  }
+  class BuiltinCommandHandler
+  class NarrowApplicationService
+}
+
+package "Skill extension" {
+  class SkillCommandSource <<Spring singleton>>
+  class SkillCommandHandler <<shared>>
+  class AgentRuntimeManager
+}
+
+CompositeCommandRegistry o-- "1..*" CommandDefinitionSource
 CompositeCommandRegistry --> ResolvedCommandCatalog : creates
-ResolvedCommandCatalog *-- CommandDefinition
-CommandDefinition ..> CommandDescriptorDTO : projects per session
+ResolvedCommandCatalog ..|> CommandCatalogView
+ResolvedCommandCatalog *-- "1..*" CommandDefinition
+
+ImmutableBuiltinCommandSource ..|> CommandDefinitionSource
+ImmutableBuiltinCommandSource "1" o-- "1..*" BuiltinCommandContributor
+BuiltinCommandContributor "1" --> "1" CommandDefinition
 CommandDefinition *-- CommandAdmissionPolicy
 CommandDefinition *-- CommandHandler
-CommandHandler ..> CommandExecutionContext : reads
-CommandExecutionContext --> ResolvedCommandCatalog : catalog view
+CommandDefinition ..> CommandDescriptorDTO
+CommandHandler ..> CommandExecutionContext
+CommandExecutionContext --> CommandCatalogView
 
-note right of ImmutableBuiltinCommandSource
-Duplicate builtin name
-fails application startup.
+BuiltinCommandHandler ..|> CommandHandler
+BuiltinCommandHandler --> NarrowApplicationService
+SkillCommandSource ..|> CommandDefinitionSource
+SkillCommandSource --> AgentRuntimeManager : complete snapshot
+SkillCommandSource --> SkillCommandHandler
+SkillCommandHandler ..|> CommandHandler
+SkillCommandHandler --> AgentRuntimeManager
+
+note bottom of ImmutableBuiltinCommandSource
+The startup index is immutable.
+Duplicate builtin names fail application startup.
 end note
 
-note right of SkillCommandSource
+note bottom of SkillCommandSource
 One dynamic source exposes skill:<name>.
-Names are 1..64 chars and strict kebab-case.
+Names are strict kebab-case with 1..64 characters.
+The complete Agent snapshot is captured once per catalog.
 end note
 
-note bottom of ResolvedCommandCatalog
-One request uses one validated view.
-Definition identity and metadata cannot drift.
-Admission still rechecks mutable authoritative state.
+note bottom of CommandDefinition
+Stable metadata, admission, and behavior stay together.
+The mutable descriptor DTO is only an internal projection.
 end note
 @enduml
 

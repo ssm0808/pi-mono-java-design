@@ -4,9 +4,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.0 |
+| 文档版本 | 1.2.0 |
 | 设计日期 | 2026-09-03 |
-| 设计仓基线 | `6baa9df1c7a5a0e3196e720168b0214b6d4b70c1` |
+| 设计仓基线 | `aae23e98014f947dd57e2172d89bc2778ab6c936` |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw `main` 复核基线 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | Command 发现层复核提交 | `3004419a467b77bac08d0f2b3dad21f8815568c5` |
@@ -93,6 +93,22 @@ CommandHandler.execute(invocation, executionContext) -> CompletionStage<CommandR
 | `CommandHandler` | 调用窄职责 Application Service；需要帮助信息时只读取执行上下文中的清单视图 |
 | `CommandExecutionService` | 维护命令生命周期和 SSE |
 
+目标类先按 Web API、Application、Command Core 和 Runtime Adapter 分层。Spring 单例只保留
+无请求可变状态的协作对象；请求 VO、Invocation、执行上下文、凭据上下文和解析后的命令清单
+都有明确边界与生命周期。
+
+![Slash Command 目标分层与对象生命周期类图](设计图/target_slash_command_boundaries.svg)
+
+[PlantUML 源码：`target_slash_command_boundaries`](设计图/diagram.puml#L35)
+
+这张图固定以下依赖方向：
+
+- Controller 只依赖 Catalog/Execution Service，不直接访问 Repository、Registry 或内部 DTO；
+- `CommandCatalogService` 负责把内部 Descriptor 投影为不可变响应 VO；
+- `CommandExecutionService` 统一归一输入、解析清单、占用执行容量并维护生命周期；
+- 单次 GET 或 POST 只生成一个 `ResolvedCommandCatalog`，Help、准入和分发读取同一视图；
+- 原始凭据只存在于本次执行的 `CommandCredentialContext`，不进入日志、持久化、Prompt 或领域事件。
+
 Builtin 在 Spring 启动时生成不可变索引。名称必须匹配 `[a-z0-9-]+`；重名直接启动失败。
 Skill 使用 `skill:<name>`，由一个动态 Source 和一个共享 Handler 处理。`<name>` 必须：
 
@@ -111,15 +127,23 @@ Handler 只接收不可变 `CommandInvocation` 和只读 `CommandExecutionContex
 Controller、调用自身 HTTP 接口，也不能获得宽泛可变 Session 门面。新增命令只新增
 Contributor、Definition、Handler 和窄职责服务，不修改中央 `switch`。
 
-`CommandDefinitionSource` 只列出当前上下文的 Definition。Registry 在单次请求内仅解析一次，
+扩展关系单独展开如下。`CommandDefinitionSource` 只列出当前上下文的 Definition。Registry 在单次请求内仅解析一次，
 再由 `ResolvedCommandCatalog` 同时提供清单和精确查找。这避免了动态 Skill 快照在展示、准入和
 执行之间重新解析，也避免 Source 各自维护两套 list/find 逻辑。该快照只固定
 Definition 身份、元数据和 Skill 快照；修改状态的命令仍在所属事务或执行锁内重新检查
 Session 状态和执行容量，不把 Descriptor 的预览可用性当作最终准入。
 
-![注册与分发](设计图/command_registration.svg)
+![Slash Command 目标解析与扩展类图](设计图/target_command_resolution_classes.svg)
 
-[PlantUML 源码：`command_registration`](设计图/diagram.puml#L35)
+[PlantUML 源码：`target_command_resolution_classes`](设计图/diagram.puml#L140)
+
+这张图表达扩展时必须保持的约束：
+
+- Builtin 由多个 Contributor 在启动期组成一个不可变 Source，重名直接阻止启动；
+- Skill 由一个动态 Source 基于完整 Agent 快照生成，并复用一个 Skill Handler；
+- `CommandDefinition` 将稳定元数据、准入和行为组合在一起，Descriptor DTO 只做内部投影；
+- Builtin Handler 只调用一个窄职责应用服务；新增命令不修改中央 `switch`；
+- `CommandExecutionContext` 只暴露同一次解析得到的只读 `CommandCatalogView`，避免 Help 形成 Bean 依赖环。
 
 ## 4. 命令清单与可用性
 
@@ -182,7 +206,7 @@ Catalog。
 
 ![交互层路由](设计图/interaction_routing.svg)
 
-[PlantUML 源码：`interaction_routing`](设计图/diagram.puml#L102)
+[PlantUML 源码：`interaction_routing`](设计图/diagram.puml#L240)
 
 ## 7. HTTP 契约
 
@@ -246,7 +270,7 @@ Session 序列，因此公开 `entrySeq` 可以有缺口，调用方不得重编
 
 ![sidecar 历史](设计图/sidecar_history.svg)
 
-[PlantUML 源码：`sidecar_history`](设计图/diagram.puml#L132)
+[PlantUML 源码：`sidecar_history`](设计图/diagram.puml#L270)
 
 断线规则：
 
@@ -268,6 +292,7 @@ Session 序列，因此公开 `entrySeq` 可以有缺口，调用方不得重编
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-03 | 重做 Slash Command 目标类图：分别表达分层与对象生命周期、注册解析与扩展关系；明确 Controller/Application/Command Core/Runtime Adapter 边界、请求级清单快照、凭据生命周期、DTO/VO 隔离和无中央分派约束 |
 | 1.1.0 | 2026-09-03 | 复核 `3004419a` 发现层与 `fb49e86d` GET 清单；引入单次请求 `ResolvedCommandCatalog` 快照和只读执行上下文，移除 Source 级别 find 职责，并明确 Definition 不直接封装可变 Descriptor DTO |
 | 1.0.4 | 2026-09-01 | 命令相关表述只使用“命令清单”；Skill 文件位置统一表述为“文件夹”，避免再次引入文件系统含义 |
 | 1.0.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 的完整规则；参数上限明确为复用普通消息的 UTF-16 输入限制，不再表述为 Harness 通用规范 |

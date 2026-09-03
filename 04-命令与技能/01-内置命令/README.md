@@ -5,9 +5,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.2.0 |
+| 文档版本 | 2.3.0 |
 | 设计日期 | 2026-09-03 |
-| 设计仓基线 | `6baa9df1c7a5a0e3196e720168b0214b6d4b70c1` |
+| 设计仓基线 | `aae23e98014f947dd57e2172d89bc2778ab6c936` |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw `main` 复核基线 | `c9d858bc8261bf07f5585f545b53495bf2226a56`（`origin/main`） |
 | Slash Command 发现层复核提交 | `3004419a467b77bac08d0f2b3dad21f8815568c5`（`origin/feat/skill-command-registry`） |
@@ -85,23 +85,7 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 
 [PlantUML 源码：`builtin_implementation_alignment`](设计图/diagram.puml#L26)
 
-### 2.4 类图视角的当前实现
-
-`3004419a` 和 `fb49e86d` 形成了“发现 + GET 清单”骨架，但还不是可直接继续叠加
-七个 Handler 的最终类边界。下图只表达两个未合入分支中已观察到的类，不把目标类混入现状。
-
-![当前 Command 发现类图](设计图/observed_command_discovery_classes.svg)
-
-[PlantUML 源码：`observed_command_discovery_classes`](设计图/diagram.puml#L154)
-
-| 类图观察 | 影响 |
-|---|---|
-| `RuntimeCommandController` 同时依赖 Repository、Registry 和响应包装器 | Web 层承担了 Session 查询和命令编排，POST 加入后会继续膨胀 |
-| `CommandListResponseVO` 直接持有可变 `CommandDescriptorDTO` | 内部 DTO 穿透 Controller 边界，公共响应会被内部重构牵动 |
-| `CommandDefinition` 只包含 Descriptor | Definition 尚不能表达准入和执行，Builtin 行为没有稳定扩展点 |
-| Composite 已用同一 `resolve` 服务 list/find，但 Source 仍各自实现 `find` | 组合层的唯一性已改正，Source 的二次查找逻辑反而成为冗余与漂移点 |
-
-### 2.5 推荐目标类图
+### 2.4 推荐目标类图
 
 目标结构先固定 Web、Application、Command Core 和 Runtime Adapter 四层。Spring 单例只保留无请求
 可变状态的协作对象；每次 GET 或 POST 都生成一个不可变 `ResolvedCommandCatalog`，并让
@@ -110,7 +94,7 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 
 ![Builtin Command 目标核心类图](设计图/target_command_core_classes.svg)
 
-[PlantUML 源码：`target_command_core_classes`](设计图/diagram.puml#L229)
+[PlantUML 源码：`target_command_core_classes`](设计图/diagram.puml#L154)
 
 这个边界下：
 
@@ -124,14 +108,14 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 
 ![Builtin 目标扩展类图](设计图/target_builtin_extension_classes.svg)
 
-[PlantUML 源码：`target_builtin_extension_classes`](设计图/diagram.puml#L339)
+[PlantUML 源码：`target_builtin_extension_classes`](设计图/diagram.puml#L264)
 
 `HelpCommandHandler` 不能注入 `CommandCatalogService` 或 Registry。否则会形成
 `CatalogService -> Registry -> BuiltinSource -> Contributor -> HelpHandler -> CatalogService`
 的 Spring Bean 依赖环。执行服务将本次已解析的只读 `CommandCatalogView` 放入
 `CommandExecutionContext`，Help 只通过无状态 `CommandHelpFormatter` 格式化该视图。
 
-### 2.6 Handler 与事务边界
+### 2.5 Handler 与事务边界
 
 - Handler 只接收不可变 Invocation 和只读 Execution Context，并只调用一个窄职责应用服务；不接收 Controller、
   Request VO、ResultBean、Repository 或宽泛 Session 门面。
@@ -150,7 +134,7 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 
 [PlantUML 源码：`compact_command_execution`](设计图/diagram.puml#L58)
 
-### 2.7 参数语法
+### 2.6 参数语法
 
 | 命令 | Handler 前的确定性语法 |
 |---|---|
@@ -167,7 +151,7 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 尚未声明的 HTTP 错误码。`fb49e86d` 中的 `INVALID_COMMAND_ARGUMENTS` 必须按该权威顺序更正，
 不能作为 Builtin 调用的兼容别名。
 
-### 2.8 三个实施决策门
+### 2.7 三个实施决策门
 
 以下问题会改变已确认的 Command HTTP 或历史语义，代码不能自行选择：
 
@@ -284,7 +268,7 @@ last-commit-wins：
 | `name` | 当前或更新后 displayName | 只有真实变更时存在 |
 | `model` | 当前模型/可选列表，或切换后模型 | 变更时指向 `session.model.changed` |
 | `thinking` | 当前或切换后 `on/off` | 变更时指向 `session.thinking.changed` |
-| `compact` | 压缩完成的稳定摘要，不回显私有摘要正文 | 真实压缩时指向 `session.compaction.completed`；无变化行为待 2.8 节确认 |
+| `compact` | 压缩完成的稳定摘要，不回显私有摘要正文 | 真实压缩时指向 `session.compaction.completed`；无变化行为待 2.7 节确认 |
 | `skills` | 当前绑定 Skill 名与描述 | 无 |
 
 `text` 只用于按请求 Locale 展示，客户端不得解析它来更新状态。客户端以
@@ -327,6 +311,7 @@ last-commit-wins：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.0 | 2026-09-03 | 设计正文只保留推荐目标类图；移除当前实现类图，继续用源码证据与差距表表达现状，并保持目标核心类图和 Builtin 扩展类图作为实施结构基线 |
 | 2.2.0 | 2026-09-03 | 复核 `3004419a` 发现层和 `fb49e86d` GET 清单；新增当前实现类图、目标核心类图和七个 Builtin 扩展类图，明确应用层、请求快照、DTO/VO 边界与 Help 无环依赖 |
 | 2.1.0 | 2026-09-02 | 复核 `c9d858bc` 主线与未合入的 `fc06c618` 命令清单骨架，增加实施权威顺序、差距、竖切片、事务边界、参数语法、公司镜像规则和三个实施决策门；不改变已确认的七个 Builtin 清单 |
 | 2.0.4 | 2026-09-01 | 命令相关表述统一使用“命令清单”，移除可能被理解为文件路径的用词 |
