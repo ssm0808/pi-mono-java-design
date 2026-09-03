@@ -2,11 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 协作机制版本 | 0.1.0 |
+| 协作机制版本 | 0.1.1 |
 | 状态 | 启用 |
 | 建立日期 | 2026-09-03 |
+| 最近更新 | 2026-09-03 |
 | 设计仓核对基线 | `678ccdb30a0e95506874ca099b0a9eeed62375bd` |
 | Events 契约内容基线 | `cc3b5576882b04dd6efb175fd87eb8525dc85c8c`（1.4.4） |
+| CampusClaw 源码核对基线 | `pi-mono-java@c9d858bc8261bf07f5585f545b53495bf2226a56` |
 
 本文是多个 Codex 任务协同设计 Mate Chat API 的事实源和导航，不是 HTTP API 契约。
 现有 Events API 仍以 [主题 README](../README.md)、operation JSON 和 OpenAPI 为准。
@@ -88,6 +90,24 @@ proposed -> confirmed -> integrated -> validated
 | C-001 | `proposed` | ListEvents 的 `page/nextPage` 改为 `1、2、3` 等一基数字页码 | 用户已明确不使用加密或 opaque cursor；仍需决定如何保留当前固定快照。候选是数字 `page/nextPage` 加公开 `snapshotEventId`，并在后续页重复过滤条件；不得直接删除固定快照承诺。 |
 | C-002 | `proposed` | 公司 Swagger 不支持展示 `text/event-stream` | 文档工具限制不能静默改变线上媒体类型。需决定使用普通文本示例、附件说明或单独实时协议文档；HTTP 契约仍需明确真实媒体类型。 |
 | C-003 | `proposed` | 创建 Chat 与配置 Chat 的 operation 边界 | 需逐项确认创建时可设置的字段、后续可变字段、默认值、状态冲突和响应资源形状。 |
+| C-004 | `proposed` | Mate 单一组合配置更新与 Claw 当前两个独立更新接口的原子性冲突 | 若 Mate 用一个请求同时修改 `modelId` 和 `thinking`，顺序调用 Claw 的两个 `PUT` 会产生部分成功和 ETag 竞争。需在“Mate 也拆成两个 operation”与“Claw 新增原子组合更新”之间做架构决策。 |
+| C-005 | `proposed` | `modelId` 的公共格式约束在 Model Manager 设计与 Claw Runtime 实现之间不一致 | Model Manager 目标设计定义大小写敏感、1–64 字符的不透明值；当前 Runtime 请求使用 1–128 且限制字符集的正则。Mate Chat 配置不得在校准前复制任一约束。 |
+
+C-004 的源码证据来自 `pi-mono-java@c9d858bc8261bf07f5585f545b53495bf2226a56`：
+
+- `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java`：`changeModel` 和 `changeThinking` 分别暴露 `PUT /sessions/{sessionId}/model` 与 `PUT /sessions/{sessionId}/thinking`，均使用 `If-Match`；
+- `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java`：`changeModel`、`changeThinking` 是两个独立服务调用；`modelChangeEntries` 在目标模型不支持 reasoning 时把 `thinking` 归一为 `false`；
+- `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java`：`updateModel` 与 `updateThinking` 分别是独立 `@Transactional` 事务边界。
+
+以上是当前源码观察。是否改变 Claw 接口或 Mate 公共 operation 属于待确认的架构变化。
+
+C-005 的两侧证据为：
+
+- 本设计仓 `02-服务与接口/03-模型管理Provider契约/README.md` 2.4.0 第 2 节将 `modelId` 定义为 1–64 字符、大小写敏感的不透明字符串；这是目标契约；
+- `pi-mono-java@c9d858bc8261bf07f5585f545b53495bf2226a56` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/RuntimeApiConstants.java`：`MODEL_ID_PATTERN` 为 `^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`；
+- 同基线的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/ChangeModelRequestVO.java`：`modelId` 通过 `@Pattern` 实际使用该正则。
+
+这是一项目标契约与当前实现的校准问题，不能把任一侧静默描述为全系统统一规则。
 
 ## 6. 接口任务交接格式
 
