@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.0 |
-| 状态 | 资源模型 A 已确认；第一个 POST operation 字段评审中 |
+| 文档版本 | 0.1.1 |
+| 状态 | 资源模型 A 与 POST 三种用户事件范围已确认；其余字段评审中 |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
@@ -18,7 +18,7 @@ CampusClaw 采用 Session Events 三接口，内部执行不成为公共资源�
 
 | Method | Path | 职责 | 当前状态 |
 |---|---|---|---|
-| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 接受并持久化一个用户事件 | 字段评审中 |
+| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 事件范围已确认，其余字段评审中 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events/stream` | 订阅跨多次内部执行的 Session live SSE | 只确认职责，字段未开始评审 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 读取固定快照的权威历史 | 只确认职责，字段未开始评审 |
 
@@ -48,6 +48,10 @@ POST /campusclaw-service/v1/sessions/{sessionId}/events
 Content-Type: application/json
 Accept: application/json
 ```
+
+已确认本接口支持 `user.message`、`user.interrupt`、
+`user.tool_confirmation`。每次请求只能提交其中一条，表示不支持数组或批量提交，
+并不表示接口只接收 `user.message`。
 
 完整候选字段、请求示例、成功与错误响应及四个选择题见
 [`chat-events-v2-review.html`](chat-events-v2-review.html)。可编辑源是
@@ -136,10 +140,12 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 | 日期 | 项目 | 结论 |
 |---|---|---|
 | 2026-09-03 | 资源模型 | 已确认选择 A：Session Events 三接口，执行保持内部状态，无 `executionId/runId` |
+| 2026-09-03 | POST 事件范围 | 已确认同一 POST 接受 `user.message`、`user.interrupt`、`user.tool_confirmation`；一次请求提交一条，不支持批量 |
 | 2026-09-03 | POST 字段 | 评审中；四个推荐项只是当前提案，不视为用户确认 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.1 | 2026-09-03 | 明确并冻结 POST 支持三种用户事件；将“一次一条”解释为请求批量边界，避免误读成只支持 `user.message`。 |
 | 0.1.0 | 2026-09-03 | 固化资源模型 A，记录当前 Java 源码差距，增加目标资源图与类图，并启动第一个 POST operation 的四项字段评审。 |

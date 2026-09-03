@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "持久化一个用户事件并返回接受结果",
-    "description": "本接口是 Session Events v2 的写入入口，只接受一个 user.* 事件，不返回 Agent 输出，也不创建或公开 executionId/runId。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。下列字段是本轮候选快照，只有资源模型 A 已确认。",
+    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围已经确认，其余字段仍是本轮候选快照。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -69,7 +69,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "顶层固定只有 event；event.type 是联合类型判别字段。一次请求只提交一个事件，不支持批量。null 不等价于省略。user.message 的 content 长度 1..5，最多一个 text 且必须位于第一项，最多四个不重复 file。user.interrupt 无其他业务字段。user.tool_confirmation 只在等待对应 Tool Call 确认时接受。",
+      "description": "顶层固定只有 event；event.type 是联合类型判别字段，可选择 user.message、user.interrupt 或 user.tool_confirmation。一次请求只提交一条事件，不支持数组或批量；三种事件都会被本接口接收。null 不等价于省略。user.message 的 content 长度 1..5，最多一个 text 且必须位于第一项，最多四个不重复 file。user.interrupt 无其他业务字段。user.tool_confirmation 只在等待对应 Tool Call 确认时接受。",
       "examples": [
         {
           "label": "用户消息 · user.message",
@@ -399,7 +399,7 @@
   },
   "review": {
     "status": "字段评审中 · 尚未确认",
-    "notice": "资源模型 A 已冻结；以下四项决定这个 POST 的精确字段。推荐项已预选，但不会自动视为确认。",
+    "notice": "已确认每次请求可从 user.message、user.interrupt、user.tool_confirmation 中提交一条事件；以下四项决定其余精确字段。推荐项已预选，但不会自动视为确认。",
     "questions": [
       {
         "id": "Q1-access-token",
