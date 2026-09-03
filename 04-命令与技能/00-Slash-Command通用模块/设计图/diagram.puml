@@ -38,32 +38,49 @@ skinparam classAttributeIconSize 0
 skinparam shadowing false
 
 ' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/command/SlashCommandRegistry.java:22-37
+' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-75
 ' Source evidence: opencode@849c2598 packages/opencode/src/command/index.ts:65-169
-' Observed behavior: current registries aggregate definitions by name and detect or skip collisions.
-' Target design: builtins fail startup on duplicates while skills occupy the skill: namespace.
+' Observed behavior: the feature implementation resolves one merged list for both list and find, while each source still declares a redundant find method.
+' Target design: sources list definitions and the registry creates one validated catalog snapshot per request.
 
 interface CommandDefinitionSource {
   +list(context)
-  +find(context, name)
 }
 interface BuiltinCommandContributor {
   +definition()
 }
 class ImmutableBuiltinCommandSource
 class SkillCommandSource
-class CompositeCommandRegistry
-class CommandDefinition
-class CommandDescriptor
-interface CommandHandler {
-  +execute(invocation)
+class CompositeCommandRegistry {
+  +resolve(context)
 }
+class ResolvedCommandCatalog {
+  +list()
+  +find(name)
+}
+class CommandDefinition {
+  +describe(context)
+  +admit(invocation, authoritativeState)
+  +execute(invocation, executionContext)
+}
+class CommandDescriptorDTO
+interface CommandAdmissionPolicy
+interface CommandHandler {
+  +execute(invocation, executionContext)
+}
+class CommandExecutionContext
 
 BuiltinCommandContributor "1..*" --> ImmutableBuiltinCommandSource : startup collection
 ImmutableBuiltinCommandSource ..|> CommandDefinitionSource
 SkillCommandSource ..|> CommandDefinitionSource
 CompositeCommandRegistry o-- CommandDefinitionSource
-CommandDefinition *-- CommandDescriptor
-CommandDefinition --> CommandHandler
+CompositeCommandRegistry --> ResolvedCommandCatalog : creates
+ResolvedCommandCatalog *-- CommandDefinition
+CommandDefinition ..> CommandDescriptorDTO : projects per session
+CommandDefinition *-- CommandAdmissionPolicy
+CommandDefinition *-- CommandHandler
+CommandHandler ..> CommandExecutionContext : reads
+CommandExecutionContext --> ResolvedCommandCatalog : catalog view
 
 note right of ImmutableBuiltinCommandSource
 Duplicate builtin name
@@ -73,6 +90,12 @@ end note
 note right of SkillCommandSource
 One dynamic source exposes skill:<name>.
 Names are 1..64 chars and strict kebab-case.
+end note
+
+note bottom of ResolvedCommandCatalog
+One request uses one validated view.
+Definition identity and metadata cannot drift.
+Admission still rechecks mutable authoritative state.
 end note
 @enduml
 

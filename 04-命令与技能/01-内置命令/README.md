@@ -5,11 +5,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.1.0 |
-| 设计日期 | 2026-09-02 |
+| 文档版本 | 2.2.0 |
+| 设计日期 | 2026-09-03 |
+| 设计仓基线 | `6baa9df1c7a5a0e3196e720168b0214b6d4b70c1` |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw `main` 复核基线 | `c9d858bc8261bf07f5585f545b53495bf2226a56`（`origin/main`） |
-| Slash Command 骨架复核提交 | `fc06c6188423d6bfb4e268244d1c7012bb823bc1`（`origin/feat/skill-command-registry`，尚未合入 `main`） |
+| Slash Command 发现层复核提交 | `3004419a467b77bac08d0f2b3dad21f8815568c5`（`origin/feat/skill-command-registry`） |
+| Slash Command 清单 HTTP 复核提交 | `fb49e86dc1bc9761d191ad9b9890afe7909deace`（`origin/feat/skill-command-list-endpoint`） |
 | 设计状态 | target-only；命令清单骨架已部分实现，七个 Builtin 行为已确认，实施细节仍有三个决策门 |
 
 ## 1. 范围
@@ -34,10 +36,12 @@ Builtin 实现按以下顺序对齐，后项不能覆盖前项：
 2. [Slash Command 通用模块](../00-Slash-Command通用模块/README.md) 定义注册、准入、生命周期、
    sidecar 与恢复规则；
 3. 本文定义七个 Builtin 的参数、状态和领域行为；
-4. `fc06c618` 已实现的命令清单骨架是 Builtin 的直接实施起点，但它不能改写前三项契约；
+4. `3004419a` 与 `fb49e86d` 已实现的发现/GET 清单骨架是 Builtin 的直接实施起点，但它们不能改写前三项契约；
 5. 旧 `command/builtin` 中四个保留 Command 只提供迁移证据，不是目标接口。
 
-`fc06c618` 与 `main` 的 merge base 为 `c9d858bc`。`modules/coding-agent-cli` 是主维护源码，
+`3004419a` 的父提交为 `d9694394`，它只修正公司镜像中的 Skill 兼容回退，主模块的 Command 发现类没有变化。
+`fb49e86d` 直接基于 `3004419a` 并增加 GET 清单。两个分支与 `main` 的 merge base 均为 `c9d858bc`。
+`modules/coding-agent-cli` 是主维护源码，
 `campusclaw/` 是生成的公司镜像。Builtin 实现必须继续先修改 `modules/*`，再运行
 `scripts/sync-campusclaw.sh` 同步镜像；不能只修改镜像。
 
@@ -47,19 +51,20 @@ Builtin 实现按以下顺序对齐，后项不能覆盖前项：
 |---|---|
 | `command/SlashCommandRegistry.java:21-67` 仍使用可变 Map、解析整段 Slash 文本且不是 Spring Bean | 替换为结构化 Invocation、不可变 Builtin Source 和 Composite Registry；不把旧 Registry 接入 Controller |
 | `command/builtin/` 只有 Model、Thinking、Compact、Name 四个保留实现 | Help、Status、Skills 不存在；已有四个实现也不能直接承担 HTTP、持久化和 SSE 语义 |
-| `fc06c618` 已新增 Descriptor、Definition Source、Composite Registry、Skill Source 和 GET Command Controller | 直接扩展现有 `runtimeapi.command` 包和 `RuntimeCommandController`；不再建第二套 Registry 或 Command 清单入口 |
-| `CommandDefinition.java:14` 只包装 Descriptor，还没有 Admission 和 Handler；分支也没有 POST Command | 先把现有 Definition 补齐为“描述符 + 准入 + Handler”，再增加 Invocation、Result、Execution Service 和请求范围 SSE |
-| `CompositeCommandRegistry.list:41-56` 在每次请求时查重，`find:65-73` 却是首个命中即返回 | Builtin Source 启动时构建不可变索引并拒绝重名；Composite 的 list/find 必须共享唯一性语义，不能一个报错、一个 first-wins |
-| `RuntimeErrorCode.java:50-51` 新增 `COMMAND_NOT_FOUND` 和 `INVALID_COMMAND_ARGUMENTS` | 保留前者；后者与内外两份精确契约中的 `INVALID_COMMAND_REQUEST` 冲突，必须在实现 POST 前统一，这不是待决策项 |
-| `Skill.java:34` 与 `SkillNameValidator.java:19` 重复同一正则，SkillLoader 与 Command Source 走两套校验 | 收口到一个 Skill 领域校验器，Loader、命令清单和后续执行路由必须复用同一实现 |
+| `3004419a` 已新增 Descriptor、Definition Source、Composite Registry 和 Skill Source；`fb49e86d` 新增 GET Command Controller | 直接扩展现有 `runtimeapi.command` 包和 `RuntimeCommandController`；不再建第二套 Registry 或 Command 清单入口 |
+| `3004419a` 的 `CommandDefinition.java:15` 只包装可变 Descriptor DTO，还没有 Admission 和 Handler；两个分支也没有 POST Command | 将 Definition 改为稳定元数据、准入和 Handler 的行为组合，按 Session 投影 Descriptor；再增加 Invocation、Result、Execution Service 和请求范围 SSE |
+| `3004419a` 的 `CompositeCommandRegistry.find:54-58` 已与 list 共用 `resolve`，但 `CommandDefinitionSource.find` 和 `SkillCommandSource.find` 已不再被 Composite 调用 | Source 只保留 list；Registry 为单次请求产生 `ResolvedCommandCatalog`，由同一快照支持清单、准入和执行查找 |
+| `fb49e86d` 的 `RuntimeCommandController.list:62-75` 直接访问 Repository/Registry，`CommandListResponseVO` 直接暴露 `CommandDescriptorDTO` | 增加 `CommandCatalogService`；Controller 只接收/返回 VO，Service 把内部 DTO 转换为不可变的响应 VO |
+| `fb49e86d` 的 `RuntimeErrorCode.java:50-51` 新增 `COMMAND_NOT_FOUND` 和 `INVALID_COMMAND_ARGUMENTS` | 保留前者；后者与内外两份精确契约中的 `INVALID_COMMAND_REQUEST` 冲突，必须在实现 POST 前统一，这不是待决策项 |
+| `3004419a` 保留 `Skill.NAME_PATTERN` 宽松加载规则，另用 `SkillNameValidator` 对命令清单严格过滤 | 这是对存量 Skill 的迁移兼容；Builtin 不扩大该差异，Skill 执行必须与清单复用同一严格校验器 |
 | `RuntimeSessionDTO` 与 `t_sessions` 没有 `displayName/display_name` | `/name` 必须先补齐 Session 资源、DTO、SQL、Mapper 和响应组装 |
 | `RuntimeSessionRepository.appendEntry*` 会推进 `active_leaf_id`；当前查询只读取活动祖先链 | 不能复用普通 Entry 追加方法写 `command.*`；必须增加 sidecar 专用事务和查询合并 |
 | `RuntimeSessionConfigurationService:78-163` 把领域更新与 Request VO、`If-Match` 绑定 | `/model`、`/thinking` 提取共用领域服务；Command 入口不伪造 ETag，也不调用 Controller |
 | `ManagedAgentSession.compact:105-107` 已提供手工压缩，但当前 HTTP 执行槽位只由 User Event 占用 | `/compact` 必须先原子占用 Session 执行槽位，再调用现有压缩能力 |
 
 指定基线 `c1311f69` 到 `main` 复核基线 `c9d858bc` 之间，四个保留 Command 主源码没有
-行为变化。`fc06c618` 是从该 merge base 向前的未合入实现证据；Builtin 开发应基于它已有骨架，
-但先处理上表契约和扩展点差距。
+行为变化。当前未合入分支尖端为 `3004419a` 和 `fb49e86d`。Builtin 开发应基于这两个
+已有骨架，并先处理上表契约和类边界差距。
 
 ### 2.3 实施切片
 
@@ -67,8 +72,9 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 
 | 顺序 | 状态 | 切片 | 完成标志 |
 |---:|---|---|---|
-| 0A | 部分已有 | 命令清单骨架整改 | 复用 `fc06c618` 的 Source、Registry 和 GET Controller；补齐 Definition 扩展点、启动查重、共享 Skill 校验和精确错误码 |
-| 0B | 待实现 | Command 执行核心与 POST HTTP | Contributor、不可变 Builtin Source、Invocation、Admission、Handler、Execution Service、VO 和请求范围 SSE 骨架可测 |
+| 0A | 未合入分支已有 | 发现与 GET 清单 | 复用 `3004419a` 的 Source/Registry 和 `fb49e86d` 的 GET Controller，不重建平行架构 |
+| 0B | 待整改 | 类边界与解析快照 | 引入 `CommandCatalogService`、不可变响应 VO、`ResolvedCommandCatalog`；补齐 Definition 扩展点、启动查重和精确错误码 |
+| 0C | 待实现 | Command 执行核心与 POST HTTP | Contributor、不可变 Builtin Source、Invocation、Admission、Handler、Execution Service、VO 和请求范围 SSE 骨架可测 |
 | 1 | 待实现 | sidecar 与生命周期 | `command.started/completed/failed` 可写、可流式投影、可从当前分支历史恢复且不改变 active leaf |
 | 2 | 待实现 | 只读 Builtin | Help、Status、Skills 完成；运行中可并发查询，仍写通用命令生命周期 |
 | 3 | 待实现 | Session Name | 查询、修改、同值更新、运行中更新、`displayName` 与 `session.name.changed` 完成 |
@@ -79,9 +85,55 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 
 [PlantUML 源码：`builtin_implementation_alignment`](设计图/diagram.puml#L26)
 
-### 2.4 Handler 与事务边界
+### 2.4 类图视角的当前实现
 
-- Handler 只接收不可变 Invocation，并只调用一个窄职责应用服务；不接收 Controller、
+`3004419a` 和 `fb49e86d` 形成了“发现 + GET 清单”骨架，但还不是可直接继续叠加
+七个 Handler 的最终类边界。下图只表达两个未合入分支中已观察到的类，不把目标类混入现状。
+
+![当前 Command 发现类图](设计图/observed_command_discovery_classes.svg)
+
+[PlantUML 源码：`observed_command_discovery_classes`](设计图/diagram.puml#L154)
+
+| 类图观察 | 影响 |
+|---|---|
+| `RuntimeCommandController` 同时依赖 Repository、Registry 和响应包装器 | Web 层承担了 Session 查询和命令编排，POST 加入后会继续膨胀 |
+| `CommandListResponseVO` 直接持有可变 `CommandDescriptorDTO` | 内部 DTO 穿透 Controller 边界，公共响应会被内部重构牵动 |
+| `CommandDefinition` 只包含 Descriptor | Definition 尚不能表达准入和执行，Builtin 行为没有稳定扩展点 |
+| Composite 已用同一 `resolve` 服务 list/find，但 Source 仍各自实现 `find` | 组合层的唯一性已改正，Source 的二次查找逻辑反而成为冗余与漂移点 |
+
+### 2.5 推荐目标类图
+
+目标结构先固定 Web、Application、Command Core 和 Runtime Adapter 四层。Spring 单例只保留无请求
+可变状态的协作对象；每次 GET 或 POST 都生成一个不可变 `ResolvedCommandCatalog`，并让
+清单、Help、准入和分发共享其 Definition 身份、元数据和 Skill 快照。可变 Session 状态
+和执行容量仍在接受操作的事务或锁内重新检查。
+
+![Builtin Command 目标核心类图](设计图/target_command_core_classes.svg)
+
+[PlantUML 源码：`target_command_core_classes`](设计图/diagram.puml#L229)
+
+这个边界下：
+
+- Controller 只完成 HTTP 参数、Locale、Header 和响应投影，不直接访问 Repository 或 Registry；
+- `CommandCatalogService` 和 `CommandExecutionService` 分别编排只读清单与有生命周期的执行；
+- `CommandDefinitionSource` 只生成 Definition，`ResolvedCommandCatalog` 按名称建立唯一、已验证的请求快照；
+- `CommandDefinition` 是不可变行为组合，Descriptor 只是按 Session 状态生成的内部投影；
+- Service 把内部 DTO 转换为响应专用的不可变 VO，不让领域对象穿过 Web 边界。
+
+七个 Builtin 按“Contributor 声明—Handler 适配—窄职责服务”一一映射：
+
+![Builtin 目标扩展类图](设计图/target_builtin_extension_classes.svg)
+
+[PlantUML 源码：`target_builtin_extension_classes`](设计图/diagram.puml#L339)
+
+`HelpCommandHandler` 不能注入 `CommandCatalogService` 或 Registry。否则会形成
+`CatalogService -> Registry -> BuiltinSource -> Contributor -> HelpHandler -> CatalogService`
+的 Spring Bean 依赖环。执行服务将本次已解析的只读 `CommandCatalogView` 放入
+`CommandExecutionContext`，Help 只通过无状态 `CommandHelpFormatter` 格式化该视图。
+
+### 2.6 Handler 与事务边界
+
+- Handler 只接收不可变 Invocation 和只读 Execution Context，并只调用一个窄职责应用服务；不接收 Controller、
   Request VO、ResultBean、Repository 或宽泛 Session 门面。
 - `arguments` 和 `fileIds` 由 Service 统一归一。Builtin 的 `fileIds` 必须在 Handler 前为空。
 - Help、Status、Name 查询、Model 查询和 Skills 查询不改变 `state` 或 `resourceVersion`；
@@ -96,9 +148,9 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 
 ![Compact Command 执行槽位](设计图/compact_command_execution.svg)
 
-[PlantUML 源码：`compact_command_execution`](设计图/diagram.puml#L57)
+[PlantUML 源码：`compact_command_execution`](设计图/diagram.puml#L58)
 
-### 2.5 参数语法
+### 2.7 参数语法
 
 | 命令 | Handler 前的确定性语法 |
 |---|---|
@@ -112,10 +164,10 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 
 `COMMAND_ARGUMENTS_NOT_SUPPORTED` 是命令清单中的不可用原因。调用方绕过清单并提交非法
 参数时，精确 HTTP 契约当前统一返回 `INVALID_COMMAND_REQUEST`；实现不得把清单原因当作
-尚未声明的 HTTP 错误码。`fc06c618` 中的 `INVALID_COMMAND_ARGUMENTS` 必须按该权威顺序更正，
+尚未声明的 HTTP 错误码。`fb49e86d` 中的 `INVALID_COMMAND_ARGUMENTS` 必须按该权威顺序更正，
 不能作为 Builtin 调用的兼容别名。
 
-### 2.6 三个实施决策门
+### 2.8 三个实施决策门
 
 以下问题会改变已确认的 Command HTTP 或历史语义，代码不能自行选择：
 
@@ -125,7 +177,7 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 | 空历史 Compact | 当前 `ManagedAgentSession` 对无可压缩历史返回异常；Builtin 设计未定义对外结果 | 作为无变化成功：写 `command.completed`，返回“当前上下文无需压缩”，省略 `sourceEventSeq` |
 | 空 Session sidecar | sidecar 锚定提交时 `active_leaf_id`，但空 Session 的锚点为 `null` | 将 `parent_id IS NULL` 的 Command/Name sidecar 定义为根级 sidecar；任何后续当前分支都可见，且永不成为 active leaf |
 
-在这三个决策门确认前，可以实现切片 0 的纯结构和单元测试，但不应合入 Model/Thinking
+在这三个决策门确认前，可以实现切片 0B/0C 的纯结构和单元测试，但不应合入 Model/Thinking
 修改、Compact terminal 语义或 sidecar 查询 SQL。
 
 ## 3. 命令矩阵
@@ -149,7 +201,7 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 
 ![Builtin 运行状态可用性](设计图/builtin_availability.svg)
 
-[PlantUML 源码：`builtin_availability`](设计图/diagram.puml#L98)
+[PlantUML 源码：`builtin_availability`](设计图/diagram.puml#L99)
 
 ## 4. 每个 Builtin 的独立组件
 
@@ -157,7 +209,7 @@ Builtin 不能从“先写七个 Handler”开始。建议按以下依赖顺序�
 
 | 命令 | Handler 调用的应用服务 |
 |---|---|
-| Help | `CommandCatalogService` |
+| Help | `CommandHelpFormatter`（读取 Execution Context 中的 `CommandCatalogView`） |
 | Status | `SessionStatusQueryService` |
 | Name | `SessionNamingService` |
 | Model | `SessionModelConfigurationService` |
@@ -221,7 +273,7 @@ last-commit-wins：
 
 ![Session 名称更新](设计图/session_name_update.svg)
 
-[PlantUML 源码：`session_name_update`](设计图/diagram.puml#L126)
+[PlantUML 源码：`session_name_update`](设计图/diagram.puml#L127)
 
 ## 6. 输出边界
 
@@ -232,7 +284,7 @@ last-commit-wins：
 | `name` | 当前或更新后 displayName | 只有真实变更时存在 |
 | `model` | 当前模型/可选列表，或切换后模型 | 变更时指向 `session.model.changed` |
 | `thinking` | 当前或切换后 `on/off` | 变更时指向 `session.thinking.changed` |
-| `compact` | 压缩完成的稳定摘要，不回显私有摘要正文 | 真实压缩时指向 `session.compaction.completed`；无变化行为待 2.6 节确认 |
+| `compact` | 压缩完成的稳定摘要，不回显私有摘要正文 | 真实压缩时指向 `session.compaction.completed`；无变化行为待 2.8 节确认 |
 | `skills` | 当前绑定 Skill 名与描述 | 无 |
 
 `text` 只用于按请求 Locale 展示，客户端不得解析它来更新状态。客户端以
@@ -246,15 +298,19 @@ last-commit-wins：
 | 观察到的行为 | `ThinkingCommand.java:30-45` 当前还兼容 `true/false`；v1 只对用户开放 `on/off` |
 | 观察到的行为 | `c9d858bc` 的 `RuntimeSessionConfigurationService.java:78-163` 已有可选模型查询、模型/思考变更和 idle/ETag 校验 |
 | 观察到的行为 | `ManagedAgentSession.java:105` 已有压缩入口；命令不应自建另一套压缩实现 |
-| 观察到的未合入实现 | `fc06c618` 的 `runtimeapi.command` 和 `RuntimeCommandController.list:62-75` 已落地动态 Skill 清单、组合 Registry 与 GET 入口；尚无 Builtin Source、Handler、准入、POST/SSE 和命令生命周期 |
-| 当前实现差异 | `fc06c618` 的 Definition 只包含 Descriptor，Registry 的 list/find 查重语义不一致，且 `INVALID_COMMAND_ARGUMENTS` 与精确契约不一致；它们是 Builtin 实现前置整改，不是已确认设计的替代方案 |
+| 观察到的未合入实现 | `3004419a` 的 `runtimeapi.command` 已落地动态 Skill 清单和组合 Registry；`fb49e86d` 的 `RuntimeCommandController.list:62-75` 已落地 GET 入口；尚无 Builtin Source、Handler、准入、POST/SSE 和命令生命周期 |
+| 当前实现差异 | `3004419a` 的 Definition 只包含可变 Descriptor DTO，Source 仍有未被 Composite 使用的 `find`；`fb49e86d` 的 Controller 越过应用层且响应 VO 暴露内部 DTO，错误码也与精确契约不一致 |
 | 目标设计 | 新增 Help/Status/Skills 与全部 Runtime Command 适配器；七个 Builtin 均为 target-only |
+| 目标设计 | 新增 `CommandCatalogService`、`CommandExecutionService`、`ResolvedCommandCatalog`、可执行 Definition 与响应专用不可变 VO；这些类尚未实现 |
 | 架构变更 | Name 所有权转入 CampusClaw Session，替换 `NameCommand.java:13-14` 的旧注释 |
 | 实施边界 | `modules/coding-agent-cli` 是主维护源码；`campusclaw/` 由同步脚本生成，不作为独立实现源 |
 
 ## 8. 验收清单
 
 - 七个 Contributor 名称不可变，任两重名时 Spring 启动失败。
+- Controller 只依赖 Catalog/Execution Service；不直接依赖 Repository、Registry 或返回内部 DTO。
+- `CommandDefinitionSource` 只保留 list；同一请求的清单、Help、准入和执行命中同一 `ResolvedCommandCatalog`，状态变更仍在权威边界重新准入。
+- `HelpCommandHandler` 不注入 Catalog Service 或 Registry，Spring Bean 依赖图无环。
 - 对每个命令覆盖无参、有参、多余参数、附件和 idle/running 矩阵。
 - Model/Thinking 在 running 中的查询成功，输入调用于流建立前返回 `SESSION_BUSY`。
 - Name 覆盖初始空值、查询、运行中更新、同值更新、控制符、UTF-8 字节边界、
@@ -271,6 +327,7 @@ last-commit-wins：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.2.0 | 2026-09-03 | 复核 `3004419a` 发现层和 `fb49e86d` GET 清单；新增当前实现类图、目标核心类图和七个 Builtin 扩展类图，明确应用层、请求快照、DTO/VO 边界与 Help 无环依赖 |
 | 2.1.0 | 2026-09-02 | 复核 `c9d858bc` 主线与未合入的 `fc06c618` 命令清单骨架，增加实施权威顺序、差距、竖切片、事务边界、参数语法、公司镜像规则和三个实施决策门；不改变已确认的七个 Builtin 清单 |
 | 2.0.4 | 2026-09-01 | 命令相关表述统一使用“命令清单”，移除可能被理解为文件路径的用词 |
 | 2.0.3 | 2026-08-31 | 统一七个 Builtin 的动作式短句，简化运行状态和组件职责说明；不改变命令行为 |

@@ -27,16 +27,17 @@ Execution -> Repository : append command.completed sidecar
 title Builtin Command Implementation Slices
 skinparam shadowing false
 
-' Source evidence: pi-mono-java@fc06c618 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java:14
-' Source evidence: pi-mono-java@fc06c618 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-73
-' Source evidence: pi-mono-java@fc06c618 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java:37-81
-' Observed behavior: the feature branch provides command discovery and the GET endpoint, but Definition has no admission or handler and POST execution is absent.
+' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java:15
+' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-75
+' Source evidence: pi-mono-java@fb49e86d modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java:37-81
+' Observed behavior: the unmerged branches provide command discovery and the GET endpoint, but Definition has no admission or handler and POST execution is absent.
 ' Target-only design: extend the existing skeleton and deliver builtins as dependent vertical slices.
 
 start
-:Existing fc06c618\nSources, registry, descriptors,\nand GET command list;
-:Slice 0A\nComplete Definition seams, startup checks,\nshared Skill validation, and exact error code;
-:Slice 0B\nInvocation, admission, handlers,\nexecution service, and POST SSE;
+:Existing 3004419a and fb49e86d\nSources, registry, descriptors,\nand GET command list;
+:Slice 0A\nReuse discovery and GET skeleton;
+:Slice 0B\nAdd application boundary, immutable response VOs,\nresolved catalog, Definition seams, and exact errors;
+:Slice 0C\nInvocation, execution context, admission, handlers,\nexecution service, and POST SSE;
 :Slice 1\nSidecar lifecycle and recovery;
 :Slice 2\nHelp, Status, and Skills;
 :Slice 3\nSession Name;
@@ -148,4 +149,266 @@ else changed value
   Naming -> Entries : append session.name.changed sidecar
 end
 Naming --> Handler : text and optional sourceEventSeq
+@enduml
+
+@startuml observed_command_discovery_classes
+title Observed Command Discovery Classes (Unmerged)
+top to bottom direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+
+' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java:15
+' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinitionSource.java:20-36
+' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-75
+' Source evidence: pi-mono-java@fb49e86d modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java:37-81
+' Source evidence: pi-mono-java@fb49e86d modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/CommandListResponseVO.java:19-30
+' Observed behavior: discovery and GET exist only on unmerged branches; execution and builtin definitions do not exist.
+
+package "Web boundary" {
+  class RuntimeCommandController {
+    +list(sessionId, request)
+    -requireSession(sessionId)
+  }
+  class CommandListResponseVO <<mutable>> {
+    +commands: List<CommandDescriptorDTO>
+  }
+  class ResultBeanAdapter
+}
+
+package "Command discovery" {
+  class CompositeCommandRegistry {
+    +list(session)
+    +find(session, name)
+    -resolve(session)
+  }
+  interface CommandDefinitionSource {
+    +list(session)
+    +find(session, name)
+  }
+  class SkillCommandSource
+  class CommandDefinition {
+    +descriptor: CommandDescriptorDTO
+  }
+  class CommandDescriptorDTO <<mutable>>
+}
+
+package "Runtime and persistence" {
+  class RuntimeSessionRepository
+  class AgentRuntimeManager
+}
+
+RuntimeCommandController --> RuntimeSessionRepository : loads session directly
+RuntimeCommandController --> CompositeCommandRegistry : lists directly
+RuntimeCommandController --> ResultBeanAdapter : wraps response
+RuntimeCommandController ..> CommandListResponseVO : creates
+CommandListResponseVO o-- CommandDescriptorDTO : exposes internal DTO
+CompositeCommandRegistry o-- CommandDefinitionSource
+CompositeCommandRegistry --> CommandDefinition : resolves
+SkillCommandSource ..|> CommandDefinitionSource
+SkillCommandSource --> AgentRuntimeManager : prepareCached
+CommandDefinition *-- CommandDescriptorDTO
+
+note right of RuntimeCommandController
+No application service boundary.
+There is no POST execution path.
+end note
+
+note right of CommandDefinitionSource
+Composite registry calls list only.
+Source-level find is redundant.
+end note
+
+note right of CommandDefinition
+The definition is descriptor-only.
+Admission and handler are absent.
+end note
+@enduml
+
+@startuml target_command_core_classes
+title Target Builtin Command Core Classes
+top to bottom direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+
+' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-75
+' Source evidence: pi-mono-java@fb49e86d modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java:37-81
+' Target-only design: add application boundaries, one catalog snapshot per request, executable definitions, and immutable response VOs.
+' Design reason: list, help, admission, and execution must use one validated command view without Controller or DTO leakage.
+
+package "Web API" {
+  class RuntimeCommandController <<Spring singleton>> {
+    +list(sessionId, locale)
+    +execute(sessionId, request)
+  }
+  class CommandListResponseVO <<immutable>>
+  class CommandDescriptorResponseVO <<immutable>>
+}
+
+package "Application" {
+  class CommandCatalogService <<Spring singleton>> {
+    +list(sessionId, locale)
+  }
+  class CommandExecutionService <<Spring singleton>> {
+    +execute(sessionId, requestContext)
+  }
+  class CommandInvocation <<immutable>>
+  class CommandExecutionContext <<per request>> {
+    +sessionSnapshot
+    +catalogView
+    +locale
+  }
+}
+
+package "Command core" {
+  class CompositeCommandRegistry <<Spring singleton>> {
+    +resolve(context): ResolvedCommandCatalog
+  }
+  interface CommandCatalogView {
+    +list()
+    +find(name)
+  }
+  class ResolvedCommandCatalog <<request snapshot>>
+  interface CommandDefinitionSource {
+    +list(context)
+  }
+  class ImmutableBuiltinCommandSource <<Spring singleton>>
+  class SkillCommandSource <<Spring singleton>>
+  interface BuiltinCommandContributor {
+    +definition()
+  }
+  class CommandDefinition <<immutable>> {
+    +name
+    +kind
+    +describe(context)
+    +admit(invocation, authoritativeState)
+    +execute(invocation, executionContext)
+  }
+  interface CommandAdmissionPolicy
+  interface CommandHandler {
+    +execute(invocation, executionContext)
+  }
+  class CommandDescriptorDTO <<internal>>
+}
+
+package "Runtime adapters" {
+  class RuntimeSessionRepository
+  class AgentRuntimeManager
+}
+
+RuntimeCommandController -down-> CommandCatalogService
+RuntimeCommandController -down-> CommandExecutionService
+CommandCatalogService -down-> RuntimeSessionRepository : loads authorized session
+CommandCatalogService -down-> CompositeCommandRegistry : resolves once
+CommandCatalogService ..> CommandListResponseVO : returns
+CommandListResponseVO *-- CommandDescriptorResponseVO
+CommandExecutionService -down-> RuntimeSessionRepository : lifecycle sidecars
+CommandExecutionService -down-> CompositeCommandRegistry : resolves once
+CommandExecutionService ..> CommandInvocation : creates
+CommandExecutionService ..> CommandExecutionContext : creates
+CommandExecutionService -down-> CommandDefinition : dispatches
+
+CompositeCommandRegistry o-- CommandDefinitionSource
+CompositeCommandRegistry -down-> ResolvedCommandCatalog : creates validated snapshot
+ResolvedCommandCatalog ..|> CommandCatalogView
+ResolvedCommandCatalog *-- CommandDefinition
+ImmutableBuiltinCommandSource ..|> CommandDefinitionSource
+SkillCommandSource ..|> CommandDefinitionSource
+ImmutableBuiltinCommandSource "1" o-- "7" BuiltinCommandContributor : startup index
+SkillCommandSource --> AgentRuntimeManager : reads complete snapshot
+CommandDefinition *-- CommandAdmissionPolicy
+CommandDefinition *-- CommandHandler
+CommandDefinition ..> CommandDescriptorDTO : projects per session
+CommandExecutionContext --> CommandCatalogView : same resolved view
+
+note right of ResolvedCommandCatalog
+One request owns one immutable view.
+Definition identity and metadata cannot drift.
+Admission still rechecks mutable authoritative state.
+end note
+
+note right of CommandCatalogService
+Internal DTOs stop here.
+Only immutable response VOs cross the Web boundary.
+end note
+@enduml
+
+@startuml target_builtin_extension_classes
+title Target Builtin Contributors, Handlers, and Services
+left to right direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+
+' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/builtin/ModelCommand.java:16-36
+' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/SlashCommandSession.java:19-32
+' Target-only design: each builtin contributes one definition, delegates to one handler, and reaches one narrow application service.
+' Design reason: adding a builtin must not modify a central switch or create a dependency cycle through the catalog service.
+
+package "Contributors" {
+  interface BuiltinCommandContributor
+  class HelpContributor
+  class StatusContributor
+  class NameContributor
+  class ModelContributor
+  class ThinkingContributor
+  class CompactContributor
+  class SkillsContributor
+}
+
+package "Handlers" {
+  class HelpCommandHandler
+  class StatusCommandHandler
+  class NameCommandHandler
+  class ModelCommandHandler
+  class ThinkingCommandHandler
+  class CompactCommandHandler
+  class SkillsCommandHandler
+}
+
+package "Narrow application services" {
+  class CommandHelpFormatter
+  class SessionStatusQueryService
+  class SessionNamingService
+  class SessionModelConfigurationService
+  class SessionThinkingConfigurationService
+  class SessionCompactionApplicationService
+  class AgentSkillCatalogService
+  interface CommandCatalogView
+}
+
+BuiltinCommandContributor <|.. HelpContributor
+BuiltinCommandContributor <|.. StatusContributor
+BuiltinCommandContributor <|.. NameContributor
+BuiltinCommandContributor <|.. ModelContributor
+BuiltinCommandContributor <|.. ThinkingContributor
+BuiltinCommandContributor <|.. CompactContributor
+BuiltinCommandContributor <|.. SkillsContributor
+
+HelpContributor --> HelpCommandHandler : binds
+StatusContributor --> StatusCommandHandler : binds
+NameContributor --> NameCommandHandler : binds
+ModelContributor --> ModelCommandHandler : binds
+ThinkingContributor --> ThinkingCommandHandler : binds
+CompactContributor --> CompactCommandHandler : binds
+SkillsContributor --> SkillsCommandHandler : binds
+
+HelpCommandHandler --> CommandHelpFormatter
+CommandHelpFormatter ..> CommandCatalogView : formats execution view
+StatusCommandHandler --> SessionStatusQueryService
+NameCommandHandler --> SessionNamingService
+ModelCommandHandler --> SessionModelConfigurationService
+ThinkingCommandHandler --> SessionThinkingConfigurationService
+CompactCommandHandler --> SessionCompactionApplicationService
+SkillsCommandHandler --> AgentSkillCatalogService
+
+note bottom of HelpCommandHandler
+The execution context supplies CommandCatalogView.
+The handler does not inject CommandCatalogService
+or CompositeCommandRegistry, so no bean cycle exists.
+end note
 @enduml

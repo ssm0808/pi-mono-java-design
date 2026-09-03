@@ -4,12 +4,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.4 |
-| 设计日期 | 2026-09-01 |
-| 设计仓基线 | `27484974eb106a7e43910d8e542de52a72c58102` |
+| 文档版本 | 1.1.0 |
+| 设计日期 | 2026-09-03 |
+| 设计仓基线 | `6baa9df1c7a5a0e3196e720168b0214b6d4b70c1` |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
-| CampusClaw 复核 HEAD | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
-| 交付范围 | 目标设计与 HTTP 契约；不修改产品代码 |
+| CampusClaw `main` 复核基线 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
+| Command 发现层复核提交 | `3004419a467b77bac08d0f2b3dad21f8815568c5` |
+| Command 清单 HTTP 复核提交 | `fb49e86dc1bc9761d191ad9b9890afe7909deace` |
+| 交付范围 | 目标设计与 HTTP 契约；发现与 GET 清单已有未合入实现，执行仍为 target-only |
 
 ## 1. 设计结论
 
@@ -44,9 +46,12 @@ CampusClaw Session 能力。这是架构变更，不是现有行为。
 | Runtime 只有 Spring `@RestController` 路由；Registry 无生产调用点 | 当前对外执行入口只有 HTTP |
 | `RuntimeSessionMapper.xml:132-190` 只查询 `active_leaf_id` 的祖先 | 当前没有 sidecar 查询语义 |
 | `AgentRuntimeManager.java:81-112,275-293,425-433` 在 Agent 锁内发布和读取 complete 快照 | Skill 调用应复用该快照边界 |
+| `3004419a` 的 `CompositeCommandRegistry.resolve:60-75` 合并 Source 并统一支持 list/find | 发现层已在未合入分支落地；`CommandDefinitionSource.find` 已不再被 Composite 使用 |
+| `fb49e86d` 的 `RuntimeCommandController.list:62-75` 已提供 GET 清单 | Controller 仍直接访问 Repository/Registry 并返回内部 DTO，还不是目标边界 |
 
-指定基线 `c1311f69` 与复核 HEAD `94abd2ab` 都包含上述关键符号。后发的
-`RuntimeEventProjector` 变更只归入复核 HEAD，不归入早期 commit。
+指定基线 `c1311f69` 和 `main` 复核基线 `c9d858bc` 包含旧 Command 与 Runtime 关键符号。
+Command 发现层和 GET 清单分别只存在于未合入的 `3004419a` 和 `fb49e86d`，
+本文不把它们回写成 `main` 的已实现行为。
 
 ### 2.2 Harness 对比
 
@@ -70,18 +75,22 @@ CampusClaw Session 能力。这是架构变更，不是现有行为。
 
 ```text
 CommandDefinitionSource.list(context)
-CommandDefinitionSource.find(context, name)
-CommandHandler.execute(invocation) -> CompletionStage<CommandResultDTO>
+CompositeCommandRegistry.resolve(context) -> ResolvedCommandCatalog
+ResolvedCommandCatalog.list()
+ResolvedCommandCatalog.find(name)
+CommandHandler.execute(invocation, executionContext) -> CompletionStage<CommandResultDTO>
 ```
 
 | 组件 | 职责 |
 |---|---|
 | `BuiltinCommandContributor` | 声明一个 Builtin；启动时参与重名检查 |
 | `SkillCommandSource` | 按当前 Agent 快照动态生成 Skill 命令 |
-| `CompositeCommandRegistry` | 合并来源并按名称精确查找；不写命令分支 |
-| `CommandDefinition` | 组合描述符、准入规则和 Handler |
+| `CompositeCommandRegistry` | 合并来源、检查重名并为单次请求生成一个已验证快照 |
+| `ResolvedCommandCatalog` | 持有单次解析的唯一 Definition 映射，同时服务清单和精确执行查找 |
+| `CommandDefinition` | 组合稳定元数据、准入规则和 Handler；按 Session 投影 Descriptor，不把可变 Descriptor DTO 当作 Definition 本身 |
 | `CommandAdmissionPolicy` | 统一检查参数、附件和 Session 状态 |
-| `CommandHandler` | 调用窄职责 Application Service |
+| `CommandExecutionContext` | 为本次执行提供只读 Session 快照、Locale 和同一 `ResolvedCommandCatalog` 视图 |
+| `CommandHandler` | 调用窄职责 Application Service；需要帮助信息时只读取执行上下文中的清单视图 |
 | `CommandExecutionService` | 维护命令生命周期和 SSE |
 
 Builtin 在 Spring 启动时生成不可变索引。名称必须匹配 `[a-z0-9-]+`；重名直接启动失败。
@@ -98,9 +107,15 @@ Skill 名称校验器，不维护第二套规则。该规则对齐
 `SkillLoader` 只校验 64 字符和字符集合，尚未拒绝首尾或连续连字符，也未要求名称与
 `SKILL.md` 所在文件夹同名，因此这里属于目标安全加固。
 
-Handler 只接收不可变 `CommandInvocation`。它不能依赖 Controller、调用自身 HTTP 接口，
-也不能获得宽泛可变 Session 门面。新增命令只新增 Contributor、Definition、Handler 和
-窄职责服务，不修改中央 `switch`。
+Handler 只接收不可变 `CommandInvocation` 和只读 `CommandExecutionContext`。它不能依赖
+Controller、调用自身 HTTP 接口，也不能获得宽泛可变 Session 门面。新增命令只新增
+Contributor、Definition、Handler 和窄职责服务，不修改中央 `switch`。
+
+`CommandDefinitionSource` 只列出当前上下文的 Definition。Registry 在单次请求内仅解析一次，
+再由 `ResolvedCommandCatalog` 同时提供清单和精确查找。这避免了动态 Skill 快照在展示、准入和
+执行之间重新解析，也避免 Source 各自维护两套 list/find 逻辑。该快照只固定
+Definition 身份、元数据和 Skill 快照；修改状态的命令仍在所属事务或执行锁内重新检查
+Session 状态和执行容量，不把 Descriptor 的预览可用性当作最终准入。
 
 ![注册与分发](设计图/command_registration.svg)
 
@@ -167,7 +182,7 @@ Catalog。
 
 ![交互层路由](设计图/interaction_routing.svg)
 
-[PlantUML 源码：`interaction_routing`](设计图/diagram.puml#L79)
+[PlantUML 源码：`interaction_routing`](设计图/diagram.puml#L102)
 
 ## 7. HTTP 契约
 
@@ -231,7 +246,7 @@ Session 序列，因此公开 `entrySeq` 可以有缺口，调用方不得重编
 
 ![sidecar 历史](设计图/sidecar_history.svg)
 
-[PlantUML 源码：`sidecar_history`](设计图/diagram.puml#L109)
+[PlantUML 源码：`sidecar_history`](设计图/diagram.puml#L132)
 
 断线规则：
 
@@ -253,6 +268,7 @@ Session 序列，因此公开 `entrySeq` 可以有缺口，调用方不得重编
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-09-03 | 复核 `3004419a` 发现层与 `fb49e86d` GET 清单；引入单次请求 `ResolvedCommandCatalog` 快照和只读执行上下文，移除 Source 级别 find 职责，并明确 Definition 不直接封装可变 Descriptor DTO |
 | 1.0.4 | 2026-09-01 | 命令相关表述只使用“命令清单”；Skill 文件位置统一表述为“文件夹”，避免再次引入文件系统含义 |
 | 1.0.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 的完整规则；参数上限明确为复用普通消息的 UTF-16 输入限制，不再表述为 Harness 通用规范 |
 | 1.0.2 | 2026-08-31 | 全文改为短句、动作式表格和先结论后细节的结构；不改变已确认行为 |
