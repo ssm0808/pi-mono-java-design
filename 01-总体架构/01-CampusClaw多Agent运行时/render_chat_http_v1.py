@@ -158,6 +158,42 @@ def static_response(response: dict[str, Any], index: int) -> str:
     )
 
 
+def static_review(model: dict[str, Any]) -> str:
+    review = model.get("review", {})
+    questions = review.get("questions", [])
+    if not questions:
+        return ""
+    operation_key = model["operation"]["operationKey"]
+    fields = []
+    for question in questions:
+        options = []
+        for option in question["options"]:
+            checked = " checked" if option.get("selected") else ""
+            options.append(
+                '<label class="review-option">'
+                f'<input type="radio" name="{html.escape(operation_key)}-{html.escape(question["id"])}" '
+                f'value="{html.escape(option["value"], quote=True)}"{checked}>'
+                f'<span><strong>{html.escape(option["label"])}</strong>'
+                f'<small>{html.escape(option.get("description", ""))}</small></span></label>'
+            )
+        fields.append(
+            f'<fieldset data-question-id="{html.escape(question["id"], quote=True)}">'
+            f'<legend>{html.escape(question["legend"])}</legend>{"".join(options)}</fieldset>'
+        )
+    notice = review.get("notice", "选择后可直接发送本轮评审答复。")
+    return (
+        '<section class="section review-section"><div class="review-heading">'
+        '<div><h3>本轮需要你确认</h3>'
+        f'<p class="muted">{html.escape(notice)}</p></div>'
+        f'<span class="review-status">{html.escape(review.get("status", "评审中"))}</span></div>'
+        f'<form class="review-form" data-review-form data-operation-key="{html.escape(operation_key, quote=True)}">'
+        f'{"".join(fields)}<label class="review-notes">补充说明（可选）'
+        '<textarea name="notes" rows="3" placeholder="例如：只调整第 2 项，其余采用推荐项。"></textarea></label>'
+        '<div class="review-actions"><button type="submit" class="review-submit">发送评审答复</button>'
+        '<span class="review-feedback" data-review-feedback aria-live="polite"></span></div></form></section>'
+    )
+
+
 def render_static(model: dict[str, Any]) -> str:
     api = model["api"]
     operation = model["operation"]
@@ -187,6 +223,14 @@ def render_static(model: dict[str, Any]) -> str:
     ) if parameters else '<p class="muted empty">无 path/query/header 业务参数。</p>'
     request_body = operation["requestBody"]
     request_example = static_pre(request_body["example"]) if request_body.get("example") is not None else ""
+    request_examples = []
+    for example_index, example in enumerate(request_body.get("examples", [])):
+        open_attribute = " open" if example_index == 0 else ""
+        request_examples.append(
+            f'<details class="static-choice"{open_attribute}><summary>{html.escape(example["label"])}</summary>'
+            f'<p class="muted empty">{html.escape(example.get("description", ""))}</p>'
+            f'{static_pre(example["value"])}</details>'
+        )
     responses = "".join(static_response(response, index) for index, response in enumerate(operation["responses"]))
     return (
         '<div data-static-review>'
@@ -207,9 +251,9 @@ def render_static(model: dict[str, Any]) -> str:
         f'<section class="section contract-detail auth-section"><h3>调用上下文 Header</h3>{"".join(auth_blocks)}</section>'
         '<section class="section contract-detail request-section"><h3>参数与请求体</h3>'
         f'{parameter_html}<p class="muted empty">{html.escape(request_body.get("description", "无请求体。"))}</p>'
-        f'{request_example}</section>'
+        f'{request_example}{"".join(request_examples)}</section>'
         f'<section class="section contract-detail response-section"><h3>响应</h3>{responses}</section>'
-        '</article></div>'
+        f'{static_review(model)}</article></div>'
     )
 
 
@@ -242,7 +286,7 @@ def build_html() -> str:
   </style>
 </head>
 <body>
-  <!-- Generated from 接口契约/common.json and 接口契约/操作/*.json. Do not edit this HTML directly. -->
+  <!-- Generated from {html.escape(str(CONTRACT_ROOT.relative_to(ROOT)))}/common.json and operation models. Do not edit this HTML directly. -->
   <main>
 {"".join(cards)}
   </main>

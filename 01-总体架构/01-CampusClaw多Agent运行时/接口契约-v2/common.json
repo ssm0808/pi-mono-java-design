@@ -1,0 +1,71 @@
+{
+  "api": {
+    "title": "CampusClaw Session Events API",
+    "version": "2.0.0-proposal.1",
+    "basePath": "/campusclaw-service/v1",
+    "visibility": "Internal · 资源模型 A 已确认 · 当前接口评审中",
+    "fieldNaming": "lowerCamelCase",
+    "headerNaming": "保留原名"
+  },
+  "resourceIdPatterns": {
+    "session": "^session-[0-9a-fA-F]{32}$"
+  },
+  "requestHeaderExamples": [
+    {
+      "id": "jwt",
+      "label": "JWT Header 示例",
+      "preferred": true,
+      "headers": [
+        {
+          "name": "X-HW-ID",
+          "value": "<CALLER_ID>",
+          "required": true,
+          "description": "公司调用方标识"
+        },
+        {
+          "name": "Authorization",
+          "value": "Bearer <JWT>",
+          "required": true,
+          "description": "由上游完成真实性与格式检查；Runtime Controller 仅接收调用上下文"
+        }
+      ]
+    },
+    {
+      "id": "appkey",
+      "label": "APPKEY Header 示例",
+      "preferred": false,
+      "headers": [
+        {
+          "name": "X-HW-ID",
+          "value": "<CALLER_ID>",
+          "required": true,
+          "description": "公司调用方标识"
+        },
+        {
+          "name": "X-HW-APPKEY",
+          "value": "<APPKEY>",
+          "required": true,
+          "description": "由上游完成真实性与格式检查；可与 Authorization 同时出现，Runtime 不做互斥检查"
+        }
+      ]
+    }
+  ],
+  "parameters": {
+    "sessionId": {
+      "in": "path",
+      "name": "sessionId",
+      "required": true,
+      "schema": {
+        "$ref": "resourceIdPatterns.session"
+      },
+      "description": "已经存在且未删除的内部 Session 标识；不暴露给浏览器"
+    },
+    "acceptLanguage": {
+      "in": "header",
+      "name": "Accept-Language",
+      "required": false,
+      "schema": "zh-CN | en-US",
+      "description": "异常消息语言；缺失或不支持时回退 en-US"
+    }
+  }
+}

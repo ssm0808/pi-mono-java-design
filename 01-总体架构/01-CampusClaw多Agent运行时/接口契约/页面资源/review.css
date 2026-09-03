@@ -135,6 +135,63 @@ main {
 }
 .company-api-review .static-response:last-child { border-bottom: 0; }
 .company-api-review .static-choice { margin-left: 8px; }
+.company-api-review .review-section { background: light-dark(#f8fbff, #121c28); }
+.company-api-review .review-heading,
+.company-api-review .review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.company-api-review .review-status {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border: 1px solid light-dark(#bf8700, #d29922);
+  border-radius: 999px;
+  color: light-dark(#7d4e00, #f2cc60);
+  font-size: 12px;
+}
+.company-api-review .review-form { margin-top: 14px; }
+.company-api-review fieldset {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 8px;
+}
+.company-api-review legend { padding: 0 5px; font-size: 13px; font-weight: 600; }
+.company-api-review .review-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-top: 9px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.company-api-review .review-option input { margin: 3px 0 0; }
+.company-api-review .review-option strong,
+.company-api-review .review-option small { display: block; }
+.company-api-review .review-option small { margin-top: 2px; color: light-dark(#5f6b78, #aab4c0); }
+.company-api-review .review-notes { display: block; font-size: 13px; font-weight: 600; }
+.company-api-review textarea {
+  width: 100%;
+  margin-top: 7px;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 7px;
+  background: light-dark(#ffffff, #1a2028);
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+}
+.company-api-review .review-actions { justify-content: flex-start; margin-top: 12px; }
+.company-api-review .review-submit {
+  border-color: light-dark(#0969da, #58a6ff);
+  background: light-dark(#0969da, #238636);
+  color: #ffffff;
+}
+.company-api-review .review-feedback { color: light-dark(#5f6b78, #aab4c0); font-size: 12px; }
 @media (max-width: 680px) {
   body { padding: 8px; }
   .company-api-review .operation { margin-right: 9px; margin-left: 9px; }
@@ -167,4 +224,6 @@ main {
     overflow-wrap: anywhere;
     white-space: pre-wrap;
   }
+  .company-api-review .review-heading,
+  .company-api-review .review-actions { align-items: flex-start; flex-direction: column; }
 }

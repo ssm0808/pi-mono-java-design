@@ -2,12 +2,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.5.5 |
-| 状态 | CampusClaw 内部 HTTP 1.43.4 共 13 个 operation；Slash Command 内外契约已确认；mate-service 普通消息 Events 路径已确认、其余评审中 |
-| 当前传输结论 | 浏览器/UI → mate-service、mate-service → CampusClaw 均使用 HTTP；实时执行均使用请求范围内的 SSE |
-| 设计仓分析基线 | `27484974eb106a7e43910d8e542de52a72c58102` |
+| 文档版本 | 3.6.0 |
+| 状态 | Session Events v2 资源模型 A 已确认；第一个 POST operation 字段评审中；HTTP 1.43.4 保留为迁移前 v1 基线 |
+| 当前传输结论 | v2 使用独立 POST、Session live SSE 与固定快照历史；执行仍是内部状态，无 `executionId/runId` |
+| 设计仓分析基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
-| CampusClaw 当前核对头 | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
+| CampusClaw 当前核对头 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | pi-mono Slash 对比基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -19,11 +19,33 @@
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | DeepSeek Harness 对照基线 | `141eb6fef83422698aef7a981029e843e8161534` |
 | Codex Harness 对照基线 | `be33f80bc65159c094ecd06bf155afa3061ce23d` |
-| 更新日期 | 2026-09-01 |
+| 更新日期 | 2026-09-03 |
 
 ## 1. 当前结论
 
-系统采用两跳 HTTP+SSE，而不是 WebSocket：
+用户已确认 Session Events 资源模型 A。CampusClaw 的目标会话事件边界拆为三个
+Session scoped operation：
+
+```text
+POST /sessions/{sessionId}/events
+  -> 接受并持久化一个 user.* 事件，返回 ResultBean JSON
+
+GET /sessions/{sessionId}/events/stream
+  -> 跨多次内部执行的 live-only Session SSE
+
+GET /sessions/{sessionId}/events
+  -> 固定快照的权威历史与断线对账
+```
+
+执行继续是 Runtime 内部状态，不引入 `executionId` 或 `runId`。独立 Abort 将由
+`user.interrupt` 替代，`user.tool_confirmation` 进入同一个用户事件联合类型。
+第一个 POST operation 的字段仍在评审，详见
+[`Session Events v2 重设计`](chat-events-v2-design.md) 和
+[`交互评审页`](chat-events-v2-review.html)。
+
+### 1.1 现行 v1 基线（迁移完成前保留）
+
+HTTP 1.43.4 当前仍采用两跳 HTTP+SSE，而不是 WebSocket：
 
 ```text
 Browser / Agent UI
@@ -38,7 +60,8 @@ SSE；结构化 Skill/Compact Command 同样建立独立的请求范围 SSE。�
 `stream.end`、流内错误或网络中断后连接结束。下一次用户消息、Command、Steer、
 FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。
 
-SSE 在这里不是永久在线的 Session 订阅，也不是单独的第二条事件接口。它是一次
+以下段落只描述迁移前 v1，不再代表 v2 目标。v1 的 SSE 不是永久在线的 Session
+订阅，也不是单独的第二条事件接口。它是一次
 有界执行的流式 HTTP 响应。Steer 和 FollowUp 被接受后进入当前 Session 的内部队列，
 其后续 Assistant、Tool 和状态事件继续由当前仍然打开的执行 SSE 输出；Abort 终止
 当前执行并使该流收敛。
@@ -49,7 +72,7 @@ SSE 在这里不是永久在线的 Session 订阅，也不是单独的第二条�
 
 ## 2. 契约权威顺序
 
-当前逐接口评审的维护顺序为：
+迁移前 v1 逐接口契约的维护顺序为：
 
 1. [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作)：唯一可编辑的精确契约源；共享 ID、认证和公共响应只定义一次；
 2. [`chat-http-v1-review.html`](chat-http-v1-review.html)：由结构化契约生成的主要人类评审界面，不允许手工修改；
@@ -67,6 +90,13 @@ OpenAPI 已经明确废弃并从仓库删除。仓库内 JSON 是 HTML 的规范
 
 旧 WebSocket/AsyncAPI 文档已从当前仓库删除，历史内容只能从 Git 历史读取，不再是
 目标契约或新实现输入。
+
+Session Events v2 在重设计完成前使用独立的
+[`接口契约-v2`](接口契约-v2) 和
+[`chat-events-v2-review.html`](chat-events-v2-review.html)，不会覆盖已确认的 v1
+契约。每次只展示并评审一个 operation；确认后的决定记录到
+[`chat-events-v2-design.md`](chat-events-v2-design.md)，三个 operation 全部确认后再统一
+替换 v1 事件接口及校验门禁。
 
 当前 CampusClaw HTTP 契约中的路径参数、查询参数、请求体、普通响应和 SSE `data`
 字段统一使用 lowerCamelCase。HTTP Header 保持标准或公司既有原名，例如
@@ -134,7 +164,7 @@ CampusClaw 面向 mate-service Runtime client 和明确获授权的内部服务�
 CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` 定位 Session，
 并作为 `displayName`、资源版本、复制继承和 `session.name.changed` 的唯一权威。
 
-## 4. CampusClaw 已确认接口
+## 4. CampusClaw v1 已确认接口（迁移基线）
 
 基础路径统一为 `/campusclaw-service/v1`。
 
@@ -153,6 +183,9 @@ CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` �
 | 11 | `POST` | `/sessions/{sessionId}/abort` | `204` | 中止当前执行并清空尚未投递的控制消息 |
 | 12 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回 Builtin 与当前 Agent Skill 的动态命令清单 |
 | 13 | `POST` | `/sessions/{sessionId}/command` | `200 text/event-stream` | 执行结构化 Builtin 或 Skill Command |
+
+本表第 4、5、11 项是迁移前 v1 行为；v2 将其重构为第 1 节的三个 Session Events
+operation。其他接口是否受影响按 operation 继续评审，不由资源模型 A 自动推断。
 
 公共资源没有 `Run`。一次用户输入会触发内部 active execution，但调用方使用
 Session、Entry 和 SSE 恢复，不获得 `runId`，也不存在 GetRun 或 Run Events。
@@ -443,16 +476,19 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 以下内容尚未确认，不应由实现自行猜测：
 
-1. `POST /mate-service/v1/chats/{chatId}/events` 的公共事件命名、事件身份、Thinking 和 Tool 投影；路径已经用户确认；
-2. `GET /mate-service/v1/chats/{chatId}/events` 的分页、持久化 Event Schema，以及浏览器断线后如何对账内部 Entry；
-3. Pod 重启时 active execution 的中断或恢复策略；
-4. 公司 `ResultBeanFactory` 真实制品坐标和 `ResultBeanAdapter` 公司 Bean 的落地方式；
-5. 若未来需要机器可读契约，其格式、生成源和同步门禁需要重新评审。
+1. Claw v2 POST 的用户事件范围、请求形状、成功响应和幂等/对账策略；
+2. Claw v2 Session live SSE 的事件、heartbeat、背压、鉴权和关闭语义；
+3. Claw v2 固定快照历史的过滤、游标、事件投影和保留期；
+4. Steer、FollowUp 与 Slash Command 是否并入新的 Events 边界；
+5. Pod 重启时 active execution 的中断或恢复策略；
+6. 公司 `ResultBeanFactory` 真实制品坐标和 `ResultBeanAdapter` 公司 Bean 的落地方式；
+7. 若未来需要标准机器契约，其格式、生成源和同步门禁需要重新评审。
 
 ## 10. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.6.0 | 2026-09-03 | 用户确认 Session Events 资源模型 A：Claw 拆分 POST、Session live SSE 与固定快照历史，执行保持内部状态；保留 HTTP 1.43.4 为迁移前基线，并启动第一个 POST operation 字段评审。 |
 | 3.5.5 | 2026-09-01 | 记录 mate-service 普通消息 Events 公共路径已确认并链接单 operation 评审稿；事件命名、事件身份、Thinking/Tool 投影和 GET 恢复契约保持待确认。 |
 | 3.5.4 | 2026-09-01 | 同步 HTTP 1.43.4：Slash Command 统一使用“命令清单”，Skill 文件位置统一表述为“文件夹”。 |
 | 3.5.3 | 2026-09-01 | 同步 HTTP 1.43.3：补齐 Skill 名称规范，并明确参数复用普通消息的 UTF-16 输入上限。 |

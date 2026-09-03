@@ -143,6 +143,63 @@ main {
 }
 .company-api-review .static-response:last-child { border-bottom: 0; }
 .company-api-review .static-choice { margin-left: 8px; }
+.company-api-review .review-section { background: light-dark(#f8fbff, #121c28); }
+.company-api-review .review-heading,
+.company-api-review .review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.company-api-review .review-status {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border: 1px solid light-dark(#bf8700, #d29922);
+  border-radius: 999px;
+  color: light-dark(#7d4e00, #f2cc60);
+  font-size: 12px;
+}
+.company-api-review .review-form { margin-top: 14px; }
+.company-api-review fieldset {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 8px;
+}
+.company-api-review legend { padding: 0 5px; font-size: 13px; font-weight: 600; }
+.company-api-review .review-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-top: 9px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.company-api-review .review-option input { margin: 3px 0 0; }
+.company-api-review .review-option strong,
+.company-api-review .review-option small { display: block; }
+.company-api-review .review-option small { margin-top: 2px; color: light-dark(#5f6b78, #aab4c0); }
+.company-api-review .review-notes { display: block; font-size: 13px; font-weight: 600; }
+.company-api-review textarea {
+  width: 100%;
+  margin-top: 7px;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 7px;
+  background: light-dark(#ffffff, #1a2028);
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+}
+.company-api-review .review-actions { justify-content: flex-start; margin-top: 12px; }
+.company-api-review .review-submit {
+  border-color: light-dark(#0969da, #58a6ff);
+  background: light-dark(#0969da, #238636);
+  color: #ffffff;
+}
+.company-api-review .review-feedback { color: light-dark(#5f6b78, #aab4c0); font-size: 12px; }
 @media (max-width: 680px) {
   body { padding: 8px; }
   .company-api-review .operation { margin-right: 9px; margin-left: 9px; }
@@ -175,11 +232,13 @@ main {
     overflow-wrap: anywhere;
     white-space: pre-wrap;
   }
+  .company-api-review .review-heading,
+  .company-api-review .review-actions { align-items: flex-start; flex-direction: column; }
 }
   </style>
 </head>
 <body>
-  <!-- Generated from 接口契约/common.json and 接口契约/操作/*.json. Do not edit this HTML directly. -->
+  <!-- Generated from 接口契约/common.json and operation models. Do not edit this HTML directly. -->
   <main>
 <section class="company-api-review" data-operation-review="createSession" data-operation-index="0"><div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>CampusClaw Service API</h2><span class="tag">1.43.4</span><span class="tag">Internal · 已确认</span><span class="tag">字段：lowerCamelCase</span><span class="tag">Header：保留原名</span></div><code class="base">/campusclaw-service/v1</code></header><article class="operation operation-post"><header class="operation-head"><span class="method method-post">POST</span><code class="path">/agents/{agentId}/sessions</code><span class="muted">创建 Runtime Session</span><span class="operation-name">创建会话</span><code class="operation-key">createSession</code></header><section class="section"><h3>作用</h3><p class="description">根据 agentId 创建一个全新的 Runtime Session。CampusClaw 生成 sessionId，直接从受控 agent/{agentId}/.campusclaw/ 目录读取 settings.json、SYSTEM.md 和 skills/，解析并校验默认模型，然后完成 Session 持久化；AgentSession 在首次执行时惰性初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session，默认 thinking=true，lifetimeUsage 的 Token 与 USD Cost 明细全部为零。</p></section><section class="section contract-detail auth-section"><h3>调用上下文 Header</h3><details class="static-choice" open><summary>JWT Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">&lt;CALLER_ID&gt;</td><td data-label="说明">公司调用方标识</td></tr><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer &lt;JWT&gt;</td><td data-label="说明">由上游完成真实性与格式检查；Runtime Controller 仅接收调用上下文</td></tr></tbody></table></div><pre><code>POST /campusclaw-service/v1/agents/{agentId}/sessions
 X-HW-ID: &lt;CALLER_ID&gt;
@@ -1551,6 +1610,76 @@ data: {&quot;resCode&quot;:&quot;COMMAND_EXECUTION_FAILED&quot;,&quot;resMsg&quo
   };
   const code = (text, className) => make('code', className || '', text);
   const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  const renderReview = (model) => {
+    const review = model.review || {};
+    if (!review.questions || review.questions.length === 0) return null;
+    const section = make('section', 'section review-section');
+    const heading = make('div', 'review-heading');
+    const copy = make('div', '');
+    append(copy, make('h3', '', '本轮需要你确认'), make('p', 'muted', review.notice || '选择后可直接发送本轮评审答复。'));
+    append(heading, copy, make('span', 'review-status', review.status || '评审中'));
+    section.appendChild(heading);
+    const form = make('form', 'review-form');
+    form.dataset.operationKey = model.operation.operationKey;
+    review.questions.forEach((question) => {
+      const fieldset = make('fieldset', '');
+      fieldset.dataset.questionId = question.id;
+      fieldset.appendChild(make('legend', '', question.legend));
+      question.options.forEach((option) => {
+        const label = make('label', 'review-option');
+        const input = make('input', '');
+        input.type = 'radio';
+        input.name = `${model.operation.operationKey}-${question.id}`;
+        input.value = option.value;
+        input.checked = Boolean(option.selected);
+        const optionCopy = make('span', '');
+        append(optionCopy, make('strong', '', option.label), make('small', '', option.description || ''));
+        append(label, input, optionCopy);
+        fieldset.appendChild(label);
+      });
+      form.appendChild(fieldset);
+    });
+    const notes = make('label', 'review-notes', '补充说明（可选）');
+    const textarea = make('textarea', '');
+    textarea.name = 'notes';
+    textarea.rows = 3;
+    textarea.placeholder = '例如：只调整第 2 项，其余采用推荐项。';
+    notes.appendChild(textarea);
+    form.appendChild(notes);
+    const actions = make('div', 'review-actions');
+    const submit = make('button', 'review-submit', '发送评审答复');
+    submit.type = 'submit';
+    const feedback = make('span', 'review-feedback');
+    feedback.setAttribute('aria-live', 'polite');
+    append(actions, submit, feedback);
+    form.appendChild(actions);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const answers = review.questions.map((question) => {
+        const selected = form.querySelector(`input[name="${model.operation.operationKey}-${question.id}"]:checked`);
+        return `${question.id}=${selected ? selected.value : '未选择'}`;
+      });
+      const extra = textarea.value.trim();
+      const prompt = [
+        `Claw Session Events v2 接口评审：${model.operation.method} ${model.operation.path}`,
+        ...answers,
+        extra ? `补充说明：${extra}` : ''
+      ].filter(Boolean).join('\n');
+      if (window.openai && typeof window.openai.sendFollowUpMessage === 'function') {
+        await window.openai.sendFollowUpMessage({ prompt });
+        feedback.textContent = '已发送。';
+        return;
+      }
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(prompt);
+        feedback.textContent = '当前环境不能直接发送，答复已复制。';
+        return;
+      }
+      feedback.textContent = `请回复：${answers.join('，')}${extra ? `；${extra}` : ''}`;
+    });
+    section.appendChild(form);
+    return section;
+  };
   const table = (columns, rows) => {
     const wrap = make('div', 'table-wrap');
     const element = make('table', '');
@@ -1658,6 +1787,14 @@ data: {&quot;resCode&quot;:&quot;COMMAND_EXECUTION_FAILED&quot;,&quot;resMsg&quo
     if (requestBody.example !== undefined && requestBody.example !== null) {
       requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
     }
+    (requestBody.examples || []).forEach((example, index) => {
+      const details = make('details', 'static-choice');
+      details.open = index === 0;
+      details.appendChild(make('summary', '', example.label));
+      if (example.description) details.appendChild(make('p', 'muted empty', example.description));
+      details.appendChild(append(make('pre', ''), code(pretty(example.value))));
+      requestSection.appendChild(details);
+    });
     article.appendChild(requestSection);
 
     const responseSection = make('section', 'section contract-detail response-section');
@@ -1714,6 +1851,8 @@ data: {&quot;resCode&quot;:&quot;COMMAND_EXECUTION_FAILED&quot;,&quot;resMsg&quo
     });
     renderResponse();
     article.appendChild(responseSection);
+    const reviewSection = renderReview(model);
+    if (reviewSection) article.appendChild(reviewSection);
     shell.replaceChildren(topbar, article);
   };
   roots.forEach((root, index) => {

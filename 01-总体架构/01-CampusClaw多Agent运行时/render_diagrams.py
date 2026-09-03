@@ -19,9 +19,9 @@ def diagram_sources() -> list[Path]:
 
 def changed_paths() -> set[Path]:
     commands = [
-        ["git", "diff", "--name-only"],
-        ["git", "diff", "--cached", "--name-only"],
-        ["git", "ls-files", "--others", "--exclude-standard"],
+        ["git", "-c", "core.quotepath=false", "diff", "--name-only"],
+        ["git", "-c", "core.quotepath=false", "diff", "--cached", "--name-only"],
+        ["git", "-c", "core.quotepath=false", "ls-files", "--others", "--exclude-standard"],
     ]
     result = set()
     for command in commands:

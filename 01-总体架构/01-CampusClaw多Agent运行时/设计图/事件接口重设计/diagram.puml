@@ -1,0 +1,239 @@
+@startuml target_session_events_resource_model
+title CampusClaw Target Session Events Resource Model
+
+' Source evidence (pi-mono-java c9d858bc8261bf07f5585f545b53495bf2226a56):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java,
+' RuntimeEventController.submit and RuntimeEventController.list, lines 39-91.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java,
+' RuntimeEventStream.attach and RuntimeEventStream.detachInternal, lines 89-159.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventQueryService.java,
+' RuntimeEventQueryService.list and RuntimeEventQueryService.pageOf, lines 53-99.
+' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
+' packages/agent/src/agent-loop.ts, streamAssistantResponse.
+' packages/coding-agent/src/core/agent-session.ts, _handleAgentEvent.
+' Observed behavior: the current Java POST owns one execution-scoped SSE stream,
+' one RuntimeEventStream permits only one attached subscriber, and GET pagination
+' does not bind later pages to a fixed snapshot watermark.
+' Target-only design: POST acceptance, live observation, and durable history are
+' three separate Session-scoped operations. Execution remains an internal concept.
+' Architecture change: a long-lived Session stream can observe multiple executions
+' and multiple subscribers; disconnect never cancels or retries a write.
+' Design reason: keep write acceptance, best-effort preview, and recovery authority
+' separate while preserving pi Agent and Tool lifecycle semantics inside Runtime.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam sequence {
+  ArrowColor #475569
+  ActorBorderColor #475569
+  ActorFontColor #0F172A
+  LifeLineBorderColor #94A3B8
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantFontColor #0F172A
+  GroupBorderColor #64748B
+  GroupFontColor #334155
+}
+skinparam note {
+  BackgroundColor #FFFBEA
+  BorderColor #A16207
+  FontColor #713F12
+}
+
+actor "mate-service" as Mate
+participant "Runtime Event API\n<<target-only>>" as API
+participant "Session Live Hub\n<<target-only>>" as Hub
+participant "Event Acceptance\n<<target-only>>" as Accept
+participant "Execution Coordinator\n<<existing, changed>>" as Execution
+participant "Event Projector\n<<target-only>>" as Projector
+database "Runtime Session Store" as Store
+participant "History Query\n<<existing, changed>>" as Query
+
+group Open one Session live stream
+  Mate -> API : GET /sessions/{sessionId}/events/stream
+  API -> Hub : create connection-scoped subscription
+  Hub --> Mate : 200 live-only SSE
+end
+
+group Submit one user event independently
+  Mate -> API : POST /sessions/{sessionId}/events
+  API -> Accept : validated RequestVO and request snapshot
+  Accept -> Store : recheck mutable state and persist atomically
+  Store --> Accept : accepted Entry
+  Accept -> Execution : start, interrupt, or resume
+  Accept --> API : complete accepted internal event
+  API --> Mate : 200 ResultBean JSON
+end
+
+loop zero or more internal executions while the live stream stays open
+  Execution -> Projector : normalized Agent lifecycle
+  alt authoritative event
+    Projector -> Store : persist Entry first
+    Store --> Projector : commit succeeds
+    Projector -> Hub : publish completed event
+  else transient preview
+    Projector -> Hub : publish delta best-effort
+  end
+  Hub --> Mate : SSE event
+end
+
+group Recover from POST uncertainty, SSE gap, or reconnect
+  Mate -> API : GET /sessions/{sessionId}/events?filters&page
+  API -> Query : fixed filters and opaque page
+  Query -> Store : read one snapshot watermark
+  Store --> Query : authoritative Entries
+  Query --> API : fixed-snapshot page
+  API --> Mate : 200 ResultBean JSON
+end
+
+note over Mate,Hub
+Multiple callers may subscribe to the same Session.
+Each connection owns a bounded queue and fails independently.
+The Hub performs no replay and is never the recovery authority.
+end note
+
+note over Accept,Execution
+No executionId or runId crosses the HTTP boundary.
+The accepted event is durable before success is returned.
+Disconnect never cancels execution or retries the POST.
+end note
+
+note over Store,Query
+The first history page captures its watermark and filters.
+Every later opaque page remains bound to that snapshot.
+end note
+@enduml
+
+@startuml target_session_events_classes
+title CampusClaw Target Session Events Class Structure
+
+' Source evidence (pi-mono-java c9d858bc8261bf07f5585f545b53495bf2226a56):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java,
+' RuntimeEventController.submit and RuntimeEventController.list, lines 39-91.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java,
+' RuntimeEventService.submit and RuntimeEventService.prepareAndSubmit, lines 76-118.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java,
+' RuntimeEventStream.attach, lines 93-100.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java,
+' steer, followUp, abort, and prepareAbort, lines 59-132.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
+' acceptUserEvent and listCurrentBranch, lines 57-120.
+' Observed behavior: current write, query, execution control, and one-subscriber
+' streaming responsibilities are split across the cited classes but remain tied
+' to one execution-scoped RuntimeEventStream returned by POST.
+' Target-only design: all classes and relationships below are target-only unless
+' a class is explicitly marked existing-changed.
+' Architecture change: event-type strategies replace a central type branch, and
+' SessionLiveEventHub replaces RuntimeEventStream as the HTTP observation boundary.
+' Design reason: isolate request validation, mutable admission, execution lifetime,
+' per-connection backpressure, persistence, and public projection responsibilities.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam class {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+  ArrowColor #64748B
+}
+skinparam package {
+  BorderColor #94A3B8
+  FontColor #334155
+}
+
+top to bottom direction
+
+package "Web boundary" {
+  class RuntimeEventController <<Spring singleton, target-only>>
+  class SubmitSessionEventRequestVO <<request VO, target-only>>
+  class AcceptedSessionEventResponseVO <<response VO, target-only>>
+}
+
+package "Application" {
+  class SessionEventApplicationService <<Spring singleton, target-only>>
+  class SessionEventHandlerRegistry <<Spring singleton, target-only>>
+  interface SessionEventHandler <<target-only>> {
+    +supports(type)
+    +accept(snapshot)
+  }
+  class UserMessageEventHandler <<Spring singleton, target-only>>
+  class UserInterruptEventHandler <<Spring singleton, target-only>>
+  class UserToolConfirmationEventHandler <<Spring singleton, target-only>>
+  class SessionEventAcceptanceSnapshot <<request scope, immutable, target-only>>
+  class SessionEventQueryService <<Spring singleton, existing-changed>>
+}
+
+package "Runtime core" {
+  class RuntimeExecutionCoordinator <<Spring singleton, existing-changed>>
+  class RuntimeActiveExecution <<Session execution, existing-changed>>
+  class SessionEventProjector <<Spring singleton, target-only>>
+}
+
+package "Live observation" {
+  interface SessionEventPublisher <<target-only>> {
+    +publish(event)
+    +publishBestEffort(event)
+  }
+  class SessionLiveEventHub <<Spring singleton, target-only>>
+  class SessionLiveSubscription <<connection scope, target-only>>
+}
+
+package "Persistence" {
+  interface RuntimeSessionRepository <<existing-changed>>
+  class MyBatisRuntimeSessionRepository <<Spring singleton, existing-changed>>
+  class RuntimeEntryDTO <<persistence DTO, existing-changed>>
+}
+
+RuntimeEventController --> SubmitSessionEventRequestVO : validates
+RuntimeEventController --> SessionEventApplicationService : submit
+RuntimeEventController --> AcceptedSessionEventResponseVO : returns
+RuntimeEventController --> SessionLiveEventHub : subscribe
+RuntimeEventController --> SessionEventQueryService : list fixed snapshot
+
+SessionEventApplicationService *-- SessionEventAcceptanceSnapshot : creates
+SessionEventApplicationService --> SessionEventHandlerRegistry : select by type
+SessionEventHandlerRegistry o-- "3" SessionEventHandler : immutable handlers
+SessionEventHandler <|.. UserMessageEventHandler
+SessionEventHandler <|.. UserInterruptEventHandler
+SessionEventHandler <|.. UserToolConfirmationEventHandler
+
+UserMessageEventHandler --> RuntimeSessionRepository : recheck and append
+UserMessageEventHandler --> RuntimeExecutionCoordinator : start
+UserInterruptEventHandler --> RuntimeSessionRepository : append audit Entry
+UserInterruptEventHandler --> RuntimeExecutionCoordinator : request interrupt
+UserToolConfirmationEventHandler --> RuntimeSessionRepository : recheck pending Tool and append
+UserToolConfirmationEventHandler --> RuntimeExecutionCoordinator : resume Tool flow
+
+RuntimeExecutionCoordinator *-- "0..1 per Session" RuntimeActiveExecution
+RuntimeExecutionCoordinator --> SessionEventProjector : normalized lifecycle
+SessionEventProjector --> RuntimeSessionRepository : persist authoritative Entry
+SessionEventProjector --> SessionEventPublisher : publish after commit or best-effort
+SessionEventPublisher <|.. SessionLiveEventHub
+SessionLiveEventHub *-- "0..*" SessionLiveSubscription : bounded queue per connection
+
+SessionEventQueryService --> RuntimeSessionRepository : snapshot-bound page
+RuntimeSessionRepository <|.. MyBatisRuntimeSessionRepository
+MyBatisRuntimeSessionRepository --> RuntimeEntryDTO : maps records
+
+note right of SessionEventAcceptanceSnapshot
+Contains parsed structure, object identity,
+locale, and transient credential values.
+It never freezes mutable Session state,
+pending Tool state, or capacity admission.
+end note
+
+note right of AcceptedSessionEventResponseVO
+Controller returns a response-specific immutable VO.
+DTOs and persistence records never cross the API boundary.
+end note
+
+note bottom of SessionLiveSubscription
+One slow subscriber cannot block execution or other clients.
+Overflow closes only this subscription and requires history repair.
+end note
+@enduml

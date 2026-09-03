@@ -15,6 +15,76 @@
   };
   const code = (text, className) => make('code', className || '', text);
   const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  const renderReview = (model) => {
+    const review = model.review || {};
+    if (!review.questions || review.questions.length === 0) return null;
+    const section = make('section', 'section review-section');
+    const heading = make('div', 'review-heading');
+    const copy = make('div', '');
+    append(copy, make('h3', '', '本轮需要你确认'), make('p', 'muted', review.notice || '选择后可直接发送本轮评审答复。'));
+    append(heading, copy, make('span', 'review-status', review.status || '评审中'));
+    section.appendChild(heading);
+    const form = make('form', 'review-form');
+    form.dataset.operationKey = model.operation.operationKey;
+    review.questions.forEach((question) => {
+      const fieldset = make('fieldset', '');
+      fieldset.dataset.questionId = question.id;
+      fieldset.appendChild(make('legend', '', question.legend));
+      question.options.forEach((option) => {
+        const label = make('label', 'review-option');
+        const input = make('input', '');
+        input.type = 'radio';
+        input.name = `${model.operation.operationKey}-${question.id}`;
+        input.value = option.value;
+        input.checked = Boolean(option.selected);
+        const optionCopy = make('span', '');
+        append(optionCopy, make('strong', '', option.label), make('small', '', option.description || ''));
+        append(label, input, optionCopy);
+        fieldset.appendChild(label);
+      });
+      form.appendChild(fieldset);
+    });
+    const notes = make('label', 'review-notes', '补充说明（可选）');
+    const textarea = make('textarea', '');
+    textarea.name = 'notes';
+    textarea.rows = 3;
+    textarea.placeholder = '例如：只调整第 2 项，其余采用推荐项。';
+    notes.appendChild(textarea);
+    form.appendChild(notes);
+    const actions = make('div', 'review-actions');
+    const submit = make('button', 'review-submit', '发送评审答复');
+    submit.type = 'submit';
+    const feedback = make('span', 'review-feedback');
+    feedback.setAttribute('aria-live', 'polite');
+    append(actions, submit, feedback);
+    form.appendChild(actions);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const answers = review.questions.map((question) => {
+        const selected = form.querySelector(`input[name="${model.operation.operationKey}-${question.id}"]:checked`);
+        return `${question.id}=${selected ? selected.value : '未选择'}`;
+      });
+      const extra = textarea.value.trim();
+      const prompt = [
+        `Claw Session Events v2 接口评审：${model.operation.method} ${model.operation.path}`,
+        ...answers,
+        extra ? `补充说明：${extra}` : ''
+      ].filter(Boolean).join('\n');
+      if (window.openai && typeof window.openai.sendFollowUpMessage === 'function') {
+        await window.openai.sendFollowUpMessage({ prompt });
+        feedback.textContent = '已发送。';
+        return;
+      }
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(prompt);
+        feedback.textContent = '当前环境不能直接发送，答复已复制。';
+        return;
+      }
+      feedback.textContent = `请回复：${answers.join('，')}${extra ? `；${extra}` : ''}`;
+    });
+    section.appendChild(form);
+    return section;
+  };
   const table = (columns, rows) => {
     const wrap = make('div', 'table-wrap');
     const element = make('table', '');
@@ -122,6 +192,14 @@
     if (requestBody.example !== undefined && requestBody.example !== null) {
       requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
     }
+    (requestBody.examples || []).forEach((example, index) => {
+      const details = make('details', 'static-choice');
+      details.open = index === 0;
+      details.appendChild(make('summary', '', example.label));
+      if (example.description) details.appendChild(make('p', 'muted empty', example.description));
+      details.appendChild(append(make('pre', ''), code(pretty(example.value))));
+      requestSection.appendChild(details);
+    });
     article.appendChild(requestSection);
 
     const responseSection = make('section', 'section contract-detail response-section');
@@ -178,6 +256,8 @@
     });
     renderResponse();
     article.appendChild(responseSection);
+    const reviewSection = renderReview(model);
+    if (reviewSection) article.appendChild(reviewSection);
     shell.replaceChildren(topbar, article);
   };
   roots.forEach((root, index) => {

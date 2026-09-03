@@ -506,9 +506,9 @@ def validate_diagram_inventory(sources: list[Path]) -> None:
 
 def changed_repository_paths() -> set[Path]:
     commands = [
-        ["git", "diff", "--name-only"],
-        ["git", "diff", "--cached", "--name-only"],
-        ["git", "ls-files", "--others", "--exclude-standard"],
+        ["git", "-c", "core.quotepath=false", "diff", "--name-only"],
+        ["git", "-c", "core.quotepath=false", "diff", "--cached", "--name-only"],
+        ["git", "-c", "core.quotepath=false", "ls-files", "--others", "--exclude-standard"],
     ]
     paths = set()
     for command in commands:

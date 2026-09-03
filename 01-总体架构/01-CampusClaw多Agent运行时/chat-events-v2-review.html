@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>CampusClaw Session Events API - API Review</title>
+  <style>
+:root {
+  color-scheme: light dark;
+  background: light-dark(#f7f8fa, #11151b);
+}
+body {
+  margin: 0;
+  padding: 16px;
+  background: inherit;
+}
+main {
+  width: min(1400px, 100%);
+  margin: 0 auto;
+}
+.company-api-review {
+  width: 100%;
+  margin-block-end: 16px;
+  color: light-dark(#17202a, #edf2f7);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.company-api-review * { box-sizing: border-box; }
+.company-api-review h2,
+.company-api-review h3,
+.company-api-review p { margin: 0; }
+.company-api-review code,
+.company-api-review pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.company-api-review .api-shell {
+  overflow: hidden;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 12px;
+  background: light-dark(#f7f8fa, #11151b);
+}
+.company-api-review .topbar,
+.company-api-review .operation-head,
+.company-api-review .row,
+.company-api-review .tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.company-api-review .topbar {
+  justify-content: space-between;
+  padding: 15px 17px;
+  border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+  background: light-dark(#ffffff, #1a2028);
+}
+.company-api-review h2 { font-size: 18px; font-weight: 500; }
+.company-api-review h3 { margin-bottom: 10px; font-size: 14px; font-weight: 500; }
+.company-api-review .tag,
+.company-api-review .operation-name {
+  padding: 2px 8px;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 999px;
+  background: light-dark(#f2f5f8, #222a34);
+  font-size: 12px;
+}
+.company-api-review .base,
+.company-api-review .muted,
+.company-api-review .operation-key {
+  color: light-dark(#5f6b78, #aab4c0);
+  font-size: 13px;
+}
+.company-api-review .operation {
+  margin: 15px;
+  overflow: hidden;
+  border: 1px solid light-dark(#1f883d, #3fb950);
+  border-radius: 9px;
+  background: light-dark(#ffffff, #1a2028);
+}
+.company-api-review .operation-head {
+  padding: 13px 15px;
+  border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+  background: light-dark(#eaf8ee, #15331f);
+}
+.company-api-review .method {
+  padding: 6px 11px;
+  border-radius: 5px;
+  background: light-dark(#1f883d, #3fb950);
+  color: light-dark(#ffffff, #07150b);
+  font-size: 13px;
+  font-weight: 500;
+}
+.company-api-review .operation-delete { border-color: light-dark(#cf222e, #f85149); }
+.company-api-review .operation-delete .operation-head { background: light-dark(#fff1f0, #3a1d1d); }
+.company-api-review .method-delete { background: light-dark(#cf222e, #f85149); color: #ffffff; }
+.company-api-review .path { overflow-wrap: anywhere; font-size: 14px; font-weight: 500; }
+.company-api-review .section {
+  padding: 15px;
+  border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+}
+.company-api-review .section:last-child { border-bottom: 0; }
+.company-api-review .section-title { justify-content: space-between; }
+.company-api-review .description { line-height: 1.6; }
+.company-api-review table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.company-api-review th,
+.company-api-review td {
+  padding: 8px;
+  border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+  text-align: left;
+  vertical-align: top;
+}
+.company-api-review th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
+.company-api-review tbody tr:last-child td { border-bottom: 0; }
+.company-api-review pre {
+  margin: 10px 0 0;
+  padding: 13px;
+  overflow-x: auto;
+  border-radius: 7px;
+  background: light-dark(#eef2f6, #0d1117);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.company-api-review button {
+  appearance: none;
+  padding: 7px 10px;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 6px;
+  background: light-dark(#ffffff, #1a2028);
+  color: light-dark(#17202a, #edf2f7);
+  font: inherit;
+  cursor: pointer;
+}
+.company-api-review button[aria-selected="true"],
+.company-api-review button[aria-pressed="true"] {
+  border-color: light-dark(#0969da, #58a6ff);
+  background: light-dark(#eaf3ff, #132b46);
+  color: light-dark(#0969da, #58a6ff);
+}
+.company-api-review .empty { margin-top: 8px; }
+.company-api-review details { margin-top: 9px; }
+.company-api-review summary { cursor: pointer; font-size: 13px; font-weight: 500; line-height: 1.5; }
+.company-api-review .static-response {
+  padding: 8px 0;
+  border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+}
+.company-api-review .static-response:last-child { border-bottom: 0; }
+.company-api-review .static-choice { margin-left: 8px; }
+.company-api-review .review-section { background: light-dark(#f8fbff, #121c28); }
+.company-api-review .review-heading,
+.company-api-review .review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.company-api-review .review-status {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border: 1px solid light-dark(#bf8700, #d29922);
+  border-radius: 999px;
+  color: light-dark(#7d4e00, #f2cc60);
+  font-size: 12px;
+}
+.company-api-review .review-form { margin-top: 14px; }
+.company-api-review fieldset {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 8px;
+}
+.company-api-review legend { padding: 0 5px; font-size: 13px; font-weight: 600; }
+.company-api-review .review-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-top: 9px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.company-api-review .review-option input { margin: 3px 0 0; }
+.company-api-review .review-option strong,
+.company-api-review .review-option small { display: block; }
+.company-api-review .review-option small { margin-top: 2px; color: light-dark(#5f6b78, #aab4c0); }
+.company-api-review .review-notes { display: block; font-size: 13px; font-weight: 600; }
+.company-api-review textarea {
+  width: 100%;
+  margin-top: 7px;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid light-dark(#d8dee6, #37414d);
+  border-radius: 7px;
+  background: light-dark(#ffffff, #1a2028);
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+}
+.company-api-review .review-actions { justify-content: flex-start; margin-top: 12px; }
+.company-api-review .review-submit {
+  border-color: light-dark(#0969da, #58a6ff);
+  background: light-dark(#0969da, #238636);
+  color: #ffffff;
+}
+.company-api-review .review-feedback { color: light-dark(#5f6b78, #aab4c0); font-size: 12px; }
+@media (max-width: 680px) {
+  body { padding: 8px; }
+  .company-api-review .operation { margin-right: 9px; margin-left: 9px; }
+  .company-api-review .table-wrap { overflow: visible; }
+  .company-api-review .table-wrap thead { display: none; }
+  .company-api-review .table-wrap table,
+  .company-api-review .table-wrap tbody,
+  .company-api-review .table-wrap tr,
+  .company-api-review .table-wrap td { display: block; width: 100%; }
+  .company-api-review .table-wrap tr {
+    padding: 7px 0;
+    border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+  }
+  .company-api-review .table-wrap tbody tr:last-child { border-bottom: 0; }
+  .company-api-review .table-wrap td {
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+    gap: 8px;
+    padding: 5px 0;
+    overflow-wrap: anywhere;
+    border-bottom: 0;
+  }
+  .company-api-review .table-wrap td::before {
+    content: attr(data-label);
+    color: light-dark(#5f6b78, #aab4c0);
+    font-weight: 500;
+  }
+  .company-api-review pre {
+    overflow-x: visible;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .company-api-review .review-heading,
+  .company-api-review .review-actions { align-items: flex-start; flex-direction: column; }
+}
+  </style>
+</head>
+<body>
+  <!-- Generated from 接口契约-v2/common.json and operation models. Do not edit this HTML directly. -->
+  <main>
+<section class="company-api-review" data-operation-review="submitSessionEvent" data-operation-index="0"><div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>CampusClaw Session Events API</h2><span class="tag">2.0.0-proposal.1</span><span class="tag">Internal · 资源模型 A 已确认 · 当前接口评审中</span><span class="tag">字段：lowerCamelCase</span><span class="tag">Header：保留原名</span></div><code class="base">/campusclaw-service/v1</code></header><article class="operation operation-post"><header class="operation-head"><span class="method method-post">POST</span><code class="path">/sessions/{sessionId}/events</code><span class="muted">持久化一个用户事件并返回接受结果</span><span class="operation-name">提交 Session 用户事件</span><code class="operation-key">submitSessionEvent</code></header><section class="section"><h3>作用</h3><p class="description">本接口是 Session Events v2 的写入入口，只接受一个 user.* 事件，不返回 Agent 输出，也不创建或公开 executionId/runId。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。下列字段是本轮候选快照，只有资源模型 A 已确认。</p></section><section class="section contract-detail auth-section"><h3>调用上下文 Header</h3><details class="static-choice" open><summary>JWT Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">&lt;CALLER_ID&gt;</td><td data-label="说明">公司调用方标识；作为本次用户事件的请求上下文</td></tr><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer &lt;JWT&gt;</td><td data-label="说明">由上游完成真实性与格式检查；仅形成执行级瞬态凭据快照</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">&lt;ACCESS_TOKEN&gt;</td><td data-label="说明">执行级瞬态工具调用凭据；不持久化、不记录，只发送给实际 Mate tool execute</td></tr></tbody></table></div><pre><code>POST /campusclaw-service/v1/sessions/{sessionId}/events
+X-HW-ID: &lt;CALLER_ID&gt;
+Authorization: Bearer &lt;JWT&gt;
+access-token: &lt;ACCESS_TOKEN&gt;</code></pre></details><details class="static-choice"><summary>APPKEY Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">&lt;CALLER_ID&gt;</td><td data-label="说明">公司调用方标识；作为本次用户事件的请求上下文</td></tr><tr><td data-label="Header">X-HW-APPKEY</td><td data-label="必填">是</td><td data-label="示例值">&lt;APPKEY&gt;</td><td data-label="说明">由上游完成真实性与格式检查；可与 Authorization 同时出现</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">&lt;ACCESS_TOKEN&gt;</td><td data-label="说明">执行级瞬态工具调用凭据；不持久化、不记录，只发送给实际 Mate tool execute</td></tr></tbody></table></div><pre><code>POST /campusclaw-service/v1/sessions/{sessionId}/events
+X-HW-ID: &lt;CALLER_ID&gt;
+X-HW-APPKEY: &lt;APPKEY&gt;
+access-token: &lt;ACCESS_TOKEN&gt;</code></pre></details></section><section class="section contract-detail request-section"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">sessionId</td><td data-label="必填">是</td><td data-label="约束">^session-[0-9a-fA-F]{32}$</td><td data-label="说明">已经存在且未删除的内部 Session 标识；不暴露给浏览器</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US</td><td data-label="说明">异常消息语言；缺失或不支持时回退 en-US</td></tr></tbody></table></div><p class="muted empty">顶层固定只有 event；event.type 是联合类型判别字段。一次请求只提交一个事件，不支持批量。null 不等价于省略。user.message 的 content 长度 1..5，最多一个 text 且必须位于第一项，最多四个不重复 file。user.interrupt 无其他业务字段。user.tool_confirmation 只在等待对应 Tool Call 确认时接受。</p><details class="static-choice" open><summary>用户消息 · user.message</summary><p class="muted empty">文本与附件保持调用顺序；Claw 只保存 fileId 引用。</p><pre><code>{
+  &quot;event&quot;: {
+    &quot;type&quot;: &quot;user.message&quot;,
+    &quot;content&quot;: [
+      {
+        &quot;type&quot;: &quot;text&quot;,
+        &quot;text&quot;: &quot;请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。&quot;
+      },
+      {
+        &quot;type&quot;: &quot;file&quot;,
+        &quot;fileId&quot;: &quot;7f12d8a380964fdc8518f48be1cf6a42&quot;
+      }
+    ]
+  }
+}</code></pre></details><details class="static-choice"><summary>中断执行 · user.interrupt</summary><p class="muted empty">只请求终止当前内部执行；200 不表示执行已经完全退出。</p><pre><code>{
+  &quot;event&quot;: {
+    &quot;type&quot;: &quot;user.interrupt&quot;
+  }
+}</code></pre></details><details class="static-choice"><summary>拒绝工具调用 · user.tool_confirmation</summary><p class="muted empty">toolCallId 原样引用等待确认的 Tool Call；denyMessage 仅在 deny 时允许。</p><pre><code>{
+  &quot;event&quot;: {
+    &quot;type&quot;: &quot;user.tool_confirmation&quot;,
+    &quot;toolCallId&quot;: &quot;call_unLAR8MvFNptuiZK6K6HCy5k&quot;,
+    &quot;result&quot;: &quot;deny&quot;,
+    &quot;denyMessage&quot;: &quot;该操作会修改生产配置，请先给出无变更风险的处理建议。&quot;
+  }
+}</code></pre></details></section><section class="section contract-detail response-section"><h3>响应</h3><details class="static-response" open><summary><code>200 · user.message</code> 200 OK — 事件已经持久化并被接受；返回同一条完整内部用户事件。Agent 后续输出只从独立 live SSE 或权威历史读取。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;event&quot;: {
+      &quot;entryId&quot;: &quot;entry_100&quot;,
+      &quot;entrySeq&quot;: 204,
+      &quot;type&quot;: &quot;user.message&quot;,
+      &quot;createdAt&quot;: &quot;2026-09-03T08:30:15.123Z&quot;,
+      &quot;content&quot;: [
+        {
+          &quot;type&quot;: &quot;text&quot;,
+          &quot;text&quot;: &quot;请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。&quot;
+        },
+        {
+          &quot;type&quot;: &quot;file&quot;,
+          &quot;fileId&quot;: &quot;7f12d8a380964fdc8518f48be1cf6a42&quot;
+        }
+      ]
+    }
+  }
+}</code></pre></details></details><details class="static-response"><summary><code>200 · user.interrupt</code> 200 OK — 中断事件已经持久化并被接受；调用方继续观察 session.status.idle(reason=terminated)，不能把 200 当作执行已退出。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;event&quot;: {
+      &quot;entryId&quot;: &quot;entry_101&quot;,
+      &quot;entrySeq&quot;: 205,
+      &quot;type&quot;: &quot;user.interrupt&quot;,
+      &quot;createdAt&quot;: &quot;2026-09-03T08:30:16.420Z&quot;
+    }
+  }
+}</code></pre></details></details><details class="static-response"><summary><code>200 · tool confirmation</code> 200 OK — 确认事件已经持久化并被接受；Tool Call、确认和结果通过同一个 toolCallId 关联，但各自仍是不同 Entry。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;event&quot;: {
+      &quot;entryId&quot;: &quot;entry_102&quot;,
+      &quot;entrySeq&quot;: 206,
+      &quot;type&quot;: &quot;user.tool_confirmation&quot;,
+      &quot;createdAt&quot;: &quot;2026-09-03T08:30:17.100Z&quot;,
+      &quot;toolCallId&quot;: &quot;call_unLAR8MvFNptuiZK6K6HCy5k&quot;,
+      &quot;result&quot;: &quot;deny&quot;,
+      &quot;denyMessage&quot;: &quot;该操作会修改生产配置，请先给出无变更风险的处理建议。&quot;
+    }
+  }
+}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_SESSION_ID</code> 400 Bad Request — sessionId 不符合内部资源标识格式。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;INVALID_SESSION_ID&quot;,
+  &quot;resMsg&quot;: &quot;sessionId 格式不正确。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;INVALID_SESSION_ID&quot;,
+  &quot;resMsg&quot;: &quot;The sessionId format is invalid.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_EVENT_REQUEST</code> 400 Bad Request — JSON、联合类型字段、content 或确认字段不满足约束。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;INVALID_EVENT_REQUEST&quot;,
+  &quot;resMsg&quot;: &quot;用户事件请求内容不符合约束。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;INVALID_EVENT_REQUEST&quot;,
+  &quot;resMsg&quot;: &quot;The user event request does not satisfy the required constraints.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_EVENT_TYPE</code> 400 Bad Request — event.type 不是当前版本支持的 user.* 联合类型。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;INVALID_EVENT_TYPE&quot;,
+  &quot;resMsg&quot;: &quot;用户事件类型不受支持。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;INVALID_EVENT_TYPE&quot;,
+  &quot;resMsg&quot;: &quot;The user event type is not supported.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404 · SESSION_NOT_FOUND</code> 404 Not Found — Session 不存在或已删除。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SESSION_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;指定的 Session 不存在。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SESSION_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;The specified Session does not exist.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>409 · SESSION_BUSY</code> 409 Conflict — user.message 到达时 Session 不是允许新消息的 idle 状态。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SESSION_BUSY&quot;,
+  &quot;resMsg&quot;: &quot;该 Session 当前不能接受新的用户消息。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SESSION_BUSY&quot;,
+  &quot;resMsg&quot;: &quot;The Session cannot accept a new user message now.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>409 · SESSION_NOT_RUNNING</code> 409 Conflict — user.interrupt 到达时没有可中断的内部执行。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SESSION_NOT_RUNNING&quot;,
+  &quot;resMsg&quot;: &quot;该 Session 当前没有正在运行的执行。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SESSION_NOT_RUNNING&quot;,
+  &quot;resMsg&quot;: &quot;The Session has no running execution.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>409 · TOOL_CONFIRMATION_NOT_PENDING</code> 409 Conflict — 指定 Tool Call 不在当前 Session 等待确认，或确认已经完成。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;TOOL_CONFIRMATION_NOT_PENDING&quot;,
+  &quot;resMsg&quot;: &quot;指定的工具调用当前不等待确认。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;TOOL_CONFIRMATION_NOT_PENDING&quot;,
+  &quot;resMsg&quot;: &quot;The specified tool call is not awaiting confirmation.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>503 · RUNTIME_CAPACITY_EXCEEDED</code> 503 Service Unavailable — user.message 所需的全局执行容量已满；本次事件未接受。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;RUNTIME_CAPACITY_EXCEEDED&quot;,
+  &quot;resMsg&quot;: &quot;Runtime 执行容量已满，请稍后重试。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+Retry-After: 3
+
+{
+  &quot;resCode&quot;: &quot;RUNTIME_CAPACITY_EXCEEDED&quot;,
+  &quot;resMsg&quot;: &quot;Runtime execution capacity is exhausted. Try again later.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>500 · EVENT_ACCEPTANCE_FAILED</code> 500 Internal Server Error — 用户事件未能完成持久化和状态接受；不返回内部异常细节。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;EVENT_ACCEPTANCE_FAILED&quot;,
+  &quot;resMsg&quot;: &quot;用户事件接收失败。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;EVENT_ACCEPTANCE_FAILED&quot;,
+  &quot;resMsg&quot;: &quot;User event acceptance failed.&quot;
+}</code></pre></details></details></section><section class="section review-section"><div class="review-heading"><div><h3>本轮需要你确认</h3><p class="muted">资源模型 A 已冻结；以下四项决定这个 POST 的精确字段。推荐项已预选，但不会自动视为确认。</p></div><span class="review-status">字段评审中 · 尚未确认</span></div><form class="review-form" data-review-form data-operation-key="submitSessionEvent"><fieldset data-question-id="Q1-access-token"><legend>Q1 · access-token 对三种用户事件如何要求？</legend><label class="review-option"><input type="radio" name="submitSessionEvent-Q1-access-token" value="A-required-for-all-user-events" checked><span><strong>A · 三种事件都必填（推荐）</strong><small>与 mate 入站上下文一致，联合 operation 的 Header 规则保持单一；Claw 仍只在实际 Tool execute 使用。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q1-access-token" value="B-required-by-event-type"><span><strong>B · 按事件类型条件必填</strong><small>user.message 与 tool confirmation 必填，interrupt 可省略；语义更窄但校验和客户端分支更复杂。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q1-access-token" value="C-not-forwarded-to-claw"><span><strong>C · Claw 不接收 access-token</strong><small>需要另行设计 Tool execute 的凭据取得机制，超出当前请求快照架构。</small></span></label></fieldset><fieldset data-question-id="Q2-request-shape"><legend>Q2 · 请求体采用哪种形状？</legend><label class="review-option"><input type="radio" name="submitSessionEvent-Q2-request-shape" value="A-event-wrapper-content-array" checked><span><strong>A · event + content[]（推荐）</strong><small>与 mate 的联合事件同构，保留文本与文件顺序，Claw 仍独立定义内部约束。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q2-request-shape" value="B-top-level-union"><span><strong>B · 顶层联合类型</strong><small>去掉 event 包装，但 mate 到 Claw 需要重组请求。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q2-request-shape" value="C-legacy-message-file-ids"><span><strong>C · 旧 message + fileIds</strong><small>只适合 user.message，无法自然承载中断和工具确认。</small></span></label></fieldset><fieldset data-question-id="Q3-success-response"><legend>Q3 · 200 成功响应返回什么？</legend><label class="review-option"><input type="radio" name="submitSessionEvent-Q3-success-response" value="A-complete-internal-event" checked><span><strong>A · 完整内部事件（推荐）</strong><small>返回 entryId、entrySeq、createdAt 和规范化业务字段，便于 mate 精确关联 Claw 历史。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q3-success-response" value="B-minimal-acceptance-receipt"><span><strong>B · 最窄接受回执</strong><small>只返回 accepted=true/acceptedAt，后续必须额外读取历史才能取得事件身份。</small></span></label></fieldset><fieldset data-question-id="Q4-retry-policy"><legend>Q4 · POST 响应丢失时如何处理？</legend><label class="review-option"><input type="radio" name="submitSessionEvent-Q4-retry-policy" value="A-history-reconciliation" checked><span><strong>A · 不设幂等键，历史对账（推荐）</strong><small>保持 mate 当前语义；结果不确定时查询权威历史，不盲目重放。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q4-retry-policy" value="B-required-idempotency-key"><span><strong>B · 强制 Idempotency-Key</strong><small>允许安全重试，但 Claw 需新增键存储、冲突和保留期契约。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q4-retry-policy" value="C-optional-idempotency-key"><span><strong>C · 可选 Idempotency-Key</strong><small>兼容两种调用方，但服务端和测试矩阵最复杂。</small></span></label></fieldset><label class="review-notes">补充说明（可选）<textarea name="notes" rows="3" placeholder="例如：只调整第 2 项，其余采用推荐项。"></textarea></label><div class="review-actions"><button type="submit" class="review-submit">发送评审答复</button><span class="review-feedback" data-review-feedback aria-live="polite"></span></div></form></section></article></div></div></section>
+  </main>
+  <script type="application/json" id="api-review-models">[{"api":{"title":"CampusClaw Session Events API","version":"2.0.0-proposal.1","basePath":"/campusclaw-service/v1","visibility":"Internal · 资源模型 A 已确认 · 当前接口评审中","fieldNaming":"lowerCamelCase","headerNaming":"保留原名"},"operation":{"shortName":"提交 Session 用户事件","operationKey":"submitSessionEvent","method":"POST","path":"/sessions/{sessionId}/events","summary":"持久化一个用户事件并返回接受结果","description":"本接口是 Session Events v2 的写入入口，只接受一个 user.* 事件，不返回 Agent 输出，也不创建或公开 executionId/runId。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。下列字段是本轮候选快照，只有资源模型 A 已确认。","requestHeaderExamples":[{"id":"jwt","label":"JWT Header 示例","preferred":true,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识；作为本次用户事件的请求上下文"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"由上游完成真实性与格式检查；仅形成执行级瞬态凭据快照"},{"name":"access-token","value":"\u003cACCESS_TOKEN\u003e","required":true,"description":"执行级瞬态工具调用凭据；不持久化、不记录，只发送给实际 Mate tool execute"}]},{"id":"appkey","label":"APPKEY Header 示例","preferred":false,"headers":[{"name":"X-HW-ID","value":"\u003cCALLER_ID\u003e","required":true,"description":"公司调用方标识；作为本次用户事件的请求上下文"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"由上游完成真实性与格式检查；可与 Authorization 同时出现"},{"name":"access-token","value":"\u003cACCESS_TOKEN\u003e","required":true,"description":"执行级瞬态工具调用凭据；不持久化、不记录，只发送给实际 Mate tool execute"}]}],"parameters":[{"in":"path","name":"sessionId","required":true,"schema":"^session-[0-9a-fA-F]{32}$","description":"已经存在且未删除的内部 Session 标识；不暴露给浏览器"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":true,"contentType":"application/json","description":"顶层固定只有 event；event.type 是联合类型判别字段。一次请求只提交一个事件，不支持批量。null 不等价于省略。user.message 的 content 长度 1..5，最多一个 text 且必须位于第一项，最多四个不重复 file。user.interrupt 无其他业务字段。user.tool_confirmation 只在等待对应 Tool Call 确认时接受。","examples":[{"label":"用户消息 · user.message","description":"文本与附件保持调用顺序；Claw 只保存 fileId 引用。","value":{"event":{"type":"user.message","content":[{"type":"text","text":"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"},{"type":"file","fileId":"7f12d8a380964fdc8518f48be1cf6a42"}]}}},{"label":"中断执行 · user.interrupt","description":"只请求终止当前内部执行；200 不表示执行已经完全退出。","value":{"event":{"type":"user.interrupt"}}},{"label":"拒绝工具调用 · user.tool_confirmation","description":"toolCallId 原样引用等待确认的 Tool Call；denyMessage 仅在 deny 时允许。","value":{"event":{"type":"user.tool_confirmation","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","result":"deny","denyMessage":"该操作会修改生产配置，请先给出无变更风险的处理建议。"}}}]},"responses":[{"id":"200-user-message","status":"200","tabLabel":"200 · user.message","label":"OK","summary":"事件已经持久化并被接受；返回同一条完整内部用户事件。Agent 后续输出只从独立 live SSE 或权威历史读取。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"default":{"resCode":"0","resMsg":"success","result":{"event":{"entryId":"entry_100","entrySeq":204,"type":"user.message","createdAt":"2026-09-03T08:30:15.123Z","content":[{"type":"text","text":"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"},{"type":"file","fileId":"7f12d8a380964fdc8518f48be1cf6a42"}]}}}}},{"id":"200-user-interrupt","status":"200","tabLabel":"200 · user.interrupt","label":"OK","summary":"中断事件已经持久化并被接受；调用方继续观察 session.status.idle(reason=terminated)，不能把 200 当作执行已退出。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"default":{"resCode":"0","resMsg":"success","result":{"event":{"entryId":"entry_101","entrySeq":205,"type":"user.interrupt","createdAt":"2026-09-03T08:30:16.420Z"}}}}},{"id":"200-tool-confirmation","status":"200","tabLabel":"200 · tool confirmation","label":"OK","summary":"确认事件已经持久化并被接受；Tool Call、确认和结果通过同一个 toolCallId 关联，但各自仍是不同 Entry。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"default":{"resCode":"0","resMsg":"success","result":{"event":{"entryId":"entry_102","entrySeq":206,"type":"user.tool_confirmation","createdAt":"2026-09-03T08:30:17.100Z","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","result":"deny","denyMessage":"该操作会修改生产配置，请先给出无变更风险的处理建议。"}}}}},{"id":"400-invalid-session-id","status":"400","tabLabel":"400 · INVALID_SESSION_ID","label":"Bad Request","summary":"sessionId 不符合内部资源标识格式。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"sessionId 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The sessionId format is invalid."}}},{"id":"400-invalid-event-request","status":"400","tabLabel":"400 · INVALID_EVENT_REQUEST","label":"Bad Request","summary":"JSON、联合类型字段、content 或确认字段不满足约束。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_EVENT_REQUEST","resMsg":"用户事件请求内容不符合约束。"},"en-US":{"resCode":"INVALID_EVENT_REQUEST","resMsg":"The user event request does not satisfy the required constraints."}}},{"id":"400-invalid-event-type","status":"400","tabLabel":"400 · INVALID_EVENT_TYPE","label":"Bad Request","summary":"event.type 不是当前版本支持的 user.* 联合类型。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_EVENT_TYPE","resMsg":"用户事件类型不受支持。"},"en-US":{"resCode":"INVALID_EVENT_TYPE","resMsg":"The user event type is not supported."}}},{"id":"404-session-not-found","status":"404","tabLabel":"404 · SESSION_NOT_FOUND","label":"Not Found","summary":"Session 不存在或已删除。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}},{"id":"409-session-busy","status":"409","tabLabel":"409 · SESSION_BUSY","label":"Conflict","summary":"user.message 到达时 Session 不是允许新消息的 idle 状态。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_BUSY","resMsg":"该 Session 当前不能接受新的用户消息。"},"en-US":{"resCode":"SESSION_BUSY","resMsg":"The Session cannot accept a new user message now."}}},{"id":"409-session-not-running","status":"409","tabLabel":"409 · SESSION_NOT_RUNNING","label":"Conflict","summary":"user.interrupt 到达时没有可中断的内部执行。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_RUNNING","resMsg":"该 Session 当前没有正在运行的执行。"},"en-US":{"resCode":"SESSION_NOT_RUNNING","resMsg":"The Session has no running execution."}}},{"id":"409-tool-confirmation-not-pending","status":"409","tabLabel":"409 · TOOL_CONFIRMATION_NOT_PENDING","label":"Conflict","summary":"指定 Tool Call 不在当前 Session 等待确认，或确认已经完成。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"TOOL_CONFIRMATION_NOT_PENDING","resMsg":"指定的工具调用当前不等待确认。"},"en-US":{"resCode":"TOOL_CONFIRMATION_NOT_PENDING","resMsg":"The specified tool call is not awaiting confirmation."}}},{"id":"503-runtime-capacity-exceeded","status":"503","tabLabel":"503 · RUNTIME_CAPACITY_EXCEEDED","label":"Service Unavailable","summary":"user.message 所需的全局执行容量已满；本次事件未接受。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"RUNTIME_CAPACITY_EXCEEDED","resMsg":"Runtime 执行容量已满，请稍后重试。"},"en-US":{"resCode":"RUNTIME_CAPACITY_EXCEEDED","resMsg":"Runtime execution capacity is exhausted. Try again later."}}},{"id":"500-event-acceptance-failed","status":"500","tabLabel":"500 · EVENT_ACCEPTANCE_FAILED","label":"Internal Server Error","summary":"用户事件未能完成持久化和状态接受；不返回内部异常细节。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"EVENT_ACCEPTANCE_FAILED","resMsg":"用户事件接收失败。"},"en-US":{"resCode":"EVENT_ACCEPTANCE_FAILED","resMsg":"User event acceptance failed."}}}]},"review":{"status":"字段评审中 · 尚未确认","notice":"资源模型 A 已冻结；以下四项决定这个 POST 的精确字段。推荐项已预选，但不会自动视为确认。","questions":[{"id":"Q1-access-token","legend":"Q1 · access-token 对三种用户事件如何要求？","options":[{"label":"A · 三种事件都必填（推荐）","value":"A-required-for-all-user-events","description":"与 mate 入站上下文一致，联合 operation 的 Header 规则保持单一；Claw 仍只在实际 Tool execute 使用。","selected":true},{"label":"B · 按事件类型条件必填","value":"B-required-by-event-type","description":"user.message 与 tool confirmation 必填，interrupt 可省略；语义更窄但校验和客户端分支更复杂。"},{"label":"C · Claw 不接收 access-token","value":"C-not-forwarded-to-claw","description":"需要另行设计 Tool execute 的凭据取得机制，超出当前请求快照架构。"}]},{"id":"Q2-request-shape","legend":"Q2 · 请求体采用哪种形状？","options":[{"label":"A · event + content[]（推荐）","value":"A-event-wrapper-content-array","description":"与 mate 的联合事件同构，保留文本与文件顺序，Claw 仍独立定义内部约束。","selected":true},{"label":"B · 顶层联合类型","value":"B-top-level-union","description":"去掉 event 包装，但 mate 到 Claw 需要重组请求。"},{"label":"C · 旧 message + fileIds","value":"C-legacy-message-file-ids","description":"只适合 user.message，无法自然承载中断和工具确认。"}]},{"id":"Q3-success-response","legend":"Q3 · 200 成功响应返回什么？","options":[{"label":"A · 完整内部事件（推荐）","value":"A-complete-internal-event","description":"返回 entryId、entrySeq、createdAt 和规范化业务字段，便于 mate 精确关联 Claw 历史。","selected":true},{"label":"B · 最窄接受回执","value":"B-minimal-acceptance-receipt","description":"只返回 accepted=true/acceptedAt，后续必须额外读取历史才能取得事件身份。"}]},{"id":"Q4-retry-policy","legend":"Q4 · POST 响应丢失时如何处理？","options":[{"label":"A · 不设幂等键，历史对账（推荐）","value":"A-history-reconciliation","description":"保持 mate 当前语义；结果不确定时查询权威历史，不盲目重放。","selected":true},{"label":"B · 强制 Idempotency-Key","value":"B-required-idempotency-key","description":"允许安全重试，但 Claw 需新增键存储、冲突和保留期契约。"},{"label":"C · 可选 Idempotency-Key","value":"C-optional-idempotency-key","description":"兼容两种调用方，但服务端和测试矩阵最复杂。"}]}]}}]</script>
+  <script>
+(() => {
+  const modelNode = document.getElementById('api-review-models');
+  if (!modelNode) return;
+  const models = JSON.parse(modelNode.textContent);
+  const roots = document.querySelectorAll('[data-operation-review]');
+  const make = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  };
+  const append = (parent, ...children) => {
+    children.filter(Boolean).forEach((child) => parent.appendChild(child));
+    return parent;
+  };
+  const code = (text, className) => make('code', className || '', text);
+  const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  const renderReview = (model) => {
+    const review = model.review || {};
+    if (!review.questions || review.questions.length === 0) return null;
+    const section = make('section', 'section review-section');
+    const heading = make('div', 'review-heading');
+    const copy = make('div', '');
+    append(copy, make('h3', '', '本轮需要你确认'), make('p', 'muted', review.notice || '选择后可直接发送本轮评审答复。'));
+    append(heading, copy, make('span', 'review-status', review.status || '评审中'));
+    section.appendChild(heading);
+    const form = make('form', 'review-form');
+    form.dataset.operationKey = model.operation.operationKey;
+    review.questions.forEach((question) => {
+      const fieldset = make('fieldset', '');
+      fieldset.dataset.questionId = question.id;
+      fieldset.appendChild(make('legend', '', question.legend));
+      question.options.forEach((option) => {
+        const label = make('label', 'review-option');
+        const input = make('input', '');
+        input.type = 'radio';
+        input.name = `${model.operation.operationKey}-${question.id}`;
+        input.value = option.value;
+        input.checked = Boolean(option.selected);
+        const optionCopy = make('span', '');
+        append(optionCopy, make('strong', '', option.label), make('small', '', option.description || ''));
+        append(label, input, optionCopy);
+        fieldset.appendChild(label);
+      });
+      form.appendChild(fieldset);
+    });
+    const notes = make('label', 'review-notes', '补充说明（可选）');
+    const textarea = make('textarea', '');
+    textarea.name = 'notes';
+    textarea.rows = 3;
+    textarea.placeholder = '例如：只调整第 2 项，其余采用推荐项。';
+    notes.appendChild(textarea);
+    form.appendChild(notes);
+    const actions = make('div', 'review-actions');
+    const submit = make('button', 'review-submit', '发送评审答复');
+    submit.type = 'submit';
+    const feedback = make('span', 'review-feedback');
+    feedback.setAttribute('aria-live', 'polite');
+    append(actions, submit, feedback);
+    form.appendChild(actions);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const answers = review.questions.map((question) => {
+        const selected = form.querySelector(`input[name="${model.operation.operationKey}-${question.id}"]:checked`);
+        return `${question.id}=${selected ? selected.value : '未选择'}`;
+      });
+      const extra = textarea.value.trim();
+      const prompt = [
+        `Claw Session Events v2 接口评审：${model.operation.method} ${model.operation.path}`,
+        ...answers,
+        extra ? `补充说明：${extra}` : ''
+      ].filter(Boolean).join('\n');
+      if (window.openai && typeof window.openai.sendFollowUpMessage === 'function') {
+        await window.openai.sendFollowUpMessage({ prompt });
+        feedback.textContent = '已发送。';
+        return;
+      }
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(prompt);
+        feedback.textContent = '当前环境不能直接发送，答复已复制。';
+        return;
+      }
+      feedback.textContent = `请回复：${answers.join('，')}${extra ? `；${extra}` : ''}`;
+    });
+    section.appendChild(form);
+    return section;
+  };
+  const table = (columns, rows) => {
+    const wrap = make('div', 'table-wrap');
+    const element = make('table', '');
+    const head = make('thead', '');
+    const headRow = make('tr', '');
+    columns.forEach((column) => headRow.appendChild(make('th', '', column)));
+    head.appendChild(headRow);
+    const body = make('tbody', '');
+    rows.forEach((values) => {
+      const row = make('tr', '');
+      values.forEach((value, index) => {
+        const cell = make('td', '', value);
+        cell.dataset.label = columns[index];
+        row.appendChild(cell);
+      });
+      body.appendChild(row);
+    });
+    append(element, head, body);
+    wrap.appendChild(element);
+    return wrap;
+  };
+  const renderOperation = (root, model) => {
+    const api = model.api;
+    const operation = model.operation;
+    const shell = root.querySelector('[data-api-shell]');
+    if (!shell) return;
+    const fullPath = `${api.basePath.replace(/\/$/, '')}/${operation.path.replace(/^\//, '')}`;
+    const topbar = make('header', 'topbar');
+    const titleRow = make('div', 'row');
+    append(titleRow, make('h2', '', api.title), make('span', 'tag', api.version));
+    if (api.visibility) titleRow.appendChild(make('span', 'tag', api.visibility));
+    titleRow.appendChild(make('span', 'tag', `字段：${api.fieldNaming}`));
+    titleRow.appendChild(make('span', 'tag', `Header：${api.headerNaming}`));
+    append(topbar, titleRow, code(api.basePath, 'base'));
+
+    const methodClass = operation.method.toLowerCase();
+    const article = make('article', `operation operation-${methodClass}`);
+    const operationHead = make('header', 'operation-head');
+    append(
+      operationHead,
+      make('span', `method method-${methodClass}`, operation.method),
+      code(operation.path, 'path'),
+      make('span', 'muted', operation.summary),
+      make('span', 'operation-name', operation.shortName),
+      code(operation.operationKey, 'operation-key')
+    );
+    article.appendChild(operationHead);
+    const purpose = make('section', 'section');
+    append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
+    article.appendChild(purpose);
+
+    const authSection = make('section', 'section contract-detail auth-section');
+    const authTitle = make('div', 'row section-title');
+    const authTabs = make('div', 'tabs');
+    const authBody = make('div', '');
+    append(authTitle, make('h3', '', '调用上下文 Header'), authTabs);
+    append(authSection, authTitle, authBody);
+    let selectedAuth = operation.requestHeaderExamples.find((item) => item.preferred) || operation.requestHeaderExamples[0];
+    const renderAuth = () => {
+      authTabs.querySelectorAll('button').forEach((button) => {
+        button.setAttribute('aria-pressed', String(button.dataset.authId === selectedAuth.id));
+      });
+      authBody.replaceChildren();
+      const rows = selectedAuth.headers.map((header) => [
+        header.name,
+        header.required ? '是' : '否',
+        header.value,
+        header.description
+      ]);
+      const request = [
+        `${operation.method} ${fullPath}`,
+        ...selectedAuth.headers.map((header) => `${header.name}: ${header.value}`)
+      ].join('\n');
+      append(authBody, table(['Header', '必填', '示例值', '说明'], rows), append(make('pre', ''), code(request)));
+    };
+    operation.requestHeaderExamples.forEach((mode) => {
+      const button = make('button', '', mode.label);
+      button.type = 'button';
+      button.dataset.authId = mode.id;
+      button.addEventListener('click', () => {
+        selectedAuth = mode;
+        renderAuth();
+      });
+      authTabs.appendChild(button);
+    });
+    renderAuth();
+    article.appendChild(authSection);
+
+    const requestSection = make('section', 'section contract-detail request-section');
+    requestSection.appendChild(make('h3', '', '参数与请求体'));
+    if (operation.parameters.length) {
+      const rows = operation.parameters.map((parameter) => [
+        parameter.in,
+        parameter.name,
+        parameter.required ? '是' : '否',
+        parameter.schema || '—',
+        parameter.description
+      ]);
+      requestSection.appendChild(table(['位置', '名称', '必填', '约束', '说明'], rows));
+    } else {
+      requestSection.appendChild(make('p', 'muted empty', '无 path/query/header 业务参数。'));
+    }
+    const requestBody = operation.requestBody || {};
+    requestSection.appendChild(make('p', 'muted empty', requestBody.description || '无请求体。'));
+    if (requestBody.example !== undefined && requestBody.example !== null) {
+      requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
+    }
+    (requestBody.examples || []).forEach((example, index) => {
+      const details = make('details', 'static-choice');
+      details.open = index === 0;
+      details.appendChild(make('summary', '', example.label));
+      if (example.description) details.appendChild(make('p', 'muted empty', example.description));
+      details.appendChild(append(make('pre', ''), code(pretty(example.value))));
+      requestSection.appendChild(details);
+    });
+    article.appendChild(requestSection);
+
+    const responseSection = make('section', 'section contract-detail response-section');
+    const responseTitle = make('div', 'row section-title');
+    const localeTabs = make('div', 'tabs');
+    const statusTabs = make('div', 'tabs');
+    const responseBody = make('div', '');
+    append(responseTitle, make('h3', '', '响应'), localeTabs);
+    append(responseSection, responseTitle, statusTabs, responseBody);
+    let selectedResponse = operation.responses[0];
+    let selectedLocale = Object.keys(selectedResponse.bodies)[0];
+    const responseIdentity = (response) => response.id || response.status;
+    const renderResponse = () => {
+      statusTabs.querySelectorAll('button').forEach((button) => {
+        button.setAttribute('aria-selected', String(button.dataset.responseId === responseIdentity(selectedResponse)));
+      });
+      const locales = Object.keys(selectedResponse.bodies);
+      if (!locales.includes(selectedLocale)) selectedLocale = locales[0];
+      localeTabs.replaceChildren();
+      locales.forEach((locale) => {
+        const button = make('button', '', locale);
+        button.type = 'button';
+        button.setAttribute('aria-pressed', String(locale === selectedLocale));
+        button.addEventListener('click', () => {
+          selectedLocale = locale;
+          renderResponse();
+        });
+        localeTabs.appendChild(button);
+      });
+      responseBody.replaceChildren();
+      responseBody.appendChild(
+        make('p', 'description', `${selectedResponse.status} ${selectedResponse.label} — ${selectedResponse.summary}`)
+      );
+      const headers = { ...(selectedResponse.headers || {}) };
+      if (selectedLocale !== 'default' && Object.hasOwn(headers, 'Content-Language')) {
+        headers['Content-Language'] = selectedLocale;
+      }
+      const headerLines = Object.entries(headers).map(([name, value]) => `${name}: ${value}`);
+      const payload = selectedResponse.bodies[selectedLocale];
+      const output = [...headerLines, headerLines.length ? '' : null, payload === undefined ? null : pretty(payload)]
+        .filter((item) => item !== null).join('\n');
+      responseBody.appendChild(append(make('pre', ''), code(output)));
+    };
+    operation.responses.forEach((response) => {
+      const button = make('button', '', response.tabLabel || response.status);
+      button.type = 'button';
+      button.dataset.responseId = responseIdentity(response);
+      button.setAttribute('role', 'tab');
+      button.addEventListener('click', () => {
+        selectedResponse = response;
+        renderResponse();
+      });
+      statusTabs.appendChild(button);
+    });
+    renderResponse();
+    article.appendChild(responseSection);
+    const reviewSection = renderReview(model);
+    if (reviewSection) article.appendChild(reviewSection);
+    shell.replaceChildren(topbar, article);
+  };
+  roots.forEach((root, index) => {
+    if (models[index]) renderOperation(root, models[index]);
+  });
+})();
+  </script>
+</body>
+</html>
