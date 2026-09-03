@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.2 |
+| 文档版本 | 0.1.3 |
 | 状态 | 资源模型 A、POST 三种用户事件范围与 `X-HW-ID` 语义已确认；其余字段评审中 |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
@@ -32,8 +32,9 @@ Steer、FollowUp 和 Slash Command 是否并入 Events 不在本轮自动决定�
 v1 契约，待三个核心 operation 完成后逐项评审。
 
 该选择属于架构变更：当前 Java 的 POST 返回一次执行范围的 SSE；目标 POST 只返回
-普通 JSON 接受结果。产品约束仍是不公开执行 ID；安全加固仍是凭据只形成执行级瞬态
-快照，不持久化、不记录、不发往模型或工具发现。
+普通 JSON 接受结果。产品约束仍是不公开执行 ID；安全加固仍是 Claw 从 POST 请求读取
+凭据后，只在内存中保留到本次 Agent 执行结束。凭据不持久化、不记录、不发往模型或
+工具发现；只有实际调用 Mate tool execute 时才发送。
 
 ![Session Events 目标资源模型](设计图/事件接口重设计/target_session_events_resource_model.svg)
 
@@ -54,16 +55,20 @@ Accept: application/json
 并不表示接口只接收 `user.message`。
 
 已确认 `X-HW-ID` 是当前请求对应的用户凭据 ID，不是公司、服务或应用调用方标识。
-请求示例使用 `<USER_CREDENTIAL_ID>`，避免将它误读为上游系统名称。当前 Java 只把该
-Header 当作不透明字符串读入 `MateCredentials`，并没有实现能够证明其业务语义的解析或
-校验，因此“用户凭据 ID”记录为本次确认的产品约束，而不是已观察源码行为。
+JWT 模式的请求示例使用 `credential-jwt`，APPKEY 模式使用 `credential-appkey`。两者都
+是当前实现测试中真实使用的非生产字面值，不是格式占位符，也不是生产用户凭据。当前
+Java 只把该 Header 当作不透明字符串读入 `MateCredentials`，并没有实现能够证明其业务
+语义的解析或校验，因此“用户凭据 ID”记录为本次确认的产品约束，而不是已观察源码行为。
+JWT、APPKEY 和 access-token 分别使用当前实现测试中的 `Bearer opaque-token`、
+`opaque-appkey` 和 `opaque-access-token`。这些是可直接阅读的非生产测试字面值，不是
+生产凭据，也不为 Token 增加格式约束。
 
 完整候选字段、请求示例、成功与错误响应及四个选择题见
 [`chat-events-v2-review.html`](chat-events-v2-review.html)。可编辑源是
 [`接口契约-v2/common.json`](接口契约-v2/common.json) 与
 [`01-submit-session-event.json`](接口契约-v2/操作/01-submit-session-event.json)。
 
-当前推荐快照如下，但尚未确认：
+当前推荐方案如下，但尚未确认：
 
 1. `access-token` 对三种用户事件均为必填，但 Claw 只在实际 Mate tool execute 使用；
 2. 请求体使用 `event` 包装和有序 `content[]`，与 mate 请求结构同构；
@@ -87,8 +92,9 @@ Header 当作不透明字符串读入 `MateCredentials`，并没有实现能够�
   Controller；
 - Application Service 根据 `event.type` 选择独立 Handler，避免新增事件时修改中央
   `switch`；
-- 请求快照只固定解析后的结构、对象身份、locale 和瞬态凭据。Session 状态、执行容量、
-  待确认 Tool Call 等可变权威状态必须在所属事务或 Session 锁内重新检查；
+- Web 边界固定解析后的结构、对象身份和 locale。凭据从请求读入后只保存在内存中，直至
+  本次 Agent 执行结束；Session 状态、执行容量、待确认 Tool Call 等可变权威状态必须在
+  所属事务或 Session 锁内重新检查；
 - Runtime Coordinator 继续拥有一次内部执行，Projector 先持久化权威 Entry，再发布
   completed live event；delta 等 preview 只 best-effort 发布；
 - `SessionLiveEventHub` 是 Spring 单例，每条 SSE 连接拥有独立有界 Subscription。
@@ -103,6 +109,7 @@ live Hub 不重放、不承担恢复；任何 SSE gap、订阅溢出或 POST 响
 |---|---|---|
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:39-91` · `RuntimeEventController.submit/list` | POST 创建 `SseEmitter` 并返回 `text/event-stream`；GET 只接收 `limit/page` |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java:45-50` · `mateCredentials`；`campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/common/client/mate/MateCredentials.java:21-74` | 当前实现把 `X-HW-ID` 作为不透明 Header 值读入执行凭据，只检查非空，不解析其业务身份 |
+| 已观察实现 | `campusclaw/src/test/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSessionRoutesTest.java:69-93` · `createWithJwtReturnsConfirmedResultBean/getWithAppKeyReturnsEtagAndNoStore`；`RuntimeEventRoutesTest.java:88-120,193-197` · `postStreamsNamedEventsWithoutResultBean/authenticated` | 当前测试使用 `credential-jwt`、`credential-appkey`、`Bearer opaque-token`、`opaque-appkey` 和 `opaque-access-token` 等非生产字面值；本设计复用它们作为具体示例，但不据此增加格式约束 |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java:76-139` · `submit/prepareAndSubmit/acceptUserEntry` | 只接受 `user.message`，要求 idle，持久化后直接启动内部执行并返回其 EventStream |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java:22-159` · `attach/detachInternal` | EventStream 属于一次执行且最多一个 subscriber；断线会清空该流缓冲 |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventQueryService.java:53-99` · `list/pageOf` | page 只携带 afterSeq 与 thinking，没有固定历史快照水位 |
@@ -111,7 +118,7 @@ live Hub 不重放、不承担恢复；任何 SSE gap、订阅溢出或 POST 响
 | 目标架构 | 本文三接口及目标图 | 提交、live 与历史解耦；支持跨执行、多订阅者的 Session live Hub |
 | 产品约束 | 本文资源模型 | 无公共 Run/Execution；mate 公共边界只暴露 `chatId` 和公共事件身份 |
 | 产品约束 | `X-HW-ID` | 标识当前请求对应的用户凭据；不是公司、服务或应用调用方标识 |
-| 安全加固 | POST 请求快照 | 凭据只在必要的实际 Mate tool execute 使用，不进入持久化、日志、SSE 或历史 |
+| 安全加固 | POST 凭据处理 | 凭据从请求读入后只在内存中保留到本次 Agent 执行结束，只在必要的实际 Mate tool execute 使用，不进入持久化、日志、SSE 或历史 |
 
 pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime 内核行为参考；
 本次不把 pi 的进程内事件、本地 Session 文件或 CLI 传输直接当成 CampusClaw HTTP 契约。
@@ -148,13 +155,14 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 |---|---|---|
 | 2026-09-03 | 资源模型 | 已确认选择 A：Session Events 三接口，执行保持内部状态，无 `executionId/runId` |
 | 2026-09-03 | POST 事件范围 | 已确认同一 POST 接受 `user.message`、`user.interrupt`、`user.tool_confirmation`；一次请求提交一条，不支持批量 |
-| 2026-09-03 | `X-HW-ID` 语义 | 已确认为用户凭据 ID；不是公司、服务或应用调用方标识；请求示例使用 `<USER_CREDENTIAL_ID>` |
+| 2026-09-03 | `X-HW-ID` 语义与示例 | 已确认为用户凭据 ID；不是公司、服务或应用调用方标识；JWT/APPKEY 示例分别使用当前实现测试值 `credential-jwt`/`credential-appkey` |
 | 2026-09-03 | POST 字段 | 评审中；四个推荐项只是当前提案，不视为用户确认 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.3 | 2026-09-03 | 将凭据处理改写为“请求读取—内存保留到执行结束—仅 Tool execute 发送”的具体过程；全部凭据 Header 改用当前源码测试中的具体非生产示例值。 |
 | 0.1.2 | 2026-09-03 | 修正并冻结 `X-HW-ID` 的身份语义：它是用户凭据 ID，不是公司、服务或应用调用方标识；同步替换请求示例占位符并增加回归校验。 |
 | 0.1.1 | 2026-09-03 | 明确并冻结 POST 支持三种用户事件；将“一次一条”解释为请求批量边界，避免误读成只支持 `user.message`。 |
 | 0.1.0 | 2026-09-03 | 固化资源模型 A，记录当前 Java 源码差距，增加目标资源图与类图，并启动第一个 POST operation 的四项字段评审。 |

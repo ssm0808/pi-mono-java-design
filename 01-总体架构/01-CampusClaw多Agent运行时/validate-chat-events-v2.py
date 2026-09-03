@@ -38,18 +38,24 @@ def main() -> int:
             ("common", common["requestHeaderExamples"]),
             ("submitSessionEvent", operation["requestHeaderExamples"]),
         ]
+        expected_x_hw_id_values = {"jwt": "credential-jwt", "appkey": "credential-appkey"}
         for owner, modes in header_sets:
             for mode in modes:
+                require(
+                    all("<" not in header["value"] and ">" not in header["value"] for header in mode["headers"]),
+                    f"{owner} {mode['id']} must use concrete non-production header examples",
+                )
                 x_hw_id = next(header for header in mode["headers"] if header["name"] == "X-HW-ID")
                 require(
-                    x_hw_id["value"] == "<USER_CREDENTIAL_ID>",
-                    f"{owner} {mode['id']} must use the user credential ID placeholder",
+                    x_hw_id["value"] == expected_x_hw_id_values[mode["id"]],
+                    f"{owner} {mode['id']} must use the concrete user credential ID example",
                 )
                 require(
                     "用户凭据 ID" in x_hw_id["description"]
                     and "不是公司、服务或应用标识" in x_hw_id["description"],
                     f"{owner} {mode['id']} must define X-HW-ID as a user credential ID",
                 )
+        require("瞬态" not in json.dumps(model, ensure_ascii=False), "v2 POST must describe credential handling plainly")
         questions = review["questions"]
         require(len(questions) == 4, "the current review must ask exactly four questions")
         for question in questions:

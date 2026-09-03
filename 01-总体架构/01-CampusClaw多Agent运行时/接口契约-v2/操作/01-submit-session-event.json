@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "持久化一个用户事件并返回接受结果",
-    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围与 X-HW-ID 语义已经确认，其余字段仍是本轮候选快照。",
+    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围与 X-HW-ID 语义已经确认，其余字段仍是本轮候选方案。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -14,21 +14,21 @@
         "headers": [
           {
             "name": "X-HW-ID",
-            "value": "<USER_CREDENTIAL_ID>",
+            "value": "credential-jwt",
             "required": true,
-            "description": "用户凭据 ID；标识当前请求对应的用户凭据，不是公司、服务或应用标识；仅进入本次执行的瞬态凭据上下文"
+            "description": "用户凭据 ID，不是公司、服务或应用标识。Claw 从本请求读取，在本次 Agent 执行结束前只保存在内存中；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"
           },
           {
             "name": "Authorization",
-            "value": "Bearer <JWT>",
+            "value": "Bearer opaque-token",
             "required": true,
-            "description": "由上游完成真实性与格式检查；仅形成执行级瞬态凭据快照"
+            "description": "Bearer JWT。Claw 从本请求读取，不解析或校验；只在内存中保留到本次 Agent 执行结束，并仅在实际调用 Mate tool execute 时原样发送"
           },
           {
             "name": "access-token",
-            "value": "<ACCESS_TOKEN>",
+            "value": "opaque-access-token",
             "required": true,
-            "description": "执行级瞬态工具调用凭据；不持久化、不记录，只发送给实际 Mate tool execute"
+            "description": "Mate 工具访问令牌。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"
           }
         ]
       },
@@ -39,21 +39,21 @@
         "headers": [
           {
             "name": "X-HW-ID",
-            "value": "<USER_CREDENTIAL_ID>",
+            "value": "credential-appkey",
             "required": true,
-            "description": "用户凭据 ID；标识当前请求对应的用户凭据，不是公司、服务或应用标识；仅进入本次执行的瞬态凭据上下文"
+            "description": "用户凭据 ID，不是公司、服务或应用标识。Claw 从本请求读取，在本次 Agent 执行结束前只保存在内存中；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"
           },
           {
             "name": "X-HW-APPKEY",
-            "value": "<APPKEY>",
+            "value": "opaque-appkey",
             "required": true,
-            "description": "由上游完成真实性与格式检查；可与 Authorization 同时出现"
+            "description": "AppKey 凭据。Claw 从本请求读取，不校验；只在内存中保留到本次 Agent 执行结束，并仅在实际调用 Mate tool execute 时原样发送；可与 Authorization 同时出现"
           },
           {
             "name": "access-token",
-            "value": "<ACCESS_TOKEN>",
+            "value": "opaque-access-token",
             "required": true,
-            "description": "执行级瞬态工具调用凭据；不持久化、不记录，只发送给实际 Mate tool execute"
+            "description": "Mate 工具访问令牌。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"
           }
         ]
       }
@@ -419,7 +419,7 @@
           {
             "label": "C · Claw 不接收 access-token",
             "value": "C-not-forwarded-to-claw",
-            "description": "需要另行设计 Tool execute 的凭据取得机制，超出当前请求快照架构。"
+            "description": "需要另行设计 Claw 在执行工具前重新取得凭据的机制，超出当前请求处理方式。"
           }
         ]
       },
