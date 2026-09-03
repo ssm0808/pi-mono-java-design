@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
+COMMON_PATH = ROOT / "接口契约-v2" / "common.json"
 MODEL_PATH = ROOT / "接口契约-v2" / "操作" / "01-submit-session-event.json"
 
 
@@ -20,6 +21,7 @@ def require(condition: bool, message: str) -> None:
 
 def main() -> int:
     try:
+        common = json.loads(COMMON_PATH.read_text(encoding="utf-8"))
         model = json.loads(MODEL_PATH.read_text(encoding="utf-8"))
         operation = model["operation"]
         review = model["review"]
@@ -32,6 +34,22 @@ def main() -> int:
             event_types == {"user.message", "user.interrupt", "user.tool_confirmation"},
             "v2 POST examples must cover all proposed user event types",
         )
+        header_sets = [
+            ("common", common["requestHeaderExamples"]),
+            ("submitSessionEvent", operation["requestHeaderExamples"]),
+        ]
+        for owner, modes in header_sets:
+            for mode in modes:
+                x_hw_id = next(header for header in mode["headers"] if header["name"] == "X-HW-ID")
+                require(
+                    x_hw_id["value"] == "<USER_CREDENTIAL_ID>",
+                    f"{owner} {mode['id']} must use the user credential ID placeholder",
+                )
+                require(
+                    "用户凭据 ID" in x_hw_id["description"]
+                    and "不是公司、服务或应用标识" in x_hw_id["description"],
+                    f"{owner} {mode['id']} must define X-HW-ID as a user credential ID",
+                )
         questions = review["questions"]
         require(len(questions) == 4, "the current review must ask exactly four questions")
         for question in questions:

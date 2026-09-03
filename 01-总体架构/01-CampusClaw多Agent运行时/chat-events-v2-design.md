@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.1 |
-| 状态 | 资源模型 A 与 POST 三种用户事件范围已确认；其余字段评审中 |
+| 文档版本 | 0.1.2 |
+| 状态 | 资源模型 A、POST 三种用户事件范围与 `X-HW-ID` 语义已确认；其余字段评审中 |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
@@ -53,6 +53,11 @@ Accept: application/json
 `user.tool_confirmation`。每次请求只能提交其中一条，表示不支持数组或批量提交，
 并不表示接口只接收 `user.message`。
 
+已确认 `X-HW-ID` 是当前请求对应的用户凭据 ID，不是公司、服务或应用调用方标识。
+请求示例使用 `<USER_CREDENTIAL_ID>`，避免将它误读为上游系统名称。当前 Java 只把该
+Header 当作不透明字符串读入 `MateCredentials`，并没有实现能够证明其业务语义的解析或
+校验，因此“用户凭据 ID”记录为本次确认的产品约束，而不是已观察源码行为。
+
 完整候选字段、请求示例、成功与错误响应及四个选择题见
 [`chat-events-v2-review.html`](chat-events-v2-review.html)。可编辑源是
 [`接口契约-v2/common.json`](接口契约-v2/common.json) 与
@@ -97,6 +102,7 @@ live Hub 不重放、不承担恢复；任何 SSE gap、订阅溢出或 POST 响
 | 分类 | 源码证据 | 结论 |
 |---|---|---|
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:39-91` · `RuntimeEventController.submit/list` | POST 创建 `SseEmitter` 并返回 `text/event-stream`；GET 只接收 `limit/page` |
+| 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java:45-50` · `mateCredentials`；`campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/common/client/mate/MateCredentials.java:21-74` | 当前实现把 `X-HW-ID` 作为不透明 Header 值读入执行凭据，只检查非空，不解析其业务身份 |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java:76-139` · `submit/prepareAndSubmit/acceptUserEntry` | 只接受 `user.message`，要求 idle，持久化后直接启动内部执行并返回其 EventStream |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java:22-159` · `attach/detachInternal` | EventStream 属于一次执行且最多一个 subscriber；断线会清空该流缓冲 |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventQueryService.java:53-99` · `list/pageOf` | page 只携带 afterSeq 与 thinking，没有固定历史快照水位 |
@@ -104,6 +110,7 @@ live Hub 不重放、不承担恢复；任何 SSE gap、订阅溢出或 POST 响
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:57-120` · `acceptUserEvent/listCurrentBranch` | `user.message` 在事务内追加并将 Session 标为 running；历史按 afterSeq 开放读取 |
 | 目标架构 | 本文三接口及目标图 | 提交、live 与历史解耦；支持跨执行、多订阅者的 Session live Hub |
 | 产品约束 | 本文资源模型 | 无公共 Run/Execution；mate 公共边界只暴露 `chatId` 和公共事件身份 |
+| 产品约束 | `X-HW-ID` | 标识当前请求对应的用户凭据；不是公司、服务或应用调用方标识 |
 | 安全加固 | POST 请求快照 | 凭据只在必要的实际 Mate tool execute 使用，不进入持久化、日志、SSE 或历史 |
 
 pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime 内核行为参考；
@@ -141,11 +148,13 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 |---|---|---|
 | 2026-09-03 | 资源模型 | 已确认选择 A：Session Events 三接口，执行保持内部状态，无 `executionId/runId` |
 | 2026-09-03 | POST 事件范围 | 已确认同一 POST 接受 `user.message`、`user.interrupt`、`user.tool_confirmation`；一次请求提交一条，不支持批量 |
+| 2026-09-03 | `X-HW-ID` 语义 | 已确认为用户凭据 ID；不是公司、服务或应用调用方标识；请求示例使用 `<USER_CREDENTIAL_ID>` |
 | 2026-09-03 | POST 字段 | 评审中；四个推荐项只是当前提案，不视为用户确认 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.2 | 2026-09-03 | 修正并冻结 `X-HW-ID` 的身份语义：它是用户凭据 ID，不是公司、服务或应用调用方标识；同步替换请求示例占位符并增加回归校验。 |
 | 0.1.1 | 2026-09-03 | 明确并冻结 POST 支持三种用户事件；将“一次一条”解释为请求批量边界，避免误读成只支持 `user.message`。 |
 | 0.1.0 | 2026-09-03 | 固化资源模型 A，记录当前 Java 源码差距，增加目标资源图与类图，并启动第一个 POST operation 的四项字段评审。 |

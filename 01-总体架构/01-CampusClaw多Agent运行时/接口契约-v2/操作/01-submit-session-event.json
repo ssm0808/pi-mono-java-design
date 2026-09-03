@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "持久化一个用户事件并返回接受结果",
-    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围已经确认，其余字段仍是本轮候选快照。",
+    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围与 X-HW-ID 语义已经确认，其余字段仍是本轮候选快照。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -14,9 +14,9 @@
         "headers": [
           {
             "name": "X-HW-ID",
-            "value": "<CALLER_ID>",
+            "value": "<USER_CREDENTIAL_ID>",
             "required": true,
-            "description": "公司调用方标识；作为本次用户事件的请求上下文"
+            "description": "用户凭据 ID；标识当前请求对应的用户凭据，不是公司、服务或应用标识；仅进入本次执行的瞬态凭据上下文"
           },
           {
             "name": "Authorization",
@@ -39,9 +39,9 @@
         "headers": [
           {
             "name": "X-HW-ID",
-            "value": "<CALLER_ID>",
+            "value": "<USER_CREDENTIAL_ID>",
             "required": true,
-            "description": "公司调用方标识；作为本次用户事件的请求上下文"
+            "description": "用户凭据 ID；标识当前请求对应的用户凭据，不是公司、服务或应用标识；仅进入本次执行的瞬态凭据上下文"
           },
           {
             "name": "X-HW-APPKEY",
@@ -398,8 +398,8 @@
     ]
   },
   "review": {
-    "status": "字段评审中 · 尚未确认",
-    "notice": "已确认每次请求可从 user.message、user.interrupt、user.tool_confirmation 中提交一条事件；以下四项决定其余精确字段。推荐项已预选，但不会自动视为确认。",
+    "status": "X-HW-ID 语义已确认 · 其余字段评审中",
+    "notice": "已确认每次请求可从 user.message、user.interrupt、user.tool_confirmation 中提交一条事件，也已确认 X-HW-ID 是用户凭据 ID，而不是公司、服务或应用标识；以下四项决定其余精确字段。推荐项已预选，但不会自动视为确认。",
     "questions": [
       {
         "id": "Q1-access-token",
