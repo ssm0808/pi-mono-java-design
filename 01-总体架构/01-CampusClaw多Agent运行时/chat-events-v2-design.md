@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.3 |
-| 状态 | 资源模型 A、POST 三种用户事件范围与 `X-HW-ID` 语义已确认；其余字段评审中 |
+| 文档版本 | 0.1.4 |
+| 状态 | 资源模型 A、POST 三种用户事件范围、Header 示例与处理说明已确认；其余字段评审中 |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
@@ -18,7 +18,7 @@ CampusClaw 采用 Session Events 三接口，内部执行不成为公共资源�
 
 | Method | Path | 职责 | 当前状态 |
 |---|---|---|---|
-| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 事件范围已确认，其余字段评审中 |
+| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 事件范围与 Header 说明已确认，其余字段评审中 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events/stream` | 订阅跨多次内部执行的 Session live SSE | 只确认职责，字段未开始评审 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 读取固定快照的权威历史 | 只确认职责，字段未开始评审 |
 
@@ -62,6 +62,9 @@ Java 只把该 Header 当作不透明字符串读入 `MateCredentials`，并没�
 JWT、APPKEY 和 access-token 分别使用当前实现测试中的 `Bearer opaque-token`、
 `opaque-appkey` 和 `opaque-access-token`。这些是可直接阅读的非生产测试字面值，不是
 生产凭据，也不为 Token 增加格式约束。
+
+上述两组 Header 示例值及凭据处理说明已经确认。该确认只冻结示例和说明，不表示
+`access-token` 对三种用户事件是否必填已经确认；必填策略仍由下面的 Q1 决定。
 
 完整候选字段、请求示例、成功与错误响应及四个选择题见
 [`chat-events-v2-review.html`](chat-events-v2-review.html)。可编辑源是
@@ -155,13 +158,15 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 |---|---|---|
 | 2026-09-03 | 资源模型 | 已确认选择 A：Session Events 三接口，执行保持内部状态，无 `executionId/runId` |
 | 2026-09-03 | POST 事件范围 | 已确认同一 POST 接受 `user.message`、`user.interrupt`、`user.tool_confirmation`；一次请求提交一条，不支持批量 |
-| 2026-09-03 | `X-HW-ID` 语义与示例 | 已确认为用户凭据 ID；不是公司、服务或应用调用方标识；JWT/APPKEY 示例分别使用当前实现测试值 `credential-jwt`/`credential-appkey` |
+| 2026-09-03 | `X-HW-ID` 语义 | 已确认为用户凭据 ID；不是公司、服务或应用调用方标识 |
+| 2026-09-03 | Header 示例与处理说明 | 已确认使用 `credential-jwt`、`credential-appkey`、`Bearer opaque-token`、`opaque-appkey`、`opaque-access-token`；凭据从请求读取，只在内存中保留到本次 Agent 执行结束，并仅随实际 Mate tool execute 发送。此项不确认 `access-token` 必填策略 |
 | 2026-09-03 | POST 字段 | 评审中；四个推荐项只是当前提案，不视为用户确认 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.4 | 2026-09-03 | 冻结用户认可的 Header 具体非生产示例值与凭据处理说明；明确该确认不包含 `access-token` 必填策略。 |
 | 0.1.3 | 2026-09-03 | 将凭据处理改写为“请求读取—内存保留到执行结束—仅 Tool execute 发送”的具体过程；全部凭据 Header 改用当前源码测试中的具体非生产示例值。 |
 | 0.1.2 | 2026-09-03 | 修正并冻结 `X-HW-ID` 的身份语义：它是用户凭据 ID，不是公司、服务或应用调用方标识；同步替换请求示例占位符并增加回归校验。 |
 | 0.1.1 | 2026-09-03 | 明确并冻结 POST 支持三种用户事件；将“一次一条”解释为请求批量边界，避免误读成只支持 `user.message`。 |

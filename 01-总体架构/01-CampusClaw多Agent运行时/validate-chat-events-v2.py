@@ -56,6 +56,14 @@ def main() -> int:
                     f"{owner} {mode['id']} must define X-HW-ID as a user credential ID",
                 )
         require("瞬态" not in json.dumps(model, ensure_ascii=False), "v2 POST must describe credential handling plainly")
+        require(
+            "Header 示例与处理说明已确认" in review["status"],
+            "review status must preserve the confirmed Header examples and handling description",
+        )
+        require(
+            "access-token 是否对三种事件都必填" in review["notice"],
+            "review notice must keep the access-token requiredness decision open",
+        )
         questions = review["questions"]
         require(len(questions) == 4, "the current review must ask exactly four questions")
         for question in questions:
