@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "提交用户消息并流式返回 Session 执行事件",
-    "description": "提交普通 user.message。即使 message 以 / 开头，本接口也按普通消息处理；Slash Command 必须调用 POST /sessions/{sessionId}/command。本接口额外必填 access-token Header；Runtime 将其与本次请求中的 X-HW-ID、Authorization、X-HW-APPKEY 作为执行级瞬态凭据快照，不校验、不持久化、不记录，只在实际 Mate 工具 execute HTTP 请求中原名透传；工具发现、模型、受管 Agent 加载、配置和其他请求均不透传。接受消息前依据最新 Agent 目录校准模型；需要自动切换时，session.model.changed 及必要的 session.thinking.changed 先于 user.message 投影；没有具备凭据的 default 时拒绝且不写用户 Entry。一次执行可触发多次模型、工具和压缩。成功 STOP 静默越界只压缩而不重放；ERROR/LENGTH 溢出最多压缩恢复并重试一次。公共 Agent 的实际请求输出上限与 recoverable LENGTH 判定一致；压缩重试后重载不会恢复已从在线上下文丢弃的 Assistant，内部排除 ID 不进入公共事件。assistant.message.completed 与 session.compaction.completed 持久化完整 Usage；tool.execution.delta、session.compaction.started/failed 只瞬态投影，failed 固定包含 reason/willRetry/aborted/message。工具 delta 只含 toolCallId/toolName/delta，序列化、大小或背压失败只丢进度。网络断开不取消执行，调用方不得自动重放 POST；应通过 GET 分页恢复持久化事件。",
+    "description": "提交普通 user.message。即使 message 以 / 开头，本接口也按普通消息处理；Slash Command 必须调用 POST /sessions/{sessionId}/command。本接口额外必填 access-token Header。Claw 从本次请求读取 X-HW-ID、Authorization、X-HW-APPKEY 和 access-token，只在内存中保留到本次 Agent 执行结束；仅随实际 Mate 工具 execute HTTP 请求原名发送，不写入 Session、事件或日志，也不随工具发现、模型、受管 Agent 加载、配置或其他请求发送。Claw 当前不解析或校验这些凭据。接受消息前依据最新 Agent 目录校准模型；需要自动切换时，session.model.changed 及必要的 session.thinking.changed 先于 user.message 投影；没有具备凭据的 default 时拒绝且不写用户 Entry。一次执行可触发多次模型、工具和压缩。成功 STOP 静默越界只压缩而不重放；ERROR/LENGTH 溢出最多压缩恢复并重试一次。公共 Agent 的实际请求输出上限与 recoverable LENGTH 判定一致；压缩重试后重载不会恢复已从在线上下文丢弃的 Assistant，内部排除 ID 不进入公共事件。assistant.message.completed 与 session.compaction.completed 持久化完整 Usage；tool.execution.delta、session.compaction.started/failed 只瞬态投影，failed 固定包含 reason/willRetry/aborted/message。工具 delta 只含 toolCallId/toolName/delta，序列化、大小或背压失败只丢进度。网络断开不取消执行，调用方不得自动重放 POST；应通过 GET 分页恢复持久化事件。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -14,21 +14,21 @@
         "headers": [
           {
             "name": "X-HW-ID",
-            "value": "<CALLER_ID>",
+            "value": "credential-jwt",
             "required": true,
-            "description": "公司调用方标识；只在本次执行的实际 Mate 工具 execute 请求中原名透传"
+            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次 Agent 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
           },
           {
             "name": "Authorization",
-            "value": "Bearer <JWT>",
+            "value": "Bearer opaque-token",
             "required": true,
-            "description": "由上游完成真实性与格式检查；只在本次执行的实际 Mate 工具 execute 请求中原名透传"
+            "description": "Bearer JWT；Claw 只在内存中保留到本次 Agent 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
           },
           {
             "name": "access-token",
-            "value": "<ACCESS_TOKEN>",
+            "value": "opaque-access-token",
             "required": true,
-            "description": "本接口专有的执行级瞬态工具调用凭据；Runtime 不校验、不持久化、不记录，只在实际 Mate 工具 execute 请求中原名透传"
+            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次 Agent 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
           }
         ]
       },
@@ -39,21 +39,21 @@
         "headers": [
           {
             "name": "X-HW-ID",
-            "value": "<CALLER_ID>",
+            "value": "credential-appkey",
             "required": true,
-            "description": "公司调用方标识；只在本次执行的实际 Mate 工具 execute 请求中原名透传"
+            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次 Agent 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
           },
           {
             "name": "X-HW-APPKEY",
-            "value": "<APPKEY>",
+            "value": "opaque-appkey",
             "required": true,
-            "description": "由上游完成真实性与格式检查；可与 Authorization 同时出现，Runtime 不做互斥检查，只在实际 Mate 工具 execute 请求中原名透传"
+            "description": "AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次 Agent 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
           },
           {
             "name": "access-token",
-            "value": "<ACCESS_TOKEN>",
+            "value": "opaque-access-token",
             "required": true,
-            "description": "本接口专有的执行级瞬态工具调用凭据；Runtime 不校验、不持久化、不记录，只在实际 Mate 工具 execute 请求中原名透传"
+            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次 Agent 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
           }
         ]
       }

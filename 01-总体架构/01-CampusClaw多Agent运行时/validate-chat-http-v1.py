@@ -48,6 +48,14 @@ EXPECTED_CONTEXT_HEADERS = {"X-HW-ID", "Authorization", "X-HW-APPKEY"}
 POST_EVENTS = ("POST", "/sessions/{sessionId}/events")
 POST_COMMAND = ("POST", "/sessions/{sessionId}/command")
 POST_EVENTS_CONTEXT_HEADERS = EXPECTED_CONTEXT_HEADERS | {"access-token"}
+EXPECTED_SHARED_HEADER_VALUES = {
+    "jwt": {"X-HW-ID": "credential-jwt", "Authorization": "Bearer opaque-token"},
+    "appkey": {"X-HW-ID": "credential-appkey", "X-HW-APPKEY": "opaque-appkey"},
+}
+EXPECTED_EXECUTION_HEADER_VALUES = {
+    mode: values | {"access-token": "opaque-access-token"}
+    for mode, values in EXPECTED_SHARED_HEADER_VALUES.items()
+}
 EXPECTED_PARAMETER_HEADERS = {"Accept-Language", "If-Match"}
 LOWER_CAMEL_FIELD = re.compile(r"^[a-z][A-Za-z0-9]*$")
 
@@ -101,6 +109,33 @@ def require(condition: bool, message: str) -> None:
 
 def run(command: list[str], cwd: Path = ROOT) -> None:
     subprocess.run(command, cwd=cwd, check=True)
+
+
+def validate_header_examples(
+    examples: list[dict[str, Any]], expected_values: dict[str, dict[str, str]], context: str
+) -> None:
+    require({example.get("id") for example in examples} == set(expected_values),
+            f"{context} request Header modes are incomplete")
+    for example in examples:
+        headers = {header["name"]: header for header in example["headers"]}
+        actual_values = {name: header.get("value") for name, header in headers.items()}
+        require(actual_values == expected_values[example["id"]],
+                f"{context} request Header values differ: {example['id']}")
+        require(all(header.get("required") is True for header in headers.values()),
+                f"{context} request Header requiredness differs: {example['id']}")
+        x_hw_id_description = headers["X-HW-ID"].get("description", "")
+        require("用户凭据 ID" in x_hw_id_description and "不是公司、服务或应用标识" in x_hw_id_description,
+                f"{context} must define X-HW-ID as the user credential ID")
+        serialized = json.dumps(example, ensure_ascii=False)
+        for forbidden in ("公司调用方标识", "瞬态", "瞬时", "<CALLER_ID>", "<JWT>", "<APPKEY>",
+                          "<ACCESS_TOKEN>"):
+            require(forbidden not in serialized, f"{context} contains obsolete Header wording: {forbidden}")
+        if "access-token" in headers:
+            for header in headers.values():
+                description = header.get("description", "")
+                for phrase in ("只在内存中保留到本次", "Mate tool execute", "不写入 Session、事件或日志"):
+                    require(phrase in description,
+                            f"{context} execution Header description is incomplete: {phrase}")
 
 
 def read_design_version() -> str:
@@ -167,8 +202,9 @@ def validate_common_contract(common: dict[str, Any]) -> None:
         for header in example["headers"]
     }
     require(header_names == EXPECTED_CONTEXT_HEADERS, "Shared HTTP Header names changed unexpectedly")
-    require("互斥检查" in json.dumps(header_examples, ensure_ascii=False),
-            "Request header contract must state that Runtime does not reject coexistence")
+    validate_header_examples(header_examples, EXPECTED_SHARED_HEADER_VALUES, "Shared")
+    require("可与 Authorization 同时提供" in json.dumps(header_examples, ensure_ascii=False),
+            "Request header contract must state that both credential modes may be provided")
 
 
 def parse_generated_models(parser: ContractHtmlParser) -> tuple[list[dict[str, Any]], list[str]]:
@@ -268,6 +304,12 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
             else EXPECTED_CONTEXT_HEADERS
         )
         require(header_names == expected_headers, f"Integration request Header names changed: {key}")
+        expected_values = (
+            EXPECTED_EXECUTION_HEADER_VALUES
+            if key in {POST_EVENTS, POST_COMMAND}
+            else EXPECTED_SHARED_HEADER_VALUES
+        )
+        validate_header_examples(operation["requestHeaderExamples"], expected_values, str(key))
         parameter_headers = {
             parameter["name"] for parameter in operation["parameters"] if parameter["in"] == "header"
         }
@@ -365,10 +407,11 @@ def validate_response_contract(
                 (header for header in example["headers"] if header["name"] == "access-token"), None
             )
             require(access_token is not None and access_token.get("required") is True
-                    and access_token.get("value") == "<ACCESS_TOKEN>",
+                    and access_token.get("value") == "opaque-access-token",
                     "POST Events must require access-token in every request Header example")
         description = operation["description"]
-        for required_phrase in ("实际 Mate 工具 execute", "不持久化", "工具发现"):
+        for required_phrase in ("只在内存中保留到本次 Agent 执行结束", "Mate 工具 execute",
+                                "不写入 Session、事件或日志", "工具发现"):
             require(required_phrase in description,
                     f"POST Events credential boundary is incomplete: {required_phrase}")
         require(("503", "RUNTIME_CAPACITY_EXCEEDED") in codes, "POST Events is missing runtime capacity")
@@ -410,6 +453,10 @@ def validate_response_contract(
             names = {header["name"] for header in example["headers"]}
             require(names == expected_example_headers.get(example["id"]),
                     f"POST Command Header mode differs: {example['id']}")
+        for required_phrase in ("只在内存中保留到本次命令处理", "Mate tool execute",
+                                "不写入 Session、事件或日志", "工具发现"):
+            require(required_phrase in operation["description"],
+                    f"POST Command credential boundary is incomplete: {required_phrase}")
         require(set(operation["requestBody"]["example"]) == {"name", "arguments", "fileIds"},
                 "POST Command request must contain only name, arguments, and fileIds")
         codes = response_codes(operation)

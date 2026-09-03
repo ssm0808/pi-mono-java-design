@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Service API",
-    "version": "1.43.4",
+    "version": "1.43.5",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认",
     "fieldNaming": "lowerCamelCase",
@@ -32,15 +32,15 @@
       "headers": [
         {
           "name": "X-HW-ID",
-          "value": "<CALLER_ID>",
+          "value": "credential-jwt",
           "required": true,
-          "description": "公司调用方标识"
+          "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 当前不解析或校验"
         },
         {
           "name": "Authorization",
-          "value": "Bearer <JWT>",
+          "value": "Bearer opaque-token",
           "required": true,
-          "description": "由上游完成真实性与格式检查；Runtime Controller 仅接收调用上下文"
+          "description": "Bearer JWT；Claw 当前不解析或校验"
         }
       ]
     },
@@ -51,15 +51,15 @@
       "headers": [
         {
           "name": "X-HW-ID",
-          "value": "<CALLER_ID>",
+          "value": "credential-appkey",
           "required": true,
-          "description": "公司调用方标识"
+          "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 当前不解析或校验"
         },
         {
           "name": "X-HW-APPKEY",
-          "value": "<APPKEY>",
+          "value": "opaque-appkey",
           "required": true,
-          "description": "由上游完成真实性与格式检查；可与 Authorization 同时出现，Runtime 不做互斥检查"
+          "description": "AppKey 凭据；Claw 当前不校验；可与 Authorization 同时提供"
         }
       ]
     }

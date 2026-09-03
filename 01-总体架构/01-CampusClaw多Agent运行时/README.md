@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.6.0 |
-| 状态 | Session Events v2 资源模型 A 已确认；第一个 POST operation 字段评审中；HTTP 1.43.4 保留为迁移前 v1 基线 |
+| 文档版本 | 3.6.1 |
+| 状态 | Session Events v2 资源模型 A 已确认；第一个 POST operation 字段评审中；HTTP 1.43.5 保留为迁移前 v1 基线 |
 | 当前传输结论 | v2 使用独立 POST、Session live SSE 与固定快照历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -45,7 +45,7 @@ GET /sessions/{sessionId}/events
 
 ### 1.1 现行 v1 基线（迁移完成前保留）
 
-HTTP 1.43.4 当前仍采用两跳 HTTP+SSE，而不是 WebSocket：
+HTTP 1.43.5 当前仍采用两跳 HTTP+SSE，而不是 WebSocket：
 
 ```text
 Browser / Agent UI
@@ -208,18 +208,20 @@ Session、Entry 和 SSE 恢复，不获得 `runId`，也不存在 GetRun 或 Run
 `ResultBeanAdapter.normal(result)`；独立仓提供默认实现，公司环境以 Bean 替换并在
 适配器内部调用真实 `ResultBeanFactory.getFactory().normal(result)`。
 
-全部十三项操作都携带调用上下文 Header：默认示例为
-`X-HW-ID + Authorization: Bearer <JWT>`，同时展示
-`X-HW-ID + X-HW-APPKEY` 兼容示例。CampusClaw 不在进入 Controller 前或 Controller
-内部校验组合完整性、两类凭据是否同时存在、Bearer 形状或真实性，也不因此返回
-`UNAUTHENTICATED/AUTH_CREDENTIAL_CONFLICT`；这些检查由上游负责。
+全部十三项操作都携带调用上下文 Header。JWT 示例固定为
+`X-HW-ID: credential-jwt` 与 `Authorization: Bearer opaque-token`；APPKEY 示例固定为
+`X-HW-ID: credential-appkey` 与 `X-HW-APPKEY: opaque-appkey`。这些都是当前源码测试使用的
+非生产示例值。`X-HW-ID` 表示用户凭据 ID，不是公司、服务或应用标识。CampusClaw
+不在进入 Controller 前或 Controller 内部解析或校验这些凭据，也不因此返回
+`UNAUTHENTICATED/AUTH_CREDENTIAL_CONFLICT`；真实性与动作授权由上游负责。
 
 `POST /sessions/{sessionId}/events` 和 `POST /sessions/{sessionId}/command` 在上述共享 Header 之外必填
-`access-token`。Runtime 只为该次 active execution 保留收到的
-`X-HW-ID`、`Authorization`、`X-HW-APPKEY` 与 `access-token`；只有实际
-`POST /mate-service/v1/runtime/tools/{toolId}/execute` 会原名透传已提供的值。
-工具发现、Model Manager、受管目录、配置加载和其他 HTTP 请求均不携带这个快照；
-快照不写日志、ResultBean、Prompt、Event 或持久化存储，执行结束即丢弃。
+`access-token`，示例值为 `opaque-access-token`。Claw 从请求读取
+`X-HW-ID`、`Authorization`、`X-HW-APPKEY` 与 `access-token`，只在内存中保留到本次
+Agent 执行或命令处理结束；只有实际
+`POST /mate-service/v1/runtime/tools/{toolId}/execute` 会原名发送已提供的值。
+工具发现、Model Manager、受管目录、配置加载和其他 HTTP 请求均不携带这些值；
+这些值不写日志、ResultBean、Prompt、Event 或持久化存储。
 
 ### 5.2 执行 SSE
 
@@ -445,15 +447,15 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 | 已实现 Java 行为 | `MyBatisRuntimeSessionRepository` 使用 openGauss 保存 Session、当前分支 Entry、严格序号、tombstone 和清理任务 |
 | 当前 Java 差异 | `RuntimeApiConstants.AGENT_ID_PATTERN` 仍为旧下划线格式，`SESSION_ID_PATTERN` 仍为通用字符串；`RandomSessionIdGenerator` 仍生成无前缀的 26 位 Crockford Base32；`RuntimeSessionService.newSession` 仍写入 `thinking=false`，`session_schema.sql` 的 `agent_id` 仍为 `VARCHAR(30)` |
 | 当前 Java 差异 | `RuntimeWebMvcConfiguration` 当前把认证拦截器应用到全部 Runtime 路径；`UserEventRequestVO` 当前仍要求 `type=user.message` |
-| 当前 Java 差异 | 凭据核对基线 `320d7907` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:61-69` / `RuntimeRequestContext.java:45-49` 只捕获 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`，没有接收 `access-token`；`common/dto/RequestHeaderInfo.java:81-90` 使用的是不同拼写 `X-Access-Token`，且 Runtime 未赋值 |
-| 当前 Java 差异 | 同基线 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:134-185` 的 `queryToolIdsByAgentId/queryToolIdsBySkillId/queryToolMetaByIds` 当前会把 Mate 凭据发送到工具发现；`invokeTool/toHeaderInfo` 303-373 行只透传原三项。目标设计改为发现无凭据、仅 execute 透传本次 POST Events 快照中已提供的四项 Header，属于安全加固 |
+| 已实现 Java 行为 | 当前核对头 `c9d858bc` 的 `RuntimeRequestContext.mateCredentials` 45-50 行从 POST 请求读取 `X-HW-ID`、`X-HW-APPKEY`、`Authorization` 与 `access-token`；`MateCredentials` 21-90 行保存四个不透明字符串，仅在 Mate tool execute 前检查最低完整性，不解析用户凭据 ID 或 Bearer 内容 |
+| 已实现 Java 行为 | 同基线 `HttpMateToolClient.queryToolIdsByAgentId/queryToolIdsBySkillId/queryToolMetaByIds` 134-193 行调用工具发现时不附带凭据；`invokeTool/toHeaderInfo` 298-370 行只在实际 Mate tool execute 时发送本次执行持有的四项 Header |
 | 当前 Java 差异 | 字段命名核对基线 `304eda06` 的四个 Runtime Controller 仍使用 `{agent_id}` / `{session_id}` 路径变量；请求/响应 VO 的 `@JsonProperty`、`@JsonSetter` 以及 `RuntimeEntryCodec` / `RuntimeEventProjector` 仍输出 snake_case。1.38 lowerCamelCase 是相对该实现的契约变更 |
 | 已实现 Java 行为 | AI 层 `AssistantMessageEvent` 存在 thinking start/delta/end；Runtime 对外 `RuntimeEventType` 无 thinking 类型，`RuntimeEventProjector` 与 `RuntimeEntryCodec` 会过滤原始思考内容 |
 | 当前 Java 差异 | CLI `AgentSession` 仍聚合 ToolCatalog、Skill 激活、reload 和委派；HTTP 仍以独立 resolver 与硬编码 Read 装配；AgentRuntimeManager 仍写旧文件名和 Skill 工具快照 |
 | 架构变更 | 两跳目标传输统一为 HTTP+SSE，删除连接首帧、Frame RPC、连接 generation、WebSocket close code 和 AsyncAPI |
 | 架构变更 | CampusClaw 目标契约改为 `agent-` / `tool-` / `skill-` / `session-` 加 32 位十六进制 UUID；Session 创建成功时固定 `thinking=true`，实现需同步放宽 `t_sessions.agent_id` 并替换 Session ID 生成器 |
 | 当前 Java 差异 | `c1311f69` 的 `SlashCommandRegistry` 仍使用可变索引并解析整段 Slash 文本，`SlashCommandSession` 是宽泛可变门面；生产 Runtime 尚未注册命令 Controller，`t_sessions` 尚无 `display_name`，Mapper 尚无 sidecar 查询 |
-| 架构变更 | 十三个目标 operation 全部保留调用上下文 Header，但移除 Runtime 应用内的凭据组合与格式校验及对应 401；POST Events 与 POST Command 额外必填 `access-token`，收到的 Header 只作执行级瞬态快照并仅对实际 Mate execute 透传 |
+| 架构变更 | 十三个目标 operation 全部保留调用上下文 Header，但移除 Runtime 应用内的凭据组合与格式校验及对应 401；`X-HW-ID` 明确表示用户凭据 ID，不是公司、服务或应用标识 |
 | 架构变更 | `thinking=true` 时将内部 thinking 生命周期投影为公共 SSE，并持久化 completed 供 GET 恢复；GET 根据 Session 当前 thinking 状态过滤，状态变化使旧 page 失效 |
 | 架构变更 | CampusClaw HTTP 的 path/query/JSON/SSE 字段统一为 lowerCamelCase；Header 原名、事件类型值、错误码和 ID 值保持不变，不接受 snake_case 字段别名 |
 | 架构变更 | Runtime、Cron、Child 共用轻量 AgentSession 和工厂；8 个活动内置工具由启动期 profile 装配，工具实例按 Session 新建 |
@@ -466,7 +468,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 | 架构变更 | refresh 只影响下一次空闲 Session 执行；模型懒校准事件先于 user.message，无有效 default 时不接受消息 |
 | 产品约束 | 浏览器命令接口只识别 `chatId`，CampusClaw 内部契约只识别 `sessionId`；ChatSessionResolver 维护稳定映射，公共接口不泄露 Runtime 标识 |
 | 产品约束 | 不提供 CLI、Bash/Edit/Write、Loop、旧工具名、旧 Cron payload、Java Extension SDK、ACP/HTTP/A2A Child 或兼容执行器 |
-| 安全边界 | 调用上下文 Header 的检查由上游负责；Runtime 只在 POST Events/Command execution 内瞬态保留工具凭据，不记录、不持久化、不发往工具发现或模型请求；thinking 内容仅在开关为 true 时按事件契约返回 |
+| 安全边界 | 调用上下文 Header 的真实性与动作授权由上游负责；Claw 从 POST Events/Command 请求读取四项凭据，只在内存中保留到本次 Agent 执行或命令处理结束，仅随实际 Mate tool execute 发送，不记录、不持久化、不发往工具发现或模型请求；thinking 内容仅在开关为 true 时按事件契约返回 |
 | 安全加固 | 工具参数先做 JSON Schema 校验；目录完整发布、名称/版本/ancestry 校验和模型 bindingModels 白名单阻止不完整或越界执行 |
 
 源码证据的完整 commit、符号、行号和逐项设计理由见
@@ -488,6 +490,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.6.1 | 2026-09-03 | 同步 HTTP 1.43.5：十三个接口统一采用源码测试中的具体 Header 示例；明确 `X-HW-ID` 是用户凭据 ID；仅在 POST Events/Command 说明凭据的内存保留期限、Mate tool execute 发送范围和禁止落盘范围。 |
 | 3.6.0 | 2026-09-03 | 用户确认 Session Events 资源模型 A：Claw 拆分 POST、Session live SSE 与固定快照历史，执行保持内部状态；保留 HTTP 1.43.4 为迁移前基线，并启动第一个 POST operation 字段评审。 |
 | 3.5.5 | 2026-09-01 | 记录 mate-service 普通消息 Events 公共路径已确认并链接单 operation 评审稿；事件命名、事件身份、Thinking/Tool 投影和 GET 恢复契约保持待确认。 |
 | 3.5.4 | 2026-09-01 | 同步 HTTP 1.43.4：Slash Command 统一使用“命令清单”，Skill 文件位置统一表述为“文件夹”。 |
@@ -495,7 +498,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 | 3.5.2 | 2026-08-31 | 同步 HTTP 1.43.2，以规则表和动作式短句统一 Slash Command 说明；不改变已确认行为。 |
 | 3.5.1 | 2026-08-31 | 同步 HTTP 1.43.1，将面向用户和 HTTP 的相关表述统一为“命令清单”，避免被理解为文件路径。 |
 | 3.5.0 | 2026-08-31 | 同步 HTTP 1.43：增加命令清单与结构化执行；明确 Builtin/Skill、`displayName` 所有权、sidecar Entry、Skill 快照和 mate-service 公共命令投影。 |
-| 3.4.0 | 2026-08-27 | 同步 HTTP 1.42：POST Events 必填 `access-token`，四项入站 Header 仅作执行级瞬态快照，工具发现无凭据，只在实际 Mate execute 时原名透传已提供值。 |
+| 3.4.0 | 2026-08-27 | 同步 HTTP 1.42：POST Events 必填 `access-token`；Claw 从请求读取四项 Header，只在内存中保留到本次执行结束；工具发现无凭据，只在实际 Mate execute 时原名发送已提供值。 |
 | 3.3.0 | 2026-08-24 | 同步工具系统 2.3 和 HTTP 1.41：LENGTH 判定使用实际请求输出上限，压缩重试候选按内部 Entry ID 持久化并在重载时精确排除。 |
 | 3.2.0 | 2026-08-24 | 固定 pi 压缩细节及 HTTP 1.40：成功 STOP 不重试、ERROR/LENGTH 单次恢复、Usage/边界/安全切点、split-turn/重复摘要、Read 路径继承和 failed.aborted。 |
 | 3.1.0 | 2026-08-24 | 修订 PR 167 TUI 删除边界，保留未注册 Slash 核心并迁移公共压缩；HTTP 升级 1.39 Usage/领域事件/工具 delta，明确 refresh 后下一次执行懒校准。 |

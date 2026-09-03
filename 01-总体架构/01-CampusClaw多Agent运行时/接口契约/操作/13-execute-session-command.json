@@ -5,16 +5,16 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/command",
     "summary": "执行 Builtin 或 Skill 命令并流式返回结果",
-    "description": "提交结构化 name、arguments 和 fileIds；name 不含 Slash。Service 把省略的 arguments 和 fileIds 分别归一为空字符串和空列表，并拒绝未知字段。每次已接受调用生成 command- 加 32 位小写十六进制 UUID，并保存 started 和 completed/failed 生命周期。Skill 或 Compact 接受后，断线不取消执行；调用方从 GET Events 查询结果，不重放 POST。该接口与 POST Events 使用相同的瞬时凭据边界：Header 不校验、不记录、不持久化，只在 Skill 实际调用 Mate Tool 时原名传递。",
+    "description": "提交结构化 name、arguments 和 fileIds；name 不含 Slash。Service 把省略的 arguments 和 fileIds 分别归一为空字符串和空列表，并拒绝未知字段。每次已接受调用生成 command- 加 32 位小写十六进制 UUID，并保存 started 和 completed/failed 生命周期。Skill 或 Compact 接受后，断线不取消执行；调用方从 GET Events 查询结果，不重放 POST。本接口额外必填 access-token Header。Claw 从本次请求读取 X-HW-ID、Authorization、X-HW-APPKEY 和 access-token，只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅在实际调用 Mate tool execute 时原名发送，不写入 Session、事件或日志，也不随工具发现、模型或其他请求发送。Claw 当前不解析或校验这些凭据。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
         "label": "JWT Header 示例",
         "preferred": true,
         "headers": [
-          {"name": "X-HW-ID", "value": "<CALLER_ID>", "required": true, "description": "公司调用方标识；只在本次 Skill 实际 Mate 工具 execute 中原名传递"},
-          {"name": "Authorization", "value": "Bearer <JWT>", "required": true, "description": "由上游校验；只在本次 Skill 实际 Mate 工具 execute 中原名传递"},
-          {"name": "access-token", "value": "<ACCESS_TOKEN>", "required": true, "description": "本次执行瞬时工具凭据；Runtime 不校验、不持久化、不记录"}
+          {"name": "X-HW-ID", "value": "credential-jwt", "required": true, "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},
+          {"name": "Authorization", "value": "Bearer opaque-token", "required": true, "description": "Bearer JWT；Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},
+          {"name": "access-token", "value": "opaque-access-token", "required": true, "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"}
         ]
       },
       {
@@ -22,9 +22,9 @@
         "label": "APPKEY Header 示例",
         "preferred": false,
         "headers": [
-          {"name": "X-HW-ID", "value": "<CALLER_ID>", "required": true, "description": "公司调用方标识；只在本次 Skill 实际 Mate 工具 execute 中原名传递"},
-          {"name": "X-HW-APPKEY", "value": "<APPKEY>", "required": true, "description": "由上游校验；可与 Authorization 同时出现，Runtime 不做互斥检查"},
-          {"name": "access-token", "value": "<ACCESS_TOKEN>", "required": true, "description": "本次执行瞬时工具凭据；Runtime 不校验、不持久化、不记录"}
+          {"name": "X-HW-ID", "value": "credential-appkey", "required": true, "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},
+          {"name": "X-HW-APPKEY", "value": "opaque-appkey", "required": true, "description": "AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},
+          {"name": "access-token", "value": "opaque-access-token", "required": true, "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"}
         ]
       }
     ],
