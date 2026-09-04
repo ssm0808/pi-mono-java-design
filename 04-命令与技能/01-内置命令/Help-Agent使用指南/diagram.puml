@@ -1,0 +1,108 @@
+@startuml target_help_global_classes
+title Recommended Global Command Structure - Agent Help Proposal
+top to bottom direction
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 35
+skinparam linetype ortho
+' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java AgentRuntime.
+' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached, toIdentity:630, toRuntime:646, AgentIdentity:717.
+' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java metadata.
+' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/execution/CommandExecutionContext.java session and catalog.
+' Observed behavior: upstream AgentRuntime has userCases, but the local identity omits it and reload supplies an empty list.
+' Design reason: keep the whole command structure visible while Help projects authored Agent metadata, not command descriptors.
+' Product constraint: Help explains the Agent; Slash discovery remains in the command catalog.
+' Target-only: all nodes and relations describe the proposed assembly; existing SPI and Runtime collaborators are reused.
+
+package "Web boundary" {
+  class RuntimeCommandController {
+    +list(sessionId)
+    +execute(sessionId, request)
+  }
+  class "Command Request VOs\nImmutable Response VOs" as CommandVOs
+}
+package "Application layer - singleton" {
+  class CommandCatalogService
+  class CommandExecutionService
+  class CommandResponseAssembler
+}
+package "Command core" {
+  class CompositeCommandRegistry
+  class ResolvedCommandCatalog <<request snapshot>>
+  interface CommandDefinitionSource
+  class BuiltinCommandSource
+  class SkillCommandSource
+  interface BuiltinCommandContributor
+  class BuiltinCommandDefinition
+  interface CommandHandler
+  interface CommandAdmissionPolicy
+}
+package "Builtin adapters - singleton" {
+  class "HelpContributor + 6 Contributors" as Contributors
+  class HelpCommandHandler #E3F2E1
+  class AgentHelpQueryService #E3F2E1
+  class "6 Other Builtin Handlers\nand Narrow Services" as OtherBuiltins
+}
+package "Runtime and persistence" {
+  class AgentRuntimeManager
+  class PreparedAgentRuntime <<query snapshot>> #E3F2E1
+  class "AgentIdentity\nagent.json" as AgentIdentity <<stored metadata>> #E3F2E1 {
+    name / displayName
+    description[]
+    userCases[] (retain on reload)
+  }
+  class MateServiceClient
+  class "Runtime execution / Repository" as RuntimePorts <<grouped>>
+}
+
+RuntimeCommandController --> CommandCatalogService
+RuntimeCommandController --> CommandExecutionService
+RuntimeCommandController ..> CommandVOs
+CommandCatalogService --> CompositeCommandRegistry
+CommandCatalogService ..> CommandVOs : descriptor DTO to VO
+CommandExecutionService --> CompositeCommandRegistry
+CommandExecutionService --> CommandResponseAssembler
+CommandResponseAssembler ..> CommandVOs : HelpResultDTO to response VO
+CompositeCommandRegistry o-- "1..*" CommandDefinitionSource
+BuiltinCommandSource ..|> CommandDefinitionSource
+SkillCommandSource ..|> CommandDefinitionSource
+CompositeCommandRegistry --> ResolvedCommandCatalog : one resolution
+BuiltinCommandSource o-- "7" BuiltinCommandContributor
+Contributors ..|> BuiltinCommandContributor
+BuiltinCommandContributor --> BuiltinCommandDefinition : contributes
+ResolvedCommandCatalog o-- "0..*" BuiltinCommandDefinition : selected Builtin view
+BuiltinCommandDefinition *-- "1" CommandHandler
+BuiltinCommandDefinition *-- "1" CommandAdmissionPolicy
+CommandExecutionService --> BuiltinCommandDefinition : select / admit / execute
+HelpCommandHandler ..|> CommandHandler
+OtherBuiltins ..|> CommandHandler
+Contributors --> HelpCommandHandler : Help binding
+Contributors --> OtherBuiltins : other bindings
+HelpCommandHandler --> AgentHelpQueryService : authorized Session agentId
+AgentHelpQueryService --> AgentRuntimeManager : prepareCached once
+AgentHelpQueryService ..> PreparedAgentRuntime : public fields only
+AgentRuntimeManager --> PreparedAgentRuntime : load complete snapshot
+AgentRuntimeManager --> AgentIdentity : publish / reload userCases
+AgentRuntimeManager --> MateServiceClient : existing explicit refresh only
+SkillCommandSource --> AgentRuntimeManager
+OtherBuiltins --> RuntimePorts
+CommandExecutionService --> RuntimePorts : Session access
+
+RuntimeCommandController -[hidden]down-> CommandCatalogService
+CommandCatalogService -[hidden]down-> CompositeCommandRegistry
+BuiltinCommandSource -[hidden]down-> Contributors
+
+note bottom of AgentHelpQueryService
+No catalog formatting, model call, or refresh.
+No prompt or binding details in the response.
+Cache reads serialize with Agent publication.
+end note
+legend bottom left
+Target-only global proposal; green marks the Help metadata path.
+Repeated collaborators are grouped, not omitted.
+Core/application services are singleton; response data is request-scoped.
+RuntimePorts includes singleton services and execution-scoped Session objects.
+endlegend
+@enduml

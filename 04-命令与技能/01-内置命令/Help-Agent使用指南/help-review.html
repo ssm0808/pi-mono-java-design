@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Help：Agent 使用指南（专项候选） - POST /sessions/{sessionId}/command</title>
+  <style>
+    :root { color-scheme: light dark; background: light-dark(#f7f8fa, #11151b); }
+    body { margin: 0; padding: 16px; background: inherit; }
+    main { width: min(1400px, 100%); margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <main>
+<div id="company-api-review-post-sessions-sessionid-command-ba91052c">
+  <style>
+    #company-api-review-post-sessions-sessionid-command-ba91052c {
+      color-scheme: light dark;
+      color: light-dark(#17202a, #edf2f7);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      width: 100%;
+      margin-block-end: 16px;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c * { box-sizing: border-box; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c h2,
+    #company-api-review-post-sessions-sessionid-command-ba91052c h3,
+    #company-api-review-post-sessions-sessionid-command-ba91052c p { margin: 0; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c code,
+    #company-api-review-post-sessions-sessionid-command-ba91052c pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .api-shell {
+      overflow: hidden;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 12px;
+      background: light-dark(#f7f8fa, #11151b);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .topbar,
+    #company-api-review-post-sessions-sessionid-command-ba91052c .operation-head,
+    #company-api-review-post-sessions-sessionid-command-ba91052c .row,
+    #company-api-review-post-sessions-sessionid-command-ba91052c .tabs,
+    #company-api-review-post-sessions-sessionid-command-ba91052c .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .topbar {
+      justify-content: space-between;
+      padding: 15px 17px;
+      background: light-dark(#ffffff, #1a2028);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c h2 { font-size: 18px; font-weight: 500; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c h3 { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .tag {
+      padding: 2px 8px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 999px;
+      background: light-dark(#f2f5f8, #222a34);
+      font-size: 12px;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .base,
+    #company-api-review-post-sessions-sessionid-command-ba91052c .muted { color: light-dark(#5f6b78, #aab4c0); font-size: 13px; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .operation {
+      margin: 15px;
+      overflow: hidden;
+      border: 1px solid light-dark(#1f883d, #3fb950);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .operation-head {
+      padding: 13px 15px;
+      background: light-dark(#eaf8ee, #15331f);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .method {
+      padding: 6px 11px;
+      border-radius: 5px;
+      background: light-dark(#1f883d, #3fb950);
+      color: light-dark(#ffffff, #07150b);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .operation-delete {
+      border-color: light-dark(#cf222e, #f85149);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .operation-delete .operation-head {
+      background: light-dark(#fff1f0, #3a1d1d);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .method-delete {
+      background: light-dark(#cf222e, #f85149);
+      color: #ffffff;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .path { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .section {
+      padding: 15px;
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .section:last-child { border-bottom: 0; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .section-title { justify-content: space-between; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .description { line-height: 1.6; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .decision-gate {
+      border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
+      background: light-dark(#f5f9ff, #122337);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .decision-notice {
+      margin-top: 10px;
+      color: light-dark(#8250df, #d2a8ff);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .gate-only .contract-detail { display: none; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c th,
+    #company-api-review-post-sessions-sessionid-command-ba91052c td {
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c tbody tr:last-child td { border-bottom: 0; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c pre {
+      margin: 10px 0 0;
+      padding: 13px;
+      overflow-x: auto;
+      border-radius: 7px;
+      background: light-dark(#eef2f6, #0d1117);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c button {
+      appearance: none;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 6px;
+      background: light-dark(#ffffff, #1a2028);
+      color: light-dark(#17202a, #edf2f7);
+      padding: 7px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c button[aria-selected="true"],
+    #company-api-review-post-sessions-sessionid-command-ba91052c button[aria-pressed="true"] {
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#eaf3ff, #132b46);
+      color: light-dark(#0969da, #58a6ff);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .review-form {
+      margin: 0 15px 15px;
+      padding: 15px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .question-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .question-grid-single { grid-template-columns: 1fr; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c label input { margin-top: 3px; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .option-copy { display: grid; min-width: 0; gap: 2px; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .option-label { font-weight: 500; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .option-detail {
+      color: light-dark(#5f6b78, #aab4c0);
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .submit {
+      margin-top: 12px;
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#0969da, #58a6ff);
+      color: light-dark(#ffffff, #07111e);
+      font-weight: 500;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .empty { margin-top: 8px; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .prompt-output {
+      margin-top: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c details { margin-top: 9px; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .static-response {
+      padding: 8px 0;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .static-response:last-child { border-bottom: 0; }
+    #company-api-review-post-sessions-sessionid-command-ba91052c .static-choice { margin-left: 8px; }
+    @media (max-width: 680px) {
+      #company-api-review-post-sessions-sessionid-command-ba91052c .question-grid { grid-template-columns: 1fr; }
+      #company-api-review-post-sessions-sessionid-command-ba91052c .operation,
+      #company-api-review-post-sessions-sessionid-command-ba91052c .review-form { margin-left: 9px; margin-right: 9px; }
+      #company-api-review-post-sessions-sessionid-command-ba91052c .table-wrap { overflow: visible; }
+      #company-api-review-post-sessions-sessionid-command-ba91052c .table-wrap thead { display: none; }
+      #company-api-review-post-sessions-sessionid-command-ba91052c .table-wrap table,
+      #company-api-review-post-sessions-sessionid-command-ba91052c .table-wrap tbody,
+      #company-api-review-post-sessions-sessionid-command-ba91052c .table-wrap tr,
+      #company-api-review-post-sessions-sessionid-command-ba91052c .table-wrap td { display: block; width: 100%; }
+      #company-api-review-post-sessions-sessionid-command-ba91052c .table-wrap tr {
+        padding: 7px 0;
+        border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+      }
+      #company-api-review-post-sessions-sessionid-command-ba91052c .table-wrap tbody tr:last-child { border-bottom: 0; }
+      #company-api-review-post-sessions-sessionid-command-ba91052c .table-wrap td {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 8px;
+        padding: 5px 0;
+        border-bottom: 0;
+        overflow-wrap: anywhere;
+      }
+      #company-api-review-post-sessions-sessionid-command-ba91052c .table-wrap td::before {
+        content: attr(data-label);
+        color: light-dark(#5f6b78, #aab4c0);
+        font-weight: 500;
+      }
+      #company-api-review-post-sessions-sessionid-command-ba91052c pre {
+        overflow-x: visible;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    }
+  </style>
+
+  <div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>Help：Agent 使用指南（专项候选）</h2><span class="tag">1.0.0 draft</span><span class="tag">Internal · 仅 Help 评审；不替代 Runtime 1.44.1 整体契约</span></div><code class="base">/campusclaw-service/v1</code></header><article class="operation operation-post"><header class="operation-head"><span class="method method-post">POST</span><code class="path">/sessions/{sessionId}/command</code><span class="muted">/help：介绍当前 Agent 的用途和使用场景</span></header><section class="section"><h3>作用</h3><p class="description">用户已明确语义方向：/ 展示命令清单，/help 展示 Agent 元数据。四字段结果、无参规则、空内容与缓存迁移为本次推荐方案，待评审。复用现有 name、displayName、description[] 和 userCases[]，不新增远端字段。现有本地缓存丢失 userCases，实施前必须补齐保存与恢复。仅读最近完整本地快照，idle/running 都允许；不请求模型、不刷新、不返回 systemPrompt 或绑定明细。不写历史；该例为虚构演示文案，不代表真实 Agent 能力。</p></section><section class="section contract-detail"><h3>认证</h3><details class="static-choice" open><summary>JWT Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">credential-jwt</td><td data-label="说明">用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志</td></tr><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer &lt;JWT&gt;</td><td data-label="说明">Bearer JWT；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">&lt;ACCESS_TOKEN&gt;</td><td data-label="说明">Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志</td></tr></tbody></table></div><pre><code>POST /campusclaw-service/v1/sessions/{sessionId}/command
+X-HW-ID: credential-jwt
+Authorization: Bearer &lt;JWT&gt;
+access-token: &lt;ACCESS_TOKEN&gt;</code></pre></details><details class="static-choice"><summary>APPKEY Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">credential-appkey</td><td data-label="说明">用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志</td></tr><tr><td data-label="Header">X-HW-APPKEY</td><td data-label="必填">是</td><td data-label="示例值">&lt;APPKEY&gt;</td><td data-label="说明">AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">&lt;ACCESS_TOKEN&gt;</td><td data-label="说明">Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志</td></tr></tbody></table></div><pre><code>POST /campusclaw-service/v1/sessions/{sessionId}/command
+X-HW-ID: credential-appkey
+X-HW-APPKEY: &lt;APPKEY&gt;
+access-token: &lt;ACCESS_TOKEN&gt;</code></pre></details></section><section class="section contract-detail"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">sessionId</td><td data-label="必填">是</td><td data-label="约束">^session-[0-9a-fA-F]{32}$</td><td data-label="说明">沿用当前 Session 访问边界；由 Session 绑定的 agentId 选择介绍，不接收客户端指定 Agent。</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US</td><td data-label="说明">只影响错误消息与界面文案；不自动翻译 Agent 的 description/userCases。</td></tr></tbody></table></div><p class="muted empty">Help 候选规则：name=help；arguments 缺省/null/空白由 Service 归一为空。非空参数（包括 model、status 等命令名）及附件按 INVALID_COMMAND_REQUEST 拒绝。不改其他命令、共享 Header、未知字段或 If-Match/Idempotency-Key 的既有规则。</p><pre><code>{
+  &quot;name&quot;: &quot;help&quot;
+}</code></pre></section><section class="section contract-detail"><h3>响应</h3><details class="static-response" open><summary><code>200 · Agent 介绍</code> 200 OK — result 精确四字段：command=help；displayName 取 Agent displayName、空白回退 name（不是 Session 名称）；description/userCases 为必填字符串数组，过滤空白条目并保持作者顺序。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;command&quot;: &quot;help&quot;,
+    &quot;displayName&quot;: &quot;园区网络分析助手&quot;,
+    &quot;description&quot;: [
+      &quot;帮助理解园区网络状态，整理故障线索与排查建议。&quot;
+    ],
+    &quot;userCases&quot;: [
+      &quot;无线网络连接异常时，梳理排查步骤。&quot;,
+      &quot;分析告警和日志，定位可能原因。&quot;,
+      &quot;整理排查结论与后续处理建议。&quot;
+    ]
+  }
+}</code></pre></details></details><details class="static-response"><summary><code>200 · 尚未填写</code> 200 OK — 完整缓存但介绍字段未填写：返回空数组，前端显示维护者尚未填写。旧缓存缺 userCases 时也为空，须通过现有显式刷新流程补齐，不能由 Help 自动联网。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;command&quot;: &quot;help&quot;,
+    &quot;displayName&quot;: &quot;network-assistant&quot;,
+    &quot;description&quot;: [],
+    &quot;userCases&quot;: []
+  }
+}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_SESSION_ID</code> 400 Bad Request — sessionId 格式不正确。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;INVALID_SESSION_ID&quot;,
+  &quot;resMsg&quot;: &quot;sessionId 格式不正确。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;INVALID_SESSION_ID&quot;,
+  &quot;resMsg&quot;: &quot;The sessionId format is invalid.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_COMMAND_REQUEST</code> 400 Bad Request — Help 携带非空参数、附件或请求形状不合要求。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;INVALID_COMMAND_REQUEST&quot;,
+  &quot;resMsg&quot;: &quot;命令请求内容不符合约束。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;INVALID_COMMAND_REQUEST&quot;,
+  &quot;resMsg&quot;: &quot;The command request does not satisfy the required constraints.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404 · SESSION_NOT_FOUND</code> 404 Not Found — 指定的 Session 不存在。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SESSION_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;指定的 Session 不存在。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SESSION_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;The specified Session does not exist.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>422 · AGENT_NOT_AVAILABLE</code> 422 Unprocessable Entity — 未取得通过既有校验的完整 Agent 缓存。与文案未填写的 200 空内容不同；不触发 refresh。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;AGENT_NOT_AVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;当前 Agent 运行时不可用。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;AGENT_NOT_AVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;The current Agent runtime is unavailable.&quot;
+}</code></pre></details></details></section></article><section class="review-form"><h3>继续调整</h3><div class="question-grid"><fieldset><legend>Help 专项推荐方案</legend><label><input type="radio" disabled checked><span class="option-copy"><span class="option-label">采用四字段元数据结果；仅支持无参；旧缓存显式刷新补齐场景</span><span class="option-detail">确认 Help 四字段 command/displayName/description/userCases；无参；空内容返回空数组；补齐 userCases 缓存往返并显式刷新旧缓存。</span></span></label><label><input type="radio" disabled><span class="option-copy"><span class="option-label">保留新语义，但继续调整字段或缓存策略</span><span class="option-detail">保持 Help 介绍 Agent 的方向，请先继续评审字段或缓存迁移，不切换正式 HTTP 契约。</span></span></label></fieldset></div></section></div></div>
+  <script type="application/json" data-review-model>{"api":{"title":"Help：Agent 使用指南（专项候选）","version":"1.0.0 draft","basePath":"/campusclaw-service/v1","visibility":"Internal · 仅 Help 评审；不替代 Runtime 1.44.1 整体契约"},"operation":{"method":"POST","path":"/sessions/{sessionId}/command","summary":"/help：介绍当前 Agent 的用途和使用场景","description":"用户已明确语义方向：/ 展示命令清单，/help 展示 Agent 元数据。四字段结果、无参规则、空内容与缓存迁移为本次推荐方案，待评审。复用现有 name、displayName、description[] 和 userCases[]，不新增远端字段。现有本地缓存丢失 userCases，实施前必须补齐保存与恢复。仅读最近完整本地快照，idle/running 都允许；不请求模型、不刷新、不返回 systemPrompt 或绑定明细。不写历史；该例为虚构演示文案，不代表真实 Agent 能力。","authModes":[{"id":"jwt","label":"JWT Header 示例","preferred":true,"headers":[{"name":"X-HW-ID","value":"credential-jwt","required":true,"description":"用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},{"name":"Authorization","value":"Bearer \u003cJWT\u003e","required":true,"description":"Bearer JWT；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},{"name":"access-token","value":"\u003cACCESS_TOKEN\u003e","required":true,"description":"Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"}]},{"id":"appkey","label":"APPKEY Header 示例","preferred":false,"headers":[{"name":"X-HW-ID","value":"credential-appkey","required":true,"description":"用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},{"name":"X-HW-APPKEY","value":"\u003cAPPKEY\u003e","required":true,"description":"AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},{"name":"access-token","value":"\u003cACCESS_TOKEN\u003e","required":true,"description":"Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"}]}],"parameters":[{"in":"path","name":"sessionId","required":true,"schema":"^session-[0-9a-fA-F]{32}$","description":"沿用当前 Session 访问边界；由 Session 绑定的 agentId 选择介绍，不接收客户端指定 Agent。"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"只影响错误消息与界面文案；不自动翻译 Agent 的 description/userCases。"}],"requestBody":{"required":true,"contentType":"application/json","description":"Help 候选规则：name=help；arguments 缺省/null/空白由 Service 归一为空。非空参数（包括 model、status 等命令名）及附件按 INVALID_COMMAND_REQUEST 拒绝。不改其他命令、共享 Header、未知字段或 If-Match/Idempotency-Key 的既有规则。","example":{"name":"help"}},"responses":[{"id":"200-help","status":"200","tabLabel":"200 · Agent 介绍","label":"OK","summary":"result 精确四字段：command=help；displayName 取 Agent displayName、空白回退 name（不是 Session 名称）；description/userCases 为必填字符串数组，过滤空白条目并保持作者顺序。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"0","resMsg":"success","result":{"command":"help","displayName":"园区网络分析助手","description":["帮助理解园区网络状态，整理故障线索与排查建议。"],"userCases":["无线网络连接异常时，梳理排查步骤。","分析告警和日志，定位可能原因。","整理排查结论与后续处理建议。"]}}}},{"id":"200-empty","status":"200","tabLabel":"200 · 尚未填写","label":"OK","summary":"完整缓存但介绍字段未填写：返回空数组，前端显示维护者尚未填写。旧缓存缺 userCases 时也为空，须通过现有显式刷新流程补齐，不能由 Help 自动联网。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"0","resMsg":"success","result":{"command":"help","displayName":"network-assistant","description":[],"userCases":[]}}}},{"id":"400-invalid-session-id","status":"400","tabLabel":"400 · INVALID_SESSION_ID","label":"Bad Request","summary":"sessionId 格式不正确。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"sessionId 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The sessionId format is invalid."}}},{"id":"400-invalid-command-request","status":"400","tabLabel":"400 · INVALID_COMMAND_REQUEST","label":"Bad Request","summary":"Help 携带非空参数、附件或请求形状不合要求。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_COMMAND_REQUEST","resMsg":"命令请求内容不符合约束。"},"en-US":{"resCode":"INVALID_COMMAND_REQUEST","resMsg":"The command request does not satisfy the required constraints."}}},{"id":"404-session-not-found","status":"404","tabLabel":"404 · SESSION_NOT_FOUND","label":"Not Found","summary":"指定的 Session 不存在。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}},{"id":"422-agent-not-available","status":"422","tabLabel":"422 · AGENT_NOT_AVAILABLE","label":"Unprocessable Entity","summary":"未取得通过既有校验的完整 Agent 缓存。与文案未填写的 200 空内容不同；不触发 refresh。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"AGENT_NOT_AVAILABLE","resMsg":"当前 Agent 运行时不可用。"},"en-US":{"resCode":"AGENT_NOT_AVAILABLE","resMsg":"The current Agent runtime is unavailable."}}}]},"review":{"questions":[{"id":"help_contract","legend":"Help 专项推荐方案","options":[{"label":"采用四字段元数据结果；仅支持无参；旧缓存显式刷新补齐场景","value":"确认 Help 四字段 command/displayName/description/userCases；无参；空内容返回空数组；补齐 userCases 缓存往返并显式刷新旧缓存。","selected":true},{"label":"保留新语义，但继续调整字段或缓存策略","value":"保持 Help 介绍 Agent 的方向，请先继续评审字段或缓存迁移，不切换正式 HTTP 契约。","selected":false}]}],"followUpTitle":"确认 Help 方案","promptPrefix":"继续评审 /help 基于 Agent 元数据的使用指南。","promptSuffix":"仅同步确认的 Help 语义、Runtime 描述符与结果、相关全局类图和校验；其他命令不变，不发布 mate-service 新公共路径，不改实现仓。"}}</script>
+  <script>
+    (() => {
+      const root = document.getElementById('company-api-review-post-sessions-sessionid-command-ba91052c');
+      const model = JSON.parse(root.querySelector('[data-review-model]').textContent);
+      const api = model.api;
+      const operation = model.operation;
+      const review = model.review || { questions: [] };
+      const shell = root.querySelector('[data-api-shell]');
+      const make = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+      };
+      const append = (parent, ...children) => {
+        children.filter(Boolean).forEach((child) => parent.appendChild(child));
+        return parent;
+      };
+      const code = (text, className) => make('code', className || '', text);
+      const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      const fullPath = `${api.basePath.replace(/\/$/, '')}/${operation.path.replace(/^\//, '')}`;
+
+      const topbar = make('header', 'topbar');
+      const titleRow = make('div', 'row');
+      append(titleRow, make('h2', '', api.title), make('span', 'tag', api.version));
+      if (api.visibility) titleRow.appendChild(make('span', 'tag', api.visibility));
+      append(topbar, titleRow, code(api.basePath, 'base'));
+
+      const methodClass = operation.method.toLowerCase();
+      const decisionGate = review.decisionGate;
+      const gateClass = decisionGate && decisionGate.hideOperationDetails ? ' gate-only' : '';
+      const article = make('article', `operation operation-${methodClass}${gateClass}`);
+      const operationHead = make('header', 'operation-head');
+      append(operationHead,
+        make('span', `method method-${methodClass}`, operation.method.toUpperCase()),
+        code(operation.path, 'path'),
+        make('span', 'muted', operation.summary));
+      article.appendChild(operationHead);
+
+      const purpose = make('section', 'section');
+      append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
+      article.appendChild(purpose);
+
+      if (decisionGate) {
+        const gateSection = make('section', 'section decision-gate');
+        append(gateSection,
+          make('h3', '', decisionGate.title),
+          make('p', 'description', decisionGate.description));
+        const comparison = decisionGate.comparison;
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        comparison.columns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        comparison.rows.forEach((items) => {
+          const row = make('tr', '');
+          items.forEach((item, index) => {
+            const cell = make('td', '', item);
+            cell.dataset.label = comparison.columns[index] || '';
+            row.appendChild(cell);
+          });
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        append(gateSection, wrap, make('p', 'decision-notice', decisionGate.detailNotice));
+        article.appendChild(gateSection);
+      }
+
+      const authModes = operation.authModes || [];
+      if (authModes.length) {
+        const authSection = make('section', 'section contract-detail');
+        const authTitle = make('div', 'row section-title');
+        const authTabs = make('div', 'tabs');
+        const authBody = make('div', '');
+        append(authTitle, make('h3', '', '认证'), authTabs);
+        append(authSection, authTitle, authBody);
+        article.appendChild(authSection);
+        let selectedAuth = authModes.find((item) => item.preferred) || authModes[0];
+        const renderAuth = () => {
+          authTabs.querySelectorAll('button').forEach((button) => {
+            button.setAttribute('aria-pressed', String(button.dataset.authId === selectedAuth.id));
+          });
+          authBody.replaceChildren();
+          const wrap = make('div', 'table-wrap');
+          const table = make('table', '');
+          const head = make('thead', '');
+          const headRow = make('tr', '');
+          const authColumns = ['Header', '必填', '示例值', '说明'];
+          authColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+          head.appendChild(headRow);
+          const body = make('tbody', '');
+          selectedAuth.headers.forEach((header) => {
+            const row = make('tr', '');
+            const cells = [
+              append(make('td', ''), code(header.name)),
+              make('td', '', header.required ? '是' : '否'),
+              append(make('td', ''), code(header.value)),
+              make('td', '', header.description)
+            ];
+            cells.forEach((cell, index) => { cell.dataset.label = authColumns[index]; });
+            append(row, ...cells);
+            body.appendChild(row);
+          });
+          append(table, head, body);
+          wrap.appendChild(table);
+          const request = [
+            `${operation.method.toUpperCase()} ${fullPath}`,
+            ...selectedAuth.headers.map((header) => `${header.name}: ${header.value}`)
+          ].join('\n');
+          append(authBody, wrap, append(make('pre', ''), code(request)));
+        };
+        authModes.forEach((mode) => {
+          const button = make('button', '', mode.label);
+          button.type = 'button';
+          button.dataset.authId = mode.id;
+          button.setAttribute('aria-pressed', String(mode.id === selectedAuth.id));
+          button.addEventListener('click', () => {
+            selectedAuth = mode;
+            renderAuth();
+          });
+          authTabs.appendChild(button);
+        });
+        renderAuth();
+      }
+
+      const requestSection = make('section', 'section contract-detail');
+      requestSection.appendChild(make('h3', '', '参数与请求体'));
+      const parameters = operation.parameters || [];
+      if (parameters.length) {
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        const parameterColumns = ['位置', '名称', '必填', '约束', '说明'];
+        parameterColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        parameters.forEach((parameter) => {
+          const row = make('tr', '');
+          const cells = [
+            make('td', '', parameter.in),
+            append(make('td', ''), code(parameter.name)),
+            make('td', '', parameter.required ? '是' : '否'),
+            append(make('td', ''), code(parameter.schema || '—')),
+            make('td', '', parameter.description)
+          ];
+          cells.forEach((cell, index) => { cell.dataset.label = parameterColumns[index]; });
+          append(row, ...cells);
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        requestSection.appendChild(wrap);
+      } else {
+        requestSection.appendChild(make('p', 'muted empty', '无 path/query/header 业务参数。'));
+      }
+      const requestBody = operation.requestBody || {};
+      requestSection.appendChild(make('p', 'muted empty', requestBody.description || '无请求体。'));
+      if (requestBody.example !== undefined && requestBody.example !== null) {
+        requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
+      }
+      article.appendChild(requestSection);
+
+      const responseSection = make('section', 'section contract-detail');
+      const responseTitle = make('div', 'row section-title');
+      const localeTabs = make('div', 'tabs');
+      append(responseTitle, make('h3', '', '响应'), localeTabs);
+      const statusTabs = make('div', 'tabs');
+      const responseBody = make('div', '');
+      append(responseSection, responseTitle, statusTabs, responseBody);
+      article.appendChild(responseSection);
+      const responses = operation.responses;
+      const responseIdentity = (response) => response.id || response.status;
+      let selectedResponse = responses[0];
+      let selectedLocale = Object.keys(selectedResponse.bodies || {})[0] || 'default';
+      const renderResponse = () => {
+        statusTabs.querySelectorAll('button').forEach((button) => {
+          button.setAttribute('aria-selected', String(button.dataset.responseId === responseIdentity(selectedResponse)));
+        });
+        const locales = Object.keys(selectedResponse.bodies || {});
+        if (!locales.includes(selectedLocale)) selectedLocale = locales[0] || 'default';
+        localeTabs.replaceChildren();
+        locales.forEach((locale) => {
+          const button = make('button', '', locale);
+          button.type = 'button';
+          button.setAttribute('aria-pressed', String(locale === selectedLocale));
+          button.addEventListener('click', () => {
+            selectedLocale = locale;
+            renderResponse();
+          });
+          localeTabs.appendChild(button);
+        });
+        responseBody.replaceChildren();
+        responseBody.appendChild(make('p', 'description', `${selectedResponse.status} ${selectedResponse.label} — ${selectedResponse.summary}`));
+        const responseHeaders = { ...(selectedResponse.headers || {}) };
+        if (selectedLocale !== 'default' && Object.hasOwn(responseHeaders, 'Content-Language')) {
+          responseHeaders['Content-Language'] = selectedLocale;
+        }
+        const headerLines = Object.entries(responseHeaders).map(([name, value]) => `${name}: ${value}`);
+        const payload = selectedResponse.bodies ? selectedResponse.bodies[selectedLocale] : null;
+        const output = [...headerLines, headerLines.length ? '' : null, payload === undefined ? null : pretty(payload)]
+          .filter((item) => item !== null).join('\n');
+        responseBody.appendChild(append(make('pre', ''), code(output)));
+      };
+      responses.forEach((response) => {
+        const button = make('button', '', response.tabLabel || response.status);
+        button.type = 'button';
+        button.dataset.responseId = responseIdentity(response);
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-selected', String(response === selectedResponse));
+        button.addEventListener('click', () => {
+          selectedResponse = response;
+          renderResponse();
+        });
+        statusTabs.appendChild(button);
+      });
+      renderResponse();
+
+      shell.replaceChildren();
+      append(shell, topbar, article);
+
+      const questions = review.questions || [];
+      if (questions.length) {
+        const form = make('form', 'review-form');
+        form.appendChild(make('h3', '', '继续调整'));
+        const questionGrid = make('div', 'question-grid');
+        if (questions.length === 1) questionGrid.classList.add('question-grid-single');
+        questions.forEach((question) => {
+          const fieldset = make('fieldset', '');
+          fieldset.appendChild(make('legend', '', question.legend));
+          question.options.forEach((option, index) => {
+            const label = make('label', '');
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = question.id;
+            input.value = option.value;
+            input.checked = option.selected || (!question.options.some((item) => item.selected) && index === 0);
+            const optionCopy = make('span', 'option-copy');
+            append(optionCopy,
+              make('span', 'option-label', option.label),
+              make('span', 'option-detail', option.value));
+            append(label, input, optionCopy);
+            fieldset.appendChild(label);
+          });
+          questionGrid.appendChild(fieldset);
+        });
+        form.appendChild(questionGrid);
+        const actions = make('div', 'actions');
+        const submit = make('button', 'submit', '提交调整意见');
+        submit.type = 'submit';
+        const formStatus = make('span', 'muted', '');
+        formStatus.setAttribute('role', 'status');
+        formStatus.setAttribute('aria-live', 'polite');
+        append(actions, submit, formStatus);
+        form.appendChild(actions);
+        const promptOutput = make('pre', 'prompt-output', '');
+        promptOutput.hidden = true;
+        form.appendChild(promptOutput);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const selections = questions.map((question) => `- ${question.legend}：${data.get(question.id)}`).join('\n');
+          const promptSuffix = review.promptSuffix || '请按这些选择更新主维护契约、设计文档和当前接口展示。';
+          const prompt = `${review.promptPrefix}\n${selections}\n${promptSuffix}`;
+          if (!window.openai || typeof window.openai.sendFollowUpMessage !== 'function') {
+            promptOutput.textContent = prompt;
+            promptOutput.hidden = false;
+            try {
+              await navigator.clipboard.writeText(prompt);
+              formStatus.textContent = '调整提示已复制，请粘贴到对话中。';
+            } catch (error) {
+              formStatus.textContent = '请复制下方调整提示并发送到对话中。';
+            }
+            return;
+          }
+          formStatus.textContent = '正在提交…';
+          try {
+            await window.openai.sendFollowUpMessage({ prompt, title: review.followUpTitle });
+            formStatus.textContent = '已提交。';
+          } catch (error) {
+            formStatus.textContent = '提交失败，请重试。';
+          }
+        });
+        shell.appendChild(form);
+      }
+    })();
+  </script>
+</div>
+
+  </main>
+</body>
+</html>
