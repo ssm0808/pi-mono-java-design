@@ -4,15 +4,17 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.4.0 |
+| 文档版本 | 2.4.1 |
 | 更新日期 | 2026-09-04 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
-| 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，未合并 |
+| 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
 | 状态 | 七个 Builtin 目标已由用户确认；公开执行为 target-only |
 
 ## 1. 范围与证据
+
+本会话只负责七个 Builtin；Skill Command 由其他同事并行开发，不是延期或禁用。Builtin 来源视图、参数规则和验收不得提升为整个产品的 Skill 限制。共享 GET/POST 的最终命名、请求联合类型和清单合并需在 HTTP 发布前与 Skill 开发线对齐；本次不代替同事设计 Skill 执行细节。
 
 仅实现 help、status、name、model、thinking、compact、skills，不转换成模型提示词，不接受附件。
 精确请求和结果以 Runtime
@@ -33,7 +35,7 @@ d84dd3d6 的 `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/ses
 [PlantUML 源码](设计图/diagram.puml#L1)
 
 BuiltinCommandSource 聚合七个 Contributor 并在 Spring 启动期查重。
-可执行 Builtin Definition 持有 Handler/Admission；仅展示的 Skill Definition 没有 Handler。
+可执行 Builtin Definition 持有 Handler/Admission；现有 Skill 发现定义不安装伪 Handler，真实 Skill 执行由同事实现。
 CommandExecutionContext 固定只读 Session、Locale 和同一 Catalog View。
 Help 使用 Context 中的视图，避免 Registry/Application Bean 依赖环。
 响应组装器才允许按结果类型分派，不允许中央按命令名称 switch。
@@ -50,7 +52,7 @@ Help 使用 Context 中的视图，避免 Registry/Application Bean 依赖环。
 
 ## 3. 串行 PR 与预算
 
-设计先修 PR 合并后才能发布实现接口。先同步并评审前置 PR #210；每个后续 PR 必须等前一 PR 合并，
+设计先修 PR #4 和前置实现 PR #210 已合并；每个后续 Builtin PR 必须等前一 Builtin PR 合并，
 再从最新 origin/main 建立独立 worktree 和 codex/* 分支，不使用堆叠分支。
 
 | 顺序 | 分支 | 职责与发布边界 |
@@ -125,7 +127,7 @@ Projector 不依赖请求 SSE 仍持久化权威领域 Entry。
 
 POST 请求只有 name 和 arguments；name 必填，1～64，匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`。
 arguments 缺省/null 在 Service 归一为 ""，最大 262144 UTF-16 代码单元。
-拒绝 fileIds、未知字段、If-Match 和 Idempotency-Key。skill:* 格式非法，不进入未知命令分支。
+Builtin 请求拒绝 fileIds、未知字段、If-Match 和 Idempotency-Key。该规则不是 Skill 请求的全局限制；最终共享入口需整合 Skill 命名与请求类型。
 
 | 命令 | 成功 result 字段 |
 |---|---|
@@ -162,6 +164,7 @@ sync-campusclaw、diff --check 和新增行数门禁；最终 HTTP PR 执行完�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.4.1 | 2026-09-04 | 将七个 Builtin 限定为本会话责任；Skill 由同事并行开发，共享 HTTP 发布前对齐；确认设计和发现层前置 PR 已合并。 |
 | 2.4.0 | 2026-09-04 | 冻结七个 Builtin JSON 行为、当前名称、领域 Entry、Compact 独立终态与串行九 PR 预算。 |
 | 2.3.0 | 2026-09-03 | 设计正文只保留推荐目标类图；移除当前实现类图，继续用源码证据与差距表表达现状，并保持目标核心类图和 Builtin 扩展类图作为实施结构基线 |
 | 2.2.0 | 2026-09-03 | 复核 `3004419a` 发现层和 `fb49e86d` GET 清单；新增当前实现类图、目标核心类图和七个 Builtin 扩展类图，明确应用层、请求快照、DTO/VO 边界与 Help 无环依赖 |

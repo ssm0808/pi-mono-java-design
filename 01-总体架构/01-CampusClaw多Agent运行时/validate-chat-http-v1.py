@@ -422,13 +422,15 @@ def validate_response_contract(
         require("\"entrySeq\":18" in stream and "\"type\":\"thinking\"" in stream,
                 "Completed thinking must be a durable recoverable event")
     elif key == ("GET", "/sessions/{sessionId}/commands"):
+        require("Skill Command 由其他同事并行开发" in operation["description"],
+                "Command catalog must preserve the confirmed parallel development scope")
         success = next(response for response in operation["responses"] if response["status"] == "200")
         commands = success["bodies"]["zh-CN"]["result"]["commands"]
         names = [command["name"] for command in commands]
         require(names == ["compact", "help", "model", "name", "skills", "status", "thinking"],
                 "Builtin command catalog must contain exactly seven sorted entries")
         require(all(command["kind"] == "builtin" for command in commands),
-                "Command catalog must not expose Skill commands")
+                "Builtin catalog example must contain only Builtin commands")
         require(all(command["input"]["acceptsFiles"] is False for command in commands),
                 "Builtin command catalog must reject files")
         require(all(isinstance(command["input"]["suggestions"], list) for command in commands),
@@ -441,6 +443,8 @@ def validate_response_contract(
         require(not any(code == "AGENT_NOT_AVAILABLE" for _, code in response_codes(operation)),
                 "Builtin catalog must not depend on an Agent snapshot")
     elif key == ("POST", "/sessions/{sessionId}/command"):
+        require("Skill Command 由其他同事并行开发" in operation["description"],
+                "Command execution must preserve the confirmed parallel development scope")
         for phrase in ("只在内存中保留到本次命令处理", "Mate tool execute",
                        "不写入 Session、事件或日志", "工具发现", "Active Holder"):
             require(phrase in operation["description"], f"Missing credential boundary: {phrase}")

@@ -1,7 +1,7 @@
 @startuml skill_catalog
 title Target-only Skill Source Exclusion
 ' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/SkillCommandSource.java list.
-' Product constraint: Skill execution is deferred; Builtin HTTP must not resolve dynamic Skill sources.
+' Product scope: Skill execution is owned by a parallel workstream; Builtin selection skips dynamic Skill sources.
 skinparam shadowing false
 class CompositeCommandRegistry
 interface CommandDefinitionSource
@@ -12,10 +12,10 @@ BuiltinCommandSource ..|> CommandDefinitionSource
 SkillCommandSource ..|> CommandDefinitionSource
 CompositeCommandRegistry o-- CommandDefinitionSource
 CompositeCommandRegistry --> BuiltinCommandSource : resolve(context, BUILTIN)
-SkillCommandSource --> SkillCommandDefinition : future discovery only
+SkillCommandSource --> SkillCommandDefinition : existing discovery
 note right of SkillCommandDefinition
 No Handler.
-No public Skill command route.
+Skill execution belongs to a parallel workstream.
 skills Builtin only exposes names and descriptions.
 end note
 @enduml

@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.6.4 |
-| 状态 | Session Events v2 资源模型 A、POST 事件范围、`eventId` 身份与 `access-token` 必填规则已确认；其余 POST 字段评审中；HTTP 1.44.0 的 Builtin JSON 契约已确认 |
+| 文档版本 | 3.6.5 |
+| 状态 | Session Events v2 资源模型 A、POST 事件范围、`eventId` 身份与 `access-token` 必填规则已确认；其余 POST 字段评审中；HTTP 1.44.1 保留已确认 Builtin JSON，Skill 由同事并行开发 |
 | 当前传输结论 | v2 使用独立 POST、Session live SSE 与固定快照历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -19,7 +19,7 @@
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | DeepSeek Harness 对照基线 | `141eb6fef83422698aef7a981029e843e8161534` |
 | Codex Harness 对照基线 | `be33f80bc65159c094ecd06bf155afa3061ce23d` |
-| Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989`；PR #210 `0bb794f222273e12fc24fe98d6ab4e9013ac8599` 未合并 |
+| Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989`；PR #210 最终实现 `9d0d76f4a571b559dc77ae52736caebbcc8fad88` 已通过 `a8192e047f4061bd385297d3dc6c4358362d0d49` 合并 |
 | 更新日期 | 2026-09-04 |
 
 ## 1. 当前结论
@@ -50,7 +50,7 @@ Mate tool execute 时发送；该必填规则已确认，不再列为待选项�
 
 ### 1.1 现行 v1 基线（迁移完成前保留）
 
-HTTP 1.44.0 的普通消息仍采用两跳 HTTP+SSE；Runtime Builtin Command 返回普通 JSON：
+HTTP 1.44.1 的普通消息仍采用两跳 HTTP+SSE；Runtime Builtin Command 返回普通 JSON：
 
 ```text
 Browser / Agent UI
@@ -61,7 +61,7 @@ Browser / Agent UI
 ```
 
 每次提交用户消息都会新建一个 HTTP 请求。该请求的响应在本次执行期间持续输出
-SSE；Runtime Command 不建立请求级 SSE，Skill 执行尚未开放。普通消息正常收到
+SSE；Runtime Command 不建立请求级 SSE，Skill 执行由其他同事并行开发。普通消息正常收到
 `stream.end`、流内错误或网络中断后连接结束。下一次用户消息、Command、Steer、
 FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。公共 Command 协议待独立评审。
 
@@ -277,11 +277,13 @@ Command 协议待独立评审；普通消息 Events 已确认公共路径并进�
 
 ### 5.4 Built-in Command
 
+本会话只负责七个 Builtin；Skill Command 由其他同事并行开发，不是延期或禁用。Builtin 来源视图、参数规则和验收不得提升为整个产品的 Skill 限制。共享 GET/POST 的最终命名、请求联合类型和清单合并需在 HTTP 发布前与 Skill 开发线对齐；本次不代替同事设计 Skill 执行细节。
+
 | 规则 | v1 结论 |
 |---|---|
 | HTTP 请求 | 只提交 name、arguments；name 不含 /，省略或 null 参数由 Service 归一 |
 | 可发现范围 | compact、help、model、name、skills、status、thinking 七个 Builtin |
-| 未开放 | Skill、Extension、Prompt 执行；附件 |
+| 本会话不实现 | Skill 执行（同事并行开发）；Extension、Prompt 执行；Builtin 附件 |
 | 响应 | 普通 ResultBean JSON，不建立请求级 SSE |
 | 普通消息接口 | 不解析 Slash 文本，现有 SSE 行为不变 |
 
@@ -393,7 +395,7 @@ CampusClaw 不再提供 CLI、TUI、OneShot、RPC 或 ACP 产品入口。Slash v
 
 - 不可变 Definition、Handler、Composite Registry、Contributor 和 Admission Policy
   替换当前可变 Registry 与宽泛 `SlashCommandSession`；
-- Builtin 各自使用 Contributor/Handler；Skill 只保留展示定义，不装配伪 Handler、不进入当前 HTTP 清单；
+- Builtin 各自使用 Contributor/Handler；现有 Skill 发现定义不装配伪 Handler；同事并行实现执行定义，共享 HTTP 清单在发布前对齐；
 - 新增命令不修改中央 `switch`；Builtin 重名直接启动失败；
 - 清单命中后才调用 Command API；清单失败不降级；API 未知名称返回 `COMMAND_NOT_FOUND`；
 - `/name` 只调用 `SessionNamingService`，不经过 mate-service 名称副本；
@@ -464,7 +466,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 | 架构变更 | 受管目录统一身份文件、缓存优先 prepare 与显式原子 refresh；Skill 和 Child 通过目录名称索引解析，不保存远端工具列表 |
 | 架构变更 | Mate 发现改为 `ListMateTools({skillName?})` 稳定 JSON 与实时查询；Call 通过 Session 名称到 ID 缓存解析，miss 时 single-flight 自动刷新完整有效集合，实际执行不重试 |
 | 架构变更 | `Agent({agentName,task})` 只解析直接绑定 Child；公共 `AgentSessionFactory` 创建独立 Child Session 实例，父子使用相同类型和执行语义但隔离消息、工作区、工具与上下文 |
-| 架构变更 | HTTP-only Slash 模块使用不可变 Definition、Strategy Handler、Composite Registry、Contributor 和 Admission Policy；增加命令不修改中央分派；Skill 执行延期，不进入当前 HTTP 命名空间 |
+| 架构变更 | HTTP-only Slash 模块使用不可变 Definition、Strategy Handler、Composite Registry、Contributor 和 Admission Policy；增加命令不修改中央分派；Skill 由其他同事并行开发；Builtin 来源过滤不是全局命名空间限制 |
 | 架构变更 | 当前 `displayName` 与资源版本由 CampusClaw Session 持有；不保存 Name Entry 或通用命令生命周期；只有 Model/Thinking/Compact 复用既有领域历史 |
 | 架构变更 | Assistant/Compaction Usage 持久化并累计 lifetimeUsage；模型、thinking、compaction 领域事件历史可见，工具 delta 与压缩 started/failed 保持瞬态 |
 | 架构变更 | refresh 只影响下一次空闲 Session 执行；模型懒校准事件先于 user.message，无有效 default 时不接受消息 |
@@ -492,6 +494,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.6.5 | 2026-09-04 | 同步 HTTP 1.44.1：Skill Command 由其他同事并行开发，七个 Builtin 是本会话交付范围，不是全产品禁用规则。 |
 | 3.6.4 | 2026-09-04 | 同步 HTTP 1.44.0：七个 Builtin 使用普通 JSON，Skill 执行延期，取消 Name 边车与通用生命周期；合并设计主线 `332e7faba9f35b657b17013287507449a68359c3`，保留 Events v2 的 `access-token` 必填决定与独立评审，不推导公共 Command 协议。 |
 | 3.6.3 | 2026-09-04 | 同步 Session Events v2 0.1.6：三种用户事件统一携带 `access-token`，JWT/APPKEY 模式均必填；从待评审项中移除此项，其他字段继续评审。 |
 | 3.6.2 | 2026-09-04 | 同步 Session Events v2 0.1.5：公共事件身份统一使用 `eventId`，POST、live SSE 和权威历史不公开内部 `entryId/entrySeq`；其余 POST 字段继续评审。 |

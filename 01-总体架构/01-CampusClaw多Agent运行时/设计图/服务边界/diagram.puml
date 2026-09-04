@@ -54,7 +54,7 @@ end note
 
 note bottom of Runtime
 Each user-message POST owns one bounded SSE response.
-Builtin commands return JSON; Skill execution is deferred.
+Builtin commands return JSON; Skill work proceeds in parallel.
 Steer and FollowUp are separate HTTP requests that enqueue
 into the active execution. Abort is another HTTP request.
 The Runtime does not read chatId or end-user identity.
