@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.6.1 |
-| 状态 | Session Events v2 资源模型 A 已确认；第一个 POST operation 字段评审中；HTTP 1.43.5 保留为迁移前 v1 基线 |
+| 文档版本 | 3.6.2 |
+| 状态 | Session Events v2 资源模型 A、POST 事件范围与 `eventId` 身份已确认；其余 POST 字段评审中；HTTP 1.43.5 保留为迁移前 v1 基线 |
 | 当前传输结论 | v2 使用独立 POST、Session live SSE 与固定快照历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -19,7 +19,7 @@
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | DeepSeek Harness 对照基线 | `141eb6fef83422698aef7a981029e843e8161534` |
 | Codex Harness 对照基线 | `be33f80bc65159c094ecd06bf155afa3061ce23d` |
-| 更新日期 | 2026-09-03 |
+| 更新日期 | 2026-09-04 |
 
 ## 1. 当前结论
 
@@ -39,6 +39,8 @@ GET /sessions/{sessionId}/events
 
 执行继续是 Runtime 内部状态，不引入 `executionId` 或 `runId`。独立 Abort 将由
 `user.interrupt` 替代，`user.tool_confirmation` 进入同一个用户事件联合类型。
+v2 公共事件身份使用 `eventId`，不公开内部 `entryId` 或 `entrySeq`；内部序号仍可用于
+持久化排序与分页，但不得穿透 POST、live SSE 或权威历史响应。
 第一个 POST operation 的字段仍在评审，详见
 [`Session Events v2 重设计`](chat-events-v2-design.md) 和
 [`交互评审页`](chat-events-v2-review.html)。
@@ -478,7 +480,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 以下内容尚未确认，不应由实现自行猜测：
 
-1. Claw v2 POST 的用户事件范围、请求形状、成功响应和幂等/对账策略；
+1. Claw v2 POST 的 `access-token` 必填策略、请求形状、成功响应宽度和幂等/对账策略；
 2. Claw v2 Session live SSE 的事件、heartbeat、背压、鉴权和关闭语义；
 3. Claw v2 固定快照历史的过滤、游标、事件投影和保留期；
 4. Steer、FollowUp 与 Slash Command 是否并入新的 Events 边界；
@@ -490,6 +492,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.6.2 | 2026-09-04 | 同步 Session Events v2 0.1.5：公共事件身份统一使用 `eventId`，POST、live SSE 和权威历史不公开内部 `entryId/entrySeq`；其余 POST 字段继续评审。 |
 | 3.6.1 | 2026-09-03 | 同步 HTTP 1.43.5：十三个接口统一采用源码测试中的具体 Header 示例；明确 `X-HW-ID` 是用户凭据 ID；仅在 POST Events/Command 说明凭据的内存保留期限、Mate tool execute 发送范围和禁止落盘范围。 |
 | 3.6.0 | 2026-09-03 | 用户确认 Session Events 资源模型 A：Claw 拆分 POST、Session live SSE 与固定快照历史，执行保持内部状态；保留 HTTP 1.43.4 为迁移前基线，并启动第一个 POST operation 字段评审。 |
 | 3.5.5 | 2026-09-01 | 记录 mate-service 普通消息 Events 公共路径已确认并链接单 operation 评审稿；事件命名、事件身份、Thinking/Tool 投影和 GET 恢复契约保持待确认。 |
