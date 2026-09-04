@@ -87,7 +87,7 @@ title CampusClaw Target Request-scoped Event Classes
 ' completeExecution, lines 154-168: persistence, terminal events, stream completion.
 ' Observed behavior: a current stream belongs to one active execution.
 ' Target-only architecture: per-request bindings support union input without a
-' public Session subscription API. Exact control-output routing remains proposed.
+' public Session subscription API. Interrupt delivery is confirmed; exact binding remains proposed.
 ' Design reason: keep web VOs, application admission, runtime and persistence separate;
 ' retain independent response backpressure and shared causal append ordering.
 skinparam backgroundColor #FFFFFF
@@ -185,7 +185,7 @@ end note
 @enduml
 
 @startuml target_session_live_stream_lifecycle
-title CampusClaw POST SSE - Closing Confirmed; Routing Proposed
+title CampusClaw POST SSE - Closing and Interrupt Delivery Confirmed
 ' Stable block name retained for existing SVG links; this is no longer a GET stream.
 ' Source evidence: pi-mono-java 918005ee8ccc88d179fc31a0de17a92b4a01383b.
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeTerminalEventFactory.java,
@@ -195,7 +195,8 @@ title CampusClaw POST SSE - Closing Confirmed; Routing Proposed
 ' Confirmed: one POST for input/output, user receipt first, data-only and type+phase.
 ' Confirmed target-only: matching idle ends this response, including confirmation waits.
 ' Design reason: do not keep a completed request open for unrelated later messages.
-' Control binding, idle reason literals and failure details remain unconfirmed.
+' Confirmed: original output stays on A; B receives receipt and the same stop idle only.
+' Instance routing, control binding, idle reason literals and failures remain unconfirmed.
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -237,9 +238,9 @@ else Confirmed: close while waiting for tool confirmation
   B --> Client : data: user.tool_confirmation receipt
   Execution -> B : tool result, response, corresponding idle
   B --> Client : data: matching output; idle; EOF
-else Candidate: interrupt while response A remains open
+else Confirmed delivery: interrupt while response A remains open
   Client -> API : new POST user.interrupt
-  API -> B : bind exact active target before interrupt
+  API -> B : candidate: bind exact active target before interrupt
   API -> Store : accept and persist interrupt
   API -> B : complete interrupt receipt first
   B --> Client : data: user.interrupt receipt
