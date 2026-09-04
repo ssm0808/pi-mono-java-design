@@ -54,7 +54,7 @@ loop Output belonging to the bound request scope
   Binding -> Writer : response-specific immutable event
   Writer --> Mate : data: agent.* JSON
 end
-group Candidate closing rule, not yet confirmed
+group Confirmed idle closing; persistence and routing proposed
   Execution -> Append : corresponding idle state
   Append -> Store : commit authoritative terminal boundary
   Append -> Binding : publish matching session.status_idle
@@ -185,7 +185,7 @@ end note
 @enduml
 
 @startuml target_session_live_stream_lifecycle
-title CampusClaw POST SSE - Candidate Closing and Recovery
+title CampusClaw POST SSE - Closing Confirmed; Routing Proposed
 ' Stable block name retained for existing SVG links; this is no longer a GET stream.
 ' Source evidence: pi-mono-java 918005ee8ccc88d179fc31a0de17a92b4a01383b.
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeTerminalEventFactory.java,
@@ -193,9 +193,9 @@ title CampusClaw POST SSE - Candidate Closing and Recovery
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSseEmitterSubscriber.java,
 ' onEvent/onComplete, lines 33-49: named SSE; explicit emitter completion.
 ' Confirmed: one POST for input/output, user receipt first, data-only and type+phase.
-' Target-only: matching idle ends this response, confirming splits the interaction.
+' Confirmed target-only: matching idle ends this response, including confirmation waits.
 ' Design reason: do not keep a completed request open for unrelated later messages.
-' Control binding, idle reasons and exact closing behavior are still unconfirmed.
+' Control binding, idle reason literals and failure details remain unconfirmed.
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -221,11 +221,11 @@ A --> Client : data: user.message receipt
 Execution -> A : matching agent events
 A --> Client : data: agent.* output
 
-alt Candidate: execution finishes
+alt Confirmed: close on matching execution idle
   Execution -> Store : commit done / failed boundary
   Execution -> A : corresponding idle, then complete
   A --> Client : data: session.status_idle; EOF
-else Candidate: waiting for tool confirmation
+else Confirmed: close while waiting for tool confirmation
   Execution -> Store : commit Tool Call and confirming boundary
   Execution -> A : tool call, confirming idle, then complete
   A --> Client : data: tool call; data: confirming idle; EOF

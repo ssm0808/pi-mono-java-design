@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.7.0 |
-| 状态 | Events v2 合并 POST SSE 与完整 user.* 首帧已确认，输出范围与关闭细节评审中；HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发不变 |
+| 文档版本 | 3.7.1 |
+| 状态 | Events v2 合并 POST SSE、完整 user.* 首帧与对应 idle 关闭已确认，输出范围、字段与错误细节评审中；HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发不变 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 固定快照历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -50,8 +50,9 @@ Header 示例和用户凭据 ID 语义均保留；三种 POST 用户事件仍统
 以及五个输出类型名保留；用户明确调整 S3：完整本次 user.* 作为首个业务帧返回，
 仅一次，不广播其他用户输入。原只读流的 S4 不再适用合并 POST。
 
-当前推荐“对应 idle 后关闭本次响应；confirming 后另发确认 POST 接收续跑”，仍是候选，
-不是整体确认。当前入口见 [合并 POST 评审页](chat-events-v2-review.html)、
+结束规则已确认：收到本次对应 idle 后关闭响应，等待工具确认时也关闭；之后通过新确认
+POST 接收续跑结果。等待确认只结束本次 HTTP 交互，不代表任务成功。具体 reason、
+并发输出归属与错误细节仍待评审，不是整体确认。当前入口见 [合并 POST 评审页](chat-events-v2-review.html)、
 [Events v2 设计](chat-events-v2-design.md) 和 [请求级 SSE 设计](chat-events-v2-stream-design.md)。
 [旧确认页](chat-events-v2-confirmed.html) 改为变更提示，旧 JSON POST 仅在 Git 历史保留。
 当前没有整体确认的新 v2 operation；既有字段决定不因此被重新开放。
@@ -492,8 +493,8 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 以下内容尚未确认，不应由实现自行猜测：
 
-1. Claw v2 合并 POST 的三类输入对应范围、confirming 分段与中断终态投递；合并方向、完整本次 user.* 首帧已确认；
-2. Claw v2 SSE 具体字段、thinking 内容、idle reason、heartbeat、容量、错误与关闭细节及整体确认；类型名、data-only、type + phase 已确认；
+1. Claw v2 合并 POST 的三类输入对应范围、并发控制与原消息流的中断终态投递；合并方向、完整本次 user.* 首帧与对应 idle 关闭（含等待工具确认分段）已确认；
+2. Claw v2 SSE 具体字段、thinking 内容、idle reason、heartbeat、容量、错误细节及整体确认；类型名、data-only、type + phase 已确认；
 3. Claw v2 固定快照历史的过滤、游标、事件投影和保留期；
 4. Steer、FollowUp 与 Slash Command 是否并入新的 Events 边界；
 5. Pod 重启时 active execution 的中断或恢复策略；
@@ -504,6 +505,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.7.1 | 2026-09-04 | 同步 Events v2 0.3.1 与请求级 SSE 0.2.1：确认对应 idle 后关闭，含等待工具确认分段，新确认 POST 接收续跑；不整体确认操作，不改变输出字段、实现或 Mate 公共契约。 |
 | 3.7.0 | 2026-09-04 | 同步 Events v2 0.3.0：合并 POST 提交与 SSE 推送、确认完整本次 user.* 首帧，撤销内部独立 GET stream，保留 ListEvents；更新评审状态、源码证据与图，结束细节仍候选，不修改 Mate 公共契约或 v1 基线。 |
 | 3.6.8 | 2026-09-04 | 同步 Events v2 0.2.2：确认 GET stream S1～S4 的四项 A 选择，移除对应待选题；保留其他具体字段、连接细节和接口整体评审状态，不影响已确认 POST 与 v1 迁移基线。 |
 | 3.6.7 | 2026-09-04 | 同步 Events v2 0.2.1：确认 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 五个基础类型名；增量结构、字段和 GET 整体仍在评审，不改 v1 迁移基线。 |

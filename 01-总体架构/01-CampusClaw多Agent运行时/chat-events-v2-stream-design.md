@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.0 |
-| 状态 | 合并方向、完整 user.* 首帧回执已确认；对应范围与结束细节候选，target-only |
-| 设计仓本次变更前基线 | `ea6b49b` |
+| 文档版本 | 0.2.1 |
+| 状态 | 合并方向、完整 user.* 首帧及对应 idle 关闭（含等待工具确认）已确认；对应范围、字段与错误细节候选，target-only |
+| 设计仓本次变更前基线 | `c315ad817a80b6672c7499f5789b4e9908516887` |
 | 本次实现核对 | `pi-mono-java@918005ee8ccc88d179fc31a0de17a92b4a01383b` |
 | 原实现基线 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；复核文件与差距见 §6 |
 | Mate 契约对照 | 通用对话 Events 1.4.4，已确认目标契约，不是实现证据；本轮不修改 |
@@ -37,6 +37,10 @@ S1 data-only、S2 type + phase 与五个输出类型名也继续有效。
 这取代原 S3 的“流内完全不出现 user.*”。原 Q3 的完整回执内容保留，普通 JSON
 ResultBean 外壳不再使用；S4 的只读 GET 无工具令牌规则不适用于合并 POST。
 
+用户已确认 M3 结束规则：收到本次对应的 `session.status_idle` 后关闭本条响应；
+等待工具确认时也关闭，之后通过新的确认 POST 接收续跑结果。这是已确认目标设计的
+产品约束，不代表当前 Java 已实现，也不表示整个操作或具体 reason 取值已确认。
+
 ## 2. 请求与凭据边界
 
 - 请求体仍是一条三种联合类型之一的 event：user.message、user.interrupt、
@@ -59,7 +63,7 @@ ResultBean 外壳不再使用；S4 的只读 GET 无工具令牌规则不适用�
 服务端需在接受前预留流缓冲、绑定目标，提交回执并排入队列后再放行后续输出；
 网络写出在事务外，不为等客户端收完首帧而锁住 Session。
 
-下面首帧已确认，后续字段与关闭规则仍为候选：
+下面首帧与收到对应 idle 后关闭已确认，其他输出字段仍为候选：
 
 ```text
 Content-Type: text/event-stream
@@ -79,19 +83,24 @@ data: {"eventId":"d4e3e8b9653047a99ac10396a17fe84d","type":"session.status_idle"
 每帧是单行 JSON 加空行，JSON 内换行必须转义。没有 SSE event/id 字段，不包装 ResultBean。
 200 表示已进入接受后的流式响应，不是任务成功；完整首帧是持久化接收凭据，不是执行终态。
 
-## 4. “对应事件”的范围与关闭候选
+## 4. 已确认关闭规则与候选输出范围
 
-以下表格是待评审的推荐方案，不因本次合并与首帧确认而自动生效。
+结束规则已确认：收到本次对应 idle 后关闭响应，等待工具确认时也关闭；不等待下一条
+用户消息。仅结束本次 HTTP 交互，等待确认不代表任务成功。之后新发确认 POST，
+由新响应接收工具结果与续跑；不把新结果发给已经关闭的旧响应。
 
-| 本次输入 | 本条响应的绑定范围 | 候选结束点 |
+以下绑定范围、具体 reason 取值和停止失败处理仍是候选；不得把任意 Session idle
+当作本次终态。本次确认不自动决定并发请求之间如何分配输出。
+
+| 本次输入 | 本条响应的绑定范围（候选） | 对应 idle 的触发与 reason 示例（候选） |
 |---|---|---|
 | user.message | 由这条消息开始的执行段，包括模型、工具与该段状态；不包含后续另一条消息 | 对应 done/failed/terminated，或进入 confirming |
 | user.tool_confirmation | 当前 Session 中指定 toolCallId 的有效待确认操作及由本次确认触发的续跑段 | 对应 done/failed/terminated，或再次进入 confirming |
 | user.interrupt | 接受时锁定的正在执行/等待确认目标；首帧后只等待该目标停止结果，不订阅整个 Session | 实际停止后的 terminated；停止失败路径另评审，不能提前伪造终态 |
 
-候选理由：本次交互结束就关闭其 HTTP 响应，不跨下一次无关执行。confirming 表示需要
-用户新动作，不是任务完成；原响应关闭，后续通过另一次确认 POST 接收工具结果与续跑。
-若用户希望 confirming 时保留原流，需要重新确认两条 POST 的输出归属，不能默认双播所有输出。
+设计理由：本次交互结束就关闭其 HTTP 响应，不跨下一次无关执行。等待工具确认需要
+用户新动作，以另一次确认 POST 开始下一段交互，避免旧响应无限等待用户操作。
+`confirming` 只是该状态的候选 reason 字面值，确认关闭策略不等于确认这个字段取值。
 
 中断与原消息流可能同时存在。候选是在 Session 协调边界原子绑定原执行身份，
 再接受中断并触发停止；同一已提交终态可以发给仍绑定该目标的两条响应，复用 eventId，
@@ -144,7 +153,7 @@ data: {"eventId":"d4e3e8b9653047a99ac10396a17fe84d","type":"session.status_idle"
 不能凭相同文本猜测后重发。恢复精确游标和 UI 对账规则留待 ListEvents 评审。
 时间允许回退，不用最后 createdAt 作下界，也不自行构造内部序号。
 
-![请求级 SSE 候选生命周期](设计图/事件接口重设计/target_session_live_stream_lifecycle.svg)
+![请求级 SSE 生命周期：关闭规则已确认，输出绑定仍候选](设计图/事件接口重设计/target_session_live_stream_lifecycle.svg)
 
 [PlantUML 源码：`target_session_live_stream_lifecycle`](设计图/事件接口重设计/diagram.puml#L187)
 
@@ -157,7 +166,7 @@ data: {"eventId":"d4e3e8b9653047a99ac10396a17fe84d","type":"session.status_idle"
 观察到的当前代码：POST SSE / GET 历史、单 subscriber、有界流；正常结束为
 session.status.idle + stream.end，失败为 stream.error，随后 complete；断线 detach
 不 abort。目标差距：三输入联合请求、v2 完整首帧、data-only、type + phase、
-eventId、不公开序号、请求控制绑定与候选 idle 关闭都还需要改造。
+eventId、不公开序号、请求控制绑定与已确认的对应 idle 关闭都还需要改造。
 
 [Claude Managed Agents 事件流](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
 及 [List Events](https://platform.claude.com/docs/en/api/beta/sessions/events/list)
@@ -170,9 +179,9 @@ Mate 公共路径、身份映射、读取流或用户授权。桥接方案需后
 
 ## 7. 实施验收与待确认
 
-已确认项不再展示选项。待确认：三类请求对应范围、confirming 分段和原流终态投递；
+已确认项不再展示选项。待确认：三类请求对应范围、并发控制与原流终态投递；
 idle reason、具体字段和 thinking 内容；Header 后错误、保活、容量；合并接口整体确认。
-不自动推进 ListEvents。
+对应 idle 关闭及等待工具确认分段已确认，不重复询问，不自动推进 ListEvents。
 
 实施验收需覆盖：三输入首帧与请求内容一致且只一次；提交前绑定/回执先行；极快完成；
 确认续跑和中断目标竞态；同 Session 下一次执行隔离；断线与慢连接不影响执行；
@@ -183,6 +192,7 @@ idle reason、具体字段和 thinking 内容；Header 后错误、保活、容�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.1 | 2026-09-04 | 记录用户确认 M3：对应 idle 后关闭，等待工具确认时也关闭，新确认 POST 接收续跑。同步状态和生命周期图；精确 reason、并发输出绑定及错误细节仍候选，整个操作仍待评审。 |
 | 0.2.0 | 2026-09-04 | 撤销独立 GET stream，合并到 POST SSE，确认完整本次 user.* 首帧；保留 S1/S2、Header、eventId 与排序；三输入绑定和结束规则仍候选，更新源码基线与三图。 |
 | 0.1.2 | 2026-09-04 | 确认 S1 data-only、S2 type + phase、S3 用户事件只走回执/历史、S4 GET 不要求 access-token；移除四项选择题并记录精确选择，保留其余字段与 GET 整体评审状态。 |
 | 0.1.1 | 2026-09-04 | 按用户指定确认五个基础类型名，同步全部候选示例及流/历史同名约束；S2 仅继续评审增量结构，不保留会重新开放旧名称的选项；phase、字段和 GET 整体仍未确认。 |

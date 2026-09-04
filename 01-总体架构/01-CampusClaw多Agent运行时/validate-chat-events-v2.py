@@ -19,6 +19,7 @@ RETIRED_STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", 
 CONFIRMED_CHOICES = {
     "M1-transport": "single-post-sse",
     "M2-receipt": "A-user-event-first",
+    "M3-close-rule": "idle-closes-including-confirming",
     "S1-frame-format": "A-data-only",
     "S2-event-projection": "A-type-and-phase",
 }
@@ -106,7 +107,7 @@ def parse_stream(stream: str) -> list[dict]:
     events = []
     for frame in stream.strip().split("\n\n"):
         if frame == ": ping":
-            require(not events or events[-1]["type"] != "session.status_idle", "no ping after candidate idle close")
+            require(not events or events[-1]["type"] != "session.status_idle", "no ping after confirmed idle close")
             continue
         require(frame.startswith("data: ") and "\n" not in frame, "business frames must be data-only JSON")
         events.append(json.loads(frame[6:]))
@@ -176,17 +177,20 @@ def validate_model(model: dict) -> None:
                 if event.get("phase") != "delta":
                     completed.add(event["eventId"])
                 if event["type"] == "session.status_idle":
-                    require(index == len(frames) - 1, "candidate idle closes this response; no later output")
+                    require(index == len(frames) - 1, "confirmed idle closes this response; no later output")
                 all_types.add(event["type"])
-            require(frames[-1]["type"] == "session.status_idle", "candidate example must end at matching idle")
+            require(frames[-1]["type"] == "session.status_idle", "normal-close example must end at matching idle")
     require(set(RESPONSE_INPUTS).issubset(response_ids), "examples must cover message, confirming, confirmation and interrupt")
     require(receipt_types == USER_EVENT_TYPES and all_types == STREAM_TYPES, "missing receipt or basic output examples")
-    require(review.get("confirmedChoices") == CONFIRMED_CHOICES, "preserve exact confirmed transport/receipt/S1/S2")
+    require(review.get("confirmedChoices") == CONFIRMED_CHOICES, "preserve exact confirmed transport/receipt/closing/S1/S2")
     require(set(review["confirmedEventTypes"]) == STREAM_TYPES, "confirmed output type names changed")
     require(review["questions"] == [], "do not reopen confirmed choices")
     require("合并 POST 接口整体确认" in review["pendingReview"], "whole operation must remain pending")
     require("合并接口评审中" in review["status"], "do not mark merged operation fully confirmed")
     require("完整 user.* 首帧回执已确认" in review["status"], "receipt approval must be visible")
+    require("结束规则已确认" in review["status"], "closing approval must be visible")
+    require("等待工具确认时也关闭" in operation["description"], "confirmation wait must also close the response")
+    require("idle reason" in " ".join(review["pendingReview"]), "closing approval must not confirm reason literals")
     require("三种用户事件均必须携带 access-token" in review["notice"], "preserve three-type token rule")
     require(review["decisionHistory"]["S3-user-events"]["previous"] == "A-user-events-receipt-history-only",
             "record the explicitly superseded S3")
@@ -225,6 +229,13 @@ def validate_negative_regressions(model: dict) -> int:
         ("ping after idle", original + ": ping\n\n"),
     ):
         changed(label, lambda m, value=payload: m["operation"]["responses"][0]["bodies"].update(default=value))
+    confirming_index = next(index for index, response in enumerate(model["operation"]["responses"])
+                            if response["id"] == "200-confirming")
+    confirming = model["operation"]["responses"][confirming_index]["bodies"]["default"]
+    changed("ping after confirmation idle", lambda m: m["operation"]["responses"][confirming_index]["bodies"].update(
+        default=confirming + ": ping\n\n"))
+    changed("output after confirmation idle", lambda m: m["operation"]["responses"][confirming_index]["bodies"].update(
+        default=confirming + rest.split("\n\n", 1)[0] + "\n\n"))
     for label, candidate in mutations:
         try:
             validate_model(candidate)
@@ -253,7 +264,8 @@ def validate_review_pages() -> None:
     validate_model(models[0])
     validator.validate_executable_script(scripts[0])
     visible = " ".join(parser.visible_text)
-    for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "未整体确认合并接口"):
+    for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "未整体确认合并接口",
+                 "结束规则已确认", "等待工具确认时也关闭"):
         require(text in visible, f"no-JavaScript page is missing {text}")
     require("data-question-id=" not in source, "confirmed receipt must not remain a question")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")

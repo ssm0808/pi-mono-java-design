@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.3.0 |
-| 状态 | POST 提交与实时推送合并、完整 user.* 首帧回执已确认；输出范围和结束细节仍评审，target-only |
+| 文档版本 | 0.3.1 |
+| 状态 | POST 合并、完整 user.* 首帧及对应 idle 关闭（含等待工具确认）已确认；输出范围、具体字段与错误细节仍评审，target-only |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | 本次 HTTP 合并核对提交 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；原 `a8192e0`，变更路径与结论见 §4.2 |
@@ -20,7 +20,7 @@
 
 | Method | Path | 职责 | 当前状态 |
 |---|---|---|---|
-| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 提交一条用户事件；首帧完整回执，随后推送对应事件 | 合并方向与首帧已确认；整个操作仍待评审 |
+| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 提交一条用户事件；首帧完整回执，随后推送对应事件 | 合并方向、首帧与对应 idle 关闭已确认；整个操作仍待评审 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 固定快照权威历史及断线对账 | 职责、身份与顺序已确认；具体字段未完整评审 |
 
 原独立 `GET /sessions/{sessionId}/events/stream` 从 v2 目标中撤销；旧 JSON model
@@ -76,6 +76,7 @@ access-token: opaque-access-token
 | S2：type + phase | 保留；正文/思考为 delta/completed，工具与 idle 不带 phase | 已确认投影 |
 | S3：流不推送 user.*，仅回执/历史可见 | 用户明确调整：首帧返回本次完整 user.*，仅一次，不广播其他用户输入 | 产品约束：同一请求内确认接收，不重复业务输出 |
 | S4：只读 GET 不需要 access-token | 原只读流已撤销，此项不再适用该入口；POST 三类仍必填 | 适用范围改变，不是放宽写入凭据 |
+| M3：响应结束规则 | 已确认收到本次对应 idle 后关闭；等待工具确认时也关闭，之后通过新确认 POST 接收续跑结果 | 产品约束：结束本次 HTTP 交互，不把等待确认当作任务成功；具体 reason 与并发归属仍待评审 |
 | 原 POST 整体已确认 | 仅被本次替代的响应部分重新评审，其余已确认字段保留 | 不把旧整体确认标签误用于新合并接口 |
 
 完整首帧包括服务端 `eventId`、原事件 `type`、`createdAt` 和规范化业务字段。
@@ -91,16 +92,17 @@ access-token: opaque-access-token
 - [当前合并 POST 评审页](chat-events-v2-review.html)：
   [唯一 operation model](接口契约-v2/操作/01-submit-session-event.json)。
 - [响应生命周期与源码差距](chat-events-v2-stream-design.md)：三种输入各自的输出范围、
-  结束时机、背压和恢复候选。
+  已确认结束规则，以及背压和恢复候选。
 - [旧确认页](chat-events-v2-confirmed.html) 只保留变更提示并链接当前页，不再展示已失效
   的普通 JSON POST 为当前已确认接口。
 - `common.json.reviewState` 当前为 `submitSessionEvent`，
   `confirmedOperations=[]`；这不撤销已确认字段，只表示新操作尚未整体确认。
 
-建议候选：本次消息/确认续跑/中断目标绑定对应输出；遇到对应
-`session.status_idle(reason=done/terminated/failed/confirming)` 后结束响应。
-`confirming` 结束的是本次 HTTP 交互，表示等待用户确认，不是任务成功；之后另发
-确认 POST。这项关闭策略及精确事件字段还未确认，不由合并决定自动推导。
+结束规则已确认：收到本次对应的 `session.status_idle` 后关闭本条响应；等待工具确认
+时也关闭，之后通过新的 `user.tool_confirmation` POST 接收续跑结果。关闭的是本次
+HTTP 交互，不代表任务成功；不相关的 Session idle 不能结束本次响应。
+三类请求的精确绑定范围、并发中断与原流终态投递、`reason` 的具体取值及错误细节仍为
+候选。本次仅确认关闭策略，不整体确认合并接口或提前确认输出字段。
 
 ## 3. 目标分层与生命周期
 
@@ -220,8 +222,8 @@ pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime
 | `event/RuntimeEventService.java:101-141` · prepareAndSubmitLocked/acceptUserEntry | 当前只接收消息，保存后发送 user.message 并启动；三类输入和完整 v2 回执仍需改造 |
 | `event/RuntimeEventStream.java:84-159` · complete/attach/detachInternal | 单 subscriber、有界缓冲、断线清缓冲，不自行 abort；尚无控制 POST 的独立绑定 |
 | `web/RuntimeSseEmitterSubscriber.java:33-49` · onEvent/onComplete | 当前 named SSE 和可选 id，完成后 emitter.complete；目标 data-only 不等于当前格式 |
-| `event/RuntimeExecutionCoordinator.java:154-168` · completeExecution | 当前收尾持久化、发送终态、complete 流；候选 confirming 分段关闭不能据此宣称已有 |
-| `event/RuntimeTerminalEventFactory.java:34-57` · emit | 当前成功/中断发 session.status.idle + stream.end，失败发 stream.error；目标只用候选对应 idle 收尾，尚未实现 |
+| `event/RuntimeExecutionCoordinator.java:154-168` · completeExecution | 当前收尾持久化、发送终态、complete 流；已确认目标中的等待确认分段关闭不能据此宣称已有 |
+| `event/RuntimeTerminalEventFactory.java:34-57` · emit | 当前成功/中断发 session.status.idle + stream.end，失败发 stream.error；目标已确认收到对应 idle 后关闭，具体 reason 与失败处理仍待评审，尚未实现 |
 | `event/RuntimeEventQueryService.java:53-99` · list/pageOf | 当前按内部序号分页，尚无固定快照水位 |
 
 本次不修改 pi Agent Loop、Tool Loop 或 Session 内核语义，也不以 pi 的进程内事件
@@ -237,8 +239,9 @@ pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime
    后再放行输出，避免快执行漏回执或终态、以及控制请求跨到下一轮执行。
 3. 在 API 投影层映射 data-only、type + phase、eventId；完整事件与历史同形，
    不把 v1 started/delta/completed 类型直接重命名就宣称实现完成。
-4. 仅在本轮结束规则确认后实现消息、确认续跑、中断的关闭与失败路径；
-   Header 前 JSON 失败、Header 后传输断开和业务失败必须区分。
+4. 结束规则已确认：对应 idle 后关闭，等待确认时关闭并由新确认 POST 接收续跑；
+   待输出绑定与错误细节确认后实施。Header 前 JSON 失败、Header 后传输断开和业务失败
+   必须区分，不把单纯 EOF 当作成功。
 5. 历史升级固定快照与内部有序读取。Mate bridge 将来消费 Claw POST SSE，公共
    路径和连接策略不因内部改动自动改变；当前不修改 Mate 实现或契约。
 
@@ -266,11 +269,13 @@ pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime
 | 2026-09-04 | GET S1～S4 | 已确认 A-data-only、A-type-and-phase、A-user-events-receipt-history-only、A-no-read-tool-token；移除四项选择题，保留具体字段、连接细节和 GET 整体评审状态；POST 不变 |
 | 2026-09-04 | 合并提交与实时推送 | 用户明确改为一次 POST SSE，撤销独立 Claw GET stream，保留 ListEvents；既有请求、Header、eventId、排序、S1/S2 继续有效，关闭细节待评审 |
 | 2026-09-04 | 完整首帧回执 | 用户明确允许首帧返回本次完整 user.*（含 eventId）；调整 S3，后续不广播其他用户事件；不是自动确认整个合并接口 |
+| 2026-09-04 | M3 结束规则 | 用户明确回复“结束规则我认可的”：收到本次对应 idle 后关闭响应，等待工具确认时也关闭，之后通过新确认 POST 接收续跑结果。仅确认关闭策略；reason 具体取值、并发输出归属、错误细节和整体操作仍待评审 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.3.1 | 2026-09-04 | 确认 M3 对应 idle 关闭，含等待工具确认分段；同步评审模型、HTML、生命周期说明及图和回归校验。不更改请求、Header 或响应示例字段，不整体确认合并接口；变更前设计提交 c315ad8，实现基线 918005ee 不变。 |
 | 0.3.0 | 2026-09-04 | 合并 POST 提交与实时 SSE、确认完整 user.* 首帧回执；撤销独立 GET stream，保留历史；同步评审状态、三图和校验，补充 918005ee 与 a8192e0 的源码对比；结束规则仍候选。 |
 | 0.2.2 | 2026-09-04 | 固化 GET stream S1～S4 的四项 A 选择，同步实时订阅 0.1.2、评审页、图与回归校验；不自动确认整个 GET 或切换 ListEvents。 |
 | 0.2.1 | 2026-09-04 | 确认第二接口的五个基础类型名，同步评审面、实时订阅 0.1.1、生命周期图和校验；同步 POST 中断说明的 idle 名称引用，不改 POST 字段或已确认状态，S2 仅继续讨论增量结构。 |
