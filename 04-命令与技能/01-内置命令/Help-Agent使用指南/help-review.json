@@ -1,15 +1,15 @@
 {
   "api": {
-    "title": "Help：Agent 使用指南（专项候选）",
-    "version": "1.0.0 draft",
+    "title": "Help：Agent 使用指南（已确认）",
+    "version": "1.1.0 · Runtime 1.45.0",
     "basePath": "/campusclaw-service/v1",
-    "visibility": "Internal · 仅 Help 评审；不替代 Runtime 1.44.1 整体契约"
+    "visibility": "Internal · Help 已确认；Runtime 操作 13 的专项展示"
   },
   "operation": {
     "method": "POST",
     "path": "/sessions/{sessionId}/command",
     "summary": "/help：介绍当前 Agent 的用途和使用场景",
-    "description": "用户已明确语义方向：/ 展示命令清单，/help 展示 Agent 元数据。四字段结果、无参规则、空内容与缓存迁移为本次推荐方案，待评审。复用现有 name、displayName、description[] 和 userCases[]，不新增远端字段。现有本地缓存丢失 userCases，实施前必须补齐保存与恢复。仅读最近完整本地快照，idle/running 都允许；不请求模型、不刷新、不返回 systemPrompt 或绑定明细。不写历史；该例为虚构演示文案，不代表真实 Agent 能力。",
+    "description": "已确认：/ 展示命令清单，/help 展示 Agent 元数据。已确认四字段 command、displayName、description、userCases，以及无参、空数组及 userCases 缓存往返与显式刷新旧缓存。复用现有 name、displayName、description[] 和 userCases[]，不新增远端字段。现有本地缓存丢失 userCases，实施前必须补齐保存与恢复。仅读最近完整本地快照，idle/running 都允许；不请求模型、不刷新、不返回 systemPrompt 或绑定明细。不写历史；该例为虚构演示文案，不代表真实 Agent 能力。",
     "authModes": [
       {
         "id": "jwt",
@@ -81,7 +81,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "Help 候选规则：name=help；arguments 缺省/null/空白由 Service 归一为空。非空参数（包括 model、status 等命令名）及附件按 INVALID_COMMAND_REQUEST 拒绝。不改其他命令、共享 Header、未知字段或 If-Match/Idempotency-Key 的既有规则。",
+      "description": "Help 已确认规则：name=help；arguments 缺省/null/空白由 Service 归一为空。非空参数（包括 model、status 等命令名）及附件按 INVALID_COMMAND_REQUEST 拒绝。不改其他命令、共享 Header、未知字段或 If-Match/Idempotency-Key 的既有规则。",
       "example": {
         "name": "help"
       }
@@ -118,7 +118,7 @@
         }
       },
       {
-        "id": "200-empty",
+        "id": "200-help-empty",
         "status": "200",
         "tabLabel": "200 · 尚未填写",
         "label": "OK",
@@ -228,26 +228,6 @@
     ]
   },
   "review": {
-    "questions": [
-      {
-        "id": "help_contract",
-        "legend": "Help 专项推荐方案",
-        "options": [
-          {
-            "label": "采用四字段元数据结果；仅支持无参；旧缓存显式刷新补齐场景",
-            "value": "确认 Help 四字段 command/displayName/description/userCases；无参；空内容返回空数组；补齐 userCases 缓存往返并显式刷新旧缓存。",
-            "selected": true
-          },
-          {
-            "label": "保留新语义，但继续调整字段或缓存策略",
-            "value": "保持 Help 介绍 Agent 的方向，请先继续评审字段或缓存迁移，不切换正式 HTTP 契约。",
-            "selected": false
-          }
-        ]
-      }
-    ],
-    "followUpTitle": "确认 Help 方案",
-    "promptPrefix": "继续评审 /help 基于 Agent 元数据的使用指南。",
-    "promptSuffix": "仅同步确认的 Help 语义、Runtime 描述符与结果、相关全局类图和校验；其他命令不变，不发布 mate-service 新公共路径，不改实现仓。"
+    "questions": []
   }
 }

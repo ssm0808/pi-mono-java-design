@@ -43,7 +43,7 @@ CommandResponseAssembler ..> ResponseVO : DTO to VO
 @startuml target_command_resolution_classes
 title Target-only Immutable Request Catalog
 ' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/ResolvedCommandCatalog.java.
-' Design reason: list, help, admission, and dispatch share definition identity; writes recheck mutable state under locks.
+' Design reason: catalog, admission, and dispatch share definition identity; Help content uses Agent metadata instead.
 skinparam shadowing false
 interface CommandDefinition
 class BuiltinCommandDefinition
@@ -52,14 +52,14 @@ interface CommandHandler
 interface CommandAdmissionPolicy
 class ResolvedCommandCatalog <<immutable request snapshot>>
 class CommandExecutionContext <<request snapshot>>
-class CommandHelpFormatter
+class CommandExecutionService
 BuiltinCommandDefinition ..|> CommandDefinition
 SkillCommandDefinition ..|> CommandDefinition
 BuiltinCommandDefinition *-- CommandHandler
 BuiltinCommandDefinition *-- CommandAdmissionPolicy
 ResolvedCommandCatalog *-- "0..*" CommandDefinition
 CommandExecutionContext o-- "1" ResolvedCommandCatalog
-CommandHelpFormatter --> CommandExecutionContext : use same catalog
+CommandExecutionService --> CommandExecutionContext : same definition identity
 note right of SkillCommandDefinition
 Current discovery definition.
 No fake Handler; execution is parallel work.

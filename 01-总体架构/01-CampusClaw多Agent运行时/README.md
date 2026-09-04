@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.7.2 |
-| 状态 | Events v2 合并 POST SSE、完整 user.* 首帧、对应 idle 关闭及中断推送分工已确认，实例定位、目标绑定、字段与错误细节评审中；HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发不变 |
+| 文档版本 | 3.7.3 |
+| 状态 | Events v2 合并 POST SSE、完整 user.* 首帧、对应 idle 关闭及中断推送分工已确认，实例定位、目标绑定、字段与错误细节评审中；HTTP 1.45.0 确认 Help 元数据指南，其他 Builtin JSON 与 Skill 并行开发不变 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 固定快照历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -61,7 +61,7 @@ POST 接收续跑结果。等待确认只结束本次 HTTP 交互，不代表任
 
 ### 1.1 现行 v1 基线（迁移完成前保留）
 
-HTTP 1.44.1 的普通消息仍采用两跳 HTTP+SSE；Runtime Builtin Command 返回普通 JSON：
+HTTP 1.45.0 的普通消息仍采用两跳 HTTP+SSE；Runtime Builtin Command 返回普通 JSON：
 
 ```text
 Browser / Agent UI
@@ -298,10 +298,17 @@ Command 协议待独立评审；普通消息 Events 已确认公共路径并进�
 | 响应 | 普通 ResultBean JSON，不建立请求级 SSE |
 | 普通消息接口 | 不解析 Slash 文本，现有 SSE 行为不变 |
 
-一次请求只解析一个不可变 Catalog，列表与 Help 复用，按来源类型过滤而不调用
+一次请求只解析一个不可变 Catalog，列表与执行分派复用 Definition 身份，按来源类型过滤而不调用
 SkillCommandSource，也不刷新 Agent。列表字段非 null、acceptsFiles=false；
 running 时 Help/Status 可用、Name 可查改、Model/Thinking 只可查、Compact 不可执行。
 Skills 查询最新完整绑定快照；没有快照返回 AGENT_NOT_AVAILABLE，完整空快照返回 []。
+
+Help 无参读取当前 Agent 的 displayName/name、description、userCases，成功仅返回
+command/displayName/description/userCases；介绍或场景缺失返回 []，非空参数拒绝。
+Help 内容不来自 Catalog，而是同一完整 PreparedAgentRuntime；无缓存返回 422 AGENT_NOT_AVAILABLE。
+元数据仅读不刷新、不调用模型/Tool、不写历史；userCases 必须完成缓存保存/重载往返，旧缓存显式刷新补齐。
+源码基线 `d8e22562` 与全局目标结构见
+[Help 专项设计](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)。
 
 不生成 commandId、不持久化通用命令生命周期或 Name 边车。Name 只更新当前状态；
 Model/Thinking/Compact 复用既有领域 Entry，sourceEventSeq 指向本次最后一条 Entry，
@@ -507,6 +514,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.7.3 | 2026-09-04 | 同步 HTTP 1.45.0 已确认 Help 四字段元数据指南、无参与缓存演进；保持其他 Builtin、Events v2 评审和 Mate 公共接口不变。 |
 | 3.7.2 | 2026-09-04 | 同步 Events v2 0.3.2 与请求级 SSE 0.2.2：确认原消息保留输出、中断只回执与等待同一停止 idle；补充实例定位的源码证据和解释，尚未选择路由方案。不整体确认操作，不修改实现或 Mate 契约。 |
 | 3.7.1 | 2026-09-04 | 同步 Events v2 0.3.1 与请求级 SSE 0.2.1：确认对应 idle 后关闭，含等待工具确认分段，新确认 POST 接收续跑；不整体确认操作，不改变输出字段、实现或 Mate 公共契约。 |
 | 3.7.0 | 2026-09-04 | 同步 Events v2 0.3.0：合并 POST 提交与 SSE 推送、确认完整本次 user.* 首帧，撤销内部独立 GET stream，保留 ListEvents；更新评审状态、源码证据与图，结束细节仍候选，不修改 Mate 公共契约或 v1 基线。 |

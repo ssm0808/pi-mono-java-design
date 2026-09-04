@@ -1,12 +1,12 @@
 @startuml target_help_global_classes
-title Recommended Global Command Structure - Agent Help Proposal
+title Recommended Global Command Structure - Confirmed Agent Help
 top to bottom direction
 skinparam shadowing false
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
-skinparam nodesep 20
-skinparam ranksep 35
-skinparam linetype ortho
+skinparam nodesep 45
+skinparam ranksep 65
+skinparam ArrowFontSize 12
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java AgentRuntime.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached, toIdentity:630, toRuntime:646, AgentIdentity:717.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java metadata.
@@ -14,21 +14,31 @@ skinparam linetype ortho
 ' Observed behavior: upstream AgentRuntime has userCases, but the local identity omits it and reload supplies an empty list.
 ' Design reason: keep the whole command structure visible while Help projects authored Agent metadata, not command descriptors.
 ' Product constraint: Help explains the Agent; Slash discovery remains in the command catalog.
-' Target-only: all nodes and relations describe the proposed assembly; existing SPI and Runtime collaborators are reused.
+' Target-only: confirmed assembly is not implemented; existing SPI and Runtime collaborators are reused.
 
-package "Web boundary" {
+package "Web boundary" as Web {
   class RuntimeCommandController {
     +list(sessionId)
     +execute(sessionId, request)
   }
   class "Command Request VOs\nImmutable Response VOs" as CommandVOs
+  class HelpResultResponseVO <<immutable response>> #E3F2E1 {
+    command = help
+    displayName
+    description[]
+    userCases[]
+  }
 }
-package "Application layer - singleton" {
+package "Application layer" as Application {
   class CommandCatalogService
   class CommandExecutionService
   class CommandResponseAssembler
+  class AgentHelpQueryService #E3F2E1 {
+    +query(agentId): AgentHelpDTO
+  }
+  class "AgentHelpDTO / HelpResultDTO" as HelpData <<immutable request data>> #E3F2E1
 }
-package "Command core" {
+package "Command core" as Core {
   class CompositeCommandRegistry
   class ResolvedCommandCatalog <<request snapshot>>
   interface CommandDefinitionSource
@@ -39,14 +49,15 @@ package "Command core" {
   interface CommandHandler
   interface CommandAdmissionPolicy
 }
-package "Builtin adapters - singleton" {
+package "Builtin adapters - singleton" as Adapters {
   class "HelpContributor + 6 Contributors" as Contributors
   class HelpCommandHandler #E3F2E1
-  class AgentHelpQueryService #E3F2E1
   class "6 Other Builtin Handlers\nand Narrow Services" as OtherBuiltins
 }
-package "Runtime and persistence" {
-  class AgentRuntimeManager
+package "Runtime and persistence" as Runtime {
+  class AgentRuntimeManager {
+    +prepareCached(agentId): PreparedAgentRuntime
+  }
   class PreparedAgentRuntime <<query snapshot>> #E3F2E1
   class "AgentIdentity\nagent.json" as AgentIdentity <<stored metadata>> #E3F2E1 {
     name / displayName
@@ -57,52 +68,74 @@ package "Runtime and persistence" {
   class "Runtime execution / Repository" as RuntimePorts <<grouped>>
 }
 
-RuntimeCommandController --> CommandCatalogService
-RuntimeCommandController --> CommandExecutionService
-RuntimeCommandController ..> CommandVOs
-CommandCatalogService --> CompositeCommandRegistry
-CommandCatalogService ..> CommandVOs : descriptor DTO to VO
-CommandExecutionService --> CompositeCommandRegistry
-CommandExecutionService --> CommandResponseAssembler
-CommandResponseAssembler ..> CommandVOs : HelpResultDTO to response VO
-CompositeCommandRegistry o-- "1..*" CommandDefinitionSource
-BuiltinCommandSource ..|> CommandDefinitionSource
-SkillCommandSource ..|> CommandDefinitionSource
-CompositeCommandRegistry --> ResolvedCommandCatalog : one resolution
-BuiltinCommandSource o-- "7" BuiltinCommandContributor
-Contributors ..|> BuiltinCommandContributor
-BuiltinCommandContributor --> BuiltinCommandDefinition : contributes
-ResolvedCommandCatalog o-- "0..*" BuiltinCommandDefinition : selected Builtin view
-BuiltinCommandDefinition *-- "1" CommandHandler
-BuiltinCommandDefinition *-- "1" CommandAdmissionPolicy
-CommandExecutionService --> BuiltinCommandDefinition : select / admit / execute
-HelpCommandHandler ..|> CommandHandler
-OtherBuiltins ..|> CommandHandler
-Contributors --> HelpCommandHandler : Help binding
-Contributors --> OtherBuiltins : other bindings
-HelpCommandHandler --> AgentHelpQueryService : authorized Session agentId
-AgentHelpQueryService --> AgentRuntimeManager : prepareCached once
-AgentHelpQueryService ..> PreparedAgentRuntime : public fields only
-AgentRuntimeManager --> PreparedAgentRuntime : load complete snapshot
-AgentRuntimeManager --> AgentIdentity : publish / reload userCases
-AgentRuntimeManager --> MateServiceClient : existing explicit refresh only
-SkillCommandSource --> AgentRuntimeManager
-OtherBuiltins --> RuntimePorts
-CommandExecutionService --> RuntimePorts : Session access
+RuntimeCommandController -[norank]-> CommandCatalogService
+RuntimeCommandController -[norank]-> CommandExecutionService
+RuntimeCommandController -[dashed,norank]-> CommandVOs
+CommandCatalogService -[norank]-> CompositeCommandRegistry
+CommandCatalogService -[dashed,norank]-> CommandVOs
+CommandExecutionService -[norank]-> CompositeCommandRegistry
+CommandExecutionService -[norank]-> CommandResponseAssembler
+CommandResponseAssembler -[dashed,norank]-> CommandVOs
+CommandResponseAssembler -[dashed,norank]-> HelpData
+CommandResponseAssembler -[dashed,norank]-> HelpResultResponseVO
+CompositeCommandRegistry o-[norank]- "1..*" CommandDefinitionSource
+BuiltinCommandSource -[dashed,norank]-|> CommandDefinitionSource
+SkillCommandSource -[dashed,norank]-|> CommandDefinitionSource
+CompositeCommandRegistry -[norank]-> ResolvedCommandCatalog : one resolution
+BuiltinCommandSource o-[norank]- "7" BuiltinCommandContributor
+Contributors -[dashed,norank]-|> BuiltinCommandContributor
+BuiltinCommandContributor -[norank]-> BuiltinCommandDefinition : contributes
+ResolvedCommandCatalog o-[norank]- "0..*" BuiltinCommandDefinition : selected Builtin view
+BuiltinCommandDefinition *-[norank]- "1" CommandHandler
+BuiltinCommandDefinition *-[norank]- "1" CommandAdmissionPolicy
+CommandExecutionService -[norank]-> BuiltinCommandDefinition : select / admit / execute
+HelpCommandHandler -[dashed,norank]-|> CommandHandler
+OtherBuiltins -[dashed,norank]-|> CommandHandler
+Contributors -[norank]-> HelpCommandHandler : Help binding
+Contributors -[norank]-> OtherBuiltins : other bindings
+HelpCommandHandler -[norank]-> AgentHelpQueryService : authorized Session agentId
+AgentHelpQueryService -[dashed,norank]-> HelpData : whitelist projection
+AgentHelpQueryService -[norank]-> AgentRuntimeManager : prepareCached once
+AgentRuntimeManager -[norank]-> PreparedAgentRuntime : load complete snapshot
+AgentRuntimeManager -[norank]-> AgentIdentity : publish / reload userCases
+AgentRuntimeManager -[norank]-> MateServiceClient : existing explicit refresh only
+SkillCommandSource -[norank]-> AgentRuntimeManager
+OtherBuiltins -[norank]-> RuntimePorts
+CommandExecutionService -[norank]-> RuntimePorts : Session access
 
+RuntimeCommandController -[hidden]right-> CommandVOs
+CommandVOs -[hidden]right-> HelpResultResponseVO
 RuntimeCommandController -[hidden]down-> CommandCatalogService
-CommandCatalogService -[hidden]down-> CompositeCommandRegistry
-BuiltinCommandSource -[hidden]down-> Contributors
+CommandCatalogService -[hidden]right-> CommandExecutionService
+CommandExecutionService -[hidden]right-> CommandResponseAssembler
+CommandCatalogService -[hidden]down-> AgentHelpQueryService
+AgentHelpQueryService -[hidden]right-> HelpData
+AgentHelpQueryService -[hidden]down-> CompositeCommandRegistry
+CompositeCommandRegistry -[hidden]right-> ResolvedCommandCatalog
+ResolvedCommandCatalog -[hidden]right-> BuiltinCommandDefinition
+CompositeCommandRegistry -[hidden]down-> CommandDefinitionSource
+CommandDefinitionSource -[hidden]right-> BuiltinCommandSource
+BuiltinCommandSource -[hidden]right-> SkillCommandSource
+CommandDefinitionSource -[hidden]down-> BuiltinCommandContributor
+BuiltinCommandContributor -[hidden]right-> CommandHandler
+CommandHandler -[hidden]right-> CommandAdmissionPolicy
+BuiltinCommandContributor -[hidden]down-> Contributors
+Contributors -[hidden]right-> HelpCommandHandler
+HelpCommandHandler -[hidden]right-> OtherBuiltins
+Contributors -[hidden]down-> AgentRuntimeManager
+AgentRuntimeManager -[hidden]right-> PreparedAgentRuntime
+PreparedAgentRuntime -[hidden]right-> AgentIdentity
+AgentRuntimeManager -[hidden]down-> MateServiceClient
+MateServiceClient -[hidden]right-> RuntimePorts
 
-note bottom of AgentHelpQueryService
-No catalog formatting, model call, or refresh.
-No prompt or binding details in the response.
-Cache reads serialize with Agent publication.
-end note
 legend bottom left
-Target-only global proposal; green marks the Help metadata path.
+Confirmed target-only global design; green marks the Help metadata path.
 Repeated collaborators are grouped, not omitted.
+Help has no catalog formatting, model call, or refresh.
+Help exposes no prompt or binding details; reads serialize with Agent publication.
 Core/application services are singleton; response data is request-scoped.
+HelpData belongs to runtimeapi.dto.command, not the Service package.
+AgentHelpQueryService belongs to runtimeapi.service.command.
 RuntimePorts includes singleton services and execution-scoped Session objects.
 endlegend
 @enduml

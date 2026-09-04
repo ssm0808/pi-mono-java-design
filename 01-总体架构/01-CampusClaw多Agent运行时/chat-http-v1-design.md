@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.44.1 |
+| 文档版本 | 1.45.0 |
 | 状态 | 十三个内部 operation 已确认；操作 12、13 保留已确认的 Builtin JSON 行为；Skill 由其他同事并行开发 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；跨 Builtin/Skill 的最终共享命令入口在发布前对齐 |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
@@ -27,6 +27,7 @@
 | Anthropic Managed Agents 文档核对 | 2026-09-01；Session、Events、Skills 与 Session Operations 官方文档 |
 | Agent Skills 规范核对 | 2026-09-01；名称、Skill 文件夹和 `SKILL.md` frontmatter 规则 |
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
+| Help 元数据专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；四字段、无参、空数组与缓存迁移已确认，仍为 target-only |
 | Registry 初始候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599` |
 | Registry 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并；最新差距见通用模块证据表 |
 | GET 候选实现 | `7759481a1722422395d46564129827c6ee6df204`，未发布，不能作为已上线契约 |
@@ -917,7 +918,7 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 | 执行命令 | `executeSessionCommand` | `POST` | `/sessions/{sessionId}/command` | 只接收 `name + arguments`，Handler 完成后返回普通 ResultBean JSON |
 
 操作 12 先确定可发现范围，操作 13 再确定执行契约。一次请求只创建一个不可变
-`ResolvedCommandCatalog`，清单、Help、准入和分派复用该快照。Builtin Contributor
+`ResolvedCommandCatalog`，清单、准入和分派复用 Definition 身份；Help 的介绍内容不来自 Catalog。Builtin Contributor
 分别提供元数据、准入策略和 Handler；仅可展示的 Skill Definition 不装配伪 Handler。
 Controller 只收发 VO；Application 负责授权、归一化、解析、准入、执行及 DTO→VO，
 不得使用命令名称中央 switch。只读响应 VO 使用 `@Getter` 与 final 字段。
@@ -926,6 +927,11 @@ Controller 只收发 VO；Application 负责授权、归一化、解析、准入
 命令不可用仍展示，所有列表非 null，所有 input.acceptsFiles=false。顶层 available
 表示空参数行为，input.available 表示带参数行为；running 时 Model/Thinking 可查不可改。
 Skills 无最新完整绑定快照时执行返回 AGENT_NOT_AVAILABLE，完整空快照返回 []。
+
+Help 已确认仅无参介绍 Agent：GET 中 description 为“介绍当前 Agent 的用途和使用场景”，
+input.mode=none、input.available=false、input.unavailableCode=COMMAND_ARGUMENTS_NOT_SUPPORTED、
+acceptsFiles=false、placeholder=null、suggestions=[]。idle/running 的空参入口均可用；
+GET 不读取 Agent 快照，available=true 不保证 POST 已取得完整缓存。本次不改变其他描述符或清单排序。
 
 Builtin 请求的 name 必填，长度 1～64，匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，不含前导 /。
 arguments 省略或 null 由 Service 归一为 ""，最大 262144 个 UTF-16 代码单元。
@@ -948,10 +954,33 @@ arguments 省略或 null 由 Service 归一为 ""，最大 262144 个 UTF-16 代
 不生成公开 commandId，不存储 command.started/completed/failed 或 Name 历史边车。
 sourceEventSeq 只表示本次命令追加的最后一条权威领域 Entry 序号；
 仅 Model、Thinking 和真实 Compact 可能返回，查询、同值操作、空历史压缩时省略。
-只有此字段可使用字段级非空序列化；displayName 即使 null 也保留。
+只有此字段可使用字段级非空序列化；Name 的 displayName 即使 null 也保留，Help 的 displayName 必填非空。
 GET Events 继续只投影现有领域历史；POST Events 的 SSE 行为不变。
 
-#### 2.6.2 Name 与配置更新
+#### 2.6.2 Help：Agent 元数据使用指南
+
+2026-09-04 用户确认 Help 成功 result 恰好四字段：`command` 固定为 `help`、`displayName`、
+`description:string[]`、`userCases:string[]`。后三者来自 Session 所绑定 Agent 的最近完整本地快照。
+displayName 空白回退 Agent name，不使用 Session 名称；两组数组必填且非 null，缺失/null 归一为 []，
+去除条目两端空白和空白条目，保留作者顺序与内部换行，不自动翻译或扩写。
+
+Help 的 arguments 缺省/null/空白归一为空；非空参数（包括 model）和附件按 400 INVALID_COMMAND_REQUEST 拒绝。
+不再支持指定命令详情查询。idle/running 都允许，不占执行容量、不写 Entry、命令历史或模型上下文。
+完整缓存仅缺介绍返回 200 空数组；无完整 Agent 缓存复用 422 AGENT_NOT_AVAILABLE，不触发 prepare/refresh 或远端请求。
+
+HelpCommandHandler 委派 AgentHelpQueryService，后者只调用一次 AgentRuntimeManager.prepareCached，
+从同一 PreparedAgentRuntime 复制三个公开字段；DTO→只读 VO 在 Service 完成。
+读取与发布复用 Agent 级锁，不是 Session 执行锁。文案按不可信纯文本展示，不执行 HTML/脚本、不自动加载远程图片。
+现有完整缓存加载器会读取 system.md，但 Help 不将 systemPrompt 作为内容来源或返回它，也不调用模型/Tool。
+
+userCases 已在 MateServiceClient.AgentRuntime 中存在，但基线 AgentIdentity 未保存、toRuntime 固定恢复为空。
+目标必须在现有 agent.json 保存并重载它，保留 schemaVersion；旧缓存缺字段按 [] 读取。
+发布新实现后走现有显式刷新流程补齐旧缓存；刷新失败保留旧缓存，Help 不自动补拉。
+这属于已确认的缓存演进要求，不代表本轮执行了刷新或修改了实现。
+完整映射、源码路径/符号、全局主图和往返/重启验收见
+[Help 专项设计](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)。
+
+#### 2.6.3 Name 与配置更新
 
 SessionResource 的可空 displayName 对应 `t_sessions.display_name`。Name 空参数查询；
 修改裁剪两端空白、保留内部空白，拒绝空值、CR/LF、C0/C1 控制字符、双向覆盖/隔离字符
@@ -966,9 +995,9 @@ Thinking 非空参数只接受小写 on/off。
 
 ![命令与权威 Session 状态](设计图/Command/command_authoritative_state.svg)
 
-[PlantUML 源码：`command_authoritative_state`](设计图/Command/diagram.puml#L28)
+[PlantUML 源码：`command_authoritative_state`](设计图/Command/diagram.puml#L40)
 
-#### 2.6.3 Compact 的执行生命周期
+#### 2.6.4 Compact 的执行生命周期
 
 Compact 只接受空参数与 idle Session。与 POST Events 共用操作锁、全局容量、
 Active Holder、Event Projector、控制队列及 30 分钟超时。空历史仅观察：
@@ -1265,6 +1294,8 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 | 分类 | 证据或决策 |
 |---|---|
 | 本轮观察证据 | `d84dd3d6` 的配置、Repository、Runtime Holder 与 Projector 以及 PR #210 Registry 源码，完整路径和符号见 [通用模块证据表](../../04-命令与技能/00-Slash-Command通用模块/README.md#2-源码证据与差距)；PR #210 已合并，但发现层不等于公开 HTTP 执行能力 |
+| Help 专项观察证据 | `d8e22562` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java` AgentRuntime 已含 userCases；同路径 AgentRuntimeManager.java 的 toIdentity:630 / toRuntime:646 / AgentIdentity:717 丢失该字段，prepareCached 未与 refresh 共用锁；command.builtin/execution 核心 SPI 已存在，Help 服务/Handler 尚未实现 |
+| Help 已确认产品与架构决策 | `/help` 不再列命令，仅读 Agent 名称/介绍/场景；补齐 userCases 缓存往返、读取/发布互斥和显式刷新旧缓存；不复制 Harness Help 语义，不新增 Mate 公共路径或元数据字段 |
 | 产品约束 | 本会话负责七个 Builtin、普通 JSON、无附件；Skill 由同事并行开发。与 pi/OpenCode 的交互能力不同，不照搬上游命令全集 |
 | 架构变化 | Name 只保存当前状态；Model/Thinking/Compact 复用既有领域 Entry；不采用 DeepSeek 的通用命令生命周期存储；Compact 独立终态句柄复用 Runtime 生命周期 |
 | 观察到的历史 Java 行为 | CampusClaw `c1311f69` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/SlashCommandRegistry.java:21-67` 使用可变 Map，并在 Registry 内解析整段 Slash 文本；`SlashCommandSession.java:19-32` 暴露宽泛可变 Session 门面 |
@@ -1381,7 +1412,7 @@ Runtime 本地认证、请求体删除 `type` 和 thinking 事件可见性；1.3
 wire fields、1.39 的公共压缩/Usage/领域事件/工具 delta/refresh 懒校准、1.40 的
 pi 压缩细节与 failed.aborted，1.41 的重试候选持久化排除和实际输出上限，
 1.42 的 POST Events `access-token` 和“只有 Mate execute 透传”安全边界，以及
-1.44.1 的七个 Builtin JSON operation 与 displayName 均为目标设计，不得表述成已实现。
+1.45.0 的七个 Builtin JSON operation、Session displayName 与 Help 元数据指南均为目标设计，不得表述成已实现。
 1.43.x 的请求级 Command SSE、Name 边车和 Skill 执行方案已被取代，不得据其开发。
 mate-service 旧公共命令方案标记为已废止的历史 target-only design，新公共协议待独立评审。
 
@@ -1389,6 +1420,7 @@ mate-service 旧公共命令方案标记为已废止的历史 target-only design
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.45.0 | 2026-09-04 | 用户确认 Help 无参四字段 Agent 使用指南；同步操作 12 描述符、操作 13 非空/空内容结果、参数与缓存语义、全局类图及校验；其他命令、事件和 Mate 公共契约不变。 |
 | 1.44.1 | 2026-09-04 | 澄清 Skill Command 由其他同事同步开发；撤销整体延期/拒绝解释，保留 Builtin 行为并将名称和清单限制限定为 Builtin 切片；共享 HTTP 发布前整合双方契约。 |
 | 1.44.0 | 2026-09-04 | 按操作 12→13 收敛七个 Builtin 与普通 JSON；延期 Skill 执行，删除通用生命周期和 Name 边车；明确 Compact 终态、队列与凭据寿命；补充分层、串行 PR 与源码证据。 |
 | 1.43.5 | 2026-09-03 | 十三个接口统一使用当前源码测试中的具体 Header 示例；明确 `X-HW-ID` 是用户凭据 ID，不是公司、服务或应用标识；仅在 POST Events/Command 说明凭据的内存保留期限、Mate tool execute 发送范围和禁止落盘范围。 |

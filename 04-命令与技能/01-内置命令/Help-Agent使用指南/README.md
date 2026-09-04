@@ -4,9 +4,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.0.0 |
+| 设计版本 | 1.1.0 |
 | 日期 | 2026-09-04 |
-| 状态 | 用户已明确变更方向；字段、参数和缓存迁移为待评审目标方案，尚未实现 |
+| 状态 | 用户已确认四字段、无参、空数组、缓存往返与显式刷新旧缓存；target-only，尚未实现 |
 | 设计仓基线 | `372fb2cbec6e8a525d30d2310ef68e3da18e33f7` |
 | 本次源码基线 | pi-mono-java `d8e22562e22ac41ef4bb5cc6b36b576139417bd9` |
 | 专项评审页 | [Help HTTP 评审](help-review.html)，由 [JSON](help-review.json) 生成 |
@@ -23,7 +23,7 @@
 | `/skills` | 绑定了哪些 Skill？ | 已验证的直接绑定 Skill 名称和描述 |
 | `/status` | 当前 Session 是什么状态？ | Session 状态、模型和 Thinking |
 
-推荐 `/help` 只接受空参数，不再支持 `/help model` 等命令详情查询；这些说明留在 `/` 的命令面板。
+已确认 `/help` 只接受空参数，不再支持 `/help model` 等命令详情查询；这些说明留在 `/` 的命令面板。
 用途介绍不是实时权限或能力承诺，不能根据 Tool、Skill、子 Agent 的名称自动推断业务场景。
 本次不调用模型生成或翻译介绍，不新增元数据字段、配置文件或数据库表。
 
@@ -71,7 +71,7 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 
 直接复用 AgentRuntime 已有字段。Agent 字段实际拼写是 `userCases`，不是 Skill 的 `useCases`；本次不顺带重命名。
 
-| 响应字段 | 元数据来源 | 推荐规则 |
+| 响应字段 | 元数据来源 | 已确认规则 |
 |---|---|---|
 | command | 固定值 | 必填，恒为 `help` |
 | displayName | displayName；空白时回退 name | 必填、非空；它是 Agent 名称，不是 `/name` 设置的 Session 名称 |
@@ -83,13 +83,13 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 两组文案都为空仍返回 200，前端显示“维护者尚未填写 Agent 介绍和使用场景”。
 只缺一组时只对该区域显示空状态，不生成看似真实的占位能力描述。
 
-候选请求沿用 Runtime 普通命令入口，不新增 `/help` HTTP 资源：
+请求沿用 Runtime 普通命令入口，不新增 `/help` HTTP 资源：
 
 ```json
 {"name": "help"}
 ```
 
-候选成功响应如下。响应恰好四个 result 字段，不增加 `commands`、metadata 原对象、Agent ID/版本/路径或 Skill/Tool 明细。
+已确认成功响应如下。响应恰好四个 result 字段，不增加 `commands`、metadata 原对象、Agent ID/版本/路径或 Skill/Tool 明细。
 
 ```json
 {
@@ -112,9 +112,14 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
 这里的 `description` 是返回的 Agent 用途介绍；GET 描述符自身的 description 改为“介绍当前 Agent 的用途和使用场景”，二者含义不同。
 
+Runtime 操作 12 沿用现行描述符结构：Help 的 `input.mode=none`、`input.available=false`、
+`input.unavailableCode=COMMAND_ARGUMENTS_NOT_SUPPORTED`、`acceptsFiles=false`、`placeholder=null`、`suggestions=[]`。
+idle/running 的 Help 空参数 `available=true`；它不表示已检查 Agent 缓存，POST 仍检查完整快照。
+本轮不合并 GET 字段减法分支，不改变其他六个命令的描述符或排序。
+
 ## 4. 缓存与缺失行为
 
-推荐复用 `prepareCached(session.agentId)`：只取已发布、通过既有完整性校验的缓存，不访问远端、不 refresh、不调用 prepare。
+复用 `prepareCached(session.agentId)`：只取已发布、通过既有完整性校验的缓存，不访问远端、不 refresh、不调用 prepare。
 idle/running 都允许查询；结果描述最近一次成功发布到本地的元数据，不承诺与远端实时同步，也不承诺等于正在执行的 Holder 已固定的旧版本。
 一次查询只使用一个 PreparedAgentRuntime，刷新期间不能混读两版字段。
 源码中的 prepareCached 目前直接逐文件加载，没有取得 refresh 使用的 Agent 级锁；“只调用一次”并不自动证明刷新并发时的版本一致。
@@ -130,14 +135,14 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 | AgentRuntimeManager.toRuntime | userCases 固定填 List.of() | 从同一身份记录恢复 userCases，不能静默丢失 |
 | PreparedAgentRuntime.metadata | 完整快照的运行时元数据 | 查询 Service 仅复制三个公开介绍字段，不返回完整 metadata |
 
-推荐采用新增可选字段的缓存演进方式：保留现有 schemaVersion，旧缓存缺 userCases 时读为 []，不把“缺场景说明”解释成运行时损坏。
+已确认采用新增可选字段的缓存演进方式：保留现有 schemaVersion，旧缓存缺 userCases 时读为 []，不把“缺场景说明”解释成运行时损坏。
 部署新实现后，通过现有显式刷新流程为需要展示场景的 Agent 重建缓存；刷新失败保留旧缓存，不由 `/help` 偷偷联网补齐。
 因此旧缓存刷新前可能只展示名称/介绍，这一限制必须在发布检查中说明并覆盖测试。
 
 这里的“不使用 systemPrompt”指不拿它生成介绍、不返回它。现有 `prepareCached` 内部的完整快照加载器会读取 system.md；
 本方案不声称 Help 请求完全没有底层文件读取，也不为展示介绍另建一套绕过完整性检查的文件解析器。
 
-| 条件 | 推荐结果 |
+| 条件 | 已确认结果 |
 |---|---|
 | arguments 缺省/null/空白 | Service 归一为空字符串，执行 Help |
 | 非空 arguments（如 model）或附件 | 400 INVALID_COMMAND_REQUEST；不回到旧的命令详情分支 |
@@ -188,16 +193,24 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 
 ## 7. 评审与同步范围
 
-已确定的是语义方向；本稿推荐的四字段结果、无参规则、空内容处理和旧缓存迁移仍待评审。
-本稿的 HTML/JSON 是 Help 专项候选，不是替代全部 Command API 的第二份权威契约。
-确认后再同步 Runtime 操作 12 的 Help 描述符、操作 13 的 Help 结果/参数/错误说明、全局主图中的 Help 依赖、相关 Markdown 和校验脚本，并提升版本。
+2026-09-04 用户确认四字段结果、无参规则、空内容处理、userCases 缓存往返与显式刷新旧缓存。
+正式契约已同步到 Runtime HTTP 1.45.0 的
+[操作 12](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-session-commands.json) 与
+[操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)。
+本稿 HTML/JSON 是已确认 Help 的专项展示，不是替代全部 Command API 的第二份权威契约；成功报文由 Runtime 校验脚本逐项比对。
+Slash 与 Builtin 主文档共同引用本专题的全局目标类图，保留五层关系，不另维护重复全局定义。
 GET 字段整体形状和排序不在本次评审范围；不将先前分支的 GET 减法与主线其他变更偷偷合并。
 
 mate-service 的旧 Command 专题已被明确标记为废止历史，不能将本稿直接当作其新公共接口。
 本次不修改该历史快照，也不新增公共路径、跨仓实现提交或通知。
 
+设计校验：运行 Runtime `validate-chat-http-v1.py --full` 和 `test_help_contract.py`。
+前者校验精确描述符、两组 Help 报文、专项页同步和图；后者用反例验证旧字段、错误类型、参数入口和候选状态不能重新进入契约。
+缓存往返、并发发布与无副作用仍是实现验收项，不把文档校验通过当作这些行为已经实现。
+
 ## 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-09-04 | 用户确认四字段、无参、空数组及缓存迁移；同步 Runtime 1.45.0、Slash/Builtin 全局视图与精确契约校验；不修改实现或公共 Mate 契约。 |
 | 1.0.0 | 2026-09-04 | 基于已有 description/userCases 设计 Agent 使用指南；记录缓存场景字段丢失的实现缺口、全局目标结构和专项候选契约。 |
