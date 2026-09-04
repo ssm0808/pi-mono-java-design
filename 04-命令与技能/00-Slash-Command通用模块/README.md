@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.2.0 |
-| 设计日期 | 2026-09-03 |
+| 文档版本 | 1.2.1 |
+| 设计日期 | 2026-09-04 |
 | 设计仓基线 | `aae23e98014f947dd57e2172d89bc2778ab6c936` |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw `main` 复核基线 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
@@ -118,10 +118,16 @@ Skill 使用 `skill:<name>`，由一个动态 Source 和一个共享 Handler 处
 - 与 `SKILL.md` 所在文件夹同名。
 
 精确格式为 `^[a-z0-9]+(?:-[a-z0-9]+)*$`。HTTP 层先移除 `skill:`，再复用同一个
-Skill 名称校验器，不维护第二套规则。该规则对齐
-[Agent Skills specification](https://agentskills.io/specification)；当前 CampusClaw
-`SkillLoader` 只校验 64 字符和字符集合，尚未拒绝首尾或连续连字符，也未要求名称与
-`SKILL.md` 所在文件夹同名，因此这里属于目标安全加固。
+Skill 域名称规则。`SkillNamePatterns` 只保留一份严格正则字符串、编译后的 Pattern 和
+64 字符长度上限；加载、命令发现和执行全部引用它，不保留 LEGACY 分支，也不在
+HTTP/Command 包中另设名称 Validator。长度必须单独校验，不能只匹配正则。
+
+非法名称在加载时就拒绝，不进入已加载 Skill 集合、模型发现提示词或命令清单；执行入口
+也不得绕过严格校验。`SKILL.md` 的 `name` 必须是非空字符串且与文件夹同名，不能通过
+回退文件夹名称、裁剪、替换或自动改名接受非法输入。这是已确认产品约束与安全加固。
+规则对齐 [Agent Skills specification](https://agentskills.io/specification)。
+旧源码中的宽松加载仅是待整改差距，不能作为存量兼容要求；名称专项复核基线、源码路径和
+验收矩阵见 [Skill 设计](../02-技能命令/README.md#7-源码证据和差异分类)。
 
 Handler 只接收不可变 `CommandInvocation` 和只读 `CommandExecutionContext`。它不能依赖
 Controller、调用自身 HTTP 接口，也不能获得宽泛可变 Session 门面。新增命令只新增
@@ -282,7 +288,7 @@ Session 序列，因此公开 `entrySeq` 可以有缺口，调用方不得重编
 ## 10. 验收重点
 
 - Builtin 重名时启动失败；Skill 与 Builtin 不冲突；新增命令不改中央分派；
-- Skill 名称拒绝超过 64 个字符、首尾连字符、连续连字符和文件夹名称不一致；
+- Skill 加载、命令发现和执行统一拒绝超过 64 个字符、首尾或连续连字符、缺少 frontmatter 名称和文件夹名称不一致；不保留宽松加载分支；
 - 命令清单精确匹配，保留暂时不可用命令，并分别标明不填参数和填写参数时能否执行；
 - 清单失败不降级；未知命令、非法参数和 Builtin 附件在流建立前失败；
 - sidecar 不改变 active leaf，分支切换后的可见性和顺序正确；
@@ -292,6 +298,7 @@ Session 序列，因此公开 `entrySeq` 可以有缺口，调用方不得重编
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.1 | 2026-09-04 | 确认 Skill 加载、命令发现和执行统一严格校验；由 Skill 域集中维护唯一正则、Pattern 和长度上限，取消宽松加载兼容 |
 | 1.2.0 | 2026-09-03 | 重做 Slash Command 目标类图：分别表达分层与对象生命周期、注册解析与扩展关系；明确 Controller/Application/Command Core/Runtime Adapter 边界、请求级清单快照、凭据生命周期、DTO/VO 隔离和无中央分派约束 |
 | 1.1.0 | 2026-09-03 | 复核 `3004419a` 发现层与 `fb49e86d` GET 清单；引入单次请求 `ResolvedCommandCatalog` 快照和只读执行上下文，移除 Source 级别 find 职责，并明确 Definition 不直接封装可变 Descriptor DTO |
 | 1.0.4 | 2026-09-01 | 命令相关表述只使用“命令清单”；Skill 文件位置统一表述为“文件夹”，避免再次引入文件系统含义 |

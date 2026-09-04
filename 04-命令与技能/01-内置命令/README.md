@@ -5,8 +5,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.3.0 |
-| 设计日期 | 2026-09-03 |
+| 文档版本 | 2.3.1 |
+| 设计日期 | 2026-09-04 |
 | 设计仓基线 | `aae23e98014f947dd57e2172d89bc2778ab6c936` |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw `main` 复核基线 | `c9d858bc8261bf07f5585f545b53495bf2226a56`（`origin/main`） |
@@ -56,7 +56,7 @@ Builtin 实现按以下顺序对齐，后项不能覆盖前项：
 | `3004419a` 的 `CompositeCommandRegistry.find:54-58` 已与 list 共用 `resolve`，但 `CommandDefinitionSource.find` 和 `SkillCommandSource.find` 已不再被 Composite 调用 | Source 只保留 list；Registry 为单次请求产生 `ResolvedCommandCatalog`，由同一快照支持清单、准入和执行查找 |
 | `fb49e86d` 的 `RuntimeCommandController.list:62-75` 直接访问 Repository/Registry，`CommandListResponseVO` 直接暴露 `CommandDescriptorDTO` | 增加 `CommandCatalogService`；Controller 只接收/返回 VO，Service 把内部 DTO 转换为不可变的响应 VO |
 | `fb49e86d` 的 `RuntimeErrorCode.java:50-51` 新增 `COMMAND_NOT_FOUND` 和 `INVALID_COMMAND_ARGUMENTS` | 保留前者；后者与内外两份精确契约中的 `INVALID_COMMAND_REQUEST` 冲突，必须在实现 POST 前统一，这不是待决策项 |
-| `3004419a` 保留 `Skill.NAME_PATTERN` 宽松加载规则，另用 `SkillNameValidator` 对命令清单严格过滤 | 这是对存量 Skill 的迁移兼容；Builtin 不扩大该差异，Skill 执行必须与清单复用同一严格校验器 |
+| `3004419a` 保留 `Skill.NAME_PATTERN` 宽松加载规则，另用 `SkillNameValidator` 对命令清单严格过滤 | 这是必须整改的规则分裂，没有存量兼容例外；加载、命令发现和执行必须统一使用 Skill 域的严格规则。仅过滤命令清单不能代替加载时拒绝非法名称 |
 | `RuntimeSessionDTO` 与 `t_sessions` 没有 `displayName/display_name` | `/name` 必须先补齐 Session 资源、DTO、SQL、Mapper 和响应组装 |
 | `RuntimeSessionRepository.appendEntry*` 会推进 `active_leaf_id`；当前查询只读取活动祖先链 | 不能复用普通 Entry 追加方法写 `command.*`；必须增加 sidecar 专用事务和查询合并 |
 | `RuntimeSessionConfigurationService:78-163` 把领域更新与 Request VO、`If-Match` 绑定 | `/model`、`/thinking` 提取共用领域服务；Command 入口不伪造 ETag，也不调用 Controller |
@@ -65,6 +65,11 @@ Builtin 实现按以下顺序对齐，后项不能覆盖前项：
 指定基线 `c1311f69` 到 `main` 复核基线 `c9d858bc` 之间，四个保留 Command 主源码没有
 行为变化。当前未合入分支尖端为 `3004419a` 和 `fb49e86d`。Builtin 开发应基于这两个
 已有骨架，并先处理上表契约和类边界差距。
+
+2026-09-04 名称专项复核 `0300541fbbe3db8b05ffa1ac953f15f01df74b3e`：
+`SkillNamePatterns` 虽已迁入 Skill 域，仍保留 LEGACY/STRICT 两套规则，加载仍使用 LEGACY。
+这一实现差距不改变严格校验的目标，也不能重新解释为兼容需求。精确源码路径、符号与
+改进理由见 [Skill 设计证据](../02-技能命令/README.md#7-源码证据和差异分类)。
 
 ### 2.3 实施切片
 
@@ -292,6 +297,7 @@ last-commit-wins：
 ## 8. 验收清单
 
 - 七个 Contributor 名称不可变，任两重名时 Spring 启动失败。
+- Skill 域只保留唯一严格名称规则；加载、命令发现与执行结论一致，非法名称不能因存量兼容被加载或执行。
 - Controller 只依赖 Catalog/Execution Service；不直接依赖 Repository、Registry 或返回内部 DTO。
 - `CommandDefinitionSource` 只保留 list；同一请求的清单、Help、准入和执行命中同一 `ResolvedCommandCatalog`，状态变更仍在权威边界重新准入。
 - `HelpCommandHandler` 不注入 Catalog Service 或 Registry，Spring Bean 依赖图无环。
@@ -311,6 +317,7 @@ last-commit-wins：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.1 | 2026-09-04 | 撤销无产品依据的 Skill 宽松加载兼容说明；把加载与发现规则分裂列为必须整改的差距，并引用名称专项源码复核与统一严格验收 |
 | 2.3.0 | 2026-09-03 | 设计正文只保留推荐目标类图；移除当前实现类图，继续用源码证据与差距表表达现状，并保持目标核心类图和 Builtin 扩展类图作为实施结构基线 |
 | 2.2.0 | 2026-09-03 | 复核 `3004419a` 发现层和 `fb49e86d` GET 清单；新增当前实现类图、目标核心类图和七个 Builtin 扩展类图，明确应用层、请求快照、DTO/VO 边界与 Help 无环依赖 |
 | 2.1.0 | 2026-09-02 | 复核 `c9d858bc` 主线与未合入的 `fc06c618` 命令清单骨架，增加实施权威顺序、差距、竖切片、事务边界、参数语法、公司镜像规则和三个实施决策门；不改变已确认的七个 Builtin 清单 |

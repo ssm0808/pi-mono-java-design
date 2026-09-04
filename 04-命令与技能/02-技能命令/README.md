@@ -5,10 +5,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.0.4 |
-| 设计日期 | 2026-09-01 |
+| 文档版本 | 3.0.5 |
+| 设计日期 | 2026-09-04 |
 | CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 复核 HEAD | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
+| Skill 名称专项复核 | `0300541fbbe3db8b05ffa1ac953f15f01df74b3e`（2026-09-04，本地源码提交；只复核名称规则与消费者） |
 | pi 基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
 | 设计状态 | target-only；当前 Skill 仅支持受管文件加载与模型自动发现，没有 HTTP Skill Command |
 
@@ -37,9 +38,25 @@ Skill 命令格式：
 ```
 
 `skill:` 是 CampusClaw 的命令命名空间，不属于 Skill 包名称。HTTP 层移除该前缀后，
-复用同一个 Skill 名称校验器。规则对齐
-[Agent Skills specification](https://agentskills.io/specification)；当前 `SkillLoader` 的
-`^[a-z0-9-]+$` 仍会接受 `-pdf`、`pdf-` 和 `pdf--tools`，目标实现必须补齐校验。
+复用 Skill 域的同一套严格规则。规则对齐
+[Agent Skills specification](https://agentskills.io/specification)。正则本身没有 64 字符上限，
+必须同时校验长度。以下规则是 2026-09-04 已确认目标，名称专项复核源码仍有第 7 节所列差距：
+
+- `SkillNamePatterns` 只保留一份严格正则字符串、编译后的 Pattern 和长度上限，加载、
+  命令发现和执行全部引用；移除 LEGACY 常量和方法，不在 HTTP/Command 包中另建名称 Validator。
+- 非法名称在加载时就拒绝，不进入已加载 Skill 集合或模型发现提示词；命令发现和执行同样
+  拒绝。禁止保留“加载可用、命令隐藏”的兼容分支。
+- `SKILL.md` 的 `name` 必须是非空字符串，与所在文件夹及绑定元数据逐字符一致；缺少名称
+  不回退到文件夹名，也不通过字符串强制转换、裁剪、替换连字符或自动改名修正非法值。
+- 单文件加载失败沿用 `SkillLoadException`；批量扫描可以沿用跳过无效文件的行为，但不能
+  把无效 Skill 加入返回集合。存量非法名称必须修正后重新加载。
+
+取消宽松加载是已确认产品约束与安全加固。旧代码或兼容测试只能证明曾经接受过非法名称，
+不能建立产品迁移要求。统一规则避免同一 Skill 能进入模型发现、却不能通过命令发现或执行。
+
+![Skill 名称统一严格校验目标](设计图/skill_name_validation.svg)
+
+[PlantUML 源码：`skill_name_validation`](设计图/diagram.puml#L93)
 
 ## 2. 命令清单如何生成
 
@@ -147,6 +164,26 @@ Skill 都出现在命令清单中。这与 pi `skills.ts:347-356` 的语义一�
 
 ## 7. 源码证据和差异分类
 
+### 7.1 名称专项复核
+
+本节保留旧分支 `3004419a467b77bac08d0f2b3dad21f8815568c5` 的证据，并追加本地源码提交
+`0300541fbbe3db8b05ffa1ac953f15f01df74b3e` 的名称专项复核。后者没有替代其余章节的历史
+基线，也不表示本文已复核所有 Command 实现。以下 Java 路径均相对 `pi-mono-java` 仓库。
+
+| 分类 / 基线 | 源码路径与符号 | 结论 |
+|---|---|---|
+| 旧实现 / `3004419a` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/Skill.java`：`NAME_PATTERN`；同目录 `SkillLoader.java`：`validateName` | 加载使用宽松 `^[a-z0-9-]+$` |
+| 旧实现 / `3004419a` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/SkillNameValidator.java`：`isValid`；同目录 `SkillCommandSource.java`：`descriptor`、`skillNameOf` | 命令路径使用独立严格规则，和加载路径不一致 |
+| 复核实现 / `0300541f` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillNamePatterns.java:15-49` | 规则已迁到 Skill 域，但仍有 LEGACY/STRICT 两套正则、Pattern 和判定方法；集中位置没有消除策略分裂 |
+| 复核实现 / `0300541f` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillLoader.java`：`parseSkillFile:110-118`、`validateName:138-150` | 缺少名称仍回退文件夹名；加载仍使用 `SkillNamePatterns.LEGACY` |
+| 复核实现 / `0300541f` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java`：`resolved` | 命令发现使用 `SkillNamePatterns.isStrictValid`；`-pdf`、`pdf-`、`pdf--tools` 仍形成加载与发现差异 |
+| pi 对照 / `4af9d21d` | `packages/coding-agent/src/core/skills.ts`：`validateName`、`loadSkillFromFile:320-344` | 检查首尾及连续连字符，但名称错误仅记录 warning，描述有效时仍加载；CampusClaw 不采用此容忍行为 |
+| 已确认目标 / 产品约束与安全加固 | Skill 域唯一严格规则；所有消费者一致拒绝 | 删除兼容分支，让加载、模型发现、命令发现与执行共享相同名称边界；执行仍属 target-only |
+
+### 7.2 其余历史基线与目标差异
+
+下表“观察到的行为”均指文首原有基线，不是名称专项复核提交的全量现状。
+
 | 分类 | 证据或决策 |
 |---|---|
 | 观察到的 CampusClaw 行为 | `RuntimeApiConstants.java:18` 定义普通消息上限 `262144`，`UserEventRequestVO.java:28` 通过 `@Size` 使用该上限；当前没有 Skill Command 参数上限实现 |
@@ -166,7 +203,9 @@ Skill 都出现在命令清单中。这与 pi `skills.ts:347-356` 的语义一�
 ## 8. 验收清单
 
 - Skill 与 Builtin 即使底层名称相同也不冲突。
-- Skill 名称拒绝超过 64 个字符、首尾连字符、连续连字符、缺少 frontmatter 名称和文件夹名称不一致。
+- 加载、命令发现和执行使用同一组名称样例，统一接受 `a`、`0`、`pdf-tools` 和长度恰为 64 的合法名称；统一拒绝空值、空字符串、65 字符、`-pdf`、`pdf-`、`pdf--tools`、`PDF`、`pdf_tools`、空白及换行。
+- 单文件加载拒绝缺少、非字符串的 frontmatter 名称及文件夹名称不一致；批量扫描返回集合、模型发现提示词和命令清单均不包含非法 Skill，直接执行也不能绕过校验。
+- Skill 域只保留一份严格正则字符串、编译后的 Pattern 和长度上限；不存在 LEGACY 加载分支、Command 专用第二套正则或“非法名称加载成功”的兼容测试。
 - 运行中命令清单仍返回 Skill，但执行在流建立前返回 `SESSION_BUSY`。
 - 快照不存在、不完整或与绑定名称不符时，用户 Entry、Record、command.started
   和 running 状态均不提交。
@@ -179,6 +218,7 @@ Skill 都出现在命令清单中。这与 pi `skills.ts:347-356` 的语义一�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.0.5 | 2026-09-04 | 确认加载、命令发现和执行统一严格名称校验，移除存量兼容例外；追加 `0300541f` 名称专项源码证据、pi warning 差异、目标校验图和一致性验收矩阵 |
 | 3.0.4 | 2026-09-01 | 命令相关表述只使用“命令清单”；Skill 文件位置统一表述为“文件夹” |
 | 3.0.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 完整规则；参数和附件改为引用普通消息限制，并补齐五类 Harness 的依据边界 |
 | 3.0.2 | 2026-08-31 | 使用规则表和动作式短句简化命名、发现、快照与信任分层说明；不改变 Skill 行为 |

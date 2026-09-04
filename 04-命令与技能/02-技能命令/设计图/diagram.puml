@@ -89,3 +89,39 @@ Replay -> Assembler : trusted Skill layer
 Replay -> Assembler : historical user arguments and attachments
 Current -[#gray,dashed]-> Replay : not consulted
 @enduml
+
+@startuml skill_name_validation
+title Target Strict Skill Name Validation
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+' Source evidence: pi-mono-java@0300541f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillNamePatterns.java:15-49
+' Source evidence: pi-mono-java@0300541f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillLoader.java:138-150
+' Source evidence: pi-mono-java@0300541f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java resolved
+' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/core/skills.ts loadSkillFromFile:320-344
+' Observed behavior: Java loading uses LEGACY while command discovery uses STRICT; pi warns but still loads invalid names.
+' Target-only design: all consumers use one strict Skill-domain rule; remove LEGACY loading.
+' Design reason: invalid names must not enter loaded Skills, model discovery, command catalogs, or execution.
+' Product constraint and security hardening: invalid existing names require correction before loading.
+
+component "SkillLoader\nload-time rejection" as Loader
+component "SkillCommandSource\ncommand discovery" as Discovery
+component "Skill command execution\nvalidate before acceptance" as Execution
+component "SkillNamePatterns\nSkill domain\nOne regex, Pattern, and length limit" as Rules
+
+Loader --> Rules : shared strict rule
+Discovery --> Rules : shared strict rule
+Execution --> Rules : shared strict rule
+
+note bottom of Rules
+^[a-z0-9]+(?:-[a-z0-9]+)*$
+Length: 1..64 characters, checked separately.
+No legacy rule or automatic name repair.
+end note
+
+note bottom of Loader
+Require a string name in SKILL.md.
+Require exact folder-name equality.
+Invalid files never enter the loaded collection.
+end note
+@enduml
