@@ -4,11 +4,15 @@
     "operationKey": "listSessionCommands",
     "method": "GET",
     "path": "/sessions/{sessionId}/commands",
-    "summary": "列出当前 Session 的 Builtin 和 Skill 命令",
-    "description": "Runtime 根据 Session 状态、模型能力和最新 complete Agent 版本生成命令清单。清单包含七个 Builtin 和当前 Agent 直接绑定的 skill:<name>，并保留暂时不可用的命令。available 表示不填参数时能否执行；input.available 表示填写参数时能否执行。响应不含 Slash 前缀、Skill ID、版本、正文或文件路径。该接口只读，不刷新 Agent，也不调用模型。",
+    "summary": "列出当前 Session 的七个 Builtin 命令",
+    "description": "只按 Session 持久化状态和 Builtin 准入策略生成七个 Builtin，按 name 稳定字典序排序。available 表示空参数调用，input.available 表示带参数调用。暂不可用命令仍保留。列表接口不触发 Agent 刷新、不读取动态 SkillCommandSource、不调用模型。所有列表字段均返回非 null 的列表，空值用 []。所有命令 acceptsFiles=false；当前不公开 Skill 命令。",
     "parameters": [
-      {"$ref": "parameters.sessionId"},
-      {"$ref": "parameters.acceptLanguage"}
+      {
+        "$ref": "parameters.sessionId"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
     ],
     "requestBody": {
       "required": false,
@@ -20,7 +24,7 @@
       {
         "status": "200",
         "label": "OK",
-        "summary": "返回全部已知命令。示例中 Session 正在运行：Model/Thinking 只能查看，Compact/Skill 不可执行。",
+        "summary": "返回七个 Builtin。示例中 Session 正在运行：Model/Thinking 只能查询，Compact 不可执行。",
         "headers": {
           "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
@@ -31,6 +35,21 @@
             "resMsg": "success",
             "result": {
               "commands": [
+                {
+                  "name": "compact",
+                  "kind": "builtin",
+                  "description": "压缩当前上下文",
+                  "available": false,
+                  "unavailableCode": "SESSION_BUSY",
+                  "input": {
+                    "mode": "none",
+                    "available": false,
+                    "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED",
+                    "acceptsFiles": false,
+                    "placeholder": null,
+                    "suggestions": []
+                  }
+                },
                 {
                   "name": "help",
                   "kind": "builtin",
@@ -43,37 +62,15 @@
                     "unavailableCode": null,
                     "acceptsFiles": false,
                     "placeholder": "command",
-                    "suggestions": ["help", "status", "name", "model", "thinking", "compact", "skills"]
-                  }
-                },
-                {
-                  "name": "status",
-                  "kind": "builtin",
-                  "description": "查看 Session 状态、模型和深度思考",
-                  "available": true,
-                  "unavailableCode": null,
-                  "input": {
-                    "mode": "none",
-                    "available": false,
-                    "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED",
-                    "acceptsFiles": false,
-                    "placeholder": null,
-                    "suggestions": []
-                  }
-                },
-                {
-                  "name": "name",
-                  "kind": "builtin",
-                  "description": "查看或修改 Session 名称",
-                  "available": true,
-                  "unavailableCode": null,
-                  "input": {
-                    "mode": "optional",
-                    "available": true,
-                    "unavailableCode": null,
-                    "acceptsFiles": false,
-                    "placeholder": "displayName",
-                    "suggestions": []
+                    "suggestions": [
+                      "compact",
+                      "help",
+                      "model",
+                      "name",
+                      "skills",
+                      "status",
+                      "thinking"
+                    ]
                   }
                 },
                 {
@@ -88,36 +85,24 @@
                     "unavailableCode": "SESSION_BUSY",
                     "acceptsFiles": false,
                     "placeholder": "modelId",
-                    "suggestions": ["claude-sonnet-4-5", "deepseek-v3-2"]
+                    "suggestions": [
+                      "claude-sonnet-4-5",
+                      "deepseek-v3-2"
+                    ]
                   }
                 },
                 {
-                  "name": "thinking",
+                  "name": "name",
                   "kind": "builtin",
-                  "description": "查看或切换深度思考",
+                  "description": "查看或修改 Session 名称",
                   "available": true,
                   "unavailableCode": null,
                   "input": {
                     "mode": "optional",
-                    "available": false,
-                    "unavailableCode": "SESSION_BUSY",
+                    "available": true,
+                    "unavailableCode": null,
                     "acceptsFiles": false,
-                    "placeholder": "on|off",
-                    "suggestions": ["on", "off"]
-                  }
-                },
-                {
-                  "name": "compact",
-                  "kind": "builtin",
-                  "description": "压缩当前上下文",
-                  "available": false,
-                  "unavailableCode": "SESSION_BUSY",
-                  "input": {
-                    "mode": "none",
-                    "available": false,
-                    "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED",
-                    "acceptsFiles": false,
-                    "placeholder": null,
+                    "placeholder": "displayName",
                     "suggestions": []
                   }
                 },
@@ -137,18 +122,36 @@
                   }
                 },
                 {
-                  "name": "skill:pdf",
-                  "kind": "skill",
-                  "description": "分析和生成 PDF 文档",
-                  "available": false,
-                  "unavailableCode": "SESSION_BUSY",
+                  "name": "status",
+                  "kind": "builtin",
+                  "description": "查看 Session 状态、模型和深度思考",
+                  "available": true,
+                  "unavailableCode": null,
+                  "input": {
+                    "mode": "none",
+                    "available": false,
+                    "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED",
+                    "acceptsFiles": false,
+                    "placeholder": null,
+                    "suggestions": []
+                  }
+                },
+                {
+                  "name": "thinking",
+                  "kind": "builtin",
+                  "description": "查看或切换深度思考",
+                  "available": true,
+                  "unavailableCode": null,
                   "input": {
                     "mode": "optional",
                     "available": false,
                     "unavailableCode": "SESSION_BUSY",
-                    "acceptsFiles": true,
-                    "placeholder": "request",
-                    "suggestions": []
+                    "acceptsFiles": false,
+                    "placeholder": "on|off",
+                    "suggestions": [
+                      "on",
+                      "off"
+                    ]
                   }
                 }
               ]
@@ -160,33 +163,41 @@
         "status": "400",
         "label": "Bad Request",
         "summary": "sessionId 不符合标识格式。",
-        "headers": {"Content-Language": "zh-CN"},
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "INVALID_SESSION_ID", "resMsg": "sessionId 格式不正确。"},
-          "en-US": {"resCode": "INVALID_SESSION_ID", "resMsg": "The sessionId format is invalid."}
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "sessionId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The sessionId format is invalid."
+          }
         }
       },
       {
         "status": "404",
         "label": "Not Found",
         "summary": "Session 不存在或已删除。",
-        "headers": {"Content-Language": "zh-CN"},
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "SESSION_NOT_FOUND", "resMsg": "指定的 Session 不存在。"},
-          "en-US": {"resCode": "SESSION_NOT_FOUND", "resMsg": "The specified Session does not exist."}
-        }
-      },
-      {
-        "status": "503",
-        "label": "Service Unavailable",
-        "summary": "当前 Agent 没有可用的 complete 快照，无法生成 Skill 命令清单。",
-        "headers": {"Content-Language": "zh-CN", "Retry-After": "3"},
-        "bodies": {
-          "zh-CN": {"resCode": "AGENT_NOT_AVAILABLE", "resMsg": "当前 Agent 运行时不可用。"},
-          "en-US": {"resCode": "AGENT_NOT_AVAILABLE", "resMsg": "The current Agent runtime is unavailable."}
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
         }
       }
     ]
   },
-  "review": {"questions": []}
+  "review": {
+    "questions": []
+  }
 }

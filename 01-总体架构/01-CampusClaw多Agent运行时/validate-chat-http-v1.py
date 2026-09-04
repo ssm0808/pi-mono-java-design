@@ -151,7 +151,7 @@ def validate_common_contract(common: dict[str, Any]) -> None:
     require(api.get("headerNaming") == "保留原名", "HTTP Header naming rule must preserve existing names")
     patterns = common.get("resourceIdPatterns", {})
     require(
-        set(patterns) == {"agent", "tool", "skill", "session", "command"},
+        set(patterns) == {"agent", "tool", "skill", "session"},
         "Typed resource ID patterns are incomplete",
     )
     valid_ids = {
@@ -159,7 +159,6 @@ def validate_common_contract(common: dict[str, Any]) -> None:
         "tool": "tool-550e8400e29b41d4a716446655440002",
         "skill": "skill-550e8400e29b41d4a716446655440001",
         "session": "session-550e8400e29b41d4a716446655440003",
-        "command": "command-550e8400e29b41d4a716446655440004",
     }
     for resource_type, pattern in patterns.items():
         require(re.fullmatch(pattern, valid_ids[resource_type]) is not None, f"Invalid {resource_type} ID pattern")
@@ -168,19 +167,15 @@ def validate_common_contract(common: dict[str, Any]) -> None:
         hyphenated_id = f"{resource_type}-550e8400-e29b-41d4-a716-446655440000"
         require(re.fullmatch(pattern, hyphenated_id) is None, f"{resource_type} pattern accepts UUID hyphens")
     command_names = common.get("commandNamePatterns", {})
-    require(set(command_names) == {"builtin", "skill"}, "Command name patterns are incomplete")
+    require(set(command_names) == {"builtin"}, "Command name patterns are incomplete")
     require(re.fullmatch(command_names["builtin"], "status") is not None, "Builtin name pattern is invalid")
     require(re.fullmatch(command_names["builtin"], "Status") is None, "Builtin names must be lowercase")
-    require(re.fullmatch(command_names["skill"], "skill:pdf") is not None, "Skill name pattern is invalid")
-    require(re.fullmatch(command_names["skill"], "pdf") is None, "Skill names must use the skill: namespace")
-    for invalid_name in ("skill:-pdf", "skill:pdf-", "skill:pdf--tools", "skill:PDF"):
-        require(re.fullmatch(command_names["skill"], invalid_name) is None,
-                f"Skill name pattern accepts an invalid name: {invalid_name}")
+    for invalid_name in ("-status", "status-", "session--status", "skill:pdf", "Status"):
+        require(re.fullmatch(command_names["builtin"], invalid_name) is None,
+                f"Builtin name pattern accepts an invalid name: {invalid_name}")
     require(common.get("commandLimits") == {
-        "skillNameCharacters": 64,
-        "skillCommandNameCharacters": 70,
+        "builtinNameCharacters": 64,
         "argumentsUtf16CodeUnits": 262144,
-        "fileIds": 32,
     }, "Command limits differ from the confirmed contract")
     agent_parameter = common["parameters"]["agentId"]
     require(agent_parameter["name"] == "agentId", "Agent path parameter must use lowerCamelCase")
@@ -317,7 +312,7 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
         validate_public_field_names(key, operation)
         require(operation["responses"], f"Operation has no responses: {key}")
         validate_response_contract(
-            patterns["agent"], patterns["session"], patterns["command"], key, operation
+            patterns["agent"], patterns["session"], key, operation
         )
     require(operations == EXPECTED_OPERATIONS, "Operation inventory differs from the confirmed contract")
 
@@ -358,7 +353,6 @@ def validate_payload_keys(value: Any, context: str) -> None:
 def validate_response_contract(
     agent_pattern: str,
     session_pattern: str,
-    command_pattern: str,
     key: tuple[str, str],
     operation: dict[str, Any],
 ) -> None:
@@ -368,9 +362,8 @@ def validate_response_contract(
     for session_id in values_for_key(operation["responses"], "sessionId"):
         require(isinstance(session_id, str) and re.fullmatch(session_pattern, session_id) is not None,
                 f"Invalid Session ID response example: {key}")
-    for command_id in values_for_key(operation["responses"], "commandId"):
-        require(isinstance(command_id, str) and re.fullmatch(command_pattern, command_id) is not None,
-                f"Invalid Command ID response example: {key}")
+    require(not list(values_for_key(operation["responses"], "commandId")),
+            f"Public commandId is forbidden: {key}")
     require(all(response["status"] != "403" for response in operation["responses"]),
             f"Service-local FORBIDDEN response is not implemented: {key}")
     for response in operation["responses"]:
@@ -431,53 +424,63 @@ def validate_response_contract(
     elif key == ("GET", "/sessions/{sessionId}/commands"):
         success = next(response for response in operation["responses"] if response["status"] == "200")
         commands = success["bodies"]["zh-CN"]["result"]["commands"]
-        names = {command["name"] for command in commands}
-        require(
-            {"help", "status", "name", "model", "thinking", "compact", "skills", "skill:pdf"} <= names,
-            "Command catalog example is incomplete",
-        )
+        names = [command["name"] for command in commands]
+        require(names == ["compact", "help", "model", "name", "skills", "status", "thinking"],
+                "Builtin command catalog must contain exactly seven sorted entries")
+        require(all(command["kind"] == "builtin" for command in commands),
+                "Command catalog must not expose Skill commands")
+        require(all(command["input"]["acceptsFiles"] is False for command in commands),
+                "Builtin command catalog must reject files")
+        require(all(isinstance(command["input"]["suggestions"], list) for command in commands),
+                "Catalog suggestions must be non-null lists")
         model = next(command for command in commands if command["name"] == "model")
         require(model["available"] is True and model["input"]["available"] is False,
                 "Running model descriptor must separate query and input availability")
         require(model["input"]["unavailableCode"] == "SESSION_BUSY",
                 "Running model input must expose SESSION_BUSY")
-        skill = next(command for command in commands if command["name"] == "skill:pdf")
-        require(skill["kind"] == "skill" and skill["input"]["acceptsFiles"] is True,
-                "Skill catalog descriptor must advertise file support")
+        require(not any(code == "AGENT_NOT_AVAILABLE" for _, code in response_codes(operation)),
+                "Builtin catalog must not depend on an Agent snapshot")
     elif key == ("POST", "/sessions/{sessionId}/command"):
-        expected_example_headers = {
-            "jwt": {"X-HW-ID", "Authorization", "access-token"},
-            "appkey": {"X-HW-ID", "X-HW-APPKEY", "access-token"},
-        }
-        for example in operation["requestHeaderExamples"]:
-            names = {header["name"] for header in example["headers"]}
-            require(names == expected_example_headers.get(example["id"]),
-                    f"POST Command Header mode differs: {example['id']}")
-        for required_phrase in ("只在内存中保留到本次命令处理", "Mate tool execute",
-                                "不写入 Session、事件或日志", "工具发现"):
-            require(required_phrase in operation["description"],
-                    f"POST Command credential boundary is incomplete: {required_phrase}")
-        require(set(operation["requestBody"]["example"]) == {"name", "arguments", "fileIds"},
-                "POST Command request must contain only name, arguments, and fileIds")
+        for phrase in ("只在内存中保留到本次命令处理", "Mate tool execute",
+                       "不写入 Session、事件或日志", "工具发现", "Active Holder"):
+            require(phrase in operation["description"], f"Missing credential boundary: {phrase}")
+        require(set(operation["requestBody"]["example"]) == {"name", "arguments"},
+                "POST Command request must contain only name and arguments")
+        for phrase in ("262144", "fileIds", "If-Match", "Idempotency-Key"):
+            require(phrase in operation["requestBody"]["description"],
+                    f"POST Command request contract is incomplete: {phrase}")
         codes = response_codes(operation)
         for expected in {
-            ("400", "INVALID_COMMAND_REQUEST"),
-            ("404", "COMMAND_NOT_FOUND"),
-            ("409", "SESSION_BUSY"),
-            ("503", "SKILL_SNAPSHOT_UNAVAILABLE"),
-            ("500", "COMMAND_ACCEPTANCE_FAILED"),
+            ("400", "INVALID_COMMAND_REQUEST"), ("404", "COMMAND_NOT_FOUND"),
+            ("409", "SESSION_BUSY"), ("422", "AGENT_NOT_AVAILABLE"),
+            ("422", "MODEL_NOT_AVAILABLE"), ("422", "THINKING_NOT_SUPPORTED"),
+            ("500", "COMMAND_EXECUTION_FAILED"), ("500", "SESSION_NAME_UPDATE_FAILED"),
+            ("503", "MANAGER_UNAVAILABLE"), ("503", "RUNTIME_CAPACITY_EXCEEDED"),
         }:
             require(expected in codes, f"POST Command is missing {expected}")
-        streams = [response["bodies"]["default"] for response in operation["responses"]
-                   if response["status"] == "200" and "default" in response.get("bodies", {})]
-        joined = "\n".join(streams)
-        for event_type in (
-            "command.started", "command.completed", "command.failed", "session.name.changed"
-        ):
-            require(f"event: {event_type}" in joined, f"POST Command is missing {event_type}")
-        require("event: stream.error" in joined, "POST Command stream failure is missing stream.error")
-        failed_stream = next(stream for stream in streams if "event: command.failed" in stream)
-        require("event: stream.end" not in failed_stream, "Failed command stream must not emit stream.end")
+        successes = [response for response in operation["responses"] if response["status"] == "200"]
+        results = [next(iter(response["bodies"].values()))["result"] for response in successes]
+        expected_fields = {
+            "help": {"command", "commands"},
+            "status": {"command", "state", "modelId", "thinking"},
+            "name": {"command", "displayName", "changed"},
+            "model": {"command", "currentModelId", "models", "changed", "sourceEventSeq"},
+            "thinking": {"command", "thinking", "changed", "sourceEventSeq"},
+            "compact": {"command", "compacted", "sourceEventSeq"},
+            "skills": {"command", "skills"},
+        }
+        require({result["command"] for result in results} == set(expected_fields),
+                "POST Command must document all seven typed success results")
+        for result in results:
+            require(set(result) == expected_fields[result["command"]], "Unexpected success fields")
+        for response in successes:
+            require(response["headers"].get("Content-Type") == "application/json",
+                    "POST Command success must use ordinary JSON")
+            require(response["headers"].get("Cache-Control") == "no-store", "Missing no-store")
+            require("default" not in response["bodies"], "POST Command must not contain SSE bodies")
+        serialized = json.dumps(operation, ensure_ascii=False)
+        require("event: command." not in serialized and "event: stream." not in serialized,
+                "POST Command must not expose request-scoped SSE lifecycle events")
     elif key == ("GET", "/sessions/{sessionId}/events"):
         success = next(response for response in operation["responses"] if response["status"] == "200")
         event_types = {event["type"] for event in success["bodies"]["en-US"]["result"]["events"]}

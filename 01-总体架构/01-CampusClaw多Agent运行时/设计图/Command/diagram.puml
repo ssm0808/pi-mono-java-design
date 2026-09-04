@@ -1,48 +1,47 @@
 @startuml command_http_flow
-title Runtime Structured Command HTTP Flow
+title Target-only Builtin JSON HTTP Flow
+' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java getSession.
+' Architecture change: command routes use ResultBean JSON and no request SSE.
 skinparam shadowing false
-
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:39-40
-' Source evidence: codex@be33f80b codex-rs/app-server-protocol/src/protocol/common.rs:528-532,577-581,657-661
-' Observed behavior: Runtime has HTTP Session endpoints but no command endpoints; Codex App Server uses structured operations.
-' Target design: add catalog and execution operations without parsing slash text in Runtime.
-
 actor Caller
-participant CommandController as Controller
-participant CommandCatalogService as Catalog
-participant CommandExecutionService as Execution
-participant CompositeCommandRegistry as Registry
-
-Caller -> Controller : GET /sessions/{sessionId}/commands
-Controller -> Catalog : list(sessionId)
-Catalog -> Registry : list(context)
-Registry --> Catalog : descriptors
-Catalog --> Controller : ResultBean payload
-Controller --> Caller : HTTP 200 JSON
-
-Caller -> Controller : POST /sessions/{sessionId}/command\n{name, arguments, fileIds}
-Controller -> Execution : execute(invocation)
-Execution -> Registry : find(context, name)
-Execution --> Controller : request-scoped event stream
-Controller --> Caller : SSE command and domain events
+participant Controller
+participant Application
+participant Registry
+participant Handler
+participant "Narrow service" as Service
+Caller -> Controller : GET commands or POST command
+Controller -> Application : validated VO, locale, headers
+Application -> Registry : resolve once with BUILTIN filter
+Registry --> Application : immutable catalog
+alt GET
+  Application --> Controller : CommandListResponseVO
+else POST
+  Application -> Handler : selected definition and same catalog
+  Handler -> Service : recheck mutable state under owning lock
+  Service --> Handler : command-specific DTO
+  Handler --> Application : command result
+  Application --> Controller : immutable response VO
+end
+Controller --> Caller : ResultBean application/json
 @enduml
 
-@startuml command_sidecar_query
-title Runtime Active Path and Sidecar Query
+@startuml command_authoritative_state
+title Target-only Command Recovery Boundary
+' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql.
+' Design reason: synchronous JSON results need no generic command lifecycle storage.
 skinparam shadowing false
-
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml:132-190
-' Observed behavior: current recursive query returns only active-leaf ancestors.
-' Target design: merge sidecars anchored to any active-path entry and order by entry_seq.
-
-database t_sessions as Sessions
-database t_session_entries as Entries
-participant RuntimeEventQueryService as Query
-
-Query -> Sessions : read active_leaf_id
-Query -> Entries : recursive active path
-Entries --> Query : path entry ids
-Query -> Entries : sidecars whose anchor is on path
-Entries --> Query : command.* and session.name.changed
-Query -> Query : union and order by entry_seq
+rectangle "Name" as Name
+rectangle "Model / Thinking / Compact" as Domain
+database "Current Session state" as State
+database "Existing domain Entries" as Entries
+rectangle "GET Session / GET Events" as Query
+Name --> State : displayName and version only
+Domain --> State : atomic state changes
+Domain --> Entries : append only when changed
+Query --> State
+Query --> Entries
+note bottom
+No commandId, command.started, command.completed, command.failed,
+or session.name.changed sidecar.
+end note
 @enduml
