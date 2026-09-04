@@ -4,20 +4,22 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.3.0 |
+| 文档版本 | 1.3.1 |
 | 更新日期 | 2026-09-04 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
-| 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，未合并；828 模块行 / 1656 总代码行 |
+| 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`；已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并；828 模块行 / 1656 总代码行 |
 | Command GET 候选 | `7759481a1722422395d46564129827c6ee6df204`（未发布） |
 | 状态 | 用户确认的目标设计；公开实现为 target-only |
 
 ## 1. 当前目标
 
-Runtime HTTP v1 只公开 `help`、`status`、`name`、`model`、`thinking`、
+本会话的 Builtin 开发切片负责 `help`、`status`、`name`、`model`、`thinking`、
 `compact`、`skills` 七个 Builtin。GET 命令清单按名称稳定字典序返回，
-POST Command 使用普通 ResultBean JSON；Skill Command 执行另立后续设计。
+POST Command 使用普通 ResultBean JSON。
+
+本会话只负责七个 Builtin；Skill Command 由其他同事并行开发，不是延期或禁用。Builtin 来源视图、参数规则和验收不得提升为整个产品的 Skill 限制。共享 GET/POST 的最终命名、请求联合类型和清单合并需在 HTTP 发布前与 Skill 开发线对齐；本次不代替同事设计 Skill 执行细节。
 
 `/` 只在交互层使用。POST 只接收 `name + arguments`，不接收附件或整段 Slash 文本。
 普通 POST Events 不解析 Slash，既有请求级 SSE 行为不变。
@@ -41,7 +43,7 @@ POST Command 使用普通 ResultBean JSON；Skill Command 执行另立后续设�
 | d84dd3d6：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java` | Model/Thinking 与 HTTP If-Match 绑定 | 提取可选 expectedVersion 的窄服务 |
 | d84dd3d6：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java`；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionHolder.java` | 活动执行、控制队列与清理已存在 | Compact 复用生命周期，单独完成 JSON Future |
 
-最新前置候选 `9d0d76f4`（非 main）已将发现数据改为
+已合并的前置实现 `9d0d76f4`（main 合并点 `a8192e04`）已将发现数据改为
 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/ResolvedCommandDTO.java`
 与同包 `SkillCommandSnapshotDTO.java`，并由 InputDTO 复制 suggestions、Catalog 复制外层列表。
 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillNamePatterns.java`
@@ -83,7 +85,7 @@ Controller 不依赖 Repository、Registry、Holder 或内部 DTO。Spring 单�
 
 - `resolve(context, BUILTIN)` 在调用 Source 前过滤类型，Builtin 查询不调用 SkillCommandSource。
 - 七个 Contributor 各自贡献元数据、准入策略和 Handler；启动期重名直接失败。
-- Skill Definition 只供展示，不安装抛错的伪 Handler。
+- 当前发现层的 Skill Definition 只供展示，不安装抛错的伪 Handler；真实执行定义由同事并行扩展，不强制复用 Builtin 类型。
 - 新增命令不修改中央名称 switch；结果类型分派只能出现在 DTO→VO 组装器。
 - 内部结果使用 DTO，响应使用只读 `@Getter` 与 final 字段的独立 VO。
 - 参数缺省只在 Service 归一；标准输入约束放在请求 VO/API 参数并实际触发 Jakarta 校验。
@@ -92,7 +94,7 @@ Controller 不依赖 Repository、Registry、Holder 或内部 DTO。Spring 单�
 
 Application 依次完成 Session 访问检查、arguments 归一、单次 Catalog 解析、名称精确查找、
 参数与预览准入、锁内重新检查、Handler 和结果组装。合法但未注册名称为 COMMAND_NOT_FOUND；
-skill:* 不符合本期名称格式，返回 INVALID_COMMAND_REQUEST。
+Builtin 名称格式不覆盖 skill:*；公共入口不能据此拒绝独立开发线的 Skill 名称。
 
 ![权威状态](设计图/authoritative_command_state.svg)
 
@@ -118,6 +120,7 @@ Mate Header 不记录、不持久化、不进入 Prompt；Compact 仅在本次 A
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.1 | 2026-09-04 | 用户澄清 Skill 由同事并行开发；撤销产品延期/禁用解释，将 Builtin-only 规则限定为本会话切片；更新 PR #210 已合并状态。 |
 | 1.3.0 | 2026-09-04 | Builtin-only 普通 JSON；Skill 执行延期；单次 Catalog、窄服务、无通用命令历史和串行 PR 预算。 |
 | 1.2.0 | 2026-09-03 | 重做 Slash Command 目标类图：分别表达分层与对象生命周期、注册解析与扩展关系；明确 Controller/Application/Command Core/Runtime Adapter 边界、请求级清单快照、凭据生命周期、DTO/VO 隔离和无中央分派约束 |
 | 1.1.0 | 2026-09-03 | 复核 `3004419a` 发现层与 `fb49e86d` GET 清单；引入单次请求 `ResolvedCommandCatalog` 快照和只读执行上下文，移除 Source 级别 find 职责，并明确 Definition 不直接封装可变 Descriptor DTO |

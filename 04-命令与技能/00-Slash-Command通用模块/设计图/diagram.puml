@@ -61,8 +61,8 @@ ResolvedCommandCatalog *-- "0..*" CommandDefinition
 CommandExecutionContext o-- "1" ResolvedCommandCatalog
 CommandHelpFormatter --> CommandExecutionContext : use same catalog
 note right of SkillCommandDefinition
-Display-only definition.
-No fake Handler.
+Current discovery definition.
+No fake Handler; execution is parallel work.
 Excluded before source resolution
 for BUILTIN requests.
 end note

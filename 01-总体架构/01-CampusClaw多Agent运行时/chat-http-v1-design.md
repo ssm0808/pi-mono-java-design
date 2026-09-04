@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.44.0 |
-| 状态 | 十三个内部 operation 已确认；操作 12、13 收敛为七个 Builtin 与普通 JSON，Skill 执行延期 |
-| 接口评审状态 | 十三个 operation 均已确认 |
+| 文档版本 | 1.44.1 |
+| 状态 | 十三个内部 operation 已确认；操作 12、13 保留已确认的 Builtin JSON 行为；Skill 由其他同事并行开发 |
+| 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；跨 Builtin/Skill 的最终共享命令入口在发布前对齐 |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，由精确契约源生成 |
 | 对外机器契约 | 不维护；结构化 JSON 只作为 HTML 生成源，不替代已废弃 OpenAPI |
@@ -28,7 +28,7 @@
 | Agent Skills 规范核对 | 2026-09-01；名称、Skill 文件夹和 `SKILL.md` frontmatter 规则 |
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Registry 初始候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599` |
-| Registry 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，未合并；最新差距见通用模块证据表 |
+| Registry 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并；最新差距见通用模块证据表 |
 | GET 候选实现 | `7759481a1722422395d46564129827c6ee6df204`，未发布，不能作为已上线契约 |
 | 更新日期 | 2026-09-04 |
 
@@ -41,8 +41,9 @@
 
 HTTP 现有十三个 operation，其中两个用于 Slash Command：查看命令清单和执行命令。
 普通消息接口不解析 Slash 文本。交互层命中命令清单后，才调用 Command API。
-v1 只开放 help、status、name、model、thinking、compact、skills 七个 Builtin。
-Skill、Extension 和 Prompt 执行均不开放；POST Command 在 Handler 完成后返回普通 ResultBean JSON。
+本会话实现 help、status、name、model、thinking、compact、skills 七个 Builtin。
+Skill Command 由其他同事并行开发；Extension 和 Prompt 执行不在本次范围。
+Builtin POST 在 Handler 完成后返回普通 ResultBean JSON。
 `/name` 归 CampusClaw Session；mate-service 只保存 Chat→Session 映射。
 
 调用方仍是 `mate-service` Runtime bridge 或明确获授权的内部服务端 SDK。
@@ -908,6 +909,8 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 
 ### 2.6 Built-in Command（已确认，目标实现）
 
+本会话只负责七个 Builtin；Skill Command 由其他同事并行开发，不是延期或禁用。Builtin 来源视图、参数规则和验收不得提升为整个产品的 Skill 限制。共享 GET/POST 的最终命名、请求联合类型和清单合并需在 HTTP 发布前与 Skill 开发线对齐；本次不代替同事设计 Skill 执行细节。
+
 | 接口简称 | operationKey | Method | Path | 语义 |
 |---|---|---|---|---|
 | 查看命令清单 | `listSessionCommands` | `GET` | `/sessions/{sessionId}/commands` | 七个 Builtin 按名称字典序返回，不刷新 Agent、不调用 SkillCommandSource |
@@ -919,15 +922,15 @@ ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约�
 Controller 只收发 VO；Application 负责授权、归一化、解析、准入、执行及 DTO→VO，
 不得使用命令名称中央 switch。只读响应 VO 使用 `@Getter` 与 final 字段。
 
-GET 的 commands 固定为 compact、help、model、name、skills、status、thinking；
+本切片的 Builtin commands 固定为 compact、help、model、name、skills、status、thinking；
 命令不可用仍展示，所有列表非 null，所有 input.acceptsFiles=false。顶层 available
 表示空参数行为，input.available 表示带参数行为；running 时 Model/Thinking 可查不可改。
 Skills 无最新完整绑定快照时执行返回 AGENT_NOT_AVAILABLE，完整空快照返回 []。
 
-POST 的 name 必填，长度 1～64，匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，不含前导 /。
+Builtin 请求的 name 必填，长度 1～64，匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，不含前导 /。
 arguments 省略或 null 由 Service 归一为 ""，最大 262144 个 UTF-16 代码单元。
 拒绝 fileIds、其他未知字段、If-Match 和 Idempotency-Key，返回 INVALID_COMMAND_REQUEST。
-合法但未注册名称返回 COMMAND_NOT_FOUND；skill:* 因格式不合法返回 INVALID_COMMAND_REQUEST。
+合法但未注册的 Builtin 名称返回 COMMAND_NOT_FOUND；该正则不定义 Skill 命名，不能据此禁止 skill:*。
 边界格式使用 Jakarta Bean Validation，状态与跨记录规则由 Service 执行。
 
 ![Command HTTP 接口与应用服务](设计图/Command/command_http_flow.svg)
@@ -983,7 +986,7 @@ POST Command 读取的 Mate Header 不进入日志、Prompt、Event 或存储。
 分层、各命令行为、分批 PR 和完整验收以
 [通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)、
 [内置命令](../../04-命令与技能/01-内置命令/README.md)、
-[Skill 延期说明](../../04-命令与技能/02-技能命令/README.md) 为依据。
+[Skill 并行开发说明](../../04-命令与技能/02-技能命令/README.md) 为依据。
 
 ## 3. 两跳 HTTP 与消息 SSE 边界
 
@@ -1261,8 +1264,8 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 
 | 分类 | 证据或决策 |
 |---|---|
-| 本轮观察证据 | `d84dd3d6` 的配置、Repository、Runtime Holder 与 Projector 以及 PR #210 Registry 源码，完整路径和符号见 [通用模块证据表](../../04-命令与技能/00-Slash-Command通用模块/README.md#2-源码证据与差距)；PR #210 尚未合并，不能标记已上线 |
-| 产品约束 | 本阶段只公开七个 Builtin、普通 JSON、无附件；Skill 执行延期。与 pi/OpenCode 的交互能力不同，不照搬上游命令全集 |
+| 本轮观察证据 | `d84dd3d6` 的配置、Repository、Runtime Holder 与 Projector 以及 PR #210 Registry 源码，完整路径和符号见 [通用模块证据表](../../04-命令与技能/00-Slash-Command通用模块/README.md#2-源码证据与差距)；PR #210 已合并，但发现层不等于公开 HTTP 执行能力 |
+| 产品约束 | 本会话负责七个 Builtin、普通 JSON、无附件；Skill 由同事并行开发。与 pi/OpenCode 的交互能力不同，不照搬上游命令全集 |
 | 架构变化 | Name 只保存当前状态；Model/Thinking/Compact 复用既有领域 Entry；不采用 DeepSeek 的通用命令生命周期存储；Compact 独立终态句柄复用 Runtime 生命周期 |
 | 观察到的历史 Java 行为 | CampusClaw `c1311f69` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/SlashCommandRegistry.java:21-67` 使用可变 Map，并在 Registry 内解析整段 Slash 文本；`SlashCommandSession.java:19-32` 暴露宽泛可变 Session 门面 |
 | 观察到的当前 Java 行为 | 同基线 `RuntimeSessionConfigurationService.java:78-163` 已有模型和 thinking 的查询/更新规则；`RuntimeSessionMapper.xml:132-190` 只查活动分支祖先，`session_schema.sql` 的 `t_sessions` 尚无 `display_name`，`t_session_records` 也尚无 `skill.snapshot` 记录 |
@@ -1340,7 +1343,7 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 | 产品约束 | Path、Query、JSON 与 SSE data 字段只使用 lowerCamelCase；HTTP Header 保留原名；事件类型值、错误码、枚举值和类型化 ID 值不改变，也不接受 snake_case 字段别名 |
 | 产品约束 | Agent、Tool、Skill、Session ID 分别使用 `agent-`、`tool-`、`skill-`、`session-` 加去连字符的 32 位十六进制 UUID；字段命名变化不得引入不同的 ID 值或旧格式别名 |
 | 产品约束 | Create Runtime Session 成功时必须返回并持久化 `thinking=true` |
-| 产品约束 | CampusClaw 不再提供 CLI/TUI/OneShot/RPC/ACP 产品入口；首版仅通过 HTTP 开放七个 Builtin；Skill 执行延期，不开放 Extension 或 Prompt Command |
+| 产品约束 | CampusClaw 不再提供 CLI/TUI/OneShot/RPC/ACP 产品入口；本会话通过 HTTP 交付七个 Builtin，Skill 由同事并行开发；不开放 Extension 或 Prompt Command |
 | 架构变更 | 目标用不可变 Definition、Strategy Handler、Composite Registry、Contributor 和 Admission Policy 取代当前可变 Registry、宽泛 `SlashCommandSession` 和集中分支；新增命令只添加 Contributor/Handler |
 | 架构变更 | 当前 `displayName` 与 `resourceVersion` 归 CampusClaw Session 领域所有；不写 Name Entry，mate-service 不保存名称副本 |
 | 安全边界 | Claw 不解析用户凭据 ID、Bearer 或 AppKey，也不判断两类身份凭据是否互斥或真实；POST Events/Command 从请求读取四项 Header，只在内存中保留到本次 Agent 执行或命令处理结束，不持久化或记录；发现、模型及其他请求无凭据，只有实际 Mate tool execute 原名发送已提供值 |
@@ -1378,7 +1381,7 @@ Runtime 本地认证、请求体删除 `type` 和 thinking 事件可见性；1.3
 wire fields、1.39 的公共压缩/Usage/领域事件/工具 delta/refresh 懒校准、1.40 的
 pi 压缩细节与 failed.aborted，1.41 的重试候选持久化排除和实际输出上限，
 1.42 的 POST Events `access-token` 和“只有 Mate execute 透传”安全边界，以及
-1.44.0 的七个 Builtin JSON operation 与 displayName 均为目标设计，不得表述成已实现。
+1.44.1 的七个 Builtin JSON operation 与 displayName 均为目标设计，不得表述成已实现。
 1.43.x 的请求级 Command SSE、Name 边车和 Skill 执行方案已被取代，不得据其开发。
 mate-service 旧公共命令方案标记为已废止的历史 target-only design，新公共协议待独立评审。
 
@@ -1386,6 +1389,7 @@ mate-service 旧公共命令方案标记为已废止的历史 target-only design
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.44.1 | 2026-09-04 | 澄清 Skill Command 由其他同事同步开发；撤销整体延期/拒绝解释，保留 Builtin 行为并将名称和清单限制限定为 Builtin 切片；共享 HTTP 发布前整合双方契约。 |
 | 1.44.0 | 2026-09-04 | 按操作 12→13 收敛七个 Builtin 与普通 JSON；延期 Skill 执行，删除通用生命周期和 Name 边车；明确 Compact 终态、队列与凭据寿命；补充分层、串行 PR 与源码证据。 |
 | 1.43.5 | 2026-09-03 | 十三个接口统一使用当前源码测试中的具体 Header 示例；明确 `X-HW-ID` 是用户凭据 ID，不是公司、服务或应用标识；仅在 POST Events/Command 说明凭据的内存保留期限、Mate tool execute 发送范围和禁止落盘范围。 |
 | 1.43.4 | 2026-09-01 | Slash Command 统一使用“命令清单”；Skill 文件位置统一表述为“文件夹”；同步内部和公共审查文案。 |

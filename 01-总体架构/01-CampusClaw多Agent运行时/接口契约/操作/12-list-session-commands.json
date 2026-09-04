@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}/commands",
     "summary": "列出当前 Session 的七个 Builtin 命令",
-    "description": "只按 Session 持久化状态和 Builtin 准入策略生成七个 Builtin，按 name 稳定字典序排序。available 表示空参数调用，input.available 表示带参数调用。暂不可用命令仍保留。列表接口不触发 Agent 刷新、不读取动态 SkillCommandSource、不调用模型。所有列表字段均返回非 null 的列表，空值用 []。所有命令 acceptsFiles=false；当前不公开 Skill 命令。",
+    "description": "本页展示已确认的 Builtin 开发切片；Skill Command 由其他同事并行开发，最终公共清单在 HTTP 发布前整合双方契约，不代表 Skill 延期或禁用。Builtin 视图只按 Session 持久化状态和 Builtin 准入策略生成七个 Builtin，按 name 稳定字典序排序。available 表示空参数调用，input.available 表示带参数调用。暂不可用命令仍保留。列表接口不触发 Agent 刷新、不读取动态 SkillCommandSource、不调用模型。所有列表字段均返回非 null 的列表，空值用 []。本页 Builtin 命令 acceptsFiles=false；该规则不定义 Skill 执行契约。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
