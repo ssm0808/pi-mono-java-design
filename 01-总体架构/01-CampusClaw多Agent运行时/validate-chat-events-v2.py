@@ -20,6 +20,7 @@ CONFIRMED_CHOICES = {
     "M1-transport": "single-post-sse",
     "M2-receipt": "A-user-event-first",
     "M3-close-rule": "idle-closes-including-confirming",
+    "M4-interrupt-delivery": "original-output-and-interrupt-receipt-shared-idle",
     "S1-frame-format": "A-data-only",
     "S2-event-projection": "A-type-and-phase",
 }
@@ -28,6 +29,7 @@ RESPONSE_INPUTS = {
     "200-confirming": "user.message",
     "200-tool-confirmation": "user.tool_confirmation",
     "200-interrupt": "user.interrupt",
+    "200-message-interrupted": "user.message",
 }
 
 def require(condition: bool, message: str) -> None:
@@ -181,6 +183,12 @@ def validate_model(model: dict) -> None:
                 all_types.add(event["type"])
             require(frames[-1]["type"] == "session.status_idle", "normal-close example must end at matching idle")
     require(set(RESPONSE_INPUTS).issubset(response_ids), "examples must cover message, confirming, confirmation and interrupt")
+    streams = {item["id"]: parse_stream(item["bodies"]["default"])
+               for item in operation["responses"] if item["status"] == "200"}
+    interrupt = streams["200-interrupt"]
+    require(len(interrupt) == 2, "interrupt response must contain only its receipt and matching stop idle")
+    require(streams["200-message-interrupted"][-1] == interrupt[-1],
+            "original and interrupt responses must deliver the same idle event, including eventId")
     require(receipt_types == USER_EVENT_TYPES and all_types == STREAM_TYPES, "missing receipt or basic output examples")
     require(review.get("confirmedChoices") == CONFIRMED_CHOICES, "preserve exact confirmed transport/receipt/closing/S1/S2")
     require(set(review["confirmedEventTypes"]) == STREAM_TYPES, "confirmed output type names changed")
@@ -189,6 +197,7 @@ def validate_model(model: dict) -> None:
     require("合并接口评审中" in review["status"], "do not mark merged operation fully confirmed")
     require("完整 user.* 首帧回执已确认" in review["status"], "receipt approval must be visible")
     require("结束规则已确认" in review["status"], "closing approval must be visible")
+    require("中断推送分工已确认" in review["status"], "interrupt delivery approval must be visible")
     require("等待工具确认时也关闭" in operation["description"], "confirmation wait must also close the response")
     require("idle reason" in " ".join(review["pendingReview"]), "closing approval must not confirm reason literals")
     require("三种用户事件均必须携带 access-token" in review["notice"], "preserve three-type token rule")
@@ -236,6 +245,14 @@ def validate_negative_regressions(model: dict) -> int:
         default=confirming + ": ping\n\n"))
     changed("output after confirmation idle", lambda m: m["operation"]["responses"][confirming_index]["bodies"].update(
         default=confirming + rest.split("\n\n", 1)[0] + "\n\n"))
+    interrupt_index = next(index for index, response in enumerate(model["operation"]["responses"])
+                           if response["id"] == "200-interrupt")
+    interrupt = model["operation"]["responses"][interrupt_index]["bodies"]["default"]
+    interrupt_receipt, interrupt_idle = interrupt.split("\n\n", 1)
+    changed("agent output copied to interrupt", lambda m: m["operation"]["responses"][interrupt_index]["bodies"].update(
+        default=interrupt_receipt + "\n\n" + rest.split("\n\n", 1)[0] + "\n\n" + interrupt_idle))
+    changed("different stop eventId", lambda m: m["operation"]["responses"][interrupt_index]["bodies"].update(
+        default=interrupt.replace('"eventId":"38e397c80d5a4f3ba7916df3bbf0a936"', '"eventId":"different-idle"')))
     for label, candidate in mutations:
         try:
             validate_model(candidate)
@@ -265,7 +282,7 @@ def validate_review_pages() -> None:
     validator.validate_executable_script(scripts[0])
     visible = " ".join(parser.visible_text)
     for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "未整体确认合并接口",
-                 "结束规则已确认", "等待工具确认时也关闭"):
+                 "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认"):
         require(text in visible, f"no-JavaScript page is missing {text}")
     require("data-question-id=" not in source, "confirmed receipt must not remain a question")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")

@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "一次 POST 提交用户事件，在同一响应中接收 SSE",
-    "description": "已确认合并方向：POST 同时承担事件提交和对应推送，不再提供独立 GET /events/stream；GET /events 的 ListEvents 历史查询仍保留。每次提交 user.message、user.interrupt、user.tool_confirmation 中的一条，响应为 200 text/event-stream，而不是独立 ResultBean JSON。三种用户事件均必须携带 access-token。event 包装、content[]、eventId、不公开 entryId/entrySeq/runId/executionId、Header 示例与安全边界继续有效。五个基础类型名及 S1 data-only、S2 type + phase 继续有效。已确认首个业务帧返回本次提交的完整 user.* 事件（含 eventId），仅一次；后续才推送对应的 Agent/Session 事件。这明确调整原 S3，不广播其他用户输入，也不额外包装 ResultBean。当前候选是请求范围 SSE，输出只绑定本次消息、确认续跑或中断目标，不跨后续无关执行；结束规则已确认：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭；之后通过新的 user.tool_confirmation POST 接收续跑结果。等待确认不是任务成功，不相关的 Session idle 不能结束本次响应。三类请求绑定方式、idle reason 具体取值及错误行为仍待评审。断线不取消已接受的执行、不自动重发 POST，通过 ListEvents 对账。未整体确认合并接口，也未修改 CampusClaw 实现或 Mate 公共契约。",
+    "description": "已确认合并方向：POST 同时承担事件提交和对应推送，不再提供独立 GET /events/stream；GET /events 的 ListEvents 历史查询仍保留。每次提交 user.message、user.interrupt、user.tool_confirmation 中的一条，响应为 200 text/event-stream，而不是独立 ResultBean JSON。三种用户事件均必须携带 access-token。event 包装、content[]、eventId、不公开 entryId/entrySeq/runId/executionId、Header 示例与安全边界继续有效。五个基础类型名及 S1 data-only、S2 type + phase 继续有效。已确认首个业务帧返回本次提交的完整 user.* 事件（含 eventId），仅一次；后续才推送对应的 Agent/Session 事件。这明确调整原 S3，不广播其他用户输入，也不额外包装 ResultBean。当前候选是请求范围 SSE，输出只绑定本次消息、确认续跑或中断目标，不跨后续无关执行；结束规则已确认：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭；之后通过新的 user.tool_confirmation POST 接收续跑结果。等待确认不是任务成功，不相关的 Session idle 不能结束本次响应。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。执行目标绑定、跨实例定位、并发竞争、idle reason 具体取值及错误行为仍待评审；本次未选择粘性路由或内部转交方案。断线不取消已接受的执行、不自动重发 POST，通过 ListEvents 对账。未整体确认合并接口，也未修改 CampusClaw 实现或 Mate 公共契约。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -143,7 +143,7 @@
         "status": "200",
         "tabLabel": "200 · 消息回复",
         "label": "OK",
-        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，具体事件字段与并发输出归属仍待评审。对应 user.message；delta 为新增文本，completed 为完整内容。收到本次对应 idle 后结束响应，不再等待另一条消息；示例 reason=done 的具体取值仍待字段评审。",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，具体事件字段、目标绑定与并发竞争仍待评审。对应 user.message；delta 为新增文本，completed 为完整内容。收到本次对应 idle 后结束响应，不再等待另一条消息；示例 reason=done 的具体取值仍待字段评审。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
@@ -159,7 +159,7 @@
         "status": "200",
         "tabLabel": "200 · 等待工具确认",
         "label": "OK",
-        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，具体事件字段与并发输出归属仍待评审。对应 user.message 触发待确认工具；等待工具确认时也关闭本次响应。此处不是任务已经完成，之后需新 POST 提交 user.tool_confirmation 并接收续跑结果；示例 reason=confirming 的具体取值仍待字段评审。",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，具体事件字段、目标绑定与并发竞争仍待评审。对应 user.message 触发待确认工具；等待工具确认时也关闭本次响应。此处不是任务已经完成，之后需新 POST 提交 user.tool_confirmation 并接收续跑结果；示例 reason=confirming 的具体取值仍待字段评审。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
@@ -175,7 +175,7 @@
         "status": "200",
         "tabLabel": "200 · 拒绝确认后续跑",
         "label": "OK",
-        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，具体事件字段与并发输出归属仍待评审。对应请求示例中的 deny 确认；新 POST 响应接收工具结果与续跑回复，收到本次对应 idle 后关闭，不把新结果发给已经结束的上一条响应。具体字段与绑定细节仍待评审。",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，具体事件字段、目标绑定与并发竞争仍待评审。对应请求示例中的 deny 确认；新 POST 响应接收工具结果与续跑回复，收到本次对应 idle 后关闭，不把新结果发给已经结束的上一条响应。具体字段与绑定细节仍待评审。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
@@ -187,11 +187,27 @@
         "exampleScope": "receipt-and-closing-confirmed-output-fields-candidate"
       },
       {
+        "id": "200-message-interrupted",
+        "status": "200",
+        "tabLabel": "200 · 原消息被中断",
+        "label": "OK",
+        "summary": "与“中断完成”配对：原 user.message 响应仍承载原执行输出，目标实际停止后收到与中断响应相同 eventId 的同一条 idle 并关闭。中断回执只出现在新 user.interrupt 响应，不在原响应重复发送。分工已确认；此处思考内容、字段和 reason=terminated 仅为候选示例。",
+        "headers": {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"fa679dc5d02e4b609a26e65c9a4603b0\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-03T08:30:16.000Z\",\"content\":\"已整理巡检记录，下一步核对告警时间线。\"}\n\ndata: {\"eventId\":\"38e397c80d5a4f3ba7916df3bbf0a936\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:31:01.000Z\",\"reason\":\"terminated\"}\n\n"
+        },
+        "exampleScope": "receipt-and-closing-confirmed-output-fields-candidate"
+      },
+      {
         "id": "200-interrupt",
         "status": "200",
         "tabLabel": "200 · 中断完成",
         "label": "OK",
-        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，具体事件字段与并发输出归属仍待评审。对应 user.interrupt；候选等待被中断执行实际停止后发送 reason=terminated，不把 HTTP 200 当作已经停止。收到本次对应 idle 后关闭已确认；reason 具体取值、停止失败与原消息流的终态投递规则仍待评审。",
+        "summary": "对应 user.interrupt；首帧返回本次完整中断回执，之后只有目标实际停止后的 idle，不复制正文、思考或工具输出。原消息响应接收同一条 idle（同 eventId）并关闭，见“原消息被中断”示例。此推送分工已确认；HTTP 200 或回执不代表执行已停止。reason=terminated 仍为候选取值，实例定位、目标绑定竞态与停止失败仍待评审。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
@@ -404,8 +420,8 @@
     ]
   },
   "review": {
-    "status": "合并方向已确认 · 事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 五个基础类型名已确认 · 合并接口评审中 · 完整 user.* 首帧回执已确认 · 结束规则已确认",
-    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。2026-09-04 用户要求合并 POST 提交和 GET 实时推送：改为同一 POST SSE。原独立 JSON 成功响应已被替代；用户进一步明确允许首帧返回本次完整 user.* 回执，含 eventId，只回执一次，不广播其他用户输入。S3 按这一明确选择调整。S4 仅适用已撤销的只读流，不能用于免除 POST 的工具令牌。用户进一步确认结束规则：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭，之后通过新的确认 POST 接收续跑结果。等待确认只结束本次 HTTP 交互，不代表任务成功。此项不确认 idle reason 具体取值、并发请求的输出归属或错误细节，也不整体确认合并接口，不自动推进 ListEvents。",
+    "status": "合并方向已确认 · 事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 五个基础类型名已确认 · 合并接口评审中 · 完整 user.* 首帧回执已确认 · 结束规则已确认 · 中断推送分工已确认",
+    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。2026-09-04 用户要求合并 POST 提交和 GET 实时推送：改为同一 POST SSE。原独立 JSON 成功响应已被替代；用户进一步明确允许首帧返回本次完整 user.* 回执，含 eventId，只回执一次，不广播其他用户输入。S3 按这一明确选择调整。S4 仅适用已撤销的只读流，不能用于免除 POST 的工具令牌。用户进一步确认结束规则：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭，之后通过新的确认 POST 接收续跑结果。等待确认只结束本次 HTTP 交互，不代表任务成功。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。此项不确认跨实例定位方案、目标绑定与并发竞争、idle reason 具体取值或错误细节，也不整体确认合并接口，不自动推进 ListEvents。",
     "questions": [],
     "confirmedEventTypes": [
       "agent.message",
@@ -419,7 +435,8 @@
       "S1-frame-format": "A-data-only",
       "S2-event-projection": "A-type-and-phase",
       "M2-receipt": "A-user-event-first",
-      "M3-close-rule": "idle-closes-including-confirming"
+      "M3-close-rule": "idle-closes-including-confirming",
+      "M4-interrupt-delivery": "original-output-and-interrupt-receipt-shared-idle"
     },
     "decisionHistory": {
       "Q3-response": {
@@ -438,14 +455,19 @@
         "date": "2026-09-04",
         "source": "用户明确回复：结束规则我认可的",
         "status": "已确认收到本次对应 idle 后关闭响应；等待工具确认时也关闭，之后通过新的确认 POST 接收续跑结果。只确认关闭策略，不确认 idle reason 具体取值、并发输出归属、错误细节或整个操作"
+      },
+      "M4-interrupt-delivery": {
+        "date": "2026-09-04",
+        "source": "用户明确回复：我认可这个分工；同时询问中断请求如何找到原执行所在实例",
+        "status": "中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。未选择跨实例定位或转交机制，未确认目标绑定竞态、reason 字面值、停止失败和整个操作。"
       }
     },
     "pendingReview": [
-      "三类请求的对应事件范围、控制请求并发与原消息流终态投递",
+      "三类请求的精确目标绑定、跨实例执行定位及控制请求并发竞争",
       "具体事件字段、thinking 内容、idle reason、heartbeat、容量与错误细节",
       "合并 POST 接口整体确认"
     ],
     "promptPrefix": "Claw Session Events v2 合并接口评审：POST /sessions/{sessionId}/events",
-    "promptSuffix": "合并方向、完整 user.* 首帧回执、对应 idle 关闭（含等待工具确认）及既有请求、Header、eventId、排序、S1/S2 已确认；继续评审输出范围、具体字段与错误细节，不重新询问结束规则，不自动确认整个接口或修改 Mate 公共契约。"
+    "promptSuffix": "合并方向、完整 user.* 首帧回执、对应 idle 关闭（含等待工具确认）及既有请求、Header、eventId、排序、S1/S2 及中断推送分工已确认；继续评审目标绑定、跨实例定位、并发竞争、具体字段与错误细节，不重新询问结束规则或中断推送分工，不自动确认整个接口或修改 Mate 公共契约。"
   }
 }
