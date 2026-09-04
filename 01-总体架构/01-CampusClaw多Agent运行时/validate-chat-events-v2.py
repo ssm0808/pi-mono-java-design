@@ -21,6 +21,7 @@ CONFIRMED_CHOICES = {
     "M2-receipt": "A-user-event-first",
     "M3-close-rule": "idle-closes-including-confirming",
     "M4-interrupt-delivery": "original-output-and-interrupt-receipt-shared-idle",
+    "M5-interrupt-coordination": "database-durable-stop-and-instance-batch-polling",
     "S1-frame-format": "A-data-only",
     "S2-event-projection": "A-type-and-phase",
 }
@@ -40,7 +41,8 @@ def require(condition: bool, message: str) -> None:
 def validate_public_payload(value: object) -> None:
     if isinstance(value, dict):
         require(
-            not {"entryId", "entrySeq", "eventSeq", "runId", "executionId"}.intersection(value),
+            not {"entryId", "entrySeq", "eventSeq", "runId", "executionId", "executionGeneration",
+                 "targetExecutionId", "ownerInstanceId"}.intersection(value),
             "v2 public payload must not expose internal identifiers or sequences",
         )
         for child in value.values():
@@ -198,6 +200,11 @@ def validate_model(model: dict) -> None:
     require("完整 user.* 首帧回执已确认" in review["status"], "receipt approval must be visible")
     require("结束规则已确认" in review["status"], "closing approval must be visible")
     require("中断推送分工已确认" in review["status"], "interrupt delivery approval must be visible")
+    require("数据库中断机制已确认" in review["status"], "database interruption approval must be visible")
+    for clause in ("同一短事务中绑定具体内部执行", "批量检查本机活动执行的停止请求",
+                   "同一条权威结束事件", "当前仅依赖数据库", "Redis 仅在后续有必要时评估"):
+        require(clause in operation["description"], f"missing database interruption constraint: {clause}")
+    require("检查周期" in " ".join(review["pendingReview"]), "polling interval must remain pending")
     require("等待工具确认时也关闭" in operation["description"], "confirmation wait must also close the response")
     require("idle reason" in " ".join(review["pendingReview"]), "closing approval must not confirm reason literals")
     require("三种用户事件均必须携带 access-token" in review["notice"], "preserve three-type token rule")
@@ -221,6 +228,10 @@ def validate_negative_regressions(model: dict) -> int:
     changed("missing token", lambda m: m["operation"]["requestHeaderExamples"][0]["headers"][2].update(required=False))
     changed("reopened receipt", lambda m: m["review"].update(questions=[{"id": "M2-receipt"}]))
     changed("false approval", lambda m: m["review"].update(pendingReview=[]))
+    changed("missing database decision", lambda m: m["operation"].update(
+        description=m["operation"]["description"].replace("当前仅依赖数据库", "当前依赖 Redis")))
+    changed("missing fixed target", lambda m: m["operation"].update(
+        description=m["operation"]["description"].replace("同一短事务中绑定具体内部执行", "按最新执行绑定")))
     for choice in CONFIRMED_CHOICES:
         changed(choice, lambda m, key=choice: m["review"]["confirmedChoices"].update({key: "unconfirmed"}))
     original = model["operation"]["responses"][0]["bodies"]["default"]
@@ -259,13 +270,20 @@ def validate_negative_regressions(model: dict) -> int:
         except (KeyError, ValueError):
             continue
         raise ValueError(f"negative regression accepted: {label}")
+    for field in ("executionGeneration", "targetExecutionId", "ownerInstanceId"):
+        try:
+            validate_frame({"eventId": "example", "type": "agent.message", "phase": "delta",
+                            "content": "example", field: "internal"})
+        except ValueError:
+            continue
+        raise ValueError(f"internal execution identity exposed: {field}")
     for name in RETIRED_STREAM_TYPES:
         try:
             validate_frame({"type": name, "eventId": "example"})
         except ValueError:
             continue
         raise ValueError(f"retired type accepted: {name}")
-    return len(mutations) + len(RETIRED_STREAM_TYPES)
+    return len(mutations) + len(RETIRED_STREAM_TYPES) + 3
 
 
 def validate_review_pages() -> None:
@@ -282,7 +300,7 @@ def validate_review_pages() -> None:
     validator.validate_executable_script(scripts[0])
     visible = " ".join(parser.visible_text)
     for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "未整体确认合并接口",
-                 "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认"):
+                 "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认", "数据库中断机制已确认"):
         require(text in visible, f"no-JavaScript page is missing {text}")
     require("data-question-id=" not in source, "confirmed receipt must not remain a question")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
