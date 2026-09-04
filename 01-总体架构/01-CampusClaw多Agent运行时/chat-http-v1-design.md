@@ -27,7 +27,8 @@
 | Anthropic Managed Agents 文档核对 | 2026-09-01；Session、Events、Skills 与 Session Operations 官方文档 |
 | Agent Skills 规范核对 | 2026-09-01；名称、Skill 文件夹和 `SKILL.md` frontmatter 规则 |
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
-| Registry 前置 PR #210 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`，未合并 |
+| Registry 初始候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599` |
+| Registry 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，未合并；最新差距见通用模块证据表 |
 | GET 候选实现 | `7759481a1722422395d46564129827c6ee6df204`，未发布，不能作为已上线契约 |
 | 更新日期 | 2026-09-04 |
 

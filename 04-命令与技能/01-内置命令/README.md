@@ -8,7 +8,8 @@
 | 更新日期 | 2026-09-04 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
-| Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
+| 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
+| 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，未合并 |
 | 状态 | 七个 Builtin 目标已由用户确认；公开执行为 target-only |
 
 ## 1. 范围与证据

@@ -7,7 +7,7 @@
 | 文档版本 | 3.1.0 |
 | 更新日期 | 2026-09-04 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
-| Skill 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
+| Skill 发现候选 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`（PR #210，未合并） |
 | 状态 | 当前公开 Skill Command 执行延期；未来 target-only 设计待独立评审 |
 
 ## 1. 当前产品边界
@@ -25,8 +25,10 @@ Skill Definition 仅可展示，不安装伪 Handler。
 
 PR #210 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/SkillCommandSource.java`
 读取 Prepared Agent 元数据并生成描述符，没有执行 Handler。
-同基线 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/SkillNameValidator.java`
-的严格名称策略不同于旧 Loader 兼容规则；前置 PR 必须按已确认审查规则收敛到 Skill 域名称规则源。
+同基线 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillNamePatterns.java`
+已集中兼容/严格策略的正则字符串、编译模式与长度上限，Loader 保持兼容策略。
+旧候选 `0bb794f2` 的 SkillNameValidator 已删除；发现结果使用只读 DTO，并复制建议列表。
+这些是前置 PR 的已提交候选行为，不是已发布 HTTP 能力。
 
 pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 `packages/coding-agent/src/core/skills.ts` 提供 Skill 发现，而
