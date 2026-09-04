@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import subprocess
@@ -17,6 +18,12 @@ STREAM_PATH = ROOT / "接口契约-v2" / "操作" / "02-stream-session-events.js
 USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
 STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "session.status_idle"}
 RETIRED_STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", "tool.result", "session.status.idle"}
+CONFIRMED_STREAM_CHOICES = {
+    "S1-frame-format": "A-data-only",
+    "S2-event-projection": "A-type-and-phase",
+    "S3-user-events": "A-user-events-receipt-history-only",
+    "S4-read-access-token": "A-no-read-tool-token",
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -92,6 +99,8 @@ def validate_stream_frame(event: dict) -> None:
     if event["type"] in {"agent.message", "agent.thinking"}:
         require(event.get("phase") in {"delta", "completed"}, "text event phase is required")
         require(isinstance(event.get("content"), str), "text content must be a string")
+    else:
+        require("phase" not in event, "tool and idle events are complete events without phase")
     if event.get("phase") == "delta":
         require("createdAt" not in event and bool(event["content"]), "delta cannot be durable or empty")
     else:
@@ -116,6 +125,13 @@ def validate_stream_model(model: dict) -> None:
     body = operation["requestBody"]
     require(body["required"] is False and body["contentType"] is None and body["example"] is None,
             "stream request must not have a body")
+    headers = [header for mode in operation["requestHeaderExamples"] for header in mode["headers"]]
+    require(not any(header["name"].lower() == "access-token" and header.get("required") for header in headers),
+            "read-only GET must not require access-token")
+    require(not any(parameter.get("name", "").lower() == "access-token" and parameter.get("required")
+                    for parameter in operation["parameters"]), "GET parameters must not require access-token")
+    require("本 GET 已确认不要求 access-token" in body["description"],
+            "GET must state the confirmed no-tool-token rule")
     all_types = set()
     for response in operation["responses"]:
         if response["status"] != "200":
@@ -139,16 +155,12 @@ def validate_stream_model(model: dict) -> None:
                     completed.add(event["eventId"])
                 all_types.add(event["type"])
     require(all_types == STREAM_TYPES, "stream examples must cover the five confirmed basic type names")
-    questions = model["review"]["questions"]
-    require([q["id"] for q in questions] == ["S1-frame-format", "S2-event-projection", "S3-user-events", "S4-read-access-token"],
-            "only second-operation questions may be open")
-    require("第二个接口评审中" in model["review"]["status"], "stream proposal must not be marked confirmed")
-    require({option["value"] for option in questions[1]["options"]} ==
-            {"A-type-and-phase", "B-separate-preview-events"},
-            "S2 must discuss pending structure without reopening confirmed type names")
-    for question in questions:
-        require(sum(bool(option.get("selected")) for option in question["options"]) == 1,
-                f"{question['id']} must have exactly one recommended selection")
+    require(review.get("confirmedChoices") == CONFIRMED_STREAM_CHOICES,
+            "S1-S4 must retain the exact confirmed choices")
+    require(review["questions"] == [], "confirmed S1-S4 must not remain in the decision form")
+    require("S1～S4 已确认" in review["status"], "confirmed choices must be visible in review status")
+    require("第二个接口评审中" in review["status"], "stream proposal must not be marked fully confirmed")
+    require("GET 接口整体确认" in review.get("pendingReview", []), "overall GET review remains pending")
 
 
 def validate_retired_type_regressions() -> None:
@@ -166,12 +178,42 @@ def validate_retired_type_regressions() -> None:
         raise ValueError(f"retired stream type was accepted: {name}")
 
 
+def validate_stream_decision_regressions(model: dict) -> None:
+    mutations = []
+    for choice in CONFIRMED_STREAM_CHOICES:
+        changed = copy.deepcopy(model)
+        changed["review"]["confirmedChoices"][choice] = "unconfirmed-alternative"
+        mutations.append((choice, changed))
+    changed = copy.deepcopy(model)
+    changed["review"]["questions"] = [{"id": "S1-frame-format"}]
+    mutations.append(("reopened-form", changed))
+    changed = copy.deepcopy(model)
+    changed["operation"]["requestHeaderExamples"][0]["headers"].append(
+        {"name": "access-token", "required": True, "value": "opaque-access-token"})
+    mutations.append(("GET-tool-token", changed))
+    original = model["operation"]["responses"][0]["bodies"]["default"]
+    for label, replacement in (
+        ("named-SSE", original.replace("data: ", "event: agent.message\ndata: ", 1)),
+        ("user-in-live-stream", original.replace('"type":"agent.message"', '"type":"user.message"', 1)),
+        ("missing-phase", original.replace(',"phase":"delta"', '', 1)),
+    ):
+        changed = copy.deepcopy(model)
+        changed["operation"]["responses"][0]["bodies"]["default"] = replacement
+        mutations.append((label, changed))
+    for label, changed in mutations:
+        try:
+            validate_stream_model(changed)
+        except ValueError:
+            continue
+        raise ValueError(f"confirmed choice regression was accepted: {label}")
+
+
 def validate_review_pages() -> None:
     spec = importlib.util.spec_from_file_location("runtime_contract_validator", ROOT / "validate-chat-http-v1.py")
     validator = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(validator)
     for filename, expected_key, question_count in (
-        ("chat-events-v2-review.html", "streamSessionEvents", 4),
+        ("chat-events-v2-review.html", "streamSessionEvents", 0),
         ("chat-events-v2-confirmed.html", "submitSessionEvent", 0),
     ):
         source = (ROOT / filename).read_text(encoding="utf-8")
@@ -185,6 +227,11 @@ def validate_review_pages() -> None:
         visible = " ".join(parser.visible_text)
         for heading in ("作用", "调用上下文 Header", "参数与请求体", "响应"):
             require(heading in visible, f"no-JavaScript page missing {heading}")
+        if expected_key == "streamSessionEvents":
+            for decision in ("S1～S4 已确认", "phase=delta/completed", "不推送 user.*", "不要求 access-token"):
+                require(decision in visible, f"confirmed decision missing without JavaScript: {decision}")
+            require("尚未确认整个 GET" in visible, "page must preserve the pending overall review")
+            require("data-question-id=" not in source, "page must not render confirmed decision controls")
         require("data-label" in source and "max-width: 680px" in source, "responsive field rows missing")
 
 
@@ -213,6 +260,7 @@ def main() -> int:
         validate_event_ordering_rule(review)
         validate_stream_model(stream_model)
         validate_retired_type_regressions()
+        validate_stream_decision_regressions(stream_model)
         require(common["reviewState"] == {
             "currentOperation": "streamSessionEvents", "confirmedOperations": ["submitSessionEvent"]
         }, "review must advance from confirmed POST to GET stream")

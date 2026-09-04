@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.1 |
-| 状态 | 第二个接口评审中；五个基础类型名已确认，其余仍为候选，target-only |
+| 文档版本 | 0.1.2 |
+| 状态 | 第二个接口评审中；五个基础类型名与 S1～S4 已确认，其余细节仍为候选，target-only |
 | 前置决策 | POST 已确认；`eventId`、不公开内部序号、Session 因果顺序继续生效 |
-| 设计仓本次变更前基线 | `8019b88`；首次候选基线为 `463d55c` |
+| 设计仓本次变更前基线 | `e45f374`；首次候选基线为 `463d55c` |
 | 实现核对 | `pi-mono-java@a8192e047f4061bd385297d3dc6c4358362d0d49` |
 | 原实现基线 | `c9d858bc8261bf07f5585f545b53495bf2226a56`；本文五个源码文件在两提交间无变化 |
 | Mate 契约对照 | 通用对话 Events 1.4.4，已确认目标契约，不是实现证据 |
@@ -27,9 +27,21 @@ Accept: text/event-stream
 
 本轮候选以 [operation JSON](接口契约-v2/操作/02-stream-session-events.json) 和
 [当前评审页](chat-events-v2-review.html) 为精确示例。第一接口的已确认状态不再开放选择；
-本轮只确认 §4 的五个基础类型名；其他字段不因渲染、校验或提交而视为确认。
+五个基础类型名及以下四项已确认；其他字段不因渲染、校验或提交而视为确认。
 
-## 2. 请求与凭据（候选）
+### 1.1 本轮已确认的四项决定
+
+| 评审项 | 已确认目标 | 分类与理由 |
+|---|---|---|
+| S1 · A-data-only | 业务帧只用 `data: JSON`，类型放在 JSON 内，不输出 SSE `event:` 或 `id:`，不使用 `Last-Event-ID` 恢复 | 架构变更：与 Mate 使用相同分派方式，不重复维护两处类型信息 |
+| S2 · A-type-and-phase | 正文和思考使用 `phase=delta/completed`；工具调用、工具结果及 idle 为完整事件，不采用独立 `event_start/event_delta` | 架构变更：业务类型与生成阶段分开，减少 Mate 转换；具体字段仍待评审 |
+| S3 · A-user-events-receipt-history-only | 实时流不推送 `user.*`，用户事件从 POST 回执及历史获得 | 产品约束：不重复通知提交者；其他订阅者需查询历史才能看到用户输入 |
+| S4 · A-no-read-tool-token | GET 不要求 `access-token`，不更新执行凭据；保留 `X-HW-ID` 与 JWT/APPKEY 上下文，POST 三种事件仍必填 | 产品约束与安全加固：只读订阅不调用工具，不把工具令牌复制进订阅对象 |
+
+本轮只确认上述选择，不确认整个 GET。对应选项已从表单移除，精确选择保存在
+operation 的 `review.confirmedChoices`；当前仍停留在第二个接口。
+
+## 2. 请求与凭据（S4 已确认，其余新细节待评审）
 
 - Path `sessionId` 沿用共享 ID 规则；必须存在且未删除。
 - JWT 与 APPKEY 沿用已确认的具体非生产示例值，以及 `X-HW-ID` 的用户凭据 ID 语义。
@@ -38,17 +50,17 @@ Accept: text/event-stream
   应用能够在 Header 读取后立即擦除框架内存。
 - 上游负责真实性与访问授权；Claw 仍不自行解析或校验 JWT/APPKEY，不新增本地 401
   或凭据互斥规则。这是既有内部服务信任边界，不意味着浏览器可以绕过 Mate 直连。
-- 推荐不要求 `access-token`；即使提供也不用于执行。前次“统一携带”针对 POST 的
-  三种用户事件，不自动冻结 GET 必填。S4 可选择为调用方组装方便而统一携带。
+- S4 已确认 GET 不要求 `access-token`；即使提供也不复制到订阅或交给 Agent，
+  不更新执行凭据。POST 的三种用户事件仍统一必填，不重新开放该决定。
 - 无请求体、无 query；携带正文、query 或 `Last-Event-ID` 候选返回
   `400 INVALID_EVENT_STREAM_REQUEST`，避免调用方误以为支持恢复。
 - `Accept-Language` 沿用 `zh-CN/en-US`，缺失或不支持时为 `en-US`，只决定错误文案。
   它不改变已持久化文本或模型输出语言。兼容带自定义 Header 的服务端 HTTP/SSE 客户端；
   不要求浏览器使用原生 EventSource 直连 Claw。
 
-## 3. 连接和帧（候选）
+## 3. 连接和帧（S1 已确认，连接细节仍为候选）
 
-订阅必须先注册到正确 Session，再发送 Header 和第一条 `: connected` 注释。
+以下订阅就绪流程仍为候选：先注册到正确 Session，再发送 Header 和第一条 `: connected` 注释。
 客户端看到该注释才认为订阅就绪；不能仅启动一个异步 GET，就立即假设后续 POST 输出
 不会漏。`connected` 不包含 Session 状态，也不替代历史查询。
 
@@ -65,23 +77,25 @@ data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phas
 : ping
 ```
 
-推荐业务帧只含一行 `data:` JSON，帧以空行结束；不输出 SSE `event:` 或 `id:`，不把
-业务 `eventId` 冒充恢复游标。文本中的换行按 JSON 转义，不分拆为额外的业务帧。
+S1 已确认业务帧只用 `data:` JSON，不输出 SSE `event:` 或 `id:`，不使用
+`Last-Event-ID` 恢复，不把业务 `eventId` 冒充恢复游标。当前示例每帧一行 JSON，
+以空行结束；文本中的换行按 JSON 转义，不分拆为额外的业务帧。
 首次连接不补发历史、不合成 idle；候选无事件时每 15 秒保活一次，间隔可由服务端配置，
 部署时与代理超时协调。Heartbeat 不是事件，不持久化，不带 ID 或时间。
 
-## 4. 已确认类型名与候选字段
+## 4. 已确认类型、阶段结构与候选字段
 
 2026-09-04 用户明确指定下表五个基础类型名。名称属于已确认的目标 API 产品约束：
 Agent 消息、思考、工具调用与结果统一使用 `agent.*`，前四项与 Mate 同名；状态保留
 Claw 的 Session 资源身份，使用 `session.status_idle`。完整事件在流和历史中使用
 同名，不提供旧候选名称的兼容别名；这不改动 v1 迁移基线或 Runtime 内部枚举。
 
-本次没有确认 `phase`、增量结构、thinking 内容或整个 GET。下表第三列仍是沿用 Mate
-“完整事件 + 文本增量”的候选；S2 只继续讨论结构，不再开放名称选择。本表不是完整的
-Runtime 事件清单，不能据此删除其他事件能力。
+S2 已确认沿用 Mate 的 `type + phase` 结构：`agent.message` 和 `agent.thinking`
+以 `delta/completed` 区分新增片段与完整内容；工具调用、工具结果和 idle 是完整事件，
+不增加 `phase`。下表其他字段约束、thinking 内容策略仍是候选，整个 GET 尚未确认。
+本表不是完整的 Runtime 事件清单，不能据此删除其他事件能力。
 
-| Claw 已确认 `type` | Mate 已确认 `type` | 候选形状与历史 |
+| Claw 已确认 `type` | Mate 已确认 `type` | 类型与 phase 已确认，其余字段及历史细节候选 |
 |---|---|---|
 | `agent.message` | `agent.message` | `eventId/type/phase/content`；只有 `completed` 带 `createdAt` 并进入权威历史 |
 | `agent.thinking` | `agent.thinking` | 同上；只在 thinking 启用且有可公开摘要时输出，不转发原始推理 |
@@ -89,12 +103,12 @@ Runtime 事件清单，不能据此删除其他事件能力。
 | `agent.tool_result` | `agent.tool_result` | `eventId/type/createdAt/toolCallId/content/isError`；失败时可有稳定 `errorCode`；完整事件 |
 | `session.status_idle` | `chat.status_idle` | `eventId/type/createdAt/reason`；完整事件，reason 候选为 `done/terminated/failed/confirming` |
 
-字段候选约束：
+在已确认类型、`phase` 和已有事件身份/排序规则之上的字段候选约束：
 
 - `eventId` 是服务端逻辑事件身份，不是帧序号或执行 ID。同一正文/摘要的 delta 与
   completed 复用该 ID；completed 后不再发送该事件的 delta。具体 ID 正则不在本轮
   从 Mate 自动继承。
-- `phase` 仅为 `delta/completed`；`content` 是字符串。delta 是新追加的非空片段，
+- `phase=delta/completed` 已确认；`content` 暂按字符串展示。delta 是新追加的非空片段，
   可只含空白；completed 是完整文本，允许空串。completed 必须覆盖 preview，不把
   增量拼接结果当作权威内容。delta 必须省略 `createdAt`。
 - 新订阅可能在回复中途建立，没有此前的 delta；其 preview 可以不完整，完整事件或
@@ -110,15 +124,14 @@ Runtime 事件清单，不能据此删除其他事件能力。
   确认或中断。`terminated` 只在执行停止后发出，不以中断请求的 200 替代。
   `done/failed` 也不关闭订阅。工具被取消时不伪造成功结果。
 
-本轮推荐不重复发送 `user.*`，与 Mate 一致；它们通过 POST 回执与历史观察。其代价是
-其他订阅者不会实时收到用户输入，需要历史同步；S3 可选择推送全部已接受用户事件，
-届时提交者按 `eventId` 去重，Mate 公共流仍遵守自己的过滤规则。
+S3 已确认实时流不推送 `user.*`，与 Mate 一致；它们通过 POST 回执与历史观察。
+其他订阅者不会实时收到用户输入，需要历史同步。这不是不接受或不保存用户事件；
+第一接口仍接受并持久化三种用户事件，历史仍是完整事件的恢复依据。
 
 `session.model.changed`、`session.thinking.changed`、压缩生命周期、工具进度以及
 Child Agent 投影尚未在 v2 完整评审。当前 v1 保留，不能因本轮只展示基础示例而删除
-这些能力。另一种待选结构是以独立 `event_start/event_delta` 引用目标 `eventId`，
-完整事件仍使用上表名称；选择它时再评审预览字段及 thinking 内容策略，不自动照搬
-Claude 的字段、ID 或进度信号语义。当前示例仍展示尚未确认的 `type + phase` 方案。
+这些能力。独立 `event_start/event_delta` 结构不再作为待选；当前使用已确认的
+`type + phase`，不自动照搬 Claude 的字段、ID 或 thinking 进度信号语义。
 
 ## 5. 顺序、故障与恢复
 
@@ -165,15 +178,16 @@ Mate 1.4.4 的“最后 createdAt 作为增量下界”：Claw 已确认时间�
 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventType.java` · enum | 使用 started/delta/completed、tool.execution、配置/压缩和 stream 控制类型；S2 基础投影尚未实现 |
 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeSseDispatcher.java` · `execute/close` | 每连接独立虚拟线程写出可复用；不证明已有跨执行订阅或持久化重放 |
 
-本次命名核对仍读取上述固定 `a8192e0` 提交的 `RuntimeEventType`，不漂移到实现仓 HEAD。
+命名核对读取上述固定 `a8192e0` 提交的 `RuntimeEventType`；本轮补充核对同一提交的
+`RuntimeEventController` 和 `RuntimeSseEmitterSubscriber`，不漂移到实现仓 HEAD。
 其中原 `ASSISTANT_MESSAGE_*`、`ASSISTANT_THINKING_*`、`TOOL_EXECUTION_*`、
 `TOOL_RESULT`、`SESSION_STATUS_IDLE` 不等于已确认的 v2 类型；后续需在 API 投影层
 按业务语义转换，不能把枚举常量原样输出。此次只改设计，没有修改实现代码。
 
 主公共基线 [Claude Managed Agents 事件流文档](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
 在本次核对仍标为 Beta，公开了 best-effort preview、完整事件覆盖、重连后查询历史。
-不据此推断服务端表、序号分配或内部调度。已确认的五个 Claw 类型名及候选 `phase`、
-GET Header、15 秒保活都是本项目决定或方案，不是 Claude 原样契约；Claude thinking preview 当前只表示
+不据此推断服务端表、序号分配或内部调度。已确认的类型名、`type + phase`、S1/S3/S4
+及候选 15 秒保活属于本项目决定或方案，不是 Claude 原样契约；Claude thinking preview 当前只表示
 开始、不发送内容，也不能作为本项目“公开摘要已实现”的证据。
 
 Mate 对照是[本地已确认目标设计](../../02-服务与接口/07-mate-service通用对话API/README.md)
@@ -182,9 +196,10 @@ Mate 对照是[本地已确认目标设计](../../02-服务与接口/07-mate-ser
 
 ## 7. 待确认与实施验收
 
-五个基础类型名已确认，不再列为待选。当前四项：S1 data-only 或具名 SSE；
-S2 `type + phase` 或独立预览事件；S3 是否推送 `user.*`；S4 GET 是否要求
-`access-token`。具体字段与其余生命周期细节同属候选，尚未确认整个 GET。
+五个基础类型名及 S1～S4 均已确认，不再列为待选。剩余评审范围为具体事件字段约束、
+thinking 内容、idle `reason`、connected/ping、容量与错误细节，以及 GET 整体确认。
+当前示例保留这些待评审细节，不能把四项选择扩大为所有字段已确认；已有的事件身份、
+内部顺序、POST 接受行为及凭据安全边界继续生效，不重新征求选择。
 
 确认后实施切片：订阅 Service 与注册/关闭骨架 → Session Hub 与每连接有界队列 →
 类型投影与不可变响应 VO → 有序发布及历史对账。Controller 不返回内部 DTO，不直连 Mapper。
@@ -199,5 +214,6 @@ S2 `type + phase` 或独立预览事件；S3 是否推送 `user.*`；S4 GET 是�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.2 | 2026-09-04 | 确认 S1 data-only、S2 type + phase、S3 用户事件只走回执/历史、S4 GET 不要求 access-token；移除四项选择题并记录精确选择，保留其余字段与 GET 整体评审状态。 |
 | 0.1.1 | 2026-09-04 | 按用户指定确认五个基础类型名，同步全部候选示例及流/历史同名约束；S2 仅继续评审增量结构，不保留会重新开放旧名称的选项；phase、字段和 GET 整体仍未确认。 |
 | 0.1.0 | 2026-09-04 | 第一个 POST 确认后启动 GET stream；提供 Header、帧、基础事件、故障与恢复候选，保留四项待确认，记录当前实现差距与 Mate 映射。 |

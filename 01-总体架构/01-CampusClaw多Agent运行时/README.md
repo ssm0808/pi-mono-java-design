@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.6.7 |
-| 状态 | Session Events v2 POST 及 GET stream 五个基础类型名已确认，GET 其余内容评审中；HTTP 1.44.1 保留已确认 Builtin JSON，Skill 由同事并行开发 |
+| 文档版本 | 3.6.8 |
+| 状态 | Session Events v2 POST、GET stream 五个基础类型名及 S1～S4 已确认，GET 其余细节评审中；HTTP 1.44.1 保留已确认 Builtin JSON，Skill 由同事并行开发 |
 | 当前传输结论 | v2 使用独立 POST、Session live SSE 与固定快照历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -50,7 +50,8 @@ Mate tool execute 时发送；该必填规则已确认，不再列为待选项�
 `createdAt` 重排；时间字段只用于展示，本次不更改其取值语义。此项是 v2 目标约束，
 不代表当前 Java 已完整实现多来源依赖检查。
 第一个 POST 已按当前稿确认：使用 `event + content[]`、返回完整用户事件、不设
-`Idempotency-Key` 且通过历史对账。当前进入第二个 GET stream 的帧和字段设计，详见
+`Idempotency-Key` 且通过历史对账。第二个 GET stream 已确认 data-only、type + phase、
+不推送 user.*、不要求 access-token，仍继续具体字段与连接细节评审，详见
 [`Session Events v2 重设计`](chat-events-v2-design.md) 和
 [`当前 GET 评审页`](chat-events-v2-review.html)；第一个接口保存在
 [`已确认 POST 页面`](chat-events-v2-confirmed.html)。
@@ -489,8 +490,8 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 以下内容尚未确认，不应由实现自行猜测：
 
-1. Claw v2 Session live SSE 的帧格式、基础事件形状及 `user.*` 是否推送；
-2. Claw v2 GET stream 的 `access-token`、heartbeat、背压和关闭细节；
+1. Claw v2 Session live SSE 的具体字段约束、thinking 内容与 idle reason；类型名、data-only、type + phase 和不推送 `user.*` 已确认；
+2. Claw v2 GET stream 的就绪、heartbeat、容量、错误与关闭细节及接口整体确认；GET 不要求 `access-token` 已确认；
 3. Claw v2 固定快照历史的过滤、游标、事件投影和保留期；
 4. Steer、FollowUp 与 Slash Command 是否并入新的 Events 边界；
 5. Pod 重启时 active execution 的中断或恢复策略；
@@ -501,6 +502,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.6.8 | 2026-09-04 | 同步 Events v2 0.2.2：确认 GET stream S1～S4 的四项 A 选择，移除对应待选题；保留其他具体字段、连接细节和接口整体评审状态，不影响已确认 POST 与 v1 迁移基线。 |
 | 3.6.7 | 2026-09-04 | 同步 Events v2 0.2.1：确认 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 五个基础类型名；增量结构、字段和 GET 整体仍在评审，不改 v1 迁移基线。 |
 | 3.6.6 | 2026-09-04 | 合并并行文档修订，保留 Events v2 POST 已确认及 GET stream 评审状态，同时保留 HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发决定。 |
 | 3.6.5 | 2026-09-04 | 同步 Session Events v2 0.2.0：第一个 POST 已整体确认，移除旧待选题；当前页切换到第二个 GET stream，保留独立已确认页面并开始流契约评审。 并行修订：同步 HTTP 1.44.1：Skill Command 由其他同事并行开发，七个 Builtin 是本会话交付范围，不是全产品禁用规则。 |

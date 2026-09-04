@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "2.0.0-proposal.10",
+    "version": "2.0.0-proposal.11",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · POST 已确认 · 实时订阅接口评审中 · target-only",
     "fieldNaming": "lowerCamelCase",

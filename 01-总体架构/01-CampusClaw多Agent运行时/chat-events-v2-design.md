@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.1 |
+| 文档版本 | 0.2.2 |
 | 状态 | 第一个 POST 接口已按当前稿整体确认；当前评审第二个 GET stream 接口；均待实现 |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
@@ -20,7 +20,7 @@ CampusClaw 采用 Session Events 三接口，内部执行不成为公共资源�
 | Method | Path | 职责 | 当前状态 |
 |---|---|---|---|
 | `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 接口已确认，待实现 |
-| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events/stream` | 订阅跨多次内部执行的 Session live SSE | 五个基础类型名已确认；帧格式、增量结构、字段、user.* 推送及 GET 凭据规则仍在评审 |
+| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events/stream` | 订阅跨多次内部执行的 Session live SSE | 五个基础类型名及 S1～S4 已确认；具体字段、连接细节与 GET 整体仍在评审 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 读取固定快照的权威历史 | 职责与顺序规则已确认，其余字段未开始评审 |
 
 这三个 operation 同构于 mate 公共 API 的“提交、实时观察、权威恢复”职责，但不是
@@ -102,12 +102,18 @@ POST 成功响应中的事件身份也已确认使用 `eventId`，不返回 `ent
 
 当前评审 `GET /campusclaw-service/v1/sessions/{sessionId}/events/stream`。
 只订阅新事件，不触发执行、不更新 Agent 凭据；连接跨越执行与空闲状态，断线不取消
-执行，不承担历史重放。具体帧、事件字段和错误仍是候选。
+执行，不承担历史重放。S1～S4 已确认；其他具体字段、连接和错误细节仍是候选。
 
 已确认五个基础类型名为 `agent.message`、`agent.thinking`、`agent.tool_call`、
 `agent.tool_result`、`session.status_idle`。这是目标 API 产品约束：前四项与 Mate
-同名，状态保留 Session 资源名称；流与历史中的完整事件不使用不同别名。命名确认不代表
-选择了 `type + phase` 或独立预览事件结构，也不提前确认 thinking 内容和其余字段。
+同名，状态保留 Session 资源名称；流与历史中的完整事件不使用不同别名。
+
+2026-09-04 进一步确认：S1 业务帧只用 `data: JSON`，不输出 SSE `event:`/`id:`，
+不使用 `Last-Event-ID` 恢复；S2 正文和思考使用 `phase=delta/completed`，工具及 idle
+为完整事件，不采用独立预览类型；S3 流中不推送 `user.*`，用户事件从 POST 回执和历史
+获得；S4 GET 不要求 `access-token`，不更新执行凭据，POST 三种事件仍必填。
+四项选择记录在 `review.confirmedChoices`，不再展示为待选题。thinking 内容、其余字段
+约束、连接及错误细节和 GET 整体仍待评审，不据此自动推进到第三接口。
 
 - 当前单接口评审面：[`chat-events-v2-review.html`](chat-events-v2-review.html)。
 - 候选模型：[`02-stream-session-events.json`](接口契约-v2/操作/02-stream-session-events.json)。
@@ -259,11 +265,13 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 | 2026-09-04 | 事件顺序 | 已确认先按 Session 统一检查依赖并确定顺序，再在同一短事务内分配内部序号和追加；依赖事件不得越过未提交的前置事件。ListEvents 按已提交的内部顺序返回，客户端不按 `createdAt` 重排，仍不公开 `entrySeq`。本次不更改时间字段语义，也不确认其余接口字段 |
 | 2026-09-04 | POST 整体确认并推进 | 用户明确表示第一个接口可以、开始下一个接口；按当前稿确认 Q2 `event + content[]`、Q3 完整用户事件、Q4 不设幂等键且历史对账；移除 POST 待选题，转入 GET stream |
 | 2026-09-04 | GET 基础类型命名 | 已确认 `agent.message`、`agent.thinking`、`agent.tool_call`、`agent.tool_result`、`session.status_idle`；完整事件在流与历史同名。只确认名称，phase、增量结构、字段及 GET 整体仍待评审 |
+| 2026-09-04 | GET S1～S4 | 已确认 A-data-only、A-type-and-phase、A-user-events-receipt-history-only、A-no-read-tool-token；移除四项选择题，保留具体字段、连接细节和 GET 整体评审状态；POST 不变 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.2 | 2026-09-04 | 固化 GET stream S1～S4 的四项 A 选择，同步实时订阅 0.1.2、评审页、图与回归校验；不自动确认整个 GET 或切换 ListEvents。 |
 | 0.2.1 | 2026-09-04 | 确认第二接口的五个基础类型名，同步评审面、实时订阅 0.1.1、生命周期图和校验；同步 POST 中断说明的 idle 名称引用，不改 POST 字段或已确认状态，S2 仅继续讨论增量结构。 |
 | 0.2.0 | 2026-09-04 | 确认第一个 POST 的当前稿，结束 Q2/Q3/Q4；当前页切换到第二个 GET stream，已确认 POST 单独只读保存；增加候选流契约、专门设计、生命周期图和状态切换校验。 |
 | 0.1.7 | 2026-09-04 | 确认事件处理、事务写入与 ListEvents 的共同顺序规则；补充 `a8192e0` 源码证据和目标差距，更新共享追加边界、目标图与顺序专项验收；保留时间示例及 Q2/Q3/Q4 待决状态。 |
