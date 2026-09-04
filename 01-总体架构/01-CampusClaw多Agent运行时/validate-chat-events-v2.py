@@ -12,11 +12,42 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 COMMON_PATH = ROOT / "接口契约-v2" / "common.json"
 MODEL_PATH = ROOT / "接口契约-v2" / "操作" / "01-submit-session-event.json"
+USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)
+
+
+def validate_public_payload(value: object) -> None:
+    if isinstance(value, dict):
+        require(
+            not {"entryId", "entrySeq"}.intersection(value),
+            "v2 public payload must not expose entryId or entrySeq",
+        )
+        for child in value.values():
+            validate_public_payload(child)
+    elif isinstance(value, list):
+        for child in value:
+            validate_public_payload(child)
+
+
+def validate_success_events(operation: dict) -> None:
+    event_types = set()
+    for response in operation["responses"]:
+        for body in response["bodies"].values():
+            validate_public_payload(body)
+            if response["status"] != "200":
+                continue
+            event = body["result"]["event"]
+            event_id = event.get("eventId")
+            require(
+                isinstance(event_id, str) and bool(event_id.strip()),
+                "each v2 success event must have a non-empty eventId",
+            )
+            event_types.add(event["type"])
+    require(event_types == USER_EVENT_TYPES, "v2 success examples must cover all three user event types")
 
 
 def main() -> int:
@@ -31,9 +62,12 @@ def main() -> int:
         examples = operation["requestBody"]["examples"]
         event_types = {example["value"]["event"]["type"] for example in examples}
         require(
-            event_types == {"user.message", "user.interrupt", "user.tool_confirmation"},
+            event_types == USER_EVENT_TYPES,
             "v2 POST examples must cover all proposed user event types",
         )
+        for example in examples:
+            validate_public_payload(example["value"])
+        validate_success_events(operation)
         header_sets = [
             ("common", common["requestHeaderExamples"]),
             ("submitSessionEvent", operation["requestHeaderExamples"]),
@@ -60,6 +94,7 @@ def main() -> int:
             "Header 示例与处理说明已确认" in review["status"],
             "review status must preserve the confirmed Header examples and handling description",
         )
+        require("eventId 已确认" in review["status"], "review status must preserve the confirmed eventId decision")
         require(
             "access-token 是否对三种事件都必填" in review["notice"],
             "review notice must keep the access-token requiredness decision open",

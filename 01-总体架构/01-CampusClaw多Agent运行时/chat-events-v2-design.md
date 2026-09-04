@@ -2,14 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.4 |
-| 状态 | 资源模型 A、POST 三种用户事件范围、Header 示例与处理说明已确认；其余字段评审中 |
+| 文档版本 | 0.1.5 |
+| 状态 | 资源模型 A、POST 三种用户事件范围、`eventId` 身份、Header 示例与处理说明已确认；其余字段评审中 |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | mate 公共契约基线 | [`mate-service 通用对话 API`](../../02-服务与接口/07-mate-service通用对话API/README.md) 1.4.4 |
 | 外部公共契约核对日 | 2026-09-03 |
-| 更新日期 | 2026-09-03 |
+| 更新日期 | 2026-09-04 |
 
 ## 1. 已确认资源模型
 
@@ -18,7 +18,7 @@ CampusClaw 采用 Session Events 三接口，内部执行不成为公共资源�
 
 | Method | Path | 职责 | 当前状态 |
 |---|---|---|---|
-| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 事件范围与 Header 说明已确认，其余字段评审中 |
+| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 事件范围、`eventId` 身份与 Header 说明已确认，其余字段评审中 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events/stream` | 订阅跨多次内部执行的 Session live SSE | 只确认职责，字段未开始评审 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 读取固定快照的权威历史 | 只确认职责，字段未开始评审 |
 
@@ -30,6 +30,12 @@ CampusClaw 采用 Session Events 三接口，内部执行不成为公共资源�
 `POST /sessions/{sessionId}/abort`。`user.tool_confirmation` 同样进入该联合类型。
 Steer、FollowUp 和 Slash Command 是否并入 Events 不在本轮自动决定，继续保留现行
 v1 契约，待三个核心 operation 完成后逐项评审。
+
+v2 HTTP 事件对象的身份字段已确认使用 `eventId`，不公开 `entryId` 或 `entrySeq`。
+内部持久化仍可保留 Entry 标识和连续序号，用于原子排序、当前分支恢复和固定快照分页；
+这些内部字段不得穿透 Response VO、live SSE 或历史响应。当前决定只冻结 Claw v2 的
+JSON 字段名称和“不公开序号”，不自动确认 Claw `eventId` 与 mate 公共 `eventId`
+是否复用同一个值，该跨服务所有权在 bridge 对账设计中另行确认。
 
 该选择属于架构变更：当前 Java 的 POST 返回一次执行范围的 SSE；目标 POST 只返回
 普通 JSON 接受结果。产品约束仍是不公开执行 ID；安全加固仍是 Claw 从 POST 请求读取
@@ -66,6 +72,10 @@ JWT、APPKEY 和 access-token 分别使用当前实现测试中的 `Bearer opaqu
 上述两组 Header 示例值及凭据处理说明已经确认。该确认只冻结示例和说明，不表示
 `access-token` 对三种用户事件是否必填已经确认；必填策略仍由下面的 Q1 决定。
 
+POST 成功响应中的事件身份也已确认使用 `eventId`，不返回 `entryId` 或 `entrySeq`。
+这一决定适用于三种用户事件，并作为后续 live SSE 与权威历史的公共身份约束；Q3 只
+继续评审成功响应是返回完整用户事件，还是只返回带 `eventId` 的最窄回执。
+
 完整候选字段、请求示例、成功与错误响应及四个选择题见
 [`chat-events-v2-review.html`](chat-events-v2-review.html)。可编辑源是
 [`接口契约-v2/common.json`](接口契约-v2/common.json) 与
@@ -75,13 +85,14 @@ JWT、APPKEY 和 access-token 分别使用当前实现测试中的 `Bearer opaqu
 
 1. `access-token` 对三种用户事件均为必填，但 Claw 只在实际 Mate tool execute 使用；
 2. 请求体使用 `event` 包装和有序 `content[]`，与 mate 请求结构同构；
-3. `200 ResultBean` 返回完整内部用户事件，包含 `entryId`、`entrySeq`、
-   `createdAt` 及规范化业务字段；
+3. `200 ResultBean` 返回完整用户事件，包含 `eventId`、`createdAt` 及规范化业务字段，
+   不返回 `entryId` 或 `entrySeq`；
 4. 不引入 `Idempotency-Key`。响应丢失时通过权威历史对账，不盲目重放 POST。
 
-同构只减少 mate 到 Claw 的请求转换，不改变所有权。Claw 的 `entryId/entrySeq` 是
-内部持久化身份；mate 的公共 `eventId` 仍由 mate 契约管理，不能把内部 Entry 身份
-直接暴露给浏览器。
+同构只减少 mate 到 Claw 的请求转换，不改变所有权。Claw v2 使用 `eventId` 作为 HTTP
+事件身份；数据库内部 Entry 标识和序号不进入公共契约。mate 的公共 `eventId` 仍由 mate
+契约管理；是否复用同一个值或建立映射，留待 bridge 对账设计确认，本次不预设额外映射，
+也不能仅因字段同名就假定值相同。
 
 ## 3. 目标分层与生命周期
 
@@ -145,8 +156,8 @@ pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime
 3. 新增独立 GET stream，验证同 Session 多订阅者、跨 idle/execution 保持连接、慢消费者
    隔离、heartbeat 和断线不取消执行；
 4. 将历史游标升级为固定快照，验证新写入不进入已开始翻页的快照；
-5. mate bridge 切换到“先保持 live 观察，再独立 POST”，通过公共 `eventId` 与 Claw
-   Entry 映射对账，最后移除独立 Abort 调用路径。
+5. mate bridge 切换到“先保持 live 观察，再独立 POST”；确认 mate 与 Claw 的 `eventId`
+   复用或映射规则后用于对账，最后移除独立 Abort 调用路径。
 
 验收必须覆盖：POST 成功但响应丢失、live SSE 中断、订阅队列溢出、两个同时订阅者、
 interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历史恢复，以及 POST 不因
@@ -158,6 +169,7 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 |---|---|---|
 | 2026-09-03 | 资源模型 | 已确认选择 A：Session Events 三接口，执行保持内部状态，无 `executionId/runId` |
 | 2026-09-03 | POST 事件范围 | 已确认同一 POST 接受 `user.message`、`user.interrupt`、`user.tool_confirmation`；一次请求提交一条，不支持批量 |
+| 2026-09-03 | POST 事件身份 | 已确认成功响应使用 `eventId`，不公开 `entryId` 或 `entrySeq`；内部 Entry 标识和序号可继续用于持久化与排序，Q3 只继续评审响应宽度 |
 | 2026-09-03 | `X-HW-ID` 语义 | 已确认为用户凭据 ID；不是公司、服务或应用调用方标识 |
 | 2026-09-03 | Header 示例与处理说明 | 已确认使用 `credential-jwt`、`credential-appkey`、`Bearer opaque-token`、`opaque-appkey`、`opaque-access-token`；凭据从请求读取，只在内存中保留到本次 Agent 执行结束，并仅随实际 Mate tool execute 发送。此项不确认 `access-token` 必填策略 |
 | 2026-09-03 | POST 字段 | 评审中；四个推荐项只是当前提案，不视为用户确认 |
@@ -166,6 +178,7 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.5 | 2026-09-04 | 按用户修正冻结 v2 公共事件身份：三种 POST 成功响应统一使用 `eventId`，删除 `entryId/entrySeq`；内部 Entry 序号不穿透 HTTP，Q3 收窄为完整事件与最窄回执的响应宽度评审；增加对应校验。 |
 | 0.1.4 | 2026-09-03 | 冻结用户认可的 Header 具体非生产示例值与凭据处理说明；明确该确认不包含 `access-token` 必填策略。 |
 | 0.1.3 | 2026-09-03 | 将凭据处理改写为“请求读取—内存保留到执行结束—仅 Tool execute 发送”的具体过程；全部凭据 Header 改用当前源码测试中的具体非生产示例值。 |
 | 0.1.2 | 2026-09-03 | 修正并冻结 `X-HW-ID` 的身份语义：它是用户凭据 ID，不是公司、服务或应用调用方标识；同步替换请求示例占位符并增加回归校验。 |

@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "持久化一个用户事件并返回接受结果",
-    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围、Header 示例值和凭据处理说明已经确认，其余字段仍是本轮候选方案。",
+    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。成功响应中的事件身份已确认为 eventId，不公开 entryId 或 entrySeq；内部持久化仍可使用 Entry 标识和序号。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围、事件身份、Header 示例值和凭据处理说明已经确认，其余字段仍是本轮候选方案。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -119,7 +119,7 @@
         "status": "200",
         "tabLabel": "200 · user.message",
         "label": "OK",
-        "summary": "事件已经持久化并被接受；返回同一条完整内部用户事件。Agent 后续输出只从独立 live SSE 或权威历史读取。",
+        "summary": "事件已经持久化并被接受；当前候选返回同一条完整用户事件。事件使用 eventId，不返回 entryId 或 entrySeq；Agent 后续输出只从独立 live SSE 或权威历史读取。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -131,8 +131,7 @@
             "resMsg": "success",
             "result": {
               "event": {
-                "entryId": "entry_100",
-                "entrySeq": 204,
+                "eventId": "b7ef45d40a854c33af7a36df871a21e8",
                 "type": "user.message",
                 "createdAt": "2026-09-03T08:30:15.123Z",
                 "content": [
@@ -167,8 +166,7 @@
             "resMsg": "success",
             "result": {
               "event": {
-                "entryId": "entry_101",
-                "entrySeq": 205,
+                "eventId": "aee903c130e048b9bc2894fc32cd63a8",
                 "type": "user.interrupt",
                 "createdAt": "2026-09-03T08:30:16.420Z"
               }
@@ -181,7 +179,7 @@
         "status": "200",
         "tabLabel": "200 · tool confirmation",
         "label": "OK",
-        "summary": "确认事件已经持久化并被接受；Tool Call、确认和结果通过同一个 toolCallId 关联，但各自仍是不同 Entry。",
+        "summary": "确认事件已经持久化并被接受；Tool Call、确认和结果通过同一个 toolCallId 关联，但各自仍有独立 eventId。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -193,8 +191,7 @@
             "resMsg": "success",
             "result": {
               "event": {
-                "entryId": "entry_102",
-                "entrySeq": 206,
+                "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
                 "type": "user.tool_confirmation",
                 "createdAt": "2026-09-03T08:30:17.100Z",
                 "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
@@ -398,8 +395,8 @@
     ]
   },
   "review": {
-    "status": "Header 示例与处理说明已确认 · 其余字段评审中",
-    "notice": "已确认三种用户事件范围、X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。以下四项仍待确认，包括 access-token 是否对三种事件都必填；推荐项已预选，但不会自动视为确认。",
+    "status": "事件范围与 eventId 已确认 · Header 示例与处理说明已确认 · 其余字段评审中",
+    "notice": "已确认三种用户事件范围；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。以下四项仍待确认，包括 access-token 是否对三种事件都必填；Q3 只继续评审完整事件与最窄回执的响应宽度，任何选项都必须遵守 eventId 且无 entrySeq。推荐项已预选，但不会自动视为确认。",
     "questions": [
       {
         "id": "Q1-access-token",
@@ -447,18 +444,18 @@
       },
       {
         "id": "Q3-success-response",
-        "legend": "Q3 · 200 成功响应返回什么？",
+        "legend": "Q3 · 除已确认的 eventId 外，200 成功响应返回多少内容？",
         "options": [
           {
-            "label": "A · 完整内部事件（推荐）",
-            "value": "A-complete-internal-event",
-            "description": "返回 entryId、entrySeq、createdAt 和规范化业务字段，便于 mate 精确关联 Claw 历史。",
+            "label": "A · 完整用户事件（推荐）",
+            "value": "A-complete-event-with-event-id",
+            "description": "返回 eventId、createdAt 和规范化业务字段，不返回 entryId 或 entrySeq；便于调用方直接对账历史。",
             "selected": true
           },
           {
-            "label": "B · 最窄接受回执",
-            "value": "B-minimal-acceptance-receipt",
-            "description": "只返回 accepted=true/acceptedAt，后续必须额外读取历史才能取得事件身份。"
+            "label": "B · 最窄事件回执",
+            "value": "B-minimal-event-receipt",
+            "description": "只返回 eventId 和 acceptedAt，不返回完整业务字段或 entrySeq；后续通过历史读取完整事件。"
           }
         ]
       },
