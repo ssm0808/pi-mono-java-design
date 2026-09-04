@@ -2,12 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.6.3 |
-| 状态 | Session Events v2 资源模型 A、POST 事件范围、`eventId` 身份与 `access-token` 必填规则已确认；其余 POST 字段评审中；HTTP 1.43.5 保留为迁移前 v1 基线 |
+| 文档版本 | 3.6.4 |
+| 状态 | Session Events v2 资源模型 A、POST 事件范围、`eventId` 身份、`access-token` 必填与事件顺序规则已确认；其余 POST 字段评审中；HTTP 1.43.5 保留为迁移前 v1 基线 |
 | 当前传输结论 | v2 使用独立 POST、Session live SSE 与固定快照历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
+| v2 事件顺序补充核对 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；证据与原基线对比见 v2 设计 §4.1 |
 | pi-mono Slash 对比基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -43,6 +44,10 @@ v2 公共事件身份使用 `eventId`，不公开内部 `entryId` 或 `entrySeq`
 持久化排序与分页，但不得穿透 POST、live SSE 或权威历史响应。
 三种 POST 用户事件在 JWT/APPKEY 模式下均必须携带 `access-token`，但只在实际
 Mate tool execute 时发送；该必填规则已确认，不再列为待选项。
+事件顺序规则已确认：同一 Session 先检查前置依赖、确定接受顺序，再在同一短事务内
+分配内部序号并追加。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按
+`createdAt` 重排；时间字段只用于展示，本次不更改其取值语义。此项是 v2 目标约束，
+不代表当前 Java 已完整实现多来源依赖检查。
 第一个 POST operation 的字段仍在评审，详见
 [`Session Events v2 重设计`](chat-events-v2-design.md) 和
 [`交互评审页`](chat-events-v2-review.html)。
@@ -494,6 +499,7 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.6.4 | 2026-09-04 | 同步 Session Events v2 0.1.7：确认依赖顺序、短事务有序追加与 ListEvents 展示规则；时间戳不参与重排，内部序号仍不公开；补充源码核对，其他字段保持待评审。 |
 | 3.6.3 | 2026-09-04 | 同步 Session Events v2 0.1.6：三种用户事件统一携带 `access-token`，JWT/APPKEY 模式均必填；从待评审项中移除此项，其他字段继续评审。 |
 | 3.6.2 | 2026-09-04 | 同步 Session Events v2 0.1.5：公共事件身份统一使用 `eventId`，POST、live SSE 和权威历史不公开内部 `entryId/entrySeq`；其余 POST 字段继续评审。 |
 | 3.6.1 | 2026-09-03 | 同步 HTTP 1.43.5：十三个接口统一采用源码测试中的具体 Header 示例；明确 `X-HW-ID` 是用户凭据 ID；仅在 POST Events/Command 说明凭据的内存保留期限、Mate tool execute 发送范围和禁止落盘范围。 |

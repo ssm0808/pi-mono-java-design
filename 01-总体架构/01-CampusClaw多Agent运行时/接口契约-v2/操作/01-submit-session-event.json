@@ -395,8 +395,8 @@
     ]
   },
   "review": {
-    "status": "事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 其余字段评审中",
-    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。以下三项仍待确认：Q2 请求结构、Q3 成功响应宽度、Q4 重试策略。Q3 的任何选项都必须遵守 eventId 且无 entrySeq。推荐项已预选，但不会自动视为确认。",
+    "status": "事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 其余字段评审中",
+    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。以下三项仍待确认：Q2 请求结构、Q3 成功响应宽度、Q4 重试策略。Q3 的任何选项都必须遵守 eventId 且无 entrySeq。推荐项已预选，但不会自动视为确认。",
     "questions": [
       {
         "id": "Q2-request-shape",

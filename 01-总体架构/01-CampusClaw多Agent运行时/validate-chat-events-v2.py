@@ -68,6 +68,19 @@ def validate_access_token_rule(operation: dict) -> None:
         )
 
 
+def validate_event_ordering_rule(review: dict) -> None:
+    require("顺序规则已确认" in review["status"], "review must preserve the confirmed ordering decision")
+    for rule in (
+        "先统一检查事件依赖、确定处理顺序",
+        "同一事务内分配内部序号并写入",
+        "前置事件未提交时，依赖它的事件不得先进入权威历史",
+        "ListEvents 按已提交的内部顺序返回",
+        "客户端保持数组顺序，不按 createdAt 重排",
+        "不公开 entrySeq",
+    ):
+        require(rule in review["notice"], f"review must retain the ordering rule: {rule}")
+
+
 def main() -> int:
     try:
         common = json.loads(COMMON_PATH.read_text(encoding="utf-8"))
@@ -87,6 +100,7 @@ def main() -> int:
             validate_public_payload(example["value"])
         validate_success_events(operation)
         validate_access_token_rule(operation)
+        validate_event_ordering_rule(review)
         header_sets = [
             ("common", common["requestHeaderExamples"]),
             ("submitSessionEvent", operation["requestHeaderExamples"]),

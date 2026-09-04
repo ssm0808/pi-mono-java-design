@@ -20,6 +20,15 @@ title CampusClaw Target Session Events Resource Model
 ' and multiple subscribers; disconnect never cancels or retries a write.
 ' Design reason: keep write acceptance, best-effort preview, and recovery authority
 ' separate while preserving pi Agent and Tool lifecycle semantics inside Runtime.
+' Supplemental evidence (pi-mono-java a8192e047f4061bd385297d3dc6c4358362d0d49):
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
+' acceptUserEvent, appendEntry, and appendLocked, lines 55-87 and 208-218.
+' campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml,
+' lockSessionForUpdate and listCurrentBranch, lines 47-54 and 132-164.
+' Observed behavior: transactional sequence allocation and sequence-ordered reads;
+' these files are unchanged from c9d858bc8261bf07f5585f545b53495bf2226a56.
+' Target-only architecture change: check causal prerequisites at a shared Session
+' acceptance boundary before assigning sequence; a DB lock alone cannot infer them.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -46,7 +55,7 @@ skinparam note {
 actor "mate-service" as Mate
 participant "Runtime Event API\n<<target-only>>" as API
 participant "Session Live Hub\n<<target-only>>" as Hub
-participant "Event Acceptance\n<<target-only>>" as Accept
+participant "Event Acceptance / Ordered Append\n<<target-only>>" as Accept
 participant "Execution Coordinator\n<<existing, changed>>" as Execution
 participant "Event Projector\n<<target-only>>" as Projector
 database "Runtime Session Store" as Store
@@ -61,8 +70,9 @@ end
 group Submit one user event independently
   Mate -> API : POST /sessions/{sessionId}/events
   API -> Accept : validated RequestVO and request snapshot
-  Accept -> Store : recheck mutable state and persist atomically
-  Store --> Accept : accepted Entry
+  Accept -> Accept : check prerequisites and determine Session order
+  Accept -> Store : short transaction: recheck, allocate sequence, append
+  Store --> Accept : committed Entry
   Accept -> Execution : start, interrupt, or resume
   Accept --> API : complete accepted internal event
   API --> Mate : 200 ResultBean JSON
@@ -71,8 +81,11 @@ end
 loop zero or more internal executions while the live stream stays open
   Execution -> Projector : normalized Agent lifecycle
   alt authoritative event
-    Projector -> Store : persist Entry first
-    Store --> Projector : commit succeeds
+    Projector -> Accept : append through the same Session ordering boundary
+    Accept -> Accept : check prerequisites before sequence allocation
+    Accept -> Store : short transaction: recheck, allocate sequence, append
+    Store --> Accept : commit succeeds
+    Accept --> Projector : committed Entry
     Projector -> Hub : publish completed event
   else transient preview
     Projector -> Hub : publish delta best-effort
@@ -83,8 +96,8 @@ end
 group Recover from POST uncertainty, SSE gap, or reconnect
   Mate -> API : GET /sessions/{sessionId}/events?filters&page
   API -> Query : fixed filters and opaque page
-  Query -> Store : read one snapshot watermark
-  Store --> Query : authoritative Entries
+  Query -> Store : read committed snapshot in internal sequence order
+  Store --> Query : ordered authoritative Entries
   Query --> API : fixed-snapshot page
   API --> Mate : 200 ResultBean JSON
 end
@@ -99,11 +112,16 @@ note over Accept,Execution
 No executionId or runId crosses the HTTP boundary.
 The accepted event is durable before success is returned.
 Disconnect never cancels execution or retries the POST.
+Dependent events cannot precede uncommitted prerequisites.
+Independent events use Session acceptance order.
+Model calls, tool calls, and prerequisite waits stay outside DB transactions.
 end note
 
 note over Store,Query
 The first history page captures its watermark and filters.
 Every later opaque page remains bound to that snapshot.
+The client keeps response array order, never timestamp order.
+Public events use eventId; entrySeq remains internal.
 end note
 @enduml
 
@@ -130,6 +148,15 @@ title CampusClaw Target Session Events Class Structure
 ' SessionLiveEventHub replaces RuntimeEventStream as the HTTP observation boundary.
 ' Design reason: isolate request validation, mutable admission, execution lifetime,
 ' per-connection backpressure, persistence, and public projection responsibilities.
+' Supplemental evidence (pi-mono-java a8192e047f4061bd385297d3dc6c4358362d0d49):
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventProjector.java,
+' onEvent and persistAssistant, lines 105-116 and 238-254.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
+' appendEntry and appendLocked, lines 76-87 and 208-218.
+' Observed behavior: synchronized callbacks and transactional append, unchanged
+' from c9d858bc8261bf07f5585f545b53495bf2226a56 for these files.
+' Target-only architecture change: all authoritative writers share Session ordering.
+' Design reason: prevent a dependent result from winning a race to the DB lock.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -165,6 +192,7 @@ package "Application" {
   class UserInterruptEventHandler <<Spring singleton, target-only>>
   class UserToolConfirmationEventHandler <<Spring singleton, target-only>>
   class SessionEventAcceptanceSnapshot <<request scope, immutable, target-only>>
+  class SessionEventAppender <<Spring singleton, target-only>>
   class SessionEventQueryService <<Spring singleton, existing-changed>>
 }
 
@@ -202,21 +230,22 @@ SessionEventHandler <|.. UserMessageEventHandler
 SessionEventHandler <|.. UserInterruptEventHandler
 SessionEventHandler <|.. UserToolConfirmationEventHandler
 
-UserMessageEventHandler --> RuntimeSessionRepository : recheck and append
+UserMessageEventHandler --> SessionEventAppender : accept user event
 UserMessageEventHandler --> RuntimeExecutionCoordinator : start
-UserInterruptEventHandler --> RuntimeSessionRepository : append audit Entry
+UserInterruptEventHandler --> SessionEventAppender : accept interrupt
 UserInterruptEventHandler --> RuntimeExecutionCoordinator : request interrupt
-UserToolConfirmationEventHandler --> RuntimeSessionRepository : recheck pending Tool and append
+UserToolConfirmationEventHandler --> SessionEventAppender : accept Tool confirmation
 UserToolConfirmationEventHandler --> RuntimeExecutionCoordinator : resume Tool flow
 
 RuntimeExecutionCoordinator *-- "0..1 per Session" RuntimeActiveExecution
 RuntimeExecutionCoordinator --> SessionEventProjector : normalized lifecycle
-SessionEventProjector --> RuntimeSessionRepository : persist authoritative Entry
+SessionEventProjector --> SessionEventAppender : accept authoritative event
+SessionEventAppender --> RuntimeSessionRepository : ordered transactional append
 SessionEventProjector --> SessionEventPublisher : publish after commit or best-effort
 SessionEventPublisher <|.. SessionLiveEventHub
 SessionLiveEventHub *-- "0..*" SessionLiveSubscription : bounded queue per connection
 
-SessionEventQueryService --> RuntimeSessionRepository : snapshot-bound page
+SessionEventQueryService --> RuntimeSessionRepository : committed ordered snapshot page
 RuntimeSessionRepository <|.. MyBatisRuntimeSessionRepository
 MyBatisRuntimeSessionRepository --> RuntimeEntryDTO : maps records
 
@@ -230,6 +259,16 @@ end note
 note right of AcceptedSessionEventResponseVO
 Controller returns a response-specific immutable VO.
 DTOs and persistence records never cross the API boundary.
+end note
+
+note right of SessionEventAppender
+Coordinate by Session, not by HTTP request or producer.
+Check source order and committed prerequisites before append.
+Recheck mutable state and dependencies in the owning transaction.
+Allocate sequence and append atomically; keep the lock until commit.
+No model calls, tool calls, or missing-dependency waits in the transaction.
+Process-local locking alone is insufficient across service instances.
+The class name and scheduling mechanism remain target-only suggestions.
 end note
 
 note bottom of SessionLiveSubscription

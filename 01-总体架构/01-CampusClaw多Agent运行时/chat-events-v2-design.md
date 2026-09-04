@@ -2,10 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.6 |
-| 状态 | 资源模型 A、POST 三种用户事件范围、`eventId` 身份、`access-token` 必填规则、Header 示例与处理说明已确认；其余字段评审中 |
+| 文档版本 | 0.1.7 |
+| 状态 | 资源模型 A、POST 三种用户事件范围、`eventId` 身份、`access-token` 必填规则、Header 示例与处理说明、事件顺序规则已确认；其余字段评审中 |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
+| 事件顺序补充核对提交 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；只补充本文 §4.1 证据，不替换其他主题基线 |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | mate 公共契约基线 | [`mate-service 通用对话 API`](../../02-服务与接口/07-mate-service通用对话API/README.md) 1.4.4 |
 | 外部公共契约核对日 | 2026-09-03 |
@@ -20,7 +21,7 @@ CampusClaw 采用 Session Events 三接口，内部执行不成为公共资源�
 |---|---|---|---|
 | `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 事件范围、`eventId`、`access-token` 必填与 Header 说明已确认，其余字段评审中 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events/stream` | 订阅跨多次内部执行的 Session live SSE | 只确认职责，字段未开始评审 |
-| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 读取固定快照的权威历史 | 只确认职责，字段未开始评审 |
+| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 读取固定快照的权威历史 | 职责与顺序规则已确认，其余字段未开始评审 |
 
 这三个 operation 同构于 mate 公共 API 的“提交、实时观察、权威恢复”职责，但不是
 字节透明转发。Claw 保留内部 `sessionId`、Entry 身份和更丰富的 Runtime 事件；mate
@@ -101,7 +102,7 @@ POST 成功响应中的事件身份也已确认使用 `eventId`，不返回 `ent
 
 ![Session Events 目标类图](设计图/事件接口重设计/target_session_events_classes.svg)
 
-[PlantUML 源码：`target_session_events_classes`](设计图/事件接口重设计/diagram.puml#L110)
+[PlantUML 源码：`target_session_events_classes`](设计图/事件接口重设计/diagram.puml#L128)
 
 目标结构采用五个责任边界：
 
@@ -119,6 +120,37 @@ POST 成功响应中的事件身份也已确认使用 `eventId`，不返回 `ent
 
 历史查询在第一页固定水位、过滤条件和分页方向，后续不透明 page 必须绑定同一快照。
 live Hub 不重放、不承担恢复；任何 SSE gap、订阅溢出或 POST 响应不确定都回到历史对账。
+
+### 3.1 已确认的事件处理、写入与展示顺序
+
+本节是已确认的 v2 目标要求，属于架构变更，不表示当前实现已完整支持多来源事件的
+依赖检查。“顺序正确”指保持业务因果关系，不是按机器时钟还原所有事件的物理发生顺序。
+例如：用户消息先于由它触发的模型工具调用，工具调用记录先于对应工具结果，工具结果
+先于依赖该结果的模型最终回答。这里没有新增公共事件类型或字段。
+
+1. 同一 Session 的权威事件先经过统一的接受边界，检查来源顺序和前置事件依赖，再确定
+   写入顺序。不能让不同工作线程各自抢数据库锁，把抢锁先后当作业务先后。
+2. 按已确定的顺序，在同一个短事务内完成可变状态与依赖复核、内部序号分配及记录追加。
+   同一 Session 的追加锁保持到提交；前置事件未提交或写入失败时，依赖它的事件不得先
+   进入权威历史。不能先独立领号、再交给异步线程任意提交。串行范围不包括模型生成、
+   工具执行或等待缺失的前置事件，这些耗时操作不占用数据库事务。
+3. 无依赖的并发事件不存在唯一的业务先后，以该 Session 统一接受顺序为准。上游已发生
+   乱序时，按来源顺序或显式依赖等待、校验；缺少足够信息就不能宣称恢复了因果顺序，
+   更不能用时间戳或随机 `eventId` 猜测。缓冲上限、超时和失败处置属于后续实施细节。
+4. ListEvents 只读取已提交的权威记录，按内部顺序返回；过滤后的结果保留相对顺序，
+   客户端按响应数组顺序展示，不按 `createdAt` 或 `eventId` 重新排序。`createdAt`
+   只用于时间展示，允许相同或不递增；本次不改其取值语义、示例或精度约定，也不新增
+   数据库插入时间字段。对外继续使用 `eventId`，不公开 `entryId/entrySeq`。
+5. 已确认的固定快照历史只纳入对应水位内已提交的记录，不让后来提交的事件插入已经
+   翻过的页面。此处明确排序和提交约束，不提前确认 ListEvents 的过滤、游标字段、分页
+   方向选项或保留期，也不确认 live SSE 的详细事件契约。
+
+推荐目标类图用 `SessionEventAppender` 表示共享的接受与有序追加职责：三个用户事件
+Handler 和 Runtime Projector 都经过该边界，再由 Repository 执行短事务。该类名及具体
+调度机制是 target-only 落地建议；确认的是共同顺序约束，而不是必须增加某种队列。
+它是 Spring 单例协作者，但协调状态按 Session 隔离；多实例场景仍须在持久化事务中
+复核依赖和状态，不能只依赖某个 JVM 内的互斥锁。查询不经过该写入边界，不等待模型
+或工具执行完成。
 
 ## 4. 源码证据与差距
 
@@ -138,6 +170,21 @@ live Hub 不重放、不承担恢复；任何 SSE gap、订阅溢出或 POST 响
 | 产品约束（target-only） | POST `access-token` | 三种用户事件在 JWT/APPKEY 模式下均必须携带，统一调用方请求头组装；不把三事件必填表述为现有 Java 已支持的行为 |
 | 安全加固 | POST 凭据处理 | 凭据从请求读入后只在内存中保留到本次 Agent 执行结束，只在必要的实际 Mate tool execute 使用，不进入持久化、日志、SSE 或历史 |
 
+### 4.1 事件顺序补充核对
+
+本节核对 `pi-mono-java@a8192e047f4061bd385297d3dc6c4358362d0d49`，下表路径均相对
+实现仓。与原基线 `c9d858bc8261bf07f5585f545b53495bf2226a56` 比较，下表五个文件均无
+变化；新增的是对这些符号的排序证据分析，不是切换其他主题的实现结论。
+
+| 分类 | 仓库相对路径与符号 | 已观察行为与边界 |
+|---|---|---|
+| 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/agent/Agent.java:294-306` · `emit` | 在当前线程依次通知 listener；这不是多来源的全局因果排序器 |
+| 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventProjector.java:105-116,238-254,382-385` · `onEvent/persistAssistant/emitPersisted` | 同一 Projector 同步处理回调，持久化完成后发送完整事件；不能由此推断不同 Projector 或其他写入入口已共同检查前置依赖 |
+| 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:55-87,208-218` · `acceptUserEvent/appendEntry/appendLocked` | 事务锁定 Session，再取序号、插入和递增；保存到达该写入边界的顺序，并不自动恢复上游乱序 |
+| 已观察实现 | `campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml:47-75,132-164` · `lockSessionForUpdate/lockNextSequence/insertEntry/listCurrentBranch` | 使用行锁；历史 SQL 按 `entry_seq` 排序，不按 `timestamp` 排序 |
+| 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java:53-60,90-99` · `list/pageOf` | 保留查询结果顺序，以最后一项内部序号生成下一页；当前实现没有 v2 固定快照水位 |
+| 架构变更（target-only） | 本文 §3.1 与 `SessionEventAppender` 推荐边界 | 所有来源共同遵守前置依赖和有序提交；ListEvents 读取已提交顺序，时间戳只作展示。需按 §5 实施并测试，不能把数据库行锁当作全部保证 |
+
 pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime 内核行为参考；
 本次不把 pi 的进程内事件、本地 Session 文件或 CLI 传输直接当成 CampusClaw HTTP 契约。
 
@@ -154,18 +201,31 @@ pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime
 资源模型落地时按以下顺序实施：
 
 1. 引入用户事件联合 Request VO、Handler Registry 和三个 Handler；POST 改为普通
-   ResultBean，并以事务或 Session 锁完成状态复核与持久化；
+   ResultBean。先让 Handler 与 Runtime Projector 汇合到共享的 Session 有序接受边界，
+   再以短事务完成依赖与状态复核、内部序号分配和持久化，禁止绕过该顺序约束独立追加；
 2. 引入 `SessionEventPublisher` 与多订阅者 `SessionLiveEventHub`，先让现有
    Coordinator 双写到新发布边界，再删除 POST 持有的 `RuntimeEventStream`；
 3. 新增独立 GET stream，验证同 Session 多订阅者、跨 idle/execution 保持连接、慢消费者
    隔离、heartbeat 和断线不取消执行；
-4. 将历史游标升级为固定快照，验证新写入不进入已开始翻页的快照；
+4. 将历史游标升级为固定快照，按已提交的内部顺序读取并保持响应数组顺序，验证新写入
+   不进入已开始翻页的快照；
 5. mate bridge 切换到“先保持 live 观察，再独立 POST”；确认 mate 与 Claw 的 `eventId`
    复用或映射规则后用于对账，最后移除独立 Abort 调用路径。
 
 验收必须覆盖：POST 成功但响应丢失、live SSE 中断、订阅队列溢出、两个同时订阅者、
 interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历史恢复，以及 POST 不因
 观察流断开而自动重放。
+
+顺序专项验收（目标测试，尚未实施）：
+
+- 前置事件故意延迟、失败或回滚时，依赖事件不能先进入历史；工具结果不能早于对应
+  工具调用记录，依赖结果的最终回答不能早于结果。
+- 多线程及多个写入入口并发时，依赖检查和序号追加不能被绕过；无依赖事件形成确定的
+  接受顺序。同 Session 模型/工具耗时调用不占用追加事务，不阻塞中断请求接受。
+- 来源事件乱序时，缺失依赖不被时间戳排序掩盖；具体缓冲、超时与失败策略在实施时明确。
+- 时间戳相同或回退时，ListEvents 与客户端仍保持内部顺序；响应不出现内部序号。
+- 在两个依赖事件之间分页、同时追加新事件或回滚写入时，固定快照内的匹配记录不漏项、
+  不重复、不被后来提交的低位记录插入；过滤仅移除事件，不改变剩余记录的相对顺序。
 
 ## 6. 决策记录
 
@@ -177,12 +237,14 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 | 2026-09-03 | `X-HW-ID` 语义 | 已确认为用户凭据 ID；不是公司、服务或应用调用方标识 |
 | 2026-09-03 | Header 示例与处理说明 | 已确认使用 `credential-jwt`、`credential-appkey`、`Bearer opaque-token`、`opaque-appkey`、`opaque-access-token`；凭据从请求读取，只在内存中保留到本次 Agent 执行结束，并仅随实际 Mate tool execute 发送。此项不确认 `access-token` 必填策略 |
 | 2026-09-04 | POST `access-token` 必填 | 已确认统一携带：三种用户事件在 JWT/APPKEY 模式下都必填；携带不代表使用，只随实际 Mate tool execute 发送，Q1 移出待选项 |
+| 2026-09-04 | 事件顺序 | 已确认先按 Session 统一检查依赖并确定顺序，再在同一短事务内分配内部序号和追加；依赖事件不得越过未提交的前置事件。ListEvents 按已提交的内部顺序返回，客户端不按 `createdAt` 重排，仍不公开 `entrySeq`。本次不更改时间字段语义，也不确认其余接口字段 |
 | 2026-09-04 | POST 剩余字段 | Q2 请求结构、Q3 成功响应宽度、Q4 重试策略仍在评审；推荐项不视为用户确认 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.7 | 2026-09-04 | 确认事件处理、事务写入与 ListEvents 的共同顺序规则；补充 `a8192e0` 源码证据和目标差距，更新共享追加边界、目标图与顺序专项验收；保留时间示例及 Q2/Q3/Q4 待决状态。 |
 | 0.1.6 | 2026-09-04 | 确认三种用户事件统一携带 `access-token`，两种 Header 模式均必填；保留示例值、使用范围和生命周期，移除 Q1 待选项并增加回归校验。 |
 | 0.1.5 | 2026-09-04 | 按用户修正冻结 v2 公共事件身份：三种 POST 成功响应统一使用 `eventId`，删除 `entryId/entrySeq`；内部 Entry 序号不穿透 HTTP，Q3 收窄为完整事件与最窄回执的响应宽度评审；增加对应校验。 |
 | 0.1.4 | 2026-09-03 | 冻结用户认可的 Header 具体非生产示例值与凭据处理说明；明确该确认不包含 `access-token` 必填策略。 |
