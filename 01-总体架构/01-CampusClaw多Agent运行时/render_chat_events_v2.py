@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the current operation and a separate read-only confirmed contract."""
+"""Render the current operation and retire superseded whole-operation approval."""
 
 import argparse
 from pathlib import Path
@@ -26,12 +26,23 @@ def build_html(confirmed: bool = False) -> str:
         common, models = original_loader()
         state = common["reviewState"]
         keys = state["confirmedOperations"] if confirmed else [state["currentOperation"]]
+        if confirmed and not keys:
+            return '''<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Events v2 — 评审状态更新</title></head>
+<body><main><h1>原独立 POST JSON 方案已被合并方案替代</h1>
+<p>当前没有整体确认的 v2 接口。既有请求、Header、eventId、排序和类型决定继续有效；
+完整本次 user.* 首帧回执也已确认；输出范围与结束条件仍在评审。</p>
+<p><a href="chat-events-v2-review.html">打开当前 POST 合并接口评审</a></p>
+<p>旧方案可从 Git 历史恢复，不再作为现行接口展示。</p></main></body></html>
+'''
         selected = [model for model in models if model["operation"]["operationKey"] in keys]
         renderer.require(len(selected) == len(keys) and bool(keys), "Review operation selection is invalid")
         for model in selected:
             model["api"]["visibility"] = (
                 "Internal · 已确认接口 · target-only" if confirmed
-                else "Internal · 当前评审：实时订阅 · target-only"
+                else "Internal · 当前评审：POST 提交与推送合并 · target-only"
             )
         renderer.load_contract = lambda: (common, selected)
         return renderer.build_html()

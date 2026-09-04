@@ -1,163 +1,95 @@
 @startuml target_session_events_resource_model
-title CampusClaw Target Session Events Resource Model
-
-' Source evidence (pi-mono-java c9d858bc8261bf07f5585f545b53495bf2226a56):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java,
-' RuntimeEventController.submit and RuntimeEventController.list, lines 39-91.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java,
-' RuntimeEventStream.attach and RuntimeEventStream.detachInternal, lines 89-159.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventQueryService.java,
-' RuntimeEventQueryService.list and RuntimeEventQueryService.pageOf, lines 53-99.
-' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
-' packages/agent/src/agent-loop.ts, streamAssistantResponse.
-' packages/coding-agent/src/core/agent-session.ts, _handleAgentEvent.
-' Observed behavior: the current Java POST owns one execution-scoped SSE stream,
-' one RuntimeEventStream permits only one attached subscriber, and GET pagination
-' does not bind later pages to a fixed snapshot watermark.
-' Target-only design: POST acceptance, live observation, and durable history are
-' three separate Session-scoped operations. Execution remains an internal concept.
-' Architecture change: a long-lived Session stream can observe multiple executions
-' and multiple subscribers; disconnect never cancels or retries a write.
-' Design reason: keep write acceptance, best-effort preview, and recovery authority
-' separate while preserving pi Agent and Tool lifecycle semantics inside Runtime.
-' Supplemental evidence (pi-mono-java a8192e047f4061bd385297d3dc6c4358362d0d49):
-' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
-' acceptUserEvent, appendEntry, and appendLocked, lines 55-87 and 208-218.
-' campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml,
-' lockSessionForUpdate and listCurrentBranch, lines 47-54 and 132-164.
-' Observed behavior: transactional sequence allocation and sequence-ordered reads;
-' these files are unchanged from c9d858bc8261bf07f5585f545b53495bf2226a56.
-' Target-only architecture change: check causal prerequisites at a shared Session
-' acceptance boundary before assigning sequence; a DB lock alone cannot infer them.
-
+title CampusClaw Target POST Events and History
+' Source evidence: pi-mono-java 918005ee8ccc88d179fc31a0de17a92b4a01383b.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeEventController.java,
+' submit/list, lines 61-91: POST SSE and GET history; no standalone read stream.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventService.java,
+' prepareAndSubmitLocked/acceptUserEntry, lines 101-141: persist message then start.
+' These files are unchanged from a8192e047f4061bd385297d3dc6c4358362d0d49.
+' Observed behavior: current Java already uses request-scoped POST SSE.
+' Confirmed target architecture: combine submission and output in one POST;
+' the first business frame is the complete accepted user event, exactly once.
+' Design reason: remove the gap between a write and an independent live subscription.
+' Target-only: union input, response projection, causal ordering and fixed snapshot.
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
-skinparam defaultFontSize 11
+skinparam defaultFontSize 12
 skinparam sequence {
-  ArrowColor #475569
-  ActorBorderColor #475569
-  ActorFontColor #0F172A
-  LifeLineBorderColor #94A3B8
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
   ParticipantBackgroundColor #F8FAFC
-  ParticipantFontColor #0F172A
-  GroupBorderColor #64748B
-  GroupFontColor #334155
+  ParticipantBorderColor #475569
+  ArrowColor #475569
 }
-skinparam note {
-  BackgroundColor #FFFBEA
-  BorderColor #A16207
-  FontColor #713F12
-}
-
 actor "mate-service" as Mate
-participant "Runtime Event API\n<<target-only>>" as API
-participant "Session Live Hub\n<<target-only>>" as Hub
-participant "Event Acceptance / Ordered Append\n<<target-only>>" as Accept
-participant "Execution Coordinator\n<<existing, changed>>" as Execution
-participant "Event Projector\n<<target-only>>" as Projector
-database "Runtime Session Store" as Store
-participant "History Query\n<<existing, changed>>" as Query
+participant "Event Application Service\n<<target-only>>" as API
+participant "Request Output Binding\n<<target-only>>" as Binding
+participant "Ordered Event Appender\n<<target-only>>" as Append
+database "Session Store" as Store
+participant "Execution Coordinator\n<<existing-changed>>" as Execution
+participant "Request SSE Writer\n<<per POST>>" as Writer
 
-group Open one Session live stream
-  Mate -> API : GET /sessions/{sessionId}/events/stream
-  API -> Hub : create connection-scoped subscription
-  Hub --> Mate : 200 live-only SSE
+Mate -> API : POST /sessions/{sessionId}/events
+API -> Binding : reserve bounded response capacity
+critical Session admission and target binding
+  API -> Binding : bind this message, resume segment or interrupt target
+  API -> Append : validate dependencies and accept user event
+  Append -> Store : short transaction: recheck, allocate sequence, append
+  Store --> Append : committed user event
+  Append --> API : accepted event
+  API -> Binding : enqueue complete user receipt first
+  API -> Execution : start, resume or interrupt the bound target
 end
+Binding -> Writer : release ordered response frames
+Writer --> Mate : 200 SSE; data: complete user.* receipt
 
-group Submit one user event independently
-  Mate -> API : POST /sessions/{sessionId}/events
-  API -> Accept : validated RequestVO and request snapshot
-  Accept -> Accept : check prerequisites and determine Session order
-  Accept -> Store : short transaction: recheck, allocate sequence, append
-  Store --> Accept : committed Entry
-  Accept -> Execution : start, interrupt, or resume
-  Accept --> API : complete accepted internal event
-  API --> Mate : 200 ResultBean JSON
-end
-
-loop zero or more internal executions while the live stream stays open
-  Execution -> Projector : normalized Agent lifecycle
-  alt authoritative event
-    Projector -> Accept : append through the same Session ordering boundary
-    Accept -> Accept : check prerequisites before sequence allocation
-    Accept -> Store : short transaction: recheck, allocate sequence, append
-    Store --> Accept : commit succeeds
-    Accept --> Projector : committed Entry
-    Projector -> Hub : publish completed event
-  else transient preview
-    Projector -> Hub : publish delta best-effort
+loop Output belonging to the bound request scope
+  alt Preview only
+    Execution -> Binding : preview delta best-effort
+  else Authoritative event
+    Execution -> Append : authoritative event
+    Append -> Store : ordered commit outside model/tool calls
+    Store --> Append : committed event
+    Append -> Binding : publish after commit in Session order
   end
-  Hub --> Mate : SSE event
+  Binding -> Writer : response-specific immutable event
+  Writer --> Mate : data: agent.* JSON
 end
-
-group Recover from POST uncertainty, SSE gap, or reconnect
-  Mate -> API : GET /sessions/{sessionId}/events?filters&page
-  API -> Query : fixed filters and opaque page
-  Query -> Store : read committed snapshot in internal sequence order
-  Store --> Query : ordered authoritative Entries
-  Query --> API : fixed-snapshot page
-  API --> Mate : 200 ResultBean JSON
+group Candidate closing rule, not yet confirmed
+  Execution -> Append : corresponding idle state
+  Append -> Store : commit authoritative terminal boundary
+  Append -> Binding : publish matching session.status_idle
+  Binding -> Writer : enqueue idle, then complete this response
+  Writer --> Mate : data: idle; response ends
 end
+Mate -> API : GET /sessions/{sessionId}/events
+API -> Store : query fixed snapshot in committed internal order
+Store --> API : ordered complete events
+API --> Mate : ResultBean JSON history
 
-note over Mate,Hub
-Multiple callers may subscribe to the same Session.
-Each connection owns a bounded queue and fails independently.
-The Hub performs no replay and is never the recovery authority.
+note over API,Execution
+No public executionId, runId or sequence.
+Credentials belong only to the required in-memory execution.
+Do not hold a DB transaction while calling models, tools or network writers.
 end note
-
-note over Accept,Execution
-No executionId or runId crosses the HTTP boundary.
-The accepted event is durable before success is returned.
-Disconnect never cancels execution or retries the POST.
-Dependent events cannot precede uncommitted prerequisites.
-Independent events use Session acceptance order.
-Model calls, tool calls, and prerequisite waits stay outside DB transactions.
-end note
-
-note over Store,Query
-The first history page captures its watermark and filters.
-Every later opaque page remains bound to that snapshot.
-The client keeps response array order, never timestamp order.
-Public events use eventId; entrySeq remains internal.
+note over Binding,Writer
+Never broadcast unrelated Session events to this response.
+A closed response does not cancel accepted execution.
+History repairs uncertainty; never replay the POST automatically.
 end note
 @enduml
 
 @startuml target_session_events_classes
-title CampusClaw Target Session Events Class Structure
-
-' Source evidence (pi-mono-java c9d858bc8261bf07f5585f545b53495bf2226a56):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java,
-' RuntimeEventController.submit and RuntimeEventController.list, lines 39-91.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java,
-' RuntimeEventService.submit and RuntimeEventService.prepareAndSubmit, lines 76-118.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java,
-' RuntimeEventStream.attach, lines 93-100.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java,
-' steer, followUp, abort, and prepareAbort, lines 59-132.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
-' acceptUserEvent and listCurrentBranch, lines 57-120.
-' Observed behavior: current write, query, execution control, and one-subscriber
-' streaming responsibilities are split across the cited classes but remain tied
-' to one execution-scoped RuntimeEventStream returned by POST.
-' Target-only design: all classes and relationships below are target-only unless
-' a class is explicitly marked existing-changed.
-' Architecture change: event-type strategies replace a central type branch, and
-' SessionLiveEventHub replaces RuntimeEventStream as the HTTP observation boundary.
-' Design reason: isolate request validation, mutable admission, execution lifetime,
-' per-connection backpressure, persistence, and public projection responsibilities.
-' Supplemental evidence (pi-mono-java a8192e047f4061bd385297d3dc6c4358362d0d49):
-' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventProjector.java,
-' onEvent and persistAssistant, lines 105-116 and 238-254.
-' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
-' appendEntry and appendLocked, lines 76-87 and 208-218.
-' Observed behavior: synchronized callbacks and transactional append, unchanged
-' from c9d858bc8261bf07f5585f545b53495bf2226a56 for these files.
-' Target-only architecture change: all authoritative writers share Session ordering.
-' Design reason: prevent a dependent result from winning a race to the DB lock.
-
+title CampusClaw Target Request-scoped Event Classes
+' Source evidence: pi-mono-java 918005ee8ccc88d179fc31a0de17a92b4a01383b.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventStream.java,
+' attach/detachInternal, lines 93-159: bounded single-subscriber stream.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java,
+' completeExecution, lines 154-168: persistence, terminal events, stream completion.
+' Observed behavior: a current stream belongs to one active execution.
+' Target-only architecture: per-request bindings support union input without a
+' public Session subscription API. Exact control-output routing remains proposed.
+' Design reason: keep web VOs, application admission, runtime and persistence separate;
+' retain independent response backpressure and shared causal append ordering.
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -165,212 +97,170 @@ skinparam defaultFontSize 11
 skinparam class {
   BackgroundColor #F8FAFC
   BorderColor #475569
-  FontColor #0F172A
   ArrowColor #64748B
 }
-skinparam package {
-  BorderColor #94A3B8
-  FontColor #334155
-}
-
 top to bottom direction
 
-package "Web boundary" {
-  class RuntimeEventController <<Spring singleton, target-only>>
-  class SubmitSessionEventRequestVO <<request VO, target-only>>
-  class AcceptedSessionEventResponseVO <<response VO, target-only>>
+package "runtimeapi.web" {
+  class RuntimeEventController <<singleton, existing-changed>>
+  class RuntimeSseEmitterSubscriber <<per response, existing-changed>>
 }
-
-package "Application" {
-  class SessionEventApplicationService <<Spring singleton, target-only>>
-  class SessionEventHandlerRegistry <<Spring singleton, target-only>>
-  interface SessionEventHandler <<target-only>> {
-    +supports(type)
-    +accept(snapshot)
-  }
-  class UserMessageEventHandler <<Spring singleton, target-only>>
-  class UserInterruptEventHandler <<Spring singleton, target-only>>
-  class UserToolConfirmationEventHandler <<Spring singleton, target-only>>
-  class SessionEventAcceptanceSnapshot <<request scope, immutable, target-only>>
-  class SessionEventAppender <<Spring singleton, target-only>>
-  class SessionEventQueryService <<Spring singleton, existing-changed>>
-  class SessionEventSubscriptionService <<Spring singleton, target-only>>
+package "runtimeapi.vo" {
+  class SubmitSessionEventRequestVO <<validated request, target-only>>
+  class SessionEventResponseVO <<immutable response, target-only>>
 }
-
-package "Runtime core" {
-  class RuntimeExecutionCoordinator <<Spring singleton, existing-changed>>
-  class RuntimeActiveExecution <<Session execution, existing-changed>>
-  class SessionEventProjector <<Spring singleton, target-only>>
+package "runtimeapi.application" {
+  class SessionEventApplicationService <<singleton, target-only>>
+  class SessionEventHandlerRegistry <<singleton, target-only>>
+  interface SessionEventHandler <<target-only>>
+  class UserMessageEventHandler <<singleton, target-only>>
+  class UserInterruptEventHandler <<singleton, target-only>>
+  class UserToolConfirmationEventHandler <<singleton, target-only>>
+  class SessionEventAppender <<singleton, target-only>>
+  class SessionEventQueryService <<singleton, existing-changed>>
+  class SessionEventProjector <<per execution, target-only>>
 }
-
-package "Live observation" {
-  interface SessionEventPublisher <<target-only>> {
-    +publish(event)
-    +publishBestEffort(event)
-  }
-  class SessionLiveEventHub <<Spring singleton, target-only>>
-  class SessionLiveSubscription <<connection scope, target-only>>
+package "runtimeapi.runtime" {
+  class RuntimeExecutionCoordinator <<singleton, existing-changed>>
+  class RuntimeActiveExecution <<per execution, existing-changed>>
 }
-
-package "Persistence" {
+package "runtimeapi.event" {
+  class RequestEventRouter <<singleton, target-only>>
+  class RequestOutputBinding <<per request, target-only>>
+  class RequestEventStream <<per response, target-only>>
+}
+package "runtimeapi.persistence" {
   interface RuntimeSessionRepository <<existing-changed>>
-  class MyBatisRuntimeSessionRepository <<Spring singleton, existing-changed>>
-  class RuntimeEntryDTO <<persistence DTO, existing-changed>>
+  class MyBatisRuntimeSessionRepository <<singleton, existing-changed>>
+}
+package "runtimeapi.dto" {
+  class RuntimeEntryDTO <<database data, existing-changed>>
 }
 
 RuntimeEventController --> SubmitSessionEventRequestVO : validates
 RuntimeEventController --> SessionEventApplicationService : submit
-RuntimeEventController --> AcceptedSessionEventResponseVO : returns
-RuntimeEventController --> SessionEventSubscriptionService : subscribe
-SessionEventSubscriptionService --> RuntimeSessionRepository : recheck Session existence
-SessionEventSubscriptionService --> SessionLiveEventHub : register and coordinate deletion
-RuntimeEventController --> SessionEventQueryService : list fixed snapshot
-
-SessionEventApplicationService *-- SessionEventAcceptanceSnapshot : creates
-SessionEventApplicationService --> SessionEventHandlerRegistry : select by type
-SessionEventHandlerRegistry o-- "3" SessionEventHandler : immutable handlers
+RuntimeEventController --> SessionEventQueryService : list
+RuntimeEventController --> RuntimeSseEmitterSubscriber : starts writer
+RuntimeSseEmitterSubscriber --> SessionEventResponseVO : serializes
+RuntimeSseEmitterSubscriber --> RequestEventStream : drains
+SessionEventApplicationService --> SessionEventHandlerRegistry : selects handler
+SessionEventHandlerRegistry o-- "3" SessionEventHandler
 SessionEventHandler <|.. UserMessageEventHandler
 SessionEventHandler <|.. UserInterruptEventHandler
 SessionEventHandler <|.. UserToolConfirmationEventHandler
-
-UserMessageEventHandler --> SessionEventAppender : accept user event
-UserMessageEventHandler --> RuntimeExecutionCoordinator : start
-UserInterruptEventHandler --> SessionEventAppender : accept interrupt
-UserInterruptEventHandler --> RuntimeExecutionCoordinator : request interrupt
-UserToolConfirmationEventHandler --> SessionEventAppender : accept Tool confirmation
-UserToolConfirmationEventHandler --> RuntimeExecutionCoordinator : resume Tool flow
-
+SessionEventHandler --> SessionEventAppender : recheck and accept
+SessionEventHandler --> RuntimeExecutionCoordinator : start / interrupt / resume
+SessionEventApplicationService --> RequestEventRouter : reserve and bind before action
 RuntimeExecutionCoordinator *-- "0..1 per Session" RuntimeActiveExecution
-RuntimeExecutionCoordinator --> SessionEventProjector : normalized lifecycle
-SessionEventProjector --> SessionEventAppender : accept authoritative event
-SessionEventAppender --> RuntimeSessionRepository : ordered transactional append
-SessionEventProjector --> SessionEventPublisher : publish after commit or best-effort
-SessionEventPublisher <|.. SessionLiveEventHub
-SessionLiveEventHub *-- "0..*" SessionLiveSubscription : bounded queue per connection
-
-SessionEventQueryService --> RuntimeSessionRepository : committed ordered snapshot page
+SessionEventApplicationService *-- "0..*" SessionEventProjector : owns subscriptions
+SessionEventProjector ..> RuntimeActiveExecution : observes normalized events
+SessionEventProjector --> SessionEventAppender : ordered authoritative append
+SessionEventAppender --> RuntimeSessionRepository : short transaction
+SessionEventAppender --> RequestEventRouter : committed event, ordered
+SessionEventProjector --> RequestEventRouter : preview
+RequestEventRouter *-- "0..*" RequestOutputBinding
+RequestOutputBinding --> "1" RuntimeActiveExecution : fixed internal target
+RequestOutputBinding *-- "1" RequestEventStream
+RequestEventStream o-- "0..*" SessionEventResponseVO : bounded queue
+SessionEventQueryService --> RuntimeSessionRepository
 RuntimeSessionRepository <|.. MyBatisRuntimeSessionRepository
-MyBatisRuntimeSessionRepository --> RuntimeEntryDTO : maps records
+MyBatisRuntimeSessionRepository --> RuntimeEntryDTO
 
-note right of SessionEventAcceptanceSnapshot
-Contains parsed structure, object identity,
-locale, and transient credential values.
-It never freezes mutable Session state,
-pending Tool state, or capacity admission.
+note right of RequestOutputBinding
+Message / resume segment or interrupt target.
+Never resolve the latest active execution on every event.
+No raw credentials or public execution identifier.
 end note
-
-note right of AcceptedSessionEventResponseVO
-Controller returns a response-specific immutable VO.
-DTOs and persistence records never cross the API boundary.
+note bottom of SessionEventAppender
+All writers share causal prerequisite checks and ordered commit.
+Allocate sequence and append atomically, retaining lock to commit.
+Network and model/tool work stay outside the transaction.
+Implementation names and scheduling remain target-only.
 end note
-
-note right of SessionEventAppender
-Coordinate by Session, not by HTTP request or producer.
-Check source order and committed prerequisites before append.
-Recheck mutable state and dependencies in the owning transaction.
-Allocate sequence and append atomically; keep the lock until commit.
-No model calls, tool calls, or missing-dependency waits in the transaction.
-Process-local locking alone is insufficient across service instances.
-The class name and scheduling mechanism remain target-only suggestions.
-end note
-
-note bottom of SessionLiveSubscription
-One slow subscriber cannot block execution or other clients.
-Overflow closes only this subscription and requires history repair.
+note bottom of RequestEventStream
+Receipt first, exactly once; then matching output.
+Slow clients fail independently without cancelling execution.
+DTOs never cross the HTTP response boundary.
 end note
 @enduml
 
 @startuml target_session_live_stream_lifecycle
-title CampusClaw Session Live Stream - Candidate Lifecycle
-
-' Source evidence (pi-mono-java a8192e047f4061bd385297d3dc6c4358362d0d49):
-' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeEventController.java,
-' RuntimeEventController.submit and list: POST-scoped SSE; no standalone GET stream.
-' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventStream.java,
-' RuntimeEventStream.attach, emit, and emitBestEffort: one subscriber and bounded buffering.
+title CampusClaw POST SSE - Candidate Closing and Recovery
+' Stable block name retained for existing SVG links; this is no longer a GET stream.
+' Source evidence: pi-mono-java 918005ee8ccc88d179fc31a0de17a92b4a01383b.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeTerminalEventFactory.java,
+' emit, lines 34-57: current idle plus stream.end, or stream.error on failure.
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSseEmitterSubscriber.java,
-' onEvent and onHeartbeat: named SSE with optional id; heartbeat comments.
-' The cited files are unchanged from c9d858bc8261bf07f5585f545b53495bf2226a56.
-' Target-only architecture change: register Session-scoped subscriptions independently
-' of execution; data-only frames are confirmed, connected comments remain proposed.
-' Confirmed product constraint (2026-09-04): idle uses session.status_idle.
-' Confirmed S1-S4: data-only, text type + phase, user events via receipt/history,
-' and no required GET access-token. Other lifecycle details remain proposed.
-' Design reason: distinguish subscription readiness, durable commit order, preview,
-' and transport loss without cancelling or replaying an accepted user request.
-
+' onEvent/onComplete, lines 33-49: named SSE; explicit emitter completion.
+' Confirmed: one POST for input/output, user receipt first, data-only and type+phase.
+' Target-only: matching idle ends this response, confirming splits the interaction.
+' Design reason: do not keep a completed request open for unrelated later messages.
+' Control binding, idle reasons and exact closing behavior are still unconfirmed.
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
-skinparam defaultFontSize 11
+skinparam defaultFontSize 12
 skinparam sequence {
-  ArrowColor #475569
-  ParticipantBorderColor #475569
   ParticipantBackgroundColor #F8FAFC
-  LifeLineBorderColor #94A3B8
-  GroupBorderColor #64748B
+  ParticipantBorderColor #475569
+  ArrowColor #475569
 }
-skinparam note {
-  BackgroundColor #FFFBEA
-  BorderColor #A16207
-}
-
 actor "mate-service" as Client
-participant "Subscription Service\n<<target-only singleton>>" as Service
-database "Session Store" as Store
-participant "Session Live Hub\n<<target-only singleton>>" as Hub
-participant "Subscription Queue + Writer\n<<per connection>>" as Connection
-participant "Ordered Event Publisher\n<<target-only>>" as Publisher
-participant "History API\n<<target-only>>" as History
+participant "POST Events API\n<<target-only>>" as API
+participant "Bound Execution\n<<internal>>" as Execution
+participant "Response A\n<<per request>>" as A
+participant "Response B\n<<per request>>" as B
+database "History Store" as Store
 
-Client -> Service : GET /sessions/{sessionId}/events/stream
-critical Registration coordinated with Session deletion
-  Service -> Store : check Session exists and is not deleted
-  Store --> Service : current authoritative state
-  Service -> Hub : register one bounded subscription
-  Hub -> Connection : create queue and writer
-  Hub --> Service : registration ready
-end
-Service --> Client : 200 text/event-stream, : connected
-note over Client,Service
-Wait for connected before submitting a separate POST.
-GET does not require access-token; POST still requires it.
-This GET never updates credentials of an active execution.
-end note
+Client -> API : POST user.message
+API -> A : reserve and bind before starting execution
+API -> Store : accept and persist user event
+API -> A : complete user.message receipt first
+API -> Execution : start only after receipt is queued
+A --> Client : data: user.message receipt
+Execution -> A : matching agent events
+A --> Client : data: agent.* output
 
-loop new Agent and Session events across multiple executions
-  Publisher -> Hub : complete event after commit, in internal order
-  Hub -> Connection : enqueue immutable event
-  alt queue has capacity
-    Connection --> Client : data: JSON with eventId and type
-  else complete event cannot be queued
-    Hub -> Connection : close only this subscription
-    Connection --> Client : transport closes; no business success implied
-  end
-end
-
-group Idle is not end of subscription
-  Publisher -> Hub : committed session.status_idle
-  Hub -> Connection : enqueue idle event in order
-  Connection --> Client : data: idle event
-  Connection --> Client : : ping while waiting for new events
-end
-
-group Recover after any transport gap
-  Client -> Service : reopen GET stream and wait for connected
-  Client -> History : GET /sessions/{sessionId}/events
-  History -> Store : query committed fixed snapshot
-  Store --> History : ordered authoritative records
-  History --> Client : fixed-snapshot page
-  Client -> Client : reconcile by eventId; keep history order
+alt Candidate: execution finishes
+  Execution -> Store : commit done / failed boundary
+  Execution -> A : corresponding idle, then complete
+  A --> Client : data: session.status_idle; EOF
+else Candidate: waiting for tool confirmation
+  Execution -> Store : commit Tool Call and confirming boundary
+  Execution -> A : tool call, confirming idle, then complete
+  A --> Client : data: tool call; data: confirming idle; EOF
+  Client -> API : new POST user.tool_confirmation
+  API -> B : atomically bind valid pending tool and resume segment
+  API -> Store : accept and persist confirmation
+  API -> B : complete confirmation receipt first
+  API -> Execution : resume
+  B --> Client : data: user.tool_confirmation receipt
+  Execution -> B : tool result, response, corresponding idle
+  B --> Client : data: matching output; idle; EOF
+else Candidate: interrupt while response A remains open
+  Client -> API : new POST user.interrupt
+  API -> B : bind exact active target before interrupt
+  API -> Store : accept and persist interrupt
+  API -> B : complete interrupt receipt first
+  B --> Client : data: user.interrupt receipt
+  API -> Execution : request stop of bound target
+  Execution -> Store : commit actual stop boundary
+  Execution -> A : final matching idle if still attached
+  Execution -> B : same idle eventId, then complete
+  A --> Client : data: terminated idle; EOF
+  B --> Client : data: terminated idle; EOF
 end
 
-note over Hub,Connection
-Text uses type + phase=delta/completed; tool and idle events are complete.
-User events are read from POST receipts and history, not this stream.
-Preview may be shed; completed events replace preview.
-Network writes never hold the Session DB transaction.
-Disconnect does not cancel execution or replay a POST.
-No SSE event or id, Last-Event-ID replay, or public sequence.
-end note
+group Transport failure at any point
+  Client -> Client : preserve uncertainty if no authoritative terminal
+  note over A,B
+  Detach only the failed response; do not cancel execution.
+  No POST replay or independent GET stream reconnection.
+  end note
+  Client -> API : GET /sessions/{sessionId}/events
+  API -> Store : fixed committed snapshot
+  Store --> API : complete events in internal order
+  API --> Client : ResultBean history
+  Client -> Client : deduplicate by eventId; retain array order
+end
 @enduml

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the confirmed POST and current Session stream proposal."""
+"""Validate merged POST SSE decisions, preserved inputs and generated review."""
 
 from __future__ import annotations
 
@@ -10,21 +10,24 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent
 COMMON_PATH = ROOT / "接口契约-v2" / "common.json"
 MODEL_PATH = ROOT / "接口契约-v2" / "操作" / "01-submit-session-event.json"
-STREAM_PATH = ROOT / "接口契约-v2" / "操作" / "02-stream-session-events.json"
 USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
 STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "session.status_idle"}
 RETIRED_STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", "tool.result", "session.status.idle"}
-CONFIRMED_STREAM_CHOICES = {
+CONFIRMED_CHOICES = {
+    "M1-transport": "single-post-sse",
+    "M2-receipt": "A-user-event-first",
     "S1-frame-format": "A-data-only",
     "S2-event-projection": "A-type-and-phase",
-    "S3-user-events": "A-user-events-receipt-history-only",
-    "S4-read-access-token": "A-no-read-tool-token",
 }
-
+RESPONSE_INPUTS = {
+    "200-message": "user.message",
+    "200-confirming": "user.message",
+    "200-tool-confirmation": "user.tool_confirmation",
+    "200-interrupt": "user.interrupt",
+}
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -42,23 +45,6 @@ def validate_public_payload(value: object) -> None:
     elif isinstance(value, list):
         for child in value:
             validate_public_payload(child)
-
-
-def validate_success_events(operation: dict) -> None:
-    event_types = set()
-    for response in operation["responses"]:
-        for body in response["bodies"].values():
-            validate_public_payload(body)
-            if response["status"] != "200":
-                continue
-            event = body["result"]["event"]
-            event_id = event.get("eventId")
-            require(
-                isinstance(event_id, str) and bool(event_id.strip()),
-                "each v2 success event must have a non-empty eventId",
-            )
-            event_types.add(event["type"])
-    require(event_types == USER_EVENT_TYPES, "v2 success examples must cover all three user event types")
 
 
 def validate_access_token_rule(operation: dict) -> None:
@@ -92,221 +78,206 @@ def validate_event_ordering_rule(review: dict) -> None:
         require(rule in review["notice"], f"review must retain the ordering rule: {rule}")
 
 
-def validate_stream_frame(event: dict) -> None:
+
+def validate_frame(event: dict, receipt: bool = False) -> None:
     validate_public_payload(event)
-    require(event.get("type") in STREAM_TYPES, "stream type must use a confirmed basic name")
-    require(isinstance(event.get("eventId"), str) and bool(event["eventId"]), "stream eventId is required")
-    if event["type"] in {"agent.message", "agent.thinking"}:
-        require(event.get("phase") in {"delta", "completed"}, "text event phase is required")
-        require(isinstance(event.get("content"), str), "text content must be a string")
+    require(event.get("type") in (USER_EVENT_TYPES if receipt else STREAM_TYPES),
+            "receipt/output event is not in its allowed scope")
+    require(isinstance(event.get("eventId"), str) and bool(event["eventId"]), "eventId is required")
+    if receipt:
+        require("phase" not in event, "receipt is a complete user event, not a preview")
+    elif event["type"] in {"agent.message", "agent.thinking"}:
+        require(event.get("phase") in {"delta", "completed"}, "text phase is required")
+        require(isinstance(event.get("content"), str), "candidate text content must be a string")
     else:
-        require("phase" not in event, "tool and idle events are complete events without phase")
+        require("phase" not in event, "tool/idle events have no phase")
     if event.get("phase") == "delta":
-        require("createdAt" not in event and bool(event["content"]), "delta cannot be durable or empty")
+        require("createdAt" not in event and bool(event["content"]), "delta must omit createdAt and be nonempty")
     else:
-        require(isinstance(event.get("createdAt"), str), "complete event must include createdAt")
+        require(isinstance(event.get("createdAt"), str), "complete event requires createdAt")
     if event["type"] in {"agent.tool_call", "agent.tool_result"}:
-        require(bool(event.get("toolCallId")), "toolCallId is required independently of eventId")
+        require(bool(event.get("toolCallId")), "toolCallId is required")
     if event["type"] == "session.status_idle":
-        require(event.get("reason") in {"done", "terminated", "failed", "confirming"}, "invalid idle reason")
+        require(event.get("reason") in {"done", "failed", "terminated", "confirming"}, "invalid candidate reason")
 
 
-def validate_stream_model(model: dict) -> None:
-    operation = model["operation"]
-    review = model["review"]
-    require(set(review.get("confirmedEventTypes", [])) == STREAM_TYPES,
-            "the five confirmed stream type names must remain recorded")
-    require("五个基础类型名已确认" in review["status"], "confirmed names must be visible in review status")
-    serialized = json.dumps(model, ensure_ascii=False)
-    require(not any(name in serialized for name in RETIRED_STREAM_TYPES),
-            "stream examples and review options must not reopen retired type names")
-    require(operation["method"] == "GET", "second operation must be GET")
-    require(operation["path"] == "/sessions/{sessionId}/events/stream", "unexpected stream path")
-    body = operation["requestBody"]
-    require(body["required"] is False and body["contentType"] is None and body["example"] is None,
-            "stream request must not have a body")
-    headers = [header for mode in operation["requestHeaderExamples"] for header in mode["headers"]]
-    require(not any(header["name"].lower() == "access-token" and header.get("required") for header in headers),
-            "read-only GET must not require access-token")
-    require(not any(parameter.get("name", "").lower() == "access-token" and parameter.get("required")
-                    for parameter in operation["parameters"]), "GET parameters must not require access-token")
-    require("本 GET 已确认不要求 access-token" in body["description"],
-            "GET must state the confirmed no-tool-token rule")
-    all_types = set()
-    for response in operation["responses"]:
-        if response["status"] != "200":
-            for error in response["bodies"].values():
-                require(set(error) == {"resCode", "resMsg"}, "pre-stream errors must not include result")
+def parse_stream(stream: str) -> list[dict]:
+    require(isinstance(stream, str) and stream.endswith("\n\n"), "SSE must terminate frames with blank lines")
+    events = []
+    for frame in stream.strip().split("\n\n"):
+        if frame == ": ping":
+            require(not events or events[-1]["type"] != "session.status_idle", "no ping after candidate idle close")
             continue
-        require(response["headers"]["Content-Type"] == "text/event-stream", "stream media type must be SSE")
-        require(response["headers"]["Cache-Control"] == "no-store", "live content must not be cached")
-        for stream in response["bodies"].values():
-            require(isinstance(stream, str) and stream.startswith(": connected\n\n"), "missing readiness comment")
-            completed = set()
-            for frame in stream.strip().split("\n\n"):
-                if frame.startswith(":"):
-                    require(frame in {": connected", ": ping"}, "unexpected stream comment")
-                    continue
-                require(frame.startswith("data: ") and "\n" not in frame, "business frame must be data-only JSON")
-                event = json.loads(frame[6:])
-                validate_stream_frame(event)
-                require(event["eventId"] not in completed, "completed must be the last frame for an eventId")
+        require(frame.startswith("data: ") and "\n" not in frame, "business frames must be data-only JSON")
+        events.append(json.loads(frame[6:]))
+    return events
+
+
+def validate_headers(operation: dict) -> None:
+    validate_access_token_rule(operation)
+    expected_ids = {"jwt": "credential-jwt", "appkey": "credential-appkey"}
+    for mode in operation["requestHeaderExamples"]:
+        headers = {item["name"]: item for item in mode["headers"]}
+        require(len(headers) == len(mode["headers"]), "duplicate Header")
+        require(headers["Accept"]["value"] == "text/event-stream", "POST must request SSE")
+        require(headers["Content-Type"]["value"] == "application/json", "POST body remains JSON")
+        require(headers["X-HW-ID"]["value"] == expected_ids[mode["id"]], "credential ID example changed")
+        require("用户凭据 ID" in headers["X-HW-ID"]["description"]
+                and "不是公司、服务或应用标识" in headers["X-HW-ID"]["description"], "credential ID meaning changed")
+        credential_name = "Authorization" if mode["id"] == "jwt" else "X-HW-APPKEY"
+        require(headers[credential_name]["value"] == ("Bearer opaque-token" if mode["id"] == "jwt" else "opaque-appkey"),
+                "confirmed credential example changed")
+        require(all("<" not in item["value"] and ">" not in item["value"] for item in headers.values()),
+                "use concrete non-production examples")
+
+
+def validate_model(model: dict) -> None:
+    operation, review = model["operation"], model["review"]
+    require(operation["method"] == "POST" and operation["path"] == "/sessions/{sessionId}/events",
+            "merged operation must be POST /events")
+    require(operation["operationKey"] == "submitSessionEvent", "review operation identity changed")
+    validate_headers(operation)
+    validate_event_ordering_rule(review)
+    body = operation["requestBody"]
+    require(body["required"] and body["contentType"] == "application/json", "union request must remain JSON")
+    inputs = {}
+    for example in body["examples"]:
+        value = example["value"]
+        validate_public_payload(value)
+        require(set(value) == {"event"}, "event wrapper must be preserved")
+        inputs[value["event"]["type"]] = value["event"]
+    require(set(inputs) == USER_EVENT_TYPES and len(body["examples"]) == 3, "preserve three input examples")
+    require(isinstance(inputs["user.message"]["content"], list), "message content remains ordered array")
+
+    all_types, receipt_types, response_ids = set(), set(), set()
+    for response in operation["responses"]:
+        require(response["id"] not in response_ids, "duplicate response ID")
+        response_ids.add(response["id"])
+        for payload in response["bodies"].values():
+            if response["status"] != "200":
+                require(response["headers"]["Content-Type"] == "application/json", "pre-header failure must be JSON")
+                require(set(payload) == {"resCode", "resMsg"}, "errors must have no result field")
+                continue
+            require(response["headers"]["Content-Type"] == "text/event-stream", "POST success must be SSE")
+            require(response["headers"]["Cache-Control"] == "no-store", "SSE must not be cached")
+            frames = parse_stream(payload)
+            require(len(frames) >= 2, "receipt and corresponding output are required")
+            receipt = frames[0]
+            validate_frame(receipt, receipt=True)
+            kind = RESPONSE_INPUTS[response["id"]]
+            require(receipt["type"] == kind, "receipt must correspond to this request")
+            normalized = {key: value for key, value in receipt.items() if key not in {"eventId", "createdAt"}}
+            require(normalized == inputs[kind], "complete receipt must preserve normalized submitted event")
+            receipt_types.add(kind)
+            completed = {receipt["eventId"]}
+            for index, event in enumerate(frames[1:], 1):
+                validate_frame(event)
+                require(event["eventId"] not in completed, "no repeated complete event or receipt")
                 if event.get("phase") != "delta":
                     completed.add(event["eventId"])
+                if event["type"] == "session.status_idle":
+                    require(index == len(frames) - 1, "candidate idle closes this response; no later output")
                 all_types.add(event["type"])
-    require(all_types == STREAM_TYPES, "stream examples must cover the five confirmed basic type names")
-    require(review.get("confirmedChoices") == CONFIRMED_STREAM_CHOICES,
-            "S1-S4 must retain the exact confirmed choices")
-    require(review["questions"] == [], "confirmed S1-S4 must not remain in the decision form")
-    require("S1～S4 已确认" in review["status"], "confirmed choices must be visible in review status")
-    require("第二个接口评审中" in review["status"], "stream proposal must not be marked fully confirmed")
-    require("GET 接口整体确认" in review.get("pendingReview", []), "overall GET review remains pending")
+            require(frames[-1]["type"] == "session.status_idle", "candidate example must end at matching idle")
+    require(set(RESPONSE_INPUTS).issubset(response_ids), "examples must cover message, confirming, confirmation and interrupt")
+    require(receipt_types == USER_EVENT_TYPES and all_types == STREAM_TYPES, "missing receipt or basic output examples")
+    require(review.get("confirmedChoices") == CONFIRMED_CHOICES, "preserve exact confirmed transport/receipt/S1/S2")
+    require(set(review["confirmedEventTypes"]) == STREAM_TYPES, "confirmed output type names changed")
+    require(review["questions"] == [], "do not reopen confirmed choices")
+    require("合并 POST 接口整体确认" in review["pendingReview"], "whole operation must remain pending")
+    require("合并接口评审中" in review["status"], "do not mark merged operation fully confirmed")
+    require("完整 user.* 首帧回执已确认" in review["status"], "receipt approval must be visible")
+    require("三种用户事件均必须携带 access-token" in review["notice"], "preserve three-type token rule")
+    require(review["decisionHistory"]["S3-user-events"]["previous"] == "A-user-events-receipt-history-only",
+            "record the explicitly superseded S3")
+    require("用户明确调整" in review["decisionHistory"]["S3-user-events"]["status"], "S3 adjustment needs explicit attribution")
+    require("不适用于合并 POST" in review["decisionHistory"]["S4-read-access-token"]["status"],
+            "retired GET token policy must not leak into POST")
+    require(not any(name in json.dumps(model, ensure_ascii=False) for name in RETIRED_STREAM_TYPES),
+            "do not restore v1 or rejected candidate type names")
 
 
-def validate_retired_type_regressions() -> None:
-    for name in RETIRED_STREAM_TYPES:
-        event = {
-            "eventId": "d5c19f7c4b1642e6806aeb860752d99b", "type": name,
-            "phase": "completed", "content": "已完成告警分析。",
-            "createdAt": "2026-09-04T08:30:19.451Z",
-            "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k", "reason": "done",
-        }
-        try:
-            validate_stream_frame(event)
-        except ValueError:
-            continue
-        raise ValueError(f"retired stream type was accepted: {name}")
-
-
-def validate_stream_decision_regressions(model: dict) -> None:
+def validate_negative_regressions(model: dict) -> int:
     mutations = []
-    for choice in CONFIRMED_STREAM_CHOICES:
-        changed = copy.deepcopy(model)
-        changed["review"]["confirmedChoices"][choice] = "unconfirmed-alternative"
-        mutations.append((choice, changed))
-    changed = copy.deepcopy(model)
-    changed["review"]["questions"] = [{"id": "S1-frame-format"}]
-    mutations.append(("reopened-form", changed))
-    changed = copy.deepcopy(model)
-    changed["operation"]["requestHeaderExamples"][0]["headers"].append(
-        {"name": "access-token", "required": True, "value": "opaque-access-token"})
-    mutations.append(("GET-tool-token", changed))
+    def changed(label, edit):
+        candidate = copy.deepcopy(model)
+        edit(candidate)
+        mutations.append((label, candidate))
+    changed("GET method", lambda m: m["operation"].update(method="GET"))
+    changed("JSON success", lambda m: m["operation"]["responses"][0]["headers"].update({"Content-Type": "application/json"}))
+    changed("missing token", lambda m: m["operation"]["requestHeaderExamples"][0]["headers"][2].update(required=False))
+    changed("reopened receipt", lambda m: m["review"].update(questions=[{"id": "M2-receipt"}]))
+    changed("false approval", lambda m: m["review"].update(pendingReview=[]))
+    for choice in CONFIRMED_CHOICES:
+        changed(choice, lambda m, key=choice: m["review"]["confirmedChoices"].update({key: "unconfirmed"}))
     original = model["operation"]["responses"][0]["bodies"]["default"]
-    for label, replacement in (
-        ("named-SSE", original.replace("data: ", "event: agent.message\ndata: ", 1)),
-        ("user-in-live-stream", original.replace('"type":"agent.message"', '"type":"user.message"', 1)),
-        ("missing-phase", original.replace(',"phase":"delta"', '', 1)),
+    first, rest = original.split("\n\n", 1)
+    for label, payload in (
+        ("missing receipt", rest),
+        ("duplicate receipt", first + "\n\n" + original),
+        ("named SSE", original.replace("data: ", "event: user.message\ndata: ", 1)),
+        ("public sequence", original.replace('"type":"user.message"', '"entrySeq":1,"type":"user.message"', 1)),
+        ("unrelated receipt", original.replace('"type":"user.message"', '"type":"user.interrupt"', 1)),
+        ("incomplete receipt", original.replace('"content":[', '"unexpected":[', 1)),
+        ("receipt phase", original.replace('"type":"user.message"', '"phase":"completed","type":"user.message"', 1)),
+        ("missing text phase", original.replace(',"phase":"delta"', "", 1)),
+        ("later unrelated user", original + first + "\n\n"),
+        ("ping after idle", original + ": ping\n\n"),
     ):
-        changed = copy.deepcopy(model)
-        changed["operation"]["responses"][0]["bodies"]["default"] = replacement
-        mutations.append((label, changed))
-    for label, changed in mutations:
+        changed(label, lambda m, value=payload: m["operation"]["responses"][0]["bodies"].update(default=value))
+    for label, candidate in mutations:
         try:
-            validate_stream_model(changed)
+            validate_model(candidate)
+        except (KeyError, ValueError):
+            continue
+        raise ValueError(f"negative regression accepted: {label}")
+    for name in RETIRED_STREAM_TYPES:
+        try:
+            validate_frame({"type": name, "eventId": "example"})
         except ValueError:
             continue
-        raise ValueError(f"confirmed choice regression was accepted: {label}")
+        raise ValueError(f"retired type accepted: {name}")
+    return len(mutations) + len(RETIRED_STREAM_TYPES)
 
 
 def validate_review_pages() -> None:
     spec = importlib.util.spec_from_file_location("runtime_contract_validator", ROOT / "validate-chat-http-v1.py")
     validator = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(validator)
-    for filename, expected_key, question_count in (
-        ("chat-events-v2-review.html", "streamSessionEvents", 0),
-        ("chat-events-v2-confirmed.html", "submitSessionEvent", 0),
-    ):
-        source = (ROOT / filename).read_text(encoding="utf-8")
-        parser = validator.ContractHtmlParser()
-        parser.feed(source)
-        models, scripts = validator.parse_generated_models(parser)
-        require(len(models) == parser.static_review_count == len(scripts) == 1, "page must show exactly one operation")
-        require(models[0]["operation"]["operationKey"] == expected_key, "wrong operation on review page")
-        require(len(models[0]["review"]["questions"]) == question_count, "stale decision form on page")
-        validator.validate_executable_script(scripts[0])
-        visible = " ".join(parser.visible_text)
-        for heading in ("作用", "调用上下文 Header", "参数与请求体", "响应"):
-            require(heading in visible, f"no-JavaScript page missing {heading}")
-        if expected_key == "streamSessionEvents":
-            for decision in ("S1～S4 已确认", "phase=delta/completed", "不推送 user.*", "不要求 access-token"):
-                require(decision in visible, f"confirmed decision missing without JavaScript: {decision}")
-            require("尚未确认整个 GET" in visible, "page must preserve the pending overall review")
-            require("data-question-id=" not in source, "page must not render confirmed decision controls")
-        require("data-label" in source and "max-width: 680px" in source, "responsive field rows missing")
+    source = (ROOT / "chat-events-v2-review.html").read_text(encoding="utf-8")
+    parser = validator.ContractHtmlParser()
+    parser.feed(source)
+    models, scripts = validator.parse_generated_models(parser)
+    require(len(models) == parser.static_review_count == len(scripts) == 1, "show one current operation")
+    require(models[0]["operation"]["operationKey"] == "submitSessionEvent", "show merged POST")
+    validate_model(models[0])
+    validator.validate_executable_script(scripts[0])
+    visible = " ".join(parser.visible_text)
+    for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "未整体确认合并接口"):
+        require(text in visible, f"no-JavaScript page is missing {text}")
+    require("data-question-id=" not in source, "confirmed receipt must not remain a question")
+    require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
+    retired = (ROOT / "chat-events-v2-confirmed.html").read_text(encoding="utf-8")
+    require("原独立 POST JSON 方案已被合并方案替代" in retired, "retire stale whole-operation approval")
+    require("chat-events-v2-review.html" in retired and "data-operation-review" not in retired,
+            "old confirmed page must link current review, not display an approved operation")
 
 
 def main() -> int:
     try:
         common = json.loads(COMMON_PATH.read_text(encoding="utf-8"))
         model = json.loads(MODEL_PATH.read_text(encoding="utf-8"))
-        stream_model = json.loads(STREAM_PATH.read_text(encoding="utf-8"))
-        operation = model["operation"]
-        review = model["review"]
-        require(operation["method"] == "POST", "first v2 operation must be POST")
-        require(operation["path"] == "/sessions/{sessionId}/events", "unexpected v2 POST path")
-        require("text/event-stream" not in json.dumps(operation, ensure_ascii=False), "v2 POST must not return SSE")
-        examples = operation["requestBody"]["examples"]
-        event_types = {example["value"]["event"]["type"] for example in examples}
-        require(
-            event_types == USER_EVENT_TYPES,
-            "v2 POST examples must cover all proposed user event types",
-        )
-        for example in examples:
-            validate_public_payload(example["value"])
-        validate_success_events(operation)
-        require(not any(name in json.dumps(model, ensure_ascii=False) for name in RETIRED_STREAM_TYPES),
-                "confirmed POST cross-references must use the current stream type names")
-        validate_access_token_rule(operation)
-        validate_event_ordering_rule(review)
-        validate_stream_model(stream_model)
-        validate_retired_type_regressions()
-        validate_stream_decision_regressions(stream_model)
-        require(common["reviewState"] == {
-            "currentOperation": "streamSessionEvents", "confirmedOperations": ["submitSessionEvent"]
-        }, "review must advance from confirmed POST to GET stream")
-        header_sets = [
-            ("common", common["requestHeaderExamples"]),
-            ("submitSessionEvent", operation["requestHeaderExamples"]),
-            ("streamSessionEvents", stream_model["operation"]["requestHeaderExamples"]),
-        ]
-        expected_x_hw_id_values = {"jwt": "credential-jwt", "appkey": "credential-appkey"}
-        for owner, modes in header_sets:
-            for mode in modes:
-                require(
-                    all("<" not in header["value"] and ">" not in header["value"] for header in mode["headers"]),
-                    f"{owner} {mode['id']} must use concrete non-production header examples",
-                )
-                x_hw_id = next(header for header in mode["headers"] if header["name"] == "X-HW-ID")
-                require(
-                    x_hw_id["value"] == expected_x_hw_id_values[mode["id"]],
-                    f"{owner} {mode['id']} must use the concrete user credential ID example",
-                )
-                require(
-                    "用户凭据 ID" in x_hw_id["description"]
-                    and "不是公司、服务或应用标识" in x_hw_id["description"],
-                    f"{owner} {mode['id']} must define X-HW-ID as a user credential ID",
-                )
-        require("瞬态" not in json.dumps(model, ensure_ascii=False), "v2 POST must describe credential handling plainly")
-        require(
-            "Header 示例与处理说明已确认" in review["status"],
-            "review status must preserve the confirmed Header examples and handling description",
-        )
-        require("eventId 已确认" in review["status"], "review status must preserve the confirmed eventId decision")
-        require(
-            "access-token 必填规则已确认" in review["status"]
-            and "三种用户事件均必须携带 access-token" in review["notice"],
-            "review must preserve the confirmed access-token requiredness decision",
-        )
-        require(
-            review["questions"] == [] and "POST 接口已确认" in review["status"],
-            "confirmed POST must not retain Q1/Q2/Q3/Q4 decision forms",
-        )
+        require(common["reviewState"] == {"currentOperation": "submitSessionEvent", "confirmedOperations": []},
+                "current merged POST remains in review")
+        require(sorted(MODEL_PATH.parent.glob("*.json")) == [MODEL_PATH], "retired GET stream model must not remain active")
+        validate_model(model)
+        negative_count = validate_negative_regressions(model)
         subprocess.run([sys.executable, str(ROOT / "render_chat_events_v2.py"), "--check"], check=True)
         validate_review_pages()
     except (KeyError, OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(f"error: {error}")
         return 2
-    print("Session Events v2 review snapshot is valid")
+    print(f"Merged POST SSE review is valid; {negative_count} negative regressions rejected")
     return 0
 
 

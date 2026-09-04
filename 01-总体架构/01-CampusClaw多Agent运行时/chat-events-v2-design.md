@@ -2,149 +2,134 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.2 |
-| 状态 | 第一个 POST 接口已按当前稿整体确认；当前评审第二个 GET stream 接口；均待实现 |
+| 文档版本 | 0.3.0 |
+| 状态 | POST 提交与实时推送合并、完整 user.* 首帧回执已确认；输出范围和结束细节仍评审，target-only |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
+| 本次 HTTP 合并核对提交 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；原 `a8192e0`，变更路径与结论见 §4.2 |
 | 事件顺序补充核对提交 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；只补充本文 §4.1 证据，不替换其他主题基线 |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | mate 公共契约基线 | [`mate-service 通用对话 API`](../../02-服务与接口/07-mate-service通用对话API/README.md) 1.4.4 |
-| 外部公共契约核对日 | 2026-09-04；实时流核对范围见第二接口设计 |
+| 外部公共契约核对日 | 2026-09-04；仅对照 preview 与权威历史，不照搬独立读取流 |
 | 更新日期 | 2026-09-04 |
 
 ## 1. 已确认资源模型
 
-CampusClaw 采用 Session Events 三接口，内部执行不成为公共资源，也不增加
-`executionId` 或 `runId`：
+2026-09-04 用户明确要求把 POST 提交与 GET 实时推送合并：一次请求发送事件，并在
+同一 HTTP 响应中接收对应 SSE。这里合并的是原 GET 实时流，不是 ListEvents 历史查询。
 
 | Method | Path | 职责 | 当前状态 |
 |---|---|---|---|
-| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 接口已确认，待实现 |
-| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events/stream` | 订阅跨多次内部执行的 Session live SSE | 五个基础类型名及 S1～S4 已确认；具体字段、连接细节与 GET 整体仍在评审 |
-| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 读取固定快照的权威历史 | 职责与顺序规则已确认，其余字段未开始评审 |
+| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 提交一条用户事件；首帧完整回执，随后推送对应事件 | 合并方向与首帧已确认；整个操作仍待评审 |
+| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 固定快照权威历史及断线对账 | 职责、身份与顺序已确认；具体字段未完整评审 |
 
-这三个 operation 同构于 mate 公共 API 的“提交、实时观察、权威恢复”职责，但不是
-字节透明转发。Claw 保留内部 `sessionId`、Entry 身份和更丰富的 Runtime 事件；mate
-继续拥有 `chatId`、公共 `eventId`、终端用户授权和安全字段投影。
+原独立 `GET /sessions/{sessionId}/events/stream` 从 v2 目标中撤销；旧 JSON model
+移除，旧方案可从 Git 历史恢复。不增加 `executionId/runId`，不把响应连接变成公共执行
+资源。请求级推送也不意味着去掉持久化事件或历史恢复。
 
-`user.interrupt` 进入 POST 的用户事件联合类型，替代独立
-`POST /sessions/{sessionId}/abort`。`user.tool_confirmation` 同样进入该联合类型。
-Steer、FollowUp 和 Slash Command 是否并入 Events 不在本轮自动决定，继续保留现行
-v1 契约，待三个核心 operation 完成后逐项评审。
+这项改变是相对旧三接口提案的架构变更，与当前 Java 的 POST SSE 传输方向一致；
+不等于直接恢复 v1 的请求字段、类型名或公开序号。Mate 公共 API 不在本次修改范围，
+其三接口形态仍独立成立；将来由 Mate bridge 消费一次 Claw POST 响应并做安全投影，
+不能机械删除 Mate 的公共读取流。
 
-v2 HTTP 事件对象的身份字段已确认使用 `eventId`，不公开 `entryId` 或 `entrySeq`。
-内部持久化仍可保留 Entry 标识和连续序号，用于原子排序、当前分支恢复和固定快照分页；
-这些内部字段不得穿透 Response VO、live SSE 或历史响应。当前决定只冻结 Claw v2 的
-JSON 字段名称和“不公开序号”，不自动确认 Claw `eventId` 与 mate 公共 `eventId`
-是否复用同一个值，该跨服务所有权在 bridge 对账设计中另行确认。
-
-该选择属于架构变更：当前 Java 的 POST 返回一次执行范围的 SSE；目标 POST 只返回
-普通 JSON 接受结果。产品约束仍是不公开执行 ID；安全加固仍是 Claw 从 POST 请求读取
-凭据后，只在内存中保留到本次 Agent 执行结束。凭据不持久化、不记录、不发往模型或
-工具发现；只有实际调用 Mate tool execute 时才发送。
+`user.interrupt` 和 `user.tool_confirmation` 仍走同一 POST 联合类型。独立 Abort
+的替代方向不变；Steer、FollowUp 和 Slash Command 是否并入仍另行评审，当前 v1
+迁移基线继续保留。
 
 ![Session Events 目标资源模型](设计图/事件接口重设计/target_session_events_resource_model.svg)
 
 [PlantUML 源码：`target_session_events_resource_model`](设计图/事件接口重设计/diagram.puml#L1)
 
-## 2. 第一项：提交 Session 用户事件（已确认）
-
-2026-09-04 用户确认第一个接口可以，并要求开始下一个接口。本接口按当前稿整体确认：
+## 2. 当前评审：提交事件并接收对应推送
 
 ```http
 POST /campusclaw-service/v1/sessions/{sessionId}/events
 Content-Type: application/json
-Accept: application/json
+Accept: text/event-stream
+X-HW-ID: credential-jwt
+Authorization: Bearer opaque-token
+access-token: opaque-access-token
 ```
 
-已确认本接口支持 `user.message`、`user.interrupt`、
-`user.tool_confirmation`。每次请求只能提交其中一条，表示不支持数组或批量提交，
-并不表示接口只接收 `user.message`。
+已确认继续有效：
 
-已确认 `X-HW-ID` 是当前请求对应的用户凭据 ID，不是公司、服务或应用调用方标识。
-JWT 模式的请求示例使用 `credential-jwt`，APPKEY 模式使用 `credential-appkey`。两者都
-是当前实现测试中真实使用的非生产字面值，不是格式占位符，也不是生产用户凭据。当前
-Java 只把该 Header 当作不透明字符串读入 `MateCredentials`，并没有实现能够证明其业务
-语义的解析或校验，因此“用户凭据 ID”记录为本次确认的产品约束，而不是已观察源码行为。
-JWT、APPKEY 和 access-token 分别使用当前实现测试中的 `Bearer opaque-token`、
-`opaque-appkey` 和 `opaque-access-token`。这些是可直接阅读的非生产测试字面值，不是
-生产凭据，也不为 Token 增加格式约束。
+- 每次一条 `user.message`、`user.interrupt` 或 `user.tool_confirmation`；
+  使用 `event` 包装、有序 `content[]`，不接受批量。
+- `X-HW-ID` 是用户凭据 ID，不是公司、服务或应用标识。两种 Header 示例及说明不回退：
+  `credential-jwt`、`credential-appkey`、`Bearer opaque-token`、
+  `opaque-appkey`、`opaque-access-token` 都是实现测试中的非生产字面值。
+- 三种用户事件在 JWT/APPKEY 模式下均必须携带 `access-token`。Claw 不自行解析或校验
+  JWT/APPKEY；真实性和授权由上游负责，允许已有两种凭据同时出现，不新增互斥规则。
+- 凭据从 POST 读取，只在内存中保留到本次 Agent 执行结束，只随实际 Mate tool execute
+  发送；不发给模型、工具发现，不进入日志、Session 持久化、事件或回执。HTTP 断开不是
+  执行结束，也不能因此提前清除仍需执行的凭据。
+- 对外使用 `eventId`，不暴露 `entryId/entrySeq/runId/executionId`。
+  Claw 与 Mate 的 eventId 是否共值仍待 bridge 评审，字段同名不等于值相同。
+- 不接受 `Idempotency-Key`；已提交但响应丢失时通过历史对账，不盲目重放 POST。
 
-上述两组 Header 示例值及凭据处理说明已经确认。本轮进一步确认：`user.message`、
-`user.interrupt`、`user.tool_confirmation` 均必须携带 `access-token`，JWT 与 APPKEY
-模式使用同一必填规则。此项属于目标 API 的产品约束，理由是调用方统一组装请求头，
-不按事件类型分支；代价是中断请求本身不调用工具也需要携带令牌。携带不代表使用，
-Claw 仍只在实际调用 Mate tool execute 时发送，不新增凭据持久化或发送范围。
-Q1 已在此前确认，本次 Q2、Q3、Q4 也按当前稿确认，全部移出待选表单。
+### 2.1 本次明确替代与保留的决定
 
-POST 成功响应中的事件身份也已确认使用 `eventId`，不返回 `entryId` 或 `entrySeq`。
-这一决定适用于三种用户事件，并作为后续 live SSE 与权威历史的公共身份约束；成功响应
-已确认返回完整用户事件，不采用最窄回执。
+| 原决定 | 合并后的状态 | 原因 / 分类 |
+|---|---|---|
+| Q3：普通 JSON ResultBean 返回完整用户事件 | JSON 外壳被替代；完整用户事件作为首个 SSE 业务帧返回，已确认 | 架构变更：一次响应承载接收回执与输出 |
+| S1：data-only | 保留；不使用 SSE `event:`、`id:` 或 Last-Event-ID 恢复 | 已确认格式不因 HTTP method 改变 |
+| S2：type + phase | 保留；正文/思考为 delta/completed，工具与 idle 不带 phase | 已确认投影 |
+| S3：流不推送 user.*，仅回执/历史可见 | 用户明确调整：首帧返回本次完整 user.*，仅一次，不广播其他用户输入 | 产品约束：同一请求内确认接收，不重复业务输出 |
+| S4：只读 GET 不需要 access-token | 原只读流已撤销，此项不再适用该入口；POST 三类仍必填 | 适用范围改变，不是放宽写入凭据 |
+| 原 POST 整体已确认 | 仅被本次替代的响应部分重新评审，其余已确认字段保留 | 不把旧整体确认标签误用于新合并接口 |
 
-已确认字段、请求示例、成功与错误响应见独立只读页面
-[`chat-events-v2-confirmed.html`](chat-events-v2-confirmed.html)。可编辑源是
-[`接口契约-v2/common.json`](接口契约-v2/common.json) 与
-[`01-submit-session-event.json`](接口契约-v2/操作/01-submit-session-event.json)。
+完整首帧包括服务端 `eventId`、原事件 `type`、`createdAt` 和规范化业务字段。
+它是已经持久化并接受的用户事件，不代表 Agent 已完成或中断已停止；不额外套 ResultBean，
+不增加 `phase`。首帧只能来自当前 POST，后续推送必须晚于该回执入队。
 
-原 Q2、Q3、Q4 的已确认结论：
+五个基础输出类型保留：`agent.message`、`agent.thinking`、`agent.tool_call`、
+`agent.tool_result`、`session.status_idle`。完整事件在 SSE 与历史使用相同名称和字段。
+这不是全部 Runtime 事件清单，不据此删除配置、压缩、进度或子 Agent 能力。
 
-1. Q2：请求体使用 `event` 包装和有序 `content[]`，与 mate 请求结构同构；
-2. Q3：`200 ResultBean` 返回完整用户事件，包含 `eventId`、`createdAt` 及规范化业务字段，
-   不返回 `entryId` 或 `entrySeq`；
-3. Q4：不引入 `Idempotency-Key`。响应丢失时通过权威历史对账，不盲目重放 POST。
+### 2.2 精确评审入口与未确认范围
 
-同构只减少 mate 到 Claw 的请求转换，不改变所有权。Claw v2 使用 `eventId` 作为 HTTP
-事件身份；数据库内部 Entry 标识和序号不进入公共契约。mate 的公共 `eventId` 仍由 mate
-契约管理；是否复用同一个值或建立映射，留待 bridge 对账设计确认，本次不预设额外映射，
-也不能仅因字段同名就假定值相同。
+- [当前合并 POST 评审页](chat-events-v2-review.html)：
+  [唯一 operation model](接口契约-v2/操作/01-submit-session-event.json)。
+- [响应生命周期与源码差距](chat-events-v2-stream-design.md)：三种输入各自的输出范围、
+  结束时机、背压和恢复候选。
+- [旧确认页](chat-events-v2-confirmed.html) 只保留变更提示并链接当前页，不再展示已失效
+  的普通 JSON POST 为当前已确认接口。
+- `common.json.reviewState` 当前为 `submitSessionEvent`，
+  `confirmedOperations=[]`；这不撤销已确认字段，只表示新操作尚未整体确认。
 
-### 2.1 当前第二项：订阅 Session 实时事件
-
-当前评审 `GET /campusclaw-service/v1/sessions/{sessionId}/events/stream`。
-只订阅新事件，不触发执行、不更新 Agent 凭据；连接跨越执行与空闲状态，断线不取消
-执行，不承担历史重放。S1～S4 已确认；其他具体字段、连接和错误细节仍是候选。
-
-已确认五个基础类型名为 `agent.message`、`agent.thinking`、`agent.tool_call`、
-`agent.tool_result`、`session.status_idle`。这是目标 API 产品约束：前四项与 Mate
-同名，状态保留 Session 资源名称；流与历史中的完整事件不使用不同别名。
-
-2026-09-04 进一步确认：S1 业务帧只用 `data: JSON`，不输出 SSE `event:`/`id:`，
-不使用 `Last-Event-ID` 恢复；S2 正文和思考使用 `phase=delta/completed`，工具及 idle
-为完整事件，不采用独立预览类型；S3 流中不推送 `user.*`，用户事件从 POST 回执和历史
-获得；S4 GET 不要求 `access-token`，不更新执行凭据，POST 三种事件仍必填。
-四项选择记录在 `review.confirmedChoices`，不再展示为待选题。thinking 内容、其余字段
-约束、连接及错误细节和 GET 整体仍待评审，不据此自动推进到第三接口。
-
-- 当前单接口评审面：[`chat-events-v2-review.html`](chat-events-v2-review.html)。
-- 候选模型：[`02-stream-session-events.json`](接口契约-v2/操作/02-stream-session-events.json)。
-- 设计、源码差距、Mate 映射与验收：[`实时订阅接口设计`](chat-events-v2-stream-design.md)。
-
-`common.json.reviewState` 记录当前项和已确认项。生成器分别输出“当前 GET”与“已确认
-POST”两个页面，不把旧 POST 待选题继续展示为本轮任务。第三个 ListEvents 仍未开始
-完整字段评审，保留已确认的职责、事件身份和排序规则。
+建议候选：本次消息/确认续跑/中断目标绑定对应输出；遇到对应
+`session.status_idle(reason=done/terminated/failed/confirming)` 后结束响应。
+`confirming` 结束的是本次 HTTP 交互，表示等待用户确认，不是任务成功；之后另发
+确认 POST。这项关闭策略及精确事件字段还未确认，不由合并决定自动推导。
 
 ## 3. 目标分层与生命周期
 
 ![Session Events 目标类图](设计图/事件接口重设计/target_session_events_classes.svg)
 
-[PlantUML 源码：`target_session_events_classes`](设计图/事件接口重设计/diagram.puml#L128)
+[PlantUML 源码：`target_session_events_classes`](设计图/事件接口重设计/diagram.puml#L81)
 
-目标结构采用五个责任边界：
+推荐骨架保留 Web、Application、Runtime、流式输出、持久化边界，不保留长期 Session
+订阅 Hub：
 
-- Web 边界只接收 Request VO、返回不可变 Response VO，不把 DTO 或持久化记录穿透给
-  Controller；
-- Application Service 根据 `event.type` 选择独立 Handler，避免新增事件时修改中央
-  `switch`；
-- Web 边界固定解析后的结构、对象身份和 locale。凭据从请求读入后只保存在内存中，直至
-  本次 Agent 执行结束；Session 状态、执行容量、待确认 Tool Call 等可变权威状态必须在
-  所属事务或 Session 锁内重新检查；
-- Runtime Coordinator 继续拥有一次内部执行，Projector 先持久化权威 Entry，再发布
-  completed live event；delta 等 preview 只 best-effort 发布；
-- `SessionLiveEventHub` 是 Spring 单例，每条 SSE 连接拥有独立有界 Subscription。
-  慢消费者或断线只移除自身，不能阻塞执行、其他订阅者或取消 Session。
+- Controller 验证 Request VO，交给 Service，使用只读 Response VO 编码 SSE；
+  DTO/Mapper 不越过 Service 暴露到 HTTP。
+- Service 固定解析结构、对象身份和 locale，使用 Handler Registry 分派三类用户事件。
+  可变 Session/Tool 状态、容量与执行目标在所属事务或 Session 协调边界内复核。
+- 每个 POST 有独立有界 `RequestEventStream`；候选 `RequestEventRouter` 只按内部绑定
+  的执行段或中断目标投递，不按“当前 Session 最新执行”动态猜测归属。
+  Controller 不持有或遍历全局 Session 订阅。
+- 接受前预留响应队列，在同一协调边界绑定目标；用户事件提交后先排入完整回执，再允许
+  执行/续跑/中断产生可投递输出。网络写出不占数据库锁。目标提前结束时在接受前拒绝，
+  不能接受后空等一个已经错过的 idle。
+- Application 层按执行管理 Projector 订阅，不让 Runtime 内核拥有 HTTP 投影器。
+  Projector 与用户 Handler 共用有序追加边界；完整事件提交后有序发布，
+  preview 只 best-effort 发布。HTTP 关闭只解绑该响应，不取消已接受执行。
+- 中断可与原消息响应同时存在，但不新增公共订阅接口；两条响应的终态绑定与去重仍为
+  候选，详见生命周期文档。Spring 单例 Router 不持有请求原始凭据。
 
-历史查询在第一页固定水位、过滤条件和分页方向，后续不透明 page 必须绑定同一快照。
-live Hub 不重放、不承担恢复；任何 SSE gap、订阅溢出或 POST 响应不确定都回到历史对账。
+历史第一页固定水位、过滤条件和分页方向；后续 opaque page 绑定同一快照。
+请求级 SSE 不重放。断线、队列溢出或接收结果不确定都回到 ListEvents 对账；时间不能作
+增量游标，不把重新 POST 当作重连。
 
 ### 3.1 已确认的事件处理、写入与展示顺序
 
@@ -189,7 +174,7 @@ Handler 和 Runtime Projector 都经过该边界，再由 Repository 执行短�
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventQueryService.java:53-99` · `list/pageOf` | page 只携带 afterSeq 与 thinking，没有固定历史快照水位 |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java:59-132` · `steer/followUp/abort/prepareAbort` | Abort 是独立接口行为；Steer 与 FollowUp 使用执行内队列 |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:57-120` · `acceptUserEvent/listCurrentBranch` | `user.message` 在事务内追加并将 Session 标为 running；历史按 afterSeq 开放读取 |
-| 目标架构 | 本文三接口及目标图 | 提交、live 与历史解耦；支持跨执行、多订阅者的 Session live Hub |
+| 目标架构 | 本文两接口及目标图 | 提交和对应 SSE 合并到 POST，GET 历史保留；多类型输入与请求输出绑定为 target-only |
 | 产品约束 | 本文资源模型 | 无公共 Run/Execution；mate 公共边界只暴露 `chatId` 和公共事件身份 |
 | 产品约束 | `X-HW-ID` | 标识当前请求对应的用户凭据；不是公司、服务或应用调用方标识 |
 | 产品约束（target-only） | POST `access-token` | 三种用户事件在 JWT/APPKEY 模式下均必须携带，统一调用方请求头组装；不把三事件必填表述为现有 Java 已支持的行为 |
@@ -221,42 +206,55 @@ pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime
 `/event` SSE，因此这里只作多客户端通知对照，不把其源码中的 Session durable stream
 描述成公开稳定契约。
 
+### 4.2 本次合并方案源码复核
+
+本次实际读取 `pi-mono-java@918005ee8ccc88d179fc31a0de17a92b4a01383b`。
+以下路径前缀均为
+`campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/`。
+这七个文件相对旧 `a8192e047f4061bd385297d3dc6c4358362d0d49` 均无 diff；
+变化的是目标设计，不是把本次方案误说成已实现。
+
+| 相对上述前缀的路径 / 符号 | 已观察行为与新目标差距 |
+|---|---|
+| `web/RuntimeEventController.java:61-91` · submit/list | 当前 POST 返回 SSE、GET 返回历史，无独立 GET stream；新方案复用传输方向 |
+| `event/RuntimeEventService.java:101-141` · prepareAndSubmitLocked/acceptUserEntry | 当前只接收消息，保存后发送 user.message 并启动；三类输入和完整 v2 回执仍需改造 |
+| `event/RuntimeEventStream.java:84-159` · complete/attach/detachInternal | 单 subscriber、有界缓冲、断线清缓冲，不自行 abort；尚无控制 POST 的独立绑定 |
+| `web/RuntimeSseEmitterSubscriber.java:33-49` · onEvent/onComplete | 当前 named SSE 和可选 id，完成后 emitter.complete；目标 data-only 不等于当前格式 |
+| `event/RuntimeExecutionCoordinator.java:154-168` · completeExecution | 当前收尾持久化、发送终态、complete 流；候选 confirming 分段关闭不能据此宣称已有 |
+| `event/RuntimeTerminalEventFactory.java:34-57` · emit | 当前成功/中断发 session.status.idle + stream.end，失败发 stream.error；目标只用候选对应 idle 收尾，尚未实现 |
+| `event/RuntimeEventQueryService.java:53-99` · list/pageOf | 当前按内部序号分页，尚无固定快照水位 |
+
+本次不修改 pi Agent Loop、Tool Loop 或 Session 内核语义，也不以 pi 的进程内事件
+证明 HTTP 合并设计。原 pi 固定基线仅保留为其他 Runtime 设计的证据范围。
+
 ## 5. 实施切片与验收
 
-资源模型落地时按以下顺序实施：
+以下是 target-only 实施建议，不是本轮实现完成报告：
 
-1. 引入用户事件联合 Request VO、Handler Registry 和三个 Handler；POST 改为普通
-   ResultBean。先让 Handler 与 Runtime Projector 汇合到共享的 Session 有序接受边界，
-   再以短事务完成依赖与状态复核、内部序号分配和持久化，禁止绕过该顺序约束独立追加；
-2. 引入 `SessionEventPublisher` 与多订阅者 `SessionLiveEventHub`，先让现有
-   Coordinator 双写到新发布边界，再删除 POST 持有的 `RuntimeEventStream`；
-3. 新增独立 GET stream，验证同 Session 多订阅者、跨 idle/execution 保持连接、慢消费者
-   隔离、heartbeat 和断线不取消执行；
-4. 将历史游标升级为固定快照，按已提交的内部顺序读取并保持响应数组顺序，验证新写入
-   不进入已开始翻页的快照；
-5. mate bridge 切换到“先保持 live 观察，再独立 POST”；确认 mate 与 Claw 的 `eventId`
-   复用或映射规则后用于对账，最后移除独立 Abort 调用路径。
+1. 保留 POST SSE Controller 方向，新增三类联合 Request VO 与 Handler Registry；
+   首个业务帧改为 v2 完整用户事件，保留统一凭据边界。
+2. 建立每请求有界流与内部目标绑定；接受前预留容量，在所属锁内复核目标，提交回执
+   后再放行输出，避免快执行漏回执或终态、以及控制请求跨到下一轮执行。
+3. 在 API 投影层映射 data-only、type + phase、eventId；完整事件与历史同形，
+   不把 v1 started/delta/completed 类型直接重命名就宣称实现完成。
+4. 仅在本轮结束规则确认后实现消息、确认续跑、中断的关闭与失败路径；
+   Header 前 JSON 失败、Header 后传输断开和业务失败必须区分。
+5. 历史升级固定快照与内部有序读取。Mate bridge 将来消费 Claw POST SSE，公共
+   路径和连接策略不因内部改动自动改变；当前不修改 Mate 实现或契约。
 
-验收必须覆盖：POST 成功但响应丢失、live SSE 中断、订阅队列溢出、两个同时订阅者、
-interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历史恢复，以及 POST 不因
-观察流断开而自动重放。
-
-顺序专项验收（目标测试，尚未实施）：
-
-- 前置事件故意延迟、失败或回滚时，依赖事件不能先进入历史；工具结果不能早于对应
-  工具调用记录，依赖结果的最终回答不能早于结果。
-- 多线程及多个写入入口并发时，依赖检查和序号追加不能被绕过；无依赖事件形成确定的
-  接受顺序。同 Session 模型/工具耗时调用不占用追加事务，不阻塞中断请求接受。
-- 来源事件乱序时，缺失依赖不被时间戳排序掩盖；具体缓冲、超时与失败策略在实施时明确。
-- 时间戳相同或回退时，ListEvents 与客户端仍保持内部顺序；响应不出现内部序号。
-- 在两个依赖事件之间分页、同时追加新事件或回滚写入时，固定快照内的匹配记录不漏项、
-  不重复、不被后来提交的低位记录插入；过滤仅移除事件，不改变剩余记录的相对顺序。
+验收包括：首帧只返回本次用户事件且先于输出；极快完成和写后响应丢失；原消息与中断
+并发、控制目标提前结束、不捕获下一轮事件；工具确认分段与重复确认；preview 丢弃后
+完整内容覆盖；慢流溢出不阻塞执行；断线不取消、不重发；重启后历史对账；
+前置依赖延迟/失败、相同或回退时间、并发提交与固定快照分页保持数组顺序。
+这些运行时测试尚未实施；本轮验证的是设计源、生成 HTML、PlantUML 与 SVG。
 
 ## 6. 决策记录
 
+以下按发生顺序保留历史；当前约束以 §1–§2 的最新决定为准。
+
 | 日期 | 项目 | 结论 |
 |---|---|---|
-| 2026-09-03 | 资源模型 | 已确认选择 A：Session Events 三接口，执行保持内部状态，无 `executionId/runId` |
+| 2026-09-03 | 资源模型（历史，已被 2026-09-04 合并决定替代） | 当时确认选择 A：Session Events 三接口，执行保持内部状态，无 `executionId/runId` |
 | 2026-09-03 | POST 事件范围 | 已确认同一 POST 接受 `user.message`、`user.interrupt`、`user.tool_confirmation`；一次请求提交一条，不支持批量 |
 | 2026-09-03 | POST 事件身份 | 已确认成功响应使用 `eventId`，不公开 `entryId` 或 `entrySeq`；内部 Entry 标识和序号可继续用于持久化与排序，Q3 只继续评审响应宽度 |
 | 2026-09-03 | `X-HW-ID` 语义 | 已确认为用户凭据 ID；不是公司、服务或应用调用方标识 |
@@ -266,11 +264,14 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 | 2026-09-04 | POST 整体确认并推进 | 用户明确表示第一个接口可以、开始下一个接口；按当前稿确认 Q2 `event + content[]`、Q3 完整用户事件、Q4 不设幂等键且历史对账；移除 POST 待选题，转入 GET stream |
 | 2026-09-04 | GET 基础类型命名 | 已确认 `agent.message`、`agent.thinking`、`agent.tool_call`、`agent.tool_result`、`session.status_idle`；完整事件在流与历史同名。只确认名称，phase、增量结构、字段及 GET 整体仍待评审 |
 | 2026-09-04 | GET S1～S4 | 已确认 A-data-only、A-type-and-phase、A-user-events-receipt-history-only、A-no-read-tool-token；移除四项选择题，保留具体字段、连接细节和 GET 整体评审状态；POST 不变 |
+| 2026-09-04 | 合并提交与实时推送 | 用户明确改为一次 POST SSE，撤销独立 Claw GET stream，保留 ListEvents；既有请求、Header、eventId、排序、S1/S2 继续有效，关闭细节待评审 |
+| 2026-09-04 | 完整首帧回执 | 用户明确允许首帧返回本次完整 user.*（含 eventId）；调整 S3，后续不广播其他用户事件；不是自动确认整个合并接口 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.3.0 | 2026-09-04 | 合并 POST 提交与实时 SSE、确认完整 user.* 首帧回执；撤销独立 GET stream，保留历史；同步评审状态、三图和校验，补充 918005ee 与 a8192e0 的源码对比；结束规则仍候选。 |
 | 0.2.2 | 2026-09-04 | 固化 GET stream S1～S4 的四项 A 选择，同步实时订阅 0.1.2、评审页、图与回归校验；不自动确认整个 GET 或切换 ListEvents。 |
 | 0.2.1 | 2026-09-04 | 确认第二接口的五个基础类型名，同步评审面、实时订阅 0.1.1、生命周期图和校验；同步 POST 中断说明的 idle 名称引用，不改 POST 字段或已确认状态，S2 仅继续讨论增量结构。 |
 | 0.2.0 | 2026-09-04 | 确认第一个 POST 的当前稿，结束 Q2/Q3/Q4；当前页切换到第二个 GET stream，已确认 POST 单独只读保存；增加候选流契约、专门设计、生命周期图和状态切换校验。 |

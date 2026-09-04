@@ -1,11 +1,11 @@
 {
   "operation": {
-    "shortName": "提交 Session 用户事件",
+    "shortName": "提交事件并接收对应推送",
     "operationKey": "submitSessionEvent",
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
-    "summary": "持久化一个用户事件并返回接受结果",
-    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。三种用户事件均必须携带 access-token，JWT 与 APPKEY 两种 Header 模式遵守同一规则；携带不代表使用，Claw 只在实际调用 Mate tool execute 时发送。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。成功响应中的事件身份已确认为 eventId，不公开 entryId 或 entrySeq；内部持久化仍可使用 Entry 标识和序号。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；本接口不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。本接口已按当前评审稿整体确认：event 包装、content[]、完整用户事件回执及历史对账策略均已确认；实现仍待落地。",
+    "summary": "一次 POST 提交用户事件，在同一响应中接收 SSE",
+    "description": "已确认合并方向：POST 同时承担事件提交和对应推送，不再提供独立 GET /events/stream；GET /events 的 ListEvents 历史查询仍保留。每次提交 user.message、user.interrupt、user.tool_confirmation 中的一条，响应为 200 text/event-stream，而不是独立 ResultBean JSON。三种用户事件均必须携带 access-token。event 包装、content[]、eventId、不公开 entryId/entrySeq/runId/executionId、Header 示例与安全边界继续有效。五个基础类型名及 S1 data-only、S2 type + phase 继续有效。已确认首个业务帧返回本次提交的完整 user.* 事件（含 eventId），仅一次；后续才推送对应的 Agent/Session 事件。这明确调整原 S3，不广播其他用户输入，也不额外包装 ResultBean。当前候选是请求范围 SSE，输出只绑定本次消息、确认续跑或中断目标，不跨后续无关执行；对应 idle 后关闭的细节、三类请求绑定方式及错误行为仍待评审。断线不取消已接受的执行、不自动重发 POST，通过 ListEvents 对账。未整体确认合并接口，也未修改 CampusClaw 实现或 Mate 公共契约。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -29,6 +29,18 @@
             "value": "opaque-access-token",
             "required": true,
             "description": "Mate 工具访问令牌，三种用户事件均必须携带。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json",
+            "required": true,
+            "description": "请求体是包含一条 event 的 JSON。"
+          },
+          {
+            "name": "Accept",
+            "value": "text/event-stream",
+            "required": true,
+            "description": "接收本次 POST 的流式响应；服务端 HTTP 客户端或 fetch 持续读取，不使用原生 EventSource 发送 POST。"
           }
         ]
       },
@@ -54,6 +66,18 @@
             "value": "opaque-access-token",
             "required": true,
             "description": "Mate 工具访问令牌，三种用户事件均必须携带。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json",
+            "required": true,
+            "description": "请求体是包含一条 event 的 JSON。"
+          },
+          {
+            "name": "Accept",
+            "value": "text/event-stream",
+            "required": true,
+            "description": "接收本次 POST 的流式响应；服务端 HTTP 客户端或 fetch 持续读取，不使用原生 EventSource 发送 POST。"
           }
         ]
       }
@@ -115,102 +139,79 @@
     },
     "responses": [
       {
-        "id": "200-user-message",
+        "id": "200-message",
         "status": "200",
-        "tabLabel": "200 · user.message",
+        "tabLabel": "200 · 消息回复",
         "label": "OK",
-        "summary": "事件已经持久化并被接受；返回同一条完整用户事件。事件使用 eventId，不返回 entryId 或 entrySeq；Agent 后续输出只从独立 live SSE 或权威历史读取。",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；后续事件字段及结束规则仍为候选。对应 user.message；delta 为新增文本，completed 为完整内容。候选在本次对应 reason=done 后结束响应，不再等待另一条消息。",
         "headers": {
-          "Content-Type": "application/json",
+          "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
           "Content-Language": "en-US"
         },
         "bodies": {
-          "default": {
-            "resCode": "0",
-            "resMsg": "success",
-            "result": {
-              "event": {
-                "eventId": "b7ef45d40a854c33af7a36df871a21e8",
-                "type": "user.message",
-                "createdAt": "2026-09-03T08:30:15.123Z",
-                "content": [
-                  {
-                    "type": "text",
-                    "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
-                  },
-                  {
-                    "type": "file",
-                    "fileId": "7f12d8a380964fdc8518f48be1cf6a42"
-                  }
-                ]
-              }
-            }
-          }
-        }
+          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"结合巡检记录与告警信息，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:19.451Z\",\"content\":\"结合巡检记录与告警信息，建议先核查上联链路，再安排变更窗口处理。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:20.000Z\",\"reason\":\"done\"}\n\n"
+        },
+        "exampleScope": "receipt-confirmed-output-lifecycle-candidate"
       },
       {
-        "id": "200-user-interrupt",
+        "id": "200-confirming",
         "status": "200",
-        "tabLabel": "200 · user.interrupt",
+        "tabLabel": "200 · 等待工具确认",
         "label": "OK",
-        "summary": "中断事件已经持久化并被接受；调用方继续观察 session.status_idle(reason=terminated)，不能把 200 当作执行已退出。",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；后续事件字段及结束规则仍为候选。对应 user.message 触发待确认工具；候选在 reason=confirming 后关闭本次响应。此处不是任务已经完成，之后需新 POST 提交 user.tool_confirmation。",
         "headers": {
-          "Content-Type": "application/json",
+          "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
           "Content-Language": "en-US"
         },
         "bodies": {
-          "default": {
-            "resCode": "0",
-            "resMsg": "success",
-            "result": {
-              "event": {
-                "eventId": "aee903c130e048b9bc2894fc32cd63a8",
-                "type": "user.interrupt",
-                "createdAt": "2026-09-03T08:30:16.420Z"
-              }
-            }
-          }
-        }
+          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"5e9a24c8d7134f6baa10c9827d45e301\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:16.000Z\",\"content\":\"已确认隔离操作会修改生产配置，需要用户确认。\"}\n\ndata: {\"eventId\":\"6c7d8e9f01234567a89bcdef01234567\",\"type\":\"agent.tool_call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-04T08:30:16.100Z\",\"toolName\":\"isolate_campus_port\",\"arguments\":{\"deviceName\":\"SW-DC-01\",\"portName\":\"GigabitEthernet0/0/24\"},\"requiresConfirmation\":true}\n\ndata: {\"eventId\":\"7d8e9f0123456789abcdef0123456789\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:16.200Z\",\"reason\":\"confirming\"}\n\n"
+        },
+        "exampleScope": "receipt-confirmed-output-lifecycle-candidate"
       },
       {
         "id": "200-tool-confirmation",
         "status": "200",
-        "tabLabel": "200 · tool confirmation",
+        "tabLabel": "200 · 拒绝确认后续跑",
         "label": "OK",
-        "summary": "确认事件已经持久化并被接受；Tool Call、确认和结果通过同一个 toolCallId 关联，但各自仍有独立 eventId。",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；后续事件字段及结束规则仍为候选。对应请求示例中的 deny 确认；候选在本次 POST 响应返回工具取消结果与续跑回复，不把新结果发给已经结束的上一条响应。",
         "headers": {
-          "Content-Type": "application/json",
+          "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
           "Content-Language": "en-US"
         },
         "bodies": {
-          "default": {
-            "resCode": "0",
-            "resMsg": "success",
-            "result": {
-              "event": {
-                "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
-                "type": "user.tool_confirmation",
-                "createdAt": "2026-09-03T08:30:17.100Z",
-                "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
-                "result": "deny",
-                "denyMessage": "该操作会修改生产配置，请先给出无变更风险的处理建议。"
-              }
-            }
-          }
-        }
+          "default": "data: {\"eventId\":\"2781508bb1c9496f94a0454d0bf8c0f8\",\"type\":\"user.tool_confirmation\",\"createdAt\":\"2026-09-03T08:30:17.100Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"result\":\"deny\",\"denyMessage\":\"该操作会修改生产配置，请先给出无变更风险的处理建议。\"}\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-04T08:30:16.600Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":\"用户已拒绝，本次工具调用未执行。\",\"isError\":true,\"errorCode\":\"TOOL_CALL_DENIED\"}\n\ndata: {\"eventId\":\"9f0123456789abcdef0123456789abcd\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:17.000Z\",\"content\":\"已取消配置变更，接下来可先核查告警时间线与上联链路。\"}\n\ndata: {\"eventId\":\"a0123456789abcdef0123456789abcde\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:17.100Z\",\"reason\":\"done\"}\n\n"
+        },
+        "exampleScope": "receipt-confirmed-output-lifecycle-candidate"
+      },
+      {
+        "id": "200-interrupt",
+        "status": "200",
+        "tabLabel": "200 · 中断完成",
+        "label": "OK",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；后续事件字段及结束规则仍为候选。对应 user.interrupt；候选等待被中断执行实际停止后发送 reason=terminated 再关闭，不把 HTTP 200 当作已经停止。原消息流的终态投递规则仍待评审。",
+        "headers": {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "default": "data: {\"eventId\":\"aee903c130e048b9bc2894fc32cd63a8\",\"type\":\"user.interrupt\",\"createdAt\":\"2026-09-03T08:30:16.420Z\"}\n\ndata: {\"eventId\":\"38e397c80d5a4f3ba7916df3bbf0a936\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:31:01.000Z\",\"reason\":\"terminated\"}\n\n"
+        },
+        "exampleScope": "receipt-confirmed-output-lifecycle-candidate"
       },
       {
         "id": "400-invalid-session-id",
         "status": "400",
         "tabLabel": "400 · INVALID_SESSION_ID",
         "label": "Bad Request",
-        "summary": "sessionId 不符合内部资源标识格式。",
+        "summary": "SSE Header 发出前：sessionId 不符合内部资源标识格式。",
         "headers": {
           "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store"
         },
         "bodies": {
           "zh-CN": {
@@ -228,10 +229,11 @@
         "status": "400",
         "tabLabel": "400 · INVALID_EVENT_REQUEST",
         "label": "Bad Request",
-        "summary": "JSON、联合类型字段、content 或确认字段不满足约束。",
+        "summary": "SSE Header 发出前：JSON、联合类型字段、content 或确认字段不满足约束。",
         "headers": {
           "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store"
         },
         "bodies": {
           "zh-CN": {
@@ -249,10 +251,11 @@
         "status": "400",
         "tabLabel": "400 · INVALID_EVENT_TYPE",
         "label": "Bad Request",
-        "summary": "event.type 不是当前版本支持的 user.* 联合类型。",
+        "summary": "SSE Header 发出前：event.type 不是当前版本支持的 user.* 联合类型。",
         "headers": {
           "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store"
         },
         "bodies": {
           "zh-CN": {
@@ -270,10 +273,11 @@
         "status": "404",
         "tabLabel": "404 · SESSION_NOT_FOUND",
         "label": "Not Found",
-        "summary": "Session 不存在或已删除。",
+        "summary": "SSE Header 发出前：Session 不存在或已删除。",
         "headers": {
           "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store"
         },
         "bodies": {
           "zh-CN": {
@@ -291,10 +295,11 @@
         "status": "409",
         "tabLabel": "409 · SESSION_BUSY",
         "label": "Conflict",
-        "summary": "user.message 到达时 Session 不是允许新消息的 idle 状态。",
+        "summary": "SSE Header 发出前：user.message 到达时 Session 不是允许新消息的 idle 状态。",
         "headers": {
           "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store"
         },
         "bodies": {
           "zh-CN": {
@@ -312,10 +317,11 @@
         "status": "409",
         "tabLabel": "409 · SESSION_NOT_RUNNING",
         "label": "Conflict",
-        "summary": "user.interrupt 到达时没有可中断的内部执行。",
+        "summary": "SSE Header 发出前：user.interrupt 到达时没有可中断的内部执行。",
         "headers": {
           "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store"
         },
         "bodies": {
           "zh-CN": {
@@ -333,10 +339,11 @@
         "status": "409",
         "tabLabel": "409 · TOOL_CONFIRMATION_NOT_PENDING",
         "label": "Conflict",
-        "summary": "指定 Tool Call 不在当前 Session 等待确认，或确认已经完成。",
+        "summary": "SSE Header 发出前：指定 Tool Call 不在当前 Session 等待确认，或确认已经完成。",
         "headers": {
           "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store"
         },
         "bodies": {
           "zh-CN": {
@@ -354,11 +361,12 @@
         "status": "503",
         "tabLabel": "503 · RUNTIME_CAPACITY_EXCEEDED",
         "label": "Service Unavailable",
-        "summary": "user.message 所需的全局执行容量已满；本次事件未接受。",
+        "summary": "SSE Header 发出前：user.message 所需的全局执行容量已满；本次事件未接受。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN",
-          "Retry-After": "3"
+          "Retry-After": "3",
+          "Cache-Control": "no-store"
         },
         "bodies": {
           "zh-CN": {
@@ -376,10 +384,11 @@
         "status": "500",
         "tabLabel": "500 · EVENT_ACCEPTANCE_FAILED",
         "label": "Internal Server Error",
-        "summary": "用户事件未能完成持久化和状态接受；不返回内部异常细节。",
+        "summary": "SSE Header 发出前且确认尚未提交或已回滚时，返回接受失败；不返回内部异常细节。若事件已经接受或提交结果不确定，不能把此错误解释为可安全重发，需查询历史对账。",
         "headers": {
           "Content-Type": "application/json",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store"
         },
         "bodies": {
           "zh-CN": {
@@ -395,8 +404,42 @@
     ]
   },
   "review": {
-    "status": "事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · POST 接口已确认",
-    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。2026-09-04 用户确认第一个接口可以，开始下一个接口：Q2 使用 event 包装与 content[]，Q3 返回完整用户事件，Q4 不接受 Idempotency-Key、结果不确定时历史对账；三项均按当前稿确认，不再重复征求选择。当前转入 GET /sessions/{sessionId}/events/stream 评审。",
-    "questions": []
+    "status": "合并方向已确认 · 事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 五个基础类型名已确认 · 合并接口评审中 · 完整 user.* 首帧回执已确认",
+    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。2026-09-04 用户要求合并 POST 提交和 GET 实时推送：改为同一 POST SSE。原独立 JSON 成功响应已被替代；用户进一步明确允许首帧返回本次完整 user.* 回执，含 eventId，只回执一次，不广播其他用户输入。S3 按这一明确选择调整。S4 仅适用已撤销的只读流，不能用于免除 POST 的工具令牌。完整回执已确认，其他连接与字段细节保留待确认，不自动推进 ListEvents。",
+    "questions": [],
+    "confirmedEventTypes": [
+      "agent.message",
+      "agent.thinking",
+      "agent.tool_call",
+      "agent.tool_result",
+      "session.status_idle"
+    ],
+    "confirmedChoices": {
+      "M1-transport": "single-post-sse",
+      "S1-frame-format": "A-data-only",
+      "S2-event-projection": "A-type-and-phase",
+      "M2-receipt": "A-user-event-first"
+    },
+    "decisionHistory": {
+      "Q3-response": {
+        "previous": "200 ResultBean 完整用户事件",
+        "status": "JSON 传输被合并决定替代；完整用户事件内容保留，现作为首个 data 业务帧返回"
+      },
+      "S3-user-events": {
+        "previous": "A-user-events-receipt-history-only",
+        "status": "用户明确调整为仅本次 POST 的完整 user.* 首帧回执；不广播其他用户输入"
+      },
+      "S4-read-access-token": {
+        "previous": "A-no-read-tool-token",
+        "status": "只读 GET stream 已撤销，此项不适用于合并 POST；POST 三种事件继续必填"
+      }
+    },
+    "pendingReview": [
+      "三类请求的对应事件范围、控制请求并发与结束条件",
+      "具体事件字段、thinking 内容、idle reason、heartbeat、容量与错误细节",
+      "合并 POST 接口整体确认"
+    ],
+    "promptPrefix": "Claw Session Events v2 合并接口评审：POST /sessions/{sessionId}/events",
+    "promptSuffix": "合并方向、完整 user.* 首帧回执及既有请求、Header、eventId、排序、S1/S2 已确认；继续评审结束规则与输出范围，不自动确认整个接口或修改 Mate 公共契约。"
   }
 }

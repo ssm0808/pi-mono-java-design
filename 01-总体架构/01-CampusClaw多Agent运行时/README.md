@@ -2,12 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.6.8 |
-| 状态 | Session Events v2 POST、GET stream 五个基础类型名及 S1～S4 已确认，GET 其余细节评审中；HTTP 1.44.1 保留已确认 Builtin JSON，Skill 由同事并行开发 |
-| 当前传输结论 | v2 使用独立 POST、Session live SSE 与固定快照历史；执行仍是内部状态，无 `executionId/runId` |
+| 文档版本 | 3.7.0 |
+| 状态 | Events v2 合并 POST SSE 与完整 user.* 首帧已确认，输出范围与关闭细节评审中；HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发不变 |
+| 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 固定快照历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
+| v2 合并传输核对 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；对比原 `a8192e0` 的七个 HTTP/事件文件无变化，目标变化见 v2 §4.2 |
 | v2 事件顺序补充核对 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；证据与原基线对比见 v2 设计 §4.1 |
 | pi-mono Slash 对比基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
@@ -25,36 +26,35 @@
 
 ## 1. 当前结论
 
-用户已确认 Session Events 资源模型 A。CampusClaw 的目标会话事件边界拆为三个
-Session scoped operation：
+用户最新决定取代此前独立提交与实时订阅的方案：Claw 采用一次 POST 发送事件并
+接收对应推送，另保留 GET 权威历史。
 
 ```text
 POST /sessions/{sessionId}/events
-  -> 接受并持久化一个 user.* 事件，返回 ResultBean JSON
-
-GET /sessions/{sessionId}/events/stream
-  -> 跨多次内部执行的 live-only Session SSE
+  -> 接受并持久化一条 user.*，同一 SSE 响应首帧返回完整回执，再推送对应事件
 
 GET /sessions/{sessionId}/events
   -> 固定快照的权威历史与断线对账
 ```
 
-执行继续是 Runtime 内部状态，不引入 `executionId` 或 `runId`。独立 Abort 将由
-`user.interrupt` 替代，`user.tool_confirmation` 进入同一个用户事件联合类型。
-v2 公共事件身份使用 `eventId`，不公开内部 `entryId` 或 `entrySeq`；内部序号仍可用于
-持久化排序与分页，但不得穿透 POST、live SSE 或权威历史响应。
-三种 POST 用户事件在 JWT/APPKEY 模式下均必须携带 `access-token`，但只在实际
-Mate tool execute 时发送；该必填规则已确认，不再列为待选项。
-事件顺序规则已确认：同一 Session 先检查前置依赖、确定接受顺序，再在同一短事务内
-分配内部序号并追加。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按
-`createdAt` 重排；时间字段只用于展示，本次不更改其取值语义。此项是 v2 目标约束，
-不代表当前 Java 已完整实现多来源依赖检查。
-第一个 POST 已按当前稿确认：使用 `event + content[]`、返回完整用户事件、不设
-`Idempotency-Key` 且通过历史对账。第二个 GET stream 已确认 data-only、type + phase、
-不推送 user.*、不要求 access-token，仍继续具体字段与连接细节评审，详见
-[`Session Events v2 重设计`](chat-events-v2-design.md) 和
-[`当前 GET 评审页`](chat-events-v2-review.html)；第一个接口保存在
-[`已确认 POST 页面`](chat-events-v2-confirmed.html)。
+原独立 Claw GET stream 从目标中撤销，不能继续指导客户端“先 GET 再 POST”。
+Mate 的公共 Events API 不在本轮修改范围；其路径和连接策略仍由 Mate 契约独立管理。
+
+执行继续是内部状态，不引入 executionId/runId；user.interrupt、user.tool_confirmation
+仍进入同一 POST 联合类型。event 包装、content[]、eventId、不公开 entryId/entrySeq、
+Header 示例和用户凭据 ID 语义均保留；三种 POST 用户事件仍统一必填 access-token，
+凭据仅在内存保留到执行结束，只随实际 Mate tool execute 发送。
+
+已确认内部因果顺序与短事务追加，ListEvents 保持已提交数组顺序，不按 createdAt 重排；
+不设 Idempotency-Key，断线不取消执行、不自动重发 POST。S1 data-only、S2 type + phase
+以及五个输出类型名保留；用户明确调整 S3：完整本次 user.* 作为首个业务帧返回，
+仅一次，不广播其他用户输入。原只读流的 S4 不再适用合并 POST。
+
+当前推荐“对应 idle 后关闭本次响应；confirming 后另发确认 POST 接收续跑”，仍是候选，
+不是整体确认。当前入口见 [合并 POST 评审页](chat-events-v2-review.html)、
+[Events v2 设计](chat-events-v2-design.md) 和 [请求级 SSE 设计](chat-events-v2-stream-design.md)。
+[旧确认页](chat-events-v2-confirmed.html) 改为变更提示，旧 JSON POST 仅在 Git 历史保留。
+当前没有整体确认的新 v2 operation；既有字段决定不因此被重新开放。
 
 ### 1.1 现行 v1 基线（迁移完成前保留）
 
@@ -108,7 +108,7 @@ Session Events v2 在重设计完成前使用独立的
 [`接口契约-v2`](接口契约-v2) 和
 [`chat-events-v2-review.html`](chat-events-v2-review.html)，不会覆盖已确认的 v1
 契约。每次只展示并评审一个 operation；确认后的决定记录到
-[`chat-events-v2-design.md`](chat-events-v2-design.md)，三个 operation 全部确认后再统一
+[`chat-events-v2-design.md`](chat-events-v2-design.md)，两个 operation 全部确认后再统一
 替换 v1 事件接口及校验门禁。
 
 当前 CampusClaw HTTP 契约中的路径参数、查询参数、请求体、普通响应和 SSE `data`
@@ -197,13 +197,13 @@ CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` �
 | 12 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回按名称字典序排列的七个 Builtin，不解析 Skill Source |
 | 13 | `POST` | `/sessions/{sessionId}/command` | `200` ResultBean JSON | 执行七个 Builtin，Handler 完成后返回 |
 
-本表第 4、5、11 项是迁移前 v1 行为；v2 将其重构为第 1 节的三个 Session Events
+本表第 4、5、11 项是迁移前 v1 行为；v2 将其重构为第 1 节的两个 Session Events
 operation。其他接口是否受影响按 operation 继续评审，不由资源模型 A 自动推断。
 
 公共资源没有 `Run`。一次用户输入会触发内部 active execution，但调用方使用
 Session、Entry 和 SSE 恢复，不获得 `runId`，也不存在 GetRun 或 Run Events。
 
-## 5. HTTP 与 SSE 行为
+## 5. 迁移前 v1 HTTP 与 SSE 行为
 
 ### 5.1 普通 HTTP
 
@@ -314,6 +314,8 @@ Model/Thinking/Compact 复用既有领域 Entry，sourceEventSeq 指向本次最
 [内置命令](../../04-命令与技能/01-内置命令/README.md)。
 
 ## 6. Runtime 内部设计不变量
+
+本节 HTTP 字段描述保留为 v1 迁移基线；v2 请求与输出字段以独立评审模型为准。
 
 - 一个 Session 绑定一个不可变 `agentId`，允许切换 `modelId`；模型不是 Session 身份的一部分。
 - 公共标识字段固定命名为 `agentId`、`toolId`、`skillId` 和 `sessionId`；对应值共用类型化资源 ID 规则，精确正则只在 [`接口契约/common.json`](接口契约/common.json) 定义。
@@ -490,8 +492,8 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 以下内容尚未确认，不应由实现自行猜测：
 
-1. Claw v2 Session live SSE 的具体字段约束、thinking 内容与 idle reason；类型名、data-only、type + phase 和不推送 `user.*` 已确认；
-2. Claw v2 GET stream 的就绪、heartbeat、容量、错误与关闭细节及接口整体确认；GET 不要求 `access-token` 已确认；
+1. Claw v2 合并 POST 的三类输入对应范围、confirming 分段与中断终态投递；合并方向、完整本次 user.* 首帧已确认；
+2. Claw v2 SSE 具体字段、thinking 内容、idle reason、heartbeat、容量、错误与关闭细节及整体确认；类型名、data-only、type + phase 已确认；
 3. Claw v2 固定快照历史的过滤、游标、事件投影和保留期；
 4. Steer、FollowUp 与 Slash Command 是否并入新的 Events 边界；
 5. Pod 重启时 active execution 的中断或恢复策略；
@@ -502,6 +504,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.7.0 | 2026-09-04 | 同步 Events v2 0.3.0：合并 POST 提交与 SSE 推送、确认完整本次 user.* 首帧，撤销内部独立 GET stream，保留 ListEvents；更新评审状态、源码证据与图，结束细节仍候选，不修改 Mate 公共契约或 v1 基线。 |
 | 3.6.8 | 2026-09-04 | 同步 Events v2 0.2.2：确认 GET stream S1～S4 的四项 A 选择，移除对应待选题；保留其他具体字段、连接细节和接口整体评审状态，不影响已确认 POST 与 v1 迁移基线。 |
 | 3.6.7 | 2026-09-04 | 同步 Events v2 0.2.1：确认 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 五个基础类型名；增量结构、字段和 GET 整体仍在评审，不改 v1 迁移基线。 |
 | 3.6.6 | 2026-09-04 | 合并并行文档修订，保留 Events v2 POST 已确认及 GET stream 评审状态，同时保留 HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发决定。 |
