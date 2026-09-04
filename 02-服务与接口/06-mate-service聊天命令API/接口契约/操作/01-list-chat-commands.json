@@ -4,8 +4,8 @@
     "operationKey": "listChatCommands",
     "method": "GET",
     "path": "/chats/{chatId}/commands",
-    "summary": "列出当前 Chat 的 Builtin 和 Skill 命令",
-    "description": "mate-service 先验证登录用户和 Chat 权限，再把 chatId 解析为唯一 sessionId，并调用 CampusClaw。命令清单按当前 Chat/Session 状态动态生成，表示当前可以发现的命令及其可用性。清单保留暂时不可用的命令，但不暴露 sessionId、Agent/Skill ID、Skill 版本或受管路径。清单获取失败时，交互层保留 Slash 草稿并显示错误。当前 mate-service 尚无 Chat→Runtime bridge，因此本接口是 target-only design。",
+    "summary": "【已废止历史】列出当前 Chat 的 Builtin 和 Skill 命令",
+    "description": "已废止的 historical target-only design；不得作为实现依据。新公共命令协议待独立评审，不能由 Runtime 1.44.0 推导。以下保留旧提案快照：mate-service 先验证登录用户和 Chat 权限，再把 chatId 解析为唯一 sessionId，并调用 CampusClaw。命令清单按当前 Chat/Session 状态动态生成，表示当前可以发现的命令及其可用性。清单保留暂时不可用的命令，但不暴露 sessionId、Agent/Skill ID、Skill 版本或受管路径。清单获取失败时，交互层保留 Slash 草稿并显示错误。当前 mate-service 尚无 Chat→Runtime bridge，因此本接口是 target-only design。",
     "parameters": [
       {"$ref": "parameters.chatId"},
       {"$ref": "parameters.acceptLanguage"}
@@ -95,7 +95,7 @@
   },
   "review": {
     "businessView": {
-      "summary": "用户在聊天输入框键入 Slash 时，前端调用本接口获取当前 Chat 可以展示的命令及其实时可用状态。",
+      "summary": "【已废止历史；不得作为实现依据】用户在聊天输入框键入 Slash 时，前端调用本接口获取当前 Chat 可以展示的命令及其实时可用状态。",
       "flow": [
         {"actor": "用户", "action": "在输入框第一个字符输入 /", "outcome": "前端开始识别 Slash 命令"},
         {"actor": "前端", "action": "携带 chatId 请求命令清单", "outcome": "不接触内部 sessionId"},

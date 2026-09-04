@@ -1,299 +1,90 @@
-@startuml slash_command_architecture
-title CampusClaw Slash Command Target Architecture
-skinparam componentStyle rectangle
-skinparam shadowing false
-
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/command/SlashCommandRegistry.java:21-49
-' Source evidence: deepseek-harness@141eb6fe packages/interaction/commands/src/index.ts:250-300
-' Observed behavior: CampusClaw has an unmanaged mutable registry and direct text execution.
-' Target design: HTTP adapters submit structured invocations to immutable and dynamic command sources.
-' Design reason: contributors and strategy handlers let commands evolve without a central switch.
-
-actor "Interaction client" as Client
-component "CommandController" as Controller
-component "CommandCatalogService" as Catalog
-component "CommandExecutionService" as Execution
-component "CompositeCommandRegistry" as Registry
-component "BuiltinCommandSource\nimmutable index" as Builtin
-component "SkillCommandSource\ndynamic view" as Skill
-component "CommandAdmissionPolicy" as Admission
-component "CommandHandler" as Handler
-component "Narrow application services" as Services
-
-Client --> Controller : structured name, arguments, fileIds
-Controller --> Catalog : list(context)
-Controller --> Execution : execute(invocation)
-Catalog --> Registry
-Execution --> Registry
-Registry --> Builtin
-Registry --> Skill
-Execution --> Admission
-Execution --> Handler
-Handler --> Services
-@enduml
-
 @startuml target_slash_command_boundaries
-title Target Slash Command Boundaries and Object Lifetimes
-top to bottom direction
-skinparam classAttributeIconSize 0
+title Target-only Builtin Command Layers
+' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java resolve.
+' Architecture change: JSON command execution uses narrow services and no generic lifecycle store.
 skinparam shadowing false
-skinparam linetype ortho
-skinparam packageStyle rectangle
-
-' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-75
-' Source evidence: pi-mono-java@fb49e86d modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java:37-81
-' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:68-108
-' Observed behavior: the unmerged GET path lets the Controller load a Session, resolve commands, and expose an internal DTO.
-' Target-only design: add application services, immutable Web VOs, one request catalog, and an ephemeral credential context.
-' Design reason: HTTP concerns, command resolution, mutable Runtime state, and outbound credentials need explicit ownership and lifetimes.
-
-package "Web API" {
-  class RuntimeCommandController <<Spring singleton>> {
-    +list(sessionId, locale)
-    +execute(sessionId, request)
-  }
-  class ExecuteCommandRequestVO <<request VO>> {
-    +name
-    +arguments
-    +fileIds
-  }
-  class CommandListResponseVO <<immutable response VO>>
-  class CommandDescriptorResponseVO <<immutable response VO>>
+package "Web boundary" {
+  class CommandController
+  class RequestVO
+  class ResponseVO
 }
-
-package "Application" {
-  class CommandCatalogService <<Spring singleton>> {
-    +list(sessionId, locale)
-  }
-  class CommandExecutionService <<Spring singleton>> {
-    +execute(sessionId, request, credentials)
-  }
-  class CommandInvocation <<immutable>>
-  class CommandExecutionContext <<per request>> {
-    +sessionSnapshot
-    +locale
-  }
-  class CommandCredentialContext <<ephemeral>>
+package "Application - singleton" {
+  class CommandCatalogService
+  class CommandExecutionService
+  class CommandResponseAssembler
 }
-
-package "Command core" {
-  class CompositeCommandRegistry <<Spring singleton>> {
-    +resolve(context): ResolvedCommandCatalog
-  }
-  interface CommandCatalogView {
-    +list()
-    +find(name)
-  }
+package "Core" {
+  interface CommandDefinitionSource
+  class BuiltinCommandSource
+  class CompositeCommandRegistry
   class ResolvedCommandCatalog <<request snapshot>>
-  class CommandDefinition <<immutable>> {
-    +describe(context)
-    +admit(invocation, authoritativeState)
-    +execute(invocation, executionContext)
-  }
 }
-
-package "Runtime adapters" {
-  class RuntimeSessionRepository
-  class RuntimeSessionEngineRegistry
+package "Domain and infrastructure" {
+  interface NarrowCommandService
+  class SessionRepository
+  class RuntimeCoordinator
 }
-
-RuntimeCommandController ..> ExecuteCommandRequestVO : accepts
-RuntimeCommandController -down-> CommandCatalogService
-RuntimeCommandController -down-> CommandExecutionService
-RuntimeCommandController ..> CommandListResponseVO : returns
-CommandListResponseVO *-- CommandDescriptorResponseVO
-
-CommandCatalogService -down-> RuntimeSessionRepository : loads authorized Session
-CommandCatalogService -down-> CompositeCommandRegistry : resolves once
-CommandCatalogService ..> CommandListResponseVO : maps internal descriptors
-
-CommandExecutionService -down-> RuntimeSessionRepository : lifecycle sidecars
-CommandExecutionService -down-> RuntimeSessionEngineRegistry : operation lock and capacity
-CommandExecutionService -down-> CompositeCommandRegistry : resolves once
-CommandExecutionService ..> CommandInvocation : normalizes request
-CommandExecutionService ..> CommandExecutionContext : creates
-CommandExecutionService -down-> CommandDefinition : dispatches selected definition
-
-CompositeCommandRegistry -down-> ResolvedCommandCatalog : creates validated snapshot
-ResolvedCommandCatalog ..|> CommandCatalogView
-ResolvedCommandCatalog *-- CommandDefinition
-CommandExecutionContext --> CommandCatalogView : same resolved view
-CommandExecutionContext *-- CommandCredentialContext
-
-note right of RuntimeCommandController
-The Controller owns HTTP adaptation only.
-It does not load Session state or resolve commands.
-end note
-
-note right of ResolvedCommandCatalog
-One GET or POST owns one immutable catalog.
-List, Help, admission, and dispatch share it.
-Mutable state is rechecked at the owning lock or transaction.
-end note
-
-note right of CommandCredentialContext
-Raw credentials live only for this request.
-They are not logged, persisted, or added to prompts.
-end note
+CommandController --> CommandCatalogService
+CommandController --> CommandExecutionService
+CommandController ..> RequestVO
+CommandController ..> ResponseVO
+CommandExecutionService --> CommandResponseAssembler
+CommandCatalogService --> CompositeCommandRegistry
+CommandExecutionService --> CompositeCommandRegistry
+CompositeCommandRegistry o-- "1..*" CommandDefinitionSource
+BuiltinCommandSource ..|> CommandDefinitionSource
+CompositeCommandRegistry --> ResolvedCommandCatalog : resolve once
+CommandExecutionService --> NarrowCommandService : selected handler
+NarrowCommandService --> SessionRepository : row lock
+NarrowCommandService --> RuntimeCoordinator : operation lock
+CommandResponseAssembler ..> ResponseVO : DTO to VO
 @enduml
 
 @startuml target_command_resolution_classes
-title Target Command Resolution and Extension Classes
-left to right direction
-skinparam classAttributeIconSize 0
+title Target-only Immutable Request Catalog
+' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/ResolvedCommandCatalog.java.
+' Design reason: list, help, admission, and dispatch share definition identity; writes recheck mutable state under locks.
 skinparam shadowing false
-skinparam linetype ortho
-skinparam packageStyle rectangle
-
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/command/SlashCommandRegistry.java:22-37
-' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinitionSource.java:20-36
-' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-75
-' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/AgentRuntimeManager.java:275-293
-' Observed behavior: Composite resolution already merges lists, while each source still declares a redundant find operation.
-' Target-only design: sources only list definitions; builtin and Skill extensions meet at an immutable executable definition.
-' Design reason: new commands must not modify a central branch, and dynamic Skill discovery must not drift inside one request.
-
-package "Resolution" {
-  interface CommandDefinitionSource {
-    +list(context)
-  }
-  class CompositeCommandRegistry <<Spring singleton>> {
-    +resolve(context): ResolvedCommandCatalog
-  }
-  interface CommandCatalogView
-  class ResolvedCommandCatalog <<request snapshot>> {
-    +list()
-    +find(name)
-  }
-}
-
-package "Executable definition" {
-  class CommandDefinition <<immutable>> {
-    +name
-    +kind
-    +describe(context)
-    +admit(invocation, authoritativeState)
-    +execute(invocation, executionContext)
-  }
-  class CommandDescriptorDTO <<internal projection>>
-  interface CommandAdmissionPolicy
-  interface CommandHandler {
-    +execute(invocation, executionContext)
-  }
-  class CommandExecutionContext <<per request>>
-}
-
-package "Builtin extension" {
-  class ImmutableBuiltinCommandSource <<Spring singleton>>
-  interface BuiltinCommandContributor {
-    +definition()
-  }
-  class BuiltinCommandHandler
-  class NarrowApplicationService
-}
-
-package "Skill extension" {
-  class SkillCommandSource <<Spring singleton>>
-  class SkillCommandHandler <<shared>>
-  class AgentRuntimeManager
-}
-
-CompositeCommandRegistry o-- "1..*" CommandDefinitionSource
-CompositeCommandRegistry --> ResolvedCommandCatalog : creates
-ResolvedCommandCatalog ..|> CommandCatalogView
-ResolvedCommandCatalog *-- "1..*" CommandDefinition
-
-ImmutableBuiltinCommandSource ..|> CommandDefinitionSource
-ImmutableBuiltinCommandSource "1" o-- "1..*" BuiltinCommandContributor
-BuiltinCommandContributor "1" --> "1" CommandDefinition
-CommandDefinition *-- CommandAdmissionPolicy
-CommandDefinition *-- CommandHandler
-CommandDefinition ..> CommandDescriptorDTO
-CommandHandler ..> CommandExecutionContext
-CommandExecutionContext --> CommandCatalogView
-
-BuiltinCommandHandler ..|> CommandHandler
-BuiltinCommandHandler --> NarrowApplicationService
-SkillCommandSource ..|> CommandDefinitionSource
-SkillCommandSource --> AgentRuntimeManager : complete snapshot
-SkillCommandSource --> SkillCommandHandler
-SkillCommandHandler ..|> CommandHandler
-SkillCommandHandler --> AgentRuntimeManager
-
-note bottom of ImmutableBuiltinCommandSource
-The startup index is immutable.
-Duplicate builtin names fail application startup.
-end note
-
-note bottom of SkillCommandSource
-One dynamic source exposes skill:<name>.
-Names are strict kebab-case with 1..64 characters.
-The complete Agent snapshot is captured once per catalog.
-end note
-
-note bottom of CommandDefinition
-Stable metadata, admission, and behavior stay together.
-The mutable descriptor DTO is only an internal projection.
+interface CommandDefinition
+class BuiltinCommandDefinition
+class SkillCommandDefinition
+interface CommandHandler
+interface CommandAdmissionPolicy
+class ResolvedCommandCatalog <<immutable request snapshot>>
+class CommandExecutionContext <<request snapshot>>
+class CommandHelpFormatter
+BuiltinCommandDefinition ..|> CommandDefinition
+SkillCommandDefinition ..|> CommandDefinition
+BuiltinCommandDefinition *-- CommandHandler
+BuiltinCommandDefinition *-- CommandAdmissionPolicy
+ResolvedCommandCatalog *-- "0..*" CommandDefinition
+CommandExecutionContext o-- "1" ResolvedCommandCatalog
+CommandHelpFormatter --> CommandExecutionContext : use same catalog
+note right of SkillCommandDefinition
+Display-only definition.
+No fake Handler.
+Excluded before source resolution
+for BUILTIN requests.
 end note
 @enduml
 
-@startuml interaction_routing
-title Interaction Layer Slash Routing
+@startuml authoritative_command_state
+title Target-only Authoritative Command State
+' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql t_sessions.
+' Architecture change: current name and existing domain entries replace generic command history.
 skinparam shadowing false
-
-' Source evidence: codex@be33f80b codex-rs/tui/src/chatwidget/slash_dispatch.rs:900-965
-' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/modes/interactive/interactive-mode.ts:675-772
-' Observed behavior: terminal harnesses parse and dispatch slash input inside their interaction host.
-' Architecture change: CampusClaw keeps parsing in the HTTP client and sends structured commands.
-
-start
-:User submits draft;
-if (First character is slash?) then (no)
-  :Send ordinary user message;
-  stop
-endif
-:Fetch command catalog;
-if (Catalog loaded?) then (no)
-  :Keep slash draft and show error;
-  stop
-endif
-:Parse exact lowercase name\nthrough first whitespace;
-:Preserve remaining argument text;
-if (Exact catalog match?) then (yes)
-  :POST structured Command request;
-else (no)
-  :Send ordinary user message;
-endif
-stop
-@enduml
-
-@startuml sidecar_history
-title Branch History With Sidecar Entries
-skinparam shadowing false
-
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml:132-190
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/resources/db/gaussdb/install/session_schema.sql:99-157
-' Observed behavior: current history reads only ancestors of active_leaf_id ordered by entry_seq.
-' Target design: command lifecycle and name events are sidecars anchored to active-path entries.
-
-rectangle "Active branch" {
-  object "user.message\nseq 11" as U
-  object "assistant.message.completed\nseq 15\nactive leaf" as A
-  U --> A : parent_id
-}
-rectangle "Sidecars" {
-  object "command.started\nseq 12" as CS
-  object "session.name.changed\nseq 13" as NC
-  object "command.completed\nseq 14" as CC
-}
-
-U --> CS : anchor only
-U --> NC : anchor only
-U --> CC : anchor only
-
+rectangle "Help / Status / Skills" as Read
+rectangle Name
+rectangle "Model / Thinking / Compact" as Domain
+database "Current Session state" as Session
+database "Existing domain Entries" as Entries
+Read --> Session : observe only
+Name --> Session : current displayName and version
+Domain --> Session : atomic state
+Domain --> Entries : authoritative changes only
 note bottom
-Sidecars do not replace active_leaf_id.
-GET Events merges active-path entries and sidecars by entry_seq.
-Model context projection ignores command.* and session.name.changed.
+No public commandId or generic command lifecycle.
+No Name history sidecar.
+Queries, same-value updates, and empty compaction append nothing.
 end note
 @enduml

@@ -1,184 +1,58 @@
 # CampusClaw Skill Command 设计
 
-[返回命令与技能导航](../README.md) ·
-[通用模块](../00-Slash-Command通用模块/README.md)
+[返回导航](../README.md) · [通用模块](../00-Slash-Command通用模块/README.md)
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.0.4 |
-| 设计日期 | 2026-09-01 |
-| CampusClaw 指定源码基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
-| CampusClaw 复核 HEAD | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
-| pi 基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
-| 设计状态 | target-only；当前 Skill 仅支持受管文件加载与模型自动发现，没有 HTTP Skill Command |
+| 文档版本 | 3.1.0 |
+| 更新日期 | 2026-09-04 |
+| 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
+| Skill 发现候选 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`（PR #210，未合并） |
+| 状态 | 当前公开 Skill Command 执行延期；未来 target-only 设计待独立评审 |
 
-## 1. 结论
+## 1. 当前产品边界
 
-Skill 命令格式：
+Runtime v1 GET 清单和 POST 执行只支持七个 Builtin，不公开或执行 skill:*。
+PR #210 的动态 SkillCommandSource 可保留，但 Registry 必须在调用 Source 前按来源过滤。
+Builtin 列表不读取 Skill 快照、不触发 Agent 刷新，不因 Skill 失效而失败。
+Skill Definition 仅可展示，不安装伪 Handler。
 
-```text
-/skill:<name> [request]
-```
+![发现与执行边界](设计图/skill_catalog.svg)
 
-| 规则 | 结论 |
-|---|---|
-| HTTP `name` | `skill:<name>`，不含 `/` |
-| Skill 名称 | 1～64 个字符；只使用小写字母、数字和连字符；连字符不能位于首尾或连续出现 |
-| 名称与文件夹 | `SKILL.md` 的 `name` 必填，并与所在文件夹同名 |
-| 命名冲突 | 与 Builtin 分属不同命名空间，不设置优先级 |
-| Session 状态 | 仅 `idle` 时可执行；`running` 时仍显示但标记不可用 |
-| 参数 | 可选；长度限制与普通用户消息相同 |
-| 附件 | 可选；数量和校验规则与普通用户消息相同 |
+[PlantUML 源码](设计图/diagram.puml#L1)
 
-名称的精确格式为：
+## 2. 源码证据
 
-```regex
-^[a-z0-9]+(?:-[a-z0-9]+)*$
-```
+PR #210 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/SkillCommandSource.java`
+读取 Prepared Agent 元数据并生成描述符，没有执行 Handler。
+同基线 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillNamePatterns.java`
+已集中兼容/严格策略的正则字符串、编译模式与长度上限，Loader 保持兼容策略。
+旧候选 `0bb794f2` 的 SkillNameValidator 已删除；发现结果使用只读 DTO，并复制建议列表。
+这些是前置 PR 的已提交候选行为，不是已发布 HTTP 能力。
 
-`skill:` 是 CampusClaw 的命令命名空间，不属于 Skill 包名称。HTTP 层移除该前缀后，
-复用同一个 Skill 名称校验器。规则对齐
-[Agent Skills specification](https://agentskills.io/specification)；当前 `SkillLoader` 的
-`^[a-z0-9-]+$` 仍会接受 `-pdf`、`pdf-` 和 `pdf--tools`，目标实现必须补齐校验。
+pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
+`packages/coding-agent/src/core/skills.ts` 提供 Skill 发现，而
+`packages/coding-agent/src/core/agent-session.ts` 有本地展开/执行语义；
+这不是 CampusClaw 的企业 HTTP 契约。完整外部基线和差异分类见[通用模块](../00-Slash-Command通用模块/README.md)。
 
-## 2. 命令清单如何生成
+## 3. 后续独立设计要求
 
-每次查询命令清单时，`SkillCommandSource`：
+公开 Skill 执行必须另立设计，不由发现骨架推断为已发布。
+后续评审需明确普通 JSON 结果、完整快照、绑定重检、容量、信任分层、失败与恢复。
+不得重新引入本期已移除的通用 commandId、command.started/completed/failed 或 Name 边车。
+若需要私有 Skill 调用快照，必须单独评审其保留期、隐私与恢复用途，不作为当前实现要求。
 
-1. 从 Session 取不变 `agentId`。
-2. 通过 `AgentRuntimeManager.prepareCached(agentId)` 读取最新 complete 版本，不触发远程刷新。
-3. 校验 `SKILL.md` 名称、所在文件夹名称和绑定元数据一致，再按名称稳定排序并生成
-   `skill:<name>` Descriptor。
-4. 只返回名称、描述、可用性和输入提示；不返回正文、路径、Skill ID 或版本。
+## 4. 当前验收
 
-`PreparedAgentRuntime.skills()` 和 `findSkill()` 已支持精确名称查找。目标设计在其上建立
-动态 Source，不把每个 Skill 注册成 Spring Bean。
+GET 只含七个 kind=builtin；POST skill:* 返回 INVALID_COMMAND_REQUEST；
+Builtin Registry 测试证明 SkillCommandSource 未被调用。
+skills Builtin 只展示最新完整绑定快照中的名称/描述，不等于发布 Skill Command。
 
-![Skill 命令清单解析](设计图/skill_catalog.svg)
-
-[PlantUML 源码：`skill_catalog`](设计图/diagram.puml#L1)
-
-## 3. 调用时快照
-
-### 3.1 为什么不能只保存 Skill ID
-
-Agent 刷新会替换 Skill 版本、正文和资源，也可能删除绑定。历史若只记录 Skill ID 或
-文件路径，重放时就可能读取到不同内容。
-
-因此每次调用都把完整快照写入 `t_session_records(type='skill.snapshot')`，不跨调用去重。
-快照至少包含：
-
-```text
-commandId
-agentId
-agentVersion
-skillId
-skillVersion
-name
-description
-skillMarkdown
-references[]: name, fileType, content
-templates[]: name, fileType, content
-capturedAt
-```
-
-快照使用 `lane='main'`、`run_id=commandId`。`record_seq` 与 Entry 共享 Session 序列，
-但快照不进入 GET Events 或公共 SSE。因此公开 `entrySeq` 可以有缺口；调用方只能排序，
-不能补号或推断缺口内容。
-
-### 3.2 原子接受顺序
-
-Skill 调用按以下顺序接受；全部成功后才建立 SSE：
-
-1. 在 Agent 锁内读取最新 complete 版本的元数据、`SKILL.md` 和资源；随后释放 Agent 锁。
-2. 锁定 Session，校验 idle、命令参数、附件与快照完整性。
-3. 写入包含 `commandId`、`commandName`、原始 `arguments` 和 `fileIds` 的活动 `user.message`。
-4. 写入私有 `skill.snapshot` Record。
-5. 写入锚定在新 User Entry 的 `command.started` sidecar。
-6. 将 Session 置为 running，`active_leaf_id` 指向新 User Entry。
-
-任一步失败都回滚，并在流建立前返回 ResultBean。不能先写用户消息，再检查 Skill 正文。
-
-![Skill 原子接受](设计图/skill_acceptance.svg)
-
-[PlantUML 源码：`skill_acceptance`](设计图/diagram.puml#L21)
-
-## 4. 模型请求分层
-
-`ModelRequestAssembler` 不得把 `SKILL.md + arguments + fileIds` 拼成一段文本，必须保留三层：
-
-| 层 | 来源 | 信任语义 | 恢复来源 |
-|---|---|---|---|
-| Skill instruction | 调用时 `skill.snapshot` | 受管、已验证的 Skill 指令层 | 私有 Record |
-| User text | 结构化 `arguments` | 不可信 User 输入层 | `user.message` |
-| User files | `fileIds` | 普通用户附件层 | `user.message` |
-
-这是相对 pi `agent-session.ts:1331-1334` 的安全加固，避免把用户参数当成受信任指令。
-
-命令关联的 `user.message` 只把 `arguments + fileIds` 放入 User 层。UI 使用的
-`/skill:<name>` 不进入模型内容；Skill 指令由快照投影器单独注入。
-
-![Skill 信任分层](设计图/skill_trust_layers.svg)
-
-[PlantUML 源码：`skill_trust_layers`](设计图/diagram.puml#L49)
-
-## 5. `disable-model-invocation`
-
-CampusClaw `SkillLoader.java:134-137` 已解析 `disable-model-invocation`，
-`RuntimeAgentPromptLoader.java:67-72` 已将该 Skill 排除在模型自动发现提示词外。
-
-该字段只禁止模型自动发现和调用，不禁止用户显式调用。当前 Agent 直接绑定且快照完整的
-Skill 都出现在命令清单中。这与 pi `skills.ts:347-356` 的语义一致。
-
-## 6. 执行、断线和恢复
-
-- Skill Handler 完成接受事务后，用新的 `user.message` 作为活动分支叶子，
-  并发起一次标准 Agent 执行。
-- Assistant、Thinking、Tool 和 Compaction 事件复用现有 Runtime 领域投影；
-  Skill 不建立专属消息模型。
-- `command.completed.sourceEventSeq` 指向最终 `assistant.message.completed`。
-- HTTP 断线不取消已接受执行；调用方不重放 POST，通过 GET Events 恢复。
-- Agent 刷新、Skill 修改或删除后，恢复只读取 `skill.snapshot`，不读当前文件。
-- 历史恢复时找不到调用快照属于数据完整性错误，不允许回退到当前 Skill。
-
-![Skill 快照重放](设计图/skill_replay.svg)
-
-[PlantUML 源码：`skill_replay`](设计图/diagram.puml#L73)
-
-## 7. 源码证据和差异分类
-
-| 分类 | 证据或决策 |
-|---|---|
-| 观察到的 CampusClaw 行为 | `RuntimeApiConstants.java:18` 定义普通消息上限 `262144`，`UserEventRequestVO.java:28` 通过 `@Size` 使用该上限；当前没有 Skill Command 参数上限实现 |
-| 观察到的 CampusClaw 行为 | `Skill.java:25,34` 定义 64 字符和宽松正则；`SkillLoader.java:104-111,140-150` 在缺少 frontmatter 名称时使用 `SKILL.md` 所在文件夹名称，且未拒绝首尾或连续连字符 |
-| 观察到的行为 | `AgentRuntimeManager.java:194-253,323-363` 已校验并重建 Skill 元数据和完整 Markdown |
-| 观察到的行为 | `PreparedAgentRuntime.java:57-95` 已提供绑定 Skill 索引和精确名称查找 |
-| 观察到的行为 | `t_session_records` 已有私有 Record lane，但当前 `type` 只说明支持 usage；`skill.snapshot` 是目标扩展 |
-| pi 对照 | pi `4af9d21d` 的 `skills.ts:92-111` 校验 64 字符、首尾和连续连字符，并使用 `/skill:name`；没有 `262144` 参数上限 |
-| OpenCode 对照 | OpenCode `849c2598` 的 `skill/index.ts:37-58` 只要求名称为字符串；没有严格命名规则或 `262144` 参数上限 |
-| DeepSeek Harness 对照 | DeepSeek Harness `141eb6fe` 没有 Agent Skill 包或 Skill Command 约定，不能作为这两个限制的依据 |
-| Codex Harness 对照 | Codex `be33f80b` 的 `core-skills/src/loader.rs:126,759-807` 有 64 字符上限，但字符规则更宽松；没有 `262144` 参数上限 |
-| Claude Managed Agents 对照 | 2026-09-01 的 [Skills 文档](https://platform.claude.com/docs/en/managed-agents/skills) 使用 Agent Skills 格式，但没有 Slash 调用参数上限 |
-| 目标设计 | 动态 SkillCommandSource、共享 Handler、调用快照、附件与断线恢复均未在当前 CampusClaw 实现 |
-| 安全加固 | 名称按 Agent Skills 完整规则校验；受信任 Skill 指令、User 参数和附件分层；快照缺失时禁止回退到当前文件 |
-| 产品约束 | 只有 `skill:` 命名空间；`arguments` 复用普通消息上限；不开放 pi 的 Prompt/Extension 或 OpenCode 的裸 Skill 名称 |
-
-## 8. 验收清单
-
-- Skill 与 Builtin 即使底层名称相同也不冲突。
-- Skill 名称拒绝超过 64 个字符、首尾连字符、连续连字符、缺少 frontmatter 名称和文件夹名称不一致。
-- 运行中命令清单仍返回 Skill，但执行在流建立前返回 `SESSION_BUSY`。
-- 快照不存在、不完整或与绑定名称不符时，用户 Entry、Record、command.started
-  和 running 状态均不提交。
-- `arguments` 与 `fileIds` 保持 User 输入层，Skill 正文保持受信任指令层。
-- 快照不跨调用去重；修改或删除 Skill 后仍按原快照恢复。
-- `disable-model-invocation=true` 的绑定 Skill 仍可由用户显式调用。
-- SSE 断线后执行继续，最终 Assistant 事件与 `command.completed/failed` 可恢复。
-
-## 9. 版本历史
+## 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.1.0 | 2026-09-04 | Skill 执行延期；保留发现骨架但从 Builtin HTTP 来源过滤，禁止伪 Handler 与通用命令历史。 |
 | 3.0.4 | 2026-09-01 | 命令相关表述只使用“命令清单”；Skill 文件位置统一表述为“文件夹” |
 | 3.0.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 完整规则；参数和附件改为引用普通消息限制，并补齐五类 Harness 的依据边界 |
 | 3.0.2 | 2026-08-31 | 使用规则表和动作式短句简化命名、发现、快照与信任分层说明；不改变 Skill 行为 |

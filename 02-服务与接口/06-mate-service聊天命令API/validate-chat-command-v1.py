@@ -117,9 +117,10 @@ def sse_payloads(stream: str) -> list[dict[str, Any]]:
 
 
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.0.5", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.1.0", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
-    require("target-only" in common["api"]["visibility"], "Public contract must remain target-only")
+    require("已废止" in common["api"]["visibility"] and "historical target-only" in common["api"]["visibility"],
+            "Public command snapshot must remain explicitly retired")
     headers = {
         header["name"]
         for example in common["requestHeaderExamples"]
@@ -137,7 +138,7 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
         "skillCommandNameCharacters": 70,
         "argumentsUtf16CodeUnits": 262144,
         "fileIds": 32,
-    }, "Public command limits differ from the confirmed contract")
+    }, "Historical command snapshot limits changed")
     operations = {(model["operation"]["method"], model["operation"]["path"]) for model in models}
     require(operations == EXPECTED_OPERATIONS, "Public operation inventory differs")
     require(len(models) == 2, "Expected two public command operations")
@@ -149,7 +150,8 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
                 "Human review summary is required")
         require(isinstance(business_view.get("flow"), list) and business_view["flow"],
                 "Human review flow is required")
-        require("target-only design" in operation["description"], "Operation must state target-only status")
+        require("target-only design" in operation["description"] and "不得作为实现依据" in operation["description"],
+                "Operation must state retired target-only status")
         placeholders = re.findall(r"{([^}]+)}", operation["path"])
         require(all(LOWER_CAMEL.fullmatch(item) for item in placeholders), "Path fields must be lowerCamelCase")
         for response in operation["responses"]:

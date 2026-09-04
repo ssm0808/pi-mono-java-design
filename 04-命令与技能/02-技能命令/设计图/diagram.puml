@@ -1,91 +1,21 @@
 @startuml skill_catalog
-title Skill Command Catalog Resolution
+title Target-only Skill Source Exclusion
+' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/SkillCommandSource.java list.
+' Product constraint: Skill execution is deferred; Builtin HTTP must not resolve dynamic Skill sources.
 skinparam shadowing false
-
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/runtime/PreparedAgentRuntime.java:57-95
-' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/modes/interactive/interactive-mode.ts:754-765
-' Observed behavior: both runtimes expose direct bound Skill name indexes.
-' Target design: every bound Skill is user-invocable under the skill: namespace.
-
-participant SkillCommandSource as Source
-participant AgentRuntimeManager as Runtime
-participant PreparedAgentRuntime as Snapshot
-
-Source -> Runtime : prepareCached(agentId)
-Runtime --> Source : latest complete Agent version
-Source -> Snapshot : skills()
-Snapshot --> Source : bound Skill metadata
-Source -> Source : map validated 1..64 names to skill: namespace
-@enduml
-
-@startuml skill_acceptance
-title Atomic Skill Command Acceptance
-skinparam shadowing false
-
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/runtime/AgentRuntimeManager.java:81-112,275-293,425-433
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml:100-130
-' Observed behavior: Agent snapshots are validated and published under an Agent-scoped lock.
-' Target design: Skill content and Session acceptance commit as one replay-safe transaction.
-
-participant SkillCommandHandler as Handler
-participant AgentSkillSnapshotService as SnapshotService
-participant AgentRuntimeManager as Runtime
-database t_sessions as Sessions
-database t_session_entries as Entries
-database t_session_records as Records
-
-Handler -> SnapshotService : snapshotLatestBoundSkill(agentId, name)
-SnapshotService -> Runtime : read latest complete version under Agent lock
-Runtime --> SnapshotService : metadata and full SKILL.md
-SnapshotService --> Handler : immutable Skill snapshot
-Handler -> Sessions : lock and require idle
-Handler -> Entries : append active user.message with commandId
-Handler -> Records : append private skill.snapshot
-Handler -> Entries : append command.started sidecar
-Handler -> Sessions : state=running, active leaf=user.message
-note over Sessions,Records : One acceptance transaction
-@enduml
-
-@startuml skill_trust_layers
-title Skill and User Input Trust Layers
-skinparam shadowing false
-
-' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/core/agent-session.ts:1315-1343
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java:44-72
-' Observed behavior: current implementations concatenate or format Skill content for model use.
-' Security hardening: Skill instructions, user arguments, and attachments remain separate typed layers.
-
-rectangle "Trusted Skill instruction layer" as Trusted
-rectangle "User input layer\narguments" as User
-rectangle "User attachment layer\nfileIds" as Files
-rectangle "Model request assembler" as Assembler
-
-Trusted --> Assembler : exact invocation snapshot
-User --> Assembler : untrusted user content
-Files --> Assembler : ordinary attachment semantics
-
-note bottom of Assembler
-Never concatenate all layers into one untyped text value.
-disable-model-invocation affects automatic discovery only.
+class CompositeCommandRegistry
+interface CommandDefinitionSource
+class BuiltinCommandSource
+class SkillCommandSource
+class SkillCommandDefinition <<display only>>
+BuiltinCommandSource ..|> CommandDefinitionSource
+SkillCommandSource ..|> CommandDefinitionSource
+CompositeCommandRegistry o-- CommandDefinitionSource
+CompositeCommandRegistry --> BuiltinCommandSource : resolve(context, BUILTIN)
+SkillCommandSource --> SkillCommandDefinition : future discovery only
+note right of SkillCommandDefinition
+No Handler.
+No public Skill command route.
+skills Builtin only exposes names and descriptions.
 end note
-@enduml
-
-@startuml skill_replay
-title Skill Replay After Agent Refresh
-skinparam shadowing false
-
-' Source evidence: pi-mono-java@c1311f69 mate-campusclaw/src/main/java/com/huawei/hicampus/mate/matecampusclaw/codingagent/runtime/AgentRuntimeManager.java:131-153,366-380
-' Observed behavior: managed Agent refresh atomically replaces the published directory.
-' Target design: replay reads the invocation-local snapshot rather than the current directory.
-
-database t_session_records as Records
-participant SessionReplayService as Replay
-participant ModelRequestAssembler as Assembler
-collections "Current Agent files\nnew version or deleted Skill" as Current
-
-Replay -> Records : load skill.snapshot by commandId
-Records --> Replay : exact metadata and full content
-Replay -> Assembler : trusted Skill layer
-Replay -> Assembler : historical user arguments and attachments
-Current -[#gray,dashed]-> Replay : not consulted
 @enduml

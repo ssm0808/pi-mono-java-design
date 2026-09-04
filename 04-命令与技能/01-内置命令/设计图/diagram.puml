@@ -1,339 +1,89 @@
-@startuml builtin_dispatch
-title Builtin Command Dispatch
+@startuml target_command_core_classes
+title Target-only Executable Builtin Definition
+' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java.
+' Design reason: each contributor owns metadata, admission, and handler; no central command-name switch.
 skinparam shadowing false
-
-' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/builtin/ModelCommand.java:16-36
-' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/SlashCommandSession.java:19-32
-' Observed behavior: handlers currently depend on one broad mutable session facade.
-' Target design: every builtin handler depends on one narrow application service.
-
-participant CommandExecutionService as Execution
-participant CommandAdmissionPolicy as Admission
-participant BuiltinHandler as Handler
-participant NarrowApplicationService as Service
-participant RuntimeSessionRepository as Repository
-
-Execution -> Admission : evaluate(descriptor, sessionState, input)
-Admission --> Execution : admitted
-Execution -> Repository : append command.started sidecar
-Execution -> Handler : execute(immutable invocation)
-Handler -> Service : read or update domain state
-Service --> Handler : text and optional sourceEventSeq
-Handler --> Execution : CommandResultDTO
-Execution -> Repository : append command.completed sidecar
-@enduml
-
-@startuml builtin_implementation_alignment
-title Builtin Command Implementation Slices
-skinparam shadowing false
-
-' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java:15
-' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-75
-' Source evidence: pi-mono-java@fb49e86d modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java:37-81
-' Observed behavior: the unmerged branches provide command discovery and the GET endpoint, but Definition has no admission or handler and POST execution is absent.
-' Target-only design: extend the existing skeleton and deliver builtins as dependent vertical slices.
-
-start
-:Existing 3004419a and fb49e86d\nSources, registry, descriptors,\nand GET command list;
-:Slice 0A\nReuse discovery and GET skeleton;
-:Slice 0B\nAdd application boundary, immutable response VOs,\nresolved catalog, Definition seams, and exact errors;
-:Slice 0C\nInvocation, execution context, admission, handlers,\nexecution service, and POST SSE;
-:Slice 1\nSidecar lifecycle and recovery;
-:Slice 2\nHelp, Status, and Skills;
-:Slice 3\nSession Name;
-:Slice 4\nModel and Thinking;
-note right
-Reuse Runtime configuration domain rules.
-Do not call Controllers or fabricate ETags.
-end note
-:Slice 5\nCompact execution;
-note right
-Reserve the Runtime active execution slot.
-Reuse ManagedAgentSession manual compaction.
-end note
-:Synchronize modules to the generated corporate mirror;
-stop
-@enduml
-
-@startuml compact_command_execution
-title Compact Command Active Execution Boundary
-skinparam shadowing false
-
-' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java:105-108,177-183
-' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:68-108
-' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java:105-166
-' Observed behavior: user events reserve the active execution holder, but manual compaction has no HTTP acceptance path.
-' Target-only design: compact reserves the same per-Session execution capacity and survives client disconnect.
-
-participant CommandController as Controller
-participant CommandExecutionService as Execution
-participant RuntimeSessionEngineRegistry as Registry
-database RuntimeSessionRepository as Repository
-participant ManagedAgentSession as Session
-
-Controller -> Execution : execute compact with no arguments
-Execution -> Registry : lockOperation(sessionId)
-Execution -> Registry : register holder and capacity
-Execution -> Repository : accept compact and append command.started
-note right of Repository
-The acceptance transaction sets state=running.
-It does not change active_leaf_id.
-end note
-Execution -> Session : compact(null)
-Execution -> Registry : unlockOperation(sessionId)
-Session --> Execution : compaction lifecycle events
-Execution -> Registry : lockOperation(sessionId)
-alt completed
-  Execution -> Repository : append command.completed and mark idle
-else failed or aborted
-  Execution -> Repository : append command.failed and mark idle
-end
-Execution -> Registry : release holder and capacity
-Execution -> Registry : unlockOperation(sessionId)
-note over Controller,Session
-SSE detach stops delivery only.
-The accepted compaction continues until completion or explicit Abort.
-end note
-@enduml
-
-@startuml builtin_availability
-title Builtin Availability by Session State
-skinparam shadowing false
-
-' Source evidence: codex@be33f80b codex-rs/tui/src/chatwidget/slash_dispatch.rs:134-157
-' Observed behavior: Codex blocks commands by task state at dispatch time.
-' Target design: the catalog reports execution without and with arguments separately.
-
-state idle {
-  [*] --> AllBuiltins
-  AllBuiltins --> ModelChange
-  AllBuiltins --> ThinkingChange
-  AllBuiltins --> Compact
-}
-
-state running {
-  [*] --> HelpStatusSkills
-  HelpStatusSkills --> NameViewAndChange
-  HelpStatusSkills --> ModelThinkingViewOnly
-}
-
-note right of running
-model without arguments: available=true
-model with arguments: input.available=false
-unavailableCode=SESSION_BUSY
+interface BuiltinCommandContributor
+class BuiltinCommandSource <<singleton>>
+class BuiltinCommandDefinition <<immutable>>
+interface CommandHandler
+interface CommandAdmissionPolicy
+class CommandExecutionContext <<request>>
+class CommandExecutionService <<singleton>>
+class CommandResponseAssembler <<singleton>>
+class CommandResultDTO
+class CommandResponseVO <<immutable>>
+interface NarrowDomainService
+BuiltinCommandSource o-- "7" BuiltinCommandContributor
+BuiltinCommandContributor --> BuiltinCommandDefinition : contribute
+BuiltinCommandSource *-- "7" BuiltinCommandDefinition : startup unique index
+BuiltinCommandDefinition *-- CommandHandler
+BuiltinCommandDefinition *-- CommandAdmissionPolicy
+CommandExecutionService --> CommandExecutionContext : one catalog
+CommandExecutionService --> BuiltinCommandDefinition : selected definition
+CommandHandler --> NarrowDomainService
+CommandHandler ..> CommandResultDTO
+CommandExecutionService --> CommandResponseAssembler
+CommandResponseAssembler ..> CommandResultDTO
+CommandResponseAssembler ..> CommandResponseVO
+note bottom of CommandResponseAssembler
+Only result-type dispatch lives here.
+Controllers never expose internal DTOs.
 end note
 @enduml
 
 @startuml session_name_update
-title Session Name Update Transaction
+title Target-only Name Update Under Row Lock
+' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql t_sessions.
+' Architecture change: persist current display_name only; no name event or sidecar.
 skinparam shadowing false
-
-' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/core/agent-session.ts:3005-3012
-' Source evidence: deepseek-harness@141eb6fe packages/session/session-title/src/index.ts:343-383
-' Source evidence: codex@be33f80b codex-rs/app-server/src/request_processors/thread_processor.rs:1510-1541
-' Observed behavior: peer harnesses persist Session or Thread names in the owning runtime domain.
-' Architecture change: CampusClaw replaces the current NameCommand mate-service ownership comment.
-
-participant NameCommandHandler as Handler
-participant SessionNamingService as Naming
-database t_sessions as Sessions
-database t_session_entries as Entries
-
-Handler -> Naming : changeDisplayName(sessionId, rawName)
-Naming -> Naming : trim and reject blank, controls, newline, or over 80 UTF-8 bytes
-Naming -> Sessions : lock current row
-alt same normalized value
-  Sessions --> Naming : unchanged success
-else changed value
-  Naming -> Sessions : update display_name, resource_version, updated_at
-  Naming -> Entries : append session.name.changed sidecar
+participant Handler
+participant SessionNamingService as Service
+database SessionRepository as Repo
+Handler -> Service : arguments
+Service -> Service : strip outer whitespace and validate UTF-8 / Unicode
+Service -> Repo : lock Session row
+alt same normalized name
+  Repo --> Service : changed=false, same version
+else new valid name
+  Repo -> Repo : update display_name and resource_version
+  Repo --> Service : changed=true
 end
-Naming --> Handler : text and optional sourceEventSeq
-@enduml
-
-@startuml target_command_core_classes
-title Target Builtin Command Core Classes
-top to bottom direction
-skinparam shadowing false
-skinparam linetype ortho
-skinparam packageStyle rectangle
-skinparam classAttributeIconSize 0
-
-' Source evidence: pi-mono-java@3004419a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java:27-75
-' Source evidence: pi-mono-java@fb49e86d modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java:37-81
-' Target-only design: add application boundaries, one catalog snapshot per request, executable definitions, and immutable response VOs.
-' Design reason: list, help, admission, and execution must use one validated command view without Controller or DTO leakage.
-
-package "Web API" {
-  class RuntimeCommandController <<Spring singleton>> {
-    +list(sessionId, locale)
-    +execute(sessionId, request)
-  }
-  class CommandListResponseVO <<immutable>>
-  class CommandDescriptorResponseVO <<immutable>>
-}
-
-package "Application" {
-  class CommandCatalogService <<Spring singleton>> {
-    +list(sessionId, locale)
-  }
-  class CommandExecutionService <<Spring singleton>> {
-    +execute(sessionId, requestContext)
-  }
-  class CommandInvocation <<immutable>>
-  class CommandExecutionContext <<per request>> {
-    +sessionSnapshot
-    +catalogView
-    +locale
-  }
-}
-
-package "Command core" {
-  class CompositeCommandRegistry <<Spring singleton>> {
-    +resolve(context): ResolvedCommandCatalog
-  }
-  interface CommandCatalogView {
-    +list()
-    +find(name)
-  }
-  class ResolvedCommandCatalog <<request snapshot>>
-  interface CommandDefinitionSource {
-    +list(context)
-  }
-  class ImmutableBuiltinCommandSource <<Spring singleton>>
-  class SkillCommandSource <<Spring singleton>>
-  interface BuiltinCommandContributor {
-    +definition()
-  }
-  class CommandDefinition <<immutable>> {
-    +name
-    +kind
-    +describe(context)
-    +admit(invocation, authoritativeState)
-    +execute(invocation, executionContext)
-  }
-  interface CommandAdmissionPolicy
-  interface CommandHandler {
-    +execute(invocation, executionContext)
-  }
-  class CommandDescriptorDTO <<internal>>
-}
-
-package "Runtime adapters" {
-  class RuntimeSessionRepository
-  class AgentRuntimeManager
-}
-
-RuntimeCommandController -down-> CommandCatalogService
-RuntimeCommandController -down-> CommandExecutionService
-CommandCatalogService -down-> RuntimeSessionRepository : loads authorized session
-CommandCatalogService -down-> CompositeCommandRegistry : resolves once
-CommandCatalogService ..> CommandListResponseVO : returns
-CommandListResponseVO *-- CommandDescriptorResponseVO
-CommandExecutionService -down-> RuntimeSessionRepository : lifecycle sidecars
-CommandExecutionService -down-> CompositeCommandRegistry : resolves once
-CommandExecutionService ..> CommandInvocation : creates
-CommandExecutionService ..> CommandExecutionContext : creates
-CommandExecutionService -down-> CommandDefinition : dispatches
-
-CompositeCommandRegistry o-- CommandDefinitionSource
-CompositeCommandRegistry -down-> ResolvedCommandCatalog : creates validated snapshot
-ResolvedCommandCatalog ..|> CommandCatalogView
-ResolvedCommandCatalog *-- CommandDefinition
-ImmutableBuiltinCommandSource ..|> CommandDefinitionSource
-SkillCommandSource ..|> CommandDefinitionSource
-ImmutableBuiltinCommandSource "1" o-- "7" BuiltinCommandContributor : startup index
-SkillCommandSource --> AgentRuntimeManager : reads complete snapshot
-CommandDefinition *-- CommandAdmissionPolicy
-CommandDefinition *-- CommandHandler
-CommandDefinition ..> CommandDescriptorDTO : projects per session
-CommandExecutionContext --> CommandCatalogView : same resolved view
-
-note right of ResolvedCommandCatalog
-One request owns one immutable view.
-Definition identity and metadata cannot drift.
-Admission still rechecks mutable authoritative state.
-end note
-
-note right of CommandCatalogService
-Internal DTOs stop here.
-Only immutable response VOs cross the Web boundary.
+Service --> Handler : NameResultDTO
+note over Repo
+Running is allowed.
+Last commit wins.
+No Entry or active-leaf mutation.
 end note
 @enduml
 
-@startuml target_builtin_extension_classes
-title Target Builtin Contributors, Handlers, and Services
-left to right direction
+@startuml compact_command_execution
+title Target-only Compact JSON Terminal and Queue Continuation
+' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java.
+' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionHolder.java.
+' Architecture change: compact terminal Future is independent of Holder lifetime and request transport.
 skinparam shadowing false
-skinparam linetype ortho
-skinparam packageStyle rectangle
-skinparam classAttributeIconSize 0
-
-' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/builtin/ModelCommand.java:16-36
-' Source evidence: pi-mono-java@c9d858bc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/SlashCommandSession.java:19-32
-' Target-only design: each builtin contributes one definition, delegates to one handler, and reaches one narrow application service.
-' Design reason: adding a builtin must not modify a central switch or create a dependency cycle through the catalog service.
-
-package "Contributors" {
-  interface BuiltinCommandContributor
-  class HelpContributor
-  class StatusContributor
-  class NameContributor
-  class ModelContributor
-  class ThinkingContributor
-  class CompactContributor
-  class SkillsContributor
-}
-
-package "Handlers" {
-  class HelpCommandHandler
-  class StatusCommandHandler
-  class NameCommandHandler
-  class ModelCommandHandler
-  class ThinkingCommandHandler
-  class CompactCommandHandler
-  class SkillsCommandHandler
-}
-
-package "Narrow application services" {
-  class CommandHelpFormatter
-  class SessionStatusQueryService
-  class SessionNamingService
-  class SessionModelConfigurationService
-  class SessionThinkingConfigurationService
-  class SessionCompactionApplicationService
-  class AgentSkillCatalogService
-  interface CommandCatalogView
-}
-
-BuiltinCommandContributor <|.. HelpContributor
-BuiltinCommandContributor <|.. StatusContributor
-BuiltinCommandContributor <|.. NameContributor
-BuiltinCommandContributor <|.. ModelContributor
-BuiltinCommandContributor <|.. ThinkingContributor
-BuiltinCommandContributor <|.. CompactContributor
-BuiltinCommandContributor <|.. SkillsContributor
-
-HelpContributor --> HelpCommandHandler : binds
-StatusContributor --> StatusCommandHandler : binds
-NameContributor --> NameCommandHandler : binds
-ModelContributor --> ModelCommandHandler : binds
-ThinkingContributor --> ThinkingCommandHandler : binds
-CompactContributor --> CompactCommandHandler : binds
-SkillsContributor --> SkillsCommandHandler : binds
-
-HelpCommandHandler --> CommandHelpFormatter
-CommandHelpFormatter ..> CommandCatalogView : formats execution view
-StatusCommandHandler --> SessionStatusQueryService
-NameCommandHandler --> SessionNamingService
-ModelCommandHandler --> SessionModelConfigurationService
-ThinkingCommandHandler --> SessionThinkingConfigurationService
-CompactCommandHandler --> SessionCompactionApplicationService
-SkillsCommandHandler --> AgentSkillCatalogService
-
-note bottom of HelpCommandHandler
-The execution context supplies CommandCatalogView.
-The handler does not inject CommandCatalogService
-or CompositeCommandRegistry, so no bean cycle exists.
+participant "Virtual request thread" as Http
+participant CompactionService as Service
+participant ActiveHolder as Holder
+database Projector
+participant "Control queue" as Queue
+Http -> Service : compact(sessionId)
+Service -> Service : operation lock and idle recheck
+alt empty history
+  Service --> Http : compacted=false, no lease/state/Entry
+else real compaction
+  Service -> Holder : capacity lease, credentials, 30-minute timeout
+  Http -> Holder : await non-cancelling compact terminal handle
+  Holder -> Projector : persist Compaction Entry if changed
+  Holder --> Http : complete JSON result immediately
+  Holder -> Queue : consume accepted Steer / FollowUp
+  Queue --> Holder : continue Agent in same Holder
+  Holder -> Holder : release lease and credentials at final cleanup
+end
+note over Http,Holder
+Client disconnect does not cancel accepted compaction.
+Abort cancels compact and clears pending control messages.
+JSON response may precede the Session becoming idle.
 end note
 @enduml

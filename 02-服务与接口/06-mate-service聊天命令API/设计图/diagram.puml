@@ -1,11 +1,11 @@
 @startuml public_command_boundary
-title Public Chat Command Boundary
+title Retired Proposal: Public Chat Command Boundary
 skinparam shadowing false
 
 ' Source evidence: mate-service@956b547f src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java:39-67
 ' Source evidence: pi-mono-java@c1311f69 Runtime controllers expose only /campusclaw-service/v1 Session operations.
 ' Observed behavior: the public Chat command bridge does not exist in the reviewed source.
-' Target-only design: mate-service resolves Chat ownership and calls structured Runtime command APIs.
+' Retired target-only design (not an implementation contract): mate-service resolves Chat ownership and calls structured Runtime command APIs.
 
 actor "Authenticated user" as User
 component "mate-service\nChatCommandController" as Mate
@@ -21,12 +21,12 @@ Mate --> User : public ResultBean or reprojected SSE
 @enduml
 
 @startuml public_sse_projection
-title SSE Parse and Reprojection
+title Retired Proposal: SSE Parse and Reprojection
 skinparam shadowing false
 
 ' Source evidence: mate-service@956b547f src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/service/UpstreamChatCall.java:19-31
 ' Observed behavior: the current model proxy forwards bytes and has no CampusClaw event projector.
-' Architecture change: mate-service is not a byte-transparent proxy.
+' Retired target-only proposal: mate-service is not a byte-transparent proxy.
 ' Design reason: public authentication, identifiers, and error semantics differ from the internal Runtime contract.
 
 participant Browser

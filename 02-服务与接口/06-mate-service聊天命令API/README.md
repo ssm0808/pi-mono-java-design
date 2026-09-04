@@ -2,21 +2,26 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.5 |
-| 状态 | 两个公共 operation 已确认；target-only design |
+| 文档版本 | 1.1.0 |
+| 状态 | 已废止的历史 target-only design；新公共命令协议待独立评审 |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
 | 人类评审契约 | [`chat-command-v1-review.html`](chat-command-v1-review.html)，由精确契约源生成 |
 | 设计仓分析基线 | `27484974eb106a7e43910d8e542de52a72c58102` |
 | mate-service 源码基线 | `956b547f5ca12ca89e68f73012f92a4406b0c9fa` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
-| CampusClaw 内部 HTTP 契约 | `1.43.4` |
-| 更新日期 | 2026-09-01 |
+| 历史对应内部 HTTP 契约 | `1.43.4`，已被 1.44.0 Builtin JSON 取代 |
+| 更新日期 | 2026-09-04 |
 
-阅读评审页时，默认先看每个接口的“业务评审视图”：它说明调用时机、前后端步骤、字段含义、
+本专题以下 operation、组件、SSE 示例和验收均为已废止历史提案，不得作为实现依据。
+Runtime 1.44.0 已确认七个 Builtin、普通 JSON 与 Skill 执行延期；此决定不自动确认
+mate-service 新公共 Command 的路径、认证、VO 或响应。新公共协议必须另行逐接口评审。
+本次只标记历史，不发布替代公共接口。
+
+阅读历史评审页时，默认先看每个接口的“业务评审视图”：它说明调用时机、前后端步骤、字段含义、
 界面结果和失败场景。精确 HTTP、JSON 与 SSE 报文默认折叠，研发实现时再展开核对。
 
-## 1. 结论与边界
+## 1. 历史结论与边界
 
 mate-service 向登录用户开放两个接口：
 
@@ -34,7 +39,7 @@ mate-service 向登录用户开放两个接口：
 `/name` 修改 CampusClaw Session 的 `displayName`。mate-service 只维护
 `chatId -> sessionId` 映射，不保存名称副本。
 
-## 2. 目标组件
+## 2. 历史目标组件
 
 ![公共聊天命令边界](设计图/public_command_boundary.svg)
 
@@ -51,7 +56,7 @@ mate-service 向登录用户开放两个接口：
 浏览器 `Authorization` 只用于用户认证和 Chat 权限。mate-service 调用 CampusClaw 时
 重新构造内部 Header，不透传浏览器凭据。`chatId` 和 `sessionId` 都不是凭据。
 
-## 3. 交互层解析
+## 3. 历史交互层解析
 
 交互层按以下顺序处理：
 
@@ -69,7 +74,7 @@ HTTP `name` 不含 `/`。直接调用 API 时，未知名称返回 `COMMAND_NOT_
 精确字段和 running 示例见
 [`01-list-chat-commands.json`](接口契约/操作/01-list-chat-commands.json)。
 
-## 4. 请求与执行语义
+## 4. 历史请求与执行语义
 
 请求体固定为：
 
@@ -95,7 +100,7 @@ HTTP `name` 不含 `/`。直接调用 API 时，未知名称返回 `COMMAND_NOT_
 CampusClaw 为每次已接受调用生成 `command-<32 位小写十六进制 UUID>`。mate-service
 原样保留该 ID。通用结果只有 `text` 和可选 `sourceEventSeq`。
 
-## 5. SSE 投影与错误
+## 5. 历史 SSE 投影与错误
 
 ![公共 SSE 重新投影](设计图/public_sse_projection.svg)
 
@@ -139,9 +144,9 @@ Slash 模块、Builtin、Skill 和内部 Runtime 契约分别见
 [通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)、
 [内置命令](../../04-命令与技能/01-内置命令/README.md)、
 [技能命令](../../04-命令与技能/02-技能命令/README.md) 与
-[CampusClaw HTTP 1.43.4](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)。
+[CampusClaw HTTP 当前设计](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)。
 
-## 7. 验收
+## 7. 历史验收（不用于当前实现）
 
 - GET 对 running Session 分别标明不填参数和填写参数时能否执行，并保留暂不可用命令；
 - 命令清单请求失败时保留 Slash 草稿；请求成功但未命中才按普通消息发送；
@@ -169,6 +174,7 @@ Mermaid 与 `git diff --check`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-09-04 | 标记旧公共命令 SSE 契约为已废止历史，保留快照以供追溯；Runtime 1.44.0 不自动确认新公共协议，后续独立重审。 |
 | 1.0.5 | 2026-09-01 | 人类评审页默认展示调用时机、前后端步骤、字段含义、界面结果和错误场景；原始 HTTP、JSON 与 SSE 报文移入折叠区，不改变接口契约。 |
 | 1.0.4 | 2026-09-01 | 命令相关表述统一使用“命令清单”，不再借助文件系统概念解释 Command Catalog。 |
 | 1.0.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 完整规则；参数上限明确为与普通消息一致的 UTF-16 输入限制。 |

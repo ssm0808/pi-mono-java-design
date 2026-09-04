@@ -4,8 +4,8 @@
     "operationKey": "executeChatCommand",
     "method": "POST",
     "path": "/chats/{chatId}/command",
-    "summary": "执行 Builtin 或 Skill 命令并流式返回结果",
-    "description": "交互层提交结构化 name、arguments 和 fileIds；name 不含 Slash。mate-service 验证登录用户和 Chat 权限，解析唯一 Session，并使用内部凭据调用 CampusClaw。它解析内部 SSE，删除 sessionId、entryId、Agent/Skill ID、版本、受管路径和私有快照，再生成公共事件。Service 统一处理省略字段并拒绝未知字段。Skill 或 Compact 接受后，浏览器断线不取消执行；客户端从持久化历史查询结果，不重放 POST。当前 mate-service 尚无 Chat→Runtime bridge，因此本接口是 target-only design。",
+    "summary": "【已废止历史】执行 Builtin 或 Skill 命令并流式返回结果",
+    "description": "已废止的 historical target-only design；不得作为实现依据。新公共命令协议待独立评审，不能由 Runtime 1.44.0 推导。以下保留旧提案快照：交互层提交结构化 name、arguments 和 fileIds；name 不含 Slash。mate-service 验证登录用户和 Chat 权限，解析唯一 Session，并使用内部凭据调用 CampusClaw。它解析内部 SSE，删除 sessionId、entryId、Agent/Skill ID、版本、受管路径和私有快照，再生成公共事件。Service 统一处理省略字段并拒绝未知字段。Skill 或 Compact 接受后，浏览器断线不取消执行；客户端从持久化历史查询结果，不重放 POST。当前 mate-service 尚无 Chat→Runtime bridge，因此本接口是 target-only design。",
     "parameters": [
       {"$ref": "parameters.chatId"},
       {"$ref": "parameters.acceptLanguage", "description": "流建立前 ResultBean 与流内错误消息语言；缺失或不支持时回退 en-US"}
@@ -164,7 +164,7 @@
   },
   "review": {
     "businessView": {
-      "summary": "用户确认 Slash 命令后，前端提交命令名、参数和附件；mate-service 完成权限校验和内部 Session 映射，再把安全结果流式返回。",
+      "summary": "【已废止历史；不得作为实现依据】用户确认 Slash 命令后，前端提交命令名、参数和附件；mate-service 完成权限校验和内部 Session 映射，再把安全结果流式返回。",
       "flow": [
         {"actor": "前端", "action": "提交结构化命令请求", "outcome": "name 不带 /，保留原始参数"},
         {"actor": "mate-service", "action": "校验用户、Chat 权限和请求字段", "outcome": "失败时直接返回稳定错误码"},
