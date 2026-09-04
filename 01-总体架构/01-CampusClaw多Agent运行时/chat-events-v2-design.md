@@ -2,14 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.7 |
-| 状态 | 资源模型 A、POST 三种用户事件范围、`eventId` 身份、`access-token` 必填规则、Header 示例与处理说明、事件顺序规则已确认；其余字段评审中 |
+| 文档版本 | 0.2.0 |
+| 状态 | 第一个 POST 接口已按当前稿整体确认；当前评审第二个 GET stream 接口；均待实现 |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | 事件顺序补充核对提交 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；只补充本文 §4.1 证据，不替换其他主题基线 |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | mate 公共契约基线 | [`mate-service 通用对话 API`](../../02-服务与接口/07-mate-service通用对话API/README.md) 1.4.4 |
-| 外部公共契约核对日 | 2026-09-03 |
+| 外部公共契约核对日 | 2026-09-04；实时流核对范围见第二接口设计 |
 | 更新日期 | 2026-09-04 |
 
 ## 1. 已确认资源模型
@@ -19,8 +19,8 @@ CampusClaw 采用 Session Events 三接口，内部执行不成为公共资源�
 
 | Method | Path | 职责 | 当前状态 |
 |---|---|---|---|
-| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 事件范围、`eventId`、`access-token` 必填与 Header 说明已确认，其余字段评审中 |
-| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events/stream` | 订阅跨多次内部执行的 Session live SSE | 只确认职责，字段未开始评审 |
+| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 接口已确认，待实现 |
+| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events/stream` | 订阅跨多次内部执行的 Session live SSE | 当前评审：帧格式、基础事件投影、user.* 推送及 GET 凭据规则 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 读取固定快照的权威历史 | 职责与顺序规则已确认，其余字段未开始评审 |
 
 这三个 operation 同构于 mate 公共 API 的“提交、实时观察、权威恢复”职责，但不是
@@ -47,9 +47,9 @@ JSON 字段名称和“不公开序号”，不自动确认 Claw `eventId` 与 m
 
 [PlantUML 源码：`target_session_events_resource_model`](设计图/事件接口重设计/diagram.puml#L1)
 
-## 2. 第一项：提交 Session 用户事件
+## 2. 第一项：提交 Session 用户事件（已确认）
 
-当前只评审：
+2026-09-04 用户确认第一个接口可以，并要求开始下一个接口。本接口按当前稿整体确认：
 
 ```http
 POST /campusclaw-service/v1/sessions/{sessionId}/events
@@ -75,18 +75,18 @@ JWT、APPKEY 和 access-token 分别使用当前实现测试中的 `Bearer opaqu
 模式使用同一必填规则。此项属于目标 API 的产品约束，理由是调用方统一组装请求头，
 不按事件类型分支；代价是中断请求本身不调用工具也需要携带令牌。携带不代表使用，
 Claw 仍只在实际调用 Mate tool execute 时发送，不新增凭据持久化或发送范围。
-Q1 已确认并移出评审表单，剩余问题继续保留 Q2、Q3、Q4 标识。
+Q1 已在此前确认，本次 Q2、Q3、Q4 也按当前稿确认，全部移出待选表单。
 
 POST 成功响应中的事件身份也已确认使用 `eventId`，不返回 `entryId` 或 `entrySeq`。
-这一决定适用于三种用户事件，并作为后续 live SSE 与权威历史的公共身份约束；Q3 只
-继续评审成功响应是返回完整用户事件，还是只返回带 `eventId` 的最窄回执。
+这一决定适用于三种用户事件，并作为后续 live SSE 与权威历史的公共身份约束；成功响应
+已确认返回完整用户事件，不采用最窄回执。
 
-完整候选字段、请求示例、成功与错误响应及三个待确认问题见
-[`chat-events-v2-review.html`](chat-events-v2-review.html)。可编辑源是
+已确认字段、请求示例、成功与错误响应见独立只读页面
+[`chat-events-v2-confirmed.html`](chat-events-v2-confirmed.html)。可编辑源是
 [`接口契约-v2/common.json`](接口契约-v2/common.json) 与
 [`01-submit-session-event.json`](接口契约-v2/操作/01-submit-session-event.json)。
 
-当前推荐方案如下，但尚未确认：
+原 Q2、Q3、Q4 的已确认结论：
 
 1. Q2：请求体使用 `event` 包装和有序 `content[]`，与 mate 请求结构同构；
 2. Q3：`200 ResultBean` 返回完整用户事件，包含 `eventId`、`createdAt` 及规范化业务字段，
@@ -97,6 +97,20 @@ POST 成功响应中的事件身份也已确认使用 `eventId`，不返回 `ent
 事件身份；数据库内部 Entry 标识和序号不进入公共契约。mate 的公共 `eventId` 仍由 mate
 契约管理；是否复用同一个值或建立映射，留待 bridge 对账设计确认，本次不预设额外映射，
 也不能仅因字段同名就假定值相同。
+
+### 2.1 当前第二项：订阅 Session 实时事件
+
+当前评审 `GET /campusclaw-service/v1/sessions/{sessionId}/events/stream`。
+只订阅新事件，不触发执行、不更新 Agent 凭据；连接跨越执行与空闲状态，断线不取消
+执行，不承担历史重放。具体帧、事件字段和错误仍是候选。
+
+- 当前单接口评审面：[`chat-events-v2-review.html`](chat-events-v2-review.html)。
+- 候选模型：[`02-stream-session-events.json`](接口契约-v2/操作/02-stream-session-events.json)。
+- 设计、源码差距、Mate 映射与验收：[`实时订阅接口设计`](chat-events-v2-stream-design.md)。
+
+`common.json.reviewState` 记录当前项和已确认项。生成器分别输出“当前 GET”与“已确认
+POST”两个页面，不把旧 POST 待选题继续展示为本轮任务。第三个 ListEvents 仍未开始
+完整字段评审，保留已确认的职责、事件身份和排序规则。
 
 ## 3. 目标分层与生命周期
 
@@ -238,12 +252,13 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 | 2026-09-03 | Header 示例与处理说明 | 已确认使用 `credential-jwt`、`credential-appkey`、`Bearer opaque-token`、`opaque-appkey`、`opaque-access-token`；凭据从请求读取，只在内存中保留到本次 Agent 执行结束，并仅随实际 Mate tool execute 发送。此项不确认 `access-token` 必填策略 |
 | 2026-09-04 | POST `access-token` 必填 | 已确认统一携带：三种用户事件在 JWT/APPKEY 模式下都必填；携带不代表使用，只随实际 Mate tool execute 发送，Q1 移出待选项 |
 | 2026-09-04 | 事件顺序 | 已确认先按 Session 统一检查依赖并确定顺序，再在同一短事务内分配内部序号和追加；依赖事件不得越过未提交的前置事件。ListEvents 按已提交的内部顺序返回，客户端不按 `createdAt` 重排，仍不公开 `entrySeq`。本次不更改时间字段语义，也不确认其余接口字段 |
-| 2026-09-04 | POST 剩余字段 | Q2 请求结构、Q3 成功响应宽度、Q4 重试策略仍在评审；推荐项不视为用户确认 |
+| 2026-09-04 | POST 整体确认并推进 | 用户明确表示第一个接口可以、开始下一个接口；按当前稿确认 Q2 `event + content[]`、Q3 完整用户事件、Q4 不设幂等键且历史对账；移除 POST 待选题，转入 GET stream |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.0 | 2026-09-04 | 确认第一个 POST 的当前稿，结束 Q2/Q3/Q4；当前页切换到第二个 GET stream，已确认 POST 单独只读保存；增加候选流契约、专门设计、生命周期图和状态切换校验。 |
 | 0.1.7 | 2026-09-04 | 确认事件处理、事务写入与 ListEvents 的共同顺序规则；补充 `a8192e0` 源码证据和目标差距，更新共享追加边界、目标图与顺序专项验收；保留时间示例及 Q2/Q3/Q4 待决状态。 |
 | 0.1.6 | 2026-09-04 | 确认三种用户事件统一携带 `access-token`，两种 Header 模式均必填；保留示例值、使用范围和生命周期，移除 Q1 待选项并增加回归校验。 |
 | 0.1.5 | 2026-09-04 | 按用户修正冻结 v2 公共事件身份：三种 POST 成功响应统一使用 `eventId`，删除 `entryId/entrySeq`；内部 Entry 序号不穿透 HTTP，Q3 收窄为完整事件与最窄回执的响应宽度评审；增加对应校验。 |

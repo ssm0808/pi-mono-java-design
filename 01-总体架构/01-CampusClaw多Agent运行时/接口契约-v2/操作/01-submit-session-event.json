@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "持久化一个用户事件并返回接受结果",
-    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。三种用户事件均必须携带 access-token，JWT 与 APPKEY 两种 Header 模式遵守同一规则；携带不代表使用，Claw 只在实际调用 Mate tool execute 时发送。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。成功响应中的事件身份已确认为 eventId，不公开 entryId 或 entrySeq；内部持久化仍可使用 Entry 标识和序号。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围、事件身份、access-token 必填规则、Header 示例值和凭据处理说明已经确认，其余字段仍是本轮候选方案。",
+    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。三种用户事件均必须携带 access-token，JWT 与 APPKEY 两种 Header 模式遵守同一规则；携带不代表使用，Claw 只在实际调用 Mate tool execute 时发送。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。成功响应中的事件身份已确认为 eventId，不公开 entryId 或 entrySeq；内部持久化仍可使用 Entry 标识和序号。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；本接口不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。本接口已按当前评审稿整体确认：event 包装、content[]、完整用户事件回执及历史对账策略均已确认；实现仍待落地。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -119,7 +119,7 @@
         "status": "200",
         "tabLabel": "200 · user.message",
         "label": "OK",
-        "summary": "事件已经持久化并被接受；当前候选返回同一条完整用户事件。事件使用 eventId，不返回 entryId 或 entrySeq；Agent 后续输出只从独立 live SSE 或权威历史读取。",
+        "summary": "事件已经持久化并被接受；返回同一条完整用户事件。事件使用 eventId，不返回 entryId 或 entrySeq；Agent 后续输出只从独立 live SSE 或权威历史读取。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -395,70 +395,8 @@
     ]
   },
   "review": {
-    "status": "事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 其余字段评审中",
-    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。以下三项仍待确认：Q2 请求结构、Q3 成功响应宽度、Q4 重试策略。Q3 的任何选项都必须遵守 eventId 且无 entrySeq。推荐项已预选，但不会自动视为确认。",
-    "questions": [
-      {
-        "id": "Q2-request-shape",
-        "legend": "Q2 · 请求体采用哪种形状？",
-        "options": [
-          {
-            "label": "A · event + content[]（推荐）",
-            "value": "A-event-wrapper-content-array",
-            "description": "与 mate 的联合事件同构，保留文本与文件顺序，Claw 仍独立定义内部约束。",
-            "selected": true
-          },
-          {
-            "label": "B · 顶层联合类型",
-            "value": "B-top-level-union",
-            "description": "去掉 event 包装，但 mate 到 Claw 需要重组请求。"
-          },
-          {
-            "label": "C · 旧 message + fileIds",
-            "value": "C-legacy-message-file-ids",
-            "description": "只适合 user.message，无法自然承载中断和工具确认。"
-          }
-        ]
-      },
-      {
-        "id": "Q3-success-response",
-        "legend": "Q3 · 除已确认的 eventId 外，200 成功响应返回多少内容？",
-        "options": [
-          {
-            "label": "A · 完整用户事件（推荐）",
-            "value": "A-complete-event-with-event-id",
-            "description": "返回 eventId、createdAt 和规范化业务字段，不返回 entryId 或 entrySeq；便于调用方直接对账历史。",
-            "selected": true
-          },
-          {
-            "label": "B · 最窄事件回执",
-            "value": "B-minimal-event-receipt",
-            "description": "只返回 eventId 和 acceptedAt，不返回完整业务字段或 entrySeq；后续通过历史读取完整事件。"
-          }
-        ]
-      },
-      {
-        "id": "Q4-retry-policy",
-        "legend": "Q4 · POST 响应丢失时如何处理？",
-        "options": [
-          {
-            "label": "A · 不设幂等键，历史对账（推荐）",
-            "value": "A-history-reconciliation",
-            "description": "保持 mate 当前语义；结果不确定时查询权威历史，不盲目重放。",
-            "selected": true
-          },
-          {
-            "label": "B · 强制 Idempotency-Key",
-            "value": "B-required-idempotency-key",
-            "description": "允许安全重试，但 Claw 需新增键存储、冲突和保留期契约。"
-          },
-          {
-            "label": "C · 可选 Idempotency-Key",
-            "value": "C-optional-idempotency-key",
-            "description": "兼容两种调用方，但服务端和测试矩阵最复杂。"
-          }
-        ]
-      }
-    ]
+    "status": "事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · POST 接口已确认",
+    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。2026-09-04 用户确认第一个接口可以，开始下一个接口：Q2 使用 event 包装与 content[]，Q3 返回完整用户事件，Q4 不接受 Idempotency-Key、结果不确定时历史对账；三项均按当前稿确认，不再重复征求选择。当前转入 GET /sessions/{sessionId}/events/stream 评审。",
+    "questions": []
   }
 }

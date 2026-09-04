@@ -194,6 +194,7 @@ package "Application" {
   class SessionEventAcceptanceSnapshot <<request scope, immutable, target-only>>
   class SessionEventAppender <<Spring singleton, target-only>>
   class SessionEventQueryService <<Spring singleton, existing-changed>>
+  class SessionEventSubscriptionService <<Spring singleton, target-only>>
 }
 
 package "Runtime core" {
@@ -220,7 +221,9 @@ package "Persistence" {
 RuntimeEventController --> SubmitSessionEventRequestVO : validates
 RuntimeEventController --> SessionEventApplicationService : submit
 RuntimeEventController --> AcceptedSessionEventResponseVO : returns
-RuntimeEventController --> SessionLiveEventHub : subscribe
+RuntimeEventController --> SessionEventSubscriptionService : subscribe
+SessionEventSubscriptionService --> RuntimeSessionRepository : recheck Session existence
+SessionEventSubscriptionService --> SessionLiveEventHub : register and coordinate deletion
 RuntimeEventController --> SessionEventQueryService : list fixed snapshot
 
 SessionEventApplicationService *-- SessionEventAcceptanceSnapshot : creates
@@ -274,5 +277,94 @@ end note
 note bottom of SessionLiveSubscription
 One slow subscriber cannot block execution or other clients.
 Overflow closes only this subscription and requires history repair.
+end note
+@enduml
+
+@startuml target_session_live_stream_lifecycle
+title CampusClaw Session Live Stream - Candidate Lifecycle
+
+' Source evidence (pi-mono-java a8192e047f4061bd385297d3dc6c4358362d0d49):
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeEventController.java,
+' RuntimeEventController.submit and list: POST-scoped SSE; no standalone GET stream.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventStream.java,
+' RuntimeEventStream.attach, emit, and emitBestEffort: one subscriber and bounded buffering.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSseEmitterSubscriber.java,
+' onEvent and onHeartbeat: named SSE with optional id; heartbeat comments.
+' The cited files are unchanged from c9d858bc8261bf07f5585f545b53495bf2226a56.
+' Target-only architecture change: register Session-scoped subscriptions independently
+' of execution; data-only frames and connected comments are unconfirmed proposals.
+' Design reason: distinguish subscription readiness, durable commit order, preview,
+' and transport loss without cancelling or replaying an accepted user request.
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam sequence {
+  ArrowColor #475569
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  LifeLineBorderColor #94A3B8
+  GroupBorderColor #64748B
+}
+skinparam note {
+  BackgroundColor #FFFBEA
+  BorderColor #A16207
+}
+
+actor "mate-service" as Client
+participant "Subscription Service\n<<target-only singleton>>" as Service
+database "Session Store" as Store
+participant "Session Live Hub\n<<target-only singleton>>" as Hub
+participant "Subscription Queue + Writer\n<<per connection>>" as Connection
+participant "Ordered Event Publisher\n<<target-only>>" as Publisher
+participant "History API\n<<target-only>>" as History
+
+Client -> Service : GET /sessions/{sessionId}/events/stream
+critical Registration coordinated with Session deletion
+  Service -> Store : check Session exists and is not deleted
+  Store --> Service : current authoritative state
+  Service -> Hub : register one bounded subscription
+  Hub -> Connection : create queue and writer
+  Hub --> Service : registration ready
+end
+Service --> Client : 200 text/event-stream, : connected
+note over Client,Service
+Wait for connected before submitting a separate POST.
+This GET never updates credentials of an active execution.
+end note
+
+loop new events across multiple executions
+  Publisher -> Hub : complete event after commit, in internal order
+  Hub -> Connection : enqueue immutable event
+  alt queue has capacity
+    Connection --> Client : data: JSON with eventId and type
+  else complete event cannot be queued
+    Hub -> Connection : close only this subscription
+    Connection --> Client : transport closes; no business success implied
+  end
+end
+
+group Idle is not end of subscription
+  Publisher -> Hub : committed session.status.idle
+  Hub -> Connection : enqueue idle event in order
+  Connection --> Client : data: idle event
+  Connection --> Client : : ping while waiting for new events
+end
+
+group Recover after any transport gap
+  Client -> Service : reopen GET stream and wait for connected
+  Client -> History : GET /sessions/{sessionId}/events
+  History -> Store : query committed fixed snapshot
+  Store --> History : ordered authoritative records
+  History --> Client : fixed-snapshot page
+  Client -> Client : reconcile by eventId; keep history order
+end
+
+note over Hub,Connection
+Preview may be shed; completed events replace preview.
+Network writes never hold the Session DB transaction.
+Disconnect does not cancel execution or replay a POST.
+No SSE id, Last-Event-ID replay, or public sequence is proposed.
 end note
 @enduml

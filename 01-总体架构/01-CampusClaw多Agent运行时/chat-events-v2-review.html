@@ -240,205 +240,130 @@ main {
 <body>
   <!-- Generated from 接口契约-v2/common.json and operation models. Do not edit this HTML directly. -->
   <main>
-<section class="company-api-review" data-operation-review="submitSessionEvent" data-operation-index="0"><div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>CampusClaw Session Events API</h2><span class="tag">2.0.0-proposal.8</span><span class="tag">Internal · 事件范围、事件身份、access-token 必填与顺序规则已确认 · 其余字段评审中</span><span class="tag">字段：lowerCamelCase</span><span class="tag">Header：保留原名</span></div><code class="base">/campusclaw-service/v1</code></header><article class="operation operation-post"><header class="operation-head"><span class="method method-post">POST</span><code class="path">/sessions/{sessionId}/events</code><span class="muted">持久化一个用户事件并返回接受结果</span><span class="operation-name">提交 Session 用户事件</span><code class="operation-key">submitSessionEvent</code></header><section class="section"><h3>作用</h3><p class="description">本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。三种用户事件均必须携带 access-token，JWT 与 APPKEY 两种 Header 模式遵守同一规则；携带不代表使用，Claw 只在实际调用 Mate tool execute 时发送。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。成功响应中的事件身份已确认为 eventId，不公开 entryId 或 entrySeq；内部持久化仍可使用 Entry 标识和序号。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围、事件身份、access-token 必填规则、Header 示例值和凭据处理说明已经确认，其余字段仍是本轮候选方案。</p></section><section class="section contract-detail auth-section"><h3>调用上下文 Header</h3><details class="static-choice" open><summary>JWT Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">credential-jwt</td><td data-label="说明">用户凭据 ID，不是公司、服务或应用标识。Claw 从本请求读取，在本次 Agent 执行结束前只保存在内存中；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志</td></tr><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer opaque-token</td><td data-label="说明">Bearer JWT。Claw 从本请求读取，不解析或校验；只在内存中保留到本次 Agent 执行结束，并仅在实际调用 Mate tool execute 时原样发送</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">opaque-access-token</td><td data-label="说明">Mate 工具访问令牌，三种用户事件均必须携带。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志</td></tr></tbody></table></div><pre><code>POST /campusclaw-service/v1/sessions/{sessionId}/events
+<section class="company-api-review" data-operation-review="streamSessionEvents" data-operation-index="0"><div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>CampusClaw Session Events API</h2><span class="tag">2.0.0-proposal.9</span><span class="tag">Internal · 当前评审：实时订阅 · target-only</span><span class="tag">字段：lowerCamelCase</span><span class="tag">Header：保留原名</span></div><code class="base">/campusclaw-service/v1</code></header><article class="operation operation-get"><header class="operation-head"><span class="method method-get">GET</span><code class="path">/sessions/{sessionId}/events/stream</code><span class="muted">持续接收 Session 的新事件，不触发执行</span><span class="operation-name">订阅 Session 实时事件</span><code class="operation-key">streamSessionEvents</code></header><section class="section"><h3>作用</h3><p class="description">当前评审第二个接口；第一个 POST /events 已确认。本接口只建立指定 Session 的实时订阅，不提交用户事件、不启动或取消执行，也不修改执行凭据。连接可以跨越多次执行与空闲状态，同一 Session 允许多个订阅者。以下为候选：注册订阅完成后先发送 : connected 注释；业务帧只使用 data: JSON，类型放在 type，不发送 SSE event: 或 id:。以与 Mate 同构的五类基础事件展示候选字段，但保留 Claw 的 assistant/tool/session 命名；配置、压缩和子 Agent 投影另行补齐，不视为已删除。收到 session.status.idle 不关闭连接。已确认的 eventId、无公开 entrySeq 及内部依赖顺序继续生效；新的帧格式、事件投影、GET access-token 和 user.* 是否推送仍待本轮确认。</p></section><section class="section contract-detail auth-section"><h3>调用上下文 Header</h3><details class="static-choice" open><summary>JWT Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">credential-jwt</td><td data-label="说明">用户凭据 ID，不是公司、服务或应用标识。随本次订阅请求提供；不绑定或更新正在执行的 Agent 凭据，不写入事件或日志</td></tr><tr><td data-label="Header">Authorization</td><td data-label="必填">是</td><td data-label="示例值">Bearer opaque-token</td><td data-label="说明">Bearer JWT。由上游完成真实性及访问授权；Claw 不解析或校验，不复制到订阅对象，不用于后续工具调用</td></tr><tr><td data-label="Header">Accept</td><td data-label="必填">是</td><td data-label="示例值">text/event-stream</td><td data-label="说明">声明接收持续的 SSE 响应；本接口没有请求体，不需要 Content-Type 请求头</td></tr></tbody></table></div><pre><code>GET /campusclaw-service/v1/sessions/{sessionId}/events/stream
 X-HW-ID: credential-jwt
 Authorization: Bearer opaque-token
-access-token: opaque-access-token</code></pre></details><details class="static-choice"><summary>APPKEY Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">credential-appkey</td><td data-label="说明">用户凭据 ID，不是公司、服务或应用标识。Claw 从本请求读取，在本次 Agent 执行结束前只保存在内存中；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志</td></tr><tr><td data-label="Header">X-HW-APPKEY</td><td data-label="必填">是</td><td data-label="示例值">opaque-appkey</td><td data-label="说明">AppKey 凭据。Claw 从本请求读取，不校验；只在内存中保留到本次 Agent 执行结束，并仅在实际调用 Mate tool execute 时原样发送；可与 Authorization 同时出现</td></tr><tr><td data-label="Header">access-token</td><td data-label="必填">是</td><td data-label="示例值">opaque-access-token</td><td data-label="说明">Mate 工具访问令牌，三种用户事件均必须携带。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志</td></tr></tbody></table></div><pre><code>POST /campusclaw-service/v1/sessions/{sessionId}/events
+Accept: text/event-stream</code></pre></details><details class="static-choice"><summary>APPKEY Header 示例</summary><div class="table-wrap"><table><thead><tr><th>Header</th><th>必填</th><th>示例值</th><th>说明</th></tr></thead><tbody><tr><td data-label="Header">X-HW-ID</td><td data-label="必填">是</td><td data-label="示例值">credential-appkey</td><td data-label="说明">用户凭据 ID，不是公司、服务或应用标识。随本次订阅请求提供；不绑定或更新正在执行的 Agent 凭据，不写入事件或日志</td></tr><tr><td data-label="Header">X-HW-APPKEY</td><td data-label="必填">是</td><td data-label="示例值">opaque-appkey</td><td data-label="说明">AppKey 凭据。由上游完成真实性及访问授权；Claw 不解析或校验，不复制到订阅对象，不用于后续工具调用；可与 Authorization 同时出现</td></tr><tr><td data-label="Header">Accept</td><td data-label="必填">是</td><td data-label="示例值">text/event-stream</td><td data-label="说明">声明接收持续的 SSE 响应；本接口没有请求体，不需要 Content-Type 请求头</td></tr></tbody></table></div><pre><code>GET /campusclaw-service/v1/sessions/{sessionId}/events/stream
 X-HW-ID: credential-appkey
 X-HW-APPKEY: opaque-appkey
-access-token: opaque-access-token</code></pre></details></section><section class="section contract-detail request-section"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">sessionId</td><td data-label="必填">是</td><td data-label="约束">^session-[0-9a-fA-F]{32}$</td><td data-label="说明">已经存在且未删除的内部 Session 标识；不暴露给浏览器</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US</td><td data-label="说明">异常消息语言；缺失或不支持时回退 en-US</td></tr></tbody></table></div><p class="muted empty">顶层固定只有 event；event.type 是联合类型判别字段，可选择 user.message、user.interrupt 或 user.tool_confirmation。一次请求只提交一条事件，不支持数组或批量；三种事件都会被本接口接收。null 不等价于省略。user.message 的 content 长度 1..5，最多一个 text 且必须位于第一项，最多四个不重复 file。user.interrupt 无其他业务字段。user.tool_confirmation 只在等待对应 Tool Call 确认时接受。</p><details class="static-choice" open><summary>用户消息 · user.message</summary><p class="muted empty">文本与附件保持调用顺序；Claw 只保存 fileId 引用。</p><pre><code>{
-  &quot;event&quot;: {
-    &quot;type&quot;: &quot;user.message&quot;,
-    &quot;content&quot;: [
-      {
-        &quot;type&quot;: &quot;text&quot;,
-        &quot;text&quot;: &quot;请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。&quot;
-      },
-      {
-        &quot;type&quot;: &quot;file&quot;,
-        &quot;fileId&quot;: &quot;7f12d8a380964fdc8518f48be1cf6a42&quot;
-      }
-    ]
-  }
-}</code></pre></details><details class="static-choice"><summary>中断执行 · user.interrupt</summary><p class="muted empty">只请求终止当前内部执行；200 不表示执行已经完全退出。</p><pre><code>{
-  &quot;event&quot;: {
-    &quot;type&quot;: &quot;user.interrupt&quot;
-  }
-}</code></pre></details><details class="static-choice"><summary>拒绝工具调用 · user.tool_confirmation</summary><p class="muted empty">toolCallId 原样引用等待确认的 Tool Call；denyMessage 仅在 deny 时允许。</p><pre><code>{
-  &quot;event&quot;: {
-    &quot;type&quot;: &quot;user.tool_confirmation&quot;,
-    &quot;toolCallId&quot;: &quot;call_unLAR8MvFNptuiZK6K6HCy5k&quot;,
-    &quot;result&quot;: &quot;deny&quot;,
-    &quot;denyMessage&quot;: &quot;该操作会修改生产配置，请先给出无变更风险的处理建议。&quot;
-  }
-}</code></pre></details></section><section class="section contract-detail response-section"><h3>响应</h3><details class="static-response" open><summary><code>200 · user.message</code> 200 OK — 事件已经持久化并被接受；当前候选返回同一条完整用户事件。事件使用 eventId，不返回 entryId 或 entrySeq；Agent 后续输出只从独立 live SSE 或权威历史读取。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: application/json
+Accept: text/event-stream</code></pre></details></section><section class="section contract-detail request-section"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">sessionId</td><td data-label="必填">是</td><td data-label="约束">^session-[0-9a-fA-F]{32}$</td><td data-label="说明">已经存在且未删除的内部 Session 标识；不暴露给浏览器</td></tr><tr><td data-label="位置">header</td><td data-label="名称">Accept-Language</td><td data-label="必填">否</td><td data-label="约束">zh-CN | en-US</td><td data-label="说明">异常消息语言；缺失或不支持时回退 en-US</td></tr></tbody></table></div><p class="muted empty">没有请求体，也没有 query 参数。候选不接受 Last-Event-ID、after、page、types 或其他恢复参数；发送请求体或这些参数返回 400。本 GET 不要求 access-token；即使携带，也不复制到订阅或交给 Agent。此前“统一携带”已确认的是 POST 的三种用户事件，不自动扩大到只读 GET。客户端等待 : connected 后再提交 POST；断线后重新订阅并查询历史，不重放 POST。</p></section><section class="section contract-detail response-section"><h3>响应</h3><details class="static-response" open><summary><code>200 · 回复与空闲</code> 200 OK — 候选 data-only SSE。delta 是本帧新增文本，不带 createdAt；completed 是已提交的完整事件，两者复用 eventId。completed 替换 preview；reason=done 后继续保活，不发送 stream.end。时间只用于展示，不能用来重排。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
 Cache-Control: no-store
-Content-Language: en-US
 
-{
-  &quot;resCode&quot;: &quot;0&quot;,
-  &quot;resMsg&quot;: &quot;success&quot;,
-  &quot;result&quot;: {
-    &quot;event&quot;: {
-      &quot;eventId&quot;: &quot;b7ef45d40a854c33af7a36df871a21e8&quot;,
-      &quot;type&quot;: &quot;user.message&quot;,
-      &quot;createdAt&quot;: &quot;2026-09-03T08:30:15.123Z&quot;,
-      &quot;content&quot;: [
-        {
-          &quot;type&quot;: &quot;text&quot;,
-          &quot;text&quot;: &quot;请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。&quot;
-        },
-        {
-          &quot;type&quot;: &quot;file&quot;,
-          &quot;fileId&quot;: &quot;7f12d8a380964fdc8518f48be1cf6a42&quot;
-        }
-      ]
-    }
-  }
-}</code></pre></details></details><details class="static-response"><summary><code>200 · user.interrupt</code> 200 OK — 中断事件已经持久化并被接受；调用方继续观察 session.status.idle(reason=terminated)，不能把 200 当作执行已退出。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: application/json
+: connected
+
+data: {&quot;eventId&quot;:&quot;d5c19f7c4b1642e6806aeb860752d99b&quot;,&quot;type&quot;:&quot;assistant.message&quot;,&quot;phase&quot;:&quot;delta&quot;,&quot;content&quot;:&quot;结合巡检记录与告警信息，&quot;}
+
+data: {&quot;eventId&quot;:&quot;d5c19f7c4b1642e6806aeb860752d99b&quot;,&quot;type&quot;:&quot;assistant.message&quot;,&quot;phase&quot;:&quot;completed&quot;,&quot;createdAt&quot;:&quot;2026-09-04T08:30:19.451Z&quot;,&quot;content&quot;:&quot;结合巡检记录与告警信息，建议先核查上联链路，再安排变更窗口处理。&quot;}
+
+data: {&quot;eventId&quot;:&quot;d4e3e8b9653047a99ac10396a17fe84d&quot;,&quot;type&quot;:&quot;session.status.idle&quot;,&quot;createdAt&quot;:&quot;2026-09-04T08:30:20.000Z&quot;,&quot;reason&quot;:&quot;done&quot;}
+
+: ping
+
+</code></pre></details></details><details class="static-response"><summary><code>200 · 工具确认</code> 200 OK — 候选基础事件投影。thinking 只在启用且存在可公开摘要时发送，不直接转发原始推理。confirming 与 tool.result 之间由另一次 POST 提交拒绝确认，SSE 本身不接收确认；本候选不重复推送 user.*。toolCallId 关联调用、确认和结果，各事件仍有独立 eventId。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
 Cache-Control: no-store
-Content-Language: en-US
 
-{
-  &quot;resCode&quot;: &quot;0&quot;,
-  &quot;resMsg&quot;: &quot;success&quot;,
-  &quot;result&quot;: {
-    &quot;event&quot;: {
-      &quot;eventId&quot;: &quot;aee903c130e048b9bc2894fc32cd63a8&quot;,
-      &quot;type&quot;: &quot;user.interrupt&quot;,
-      &quot;createdAt&quot;: &quot;2026-09-03T08:30:16.420Z&quot;
-    }
-  }
-}</code></pre></details></details><details class="static-response"><summary><code>200 · tool confirmation</code> 200 OK — 确认事件已经持久化并被接受；Tool Call、确认和结果通过同一个 toolCallId 关联，但各自仍有独立 eventId。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: application/json
+: connected
+
+data: {&quot;eventId&quot;:&quot;5e9a24c8d7134f6baa10c9827d45e301&quot;,&quot;type&quot;:&quot;assistant.thinking&quot;,&quot;phase&quot;:&quot;completed&quot;,&quot;createdAt&quot;:&quot;2026-09-04T08:30:16.000Z&quot;,&quot;content&quot;:&quot;已确认隔离操作会修改生产配置，需要用户确认。&quot;}
+
+data: {&quot;eventId&quot;:&quot;6c7d8e9f01234567a89bcdef01234567&quot;,&quot;type&quot;:&quot;tool.call&quot;,&quot;toolCallId&quot;:&quot;call_unLAR8MvFNptuiZK6K6HCy5k&quot;,&quot;createdAt&quot;:&quot;2026-09-04T08:30:16.100Z&quot;,&quot;toolName&quot;:&quot;isolate_campus_port&quot;,&quot;arguments&quot;:{&quot;deviceName&quot;:&quot;SW-DC-01&quot;,&quot;portName&quot;:&quot;GigabitEthernet0/0/24&quot;},&quot;requiresConfirmation&quot;:true}
+
+data: {&quot;eventId&quot;:&quot;7d8e9f0123456789abcdef0123456789&quot;,&quot;type&quot;:&quot;session.status.idle&quot;,&quot;createdAt&quot;:&quot;2026-09-04T08:30:16.200Z&quot;,&quot;reason&quot;:&quot;confirming&quot;}
+
+: ping
+
+data: {&quot;eventId&quot;:&quot;89f8316e07ef4c9aa3fd056a91a182b0&quot;,&quot;type&quot;:&quot;tool.result&quot;,&quot;createdAt&quot;:&quot;2026-09-04T08:30:16.600Z&quot;,&quot;toolCallId&quot;:&quot;call_unLAR8MvFNptuiZK6K6HCy5k&quot;,&quot;content&quot;:&quot;用户已拒绝，本次工具调用未执行。&quot;,&quot;isError&quot;:true,&quot;errorCode&quot;:&quot;TOOL_CALL_DENIED&quot;}
+
+data: {&quot;eventId&quot;:&quot;9f0123456789abcdef0123456789abcd&quot;,&quot;type&quot;:&quot;assistant.message&quot;,&quot;phase&quot;:&quot;completed&quot;,&quot;createdAt&quot;:&quot;2026-09-04T08:30:17.000Z&quot;,&quot;content&quot;:&quot;已取消配置变更，接下来可先核查告警时间线与上联链路。&quot;}
+
+data: {&quot;eventId&quot;:&quot;a0123456789abcdef0123456789abcde&quot;,&quot;type&quot;:&quot;session.status.idle&quot;,&quot;createdAt&quot;:&quot;2026-09-04T08:30:17.100Z&quot;,&quot;reason&quot;:&quot;done&quot;}
+
+: ping
+
+</code></pre></details></details><details class="static-response"><summary><code>200 · 仅等待新事件</code> 200 OK — Session 当前空闲也可以订阅；connected 仅说明订阅就绪，不代表 idle、没有历史或执行已结束。无业务事件时建议每 15 秒发送 : ping（服务端可配置），网络和代理可能延迟，不构成实时到达保证。</summary><details class="static-choice" open><summary>default</summary><pre><code>Content-Type: text/event-stream
 Cache-Control: no-store
-Content-Language: en-US
 
-{
-  &quot;resCode&quot;: &quot;0&quot;,
-  &quot;resMsg&quot;: &quot;success&quot;,
-  &quot;result&quot;: {
-    &quot;event&quot;: {
-      &quot;eventId&quot;: &quot;2781508bb1c9496f94a0454d0bf8c0f8&quot;,
-      &quot;type&quot;: &quot;user.tool_confirmation&quot;,
-      &quot;createdAt&quot;: &quot;2026-09-03T08:30:17.100Z&quot;,
-      &quot;toolCallId&quot;: &quot;call_unLAR8MvFNptuiZK6K6HCy5k&quot;,
-      &quot;result&quot;: &quot;deny&quot;,
-      &quot;denyMessage&quot;: &quot;该操作会修改生产配置，请先给出无变更风险的处理建议。&quot;
-    }
-  }
-}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_SESSION_ID</code> 400 Bad Request — sessionId 不符合内部资源标识格式。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+: connected
+
+: ping
+
+: ping
+
+</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_SESSION_ID</code> 400 Bad Request — 发送 SSE Header 前，Session 标识格式不合法。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: zh-CN
 
 {
   &quot;resCode&quot;: &quot;INVALID_SESSION_ID&quot;,
   &quot;resMsg&quot;: &quot;sessionId 格式不正确。&quot;
 }</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: en-US
 
 {
   &quot;resCode&quot;: &quot;INVALID_SESSION_ID&quot;,
   &quot;resMsg&quot;: &quot;The sessionId format is invalid.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_EVENT_REQUEST</code> 400 Bad Request — JSON、联合类型字段、content 或确认字段不满足约束。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_EVENT_STREAM_REQUEST</code> 400 Bad Request — 发送 SSE Header 前，请求携带正文、query 参数或 Last-Event-ID；本流不提供重放。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: zh-CN
 
 {
-  &quot;resCode&quot;: &quot;INVALID_EVENT_REQUEST&quot;,
-  &quot;resMsg&quot;: &quot;用户事件请求内容不符合约束。&quot;
+  &quot;resCode&quot;: &quot;INVALID_EVENT_STREAM_REQUEST&quot;,
+  &quot;resMsg&quot;: &quot;实时订阅不接受请求体、查询参数或 Last-Event-ID。&quot;
 }</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: en-US
 
 {
-  &quot;resCode&quot;: &quot;INVALID_EVENT_REQUEST&quot;,
-  &quot;resMsg&quot;: &quot;The user event request does not satisfy the required constraints.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>400 · INVALID_EVENT_TYPE</code> 400 Bad Request — event.type 不是当前版本支持的 user.* 联合类型。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
-Content-Language: zh-CN
-
-{
-  &quot;resCode&quot;: &quot;INVALID_EVENT_TYPE&quot;,
-  &quot;resMsg&quot;: &quot;用户事件类型不受支持。&quot;
-}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
-Content-Language: en-US
-
-{
-  &quot;resCode&quot;: &quot;INVALID_EVENT_TYPE&quot;,
-  &quot;resMsg&quot;: &quot;The user event type is not supported.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>404 · SESSION_NOT_FOUND</code> 404 Not Found — Session 不存在或已删除。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+  &quot;resCode&quot;: &quot;INVALID_EVENT_STREAM_REQUEST&quot;,
+  &quot;resMsg&quot;: &quot;The live stream does not accept a request body, query parameters, or Last-Event-ID.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404 · SESSION_NOT_FOUND</code> 404 Not Found — 发送 SSE Header 前，Session 不存在或已删除。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: zh-CN
 
 {
   &quot;resCode&quot;: &quot;SESSION_NOT_FOUND&quot;,
   &quot;resMsg&quot;: &quot;指定的 Session 不存在。&quot;
 }</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: en-US
 
 {
   &quot;resCode&quot;: &quot;SESSION_NOT_FOUND&quot;,
   &quot;resMsg&quot;: &quot;The specified Session does not exist.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>409 · SESSION_BUSY</code> 409 Conflict — user.message 到达时 Session 不是允许新消息的 idle 状态。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
-Content-Language: zh-CN
-
-{
-  &quot;resCode&quot;: &quot;SESSION_BUSY&quot;,
-  &quot;resMsg&quot;: &quot;该 Session 当前不能接受新的用户消息。&quot;
-}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
-Content-Language: en-US
-
-{
-  &quot;resCode&quot;: &quot;SESSION_BUSY&quot;,
-  &quot;resMsg&quot;: &quot;The Session cannot accept a new user message now.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>409 · SESSION_NOT_RUNNING</code> 409 Conflict — user.interrupt 到达时没有可中断的内部执行。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
-Content-Language: zh-CN
-
-{
-  &quot;resCode&quot;: &quot;SESSION_NOT_RUNNING&quot;,
-  &quot;resMsg&quot;: &quot;该 Session 当前没有正在运行的执行。&quot;
-}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
-Content-Language: en-US
-
-{
-  &quot;resCode&quot;: &quot;SESSION_NOT_RUNNING&quot;,
-  &quot;resMsg&quot;: &quot;The Session has no running execution.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>409 · TOOL_CONFIRMATION_NOT_PENDING</code> 409 Conflict — 指定 Tool Call 不在当前 Session 等待确认，或确认已经完成。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
-Content-Language: zh-CN
-
-{
-  &quot;resCode&quot;: &quot;TOOL_CONFIRMATION_NOT_PENDING&quot;,
-  &quot;resMsg&quot;: &quot;指定的工具调用当前不等待确认。&quot;
-}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
-Content-Language: en-US
-
-{
-  &quot;resCode&quot;: &quot;TOOL_CONFIRMATION_NOT_PENDING&quot;,
-  &quot;resMsg&quot;: &quot;The specified tool call is not awaiting confirmation.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>503 · RUNTIME_CAPACITY_EXCEEDED</code> 503 Service Unavailable — user.message 所需的全局执行容量已满；本次事件未接受。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+}</code></pre></details></details><details class="static-response"><summary><code>503 · EVENT_STREAM_CAPACITY_EXCEEDED</code> 503 Service Unavailable — 发送 SSE Header 前，全局或该 Session 的订阅容量不足；只影响此次订阅，不占用 Agent 执行容量。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: zh-CN
 Retry-After: 3
 
 {
-  &quot;resCode&quot;: &quot;RUNTIME_CAPACITY_EXCEEDED&quot;,
-  &quot;resMsg&quot;: &quot;Runtime 执行容量已满，请稍后重试。&quot;
+  &quot;resCode&quot;: &quot;EVENT_STREAM_CAPACITY_EXCEEDED&quot;,
+  &quot;resMsg&quot;: &quot;实时订阅容量已满，请稍后重试。&quot;
 }</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: en-US
 Retry-After: 3
 
 {
-  &quot;resCode&quot;: &quot;RUNTIME_CAPACITY_EXCEEDED&quot;,
-  &quot;resMsg&quot;: &quot;Runtime execution capacity is exhausted. Try again later.&quot;
-}</code></pre></details></details><details class="static-response"><summary><code>500 · EVENT_ACCEPTANCE_FAILED</code> 500 Internal Server Error — 用户事件未能完成持久化和状态接受；不返回内部异常细节。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+  &quot;resCode&quot;: &quot;EVENT_STREAM_CAPACITY_EXCEEDED&quot;,
+  &quot;resMsg&quot;: &quot;Live subscription capacity is exhausted. Try again later.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>500 · EVENT_STREAM_SUBSCRIPTION_FAILED</code> 500 Internal Server Error — 发送 SSE Header 前，订阅注册失败。Header 已发送后的编码、传输或订阅错误只关闭当前连接，不改 HTTP 状态、不发送 stream.error；客户端重连并查历史。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: zh-CN
 
 {
-  &quot;resCode&quot;: &quot;EVENT_ACCEPTANCE_FAILED&quot;,
-  &quot;resMsg&quot;: &quot;用户事件接收失败。&quot;
+  &quot;resCode&quot;: &quot;EVENT_STREAM_SUBSCRIPTION_FAILED&quot;,
+  &quot;resMsg&quot;: &quot;实时订阅建立失败。&quot;
 }</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
 Content-Language: en-US
 
 {
-  &quot;resCode&quot;: &quot;EVENT_ACCEPTANCE_FAILED&quot;,
-  &quot;resMsg&quot;: &quot;User event acceptance failed.&quot;
-}</code></pre></details></details></section><section class="section review-section"><div class="review-heading"><div><h3>本轮需要你确认</h3><p class="muted">已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。以下三项仍待确认：Q2 请求结构、Q3 成功响应宽度、Q4 重试策略。Q3 的任何选项都必须遵守 eventId 且无 entrySeq。推荐项已预选，但不会自动视为确认。</p></div><span class="review-status">事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 其余字段评审中</span></div><form class="review-form" data-review-form data-operation-key="submitSessionEvent"><fieldset data-question-id="Q2-request-shape"><legend>Q2 · 请求体采用哪种形状？</legend><label class="review-option"><input type="radio" name="submitSessionEvent-Q2-request-shape" value="A-event-wrapper-content-array" checked><span><strong>A · event + content[]（推荐）</strong><small>与 mate 的联合事件同构，保留文本与文件顺序，Claw 仍独立定义内部约束。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q2-request-shape" value="B-top-level-union"><span><strong>B · 顶层联合类型</strong><small>去掉 event 包装，但 mate 到 Claw 需要重组请求。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q2-request-shape" value="C-legacy-message-file-ids"><span><strong>C · 旧 message + fileIds</strong><small>只适合 user.message，无法自然承载中断和工具确认。</small></span></label></fieldset><fieldset data-question-id="Q3-success-response"><legend>Q3 · 除已确认的 eventId 外，200 成功响应返回多少内容？</legend><label class="review-option"><input type="radio" name="submitSessionEvent-Q3-success-response" value="A-complete-event-with-event-id" checked><span><strong>A · 完整用户事件（推荐）</strong><small>返回 eventId、createdAt 和规范化业务字段，不返回 entryId 或 entrySeq；便于调用方直接对账历史。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q3-success-response" value="B-minimal-event-receipt"><span><strong>B · 最窄事件回执</strong><small>只返回 eventId 和 acceptedAt，不返回完整业务字段或 entrySeq；后续通过历史读取完整事件。</small></span></label></fieldset><fieldset data-question-id="Q4-retry-policy"><legend>Q4 · POST 响应丢失时如何处理？</legend><label class="review-option"><input type="radio" name="submitSessionEvent-Q4-retry-policy" value="A-history-reconciliation" checked><span><strong>A · 不设幂等键，历史对账（推荐）</strong><small>保持 mate 当前语义；结果不确定时查询权威历史，不盲目重放。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q4-retry-policy" value="B-required-idempotency-key"><span><strong>B · 强制 Idempotency-Key</strong><small>允许安全重试，但 Claw 需新增键存储、冲突和保留期契约。</small></span></label><label class="review-option"><input type="radio" name="submitSessionEvent-Q4-retry-policy" value="C-optional-idempotency-key"><span><strong>C · 可选 Idempotency-Key</strong><small>兼容两种调用方，但服务端和测试矩阵最复杂。</small></span></label></fieldset><label class="review-notes">补充说明（可选）<textarea name="notes" rows="3" placeholder="例如：只调整第 2 项，其余采用推荐项。"></textarea></label><div class="review-actions"><button type="submit" class="review-submit">发送评审答复</button><span class="review-feedback" data-review-feedback aria-live="polite"></span></div></form></section></article></div></div></section>
+  &quot;resCode&quot;: &quot;EVENT_STREAM_SUBSCRIPTION_FAILED&quot;,
+  &quot;resMsg&quot;: &quot;Live event subscription failed.&quot;
+}</code></pre></details></details></section><section class="section review-section"><div class="review-heading"><div><h3>本轮需要你确认</h3><p class="muted">本轮只评审 GET /events/stream，不重新确认 POST。候选保持 Session 长连接、只收新事件、无回放，断线不取消执行。完整事件必须先提交再发布，并保持内部顺序；每条连接独立有界排队，delta 可丢弃，完整事件无法入队时关闭该连接并查历史，不能阻塞模型或其他订阅者。不按 createdAt 重排，也不能用最后一条 createdAt 作为可靠恢复位置。以下推荐项仅用于形成当前示例，不代表用户已确认。</p></div><span class="review-status">POST 接口已确认 · 第二个接口评审中 · eventId 与顺序规则继续生效</span></div><form class="review-form" data-review-form data-operation-key="streamSessionEvents"><fieldset data-question-id="S1-frame-format"><legend>S1 · SSE 帧怎样组织？</legend><label class="review-option"><input type="radio" name="streamSessionEvents-S1-frame-format" value="A-data-only" checked><span><strong>A · 只有 data: JSON（推荐）</strong><small>与 Mate 一致，type 在 JSON 内；eventId 作为业务身份，不使用 SSE id 或 Last-Event-ID。</small></span></label><label class="review-option"><input type="radio" name="streamSessionEvents-S1-frame-format" value="B-named-sse"><span><strong>B · event: + data:</strong><small>保留具名 SSE 分派；仍不公开内部序号，也不因此支持断线重放。</small></span></label></fieldset><fieldset data-question-id="S2-event-projection"><legend>S2 · 事件结构采用哪种方案？</legend><label class="review-option"><input type="radio" name="streamSessionEvents-S2-event-projection" value="A-mate-shaped-claw-names" checked><span><strong>A · 与 Mate 同构（推荐）</strong><small>正文与思考用 phase=delta/completed；工具调用、工具结果、Session idle 独立事件。保留 Claw 命名，扩展事件另行评审。</small></span></label><label class="review-option"><input type="radio" name="streamSessionEvents-S2-event-projection" value="B-existing-claw-lifecycle"><span><strong>B · 保留 Claw 细分类型</strong><small>继续区分 started/delta/completed 与 tool.execution.*，由 Mate 完成更多事件聚合和字段转换。</small></span></label></fieldset><fieldset data-question-id="S3-user-events"><legend>S3 · 实时流是否重复推送 user.*？</legend><label class="review-option"><input type="radio" name="streamSessionEvents-S3-user-events" value="A-user-events-receipt-history-only" checked><span><strong>A · 不重复推送（推荐）</strong><small>与 Mate 一致，用户事件通过 POST 回执及历史获得；其他订阅者需要查询历史获取用户输入。</small></span></label><label class="review-option"><input type="radio" name="streamSessionEvents-S3-user-events" value="B-publish-user-events"><span><strong>B · 推送已接受用户事件</strong><small>所有订阅者实时看到用户消息、中断和确认；提交者用 eventId 对 POST 回执去重，Mate 仍过滤公共流。</small></span></label></fieldset><fieldset data-question-id="S4-read-access-token"><legend>S4 · 只读订阅是否要求 access-token？</legend><label class="review-option"><input type="radio" name="streamSessionEvents-S4-read-access-token" value="A-no-read-tool-token" checked><span><strong>A · 不要求（推荐）</strong><small>GET 不调用工具、不更新执行凭据；保留 X-HW-ID 与 JWT/APPKEY 上下文。POST 三种事件仍统一必填。</small></span></label><label class="review-option"><input type="radio" name="streamSessionEvents-S4-read-access-token" value="B-require-read-token"><span><strong>B · 与 POST 一样携带</strong><small>调用方统一组装 Header；GET 即使携带也不能把令牌交给正在执行的 Agent。</small></span></label></fieldset><label class="review-notes">补充说明（可选）<textarea name="notes" rows="3" placeholder="例如：只调整第 2 项，其余采用推荐项。"></textarea></label><div class="review-actions"><button type="submit" class="review-submit">发送评审答复</button><span class="review-feedback" data-review-feedback aria-live="polite"></span></div></form></section></article></div></div></section>
   </main>
-  <script type="application/json" id="api-review-models">[{"api":{"title":"CampusClaw Session Events API","version":"2.0.0-proposal.8","basePath":"/campusclaw-service/v1","visibility":"Internal · 事件范围、事件身份、access-token 必填与顺序规则已确认 · 其余字段评审中","fieldNaming":"lowerCamelCase","headerNaming":"保留原名"},"operation":{"shortName":"提交 Session 用户事件","operationKey":"submitSessionEvent","method":"POST","path":"/sessions/{sessionId}/events","summary":"持久化一个用户事件并返回接受结果","description":"本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。三种用户事件均必须携带 access-token，JWT 与 APPKEY 两种 Header 模式遵守同一规则；携带不代表使用，Claw 只在实际调用 Mate tool execute 时发送。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。成功响应中的事件身份已确认为 eventId，不公开 entryId 或 entrySeq；内部持久化仍可使用 Entry 标识和序号。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围、事件身份、access-token 必填规则、Header 示例值和凭据处理说明已经确认，其余字段仍是本轮候选方案。","requestHeaderExamples":[{"id":"jwt","label":"JWT Header 示例","preferred":true,"headers":[{"name":"X-HW-ID","value":"credential-jwt","required":true,"description":"用户凭据 ID，不是公司、服务或应用标识。Claw 从本请求读取，在本次 Agent 执行结束前只保存在内存中；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"},{"name":"Authorization","value":"Bearer opaque-token","required":true,"description":"Bearer JWT。Claw 从本请求读取，不解析或校验；只在内存中保留到本次 Agent 执行结束，并仅在实际调用 Mate tool execute 时原样发送"},{"name":"access-token","value":"opaque-access-token","required":true,"description":"Mate 工具访问令牌，三种用户事件均必须携带。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"}]},{"id":"appkey","label":"APPKEY Header 示例","preferred":false,"headers":[{"name":"X-HW-ID","value":"credential-appkey","required":true,"description":"用户凭据 ID，不是公司、服务或应用标识。Claw 从本请求读取，在本次 Agent 执行结束前只保存在内存中；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"},{"name":"X-HW-APPKEY","value":"opaque-appkey","required":true,"description":"AppKey 凭据。Claw 从本请求读取，不校验；只在内存中保留到本次 Agent 执行结束，并仅在实际调用 Mate tool execute 时原样发送；可与 Authorization 同时出现"},{"name":"access-token","value":"opaque-access-token","required":true,"description":"Mate 工具访问令牌，三种用户事件均必须携带。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"}]}],"parameters":[{"in":"path","name":"sessionId","required":true,"schema":"^session-[0-9a-fA-F]{32}$","description":"已经存在且未删除的内部 Session 标识；不暴露给浏览器"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":true,"contentType":"application/json","description":"顶层固定只有 event；event.type 是联合类型判别字段，可选择 user.message、user.interrupt 或 user.tool_confirmation。一次请求只提交一条事件，不支持数组或批量；三种事件都会被本接口接收。null 不等价于省略。user.message 的 content 长度 1..5，最多一个 text 且必须位于第一项，最多四个不重复 file。user.interrupt 无其他业务字段。user.tool_confirmation 只在等待对应 Tool Call 确认时接受。","examples":[{"label":"用户消息 · user.message","description":"文本与附件保持调用顺序；Claw 只保存 fileId 引用。","value":{"event":{"type":"user.message","content":[{"type":"text","text":"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"},{"type":"file","fileId":"7f12d8a380964fdc8518f48be1cf6a42"}]}}},{"label":"中断执行 · user.interrupt","description":"只请求终止当前内部执行；200 不表示执行已经完全退出。","value":{"event":{"type":"user.interrupt"}}},{"label":"拒绝工具调用 · user.tool_confirmation","description":"toolCallId 原样引用等待确认的 Tool Call；denyMessage 仅在 deny 时允许。","value":{"event":{"type":"user.tool_confirmation","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","result":"deny","denyMessage":"该操作会修改生产配置，请先给出无变更风险的处理建议。"}}}]},"responses":[{"id":"200-user-message","status":"200","tabLabel":"200 · user.message","label":"OK","summary":"事件已经持久化并被接受；当前候选返回同一条完整用户事件。事件使用 eventId，不返回 entryId 或 entrySeq；Agent 后续输出只从独立 live SSE 或权威历史读取。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"default":{"resCode":"0","resMsg":"success","result":{"event":{"eventId":"b7ef45d40a854c33af7a36df871a21e8","type":"user.message","createdAt":"2026-09-03T08:30:15.123Z","content":[{"type":"text","text":"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"},{"type":"file","fileId":"7f12d8a380964fdc8518f48be1cf6a42"}]}}}}},{"id":"200-user-interrupt","status":"200","tabLabel":"200 · user.interrupt","label":"OK","summary":"中断事件已经持久化并被接受；调用方继续观察 session.status.idle(reason=terminated)，不能把 200 当作执行已退出。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"default":{"resCode":"0","resMsg":"success","result":{"event":{"eventId":"aee903c130e048b9bc2894fc32cd63a8","type":"user.interrupt","createdAt":"2026-09-03T08:30:16.420Z"}}}}},{"id":"200-tool-confirmation","status":"200","tabLabel":"200 · tool confirmation","label":"OK","summary":"确认事件已经持久化并被接受；Tool Call、确认和结果通过同一个 toolCallId 关联，但各自仍有独立 eventId。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"en-US"},"bodies":{"default":{"resCode":"0","resMsg":"success","result":{"event":{"eventId":"2781508bb1c9496f94a0454d0bf8c0f8","type":"user.tool_confirmation","createdAt":"2026-09-03T08:30:17.100Z","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","result":"deny","denyMessage":"该操作会修改生产配置，请先给出无变更风险的处理建议。"}}}}},{"id":"400-invalid-session-id","status":"400","tabLabel":"400 · INVALID_SESSION_ID","label":"Bad Request","summary":"sessionId 不符合内部资源标识格式。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"sessionId 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The sessionId format is invalid."}}},{"id":"400-invalid-event-request","status":"400","tabLabel":"400 · INVALID_EVENT_REQUEST","label":"Bad Request","summary":"JSON、联合类型字段、content 或确认字段不满足约束。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_EVENT_REQUEST","resMsg":"用户事件请求内容不符合约束。"},"en-US":{"resCode":"INVALID_EVENT_REQUEST","resMsg":"The user event request does not satisfy the required constraints."}}},{"id":"400-invalid-event-type","status":"400","tabLabel":"400 · INVALID_EVENT_TYPE","label":"Bad Request","summary":"event.type 不是当前版本支持的 user.* 联合类型。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_EVENT_TYPE","resMsg":"用户事件类型不受支持。"},"en-US":{"resCode":"INVALID_EVENT_TYPE","resMsg":"The user event type is not supported."}}},{"id":"404-session-not-found","status":"404","tabLabel":"404 · SESSION_NOT_FOUND","label":"Not Found","summary":"Session 不存在或已删除。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}},{"id":"409-session-busy","status":"409","tabLabel":"409 · SESSION_BUSY","label":"Conflict","summary":"user.message 到达时 Session 不是允许新消息的 idle 状态。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_BUSY","resMsg":"该 Session 当前不能接受新的用户消息。"},"en-US":{"resCode":"SESSION_BUSY","resMsg":"The Session cannot accept a new user message now."}}},{"id":"409-session-not-running","status":"409","tabLabel":"409 · SESSION_NOT_RUNNING","label":"Conflict","summary":"user.interrupt 到达时没有可中断的内部执行。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_RUNNING","resMsg":"该 Session 当前没有正在运行的执行。"},"en-US":{"resCode":"SESSION_NOT_RUNNING","resMsg":"The Session has no running execution."}}},{"id":"409-tool-confirmation-not-pending","status":"409","tabLabel":"409 · TOOL_CONFIRMATION_NOT_PENDING","label":"Conflict","summary":"指定 Tool Call 不在当前 Session 等待确认，或确认已经完成。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"TOOL_CONFIRMATION_NOT_PENDING","resMsg":"指定的工具调用当前不等待确认。"},"en-US":{"resCode":"TOOL_CONFIRMATION_NOT_PENDING","resMsg":"The specified tool call is not awaiting confirmation."}}},{"id":"503-runtime-capacity-exceeded","status":"503","tabLabel":"503 · RUNTIME_CAPACITY_EXCEEDED","label":"Service Unavailable","summary":"user.message 所需的全局执行容量已满；本次事件未接受。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"RUNTIME_CAPACITY_EXCEEDED","resMsg":"Runtime 执行容量已满，请稍后重试。"},"en-US":{"resCode":"RUNTIME_CAPACITY_EXCEEDED","resMsg":"Runtime execution capacity is exhausted. Try again later."}}},{"id":"500-event-acceptance-failed","status":"500","tabLabel":"500 · EVENT_ACCEPTANCE_FAILED","label":"Internal Server Error","summary":"用户事件未能完成持久化和状态接受；不返回内部异常细节。","headers":{"Content-Type":"application/json","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"EVENT_ACCEPTANCE_FAILED","resMsg":"用户事件接收失败。"},"en-US":{"resCode":"EVENT_ACCEPTANCE_FAILED","resMsg":"User event acceptance failed."}}}]},"review":{"status":"事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 其余字段评审中","notice":"已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。以下三项仍待确认：Q2 请求结构、Q3 成功响应宽度、Q4 重试策略。Q3 的任何选项都必须遵守 eventId 且无 entrySeq。推荐项已预选，但不会自动视为确认。","questions":[{"id":"Q2-request-shape","legend":"Q2 · 请求体采用哪种形状？","options":[{"label":"A · event + content[]（推荐）","value":"A-event-wrapper-content-array","description":"与 mate 的联合事件同构，保留文本与文件顺序，Claw 仍独立定义内部约束。","selected":true},{"label":"B · 顶层联合类型","value":"B-top-level-union","description":"去掉 event 包装，但 mate 到 Claw 需要重组请求。"},{"label":"C · 旧 message + fileIds","value":"C-legacy-message-file-ids","description":"只适合 user.message，无法自然承载中断和工具确认。"}]},{"id":"Q3-success-response","legend":"Q3 · 除已确认的 eventId 外，200 成功响应返回多少内容？","options":[{"label":"A · 完整用户事件（推荐）","value":"A-complete-event-with-event-id","description":"返回 eventId、createdAt 和规范化业务字段，不返回 entryId 或 entrySeq；便于调用方直接对账历史。","selected":true},{"label":"B · 最窄事件回执","value":"B-minimal-event-receipt","description":"只返回 eventId 和 acceptedAt，不返回完整业务字段或 entrySeq；后续通过历史读取完整事件。"}]},{"id":"Q4-retry-policy","legend":"Q4 · POST 响应丢失时如何处理？","options":[{"label":"A · 不设幂等键，历史对账（推荐）","value":"A-history-reconciliation","description":"保持 mate 当前语义；结果不确定时查询权威历史，不盲目重放。","selected":true},{"label":"B · 强制 Idempotency-Key","value":"B-required-idempotency-key","description":"允许安全重试，但 Claw 需新增键存储、冲突和保留期契约。"},{"label":"C · 可选 Idempotency-Key","value":"C-optional-idempotency-key","description":"兼容两种调用方，但服务端和测试矩阵最复杂。"}]}]}}]</script>
+  <script type="application/json" id="api-review-models">[{"api":{"title":"CampusClaw Session Events API","version":"2.0.0-proposal.9","basePath":"/campusclaw-service/v1","visibility":"Internal · 当前评审：实时订阅 · target-only","fieldNaming":"lowerCamelCase","headerNaming":"保留原名"},"operation":{"shortName":"订阅 Session 实时事件","operationKey":"streamSessionEvents","method":"GET","path":"/sessions/{sessionId}/events/stream","summary":"持续接收 Session 的新事件，不触发执行","description":"当前评审第二个接口；第一个 POST /events 已确认。本接口只建立指定 Session 的实时订阅，不提交用户事件、不启动或取消执行，也不修改执行凭据。连接可以跨越多次执行与空闲状态，同一 Session 允许多个订阅者。以下为候选：注册订阅完成后先发送 : connected 注释；业务帧只使用 data: JSON，类型放在 type，不发送 SSE event: 或 id:。以与 Mate 同构的五类基础事件展示候选字段，但保留 Claw 的 assistant/tool/session 命名；配置、压缩和子 Agent 投影另行补齐，不视为已删除。收到 session.status.idle 不关闭连接。已确认的 eventId、无公开 entrySeq 及内部依赖顺序继续生效；新的帧格式、事件投影、GET access-token 和 user.* 是否推送仍待本轮确认。","requestHeaderExamples":[{"id":"jwt","label":"JWT Header 示例","preferred":true,"headers":[{"name":"X-HW-ID","value":"credential-jwt","required":true,"description":"用户凭据 ID，不是公司、服务或应用标识。随本次订阅请求提供；不绑定或更新正在执行的 Agent 凭据，不写入事件或日志"},{"name":"Authorization","value":"Bearer opaque-token","required":true,"description":"Bearer JWT。由上游完成真实性及访问授权；Claw 不解析或校验，不复制到订阅对象，不用于后续工具调用"},{"name":"Accept","value":"text/event-stream","required":true,"description":"声明接收持续的 SSE 响应；本接口没有请求体，不需要 Content-Type 请求头"}]},{"id":"appkey","label":"APPKEY Header 示例","preferred":false,"headers":[{"name":"X-HW-ID","value":"credential-appkey","required":true,"description":"用户凭据 ID，不是公司、服务或应用标识。随本次订阅请求提供；不绑定或更新正在执行的 Agent 凭据，不写入事件或日志"},{"name":"X-HW-APPKEY","value":"opaque-appkey","required":true,"description":"AppKey 凭据。由上游完成真实性及访问授权；Claw 不解析或校验，不复制到订阅对象，不用于后续工具调用；可与 Authorization 同时出现"},{"name":"Accept","value":"text/event-stream","required":true,"description":"声明接收持续的 SSE 响应；本接口没有请求体，不需要 Content-Type 请求头"}]}],"parameters":[{"in":"path","name":"sessionId","required":true,"schema":"^session-[0-9a-fA-F]{32}$","description":"已经存在且未删除的内部 Session 标识；不暴露给浏览器"},{"in":"header","name":"Accept-Language","required":false,"schema":"zh-CN | en-US","description":"异常消息语言；缺失或不支持时回退 en-US"}],"requestBody":{"required":false,"contentType":null,"description":"没有请求体，也没有 query 参数。候选不接受 Last-Event-ID、after、page、types 或其他恢复参数；发送请求体或这些参数返回 400。本 GET 不要求 access-token；即使携带，也不复制到订阅或交给 Agent。此前“统一携带”已确认的是 POST 的三种用户事件，不自动扩大到只读 GET。客户端等待 : connected 后再提交 POST；断线后重新订阅并查询历史，不重放 POST。","example":null},"responses":[{"id":"200-text","status":"200","tabLabel":"200 · 回复与空闲","label":"OK","summary":"候选 data-only SSE。delta 是本帧新增文本，不带 createdAt；completed 是已提交的完整事件，两者复用 eventId。completed 替换 preview；reason=done 后继续保活，不发送 stream.end。时间只用于展示，不能用来重排。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store"},"bodies":{"default":": connected\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"assistant.message\",\"phase\":\"delta\",\"content\":\"结合巡检记录与告警信息，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"assistant.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:19.451Z\",\"content\":\"结合巡检记录与告警信息，建议先核查上联链路，再安排变更窗口处理。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"session.status.idle\",\"createdAt\":\"2026-09-04T08:30:20.000Z\",\"reason\":\"done\"}\n\n: ping\n\n"}},{"id":"200-tool-confirmation","status":"200","tabLabel":"200 · 工具确认","label":"OK","summary":"候选基础事件投影。thinking 只在启用且存在可公开摘要时发送，不直接转发原始推理。confirming 与 tool.result 之间由另一次 POST 提交拒绝确认，SSE 本身不接收确认；本候选不重复推送 user.*。toolCallId 关联调用、确认和结果，各事件仍有独立 eventId。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store"},"bodies":{"default":": connected\n\ndata: {\"eventId\":\"5e9a24c8d7134f6baa10c9827d45e301\",\"type\":\"assistant.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:16.000Z\",\"content\":\"已确认隔离操作会修改生产配置，需要用户确认。\"}\n\ndata: {\"eventId\":\"6c7d8e9f01234567a89bcdef01234567\",\"type\":\"tool.call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-04T08:30:16.100Z\",\"toolName\":\"isolate_campus_port\",\"arguments\":{\"deviceName\":\"SW-DC-01\",\"portName\":\"GigabitEthernet0/0/24\"},\"requiresConfirmation\":true}\n\ndata: {\"eventId\":\"7d8e9f0123456789abcdef0123456789\",\"type\":\"session.status.idle\",\"createdAt\":\"2026-09-04T08:30:16.200Z\",\"reason\":\"confirming\"}\n\n: ping\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"tool.result\",\"createdAt\":\"2026-09-04T08:30:16.600Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":\"用户已拒绝，本次工具调用未执行。\",\"isError\":true,\"errorCode\":\"TOOL_CALL_DENIED\"}\n\ndata: {\"eventId\":\"9f0123456789abcdef0123456789abcd\",\"type\":\"assistant.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:17.000Z\",\"content\":\"已取消配置变更，接下来可先核查告警时间线与上联链路。\"}\n\ndata: {\"eventId\":\"a0123456789abcdef0123456789abcde\",\"type\":\"session.status.idle\",\"createdAt\":\"2026-09-04T08:30:17.100Z\",\"reason\":\"done\"}\n\n: ping\n\n"}},{"id":"200-idle","status":"200","tabLabel":"200 · 仅等待新事件","label":"OK","summary":"Session 当前空闲也可以订阅；connected 仅说明订阅就绪，不代表 idle、没有历史或执行已结束。无业务事件时建议每 15 秒发送 : ping（服务端可配置），网络和代理可能延迟，不构成实时到达保证。","headers":{"Content-Type":"text/event-stream","Cache-Control":"no-store"},"bodies":{"default":": connected\n\n: ping\n\n: ping\n\n"}},{"id":"400-invalid-session-id","status":"400","tabLabel":"400 · INVALID_SESSION_ID","label":"Bad Request","summary":"发送 SSE Header 前，Session 标识格式不合法。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_SESSION_ID","resMsg":"sessionId 格式不正确。"},"en-US":{"resCode":"INVALID_SESSION_ID","resMsg":"The sessionId format is invalid."}}},{"id":"400-invalid-event-stream-request","status":"400","tabLabel":"400 · INVALID_EVENT_STREAM_REQUEST","label":"Bad Request","summary":"发送 SSE Header 前，请求携带正文、query 参数或 Last-Event-ID；本流不提供重放。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"INVALID_EVENT_STREAM_REQUEST","resMsg":"实时订阅不接受请求体、查询参数或 Last-Event-ID。"},"en-US":{"resCode":"INVALID_EVENT_STREAM_REQUEST","resMsg":"The live stream does not accept a request body, query parameters, or Last-Event-ID."}}},{"id":"404-session-not-found","status":"404","tabLabel":"404 · SESSION_NOT_FOUND","label":"Not Found","summary":"发送 SSE Header 前，Session 不存在或已删除。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SESSION_NOT_FOUND","resMsg":"指定的 Session 不存在。"},"en-US":{"resCode":"SESSION_NOT_FOUND","resMsg":"The specified Session does not exist."}}},{"id":"503-event-stream-capacity-exceeded","status":"503","tabLabel":"503 · EVENT_STREAM_CAPACITY_EXCEEDED","label":"Service Unavailable","summary":"发送 SSE Header 前，全局或该 Session 的订阅容量不足；只影响此次订阅，不占用 Agent 执行容量。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN","Retry-After":"3"},"bodies":{"zh-CN":{"resCode":"EVENT_STREAM_CAPACITY_EXCEEDED","resMsg":"实时订阅容量已满，请稍后重试。"},"en-US":{"resCode":"EVENT_STREAM_CAPACITY_EXCEEDED","resMsg":"Live subscription capacity is exhausted. Try again later."}}},{"id":"500-event-stream-subscription-failed","status":"500","tabLabel":"500 · EVENT_STREAM_SUBSCRIPTION_FAILED","label":"Internal Server Error","summary":"发送 SSE Header 前，订阅注册失败。Header 已发送后的编码、传输或订阅错误只关闭当前连接，不改 HTTP 状态、不发送 stream.error；客户端重连并查历史。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"EVENT_STREAM_SUBSCRIPTION_FAILED","resMsg":"实时订阅建立失败。"},"en-US":{"resCode":"EVENT_STREAM_SUBSCRIPTION_FAILED","resMsg":"Live event subscription failed."}}}]},"review":{"status":"POST 接口已确认 · 第二个接口评审中 · eventId 与顺序规则继续生效","notice":"本轮只评审 GET /events/stream，不重新确认 POST。候选保持 Session 长连接、只收新事件、无回放，断线不取消执行。完整事件必须先提交再发布，并保持内部顺序；每条连接独立有界排队，delta 可丢弃，完整事件无法入队时关闭该连接并查历史，不能阻塞模型或其他订阅者。不按 createdAt 重排，也不能用最后一条 createdAt 作为可靠恢复位置。以下推荐项仅用于形成当前示例，不代表用户已确认。","questions":[{"id":"S1-frame-format","legend":"S1 · SSE 帧怎样组织？","options":[{"label":"A · 只有 data: JSON（推荐）","value":"A-data-only","description":"与 Mate 一致，type 在 JSON 内；eventId 作为业务身份，不使用 SSE id 或 Last-Event-ID。","selected":true},{"label":"B · event: + data:","value":"B-named-sse","description":"保留具名 SSE 分派；仍不公开内部序号，也不因此支持断线重放。"}]},{"id":"S2-event-projection","legend":"S2 · 事件结构采用哪种方案？","options":[{"label":"A · 与 Mate 同构（推荐）","value":"A-mate-shaped-claw-names","description":"正文与思考用 phase=delta/completed；工具调用、工具结果、Session idle 独立事件。保留 Claw 命名，扩展事件另行评审。","selected":true},{"label":"B · 保留 Claw 细分类型","value":"B-existing-claw-lifecycle","description":"继续区分 started/delta/completed 与 tool.execution.*，由 Mate 完成更多事件聚合和字段转换。"}]},{"id":"S3-user-events","legend":"S3 · 实时流是否重复推送 user.*？","options":[{"label":"A · 不重复推送（推荐）","value":"A-user-events-receipt-history-only","description":"与 Mate 一致，用户事件通过 POST 回执及历史获得；其他订阅者需要查询历史获取用户输入。","selected":true},{"label":"B · 推送已接受用户事件","value":"B-publish-user-events","description":"所有订阅者实时看到用户消息、中断和确认；提交者用 eventId 对 POST 回执去重，Mate 仍过滤公共流。"}]},{"id":"S4-read-access-token","legend":"S4 · 只读订阅是否要求 access-token？","options":[{"label":"A · 不要求（推荐）","value":"A-no-read-tool-token","description":"GET 不调用工具、不更新执行凭据；保留 X-HW-ID 与 JWT/APPKEY 上下文。POST 三种事件仍统一必填。","selected":true},{"label":"B · 与 POST 一样携带","value":"B-require-read-token","description":"调用方统一组装 Header；GET 即使携带也不能把令牌交给正在执行的 Agent。"}]}],"promptPrefix":"继续评审 GET /campusclaw-service/v1/sessions/{sessionId}/events/stream","promptSuffix":"只按本轮明确选择更新第二个接口；第一个 POST 已确认，不恢复其 Q2/Q3/Q4。"}}]</script>
   <script>
 (() => {
   const modelNode = document.getElementById('api-review-models');
