@@ -1,10 +1,10 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.3.8<br>
-> 整理日期：2026-09-02<br>
-> Slash Command 设计基线：`27484974eb106a7e43910d8e542de52a72c58102`<br>
+> 导航版本：2.4.1<br>
+> 整理日期：2026-09-04<br>
+> Slash Command 设计基线：`0eaa70ff365bf4d4e328b3473809341ca4cfc58d`<br>
 > 通用对话 Events 三接口设计前基线：`743eca488ad559387706b5df54e2248a4124e5ef`<br>
-> 变更性质：补充 mate-service 实时流工具交互示例
+> 变更性质：Builtin 分层、普通 JSON 与串行 PR；Skill Command 由其他同事并行开发
 
 本仓库维护 CampusClaw Runtime、mate-service 边界、pi-mono-java 目标设计，
 以及相关源码和产品研究。这是设计与契约资料仓库，不是产品源码仓库。
@@ -20,7 +20,7 @@
 | 全产品测试与质量门禁 | [CampusClaw TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | 能力注册表、实时门禁、nightly 维护和测试防弱化 |
 | Session、Agent 元数据如何持久化 | [数据与存储导航](./03-数据与存储/README.md) | 会话记忆、Agent 元数据和通用数据库模式 |
 | Command 和 Skill Command 如何设计 | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [内置命令](./04-命令与技能/01-内置命令/README.md)、[技能命令](./04-命令与技能/02-技能命令/README.md) |
-| 浏览器如何调用聊天命令 | [mate-service 聊天命令 API](./02-服务与接口/06-mate-service聊天命令API/README.md) | [公共 HTTP 评审页](./02-服务与接口/06-mate-service聊天命令API/chat-command-v1-review.html)、[内部 Runtime 1.43.4](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) |
+| 公共聊天命令历史与重审入口 | [mate-service 聊天命令 API](./02-服务与接口/06-mate-service聊天命令API/README.md) | [公共 HTTP 评审页](./02-服务与接口/06-mate-service聊天命令API/chat-command-v1-review.html)、[内部 Runtime 1.44.1](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) |
 | 浏览器如何提交、观察和恢复普通 Chat | [mate-service 通用对话 Events API](./02-服务与接口/07-mate-service通用对话API/README.md) | [三接口契约页](./02-服务与接口/07-mate-service通用对话API/chat-events-v1-review.html)、[OpenAPI 3.1](./02-服务与接口/07-mate-service通用对话API/chat-events-v1.openapi.yaml)、[operation models](./02-服务与接口/07-mate-service通用对话API/接口契约/操作/) |
 | 查看 pi 或主流 Agent 平台证据 | [研究资料导航](./05-研究资料/README.md) | 配置生成 Tool/Agent、Anthropic、pi Session 和官方文档 |
 | 查看 Agent / Tool / Skill 元数据草案 | [元数据草案导航](./06-元数据草案/README.md) | 三份 JSON 草案 |
@@ -53,8 +53,8 @@ Runtime HTTP V1 不维护 OpenAPI。CampusMate 附件服务仍维护独立的
 [`attachment-api.openapi.yaml`](./02-服务与接口/01-CampusMate附件服务/attachment-api.openapi.yaml)，
 两者不可混用。
 
-mate-service 聊天命令 API 采用相同的 source-first 维护方式，但保持独立公共认证和
-SSE 投影契约；其精确源与生成页位于
+mate-service 聊天命令旧 SSE 提案已废止，仅保留历史 target-only 契约，不能作为实现依据。
+新公共命令协议需独立重审，不由 Runtime Builtin JSON 决策推导；历史源与生成页位于
 [`02-服务与接口/06-mate-service聊天命令API/`](./02-服务与接口/06-mate-service聊天命令API/)。
 
 mate-service 通用对话 Events API 已确认事件提交、Chat 级 live SSE 和固定快照历史三个
@@ -96,6 +96,8 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.4.1 | 2026-09-04 | 澄清 Builtin/Skill 并行开发分工；旧版 Skill 延期解释不再有效，公共命令接口在发布前合并双方契约。 |
+| 2.4.0 | 2026-09-04 | 收敛 Runtime 1.44.0 与七个 Builtin 分层设计；采用普通 JSON、延期 Skill 执行、去除通用生命周期与 Name 边车；旧公共命令提案标为历史，记录串行 PR 门禁。 |
 | 2.3.8 | 2026-09-02 | 为 mate-service 通用对话 Events 实时流补充“用户同意后执行端口隔离”的完整工具交互示例。 |
 | 2.3.7 | 2026-09-02 | 为 mate-service 通用对话 Events 提交接口补充“允许工具调用”的完整成功响应示例，并与拒绝示例并列展示。 |
 | 2.3.6 | 2026-09-02 | 整体润色 mate-service 通用对话 Events 三接口的说明与示例，统一为真实、连贯的园区巡检场景；字段、Schema 和行为不变。 |

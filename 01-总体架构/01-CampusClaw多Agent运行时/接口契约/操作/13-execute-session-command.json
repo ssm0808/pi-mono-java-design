@@ -4,17 +4,32 @@
     "operationKey": "executeSessionCommand",
     "method": "POST",
     "path": "/sessions/{sessionId}/command",
-    "summary": "执行 Builtin 或 Skill 命令并流式返回结果",
-    "description": "提交结构化 name、arguments 和 fileIds；name 不含 Slash。Service 把省略的 arguments 和 fileIds 分别归一为空字符串和空列表，并拒绝未知字段。每次已接受调用生成 command- 加 32 位小写十六进制 UUID，并保存 started 和 completed/failed 生命周期。Skill 或 Compact 接受后，断线不取消执行；调用方从 GET Events 查询结果，不重放 POST。本接口额外必填 access-token Header。Claw 从本次请求读取 X-HW-ID、Authorization、X-HW-APPKEY 和 access-token，只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅在实际调用 Mate tool execute 时原名发送，不写入 Session、事件或日志，也不随工具发现、模型或其他请求发送。Claw 当前不解析或校验这些凭据。",
+    "summary": "执行一个 Builtin 命令并返回 JSON 结果",
+    "description": "本页展示已确认的 Builtin 开发切片：help、status、name、model、thinking、compact 和 skills。Skill Command 由其他同事并行开发，最终共享 HTTP 入口的命名与请求联合类型在发布前整合；不是 Skill 延期或禁用决定。Service 将省略或 null 的 arguments 归一为空字符串，Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Compact 复用权威领域 Entry。Compact 被接受后断线不取消，结果不确定时通过 GET Session/Events 对账，不自动重放 POST。本接口额外必填 access-token。Claw 从请求读取四项凭据，非 Compact 命令只在内存中保留到本次命令处理结束；Compact 仅在 Active Holder 保留到压缩及排队续跑结束。仅随实际 Mate tool execute 原名发送，不写入 Session、事件或日志，不进入 Prompt，也不随工具发现、模型或其他请求发送；Claw 不解析或校验凭据。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
         "label": "JWT Header 示例",
         "preferred": true,
         "headers": [
-          {"name": "X-HW-ID", "value": "credential-jwt", "required": true, "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},
-          {"name": "Authorization", "value": "Bearer opaque-token", "required": true, "description": "Bearer JWT；Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},
-          {"name": "access-token", "value": "opaque-access-token", "required": true, "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"}
+          {
+            "name": "X-HW-ID",
+            "value": "credential-jwt",
+            "required": true,
+            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer opaque-token",
+            "required": true,
+            "description": "Bearer JWT；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          },
+          {
+            "name": "access-token",
+            "value": "opaque-access-token",
+            "required": true,
+            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          }
         ]
       },
       {
@@ -22,47 +37,226 @@
         "label": "APPKEY Header 示例",
         "preferred": false,
         "headers": [
-          {"name": "X-HW-ID", "value": "credential-appkey", "required": true, "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},
-          {"name": "X-HW-APPKEY", "value": "opaque-appkey", "required": true, "description": "AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"},
-          {"name": "access-token", "value": "opaque-access-token", "required": true, "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理或其触发的 Agent/Skill 执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"}
+          {
+            "name": "X-HW-ID",
+            "value": "credential-appkey",
+            "required": true,
+            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          },
+          {
+            "name": "X-HW-APPKEY",
+            "value": "opaque-appkey",
+            "required": true,
+            "description": "AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          },
+          {
+            "name": "access-token",
+            "value": "opaque-access-token",
+            "required": true,
+            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到排队续跑结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          }
         ]
       }
     ],
     "parameters": [
-      {"$ref": "parameters.sessionId"},
-      {"$ref": "parameters.acceptLanguage", "description": "流建立前 JSON 错误和流内错误的消息语言；缺失或不支持时回退 en-US"}
+      {
+        "$ref": "parameters.sessionId"
+      },
+      {
+        "$ref": "parameters.acceptLanguage",
+        "description": "ResultBean 消息语言；缺失或不支持时回退 en-US"
+      }
     ],
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "name 必填，使用命令清单中的小写名称且不含 Slash。Skill 命令为 skill:<name>；<name> 长度为 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$。arguments 与普通消息使用同一上限，最多 262144 个 UTF-16 代码单元。fileIds 最多 32 个，元素唯一并保留顺序。Builtin 不接受附件；Skill 接受普通消息附件。不接受 type、sessionId、modelId、thinking、metadata 或 Idempotency-Key。",
+      "description": "以下为 Builtin 请求约束，不定义 Skill 请求；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。If-Match 和 Idempotency-Key 在 Builtin 请求中没有契约语义，出现时按 INVALID_COMMAND_REQUEST 拒绝。",
       "example": {
-        "name": "skill:pdf",
-        "arguments": "分析附件并总结",
-        "fileIds": ["file_01JY8X2E3R4T5Y6U7I8O9P0A1S"]
+        "name": "model",
+        "arguments": "provider/model"
       }
     },
     "responses": [
       {
-        "id": "200-name-success",
+        "id": "200-help",
         "status": "200",
-        "tabLabel": "200 · Builtin 成功",
+        "tabLabel": "200 · help",
         "label": "OK",
-        "summary": "命令已接受并返回 SSE；以 name 有效更新为例，领域事件位于 command.started 和 command.completed 之间。",
-        "headers": {"Content-Type": "text/event-stream", "Cache-Control": "no-store", "Content-Language": "zh-CN"},
+        "summary": "空参数返回全部七项；提供名称时去除两端空白后精确匹配一项，不接受前导 Slash。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "default": "id: 31\nevent: command.started\ndata: {\"entryId\":\"entry_301\",\"entrySeq\":31,\"commandId\":\"command-550e8400e29b41d4a716446655440000\",\"name\":\"name\",\"kind\":\"builtin\",\"createdAt\":\"2026-08-31T10:00:00Z\"}\n\nid: 32\nevent: session.name.changed\ndata: {\"entryId\":\"entry_302\",\"entrySeq\":32,\"previousDisplayName\":null,\"displayName\":\"园区网络故障分析\",\"resourceVersion\":7,\"createdAt\":\"2026-08-31T10:00:00Z\"}\n\nid: 33\nevent: command.completed\ndata: {\"entryId\":\"entry_303\",\"entrySeq\":33,\"commandId\":\"command-550e8400e29b41d4a716446655440000\",\"name\":\"name\",\"result\":{\"text\":\"Session 名称已更新为：园区网络故障分析\",\"sourceEventSeq\":32},\"createdAt\":\"2026-08-31T10:00:00Z\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "command": "help",
+              "commands": [
+                {
+                  "name": "status",
+                  "kind": "builtin",
+                  "description": "查看 Session 状态、模型和深度思考",
+                  "available": true,
+                  "unavailableCode": null,
+                  "input": {
+                    "mode": "none",
+                    "available": false,
+                    "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED",
+                    "acceptsFiles": false,
+                    "placeholder": null,
+                    "suggestions": []
+                  }
+                }
+              ]
+            }
+          }
         }
       },
       {
-        "id": "200-skill-success",
+        "id": "200-status",
         "status": "200",
-        "tabLabel": "200 · Skill 成功",
+        "tabLabel": "200 · status",
         "label": "OK",
-        "summary": "Skill 调用的用户参数与附件作为 user.message 持久化，Skill 快照仅写私有 Record，最终结果指向 Assistant 完成事件。",
-        "headers": {"Content-Type": "text/event-stream", "Cache-Control": "no-store", "Content-Language": "zh-CN"},
+        "summary": "返回持久化状态、模型和 Thinking，不估算上下文用量。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "default": "id: 41\nevent: user.message\ndata: {\"entryId\":\"entry_401\",\"entrySeq\":41,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"commandName\":\"skill:pdf\",\"message\":\"分析附件并总结\",\"fileIds\":[\"file_01JY8X2E3R4T5Y6U7I8O9P0A1S\"],\"createdAt\":\"2026-08-31T10:01:00Z\"}\n\nid: 43\nevent: command.started\ndata: {\"entryId\":\"entry_403\",\"entrySeq\":43,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"name\":\"skill:pdf\",\"kind\":\"skill\",\"createdAt\":\"2026-08-31T10:01:00Z\"}\n\nevent: assistant.message.started\ndata: {\"entryId\":\"entry_404\",\"role\":\"assistant\"}\n\nevent: assistant.message.delta\ndata: {\"entryId\":\"entry_404\",\"delta\":{\"type\":\"text\",\"text\":\"附件包含三类关键信息。\"}}\n\nid: 44\nevent: assistant.message.completed\ndata: {\"entryId\":\"entry_404\",\"entrySeq\":44,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"附件包含三类关键信息。\"}]},\"finishReason\":\"stop\",\"createdAt\":\"2026-08-31T10:01:03Z\"}\n\nid: 45\nevent: command.completed\ndata: {\"entryId\":\"entry_405\",\"entrySeq\":45,\"commandId\":\"command-550e8400e29b41d4a716446655440001\",\"name\":\"skill:pdf\",\"result\":{\"text\":\"Skill 执行完成。\",\"sourceEventSeq\":44},\"createdAt\":\"2026-08-31T10:01:03Z\"}\n\nevent: session.status.idle\ndata: {\"status\":\"idle\"}\n\nevent: stream.end\ndata: {\"reason\":\"completed\"}\n"
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "command": "status",
+              "state": "running",
+              "modelId": "provider/model",
+              "thinking": true
+            }
+          }
+        }
+      },
+      {
+        "id": "200-name",
+        "status": "200",
+        "tabLabel": "200 · name",
+        "label": "OK",
+        "summary": "返回当前名称和本次是否修改；displayName 即使为 null 也保留。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "command": "name",
+              "displayName": null,
+              "changed": false
+            }
+          }
+        }
+      },
+      {
+        "id": "200-model",
+        "status": "200",
+        "tabLabel": "200 · model",
+        "label": "OK",
+        "summary": "返回当前与可用模型；查询和同值操作省略 sourceEventSeq。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "command": "model",
+              "currentModelId": "provider/model",
+              "models": [
+                "provider/model",
+                "provider/model-fast"
+              ],
+              "changed": true,
+              "sourceEventSeq": 23
+            }
+          }
+        }
+      },
+      {
+        "id": "200-thinking",
+        "status": "200",
+        "tabLabel": "200 · thinking",
+        "label": "OK",
+        "summary": "只接受小写 on/off；查询和同值操作省略 sourceEventSeq。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "command": "thinking",
+              "thinking": false,
+              "changed": true,
+              "sourceEventSeq": 24
+            }
+          }
+        }
+      },
+      {
+        "id": "200-compact",
+        "status": "200",
+        "tabLabel": "200 · compact",
+        "label": "OK",
+        "summary": "压缩成功或无变化即返回，不等待 Steer/FollowUp 续跑；空历史 compacted=false，不占容量、不改变状态、不写 Entry，省略 sourceEventSeq。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "command": "compact",
+              "compacted": true,
+              "sourceEventSeq": 31
+            }
+          }
+        }
+      },
+      {
+        "id": "200-skills",
+        "status": "200",
+        "tabLabel": "200 · skills",
+        "label": "OK",
+        "summary": "最新完整绑定快照中的名称和描述稳定排序；完整空快照返回 []，无完整快照返回 AGENT_NOT_AVAILABLE。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "command": "skills",
+              "skills": []
+            }
+          }
         }
       },
       {
@@ -70,11 +264,20 @@
         "status": "400",
         "tabLabel": "400 · INVALID_SESSION_ID",
         "label": "Bad Request",
-        "summary": "sessionId 不符合标识格式。",
-        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "summary": "sessionId 格式不正确。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "INVALID_SESSION_ID", "resMsg": "sessionId 格式不正确。"},
-          "en-US": {"resCode": "INVALID_SESSION_ID", "resMsg": "The sessionId format is invalid."}
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "sessionId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The sessionId format is invalid."
+          }
         }
       },
       {
@@ -82,11 +285,20 @@
         "status": "400",
         "tabLabel": "400 · INVALID_COMMAND_REQUEST",
         "label": "Bad Request",
-        "summary": "请求 JSON 非法、含未知字段，name/arguments/fileIds 不符合约束，或 Builtin 携带了附件。",
-        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "summary": "命令请求内容不符合约束。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "INVALID_COMMAND_REQUEST", "resMsg": "命令请求内容不符合约束。"},
-          "en-US": {"resCode": "INVALID_COMMAND_REQUEST", "resMsg": "The command request does not satisfy the required constraints."}
+          "zh-CN": {
+            "resCode": "INVALID_COMMAND_REQUEST",
+            "resMsg": "命令请求内容不符合约束。"
+          },
+          "en-US": {
+            "resCode": "INVALID_COMMAND_REQUEST",
+            "resMsg": "The command request does not satisfy the required constraints."
+          }
         }
       },
       {
@@ -94,11 +306,20 @@
         "status": "404",
         "tabLabel": "404 · SESSION_NOT_FOUND",
         "label": "Not Found",
-        "summary": "Session 不存在或已删除。",
-        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "summary": "指定的 Session 不存在。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "SESSION_NOT_FOUND", "resMsg": "指定的 Session 不存在。"},
-          "en-US": {"resCode": "SESSION_NOT_FOUND", "resMsg": "The specified Session does not exist."}
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
         }
       },
       {
@@ -106,71 +327,195 @@
         "status": "404",
         "tabLabel": "404 · COMMAND_NOT_FOUND",
         "label": "Not Found",
-        "summary": "命令不存在，或 Skill 在清单返回后已解绑。",
-        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "summary": "指定的命令不存在。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "COMMAND_NOT_FOUND", "resMsg": "指定的命令不存在。"},
-          "en-US": {"resCode": "COMMAND_NOT_FOUND", "resMsg": "The specified command does not exist."}
+          "zh-CN": {
+            "resCode": "COMMAND_NOT_FOUND",
+            "resMsg": "指定的命令不存在。"
+          },
+          "en-US": {
+            "resCode": "COMMAND_NOT_FOUND",
+            "resMsg": "The specified command does not exist."
+          }
         }
       },
       {
+        "id": "409-session-busy",
         "status": "409",
+        "tabLabel": "409 · SESSION_BUSY",
         "label": "Conflict",
-        "summary": "Session 正在执行；本次修改或执行只允许 idle。",
-        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
+        "summary": "该 Session 正在执行，当前命令暂不可用。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "SESSION_BUSY", "resMsg": "该 Session 正在执行，当前命令暂不可用。"},
-          "en-US": {"resCode": "SESSION_BUSY", "resMsg": "The Session is running and the requested command is unavailable."}
+          "zh-CN": {
+            "resCode": "SESSION_BUSY",
+            "resMsg": "该 Session 正在执行，当前命令暂不可用。"
+          },
+          "en-US": {
+            "resCode": "SESSION_BUSY",
+            "resMsg": "The Session is running and the requested command is unavailable."
+          }
         }
       },
       {
-        "id": "503-skill-snapshot-unavailable",
+        "id": "422-agent-not-available",
+        "status": "422",
+        "tabLabel": "422 · AGENT_NOT_AVAILABLE",
+        "label": "Unprocessable Entity",
+        "summary": "当前 Agent 运行时不可用。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "AGENT_NOT_AVAILABLE",
+            "resMsg": "当前 Agent 运行时不可用。"
+          },
+          "en-US": {
+            "resCode": "AGENT_NOT_AVAILABLE",
+            "resMsg": "The current Agent runtime is unavailable."
+          }
+        }
+      },
+      {
+        "id": "422-model-not-available",
+        "status": "422",
+        "tabLabel": "422 · MODEL_NOT_AVAILABLE",
+        "label": "Unprocessable Entity",
+        "summary": "指定的模型当前不可用。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MODEL_NOT_AVAILABLE",
+            "resMsg": "指定的模型当前不可用。"
+          },
+          "en-US": {
+            "resCode": "MODEL_NOT_AVAILABLE",
+            "resMsg": "The specified model is not available."
+          }
+        }
+      },
+      {
+        "id": "422-thinking-not-supported",
+        "status": "422",
+        "tabLabel": "422 · THINKING_NOT_SUPPORTED",
+        "label": "Unprocessable Entity",
+        "summary": "当前模型不支持深度思考。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "THINKING_NOT_SUPPORTED",
+            "resMsg": "当前模型不支持深度思考。"
+          },
+          "en-US": {
+            "resCode": "THINKING_NOT_SUPPORTED",
+            "resMsg": "The current model does not support thinking."
+          }
+        }
+      },
+      {
+        "id": "500-session-name-update-failed",
+        "status": "500",
+        "tabLabel": "500 · SESSION_NAME_UPDATE_FAILED",
+        "label": "Internal Server Error",
+        "summary": "Session 名称更新失败。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NAME_UPDATE_FAILED",
+            "resMsg": "Session 名称更新失败。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NAME_UPDATE_FAILED",
+            "resMsg": "The Session name could not be updated."
+          }
+        }
+      },
+      {
+        "id": "500-command-execution-failed",
+        "status": "500",
+        "tabLabel": "500 · COMMAND_EXECUTION_FAILED",
+        "label": "Internal Server Error",
+        "summary": "命令执行失败。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "COMMAND_EXECUTION_FAILED",
+            "resMsg": "命令执行失败。"
+          },
+          "en-US": {
+            "resCode": "COMMAND_EXECUTION_FAILED",
+            "resMsg": "Command execution failed."
+          }
+        }
+      },
+      {
+        "id": "503-manager-unavailable",
         "status": "503",
-        "tabLabel": "503 · SKILL_SNAPSHOT_UNAVAILABLE",
+        "tabLabel": "503 · MANAGER_UNAVAILABLE",
         "label": "Service Unavailable",
-        "summary": "无法读取完整 Skill 快照；命令未接受。",
-        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN", "Retry-After": "3"},
+        "summary": "运行时管理器当前不可用。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "SKILL_SNAPSHOT_UNAVAILABLE", "resMsg": "当前 Skill 调用快照不可用。"},
-          "en-US": {"resCode": "SKILL_SNAPSHOT_UNAVAILABLE", "resMsg": "The current Skill invocation snapshot is unavailable."}
+          "zh-CN": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "运行时管理器当前不可用。"
+          },
+          "en-US": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "The runtime manager is currently unavailable."
+          }
         }
       },
       {
-        "id": "503-runtime-capacity",
+        "id": "503-runtime-capacity-exceeded",
         "status": "503",
         "tabLabel": "503 · RUNTIME_CAPACITY_EXCEEDED",
         "label": "Service Unavailable",
-        "summary": "Runtime 执行容量已满；命令未接受。",
-        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN", "Retry-After": "3"},
+        "summary": "Runtime 执行容量已满，请稍后重试。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "RUNTIME_CAPACITY_EXCEEDED", "resMsg": "Runtime 执行容量已满，请稍后重试。"},
-          "en-US": {"resCode": "RUNTIME_CAPACITY_EXCEEDED", "resMsg": "Runtime execution capacity is exhausted. Try again later."}
-        }
-      },
-      {
-        "id": "500-before-stream",
-        "status": "500",
-        "tabLabel": "500 · 流建立前",
-        "label": "Internal Server Error",
-        "summary": "命令未接受；没有写入用户 Entry、Skill 快照、command.started 或 running 状态。",
-        "headers": {"Content-Type": "application/json", "Content-Language": "zh-CN"},
-        "bodies": {
-          "zh-CN": {"resCode": "COMMAND_ACCEPTANCE_FAILED", "resMsg": "命令接收失败。"},
-          "en-US": {"resCode": "COMMAND_ACCEPTANCE_FAILED", "resMsg": "Command acceptance failed."}
-        }
-      },
-      {
-        "id": "200-stream-error",
-        "status": "200",
-        "tabLabel": "200 · 流内异常",
-        "label": "SSE already started",
-        "summary": "流建立后 Handler 或 Agent 执行失败；先持久化 command.failed，再发 stream.error 并关闭，不发 stream.end。",
-        "headers": {"Content-Type": "text/event-stream", "Cache-Control": "no-store", "Content-Language": "zh-CN"},
-        "bodies": {
-          "default": "id: 52\nevent: command.failed\ndata: {\"entryId\":\"entry_502\",\"entrySeq\":52,\"commandId\":\"command-550e8400e29b41d4a716446655440002\",\"name\":\"skill:pdf\",\"resCode\":\"COMMAND_EXECUTION_FAILED\",\"resMsg\":\"命令执行失败。\",\"createdAt\":\"2026-08-31T10:02:01Z\"}\n\nevent: stream.error\ndata: {\"resCode\":\"COMMAND_EXECUTION_FAILED\",\"resMsg\":\"命令执行失败。\"}\n"
+          "zh-CN": {
+            "resCode": "RUNTIME_CAPACITY_EXCEEDED",
+            "resMsg": "Runtime 执行容量已满，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "RUNTIME_CAPACITY_EXCEEDED",
+            "resMsg": "Runtime execution capacity is exhausted. Try again later."
+          }
         }
       }
     ]
   },
-  "review": {"questions": []}
+  "review": {
+    "questions": []
+  }
 }

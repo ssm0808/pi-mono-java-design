@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.6.5 |
-| 状态 | Session Events v2 第一个 POST 接口已确认；当前评审第二个 GET stream；HTTP 1.43.5 保留为迁移前 v1 基线 |
+| 文档版本 | 3.6.6 |
+| 状态 | Session Events v2 第一个 POST 接口已确认；当前评审第二个 GET stream；HTTP 1.44.1 保留已确认 Builtin JSON，Skill 由同事并行开发 |
 | 当前传输结论 | v2 使用独立 POST、Session live SSE 与固定快照历史；执行仍是内部状态，无 `executionId/runId` |
-| 设计仓分析基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
+| 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | v2 事件顺序补充核对 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；证据与原基线对比见 v2 设计 §4.1 |
@@ -20,6 +20,7 @@
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | DeepSeek Harness 对照基线 | `141eb6fef83422698aef7a981029e843e8161534` |
 | Codex Harness 对照基线 | `be33f80bc65159c094ecd06bf155afa3061ce23d` |
+| Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989`；PR #210 最终实现 `9d0d76f4a571b559dc77ae52736caebbcc8fad88` 已通过 `a8192e047f4061bd385297d3dc6c4358362d0d49` 合并 |
 | 更新日期 | 2026-09-04 |
 
 ## 1. 当前结论
@@ -56,7 +57,7 @@ Mate tool execute 时发送；该必填规则已确认，不再列为待选项�
 
 ### 1.1 现行 v1 基线（迁移完成前保留）
 
-HTTP 1.43.5 当前仍采用两跳 HTTP+SSE，而不是 WebSocket：
+HTTP 1.44.1 的普通消息仍采用两跳 HTTP+SSE；Runtime Builtin Command 返回普通 JSON：
 
 ```text
 Browser / Agent UI
@@ -67,9 +68,9 @@ Browser / Agent UI
 ```
 
 每次提交用户消息都会新建一个 HTTP 请求。该请求的响应在本次执行期间持续输出
-SSE；结构化 Skill/Compact Command 同样建立独立的请求范围 SSE。正常收到
+SSE；Runtime Command 不建立请求级 SSE，Skill 执行由其他同事并行开发。普通消息正常收到
 `stream.end`、流内错误或网络中断后连接结束。下一次用户消息、Command、Steer、
-FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。
+FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。公共 Command 协议待独立评审。
 
 以下段落只描述迁移前 v1，不再代表 v2 目标。v1 的 SSE 不是永久在线的 Session
 订阅，也不是单独的第二条事件接口。它是一次
@@ -153,9 +154,9 @@ mate-service 面向浏览器和业务客户端，负责：
 - 消费内部 SSE，过滤内部字段和错误，再投影为公共 SSE；
 - 保证 `sessionId`、内部凭据、Provider 配置和工具私有数据不泄露给浏览器。
 
-命令相关的公共路径、请求 VO、ResultBean、错误码和 SSE Event 投影见
-[mate-service 聊天命令 API](../../02-服务与接口/06-mate-service聊天命令API/README.md)。
-该接口不把 CampusClaw 的内部路径或内部 SSE 字节直接暴露给浏览器。
+[mate-service 聊天命令 API](../../02-服务与接口/06-mate-service聊天命令API/README.md)
+中的旧 SSE 提案已废止，仅保留历史依据。Runtime 的 Builtin JSON 决策不自动确认公共
+路径、VO、错误码或传输协议；公共命令需独立重审，不能直接暴露内部 Session 标识。
 
 普通消息已开始按单 operation 评审，用户确认路径为
 `POST /mate-service/v1/chats/{chatId}/events`。请求、认证、公共事件和错误建议见
@@ -173,7 +174,7 @@ CampusClaw 面向 mate-service Runtime client 和明确获授权的内部服务�
 - 内部 HTTP 鉴权、ResultBean、SSE 事件和错误国际化。
 
 CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` 定位 Session，
-并作为 `displayName`、资源版本、复制继承和 `session.name.changed` 的唯一权威。
+并作为当前 `displayName` 与资源版本的唯一权威；Name 不生成历史 Entry。
 
 ## 4. CampusClaw v1 已确认接口（迁移基线）
 
@@ -192,8 +193,8 @@ CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` �
 | 9 | `POST` | `/sessions/{sessionId}/steers` | `202` ResultBean | 向 running Session 的当前执行追加优先指导 |
 | 10 | `POST` | `/sessions/{sessionId}/follow-ups` | `202` ResultBean | 在 Agent 原本将停止时追加后续消息 |
 | 11 | `POST` | `/sessions/{sessionId}/abort` | `204` | 中止当前执行并清空尚未投递的控制消息 |
-| 12 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回 Builtin 与当前 Agent Skill 的动态命令清单 |
-| 13 | `POST` | `/sessions/{sessionId}/command` | `200 text/event-stream` | 执行结构化 Builtin 或 Skill Command |
+| 12 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回按名称字典序排列的七个 Builtin，不解析 Skill Source |
+| 13 | `POST` | `/sessions/{sessionId}/command` | `200` ResultBean JSON | 执行七个 Builtin，Handler 完成后返回 |
 
 本表第 4、5、11 项是迁移前 v1 行为；v2 将其重构为第 1 节的三个 Session Events
 operation。其他接口是否受影响按 operation 继续评审，不由资源模型 A 自动推断。
@@ -229,7 +230,8 @@ Session、Entry 和 SSE 恢复，不获得 `runId`，也不存在 GetRun 或 Run
 `POST /sessions/{sessionId}/events` 和 `POST /sessions/{sessionId}/command` 在上述共享 Header 之外必填
 `access-token`，示例值为 `opaque-access-token`。Claw 从请求读取
 `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 与 `access-token`，只在内存中保留到本次
-Agent 执行或命令处理结束；只有实际
+Agent 执行或命令处理结束；Compact 由本次 Active Holder 保留到压缩与排队续跑结束。
+只有实际
 `POST /mate-service/v1/runtime/tools/{toolId}/execute` 会原名发送已提供的值。
 工具发现、Model Manager、受管目录、配置加载和其他 HTTP 请求均不携带这些值；
 这些值不写日志、ResultBean、Prompt、Event 或持久化存储。
@@ -276,41 +278,39 @@ mate-service 不得字节透明转发内部流。它至少要保证：
 - 仅在公共投影已经完成后发送公共终态；
 - 背压、超时和代理缓冲配置适用于 `text/event-stream`。
 
-公共事件名和字段不与内部事件机械绑定。聊天命令 API 已确认由 mate-service 解析内部
-SSE、移除内部标识并重新投影；普通消息 Events 已确认公共路径并进入逐项评审，当前
+公共事件名和字段不与内部事件机械绑定。旧聊天命令 SSE 提案已经废止，新的公共
+Command 协议待独立评审；普通消息 Events 已确认公共路径并进入逐项评审，当前
 推荐方案与待决项见其独立评审页，其他公共交互仍需在各自契约中逐项确认。
 
-### 5.4 Slash Command
+### 5.4 Built-in Command
+
+本会话只负责七个 Builtin；Skill Command 由其他同事并行开发，不是延期或禁用。Builtin 来源视图、参数规则和验收不得提升为整个产品的 Skill 限制。共享 GET/POST 的最终命名、请求联合类型和清单合并需在 HTTP 发布前与 Skill 开发线对齐；本次不代替同事设计 Skill 执行细节。
 
 | 规则 | v1 结论 |
 |---|---|
-| `/` | 只在交互层使用 |
-| HTTP 请求 | 提交 `name + arguments + fileIds` |
-| 命令类型 | 七个 Builtin 和 `skill:<name>` |
-| 未开放 | Extension、Prompt |
-| 普通消息接口 | 不解析 Slash 文本 |
+| HTTP 请求 | 只提交 name、arguments；name 不含 /，省略或 null 参数由 Service 归一 |
+| 可发现范围 | compact、help、model、name、skills、status、thinking 七个 Builtin |
+| 本会话不实现 | Skill 执行（同事并行开发）；Extension、Prompt 执行；Builtin 附件 |
+| 响应 | 普通 ResultBean JSON，不建立请求级 SSE |
+| 普通消息接口 | 不解析 Slash 文本，现有 SSE 行为不变 |
 
-Skill 的 `<name>` 为 1～64 个字符，只使用小写字母、数字和连字符；连字符不能位于
-首尾或连续出现，名称必须与 `SKILL.md` 所在文件夹同名。Skill 参数和附件复用普通用户消息限制。
+一次请求只解析一个不可变 Catalog，列表与 Help 复用，按来源类型过滤而不调用
+SkillCommandSource，也不刷新 Agent。列表字段非 null、acceptsFiles=false；
+running 时 Help/Status 可用、Name 可查改、Model/Thinking 只可查、Compact 不可执行。
+Skills 查询最新完整绑定快照；没有快照返回 AGENT_NOT_AVAILABLE，完整空快照返回 []。
 
-命令清单按 Session、Agent 快照和执行状态生成，表示当前可以发现的命令及其可用性。
-暂时不可用的命令仍会显示。每条命令分别标明不填参数和填写参数时能否执行。
-
-| Session 运行中 | 行为 |
-|---|---|
-| Help、Status、Skills | 始终可用 |
-| Name | 可查看、可修改 |
-| Model、Thinking | 只能查看 |
-| Compact、Skill | 不可执行 |
-
-每次已接受调用都会持久化命令生命周期。Skill 和 Compact 不因 HTTP 断线自动中止。
+不生成 commandId、不持久化通用命令生命周期或 Name 边车。Name 只更新当前状态；
+Model/Thinking/Compact 复用既有领域 Entry，sourceEventSeq 指向本次最后一条 Entry，
+查询、同值更新与空历史压缩省略。Compact 接受后不因 HTTP 断线取消；
+成功或无变化即返回 JSON，不等待同一 Holder 中排队的 Steer/FollowUp，客户端不得自动重放。
 
 ![Command HTTP 边界](设计图/Command/command_http_flow.svg)
 
 [PlantUML 源码：`command_http_flow`](设计图/Command/diagram.puml#L1)
 
-模块、行为与持久化的唯一公共定义见
-[Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)。
+分层、行为与串行 PR 验收见
+[Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)、
+[内置命令](../../04-命令与技能/01-内置命令/README.md)。
 
 ## 6. Runtime 内部设计不变量
 
@@ -320,7 +320,7 @@ Skill 的 `<name>` 为 1～64 个字符，只使用小写字母、数字和连�
 - Session 粗粒度状态只有 `idle/running`；模型、工具或消息阶段通过实时事件表达。
 - `thinking` 是“是否启用深度思考”的 boolean，不是原始推理披露等级。
 - 持久化 Session Entry 使用 `id + parentId` 形成树；公共 GET Events 首版只返回当前分支。
-- Runtime 只接收有序 `fileIds`，不解析或下载文件正文；ID 按固定 `[File IDs]` 提示块传给模型。
+- Runtime POST Events 对附件只接收有序 `fileIds`，不解析或下载文件正文；ID 按固定 `[File IDs]` 提示块传给模型。
 - Model Manager 是模型 descriptor、可用性和凭据的最终权威；Mate 是远端工具绑定、授权
   与执行的最终权威；`AgentRuntimeManager` 发布的受管目录是 Session 使用的 Agent、Skill
   和直接 Child 身份快照。内存中不再规划独立的动态 `ToolCatalog` 或 Tool Manager 摘要缓存。
@@ -402,7 +402,7 @@ CampusClaw 不再提供 CLI、TUI、OneShot、RPC 或 ACP 产品入口。Slash v
 
 - 不可变 Definition、Handler、Composite Registry、Contributor 和 Admission Policy
   替换当前可变 Registry 与宽泛 `SlashCommandSession`；
-- Builtin 各自使用 Contributor/Handler；Skill 使用动态 Source 和共享 Handler；
+- Builtin 各自使用 Contributor/Handler；现有 Skill 发现定义不装配伪 Handler；同事并行实现执行定义，共享 HTTP 清单在发布前对齐；
 - 新增命令不修改中央 `switch`；Builtin 重名直接启动失败；
 - 清单命中后才调用 Command API；清单失败不降级；API 未知名称返回 `COMMAND_NOT_FOUND`；
 - `/name` 只调用 `SessionNamingService`，不经过 mate-service 名称副本；
@@ -442,7 +442,7 @@ RuntimeSessionStore 保存 Session 配置、当前分支 Entry 和内部执行�
 模式详见 [`Agent 数据库模式`](../../03-数据与存储/03-Agent数据库模式/README.md)。
 
 文件上传、扫描、正文、元数据和删除生命周期不属于 CampusClaw Runtime。
-CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它不调用 resolve/content、
+CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为固定文本块；它不调用 resolve/content、
 不直连 OBS，也不接受文件名、URL、MIME、Base64 或 Object Key。
 
 ## 8. 源码证据与目标差异
@@ -463,9 +463,9 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 | 当前 Java 差异 | 字段命名核对基线 `304eda06` 的四个 Runtime Controller 仍使用 `{agent_id}` / `{session_id}` 路径变量；请求/响应 VO 的 `@JsonProperty`、`@JsonSetter` 以及 `RuntimeEntryCodec` / `RuntimeEventProjector` 仍输出 snake_case。1.38 lowerCamelCase 是相对该实现的契约变更 |
 | 已实现 Java 行为 | AI 层 `AssistantMessageEvent` 存在 thinking start/delta/end；Runtime 对外 `RuntimeEventType` 无 thinking 类型，`RuntimeEventProjector` 与 `RuntimeEntryCodec` 会过滤原始思考内容 |
 | 当前 Java 差异 | CLI `AgentSession` 仍聚合 ToolCatalog、Skill 激活、reload 和委派；HTTP 仍以独立 resolver 与硬编码 Read 装配；AgentRuntimeManager 仍写旧文件名和 Skill 工具快照 |
-| 架构变更 | 两跳目标传输统一为 HTTP+SSE，删除连接首帧、Frame RPC、连接 generation、WebSocket close code 和 AsyncAPI |
+| 架构变更 | 消息两跳目标传输使用 HTTP+SSE，Runtime Command 使用普通 JSON，删除连接首帧、Frame RPC、连接 generation、WebSocket close code 和 AsyncAPI |
 | 架构变更 | CampusClaw 目标契约改为 `agent-` / `tool-` / `skill-` / `session-` 加 32 位十六进制 UUID；Session 创建成功时固定 `thinking=true`，实现需同步放宽 `t_sessions.agent_id` 并替换 Session ID 生成器 |
-| 当前 Java 差异 | `c1311f69` 的 `SlashCommandRegistry` 仍使用可变索引并解析整段 Slash 文本，`SlashCommandSession` 是宽泛可变门面；生产 Runtime 尚未注册命令 Controller，`t_sessions` 尚无 `display_name`，Mapper 尚无 sidecar 查询 |
+| 当前 Java 差异 | `c1311f69` 的 `SlashCommandRegistry` 仍使用可变索引并解析整段 Slash 文本，`SlashCommandSession` 是宽泛可变门面；生产 Runtime 尚未注册命令 Controller，`t_sessions` 尚无 `display_name`；新契约无需 sidecar 查询 |
 | 架构变更 | 十三个目标 operation 全部保留调用上下文 Header，但移除 Runtime 应用内的凭据组合与格式校验及对应 401；`X-HW-ID` 明确表示用户凭据 ID，不是公司、服务或应用标识 |
 | 架构变更 | `thinking=true` 时将内部 thinking 生命周期投影为公共 SSE，并持久化 completed 供 GET 恢复；GET 根据 Session 当前 thinking 状态过滤，状态变化使旧 page 失效 |
 | 架构变更 | CampusClaw HTTP 的 path/query/JSON/SSE 字段统一为 lowerCamelCase；Header 原名、事件类型值、错误码和 ID 值保持不变，不接受 snake_case 字段别名 |
@@ -473,8 +473,8 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 | 架构变更 | 受管目录统一身份文件、缓存优先 prepare 与显式原子 refresh；Skill 和 Child 通过目录名称索引解析，不保存远端工具列表 |
 | 架构变更 | Mate 发现改为 `ListMateTools({skillName?})` 稳定 JSON 与实时查询；Call 通过 Session 名称到 ID 缓存解析，miss 时 single-flight 自动刷新完整有效集合，实际执行不重试 |
 | 架构变更 | `Agent({agentName,task})` 只解析直接绑定 Child；公共 `AgentSessionFactory` 创建独立 Child Session 实例，父子使用相同类型和执行语义但隔离消息、工作区、工具与上下文 |
-| 架构变更 | HTTP-only Slash 模块使用不可变 Definition、Strategy Handler、Composite Registry、Contributor 和 Admission Policy；增加命令不修改中央分派；Skill 使用独立 `skill:` 命名空间 |
-| 架构变更 | `displayName`、资源版本、复制继承和 `session.name.changed` 由 CampusClaw Session 持有；命令与名称事件使用不改变 active leaf 的 sidecar Entry；Skill 每次调用内联保存完整快照 |
+| 架构变更 | HTTP-only Slash 模块使用不可变 Definition、Strategy Handler、Composite Registry、Contributor 和 Admission Policy；增加命令不修改中央分派；Skill 由其他同事并行开发；Builtin 来源过滤不是全局命名空间限制 |
+| 架构变更 | 当前 `displayName` 与资源版本由 CampusClaw Session 持有；不保存 Name Entry 或通用命令生命周期；只有 Model/Thinking/Compact 复用既有领域历史 |
 | 架构变更 | Assistant/Compaction Usage 持久化并累计 lifetimeUsage；模型、thinking、compaction 领域事件历史可见，工具 delta 与压缩 started/failed 保持瞬态 |
 | 架构变更 | refresh 只影响下一次空闲 Session 执行；模型懒校准事件先于 user.message，无有效 default 时不接受消息 |
 | 产品约束 | 浏览器命令接口只识别 `chatId`，CampusClaw 内部契约只识别 `sessionId`；ChatSessionResolver 维护稳定映射，公共接口不泄露 Runtime 标识 |
@@ -501,8 +501,9 @@ CampusClaw 只消费有序 `fileIds`，把它们编码为固定文本块；它�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 3.6.5 | 2026-09-04 | 同步 Session Events v2 0.2.0：第一个 POST 已整体确认，移除旧待选题；当前页切换到第二个 GET stream，保留独立已确认页面并开始流契约评审。 |
-| 3.6.4 | 2026-09-04 | 同步 Session Events v2 0.1.7：确认依赖顺序、短事务有序追加与 ListEvents 展示规则；时间戳不参与重排，内部序号仍不公开；补充源码核对，其他字段保持待评审。 |
+| 3.6.6 | 2026-09-04 | 合并并行文档修订，保留 Events v2 POST 已确认及 GET stream 评审状态，同时保留 HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发决定。 |
+| 3.6.5 | 2026-09-04 | 同步 Session Events v2 0.2.0：第一个 POST 已整体确认，移除旧待选题；当前页切换到第二个 GET stream，保留独立已确认页面并开始流契约评审。 并行修订：同步 HTTP 1.44.1：Skill Command 由其他同事并行开发，七个 Builtin 是本会话交付范围，不是全产品禁用规则。 |
+| 3.6.4 | 2026-09-04 | 同步 Session Events v2 0.1.7：确认依赖顺序、短事务有序追加与 ListEvents 展示规则；时间戳不参与重排，内部序号仍不公开；补充源码核对，其他字段保持待评审。 并行修订：同步 HTTP 1.44.0：七个 Builtin 使用普通 JSON，Skill 执行延期，取消 Name 边车与通用生命周期；合并设计主线 `332e7faba9f35b657b17013287507449a68359c3`，保留 Events v2 的 `access-token` 必填决定与独立评审，不推导公共 Command 协议。 |
 | 3.6.3 | 2026-09-04 | 同步 Session Events v2 0.1.6：三种用户事件统一携带 `access-token`，JWT/APPKEY 模式均必填；从待评审项中移除此项，其他字段继续评审。 |
 | 3.6.2 | 2026-09-04 | 同步 Session Events v2 0.1.5：公共事件身份统一使用 `eventId`，POST、live SSE 和权威历史不公开内部 `entryId/entrySeq`；其余 POST 字段继续评审。 |
 | 3.6.1 | 2026-09-03 | 同步 HTTP 1.43.5：十三个接口统一采用源码测试中的具体 Header 示例；明确 `X-HW-ID` 是用户凭据 ID；仅在 POST Events/Command 说明凭据的内存保留期限、Mate tool execute 发送范围和禁止落盘范围。 |
