@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}/events/stream",
     "summary": "持续接收 Session 的新事件，不触发执行",
-    "description": "当前评审第二个接口；第一个 POST /events 已确认。本接口只建立指定 Session 的实时订阅，不提交用户事件、不启动或取消执行，也不修改执行凭据。连接可以跨越多次执行与空闲状态，同一 Session 允许多个订阅者。以下为候选：注册订阅完成后先发送 : connected 注释；业务帧只使用 data: JSON，类型放在 type，不发送 SSE event: 或 id:。以与 Mate 同构的五类基础事件展示候选字段，但保留 Claw 的 assistant/tool/session 命名；配置、压缩和子 Agent 投影另行补齐，不视为已删除。收到 session.status.idle 不关闭连接。已确认的 eventId、无公开 entrySeq 及内部依赖顺序继续生效；新的帧格式、事件投影、GET access-token 和 user.* 是否推送仍待本轮确认。",
+    "description": "当前评审第二个接口；第一个 POST /events 已确认。本接口只建立指定 Session 的实时订阅，不提交用户事件、不启动或取消执行，也不修改执行凭据。已确认五个基础类型名：agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle；完整事件在流与历史中使用同名，不提供旧名称别名。本次只确认名称，不确认 phase、增量结构或整个 GET。以下仍为候选：同一 Session 允许多个跨执行与空闲状态的订阅；注册完成后先发送 : connected；业务帧只使用 data: JSON，不发送 SSE event: 或 id:；收到 session.status_idle 不关闭连接。配置、压缩和子 Agent 投影另行补齐，不视为已删除。eventId、无公开 entrySeq 及内部依赖顺序继续生效；帧格式、事件字段、GET access-token 和 user.* 是否推送仍待确认。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -84,7 +84,7 @@
           "Cache-Control": "no-store"
         },
         "bodies": {
-          "default": ": connected\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"assistant.message\",\"phase\":\"delta\",\"content\":\"结合巡检记录与告警信息，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"assistant.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:19.451Z\",\"content\":\"结合巡检记录与告警信息，建议先核查上联链路，再安排变更窗口处理。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"session.status.idle\",\"createdAt\":\"2026-09-04T08:30:20.000Z\",\"reason\":\"done\"}\n\n: ping\n\n"
+          "default": ": connected\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"结合巡检记录与告警信息，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:19.451Z\",\"content\":\"结合巡检记录与告警信息，建议先核查上联链路，再安排变更窗口处理。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:20.000Z\",\"reason\":\"done\"}\n\n: ping\n\n"
         }
       },
       {
@@ -92,13 +92,13 @@
         "status": "200",
         "tabLabel": "200 · 工具确认",
         "label": "OK",
-        "summary": "候选基础事件投影。thinking 只在启用且存在可公开摘要时发送，不直接转发原始推理。confirming 与 tool.result 之间由另一次 POST 提交拒绝确认，SSE 本身不接收确认；本候选不重复推送 user.*。toolCallId 关联调用、确认和结果，各事件仍有独立 eventId。",
+        "summary": "候选基础事件投影。thinking 只在启用且存在可公开摘要时发送，不直接转发原始推理。confirming 与 agent.tool_result 之间由另一次 POST 提交拒绝确认，SSE 本身不接收确认；本候选不重复推送 user.*。toolCallId 关联调用、确认和结果，各事件仍有独立 eventId。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store"
         },
         "bodies": {
-          "default": ": connected\n\ndata: {\"eventId\":\"5e9a24c8d7134f6baa10c9827d45e301\",\"type\":\"assistant.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:16.000Z\",\"content\":\"已确认隔离操作会修改生产配置，需要用户确认。\"}\n\ndata: {\"eventId\":\"6c7d8e9f01234567a89bcdef01234567\",\"type\":\"tool.call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-04T08:30:16.100Z\",\"toolName\":\"isolate_campus_port\",\"arguments\":{\"deviceName\":\"SW-DC-01\",\"portName\":\"GigabitEthernet0/0/24\"},\"requiresConfirmation\":true}\n\ndata: {\"eventId\":\"7d8e9f0123456789abcdef0123456789\",\"type\":\"session.status.idle\",\"createdAt\":\"2026-09-04T08:30:16.200Z\",\"reason\":\"confirming\"}\n\n: ping\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"tool.result\",\"createdAt\":\"2026-09-04T08:30:16.600Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":\"用户已拒绝，本次工具调用未执行。\",\"isError\":true,\"errorCode\":\"TOOL_CALL_DENIED\"}\n\ndata: {\"eventId\":\"9f0123456789abcdef0123456789abcd\",\"type\":\"assistant.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:17.000Z\",\"content\":\"已取消配置变更，接下来可先核查告警时间线与上联链路。\"}\n\ndata: {\"eventId\":\"a0123456789abcdef0123456789abcde\",\"type\":\"session.status.idle\",\"createdAt\":\"2026-09-04T08:30:17.100Z\",\"reason\":\"done\"}\n\n: ping\n\n"
+          "default": ": connected\n\ndata: {\"eventId\":\"5e9a24c8d7134f6baa10c9827d45e301\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:16.000Z\",\"content\":\"已确认隔离操作会修改生产配置，需要用户确认。\"}\n\ndata: {\"eventId\":\"6c7d8e9f01234567a89bcdef01234567\",\"type\":\"agent.tool_call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-04T08:30:16.100Z\",\"toolName\":\"isolate_campus_port\",\"arguments\":{\"deviceName\":\"SW-DC-01\",\"portName\":\"GigabitEthernet0/0/24\"},\"requiresConfirmation\":true}\n\ndata: {\"eventId\":\"7d8e9f0123456789abcdef0123456789\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:16.200Z\",\"reason\":\"confirming\"}\n\n: ping\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-04T08:30:16.600Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":\"用户已拒绝，本次工具调用未执行。\",\"isError\":true,\"errorCode\":\"TOOL_CALL_DENIED\"}\n\ndata: {\"eventId\":\"9f0123456789abcdef0123456789abcd\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:17.000Z\",\"content\":\"已取消配置变更，接下来可先核查告警时间线与上联链路。\"}\n\ndata: {\"eventId\":\"a0123456789abcdef0123456789abcde\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:17.100Z\",\"reason\":\"done\"}\n\n: ping\n\n"
         }
       },
       {
@@ -229,8 +229,9 @@
     ]
   },
   "review": {
-    "status": "POST 接口已确认 · 第二个接口评审中 · eventId 与顺序规则继续生效",
-    "notice": "本轮只评审 GET /events/stream，不重新确认 POST。候选保持 Session 长连接、只收新事件、无回放，断线不取消执行。完整事件必须先提交再发布，并保持内部顺序；每条连接独立有界排队，delta 可丢弃，完整事件无法入队时关闭该连接并查历史，不能阻塞模型或其他订阅者。不按 createdAt 重排，也不能用最后一条 createdAt 作为可靠恢复位置。以下推荐项仅用于形成当前示例，不代表用户已确认。",
+    "status": "POST 接口已确认 · 第二个接口评审中 · 五个基础类型名已确认 · eventId 与顺序规则继续生效",
+    "confirmedEventTypes": ["agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "session.status_idle"],
+    "notice": "本轮只评审 GET /events/stream，不重新确认 POST。五个基础类型名已确认：agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle；这是目标命名，不代表 Java 已实现，也不确认 phase 或增量结构。候选保持 Session 长连接、只收新事件、无回放，断线不取消执行。完整事件必须先提交再发布，并保持内部顺序；每条连接独立有界排队，delta 可丢弃，完整事件无法入队时关闭该连接并查历史，不能阻塞模型或其他订阅者。不按 createdAt 重排，也不能用最后一条 createdAt 作为可靠恢复位置。以下待选项只讨论未确认内容，不再开放旧名称。",
     "questions": [
       {
         "id": "S1-frame-format",
@@ -251,18 +252,18 @@
       },
       {
         "id": "S2-event-projection",
-        "legend": "S2 · 事件结构采用哪种方案？",
+        "legend": "S2 · 类型名已确认，增量怎样组织？",
         "options": [
           {
             "label": "A · 与 Mate 同构（推荐）",
-            "value": "A-mate-shaped-claw-names",
-            "description": "正文与思考用 phase=delta/completed；工具调用、工具结果、Session idle 独立事件。保留 Claw 命名，扩展事件另行评审。",
+            "value": "A-type-and-phase",
+            "description": "保留已确认的五个名称；正文与思考用 phase=delta/completed 区分新增片段和完整内容，工具及 idle 为完整事件。字段仍待确认。",
             "selected": true
           },
           {
-            "label": "B · 保留 Claw 细分类型",
-            "value": "B-existing-claw-lifecycle",
-            "description": "继续区分 started/delta/completed 与 tool.execution.*，由 Mate 完成更多事件聚合和字段转换。"
+            "label": "B · 独立预览事件",
+            "value": "B-separate-preview-events",
+            "description": "完整事件保留已确认的五个名称；另用 event_start/event_delta 引用目标 eventId，不在完整事件中使用 phase；预览字段与 thinking 内容策略另行确认。"
           }
         ]
       },

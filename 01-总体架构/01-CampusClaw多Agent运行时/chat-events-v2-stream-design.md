@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.0 |
-| 状态 | 第二个接口评审中；候选方案，target-only |
+| 文档版本 | 0.1.1 |
+| 状态 | 第二个接口评审中；五个基础类型名已确认，其余仍为候选，target-only |
 | 前置决策 | POST 已确认；`eventId`、不公开内部序号、Session 因果顺序继续生效 |
-| 设计仓变更前基线 | `463d55c` |
+| 设计仓本次变更前基线 | `8019b88`；首次候选基线为 `463d55c` |
 | 实现核对 | `pi-mono-java@a8192e047f4061bd385297d3dc6c4358362d0d49` |
 | 原实现基线 | `c9d858bc8261bf07f5585f545b53495bf2226a56`；本文五个源码文件在两提交间无变化 |
 | Mate 契约对照 | 通用对话 Events 1.4.4，已确认目标契约，不是实现证据 |
@@ -27,7 +27,7 @@ Accept: text/event-stream
 
 本轮候选以 [operation JSON](接口契约-v2/操作/02-stream-session-events.json) 和
 [当前评审页](chat-events-v2-review.html) 为精确示例。第一接口的已确认状态不再开放选择；
-本轮新字段不因渲染、校验或提交而视为确认。
+本轮只确认 §4 的五个基础类型名；其他字段不因渲染、校验或提交而视为确认。
 
 ## 2. 请求与凭据（候选）
 
@@ -58,9 +58,9 @@ Cache-Control: no-store
 
 : connected
 
-data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"assistant.message","phase":"delta","content":"正在整理告警信息，"}
+data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"delta","content":"正在整理告警信息，"}
 
-data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"assistant.message","phase":"completed","createdAt":"2026-09-04T08:30:19.451Z","content":"已整理告警信息，建议先核查上联链路。"}
+data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"completed","createdAt":"2026-09-04T08:30:19.451Z","content":"已整理告警信息，建议先核查上联链路。"}
 
 : ping
 ```
@@ -70,18 +70,24 @@ data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"assistant.message","
 首次连接不补发历史、不合成 idle；候选无事件时每 15 秒保活一次，间隔可由服务端配置，
 部署时与代理超时协调。Heartbeat 不是事件，不持久化，不带 ID 或时间。
 
-## 4. 基础事件候选与 Mate 映射
+## 4. 已确认类型名与候选字段
 
-推荐沿用 Mate 的“完整事件 + 文本增量”结构，但不把 Claw Session 改名为 Chat。
-本表是 S2 的候选基础集合，不代表 Runtime 内部事件只剩五种。
+2026-09-04 用户明确指定下表五个基础类型名。名称属于已确认的目标 API 产品约束：
+Agent 消息、思考、工具调用与结果统一使用 `agent.*`，前四项与 Mate 同名；状态保留
+Claw 的 Session 资源身份，使用 `session.status_idle`。完整事件在流和历史中使用
+同名，不提供旧候选名称的兼容别名；这不改动 v1 迁移基线或 Runtime 内部枚举。
 
-| Claw 候选 `type` | Mate 已确认 `type` | 形状与历史 |
+本次没有确认 `phase`、增量结构、thinking 内容或整个 GET。下表第三列仍是沿用 Mate
+“完整事件 + 文本增量”的候选；S2 只继续讨论结构，不再开放名称选择。本表不是完整的
+Runtime 事件清单，不能据此删除其他事件能力。
+
+| Claw 已确认 `type` | Mate 已确认 `type` | 候选形状与历史 |
 |---|---|---|
-| `assistant.message` | `agent.message` | `eventId/type/phase/content`；只有 `completed` 带 `createdAt` 并进入权威历史 |
-| `assistant.thinking` | `agent.thinking` | 同上；只在 thinking 启用且有可公开摘要时输出，不转发原始推理 |
-| `tool.call` | `agent.tool_call` | `eventId/type/createdAt/toolCallId/toolName/arguments/requiresConfirmation`；完整事件 |
-| `tool.result` | `agent.tool_result` | `eventId/type/createdAt/toolCallId/content/isError`；失败时可有稳定 `errorCode`；完整事件 |
-| `session.status.idle` | `chat.status_idle` | `eventId/type/createdAt/reason`；完整事件，reason 候选为 `done/terminated/failed/confirming` |
+| `agent.message` | `agent.message` | `eventId/type/phase/content`；只有 `completed` 带 `createdAt` 并进入权威历史 |
+| `agent.thinking` | `agent.thinking` | 同上；只在 thinking 启用且有可公开摘要时输出，不转发原始推理 |
+| `agent.tool_call` | `agent.tool_call` | `eventId/type/createdAt/toolCallId/toolName/arguments/requiresConfirmation`；完整事件 |
+| `agent.tool_result` | `agent.tool_result` | `eventId/type/createdAt/toolCallId/content/isError`；失败时可有稳定 `errorCode`；完整事件 |
+| `session.status_idle` | `chat.status_idle` | `eventId/type/createdAt/reason`；完整事件，reason 候选为 `done/terminated/failed/confirming` |
 
 字段候选约束：
 
@@ -110,7 +116,9 @@ data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"assistant.message","
 
 `session.model.changed`、`session.thinking.changed`、压缩生命周期、工具进度以及
 Child Agent 投影尚未在 v2 完整评审。当前 v1 保留，不能因本轮只展示基础示例而删除
-这些能力。S2 若保留 Claw 细分类型，需要同步补齐与 Mate 的聚合映射，不只改示例名称。
+这些能力。另一种待选结构是以独立 `event_start/event_delta` 引用目标 `eventId`，
+完整事件仍使用上表名称；选择它时再评审预览字段及 thinking 内容策略，不自动照搬
+Claude 的字段、ID 或进度信号语义。当前示例仍展示尚未确认的 `type + phase` 方案。
 
 ## 5. 顺序、故障与恢复
 
@@ -127,7 +135,7 @@ Child Agent 投影尚未在 v2 完整评审。当前 v1 保留，不能因本轮
 |---|---|
 | Header 前 | 使用 operation 中的 400/404/500/503 JSON 错误，只有 `resCode/resMsg` |
 | Header 后 | 不更改 HTTP 状态、不发送 ResultBean 或 `stream.error`；关闭当前连接并让客户端历史对账 |
-| Agent 执行失败 | 若能够提交完整状态记录，发出 `session.status.idle(reason=failed)`；它不是订阅传输错误 |
+| Agent 执行失败 | 若能够提交完整状态记录，发出 `session.status_idle(reason=failed)`；它不是订阅传输错误 |
 | Session 删除 / 服务关闭 | 清理对应订阅；不把连接结束伪装成执行成功，不额外取消其他执行 |
 
 建立订阅与 Session 删除必须协调，避免“先验证存在、后删除、最后注册孤儿订阅”。
@@ -157,10 +165,15 @@ Mate 1.4.4 的“最后 createdAt 作为增量下界”：Claw 已确认时间�
 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventType.java` · enum | 使用 started/delta/completed、tool.execution、配置/压缩和 stream 控制类型；S2 基础投影尚未实现 |
 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeSseDispatcher.java` · `execute/close` | 每连接独立虚拟线程写出可复用；不证明已有跨执行订阅或持久化重放 |
 
+本次命名核对仍读取上述固定 `a8192e0` 提交的 `RuntimeEventType`，不漂移到实现仓 HEAD。
+其中原 `ASSISTANT_MESSAGE_*`、`ASSISTANT_THINKING_*`、`TOOL_EXECUTION_*`、
+`TOOL_RESULT`、`SESSION_STATUS_IDLE` 不等于已确认的 v2 类型；后续需在 API 投影层
+按业务语义转换，不能把枚举常量原样输出。此次只改设计，没有修改实现代码。
+
 主公共基线 [Claude Managed Agents 事件流文档](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
 在本次核对仍标为 Beta，公开了 best-effort preview、完整事件覆盖、重连后查询历史。
-不据此推断服务端表、序号分配或内部调度。本候选 `phase`、Claw 类型名、GET Header、
-15 秒保活都是本项目方案，不是 Claude 原样契约；Claude thinking preview 当前只表示
+不据此推断服务端表、序号分配或内部调度。已确认的五个 Claw 类型名及候选 `phase`、
+GET Header、15 秒保活都是本项目决定或方案，不是 Claude 原样契约；Claude thinking preview 当前只表示
 开始、不发送内容，也不能作为本项目“公开摘要已实现”的证据。
 
 Mate 对照是[本地已确认目标设计](../../02-服务与接口/07-mate-service通用对话API/README.md)
@@ -169,9 +182,9 @@ Mate 对照是[本地已确认目标设计](../../02-服务与接口/07-mate-ser
 
 ## 7. 待确认与实施验收
 
-当前四项：S1 data-only 或具名 SSE；S2 Mate 同构基础形状或 Claw 细分生命周期；
-S3 是否推送 `user.*`；S4 GET 是否要求 `access-token`。其余生命周期细节同属候选，
-本轮只是开始第二个接口，尚未确认整个 GET。
+五个基础类型名已确认，不再列为待选。当前四项：S1 data-only 或具名 SSE；
+S2 `type + phase` 或独立预览事件；S3 是否推送 `user.*`；S4 GET 是否要求
+`access-token`。具体字段与其余生命周期细节同属候选，尚未确认整个 GET。
 
 确认后实施切片：订阅 Service 与注册/关闭骨架 → Session Hub 与每连接有界队列 →
 类型投影与不可变响应 VO → 有序发布及历史对账。Controller 不返回内部 DTO，不直连 Mapper。
@@ -186,4 +199,5 @@ S3 是否推送 `user.*`；S4 GET 是否要求 `access-token`。其余生命周�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.1 | 2026-09-04 | 按用户指定确认五个基础类型名，同步全部候选示例及流/历史同名约束；S2 仅继续评审增量结构，不保留会重新开放旧名称的选项；phase、字段和 GET 整体仍未确认。 |
 | 0.1.0 | 2026-09-04 | 第一个 POST 确认后启动 GET stream；提供 Header、帧、基础事件、故障与恢复候选，保留四项待确认，记录当前实现差距与 Mate 映射。 |

@@ -293,6 +293,8 @@ title CampusClaw Session Live Stream - Candidate Lifecycle
 ' The cited files are unchanged from c9d858bc8261bf07f5585f545b53495bf2226a56.
 ' Target-only architecture change: register Session-scoped subscriptions independently
 ' of execution; data-only frames and connected comments are unconfirmed proposals.
+' Confirmed product constraint (2026-09-04): idle uses session.status_idle.
+' This naming decision does not approve the candidate frame or preview structure.
 ' Design reason: distinguish subscription readiness, durable commit order, preview,
 ' and transport loss without cancelling or replaying an accepted user request.
 
@@ -346,7 +348,7 @@ loop new events across multiple executions
 end
 
 group Idle is not end of subscription
-  Publisher -> Hub : committed session.status.idle
+  Publisher -> Hub : committed session.status_idle
   Hub -> Connection : enqueue idle event in order
   Connection --> Client : data: idle event
   Connection --> Client : : ping while waiting for new events

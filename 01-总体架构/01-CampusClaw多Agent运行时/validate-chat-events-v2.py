@@ -15,7 +15,8 @@ COMMON_PATH = ROOT / "接口契约-v2" / "common.json"
 MODEL_PATH = ROOT / "接口契约-v2" / "操作" / "01-submit-session-event.json"
 STREAM_PATH = ROOT / "接口契约-v2" / "操作" / "02-stream-session-events.json"
 USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
-STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", "tool.result", "session.status.idle"}
+STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "session.status_idle"}
+RETIRED_STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", "tool.result", "session.status.idle"}
 
 
 def require(condition: bool, message: str) -> None:
@@ -86,23 +87,30 @@ def validate_event_ordering_rule(review: dict) -> None:
 
 def validate_stream_frame(event: dict) -> None:
     validate_public_payload(event)
-    require(event.get("type") in STREAM_TYPES, "unexpected candidate stream event type")
+    require(event.get("type") in STREAM_TYPES, "stream type must use a confirmed basic name")
     require(isinstance(event.get("eventId"), str) and bool(event["eventId"]), "stream eventId is required")
-    if event["type"] in {"assistant.message", "assistant.thinking"}:
+    if event["type"] in {"agent.message", "agent.thinking"}:
         require(event.get("phase") in {"delta", "completed"}, "text event phase is required")
         require(isinstance(event.get("content"), str), "text content must be a string")
     if event.get("phase") == "delta":
         require("createdAt" not in event and bool(event["content"]), "delta cannot be durable or empty")
     else:
         require(isinstance(event.get("createdAt"), str), "complete event must include createdAt")
-    if event["type"] in {"tool.call", "tool.result"}:
+    if event["type"] in {"agent.tool_call", "agent.tool_result"}:
         require(bool(event.get("toolCallId")), "toolCallId is required independently of eventId")
-    if event["type"] == "session.status.idle":
+    if event["type"] == "session.status_idle":
         require(event.get("reason") in {"done", "terminated", "failed", "confirming"}, "invalid idle reason")
 
 
 def validate_stream_model(model: dict) -> None:
     operation = model["operation"]
+    review = model["review"]
+    require(set(review.get("confirmedEventTypes", [])) == STREAM_TYPES,
+            "the five confirmed stream type names must remain recorded")
+    require("五个基础类型名已确认" in review["status"], "confirmed names must be visible in review status")
+    serialized = json.dumps(model, ensure_ascii=False)
+    require(not any(name in serialized for name in RETIRED_STREAM_TYPES),
+            "stream examples and review options must not reopen retired type names")
     require(operation["method"] == "GET", "second operation must be GET")
     require(operation["path"] == "/sessions/{sessionId}/events/stream", "unexpected stream path")
     body = operation["requestBody"]
@@ -130,14 +138,32 @@ def validate_stream_model(model: dict) -> None:
                 if event.get("phase") != "delta":
                     completed.add(event["eventId"])
                 all_types.add(event["type"])
-    require(all_types == STREAM_TYPES, "stream examples must cover the five candidate basic types")
+    require(all_types == STREAM_TYPES, "stream examples must cover the five confirmed basic type names")
     questions = model["review"]["questions"]
     require([q["id"] for q in questions] == ["S1-frame-format", "S2-event-projection", "S3-user-events", "S4-read-access-token"],
             "only second-operation questions may be open")
     require("第二个接口评审中" in model["review"]["status"], "stream proposal must not be marked confirmed")
+    require({option["value"] for option in questions[1]["options"]} ==
+            {"A-type-and-phase", "B-separate-preview-events"},
+            "S2 must discuss pending structure without reopening confirmed type names")
     for question in questions:
         require(sum(bool(option.get("selected")) for option in question["options"]) == 1,
                 f"{question['id']} must have exactly one recommended selection")
+
+
+def validate_retired_type_regressions() -> None:
+    for name in RETIRED_STREAM_TYPES:
+        event = {
+            "eventId": "d5c19f7c4b1642e6806aeb860752d99b", "type": name,
+            "phase": "completed", "content": "已完成告警分析。",
+            "createdAt": "2026-09-04T08:30:19.451Z",
+            "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k", "reason": "done",
+        }
+        try:
+            validate_stream_frame(event)
+        except ValueError:
+            continue
+        raise ValueError(f"retired stream type was accepted: {name}")
 
 
 def validate_review_pages() -> None:
@@ -181,9 +207,12 @@ def main() -> int:
         for example in examples:
             validate_public_payload(example["value"])
         validate_success_events(operation)
+        require(not any(name in json.dumps(model, ensure_ascii=False) for name in RETIRED_STREAM_TYPES),
+                "confirmed POST cross-references must use the current stream type names")
         validate_access_token_rule(operation)
         validate_event_ordering_rule(review)
         validate_stream_model(stream_model)
+        validate_retired_type_regressions()
         require(common["reviewState"] == {
             "currentOperation": "streamSessionEvents", "confirmedOperations": ["submitSessionEvent"]
         }, "review must advance from confirmed POST to GET stream")

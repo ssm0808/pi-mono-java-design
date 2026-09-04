@@ -154,7 +154,7 @@
         "status": "200",
         "tabLabel": "200 · user.interrupt",
         "label": "OK",
-        "summary": "中断事件已经持久化并被接受；调用方继续观察 session.status.idle(reason=terminated)，不能把 200 当作执行已退出。",
+        "summary": "中断事件已经持久化并被接受；调用方继续观察 session.status_idle(reason=terminated)，不能把 200 当作执行已退出。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
