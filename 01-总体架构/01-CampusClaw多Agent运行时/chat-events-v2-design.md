@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.5 |
-| 状态 | 资源模型 A、POST 三种用户事件范围、`eventId` 身份、Header 示例与处理说明已确认；其余字段评审中 |
+| 文档版本 | 0.1.6 |
+| 状态 | 资源模型 A、POST 三种用户事件范围、`eventId` 身份、`access-token` 必填规则、Header 示例与处理说明已确认；其余字段评审中 |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
@@ -18,7 +18,7 @@ CampusClaw 采用 Session Events 三接口，内部执行不成为公共资源�
 
 | Method | Path | 职责 | 当前状态 |
 |---|---|---|---|
-| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 事件范围、`eventId` 身份与 Header 说明已确认，其余字段评审中 |
+| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 每次接受并持久化一条三种联合类型之一的用户事件 | 事件范围、`eventId`、`access-token` 必填与 Header 说明已确认，其余字段评审中 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events/stream` | 订阅跨多次内部执行的 Session live SSE | 只确认职责，字段未开始评审 |
 | `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 读取固定快照的权威历史 | 只确认职责，字段未开始评审 |
 
@@ -69,25 +69,28 @@ JWT、APPKEY 和 access-token 分别使用当前实现测试中的 `Bearer opaqu
 `opaque-appkey` 和 `opaque-access-token`。这些是可直接阅读的非生产测试字面值，不是
 生产凭据，也不为 Token 增加格式约束。
 
-上述两组 Header 示例值及凭据处理说明已经确认。该确认只冻结示例和说明，不表示
-`access-token` 对三种用户事件是否必填已经确认；必填策略仍由下面的 Q1 决定。
+上述两组 Header 示例值及凭据处理说明已经确认。本轮进一步确认：`user.message`、
+`user.interrupt`、`user.tool_confirmation` 均必须携带 `access-token`，JWT 与 APPKEY
+模式使用同一必填规则。此项属于目标 API 的产品约束，理由是调用方统一组装请求头，
+不按事件类型分支；代价是中断请求本身不调用工具也需要携带令牌。携带不代表使用，
+Claw 仍只在实际调用 Mate tool execute 时发送，不新增凭据持久化或发送范围。
+Q1 已确认并移出评审表单，剩余问题继续保留 Q2、Q3、Q4 标识。
 
 POST 成功响应中的事件身份也已确认使用 `eventId`，不返回 `entryId` 或 `entrySeq`。
 这一决定适用于三种用户事件，并作为后续 live SSE 与权威历史的公共身份约束；Q3 只
 继续评审成功响应是返回完整用户事件，还是只返回带 `eventId` 的最窄回执。
 
-完整候选字段、请求示例、成功与错误响应及四个选择题见
+完整候选字段、请求示例、成功与错误响应及三个待确认问题见
 [`chat-events-v2-review.html`](chat-events-v2-review.html)。可编辑源是
 [`接口契约-v2/common.json`](接口契约-v2/common.json) 与
 [`01-submit-session-event.json`](接口契约-v2/操作/01-submit-session-event.json)。
 
 当前推荐方案如下，但尚未确认：
 
-1. `access-token` 对三种用户事件均为必填，但 Claw 只在实际 Mate tool execute 使用；
-2. 请求体使用 `event` 包装和有序 `content[]`，与 mate 请求结构同构；
-3. `200 ResultBean` 返回完整用户事件，包含 `eventId`、`createdAt` 及规范化业务字段，
+1. Q2：请求体使用 `event` 包装和有序 `content[]`，与 mate 请求结构同构；
+2. Q3：`200 ResultBean` 返回完整用户事件，包含 `eventId`、`createdAt` 及规范化业务字段，
    不返回 `entryId` 或 `entrySeq`；
-4. 不引入 `Idempotency-Key`。响应丢失时通过权威历史对账，不盲目重放 POST。
+3. Q4：不引入 `Idempotency-Key`。响应丢失时通过权威历史对账，不盲目重放 POST。
 
 同构只减少 mate 到 Claw 的请求转换，不改变所有权。Claw v2 使用 `eventId` 作为 HTTP
 事件身份；数据库内部 Entry 标识和序号不进入公共契约。mate 的公共 `eventId` 仍由 mate
@@ -132,6 +135,7 @@ live Hub 不重放、不承担恢复；任何 SSE gap、订阅溢出或 POST 响
 | 目标架构 | 本文三接口及目标图 | 提交、live 与历史解耦；支持跨执行、多订阅者的 Session live Hub |
 | 产品约束 | 本文资源模型 | 无公共 Run/Execution；mate 公共边界只暴露 `chatId` 和公共事件身份 |
 | 产品约束 | `X-HW-ID` | 标识当前请求对应的用户凭据；不是公司、服务或应用调用方标识 |
+| 产品约束（target-only） | POST `access-token` | 三种用户事件在 JWT/APPKEY 模式下均必须携带，统一调用方请求头组装；不把三事件必填表述为现有 Java 已支持的行为 |
 | 安全加固 | POST 凭据处理 | 凭据从请求读入后只在内存中保留到本次 Agent 执行结束，只在必要的实际 Mate tool execute 使用，不进入持久化、日志、SSE 或历史 |
 
 pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime 内核行为参考；
@@ -172,12 +176,14 @@ interrupt 接受后延迟退出、错误 Tool 确认、服务重启后仅靠历�
 | 2026-09-03 | POST 事件身份 | 已确认成功响应使用 `eventId`，不公开 `entryId` 或 `entrySeq`；内部 Entry 标识和序号可继续用于持久化与排序，Q3 只继续评审响应宽度 |
 | 2026-09-03 | `X-HW-ID` 语义 | 已确认为用户凭据 ID；不是公司、服务或应用调用方标识 |
 | 2026-09-03 | Header 示例与处理说明 | 已确认使用 `credential-jwt`、`credential-appkey`、`Bearer opaque-token`、`opaque-appkey`、`opaque-access-token`；凭据从请求读取，只在内存中保留到本次 Agent 执行结束，并仅随实际 Mate tool execute 发送。此项不确认 `access-token` 必填策略 |
-| 2026-09-03 | POST 字段 | 评审中；四个推荐项只是当前提案，不视为用户确认 |
+| 2026-09-04 | POST `access-token` 必填 | 已确认统一携带：三种用户事件在 JWT/APPKEY 模式下都必填；携带不代表使用，只随实际 Mate tool execute 发送，Q1 移出待选项 |
+| 2026-09-04 | POST 剩余字段 | Q2 请求结构、Q3 成功响应宽度、Q4 重试策略仍在评审；推荐项不视为用户确认 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.6 | 2026-09-04 | 确认三种用户事件统一携带 `access-token`，两种 Header 模式均必填；保留示例值、使用范围和生命周期，移除 Q1 待选项并增加回归校验。 |
 | 0.1.5 | 2026-09-04 | 按用户修正冻结 v2 公共事件身份：三种 POST 成功响应统一使用 `eventId`，删除 `entryId/entrySeq`；内部 Entry 序号不穿透 HTTP，Q3 收窄为完整事件与最窄回执的响应宽度评审；增加对应校验。 |
 | 0.1.4 | 2026-09-03 | 冻结用户认可的 Header 具体非生产示例值与凭据处理说明；明确该确认不包含 `access-token` 必填策略。 |
 | 0.1.3 | 2026-09-03 | 将凭据处理改写为“请求读取—内存保留到执行结束—仅 Tool execute 发送”的具体过程；全部凭据 Header 改用当前源码测试中的具体非生产示例值。 |

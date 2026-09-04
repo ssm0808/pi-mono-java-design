@@ -50,6 +50,24 @@ def validate_success_events(operation: dict) -> None:
     require(event_types == USER_EVENT_TYPES, "v2 success examples must cover all three user event types")
 
 
+def validate_access_token_rule(operation: dict) -> None:
+    modes = operation["requestHeaderExamples"]
+    require(
+        len(modes) == 2 and {mode["id"] for mode in modes} == {"jwt", "appkey"},
+        "v2 POST must retain both Header modes",
+    )
+    for mode in modes:
+        tokens = [header for header in mode["headers"] if header["name"] == "access-token"]
+        require(len(tokens) == 1, f"{mode['id']} must contain exactly one access-token Header")
+        token = tokens[0]
+        require(token.get("required") is True, f"{mode['id']} must require access-token")
+        require(token["value"] == "opaque-access-token", "confirmed access-token example must be preserved")
+        require(
+            "三种用户事件均必须携带" in token["description"],
+            f"{mode['id']} must state that all three user event types require access-token",
+        )
+
+
 def main() -> int:
     try:
         common = json.loads(COMMON_PATH.read_text(encoding="utf-8"))
@@ -68,6 +86,7 @@ def main() -> int:
         for example in examples:
             validate_public_payload(example["value"])
         validate_success_events(operation)
+        validate_access_token_rule(operation)
         header_sets = [
             ("common", common["requestHeaderExamples"]),
             ("submitSessionEvent", operation["requestHeaderExamples"]),
@@ -96,11 +115,16 @@ def main() -> int:
         )
         require("eventId 已确认" in review["status"], "review status must preserve the confirmed eventId decision")
         require(
-            "access-token 是否对三种事件都必填" in review["notice"],
-            "review notice must keep the access-token requiredness decision open",
+            "access-token 必填规则已确认" in review["status"]
+            and "三种用户事件均必须携带 access-token" in review["notice"],
+            "review must preserve the confirmed access-token requiredness decision",
         )
         questions = review["questions"]
-        require(len(questions) == 4, "the current review must ask exactly four questions")
+        require(
+            [question["id"] for question in questions]
+            == ["Q2-request-shape", "Q3-success-response", "Q4-retry-policy"],
+            "only Q2, Q3 and Q4 remain open; the confirmed Q1 must not reappear",
+        )
         for question in questions:
             selected = [option for option in question["options"] if option.get("selected")]
             require(len(selected) == 1, f'{question["id"]} must have one recommended selection')

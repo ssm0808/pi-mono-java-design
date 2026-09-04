@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "持久化一个用户事件并返回接受结果",
-    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。成功响应中的事件身份已确认为 eventId，不公开 entryId 或 entrySeq；内部持久化仍可使用 Entry 标识和序号。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围、事件身份、Header 示例值和凭据处理说明已经确认，其余字段仍是本轮候选方案。",
+    "description": "本接口是 Session Events v2 的写入入口。每次请求提交一条用户事件，明确支持 user.message、user.interrupt、user.tool_confirmation 三种联合类型；“一条”是请求批量边界，不是只支持 user.message。三种用户事件均必须携带 access-token，JWT 与 APPKEY 两种 Header 模式遵守同一规则；携带不代表使用，Claw 只在实际调用 Mate tool execute 时发送。X-HW-ID 已确认为用户凭据 ID，不是公司、服务或应用标识。本接口不返回 Agent 输出，也不创建或公开 executionId/runId。成功响应中的事件身份已确认为 eventId，不公开 entryId 或 entrySeq；内部持久化仍可使用 Entry 标识和序号。服务端在所属事务或 Session 锁内重新检查当前状态，再持久化用户事件并触发、终止或恢复内部执行。响应丢失不代表写入失败；当前提案不接受 Idempotency-Key，调用方应通过权威历史对账且不得盲目重放。三种事件范围、事件身份、access-token 必填规则、Header 示例值和凭据处理说明已经确认，其余字段仍是本轮候选方案。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -28,7 +28,7 @@
             "name": "access-token",
             "value": "opaque-access-token",
             "required": true,
-            "description": "Mate 工具访问令牌。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"
+            "description": "Mate 工具访问令牌，三种用户事件均必须携带。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"
           }
         ]
       },
@@ -53,7 +53,7 @@
             "name": "access-token",
             "value": "opaque-access-token",
             "required": true,
-            "description": "Mate 工具访问令牌。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"
+            "description": "Mate 工具访问令牌，三种用户事件均必须携带。Claw 从本请求读取，只在内存中保留到本次 Agent 执行结束；仅在实际调用 Mate tool execute 时发送，不写入 Session、事件或日志"
           }
         ]
       }
@@ -395,31 +395,9 @@
     ]
   },
   "review": {
-    "status": "事件范围与 eventId 已确认 · Header 示例与处理说明已确认 · 其余字段评审中",
-    "notice": "已确认三种用户事件范围；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。以下四项仍待确认，包括 access-token 是否对三种事件都必填；Q3 只继续评审完整事件与最窄回执的响应宽度，任何选项都必须遵守 eventId 且无 entrySeq。推荐项已预选，但不会自动视为确认。",
+    "status": "事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 其余字段评审中",
+    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。以下三项仍待确认：Q2 请求结构、Q3 成功响应宽度、Q4 重试策略。Q3 的任何选项都必须遵守 eventId 且无 entrySeq。推荐项已预选，但不会自动视为确认。",
     "questions": [
-      {
-        "id": "Q1-access-token",
-        "legend": "Q1 · access-token 对三种用户事件如何要求？",
-        "options": [
-          {
-            "label": "A · 三种事件都必填（推荐）",
-            "value": "A-required-for-all-user-events",
-            "description": "与 mate 入站上下文一致，联合 operation 的 Header 规则保持单一；Claw 仍只在实际 Tool execute 使用。",
-            "selected": true
-          },
-          {
-            "label": "B · 按事件类型条件必填",
-            "value": "B-required-by-event-type",
-            "description": "user.message 与 tool confirmation 必填，interrupt 可省略；语义更窄但校验和客户端分支更复杂。"
-          },
-          {
-            "label": "C · Claw 不接收 access-token",
-            "value": "C-not-forwarded-to-claw",
-            "description": "需要另行设计 Claw 在执行工具前重新取得凭据的机制，超出当前请求处理方式。"
-          }
-        ]
-      },
       {
         "id": "Q2-request-shape",
         "legend": "Q2 · 请求体采用哪种形状？",
