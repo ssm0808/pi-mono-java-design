@@ -22,6 +22,7 @@ CONFIRMED_CHOICES = {
     "M3-close-rule": "idle-closes-including-confirming",
     "M4-interrupt-delivery": "original-output-and-interrupt-receipt-shared-idle",
     "M5-interrupt-coordination": "database-durable-stop-and-instance-batch-polling",
+    "M6-message-admission": "session-single-message-atomic-idle-to-running",
     "S1-frame-format": "A-data-only",
     "S2-event-projection": "A-type-and-phase",
 }

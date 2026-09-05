@@ -33,7 +33,7 @@ def build_html(confirmed: bool = False) -> str:
 <title>Session Events v2 — 评审状态更新</title></head>
 <body><main><h1>原独立 POST JSON 方案已被合并方案替代</h1>
 <p>当前没有整体确认的 v2 接口。既有请求、Header、eventId、排序和类型决定继续有效；
-完整本次 user.* 首帧回执、对应 idle 关闭（含等待工具确认）、中断推送分工及数据库中断机制已确认；数据库控制细节、周期、故障与其他字段仍在评审。</p>
+完整本次 user.* 首帧回执、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制及单消息准入已确认；数据库控制细节、周期、故障与其他字段仍在评审。</p>
 <p><a href="chat-events-v2-review.html">打开当前 POST 合并接口评审</a></p>
 <p>旧方案可从 Git 历史恢复，不再作为现行接口展示。</p></main></body></html>
 '''

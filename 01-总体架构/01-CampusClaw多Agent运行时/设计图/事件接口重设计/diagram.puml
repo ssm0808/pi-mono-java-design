@@ -11,6 +11,9 @@ title CampusClaw Target POST Events and History
 ' the first business frame is the complete accepted user event, exactly once.
 ' Design reason: remove the gap between a write and an independent live subscription.
 ' Target-only: union input, response projection, causal ordering and fixed snapshot.
+' Source evidence: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
+' acceptUserEvent: row lock, idle recheck, message append and running update in one transaction.
+' Confirmed product constraint: one unfinished user.message per Session across instances.
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -33,7 +36,7 @@ API -> Binding : reserve bounded response capacity
 critical Session admission and target binding
   API -> Binding : bind this message, resume segment or interrupt target
   API -> Append : validate dependencies and accept user event
-  Append -> Store : short transaction: recheck, append; persist stop intent if interrupt
+  Append -> Store : short transaction: type-specific admission and append\nmessage: require idle, set running; interrupt: persist stop intent
   Store --> Append : committed user event
   Append --> API : accepted event
   API -> Binding : enqueue complete user receipt first
@@ -56,7 +59,7 @@ loop Output belonging to the bound request scope
 end
 group Confirmed idle closing and database interrupt handoff
   Execution -> Append : corresponding idle state
-  Append -> Store : commit authoritative terminal boundary
+  Append -> Store : commit corresponding boundary\nactual finish: set idle; confirmation wait: retain running
   Append -> Binding : publish matching session.status_idle
   Binding -> Writer : enqueue idle, then complete this response
   Writer --> Mate : data: idle; response ends
@@ -77,6 +80,12 @@ A closed response does not cancel accepted execution.
 History repairs uncertainty; never replay the POST automatically.
 Interrupt delivery uses durable stop intent and per-instance polling.
 Redis is deferred; no sticky routing or instance forwarding.
+end note
+note over API,Store
+Reject a new user.message while M1 is unfinished; never queue it.
+The busy response is sent before opening SSE.
+Control events use their own admission rules.
+Confirmation idle ends the HTTP response; the resource stays running.
 end note
 @enduml
 
@@ -180,6 +189,8 @@ No raw credentials or public execution identifier.
 end note
 note bottom of SessionEventAppender
 All writers share causal prerequisite checks and ordered commit.
+Message admission locks the Session and rechecks idle in the DB.
+Append the message and set running together; reject new messages while busy.
 Interrupt event and stop intent commit together for a fixed target.
 Terminal event and target result link also commit atomically.
 Allocate sequence and append atomically, retaining lock to commit.
@@ -226,19 +237,26 @@ database "History and Control Store" as Store
 
 Client -> API : POST user.message
 API -> A : reserve and bind before starting execution
-API -> Store : accept and persist user event
+API -> Store : short transaction: lock Session, require idle,\nappend M1 and set running
 API -> A : complete user.message receipt first
 API -> Execution : start only after receipt is queued
 A --> Client : data: user.message receipt
 Execution -> A : matching agent events
 A --> Client : data: agent.* output
 
+opt Another user.message arrives while M1 is unfinished
+  Client -> API : POST user.message M2
+  API -> Store : check authoritative admission state
+  Store --> API : busy; no message appended
+  API --> Client : reject before SSE\n409 SESSION_BUSY (candidate error)
+end
+
 alt Confirmed: close on matching execution idle
-  Execution -> Store : commit done / failed boundary
+  Execution -> Store : actual exit; commit done / failed boundary\nand set matching Session idle
   Execution -> A : corresponding idle, then complete
   A --> Client : data: session.status_idle; EOF
 else Confirmed: close while waiting for tool confirmation
-  Execution -> Store : commit Tool Call and confirming boundary
+  Execution -> Store : commit Tool Call and confirming boundary\nretain Session running; M1 is unfinished
   Execution -> A : tool call, confirming idle, then complete
   A --> Client : data: tool call; data: confirming idle; EOF
   Client -> API : new POST user.tool_confirmation
@@ -247,6 +265,7 @@ else Confirmed: close while waiting for tool confirmation
   API -> B : complete confirmation receipt first
   API -> Execution : resume
   B --> Client : data: user.tool_confirmation receipt
+  Execution -> Store : actual exit after resume; commit terminal\nand set matching Session idle
   Execution -> B : tool result, response, corresponding idle
   B --> Client : data: matching output; idle; EOF
 else Confirmed delivery: interrupt while response A remains open
@@ -258,7 +277,7 @@ else Confirmed delivery: interrupt while response A remains open
   Poller -> Store : batch read stop intents for local executions
   Store --> Poller : stop intent with fixed target
   Poller -> Execution : recheck identity; request local cancellation
-  Execution -> Store : commit actual stop idle and target result link
+  Execution -> Store : commit actual stop idle and target result link\nset matching Session idle
   Execution -> A : final committed idle if still attached
   API -> Store : result poll: read this target's committed idle
   Store --> API : same immutable idle event
@@ -311,6 +330,7 @@ participant "Instance A\nExecution / Original SSE" as A
 
 note over DB,A
 The accepted execution identity is already registered in the DB.
+The Session stays running until M1 actually finishes; new messages are rejected.
 Its live Agent object and credentials remain on instance A.
 end note
 Client -> B : POST user.interrupt
@@ -329,7 +349,7 @@ Poller -> A : recheck identity and request local cancellation
 A -> A : finish cancellation and execution cleanup
 group Short terminal transaction
   A -> DB : recheck target; append one authoritative idle
-  A -> DB : link target to idle; update only matching state
+  A -> DB : link target to idle; set only matching Session idle
   DB --> A : commit; one idle eventId
 end
 A --> Client : original SSE: same committed idle; close
