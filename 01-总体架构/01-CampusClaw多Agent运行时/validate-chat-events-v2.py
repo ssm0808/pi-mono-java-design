@@ -23,8 +23,23 @@ CONFIRMED_CHOICES = {
     "M4-interrupt-delivery": "original-output-and-interrupt-receipt-shared-idle",
     "M5-interrupt-coordination": "database-durable-stop-and-instance-batch-polling",
     "M6-message-admission": "session-single-message-atomic-idle-to-running",
+    "M7-interrupt-optimization": "post-commit-local-wakeup-deduplicated-waiters-measured-index",
     "S1-frame-format": "A-data-only",
     "S2-event-projection": "A-type-and-phase",
+}
+INTERRUPT_OPTIMIZATION = {
+    "authority": "committed-database",
+    "localWakeup": "after-commit-only",
+    "pollingFallback": True,
+    "waiterGrouping": "fixed-internal-execution",
+    "registrationRecovery": "register-then-read-committed-terminal",
+    "terminalDelivery": "receipt-first-once-per-response",
+    "lastWaiterCleanup": "local-registration-only",
+    "indexSelection": "gaussdb-plan-and-load-test",
+    "pollingIntervalMs": None,
+    "batchSize": None,
+    "interruptWaitTimeoutMs": None,
+    "toolTimeoutMs": None,
 }
 RESPONSE_INPUTS = {
     "200-message": "user.message",
@@ -144,6 +159,14 @@ def validate_model(model: dict) -> None:
     require(operation["operationKey"] == "submitSessionEvent", "review operation identity changed")
     validate_headers(operation)
     validate_event_ordering_rule(review)
+    require(review.get("interruptOptimization") == INTERRUPT_OPTIMIZATION,
+            "preserve M7 guarantees without approving numerical defaults")
+    require("中断查询优化已确认" in review["status"], "M7 approval must be visible")
+    for clause in ("停止请求提交成功后", "数据库轮询兜底保留", "固定内部执行身份是等待结果的去重键",
+                   "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次",
+                   "慢连接互不阻塞", "不删除停止请求或终态", "不预先冻结具体索引"):
+        require(clause in operation["description"] and clause in review["notice"],
+                f"missing visible M7 consistency rule: {clause}")
     body = operation["requestBody"]
     require(body["required"] and body["contentType"] == "application/json", "union request must remain JSON")
     inputs = {}
@@ -233,6 +256,17 @@ def validate_negative_regressions(model: dict) -> int:
         description=m["operation"]["description"].replace("当前仅依赖数据库", "当前依赖 Redis")))
     changed("missing fixed target", lambda m: m["operation"].update(
         description=m["operation"]["description"].replace("同一短事务中绑定具体内部执行", "按最新执行绑定")))
+    changed("missing M7 status", lambda m: m["review"].update(
+        status=m["review"]["status"].replace("中断查询优化已确认", "待定")))
+    changed("missing M7 model", lambda m: m["review"].pop("interruptOptimization"))
+    for field, value in INTERRUPT_OPTIMIZATION.items():
+        changed(f"changed M7 {field}", lambda m, key=field, original=value:
+                m["review"]["interruptOptimization"].update({key: 500 if original is None else "unconfirmed"}))
+        changed(f"missing M7 {field}", lambda m, key=field: m["review"]["interruptOptimization"].pop(key))
+    for field in ("description", "notice"):
+        section = "operation" if field == "description" else "review"
+        changed(f"missing visible M7 in {field}", lambda m, key=field, area=section: m[area].update(
+            {key: m[area][key].replace("先登记等待再补读已提交终态", "只等待通知")}))
     for choice in CONFIRMED_CHOICES:
         changed(choice, lambda m, key=choice: m["review"]["confirmedChoices"].update({key: "unconfirmed"}))
     original = model["operation"]["responses"][0]["bodies"]["default"]
@@ -301,7 +335,8 @@ def validate_review_pages() -> None:
     validator.validate_executable_script(scripts[0])
     visible = " ".join(parser.visible_text)
     for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "未整体确认合并接口",
-                 "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认", "数据库中断机制已确认"):
+                 "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认", "数据库中断机制已确认",
+                 "中断查询优化已确认", "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次"):
         require(text in visible, f"no-JavaScript page is missing {text}")
     require("data-question-id=" not in source, "confirmed receipt must not remain a question")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
