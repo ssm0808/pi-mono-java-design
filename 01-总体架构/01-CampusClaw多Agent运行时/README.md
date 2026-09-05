@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.8.0 |
-| 状态 | Events v2 合并 POST SSE、完整 user.* 首帧、对应 idle 关闭、中断推送分工及数据库中断机制已确认，数据库细节、并发竞态、字段与错误细节评审中；HTTP 1.45.0 确认 Help 元数据指南，其他 Builtin JSON 与 Skill 并行开发不变 |
+| 文档版本 | 3.8.1 |
+| 状态 | Events v2 合并 POST SSE、完整 user.* 首帧、对应 idle 关闭、中断推送分工及数据库中断机制已确认，数据库细节、并发竞态、字段与错误细节评审中；HTTP 1.45.1 保留已确认 Help 元数据指南，Builtin 与 Skill Command 由用户统一实现 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 固定快照历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -75,7 +75,7 @@ Browser / Agent UI
 ```
 
 每次提交用户消息都会新建一个 HTTP 请求。该请求的响应在本次执行期间持续输出
-SSE；Runtime Command 不建立请求级 SSE，Skill 执行由其他同事并行开发。普通消息正常收到
+SSE；Runtime Command 不建立请求级 SSE，Builtin 与 Skill 执行由用户统一实现。普通消息正常收到
 `stream.end`、流内错误或网络中断后连接结束。下一次用户消息、Command、Steer、
 FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。公共 Command 协议待独立评审。
 
@@ -291,13 +291,14 @@ Command 协议待独立评审；普通消息 Events 已确认公共路径并进�
 
 ### 5.4 Built-in Command
 
-本会话只负责七个 Builtin；Skill Command 由其他同事并行开发，不是延期或禁用。Builtin 来源视图、参数规则和验收不得提升为整个产品的 Skill 限制。共享 GET/POST 的最终命名、请求联合类型和清单合并需在 HTTP 发布前与 Skill 开发线对齐；本次不代替同事设计 Skill 执行细节。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。Builtin 来源视图、参数规则和验收仅适用于 Builtin；共享 GET/POST 的最终命名、请求联合类型和清单合并，由同一负责人在 HTTP 发布前统一对齐。Skill 执行纳入整体实施与验收计划，具体未确认契约继续逐项评审。
 
 | 规则 | v1 结论 |
 |---|---|
 | HTTP 请求 | 只提交 name、arguments；name 不含 /，省略或 null 参数由 Service 归一 |
 | 可发现范围 | compact、help、model、name、skills、status、thinking 七个 Builtin |
-| 本会话不实现 | Skill 执行（同事并行开发）；Extension、Prompt 执行；Builtin 附件 |
+| 统一实施范围 | 用户负责七个 Builtin、Skill 执行及共享 HTTP 集成；Skill 具体契约待统一评审 |
+| 未纳入命令目标 | Extension、Prompt 执行；Builtin 附件 |
 | 响应 | 普通 ResultBean JSON，不建立请求级 SSE |
 | 普通消息接口 | 不解析 Slash 文本，现有 SSE 行为不变 |
 
@@ -418,7 +419,7 @@ CampusClaw 不再提供 CLI、TUI、OneShot、RPC 或 ACP 产品入口。Slash v
 
 - 不可变 Definition、Handler、Composite Registry、Contributor 和 Admission Policy
   替换当前可变 Registry 与宽泛 `SlashCommandSession`；
-- Builtin 各自使用 Contributor/Handler；现有 Skill 发现定义不装配伪 Handler；同事并行实现执行定义，共享 HTTP 清单在发布前对齐；
+- Builtin 各自使用 Contributor/Handler；现有 Skill 发现定义不装配伪 Handler；用户统一实现 Skill 执行定义，共享 HTTP 清单在发布前对齐；
 - 新增命令不修改中央 `switch`；Builtin 重名直接启动失败；
 - 清单命中后才调用 Command API；清单失败不降级；API 未知名称返回 `COMMAND_NOT_FOUND`；
 - `/name` 只调用 `SessionNamingService`，不经过 mate-service 名称副本；
@@ -489,7 +490,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 | 架构变更 | 受管目录统一身份文件、缓存优先 prepare 与显式原子 refresh；Skill 和 Child 通过目录名称索引解析，不保存远端工具列表 |
 | 架构变更 | Mate 发现改为 `ListMateTools({skillName?})` 稳定 JSON 与实时查询；Call 通过 Session 名称到 ID 缓存解析，miss 时 single-flight 自动刷新完整有效集合，实际执行不重试 |
 | 架构变更 | `Agent({agentName,task})` 只解析直接绑定 Child；公共 `AgentSessionFactory` 创建独立 Child Session 实例，父子使用相同类型和执行语义但隔离消息、工作区、工具与上下文 |
-| 架构变更 | HTTP-only Slash 模块使用不可变 Definition、Strategy Handler、Composite Registry、Contributor 和 Admission Policy；增加命令不修改中央分派；Skill 由其他同事并行开发；Builtin 来源过滤不是全局命名空间限制 |
+| 架构变更 | HTTP-only Slash 模块使用不可变 Definition、Strategy Handler、Composite Registry、Contributor 和 Admission Policy；增加命令不修改中央分派；Builtin 与 Skill 由用户统一实现；Builtin 来源过滤不是全局命名空间限制 |
 | 架构变更 | 当前 `displayName` 与资源版本由 CampusClaw Session 持有；不保存 Name Entry 或通用命令生命周期；只有 Model/Thinking/Compact 复用既有领域历史 |
 | 架构变更 | Assistant/Compaction Usage 持久化并累计 lifetimeUsage；模型、thinking、compaction 领域事件历史可见，工具 delta 与压缩 started/failed 保持瞬态 |
 | 架构变更 | refresh 只影响下一次空闲 Session 执行；模型懒校准事件先于 user.message，无有效 default 时不接受消息 |
@@ -517,6 +518,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.8.1 | 2026-09-05 | 同步 HTTP 1.45.1 的统一实施责任；用户负责 Builtin、Skill 及共享集成验收，保留 Help 与 Events v2 已确认设计。 |
 | 3.8.0 | 2026-09-04 | 同步 Events v2 0.4.0 与请求级 SSE 0.3.0：确认数据库中断交接、实例批量检查及共享结束记录，本期不引入 Redis；补齐目标类图、时序、源码差距和验收，未修改实现或整体确认接口。 |
 | 3.7.3 | 2026-09-04 | 同步 HTTP 1.45.0 已确认 Help 四字段元数据指南、无参与缓存演进；保持其他 Builtin、Events v2 评审和 Mate 公共接口不变。 |
 | 3.7.2 | 2026-09-04 | 同步 Events v2 0.3.2 与请求级 SSE 0.2.2：确认原消息保留输出、中断只回执与等待同一停止 idle；补充实例定位的源码证据和解释，尚未选择路由方案。不整体确认操作，不修改实现或 Mate 契约。 |

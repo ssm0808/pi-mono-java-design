@@ -1,7 +1,7 @@
 @startuml skill_catalog
 title Target-only Skill Source Exclusion
 ' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/SkillCommandSource.java list.
-' Product scope: Skill execution is owned by a parallel workstream; Builtin selection skips dynamic Skill sources.
+' Ownership decision 2026-09-05: the user implements Builtin and Skill; Builtin selection skips dynamic Skill sources.
 skinparam shadowing false
 class CompositeCommandRegistry
 interface CommandDefinitionSource
@@ -15,7 +15,7 @@ CompositeCommandRegistry --> BuiltinCommandSource : resolve(context, BUILTIN)
 SkillCommandSource --> SkillCommandDefinition : existing discovery
 note right of SkillCommandDefinition
 No Handler.
-Skill execution belongs to a parallel workstream.
+The user owns Builtin and Skill implementation.
 skills Builtin only exposes names and descriptions.
 end note
 @enduml

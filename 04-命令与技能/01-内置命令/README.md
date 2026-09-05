@@ -7,8 +7,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.6.0 |
-| 更新日期 | 2026-09-04 |
+| 文档版本 | 2.6.1 |
+| 更新日期 | 2026-09-05 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；已有核心 SPI，Help Handler/查询与缓存补齐仍为 target-only |
@@ -18,9 +18,9 @@
 
 ## 1. 范围与证据
 
-本会话只负责七个 Builtin；Skill Command 由其他同事并行开发，不是延期或禁用。Builtin 来源视图、参数规则和验收不得提升为整个产品的 Skill 限制。共享 GET/POST 的最终命名、请求联合类型和清单合并需在 HTTP 发布前与 Skill 开发线对齐；本次不代替同事设计 Skill 执行细节。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。Builtin 来源视图、参数规则和验收仅适用于 Builtin；共享 GET/POST 的最终命名、请求联合类型和清单合并，由同一负责人在 HTTP 发布前统一对齐。Skill 执行纳入整体实施与验收计划，具体未确认契约继续逐项评审。
 
-仅实现 help、status、name、model、thinking、compact、skills，不转换成模型提示词，不接受附件。
+本文的 Builtin 实现切片覆盖 help、status、name、model、thinking、compact、skills，不转换成模型提示词，不接受附件。
 精确请求和结果以 Runtime
 [操作 12](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-session-commands.json)、
 [操作 13](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json) 为准。
@@ -54,7 +54,7 @@ Builtin 的来源过滤与 Skill 名称校验是不同职责，不能以过滤 S
 [PlantUML 源码](设计图/diagram.puml#L1)
 
 BuiltinCommandSource 聚合七个 Contributor 并在 Spring 启动期查重。
-可执行 Builtin Definition 持有 Handler/Admission；现有 Skill 发现定义不安装伪 Handler，真实 Skill 执行由同事实现。
+可执行 Builtin Definition 持有 Handler/Admission；现有 Skill 发现定义不安装伪 Handler，真实 Skill 执行由用户统一实现。
 CommandExecutionContext 固定只读 Session、Locale 和同一 Catalog View。
 Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个完整 Agent 缓存；不消费命令清单、不反向注入 Registry。
 响应组装器才允许按结果类型分派，不允许中央按命令名称 switch。
@@ -71,6 +71,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 
 ## 3. 串行 PR 与预算
 
+下表保留 Builtin 的分批实施顺序；Skill 执行与共享 HTTP 集成同时纳入[统一实施计划](../00-Slash-Command通用模块/README.md#5-实施与验收)。
 设计先修 PR #4 和前置实现 PR #210 已合并；每个后续 Builtin PR 必须等前一 Builtin PR 合并，
 再从最新 origin/main 建立独立 worktree 和 codex/* 分支，不使用堆叠分支。
 
@@ -84,7 +85,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 | 6 | codex/compact-runtime-lifecycle | 操作锁、容量、Holder、持久化 Projector、30 分钟超时与独立终态 Future |
 | 7 | codex/builtin-command-compact | Compact Contributor/Handler/Application Service、排队续跑与 Abort |
 | 8 | codex/builtin-command-application | Catalog/Execution 应用边界与七类 DTO→VO |
-| 9 | codex/builtin-command-http | 同时发布 GET/POST、VO/Header/ResultBean、契约和跨进程测试；删除旧 command 原型；更新实施状态 |
+| 9 | codex/builtin-command-http | 统一对齐 Skill 清单与请求类型后发布 GET/POST、VO/Header/ResultBean、契约和跨进程测试；删除旧 command 原型；更新实施状态 |
 
 单 PR 模块侧新增不超过 850 行，sync-campusclaw 后总量超过 1800 行不发布，硬上限 2000。
 删除行不抵扣新增。触及预算时在相邻职责边界拆分，不提前公开未完成路由。
@@ -189,6 +190,7 @@ sync-campusclaw、diff --check 和新增行数门禁；最终 HTTP PR 执行完�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.1 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一实现；保留 Builtin 分批计划，并将 Skill 与共享 HTTP 集成纳入统一发布验收。 |
 | 2.6.0 | 2026-09-04 | 确认 Help 元数据指南、无参四字段结果、空数组与缓存迁移；同步 Runtime 描述符、全局主图、验收；其他六个 Builtin 不变。 |
 | 2.5.0 | 2026-09-04 | 新增 Help 元数据使用指南专项评审入口；旧 Help 清单语义标记为变更前基线，细节待确认后统一切换，其他命令不变。 |
 | 2.4.2 | 2026-09-04 | 撤销无产品依据的 Skill 宽松加载兼容判断；引用名称专项源码复核与统一严格校验要求，保留 Builtin 与 Skill 并行分工。 |

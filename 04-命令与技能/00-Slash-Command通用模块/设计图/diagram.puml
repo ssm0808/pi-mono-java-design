@@ -62,7 +62,7 @@ CommandExecutionContext o-- "1" ResolvedCommandCatalog
 CommandExecutionService --> CommandExecutionContext : same definition identity
 note right of SkillCommandDefinition
 Current discovery definition.
-No fake Handler; execution is parallel work.
+No fake Handler; execution is target-only.
 Excluded before source resolution
 for BUILTIN requests.
 end note

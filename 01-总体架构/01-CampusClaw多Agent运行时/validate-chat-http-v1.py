@@ -424,8 +424,8 @@ def validate_response_contract(
         require("\"entrySeq\":18" in stream and "\"type\":\"thinking\"" in stream,
                 "Completed thinking must be a durable recoverable event")
     elif key == ("GET", "/sessions/{sessionId}/commands"):
-        require("Skill Command 由其他同事并行开发" in operation["description"],
-                "Command catalog must preserve the confirmed parallel development scope")
+        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in operation["description"],
+                "Command catalog must reflect unified Builtin and Skill ownership")
         success = next(response for response in operation["responses"] if response["status"] == "200")
         commands = success["bodies"]["zh-CN"]["result"]["commands"]
         names = [command["name"] for command in commands]
@@ -446,8 +446,8 @@ def validate_response_contract(
                 "Builtin catalog must not depend on an Agent snapshot")
         validate_help_descriptor(next(command for command in commands if command["name"] == "help"))
     elif key == ("POST", "/sessions/{sessionId}/command"):
-        require("Skill Command 由其他同事并行开发" in operation["description"],
-                "Command execution must preserve the confirmed parallel development scope")
+        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in operation["description"],
+                "Command execution must reflect unified Builtin and Skill ownership")
         for phrase in ("只在内存中保留到本次命令处理", "Mate tool execute",
                        "不写入 Session、事件或日志", "工具发现", "Active Holder"):
             require(phrase in operation["description"], f"Missing credential boundary: {phrase}")
@@ -636,7 +636,7 @@ def validate_source_deduplication() -> None:
 
 def diagram_sources() -> list[Path]:
     sources = sorted((ROOT / "设计图").glob("*/diagram.puml"))
-    sources.extend(path.parent / "设计图/diagram.puml" for path in SLASH_DESIGN_PATHS[:2])
+    sources.extend(path.parent / "设计图/diagram.puml" for path in SLASH_DESIGN_PATHS)
     sources.append(HELP_ROOT / "diagram.puml")
     require(sources, "No topic PlantUML sources found")
     require(not (ROOT / "diagram.puml").exists(), "Legacy aggregate diagram.puml still exists")
@@ -725,6 +725,21 @@ def validate_command_wording(models: list[dict[str, Any]]) -> None:
     for path in SLASH_DESIGN_PATHS:
         require("目录" not in path.read_text(encoding="utf-8"),
                 f"Slash Command design must use explicit wording: {path.relative_to(REPOSITORY_ROOT)}")
+    ownership_paths = (*SLASH_DESIGN_PATHS, DESIGN_PATH, ROOT / "README.md",
+                       REPOSITORY_ROOT / "README.md", REPOSITORY_ROOT / "04-命令与技能/README.md")
+    retired_ownership = ("Skill Command 由其他同事", "Skill 执行由其他同事", "Skill 由其他同事",
+                         "Skill 由同事", "真实 Skill 执行由同事", "Skill 执行由同事",
+                         "同事并行实现执行定义", "真实执行定义由同事", "Skill 开发线",
+                         "Skill 执行开发线", "本会话只负责七个 Builtin")
+    for path in ownership_paths:
+        active = re.split(r"^## (?:\d+\. )?版本历史", path.read_text(encoding="utf-8"),
+                          maxsplit=1, flags=re.MULTILINE)[0]
+        for wording in retired_ownership:
+            require(wording not in active,
+                    f"Superseded Command ownership in {path.relative_to(REPOSITORY_ROOT)}: {wording}")
+    for path in SLASH_DESIGN_PATHS:
+        source = (path.parent / "设计图/diagram.puml").read_text(encoding="ascii")
+        require("parallel work" not in source, "Command diagrams must reflect unified implementation ownership")
     design_text = DESIGN_PATH.read_text(encoding="utf-8")
     contract_text = json.dumps(models, ensure_ascii=False)
     for wording in ("命令目录", "列出当前目录", "当前目录中的已知命令", "Skill 父目录", "回退父目录名"):

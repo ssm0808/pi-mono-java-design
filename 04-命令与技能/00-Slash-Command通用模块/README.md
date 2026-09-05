@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.0 |
-| 更新日期 | 2026-09-04 |
+| 文档版本 | 1.4.1 |
+| 更新日期 | 2026-09-05 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；字段/缓存/SPI 证据见 Help 专项，不替换其他行为的历史证据点 |
@@ -16,13 +16,16 @@
 
 ## 1. 当前目标
 
-本会话的 Builtin 开发切片负责 `help`、`status`、`name`、`model`、`thinking`、
+Builtin 实现切片覆盖 `help`、`status`、`name`、`model`、`thinking`、
 `compact`、`skills` 七个 Builtin。GET 命令清单按名称稳定字典序返回，
 POST Command 使用普通 ResultBean JSON。
 
-本会话只负责七个 Builtin；Skill Command 由其他同事并行开发，不是延期或禁用。Builtin 来源视图、参数规则和验收不得提升为整个产品的 Skill 限制。共享 GET/POST 的最终命名、请求联合类型和清单合并需在 HTTP 发布前与 Skill 开发线对齐；本次不代替同事设计 Skill 执行细节。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。Builtin 来源视图、参数规则和验收仅适用于 Builtin；共享 GET/POST 的最终命名、请求联合类型和清单合并，由同一负责人在 HTTP 发布前统一对齐。Skill 执行纳入整体实施与验收计划，具体未确认契约继续逐项评审。
 
-`/` 只在交互层使用。POST 只接收 `name + arguments`，不接收附件或整段 Slash 文本。
+本责任安排由用户于 2026-09-05 确认，取代旧版人员分工；旧记录仅用于历史追溯。
+变更前设计基线为 `7bf966edc313b092f05f2f28256e32ed673e8c9a`；这是实施责任调整，既有源码证据点和命令行为决定继续有效。
+
+`/` 只在交互层使用。Builtin POST 只接收 `name + arguments`，不接收附件或整段 Slash 文本。
 普通 POST Events 不解析 Slash，既有请求级 SSE 行为不变。
 本期不生成公开 commandId，也不持久化通用命令生命周期或 Name 边车历史。
 
@@ -108,7 +111,7 @@ Catalog 用于找到 Help Definition 与执行上下文；Help 内容由 AgentHe
 
 - `resolve(context, BUILTIN)` 在调用 Source 前过滤类型，Builtin 查询不调用 SkillCommandSource。
 - 七个 Contributor 各自贡献元数据、准入策略和 Handler；启动期重名直接失败。
-- 当前发现层的 Skill Definition 只供展示，不安装抛错的伪 Handler；真实执行定义由同事并行扩展，不强制复用 Builtin 类型。
+- 当前发现层的 Skill Definition 只供展示，不安装抛错的伪 Handler；真实执行定义纳入统一实施计划，不强制复用 Builtin 类型。
 - 新增命令不修改中央名称 switch；结果类型分派只能出现在 DTO→VO 组装器。
 - 内部结果使用 DTO，响应使用只读 `@Getter` 与 final 字段的独立 VO。
 - 参数缺省只在 Service 归一；标准输入约束放在请求 VO/API 参数并实际触发 Jakarta 校验。
@@ -121,14 +124,14 @@ Skill 名称必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，同时单独校验 1～6
 非法名称在加载时就拒绝，不能进入已加载集合、模型发现提示词或命令清单；执行不得绕过。
 `SKILL.md` 的 `name` 必须是非空字符串且与文件夹同名，不能通过回退、裁剪或自动改名接受。
 
-这是已确认产品约束与安全加固，同时适用于并行 Skill 开发线；Builtin 的来源过滤不改变该规则。
+这是已确认产品约束与安全加固，同时适用于 Skill 执行；Builtin 的来源过滤不改变该规则。
 名称专项源码证据和完整验收见 [Skill 设计](../02-技能命令/README.md#3-名称统一严格校验)。
 
 ## 4. 执行顺序与恢复
 
 Application 依次完成 Session 访问检查、arguments 归一、单次 Catalog 解析、名称精确查找、
 参数与预览准入、锁内重新检查、Handler 和结果组装。合法但未注册名称为 COMMAND_NOT_FOUND；
-Builtin 名称格式不覆盖 skill:*；公共入口不能据此拒绝独立开发线的 Skill 名称。
+Builtin 名称格式不覆盖 skill:*；公共入口不能据此拒绝 Skill 名称。
 
 ![权威状态](设计图/authoritative_command_state.svg)
 
@@ -146,6 +149,18 @@ Mate Header 不记录、不持久化、不进入 Prompt；Compact 仅在本次 A
 [13](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)。
 实施顺序和命令矩阵见[内置命令](../01-内置命令/README.md)。
 
+统一实施计划由用户负责，按依赖拆分提交：
+
+| 实施项 | 完成条件 |
+|---|---|
+| 共享核心 | 两类命令复用来源过滤、不可变解析快照和分层边界；分别定义发现与执行职责 |
+| Builtin | 按 Builtin 分批计划完成七个命令，包括已确认的 Help 元数据指南 |
+| Skill Command | 补齐执行契约、真实执行定义、快照与绑定重检、失败恢复及专项验收 |
+| 共享 HTTP 集成 | 统一对齐两类命令的命名、清单、请求类型、结果与错误，完成发现到执行的集成验收后发布 |
+
+Skill 的未确认细节按[Skill 实施要求](../02-技能命令/README.md#4-统一实施与集成要求)继续评审；
+操作 12/13 当前保留的七个 Builtin 示例是已确认部分，不能代替两类命令的最终整体验收。
+
 每个实现 PR 非文档新增代码最多 2000 行，模块侧最多 850 行；
 同步 campusclaw 后总量超过 1800 行不发布。前一 PR 合并后再创建下一分支，不堆叠。
 测试覆盖来源过滤、稳定排序、重名启动失败、单次解析、无 DTO 泄漏、并发准入和无通用命令历史。
@@ -156,6 +171,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.1 | 2026-09-05 | 用户统一负责 Builtin、Skill 与共享 HTTP 集成；替代同事并行分工，补齐统一实施验收；现有协议细节与源码证据不变。 |
 | 1.4.0 | 2026-09-04 | 确认 Help 元数据指南并移除内容对 Catalog 的依赖；Slash/Builtin 共用全局主图，局部图只作补充；同步 Runtime 契约与 Help 验收，不改变其他命令。 |
 | 1.3.2 | 2026-09-04 | Skill 加载、命令发现和执行统一使用 Skill 域严格名称规则，取消宽松加载兼容；保留并行开发分工。 |
 | 1.3.1 | 2026-09-04 | 用户澄清 Skill 由同事并行开发；撤销产品延期/禁用解释，将 Builtin-only 规则限定为本会话切片；更新 PR #210 已合并状态。 |
