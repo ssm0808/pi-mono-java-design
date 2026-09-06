@@ -10,7 +10,7 @@ title CampusClaw Target POST Events and History
 ' Confirmed target architecture: combine submission and output in one POST;
 ' the first business frame is the complete accepted user event, exactly once.
 ' Design reason: remove the gap between a write and an independent live subscription.
-' Target-only: union input, response projection, causal ordering and fixed snapshot.
+' Target-only: union input, response projection, causal ordering and integer paging.
 ' Source evidence: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
 ' acceptUserEvent: row lock, idle recheck, message append and running update in one transaction.
 ' Confirmed product constraint: one unfinished user.message per Session across instances.
@@ -65,7 +65,7 @@ group Confirmed idle closing and database interrupt handoff
   Writer --> Mate : data: idle; response ends
 end
 Mate -> API : GET /sessions/{sessionId}/events
-API -> Store : query fixed snapshot in committed internal order
+API -> Store : query current integer page in committed internal order
 Store --> API : ordered complete events
 API --> Mate : ResultBean JSON history
 
@@ -304,7 +304,7 @@ group Transport failure at any point
   No POST replay or independent GET stream reconnection.
   end note
   Client -> API : GET /sessions/{sessionId}/events
-  API -> Store : fixed committed snapshot
+API -> Store : current committed history page
   Store --> API : complete events in internal order
   API --> Client : ResultBean history
   Client -> Client : deduplicate by eventId; retain array order

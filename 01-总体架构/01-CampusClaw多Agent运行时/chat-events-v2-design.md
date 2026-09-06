@@ -2,13 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.5.0 |
+| 文档版本 | 0.5.1 |
 | 状态 | 当前评审 ListEvents；POST 合并、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；两操作的未决细节仍保留，target-only |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | 本次 HTTP 合并核对提交 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；原 `a8192e0`，变更路径与结论见 §4.2 |
 | 中断优化补充核对提交 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；只补充 §4.4 的容量、注册表及响应生命周期证据，不替换其他主题基线 |
-| 历史查询补充核对 | 同一 `dfb90ca`；查询、编码、游标与 Mapper 四个文件相对 `918005e` 不变，见 [ListEvents 设计](chat-events-v2-history-design.md)；本次变更前设计 `76d39c2603fc2a402d16545d35793ddcc97cc687` |
+| 历史查询补充核对 | 同一 `dfb90ca`；查询、编码、游标与 Mapper 四个文件相对 `918005e` 不变，见 [ListEvents 设计](chat-events-v2-history-design.md)；本次变更前设计 `5e12ef57a558ba99c1d9ce86149969e664c70174` |
 | 事件顺序补充核对提交 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；只补充本文 §4.1 证据，不替换其他主题基线 |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | mate 公共契约基线 | [`mate-service 通用对话 API`](../../02-服务与接口/07-mate-service通用对话API/README.md) 1.4.4 |
@@ -23,7 +23,7 @@
 | Method | Path | 职责 | 当前状态 |
 |---|---|---|---|
 | `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 提交一条用户事件；首帧完整回执，随后推送对应事件 | 合并方向、首帧与对应 idle 关闭已确认；整个操作仍待评审 |
-| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 固定快照权威历史及断线对账 | 当前评审；完整事件示例已对齐 POST，分页方向与细节候选 |
+| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 普通页码查询权威历史及断线对账 | 从旧到新、整数页码与取消固定快照已确认；数量、元数据等细节仍候选 |
 
 原独立 `GET /sessions/{sessionId}/events/stream` 从 v2 目标中撤销；旧 JSON model
 移除，旧方案可从 Git 历史恢复。不增加 `executionId/runId`，不把响应连接变成公共执行
@@ -47,7 +47,8 @@
 2026-09-06 用户明确要求开始修改历史接口，当前切换到
 `GET /sessions/{sessionId}/events`，见 [ListEvents 评审页](chat-events-v2-review.html)
 和 [历史查询设计](chat-events-v2-history-design.md)。GET 返回普通 JSON 的完整事件分页，
-不是独立 SSE；已确认的身份、同形和顺序继续有效，分页方向与细节仍候选。
+不是独立 SSE；已确认的身份、同形和顺序继续有效，从旧到新及普通整数页码已确认，
+不再固定跨页快照；每页数量、响应元数据、事件字段及错误细节仍候选。
 下面保留 POST 已确认边界，切换评审不等于整体确认 POST。
 
 ```http
@@ -128,7 +129,7 @@ idle，不复制正文、思考或工具输出。仍连接的两条响应接收�
 
 ## 3. 目标分层与生命周期
 
-以下总览保留 POST 与执行主干；GET 的共享完整事件投影、请求范围快照和固定分页
+以下总览保留 POST 与执行主干；GET 的共享完整事件投影、请求范围分页参数和普通分页
 细化为 [历史查询目标类图与时序](chat-events-v2-history-design.md#6-推荐目标类图与查询时序)。
 
 ![Session Events 目标类图](设计图/事件接口重设计/target_session_events_classes.svg)
@@ -157,7 +158,8 @@ idle，不复制正文、思考或工具输出。仍连接的两条响应接收�
   两个 Application 检查服务经数据库交接停止请求与结束结果，详见 §4.4。
   Spring 单例 Router 与检查服务不持有请求原始凭据。
 
-历史第一页固定水位、过滤条件和分页方向；后续 opaque page 绑定同一快照。
+历史使用从 1 开始的普通整数页码；不保留跨页水位、快照或加密游标。同一轮保持
+limit 不变，每页按该次查询的当前分支与可见性读取；分支或过滤变化后从第一页重载。
 请求级 SSE 不重放。断线、队列溢出或接收结果不确定都回到 ListEvents 对账；时间不能作
 增量游标，不把重新 POST 当作重连。
 
@@ -181,9 +183,10 @@ idle，不复制正文、思考或工具输出。仍连接的两条响应接收�
    客户端按响应数组顺序展示，不按 `createdAt` 或 `eventId` 重新排序。`createdAt`
    只用于时间展示，允许相同或不递增；本次不改其取值语义、示例或精度约定，也不新增
    数据库插入时间字段。对外继续使用 `eventId`，不公开 `entryId/entrySeq`。
-5. 已确认的固定快照历史只纳入对应水位内已提交的记录，不让后来提交的事件插入已经
-   翻过的页面。此处明确排序和提交约束，不提前确认 ListEvents 的过滤、游标字段、分页
-   方向选项或保留期，也不确认 live SSE 的详细事件契约。
+5. 历史按每次查询可见的已提交完整事件集合进行普通分页。分支和过滤不变且仅尾部
+   追加时，已有记录的位置不移动，新记录可进入后续页；发生分支或可见范围变化时
+   从第一页重载，不承诺跨页固定结果。数量、过滤细节和保留期仍待确认；这一变更
+   不放宽前置依赖与有序提交要求，也不确认 SSE 的未决字段。
 
 推荐目标类图用 `SessionEventAppender` 表示共享的接受与有序追加职责：三个用户事件
 Handler 和 Runtime Projector 都经过该边界，再由 Repository 执行短事务。该类名及具体
@@ -267,7 +270,7 @@ Session 资源状态改为 running。此规则按 Session 生效，覆盖同一�
 | 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventProjector.java:105-116,238-254,382-385` · `onEvent/persistAssistant/emitPersisted` | 同一 Projector 同步处理回调，持久化完成后发送完整事件；不能由此推断不同 Projector 或其他写入入口已共同检查前置依赖 |
 | 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:55-87,208-218` · `acceptUserEvent/appendEntry/appendLocked` | 事务锁定 Session，再取序号、插入和递增；保存到达该写入边界的顺序，并不自动恢复上游乱序 |
 | 已观察实现 | `campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml:47-75,132-164` · `lockSessionForUpdate/lockNextSequence/insertEntry/listCurrentBranch` | 使用行锁；历史 SQL 按 `entry_seq` 排序，不按 `timestamp` 排序 |
-| 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java:53-60,90-99` · `list/pageOf` | 保留查询结果顺序，以最后一项内部序号生成下一页；当前实现没有 v2 固定快照水位 |
+| 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java:53-60,90-99` · `list/pageOf` | 保留查询结果顺序，以最后一项内部序号生成不透明下一页游标；尚非 v2 的整数页码 |
 | 架构变更（target-only） | 本文 §3.1 与 `SessionEventAppender` 推荐边界 | 所有来源共同遵守前置依赖和有序提交；ListEvents 读取已提交顺序，时间戳只作展示。需按 §5 实施并测试，不能把数据库行锁当作全部保证 |
 
 pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime 内核行为参考；
@@ -297,7 +300,7 @@ pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime
 | `web/RuntimeSseEmitterSubscriber.java:33-49` · onEvent/onComplete | 当前 named SSE 和可选 id，完成后 emitter.complete；目标 data-only 不等于当前格式 |
 | `event/RuntimeExecutionCoordinator.java:154-168` · completeExecution | 当前收尾持久化、发送终态、complete 流；已确认目标中的等待确认分段关闭不能据此宣称已有 |
 | `event/RuntimeTerminalEventFactory.java:34-57` · emit | 当前成功/中断发 session.status.idle + stream.end，失败发 stream.error；目标已确认收到对应 idle 后关闭，具体 reason 与失败处理仍待评审，尚未实现 |
-| `event/RuntimeEventQueryService.java:53-99` · list/pageOf | 当前按内部序号分页，尚无固定快照水位 |
+| `event/RuntimeEventQueryService.java:53-99` · list/pageOf | 当前按内部序号生成下一页游标；v2 目标改为普通整数页码 |
 
 本次不修改 pi Agent Loop、Tool Loop 或 Session 内核语义，也不以 pi 的进程内事件
 证明 HTTP 合并设计。原 pi 固定基线仅保留为其他 Runtime 设计的证据范围。
@@ -490,14 +493,15 @@ M7 补充核对 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，
    请求同事务，终态与关联同事务；用已提交的同一 idle 支撑两条响应，不引入 Redis。
    同步实现 M7 的提交后本地快路径、按目标分组的等待登记、登记后补读，以及通知和
    补读共用的逐响应终态去重；数据库批量检查兜底不移除。
-6. 历史升级固定快照与内部有序读取。Mate bridge 将来消费 Claw POST SSE，公共
+6. 历史改为普通页码与内部有序读取，复用完整事件投影。Mate bridge 将来消费 Claw POST SSE，公共
    路径和连接策略不因内部改动自动改变；当前不修改 Mate 实现或契约。
 
 验收包括：中断响应只含本次回执及同一停止 idle，原响应保留输出且终态 eventId 一致；
 首帧只返回本次用户事件且先于输出；极快完成和写后响应丢失；原消息与中断
 并发、控制目标提前结束、不捕获下一轮事件；工具确认分段与重复确认；preview 丢弃后
 完整内容覆盖；慢流溢出不阻塞执行；断线不取消、不重发；重启后历史对账；
-前置依赖延迟/失败、相同或回退时间、并发提交与固定快照分页保持数组顺序。
+前置依赖延迟/失败、相同或回退时间、并发提交与普通分页保持数组顺序，以及分支或
+过滤改变后从第一页重载的边界。
 数据库中断专项验收：消息在 A、中断在 B；A 极快结束而 B 回执尚未写出；重复检查
 不重复取消副作用；旧代次信号不取消新执行；数据库短暂不可用后恢复；原流或中断流断开；
 A 失联不伪造成功；自然完成竞争保留真实原因；单个取消慢操作不堵塞批量检查；
@@ -538,11 +542,13 @@ M7 专项验收：同实例请求只在提交成功后取消，回滚/提交不�
 | 2026-09-05 | M6 单消息准入 | 用户明确 M1 未完成前不接受 M2，数据库 Session 在消息接受时改为 running；按 Session 对不同调用方和实例互斥，接受与状态变更同事务。等待确认和停止未完成不释放新消息准入；迟到中断、超时策略和其余错误仍待评审。 |
 | 2026-09-05 | M7 中断查询优化 | 用户在同实例提交后立即通知、等待目标去重及索引按执行计划与压测选择的建议后回复“可以呀”；保留数据库权威和轮询兜底，补齐登记/补读与逐响应去重边界。未确认具体周期、批次、工具超时、等待期限、索引 DDL、重复中断准入或整个操作。 |
 | 2026-09-06 | 开始修改 ListEvents | 用户要求历史查询随新事件接口调整，并明确开始修改；当前 operation 切至 GET 历史，补齐完整事件、固定分支与上界候选及对账示例。未整体确认 GET 或 POST。 |
+| 2026-09-06 | 普通分页已确认 | 用户确认从旧到新、page/nextPage 使用普通整数页码，并取消跨页固定快照；保留同形与有序提交，不增加快照标识、密钥或过期时间。当前仅询问数量和 total，其他未决项不视为通过。 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.5.1 | 2026-09-06 | 同步 ListEvents 普通整数分页决定，移除目标快照/游标设计，保留内部因果顺序与完整事件同形；分页数量和 total 待确认。源码基线 dfb90ca 不变，仅改设计。 |
 | 0.5.0 | 2026-09-06 | 开始 ListEvents 评审：新增独立模型、历史设计和目标图，完整事件示例与 POST 同形，固定分支/上界和分页方向候选；保留 POST 独立评审页及未决项。实现基线 dfb90ca，仅改设计。 |
 | 0.4.2 | 2026-09-05 | 确认 M7：提交后同实例通知、按固定目标去重等待、登记后补读与逐响应终态去重、索引按实测选型；同步评审模型/HTML、目标类图/时序和验收。变更前设计 e370d2d；补充核对 dfb90cac，所查五个文件相对 918005ee 不变，仅改设计。 |
 | 0.4.1 | 2026-09-05 | 确认 M6 单消息数据库准入；补齐源码行锁与事务证据、SSE 关闭和资源 running 的区别、目标图与实施验收。变更前设计 ab9e360，实现基线 918005ee 不变；本轮仅改设计。 |

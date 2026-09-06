@@ -349,26 +349,42 @@ def validate_history_model(model: dict, post: dict) -> None:
         require(headers["Accept"]["value"] == "application/json", "history requests JSON")
     require([p["name"] for p in operation["parameters"] if p.get("in") == "query"] == ["limit", "page"],
             "do not introduce unreviewed query parameters")
+    parameters = {p["name"]: p for p in operation["parameters"] if p.get("in") == "query"}
+    require(parameters["page"]["schema"] == "integer >= 1; default 1", "page is a one-based integer")
+    require(parameters["limit"]["schema"] == "integer 1..200; default 100（候选沿用）",
+            "page size remains a candidate")
     require(review["inheritedRules"] == {
         "eventIdentity": "eventId", "completeEventProjection": "same-as-post-sse",
-        "ordering": "committed-causal-order", "snapshot": "fixed", "deltaHistory": False,
-    }, "history must retain confirmed identity, projection and snapshot rules")
+        "ordering": "committed-causal-order", "deltaHistory": False,
+    }, "history must retain identity and projection, without reviving a fixed snapshot")
+    require(review["confirmedPagination"] == {
+        "direction": "oldest-first", "pageType": "positive-integer", "firstPage": 1, "defaultPage": 1,
+        "fixedSnapshot": False, "cursorEncryption": False, "nextPage": "integer-or-null",
+        "sameLimitAcrossPages": True, "readWhileRunning": True,
+    }, "ordinary pagination is confirmed, without a cross-page snapshot or idle-only restriction")
     proposal = review["historyProposal"]
     require(proposal == {
-        "pageDirection": "oldest-first", "defaultLimit": 100, "maxLimit": 200,
-        "scope": "current-branch-at-first-read", "thinkingFilter": "session-policy",
-        "cursorBindings": ["session", "branch", "committedUpperBound", "position", "visibilityVersion",
-                           "projectionVersion", "direction", "expiresAt"],
-        "cursorTtlSeconds": None, "readToolToken": False,
-    }, "history candidate must bind the complete snapshot without freezing a token lifetime")
-    require(review["confirmedChoices"] == {} and "ListEvents 接口整体确认" in review["pendingReview"],
-            "new history details are not yet approved")
+        "defaultLimit": 100, "maxLimit": 200, "scope": "current-branch-per-request",
+        "thinkingFilter": "session-policy", "responseFields": ["events", "nextPage"],
+        "outOfRangePage": "empty-success", "readToolToken": False,
+    }, "keep only the remaining candidates, not cursor keys, bindings or expiry")
+    require(review["confirmedChoices"] == {
+        "L1-page-direction": "A-oldest-first", "L1-page-format": "one-based-integer",
+        "L1-consistency": "no-fixed-snapshot",
+    } and "ListEvents 接口整体确认" in review["pendingReview"],
+            "pagination is approved, not the whole history operation")
     questions = review["questions"]
-    require(len(questions) == 1 and questions[0]["id"] == "L1-page-direction", "only ask current pagination choice")
-    require([x["value"] for x in questions[0]["options"]] == ["A-oldest-first", "B-latest-page-first"],
-            "preserve pagination alternatives")
-    for clause in ("首次查询固定分支、已提交上界和可见性规则", "不按 createdAt 重排",
-                   "nextPage=null 仅表示本快照读完", "不能用某条历史 idle 判定现在可提交 M2",
+    require([q["id"] for q in questions] == ["L2-page-size", "L3-page-metadata"],
+            "only ask page size and response metadata; do not reopen L1")
+    require([[x["value"] for x in q["options"]] for q in questions] == [
+        ["A-default100-max200", "B-default50-max200"], ["A-events-nextPage-only", "B-include-total"],
+    ], "preserve pending page size and metadata alternatives")
+    require(all([x.get("selected", False) for x in q["options"]] == [True, False] for q in questions),
+            "recommend current limits and no total without claiming approval")
+    for clause in ("普通分页已确认", "不再固定快照", "跨页保持相同 limit", "不按 createdAt 重排",
+                   "每页读取该次查询可见的当前分支完整事件", "本接口不承诺自动检测跨页变化",
+                   "允许 Session running 时查询", "nextPage=null 仅表示本次查询没有下一页",
+                   "不能用某条历史 idle 判定现在可提交 M2",
                    "每页重新检查访问边界", "配置变更、压缩、Usage", "未整体确认 ListEvents 或合并 POST"):
         require(clause in operation["description"], f"missing visible history boundary: {clause}")
     complete = complete_streams(post)
@@ -378,6 +394,7 @@ def validate_history_model(model: dict, post: dict) -> None:
         "200-confirmation": complete["200-confirming"] + complete["200-tool-confirmation"],
         "200-interrupted": complete["200-message-interrupted"][:-1] + complete["200-interrupt"],
         "200-empty": [],
+        "200-out-of-range": [],
     }
     results, all_types, errors = {}, set(), set()
     ids = [x["id"] for x in operation["responses"]]
@@ -395,6 +412,9 @@ def validate_history_model(model: dict, post: dict) -> None:
                     and body["resMsg"] == "success", "history success uses ResultBean")
             result = body["result"]
             require(set(result) == {"events", "nextPage"}, "unexpected history page fields")
+            require(result["nextPage"] is None or
+                    (type(result["nextPage"]) is int and result["nextPage"] >= 1),
+                    "nextPage must be a positive JSON integer or null, never a string or boolean")
             require(result["events"] == expected[response["id"]], "history complete records drift from POST frames")
             seen = set()
             for event in result["events"]:
@@ -406,11 +426,11 @@ def validate_history_model(model: dict, post: dict) -> None:
             results[response["id"]] = result
     require(set(results) == set(expected), "missing paired page, confirmation, interrupt or empty examples")
     require(all_types == USER_EVENT_TYPES | STREAM_TYPES, "missing complete event type")
-    token = results["200-first-page"]["nextPage"]
-    require(isinstance(token, str) and token.startswith("page_") and len(token) > 40, "concrete demo cursor required")
-    require(token in operation["requestBody"]["description"], "next request must use the previous nextPage")
+    require(results["200-first-page"]["nextPage"] == 2, "page 1 must continue at page 2")
+    require(all(query in operation["requestBody"]["description"]
+                for query in ("?page=1&limit=2", "?page=2&limit=2")), "paired numeric requests required")
     require(all(x["nextPage"] is None for key, x in results.items() if key != "200-first-page"),
-            "example snapshot ends must return null")
+            "example page exhaustion must return null")
     require(errors == {("400", "INVALID_SESSION_ID"), ("400", "INVALID_EVENT_LIST_QUERY"),
                        ("404", "SESSION_NOT_FOUND"), ("500", "EVENT_LIST_FAILED")}, "history error catalog drift")
 
@@ -421,13 +441,25 @@ def validate_history_regressions(model: dict, post: dict) -> int:
         lambda m: m["operation"]["requestBody"].update(required=True),
         lambda m: m["operation"]["requestHeaderExamples"][0]["headers"].append(
             {"name": "access-token", "value": "opaque-access-token", "required": True}),
-        lambda m: m["review"].update(confirmedChoices={"L1-page-direction": "A-oldest-first"}),
+        lambda m: m["review"].update(confirmedChoices={}),
         lambda m: m["review"].update(pendingReview=[]),
         lambda m: m["review"]["inheritedRules"].update(deltaHistory=True),
-        lambda m: m["review"]["historyProposal"]["cursorBindings"].remove("branch"),
-        lambda m: m["review"]["historyProposal"]["cursorBindings"].remove("committedUpperBound"),
+        lambda m: m["review"]["confirmedPagination"].update(fixedSnapshot=True),
+        lambda m: m["review"]["confirmedPagination"].update(cursorEncryption=True),
+        lambda m: m["review"]["confirmedPagination"].update(readWhileRunning=False),
+        lambda m: m["review"]["confirmedPagination"].update(sameLimitAcrossPages=False),
+        lambda m: m["review"]["historyProposal"].update(cursorBindings=["branch", "committedUpperBound"]),
         lambda m: m["review"]["historyProposal"].update(cursorTtlSeconds=3600),
+        lambda m: m["review"]["questions"][0].update(id="L1-page-direction"),
+        lambda m: m["operation"]["parameters"][2].update(schema="opaque string"),
+        lambda m: m["operation"]["parameters"].append({"in": "query", "name": "snapshotId"}),
         lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(nextPage=None),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(nextPage="2"),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(nextPage=True),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(nextPage=0),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(nextPage=3),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(total=3),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(snapshotId="snapshot-demo"),
         lambda m: m["operation"]["responses"][1]["bodies"]["default"]["result"].update(nextPage="page_more"),
         lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"]["events"][0].update(entrySeq=1),
         lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"]["events"][1].update(phase="delta"),
@@ -462,10 +494,12 @@ def validate_review_pages(post: dict) -> None:
     validate_history_model(histories[0], post)
     validator.validate_executable_script(history_scripts[0])
     visible_history = " ".join(history_parser.visible_text)
-    for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "固定分支", "下一页", "确认与续跑历史",
-                 "中断历史", "未整体确认", "第一页从哪里开始"):
+    for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "普通分页", "下一页", "确认与续跑历史",
+                 "中断历史", "未整体确认", "每页默认与最多返回多少条事件", "是否需要 total"):
         require(text in visible_history, f"no-JavaScript history page missing {text}")
-    require('data-question-id="L1-page-direction"' in history_source, "show current history choice")
+    require('data-question-id="L1-page-direction"' not in history_source, "do not reopen direction")
+    require(all(f'data-question-id="{key}"' in history_source for key in ("L2-page-size", "L3-page-metadata")),
+            "show remaining history choices")
     require("data-label" in history_source and "max-width: 680px" in history_source, "history responsive rules missing")
     source = (ROOT / "chat-events-v2-submit-review.html").read_text(encoding="utf-8")
     parser = validator.ContractHtmlParser()
@@ -507,7 +541,7 @@ def main() -> int:
         print(f"error: {error}")
         return 2
     print(f"POST SSE and ListEvents contracts valid; {negative_count} POST and {history_count} history negative regressions rejected")
-    print("Static contract validation only; database snapshot behavior and runtime concurrency were not executed.")
+    print("Static contract validation only; database pagination and runtime concurrency were not executed.")
     return 0
 
 

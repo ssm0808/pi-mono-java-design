@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.0 |
-| 状态 | 当前 operation 评审中，target-only；不代表已实现或整体确认 |
+| 文档版本 | 0.2.0 |
+| 状态 | 从旧到新、普通整数页码与取消固定快照已确认；其他字段及整体仍评审，target-only |
 | 更新日期 | 2026-09-06 |
-| 设计仓变更前基线 | `76d39c2603fc2a402d16545d35793ddcc97cc687` |
+| 设计仓变更前基线 | `5e12ef57a558ba99c1d9ce86149969e664c70174` |
 | 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
 | 官方公共契约核对 | Claude Managed Agents，2026-09-06，Beta；只证明公开行为 |
@@ -14,6 +14,8 @@
 
 用户明确要求开始修改查看对话历史接口，因此从 POST 切换到 ListEvents 逐项评审。
 这不是 POST 整体通过：其已确认决定与未决项继续保留。
+用户进一步确认从旧到新、普通 `page/nextPage` 数字页码，并在解释取舍后明确采用
+普通分页。该决定替代上一版跨页固定快照与不透明游标方案，不影响事件身份和写入顺序。
 
 - 当前 [ListEvents 评审页](chat-events-v2-review.html)，唯一精确源为
   [02-list-session-events.json](接口契约-v2/操作/02-list-session-events.json)。
@@ -23,7 +25,7 @@
   公共接口不变。内部 `sessionId` 不直接暴露给浏览器。
 
 ```http
-GET /campusclaw-service/v1/sessions/{sessionId}/events?limit=2
+GET /campusclaw-service/v1/sessions/{sessionId}/events?page=1&limit=2
 Accept: application/json
 X-HW-ID: credential-jwt
 Authorization: Bearer opaque-token
@@ -32,12 +34,12 @@ Authorization: Bearer opaque-token
 GET 是一次普通 JSON 读取，不是 SSE，也不是已撤销的 GET stream。结果沿用
 `ResultBean {resCode,resMsg,result:{events,nextPage}}`；失败不带 `result`。
 两种 Header 模式保留用户凭据 ID 的含义及具体非生产值。不要求 `access-token`，
-不创建执行凭据、不调用 Mate 工具，不把任何凭据写进事件、游标或日志。
+不创建执行凭据、不调用 Mate 工具，不把任何凭据写进事件或日志。
 上游认证、授权和隔离边界仍有效，Claw 不新增 JWT/APPKEY 解析或互斥校验。
 
 ## 2. 历史返回什么
 
-身份、完整事件同形、已提交顺序和固定快照沿用已确认目标决定。下表将这些决定
+身份、完整事件同形和已提交顺序沿用已确认目标决定；固定快照已被普通分页替代。下表将这些决定
 应用到 ListEvents；具体内容字段继承 POST 的候选状态，不因复制示例而获得批准。
 
 | 事件 | 历史投影 | 读取意义 |
@@ -63,34 +65,41 @@ GET 是一次普通 JSON 读取，不是 SSE，也不是已撤销的 GET stream�
 恢复，不能直接将 `user.interrupt`、idle 或显示摘要当作模型消息。本轮不修改 Runtime
 内核及 pi 语义，未从其他产品的公开接口推断内部持久化模型。
 
-## 3. 固定快照怎样分页
+## 3. 已确认：普通数字页码
 
-以下是落实固定快照的目标方案，具体游标字段、期限和方向尚待评审：
+`page=1、2、3……`，省略按第一页处理；有后续页时返回整数 `nextPage=page+1`，
+没有下一页时返回 `null`。不使用加密游标，不额外增加快照标识、密钥、过期时间或
+服务端翻页会话。页码是记录位置，不是 eventId 或内部事件序号。
 
-1. 首次不传 `page`。在一致的数据库短读事务中，读取当前分支叶节点、已提交的
-   内部顺序上界与可见性策略版本。它们必须属于同一个数据库可见状态。
-2. 只在该叶节点的祖先链内、上界以内读取完整可见事件。候选按内部顺序从旧到新，
-   过滤后取 `limit+1` 条判断是否还有下一页；`limit` 计事件，不计消息轮次。
-3. 有下一页时返回不透明 `nextPage`，封装 Session、固定分支、上界、上次返回位置、
-   可见性和投影版本、方向、到期时间。调用方原样回传，不能用 eventId 替代。
-4. 后续页仍查询固定分支和上界；期间新消息、迟到提交或当前分支切换，不混入这一轮。
-   同一有效 page 重读应得到相同记录；不跨 HTTP 请求持有数据库事务或行锁。
-5. 每页在读取边界重新检查 Session 存续及适用的授权/可见性条件。thinking 开关改变、
-   策略撤回或原分支数据清理导致快照不可用时，旧 page 失效；不能继续返回已撤权内容，
-   也不能偷偷切回最新分支。候选返回 `400 / INVALID_EVENT_LIST_QUERY`，Session
-   不存在/删除沿用 `404 / SESSION_NOT_FOUND`。统一错误不回显内部 token 或标识。
+每页读取该次查询可见的当前分支完整记录，不冻结首次查询的分支或提交上界。
+查询可在 `idle` 或 `running` 时进行，不抢占消息执行名额，也不要求暂停执行。
+同一轮翻页保持 `limit` 不变；改变大小时从第一页重新读取。
 
-游标需防篡改、不泄露内部字段，并在允许访问同一 Session 的服务实例间可验证；不能
-把当前缺省的进程随机密钥当作生产多实例方案。密钥轮换兼容窗口、过期时间、投影版本
-升级和数据保留期一并评审。新增表如确有必要仍使用 `t_` 命名，本轮不冻结 DDL。
+目标实现按可见事件集合计算 `offset=(page-1)*limit`，先按权限和事件类型过滤，
+再按内部顺序升序分页；多取一条判断是否还有下一页。若一个内部记录映射为多条
+公开事件，分页必须作用于映射后的稳定完整事件集合，不能先分页 Entry 再随意拆分。
+内部数据类型映射与完整事件身份是先决条件，不能把 delta 算入页大小。
+Service 校验页码、数量及偏移计算边界，拒绝溢出或无法支持的数值，不允许绕回负数。
+每页的分支、可见性和记录读取应来自一致的单次读取边界；这是单请求一致性，不是跨页
+固定快照，不跨 HTTP 请求保留数据库事务、连接或锁。
 
-`nextPage=null` 仅表示本快照读完，不表示执行结束。活动执行的后续完整事件需要
-从不带 page 的第一页创建新快照读取。这里只提供可靠历史补读，不声称可重放 token
-或用 eventId 在独立 SSE 上断点续传。
+例如第一页查询时有 120 条，取前 100 条；其后尾部追加 5 条，第二页可返回第
+101～125 条。这不是顺序错误，也不需要把新记录排除。稳定位置的前提是分支、过滤、
+保留范围和页大小不变，且新增事件只追加到可见顺序尾部；写侧的依赖检查和有序提交继续有效。
 
-当前 L1 只询问分页方向：推荐沿用旧到新，便于顺序读取和对账；另一候选先返回最近
-一页、再向前加载，每页内部仍按旧到新。默认 `limit=100`、上限 `200`、跨页改 limit
-规则和游标期限未冻结；暂不增加 `before/after/order` 等未经选择的新参数。
+分支切换、thinking 过滤改变、记录清理或可见权限变化可能使已有位置移动。调用方
+获知变化后重新从 `page=1` 加载；每页独立复核当前访问边界，不能返回已撤权内容。
+没有跨页身份，本接口不承诺自动发现这些变化，也不承诺跨页完全无重复、无遗漏。
+eventId 去重只能消除重复，不能弥补漏项；重新加载用于重新建立完整的当前列表。
+
+`nextPage=null` 仅表示本次查询没有下一页，不表示执行结束或未来不会增加记录。
+若读完后又有新增事件，客户端需要再次查询或合并其已收到的完整 SSE 事件；重新补读
+可从第一页开始按 eventId 合并，不凭页尾 null 自动重发 POST。
+
+剩余两项分页评审：L2 推荐默认 `limit=100`、上限 `200`；L3 推荐仅保留
+`events/nextPage`，不增加 `total`。若选择增加 total，它只能表示该次查询的可见记录数，
+不同页的值可以变化。合法但超出记录范围的页码暂以空成功响应为候选；非法页码或 limit
+沿用 `400 / INVALID_EVENT_LIST_QUERY`，不存在游标解密/过期错误。具体错误边界仍待评审。
 
 ## 4. 断线、确认和中断怎样展示
 
@@ -102,9 +111,9 @@ GET 是一次普通 JSON 读取，不是 SSE，也不是已撤销的 GET stream�
   被展示为“已经停止”；实际停止记录才可说明对应目标结束。
 - 等待工具确认的 idle 只结束对应 HTTP 交互；M1 仍占用 `running`，不可接受 M2。
   历史中的旧 done/terminated 也不是当前状态；提交是否允许仍以数据库原子准入为准。
-- 固定快照补读时，不删除还未出现在该快照中的实时内容。保留独立实时尾部，等新的
-  权威快照覆盖后再合并定序；不凭时间戳或 eventId 猜测跨通道顺序。
-- 缺少首帧时不能按“文本相同”唯一识别提交；空历史、超时或本轮快照缺少某条事件
+- 普通分页补读时，不删除尚未读到的实时内容。按 eventId 合并完整事件；尚未出现在
+  读取结果中的实时尾部保留独立顺序，后续补读再对账，不凭时间戳猜测跨通道顺序。
+- 缺少首帧时不能按“文本相同”唯一识别提交；空历史、超时或本次查询缺少某条事件
   都不证明 POST 未接受。不得自动重发。若需要自动判定某次提交或跨执行终态归属，
   还须单独确认关联机制，本轮不擅自增加请求 ID、执行 ID 或幂等键。
 
@@ -117,57 +126,60 @@ Java 文件相对根路径为
 | 相对路径与符号 | 已观察行为 | 目标差异 / 理由 |
 |---|---|---|
 | `web/RuntimeEventController.java` · `list` | GET 返回普通 ResultBean，不创建 Mate 执行凭据 | 保留 JSON 读取边界；不是再建实时长连接 |
-| `event/RuntimeEventQueryService.java` · `list/pageOf` | 默认 100、上限 200；每页读取 Session，afterSeq 分页 | 新增一致快照解析；数值作为沿用候选，不误标为新确认 |
-| `event/RuntimeEventCursorCodec.java` · `encode/decode` | AES-GCM page 绑定 Session、afterSeq、thinking 和到期时间；无固定分支/上界；未配置 secret 时用进程随机密钥 | 补齐快照绑定和多实例密钥约束，避免换实例即失效 |
+| `event/RuntimeEventQueryService.java` · `list/pageOf` | 默认 100、上限 200；每页读取 Session，afterSeq 分页 | 改为正整数页码与偏移分页；数量是沿用候选，不误标为新确认 |
+| `event/RuntimeEventCursorCodec.java` · `encode/decode` | AES-GCM page 绑定 Session、afterSeq、thinking 和到期时间；无固定分支/上界；未配置 secret 时用进程随机密钥 | 此编码器退出 v2 ListEvents 读取链路，不为普通页码增加密钥或签名；v1 实现目前未改 |
 | `event/RuntimeEntryCodec.java` · `toHistoryEvent/toSseData` | 旧类型、entryId/entrySeq，用户 message/fileIds；工具调用嵌在 Assistant 内容中 | 共用完整事件投影；工具调用身份要持久化或稳定映射，不能每次读取生成新 ID |
 | `vo/EventPageResponseVO.java` | events 为 `List<Map<String,Object>>`，另有 nextPage | 目标使用只读类型化事件 Response VO，DTO 不穿透 HTTP |
-| `campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · `listCurrentBranch` | 每页从当前 active_leaf_id 递归；只按 afterSeq 下界与旧类型白名单查询、按 entry_seq 升序 | 固定首查分支及已提交上界；新增控制、工具调用、结束记录的完整投影 |
+| `campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · `listCurrentBranch` | 每页从当前 active_leaf_id 递归；只按 afterSeq 下界与旧类型白名单查询、按 entry_seq 升序 | 保留每次读取当前分支；以可见完整事件为分页单位，用页码计算偏移；新增控制、工具调用、结束记录的完整投影 |
 | `event/RuntimeEventQueryService.java` · `restoreHistory`；`event/RuntimeEntryCodec.java` · `toAgentMessages` | 模型上下文恢复与公开列表已有不同路径 | 保留职责分离，避免把控制历史回灌模型 |
 
-分类：JSON ResultBean、公司上下文、M1 准入是产品约束；凭据不落盘与游标访问复核是
-安全加固；固定分页快照、共享完整事件投影和新增可恢复记录是 target-only 架构变更。
+分类：JSON ResultBean、公司上下文、M1 准入是产品约束；凭据不落盘与每页访问复核是
+安全加固；普通数字页码取代不透明游标是用户明确的产品约束，取消跨页固定快照是
+架构简化；共享完整事件投影和新增可恢复记录仍是 target-only 架构变更。
 
 [Claude 官方事件流文档](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
 区分不持久化的 preview 与权威完整事件，并用历史补齐断线期间的记录；
 [List Events 官方参考](https://platform.claude.com/docs/en/api/beta/sessions/events/list)
 是公开读取契约。本次只借鉴该边界；Beta 文档不能证明其服务端表结构、ID 算法、
-事务、调度或固定快照实现。Claw 的 POST 合并、type + phase、thinking 策略及游标
+事务、调度或分页实现。Claw 的 POST 合并、type + phase、thinking 策略及普通页码
 是本项目目标决定/候选，不声称与 Claude 完全相同。
 
 ## 6. 推荐目标类图与查询时序
 
-![共享权威事件投影与固定读取快照](设计图/事件历史查询/target_event_history_classes.svg)
+![共享权威事件投影与普通分页查询](设计图/事件历史查询/target_event_history_classes.svg)
 
 [PlantUML 源码：target_event_history_classes](设计图/事件历史查询/diagram.puml#L1)
 
 无状态单例 `CommittedEventProjection` 只接收已提交且完成可见性处理所需的 DTO，产出
 不可变 Response VO；POST 的完整帧与 GET 复用它。它不接收原始 Provider delta，
-也不承担追加事务。查询快照按请求解析、跨页通过不透明 page 延续，不是保存数据库
-连接的长生命周期对象；执行侧的 `SessionEventProjector` 仍是每执行对象，负责归一化
+也不承担追加事务。`HistoryPageQueryDTO` 只保存单次查询的页码、大小和安全计算后的
+偏移等内部参数；没有跨页快照对象或游标编解码器。执行侧的 `SessionEventProjector` 仍是每执行对象，负责归一化
 与追加，不能与这个无状态投影器混为同一职责。
 
-![固定快照分页与并发追加](设计图/事件历史查询/target_event_history_paging.svg)
+![普通分页与尾部追加](设计图/事件历史查询/target_event_history_paging.svg)
 
-[PlantUML 源码：target_event_history_paging](设计图/事件历史查询/diagram.puml#L58)
+[PlantUML 源码：target_event_history_paging](设计图/事件历史查询/diagram.puml#L56)
 
 ## 7. 实施切片与验收
 
 1. 先补完整记录的稳定身份和共享投影骨架。POST 与 GET 同一完整事件逐字段相等；
    保留三种用户回执、工具关联及唯一停止记录，不泄露内部 ID 或凭据。
-2. 再实现快照查询 DTO、游标编解码与 Mapper。并发追加、分支切换不混页；上界以前
-   不允许后来填入已对外提交顺序的空洞。保留写侧已确认的因果依赖与短事务串行规则。
+2. 再实现页码归一、查询 DTO 与 Mapper。尾部追加不移动已有位置；分支/过滤变化后
+   重读第一页，不承诺跨页快照。保留写侧已确认的因果依赖与短事务串行规则。
 3. 接入类型化只读 Response VO；请求 Request VO 用标准 Jakarta 校验，默认值在
    Service 归一，内部 Mapper 仅传 DTO。不得把原 Map/存储对象直接交给 Controller。
-4. 验收过滤计数、空页、页尾、重复查询、过期/篡改/跨 Session page、密钥轮换、
-   thinking 变化、删除与保留期清理；多实例使用同一有效 page 的结果一致。
+4. 验收 page=1/2、默认第一页、非法整数、limit 越界、偏移溢出、过滤后计数、空页、
+   超出范围、页尾、追加后续读和运行中读取；同一数据库可见数据与策略下不同实例结果一致。
+   另外覆盖 thinking/分支变化后重载、删除和保留期清理，不测试已取消的游标期限或密钥。
 5. 场景验收完整事件覆盖预览、迟到 delta、中断双响应去重、等待确认仍 running，
    以及没有回执时不自动重发。工具无结果不伪造，未知持久化类型不静默丢弃。
 
 当前交付是契约示例与静态验证，不包含上述运行时测试的通过声明。完整字段、扩展事件、
-分页方向、数值及保留期确认后，才能将本操作标为整体通过并替换 v1。
+分页数量、响应元数据、错误及保留期确认后，才能将本操作标为整体通过并替换 v1。
 
 ## 8. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.0 | 2026-09-06 | 确认从旧到新、普通整数 page/nextPage，取消跨页固定快照、快照标识及加密游标；保留同形与顺序，移除 L1 选择，改评审每页数量与 total；补齐普通分页变化边界与目标图。 |
 | 0.1.0 | 2026-09-06 | 按用户要求开启 ListEvents 修改：完整事件与 POST 对齐、固定分支/提交上界候选、两页与中断/确认示例、源码差距、目标图及验收；POST 未决项保留。 |

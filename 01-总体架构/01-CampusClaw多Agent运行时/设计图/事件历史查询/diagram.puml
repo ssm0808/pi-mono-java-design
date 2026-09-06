@@ -4,7 +4,7 @@ title Target Event History - Shared Complete Projection
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java, list/pageOf.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEntryCodec.java, toHistoryEvent/toSseData.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventCursorCodec.java, encode/decode.
-' Observed behavior: current cursors have no fixed branch or upper watermark.
+' Observed behavior: current pages are sequence-based opaque cursors, not integers.
 ' Design reason: one complete projection prevents SSE/history identity drift.
 ' All new classes and relations are target-only; existing boundaries are changed.
 hide empty members
@@ -17,8 +17,7 @@ package "Web boundary" {
 }
 package "Application" {
   class SessionEventQueryService <<singleton, target-only>>
-  class HistoryReadSnapshotDTO <<request immutable, target-only>>
-  class HistoryCursorCodec <<singleton, target-only>>
+  class HistoryPageQueryDTO <<request immutable, target-only>>
   class CommittedEventProjection <<stateless singleton, target-only>>
   class RequestEventRouter <<singleton, target-only>>
 }
@@ -32,8 +31,7 @@ RuntimeEventController --> ListSessionEventsRequestVO : validates
 RuntimeEventController --> SessionEventQueryService : list
 RuntimeEventController ..> ListSessionEventsResponseVO : returns
 ListSessionEventsResponseVO *-- "0..*" SessionEventResponseVO : ordered events
-SessionEventQueryService --> HistoryCursorCodec : validate / encode page
-SessionEventQueryService ..> HistoryReadSnapshotDTO : resolves each request
+SessionEventQueryService ..> HistoryPageQueryDTO : validates page / limit / offset
 SessionEventQueryService --> RuntimeSessionRepository : consistent read
 SessionEventQueryService --> CommittedEventProjection : complete history
 RequestEventRouter --> CommittedEventProjection : committed SSE only
@@ -42,12 +40,12 @@ CommittedEventProjection ..> SessionEventResponseVO : creates
 RuntimeSessionRepository <|.. MyBatisRuntimeSessionRepository
 MyBatisRuntimeSessionRepository --> RuntimeSessionMapper
 RuntimeSessionMapper ..> CommittedEventDTO : maps records
-RuntimeSessionRepository ..> HistoryReadSnapshotDTO : fixed branch and bounds
-note bottom of HistoryReadSnapshotDTO
-  Binds branch, committed upper bound,
-  position and visibility policy.
-  No live database connection.
-  Recheck current access on every page.
+RuntimeSessionRepository ..> HistoryPageQueryDTO : ordinary page criteria
+note bottom of HistoryPageQueryDTO
+  Positive page number and stable per-traversal limit.
+  Resolve current branch and visibility per request.
+  No cross-request snapshot or cursor encryption.
+  Recheck access; no retained database connection.
 end note
 note bottom of CommittedEventProjection
   Same eventId and complete payload for SSE and history.
@@ -56,50 +54,51 @@ note bottom of CommittedEventProjection
 end note
 @enduml
 @startuml target_event_history_paging
-title Target Fixed Snapshot Paging - Oldest First Candidate
+title Target Ordinary Integer Paging - Oldest First
 ' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
 ' Source: campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml, listCurrentBranch.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java, list/pageOf.
 ' Observed behavior: each current query resolves active_leaf_id again.
-' Design reason: fix branch and committed upper bound without a long transaction.
-' Target-only architecture; page direction, limits and token lifetime remain candidates.
+' Design reason: user approved ordinary pages without cross-request snapshots.
+' Target-only architecture; page size, response metadata and errors remain candidates.
 actor "Internal caller" as C
 participant "History service" as Q
-participant "Cursor codec" as T
 database "Session / Event store" as D
 participant "Execution appender" as A
-C -> Q : GET events (limit, no page)
+C -> Q : GET events (page = 1, limit = 100)
+Q -> Q : Validate positive integers and offset bounds
 group Short consistent read transaction
   Q -> D : Check access / existence / visibility
-  Q -> D : Read branch leaf and committed upper bound
-  Q -> D : Read visible complete records (limit + 1)
-  D --> Q : Snapshot and records
+  Q -> D : Resolve current branch and visibility
+  Q -> D : Read ordered complete events (offset 0, limit + 1)
+  D --> Q : First page and one possible extra event
 end
-Q -> T : Encode bound continuation if more records
-T --> Q : Opaque nextPage or null
+Q -> Q : nextPage = 2 if extra event exists, else null
 Q --> C : ResultBean(events, nextPage)
-A -> D : Commit new complete event after upper bound
-note right of D : New records do not enter the earlier snapshot.
-C -> Q : GET events (page = nextPage)
-Q -> T : Verify session, integrity, expiry and versions
-alt Valid token
+A -> D : Commit new complete events at the tail
+note right of D : New records may enter later pages.
+C -> Q : GET events (page = 2, same limit)
+Q -> Q : Validate page / limit / offset
+alt Valid parameters
   group Short consistent read transaction
     Q -> D : Recheck access, existence and visibility
-    Q -> D : Read pinned branch within fixed upper bound
-    D --> Q : Records or unavailable snapshot
+    Q -> D : Resolve current branch and visible complete events
+    Q -> D : Read ordered page (offset = (page - 1) * limit)
+    D --> Q : Page plus one possible extra event
   end
-  alt Snapshot still readable
-    Q -> T : Encode next position or return null
+  alt Session readable
+    Q -> Q : nextPage = page + 1 if extra event, else null
     Q --> C : Complete ordered events
-  else Deleted / revoked / snapshot unavailable
-    Q --> C : Error, never silently switch branch
+  else Deleted / access revoked
+    Q --> C : Error, no stale access reuse
   end
-else Invalid token
+else Invalid parameters
   Q --> C : INVALID_EVENT_LIST_QUERY
 end
 note over C,Q
-  null means snapshot exhausted, not execution finished.
-  Start a fresh first page to include newer commits.
+  null means no next page at query time, not execution finished.
+  Reload page 1 if branch, filter or page size changes.
+  No automatic cross-page change detection is promised.
   No automatic replay of accepted POST requests.
 end note
 @enduml
