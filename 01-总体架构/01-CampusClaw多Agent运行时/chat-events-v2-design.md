@@ -2,17 +2,18 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.4.2 |
-| 状态 | POST 合并、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；数据库细节、其余并发竞态、具体字段与错误细节仍评审，target-only |
+| 文档版本 | 0.5.0 |
+| 状态 | 当前评审 ListEvents；POST 合并、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；两操作的未决细节仍保留，target-only |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | 本次 HTTP 合并核对提交 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；原 `a8192e0`，变更路径与结论见 §4.2 |
 | 中断优化补充核对提交 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；只补充 §4.4 的容量、注册表及响应生命周期证据，不替换其他主题基线 |
+| 历史查询补充核对 | 同一 `dfb90ca`；查询、编码、游标与 Mapper 四个文件相对 `918005e` 不变，见 [ListEvents 设计](chat-events-v2-history-design.md)；本次变更前设计 `76d39c2603fc2a402d16545d35793ddcc97cc687` |
 | 事件顺序补充核对提交 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；只补充本文 §4.1 证据，不替换其他主题基线 |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | mate 公共契约基线 | [`mate-service 通用对话 API`](../../02-服务与接口/07-mate-service通用对话API/README.md) 1.4.4 |
 | 外部公共契约核对日 | 2026-09-04；仅对照 preview 与权威历史，不照搬独立读取流 |
-| 更新日期 | 2026-09-05 |
+| 更新日期 | 2026-09-06 |
 
 ## 1. 已确认资源模型
 
@@ -22,7 +23,7 @@
 | Method | Path | 职责 | 当前状态 |
 |---|---|---|---|
 | `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 提交一条用户事件；首帧完整回执，随后推送对应事件 | 合并方向、首帧与对应 idle 关闭已确认；整个操作仍待评审 |
-| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 固定快照权威历史及断线对账 | 职责、身份与顺序已确认；具体字段未完整评审 |
+| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 固定快照权威历史及断线对账 | 当前评审；完整事件示例已对齐 POST，分页方向与细节候选 |
 
 原独立 `GET /sessions/{sessionId}/events/stream` 从 v2 目标中撤销；旧 JSON model
 移除，旧方案可从 Git 历史恢复。不增加 `executionId/runId`，不把响应连接变成公共执行
@@ -41,7 +42,13 @@
 
 [PlantUML 源码：`target_session_events_resource_model`](设计图/事件接口重设计/diagram.puml#L1)
 
-## 2. 当前评审：提交事件并接收对应推送
+## 2. 当前评审安排与 POST 已确认边界
+
+2026-09-06 用户明确要求开始修改历史接口，当前切换到
+`GET /sessions/{sessionId}/events`，见 [ListEvents 评审页](chat-events-v2-review.html)
+和 [历史查询设计](chat-events-v2-history-design.md)。GET 返回普通 JSON 的完整事件分页，
+不是独立 SSE；已确认的身份、同形和顺序继续有效，分页方向与细节仍候选。
+下面保留 POST 已确认边界，切换评审不等于整体确认 POST。
 
 ```http
 POST /campusclaw-service/v1/sessions/{sessionId}/events
@@ -94,14 +101,16 @@ access-token: opaque-access-token
 
 ### 2.2 精确评审入口与未确认范围
 
-- [当前合并 POST 评审页](chat-events-v2-review.html)：
-  [唯一 operation model](接口契约-v2/操作/01-submit-session-event.json)。
+- [当前 ListEvents 评审页](chat-events-v2-review.html)：
+  [历史 operation model](接口契约-v2/操作/02-list-session-events.json)。
+- [合并 POST 保留评审页](chat-events-v2-submit-review.html)：
+  [POST operation model](接口契约-v2/操作/01-submit-session-event.json)，未决项不变。
 - [响应生命周期与源码差距](chat-events-v2-stream-design.md)：三种输入各自的输出范围、
   已确认结束规则，以及背压和恢复候选。
 - [旧确认页](chat-events-v2-confirmed.html) 只保留变更提示并链接当前页，不再展示已失效
   的普通 JSON POST 为当前已确认接口。
-- `common.json.reviewState` 当前为 `submitSessionEvent`，
-  `confirmedOperations=[]`；这不撤销已确认字段，只表示新操作尚未整体确认。
+- `common.json.reviewState` 当前为 `listSessionEvents`，
+  `confirmedOperations=[]`；这不撤销已确认字段，也不推定任一新操作整体通过。
 
 结束规则已确认：收到本次对应的 `session.status_idle` 后关闭本条响应；等待工具确认
 时也关闭，之后通过新的 `user.tool_confirmation` POST 接收续跑结果。关闭的是本次
@@ -118,6 +127,9 @@ idle，不复制正文、思考或工具输出。仍连接的两条响应接收�
 不整体确认合并接口。机制与安全边界见 §4.4。
 
 ## 3. 目标分层与生命周期
+
+以下总览保留 POST 与执行主干；GET 的共享完整事件投影、请求范围快照和固定分页
+细化为 [历史查询目标类图与时序](chat-events-v2-history-design.md#6-推荐目标类图与查询时序)。
 
 ![Session Events 目标类图](设计图/事件接口重设计/target_session_events_classes.svg)
 
@@ -525,11 +537,13 @@ M7 专项验收：同实例请求只在提交成功后取消，回滚/提交不�
 | 2026-09-04 | M5 数据库中断机制 | 用户明确选择本期数据库停止请求与实例批量检查；后续有必要再用 Redis。固定内部执行目标、共享同一权威终态、不依赖粘性路由；数据库细节、数值参数、并发与故障流程仍待评审，不整体确认操作。 |
 | 2026-09-05 | M6 单消息准入 | 用户明确 M1 未完成前不接受 M2，数据库 Session 在消息接受时改为 running；按 Session 对不同调用方和实例互斥，接受与状态变更同事务。等待确认和停止未完成不释放新消息准入；迟到中断、超时策略和其余错误仍待评审。 |
 | 2026-09-05 | M7 中断查询优化 | 用户在同实例提交后立即通知、等待目标去重及索引按执行计划与压测选择的建议后回复“可以呀”；保留数据库权威和轮询兜底，补齐登记/补读与逐响应去重边界。未确认具体周期、批次、工具超时、等待期限、索引 DDL、重复中断准入或整个操作。 |
+| 2026-09-06 | 开始修改 ListEvents | 用户要求历史查询随新事件接口调整，并明确开始修改；当前 operation 切至 GET 历史，补齐完整事件、固定分支与上界候选及对账示例。未整体确认 GET 或 POST。 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.5.0 | 2026-09-06 | 开始 ListEvents 评审：新增独立模型、历史设计和目标图，完整事件示例与 POST 同形，固定分支/上界和分页方向候选；保留 POST 独立评审页及未决项。实现基线 dfb90ca，仅改设计。 |
 | 0.4.2 | 2026-09-05 | 确认 M7：提交后同实例通知、按固定目标去重等待、登记后补读与逐响应终态去重、索引按实测选型；同步评审模型/HTML、目标类图/时序和验收。变更前设计 e370d2d；补充核对 dfb90cac，所查五个文件相对 918005ee 不变，仅改设计。 |
 | 0.4.1 | 2026-09-05 | 确认 M6 单消息数据库准入；补齐源码行锁与事务证据、SSE 关闭和资源 running 的区别、目标图与实施验收。变更前设计 ab9e360，实现基线 918005ee 不变；本轮仅改设计。 |
 | 0.4.0 | 2026-09-04 | 确认 M5 数据库中断交接，本期不引入 Redis；同步评审模型、HTML、目标类图及数据库时序、源码差距和验收。变更前设计 4b1577a，实现基线 918005ee 不变；未修改实现或 Mate 契约。 |

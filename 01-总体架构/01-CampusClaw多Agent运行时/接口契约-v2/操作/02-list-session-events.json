@@ -1,0 +1,484 @@
+{
+  "operation": {
+    "shortName": "查看对话历史",
+    "operationKey": "listSessionEvents",
+    "method": "GET",
+    "path": "/sessions/{sessionId}/events",
+    "summary": "分页查询与 POST SSE 一致的完整事件",
+    "description": "当前评审 ListEvents；这是目标设计，尚未修改 CampusClaw 实现。保留 GET 历史查询，不恢复 GET /events/stream。普通 JSON 响应使用 ResultBean，result.events 是有序完整事件数组，result.nextPage 是下一页的不透明游标或 null。三类已接受的 user.* 回执与 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 使用 POST SSE 的相同 eventId、createdAt 和业务字段；正文/思考只返回 phase=completed，不返回 delta、心跳或连接结束标记。已确认按已提交内部顺序返回，客户端保持数组顺序，不按 createdAt 重排，不公开 entryId、entrySeq 或执行标识。当前候选以当前分支为首查范围，首次查询固定分支、已提交上界和可见性规则；后续 page 继续同一快照。后来写入的事件需另起第一页读取，nextPage=null 仅表示本快照读完，不表示执行已结束。候选沿用 Session thinking 开关过滤已获准公开的摘要；开关或授权条件变化时不能凭旧 page 继续读取已失去权限的内容。每页重新检查访问边界，page 不是访问凭据。中断回执只表示已接受；相同停止 idle 在历史中只出现一次。等待确认的 idle 不能解除 M1 的 running 状态；不能用某条历史 idle 判定现在可提交 M2。只读接口不要求 access-token，不创建执行凭据、不调用 Mate 工具，所有凭据都不进入历史或游标。未整体确认 ListEvents 或合并 POST；配置变更、压缩、Usage 与其他扩展事件的 v2 映射仍待补齐，不能因基础示例未列出而删除既有能力。CampusClaw 内部 sessionId 不直接暴露给浏览器，Mate 公共 API 不在本轮修改范围。",
+    "requestHeaderExamples": [
+      {
+        "id": "jwt",
+        "label": "JWT Header 示例",
+        "preferred": true,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "credential-jwt",
+            "required": true,
+            "description": "用户凭据 ID，不是公司、服务或应用标识。只读请求沿用公司调用上下文；不保存到事件、分页游标或日志。"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer opaque-token",
+            "required": true,
+            "description": "Bearer JWT 示例。沿用上游认证与授权边界，Claw 不解析或校验；本接口不创建执行凭据、不调用 Mate 工具。"
+          },
+          {
+            "name": "Accept",
+            "value": "application/json",
+            "required": false,
+            "description": "接收普通 JSON 分页响应，不建立 SSE 连接。不需要 access-token，也不借用上一条 POST 的工具令牌。"
+          }
+        ]
+      },
+      {
+        "id": "appkey",
+        "label": "APPKEY Header 示例",
+        "preferred": false,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "credential-appkey",
+            "required": true,
+            "description": "用户凭据 ID，不是公司、服务或应用标识。只读请求沿用公司调用上下文；不保存到事件、分页游标或日志。"
+          },
+          {
+            "name": "X-HW-APPKEY",
+            "value": "opaque-appkey",
+            "required": true,
+            "description": "AppKey 示例。沿用上游认证与授权边界，Claw 不校验，可与 Authorization 同时出现；本接口不创建执行凭据、不调用 Mate 工具。"
+          },
+          {
+            "name": "Accept",
+            "value": "application/json",
+            "required": false,
+            "description": "接收普通 JSON 分页响应，不建立 SSE 连接。不需要 access-token，也不借用上一条 POST 的工具令牌。"
+          }
+        ]
+      }
+    ],
+    "parameters": [
+      {
+        "$ref": "parameters.sessionId"
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": "integer 1..200; default 100（候选沿用）",
+        "description": "本页最多返回的完整事件条数，不是消息轮数；用户、工具和状态事件分别计数。第一页/下一页示例使用 2，其他场景使用 100。默认值、上限和跨页修改规则尚未冻结。"
+      },
+      {
+        "in": "query",
+        "name": "page",
+        "required": false,
+        "schema": "opaque string",
+        "description": "第一页不传；后续页原样使用上一响应的 nextPage，不能用 eventId 替代。候选绑定 Session、固定分支、已提交上界、上次返回位置、可见性/投影版本、方向及到期时间；字段均封装在游标内，不公开内部序号。"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体。第一页：?limit=2；配对下一页：?limit=2&page=page_h7Qb2Yk9Lm4Np6Rx8Tv3Wa5Zc0De1Fg2Hi3Jk4Lm5No6Pq7Rs8Tu9Vw。该游标是非生产演示值，不能用于调用真实环境。示例暂按旧到新分页，方向待下方选择。",
+      "example": null
+    },
+    "responses": [
+      {
+        "id": "200-first-page",
+        "status": "200",
+        "tabLabel": "200 · 第一页",
+        "label": "OK",
+        "summary": "候选正向分页，?limit=2：同一快照共三条完整记录，本页返回前两条。eventId、createdAt 与正文均复用 POST「消息回复」完整帧；不含 delta。nextPage 非空表示该快照还有下一页。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "eventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "type": "user.message",
+                  "createdAt": "2026-09-03T08:30:15.123Z",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
+                    },
+                    {
+                      "type": "file",
+                      "fileId": "7f12d8a380964fdc8518f48be1cf6a42"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "d5c19f7c4b1642e6806aeb860752d99b",
+                  "type": "agent.message",
+                  "phase": "completed",
+                  "createdAt": "2026-09-04T08:30:19.451Z",
+                  "content": "结合巡检记录与告警信息，建议先核查上联链路，再安排变更窗口处理。"
+                }
+              ],
+              "nextPage": "page_h7Qb2Yk9Lm4Np6Rx8Tv3Wa5Zc0De1Fg2Hi3Jk4Lm5No6Pq7Rs8Tu9Vw"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-next-page",
+        "status": "200",
+        "tabLabel": "200 · 下一页",
+        "label": "OK",
+        "summary": "与「第一页」配对，?limit=2&page=page_h7Qb2Yk9Lm4Np6Rx8Tv3Wa5Zc0De1Fg2Hi3Jk4Lm5No6Pq7Rs8Tu9Vw：返回同一快照的最后一条，nextPage=null 只表示该快照读完；不等于 Session 当前空闲。分页期间新增事件须另起第一页读取。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "eventId": "d4e3e8b9653047a99ac10396a17fe84d",
+                  "type": "session.status_idle",
+                  "createdAt": "2026-09-04T08:30:20.000Z",
+                  "reason": "done"
+                }
+              ],
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "200-confirmation",
+        "status": "200",
+        "tabLabel": "200 · 确认与续跑历史",
+        "label": "OK",
+        "summary": "独立场景，?limit=100，thinking=true：合并 POST「等待工具确认」与「拒绝确认后续跑」的完整事件，按依赖与已提交内部顺序返回；不是按 createdAt 排序。reason=confirming 只结束对应 HTTP 交互，资源仍 running。具体 thinking 内容、工具字段和 reason 值继承 POST 候选状态。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "eventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "type": "user.message",
+                  "createdAt": "2026-09-03T08:30:15.123Z",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
+                    },
+                    {
+                      "type": "file",
+                      "fileId": "7f12d8a380964fdc8518f48be1cf6a42"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "5e9a24c8d7134f6baa10c9827d45e301",
+                  "type": "agent.thinking",
+                  "phase": "completed",
+                  "createdAt": "2026-09-04T08:30:16.000Z",
+                  "content": "已确认隔离操作会修改生产配置，需要用户确认。"
+                },
+                {
+                  "eventId": "6c7d8e9f01234567a89bcdef01234567",
+                  "type": "agent.tool_call",
+                  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
+                  "createdAt": "2026-09-04T08:30:16.100Z",
+                  "toolName": "isolate_campus_port",
+                  "arguments": {
+                    "deviceName": "SW-DC-01",
+                    "portName": "GigabitEthernet0/0/24"
+                  },
+                  "requiresConfirmation": true
+                },
+                {
+                  "eventId": "7d8e9f0123456789abcdef0123456789",
+                  "type": "session.status_idle",
+                  "createdAt": "2026-09-04T08:30:16.200Z",
+                  "reason": "confirming"
+                },
+                {
+                  "eventId": "2781508bb1c9496f94a0454d0bf8c0f8",
+                  "type": "user.tool_confirmation",
+                  "createdAt": "2026-09-03T08:30:17.100Z",
+                  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
+                  "result": "deny",
+                  "denyMessage": "该操作会修改生产配置，请先给出无变更风险的处理建议。"
+                },
+                {
+                  "eventId": "89f8316e07ef4c9aa3fd056a91a182b0",
+                  "type": "agent.tool_result",
+                  "createdAt": "2026-09-04T08:30:16.600Z",
+                  "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
+                  "content": "用户已拒绝，本次工具调用未执行。",
+                  "isError": true,
+                  "errorCode": "TOOL_CALL_DENIED"
+                },
+                {
+                  "eventId": "9f0123456789abcdef0123456789abcd",
+                  "type": "agent.message",
+                  "phase": "completed",
+                  "createdAt": "2026-09-04T08:30:17.000Z",
+                  "content": "已取消配置变更，接下来可先核查告警时间线与上联链路。"
+                },
+                {
+                  "eventId": "a0123456789abcdef0123456789abcde",
+                  "type": "session.status_idle",
+                  "createdAt": "2026-09-04T08:30:17.100Z",
+                  "reason": "done"
+                }
+              ],
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "200-interrupted",
+        "status": "200",
+        "tabLabel": "200 · 中断历史",
+        "label": "OK",
+        "summary": "独立场景，?limit=100：原消息输出、中断回执和实际停止记录汇入同一历史。两条 SSE 共享的停止事件仅保留一条，eventId 相同；中断回执本身不证明执行已停止。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "eventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "type": "user.message",
+                  "createdAt": "2026-09-03T08:30:15.123Z",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
+                    },
+                    {
+                      "type": "file",
+                      "fileId": "7f12d8a380964fdc8518f48be1cf6a42"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "fa679dc5d02e4b609a26e65c9a4603b0",
+                  "type": "agent.thinking",
+                  "phase": "completed",
+                  "createdAt": "2026-09-03T08:30:16.000Z",
+                  "content": "已整理巡检记录，下一步核对告警时间线。"
+                },
+                {
+                  "eventId": "aee903c130e048b9bc2894fc32cd63a8",
+                  "type": "user.interrupt",
+                  "createdAt": "2026-09-03T08:30:16.420Z"
+                },
+                {
+                  "eventId": "38e397c80d5a4f3ba7916df3bbf0a936",
+                  "type": "session.status_idle",
+                  "createdAt": "2026-09-04T08:31:01.000Z",
+                  "reason": "terminated"
+                }
+              ],
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "200-empty",
+        "status": "200",
+        "tabLabel": "200 · 空历史",
+        "label": "OK",
+        "summary": "独立场景：当前快照无可见完整事件。返回 events=[]、nextPage=null，不返回 null 数组。空历史不证明此前 POST 未接受，不授权自动重发。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [],
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "400-invalid-session-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_SESSION_ID",
+        "label": "Bad Request",
+        "summary": "sessionId 不符合标识格式。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "sessionId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The sessionId format is invalid."
+          }
+        }
+      },
+      {
+        "id": "400-invalid-event-list-query",
+        "status": "400",
+        "tabLabel": "400 · INVALID_EVENT_LIST_QUERY",
+        "label": "Bad Request",
+        "summary": "候选统一分页错误：limit 越界，page 被篡改、过期、绑定其他 Session，或原快照/可见性策略已不可用。不得静默切换到最新分支；调用方放弃本轮分页，从不带 page 的第一页重新查询。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_EVENT_LIST_QUERY",
+            "resMsg": "事件分页参数不符合约束。"
+          },
+          "en-US": {
+            "resCode": "INVALID_EVENT_LIST_QUERY",
+            "resMsg": "The event pagination parameters are invalid."
+          }
+        }
+      },
+      {
+        "status": "404",
+        "label": "Not Found",
+        "summary": "Session 不存在或已删除。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        },
+        "id": "404-session-not-found",
+        "tabLabel": "404 · SESSION_NOT_FOUND"
+      },
+      {
+        "status": "500",
+        "label": "Internal Server Error",
+        "summary": "服务端未能读取或投影 Session 持久化事件。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_LIST_FAILED",
+            "resMsg": "Session 持久化事件读取失败。"
+          },
+          "en-US": {
+            "resCode": "EVENT_LIST_FAILED",
+            "resMsg": "Failed to list persisted events for the Session."
+          }
+        },
+        "id": "500-event-list-failed",
+        "tabLabel": "500 · EVENT_LIST_FAILED"
+      }
+    ]
+  },
+  "review": {
+    "status": "ListEvents 当前评审 · eventId、完整事件同形、顺序与固定快照沿用已确认决定 · 分页细节候选 · 未整体确认",
+    "notice": "本轮只确认尚未确定的分页方向；身份、完整事件同形和不按 createdAt 重排不重开。默认候选沿用旧到新，便于顺序读取与对账。工具/思考字段、扩展事件、游标期限和完整接口仍待评审。选择方向不等于确认全部内容。",
+    "questions": [
+      {
+        "id": "L1-page-direction",
+        "legend": "查看历史时，第一页从哪里开始？",
+        "options": [
+          {
+            "value": "A-oldest-first",
+            "label": "从最早记录开始（推荐）",
+            "description": "按已提交顺序向后翻页；适合完整历史读取和断线对账，示例采用此方案。",
+            "selected": true
+          },
+          {
+            "value": "B-latest-page-first",
+            "label": "先返回最近一页",
+            "description": "先显示最近对话，再向前加载更早记录；每页仍按旧到新排列，跨页需要向前拼接。"
+          }
+        ]
+      }
+    ],
+    "confirmedChoices": {},
+    "inheritedRules": {
+      "eventIdentity": "eventId",
+      "completeEventProjection": "same-as-post-sse",
+      "ordering": "committed-causal-order",
+      "snapshot": "fixed",
+      "deltaHistory": false
+    },
+    "historyProposal": {
+      "pageDirection": "oldest-first",
+      "defaultLimit": 100,
+      "maxLimit": 200,
+      "scope": "current-branch-at-first-read",
+      "thinkingFilter": "session-policy",
+      "cursorBindings": [
+        "session",
+        "branch",
+        "committedUpperBound",
+        "position",
+        "visibilityVersion",
+        "projectionVersion",
+        "direction",
+        "expiresAt"
+      ],
+      "cursorTtlSeconds": null,
+      "readToolToken": false
+    },
+    "pendingReview": [
+      "分页方向、limit 默认值/上限及跨页修改规则",
+      "thinking 内容策略、配置/压缩/Usage 与其他扩展事件的完整 v2 投影",
+      "游标期限、密钥管理、数据保留和错误细节",
+      "缺少回执时的结果不确定、执行关联与 Mate 展示对账边界",
+      "ListEvents 接口整体确认"
+    ],
+    "promptPrefix": "Claw Session Events v2 接口评审：GET /sessions/{sessionId}/events",
+    "promptSuffix": "仅应用本次明确选择；保留 eventId、完整事件同形与固定快照顺序，不默认确认 ListEvents 或合并 POST，不修改 Mate 公共契约。"
+  }
+}

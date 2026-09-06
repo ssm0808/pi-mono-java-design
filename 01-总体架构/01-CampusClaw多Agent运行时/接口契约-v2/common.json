@@ -1,14 +1,14 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "2.0.0-proposal.17",
+    "version": "2.0.0-proposal.18",
     "basePath": "/campusclaw-service/v1",
-    "visibility": "Internal · POST 提交与推送合并评审中 · target-only",
+    "visibility": "Internal · 当前评审：ListEvents 历史查询 · target-only",
     "fieldNaming": "lowerCamelCase",
     "headerNaming": "保留原名"
   },
   "reviewState": {
-    "currentOperation": "submitSessionEvent",
+    "currentOperation": "listSessionEvents",
     "confirmedOperations": []
   },
   "resourceIdPatterns": {

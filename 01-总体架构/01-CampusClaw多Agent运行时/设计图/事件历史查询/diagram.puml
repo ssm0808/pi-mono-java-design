@@ -1,0 +1,105 @@
+@startuml target_event_history_classes
+title Target Event History - Shared Complete Projection
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java, list/pageOf.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEntryCodec.java, toHistoryEvent/toSseData.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventCursorCodec.java, encode/decode.
+' Observed behavior: current cursors have no fixed branch or upper watermark.
+' Design reason: one complete projection prevents SSE/history identity drift.
+' All new classes and relations are target-only; existing boundaries are changed.
+hide empty members
+skinparam classAttributeIconSize 0
+package "Web boundary" {
+  class RuntimeEventController <<singleton, existing-changed>>
+  class ListSessionEventsRequestVO <<request, target-only>>
+  class ListSessionEventsResponseVO <<immutable, target-only>>
+  class SessionEventResponseVO <<immutable union, target-only>>
+}
+package "Application" {
+  class SessionEventQueryService <<singleton, target-only>>
+  class HistoryReadSnapshotDTO <<request immutable, target-only>>
+  class HistoryCursorCodec <<singleton, target-only>>
+  class CommittedEventProjection <<stateless singleton, target-only>>
+  class RequestEventRouter <<singleton, target-only>>
+}
+package "Persistence boundary" {
+  interface RuntimeSessionRepository <<existing-changed>>
+  class MyBatisRuntimeSessionRepository <<singleton, existing-changed>>
+  class CommittedEventDTO <<immutable transfer, target-only>>
+  class RuntimeSessionMapper <<singleton, existing-changed>>
+}
+RuntimeEventController --> ListSessionEventsRequestVO : validates
+RuntimeEventController --> SessionEventQueryService : list
+RuntimeEventController ..> ListSessionEventsResponseVO : returns
+ListSessionEventsResponseVO *-- "0..*" SessionEventResponseVO : ordered events
+SessionEventQueryService --> HistoryCursorCodec : validate / encode page
+SessionEventQueryService ..> HistoryReadSnapshotDTO : resolves each request
+SessionEventQueryService --> RuntimeSessionRepository : consistent read
+SessionEventQueryService --> CommittedEventProjection : complete history
+RequestEventRouter --> CommittedEventProjection : committed SSE only
+CommittedEventProjection ..> CommittedEventDTO : reads
+CommittedEventProjection ..> SessionEventResponseVO : creates
+RuntimeSessionRepository <|.. MyBatisRuntimeSessionRepository
+MyBatisRuntimeSessionRepository --> RuntimeSessionMapper
+RuntimeSessionMapper ..> CommittedEventDTO : maps records
+RuntimeSessionRepository ..> HistoryReadSnapshotDTO : fixed branch and bounds
+note bottom of HistoryReadSnapshotDTO
+  Binds branch, committed upper bound,
+  position and visibility policy.
+  No live database connection.
+  Recheck current access on every page.
+end note
+note bottom of CommittedEventProjection
+  Same eventId and complete payload for SSE and history.
+  No credentials, raw delta or execution IDs.
+  Not the execution-scoped SessionEventProjector.
+end note
+@enduml
+@startuml target_event_history_paging
+title Target Fixed Snapshot Paging - Oldest First Candidate
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
+' Source: campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml, listCurrentBranch.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java, list/pageOf.
+' Observed behavior: each current query resolves active_leaf_id again.
+' Design reason: fix branch and committed upper bound without a long transaction.
+' Target-only architecture; page direction, limits and token lifetime remain candidates.
+actor "Internal caller" as C
+participant "History service" as Q
+participant "Cursor codec" as T
+database "Session / Event store" as D
+participant "Execution appender" as A
+C -> Q : GET events (limit, no page)
+group Short consistent read transaction
+  Q -> D : Check access / existence / visibility
+  Q -> D : Read branch leaf and committed upper bound
+  Q -> D : Read visible complete records (limit + 1)
+  D --> Q : Snapshot and records
+end
+Q -> T : Encode bound continuation if more records
+T --> Q : Opaque nextPage or null
+Q --> C : ResultBean(events, nextPage)
+A -> D : Commit new complete event after upper bound
+note right of D : New records do not enter the earlier snapshot.
+C -> Q : GET events (page = nextPage)
+Q -> T : Verify session, integrity, expiry and versions
+alt Valid token
+  group Short consistent read transaction
+    Q -> D : Recheck access, existence and visibility
+    Q -> D : Read pinned branch within fixed upper bound
+    D --> Q : Records or unavailable snapshot
+  end
+  alt Snapshot still readable
+    Q -> T : Encode next position or return null
+    Q --> C : Complete ordered events
+  else Deleted / revoked / snapshot unavailable
+    Q --> C : Error, never silently switch branch
+  end
+else Invalid token
+  Q --> C : INVALID_EVENT_LIST_QUERY
+end
+note over C,Q
+  null means snapshot exhausted, not execution finished.
+  Start a fresh first page to include newer commits.
+  No automatic replay of accepted POST requests.
+end note
+@enduml

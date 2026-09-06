@@ -2,14 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.8.2 |
-| 状态 | Events v2 合并 POST SSE、完整 user.* 首帧、对应 idle 关闭、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认，数据库细节、其余并发竞态、字段与错误细节评审中；HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发不变 |
+| 文档版本 | 3.9.0 |
+| 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发不变 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 固定快照历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | v2 合并传输核对 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；对比原 `a8192e0` 的七个 HTTP/事件文件无变化，目标变化见 v2 §4.2 |
 | v2 中断优化补充核对 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；五个并发、流与配置文件相对 `918005e` 无变化，见 v2 §4.4；本次设计变更前为 `e370d2d49e6cd20b7dd910944e583d7f67115cf4` |
+| v2 历史查询补充核对 | 同一 `dfb90ca`；查询、编码、游标与 Mapper 四文件相对 `918005e` 不变，见 [历史设计](chat-events-v2-history-design.md)；变更前设计 `76d39c2603fc2a402d16545d35793ddcc97cc687` |
 | v2 事件顺序补充核对 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；证据与原基线对比见 v2 设计 §4.1 |
 | pi-mono Slash 对比基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
@@ -23,7 +24,7 @@
 | DeepSeek Harness 对照基线 | `141eb6fef83422698aef7a981029e843e8161534` |
 | Codex Harness 对照基线 | `be33f80bc65159c094ecd06bf155afa3061ce23d` |
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989`；PR #210 最终实现 `9d0d76f4a571b559dc77ae52736caebbcc8fad88` 已通过 `a8192e047f4061bd385297d3dc6c4358362d0d49` 合并 |
-| 更新日期 | 2026-09-05 |
+| 更新日期 | 2026-09-06 |
 
 ## 1. 当前结论
 
@@ -65,7 +66,9 @@ M1 真实结束并提交可靠状态后才恢复 idle；中断与工具确认按
 索引按实际 GaussDB 执行计划和 100 并发压测选择，不冻结 500 毫秒周期、批次上限或超时。
 固定内部执行身份不穿透 HTTP；数据库结构、检查周期、其余并发竞争、reason 与故障细节
 仍待评审，不是整体确认。
-当前入口见 [合并 POST 评审页](chat-events-v2-review.html)、
+用户明确要求开始修改 ListEvents，当前入口为 [历史查询评审页](chat-events-v2-review.html)；
+完整事件与 POST 同形，固定快照、分支和分页细节见 [历史设计](chat-events-v2-history-design.md)。
+POST 的决定与未决项仍见 [合并 POST 保留评审页](chat-events-v2-submit-review.html)、
 [Events v2 设计](chat-events-v2-design.md) 和 [请求级 SSE 设计](chat-events-v2-stream-design.md)。
 [旧确认页](chat-events-v2-confirmed.html) 改为变更提示，旧 JSON POST 仅在 Git 历史保留。
 当前没有整体确认的新 v2 operation；既有字段决定不因此被重新开放。
@@ -518,6 +521,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.9.0 | 2026-09-06 | 同步 Events v2 0.5.0、请求级 SSE 0.3.3 与历史查询 0.1.0：按用户要求切换 ListEvents，补齐完整事件及固定快照分页候选和目标图；POST 未决项保留，不改实现、Mate 或 v1 迁移基线。 |
 | 3.8.2 | 2026-09-05 | 同步 Events v2 0.4.2 与请求级 SSE 0.3.2：确认同实例提交后通知、等待目标去重及实测索引选型；补齐终态登记竞态和每响应投递门控，保持数值参数、完整操作及 Mate 契约边界不变。 |
 | 3.8.1 | 2026-09-05 | 同步 Events v2 0.4.1 与请求级 SSE 0.3.1：确认单消息数据库准入，M1 未完成前拒绝 M2；明确等待确认时 SSE 结束但资源仍 running，补齐源码证据与目标图。 |
 | 3.8.0 | 2026-09-04 | 同步 Events v2 0.4.0 与请求级 SSE 0.3.0：确认数据库中断交接、实例批量检查及共享结束记录，本期不引入 Redis；补齐目标类图、时序、源码差距和验收，未修改实现或整体确认接口。 |
