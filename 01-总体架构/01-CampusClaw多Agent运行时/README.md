@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.9.1 |
+| 文档版本 | 3.9.2 |
 | 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发不变 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
@@ -10,7 +10,7 @@
 | CampusClaw 当前核对头 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | v2 合并传输核对 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；对比原 `a8192e0` 的七个 HTTP/事件文件无变化，目标变化见 v2 §4.2 |
 | v2 中断优化补充核对 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；五个并发、流与配置文件相对 `918005e` 无变化，见 v2 §4.4；本次设计变更前为 `e370d2d49e6cd20b7dd910944e583d7f67115cf4` |
-| v2 历史查询补充核对 | 同一 `dfb90ca`；查询、编码、游标与 Mapper 四文件相对 `918005e` 不变，见 [历史设计](chat-events-v2-history-design.md)；本次变更前设计 `5e12ef57a558ba99c1d9ce86149969e664c70174` |
+| v2 历史查询补充核对 | 同一 `dfb90ca`；查询、编码、游标与 Mapper 四文件相对 `918005e` 不变，见 [历史设计](chat-events-v2-history-design.md)；本次变更前设计 `dea5c69ee104fc39181bba3281e857a27c1365ca` |
 | v2 事件顺序补充核对 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；证据与原基线对比见 v2 设计 §4.1 |
 | pi-mono Slash 对比基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
@@ -68,6 +68,7 @@ M1 真实结束并提交可靠状态后才恢复 idle；中断与工具确认按
 仍待评审，不是整体确认。
 用户明确要求开始修改 ListEvents，当前入口为 [历史查询评审页](chat-events-v2-review.html)；
 完整事件与 POST 同形，从旧到新、普通整数页码和取消固定快照已确认，见 [历史设计](chat-events-v2-history-design.md)。
+分页默认 50/最多 200、result 只返回 events/nextPage 已确认，不返回 total；当前继续评审空页响应。
 POST 的决定与未决项仍见 [合并 POST 保留评审页](chat-events-v2-submit-review.html)、
 [Events v2 设计](chat-events-v2-design.md) 和 [请求级 SSE 设计](chat-events-v2-stream-design.md)。
 [旧确认页](chat-events-v2-confirmed.html) 改为变更提示，旧 JSON POST 仅在 Git 历史保留。
@@ -511,7 +512,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 1. Claw v2 数据库控制字段与约束、实测索引选型、检查周期和超时响应，以及跨完成边界的迟到中断、确认续跑/控制请求竞争；单消息数据库准入、数据库停止请求与实例批量检查及中断查询优化已确认，本期不引入 Redis；此前合并、首帧、关闭与中断分工决定继续有效；
 2. Claw v2 SSE 具体字段、thinking 内容、idle reason、heartbeat、容量、错误细节及整体确认；类型名、data-only、type + phase 已确认；
-3. Claw v2 历史每页数量、是否增加 total、过滤及具体事件投影、错误和保留期；
+3. Claw v2 历史空页响应、过滤及具体事件投影、其他错误和保留期；默认 50/最多 200 与无 total 已确认；
 4. Steer、FollowUp 与 Slash Command 是否并入新的 Events 边界；
 5. Pod 重启时 active execution 的中断或恢复策略；
 6. 公司 `ResultBeanFactory` 真实制品坐标和 `ResultBeanAdapter` 公司 Bean 的落地方式；
@@ -521,6 +522,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.9.2 | 2026-09-06 | 同步 Events v2 0.5.2、请求级 SSE 0.3.5 与历史查询 0.2.1：确认默认 50/上限 200 与无 total，继续 L4 空页评审；保持实现、Mate 及 v1 不变。 |
 | 3.9.1 | 2026-09-06 | 同步 Events v2 0.5.1、请求级 SSE 0.3.4 与历史查询 0.2.0：确认普通整数分页和取消固定快照，评审数量与 total；保持实现、Mate 及 v1 不变。 |
 | 3.9.0 | 2026-09-06 | 同步 Events v2 0.5.0、请求级 SSE 0.3.3 与历史查询 0.1.0：按用户要求切换 ListEvents，补齐完整事件及固定快照分页候选和目标图；POST 未决项保留，不改实现、Mate 或 v1 迁移基线。 |
 | 3.8.2 | 2026-09-05 | 同步 Events v2 0.4.2 与请求级 SSE 0.3.2：确认同实例提交后通知、等待目标去重及实测索引选型；补齐终态登记竞态和每响应投递门控，保持数值参数、完整操作及 Mate 契约边界不变。 |

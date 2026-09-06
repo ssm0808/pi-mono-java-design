@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.0 |
-| 状态 | 从旧到新、普通整数页码与取消固定快照已确认；其他字段及整体仍评审，target-only |
+| 文档版本 | 0.2.1 |
+| 状态 | 普通整数分页、默认 50/上限 200 与无 total 已确认；空页、其他字段及整体仍评审，target-only |
 | 更新日期 | 2026-09-06 |
-| 设计仓变更前基线 | `5e12ef57a558ba99c1d9ce86149969e664c70174` |
+| 设计仓变更前基线 | `dea5c69ee104fc39181bba3281e857a27c1365ca` |
 | 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
 | 官方公共契约核对 | Claude Managed Agents，2026-09-06，Beta；只证明公开行为 |
@@ -16,6 +16,8 @@
 这不是 POST 整体通过：其已确认决定与未决项继续保留。
 用户进一步确认从旧到新、普通 `page/nextPage` 数字页码，并在解释取舍后明确采用
 普通分页。该决定替代上一版跨页固定快照与不透明游标方案，不影响事件身份和写入顺序。
+用户本轮选择 `L2-page-size=B-default50-max200` 和
+`L3-page-metadata=A-events-nextPage-only`：默认 50、上限 200，result 不返回 total。
 
 - 当前 [ListEvents 评审页](chat-events-v2-review.html)，唯一精确源为
   [02-list-session-events.json](接口契约-v2/操作/02-list-session-events.json)。
@@ -74,6 +76,8 @@ GET 是一次普通 JSON 读取，不是 SSE，也不是已撤销的 GET stream�
 每页读取该次查询可见的当前分支完整记录，不冻结首次查询的分支或提交上界。
 查询可在 `idle` 或 `running` 时进行，不抢占消息执行名额，也不要求暂停执行。
 同一轮翻页保持 `limit` 不变；改变大小时从第一页重新读取。
+`limit` 省略时默认 50，显式取值范围为 1～200；默认值由 Service 归一。
+用户、正文、思考、工具及状态等每条可见完整事件分别计数，不按消息轮次计数。
 
 目标实现按可见事件集合计算 `offset=(page-1)*limit`，先按权限和事件类型过滤，
 再按内部顺序升序分页；多取一条判断是否还有下一页。若一个内部记录映射为多条
@@ -83,8 +87,8 @@ Service 校验页码、数量及偏移计算边界，拒绝溢出或无法支持
 每页的分支、可见性和记录读取应来自一致的单次读取边界；这是单请求一致性，不是跨页
 固定快照，不跨 HTTP 请求保留数据库事务、连接或锁。
 
-例如第一页查询时有 120 条，取前 100 条；其后尾部追加 5 条，第二页可返回第
-101～125 条。这不是顺序错误，也不需要把新记录排除。稳定位置的前提是分支、过滤、
+例如第一页查询时有 70 条，按默认大小取前 50 条；其后尾部追加 5 条，第二页可返回第
+51～75 条。这不是顺序错误，也不需要把新记录排除。稳定位置的前提是分支、过滤、
 保留范围和页大小不变，且新增事件只追加到可见顺序尾部；写侧的依赖检查和有序提交继续有效。
 
 分支切换、thinking 过滤改变、记录清理或可见权限变化可能使已有位置移动。调用方
@@ -96,9 +100,10 @@ eventId 去重只能消除重复，不能弥补漏项；重新加载用于重新
 若读完后又有新增事件，客户端需要再次查询或合并其已收到的完整 SSE 事件；重新补读
 可从第一页开始按 eventId 合并，不凭页尾 null 自动重发 POST。
 
-剩余两项分页评审：L2 推荐默认 `limit=100`、上限 `200`；L3 推荐仅保留
-`events/nextPage`，不增加 `total`。若选择增加 total，它只能表示该次查询的可见记录数，
-不同页的值可以变化。合法但超出记录范围的页码暂以空成功响应为候选；非法页码或 limit
+L2/L3 已确认：默认 `limit=50`、上限 `200`，成功 result 只保留 `events/nextPage`，
+不返回 `total`，也不为这个响应增加总数统计查询。下一项 L4 仅评审合法但超出记录范围
+的页码：推荐 `200` 空成功响应；另一选项是按 `400 / INVALID_EVENT_LIST_QUERY` 处理。
+当前示例保留空成功候选，不代表已通过。非法页码或 limit
 沿用 `400 / INVALID_EVENT_LIST_QUERY`，不存在游标解密/过期错误。具体错误边界仍待评审。
 
 ## 4. 断线、确认和中断怎样展示
@@ -126,7 +131,7 @@ Java 文件相对根路径为
 | 相对路径与符号 | 已观察行为 | 目标差异 / 理由 |
 |---|---|---|
 | `web/RuntimeEventController.java` · `list` | GET 返回普通 ResultBean，不创建 Mate 执行凭据 | 保留 JSON 读取边界；不是再建实时长连接 |
-| `event/RuntimeEventQueryService.java` · `list/pageOf` | 默认 100、上限 200；每页读取 Session，afterSeq 分页 | 改为正整数页码与偏移分页；数量是沿用候选，不误标为新确认 |
+| `event/RuntimeEventQueryService.java` · `list/pageOf/parseLimit` | 默认 100、上限 200；每页读取 Session，afterSeq 分页 | 用户已确认默认改为 50、上限仍为 200；普通整数页码与默认值尚未落入实现，不能将当前 100 当作目标值 |
 | `event/RuntimeEventCursorCodec.java` · `encode/decode` | AES-GCM page 绑定 Session、afterSeq、thinking 和到期时间；无固定分支/上界；未配置 secret 时用进程随机密钥 | 此编码器退出 v2 ListEvents 读取链路，不为普通页码增加密钥或签名；v1 实现目前未改 |
 | `event/RuntimeEntryCodec.java` · `toHistoryEvent/toSseData` | 旧类型、entryId/entrySeq，用户 message/fileIds；工具调用嵌在 Assistant 内容中 | 共用完整事件投影；工具调用身份要持久化或稳定映射，不能每次读取生成新 ID |
 | `vo/EventPageResponseVO.java` | events 为 `List<Map<String,Object>>`，另有 nextPage | 目标使用只读类型化事件 Response VO，DTO 不穿透 HTTP |
@@ -135,7 +140,8 @@ Java 文件相对根路径为
 
 分类：JSON ResultBean、公司上下文、M1 准入是产品约束；凭据不落盘与每页访问复核是
 安全加固；普通数字页码取代不透明游标是用户明确的产品约束，取消跨页固定快照是
-架构简化；共享完整事件投影和新增可恢复记录仍是 target-only 架构变更。
+架构简化；默认 50/上限 200 与只返回 events/nextPage 是本轮已确认产品约束；共享完整
+事件投影和新增可恢复记录仍是 target-only 架构变更。
 
 [Claude 官方事件流文档](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
 区分不持久化的 preview 与权威完整事件，并用历史补齐断线期间的记录；
@@ -168,18 +174,20 @@ Java 文件相对根路径为
    重读第一页，不承诺跨页快照。保留写侧已确认的因果依赖与短事务串行规则。
 3. 接入类型化只读 Response VO；请求 Request VO 用标准 Jakarta 校验，默认值在
    Service 归一，内部 Mapper 仅传 DTO。不得把原 Map/存储对象直接交给 Controller。
-4. 验收 page=1/2、默认第一页、非法整数、limit 越界、偏移溢出、过滤后计数、空页、
+4. 验收 page=1/2、默认第一页、limit 省略为 50、显式 1/200 边界、非法整数、limit 越界、偏移溢出、过滤后计数、空页、
    超出范围、页尾、追加后续读和运行中读取；同一数据库可见数据与策略下不同实例结果一致。
    另外覆盖 thinking/分支变化后重载、删除和保留期清理，不测试已取消的游标期限或密钥。
+   成功 result 精确包含 events/nextPage，不新增 total，也不触发为 total 服务的 COUNT 查询。
 5. 场景验收完整事件覆盖预览、迟到 delta、中断双响应去重、等待确认仍 running，
    以及没有回执时不自动重发。工具无结果不伪造，未知持久化类型不静默丢弃。
 
 当前交付是契约示例与静态验证，不包含上述运行时测试的通过声明。完整字段、扩展事件、
-分页数量、响应元数据、错误及保留期确认后，才能将本操作标为整体通过并替换 v1。
+空页及错误、保留期确认后，才能将本操作标为整体通过并替换 v1。
 
 ## 8. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.1 | 2026-09-06 | 确认 L2 默认 50/上限 200、L3 仅 events/nextPage，不返回 total；同步默认值、示例、图和验收。L4 空页响应待评审，未整体确认，源码基线 dfb90ca 不变。 |
 | 0.2.0 | 2026-09-06 | 确认从旧到新、普通整数 page/nextPage，取消跨页固定快照、快照标识及加密游标；保留同形与顺序，移除 L1 选择，改评审每页数量与 total；补齐普通分页变化边界与目标图。 |
 | 0.1.0 | 2026-09-06 | 按用户要求开启 ListEvents 修改：完整事件与 POST 对齐、固定分支/提交上界候选、两页与中断/确认示例、源码差距、目标图及验收；POST 未决项保留。 |
