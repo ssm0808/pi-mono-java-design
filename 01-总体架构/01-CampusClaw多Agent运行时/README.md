@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.12.1 |
+| 文档版本 | 3.13.0 |
 | 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.47.1 保留共享 GET 轻量清单并保留 Help 元数据指南，Builtin 与 Skill Command 由用户统一实现 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
@@ -306,15 +306,17 @@ running 时 Help/Status 可用、Name 可查改、Model/Thinking 只可查、Com
 Skills 查询最新完整绑定快照；没有快照返回 AGENT_NOT_AVAILABLE，完整空快照返回 []。
 
 Help 无参读取当前 Agent 的 displayName/name、description、userCases，成功仅返回
-command/displayName/description/userCases；介绍或场景缺失返回 []，非空参数拒绝。
+displayName/description/userCases；介绍或场景缺失返回 []，非空参数拒绝。
 Help 内容不来自 Catalog，而是同一完整 PreparedAgentRuntime；无缓存返回 422 AGENT_NOT_AVAILABLE。
 元数据仅读不刷新、不调用模型/Tool、不写历史；userCases 必须完成缓存保存/重载往返，旧缓存显式刷新补齐。
 源码基线 `d8e22562` 与全局目标结构见
 [Help 专项设计](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)。
 
 不生成 commandId、不持久化通用命令生命周期或 Name 边车。Name 只更新当前状态；
-Model/Thinking/Compact 复用既有领域 Entry，sourceEventSeq 指向本次最后一条 Entry，
-查询、同值更新与空历史压缩省略。Compact 接受后不因 HTTP 断线取消；
+Model/Thinking/Compact 复用既有领域 Entry，内部序号不放入成功响应。
+响应复用既有 Session/Models 资源，不公开 command/changed/sourceEventSeq；
+映射及 Session 与 ETag 同源要求见 [Builtin §8](../../04-命令与技能/01-内置命令/README.md#8-json-与错误)。
+Compact 接受后不因 HTTP 断线取消；
 成功或无变化即返回 JSON；当前不接受排队续跑，客户端不得自动重放。
 
 ![Command HTTP 边界](设计图/Command/command_http_flow.svg)
@@ -516,6 +518,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.13.0 | 2026-09-07 | 同步 HTTP 1.48.0：Command 复用既有业务响应、删除入口及内部回执字段；全局目标主图、GET 与 Events 评审边界不变。 |
 | 3.12.1 | 2026-09-07 | 同步冗余清理：Mate 只保留 GET，Help 直接派生；专题职责见统一维护规则，Runtime 契约不变。 |
 | 3.12.0 | 2026-09-07 | 合入遗漏的共享 GET 轻量清单，保留新 Help/POST/Events 决定；补充分支整合核查记录。 |
 | 3.11.1 | 2026-09-07 | 删除四个废弃评审页与迁移占位生成逻辑，修复引用并阻止文件回流；当前十项契约和评审决定不变。 |

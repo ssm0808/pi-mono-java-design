@@ -4,9 +4,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.1.3 |
+| 设计版本 | 1.2.0 |
 | 日期 | 2026-09-07 |
-| 状态 | 用户已确认四字段、无参、空数组、缓存往返与显式刷新旧缓存；target-only，尚未实现 |
+| 状态 | 已确认无参、三个业务字段、空数组、缓存往返与显式刷新旧缓存；统一响应设计删除 command 回显，target-only |
 | 设计仓基线 | `372fb2cbec6e8a525d30d2310ef68e3da18e33f7` |
 | 本次源码基线 | pi-mono-java `d8e22562e22ac41ef4bb5cc6b36b576139417bd9` |
 | 专项评审页 | [Help HTTP 评审](help-review.html)，直接从 Runtime 操作 13 提取生成 |
@@ -62,7 +62,7 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 | HelpCommandContributor / HelpCommandHandler | `runtimeapi.command.builtin` / 无请求状态的单例 | 声明无参 Help，委派公开介绍查询；实现既有 Contributor/Handler SPI |
 | AgentHelpQueryService | `runtimeapi.service.command` / 无请求状态的单例 | 读取已授权 Session 的 agentId，取一个完整缓存快照，按白名单投影并归一显示内容 |
 | AgentHelpDTO / HelpResultDTO | `runtimeapi.dto.command` / 请求内只读数据 | 仅携带 Agent 显示名、介绍和场景，不携带完整运行时对象 |
-| HelpResultResponseVO | `runtimeapi.vo.command` / 请求内只读响应 | final 字段与只读访问器；不嵌套内部 DTO |
+| AgentHelpResponseVO | `runtimeapi.vo` / 请求内只读响应 | 三个业务字段，final 字段与只读访问器；不嵌套内部 DTO，不回显命令 |
 | CommandResponseAssembler | Application Service 包 / 单例 | 将 HelpResultDTO 转换为响应 VO，Controller 不承担投影 |
 | PreparedAgentRuntime | 既有 Runtime 边界 / 单次查询快照 | Help 的三个业务字段取自同一实例，避免多次读取拼接不同版本 |
 
@@ -74,7 +74,6 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 
 | 响应字段 | 元数据来源 | 已确认规则 |
 |---|---|---|
-| command | 固定值 | 必填，恒为 `help` |
 | displayName | displayName；空白时回退 name | 必填、非空；它是 Agent 名称，不是 `/name` 设置的 Session 名称 |
 | description | description[] | 必填数组；保留作者顺序和内部换行，去除条目两端空白及空白条目 |
 | userCases | userCases[] | 必填数组；同上，不排序、不扩写，不当作自动执行的提示词 |
@@ -87,6 +86,9 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 请求与完整报文统一由 [Runtime 操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)
 维护，[Help 专项页](help-review.html) 只选择其中的 Help 请求、两种成功结果及相关错误。
 不新增 /help HTTP 资源，也不在本文另存可调用报文副本。
+统一响应设计不再回显 command，精确结果为上述三个业务字段；调用方已经知道提交的是 Help。
+这项架构变更只移除入口信息，不改变 Agent 使用指南、缓存与无副作用规则。
+跨命令复用依据见 [Builtin 响应源码证据](../README.md#82-源码证据差距与理由)。
 
 输出直接展示为纯文本段落和列表，不执行 HTML、脚本或元数据中声明的操作；不自动加载远程图片。
 Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
@@ -157,7 +159,7 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 
 1. Runtime 元数据切片：保存并恢复 userCases，测试远端元数据 → 发布 → 缓存读取 → 进程重启的完整往返；覆盖旧缓存、空数组、刷新失败。
 2. Builtin 只读切片：实现 HelpContributor、HelpHandler、AgentHelpQueryService 和 DTO；不依赖 CatalogFormatter，不增加中央名称 switch。
-3. 应用/HTTP 切片：组装独立响应 VO，精确断言四个字段；Help 非空参数拒绝；idle/running 内容一致且无副作用。
+3. 应用/HTTP 切片：组装 AgentHelpResponseVO，精确断言三个业务字段且无 command/changed/sourceEventSeq；Help 非空参数拒绝；idle/running 内容一致且无副作用。
 4. 展示切片：用途/场景分区，纯文本安全渲染、空状态、错误保留草稿；不创建可恢复消息或自动提交示例。
 
 专项测试至少证明：
@@ -179,7 +181,9 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 专项 HTML 是已确认 Help 的派生展示；不再保存第二份 Help JSON。投影仅筛选场景，Header、参数、请求约束、结果和错误直接继承 Runtime 精确模型。
 Slash 与 Builtin 主文档共同引用 Slash 主题维护的完整全局目标类图；
 本专题只维护 Help 元数据局部补充图，不再维护第二份全局定义。
-9 月 4 日 Help 评审未合并 GET 减法；9 月 7 日用户现已明确授权整合，仅更新 GET 描述符及清单规则，Help 结果和缓存行为不变。
+9 月 4 日 Help 评审未合并 GET 减法；9 月 7 日 GET 整合阶段只改描述符与清单规则。
+随后用户确认 Slash 响应与既有 API 对齐：Runtime HTTP 1.48.0 删除 command 回显，
+以三个业务字段取代早期四字段结果；其他 Help 元数据和缓存决定继续有效。
 
 mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 GET 投影及公共边界待决。
 不能将本稿直接当作新公共接口；公共认证、bridge 和执行协议仍待重审，不新增公共路径或跨仓实现。
@@ -194,6 +198,7 @@ mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-07 | 跟随统一业务响应设计移除 command，采用 AgentHelpResponseVO 三字段；更新局部图与精确校验，保留无参、空数组、缓存与公共边界。 |
 | 1.1.3 | 2026-09-07 | 移除手工专项 JSON 和正文报文副本；页面直接投影 Runtime 契约，保留元数据映射、缓存理由及实施验收。 |
 | 1.1.2 | 2026-09-07 | 按用户授权同步 GET 精简，Help 描述符不带 input；保持 POST 四字段、缓存及错误语义；修复专项 Header 仍含旧占位符的同步遗漏，专项页版本跟随 Runtime 1.47.0。 |
 | 1.1.1 | 2026-09-07 | 全局主图归回 Slash 主题，Help 类图收敛为元数据与结果投影补充；恢复旧完整版的整体视角。Help 四字段、缓存语义和专项 JSON/HTML 契约保持 1.1.0 已确认内容不变。 |

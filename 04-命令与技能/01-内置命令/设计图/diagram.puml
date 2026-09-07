@@ -2,6 +2,8 @@
 title Target-only Executable Builtin Definition
 ' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java.
 ' Design reason: each contributor owns metadata, admission, and handler; no central command-name switch.
+' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java getView.
+' Architecture change: project business resources, never serialize the internal command receipt.
 skinparam shadowing false
 interface BuiltinCommandContributor
 class BuiltinCommandSource <<singleton>>
@@ -12,7 +14,10 @@ class CommandExecutionContext <<request>>
 class CommandExecutionService <<singleton>>
 class CommandResponseAssembler <<singleton>>
 class CommandResultDTO
-class CommandResponseVO <<immutable>>
+class RuntimeSessionResponseAssembler <<existing singleton>>
+class GetSessionResponseVO <<existing immutable>>
+class AvailableModelsResponseVO <<existing immutable>>
+class "AgentHelp / Compaction / BoundSkills\nResponseVOs" as BusinessVOs <<target-only immutable>>
 interface NarrowDomainService
 BuiltinCommandSource o-- "7" BuiltinCommandContributor
 BuiltinCommandContributor --> BuiltinCommandDefinition : contribute
@@ -25,10 +30,14 @@ CommandHandler --> NarrowDomainService
 CommandHandler ..> CommandResultDTO
 CommandExecutionService --> CommandResponseAssembler
 CommandResponseAssembler ..> CommandResultDTO
-CommandResponseAssembler ..> CommandResponseVO
+CommandResponseAssembler --> RuntimeSessionResponseAssembler : same authoritative Session DTO
+RuntimeSessionResponseAssembler ..> GetSessionResponseVO : resource and ETag
+CommandResponseAssembler ..> AvailableModelsResponseVO : model query
+CommandResponseAssembler ..> BusinessVOs : minimal business data
 note bottom of CommandResponseAssembler
 Only result-type dispatch lives here.
 Controllers never expose internal DTOs.
+No public command, changed or sourceEventSeq.
 end note
 @enduml
 

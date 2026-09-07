@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.47.1 |
+| 文档版本 | 1.48.0 |
 | 状态 | 保留十个目标 operation；Events 以 v2 部分确认稿为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 与公共命令边界待对齐 |
 | 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的八项保留契约与两项 Events v2 模型 |
@@ -27,7 +27,8 @@
 | Anthropic Managed Agents 文档核对 | 2026-09-01；Session、Events、Skills 与 Session Operations 官方文档 |
 | Agent Skills 规范核对 | 2026-09-01；名称、Skill 文件夹和 `SKILL.md` frontmatter 规则 |
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
-| Help 元数据专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；四字段、无参、空数组与缓存迁移已确认，仍为 target-only |
+| Help 元数据专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；无参、空数组与缓存迁移已确认；1.48.0 去除 command 后保留三个业务字段，仍为 target-only |
+| Command 响应复用源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`；既有 Session/Models 资源投影；源码路径与差距由 Builtin §8 维护 |
 | Registry 初始候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599` |
 | Registry 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并；最新差距见通用模块证据表 |
 | GET 候选实现 | `7759481a1722422395d46564129827c6ee6df204`，未发布，不能作为已上线契约 |
@@ -472,10 +473,11 @@ POST 重新解析，并在所属锁或事务内检查可变状态；共同结构
 #### 2.6.1 普通 JSON 与权威领域事件
 
 Builtin Handler 完成后返回普通 ResultBean JSON，不建立命令 SSE。
-请求、结果与错误由操作 13 维护；领域结果与可选 sourceEventSeq 的规则统一见
+请求、结果与错误由操作 13 维护；与既有 Session/Models 资源复用的映射及 ETag 规则统一见
 [Builtin §8](../../04-命令与技能/01-内置命令/README.md#8-json-与错误)。
 不产生通用命令生命周期或 Name 历史；这不改变 POST Events 的独立 SSE 契约。
-sourceEventSeq 与 Events v2 的联动仍需评审，不能据此恢复历史接口的公共序号。
+所有成功结果移除 command、changed、sourceEventSeq；内部领域 Entry 不变。
+不以新命令包装或 eventId 替代这些字段，不据此决定尚待评审的 Events v2 衔接。
 
 #### 2.6.2 Help：Agent 元数据使用指南
 
@@ -825,6 +827,7 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.48.0 | 2026-09-07 | POST Command 成功响应对齐既有 Session/Models 资源与 ETag，移除 command/changed/sourceEventSeq；保留 Help 三业务字段与 Compact/Skills 最小结果，新增跨接口反例校验；GET、请求、错误与 Events v2 不变。 |
 | 1.47.1 | 2026-09-07 | 删除 Command 业务重复副本，改引所属专题；Help 从 Runtime 直接派生；清理废止的历史目标规则，现行报文不变。 |
 | 1.47.0 | 2026-09-07 | 语义合入 ec5492a 的 GET 字段精简、状态过滤与全量清单完整性；保留后续 Help 无参、POST JSON、统一责任和 Events v2，不恢复旧页面。 |
 | 1.46.1 | 2026-09-07 | 统一清单、生成与校验入口；移除旧 Events 报文及分页章节，保留注明版本的源码证据；已确认字段和待决项不变。 |

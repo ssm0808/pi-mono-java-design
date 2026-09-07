@@ -17,6 +17,7 @@ from typing import Any
 
 from render_chat_http_v1 import build_operation_html, load_contract
 from command_catalog_contract import validate_catalog_examples
+from command_response_contract import validate_response_reuse
 from help_review_projection import load_help_model
 
 
@@ -31,7 +32,7 @@ SLASH_DESIGN_PATHS = (
     REPOSITORY_ROOT / "04-命令与技能/02-技能命令/README.md",
 )
 HELP_ROOT = REPOSITORY_ROOT / "04-命令与技能/01-内置命令/Help-Agent使用指南"
-HELP_RESULT_FIELDS = {"command", "displayName", "description", "userCases"}
+HELP_RESULT_FIELDS = {"displayName", "description", "userCases"}
 EXPECTED_OPERATION_COUNT = 8
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
@@ -313,6 +314,7 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
             patterns["agent"], patterns["session"], key, operation
         )
     require(operations == EXPECTED_OPERATIONS, "Operation inventory differs from the confirmed contract")
+    validate_response_reuse(models)
 
 
 def validate_public_field_names(key: tuple[str, str], operation: dict[str, Any]) -> None:
@@ -418,20 +420,6 @@ def validate_response_contract(
         }:
             require(expected in codes, f"POST Command is missing {expected}")
         successes = [response for response in operation["responses"] if response["status"] == "200"]
-        results = [next(iter(response["bodies"].values()))["result"] for response in successes]
-        expected_fields = {
-            "help": HELP_RESULT_FIELDS,
-            "status": {"command", "state", "modelId", "thinking"},
-            "name": {"command", "displayName", "changed"},
-            "model": {"command", "currentModelId", "models", "changed", "sourceEventSeq"},
-            "thinking": {"command", "thinking", "changed", "sourceEventSeq"},
-            "compact": {"command", "compacted", "sourceEventSeq"},
-            "skills": {"command", "skills"},
-        }
-        require({result["command"] for result in results} == set(expected_fields),
-                "POST Command must document all seven typed success results")
-        for result in results:
-            require(set(result) == expected_fields[result["command"]], "Unexpected success fields")
         for response in successes:
             require(response["headers"].get("Content-Type") == "application/json",
                     "POST Command success must use ordinary JSON")
@@ -454,8 +442,7 @@ def validate_help_body(body: dict[str, Any]) -> None:
             and body["resMsg"] == "success", "Help success ResultBean differs")
     result = body["result"]
     require(isinstance(result, dict) and set(result) == HELP_RESULT_FIELDS,
-            "Help must expose exactly four fields, never commands or internal metadata")
-    require(result["command"] == "help", "Help discriminator differs")
+            "Help must expose exactly three business fields, never commands or internal metadata")
     require(isinstance(result["displayName"], str) and bool(result["displayName"].strip()),
             "Help displayName must be a non-blank Agent name")
     for field in ("description", "userCases"):

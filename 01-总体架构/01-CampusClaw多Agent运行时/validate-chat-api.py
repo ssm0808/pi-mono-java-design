@@ -92,6 +92,7 @@ def main():
         ["test_chat_api.py"],
         ["test_help_contract.py"],
         ["test_command_catalog_contract.py"],
+        ["test_command_response_contract.py"],
         ["test_document_maintenance.py"],
     ):
         subprocess.run([sys.executable, *command], cwd=ROOT, check=True)

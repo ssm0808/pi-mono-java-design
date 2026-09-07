@@ -38,7 +38,7 @@ class HelpContractTest(unittest.TestCase):
                     GATE.validate_help_descriptor(descriptor)
 
     def test_result_rejects_legacy_and_private_fields(self):
-        for field in ("commands", "systemPrompt", "agentId", "version", "path",
+        for field in ("command", "changed", "commands", "systemPrompt", "agentId", "version", "path",
                       "bindingSkills", "bindingTools", "useCases", "sourceEventSeq"):
             with self.subTest(field=field):
                 body = copy.deepcopy(self.body)
@@ -46,7 +46,7 @@ class HelpContractTest(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     GATE.validate_help_body(body)
 
-    def test_result_requires_all_four_fields(self):
+    def test_result_requires_all_three_fields(self):
         for field in GATE.HELP_RESULT_FIELDS:
             with self.subTest(field=field):
                 body = copy.deepcopy(self.body)

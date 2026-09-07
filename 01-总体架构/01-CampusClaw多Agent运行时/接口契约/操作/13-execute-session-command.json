@@ -4,8 +4,8 @@
     "operationKey": "executeSessionCommand",
     "method": "POST",
     "path": "/sessions/{sessionId}/command",
-    "summary": "执行一个 Builtin 命令并返回 JSON 结果",
-    "description": "本页展示已确认的 Builtin 开发切片：help、status、name、model、thinking、compact 和 skills。Builtin 与 Skill Command 由用户统一负责设计、实现和集成，最终共享 HTTP 入口的命名与请求联合类型在发布前统一对齐；Skill 具体契约继续评审。Service 将省略或 null 的 arguments 归一为空字符串，Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Compact 复用权威领域 Entry。Compact 被接受后断线不取消，结果不确定时通过 GET Session/Events 对账，不自动重放 POST。本接口额外必填 access-token。Claw 从请求读取四项凭据，非 Compact 命令只在内存中保留到本次命令处理结束；Compact 仅在 Active Holder 保留到压缩及本次压缩执行结束。仅随实际 Mate tool execute 原名发送，不写入 Session、事件或日志，不进入 Prompt，也不随工具发现、模型或其他请求发送；Claw 不解析或校验凭据。 Help 已确认改为 Agent 使用指南：只取 Session 绑定 Agent 最近成功发布的一份完整本地缓存，不消费命令清单，不调用 prepare、refresh、远端 Mate、模型或 Tool，不写历史或模型上下文、不占执行容量。AgentRuntime 的 userCases 必须完成保存与重载往返；旧缓存显式刷新前缺场景返回 []。三个介绍字段同取一份 PreparedAgentRuntime，读取与发布复用 Agent 级锁，不取 Session 执行锁。元数据仅作不可信纯文本展示，不执行 HTML、脚本或自动加载远程图片。",
+    "summary": "执行一个 Builtin 命令并返回对应业务资源",
+    "description": "本页展示已确认的 Builtin 开发切片：help、status、name、model、thinking、compact 和 skills。Builtin 与 Skill Command 由用户统一负责设计、实现和集成，最终共享 HTTP 入口的命名与请求联合类型在发布前统一对齐；Skill 具体契约继续评审。Service 将省略或 null 的 arguments 归一为空字符串，Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Compact 复用权威领域 Entry。Compact 被接受后断线不取消，结果不确定时通过 GET Session/Events 对账，不自动重放 POST。本接口额外必填 access-token。Claw 从请求读取四项凭据，非 Compact 命令只在内存中保留到本次命令处理结束；Compact 仅在 Active Holder 保留到压缩及本次压缩执行结束。仅随实际 Mate tool execute 原名发送，不写入 Session、事件或日志，不进入 Prompt，也不随工具发现、模型或其他请求发送；Claw 不解析或校验凭据。 Help 已确认改为 Agent 使用指南：只取 Session 绑定 Agent 最近成功发布的一份完整本地缓存，不消费命令清单，不调用 prepare、refresh、远端 Mate、模型或 Tool，不写历史或模型上下文、不占执行容量。AgentRuntime 的 userCases 必须完成保存与重载往返；旧缓存显式刷新前缺场景返回 []。三个介绍字段同取一份 PreparedAgentRuntime，读取与发布复用 Agent 级锁，不取 Session 执行锁。元数据仅作不可信纯文本展示，不执行 HTML、脚本或自动加载远程图片。 响应对齐既有 API：status/name/thinking 查询及 name/model/thinking 修改统一返回 GET Session 的完整资源与 ETag；model 查询返回 GET Models 的 currentModelId/models。仅复用业务响应 VO 和投影，不调用其他 Controller；Session 资源与 ETag 同取权威查询快照或锁内更新结果，不从旧命令清单拼接。Help、Compact、Skills 无对应独立 API，保留最小业务结果，不新增公共路径。所有成功结果删除 command、changed、sourceEventSeq，不新增类型判别或命令回执包装；调用方依据自身请求区分响应。配置同值成功保留原 updatedAt/ETag，不写领域 Entry。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -73,7 +73,7 @@
       "description": "以下为 Builtin 请求约束，不定义 Skill 请求；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。If-Match 和 Idempotency-Key 在 Builtin 请求中没有契约语义，出现时按 INVALID_COMMAND_REQUEST 拒绝。 Help 只接受空参数：arguments 缺省/null/空白由 Service 归一为空；非空参数（包括 model 等命令名）按 INVALID_COMMAND_REQUEST 拒绝，不查询命令详情。",
       "example": {
         "name": "model",
-        "arguments": "provider/model"
+        "arguments": "model_011CZq2GkV8aD4NwP7sLmXfS"
       },
       "examples": [
         {
@@ -81,6 +81,63 @@
           "description": "idle/running 均可查询；不改变其他 Builtin 的参数规则。",
           "value": {
             "name": "help"
+          }
+        },
+        {
+          "label": "Status：查询 Session",
+          "value": {
+            "name": "status"
+          }
+        },
+        {
+          "label": "Name：查询 Session 名称",
+          "value": {
+            "name": "name"
+          }
+        },
+        {
+          "label": "Name：修改名称",
+          "value": {
+            "name": "name",
+            "arguments": "园区网络故障分析"
+          }
+        },
+        {
+          "label": "Model：查询可选模型",
+          "value": {
+            "name": "model"
+          }
+        },
+        {
+          "label": "Model：切换模型",
+          "value": {
+            "name": "model",
+            "arguments": "model_011CZq2GkV8aD4NwP7sLmXfS"
+          }
+        },
+        {
+          "label": "Thinking：查询开关",
+          "value": {
+            "name": "thinking"
+          }
+        },
+        {
+          "label": "Thinking：开启",
+          "value": {
+            "name": "thinking",
+            "arguments": "on"
+          }
+        },
+        {
+          "label": "Compact：压缩",
+          "value": {
+            "name": "compact"
+          }
+        },
+        {
+          "label": "Skills：查询绑定技能",
+          "value": {
+            "name": "skills"
           }
         }
       ]
@@ -91,7 +148,7 @@
         "status": "200",
         "tabLabel": "200 · help",
         "label": "OK",
-        "summary": "Help 只接受空参数，idle/running 均可查询。result 必填且精确为 command=help、displayName、description、userCases。displayName 为非空 Agent 显示名，空白时回退 Agent name，不是 Session 名称。description/userCases 为必填非 null 字符串数组，去除条目两端空白和空白条目，保持作者顺序与内部换行；不翻译、不生成能力说明。以下为虚构示例。",
+        "summary": "Help 只接受空参数，idle/running 均可查询。result 必填且精确为 displayName、description、userCases。displayName 为非空 Agent 显示名，空白时回退 Agent name，不是 Session 名称。description/userCases 为必填非 null 字符串数组，去除条目两端空白和空白条目，保持作者顺序与内部换行；不翻译、不生成能力说明。以下为虚构示例。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -102,7 +159,6 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "command": "help",
               "displayName": "园区网络分析助手",
               "description": [
                 "帮助理解园区网络状态，整理故障线索与排查建议。"
@@ -132,7 +188,6 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "command": "help",
               "displayName": "network-assistant",
               "description": [],
               "userCases": []
@@ -145,21 +200,40 @@
         "status": "200",
         "tabLabel": "200 · status",
         "label": "OK",
-        "summary": "返回持久化状态、模型和 Thinking，不估算上下文用量。",
+        "summary": "与 GET Session 相同的完整资源和 ETag；包含既有 lifetimeUsage，不增加上下文用量估算。示例为 running。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-zQfM5yN8x2\""
         },
         "bodies": {
           "zh-CN": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "command": "status",
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "claude-sonnet-4-5",
               "state": "running",
-              "modelId": "provider/model",
-              "thinking": true
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-16T09:15:21+08:00"
             }
           }
         }
@@ -167,9 +241,138 @@
       {
         "id": "200-name",
         "status": "200",
-        "tabLabel": "200 · name",
+        "tabLabel": "200 · name 查询",
         "label": "OK",
-        "summary": "返回当前名称和本次是否修改；displayName 即使为 null 也保留。",
+        "summary": "空参数查询与 GET Session 相同；displayName 未设置时保留 null。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-zQfM5yN8x2\""
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": null,
+              "modelId": "claude-sonnet-4-5",
+              "state": "running",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-16T09:15:21+08:00"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-name-updated",
+        "status": "200",
+        "tabLabel": "200 · name 修改",
+        "label": "OK",
+        "summary": "更新后返回完整 Session 与对应 ETag；running 仍允许改名，不写 Name Entry。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-N8mQ2vK5xR4\""
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "claude-sonnet-4-5",
+              "state": "running",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:15:00+08:00"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-name-unchanged",
+        "status": "200",
+        "tabLabel": "200 · name 同值",
+        "label": "OK",
+        "summary": "在 name 修改示例后再次提交同一名称：资源、updatedAt、ETag 均保持不变；不返回 changed。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-N8mQ2vK5xR4\""
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "claude-sonnet-4-5",
+              "state": "running",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:15:00+08:00"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-model-query",
+        "status": "200",
+        "tabLabel": "200 · model 查询",
+        "label": "OK",
+        "summary": "空参数与 GET Session Models 完全相同，idle/running 均可查询；models 实时过滤并保持 Agent 绑定顺序，名称展示使用既有模型信息来源。不返回 ETag。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -180,9 +383,33 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "command": "name",
-              "displayName": null,
-              "changed": false
+              "currentModelId": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "models": [
+                "model_011CZq2GkV8aD4NwP7sLmXfR",
+                "model_011CZq2GkV8aD4NwP7sLmXfS"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "200-model-query-empty",
+        "status": "200",
+        "tabLabel": "200 · model 无可选项",
+        "label": "OK",
+        "summary": "复用 GET Models 的空清单语义：models=[]，currentModelId 仍保留当前值且可以不在候选中。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentModelId": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "models": []
             }
           }
         }
@@ -190,27 +417,128 @@
       {
         "id": "200-model",
         "status": "200",
-        "tabLabel": "200 · model",
+        "tabLabel": "200 · model 修改",
         "label": "OK",
-        "summary": "返回当前与可用模型；查询和同值操作省略 sourceEventSeq。",
+        "summary": "非空参数与 PUT Model 成功响应相同：完整 Session 和 ETag，不再重复返回模型候选。本例切换到不支持 Thinking 的模型，thinking 自动关闭。Command 不接收 If-Match；PUT 的条件更新要求不变。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-H7vK3mQ8cN2\""
         },
         "bodies": {
           "zh-CN": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "command": "model",
-              "currentModelId": "provider/model",
-              "models": [
-                "provider/model",
-                "provider/model-fast"
-              ],
-              "changed": true,
-              "sourceEventSeq": 23
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": false,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:20:31+08:00"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-model-unchanged",
+        "status": "200",
+        "tabLabel": "200 · model 同值",
+        "label": "OK",
+        "summary": "在 model 修改示例后再次选择同一模型：与 PUT 的无变化成功一致，返回原资源与 ETag，不追加 Entry。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-H7vK3mQ8cN2\""
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": false,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:20:31+08:00"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-thinking-query",
+        "status": "200",
+        "tabLabel": "200 · thinking 查询",
+        "label": "OK",
+        "summary": "空参数返回 GET Session 的完整资源与 ETag，前端读取 thinking；本例 running 可查询。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-zQfM5yN8x2\""
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "claude-sonnet-4-5",
+              "state": "running",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-16T09:15:21+08:00"
             }
           }
         }
@@ -218,23 +546,85 @@
       {
         "id": "200-thinking",
         "status": "200",
-        "tabLabel": "200 · thinking",
+        "tabLabel": "200 · thinking 修改",
         "label": "OK",
-        "summary": "只接受小写 on/off；查询和同值操作省略 sourceEventSeq。",
+        "summary": "小写 on/off 修改后与 PUT Thinking 成功响应相同，返回完整 Session 与 ETag；本例为 on。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-P4tR8vL2xC6\""
         },
         "bodies": {
           "zh-CN": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "command": "thinking",
-              "thinking": false,
-              "changed": true,
-              "sourceEventSeq": 24
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:25:09+08:00"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-thinking-unchanged",
+        "status": "200",
+        "tabLabel": "200 · thinking 同值",
+        "label": "OK",
+        "summary": "在 thinking 修改示例后再次提交 on：返回原资源与 ETag，不修改 updatedAt，不追加 Entry。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-P4tR8vL2xC6\""
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:25:09+08:00"
             }
           }
         }
@@ -244,7 +634,7 @@
         "status": "200",
         "tabLabel": "200 · compact",
         "label": "OK",
-        "summary": "压缩成功或无变化即返回；当前不接受执行中的后续消息，不承诺排队续跑。空历史 compacted=false，不占容量、不改变状态、不写 Entry，省略 sourceEventSeq。",
+        "summary": "无对应独立 API，保留最小业务结果 compacted=true。成功即返回，不承诺排队续跑，也不暴露内部 Entry 序号。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -255,9 +645,28 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "command": "compact",
-              "compacted": true,
-              "sourceEventSeq": 31
+              "compacted": true
+            }
+          }
+        }
+      },
+      {
+        "id": "200-compact-empty",
+        "status": "200",
+        "tabLabel": "200 · compact 空历史",
+        "label": "OK",
+        "summary": "空历史 compacted=false；不占容量、不改状态、不写 Entry。请求断线不取消已接受的真实压缩；不自动重放。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "compacted": false
             }
           }
         }
@@ -265,9 +674,9 @@
       {
         "id": "200-skills",
         "status": "200",
-        "tabLabel": "200 · skills",
+        "tabLabel": "200 · skills 空绑定",
         "label": "OK",
-        "summary": "最新完整绑定快照中的名称和描述稳定排序；完整空快照返回 []，无完整快照返回 AGENT_NOT_AVAILABLE。",
+        "summary": "完整空快照返回 skills=[]；无完整快照仍返回既有 AGENT_NOT_AVAILABLE。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -278,8 +687,33 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "command": "skills",
               "skills": []
+            }
+          }
+        }
+      },
+      {
+        "id": "200-skills-populated",
+        "status": "200",
+        "tabLabel": "200 · skills",
+        "label": "OK",
+        "summary": "最新完整绑定快照中按名称稳定排序的名称和描述；不增加 Skill ID、版本、路径或命令字段。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "skills": [
+                {
+                  "name": "pdf",
+                  "description": "分析和生成 PDF 文档"
+                }
+              ]
             }
           }
         }

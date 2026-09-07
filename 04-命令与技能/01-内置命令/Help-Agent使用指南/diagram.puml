@@ -29,8 +29,7 @@ class "AgentIdentity / agent.json" as AgentIdentity <<stored metadata>> {
 }
 class "AgentHelpDTO / HelpResultDTO" as HelpData <<immutable request data>> #E3F2E1
 class CommandResponseAssembler <<singleton>>
-class HelpResultResponseVO <<immutable response>> #E3F2E1 {
-  command = help
+class AgentHelpResponseVO <<target-only immutable response>> #E3F2E1 {
   displayName
   description[]
   userCases[]
@@ -43,7 +42,7 @@ AgentRuntimeManager --> PreparedAgentRuntime : complete snapshot
 AgentRuntimeManager --> AgentIdentity : publish / reload
 AgentHelpQueryService ..> HelpData : whitelist projection
 CommandResponseAssembler ..> HelpData : result DTO
-CommandResponseAssembler ..> HelpResultResponseVO : independent VO
+CommandResponseAssembler ..> AgentHelpResponseVO : business VO
 
 note bottom of AgentIdentity
 Keep userCases on save and reload.
@@ -51,8 +50,9 @@ Old cache: explicit refresh outside Help.
 Read and publication share the Agent lock.
 end note
 
-note bottom of HelpResultResponseVO
-Exactly four fields; absent text is [].
+note bottom of AgentHelpResponseVO
+Exactly three business fields; absent text is [].
+No command discriminator or internal receipt.
 No prompt, bindings, or runtime objects.
 end note
 
@@ -61,6 +61,6 @@ This is a Help-only detail view, not the global Command structure.
 Help uses authored Agent metadata, not the command catalog.
 No model/tool call, implicit refresh, Session Entry or execution lease.
 CommandExecutionContext retains the common request catalog.
-DTOs belong to runtimeapi.dto.command; VOs to runtimeapi.vo.command.
+DTOs belong to runtimeapi.dto.command; VOs to runtimeapi.vo.
 endlegend
 @enduml

@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.0 |
+| 文档版本 | 1.6.0 |
 | 更新日期 | 2026-09-07 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -60,7 +60,7 @@ Builtin 直接引用这份主图；Help 专题只补充元数据、缓存与结�
 分别证明发现抽象、Handler/Admission 组合、请求定义索引和共享 Session 快照已经存在；公开完整装配仍是目标设计。
 这是视图恢复及设计规则修正，不是新的 HTTP 或 Runtime 行为变更。
 
-Help 的结果精确为 command/displayName/description/userCases，字段和缓存规则见
+Help 的结果精确为 displayName/description/userCases，字段和缓存规则见
 [Help 专项设计](../01-内置命令/Help-Agent使用指南/README.md)。其他命令不变。
 
 ![补充分层视图](设计图/target_slash_command_boundaries.svg)
@@ -226,7 +226,7 @@ argumentHint，支持轻量提示的结构参考；它不定义 CampusClaw 的 H
 2. 增加只读轻量 Response VO 与投影，覆盖 idle/running、完整空 Skill、无完整缓存 503，
    禁止内部字段与建议值输出，保证固定 Builtin 顺序及 Skill 顺序。
 3. 两跳 GET 的 Descriptor 必须逐项等值；公共协议未确认部分保持待评审标记。
-4. POST 重新准入、Help 无参四字段、Name 无历史、JSON 返回和 Events v2 不回退；
+4. POST 重新准入、Help 无参三个业务字段、Name 无历史、JSON 返回和 Events v2 不回退；
    交互层验证 Slash 未命中保留草稿、无普通消息 fallback。
 5. 文档门禁同时检查两套 JSON、HTML 和负向变异，防止后续 Help/POST 改动重新带回旧 GET。
 
@@ -242,6 +242,10 @@ Builtin 名称格式不覆盖 skill:*；公共入口不能据此拒绝 Skill 名
 
 Help/Status/Skills 不写 Entry；Name 只保存当前名称与版本；Model/Thinking/Compact
 复用现有领域 Entry。同值、查询和空历史压缩不写 Entry。
+成功响应复用既有 Session/Models 资源及对应 ETag，不建立独立 Slash 回执。
+Help/Compact/Skills 无对应独立 API，只保留最小业务结果；所有成功 result 删除 command、changed、sourceEventSeq。
+精确映射、6f52fddc 源码证据与同源快照要求统一见 [Builtin §8](../01-内置命令/README.md#8-json-与错误)。
+全局主图的响应投影边界不变，不增加七个命令 VO 或重排主图。
 Compact 断线不取消，调用方通过 GET Session/Events 对账，不自动重放不确定的 POST。
 Mate Header 不记录、不持久化、不进入 Prompt；Compact 仅在本次 Active Holder 中保留到本次执行结束。
 独立控制接口退役后本期不接受排队续跑；停止与 Events 的绑定见[内置命令 §7](../01-内置命令/README.md#7-compact-生命周期)，
@@ -269,7 +273,7 @@ Skill 的未确认细节按[Skill 实施要求](../02-技能命令/README.md#4-�
 每个实现 PR 非文档新增代码最多 2000 行，模块侧最多 850 行；
 同步 campusclaw 后总量超过 1800 行不发布。前一 PR 合并后再创建下一分支，不堆叠。
 测试覆盖来源过滤、稳定排序、重名启动失败、单次解析、无 DTO 泄漏、并发准入和无通用命令历史。
-Help 额外覆盖无参描述符、四字段结果、空数组、显示名回退、userCases 缓存往返与显式刷新旧缓存；
+Help 额外覆盖无参描述符、三个业务字段、空数组、显示名回退、userCases 缓存往返与显式刷新旧缓存；
 GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照检查。
 
 图的提交验收额外运行 `python3 validate-global-class-view.py`，检查全局主图入口和不可折叠的职责关系；
@@ -279,6 +283,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-09-07 | Command 成功响应复用业务资源，删除 command/changed/sourceEventSeq；Help 三业务字段；全局主图、GET、准入、领域历史与统一实施责任不变。 |
 | 1.5.0 | 2026-09-07 | 合入 ec5492a 的轻量 GET、排序、状态过滤、完整性和交互路由；保留后续 Help 无参、POST JSON 与完整版全局类图。 |
 | 1.4.3 | 2026-09-07 | 以 06bea56 完整版恢复全局主图和职责链，局部更新 Help 元数据委派与统一实施责任；Help 专题改为补充图，增加结构与视觉验收，不修改接口契约。 |
 | 1.4.2 | 2026-09-07 | 同步独立控制接口退役，Compact 凭据保留到本次执行结束，不再承诺排队续跑；其余命令字段与分工不变。 |
