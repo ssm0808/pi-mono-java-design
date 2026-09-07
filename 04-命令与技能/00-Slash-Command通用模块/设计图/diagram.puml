@@ -88,3 +88,144 @@ No Name history sidecar.
 Queries, same-value updates, and empty compaction append nothing.
 end note
 @enduml
+
+@startuml target_slash_command_global_classes
+title Recommended Slash Command Global Class Structure
+top to bottom direction
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 35
+skinparam linetype ortho
+
+' Presentation baseline: design repo 06bea56, target_slash_command_global_classes; preserve the complete global skeleton.
+' Revision: Help-only metadata delegation replaces catalog formatting; implementation ownership is unified.
+' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/definition/CommandDefinition.java.
+' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/builtin/BuiltinCommandDefinition.java implements CommandDefinition; admission and handler.
+' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/catalog/ResolvedCommandCatalog.java definitions and session.
+' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java metadata.
+' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached, toIdentity, toRuntime.
+' Source evidence: pi-mono-java@7759481a modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java list.
+' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java resolve.
+' Source evidence: pi-mono-java@9d0d76f4 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/ResolvedCommandCatalog.java list and find return discovery DTOs, not executable definitions yet.
+' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/SkillCommandSource.java preparedRuntime.
+' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start, finish, and releaseExecution.
+' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionHolder.java managedSession and activeExecution.
+' Observed behavior: discovery snapshots and Runtime execution collaborators exist at the cited baselines; executable Builtin assembly remains target-only.
+' Design reason: preserve one connected global view; collapse repeated implementations, not responsibility boundaries.
+' Architecture decision retained: narrow services own state changes; no generic command lifecycle or Name sidecar store.
+' Target-only: every node and relationship below describes the target assembly, not an inventory of implemented behavior.
+
+package "Web boundary" {
+  class RuntimeCommandController {
+    +list(sessionId)
+    +execute(sessionId, request)
+  }
+  class "Request VOs / Immutable Response VOs" as CommandVOs
+}
+
+package "Application layer - singleton" {
+  class CommandCatalogService
+  class CommandExecutionService
+  class CommandResponseAssembler
+}
+
+package "Command core" {
+  class CompositeCommandRegistry <<singleton>> {
+    +resolve(context, kind)
+  }
+  class ResolvedCommandCatalog <<request snapshot>> {
+    +list()
+    +find(name)
+  }
+  interface CommandDefinitionSource {
+    +list(context)
+  }
+  class BuiltinCommandSource <<singleton>>
+  class SkillCommandSource <<singleton>>
+  interface BuiltinCommandContributor
+  interface CommandDefinition
+  class BuiltinCommandDefinition <<immutable>>
+  interface CommandAdmissionPolicy
+  interface CommandHandler
+}
+
+package "Builtin adapters and service delegation - singleton" {
+  class "7 x Builtin Contributor" as BuiltinContributors
+  class "7 x Builtin Handler" as BuiltinHandlers
+  class "Narrow Domain Services" as DomainServices
+  class AgentHelpQueryService <<application service>> #E3F2E1
+}
+
+package "Runtime and persistence" {
+  interface RuntimeSessionRepository
+  class AgentRuntimeManager <<singleton>>
+  class RuntimeExecutionCoordinator <<singleton>>
+  class "RuntimeSessionEngineRegistry\nRuntimeSessionHolder / ManagedAgentSession\nRuntimeEventProjector" as RuntimeExecutionPorts <<grouped>>
+}
+
+RuntimeCommandController --> CommandCatalogService
+RuntimeCommandController --> CommandExecutionService
+RuntimeCommandController ..> CommandVOs
+CommandCatalogService --> RuntimeSessionRepository : authorized Session
+CommandCatalogService --> CompositeCommandRegistry
+CommandCatalogService ..> CommandVOs : descriptor DTO to VO
+CommandExecutionService --> RuntimeSessionRepository : authorized Session
+CommandExecutionService --> CompositeCommandRegistry
+CommandExecutionService --> CommandResponseAssembler
+CommandResponseAssembler ..> CommandVOs : result DTO to VO
+
+CompositeCommandRegistry o-- "1..*" CommandDefinitionSource
+CommandDefinitionSource ..> CommandDefinition
+CompositeCommandRegistry --> ResolvedCommandCatalog
+ResolvedCommandCatalog o-- "0..*" CommandDefinition
+BuiltinCommandSource ..|> CommandDefinitionSource
+SkillCommandSource ..|> CommandDefinitionSource
+BuiltinCommandSource o-- "7" BuiltinCommandContributor
+BuiltinContributors ..|> BuiltinCommandContributor
+BuiltinCommandContributor --> BuiltinCommandDefinition : contributes
+BuiltinCommandDefinition ..|> CommandDefinition
+BuiltinCommandDefinition *-- "1" CommandAdmissionPolicy
+BuiltinCommandDefinition *-- "1" CommandHandler
+CommandExecutionService --> BuiltinCommandDefinition : select / admit / execute
+BuiltinHandlers ..|> CommandHandler
+BuiltinContributors --> BuiltinHandlers : binds
+BuiltinHandlers --> DomainServices
+BuiltinHandlers --> AgentHelpQueryService : help only
+AgentHelpQueryService -[norank]-> AgentRuntimeManager : prepareCached
+
+SkillCommandSource --> AgentRuntimeManager : complete Skill snapshot
+DomainServices --> AgentRuntimeManager : bound Skill snapshot
+DomainServices --> RuntimeSessionRepository : read / locked state change
+DomainServices --> RuntimeExecutionCoordinator : compact only
+RuntimeExecutionCoordinator --> RuntimeExecutionPorts : execution / cleanup
+RuntimeExecutionPorts --> RuntimeSessionRepository : domain Entry projection
+
+RuntimeCommandController -[hidden]down-> CommandCatalogService
+CommandCatalogService -[hidden]down-> CompositeCommandRegistry
+CompositeCommandRegistry -[hidden]down-> BuiltinCommandSource
+BuiltinCommandSource -[hidden]down-> BuiltinContributors
+' Layout-only: retain the former formatter row; this is not a Help-to-Catalog dependency.
+AgentHelpQueryService -[hidden]-> ResolvedCommandCatalog
+
+note bottom of ResolvedCommandCatalog
+One independent snapshot per GET or POST.
+Discovery and dispatch keep Definition identity.
+POST rechecks mutable state under owning locks.
+end note
+
+note bottom of AgentHelpQueryService
+Agent metadata, not command descriptions.
+No model call, implicit refresh, or history write.
+end note
+
+legend bottom left
+Target-only assembly; existing symbols are reused where applicable.
+Grouped boxes denote multiple collaborators, not new classes.
+One owner implements Builtin and Skill; no fake Skill Handler is assigned.
+Delegation groups are not Java packages; query services belong to the application Service package.
+Runtime registry is singleton; Holder / Session / Projector are execution-scoped.
+endlegend
+@enduml
