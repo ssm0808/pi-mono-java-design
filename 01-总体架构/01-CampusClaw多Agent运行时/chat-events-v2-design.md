@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.5.3 |
+| 文档版本 | 0.6.0 |
 | 状态 | 当前评审 ListEvents；POST 合并、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；两操作的未决细节仍保留，target-only |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
@@ -34,13 +34,18 @@
 其三接口形态仍独立成立；将来由 Mate bridge 消费一次 Claw POST 响应并做安全投影，
 不能机械删除 Mate 的公共读取流。
 
-`user.interrupt` 和 `user.tool_confirmation` 仍走同一 POST 联合类型。独立 Abort
-的替代方向不变；Steer、FollowUp 和 Slash Command 是否并入仍另行评审，当前 v1
-迁移基线继续保留。
+`user.interrupt` 和 `user.tool_confirmation` 仍走同一 POST 联合类型。三个独立控制
+接口已退役，本期不开放运行中追加消息；调整方向采用实际停止后新提交。
+Slash Command 与 Events 的衔接继续评审，旧 v1 控制接口只保留历史证据。
 
 ![Session Events 目标资源模型](设计图/事件接口重设计/target_session_events_resource_model.svg)
 
 [PlantUML 源码：`target_session_events_resource_model`](设计图/事件接口重设计/diagram.puml#L1)
+
+M8 已确认：当前目标十个接口，移除独立 abort、steers、follow-ups。
+[FollowUp 未来设计](chat-follow-up-future-design.md) 已记录数据库排队及跨实例接续方向，
+本期不启用；M6 仍拒绝未完成 M1 时的 M2，不新增输入类型、字段或排队回执。
+这不代表两个 Events operation 整体通过，也不代表已修改实现。
 
 ## 2. 当前评审安排与 POST 已确认边界
 
@@ -546,11 +551,13 @@ M7 专项验收：同实例请求只在提交成功后取消，回滚/提交不�
 | 2026-09-06 | 普通分页已确认 | 用户确认从旧到新、page/nextPage 使用普通整数页码，并取消跨页固定快照；保留同形与有序提交，不增加快照标识、密钥或过期时间。当前仅询问数量和 total，其他未决项不视为通过。 |
 | 2026-09-06 | L2/L3 已确认 | 用户选择默认 50/上限 200，以及 result 只返回 events/nextPage，不返回 total；移除对应问题，仅继续 L4 空页响应评审，不批准其他未决项或整个接口。 |
 | 2026-09-07 | L4 已确认 | 用户选择合法超范围页返回 200 空列表、nextPage=null；不把 Session 不存在、非法参数或读取失败当作空页。分页选择移除，其他字段、错误和整体未确认。 |
+| 2026-09-07 | M8 控制接口退役与未来 FollowUp | 用户确认移除三个独立控制接口；停止经 user.interrupt、调整方向在实际停止后新提交，本期不支持排队；未来方向已记录但启用另行评审。 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.6.0 | 2026-09-07 | 确认退役三个独立控制接口，FollowUp 仅记录未来数据库接续方案；不放宽 M6 或增加字段，保留部分确认状态。 |
 | 0.5.3 | 2026-09-07 | 同步 L4 超范围空成功决定；不重开分页选择，保留 POST 及其余未决边界，源码基线 dfb90ca 不变。 |
 | 0.5.2 | 2026-09-06 | 同步 L2 默认 50/上限 200、L3 无 total，保留 POST 决定；空页与其余错误、字段继续评审，源码基线 dfb90ca 不变。 |
 | 0.5.1 | 2026-09-06 | 同步 ListEvents 普通整数分页决定，移除目标快照/游标设计，保留内部因果顺序与完整事件同形；分页数量和 total 待确认。源码基线 dfb90ca 不变，仅改设计。 |

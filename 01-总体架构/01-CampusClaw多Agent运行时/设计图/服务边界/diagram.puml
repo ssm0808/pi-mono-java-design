@@ -34,7 +34,7 @@ rectangle "Agent UI\n\nCall public HTTP operations\nUse chatId only\nRead execut
 
 rectangle "mate-service\n\nOwn public HTTP and SSE\nAuthenticate the end user\nOwn Chat metadata and chatId\nMap public Chat ID to internal Session ID\nRun guardrails and orchestration\nCall CampusClaw with request credentials\nProject safe public events and errors" as Mate #FFF7ED
 
-rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nReceive request context without credential checks\nOwn Runtime Session and sessionId\nValidate Agent and Model\nBuild Context and execute Model and read tool\nPersist current-branch Entries\nOwn Steer, FollowUp, and Abort" as Runtime #ECFDF5
+rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nReceive request context without credential checks\nOwn Runtime Session and sessionId\nValidate Agent and Model\nBuild Context and execute Model and read tool\nPersist current-branch Entries\nOwn Events interruption; no pending message queue" as Runtime #ECFDF5
 
 database "Mate Chat Store\n\nPublic Chat ID to internal Session ID\nProduct state (no Session name copy)\nUser ownership" as MateStore
 
@@ -54,9 +54,10 @@ end note
 
 note bottom of Runtime
 Each user-message POST owns one bounded SSE response.
-Builtin commands return JSON; Skill work proceeds in parallel.
-Steer and FollowUp are separate HTTP requests that enqueue
-into the active execution. Abort is another HTTP request.
+Builtin commands return JSON; shared Skill integration is reviewed separately.
+Each interrupt or tool confirmation uses a new POST Events response.
+No standalone control routes. No queued next message in this release.
+Future FollowUp requires separate activation review.
 The Runtime does not read chatId or end-user identity.
 end note
 @enduml

@@ -328,6 +328,7 @@
   </style>
 </head>
 <body>
+<aside role="note"><p>2026-09-07 控制设计已更新：本期不支持队列或运行中 Steer。停止通过 user.interrupt，实际停止后才可提交新消息。下方旧图片及跟进控件仅为历史视觉基线，不可作为当前调用契约。<a href="README.md#73-running-对话">当前控制规则</a></p></aside>
   <main class="company-design-review">
     <div class="review-shell">
       <header class="topbar">
@@ -508,7 +509,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
           <strong>执行中控制</strong>
           <span class="screen-name">执行中</span>
           <code class="screen-key">runningConversation</code>
-          <span class="muted">跟进交互已确认 · 界面待确认</span>
+          <span class="muted">旧跟进交互已退役 · 图片仅作历史视觉基线</span>
         </header>
         <div class="screen-grid">
           <figure>
@@ -540,7 +541,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         <h2>本轮确认项</h2>
         <details class="review-question" open><summary>1. 是否确认三状态信息架构？</summary><p><code>firstUse</code>、<code>idleConversation</code>、<code>runningConversation</code> 作为首版稳定评审和测试边界。</p></details>
         <details class="review-question" open><summary>2. 已确认：O1 品牌标识；暖中性配色进入评审</summary><p>O1 使用原始透明 PNG，不生成式重绘，也不缩进深色品牌方块；暖白、暖灰与深暖黑构成工作台，珊瑚色仅用于品牌标识，绿色继续表达运行与完成。</p></details>
-        <details class="review-question" open><summary>3. 已确认：跟进交互与 Codex desktop 一致</summary><p>desktop 默认“调整方向”，设置可切换“加入队列”；<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。“调整方向”不会硬中断当前模型或工具。</p></details>
+        <details class="review-question" open><summary>3. 历史决定已被取代：旧跟进交互</summary><p>desktop 默认“调整方向”，设置可切换“加入队列”；<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。“调整方向”不会硬中断当前模型或工具。</p></details>
         <details class="review-question" open><summary>4. 已确认：产品前端不持有 JWT/APPKEY</summary><p>生产身份与授权仍由统一登录、mate-service 或网关承担；产品 Chat 不出现凭据表单、秘密构建配置或浏览器持久化。</p></details>
         <details class="review-question" open><summary>5. 评审中：独立 <code>Headers</code> 面板</summary><p>通用 Key/Value 表格、逐行启停和自动空白行保持不变；请求适配器自动生成的 Header 不在面板中展示。面板不与 Agent/Session 诊断入口合并，仅复用其视觉，值只在页面内存中存活，仅附加到初始 <code>POST /events</code>。</p></details>
         <details class="review-question" open><summary>6. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>

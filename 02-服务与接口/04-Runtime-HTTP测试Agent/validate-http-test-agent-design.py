@@ -148,8 +148,8 @@ def iter_cases(catalog: dict):
 
 
 def validate_catalog(catalog: dict) -> None:
-    if catalog["catalogVersion"] != "1.1.0":
-        fail("catalogVersion must match the design document version 1.1.0")
+    if catalog["catalogVersion"] != "1.1.1":
+        fail("catalogVersion must match the design document version 1.1.1")
     operations = [
         (item["operationKey"], item["shortName"], item["method"], item["path"])
         for item in catalog["operations"]

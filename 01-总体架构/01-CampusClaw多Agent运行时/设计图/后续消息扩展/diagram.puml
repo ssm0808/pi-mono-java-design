@@ -1,0 +1,123 @@
+@startuml target_follow_up_handoff
+skinparam backgroundColor white
+' Target-only. Direction accepted; disabled in the current product.
+' Source: pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/session/RuntimeSessionControlService.java
+' Symbols: acceptLocked, requireRunningHolder, queueControl. Observed behavior: local Holder queues.
+' Source: pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185
+' packages/agent/src/agent-loop.ts: runLoop. Observed behavior: follow-up continues the same loop.
+' Design reason: durable application handoff avoids sticky routing and live output relay.
+title Future FollowUp - durable handoff, not enabled
+actor "Caller via Mate" as Caller
+participant "Instance A\nM1 execution" as A
+database "Shared database\nqueue + execution authority" as DB
+participant "Instance B\nM2 application service" as B
+participant "B batch dispatcher" as Watch
+Caller -> A: POST Events M1
+A -> DB: Accept M1 and claim execution
+A --> Caller: M1 receipt and output
+Caller -> B: Future queue submission M2
+note over Caller, B: Public queue fields and activation require review
+B -> DB: Short transaction: accept ordered pending M2
+DB --> B: Committed association
+B --> Caller: M2 receipt first; keep its own SSE
+B -> Watch: Register local pending M2, then recheck
+note over B, Watch: M2 credentials remain only in B memory
+A -> DB: Commit recoverable context + real terminal + release
+A --> Caller: M1 terminal; close M1 SSE only
+loop Bounded instance-level batches
+Watch -> DB: Read predecessor completion and queue head
+DB --> Watch: Authoritative committed state
+end
+Watch -> B: Eligible candidate, not final admission
+B -> DB: Short transaction: recheck head and atomically claim M2
+DB --> B: One winning internal execution identity
+B -> DB: Restore internal model context after claim
+note over B, DB: Never restore from public ListEvents
+B -> B: Start M2 using its own credentials
+B --> Caller: M2 output on M2 SSE only
+B -> DB: Commit M2 real completion
+B --> Caller: M2 terminal; close M2 SSE
+note over A, B
+  No cross-instance Java object transfer or token relay.
+  Lost owner or credentials require a separate recovery protocol.
+  A lease expiry is not proof that remote side effects stopped.
+end note
+@enduml
+
+@startuml target_follow_up_classes
+skinparam backgroundColor white
+' All types and relations below are target-only; names are not frozen.
+' Source: pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java
+' Symbols: register, find, createHolder. Observed behavior: process-local execution objects.
+' Design reason: application-level queue authority stays separate from runtime and request credentials.
+title Future FollowUp - target-only responsibility boundaries
+hide empty members
+package "Web / API" {
+  class EventsController <<singleton, target-only>>
+}
+package "Application" {
+  class EventSubmissionService <<singleton, target-only>>
+  class FollowUpQueueService <<singleton, target-only>>
+  class FollowUpDispatcher <<singleton per instance, target-only>>
+  class PendingSubmissionRegistry <<singleton per instance, target-only>>
+  interface FollowUpQueueRepository <<target-only>>
+}
+package "Persistence adapter" {
+  class MyBatisFollowUpQueueRepository <<singleton, target-only>>
+  class "Shared database\nqueue / claim authority" as DB <<durable store>>
+}
+package "Runtime boundary" {
+  interface RuntimeExecutionLauncher <<target-only>>
+  interface SessionContextRestorer <<target-only>>
+}
+EventsController --> EventSubmissionService
+EventSubmissionService --> FollowUpQueueService : admit / convert VO and DTO
+EventSubmissionService --> PendingSubmissionRegistry : register after commit
+FollowUpDispatcher --> PendingSubmissionRegistry : bounded local candidates
+FollowUpDispatcher --> FollowUpQueueService : recheck and claim
+FollowUpQueueService --> FollowUpQueueRepository : transactional authority
+MyBatisFollowUpQueueRepository ..|> FollowUpQueueRepository
+MyBatisFollowUpQueueRepository --> DB : Mapper / DTO
+FollowUpDispatcher --> RuntimeExecutionLauncher : launch only after claim
+RuntimeExecutionLauncher --> SessionContextRestorer : internal durable projection
+SessionContextRestorer --> DB
+note bottom of FollowUpQueueService
+  Revalidate mutable state inside the claim transaction.
+  No network IO or model calls while holding DB locks.
+end note
+note right of EventsController
+  RequestVO / ResponseVO only at the API boundary.
+  All shown types and relations are target-only.
+end note
+@enduml
+
+@startuml target_follow_up_local_lifecycle
+skinparam backgroundColor white
+' Target-only local lifecycle, no public queue API or durable credentials.
+' Source: pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java
+' Observed behavior: registry holds local execution objects only.
+' Design reason: bound pending capacity and keep request credentials out of persistence.
+title Future FollowUp - local lifecycle, not enabled
+hide empty members
+class PendingSubmissionRegistry <<singleton, target-only>>
+class PendingSubmission <<pending / execution, target-only>>
+class CredentialSnapshot <<memory only, target-only>>
+class BoundedResponseBuffer <<HTTP response, target-only>>
+interface RuntimeExecutionLauncher <<target-only>>
+class SessionExecution <<execution, target-only>>
+interface ExecutionIO <<runtime port, target-only>>
+PendingSubmissionRegistry "1" *-- "0..bounded" PendingSubmission
+PendingSubmission "1" *-- "1" CredentialSnapshot
+PendingSubmission "1" *-- "0..1" BoundedResponseBuffer
+PendingSubmission ..|> ExecutionIO
+RuntimeExecutionLauncher ..> SessionExecution : create after claim
+SessionExecution --> ExecutionIO
+note bottom of PendingSubmission
+  Disconnect detaches output, not accepted work.
+  Credentials are cleared at final cleanup.
+  Process loss requires a separate authorization policy.
+end note
+@enduml
