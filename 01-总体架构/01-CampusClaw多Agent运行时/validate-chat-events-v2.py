@@ -29,6 +29,7 @@ CONFIRMED_CHOICES = {
     "S1-frame-format": "A-data-only",
     "S2-event-projection": "A-type-and-phase",
     "L5-agent-message-content": "A-string",
+    "L6-tool-call-arguments": "A-object",
 }
 INTERRUPT_OPTIMIZATION = {
     "authority": "committed-database",
@@ -124,6 +125,8 @@ def validate_frame(event: dict, receipt: bool = False) -> None:
         require(isinstance(event.get("createdAt"), str), "complete event requires createdAt")
     if event["type"] in {"agent.tool_call", "agent.tool_result"}:
         require(bool(event.get("toolCallId")), "toolCallId is required")
+    if event["type"] == "agent.tool_call":
+        require(isinstance(event.get("arguments"), dict), "confirmed tool arguments must be a JSON object")
     if event["type"] == "session.status_idle":
         require(event.get("reason") in {"done", "failed", "terminated", "confirming"}, "invalid candidate reason")
 
@@ -223,9 +226,11 @@ def validate_model(model: dict) -> None:
             "original and interrupt responses must deliver the same idle event, including eventId")
     require(receipt_types == USER_EVENT_TYPES and all_types == STREAM_TYPES, "missing receipt or basic output examples")
     require(review.get("confirmedChoices") == CONFIRMED_CHOICES,
-            "preserve exact confirmed transport/receipt/closing/S1/S2/L5")
+            "preserve exact confirmed transport/receipt/closing/S1/S2/L5/L6")
     require("L5 已确认" in operation["description"] and "L5 已确认" in review["notice"],
             "completed content approval must be visible in POST")
+    require("L6 已确认" in operation["description"] and "L6 已确认" in review["notice"],
+            "tool arguments approval must be visible in POST")
     require(set(review["confirmedEventTypes"]) == STREAM_TYPES, "confirmed output type names changed")
     require(review["questions"] == [], "do not reopen confirmed choices")
     require("合并 POST 接口整体确认" in review["pendingReview"], "whole operation must remain pending")
@@ -296,6 +301,12 @@ def validate_negative_regressions(model: dict) -> int:
     confirming_index = next(index for index, response in enumerate(model["operation"]["responses"])
                             if response["id"] == "200-confirming")
     confirming = model["operation"]["responses"][confirming_index]["bodies"]["default"]
+    for arguments in ('{"port":"GE0/0/1"}', [], None, 1, True):
+        frames = parse_stream(confirming)
+        next(event for event in frames if event["type"] == "agent.tool_call")["arguments"] = arguments
+        invalid = "".join("data: " + json.dumps(event, ensure_ascii=False) + "\n\n" for event in frames)
+        changed(f"non-object tool arguments: {arguments!r}",
+                lambda m, value=invalid: m["operation"]["responses"][confirming_index]["bodies"].update(default=value))
     changed("ping after confirmation idle", lambda m: m["operation"]["responses"][confirming_index]["bodies"].update(
         default=confirming + ": ping\n\n"))
     changed("output after confirmation idle", lambda m: m["operation"]["responses"][confirming_index]["bodies"].update(
@@ -383,17 +394,20 @@ def validate_history_model(model: dict, post: dict) -> None:
         "L2-page-size": "B-default50-max200", "L3-page-metadata": "A-events-nextPage-only",
         "L4-out-of-range-page": "A-empty-success",
         "L5-agent-message-content": "A-string",
+        "L6-tool-call-arguments": "A-object",
     } and "ListEvents 接口整体确认" in review["pendingReview"],
-            "pagination and completed content are approved, not the whole history operation")
+            "pagination, completed content and tool arguments are approved, not the whole history operation")
     questions = review["questions"]
-    require(len(questions) == 1 and questions[0]["id"] == "L6-tool-call-arguments",
-            "only L6 arguments structure is under review; do not reopen L1-L5")
+    require(len(questions) == 1 and questions[0]["id"] == "L7-tool-result-content",
+            "only L7 result content structure is under review; do not reopen L1-L6")
     options = questions[0]["options"]
-    require(len(options) == 2 and {option["value"] for option in options} == {"A-object", "B-json-string"}
+    require(len(options) == 2 and {option["value"] for option in options} == {"A-content-blocks", "B-string"}
             and sum(bool(option.get("selected")) for option in options) == 1,
-            "L6 must retain two alternatives and one unconfirmed recommendation")
+            "L7 must retain two alternatives and one unconfirmed recommendation")
     require("L5 已确认" in operation["description"] and "L5 已确认" in review["notice"],
             "completed content approval must be visible in history")
+    require("L6 已确认" in operation["description"] and "L6 已确认" in review["notice"],
+            "tool arguments approval must be visible in history")
     for clause in ("普通分页已确认", "不再固定快照", "跨页保持相同 limit", "不按 createdAt 重排",
                    "每页读取该次查询可见的当前分支完整事件", "本接口不承诺自动检测跨页变化",
                    "允许 Session running 时查询", "nextPage=null 仅表示本次查询没有下一页",
@@ -462,6 +476,7 @@ def validate_history_regressions(model: dict, post: dict) -> int:
         lambda m: m["review"]["confirmedChoices"].update(**{"L3-page-metadata": "B-include-total"}),
         lambda m: m["review"]["confirmedChoices"].update(**{"L4-out-of-range-page": "B-query-error"}),
         lambda m: m["review"]["confirmedChoices"].update(**{"L5-agent-message-content": "B-content-blocks"}),
+        lambda m: m["review"]["confirmedChoices"].update(**{"L6-tool-call-arguments": "B-json-string"}),
         lambda m: m["review"]["confirmedPagination"].update(outOfRangePage="query-error"),
         lambda m: m["review"]["historyProposal"].update(outOfRangePage="empty-success"),
         lambda m: m["review"]["confirmedPagination"].update(defaultLimit=100),
@@ -481,6 +496,7 @@ def validate_history_regressions(model: dict, post: dict) -> int:
         lambda m: m["review"]["questions"].append({"id": "L3-page-metadata"}),
         lambda m: m["review"]["questions"].append({"id": "L4-out-of-range-page"}),
         lambda m: m["review"]["questions"].append({"id": "L5-agent-message-content"}),
+        lambda m: m["review"]["questions"].append({"id": "L6-tool-call-arguments"}),
         lambda m: m["review"].update(questions=[]),
         lambda m: next(x for x in m["operation"]["responses"] if x["id"] == "200-out-of-range").update(status="204"),
         lambda m: next(x for x in m["operation"]["responses"] if x["id"] == "200-out-of-range")
@@ -535,7 +551,7 @@ def validate_review_pages(post: dict) -> None:
         require(text in visible_history, f"no-JavaScript history page missing {text}")
     require(all(f'data-question-id="{key}"' not in history_source
                 for key in ("L1-page-direction", "L2-page-size", "L3-page-metadata", "L4-out-of-range-page",
-                            "L5-agent-message-content")),
+                            "L5-agent-message-content", "L6-tool-call-arguments")),
             "do not reopen confirmed choices")
     require("data-label" in history_source and "max-width: 680px" in history_source, "history responsive rules missing")
     source = history_source
@@ -551,9 +567,9 @@ def validate_review_pages(post: dict) -> None:
                  "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认", "数据库中断机制已确认",
                  "中断查询优化已确认", "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次"):
         require(text in visible, f"no-JavaScript page is missing {text}")
-    require(source.count('data-question-id="L6-tool-call-arguments"') == 1
+    require(source.count('data-question-id="L7-tool-result-content"') == 1
             and source.count('data-question-id="') == 1,
-            "only the current L6 history question may be displayed")
+            "only the current L7 history question may be displayed")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
 
 
