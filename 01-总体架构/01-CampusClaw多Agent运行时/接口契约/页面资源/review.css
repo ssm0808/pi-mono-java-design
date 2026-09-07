@@ -171,7 +171,7 @@ main {
 .company-api-review .review-option input { margin: 3px 0 0; }
 .company-api-review .review-option strong,
 .company-api-review .review-option small { display: block; }
-.company-api-review .review-option small { margin-top: 2px; color: light-dark(#5f6b78, #aab4c0); }
+.company-api-review .review-option small { white-space: pre-line; margin-top: 2px; color: light-dark(#5f6b78, #aab4c0); }
 .company-api-review .review-notes { display: block; font-size: 13px; font-weight: 600; }
 .company-api-review textarea {
   width: 100%;

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.6.5 |
+| 文档版本 | 0.6.6 |
 | 状态 | 当前评审 ListEvents；POST 合并、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；两操作的未决细节仍保留，target-only |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
@@ -56,7 +56,7 @@ M8 已确认：当前目标十个接口，移除独立 abort、steers、follow-u
 不再固定跨页快照；默认 50/上限 200 与 result 仅含 events/nextPage 已确认。
 合法超范围页返回 200、events=[]、nextPage=null 已确认；L5 完整回答 content 字符串与
 L6 工具调用 arguments JSON 对象、L7 工具结果 content 数组与 L8 本期仅文本块也已确认；
-L9 已确认 Mate 调用保留 CallMateTool 与 {tool,args}，
+L9 已确认 Mate 调用保留 CallMateTool 与 {tool,args}；L10 已确认每条工具结果必有布尔 isError，
 其余事件字段及错误细节仍候选。字段原因和后续评审由[历史查询设计 §2](chat-events-v2-history-design.md#2-历史返回什么)维护。
 下面保留 POST 已确认边界，切换评审不等于整体确认 POST。
 
@@ -543,11 +543,14 @@ M7 专项验收：同实例请求只在提交成功后取消，回滚/提交不�
 | 2026-09-08 | L7 工具结果容器 | 用户选择 L7-tool-result-content=A-content-blocks；GET 历史与 POST SSE 工具结果统一为内容块数组。Mate 返回的具体映射、图片与其他字段不随之确认。 |
 | 2026-09-08 | L8 工具结果仅文本 | 用户补充当前工具只返回文本；content[] 仅含 text 块，Mate 亦如此。撤回未确认的 JSON/图片块候选，不改变 L7 数组或整体待评审状态。 |
 | 2026-09-08 | L9 Mate 工具身份 | 用户选择 L9-mate-tool-identity=A-runtime-wrapper；toolName 保留 CallMateTool，arguments 保留 {tool,args}。GET 与 POST 同步，结果文本块及关联 ID 不变。 |
+| 2026-09-08 | L10 工具结果成败 | 用户选择 L10-tool-result-outcome=A-is-error；每条工具结果必有布尔 isError，成功 false、失败 true。错误码与文案仍待评审，不整体确认接口。 |
+| 2026-09-08 | 批量评审方式 | 用户要求一次集中确认剩余问题；L1～L10 保持确认，B01～B15 的待确认建议统一由历史专题 §8 与 ListEvents 评审模型维护，不再逐字段提问。 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.6.6 | 2026-09-08 | 记录 L10 isError 决定；设计基线 0f3f58f，字段原因及 B01～B15 批量建议由历史专题维护，运行机制和图不变。 |
 | 0.6.5 | 2026-09-08 | 记录 L9 Runtime 包装决定；设计基线 33a7344，字段原因及 L10 成败标记候选由历史专题维护，运行机制与图不变。 |
 | 0.6.4 | 2026-09-08 | 记录 L7 内容块数组与 L8 本期仅文本决定；设计基线 019b2db。Mate 返回链路及 L9 工具身份投影由历史专题维护，既有运行机制和图不变。 |
 | 0.6.3 | 2026-09-07 | 记录 L6 JSON 对象决定；字段理由及 L7 候选由历史专题维护。本轮设计基线 050bda2，未重新核对实现，源码证据、运行机制与图不变。 |

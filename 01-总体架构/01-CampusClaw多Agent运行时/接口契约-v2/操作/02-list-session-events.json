@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}/events",
     "summary": "分页查询与 POST SSE 一致的完整事件",
-    "description": "当前评审 ListEvents；这是目标设计，尚未修改 CampusClaw 实现。保留 GET 历史查询，不恢复 GET /events/stream。普通分页已确认：page 从 1 开始，按旧到新的已提交内部顺序返回；nextPage 是下一页整数或 null，不是加密游标。不再固定快照，不增加快照标识、游标密钥或过期时间。每页读取该次查询可见的当前分支完整事件，跨页保持相同 limit；同一分支和过滤条件不变且仅尾部追加时，已有记录的位置不移动，新事件可以进入后续页。分支、过滤条件或历史可见范围改变时，从 page=1 重新加载；本接口不承诺自动检测跨页变化。nextPage=null 仅表示本次查询没有下一页，不表示执行已结束或以后不会新增事件。允许 Session running 时查询，不占用消息执行准入名额。分页数量已确认：省略 limit 时返回最多 50 条，允许 1～200；result 只含 events 和 nextPage，不返回 total。普通 JSON 响应继续使用 ResultBean。L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null，不作为分页参数错误；此规则以 Session 存在、访问检查及查询成功为前提，不掩盖非法参数或读取失败。三类已接受的 user.* 回执与 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 使用 POST SSE 的相同 eventId、createdAt 和业务字段；正文/思考只返回 phase=completed，不返回 delta、心跳或连接结束标记。客户端保持数组顺序，不按 createdAt 重排，不公开 entryId、entrySeq 或执行标识。候选沿用 Session thinking 开关过滤已获准公开的摘要；每页重新检查访问边界，页码不是访问凭据。中断回执只表示已接受；相同停止 idle 在历史中只出现一次。等待确认的 idle 不能解除 M1 的 running 状态；不能用某条历史 idle 判定现在可提交 M2。只读接口不要求 access-token，不创建执行凭据、不调用 Mate 工具，所有凭据都不进入历史或日志。未整体确认 ListEvents 或合并 POST；配置变更、压缩、Usage 与其他扩展事件的 v2 映射仍待补齐，不能因基础示例未列出而删除既有能力。CampusClaw 内部 sessionId 不直接暴露给浏览器，Mate 公共 API 不在本轮修改范围。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。",
+    "description": "当前评审 ListEvents；这是目标设计，尚未修改 CampusClaw 实现。保留 GET 历史查询，不恢复 GET /events/stream。普通分页已确认：page 从 1 开始，按旧到新的已提交内部顺序返回；nextPage 是下一页整数或 null，不是加密游标。不再固定快照，不增加快照标识、游标密钥或过期时间。每页读取该次查询可见的当前分支完整事件，跨页保持相同 limit；同一分支和过滤条件不变且仅尾部追加时，已有记录的位置不移动，新事件可以进入后续页。分支、过滤条件或历史可见范围改变时，从 page=1 重新加载；本接口不承诺自动检测跨页变化。nextPage=null 仅表示本次查询没有下一页，不表示执行已结束或以后不会新增事件。允许 Session running 时查询，不占用消息执行准入名额。分页数量已确认：省略 limit 时返回最多 50 条，允许 1～200；result 只含 events 和 nextPage，不返回 total。普通 JSON 响应继续使用 ResultBean。L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null，不作为分页参数错误；此规则以 Session 存在、访问检查及查询成功为前提，不掩盖非法参数或读取失败。三类已接受的 user.* 回执与 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 使用 POST SSE 的相同 eventId、createdAt 和业务字段；正文/思考只返回 phase=completed，不返回 delta、心跳或连接结束标记。客户端保持数组顺序，不按 createdAt 重排，不公开 entryId、entrySeq 或执行标识。候选沿用 Session thinking 开关过滤已获准公开的摘要；每页重新检查访问边界，页码不是访问凭据。中断回执只表示已接受；相同停止 idle 在历史中只出现一次。等待确认的 idle 不能解除 M1 的 running 状态；不能用某条历史 idle 判定现在可提交 M2。只读接口不要求 access-token，不创建执行凭据、不调用 Mate 工具，所有凭据都不进入历史或日志。未整体确认 ListEvents 或合并 POST；配置变更、压缩、Usage 与其他扩展事件的 v2 映射仍待补齐，不能因基础示例未列出而删除既有能力。CampusClaw 内部 sessionId 不直接暴露给浏览器，Mate 公共 API 不在本轮修改范围。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -453,23 +453,77 @@
     ]
   },
   "review": {
-    "status": "L1～L9 已确认 · L10 待确认 · 接口未整体确认",
-    "notice": "L1～L4 分页不变。L5 已确认完整正文字符串；L6 已确认调用参数 JSON 对象；L7 已确认内容块数组；L8 已确认结果仅文本。L9 已确认 Mate 调用保留 CallMateTool 和 {tool,args}，均与 POST 同形。L10 只评审工具结果的成功/失败标记；当前示例仍使用 isError，错误码、空文本、块数量及接口整体继续待评审。",
+    "status": "L1～L10 已确认 · 剩余问题批量评审 · 接口未整体确认",
+    "notice": "L5 已确认正文字符串；L6 已确认参数对象；L7 已确认内容块数组；L8 已确认仅文本；L9 已确认 CallMateTool/{tool,args}；L10 已确认 isError。已确认项不重开。按用户要求，将 GET/POST Events 与配置、Skill 联动的剩余问题合并为 15 项、4 组，一次发送即可，也可直接回复“全部按推荐；Bxx 改为……”。以下均为待确认建议，选择确认的是列出的语义；具体报文、错误码表和示例随后一次整稿验收，不再逐字段追问。Mate 公共 API 不在本轮变更范围。",
     "questions": [
       {
-        "id": "L10-tool-result-outcome",
-        "legend": "工具结果用什么字段标识成功或失败？",
+        "id": "BATCH-20260908-1-tools",
+        "legend": "1～3 · 工具结果与 Mate 文本",
         "options": [
           {
-            "value": "A-is-error",
-            "label": "isError 布尔值（推荐，沿用当前候选）",
-            "description": "每条结果都返回 isError：成功为 false，失败为 true。与 Runtime 工具结果一致；具体 errorCode 与文案另行确认。",
+            "value": "A-recommended",
+            "label": "本组全部按推荐",
+            "description": "B01 失败错误码：失败时必有稳定 errorCode，成功时省略；区分用户拒绝、参数错误、工具不存在、超时和执行失败。文案放在 text，使用脱敏可展示信息；不透传 Mate 原始错误码、异常栈或凭据。\n\nB02 空文本与大小：工具结果至少一个 text 块，允许 text=\"\"，不强制只有一块；没有正文时不伪造 Agent 回答。沿用工具自身的有说明截断；HTTP 不静默截断完整事件。大小上限由实现校准，超限必须明确失败或断流并可查历史。\n\nB03 Mate 文本归一：CallMateTool 缺省 args 在公开事件中补 {}；Mate result 为字符串时直接作为文本，对象/数组变为 JSON 文本，null 为 \"\"。这是待确认的适配调整，当前客户端对字符串使用 JSON 序列化的实现将有变化。",
             "selected": true
           },
           {
-            "value": "B-status-enum",
-            "label": "status 枚举",
-            "description": "改为 status=\"success\" 或 \"failed\"，替代 isError。调用方按状态值判断，需要同步调整 GET/POST 字段及映射；本项不新增执行中状态。",
+            "value": "B-amend-in-notes",
+            "label": "本组有调整，见补充说明",
+            "description": "只写需要调整的 B 编号与要求；未提出修改的推荐项可一并确认。",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "id": "BATCH-20260908-1-events",
+        "legend": "4～7 · 事件字段与展示",
+        "options": [
+          {
+            "value": "A-recommended",
+            "label": "本组全部按推荐",
+            "description": "B04 时间与增量：完整事件 createdAt 使用 Claw 形成该权威记录时的 UTC 毫秒时间，保存一次，GET/POST 复用；delta 使用 content 字符串，只含新增文本，沿用同一 eventId，不带 createdAt。completed 覆盖预览，之后忽略迟到 delta。\n\nB05 Thinking 展示：只展示可公开摘要，不暴露原始推理。thinking 开关决定后续执行是否产生摘要；之后关闭开关不隐藏此前已公开的历史摘要，读取仍受当前权限约束。此项替换尚未确认的“按当前开关过滤历史”候选。\n\nB06 工具确认标记：每个完整 agent.tool_call 都带 requiresConfirmation 布尔值；本期顺序发出需确认调用，同一执行一次只挂起一个待确认 toolCallId。允许/拒绝后分别续跑，拒绝产生 isError=true 的工具结果。\n\nB07 结束原因：session.status_idle.reason 固定 done、failed、terminated、confirming；confirming 只结束当前 SSE，Session 继续 running。failed 携带稳定 errorCode 和可展示 message；工具失败可由 Agent 继续处理，不自动等同于整轮 failed。",
+            "selected": true
+          },
+          {
+            "value": "B-amend-in-notes",
+            "label": "本组有调整，见补充说明",
+            "description": "只写需要调整的 B 编号与要求；未提出修改的推荐项可一并确认。",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "id": "BATCH-20260908-1-lifecycle",
+        "legend": "8～11 · 并发、关联与故障",
+        "options": [
+          {
+            "value": "A-recommended",
+            "label": "本组全部按推荐",
+            "description": "B08 控制请求竞争：确认与中断在同一执行的事务内重检；停止请求先提交，则拒绝确认；确认先提交，中断仍可停止续跑。重复/过期确认返回 409，不重复执行工具；等待超时不伪造已停止。\n\nB09 防止误停下一轮：建议给 user.interrupt 增加必填 targetEventId，引用原 user.message 的 eventId；不匹配当前执行时返回 409。agent.* 和 idle 用 sourceEventId 引用同一原消息，便于历史对账。复用已有事件身份，不新增 runId/executionId；这是需要你确认的字段扩展。\n\nB10 断线与回执丢失：保留无自动写重试的方案：没有收到首帧时显示“提交结果不确定”，不靠相同文本猜测成功，不新增幂等键。收到回执后按 eventId 和 B09 的关联补读历史；断流本身不取消执行，也不代表失败。\n\nB11 HTTP 故障与心跳：接受前：非法参数 400、不存在 404、状态冲突 409、容量/依赖暂不可用 503、内部失败 500，统一 ResultBean；接受后不得伪装成未接受。SSE 已开始则不改成 JSON，能保存权威失败则发送 failed，否则断流并对账。采用 : ping 注释心跳；慢客户端可丢 preview，完整帧不能入队则断开。",
+            "selected": true
+          },
+          {
+            "value": "B-amend-in-notes",
+            "label": "本组有调整，见补充说明",
+            "description": "只写需要调整的 B 编号与要求；未提出修改的推荐项可一并确认。",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "id": "BATCH-20260908-1-integration",
+        "legend": "12～15 · 配置、Skill 与保留",
+        "options": [
+          {
+            "value": "A-recommended",
+            "label": "本组全部按推荐",
+            "description": "B12 配置、压缩与用量：模型/思考配置变更和压缩保留独立完整事件，映射到统一 v2；Usage 放在对应完整 Agent 消息，Session 保留累计用量。不新增通用 command 生命周期、进度或子 Agent 公共事件；已有内部记录逐类标明公开映射或不公开理由。\n\nB13 Skill 请求与响应：共享 POST /sessions/{sessionId}/command：Skill 用 name=\"skill:<name>\"、arguments 字符串和可选 fileIds；Skill 执行返回与消息一致的 SSE，Builtin 保持普通 JSON。Skill 遵循同一 Session 单消息准入，首帧回执为展开前的 user.message，随后普通 Agent/Tool/idle 事件，不新增 commandId。\n\nB14 Skill 快照与恢复：受理前解析完整 Agent/Skill 快照并重检绑定、权限和容量，受理后本次执行固定快照；Skill 正文按资源内容处理，不提升为系统权限。内部恢复所需内容沿用 Session 持久化与保留策略，公共历史只展示用户调用和执行结果，不另建 Skill 全文审计副本。\n\nB15 数据保留：沿用部署统一的数据保留策略，不为 Events 或 Skill 另定天数；没有已配置策略时不新增自动清理。保留范围变化后重新从第 1 页加载，不能承诺永久可恢复。若已有公司保留期限，请在同一份答复中补充。",
+            "selected": true
+          },
+          {
+            "value": "B-amend-in-notes",
+            "label": "本组有调整，见补充说明",
+            "description": "只写需要调整的 B 编号与要求；未提出修改的推荐项可一并确认。",
             "selected": false
           }
         ]
@@ -486,7 +540,8 @@
       "L6-tool-call-arguments": "A-object",
       "L7-tool-result-content": "A-content-blocks",
       "L8-tool-result-types": "A-text-only",
-      "L9-mate-tool-identity": "A-runtime-wrapper"
+      "L9-mate-tool-identity": "A-runtime-wrapper",
+      "L10-tool-result-outcome": "A-is-error"
     },
     "inheritedRules": {
       "eventIdentity": "eventId",
@@ -500,14 +555,14 @@
       "readToolToken": false
     },
     "pendingReview": [
-      "工具结果成功/失败标记、错误码、空文本、块数量与大小约束",
-      "thinking 内容策略、配置/压缩/Usage 与其他扩展事件的完整 v2 投影",
-      "参数与读取错误细节、数据保留",
-      "缺少回执时的结果不确定、执行关联与 Mate 展示对账边界",
+      "B01～B03：工具结果错误码、空文本、大小与 Mate 归一",
+      "B04～B07：时间、delta、thinking、确认标记与 idle reason",
+      "B08～B11：控制竞态、事件关联、回执不确定和 HTTP/SSE 故障",
+      "B12～B15：配置/压缩/Usage、Skill 执行与数据保留",
       "ListEvents 接口整体确认"
     ],
     "promptPrefix": "Claw Session Events v2 接口评审：GET /sessions/{sessionId}/events",
-    "promptSuffix": "仅应用本次明确调整；L1～L4 已确认：普通整数分页、从旧到新、不固定快照、默认 50/最多 200、result 仅含 events/nextPage，合法页码超出记录范围返回 200 空列表。不重开已确认决定，不默认确认 ListEvents 或合并 POST，不修改 Mate 公共契约。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 不重开已确认的正文结构。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 不重开已确认的工具参数结构。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 不重开已确认的工具结果容器。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 空文本、数量和错误细节仍待评审。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 不重开已确认的 Mate 工具名称与参数投影。",
+    "promptSuffix": "仅应用本次明确调整；L1～L4 已确认：普通整数分页、从旧到新、不固定快照、默认 50/最多 200、result 仅含 events/nextPage，合法页码超出记录范围返回 200 空列表。不重开已确认决定，不默认确认 ListEvents 或合并 POST，不修改 Mate 公共契约。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 不重开已确认的正文结构。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 不重开已确认的工具参数结构。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 不重开已确认的工具结果容器。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 空文本、数量和错误细节仍待评审。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 不重开已确认的 Mate 工具名称与参数投影。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。 不重开已确认的成败标记；错误码及文案继续待评审。",
     "confirmedPagination": {
       "direction": "oldest-first",
       "pageType": "positive-integer",
@@ -577,7 +632,111 @@
         "date": "2026-09-08",
         "source": "用户通过 CLAW ListEvents 评审页选择 L9-mate-tool-identity=A-runtime-wrapper。",
         "status": "仅确认 Mate 调用的公开工具名称与参数保留 Runtime 包装，同步 GET 历史和 POST SSE；既有 eventId、toolCallId、业务参数值及结果文本块保持不变。没有公开内部 toolId，也不新增模型工具；isError 表示、错误码、空文本、数量与接口整体继续待评审。"
+      },
+      "L10-tool-result-outcome": {
+        "date": "2026-09-08",
+        "source": "用户通过 CLAW ListEvents 评审页选择 L10-tool-result-outcome=A-is-error。",
+        "status": "仅确认每条工具结果必有 isError 布尔值，成功 false、失败 true，同步 GET 历史与 POST SSE。工具结果仍为文本块数组；错误码、文案、空文本、块数量与接口整体不随此项确认。"
+      },
+      "batch-review-mode": {
+        "date": "2026-09-08",
+        "source": "用户：还有什么要确认的，一起和我确认吧，逐项确认效率太慢了",
+        "status": "改为跨接口批量评审，L1～L10 保持确认；B01～B15 是待确认建议，默认选中不代表用户已提交，也不代表接口整体通过。"
       }
+    },
+    "batchReview": {
+      "version": "2026-09-08.1",
+      "status": "proposal",
+      "scope": [
+        "submitSessionEvent",
+        "listSessionEvents",
+        "getSession",
+        "changeSessionModel",
+        "changeSessionThinking",
+        "executeSessionCommand"
+      ],
+      "items": [
+        {
+          "id": "B01",
+          "title": "失败错误码",
+          "recommendation": "失败时必有稳定 errorCode，成功时省略；区分用户拒绝、参数错误、工具不存在、超时和执行失败。文案放在 text，使用脱敏可展示信息；不透传 Mate 原始错误码、异常栈或凭据。"
+        },
+        {
+          "id": "B02",
+          "title": "空文本与大小",
+          "recommendation": "工具结果至少一个 text 块，允许 text=\"\"，不强制只有一块；没有正文时不伪造 Agent 回答。沿用工具自身的有说明截断；HTTP 不静默截断完整事件。大小上限由实现校准，超限必须明确失败或断流并可查历史。"
+        },
+        {
+          "id": "B03",
+          "title": "Mate 文本归一",
+          "recommendation": "CallMateTool 缺省 args 在公开事件中补 {}；Mate result 为字符串时直接作为文本，对象/数组变为 JSON 文本，null 为 \"\"。这是待确认的适配调整，当前客户端对字符串使用 JSON 序列化的实现将有变化。"
+        },
+        {
+          "id": "B04",
+          "title": "时间与增量",
+          "recommendation": "完整事件 createdAt 使用 Claw 形成该权威记录时的 UTC 毫秒时间，保存一次，GET/POST 复用；delta 使用 content 字符串，只含新增文本，沿用同一 eventId，不带 createdAt。completed 覆盖预览，之后忽略迟到 delta。"
+        },
+        {
+          "id": "B05",
+          "title": "Thinking 展示",
+          "recommendation": "只展示可公开摘要，不暴露原始推理。thinking 开关决定后续执行是否产生摘要；之后关闭开关不隐藏此前已公开的历史摘要，读取仍受当前权限约束。此项替换尚未确认的“按当前开关过滤历史”候选。"
+        },
+        {
+          "id": "B06",
+          "title": "工具确认标记",
+          "recommendation": "每个完整 agent.tool_call 都带 requiresConfirmation 布尔值；本期顺序发出需确认调用，同一执行一次只挂起一个待确认 toolCallId。允许/拒绝后分别续跑，拒绝产生 isError=true 的工具结果。"
+        },
+        {
+          "id": "B07",
+          "title": "结束原因",
+          "recommendation": "session.status_idle.reason 固定 done、failed、terminated、confirming；confirming 只结束当前 SSE，Session 继续 running。failed 携带稳定 errorCode 和可展示 message；工具失败可由 Agent 继续处理，不自动等同于整轮 failed。"
+        },
+        {
+          "id": "B08",
+          "title": "控制请求竞争",
+          "recommendation": "确认与中断在同一执行的事务内重检；停止请求先提交，则拒绝确认；确认先提交，中断仍可停止续跑。重复/过期确认返回 409，不重复执行工具；等待超时不伪造已停止。"
+        },
+        {
+          "id": "B09",
+          "title": "防止误停下一轮",
+          "recommendation": "建议给 user.interrupt 增加必填 targetEventId，引用原 user.message 的 eventId；不匹配当前执行时返回 409。agent.* 和 idle 用 sourceEventId 引用同一原消息，便于历史对账。复用已有事件身份，不新增 runId/executionId；这是需要你确认的字段扩展。"
+        },
+        {
+          "id": "B10",
+          "title": "断线与回执丢失",
+          "recommendation": "保留无自动写重试的方案：没有收到首帧时显示“提交结果不确定”，不靠相同文本猜测成功，不新增幂等键。收到回执后按 eventId 和 B09 的关联补读历史；断流本身不取消执行，也不代表失败。"
+        },
+        {
+          "id": "B11",
+          "title": "HTTP 故障与心跳",
+          "recommendation": "接受前：非法参数 400、不存在 404、状态冲突 409、容量/依赖暂不可用 503、内部失败 500，统一 ResultBean；接受后不得伪装成未接受。SSE 已开始则不改成 JSON，能保存权威失败则发送 failed，否则断流并对账。采用 : ping 注释心跳；慢客户端可丢 preview，完整帧不能入队则断开。"
+        },
+        {
+          "id": "B12",
+          "title": "配置、压缩与用量",
+          "recommendation": "模型/思考配置变更和压缩保留独立完整事件，映射到统一 v2；Usage 放在对应完整 Agent 消息，Session 保留累计用量。不新增通用 command 生命周期、进度或子 Agent 公共事件；已有内部记录逐类标明公开映射或不公开理由。"
+        },
+        {
+          "id": "B13",
+          "title": "Skill 请求与响应",
+          "recommendation": "共享 POST /sessions/{sessionId}/command：Skill 用 name=\"skill:<name>\"、arguments 字符串和可选 fileIds；Skill 执行返回与消息一致的 SSE，Builtin 保持普通 JSON。Skill 遵循同一 Session 单消息准入，首帧回执为展开前的 user.message，随后普通 Agent/Tool/idle 事件，不新增 commandId。"
+        },
+        {
+          "id": "B14",
+          "title": "Skill 快照与恢复",
+          "recommendation": "受理前解析完整 Agent/Skill 快照并重检绑定、权限和容量，受理后本次执行固定快照；Skill 正文按资源内容处理，不提升为系统权限。内部恢复所需内容沿用 Session 持久化与保留策略，公共历史只展示用户调用和执行结果，不另建 Skill 全文审计副本。"
+        },
+        {
+          "id": "B15",
+          "title": "数据保留",
+          "recommendation": "沿用部署统一的数据保留策略，不为 Events 或 Skill 另定天数；没有已配置策略时不新增自动清理。保留范围变化后重新从第 1 页加载，不能承诺永久可恢复。若已有公司保留期限，请在同一份答复中补充。"
+        }
+      ],
+      "calibration": [
+        "数据库字段、约束及索引由实现设计与实际 GaussDB 执行计划确定",
+        "轮询周期、批次、心跳周期、事件大小和缓冲上限经容量测试与网关验证确定；本轮不冻结 500 毫秒或 15 秒",
+        "各工具超时数值与停止等待上限由实现配置，但必须遵循本轮拟确认的接受、失败和不确定边界"
+      ]
     }
   }
 }

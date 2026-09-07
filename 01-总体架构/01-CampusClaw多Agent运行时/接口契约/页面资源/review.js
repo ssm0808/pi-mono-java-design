@@ -132,6 +132,8 @@
       code(operation.operationKey, 'operation-key')
     );
     article.appendChild(operationHead);
+    const reviewSection = renderReview(model);
+    if (reviewSection && model.review.batchReview) article.appendChild(reviewSection);
     const purpose = make('section', 'section');
     append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
     article.appendChild(purpose);
@@ -256,8 +258,7 @@
     });
     renderResponse();
     article.appendChild(responseSection);
-    const reviewSection = renderReview(model);
-    if (reviewSection) article.appendChild(reviewSection);
+    if (reviewSection && !model.review.batchReview) article.appendChild(reviewSection);
     shell.replaceChildren(topbar, article);
   };
   roots.forEach((root, index) => {

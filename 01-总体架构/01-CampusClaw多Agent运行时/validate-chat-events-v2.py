@@ -33,6 +33,7 @@ CONFIRMED_CHOICES = {
     "L7-tool-result-content": "A-content-blocks",
     "L8-tool-result-types": "A-text-only",
     "L9-mate-tool-identity": "A-runtime-wrapper",
+    "L10-tool-result-outcome": "A-is-error",
 }
 INTERRUPT_OPTIMIZATION = {
     "authority": "committed-database",
@@ -131,6 +132,8 @@ def validate_frame(event: dict, receipt: bool = False) -> None:
     if event["type"] == "agent.tool_call":
         require(isinstance(event.get("arguments"), dict), "confirmed tool arguments must be a JSON object")
     if event["type"] == "agent.tool_result":
+        require(type(event.get("isError")) is bool, "every tool result must contain a boolean isError")
+        require("status" not in event, "confirmed isError must not be replaced or duplicated by status")
         content = event.get("content")
         require(isinstance(content, list) and all(isinstance(block, dict) for block in content),
                 "confirmed tool result content must be an array of content blocks")
@@ -241,7 +244,7 @@ def validate_model(model: dict) -> None:
             "original and interrupt responses must deliver the same idle event, including eventId")
     require(receipt_types == USER_EVENT_TYPES and all_types == STREAM_TYPES, "missing receipt or basic output examples")
     require(review.get("confirmedChoices") == CONFIRMED_CHOICES,
-            "preserve exact confirmed transport/receipt/closing/S1/S2/L5/L6/L7/L8/L9")
+            "preserve exact confirmed transport/receipt/closing/S1/S2/L5/L6/L7/L8/L9/L10")
     require("L5 已确认" in operation["description"] and "L5 已确认" in review["notice"],
             "completed content approval must be visible in POST")
     require("L6 已确认" in operation["description"] and "L6 已确认" in review["notice"],
@@ -252,6 +255,8 @@ def validate_model(model: dict) -> None:
             "text-only tool result approval must be visible in POST")
     require("L9 已确认" in operation["description"] and "L9 已确认" in review["notice"],
             "Mate Runtime wrapper approval must be visible in POST")
+    require("L10 已确认" in operation["description"] and "L10 已确认" in review["notice"],
+            "tool result boolean outcome approval must be visible in POST")
     require(set(review["confirmedEventTypes"]) == STREAM_TYPES, "confirmed output type names changed")
     require(review["questions"] == [], "do not reopen confirmed choices")
     require("合并 POST 接口整体确认" in review["pendingReview"], "whole operation must remain pending")
@@ -343,6 +348,25 @@ def validate_negative_regressions(model: dict) -> int:
     result_index = next(index for index, response in enumerate(model["operation"]["responses"])
                         if response["id"] == "200-tool-confirmation")
     result_stream = model["operation"]["responses"][result_index]["bodies"]["default"]
+    for label, edit in (
+        ("missing isError", lambda e: e.pop("isError")),
+        ("null isError", lambda e: e.update(isError=None)),
+        ("integer isError", lambda e: e.update(isError=1)),
+        ("zero isError", lambda e: e.update(isError=0)),
+        ("string isError", lambda e: e.update(isError="true")),
+        ("array isError", lambda e: e.update(isError=[])),
+        ("extra outcome status", lambda e: e.update(status="failed")),
+    ):
+        frames = parse_stream(result_stream)
+        edit(next(event for event in frames if event["type"] == "agent.tool_result"))
+        invalid = "".join("data: " + json.dumps(event, ensure_ascii=False) + "\n\n" for event in frames)
+        changed(label, lambda m, value=invalid:
+                m["operation"]["responses"][result_index]["bodies"].update(default=value))
+    for outcome in (False, True):
+        event = copy.deepcopy(next(e for e in parse_stream(result_stream) if e["type"] == "agent.tool_result"))
+        event.update(isError=outcome, content=[{"type": "text", "text": "failed" if outcome else "completed"}])
+        event.pop("errorCode", None)
+        validate_frame(event)
     for content in ("text", {"type": "text", "text": "text"}, None, 1, True, ["text"], [None],
                     [{"type": "json", "data": {"status": "done"}}],
                     [{"type": "image", "data": "opaque", "mimeType": "image/png"}],
@@ -445,15 +469,28 @@ def validate_history_model(model: dict, post: dict) -> None:
         "L7-tool-result-content": "A-content-blocks",
         "L8-tool-result-types": "A-text-only",
         "L9-mate-tool-identity": "A-runtime-wrapper",
+        "L10-tool-result-outcome": "A-is-error",
     } and "ListEvents 接口整体确认" in review["pendingReview"],
             "pagination, completed content, tool arguments and result container are approved, not the whole operation")
     questions = review["questions"]
-    require(len(questions) == 1 and questions[0]["id"] == "L10-tool-result-outcome",
-            "only L10 tool result outcome is under review; do not reopen L1-L9")
-    options = questions[0]["options"]
-    require(len(options) == 2 and {option["value"] for option in options} == {"A-is-error", "B-status-enum"}
-            and sum(bool(option.get("selected")) for option in options) == 1,
-            "L10 must retain two alternatives and one unconfirmed recommendation")
+    batch_ids = ["BATCH-20260908-1-tools", "BATCH-20260908-1-events",
+                 "BATCH-20260908-1-lifecycle", "BATCH-20260908-1-integration"]
+    require([question["id"] for question in questions] == batch_ids,
+            "remaining decisions must be reviewed together without reopening L1-L10")
+    for question in questions:
+        options = question["options"]
+        require(len(options) == 2 and {option["value"] for option in options}
+                == {"A-recommended", "B-amend-in-notes"}
+                and sum(bool(option.get("selected")) for option in options) == 1,
+                "batch questions require a recommendation and an amendment choice")
+    batch = review["batchReview"]
+    require(batch["status"] == "proposal" and batch["version"] == "2026-09-08.1",
+            "batch defaults must not become implicit approval")
+    require([item["id"] for item in batch["items"]] == [f"B{i:02}" for i in range(1, 16)],
+            "all fifteen remaining semantic decisions must remain in this batch")
+    descriptions = " ".join(question["options"][0]["description"] for question in questions)
+    require(all(item["recommendation"] in descriptions for item in batch["items"]),
+            "every batch proposal must be visible in the actual confirmation form")
     require("L5 已确认" in operation["description"] and "L5 已确认" in review["notice"],
             "completed content approval must be visible in history")
     require("L6 已确认" in operation["description"] and "L6 已确认" in review["notice"],
@@ -464,6 +501,8 @@ def validate_history_model(model: dict, post: dict) -> None:
             "text-only tool result approval must be visible in history")
     require("L9 已确认" in operation["description"] and "L9 已确认" in review["notice"],
             "Mate Runtime wrapper approval must be visible in history")
+    require("L10 已确认" in operation["description"] and "L10 已确认" in review["notice"],
+            "tool result boolean outcome approval must be visible in history")
     for clause in ("普通分页已确认", "不再固定快照", "跨页保持相同 limit", "不按 createdAt 重排",
                    "每页读取该次查询可见的当前分支完整事件", "本接口不承诺自动检测跨页变化",
                    "允许 Session running 时查询", "nextPage=null 仅表示本次查询没有下一页",
@@ -536,6 +575,7 @@ def validate_history_regressions(model: dict, post: dict) -> int:
         lambda m: m["review"]["confirmedChoices"].update(**{"L7-tool-result-content": "B-string"}),
         lambda m: m["review"]["confirmedChoices"].update(**{"L8-tool-result-types": "B-mixed-types"}),
         lambda m: m["review"]["confirmedChoices"].update(**{"L9-mate-tool-identity": "B-business-tool"}),
+        lambda m: m["review"]["confirmedChoices"].update(**{"L10-tool-result-outcome": "B-status-enum"}),
         lambda m: m["review"]["confirmedPagination"].update(outOfRangePage="query-error"),
         lambda m: m["review"]["historyProposal"].update(outOfRangePage="empty-success"),
         lambda m: m["review"]["confirmedPagination"].update(defaultLimit=100),
@@ -559,6 +599,7 @@ def validate_history_regressions(model: dict, post: dict) -> int:
         lambda m: m["review"]["questions"].append({"id": "L7-tool-result-content"}),
         lambda m: m["review"]["questions"].append({"id": "L8-tool-result-types"}),
         lambda m: m["review"]["questions"].append({"id": "L9-mate-tool-identity"}),
+        lambda m: m["review"]["questions"].append({"id": "L10-tool-result-outcome"}),
         lambda m: m["review"].update(questions=[]),
         lambda m: next(x for x in m["operation"]["responses"] if x["id"] == "200-out-of-range").update(status="204"),
         lambda m: next(x for x in m["operation"]["responses"] if x["id"] == "200-out-of-range")
@@ -614,7 +655,8 @@ def validate_review_pages(post: dict) -> None:
     require(all(f'data-question-id="{key}"' not in history_source
                 for key in ("L1-page-direction", "L2-page-size", "L3-page-metadata", "L4-out-of-range-page",
                             "L5-agent-message-content", "L6-tool-call-arguments", "L7-tool-result-content",
-                            "L8-tool-result-types", "L8-mate-result-projection", "L9-mate-tool-identity")),
+                            "L8-tool-result-types", "L8-mate-result-projection", "L9-mate-tool-identity",
+                            "L10-tool-result-outcome")),
             "do not reopen confirmed choices")
     require("data-label" in history_source and "max-width: 680px" in history_source, "history responsive rules missing")
     source = history_source
@@ -630,9 +672,10 @@ def validate_review_pages(post: dict) -> None:
                  "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认", "数据库中断机制已确认",
                  "中断查询优化已确认", "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次"):
         require(text in visible, f"no-JavaScript page is missing {text}")
-    require(source.count('data-question-id="L10-tool-result-outcome"') == 1
-            and source.count('data-question-id="') == 1,
-            "only the current L10 history question may be displayed")
+    require(source.count('data-question-id="BATCH-20260908-1-') == 4
+            and source.count('data-question-id="') == 4
+            and 'data-question-id="L11-tool-result-error-code"' not in source,
+            "show all four remaining decision groups together, not the old L11 question")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
 
 

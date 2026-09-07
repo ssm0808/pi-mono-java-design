@@ -245,13 +245,14 @@ def render_static(model: dict[str, Any]) -> str:
         f'<span class="muted">{html.escape(operation["summary"])}</span>'
         f'<span class="operation-name">{html.escape(operation["shortName"])}</span>'
         f'<code class="operation-key">{html.escape(operation["operationKey"])}</code></header>'
+        f'{static_review(model) if model.get("review", {}).get("batchReview") else ""}'
         f'<section class="section"><h3>作用</h3><p class="description">{html.escape(operation["description"])}</p></section>'
         f'<section class="section contract-detail auth-section"><h3>调用上下文 Header</h3>{"".join(auth_blocks)}</section>'
         '<section class="section contract-detail request-section"><h3>参数与请求体</h3>'
         f'{parameter_html}<p class="muted empty">{html.escape(request_body.get("description", "无请求体。"))}</p>'
         f'{request_example}{"".join(request_examples)}</section>'
         f'<section class="section contract-detail response-section"><h3>响应</h3>{responses}</section>'
-        f'{static_review(model)}</article></div>'
+        f'{static_review(model) if not model.get("review", {}).get("batchReview") else ""}</article></div>'
     )
 
 

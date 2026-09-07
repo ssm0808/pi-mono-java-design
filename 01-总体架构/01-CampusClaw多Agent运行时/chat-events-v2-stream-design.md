@@ -2,13 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.4.5 |
+| 文档版本 | 0.4.6 |
 | 状态 | 合并方向、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；数据库细节、其余并发竞态、字段与错误细节候选，target-only |
 | 设计仓本次变更前基线 | `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
 | L5 字段确认前设计仓基线 | `7349cdf2e037700ddf4917eebef0e19799252f47`；只同步目标字段决定，未重新核对实现 |
 | L6 字段确认前设计仓基线 | `050bda2579004b630021300986881ac61ba7142e`；只同步目标字段决定，未重新核对实现 |
 | L7 字段确认前设计仓基线 | `019b2dbfbc85edb23d94ffbda7b4963237286f7e`；Mate 返回链路补充核对见历史查询 §2.1 |
 | L9 字段确认前设计仓基线 | `33a7344ff3b98e143e98894f6105f53160ab0734`；字段同步，沿用历史查询 §2.1 的同一源码基线 |
+| L10 字段确认前设计仓基线 | `0f3f58f2f203fe4fe88c308032e1815b1622683b`；只确认目标字段，既有源码证据不变 |
 | 本次实现核对 | `pi-mono-java@918005ee8ccc88d179fc31a0de17a92b4a01383b` |
 | M7 补充源码核对 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；五个并发、流与配置文件相对 `918005e` 无变化，路径与符号见总体设计 §4.4 |
 | 原实现基线 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；复核文件与差距见 §6 |
@@ -149,7 +150,7 @@ M1 完成后 M2 才能开始。跨这个完成边界的迟到中断、已接受�
 | agent.message | phase=delta/completed | completed 的 content 为完整正文字符串已确认（L5）；delta 字段、createdAt 等其余细节仍保留候选状态；同 ID 完整内容替换 preview |
 | agent.thinking | phase=delta/completed | 仅启用且有可公开摘要时输出，不泄露原始推理；具体内容策略待评审 |
 | agent.tool_call | 无 phase 的完整事件 | arguments JSON 对象已确认（L6）；Mate 的 toolName=CallMateTool、arguments={tool,args} 已确认（L9）；其他字段保留各自原有状态 |
-| agent.tool_result | 无 phase 的完整事件 | content 数组且仅包含 text 块已确认（L7/L8）；eventId/type/createdAt/toolCallId/isError 及失败 errorCode 保留各自原有状态 |
+| agent.tool_result | 无 phase 的完整事件 | content 数组且仅包含 text 块已确认（L7/L8）；每条结果必有布尔 isError、成功 false/失败 true 已确认（L10）；其他字段及失败 errorCode 保留各自原有状态 |
 | session.status_idle | 无 phase 的完整事件 | eventId/type/createdAt/reason；reason=done/terminated/failed/confirming 仍候选 |
 
 2026-09-07 用户在 ListEvents 选择 `L5-agent-message-content=A-string`。
@@ -163,8 +164,9 @@ M1 完成后 M2 才能开始。跨这个完成边界的迟到中断、已接受�
 不增加 JSON 块或图片块。Mate 的文本返回与源码边界见[历史查询 §2.1](chat-events-v2-history-design.md#21-mate-工具的文本返回与源码边界)；
 空文本及错误细节仍待评审。
 同日用户选择 L9 保留 Runtime 包装，本 POST 的 Mate 调用同步为 `CallMateTool` 和
-`{tool,args}`；完整工具结果的文本块、关联 ID 与确认标记不变。当前 L10 成败标记仍候选，
-设计理由与源码证据继续由历史查询 §2.1 维护。
+`{tool,args}`；完整工具结果的文本块、关联 ID 与确认标记不变。
+同日用户选择 L10，本 POST 同步确认每条完整工具结果必有布尔 isError，成功 false、失败 true；
+errorCode 字段、具体码值和文案仍待评审。设计理由与源码证据继续由历史查询 §2.1 维护。
 
 完整事件在 SSE 与 ListEvents 同名同形；落盘范围仍须配合历史接口确认，
 不能假定当前 Java 已保存 Tool Call 或 idle。preview 不持久化、不补发；同一 eventId
@@ -239,10 +241,13 @@ idle reason、具体字段和 thinking 内容；Header 后错误、保活、容�
 本节不重复维护调度与数据库检查清单。
 本轮仅改设计，未运行尚未实现的 v2 Runtime 集成测试。
 
+剩余问题按用户要求统一纳入[历史专题 §8 的批量评审](chat-events-v2-history-design.md#8-剩余问题一次批量确认待确认建议)。B01～B15 均为待确认建议，当前报文示例未据此调整。
+
 ## 8. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.4.6 | 2026-09-08 | 同步 L10：每条工具结果必有布尔 isError；errorCode、文案与其他细节合并到 B01～B15 批量评审，接口未整体确认，PlantUML 不变。 |
 | 0.4.5 | 2026-09-08 | 同步 L9 Mate 工具名与参数包装，结果仍为文本块数组；成败标记、错误及整体仍待评审，PlantUML 不变。 |
 | 0.4.4 | 2026-09-08 | 同步 L7/L8：agent.tool_result.content 使用仅含 text 块的数组；Mate 返回链路与待决工具身份投影由历史专题维护，其他字段及 POST 整体仍待评审，PlantUML 不变。 |
 | 0.4.3 | 2026-09-07 | 同步 L6：agent.tool_call.arguments 使用 JSON 对象；其他工具字段、结果与整个 POST 仍待评审，源码证据及 PlantUML 不变。 |
