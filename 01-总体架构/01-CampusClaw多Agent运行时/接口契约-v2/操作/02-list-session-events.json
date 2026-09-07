@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}/events",
     "summary": "分页查询与 POST SSE 一致的完整事件",
-    "description": "当前评审 ListEvents；这是目标设计，尚未修改 CampusClaw 实现。保留 GET 历史查询，不恢复 GET /events/stream。普通分页已确认：page 从 1 开始，按旧到新的已提交内部顺序返回；nextPage 是下一页整数或 null，不是加密游标。不再固定快照，不增加快照标识、游标密钥或过期时间。每页读取该次查询可见的当前分支完整事件，跨页保持相同 limit；同一分支和过滤条件不变且仅尾部追加时，已有记录的位置不移动，新事件可以进入后续页。分支、过滤条件或历史可见范围改变时，从 page=1 重新加载；本接口不承诺自动检测跨页变化。nextPage=null 仅表示本次查询没有下一页，不表示执行已结束或以后不会新增事件。允许 Session running 时查询，不占用消息执行准入名额。分页数量已确认：省略 limit 时返回最多 50 条，允许 1～200；result 只含 events 和 nextPage，不返回 total。普通 JSON 响应继续使用 ResultBean。三类已接受的 user.* 回执与 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 使用 POST SSE 的相同 eventId、createdAt 和业务字段；正文/思考只返回 phase=completed，不返回 delta、心跳或连接结束标记。客户端保持数组顺序，不按 createdAt 重排，不公开 entryId、entrySeq 或执行标识。候选沿用 Session thinking 开关过滤已获准公开的摘要；每页重新检查访问边界，页码不是访问凭据。中断回执只表示已接受；相同停止 idle 在历史中只出现一次。等待确认的 idle 不能解除 M1 的 running 状态；不能用某条历史 idle 判定现在可提交 M2。只读接口不要求 access-token，不创建执行凭据、不调用 Mate 工具，所有凭据都不进入历史或日志。未整体确认 ListEvents 或合并 POST；配置变更、压缩、Usage 与其他扩展事件的 v2 映射仍待补齐，不能因基础示例未列出而删除既有能力。CampusClaw 内部 sessionId 不直接暴露给浏览器，Mate 公共 API 不在本轮修改范围。",
+    "description": "当前评审 ListEvents；这是目标设计，尚未修改 CampusClaw 实现。保留 GET 历史查询，不恢复 GET /events/stream。普通分页已确认：page 从 1 开始，按旧到新的已提交内部顺序返回；nextPage 是下一页整数或 null，不是加密游标。不再固定快照，不增加快照标识、游标密钥或过期时间。每页读取该次查询可见的当前分支完整事件，跨页保持相同 limit；同一分支和过滤条件不变且仅尾部追加时，已有记录的位置不移动，新事件可以进入后续页。分支、过滤条件或历史可见范围改变时，从 page=1 重新加载；本接口不承诺自动检测跨页变化。nextPage=null 仅表示本次查询没有下一页，不表示执行已结束或以后不会新增事件。允许 Session running 时查询，不占用消息执行准入名额。分页数量已确认：省略 limit 时返回最多 50 条，允许 1～200；result 只含 events 和 nextPage，不返回 total。普通 JSON 响应继续使用 ResultBean。L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null，不作为分页参数错误；此规则以 Session 存在、访问检查及查询成功为前提，不掩盖非法参数或读取失败。三类已接受的 user.* 回执与 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 使用 POST SSE 的相同 eventId、createdAt 和业务字段；正文/思考只返回 phase=completed，不返回 delta、心跳或连接结束标记。客户端保持数组顺序，不按 createdAt 重排，不公开 entryId、entrySeq 或执行标识。候选沿用 Session thinking 开关过滤已获准公开的摘要；每页重新检查访问边界，页码不是访问凭据。中断回执只表示已接受；相同停止 idle 在历史中只出现一次。等待确认的 idle 不能解除 M1 的 running 状态；不能用某条历史 idle 判定现在可提交 M2。只读接口不要求 access-token，不创建执行凭据、不调用 Mate 工具，所有凭据都不进入历史或日志。未整体确认 ListEvents 或合并 POST；配置变更、压缩、Usage 与其他扩展事件的 v2 映射仍待补齐，不能因基础示例未列出而删除既有能力。CampusClaw 内部 sessionId 不直接暴露给浏览器，Mate 公共 API 不在本轮修改范围。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -337,7 +337,7 @@
         "status": "200",
         "tabLabel": "200 · 页码超出记录范围",
         "label": "OK",
-        "summary": "候选边界：当前只有三条可见事件，?page=4&limit=2 返回 events=[]、nextPage=null；页码本身合法，不按参数格式错误处理。",
+        "summary": "L4 已确认：当前只有三条可见事件，?page=4&limit=2 返回 200，events=[]、nextPage=null；页码本身合法，不按参数格式错误处理。前提是 Session 存在、访问检查通过且查询成功；Session 不存在或读取失败仍走对应错误响应。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -445,33 +445,16 @@
     ]
   },
   "review": {
-    "status": "ListEvents 当前评审 · 普通整数分页、默认 50/最多 200、无 total 已确认 · eventId、完整事件同形与顺序保留 · 未整体确认",
-    "notice": "L2 已选择默认 50、最多 200；L3 已选择只返回 events、nextPage。普通分页、方向和这两项不再询问。现在仅评审合法页码超出记录范围时如何返回；其他事件字段、错误细节和接口整体仍待评审。",
-    "questions": [
-      {
-        "id": "L4-out-of-range-page",
-        "legend": "页码合法，但超出当前记录范围时如何返回？",
-        "options": [
-          {
-            "value": "A-empty-success",
-            "label": "200 返回空列表（推荐）",
-            "description": "例如只有 3 条事件，page=4&limit=2 返回 events=[]、nextPage=null；查询成功，只是没有记录。",
-            "selected": true
-          },
-          {
-            "value": "B-query-error",
-            "label": "400 返回分页错误",
-            "description": "将超出当前记录范围也视为无效查询，返回 INVALID_EVENT_LIST_QUERY；客户端需区分错误和正常读完。"
-          }
-        ]
-      }
-    ],
+    "status": "ListEvents 当前评审 · 普通分页、默认 50/最多 200、无 total、超范围空成功已确认 · eventId、完整事件同形与顺序保留 · 未整体确认",
+    "notice": "L1～L4 分页决定已确认，不再重复询问。合法页码超出记录范围时返回 200 空列表，result 仍只有 events、nextPage。其余待评审项是具体事件内容、参数与读取错误、数据保留及对账边界；这不代表整个 ListEvents 或 POST 接口通过。",
+    "questions": [],
     "confirmedChoices": {
       "L1-page-direction": "A-oldest-first",
       "L1-page-format": "one-based-integer",
       "L1-consistency": "no-fixed-snapshot",
       "L2-page-size": "B-default50-max200",
-      "L3-page-metadata": "A-events-nextPage-only"
+      "L3-page-metadata": "A-events-nextPage-only",
+      "L4-out-of-range-page": "A-empty-success"
     },
     "inheritedRules": {
       "eventIdentity": "eventId",
@@ -482,17 +465,16 @@
     "historyProposal": {
       "scope": "current-branch-per-request",
       "thinkingFilter": "session-policy",
-      "outOfRangePage": "empty-success",
       "readToolToken": false
     },
     "pendingReview": [
       "thinking 内容策略、配置/压缩/Usage 与其他扩展事件的完整 v2 投影",
-      "合法页码超出记录范围的空成功响应、参数与读取错误细节、数据保留",
+      "参数与读取错误细节、数据保留",
       "缺少回执时的结果不确定、执行关联与 Mate 展示对账边界",
       "ListEvents 接口整体确认"
     ],
     "promptPrefix": "Claw Session Events v2 接口评审：GET /sessions/{sessionId}/events",
-    "promptSuffix": "仅应用本次明确选择；普通整数分页、从旧到新、不固定快照、默认 50/最多 200 和 result 仅含 events/nextPage 已确认，不再询问。保留 eventId 与完整事件同形，不默认确认 ListEvents 或合并 POST，不修改 Mate 公共契约。",
+    "promptSuffix": "仅应用本次明确调整；L1～L4 已确认：普通整数分页、从旧到新、不固定快照、默认 50/最多 200、result 仅含 events/nextPage，合法页码超出记录范围返回 200 空列表。不重开已确认决定，不默认确认 ListEvents 或合并 POST，不修改 Mate 公共契约。",
     "confirmedPagination": {
       "direction": "oldest-first",
       "pageType": "positive-integer",
@@ -508,7 +490,8 @@
       "responseFields": [
         "events",
         "nextPage"
-      ]
+      ],
+      "outOfRangePage": "empty-success"
     },
     "decisionHistory": {
       "L1-page-direction": {
@@ -531,6 +514,11 @@
         "date": "2026-09-06",
         "source": "用户通过评审页选择 L3-page-metadata=A-events-nextPage-only。",
         "status": "成功 result 仅含 events、nextPage，不返回 total；保留 ResultBean 外层。空页、其他错误、事件字段和整个操作仍待评审。"
+      },
+      "L4-out-of-range-page": {
+        "date": "2026-09-07",
+        "source": "用户通过评审页选择 L4-out-of-range-page=A-empty-success。",
+        "status": "页码合法但超出当前记录范围时返回 200，result.events=[]、result.nextPage=null；不视为 INVALID_EVENT_LIST_QUERY。以 Session 存在、访问检查通过和查询成功为前提，不改变其他参数与读取错误候选，也不确认整个操作。"
       }
     }
   }

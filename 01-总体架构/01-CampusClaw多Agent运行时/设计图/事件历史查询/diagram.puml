@@ -60,7 +60,7 @@ title Target Ordinary Integer Paging - Oldest First
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java, list/pageOf.
 ' Observed behavior: each current query resolves active_leaf_id again.
 ' Design reason: user approved ordinary pages without cross-request snapshots.
-' Target-only: default 50, max 200, events/nextPage confirmed; empty-page errors pending.
+' Target-only: default 50, max 200, events/nextPage and empty-page success confirmed.
 actor "Internal caller" as C
 participant "History service" as Q
 database "Session / Event store" as D
@@ -88,7 +88,7 @@ alt Valid parameters
   end
   alt Session readable
     Q -> Q : nextPage = page + 1 if extra event, else null
-    Q --> C : Complete ordered events
+    Q --> C : 200 ordered events (empty page: [], null)
   else Deleted / access revoked
     Q --> C : Error, no stale access reuse
   end
