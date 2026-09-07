@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
+  "version": "1.1.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -12,7 +12,7 @@
     {"key": "listSessionModels", "source": "接口契约/操作/06-list-session-models.json", "common": "接口契约/common.json", "status": "原契约已确认", "note": "模型清单规则保持不变。", "design": "chat-http-v1-design.md#241-get-session-models"},
     {"key": "changeSessionModel", "source": "接口契约/操作/07-change-session-model.json", "common": "接口契约/common.json", "status": "原契约 · 事件映射待评审", "note": "配置接口保持原契约；配置变更事件如何进入 Events v2 尚待对齐，不能用旧事件示例覆盖新 Events。", "design": "chat-http-v1-design.md#242-put-session-model"},
     {"key": "changeSessionThinking", "source": "接口契约/操作/08-change-session-thinking.json", "common": "接口契约/common.json", "status": "原契约 · 需联动评审", "note": "配置请求和响应保持原契约；历史过滤与事件映射待联动评审，已移除作废的旧事件名和游标失效指引。", "design": "chat-http-v1-design.md#243-put-session-thinking"},
-    {"key": "listSessionCommands", "source": "接口契约/操作/12-list-session-commands.json", "common": "接口契约/common.json", "status": "Builtin 切片已确认", "note": "Builtin 与 Skill Command 由用户统一负责；展示已确认 Builtin 切片，Skill 共享契约整合仍待评审，不表示 Skill 延期或禁用。", "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"},
+    {"key": "listSessionCommands", "source": "接口契约/操作/12-list-session-commands.json", "common": "接口契约/common.json", "status": "GET 轻量清单已确认", "note": "合入已确认字段精简：必填 name/kind/description，可选 input；按状态过滤，Help 无参。Skill 执行与公共 POST 仍待评审，不恢复旧 SSE。", "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"},
     {"key": "executeSessionCommand", "source": "接口契约/操作/13-execute-session-command.json", "common": "接口契约/common.json", "status": "Builtin 切片已确认", "note": "已确认 Builtin 普通 JSON 行为不变；Skill 联合请求及命令事件与 Events v2 的衔接待评审。", "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"}
   ]
 }

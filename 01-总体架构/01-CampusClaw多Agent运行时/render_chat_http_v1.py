@@ -261,7 +261,7 @@ def encode_models(models: list[dict[str, Any]]) -> str:
 
 
 def build_operation_html(models: list[dict[str, Any]]) -> str:
-    """Internal renderer fixture; not a separately maintained contract page."""
+    """Render supplied review models using the shared Runtime presentation."""
     css = CSS_PATH.read_text(encoding="utf-8").strip()
     script = JS_PATH.read_text(encoding="utf-8").strip()
     cards = []
@@ -284,7 +284,7 @@ def build_operation_html(models: list[dict[str, Any]]) -> str:
   </style>
 </head>
 <body>
-  <!-- Generated from {html.escape(str(CONTRACT_ROOT.relative_to(ROOT)))}/common.json and operation models. Do not edit this HTML directly. -->
+  <!-- Generated from operation review models. Do not edit this HTML directly. -->
   <main>
 {"".join(cards)}
   </main>

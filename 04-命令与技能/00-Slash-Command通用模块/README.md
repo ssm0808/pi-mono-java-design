@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.3 |
+| 文档版本 | 1.5.0 |
 | 更新日期 | 2026-09-07 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -17,10 +17,10 @@
 ## 1. 当前目标
 
 Builtin 实现切片覆盖 `help`、`status`、`name`、`model`、`thinking`、
-`compact`、`skills` 七个 Builtin。GET 命令清单按名称稳定字典序返回，
+`compact`、`skills` 七个 Builtin。共享 GET 按固定 Builtin 顺序与 Skill 名称顺序返回轻量清单，
 POST Command 使用普通 ResultBean JSON。
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。Builtin 来源视图、参数规则和验收仅适用于 Builtin；共享 GET/POST 的最终命名、请求联合类型和清单合并，由同一负责人在 HTTP 发布前统一对齐。Skill 执行纳入整体实施与验收计划，具体未确认契约继续逐项评审。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、执行结果和 HTTP 发布集成仍需评审。
 
 本责任安排由用户于 2026-09-05 确认，取代旧版人员分工；旧记录仅用于历史追溯。
 变更前设计基线为 `7bf966edc313b092f05f2f28256e32ed673e8c9a`；这是实施责任调整，既有源码证据点和命令行为决定继续有效。
@@ -129,7 +129,7 @@ Catalog 用于找到 Help Definition 与执行上下文；Help 内容由 AgentHe
 
 [PlantUML 源码](设计图/diagram.puml#L43)
 
-- `resolve(context, BUILTIN)` 在调用 Source 前过滤类型，Builtin 查询不调用 SkillCommandSource。
+- `resolve(context, BUILTIN)` 仅用于内部 Builtin 专属解析，在调用 Source 前过滤类型；共享 GET 使用完整来源解析，不套用此快路径。
 - 七个 Contributor 各自贡献元数据、准入策略和 Handler；启动期重名直接失败。
 - 当前发现层的 Skill Definition 只供展示，不安装抛错的伪 Handler；真实执行定义纳入统一实施计划，不强制复用 Builtin 类型。
 - 新增命令不修改中央名称 switch；结果类型分派只能出现在 DTO→VO 组装器。
@@ -146,6 +146,89 @@ Skill 名称必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，同时单独校验 1～6
 
 这是已确认产品约束与安全加固，同时适用于 Skill 执行；Builtin 的来源过滤不改变该规则。
 名称专项源码证据和完整验收见 [Skill 设计](../02-技能命令/README.md#3-名称统一严格校验)。
+
+### 3.1 GET 轻量清单（已确认）
+
+2026-09-03 用户在任务「对齐 slash command 内置命令设计」确认 GET 字段减法，
+产物为设计提交 `ec5492aedb254d39f5b284eb36d80ad528236d80`；它此前未进入主线。
+2026-09-07 按用户要求语义整合到当前主线，不整文件恢复旧分支。
+后续 Help 无参、普通 POST JSON、统一实施责任与新版 Events 决定优先保留。
+
+Runtime GET 的精确模型见[当前接口](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#listSessionCommands)；
+Mate GET 同步相同 Descriptor，但公共认证、bridge、错误映射与 POST 发布仍需独立评审。
+
+| 字段 | 必填 | 契约 |
+|---|---|---|
+| name | 是 | 不带前导 /；Builtin 裸名或 `skill:<name>` |
+| kind | 是 | builtin 或 skill |
+| description | 是 | 命令用途的非空说明 |
+| input | 否 | 缺失表示当前仅允许无参数、无附件调用；不返回 null 或空对象 |
+| input.hint | input 存在时必填 | 非空展示文本；`[x]` 为可选输入、`<x>` 为必填输入，不参与参数校验 |
+| input.acceptsFiles | 否 | 只在 true 时输出，缺失为 false；Builtin 一律省略 |
+
+删除的七项为 available、unavailableCode、input.mode、input.available、input.unavailableCode、
+input.placeholder、input.suggestions；不以 allowedValues、catalogVersion 或其他候选值字段替代。
+
+| 命令 | idle 的 input | running 的 input / 可见性 |
+|---|---|---|
+| help | 无 | 无，保留；不恢复 [command] |
+| status | 无 | 无，保留 |
+| name | hint=[displayName] | 不变 |
+| model | hint=[modelId] | 省略 input，仅查询 |
+| thinking | hint=[on\|off] | 省略 input，仅查询 |
+| compact | 无 | 整项省略 |
+| skills | 无 | 无，保留 |
+| `skill:<name>` | hint=[request]，acceptsFiles=true | 整项省略 |
+
+Builtin 固定按 help、status、name、model、thinking、compact、skills 排列，再追加按 name
+升序排列的 Skill。过滤后保留相对顺序；服务端控制显示顺序，客户端不重新排序。
+同一次 GET 必须先取得完整 Agent 缓存并解析完整来源，即使 running 会隐藏 Skill 也不返回
+残缺的 Builtin 列表；无完整缓存返回 503 AGENT_NOT_AVAILABLE，保留 Retry-After: 3。
+不得自动刷新、远程补拉或调用模型。完整缓存中的空 Skill 绑定是成功，不等于缓存缺失。
+
+这是展示投影，不是执行授权凭据或预约。保留内部 Admission Policy/DTO 的状态字段供服务端使用，
+DTO→VO 时执行过滤与省略规则；不能把内部 DTO 直接序列化。
+每个 POST 重新解析独立 Catalog，在所属事务或锁内复核可变状态、绑定与参数。
+Builtin POST 的 400/404/409/422/500/503 和普通 JSON 保持后续已确认契约，特别是 Help 无缓存仍为 422；
+GET 需按 operation 映射 503，不能全局修改同名错误的 422 映射。Skill POST 的未决项不能由 GET 示例自动确认。
+
+交互层遇到 Slash 时，先按清单精确匹配。清单失败、命令未命中或形态不支持时保留草稿并提示，
+绝不把未匹配 Slash 自动当成普通消息；直接普通消息 API 仍不解析 Slash。
+清单读取后 Session 状态可能变化，POST 拒绝时刷新清单，不自动重放副作用请求。
+
+### 3.2 本次源码核对与实施验收
+
+本次固定 `pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5` 核对发现层，
+不把旧 d84dd3d6/d8e22562 的差距表当作当前全部实现状态。
+以下均为实现仓相对路径：
+
+| 源码 / 符号 | 本次观察 | 目标差距 |
+|---|---|---|
+| modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CompositeCommandRegistry.java · resolve | 全来源解析与 CommandKind 过滤均存在，TreeMap 按名称排序 | 共享 GET 用全来源；VO 投影改为固定 Builtin 顺序，不改变内部快路径 |
+| modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/catalog/ResolvedCommandCatalog.java · list/findDefinition | 请求快照保存发现 DTO 与 Definition 身份 | 保留请求级身份，不把 GET 快照跨请求当作授权 |
+| modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/dto/command/ResolvedCommandDTO.java · InputDTO | 内部仍有 mode、双层 available、placeholder、suggestions | 允许内部保留，禁止泄漏进轻量响应 VO |
+| modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java · list/resolved | prepareCached 缺失返回空清单；running 生成不可用标记 | 共享 GET 在组装前区分缓存缺失与完整空绑定，缺失整体 503；running 整项过滤 |
+| modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/BuiltinCommandSource.java · definitions/list | Contributor 来源已装配，内部按名称排序 | 在 Application 投影固定显示顺序；不集中按名称执行 |
+| modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/ | 该固定 commit 无 RuntimeCommandController | GET 轻量 HTTP 尚为 target-only，不宣称设计合入即已上线 |
+
+pi 固定基线仍用 `5cd93f688aaab89dbb6dfa4aca535f21796ae185`：
+`packages/coding-agent/src/core/slash-commands.ts` 的 BuiltinSlashCommand 为 name/description/可选
+argumentHint，支持轻量提示的结构参考；它不定义 CampusClaw 的 HTTP、状态过滤或缓存 503。
+本次未更新其他 Harness 基线，也不据公开文档推断服务端实现。
+
+差异分类：字段减法、固定顺序和 Help 无参属于产品约束；共享 GET 完整性前置与 DTO→VO
+投影属于架构变更；不返回内部路径、正文和凭据属于安全边界。
+原因是让前端只解释当前调用形态，同时让执行的权威校验留在后端。
+
+实施先后及验收：
+
+1. 保留全局主图骨架与 Definition 身份；实现共享完整缓存解析和独立 Builtin 专属解析。
+2. 增加只读轻量 Response VO 与投影，覆盖 idle/running、完整空 Skill、无完整缓存 503，
+   禁止内部字段与建议值输出，保证固定 Builtin 顺序及 Skill 顺序。
+3. 两跳 GET 的 Descriptor 必须逐项等值；公共协议未确认部分保持待评审标记。
+4. POST 重新准入、Help 无参四字段、Name 无历史、JSON 返回和 Events v2 不回退；
+   交互层验证 Slash 未命中保留草稿、无普通消息 fallback。
+5. 文档门禁同时检查两套 JSON、HTML 和负向变异，防止后续 Help/POST 改动重新带回旧 GET。
 
 ## 4. 执行顺序与恢复
 
@@ -196,6 +279,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.0 | 2026-09-07 | 合入 ec5492a 的轻量 GET、排序、状态过滤、完整性和交互路由；保留后续 Help 无参、POST JSON 与完整版全局类图。 |
 | 1.4.3 | 2026-09-07 | 以 06bea56 完整版恢复全局主图和职责链，局部更新 Help 元数据委派与统一实施责任；Help 专题改为补充图，增加结构与视觉验收，不修改接口契约。 |
 | 1.4.2 | 2026-09-07 | 同步独立控制接口退役，Compact 凭据保留到本次执行结束，不再承诺排队续跑；其余命令字段与分工不变。 |
 | 1.4.1 | 2026-09-05 | 用户统一负责 Builtin、Skill 与共享 HTTP 集成；替代同事并行分工，补齐统一实施验收；现有协议细节与源码证据不变。 |

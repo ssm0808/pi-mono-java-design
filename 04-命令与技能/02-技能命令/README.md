@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.1.3 |
-| 更新日期 | 2026-09-05 |
+| 文档版本 | 3.2.0 |
+| 更新日期 | 2026-09-07 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | Skill 发现候选 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`（PR #210，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并） |
 | Skill 名称专项复核 | `0300541fbbe3db8b05ffa1ac953f15f01df74b3e`（2026-09-04，本地源码提交；只复核名称规则与消费者） |
@@ -13,14 +13,14 @@
 
 ## 1. 当前实施责任
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。Builtin 来源视图、参数规则和验收仅适用于 Builtin；共享 GET/POST 的最终命名、请求联合类型和清单合并，由同一负责人在 HTTP 发布前统一对齐。Skill 执行纳入整体实施与验收计划，具体未确认契约继续逐项评审。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、执行结果和 HTTP 发布集成仍需评审。
 PR #210 的动态 SkillCommandSource 可保留，但 Registry 必须在调用 Source 前按来源过滤。
-Builtin 列表不读取 Skill 快照、不触发 Agent 刷新，不因 Skill 失效而失败。
+内部 Builtin 专属解析不读取 Skill 来源；共享 GET 必须取得完整 Agent 快照，不触发刷新，无完整快照整体返回 503。
 现有 Skill 发现定义只展示，不安装伪 Handler；用户统一补齐真实执行定义。
 
 ![发现与执行边界](设计图/skill_catalog.svg)
 
-[PlantUML 源码](设计图/diagram.puml#L1)
+[PlantUML 源码](设计图/diagram.puml#L1) · [原尺寸 SVG](设计图/skill_catalog.svg)
 
 ## 2. 源码证据
 
@@ -78,9 +78,15 @@ pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 
 ![Skill 名称统一严格校验目标](设计图/skill_name_validation.svg)
 
-[PlantUML 源码：`skill_name_validation`](设计图/diagram.puml#L23)
+[PlantUML 源码：`skill_name_validation`](设计图/diagram.puml#L24)
 
 ## 4. 统一实施与集成要求
+
+共享 GET 的 Skill 名称为 `skill:<name>`，idle 时排在固定 Builtin 顺序之后并按 name 排序；
+running 时整项省略。仅返回 name/kind/description 与
+`input: {"hint":"[request]","acceptsFiles":true}`，不输出 Skill ID、版本、正文、路径或建议值。
+完整规则与最新源码差距见[共享 GET 契约](../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
+这些是已确认的发现投影，不等于 Skill POST 已实现或已发布。
 
 Skill 执行由用户统一设计与实现，按共享核心依赖安排实施；已有发现骨架仍只证明发现能力。
 统一对齐时需明确命令结果、完整快照、绑定重检、容量、信任分层、失败与恢复。
@@ -103,6 +109,7 @@ skills Builtin 只展示最新完整绑定快照中的名称/描述，不等于�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.2.0 | 2026-09-07 | 合入共享 GET 的 Skill 轻量投影与 running 过滤，明确完整缓存前置；保留严格名称、统一实施责任及待评审的执行细节。 |
 | 3.1.3 | 2026-09-05 | 用户统一负责 Skill 与 Builtin 的设计、实现和集成；更新实施、发布与验收责任；取代 3.1.1/3.1.2 的同事并行分工。 |
 | 3.1.2 | 2026-09-04 | 加载、命令发现和执行统一严格名称校验，取消存量兼容；追加 `0300541f` 名称专项证据、pi warning 差异、目标校验图与一致性验收，保留并行开发分工。 |
 | 3.1.1 | 2026-09-04 | 用户明确 Skill 由其他同事同步开发；撤销 3.1.0 的执行延期与全局拒绝解释，保留发现/执行职责分离。 |

@@ -4,11 +4,15 @@
     "operationKey": "listChatCommands",
     "method": "GET",
     "path": "/chats/{chatId}/commands",
-    "summary": "【已废止历史】列出当前 Chat 的 Builtin 和 Skill 命令",
-    "description": "已废止的 historical target-only design；不得作为实现依据。新公共命令协议待独立评审，不能由 Runtime 1.44.0 推导。以下保留旧提案快照：mate-service 先验证登录用户和 Chat 权限，再把 chatId 解析为唯一 sessionId，并调用 CampusClaw。命令清单按当前 Chat/Session 状态动态生成，表示当前可以发现的命令及其可用性。清单保留暂时不可用的命令，但不暴露 sessionId、Agent/Skill ID、Skill 版本或受管路径。清单获取失败时，交互层保留 Slash 草稿并显示错误。当前 mate-service 尚无 Chat→Runtime bridge，因此本接口是 target-only design。",
+    "summary": "查看轻量命令清单（字段投影已确认，公共边界待重审）",
+    "description": "GET Descriptor 字段投影已确认，按当前 Runtime 轻量清单同步：必填 name/kind/description，可选 input.hint 与仅为 true 时输出的 input.acceptsFiles；running 隐藏 Compact/Skill，Model/Thinking 仅无参；Help 无参且无 input。固定 Builtin 顺序后追加按 name 排序的 Skill。公共认证、Chat→Session bridge 和错误映射仍为 target-only design，尚未整体确认，不得作为实现依据；旧公共 POST SSE 已废止，不能由本次 GET 投影恢复。",
     "parameters": [
-      {"$ref": "parameters.chatId"},
-      {"$ref": "parameters.acceptLanguage"}
+      {
+        "$ref": "parameters.chatId"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
     ],
     "requestBody": {
       "required": false,
@@ -20,90 +24,249 @@
       {
         "status": "200",
         "label": "OK",
-        "summary": "返回全部已知命令。示例中 Session 正在运行：Model/Thinking 只能查看，Compact/Skill 不可执行。",
-        "headers": {"Cache-Control": "no-store", "Content-Language": "zh-CN"},
+        "tabLabel": "200 · Running",
+        "summary": "Session 正在运行。只返回当前可调用的命令形态；Model/Thinking 仅保留无参查看，Compact 和 Skill 不返回。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
           "zh-CN": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
               "commands": [
-                {"name": "help", "kind": "builtin", "description": "列出命令清单或查看指定命令详情", "available": true, "unavailableCode": null, "input": {"mode": "optional", "available": true, "unavailableCode": null, "acceptsFiles": false, "placeholder": "command", "suggestions": ["help", "status", "name", "model", "thinking", "compact", "skills"]}},
-                {"name": "status", "kind": "builtin", "description": "查看 Session 状态、模型和深度思考", "available": true, "unavailableCode": null, "input": {"mode": "none", "available": false, "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED", "acceptsFiles": false, "placeholder": null, "suggestions": []}},
-                {"name": "name", "kind": "builtin", "description": "查看或修改 Session 名称", "available": true, "unavailableCode": null, "input": {"mode": "optional", "available": true, "unavailableCode": null, "acceptsFiles": false, "placeholder": "displayName", "suggestions": []}},
-                {"name": "model", "kind": "builtin", "description": "查看或切换模型", "available": true, "unavailableCode": null, "input": {"mode": "optional", "available": false, "unavailableCode": "SESSION_BUSY", "acceptsFiles": false, "placeholder": "modelId", "suggestions": ["claude-sonnet-4-5", "deepseek-v3-2"]}},
-                {"name": "thinking", "kind": "builtin", "description": "查看或切换深度思考", "available": true, "unavailableCode": null, "input": {"mode": "optional", "available": false, "unavailableCode": "SESSION_BUSY", "acceptsFiles": false, "placeholder": "on|off", "suggestions": ["on", "off"]}},
-                {"name": "compact", "kind": "builtin", "description": "压缩当前上下文", "available": false, "unavailableCode": "SESSION_BUSY", "input": {"mode": "none", "available": false, "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED", "acceptsFiles": false, "placeholder": null, "suggestions": []}},
-                {"name": "skills", "kind": "builtin", "description": "列出当前 Agent 绑定的 Skill", "available": true, "unavailableCode": null, "input": {"mode": "none", "available": false, "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED", "acceptsFiles": false, "placeholder": null, "suggestions": []}},
-                {"name": "skill:pdf", "kind": "skill", "description": "分析和生成 PDF 文档", "available": false, "unavailableCode": "SESSION_BUSY", "input": {"mode": "optional", "available": false, "unavailableCode": "SESSION_BUSY", "acceptsFiles": true, "placeholder": "request", "suggestions": []}}
+                {
+                  "name": "help",
+                  "kind": "builtin",
+                  "description": "介绍当前 Agent 的用途和使用场景"
+                },
+                {
+                  "name": "status",
+                  "kind": "builtin",
+                  "description": "查看 Session 状态、模型和深度思考"
+                },
+                {
+                  "name": "name",
+                  "kind": "builtin",
+                  "description": "查看或修改 Session 名称",
+                  "input": {
+                    "hint": "[displayName]"
+                  }
+                },
+                {
+                  "name": "model",
+                  "kind": "builtin",
+                  "description": "查看或切换模型"
+                },
+                {
+                  "name": "thinking",
+                  "kind": "builtin",
+                  "description": "查看或切换深度思考"
+                },
+                {
+                  "name": "skills",
+                  "kind": "builtin",
+                  "description": "列出当前 Agent 绑定的 Skill"
+                }
               ]
             }
           }
-        }
+        },
+        "id": "200-running"
+      },
+      {
+        "status": "200",
+        "label": "OK",
+        "tabLabel": "200 · Idle",
+        "summary": "Session 处于空闲。恢复 Compact、Skill 以及 Model/Thinking 的带参调用形态。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "kind": "builtin",
+                  "description": "介绍当前 Agent 的用途和使用场景"
+                },
+                {
+                  "name": "status",
+                  "kind": "builtin",
+                  "description": "查看 Session 状态、模型和深度思考"
+                },
+                {
+                  "name": "name",
+                  "kind": "builtin",
+                  "description": "查看或修改 Session 名称",
+                  "input": {
+                    "hint": "[displayName]"
+                  }
+                },
+                {
+                  "name": "model",
+                  "kind": "builtin",
+                  "description": "查看或切换模型",
+                  "input": {
+                    "hint": "[modelId]"
+                  }
+                },
+                {
+                  "name": "thinking",
+                  "kind": "builtin",
+                  "description": "查看或切换深度思考",
+                  "input": {
+                    "hint": "[on|off]"
+                  }
+                },
+                {
+                  "name": "compact",
+                  "kind": "builtin",
+                  "description": "压缩当前上下文"
+                },
+                {
+                  "name": "skills",
+                  "kind": "builtin",
+                  "description": "列出当前 Agent 绑定的 Skill"
+                },
+                {
+                  "name": "skill:pdf",
+                  "kind": "skill",
+                  "description": "分析和生成 PDF 文档",
+                  "input": {
+                    "hint": "[request]",
+                    "acceptsFiles": true
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "id": "200-idle"
       },
       {
         "status": "400",
         "label": "Bad Request",
         "summary": "chatId 为空、过长或格式不符合公共 Chat 约束。",
-        "headers": {"Content-Language": "zh-CN"},
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "INVALID_CHAT_ID", "resMsg": "chatId 格式不正确。"},
-          "en-US": {"resCode": "INVALID_CHAT_ID", "resMsg": "The chatId format is invalid."}
+          "zh-CN": {
+            "resCode": "INVALID_CHAT_ID",
+            "resMsg": "chatId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_CHAT_ID",
+            "resMsg": "The chatId format is invalid."
+          }
         }
       },
       {
         "status": "401",
         "label": "Unauthorized",
         "summary": "用户未登录或访问令牌无效。",
-        "headers": {"Content-Language": "zh-CN"},
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "UNAUTHENTICATED", "resMsg": "请先登录。"},
-          "en-US": {"resCode": "UNAUTHENTICATED", "resMsg": "Authentication is required."}
+          "zh-CN": {
+            "resCode": "UNAUTHENTICATED",
+            "resMsg": "请先登录。"
+          },
+          "en-US": {
+            "resCode": "UNAUTHENTICATED",
+            "resMsg": "Authentication is required."
+          }
         }
       },
       {
         "status": "403",
         "label": "Forbidden",
         "summary": "登录用户无权访问该 Chat；不得据此探测内部 Session。",
-        "headers": {"Content-Language": "zh-CN"},
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "CHAT_ACCESS_DENIED", "resMsg": "无权访问该 Chat。"},
-          "en-US": {"resCode": "CHAT_ACCESS_DENIED", "resMsg": "Access to the Chat is denied."}
+          "zh-CN": {
+            "resCode": "CHAT_ACCESS_DENIED",
+            "resMsg": "无权访问该 Chat。"
+          },
+          "en-US": {
+            "resCode": "CHAT_ACCESS_DENIED",
+            "resMsg": "Access to the Chat is denied."
+          }
         }
       },
       {
         "status": "404",
         "label": "Not Found",
         "summary": "Chat 不存在、已删除，或尚未建立有效 Runtime Session 映射。",
-        "headers": {"Content-Language": "zh-CN"},
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "CHAT_NOT_FOUND", "resMsg": "指定的 Chat 不存在。"},
-          "en-US": {"resCode": "CHAT_NOT_FOUND", "resMsg": "The specified Chat does not exist."}
+          "zh-CN": {
+            "resCode": "CHAT_NOT_FOUND",
+            "resMsg": "指定的 Chat 不存在。"
+          },
+          "en-US": {
+            "resCode": "CHAT_NOT_FOUND",
+            "resMsg": "The specified Chat does not exist."
+          }
         }
       },
       {
         "status": "503",
         "label": "Service Unavailable",
         "summary": "暂时无法获取命令清单；UI 保留 Slash 草稿。",
-        "headers": {"Content-Language": "zh-CN", "Retry-After": "3"},
+        "headers": {
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
         "bodies": {
-          "zh-CN": {"resCode": "COMMAND_CATALOG_UNAVAILABLE", "resMsg": "命令清单暂时不可用。"},
-          "en-US": {"resCode": "COMMAND_CATALOG_UNAVAILABLE", "resMsg": "The command catalog is temporarily unavailable."}
+          "zh-CN": {
+            "resCode": "COMMAND_CATALOG_UNAVAILABLE",
+            "resMsg": "命令清单暂时不可用。"
+          },
+          "en-US": {
+            "resCode": "COMMAND_CATALOG_UNAVAILABLE",
+            "resMsg": "The command catalog is temporarily unavailable."
+          }
         }
       }
     ]
   },
   "review": {
     "businessView": {
-      "summary": "【已废止历史；不得作为实现依据】用户在聊天输入框键入 Slash 时，前端调用本接口获取当前 Chat 可以展示的命令及其实时可用状态。",
+      "summary": "GET 字段精简已同步；公共边界仍待重审。清单只展示当前可调用形态，不展示置灰命令或内部准入原因。",
       "flow": [
-        {"actor": "用户", "action": "在输入框第一个字符输入 /", "outcome": "前端开始识别 Slash 命令"},
-        {"actor": "前端", "action": "携带 chatId 请求命令清单", "outcome": "不接触内部 sessionId"},
-        {"actor": "mate-service", "action": "校验登录用户和 Chat 权限，再解析内部 Session", "outcome": "向 CampusClaw 查询当前命令"},
-        {"actor": "前端", "action": "展示命令、参数提示和不可用原因", "outcome": "请求失败时保留用户草稿"}
+        {
+          "actor": "前端",
+          "action": "读取当前 Chat 命令清单",
+          "outcome": "按服务器顺序展示，不推测内部状态"
+        },
+        {
+          "actor": "mate-service",
+          "action": "在目标 bridge 中复用 Runtime 轻量投影",
+          "outcome": "公共认证与错误映射另行评审"
+        },
+        {
+          "actor": "前端",
+          "action": "按 input 是否存在展示参数输入",
+          "outcome": "命令无匹配时保留草稿，不回退普通消息"
+        }
       ],
       "notes": [
-        "评审时先确认命令是否应该出现、当前能否执行以及前端如何展示；完整 JSON 只用于研发核对字段。"
+        "input 缺失表示当前只允许无参数、无附件调用；hint 仅供展示，不参与参数校验。",
+        "无完整 Agent 快照时，目标清单失败，不返回残缺 Builtin；公共错误映射保留待重审状态。",
+        "GET 是观察结果，不保证随后 POST 一定成功；POST 仍需独立解析并在所属事务或锁内复核。",
+        "Skill 发现不等于 Skill 执行协议已发布。旧公共 POST SSE 已废止，不属于本次 GET 恢复范围。"
       ]
     },
     "questions": []

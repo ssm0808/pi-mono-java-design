@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from render_chat_http_v1 import build_operation_html, load_contract
+from command_catalog_contract import validate_catalog_examples
 
 
 ROOT = Path(__file__).resolve().parent
@@ -386,25 +387,15 @@ def validate_response_contract(
     elif key == ("GET", "/sessions/{sessionId}/commands"):
         require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in operation["description"],
                 "Command catalog must reflect unified Builtin and Skill ownership")
-        success = next(response for response in operation["responses"] if response["status"] == "200")
-        commands = success["bodies"]["zh-CN"]["result"]["commands"]
-        names = [command["name"] for command in commands]
-        require(names == ["compact", "help", "model", "name", "skills", "status", "thinking"],
-                "Builtin command catalog must contain exactly seven sorted entries")
-        require(all(command["kind"] == "builtin" for command in commands),
-                "Builtin catalog example must contain only Builtin commands")
-        require(all(command["input"]["acceptsFiles"] is False for command in commands),
-                "Builtin command catalog must reject files")
-        require(all(isinstance(command["input"]["suggestions"], list) for command in commands),
-                "Catalog suggestions must be non-null lists")
-        model = next(command for command in commands if command["name"] == "model")
-        require(model["available"] is True and model["input"]["available"] is False,
-                "Running model descriptor must separate query and input availability")
-        require(model["input"]["unavailableCode"] == "SESSION_BUSY",
-                "Running model input must expose SESSION_BUSY")
-        require(not any(code == "AGENT_NOT_AVAILABLE" for _, code in response_codes(operation)),
-                "Builtin catalog must not depend on an Agent snapshot")
-        validate_help_descriptor(next(command for command in commands if command["name"] == "help"))
+        validate_catalog_examples(operation)
+        require(("503", "AGENT_NOT_AVAILABLE") in codes,
+                "Shared GET must reject missing complete Agent cache, not return partial Builtins")
+        missing_cache = next(response for response in operation["responses"] if response["status"] == "503")
+        require(missing_cache["headers"].get("Retry-After") == "3", "GET cache retry hint differs")
+        for response in operation["responses"]:
+            if response["status"] == "200":
+                commands = response["bodies"]["zh-CN"]["result"]["commands"]
+                validate_help_descriptor(next(command for command in commands if command["name"] == "help"))
     elif key == ("POST", "/sessions/{sessionId}/command"):
         require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in operation["description"],
                 "Command execution must reflect unified Builtin and Skill ownership")
@@ -454,12 +445,6 @@ def validate_response_contract(
 def validate_help_descriptor(descriptor: dict[str, Any]) -> None:
     require(descriptor == {
         "name": "help", "kind": "builtin", "description": "介绍当前 Agent 的用途和使用场景",
-        "available": True, "unavailableCode": None,
-        "input": {
-            "mode": "none", "available": False,
-            "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED",
-            "acceptsFiles": False, "placeholder": None, "suggestions": [],
-        },
     }, "Help descriptor must advertise only the no-argument Agent guide")
 
 
@@ -508,6 +493,9 @@ def validate_help_projection(model: dict[str, Any], operation: dict[str, Any]) -
             "Help projection must remain confirmed")
     require(read_design_version() in model["api"]["version"], "Help projection Runtime version is stale")
     view = model["operation"]
+    require("authModes" not in view, "Help must not retain a second, unused Header example source")
+    require(view["requestHeaderExamples"] == operation["requestHeaderExamples"],
+            "Help request Header examples and descriptions must match Runtime")
     require((view["method"], view["path"]) == POST_COMMAND, "Help must reuse the Runtime Command path")
     require(view["requestBody"]["example"] == {"name": "help"}, "Help request projection differs")
     source_successes, view_successes = help_successes(operation), help_successes(view)
@@ -532,14 +520,21 @@ def validate_help_artifacts(models: list[dict[str, Any]]) -> None:
                      if model["operation"]["operationKey"] == "executeSessionCommand")
     validate_help_projection(model, operation)
     parser = ContractHtmlParser()
-    parser.feed((HELP_ROOT / "help-review.html").read_text(encoding="utf-8"))
-    embedded = [json.loads(source) for attrs, source in parser.scripts
-                if attrs.get("type") == "application/json"]
+    html_source = (HELP_ROOT / "help-review.html").read_text(encoding="utf-8")
+    require(html_source == build_operation_html([model]), "Help HTML must use the shared renderer")
+    parser.feed(html_source)
+    embedded, _ = parse_generated_models(parser)
     require(embedded == [model], "Help HTML embedded model is stale")
     for attrs, source in parser.scripts:
         if attrs.get("type") != "application/json":
             validate_executable_script(source)
     visible = " ".join(parser.visible_text)
+    for example in operation["requestHeaderExamples"]:
+        for header in example["headers"]:
+            require(header["value"] in visible and header["description"] in visible,
+                    "Help visible Header values or descriptions differ from Runtime")
+    for placeholder in ("<JWT>", "<APPKEY>", "<ACCESS_TOKEN>"):
+        require(placeholder not in visible, "Help visible HTML still contains obsolete Header placeholders")
     for phrase in ("作用", "name", "help", "description", "userCases", "AGENT_NOT_AVAILABLE", "已确认"):
         require(phrase in visible, f"Help no-script surface is missing {phrase}")
     guide = (HELP_ROOT / "README.md").read_text(encoding="utf-8")

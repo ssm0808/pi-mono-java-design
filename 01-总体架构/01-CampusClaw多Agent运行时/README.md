@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.11.1 |
-| 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.46.1 保留已确认 Help 元数据指南，Builtin 与 Skill Command 由用户统一实现 |
+| 文档版本 | 3.12.0 |
+| 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.47.0 合入共享 GET 轻量清单并保留 Help 元数据指南，Builtin 与 Skill Command 由用户统一实现 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -197,7 +197,7 @@ CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` �
 | 6 | `GET` | `/sessions/{sessionId}/models` | `200` ResultBean | 返回可用 `modelId` 字符串数组 |
 | 7 | `PUT` | `/sessions/{sessionId}/model` | `200` ResultBean | 修改后续用户消息使用的 Session 默认模型 |
 | 8 | `PUT` | `/sessions/{sessionId}/thinking` | `200` ResultBean | 开关后续用户消息是否启用深度思考 |
-| 9 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回按名称字典序排列的七个 Builtin，不解析 Skill Source |
+| 9 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回按状态过滤的 Builtin/Skill 轻量清单，固定 Builtin 顺序后追加 Skill |
 | 10 | `POST` | `/sessions/{sessionId}/command` | `200` ResultBean JSON | 执行七个 Builtin，Handler 完成后返回 |
 
 本表第 4、5 项采用最新 Events v2；其余八项保留既有契约。配置事件与命令的衔接
@@ -289,12 +289,12 @@ Command 协议待独立评审；普通消息 Events 已确认公共路径并进�
 
 ### 5.4 Built-in Command
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。Builtin 来源视图、参数规则和验收仅适用于 Builtin；共享 GET/POST 的最终命名、请求联合类型和清单合并，由同一负责人在 HTTP 发布前统一对齐。Skill 执行纳入整体实施与验收计划，具体未确认契约继续逐项评审。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、执行结果和 HTTP 发布集成仍需评审。
 
 | 规则 | v1 结论 |
 |---|---|
 | HTTP 请求 | 只提交 name、arguments；name 不含 /，省略或 null 参数由 Service 归一 |
-| 可发现范围 | compact、help、model、name、skills、status、thinking 七个 Builtin |
+| 可发现范围 | help、status、name、model、thinking、compact、skills，随后追加 Skill；running 去掉 Compact/Skill |
 | 统一实施范围 | 用户负责七个 Builtin、Skill 执行及共享 HTTP 集成；Skill 具体契约待统一评审 |
 | 未纳入命令目标 | Extension、Prompt 执行；Builtin 附件 |
 | 响应 | 普通 ResultBean JSON，不建立请求级 SSE |
@@ -417,7 +417,7 @@ CampusClaw 不再提供 CLI、TUI、OneShot、RPC 或 ACP 产品入口。Slash v
 
 - 不可变 Definition、Handler、Composite Registry、Contributor 和 Admission Policy
   替换当前可变 Registry 与宽泛 `SlashCommandSession`；
-- Builtin 各自使用 Contributor/Handler；现有 Skill 发现定义不装配伪 Handler；用户统一实现 Skill 执行定义，共享 HTTP 清单在发布前对齐；
+- Builtin 各自使用 Contributor/Handler；现有 Skill 发现定义不装配伪 Handler；用户统一实现 Skill 执行定义，共享 GET 已按轻量契约对齐，Skill POST 发布前继续评审；
 - 新增命令不修改中央 `switch`；Builtin 重名直接启动失败；
 - 清单命中后才调用 Command API；清单失败不降级；API 未知名称返回 `COMMAND_NOT_FOUND`；
 - `/name` 只调用 `SessionNamingService`，不经过 mate-service 名称副本；
@@ -516,6 +516,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.12.0 | 2026-09-07 | 合入遗漏的共享 GET 轻量清单，保留新 Help/POST/Events 决定；补充分支整合核查记录。 |
 | 3.11.1 | 2026-09-07 | 删除四个废弃评审页与迁移占位生成逻辑，修复引用并阻止文件回流；当前十项契约和评审决定不变。 |
 | 3.11.0 | 2026-09-07 | 当前十项 API 统一到仓库清单与页面；旧入口只导航，旧 Events 报文移除，新增统一生成和防回流校验；确认状态不变。 |
 | 3.10.0 | 2026-09-07 | 当前目标收敛为十项，退役三个独立控制接口；补充 FollowUp 未来跨实例设计但不启用，保留 M6 与 Events 部分确认状态。 |

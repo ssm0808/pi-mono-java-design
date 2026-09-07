@@ -91,6 +91,7 @@ def main():
         ["test_control_retirement.py"],
         ["test_chat_api.py"],
         ["test_help_contract.py"],
+        ["test_command_catalog_contract.py"],
     ):
         subprocess.run([sys.executable, *command], cwd=ROOT, check=True)
     validate_catalog()

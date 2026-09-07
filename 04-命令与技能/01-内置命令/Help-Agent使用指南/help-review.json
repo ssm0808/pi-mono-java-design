@@ -1,67 +1,17 @@
 {
   "api": {
     "title": "Help：Agent 使用指南（已确认）",
-    "version": "1.1.0 · Runtime 1.46.1",
+    "version": "1.1.2 · Runtime 1.47.0",
     "basePath": "/campusclaw-service/v1",
-    "visibility": "Internal · Help 已确认；Runtime 操作 13 的专项展示"
+    "visibility": "Internal · Help 已确认；Runtime 操作 13 的专项展示",
+    "fieldNaming": "lowerCamelCase",
+    "headerNaming": "保留原名"
   },
   "operation": {
     "method": "POST",
     "path": "/sessions/{sessionId}/command",
     "summary": "/help：介绍当前 Agent 的用途和使用场景",
     "description": "已确认：/ 展示命令清单，/help 展示 Agent 元数据。已确认四字段 command、displayName、description、userCases，以及无参、空数组及 userCases 缓存往返与显式刷新旧缓存。复用现有 name、displayName、description[] 和 userCases[]，不新增远端字段。现有本地缓存丢失 userCases，实施前必须补齐保存与恢复。仅读最近完整本地快照，idle/running 都允许；不请求模型、不刷新、不返回 systemPrompt 或绑定明细。不写历史；该例为虚构演示文案，不代表真实 Agent 能力。",
-    "authModes": [
-      {
-        "id": "jwt",
-        "label": "JWT Header 示例",
-        "preferred": true,
-        "headers": [
-          {
-            "name": "X-HW-ID",
-            "value": "credential-jwt",
-            "required": true,
-            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
-          },
-          {
-            "name": "Authorization",
-            "value": "Bearer <JWT>",
-            "required": true,
-            "description": "Bearer JWT；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
-          },
-          {
-            "name": "access-token",
-            "value": "<ACCESS_TOKEN>",
-            "required": true,
-            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
-          }
-        ]
-      },
-      {
-        "id": "appkey",
-        "label": "APPKEY Header 示例",
-        "preferred": false,
-        "headers": [
-          {
-            "name": "X-HW-ID",
-            "value": "credential-appkey",
-            "required": true,
-            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
-          },
-          {
-            "name": "X-HW-APPKEY",
-            "value": "<APPKEY>",
-            "required": true,
-            "description": "AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
-          },
-          {
-            "name": "access-token",
-            "value": "<ACCESS_TOKEN>",
-            "required": true,
-            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
-          }
-        ]
-      }
-    ],
     "parameters": [
       {
         "in": "path",
@@ -225,7 +175,61 @@
           }
         }
       }
-    ]
+    ],
+    "requestHeaderExamples": [
+      {
+        "id": "jwt",
+        "label": "JWT Header 示例",
+        "preferred": true,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "credential-jwt",
+            "required": true,
+            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer opaque-token",
+            "required": true,
+            "description": "Bearer JWT；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          },
+          {
+            "name": "access-token",
+            "value": "opaque-access-token",
+            "required": true,
+            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          }
+        ]
+      },
+      {
+        "id": "appkey",
+        "label": "APPKEY Header 示例",
+        "preferred": false,
+        "headers": [
+          {
+            "name": "X-HW-ID",
+            "value": "credential-appkey",
+            "required": true,
+            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          },
+          {
+            "name": "X-HW-APPKEY",
+            "value": "opaque-appkey",
+            "required": true,
+            "description": "AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          },
+          {
+            "name": "access-token",
+            "value": "opaque-access-token",
+            "required": true,
+            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+          }
+        ]
+      }
+    ],
+    "shortName": "Help：Agent 使用指南",
+    "operationKey": "executeSessionCommand"
   },
   "review": {
     "questions": []

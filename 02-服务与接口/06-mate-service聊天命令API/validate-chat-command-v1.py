@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import shutil
+import sys
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -14,7 +15,10 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from render_chat_command_v1 import build_html, load_contract
+from render_chat_command_v1 import build_html, load_contract, RUNTIME_ROOT
+
+sys.path.insert(0, str(RUNTIME_ROOT))
+from command_catalog_contract import validate_catalog_examples, validate_projection_pair
 
 
 ROOT = Path(__file__).resolve().parent
@@ -117,7 +121,7 @@ def sse_payloads(stream: str) -> list[dict[str, Any]]:
 
 
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.1.0", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.2.0", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
     require("已废止" in common["api"]["visibility"] and "historical target-only" in common["api"]["visibility"],
             "Public command snapshot must remain explicitly retired")
@@ -164,16 +168,9 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
 
 def validate_catalog(models: list[dict[str, Any]]) -> None:
     operation = next(model["operation"] for model in models if model["operation"]["operationKey"] == "listChatCommands")
-    success = next(response for response in operation["responses"] if response["status"] == "200")
-    commands = success["bodies"]["zh-CN"]["result"]["commands"]
-    names = {command["name"] for command in commands}
-    require({"help", "status", "name", "model", "thinking", "compact", "skills", "skill:pdf"} <= names,
-            "Catalog example is incomplete")
-    model = next(command for command in commands if command["name"] == "model")
-    require(model["available"] is True and model["input"]["available"] is False,
-            "Catalog must preserve two-level running availability")
-    skill = next(command for command in commands if command["name"] == "skill:pdf")
-    require(skill["input"]["acceptsFiles"] is True, "Skill must advertise attachment support")
+    validate_catalog_examples(operation)
+    runtime = json.loads((RUNTIME_ROOT / "接口契约/操作/12-list-session-commands.json").read_text(encoding="utf-8"))
+    validate_projection_pair(runtime["operation"], operation)
     codes = set(values_for_key(operation["responses"], "resCode"))
     require({"UNAUTHENTICATED", "CHAT_ACCESS_DENIED", "CHAT_NOT_FOUND", "COMMAND_CATALOG_UNAVAILABLE"} <= codes,
             "Catalog public errors are incomplete")

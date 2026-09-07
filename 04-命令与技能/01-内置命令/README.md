@@ -7,7 +7,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.7.1 |
+| 文档版本 | 2.8.0 |
 | 更新日期 | 2026-09-07 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -22,7 +22,7 @@
 
 ## 1. 范围与证据
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。Builtin 来源视图、参数规则和验收仅适用于 Builtin；共享 GET/POST 的最终命名、请求联合类型和清单合并，由同一负责人在 HTTP 发布前统一对齐。Skill 执行纳入整体实施与验收计划，具体未确认契约继续逐项评审。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、执行结果和 HTTP 发布集成仍需评审。
 
 本文的 Builtin 实现切片覆盖 help、status、name、model、thinking、compact、skills，不转换成模型提示词，不接受附件。
 精确请求和结果以 Runtime
@@ -112,10 +112,10 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 
 空参数是 Service 归一后的空字符串。全空白 Name 修改在去除两端空白后为空时拒绝，不视为清空。
 Help 的 arguments 缺省/null/空白归一为空；非空参数（包括 model）为 INVALID_COMMAND_REQUEST，不进入命令详情或 COMMAND_NOT_FOUND 分支。
-GET 的 Help 描述符使用 mode=none、input.available=false、COMMAND_ARGUMENTS_NOT_SUPPORTED、placeholder=null、suggestions=[]。
+GET 的 Help 描述符只有 name/kind/description，不返回 input；共享清单按[轻量契约](../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)过滤并排序。
 Help 不刷新：读取最近成功发布的完整 Agent 缓存；无快照为 422 AGENT_NOT_AVAILABLE，只有文案缺失则返回 200 空数组。
 displayName 取 Agent 显示名，空白回退 Agent name；不是 `/name` 的 Session 名称。文案按纯文本展示，不调用模型、不写历史或模型上下文。
-描述符的 COMMAND_ARGUMENTS_NOT_SUPPORTED 只是可用性原因，不是额外 HTTP 错误。
+共享 GET 不暴露内部准入原因；无完整 Agent 缓存时为 503 AGENT_NOT_AVAILABLE，不改变上述 POST Help 的 422。
 Skills 不触发刷新：无完整快照返回 AGENT_NOT_AVAILABLE；完整空快照返回 []，只展示名称/描述并稳定排序。
 
 ## 5. Name 当前状态
@@ -197,6 +197,7 @@ sync-campusclaw、diff --check 和新增行数门禁；最终 HTTP PR 执行完�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.8.0 | 2026-09-07 | 同步 GET 轻量描述符与状态过滤；Help 保留无参四字段，POST JSON 及各命令领域行为不变。 |
 | 2.7.1 | 2026-09-07 | 重新引用 Slash 完整全局主图，恢复 Handler/业务服务与 Coordinator/执行对象/Repository 的独立关系；Help 图仅作下钻，既有命令语义和源码基线不变。 |
 | 2.7.0 | 2026-09-07 | 同步独立控制接口退役，不再承诺 Compact 后排队续跑；保留 JSON 与清理边界，停止与 Events 绑定另评审。 |
 | 2.6.1 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一实现；保留 Builtin 分批计划，并将 Skill 与共享 HTTP 集成纳入统一发布验收。 |

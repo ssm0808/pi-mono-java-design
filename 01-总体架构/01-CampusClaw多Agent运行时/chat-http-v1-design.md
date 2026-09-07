@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.46.1 |
+| 文档版本 | 1.47.0 |
 | 状态 | 保留十个目标 operation；Events 以 v2 部分确认稿为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
-| 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；跨 Builtin/Skill 的最终共享命令入口在发布前对齐 |
+| 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 与公共命令边界待对齐 |
 | 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的八项保留契约与两项 Events v2 模型 |
 | 人类评审契约 | [统一当前接口页](chat-api-review.html)，由 [唯一清单](接口契约/catalog.json) 生成 |
 | 对外机器契约 | 不维护；结构化 JSON 只作为 HTML 生成源，不替代已废弃 OpenAPI |
@@ -452,11 +452,11 @@ SessionResource 和新 `ETag`。
 
 ### 2.6 Built-in Command（已确认，目标实现）
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。Builtin 来源视图、参数规则和验收仅适用于 Builtin；共享 GET/POST 的最终命名、请求联合类型和清单合并，由同一负责人在 HTTP 发布前统一对齐。Skill 执行纳入整体实施与验收计划，具体未确认契约继续逐项评审。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、执行结果和 HTTP 发布集成仍需评审。
 
 | 接口简称 | operationKey | Method | Path | 语义 |
 |---|---|---|---|---|
-| 查看命令清单 | `listSessionCommands` | `GET` | `/sessions/{sessionId}/commands` | 七个 Builtin 按名称字典序返回，不刷新 Agent、不调用 SkillCommandSource |
+| 查看命令清单 | `listSessionCommands` | `GET` | `/sessions/{sessionId}/commands` | 按状态返回 Builtin 与 Skill 轻量清单，固定 Builtin 顺序后追加 Skill；不刷新 Agent |
 | 执行命令 | `executeSessionCommand` | `POST` | `/sessions/{sessionId}/command` | 只接收 `name + arguments`，Handler 完成后返回普通 ResultBean JSON |
 
 操作 12 先确定可发现范围，操作 13 再确定执行契约。一次请求只创建一个不可变
@@ -465,15 +465,21 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。Builti
 Controller 只收发 VO；Application 负责授权、归一化、解析、准入、执行及 DTO→VO，
 不得使用命令名称中央 switch。只读响应 VO 使用 `@Getter` 与 final 字段。
 
-本切片的 Builtin commands 固定为 compact、help、model、name、skills、status、thinking；
-命令不可用仍展示，所有列表非 null，所有 input.acceptsFiles=false。顶层 available
-表示空参数行为，input.available 表示带参数行为；running 时 Model/Thinking 可查不可改。
-Skills 无最新完整绑定快照时执行返回 AGENT_NOT_AVAILABLE，完整空快照返回 []。
+GET 精确投影只保留必填 `name/kind/description`、可选 `input`；input 存在时必填非空
+`hint`，`acceptsFiles` 只在 true 时输出。省略 input 表示当前仅允许无参数、无附件调用。
+不返回 available/unavailableCode、input.mode/available/unavailableCode/placeholder/suggestions，
+不增加 allowedValues、catalogVersion 或其他候选值替代字段。hint 是展示文字，不可用于参数校验。
 
-Help 已确认仅无参介绍 Agent：GET 中 description 为“介绍当前 Agent 的用途和使用场景”，
-input.mode=none、input.available=false、input.unavailableCode=COMMAND_ARGUMENTS_NOT_SUPPORTED、
-acceptsFiles=false、placeholder=null、suggestions=[]。idle/running 的空参入口均可用；
-GET 不读取 Agent 快照，available=true 不保证 POST 已取得完整缓存。本次不改变其他描述符或清单排序。
+Builtin 固定顺序为 help、status、name、model、thinking、compact、skills；随后按 name 排序追加 Skill。
+running 时去掉 Compact 与全部 Skill，Model/Thinking 去掉 input，Name 保留 [displayName]；
+idle 时恢复 Compact、Skill 与 Model/Thinking 的 input。Help/Status/Skills/Compact 始终不带 input。
+Help description 保留“介绍当前 Agent 的用途和使用场景”，不恢复 [command] 参数。
+
+共享 GET 从同一次完整 Agent 缓存解析得到 Builtin 与 Skill；没有完整缓存时返回
+503 AGENT_NOT_AVAILABLE，不刷新、不调用模型、不返回残缺 Builtin。这是 GET 的完整性规则，
+不改变 POST Help/Skills 无缓存的既有 422 错误。GET 不构成执行预约，POST 独立解析，
+变更仍在所属事务或锁内重新准入；不以清单中的提示代替状态、参数或绑定校验。
+完整字段表、集成证据与差距见[通用模块 GET 契约](../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
 
 Builtin 请求的 name 必填，长度 1～64，匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，不含前导 /。
 arguments 省略或 null 由 Service 归一为 ""，最大 262144 个 UTF-16 代码单元。
@@ -483,7 +489,7 @@ arguments 省略或 null 由 Service 归一为 ""，最大 262144 个 UTF-16 代
 
 ![Command HTTP 接口与应用服务](设计图/Command/command_http_flow.svg)
 
-[PlantUML 源码：`command_http_flow`](设计图/Command/diagram.puml#L1)
+[PlantUML 源码：`command_http_flow`](设计图/Command/diagram.puml#L1) · [原尺寸 SVG](设计图/Command/command_http_flow.svg)
 
 #### 2.6.1 普通 JSON 与权威领域事件
 
@@ -537,7 +543,7 @@ Thinking 非空参数只接受小写 on/off。
 
 ![命令与权威 Session 状态](设计图/Command/command_authoritative_state.svg)
 
-[PlantUML 源码：`command_authoritative_state`](设计图/Command/diagram.puml#L40)
+[PlantUML 源码：`command_authoritative_state`](设计图/Command/diagram.puml#L44)
 
 #### 2.6.4 Compact 的执行生命周期
 
@@ -564,7 +570,7 @@ POST Command 读取的 Mate Header 不进入日志、Prompt、Event 或存储。
 | 边界 | 普通操作 | 实时执行 | 标识范围 | 当前评审状态 |
 |---|---|---|---|---|
 | 浏览器/UI → mate-service | 独立 HTTP 请求与响应 | 消息 SSE；公共命令协议需独立重审 | 公共 `chatId` | 旧公共命令 SSE 提案已废止，不推导新协议 |
-| mate-service → CampusClaw | 本文十个 HTTP operation，Command 为普通 JSON | 仅 `POST /events` 输出请求级 SSE | 内部 `sessionId` | 操作 12、13 为七个 Builtin 目标契约 |
+| mate-service → CampusClaw | 本文十个 HTTP operation，Command 为普通 JSON | 仅 `POST /events` 输出请求级 SSE | 内部 `sessionId` | 操作 12 为共享轻量清单；13 保留 Builtin JSON，Skill POST 待评审 |
 
 两跳不是同一条物理连接，也不是一份字节透明协议。mate-service 需要终止公共认证、
 解析内部事件、移除 Runtime 私有字段、映射安全错误并重新编码公共 SSE。内部
@@ -933,6 +939,7 @@ mate-service 旧公共命令方案标记为已废止的历史 target-only design
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.47.0 | 2026-09-07 | 语义合入 ec5492a 的 GET 字段精简、状态过滤与全量清单完整性；保留后续 Help 无参、POST JSON、统一责任和 Events v2，不恢复旧页面。 |
 | 1.46.1 | 2026-09-07 | 统一清单、生成与校验入口；移除旧 Events 报文及分页章节，保留注明版本的源码证据；已确认字段和待决项不变。 |
 | 1.46.0 | 2026-09-07 | 退役三个独立控制接口及其示例和错误集合，保留十项；Events 指向 v2，FollowUp 仅记录未来设计，保持单消息准入。 |
 | 1.45.1 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一设计、实现和集成；同步操作 12/13 的实施责任说明与校验，保留已确认报文及待评审的 Skill 细节。 |

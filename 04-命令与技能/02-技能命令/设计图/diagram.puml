@@ -1,7 +1,7 @@
 @startuml skill_catalog
-title Target-only Skill Source Exclusion
-' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/SkillCommandSource.java list.
-' Ownership decision 2026-09-05: the user implements Builtin and Skill; Builtin selection skips dynamic Skill sources.
+title Target-only Shared GET and Internal Source Selection
+' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java list.
+' Product decision: shared GET requires complete Agent cache; internal BUILTIN selection skips Skill sources.
 skinparam shadowing false
 class CompositeCommandRegistry
 interface CommandDefinitionSource
@@ -11,12 +11,13 @@ class SkillCommandDefinition <<display only>>
 BuiltinCommandSource ..|> CommandDefinitionSource
 SkillCommandSource ..|> CommandDefinitionSource
 CompositeCommandRegistry o-- CommandDefinitionSource
-CompositeCommandRegistry --> BuiltinCommandSource : resolve(context, BUILTIN)
+CompositeCommandRegistry --> BuiltinCommandSource : BUILTIN or shared GET
+CompositeCommandRegistry --> SkillCommandSource : shared GET only; complete cache
 SkillCommandSource --> SkillCommandDefinition : existing discovery
 note right of SkillCommandDefinition
 No Handler.
 The user owns Builtin and Skill implementation.
-skills Builtin only exposes names and descriptions.
+GET hides Skill while running; idle uses lightweight input.
 end note
 @enduml
 

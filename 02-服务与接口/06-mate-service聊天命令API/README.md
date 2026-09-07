@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.0 |
-| 状态 | 已废止的历史 target-only design；新公共命令协议待独立评审 |
+| 文档版本 | 1.2.0 |
+| 状态 | GET Descriptor 精简已同步；公共边界待独立评审，旧 POST SSE 仍已废止 |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
 | 人类评审契约 | [`chat-command-v1-review.html`](chat-command-v1-review.html)，由精确契约源生成 |
 | 设计仓分析基线 | `27484974eb106a7e43910d8e542de52a72c58102` |
@@ -11,12 +11,13 @@
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `94abd2abcb03943daef5118115e4b4a21f1c4d5f` |
 | 历史对应内部 HTTP 契约 | `1.43.4`，已被 1.44.0 Builtin JSON 取代 |
-| 更新日期 | 2026-09-04 |
+| 更新日期 | 2026-09-07 |
 
-本专题以下 operation、组件、SSE 示例和验收均为已废止历史提案，不得作为实现依据。
-Runtime 1.44.0 已确认七个 Builtin、普通 JSON 与 Skill 执行延期；此决定不自动确认
-mate-service 新公共 Command 的路径、认证、VO 或响应。新公共协议必须另行逐接口评审。
-本次只标记历史，不发布替代公共接口。
+本专题除第 3 节 GET Descriptor 外，公共认证、bridge、错误映射、旧 POST SSE 和相关图仍为
+未获新确认或已废止的历史 target-only design，不得作为实现依据。
+2026-09-07 按用户要求恢复 ec5492a 的两跳 GET 字段精简，保留后续 Help 无参决定；
+不由此恢复旧公共 POST SSE，也不自动确认新公共路径或认证。Builtin 与 Skill 均由用户统一负责，
+旧版 Skill 延期及人员分工不再适用。这里只同步已确认的字段投影，不发布公共接口。
 
 阅读历史评审页时，默认先看每个接口的“业务评审视图”：它说明调用时机、前后端步骤、字段含义、
 界面结果和失败场景。精确 HTTP、JSON 与 SSE 报文默认折叠，研发实现时再展开核对。
@@ -56,23 +57,28 @@ mate-service 向登录用户开放两个接口：
 浏览器 `Authorization` 只用于用户认证和 Chat 权限。mate-service 调用 CampusClaw 时
 重新构造内部 Header，不透传浏览器凭据。`chatId` 和 `sessionId` 都不是凭据。
 
-## 3. 历史交互层解析
+## 3. GET 轻量投影与交互路由
 
-交互层按以下顺序处理：
+GET 的 Descriptor 与 Runtime 使用同一已确认形状，详细规则和本次源码核对统一引用
+[通用模块 §3.1–3.2](../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)，不另立公共字段副本。
+本次源码基线为 pi-mono-java 6f52fddc；Mate 实现证据仍停留在上述 956b547f，
+本次未重新检查 Mate 代码，因此不将历史实现缺口表述为当前现状。
 
-1. 仅当第一个字符是 `/` 时尝试解析；
-2. 命令名截取到第一个空白字符，并精确匹配小写 `name`；
-3. 参数保留原始内容，包括内部换行；
-4. 命中后调用 Command API；
-5. 清单获取成功但未命中时，按普通消息发送；
-6. 清单获取失败时，保留草稿并显示错误。
+每项必填 name/kind/description，可选 input；input 存在时含非空 hint，acceptsFiles 仅 true 时输出。
+没有 input 表示当前仅允许无参数、无附件；不再输出 available、unavailableCode、
+mode、placeholder 或 suggestions，也不以其他字段传候选值。
+running 隐藏 Compact/Skill，Model/Thinking 无 input，Name 保留输入；Help 始终无参无 input。
+Builtin 按 help、status、name、model、thinking、compact、skills 排序，其后 Skill 按 name 排序。
+idle/running 两组精确示例见[GET 模型](接口契约/操作/01-list-chat-commands.json)，并与 Runtime 做等值门禁。
 
-HTTP `name` 不含 `/`。直接调用 API 时，未知名称返回 `COMMAND_NOT_FOUND`。
+交互层按第一个字符 / 识别 Slash，提取首个空白前的命令名并精确匹配；参数保留内部换行。
+未命中、清单失败或形态不支持时保留草稿并提示，不自动按普通消息发送。
+hint 不参与校验；POST 仍重新解析并在所属锁或事务内准入，不能直接信任 GET。
+普通消息 API 自身不解析 Slash。公共 POST 的具体执行协议仍待重审。
 
-命令清单返回七个 Builtin 和当前 Agent 绑定的 `skill:<name>`。暂时不可用的命令仍返回。
-`available` 表示不填参数时能否执行；`input.available` 表示填写参数时能否执行。
-精确字段和 running 示例见
-[`01-list-chat-commands.json`](接口契约/操作/01-list-chat-commands.json)。
+公共 GET 的完整性目标沿用 Runtime：无完整 Agent 快照时失败，不返回残缺 Builtin。
+本页保留的公共错误映射和认证仅供重审，不因 Descriptor 已确认而自动获批。
+
 
 ## 4. 历史请求与执行语义
 
@@ -148,7 +154,7 @@ Slash 模块、Builtin、Skill 和内部 Runtime 契约分别见
 
 ## 7. 历史验收（不用于当前实现）
 
-- GET 对 running Session 分别标明不填参数和填写参数时能否执行，并保留暂不可用命令；
+- GET 当前验收以第 3 节为准：running 过滤 Compact/Skill，Model/Thinking 无 input；下面其余 POST/SSE 条目仅为已废止历史，不恢复为实施门禁；
 - 命令清单请求失败时保留 Slash 草稿；请求成功但未命中才按普通消息发送；
 - POST 拒绝未知命令、非法参数、Builtin 附件与未知字段；
 - Chat 权限拒绝发生在 Session 解析和内部调用之前；
@@ -174,6 +180,7 @@ Mermaid 与 `git diff --check`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-07 | 同步 ec5492a 的 GET 精简投影与拒绝 Slash fallback；保留后续 Help 无参，公共边界待重审、旧 POST SSE 不恢复。 |
 | 1.1.0 | 2026-09-04 | 标记旧公共命令 SSE 契约为已废止历史，保留快照以供追溯；Runtime 1.44.0 不自动确认新公共协议，后续独立重审。 |
 | 1.0.5 | 2026-09-01 | 人类评审页默认展示调用时机、前后端步骤、字段含义、界面结果和错误场景；原始 HTTP、JSON 与 SSE 报文移入折叠区，不改变接口契约。 |
 | 1.0.4 | 2026-09-01 | 命令相关表述统一使用“命令清单”，不再借助文件系统概念解释 Command Catalog。 |

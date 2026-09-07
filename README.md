@@ -1,6 +1,6 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.4.6<br>
+> 导航版本：2.5.0<br>
 > 整理日期：2026-09-07<br>
 > Slash Command 设计基线：`0eaa70ff365bf4d4e328b3473809341ca4cfc58d`<br>
 > 通用对话 Events 三接口设计前基线：`743eca488ad559387706b5df54e2248a4124e5ef`<br>
@@ -20,7 +20,7 @@
 | 全产品测试与质量门禁 | [CampusClaw TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | 能力注册表、实时门禁、nightly 维护和测试防弱化 |
 | Session、Agent 元数据如何持久化 | [数据与存储导航](./03-数据与存储/README.md) | 会话记忆、Agent 元数据和通用数据库模式 |
 | Command 和 Skill Command 如何设计 | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [内置命令](./04-命令与技能/01-内置命令/README.md)、[技能命令](./04-命令与技能/02-技能命令/README.md) |
-| 公共聊天命令历史与重审入口 | [mate-service 聊天命令 API](./02-服务与接口/06-mate-service聊天命令API/README.md) | [公共 HTTP 评审页](./02-服务与接口/06-mate-service聊天命令API/chat-command-v1-review.html)、[内部 Runtime 1.45.1](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) |
+| 公共聊天命令历史与重审入口 | [mate-service 聊天命令 API](./02-服务与接口/06-mate-service聊天命令API/README.md) | [公共 HTTP 评审页](./02-服务与接口/06-mate-service聊天命令API/chat-command-v1-review.html)、[内部 Runtime 1.47.0](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) |
 | `/help` 介绍什么、元数据从哪里来 | [已确认 Help 使用指南](./04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) | [专项评审页](./04-命令与技能/01-内置命令/Help-Agent使用指南/help-review.html)、[Slash 完整全局目标类图](./04-命令与技能/00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg) |
 | 浏览器如何提交、观察和恢复普通 Chat | [mate-service 通用对话 Events API](./02-服务与接口/07-mate-service通用对话API/README.md) | [三接口契约页](./02-服务与接口/07-mate-service通用对话API/chat-events-v1-review.html)、[OpenAPI 3.1](./02-服务与接口/07-mate-service通用对话API/chat-events-v1.openapi.yaml)、[operation models](./02-服务与接口/07-mate-service通用对话API/接口契约/操作/) |
 | 查看 pi 或主流 Agent 平台证据 | [研究资料导航](./05-研究资料/README.md) | 配置生成 Tool/Agent、Anthropic、pi Session 和官方文档 |
@@ -55,12 +55,15 @@ Runtime HTTP V1 不维护 OpenAPI。CampusMate 附件服务仍维护独立的
 两者不可混用。
 
 mate-service 聊天命令旧 SSE 提案已废止，仅保留历史 target-only 契约，不能作为实现依据。
-新公共命令协议需独立重审，不由 Runtime Builtin JSON 决策推导；历史源与生成页位于
+GET Descriptor 已按本次已确认轻量结构同步；公共边界和新 POST 协议需独立重审，
+不由 Runtime Builtin JSON 决策推导；历史源与生成页位于
 [`02-服务与接口/06-mate-service聊天命令API/`](./02-服务与接口/06-mate-service聊天命令API/)。
 
 mate-service 通用对话 Events API 已确认事件提交、Chat 级 live SSE 和固定快照历史三个
 operation；standalone HTML 是主要人类契约，OpenAPI 3.1 是同步的机器契约，均位于
 [`02-服务与接口/07-mate-service通用对话API/`](./02-服务与接口/07-mate-service通用对话API/)。
+
+本次 GET 精简与其他未合入分支的核查见[设计整合记录](./01-总体架构/01-CampusClaw多Agent运行时/design-integration-audit.md)。
 
 ## 4. 文档维护约定
 
@@ -97,6 +100,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.5.0 | 2026-09-07 | 整合遗漏的轻量 GET 字段设计，保留后续 Help/POST/Events；增加未合入分支的语义核查记录。 |
 | 2.4.6 | 2026-09-07 | 删除四个废弃 Claw 评审页，不保留跳转占位；统一入口与现行契约不变，历史测试改用固定 Git 来源。 |
 | 2.4.5 | 2026-09-07 | CampusClaw 当前十项接口统一入口、源清单与校验；旧评审页停止展示报文，Events 部分确认状态保留。 |
 | 2.4.4 | 2026-09-07 | Slash/Builtin 恢复 06bea56 完整版全局主图入口，Help 专题仅提供下钻图；同步全局图维护规则，契约和统一实施责任不变。 |

@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.1.1 |
+| 设计版本 | 1.1.2 |
 | 日期 | 2026-09-07 |
 | 状态 | 用户已确认四字段、无参、空数组、缓存往返与显式刷新旧缓存；target-only，尚未实现 |
 | 设计仓基线 | `372fb2cbec6e8a525d30d2310ef68e3da18e33f7` |
@@ -113,10 +113,9 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
 这里的 `description` 是返回的 Agent 用途介绍；GET 描述符自身的 description 改为“介绍当前 Agent 的用途和使用场景”，二者含义不同。
 
-Runtime 操作 12 沿用现行描述符结构：Help 的 `input.mode=none`、`input.available=false`、
-`input.unavailableCode=COMMAND_ARGUMENTS_NOT_SUPPORTED`、`acceptsFiles=false`、`placeholder=null`、`suggestions=[]`。
-idle/running 的 Help 空参数 `available=true`；它不表示已检查 Agent 缓存，POST 仍检查完整快照。
-本轮不合并 GET 字段减法分支，不改变其他六个命令的描述符或排序。
+2026-09-07 用户明确要求合入 GET 字段精简，Runtime 操作 12 的 Help 只返回 name/kind/description，
+不带 input。idle/running 均保留 Help；共享 GET 无完整缓存整体 503，但 POST Help 仍独立检查缓存并保持既有 422。
+两跳清单的字段、排序与过滤见[共享 GET 契约](../../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
 
 ## 4. 缓存与缺失行为
 
@@ -201,11 +200,13 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 本稿 HTML/JSON 是已确认 Help 的专项展示，不是替代全部 Command API 的第二份权威契约；成功报文由 Runtime 校验脚本逐项比对。
 Slash 与 Builtin 主文档共同引用 Slash 主题维护的完整全局目标类图；
 本专题只维护 Help 元数据局部补充图，不再维护第二份全局定义。
-GET 字段整体形状和排序不在本次评审范围；不将先前分支的 GET 减法与主线其他变更偷偷合并。
+9 月 4 日 Help 评审未合并 GET 减法；9 月 7 日用户现已明确授权整合，仅更新 GET 描述符及清单规则，Help 结果和缓存行为不变。
 
 mate-service 的旧 Command 专题已被明确标记为废止历史，不能将本稿直接当作其新公共接口。
-本次不修改该历史快照，也不新增公共路径、跨仓实现提交或通知。
+本次仅将 Mate GET Descriptor 同步为轻量投影，公共认证、bridge 和 POST 仍待重审；不新增公共路径、跨仓实现提交或通知。
 
+展示生成：运行本专题 `python3 render_help_review.py`，复用 Runtime 共享渲染器；不再使用强制凭据占位符的技能默认模板。
+JSON 只保留 requestHeaderExamples 一处 Header 源，并与 Runtime POST 比对；实际可见 HTML 也检查示例值与说明。
 设计校验：运行 Runtime `validate-chat-http-v1.py --full` 和 `test_help_contract.py`。
 前者校验精确描述符、两组 Help 报文、专项页同步和图；后者用反例验证旧字段、错误类型、参数入口和候选状态不能重新进入契约。
 缓存往返、并发发布与无副作用仍是实现验收项，不把文档校验通过当作这些行为已经实现。
@@ -214,6 +215,7 @@ mate-service 的旧 Command 专题已被明确标记为废止历史，不能将�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.2 | 2026-09-07 | 按用户授权同步 GET 精简，Help 描述符不带 input；保持 POST 四字段、缓存及错误语义；修复专项 Header 仍含旧占位符的同步遗漏，专项页版本跟随 Runtime 1.47.0。 |
 | 1.1.1 | 2026-09-07 | 全局主图归回 Slash 主题，Help 类图收敛为元数据与结果投影补充；恢复旧完整版的整体视角。Help 四字段、缓存语义和专项 JSON/HTML 契约保持 1.1.0 已确认内容不变。 |
 | 1.1.0 | 2026-09-04 | 用户确认四字段、无参、空数组及缓存迁移；同步 Runtime 1.45.0、Slash/Builtin 全局视图与精确契约校验；不修改实现或公共 Mate 契约。 |
 | 1.0.0 | 2026-09-04 | 基于已有 description/userCases 设计 Agent 使用指南；记录缓存场景字段丢失的实现缺口、全局目标结构和专项候选契约。 |

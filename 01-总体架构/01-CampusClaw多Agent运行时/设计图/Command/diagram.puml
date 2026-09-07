@@ -1,7 +1,9 @@
 @startuml command_http_flow
-title Target-only Builtin JSON HTTP Flow
+title Target-only Lightweight GET and Builtin JSON POST
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java getSession.
 ' Architecture change: command routes use ResultBean JSON and no request SSE.
+' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CompositeCommandRegistry.java resolve.
+' Product decision: GET uses full sources and state-filtered name/kind/description/input; POST keeps locked admission.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached and toRuntime.
 ' Product decision: Help uses authored Agent metadata; it does not format the command catalog.
 skinparam shadowing false
@@ -11,24 +13,26 @@ participant Application
 participant Registry
 participant Handler
 participant "Narrow service" as Service
-Caller -> Controller : GET commands or POST command
-Controller -> Application : validated VO, locale, headers
-Application -> Registry : resolve once with BUILTIN filter
-Registry --> Application : immutable catalog
-alt GET
-  Application --> Controller : CommandListResponseVO
-else POST
-  Application -> Handler : selected definition and same catalog
+Caller -> Controller : GET commands\nor POST command
+Controller -> Application : validated VO\nlocale + headers
+alt GET shared catalog
+  Application -> Registry : resolve all sources\ncomplete Agent cache
+  Registry --> Application : immutable catalog or target 503
+  Application --> Controller : filter state, order\nlightweight VO
+else POST Builtin
+  Application -> Registry : resolve once with BUILTIN filter
+  Registry --> Application : immutable catalog
+  Application -> Handler : selected definition\nsame catalog
   alt Help
-    Handler -> Service : query Agent help using Session agentId
-    Service -> Service : prepareCached once under Agent publication lock
-    note right of Service
+    Handler -> Service : query Agent help\nusing Session agentId
+    Service -> Service : prepareCached once\nunder Agent publication lock
+    note over Handler, Service
       Project displayName, description, userCases.
       No model, refresh, Session write, or capacity lease.
       No complete cache: existing 422 error.
     end note
   else Other Builtins
-    Handler -> Service : retain command-specific admission and locking
+    Handler -> Service : command-specific admission\nand locking
   end
   Service --> Handler : command-specific DTO
   Handler --> Application : command result

@@ -152,31 +152,25 @@ def render_business_flow(flow: list[dict[str, str]]) -> str:
 
 
 def command_state(command: dict[str, Any]) -> list[str]:
-    no_arguments = "可执行" if command["available"] else f'不可执行（{command["unavailableCode"]}）'
-    command_input = command["input"]
-    if command_input["mode"] == "none":
-        arguments = "不接受参数"
-    elif command_input["available"]:
-        arguments = "可填写参数"
-    else:
-        arguments = f'不可填写（{command_input["unavailableCode"]}）'
-    if not command["available"]:
-        display = "置灰并说明原因"
-    elif command_input["mode"] != "none" and not command_input["available"]:
-        display = "允许无参数调用，禁用参数输入"
-    else:
-        display = "正常展示"
-    return [f'/{command["name"]}', command["description"], no_arguments, arguments, display]
+    command_input = command.get("input")
+    hint = command_input["hint"] if command_input else "无参数"
+    files = "允许附件" if command_input and command_input.get("acceptsFiles") else "无附件"
+    return [f'/{command["name"]}', command["description"], hint, files]
 
 
 def render_command_example(operation: dict[str, Any]) -> str:
-    response = next(item for item in operation["responses"] if item["status"] == "200")
-    commands = response["bodies"]["zh-CN"]["result"]["commands"]
-    rows = [command_state(command) for command in commands]
-    return (
-        '<section class="business-section"><h3>Session 正在运行时，命令清单怎么读</h3>'
-        f'{SHARED.static_table(["命令", "用途", "不填参数", "填写参数", "前端展示"], rows)}</section>'
-    )
+    sections = []
+    for response in operation["responses"]:
+        if response["status"] != "200":
+            continue
+        commands = response["bodies"]["zh-CN"]["result"]["commands"]
+        rows = [command_state(command) for command in commands]
+        sections.append(
+            '<section class="business-section">'
+            f'<h3>{html.escape(response["tabLabel"])}</h3>'
+            f'{SHARED.static_table(["命令", "用途", "输入提示", "附件"], rows)}</section>'
+        )
+    return ''.join(sections)
 
 
 def render_request_fields(fields: list[dict[str, str]]) -> str:

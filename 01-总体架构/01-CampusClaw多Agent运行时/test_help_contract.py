@@ -34,7 +34,7 @@ class HelpContractTest(unittest.TestCase):
                              ("placeholder", "command"), ("suggestions", ["model"])):
             with self.subTest(field=field):
                 descriptor = copy.deepcopy(self.descriptor)
-                descriptor["input"][field] = value
+                descriptor["input"] = {field: value}
                 with self.assertRaises(RuntimeError):
                     GATE.validate_help_descriptor(descriptor)
 
@@ -89,6 +89,18 @@ class HelpContractTest(unittest.TestCase):
         operation["requestBody"]["examples"][0]["value"]["arguments"] = "model"
         with self.assertRaises(RuntimeError):
             GATE.validate_help_operation(operation)
+
+    def test_projection_headers_cannot_keep_old_values_or_descriptions(self):
+        for field, value in (("value", "Bearer <JWT>"), ("description", "公司调用方标识")):
+            projection = copy.deepcopy(self.projection)
+            projection["operation"]["requestHeaderExamples"][0]["headers"][0][field] = value
+            with self.assertRaises(RuntimeError):
+                GATE.validate_help_projection(projection, self.operation)
+
+        projection = copy.deepcopy(self.projection)
+        projection["operation"]["authModes"] = []
+        with self.assertRaises(RuntimeError):
+            GATE.validate_help_projection(projection, self.operation)
 
     def test_projection_cannot_drift_or_reopen_decisions(self):
         projection = copy.deepcopy(self.projection)

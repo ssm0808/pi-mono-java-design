@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service Chat Command API",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已废止 · historical target-only",
     "fieldNaming": "lowerCamelCase",
