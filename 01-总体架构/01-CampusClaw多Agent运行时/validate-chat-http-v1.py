@@ -421,10 +421,12 @@ def validate_response_contract(
             require(expected in codes, f"POST Command is missing {expected}")
         successes = [response for response in operation["responses"] if response["status"] == "200"]
         for response in successes:
-            require(response["headers"].get("Content-Type") == "application/json",
-                    "POST Command success must use ordinary JSON")
+            skill = response["id"] == "200-skill-message"
+            require(response["headers"].get("Content-Type") == ("text/event-stream" if skill else "application/json"),
+                    "Skill must use shared SSE; Builtin must retain JSON")
             require(response["headers"].get("Cache-Control") == "no-store", "Missing no-store")
-            require("default" not in response["bodies"], "POST Command must not contain SSE bodies")
+            require(("default" in response["bodies"]) == skill, "response body branch differs")
+        require(any(r["id"] == "200-skill-message" for r in successes), "Skill SSE example missing")
         serialized = json.dumps(operation, ensure_ascii=False)
         require("event: command." not in serialized and "event: stream." not in serialized,
                 "POST Command must not expose request-scoped SSE lifecycle events")

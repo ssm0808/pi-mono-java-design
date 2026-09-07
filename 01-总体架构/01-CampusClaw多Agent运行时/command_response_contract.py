@@ -54,7 +54,7 @@ def validate_response_reuse(models):
     model_list = success(operations["listSessionModels"])
     for key in ("changeSessionModel", "changeSessionThinking"):
         same_shape(success(operations[key]), session, nullable_name=True)
-    responses = [item for item in operations["executeSessionCommand"]["responses"] if item["status"] == "200"]
+    responses = [item for item in operations["executeSessionCommand"]["responses"] if item["status"] == "200" and item["id"] != "200-skill-message"]
     cases = {item["id"]: item for item in responses}
     require(len(cases) == len(responses) and set(cases) == SESSION_CASES | MODEL_CASES | set(BUSINESS_SHAPES),
             "Command query, mutation, unchanged and empty response cases differ")

@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.7.0 |
-| 更新日期 | 2026-09-07 |
+| 文档版本 | 1.8.0 |
+| 更新日期 | 2026-09-08 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；字段/缓存/SPI 证据见 Help 专项，不替换其他行为的历史证据点 |
@@ -22,9 +22,9 @@
 
 Builtin 实现切片覆盖 `help`、`status`、`name`、`model`、`thinking`、
 `compact`、`skills` 七个 Builtin。共享 GET 按固定 Builtin 顺序与 Skill 名称顺序返回轻量清单，
-POST Command 使用普通 ResultBean JSON。
+POST Command 按类别返回：Builtin 普通 ResultBean JSON，Skill 请求级 SSE。
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、执行结果和 HTTP 发布集成仍需评审。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、SSE 和恢复语义已由 B13/B14 确认，精确契约与 Events 已同步。
 
 本责任安排由用户于 2026-09-05 确认，取代旧版人员分工；旧记录仅用于历史追溯。
 变更前设计基线为 `7bf966edc313b092f05f2f28256e32ed673e8c9a`；这是实施责任调整，既有源码证据点和命令行为决定继续有效。
@@ -38,12 +38,12 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享
 `/` 展示命令清单；已确认的 `/help` 无参展示当前 Agent 的用途和场景。
 主图以设计仓 `06bea56c7a725bb749cffb6682bcf98a8f51884a` 的完整版为结构与排版基线，
 保留 Web、Application、Command Core、Builtin 委派和 Runtime/持久化的完整关系。
-本次只将旧 Help Formatter 路径替换为 Agent 元数据查询，并保留用户统一实施责任；不回滚其他设计决定。
+本次保留 Help 元数据与 Builtin 主干，补齐已确认 Skill 执行链和共享消息应用服务，并保留用户统一实施责任；不回滚其他设计决定。
 所有装配关系均为 target-only；分组仅归并重复实现，不把 Handler、业务服务、Coordinator 和 Repository 合成一个对象。
 
 ![Slash Command 完整全局目标类图](设计图/target_slash_command_global_classes.svg)
 
-[PlantUML 源码](设计图/diagram.puml#L92) · [展开原尺寸 SVG](设计图/target_slash_command_global_classes.svg)
+[PlantUML 源码](设计图/diagram.puml#L95) · [展开原尺寸 SVG](设计图/target_slash_command_global_classes.svg)
 
 文档内缩略图用于定位整体分层；阅读类名、箭头和多重性时展开原尺寸 SVG，不通过缩小图中文字适配窄页面。
 
@@ -194,7 +194,7 @@ Builtin 固定按 help、status、name、model、thinking、compact、skills 排
 DTO→VO 时执行过滤与省略规则；不能把内部 DTO 直接序列化。
 每个 POST 重新解析独立 Catalog，在所属事务或锁内复核可变状态、绑定与参数。
 Builtin POST 的 400/404/409/422/500/503 和普通 JSON 保持后续已确认契约，特别是 Help 无缓存仍为 422；
-GET 需按 operation 映射 503，不能全局修改同名错误的 422 映射。Skill POST 的未决项不能由 GET 示例自动确认。
+GET 需按 operation 映射 503，不能全局修改同名错误的 422 映射。Skill POST 以 B13/B14 的明确确认生效，不能由 GET 示例自动确认。
 
 交互层遇到 Slash 时，先按清单精确匹配。清单失败、命令未命中或形态不支持时保留草稿并提示，
 绝不把未匹配 Slash 自动当成普通消息；直接普通消息 API 仍不解析 Slash。
@@ -234,6 +234,22 @@ argumentHint，支持轻量提示的结构参考；它不定义 CampusClaw 的 H
    交互层验证 Slash 未命中保留草稿、无普通消息 fallback。
 5. 文档门禁同时检查两套 JSON、HTML 和负向变异，防止后续 Help/POST 改动重新带回旧 GET。
 
+### 3.3 Skill 执行链（B13/B14 已确认）
+
+共享 Registry 解析的 SkillCommandDefinition 组合 CommandAdmissionPolicy 与真实 SkillCommandHandler；
+Handler 委派 SkillExecutionService，再经 SessionEventApplicationService 复用普通消息的接受、
+凭据和运行生命周期。PreparedSkillInvocationDTO 固定正文、元数据和版本；同一请求的发现与
+执行用同一 Definition 身份，绑定/权限/容量仍在所属事务或锁内重检。不能把 DTO 穿透 Controller。
+
+CommandExecutionService 返回内部 Builtin/Skill 结果联合 DTO，由 CommandResponseAssembler
+转为只读 JSON VO 或请求级事件流响应对象；Controller 只按已类型化结果选择 JSON/SSE，不按
+命令名称新增中央 switch。共享事件 VO 与 EventStream 由 Events 模块维护，避免命令再造一套事件。
+Skill 详情、源码基线 dfb90ca 与 pi 5cd93f 证据见[Skill 专题 §4](../02-技能命令/README.md#4-统一实施与集成要求)。
+
+新增主图依赖对应实施切片：先补 Skill 定义与 Handler，再补快照/重检应用服务，接着复用消息
+接受与投影，最后联合 HTTP 与恢复验收。保持 Help/Builtin Handler、窄业务服务与 Coordinator
+独立，类图不得用一个大框遮盖其分层。不新增 Maven 依赖。
+
 ## 4. 执行顺序与恢复
 
 Application 依次完成 Session 访问检查、arguments 归一、单次 Catalog 解析、名称精确查找、
@@ -242,7 +258,7 @@ Builtin 名称格式不覆盖 skill:*；公共入口不能据此拒绝 Skill 名
 
 ![权威状态](设计图/authoritative_command_state.svg)
 
-[PlantUML 源码](设计图/diagram.puml#L71)
+[PlantUML 源码](设计图/diagram.puml#L74)
 
 Help/Status/Skills 不写 Entry；Name 只保存当前名称与版本；Model/Thinking/Compact
 复用现有领域 Entry。同值、查询和空历史压缩不写 Entry。
@@ -271,7 +287,7 @@ Mate Header 不记录、不持久化、不进入 Prompt；Compact 仅在本次 A
 | Skill Command | 补齐执行契约、真实执行定义、快照与绑定重检、失败恢复及专项验收 |
 | 共享 HTTP 集成 | 统一对齐两类命令的命名、清单、请求类型、结果与错误，完成发现到执行的集成验收后发布 |
 
-Skill 的未确认细节按[Skill 实施要求](../02-技能命令/README.md#4-统一实施与集成要求)继续评审；
+Skill 的已确认执行语义按[Skill 实施要求](../02-技能命令/README.md#4-统一实施与集成要求)实施；
 操作 12/13 当前保留的七个 Builtin 示例是已确认部分，不能代替两类命令的最终整体验收。
 
 每个实现 PR 非文档新增代码最多 2000 行，模块侧最多 850 行；
@@ -287,7 +303,8 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.7.0 | 2026-09-07 | 新增 Slash Command 前端专项入口；Composer 模式、目录、独立草稿、临时结果、错误恢复和可访问性均为 target-only，不改变现有 Runtime/Mate HTTP 契约。 |
+| 1.8.0 | 2026-09-08 | B13/B14 确认 Skill 请求级 SSE 与共享消息接受链；保持 Builtin JSON，补全全局类图的 Skill Definition/Handler、应用服务、快照及响应边界；发现事实与目标执行分开。 |
+| 1.7.0 | 2026-09-07 | 新增 Slash Command 前端专项入口；Composer 模式、命令清单、独立草稿、临时结果、错误恢复和可访问性均为 target-only，不改变现有 Runtime/Mate HTTP 契约。 |
 | 1.6.0 | 2026-09-07 | Command 成功响应复用业务资源，删除 command/changed/sourceEventSeq；Help 三业务字段；全局主图、GET、准入、领域历史与统一实施责任不变。 |
 | 1.5.0 | 2026-09-07 | 合入 ec5492a 的轻量 GET、排序、状态过滤、完整性和交互路由；保留后续 Help 无参、POST JSON 与完整版全局类图。 |
 | 1.4.3 | 2026-09-07 | 以 06bea56 完整版恢复全局主图和职责链，局部更新 Help 元数据委派与统一实施责任；Help 专题改为补充图，增加结构与视觉验收，不修改接口契约。 |

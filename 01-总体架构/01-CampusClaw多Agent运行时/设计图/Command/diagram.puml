@@ -1,7 +1,7 @@
 @startuml command_http_flow
-title Target-only Lightweight GET and Builtin JSON POST
+title Target-only Shared GET and Typed Command POST
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java getSession.
-' Architecture change: command routes use ResultBean JSON and no request SSE.
+' Architecture change: Builtin routes return JSON; B13/B14 Skill reuses the message SSE boundary.
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CompositeCommandRegistry.java resolve.
 ' Product decision: GET uses full sources and state-filtered name/kind/description/input; POST keeps locked admission.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached and toRuntime.
@@ -37,8 +37,18 @@ else POST Builtin
   Service --> Handler : command-specific DTO
   Handler --> Application : command result
   Application --> Controller : immutable response VO
+else POST Skill (target-only B13/B14)
+  Application -> Registry : resolve full sources once
+  Registry --> Application : real Skill definition and snapshot
+  Application -> Handler : immutable invocation
+  Handler -> Service : shared message admission and execution
+  Service --> Controller : typed message stream result
 end
-Controller --> Caller : ResultBean application/json
+alt Builtin or GET
+  Controller --> Caller : ResultBean application/json
+else Skill
+  Controller --> Caller : user.message receipt first\nshared Agent events and matching idle
+end
 @enduml
 
 @startuml command_authoritative_state

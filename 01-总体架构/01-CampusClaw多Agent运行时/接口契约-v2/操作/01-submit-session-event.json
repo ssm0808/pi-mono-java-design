@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "一次 POST 提交用户事件，在同一响应中接收 SSE",
-    "description": "已确认合并方向：POST 同时承担事件提交和对应推送，不再提供独立 GET /events/stream；GET /events 的 ListEvents 历史查询仍保留。每次提交 user.message、user.interrupt、user.tool_confirmation 中的一条，响应为 200 text/event-stream，而不是独立 ResultBean JSON。三种用户事件均必须携带 access-token。event 包装、content[]、eventId、不公开 entryId/entrySeq/runId/executionId、Header 示例与安全边界继续有效。五个基础类型名及 S1 data-only、S2 type + phase 继续有效。已确认首个业务帧返回本次提交的完整 user.* 事件（含 eventId），仅一次；后续才推送对应的 Agent/Session 事件。这明确调整原 S3，不广播其他用户输入，也不额外包装 ResultBean。当前候选是请求范围 SSE，输出只绑定本次消息、确认续跑或中断目标，不跨后续无关执行；结束规则已确认：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭；之后通过新的 user.tool_confirmation POST 接收续跑结果。等待确认不是任务成功，不相关的 Session idle 不能结束本次响应。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。单消息准入已确认：同一 Session 的 M1 未执行完成前，不接受任何调用方提交的下一条 user.message M2，也不将 M2 排队或写入已接受事件历史。接受 user.message 时，在同一数据库短事务中锁定 Session、复核 state=idle、写入消息和内部执行身份，并将 state 改为 running；提交成功后才启动执行并返回完整回执。该约束按 Session 生效，覆盖不同用户和服务实例。M1 等待工具确认、正在停止或仅响应断开时仍未完成，Session 保持 running；等待确认的 session.status_idle 只结束本次 SSE，不能据此开放下一条消息。M1 真正完成或实际停止且结束状态提交后，Session 才恢复 idle。user.interrupt 和 user.tool_confirmation 按各自控制条件接受，不受新消息的 idle 前置条件阻挡。中断查询优化已确认：同实例在停止请求提交成功后立即通知对应执行，跨实例继续批量检查，数据库轮询兜底保留；固定内部执行身份是等待结果的去重键，同一目标只查一次，再分别通知本机仍连接的响应。先登记等待再补读已提交终态，避免登记前后完成导致漏发；本地通知和补读共用每条响应的终态去重，完整回执先行，同一终态每条响应最多投递一次，慢连接互不阻塞。最后一个等待者离开只清理本机登记，不删除停止请求或终态。查询索引按实际 GaussDB 版本、执行计划与 100 并发压测选择，不预先冻结具体索引、500 毫秒周期、批次上限或工具/中断等待超时。执行标识不公开；旧停止请求不能作用于下一轮执行，回执、超时或实例失联不代表已停止。数据库字段、检查周期、并发竞态、idle reason 具体值和故障处理细节仍待评审。断线不取消已接受的执行、不自动重发 POST，通过 ListEvents 对账。未整体确认合并接口，也未修改 CampusClaw 实现或 Mate 公共契约。独立 abort、steers、follow-ups 接口已退役。停止执行通过 user.interrupt 完成；调整方向为确认实际停止后新提交 user.message，不提供原生运行中 Steer。本期不支持 FollowUp 排队，未来数据库交接方案仅记录在专题设计中，启用另行评审；不新增当前输入类型、字段或排队回执。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。",
+    "description": "已确认合并方向：POST 同时承担事件提交和对应推送，不再提供独立 GET /events/stream；GET /events 的 ListEvents 历史查询仍保留。每次提交 user.message、user.interrupt、user.tool_confirmation 中的一条，响应为 200 text/event-stream，而不是独立 ResultBean JSON。三种用户事件均必须携带 access-token。event 包装、content[]、eventId、不公开 entryId/entrySeq/runId/executionId、Header 示例与安全边界继续有效。五个基础类型名及 S1 data-only、S2 type + phase 继续有效。已确认首个业务帧返回本次提交的完整 user.* 事件（含 eventId），仅一次；后续才推送对应的 Agent/Session 事件。这明确调整原 S3，不广播其他用户输入，也不额外包装 ResultBean。已确认采用请求范围 SSE，输出只绑定本次消息、确认续跑或中断目标，不跨后续无关执行；结束规则已确认：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭；之后通过新的 user.tool_confirmation POST 接收续跑结果。等待确认不是任务成功，不相关的 Session idle 不能结束本次响应。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。单消息准入已确认：同一 Session 的 M1 未执行完成前，不接受任何调用方提交的下一条 user.message M2，也不将 M2 排队或写入已接受事件历史。接受 user.message 时，在同一数据库短事务中锁定 Session、复核 state=idle、写入消息和内部执行身份，并将 state 改为 running；提交成功后才启动执行并返回完整回执。该约束按 Session 生效，覆盖不同用户和服务实例。M1 等待工具确认、正在停止或仅响应断开时仍未完成，Session 保持 running；等待确认的 session.status_idle 只结束本次 SSE，不能据此开放下一条消息。M1 真正完成或实际停止且结束状态提交后，Session 才恢复 idle。user.interrupt 和 user.tool_confirmation 按各自控制条件接受，不受新消息的 idle 前置条件阻挡。中断查询优化已确认：同实例在停止请求提交成功后立即通知对应执行，跨实例继续批量检查，数据库轮询兜底保留；固定内部执行身份是等待结果的去重键，同一目标只查一次，再分别通知本机仍连接的响应。先登记等待再补读已提交终态，避免登记前后完成导致漏发；本地通知和补读共用每条响应的终态去重，完整回执先行，同一终态每条响应最多投递一次，慢连接互不阻塞。最后一个等待者离开只清理本机登记，不删除停止请求或终态。查询索引按实际 GaussDB 版本、执行计划与 100 并发压测选择，不预先冻结具体索引、500 毫秒周期、批次上限或工具/中断等待超时。执行标识不公开；旧停止请求不能作用于下一轮执行，回执、超时或实例失联不代表已停止。B07～B11 已确定 reason、并发竞争和故障处理；数据库字段、检查周期与容量数值进入实施校准。断线不取消已接受的执行、不自动重发 POST，通过 ListEvents 对账。已确认目标契约，尚未修改 CampusClaw 实现或 Mate 公共契约。独立 abort、steers、follow-ups 接口已退役。停止执行通过 user.interrupt 完成；调整方向为确认实际停止后新提交 user.message，不提供原生运行中 Steer。本期不支持 FollowUp 排队，未来数据库交接方案仅记录在专题设计中，启用另行评审；不新增当前输入类型、字段或排队回执。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。 中断必填 targetEventId 并在同一事务匹配原消息；agent.* 与 session.status_idle 必填 sourceEventId，均引用该原 user.message.eventId。确认和停止同一事务内竞争：停止先提交拒绝确认；确认先提交仍可中断续跑。重复确认或重复停止均返回 409。自然完成胜出时返回真实 done/failed，不伪造 terminated。每次只有一个待确认工具。跨实例确认通过数据库交接决定和完整事件，本机可发送 preview，远端 preview 不保证提供。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -93,7 +93,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "顶层固定只有 event；event.type 是联合类型判别字段，可选择 user.message、user.interrupt 或 user.tool_confirmation。一次请求只提交一条事件，不支持数组或批量；三种事件都会被本接口接收。null 不等价于省略。user.message 的 content 长度 1..5，最多一个 text 且必须位于第一项，最多四个不重复 file。user.interrupt 无其他业务字段。user.tool_confirmation 只在等待对应 Tool Call 确认时接受。 user.message 仅在 Session 为 idle 时接受；接受消息与改为 running 同事务，上一条消息未完成前拒绝下一条，不排队。",
+      "description": "顶层固定只有 event；event.type 是联合类型判别字段，可选择 user.message、user.interrupt 或 user.tool_confirmation。一次请求只提交一条事件，不支持数组或批量；三种事件都会被本接口接收。null 不等价于省略。user.message 的 content 长度 1..5，最多一个 text 且必须位于第一项，最多四个不重复 file。user.interrupt 必填 targetEventId，引用要停止的原 user.message.eventId；仅匹配当前未完成执行时接受，旧目标不能误停下一轮。user.tool_confirmation 只在等待对应 Tool Call 确认时接受。 user.message 仅在 Session 为 idle 时接受；接受消息与改为 running 同事务，上一条消息未完成前拒绝下一条，不排队。",
       "examples": [
         {
           "label": "用户消息 · user.message",
@@ -116,10 +116,11 @@
         },
         {
           "label": "中断执行 · user.interrupt",
-          "description": "只请求终止当前内部执行；200 不表示执行已经完全退出。",
+          "description": "停止 targetEventId 指向的原消息执行；锁内复核当前目标，200 回执不表示已实际退出。",
           "value": {
             "event": {
-              "type": "user.interrupt"
+              "type": "user.interrupt",
+              "targetEventId": "b7ef45d40a854c33af7a36df871a21e8"
             }
           }
         },
@@ -143,14 +144,14 @@
         "status": "200",
         "tabLabel": "200 · 消息回复",
         "label": "OK",
-        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，数据库中断机制已确认，具体事件字段、数据库控制细节与并发竞争仍待评审。对应 user.message；delta 为新增文本，completed 为完整内容。收到本次对应 idle 后结束响应，不再等待另一条消息；示例 reason=done 的具体取值仍待字段评审。",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，数据库中断机制已确认，字段和竞争规则已确认，数据库数值按实现校准。对应 user.message；delta 为新增文本，completed 为完整内容。收到本次对应 idle 后结束响应，不再等待另一条消息；reason=done 已确认。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
-          "Content-Language": "en-US"
+          "Content-Language": "zh-CN"
         },
         "bodies": {
-          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"结合巡检记录与告警信息，\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:19.451Z\",\"content\":\"结合巡检记录与告警信息，建议先核查上联链路，再安排变更窗口处理。\"}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:20.000Z\",\"reason\":\"done\"}\n\n"
+          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"delta\",\"content\":\"结合巡检记录与告警信息，\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\ndata: {\"eventId\":\"d5c19f7c4b1642e6806aeb860752d99b\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:19.451Z\",\"content\":\"结合巡检记录与告警信息，建议先核查上联链路，再安排变更窗口处理。\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"usage\":{\"input\":1280,\"output\":320,\"cacheRead\":640,\"cacheWrite\":96,\"totalTokens\":2336,\"cost\":{\"input\":0.00384,\"output\":0.0048,\"cacheRead\":0.000192,\"cacheWrite\":0.00036,\"total\":0.009192}}}\n\ndata: {\"eventId\":\"d4e3e8b9653047a99ac10396a17fe84d\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:20.000Z\",\"reason\":\"done\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\n"
         },
         "exampleScope": "receipt-and-closing-confirmed-output-fields-candidate"
       },
@@ -159,14 +160,14 @@
         "status": "200",
         "tabLabel": "200 · 等待工具确认",
         "label": "OK",
-        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，数据库中断机制已确认，具体事件字段、数据库控制细节与并发竞争仍待评审。对应 user.message 触发待确认工具；等待工具确认时也关闭本次响应。此处不是任务已经完成，之后需新 POST 提交 user.tool_confirmation 并接收续跑结果；示例 reason=confirming 的具体取值仍待字段评审。 此时 M1 尚未完成，数据库 Session 仍为 running，不能接受 M2；此 idle 只表示本次 HTTP 交互结束。",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，数据库中断机制已确认，字段和竞争规则已确认，数据库数值按实现校准。对应 user.message 触发待确认工具；等待工具确认时也关闭本次响应。此处不是任务已经完成，之后需新 POST 提交 user.tool_confirmation 并接收续跑结果；reason=confirming 已确认。 此时 M1 尚未完成，数据库 Session 仍为 running，不能接受 M2；此 idle 只表示本次 HTTP 交互结束。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
-          "Content-Language": "en-US"
+          "Content-Language": "zh-CN"
         },
         "bodies": {
-          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"5e9a24c8d7134f6baa10c9827d45e301\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:16.000Z\",\"content\":\"已确认隔离操作会修改生产配置，需要用户确认。\"}\n\ndata: {\"eventId\":\"6c7d8e9f01234567a89bcdef01234567\",\"type\":\"agent.tool_call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-04T08:30:16.100Z\",\"toolName\":\"CallMateTool\",\"arguments\":{\"tool\":\"isolate_campus_port\",\"args\":{\"deviceName\":\"SW-DC-01\",\"portName\":\"GigabitEthernet0/0/24\"}},\"requiresConfirmation\":true}\n\ndata: {\"eventId\":\"7d8e9f0123456789abcdef0123456789\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:16.200Z\",\"reason\":\"confirming\"}\n\n"
+          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"5e9a24c8d7134f6baa10c9827d45e301\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:16.000Z\",\"content\":\"已确认隔离操作会修改生产配置，需要用户确认。\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\ndata: {\"eventId\":\"6c7d8e9f01234567a89bcdef01234567\",\"type\":\"agent.tool_call\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"createdAt\":\"2026-09-04T08:30:16.100Z\",\"toolName\":\"CallMateTool\",\"arguments\":{\"tool\":\"isolate_campus_port\",\"args\":{\"deviceName\":\"SW-DC-01\",\"portName\":\"GigabitEthernet0/0/24\"}},\"requiresConfirmation\":true,\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\ndata: {\"eventId\":\"7d8e9f0123456789abcdef0123456789\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:16.200Z\",\"reason\":\"confirming\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\n"
         },
         "exampleScope": "receipt-and-closing-confirmed-output-fields-candidate"
       },
@@ -175,14 +176,14 @@
         "status": "200",
         "tabLabel": "200 · 拒绝确认后续跑",
         "label": "OK",
-        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，数据库中断机制已确认，具体事件字段、数据库控制细节与并发竞争仍待评审。对应请求示例中的 deny 确认；新 POST 响应接收工具结果与续跑回复，收到本次对应 idle 后关闭，不把新结果发给已经结束的上一条响应。具体字段与绑定细节仍待评审。",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，数据库中断机制已确认，字段和竞争规则已确认，数据库数值按实现校准。对应请求示例中的 deny 确认；新 POST 响应接收工具结果与续跑回复，收到本次对应 idle 后关闭，不把新结果发给已经结束的上一条响应。字段与 sourceEventId 绑定已确认。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
-          "Content-Language": "en-US"
+          "Content-Language": "zh-CN"
         },
         "bodies": {
-          "default": "data: {\"eventId\":\"2781508bb1c9496f94a0454d0bf8c0f8\",\"type\":\"user.tool_confirmation\",\"createdAt\":\"2026-09-03T08:30:17.100Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"result\":\"deny\",\"denyMessage\":\"该操作会修改生产配置，请先给出无变更风险的处理建议。\"}\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-04T08:30:16.600Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":[{\"type\":\"text\",\"text\":\"用户已拒绝，本次工具调用未执行。\"}],\"isError\":true,\"errorCode\":\"TOOL_CALL_DENIED\"}\n\ndata: {\"eventId\":\"9f0123456789abcdef0123456789abcd\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:17.000Z\",\"content\":\"已取消配置变更，接下来可先核查告警时间线与上联链路。\"}\n\ndata: {\"eventId\":\"a0123456789abcdef0123456789abcde\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:17.100Z\",\"reason\":\"done\"}\n\n"
+          "default": "data: {\"eventId\":\"2781508bb1c9496f94a0454d0bf8c0f8\",\"type\":\"user.tool_confirmation\",\"createdAt\":\"2026-09-03T08:30:17.100Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"result\":\"deny\",\"denyMessage\":\"该操作会修改生产配置，请先给出无变更风险的处理建议。\"}\n\ndata: {\"eventId\":\"89f8316e07ef4c9aa3fd056a91a182b0\",\"type\":\"agent.tool_result\",\"createdAt\":\"2026-09-04T08:30:16.600Z\",\"toolCallId\":\"call_unLAR8MvFNptuiZK6K6HCy5k\",\"content\":[{\"type\":\"text\",\"text\":\"用户已拒绝，本次工具调用未执行。\"}],\"isError\":true,\"errorCode\":\"TOOL_CALL_DENIED\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\ndata: {\"eventId\":\"9f0123456789abcdef0123456789abcd\",\"type\":\"agent.message\",\"phase\":\"completed\",\"createdAt\":\"2026-09-04T08:30:17.000Z\",\"content\":\"已取消配置变更，接下来可先核查告警时间线与上联链路。\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\ndata: {\"eventId\":\"a0123456789abcdef0123456789abcde\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:17.100Z\",\"reason\":\"done\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\n"
         },
         "exampleScope": "receipt-and-closing-confirmed-output-fields-candidate"
       },
@@ -191,14 +192,14 @@
         "status": "200",
         "tabLabel": "200 · 原消息被中断",
         "label": "OK",
-        "summary": "与“中断完成”配对：原 user.message 响应仍承载原执行输出，目标实际停止后收到与中断响应相同 eventId 的同一条 idle 并关闭。中断回执只出现在新 user.interrupt 响应，不在原响应重复发送。分工已确认；此处思考内容、字段和 reason=terminated 仅为候选示例。",
+        "summary": "与“中断完成”配对：原 user.message 响应仍承载原执行输出，目标实际停止后收到与中断响应相同 eventId 的同一条 idle 并关闭。中断回执只出现在新 user.interrupt 响应，不在原响应重复发送。分工已确认；公开摘要、字段和 reason=terminated 按已确认契约展示。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
-          "Content-Language": "en-US"
+          "Content-Language": "zh-CN"
         },
         "bodies": {
-          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"fa679dc5d02e4b609a26e65c9a4603b0\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-03T08:30:16.000Z\",\"content\":\"已整理巡检记录，下一步核对告警时间线。\"}\n\ndata: {\"eventId\":\"38e397c80d5a4f3ba7916df3bbf0a936\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:31:01.000Z\",\"reason\":\"terminated\"}\n\n"
+          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"fa679dc5d02e4b609a26e65c9a4603b0\",\"type\":\"agent.thinking\",\"phase\":\"completed\",\"createdAt\":\"2026-09-03T08:30:16.000Z\",\"content\":\"已整理巡检记录，下一步核对告警时间线。\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\ndata: {\"eventId\":\"38e397c80d5a4f3ba7916df3bbf0a936\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:31:01.000Z\",\"reason\":\"terminated\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\n"
         },
         "exampleScope": "receipt-and-closing-confirmed-output-fields-candidate"
       },
@@ -207,16 +208,46 @@
         "status": "200",
         "tabLabel": "200 · 中断完成",
         "label": "OK",
-        "summary": "对应 user.interrupt；首帧返回本次完整中断回执，之后只有目标实际停止后的 idle，不复制正文、思考或工具输出。原消息响应接收同一条 idle（同 eventId）并关闭，见“原消息被中断”示例。此推送分工已确认；HTTP 200 或回执不代表执行已停止。reason=terminated 仍为候选取值，数据库保存停止请求、执行实例批量检查及共享结束记录已确认；同实例提交后立即通知与等待目标去重也已确认，回执仍先于同一权威终态；检查周期、具体索引、并发竞态与停止失败仍待评审。",
+        "summary": "对应 user.interrupt；首帧返回本次完整中断回执，之后只有目标实际停止后的 idle，不复制正文、思考或工具输出。原消息响应接收同一条 idle（同 eventId）并关闭，见“原消息被中断”示例。此推送分工已确认；HTTP 200 或回执不代表执行已停止。reason=terminated 已确认，数据库保存停止请求、执行实例批量检查及共享结束记录已确认；同实例提交后立即通知与等待目标去重也已确认，回执仍先于同一权威终态；竞争与停止失败语义已确认；检查周期和具体索引按实现校准。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
-          "Content-Language": "en-US"
+          "Content-Language": "zh-CN"
         },
         "bodies": {
-          "default": "data: {\"eventId\":\"aee903c130e048b9bc2894fc32cd63a8\",\"type\":\"user.interrupt\",\"createdAt\":\"2026-09-03T08:30:16.420Z\"}\n\ndata: {\"eventId\":\"38e397c80d5a4f3ba7916df3bbf0a936\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:31:01.000Z\",\"reason\":\"terminated\"}\n\n"
+          "default": "data: {\"eventId\":\"aee903c130e048b9bc2894fc32cd63a8\",\"type\":\"user.interrupt\",\"createdAt\":\"2026-09-03T08:30:16.420Z\",\"targetEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\ndata: {\"eventId\":\"38e397c80d5a4f3ba7916df3bbf0a936\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:31:01.000Z\",\"reason\":\"terminated\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\"}\n\n"
         },
         "exampleScope": "receipt-and-closing-confirmed-output-fields-candidate"
+      },
+      {
+        "id": "200-tool-success",
+        "status": "200",
+        "tabLabel": "200 · 工具成功与空参数",
+        "label": "OK",
+        "summary": "独立场景，同一消息请求；工具无需确认，args={}；JSON 文本仍是一个 text 块，成功不返回 errorCode。",
+        "headers": {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"e0000000000000000000000000000002\",\"type\":\"agent.tool_call\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"createdAt\":\"2026-09-04T08:30:16.000Z\",\"toolCallId\":\"call_read_01\",\"toolName\":\"CallMateTool\",\"arguments\":{\"tool\":\"inspect_campus_ports\",\"args\":{}},\"requiresConfirmation\":false}\n\ndata: {\"eventId\":\"e0000000000000000000000000000003\",\"type\":\"agent.tool_result\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"createdAt\":\"2026-09-04T08:30:17.000Z\",\"toolCallId\":\"call_read_01\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ports\\\":[]}\"}],\"isError\":false}\n\ndata: {\"eventId\":\"e0000000000000000000000000000004\",\"type\":\"agent.message\",\"phase\":\"completed\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"createdAt\":\"2026-09-04T08:30:18.000Z\",\"content\":\"未找到符合条件的端口。\"}\n\ndata: {\"eventId\":\"e0000000000000000000000000000005\",\"type\":\"session.status_idle\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"createdAt\":\"2026-09-04T08:30:19.000Z\",\"reason\":\"done\"}\n\n"
+        }
+      },
+      {
+        "id": "200-execution-failed",
+        "status": "200",
+        "tabLabel": "200 · 接受后模型失败",
+        "label": "OK",
+        "summary": "消息已接受；确已退出并提交失败终态后返回 failed，不把 HTTP 200 当作成功。",
+        "headers": {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "default": "data: {\"eventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"type\":\"user.message\",\"createdAt\":\"2026-09-03T08:30:15.123Z\",\"content\":[{\"type\":\"text\",\"text\":\"请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"e0000000000000000000000000000001\",\"type\":\"session.status_idle\",\"createdAt\":\"2026-09-04T08:30:20.001Z\",\"sourceEventId\":\"b7ef45d40a854c33af7a36df871a21e8\",\"reason\":\"failed\",\"errorCode\":\"MODEL_REQUEST_FAILED\",\"message\":\"模型请求失败。\"}\n\n"
+        }
       },
       {
         "id": "400-invalid-session-id",
@@ -311,7 +342,7 @@
         "status": "409",
         "tabLabel": "409 · SESSION_BUSY",
         "label": "Conflict",
-        "summary": "SSE Header 发出前：user.message 的数据库准入检查发现 Session 不为 idle，包括已有消息执行中、等待工具确认或停止尚未完成；拒绝本次新消息，不写入已接受事件历史、不排队、不启动模型。拒绝语义已确认，409/SESSION_BUSY 沿用当前候选错误表达，完整错误契约仍待评审。",
+        "summary": "SSE Header 发出前：user.message 的数据库准入检查发现 Session 不为 idle，包括已有消息执行中、等待工具确认或停止尚未完成；拒绝本次新消息，不写入已接受事件历史、不排队、不启动模型。拒绝语义已确认，采用 409/SESSION_BUSY，完整错误契约已补齐。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN",
@@ -416,12 +447,153 @@
             "resMsg": "User event acceptance failed."
           }
         }
+      },
+      {
+        "id": "409-interrupt-target-mismatch",
+        "status": "409",
+        "tabLabel": "409 · INTERRUPT_TARGET_MISMATCH",
+        "label": "Conflict",
+        "summary": "中断目标不是当前未完成消息。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INTERRUPT_TARGET_MISMATCH",
+            "resMsg": "中断目标不是当前未完成消息。"
+          },
+          "en-US": {
+            "resCode": "INTERRUPT_TARGET_MISMATCH",
+            "resMsg": "The interrupt target is not the current unfinished message."
+          }
+        }
+      },
+      {
+        "id": "409-interrupt-already-requested",
+        "status": "409",
+        "tabLabel": "409 · INTERRUPT_ALREADY_REQUESTED",
+        "label": "Conflict",
+        "summary": "该执行已接受停止请求。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INTERRUPT_ALREADY_REQUESTED",
+            "resMsg": "该执行已接受停止请求。"
+          },
+          "en-US": {
+            "resCode": "INTERRUPT_ALREADY_REQUESTED",
+            "resMsg": "A stop request has already been accepted for this execution."
+          }
+        }
+      },
+      {
+        "id": "409-execution-stopping",
+        "status": "409",
+        "tabLabel": "409 · EXECUTION_STOPPING",
+        "label": "Conflict",
+        "summary": "该执行正在停止，不能再确认工具调用。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EXECUTION_STOPPING",
+            "resMsg": "该执行正在停止，不能再确认工具调用。"
+          },
+          "en-US": {
+            "resCode": "EXECUTION_STOPPING",
+            "resMsg": "This execution is stopping and cannot accept a tool confirmation."
+          }
+        }
+      },
+      {
+        "id": "503-event-service-unavailable",
+        "status": "503",
+        "tabLabel": "503 · EVENT_SERVICE_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "确认尚未接受时的数据库/执行依赖暂不可用；提交结果不确定时不使用此错误宣称未接受。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_SERVICE_UNAVAILABLE",
+            "resMsg": "事件服务暂不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "EVENT_SERVICE_UNAVAILABLE",
+            "resMsg": "The event service is temporarily unavailable. Try again later."
+          }
+        }
+      }
+    ],
+    "contractSections": [
+      {
+        "title": "输入、接受与竞争规则",
+        "description": "一次只接受一个事件。字段格式在 VO 校验，执行/工具状态在事务内复核。",
+        "columns": [
+          "请求/场景",
+          "规则"
+        ],
+        "rows": [
+          [
+            "user.message",
+            "沿用既有 content[] 约束：text 1..262144 UTF-16 单元且不可全空白；fileId 为 32 位十六进制，最多四个不重复。仅 idle 接受并原子改为 running。"
+          ],
+          [
+            "user.tool_confirmation",
+            "toolCallId 非空并在当前 Session 内解析；result=allow/deny；denyMessage 仅 deny 允许，最大 4096 UTF-16 单元；未知字段、显式 null、非法 type、非对象参数均拒绝。"
+          ],
+          [
+            "中断目标",
+            "targetEventId 非空、原样匹配当前原消息。Session 不运行为 SESSION_NOT_RUNNING；运行但目标不同为 INTERRUPT_TARGET_MISMATCH；同目标已请求停止为 INTERRUPT_ALREADY_REQUESTED。"
+          ],
+          [
+            "确认竞争",
+            "停止已提交则 EXECUTION_STOPPING；否则非当前唯一待确认 toolCallId（含重复确认）为 TOOL_CONFIRMATION_NOT_PENDING。确认先提交仍允许后续中断续跑，工具最多执行一次。"
+          ],
+          [
+            "跨实例确认",
+            "事务持久化决定并绑定原执行/续跑段；执行实例独立批量读取并续跑。接收实例按固定段补读完整权威事件；不持久化 preview，不调用公共 ListEvents 作内部总线。回执先行，第一条对应 idle 后关闭。"
+          ],
+          [
+            "凭据与故障",
+            "原执行内存凭据保留至 M1 实际结束，包含确认等待；控制 POST 凭据不覆盖原执行、不落盘。实例丢失不自动接管或重跑；等待超时断流并对账，不伪造已停止。"
+          ],
+          [
+            "未接受错误",
+            "非法参数 400、不存在 404、状态冲突 409、临时依赖/容量 503、确认回滚的内部错误 500。接受后或提交不确定不能返回“未接受”语义；已开始 SSE 不再拼接 ResultBean。"
+          ]
+        ]
+      },
+      {
+        "$ref": "contractSections.events0"
+      },
+      {
+        "$ref": "contractSections.events1"
+      },
+      {
+        "$ref": "contractSections.events2"
+      },
+      {
+        "$ref": "contractSections.events3"
       }
     ]
   },
   "review": {
-    "status": "合并方向已确认 · 事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 五个基础类型名已确认 · 合并接口评审中 · 完整 user.* 首帧回执已确认 · 结束规则已确认 · 中断推送分工已确认 · 数据库中断机制已确认 · 单消息准入已确认 · 中断查询优化已确认 · agent.message 完整正文字符串已确认 · 工具调用参数 JSON 对象已确认 · 工具结果内容块数组已确认 · 工具结果仅文本已确认 · Mate 调用保留 Runtime 包装已确认 · 工具结果 isError 已确认",
-    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。2026-09-04 用户要求合并 POST 提交和 GET 实时推送：改为同一 POST SSE。原独立 JSON 成功响应已被替代；用户进一步明确允许首帧返回本次完整 user.* 回执，含 eventId，只回执一次，不广播其他用户输入。S3 按这一明确选择调整。S4 仅适用已撤销的只读流，不能用于免除 POST 的工具令牌。用户进一步确认结束规则：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭，之后通过新的确认 POST 接收续跑结果。等待确认只结束本次 HTTP 交互，不代表任务成功。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。单消息准入已确认：同一 Session 的 M1 未执行完成前，不接受任何调用方提交的下一条 user.message M2，也不将 M2 排队或写入已接受事件历史。接受 user.message 时，在同一数据库短事务中锁定 Session、复核 state=idle、写入消息和内部执行身份，并将 state 改为 running；提交成功后才启动执行并返回完整回执。该约束按 Session 生效，覆盖不同用户和服务实例。M1 等待工具确认、正在停止或仅响应断开时仍未完成，Session 保持 running；等待确认的 session.status_idle 只结束本次 SSE，不能据此开放下一条消息。M1 真正完成或实际停止且结束状态提交后，Session 才恢复 idle。user.interrupt 和 user.tool_confirmation 按各自控制条件接受，不受新消息的 idle 前置条件阻挡。中断查询优化已确认：同实例在停止请求提交成功后立即通知对应执行，跨实例继续批量检查，数据库轮询兜底保留；固定内部执行身份是等待结果的去重键，同一目标只查一次，再分别通知本机仍连接的响应。先登记等待再补读已提交终态，避免登记前后完成导致漏发；本地通知和补读共用每条响应的终态去重，完整回执先行，同一终态每条响应最多投递一次，慢连接互不阻塞。最后一个等待者离开只清理本机登记，不删除停止请求或终态。查询索引按实际 GaussDB 版本、执行计划与 100 并发压测选择，不预先冻结具体索引、500 毫秒周期、批次上限或工具/中断等待超时。本次不冻结数据库字段、检查周期、其余并发竞态、idle reason 具体值或故障处理细节，不整体确认合并接口，2026-09-06 用户明确要求开始修改历史接口，因此当前评审切换到 ListEvents；本 POST 的未决项仍保留，不视为整体通过。 独立 abort、steers、follow-ups 接口已退役。停止执行通过 user.interrupt 完成；调整方向为确认实际停止后新提交 user.message，不提供原生运行中 Steer。本期不支持 FollowUp 排队，未来数据库交接方案仅记录在专题设计中，启用另行评审；不新增当前输入类型、字段或排队回执。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 其他字段和两个接口整体仍待评审。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。 剩余问题按用户要求统一在 ListEvents 的 B01～B15 批量评审，不再逐字段提问。",
+    "status": "合并方向已确认 · 事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 五个基础类型名已确认 · 目标契约已定稿 · 完整 user.* 首帧回执已确认 · 结束规则已确认 · 中断推送分工已确认 · 数据库中断机制已确认 · 单消息准入已确认 · 中断查询优化已确认 · agent.message 完整正文字符串已确认 · 工具调用参数 JSON 对象已确认 · 工具结果内容块数组已确认 · 工具结果仅文本已确认 · Mate 调用保留 Runtime 包装已确认 · 工具结果 isError 已确认 · B01～B15 已确认 · 可进入实现",
+    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；B04 现已明确完整事件使用 Claw 形成权威记录时的 UTC 毫秒时间，GET/POST 复用一次保存值。2026-09-04 用户要求合并 POST 提交和 GET 实时推送：改为同一 POST SSE。原独立 JSON 成功响应已被替代；用户进一步明确允许首帧返回本次完整 user.* 回执，含 eventId，只回执一次，不广播其他用户输入。S3 按这一明确选择调整。S4 仅适用已撤销的只读流，不能用于免除 POST 的工具令牌。用户进一步确认结束规则：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭，之后通过新的确认 POST 接收续跑结果。等待确认只结束本次 HTTP 交互，不代表任务成功。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。单消息准入已确认：同一 Session 的 M1 未执行完成前，不接受任何调用方提交的下一条 user.message M2，也不将 M2 排队或写入已接受事件历史。接受 user.message 时，在同一数据库短事务中锁定 Session、复核 state=idle、写入消息和内部执行身份，并将 state 改为 running；提交成功后才启动执行并返回完整回执。该约束按 Session 生效，覆盖不同用户和服务实例。M1 等待工具确认、正在停止或仅响应断开时仍未完成，Session 保持 running；等待确认的 session.status_idle 只结束本次 SSE，不能据此开放下一条消息。M1 真正完成或实际停止且结束状态提交后，Session 才恢复 idle。user.interrupt 和 user.tool_confirmation 按各自控制条件接受，不受新消息的 idle 前置条件阻挡。中断查询优化已确认：同实例在停止请求提交成功后立即通知对应执行，跨实例继续批量检查，数据库轮询兜底保留；固定内部执行身份是等待结果的去重键，同一目标只查一次，再分别通知本机仍连接的响应。先登记等待再补读已提交终态，避免登记前后完成导致漏发；本地通知和补读共用每条响应的终态去重，完整回执先行，同一终态每条响应最多投递一次，慢连接互不阻塞。最后一个等待者离开只清理本机登记，不删除停止请求或终态。查询索引按实际 GaussDB 版本、执行计划与 100 并发压测选择，不预先冻结具体索引、500 毫秒周期、批次上限或工具/中断等待超时。数据库字段和检查周期按实现校准；B07～B11 已确认结束原因、控制竞态、关联和故障语义，当前 GET/POST 目标契约已定稿、待实现。 独立 abort、steers、follow-ups 接口已退役。停止执行通过 user.interrupt 完成；调整方向为确认实际停止后新提交 user.message，不提供原生运行中 Steer。本期不支持 FollowUp 排队，未来数据库交接方案仅记录在专题设计中，启用另行评审；不新增当前输入类型、字段或排队回执。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 字段按 B01～B15 补齐，两个接口可进入实现。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。 B01～B15 已由用户批量确认，不再逐字段提问。 B01～B15 已确认：四组全部按推荐。旧候选表述由本轮完整字段与错误码表替代；数字容量仍按实现校准，不重开单字段评审。 用户已一次提交四组 A-recommended，并要求无新增问题则完成后通知实现任务；B01～B15 语义已确认，精确字段和码值据此补齐，无新增产品确认门槛。",
     "questions": [],
     "confirmedEventTypes": [
       "agent.message",
@@ -446,7 +618,11 @@
       "L7-tool-result-content": "A-content-blocks",
       "L8-tool-result-types": "A-text-only",
       "L9-mate-tool-identity": "A-runtime-wrapper",
-      "L10-tool-result-outcome": "A-is-error"
+      "L10-tool-result-outcome": "A-is-error",
+      "BATCH-20260908-1-tools": "A-recommended",
+      "BATCH-20260908-1-events": "A-recommended",
+      "BATCH-20260908-1-lifecycle": "A-recommended",
+      "BATCH-20260908-1-integration": "A-recommended"
     },
     "decisionHistory": {
       "M8-control-retirement": {
@@ -520,15 +696,26 @@
         "date": "2026-09-08",
         "source": "用户通过 CLAW ListEvents 评审页选择 L10-tool-result-outcome=A-is-error。",
         "status": "仅确认每条工具结果必有 isError 布尔值，成功 false、失败 true，同步 GET 历史与 POST SSE。工具结果仍为文本块数组；错误码、文案、空文本、块数量与接口整体不随此项确认。"
+      },
+      "batch-20260908-1": {
+        "date": "2026-09-08",
+        "source": "用户一次提交四组 A-recommended；确认 B01～B15 语义，精确整稿随后核对。",
+        "choices": {
+          "BATCH-20260908-1-tools": "A-recommended",
+          "BATCH-20260908-1-events": "A-recommended",
+          "BATCH-20260908-1-lifecycle": "A-recommended",
+          "BATCH-20260908-1-integration": "A-recommended"
+        },
+        "status": "B01～B15 已确认；报文、枚举和错误码表按该语义统一补齐，不再逐字段提问。实现校准项及整稿核对单独保留。"
+      },
+      "delivery-20260908": {
+        "source": "用户已一次提交四组 A-recommended，并要求无新增问题则完成后通知实现任务；B01～B15 语义已确认，精确字段和码值据此补齐，无新增产品确认门槛。",
+        "status": "implementation-ready；数值校准在实现阶段完成。"
       }
     },
-    "pendingReview": [
-      "数据库控制记录的字段、约束及实测索引选型、检查周期和超时响应；跨完成边界的迟到中断、确认续跑与中断竞争（单消息准入及中断查询优化已确认）",
-      "具体事件字段、thinking 内容、idle reason、heartbeat、容量与错误细节",
-      "合并 POST 接口整体确认"
-    ],
+    "pendingReview": [],
     "promptPrefix": "Claw Session Events v2 合并接口评审：POST /sessions/{sessionId}/events",
-    "promptSuffix": "既有请求、Header、eventId、排序、S1/S2、完整首帧、对应 idle 关闭、中断推送分工及数据库中断机制、单消息准入及中断查询优化已确认；当前不引入 Redis。继续评审数据库控制细节、周期与故障边界、跨完成边界的迟到中断、确认与中断竞争及具体输出字段，不重复询问已确认机制，不自动确认整个接口或修改 Mate 公共契约。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 不重开已确认的正文结构。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 不重开已确认的工具参数结构。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 不重开已确认的工具结果容器。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 空文本、数量和错误细节仍待评审。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 不重开已确认的 Mate 工具名称与参数投影。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。 不重开已确认的成败标记；错误码及文案继续待评审。",
+    "promptSuffix": "已确认目标契约，待实现；后续变更同步唯一 JSON、HTML、设计与图，不把静态验证当作运行时完成。",
     "interruptOptimization": {
       "authority": "committed-database",
       "localWakeup": "after-commit-only",
@@ -543,6 +730,10 @@
       "interruptWaitTimeoutMs": null,
       "toolTimeoutMs": null
     },
-    "batchReviewRef": "02-list-session-events.json#review.batchReview"
+    "batchReviewRef": "02-list-session-events.json#review.batchReview",
+    "deliveryState": "implementation-ready",
+    "implementationCalibration": [
+      "数据库字段、约束、实测索引、检查周期、超时数值与容量上限按实现验证；保留策略沿用现有部署，无策略时不新增自动清理。"
+    ]
   }
 }

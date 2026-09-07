@@ -2,13 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.48.0 |
-| 状态 | 保留十个目标 operation；Events 以 v2 部分确认稿为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
-| 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 与公共命令边界待对齐 |
+| 文档版本 | 1.49.0 |
+| 状态 | 保留十个目标 operation；Events 以 v2 已确认目标契约为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
+| 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 已按 B13/B14 对齐；Mate 公共命令独立管理 |
 | 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的八项保留契约与两项 Events v2 模型 |
 | 人类评审契约 | [统一当前接口页](chat-api-review.html)，由 [唯一清单](接口契约/catalog.json) 生成 |
 | 对外机器契约 | 不维护；结构化 JSON 只作为 HTML 生成源，不替代已废弃 OpenAPI |
-| 端到端传输结论 | 两跳均为 HTTP；Runtime POST Events 保留请求级 SSE，POST Command 返回普通 JSON；公共命令待独立评审 |
+| 端到端传输结论 | 两跳均为 HTTP；Runtime POST Events 保留请求级 SSE，POST Command 的 Builtin 返回 JSON、Skill 返回 SSE；公共命令待独立评审 |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
@@ -32,10 +32,10 @@
 | Registry 初始候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599` |
 | Registry 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并；最新差距见通用模块证据表 |
 | GET 候选实现 | `7759481a1722422395d46564129827c6ee6df204`，未发布，不能作为已上线契约 |
-| 更新日期 | 2026-09-07 |
+| 更新日期 | 2026-09-08 |
 
 本轮退役独立 `/abort`、`/steers`、`/follow-ups`，清单见 [总览 §4](README.md#4-当前目标-http-接口清单)。
-[合并 POST](chat-api-review.html#submitSessionEvent) 与 [历史查询](chat-api-review.html#listSessionEvents) 采用 v2，均未整体确认。
+[合并 POST](chat-api-review.html#submitSessionEvent) 与 [历史查询](chat-api-review.html#listSessionEvents) 采用 v2，目标契约已定稿、待实现。
 旧 POST/GET 字段、类型和分页示例已移除，仅可从 Git 历史追溯。管理规则见 [统一维护规则](chat-api-index.md)。
 [FollowUp 未来设计](chat-follow-up-future-design.md) 只记录扩展方向，本期不支持排队。
 本次源码基线 dfb90cac4e233e09a0b8f047f7e9f4682f5ad238，路径及差异见该专题；不改实现。
@@ -59,7 +59,7 @@ Builtin POST 在 Handler 完成后返回普通 ResultBean JSON。
 `sessionId`。Runtime POST Events 对附件只接受 `fileIds`，当前实现不解析或下载文件内容，
 而是把 ID 按固定 `[File IDs]` 提示块附加到用户消息。
 
-普通消息端到端传输采用两跳 HTTP+SSE；Runtime Command 使用普通 JSON：浏览器先调用 mate-service 公共 HTTP，
+普通消息端到端传输采用两跳 HTTP+SSE；Runtime Command 的 Builtin 使用 JSON、Skill 使用 SSE：浏览器先调用 mate-service 公共 HTTP，
 mate-service 再调用本文定义的 CampusClaw 内部 HTTP。公共边界独立认证；CampusClaw
 全部 operation 携带调用上下文 Header，但 Runtime 不执行凭据认证，并在内部事件进入公共边界前完成安全投影。
 mate-service 不得把内部 SSE 字节透明转发给浏览器。公共 mate-service 的路径、VO、
@@ -191,7 +191,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 | `agentId` | string | 创建后不可变的 Agent 绑定 |
 | `modelId` | string | Session 当前默认模型；允许后续切换 |
 | `state` | `idle \| running` | 只回答 Session 当前是否存在 active execution |
-| `thinking` | boolean | 是否对后续用户消息启用深度思考；同时控制 GET Events 是否返回已持久化的 thinking completed |
+| `thinking` | boolean | 是否对后续用户消息启用深度思考；既有已公开摘要保持历史可见，不随之后关闭而隐藏 |
 | `displayName` | string or null | Session 显示名称；由 `/name` 查看或修改 |
 | `lifetimeUsage` | Usage | Session 创建以来持久化 Assistant 与 Compaction Usage 的原子累计值 |
 | `createdAt` | RFC 3339 timestamp | Session 创建时间 |
@@ -214,9 +214,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
 boolean：`false` 映射为 `off`；`true` 使用当前模型和 Agent 配置的受管非 `off`
-推理强度，不把具体等级开放给调用方。该开关还控制事件可见性：POST Events 按接受
-用户事件时的快照决定是否生成 thinking 生命周期事件；GET Events 按查询时 Session
-当前值决定是否返回已持久化的 `assistant.thinking.completed`。
+推理强度，不把具体等级开放给调用方。POST Events 按接受用户事件时的快照决定是否生成可公开的 thinking 摘要；GET Events 返回已保存的公开摘要，不因后续关闭开关而隐藏，也不返回私有推理。每页继续检查当前访问边界。
 
 GetSession 使用 `displayName` 返回名称，但不返回 `name` 别名、`historySeq`、完整 `transcript`、
 `queuedSteer`、`phase`、`attached` 或 `locked`。用户可见会话名称属于
@@ -301,10 +299,12 @@ owner 信息。删除操作仍携带调用上下文 Header，但 Runtime 不执�
 - [GET 历史查询](chat-api-review.html#listSessionEvents)：[普通分页与恢复设计](chat-events-v2-history-design.md)。
 
 当前三类输入为 user.message、user.interrupt、user.tool_confirmation；请求级 SSE、
-eventId、不公开内部序号和普通分页采用已确认决定，两个操作仍未整体确认。
+eventId、不公开内部序号、普通分页与 B01～B15 已确认，精确契约可进入实现。
 旧 message/fileIds 报文、event/id 帧和错误规则不作为兼容别名保留。
 
-#### 2.2.1 公共 Session 压缩能力（保留能力，事件映射待评审）
+#### 2.2.1 公共 Session 压缩能力（内部算法与已确认公共映射）
+
+本节 `session.compaction.*` 为内部事件和历史实现符号；公共层只输出完整 `session.compacted`，不公开摘要、内部边界或 started/failed。具体映射见历史设计与统一契约。
 
 压缩属于 `ManagedAgentSession`，不属于已删除的 TUI Host。默认配置沿用
 `enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`；`enabled=false` 同时关闭
@@ -354,8 +354,7 @@ Session lifetime Usage。`willRetry=true` 时，持久化 payload 还包含不�
 以 [ListEvents v2](chat-events-v2-history-design.md) 为唯一依据：完整事件与 POST 同形，
 按服务端返回顺序展示，用 eventId 去重；普通整数分页默认 50、最多 200，不返回 total。
 旧不透明 page、entryId/entrySeq 和完整旧响应示例已移除。内部模型上下文恢复仍是独立投影。
-配置、thinking 与压缩事件的 v2 映射未整体确认；下文涉及旧事件名的保留接口说明
-仅表示待联动评审，不构成另一份 Events 契约。
+配置、thinking、压缩与 Usage 已按 B05/B12 对齐；公共投影见统一契约，内部事件不直接透传。
 
 ### 2.4 模型与 Session 配置
 
@@ -400,13 +399,13 @@ Agent 配置中的稳定顺序，不分页。`models` 可以为空；Session 保
 Runtime 必须实时确认目标模型仍属于上述可选集合；不存在、未绑定或调用方无权使用
 统一返回 `422 MODEL_NOT_AVAILABLE`，不泄露模型目录。成功后只改变后续
 `user.message` 使用的 Session 默认模型，不影响已完成消息，但原子追加持久化
-`session.model.changed`，原因为 `requested`。响应复用完整 SessionResource，使调用方一次刷新 `modelId`、
+`session.model_changed`，原因为 `requested`。响应复用完整 SessionResource，使调用方一次刷新 `modelId`、
 `updatedAt` 和新 `ETag`：
 
 若切换前 `thinking=true`，但目标模型不支持深度思考，Runtime 在同一原子配置变更
 中将 `thinking` 归一为 `false`，而不是留下不可执行的 Session 配置。目标模型支持
 深度思考时保持原值。能力归一化同时追加原因为 `modelCapability` 的
-`session.thinking.changed`；两个领域事件与 Session 配置、资源版本在同一事务提交。
+`session.thinking_changed`；两个领域事件与 Session 配置、资源版本在同一事务提交。
 
 #### 2.4.3 PUT Session Thinking
 
@@ -418,10 +417,8 @@ Runtime 必须实时确认目标模型仍属于上述可选集合；不存在、
 非 `off` 推理强度。调用方不选择 `minimal/low/medium/high/xhigh/max` 等具体等级。
 当前模型不支持深度思考时，请求 `true` 返回 `422 THINKING_NOT_SUPPORTED`；请求
 `false` 始终允许。变更只作用于之后接受的 `user.message` 是否生成 thinking 事件，
-不会改变已开始执行的快照；同时立即改变后续 GET Events 对已持久化
-`assistant.thinking.completed` 的可见性。关闭时只过滤、不删除已存记录；再次开启会
-重新显示当前分支中已有的 thinking completed。实际值改变时原子追加原因为
-`requested` 的 `session.thinking.changed`；同值请求不追加事件。成功响应复用完整
+不会改变已开始执行的快照；后续关闭不隐藏既有公开摘要。GET 始终按保存值和当前访问边界读取。实际值改变时原子追加原因为
+`requested` 的 `session.thinking_changed`；同值请求不追加事件。成功响应复用完整
 SessionResource 和新 `ETag`。
 
 两个 PUT 都不接收 `Idempotency-Key`。Session 正在执行时返回
@@ -433,8 +430,8 @@ SessionResource 和新 `ETag`。
 管理面 `refresh(agentId)` 成功只发布新目录，不改动 active execution 的模型、thinking
 或工具快照。空闲 DB Session 在下一次 `POST Events` 接受消息前读取新目录；若当前模型
 仍具备凭据则保持不变，失效时切换到具备凭据的新 default，并按
-`session.model.changed(reason=agentRefresh)`、必要的
-`session.thinking.changed(reason=modelCapability)`、`user.message` 顺序原子写入和投影。
+`session.model_changed(reason=agentRefresh)`、必要的
+`session.thinking_changed(reason=modelCapability)`、`user.message` 顺序原子写入。配置校准记录只进入 GET 历史；本次 SSE 首个业务帧仍是 user.message，不能先发配置事件。
 没有有效 default 时本次请求在 SSE 建立前失败，既不改变 Session，也不接受 User Entry。
 
 ![HTTP Session 模型与深度思考配置](设计图/会话配置/http_session_model_configuration.svg)
@@ -454,8 +451,7 @@ SessionResource 和新 `ETag`。
 ### 2.6 Built-in Command（已确认，目标实现）
 
 Builtin 与 Skill Command 由用户统一负责设计、实现和集成。
-共享 GET 轻量清单及 Builtin 普通 JSON 已确认；Skill 请求联合类型、执行结果、公共命令边界
-与 Events 衔接仍待评审。本节只说明 HTTP 边界，不重复维护命令业务规则。
+共享 GET 轻量清单、Builtin 普通 JSON，以及 B13/B14 的 Skill 请求、SSE 与恢复规则已确认；Mate 公共命令独立管理。本节只说明 HTTP 边界，不重复维护命令业务规则。
 
 | 接口 | 精确模型 | 设计职责 |
 |---|---|---|
@@ -477,7 +473,7 @@ Builtin Handler 完成后返回普通 ResultBean JSON，不建立命令 SSE。
 [Builtin §8](../../04-命令与技能/01-内置命令/README.md#8-json-与错误)。
 不产生通用命令生命周期或 Name 历史；这不改变 POST Events 的独立 SSE 契约。
 所有成功结果移除 command、changed、sourceEventSeq；内部领域 Entry 不变。
-不以新命令包装或 eventId 替代这些字段，不据此决定尚待评审的 Events v2 衔接。
+不以新命令包装或 eventId 替代这些字段，Skill 分支复用 Events v2，详细行为见 [Skill 设计](../../04-命令与技能/02-技能命令/README.md)。
 
 #### 2.6.2 Help：Agent 元数据使用指南
 
@@ -495,13 +491,13 @@ Command 不削弱本文 §2.4 既有 PUT 的 If-Match/ETag 语义。
 
 ![命令与权威 Session 状态](设计图/Command/command_authoritative_state.svg)
 
-[PlantUML 源码：`command_authoritative_state`](设计图/Command/diagram.puml#L44)
+[PlantUML 源码：`command_authoritative_state`](设计图/Command/diagram.puml#L54)
 
 #### 2.6.4 Compact 的执行生命周期
 
 [Compact 生命周期](../../04-命令与技能/01-内置命令/README.md#7-compact-生命周期)维护空历史、
 独立终态 Future、容量/Holder 清理和断线不取消规则；本文 §2.2.1 保留压缩算法与恢复边界。
-停止方向为 user.interrupt，目标绑定和响应衔接继续评审，不恢复独立 Abort 或排队续跑。
+user.interrupt 只绑定原 user.message.eventId。手工 Compact 没有该原消息，不伪造目标或扩大中断范围；正在手工压缩时仍按现有忙状态拒绝新消息。当前不新增 Compact 专用取消接口。
 
 POST Command 的凭据只由请求范围对象保留；非 Compact 到 Handler 完成，
 Compact 到 Active Holder 的本次压缩执行结束。仅实际 Mate tool execute 可以发送；
@@ -512,7 +508,7 @@ Spring 单例不保存原始凭据。共享安全约束见 §7，精确 Header �
 | 边界 | 普通操作 | 实时执行 | 标识范围 | 当前评审状态 |
 |---|---|---|---|---|
 | 浏览器/UI → mate-service | 独立 HTTP 请求与响应 | 消息 SSE；公共命令协议需独立重审 | 公共 `chatId` | 旧公共命令 SSE 提案已废止，不推导新协议 |
-| mate-service → CampusClaw | 本文十个 HTTP operation，Command 为普通 JSON | 仅 `POST /events` 输出请求级 SSE | 内部 `sessionId` | 操作 12 为共享轻量清单；13 保留 Builtin JSON，Skill POST 待评审 |
+| mate-service → CampusClaw | 本文十个 HTTP operation，Builtin Command 为 JSON | `POST /events` 与 Skill Command 输出请求级 SSE | 内部 `sessionId` | 操作 12 为共享轻量清单；13 的 Builtin JSON 与 Skill SSE 已确认 |
 
 两跳不是同一条物理连接，也不是一份字节透明协议。mate-service 需要终止公共认证、
 解析内部事件、移除 Runtime 私有字段、映射安全错误并重新编码公共 SSE。内部
@@ -552,7 +548,7 @@ Spring 单例不保存原始凭据。共享安全约束见 §7，精确 Header �
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。八项保留既有契约，两个 Events 操作仍为 v2 部分确认。所有普通 JSON 响应都
+草案的公司集成约束。八项保留既有契约，两个 Events 操作采用已确认 v2 目标契约。所有普通 JSON 响应都
 遵守同一包装，SSE 事件流和 HTTP
 `204` 无响应体不使用 ResultBean。
 
@@ -827,6 +823,7 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.49.0 | 2026-09-08 | 同步 B01～B15：完整事件、固定公开摘要、配置/压缩/Usage 映射与 Skill SSE；产品语义已定稿，实施数值按校准。 |
 | 1.48.0 | 2026-09-07 | POST Command 成功响应对齐既有 Session/Models 资源与 ETag，移除 command/changed/sourceEventSeq；保留 Help 三业务字段与 Compact/Skills 最小结果，新增跨接口反例校验；GET、请求、错误与 Events v2 不变。 |
 | 1.47.1 | 2026-09-07 | 删除 Command 业务重复副本，改引所属专题；Help 从 Runtime 直接派生；清理废止的历史目标规则，现行报文不变。 |
 | 1.47.0 | 2026-09-07 | 语义合入 ec5492a 的 GET 字段精简、状态过滤与全量清单完整性；保留后续 Help 无参、POST JSON、统一责任和 Events v2，不恢复旧页面。 |

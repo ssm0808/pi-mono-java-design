@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.7 |
-| 状态 | L1～L10 已确认；剩余问题改为 B01～B15 批量评审，整体未确认，target-only |
+| 文档版本 | 0.3.0 |
+| 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，target-only |
 | 更新日期 | 2026-09-08 |
 | 设计仓变更前基线 | `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
 | L5 字段确认前设计仓基线 | `7349cdf2e037700ddf4917eebef0e19799252f47`；沿用下述实现证据，本轮未重新核对实现 |
@@ -11,6 +11,7 @@
 | L7 字段确认前设计仓基线 | `019b2dbfbc85edb23d94ffbda7b4963237286f7e`；Mate 适配补充核对见 §2.1，既有 HTTP 证据不整体升级 |
 | L9 字段确认前设计仓基线 | `33a7344ff3b98e143e98894f6105f53160ab0734`；复核同一 dfb90ca 的 CallMateTool.name/parameters/execute，其他源码证据不变 |
 | L10 字段确认前设计仓基线 | `0f3f58f2f203fe4fe88c308032e1815b1622683b`；沿用工具结果源码证据，本轮只确认 HTTP 目标字段 |
+| 本批确认前设计仓基线 | `9096f1e9ae445e67292c5e7d5a9e0d2ac10d8f5d`；本批语义确认不表示代码已实现 |
 | 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
 | 官方公共契约核对 | Claude Managed Agents，2026-09-06，Beta；只证明公开行为 |
@@ -55,58 +56,78 @@ GET 是一次普通 JSON 读取，不是 SSE，也不是已撤销的 GET stream�
 
 ## 2. 历史返回什么
 
-身份、完整事件同形和已提交顺序沿用已确认目标决定；固定快照已被普通分页替代。下表将这些决定
-应用到 ListEvents；L5 完整正文字符串、L6 工具调用参数 JSON 对象、L7 内容块数组与 L8 工具结果仅文本已确认，其他具体内容字段保留原有评审状态，
-不因复制示例而获得批准。
+L1～L10 与 B01～B15 已确认。精确字段、条件必填、枚举、错误码和语言文案由
+[公共字段源](接口契约-v2/common.json) 的 `eventContract` / `contractSections` 维护，
+渲染到 GET/POST 的统一 HTML；两个操作引用同一份定义，不各写一套。
 
-| 事件 | 历史投影 | 读取意义 |
-|---|---|---|
-| `user.message` | 完整 `eventId/type/createdAt/content[]` | 已接受的消息；拒绝的 M2 不在这里 |
-| `user.interrupt` | 完整中断回执 | 已接受停止请求，不表示实际退出 |
-| `user.tool_confirmation` | 完整确认回执，保留 `toolCallId` | 与对应工具调用关联 |
-| `agent.message` | 仅 `phase=completed`；`content` 字符串已确认 | 用完整正文覆盖同 eventId 的预览 |
-| `agent.thinking` | 仅允许公开的 `phase=completed` | 候选沿用 Session thinking 过滤，不披露原始推理 |
-| `agent.tool_call` / `agent.tool_result` | 完整事件，保留各自 eventId 与共同 toolCallId；调用的 `arguments` JSON 对象、结果的 `content` 文本块数组已确认 | 调用与结果分别计数；缺少结果不能伪造成功 |
-| `session.status_idle` | 完整权威结束记录，同 eventId 只保留一条 | 必须结合对应交互理解，不是当前准入状态 |
+历史读取三类已接受 user.*、完整 agent.message/thinking/tool_call/tool_result、
+session.status_idle，以及模型配置、thinking 配置和压缩完整记录。delta、心跳、连接标记不入历史。
+每条完整记录有服务端 eventId 与保存一次的 UTC 毫秒 createdAt；按内部已提交顺序展示，
+不按时间戳排序。agent.* 和 idle 的 sourceEventId 始终引用原始 user.message.eventId，
+确认续跑不换根消息；中断用 targetEventId 指向它。共享终态只保留一条。
 
-不返回 delta、心跳或连接结束标记，不公开 `entryId/entrySeq/runId/executionId`。
-同一事件在 POST 完整帧与 GET 历史中保持相同身份、时间和业务字段；序列化、脱敏与
-可见性投影不能各实现一套。历史数组不按 `createdAt` 重新排序。
+Agent 正文是字符串，工具 arguments 是对象，工具结果是至少一个纯文本块；允许空 text
+和多个块，禁止 JSON/image 块。真实 Assistant 没有正文可保存 content=""（例如只有工具调用），
+客户端不必画空气泡；不能凭空合成一条回答或把工具文本当成模型回答。
+已知 Usage 随对应完整 Agent 消息保存，不在 delta、thinking 或各个工具事件重复计数。
+无可验证用量时省略而非伪造零；lifetimeUsage 还包括压缩、失败尝试等可计费用量，不能以
+公开消息 usage 简单求和代替 Session 的累计权威统计。
 
-L5 是已确认的目标产品约束：完整回答的 `content` 使用 JSON 字符串。它保留当前候选的
-正文表达，调用方可直接用完整正文替换预览，不增加内容块解析。既有示例已使用字符串，
-因此本轮只收敛字段状态，不改变示例值；不新增附件输出块，也不改变已确认的
-`user.message.content[]`。空内容、长度、thinking、delta 及其他事件字段仍按各自状态评审。
-这不是 Java 或 pi 已实现该 v2 字段的声明，不升级源码基线，也不改变图中的结构和生命周期。
+B05 替代此前尚未确认的“按当前 thinking 开关过滤历史”：开关控制后续执行，已有公开摘要
+不会因关闭而隐藏；读取仍受当前授权和保留策略约束。原始推理、凭据、内部序号、执行 ID、
+Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只决定本次错误 resMsg，
+不重译已保存工具 text 或失败 message；同一事件在 GET 与 POST 必须逐字段相同。
 
-L6 是已确认的目标产品约束：`agent.tool_call.arguments` 使用 JSON 对象，调用方可直接
-读取字段，避免二次 JSON 解析。GET 与 POST 使用相同的脱敏投影；对象内部字段仍由对应
-工具契约决定，本次不统一各工具参数，也不确认其他工具字段或工具结果。现有示例已为
-对象，因此只收敛确认状态，不修改示例值、Runtime 实现或图中结构。
+工具失败由 isError=true 和稳定 errorCode 表达，成功必须省略 errorCode；错误文本经过
+安全投影后保存。未知 Mate 错误映射通用 TOOL_EXECUTION_FAILED，不能分析原始错误文字猜码。
+工具超时只表示调用期限已到，不保证远端副作用停止；整轮失败只有在本地执行确已退出并
+可靠保存后，才发送 reason=failed 的权威 idle。HTTP 断流本身不是失败终态。
 
-L7 是已确认的目标产品约束：`agent.tool_result.content` 使用内容块数组。既有字符串示例
-同步包装为一个 `{"type":"text","text":"原文本"}` 块，成功与失败使用同一容器，不改变
-既有示例的成败标记与错误码值；isError 已由 L10 确认，errorCode 仍候选。保留数组是用户已确认的字段结构，当前一个文本结果
-可直接包装为一个块；不是以本期存在图片或结构化 JSON 输出为前提。
+配置事件保留真实变更的 previous/current 值及既有原因；模型自动回退的 agentRefresh 和
+模型能力关闭 thinking 的 modelCapability 不因 v2 改名丢失。配置事件不进入模型上下文，
+只在历史展示；自动压缩可在对应执行 SSE 展示，手动 compact 保持 JSON。
+压缩摘要和 firstKeptEntryId 等恢复数据留在内部，不把提示词、私有摘要和内部关联直接返回。
+全部旧持久化类型必须逐类映射或明确不公开理由；未知持久化类型报 EVENT_LIST_FAILED，
+不能静默跳过后声称完整。
 
-L8 是用户进一步明确的本期产品约束：当前工具只返回文本，公共 content[] 仅包含
-`type=text` 与字符串 `text`，Mate 亦如此。不提供 JSON 块、图片块或自动类型识别；文本即使
-是 JSON 字符串也仍是文本。此前用 Read 图片说明本期数组必要性的理由撤回，不能从
-[旧工具目标契约](../02-CampusClaw工具系统/built-in-tool-contracts.md#1-契约总则)的图片设计
-推导当前 HTTP 支持图片。本轮只收敛接口输出范围，不修改 Runtime 工具实现或重做 Read
-工具专题。空文本、块数量、大小与保留规则仍待评审；内部 details 或 ContentBlock 扩展字段
-不直接进入公共 HTTP VO。
+### 2.0 既有事件的完整迁移清单
 
-八类基础事件不是封闭的最终清单。已有模型/思考配置变更、压缩及 Usage 的 v2 映射
-仍须补齐；其他进度与子 Agent 投影另审。不能以本页未举例为由删除既有能力，也不能
-把旧 `entryId/entrySeq` 报文直接混进 v2。迁移验收前必须为每种持久化记录明确
-映射或有依据的可见性规则；未知记录不能静默丢弃后宣称历史完整。
+源码基线为 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，以下旧名称来自
+`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventType.java`
+与同目录 `RuntimeEntryCodec.java` 的各 Entry 工厂及恢复投影。此表描述 target-only 架构变更：
+内部原始事件先归一，再经共享完整事件投影供历史与 SSE 使用；旧名称不是兼容 wire 别名。
 
-公开事件历史与模型上下文恢复是两种投影：后者仍由内部消息、工具结果及压缩边界
-恢复，不能直接将 `user.interrupt`、idle 或显示摘要当作模型消息。本轮不修改 Runtime
-内核及 pi 语义，未从其他产品的公开接口推断内部持久化模型。
+| 既有内部类型或记录 | v2 目标投影 / 不公开理由 |
+|---|---|
+| user.message | 完整 user.message；旧存量迁移时生成一次稳定 eventId，保留有序正文与 file 块；内部执行与根消息关联持久化，不能每次查询重新生成 ID |
+| assistant.message.started | 不公开；客户端由第一段 delta 或 completed 建立消息 |
+| assistant.message.delta / completed | agent.message + delta/completed；只有 completed 入历史，完整正文和已知 Usage 保存一次 |
+| assistant.thinking.started | 不公开；不需要额外开始记录 |
+| assistant.thinking.delta / completed | 仅可公开摘要映射 agent.thinking；原始/私有推理只供内部模型上下文，不得当作历史可见摘要 |
+| tool.execution.started | 参数收集完成后投影完整 agent.tool_call，保存 toolCallId、参数对象和确认标记 |
+| tool.execution.delta / completed | 不单独公开；内部工具进度不构成新的业务历史或通用命令生命周期 |
+| tool.result | 完整 agent.tool_result；至少一个 text 块、必填 isError，失败映射稳定安全码 |
+| session.model.changed / session.thinking.changed | session.model_changed / session.thinking_changed；保留真实 previous/current 与原有 reason，只进入历史 |
+| session.compaction.started / failed | 不单独公开；内部压缩过程与恢复判断保留，最终整轮确实失败时才产生 failed idle；手工 Compact 失败仍按其 JSON 错误契约 |
+| session.compaction.completed | 完整 session.compacted；内部摘要、恢复边界和独立 Usage 仍保留供恢复与累计，不进入公共 payload |
+| session.status.idle | 对应 session.status_idle；持久化真实 reason/原消息 sourceEventId，确认等待边界与实际执行终态区分 |
+| stream.end / stream.error | 连接级信号不入历史；正常 EOF 跟随对应 idle，不能把断线编造成业务失败 |
+| 独立 Usage 累计记录、私有 thinking/Skill 展开上下文、树结构控制记录 | 不作为额外公共事件；分别用于 lifetimeUsage、模型恢复和分支重建，不能重复计费或泄露私有上下文 |
+
+存量未保存的公开摘要或精确因果关联不能凭空补造。实现应提供一次可重跑的迁移/兼容读取方案，
+对缺少安全映射的历史显式报错并提示迁移处理；不得逐次分配新 ID 或静默丢弃后声称历史完整。
+本次静态契约校验不证明旧数据迁移已实现。
 
 ### 2.1 Mate 工具的文本返回与源码边界
+
+本批仍复核 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`：
+`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java`
+的 modelChangedEntry/thinkingChangedEntry/compactionEntry/usageRecord/appendPublicPayload
+证明当前已有配置、压缩和独立 Usage 存储；当前 appendToolResultPayload 会按读取 locale 生成
+errorMessage，时间还会使用模型 timestamp。目标共享投影将其改为固定完整事件时间、保存安全
+错误文本、纯文本块、sourceEventId 和已知 usage 归属。这是本批源码差距，不是字段重命名即可完成。
+旧 `campusclaw/.../com/huawei/hicampus/claw/...` 证据继续保留，各路径均相对实现仓。
+
 
 2026-09-08 重新读取 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`
 的下列实现；这是对相同 commit 的 Mate 返回链路补充核对，不替换旧工具专题的其他结论。
@@ -114,9 +135,9 @@ L8 是用户进一步明确的本期产品约束：当前工具只返回文本�
 
 | 源码证据 | 已观察行为 |
 |---|---|
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:340` · `toToolResult` | Claw 客户端读取 `resCode/resMsg/result`；仅 `resCode` 文本值为 `0` 时成功，把非空 result 用 `JsonNode.toString()` 序列化，metadata 为 null。result 缺失或 null 时当前返回空字符串；这不是本轮确认的空结果规则。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:340` · `toToolResult` | Claw 客户端读取 `resCode/resMsg/result`；仅 `resCode` 文本值为 `0` 时成功，把非空 result 用 `JsonNode.toString()` 序列化，metadata 为 null。result 缺失或 null 时当前返回空字符串；B03 保留空文本语义，并将字符串 result 改为 asText()，对象/数组仍序列化。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/mate/MateToolClient.java` · `ToolResult` | 内部结果是 `String content`、`Map metadata`、`boolean isError`，没有保留原始 JSON 节点或图片块。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java:46` · `name/parameters/execute` | 工具名为 CallMateTool；Schema 的 tool 为业务工具名，args 为对象且可省略，执行时缺省为 Map.of()。L9 只固定公开包装，不在本轮额外确认省略 args 的事件归一方式。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java:46` · `name/parameters/execute` | 工具名为 CallMateTool；Schema 的 tool 为业务工具名，args 为对象且可省略，执行时缺省为 Map.of()。L9 固定包装；B03 已确认公共事件中补齐 args={}。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java:101` · `execute` | 成功时包装一个 TextContent；metadata 进入 AgentToolResult.details。错误时抛出 MateToolExecutionException。 |
 | `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java` · `invokeTool/failureResult/toToolResultMessage` | 普通执行异常转成文本块和 isError=true，最终 ToolResultMessage 保留工具调用关联、内容块及内部 details；after hook 仍可调整结果。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateToolsTool.java` · `stableJson/textResult` | 工具发现的 scope/tools 清单也序列化为一个文本块，只保留 name/description/inputSchema，不返回内部工具 ID 或 outputSchema。 |
@@ -131,12 +152,12 @@ L8 是用户进一步明确的本期产品约束：当前工具只返回文本�
 它符合 L7 的数组容器与 L8 的文本约束，不自动把 JSON 中的 URL、Base64 或 `content` 字段识别为其他类型的块。
 `details/metadata` 也不因此进入公共历史或 SSE；既有工具契约将 details 定位为内部扩展位。
 L9 已确认公开调用保留 Runtime `CallMateTool({tool,args})` 包装；既有直接业务工具名示例
-已同步替换。isError 已由 L10 确认；稳定错误码及脱敏文案映射仍保留原有评审状态。
+已同步替换。isError 已由 L10 确认；稳定错误码及脱敏文案按 B01 确认语义和共享错误码表投影。
 
 用户明确仅文本后，尚未确认的独立 JSON 块候选撤回。Mate 返回复用现有文本结果；调用方
 展示 text，不把某段恰好可解析的 JSON 当作稳定跨工具业务对象。没有公共 `structuredContent`，
 也不新增 Mate 原始 ResultBean 信封。Mate result 为字符串时当前 `JsonNode.toString()` 会保留
-JSON 字符串的引号与转义；原始 result 的服务端形状和文本归一细节尚未核对，不隐式改变解包规则。
+JSON 字符串的引号与转义；服务端实现仍未核对；B03 已确认目标适配去掉字符串 result 的 JSON 引号/转义，保留对象/数组为 JSON 文本，差异属于产品约束。
 
 L9 是已确认的目标产品约束：Mate 调用的 `toolName=CallMateTool`，arguments 保留
 `{tool,args}`，与实际调用及 Schema 一致。业务工具名只放在 `arguments.tool`，原业务参数
@@ -150,9 +171,9 @@ L10 是已确认的目标产品约束：每条完整工具结果必须带 `isErr
 失败为 true。既有示例已使用该字段，因此本轮只确认字段契约，不改变示例值。该表示
 沿用 Java ToolResultMessage 与固定 pi 的 isError 语义，调用方无需解析文本判断成败；
 不增加 status 枚举或执行中状态。GET 与 POST 共用同一结果投影，失败仍返回文本块，
-具体错误码、文案、空文本和块数量规则继续待评审。
+错误码、文案、空文本和块数量按 B01/B02 的确认语义落入当前共享表。
 
-失败错误码、空文本与 Mate 归一等剩余语义统一纳入 §8 的批量建议；原 L11 单字段问卷撤下。现有 TOOL_CALL_DENIED 示例仍为候选，不能当作错误码集合已确认。
+B01～B03 已确认失败码、空文本与 Mate 归一；原 L11 单字段问卷不再恢复。错误码的具体字符串和中英文表已按确认语义写入精确契约。
 
 ## 3. 已确认：普通数字页码
 
@@ -178,7 +199,7 @@ Service 校验页码、数量及偏移计算边界，拒绝溢出或无法支持
 51～75 条。这不是顺序错误，也不需要把新记录排除。稳定位置的前提是分支、过滤、
 保留范围和页大小不变，且新增事件只追加到可见顺序尾部；写侧的依赖检查和有序提交继续有效。
 
-分支切换、thinking 过滤改变、记录清理或可见权限变化可能使已有位置移动。调用方
+分支切换、访问权限改变、记录清理或可见权限变化可能使已有位置移动。调用方
 获知变化后重新从 `page=1` 加载；每页独立复核当前访问边界，不能返回已撤权内容。
 没有跨页身份，本接口不承诺自动发现这些变化，也不承诺跨页完全无重复、无遗漏。
 eventId 去重只能消除重复，不能弥补漏项；重新加载用于重新建立完整的当前列表。
@@ -192,8 +213,7 @@ L2/L3 已确认：默认 `limit=50`、上限 `200`，成功 result 只保留 `ev
 的页码返回 `200`，`result.events=[]`、`result.nextPage=null`；不返回 `204` 或空正文，
 也不因没有记录而报 `INVALID_EVENT_LIST_QUERY`。此产品约束表示查询成功但没有匹配记录，
 不表示 Session 执行完成。前提是 Session 存在、访问检查通过且查询成功；不能把不存在、
-非法参数或读取失败转成空成功。非法页码或 limit 的 `400 / INVALID_EVENT_LIST_QUERY`
-及其他错误细节继续待评审，不存在游标解密/过期错误。
+非法参数或读取失败转成空成功。非法页码或 limit 返回 `400 / INVALID_EVENT_LIST_QUERY`；其他读取错误见精确模型，不存在游标解密/过期错误。
 
 ## 4. 断线、确认和中断怎样展示
 
@@ -209,7 +229,7 @@ L2/L3 已确认：默认 `limit=50`、上限 `200`，成功 result 只保留 `ev
   读取结果中的实时尾部保留独立顺序，后续补读再对账，不凭时间戳猜测跨通道顺序。
 - 缺少首帧时不能按“文本相同”唯一识别提交；空历史、超时或本次查询缺少某条事件
   都不证明 POST 未接受。不得自动重发。若需要自动判定某次提交或跨执行终态归属，
-  还须单独确认关联机制，本轮不擅自增加请求 ID、执行 ID 或幂等键。
+  B09 已通过原消息 eventId 明确已知回执后的归属；B10 接受首回执丢失的不确定性，不新增请求 ID、执行 ID 或幂等键。
 
 ## 5. 源码证据与差距
 
@@ -253,9 +273,15 @@ Java 文件相对根路径为
 
 ![普通分页与尾部追加](设计图/事件历史查询/target_event_history_paging.svg)
 
-[PlantUML 源码：target_event_history_paging](设计图/事件历史查询/diagram.puml#L56)
+[PlantUML 源码：target_event_history_paging](设计图/事件历史查询/diagram.puml#L58)
 
 ## 7. 实施切片与验收
+
+新增批次验收：原消息归属在普通输出/续跑/失败/中断中不漂移；迟到中断拒绝新执行；
+失败缺码/成功带码/非布尔 isError/非文本块被拒绝；GET/POST 与 Skill 完整帧同形；
+后续关闭 thinking 不隐藏已有摘要；配置、压缩与 Usage 投影不泄露内部 ID；
+Skill 展开前回执、绑定变更重检、内部上下文恢复与保留策略保持一致。
+
 
 1. 先补完整记录的稳定身份和共享投影骨架。POST 与 GET 同一完整事件逐字段相等；
    保留三种用户回执、工具关联及唯一停止记录，不泄露内部 ID 或凭据。
@@ -279,36 +305,30 @@ Java 文件相对根路径为
 8. L10 验收每条完整工具结果均带布尔 isError，成功 false、失败 true；缺失、null、
    数字或字符串不符合该字段契约，不能以 status 或错误文本替代。
 
-当前交付是契约示例与静态验证，不包含上述运行时测试的通过声明。完整字段、扩展事件、
-其他错误及保留期确认后，才能将本操作标为整体通过并替换 v1。
+当前交付是契约示例与静态验证，不包含上述运行时测试的通过声明。B01～B15 语义已确认，精确报文与码值已补齐，可进入实现。部署与数据库数值仍需实现校准。
 
-## 8. 剩余问题一次批量确认（待确认建议）
+## 8. 批量确认结果
 
-批次 `2026-09-08.1`。用户明确要求一起确认，替代逐项提问；L1～L10 保持已确认。
-精确问题和选项由当前 ListEvents JSON 的 `review.questions` / `review.batchReview` 维护，
-统一 HTML 显示四组问题，可一次提交或直接回复“全部按推荐；Bxx 改为……”。默认选中不是批准。
-本批确认列出的产品语义；确认后统一补齐报文、错误码表、示例和验收，再整体核对，不再逐字段提问。
+批次 `2026-09-08.1`，用户一次提交 tools/events/lifecycle/integration 四组 A-recommended，
+B01～B15 语义全部确认，L1～L10 保持确认。本次确认已实际提交；用户要求完成后通知实现任务，不增加整稿确认门槛。
+本批确认前设计为 `9096f1e9ae445e67292c5e7d5a9e0d2ac10d8f5d`。表中保留获确认的推荐内容，
+具体字段与码值按上文共同源展开；实现校准项不要求用户逐个拍数值。
 
-范围是 `/campusclaw-service/v1` 下的 GET/POST `/sessions/{sessionId}/events` 及其配置、
-Skill 联动；不修改 Mate 公共 API。下表都是 target-only 建议，尚未改变现有示例或原契约。
-B09 增加控制目标/输出关联字段、B13 为 Skill 选择 SSE 是需要明确确认的架构变更；
-B01 脱敏、B14 信任和访问复核是安全加固，其余公开行为为产品约束。新建议没有对应已实现声明。
-依据是本页 §2/§5 的已核对 Java/pi 证据、当前 POST 流设计，以及
-[已确认 Builtin 请求](接口契约/操作/13-execute-session-command.json)、
-[通用命令设计](../../04-命令与技能/00-Slash-Command通用模块/README.md) 和
-[Skill 待实现边界](../../04-命令与技能/02-技能命令/README.md)。本轮不升级实现源码基线或托管产品核对日期。
+范围为 Claw 内部 Events、配置和 Skill；Mate 公共 API 不随本批修改。B09 的目标/关联字段和
+B13 Skill SSE 是架构变更；B01 脱敏、B14 信任边界是安全加固，其余公开行为为产品约束。
+类名与装配仍是 target-only 实施骨架，不声称现有 Java 已实现。
 
-| 编号 | 需要决定的内容 | 推荐方案（未确认） |
+| 编号 | 需要决定的内容 | 已确认方案 |
 |---|---|---|
 | B01 | 失败错误码 | 失败时必有稳定 errorCode，成功时省略；区分用户拒绝、参数错误、工具不存在、超时和执行失败。文案放在 text，使用脱敏可展示信息；不透传 Mate 原始错误码、异常栈或凭据。 |
 | B02 | 空文本与大小 | 工具结果至少一个 text 块，允许 text=""，不强制只有一块；没有正文时不伪造 Agent 回答。沿用工具自身的有说明截断；HTTP 不静默截断完整事件。大小上限由实现校准，超限必须明确失败或断流并可查历史。 |
-| B03 | Mate 文本归一 | CallMateTool 缺省 args 在公开事件中补 {}；Mate result 为字符串时直接作为文本，对象/数组变为 JSON 文本，null 为 ""。这是待确认的适配调整，当前客户端对字符串使用 JSON 序列化的实现将有变化。 |
+| B03 | Mate 文本归一 | CallMateTool 缺省 args 在公开事件中补 {}；Mate result 为字符串时直接作为文本，对象/数组变为 JSON 文本，null 为 ""。这是已确认的适配调整，当前客户端对字符串使用 JSON 序列化的实现将有变化。 |
 | B04 | 时间与增量 | 完整事件 createdAt 使用 Claw 形成该权威记录时的 UTC 毫秒时间，保存一次，GET/POST 复用；delta 使用 content 字符串，只含新增文本，沿用同一 eventId，不带 createdAt。completed 覆盖预览，之后忽略迟到 delta。 |
-| B05 | Thinking 展示 | 只展示可公开摘要，不暴露原始推理。thinking 开关决定后续执行是否产生摘要；之后关闭开关不隐藏此前已公开的历史摘要，读取仍受当前权限约束。此项替换尚未确认的“按当前开关过滤历史”候选。 |
+| B05 | Thinking 展示 | 只展示可公开摘要，不暴露原始推理。thinking 开关决定后续执行是否产生摘要；之后关闭开关不隐藏此前已公开的历史摘要，读取仍受当前权限约束。此项已替换原先尚未确认的“按当前开关过滤历史”候选。 |
 | B06 | 工具确认标记 | 每个完整 agent.tool_call 都带 requiresConfirmation 布尔值；本期顺序发出需确认调用，同一执行一次只挂起一个待确认 toolCallId。允许/拒绝后分别续跑，拒绝产生 isError=true 的工具结果。 |
 | B07 | 结束原因 | session.status_idle.reason 固定 done、failed、terminated、confirming；confirming 只结束当前 SSE，Session 继续 running。failed 携带稳定 errorCode 和可展示 message；工具失败可由 Agent 继续处理，不自动等同于整轮 failed。 |
 | B08 | 控制请求竞争 | 确认与中断在同一执行的事务内重检；停止请求先提交，则拒绝确认；确认先提交，中断仍可停止续跑。重复/过期确认返回 409，不重复执行工具；等待超时不伪造已停止。 |
-| B09 | 防止误停下一轮 | 建议给 user.interrupt 增加必填 targetEventId，引用原 user.message 的 eventId；不匹配当前执行时返回 409。agent.* 和 idle 用 sourceEventId 引用同一原消息，便于历史对账。复用已有事件身份，不新增 runId/executionId；这是需要你确认的字段扩展。 |
+| B09 | 防止误停下一轮 | 给 user.interrupt 增加必填 targetEventId，引用原 user.message 的 eventId；不匹配当前执行时返回 409。agent.* 和 idle 用 sourceEventId 引用同一原消息，便于历史对账。复用已有事件身份，不新增 runId/executionId；这是已确认的字段扩展。 |
 | B10 | 断线与回执丢失 | 保留无自动写重试的方案：没有收到首帧时显示“提交结果不确定”，不靠相同文本猜测成功，不新增幂等键。收到回执后按 eventId 和 B09 的关联补读历史；断流本身不取消执行，也不代表失败。 |
 | B11 | HTTP 故障与心跳 | 接受前：非法参数 400、不存在 404、状态冲突 409、容量/依赖暂不可用 503、内部失败 500，统一 ResultBean；接受后不得伪装成未接受。SSE 已开始则不改成 JSON，能保存权威失败则发送 failed，否则断流并对账。采用 : ping 注释心跳；慢客户端可丢 preview，完整帧不能入队则断开。 |
 | B12 | 配置、压缩与用量 | 模型/思考配置变更和压缩保留独立完整事件，映射到统一 v2；Usage 放在对应完整 Agent 消息，Session 保留累计用量。不新增通用 command 生命周期、进度或子 Agent 公共事件；已有内部记录逐类标明公开映射或不公开理由。 |
@@ -319,17 +339,18 @@ B01 脱敏、B14 信任和访问复核是安全加固，其余公开行为为产
 B09 的原因是只凭 Session “当前执行”无法区分迟到的旧中断与新一轮；复用原消息 eventId
 可以拒绝错误目标，也让 GET 历史中的终态可归属。B10 仍承认首回执丢失的不确定性，
 B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发一次 Agent 执行，复用
-普通事件及恢复规则；Builtin 已确认 JSON 行为不因此改变。具体联合 VO 和错误码表在本批确认后整稿同步。
+普通事件及恢复规则；Builtin 已确认 JSON 行为不因此改变。具体联合 VO、错误码表和完整示例已同步到当前 HTML，作为统一实施契约。
 
 以下是实现校准项，不再要求用户逐个拍数值：数据库表字段/约束与索引、轮询周期/批次、
 心跳周期、工具/停止等待超时、事件与缓冲上限。需要依据实际 GaussDB、网关和容量测试确定；
-不得把候选 500 毫秒或 15 秒当作本批默认批准。错误/超时的可观察语义仍需遵循 B02/B07～B11。
+不得把候选 500 毫秒或 15 秒当作本批默认批准。错误/超时的可观察语义仍需遵循 B02/B07～B11。当前不新增 Maven 依赖，使用现有 JDK/Jackson 完成类型化投影；实际实现若新增依赖仍须按通用规则披露。
 B15 不编造公司保留天数；已有策略可在同一答复补充，缺少配置不新增自动删除。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.3.0 | 2026-09-08 | 记录用户四组全部按推荐确认 B01～B15；补齐共享事件字段、错误码、源消息关联、配置/压缩/Usage 与 Skill 示例，作为统一实施契约。同步相关类图、正文与校验，运行时仍 target-only。 |
 | 0.2.7 | 2026-09-08 | 确认 L10：每条工具结果必有布尔 isError，成功 false、失败 true；同步 POST；按用户要求撤下 L11 单字段问题，集中 B01～B15 为一次批量评审。沿用 dfb90ca/pi 证据，建议未确认，图不变。 |
 | 0.2.6 | 2026-09-08 | 确认 L9 Mate 调用保留 CallMateTool/{tool,args}，同步 GET/POST 示例；复核同一源码基线的工具名及 Schema。继续 L10 成败标记评审，结果仅文本及既有决定不变，图不变。 |
 | 0.2.5 | 2026-09-08 | 确认 L7 内容块数组与 L8 本期仅文本并同步 POST；撤回 JSON/图片块候选及图片动机。补充 dfb90ca 的 Mate 返回链路与固定 pi 证据；L9 工具身份映射、其他细节及整体仍待评审，图不变。 |

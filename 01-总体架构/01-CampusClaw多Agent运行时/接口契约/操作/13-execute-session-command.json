@@ -4,8 +4,8 @@
     "operationKey": "executeSessionCommand",
     "method": "POST",
     "path": "/sessions/{sessionId}/command",
-    "summary": "执行一个 Builtin 命令并返回对应业务资源",
-    "description": "本页展示已确认的 Builtin 开发切片：help、status、name、model、thinking、compact 和 skills。Builtin 与 Skill Command 由用户统一负责设计、实现和集成，最终共享 HTTP 入口的命名与请求联合类型在发布前统一对齐；Skill 具体契约继续评审。Service 将省略或 null 的 arguments 归一为空字符串，Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Compact 复用权威领域 Entry。Compact 被接受后断线不取消，结果不确定时通过 GET Session/Events 对账，不自动重放 POST。本接口额外必填 access-token。Claw 从请求读取四项凭据，非 Compact 命令只在内存中保留到本次命令处理结束；Compact 仅在 Active Holder 保留到压缩及本次压缩执行结束。仅随实际 Mate tool execute 原名发送，不写入 Session、事件或日志，不进入 Prompt，也不随工具发现、模型或其他请求发送；Claw 不解析或校验凭据。 Help 已确认改为 Agent 使用指南：只取 Session 绑定 Agent 最近成功发布的一份完整本地缓存，不消费命令清单，不调用 prepare、refresh、远端 Mate、模型或 Tool，不写历史或模型上下文、不占执行容量。AgentRuntime 的 userCases 必须完成保存与重载往返；旧缓存显式刷新前缺场景返回 []。三个介绍字段同取一份 PreparedAgentRuntime，读取与发布复用 Agent 级锁，不取 Session 执行锁。元数据仅作不可信纯文本展示，不执行 HTML、脚本或自动加载远程图片。 响应对齐既有 API：status/name/thinking 查询及 name/model/thinking 修改统一返回 GET Session 的完整资源与 ETag；model 查询返回 GET Models 的 currentModelId/models。仅复用业务响应 VO 和投影，不调用其他 Controller；Session 资源与 ETag 同取权威查询快照或锁内更新结果，不从旧命令清单拼接。Help、Compact、Skills 无对应独立 API，保留最小业务结果，不新增公共路径。所有成功结果删除 command、changed、sourceEventSeq，不新增类型判别或命令回执包装；调用方依据自身请求区分响应。配置同值成功保留原 updatedAt/ETag，不写领域 Entry。",
+    "summary": "执行 Builtin（JSON）或 Skill（SSE）命令",
+    "description": "本页展示已确认的 Builtin 开发切片：help、status、name、model、thinking、compact 和 skills。Builtin 与 Skill Command 由用户统一负责设计、实现和集成，B13/B14 已确认共享命令入口，Builtin 返回 JSON，Skill 返回与 POST Events 相同的请求级 SSE。Service 将省略或 null 的 arguments 归一为空字符串，Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。Builtin 成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Compact 复用权威领域 Entry。Compact 被接受后断线不取消，结果不确定时通过 GET Session/Events 对账，不自动重放 POST。本接口额外必填 access-token。Claw 从请求读取四项凭据，非 Compact 命令只在内存中保留到本次命令处理结束；Compact 仅在 Active Holder 保留到压缩及本次压缩执行结束。仅随实际 Mate tool execute 原名发送，不写入 Session、事件或日志，不进入 Prompt，也不随工具发现、模型或其他请求发送；Claw 不解析或校验凭据。 Help 已确认改为 Agent 使用指南：只取 Session 绑定 Agent 最近成功发布的一份完整本地缓存，不消费命令清单，不调用 prepare、refresh、远端 Mate、模型或 Tool，不写历史或模型上下文、不占执行容量。AgentRuntime 的 userCases 必须完成保存与重载往返；旧缓存显式刷新前缺场景返回 []。三个介绍字段同取一份 PreparedAgentRuntime，读取与发布复用 Agent 级锁，不取 Session 执行锁。元数据仅作不可信纯文本展示，不执行 HTML、脚本或自动加载远程图片。 响应对齐既有 API：status/name/thinking 查询及 name/model/thinking 修改统一返回 GET Session 的完整资源与 ETag；model 查询返回 GET Models 的 currentModelId/models。仅复用业务响应 VO 和投影，不调用其他 Controller；Session 资源与 ETag 同取权威查询快照或锁内更新结果，不从旧命令清单拼接。Help、Compact、Skills 无对应独立 API，保留最小业务结果，不新增公共路径。所有成功结果删除 command、changed、sourceEventSeq，不新增类型判别或命令回执包装；调用方依据自身请求区分响应。配置同值成功保留原 updatedAt/ETag，不写领域 Entry。 Skill name 使用 skill:<name>；接受时取完整解析快照，锁内重检绑定、访问和容量，与 user.message 共用单消息准入。Skill 正文只进入原有 Session 内部模型上下文，不能作为系统权限；公开首帧和历史保留展开前调用。Skill 的 Active Holder 使用原始消息执行凭据直到本轮实际结束，支持确认分段及 targetEventId 中断；断线不取消，不新增 commandId 或独立 Skill 全文审计表。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -16,19 +16,19 @@
             "name": "X-HW-ID",
             "value": "credential-jwt",
             "required": true,
-            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           },
           {
             "name": "Authorization",
             "value": "Bearer opaque-token",
             "required": true,
-            "description": "Bearer JWT；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+            "description": "Bearer JWT；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           },
           {
             "name": "access-token",
             "value": "opaque-access-token",
             "required": true,
-            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           }
         ]
       },
@@ -41,19 +41,19 @@
             "name": "X-HW-ID",
             "value": "credential-appkey",
             "required": true,
-            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+            "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           },
           {
             "name": "X-HW-APPKEY",
             "value": "opaque-appkey",
             "required": true,
-            "description": "AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+            "description": "AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           },
           {
             "name": "access-token",
             "value": "opaque-access-token",
             "required": true,
-            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志"
+            "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           }
         ]
       }
@@ -70,7 +70,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "以下为 Builtin 请求约束，不定义 Skill 请求；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。If-Match 和 Idempotency-Key 在 Builtin 请求中没有契约语义，出现时按 INVALID_COMMAND_REQUEST 拒绝。 Help 只接受空参数：arguments 缺省/null/空白由 Service 归一为空；非空参数（包括 model 等命令名）按 INVALID_COMMAND_REQUEST 拒绝，不查询命令详情。",
+      "description": "先列 Builtin 请求约束，Skill 联合分支见下文；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。If-Match 和 Idempotency-Key 在 Builtin 请求中没有契约语义，出现时按 INVALID_COMMAND_REQUEST 拒绝。 Help 只接受空参数：arguments 缺省/null/空白由 Service 归一为空；非空参数（包括 model 等命令名）按 INVALID_COMMAND_REQUEST 拒绝，不查询命令详情。 Skill 联合分支已确认：name=skill:<name>，前缀后的名称严格匹配 Skill 域正则且长 1..64；arguments 可省略/null，由 Service 归一为空字符串，最多 262144 UTF-16 单元；fileIds 可省略为 []，显式 null 拒绝，最多四个不重复的 32 位十六进制 fileId。不接受其他字段、If-Match 或 Idempotency-Key。回执 text 为 /skill:<name>，非空 arguments 前加一个空格并原样追加，再附 file 块；回执整体大小接受前校验。",
       "example": {
         "name": "model",
         "arguments": "model_011CZq2GkV8aD4NwP7sLmXfS"
@@ -138,6 +138,17 @@
           "label": "Skills：查询绑定技能",
           "value": {
             "name": "skills"
+          }
+        },
+        {
+          "label": "Skill：执行 pdf 并流式返回",
+          "description": "Skill 分支单独允许 fileIds；Builtin 的附件拒绝规则不变。",
+          "value": {
+            "name": "skill:pdf",
+            "arguments": "分析附件中的巡检记录",
+            "fileIds": [
+              "7f12d8a380964fdc8518f48be1cf6a42"
+            ]
           }
         }
       ]
@@ -971,10 +982,126 @@
             "resMsg": "Runtime execution capacity is exhausted. Try again later."
           }
         }
+      },
+      {
+        "id": "200-skill-message",
+        "status": "200",
+        "tabLabel": "200 · Skill SSE",
+        "label": "OK",
+        "summary": "Skill 接受后的流式响应：首帧是展开前 user.message，引用同一根消息事件；工具确认、失败、中断和恢复复用 Events v2。",
+        "headers": {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "default": "data: {\"eventId\":\"c0000000000000000000000000000001\",\"type\":\"user.message\",\"createdAt\":\"2026-09-08T02:30:00.000Z\",\"content\":[{\"type\":\"text\",\"text\":\"/skill:pdf 分析附件中的巡检记录\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"c0000000000000000000000000000002\",\"type\":\"agent.message\",\"phase\":\"delta\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"content\":\"正在整理巡检信息。\"}\n\ndata: {\"eventId\":\"c0000000000000000000000000000002\",\"type\":\"agent.message\",\"phase\":\"completed\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"createdAt\":\"2026-09-08T02:30:04.000Z\",\"content\":\"已整理巡检信息，建议先核查上联链路。\"}\n\ndata: {\"eventId\":\"c0000000000000000000000000000003\",\"type\":\"session.status_idle\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"createdAt\":\"2026-09-08T02:30:05.000Z\",\"reason\":\"done\"}\n\n"
+        }
+      },
+      {
+        "id": "503-skill-agent-unavailable",
+        "status": "503",
+        "tabLabel": "503 · SKILL_AGENT_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "仅 Skill 分支；Builtin/Help 既有 422 AGENT_NOT_AVAILABLE 不变。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SKILL_AGENT_UNAVAILABLE",
+            "resMsg": "Skill 所需的完整 Agent 缓存暂不可用。"
+          },
+          "en-US": {
+            "resCode": "SKILL_AGENT_UNAVAILABLE",
+            "resMsg": "The complete Agent cache required for this Skill is temporarily unavailable."
+          }
+        }
+      },
+      {
+        "id": "500-skill-preparation-failed",
+        "status": "500",
+        "tabLabel": "500 · SKILL_PREPARATION_FAILED",
+        "label": "Internal Server Error",
+        "summary": "Skill 解析失败，调用未接受。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SKILL_PREPARATION_FAILED",
+            "resMsg": "Skill 解析失败，调用未接受。"
+          },
+          "en-US": {
+            "resCode": "SKILL_PREPARATION_FAILED",
+            "resMsg": "The Skill could not be prepared; the call was not accepted."
+          }
+        }
+      }
+    ],
+    "contractSections": [
+      {
+        "title": "Builtin / Skill 联合契约",
+        "description": "B13/B14 已确认，以下为精确整稿；普通 Events 不自动解析 Slash。",
+        "columns": [
+          "边界",
+          "Builtin",
+          "Skill"
+        ],
+        "rows": [
+          [
+            "分派",
+            "既有七个精确名称；对应 Handler",
+            "skill:<name>；独立 SkillCommandDefinition/Handler，共用 Registry 快照"
+          ],
+          [
+            "响应",
+            "普通 ResultBean JSON，既有资源/ETag 不变",
+            "200 text/event-stream；首帧 user.message，后续 Agent/Tool/idle 与 Events 完整事件同形"
+          ],
+          [
+            "权限和状态",
+            "既有各命令准入",
+            "完整快照中精确绑定；idle→running 与根消息接受同事务；running 返回 SESSION_BUSY"
+          ],
+          [
+            "错误",
+            "既有 400/404/409/422/500/503",
+            "非法输入 INVALID_COMMAND_REQUEST；不存在或不再绑定 COMMAND_NOT_FOUND；缺完整缓存 SKILL_AGENT_UNAVAILABLE；容量 RUNTIME_CAPACITY_EXCEEDED；接受前解析失败 SKILL_PREPARATION_FAILED；接受后按 Events 失败终态"
+          ],
+          [
+            "快照与恢复",
+            "查询不被当作后续授权",
+            "受理时固定不可变定义、正文和绑定版本；锁内复核可变权威状态。内部上下文持久化足够恢复的展开内容，公开投影剔除正文与私有路径；不在恢复时悄悄换新 Skill 版本。"
+          ],
+          [
+            "容量",
+            "既有命令限制",
+            "参数/附件与普通消息共用上限，展开后模型输入预算另行校验；不截断 Skill 正文后继续执行，不新增 Maven 依赖。"
+          ],
+          [
+            "Skill 请求与凭据",
+            "Skill 调用可声明 Accept: text/event-stream；共享入口按选中的 name 决定响应类别。凭据由原消息 Active Holder 持有至实际结束，confirming 关闭 SSE 不释放执行凭据。"
+          ]
+        ]
       }
     ]
   },
   "review": {
-    "questions": []
+    "questions": [],
+    "confirmedSemanticBatch": "2026-09-08.1",
+    "pendingReview": [],
+    "deliveryState": "implementation-ready",
+    "implementationCalibration": [
+      "数据库字段、约束、实测索引、检查周期、超时数值与容量上限按实现验证；保留策略沿用现有部署，无策略时不新增自动清理。"
+    ],
+    "promptSuffix": "已确认目标契约，待实现；后续变更同步唯一 JSON、HTML、设计与图，不把静态验证当作运行时完成。",
+    "status": "B13/B14 已确认",
+    "notice": " 用户已一次提交四组 A-recommended，并要求无新增问题则完成后通知实现任务；B01～B15 语义已确认，精确字段和码值据此补齐，无新增产品确认门槛。"
   }
 }

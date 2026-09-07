@@ -17,7 +17,7 @@ class CommandResponseContractTest(unittest.TestCase):
         return next(model["operation"] for model in models if model["operation"]["operationKey"] == key)
 
     def cases(self, models):
-        return {item["id"]: item for item in self.operation(models)["responses"] if item["status"] == "200"}
+        return {item["id"]: item for item in self.operation(models)["responses"] if item["status"] == "200" and item["id"] != "200-skill-message"}
 
     @staticmethod
     def result(response):

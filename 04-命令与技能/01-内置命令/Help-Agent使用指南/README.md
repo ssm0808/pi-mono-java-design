@@ -44,7 +44,7 @@
 ## 2. 全局入口与 Help 补充类图
 
 整体系统先看[Slash 完整全局目标类图](../../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)；
-其 [PlantUML 源码](../../00-Slash-Command通用模块/设计图/diagram.puml#L92) 为 Slash 与 Builtin 共用的唯一全局主图。
+其 [PlantUML 源码](../../00-Slash-Command通用模块/设计图/diagram.puml#L95) 为 Slash 与 Builtin 共用的唯一全局主图。
 本专题只下钻 Help 的元数据、缓存和结果投影，不再以 Help 为中心重排全局关系或合并其他命令的职责边界。
 以下类图是局部补充，不代表完整 Command 系统；所有新增类和连接仍为 target-only。
 

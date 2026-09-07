@@ -52,7 +52,7 @@ Runtime Coordinator、执行对象和 Repository 分开表达；仅替换 Help �
 
 ![Builtin 完整全局目标类图](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
 
-[PlantUML 源码](../00-Slash-Command通用模块/设计图/diagram.puml#L92) · [展开原尺寸 SVG](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
+[PlantUML 源码](../00-Slash-Command通用模块/设计图/diagram.puml#L95) · [展开原尺寸 SVG](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
 
 Slash 与 Builtin 共用这一份图源；[Help 元数据补充图](Help-Agent使用指南/README.md#2-全局入口与-help-补充类图)
 和以下核心扩展类图只作下钻，不替代或重排全局主图。

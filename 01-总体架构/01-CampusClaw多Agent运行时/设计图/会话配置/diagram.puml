@@ -20,7 +20,7 @@ title HTTP Session Model and Deep-Thinking Confirmed Configuration
 ' while true maps to a managed non-off level supported by the current model and Agent.
 ' Security hardening: model discovery is Session-scoped and exposes only modelId.
 ' Architecture change: HTTP configuration writes require an idle Session and a matching ETag.
-' Architecture change: completed thinking content becomes conditionally public in POST and GET events.
+' Architecture change: B05 retains published summaries; future thinking changes do not hide history.
 ' Architecture change: actual configuration changes append durable domain events in the same transaction.
 ' Architecture change: target HTTP fields use lowerCamelCase while If-Match keeps its header spelling.
 ' Product constraint: all Runtime operations carry integration-context headers without local validation.
@@ -80,7 +80,7 @@ group Change current model
     opt target model does not support deep thinking
       API -> API : normalize thinking to false
     end
-    API -> Store : atomically update model, thinking, ETag,\nmodel.changed reason requested,\nand optional thinking.changed reason modelCapability
+    API -> Store : atomically update model, thinking, ETag,\nsession.model_changed reason requested,\nand optional session.thinking_changed reason modelCapability
   end
   Store --> API : updated Session resource and ETag
   API -> ResultBeanAdapter : normal(SessionResponseVO)
@@ -100,7 +100,7 @@ group Change future deep-thinking default
   alt requested value equals current value
     API -> Store : no mutation and no domain event
   else thinking changes
-    API -> Store : atomically update thinking, ETag,\nand thinking.changed reason requested
+    API -> Store : atomically update thinking, ETag,\nand session.thinking_changed reason requested
   end
   Store --> API : updated Session resource and ETag
   API -> ResultBeanAdapter : normal(SessionResponseVO)
@@ -118,12 +118,12 @@ note over API,Models
 thinking controls whether deep thinking is enabled.
 The change applies only to executions accepted afterward.
 POST emits thinking events only for executions accepted with true.
-GET includes durable completed thinking only while the current
-Session thinking value is true; old pages expire after a toggle.
+GET retains already published summaries after later toggles.
+Each read checks current access; ordinary pages have no expiry.
 end note
 
 note over API,Store
-Durable model.changed and thinking.changed entries are visible in GET Events.
+Durable session.model_changed and session.thinking_changed entries are visible in GET Events.
 They are audit facts and are not restored as model conversation messages.
 end note
 @enduml

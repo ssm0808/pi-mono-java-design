@@ -7,15 +7,16 @@ class CompositeCommandRegistry
 interface CommandDefinitionSource
 class BuiltinCommandSource
 class SkillCommandSource
-class SkillCommandDefinition <<display only>>
+class SkillCommandDefinition <<target-only executable>>
 BuiltinCommandSource ..|> CommandDefinitionSource
 SkillCommandSource ..|> CommandDefinitionSource
 CompositeCommandRegistry o-- CommandDefinitionSource
 CompositeCommandRegistry --> BuiltinCommandSource : BUILTIN or shared GET
-CompositeCommandRegistry --> SkillCommandSource : shared GET only; complete cache
-SkillCommandSource --> SkillCommandDefinition : existing discovery
+CompositeCommandRegistry --> SkillCommandSource : shared GET / Skill POST; complete cache
+SkillCommandSource --> SkillCommandDefinition : same definition identity
 note right of SkillCommandDefinition
-No Handler.
+Target requires a real Handler.
+Current Java only proves discovery.
 The user owns Builtin and Skill implementation.
 GET hides Skill while running; idle uses lightweight input.
 end note
@@ -54,5 +55,51 @@ note bottom of Loader
 Require a string name in SKILL.md.
 Require exact folder-name equality.
 Invalid files never enter the loaded collection.
+end note
+@enduml
+
+@startuml target_skill_execution
+title Target Skill Execution - Snapshot, Admission and Shared Events
+' Source: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java list/resolved.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java userEntry/toAgentMessages.
+' Source: pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185 packages/coding-agent/src/core/agent-session.ts _expandSkillCommand.
+' Observed behavior: Java discovery captures metadata; pi expands Skill body into model input.
+' Target-only architecture: preserve original public input and a private recoverable expansion.
+' Design reason: reuse one message admission and event projection; do not reinterpret new Skill versions on recovery.
+skinparam shadowing false
+actor Caller
+participant "Command Application" as C
+participant "Skill Execution Service" as S
+participant "Immutable Invocation Snapshot" as I
+participant "Shared Message Application" as A
+database "Session / Context Store" as D
+participant "Runtime / Event Projector" as R
+participant "Event Query Application" as Q
+Caller -> C : POST command: skill:name / arguments / files
+C -> S : selected real Skill Definition
+S -> I : resolve complete Agent / body / binding version
+S -> S : validate expansion budget and trust boundary
+S -> A : original user input + internal expansion snapshot
+group Owning admission transaction
+  A -> D : recheck access / binding / idle / capacity
+  A -> D : append original public user event + private context\nregister root event and set running
+  D --> A : committed receipt and fixed execution
+end
+A --> Caller : SSE: complete original user.message first
+A -> R : execute with in-memory credentials
+R -> D : ordered complete events / safe projection
+R --> Caller : same root sourceEventId; preview best-effort
+R -> D : confirming boundary or actual terminal
+R --> Caller : matching idle; close response
+Caller -> Q : GET Events for reconciliation
+Q -> D : current visible complete history
+D --> Caller : original invocation / output; no private Skill body
+note over I,D
+Freeze parsed body and metadata for this invocation.
+Recheck mutable bindings under owning locks before acceptance.
+Keep recoverable expansion in existing private Session context.
+No separate Skill full-text audit copy; use deployment retention.
+No raw credential persistence or automatic side-effect replay.
 end note
 @enduml

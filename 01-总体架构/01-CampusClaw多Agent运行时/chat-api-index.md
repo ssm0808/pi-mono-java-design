@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.2.0 |
-| 更新日期 | 2026-09-07 |
+| 文档版本 | 1.3.0 |
+| 更新日期 | 2026-09-08 |
 | 设计仓变更前基线 | `2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9`（1.2.0 清理起点） |
 | 变更性质 | 统一维护职责、删除已废止副本；不修改 Runtime 实现或已确认业务行为 |
 | 唯一当前入口 | [当前十项接口](chat-api-review.html) |
@@ -20,11 +20,11 @@
 - [catalog.json](接口契约/catalog.json) 唯一决定当前十项 operation、顺序、精确源和关联设计。每个 method + path 只能出现一次，活动目录中的模型必须全部登记。
 - [chat-api-review.html](chat-api-review.html) 是唯一当前人类接口页，从清单及精确模型生成，不手工编辑 HTML。
 - 八项保留契约继续复用 `接口契约/common.json`；两个 Events 使用 `接口契约-v2/common.json`。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
-- `review` 与 `reviewState` 继续记录原有确认决定；清单中的说明只解释其适用边界，不替代或自动提升确认状态。两个 Events 均未整体确认，当前评审仍是 ListEvents。
+- `review` 与 `reviewState` 继续记录原有确认决定；清单中的说明只解释其适用边界，不替代或自动提升确认状态。B01～B15 已实际提交确认；两个 Events 目标契约已定稿，question 列表清空，数值校准另列。
 - Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；本轮仅清除其已废止 Command POST 内容，保留 GET 投影及待评审公共边界。
 
 已确认的 eventId、无公共 entrySeq、data-only SSE、三输入、普通分页等不回退。
-保留接口中的 thinking、配置与命令事件映射仍需联动评审，统一页在对应接口前标明。
+thinking、配置与 Skill 映射已联动更新，Builtin JSON 保持；公共 Mate 边界独立管理。
 GetSession 与 PUT Thinking 的说明移除已作废 Events 名称及游标指引，参数和响应不变。
 普通整数分页不继承旧不透明 page 的失效规则；不能用旧配置说明覆盖新历史接口。
 
@@ -87,6 +87,8 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 ## 4. 源码边界
 
+1.3.0 按已确认 B01～B15 补齐目标契约，源码证据沿用 Events 与 Skill 专题的 Java `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`、pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185`。新增关系、差异与验证见相应专题；下列 1.0～1.2 记录只说明此前整理工作。
+
 1.0.1 仅删除废弃文档及其生成入口，源码核对沿用 1.0.0 记录，不宣称本次重新核对实现主线。
 不重新分析 Agent Loop 或调整 pi 基线。
 保留既有 Runtime 语义证据 `pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185`，
@@ -111,6 +113,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-09-08 | 关闭 B01～B15 产品待决项；共享 contractSections 维护事件字段与码表，HTML 同步；实现校准独立记录。 |
 | 1.2.0 | 2026-09-07 | 明确各专题唯一维护职责；清除 Mate 废止 POST 副本，Help 直接投影 Runtime，业务决定和未决状态不变。 |
 | 1.1.0 | 2026-09-07 | 同步 GET 精简确认范围和防回退门禁，记录六个未合入分支的语义核查。 |
 | 1.0.1 | 2026-09-07 | 按用户决定直接删除四个旧评审页及迁移占位生成逻辑；修复导航和历史测试引用，增加文件及链接防回流回归。 |

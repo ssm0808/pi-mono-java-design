@@ -43,12 +43,14 @@ RuntimeSessionMapper ..> CommittedEventDTO : maps records
 RuntimeSessionRepository ..> HistoryPageQueryDTO : ordinary page criteria
 note bottom of HistoryPageQueryDTO
   Positive page number and stable per-traversal limit.
-  Resolve current branch and visibility per request.
+  Resolve current branch and current access per request.
   No cross-request snapshot or cursor encryption.
   Recheck access; no retained database connection.
 end note
 note bottom of CommittedEventProjection
-  Same eventId and complete payload for SSE and history.
+  Same eventId, createdAt and complete payload for SSE and history.
+Root sourceEventId references the original user.message.
+Persisted public summaries ignore later thinking switches.
   No credentials, raw delta or execution IDs.
   Not the execution-scoped SessionEventProjector.
 end note
@@ -69,7 +71,7 @@ C -> Q : GET events (page = 1, limit = 50)
 Q -> Q : Validate positive integers and offset bounds
 group Short consistent read transaction
   Q -> D : Check access / existence / visibility
-  Q -> D : Resolve current branch and visibility
+  Q -> D : Resolve current branch and current access
   Q -> D : Read ordered complete events (offset 0, limit + 1)
   D --> Q : First page and one possible extra event
 end
@@ -100,5 +102,6 @@ note over C,Q
   Reload page 1 if branch, filter or page size changes.
   No automatic cross-page change detection is promised.
   No automatic replay of accepted POST requests.
+Use sourceEventId for root ownership, not as a paging cursor.
 end note
 @enduml

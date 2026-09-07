@@ -50,7 +50,7 @@ def render_item(index: int, item: dict, model: dict) -> str:
         f'<code class="catalog-path">{html.escape(operation["path"])}</code></summary>'
         f'<p class="catalog-caveat">{html.escape(item["note"])}</p>'
         '<p class="catalog-links">'
-        f'<a href="{html.escape(item["design"], quote=True)}">设计依据与待决项</a> · '
+        f'<a href="{html.escape(item["design"], quote=True)}">设计依据与实施边界</a> · '
         f'<a href="{html.escape(item["source"], quote=True)}">精确模型</a> · '
         f'<a href="#{key}">此接口链接</a></p>'
         f'<section class="company-api-review" data-operation-review="{key}" data-operation-index="{index}">'
@@ -81,7 +81,7 @@ def build_html() -> str:
 <main id="claw-current-api-catalog">
 <header class="catalog-header"><h1>CampusClaw 当前接口 · {len(models)} 项</h1>
 <code>{html.escape(manifest["basePath"])}</code>
-<p>唯一当前接口入口。两个 Events 使用 v2 部分确认稿；其他八项沿用既有契约，并保留联动待评审说明。设计状态不代表代码已合入或已部署。</p>
+<p>唯一当前接口入口。B01～B15 已全部确认；Events v2、配置映射与 Skill SSE 已统一定稿，可进入实现。设计状态不代表代码已合入或已部署。</p>
 <p>本期不支持 FollowUp 排队；停止通过 user.interrupt，实际停止后才可提交下一条消息。</p>
 <p>展开一个接口查看请求头、参数和响应。旧 Events 报文及三个独立控制接口不再展示。</p>
 <p><a href="chat-api-index.md">维护规则与源码边界</a> · <a href="chat-follow-up-future-design.md">FollowUp 未来设计（本期不启用）</a></p>

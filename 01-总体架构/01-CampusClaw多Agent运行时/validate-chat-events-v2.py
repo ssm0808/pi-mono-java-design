@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,8 @@ MODEL_PATH = ROOT / "接口契约-v2" / "操作" / "01-submit-session-event.json
 HISTORY_PATH = ROOT / "接口契约-v2" / "操作" / "02-list-session-events.json"
 USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
 STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "session.status_idle"}
+HISTORY_TYPES = {"session.model_changed", "session.thinking_changed", "session.compacted"}
+BATCH_CHOICES = {f"BATCH-20260908-1-{group}": "A-recommended" for group in ("tools", "events", "lifecycle", "integration")}
 RETIRED_STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", "tool.result", "session.status.idle"}
 CONFIRMED_CHOICES = {
     "M1-transport": "single-post-sse",
@@ -35,6 +38,7 @@ CONFIRMED_CHOICES = {
     "L9-mate-tool-identity": "A-runtime-wrapper",
     "L10-tool-result-outcome": "A-is-error",
 }
+CONFIRMED_CHOICES.update(BATCH_CHOICES)
 INTERRUPT_OPTIMIZATION = {
     "authority": "committed-database",
     "localWakeup": "after-commit-only",
@@ -55,6 +59,8 @@ RESPONSE_INPUTS = {
     "200-tool-confirmation": "user.tool_confirmation",
     "200-interrupt": "user.interrupt",
     "200-message-interrupted": "user.message",
+    "200-tool-success": "user.message",
+    "200-execution-failed": "user.message",
 }
 
 def require(condition: bool, message: str) -> None:
@@ -108,9 +114,9 @@ def validate_event_ordering_rule(review: dict) -> None:
 
 
 
-def validate_frame(event: dict, receipt: bool = False) -> None:
+def validate_frame(event: dict, receipt: bool = False, history: bool = False) -> None:
     validate_public_payload(event)
-    require(event.get("type") in (USER_EVENT_TYPES if receipt else STREAM_TYPES),
+    require(event.get("type") in (USER_EVENT_TYPES if receipt else STREAM_TYPES | (HISTORY_TYPES if history else {"session.compacted"})),
             "receipt/output event is not in its allowed scope")
     require(isinstance(event.get("eventId"), str) and bool(event["eventId"]), "eventId is required")
     if receipt:
@@ -126,7 +132,7 @@ def validate_frame(event: dict, receipt: bool = False) -> None:
     if event.get("phase") == "delta":
         require("createdAt" not in event and bool(event["content"]), "delta must omit createdAt and be nonempty")
     else:
-        require(isinstance(event.get("createdAt"), str), "complete event requires createdAt")
+        require(isinstance(event.get("createdAt"), str) and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", event["createdAt"]) is not None, "complete event requires createdAt")
     if event["type"] in {"agent.tool_call", "agent.tool_result"}:
         require(bool(event.get("toolCallId")), "toolCallId is required")
     if event["type"] == "agent.tool_call":
@@ -135,13 +141,60 @@ def validate_frame(event: dict, receipt: bool = False) -> None:
         require(type(event.get("isError")) is bool, "every tool result must contain a boolean isError")
         require("status" not in event, "confirmed isError must not be replaced or duplicated by status")
         content = event.get("content")
-        require(isinstance(content, list) and all(isinstance(block, dict) for block in content),
+        require(isinstance(content, list) and len(content) >= 1 and all(isinstance(block, dict) for block in content),
                 "confirmed tool result content must be an array of content blocks")
         require(all(set(block) == {"type", "text"} and block["type"] == "text"
                     and isinstance(block["text"], str) for block in content),
                 "current tool results must contain only public text blocks, never JSON or images")
     if event["type"] == "session.status_idle":
         require(event.get("reason") in {"done", "failed", "terminated", "confirming"}, "invalid candidate reason")
+
+    if event["type"] in STREAM_TYPES:
+        require(isinstance(event.get("sourceEventId"), str) and bool(event["sourceEventId"]), "output needs original message sourceEventId")
+    if event["type"] == "user.interrupt":
+        require(isinstance(event.get("targetEventId"), str) and bool(event["targetEventId"]), "interrupt needs targetEventId")
+    if event["type"] == "agent.tool_call":
+        require(type(event.get("requiresConfirmation")) is bool, "confirmation flag is required")
+        require(isinstance(event.get("toolName"), str) and bool(event["toolName"]), "toolName required")
+        if event["toolName"] == "CallMateTool":
+            require(set(event["arguments"]) == {"tool", "args"} and isinstance(event["arguments"]["tool"], str)
+                    and bool(event["arguments"]["tool"]) and isinstance(event["arguments"]["args"], dict), "Mate wrapper must normalize args object")
+    contract = json.loads(COMMON_PATH.read_text())["eventContract"]
+    if event["type"] == "agent.tool_result":
+        require(event.get("errorCode") in contract["toolErrorCodes"] if event["isError"] else "errorCode" not in event,
+                "failure requires stable code; success omits it")
+        require(not {"errorMessage", "details", "status"}.intersection(event), "no duplicate or private tool fields")
+    if event["type"] == "session.status_idle":
+        if event["reason"] == "failed":
+            require(event.get("errorCode") in contract["executionErrorCodes"] and isinstance(event.get("message"), str)
+                    and bool(event["message"]), "failed idle needs safe code and message")
+        else:
+            require(not {"errorCode", "message"}.intersection(event), "nonfailure idle omits errors")
+    if "usage" in event:
+        require(event["type"] == "agent.message" and event.get("phase") == "completed", "usage only on complete message")
+        usage = event["usage"]
+        tokens = {"input", "output", "cacheRead", "cacheWrite", "totalTokens"}
+        require(isinstance(usage, dict) and tokens <= set(usage) <= tokens | {"cost"}, "usage fields differ")
+        require(all(type(usage[k]) is int and usage[k] >= 0 for k in tokens), "nonnegative token integers required")
+        if "cost" in usage:
+            cost = usage["cost"]
+            require(isinstance(cost, dict) and set(cost) == {"input", "output", "cacheRead", "cacheWrite", "total"}
+                    and all(type(v) in (int, float) and v >= 0 for v in cost.values()), "invalid USD cost")
+    if event["type"] in HISTORY_TYPES:
+        require("phase" not in event, "domain changes are complete")
+        if event["type"] == "session.model_changed":
+            require("sourceEventId" not in event and event.get("reason") in {"requested", "agentRefresh"}
+                    and all(isinstance(event.get(k), str) and event[k] for k in ("previousModelId", "modelId"))
+                    and event["previousModelId"] != event["modelId"], "invalid model change")
+        elif event["type"] == "session.thinking_changed":
+            require("sourceEventId" not in event and event.get("reason") in {"requested", "modelCapability"}
+                    and all(type(event.get(k)) is bool for k in ("previousThinking", "thinking"))
+                    and event["previousThinking"] != event["thinking"], "invalid thinking change")
+        else:
+            require(event.get("reason") in {"manual", "threshold", "overflow"}
+                    and all(type(event.get(k)) is int and event[k] >= 0 for k in ("tokensBefore", "estimatedTokensAfter")), "invalid compaction")
+            require(("sourceEventId" in event) == (event["reason"] != "manual"), "automatic compaction needs root only")
+            require(not {"summary", "firstKeptEntryId", "usage", "_discardedEntryId"}.intersection(event), "private compaction state leaked")
 
 
 def parse_stream(stream: str) -> list[dict]:
@@ -223,6 +276,8 @@ def validate_model(model: dict) -> None:
             completed = {receipt["eventId"]}
             for index, event in enumerate(frames[1:], 1):
                 validate_frame(event)
+                root = receipt["eventId"] if kind == "user.message" else inputs["user.interrupt"]["targetEventId"]
+                require(event.get("sourceEventId") == root, "output must keep the original message identity")
                 require(event["eventId"] not in completed, "no repeated complete event or receipt")
                 if event.get("phase") != "delta":
                     completed.add(event["eventId"])
@@ -239,6 +294,7 @@ def validate_model(model: dict) -> None:
         "args": {"deviceName": "SW-DC-01", "portName": "GigabitEthernet0/0/24"},
     }, "confirmed Mate example must preserve Runtime name and tool/args wrapping")
     interrupt = streams["200-interrupt"]
+    require(interrupt[0]["targetEventId"] == streams["200-message-interrupted"][0]["eventId"], "interrupt target must be original root")
     require(len(interrupt) == 2, "interrupt response must contain only its receipt and matching stop idle")
     require(streams["200-message-interrupted"][-1] == interrupt[-1],
             "original and interrupt responses must deliver the same idle event, including eventId")
@@ -259,8 +315,8 @@ def validate_model(model: dict) -> None:
             "tool result boolean outcome approval must be visible in POST")
     require(set(review["confirmedEventTypes"]) == STREAM_TYPES, "confirmed output type names changed")
     require(review["questions"] == [], "do not reopen confirmed choices")
-    require("合并 POST 接口整体确认" in review["pendingReview"], "whole operation must remain pending")
-    require("合并接口评审中" in review["status"], "do not mark merged operation fully confirmed")
+    require(review["pendingReview"] == [] and review["deliveryState"] == "implementation-ready", "no unapproved product gate remains")
+    require("目标契约已定稿" in review["status"], "target delivery status required")
     require("完整 user.* 首帧回执已确认" in review["status"], "receipt approval must be visible")
     require("结束规则已确认" in review["status"], "closing approval must be visible")
     require("中断推送分工已确认" in review["status"], "interrupt delivery approval must be visible")
@@ -268,9 +324,8 @@ def validate_model(model: dict) -> None:
     for clause in ("同一短事务中绑定具体内部执行", "批量检查本机活动执行的停止请求",
                    "同一条权威结束事件", "当前仅依赖数据库", "Redis 仅在后续有必要时评估"):
         require(clause in operation["description"], f"missing database interruption constraint: {clause}")
-    require("检查周期" in " ".join(review["pendingReview"]), "polling interval must remain pending")
+    require("检查周期" in " ".join(review["implementationCalibration"]), "polling interval needs implementation calibration")
     require("等待工具确认时也关闭" in operation["description"], "confirmation wait must also close the response")
-    require("idle reason" in " ".join(review["pendingReview"]), "closing approval must not confirm reason literals")
     require("三种用户事件均必须携带 access-token" in review["notice"], "preserve three-type token rule")
     require(review["decisionHistory"]["S3-user-events"]["previous"] == "A-user-events-receipt-history-only",
             "record the explicitly superseded S3")
@@ -291,7 +346,7 @@ def validate_negative_regressions(model: dict) -> int:
     changed("JSON success", lambda m: m["operation"]["responses"][0]["headers"].update({"Content-Type": "application/json"}))
     changed("missing token", lambda m: m["operation"]["requestHeaderExamples"][0]["headers"][2].update(required=False))
     changed("reopened receipt", lambda m: m["review"].update(questions=[{"id": "M2-receipt"}]))
-    changed("false approval", lambda m: m["review"].update(pendingReview=[]))
+    changed("reopened product gate", lambda m: m["review"].update(pendingReview=["whole approval"]))
     changed("missing database decision", lambda m: m["operation"].update(
         description=m["operation"]["description"].replace("当前仅依赖数据库", "当前依赖 Redis")))
     changed("missing fixed target", lambda m: m["operation"].update(
@@ -365,9 +420,12 @@ def validate_negative_regressions(model: dict) -> int:
     for outcome in (False, True):
         event = copy.deepcopy(next(e for e in parse_stream(result_stream) if e["type"] == "agent.tool_result"))
         event.update(isError=outcome, content=[{"type": "text", "text": "failed" if outcome else "completed"}])
-        event.pop("errorCode", None)
+        if outcome:
+            event["errorCode"] = "TOOL_EXECUTION_FAILED"
+        else:
+            event.pop("errorCode", None)
         validate_frame(event)
-    for content in ("text", {"type": "text", "text": "text"}, None, 1, True, ["text"], [None],
+    for content in ([], "text", {"type": "text", "text": "text"}, None, 1, True, ["text"], [None],
                     [{"type": "json", "data": {"status": "done"}}],
                     [{"type": "image", "data": "opaque", "mimeType": "image/png"}],
                     [{"type": "text", "text": {"status": "done"}}],
@@ -415,7 +473,7 @@ def validate_negative_regressions(model: dict) -> int:
 def complete_streams(post: dict) -> dict:
     return {item["id"]: [event for event in parse_stream(item["bodies"]["default"])
                          if event.get("phase") != "delta"]
-            for item in post["operation"]["responses"] if item["status"] == "200"}
+            for item in post["operation"]["responses"] if item["status"] == "200" and item["headers"]["Content-Type"] == "text/event-stream"}
 
 
 def validate_history_model(model: dict, post: dict) -> None:
@@ -456,7 +514,7 @@ def validate_history_model(model: dict, post: dict) -> None:
     }, "ordinary pagination is confirmed, without a cross-page snapshot or idle-only restriction")
     proposal = review["historyProposal"]
     require(proposal == {
-        "scope": "current-branch-per-request", "thinkingFilter": "session-policy",
+        "scope": "current-branch-per-request", "thinkingFilter": "persisted-public-summary-current-access",
         "readToolToken": False,
     }, "keep only the remaining candidates, not cursor keys, bindings or expiry")
     require(review["confirmedChoices"] == {
@@ -470,27 +528,13 @@ def validate_history_model(model: dict, post: dict) -> None:
         "L8-tool-result-types": "A-text-only",
         "L9-mate-tool-identity": "A-runtime-wrapper",
         "L10-tool-result-outcome": "A-is-error",
-    } and "ListEvents 接口整体确认" in review["pendingReview"],
+        **BATCH_CHOICES,
+    } and review["pendingReview"] == [] and review["deliveryState"] == "implementation-ready",
             "pagination, completed content, tool arguments and result container are approved, not the whole operation")
-    questions = review["questions"]
-    batch_ids = ["BATCH-20260908-1-tools", "BATCH-20260908-1-events",
-                 "BATCH-20260908-1-lifecycle", "BATCH-20260908-1-integration"]
-    require([question["id"] for question in questions] == batch_ids,
-            "remaining decisions must be reviewed together without reopening L1-L10")
-    for question in questions:
-        options = question["options"]
-        require(len(options) == 2 and {option["value"] for option in options}
-                == {"A-recommended", "B-amend-in-notes"}
-                and sum(bool(option.get("selected")) for option in options) == 1,
-                "batch questions require a recommendation and an amendment choice")
+    require(review["questions"] == [], "do not reopen the confirmed semantic batch")
     batch = review["batchReview"]
-    require(batch["status"] == "proposal" and batch["version"] == "2026-09-08.1",
-            "batch defaults must not become implicit approval")
-    require([item["id"] for item in batch["items"]] == [f"B{i:02}" for i in range(1, 16)],
-            "all fifteen remaining semantic decisions must remain in this batch")
-    descriptions = " ".join(question["options"][0]["description"] for question in questions)
-    require(all(item["recommendation"] in descriptions for item in batch["items"]),
-            "every batch proposal must be visible in the actual confirmation form")
+    require(batch["status"] == "confirmed" and batch["version"] == "2026-09-08.1" and batch.get("confirmedBy"), "record actual batch approval")
+    require([item["id"] for item in batch["items"]] == [f"B{i:02}" for i in range(1, 16)], "retain all fifteen semantic decisions")
     require("L5 已确认" in operation["description"] and "L5 已确认" in review["notice"],
             "completed content approval must be visible in history")
     require("L6 已确认" in operation["description"] and "L6 已确认" in review["notice"],
@@ -510,7 +554,7 @@ def validate_history_model(model: dict, post: dict) -> None:
                    "L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null",
                    "不掩盖非法参数或读取失败",
                    "不能用某条历史 idle 判定现在可提交 M2",
-                   "每页重新检查访问边界", "配置变更、压缩、Usage", "未整体确认 ListEvents 或合并 POST"):
+                   "每页重新检查访问边界", "配置变更、压缩、Usage", "B01～B15 已确认"):
         require(clause in operation["description"], f"missing visible history boundary: {clause}")
     complete = complete_streams(post)
     expected = {
@@ -520,6 +564,9 @@ def validate_history_model(model: dict, post: dict) -> None:
         "200-interrupted": complete["200-message-interrupted"][:-1] + complete["200-interrupt"],
         "200-empty": [],
         "200-out-of-range": [],
+        "200-tool-success": complete["200-tool-success"],
+        "200-execution-failed": complete["200-execution-failed"],
+        "200-skill-message": complete_streams(json.loads((ROOT / "接口契约/操作/13-execute-session-command.json").read_text()))["200-skill-message"],
     }
     results, all_types, errors = {}, set(), set()
     ids = [x["id"] for x in operation["responses"]]
@@ -540,24 +587,27 @@ def validate_history_model(model: dict, post: dict) -> None:
             require(result["nextPage"] is None or
                     (type(result["nextPage"]) is int and result["nextPage"] >= 1),
                     "nextPage must be a positive JSON integer or null, never a string or boolean")
-            require(result["events"] == expected[response["id"]], "history complete records drift from POST frames")
+            if response["id"] != "200-configuration":
+                require(result["events"] == expected[response["id"]], "history complete records drift from POST frames")
+            else:
+                require([e["type"] for e in result["events"]] == ["session.model_changed", "session.thinking_changed", "session.compacted"], "configuration projection coverage")
             seen = set()
             for event in result["events"]:
-                validate_frame(event, receipt=event["type"].startswith("user."))
+                validate_frame(event, receipt=event["type"].startswith("user."), history=True)
                 require(event.get("phase") != "delta", "delta must not enter history")
                 require(event["eventId"] not in seen, "duplicate history event, including shared idle")
                 seen.add(event["eventId"])
                 all_types.add(event["type"])
             results[response["id"]] = result
-    require(set(results) == set(expected), "missing paired page, confirmation, interrupt or empty examples")
-    require(all_types == USER_EVENT_TYPES | STREAM_TYPES, "missing complete event type")
+    require(set(results) == set(expected) | {"200-configuration"}, "missing paired page, confirmation, interrupt or empty examples")
+    require(all_types == USER_EVENT_TYPES | STREAM_TYPES | HISTORY_TYPES, "missing complete event type")
     require(results["200-first-page"]["nextPage"] == 2, "page 1 must continue at page 2")
     require(all(query in operation["requestBody"]["description"]
                 for query in ("?page=1&limit=2", "?page=2&limit=2")), "paired numeric requests required")
     require(all(x["nextPage"] is None for key, x in results.items() if key != "200-first-page"),
             "example page exhaustion must return null")
     require(errors == {("400", "INVALID_SESSION_ID"), ("400", "INVALID_EVENT_LIST_QUERY"),
-                       ("404", "SESSION_NOT_FOUND"), ("500", "EVENT_LIST_FAILED")}, "history error catalog drift")
+                       ("404", "SESSION_NOT_FOUND"), ("500", "EVENT_LIST_FAILED"), ("503", "EVENT_SERVICE_UNAVAILABLE")}, "history error catalog drift")
 
 
 def validate_history_regressions(model: dict, post: dict) -> int:
@@ -582,7 +632,7 @@ def validate_history_regressions(model: dict, post: dict) -> int:
         lambda m: m["review"]["confirmedPagination"].update(maxLimit=500),
         lambda m: m["review"]["confirmedPagination"]["responseFields"].append("total"),
         lambda m: m["operation"]["parameters"][1].update(schema="integer 1..200; default 100"),
-        lambda m: m["review"].update(pendingReview=[]),
+        lambda m: m["review"].update(pendingReview=["whole approval"]),
         lambda m: m["review"]["inheritedRules"].update(deltaHistory=True),
         lambda m: m["review"]["confirmedPagination"].update(fixedSnapshot=True),
         lambda m: m["review"]["confirmedPagination"].update(cursorEncryption=True),
@@ -600,7 +650,7 @@ def validate_history_regressions(model: dict, post: dict) -> int:
         lambda m: m["review"]["questions"].append({"id": "L8-tool-result-types"}),
         lambda m: m["review"]["questions"].append({"id": "L9-mate-tool-identity"}),
         lambda m: m["review"]["questions"].append({"id": "L10-tool-result-outcome"}),
-        lambda m: m["review"].update(questions=[]),
+        lambda m: m["review"]["batchReview"].update(status="proposal"),
         lambda m: next(x for x in m["operation"]["responses"] if x["id"] == "200-out-of-range").update(status="204"),
         lambda m: next(x for x in m["operation"]["responses"] if x["id"] == "200-out-of-range")
                 ["bodies"]["default"]["result"].update(events=None),
@@ -650,7 +700,7 @@ def validate_review_pages(post: dict) -> None:
     validator.validate_executable_script(history_scripts[0])
     visible_history = " ".join(history_parser.visible_text)
     for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "普通分页", "下一页", "确认与续跑历史",
-                 "中断历史", "未整体确认", "默认 50、上限 200 已确认", "不返回 total", "L4 已确认"):
+                 "中断历史", "已确认目标契约", "默认 50、上限 200 已确认", "不返回 total", "L4 已确认"):
         require(text in visible_history, f"no-JavaScript history page missing {text}")
     require(all(f'data-question-id="{key}"' not in history_source
                 for key in ("L1-page-direction", "L2-page-size", "L3-page-metadata", "L4-out-of-range-page",
@@ -668,15 +718,55 @@ def validate_review_pages(post: dict) -> None:
     validate_model(merged)
     validator.validate_executable_script(scripts[0])
     visible = " ".join(parser.visible_text)
-    for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "未整体确认合并接口",
+    for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "已确认目标契约",
                  "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认", "数据库中断机制已确认",
                  "中断查询优化已确认", "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次"):
         require(text in visible, f"no-JavaScript page is missing {text}")
-    require(source.count('data-question-id="BATCH-20260908-1-') == 4
-            and source.count('data-question-id="') == 4
-            and 'data-question-id="L11-tool-result-error-code"' not in source,
-            "show all four remaining decision groups together, not the old L11 question")
+    require('data-question-id="' not in source, "confirmed decisions must not leave another approval form")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
+
+
+def validate_batch_field_regressions(post: dict, history: dict) -> int:
+    streams = complete_streams(post)
+    call = next(e for e in streams["200-confirming"] if e["type"] == "agent.tool_call")
+    failure = next(e for e in streams["200-tool-confirmation"] if e["type"] == "agent.tool_result")
+    success = next(e for e in streams["200-tool-success"] if e["type"] == "agent.tool_result")
+    idle = streams["200-execution-failed"][-1]
+    config = next(r for r in history["operation"]["responses"] if r["id"] == "200-configuration")["bodies"]["default"]["result"]["events"]
+    cases = [
+        (call, lambda e: e.pop("sourceEventId")),
+        (call, lambda e: e.pop("requiresConfirmation")),
+        (call, lambda e: e.update(requiresConfirmation="false")),
+        (call, lambda e: e.update(createdAt="2026-09-08T00:00:00Z")),
+        (failure, lambda e: e.pop("errorCode")),
+        (failure, lambda e: e.update(errorCode="RAW_MATE_ERROR")),
+        (success, lambda e: e.update(errorCode="TOOL_EXECUTION_FAILED")),
+        (success, lambda e: e.update(content=[])),
+        (idle, lambda e: e.pop("message")),
+        (idle, lambda e: e.update(reason="done")),
+        (config[0], lambda e: e.update(reason="model_changed")),
+        (config[0], lambda e: e.update(sourceEventId="unrelated")),
+        (config[1], lambda e: e.update(thinking="false")),
+        (config[2], lambda e: e.update(summary="private")),
+        (config[2], lambda e: e.update(reason="threshold")),
+    ]
+    for event, edit in cases:
+        changed = copy.deepcopy(event)
+        edit(changed)
+        try:
+            validate_frame(changed, history=True)
+        except ValueError:
+            continue
+        raise ValueError(f"batch field regression accepted: {changed}")
+    skill = json.loads((ROOT / "接口契约/操作/13-execute-session-command.json").read_text())
+    frames = complete_streams(skill)["200-skill-message"]
+    request = next(e["value"] for e in skill["operation"]["requestBody"]["examples"] if e["value"]["name"] == "skill:pdf")
+    content = [{"type": "text", "text": "/" + request["name"] + " " + request["arguments"]}]
+    content += [{"type": "file", "fileId": v} for v in request["fileIds"]]
+    require(frames[0]["type"] == "user.message" and frames[0]["content"] == content, "Skill receipt must preserve original invocation and files")
+    require(all(e["sourceEventId"] == frames[0]["eventId"] for e in frames[1:]), "Skill shares original root identity")
+    require(frames[-1]["type"] == "session.status_idle" and frames[-1]["reason"] == "done", "Skill example ends normally")
+    return len(cases)
 
 
 def main() -> int:
@@ -684,20 +774,21 @@ def main() -> int:
         common = json.loads(COMMON_PATH.read_text(encoding="utf-8"))
         model = json.loads(MODEL_PATH.read_text(encoding="utf-8"))
         history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-        require(common["reviewState"] == {"currentOperation": "listSessionEvents", "confirmedOperations": []},
-                "history is current; neither operation is fully approved")
+        require(common["reviewState"] == {"currentOperation": "listSessionEvents", "confirmedOperations": ["submitSessionEvent", "listSessionEvents"], "reviewMode": "completed", "semanticBatch": "2026-09-08.1-confirmed"}, "target contracts ready after confirmed batch")
+        require(common["eventContract"]["detailStatus"] == "implementation-ready", "no extra review gate")
         require(sorted(MODEL_PATH.parent.glob("*.json")) == [MODEL_PATH, HISTORY_PATH],
                 "only POST and GET history remain active, not the retired stream")
         validate_model(model)
         negative_count = validate_negative_regressions(model)
         validate_history_model(history, model)
         history_count = validate_history_regressions(history, model)
+        batch_count = validate_batch_field_regressions(model, history)
         subprocess.run([sys.executable, str(ROOT / "render_chat_api.py"), "--check"], check=True)
         validate_review_pages(model)
     except (KeyError, OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(f"error: {error}")
         return 2
-    print(f"POST SSE and ListEvents contracts valid; {negative_count} POST and {history_count} history negative regressions rejected")
+    print(f"POST SSE and ListEvents contracts valid; {negative_count} POST and {history_count} history and {batch_count} batch field negative regressions rejected")
     print("Static contract validation only; database pagination and runtime concurrency were not executed.")
     return 0
 

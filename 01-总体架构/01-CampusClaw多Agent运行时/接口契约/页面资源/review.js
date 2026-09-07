@@ -204,6 +204,12 @@
     });
     article.appendChild(requestSection);
 
+    (operation.contractSections || []).forEach((item) => {
+      const section = make('section', 'section contract-detail');
+      append(section, make('h3', '', item.title), make('p', 'description', item.description || ''),
+        table(item.columns, item.rows));
+      article.appendChild(section);
+    });
     const responseSection = make('section', 'section contract-detail response-section');
     const responseTitle = make('div', 'row section-title');
     const localeTabs = make('div', 'tabs');

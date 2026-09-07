@@ -78,6 +78,7 @@ def expand_model(common: dict[str, Any], source: dict[str, Any]) -> dict[str, An
     operation.setdefault("requestHeaderExamples", copy.deepcopy(common["requestHeaderExamples"]))
     operation["parameters"] = [resolve_entry(common, item) for item in operation.get("parameters", [])]
     operation["responses"] = [resolve_entry(common, item) for item in operation.get("responses", [])]
+    operation["contractSections"] = [resolve_entry(common, item) for item in operation.get("contractSections", [])]
     model = {
         "api": copy.deepcopy(common["api"]),
         "operation": operation,
@@ -230,6 +231,12 @@ def render_static(model: dict[str, Any]) -> str:
             f'{static_pre(example["value"])}</details>'
         )
     responses = "".join(static_response(response, index) for index, response in enumerate(operation["responses"]))
+    sections = "".join(
+        f'<section class="section contract-detail"><h3>{html.escape(item["title"])}</h3>'
+        f'<p class="description">{html.escape(item.get("description", ""))}</p>'
+        f'{static_table(item["columns"], item["rows"])}</section>'
+        for item in operation.get("contractSections", [])
+    )
     return (
         '<div data-static-review>'
         '<header class="topbar"><div class="row">'
@@ -250,7 +257,7 @@ def render_static(model: dict[str, Any]) -> str:
         f'<section class="section contract-detail auth-section"><h3>调用上下文 Header</h3>{"".join(auth_blocks)}</section>'
         '<section class="section contract-detail request-section"><h3>参数与请求体</h3>'
         f'{parameter_html}<p class="muted empty">{html.escape(request_body.get("description", "无请求体。"))}</p>'
-        f'{request_example}{"".join(request_examples)}</section>'
+        f'{request_example}{"".join(request_examples)}</section>{sections}'
         f'<section class="section contract-detail response-section"><h3>响应</h3>{responses}</section>'
         f'{static_review(model) if not model.get("review", {}).get("batchReview") else ""}</article></div>'
     )

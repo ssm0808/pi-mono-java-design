@@ -60,7 +60,11 @@ const create = (markup, runScripts) => {
     assert.equal(surface.querySelectorAll('[data-mounted]').length, 1);
     assert.equal(surface.querySelectorAll('[data-api-shell] > article').length, 1);
     assert.ok(item.textContent.includes(operation.description));
-    assert.equal(item.querySelectorAll('.catalog-part').length, 3);
+    assert.equal(item.querySelectorAll('.catalog-part').length, 3 + (operation.contractSections || []).length);
+    for (const section of operation.contractSections || []) {
+      assert.ok(item.textContent.includes(section.title));
+      for (const row of section.rows) for (const value of row) assert.ok(item.textContent.includes(String(value)));
+    }
     assert.equal(item.querySelectorAll('.catalog-part[open]').length, 0);
 
     const auth = item.querySelector('.auth-section');

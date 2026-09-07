@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.13.0 |
-| 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.47.1 保留共享 GET 轻量清单并保留 Help 元数据指南，Builtin 与 Skill Command 由用户统一实现 |
+| 文档版本 | 3.14.0 |
+| 状态 | B01～B15 已全部确认，Events v2 与 Skill 联动契约已定稿，可进入实现；Builtin JSON 保持；当前十项接口共用一个契约入口 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -24,7 +24,7 @@
 | DeepSeek Harness 对照基线 | `141eb6fef83422698aef7a981029e843e8161534` |
 | Codex Harness 对照基线 | `be33f80bc65159c094ecd06bf155afa3061ce23d` |
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989`；PR #210 最终实现 `9d0d76f4a571b559dc77ae52736caebbcc8fad88` 已通过 `a8192e047f4061bd385297d3dc6c4358362d0d49` 合并 |
-| 更新日期 | 2026-09-07 |
+| 更新日期 | 2026-09-08 |
 
 ## 1. 当前结论
 
@@ -64,20 +64,19 @@ M1 真实结束并提交可靠状态后才恢复 idle；中断与工具确认按
 本机按固定执行身份合并等待目标，响应回执与缓冲仍各自独立；登记后补读已提交终态，
 本地通知与补读共用每响应终态去重。最后一个等待者退出只清理本机登记。
 索引按实际 GaussDB 执行计划和 100 并发压测选择，不冻结 500 毫秒周期、批次上限或超时。
-固定内部执行身份不穿透 HTTP；数据库结构、检查周期、其余并发竞争、reason 与故障细节
-仍待评审，不是整体确认。
+固定内部执行身份不穿透 HTTP；B07～B11 已确定竞争、reason 与故障语义，数据库结构、检查周期与容量数值在实施中校准。
 用户明确要求开始修改 ListEvents，当前入口为 [历史查询评审页](chat-api-review.html#listSessionEvents)；
 完整事件与 POST 同形，从旧到新、普通整数页码和取消固定快照已确认，见 [历史设计](chat-events-v2-history-design.md)。
 分页默认 50/最多 200、result 只返回 events/nextPage、合法超范围页返回 200 空列表均已确认，不返回 total。
 POST 的决定与未决项仍见 [合并 POST 保留评审页](chat-api-review.html#submitSessionEvent)、
 [Events v2 设计](chat-events-v2-design.md) 和 [请求级 SSE 设计](chat-events-v2-stream-design.md)。
 旧确认页及其他分散评审页已删除，不保留变更提示或跳转占位；旧 JSON POST 仅从 Git 历史追溯。
-当前没有整体确认的新 v2 operation；既有字段决定不因此被重新开放。
+B01～B15 四组已全部按推荐确认，精确字段、错误码与示例已补齐；没有新的产品确认门槛。
 
 本次确认移除独立 `/abort`、`/steers`、`/follow-ups`，当前目标共 10 个接口。
 停止执行通过 user.interrupt 完成，调整方向采用实际停止后新提交消息。本期不支持排队。
 [FollowUp 未来设计](chat-follow-up-future-design.md) 仅记录数据库交接方向，启用另行评审，
-不改变 M1 未完成前拒绝 M2，不改变 Events 的部分确认状态。
+不改变 M1 未完成前拒绝 M2，不新增当前消息队列。
 
 ### 1.1 迁移前 v1 行为证据（不是当前目标）
 
@@ -114,7 +113,7 @@ FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。公共 Comman
 
 完整维护规则见 [接口统一管理](chat-api-index.md)。原 v1/v2 HTML 已删除，不保留迁移页，
 也不得重新生成旧页面。旧两个 Events 模型已删除，旧字段及报文仅从 Git 历史追溯。
-两个 Events 即使未整体确认也只有一份当前方案，不保留两套当前契约。
+两个 Events 只有一份已确认目标方案，不保留两套当前契约。
 OpenAPI、WebSocket/AsyncAPI 仍已废弃，不因入口整理而恢复。
 
 当前 CampusClaw HTTP 契约中的路径参数、查询参数、请求体、普通响应和 SSE `data`
@@ -178,7 +177,7 @@ CampusClaw 面向 mate-service Runtime client 和明确获授权的内部服务�
 - Agent、Model、thinking 配置和受控目录解析；
 - MessageEntry 当前分支、模型执行、Tool 执行和持久化；
 - Session 内单 active execution 与 Events user.interrupt 中断；本期无运行中消息队列；
-- 内部 HTTP 鉴权、ResultBean、SSE 事件和错误国际化。
+- 内部 HTTP 调用上下文、ResultBean、SSE 事件和错误国际化。
 
 CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` 定位 Session，
 并作为当前 `displayName` 与资源版本的唯一权威；Name 不生成历史 Entry。
@@ -192,16 +191,15 @@ CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` �
 | 1 | `POST` | `/agents/{agentId}/sessions` | `201` ResultBean | 创建并初始化 Session；默认模型由 Agent 配置选择，`thinking=true` |
 | 2 | `GET` | `/sessions/{sessionId}` | `200` ResultBean | 读取当前模型、是否深度思考和 `idle/running` 状态 |
 | 3 | `DELETE` | `/sessions/{sessionId}` | `204` | 逻辑删除并安排 Runtime 数据清理，只保留最小 tombstone |
-| 4 | `POST` | `/sessions/{sessionId}/events` | `200 text/event-stream` | 提交三类 `user.*` 之一，完整首帧与对应推送；部分确认 |
+| 4 | `POST` | `/sessions/{sessionId}/events` | `200 text/event-stream` | 提交三类 `user.*` 之一，完整首帧与对应推送；已确认目标 |
 | 5 | `GET` | `/sessions/{sessionId}/events` | `200` ResultBean | 普通整数 `page/nextPage` 读取完整事件；分页规则已确认 |
 | 6 | `GET` | `/sessions/{sessionId}/models` | `200` ResultBean | 返回可用 `modelId` 字符串数组 |
 | 7 | `PUT` | `/sessions/{sessionId}/model` | `200` ResultBean | 修改后续用户消息使用的 Session 默认模型 |
 | 8 | `PUT` | `/sessions/{sessionId}/thinking` | `200` ResultBean | 开关后续用户消息是否启用深度思考 |
 | 9 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回按状态过滤的 Builtin/Skill 轻量清单，固定 Builtin 顺序后追加 Skill |
-| 10 | `POST` | `/sessions/{sessionId}/command` | `200` ResultBean JSON | 执行七个 Builtin，Handler 完成后返回 |
+| 10 | `POST` | `/sessions/{sessionId}/command` | Builtin JSON / Skill SSE | Builtin 完成后返回；Skill 复用事件执行与恢复 |
 
-本表第 4、5 项采用最新 Events v2；其余八项保留既有契约。配置事件与命令的衔接
-仍需按操作评审。旧 v1 POST/GET 字段仅作迁移基线，两个 v2 操作尚未整体确认。
+本表第 4、5 项采用最新 Events v2；其余八项保留既有契约。配置事件与 Skill 的衔接已按 B12～B14 同步。旧 v1 POST/GET 字段仅作迁移基线，目标语义已定稿。
 三个独立控制接口不再计入目录或作为兼容别名。
 
 公共资源没有 `Run`。一次用户输入会触发内部 active execution，但调用方使用
@@ -484,7 +482,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 | 架构变更 | CampusClaw 目标契约改为 `agent-` / `tool-` / `skill-` / `session-` 加 32 位十六进制 UUID；Session 创建成功时固定 `thinking=true`，实现需同步放宽 `t_sessions.agent_id` 并替换 Session ID 生成器 |
 | 当前 Java 差异 | `c1311f69` 的 `SlashCommandRegistry` 仍使用可变索引并解析整段 Slash 文本，`SlashCommandSession` 是宽泛可变门面；生产 Runtime 尚未注册命令 Controller，`t_sessions` 尚无 `display_name`；新契约无需 sidecar 查询 |
 | 架构变更 | 十个目标 operation 全部保留调用上下文 Header，但移除 Runtime 应用内的凭据组合与格式校验及对应 401；`X-HW-ID` 明确表示用户凭据 ID，不是公司、服务或应用标识 |
-| 架构变更 | `thinking=true` 时将内部 thinking 生命周期投影为公共 SSE，并持久化 completed 供 GET 恢复；GET 根据 Session 当前 thinking 状态过滤，状态变化使旧 page 失效 |
+| 架构变更 | `thinking=true` 时将内部 thinking 生命周期投影为公共 SSE，并持久化 completed 供 GET 恢复；B05 改为持久化公开摘要，后续关闭不隐藏既有摘要；每页仍检查访问边界 |
 | 架构变更 | CampusClaw HTTP 的 path/query/JSON/SSE 字段统一为 lowerCamelCase；Header 原名、事件类型值、错误码和 ID 值保持不变，不接受 snake_case 字段别名 |
 | 架构变更 | Runtime、Cron、Child 共用轻量 AgentSession 和工厂；8 个活动内置工具由启动期 profile 装配，工具实例按 Session 新建 |
 | 架构变更 | 受管目录统一身份文件、缓存优先 prepare 与显式原子 refresh；Skill 和 Child 通过目录名称索引解析，不保存远端工具列表 |
@@ -502,22 +500,17 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 源码证据的完整 commit、符号、行号和逐项设计理由见
 [`chat-http-v1-design.md`](chat-http-v1-design.md) 的“源码证据与差异分类”。
 
-## 9. 待继续评审
+## 9. 实施校准与范围外能力
 
-以下内容尚未确认，不应由实现自行猜测：
+当前 Claw 契约没有未决产品语义。实现阶段需验证数据库字段/约束、GaussDB 索引和执行计划、轮询批次/周期、工具与等待超时、SSE 心跳和缓冲容量；数值不得假装已压测。已接受执行的断线、超时、实例失联都不能冒充实际停止，也不得自动重放写请求或工具副作用。
 
-1. Claw v2 数据库控制字段与约束、实测索引选型、检查周期和超时响应，以及跨完成边界的迟到中断、确认续跑/控制请求竞争；单消息数据库准入、数据库停止请求与实例批量检查及中断查询优化已确认，本期不引入 Redis；此前合并、首帧、关闭与中断分工决定继续有效；
-2. Claw v2 SSE 具体字段、thinking 内容、idle reason、heartbeat、容量、错误细节及整体确认；类型名、data-only、type + phase 已确认；
-3. Claw v2 历史过滤及具体事件投影、其他错误和保留期；L1～L4 普通分页、默认 50/最多 200、无 total 与超范围空成功已确认；
-4. Slash Command 与 Events 的衔接；FollowUp 未来方案已记录但不启用，三个独立控制接口已退役；
-5. Pod 重启时 active execution 的中断或恢复策略；
-6. 公司 `ResultBeanFactory` 真实制品坐标和 `ResultBeanAdapter` 公司 Bean 的落地方式；
-7. 若未来需要标准机器契约，其格式、生成源和同步门禁需要重新评审。
+部署历史保留沿用现有策略，无策略时不新增自动清理。公司 ResultBean 真实制品由现有集成校准；本次不引入 Maven 依赖。Pod 丢失后的接管、未来 FollowUp、Mate 公共协议和机器契约不因本轮对齐而新增。
 
 ## 10. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.14.0 | 2026-09-08 | B01～B15 全部确认，统一 Events/Skill 精确契约、恢复边界与配置映射；清除当前待确认标记，交付实施校准清单。 |
 | 3.13.0 | 2026-09-07 | 同步 HTTP 1.48.0：Command 复用既有业务响应、删除入口及内部回执字段；全局目标主图、GET 与 Events 评审边界不变。 |
 | 3.12.1 | 2026-09-07 | 同步冗余清理：Mate 只保留 GET，Help 直接派生；专题职责见统一维护规则，Runtime 契约不变。 |
 | 3.12.0 | 2026-09-07 | 合入遗漏的共享 GET 轻量清单，保留新 Help/POST/Events 决定；补充分支整合核查记录。 |

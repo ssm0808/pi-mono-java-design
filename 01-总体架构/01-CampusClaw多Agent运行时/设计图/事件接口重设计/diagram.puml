@@ -34,13 +34,13 @@ participant "Request SSE Writer\n<<per POST>>" as Writer
 Mate -> API : POST /sessions/{sessionId}/events
 API -> Binding : reserve bounded response capacity
 critical Session admission and target binding
-  API -> Binding : bind this message, resume segment or interrupt target
+  API -> Binding : bind root event / resume segment; validate interrupt targetEventId
   API -> Append : validate dependencies and accept user event
   Append -> Store : short transaction: type-specific admission and append\nmessage: require idle, set running; interrupt: persist stop intent
   Store --> Append : committed user event
   Append --> API : accepted event
   API -> Binding : enqueue complete user receipt first
-  API -> Execution : start / resume; interrupt: local hint only after commit
+  API -> Execution : start; controls: local hint only after committed decision
 end
 Binding -> Writer : release ordered response frames
 Writer --> Mate : 200 SSE; data: complete user.* receipt
@@ -71,6 +71,7 @@ API --> Mate : ResultBean JSON history
 
 note over API,Execution
 No public executionId, runId or sequence.
+sourceEventId / targetEventId reference the original user.message.
 Credentials belong only to the required in-memory execution.
 Do not hold a DB transaction while calling models, tools or network writers.
 end note
@@ -132,6 +133,10 @@ package "runtimeapi.application" {
   class SessionEventAppender <<singleton, target-only>>
   class SessionEventQueryService <<singleton, existing-changed>>
   class SessionEventProjector <<per execution, target-only>>
+  class ExecutionControlPollingService <<singleton per instance, target-only>>
+  class InterruptResultPollingService <<singleton per instance, target-only>>
+  class ConfirmationResultPollingService <<singleton per instance, target-only>>
+  class CommittedEventProjection <<stateless singleton, target-only>>
 }
 package "runtimeapi.runtime" {
   class RuntimeExecutionCoordinator <<singleton, existing-changed>>
@@ -164,7 +169,18 @@ SessionEventHandler <|.. UserInterruptEventHandler
 SessionEventHandler <|.. UserToolConfirmationEventHandler
 SessionEventHandler --> SessionEventAppender : recheck and accept
 UserMessageEventHandler --> RuntimeExecutionCoordinator : start
-UserToolConfirmationEventHandler --> RuntimeExecutionCoordinator : resume
+UserToolConfirmationEventHandler --> RuntimeExecutionCoordinator : post-commit local hint
+UserInterruptEventHandler --> RuntimeExecutionCoordinator : post-commit local hint
+ExecutionControlPollingService --> RuntimeSessionRepository
+ExecutionControlPollingService --> RuntimeExecutionCoordinator
+InterruptResultPollingService --> RuntimeSessionRepository
+ConfirmationResultPollingService --> RuntimeSessionRepository
+InterruptResultPollingService --> RequestEventRouter
+ConfirmationResultPollingService --> CommittedEventProjection
+ConfirmationResultPollingService --> RequestEventRouter
+SessionEventQueryService --> CommittedEventProjection : shared history projection
+SessionEventAppender --> CommittedEventProjection
+CommittedEventProjection ..> SessionEventResponseVO : immutable
 SessionEventApplicationService --> RequestEventRouter : reserve and bind before action
 RuntimeExecutionCoordinator *-- "0..1 per Session" RuntimeActiveExecution
 SessionEventApplicationService *-- "0..*" SessionEventProjector : owns subscriptions
@@ -185,14 +201,17 @@ MyBatisRuntimeSessionRepository --> RuntimeEntryDTO
 note right of RequestOutputBinding
 Message / resume segment or interrupt target.
 Never resolve the latest active execution on every event.
-Interrupt bindings can refer to executions on another instance.
+Control bindings can refer to executions on another instance.
+Fixed root user event and internal resume-segment cursor.
 No raw credentials or public execution identifier.
+Only original user event references are public.
 end note
 note bottom of SessionEventAppender
 All writers share causal prerequisite checks and ordered commit.
 Message admission locks the Session and rechecks idle in the DB.
 Append the message and set running together; reject new messages while busy.
 Interrupt event and stop intent commit together for a fixed target.
+Confirmations atomically claim the one pending tool; stop wins if committed first.
 Terminal event and target result link also commit atomically.
 Allocate sequence and append atomically, retaining lock to commit.
 Network and model/tool work stay outside the transaction.
@@ -218,7 +237,9 @@ title CampusClaw POST SSE - Closing and Interrupt Delivery Confirmed
 ' Design reason: do not keep a completed request open for unrelated later messages.
 ' Confirmed: original output stays on A; B receives receipt and the same stop idle only.
 ' Confirmed target-only: durable DB stop requests and per-instance batch polling; no Redis.
-' Exact schema, polling interval, races, idle reason literals and failures remain open.
+' Batch 2026-09-08.1 confirms root references, control races and failure semantics.
+' Source evidence: pi-mono-java dfb90ca RuntimeEntryCodec; current projection still exposes Entry IDs.
+' Target-only: DB confirmation handoff; preview remains local and best-effort.
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -249,7 +270,7 @@ opt Another user.message arrives while M1 is unfinished
   Client -> API : POST user.message M2
   API -> Store : check authoritative admission state
   Store --> API : busy; no message appended
-  API --> Client : reject before SSE\n409 SESSION_BUSY (candidate error)
+  API --> Client : reject before SSE\n409 SESSION_BUSY
 end
 
 alt Confirmed: close on matching execution idle
@@ -262,15 +283,20 @@ else Confirmed: close while waiting for tool confirmation
   A --> Client : data: tool call; data: confirming idle; EOF
   Client -> API : new POST user.tool_confirmation
   API -> B : atomically bind valid pending tool and resume segment
-  API -> Store : accept and persist confirmation
+  API -> Store : atomically recheck stop / pending tool;\npersist confirmation and resume segment
   API -> B : complete confirmation receipt first
-  API -> Execution : resume
+  API -> Execution : after commit: local resume hint if present
+  Poller -> Store : batch read committed control decisions
+  Poller -> Execution : recheck local target; apply confirmation once
   B --> Client : data: user.tool_confirmation receipt
+  Execution -> Store : commit ordered tool result / response
   Execution -> Store : actual exit after resume; commit terminal\nand set matching Session idle
-  Execution -> B : tool result, response, corresponding idle
+  API -> Store : remote resume: read fixed segment complete events
+  Store --> API : same eventId / sourceEventId / payload
+  API -> B : receipt-gated complete events; optional local preview
   B --> Client : data: matching output; idle; EOF
 else Confirmed delivery: interrupt while response A remains open
-  Client -> API : new POST user.interrupt
+  Client -> API : new POST user.interrupt(targetEventId)
   API -> B : reserve response; retain fixed internal target
   API -> Store : transaction: bind target, persist interrupt and stop intent
   API -> B : complete interrupt receipt first
@@ -325,7 +351,8 @@ title CampusClaw Target Database-backed Interrupt
 ' Confirmed M7: post-commit local wake-up, unique target queries, measured indexes.
 ' Target-only: registration recovery and terminal delivery gates are not implemented.
 ' Design reason: accept on any instance without sticky routing or remote Java references.
-' Schema, interval, race response details and crash recovery remain under review.
+' Confirmed target-only: reject stale root, duplicate stop and conflicting confirmation.
+' Schema, interval and capacity numbers require implementation calibration.
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -346,10 +373,10 @@ The accepted execution identity is already registered in the DB.
 The Session stays running until M1 actually finishes; new messages are rejected.
 Its live Agent object and credentials remain on instance A.
 end note
-Client -> B : POST user.interrupt
+Client -> B : POST user.interrupt(targetEventId)
 B -> B : reserve bounded response capacity
 group Short admission transaction
-  B -> DB : lock and validate current target identity
+  B -> DB : lock; match targetEventId to current original user event
   B -> DB : append user.interrupt and persist stop intent
   DB --> B : commit; complete receipt and fixed target
 end
@@ -399,7 +426,8 @@ end note
 note over B,A
 Timeout, DB failure or owner loss is not proof of successful interruption.
 No automatic takeover or POST replay; reconcile authoritative history.
-Polling interval, batch size and failure handling details remain open.
+Polling interval and batch size require implementation calibration.
+Failure semantics are confirmed; do not manufacture a terminal on timeout.
 Select indexes using actual GaussDB plans and 100-concurrency load tests.
 Redis is a future optional wake-up optimization, not a current dependency.
 end note
@@ -478,8 +506,8 @@ Stream o-- "0..*" VO
 Repo <|.. Adapter
 
 note bottom of Target
-Session + execution identity only.
-No remote Agent or public ID.
+Session + immutable internal execution identity.
+The root user event maps to this identity; no remote Agent.
 Recheck state at its owner.
 end note
 note bottom of Control

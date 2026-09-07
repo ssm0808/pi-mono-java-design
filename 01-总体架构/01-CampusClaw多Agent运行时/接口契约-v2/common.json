@@ -1,15 +1,20 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "2.0.0-proposal.27",
+    "version": "2.0.0-target.1",
     "basePath": "/campusclaw-service/v1",
-    "visibility": "Internal · 当前评审：ListEvents 历史查询 · target-only",
+    "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
     "headerNaming": "保留原名"
   },
   "reviewState": {
     "currentOperation": "listSessionEvents",
-    "confirmedOperations": []
+    "confirmedOperations": [
+      "submitSessionEvent",
+      "listSessionEvents"
+    ],
+    "reviewMode": "completed",
+    "semanticBatch": "2026-09-08.1-confirmed"
   },
   "resourceIdPatterns": {
     "session": "^session-[0-9a-fA-F]{32}$"
@@ -70,6 +75,269 @@
       "required": false,
       "schema": "zh-CN | en-US",
       "description": "异常消息语言；缺失或不支持时回退 en-US"
+    }
+  },
+  "eventContract": {
+    "version": "2026-09-08.1",
+    "semanticStatus": "confirmed",
+    "detailStatus": "implementation-ready",
+    "toolErrorCodes": {
+      "TOOL_CALL_DENIED": {
+        "zh-CN": "用户已拒绝，本次工具调用未执行。",
+        "en-US": "The user denied this tool call; it was not executed."
+      },
+      "TOOL_ARGUMENTS_INVALID": {
+        "zh-CN": "工具参数不符合约束，本次调用未执行。",
+        "en-US": "The tool arguments are invalid; the call was not executed."
+      },
+      "TOOL_NOT_FOUND": {
+        "zh-CN": "指定的工具当前不可用，本次调用未执行。",
+        "en-US": "The specified tool is unavailable; the call was not executed."
+      },
+      "TOOL_EXECUTION_TIMEOUT": {
+        "zh-CN": "工具调用超时，实际执行结果可能仍需核对。",
+        "en-US": "The tool call timed out; its actual outcome may still require reconciliation."
+      },
+      "TOOL_EXECUTION_FAILED": {
+        "zh-CN": "工具执行失败，请核对执行结果。",
+        "en-US": "Tool execution failed. Check the execution outcome."
+      }
+    },
+    "executionErrorCodes": {
+      "AGENT_EXECUTION_FAILED": {
+        "zh-CN": "本次 Agent 执行失败。",
+        "en-US": "This Agent execution failed."
+      },
+      "MODEL_REQUEST_FAILED": {
+        "zh-CN": "模型请求失败。",
+        "en-US": "The model request failed."
+      },
+      "EXECUTION_START_FAILED": {
+        "zh-CN": "消息已接受，但执行未能启动。",
+        "en-US": "The message was accepted, but execution could not start."
+      },
+      "EXECUTION_RESUME_FAILED": {
+        "zh-CN": "确认已接受，但执行未能继续。",
+        "en-US": "The confirmation was accepted, but execution could not resume."
+      },
+      "EVENT_PAYLOAD_TOO_LARGE": {
+        "zh-CN": "输出超过当前容量上限，本次执行失败。",
+        "en-US": "The output exceeded the configured capacity; this execution failed."
+      }
+    },
+    "historyThinking": "persisted-public-summary-current-access",
+    "eventIdentity": "server-owned opaque string; exact equality; never recycled",
+    "rootIdentity": "original user.message.eventId",
+    "completeTypes": [
+      "user.message",
+      "user.interrupt",
+      "user.tool_confirmation",
+      "agent.message",
+      "agent.thinking",
+      "agent.tool_call",
+      "agent.tool_result",
+      "session.status_idle",
+      "session.model_changed",
+      "session.thinking_changed",
+      "session.compacted"
+    ]
+  },
+  "contractSections": {
+    "events0": {
+      "title": "完整事件字段（已确认目标契约）",
+      "description": "GET 历史与 POST 完整 SSE 使用同一投影；delta/心跳不入历史。表中条件外字段省略，null 不等于省略。配置事件只出现在历史；自动压缩可出现在所属 SSE，手动 compact 仍返回 JSON。",
+      "columns": [
+        "事件范围",
+        "字段",
+        "类型与必填",
+        "规则"
+      ],
+      "rows": [
+        [
+          "全部完整事件",
+          "eventId/type/createdAt",
+          "必填字符串",
+          "eventId 服务端生成且不复用、原样比较；createdAt 为 Claw 形成权威记录时的 UTC ISO-8601 毫秒值（...SS.sssZ），保存一次，不用时间排序。"
+        ],
+        [
+          "agent.* / session.status_idle",
+          "sourceEventId",
+          "必填字符串",
+          "精确引用该执行原始 user.message.eventId；确认续跑仍引用原消息，不能改为确认回执或内部执行 ID。"
+        ],
+        [
+          "user.message",
+          "content",
+          "1～5 项有序数组",
+          "最多一个 text 且第一项；最多四个不同 file。text/fileId 输入限制沿用本接口既有约束；Skill 首帧保留展开前调用。"
+        ],
+        [
+          "user.interrupt",
+          "targetEventId",
+          "必填字符串",
+          "引用原 user.message.eventId；受理事务校验 Session 内当前未完成执行匹配，缺失/空值 400，旧目标 409。"
+        ],
+        [
+          "user.tool_confirmation",
+          "toolCallId/result/denyMessage",
+          "toolCallId、result 必填",
+          "result=allow/deny；denyMessage 仅 deny 可选非空文本，最多 4096 UTF-16 单元；allow 禁止带该字段。一次仅一个待确认调用。"
+        ],
+        [
+          "agent.message / agent.thinking",
+          "phase/content",
+          "必填字符串",
+          "phase=delta/completed；delta content 是非空新增文本，不带 createdAt/usage。completed 完整覆盖；真实 Assistant 无正文可 content=\"\"，不凭空合成回答。thinking 只允许公开摘要。"
+        ],
+        [
+          "agent.message completed",
+          "usage",
+          "可选对象",
+          "已知时返回一次模型响应的 input/output/cacheRead/cacheWrite/totalTokens 非负整数；cost 可选，若有则 input/output/cacheRead/cacheWrite/total 非负 USD 数值。未知省略，不伪造 0；不能将多条工具/思考事件重复计费。"
+        ],
+        [
+          "agent.tool_call",
+          "toolCallId/toolName/arguments/requiresConfirmation",
+          "全部必填",
+          "toolCallId/toolName 非空字符串；arguments JSON 对象；requiresConfirmation 布尔值。CallMateTool 保留 tool/args，省略的 args 归一为 {}。"
+        ],
+        [
+          "agent.tool_result",
+          "toolCallId/content/isError/errorCode",
+          "前三项必填",
+          "content 至少一个且仅 text/text 字符串块，允许空字符串和多个块；isError 必须布尔。失败必有下表稳定 errorCode，成功必须省略；不另设 errorMessage/status/details。"
+        ],
+        [
+          "session.status_idle",
+          "reason/errorCode/message",
+          "reason 必填",
+          "reason=done/failed/terminated/confirming；仅 failed 必有稳定 errorCode 与非空 message，其他 reason 省略二者。confirming 不释放 Session running；实际结束才释放。"
+        ],
+        [
+          "session.model_changed",
+          "previousModelId/modelId/reason",
+          "全部必填",
+          "完整事件，无 phase/sourceEventId；两个模型 ID 字符串，reason=requested/agentRefresh。只记录真实变化，不进入模型上下文。"
+        ],
+        [
+          "session.thinking_changed",
+          "previousThinking/thinking/reason",
+          "全部必填",
+          "完整事件，无 phase/sourceEventId；两个布尔值，reason=requested/modelCapability；后者表示切换模型导致自动关闭。"
+        ],
+        [
+          "session.compacted",
+          "reason/tokensBefore/estimatedTokensAfter",
+          "全部必填",
+          "reason=manual/threshold/overflow；token 数非负整数。自动压缩带原消息 sourceEventId，手动 compact 省略。不返回内部 firstKeptEntryId、压缩提示词或私有摘要；失败不伪造成功压缩记录。"
+        ]
+      ]
+    },
+    "events1": {
+      "title": "工具失败码与安全文本",
+      "description": "已确认稳定失败码策略；码值是本次整稿补齐。已知内部分类显式映射，未知 Mate 错误统一 TOOL_EXECUTION_FAILED，不解析原始错误文本猜码。标准文案在执行接受时确定的 locale 下生成并保存；GET 不再翻译历史，文本成败由 isError 决定。超时不证明远端副作用被撤销。",
+      "columns": [
+        "errorCode",
+        "zh-CN text",
+        "en-US text"
+      ],
+      "rows": [
+        [
+          "TOOL_CALL_DENIED",
+          "用户已拒绝，本次工具调用未执行。",
+          "The user denied this tool call; it was not executed."
+        ],
+        [
+          "TOOL_ARGUMENTS_INVALID",
+          "工具参数不符合约束，本次调用未执行。",
+          "The tool arguments are invalid; the call was not executed."
+        ],
+        [
+          "TOOL_NOT_FOUND",
+          "指定的工具当前不可用，本次调用未执行。",
+          "The specified tool is unavailable; the call was not executed."
+        ],
+        [
+          "TOOL_EXECUTION_TIMEOUT",
+          "工具调用超时，实际执行结果可能仍需核对。",
+          "The tool call timed out; its actual outcome may still require reconciliation."
+        ],
+        [
+          "TOOL_EXECUTION_FAILED",
+          "工具执行失败，请核对执行结果。",
+          "Tool execution failed. Check the execution outcome."
+        ]
+      ]
+    },
+    "events2": {
+      "title": "执行失败终态",
+      "description": "整轮确已退出且权威终态可提交时使用 reason=failed；单个工具失败不自动结束 Agent。未知整轮失败映射 AGENT_EXECUTION_FAILED；无法确认提交或退出时只断流，不能制造可靠终态。",
+      "columns": [
+        "errorCode",
+        "zh-CN message",
+        "en-US message"
+      ],
+      "rows": [
+        [
+          "AGENT_EXECUTION_FAILED",
+          "本次 Agent 执行失败。",
+          "This Agent execution failed."
+        ],
+        [
+          "MODEL_REQUEST_FAILED",
+          "模型请求失败。",
+          "The model request failed."
+        ],
+        [
+          "EXECUTION_START_FAILED",
+          "消息已接受，但执行未能启动。",
+          "The message was accepted, but execution could not start."
+        ],
+        [
+          "EXECUTION_RESUME_FAILED",
+          "确认已接受，但执行未能继续。",
+          "The confirmation was accepted, but execution could not resume."
+        ],
+        [
+          "EVENT_PAYLOAD_TOO_LARGE",
+          "输出超过当前容量上限，本次执行失败。",
+          "The output exceeded the configured capacity; this execution failed."
+        ]
+      ]
+    },
+    "events3": {
+      "title": "容量、历史与兼容边界",
+      "description": "这些规则已确认；具体容量数值由实现和部署校准。",
+      "columns": [
+        "场景",
+        "处理"
+      ],
+      "rows": [
+        [
+          "空文本与超限",
+          "无文本的工具结果归一为一个空 text 块。工具自身有说明的截断保持；HTTP 不截断完整事件。持久化大小先校验，确实无法保存时保存小型失败终态；仅 SSE 队列或发送大小超限则断开该响应，已保存事件仍可查历史。"
+        ],
+        [
+          "背压与心跳",
+          "有界队列同时限制字节和事件数；舍弃 preview 后停止该 eventId 后续 delta，等 completed 覆盖。完整事件不能入队则断开，执行继续。心跳为 : ping，不写历史、不在 idle 后发送；周期不冻结。"
+        ],
+        [
+          "可见性与保留",
+          "公开摘要不因后续 thinking 开关消失；每次读取重新校验权限。沿用部署统一保留策略，未配置时不新增自动清理；清理保持根消息、工具关联和控制终态所需引用，不留下无法对账的孤立记录。"
+        ],
+        [
+          "完整性",
+          "所有已知持久化记录逐类映射或有明确不公开理由；未知持久化类型按 EVENT_LIST_FAILED 报错，不静默漏掉后宣称完整。客户端忽略未知可选字段，对未知 type 保留/提示待升级，不当作 idle 或成功。"
+        ],
+        [
+          "恢复",
+          "原消息 sourceEventId 只解决已获知回执后的归属；首回执丢失仍不确定，不新增幂等键、不自动重放 POST。无终态不得释放新消息准入。"
+        ],
+        [
+          "数据对象与依赖",
+          "Controller 使用请求/只读响应 VO，Service 转 DTO 并校验状态，Mapper 只收发 DTO；继续现有 Jackson/JDK，不新增 Maven 依赖。"
+        ]
+      ]
     }
   }
 }

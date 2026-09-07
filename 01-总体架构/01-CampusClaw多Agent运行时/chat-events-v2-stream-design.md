@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.4.6 |
-| 状态 | 合并方向、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；数据库细节、其余并发竞态、字段与错误细节候选，target-only |
+| 文档版本 | 0.5.0 |
+| 状态 | 合并方向、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；B01～B15 语义已确认，精确契约已定稿，可进入实现；数据库数值校准，target-only |
 | 设计仓本次变更前基线 | `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
 | L5 字段确认前设计仓基线 | `7349cdf2e037700ddf4917eebef0e19799252f47`；只同步目标字段决定，未重新核对实现 |
 | L6 字段确认前设计仓基线 | `050bda2579004b630021300986881ac61ba7142e`；只同步目标字段决定，未重新核对实现 |
@@ -15,7 +15,7 @@
 | 原实现基线 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；复核文件与差距见 §6 |
 | Mate 契约对照 | 通用对话 Events 1.4.4，已确认目标契约，不是实现证据；本轮不修改 |
 | 外部参考核对 | Claude Managed Agents 官方事件流与 List Events，2026-09-04，Beta |
-| 更新日期 | 2026-09-07 |
+| 更新日期 | 2026-09-08 |
 
 ## 1. 当前操作与已确认范围
 
@@ -52,7 +52,7 @@ ResultBean 外壳不再使用；S4 的只读 GET 无工具令牌规则不适用�
 
 用户已确认 M3 结束规则：收到本次对应的 `session.status_idle` 后关闭本条响应；
 等待工具确认时也关闭，之后通过新的确认 POST 接收续跑结果。这是已确认目标设计的
-产品约束，不代表当前 Java 已实现，也不表示整个操作或具体 reason 取值已确认。
+产品约束，不代表当前 Java 已实现，也不表示整个操作；具体 reason 取值现已由 B07 确认。
 
 ## 2. 请求与凭据边界
 
@@ -63,11 +63,10 @@ ResultBean 外壳不再使用；S4 的只读 GET 无工具令牌规则不适用�
 - 原始凭据只进入本次执行所需的内存对象，仅随实际 Mate tool execute 发送。
   响应队列、路由索引、事件、历史、模型请求和日志不得保存它们。
 - 网络断开不等于 Agent 执行结束。未完成执行不能因 HTTP 关闭就丢失凭据，也不能把
-  中断请求携带的凭据覆盖到正在运行的原执行。确认续跑具体采用哪个执行凭据对象
-  留在所属 Handler/Runtime 实施中明确，不借合并扩大凭据发送范围。
+  中断请求携带的凭据覆盖到正在运行的原执行。确认续跑继续使用原消息 Active Holder 的凭据；确认请求不覆盖原凭据，实例丢失不能靠数据库自动恢复秘密。
 - 使用支持 POST 流式读取的服务端 HTTP 客户端或 fetch。SSE 是响应格式，
   原生 EventSource 不是 POST 的发送方式；Mate 仍是面向浏览器的公共边界。
-- 不提供 Last-Event-ID 恢复，不以 eventId 冒充游标；参数拒绝与容量细节仍待评审。
+- 不提供 Last-Event-ID 恢复，不以 eventId 冒充游标；参数拒绝规则已补齐，容量数值按实施校准。
 
 ## 3. 帧结构与成功含义
 
@@ -77,27 +76,14 @@ ResultBean 外壳不再使用；S4 的只读 GET 无工具令牌规则不适用�
 输出。跨实例中断不要求执行实例等待接收实例写回执：终态持久化供后者补读，接收方
 保持本条响应的回执先行。网络写出在事务外，不为等客户端收完首帧而锁住 Session。
 
-下面首帧与收到对应 idle 后关闭已确认，其他输出字段仍为候选：
+B01～B15 已确认，完整字段、成功/失败、工具确认、中断配对和 Skill 示例集中在
+[POST 精确模型](接口契约-v2/操作/01-submit-session-event.json) 与
+[共享字段/错误表](接口契约-v2/common.json)，由统一 HTML 展示；本页不维护第二套示例。
 
-```text
-Content-Type: text/event-stream
-Cache-Control: no-store
-
-data: {"eventId":"b7ef45d40a854c33af7a36df871a21e8","type":"user.message","createdAt":"2026-09-03T08:30:15.123Z","content":[{"type":"text","text":"请分析东区园区的异常告警。"}]}
-
-data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"delta","content":"正在整理告警信息，"}
-
-data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phase":"completed","createdAt":"2026-09-04T08:30:19.451Z","content":"已整理告警信息，建议先核查上联链路。"}
-
-data: {"eventId":"d4e3e8b9653047a99ac10396a17fe84d","type":"session.status_idle","createdAt":"2026-09-04T08:30:20.000Z","reason":"done"}
-
-```
-
-示例为独立精简请求的回执；精确的附件请求与响应配对以 operation model 为准。
 每帧是单行 JSON 加空行，JSON 内换行必须转义。没有 SSE event/id 字段，不包装 ResultBean。
 200 表示已进入接受后的流式响应，不是任务成功；完整首帧是持久化接收凭据，不是执行终态。
 
-## 4. 已确认关闭与中断分工，待定绑定细节
+## 4. 已确认关闭、中断分工与绑定
 
 结束规则已确认：收到本次对应 idle 后关闭响应，等待工具确认时也关闭；不等待下一条
 用户消息。仅结束本次 HTTP 交互，等待确认不代表任务成功。之后新发确认 POST，
@@ -114,23 +100,22 @@ user.interrupt 和 user.tool_confirmation 各按控制条件接受，不使用�
 
 M5 数据库中断机制也已确认：停止请求与 user.interrupt 同事务保存，并绑定不可复用的
 内部执行身份；各实例批量检查本机活动执行并发起本地取消，接收实例检查对应权威终态。
-不得把任意 Session idle 当作本次终态。数据库字段、检查周期、并发竞争、reason 具体值
-和停止失败细节仍待评审。
+不得把任意 Session idle 当作本次终态。数据库字段与检查周期按实施校准；并发竞争、reason 与失败语义已按 B07～B11 补齐。
 
-| 本次输入 | 本条响应的绑定范围（候选） | 对应 idle 的触发与 reason 示例（候选） |
+| 本次输入 | 本条响应的绑定范围 | 对应 idle 的触发与 reason |
 |---|---|---|
 | user.message | M1 未完成前拒绝 M2 已确认；本条流对应 M1 的执行段，包括模型、工具与该段状态 | 对应 done/failed/terminated，或进入 confirming；确认等待仍保留 running |
 | user.tool_confirmation | 当前 Session 中指定 toolCallId 的有效待确认操作及由本次确认触发的续跑段 | 对应 done/failed/terminated，或再次进入 confirming |
-| user.interrupt | 首帧后只等待目标停止结果、不复制 Agent 输出已确认；接受时必须在数据库事务中固定内部执行身份；等待确认等状态准入细节仍候选 | 实际停止后的 terminated；停止失败路径另评审，不能提前伪造终态 |
+| user.interrupt | 首帧后只等待目标停止结果、不复制 Agent 输出已确认；接受时必须在数据库事务中固定内部执行身份；等待确认同样可被指定原消息的中断停止 | 实际停止后的 terminated；失败或未获知退出时按 B07/B11 处理，不能提前伪造终态 |
 
 设计理由：本次交互结束就关闭其 HTTP 响应，不跨下一次无关执行。等待工具确认需要
 用户新动作，以另一次确认 POST 开始下一段交互，避免旧响应无限等待用户操作。
-`confirming` 只是该状态的候选 reason 字面值，确认关闭策略不等于确认这个字段取值。
+`confirming` 已由 B07 确认，仍不代表 Session 已空闲。
 
 中断与原消息流可以同时存在。已确认在数据库接受事务中绑定原执行身份，保存停止请求；
 执行方发现后触发本地取消。原流已断开则通过历史对账，不能改绑下一轮执行。
 M1 完成后 M2 才能开始。跨这个完成边界的迟到中断、已接受后自然完成、确认与中断竞争
-等具体响应细节仍待评审；前述 targetEventId 建议未进入请求，超时响应规则也尚未确认。
+按 B08/B09 处理：必填 targetEventId 仅匹配原消息，重复停止 409；自然完成保留真实原因。等待超时只断流并对账。
 
 跨实例停止请求、数据库事务、批量检查、M7 本地通知与等待去重，以及容量和故障边界，
 只在[总体设计 §4.4](chat-events-v2-design.md#44-已确认数据库停止请求与实例批量检查)维护。
@@ -138,7 +123,7 @@ M1 完成后 M2 才能开始。跨这个完成边界的迟到中断、已接受�
 超时或实例失联不能伪造 idle；不把 ListEvents 当作内部通知通道。
 
 不增加公共 runId/executionId；内部绑定对象和请求生命周期不穿透 HTTP。
-多工具确认、配置/压缩与子 Agent 投影另行评审。独立 abort、steers、follow-ups 已明确退役；
+本期每执行仅一个待确认工具；配置/压缩按 B12 映射，不新增通用进度或子 Agent 公共事件。独立 abort、steers、follow-ups 已明确退役；
 停止经 user.interrupt，调整方向在实际停止后新提交。FollowUp 本期不启用，
 仅保留 [未来扩展设计](chat-follow-up-future-design.md)，不放宽单消息准入或增加公共字段。
 
@@ -147,41 +132,28 @@ M1 完成后 M2 才能开始。跨这个完成边界的迟到中断、已接受�
 | 已确认 type | 已确认阶段规则 | 字段 / 行为及确认范围 |
 |---|---|---|
 | user.* 首帧 | 不带 phase，仅本次完整回执 | eventId/type/createdAt 及对应已确认业务字段；完整内容已确认 |
-| agent.message | phase=delta/completed | completed 的 content 为完整正文字符串已确认（L5）；delta 字段、createdAt 等其余细节仍保留候选状态；同 ID 完整内容替换 preview |
-| agent.thinking | phase=delta/completed | 仅启用且有可公开摘要时输出，不泄露原始推理；具体内容策略待评审 |
-| agent.tool_call | 无 phase 的完整事件 | arguments JSON 对象已确认（L6）；Mate 的 toolName=CallMateTool、arguments={tool,args} 已确认（L9）；其他字段保留各自原有状态 |
-| agent.tool_result | 无 phase 的完整事件 | content 数组且仅包含 text 块已确认（L7/L8）；每条结果必有布尔 isError、成功 false/失败 true 已确认（L10）；其他字段及失败 errorCode 保留各自原有状态 |
-| session.status_idle | 无 phase 的完整事件 | eventId/type/createdAt/reason；reason=done/terminated/failed/confirming 仍候选 |
+| agent.message | phase=delta/completed | completed 的 content 为完整正文字符串已确认（L5）；delta content 为增量字符串且无时间，完整 createdAt 保存一次为 UTC 毫秒；同 ID 完整内容替换 preview |
+| agent.thinking | phase=delta/completed | 仅启用且有可公开摘要时输出，不泄露原始推理；B05 已确认公开摘要和历史可见性 |
+| agent.tool_call | 无 phase 的完整事件 | arguments JSON 对象已确认（L6）；Mate 的 toolName=CallMateTool、arguments={tool,args} 已确认（L9）；requiresConfirmation 必填布尔，sourceEventId 指原消息 |
+| agent.tool_result | 无 phase 的完整事件 | content 数组且仅包含 text 块已确认（L7/L8）；每条结果必有布尔 isError、成功 false/失败 true 已确认（L10）；失败必有稳定 errorCode，成功省略；至少一个 text 块，允许空文本 |
+| session.status_idle | 无 phase 的完整事件 | eventId/type/createdAt/reason；reason=done/terminated/failed/confirming 已确认；failed 必有 errorCode/message |
 
-2026-09-07 用户在 ListEvents 选择 `L5-agent-message-content=A-string`。
-按完整事件同形规则，本 POST 的 `agent.message` completed 帧同步确认 `content` 字符串；
-设计理由和剩余字段范围见[历史查询 §2](chat-events-v2-history-design.md#2-历史返回什么)。
-本轮不改变示例值、delta 设计、图中关系或两个接口的整体待评审状态。
-同日用户选择 `L6-tool-call-arguments=A-object`，本 POST 同步确认完整工具调用事件的
-`arguments` JSON 对象；原因和工具结果内容结构的下一步评审仍由历史查询 §2 维护。
-2026-09-08 用户选择 `L7-tool-result-content=A-content-blocks`，本 POST 同步将完整工具
-结果的 content 改为数组，现有文本包装为一个 text 块。用户随后明确本期工具只返回文本（L8），
-不增加 JSON 块或图片块。Mate 的文本返回与源码边界见[历史查询 §2.1](chat-events-v2-history-design.md#21-mate-工具的文本返回与源码边界)；
-空文本及错误细节仍待评审。
-同日用户选择 L9 保留 Runtime 包装，本 POST 的 Mate 调用同步为 `CallMateTool` 和
-`{tool,args}`；完整工具结果的文本块、关联 ID 与确认标记不变。
-同日用户选择 L10，本 POST 同步确认每条完整工具结果必有布尔 isError，成功 false、失败 true；
-errorCode 字段、具体码值和文案仍待评审。设计理由与源码证据继续由历史查询 §2.1 维护。
+L1～L10 和 B01～B15 的原始决定按历史记录保留；最新字段与错误码定义使用共享模型，不用旧确认时的候选段落覆盖本批决定。
 
-完整事件在 SSE 与 ListEvents 同名同形；落盘范围仍须配合历史接口确认，
+完整事件在 SSE 与 ListEvents 同名同形；落盘范围按 B12 与历史同一投影实现，
 不能假定当前 Java 已保存 Tool Call 或 idle。preview 不持久化、不补发；同一 eventId
 出现 completed 后不再发送 delta。背压丢弃某个 preview 后，该连接停止此 ID 后续 delta，
 等待完整内容覆盖，避免把缺片段的拼接结果显示为完整答案。工具参数、结果不泄露凭据、
 堆栈或不允许公开的内部数据，Mate 还需进行公共安全投影。
 
-## 5. 失败、背压与恢复候选
+## 5. 已确认失败、背压与恢复
 
-| 时点 | 推荐处理，尚待完整评审 |
+| 时点 | 已确认语义，精确错误表见统一 HTML |
 |---|---|
 | 确认尚未接受、SSE Header 前 | 400/404/409/503 或确认回滚后的 500 JSON，仅 resCode/resMsg |
 | 已经接受但启动/续跑失败 | 不再宣称“未接受”；能可靠记录失败终态时推送对应 failed，否则断开并历史对账 |
 | SSE Header 后发生编码/网络/队列故障 | 不改 HTTP 状态，不拼接 JSON 错误外壳；关闭本条响应，未收到终态视为结果不确定 |
-| 已接受执行发生业务失败 | 候选发送已提交的 session.status_idle(reason=failed)，再结束响应 |
+| 已接受执行发生业务失败 | 发送已提交的 session.status_idle(reason=failed)，再结束响应 |
 | 客户端断开 | 仅解绑本次输出，不取消执行、不重发 POST；后台继续持久化 |
 
 客户端只有收到本次绑定的明确结束事件才可判断本次交互结束；单纯 EOF、HTTP 200、
@@ -191,8 +163,8 @@ errorCode 字段、具体码值和文案仍待评审。设计理由与源码证�
 每条 POST 响应按事件数和字节数限缓冲，preview 可舍弃；完整事件无法入队或单帧超限
 则关闭该响应。网络写出不在 Session 事务内等待，慢连接不阻塞执行或中断接受。
 首帧保留顺序和容量需在接受前校验；持久化成功后若网络发送失败属于结果不确定。
-心跳建议 `: ping`，空闲间隔由服务端配置（15 秒仅候选）；不再需要 connected 就绪
-握手，因为没有独立读流。所有容量、默认值、超时细节继续待评审。
+心跳采用 `: ping`，空闲间隔由服务端配置（15 秒仅候选）；不再需要 connected 就绪
+握手，因为没有独立读流。容量、默认值与超时数值按实施校准，超时语义不再待定。
 
 断线后使用 GET ListEvents 普通整数分页查询完整记录，按 eventId 去重，保持响应数组顺序。
 仍在执行时可以后续补读或重新加载；没有可靠终态证据就不能标为完成。未收到首帧时，没有
@@ -200,12 +172,12 @@ errorCode 字段、具体码值和文案仍待评审。设计理由与源码证�
 不能凭相同文本猜测后重发。已确认的普通分页边界、完整帧同形和对账细节见
 [ListEvents 设计](chat-events-v2-history-design.md)。原消息与中断响应共用的 idle 在历史
 仅一条；历史页读完、旧 idle 或确认等待的 idle 都不是当前资源可接受 M2 的凭据。
-分页大小、结果元数据与空页规则只在历史专题维护；执行关联及 Mate 展示细节仍需确认。
+分页大小、结果元数据与空页规则只在历史专题维护；Claw 执行关联按 sourceEventId 实施；Mate 公共投影仍需独立对齐。
 时间允许回退，不用最后 createdAt 作下界，也不自行构造内部序号。
 
-![请求级 SSE 生命周期：关闭及中断推送分工已确认，数据库中断机制已确认，参数及竞态细节待评审](设计图/事件接口重设计/target_session_live_stream_lifecycle.svg)
+![请求级 SSE 生命周期：关闭及中断推送分工已确认，数据库中断机制已确认，竞争规则已确认，数值待实施校准](设计图/事件接口重设计/target_session_live_stream_lifecycle.svg)
 
-[PlantUML 源码：`target_session_live_stream_lifecycle`](设计图/事件接口重设计/diagram.puml#L208)
+[PlantUML 源码：`target_session_live_stream_lifecycle`](设计图/事件接口重设计/diagram.puml#L227)
 
 ## 6. 证据、差距与外部边界
 
@@ -229,9 +201,9 @@ Mate 公共路径、身份映射、读取流或用户授权。桥接方案需后
 
 ## 7. 实施验收与待确认
 
-已确认项不再展示选项。待确认：数据库控制字段与约束、实测索引选型、检查周期及超时，确认续跑与控制竞争；
-idle reason、具体字段和 thinking 内容；Header 后错误、保活、容量；合并接口整体确认。
-对应 idle 关闭、等待工具确认分段、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认，不重复询问。用户已明确推进 ListEvents，POST 剩余问题仍保留待评审，不据此整体通过。
+B01～B15 已一次确认，不再列单字段选项。精确契约已定稿；数据库控制字段/约束、
+实测索引、检查周期、超时和容量数值由实施校准。跨实例确认通过数据库传递已提交决定与
+完整事件，具体应用层骨架见[总体设计 §4.5](chat-events-v2-design.md#45-确认续跑的跨实例交接target-only-实施骨架)。
 
 实施验收需覆盖：原响应保留执行输出，中断响应只含回执与同一停止 idle，终态 eventId 一致；
 三输入首帧与请求内容一致且只一次；提交前绑定/回执先行；极快完成；
@@ -241,12 +213,13 @@ idle reason、具体字段和 thinking 内容；Header 后错误、保活、容�
 本节不重复维护调度与数据库检查清单。
 本轮仅改设计，未运行尚未实现的 v2 Runtime 集成测试。
 
-剩余问题按用户要求统一纳入[历史专题 §8 的批量评审](chat-events-v2-history-design.md#8-剩余问题一次批量确认待确认建议)。B01～B15 均为待确认建议，当前报文示例未据此调整。
+剩余问题按用户要求统一纳入[历史专题 §8 的批量评审](chat-events-v2-history-design.md#8-批量确认结果)。B01～B15 已确认，报文示例已经统一同步。
 
 ## 8. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.5.0 | 2026-09-08 | 确认 B01～B15，补齐根消息绑定、结束原因、控制竞争、跨实例确认与错误处理；例子和字段改为引用共享精确模型，Skill 复用此生命周期。 |
 | 0.4.6 | 2026-09-08 | 同步 L10：每条工具结果必有布尔 isError；errorCode、文案与其他细节合并到 B01～B15 批量评审，接口未整体确认，PlantUML 不变。 |
 | 0.4.5 | 2026-09-08 | 同步 L9 Mate 工具名与参数包装，结果仍为文本块数组；成败标记、错误及整体仍待评审，PlantUML 不变。 |
 | 0.4.4 | 2026-09-08 | 同步 L7/L8：agent.tool_result.content 使用仅含 text 块的数组；Mate 返回链路与待决工具身份投影由历史专题维护，其他字段及 POST 整体仍待评审，PlantUML 不变。 |
@@ -262,7 +235,7 @@ idle reason、具体字段和 thinking 内容；Header 后错误、保活、容�
 | 0.3.1 | 2026-09-05 | 确认 M6：M1 未完成前拒绝 M2，消息与 running 状态同事务提交；确认等待的 SSE idle 不释放资源准入，控制事件另行检查。补充目标生命周期与验收；迟到中断和超时仍待评审。 |
 | 0.3.0 | 2026-09-04 | 确认 M5 数据库停止请求与实例批量检查；明确 A/B 通过持久化结果交接、首帧投递屏障及固定内部目标，本期不引入 Redis；数据库与故障参数仍待评审。 |
 | 0.2.2 | 2026-09-04 | 确认 M4 原消息与中断响应分工、共用同一停止 idle 的 eventId；补充多实例定位问题解释和当前源码链接，更新生命周期图；不选择路由实现或确认其他字段。 |
-| 0.2.1 | 2026-09-04 | 记录用户确认 M3：对应 idle 后关闭，等待工具确认时也关闭，新确认 POST 接收续跑。同步状态和生命周期图；精确 reason、并发输出绑定及错误细节仍候选，整个操作仍待评审。 |
+| 0.2.1 | 2026-09-04 | 记录用户确认 M3：对应 idle 后关闭，等待工具确认时也关闭，新确认 POST 接收续跑。同步状态和生命周期图；精确 reason、并发输出绑定及错误细节仍候选，已确认目标契约，待实现。 |
 | 0.2.0 | 2026-09-04 | 撤销独立 GET stream，合并到 POST SSE，确认完整本次 user.* 首帧；保留 S1/S2、Header、eventId 与排序；三输入绑定和结束规则仍候选，更新源码基线与三图。 |
 | 0.1.2 | 2026-09-04 | 确认 S1 data-only、S2 type + phase、S3 用户事件只走回执/历史、S4 GET 不要求 access-token；移除四项选择题并记录精确选择，保留其余字段与 GET 整体评审状态。 |
 | 0.1.1 | 2026-09-04 | 按用户指定确认五个基础类型名，同步全部候选示例及流/历史同名约束；S2 仅继续评审增量结构，不保留会重新开放旧名称的选项；phase、字段和 GET 整体仍未确认。 |

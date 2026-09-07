@@ -4,16 +4,16 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.2.0 |
-| 更新日期 | 2026-09-07 |
+| 文档版本 | 4.0.0 |
+| 更新日期 | 2026-09-08 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | Skill 发现候选 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`（PR #210，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并） |
 | Skill 名称专项复核 | `0300541fbbe3db8b05ffa1ac953f15f01df74b3e`（2026-09-04，本地源码提交；只复核名称规则与消费者） |
-| 状态 | Builtin 与 Skill Command 由用户统一负责设计、实现和集成；执行契约细节待统一评审 |
+| 状态 | Builtin 与 Skill Command 由用户统一负责设计、实现和集成；B13/B14 语义已确认，精确契约已定稿，可进入实现，执行仍 target-only |
 
 ## 1. 当前实施责任
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、执行结果和 HTTP 发布集成仍需评审。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、SSE 执行结果和 Events 集成按 B13/B14 已确认语义实施。
 PR #210 的动态 SkillCommandSource 可保留，但 Registry 必须在调用 Source 前按来源过滤。
 内部 Builtin 专属解析不读取 Skill 来源；共享 GET 必须取得完整 Agent 快照，不触发刷新，无完整快照整体返回 503。
 现有 Skill 发现定义只展示，不安装伪 Handler；用户统一补齐真实执行定义。
@@ -60,7 +60,7 @@ pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 ```
 
 `name` 指 Skill 包名称，不含命令命名空间前缀。入口解析命令前缀后，
-必须复用 Skill 域的同一套严格规则；共享 HTTP 联合类型由用户统一对齐。规则对齐
+必须复用 Skill 域的同一套严格规则；共享 HTTP 联合类型已由 B13 确认。规则对齐
 [Agent Skills specification](https://agentskills.io/specification)。正则本身没有 64 字符上限，
 必须同时校验长度为 1～64 个字符。以下规则是 2026-09-04 已确认目标，名称专项复核源码仍有第 2 节所列差距：
 
@@ -78,7 +78,7 @@ pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 
 ![Skill 名称统一严格校验目标](设计图/skill_name_validation.svg)
 
-[PlantUML 源码：`skill_name_validation`](设计图/diagram.puml#L24)
+[PlantUML 源码：`skill_name_validation`](设计图/diagram.puml#L25)
 
 ## 4. 统一实施与集成要求
 
@@ -88,12 +88,55 @@ running 时整项省略。仅返回 name/kind/description 与
 完整规则与最新源码差距见[共享 GET 契约](../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
 这些是已确认的发现投影，不等于 Skill POST 已实现或已发布。
 
-Skill 执行由用户统一设计与实现，按共享核心依赖安排实施；已有发现骨架仍只证明发现能力。
-统一对齐时需明确命令结果、完整快照、绑定重检、容量、信任分层、失败与恢复。
-不得重新引入本期已移除的通用 commandId、command.started/completed/failed 或 Name 边车。
-若需要私有 Skill 调用快照，必须单独评审其保留期、隐私与恢复用途，不作为当前实现要求。
+B13/B14 已确认共享 `POST /sessions/{sessionId}/command`。精确联合请求、错误与 SSE 示例见
+[当前命令契约](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#executeSessionCommand)。
+Builtin 保持 JSON；Skill 使用 name="skill:<name>"、arguments 与可选 fileIds，成功返回请求级
+SSE。普通 Events 不解析 Slash；Skill 的首帧 user.message 保留展开前调用，随后复用普通 Agent、
+Tool 和 idle 事件。无 commandId/通用生命周期；user.message.eventId 即本次根消息，
+sourceEventId 和 targetEventId 支撑确认、中断与历史归属。
+
+全局目标类图复用[通用模块主图](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)，
+不维护一张割裂的 Skill 总图。SkillCommandDefinition 显式组合准入策略和真实 Handler；
+Handler 委派 SkillExecutionService，后者使用普通消息接受/执行应用服务，不越层调用 Controller。
+
+![Skill 快照与执行下钻](设计图/target_skill_execution.svg)
+
+[PlantUML 源码](设计图/diagram.puml#L61) · [原尺寸 SVG](设计图/target_skill_execution.svg)
+
+受理前从一份完整缓存解析绑定、定义和 Skill 正文，固定成不可变请求快照；GET 和 POST 是独立
+快照，不能把先前清单当作授权。POST 在所属锁/事务内重检绑定、权限和容量，原子接受根消息并
+将 Session 改为 running；接受失败不写成功历史，不回退普通消息。Skill 只作为用户选择的资源
+上下文，不提升为系统权限，不将包内指令当作认证或工具授权。
+
+内部 Session 记录保留恢复模型上下文所需的展开内容和绑定版本（不是新增独立 Skill 审计副本），
+公开投影只显示原调用和执行结果。恢复不得重新读取新 Skill 正文悄悄改变旧任务；凭据仍只存在
+Active Holder 内存，实例丢失不自动恢复凭据或重放副作用工具。引用文件依然通过原有 Skill
+资源解析边界读取，本次快照承诺只覆盖已解析正文和元数据，不虚构所有外部文件均被冻结。
+参数/附件复用普通消息上限；展开后的输入预算在接受前检查，不截断 Skill 正文后继续。
+B15 沿用部署统一保留策略，未配置时不新增自动清理；删除按根消息及必要引用保持对账完整。
+不新增 Maven 依赖，继续使用现有缓存、JDK/Jackson 与 Session 组件。
+
+### 4.1 本批源码证据与差异
+
+设计基线 `9096f1e9ae445e67292c5e7d5a9e0d2ac10d8f5d`；Java 固定
+`dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，只补充下面符号，不覆盖 §2 的历史名称专项证据。
+
+| 仓库 / 相对路径与符号 | 已观察行为 | 已确认目标与理由 |
+|---|---|---|
+| pi-mono-java · modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java · list/resolved/hasSkillMarkdown | prepareCached 后产生发现 DTO 和 SkillCommandSnapshotDTO，包含内部 Skill 身份、版本与内容；使用 ClawConstants.Skill.isValidName，检查规范位置；不执行 Skill | 保留发现事实，增加真实执行 Definition/Handler 与共享消息接受链；不能将发现实现当成 HTTP Skill 执行已发布 |
+| pi-mono · packages/coding-agent/src/core/agent-session.ts · _expandSkillCommand/prompt，固定 5cd93f688aaab89dbb6dfa4aca535f21796ae185 | /skill:name 查本地 Skill 并展开正文；找不到或读失败可返回原文本；扩展后作为模型输入 | 学习展开语义；HTTP 精确匹配失败必须拒绝、不回退；正文不进公共回执。产品约束与安全加固，不复制 CLI 文件路径或内存排队 |
+| pi-mono-java · modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java · userEntry/toAgentMessages | 公开 user payload 与模型恢复已有不同方法，但 userMessage 目前仅按公开文本/附件重建 | 需增加内部展开输入与公开原调用的独立投影，恢复不能重新解释不同版本 Skill；target-only 架构变更 |
+
+上一版的 pi 4af9d21d 对照仍保留在历史证据；本批 Skill 展开使用项目固定 5cd93f，不静默漂移。
+现有源码缺口是执行接入、快照事务及安全恢复，不是改一个 HTTP Content-Type 即可完成。
 
 ## 5. 当前验收
+
+先落 SkillCommandDefinition/Handler 与 SkillExecutionService 骨架，再复用 SessionEventApplicationService、
+共享投影和响应绑定；最后接入联合 VO。验收 Skill 正常 SSE、确认分段、原消息中断、根 ID 对账，
+以及解析失败不接受、受理前绑定变更拒绝、受理后版本固定、展开预算超限拒绝、公开历史不泄露正文，
+恢复不换版本、丢失凭据不自动重跑。Builtin JSON 和 GET 轻量清单必须保持现有行为。
+
 
 统一验收同时覆盖 Builtin 与 Skill Command。Builtin 专项验证来源视图只含七项、Builtin Registry 不调用 SkillCommandSource；
 Skill 专项验证发现、真实执行与失败恢复；最终共享清单和请求联合类型覆盖两类命令，不能以 POST skill:* 必须失败作为整体验收。
@@ -109,6 +152,7 @@ skills Builtin 只展示最新完整绑定快照中的名称/描述，不等于�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 4.0.0 | 2026-09-08 | B13/B14/B15 已批量确认：共享 Command 的 Skill 联合请求与 SSE、不可变执行快照、绑定重检、内部恢复与保留；更新全局图引用和执行下钻图，记录 dfb90ca 与固定 pi 5cd93f 源码证据。 |
 | 3.2.0 | 2026-09-07 | 合入共享 GET 的 Skill 轻量投影与 running 过滤，明确完整缓存前置；保留严格名称、统一实施责任及待评审的执行细节。 |
 | 3.1.3 | 2026-09-05 | 用户统一负责 Skill 与 Builtin 的设计、实现和集成；更新实施、发布与验收责任；取代 3.1.1/3.1.2 的同事并行分工。 |
 | 3.1.2 | 2026-09-04 | 加载、命令发现和执行统一严格名称校验，取消存量兼容；追加 `0300541f` 名称专项证据、pi warning 差异、目标校验图与一致性验收，保留并行开发分工。 |

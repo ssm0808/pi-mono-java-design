@@ -35,7 +35,7 @@ class CatalogTest(unittest.TestCase):
             self.assertEqual(original["operation"], model["operation"])
             self.assertEqual(original["review"], model["review"])
         state = self.read_json(current.ROOT / "接口契约-v2/common.json")["reviewState"]
-        self.assertEqual({"currentOperation": "listSessionEvents", "confirmedOperations": []}, state)
+        self.assertEqual({"currentOperation": "listSessionEvents", "confirmedOperations": ["submitSessionEvent", "listSessionEvents"], "reviewMode": "completed", "semanticBatch": "2026-09-08.1-confirmed"}, state)
 
     def test_duplicate_operation_is_rejected(self):
         self.manifest["operations"].append(copy.deepcopy(self.manifest["operations"][0]))
