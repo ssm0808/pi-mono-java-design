@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "一次 POST 提交用户事件，在同一响应中接收 SSE",
-    "description": "已确认合并方向：POST 同时承担事件提交和对应推送，不再提供独立 GET /events/stream；GET /events 的 ListEvents 历史查询仍保留。每次提交 user.message、user.interrupt、user.tool_confirmation 中的一条，响应为 200 text/event-stream，而不是独立 ResultBean JSON。三种用户事件均必须携带 access-token。event 包装、content[]、eventId、不公开 entryId/entrySeq/runId/executionId、Header 示例与安全边界继续有效。五个基础类型名及 S1 data-only、S2 type + phase 继续有效。已确认首个业务帧返回本次提交的完整 user.* 事件（含 eventId），仅一次；后续才推送对应的 Agent/Session 事件。这明确调整原 S3，不广播其他用户输入，也不额外包装 ResultBean。当前候选是请求范围 SSE，输出只绑定本次消息、确认续跑或中断目标，不跨后续无关执行；结束规则已确认：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭；之后通过新的 user.tool_confirmation POST 接收续跑结果。等待确认不是任务成功，不相关的 Session idle 不能结束本次响应。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。执行标识不公开；旧停止请求不能作用于下一轮执行，回执、超时或实例失联不代表已停止。数据库字段、检查周期、并发竞态、idle reason 具体值和故障处理细节仍待评审。断线不取消已接受的执行、不自动重发 POST，通过 ListEvents 对账。未整体确认合并接口，也未修改 CampusClaw 实现或 Mate 公共契约。",
+    "description": "已确认合并方向：POST 同时承担事件提交和对应推送，不再提供独立 GET /events/stream；GET /events 的 ListEvents 历史查询仍保留。每次提交 user.message、user.interrupt、user.tool_confirmation 中的一条，响应为 200 text/event-stream，而不是独立 ResultBean JSON。三种用户事件均必须携带 access-token。event 包装、content[]、eventId、不公开 entryId/entrySeq/runId/executionId、Header 示例与安全边界继续有效。五个基础类型名及 S1 data-only、S2 type + phase 继续有效。已确认首个业务帧返回本次提交的完整 user.* 事件（含 eventId），仅一次；后续才推送对应的 Agent/Session 事件。这明确调整原 S3，不广播其他用户输入，也不额外包装 ResultBean。当前候选是请求范围 SSE，输出只绑定本次消息、确认续跑或中断目标，不跨后续无关执行；结束规则已确认：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭；之后通过新的 user.tool_confirmation POST 接收续跑结果。等待确认不是任务成功，不相关的 Session idle 不能结束本次响应。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。单消息准入已确认：同一 Session 的 M1 未执行完成前，不接受任何调用方提交的下一条 user.message M2，也不将 M2 排队或写入已接受事件历史。接受 user.message 时，在同一数据库短事务中锁定 Session、复核 state=idle、写入消息和内部执行身份，并将 state 改为 running；提交成功后才启动执行并返回完整回执。该约束按 Session 生效，覆盖不同用户和服务实例。M1 等待工具确认、正在停止或仅响应断开时仍未完成，Session 保持 running；等待确认的 session.status_idle 只结束本次 SSE，不能据此开放下一条消息。M1 真正完成或实际停止且结束状态提交后，Session 才恢复 idle。user.interrupt 和 user.tool_confirmation 按各自控制条件接受，不受新消息的 idle 前置条件阻挡。中断查询优化已确认：同实例在停止请求提交成功后立即通知对应执行，跨实例继续批量检查，数据库轮询兜底保留；固定内部执行身份是等待结果的去重键，同一目标只查一次，再分别通知本机仍连接的响应。先登记等待再补读已提交终态，避免登记前后完成导致漏发；本地通知和补读共用每条响应的终态去重，完整回执先行，同一终态每条响应最多投递一次，慢连接互不阻塞。最后一个等待者离开只清理本机登记，不删除停止请求或终态。查询索引按实际 GaussDB 版本、执行计划与 100 并发压测选择，不预先冻结具体索引、500 毫秒周期、批次上限或工具/中断等待超时。执行标识不公开；旧停止请求不能作用于下一轮执行，回执、超时或实例失联不代表已停止。数据库字段、检查周期、并发竞态、idle reason 具体值和故障处理细节仍待评审。断线不取消已接受的执行、不自动重发 POST，通过 ListEvents 对账。未整体确认合并接口，也未修改 CampusClaw 实现或 Mate 公共契约。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -93,11 +93,11 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "顶层固定只有 event；event.type 是联合类型判别字段，可选择 user.message、user.interrupt 或 user.tool_confirmation。一次请求只提交一条事件，不支持数组或批量；三种事件都会被本接口接收。null 不等价于省略。user.message 的 content 长度 1..5，最多一个 text 且必须位于第一项，最多四个不重复 file。user.interrupt 无其他业务字段。user.tool_confirmation 只在等待对应 Tool Call 确认时接受。",
+      "description": "顶层固定只有 event；event.type 是联合类型判别字段，可选择 user.message、user.interrupt 或 user.tool_confirmation。一次请求只提交一条事件，不支持数组或批量；三种事件都会被本接口接收。null 不等价于省略。user.message 的 content 长度 1..5，最多一个 text 且必须位于第一项，最多四个不重复 file。user.interrupt 无其他业务字段。user.tool_confirmation 只在等待对应 Tool Call 确认时接受。 user.message 仅在 Session 为 idle 时接受；接受消息与改为 running 同事务，上一条消息未完成前拒绝下一条，不排队。",
       "examples": [
         {
           "label": "用户消息 · user.message",
-          "description": "文本与附件保持调用顺序；Claw 只保存 fileId 引用。",
+          "description": "文本与附件保持调用顺序；Claw 只保存 fileId 引用。 同一 Session 的上一条用户消息未完成时，本条消息不被接受。",
           "value": {
             "event": {
               "type": "user.message",
@@ -159,7 +159,7 @@
         "status": "200",
         "tabLabel": "200 · 等待工具确认",
         "label": "OK",
-        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，数据库中断机制已确认，具体事件字段、数据库控制细节与并发竞争仍待评审。对应 user.message 触发待确认工具；等待工具确认时也关闭本次响应。此处不是任务已经完成，之后需新 POST 提交 user.tool_confirmation 并接收续跑结果；示例 reason=confirming 的具体取值仍待字段评审。",
+        "summary": "首个业务帧是本次完整用户事件回执，已确认；结束规则已确认，中断推送分工已确认，数据库中断机制已确认，具体事件字段、数据库控制细节与并发竞争仍待评审。对应 user.message 触发待确认工具；等待工具确认时也关闭本次响应。此处不是任务已经完成，之后需新 POST 提交 user.tool_confirmation 并接收续跑结果；示例 reason=confirming 的具体取值仍待字段评审。 此时 M1 尚未完成，数据库 Session 仍为 running，不能接受 M2；此 idle 只表示本次 HTTP 交互结束。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
@@ -207,7 +207,7 @@
         "status": "200",
         "tabLabel": "200 · 中断完成",
         "label": "OK",
-        "summary": "对应 user.interrupt；首帧返回本次完整中断回执，之后只有目标实际停止后的 idle，不复制正文、思考或工具输出。原消息响应接收同一条 idle（同 eventId）并关闭，见“原消息被中断”示例。此推送分工已确认；HTTP 200 或回执不代表执行已停止。reason=terminated 仍为候选取值，数据库保存停止请求、执行实例批量检查及共享结束记录已确认；检查周期、并发竞态与停止失败仍待评审。",
+        "summary": "对应 user.interrupt；首帧返回本次完整中断回执，之后只有目标实际停止后的 idle，不复制正文、思考或工具输出。原消息响应接收同一条 idle（同 eventId）并关闭，见“原消息被中断”示例。此推送分工已确认；HTTP 200 或回执不代表执行已停止。reason=terminated 仍为候选取值，数据库保存停止请求、执行实例批量检查及共享结束记录已确认；同实例提交后立即通知与等待目标去重也已确认，回执仍先于同一权威终态；检查周期、具体索引、并发竞态与停止失败仍待评审。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",
@@ -311,7 +311,7 @@
         "status": "409",
         "tabLabel": "409 · SESSION_BUSY",
         "label": "Conflict",
-        "summary": "SSE Header 发出前：user.message 到达时 Session 不是允许新消息的 idle 状态。",
+        "summary": "SSE Header 发出前：user.message 的数据库准入检查发现 Session 不为 idle，包括已有消息执行中、等待工具确认或停止尚未完成；拒绝本次新消息，不写入已接受事件历史、不排队、不启动模型。拒绝语义已确认，409/SESSION_BUSY 沿用当前候选错误表达，完整错误契约仍待评审。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN",
@@ -420,8 +420,8 @@
     ]
   },
   "review": {
-    "status": "合并方向已确认 · 事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 五个基础类型名已确认 · 合并接口评审中 · 完整 user.* 首帧回执已确认 · 结束规则已确认 · 中断推送分工已确认 · 数据库中断机制已确认",
-    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。2026-09-04 用户要求合并 POST 提交和 GET 实时推送：改为同一 POST SSE。原独立 JSON 成功响应已被替代；用户进一步明确允许首帧返回本次完整 user.* 回执，含 eventId，只回执一次，不广播其他用户输入。S3 按这一明确选择调整。S4 仅适用已撤销的只读流，不能用于免除 POST 的工具令牌。用户进一步确认结束规则：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭，之后通过新的确认 POST 接收续跑结果。等待确认只结束本次 HTTP 交互，不代表任务成功。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。本次不冻结数据库字段、检查周期、并发竞态、idle reason 具体值或故障处理细节，不整体确认合并接口，不自动推进 ListEvents。",
+    "status": "合并方向已确认 · 事件范围与 eventId 已确认 · access-token 必填规则已确认 · Header 示例与处理说明已确认 · 顺序规则已确认 · 五个基础类型名已确认 · 合并接口评审中 · 完整 user.* 首帧回执已确认 · 结束规则已确认 · 中断推送分工已确认 · 数据库中断机制已确认 · 单消息准入已确认 · 中断查询优化已确认",
+    "notice": "已确认三种用户事件范围；三种用户事件均必须携带 access-token，JWT 与 APPKEY 模式一致，Q1 已确认并移出待选项；成功响应中的事件身份使用 eventId，不公开 entryId 或 entrySeq；X-HW-ID 的用户凭据语义、两种 Header 示例值，以及凭据从请求读取、在内存中保留到本次 Agent 执行结束、仅随实际 Mate tool execute 发送的处理说明。顺序规则已确认：同一 Session 先统一检查事件依赖、确定处理顺序，再在同一事务内分配内部序号并写入；前置事件未提交时，依赖它的事件不得先进入权威历史。无依赖的并发事件按统一接受顺序处理，上游乱序需按来源顺序或依赖等待、校验，不能凭时间猜测。ListEvents 按已提交的内部顺序返回，客户端保持数组顺序，不按 createdAt 重排；createdAt 只用于时间展示，不承诺递增，不公开 entrySeq。串行范围只含事件接受和短事务，不含模型或工具耗时调用。这是 v2 已确认目标要求，不表示当前 Java 已完整实现多来源依赖检查；本次不改时间字段取值语义或示例。2026-09-04 用户要求合并 POST 提交和 GET 实时推送：改为同一 POST SSE。原独立 JSON 成功响应已被替代；用户进一步明确允许首帧返回本次完整 user.* 回执，含 eventId，只回执一次，不广播其他用户输入。S3 按这一明确选择调整。S4 仅适用已撤销的只读流，不能用于免除 POST 的工具令牌。用户进一步确认结束规则：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭，之后通过新的确认 POST 接收续跑结果。等待确认只结束本次 HTTP 交互，不代表任务成功。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。单消息准入已确认：同一 Session 的 M1 未执行完成前，不接受任何调用方提交的下一条 user.message M2，也不将 M2 排队或写入已接受事件历史。接受 user.message 时，在同一数据库短事务中锁定 Session、复核 state=idle、写入消息和内部执行身份，并将 state 改为 running；提交成功后才启动执行并返回完整回执。该约束按 Session 生效，覆盖不同用户和服务实例。M1 等待工具确认、正在停止或仅响应断开时仍未完成，Session 保持 running；等待确认的 session.status_idle 只结束本次 SSE，不能据此开放下一条消息。M1 真正完成或实际停止且结束状态提交后，Session 才恢复 idle。user.interrupt 和 user.tool_confirmation 按各自控制条件接受，不受新消息的 idle 前置条件阻挡。中断查询优化已确认：同实例在停止请求提交成功后立即通知对应执行，跨实例继续批量检查，数据库轮询兜底保留；固定内部执行身份是等待结果的去重键，同一目标只查一次，再分别通知本机仍连接的响应。先登记等待再补读已提交终态，避免登记前后完成导致漏发；本地通知和补读共用每条响应的终态去重，完整回执先行，同一终态每条响应最多投递一次，慢连接互不阻塞。最后一个等待者离开只清理本机登记，不删除停止请求或终态。查询索引按实际 GaussDB 版本、执行计划与 100 并发压测选择，不预先冻结具体索引、500 毫秒周期、批次上限或工具/中断等待超时。本次不冻结数据库字段、检查周期、其余并发竞态、idle reason 具体值或故障处理细节，不整体确认合并接口，2026-09-06 用户明确要求开始修改历史接口，因此当前评审切换到 ListEvents；本 POST 的未决项仍保留，不视为整体通过。",
     "questions": [],
     "confirmedEventTypes": [
       "agent.message",
@@ -437,7 +437,9 @@
       "M2-receipt": "A-user-event-first",
       "M3-close-rule": "idle-closes-including-confirming",
       "M4-interrupt-delivery": "original-output-and-interrupt-receipt-shared-idle",
-      "M5-interrupt-coordination": "database-durable-stop-and-instance-batch-polling"
+      "M5-interrupt-coordination": "database-durable-stop-and-instance-batch-polling",
+      "M6-message-admission": "session-single-message-atomic-idle-to-running",
+      "M7-interrupt-optimization": "post-commit-local-wakeup-deduplicated-waiters-measured-index"
     },
     "decisionHistory": {
       "Q3-response": {
@@ -466,14 +468,38 @@
         "date": "2026-09-04",
         "source": "用户明确回复：可以呀，先用这个方案吧，后续有必要再使用redis",
         "status": "数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。这是已确认目标架构变更，尚未实现；不改既有请求、Header 或响应字段，不确认数值参数和整个操作。"
+      },
+      "M6-message-admission": {
+        "date": "2026-09-05",
+        "source": "用户明确说明：用户提交消息 M1，M1 未执行完之前不允许提交用户消息 M2；每次提交将数据库中的 Session 资源状态改为 running，防止不同用户对同一 Session 同时提交消息。",
+        "status": "单消息准入已确认：同一 Session 的 M1 未执行完成前，不接受任何调用方提交的下一条 user.message M2，也不将 M2 排队或写入已接受事件历史。接受 user.message 时，在同一数据库短事务中锁定 Session、复核 state=idle、写入消息和内部执行身份，并将 state 改为 running；提交成功后才启动执行并返回完整回执。该约束按 Session 生效，覆盖不同用户和服务实例。M1 等待工具确认、正在停止或仅响应断开时仍未完成，Session 保持 running；等待确认的 session.status_idle 只结束本次 SSE，不能据此开放下一条消息。M1 真正完成或实际停止且结束状态提交后，Session 才恢复 idle。user.interrupt 和 user.tool_confirmation 按各自控制条件接受，不受新消息的 idle 前置条件阻挡。分类为产品约束；消息接受的数据库行锁与 idle→running 已有实现证据，v2 确认等待/中断收尾为目标设计。未确认跨完成边界的迟到中断、超时响应或整个操作。"
+      },
+      "M7-interrupt-optimization": {
+        "date": "2026-09-05",
+        "source": "用户在同实例提交后立即通知、等待结束目标去重、索引按执行计划与压测选择的优化建议后回复：可以呀。",
+        "status": "中断查询优化已确认：同实例在停止请求提交成功后立即通知对应执行，跨实例继续批量检查，数据库轮询兜底保留；固定内部执行身份是等待结果的去重键，同一目标只查一次，再分别通知本机仍连接的响应。先登记等待再补读已提交终态，避免登记前后完成导致漏发；本地通知和补读共用每条响应的终态去重，完整回执先行，同一终态每条响应最多投递一次，慢连接互不阻塞。最后一个等待者离开只清理本机登记，不删除停止请求或终态。查询索引按实际 GaussDB 版本、执行计划与 100 并发压测选择，不预先冻结具体索引、500 毫秒周期、批次上限或工具/中断等待超时。分类为 target-only 架构优化；不修改既有 HTTP 字段、Header 或响应示例，不扩大重复中断准入，不确认整个操作。"
       }
     },
     "pendingReview": [
-      "数据库控制记录的字段与约束、检查周期和超时；确认续跑、完成与中断的并发竞态",
+      "数据库控制记录的字段、约束及实测索引选型、检查周期和超时响应；跨完成边界的迟到中断、确认续跑与中断竞争（单消息准入及中断查询优化已确认）",
       "具体事件字段、thinking 内容、idle reason、heartbeat、容量与错误细节",
       "合并 POST 接口整体确认"
     ],
     "promptPrefix": "Claw Session Events v2 合并接口评审：POST /sessions/{sessionId}/events",
-    "promptSuffix": "既有请求、Header、eventId、排序、S1/S2、完整首帧、对应 idle 关闭、中断推送分工及数据库中断机制已确认；当前不引入 Redis。继续评审数据库控制细节、周期与故障边界、并发竞态及具体输出字段，不重复询问已确认机制，不自动确认整个接口或修改 Mate 公共契约。"
+    "promptSuffix": "既有请求、Header、eventId、排序、S1/S2、完整首帧、对应 idle 关闭、中断推送分工及数据库中断机制、单消息准入及中断查询优化已确认；当前不引入 Redis。继续评审数据库控制细节、周期与故障边界、跨完成边界的迟到中断、确认与中断竞争及具体输出字段，不重复询问已确认机制，不自动确认整个接口或修改 Mate 公共契约。",
+    "interruptOptimization": {
+      "authority": "committed-database",
+      "localWakeup": "after-commit-only",
+      "pollingFallback": true,
+      "waiterGrouping": "fixed-internal-execution",
+      "registrationRecovery": "register-then-read-committed-terminal",
+      "terminalDelivery": "receipt-first-once-per-response",
+      "lastWaiterCleanup": "local-registration-only",
+      "indexSelection": "gaussdb-plan-and-load-test",
+      "pollingIntervalMs": null,
+      "batchSize": null,
+      "interruptWaitTimeoutMs": null,
+      "toolTimeoutMs": null
+    }
   }
 }

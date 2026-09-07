@@ -10,7 +10,10 @@ title CampusClaw Target POST Events and History
 ' Confirmed target architecture: combine submission and output in one POST;
 ' the first business frame is the complete accepted user event, exactly once.
 ' Design reason: remove the gap between a write and an independent live subscription.
-' Target-only: union input, response projection, causal ordering and fixed snapshot.
+' Target-only: union input, response projection, causal ordering and integer paging.
+' Source evidence: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
+' acceptUserEvent: row lock, idle recheck, message append and running update in one transaction.
+' Confirmed product constraint: one unfinished user.message per Session across instances.
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -33,11 +36,11 @@ API -> Binding : reserve bounded response capacity
 critical Session admission and target binding
   API -> Binding : bind this message, resume segment or interrupt target
   API -> Append : validate dependencies and accept user event
-  Append -> Store : short transaction: recheck, append; persist stop intent if interrupt
+  Append -> Store : short transaction: type-specific admission and append\nmessage: require idle, set running; interrupt: persist stop intent
   Store --> Append : committed user event
   Append --> API : accepted event
   API -> Binding : enqueue complete user receipt first
-  API -> Execution : start / resume only; interrupt is handled by DB polling
+  API -> Execution : start / resume; interrupt: local hint only after commit
 end
 Binding -> Writer : release ordered response frames
 Writer --> Mate : 200 SSE; data: complete user.* receipt
@@ -56,13 +59,13 @@ loop Output belonging to the bound request scope
 end
 group Confirmed idle closing and database interrupt handoff
   Execution -> Append : corresponding idle state
-  Append -> Store : commit authoritative terminal boundary
+  Append -> Store : commit corresponding boundary\nactual finish: set idle; confirmation wait: retain running
   Append -> Binding : publish matching session.status_idle
   Binding -> Writer : enqueue idle, then complete this response
   Writer --> Mate : data: idle; response ends
 end
 Mate -> API : GET /sessions/{sessionId}/events
-API -> Store : query fixed snapshot in committed internal order
+API -> Store : query current integer page in committed internal order
 Store --> API : ordered complete events
 API --> Mate : ResultBean JSON history
 
@@ -76,7 +79,14 @@ Never broadcast unrelated Session events to this response.
 A closed response does not cancel accepted execution.
 History repairs uncertainty; never replay the POST automatically.
 Interrupt delivery uses durable stop intent and per-instance polling.
+Same-instance wake-up follows commit; polling remains the fallback.
 Redis is deferred; no sticky routing or instance forwarding.
+end note
+note over API,Store
+Reject a new user.message while M1 is unfinished; never queue it.
+The busy response is sent before opening SSE.
+Control events use their own admission rules.
+Confirmation idle ends the HTTP response; the resource stays running.
 end note
 @enduml
 
@@ -180,6 +190,8 @@ No raw credentials or public execution identifier.
 end note
 note bottom of SessionEventAppender
 All writers share causal prerequisite checks and ordered commit.
+Message admission locks the Session and rechecks idle in the DB.
+Append the message and set running together; reject new messages while busy.
 Interrupt event and stop intent commit together for a fixed target.
 Terminal event and target result link also commit atomically.
 Allocate sequence and append atomically, retaining lock to commit.
@@ -226,19 +238,26 @@ database "History and Control Store" as Store
 
 Client -> API : POST user.message
 API -> A : reserve and bind before starting execution
-API -> Store : accept and persist user event
+API -> Store : short transaction: lock Session, require idle,\nappend M1 and set running
 API -> A : complete user.message receipt first
 API -> Execution : start only after receipt is queued
 A --> Client : data: user.message receipt
 Execution -> A : matching agent events
 A --> Client : data: agent.* output
 
+opt Another user.message arrives while M1 is unfinished
+  Client -> API : POST user.message M2
+  API -> Store : check authoritative admission state
+  Store --> API : busy; no message appended
+  API --> Client : reject before SSE\n409 SESSION_BUSY (candidate error)
+end
+
 alt Confirmed: close on matching execution idle
-  Execution -> Store : commit done / failed boundary
+  Execution -> Store : actual exit; commit done / failed boundary\nand set matching Session idle
   Execution -> A : corresponding idle, then complete
   A --> Client : data: session.status_idle; EOF
 else Confirmed: close while waiting for tool confirmation
-  Execution -> Store : commit Tool Call and confirming boundary
+  Execution -> Store : commit Tool Call and confirming boundary\nretain Session running; M1 is unfinished
   Execution -> A : tool call, confirming idle, then complete
   A --> Client : data: tool call; data: confirming idle; EOF
   Client -> API : new POST user.tool_confirmation
@@ -247,6 +266,7 @@ else Confirmed: close while waiting for tool confirmation
   API -> B : complete confirmation receipt first
   API -> Execution : resume
   B --> Client : data: user.tool_confirmation receipt
+  Execution -> Store : actual exit after resume; commit terminal\nand set matching Session idle
   Execution -> B : tool result, response, corresponding idle
   B --> Client : data: matching output; idle; EOF
 else Confirmed delivery: interrupt while response A remains open
@@ -254,17 +274,27 @@ else Confirmed delivery: interrupt while response A remains open
   API -> B : reserve response; retain fixed internal target
   API -> Store : transaction: bind target, persist interrupt and stop intent
   API -> B : complete interrupt receipt first
+  API -> API : register waiter by fixed execution target
+  opt Executing instance is also receiving this interrupt
+    API -> Execution : after commit: recheck target and request cancellation
+  end
   B --> Client : data: user.interrupt receipt
+  API -> Store : read committed terminal after registration
+  Store --> API : pending in this example; deliver if already complete
   Poller -> Store : batch read stop intents for local executions
   Store --> Poller : stop intent with fixed target
   Poller -> Execution : recheck identity; request local cancellation
-  Execution -> Store : commit actual stop idle and target result link
+  Execution -> Store : commit actual stop idle and target result link\nset matching Session idle
   Execution -> A : final committed idle if still attached
-  API -> Store : result poll: read this target's committed idle
+  API -> Store : result poll: read each unique local waiting target once
   Store --> API : same immutable idle event
-  API -> B : same idle eventId after receipt, then complete
+  API -> B : receipt-gated terminal delivery, at most once per response
   A --> Client : data: terminated idle; EOF
   B --> Client : data: terminated idle; EOF
+  note over API,B
+  Post-commit local terminal notification uses the same delivery gate.
+  Polling repairs missed notifications; response buffers stay independent.
+  end note
 end
 
 group Transport failure at any point
@@ -274,7 +304,7 @@ group Transport failure at any point
   No POST replay or independent GET stream reconnection.
   end note
   Client -> API : GET /sessions/{sessionId}/events
-  API -> Store : fixed committed snapshot
+API -> Store : current committed history page
   Store --> API : complete events in internal order
   API --> Client : ResultBean history
   Client -> Client : deduplicate by eventId; retain array order
@@ -292,6 +322,8 @@ title CampusClaw Target Database-backed Interrupt
 ' acceptUserEvent/finishExecution: current message acceptance and Session state updates.
 ' Observed behavior: current Java has no durable cross-instance interrupt handoff.
 ' Confirmed target architecture: DB stop intent and per-instance batch polling.
+' Confirmed M7: post-commit local wake-up, unique target queries, measured indexes.
+' Target-only: registration recovery and terminal delivery gates are not implemented.
 ' Design reason: accept on any instance without sticky routing or remote Java references.
 ' Schema, interval, race response details and crash recovery remain under review.
 skinparam backgroundColor #FFFFFF
@@ -311,6 +343,7 @@ participant "Instance A\nExecution / Original SSE" as A
 
 note over DB,A
 The accepted execution identity is already registered in the DB.
+The Session stays running until M1 actually finishes; new messages are rejected.
 Its live Agent object and credentials remain on instance A.
 end note
 Client -> B : POST user.interrupt
@@ -321,7 +354,13 @@ group Short admission transaction
   DB --> B : commit; complete receipt and fixed target
 end
 B -> B : enqueue receipt before any result delivery
+B -> B : register waiter under fixed internal execution identity
+opt Receiving and executing roles are on the same instance
+  B -> A : after stop commit: recheck target; request local cancellation
+end
 B --> Client : interrupt SSE: complete user.interrupt receipt
+B -> DB : immediately read committed terminal after registration
+DB --> B : pending in this example; if complete, deliver through same gate
 
 Poller -> DB : batch read stop intents for local active targets
 DB --> Poller : pending stop for the fixed target
@@ -329,19 +368,27 @@ Poller -> A : recheck identity and request local cancellation
 A -> A : finish cancellation and execution cleanup
 group Short terminal transaction
   A -> DB : recheck target; append one authoritative idle
-  A -> DB : link target to idle; update only matching state
+  A -> DB : link target to idle; set only matching Session idle
   DB --> A : commit; one idle eventId
 end
 A --> Client : original SSE: same committed idle; close
 
-B -> DB : batch read terminal results for local waiting responses
+opt Receiving and executing roles are on the same instance
+  A -> B : post-commit terminal hint; offer through per-response gate
+end
+B -> DB : batch read each unique local waiting target once
 DB --> B : this target's already committed idle
 B -> B : project immutable response VO; retain eventId
+B -> B : receipt first; gate duplicate terminal offers per response
 B --> Client : interrupt SSE: same idle; close
 
 note over B,DB
 B reads only the terminal result, not Agent output.
 A may finish before B polls; the committed result remains readable.
+Register then read covers completion before or during registration.
+Last waiter departure removes only the local group, not durable records.
+Registration and empty-group removal must be coordinated.
+Slow responses have independent bounded queues and fail independently.
 No credential is stored in control records or polling queues.
 end note
 note over Poller,A
@@ -353,6 +400,7 @@ note over B,A
 Timeout, DB failure or owner loss is not proof of successful interruption.
 No automatic takeover or POST replay; reconcile authoritative history.
 Polling interval, batch size and failure handling details remain open.
+Select indexes using actual GaussDB plans and 100-concurrency load tests.
 Redis is a future optional wake-up optimization, not a current dependency.
 end note
 @enduml
@@ -367,6 +415,13 @@ title CampusClaw Target Database Interrupt - Application Boundaries
 ' Observed behavior: current control and completion handles cannot cross JVM boundaries.
 ' Target-only design: every instance deploys both polling services; each owns local work only.
 ' Design reason: share durable identity and results, never a remote mutable Agent reference.
+' Supplementary source: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventStream.java,
+' attach/emit/complete: one subscriber and bounded queue; unchanged from 918005e.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java,
+' completeExecution: current persistence/completion, not a v2 after-commit terminal callback.
+' Observed behavior: registry, properties, stream, coordinator and application.properties
+' are unchanged between 918005e and dfb90ca; M7 remains a target-only architecture change.
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -388,6 +443,8 @@ package "Runtime - local to executing instance" {
   class "RuntimeActiveExecution" as Execution <<per execution, existing-changed>>
 }
 package "Response - local to receiving instance" {
+  class "InterruptWaitRegistry" as Waiters <<singleton, target-only>>
+  class "InterruptWaitGroup" as Group <<per fixed target, target-only>>
   class "RequestOutputBinding" as Binding <<per request, target-only>>
   class "RequestEventStream" as Stream <<bounded, target-only>>
   class "SessionEventResponseVO" as VO <<immutable, target-only>>
@@ -399,14 +456,21 @@ package "Persistence - shared database boundary" {
 class "ExecutionTargetDTO" as Target <<immutable internal identity, target-only>>
 
 Accept --> Append : admit\ninterrupt
+Accept --> Waiters : receipt queued;\nregister waiter
+Accept --> Result : read terminal\nafter registration
+Accept --> Runtime : after stop commit:\nlocal target hint
 Append --> Repo : atomic receipt\n+ stop intent
+Append --> Result : local terminal\nonly after commit
 Control --> Repo : batch local-target\nstop requests
 Control --> Runtime : snapshot targets;\nrecheck and cancel
 Runtime *-- "0..1 per Session" Execution
 Runtime --> Append : actual exit; commit\none terminal + result link
-Result --> Repo : batch terminal results\nfor local waiters
-Result --> Binding : inspect fixed\nwaiting targets
-Result --> Stream : convert DTO to VO;\ndeliver same idle
+Result --> Repo : batch terminal results\nfor unique waiting targets
+Result --> Waiters : snapshot unique targets\nand current waiters
+Result --> Binding : convert DTO to VO;\ntry receipt-gated terminal
+Waiters *-- "0..*" Group
+Group --> "1" Target : fixed key
+Group o-- "0..*" Binding : independent waiters
 Binding --> "1" Target
 Execution --> "1" Target
 Binding *-- "1" Stream
@@ -425,7 +489,19 @@ end note
 note bottom of Result
 Receipt first; terminal only.
 No copied Agent output.
-Disconnect removes the waiter,
-not the durable stop intent.
+Notification and DB read share
+one per-response delivery gate.
+Same terminal enqueued at most once;
+network delivery can still fail.
+Polling remains the fallback.
+Do not take business execution permits.
+Keep separate control and DB budgets.
+end note
+note bottom of Waiters
+Bound both target groups and actual waiters.
+Each response owns its receipt and queue.
+Coordinate last removal with new registration.
+Disconnect removes local state only;
+never delete durable stop or terminal records.
 end note
 @enduml

@@ -10,9 +10,10 @@ import render_chat_http_v1 as renderer
 ROOT = Path(__file__).resolve().parent
 CURRENT_OUTPUT = ROOT / "chat-events-v2-review.html"
 CONFIRMED_OUTPUT = ROOT / "chat-events-v2-confirmed.html"
+SUBMIT_OUTPUT = ROOT / "chat-events-v2-submit-review.html"
 
 
-def build_html(confirmed: bool = False) -> str:
+def build_html(confirmed: bool = False, operation_key: str | None = None) -> str:
     settings = {
         "CONTRACT_ROOT": ROOT / "接口契约-v2",
         "COMMON_PATH": ROOT / "接口契约-v2" / "common.json",
@@ -26,6 +27,8 @@ def build_html(confirmed: bool = False) -> str:
         common, models = original_loader()
         state = common["reviewState"]
         keys = state["confirmedOperations"] if confirmed else [state["currentOperation"]]
+        if operation_key is not None:
+            keys = [operation_key]
         if confirmed and not keys:
             return '''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
@@ -33,8 +36,9 @@ def build_html(confirmed: bool = False) -> str:
 <title>Session Events v2 — 评审状态更新</title></head>
 <body><main><h1>原独立 POST JSON 方案已被合并方案替代</h1>
 <p>当前没有整体确认的 v2 接口。既有请求、Header、eventId、排序和类型决定继续有效；
-完整本次 user.* 首帧回执、对应 idle 关闭（含等待工具确认）、中断推送分工及数据库中断机制已确认；数据库控制细节、周期、故障与其他字段仍在评审。</p>
-<p><a href="chat-events-v2-review.html">打开当前 POST 合并接口评审</a></p>
+完整本次 user.* 首帧回执、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；数据库控制细节、周期、具体索引、故障与其他字段仍在评审。</p>
+<p><a href="chat-events-v2-review.html">打开当前 ListEvents 历史接口评审</a></p>
+<p><a href="chat-events-v2-submit-review.html">查看合并 POST 的已确认决定与未决项</a></p>
 <p>旧方案可从 Git 历史恢复，不再作为现行接口展示。</p></main></body></html>
 '''
         selected = [model for model in models if model["operation"]["operationKey"] in keys]
@@ -42,7 +46,7 @@ def build_html(confirmed: bool = False) -> str:
         for model in selected:
             model["api"]["visibility"] = (
                 "Internal · 已确认接口 · target-only" if confirmed
-                else "Internal · 当前评审：POST 提交与推送合并 · target-only"
+                else f"Internal · {'当前评审' if model['operation']['operationKey'] == state['currentOperation'] else '保留评审稿，未整体确认'}：{model['operation']['shortName']} · target-only"
             )
         renderer.load_contract = lambda: (common, selected)
         return renderer.build_html()
@@ -57,8 +61,11 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     try:
-        for destination, confirmed in ((CURRENT_OUTPUT, False), (CONFIRMED_OUTPUT, True)):
-            content = build_html(confirmed)
+        for destination, confirmed, key in (
+            (CURRENT_OUTPUT, False, None), (CONFIRMED_OUTPUT, True, None),
+            (SUBMIT_OUTPUT, False, "submitSessionEvent"),
+        ):
+            content = build_html(confirmed, key)
             if args.check:
                 renderer.require(destination.read_text(encoding="utf-8") == content,
                                  f"Generated HTML is out of date: {destination.name}")

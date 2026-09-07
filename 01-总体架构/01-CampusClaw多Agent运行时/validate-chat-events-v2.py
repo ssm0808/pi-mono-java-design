@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate merged POST SSE decisions, preserved inputs and generated review."""
+"""Validate POST SSE and ListEvents models, examples and generated review pages."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 COMMON_PATH = ROOT / "接口契约-v2" / "common.json"
 MODEL_PATH = ROOT / "接口契约-v2" / "操作" / "01-submit-session-event.json"
+HISTORY_PATH = ROOT / "接口契约-v2" / "操作" / "02-list-session-events.json"
 USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
 STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "session.status_idle"}
 RETIRED_STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", "tool.result", "session.status.idle"}
@@ -22,8 +23,24 @@ CONFIRMED_CHOICES = {
     "M3-close-rule": "idle-closes-including-confirming",
     "M4-interrupt-delivery": "original-output-and-interrupt-receipt-shared-idle",
     "M5-interrupt-coordination": "database-durable-stop-and-instance-batch-polling",
+    "M6-message-admission": "session-single-message-atomic-idle-to-running",
+    "M7-interrupt-optimization": "post-commit-local-wakeup-deduplicated-waiters-measured-index",
     "S1-frame-format": "A-data-only",
     "S2-event-projection": "A-type-and-phase",
+}
+INTERRUPT_OPTIMIZATION = {
+    "authority": "committed-database",
+    "localWakeup": "after-commit-only",
+    "pollingFallback": True,
+    "waiterGrouping": "fixed-internal-execution",
+    "registrationRecovery": "register-then-read-committed-terminal",
+    "terminalDelivery": "receipt-first-once-per-response",
+    "lastWaiterCleanup": "local-registration-only",
+    "indexSelection": "gaussdb-plan-and-load-test",
+    "pollingIntervalMs": None,
+    "batchSize": None,
+    "interruptWaitTimeoutMs": None,
+    "toolTimeoutMs": None,
 }
 RESPONSE_INPUTS = {
     "200-message": "user.message",
@@ -143,6 +160,14 @@ def validate_model(model: dict) -> None:
     require(operation["operationKey"] == "submitSessionEvent", "review operation identity changed")
     validate_headers(operation)
     validate_event_ordering_rule(review)
+    require(review.get("interruptOptimization") == INTERRUPT_OPTIMIZATION,
+            "preserve M7 guarantees without approving numerical defaults")
+    require("中断查询优化已确认" in review["status"], "M7 approval must be visible")
+    for clause in ("停止请求提交成功后", "数据库轮询兜底保留", "固定内部执行身份是等待结果的去重键",
+                   "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次",
+                   "慢连接互不阻塞", "不删除停止请求或终态", "不预先冻结具体索引"):
+        require(clause in operation["description"] and clause in review["notice"],
+                f"missing visible M7 consistency rule: {clause}")
     body = operation["requestBody"]
     require(body["required"] and body["contentType"] == "application/json", "union request must remain JSON")
     inputs = {}
@@ -232,6 +257,17 @@ def validate_negative_regressions(model: dict) -> int:
         description=m["operation"]["description"].replace("当前仅依赖数据库", "当前依赖 Redis")))
     changed("missing fixed target", lambda m: m["operation"].update(
         description=m["operation"]["description"].replace("同一短事务中绑定具体内部执行", "按最新执行绑定")))
+    changed("missing M7 status", lambda m: m["review"].update(
+        status=m["review"]["status"].replace("中断查询优化已确认", "待定")))
+    changed("missing M7 model", lambda m: m["review"].pop("interruptOptimization"))
+    for field, value in INTERRUPT_OPTIMIZATION.items():
+        changed(f"changed M7 {field}", lambda m, key=field, original=value:
+                m["review"]["interruptOptimization"].update({key: 500 if original is None else "unconfirmed"}))
+        changed(f"missing M7 {field}", lambda m, key=field: m["review"]["interruptOptimization"].pop(key))
+    for field in ("description", "notice"):
+        section = "operation" if field == "description" else "review"
+        changed(f"missing visible M7 in {field}", lambda m, key=field, area=section: m[area].update(
+            {key: m[area][key].replace("先登记等待再补读已提交终态", "只等待通知")}))
     for choice in CONFIRMED_CHOICES:
         changed(choice, lambda m, key=choice: m["review"]["confirmedChoices"].update({key: "unconfirmed"}))
     original = model["operation"]["responses"][0]["bodies"]["default"]
@@ -286,11 +322,200 @@ def validate_negative_regressions(model: dict) -> int:
     return len(mutations) + len(RETIRED_STREAM_TYPES) + 3
 
 
-def validate_review_pages() -> None:
+def complete_streams(post: dict) -> dict:
+    return {item["id"]: [event for event in parse_stream(item["bodies"]["default"])
+                         if event.get("phase") != "delta"]
+            for item in post["operation"]["responses"] if item["status"] == "200"}
+
+
+def validate_history_model(model: dict, post: dict) -> None:
+    operation, review = model["operation"], model["review"]
+    require((operation["method"], operation["path"], operation["operationKey"]) ==
+            ("GET", "/sessions/{sessionId}/events", "listSessionEvents"), "history is GET events, not a stream")
+    require(operation["requestBody"]["contentType"] is None
+            and not operation["requestBody"]["required"]
+            and operation["requestBody"]["example"] is None, "GET history has no request body")
+    modes = operation["requestHeaderExamples"]
+    require(len(modes) == 2 and {m["id"] for m in modes} == {"jwt", "appkey"}, "preserve both read modes")
+    for mode in modes:
+        headers = {h["name"]: h for h in mode["headers"]}
+        require(len(headers) == len(mode["headers"]), "duplicate read Header")
+        require("access-token" not in headers, "history must not ask for a tool token")
+        require(headers["X-HW-ID"]["value"] == f"credential-{mode['id']}", "read credential example drift")
+        require("用户凭据 ID" in headers["X-HW-ID"]["description"], "credential ID is not a company ID")
+        name = "Authorization" if mode["id"] == "jwt" else "X-HW-APPKEY"
+        require(headers[name]["value"] == ("Bearer opaque-token" if name == "Authorization" else "opaque-appkey"),
+                "read credential value drift")
+        require(headers["Accept"]["value"] == "application/json", "history requests JSON")
+    require([p["name"] for p in operation["parameters"] if p.get("in") == "query"] == ["limit", "page"],
+            "do not introduce unreviewed query parameters")
+    parameters = {p["name"]: p for p in operation["parameters"] if p.get("in") == "query"}
+    require(parameters["page"]["schema"] == "integer >= 1; default 1", "page is a one-based integer")
+    require(parameters["limit"]["schema"] == "integer 1..200; default 50",
+            "confirmed default 50 and max 200 must not drift")
+    require(review["inheritedRules"] == {
+        "eventIdentity": "eventId", "completeEventProjection": "same-as-post-sse",
+        "ordering": "committed-causal-order", "deltaHistory": False,
+    }, "history must retain identity and projection, without reviving a fixed snapshot")
+    require(review["confirmedPagination"] == {
+        "direction": "oldest-first", "pageType": "positive-integer", "firstPage": 1, "defaultPage": 1,
+        "fixedSnapshot": False, "cursorEncryption": False, "nextPage": "integer-or-null",
+        "sameLimitAcrossPages": True, "readWhileRunning": True,
+        "defaultLimit": 50, "maxLimit": 200, "responseFields": ["events", "nextPage"],
+        "outOfRangePage": "empty-success",
+    }, "ordinary pagination is confirmed, without a cross-page snapshot or idle-only restriction")
+    proposal = review["historyProposal"]
+    require(proposal == {
+        "scope": "current-branch-per-request", "thinkingFilter": "session-policy",
+        "readToolToken": False,
+    }, "keep only the remaining candidates, not cursor keys, bindings or expiry")
+    require(review["confirmedChoices"] == {
+        "L1-page-direction": "A-oldest-first", "L1-page-format": "one-based-integer",
+        "L1-consistency": "no-fixed-snapshot",
+        "L2-page-size": "B-default50-max200", "L3-page-metadata": "A-events-nextPage-only",
+        "L4-out-of-range-page": "A-empty-success",
+    } and "ListEvents 接口整体确认" in review["pendingReview"],
+            "pagination is approved, not the whole history operation")
+    require(review["questions"] == [], "L1-L4 are confirmed; do not reopen pagination choices")
+    for clause in ("普通分页已确认", "不再固定快照", "跨页保持相同 limit", "不按 createdAt 重排",
+                   "每页读取该次查询可见的当前分支完整事件", "本接口不承诺自动检测跨页变化",
+                   "允许 Session running 时查询", "nextPage=null 仅表示本次查询没有下一页",
+                   "省略 limit 时返回最多 50 条，允许 1～200", "result 只含 events 和 nextPage，不返回 total",
+                   "L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null",
+                   "不掩盖非法参数或读取失败",
+                   "不能用某条历史 idle 判定现在可提交 M2",
+                   "每页重新检查访问边界", "配置变更、压缩、Usage", "未整体确认 ListEvents 或合并 POST"):
+        require(clause in operation["description"], f"missing visible history boundary: {clause}")
+    complete = complete_streams(post)
+    expected = {
+        "200-first-page": complete["200-message"][:2],
+        "200-next-page": complete["200-message"][2:],
+        "200-confirmation": complete["200-confirming"] + complete["200-tool-confirmation"],
+        "200-interrupted": complete["200-message-interrupted"][:-1] + complete["200-interrupt"],
+        "200-empty": [],
+        "200-out-of-range": [],
+    }
+    results, all_types, errors = {}, set(), set()
+    ids = [x["id"] for x in operation["responses"]]
+    require(len(ids) == len(set(ids)), "duplicate history response IDs")
+    for response in operation["responses"]:
+        require(response["headers"]["Content-Type"] == "application/json"
+                and response["headers"]["Cache-Control"] == "no-store", "history is uncached JSON")
+        for body in response["bodies"].values():
+            validate_public_payload(body)
+            if response["status"] != "200":
+                require(set(body) == {"resCode", "resMsg"}, "history error must omit result")
+                errors.add((response["status"], body["resCode"]))
+                continue
+            require(set(body) == {"resCode", "resMsg", "result"} and body["resCode"] == "0"
+                    and body["resMsg"] == "success", "history success uses ResultBean")
+            result = body["result"]
+            require(set(result) == {"events", "nextPage"}, "unexpected history page fields")
+            require(result["nextPage"] is None or
+                    (type(result["nextPage"]) is int and result["nextPage"] >= 1),
+                    "nextPage must be a positive JSON integer or null, never a string or boolean")
+            require(result["events"] == expected[response["id"]], "history complete records drift from POST frames")
+            seen = set()
+            for event in result["events"]:
+                validate_frame(event, receipt=event["type"].startswith("user."))
+                require(event.get("phase") != "delta", "delta must not enter history")
+                require(event["eventId"] not in seen, "duplicate history event, including shared idle")
+                seen.add(event["eventId"])
+                all_types.add(event["type"])
+            results[response["id"]] = result
+    require(set(results) == set(expected), "missing paired page, confirmation, interrupt or empty examples")
+    require(all_types == USER_EVENT_TYPES | STREAM_TYPES, "missing complete event type")
+    require(results["200-first-page"]["nextPage"] == 2, "page 1 must continue at page 2")
+    require(all(query in operation["requestBody"]["description"]
+                for query in ("?page=1&limit=2", "?page=2&limit=2")), "paired numeric requests required")
+    require(all(x["nextPage"] is None for key, x in results.items() if key != "200-first-page"),
+            "example page exhaustion must return null")
+    require(errors == {("400", "INVALID_SESSION_ID"), ("400", "INVALID_EVENT_LIST_QUERY"),
+                       ("404", "SESSION_NOT_FOUND"), ("500", "EVENT_LIST_FAILED")}, "history error catalog drift")
+
+
+def validate_history_regressions(model: dict, post: dict) -> int:
+    edits = [
+        lambda m: m["operation"].update(path="/sessions/{sessionId}/events/stream"),
+        lambda m: m["operation"]["requestBody"].update(required=True),
+        lambda m: m["operation"]["requestHeaderExamples"][0]["headers"].append(
+            {"name": "access-token", "value": "opaque-access-token", "required": True}),
+        lambda m: m["review"].update(confirmedChoices={}),
+        lambda m: m["review"]["confirmedChoices"].update(**{"L2-page-size": "A-default100-max200"}),
+        lambda m: m["review"]["confirmedChoices"].update(**{"L3-page-metadata": "B-include-total"}),
+        lambda m: m["review"]["confirmedChoices"].update(**{"L4-out-of-range-page": "B-query-error"}),
+        lambda m: m["review"]["confirmedPagination"].update(outOfRangePage="query-error"),
+        lambda m: m["review"]["historyProposal"].update(outOfRangePage="empty-success"),
+        lambda m: m["review"]["confirmedPagination"].update(defaultLimit=100),
+        lambda m: m["review"]["confirmedPagination"].update(maxLimit=500),
+        lambda m: m["review"]["confirmedPagination"]["responseFields"].append("total"),
+        lambda m: m["operation"]["parameters"][1].update(schema="integer 1..200; default 100"),
+        lambda m: m["review"].update(pendingReview=[]),
+        lambda m: m["review"]["inheritedRules"].update(deltaHistory=True),
+        lambda m: m["review"]["confirmedPagination"].update(fixedSnapshot=True),
+        lambda m: m["review"]["confirmedPagination"].update(cursorEncryption=True),
+        lambda m: m["review"]["confirmedPagination"].update(readWhileRunning=False),
+        lambda m: m["review"]["confirmedPagination"].update(sameLimitAcrossPages=False),
+        lambda m: m["review"]["historyProposal"].update(cursorBindings=["branch", "committedUpperBound"]),
+        lambda m: m["review"]["historyProposal"].update(cursorTtlSeconds=3600),
+        lambda m: m["review"]["questions"].append({"id": "L1-page-direction"}),
+        lambda m: m["review"]["questions"].append({"id": "L2-page-size"}),
+        lambda m: m["review"]["questions"].append({"id": "L3-page-metadata"}),
+        lambda m: m["review"]["questions"].append({"id": "L4-out-of-range-page"}),
+        lambda m: next(x for x in m["operation"]["responses"] if x["id"] == "200-out-of-range").update(status="204"),
+        lambda m: next(x for x in m["operation"]["responses"] if x["id"] == "200-out-of-range")
+                ["bodies"]["default"]["result"].update(events=None),
+        lambda m: m["operation"]["parameters"][2].update(schema="opaque string"),
+        lambda m: m["operation"]["parameters"].append({"in": "query", "name": "snapshotId"}),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(nextPage=None),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(nextPage="2"),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(nextPage=True),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(nextPage=0),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(nextPage=3),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(total=3),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"].update(snapshotId="snapshot-demo"),
+        lambda m: m["operation"]["responses"][1]["bodies"]["default"]["result"].update(nextPage="page_more"),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"]["events"][0].update(entrySeq=1),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"]["events"][1].update(phase="delta"),
+        lambda m: m["operation"]["responses"][0]["bodies"]["default"]["result"]["events"][1].update(content="drift"),
+        lambda m: m["operation"]["responses"][2]["bodies"]["default"]["result"]["events"].reverse(),
+        lambda m: m["operation"]["responses"][3]["bodies"]["default"]["result"]["events"].append(
+            m["operation"]["responses"][3]["bodies"]["default"]["result"]["events"][-1]),
+        lambda m: m["operation"]["responses"][-1]["bodies"]["zh-CN"].update(result=None),
+        lambda m: m["operation"].update(description=m["operation"]["description"].replace(
+            "不能用某条历史 idle 判定现在可提交 M2", "历史 idle 允许新消息")),
+    ]
+    for index, edit in enumerate(edits):
+        candidate = copy.deepcopy(model)
+        edit(candidate)
+        try:
+            validate_history_model(candidate, post)
+        except (KeyError, ValueError):
+            continue
+        raise ValueError(f"negative history regression accepted: {index}")
+    return len(edits)
+
+
+def validate_review_pages(post: dict) -> None:
     spec = importlib.util.spec_from_file_location("runtime_contract_validator", ROOT / "validate-chat-http-v1.py")
     validator = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(validator)
-    source = (ROOT / "chat-events-v2-review.html").read_text(encoding="utf-8")
+    history_source = (ROOT / "chat-events-v2-review.html").read_text(encoding="utf-8")
+    history_parser = validator.ContractHtmlParser()
+    history_parser.feed(history_source)
+    histories, history_scripts = validator.parse_generated_models(history_parser)
+    require(len(histories) == history_parser.static_review_count == len(history_scripts) == 1, "show only current GET")
+    validate_history_model(histories[0], post)
+    validator.validate_executable_script(history_scripts[0])
+    visible_history = " ".join(history_parser.visible_text)
+    for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "普通分页", "下一页", "确认与续跑历史",
+                 "中断历史", "未整体确认", "默认 50、上限 200 已确认", "不返回 total", "L4 已确认"):
+        require(text in visible_history, f"no-JavaScript history page missing {text}")
+    require(all(f'data-question-id="{key}"' not in history_source
+                for key in ("L1-page-direction", "L2-page-size", "L3-page-metadata", "L4-out-of-range-page")),
+            "do not reopen confirmed choices")
+    require("data-label" in history_source and "max-width: 680px" in history_source, "history responsive rules missing")
+    source = (ROOT / "chat-events-v2-submit-review.html").read_text(encoding="utf-8")
     parser = validator.ContractHtmlParser()
     parser.feed(source)
     models, scripts = validator.parse_generated_models(parser)
@@ -300,7 +525,8 @@ def validate_review_pages() -> None:
     validator.validate_executable_script(scripts[0])
     visible = " ".join(parser.visible_text)
     for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "未整体确认合并接口",
-                 "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认", "数据库中断机制已确认"):
+                 "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认", "数据库中断机制已确认",
+                 "中断查询优化已确认", "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次"):
         require(text in visible, f"no-JavaScript page is missing {text}")
     require("data-question-id=" not in source, "confirmed receipt must not remain a question")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
@@ -314,17 +540,22 @@ def main() -> int:
     try:
         common = json.loads(COMMON_PATH.read_text(encoding="utf-8"))
         model = json.loads(MODEL_PATH.read_text(encoding="utf-8"))
-        require(common["reviewState"] == {"currentOperation": "submitSessionEvent", "confirmedOperations": []},
-                "current merged POST remains in review")
-        require(sorted(MODEL_PATH.parent.glob("*.json")) == [MODEL_PATH], "retired GET stream model must not remain active")
+        history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+        require(common["reviewState"] == {"currentOperation": "listSessionEvents", "confirmedOperations": []},
+                "history is current; neither operation is fully approved")
+        require(sorted(MODEL_PATH.parent.glob("*.json")) == [MODEL_PATH, HISTORY_PATH],
+                "only POST and GET history remain active, not the retired stream")
         validate_model(model)
         negative_count = validate_negative_regressions(model)
+        validate_history_model(history, model)
+        history_count = validate_history_regressions(history, model)
         subprocess.run([sys.executable, str(ROOT / "render_chat_events_v2.py"), "--check"], check=True)
-        validate_review_pages()
+        validate_review_pages(model)
     except (KeyError, OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(f"error: {error}")
         return 2
-    print(f"Merged POST SSE review is valid; {negative_count} negative regressions rejected")
+    print(f"POST SSE and ListEvents contracts valid; {negative_count} POST and {history_count} history negative regressions rejected")
+    print("Static contract validation only; database pagination and runtime concurrency were not executed.")
     return 0
 
 
