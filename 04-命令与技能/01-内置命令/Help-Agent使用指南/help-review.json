@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "Help：Agent 使用指南（已确认）",
-    "version": "1.1.0 · Runtime 1.46.0",
+    "version": "1.1.0 · Runtime 1.46.1",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · Help 已确认；Runtime 操作 13 的专项展示"
   },

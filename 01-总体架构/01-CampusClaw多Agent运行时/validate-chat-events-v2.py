@@ -501,12 +501,14 @@ def validate_review_pages(post: dict) -> None:
     spec = importlib.util.spec_from_file_location("runtime_contract_validator", ROOT / "validate-chat-http-v1.py")
     validator = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(validator)
-    history_source = (ROOT / "chat-events-v2-review.html").read_text(encoding="utf-8")
+    history_source = (ROOT / "chat-api-review.html").read_text(encoding="utf-8")
     history_parser = validator.ContractHtmlParser()
     history_parser.feed(history_source)
     histories, history_scripts = validator.parse_generated_models(history_parser)
-    require(len(histories) == history_parser.static_review_count == len(history_scripts) == 1, "show only current GET")
-    validate_history_model(histories[0], post)
+    require(len(histories) == history_parser.static_review_count == 10 and len(history_scripts) == 1,
+            "show one unified catalog")
+    history = next(model for model in histories if model["operation"]["operationKey"] == "listSessionEvents")
+    validate_history_model(history, post)
     validator.validate_executable_script(history_scripts[0])
     visible_history = " ".join(history_parser.visible_text)
     for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "普通分页", "下一页", "确认与续跑历史",
@@ -516,13 +518,13 @@ def validate_review_pages(post: dict) -> None:
                 for key in ("L1-page-direction", "L2-page-size", "L3-page-metadata", "L4-out-of-range-page")),
             "do not reopen confirmed choices")
     require("data-label" in history_source and "max-width: 680px" in history_source, "history responsive rules missing")
-    source = (ROOT / "chat-events-v2-submit-review.html").read_text(encoding="utf-8")
+    source = history_source
     parser = validator.ContractHtmlParser()
     parser.feed(source)
     models, scripts = validator.parse_generated_models(parser)
-    require(len(models) == parser.static_review_count == len(scripts) == 1, "show one current operation")
-    require(models[0]["operation"]["operationKey"] == "submitSessionEvent", "show merged POST")
-    validate_model(models[0])
+    require(len(models) == parser.static_review_count == 10 and len(scripts) == 1, "show one unified catalog")
+    merged = next(model for model in models if model["operation"]["operationKey"] == "submitSessionEvent")
+    validate_model(merged)
     validator.validate_executable_script(scripts[0])
     visible = " ".join(parser.visible_text)
     for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "未整体确认合并接口",
@@ -533,7 +535,7 @@ def validate_review_pages(post: dict) -> None:
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
     retired = (ROOT / "chat-events-v2-confirmed.html").read_text(encoding="utf-8")
     require("原独立 POST JSON 方案已被合并方案替代" in retired, "retire stale whole-operation approval")
-    require("chat-events-v2-review.html" in retired and "data-operation-review" not in retired,
+    require("chat-api-review.html#listSessionEvents" in retired and "data-operation-review" not in retired,
             "old confirmed page must link current review, not display an approved operation")
 
 

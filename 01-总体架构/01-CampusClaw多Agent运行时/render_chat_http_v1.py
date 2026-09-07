@@ -263,7 +263,12 @@ def encode_models(models: list[dict[str, Any]]) -> str:
 
 
 def build_html() -> str:
-    _, models = load_contract()
+    from render_chat_api import build_legacy_page
+    return build_legacy_page(DEFAULT_OUTPUT.name)
+
+
+def build_operation_html(models: list[dict[str, Any]]) -> str:
+    """Internal renderer fixture; not a separately maintained contract page."""
     css = CSS_PATH.read_text(encoding="utf-8").strip()
     script = JS_PATH.read_text(encoding="utf-8").strip()
     cards = []
@@ -288,12 +293,6 @@ def build_html() -> str:
 <body>
   <!-- Generated from {html.escape(str(CONTRACT_ROOT.relative_to(ROOT)))}/common.json and operation models. Do not edit this HTML directly. -->
   <main>
-    <section class="section" aria-label="契约迁移边界">
-      <h1>Runtime 接口迁移基线 · 10 项</h1>
-      <p>独立控制接口已退役。下方旧 POST/GET Events 仅供迁移对照，不能作为当前调用契约。</p>
-      <p>最新设计：<a href="chat-events-v2-submit-review.html">提交事件与推送</a> ·
-        <a href="chat-events-v2-review.html">历史查询</a>。两个 Events 操作均未整体确认。</p>
-    </section>
 {"".join(cards)}
   </main>
   <script type="application/json" id="api-review-models">{encode_models(models)}</script>

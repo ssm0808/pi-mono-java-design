@@ -15,7 +15,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from render_chat_http_v1 import build_html, load_contract
+from render_chat_http_v1 import build_html, build_operation_html, load_contract
 
 
 ROOT = Path(__file__).resolve().parent
@@ -30,13 +30,11 @@ SLASH_DESIGN_PATHS = (
 )
 HELP_ROOT = REPOSITORY_ROOT / "04-命令与技能/01-内置命令/Help-Agent使用指南"
 HELP_RESULT_FIELDS = {"command", "displayName", "description", "userCases"}
-EXPECTED_OPERATION_COUNT = 10
+EXPECTED_OPERATION_COUNT = 8
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
     ("GET", "/sessions/{sessionId}"),
     ("DELETE", "/sessions/{sessionId}"),
-    ("POST", "/sessions/{sessionId}/events"),
-    ("GET", "/sessions/{sessionId}/events"),
     ("GET", "/sessions/{sessionId}/models"),
     ("PUT", "/sessions/{sessionId}/model"),
     ("PUT", "/sessions/{sessionId}/thinking"),
@@ -215,8 +213,9 @@ def parse_generated_models(parser: ContractHtmlParser) -> tuple[list[dict[str, A
 
 
 def validate_html(models: list[dict[str, Any]]) -> None:
-    html_source = HTML_PATH.read_text(encoding="utf-8")
-    require(html_source == build_html(), "Generated HTML is out of date; run render_chat_http_v1.py")
+    require(HTML_PATH.read_text(encoding="utf-8") == build_html(),
+            "Legacy entry is stale; run render_chat_api.py")
+    html_source = build_operation_html(models)
     parser = ContractHtmlParser()
     parser.feed(html_source)
     embedded_models, scripts = parse_generated_models(parser)
@@ -386,40 +385,6 @@ def validate_response_contract(
         require("displayName" in result, f"SessionResource is missing displayName: {key}")
     elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
-    elif key == ("POST", "/sessions/{sessionId}/events"):
-        expected_example_headers = {
-            "jwt": {"X-HW-ID", "Authorization", "access-token"},
-            "appkey": {"X-HW-ID", "X-HW-APPKEY", "access-token"},
-        }
-        for example in operation["requestHeaderExamples"]:
-            names = {header["name"] for header in example["headers"]}
-            require(names == expected_example_headers.get(example["id"]),
-                    f"POST Events Header mode differs: {example['id']}")
-            access_token = next(
-                (header for header in example["headers"] if header["name"] == "access-token"), None
-            )
-            require(access_token is not None and access_token.get("required") is True
-                    and access_token.get("value") == "opaque-access-token",
-                    "POST Events must require access-token in every request Header example")
-        description = operation["description"]
-        for required_phrase in ("只在内存中保留到本次 Agent 执行结束", "Mate 工具 execute",
-                                "不写入 Session、事件或日志", "工具发现"):
-            require(required_phrase in description,
-                    f"POST Events credential boundary is incomplete: {required_phrase}")
-        require(("503", "RUNTIME_CAPACITY_EXCEEDED") in codes, "POST Events is missing runtime capacity")
-        require("[File IDs]" in operation["requestBody"]["description"], "POST Events must define file ID encoding")
-        require(set(operation["requestBody"]["example"]) == {"message", "fileIds"},
-                "POST Events request must contain only message and fileIds")
-        require("type=user.message" not in operation["requestBody"]["description"],
-                "POST Events request still documents a redundant type field")
-        success = next(response for response in operation["responses"] if response["status"] == "200")
-        stream = success["bodies"]["default"]
-        for event_type in (
-            "assistant.thinking.started", "assistant.thinking.delta", "assistant.thinking.completed"
-        ):
-            require(f"event: {event_type}" in stream, f"POST Events is missing {event_type}")
-        require("\"entrySeq\":18" in stream and "\"type\":\"thinking\"" in stream,
-                "Completed thinking must be a durable recoverable event")
     elif key == ("GET", "/sessions/{sessionId}/commands"):
         require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in operation["description"],
                 "Command catalog must reflect unified Builtin and Skill ownership")
@@ -486,13 +451,6 @@ def validate_response_contract(
         require("event: command." not in serialized and "event: stream." not in serialized,
                 "POST Command must not expose request-scoped SSE lifecycle events")
         validate_help_operation(operation)
-    elif key == ("GET", "/sessions/{sessionId}/events"):
-        success = next(response for response in operation["responses"] if response["status"] == "200")
-        event_types = {event["type"] for event in success["bodies"]["en-US"]["result"]["events"]}
-        require("assistant.thinking.completed" in event_types,
-                "GET Events must show the thinking=true projection")
-        require("thinking=false" in operation["description"] and "旧 page 无效" in operation["description"],
-                "GET Events must define current-thinking filtering and cursor invalidation")
 
 
 def validate_help_descriptor(descriptor: dict[str, Any]) -> None:
@@ -791,7 +749,7 @@ def main() -> int:
     validate_control_retirement(models)
     run(["git", "diff", "--check"], cwd=REPOSITORY_ROOT)
     mode = "full" if args.full else "fast"
-    print(f"Source-first API contract validation passed: {len(models)} operations, {len(selected)} diagram topics ({mode})")
+    print(f"Retained contract validation passed: {len(models)} operations, {len(selected)} diagram topics ({mode}); full inventory: validate-chat-api.py")
     return 0
 
 

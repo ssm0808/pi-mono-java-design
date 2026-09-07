@@ -39,7 +39,10 @@
 
 ### 2.1 契约权威
 
-测试 Agent 按以下顺序读取契约：
+本节仅描述 HTTP 1.37 历史回归，测试 Agent 必须在对应历史 commit 读取以下文件。
+当前工作树的旧 HTML 已改为迁移说明，不再包含 11 项模型，不能作为该历史执行器的输入。
+当前目标契约统一见 [十项接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html)。
+历史读取顺序为：
 
 1. [`chat-http-v1-review.html`](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html)：
    HTTP V1 的人类主维护契约，在 `api-review-models` 中内嵌 11 个 operation model；

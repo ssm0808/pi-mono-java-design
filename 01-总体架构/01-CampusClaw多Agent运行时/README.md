@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.10.0 |
-| 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.46.0 保留已确认 Help 元数据指南，Builtin 与 Skill Command 由用户统一实现 |
+| 文档版本 | 3.11.0 |
+| 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.46.1 保留已确认 Help 元数据指南，Builtin 与 Skill Command 由用户统一实现 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -66,10 +66,10 @@ M1 真实结束并提交可靠状态后才恢复 idle；中断与工具确认按
 索引按实际 GaussDB 执行计划和 100 并发压测选择，不冻结 500 毫秒周期、批次上限或超时。
 固定内部执行身份不穿透 HTTP；数据库结构、检查周期、其余并发竞争、reason 与故障细节
 仍待评审，不是整体确认。
-用户明确要求开始修改 ListEvents，当前入口为 [历史查询评审页](chat-events-v2-review.html)；
+用户明确要求开始修改 ListEvents，当前入口为 [历史查询评审页](chat-api-review.html#listSessionEvents)；
 完整事件与 POST 同形，从旧到新、普通整数页码和取消固定快照已确认，见 [历史设计](chat-events-v2-history-design.md)。
 分页默认 50/最多 200、result 只返回 events/nextPage、合法超范围页返回 200 空列表均已确认，不返回 total。
-POST 的决定与未决项仍见 [合并 POST 保留评审页](chat-events-v2-submit-review.html)、
+POST 的决定与未决项仍见 [合并 POST 保留评审页](chat-api-review.html#submitSessionEvent)、
 [Events v2 设计](chat-events-v2-design.md) 和 [请求级 SSE 设计](chat-events-v2-stream-design.md)。
 [旧确认页](chat-events-v2-confirmed.html) 改为变更提示，旧 JSON POST 仅在 Git 历史保留。
 当前没有整体确认的新 v2 operation；既有字段决定不因此被重新开放。
@@ -108,31 +108,14 @@ FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。公共 Comman
 
 ## 2. 契约权威顺序
 
-迁移前 v1 逐接口契约的维护顺序为：
+1. [catalog.json](接口契约/catalog.json) 唯一决定当前清单：八项保留接口与两项 Events v2，各操作只出现一次。
+2. [chat-api-review.html](chat-api-review.html) 是唯一当前接口详情页；按接口展开，展示各自确认状态和待联动事项。
+3. 清单引用的 JSON 模型是精确编辑源；Markdown 保存设计理由、已确认决定、未决项和注明 commit 的源码证据。
 
-1. [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作)：唯一可编辑的精确契约源；共享 ID、认证和公共响应只定义一次；
-2. [`chat-http-v1-review.html`](chat-http-v1-review.html)：由结构化契约生成的主要人类评审界面，不允许手工修改；
-3. [`chat-http-v1-design.md`](chat-http-v1-design.md)：只维护源码证据、目标差异和设计原因，不承担逐字段契约复制。
-
-[`render_chat_http_v1.py`](render_chat_http_v1.py) 将共享定义和十份 operation model
-展开为一个 standalone HTML。生成页只包含一份共享 CSS、一份共享 JavaScript 和一份
-聚合 JSON model，同时保留十份无脚本可读的静态 operation；校验会重新生成并做
-字节级比较，防止静态内容、交互模型和源文件漂移。
-
-OpenAPI 已经明确废弃并从仓库删除。仓库内 JSON 是 HTML 的规范化生成源，不是对外
-发布的 OpenAPI，也不允许实现根据历史 OpenAPI 恢复旧 Run、History 或事件字段。
-若未来重新需要标准机器契约，应从这些已确认 JSON model 生成新的投影并建立同步
-门禁，不能恢复已删除文件继续增量修改。
-
-旧 WebSocket/AsyncAPI 文档已从当前仓库删除，历史内容只能从 Git 历史读取，不再是
-目标契约或新实现输入。
-
-Session Events v2 在重设计完成前使用独立的
-[`接口契约-v2`](接口契约-v2) 和
-[`chat-events-v2-review.html`](chat-events-v2-review.html)，不会覆盖已确认的 v1
-契约。每次只展示并评审一个 operation；确认后的决定记录到
-[`chat-events-v2-design.md`](chat-events-v2-design.md)，两个 operation 全部确认后再统一
-替换 v1 事件接口及校验门禁。
+完整维护规则见 [接口统一管理](chat-api-index.md)。原 v1/v2 HTML 只保留入口迁移说明与新页链接，
+不得再次生成旧报文。旧两个 Events 模型已删除，旧字段及报文仅从 Git 历史追溯。
+两个 Events 即使未整体确认也只有一份当前方案，不保留两套当前契约。
+OpenAPI、WebSocket/AsyncAPI 仍已废弃，不因入口整理而恢复。
 
 当前 CampusClaw HTTP 契约中的路径参数、查询参数、请求体、普通响应和 SSE `data`
 字段统一使用 lowerCamelCase。HTTP Header 保持标准或公司既有原名，例如
@@ -144,8 +127,8 @@ Session Events v2 在重设计完成前使用独立的
 修改契约源后先重新生成 HTML，再运行快速校验：
 
 ```bash
-python3 render_chat_http_v1.py
-python3 validate-chat-http-v1.py
+python3 render_chat_api.py
+python3 validate-chat-api.py
 ```
 
 修改 PlantUML 时只生成发生变化的设计主题；需要强制重建全部主题时增加 `--full`：
@@ -158,7 +141,7 @@ python3 render_diagrams.py --full
 提交前或 CI 使用完整校验：
 
 ```bash
-python3 validate-chat-http-v1.py --full
+python3 validate-chat-api.py --full
 ```
 
 快速模式校验契约源、HTML 字节同步、单份 JavaScript、无脚本内容、响应式规则、
@@ -533,6 +516,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.11.0 | 2026-09-07 | 当前十项 API 统一到仓库清单与页面；旧入口只导航，旧 Events 报文移除，新增统一生成和防回流校验；确认状态不变。 |
 | 3.10.0 | 2026-09-07 | 当前目标收敛为十项，退役三个独立控制接口；补充 FollowUp 未来跨实例设计但不启用，保留 M6 与 Events 部分确认状态。 |
 | 3.9.4 | 2026-09-07 | 合并设计主线 `2d0dba26`，保留 Events v2 历史查询最新决定，同时同步 HTTP 1.45.1 的 Help 元数据指南、全局目标类图与用户统一实施责任；仅整合设计，不修改实现或公共 Mate 契约。 |
 | 3.9.3 | 2026-09-07 | 同步 Events v2 0.5.3、请求级 SSE 0.3.6 与历史查询 0.2.2：确认 L4 合法超范围页 200 空成功；保持实现、Mate 及 v1 不变。 |

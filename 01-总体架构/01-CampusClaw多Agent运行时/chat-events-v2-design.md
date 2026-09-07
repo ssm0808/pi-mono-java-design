@@ -50,7 +50,7 @@ M8 已确认：当前目标十个接口，移除独立 abort、steers、follow-u
 ## 2. 当前评审安排与 POST 已确认边界
 
 2026-09-06 用户明确要求开始修改历史接口，当前切换到
-`GET /sessions/{sessionId}/events`，见 [ListEvents 评审页](chat-events-v2-review.html)
+`GET /sessions/{sessionId}/events`，见 [ListEvents 评审页](chat-api-review.html#listSessionEvents)
 和 [历史查询设计](chat-events-v2-history-design.md)。GET 返回普通 JSON 的完整事件分页，
 不是独立 SSE；已确认的身份、同形和顺序继续有效，从旧到新及普通整数页码已确认，
 不再固定跨页快照；默认 50/上限 200 与 result 仅含 events/nextPage 已确认。
@@ -108,9 +108,9 @@ access-token: opaque-access-token
 
 ### 2.2 精确评审入口与未确认范围
 
-- [当前 ListEvents 评审页](chat-events-v2-review.html)：
+- [当前 ListEvents 评审页](chat-api-review.html#listSessionEvents)：
   [历史 operation model](接口契约-v2/操作/02-list-session-events.json)。
-- [合并 POST 保留评审页](chat-events-v2-submit-review.html)：
+- [合并 POST 保留评审页](chat-api-review.html#submitSessionEvent)：
   [POST operation model](接口契约-v2/操作/01-submit-session-event.json)，未决项不变。
 - [响应生命周期与源码差距](chat-events-v2-stream-design.md)：三种输入各自的输出范围、
   已确认结束规则，以及背压和恢复候选。

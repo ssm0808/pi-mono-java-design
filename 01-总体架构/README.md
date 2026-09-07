@@ -11,5 +11,5 @@
 | CampusClaw 调用日志 | 调用失败如何简化记录和定位 | [异常日志设计](./05-CampusClaw调用日志/README.md) |
 
 多 Agent Runtime 专题中还包含 [Runtime HTTP API 设计](./01-CampusClaw多Agent运行时/chat-http-v1-design.md)、
-[接口评审页](./01-CampusClaw多Agent运行时/chat-http-v1-review.html) 和
+[接口评审页](./01-CampusClaw多Agent运行时/chat-api-review.html) 和
 [飞书渠道设计](./01-CampusClaw多Agent运行时/channel-feishu-v1-design.md)。

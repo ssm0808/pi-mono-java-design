@@ -27,8 +27,8 @@ access-token: opaque-access-token
 原独立 `GET /sessions/{sessionId}/events/stream` 已撤销；普通
 `GET /sessions/{sessionId}/events` 历史查询保留，不合并进写请求。
 当前模型为 [合并 POST](接口契约-v2/操作/01-submit-session-event.json)，
-[POST 保留评审页](chat-events-v2-submit-review.html) 只展示这一个操作。
-用户已明确要求开始修改历史查询，[当前评审页](chat-events-v2-review.html) 因此切换为
+[POST 保留评审页](chat-api-review.html#submitSessionEvent) 定位统一页面中的 POST 操作。
+用户已明确要求开始修改历史查询，[当前评审页](chat-api-review.html#listSessionEvents) 因此切换为
 ListEvents；POST 已确认决定和未决项仍保留，不视为整体通过。
 
 已确认：三类输入、event 包装、content[]、Header 语义与具体测试示例、三类统一携带

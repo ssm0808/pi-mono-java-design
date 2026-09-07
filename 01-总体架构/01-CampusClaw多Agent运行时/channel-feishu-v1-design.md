@@ -6,7 +6,7 @@
 | 状态 | 目标设计；飞书接入尚未在 `mate-service` 实现 |
 | 更新日期 | 2026-09-07 |
 | 设计仓分析基线 | `246cfd035103a1720fd6446554559f0247cc5c84` |
-| Runtime HTTP 契约 | 当前工作树 [`接口契约/common.json`](接口契约/common.json) 1.37.0、[`04-submit-user-message.json`](接口契约/操作/04-submit-user-message.json) 与 [`05-list-session-events.json`](接口契约/操作/05-list-session-events.json)；最后已提交契约基线为 `3c88fb7e`，1.37.0 差异尚未提交 |
+| Runtime HTTP 契约 | 本文保留 HTTP 1.37.0 历史映射证据；旧 Events 模型已删除，不再作为当前指导。最新十项契约见 [统一接口页](chat-api-review.html)，渠道迁移仍待专项对齐 |
 | pi-mono-java 实现基线 | `1f801dbb82bdda30478e3354e685e3153b179a0c` |
 | mate-service 源码核对基线 | `6d5e6f3714e1cf8744d187a4796ca06300ad7e33`；未发现 Channel/飞书实现 |
 | 飞书官方 CLI 基线 | `larksuite/cli@755daa4de3ea12785c43a15244ffb8f012122c13` |
@@ -15,7 +15,8 @@
 | 外部资料核对日期 | 2026-08-20 |
 
 2026-09-07 仅同步 Runtime 控制接口退役：运维停止改走 Events user.interrupt。
-本专题其他旧 Runtime 字段及事件投影仍属 1.37 迁移基线，接入前需对齐
+本专题其他旧 Runtime 字段及事件投影仍属 1.37 迁移基线；图中旧 JSON 源路径可在设计仓
+`a48515c` 查看，不再指向当前模型。接入前需对齐
 [Events v2](chat-events-v2-design.md)，不能恢复独立控制入口或依据旧 Entry 水位推断新请求已接受。
 [FollowUp 未来设计](chat-follow-up-future-design.md) 本期不启用；未重新核验飞书外部资料或改变公共 Channel 契约。
 

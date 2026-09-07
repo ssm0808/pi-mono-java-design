@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.46.0 |
+| 文档版本 | 1.46.1 |
 | 状态 | 保留十个目标 operation；Events 以 v2 部分确认稿为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；跨 Builtin/Skill 的最终共享命令入口在发布前对齐 |
-| 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
-| 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，由精确契约源生成 |
+| 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的八项保留契约与两项 Events v2 模型 |
+| 人类评审契约 | [统一当前接口页](chat-api-review.html)，由 [唯一清单](接口契约/catalog.json) 生成 |
 | 对外机器契约 | 不维护；结构化 JSON 只作为 HTML 生成源，不替代已废弃 OpenAPI |
 | 端到端传输结论 | 两跳均为 HTTP；Runtime POST Events 保留请求级 SSE，POST Command 返回普通 JSON；公共命令待独立评审 |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
@@ -34,8 +34,8 @@
 | 更新日期 | 2026-09-07 |
 
 本轮退役独立 `/abort`、`/steers`、`/follow-ups`，清单见 [总览 §4](README.md#4-当前目标-http-接口清单)。
-[合并 POST](chat-events-v2-submit-review.html) 与 [历史查询](chat-events-v2-review.html) 采用 v2，均未整体确认。
-本文旧 POST/GET 字段、类型和分页仅供迁移对照，不是最新调用指导。
+[合并 POST](chat-api-review.html#submitSessionEvent) 与 [历史查询](chat-api-review.html#listSessionEvents) 采用 v2，均未整体确认。
+旧 POST/GET 字段、类型和分页示例已移除，仅可从 Git 历史追溯。管理规则见 [统一维护规则](chat-api-index.md)。
 [FollowUp 未来设计](chat-follow-up-future-design.md) 只记录扩展方向，本期不支持排队。
 本次源码基线 dfb90cac4e233e09a0b8f047f7e9f4682f5ad238，路径及差异见该专题；不改实现。
 
@@ -68,12 +68,9 @@ mate-service 不得把内部 SSE 字节透明转发给浏览器。公共 mate-se
 
 基础路径为 `/campusclaw-service/v1`。网关 Host 可按部署环境配置，
 不属于业务路径的版本契约。
-精确字段、认证、请求、响应和错误由
-[`接口契约/common.json`](接口契约/common.json) 与十份
-[`接口契约/操作/*.json`](接口契约/操作) 唯一维护；
-[`chat-http-v1-review.html`](chat-http-v1-review.html) 是生成后供人评审的主界面，
-本文只保留跨接口语义、源码证据、目标差异和设计理由。生成页与源 model 的字节级
-一致性由校验脚本保证，禁止手工修改 HTML。
+精确字段、认证、请求、响应和错误按 [catalog.json](接口契约/catalog.json) 指定的唯一模型维护；
+[统一接口页](chat-api-review.html) 是唯一当前入口。八项保留契约与两项 Events v2 使用同一清单、
+生成和校验门禁，不再生成平行详情页。本文保留设计理由，Events 理由链接所属专题。
 过渡期 OpenAPI 1.7.1 因长期滞后且仍包含已经被替代的旧 Run 资源，已经由用户
 明确批准废弃并从仓库删除。当前不发布 OpenAPI 等标准机器契约；仓库内 JSON 只是
 HTML 的规范化生成源。实现和后续评审依据生成后的 HTML、对应 JSON model 与本文
@@ -84,7 +81,7 @@ CampusClaw 当前目标契约的命名边界为：
 
 | 位置 | 命名规则 |
 |---|---|
-| Path、Query、JSON 请求、普通 JSON 响应、SSE `data` | 字段统一使用 lowerCamelCase，例如 `sessionId`、`fileIds`、`entrySeq`、`nextPage` |
+| Path、Query、JSON 请求、普通 JSON 响应、SSE `data` | 字段统一使用 lowerCamelCase，例如 `sessionId`、`eventId`、`nextPage` |
 | HTTP Header | 保持标准或公司既有原名，例如 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`、`access-token`、`If-Match`、`Accept-Language`、`Content-Language` |
 | 字段值 | 事件类型值、错误码、`tool_call` 等枚举值和类型化 ID 值保持不变 |
 | 内部实现与源码证据 | SQL 列名、既有源码符号和外部参考契约保留其原生拼写，并明确标注为非当前 wire field |
@@ -230,7 +227,7 @@ mate-service 的 Chat 元数据；完成的 MessageEntry 由 GET Session Events 
 | 读取需求 | 负责接口 |
 |---|---|
 | Session 当前默认 `modelId/thinking` 和 `idle/running` | `GET /sessions/{sessionId}` |
-| 已提交 MessageEntry、`entrySeq` 和分页 page | `GET /sessions/{sessionId}/events` |
+| 已提交完整事件、`eventId` 和普通整数分页 | `GET /sessions/{sessionId}/events` |
 | 当前请求的实时消息与工具进度 | `POST /sessions/{sessionId}/events` 的 SSE 响应 |
 
 读取成功返回 `ETag` 和 `Cache-Control: no-store`。已确认仅将 `ETag` 用于
@@ -297,242 +294,16 @@ owner 信息。删除操作仍携带调用上下文 Header，但 Runtime 不执�
 
 ### 2.2 消息与 Session Event
 
-后续评审已经替代 1.15.0 的显式 Run 结论：一次 `user.message` 会触发一轮执行，
-但该轮执行只存在于 Runtime 内部，不作为调用方可查询、控制或持久化的公共
-`Run` 资源。Session 与 Entry 才是公共恢复边界。
+原 v1 报文已作废，旧请求、SSE 类型及完整示例移除，仅从 Git 历史追溯。
 
-| 接口简称 | operationKey | Method | Path | 语义 |
-|---|---|---|---|---|
-| 提交用户消息 | `submitUserMessage` | `POST` | `/sessions/{sessionId}/events` | 提交 `user.message`，并在同一响应中以 SSE 返回本次执行事件 |
-| 查询会话事件 | `listSessionEvents` | `GET` | `/sessions/{sessionId}/events` | 使用 `page/nextPage` 分页读取权威持久化 Entry |
+- [POST 提交与推送](chat-api-review.html#submitSessionEvent)：[请求级 SSE 设计](chat-events-v2-stream-design.md)。
+- [GET 历史查询](chat-api-review.html#listSessionEvents)：[普通分页与恢复设计](chat-events-v2-history-design.md)。
 
-公共契约不再包含 `runId`、GetRun、Run Events、Run Abort 或 Run Steer。
-中止统一使用 Events user.interrupt；调整方向在实际停止后新提交，本期不支持排队。
-独立控制接口已退役，见 §2.5。
-CreateSession 和 GetSession 已同步删除旧模型遗留的公共执行指针。
+当前三类输入为 user.message、user.interrupt、user.tool_confirmation；请求级 SSE、
+eventId、不公开内部序号和普通分页采用已确认决定，两个操作仍未整体确认。
+旧 message/fileIds 报文、event/id 帧和错误规则不作为兼容别名保留。
 
-#### 2.2.1 已确认架构决策：执行不是公共 Run 资源
-
-pi 与 pi-mono-java 都能在没有公共 `runId` 的情况下重建会话历史：持久化单元是
-MessageEntry，执行轮次只是 Agent 内部的一次 active execution。pi 的
-`AgentEvent` 明确区分 Agent、Turn、Message 和 Tool execution 生命周期；
-`message_start/update/end` 围绕同一条消息，工具调用后还可能产生下一条 Assistant
-消息。pi-mono-java 的现有 `ChatHandler` 也已经通过一个 POST 直接返回 SSE，
-但当前实现将断连解释为 abort，这一点不直接继承为目标契约。
-
-Anthropic Managed Agents 提供了相同方向的参考：普通 Session 交互通过
-`user.message` 事件驱动，不创建 Session Run；临时增量预览与最终持久化事件分离。
-CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其事件或字段名称。
-
-| 对比项 | CampusClaw 当前选择 | Anthropic 参考 |
-|---|---|---|
-| 提交用户输入 | `POST /sessions/{id}/events`，同一响应直接返回 SSE | `POST /sessions/{id}/events` 接受事件，另行订阅 Session Event Stream |
-| 轮次标识 | 无公共 `runId` | 无普通 Session Run ID |
-| 权威历史 | Session Entry Tree 与 `entrySeq` | Session 持久化事件与事件 ID |
-| 实时预览 | `assistant.message.started/delta` | 临时 start/delta preview |
-| 最终消息 | `assistant.message.completed` | 权威完整 Agent message |
-| 断线恢复 | 从第一页查询持久化 Events 并去重，不重放 POST | 按 Session 事件流与历史恢复 |
-| 设计差异 | 请求范围内直接流式返回，保留产品自己的命名 | 发送与订阅是两个 HTTP 请求 |
-
-[最新 Events 资源与内部执行边界](chat-events-v2-design.md) 取代原独立执行控制图。
-
-#### 2.2.2 第四个已确认接口：提交用户事件并直接流式返回
-
-```http
-POST /campusclaw-service/v1/sessions/{sessionId}/events
-X-HW-ID: credential-jwt
-Authorization: Bearer opaque-token
-access-token: opaque-access-token
-Content-Type: application/json
-```
-
-APPKEY 兼容模式使用 `X-HW-ID: credential-appkey` 和
-`X-HW-APPKEY: opaque-appkey`，但
-`access-token` 同样必填。HTTP Header 匹配不区分大小写，契约和出站请求统一
-保留用户指定的 `access-token` 拼写，不改写为 `X-Access-Token`。
-
-接受请求时，Claw 从请求读取 `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 和
-`access-token`，只在内存中保留到本次 Agent 执行结束。两类认证 Header 同时存在时
-保留两者。只有 Agent 实际执行
-`CallMateTool` 并向 `POST /mate-service/v1/runtime/tools/{toolId}/execute` 发起请求时，
-才将已提供的 Header 按原名发送。`ListMateTools`、Call cache miss 触发的
-Agent/Skill/metadata 发现、Model Manager chat、受管 Runtime 加载、配置请求及其他出站
-HTTP 请求不得携带这些凭据。这些值不进入日志、Prompt、ResultBean、SSE/Event 或
-持久化存储。当前 Java `c9d858bc` 已实现该发送范围。
-
-本接口已确认的请求形状为：
-
-```json
-{
-  "message": "请分析这些订单文件，并列出异常项。",
-  "fileIds": [
-    "file_01JY8X2E3R4T5Y6U7I8O9P0A1S"
-  ]
-}
-```
-
-| 字段 | 当前契约 | 具体作用 |
-|---|---|---|
-| `message` | 可选；提供时包含至少一个非空白字符，最多 262144 个 UTF-16 代码单元 | 用户文本；校验可判断空白，持久化保留原始值 |
-| `fileIds` | 可选；最多 32 个，元素唯一、大小写敏感并保留顺序 | 按固定 `[File IDs]` 提示块追加给模型，不解析文件正文 |
-
-URI 和 operation 已经唯一确定“提交 `user.message`”，请求体中的 `type` 不增加分派
-信息，因此作为冗余字段删除，并按未知字段拒绝。`message` 和 `fileIds` 至少有一项
-有效值。请求不接收 `type`、`modelId`、`thinking`、
-业务 metadata、instructions、tool choice、timeout、priority、URL、MIME、文件名、
-Base64、provider 参数、`clientRequestId` 或 `Idempotency-Key`。服务端接受时读取
-Session 当前 `modelId/thinking`，作为本次 active execution 的内部快照；该快照
-不因此产生公共 RunRecord。
-
-成功使用 `200 OK` 和 `Content-Type: text/event-stream`，不使用 ResultBean。
-浏览器原生 `EventSource` 不能发送 POST，调用方必须使用支持流式响应的 HTTP 客户端，
-例如 `fetch` 的 `ReadableStream`。在响应头尚未提交前发生的请求校验、
-容量占用或用户 Entry 持久化错误，使用真实 HTTP status 和只含 `resCode/resMsg` 的
-JSON；响应开始后发生的错误只能以流内错误事件表达。
-
-成功流的完整事件顺序已经确认。接受输入前先用最新 Agent 目录校准空闲 Session；
-需要切换时，持久化的 `session.model.changed` 与必要的
-`session.thinking.changed` 先于 `user.message` 投影。每条 Assistant MessageEntry
-使用三阶段；需要调用工具时先返回工具执行生命周期，再返回权威 `tool.result` Entry；
-压缩事件出现在触发压缩的位置；最终依次返回 `session.status.idle` 和 `stream.end`。
-
-| SSE event | 含义 | 持久化 | 客户端处理 |
-|---|---|---|---|
-| `session.model.changed` | Session 模型已改变；包含前后模型及 `requested\|agentRefresh` 原因 | 是 | 更新 Session 配置并记录变化来源 |
-| `session.thinking.changed` | thinking 已改变；包含前后布尔值及 `requested\|modelCapability` 原因 | 是 | 更新 Session 配置并记录是否由模型能力归一化 |
-| `user.message` | 确认本次请求的 User MessageEntry 已持久化 | 是 | 记录 `entryId/entrySeq`，作为本次执行的输入事实 |
-| `assistant.message.started` | 声明一条 Assistant MessageEntry 开始生成，并分配关联 `entryId` | 否 | 建立消息占位和后续 delta 的关联边界 |
-| `assistant.thinking.started` | 执行快照 `thinking=true` 时声明 thinking block 开始 | 否 | 按 `assistantEntryId/contentIndex` 建立实时 thinking 占位 |
-| `assistant.thinking.delta` | 执行快照 `thinking=true` 时推送 thinking 文本增量 | 否 | 顺序拼接，仅用于实时展示 |
-| `assistant.thinking.completed` | 返回并持久化完整 thinking block | 是 | 记录独立 `entryId/entrySeq`；GET 在当前 Session `thinking=true` 时恢复 |
-| `assistant.message.delta` | 推送这条消息的临时增量 | 否 | 按顺序拼接，仅用于实时展示 |
-| `assistant.message.completed` | 返回已经封闭和持久化的完整 Assistant MessageEntry 及本次 Usage | 是 | 使用完整消息替换本地拼接预览，并记录 `entrySeq` 与 Usage |
-| `tool.execution.started` | `toolCallId` 对应的工具开始执行 | 否 | 展示实时执行状态；参数以此前 Assistant tool-call 内容为准 |
-| `tool.execution.delta` | 返回 `toolCallId/toolName/delta` 的 best-effort 工具进度 | 否 | 可丢弃地刷新进度；不得据此恢复权威状态 |
-| `tool.execution.completed` | 工具执行生命周期结束 | 否 | 结束实时执行状态；`isError` 仅说明执行结果类别 |
-| `tool.result` | 返回已持久化的完整 ToolResultEntry | 是 | 以 `toolCallId` 关联工具调用，并记录 `entryId/entrySeq` 与权威结果 |
-| `session.compaction.started` | 公共 Session 开始阈值、溢出或手工压缩 | 否 | 显示压缩状态，不作为历史事实 |
-| `session.compaction.completed` | 压缩完成；包含原因、完整摘要、保留边界、压缩前后 Token 和 Usage | 是 | 保存恢复所需的最新压缩边界与摘要 |
-| `session.compaction.failed` | 压缩失败且旧上下文保持不变；包含 `reason/willRetry/aborted/message` | 否 | `aborted=true` 表示取消；不得推断原上下文已被修改 |
-| `session.status.idle` | 本次 active execution 已清理，Session 回到 idle | 否 | 更新粗粒度 Session 状态 |
-| `stream.end` | 本次 POST 的成功事件流正常结束 | 否 | 停止读取流；不是可分页读取的持久化 Entry |
-
-当前 Java 公共 Runtime Event 尚无 thinking 类型，投影层也会过滤底层
-`thinking_start/thinking_delta/thinking_end`。目标设计按接受用户事件时捕获的执行快照
-决定：`thinking=true` 时投影 `assistant.thinking.started/delta/completed`，并将 completed
-作为独立持久化 Entry；`thinking=false` 时三类事件均不产生。Assistant 完整消息仍只
-包含 text/tool_call 等内容，不重复内嵌 thinking block。
-
-`completed` 只表示一条 Assistant MessageEntry 或一次压缩完成，不表示整个用户事件已经处理
-结束。若其 `finishReason=tool_call`，Runtime 可以继续执行工具并产生新的 Assistant
-MessageEntry。一次请求因此可能包含多组三阶段事件。
-
-```text
-id: 17
-event: user.message
-data: {"entryId":"entry_100","entrySeq":17}
-
-event: assistant.message.started
-data: {"entryId":"entry_101","role":"assistant"}
-
-event: assistant.thinking.started
-data: {"assistantEntryId":"entry_101","contentIndex":0}
-
-event: assistant.thinking.delta
-data: {"assistantEntryId":"entry_101","contentIndex":0,"delta":{"type":"thinking","text":"我需要先定位异常订单。"}}
-
-id: 18
-event: assistant.thinking.completed
-data: {"entryId":"entry_thinking_101","entrySeq":18,"assistantEntryId":"entry_101","contentIndex":0,"content":{"type":"thinking","text":"我需要先定位异常订单。"}}
-
-event: assistant.message.delta
-data: {"entryId":"entry_101","delta":{"type":"text","text":"我先查询异常订单。"}}
-
-id: 19
-event: assistant.message.completed
-data: {"entryId":"entry_101","entrySeq":19,"message":{"role":"assistant","content":[{"type":"text","text":"我先查询异常订单。"},{"type":"tool_call","toolCallId":"call_201","name":"query_abnormal_orders","arguments":{"scope":"uploaded_files"}}]},"finishReason":"tool_call","usage":{"input":960,"output":120,"cacheRead":480,"cacheWrite":64,"totalTokens":1624,"cost":{"input":0.00288,"output":0.0018,"cacheRead":0.000144,"cacheWrite":0.00024,"total":0.005064}}}
-
-event: tool.execution.started
-data: {"toolCallId":"call_201","toolName":"query_abnormal_orders"}
-
-event: tool.execution.delta
-data: {"toolCallId":"call_201","toolName":"query_abnormal_orders","delta":{"processed":2,"total":3}}
-
-event: tool.execution.completed
-data: {"toolCallId":"call_201","toolName":"query_abnormal_orders","isError":false}
-
-id: 20
-event: tool.result
-data: {"entryId":"entry_102","entrySeq":20,"toolCallId":"call_201","toolName":"query_abnormal_orders","content":[{"type":"text","text":"发现 3 条异常订单。"}],"isError":false}
-
-event: assistant.message.started
-data: {"entryId":"entry_103","role":"assistant"}
-
-event: assistant.message.delta
-data: {"entryId":"entry_103","delta":{"type":"text","text":"发现 3 条异常订单。"}}
-
-id: 21
-event: assistant.message.completed
-data: {"entryId":"entry_103","entrySeq":21,"message":{"role":"assistant","content":[{"type":"text","text":"发现 3 条异常订单。"}]},"finishReason":"stop","usage":{"input":820,"output":48,"cacheRead":0,"cacheWrite":0,"totalTokens":868,"cost":{"input":0.00246,"output":0.00072,"cacheRead":0.0,"cacheWrite":0.0,"total":0.00318}}}
-
-event: session.compaction.started
-data: {"reason":"threshold","willRetry":false}
-
-id: 22
-event: session.compaction.completed
-data: {"entryId":"entry_104","entrySeq":22,"reason":"threshold","summary":"已分析订单文件，发现 3 条异常订单。","firstKeptEntryId":"entry_102","tokensBefore":19840,"estimatedTokensAfter":4360,"willRetry":false,"usage":{"input":720,"output":96,"cacheRead":0,"cacheWrite":0,"totalTokens":816,"cost":{"input":0.00216,"output":0.00144,"cacheRead":0.0,"cacheWrite":0.0,"total":0.0036}}}
-
-event: session.status.idle
-data: {"status":"idle"}
-
-event: stream.end
-data: {"reason":"completed"}
-```
-
-若 SSE 响应已经开始后执行失败，服务端先清理 active execution，再发送一个
-`stream.error`，随后直接关闭当前流；失败流不再发送 `stream.end`。`data` 仍是
-单行 JSON，使用稳定 `resCode` 和按 `Accept-Language` 解析的 `resMsg`：
-
-```text
-event: stream.error
-data: {"resCode":"SESSION_EXECUTION_FAILED","resMsg":"Session 执行失败。"}
-```
-
-流内错误不会伪造成 `assistant.message.completed`，也不会自动持久化一条错误
-Assistant MessageEntry。失败前已经完成持久化的 User、Thinking、Assistant 或 ToolResult
-Entry 仍可从 GET Session Events 读取；尚未持久化的 preview 不可恢复。
-
-Message 与 Thinking 的 `started/delta` 没有独立持久化序号，不能作为断线恢复来源；
-Thinking completed 使用独立 `entryId/entrySeq`，并通过 `assistantEntryId` 关联所属
-Assistant 消息。`tool.execution.started/delta/completed` 同样只是实时生命周期；
-`tool.result` 才是权威 ToolResultEntry。`tool.execution.delta` 只公开稳定外壳
-`toolCallId/toolName/delta`；参数永不进入该事件。不可序列化、超限或 SSE 背压时只丢弃
-对应进度，不断开连接、不改变工具执行，也不影响最终 `tool.execution.completed` 和
-持久化 `tool.result`。
-SSE `data` 固定为单行 JSON，每个 frame 以一个空行结束。只有
-`session.model.changed`、`session.thinking.changed`、`user.message`、
-`assistant.thinking.completed`、`assistant.message.completed`、`tool.result` 和
-`session.compaction.completed` 使用 `id: entrySeq`；
-`session.status.idle` 必须在 active execution 已清理且本轮权威 Entry 已持久化后发送，
-随后 `stream.end` 关闭正常成功流。
-
-本接口不接收 `Idempotency-Key`。网络断开不取消已经接受的 active execution，
-客户端也不得自动重放这个 POST，因为重放会持久化另一条 User MessageEntry。
-恢复时从 GET Session Events 第一页重新分页：已经持久化的 User、Thinking、Assistant
-和 ToolResult Entry 是权威事实，调用方按 `entryId/entrySeq` 与本地完整事件去重，
-未持久化的 delta 不补拉。该行为是相对 pi-mono-java 当前
-`ChatHandler.wireSink()`“客户端取消即 abort”的架构改造。
-
-![HTTP Session Event 直接流式返回](设计图/会话事件/http_session_event_stream.svg)
-
-[PlantUML 源码：`http_session_event_stream`](设计图/会话事件/diagram.puml#L1)
-
-第四接口已经确认：冻结路径、由 operation 固定的 `user.message` 语义、
-`message + fileIds` 请求体、同一 POST
-直接 SSE、无公共 `runId`、无 `Idempotency-Key`、成功事件顺序与持久化语义，
-以及流建立后使用 `stream.error` 再关闭连接的失败语义。
-
-#### 2.2.1 公共 Session 压缩能力
+#### 2.2.1 公共 Session 压缩能力（保留能力，事件映射待评审）
 
 压缩属于 `ManagedAgentSession`，不属于已删除的 TUI Host。默认配置沿用
 `enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`；`enabled=false` 同时关闭
@@ -579,164 +350,11 @@ Session lifetime Usage。`willRetry=true` 时，持久化 payload 还包含不�
 
 ### 2.3 持久化事件与恢复
 
-| 接口简称 | operationKey | Method | Path | 语义 |
-|---|---|---|---|---|
-| 查询会话事件 | `listSessionEvents` | `GET` | `/sessions/{sessionId}/events` | 使用 `page/nextPage` 分页读取当前分支的权威持久化 Entry |
-
-GET Session Events 始终返回 `session.model.changed`、`session.thinking.changed`、
-`user.message`、`assistant.message.completed`、`tool.result` 和
-`session.compaction.completed`；查询时 Session 当前 `thinking=true` 时额外返回持久化的
-`assistant.thinking.completed`，`thinking=false` 时过滤该类型。started/delta/failed 均不返回。
-断线后客户端重新分页读取完整持久化事件，不尝试按 SSE delta 游标重建原 HTTP 流。是否增加独立的 Session
-事件订阅接口，只有在出现多观察者、独立重连或需要观察超出原请求生命周期的执行时
-才重新评估；当前接口不新增该端点。
-
-#### 2.3.1 第五个接口：分页读取 Session Events（已确认）
-
-```http
-GET /campusclaw-service/v1/sessions/{sessionId}/events?limit=3
-X-HW-ID: credential-jwt
-Authorization: Bearer opaque-token
-```
-
-本接口服务两个直接用途：首次加载一个长 Session 的持久化对话，以及
-`POST /events` 断线后重新读取权威记录。用户已经选择与 Anthropic List Events
-相同方向的资源和分页边界：GET 与 POST 共用 `/events` 路径，分页只使用
-`page/nextPage`，不接受 `afterEntrySeq`，也不建立固定快照水位。已确认投影
-Session 当前分支中的消息、工具结果、模型/思考变更和压缩完成事件，并根据当前
-`Session.thinking` 决定是否增加 `assistant.thinking.completed`。pi 的 Entry 类型提供
-对照证据，但 CampusClaw 的事件名称、原因枚举、Usage 和可见性是自身公共契约。
-
-历史查询与模型上下文恢复必须使用两条独立投影。GET Events 面向调用方，返回上述
-公共消息、领域事件和允许展示的 thinking；恢复模型上下文只消费消息、工具结果和
-最新 `session.compaction.completed` 的完整摘要与保留边界。模型/思考变更事件属于
-审计事实，不得伪装为 User/Assistant Message 注入模型上下文；更早且已被压缩覆盖的
-消息仍保留在历史 Entry 中，但不进入后续模型请求。
-
-已经确定使用开放的不透明 page 分页：
-
-| 参数 | 已确认设计 | 作用 |
-|---|---|---|
-| `limit` | 可选，默认 `100`，范围 `1..200` | 限制本页最多返回的持久化事件数量 |
-| `page` | 后续页可选，不透明字符串 | 使用上一响应的 `nextPage` 继续读取；第一页不传 |
-
-`page` 绑定 Session、签发时的 `thinking` 状态、当前分支事件范围和下一读取位置，
-不包含历史上界。Session `thinking` 改变后，旧 page 返回
-`400 INVALID_EVENT_LIST_QUERY`，调用方必须从第一页重读，避免同一分页链的可见事件
-集合变化。
-不透明是 HTTP 契约边界，不要求数据库存储相同字符串，也不等同于游标内容必须在技术上
-无法解码。客户端只能原样回传，不得解析、修改、构造或依赖内部字段；服务端内部可以
-按 `entrySeq` 做 Keyset Pagination，并使用带完整性保护的 token 或随机查询键签发 page。
-持久化 Entry 始终按 `entrySeq` 从小到大排列；执行期间追加的新 Entry 可以进入
-后续页面。因此分页不是一次冻结的历史快照，如果事件持续追加，调用方可能继续获得
-新的 `nextPage`。无效、损坏、过期或属于其他 Session 的 page 统一返回
-`400 INVALID_EVENT_LIST_QUERY`。
-
-已确认的成功响应为：
-
-```json
-{
-  "resCode": "0",
-  "resMsg": "success",
-  "result": {
-    "events": [
-      {
-        "type": "user.message",
-        "entryId": "entry_100",
-        "entrySeq": 17,
-        "message": "请分析这些订单文件，并列出异常项。",
-        "fileIds": ["file_01JY8X2E3R4T5Y6U7I8O9P0A1S"],
-        "createdAt": "2026-08-17T10:00:00Z"
-      },
-      {
-        "type": "assistant.thinking.completed",
-        "entryId": "entry_thinking_101",
-        "entrySeq": 18,
-        "assistantEntryId": "entry_101",
-        "contentIndex": 0,
-        "content": {
-          "type": "thinking",
-          "text": "我需要先定位异常订单。"
-        },
-        "createdAt": "2026-08-17T10:00:01Z"
-      },
-      {
-        "type": "assistant.message.completed",
-        "entryId": "entry_101",
-        "entrySeq": 19,
-        "message": {
-          "role": "assistant",
-          "content": [
-            {"type": "text", "text": "我先查询异常订单。"},
-            {
-              "type": "tool_call",
-              "toolCallId": "call_201",
-              "name": "query_abnormal_orders",
-              "arguments": {"scope": "uploaded_files"}
-            }
-          ]
-        },
-        "finishReason": "tool_call",
-        "usage": {
-          "input": 960,
-          "output": 120,
-          "cacheRead": 480,
-          "cacheWrite": 64,
-          "totalTokens": 1624,
-          "cost": {"input": 0.00288, "output": 0.0018, "cacheRead": 0.000144, "cacheWrite": 0.00024, "total": 0.005064}
-        },
-        "createdAt": "2026-08-17T10:00:02Z"
-      }
-    ],
-    "nextPage": "page_q7K2mN9vR4xT8cL5"
-  }
-}
-```
-
-上例明确对应当前 `Session.thinking=true` 和 `limit=3`。调用方下一次请求原样传入
-`page=page_q7K2mN9vR4xT8cL5`，下一页从 `entrySeq=20` 的 `tool.result` 继续。
-如果调用方先切换了 Session thinking，旧 page 失效，必须从第一页重读。
-
-第五接口只返回第四接口 SSE 中可恢复的持久化事件，映射如下：
-
-| 第四接口 SSE `event` | 是否持久化 | 第五接口 `events[].type` |
-|---|---|---|
-| `session.model.changed` / `session.thinking.changed` | 是 | 同名领域事件 |
-| `user.message` | 是 | `user.message` |
-| `assistant.message.started` / `assistant.message.delta` | 否，实时预览 | 不返回 |
-| `assistant.thinking.started` / `assistant.thinking.delta` | 否，实时预览 | 不返回 |
-| `assistant.thinking.completed` | 是 | 当前 Session `thinking=true` 时返回；`false` 时过滤 |
-| `assistant.message.completed` | 是 | `assistant.message.completed` |
-| `tool.execution.started` / `tool.execution.delta` / `tool.execution.completed` | 否，执行进度 | 不返回 |
-| `tool.result` | 是 | `tool.result` |
-| `session.compaction.started` / `session.compaction.failed` | 否，压缩生命周期 | 不返回 |
-| `session.compaction.completed` | 是 | `session.compaction.completed` |
-| `session.status.idle` / `stream.end` / `stream.error` | 否，流控制 | 不返回 |
-
-对可见的持久化事件，GET 对象的 `type` 等于 SSE `event` 名称；其余字段与同一 Entry 的
-SSE `data` 对齐。第四接口因此在所有持久化公共事件中统一返回 `entryId`、`entrySeq`、
-完整业务数据与 `createdAt`。SSE 的 `id` 仍等于 `entrySeq`，便于流内定位。
-
-`events` 始终按 `entrySeq` 从小到大排列；`nextPage=null` 只表示响应时刻没有更多
-已持久化事件，不表示 Session 后续不会追加事件。Session 正在执行时允许读取，调用方
-只会看到已经完成持久化的 Entry，不会看到内存中的 preview。由于 POST SSE 不返回
-List Events 的 page，断线恢复必须从第一页重新分页，并按 `entryId/entrySeq` 去重；
-这是严格采用 page-only 分页后已经接受的效率取舍。事件范围已确认只包含当前分支；
-公共类型包含始终可见的持久化消息、工具结果和领域事件，以及受当前 Session
-`thinking` 控制的持久化 thinking completed；不返回废弃分支、内部控制 Entry 或临时事件。
-
-pi-mono 的 `SessionManager` 将所有 Entry 以 `id/parentId` 组织为 append-only tree，
-`getBranch()` 返回当前 leaf 到 root 的有序路径，`getEntries()` 返回完整 Entry 集合。
-pi-mono-java 的旧 `SessionManager` 同样写入 `id/parentId`，但恢复实现主要线性提取
-Message。`entrySeq` 和 HTTP page 分页不是 pi 原生接口；它们已在实现提交
-`8691e880` 的 `MyBatisRuntimeSessionRepository` 中落地。选择“当前分支”仍是
-CampusClaw 产品投影，不应表述为 pi 已有分页接口。Anthropic 的
-`GET /v1/sessions/{sessionId}/events` 同样返回不透明 `nextPage`，没有公开固定
-快照水位；CampusClaw 借鉴这一分页边界，但仍以自己的 Entry 类型和 ResultBean 返回。
-
-![HTTP Session Events 开放分页](设计图/会话事件/http_session_event_list.svg)
-
-[PlantUML 源码：`http_session_event_list`](设计图/会话事件/diagram.puml#L139)
+以 [ListEvents v2](chat-events-v2-history-design.md) 为唯一依据：完整事件与 POST 同形，
+按服务端返回顺序展示，用 eventId 去重；普通整数分页默认 50、最多 200，不返回 total。
+旧不透明 page、entryId/entrySeq 和完整旧响应示例已移除。内部模型上下文恢复仍是独立投影。
+配置、thinking 与压缩事件的 v2 映射未整体确认；下文涉及旧事件名的保留接口说明
+仅表示待联动评审，不构成另一份 Events 契约。
 
 ### 2.4 模型与 Session 配置
 
@@ -961,7 +579,7 @@ POST Command 读取的 Mate Header 不进入日志、Prompt、Event 或存储。
 
 ## 4. 状态、并发与恢复
 
-本节 entryId/entrySeq 与不透明 page 仅为迁移前 v1 证据，最新恢复以 v2 为准。
+本节以 Events v2 的已确认决定为准；旧分页与公共序号规则不再维护。
 当前准入和退役决定优先适用：
 
 - 每个 Session 同一时刻只允许一个 active execution。第二个并发初始
@@ -970,15 +588,14 @@ POST Command 读取的 Mate Header 不进入日志、Prompt、Event 或存储。
   不等于 interrupt。
 - 直接流式 POST 不使用浏览器 `EventSource` 自动重连，也不接受
   `Last-Event-ID` 来重放副作用请求。
-- 客户端断线后从 GET `/events` 第一页重新读取，并按 `entryId/entrySeq` 去重；只恢复
+- 客户端断线后从 GET `/events` 第一页重新读取，并按 `eventId` 去重；只恢复
   持久化 Entry，不恢复 started/delta 等实时预览。
 - 本接口不使用 `Idempotency-Key`。响应结果不确定时禁止无条件重试，避免重复
   User MessageEntry。
 - `Session.state` 只表达 `idle/running` 粗粒度状态。模型请求、工具执行或消息生成
   阶段通过实时事件表达，不新增公共 Run phase。
 - 本期无后续消息队列；user.interrupt 响应断开不撤销已接受的中断。
-- `entrySeq` 只由持久化 Entry 分配；临时事件不消耗序号。GetSession 不返回
-  事件水位，第五个接口也不接受 `entrySeq` 作为分页参数；它只使用不透明 page。
+- 内部顺序只用于持久化与查询，不公开 entryId/entrySeq；GET 使用普通整数 page/nextPage。
 - Pod 重启时如何终止或恢复 active execution、是否持久化 partial Assistant Entry，
   不属于当前十个 HTTP operation 已确认范围，留待执行恢复实现设计。
 
@@ -1035,23 +652,9 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 | `409` | `SESSION_BUSY` | `该 Session 正在处理另一条用户消息。` | `The Session is processing another user message.` |
 | `500` | `SESSION_DELETE_FAILED` | `Session 删除失败。` | `Session deletion failed.` |
 
-第四个 Session Event 接口的成功响应是 `200 text/event-stream`，不使用
-ResultBean。流建立前的失败仍使用真实 HTTP status 和只包含
-`resCode/resMsg` 的 JSON；流建立后的失败通过流内错误事件表达，不能再改变
-HTTP status。以下错误码和消息已经随第四个接口确认冻结：
-
-| HTTP | `resCode` | `zh_CN` | `en_US` |
-|---|---|---|---|
-| `400` | `INVALID_SESSION_ID` | `sessionId 格式不正确。` | `The sessionId format is invalid.` |
-| `400` | `INVALID_EVENT_REQUEST` | `用户事件请求内容不符合约束。` | `The user event request does not satisfy the required constraints.` |
-| `404` | `SESSION_NOT_FOUND` | `指定的 Session 不存在。` | `The specified Session does not exist.` |
-| `409` | `SESSION_BUSY` | `该 Session 正在处理另一条用户消息。` | `The Session is processing another user message.` |
-| `500` | `EVENT_ACCEPTANCE_FAILED` | `用户事件接收失败。` | `User event acceptance failed.` |
-| SSE | `SESSION_EXECUTION_FAILED` | `Session 执行失败。` | `Session execution failed.` |
-
-第五个 GET Session Events 接口已确认使用 `INVALID_SESSION_ID`、
-`INVALID_EVENT_LIST_QUERY`、`SESSION_NOT_FOUND` 和 `EVENT_LIST_FAILED`。
-这些事件查询错误已随第五接口确认而冻结。
+Events v2 的成功、错误及确认范围以 [POST](chat-events-v2-stream-design.md) 和
+[GET](chat-events-v2-history-design.md) 为准。旧错误表及 stream.error 规则已移除，
+不能将旧版“已确认”自动继承为 v2 整体通过。
 
 三个 Session 配置接口复用 Session 标识和不存在错误，并新增以下
 operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑定和无权使用，
@@ -1171,22 +774,23 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 - Agent、Tool、Skill 和 Session 标识必须匹配 [`接口契约/common.json`](接口契约/common.json)
   中各自唯一的类型化资源 ID 正则；不接受无前缀、
   错误类型前缀、带内部连字符的 UUID 或下划线旧格式。
-- `POST /sessions/{sessionId}/events` 的 operation 已固定 `user.message` 语义，请求体只接受文本和文件 ID，
-  不接受单次 `thinking` 覆盖，
-  并禁止 URL、MIME、文件名、Base64、OBS Object Key、tenant/user 字段。
+- POST Events 的三输入联合请求、文件引用与禁止字段以 v2 精确模型为准，不再使用原 message/fileIds 报文。
 - 该 POST 不接收 `Idempotency-Key`，网络结果不确定时调用方必须先读取
   Session 和持久化 Events，禁止把无条件重试描述为安全行为。
 - Runtime 不调用文件服务或 OBS；它只把有序 `fileIds` 编码成固定
   `[File IDs]` 文本块并加入本次用户提示。
 - AI Provider 的 thinking 只在执行快照 `thinking=true` 时投影为 started/delta/completed，
   其中 completed 持久化。GET Events 根据查询时 Session 当前 thinking 值决定是否返回；
-  关闭仅隐藏，不删除已存记录，切换状态会使旧 page 失效。
+  v2 可见性与配置事件映射待联动评审；普通整数分页不继承旧 page 失效规则。
 
 ![调用上下文 Header 边界](设计图/HTTP契约/http_dual_authentication.svg)
 
 [PlantUML 源码：`http_dual_authentication`](设计图/HTTP契约/diagram.puml#L61)
 
-## 8. 源码证据与差异分类
+## 8. 历次源码证据与差异分类（非当前接口清单）
+
+本节按各行固定 commit 保留迁移证据，旧类型和字段不是当前调用契约。
+入口整理不重新评审运行时语义；主分支边界核对见 [统一维护规则](chat-api-index.md#4-源码边界)。
 
 本设计以 pi-mono 和 pi-mono-java 源码行为为实现证据；共享 JSON 契约、生成的 HTML
 评审页与本文是当前 Runtime HTTP 规范来源。已删除的 WebSocket、AsyncAPI
@@ -1329,6 +933,7 @@ mate-service 旧公共命令方案标记为已废止的历史 target-only design
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.46.1 | 2026-09-07 | 统一清单、生成与校验入口；移除旧 Events 报文及分页章节，保留注明版本的源码证据；已确认字段和待决项不变。 |
 | 1.46.0 | 2026-09-07 | 退役三个独立控制接口及其示例和错误集合，保留十项；Events 指向 v2，FollowUp 仅记录未来设计，保持单消息准入。 |
 | 1.45.1 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一设计、实现和集成；同步操作 12/13 的实施责任说明与校验，保留已确认报文及待评审的 Skill 细节。 |
 | 1.45.0 | 2026-09-04 | 用户确认 Help 无参四字段 Agent 使用指南；同步操作 12 描述符、操作 13 非空/空内容结果、参数与缓存语义、全局类图及校验；其他命令、事件和 Mate 公共契约不变。 |

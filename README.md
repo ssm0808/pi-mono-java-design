@@ -1,6 +1,6 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.4.4<br>
+> 导航版本：2.4.5<br>
 > 整理日期：2026-09-07<br>
 > Slash Command 设计基线：`0eaa70ff365bf4d4e328b3473809341ca4cfc58d`<br>
 > 通用对话 Events 三接口设计前基线：`743eca488ad559387706b5df54e2248a4124e5ef`<br>
@@ -13,7 +13,7 @@
 
 | 我想了解 | 首选入口 | 继续阅读 |
 |---|---|---|
-| CampusClaw 整体如何运行 | [多 Agent Runtime 总体设计](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | [HTTP API 设计](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)、[HTTP API 评审页](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html) |
+| CampusClaw 整体如何运行 | [多 Agent Runtime 总体设计](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | [HTTP API 设计](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)、[HTTP API 评审页](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html) |
 | Tool 如何装配、发现和执行 | [CampusClaw 工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具精确契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md) |
 | 前端如何展示 Runtime 状态 | [CampusClaw 前端体验设计](./01-总体架构/04-CampusClaw前端体验/README.md) | [前端评审页](./01-总体架构/04-CampusClaw前端体验/frontend-review.html) |
 | 文件、配置和 Model Manager 边界 | [服务与接口导航](./02-服务与接口/README.md) | 附件服务、共享配置、Provider 契约和 HTTP 测试 Agent |
@@ -45,10 +45,10 @@
 
 ## 3. Runtime 契约权威顺序
 
-1. [`接口契约/common.json`](./01-总体架构/01-CampusClaw多Agent运行时/接口契约/common.json) 和 [`接口契约/操作/`](./01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/) 是唯一可编辑的精确契约源。
-2. [`chat-http-v1-review.html`](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html) 是由契约源生成的主要人类评审界面。
-3. [`chat-http-v1-design.md`](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) 只维护源码证据、目标差异和设计理由。
-4. [Runtime HTTP 测试 Agent](./02-服务与接口/04-Runtime-HTTP测试Agent/README.md) 消费已确认契约，维护分层回归测试。
+1. [当前接口清单](./01-总体架构/01-CampusClaw多Agent运行时/接口契约/catalog.json) 唯一登记十个接口及其精确 JSON 源：八项保留契约 + 两项 Events v2。
+2. [统一接口页](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html) 是唯一当前接口详情入口；两项 Events 未整体确认，其他联动待决事项按接口标明。
+3. [统一维护规则](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-index.md) 管理权威顺序、生成、校验及旧入口退役。Markdown 负责设计原因与源码证据，不维护平行报文。
+4. 旧 v1/v2 评审 URL 只链接新入口，不再展示旧字段。Runtime HTTP 测试 Agent 的旧清单仅为历史实现回归，不能证明当前 v2 已实现。
 
 Runtime HTTP V1 不维护 OpenAPI。CampusMate 附件服务仍维护独立的
 [`attachment-api.openapi.yaml`](./02-服务与接口/01-CampusMate附件服务/attachment-api.openapi.yaml)，
@@ -78,8 +78,8 @@ Runtime HTTP 契约变更后：
 
 ```bash
 cd '01-总体架构/01-CampusClaw多Agent运行时'
-python3 render_chat_http_v1.py
-python3 validate-chat-http-v1.py --full
+python3 render_chat_api.py
+python3 validate-chat-api.py --full
 ```
 
 单个图纸专题变更后，在其 `diagram.puml` 所在目录执行：
@@ -97,6 +97,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.4.5 | 2026-09-07 | CampusClaw 当前十项接口统一入口、源清单与校验；旧评审页停止展示报文，Events 部分确认状态保留。 |
 | 2.4.4 | 2026-09-07 | Slash/Builtin 恢复 06bea56 完整版全局主图入口，Help 专题仅提供下钻图；同步全局图维护规则，契约和统一实施责任不变。 |
 | 2.4.3 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一设计、实现和集成；同步当前职责、实施验收及契约说明，旧分工仅作历史。 |
 | 2.4.2 | 2026-09-04 | 同步 Runtime 1.45.0 与已确认 Help Agent 元数据指南入口；不改变其他命令或 Mate 公共契约。 |

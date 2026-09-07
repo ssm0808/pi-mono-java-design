@@ -20,11 +20,11 @@
 `L3-page-metadata=A-events-nextPage-only`：默认 50、上限 200，result 不返回 total。
 2026-09-07 用户选择 `L4-out-of-range-page=A-empty-success`，确认合法超范围页返回空成功响应。
 
-- 当前 [ListEvents 评审页](chat-events-v2-review.html)，唯一精确源为
+- 当前 [ListEvents 评审页](chat-api-review.html#listSessionEvents)，唯一精确源为
   [02-list-session-events.json](接口契约-v2/操作/02-list-session-events.json)。
-- [POST 保留评审页](chat-events-v2-submit-review.html) 与
+- [POST 保留评审页](chat-api-review.html#submitSessionEvent) 与
   [请求级 SSE 设计](chat-events-v2-stream-design.md) 继续有效。
-- 只修改 CampusClaw 内部目标契约；v1 十三个接口仍是迁移基线，运行时代码和 Mate
+- 只修改 CampusClaw 内部目标契约；当前十项接口由统一清单管理，运行时代码和 Mate
   公共接口不变。内部 `sessionId` 不直接暴露给浏览器。
 
 ```http
