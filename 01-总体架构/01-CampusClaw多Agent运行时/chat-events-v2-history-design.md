@@ -2,13 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.5 |
-| 状态 | L1～L8 已确认；工具结果仅文本块，当前评审 L9 Mate 工具名称与参数投影，其他字段及整体仍评审，target-only |
+| 文档版本 | 0.2.6 |
+| 状态 | L1～L9 已确认；当前评审 L10 工具结果成功/失败标记，其他字段及整体仍评审，target-only |
 | 更新日期 | 2026-09-08 |
 | 设计仓变更前基线 | `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
 | L5 字段确认前设计仓基线 | `7349cdf2e037700ddf4917eebef0e19799252f47`；沿用下述实现证据，本轮未重新核对实现 |
 | L6 字段确认前设计仓基线 | `050bda2579004b630021300986881ac61ba7142e`；沿用下述实现证据，本轮未重新核对实现 |
 | L7 字段确认前设计仓基线 | `019b2dbfbc85edb23d94ffbda7b4963237286f7e`；Mate 适配补充核对见 §2.1，既有 HTTP 证据不整体升级 |
+| L9 字段确认前设计仓基线 | `33a7344ff3b98e143e98894f6105f53160ab0734`；复核同一 dfb90ca 的 CallMateTool.name/parameters/execute，其他源码证据不变 |
 | 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
 | 官方公共契约核对 | Claude Managed Agents，2026-09-06，Beta；只证明公开行为 |
@@ -27,7 +28,8 @@
 用户随后选择 `L6-tool-call-arguments=A-object`，确认工具调用参数使用 JSON 对象；
 2026-09-08 用户选择 `L7-tool-result-content=A-content-blocks`，确认工具结果使用内容块数组，
 并询问 Mate 工具的返回设计。用户随后明确当前工具只返回文本，记录为 L8；
-当前继续评审 Mate 工具名称与参数的公开投影。
+用户随后选择 `L9-mate-tool-identity=A-runtime-wrapper`，确认保留 Mate 调用的 Runtime
+工具名与参数包装；当前继续评审工具结果的成功/失败标记。
 
 - 当前 [ListEvents 评审页](chat-api-review.html#listSessionEvents)，唯一精确源为
   [02-list-session-events.json](接口契约-v2/操作/02-list-session-events.json)。
@@ -112,6 +114,7 @@ L8 是用户进一步明确的本期产品约束：当前工具只返回文本�
 |---|---|
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:340` · `toToolResult` | Claw 客户端读取 `resCode/resMsg/result`；仅 `resCode` 文本值为 `0` 时成功，把非空 result 用 `JsonNode.toString()` 序列化，metadata 为 null。result 缺失或 null 时当前返回空字符串；这不是本轮确认的空结果规则。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/mate/MateToolClient.java` · `ToolResult` | 内部结果是 `String content`、`Map metadata`、`boolean isError`，没有保留原始 JSON 节点或图片块。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java:46` · `name/parameters/execute` | 工具名为 CallMateTool；Schema 的 tool 为业务工具名，args 为对象且可省略，执行时缺省为 Map.of()。L9 只固定公开包装，不在本轮额外确认省略 args 的事件归一方式。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java:101` · `execute` | 成功时包装一个 TextContent；metadata 进入 AgentToolResult.details。错误时抛出 MateToolExecutionException。 |
 | `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java` · `invokeTool/failureResult/toToolResultMessage` | 普通执行异常转成文本块和 isError=true，最终 ToolResultMessage 保留工具调用关联、内容块及内部 details；after hook 仍可调整结果。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateToolsTool.java` · `stableJson/textResult` | 工具发现的 scope/tools 清单也序列化为一个文本块，只保留 name/description/inputSchema，不返回内部工具 ID 或 outputSchema。 |
@@ -125,18 +128,26 @@ L8 是用户进一步明确的本期产品约束：当前工具只返回文本�
 对于 Mate 返回的结构化成功 result，当前适配得到的是“一个 text 块内放 JSON 文本”。
 它符合 L7 的数组容器与 L8 的文本约束，不自动把 JSON 中的 URL、Base64 或 `content` 字段识别为其他类型的块。
 `details/metadata` 也不因此进入公共历史或 SSE；既有工具契约将 details 定位为内部扩展位。
-当前示例中直接业务工具名与 Runtime `CallMateTool({tool,args})` 的名称/参数映射仍待单独对齐，
-L7 不确认这层展开方式。失败的 `isError`、稳定错误码及脱敏文案映射亦保留原有评审状态。
+L9 已确认公开调用保留 Runtime `CallMateTool({tool,args})` 包装；既有直接业务工具名示例
+已同步替换。失败的 `isError`、稳定错误码及脱敏文案映射仍保留原有评审状态。
 
 用户明确仅文本后，尚未确认的独立 JSON 块候选撤回。Mate 返回复用现有文本结果；调用方
 展示 text，不把某段恰好可解析的 JSON 当作稳定跨工具业务对象。没有公共 `structuredContent`，
 也不新增 Mate 原始 ResultBean 信封。Mate result 为字符串时当前 `JsonNode.toString()` 会保留
 JSON 字符串的引号与转义；原始 result 的服务端形状和文本归一细节尚未核对，不隐式改变解包规则。
 
-L9 当前比较保留 Runtime 包装与展开业务工具名。推荐 `toolName=CallMateTool`，arguments
-保留 `{tool,args}`，与实际调用及 Schema 一致；当前 HTTP 示例则使用业务工具名和直接参数，
-属于待确认的展开投影。两者均保持 L6 的 JSON 对象与 L8 的文本结果，不能因此改写原工具调用
-关联或把一个 Runtime 工具自动注册成多个模型工具。L9 未确认，先保留现有示例。
+L9 是已确认的目标产品约束：Mate 调用的 `toolName=CallMateTool`，arguments 保留
+`{tool,args}`，与实际调用及 Schema 一致。业务工具名只放在 `arguments.tool`，原业务参数
+移入 `arguments.args`；示例的 eventId、toolCallId、参数值、确认标记与结果内容不变。
+该方式无需再把 Runtime 工具名称替换成业务工具名称，调用方可从 arguments.tool 展示
+具体业务能力；公共事件不新增内部 toolId，也不将一个 Runtime 工具注册为多个模型工具。
+结果仍通过原 toolCallId 关联；本次不增加 tool_result.toolName 或确认其他结果字段。
+公共 VO 继续经既有共享完整事件投影产生，L9 不改变图中的分层、关联和生命周期。
+
+L10 当前比较工具结果总是返回 `isError` 布尔值，或改用 `status=success/failed` 枚举。
+推荐沿用当前 isError 候选，与 Java ToolResultMessage 及固定 pi 的 isError 语义一致，
+调用方无需解析文案判断成败；若选择枚举，GET 与 POST 需同步替换字段。L10 只针对
+完整工具结果，不引入执行中状态，也不一并确认错误码、错误文案、空文本或块数量规则。
 
 ## 3. 已确认：普通数字页码
 
@@ -257,7 +268,9 @@ Java 文件相对根路径为
    以及没有回执时不自动重发。工具无结果不伪造，未知持久化类型不静默丢弃。
 6. L7/L8 验收工具结果 content 为仅含 text 块的数组、GET 与 POST 同一完整结果逐字段相等；
    JSON 文本仍放在 text 中，不变为 JSON 或图片块，不把内部 details 或 Mate 原始信封顺带暴露。
-   工具身份映射、空文本和块数量约束仍须确认后补齐验收。
+   空文本和块数量约束仍须确认后补齐验收。
+7. L9 验收 Mate 调用的 toolName 为 CallMateTool、arguments 保留 tool/args 包装；
+   GET 与 POST 不发生二次展开，关联 ID 和业务参数值不变，不公开内部 toolId。
 
 当前交付是契约示例与静态验证，不包含上述运行时测试的通过声明。完整字段、扩展事件、
 其他错误及保留期确认后，才能将本操作标为整体通过并替换 v1。
@@ -266,6 +279,7 @@ Java 文件相对根路径为
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.6 | 2026-09-08 | 确认 L9 Mate 调用保留 CallMateTool/{tool,args}，同步 GET/POST 示例；复核同一源码基线的工具名及 Schema。继续 L10 成败标记评审，结果仅文本及既有决定不变，图不变。 |
 | 0.2.5 | 2026-09-08 | 确认 L7 内容块数组与 L8 本期仅文本并同步 POST；撤回 JSON/图片块候选及图片动机。补充 dfb90ca 的 Mate 返回链路与固定 pi 证据；L9 工具身份映射、其他细节及整体仍待评审，图不变。 |
 | 0.2.4 | 2026-09-07 | 确认 L6 工具调用参数 JSON 对象并同步 POST；继续 L7 工具结果内容结构评审，结合 Read 图片目标说明取舍。其他字段、图片传输与整体未确认；实现证据和图不变。 |
 | 0.2.3 | 2026-09-07 | 确认 L5 Agent 完整正文字符串并同步 POST；移除该选择，继续 L6 工具参数结构评审。其他字段及整体未确认；实现证据与 PlantUML 结构不变。 |
