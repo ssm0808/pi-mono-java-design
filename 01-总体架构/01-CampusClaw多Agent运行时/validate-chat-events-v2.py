@@ -28,6 +28,7 @@ CONFIRMED_CHOICES = {
     "M8-control-retirement": "remove-standalone-controls-follow-up-future-only",
     "S1-frame-format": "A-data-only",
     "S2-event-projection": "A-type-and-phase",
+    "L5-agent-message-content": "A-string",
 }
 INTERRUPT_OPTIMIZATION = {
     "authority": "committed-database",
@@ -111,7 +112,10 @@ def validate_frame(event: dict, receipt: bool = False) -> None:
         require("phase" not in event, "receipt is a complete user event, not a preview")
     elif event["type"] in {"agent.message", "agent.thinking"}:
         require(event.get("phase") in {"delta", "completed"}, "text phase is required")
-        require(isinstance(event.get("content"), str), "candidate text content must be a string")
+        message = ("confirmed completed agent.message content must be a string"
+                   if event["type"] == "agent.message" and event["phase"] == "completed"
+                   else "candidate text content must be a string")
+        require(isinstance(event.get("content"), str), message)
     else:
         require("phase" not in event, "tool/idle events have no phase")
     if event.get("phase") == "delta":
@@ -218,7 +222,10 @@ def validate_model(model: dict) -> None:
     require(streams["200-message-interrupted"][-1] == interrupt[-1],
             "original and interrupt responses must deliver the same idle event, including eventId")
     require(receipt_types == USER_EVENT_TYPES and all_types == STREAM_TYPES, "missing receipt or basic output examples")
-    require(review.get("confirmedChoices") == CONFIRMED_CHOICES, "preserve exact confirmed transport/receipt/closing/S1/S2")
+    require(review.get("confirmedChoices") == CONFIRMED_CHOICES,
+            "preserve exact confirmed transport/receipt/closing/S1/S2/L5")
+    require("L5 已确认" in operation["description"] and "L5 已确认" in review["notice"],
+            "completed content approval must be visible in POST")
     require(set(review["confirmedEventTypes"]) == STREAM_TYPES, "confirmed output type names changed")
     require(review["questions"] == [], "do not reopen confirmed choices")
     require("合并 POST 接口整体确认" in review["pendingReview"], "whole operation must remain pending")
@@ -375,9 +382,18 @@ def validate_history_model(model: dict, post: dict) -> None:
         "L1-consistency": "no-fixed-snapshot",
         "L2-page-size": "B-default50-max200", "L3-page-metadata": "A-events-nextPage-only",
         "L4-out-of-range-page": "A-empty-success",
+        "L5-agent-message-content": "A-string",
     } and "ListEvents 接口整体确认" in review["pendingReview"],
-            "pagination is approved, not the whole history operation")
-    require(review["questions"] == [], "L1-L4 are confirmed; do not reopen pagination choices")
+            "pagination and completed content are approved, not the whole history operation")
+    questions = review["questions"]
+    require(len(questions) == 1 and questions[0]["id"] == "L6-tool-call-arguments",
+            "only L6 arguments structure is under review; do not reopen L1-L5")
+    options = questions[0]["options"]
+    require(len(options) == 2 and {option["value"] for option in options} == {"A-object", "B-json-string"}
+            and sum(bool(option.get("selected")) for option in options) == 1,
+            "L6 must retain two alternatives and one unconfirmed recommendation")
+    require("L5 已确认" in operation["description"] and "L5 已确认" in review["notice"],
+            "completed content approval must be visible in history")
     for clause in ("普通分页已确认", "不再固定快照", "跨页保持相同 limit", "不按 createdAt 重排",
                    "每页读取该次查询可见的当前分支完整事件", "本接口不承诺自动检测跨页变化",
                    "允许 Session running 时查询", "nextPage=null 仅表示本次查询没有下一页",
@@ -445,6 +461,7 @@ def validate_history_regressions(model: dict, post: dict) -> int:
         lambda m: m["review"]["confirmedChoices"].update(**{"L2-page-size": "A-default100-max200"}),
         lambda m: m["review"]["confirmedChoices"].update(**{"L3-page-metadata": "B-include-total"}),
         lambda m: m["review"]["confirmedChoices"].update(**{"L4-out-of-range-page": "B-query-error"}),
+        lambda m: m["review"]["confirmedChoices"].update(**{"L5-agent-message-content": "B-content-blocks"}),
         lambda m: m["review"]["confirmedPagination"].update(outOfRangePage="query-error"),
         lambda m: m["review"]["historyProposal"].update(outOfRangePage="empty-success"),
         lambda m: m["review"]["confirmedPagination"].update(defaultLimit=100),
@@ -463,6 +480,8 @@ def validate_history_regressions(model: dict, post: dict) -> int:
         lambda m: m["review"]["questions"].append({"id": "L2-page-size"}),
         lambda m: m["review"]["questions"].append({"id": "L3-page-metadata"}),
         lambda m: m["review"]["questions"].append({"id": "L4-out-of-range-page"}),
+        lambda m: m["review"]["questions"].append({"id": "L5-agent-message-content"}),
+        lambda m: m["review"].update(questions=[]),
         lambda m: next(x for x in m["operation"]["responses"] if x["id"] == "200-out-of-range").update(status="204"),
         lambda m: next(x for x in m["operation"]["responses"] if x["id"] == "200-out-of-range")
                 ["bodies"]["default"]["result"].update(events=None),
@@ -515,7 +534,8 @@ def validate_review_pages(post: dict) -> None:
                  "中断历史", "未整体确认", "默认 50、上限 200 已确认", "不返回 total", "L4 已确认"):
         require(text in visible_history, f"no-JavaScript history page missing {text}")
     require(all(f'data-question-id="{key}"' not in history_source
-                for key in ("L1-page-direction", "L2-page-size", "L3-page-metadata", "L4-out-of-range-page")),
+                for key in ("L1-page-direction", "L2-page-size", "L3-page-metadata", "L4-out-of-range-page",
+                            "L5-agent-message-content")),
             "do not reopen confirmed choices")
     require("data-label" in history_source and "max-width: 680px" in history_source, "history responsive rules missing")
     source = history_source
@@ -531,7 +551,9 @@ def validate_review_pages(post: dict) -> None:
                  "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认", "数据库中断机制已确认",
                  "中断查询优化已确认", "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次"):
         require(text in visible, f"no-JavaScript page is missing {text}")
-    require("data-question-id=" not in source, "confirmed receipt must not remain a question")
+    require(source.count('data-question-id="L6-tool-call-arguments"') == 1
+            and source.count('data-question-id="') == 1,
+            "only the current L6 history question may be displayed")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
 
 

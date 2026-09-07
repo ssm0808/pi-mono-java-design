@@ -2,10 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.2 |
-| 状态 | L1～L4 分页决定已确认，含超范围 200 空列表；其他字段及整体仍评审，target-only |
+| 文档版本 | 0.2.3 |
+| 状态 | L1～L4 分页与 L5 完整正文字符串已确认；当前评审 L6 工具参数结构，其他字段及整体仍评审，target-only |
 | 更新日期 | 2026-09-07 |
 | 设计仓变更前基线 | `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
+| L5 字段确认前设计仓基线 | `7349cdf2e037700ddf4917eebef0e19799252f47`；沿用下述实现证据，本轮未重新核对实现 |
 | 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
 | 官方公共契约核对 | Claude Managed Agents，2026-09-06，Beta；只证明公开行为 |
@@ -19,6 +20,8 @@
 用户本轮选择 `L2-page-size=B-default50-max200` 和
 `L3-page-metadata=A-events-nextPage-only`：默认 50、上限 200，result 不返回 total。
 2026-09-07 用户选择 `L4-out-of-range-page=A-empty-success`，确认合法超范围页返回空成功响应。
+同日用户选择 `L5-agent-message-content=A-string`，确认 Agent 完整回答使用字符串。
+这一字段决定按既有完整事件同形规则同步 POST SSE；当前继续评审工具调用参数结构。
 
 - 当前 [ListEvents 评审页](chat-api-review.html#listSessionEvents)，唯一精确源为
   [02-list-session-events.json](接口契约-v2/操作/02-list-session-events.json)。
@@ -43,14 +46,15 @@ GET 是一次普通 JSON 读取，不是 SSE，也不是已撤销的 GET stream�
 ## 2. 历史返回什么
 
 身份、完整事件同形和已提交顺序沿用已确认目标决定；固定快照已被普通分页替代。下表将这些决定
-应用到 ListEvents；具体内容字段继承 POST 的候选状态，不因复制示例而获得批准。
+应用到 ListEvents；除 L5 明确确认的完整正文字符串外，其他具体内容字段保留原有评审状态，
+不因复制示例而获得批准。
 
 | 事件 | 历史投影 | 读取意义 |
 |---|---|---|
 | `user.message` | 完整 `eventId/type/createdAt/content[]` | 已接受的消息；拒绝的 M2 不在这里 |
 | `user.interrupt` | 完整中断回执 | 已接受停止请求，不表示实际退出 |
 | `user.tool_confirmation` | 完整确认回执，保留 `toolCallId` | 与对应工具调用关联 |
-| `agent.message` | 仅 `phase=completed` | 用完整内容覆盖同 eventId 的预览 |
+| `agent.message` | 仅 `phase=completed`；`content` 字符串已确认 | 用完整正文覆盖同 eventId 的预览 |
 | `agent.thinking` | 仅允许公开的 `phase=completed` | 候选沿用 Session thinking 过滤，不披露原始推理 |
 | `agent.tool_call` / `agent.tool_result` | 完整事件，保留各自 eventId 与共同 toolCallId | 调用与结果分别计数；缺少结果不能伪造成功 |
 | `session.status_idle` | 完整权威结束记录，同 eventId 只保留一条 | 必须结合对应交互理解，不是当前准入状态 |
@@ -58,6 +62,16 @@ GET 是一次普通 JSON 读取，不是 SSE，也不是已撤销的 GET stream�
 不返回 delta、心跳或连接结束标记，不公开 `entryId/entrySeq/runId/executionId`。
 同一事件在 POST 完整帧与 GET 历史中保持相同身份、时间和业务字段；序列化、脱敏与
 可见性投影不能各实现一套。历史数组不按 `createdAt` 重新排序。
+
+L5 是已确认的目标产品约束：完整回答的 `content` 使用 JSON 字符串。它保留当前候选的
+正文表达，调用方可直接用完整正文替换预览，不增加内容块解析。既有示例已使用字符串，
+因此本轮只收敛字段状态，不改变示例值；不新增附件输出块，也不改变已确认的
+`user.message.content[]`。空内容、长度、thinking、delta 及其他事件字段仍按各自状态评审。
+这不是 Java 或 pi 已实现该 v2 字段的声明，不升级源码基线，也不改变图中的结构和生命周期。
+
+当前 L6 比较 `agent.tool_call.arguments` 的 JSON 对象与 JSON 文本字符串。建议沿用当前
+对象候选，使调用方直接读取字段并避免二次 JSON 解析；两种方案均需脱敏，且 GET 与 POST
+保持同形。L6 尚未确认，其他工具字段和工具结果不随此项一并通过。
 
 八类基础事件不是封闭的最终清单。已有模型/思考配置变更、压缩及 Usage 的 v2 映射
 仍须补齐；其他进度与子 Agent 投影另审。不能以本页未举例为由删除既有能力，也不能
@@ -193,6 +207,7 @@ Java 文件相对根路径为
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.3 | 2026-09-07 | 确认 L5 Agent 完整正文字符串并同步 POST；移除该选择，继续 L6 工具参数结构评审。其他字段及整体未确认；实现证据与 PlantUML 结构不变。 |
 | 0.2.2 | 2026-09-07 | 确认 L4 合法超范围页返回 200 空列表和 nextPage=null；移除已确认选择，补齐不掩盖参数/读取错误的边界。仅改设计，源码基线 dfb90ca 不变。 |
 | 0.2.1 | 2026-09-06 | 确认 L2 默认 50/上限 200、L3 仅 events/nextPage，不返回 total；同步默认值、示例、图和验收。L4 空页响应待评审，未整体确认，源码基线 dfb90ca 不变。 |
 | 0.2.0 | 2026-09-06 | 确认从旧到新、普通整数 page/nextPage，取消跨页固定快照、快照标识及加密游标；保留同形与顺序，移除 L1 选择，改评审每页数量与 total；补齐普通分页变化边界与目标图。 |

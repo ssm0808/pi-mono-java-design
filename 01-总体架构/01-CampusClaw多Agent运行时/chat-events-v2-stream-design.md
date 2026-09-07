@@ -2,9 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.4.1 |
+| 文档版本 | 0.4.2 |
 | 状态 | 合并方向、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；数据库细节、其余并发竞态、字段与错误细节候选，target-only |
 | 设计仓本次变更前基线 | `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
+| L5 字段确认前设计仓基线 | `7349cdf2e037700ddf4917eebef0e19799252f47`；只同步目标字段决定，未重新核对实现 |
 | 本次实现核对 | `pi-mono-java@918005ee8ccc88d179fc31a0de17a92b4a01383b` |
 | M7 补充源码核对 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；五个并发、流与配置文件相对 `918005e` 无变化，路径与符号见总体设计 §4.4 |
 | 原实现基线 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；复核文件与差距见 §6 |
@@ -139,14 +140,19 @@ M1 完成后 M2 才能开始。跨这个完成边界的迟到中断、已接受�
 
 ### 4.1 输出类型与字段状态
 
-| 已确认 type | 已确认阶段规则 | 其他候选字段 / 行为 |
+| 已确认 type | 已确认阶段规则 | 字段 / 行为及确认范围 |
 |---|---|---|
 | user.* 首帧 | 不带 phase，仅本次完整回执 | eventId/type/createdAt 及对应已确认业务字段；完整内容已确认 |
-| agent.message | phase=delta/completed | content 字符串；delta 不带 createdAt，completed 带；同 ID 完整内容替换 preview |
+| agent.message | phase=delta/completed | completed 的 content 为完整正文字符串已确认（L5）；delta 字段、createdAt 等其余细节仍保留候选状态；同 ID 完整内容替换 preview |
 | agent.thinking | phase=delta/completed | 仅启用且有可公开摘要时输出，不泄露原始推理；具体内容策略待评审 |
 | agent.tool_call | 无 phase 的完整事件 | eventId/type/createdAt/toolCallId/toolName/arguments/requiresConfirmation |
 | agent.tool_result | 无 phase 的完整事件 | eventId/type/createdAt/toolCallId/content/isError；失败可有稳定 errorCode |
 | session.status_idle | 无 phase 的完整事件 | eventId/type/createdAt/reason；reason=done/terminated/failed/confirming 仍候选 |
+
+2026-09-07 用户在 ListEvents 选择 `L5-agent-message-content=A-string`。
+按完整事件同形规则，本 POST 的 `agent.message` completed 帧同步确认 `content` 字符串；
+设计理由和剩余字段范围见[历史查询 §2](chat-events-v2-history-design.md#2-历史返回什么)。
+本轮不改变示例值、delta 设计、图中关系或两个接口的整体待评审状态。
 
 完整事件在 SSE 与 ListEvents 同名同形；落盘范围仍须配合历史接口确认，
 不能假定当前 Java 已保存 Tool Call 或 idle。preview 不持久化、不补发；同一 eventId
@@ -225,6 +231,7 @@ idle reason、具体字段和 thinking 内容；Header 后错误、保活、容�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.4.2 | 2026-09-07 | 同步 L5：agent.message completed 的 content 使用完整正文字符串；其余字段、错误和整个 POST 仍待评审，源码证据及 PlantUML 不变。 |
 | 0.4.1 | 2026-09-07 | 删除数据库中断机制与验收的重复副本，改引总体设计；历史参数引用 ListEvents，流响应与确认范围不变。 |
 | 0.4.0 | 2026-09-07 | 同步三个独立控制接口退役与 FollowUp 暂不启用；本期仍仅三输入且拒绝执行中的下一条消息，输出和未决项不变。 |
 | 0.3.6 | 2026-09-07 | 历史补读同步 L4 合法超范围空成功；空页不证明执行结束或 POST 未接受，POST 报文和确认状态不变。 |
