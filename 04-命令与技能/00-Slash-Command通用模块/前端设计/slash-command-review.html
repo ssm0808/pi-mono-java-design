@@ -73,9 +73,9 @@
       align-self: start;
       height: 100dvh;
       padding: 28px 20px;
-      color: #fffaf7;
-      background: #27211f;
-      border-right: 1px solid rgb(255 255 255 / 7%);
+      color: var(--text-primary);
+      background: var(--surface-secondary);
+      border-right: 1px solid var(--border-default);
     }
 
     .review-brand {
@@ -94,11 +94,11 @@
     }
 
     .review-brand strong { display: block; font-size: 15px; letter-spacing: .02em; }
-    .review-brand span { display: block; margin-top: 2px; color: #cfc2bb; font-size: 12px; }
+    .review-brand span { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 12px; }
 
     .review-label {
       margin: 0 10px 10px;
-      color: #aa9b94;
+      color: var(--text-secondary);
       font-size: 11px;
       font-weight: 700;
       letter-spacing: .12em;
@@ -113,7 +113,7 @@
     .state-tab {
       min-height: 44px;
       padding: 10px 12px;
-      color: #ded3cd;
+      color: var(--text-secondary);
       text-align: left;
       border: 1px solid transparent;
       border-radius: 11px;
@@ -121,15 +121,15 @@
       cursor: pointer;
     }
 
-    .state-tab:hover { background: rgb(255 255 255 / 6%); }
+    .state-tab:hover { background: var(--surface-tertiary); }
     .state-tab[aria-selected="true"] {
-      color: #fff;
-      background: #3b322e;
-      border-color: #594b44;
+      color: var(--text-primary);
+      background: var(--surface-selected);
+      border-color: var(--border-default);
     }
 
     .state-tab span { display: block; font-size: 13px; font-weight: 650; }
-    .state-tab small { display: block; margin-top: 2px; color: #aa9b94; font-size: 11px; }
+    .state-tab small { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 11px; }
 
     .review-note {
       position: absolute;
@@ -137,11 +137,11 @@
       bottom: 24px;
       left: 20px;
       padding: 12px;
-      color: #cfc2bb;
+      color: var(--text-secondary);
       font-size: 11px;
-      border: 1px solid #4c403b;
+      border: 1px solid var(--border-default);
       border-radius: 12px;
-      background: #302825;
+      background: var(--surface-primary);
     }
 
     .review-main { min-width: 0; padding: 28px; }
@@ -335,8 +335,8 @@
     .command-list { max-height: 326px; overflow: auto; padding: 6px; }
     .command-option {
       display: grid;
-      grid-template-columns: 38px minmax(0, 1fr) auto;
-      gap: 10px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 10px;
       width: 100%;
       min-height: 54px;
       padding: 8px 10px;
@@ -348,10 +348,9 @@
       cursor: pointer;
     }
     .command-option:hover, .command-option.active { border-color: #dfcfc7; background: var(--surface-selected); }
-    .command-glyph { display: grid; width: 36px; height: 36px; place-items: center; color: #8d432f; font-size: 17px; font-weight: 900; border-radius: 10px; background: #fff; }
     .command-copy { min-width: 0; }
-    .command-name { display: flex; gap: 7px; align-items: center; font: 650 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .command-description { margin-top: 3px; overflow: hidden; color: var(--text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .command-name { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; overflow-wrap: anywhere; font: 650 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .command-description { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 11px; overflow-wrap: anywhere; }
     .kind-badge { padding: 2px 6px; color: #725447; font: 700 9px Inter, sans-serif; letter-spacing: .04em; border-radius: 999px; background: #f2e7e1; text-transform: uppercase; }
     .kind-badge.skill { color: #486458; background: #e8f2ec; }
     .command-input { align-self: center; color: var(--text-tertiary); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
@@ -473,7 +472,7 @@
 
     @media (max-width: 920px) {
       .review-shell { grid-template-columns: minmax(0, 1fr); }
-      .review-sidebar { position: static; width: 100%; min-width: 0; height: auto; padding: 14px; }
+      .review-sidebar { position: static; width: 100%; min-width: 0; height: auto; padding: 14px; border-right: 0; border-bottom: 1px solid var(--border-default); }
       .review-brand { margin-bottom: 12px; }
       .review-label, .review-note { display: none; }
       .state-tabs { display: flex; width: 100%; max-width: 100%; overflow-x: auto; padding-bottom: 2px; }
@@ -492,8 +491,8 @@
       .composer-dock { padding: 14px; }
       .command-palette { max-height: 45dvh; }
       .command-list { max-height: calc(45dvh - 45px); }
-      .command-option { grid-template-columns: 38px minmax(0, 1fr); }
-      .command-input { display: none; }
+      .command-option { grid-template-columns: minmax(0, 1fr); }
+      .command-input { white-space: normal; overflow-wrap: anywhere; }
       .use-cases { grid-template-columns: 1fr; }
       .result-region { width: calc(100% - 28px); }
       .prototype-caption { text-align: left; }
@@ -525,7 +524,7 @@
     <main class="review-main">
       <header class="review-heading">
         <div>
-          <p>前端专项 · 1.1.0</p>
+          <p>前端专项 · 1.2.0</p>
           <h1 id="state-title">命令清单</h1>
           <p id="state-description">空消息中输入 /，读取当前 Chat 的服务端命令清单。</p>
         </div>
@@ -584,28 +583,28 @@
                 <div class="palette-head"><strong id="palette-title">命令清单 · 7 项</strong><span class="key-hint"><kbd>↑</kbd><kbd>↓</kbd> 选择 · <kbd>Enter</kbd> 填入</span></div>
                 <div class="command-list" id="command-list" role="listbox" aria-label="可用命令">
                   <button class="command-option active" id="cmd-help" role="option" aria-selected="true" data-name="help">
-                    <span class="command-glyph">?</span><span class="command-copy"><span class="command-name">/help <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Agent 的用途和典型使用场景</span></span><span class="command-input">无需参数</span>
+                    <span class="command-copy"><span class="command-name">/help <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Agent 的用途和典型使用场景</span></span><span class="command-input">无需参数</span>
                   </button>
                   <button class="command-option" id="cmd-status" role="option" aria-selected="false" data-name="status">
-                    <span class="command-glyph">◌</span><span class="command-copy"><span class="command-name">/status <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Session 的运行状态</span></span><span class="command-input">无需参数</span>
+                    <span class="command-copy"><span class="command-name">/status <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Session 的运行状态</span></span><span class="command-input">无需参数</span>
                   </button>
                   <button class="command-option" id="cmd-name" role="option" aria-selected="false" data-name="name">
-                    <span class="command-glyph">Aa</span><span class="command-copy"><span class="command-name">/name <em class="kind-badge">builtin</em></span><span class="command-description">查看或设置当前会话显示名称</span></span><span class="command-input">[displayName]</span>
+                    <span class="command-copy"><span class="command-name">/name <em class="kind-badge">builtin</em></span><span class="command-description">查看或设置当前会话显示名称</span></span><span class="command-input">[displayName]</span>
                   </button>
                   <button class="command-option" id="cmd-model" role="option" aria-selected="false" data-name="model">
-                    <span class="command-glyph">M</span><span class="command-copy"><span class="command-name">/model <em class="kind-badge">builtin</em></span><span class="command-description">查看或切换当前模型</span></span><span class="command-input">[modelId]</span>
+                    <span class="command-copy"><span class="command-name">/model <em class="kind-badge">builtin</em></span><span class="command-description">查看或切换当前模型</span></span><span class="command-input">[modelId]</span>
                   </button>
                   <button class="command-option" id="cmd-thinking" role="option" aria-selected="false" data-name="thinking">
-                    <span class="command-glyph">T</span><span class="command-copy"><span class="command-name">/thinking <em class="kind-badge">builtin</em></span><span class="command-description">查看或切换思考模式</span></span><span class="command-input">[on|off]</span>
+                    <span class="command-copy"><span class="command-name">/thinking <em class="kind-badge">builtin</em></span><span class="command-description">查看或切换思考模式</span></span><span class="command-input">[on|off]</span>
                   </button>
                   <button class="command-option" id="cmd-compact" role="option" aria-selected="false" data-name="compact">
-                    <span class="command-glyph">↔</span><span class="command-copy"><span class="command-name">/compact <em class="kind-badge">builtin</em></span><span class="command-description">压缩当前 Session 的上下文</span></span><span class="command-input">无需参数</span>
+                    <span class="command-copy"><span class="command-name">/compact <em class="kind-badge">builtin</em></span><span class="command-description">压缩当前 Session 的上下文</span></span><span class="command-input">无需参数</span>
                   </button>
                   <button class="command-option" id="cmd-skills" role="option" aria-selected="false" data-name="skills">
-                    <span class="command-glyph">◇</span><span class="command-copy"><span class="command-name">/skills <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Agent 已加载的技能</span></span><span class="command-input">无需参数</span>
+                    <span class="command-copy"><span class="command-name">/skills <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Agent 已加载的技能</span></span><span class="command-input">无需参数</span>
                   </button>
                   <button class="command-option" id="cmd-skill-inspection-plan" role="option" aria-selected="false" data-name="skill:inspection-plan">
-                    <span class="command-glyph">✦</span><span class="command-copy"><span class="command-name">/skill:inspection-plan <em class="kind-badge skill">skill</em></span><span class="command-description">根据当前上下文整理园区巡检计划</span></span><span class="command-input">[request] · 可附文件</span>
+                    <span class="command-copy"><span class="command-name">/skill:inspection-plan <em class="kind-badge skill">skill</em></span><span class="command-description">根据当前上下文整理园区巡检计划</span></span><span class="command-input">[request] · 可附文件</span>
                   </button>
                 </div>
               </div>

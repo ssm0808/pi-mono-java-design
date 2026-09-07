@@ -4,9 +4,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.0 |
+| 文档版本 | 1.2.0 |
 | 更新日期 | 2026-09-07 |
-| 本次前端修订基线 | `91ad40ed854ab554853e718e9a5a8724f24f4e1a` |
+| 本次前端修订基线 | `e9db479e51b6148a3a3ab799c8061d617228b711` |
 | Runtime 命令契约基线 | `88f4df16bc24bbfcd28e1ec374feb2de0db8be3b` |
 | pi-mono-java 源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5` |
 | 适用端 | CampusClaw Web 产品前端；内部 Runtime 调试台只作为源码证据和受控联调入口 |
@@ -287,6 +287,18 @@ interface CommandGateway {
 
 ## 10. 可访问性、视觉与响应式
 
+2026-09-07 用户确认本专项恢复浅暖灰评审导航，并移除每条命令左侧的装饰图案。
+设计仓 `e9db479` 的 `04-命令与技能/00-Slash-Command通用模块/前端设计/slash-command-review.html`
+中，`.review-sidebar` 使用深色背景并在 920px 以下移到顶部，`.command-glyph` 为硬编码字符列；
+两者都是评审原型的视觉选择，并非接口字段或产品前端已实现能力。
+本次按[原前端视觉基线](../../../01-总体架构/04-CampusClaw前端体验/README.md#10-视觉与组件基线)
+落实以下产品约束，以保持新增命令功能与原界面的视觉一致性：
+
+- 桌面侧栏和窄屏顶部导航统一使用 `--surface-secondary`（`#F8F3F0`）、深色正文与细边框；
+  选中项沿用 `--surface-selected`，说明与提示使用次要文本色。
+- 命令列表从命令名直接开始，保留类型标签、说明和参数提示；不附加装饰字符、图标或空白图标列。
+- 宽屏采用命令文案与参数提示两列；700px 以下改为单列，参数提示置于说明之后，长名称和说明允许换行。
+
 - textarea 使用 `role="combobox"`、`aria-autocomplete="list"`、`aria-expanded`、`aria-controls` 和活动项 `aria-activedescendant`；清单使用单选 `listbox/option` 语义。
 - 清单项活动变化时滚入可视区，但不抢走 textarea DOM 焦点；读屏通过礼貌级 live region 宣布结果数量、读取错误和执行完成。
 - 所有点击目标最小 44×44 CSS px；焦点环使用现有 `--focus` 色并保持 2px 可见外轮廓。
@@ -350,5 +362,6 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-07 | 按用户反馈恢复浅暖灰评审导航，删除命令装饰图案及占位列；窄屏保留参数提示并支持文字换行，继承原前端视觉基线。 |
 | 1.1.0 | 2026-09-07 | 补充后端精简响应的前端判别规则：提交前冻结调用快照，按命令名与参数形态确定结果类型，区分 model 查询 Models 与修改 Session，未匹配 Schema/ETag 时 fail closed。 |
 | 1.0.0 | 2026-09-07 | 新增 Slash Composer 模式、清单、独立草稿、结果投影、错误恢复、无障碍、组件边界和实施门禁；全部前端能力明确为 target-only。 |
