@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.45.1 |
-| 状态 | 十三个内部 operation 已确认；操作 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
+| 文档版本 | 1.46.0 |
+| 状态 | 保留十个目标 operation；Events 以 v2 部分确认稿为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；跨 Builtin/Skill 的最终共享命令入口在发布前对齐 |
 | 精确契约源 | [`接口契约/common.json`](接口契约/common.json) 与 [`接口契约/操作/`](接口契约/操作) |
 | 人类评审契约 | [`chat-http-v1-review.html`](chat-http-v1-review.html)，由精确契约源生成 |
@@ -31,7 +31,13 @@
 | Registry 初始候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599` |
 | Registry 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并；最新差距见通用模块证据表 |
 | GET 候选实现 | `7759481a1722422395d46564129827c6ee6df204`，未发布，不能作为已上线契约 |
-| 更新日期 | 2026-09-05 |
+| 更新日期 | 2026-09-07 |
+
+本轮退役独立 `/abort`、`/steers`、`/follow-ups`，清单见 [总览 §4](README.md#4-当前目标-http-接口清单)。
+[合并 POST](chat-events-v2-submit-review.html) 与 [历史查询](chat-events-v2-review.html) 采用 v2，均未整体确认。
+本文旧 POST/GET 字段、类型和分页仅供迁移对照，不是最新调用指导。
+[FollowUp 未来设计](chat-follow-up-future-design.md) 只记录扩展方向，本期不支持排队。
+本次源码基线 dfb90cac4e233e09a0b8f047f7e9f4682f5ad238，路径及差异见该专题；不改实现。
 
 ## 1. 结论
 
@@ -40,7 +46,7 @@
 调用方通过 Session Event 提交输入，通过同一 POST 的 SSE 观察实时过程，并通过
 同一路径的 GET 分页读取持久化 Entry。
 
-HTTP 现有十三个 operation，其中两个用于 Slash Command：查看命令清单和执行命令。
+当前目标保留十个 operation，其中两个用于 Slash Command：查看命令清单和执行命令。
 普通消息接口不解析 Slash 文本。交互层命中命令清单后，才调用 Command API。
 用户统一实现七个 Builtin（help、status、name、model、thinking、compact、skills）与 Skill Command。
 Extension 和 Prompt 执行不在当前命令目标范围。
@@ -63,7 +69,7 @@ mate-service 不得把内部 SSE 字节透明转发给浏览器。公共 mate-se
 基础路径为 `/campusclaw-service/v1`。网关 Host 可按部署环境配置，
 不属于业务路径的版本契约。
 精确字段、认证、请求、响应和错误由
-[`接口契约/common.json`](接口契约/common.json) 与十三份
+[`接口契约/common.json`](接口契约/common.json) 与十份
 [`接口契约/操作/*.json`](接口契约/操作) 唯一维护；
 [`chat-http-v1-review.html`](chat-http-v1-review.html) 是生成后供人评审的主界面，
 本文只保留跨接口语义、源码证据、目标差异和设计理由。生成页与源 model 的字节级
@@ -85,11 +91,11 @@ CampusClaw 当前目标契约的命名边界为：
 
 新契约不接收 snake_case 字段别名；否则同一语义会出现双写、未知字段处理和签名输入不一致。
 
-内部十三项 operation 全部携带调用上下文 Header：
+内部十项 operation 全部携带调用上下文 Header：
 
 | Operation | Header 示例 | Claw 处理 | Claw 错误 |
 |---|---|---|---|
-| 全部十三项 operation | JWT：`X-HW-ID: credential-jwt`、`Authorization: Bearer opaque-token`；APPKEY：`X-HW-ID: credential-appkey`、`X-HW-APPKEY: opaque-appkey` | `X-HW-ID` 是用户凭据 ID，不是公司、服务或应用标识；Claw 不解析或校验这些凭据 | 不声明 `UNAUTHENTICATED` / `AUTH_CREDENTIAL_CONFLICT` |
+| 全部十项 operation | JWT：`X-HW-ID: credential-jwt`、`Authorization: Bearer opaque-token`；APPKEY：`X-HW-ID: credential-appkey`、`X-HW-APPKEY: opaque-appkey` | `X-HW-ID` 是用户凭据 ID，不是公司、服务或应用标识；Claw 不解析或校验这些凭据 | 不声明 `UNAUTHENTICATED` / `AUTH_CREDENTIAL_CONFLICT` |
 | `POST /sessions/{sessionId}/events` 和 `POST /sessions/{sessionId}/command` | 上述 JWT 或 APPKEY 示例均额外必填 `access-token: opaque-access-token` | 从请求读取四项凭据，只在内存中保留到本次 Agent 执行或命令处理结束；仅随实际 Mate tool execute 发送 | 不新增 Claw 本地凭据校验错误 |
 
 JWT 是默认调用示例，APPKEY 是兼容示例；两类 Header 同时出现不会被 Runtime 拒绝。
@@ -243,8 +249,8 @@ Authorization: Bearer opaque-token
 ```
 
 该接口不只是把 Session 从当前 Pod 的内存池中移除，而是结束
-CampusClaw 对该 Runtime Session 的管理。已确认且已实现语义是：存在 active
-execution 时返回 `409 SESSION_BUSY`，不会隐式 abort；调用方先显式调用 Abort，
+CampusClaw 对该 Runtime Session 的管理。删除本身已确认且已实现的语义是：存在 active
+execution 时返回 `409 SESSION_BUSY`，不会隐式 abort。目标调用方先通过 POST Events 提交 user.interrupt 并确认实际停止，
 再重试删除。idle 时服务端原子写入 tombstone 和可重试清理任务，然后返回
 `204 No Content`。
 从持久化成功开始，GetSession、提交用户事件和配置写入都不再能访问
@@ -301,8 +307,8 @@ owner 信息。删除操作仍携带调用上下文 Header，但 Runtime 不执�
 | 查询会话事件 | `listSessionEvents` | `GET` | `/sessions/{sessionId}/events` | 使用 `page/nextPage` 分页读取权威持久化 Entry |
 
 公共契约不再包含 `runId`、GetRun、Run Events、Run Abort 或 Run Steer。
-中止和运行中追加指导已经分别确认为 Session 范围的 Abort、Steer 与 FollowUp
-operation，不创建公共执行资源，也不复用 POST Events 的请求体。
+中止统一使用 Events user.interrupt；调整方向在实际停止后新提交，本期不支持排队。
+独立控制接口已退役，见 §2.5。
 CreateSession 和 GetSession 已同步删除旧模型遗留的公共执行指针。
 
 #### 2.2.1 已确认架构决策：执行不是公共 Run 资源
@@ -328,9 +334,7 @@ CampusClaw 借鉴其资源边界、持久化语义和事件顺序，不复制其
 | 断线恢复 | 从第一页查询持久化 Events 并去重，不重放 POST | 按 Session 事件流与历史恢复 |
 | 设计差异 | 请求范围内直接流式返回，保留产品自己的命名 | 发送与订阅是两个 HTTP 请求 |
 
-![Session Event、内部执行与 Entry 恢复边界](设计图/执行控制/http_execution_resource_model.svg)
-
-[PlantUML 源码：`http_execution_resource_model`](设计图/执行控制/diagram.puml#L118)
+[最新 Events 资源与内部执行边界](chat-events-v2-design.md) 取代原独立执行控制图。
 
 #### 2.2.2 第四个已确认接口：提交用户事件并直接流式返回
 
@@ -818,95 +822,15 @@ SessionResource 和新 `ETag`。
 
 [PlantUML 源码：`http_session_model_configuration`](设计图/会话配置/diagram.puml#L1)
 
-### 2.5 Session 执行控制（已确认）
+### 2.5 独立执行控制接口已退役
 
-| 接口简称 | operationKey | Method | Path | 语义 |
-|---|---|---|---|---|
-| 追加引导消息 | `appendSteer` | `POST` | `/sessions/{sessionId}/steers` | 向当前 active execution 优先追加 Steering Message |
-| 追加后续消息 | `appendFollowUp` | `POST` | `/sessions/{sessionId}/follow-ups` | 在当前执行原本将结束时追加 FollowUp Message |
-| 中止会话执行 | `abortSession` | `POST` | `/sessions/{sessionId}/abort` | 中止当前 active execution 并清空未投递控制消息 |
+2026-09-07 用户确认移除三个独立控制接口，精确模型与活动评审入口均删除。
+停止执行通过 user.interrupt 完成；调整方向为实际停止后新提交 user.message，不等同于 pi 原生 Steer。
+本期不提供 FollowUp 队列，M1 未完成前拒绝 M2。旧 202 入队、Abort 204/no-op
+及错误集合不继承到 Events；旧实现仅保留源码证据与版本历史，不再维护调用示例及控制图。
 
-三个 operation 已经确认。它们使用 Session scope，而不是
-`/runs/{runId}`：CampusClaw 已确认不公开 Run，并且一个 Session 同时至多只有一个
-active execution，因此 `sessionId` 已能无歧义确定控制目标。Steer 和 FollowUp
-采用复数资源路径表示向队列追加一条消息；Abort 不创建可查询资源，因此使用
-幂等动作路径 `/abort`。
-
-Steer、FollowUp 与 Abort 都携带 JWT 默认或 APPKEY 兼容调用上下文 Header；Runtime
-不执行凭据检查。
-
-#### 2.5.1 POST Session Steer
-
-Steer 只在 `Session.state=running` 时接受。它不会立即打断正在进行的模型响应或工具
-调用，而是在当前 Assistant Turn 及其工具调用结束后、下一次模型调用前注入。首版
-固定 `one-at-a-time`：同类消息保持 FIFO，每个下一轮最多投递一条；只要 Steer 队列
-非空，就不会先投递 FollowUp。
-
-请求只包含文本：
-
-```json
-{
-  "message": "先只分析异常订单，不要导出报告。"
-}
-```
-
-`message` 必须包含非空白字符，最大 262144 个 UTF-16 代码单元。首版不接受 `fileIds`、
-`modelId`、`thinking`、metadata、队列模式或 `Idempotency-Key`。成功返回
-`202 Accepted` 和最窄 ResultBean：
-
-```json
-{
-  "resCode": "0",
-  "resMsg": "success",
-  "result": {
-    "sessionId": "session-550e8400e29b41d4a716446655440003",
-    "acceptedAt": "2026-08-17T15:10:00Z"
-  }
-}
-```
-
-`202` 只表示消息已进入当前 active execution 的运行队列，不创建公共
-`steerId`/`followUpId`，也不预分配或返回 `entryId/entrySeq`。消息实际投递
-并持久化时才成为当前分支中的 `user.message`，沿发起执行的既有 SSE
-流发送，并由 GET Session Events 查询。调用方通过该 Session 的原 SSE 顺序观察
-投递结果，本版不建立控制请求到最终 Entry 的独立公开关联资源。
-
-#### 2.5.2 POST Session FollowUp
-
-FollowUp 使用相同的文本约束和 `202` 响应形状，但投递时机不同：它只在当前执行已
-没有工具调用和 Steering Message、原本将自然结束时投递，然后在同一 active
-execution 中继续下一轮。多个 FollowUp 保持 FIFO 并按 `one-at-a-time` 投递。
-Session 已经 idle 时不把 FollowUp 静默转换成新交互，而是返回
-`409 SESSION_NOT_RUNNING`；调用方应改用 `POST /sessions/{sessionId}/events`。
-
-#### 2.5.3 POST Session Abort
-
-Abort 无请求体，不接收原因、`runId`、`If-Match` 或 `Idempotency-Key`。Runtime
-中止当前模型请求、工具执行和子 Agent，清空尚未投递的 Steer/FollowUp，并等待
-Session 收敛为 `idle` 后返回 `204 No Content`。若请求到达时 Session 已经 idle，
-同样返回 `204`，避免执行自然结束与 Abort 请求之间的竞态迫使调用方处理伪错误。
-该操作携带调用上下文 Header，但不声明 Runtime 本地 `401` 认证错误。
-
-原 `POST /events` SSE 在中止后发送：
-
-```text
-event: session.status.idle
-data: {"status":"idle"}
-
-event: stream.end
-data: {"reason":"aborted"}
-```
-
-尚未投递的控制消息不会成为公共 `user.message`；已经投递的消息仍保留在历史中。
-Abort 不删除 Session 或已完成 Entry，也不新增公共 `aborted` 历史事件类型。
-
-三个控制接口不复用 `POST /events`，因为后者已经冻结为提交初始
-`user.message` 并直接返回 SSE。若让同一 HTTP operation 根据 `type` 在 SSE、
-ResultBean 和 `204` 之间切换，会使调用方式、重试和响应契约不稳定。
-
-![HTTP Session 执行控制](设计图/执行控制/http_session_execution_controls.svg)
-
-[PlantUML 源码：`http_session_execution_controls`](设计图/执行控制/diagram.puml#L1)
+[FollowUp 未来设计](chat-follow-up-future-design.md) 已记录数据库交接方向，
+但启用、公共字段、恢复与容量仍需另行评审，不增加当前接口。
 
 ### 2.6 Built-in Command（已确认，目标实现）
 
@@ -1000,17 +924,17 @@ Thinking 非空参数只接受小写 on/off。
 #### 2.6.4 Compact 的执行生命周期
 
 Compact 只接受空参数与 idle Session。与 POST Events 共用操作锁、全局容量、
-Active Holder、Event Projector、控制队列及 30 分钟超时。空历史仅观察：
+Active Holder、Event Projector 及既有命令超时。当前不开放控制消息队列。空历史仅观察：
 返回 compacted=false，不占容量、不改变状态、不写 Entry。真实压缩保留既有 Compaction Entry。
 
 虚拟请求线程等待独立的“压缩终态 Future”；完成句柄不传播客户端断线取消。
-压缩成功或无变化即完成 JSON，不等待 Steer/FollowUp；队列随后在同一个 Holder 继续，
-所以响应后 Session 仍可能 running。Abort 取消压缩、清空队列；失败和超时必须清理
-Holder、容量及 Session 状态。结果不确定时客户端不得自动重放 /compact。
+压缩成功或无变化即完成 JSON；当前不接受排队续跑。失败和超时必须清理
+Holder、容量及 Session 状态。停止方向统一为 user.interrupt；Compact 与新 Events 的
+目标绑定和响应衔接仍需命令专项评审，不恢复旧 Abort 204。结果不确定时不得自动重放。
 
 POST Command 读取的 Mate Header 不进入日志、Prompt、Event 或存储。
-非 Compact 请求只保留到 Handler 完成；Compact 只由本次 Active Holder 保留到压缩及
-排队续跑结束，Spring 单例不保存请求状态，仅实际 Mate tool execute 发送已提供值。
+非 Compact 请求只保留到 Handler 完成；Compact 只由本次 Active Holder 保留到
+本次压缩执行结束，Spring 单例不保存请求状态，仅实际 Mate tool execute 发送已提供值。
 
 分层、各命令行为、分批 PR 和完整验收以
 [通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)、
@@ -1022,7 +946,7 @@ POST Command 读取的 Mate Header 不进入日志、Prompt、Event 或存储。
 | 边界 | 普通操作 | 实时执行 | 标识范围 | 当前评审状态 |
 |---|---|---|---|---|
 | 浏览器/UI → mate-service | 独立 HTTP 请求与响应 | 消息 SSE；公共命令协议需独立重审 | 公共 `chatId` | 旧公共命令 SSE 提案已废止，不推导新协议 |
-| mate-service → CampusClaw | 本文十三个 HTTP operation，Command 为普通 JSON | 仅 `POST /events` 输出请求级 SSE | 内部 `sessionId` | 操作 12、13 为七个 Builtin 目标契约 |
+| mate-service → CampusClaw | 本文十个 HTTP operation，Command 为普通 JSON | 仅 `POST /events` 输出请求级 SSE | 内部 `sessionId` | 操作 12、13 为七个 Builtin 目标契约 |
 
 两跳不是同一条物理连接，也不是一份字节透明协议。mate-service 需要终止公共认证、
 解析内部事件、移除 Runtime 私有字段、映射安全错误并重新编码公共 SSE。内部
@@ -1031,18 +955,17 @@ POST Command 读取的 Mate Header 不进入日志、Prompt、Event 或存储。
 全部内部调用都携带调用上下文 Header；`Accept-Language`、`If-Match` 等各 operation
 已声明的普通 Header 保持各自语义。CampusClaw 不校验凭据组合、共存、格式或真实性。
 
-每次初始用户消息、Steer、FollowUp 或 Abort 都是新的 HTTP 请求。只有初始
-`POST /events` 返回本次 active execution 的 SSE；Steer 和 FollowUp 成功后进入
-该执行的队列，后续产物继续出现在仍打开的执行流中。正常 `stream.end`、流内错误
-或网络中断都会结束当前响应，后续用户消息再建立新的请求。
+当前每次 user.message、user.interrupt 或 user.tool_confirmation 使用新的 POST Events，
+各响应按 v2 规则接收本次回执与对应输出。原消息与中断响应各自绑定，不复制输出
+或借断连取消执行。三个独立控制接口已退役；命令仍按独立契约处理。
 
 ## 4. 状态、并发与恢复
 
-Session Event 的并发、连接和恢复规则当前为：
+本节 entryId/entrySeq 与不透明 page 仅为迁移前 v1 证据，最新恢复以 v2 为准。
+当前准入和退役决定优先适用：
 
 - 每个 Session 同一时刻只允许一个 active execution。第二个并发初始
-  `user.message` 返回 `409 SESSION_BUSY`；已确认的 Steer/FollowUp 是仅在 running
-  状态下追加到该 active execution 的显式例外，不创建第二个 execution。
+  `user.message` 返回 `409 SESSION_BUSY`，不接受队列追加；中断与工具确认按 v2 控制条件接受。
 - 用户 MessageEntry 持久化并开始执行后，不依赖发起 HTTP 连接继续存活；连接关闭
   不等于 interrupt。
 - 直接流式 POST 不使用浏览器 `EventSource` 自动重连，也不接受
@@ -1053,19 +976,18 @@ Session Event 的并发、连接和恢复规则当前为：
   User MessageEntry。
 - `Session.state` 只表达 `idle/running` 粗粒度状态。模型请求、工具执行或消息生成
   阶段通过实时事件表达，不新增公共 Run phase。
-- Steer/FollowUp 队列分别保持 FIFO，固定 `one-at-a-time`，且 Steer 优先；
-  Abort 清空两类尚未投递消息。控制请求断线不会撤销已经成功接受的队列追加或中止。
+- 本期无后续消息队列；user.interrupt 响应断开不撤销已接受的中断。
 - `entrySeq` 只由持久化 Entry 分配；临时事件不消耗序号。GetSession 不返回
   事件水位，第五个接口也不接受 `entrySeq` 作为分页参数；它只使用不透明 page。
 - Pod 重启时如何终止或恢复 active execution、是否持久化 partial Assistant Entry，
-  不属于已确认的十三个 HTTP operation 契约，留待执行恢复实现设计。
+  不属于当前十个 HTTP operation 已确认范围，留待执行恢复实现设计。
 
 ## 5. ResultBean、HTTP 状态与国际化
 
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。本版十三个 operation 均已确认。所有普通 JSON 响应都
+草案的公司集成约束。八项保留既有契约，两个 Events 操作仍为 v2 部分确认。所有普通 JSON 响应都
 遵守同一包装，SSE 事件流和 HTTP
 `204` 无响应体不使用 ResultBean。
 
@@ -1148,21 +1070,8 @@ operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑
 | `500` | `SESSION_THINKING_UPDATE_FAILED` | PUT Thinking | 深度思考配置和资源版本未能原子更新 |
 | `503` | `MANAGER_UNAVAILABLE` | GET Models、PUT Model | Model Manager 暂时不可用；复用第一个接口错误码 |
 
-三个已确认执行控制接口复用 Session 标识和不存在错误，并新增：
-
-| HTTP | `resCode` | 适用 operation | 语义 |
-|---|---|---|---|
-| `400` | `INVALID_STEER_REQUEST` | POST Steer | `message` 缺失、空白、过长或存在未知字段 |
-| `400` | `INVALID_FOLLOW_UP_REQUEST` | POST FollowUp | `message` 缺失、空白、过长或存在未知字段 |
-| `409` | `SESSION_NOT_RUNNING` | POST Steer、FollowUp | Session 已经 idle，没有可追加消息的 active execution |
-| `503` | `SESSION_EXECUTION_UNAVAILABLE` | POST Steer、FollowUp、Abort | Session 为 running，但请求未命中持有 active execution 的 Runtime 实例；返回 `Retry-After: 3` |
-| `500` | `STEER_ACCEPTANCE_FAILED` | POST Steer | 状态检查和 Steer 入队未能原子完成 |
-| `500` | `FOLLOW_UP_ACCEPTANCE_FAILED` | POST FollowUp | 状态检查和 FollowUp 入队未能原子完成 |
-| `500` | `SESSION_ABORT_FAILED` | POST Abort | 取消、清空队列或 idle 收敛失败 |
-
-Abort 在 Session 已经 idle 时仍返回 `204`，不使用 `SESSION_NOT_RUNNING`。Steer 和
-FollowUp 的响应结果不确定时不得无条件重试，否则可能重复入队。已确认契约不提供
-业务幂等标识或 `Idempotency-Key`；调用方需要把不确定结果作为业务对账异常处理。
+原三个独立控制接口的错误集合随接口退役；中断错误、超时和竞争结果以 v2 继续评审，
+不将原 Abort 的 idle 204 规则复制给 user.interrupt。
 
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
 `en-US`；缺失、不支持或资源 key 缺失时回退 `en-US`，禁止使用
@@ -1241,12 +1150,12 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 ## 7. 安全与附件边界
 
-- 全部十三项 operation 均携带共享调用上下文 Header 示例：JWT 使用
+- 全部十项 operation 均携带共享调用上下文 Header 示例：JWT 使用
   `X-HW-ID: credential-jwt` 与 `Authorization: Bearer opaque-token`；APPKEY 使用
   `X-HW-ID: credential-appkey` 与 `X-HW-APPKEY: opaque-appkey`。这些是非生产示例值。
 - `X-HW-ID` 表示用户凭据 ID，不是公司、服务或应用标识。
 - `POST /sessions/{sessionId}/events` 和 `POST /sessions/{sessionId}/command` 额外必填
-  `access-token`；该 Header 不成为其他十一个 operation 的共享 Header。
+  `access-token`；该 Header 不成为其他八个 operation 的共享 Header。
 - 目标实现移除进入 Controller 前的认证拦截，也不在 Controller 内调用
   `RuntimeRequestAuthenticator`。Runtime 不检查 Header 是否齐全、是否同时存在、Bearer
   形状或凭据真实性，不声明 `UNAUTHENTICATED` / `AUTH_CREDENTIAL_CONFLICT`。
@@ -1368,7 +1277,7 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 | 观察到的行为 | Anthropic [List Events API](https://platform.claude.com/docs/en/api/beta/sessions/events/list)：`GET /v1/sessions/{session_id}/events` 通过不透明 `page/next_page` 分页，并按 `processed_at` 排序；公开响应没有固定快照水位 |
 | 产品约束 | Session/Message、文件引用和 Manager 权威保持不变；执行轮次不是调用方可见的公共 Run，权威恢复单元是 Session Entry |
 | 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
-| 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径；全部十三项操作携带共享调用上下文 Header，POST Events 和 POST Command 额外必填 `access-token`，Runtime 不执行本地凭据认证 |
+| 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径；全部十项操作携带共享调用上下文 Header，POST Events 和 POST Command 额外必填 `access-token`，Runtime 不执行本地凭据认证 |
 | 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
 | 产品约束 | Session `thinking` 是是否启用深度思考的 boolean；`false` 映射为 pi 的 `off`，`true` 使用模型和 Agent 的受管非 `off` 推理强度，不公开具体等级 |
 | 产品约束 | Path、Query、JSON 与 SSE data 字段只使用 lowerCamelCase；HTTP Header 保留原名；事件类型值、错误码、枚举值和类型化 ID 值不改变，也不接受 snake_case 字段别名 |
@@ -1390,8 +1299,8 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 | 目标设计 | 模型、深度思考、资源版本和对应领域事件原子更新；模型能力归一产生 `session.thinking.changed(reason=modelCapability)`，同值请求不产生事件 |
 | 已实现行为 | Steer 和 FollowUp 使用 Session scope 的独立 POST；只在 running 时按 `one-at-a-time` 入队，Steer 优先；实际投递时统一成为既有 `user.message`，不新增公共控制 Entry 类型 |
 | 已实现行为 | Abort 使用 Session scope 的幂等 POST，无请求体；级联取消模型、工具和子 Agent，清空未投递控制消息，等待 idle 后返回 `204`；idle 时也是 `204` |
-| 产品约束 | 首版 Steer/FollowUp 仅接受文本，不开放 pi 的 inline images、扩展命令、Prompt Template 展开或队列模式配置；不复用已经冻结为直接 SSE 的 POST Events operation |
-| 架构改造 | pi-mono-java 需要新增 FollowUp 能力，并将当前 Steer“入队前直接持久化 UserMessage”调整为实际投递时才产生公共 `user.message`，避免工具结果与排队消息的历史顺序错位 |
+| 历史产品约束，已退役 | 首版 Steer/FollowUp 仅接受文本，不开放 pi 的 inline images、扩展命令、Prompt Template 展开或队列模式配置；不复用已经冻结为直接 SSE 的 POST Events operation |
+| 历史迁移设计，已被未来专题取代 | pi-mono-java 需要新增 FollowUp 能力，并将当前 Steer“入队前直接持久化 UserMessage”调整为实际投递时才产生公共 `user.message`，避免工具结果与排队消息的历史顺序错位 |
 | 已确认架构 | `POST /sessions/{sessionId}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `runId`；成功流可包含配置变更、User、Assistant 与可选 thinking、工具执行、ToolResult、压缩、Session idle、stream end；持久化消息、工具结果与领域事件是权威历史 |
 | 设计原因 | pi 本身依靠 MessageEntry 重建对话，不依赖公共 Run；mate-service 当前只需要提交消息、观察实时输出和读取持久化 Session Events，无需承担额外 Run 生命周期 |
 | 已确认设计 | Assistant Message 使用 `assistant.message.started/delta/completed` 三阶段；前两者是不可恢复预览，completed 是完整持久化 Entry。该语义借鉴 Anthropic 的 preview/final 分层，但名称采用 CampusClaw 领域语言 |
@@ -1420,6 +1329,7 @@ mate-service 旧公共命令方案标记为已废止的历史 target-only design
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.46.0 | 2026-09-07 | 退役三个独立控制接口及其示例和错误集合，保留十项；Events 指向 v2，FollowUp 仅记录未来设计，保持单消息准入。 |
 | 1.45.1 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一设计、实现和集成；同步操作 12/13 的实施责任说明与校验，保留已确认报文及待评审的 Skill 细节。 |
 | 1.45.0 | 2026-09-04 | 用户确认 Help 无参四字段 Agent 使用指南；同步操作 12 描述符、操作 13 非空/空内容结果、参数与缓存语义、全局类图及校验；其他命令、事件和 Mate 公共契约不变。 |
 | 1.44.1 | 2026-09-04 | 澄清 Skill Command 由其他同事同步开发；撤销整体延期/拒绝解释，保留 Builtin 行为并将名称和清单限制限定为 Builtin 切片；共享 HTTP 发布前整合双方契约。 |

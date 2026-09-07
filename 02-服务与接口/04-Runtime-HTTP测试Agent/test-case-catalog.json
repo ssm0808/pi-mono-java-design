@@ -1,7 +1,7 @@
 {
-  "catalogVersion": "1.1.0",
-  "status": "target-only",
-  "description": "Initial machine-maintained test inventory for the confirmed CampusClaw Runtime HTTP V1 contract.",
+  "catalogVersion": "1.1.1",
+  "status": "historical-implementation-baseline",
+  "description": "Historical HTTP 1.37 regression inventory, not the current target API. Standalone controls are retired from the current product; keep these assertions only for the matching historical implementation and contract.",
   "contract": {
     "version": "1.37.0",
     "reviewDocument": "../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html",

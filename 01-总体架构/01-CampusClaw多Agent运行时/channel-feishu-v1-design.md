@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.0.0 |
+| 文档版本 | 2.1.0 |
 | 状态 | 目标设计；飞书接入尚未在 `mate-service` 实现 |
-| 更新日期 | 2026-08-20 |
+| 更新日期 | 2026-09-07 |
 | 设计仓分析基线 | `246cfd035103a1720fd6446554559f0247cc5c84` |
 | Runtime HTTP 契约 | 当前工作树 [`接口契约/common.json`](接口契约/common.json) 1.37.0、[`04-submit-user-message.json`](接口契约/操作/04-submit-user-message.json) 与 [`05-list-session-events.json`](接口契约/操作/05-list-session-events.json)；最后已提交契约基线为 `3c88fb7e`，1.37.0 差异尚未提交 |
 | pi-mono-java 实现基线 | `1f801dbb82bdda30478e3354e685e3153b179a0c` |
@@ -13,6 +13,11 @@
 | 飞书官方 Channel SDK 基线 | `larksuite/channel-sdk-python@731d459cca55ac76e85911bba2b1666508145e03` |
 | OpenClaw 参考基线 | `openclaw/openclaw@b015925bc30f6a8363f290b07d5f8588e21422b8` |
 | 外部资料核对日期 | 2026-08-20 |
+
+2026-09-07 仅同步 Runtime 控制接口退役：运维停止改走 Events user.interrupt。
+本专题其他旧 Runtime 字段及事件投影仍属 1.37 迁移基线，接入前需对齐
+[Events v2](chat-events-v2-design.md)，不能恢复独立控制入口或依据旧 Entry 水位推断新请求已接受。
+[FollowUp 未来设计](chat-follow-up-future-design.md) 本期不启用；未重新核验飞书外部资料或改变公共 Channel 契约。
 
 ## 1. 结论
 
@@ -345,7 +350,7 @@ Channel Chat 固定账号配置中的 `agent_id`；`model_id` 由 Agent 默认�
 | 读取状态 | `GET /sessions/{session_id}` | 判断 `idle/running`，不推导公开 Run |
 | 提交消息并执行 | `POST /sessions/{session_id}/events` | 路径已表达 user message 语义，请求只发送 `message`，不再发送冗余 `type`；同一响应消费 SSE |
 | 恢复持久化事实 | `GET /sessions/{session_id}/events` | 从第一页分页，按 `entry_id/entry_seq` 去重与对账 |
-| 中止 | `POST /sessions/{session_id}/abort` | 首版仅由运维恢复流程使用，不映射普通飞书消息 |
+| 中止 | `POST /sessions/{sessionId}/events`，`user.interrupt` | 仅运维恢复流程使用；回执后等待目标实际停止，不映射普通飞书消息 |
 
 Channel 不向 Runtime 发送 tenant、open_id、chat_id、thread_id、message_id、event_id、
 卡片 ID 或业务 metadata。Provider 标识只保存在 Channel Store。
@@ -667,13 +672,14 @@ Webhook Header、未脱敏事件或完整模型 thinking。
 3. GET Events 长历史全量扫描的容量上限，是否需要只读 `after_entry_seq` 优化；
 4. 飞书 Sandbox 对回复 uuid 与 CardKit sequence 重试的实测结果；
 5. 附件导入 Attachment Service 的下载、扫描、file_id 和失败提示专题；
-6. 卡片 action 到 Abort/Steer/FollowUp 的授权和幂等专题；
+6. 卡片停止 action 到 user.interrupt 的授权与对账专题；FollowUp 暂不启用，不恢复三个独立控制接口；
 7. 独立 CLI/Python Connector 若确有部署需求，其私有 intake HTTP API 逐接口评审。
 
 ## 16. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.0 | 2026-09-07 | 同步独立控制接口退役，运维通过 user.interrupt 停止执行；其他旧 Runtime 映射明确为待迁移基线。 |
 | 2.0.0 | 2026-08-20 | 调研官方 `lark-cli`、OpenAPI MCP、Python Channel SDK、Java Server SDK 路线与 OpenClaw 实现；生产方案选择 Java SDK 长连接/Webhook Adapter，CLI 限定为 PoC；按当前无 Run、请求级 SSE 重写架构、Conversation/Chat/Session 映射、Entry 水位恢复、CardKit、表结构和验收规则 |
 | 1.3.0 | 2026-08-18 | 历史版本冻结旧 Run/独立 SSE 方案并删除过渡期 OpenAPI 引用 |
 | 1.2.0 | 2026-08-18 | 历史版本记录两跳 HTTP+SSE 结论，但图表仍依赖旧 Run |

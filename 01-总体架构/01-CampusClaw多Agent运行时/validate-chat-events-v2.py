@@ -25,6 +25,7 @@ CONFIRMED_CHOICES = {
     "M5-interrupt-coordination": "database-durable-stop-and-instance-batch-polling",
     "M6-message-admission": "session-single-message-atomic-idle-to-running",
     "M7-interrupt-optimization": "post-commit-local-wakeup-deduplicated-waiters-measured-index",
+    "M8-control-retirement": "remove-standalone-controls-follow-up-future-only",
     "S1-frame-format": "A-data-only",
     "S2-event-projection": "A-type-and-phase",
 }

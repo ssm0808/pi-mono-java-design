@@ -30,7 +30,7 @@ SLASH_DESIGN_PATHS = (
 )
 HELP_ROOT = REPOSITORY_ROOT / "04-命令与技能/01-内置命令/Help-Agent使用指南"
 HELP_RESULT_FIELDS = {"command", "displayName", "description", "userCases"}
-EXPECTED_OPERATION_COUNT = 13
+EXPECTED_OPERATION_COUNT = 10
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
     ("GET", "/sessions/{sessionId}"),
@@ -40,9 +40,6 @@ EXPECTED_OPERATIONS = {
     ("GET", "/sessions/{sessionId}/models"),
     ("PUT", "/sessions/{sessionId}/model"),
     ("PUT", "/sessions/{sessionId}/thinking"),
-    ("POST", "/sessions/{sessionId}/steers"),
-    ("POST", "/sessions/{sessionId}/follow-ups"),
-    ("POST", "/sessions/{sessionId}/abort"),
     ("GET", "/sessions/{sessionId}/commands"),
     ("POST", "/sessions/{sessionId}/command"),
 }
@@ -496,8 +493,6 @@ def validate_response_contract(
                 "GET Events must show the thinking=true projection")
         require("thinking=false" in operation["description"] and "旧 page 无效" in operation["description"],
                 "GET Events must define current-thinking filtering and cursor invalidation")
-    elif key in {("POST", "/sessions/{sessionId}/steers"), ("POST", "/sessions/{sessionId}/follow-ups")}:
-        require(("429", "CONTROL_QUEUE_FULL") in codes, f"Control queue limit is missing: {key}")
 
 
 def validate_help_descriptor(descriptor: dict[str, Any]) -> None:
@@ -757,6 +752,20 @@ def validate_removed_contract() -> None:
                     f"Deprecated OpenAPI filename is referenced by {path.relative_to(ROOT)}")
 
 
+def validate_control_retirement(models: list[dict[str, Any]]) -> None:
+    retired = {"appendSteer", "appendFollowUp", "abortSession"}
+    paths = {f"/sessions/{{sessionId}}/{name}" for name in ("steers", "follow-ups", "abort")}
+    for model in models:
+        operation = model["operation"]
+        require(operation["operationKey"] not in retired and operation["path"] not in paths,
+                "Retired standalone control operation must not re-enter the active catalog")
+    html_text = HTML_PATH.read_text(encoding="utf-8")
+    require(not any(path in html_text for path in paths), "Retired control path found in active review HTML")
+    future = (ROOT / "chat-follow-up-future-design.md").read_text(encoding="utf-8")
+    for phrase in ("本期不支持", "启用另行评审", "target-only", "M1 未完成前拒绝", "内存凭据"):
+        require(phrase in future, f"Future FollowUp must retain the disabled boundary: {phrase}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--full", action="store_true", help="render and compare every PlantUML topic")
@@ -779,6 +788,7 @@ def main() -> int:
     validate_markdown_links()
     validate_command_wording(models)
     validate_removed_contract()
+    validate_control_retirement(models)
     run(["git", "diff", "--check"], cwd=REPOSITORY_ROOT)
     mode = "full" if args.full else "fast"
     print(f"Source-first API contract validation passed: {len(models)} operations, {len(selected)} diagram topics ({mode})")

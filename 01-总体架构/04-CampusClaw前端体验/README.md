@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.2.0 |
+| 文档版本 | 1.3.0 |
 | 状态 | Proposed；产品前端无凭据边界已确认；内部调试 Header 的通用 Key/Value 方向、独立 `Headers` 面板、复用原诊断入口视觉及不展示自动生成 Header 已确认，交互细节进入评审；O1 品牌标识已确认，暖中性配色进入评审 |
-| 界面评审状态 | `credentialBoundary` 产品边界已确认；`debugHeaders` 通用表格、独立 `Headers` 命名、原诊断入口视觉与不展示自动生成 Header 已确认，交互细节待确认；`firstUse`、`idleConversation` 待确认；`runningConversation` 跟进交互已确认、界面待确认 |
+| 界面评审状态 | `credentialBoundary` 产品边界已确认；`debugHeaders` 通用表格、独立 `Headers` 命名、原诊断入口视觉与不展示自动生成 Header 已确认，交互细节待确认；`firstUse`、`idleConversation` 待确认；`runningConversation` 旧跟进交互已被退役决定取代、界面待确认 |
 | 主设计依据 | [`README.md`](README.md)，维护源码证据、目标差异、设计理由、状态与 Design Token |
 | 人类评审界面 | [`frontend-review.html`](frontend-review.html)，集中展示低保真、高保真和待确认项 |
 | 品牌标识资产 | [`campusclaw-mark-o1.png`](campusclaw-mark-o1.png)，原始透明 PNG；界面直接引用，不通过生成模型重绘，也不缩进深色品牌方块 |
@@ -20,7 +20,13 @@
 | 工具凭据实现对齐 | 变更前基线 `pi-mono-java@320d790726a70aada6100052952d5494d2a378ac`；已评审特性提交 `d03c08dbae870f19eee8d4fa79a707185f7a26b5`，位于 [Draft PR #181](https://github.com/superheromeZzh/pi-mono-java/pull/181)，尚未作为 `main` 现状 |
 | Header 编辑器对照基线 | `pi-mono@4af9d21d`、`opencode@849c2598`、`openai/codex@be33f80b`、`deepseek-harness@cd5ef814`；源码路径见 3.1 |
 | Postman 核对 | 2026-08-28；核对官方 Headers 编辑文档、`Agent Runtime` collection 及真实 SSE 响应 |
-| 更新日期 | 2026-08-28 |
+| 更新日期 | 2026-09-07 |
+
+2026-09-07 控制接口调整优先适用：独立 abort、steers、follow-ups 已退役；本期不支持
+排队或原生运行中 Steer，停止经 Events user.interrupt，实际停止后才可提交新消息。
+[FollowUp 未来专题](../01-CampusClaw多Agent运行时/chat-follow-up-future-design.md) 暂不启用。
+下文其他旧事件名、Header 适配与图片仅是原体验/实现基线，迁移前须对齐 Events v2；
+本轮不重绘栅格稿，也不改变 Mate 公共接口。旧图中的队列与模式切换不属于本期能力。
 
 ## 1. 结论
 
@@ -40,10 +46,8 @@ Key/Value 表格，不预先确定凭据模式或 Header 名称；浏览器禁�
 本轮提出一个桌面优先的单工作区方案：左侧会话导航、中央对话、顶部 Session 能力、
 底部 Composer。思考和工具调用按实际时间顺序组成对话内 Agent 活动流；每次工具调用合并为
 一条紧凑 activity disclosure，并在安全投影后显示调用入参。展开详情始终按
-“输入参数 → 输出结果”纵向排列，不做左右分栏。运行中 `Steer`、`FollowUp`、`Abort`
-分别产品化为“调整方向”“加入队列”“停止”。Composer 像 Codex desktop 一样只呈现当前
-跟进模式，默认“调整方向”，而不是同时展示两个常驻选择。现有调试能力可以保留，但只能
-作为内部构建中的开发者诊断入口，不能继续充当产品首页。
+“输入参数 → 输出结果”纵向排列，不做左右分栏。运行中只允许停止并保留新消息草稿；
+停止完成后再提交新消息，不展示加入队列或运行中注入模式。内部诊断不进入产品首页。
 
 Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和固定 Vue 组件投影为安全
 富文本；表格、列表、引用、链接、行内代码和代码块均有明确样式、溢出和复制行为。用户
@@ -134,7 +138,7 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 - `user.message`、`assistant.message.completed`、`assistant.thinking.completed` 和 `tool.result` 是可恢复的持久化 Entry；Thinking 历史只在该 Session 当前允许思考展示时返回。
 - `assistant.message.started/delta`、`assistant.thinking.started/delta`、工具执行 started/delta/completed 和流控制事件是瞬时状态。
 - Model 与 Thinking 只允许在 Session `idle` 时修改，并通过强 ETag 防止覆盖并发修改。
-- Steer 优先于 FollowUp；两者只在 `running` 时接受；Abort 在 `idle` 时也是幂等成功。
+- 本期不接受 running 时的新消息或排队；user.interrupt 回执不等于目标实际停止。
 - Runtime 只接收 `file_ids`，不负责浏览器文件上传、文件名和预览元数据。
 - 精确 Runtime 设计明确要求浏览器/UI 经 mate-service 调用，内部 SSE 不能字节透明转发。
 - 当前前端只传递非秘密 `X-HW-ID` 调用上下文，不支持 JWT/APPKEY 的输入、存储、刷新或 Header 注入；需要本地凭据认证的 Runtime 部署不属于该直接适配器的支持范围。
@@ -153,8 +157,8 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 | Header 只附加到提交消息 POST | 安全加固 + 架构变化 | Runtime 只在 `submit` 边界建立本次执行快照；Session 创建、查询、历史、配置、Steer、FollowUp 和 Abort 都不应接收这些秘密。 |
 | 生产认证由 mate-service / 网关边界完成 | Target-only architecture | 浏览器身份、登录态、授权与审计不由 Chat 页面收集原始凭据；具体会话承载和刷新机制必须在公共 API 评审时确认，不能从当前直接适配器推断。 |
 | 隐藏 ETag、原始 SSE 与内部错误 | 安全加固 | 降低内部实现泄漏和错误信息越界风险；凭据不是产品“隐藏字段”，只有内部诊断构建存在明确例外。 |
-| 将 Steer/FollowUp/Abort 改为用户语言 | 产品约束 | 用户决策是“调整方向”“加入队列”“停止”，不是选择内部 operation；命名与 Codex desktop 对齐。 |
-| 运行中只显示当前跟进模式，默认 Steer | 产品约束 | Codex desktop 的 Composer 以一个可配置默认行为和单次反转快捷键工作；两个常驻模式会增加不必要决策并偏离参照实现。 |
+| 停止与调整方向 | 产品约束 | 停止走 user.interrupt；实际停止后新提交，不承诺原生 Steer 或 FollowUp。 |
+| 运行中保留草稿 | 产品约束 | 不发送第二条用户消息，不展示队列或跟进模式切换。 |
 | 将工具事件合并为紧凑 activity disclosure | 产品约束 | 保留执行透明度，同时避免 started/completed/result 三段协议噪音；执行中默认展开，完成后折叠。 |
 | 工具详情按“输入参数 → 输出结果”纵向排列 | 产品约束 | Codex 的详情区是缩进的纵向流；左右分栏会把两个不同阅读阶段误导为并列比较，并压缩长参数和长结果。 |
 | 思考 disclosure 与工具 activity 按事件顺序组成 Agent 活动流 | 产品约束 | 让用户在一个连续区域内理解当前做什么和调用了什么，又不把思考摘要混入工具 payload。 |
@@ -223,7 +227,7 @@ CampusClaw 页面增加凭据表单或把秘密写入 `VITE_*` 来补齐。
 |---|---|---|---|---|
 | 首次进入 | `firstUse` | 待确认 | 低保真评审板 | Agent 目录和公共 Chat 创建属于 mate-service 目标态 |
 | 常规对话 | `idleConversation` | 待确认 | 低保真 + 高保真常规态 | 复用已确认 Session/Event 能力，经公共 bridge 投影 |
-| 执行中 | `runningConversation` | 跟进交互已确认；界面待确认 | 低保真 + 高保真运行态 | FollowUp、Steer、Abort 产品化，不暴露内部 operation 名称 |
+| 执行中 | `runningConversation` | 旧跟进交互已被退役决定取代；界面待确认 | 低保真 + 高保真运行态 | 停止与草稿，不暴露内部 operation 名称；本期无队列 |
 
 | 区域 | 主要内容 | 用户动作 | 默认隐藏内容 |
 |---|---|---|---|
@@ -303,37 +307,27 @@ Chat 标题或用户会话列表接口。
 
 ### 7.3 Running 对话
 
-- 顶部状态改为“执行中”，显示“停止”。
-- Composer 只显示当前跟进处理方式，不同时展示两个互斥胶囊。desktop 默认“调整方向”，
-  设置中的“跟进处理方式”可改为“加入队列”。
-- `Enter` 按当前默认方式提交；`Cmd/Ctrl+Shift+Enter` 只对本条消息使用相反方式，不修改设置。
-- “调整方向”映射内部 Steer：服务端接受后，不中断当前正在进行的模型调用或工具；它在
-  当前 Assistant Turn 及其工具结束后、下一次模型调用前优先送达。因此禁止使用“立即调整”
-  或会让用户误解为硬中断的文案。
-- “加入队列”映射内部 FollowUp：只有当前执行本会自然结束时才送达，并在同一 active
-  execution 中继续。Steer 队列优先于 FollowUp 队列。
-- 成功接受后分别显示“已接受调整”或“已加入队列”，不虚构 Entry ID、送达时间或已经
-  持久化；HTTP `202` 目前只返回 `session_id` 与 `accepted_at`。
-- 有排队消息时，在 Composer 上方显示紧凑队列列表，可编辑、删除、重试，且允许将一条
-  排队消息“调整方向”送入当前运行。公共 bridge 提供稳定控制项 ID 与查询能力前，刷新后
-  不承诺还原未送达队列，也不把本地 optimistic key 伪装为 Runtime ID。
-- 队列已满时保留输入并给出可重试提示；响应结果不确定时不自动重发。
-- Stop 映射 Abort；成功后等待 Session 回到 idle，不把 Stop 解释为删除。
+- 顶部显示执行中与停止；新消息保留草稿，M1 实际完成前不发送 M2。
+- 停止经 bridge 映射到内部 POST Events 的 user.interrupt；先显示中断已接受，
+  收到对应目标实际停止的终态后才显示已停止。确认等待 idle、断连或超时不是停止证据。
+- 调整方向采用实际停止后提交新 user.message；不是原生 Steer，不承诺不中断工具的注入。
+- 不展示加入队列、队列编辑/删除或模式反转快捷键；FollowUp 仅保留未来设计。
+- 不恢复三个独立路径，也不把旧 Abort 204/no-op 规则复制给中断。
 
-| 产品动作 | 当前内部 HTTP operation | 接受结果 | 产品解释 |
-|---|---|---|---|
-| 调整方向 | `POST /sessions/{session_id}/steers` | `202` | 已接受，在下一次模型调用前优先送达；不表示当前模型或工具已被中断 |
-| 加入队列 | `POST /sessions/{session_id}/follow-ups` | `202` | 已入 FollowUp 队列，在执行本会自然结束时送达 |
-| 停止 | `POST /sessions/{session_id}/abort` | `204` | 请求中止 active execution，并清空尚未送达的两类跟进 |
+| 产品动作 | 当前内部映射 | 产品解释 |
+|---|---|---|
+| 停止 | POST /sessions/{sessionId}/events，user.interrupt | 本次回执后等待固定目标实际结束 |
+| 调整方向 | 实际停止后 POST 同一路径，user.message | 新的一次提交，不与原执行并发 |
+| 加入队列 | 本期不支持 | 不发送隐藏请求、不做客户端自动续发 |
 
-这些路径只用于 bridge/adapter 对齐当前 HTTP 设计，不进入产品文案或浏览器可见诊断信息。
+内部路径不直接暴露给产品浏览器，Mate 公共映射仍须独立评审。
 
 ### 7.4 断线与恢复
 
 - 网络断开后显示“连接已中断，执行可能仍在继续”。
-- 禁止自动重放初始消息、Steer 或 FollowUp。
+- 禁止自动重放任何已接受或结果不确定的 POST Events。
 - 重新读取公共持久化历史并按公共事件标识去重；未持久化 delta 不尝试补齐。
-- 若 Session 仍 running，可继续展示“后台执行中”，但只有正确路由到执行实例后才能控制。
+- 若 Session 仍 running，可展示后台执行中；目标中断经数据库协调，不要求粘性路由。
 
 ### 7.5 调试 Header 请求语义
 
@@ -547,7 +541,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 | Assistant Markdown 原文保真 | Runtime `TextContent.text` 原样持久化并投影；公共 bridge 尚未逐项评审 | mate-service event projector 必须透传文本，不生成 HTML |
 | 浏览器安全的 Thinking 摘要与 ToolCallSpec | 内部 `assistant.thinking.completed` 可恢复但属于原始私有推理；Assistant completed 含原始 `tool_call.arguments`；公共投影未评审 | mate-service event projector 生成安全的 `thinkingDisplayTitle/thinkingDisplaySummary`，保留工具稳定关联身份，并对入参做服务端脱敏、资源映射和预算 |
 | 浏览器认证、权限和审计 | 当前前端只发送非秘密 `X-HW-ID`，没有 JWT/APPKEY 输入、存储或注入能力；Runtime 当前不做本地凭据认证 | mate-service / 网关建立身份并执行授权；具体浏览器会话机制待公共 API 评审 |
-| 可恢复的排队项 ID、列表与队列管理 | Steer/FollowUp 的 `202` 无控制项 ID，Runtime 无公开队列查询/修改接口 | mate-service bridge + Runtime 目标契约 |
+| 后续消息队列 | 本期不支持；未来接续、恢复与授权另行评审 | FollowUp 未来专题，不进入当前 UI |
 
 因此，高保真稿是已确认 Runtime 能力上的产品体验目标，不应表述为现有后端已经提供了
 全部页面数据。公共 bridge 契约完成前，只能使用 mock adapter 或内部开发环境验证界面。
@@ -597,8 +591,8 @@ check/“已完成”标签区分，不能只依赖颜色。
   输入；断言无 `v-html`/`innerHTML`、无意外网络请求且可回退复制原文。
 - 富文本视觉与可访问性：表格/代码块在 1440、1024、768 宽度不撑破页面，键盘可横向滚动，
   标题层级、表格语义、外链名称和复制反馈可被读屏理解。
-- 控制测试：desktop running 默认 Steer、设置切换 Queue、单条快捷键反转、Abort、Steer 优先、
-  队列满、响应不确定不重试、刷新后不虚构未送达队列。
+- 控制测试：running 不发送 M2，无队列/模式切换；中断回执不误判停止、目标终态隔离、
+  实际停止后新提交、断连不重试、不以确认等待 idle 开放发送。
 - 配置测试：idle 才能改模型/思考、ETag 冲突刷新、模型切换关闭不支持的 thinking。
 - 产品凭据负向测试：产品构建不存在 `debugHeaders` 入口和凭据 store；构建配置不接受秘密 `VITE_*`；产品 adapter 不构造 `Authorization` / `X-HW-APPKEY` / `access-token`。
 - 诊断 Header 测试：任意 Key/Value、新尾行、逐行启停、删除、清空、大小写不敏感重复、非法 token、CR/LF、Fetch 禁止名称、启用计数、自动 Header 不进入 DOM，以及手工同名值在请求合并阶段覆盖自动值；只有初始 `POST /events` 收到通过校验的快照，创建/查询/配置/控制请求均不携带。
@@ -634,6 +628,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-09-07 | 同步三个控制接口退役与本期无队列；停止执行通过 user.interrupt 完成，实际停止后新提交。旧图片仅为视觉基线，其他 v1 映射待迁移。 |
 | 1.2.0 | 2026-08-28 | 按用户确认删除“隐藏的请求头”区域及覆盖状态展示；`Headers` 面板只呈现可编辑的通用 Key/Value 行。请求适配器自动生成 Header 的内部行为不变，手工同名值仍在请求合并阶段优先。 |
 | 1.1.0 | 2026-08-28 | 按用户选择将通用 Header 编辑器保持为独立 `Headers` 面板，不与 Agent/Session 的“开发者诊断入口”合并；视觉复用原诊断入口的折叠 summary、暖灰次级表面、虚线边界、紧凑字号、38 px 输入和次级按钮；表格交互和请求边界不变，仍不提供凭据模式、固定 Header 或主动作。 |
 | 1.0.0 | 2026-08-28 | 按用户确认改用 Postman 风格的通用 Headers 表格：删除固定四 Header、认证模式、应用按钮和常驻说明；新增任意 Key/Value、逐行启停/删除、自动空白尾行、启用计数、折叠的自动 Header、手工覆盖状态和浏览器限制行内校验；补充 PI、OpenCode、Codex、DSH 与 Postman 对照证据。 |

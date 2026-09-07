@@ -58,7 +58,7 @@ end note
 @enduml
 
 @startuml compact_command_execution
-title Target-only Compact JSON Terminal and Queue Continuation
+title Target-only Compact JSON Terminal and Cleanup
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java.
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionHolder.java.
 ' Architecture change: compact terminal Future is independent of Holder lifetime and request transport.
@@ -67,7 +67,6 @@ participant "Virtual request thread" as Http
 participant CompactionService as Service
 participant ActiveHolder as Holder
 database Projector
-participant "Control queue" as Queue
 Http -> Service : compact(sessionId)
 Service -> Service : operation lock and idle recheck
 alt empty history
@@ -77,13 +76,11 @@ else real compaction
   Http -> Holder : await non-cancelling compact terminal handle
   Holder -> Projector : persist Compaction Entry if changed
   Holder --> Http : complete JSON result immediately
-  Holder -> Queue : consume accepted Steer / FollowUp
-  Queue --> Holder : continue Agent in same Holder
   Holder -> Holder : release lease and credentials at final cleanup
 end
 note over Http,Holder
 Client disconnect does not cancel accepted compaction.
-Abort cancels compact and clears pending control messages.
-JSON response may precede the Session becoming idle.
+No pending message queue in the current product.
+Interrupt binding through Events requires command-specific review.
 end note
 @enduml

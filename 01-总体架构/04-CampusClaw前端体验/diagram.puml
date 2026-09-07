@@ -273,8 +273,7 @@ rectangle "Frontend projection" as Projection {
 }
 
 rectangle "User controls while running" as Controls {
-  component "Adjust direction\n(default)" as Adjust
-  component "Queue follow-up\n(configured or one-shot inverse)" as Continue
+  component "Adjust direction\nafter actual stop" as Adjust
   component "Stop" as Stop
 }
 
@@ -286,9 +285,8 @@ ToolEvents --> ActivityCard : merge lifecycle and result
 ActivityCard --> ArgumentViewer : render safe arguments
 TerminalEvents --> SessionState : idle, complete, or recoverable error
 
-Adjust --> SessionState : internal steer
-Continue --> SessionState : internal follow-up
-Stop --> SessionState : internal abort
+Adjust --> SessionState : user.message after actual stop
+Stop --> SessionState : Events user.interrupt
 
 note bottom of ActivityCard
 Running and failed tools stay expanded.
@@ -318,7 +316,8 @@ Network loss does not replay the POST.
 Reload persistent history and deduplicate
 by the public event identity.
 
-Adjust direction does not interrupt the
-current model call or tool execution.
+No running-message queue in the current product.
+Stop first, then submit a new message.
+Other event mappings above are the v1 migration baseline.
 end note
 @enduml

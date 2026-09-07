@@ -37,6 +37,7 @@ skinparam sequence {
 }
 
 actor Client
+participant "Events application\n(target-only)" as Events
 participant "ManagedAgentSession" as Session
 participant "AgentLoop" as Loop
 participant "CampusClawAiService" as AiService
@@ -74,11 +75,17 @@ opt a safe prepared threshold or overflow window exists
   end
 end
 
-alt Session-scoped abort
-  Client -> Loop : POST /sessions/{sessionId}/abort
+alt Session-scoped interrupt (target-only)
+  Client -> Events : POST /sessions/{sessionId}/events\nuser.interrupt
+  Events -> Events : persist fixed-target stop request\ninstance batch check and local cancellation
+  Events -> Loop : request cancellation of fixed execution
   Loop -> Provider : cancel model subscription
   Provider -> ModelManager : close stream
 end
+
+' Target-only control migration, confirmed 2026-09-07: no independent abort route.
+' Source: pi-mono-java@dfb90cac RuntimeSessionControlService.requireRunningHolder uses local state.
+' Design reason: Events application coordinates DB-backed cancellation; HTTP never calls AgentLoop directly.
 
 note over Provider,ModelManager
 The Provider maps events only.

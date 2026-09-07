@@ -7,14 +7,18 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.6.1 |
-| 更新日期 | 2026-09-05 |
+| 文档版本 | 2.7.0 |
+| 更新日期 | 2026-09-07 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；已有核心 SPI，Help Handler/查询与缓存补齐仍为 target-only |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
 | 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
 | 状态 | 七个 Builtin 目标已由用户确认；公开执行为 target-only |
+
+2026-09-07 Runtime 独立控制接口退役，本期不支持排队续跑；本次仅同步 Compact 相关指引。
+[FollowUp 未来专题](../../01-总体架构/01-CampusClaw多Agent运行时/chat-follow-up-future-design.md)
+记录 dfb90ca 源码证据与待启用方向，不改变七个 Builtin、Help 或 Skill 的归属与字段。
 
 ## 1. 范围与证据
 
@@ -83,7 +87,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 | 4 | codex/builtin-command-model | Model 窄服务与可选 expectedVersion；既有 PUT 条件更新不变 |
 | 5 | codex/builtin-command-thinking | Thinking 窄服务与同一事务入口 |
 | 6 | codex/compact-runtime-lifecycle | 操作锁、容量、Holder、持久化 Projector、30 分钟超时与独立终态 Future |
-| 7 | codex/builtin-command-compact | Compact Contributor/Handler/Application Service、排队续跑与 Abort |
+| 7 | codex/builtin-command-compact | Compact Contributor/Handler/Application Service、中断绑定与清理 |
 | 8 | codex/builtin-command-application | Catalog/Execution 应用边界与七类 DTO→VO |
 | 9 | codex/builtin-command-http | 统一对齐 Skill 清单与请求类型后发布 GET/POST、VO/Header/ResultBean、契约和跨进程测试；删除旧 command 原型；更新实施状态 |
 
@@ -132,7 +136,7 @@ Manager 不可用为 MANAGER_UNAVAILABLE。Model 切换到不支持 Thinking 的
 
 ## 7. Compact 生命周期
 
-![Compact 与队列续跑](设计图/compact_command_execution.svg)
+![Compact 独立终态与清理](设计图/compact_command_execution.svg)
 
 [PlantUML 源码](设计图/diagram.puml#L60)
 
@@ -141,9 +145,9 @@ Manager 不可用为 MANAGER_UNAVAILABLE。Model 切换到不支持 Thinking 的
 Projector 不依赖请求 SSE 仍持久化权威领域 Entry。
 
 虚拟请求线程等待独立“压缩终态 Future”，使用不会传播客户端断线取消的完成句柄。
-成功或无变化即返回 JSON，不等待排队的 Steer/FollowUp；队列随后在同一 Holder 继续，
-因此响应后 Session 仍可能 running。Abort 取消压缩并清空队列。失败/超时清理容量、Holder 和 Session 状态。
-请求 Mate Header 只存在于该 Holder 至续跑结束，不写日志、Prompt 或持久化。
+成功或无变化即返回 JSON；本期不接受排队续跑，失败/超时清理容量、Holder 和 Session 状态。
+停止方向统一为 Events user.interrupt；Compact 的目标绑定、响应衔接需命令专项评审，
+不恢复独立 Abort 204。请求 Mate Header 只保留到本次执行结束，不写日志、Prompt 或存储。
 客户端不自动重放结果不确定的 Compact；通过 GET Session/Events 对账。
 
 ## 8. JSON 与错误
@@ -182,7 +186,7 @@ sync-campusclaw、diff --check 和新增行数门禁；最终 HTTP PR 执行完�
 - Help 的 userCases 远端 → 保存 → 重载 → 重启往返不丢失；旧缓存显式刷新、刷新失败保留旧值、单次完整快照与并发发布一致性。
 - Name Unicode/UTF-8 字节边界、并发、幂等、重启和 GET Session。
 - Model/Thinking 忙状态、能力、自动关闭、事件序号和 PUT ETag/If-Match 回归。
-- Compact 空历史、真实压缩、容量、锁竞争、超时、断线、队列续跑、Abort 和清理。
+- Compact 空历史、真实压缩、容量、锁竞争、超时、断线和清理；拒绝排队续跑，中断绑定衔接另评审。
 - 无通用命令或 Name 历史；POST Events SSE 完全不变。
 - openGauss 跨进程：创建 → Name/Model/Thinking → Help/Status/Skills → Compact → GET Session/Events。
 
@@ -190,6 +194,7 @@ sync-campusclaw、diff --check 和新增行数门禁；最终 HTTP PR 执行完�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.7.0 | 2026-09-07 | 同步独立控制接口退役，不再承诺 Compact 后排队续跑；保留 JSON 与清理边界，停止与 Events 绑定另评审。 |
 | 2.6.1 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一实现；保留 Builtin 分批计划，并将 Skill 与共享 HTTP 集成纳入统一发布验收。 |
 | 2.6.0 | 2026-09-04 | 确认 Help 元数据指南、无参四字段结果、空数组与缓存迁移；同步 Runtime 描述符、全局主图、验收；其他六个 Builtin 不变。 |
 | 2.5.0 | 2026-09-04 | 新增 Help 元数据使用指南专项评审入口；旧 Help 清单语义标记为变更前基线，细节待确认后统一切换，其他命令不变。 |
