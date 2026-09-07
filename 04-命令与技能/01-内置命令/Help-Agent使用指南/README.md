@@ -4,12 +4,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.1.2 |
+| 设计版本 | 1.1.3 |
 | 日期 | 2026-09-07 |
 | 状态 | 用户已确认四字段、无参、空数组、缓存往返与显式刷新旧缓存；target-only，尚未实现 |
 | 设计仓基线 | `372fb2cbec6e8a525d30d2310ef68e3da18e33f7` |
 | 本次源码基线 | pi-mono-java `d8e22562e22ac41ef4bb5cc6b36b576139417bd9` |
-| 专项评审页 | [Help HTTP 评审](help-review.html)，由 [JSON](help-review.json) 生成 |
+| 专项评审页 | [Help HTTP 评审](help-review.html)，直接从 Runtime 操作 13 提取生成 |
 
 ## 1. 语义：介绍 Agent，不再介绍命令
 
@@ -84,30 +84,9 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 两组文案都为空仍返回 200，前端显示“维护者尚未填写 Agent 介绍和使用场景”。
 只缺一组时只对该区域显示空状态，不生成看似真实的占位能力描述。
 
-请求沿用 Runtime 普通命令入口，不新增 `/help` HTTP 资源：
-
-```json
-{"name": "help"}
-```
-
-已确认成功响应如下。响应恰好四个 result 字段，不增加 `commands`、metadata 原对象、Agent ID/版本/路径或 Skill/Tool 明细。
-
-```json
-{
-  "resCode": "0",
-  "resMsg": "success",
-  "result": {
-    "command": "help",
-    "displayName": "园区网络分析助手",
-    "description": ["帮助理解园区网络状态，整理故障线索与排查建议。"],
-    "userCases": [
-      "无线网络连接异常时，梳理排查步骤。",
-      "分析告警和日志，定位可能原因。",
-      "整理排查结论与后续处理建议。"
-    ]
-  }
-}
-```
+请求与完整报文统一由 [Runtime 操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)
+维护，[Help 专项页](help-review.html) 只选择其中的 Help 请求、两种成功结果及相关错误。
+不新增 /help HTTP 资源，也不在本文另存可调用报文副本。
 
 输出直接展示为纯文本段落和列表，不执行 HTML、脚本或元数据中声明的操作；不自动加载远程图片。
 Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
@@ -197,16 +176,16 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 正式契约已同步到 Runtime HTTP 1.45.0 的
 [操作 12](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-session-commands.json) 与
 [操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)。
-本稿 HTML/JSON 是已确认 Help 的专项展示，不是替代全部 Command API 的第二份权威契约；成功报文由 Runtime 校验脚本逐项比对。
+专项 HTML 是已确认 Help 的派生展示；不再保存第二份 Help JSON。投影仅筛选场景，Header、参数、请求约束、结果和错误直接继承 Runtime 精确模型。
 Slash 与 Builtin 主文档共同引用 Slash 主题维护的完整全局目标类图；
 本专题只维护 Help 元数据局部补充图，不再维护第二份全局定义。
 9 月 4 日 Help 评审未合并 GET 减法；9 月 7 日用户现已明确授权整合，仅更新 GET 描述符及清单规则，Help 结果和缓存行为不变。
 
-mate-service 的旧 Command 专题已被明确标记为废止历史，不能将本稿直接当作其新公共接口。
-本次仅将 Mate GET Descriptor 同步为轻量投影，公共认证、bridge 和 POST 仍待重审；不新增公共路径、跨仓实现提交或通知。
+mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 GET 投影及公共边界待决。
+不能将本稿直接当作新公共接口；公共认证、bridge 和执行协议仍待重审，不新增公共路径或跨仓实现。
 
 展示生成：运行本专题 `python3 render_help_review.py`，复用 Runtime 共享渲染器；不再使用强制凭据占位符的技能默认模板。
-JSON 只保留 requestHeaderExamples 一处 Header 源，并与 Runtime POST 比对；实际可见 HTML 也检查示例值与说明。
+投影由 Runtime 的 help_review_projection.py 生成；不手工复制 Header、版本或响应。门禁检查派生内容与源等值、可见 HTML 及旧 JSON 不存在。
 设计校验：运行 Runtime `validate-chat-http-v1.py --full` 和 `test_help_contract.py`。
 前者校验精确描述符、两组 Help 报文、专项页同步和图；后者用反例验证旧字段、错误类型、参数入口和候选状态不能重新进入契约。
 缓存往返、并发发布与无副作用仍是实现验收项，不把文档校验通过当作这些行为已经实现。
@@ -215,6 +194,7 @@ JSON 只保留 requestHeaderExamples 一处 Header 源，并与 Runtime POST 比
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.3 | 2026-09-07 | 移除手工专项 JSON 和正文报文副本；页面直接投影 Runtime 契约，保留元数据映射、缓存理由及实施验收。 |
 | 1.1.2 | 2026-09-07 | 按用户授权同步 GET 精简，Help 描述符不带 input；保持 POST 四字段、缓存及错误语义；修复专项 Header 仍含旧占位符的同步遗漏，专项页版本跟随 Runtime 1.47.0。 |
 | 1.1.1 | 2026-09-07 | 全局主图归回 Slash 主题，Help 类图收敛为元数据与结果投影补充；恢复旧完整版的整体视角。Help 四字段、缓存语义和专项 JSON/HTML 契约保持 1.1.0 已确认内容不变。 |
 | 1.1.0 | 2026-09-04 | 用户确认四字段、无参、空数组及缓存迁移；同步 Runtime 1.45.0、Slash/Builtin 全局视图与精确契约校验；不修改实现或公共 Mate 契约。 |

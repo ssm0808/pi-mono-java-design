@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.12.0 |
-| 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.47.0 合入共享 GET 轻量清单并保留 Help 元数据指南，Builtin 与 Skill Command 由用户统一实现 |
+| 文档版本 | 3.12.1 |
+| 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.47.1 保留共享 GET 轻量清单并保留 Help 元数据指南，Builtin 与 Skill Command 由用户统一实现 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -162,7 +162,7 @@ mate-service 面向浏览器和业务客户端，负责：
 - 保证 `sessionId`、内部凭据、Provider 配置和工具私有数据不泄露给浏览器。
 
 [mate-service 聊天命令 API](../../02-服务与接口/06-mate-service聊天命令API/README.md)
-中的旧 SSE 提案已废止，仅保留历史依据。Runtime 的 Builtin JSON 决策不自动确认公共
+只保留 GET 轻量字段投影与待评审边界；旧 SSE 模型与图已删除。Runtime 的 Builtin JSON 决策不自动确认公共
 路径、VO、错误码或传输协议；公共命令需独立重审，不能直接暴露内部 Session 标识。
 
 普通消息已开始按单 operation 评审，用户确认路径为
@@ -516,6 +516,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.12.1 | 2026-09-07 | 同步冗余清理：Mate 只保留 GET，Help 直接派生；专题职责见统一维护规则，Runtime 契约不变。 |
 | 3.12.0 | 2026-09-07 | 合入遗漏的共享 GET 轻量清单，保留新 Help/POST/Events 决定；补充分支整合核查记录。 |
 | 3.11.1 | 2026-09-07 | 删除四个废弃评审页与迁移占位生成逻辑，修复引用并阻止文件回流；当前十项契约和评审决定不变。 |
 | 3.11.0 | 2026-09-07 | 当前十项 API 统一到仓库清单与页面；旧入口只导航，旧 Events 报文移除，新增统一生成和防回流校验；确认状态不变。 |

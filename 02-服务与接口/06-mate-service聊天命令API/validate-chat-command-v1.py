@@ -6,11 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shutil
 import sys
 import subprocess
 import tempfile
-import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -28,7 +26,6 @@ DESIGN_PATH = ROOT / "README.md"
 LOWER_CAMEL = re.compile(r"^[a-z][A-Za-z0-9]*$")
 EXPECTED_OPERATIONS = {
     ("GET", "/chats/{chatId}/commands"),
-    ("POST", "/chats/{chatId}/command"),
 }
 
 
@@ -110,42 +107,22 @@ def values_for_key(value: Any, key: str):
             yield from values_for_key(item, key)
 
 
-def sse_payloads(stream: str) -> list[dict[str, Any]]:
-    payloads = []
-    for line in stream.splitlines():
-        if line.startswith("data: "):
-            payload = json.loads(line.removeprefix("data: "))
-            require(isinstance(payload, dict), "SSE data must contain a JSON object")
-            payloads.append(payload)
-    return payloads
-
-
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.2.0", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.3.0", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
-    require("已废止" in common["api"]["visibility"] and "historical target-only" in common["api"]["visibility"],
-            "Public command snapshot must remain explicitly retired")
+    require("GET 字段已确认" in common["api"]["visibility"] and "公共边界待评审" in common["api"]["visibility"],
+            "GET confirmation must not approve the public boundary")
+    require("commandLimits" not in common and "commandNamePatterns" not in common,
+            "Retired POST-only common definitions must not return")
     headers = {
         header["name"]
         for example in common["requestHeaderExamples"]
         for header in example["headers"]
     }
     require(headers == {"Authorization"}, "Public auth must not expose internal Header names")
-    command_names = common.get("commandNamePatterns", {})
-    require(re.fullmatch(command_names["skill"], "skill:pdf-tools") is not None,
-            "Public Skill command pattern is invalid")
-    for invalid_name in ("skill:-pdf", "skill:pdf-", "skill:pdf--tools", "skill:PDF"):
-        require(re.fullmatch(command_names["skill"], invalid_name) is None,
-                f"Public Skill pattern accepts an invalid name: {invalid_name}")
-    require(common.get("commandLimits") == {
-        "skillNameCharacters": 64,
-        "skillCommandNameCharacters": 70,
-        "argumentsUtf16CodeUnits": 262144,
-        "fileIds": 32,
-    }, "Historical command snapshot limits changed")
     operations = {(model["operation"]["method"], model["operation"]["path"]) for model in models}
     require(operations == EXPECTED_OPERATIONS, "Public operation inventory differs")
-    require(len(models) == 2, "Expected two public command operations")
+    require(len(models) == 1, "Expected only the retained public GET projection")
     for model in models:
         operation = model["operation"]
         business_view = model["review"].get("businessView")
@@ -155,7 +132,7 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
         require(isinstance(business_view.get("flow"), list) and business_view["flow"],
                 "Human review flow is required")
         require("target-only design" in operation["description"] and "不得作为实现依据" in operation["description"],
-                "Operation must state retired target-only status")
+                "Operation must state the pending target-only public boundary")
         placeholders = re.findall(r"{([^}]+)}", operation["path"])
         require(all(LOWER_CAMEL.fullmatch(item) for item in placeholders), "Path fields must be lowerCamelCase")
         for response in operation["responses"]:
@@ -163,7 +140,6 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
                 if isinstance(body, (dict, list)):
                     validate_keys(body, operation["operationKey"])
     validate_catalog(models)
-    validate_execution(models)
 
 
 def validate_catalog(models: list[dict[str, Any]]) -> None:
@@ -176,39 +152,14 @@ def validate_catalog(models: list[dict[str, Any]]) -> None:
             "Catalog public errors are incomplete")
 
 
-def validate_execution(models: list[dict[str, Any]]) -> None:
-    operation = next(model["operation"] for model in models if model["operation"]["operationKey"] == "executeChatCommand")
-    require(set(operation["requestBody"]["example"]) == {"name", "arguments", "fileIds"},
-            "Command request shape changed")
-    codes = set(values_for_key(operation["responses"], "resCode"))
-    for code in {"INVALID_COMMAND_REQUEST", "COMMAND_NOT_FOUND", "SESSION_BUSY", "COMMAND_UNAVAILABLE"}:
-        require(code in codes, f"Missing public error: {code}")
-    streams = [response["bodies"]["default"] for response in operation["responses"]
-               if response["status"] == "200" and "default" in response.get("bodies", {})]
-    require(any("event: session.name.changed" in stream for stream in streams), "Name event missing")
-    require(any("event: assistant.message.completed" in stream for stream in streams), "Skill result missing")
-    failed = next(stream for stream in streams if "event: command.failed" in stream)
-    require("event: stream.error" in failed and "event: stream.end" not in failed,
-            "Failed stream terminal semantics changed")
-    for stream in streams:
-        for payload in sse_payloads(stream):
-            validate_keys(payload, "public SSE")
-            for forbidden in ("sessionId", "entryId", "entrySeq", "agentId", "skillId", "skillVersion", "snapshot"):
-                require(not any(True for _ in values_for_key(payload, forbidden)),
-                        f"Internal field leaked to public SSE: {forbidden}")
-    successful_payloads = [payload for stream in streams for payload in sse_payloads(stream)]
-    require(any(True for payload in successful_payloads for _ in values_for_key(payload, "sourceEventSeq")),
-            "Public completion must retain sourceEventSeq")
-
-
 def validate_html(models: list[dict[str, Any]]) -> None:
     source = HTML_PATH.read_text(encoding="utf-8")
     require(source == build_html(), "Generated public review HTML is stale")
     parser = ReviewHtmlParser()
     parser.feed(source)
-    require(parser.static_count == 2, "No-script operation count is wrong")
-    require(parser.business_count == 2, "Business review operation count is wrong")
-    require(parser.exact_contract_count == 2, "Exact contract fold count is wrong")
+    require(parser.static_count == 1, "No-script operation count is wrong")
+    require(parser.business_count == 1, "Business review operation count is wrong")
+    require(parser.exact_contract_count == 1, "Exact contract fold count is wrong")
     require(parser.open_exact_contract_count == 0, "Raw protocol must be folded by default")
     require(len(parser.styles) == 1, "Expected one shared style block")
     model_scripts = [json.loads(script) for attrs, script in parser.scripts
@@ -223,7 +174,7 @@ def validate_html(models: list[dict[str, Any]]) -> None:
     visible = " ".join(parser.visible)
     for heading in ("业务评审视图", "前后端怎么交互", "作用", "调用上下文 Header", "参数与请求体", "响应"):
         require(heading in visible, f"No-script review is missing {heading}")
-    require("研发实现用：查看原始 HTTP / JSON / SSE 报文" in visible,
+    require("查看 GET HTTP / JSON 报文（公共边界待评审）" in visible,
             "Raw protocol fold is missing")
     require(source.index("data-business-review") < source.index("class=\"exact-contract\""),
             "Business review must appear before the raw protocol")
@@ -234,29 +185,17 @@ def validate_html(models: list[dict[str, Any]]) -> None:
     require("content: attr(data-label)" in source, "Responsive labeled rows are missing")
 
 
-def diagram_names(source: Path) -> list[str]:
-    content = source.read_text(encoding="ascii")
-    names = re.findall(r"^@startuml\s+([A-Za-z0-9_]+)\s*$", content, re.MULTILINE)
-    require(names, "PlantUML must contain named diagrams")
-    return names
-
-
-def validate_diagrams() -> None:
-    source = ROOT / "设计图" / "diagram.puml"
-    require(source.read_bytes().isascii(), "PlantUML must be ASCII-only")
-    names = diagram_names(source)
-    expected = {f"{name}.svg" for name in names}
-    actual = {path.name for path in source.parent.glob("*.svg")}
-    require(actual == expected, "Public command SVG inventory differs")
-    for svg in source.parent.glob("*.svg"):
-        ET.parse(svg)
-    with tempfile.TemporaryDirectory() as directory:
-        temporary = Path(directory) / "diagram.puml"
-        shutil.copy2(source, temporary)
-        run(["plantuml", "-tsvg", str(temporary)], Path(directory))
-        for name in names:
-            require((Path(directory) / f"{name}.svg").read_bytes() == (source.parent / f"{name}.svg").read_bytes(),
-                    f"Generated SVG is stale: {name}.svg")
+def validate_retirement(root: Path = ROOT) -> None:
+    retired = (
+        "接口契约/操作/02-execute-chat-command.json",
+        "设计图/diagram.puml",
+        "设计图/public_command_boundary.svg",
+        "设计图/public_sse_projection.svg",
+    )
+    for path in retired:
+        require(not (root / path).exists(), f"Retired Command artifact returned: {path}")
+    sources = {path.name for path in (root / "接口契约/操作").glob("*.json")}
+    require(sources == {"01-list-chat-commands.json"}, "Only the retained GET model may remain")
 
 
 def validate_markdown() -> None:
@@ -282,10 +221,10 @@ def main() -> int:
     require("目录" not in json.dumps(models, ensure_ascii=False),
             "Public Command contract must use 命令清单 or an explicit file term")
     validate_html(models)
-    validate_diagrams()
+    validate_retirement()
     validate_markdown()
     run(["git", "diff", "--check"], REPOSITORY_ROOT)
-    print("mate-service Chat Command contract validation passed: 2 operations, 1 diagram topic")
+    print("mate-service Chat Command contract validation passed: 1 GET projection; public boundary pending; retired POST and diagrams absent")
     return 0
 
 

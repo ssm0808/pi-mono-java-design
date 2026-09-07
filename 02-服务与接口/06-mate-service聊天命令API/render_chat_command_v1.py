@@ -129,11 +129,11 @@ def render_page_guide() -> str:
     return (
         '<section class="review-guide">'
         '<h1>mate-service Chat Command API 评审页</h1>'
-        '<p>默认内容用于产品、前端和后端澄清业务行为；精确 HTTP、JSON 和 SSE 报文保留在每个接口下方的折叠区。</p>'
+        '<p>默认内容用于产品、前端和后端澄清业务行为；这里只展示 GET 清单；公共认证、bridge 和错误映射仍待评审，不代表接口已发布。精确 HTTP、JSON 位于折叠区。</p>'
         '<div class="review-guide-steps">'
         '<div class="review-guide-step"><strong>1. 先看触发场景</strong><span>确认用户什么时候会调用这个接口。</span></div>'
         '<div class="review-guide-step"><strong>2. 再看界面结果</strong><span>确认前端如何展示成功、不可用和失败。</span></div>'
-        '<div class="review-guide-step"><strong>3. 最后核对报文</strong><span>研发按需展开原始字段、Header 和事件。</span></div>'
+        '<div class="review-guide-step"><strong>3. 最后核对报文</strong><span>研发按需展开原始字段、Header 和响应。</span></div>'
         '</div></section>'
     )
 
@@ -173,43 +173,11 @@ def render_command_example(operation: dict[str, Any]) -> str:
     return ''.join(sections)
 
 
-def render_request_fields(fields: list[dict[str, str]]) -> str:
-    rows = [[item["name"], item["required"], item["meaning"], item["example"]] for item in fields]
-    return (
-        '<section class="business-section"><h3>前端需要提交什么</h3>'
-        f'{SHARED.static_table(["字段", "必填", "业务含义", "示例"], rows)}</section>'
-    )
-
-
-def render_scenarios(scenarios: list[dict[str, Any]]) -> str:
-    cards = []
-    for scenario in scenarios:
-        steps = ''.join(f'<li>{html.escape(step)}</li>' for step in scenario["steps"])
-        cards.append(
-            '<article class="business-scenario">'
-            f'<h4>{html.escape(scenario["title"])}</h4>'
-            f'<ol>{steps}</ol>'
-            f'<p class="muted">界面结果：{html.escape(scenario["outcome"])}</p>'
-            '</article>'
-        )
-    return (
-        '<section class="business-section"><h3>成功后用户会看到什么</h3>'
-        f'<div class="business-scenarios">{"".join(cards)}</div></section>'
-    )
-
-
 def response_code(response: dict[str, Any]) -> str | None:
     codes = []
     for payload in response.get("bodies", {}).values():
         if isinstance(payload, dict) and payload.get("resCode"):
             codes.append(str(payload["resCode"]))
-        elif isinstance(payload, str):
-            for line in payload.splitlines():
-                if not line.startswith("data: "):
-                    continue
-                data = json.loads(line.removeprefix("data: "))
-                if data.get("resCode"):
-                    codes.append(str(data["resCode"]))
     unique = list(dict.fromkeys(codes))
     return " / ".join(unique) if unique else None
 
@@ -242,10 +210,6 @@ def render_business_review(model: dict[str, Any]) -> str:
     ]
     if operation["operationKey"] == "listChatCommands":
         sections.append(render_command_example(operation))
-    if view.get("requestFields"):
-        sections.append(render_request_fields(view["requestFields"]))
-    if view.get("scenarios"):
-        sections.append(render_scenarios(view["scenarios"]))
     sections.append(render_error_summary(operation))
     for note in view.get("notes", []):
         sections.append(
@@ -282,7 +246,7 @@ def build_html() -> str:
         cards.append(
             f'<section class="company-api-review" data-operation-review="{html.escape(operation_key, quote=True)}" '
             f'data-operation-index="{index}">{render_business_review(model)}'
-            '<details class="exact-contract"><summary>研发实现用：查看原始 HTTP / JSON / SSE 报文</summary>'
+            '<details class="exact-contract"><summary>查看 GET HTTP / JSON 报文（公共边界待评审）</summary>'
             '<div class="api-shell" data-api-shell aria-live="polite">'
             f'{SHARED.render_static(model)}</div></details></section>'
         )

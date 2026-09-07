@@ -17,6 +17,7 @@ from typing import Any
 
 from render_chat_http_v1 import build_operation_html, load_contract
 from command_catalog_contract import validate_catalog_examples
+from help_review_projection import load_help_model
 
 
 ROOT = Path(__file__).resolve().parent
@@ -497,11 +498,15 @@ def validate_help_projection(model: dict[str, Any], operation: dict[str, Any]) -
     require(view["requestHeaderExamples"] == operation["requestHeaderExamples"],
             "Help request Header examples and descriptions must match Runtime")
     require((view["method"], view["path"]) == POST_COMMAND, "Help must reuse the Runtime Command path")
+    require(view["parameters"] == operation["parameters"], "Help parameters must come from Runtime")
+    for field in ("required", "contentType", "description"):
+        require(view["requestBody"][field] == operation["requestBody"][field],
+                f"Help request rule must come from Runtime: {field}")
     require(view["requestBody"]["example"] == {"name": "help"}, "Help request projection differs")
     source_successes, view_successes = help_successes(operation), help_successes(view)
     require(set(source_successes) == set(view_successes), "Help projection success variants differ")
     for identity, response in source_successes.items():
-        for field in ("status", "headers", "bodies"):
+        for field in ("status", "headers", "bodies", "summary", "tabLabel", "label"):
             require(view_successes[identity][field] == response[field],
                     f"Help projection differs from Runtime: {identity}.{field}")
     source_errors = {response["id"]: response for response in operation["responses"]
@@ -515,7 +520,8 @@ def validate_help_projection(model: dict[str, Any], operation: dict[str, Any]) -
 
 
 def validate_help_artifacts(models: list[dict[str, Any]]) -> None:
-    model = json.loads((HELP_ROOT / "help-review.json").read_text(encoding="utf-8"))
+    require(not (HELP_ROOT / "help-review.json").exists(), "Help must not keep a second JSON source")
+    model = load_help_model()
     operation = next(model["operation"] for model in models
                      if model["operation"]["operationKey"] == "executeSessionCommand")
     validate_help_projection(model, operation)

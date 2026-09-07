@@ -3,7 +3,6 @@
 
 import copy
 import importlib.util
-import json
 import unittest
 from pathlib import Path
 
@@ -21,7 +20,7 @@ class HelpContractTest(unittest.TestCase):
         commands = models[-2]["operation"]["responses"][0]["bodies"]["zh-CN"]["result"]["commands"]
         self.descriptor = next(command for command in commands if command["name"] == "help")
         self.body = GATE.help_successes(self.operation)["200-help"]["bodies"]["zh-CN"]
-        self.projection = json.loads((GATE.HELP_ROOT / "help-review.json").read_text(encoding="utf-8"))
+        self.projection = GATE.load_help_model()
 
     def test_confirmed_contract(self):
         GATE.validate_help_descriptor(self.descriptor)

@@ -2,14 +2,17 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
+| 文档版本 | 1.1.0 |
 | 核查日期 | 2026-09-07 |
 | 设计仓起点 | main / origin/main：2734a36b6f3cee2ebe16f1133d50ccb3eaaeb4e9；开始前已 fast-forward 同步 |
-| 本次范围 | 合入已确认 GET Command 字段减法；核查可见本地/远端分支及相关任务记录，不修改产品代码 |
+| 核查范围 | §1–§3 保留已完成的 GET 整合记录；§4 记录后续冗余清理，不修改产品代码 |
 | 实现核对 | pi-mono-java 6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5；只核对 Command 发现层与 HTTP 发布边界 |
 | 原始决定 | 任务「对齐 slash command 内置命令设计」，2026-09-03 用户要求实施 GET 字段减法；设计提交 ec5492aedb254d39f5b284eb36d80ad528236d80 |
 
-## 1. 本次整合
+§1–§3 是已在 `2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9` 交付的历史核查结果，
+不是当前接口清单；后续文件退役与派生流程以 §4 及[统一维护规则](chat-api-index.md#21-单一维护职责)为准。
+
+## 1. GET 字段整合记录
 
 根因不是缓存：ec5492a 已提交到独立分支，但未进入 main；随后主线继续变更 Help、Builtin POST 和
 Events，沿用了旧 GET Descriptor。Help 专题当时明确暂不合并字段减法，用户本次现已要求合入。
@@ -63,7 +66,7 @@ packages/coding-agent/src/core/slash-commands.ts；未更新 Runtime 内核基�
 - 本次是设计整合与有限范围核查，不是对所有历史会话、所有实现 PR 或全部产品行为的完整审计。
   除 GET 精简与 Help Header 投影遗漏外，未找到其他可以证实“已确认、仍有效、却缺失于当前主线”的接口决定；分层专题待评审事项不能归零。
 
-### 本次验证结果
+### GET 整合时的验证结果
 
 - `validate-chat-api.py --full`：通过；当前十项、14 个 PlantUML 主题、111 个 Events 负向反例、
   2 组退役测试、8 组清单测试、10 组 Help 测试、7 组 GET 精简测试。
@@ -79,8 +82,33 @@ packages/coding-agent/src/core/slash-commands.ts；未更新 Runtime 内核基�
 - Runtime/Mate POST 精确模型与 Events v2 模型未变；未运行 Java、数据库或端到端执行测试。
   原工作树中无关的虚拟线程 README 删除保持原样，不纳入提交。
 
+## 4. 冗余清理（2026-09-07）
+
+整理起点为设计仓 `2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9`。
+仅清理已废止内容和重复维护；沿用上述实现证据，不宣称重新核对产品源码或更新参考基线。
+
+- 删除 Mate 旧 Command POST SSE JSON、专用 diagram.puml 和两张生成 SVG；
+  专题仅保留 GET 投影及公共边界待决。没有新增公共执行契约，已删内容可从 Git 恢复。
+- 删除 Help 手工 JSON 与正文报文副本，专项 HTML 直接提取 Runtime 操作 13；
+  Header、参数、请求约束、结果及错误随源更新，新增防回退测试，不改变 Help 业务。
+- HTTP 只维护传输边界，Command 业务及源码理由引用 Slash/Builtin/Help 专题；
+  Events 总体、流与历史各自维护执行机制、响应生命周期、分页与对账，不复制整段规则。
+- 从 HTTP 历史证据表移除已被替代的目标报文与分页规则；保留仍有价值的固定提交观察、
+  版本记录和差距引用，不恢复旧接口。
+
+验证通过：统一接口全量门禁（14 个图主题、111 个 Events 负向反例、2 组控制退役、
+8 组清单、10 组 Help、7 组 GET、6 组新增文档维护测试）、Mate GET 专项门禁及 6 组全局类图检查；
+company-http-api-design 的 Markdown、PlantUML/SVG、HTML 脚本和 diff 检查通过。
+DOM 交互遍历当前十项、Help 的两组 Header/六个响应及 Mate GET 的七个响应，
+无脚本回退与生成字节同步通过；当前总览滚动事件的 DOM 变更数为 0。
+当前十项 operation 精确 JSON、Events v2 全部 JSON、catalog、Mate GET 模型和保留图源/图产物
+与整理起点相同；变化仅为文档职责、派生流程、废止文件及展示版本。
+未运行 Java、数据库或端到端执行测试；不将 DOM 检查当作宿主浏览器的像素或滚动帧率验收。
+原工作树中无关的虚拟线程 README 删除仍保持原样，不纳入本任务提交。
+
 ## 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-09-07 | 区分整合历史与当前清理；记录废止文件删除、单源 Help、专题职责及验证边界。 |
 | 1.0.0 | 2026-09-07 | 整合 GET 精简，记录六个未合入分支的语义状态及校验边界。 |

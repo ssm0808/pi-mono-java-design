@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.47.0 |
+| 文档版本 | 1.47.1 |
 | 状态 | 保留十个目标 operation；Events 以 v2 部分确认稿为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 与公共命令边界待对齐 |
 | 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的八项保留契约与两项 Events v2 模型 |
@@ -452,40 +452,18 @@ SessionResource 和新 `ETag`。
 
 ### 2.6 Built-in Command（已确认，目标实现）
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、执行结果和 HTTP 发布集成仍需评审。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。
+共享 GET 轻量清单及 Builtin 普通 JSON 已确认；Skill 请求联合类型、执行结果、公共命令边界
+与 Events 衔接仍待评审。本节只说明 HTTP 边界，不重复维护命令业务规则。
 
-| 接口简称 | operationKey | Method | Path | 语义 |
-|---|---|---|---|---|
-| 查看命令清单 | `listSessionCommands` | `GET` | `/sessions/{sessionId}/commands` | 按状态返回 Builtin 与 Skill 轻量清单，固定 Builtin 顺序后追加 Skill；不刷新 Agent |
-| 执行命令 | `executeSessionCommand` | `POST` | `/sessions/{sessionId}/command` | 只接收 `name + arguments`，Handler 完成后返回普通 ResultBean JSON |
+| 接口 | 精确模型 | 设计职责 |
+|---|---|---|
+| GET /sessions/{sessionId}/commands | [操作 12](接口契约/操作/12-list-session-commands.json) | [Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)维护描述符、排序、状态过滤、完整缓存与重新准入理由 |
+| POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../../04-命令与技能/01-内置命令/README.md)维护七个命令的业务、窄服务、事务和实施验收 |
 
-操作 12 先确定可发现范围，操作 13 再确定执行契约。一次请求只创建一个不可变
-`ResolvedCommandCatalog`，清单、准入和分派复用 Definition 身份；Help 的介绍内容不来自 Catalog。Builtin Contributor
-分别提供元数据、准入策略和 Handler；仅可展示的 Skill Definition 不装配伪 Handler。
-Controller 只收发 VO；Application 负责授权、归一化、解析、准入、执行及 DTO→VO，
-不得使用命令名称中央 switch。只读响应 VO 使用 `@Getter` 与 final 字段。
-
-GET 精确投影只保留必填 `name/kind/description`、可选 `input`；input 存在时必填非空
-`hint`，`acceptsFiles` 只在 true 时输出。省略 input 表示当前仅允许无参数、无附件调用。
-不返回 available/unavailableCode、input.mode/available/unavailableCode/placeholder/suggestions，
-不增加 allowedValues、catalogVersion 或其他候选值替代字段。hint 是展示文字，不可用于参数校验。
-
-Builtin 固定顺序为 help、status、name、model、thinking、compact、skills；随后按 name 排序追加 Skill。
-running 时去掉 Compact 与全部 Skill，Model/Thinking 去掉 input，Name 保留 [displayName]；
-idle 时恢复 Compact、Skill 与 Model/Thinking 的 input。Help/Status/Skills/Compact 始终不带 input。
-Help description 保留“介绍当前 Agent 的用途和使用场景”，不恢复 [command] 参数。
-
-共享 GET 从同一次完整 Agent 缓存解析得到 Builtin 与 Skill；没有完整缓存时返回
-503 AGENT_NOT_AVAILABLE，不刷新、不调用模型、不返回残缺 Builtin。这是 GET 的完整性规则，
-不改变 POST Help/Skills 无缓存的既有 422 错误。GET 不构成执行预约，POST 独立解析，
-变更仍在所属事务或锁内重新准入；不以清单中的提示代替状态、参数或绑定校验。
-完整字段表、集成证据与差距见[通用模块 GET 契约](../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
-
-Builtin 请求的 name 必填，长度 1～64，匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，不含前导 /。
-arguments 省略或 null 由 Service 归一为 ""，最大 262144 个 UTF-16 代码单元。
-拒绝 fileIds、其他未知字段、If-Match 和 Idempotency-Key，返回 INVALID_COMMAND_REQUEST。
-合法但未注册的 Builtin 名称返回 COMMAND_NOT_FOUND；该正则不定义 Skill 命名，不能据此禁止 skill:*。
-边界格式使用 Jakarta Bean Validation，状态与跨记录规则由 Service 执行。
+Controller 只收发 VO，Application 完成授权、归一化、一次 Catalog 解析、准入、执行及 DTO→VO。
+共享 GET 使用完整来源；内部 Builtin 专属解析才过滤来源。GET 不构成执行预约，
+POST 重新解析，并在所属锁或事务内检查可变状态；共同结构只在 Slash 全局主图维护。
 
 ![Command HTTP 接口与应用服务](设计图/Command/command_http_flow.svg)
 
@@ -493,53 +471,25 @@ arguments 省略或 null 由 Service 归一为 ""，最大 262144 个 UTF-16 代
 
 #### 2.6.1 普通 JSON 与权威领域事件
 
-成功固定 HTTP 200、application/json、Cache-Control: no-store 和 Content-Language。
-七种结果的精确字段、非空数组和全部错误示例分别由
-[操作 12](接口契约/操作/12-list-session-commands.json)、
-[操作 13](接口契约/操作/13-execute-session-command.json) 维护。
-错误始终返回真实 HTTP 状态与 ResultBean，不在请求上建立 SSE。
-
-不生成公开 commandId，不存储 command.started/completed/failed 或 Name 历史边车。
-sourceEventSeq 只表示本次命令追加的最后一条权威领域 Entry 序号；
-仅 Model、Thinking 和真实 Compact 可能返回，查询、同值操作、空历史压缩时省略。
-只有此字段可使用字段级非空序列化；Name 的 displayName 即使 null 也保留，Help 的 displayName 必填非空。
-GET Events 继续只投影现有领域历史；POST Events 的 SSE 行为不变。
+Builtin Handler 完成后返回普通 ResultBean JSON，不建立命令 SSE。
+请求、结果与错误由操作 13 维护；领域结果与可选 sourceEventSeq 的规则统一见
+[Builtin §8](../../04-命令与技能/01-内置命令/README.md#8-json-与错误)。
+不产生通用命令生命周期或 Name 历史；这不改变 POST Events 的独立 SSE 契约。
+sourceEventSeq 与 Events v2 的联动仍需评审，不能据此恢复历史接口的公共序号。
 
 #### 2.6.2 Help：Agent 元数据使用指南
 
-2026-09-04 用户确认 Help 成功 result 恰好四字段：`command` 固定为 `help`、`displayName`、
-`description:string[]`、`userCases:string[]`。后三者来自 Session 所绑定 Agent 的最近完整本地快照。
-displayName 空白回退 Agent name，不使用 Session 名称；两组数组必填且非 null，缺失/null 归一为 []，
-去除条目两端空白和空白条目，保留作者顺序与内部换行，不自动翻译或扩写。
-
-Help 的 arguments 缺省/null/空白归一为空；非空参数（包括 model）和附件按 400 INVALID_COMMAND_REQUEST 拒绝。
-不再支持指定命令详情查询。idle/running 都允许，不占执行容量、不写 Entry、命令历史或模型上下文。
-完整缓存仅缺介绍返回 200 空数组；无完整 Agent 缓存复用 422 AGENT_NOT_AVAILABLE，不触发 prepare/refresh 或远端请求。
-
-HelpCommandHandler 委派 AgentHelpQueryService，后者只调用一次 AgentRuntimeManager.prepareCached，
-从同一 PreparedAgentRuntime 复制三个公开字段；DTO→只读 VO 在 Service 完成。
-读取与发布复用 Agent 级锁，不是 Session 执行锁。文案按不可信纯文本展示，不执行 HTML/脚本、不自动加载远程图片。
-现有完整缓存加载器会读取 system.md，但 Help 不将 systemPrompt 作为内容来源或返回它，也不调用模型/Tool。
-
-userCases 已在 MateServiceClient.AgentRuntime 中存在，但基线 AgentIdentity 未保存、toRuntime 固定恢复为空。
-目标必须在现有 agent.json 保存并重载它，保留 schemaVersion；旧缓存缺字段按 [] 读取。
-发布新实现后走现有显式刷新流程补齐旧缓存；刷新失败保留旧缓存，Help 不自动补拉。
-这属于已确认的缓存演进要求，不代表本轮执行了刷新或修改了实现。
-完整映射、源码路径/符号、全局主图和往返/重启验收见
-[Help 专项设计](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)。
+Help 通过普通 POST Command 提供无参 Agent 使用指南，不新增 HTTP 资源。
+[Help 专题](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)唯一维护元数据映射、
+缓存往返、读取/发布互斥、空内容处理、安全展示和实施验收。
+其专项页面直接提取操作 13，不再复制 Header、参数或响应 JSON。
+共享 GET 无完整缓存的 503 与 POST Help 的既有 422 属于不同操作，不能统一改写。
 
 #### 2.6.3 Name 与配置更新
 
-SessionResource 的可空 displayName 对应 `t_sessions.display_name`。Name 空参数查询；
-修改裁剪两端空白、保留内部空白，拒绝空值、CR/LF、C0/C1 控制字符、双向覆盖/隔离字符
-以及超过 80 UTF-8 字节的名称，不静默截断。数据库行锁内重新检查状态，
-running 时允许修改，以实际提交顺序 last-commit-wins；相同归一值不提升版本。
-只恢复当前名称，不追加 Name Entry，也不建立旁路历史。
-
-Model/Thinking 使用窄职责服务及共享行锁事务。Repository 支持可选 expectedVersion：
-既有 PUT 继续要求 If-Match 并返回 ETag；Command 使用锁内当前版本，不削弱 PUT 条件语义。
-running 时仅允许查询，同值不写事件；不支持 Thinking 的模型沿用既有自动关闭规则。
-Thinking 非空参数只接受小写 on/off。
+Name 的当前状态归属见 [Builtin §5](../../04-命令与技能/01-内置命令/README.md#5-name-当前状态)，
+Model/Thinking 的事务和版本规则见 [Builtin §6](../../04-命令与技能/01-内置命令/README.md#6-model--thinking)。
+Command 不削弱本文 §2.4 既有 PUT 的 If-Match/ETag 语义。
 
 ![命令与权威 Session 状态](设计图/Command/command_authoritative_state.svg)
 
@@ -547,23 +497,13 @@ Thinking 非空参数只接受小写 on/off。
 
 #### 2.6.4 Compact 的执行生命周期
 
-Compact 只接受空参数与 idle Session。与 POST Events 共用操作锁、全局容量、
-Active Holder、Event Projector 及既有命令超时。当前不开放控制消息队列。空历史仅观察：
-返回 compacted=false，不占容量、不改变状态、不写 Entry。真实压缩保留既有 Compaction Entry。
+[Compact 生命周期](../../04-命令与技能/01-内置命令/README.md#7-compact-生命周期)维护空历史、
+独立终态 Future、容量/Holder 清理和断线不取消规则；本文 §2.2.1 保留压缩算法与恢复边界。
+停止方向为 user.interrupt，目标绑定和响应衔接继续评审，不恢复独立 Abort 或排队续跑。
 
-虚拟请求线程等待独立的“压缩终态 Future”；完成句柄不传播客户端断线取消。
-压缩成功或无变化即完成 JSON；当前不接受排队续跑。失败和超时必须清理
-Holder、容量及 Session 状态。停止方向统一为 user.interrupt；Compact 与新 Events 的
-目标绑定和响应衔接仍需命令专项评审，不恢复旧 Abort 204。结果不确定时不得自动重放。
-
-POST Command 读取的 Mate Header 不进入日志、Prompt、Event 或存储。
-非 Compact 请求只保留到 Handler 完成；Compact 只由本次 Active Holder 保留到
-本次压缩执行结束，Spring 单例不保存请求状态，仅实际 Mate tool execute 发送已提供值。
-
-分层、各命令行为、分批 PR 和完整验收以
-[通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)、
-[内置命令](../../04-命令与技能/01-内置命令/README.md)、
-[Skill 统一实施说明](../../04-命令与技能/02-技能命令/README.md) 为依据。
+POST Command 的凭据只由请求范围对象保留；非 Compact 到 Handler 完成，
+Compact 到 Active Holder 的本次压缩执行结束。仅实际 Mate tool execute 可以发送；
+Spring 单例不保存原始凭据。共享安全约束见 §7，精确 Header 以操作 13 为准。
 
 ## 3. 两跳 HTTP 与消息 SSE 边界
 
@@ -812,19 +752,7 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 
 | 分类 | 证据或决策 |
 |---|---|
-| 本轮观察证据 | `d84dd3d6` 的配置、Repository、Runtime Holder 与 Projector 以及 PR #210 Registry 源码，完整路径和符号见 [通用模块证据表](../../04-命令与技能/00-Slash-Command通用模块/README.md#2-源码证据与差距)；PR #210 已合并，但发现层不等于公开 HTTP 执行能力 |
-| Help 专项观察证据 | `d8e22562` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java` AgentRuntime 已含 userCases；同路径 AgentRuntimeManager.java 的 toIdentity:630 / toRuntime:646 / AgentIdentity:717 丢失该字段，prepareCached 未与 refresh 共用锁；command.builtin/execution 核心 SPI 已存在，Help 服务/Handler 尚未实现 |
-| Help 已确认产品与架构决策 | `/help` 不再列命令，仅读 Agent 名称/介绍/场景；补齐 userCases 缓存往返、读取/发布互斥和显式刷新旧缓存；不复制 Harness Help 语义，不新增 Mate 公共路径或元数据字段 |
-| 产品约束 | 用户统一负责 Builtin 与 Skill；七个 Builtin 保持普通 JSON、无附件约束。与 pi/OpenCode 的交互能力不同，不照搬上游命令全集 |
-| 架构变化 | Name 只保存当前状态；Model/Thinking/Compact 复用既有领域 Entry；不采用 DeepSeek 的通用命令生命周期存储；Compact 独立终态句柄复用 Runtime 生命周期 |
-| 观察到的历史 Java 行为 | CampusClaw `c1311f69` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/command/SlashCommandRegistry.java:21-67` 使用可变 Map，并在 Registry 内解析整段 Slash 文本；`SlashCommandSession.java:19-32` 暴露宽泛可变 Session 门面 |
-| 观察到的当前 Java 行为 | 同基线 `RuntimeSessionConfigurationService.java:78-163` 已有模型和 thinking 的查询/更新规则；`RuntimeSessionMapper.xml:132-190` 只查活动分支祖先，`session_schema.sql` 的 `t_sessions` 尚无 `display_name`，`t_session_records` 也尚无 `skill.snapshot` 记录 |
-| 观察到的当前 Java 行为 | 同基线 `RuntimeApiConstants.java:18` 与 `UserEventRequestVO.java:28` 把普通消息上限固定为 262144；`Skill.java:25,34` 与 `SkillLoader.java:104-111,140-150` 只校验 64 字符和宽松字符集合，仍允许首尾或连续连字符，并在缺少 frontmatter 名称时使用 `SKILL.md` 所在文件夹名称 |
-| 观察到的 pi 行为 | pi `4af9d21d` 的 `interactive-mode.ts:675-772` 聚合 Builtin、Prompt、Extension 和 `skill:*`；`skills.ts:92-111` 校验 64 字符、首尾和连续连字符；没有 262144 参数上限；`agent-session.ts:3005-3012` 由 Session 保存名称变更 |
-| 观察到的 OpenCode 行为 | OpenCode `849c2598` 的 `command/index.ts:65-169` 把内置、MCP 和 Skill 放入共享裸名空间并跳过冲突 Skill；`skill/index.ts:37-58` 只要求名称为字符串，没有严格命名规则或 262144 参数上限；`session/session.ts:693-710,755-757` 由 Session 领域更新 title |
-| 观察到的 DeepSeek Harness 行为 | DeepSeek Harness `141eb6fe` 的 `packages/interaction/commands/src/index.ts:53-123,245-300,328-437` 拆分 Definition、Registry 和 Executor，持久化 command lifecycle 并用 `sourceEventSeq` 关联结果；它没有 Agent Skill 包或 Skill Command 约定，也未提供这两个限制的依据 |
-| 观察到的 Codex 行为 | Codex `be33f80b` 的 TUI 集中分派 Slash；`core-skills/src/loader.rs:126,759-807` 有 64 字符上限，但字符规则更宽松且没有 262144 参数上限；App Server `thread/name/set`、`thread/compact/start`、`skills/list` 是结构化线程操作 |
-| 观察到的 Claude 行为 | Anthropic [Sessions](https://platform.claude.com/docs/en/managed-agents/sessions)、[Events](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)、[Skills](https://platform.claude.com/docs/en/managed-agents/skills) 与 [Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations) 定义持久 Session、事件流和 Agent Skill 附着；Skills 使用 Agent Skills 格式，但没有统一 Slash Command、Session rename 或 262144 调用参数协议 |
+| Command / Help / Skill 证据 | 统一引用 [Slash 源码证据](../../04-命令与技能/00-Slash-Command通用模块/README.md#2-源码证据与差距)、[GET 最新核对](../../04-命令与技能/00-Slash-Command通用模块/README.md#32-本次源码核对与实施验收)与 [Help 专项证据](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md#5-源码证据与设计理由)，不另复制旧 Registry 和元数据差距。 |
 | 观察到的行为 | PR 167 在 `f60cc3e` 删除 `modules/coding-agent-cli/.../command/` 中 Slash Registry、`ModelCommand`、`ThinkingCommand`、`CompactCommand`、`NameCommand`，同时删除 `.../compaction/Compactor`、`FileOperationTracker` 与旧大型 `AgentSession`；该删除按包边界发生，未先迁移入口无关能力 |
 | 观察到的行为 | PR 167 新增 `modules/coding-agent-cli/.../session/ManagedAgentSession.java` 和 `AgentSessionFactory.java`，但基线 Session 只持有 Runtime、入口、Agent 和工具，不包含阈值/溢出压缩、Usage 累计或 Host 无关 Slash 操作端口 |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 `5cd93f6` 中的 `compact()`、`autoCompact()`、`setModel()`、`setThinkingLevel()` 与 Session Entry 写入证明压缩及配置变更是 Agent Session 能力，不依赖终端绘制组件 |
@@ -873,72 +801,31 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 | 历史实现差异 | pi-mono-java `1f801dbb` 的 `RuntimeWebMvcConfiguration.addInterceptors` 27-30 行曾在进入 Controller 前把认证拦截器应用到 `/campusclaw-service/v1/**` 全路径；当前核对头 `c9d858bc` 已删除该拦截器和 `RuntimeRequestAuthenticator`，也未把相同校验搬入 Controller |
 | 观察到的当前 Java 行为 | CampusClaw `c9d858bc` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java:45-50` 从 POST 请求读取 `X-HW-ID`、`X-HW-APPKEY`、`Authorization` 与 `access-token`；`common/client/mate/MateCredentials.java:21-90` 保存四个不透明字符串，仅在 Mate tool execute 前检查最低完整性，不解析用户凭据 ID 或 Bearer 内容 |
 | 观察到的当前 Java 行为 | 同基线 `common/client/HttpMateToolClient.java:134-193` 的三个发现调用不附带凭据；`invokeTool/toHeaderInfo` 298-370 行只在实际 Mate tool execute 时发送本次执行持有的四项 Header |
-| 当前实现差异 | 同基线 `UserEventRequestVO` 28-52 行仍声明、校验并解析 `type=user.message`；目标请求体删除该冗余字段，属于产品契约精简 |
 | 当前实现差异 | 字段命名核对基线 `304eda06`：`RuntimeSessionController`、`RuntimeEventController`、`RuntimeSessionConfigurationController` 和 `RuntimeSessionControlController` 的映射仍使用 `{agent_id}` / `{session_id}`；`CreateSessionResponseVO`、`GetSessionResponseVO`、`AvailableModelsResponseVO`、`EventPageResponseVO`、`ControlMessageAcceptedResponseVO`、`ChangeModelRequestVO`、`UserEventRequestVO` 以及 `RuntimeEntryCodec` / `RuntimeEventProjector` 仍显式读写 snake_case。1.38 lowerCamelCase 是相对该实现的架构变更 |
 | 观察到的行为 | 同基线 `modules/ai/.../AssistantMessageEvent.java` 29-56、92-117 行定义内部 `thinking_start/thinking_delta/thinking_end`；`RuntimeEventType` 13-23 行没有公开 thinking 类型，`RuntimeEventProjector.projectMessageUpdate` 128-140 行只投影文本 delta |
 | 观察到的行为 | 同基线 `RuntimeEntryCodec` 35-39、211-223 行明确并实际过滤 `ThinkingContent`；当前 Runtime SSE 与 GET Events 均不披露原始思考内容 |
-| 架构改造 | 同提交将错误码、HTTP 状态、国际化 key 与 `Retry-After` 收口到 `RuntimeErrorCode`；running Session 未命中本机 active execution 时显式返回 `503 SESSION_EXECUTION_UNAVAILABLE`，不把进程归属问题误报为通用 500 |
-| 架构变更 | 浏览器/UI 到 mate-service、mate-service 到 CampusClaw 两跳目标传输统一为 HTTP+SSE；删除连接首帧、Frame RPC、连接 generation、close code 和 AsyncAPI 目标契约 |
-| 架构变更 | mate-service 终止公共 HTTP/SSE 并以服务身份调用内部 HTTP/SSE；两跳分别鉴权和投影，内部流不得字节透明转发 |
-| 目标设计 | mate-service 旧公共命令 SSE 提案已废止；新公共路径、VO、错误码及传输待独立评审；源码无 Chat→Runtime bridge |
 | 观察到的行为 | pi-mono-java `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` 基线 183-194、218-268：`startExecution` 通过 executionLock 保证单次 current execution，并在虚拟线程执行结束时清理；没有共享数据库 active-run 唯一约束或执行任务 |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/session-manager.ts` 基线 46-156、1057-1149、1260-1303：Session Entry 使用 `id/parentId` 组成 append-only tree，`getBranch()` 返回当前 leaf 路径，`getEntries()` 返回全部 Entry；Entry 类型还包含模型、thinking、compaction、branch summary 和扩展状态 |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/SessionEntry.java` 基线 18-38 与 `SessionManager.java` 基线 188-296：JSONL Entry 保留 `id/parentId/type/message`，当前恢复主要线性提取 Message；没有 HTTP 分页、`entry_seq` 或不透明 page |
 | 观察到的行为 | Anthropic [List Events API](https://platform.claude.com/docs/en/api/beta/sessions/events/list)：`GET /v1/sessions/{session_id}/events` 通过不透明 `page/next_page` 分页，并按 `processed_at` 排序；公开响应没有固定快照水位 |
-| 产品约束 | Session/Message、文件引用和 Manager 权威保持不变；执行轮次不是调用方可见的公共 Run，权威恢复单元是 Session Entry |
-| 产品约束 | 普通 JSON 成功响应使用 `resCode/resMsg/result`，异常响应只使用 `resCode/resMsg`；错误码和国际化 key 一致，真实 HTTP status 仍保留 |
-| 产品约束 | 用户提供的公司集成基线定义 JWT 与 APPKEY 两组入站 Header；JWT 作为默认文档路径；全部十项操作携带共享调用上下文 Header，POST Events 和 POST Command 额外必填 `access-token`，Runtime 不执行本地凭据认证 |
-| 产品约束 | DeleteSession 永久 tombstone 严格只包含 `session_id`、`deleted_at`；清理状态、重试信息、owner 和业务快照不进入 tombstone |
-| 产品约束 | Session `thinking` 是是否启用深度思考的 boolean；`false` 映射为 pi 的 `off`，`true` 使用模型和 Agent 的受管非 `off` 推理强度，不公开具体等级 |
-| 产品约束 | Path、Query、JSON 与 SSE data 字段只使用 lowerCamelCase；HTTP Header 保留原名；事件类型值、错误码、枚举值和类型化 ID 值不改变，也不接受 snake_case 字段别名 |
-| 产品约束 | Agent、Tool、Skill、Session ID 分别使用 `agent-`、`tool-`、`skill-`、`session-` 加去连字符的 32 位十六进制 UUID；字段命名变化不得引入不同的 ID 值或旧格式别名 |
-| 产品约束 | Create Runtime Session 成功时必须返回并持久化 `thinking=true` |
-| 产品约束 | CampusClaw 不再提供 CLI/TUI/OneShot/RPC/ACP 产品入口；用户统一通过 HTTP 交付 Builtin 与 Skill，具体 Skill 契约继续评审；不开放 Extension 或 Prompt Command |
-| 架构变更 | 目标用不可变 Definition、Strategy Handler、Composite Registry、Contributor 和 Admission Policy 取代当前可变 Registry、宽泛 `SlashCommandSession` 和集中分支；新增命令只添加 Contributor/Handler |
-| 架构变更 | 当前 `displayName` 与 `resourceVersion` 归 CampusClaw Session 领域所有；不写 Name Entry，mate-service 不保存名称副本 |
-| 安全边界 | Claw 不解析用户凭据 ID、Bearer 或 AppKey，也不判断两类身份凭据是否互斥或真实；POST Events/Command 从请求读取四项 Header，只在内存中保留到本次 Agent 执行或命令处理结束，不持久化或记录；发现、模型及其他请求无凭据，只有实际 Mate tool execute 原名发送已提供值 |
-| 安全加固 | Session 模型列表通过 `string[]` 只暴露 `modelId` 值，不返回名称、供应商、能力、base URL、凭据状态、价格、token 上限或供应商请求配置；thinking 内容只按显式开关进入受控事件投影 |
-| 安全加固 | `tool.execution.delta` 不返回工具参数；序列化、大小和背压异常只丢进度，不得破坏最终 ToolResult 或 SSE 连接 |
-| 架构改造 | CampusClaw 生成类型化 Session ID、直接 Agent 目录解析、ResultBeanAdapter 替换点、ETag 并发控制、请求范围内 POST SSE、断线后执行继续、按 thinking 状态投影与查询 thinking completed、持久化 tombstone 和可重试清理任务驱动的异步 Session 物理删除 |
-| 架构改造 | 将压缩与 Read 文件追踪迁入 `ManagedAgentSession`；持久化 Assistant/Compaction Usage 并在 `t_session_materialized` 原子累计；历史查询与模型恢复使用不同投影 |
-| 架构改造 | Runtime append-only Entry 替代 pi JSONL compaction entry；成功 STOP 溢出不重放，失败/length 最多恢复一次，并以 persisted provider/model 和摘要边界阻止失效判定 |
-| 安全加固 | 空摘要、摘要 ToolCall、失败或取消摘要不能发布新恢复边界；failed.aborted 明确区分取消和普通失败 |
-| 架构改造 | 管理面 refresh 不修改 active execution 快照；下一次空闲执行按新目录懒校准模型，并在 User Entry 前原子投影配置变更 |
 | 已实现行为 | GET Session Models 以 `string[]` 实时返回 Agent allowlist 与当前可用模型交集中的 `modelId` 值，不分页；目标字段 `currentModelId` 允许因管理面后续停用而不在 `models` 中 |
 | 已实现行为 | PR 167 基线的 PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功返回完整 SessionResource 和 ETag，相同值按无变化成功返回 |
-| 目标设计 | 模型、深度思考、资源版本和对应领域事件原子更新；模型能力归一产生 `session.thinking.changed(reason=modelCapability)`，同值请求不产生事件 |
-| 已实现行为 | Steer 和 FollowUp 使用 Session scope 的独立 POST；只在 running 时按 `one-at-a-time` 入队，Steer 优先；实际投递时统一成为既有 `user.message`，不新增公共控制 Entry 类型 |
-| 已实现行为 | Abort 使用 Session scope 的幂等 POST，无请求体；级联取消模型、工具和子 Agent，清空未投递控制消息，等待 idle 后返回 `204`；idle 时也是 `204` |
-| 历史产品约束，已退役 | 首版 Steer/FollowUp 仅接受文本，不开放 pi 的 inline images、扩展命令、Prompt Template 展开或队列模式配置；不复用已经冻结为直接 SSE 的 POST Events operation |
-| 历史迁移设计，已被未来专题取代 | pi-mono-java 需要新增 FollowUp 能力，并将当前 Steer“入队前直接持久化 UserMessage”调整为实际投递时才产生公共 `user.message`，避免工具结果与排队消息的历史顺序错位 |
-| 已确认架构 | `POST /sessions/{sessionId}/events` 提交 `user.message` 并直接返回 SSE；不创建公共 `runId`；成功流可包含配置变更、User、Assistant 与可选 thinking、工具执行、ToolResult、压缩、Session idle、stream end；持久化消息、工具结果与领域事件是权威历史 |
-| 设计原因 | pi 本身依靠 MessageEntry 重建对话，不依赖公共 Run；mate-service 当前只需要提交消息、观察实时输出和读取持久化 Session Events，无需承担额外 Run 生命周期 |
-| 已确认设计 | Assistant Message 使用 `assistant.message.started/delta/completed` 三阶段；前两者是不可恢复预览，completed 是完整持久化 Entry。该语义借鉴 Anthropic 的 preview/final 分层，但名称采用 CampusClaw 领域语言 |
-| 已确认设计 | CreateSession 和 GetSession 删除旧公共 Run 模型遗留的 `activeRun` 字段；Session 粗粒度执行状态只由 `state=idle/running` 表达 |
-| 已确认设计 | Session Event 的 operation 已固定 `user.message` 语义，请求体只使用 `message + fileIds`，删除冗余 `type`，不接受业务 metadata 或 `Idempotency-Key`；这是目标产品约束，不是 pi 已有 HTTP 契约 |
-| 已确认设计 | GET 与 POST 共用 `/sessions/{sessionId}/events`；GET 只使用 `limit + page/nextPage` 开放分页，不接受 `afterEntrySeq`，不公开固定快照水位；page 是客户端只能原样回传且不得解析、修改或构造的服务端游标，数据库内部可继续使用 `entry_seq` Keyset Pagination；这是借鉴 Anthropic 的目标架构选择 |
-| 跨接口一致性 | 第五接口复用第四接口全部持久化事件的名称和字段；模型/思考变更及压缩完成进入分页历史，thinking/message preview、工具执行进度、压缩 started/failed 和流控制事件不进入分页历史 |
-| 已确认设计 | GET Session Events 投影当前分支中的公共消息、工具结果、模型/思考变更和压缩完成；仅在查询时 Session 当前 `thinking=true` 时增加 `assistant.thinking.completed`。page 绑定 thinking 状态，状态变化后旧 page 失效；不公开废弃分支、完整 Entry 树或内部控制 Entry |
 
-公司内部 ResultBean 制品信息以及 JWT/APPKEY 入站凭据组合来自用户提供的
-集成约束。当前工作区不含对应内部制品元数据，因此实现通过
-`ResultBeanAdapter` 保留替换点，并把凭据真实性和动作授权明确放在上游
-mate-service。既有 CampusClaw 11 个 HTTP operation 已在 pi-mono-java 提交
-`8691e880` 中实现，并由提交
-`972f98ca` 完成运行根目录、事件职责和多实例错误边界整改。字段命名核对基线
-`304eda06` 已实现 HTTP 1.37 的类型化 ID、`thinking=true`、全接口调用上下文 Header 且无
-Runtime 本地认证、请求体删除 `type` 和 thinking 事件可见性；1.38 的 lowerCamelCase
-wire fields、1.39 的公共压缩/Usage/领域事件/工具 delta/refresh 懒校准、1.40 的
-pi 压缩细节与 failed.aborted，1.41 的重试候选持久化排除和实际输出上限，
-1.42 的 POST Events `access-token` 和“只有 Mate execute 透传”安全边界，以及
-1.45.0 的七个 Builtin JSON operation、Session displayName 与 Help 元数据指南均为目标设计，不得表述成已实现。
-1.43.x 的请求级 Command SSE、Name 边车和 Skill 执行方案已被取代，不得据其开发。
-mate-service 旧公共命令方案标记为已废止的历史 target-only design，新公共协议待独立评审。
+以上均是固定提交的历史观察，不等于当前源码状态。本轮以设计仓
+`2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9` 为整理基线，未重新分析产品源码，
+未更新 pi 或其他外部参考；删除的是废止目标规则和重复副本，不是新增产品行为。
+
+现行 Events 请求、流和分页只以 v2 专题及精确模型为准；旧事件名、旧分页和控制接口
+不在本节再次列作“已确认设计”。当前实现差距见 [Events 源码复核](chat-events-v2-design.md#42-本次合并方案源码复核)、
+[历史查询证据](chat-events-v2-history-design.md#5-源码证据与差距)与 [FollowUp 未来设计](chat-follow-up-future-design.md)。
+公司 ResultBean 替换点、HTTP 状态和凭据要求属于产品约束，分别由 §5–§7 维护；
+命令的产品约束、架构变更和安全加固由所属专题维护。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.47.1 | 2026-09-07 | 删除 Command 业务重复副本，改引所属专题；Help 从 Runtime 直接派生；清理废止的历史目标规则，现行报文不变。 |
 | 1.47.0 | 2026-09-07 | 语义合入 ec5492a 的 GET 字段精简、状态过滤与全量清单完整性；保留后续 Help 无参、POST JSON、统一责任和 Events v2，不恢复旧页面。 |
 | 1.46.1 | 2026-09-07 | 统一清单、生成与校验入口；移除旧 Events 报文及分页章节，保留注明版本的源码证据；已确认字段和待决项不变。 |
 | 1.46.0 | 2026-09-07 | 退役三个独立控制接口及其示例和错误集合，保留十项；Events 指向 v2，FollowUp 仅记录未来设计，保持单消息准入。 |
