@@ -6,9 +6,10 @@ title Target Slash Command Frontend Components
 ' Source evidence: frontend/src/components/ComposerBox.vue, handleKeydown and template
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts, sendMessage and requestRaw
 ' Source evidence: frontend/src/types/product.ts and frontend/src/types/runtime.ts
+' Contract evidence: executeSessionCommand response variants at design baseline 88f4df16
 ' Observed behavior: the current debug workbench has one message draft and no command gateway, catalog, parser, or command result projection.
 ' Target-only design: every element marked target is proposed and is not implemented at the source baseline.
-' Design reason: keep command discovery, explicit execution, ephemeral results, and ordinary chat history as separate responsibilities.
+' Design reason: keep discovery, immutable invocation decoding, ephemeral results, and ordinary chat history as separate responsibilities.
 
 skinparam backgroundColor #FFFCFA
 skinparam shadowing false
@@ -72,9 +73,9 @@ ResultRegion --> Registry
 UseSlash *-- DraftStore
 UseSlash *-- CatalogStore
 UseSlash --> Parser
-UseSlash --> Registry
+UseSlash --> Registry : present by expected result kind
 UseSlash --> Gateway
-UseSlash --> SessionState : apply authoritative response
+UseSlash --> SessionState : apply validated resource response
 UseSlash --> AttachmentState : preserve or admit files
 Registry --> Renderers
 Gateway <|.. MateGateway
@@ -174,7 +175,7 @@ title Slash Command Discovery and Execution Flow
 ' Contract evidence: Runtime operations listSessionCommands and executeSessionCommand
 ' Observed behavior: the current frontend has no command HTTP methods or command response projectors.
 ' Target-only design: the browser workflow and production Mate gateway are proposed.
-' Design reason: never replay an uncertain mutation and always reconcile through authoritative resources.
+' Design reason: decode from an immutable invocation, never replay an uncertain mutation, and reconcile through authoritative resources.
 
 skinparam backgroundColor #FFFCFA
 skinparam shadowing false
@@ -210,14 +211,16 @@ Composer -> Slash : select(name)
 Slash --> Composer : canonical draft and input hint
 User -> Composer : explicit Run
 Composer -> Slash : execute(name, arguments, files)
-Slash -> Gateway : executeCommand(...)
+Slash -> Slash : freeze invocation and expected result kind
+Slash -> Gateway : executeCommand(invocation)
 Gateway -> Api : POST command
 
 alt success
   Api --> Gateway : command-specific JSON
-  Gateway --> Slash : typed gateway result
+  Gateway -> Gateway : validate against expected result kind
+  Gateway --> Slash : typed result plus invocation
   Slash -> State : apply authoritative Session or Models when present
-  Slash -> Result : render by submitted command name
+  Slash -> Result : render by expected result kind
   Slash -> Slash : mark catalog stale
 else 404 or 409
   Api --> Gateway : structured error
@@ -238,5 +241,11 @@ end
 note over Gateway,Api
   Production Mate execution remains disabled
   until its public execute contract is confirmed.
+end note
+
+note over Slash,Gateway
+  The model command is polymorphic:
+  empty arguments expect Models;
+  non-empty arguments expect Session.
 end note
 @enduml
