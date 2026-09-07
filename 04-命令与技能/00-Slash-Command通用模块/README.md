@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.2 |
+| 文档版本 | 1.4.3 |
 | 更新日期 | 2026-09-07 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -32,14 +32,34 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。Builti
 ### 1.1 全局目标类图
 
 `/` 展示命令清单；已确认的 `/help` 无参展示当前 Agent 的用途和场景。
-先保留 Web、Application、Core、Adapter、Runtime/持久化的全局关系，突出 Help 元数据路径。
-图中所有新增装配为 target-only；六个重复 Builtin 协作者分组显示，不删除其上下游关系。
+主图以设计仓 `06bea56c7a725bb749cffb6682bcf98a8f51884a` 的完整版为结构与排版基线，
+保留 Web、Application、Command Core、Builtin 委派和 Runtime/持久化的完整关系。
+本次只将旧 Help Formatter 路径替换为 Agent 元数据查询，并保留用户统一实施责任；不回滚其他设计决定。
+所有装配关系均为 target-only；分组仅归并重复实现，不把 Handler、业务服务、Coordinator 和 Repository 合成一个对象。
 
-![Slash Command 全局目标类图](../01-内置命令/Help-Agent使用指南/target_help_global_classes.svg)
+![Slash Command 完整全局目标类图](设计图/target_slash_command_global_classes.svg)
 
-[PlantUML 源码](../01-内置命令/Help-Agent使用指南/diagram.puml#L1)
+[PlantUML 源码](设计图/diagram.puml#L92) · [展开原尺寸 SVG](设计图/target_slash_command_global_classes.svg)
 
-同一图源也由 Builtin 和 Help 专题引用；下列分层图与请求快照图只作局部补充。
+文档内缩略图用于定位整体分层；阅读类名、箭头和多重性时展开原尺寸 SVG，不通过缩小图中文字适配窄页面。
+
+Builtin 直接引用这份主图；Help 专题只补充元数据、缓存与结果投影，不再替代全局视图。
+分组框表达协作关系而非 Java 包：AgentHelpQueryService 和其他窄业务服务仍属于应用 Service 层。
+七个 Contributor/Handler 的精确命令映射见[内置命令服务表](../01-内置命令/README.md#2-全局目标与核心扩展)。
+
+| 主图保留的职责关系 | 不能合并的原因 |
+|---|---|
+| CommandDefinition → BuiltinCommandDefinition；Catalog → Definition | 通用发现抽象和可执行 Builtin 不是同一职责；请求内固定 Definition 身份 |
+| Contributor → Handler → 窄业务服务 | 分别负责装配、命令适配和业务约束；新增命令不修改中央名称 switch |
+| 窄业务服务 → Coordinator → Holder/Session/Projector → Repository | 区分执行协调、执行范围对象与持久化；最终准入仍在所属锁内完成 |
+| Help Handler → AgentHelpQueryService → AgentRuntimeManager | Help 消费同一完整 Agent 元数据快照，不反向依赖命令清单 |
+
+补充源码复核仍使用 pi-mono-java `d8e22562`：`definition/CommandDefinition.java`、
+`builtin/BuiltinCommandDefinition.java`、`catalog/ResolvedCommandCatalog.java` 和
+`execution/CommandExecutionContext.java` 均位于 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/` 下，
+分别证明发现抽象、Handler/Admission 组合、请求定义索引和共享 Session 快照已经存在；公开完整装配仍是目标设计。
+这是视图恢复及设计规则修正，不是新的 HTTP 或 Runtime 行为变更。
+
 Help 的结果精确为 command/displayName/description/userCases，字段和缓存规则见
 [Help 专项设计](../01-内置命令/Help-Agent使用指南/README.md)。其他命令不变。
 
@@ -169,10 +189,14 @@ Skill 的未确认细节按[Skill 实施要求](../02-技能命令/README.md#4-�
 Help 额外覆盖无参描述符、四字段结果、空数组、显示名回退、userCases 缓存往返与显式刷新旧缓存；
 GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照检查。
 
+图的提交验收额外运行 `python3 validate-global-class-view.py`，检查全局主图入口和不可折叠的职责关系；
+该脚本不证明视觉可读性，仍须查看实际 SVG，核对原尺寸与文档缩放下的文字、连线和标签。
+
 ## 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.3 | 2026-09-07 | 以 06bea56 完整版恢复全局主图和职责链，局部更新 Help 元数据委派与统一实施责任；Help 专题改为补充图，增加结构与视觉验收，不修改接口契约。 |
 | 1.4.2 | 2026-09-07 | 同步独立控制接口退役，Compact 凭据保留到本次执行结束，不再承诺排队续跑；其余命令字段与分工不变。 |
 | 1.4.1 | 2026-09-05 | 用户统一负责 Builtin、Skill 与共享 HTTP 集成；替代同事并行分工，补齐统一实施验收；现有协议细节与源码证据不变。 |
 | 1.4.0 | 2026-09-04 | 确认 Help 元数据指南并移除内容对 Catalog 的依赖；Slash/Builtin 共用全局主图，局部图只作补充；同步 Runtime 契约与 Help 验收，不改变其他命令。 |

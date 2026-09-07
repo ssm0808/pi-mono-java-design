@@ -7,7 +7,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.7.0 |
+| 文档版本 | 2.7.1 |
 | 更新日期 | 2026-09-07 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -45,13 +45,16 @@ Builtin 的来源过滤与 Skill 名称校验是不同职责，不能以过滤 S
 ## 2. 全局目标与核心扩展
 
 先看完整 Web → Application → Command Core → Builtin Adapter → Runtime/持久化结构；
-只展开本次变化的 Help 路径，其余六个 Handler/窄服务分组保留。共用一个全局图源，避免分图替代全局视角。
+主图恢复设计仓 `06bea56` 的完整骨架。七个 Contributor、七个 Handler、窄业务服务分别分组，
+Runtime Coordinator、执行对象和 Repository 分开表达；仅替换 Help 元数据查询路径和旧人员分工。
+这些分组表示协作者集合，不要求实现同名大类，也不改变 Service 的 Java 包归属。
 
-![Builtin 全局目标类图](Help-Agent使用指南/target_help_global_classes.svg)
+![Builtin 完整全局目标类图](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
 
-[PlantUML 源码](Help-Agent使用指南/diagram.puml#L1)
+[PlantUML 源码](../00-Slash-Command通用模块/设计图/diagram.puml#L92) · [展开原尺寸 SVG](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
 
-以下核心扩展类图只补充 Definition/Handler/Admission 的绑定细节，不替代全局图。
+Slash 与 Builtin 共用这一份图源；[Help 元数据补充图](Help-Agent使用指南/README.md#2-全局入口与-help-补充类图)
+和以下核心扩展类图只作下钻，不替代或重排全局主图。
 
 ![目标核心类图](设计图/target_command_core_classes.svg)
 
@@ -194,6 +197,7 @@ sync-campusclaw、diff --check 和新增行数门禁；最终 HTTP PR 执行完�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.7.1 | 2026-09-07 | 重新引用 Slash 完整全局主图，恢复 Handler/业务服务与 Coordinator/执行对象/Repository 的独立关系；Help 图仅作下钻，既有命令语义和源码基线不变。 |
 | 2.7.0 | 2026-09-07 | 同步独立控制接口退役，不再承诺 Compact 后排队续跑；保留 JSON 与清理边界，停止与 Events 绑定另评审。 |
 | 2.6.1 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一实现；保留 Builtin 分批计划，并将 Skill 与共享 HTTP 集成纳入统一发布验收。 |
 | 2.6.0 | 2026-09-04 | 确认 Help 元数据指南、无参四字段结果、空数组与缓存迁移；同步 Runtime 描述符、全局主图、验收；其他六个 Builtin 不变。 |
