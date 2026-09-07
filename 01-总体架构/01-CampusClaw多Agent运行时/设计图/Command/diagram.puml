@@ -2,6 +2,8 @@
 title Target-only Builtin JSON HTTP Flow
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java getSession.
 ' Architecture change: command routes use ResultBean JSON and no request SSE.
+' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached and toRuntime.
+' Product decision: Help uses authored Agent metadata; it does not format the command catalog.
 skinparam shadowing false
 actor Caller
 participant Controller
@@ -17,7 +19,17 @@ alt GET
   Application --> Controller : CommandListResponseVO
 else POST
   Application -> Handler : selected definition and same catalog
-  Handler -> Service : recheck mutable state under owning lock
+  alt Help
+    Handler -> Service : query Agent help using Session agentId
+    Service -> Service : prepareCached once under Agent publication lock
+    note right of Service
+      Project displayName, description, userCases.
+      No model, refresh, Session write, or capacity lease.
+      No complete cache: existing 422 error.
+    end note
+  else Other Builtins
+    Handler -> Service : retain command-specific admission and locking
+  end
   Service --> Handler : command-specific DTO
   Handler --> Application : command result
   Application --> Controller : immutable response VO

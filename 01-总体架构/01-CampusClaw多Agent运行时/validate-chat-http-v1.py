@@ -28,6 +28,8 @@ SLASH_DESIGN_PATHS = (
     REPOSITORY_ROOT / "04-命令与技能/01-内置命令/README.md",
     REPOSITORY_ROOT / "04-命令与技能/02-技能命令/README.md",
 )
+HELP_ROOT = REPOSITORY_ROOT / "04-命令与技能/01-内置命令/Help-Agent使用指南"
+HELP_RESULT_FIELDS = {"command", "displayName", "description", "userCases"}
 EXPECTED_OPERATION_COUNT = 13
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
@@ -422,8 +424,8 @@ def validate_response_contract(
         require("\"entrySeq\":18" in stream and "\"type\":\"thinking\"" in stream,
                 "Completed thinking must be a durable recoverable event")
     elif key == ("GET", "/sessions/{sessionId}/commands"):
-        require("Skill Command 由其他同事并行开发" in operation["description"],
-                "Command catalog must preserve the confirmed parallel development scope")
+        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in operation["description"],
+                "Command catalog must reflect unified Builtin and Skill ownership")
         success = next(response for response in operation["responses"] if response["status"] == "200")
         commands = success["bodies"]["zh-CN"]["result"]["commands"]
         names = [command["name"] for command in commands]
@@ -442,9 +444,10 @@ def validate_response_contract(
                 "Running model input must expose SESSION_BUSY")
         require(not any(code == "AGENT_NOT_AVAILABLE" for _, code in response_codes(operation)),
                 "Builtin catalog must not depend on an Agent snapshot")
+        validate_help_descriptor(next(command for command in commands if command["name"] == "help"))
     elif key == ("POST", "/sessions/{sessionId}/command"):
-        require("Skill Command 由其他同事并行开发" in operation["description"],
-                "Command execution must preserve the confirmed parallel development scope")
+        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in operation["description"],
+                "Command execution must reflect unified Builtin and Skill ownership")
         for phrase in ("只在内存中保留到本次命令处理", "Mate tool execute",
                        "不写入 Session、事件或日志", "工具发现", "Active Holder"):
             require(phrase in operation["description"], f"Missing credential boundary: {phrase}")
@@ -465,7 +468,7 @@ def validate_response_contract(
         successes = [response for response in operation["responses"] if response["status"] == "200"]
         results = [next(iter(response["bodies"].values()))["result"] for response in successes]
         expected_fields = {
-            "help": {"command", "commands"},
+            "help": HELP_RESULT_FIELDS,
             "status": {"command", "state", "modelId", "thinking"},
             "name": {"command", "displayName", "changed"},
             "model": {"command", "currentModelId", "models", "changed", "sourceEventSeq"},
@@ -485,6 +488,7 @@ def validate_response_contract(
         serialized = json.dumps(operation, ensure_ascii=False)
         require("event: command." not in serialized and "event: stream." not in serialized,
                 "POST Command must not expose request-scoped SSE lifecycle events")
+        validate_help_operation(operation)
     elif key == ("GET", "/sessions/{sessionId}/events"):
         success = next(response for response in operation["responses"] if response["status"] == "200")
         event_types = {event["type"] for event in success["bodies"]["en-US"]["result"]["events"]}
@@ -494,6 +498,102 @@ def validate_response_contract(
                 "GET Events must define current-thinking filtering and cursor invalidation")
     elif key in {("POST", "/sessions/{sessionId}/steers"), ("POST", "/sessions/{sessionId}/follow-ups")}:
         require(("429", "CONTROL_QUEUE_FULL") in codes, f"Control queue limit is missing: {key}")
+
+
+def validate_help_descriptor(descriptor: dict[str, Any]) -> None:
+    require(descriptor == {
+        "name": "help", "kind": "builtin", "description": "介绍当前 Agent 的用途和使用场景",
+        "available": True, "unavailableCode": None,
+        "input": {
+            "mode": "none", "available": False,
+            "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED",
+            "acceptsFiles": False, "placeholder": None, "suggestions": [],
+        },
+    }, "Help descriptor must advertise only the no-argument Agent guide")
+
+
+def validate_help_body(body: dict[str, Any]) -> None:
+    require(set(body) == {"resCode", "resMsg", "result"} and body["resCode"] == "0"
+            and body["resMsg"] == "success", "Help success ResultBean differs")
+    result = body["result"]
+    require(isinstance(result, dict) and set(result) == HELP_RESULT_FIELDS,
+            "Help must expose exactly four fields, never commands or internal metadata")
+    require(result["command"] == "help", "Help discriminator differs")
+    require(isinstance(result["displayName"], str) and bool(result["displayName"].strip()),
+            "Help displayName must be a non-blank Agent name")
+    for field in ("description", "userCases"):
+        require(isinstance(result[field], list), f"Help {field} must be a non-null array")
+        require(all(isinstance(item, str) and bool(item.strip()) and item == item.strip()
+                    for item in result[field]), f"Help {field} items must be normalized non-blank strings")
+
+
+def help_successes(operation: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {response["id"]: response for response in operation["responses"]
+            if response.get("id", "").startswith("200-help")}
+
+
+def validate_help_operation(operation: dict[str, Any]) -> None:
+    successes = help_successes(operation)
+    require(set(successes) == {"200-help", "200-help-empty"},
+            "Help must document populated and empty successful responses")
+    for response in successes.values():
+        for body in response["bodies"].values():
+            validate_help_body(body)
+    empty = successes["200-help-empty"]["bodies"]["zh-CN"]["result"]
+    require(empty["description"] == [] and empty["userCases"] == [], "Help empty response differs")
+    populated = successes["200-help"]["bodies"]["zh-CN"]["result"]
+    require(bool(populated["description"]) and bool(populated["userCases"]), "Missing populated Help example")
+    examples = operation["requestBody"].get("examples", [])
+    require(any(example.get("value") == {"name": "help"} for example in examples),
+            "POST Command must show the no-argument Help request")
+    for phrase in ("Help 只接受空参数", "缺省/null/空白", "非空参数", "INVALID_COMMAND_REQUEST"):
+        require(phrase in operation["requestBody"]["description"], f"Missing Help request rule: {phrase}")
+    require(("422", "AGENT_NOT_AVAILABLE") in response_codes(operation), "Missing Help cache failure")
+
+
+def validate_help_projection(model: dict[str, Any], operation: dict[str, Any]) -> None:
+    require(model["review"]["questions"] == [], "Confirmed Help must not reopen review choices")
+    require("已确认" in model["api"]["visibility"] and "draft" not in model["api"]["version"],
+            "Help projection must remain confirmed")
+    require(read_design_version() in model["api"]["version"], "Help projection Runtime version is stale")
+    view = model["operation"]
+    require((view["method"], view["path"]) == POST_COMMAND, "Help must reuse the Runtime Command path")
+    require(view["requestBody"]["example"] == {"name": "help"}, "Help request projection differs")
+    source_successes, view_successes = help_successes(operation), help_successes(view)
+    require(set(source_successes) == set(view_successes), "Help projection success variants differ")
+    for identity, response in source_successes.items():
+        for field in ("status", "headers", "bodies"):
+            require(view_successes[identity][field] == response[field],
+                    f"Help projection differs from Runtime: {identity}.{field}")
+    source_errors = {response["id"]: response for response in operation["responses"]
+                     if response["status"] != "200"}
+    for response in view["responses"]:
+        if response["status"] == "200":
+            continue
+        source = source_errors.get(response["id"])
+        require(source is not None and response["status"] == source["status"]
+                and response["bodies"] == source["bodies"], "Help error projection differs from Runtime")
+
+
+def validate_help_artifacts(models: list[dict[str, Any]]) -> None:
+    model = json.loads((HELP_ROOT / "help-review.json").read_text(encoding="utf-8"))
+    operation = next(model["operation"] for model in models
+                     if model["operation"]["operationKey"] == "executeSessionCommand")
+    validate_help_projection(model, operation)
+    parser = ContractHtmlParser()
+    parser.feed((HELP_ROOT / "help-review.html").read_text(encoding="utf-8"))
+    embedded = [json.loads(source) for attrs, source in parser.scripts
+                if attrs.get("type") == "application/json"]
+    require(embedded == [model], "Help HTML embedded model is stale")
+    for attrs, source in parser.scripts:
+        if attrs.get("type") != "application/json":
+            validate_executable_script(source)
+    visible = " ".join(parser.visible_text)
+    for phrase in ("作用", "name", "help", "description", "userCases", "AGENT_NOT_AVAILABLE", "已确认"):
+        require(phrase in visible, f"Help no-script surface is missing {phrase}")
+    guide = (HELP_ROOT / "README.md").read_text(encoding="utf-8")
+    for phrase in ("显式刷新", "toIdentity", "toRuntime", "进程重启", "schemaVersion", "Agent 级锁"):
+        require(phrase in guide, f"Help cache implementation acceptance is missing {phrase}")
 
 
 def validate_create_session(agent_pattern: str, session_pattern: str, operation: dict[str, Any]) -> None:
@@ -536,6 +636,8 @@ def validate_source_deduplication() -> None:
 
 def diagram_sources() -> list[Path]:
     sources = sorted((ROOT / "设计图").glob("*/diagram.puml"))
+    sources.extend(path.parent / "设计图/diagram.puml" for path in SLASH_DESIGN_PATHS)
+    sources.append(HELP_ROOT / "diagram.puml")
     require(sources, "No topic PlantUML sources found")
     require(not (ROOT / "diagram.puml").exists(), "Legacy aggregate diagram.puml still exists")
     return sources
@@ -544,16 +646,16 @@ def diagram_sources() -> list[Path]:
 def diagram_names(source: Path) -> list[str]:
     content = source.read_text(encoding="ascii")
     names = re.findall(r"^@startuml\s+([A-Za-z0-9_]+)\s*$", content, re.MULTILINE)
-    require(names, f"No named diagrams in {source.relative_to(ROOT)}")
+    require(names, f"No named diagrams in {source.relative_to(REPOSITORY_ROOT)}")
     return names
 
 
 def validate_diagram_inventory(sources: list[Path]) -> None:
     for source in sources:
-        require(source.read_bytes().isascii(), f"Non-ASCII PlantUML: {source.relative_to(ROOT)}")
+        require(source.read_bytes().isascii(), f"Non-ASCII PlantUML: {source.relative_to(REPOSITORY_ROOT)}")
         expected = {f"{name}.svg" for name in diagram_names(source)}
         actual = {path.name for path in source.parent.glob("*.svg")}
-        require(actual == expected, f"SVG inventory differs in {source.parent.relative_to(ROOT)}")
+        require(actual == expected, f"SVG inventory differs in {source.parent.relative_to(REPOSITORY_ROOT)}")
         for svg_path in source.parent.glob("*.svg"):
             ET.parse(svg_path)
 
@@ -602,9 +704,9 @@ def validate_rendered_diagrams(sources: list[Path]) -> None:
 
 
 def validate_markdown_links() -> None:
-    for markdown_path in ROOT.rglob("*.md"):
+    for markdown_path in REPOSITORY_ROOT.rglob("*.md"):
         content = markdown_path.read_text(encoding="utf-8")
-        require("```mermaid" not in content, f"Mermaid is forbidden: {markdown_path.relative_to(ROOT)}")
+        require("```mermaid" not in content, f"Mermaid is forbidden: {markdown_path.relative_to(REPOSITORY_ROOT)}")
         for target in re.findall(r"!\[[^\]]*\]\(([^)]+\.svg)\)", content):
             require((markdown_path.parent / target).resolve().exists(), f"Missing SVG link: {target}")
         for target in re.findall(r"\[[^\]]+\]\(([^)#]+\.json)\)", content):
@@ -623,6 +725,21 @@ def validate_command_wording(models: list[dict[str, Any]]) -> None:
     for path in SLASH_DESIGN_PATHS:
         require("目录" not in path.read_text(encoding="utf-8"),
                 f"Slash Command design must use explicit wording: {path.relative_to(REPOSITORY_ROOT)}")
+    ownership_paths = (*SLASH_DESIGN_PATHS, DESIGN_PATH, ROOT / "README.md",
+                       REPOSITORY_ROOT / "README.md", REPOSITORY_ROOT / "04-命令与技能/README.md")
+    retired_ownership = ("Skill Command 由其他同事", "Skill 执行由其他同事", "Skill 由其他同事",
+                         "Skill 由同事", "真实 Skill 执行由同事", "Skill 执行由同事",
+                         "同事并行实现执行定义", "真实执行定义由同事", "Skill 开发线",
+                         "Skill 执行开发线", "本会话只负责七个 Builtin")
+    for path in ownership_paths:
+        active = re.split(r"^## (?:\d+\. )?版本历史", path.read_text(encoding="utf-8"),
+                          maxsplit=1, flags=re.MULTILINE)[0]
+        for wording in retired_ownership:
+            require(wording not in active,
+                    f"Superseded Command ownership in {path.relative_to(REPOSITORY_ROOT)}: {wording}")
+    for path in SLASH_DESIGN_PATHS:
+        source = (path.parent / "设计图/diagram.puml").read_text(encoding="ascii")
+        require("parallel work" not in source, "Command diagrams must reflect unified implementation ownership")
     design_text = DESIGN_PATH.read_text(encoding="utf-8")
     contract_text = json.dumps(models, ensure_ascii=False)
     for wording in ("命令目录", "列出当前目录", "当前目录中的已知命令", "Skill 父目录", "回退父目录名"):
@@ -654,6 +771,7 @@ def main() -> int:
     validate_source_deduplication()
     validate_review_models(common, models)
     validate_html(models)
+    validate_help_artifacts(models)
     sources = diagram_sources()
     validate_diagram_inventory(sources)
     selected = select_diagrams(sources, args.full)

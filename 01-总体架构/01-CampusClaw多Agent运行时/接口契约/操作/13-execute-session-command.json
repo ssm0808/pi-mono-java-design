@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/command",
     "summary": "执行一个 Builtin 命令并返回 JSON 结果",
-    "description": "本页展示已确认的 Builtin 开发切片：help、status、name、model、thinking、compact 和 skills。Skill Command 由其他同事并行开发，最终共享 HTTP 入口的命名与请求联合类型在发布前整合；不是 Skill 延期或禁用决定。Service 将省略或 null 的 arguments 归一为空字符串，Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Compact 复用权威领域 Entry。Compact 被接受后断线不取消，结果不确定时通过 GET Session/Events 对账，不自动重放 POST。本接口额外必填 access-token。Claw 从请求读取四项凭据，非 Compact 命令只在内存中保留到本次命令处理结束；Compact 仅在 Active Holder 保留到压缩及排队续跑结束。仅随实际 Mate tool execute 原名发送，不写入 Session、事件或日志，不进入 Prompt，也不随工具发现、模型或其他请求发送；Claw 不解析或校验凭据。",
+    "description": "本页展示已确认的 Builtin 开发切片：help、status、name、model、thinking、compact 和 skills。Builtin 与 Skill Command 由用户统一负责设计、实现和集成，最终共享 HTTP 入口的命名与请求联合类型在发布前统一对齐；Skill 具体契约继续评审。Service 将省略或 null 的 arguments 归一为空字符串，Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Compact 复用权威领域 Entry。Compact 被接受后断线不取消，结果不确定时通过 GET Session/Events 对账，不自动重放 POST。本接口额外必填 access-token。Claw 从请求读取四项凭据，非 Compact 命令只在内存中保留到本次命令处理结束；Compact 仅在 Active Holder 保留到压缩及排队续跑结束。仅随实际 Mate tool execute 原名发送，不写入 Session、事件或日志，不进入 Prompt，也不随工具发现、模型或其他请求发送；Claw 不解析或校验凭据。 Help 已确认改为 Agent 使用指南：只取 Session 绑定 Agent 最近成功发布的一份完整本地缓存，不消费命令清单，不调用 prepare、refresh、远端 Mate、模型或 Tool，不写历史或模型上下文、不占执行容量。AgentRuntime 的 userCases 必须完成保存与重载往返；旧缓存显式刷新前缺场景返回 []。三个介绍字段同取一份 PreparedAgentRuntime，读取与发布复用 Agent 级锁，不取 Session 执行锁。元数据仅作不可信纯文本展示，不执行 HTML、脚本或自动加载远程图片。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -70,11 +70,20 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "以下为 Builtin 请求约束，不定义 Skill 请求；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。If-Match 和 Idempotency-Key 在 Builtin 请求中没有契约语义，出现时按 INVALID_COMMAND_REQUEST 拒绝。",
+      "description": "以下为 Builtin 请求约束，不定义 Skill 请求；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。If-Match 和 Idempotency-Key 在 Builtin 请求中没有契约语义，出现时按 INVALID_COMMAND_REQUEST 拒绝。 Help 只接受空参数：arguments 缺省/null/空白由 Service 归一为空；非空参数（包括 model 等命令名）按 INVALID_COMMAND_REQUEST 拒绝，不查询命令详情。",
       "example": {
         "name": "model",
         "arguments": "provider/model"
-      }
+      },
+      "examples": [
+        {
+          "label": "Help：无参 Agent 使用指南",
+          "description": "idle/running 均可查询；不改变其他 Builtin 的参数规则。",
+          "value": {
+            "name": "help"
+          }
+        }
+      ]
     },
     "responses": [
       {
@@ -82,7 +91,7 @@
         "status": "200",
         "tabLabel": "200 · help",
         "label": "OK",
-        "summary": "空参数返回全部七项；提供名称时去除两端空白后精确匹配一项，不接受前导 Slash。",
+        "summary": "Help 只接受空参数，idle/running 均可查询。result 必填且精确为 command=help、displayName、description、userCases。displayName 为非空 Agent 显示名，空白时回退 Agent name，不是 Session 名称。description/userCases 为必填非 null 字符串数组，去除条目两端空白和空白条目，保持作者顺序与内部换行；不翻译、不生成能力说明。以下为虚构示例。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -94,23 +103,39 @@
             "resMsg": "success",
             "result": {
               "command": "help",
-              "commands": [
-                {
-                  "name": "status",
-                  "kind": "builtin",
-                  "description": "查看 Session 状态、模型和深度思考",
-                  "available": true,
-                  "unavailableCode": null,
-                  "input": {
-                    "mode": "none",
-                    "available": false,
-                    "unavailableCode": "COMMAND_ARGUMENTS_NOT_SUPPORTED",
-                    "acceptsFiles": false,
-                    "placeholder": null,
-                    "suggestions": []
-                  }
-                }
+              "displayName": "园区网络分析助手",
+              "description": [
+                "帮助理解园区网络状态，整理故障线索与排查建议。"
+              ],
+              "userCases": [
+                "无线网络连接异常时，梳理排查步骤。",
+                "分析告警和日志，定位可能原因。",
+                "整理排查结论与后续处理建议。"
               ]
+            }
+          }
+        }
+      },
+      {
+        "id": "200-help-empty",
+        "status": "200",
+        "tabLabel": "200 · help 空内容",
+        "label": "OK",
+        "summary": "完整缓存但介绍未填写：description/userCases 缺失或 null 均返回 []；只缺一组则只该组为空。旧缓存缺 userCases 也按 [] 读取，发布新实现后通过现有显式刷新流程补齐；Help 不自动联网或刷新。无完整缓存是 422 AGENT_NOT_AVAILABLE，不与本例混淆。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "command": "help",
+              "displayName": "network-assistant",
+              "description": [],
+              "userCases": []
             }
           }
         }
@@ -285,7 +310,7 @@
         "status": "400",
         "tabLabel": "400 · INVALID_COMMAND_REQUEST",
         "label": "Bad Request",
-        "summary": "命令请求内容不符合约束。",
+        "summary": "命令请求内容不符合约束。 Help 的非空参数（如 model）也使用本错误，而不是 COMMAND_NOT_FOUND。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN"
@@ -369,7 +394,7 @@
         "status": "422",
         "tabLabel": "422 · AGENT_NOT_AVAILABLE",
         "label": "Unprocessable Entity",
-        "summary": "当前 Agent 运行时不可用。",
+        "summary": "当前 Agent 运行时不可用。 Help 无完整 Agent 缓存时复用此错误；完整缓存仅缺介绍时返回 200 空数组。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN"
