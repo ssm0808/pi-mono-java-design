@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Render the repository-owned Runtime HTTP contract models as standalone HTML."""
+"""Shared contract rendering helpers; use render_chat_api.py to publish Runtime HTML."""
 
 from __future__ import annotations
 
-import argparse
 import copy
 import html
 import json
@@ -20,7 +19,6 @@ COMMON_PATH = CONTRACT_ROOT / "common.json"
 OPERATIONS_ROOT = CONTRACT_ROOT / "操作"
 CSS_PATH = CONTRACT_ROOT / "页面资源" / "review.css"
 JS_PATH = CONTRACT_ROOT / "页面资源" / "review.js"
-DEFAULT_OUTPUT = ROOT / "chat-http-v1-review.html"
 
 
 def require(condition: bool, message: str) -> None:
@@ -262,11 +260,6 @@ def encode_models(models: list[dict[str, Any]]) -> str:
     return encoded.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
-def build_html() -> str:
-    from render_chat_api import build_legacy_page
-    return build_legacy_page(DEFAULT_OUTPUT.name)
-
-
 def build_operation_html(models: list[dict[str, Any]]) -> str:
     """Internal renderer fixture; not a separately maintained contract page."""
     css = CSS_PATH.read_text(encoding="utf-8").strip()
@@ -310,31 +303,3 @@ def write_output(destination: Path, content: str) -> None:
         handle.write(content)
         temporary = Path(handle.name)
     os.replace(temporary, destination)
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--check", action="store_true", help="fail when the generated HTML differs from the destination")
-    return parser.parse_args()
-
-
-def main() -> int:
-    args = parse_args()
-    try:
-        content = build_html()
-        destination = args.output.resolve()
-        if args.check:
-            require(destination.exists(), f"Generated HTML is missing: {destination}")
-            require(destination.read_text(encoding="utf-8") == content, "Generated HTML is out of date")
-        else:
-            write_output(destination, content)
-    except (OSError, ValueError, json.JSONDecodeError) as error:
-        print(f"error: {error}")
-        return 2
-    print(args.output.resolve())
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.11.0 |
+| 文档版本 | 3.11.1 |
 | 状态 | 当前评审 Events v2 ListEvents；POST 合并、首帧、关闭、中断分工、数据库机制、单消息准入及查询优化决定保留，两个操作均未整体确认；HTTP 1.46.1 保留已确认 Help 元数据指南，Builtin 与 Skill Command 由用户统一实现 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
@@ -71,7 +71,7 @@ M1 真实结束并提交可靠状态后才恢复 idle；中断与工具确认按
 分页默认 50/最多 200、result 只返回 events/nextPage、合法超范围页返回 200 空列表均已确认，不返回 total。
 POST 的决定与未决项仍见 [合并 POST 保留评审页](chat-api-review.html#submitSessionEvent)、
 [Events v2 设计](chat-events-v2-design.md) 和 [请求级 SSE 设计](chat-events-v2-stream-design.md)。
-[旧确认页](chat-events-v2-confirmed.html) 改为变更提示，旧 JSON POST 仅在 Git 历史保留。
+旧确认页及其他分散评审页已删除，不保留变更提示或跳转占位；旧 JSON POST 仅从 Git 历史追溯。
 当前没有整体确认的新 v2 operation；既有字段决定不因此被重新开放。
 
 本次确认移除独立 `/abort`、`/steers`、`/follow-ups`，当前目标共 10 个接口。
@@ -112,8 +112,8 @@ FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。公共 Comman
 2. [chat-api-review.html](chat-api-review.html) 是唯一当前接口详情页；按接口展开，展示各自确认状态和待联动事项。
 3. 清单引用的 JSON 模型是精确编辑源；Markdown 保存设计理由、已确认决定、未决项和注明 commit 的源码证据。
 
-完整维护规则见 [接口统一管理](chat-api-index.md)。原 v1/v2 HTML 只保留入口迁移说明与新页链接，
-不得再次生成旧报文。旧两个 Events 模型已删除，旧字段及报文仅从 Git 历史追溯。
+完整维护规则见 [接口统一管理](chat-api-index.md)。原 v1/v2 HTML 已删除，不保留迁移页，
+也不得重新生成旧页面。旧两个 Events 模型已删除，旧字段及报文仅从 Git 历史追溯。
 两个 Events 即使未整体确认也只有一份当前方案，不保留两套当前契约。
 OpenAPI、WebSocket/AsyncAPI 仍已废弃，不因入口整理而恢复。
 
@@ -516,6 +516,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.11.1 | 2026-09-07 | 删除四个废弃评审页与迁移占位生成逻辑，修复引用并阻止文件回流；当前十项契约和评审决定不变。 |
 | 3.11.0 | 2026-09-07 | 当前十项 API 统一到仓库清单与页面；旧入口只导航，旧 Events 报文移除，新增统一生成和防回流校验；确认状态不变。 |
 | 3.10.0 | 2026-09-07 | 当前目标收敛为十项，退役三个独立控制接口；补充 FollowUp 未来跨实例设计但不启用，保留 M6 与 Events 部分确认状态。 |
 | 3.9.4 | 2026-09-07 | 合并设计主线 `2d0dba26`，保留 Events v2 历史查询最新决定，同时同步 HTTP 1.45.1 的 Help 元数据指南、全局目标类图与用户统一实施责任；仅整合设计，不修改实现或公共 Mate 契约。 |

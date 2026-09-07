@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from html.parser import HTMLParser
 import json
 from pathlib import Path
@@ -84,9 +85,9 @@ def fail(message: str) -> None:
     raise ValueError(message)
 
 
-def read_contract_text(contract_path: Path, contract_ref: str | None) -> str:
-    if contract_ref is None:
-        return contract_path.read_text(encoding="utf-8")
+def read_contract_text(contract_path: Path, contract_ref: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{40}", contract_ref):
+        fail("historical contract requires an immutable full Git commit")
     relative_path = contract_path.relative_to(REPO_DIR).as_posix()
     result = subprocess.run(
         ["git", "show", f"{contract_ref}:{relative_path}"],
@@ -100,9 +101,14 @@ def read_contract_text(contract_path: Path, contract_ref: str | None) -> str:
 
 def validate_contract(catalog: dict, contract_ref: str | None) -> None:
     contract = catalog["contract"]
-    contract_path = (TOPIC_DIR / contract["reviewDocument"]).resolve()
+    if contract["sourceKind"] != "git-history":
+        fail("historical contract must come from Git, never a restored working-tree page")
+    contract_path = (REPO_DIR / contract["reviewDocument"]).resolve()
+    source = read_contract_text(contract_path, contract_ref or contract["sourceCommit"])
+    if hashlib.sha256(source.encode("utf-8")).hexdigest() != contract["reviewSha256"]:
+        fail("historical contract SHA-256 differs from the frozen baseline")
     parser = ReviewModelParser()
-    parser.feed(read_contract_text(contract_path, contract_ref))
+    parser.feed(source)
     if len(parser.models) != contract["expectedOperationCount"]:
         fail(f"review model count is {len(parser.models)}, expected {contract['expectedOperationCount']}")
 
@@ -148,8 +154,8 @@ def iter_cases(catalog: dict):
 
 
 def validate_catalog(catalog: dict) -> None:
-    if catalog["catalogVersion"] != "1.1.1":
-        fail("catalogVersion must match the design document version 1.1.1")
+    if catalog["catalogVersion"] != "1.1.2":
+        fail("catalogVersion must match the design document version 1.1.2")
     operations = [
         (item["operationKey"], item["shortName"], item["method"], item["path"])
         for item in catalog["operations"]
@@ -230,7 +236,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--contract-ref",
-        help="read the canonical review HTML from this Git ref instead of the working tree",
+        help="override the catalog's historical full Git commit; the frozen SHA-256 must still match",
     )
     parser.add_argument("--no-render", action="store_true", help="validate existing SVG files without regenerating")
     return parser.parse_args()
@@ -247,7 +253,7 @@ def main() -> int:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
     print(
-        f"PASS: {len(catalog['operations'])} operations, "
+        f"PASS (historical HTTP 1.37 only): {len(catalog['operations'])} operations, "
         f"{sum(1 for _ in iter_cases(catalog))} catalog entries, "
         f"{len(EXPECTED_BLOCKS)} synchronized PlantUML diagrams"
     )

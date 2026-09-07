@@ -533,10 +533,6 @@ def validate_review_pages(post: dict) -> None:
         require(text in visible, f"no-JavaScript page is missing {text}")
     require("data-question-id=" not in source, "confirmed receipt must not remain a question")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
-    retired = (ROOT / "chat-events-v2-confirmed.html").read_text(encoding="utf-8")
-    require("原独立 POST JSON 方案已被合并方案替代" in retired, "retire stale whole-operation approval")
-    require("chat-api-review.html#listSessionEvents" in retired and "data-operation-review" not in retired,
-            "old confirmed page must link current review, not display an approved operation")
 
 
 def main() -> int:
@@ -552,7 +548,7 @@ def main() -> int:
         negative_count = validate_negative_regressions(model)
         validate_history_model(history, model)
         history_count = validate_history_regressions(history, model)
-        subprocess.run([sys.executable, str(ROOT / "render_chat_events_v2.py"), "--check"], check=True)
+        subprocess.run([sys.executable, str(ROOT / "render_chat_api.py"), "--check"], check=True)
         validate_review_pages(model)
     except (KeyError, OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(f"error: {error}")

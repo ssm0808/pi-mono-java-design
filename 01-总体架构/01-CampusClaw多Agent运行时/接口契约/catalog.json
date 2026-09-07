@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -14,11 +14,5 @@
     {"key": "changeSessionThinking", "source": "接口契约/操作/08-change-session-thinking.json", "common": "接口契约/common.json", "status": "原契约 · 需联动评审", "note": "配置请求和响应保持原契约；历史过滤与事件映射待联动评审，已移除作废的旧事件名和游标失效指引。", "design": "chat-http-v1-design.md#243-put-session-thinking"},
     {"key": "listSessionCommands", "source": "接口契约/操作/12-list-session-commands.json", "common": "接口契约/common.json", "status": "Builtin 切片已确认", "note": "Builtin 与 Skill Command 由用户统一负责；展示已确认 Builtin 切片，Skill 共享契约整合仍待评审，不表示 Skill 延期或禁用。", "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"},
     {"key": "executeSessionCommand", "source": "接口契约/操作/13-execute-session-command.json", "common": "接口契约/common.json", "status": "Builtin 切片已确认", "note": "已确认 Builtin 普通 JSON 行为不变；Skill 联合请求及命令事件与 Events v2 的衔接待评审。", "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"}
-  ],
-  "legacyPages": {
-    "chat-http-v1-review.html": "",
-    "chat-events-v2-review.html": "listSessionEvents",
-    "chat-events-v2-submit-review.html": "submitSessionEvent",
-    "chat-events-v2-confirmed.html": "listSessionEvents"
-  }
+  ]
 }

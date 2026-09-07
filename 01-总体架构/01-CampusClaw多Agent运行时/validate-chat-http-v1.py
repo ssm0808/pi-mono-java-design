@@ -15,12 +15,12 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from render_chat_http_v1 import build_html, build_operation_html, load_contract
+from render_chat_http_v1 import build_operation_html, load_contract
 
 
 ROOT = Path(__file__).resolve().parent
 REPOSITORY_ROOT = ROOT.parents[1]
-HTML_PATH = ROOT / "chat-http-v1-review.html"
+HTML_PATH = ROOT / "chat-api-review.html"
 DESIGN_PATH = ROOT / "chat-http-v1-design.md"
 CONTRACT_ROOT = ROOT / "接口契约"
 SLASH_DESIGN_PATHS = (
@@ -213,8 +213,6 @@ def parse_generated_models(parser: ContractHtmlParser) -> tuple[list[dict[str, A
 
 
 def validate_html(models: list[dict[str, Any]]) -> None:
-    require(HTML_PATH.read_text(encoding="utf-8") == build_html(),
-            "Legacy entry is stale; run render_chat_api.py")
     html_source = build_operation_html(models)
     parser = ContractHtmlParser()
     parser.feed(html_source)

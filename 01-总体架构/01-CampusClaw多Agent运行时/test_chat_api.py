@@ -1,10 +1,17 @@
 """Regression tests for single-source inventory and legacy entry retirement."""
 
 import copy
+import importlib.util
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import render_chat_api as current
+
+spec = importlib.util.spec_from_file_location("catalog_gate", current.ROOT / "validate-chat-api.py")
+gate = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gate)
 
 
 class CatalogTest(unittest.TestCase):
@@ -45,14 +52,35 @@ class CatalogTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "mismatched"):
             self.load_changed(self.manifest)
 
-    def test_legacy_pages_only_link_current_catalog(self):
-        for name, key in self.manifest["legacyPages"].items():
+    def test_retired_artifacts_and_links_are_absent(self):
+        self.assertNotIn("legacyPages", self.manifest)
+        self.assertFalse(hasattr(current, "build_legacy_page"))
+        self.assertFalse(hasattr(current.shared, "main"))
+        gate.validate_retired_artifacts()
+
+    def test_generation_writes_only_current_page(self):
+        with patch("sys.argv", ["render_chat_api.py"]), patch.object(current.shared, "write_output") as write:
+            self.assertEqual(0, current.main())
+        write.assert_called_once_with(current.ROOT / "chat-api-review.html", current.build_html())
+
+    def test_retired_file_reintroduction_is_rejected(self):
+        for name in gate.RETIRED_ARTIFACTS:
             with self.subTest(name=name):
-                source = current.build_legacy_page(name)
-                self.assertNotIn("data-operation-review", source)
-                self.assertNotIn("api-review-models", source)
-                self.assertIn("chat-api-review.html" + ("#" + key if key else ""), source)
-                self.assertEqual(source, (current.ROOT / name).read_text(encoding="utf-8"))
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    (root / name).touch()
+                    with self.assertRaisesRegex(ValueError, "Retired artifact reintroduced"):
+                        gate.validate_retired_artifacts(root, root)
+
+    def test_retired_local_link_reintroduction_is_rejected(self):
+        for source in ('[旧页](chat-events-v2-confirmed.html)',
+                       '<a href="chat-http-v1-review.html#old">旧页</a>',
+                       '[旧页](../topic/chat-events-v2-%72eview.html)'):
+            with self.subTest(source=source), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "README.md").write_text(source, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "Retired artifact link"):
+                    gate.validate_retired_artifacts(root, root)
 
 
 if __name__ == "__main__":

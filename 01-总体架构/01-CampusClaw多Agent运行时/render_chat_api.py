@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the single current catalog and payload-free legacy entry pages."""
+"""Render only the single current CampusClaw API catalog."""
 
 from __future__ import annotations
 
@@ -94,32 +94,12 @@ def build_html() -> str:
 '''
 
 
-def build_legacy_page(name: str) -> str:
-    manifest = shared.read_json(MANIFEST)
-    key = manifest["legacyPages"][name]
-    target = manifest["output"] + (f"#{key}" if key else "")
-    notice = ("原独立 POST JSON 方案已被合并方案替代。两个 Events 均未整体确认。"
-              if name == "chat-events-v2-confirmed.html" else "旧分散评审页已停止维护，不再保留接口报文。")
-    return f'''<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CampusClaw 接口入口已统一</title>
-<link rel="canonical" href="{target}">
-<style>body {{ max-width: 48rem; margin: 3rem auto; padding: 1rem; font: 16px/1.7 system-ui; }} a {{ overflow-wrap: anywhere; }}</style>
-</head><body><main><h1>接口文档已统一</h1>
-<p>{notice}</p><p><a href="{target}">打开当前 10 个接口的统一评审页</a></p>
-<p>旧方案仅用于 Git 历史追溯，不作为当前契约或实现依据。</p>
-</main></body></html>
-'''
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     manifest = shared.read_json(MANIFEST)
     outputs = {manifest["output"]: build_html()}
-    outputs.update({name: build_legacy_page(name) for name in manifest["legacyPages"]})
     for name, content in outputs.items():
         path = ROOT / name
         if args.check:

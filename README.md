@@ -1,6 +1,6 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.4.5<br>
+> 导航版本：2.4.6<br>
 > 整理日期：2026-09-07<br>
 > Slash Command 设计基线：`0eaa70ff365bf4d4e328b3473809341ca4cfc58d`<br>
 > 通用对话 Events 三接口设计前基线：`743eca488ad559387706b5df54e2248a4124e5ef`<br>
@@ -48,7 +48,7 @@
 1. [当前接口清单](./01-总体架构/01-CampusClaw多Agent运行时/接口契约/catalog.json) 唯一登记十个接口及其精确 JSON 源：八项保留契约 + 两项 Events v2。
 2. [统一接口页](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html) 是唯一当前接口详情入口；两项 Events 未整体确认，其他联动待决事项按接口标明。
 3. [统一维护规则](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-index.md) 管理权威顺序、生成、校验及旧入口退役。Markdown 负责设计原因与源码证据，不维护平行报文。
-4. 旧 v1/v2 评审 URL 只链接新入口，不再展示旧字段。Runtime HTTP 测试 Agent 的旧清单仅为历史实现回归，不能证明当前 v2 已实现。
+4. 废弃的 Claw v1/v2 评审页直接删除，不保留迁移页或跳转占位；历史仅从 Git 追溯。Runtime HTTP 测试 Agent 的旧清单仅为固定提交的历史实现回归，不能证明当前 v2 已实现。
 
 Runtime HTTP V1 不维护 OpenAPI。CampusMate 附件服务仍维护独立的
 [`attachment-api.openapi.yaml`](./02-服务与接口/01-CampusMate附件服务/attachment-api.openapi.yaml)，
@@ -97,6 +97,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.4.6 | 2026-09-07 | 删除四个废弃 Claw 评审页，不保留跳转占位；统一入口与现行契约不变，历史测试改用固定 Git 来源。 |
 | 2.4.5 | 2026-09-07 | CampusClaw 当前十项接口统一入口、源清单与校验；旧评审页停止展示报文，Events 部分确认状态保留。 |
 | 2.4.4 | 2026-09-07 | Slash/Builtin 恢复 06bea56 完整版全局主图入口，Help 专题仅提供下钻图；同步全局图维护规则，契约和统一实施责任不变。 |
 | 2.4.3 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一设计、实现和集成；同步当前职责、实施验收及契约说明，旧分工仅作历史。 |

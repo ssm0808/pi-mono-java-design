@@ -114,8 +114,8 @@ access-token: opaque-access-token
   [POST operation model](接口契约-v2/操作/01-submit-session-event.json)，未决项不变。
 - [响应生命周期与源码差距](chat-events-v2-stream-design.md)：三种输入各自的输出范围、
   已确认结束规则，以及背压和恢复候选。
-- [旧确认页](chat-events-v2-confirmed.html) 只保留变更提示并链接当前页，不再展示已失效
-  的普通 JSON POST 为当前已确认接口。
+- 旧确认页已删除，不保留变更提示或占位文件；已失效的普通 JSON POST 仅从 Git 历史追溯，
+  不作为当前已确认接口。当前入口统一见上方两个操作锚点。
 - `common.json.reviewState` 当前为 `listSessionEvents`，
   `confirmedOperations=[]`；这不撤销已确认字段，也不推定任一新操作整体通过。
 

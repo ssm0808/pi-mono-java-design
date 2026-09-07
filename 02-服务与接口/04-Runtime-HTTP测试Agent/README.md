@@ -2,12 +2,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.1 |
+| 文档版本 | 1.1.2 |
 | 状态 | 首版执行器与仓库 Skill 已落地到 `codex/campusclaw-tdd-agent`，当前实现契约漂移预期为红 |
 | 设计目标 | 基于已确认 HTTP 契约自动规划、拉起、执行和维护回归测试 |
 | HTTP 契约版本 | `1.37.0`，十一项 operation 均已确认 |
 | 设计仓分析基线 | `8ab8eef47b2dc0d9e21ae0ca0bd7617f8a158a32`；运行时仍另记工作树状态与 SHA-256 |
-| 当前 HTML 契约 SHA-256 | `5c1f235bd04017390bf2a8fd603d176b5f9a3babc019e33cee192ce132672604` |
+| 历史 HTML 契约 SHA-256 | `5c1f235bd04017390bf2a8fd603d176b5f9a3babc019e33cee192ce132672604` |
 | pi-mono-java 实现分析基线 | `1f801dbb82bdda30478e3354e685e3153b179a0c`，`origin/main` |
 | 初始机器用例目录 | [`test-case-catalog.json`](test-case-catalog.json) |
 | 更新日期 | 2026-09-07 |
@@ -40,18 +40,25 @@
 ### 2.1 契约权威
 
 本节仅描述 HTTP 1.37 历史回归，测试 Agent 必须在对应历史 commit 读取以下文件。
-当前工作树的旧 HTML 已改为迁移说明，不再包含 11 项模型，不能作为该历史执行器的输入。
+当前工作树的旧 HTML 已删除，不保留迁移页，也不得为测试恢复副本。
 当前目标契约统一见 [十项接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html)。
-历史读取顺序为：
+历史源固定为设计提交 `8ab8eef47b2dc0d9e21ae0ca0bd7617f8a158a32`，当时的目录为
+`pi-mono-java-manager-driven-multi-agent-runtime/`；以下两个文件名是该提交内的路径，
+不是当前工作树链接。历史读取顺序为：
 
-1. [`chat-http-v1-review.html`](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html)：
+1. `chat-http-v1-review.html`：
    HTTP V1 的人类主维护契约，在 `api-review-models` 中内嵌 11 个 operation model；
-2. [`chat-http-v1-design.md`](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)：
+2. `chat-http-v1-design.md`：
    状态、并发、SSE、错误和恢复原因；
 3. 本目录的 [`test-case-catalog.json`](test-case-catalog.json)：
    契约要求到可执行测试的稳定映射；
 4. 候选提交的 Controller、VO、Service、Mapper、SQL 和配置：实现证据，不能反向覆盖已确认
    契约。
+
+本目录校验器按用例目录中的 `sourceKind=git-history`、完整 `sourceCommit`、仓库相对路径
+和 SHA-256，通过 `git show` 在内存中读取历史契约。默认运行
+`python3 validate-http-test-agent-design.py` 不依赖已删除页面；缺少提交或摘要不符直接失败。
+`--contract-ref` 只允许完整提交 ID，仍必须匹配冻结的摘要，不能借此覆盖当前十项接口。
 
 Runtime HTTP 接口当前不维护 OpenAPI。Agent 必须从 HTML 中的结构化 review model 提取
 operation，而不是从历史 Git 恢复已经废弃的 OpenAPI。提取结果必须记录契约版本、文件
@@ -482,6 +489,7 @@ Agent 不得自动：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.2 | 2026-09-07 | 删除旧页的工作树引用；历史校验固定 Git 提交、当时路径和 SHA-256，仅内存读取，不恢复废弃文档。 |
 | 1.1.1 | 2026-09-07 | 标记为旧实现回归资料；三个控制接口不再属于当前目标，保留用例证据与原断言，不据此恢复接口。 |
 | 1.1.0 | 2026-08-20 | 对齐 HTTP V1 1.37.0 和实现基线 `1f801dbb`；目录继续留在设计仓；退役本地认证矩阵，新增全接口调用上下文/no-auth、类型化 ID、`thinking=true`、thinking 事件可见性、Submit 删除 `type`、设计基线证据和实现漂移失败门禁；记录首版执行器、Skill、openGauss 与 Failsafe 落地 |
 | 1.0.0 | 2026-08-19 | 初版：对齐 HTTP V1 1.30.0 和实现分析提交 `2e3962f4`；建立 11 operation 用例模型、分层测试、自动环境、变更感知、全量回退、证据与防弱化维护流程 |

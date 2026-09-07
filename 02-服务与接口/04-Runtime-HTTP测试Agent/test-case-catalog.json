@@ -1,11 +1,14 @@
 {
-  "catalogVersion": "1.1.1",
+  "catalogVersion": "1.1.2",
   "status": "historical-implementation-baseline",
   "description": "Historical HTTP 1.37 regression inventory, not the current target API. Standalone controls are retired from the current product; keep these assertions only for the matching historical implementation and contract.",
   "contract": {
     "version": "1.37.0",
-    "reviewDocument": "../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html",
-    "designDocument": "../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md",
+    "sourceKind": "git-history",
+    "sourceCommit": "8ab8eef47b2dc0d9e21ae0ca0bd7617f8a158a32",
+    "reviewDocument": "pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-review.html",
+    "reviewSha256": "5c1f235bd04017390bf2a8fd603d176b5f9a3babc019e33cee192ce132672604",
+    "designDocument": "pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-design.md",
     "expectedOperationCount": 11,
     "implementationCommit": "1f801dbb82bdda30478e3354e685e3153b179a0c"
   },
@@ -15,7 +18,7 @@
     "retryPolicy": "none in required gates"
   },
   "evidenceRegistry": {
-    "CONTRACT": "design:01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-review.html@1.37.0",
+    "CONTRACT": "git:8ab8eef47b2dc0d9e21ae0ca0bd7617f8a158a32:pi-mono-java-manager-driven-multi-agent-runtime/chat-http-v1-review.html@1.37.0",
     "SESSION_CONTROLLER": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java#RuntimeSessionController@1f801dbb",
     "EVENT_CONTROLLER": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java#RuntimeEventController@1f801dbb",
     "CONFIG_CONTROLLER": "pi-mono-java:modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java#RuntimeSessionConfigurationController@1f801dbb",

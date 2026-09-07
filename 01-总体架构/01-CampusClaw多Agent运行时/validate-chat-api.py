@@ -7,10 +7,18 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import render_chat_api as current
 
 ROOT = Path(__file__).resolve().parent
+RETIRED_ARTIFACTS = (
+    "chat-http-v1-review.html",
+    "chat-events-v2-review.html",
+    "chat-events-v2-submit-review.html",
+    "chat-events-v2-confirmed.html",
+    "render_chat_events_v2.py",
+)
 
 
 def require(value, message):
@@ -18,8 +26,25 @@ def require(value, message):
         raise ValueError(message)
 
 
+def validate_retired_artifacts(root=ROOT, repository=ROOT.parents[1]):
+    for name in RETIRED_ARTIFACTS:
+        require(not (root / name).exists(), f"Retired artifact reintroduced: {name}")
+    for pattern in ("*.md", "*.html"):
+        for path in repository.rglob(pattern):
+            source = path.read_text(encoding="utf-8")
+            targets = re.findall(r'''(?:href|src)=["']([^"']+)["']''', source)
+            targets += re.findall(r"\[[^\]]*\]\(([^)]+)\)", source)
+            for target in targets:
+                url = urlsplit(target.strip("<>"))
+                if not url.scheme and not url.netloc:
+                    require(Path(unquote(url.path)).name not in RETIRED_ARTIFACTS,
+                            f"Retired artifact link in {path.relative_to(repository)}: {target}")
+
+
 def validate_catalog():
     manifest, models = current.load_catalog()
+    require(manifest["output"] == "chat-api-review.html" and "legacyPages" not in manifest,
+            "Publish only the current catalog; no legacy aliases")
     require(len(models) == 10, "Current catalog must contain exactly ten operations")
     require({model["operation"]["operationKey"] for model in models} == {
         "createSession", "getSession", "deleteSession", "submitSessionEvent", "listSessionEvents",
@@ -38,12 +63,7 @@ def validate_catalog():
     require(len(scripts) == len(parser.styles) == 1, "Keep one shared script and style")
     gate.validate_executable_script(scripts[0])
     gate.validate_control_retirement(models)
-    for name in manifest["legacyPages"]:
-        legacy = (ROOT / name).read_text(encoding="utf-8")
-        require(legacy == current.build_legacy_page(name), f"Stale legacy entry: {name}")
-        require("data-operation-review" not in legacy and "application/json" not in legacy,
-                f"Legacy page must not contain contract payloads: {name}")
-        require("chat-api-review.html" in legacy, f"Legacy entry must link the current catalog: {name}")
+    validate_retired_artifacts()
     for name in ("04-submit-user-message.json", "05-list-session-events.json"):
         require(not (ROOT / "接口契约/操作" / name).exists(), "Retired Events source reintroduced")
     for item in manifest["operations"]:
@@ -74,7 +94,7 @@ def main():
     ):
         subprocess.run([sys.executable, *command], cwd=ROOT, check=True)
     validate_catalog()
-    print("Current catalog valid: ten unique operations; old entries carry no payload; review decisions preserved.")
+    print("Current catalog valid: ten unique operations; retired pages/generator absent; no retired links; review decisions preserved.")
     return 0
 
 
