@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}/events",
     "summary": "分页查询与 POST SSE 一致的完整事件",
-    "description": "当前评审 ListEvents；这是目标设计，尚未修改 CampusClaw 实现。保留 GET 历史查询，不恢复 GET /events/stream。普通分页已确认：page 从 1 开始，按旧到新的已提交内部顺序返回；nextPage 是下一页整数或 null，不是加密游标。不再固定快照，不增加快照标识、游标密钥或过期时间。每页读取该次查询可见的当前分支完整事件，跨页保持相同 limit；同一分支和过滤条件不变且仅尾部追加时，已有记录的位置不移动，新事件可以进入后续页。分支、过滤条件或历史可见范围改变时，从 page=1 重新加载；本接口不承诺自动检测跨页变化。nextPage=null 仅表示本次查询没有下一页，不表示执行已结束或以后不会新增事件。允许 Session running 时查询，不占用消息执行准入名额。分页数量已确认：省略 limit 时返回最多 50 条，允许 1～200；result 只含 events 和 nextPage，不返回 total。普通 JSON 响应继续使用 ResultBean。L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null，不作为分页参数错误；此规则以 Session 存在、访问检查及查询成功为前提，不掩盖非法参数或读取失败。三类已接受的 user.* 回执与 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 使用 POST SSE 的相同 eventId、createdAt 和业务字段；正文/思考只返回 phase=completed，不返回 delta、心跳或连接结束标记。客户端保持数组顺序，不按 createdAt 重排，不公开 entryId、entrySeq 或执行标识。候选沿用 Session thinking 开关过滤已获准公开的摘要；每页重新检查访问边界，页码不是访问凭据。中断回执只表示已接受；相同停止 idle 在历史中只出现一次。等待确认的 idle 不能解除 M1 的 running 状态；不能用某条历史 idle 判定现在可提交 M2。只读接口不要求 access-token，不创建执行凭据、不调用 Mate 工具，所有凭据都不进入历史或日志。未整体确认 ListEvents 或合并 POST；配置变更、压缩、Usage 与其他扩展事件的 v2 映射仍待补齐，不能因基础示例未列出而删除既有能力。CampusClaw 内部 sessionId 不直接暴露给浏览器，Mate 公共 API 不在本轮修改范围。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。",
+    "description": "当前评审 ListEvents；这是目标设计，尚未修改 CampusClaw 实现。保留 GET 历史查询，不恢复 GET /events/stream。普通分页已确认：page 从 1 开始，按旧到新的已提交内部顺序返回；nextPage 是下一页整数或 null，不是加密游标。不再固定快照，不增加快照标识、游标密钥或过期时间。每页读取该次查询可见的当前分支完整事件，跨页保持相同 limit；同一分支和过滤条件不变且仅尾部追加时，已有记录的位置不移动，新事件可以进入后续页。分支、过滤条件或历史可见范围改变时，从 page=1 重新加载；本接口不承诺自动检测跨页变化。nextPage=null 仅表示本次查询没有下一页，不表示执行已结束或以后不会新增事件。允许 Session running 时查询，不占用消息执行准入名额。分页数量已确认：省略 limit 时返回最多 50 条，允许 1～200；result 只含 events 和 nextPage，不返回 total。普通 JSON 响应继续使用 ResultBean。L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null，不作为分页参数错误；此规则以 Session 存在、访问检查及查询成功为前提，不掩盖非法参数或读取失败。三类已接受的 user.* 回执与 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 使用 POST SSE 的相同 eventId、createdAt 和业务字段；正文/思考只返回 phase=completed，不返回 delta、心跳或连接结束标记。客户端保持数组顺序，不按 createdAt 重排，不公开 entryId、entrySeq 或执行标识。候选沿用 Session thinking 开关过滤已获准公开的摘要；每页重新检查访问边界，页码不是访问凭据。中断回执只表示已接受；相同停止 idle 在历史中只出现一次。等待确认的 idle 不能解除 M1 的 running 状态；不能用某条历史 idle 判定现在可提交 M2。只读接口不要求 access-token，不创建执行凭据、不调用 Mate 工具，所有凭据都不进入历史或日志。未整体确认 ListEvents 或合并 POST；配置变更、压缩、Usage 与其他扩展事件的 v2 映射仍待补齐，不能因基础示例未列出而删除既有能力。CampusClaw 内部 sessionId 不直接暴露给浏览器，Mate 公共 API 不在本轮修改范围。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -231,7 +231,12 @@
                   "type": "agent.tool_result",
                   "createdAt": "2026-09-04T08:30:16.600Z",
                   "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
-                  "content": "用户已拒绝，本次工具调用未执行。",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "用户已拒绝，本次工具调用未执行。"
+                    }
+                  ],
                   "isError": true,
                   "errorCode": "TOOL_CALL_DENIED"
                 },
@@ -445,23 +450,23 @@
     ]
   },
   "review": {
-    "status": "L1～L6 已确认 · L7 待确认 · 接口未整体确认",
-    "notice": "L1～L4 分页不变。L5 已确认完整正文字符串；L6 已确认工具调用参数 JSON 对象，均与 POST 同形。本轮只评审 L7 工具结果的 content 容器。响应仍展示现有字符串候选；推荐的数组尚未生效。图片表示、传输、其余事件字段、错误及接口整体继续待评审。",
+    "status": "L1～L8 已确认 · L9 待确认 · 接口未整体确认",
+    "notice": "L1～L4 分页不变。L5 已确认完整正文字符串；L6 已确认工具调用参数 JSON 对象；L7 已确认工具结果内容块数组；L8 已确认本期工具结果仅文本，Mate 也使用 text 块，均与 POST 同形。不提供 JSON 块或图片块。当前示例的业务工具名尚未确认；L9 只评审 Mate 调用在事件中的工具名称与参数是否保留 Runtime 包装。错误、空文本及接口整体继续待评审。",
     "questions": [
       {
-        "id": "L7-tool-result-content",
-        "legend": "工具结果事件 agent.tool_result.content 用什么结构？",
+        "id": "L9-mate-tool-identity",
+        "legend": "Mate 调用在 agent.tool_call 中怎样表示工具名与参数？",
         "options": [
           {
-            "value": "A-content-blocks",
-            "label": "内容块数组（推荐）",
-            "description": "例如 content: [{\"type\":\"text\",\"text\":\"操作已完成。\"}]。可分别表达文字与图片结果；具体图片块、传输方式及可见性另行确认，选择后同步 GET/POST 示例。",
+            "value": "A-runtime-wrapper",
+            "label": "保留 CallMateTool（推荐）",
+            "description": "toolName 为 CallMateTool；arguments 为 {\"tool\":\"isolate_campus_port\",\"args\":{...}}。与 Runtime 实际工具调用一致，业务工具名放在 tool 字段中；选择后同步 GET/POST 示例。",
             "selected": true
           },
           {
-            "value": "B-string",
-            "label": "字符串（当前候选）",
-            "description": "例如 content: \"操作已完成。\"。HTTP 只返回文本内容；Runtime 内部图片结果仍保留，图片的对外展示需另设计。",
+            "value": "B-business-tool",
+            "label": "展开为业务工具名（当前候选）",
+            "description": "toolName 为 isolate_campus_port；arguments 直接放业务参数。与现有 HTTP 示例一致，需要明确从 CallMateTool 到公开事件的映射。",
             "selected": false
           }
         ]
@@ -475,7 +480,9 @@
       "L3-page-metadata": "A-events-nextPage-only",
       "L4-out-of-range-page": "A-empty-success",
       "L5-agent-message-content": "A-string",
-      "L6-tool-call-arguments": "A-object"
+      "L6-tool-call-arguments": "A-object",
+      "L7-tool-result-content": "A-content-blocks",
+      "L8-tool-result-types": "A-text-only"
     },
     "inheritedRules": {
       "eventIdentity": "eventId",
@@ -489,13 +496,14 @@
       "readToolToken": false
     },
     "pendingReview": [
+      "工具名称与参数的公开投影、空文本、块数量与大小约束",
       "thinking 内容策略、配置/压缩/Usage 与其他扩展事件的完整 v2 投影",
       "参数与读取错误细节、数据保留",
       "缺少回执时的结果不确定、执行关联与 Mate 展示对账边界",
       "ListEvents 接口整体确认"
     ],
     "promptPrefix": "Claw Session Events v2 接口评审：GET /sessions/{sessionId}/events",
-    "promptSuffix": "仅应用本次明确调整；L1～L4 已确认：普通整数分页、从旧到新、不固定快照、默认 50/最多 200、result 仅含 events/nextPage，合法页码超出记录范围返回 200 空列表。不重开已确认决定，不默认确认 ListEvents 或合并 POST，不修改 Mate 公共契约。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 不重开已确认的正文结构。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 不重开已确认的工具参数结构。",
+    "promptSuffix": "仅应用本次明确调整；L1～L4 已确认：普通整数分页、从旧到新、不固定快照、默认 50/最多 200、result 仅含 events/nextPage，合法页码超出记录范围返回 200 空列表。不重开已确认决定，不默认确认 ListEvents 或合并 POST，不修改 Mate 公共契约。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 不重开已确认的正文结构。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 不重开已确认的工具参数结构。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 不重开已确认的工具结果容器。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 工具名称与参数的公开投影、空文本、数量和错误细节仍待评审。",
     "confirmedPagination": {
       "direction": "oldest-first",
       "pageType": "positive-integer",
@@ -550,6 +558,16 @@
         "date": "2026-09-07",
         "source": "用户通过 CLAW ListEvents 评审页选择 L6-tool-call-arguments=A-object。",
         "status": "仅确认 agent.tool_call.arguments 的 JSON 对象结构，沿用既有脱敏与完整事件同形规则，同步 GET 历史和 POST SSE；对象内部字段由对应工具契约决定。本次不确认其他工具字段、工具结果、thinking、错误、保留期或两个接口整体。"
+      },
+      "L7-tool-result-content": {
+        "date": "2026-09-08",
+        "source": "用户通过 CLAW ListEvents 评审页选择 L7-tool-result-content=A-content-blocks，并询问 Mate 工具返回设计。",
+        "status": "仅确认 agent.tool_result.content 的内容块数组容器，同步 GET 历史与 POST SSE；现有文本示例包为一个 text 块。后续用户关于当前工具只返回文本的范围约束见 L8；其他字段、错误细节及两个接口整体仍待评审。"
+      },
+      "L8-tool-result-types": {
+        "date": "2026-09-08",
+        "source": "用户明确补充：需要注意现在的工具只会返回文本。",
+        "status": "将本期工具结果公开类型限定为文本块，包括 Mate；保留 L7 已确认数组，不增加 JSON 块或图片块，不因文本可解析为 JSON 而改变其类型。撤回未确认的 Mate JSON 块候选和以 Read 图片论证本期 HTTP 容器的理由；未确认空文本、块数量、大小、错误细节或工具名称/参数映射。"
       }
     }
   }

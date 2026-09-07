@@ -1,5 +1,5 @@
 {
-  "version": "1.2.2",
+  "version": "1.2.3",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -7,8 +7,8 @@
     {"key": "createSession", "source": "接口契约/操作/01-create-session.json", "common": "接口契约/common.json", "status": "原契约已确认", "note": "创建会话规则保持不变。", "design": "chat-http-v1-design.md#21-session-生命周期"},
     {"key": "getSession", "source": "接口契约/操作/02-get-session.json", "common": "接口契约/common.json", "status": "原契约 · 需联动评审", "note": "Session 响应保持原契约；thinking 与新历史事件的可见性需联动评审，旧事件名不定义 Events v2。", "design": "chat-http-v1-design.md#211-第二个已确认接口读取-session"},
     {"key": "deleteSession", "source": "接口契约/操作/03-delete-session.json", "common": "接口契约/common.json", "status": "已确认 · 停止指引已同步", "note": "运行中拒绝删除；经 user.interrupt 确认实际停止后重试，删除事务仍复核空闲。", "design": "chat-http-v1-design.md#212-第三个已确认接口删除-session"},
-    {"key": "submitSessionEvent", "source": "接口契约-v2/操作/01-submit-session-event.json", "common": "接口契约-v2/common.json", "status": "Events v2 · 部分确认", "note": "当前合并 POST：提交事件并接收对应 SSE。首帧、关闭、中断与单消息准入等已确认；字段、超时、故障及整体接口仍待评审。 agent.message completed 的 content 字符串与 agent.tool_call.arguments JSON 对象已确认。", "design": "chat-events-v2-stream-design.md"},
-    {"key": "listSessionEvents", "source": "接口契约-v2/操作/02-list-session-events.json", "common": "接口契约-v2/common.json", "status": "Events v2 · 当前评审", "note": "普通整数分页、默认 50/最多 200、无 total、超范围 200 空列表已确认；其余事件、错误及恢复边界未整体确认。 agent.message completed 的 content 字符串与 agent.tool_call.arguments JSON 对象已确认。", "design": "chat-events-v2-history-design.md"},
+    {"key": "submitSessionEvent", "source": "接口契约-v2/操作/01-submit-session-event.json", "common": "接口契约-v2/common.json", "status": "Events v2 · 部分确认", "note": "当前合并 POST：提交事件并接收对应 SSE。首帧、关闭、中断与单消息准入等已确认；字段、超时、故障及整体接口仍待评审。 agent.message completed 的 content 字符串、agent.tool_call.arguments JSON 对象及 agent.tool_result.content 文本块数组已确认；本期工具结果仅文本。", "design": "chat-events-v2-stream-design.md"},
+    {"key": "listSessionEvents", "source": "接口契约-v2/操作/02-list-session-events.json", "common": "接口契约-v2/common.json", "status": "Events v2 · 当前评审", "note": "普通整数分页、默认 50/最多 200、无 total、超范围 200 空列表已确认；其余事件、错误及恢复边界未整体确认。 agent.message completed 的 content 字符串、agent.tool_call.arguments JSON 对象及 agent.tool_result.content 文本块数组已确认；本期工具结果仅文本。", "design": "chat-events-v2-history-design.md"},
     {"key": "listSessionModels", "source": "接口契约/操作/06-list-session-models.json", "common": "接口契约/common.json", "status": "原契约已确认", "note": "模型清单规则保持不变。", "design": "chat-http-v1-design.md#241-get-session-models"},
     {"key": "changeSessionModel", "source": "接口契约/操作/07-change-session-model.json", "common": "接口契约/common.json", "status": "原契约 · 事件映射待评审", "note": "配置接口保持原契约；配置变更事件如何进入 Events v2 尚待对齐，不能用旧事件示例覆盖新 Events。", "design": "chat-http-v1-design.md#242-put-session-model"},
     {"key": "changeSessionThinking", "source": "接口契约/操作/08-change-session-thinking.json", "common": "接口契约/common.json", "status": "原契约 · 需联动评审", "note": "配置请求和响应保持原契约；历史过滤与事件映射待联动评审，已移除作废的旧事件名和游标失效指引。", "design": "chat-http-v1-design.md#243-put-session-thinking"},
