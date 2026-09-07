@@ -1,0 +1,242 @@
+@startuml target_slash_command_frontend_components
+title Target Slash Command Frontend Components
+
+' Source baseline: pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5
+' Source evidence: frontend/src/App.vue, setup and submit
+' Source evidence: frontend/src/components/ComposerBox.vue, handleKeydown and template
+' Source evidence: frontend/src/composables/useRuntimeApi.ts, sendMessage and requestRaw
+' Source evidence: frontend/src/types/product.ts and frontend/src/types/runtime.ts
+' Observed behavior: the current debug workbench has one message draft and no command gateway, catalog, parser, or command result projection.
+' Target-only design: every element marked target is proposed and is not implemented at the source baseline.
+' Design reason: keep command discovery, explicit execution, ephemeral results, and ordinary chat history as separate responsibilities.
+
+skinparam backgroundColor #FFFCFA
+skinparam shadowing false
+skinparam roundcorner 12
+skinparam defaultFontName Arial
+skinparam defaultFontColor #2C2724
+skinparam ArrowColor #7A6F69
+skinparam packageBorderColor #CDBEB6
+skinparam packageBackgroundColor #F8F3F0
+skinparam componentBorderColor #BFAEA5
+skinparam componentBackgroundColor #FFFFFF
+skinparam interfaceBorderColor #A9472B
+skinparam interfaceBackgroundColor #FFF6F1
+skinparam noteBorderColor #CDBEB6
+skinparam noteBackgroundColor #FFF9E8
+left to right direction
+
+package "Existing application shell" as ExistingPkg {
+  component "App.vue\n[current]" as App
+  component "ComposerBox.vue\n[current, extended]" as Composer
+  component "ConversationTimeline\n[current, unchanged]" as Timeline
+  component "Session and model state\n[current, extended]" as SessionState
+  component "Attachment draft state\n[current concept, extended]" as AttachmentState
+}
+
+package "Slash presentation [target-only]" as PresentationPkg {
+  component "SlashCommandButton" as SlashButton
+  component "CommandPalette" as Palette
+  component "CommandArgumentHint" as ArgumentHint
+  component "CommandResultRegion" as ResultRegion
+  component "CommandResultRenderers" as Renderers
+}
+
+package "Slash application state [target-only]" as StatePkg {
+  component "useSlashCommands" as UseSlash
+  component "CommandDraftStore\nper active chat" as DraftStore
+  component "CommandCatalogStore\nper active chat" as CatalogStore
+  component "CommandParser\npure function" as Parser
+  component "CommandPresentationRegistry" as Registry
+}
+
+package "Gateway boundary [target-only]" as GatewayPkg {
+  interface "CommandGateway" as Gateway
+  component "MateCommandGateway\nproduction target" as MateGateway
+  component "RuntimeCommandGateway\ncontrolled development only" as RuntimeGateway
+}
+
+cloud "mate-service public API\nGET descriptor confirmed\nexecute contract pending" as MateApi
+cloud "Runtime internal API\nGET and Builtin POST confirmed" as RuntimeApi
+
+App *-- Composer
+App *-- Timeline
+App *-- ResultRegion
+Composer *-- SlashButton
+Composer *-- Palette
+Composer *-- ArgumentHint
+Composer --> UseSlash
+SlashButton --> UseSlash
+Palette --> UseSlash
+ResultRegion --> Registry
+UseSlash *-- DraftStore
+UseSlash *-- CatalogStore
+UseSlash --> Parser
+UseSlash --> Registry
+UseSlash --> Gateway
+UseSlash --> SessionState : apply authoritative response
+UseSlash --> AttachmentState : preserve or admit files
+Registry --> Renderers
+Gateway <|.. MateGateway
+Gateway <|.. RuntimeGateway
+MateGateway --> MateApi
+RuntimeGateway --> RuntimeApi
+
+note bottom of Timeline
+  Command results never become
+  ConversationTurn or durable history.
+end note
+
+note bottom of MateGateway
+  Production execution remains gated until
+  route, authentication, errors, Skill result,
+  and file reference contracts are confirmed.
+end note
+
+note bottom of DraftStore
+  Separate message and command buffers prevent
+  a Slash attempt from destroying user text.
+end note
+@enduml
+
+@startuml slash_composer_state
+title Slash Composer Interaction State
+
+' Source baseline: pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5
+' Source evidence: frontend/src/components/ComposerBox.vue, handleKeydown and textarea binding
+' Source evidence: frontend/src/App.vue, message ref and submit
+' Observed behavior: the current composer has a single message state and Enter submits an ordinary message.
+' Target-only design: this state machine is the proposed Slash interaction model.
+' Design reason: explicit selection and explicit execution prevent accidental state-changing commands.
+
+skinparam backgroundColor #FFFCFA
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontColor #2C2724
+skinparam ArrowColor #7A6F69
+skinparam stateBorderColor #BFAEA5
+skinparam stateBackgroundColor #FFFFFF
+skinparam noteBorderColor #CDBEB6
+skinparam noteBackgroundColor #FFF9E8
+skinparam nodesep 34
+skinparam ranksep 42
+top to bottom direction
+
+[*] --> MessageDraft
+MessageDraft : Ordinary message buffer is authoritative
+MessageDraft --> BrowsingCatalog : first-character slash or Slash button
+
+state BrowsingCatalog
+BrowsingCatalog : Full list or prefix-filtered list
+BrowsingCatalog --> EditingArguments : select descriptor
+BrowsingCatalog --> MessageDraft : Escape, cancel, or lone slash Backspace
+
+state EditingArguments
+EditingArguments : Canonical name plus editable arguments
+EditingArguments --> Executing : explicit second Enter or Run
+EditingArguments --> MessageDraft : cancel and restore suspended draft
+
+state Executing
+Executing --> EditingArguments : failure, preserve command draft
+Executing --> ResultVisible : success
+
+state ResultVisible
+ResultVisible : Ephemeral result, latest one per active chat
+ResultVisible --> BrowsingCatalog : start another command
+ResultVisible --> MessageDraft : dismiss, refresh, or switch chat
+
+note right of BrowsingCatalog
+  Prefix filtering preserves server order.
+  No fuzzy reordering and no auto-execution.
+end note
+
+note right of EditingArguments
+  hint is display-only.
+  Files are admitted only when acceptsFiles is true.
+end note
+
+note left of BrowsingCatalog
+  No automatic fallback to an ordinary message.
+  IME composition never triggers a mode transition.
+end note
+
+note right of MessageDraft
+  Slash button entry suspends the existing
+  message draft and files until exit or success.
+end note
+@enduml
+
+@startuml slash_command_execution_flow
+title Slash Command Discovery and Execution Flow
+
+' Source baseline: pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5
+' Source evidence: frontend/src/composables/useRuntimeApi.ts, requestRaw and return surface
+' Contract evidence: Runtime operations listSessionCommands and executeSessionCommand
+' Observed behavior: the current frontend has no command HTTP methods or command response projectors.
+' Target-only design: the browser workflow and production Mate gateway are proposed.
+' Design reason: never replay an uncertain mutation and always reconcile through authoritative resources.
+
+skinparam backgroundColor #FFFCFA
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontColor #2C2724
+skinparam ArrowColor #7A6F69
+skinparam participantBorderColor #BFAEA5
+skinparam participantBackgroundColor #FFFFFF
+skinparam sequenceLifeLineBorderColor #BFAEA5
+skinparam sequenceLifeLineBackgroundColor #F8F3F0
+skinparam noteBorderColor #CDBEB6
+skinparam noteBackgroundColor #FFF9E8
+hide footbox
+
+actor User
+participant "Composer" as Composer
+participant "useSlashCommands\n[target]" as Slash
+participant "CommandGateway\n[target]" as Gateway
+participant "Command API" as Api
+participant "Session and model state" as State
+participant "CommandResultRegion\n[target]" as Result
+
+User -> Composer : enter Slash mode
+Composer -> Slash : open(activeChatId)
+Slash -> Gateway : listCommands(activeChatId)
+Gateway -> Api : GET command descriptors
+Api --> Gateway : server-ordered descriptors
+Gateway --> Slash : descriptors
+Slash --> Composer : render listbox
+
+User -> Composer : select command
+Composer -> Slash : select(name)
+Slash --> Composer : canonical draft and input hint
+User -> Composer : explicit Run
+Composer -> Slash : execute(name, arguments, files)
+Slash -> Gateway : executeCommand(...)
+Gateway -> Api : POST command
+
+alt success
+  Api --> Gateway : command-specific JSON
+  Gateway --> Slash : typed gateway result
+  Slash -> State : apply authoritative Session or Models when present
+  Slash -> Result : render by submitted command name
+  Slash -> Slash : mark catalog stale
+else 404 or 409
+  Api --> Gateway : structured error
+  Gateway --> Slash : failure
+  Slash -> Slash : preserve draft and mark catalog stale
+  Slash -> Gateway : refresh descriptors
+  note over Slash,Gateway
+    Refresh is read-only.
+    The command POST is never replayed automatically.
+  end note
+else network outcome unknown
+  Api x-- Gateway : connection lost
+  Gateway --> Slash : uncertain outcome
+  Slash -> State : reconcile Session, Models, or Events as applicable
+  Slash --> Composer : preserve draft and require explicit action
+end
+
+note over Gateway,Api
+  Production Mate execution remains disabled
+  until its public execute contract is confirmed.
+end note
+@enduml

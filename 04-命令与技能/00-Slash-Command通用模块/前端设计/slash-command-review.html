@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CampusClaw Slash Command 前端评审稿</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --surface-primary: #fffcfa;
+      --surface-secondary: #f8f3f0;
+      --surface-tertiary: #f4ece8;
+      --surface-selected: #efe4de;
+      --surface-raised: #ffffff;
+      --text-primary: #2c2724;
+      --text-secondary: #6c625d;
+      --text-tertiary: #8e8179;
+      --border-default: #ded4cf;
+      --border-strong: #cdbeb6;
+      --action-primary: #2b2522;
+      --action-primary-hover: #423935;
+      --focus: #a9472b;
+      --accent-soft: #fff0e9;
+      --success: #2e6a4f;
+      --success-soft: #edf7f1;
+      --danger: #9c382d;
+      --danger-soft: #fff0ed;
+      --warning: #81561e;
+      --warning-soft: #fff8e7;
+      --shadow: 0 20px 48px rgb(55 38 29 / 12%);
+      --shadow-soft: 0 8px 24px rgb(55 38 29 / 8%);
+      --radius-sm: 10px;
+      --radius-md: 16px;
+      --radius-lg: 24px;
+      --content-width: 880px;
+    }
+
+    * { box-sizing: border-box; }
+
+    [hidden] { display: none !important; }
+
+    html { background: #e8dfda; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--text-primary);
+      background:
+        radial-gradient(circle at 8% 0%, rgb(255 248 240 / 92%), transparent 29rem),
+        linear-gradient(145deg, #eee6e1 0%, #e5dbd5 100%);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    button, textarea, input { font: inherit; }
+
+    button:focus-visible,
+    textarea:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .review-shell {
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+      min-height: 100dvh;
+    }
+
+    .review-sidebar {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100dvh;
+      padding: 28px 20px;
+      color: #fffaf7;
+      background: #27211f;
+      border-right: 1px solid rgb(255 255 255 / 7%);
+    }
+
+    .review-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .review-brand img {
+      width: 42px;
+      height: 42px;
+      border-radius: 13px;
+      object-fit: cover;
+      background: #fff;
+    }
+
+    .review-brand strong { display: block; font-size: 15px; letter-spacing: .02em; }
+    .review-brand span { display: block; margin-top: 2px; color: #cfc2bb; font-size: 12px; }
+
+    .review-label {
+      margin: 0 10px 10px;
+      color: #aa9b94;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .state-tabs {
+      display: grid;
+      gap: 6px;
+    }
+
+    .state-tab {
+      min-height: 44px;
+      padding: 10px 12px;
+      color: #ded3cd;
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .state-tab:hover { background: rgb(255 255 255 / 6%); }
+    .state-tab[aria-selected="true"] {
+      color: #fff;
+      background: #3b322e;
+      border-color: #594b44;
+    }
+
+    .state-tab span { display: block; font-size: 13px; font-weight: 650; }
+    .state-tab small { display: block; margin-top: 2px; color: #aa9b94; font-size: 11px; }
+
+    .review-note {
+      position: absolute;
+      right: 20px;
+      bottom: 24px;
+      left: 20px;
+      padding: 12px;
+      color: #cfc2bb;
+      font-size: 11px;
+      border: 1px solid #4c403b;
+      border-radius: 12px;
+      background: #302825;
+    }
+
+    .review-main { min-width: 0; padding: 28px; }
+
+    .review-heading {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      max-width: 1180px;
+      margin: 0 auto 18px;
+    }
+
+    .review-heading p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+    .review-heading h1 { margin: 3px 0 4px; font-size: clamp(22px, 3vw, 34px); letter-spacing: -.035em; }
+
+    .review-badge {
+      flex: 0 0 auto;
+      padding: 7px 10px;
+      color: var(--warning);
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid #e4cca5;
+      border-radius: 999px;
+      background: var(--warning-soft);
+    }
+
+    .app-window {
+      display: grid;
+      grid-template-rows: 64px minmax(680px, calc(100dvh - 150px));
+      max-width: 1180px;
+      min-height: 744px;
+      margin: 0 auto;
+      overflow: hidden;
+      border: 1px solid rgb(160 141 131 / 50%);
+      border-radius: 22px;
+      background: var(--surface-primary);
+      box-shadow: var(--shadow);
+    }
+
+    .app-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--border-default);
+      background: rgb(255 252 250 / 92%);
+    }
+
+    .agent-id { display: flex; align-items: center; gap: 12px; }
+    .agent-avatar {
+      display: grid;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      color: #fff;
+      font-weight: 800;
+      border-radius: 11px;
+      background: linear-gradient(145deg, #b85b3d, #773826);
+    }
+    .agent-id strong { display: block; font-size: 14px; }
+    .agent-id small { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 11px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #4d9872; box-shadow: 0 0 0 3px #e8f5ed; }
+
+    .top-actions { display: flex; gap: 8px; }
+    .icon-action {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      border-radius: 12px;
+      background: transparent;
+    }
+    .icon-action:hover { border-color: var(--border-default); background: var(--surface-secondary); }
+
+    .workspace {
+      position: relative;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      min-height: 0;
+      background:
+        linear-gradient(var(--surface-primary), var(--surface-primary)) padding-box,
+        radial-gradient(circle at 50% 0%, #fff, transparent 34rem);
+    }
+
+    .timeline {
+      min-height: 0;
+      overflow: auto;
+      padding: 34px 24px 230px;
+      scrollbar-color: var(--border-strong) transparent;
+    }
+
+    .timeline-inner { width: min(100%, var(--content-width)); margin: 0 auto; }
+
+    .date-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 28px;
+      color: var(--text-tertiary);
+      font-size: 11px;
+    }
+    .date-divider::before, .date-divider::after { content: ""; height: 1px; flex: 1; background: var(--border-default); }
+
+    .message { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; margin: 0 0 26px; }
+    .message.user { grid-template-columns: minmax(0, 1fr); justify-items: end; }
+    .message-avatar {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      border-radius: 10px;
+      background: #9c4c35;
+    }
+    .message-body { max-width: 690px; }
+    .message-meta { margin-bottom: 6px; color: var(--text-tertiary); font-size: 11px; }
+    .message-copy { margin: 0; font-size: 14px; line-height: 1.7; }
+    .user-bubble {
+      max-width: 620px;
+      padding: 12px 15px;
+      font-size: 14px;
+      border: 1px solid var(--border-default);
+      border-radius: 16px 16px 5px 16px;
+      background: var(--surface-secondary);
+    }
+
+    .result-region {
+      display: none;
+      width: min(calc(100% - 48px), var(--content-width));
+      margin: 8px auto 26px;
+      padding: 16px 18px;
+      border: 1px solid #cbded3;
+      border-radius: var(--radius-md);
+      background: var(--success-soft);
+      box-shadow: var(--shadow-soft);
+    }
+    .result-region.visible { display: block; }
+    .result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .result-eyebrow { color: var(--success); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+    .result-title { margin: 4px 0 1px; font-size: 18px; }
+    .result-subtitle { color: var(--text-secondary); font-size: 12px; }
+    .result-close { width: 44px; height: 44px; border: 0; border-radius: 10px; color: var(--text-secondary); background: transparent; cursor: pointer; }
+    .result-close:hover { background: rgb(46 106 79 / 8%); }
+    .help-description { display: grid; gap: 5px; margin: 16px 0 12px; font-size: 13px; }
+    .use-cases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .use-case { padding: 11px; color: var(--text-secondary); font-size: 12px; border: 1px solid #cbded3; border-radius: 11px; background: rgb(255 255 255 / 56%); }
+
+    .composer-dock {
+      position: absolute;
+      z-index: 5;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      padding: 18px 24px 22px;
+      background: linear-gradient(to bottom, transparent 0, rgb(255 252 250 / 92%) 18%, var(--surface-primary) 42%);
+    }
+
+    .composer-stack { position: relative; width: min(100%, var(--content-width)); margin: 0 auto; }
+
+    .command-palette {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 10px);
+      left: 0;
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      background: var(--surface-raised);
+      box-shadow: var(--shadow);
+    }
+
+    .palette-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 44px;
+      padding: 8px 12px 8px 15px;
+      border-bottom: 1px solid var(--border-default);
+      background: var(--surface-secondary);
+    }
+    .palette-head strong { font-size: 12px; }
+    .palette-head span { color: var(--text-tertiary); font-size: 11px; }
+    .key-hint { display: inline-flex; gap: 5px; align-items: center; }
+    kbd { padding: 2px 5px; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--border-default); border-radius: 5px; background: #fff; box-shadow: 0 1px 0 var(--border-default); }
+
+    .command-list { max-height: 326px; overflow: auto; padding: 6px; }
+    .command-option {
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr) auto;
+      gap: 10px;
+      width: 100%;
+      min-height: 54px;
+      padding: 8px 10px;
+      color: inherit;
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      background: transparent;
+      cursor: pointer;
+    }
+    .command-option:hover, .command-option.active { border-color: #dfcfc7; background: var(--surface-selected); }
+    .command-glyph { display: grid; width: 36px; height: 36px; place-items: center; color: #8d432f; font-size: 17px; font-weight: 900; border-radius: 10px; background: #fff; }
+    .command-copy { min-width: 0; }
+    .command-name { display: flex; gap: 7px; align-items: center; font: 650 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .command-description { margin-top: 3px; overflow: hidden; color: var(--text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .kind-badge { padding: 2px 6px; color: #725447; font: 700 9px Inter, sans-serif; letter-spacing: .04em; border-radius: 999px; background: #f2e7e1; text-transform: uppercase; }
+    .kind-badge.skill { color: #486458; background: #e8f2ec; }
+    .command-input { align-self: center; color: var(--text-tertiary); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+
+    .composer {
+      position: relative;
+      padding: 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: 18px;
+      background: var(--surface-raised);
+      box-shadow: var(--shadow-soft);
+    }
+    .composer.command-mode { border-color: #c9856f; box-shadow: 0 0 0 3px rgb(169 71 43 / 8%), var(--shadow-soft); }
+    .mode-line { display: none; align-items: center; justify-content: space-between; gap: 10px; margin: -2px 2px 7px; }
+    .command-mode .mode-line { display: flex; }
+    .mode-pill { display: inline-flex; align-items: center; gap: 7px; color: #8b3e29; font-size: 11px; font-weight: 750; }
+    .mode-pill::before { content: "/"; display: grid; width: 20px; height: 20px; place-items: center; color: #fff; border-radius: 6px; background: #a9472b; }
+    .mode-line span:last-child { color: var(--text-tertiary); font-size: 10px; }
+
+    .composer textarea {
+      display: block;
+      width: 100%;
+      min-height: 54px;
+      max-height: 160px;
+      padding: 8px 7px;
+      resize: none;
+      color: var(--text-primary);
+      line-height: 1.5;
+      border: 0;
+      outline: 0;
+      background: transparent;
+    }
+    .composer textarea::placeholder { color: #a3948c; }
+
+    .argument-hint {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      margin: 0 7px 8px;
+      color: var(--text-secondary);
+      font-size: 11px;
+    }
+    .argument-hint.visible { display: flex; }
+    .argument-hint code { padding: 2px 5px; color: #833d29; border-radius: 5px; background: var(--accent-soft); }
+
+    .inline-error {
+      display: none;
+      margin: 0 7px 9px;
+      padding: 9px 10px;
+      color: var(--danger);
+      font-size: 11px;
+      border: 1px solid #efc3bc;
+      border-radius: 9px;
+      background: var(--danger-soft);
+    }
+    .inline-error.visible { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .inline-error button { min-height: 32px; color: var(--danger); font-size: 10px; font-weight: 700; border: 0; background: transparent; cursor: pointer; }
+
+    .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .tool-actions { display: flex; gap: 4px; }
+    .tool-button {
+      display: grid;
+      width: 44px;
+      height: 44px;
+      place-items: center;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      border-radius: 11px;
+      background: transparent;
+      cursor: pointer;
+    }
+    .tool-button:hover, .tool-button.active { color: #8b3e29; border-color: #ead7cf; background: var(--accent-soft); }
+    .tool-button:disabled { color: #c1b5ae; cursor: not-allowed; }
+    .slash-icon { font: 800 18px ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .submit-button {
+      min-width: 94px;
+      min-height: 44px;
+      padding: 0 17px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 750;
+      border: 0;
+      border-radius: 12px;
+      background: var(--action-primary);
+      cursor: pointer;
+    }
+    .submit-button:hover { background: var(--action-primary-hover); }
+    .submit-button .run-label { display: none; }
+    .command-mode .submit-button .send-label { display: none; }
+    .command-mode .submit-button .run-label { display: inline; }
+
+    .composer-footnote { margin-top: 7px; color: var(--text-tertiary); font-size: 10px; text-align: center; }
+
+    .running-banner {
+      display: none;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 10px;
+      padding: 9px 12px;
+      color: var(--warning);
+      font-size: 11px;
+      border: 1px solid #ead8b5;
+      border-radius: 11px;
+      background: var(--warning-soft);
+    }
+    .running-banner.visible { display: flex; }
+    .running-spinner { width: 12px; height: 12px; border: 2px solid #dac5a0; border-top-color: #8a5d22; border-radius: 50%; animation: spin .9s linear infinite; }
+
+    .prototype-caption {
+      max-width: 1180px;
+      margin: 14px auto 0;
+      color: #756862;
+      font-size: 12px;
+      text-align: right;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 920px) {
+      .review-shell { grid-template-columns: minmax(0, 1fr); }
+      .review-sidebar { position: static; width: 100%; min-width: 0; height: auto; padding: 14px; }
+      .review-brand { margin-bottom: 12px; }
+      .review-label, .review-note { display: none; }
+      .state-tabs { display: flex; width: 100%; max-width: 100%; overflow-x: auto; padding-bottom: 2px; }
+      .state-tab { flex: 0 0 auto; min-width: 136px; }
+      .state-tab small { display: none; }
+      .review-main { width: 100%; min-width: 0; padding: 14px; }
+    }
+
+    @media (max-width: 700px) {
+      .review-heading { align-items: flex-start; }
+      .review-heading p:last-child, .review-badge { display: none; }
+      .app-window { grid-template-rows: 58px minmax(660px, calc(100dvh - 168px)); min-height: 718px; border-radius: 16px; }
+      .app-topbar { padding: 0 14px; }
+      .top-actions .icon-action:first-child { display: none; }
+      .timeline { padding: 24px 14px 230px; }
+      .composer-dock { padding: 14px; }
+      .command-palette { max-height: 45dvh; }
+      .command-list { max-height: calc(45dvh - 45px); }
+      .command-option { grid-template-columns: 38px minmax(0, 1fr); }
+      .command-input { display: none; }
+      .use-cases { grid-template-columns: 1fr; }
+      .result-region { width: calc(100% - 28px); }
+      .prototype-caption { text-align: left; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="review-shell">
+    <aside class="review-sidebar" aria-label="评审状态">
+      <div class="review-brand">
+        <img src="../../../01-总体架构/04-CampusClaw前端体验/campusclaw-mark-o1.png" alt="">
+        <div><strong>CampusClaw</strong><span>Slash Command · UX review</span></div>
+      </div>
+      <p class="review-label">界面状态</p>
+      <div class="state-tabs" role="tablist" aria-label="切换 Slash Command 状态">
+        <button class="state-tab" role="tab" aria-selected="true" data-state="catalog"><span>命令清单</span><small>输入 / 后的默认浏览状态</small></button>
+        <button class="state-tab" role="tab" aria-selected="false" data-state="argument"><span>参数编辑</span><small>选择后仍需明确运行</small></button>
+        <button class="state-tab" role="tab" aria-selected="false" data-state="running"><span>运行中清单</span><small>完全服从服务端 Descriptor</small></button>
+        <button class="state-tab" role="tab" aria-selected="false" data-state="help"><span>Help 结果</span><small>非对话、仅当前页面</small></button>
+        <button class="state-tab" role="tab" aria-selected="false" data-state="unmatched"><span>未匹配</span><small>保留草稿、禁止自动回退</small></button>
+      </div>
+      <div class="review-note">Target-only 视觉评审稿。公共命令执行协议未确认前，产品运行入口必须 fail closed。</div>
+    </aside>
+
+    <main class="review-main">
+      <header class="review-heading">
+        <div>
+          <p>前端专项 · 1.0.0</p>
+          <h1 id="state-title">命令清单</h1>
+          <p id="state-description">空消息中输入 /，读取当前 Chat 的服务端命令清单。</p>
+        </div>
+        <span class="review-badge">Target-only design</span>
+      </header>
+
+      <section class="app-window" aria-labelledby="state-title">
+        <header class="app-topbar">
+          <div class="agent-id">
+            <div class="agent-avatar">C</div>
+            <div><strong>园区运维助手</strong><small><i class="status-dot"></i><span id="agent-status">在线 · 空闲</span></small></div>
+          </div>
+          <div class="top-actions" aria-label="会话操作">
+            <button class="icon-action" aria-label="查看会话信息">ⓘ</button>
+            <button class="icon-action" aria-label="更多操作">•••</button>
+          </div>
+        </header>
+
+        <div class="workspace">
+          <div class="timeline">
+            <div class="timeline-inner">
+              <div class="date-divider">今天 15:42</div>
+              <article class="message user"><div class="user-bubble">帮我梳理一下园区明天的巡检重点。</div></article>
+              <article class="message">
+                <div class="message-avatar">C</div>
+                <div class="message-body">
+                  <div class="message-meta">园区运维助手 · 15:42</div>
+                  <p class="message-copy">建议优先检查消防通道、配电房告警和室外施工区域。我可以继续把这些内容整理成按楼栋执行的检查清单。</p>
+                </div>
+              </article>
+
+              <section class="result-region" id="result-region" aria-label="命令结果">
+                <div class="result-head">
+                  <div>
+                    <div class="result-eyebrow">命令结果 · 仅当前页面</div>
+                    <h2 class="result-title">园区运维助手</h2>
+                    <div class="result-subtitle">/help · 刚刚完成</div>
+                  </div>
+                  <button class="result-close" type="button" aria-label="关闭命令结果">×</button>
+                </div>
+                <div class="help-description"><span>协助园区运维人员分析告警、组织巡检任务。</span><span>根据当前会话信息给出可执行的处置建议。</span></div>
+                <div class="use-cases" aria-label="使用场景">
+                  <div class="use-case">梳理当天高优先级告警</div>
+                  <div class="use-case">生成按楼栋划分的巡检建议</div>
+                  <div class="use-case">解释设备异常并列出处置步骤</div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div class="composer-dock">
+            <div class="composer-stack">
+              <div class="running-banner" id="running-banner"><i class="running-spinner"></i>当前 Agent 正在执行任务。清单仅展示此刻可运行的查询命令。</div>
+
+              <div class="command-palette" id="command-palette">
+                <div class="palette-head"><strong id="palette-title">命令清单 · 7 项</strong><span class="key-hint"><kbd>↑</kbd><kbd>↓</kbd> 选择 · <kbd>Enter</kbd> 填入</span></div>
+                <div class="command-list" id="command-list" role="listbox" aria-label="可用命令">
+                  <button class="command-option active" id="cmd-help" role="option" aria-selected="true" data-name="help">
+                    <span class="command-glyph">?</span><span class="command-copy"><span class="command-name">/help <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Agent 的用途和典型使用场景</span></span><span class="command-input">无需参数</span>
+                  </button>
+                  <button class="command-option" id="cmd-status" role="option" aria-selected="false" data-name="status">
+                    <span class="command-glyph">◌</span><span class="command-copy"><span class="command-name">/status <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Session 的运行状态</span></span><span class="command-input">无需参数</span>
+                  </button>
+                  <button class="command-option" id="cmd-name" role="option" aria-selected="false" data-name="name">
+                    <span class="command-glyph">Aa</span><span class="command-copy"><span class="command-name">/name <em class="kind-badge">builtin</em></span><span class="command-description">查看或设置当前会话显示名称</span></span><span class="command-input">[displayName]</span>
+                  </button>
+                  <button class="command-option" id="cmd-model" role="option" aria-selected="false" data-name="model">
+                    <span class="command-glyph">M</span><span class="command-copy"><span class="command-name">/model <em class="kind-badge">builtin</em></span><span class="command-description">查看或切换当前模型</span></span><span class="command-input">[modelId]</span>
+                  </button>
+                  <button class="command-option" id="cmd-thinking" role="option" aria-selected="false" data-name="thinking">
+                    <span class="command-glyph">T</span><span class="command-copy"><span class="command-name">/thinking <em class="kind-badge">builtin</em></span><span class="command-description">查看或切换思考模式</span></span><span class="command-input">[on|off]</span>
+                  </button>
+                  <button class="command-option" id="cmd-compact" role="option" aria-selected="false" data-name="compact">
+                    <span class="command-glyph">↔</span><span class="command-copy"><span class="command-name">/compact <em class="kind-badge">builtin</em></span><span class="command-description">压缩当前 Session 的上下文</span></span><span class="command-input">无需参数</span>
+                  </button>
+                  <button class="command-option" id="cmd-skills" role="option" aria-selected="false" data-name="skills">
+                    <span class="command-glyph">◇</span><span class="command-copy"><span class="command-name">/skills <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Agent 已加载的技能</span></span><span class="command-input">无需参数</span>
+                  </button>
+                  <button class="command-option" id="cmd-skill-inspection-plan" role="option" aria-selected="false" data-name="skill:inspection-plan">
+                    <span class="command-glyph">✦</span><span class="command-copy"><span class="command-name">/skill:inspection-plan <em class="kind-badge skill">skill</em></span><span class="command-description">根据当前上下文整理园区巡检计划</span></span><span class="command-input">[request] · 可附文件</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="composer command-mode" id="composer">
+                <div class="mode-line"><span class="mode-pill">命令模式</span><span>Esc 关闭清单</span></div>
+                <textarea id="composer-input" rows="2" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="command-list" aria-activedescendant="" spellcheck="false">/</textarea>
+                <div class="argument-hint" id="argument-hint"><span>参数提示</span><code id="hint-code">[displayName]</code><span>提示仅用于展示，最终由服务端校验</span></div>
+                <div class="inline-error" id="inline-error"><span>没有与 “/deploy” 匹配的命令。草稿尚未发送。</span><button type="button">转为普通消息…</button></div>
+                <div class="composer-actions">
+                  <div class="tool-actions">
+                    <button class="tool-button active" type="button" aria-label="打开命令清单" title="命令"><span class="slash-icon">/</span></button>
+                    <button class="tool-button" id="attach-button" type="button" aria-label="添加附件" title="当前命令不接收附件" disabled>⌕</button>
+                  </div>
+                  <button class="submit-button" type="button"><span class="send-label">发送</span><span class="run-label">运行命令</span></button>
+                </div>
+              </div>
+              <div class="composer-footnote" id="composer-footnote">选择只会填入命令，再次按 Enter 或点击“运行命令”才会执行。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <p class="prototype-caption">评审重点：显式二次执行、命令结果不进入对话、失败保留草稿、无自动 POST 重放。</p>
+    </main>
+  </div>
+
+  <script>
+    const states = {
+      catalog: {
+        title: "命令清单",
+        description: "空消息中输入 /，读取当前 Chat 的服务端命令清单。",
+        value: "/",
+        commandMode: true,
+        palette: true,
+        result: false,
+        running: false,
+        hint: false,
+        error: false,
+        status: "在线 · 空闲",
+        footnote: "选择只会填入命令，再次按 Enter 或点击“运行命令”才会执行。"
+      },
+      argument: {
+        title: "参数编辑",
+        description: "选中命令只完成规范填入，用户明确运行后才提交。",
+        value: "/name 夜间巡检会话",
+        commandMode: true,
+        palette: false,
+        result: false,
+        running: false,
+        hint: true,
+        hintText: "[displayName]",
+        error: false,
+        status: "在线 · 空闲",
+        footnote: "Enter 运行 · Shift + Enter 换行 · 参数提示不承担最终校验"
+      },
+      running: {
+        title: "运行中清单",
+        description: "不在前端复制状态矩阵；直接展示服务端当前返回的命令和 input。",
+        value: "/",
+        commandMode: true,
+        palette: true,
+        result: false,
+        running: true,
+        hint: false,
+        error: false,
+        status: "执行中 · 可停止",
+        footnote: "普通消息保持草稿；只允许运行当前清单明确返回的命令。"
+      },
+      help: {
+        title: "Help 临时结果",
+        description: "命令结果位于 Timeline 与 Composer 之间，但不是 Assistant 消息。",
+        value: "",
+        commandMode: false,
+        palette: false,
+        result: true,
+        running: false,
+        hint: false,
+        error: false,
+        status: "在线 · 空闲",
+        footnote: "Help 内容按纯文本展示，不解析 Markdown、HTML 或远程图片。"
+      },
+      unmatched: {
+        title: "未匹配命令",
+        description: "保留原始命令草稿，不自动回退到普通消息或自动发送。",
+        value: "/deploy tomorrow",
+        commandMode: true,
+        palette: false,
+        result: false,
+        running: false,
+        hint: false,
+        error: true,
+        status: "在线 · 空闲",
+        footnote: "显式“转为普通消息”也只转移到消息草稿，仍需用户再次确认发送。"
+      }
+    };
+
+    const elements = {
+      title: document.querySelector("#state-title"),
+      description: document.querySelector("#state-description"),
+      input: document.querySelector("#composer-input"),
+      palette: document.querySelector("#command-palette"),
+      result: document.querySelector("#result-region"),
+      running: document.querySelector("#running-banner"),
+      hint: document.querySelector("#argument-hint"),
+      hintCode: document.querySelector("#hint-code"),
+      error: document.querySelector("#inline-error"),
+      composer: document.querySelector("#composer"),
+      slashButton: document.querySelector(".tool-button"),
+      agentStatus: document.querySelector("#agent-status"),
+      footnote: document.querySelector("#composer-footnote"),
+      list: document.querySelector("#command-list"),
+      paletteTitle: document.querySelector("#palette-title")
+    };
+
+    function setState(name) {
+      const state = states[name];
+      elements.title.textContent = state.title;
+      elements.description.textContent = state.description;
+      elements.input.value = state.value;
+      elements.input.placeholder = state.commandMode ? "输入命令" : "输入消息，或按 / 查看命令";
+      elements.composer.classList.toggle("command-mode", state.commandMode);
+      elements.slashButton.classList.toggle("active", state.commandMode);
+      elements.palette.hidden = !state.palette;
+      elements.input.setAttribute("aria-expanded", String(state.palette));
+      elements.input.setAttribute("aria-activedescendant", state.palette ? "cmd-help" : "");
+      elements.result.classList.toggle("visible", state.result);
+      elements.running.classList.toggle("visible", state.running);
+      elements.hint.classList.toggle("visible", state.hint);
+      elements.error.classList.toggle("visible", state.error);
+      elements.agentStatus.textContent = state.status;
+      elements.footnote.textContent = state.footnote;
+      if (state.hintText) elements.hintCode.textContent = state.hintText;
+      document.querySelectorAll(".state-tab").forEach((tab) => {
+        tab.setAttribute("aria-selected", String(tab.dataset.state === name));
+      });
+
+      const allOptions = [...document.querySelectorAll(".command-option")];
+      allOptions.forEach((option) => {
+        const hiddenForRunning = state.running && ["compact", "skill:inspection-plan"].includes(option.dataset.name);
+        option.hidden = hiddenForRunning;
+        const input = option.querySelector(".command-input");
+        if (state.running && ["model", "thinking"].includes(option.dataset.name)) input.textContent = "无需参数";
+        else if (option.dataset.name === "model") input.textContent = "[modelId]";
+        else if (option.dataset.name === "thinking") input.textContent = "[on|off]";
+      });
+      const count = allOptions.filter((option) => !option.hidden).length;
+      elements.paletteTitle.textContent = `命令清单 · ${count} 项`;
+    }
+
+    document.querySelectorAll(".state-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        setState(tab.dataset.state);
+        history.replaceState(null, "", `#${tab.dataset.state}`);
+      });
+    });
+
+    document.querySelectorAll(".command-option").forEach((option) => {
+      option.addEventListener("click", () => {
+        document.querySelectorAll(".command-option").forEach((item) => {
+          const active = item === option;
+          item.classList.toggle("active", active);
+          item.setAttribute("aria-selected", String(active));
+        });
+        elements.input.setAttribute("aria-activedescendant", option.id);
+        const name = option.dataset.name;
+        elements.input.value = `/${name}${["name", "model", "thinking", "skill:inspection-plan"].includes(name) ? " " : ""}`;
+      });
+    });
+
+    document.querySelector(".result-close").addEventListener("click", () => {
+      elements.result.classList.remove("visible");
+    });
+
+    const initialState = location.hash.slice(1);
+    setState(states[initialState] ? initialState : "catalog");
+    window.addEventListener("hashchange", () => {
+      const nextState = location.hash.slice(1);
+      setState(states[nextState] ? nextState : "catalog");
+    });
+  </script>
+</body>
+</html>

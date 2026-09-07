@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.3.0 |
-| 状态 | Proposed；产品前端无凭据边界已确认；内部调试 Header 的通用 Key/Value 方向、独立 `Headers` 面板、复用原诊断入口视觉及不展示自动生成 Header 已确认，交互细节进入评审；O1 品牌标识已确认，暖中性配色进入评审 |
+| 文档版本 | 1.4.0 |
+| 状态 | Proposed；产品前端无凭据边界已确认；Slash Composer/目录/临时结果为 target-only 专项设计，生产执行受 Mate 公共协议门禁；内部调试 Header 方向已确认；O1 品牌标识已确认，暖中性配色进入评审 |
 | 界面评审状态 | `credentialBoundary` 产品边界已确认；`debugHeaders` 通用表格、独立 `Headers` 命名、原诊断入口视觉与不展示自动生成 Header 已确认，交互细节待确认；`firstUse`、`idleConversation` 待确认；`runningConversation` 旧跟进交互已被退役决定取代、界面待确认 |
 | 主设计依据 | [`README.md`](README.md)，维护源码证据、目标差异、设计理由、状态与 Design Token |
 | 人类评审界面 | [`frontend-review.html`](frontend-review.html)，集中展示低保真、高保真和待确认项 |
@@ -48,6 +48,11 @@ Key/Value 表格，不预先确定凭据模式或 Header 名称；浏览器禁�
 一条紧凑 activity disclosure，并在安全投影后显示调用入参。展开详情始终按
 “输入参数 → 输出结果”纵向排列，不做左右分栏。运行中只允许停止并保留新消息草稿；
 停止完成后再提交新消息，不展示加入队列或运行中注入模式。内部诊断不进入产品首页。
+
+Composer 中的 Slash Command 使用独立命令模式和草稿；命令清单保持服务端顺序，选择后仍需明确运行，
+命令结果作为当前页面临时区域而不是对话消息。完整交互、组件和协议门禁由
+[Slash Command 前端专项](../../04-命令与技能/00-Slash-Command通用模块/前端设计/README.md)维护，
+本专题只保留整体工作区和视觉基线。
 
 Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和固定 Vue 组件投影为安全
 富文本；表格、列表、引用、链接、行内代码和代码块均有明确样式、溢出和复制行为。用户
@@ -234,7 +239,7 @@ CampusClaw 页面增加凭据表单或把秘密写入 `VITE_*` 来补齐。
 | 左侧导航 | 新建会话、最近会话、Agent 中心、设置 | 创建、切换、搜索会话 | `session_id`、接口地址 |
 | 顶部栏 | Agent 名称、自动保存、模型、深度思考、粗粒度状态 | 切换 idle Session 的模型/思考；运行时停止 | ETag、资源版本；产品构建不提供凭据入口 |
 | 对话画布 | User turn、Agent 活动流（思考 disclosure + 工具 activity + 安全入参）、Assistant 安全富文本、附件、错误恢复提示 | 阅读、选择文本、打开安全链接、复制正文/代码、展开思考或工具详情 | SSE frame、瞬时 Entry ID、原始未脱敏入参、可执行 HTML |
-| Composer | 附件、输入、发送；运行时当前跟进模式 | 发送新消息、调整方向、加入队列 | operation path、内部请求体 |
+| Composer | 附件、普通消息、Slash 命令入口；运行中保留消息草稿 | 发送新消息、打开命令清单、显式运行当前可用命令；运行中可停止 | operation path、内部请求体 |
 | 开发者诊断 | 请求摘要、原始事件、内部标识、临时 Header | 创建/恢复 Session，以通用 Key/Value 行配置下一次消息提交的 Header | 仅内部构建可见；值只在页面内存中，诊断摘要只显示 Key 和“已配置/未配置” |
 
 ### 6.1 开发者调试 Header
@@ -285,6 +290,13 @@ v8 保留 v7 的 Assistant 富文本和紧凑 activity disclosure，把 O1 从�
 运行态 v8 保留 v7 的停止操作、Composer 跟进方式和 O1 暖中性表面，并以透明底原图直接展示 O1；
 当前思考只展示安全标题与摘要，已完成工具折叠，当前工具展开并按“输入参数 → 输出结果”纵向展示。
 尚未开始的工具不提前出现在活动流中。
+
+### 6.5 Slash Command 专项
+
+Slash Command 不新增页面路由，而是在同一 Composer 中切换独立命令模式。命令清单、参数编辑、
+running 状态清单、Help 临时结果和未匹配错误的评审面见
+[Slash Command 交互评审稿](../../04-命令与技能/00-Slash-Command通用模块/前端设计/slash-command-review.html)。
+专项中的组件、Store 和 Mate Gateway 均为 target-only；现有内部调试台尚未实现这些对象。
 
 ## 7. 关键状态与交互
 
@@ -509,8 +521,8 @@ check/“已完成”标签区分，不能只依赖颜色。
 
 - 正文与交互文字至少满足 WCAG 2.2 AA；状态不能只靠颜色表达。
 - 所有图标按钮具有可读名称；主要命中区至少 44 × 44 CSS px。
-- `Enter` 按当前跟进方式发送，`Shift+Enter` 换行；运行中通过动作名称明确当前方式。
-- `Cmd/Ctrl+Shift+Enter` 对单条运行中消息临时反转“调整方向”与“加入队列”，不改变默认设置。
+- 普通消息 idle 时 `Enter` 发送、`Shift+Enter` 换行；running 时保留草稿且不提交新消息。
+- Slash 清单使用 listbox 键盘语义；选中只填入，第二次明确 Enter 才执行，IME composition 期间不触发选择或执行。
 - Tool Activity 使用可聚焦的 disclosure；展开状态通过 `aria-expanded` 表达，详情的 DOM 顺序始终是输入在前、输出在后。
 - Thinking 与 Tool 使用独立 disclosure；读屏只在分析开始、工具状态变化和分析完成时播报安全摘要，不逐 token 播报原始推理。
 - 入参 viewer 用语义化 description list/tree 表达键值和层级；被脱敏、被截断和无入参都有非颜色文字状态。
@@ -542,6 +554,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 | 浏览器安全的 Thinking 摘要与 ToolCallSpec | 内部 `assistant.thinking.completed` 可恢复但属于原始私有推理；Assistant completed 含原始 `tool_call.arguments`；公共投影未评审 | mate-service event projector 生成安全的 `thinkingDisplayTitle/thinkingDisplaySummary`，保留工具稳定关联身份，并对入参做服务端脱敏、资源映射和预算 |
 | 浏览器认证、权限和审计 | 当前前端只发送非秘密 `X-HW-ID`，没有 JWT/APPKEY 输入、存储或注入能力；Runtime 当前不做本地凭据认证 | mate-service / 网关建立身份并执行授权；具体浏览器会话机制待公共 API 评审 |
 | 后续消息队列 | 本期不支持；未来接续、恢复与授权另行评审 | FollowUp 未来专题，不进入当前 UI |
+| Slash Command 公共执行 | Mate 只确认 GET Descriptor 投影；执行路径、响应判别、Skill 结果和附件引用尚未确认 | mate-service 命令 API 先确认公共 operation；前端生产 Gateway 在此之前 fail closed |
 
 因此，高保真稿是已确认 Runtime 能力上的产品体验目标，不应表述为现有后端已经提供了
 全部页面数据。公共 bridge 契约完成前，只能使用 mock adapter 或内部开发环境验证界面。
@@ -574,8 +587,9 @@ check/“已完成”标签区分，不能只依赖颜色。
 2. **前端壳与 mock adapter**：实现路由、导航、对话、思考/工具活动流、入参 viewer、Composer、状态机与
    `RichTextRenderer`；产品 adapter 保持无 JWT/APPKEY/`access-token` 能力，只使用非秘密 fixture 和调用上下文。
 3. **公共 bridge 契约评审**：逐项确认 Agent、Chat、Attachment、Model Catalog 与 public SSE。
-4. **真实集成**：替换 mock adapter；实现历史去重、断线恢复、ETag 冲突和错误投影。
-5. **诊断隔离**：把现有调试台迁移到内部路由或独立开发构建，实现 `debugHeaders` 仅内存 store 和 event-only Header 快照，验证生产包不可达。
+4. **Slash 前端切片**：按专项先实现 Parser、独立草稿、Catalog、Mock Gateway、临时结果与无障碍；公共执行协议确认前不接真实 POST。
+5. **真实集成**：替换 mock adapter；实现历史去重、断线恢复、ETag 冲突和错误投影。
+6. **诊断隔离**：把现有调试台迁移到内部路由或独立开发构建，实现 `debugHeaders` 仅内存 store 和 event-only Header 快照，验证生产包不可达。
 
 ## 15. 测试与验收
 
@@ -628,6 +642,7 @@ check/“已完成”标签区分，不能只依赖颜色。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-09-07 | 增加 Slash Command 前端专项入口和整体边界：独立 Composer 模式、显式执行、临时结果与公共执行协议门禁；同步清除已退役的 running 队列快捷键表述。 |
 | 1.3.0 | 2026-09-07 | 同步三个控制接口退役与本期无队列；停止执行通过 user.interrupt 完成，实际停止后新提交。旧图片仅为视觉基线，其他 v1 映射待迁移。 |
 | 1.2.0 | 2026-08-28 | 按用户确认删除“隐藏的请求头”区域及覆盖状态展示；`Headers` 面板只呈现可编辑的通用 Key/Value 行。请求适配器自动生成 Header 的内部行为不变，手工同名值仍在请求合并阶段优先。 |
 | 1.1.0 | 2026-08-28 | 按用户选择将通用 Header 编辑器保持为独立 `Headers` 面板，不与 Agent/Session 的“开发者诊断入口”合并；视觉复用原诊断入口的折叠 summary、暖灰次级表面、虚线边界、紧凑字号、38 px 输入和次级按钮；表格交互和请求边界不变，仍不提供凭据模式、固定 Header 或主动作。 |

@@ -1,6 +1,6 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.5.2<br>
+> 导航版本：2.5.3<br>
 > 整理日期：2026-09-07<br>
 > Slash Command 设计基线：`0eaa70ff365bf4d4e328b3473809341ca4cfc58d`<br>
 > 通用对话 Events 三接口设计前基线：`743eca488ad559387706b5df54e2248a4124e5ef`<br>
@@ -15,11 +15,11 @@
 |---|---|---|
 | CampusClaw 整体如何运行 | [多 Agent Runtime 总体设计](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | [HTTP API 设计](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)、[HTTP API 评审页](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html) |
 | Tool 如何装配、发现和执行 | [CampusClaw 工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具精确契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md) |
-| 前端如何展示 Runtime 状态 | [CampusClaw 前端体验设计](./01-总体架构/04-CampusClaw前端体验/README.md) | [前端评审页](./01-总体架构/04-CampusClaw前端体验/frontend-review.html) |
+| 前端如何展示 Runtime 状态 | [CampusClaw 前端体验设计](./01-总体架构/04-CampusClaw前端体验/README.md) | [前端评审页](./01-总体架构/04-CampusClaw前端体验/frontend-review.html)、[Slash Command 前端专项](./04-命令与技能/00-Slash-Command通用模块/前端设计/README.md) |
 | 文件、配置和 Model Manager 边界 | [服务与接口导航](./02-服务与接口/README.md) | 附件服务、共享配置、Provider 契约和 HTTP 测试 Agent |
 | 全产品测试与质量门禁 | [CampusClaw TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | 能力注册表、实时门禁、nightly 维护和测试防弱化 |
 | Session、Agent 元数据如何持久化 | [数据与存储导航](./03-数据与存储/README.md) | 会话记忆、Agent 元数据和通用数据库模式 |
-| Command 和 Skill Command 如何设计 | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [内置命令](./04-命令与技能/01-内置命令/README.md)、[技能命令](./04-命令与技能/02-技能命令/README.md) |
+| Command 和 Skill Command 如何设计 | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [Slash 前端设计与交互评审稿](./04-命令与技能/00-Slash-Command通用模块/前端设计/README.md)、[内置命令](./04-命令与技能/01-内置命令/README.md)、[技能命令](./04-命令与技能/02-技能命令/README.md) |
 | 公共聊天命令清单与待评审边界 | [mate-service 聊天命令 API](./02-服务与接口/06-mate-service聊天命令API/README.md) | [公共 HTTP 评审页](./02-服务与接口/06-mate-service聊天命令API/chat-command-v1-review.html)、[内部 Runtime 契约](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md) |
 | `/help` 介绍什么、元数据从哪里来 | [已确认 Help 使用指南](./04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) | [专项评审页](./04-命令与技能/01-内置命令/Help-Agent使用指南/help-review.html)、[Slash 完整全局目标类图](./04-命令与技能/00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg) |
 | 浏览器如何提交、观察和恢复普通 Chat | [mate-service 通用对话 Events API](./02-服务与接口/07-mate-service通用对话API/README.md) | [三接口契约页](./02-服务与接口/07-mate-service通用对话API/chat-events-v1-review.html)、[OpenAPI 3.1](./02-服务与接口/07-mate-service通用对话API/chat-events-v1.openapi.yaml)、[operation models](./02-服务与接口/07-mate-service通用对话API/接口契约/操作/) |
@@ -100,6 +100,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.5.3 | 2026-09-07 | 新增 Slash Command 前端专项导航：独立 Composer 状态、目录、草稿、临时结果、错误恢复、可访问性、交互评审页与生产协议门禁。 |
 | 2.5.2 | 2026-09-07 | Runtime Command 响应对齐既有 Session/Models 资源；Help 保留三个业务字段，相关专题和派生页面同步，全局类图不变。 |
 | 2.5.1 | 2026-09-07 | 清除废止与重复文档，明确专题单一维护职责；Help 派生展示，Mate 仅保留有效 GET 投影和待评审边界。 |
 | 2.5.0 | 2026-09-07 | 整合遗漏的轻量 GET 字段设计，保留后续 Help/POST/Events；增加未合入分支的语义核查记录。 |
