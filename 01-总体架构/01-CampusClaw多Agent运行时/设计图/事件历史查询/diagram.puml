@@ -5,7 +5,7 @@ title Target Event History - Shared Complete Projection
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEntryCodec.java, toHistoryEvent/toSseData.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventCursorCodec.java, encode/decode.
 ' Observed behavior: current pages are sequence-based opaque cursors, not integers.
-' Design reason: one complete projection prevents SSE/history identity drift. Thinking target: user decision 2026-09-09 removes summary gating; Java 4cc8dd86 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeV2EventProjector.java projectThinking still filters publicSummary.
+' Design reason: one complete projection prevents SSE/history identity drift. Thinking target: display original model reasoning; Java 4cc8dd86 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeV2EventProjector.java projectThinking still filters publicSummary.
 ' All new classes and relations are target-only; existing boundaries are changed.
 hide empty members
 skinparam classAttributeIconSize 0

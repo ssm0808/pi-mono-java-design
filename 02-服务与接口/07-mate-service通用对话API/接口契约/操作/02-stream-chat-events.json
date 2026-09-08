@@ -9,7 +9,7 @@
     "method": "GET",
     "path": "/chats/{chatId}/events/stream",
     "summary": "实时接收 Chat 事件",
-    "description": "持续接收指定 Chat 从连接建立后产生的实时事件，连接可跨越多次执行和空闲状态。该流用于即时预览，不负责历史重放，也不会在 chat.status_idle 后关闭；业务帧只使用 data: 承载完整 JSON，保活使用 : ping 注释。断线后重新建立连接，并通过权威历史按 eventId 完成对账。 agent.thinking.content 直接承载模型返回的可读原始推理，不生成摘要、不以 publicSummary 过滤；执行 thinking 开关控制新思考事件，历史原文不因后续关闭而隐藏。",
+    "description": "持续接收指定 Chat 从连接建立后产生的实时事件，连接可跨越多次执行和空闲状态。该流用于即时预览，不负责历史重放，也不会在 chat.status_idle 后关闭；业务帧只使用 data: 承载完整 JSON，保活使用 : ping 注释。断线后重新建立连接，并通过权威历史按 eventId 完成对账。 agent.thinking.content 直接承载模型返回的可读原始推理；执行 thinking 开关控制新思考事件，历史原文不因后续关闭而隐藏。",
     "authModes": [
       {
         "id": "jwt",

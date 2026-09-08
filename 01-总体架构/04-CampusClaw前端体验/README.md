@@ -9,7 +9,7 @@
 | 人类评审界面 | [`frontend-review.html`](frontend-review.html)，集中展示低保真、高保真和待确认项 |
 | 品牌标识资产 | [`campusclaw-mark-o1.png`](campusclaw-mark-o1.png)，原始透明 PNG；界面直接引用，不通过生成模型重绘，也不缩进深色品牌方块 |
 | 图源 | [`diagram.puml`](diagram.puml)，含产品边界、全局目标组件类图、事件投影与状态流 |
-| 本次对齐基线 | 设计仓 `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；Mate Events 1.5.0、内部 Events B01～B15 及 2026-09-09 Thinking 原文决定；公共契约仅同步 Thinking 规则 |
+| 本次对齐基线 | 设计仓 `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；Mate Events 1.5.0、内部 Events B01～B15 与 Thinking 展示规则 |
 | 本次前端源码复核 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；范围及符号见 [本次证据与差距](public-chat-alignment.md#2-源码证据与差距)；以下早期基线不代表当前实现 |
 | 本专题修改基线 | 设计仓 `ee2c8e61800d95e609982e3ee354b1ee06f70fe4`；该提交中的原路径为 `campusclaw-frontend-design/`，当前路径为 `01-总体架构/04-CampusClaw前端体验/` |
 | 早期设计仓基线 | `3cc234f068209c90639f812bcb8e1825301fa565` |
@@ -30,10 +30,7 @@
 不能照搬 Claw 的 POST SSE、数字页码、sourceEventId/targetEventId 或工具文本块。
 旧运行态 PNG 不再作为当前交互稿；当前 HTML 已移除旧跟进控件。
 
-2026-09-09 局部更新：按用户明确决定展示原始推理，撤销摘要设计。
-源码补充基线为 `pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60`，
-范围、差距和原因见[原始文本决定](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
-其余历史源码与外部公开契约证据保持原核对日期，不表示本次全面复核。
+Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
 
 ## 1. 结论
 
@@ -66,8 +63,7 @@ Builtin 结果作为当前页面临时区域而不是对话消息；Skill 在内
 Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和固定 Vue 组件投影为安全
 富文本；表格、列表、引用、链接、行内代码和代码块均有明确样式、溢出和复制行为。用户
 原文、Thinking 原文、工具入参和工具原始结果不进入该 Markdown 渲染链。思考区域以纯文本
-展示模型返回的可读原始推理，保留文字和换行；经类型化事件与公共 bridge 投影，不生成摘要，
-不以 publicSummary 标记过滤。权威规则见[原始文本决定](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+展示模型返回的可读原始推理，保留文字和换行；经类型化事件与公共 bridge 投影。具体规则见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
 
 布局层级与工具密度继续采用 Codex-inspired 而非品牌复制；品牌层改用已确认的 O1 五片有机
 标识，界面直接引用同一张透明 PNG，不允许生成式重绘。配色由冷灰调整为暖白、暖灰与深暖黑，
@@ -129,7 +125,7 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 | 同一 `app.asar` 的 `webview/assets/app-initial-BCLYDefw.js`：`followUpQueueMode`、`K9s()`、`composer.submitButtonTooltip.*` 与 submit telemetry | Codex desktop 的跟进模式取值为 `steer` / `queue`，desktop 默认 `steer`；`Cmd/Ctrl+Shift+Enter` 对单条消息执行相反模式；已排队消息支持送入当前运行、编辑、删除、重试与恢复。历史 `interrupt` 配置会归一为 `steer`。 |
 | 同一 `app.asar` 的 `webview/assets/zh-CN-ByRVSIXt.js` | 产品文案使用“调整方向”“加入队列”“停止”；“调整方向”的说明是提交但不中断正在运行的模型，而不是立即中止当前模型或工具。 |
 | 本机 `ChatGPT.app` 26.820.60940 的 `tool-activity-disclosure-CZUjU0Tu.js` 与 `agent-activity-item-BL0IhzOn.js` | Codex activity body 使用纵向 `flex-col` 和缩进详情；执行中 item 默认展开，完成项折叠为动作摘要，输入和输出不采用左右分栏。 |
-| 同一安装包的 `reasoning-item-heading-Cdl3NWmT.js` 与 `local-conversation-turn-Ngva_Lp3.js` | 思考展示从 reasoning summary / 当前 activity 推导简短标题；完成后收敛为轻量 disclosure。该证据只支持折叠交互借鉴；CampusClaw 的内容按 2026-09-09 用户决定展示模型返回的原文，不沿用其摘要策略。 |
+| 同一安装包的 `reasoning-item-heading-Cdl3NWmT.js` 与 `local-conversation-turn-Ngva_Lp3.js` | 思考展示从 reasoning summary / 当前 activity 推导简短标题；完成后收敛为轻量 disclosure。该证据只支持折叠交互借鉴；CampusClaw 展示模型返回的原始推理。 |
 | [OpenAI 官方 ChatGPT desktop app 文档](https://learn.chatgpt.com/docs/app) | 官方文档确认桌面应用上下文，但未公开 activity disclosure 的精确视觉规则；本设计的交互细节以本机可观察实现证据和 CampusClaw 产品约束为依据。 |
 | [OpenAI 官方 Codex use cases](https://developers.openai.com/codex/use-cases) | 官方将 Codex 表述为理解代码、构建/测试、评审并交付任务的工作界面；官方未公开可复制的 Codex Design Token，因此具体色值以本机可观察资源和本设计决策为依据。 |
 
@@ -176,8 +172,8 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 | 将工具事件合并为紧凑 activity disclosure | 产品约束 | 保留执行透明度，同时避免 started/completed/result 三段协议噪音；执行中默认展开，完成后折叠。 |
 | 工具详情按“输入参数 → 输出结果”纵向排列 | 产品约束 | Codex 的详情区是缩进的纵向流；左右分栏会把两个不同阅读阶段误导为并列比较，并压缩长参数和长结果。 |
 | 思考 disclosure 与工具 activity 按事件顺序组成 Agent 活动流 | 产品约束 | 让用户在一个连续区域内理解当前做什么和调用了什么，又不把思考原文混入工具 payload。 |
-| 产品思考区展示模型返回的原始推理 | 产品约束 | 2026-09-09 用户明确撤销摘要设计；可读 Thinking 文本按原文展示，不另行生成摘要。 |
-| 公共 bridge 保留 `agent.thinking.content` 原文 | 架构变更 | 保留协议和身份投影，移除摘要过滤；前端标题使用状态文案，不新增公共标题或摘要字段。 |
+| 产品思考区展示模型返回的原始推理 | 产品约束 | 直接查看模型本次返回的思考内容。 |
+| 公共 bridge 保留 `agent.thinking.content` 原文 | 架构变更 | 保留协议和身份投影，内容按原文传递；前端标题使用状态文案。 |
 | 工具 activity 展示经安全投影的调用入参 | 产品约束 + 安全加固 | 入参能解释 Agent 的实际动作；浏览器只接收经 bridge 脱敏、截断和用户资源映射后的结构，不暴露密钥、内部 ID 或绝对路径。 |
 | 从独立 `agent.tool_call` 读取参数，按 `toolCallId` 合并确认和结果 | 架构变化 | 新公共事件已显式提供调用；产品不再依赖 Assistant 内嵌 ToolCallSpec 或旧工具进度事件。 |
 | Assistant 正文使用安全 Markdown 富文本 | 产品约束 | 模型天然会输出表格、代码、列表和强调；纯文本会把结构标记直接暴露给用户。 |
@@ -613,7 +609,7 @@ Chrome 实际操作确认点击后由三行变四行、删除后回到三行；�
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | 1.8.0 | 2026-09-09 | 同步用户确认的 Slash 标签式交互：+ 菜单入口、无前导 Slash 的精简清单、独立参数与统一上箭头，正式交互详见专项 1.4.0。 |
-| 1.7.0 | 2026-09-09 | 按用户明确决定展示模型返回的原始推理，撤销摘要设计；同步 Runtime、Mate、前端及历史语义。Thinking 局部源码基线 4cc8dd86，固定 pi 5cd93f6，代码仍待同步。 |
+| 1.7.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 1.6.0 | 2026-09-09 | 按用户反馈精简 Headers 面板：删除常驻说明；预置 access-token、X-HW-ID、Authorization 三个可编辑/可删除的空值行；仅“增加请求头”追加空行，取消自动尾行，删除/清空允许零行；未使用预置不报错、不计数或发送。复核实现 4cc8dd8，更新设计、交互原型及图源，Vue 实现待同步。 |
 | 1.5.0 | 2026-09-08 | 对齐 Mate 公共三接口与内部 B01～B15 差异；补齐主对话、工具确认、中断、恢复、配置共享与目标组件；移除现行原型的旧跟进控件，保持浅暖灰。 |
 | 1.4.0 | 2026-09-07 | 增加 Slash Command 前端专项入口和整体边界：独立 Composer 模式、显式执行、临时结果与公共执行协议门禁；同步清除已退役的 running 队列快捷键表述。 |
@@ -624,7 +620,7 @@ Chrome 实际操作确认点击后由三行变四行、删除后回到三行；�
 | 0.9.0 | 2026-08-27 | 在产品路由仍保持无凭据的前提下，新增 target-only `debugHeaders` 内部诊断设计：固定支持 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`、`access-token`，只在页面内存中存活，仅快照到初始 `POST /events`；对齐已评审实现 `pi-mono-java@d03c08db`，其 Agent/Skill/Tool 发现不透传、只有 Tool execute 使用四项快照；补充隔离、脱敏、CORS、断线不重放和验收规则。 |
 | 0.8.0 | 2026-08-27 | 基于 `pi-mono-java@320d7907` 修正凭据边界：当前前端只发送非秘密 `X-HW-ID`，不支持 JWT/APPKEY 输入、配置、存储或 Header 注入；删除“凭据可在开发者诊断中查看”的错误设计，明确生产身份与授权由 mate-service / 网关承担且具体浏览器会话机制待评审；同步 ADR、评审页、低保真与 PlantUML/SVG。 |
 | 0.7.1 | 2026-08-26 | 修正 O1 在界面中被深色方块和过小身份容器弱化的问题；品牌位改为透明底原图直接显示并等比放大，同步常规态/运行态 v8、低保真与评审面。 |
-| 0.7.0 | 2026-08-26 | 对照本机 Codex activity disclosure 实现，将思考改为安全标题/摘要而非原始推理（该条款已由 1.7.0 撤销）；工具改为紧凑活动行，执行中展开、完成后折叠，输入与输出始终纵向排列，未开始工具不显示；同步常规态/运行态 v7、低保真、评审面和 PlantUML/SVG。 |
+| 0.7.0 | 2026-08-26 | 对照本机 Codex activity disclosure 实现，将思考改为安全标题/摘要而非原始推理；工具改为紧凑活动行，执行中展开、完成后折叠，输入与输出始终纵向排列，未开始工具不显示；同步常规态/运行态 v7、低保真、评审面和 PlantUML/SVG。 |
 | 0.6.0 | 2026-08-26 | 确认 O1 为 CampusClaw 品牌标识，新增原始透明 PNG 权威资产；禁止生成式重绘，低保真/评审 HTML 直接引用同一文件，高保真 v6 采用确定性缩放与合成；将冷灰表面调整为暖白、暖灰和深暖黑，保留绿色运行/完成语义。 |
 | 0.5.0 | 2026-08-26 | 基于 `pi-mono-java@bde12370` 的 Thinking 持久化投影、Assistant `tool_call.arguments` 与工具生命周期实现，将思考与工具按时序组成 Agent 活动流；增加工具入参关联、服务端脱敏、资源映射、结构化 viewer、降级与测试规则；同步常规态/运行态 v5、低保真、评审面和 PlantUML/SVG。 |
 | 0.4.0 | 2026-08-26 | 基于 `pi-mono-java@56be8eee` 的当前 Vue 文本插值、事件投影和 Runtime 文本保真行为，新增 Assistant-only 安全 Markdown 设计：支持语法、信任边界、AST-to-Vue 渲染、链接/图片/HTML 策略、流式稳定尾块、复制/响应式/可访问性与安全测试；新增富文本 PlantUML/SVG、常规态 v4、低保真和评审面。 |

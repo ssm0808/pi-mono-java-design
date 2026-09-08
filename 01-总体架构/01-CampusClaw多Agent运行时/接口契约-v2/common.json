@@ -187,7 +187,7 @@
           "agent.message / agent.thinking",
           "phase/content",
           "必填字符串",
-          "phase=delta/completed；delta content 是非空新增文本，不带 createdAt/usage。completed 完整覆盖；真实 Assistant 无正文可 content=\"\"，不凭空合成回答。thinking content 为模型返回的可读原始推理，不生成摘要，不以 publicSummary 过滤；仅 thinking=true 的执行产生新思考事件。"
+          "phase=delta/completed；delta content 是非空新增文本，不带 createdAt/usage。completed 完整覆盖；真实 Assistant 无正文可 content=\"\"，不凭空合成回答。thinking content 为模型返回的可读原始推理；仅 thinking=true 的执行产生新思考事件。"
         ],
         [
           "agent.message completed",

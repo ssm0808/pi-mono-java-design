@@ -482,7 +482,7 @@ paths:
                   content:
                     type: string
                     minLength: 1
-                    description: 模型返回的原始推理新增片段；允许只含空格或换行，不生成摘要
+                    description: 模型返回的原始推理新增片段；允许只含空格或换行
               - $ref: '#/components/schemas/AgentThinkingCompletedEvent'
               - $ref: '#/components/schemas/AgentToolCallEvent'
               - $ref: '#/components/schemas/AgentToolResultEvent'
@@ -1147,7 +1147,7 @@ components:
           $ref: '#/components/schemas/CreatedAt'
         content:
           type: string
-          description: 模型返回的完整权威推理原文；不生成摘要，不以 publicSummary 过滤
+          description: 模型返回的完整权威推理原文
     AgentToolCallEvent:
       type: object
       description: >

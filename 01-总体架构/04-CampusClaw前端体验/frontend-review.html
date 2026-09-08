@@ -678,7 +678,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         <details class="review-question" open><summary>4. 已确认：产品前端不持有 JWT/APPKEY</summary><p>生产身份与授权仍由统一登录、mate-service 或网关承担；产品 Chat 不出现凭据表单、秘密构建配置或浏览器持久化。</p></details>
         <details class="review-question" open><summary>5. 已确认：<code>Headers</code> 行编辑</summary><p>默认预置 access-token、X-HW-ID、Authorization，Value 留空，三行均可编辑、启停和删除。点击“增加请求头”追加一行空 Key/Value；填写、删除和清空均不自动补行。面板内去掉常驻文字说明，请求范围与内存生命周期由设计文档维护。</p></details>
         <details class="review-question" open><summary>6. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
-        <details class="review-question" open><summary>7. 已确认：原始推理与活动 disclosure</summary><p>Thinking 展示模型返回的原始推理，不生成摘要；标题使用前端状态文案；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。内部 ID、绝对路径和凭据不作为产品公共字段。</p></details>
+        <details class="review-question" open><summary>7. 已确认：原始推理与活动 disclosure</summary><p>Thinking 展示模型返回的原始推理；标题使用前端状态文案；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。内部 ID、绝对路径和凭据不作为产品公共字段。</p></details>
         <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="public-chat-alignment.md">查看公共对话对齐</a></div>
       </section>
     </div>

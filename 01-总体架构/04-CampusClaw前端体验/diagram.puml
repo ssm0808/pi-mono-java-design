@@ -1,5 +1,5 @@
 @startuml frontend_product_boundary
-' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target user decision 2026-09-09 displays original text.
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target displays original model reasoning.
 ' Source evidence: frontend/src/App.vue submit; frontend/src/composables/useRuntimeApi.ts sendMessage, dispatchSseFrame.
 ' Observed behavior: the internal workbench still consumes legacy Runtime request-scoped SSE and separate controls.
 ' Contract baseline: design 2ee2a3211da68ad87b0d9cab353e691b00bdaebd.
@@ -210,7 +210,7 @@ end note
 @enduml
 
 @startuml runtime_event_ui_projection
-' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target user decision 2026-09-09 displays original text.
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target displays original model reasoning.
 ' Source evidence: frontend/src/projectors/runtimeEventProjector.ts projectRuntimeEvents, registerToolSpecs.
 ' Source evidence: frontend/src/components/ToolActivity.vue template; frontend/src/types/product.ts ActivityTurn.
 ' Observed behavior: legacy assistant/tool events, no confirmation UI, rich-text tool output.
@@ -252,7 +252,7 @@ end note
 @enduml
 
 @startuml target_frontend_components
-' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target user decision 2026-09-09 displays original text.
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target displays original model reasoning.
 ' Source evidence: frontend/src/App.vue submit; frontend/src/composables/useRuntimeApi.ts loadHistory, requestRaw.
 ' Source evidence: frontend/src/projectors/runtimeEventProjector.ts projectRuntimeEvents; frontend/src/types/product.ts.
 ' Observed behavior: current app directly owns Runtime state and legacy controls; no public Chat Gateway.

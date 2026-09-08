@@ -9,7 +9,7 @@
     "method": "GET",
     "path": "/chats/{chatId}/events",
     "summary": "查询 Chat 事件历史",
-    "description": "读取可用于界面恢复和审计的完整事件历史。结果按 createdAt 升序排列；首次查询会固定本次快照的上界，后续通过 page 继续读取，因此翻页期间产生的新事件不会混入当前快照。历史包含三类用户事件、已完成的消息与思考原文、工具调用与结果，以及 chat.status_idle；不包含实时 delta、SSE ping 或内部事件。 agent.thinking.content 直接承载模型返回的可读原始推理，不生成摘要、不以 publicSummary 过滤；执行 thinking 开关控制新思考事件，历史原文不因后续关闭而隐藏。",
+    "description": "读取可用于界面恢复和审计的完整事件历史。结果按 createdAt 升序排列；首次查询会固定本次快照的上界，后续通过 page 继续读取，因此翻页期间产生的新事件不会混入当前快照。历史包含三类用户事件、已完成的消息与思考原文、工具调用与结果，以及 chat.status_idle；不包含实时 delta、SSE ping 或内部事件。 agent.thinking.content 直接承载模型返回的可读原始推理；执行 thinking 开关控制新思考事件，历史原文不因后续关闭而隐藏。",
     "authModes": [
       {
         "id": "jwt",

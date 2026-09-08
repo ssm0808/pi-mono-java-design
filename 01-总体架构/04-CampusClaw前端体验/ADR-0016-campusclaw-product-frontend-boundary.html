@@ -61,7 +61,7 @@
       <li>停止使用 <code>user.interrupt</code>。请求回执不等于实际停止；确认目标归属与真实终态后才恢复发送。公共精确目标映射尚未确认时仅提供 mock，不擅自添加内部字段。</li>
       <li>公共 tool_call、确认决定和 tool_result 合并为一个紧凑 activity disclosure。待确认项显示参数及允许/拒绝；需要确认不代表正在执行，缺少结果不代表成功。</li>
       <li>工具展开详情始终按“输入参数 → 输出结果”纵向排列，不采用左右分栏；完整工具结果更新同一个工具行，不与文本 delta 混合。</li>
-      <li>Thinking 与 Tool 按事件顺序组成 Agent 活动流；Thinking 运行时可展开、完成后折叠为“分析过程”。2026-09-09 用户已确认展示模型实际返回的可读原始推理；公共 content 原样以纯文本显示，不再生成摘要或检查 publicSummary。</li>
+      <li>Thinking 与 Tool 按事件顺序组成 Agent 活动流；Thinking 运行时可展开、完成后折叠为“分析过程”。展示模型返回的原始推理，公共 content 原样以纯文本显示。</li>
       <li>前端从独立 <code>agent.tool_call</code> 提取名称和安全入参，按 <code>toolCallId</code> 关联确认与结果；事件自身按 <code>eventId</code> 去重。不再从旧 Assistant 内嵌块推导公共调用。</li>
       <li>产品工具卡只显示 mate-service bridge 经字段策略、脱敏、资源映射和预算后的入参；禁止暴露凭据、内部 ID、绝对路径和原始未脱敏 payload。入参 viewer 不激活 Markdown、HTML 或 URL。</li>
       <li>公共 Assistant <code>agent.message.content</code> 原样作为 Markdown 源，通过关闭 raw HTML 的 parser、节点与 URL allowlist 以及固定 Vue 组件渲染；禁止 <code>v-html</code>、<code>innerHTML</code>、远程 Markdown 图片、相对应用路由和危险协议链接。</li>

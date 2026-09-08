@@ -17,8 +17,7 @@
 | 外部参考核对 | Claude Managed Agents 官方事件流与 List Events，2026-09-04，Beta |
 | 更新日期 | 2026-09-09 |
 
-2026-09-09 Thinking 展示以[原始文本决定](chat-events-v2-history-design.md#thinking-original-text)为准；
-该局部决定和源码证据替代旧摘要条款，不整体升级其他专题基线。
+Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-v2-history-design.md#thinking-original-text)。
 
 ## 1. 当前操作与已确认范围
 
@@ -136,7 +135,7 @@ M1 完成后 M2 才能开始。跨这个完成边界的迟到中断、已接受�
 |---|---|---|
 | user.* 首帧 | 不带 phase，仅本次完整回执 | eventId/type/createdAt 及对应已确认业务字段；完整内容已确认 |
 | agent.message | phase=delta/completed | completed 的 content 为完整正文字符串已确认（L5）；delta content 为增量字符串且无时间，完整 createdAt 保存一次为 UTC 毫秒；同 ID 完整内容替换 preview |
-| agent.thinking | phase=delta/completed | 执行 thinking=true 且有可读推理时输出原文；不生成摘要、不检查 publicSummary，completed 原文入历史；见[原始文本决定](chat-events-v2-history-design.md#thinking-original-text) |
+| agent.thinking | phase=delta/completed | 执行 thinking=true 且有可读推理时输出原文；completed 原文入历史；见[Thinking 展示](chat-events-v2-history-design.md#thinking-original-text) |
 | agent.tool_call | 无 phase 的完整事件 | arguments JSON 对象已确认（L6）；Mate 的 toolName=CallMateTool、arguments={tool,args} 已确认（L9）；requiresConfirmation 必填布尔，sourceEventId 指原消息 |
 | agent.tool_result | 无 phase 的完整事件 | content 数组且仅包含 text 块已确认（L7/L8）；每条结果必有布尔 isError、成功 false/失败 true 已确认（L10）；失败必有稳定 errorCode，成功省略；至少一个 text 块，允许空文本 |
 | session.status_idle | 无 phase 的完整事件 | eventId/type/createdAt/reason；reason=done/terminated/failed/confirming 已确认；failed 必有 errorCode/message |
@@ -216,13 +215,13 @@ B01～B15 已一次确认，不再列单字段选项。精确契约已定稿；�
 本节不重复维护调度与数据库检查清单。
 本轮仅改设计，未运行尚未实现的 v2 Runtime 集成测试。
 
-剩余问题按用户要求统一纳入[历史专题 §8 的批量评审](chat-events-v2-history-design.md#8-批量确认结果)。B01～B15 已确认，报文示例已经统一同步。
+事件与配置规则见[历史专题 §8](chat-events-v2-history-design.md#8-事件与配置规则)，报文示例与共享契约一致。
 
 ## 8. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.6.0 | 2026-09-09 | 按用户明确决定展示模型返回的原始推理，撤销摘要设计；同步 Runtime、Mate、前端及历史语义。Thinking 局部源码基线 4cc8dd86，固定 pi 5cd93f6，代码仍待同步。 |
+| 0.6.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 0.5.0 | 2026-09-08 | 确认 B01～B15，补齐根消息绑定、结束原因、控制竞争、跨实例确认与错误处理；例子和字段改为引用共享精确模型，Skill 复用此生命周期。 |
 | 0.4.6 | 2026-09-08 | 同步 L10：每条工具结果必有布尔 isError；errorCode、文案与其他细节合并到 B01～B15 批量评审，接口未整体确认，PlantUML 不变。 |
 | 0.4.5 | 2026-09-08 | 同步 L9 Mate 工具名与参数包装，结果仍为文本块数组；成败标记、错误及整体仍待评审，PlantUML 不变。 |

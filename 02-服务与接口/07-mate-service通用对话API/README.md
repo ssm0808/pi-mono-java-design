@@ -24,10 +24,7 @@
 | OpenAI API 公开文档核对日期 | 2026-09-02 |
 | 更新日期 | 2026-09-09 |
 
-2026-09-09 局部更新：按用户明确决定展示原始推理，撤销摘要设计。
-源码补充基线为 `pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60`，
-范围、差距和原因见[原始文本决定](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
-其余历史源码与外部公开契约证据保持原核对日期，不表示本次全面复核。
+Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
 
 ## 1. 已确认接口
 
@@ -397,7 +394,7 @@ data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phas
 | `type` | 是否有 delta | 是否进入历史 | 作用 |
 |---|---:|---:|---|
 | `agent.message` | 是 | 仅 `completed` | Assistant 对用户可见的文本 |
-| `agent.thinking` | 是 | 仅 `completed` | 模型实际返回的可读原始推理；不再生成摘要 |
+| `agent.thinking` | 是 | 仅 `completed` | 模型返回的原始推理 |
 | `agent.tool_call` | 否 | 是 | 一次已公开的 Tool 调用及安全参数 |
 | `agent.tool_result` | 否 | 是 | Tool 的公开结果或稳定公开错误 |
 | `chat.status_idle` | 否 | 是 | 当前 execution 已停止或暂停等待确认 |
@@ -440,8 +437,7 @@ data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phas
 
 客户端按顺序追加 delta；收到 completed 后，以 completed 的完整 `content` 替换 preview。
 若 execution 被中断且没有 completed，则丢弃未完成 preview。`agent.thinking.content` 展示模型实际返回的可读原始推理，
-不生成摘要、不使用 publicSummary 门槛。2026-09-09 用户决定同步适用于 Mate 公共边界，
-完整规则与补充源码证据见[原始文本决定](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+完整规则与源码证据见[Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
 思考开关控制后续执行，已保存原文不因后续关闭而隐藏；不透明签名不作为正文。
 
 ### 5.4 `agent.tool_call`
@@ -779,7 +775,7 @@ Claude Managed Agents 在核对日仍是 Beta 公共 API。公开文档不能证
 |---|---|
 | 产品约束 | Mate 对外叫 Chat，Claw 内部叫 Session；公共层只保留三种 user event、五种 SSE event 和四个 idle reason，减少客户端状态机 |
 | 产品约束 | `interrupt + message` 不批量提交；终止完成后再提交消息，保证单 active execution |
-| 产品约束 | 2026-09-09 用户明确展示模型返回的原始推理；撤销 Thinking 摘要设计，恢复原文展示能力，流和历史复用完整原文 |
+| 产品约束 | 展示模型返回的原始推理；实时流和历史复用完整原文，便于查看同一次思考内容 |
 | 安全加固 | Tool 参数、结果和错误必须经过安全投影；内部 ID、路径、凭据及不透明模型续传签名不作为公共字段 |
 | 架构变化 | POST、live SSE、durable history 分离；live 流不重放，历史固定快照；用 `eventId` 对账，不公开内部 sequence |
 | 架构变化 | POST 成功时在 `result.event` 返回完整、已持久化的 `user.*` 事件，并与历史接口复用同一 Schema；这使创建响应可直接作为权威记录合并，同时不把 Agent execution 结果混入写入响应 |
@@ -835,7 +831,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.5.0 | 2026-09-09 | 按用户明确决定展示模型返回的原始推理，撤销摘要设计；同步 Runtime、Mate、前端及历史语义。Thinking 局部源码基线 4cc8dd86，固定 pi 5cd93f6，代码仍待同步。 |
+| 1.5.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 1.4.4 | 2026-09-02 | 为实时流增加“用户同意后执行端口隔离”的完整工具交互示例，覆盖 `tool_call`、`confirming`、POST 确认边界、`tool_result`、Agent 回复与最终 `done`；事件类型和字段不变。 |
 | 1.4.3 | 2026-09-02 | 补充“允许工具调用”的提交成功响应示例，与既有拒绝示例并列展示；明确 `allow` 响应省略 `denyMessage`，字段、Schema 和行为不变。 |
 | 1.4.2 | 2026-09-02 | 整体润色三个 Events 接口的说明与示例，统一为真实、连贯的园区巡检场景，并为实时流和历史页增加命名示例；字段、Schema 和行为不变。 |

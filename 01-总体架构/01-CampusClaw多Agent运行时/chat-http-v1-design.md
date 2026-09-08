@@ -40,8 +40,7 @@
 [FollowUp 未来设计](chat-follow-up-future-design.md) 只记录扩展方向，本期不支持排队。
 本次源码基线 dfb90cac4e233e09a0b8f047f7e9f4682f5ad238，路径及差异见该专题；不改实现。
 
-2026-09-09 Thinking 展示以[原始文本决定](chat-events-v2-history-design.md#thinking-original-text)为准；
-该局部决定和源码证据替代旧摘要条款，不整体升级其他专题基线。
+Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-v2-history-design.md#thinking-original-text)。
 
 ## 1. 结论
 
@@ -217,7 +216,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
 boolean：`false` 映射为 `off`；`true` 使用当前模型和 Agent 配置的受管非 `off`
-推理强度，不把具体等级开放给调用方。POST Events 按接受用户事件时的快照决定是否投影模型返回的 thinking 原文；GET Events 返回已保存的完整原文，不因后续关闭开关而隐藏。展示规则见[原始文本决定](chat-events-v2-history-design.md#thinking-original-text)。每页继续检查当前访问边界。
+推理强度，不把具体等级开放给调用方。POST Events 按接受用户事件时的快照决定是否投影模型返回的 thinking 原文；GET Events 返回已保存的完整原文，不因后续关闭开关而隐藏。展示规则见[Thinking 展示](chat-events-v2-history-design.md#thinking-original-text)。每页继续检查当前访问边界。
 
 GetSession 使用 `displayName` 返回名称，但不返回 `name` 别名、`historySeq`、完整 `transcript`、
 `queuedSteer`、`phase`、`attached` 或 `locked`。用户可见会话名称属于
@@ -826,7 +825,7 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.50.0 | 2026-09-09 | 按用户明确决定展示模型返回的原始推理，撤销摘要设计；同步 Runtime、Mate、前端及历史语义。Thinking 局部源码基线 4cc8dd86，固定 pi 5cd93f6，代码仍待同步。 |
+| 1.50.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 1.49.0 | 2026-09-08 | 同步 B01～B15：完整事件、固定公开摘要、配置/压缩/Usage 映射与 Skill SSE；产品语义已定稿，实施数值按校准。 |
 | 1.48.0 | 2026-09-07 | POST Command 成功响应对齐既有 Session/Models 资源与 ETag，移除 command/changed/sourceEventSeq；保留 Help 三业务字段与 Compact/Skills 最小结果，新增跨接口反例校验；GET、请求、错误与 Events v2 不变。 |
 | 1.47.1 | 2026-09-07 | 删除 Command 业务重复副本，改引所属专题；Help 从 Runtime 直接派生；清理废止的历史目标规则，现行报文不变。 |

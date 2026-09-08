@@ -1,6 +1,6 @@
 # CampusClaw 高保真视觉稿 ImageGen Prompts
 
-> 历史素材生成记录：以下提示词保留当时输入，不作为当前产品语义。2026-09-09 用户已撤销 Thinking 摘要设计，当前展示模型返回的原始推理，依据 [Thinking 原始文本决定](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)；旧提示词中的摘要要求不得用于后续实现或新素材。
+> 以下为历史素材的生成输入。当前产品内容以 [Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)和前端正文为准。
 
 
 | 属性 | 值 |

@@ -10,10 +10,7 @@
 | 性质 | target-only 产品前端；Thinking 原文规则同步 Mate 公共契约；Vue 与 Runtime 实现仍待同步，公司认证规则保持 |
 | 契约依据 | [Mate Events 1.5.0](../../02-服务与接口/07-mate-service通用对话API/README.md)、[Claw POST 0.6.0](../01-CampusClaw多Agent运行时/chat-events-v2-stream-design.md)、[Claw 历史 0.4.0](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md) |
 
-2026-09-09 局部更新：按用户明确决定展示原始推理，撤销摘要设计。
-源码补充基线为 `pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60`，
-范围、差距和原因见[原始文本决定](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
-其余历史源码与外部公开契约证据保持原核对日期，不表示本次全面复核。
+Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
 
 ## 1. 结论与两跳边界
 
@@ -131,7 +128,7 @@ Enter 发送、Shift+Enter 换行；compositionstart 至 compositionend 期间 E
 |---|---|
 | POST result.event / history user.message | 同 eventId 一条用户消息；按 content 顺序展示文本和附件引用 |
 | agent.message + delta/completed | 第一帧创建；同 ID completed 覆盖预览，之后迟到 delta 忽略；空完整正文不画空气泡 |
-| agent.thinking + delta/completed | 展示模型返回的可读原文，标注“原始推理”；delta 追加、completed 原文覆盖，历史同形；不生成摘要、不检查 publicSummary。前端标题为“正在分析/分析过程”，不构造额外公共标题字段，不虚构耗时 |
+| agent.thinking + delta/completed | 展示模型返回的可读原文，标注“原始推理”；delta 追加、completed 原文覆盖，历史同形。前端标题为“正在分析/分析过程”，不构造额外公共标题字段，不虚构耗时 |
 | agent.tool_call | 按 toolCallId 建立一个工具行；requiresConfirmation=true 时等待确认，不能一收到调用就标记正在执行 |
 | user.tool_confirmation | POST/历史合并为该工具的只读决定记录；不是 Assistant 发言 |
 | agent.tool_result | 使用 isError 判成败，公共字符串作为纯文本；没有结果不伪造成功；工具失败后 Agent 仍可能继续处理 |
@@ -197,5 +194,5 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.1.0 | 2026-09-09 | 按用户明确决定展示原始推理，撤销摘要设计；同步两层契约引用、前端行为与局部 4cc8dd86 源码差距。 |
+| 1.1.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 1.0.0 | 2026-09-08 | 补齐主对话、工具确认、中断、恢复及配置共享；记录公共/内部差异与接入门禁；保持原视觉语言。 |
