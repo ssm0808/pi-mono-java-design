@@ -126,25 +126,60 @@
     .running-tool-args .arg-line { width: 72%; }
     .running-tool-args .tool-output { width: 72%; }
     .control-composer { margin: 0 42px 22px; border: 2px solid var(--dark); border-radius: 10px; padding: 10px; }
-    .follow-up-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); font-size: 10px; }
-    .follow-up-mode { padding: 6px 9px; border: 1px solid var(--dark); border-radius: 7px; background: var(--soft); color: var(--ink); font-weight: 700; }
-    .follow-up-shortcut { font-family: ui-monospace, monospace; }
     .control-input { display: flex; align-items: center; color: var(--muted); font-size: 12px; }
     .control-input button { margin-left: auto; border: 1px solid var(--dark); border-radius: 7px; background: var(--dark); color: #fff; padding: 7px 10px; }
     .screen-note { position: absolute; right: 12px; bottom: 10px; color: var(--muted); font: 10px ui-monospace, monospace; }
 
     @media (max-height: 900px) {
-      body { width: 1724px; zoom: .58; }
+      .board { min-height: 0; }
+    }
+
+    .board { width: min(1600px, 100%); padding: 24px; }
+    .grid { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); grid-template-rows: minmax(520px, auto) minmax(520px, auto) auto; }
+    .main-screen { grid-template-columns: 200px minmax(0, 1fr); }
+    .conversation { padding: 28px; overflow: auto; }
+    .composer-wrap { padding: 0 28px 28px; }
+    .board-header, .topbar { flex-wrap: wrap; }
+    button { min-height: 44px; }
+    .icon-button { width: 44px; height: 44px; }
+    .draft-note { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .support-screen { padding: 52px 24px 28px; min-height: 280px; }
+    .support-screen h2 { font-size: 18px; }
+    .support-screen p { line-height: 1.7; }
+    .support-screen button { padding: 8px 12px; margin: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--shell); color: var(--ink); }
+    .support-screen dl { border-left: 1px solid var(--line); padding: 12px; }
+    .support-screen dd { margin: 6px 0 14px; overflow-wrap: anywhere; }
+    .screen-note { position: static; margin: 0 12px 10px; line-height: 1.6; }
+    .annotation { display: none; }
+    @media (max-width: 1200px) {
+      .grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+      .main-screen { grid-row: auto; min-height: 800px; }
+      .running-screen { min-height: 500px; }
+    }
+    @media (max-width: 680px) {
+      .board { padding: 12px; }
+      .board-header { align-items: start; gap: 12px; }
+      .legend { display: none; }
+      .main-screen, .small-screen { grid-template-columns: minmax(0, 1fr); }
+      .rail, .mini-rail { display: none; }
+      .topbar { padding: 50px 16px 12px; min-height: 125px; }
+      .workspace { grid-template-rows: auto 1fr auto; }
+      .conversation, .running-body { padding: 18px; }
+      .composer-wrap { padding: 0 18px 18px; }
+      .control-composer { margin: 0 18px 18px; }
+      .running-top { padding: 48px 16px 12px; height: auto; flex-wrap: wrap; }
+      .arg-line, .tool-output, .running-tool-args .arg-line, .running-tool-args .tool-output { width: 100%; overflow-wrap: anywhere; }
+      .welcome { padding: 38px 18px; }
     }
   </style>
 </head>
 <body>
-<aside role="note"><p>2026-09-07 控制设计已更新：本期不支持队列或运行中 Steer。停止通过 user.interrupt，实际停止后才可提交新消息。下方旧图片及跟进控件仅为历史视觉基线，不可作为当前调用契约。<a href="README.md#73-running-对话">当前控制规则</a></p></aside>
+<aside role="note"><p>1.5.0 · 2026-09-08 · 当前低保真布局；仅展示目标交互，不调用后端。<a href="frontend-review.html#conversation-workbench">打开可操作评审</a></p></aside>
   <div class="board">
     <div class="board-header">
       <div>
-        <h1>CampusClaw 真实前端 · 低保真结构</h1>
-        <div class="subtitle">桌面优先 / 三个关键状态 / 产品无凭据 / 内部诊断可配置临时 Header</div>
+        <h1>CampusClaw 产品前端 · 低保真结构</h1>
+        <div class="subtitle">浅暖灰 / 常规、运行、确认与恢复 / target-only</div>
       </div>
       <div class="legend"><span>用户操作</span><span class="system">系统状态</span></div>
     </div>
@@ -261,17 +296,33 @@
                   <div class="arg-label">输入参数</div>
                   <div class="arg-line">fields　price, quantity<br>threshold　10%</div>
                   <div class="arg-label" style="margin-top:6px">输出结果</div>
-                  <div class="tool-output">正在检查，已处理 2,910 / 3,482 行…</div>
+                  <div class="tool-output">等待工具结果；无可靠进度时不显示百分比。</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
         <div class="control-composer">
-          <div class="follow-up-row"><span class="follow-up-mode">调整方向⌄</span><span class="follow-up-shortcut">⌘⇧↵ 本条加入队列</span></div>
-          <div class="control-input">补充新的要求…<button>调整方向 ↑</button></div>
+          <p class="draft-note">当前任务结束前只保留草稿</p>
+          <div class="control-input">补充新的要求…<button disabled>发送</button></div>
         </div>
-        <div class="screen-note">默认：调整方向 → Steer · 单次反转：加入队列 → FollowUp · 停止 → Abort</div>
+        <div class="screen-note">停止回执不等于已停止；无队列，不自动续发</div>
+      </section>
+      <section class="screen support-screen" id="tool-confirmation">
+        <div class="tag">04 · 等待工具确认</div>
+        <h2>隔离受影响端口</h2>
+        <p>确认后才会修改设备配置。当前任务仍在执行，不能发送第二条消息。</p>
+        <dl><dt>输入参数</dt><dd>设备 SW-DC-01 · 端口 GigabitEthernet0/0/24</dd><dt>输出结果</dt><dd>尚未执行，等待确认。</dd></dl>
+        <button>允许执行</button><button>拒绝（可填写原因）</button>
+        <p class="draft-note">确认回执只表示决定已接受；等待工具结果后再判成败。</p>
+      </section>
+      <section class="screen support-screen" id="history-recovery">
+        <div class="tag">05 · 断线与历史恢复</div>
+        <h2>连接中断，执行可能仍在继续</h2>
+        <p>已保留当前草稿和已确认内容。重新连接并读取历史，不重复提交消息。</p>
+        <button>检查最新状态</button>
+        <p class="draft-note">尚无回执时显示“提交结果不确定”；没有更多历史记录不等于执行完成。</p>
+        <a href="frontend-review.html#conversation-workbench">在交互原型中分别模拟回执与终态</a>
       </section>
     </div>
   </div>

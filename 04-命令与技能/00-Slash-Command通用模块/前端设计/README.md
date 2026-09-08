@@ -4,10 +4,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.2.0 |
-| 更新日期 | 2026-09-07 |
-| 本次前端修订基线 | `e9db479e51b6148a3a3ab799c8061d617228b711` |
-| Runtime 命令契约基线 | `88f4df16bc24bbfcd28e1ec374feb2de0db8be3b` |
+| 文档版本 | 1.3.0 |
+| 更新日期 | 2026-09-08 |
+| 本次前端修订基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
+| Runtime 命令契约基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；B13 已确认 Skill SSE，Builtin JSON 不变 |
 | pi-mono-java 源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5` |
 | 适用端 | CampusClaw Web 产品前端；内部 Runtime 调试台只作为源码证据和受控联调入口 |
 | 状态 | 前端目标设计；现有 Slash 前端实现不存在，生产执行适配受 Mate 公共协议门禁 |
@@ -19,14 +19,14 @@ Slash Command 采用“同一 Composer、独立模式、独立草稿、显式执
 前端读取当前 Chat 的服务端命令清单，保持服务端顺序做前缀过滤。选中命令只完成填入，
 必须再次按 Enter 或点击“运行”才会执行，避免 `/compact` 等状态变更命令被误触。
 
-命令结果不是 Assistant 消息，不进入 ConversationTimeline、Session Event 或持久化历史。
+Builtin 命令结果不是 Assistant 消息，不进入 ConversationTimeline、Session Event 或持久化历史。
 页面只保留当前 Chat 最近一条临时命令结果，并明确标注“仅当前页面”。失败、清单过期和网络不确定时
 保留命令草稿；刷新清单只重放 GET，绝不自动重放命令 POST，也不自动把未匹配的 Slash 转为普通消息。
 每次执行在发起 POST 前冻结不可变的调用快照，用“规范命令名 + 空参/带参形态”确定期望结果类型。
 这一快照同时驱动 Gateway 解码和结果展示；不通过返回 JSON 形状猜测，也不使用执行期可编辑的草稿再次判定。
 
 产品浏览器继续只访问 mate-service。当前只确认 Mate GET Descriptor 投影，公共执行路径、认证映射、
-Skill 联合请求/结果和附件引用仍未确认，因此真实生产执行适配必须保持关闭。可以先实现纯前端状态机、
+公共 Skill 联合请求/结果和附件引用仍未确认，因此真实生产执行适配必须保持关闭。可以先实现纯前端状态机、
 可访问组件和 Mock Gateway；内部 Runtime Gateway 只允许在受控开发环境联调，不能成为产品回退路径。
 
 ## 2. 事实、决策与理由
@@ -70,7 +70,7 @@ Mate 侧当前只确认 Descriptor 字段投影；路径、权限、错误映射
 |---|---|---|
 | 消息与命令采用两个草稿缓冲区 | 产品约束 | 尝试 Slash、关闭清单或执行失败不能破坏用户已写消息 |
 | 选中后还需再次明确执行 | 安全加固 | 防止键盘浏览时误触 Compact、Name、Model 等状态变更 |
-| 命令结果不进入对话历史 | 架构选择 | 当前命令协议没有持久化生命周期；避免把查询卡片伪装成 Agent 消息 |
+| Builtin 结果不进入对话历史 | 架构选择 | Builtin 没有通用持久化生命周期；Skill 已按 B13 复用普通消息事件，二者不能混为一个结果分支 |
 | 未匹配 Slash 不自动回退为普通消息 | 安全加固 | 避免命令意图和内容在普通 Events 通道中被意外提交 |
 | 浏览器只经 Mate Gateway | 产品约束 | 保持公司认证、租户隔离和凭据边界，不把 Runtime 暴露给产品端 |
 | Catalog 仅保存在当前页面内存 | 架构选择 | 清单随 Session 状态变化，持久缓存会制造过期入口 |
@@ -106,7 +106,7 @@ Chat Workspace
 
 ![Slash Composer 状态图](./slash_composer_state.svg)
 
-[PlantUML 源码](./diagram.puml#L103) · [展开原尺寸 SVG](./slash_composer_state.svg)
+[PlantUML 源码](./diagram.puml#L107) · [展开原尺寸 SVG](./slash_composer_state.svg)
 
 ### 4.1 进入与退出
 
@@ -165,7 +165,7 @@ Session Event 或服务端。点击入口暂存的消息在取消或成功后恢
 
 ![Slash Command 执行时序](./slash_command_execution_flow.svg)
 
-[PlantUML 源码](./diagram.puml#L170) · [展开原尺寸 SVG](./slash_command_execution_flow.svg)
+[PlantUML 源码](./diagram.puml#L177) · [展开原尺寸 SVG](./slash_command_execution_flow.svg)
 
 执行请求由已选择 Descriptor 与当前编辑值组装，不重新解析成另一命令。提交期间只锁定命令编辑和“运行”动作，
 保留取消页面读取和浏览历史的能力。当前协议没有 cancel command，离开页面不应声称后端命令已取消。
@@ -175,7 +175,7 @@ Session Event 或服务端。点击入口暂存的消息在取消或成功后恢
 
 `expectedResultKind` 由前端纯函数根据已组装的 Builtin 请求确定：Help 是 `agentGuide`，
 Status/Name/Thinking 是 `session`，Model 空参是 `models`、带参是 `session`，Compact 是 `compaction`，
-Skills 是 `skills`。未知名称、Skill 或无法确定的形态在公共契约确认前 fail closed。响应体与预期 Schema
+Skills 是 `skills`。未知名称或无法确定的形态 fail closed；Skill 的公共执行未确认时同样关闭。响应体与预期 Schema
 不匹配时转换为稳定的 `INVALID_RESPONSE` 前端错误，不写入 Session/Model Store，不展示“执行成功”。
 
 附件只有在 `input.acceptsFiles === true` 时才能加入请求；否则附件按钮禁用并提供原因。
@@ -187,6 +187,23 @@ Skills 是 `skills`。未知名称、Skill 或无法确定的形态在公共契�
 - Help、Status、Model 查询和 Skills 等只读命令可显示“结果未知”与显式“重新查询”，但仍不自动重试。
 - Name、Model 修改、Thinking 和 Compact 使用权威 Session/Models/Events 接口对账；UI 不依据本地乐观值宣布成功。
 - 没有 commandId、幂等键或通用历史时，禁止伪造“继续等待”轮询和后台自动重放。
+
+### 6.1 Skill 与普通对话共享执行
+
+设计仓 `2ee2a32` 的 B13 已确认内部 `skill:<name>` 返回 SSE；首帧是展开前的 user.message，
+其后复用 Agent、Tool、确认、中断、终态与历史。该首帧不是 Builtin 临时结果。
+提交前从 Descriptor.kind 冻结 `executionMode=builtinJson|skillEvents`；Builtin 再计算
+expectedResultKind。必须校验所选协议的 Content-Type 与完整 Schema，不因收到其他形状就切换模式。
+
+生产公共 Skill 映射确认后，交由共享 ConversationCoordinator 接收回执和结果，清单变更后重新读取；
+草稿只在可归属的完整回执后清除，恢复暂存的普通消息不得自动发送。停止复用 Events 控制，
+不新增 cancel-command 或 commandId。内部 Skill 私有展开正文不显示、不缓存为公共历史。
+公共接口当前仍关闭，不能把内部 Skill 请求直接发给 Mate 或偷偷转换为普通消息。
+
+本轮源码补充核对为 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，
+App.submit、ComposerBox 与 useRuntimeApi 仍无命令适配；此前源码表作为历史保留。
+共享组件与生命周期以[公共对话对齐](../../../01-总体架构/04-CampusClaw前端体验/public-chat-alignment.md)维护。
+此差异是已确认内部契约驱动的 target-only 前端架构调整，不表示公共 Skill 已发布。
 
 ## 7. 结果投影
 
@@ -208,7 +225,7 @@ Skills 是 `skills`。未知名称、Skill 或无法确定的形态在公共契�
 | `thinking` 空参/带参 | `session` | 应用完整 Session 与版本响应头，展示服务端最终开关值 |
 | `compact` 空参 | `compaction` | `compacted=true` 显示已完成；false 显示本次无需压缩，不包装成 Assistant 消息 |
 | `skills` 空参 | `skills` | 只按纯文本显示 Skill 名称和描述，不读取本地路径、正文或远程资源 |
-| `skill:<name>` | 未确认 | 公共结果契约未确认；生产 Renderer 与执行入口保持关闭，不用“通用成功”占位冒充稳定契约 |
+| `skill:<name>` | 内部 skillEvents 已确认，公共映射待确认 | 不进入 CommandResultRegion；公共接入后复用消息时间线、工具确认和恢复，当前生产执行仍关闭 |
 
 Runtime 的 Session 结果带 ETag，Gateway/状态适配器必须与 Session 快照一起原子应用；
 产品组件和临时结果卡不显示 ETag。Mate 公共协议如何映射版本信息仍属门禁项，未确认前不假设浏览器可见字段。
@@ -271,9 +288,11 @@ type BuiltinResultKind = "agentGuide" | "session" | "models" | "compaction" | "s
 
 type CommandInvocation = Readonly<{
   request: Readonly<CommandExecutionRequest>
-  expectedResultKind: BuiltinResultKind
   startedAt: string
-}>
+} & (
+  { executionMode: "builtinJson"; expectedResultKind: BuiltinResultKind }
+  | { executionMode: "skillEvents" }
+)>
 
 interface CommandGateway {
   listCommands(chatId: string, signal: AbortSignal): Promise<readonly CommandDescriptor[]>
@@ -334,6 +353,7 @@ interface CommandGateway {
 - 使用同一 `model` 命令名的查询与修改 fixture 必须走不同解码分支；Schema/ETag 与预期不符时不更新 Store。
 - 产品构建中不存在 Runtime base URL、Runtime 凭据表单或 `RuntimeCommandGateway` 装配。
 - Mate 执行协议未确认前，端到端测试必须证明生产执行入口 fail closed，而不是落到普通 Events。
+- Builtin JSON 与 Skill SSE fixture 不能互相解码；Skill 完整回执进入共享事件 Store，结果不进入 Builtin 临时区；断流不重发、私有 Skill 正文不公开。
 
 ## 12. 实施切片与协议门禁
 
@@ -341,7 +361,7 @@ interface CommandGateway {
 2. 接入已确认 Descriptor 的 Mate GET 后，完成 idle/running、失效和错误态契约测试。
 3. 实现 Builtin Renderer，并用 Runtime JSON fixture 验证 Session/Models/Help 投影；仍不宣称产品可执行。
 4. Mate 公共执行 operation 需先确认路径、认证、请求联合类型、响应判别、错误、超时和不确定结果对账，再实现 `MateCommandGateway.executeCommand`。
-5. Skill 执行需额外确认 request/result、附件 fileId 所有权和内容安全后才开放；与 Builtin 分开验收。
+5. Skill 内部 request/SSE 已确认；公共映射、附件 fileId 所有权与内容安全确认后才开放生产适配，与 Builtin 分开验收。
 6. 最后在真实产品包验证 Runtime 适配不可达、普通消息不解析 Slash、刷新/切 Chat 不泄漏临时结果。
 
 当前没有新增 npm 或 Maven 直接依赖。若后续希望引入 floating-ui、状态库或快捷键库，必须单独说明用途、
@@ -354,7 +374,7 @@ interface CommandGateway {
 | Mate 命令 GET 最终路径、认证和错误映射 | 只允许 Mock/契约评审；不得猜测 URL |
 | Mate Builtin 执行 operation 与响应判别 | 生产运行按钮 fail closed，不回退到 Runtime 或普通 Events |
 | 变更命令的并发控制与 ETag 使用方式 | 不做乐观修改；结果未知时只读对账 |
-| Skill request/result 联合类型 | 不开放 Skill 执行，不显示虚构通用成功卡 |
+| Mate 公共 Skill request/result 映射 | 内部 B13 不自动升级公共状态；不开放生产 Skill，不显示虚构通用成功卡 |
 | Skill 附件引用、所有权和有效期 | `acceptsFiles=true` 只驱动展示；生产附件提交保持关闭 |
 | 公共 requestId/错误码稳定集合 | 未确认前由 Gateway 保留兼容层，组件不绑定服务端文案 |
 
@@ -362,6 +382,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-09-08 | 区分 Builtin 临时 JSON 与内部已确认 Skill SSE；Skill 复用主对话、确认及恢复，公共执行保持门禁；视觉不变。 |
 | 1.2.0 | 2026-09-07 | 按用户反馈恢复浅暖灰评审导航，删除命令装饰图案及占位列；窄屏保留参数提示并支持文字换行，继承原前端视觉基线。 |
 | 1.1.0 | 2026-09-07 | 补充后端精简响应的前端判别规则：提交前冻结调用快照，按命令名与参数形态确定结果类型，区分 model 查询 Models 与修改 Session，未匹配 Schema/ETag 时 fail closed。 |
 | 1.0.0 | 2026-09-07 | 新增 Slash Composer 模式、清单、独立草稿、结果投影、错误恢复、无障碍、组件边界和实施门禁；全部前端能力明确为 target-only。 |

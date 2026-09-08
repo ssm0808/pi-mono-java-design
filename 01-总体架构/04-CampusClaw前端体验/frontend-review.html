@@ -7,7 +7,7 @@
   <title>CampusClaw Frontend UX - Design Review</title>
   <style>
     :root {
-      color-scheme: light dark;
+      color-scheme: light;
       --canvas: light-dark(#f8f3f0, #181818);
       --surface: light-dark(#fffcfa, #212121);
       --surface-secondary: light-dark(#f8f3f0, #181818);
@@ -325,20 +325,73 @@
       #debug-headers td { padding: 4px 8px; border-bottom: 0; }
       #debug-headers td::before { content: attr(data-label); display: block; margin-bottom: 2px; color: var(--muted); font-size: 11px; }
     }
+
+    [hidden] { display: none !important; }
+    .scenario-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 8px; }
+    #conversation-workbench button, #conversation-workbench select {
+      min-height: 44px; padding: 8px 12px; border: 1px solid var(--border-strong);
+      border-radius: 8px; color: var(--text); background: var(--surface); font: inherit; cursor: pointer;
+    }
+    #conversation-workbench button:disabled { color: var(--muted); cursor: default; opacity: .65; }
+    #conversation-workbench :focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
+    .chat-prototype { display: grid; grid-template-columns: 200px minmax(0, 1fr); margin-top: 18px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .chat-rail { padding: 20px 14px; background: var(--surface-secondary); border-right: 1px solid var(--border); }
+    .chat-rail > p { margin-top: 20px; font-size: 13px; }
+    .chat-current { padding: 12px; border-radius: 8px; background: var(--selected); }
+    .chat-body { min-width: 0; background: var(--surface); }
+    .chat-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--border); }
+    .chat-config-label { font-size: 12px; color: var(--muted); }
+    #chat-state-label { color: var(--muted); font-size: 13px; }
+    #chat-stop { margin-left: auto; }
+    .chat-scroll { padding: 24px; min-height: 350px; }
+    .chat-notice { padding: 12px; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-secondary); line-height: 1.6; }
+    .chat-user { max-width: 85%; width: fit-content; margin: 0 0 24px auto; padding: 12px 16px; border-radius: 12px; background: var(--surface-tertiary); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .chat-analysis, .chat-tool { margin: 12px 0; }
+    .chat-analysis summary, .chat-tool summary { cursor: pointer; min-height: 44px; padding: 10px 0; }
+    .chat-analysis p { padding-left: 18px; color: var(--muted); font-size: 13px; }
+    #chat-tool-state { margin-left: 12px; color: var(--muted); font-size: 12px; }
+    .chat-tool-detail { border-left: 1px solid var(--border); margin-left: 8px; padding: 4px 0 4px 18px; }
+    .chat-tool-detail h3 { margin: 12px 0 8px; color: var(--muted); font-size: 12px; }
+    .chat-tool-detail dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; margin: 0; padding: 12px; background: var(--surface-tertiary); border-radius: 8px; }
+    .chat-tool-detail dt { color: var(--muted); }
+    .chat-tool-detail dd { margin: 0; overflow-wrap: anywhere; }
+    .chat-tool-detail p, .chat-answer { line-height: 1.65; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .chat-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+    .chat-composer { margin: 16px 24px 24px; padding: 14px; border: 1px solid var(--border-strong); border-radius: 12px; }
+    .chat-composer label, #chat-deny-editor label { display: block; margin: 8px 0; font-size: 13px; }
+    #conversation-workbench textarea { width: 100%; min-height: 72px; resize: vertical; padding: 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+    #chat-send, #chat-allow { background: var(--primary) !important; color: var(--primary-text) !important; }
+    #chat-count { font-size: 12px; color: var(--muted); }
+    #chat-send { margin-left: auto; }
+    #chat-input-error { margin-top: 6px; color: var(--danger); font-size: 13px; }
+    #chat-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    #chat-history-note { margin-top: 12px; }
+    @media (max-width: 960px) {
+      .chat-prototype { grid-template-columns: minmax(0, 1fr); }
+      .chat-rail { display: none; }
+    }
+    @media (max-width: 680px) {
+      .chat-scroll { padding: 14px; }
+      .chat-composer { margin: 14px; }
+      .chat-config-label { width: 100%; }
+      .scenario-bar > select { width: 100%; min-width: 0; }
+      .chat-tool-detail dl { grid-template-columns: minmax(0, 1fr); }
+    }
+
   </style>
 </head>
 <body>
-<aside role="note"><p>2026-09-07 控制设计已更新：本期不支持队列或运行中 Steer。停止通过 user.interrupt，实际停止后才可提交新消息。下方旧图片及跟进控件仅为历史视觉基线，不可作为当前调用契约。<a href="README.md#73-running-对话">当前控制规则</a></p></aside>
+
   <main class="company-design-review">
     <div class="review-shell">
       <header class="topbar">
         <div class="row">
           <img class="review-brand-mark" src="campusclaw-mark-o1.png" alt="">
           <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">1.2.0</span>
-          <span class="tag">Product credentialless · Independent Headers panel in review</span>
+          <span class="tag">1.5.0</span>
+          <span class="tag">主对话 · 确认 · 停止 · 恢复</span>
         </div>
-        <code class="base">pi-mono-java 320d7907 → d03c08db (PR 181) · event-only debug snapshot</code>
+        <code class="base">设计基线 2ee2a32 · 源码 dfb90ca · target-only</code>
       </header>
 
       <section class="section">
@@ -358,12 +411,12 @@
 
       <section class="section" id="credential-boundary">
         <div class="section-title"><h2>已确认：产品前端不持有 JWT/APPKEY</h2><code class="screen-key">credentialBoundary</code></div>
-        <p class="description">当前实现没有凭据表单、秘密 <code>VITE_*</code> 配置、浏览器 credential store 或 <code>Authorization</code> / <code>X-HW-APPKEY</code> 注入路径；统一请求只发送非秘密 <code>X-HW-ID</code>。本轮只为隔离的内部开发构建增加临时 Header，不改变生产产品边界。</p>
+        <p class="description">当前内部工作台已有 DEV-only Headers，但不具备生产公共 Chat 集成。产品不新增凭据表单或秘密存储；身份由宿主、mate-service 或网关边界建立。</p>
         <div class="table-wrap" style="margin-top:12px">
           <table>
             <thead><tr><th>边界</th><th>设计结论</th></tr></thead>
             <tbody>
-              <tr><td>当前内部调试链路</td><td>当前仍无凭据控件；目标诊断抽屉只用于 Runtime 透传调试，不建立生产身份。</td></tr>
+              <tr><td>当前内部调试链路</td><td>已有临时 Headers；只用于 Runtime 透传调试，不建立生产身份。</td></tr>
               <tr><td>未来生产链路</td><td>统一登录、mate-service 或网关负责身份与授权；具体浏览器会话机制待公共 API 评审。</td></tr>
               <tr><td>诊断例外</td><td>只在页面内存中接受用户填写的 Key/Value Header，仅附加到提交消息 POST；刷新或关闭页签清除。</td></tr>
               <tr><td><code>401/403</code></td><td>交给统一登录/权限流程，不弹出凭据框，也不自动重放副作用请求。</td></tr>
@@ -404,7 +457,7 @@
             <tbody>
               <tr><td data-label="请求">初始 <code>POST /sessions/{sessionId}/events</code></td><td data-label="是否附加调试 Header">是；发送时建立不可变快照。</td></tr>
               <tr><td data-label="请求">Session/历史/模型/Thinking</td><td data-label="是否附加调试 Header">否。</td></tr>
-              <tr><td data-label="请求">Steer / FollowUp / Abort</td><td data-label="是否附加调试 Header">否；修改抽屉不改变正在执行的快照。</td></tr>
+              <tr><td data-label="请求">旧独立控制接口（已退役）</td><td data-label="是否附加调试 Header">否；修改抽屉不改变正在执行的快照。</td></tr>
               <tr><td data-label="请求">Mate 发现</td><td data-label="是否附加调试 Header">否；已评审后端特性提交 <code>d03c08db</code> 只在 Tool execute 下游请求中使用后端识别的凭据项。</td></tr>
             </tbody>
           </table>
@@ -429,8 +482,8 @@
         </header>
         <div class="screen-grid">
           <figure>
-            <a href="low-fidelity.html"><img src="low-fidelity.png" alt="CampusClaw 三状态低保真评审板"></a>
-            <figcaption>首次进入状态目前使用三状态低保真板评审；Agent 目录和公共 Chat 创建仍是 mate-service 目标态。</figcaption>
+            <p class="description">首次进入 → 选择 Agent → 创建 Chat → 编辑消息</p><p class="review-links"><a href="low-fidelity.html">打开当前低保真布局</a></p>
+            <figcaption>首次进入状态使用可编辑低保真板评审；Agent 目录和公共 Chat 创建仍是 mate-service 目标态。</figcaption>
           </figure>
           <div class="screen-detail">
             <section class="section"><h3>作用</h3><p class="description">让用户先选择一个受管 Agent，再进入真实任务会话；用户身份由统一登录、mate-service 或网关建立，前端不接收 JWT/APPKEY。Runtime Session 创建、授权和默认模型初始化均在后台完成。</p></section>
@@ -450,7 +503,7 @@
         <div class="screen-grid">
           <figure>
             <a href="high-fidelity-conversation-v8.png"><img src="high-fidelity-conversation-v8.png" alt="CampusClaw O1 暖中性常规对话高保真稿"></a>
-            <figcaption>v8：O1 以透明底原图直接显示，不再缩进深色品牌方块；其余活动 disclosure 与纵向工具详情保持 v7 不变。</figcaption>
+            <figcaption>历史常规视觉基线：仅对照 O1、暖灰表面和正文排版；当前消息字段、状态及操作以下方交互样例为准。</figcaption>
           </figure>
           <div class="screen-detail">
             <section class="section"><h3>作用</h3><p class="description">围绕 Agent、Chat、消息、附件和工具活动完成日常任务。协议身份、ETag 和原始 SSE 不进入产品主流程；JWT/APPKEY/<code>access-token</code> 不是产品隐藏高级字段，只存在于内部诊断例外。</p></section>
@@ -505,22 +558,86 @@ HAVING COUNT(*) &gt; 1;</code></pre>
 
       <article class="screen-card" id="running-conversation" data-screen-key="runningConversation">
         <header class="screen-head">
-          <span class="status-dot running" aria-hidden="true"></span>
-          <strong>执行中控制</strong>
-          <span class="screen-name">执行中</span>
-          <code class="screen-key">runningConversation</code>
-          <span class="muted">旧跟进交互已退役 · 图片仅作历史视觉基线</span>
+          <strong>主对话交互</strong><span class="tag">1.5.0 · target-only</span>
+          <a href="public-chat-alignment.md">契约边界与验收</a>
         </header>
-        <div class="screen-grid">
-          <figure>
-            <a href="high-fidelity-running-v8.png"><img src="high-fidelity-running-v8.png" alt="CampusClaw O1 暖中性执行中高保真稿"></a>
-            <figcaption>v8：O1 以透明底原图直接显示；当前安全分析摘要和当前工具默认展开，输入与输出纵向显示。</figcaption>
-          </figure>
-          <div class="screen-detail">
-            <section class="section"><h3>作用</h3><p class="description">让用户看懂 Agent 正在做什么，并通过“调整方向”“加入队列”“停止”控制唯一 active execution。</p></section>
-            <section class="section"><h3>主要评审点</h3><ul class="review-points"><li>运行中分析摘要是否足够可读，同时不暴露原始私有推理。</li><li>当前工具展开、完成工具折叠和未开始工具不显示是否符合活动节奏。</li><li>输入参数与输出结果的纵向顺序是否比左右分栏更易扫描。</li><li>当前跟进方式是否在发送前足够清楚，且无需两个常驻胶囊。</li></ul></section>
+        <section class="section" id="conversation-workbench">
+          <p class="description">沿用原来的浅暖灰导航、开放式正文和纵向工具详情。以下全部为本地模拟，不上传文件、不执行工具、不调用后端。公共目标关联和桥接未完成前不可据此开启生产接入。</p>
+          <div class="scenario-bar">
+            <label for="conversation-scenario">评审状态</label>
+            <select id="conversation-scenario">
+              <option value="ready">常规对话</option>
+              <option value="running" selected>执行中</option>
+              <option value="confirming">等待工具确认</option>
+              <option value="stopAccepted">停止请求已接受</option>
+              <option value="uncertain">提交结果不确定</option>
+              <option value="offline">断线恢复</option>
+              <option value="conflict">配置版本冲突</option>
+            </select>
+            <button type="button" id="simulate-receipt">模拟完整回执</button>
+            <button type="button" id="simulate-terminal">模拟真实终态</button>
+            <button type="button" id="simulate-history">模拟补读结果</button>
           </div>
-        </div>
+          <p class="muted">上方按钮模拟服务端响应；下方按钮模拟用户操作。“收到回执”与“实际完成”是两个步骤。</p>
+          <div class="chat-prototype" data-phase="running">
+            <aside class="chat-rail" aria-label="示例会话导航">
+              <div class="row"><img class="review-brand-mark" src="campusclaw-mark-o1.png" alt=""><strong>CampusClaw</strong></div>
+              <p class="muted">最近会话 · 示例</p>
+              <p class="chat-current">园区告警分析</p>
+              <p>每日巡检计划</p>
+            </aside>
+            <div class="chat-body">
+              <header class="chat-header">
+                <strong>园区运维助手</strong>
+                <span id="chat-state-label" role="status" aria-live="polite">正在处理</span>
+                <span class="chat-config-label" id="chat-config-label">模型 A · 深度思考开启</span>
+                <button type="button" id="chat-stop">停止</button>
+              </header>
+              <div class="chat-scroll">
+                <div class="chat-notice" id="chat-notice" role="status" aria-live="polite"></div>
+                <div class="chat-user" id="chat-user">请分析东区园区告警，并给出处理建议。</div>
+                <details class="chat-analysis"><summary>分析过程</summary><p>已整理允许公开的告警摘要，正在核对影响范围。</p></details>
+                <details class="chat-tool" id="chat-tool" open>
+                  <summary><strong>隔离受影响端口</strong><span id="chat-tool-state">等待工具返回</span></summary>
+                  <div class="chat-tool-detail">
+                    <h3>输入参数</h3>
+                    <dl><dt>设备</dt><dd>SW-DC-01</dd><dt>端口</dt><dd>GigabitEthernet0/0/24</dd></dl>
+                    <section id="chat-confirmation" hidden>
+                      <p>此操作会修改设备配置。确认前不会执行。</p>
+                      <div class="chat-actions"><button type="button" id="chat-allow">允许执行</button><button type="button" id="chat-deny">拒绝</button></div>
+                      <div id="chat-deny-editor" hidden>
+                        <label for="chat-deny-reason">拒绝原因（选填，最多 2048 字）</label>
+                        <textarea id="chat-deny-reason" rows="2"></textarea>
+                        <div class="chat-actions"><button type="button" id="chat-deny-submit">确认拒绝</button><button type="button" id="chat-deny-cancel">取消</button></div>
+                      </div>
+                    </section>
+                    <h3>输出结果</h3><p id="chat-tool-output">尚未收到结果，不能判定成功或失败。</p>
+                  </div>
+                </details>
+                <p class="chat-answer" id="chat-answer" role="status" aria-label="模拟执行终态" hidden></p>
+                <div class="chat-actions">
+                  <button type="button" id="chat-check" hidden>检查最新状态</button>
+                  <button type="button" id="chat-config-reload" hidden>读取最新配置</button>
+                  <button type="button" id="chat-config-confirm" hidden>确认重新修改</button>
+                </div>
+                <p class="muted" id="chat-history-note">历史与实时内容共用事件身份，完整记录覆盖预览。</p>
+              </div>
+              <div class="chat-composer">
+                <label for="chat-draft">新消息草稿</label>
+                <textarea id="chat-draft" rows="3" aria-describedby="chat-input-help chat-input-error" placeholder="可以先写下新的要求，当前任务结束后再发送"></textarea>
+                <div id="chat-attachments" aria-label="模拟附件"></div>
+                <div class="chat-actions">
+                  <button type="button" id="chat-add-file">添加示例附件</button>
+                  <span id="chat-count">0 / 2048 字 · 0 / 4 个附件</span>
+                  <button type="button" id="chat-send" disabled>发送</button>
+                </div>
+                <p id="chat-input-help" class="muted">当前任务结束前只保留草稿，不发送第二条消息。</p>
+                <p id="chat-input-error" role="alert"></p>
+              </div>
+            </div>
+          </div>
+          <noscript><p>脚本未启用：可阅读默认执行中布局。确认先提交决定、停止先等待回执，实际终态到达前不开放普通发送；详细状态见设计说明。</p></noscript>
+        </section>
       </article>
 
       <section class="section">
@@ -539,14 +656,14 @@ HAVING COUNT(*) &gt; 1;</code></pre>
 
       <section class="section">
         <h2>本轮确认项</h2>
-        <details class="review-question" open><summary>1. 是否确认三状态信息架构？</summary><p><code>firstUse</code>、<code>idleConversation</code>、<code>runningConversation</code> 作为首版稳定评审和测试边界。</p></details>
+        <details class="review-question" open><summary>1. 本轮交互覆盖</summary><p>保留首次进入、常规、运行三键，新增工具确认、停止处理中、不确定提交、历史恢复与配置冲突；沿用原视觉风格。</p></details>
         <details class="review-question" open><summary>2. 已确认：O1 品牌标识；暖中性配色进入评审</summary><p>O1 使用原始透明 PNG，不生成式重绘，也不缩进深色品牌方块；暖白、暖灰与深暖黑构成工作台，珊瑚色仅用于品牌标识，绿色继续表达运行与完成。</p></details>
-        <details class="review-question" open><summary>3. 历史决定已被取代：旧跟进交互</summary><p>desktop 默认“调整方向”，设置可切换“加入队列”；<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。“调整方向”不会硬中断当前模型或工具。</p></details>
+        <details class="review-question" open><summary>3. 运行中只保留草稿和停止</summary><p>不提供队列或运行中注入；停止回执不等于已停止，实际终态到达后才允许新消息。等待确认不能视为空闲。</p></details>
         <details class="review-question" open><summary>4. 已确认：产品前端不持有 JWT/APPKEY</summary><p>生产身份与授权仍由统一登录、mate-service 或网关承担；产品 Chat 不出现凭据表单、秘密构建配置或浏览器持久化。</p></details>
         <details class="review-question" open><summary>5. 评审中：独立 <code>Headers</code> 面板</summary><p>通用 Key/Value 表格、逐行启停和自动空白行保持不变；请求适配器自动生成的 Header 不在面板中展示。面板不与 Agent/Session 诊断入口合并，仅复用其视觉，值只在页面内存中存活，仅附加到初始 <code>POST /events</code>。</p></details>
         <details class="review-question" open><summary>6. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
-        <details class="review-question" open><summary>7. 本轮方向：采用 Codex-inspired 活动 disclosure</summary><p>Thinking 只展示公共 bridge 生成的安全标题和摘要；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。原始推理、内部 ID、绝对路径和凭据都不进入产品浏览器。</p></details>
-        <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="imagegen-prompts.md">查看 ImageGen Prompts</a></div>
+        <details class="review-question" open><summary>7. 本轮方向：采用 Codex-inspired 活动 disclosure</summary><p>Thinking 只展示公共安全摘要，标题使用前端状态文案；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。原始推理、内部 ID、绝对路径和凭据都不进入产品浏览器。</p></details>
+        <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="public-chat-alignment.md">查看公共对话对齐</a></div>
       </section>
     </div>
   </main>
@@ -714,6 +831,200 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         rows.querySelector(".header-key").focus();
       });
       validateRows();
+    })();
+  </script>
+  <script>
+    (() => {
+      // Target-only fixture controller. No network, upload, or real tool execution.
+      const byId = (id) => document.getElementById(id);
+      const draft = byId('chat-draft');
+      const denyReason = byId('chat-deny-reason');
+      const root = document.querySelector('.chat-prototype');
+      const codePoints = (value) => Array.from(value).length;
+      let phase = 'running';
+      let files = [];
+      let nextFile = 1;
+      let submission = null;
+      let decision = null;
+      let composing = false;
+      let showDeny = false;
+      let configFresh = false;
+      let lastStablePhase = 'running';
+      let noticeOverride = '';
+      let terminalText = '';
+      let toolResultText = '';
+
+      const states = {
+        ready: ['已就绪', '可以发送新消息。示例附件仅在本页模拟。'],
+        submitting: ['正在提交', '草稿已保留；收到完整消息回执后才确认提交。'],
+        running: ['正在处理', '当前任务结束前只保留新草稿，不发送第二条消息。'],
+        confirming: ['等待工具确认', '执行前请检查下方参数；确认等待不是空闲。'],
+        confirmingSubmit: ['正在提交决定', '决定尚未收到回执，请勿重复操作。'],
+        stopRequested: ['正在请求停止', '停止请求尚未确认，不能显示已经停止。'],
+        stopAccepted: ['停止处理中', '停止请求已接受；仍需等待目标实际结束。'],
+        uncertain: ['提交结果不确定', '尚无可归属的回执；请先检查最新状态，不要重复提交。'],
+        offline: ['连接已中断', '执行可能仍在继续；已确认内容和草稿保留。'],
+        recovering: ['正在检查最新状态', '只读取历史与状态，不重发消息、确认或停止。'],
+        conflict: ['配置已变化', '先读取实际配置，再确认是否重新修改；消息草稿不受影响。']
+      };
+
+      function messageError() {
+        if (codePoints(draft.value) > 2048) return '消息最多 2048 个 Unicode 字符，请缩短后发送。';
+        if (files.length > 4) return '最多添加 4 个附件。';
+        return '';
+      }
+
+      function render() {
+        root.dataset.phase = phase;
+        byId('chat-state-label').textContent = states[phase][0];
+        byId('chat-notice').textContent = noticeOverride || states[phase][1];
+        byId('chat-count').textContent = `${codePoints(draft.value)} / 2048 字 · ${files.length} / 4 个附件`;
+        byId('chat-input-error').textContent = messageError();
+        byId('chat-send').disabled = phase !== 'ready' || !!messageError() || (!draft.value.trim() && !files.length);
+        byId('chat-stop').hidden = !['running', 'confirming', 'stopRequested', 'stopAccepted'].includes(phase);
+        byId('chat-stop').disabled = ['stopRequested', 'stopAccepted'].includes(phase);
+        byId('chat-confirmation').hidden = phase !== 'confirming' && phase !== 'confirmingSubmit';
+        byId('chat-allow').disabled = phase !== 'confirming';
+        byId('chat-deny').disabled = phase !== 'confirming';
+        byId('chat-deny-editor').hidden = !showDeny || phase !== 'confirming';
+        byId('chat-check').hidden = !['uncertain', 'offline', 'recovering'].includes(phase);
+        byId('chat-check').disabled = phase === 'recovering';
+        byId('chat-config-reload').hidden = phase !== 'conflict' || configFresh;
+        byId('chat-config-confirm').hidden = phase !== 'conflict' || !configFresh;
+        byId('simulate-receipt').disabled = !['submitting', 'confirmingSubmit', 'stopRequested'].includes(phase);
+        byId('simulate-terminal').disabled = !['running', 'stopAccepted'].includes(phase);
+        byId('simulate-history').disabled = phase !== 'recovering';
+        byId('chat-add-file').disabled = files.length >= 4;
+        byId('chat-input-help').textContent = phase === 'ready'
+          ? 'Enter 发送 · Shift+Enter 换行；输入法选字期间不发送。'
+          : '当前状态下仅保留草稿；不会排队或自动续发。';
+        byId('chat-tool').hidden = ['ready', 'submitting', 'conflict'].includes(phase) && !terminalText;
+        byId('chat-tool-state').textContent = phase === 'confirming' ? '尚未执行 · 等待确认'
+          : phase === 'confirmingSubmit' ? '决定提交中' : toolResultText ? '已有完整结果' : '尚无完成证据';
+        byId('chat-tool-output').textContent = toolResultText || (phase === 'confirming'
+          ? '尚未执行，等待你的确认。' : '尚未收到结果，不能判定成功或失败。');
+        byId('chat-answer').hidden = !terminalText;
+        byId('chat-answer').textContent = terminalText;
+      }
+
+      function setPhase(value, notice = '') {
+        phase = value;
+        noticeOverride = notice;
+        render();
+      }
+
+      function send() {
+        if (composing || byId('chat-send').disabled) return;
+        submission = { text: draft.value, files: [...files] };
+        terminalText = '';
+        toolResultText = '';
+        setPhase('submitting');
+      }
+
+      function renderFiles() {
+        byId('chat-attachments').replaceChildren();
+        for (const file of files) {
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.textContent = `示例附件 ${file} · 删除`;
+          remove.setAttribute('aria-label', `删除示例附件 ${file}`);
+          remove.addEventListener('click', () => {
+            files = files.filter((item) => item !== file);
+            renderFiles(); render();
+          });
+          byId('chat-attachments').append(remove);
+        }
+      }
+
+      draft.addEventListener('input', render);
+      draft.addEventListener('compositionstart', () => { composing = true; });
+      draft.addEventListener('compositionend', () => { composing = false; render(); });
+      draft.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' || event.shiftKey || event.isComposing || composing) return;
+        event.preventDefault(); send();
+      });
+      byId('chat-send').addEventListener('click', send);
+      byId('chat-add-file').addEventListener('click', () => {
+        if (files.length >= 4) return;
+        files.push(nextFile++); renderFiles(); render();
+      });
+      byId('chat-stop').addEventListener('click', () => {
+        if (!['running', 'confirming'].includes(phase)) return;
+        showDeny = false;
+        setPhase('stopRequested');
+      });
+      byId('chat-allow').addEventListener('click', () => {
+        if (phase !== 'confirming') return;
+        decision = { result: 'allow' }; // Allow never carries denyMessage.
+        setPhase('confirmingSubmit');
+      });
+      byId('chat-deny').addEventListener('click', () => {
+        showDeny = true; render(); denyReason.focus();
+      });
+      byId('chat-deny-cancel').addEventListener('click', () => {
+        showDeny = false; render(); byId('chat-deny').focus();
+      });
+      byId('chat-deny-submit').addEventListener('click', () => {
+        if (phase !== 'confirming') return;
+        const value = denyReason.value;
+        if ((value && !value.trim()) || codePoints(value) > 2048) {
+          byId('chat-notice').textContent = '拒绝原因如填写，需非空白且最多 2048 个 Unicode 字符。';
+          denyReason.focus(); return;
+        }
+        decision = value ? { result: 'deny', denyMessage: value } : { result: 'deny' };
+        setPhase('confirmingSubmit');
+      });
+      byId('simulate-receipt').addEventListener('click', () => {
+        if (phase === 'submitting' && submission) {
+          byId('chat-user').textContent = [submission.text, submission.files.length
+            ? `已提交 ${submission.files.length} 个示例附件` : ''].filter(Boolean).join('\n');
+          if (draft.value === submission.text) draft.value = '';
+          files = files.filter((file) => !submission.files.includes(file));
+          renderFiles(); submission = null; setPhase('running', '完整消息回执已确认；正在等待 Agent 输出。');
+        } else if (phase === 'confirmingSubmit') {
+          setPhase('running', decision?.result === 'deny'
+            ? '拒绝决定已接受；等待未执行记录及 Agent 后续回复。' : '允许决定已接受；等待工具结果，尚未完成。');
+        } else if (phase === 'stopRequested') setPhase('stopAccepted');
+      });
+      byId('simulate-terminal').addEventListener('click', () => {
+        if (!['running', 'stopAccepted'].includes(phase)) return;
+        toolResultText = phase === 'stopAccepted' ? '' : decision?.result === 'deny'
+          ? '工具未执行：用户拒绝本次调用。' : '示例完整结果：端口隔离已完成。';
+        terminalText = phase === 'stopAccepted' ? '已收到目标的实际停止记录；没有伪造工具结果。'
+          : decision?.result === 'deny' ? '本次工具未执行；Agent 已提供替代建议，任务已完成。'
+          : '已收到完整结果与本次真实完成记录。';
+        setPhase('ready', terminalText);
+      });
+      byId('chat-check').addEventListener('click', () => {
+        if (!['uncertain', 'offline'].includes(phase)) return;
+        lastStablePhase = phase; setPhase('recovering');
+      });
+      byId('simulate-history').addEventListener('click', () => {
+        if (phase !== 'recovering') return;
+        byId('chat-history-note').textContent = '示例已读到末页。没有更多记录不代表任务结束。';
+        setPhase(lastStablePhase === 'uncertain' ? 'uncertain' : 'running', lastStablePhase === 'uncertain'
+          ? '历史尚无可归属回执；提交结果仍不确定，草稿保持不变。'
+          : '完整记录已补齐，实时连接已恢复；任务仍在执行，不开放新消息。');
+      });
+      byId('chat-config-reload').addEventListener('click', () => {
+        if (phase !== 'conflict') return;
+        configFresh = true;
+        byId('chat-config-label').textContent = '模型 B · 深度思考关闭';
+        setPhase('conflict', '当前配置：模型 B，思考关闭。原选择：模型 A。请确认是否重新修改；尚未发起写入。');
+      });
+      byId('chat-config-confirm').addEventListener('click', () => {
+        if (!configFresh || phase !== 'conflict') return;
+        byId('chat-config-label').textContent = '模型 A · 深度思考关闭';
+        setPhase('ready', '已模拟用户再次确认后的配置成功；顶部和命令入口使用同一完整配置快照。');
+      });
+      byId('conversation-scenario').addEventListener('change', (event) => {
+        submission = null; decision = null; showDeny = false; configFresh = false; terminalText = ''; toolResultText = '';
+        byId('chat-config-label').textContent = '模型 A · 深度思考开启';
+        denyReason.value = '';
+        byId('chat-history-note').textContent = '历史与实时内容共用事件身份，完整记录覆盖预览。';
+        setPhase(event.target.value);
+      });
+      render();
     })();
   </script>
 </body>

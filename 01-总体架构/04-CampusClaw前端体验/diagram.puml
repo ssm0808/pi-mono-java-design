@@ -1,73 +1,43 @@
 @startuml frontend_product_boundary
-' Source baseline: pi-mono-java 320d790726a70aada6100052952d5494d2a378ac.
-' Reviewed implementation commit: pi-mono-java d03c08dbae870f19eee8d4fa79a707185f7a26b5 (Draft PR 181).
-' Source evidence: frontend/README.md lines 26-28 and 40-58.
-' Source evidence: frontend/.env.example lines 1-7.
-' Source evidence: frontend/src/App.vue lines 177-290 and frontend/src/components/DevDiagnostics.vue lines 4-25.
-' Source evidence: frontend/src/composables/useRuntimeApi.ts lines 18-20 and 480-495 (requestRaw).
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
-' Source evidence: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionRoutesTest.java lines 102-120.
-' Observed behavior: the current browser client calls Runtime V1 directly, sends only non-secret X-HW-ID, and has no JWT, APPKEY, or access-token editor, storage, or header injection path.
-' Target-only design: the product browser calls a public bridge; an isolated internal development build may provide event-only debug headers.
-' Design reason: diagnostic header transport is not production authentication; the public bridge owns identity, authorization, public resources, and safe event projection.
-
-title CampusClaw product frontend boundary
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
+' Source evidence: frontend/src/App.vue submit; frontend/src/composables/useRuntimeApi.ts sendMessage, dispatchSseFrame.
+' Observed behavior: the internal workbench still consumes legacy Runtime request-scoped SSE and separate controls.
+' Contract baseline: design 2ee2a3211da68ad87b0d9cab353e691b00bdaebd.
+' Contract references: public-chat-alignment.md section 1, relative to this topic.
+' Target-only architecture: product integration through Mate; no direct Runtime fallback.
+' Design reason: public identity, protocol, and data visibility do not equal the internal transport.
+title Product boundary - target-only integration
 left to right direction
-
-actor "Campus user" as User
-rectangle "Product frontend" as Frontend {
-  component "Agent and chat workspace" as Workspace
-  component "Product request adapter\ncredentialless" as RequestAdapter
-  component "Product event projector" as Projector
-  component "Developer diagnostics\n(internal build only)" as Diagnostics
+actor "User" as User
+rectangle "Product browser" {
+  component "Chat workspace\nno credential forms" as Workspace
+  component "Public Chat Gateway" as Gateway
+  component "Safe event reducer" as Reducer
 }
-
-rectangle "mate-service" as Mate {
-  component "Public chat API" as PublicApi
-  component "Chat to session mapping" as Mapping
-  component "Auth, policy, and event projection" as Policy
+rectangle "Host and Mate boundary" {
+  component "Host identity transport\nintegration gate" as Host
+  component "Public Chat API\nPOST JSON / GET live / GET history" as Mate
+  component "Authorization and\nChat / Session mapping" as Mapping
+  component "Safe event and\nhistory bridge - gate" as Bridge
 }
-
-rectangle "CampusClaw Runtime V1" as Runtime {
-  component "Session controllers" as Sessions
-  component "Request-scoped SSE" as Stream
+rectangle "Internal Runtime - target contract" {
+  component "Session API\nPOST SSE / GET numeric pages" as Runtime
 }
-
-User --> Workspace : chat tasks
-Workspace --> RequestAdapter : product actions
-RequestAdapter --> PublicApi : target public HTTP and SSE
-PublicApi --> Policy
-Policy --> Mapping
-Mapping --> Sessions : internal HTTP
-Stream --> Policy : internal SSE events
-Policy --> Projector : public safe events
-RequestAdapter ..> Sessions : current internal-only direct HTTP
-Stream ..> Projector : current internal-only direct SSE
-Diagnostics --> RequestAdapter : product-safe diagnostics only
-
-note bottom of Frontend
-Product constraints:
-- No product Service URL or credential editor
-- No JWT, APPKEY, or access-token product storage
-- No raw session_id, ETag, JSON, or SSE frames
-- Agent, chat, and attachment metadata use public resources
-end note
-
+User --> Workspace
+Workspace --> Gateway
+Gateway --> Host
+Host --> Mate
+Mate --> Mapping
+Mapping --> Runtime
+Runtime --> Bridge : committed events and preview
+Bridge --> Mate : explicit public projection
+Gateway --> Reducer : validated receipt, live, history
+Reducer --> Workspace : immutable view
 note bottom of Mate
-Security hardening:
-- Establish identity outside Chat credential forms
-- Exact browser session mechanism remains pending
-- Authorize each action
-- Project internal errors and events
-- Do not byte-forward internal SSE
-end note
-
-note bottom of Runtime
-Observed internal contract:
-- 11 Session Runtime operations
-- One active execution per Session
-- No Runtime-local integration credential validation
-- Persistent Entry history plus transient progress events
+Keep public and internal contracts separate.
+Target correlation, tool result projection,
+history snapshot bridging, and authentication
+must be verified before production enablement.
 end note
 @enduml
 
@@ -79,16 +49,16 @@ end note
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java lines 58-73 (submit).
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java lines 45-50 (mateCredentials).
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java lines 93-190 and 298-373.
-' Observed behavior: the current frontend has no credential controls and requestRaw always sends only non-secret X-HW-ID context.
+' Historical behavior at 320d7907: no editor; latest dfb90ca has a DEV-only memory editor in frontend/src/debugHeaders.ts and App.vue submit.
 ' Observed behavior: the source baseline captures three headers on event submission and also sends them on discovery requests.
 ' Reviewed implementation: access-token is captured, discovery is credentialless, and only Mate tool execute receives the execution snapshot.
-' Target-only frontend design: the debug drawer and event-only browser header snapshot are not implemented at the reviewed commit.
+' Observed at dfb90ca: initial-message headers exist; new control and Skill request adapters remain target-only.
 ' Product-reference evidence: Postman request headers documentation reviewed 2026-08-28.
 ' Product-reference evidence: opencode 849c2598 packages/app/src/components/dialog-custom-provider.tsx lines 273-315 and dialog-custom-provider-form.ts lines 97-128.
 ' Security hardening: browser validation, memory-only values, event-only request scope, redacted diagnostics, and no automatic POST replay.
 ' Design reason: a generic key-value table supports fast request debugging without freezing current credential names into the UI.
 
-title Internal debug header flow
+title Internal debug header flow - legacy adapter scope
 left to right direction
 
 actor "Developer" as Developer
@@ -135,7 +105,10 @@ note bottom of EventAdapter
 Never attach the debug snapshot to:
 - Session create, read, or delete
 - History, model, or thinking
-- Steer, FollowUp, or Abort
+- Legacy control paths (now retired)
+
+New Events control headers require a separate adapter.
+This legacy allowlist is not the v2 contract.
 
 Do not replay the event POST after disconnect.
 end note
@@ -159,6 +132,8 @@ end note
 
 @startuml assistant_rich_text_rendering
 ' Source baseline: pi-mono-java bde123706305a41e51c9a47b22e6ad11bbd8204c.
+' Historical evidence below; dfb90ca frontend/package.json already includes markdown-it.
+' Target decision: reuse the parser with a public content policy, not raw debugger visibility.
 ' Source evidence: frontend/src/components/ConversationTimeline.vue lines 37-49 (assistant text interpolation).
 ' Source evidence: frontend/src/projectors/runtimeEventProjector.ts lines 40-55 (projectAssistantEvent) and 133-145 (text extraction).
 ' Source evidence: frontend/src/style.css lines 784-789 (.assistant-message plain pre-wrap styling).
@@ -169,12 +144,12 @@ end note
 ' Security hardening: raw HTML, remote Markdown images, relative application routes, and dangerous URL schemes never become active DOM.
 ' Design reason: use one raw Markdown source and one renderer so streaming, completion, and history recovery converge to equivalent UI.
 
-title Assistant safe rich-text rendering
+title Assistant safe rich-text rendering - public integration target
 top to bottom direction
 
-rectangle "Runtime and public event input" as Input {
-  component "assistant.message.delta\ntext fragment" as Delta
-  component "assistant.message.completed\nfull persistent text" as Completed
+rectangle "Validated public event input" as Input {
+  component "agent.message phase=delta\ncontent fragment" as Delta
+  component "agent.message phase=completed\nfull persistent content" as Completed
   component "GET history\nfull persistent text" as History
 }
 
@@ -211,10 +186,10 @@ Vue --> Code
 Vue --> Link
 
 note bottom of Input
-Observed source contract:
-- Runtime carries text, not HTML
-- completed and history are authoritative
-- tool result and thinking use separate UI paths
+Historical source and target policy:
+- Source carries text, not HTML
+- Target completed/history are authoritative
+- Target tool and summary use plain text
 end note
 
 note bottom of Renderer
@@ -235,89 +210,165 @@ end note
 @enduml
 
 @startuml runtime_event_ui_projection
-' Source baseline: pi-mono-java bde123706305a41e51c9a47b22e6ad11bbd8204c.
-' Source evidence: frontend/src/components/ConversationTimeline.vue lines 37-65 (thinking disclosure and result-only activity card).
-' Source evidence: frontend/src/projectors/runtimeEventProjector.ts lines 40-90 and 112-145 (assistant, thinking, and result-only tool projection).
-' Source evidence: frontend/src/types/product.ts lines 22-37 (AssistantTurn and ActivityTurn without arguments).
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java lines 149-213 and 257-285.
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java lines 67-88, 430-442, 512-517, and 557-601.
-' Product-reference evidence: ChatGPT.app 26.820.60940 webview/assets/tool-activity-disclosure-CZUjU0Tu.js, agent-activity-item-BL0IhzOn.js, reasoning-item-heading-Cdl3NWmT.js, and local-conversation-turn-Ngva_Lp3.js.
-' Observed behavior: thinking is attached to the assistant body; the frontend activity card shows result only; tool lifecycle events omit arguments, while assistant completed content preserves tool_call arguments.
-' Target-only design: a chronological activity group, safe thinking summary, and safe argument viewer are not implemented at this baseline.
-' Security hardening: the public bridge redacts, maps, and budgets arguments before the browser renders inert structured text.
-' Security hardening: raw private reasoning remains internal; the browser receives only a user-facing thinking title and summary.
-' Observed Codex behavior: activity rows are compact disclosures; details are vertical and indented; the running item opens by default and completed items collapse.
-' Design reason: correlate ToolCallSpec, lifecycle, and result by toolCallId so safe thinking context and real tool inputs stay readable without exposing raw protocol data.
-
-title Runtime events to product UI projection
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
+' Source evidence: frontend/src/projectors/runtimeEventProjector.ts projectRuntimeEvents, registerToolSpecs.
+' Source evidence: frontend/src/components/ToolActivity.vue template; frontend/src/types/product.ts ActivityTurn.
+' Observed behavior: legacy assistant/tool events, no confirmation UI, rich-text tool output.
+' Target-only product projection follows the Mate public contract, not internal wire aliases.
+' Design reason: shared reduction prevents duplicate messages and separates preview from authority.
+title Public event to UI projection - target-only
 left to right direction
-
-rectangle "Runtime event families" as Events {
-  component "user.message" as UserEvent
-  component "assistant.message.started\nassistant.message.delta\nassistant.message.completed" as AssistantEvents
-  component "assistant.thinking.started\nassistant.thinking.delta\nassistant.thinking.completed" as ThinkingEvents
-  component "assistant completed\ntool_call name and arguments" as ToolSpec
-  component "tool.execution.started\ntool.execution.completed\ntool.result" as ToolEvents
-  component "session.status.idle\nstream.end\nstream.error" as TerminalEvents
+rectangle "Validated public input" {
+  component "POST receipt / history\nuser.*" as UserEvents
+  component "agent.message\nphase delta / completed" as Message
+  component "agent.thinking\npublic summary only" as Thinking
+  component "agent.tool_call\nagent.tool_result" as Tool
+  component "chat.status_idle\nreason" as Idle
 }
+component "PublicEventReducer\nshared by receipt, live, history" as Reducer
+rectangle "Per-Chat UI" {
+  component "User and Assistant timeline\ncompleted replaces preview" as Timeline
+  component "Thinking disclosure\nsafe plain text" as Summary
+  component "Tool activity\ninput above output" as Activity
+  component "Confirmation state\nallow / deny / receipt pending" as Confirmation
+  component "Business state\nseparate from connection" as State
+}
+UserEvents --> Reducer
+Message --> Reducer
+Thinking --> Reducer
+Tool --> Reducer
+Idle --> Reducer
+Reducer --> Timeline : eventId
+Reducer --> Summary
+Reducer --> Activity : toolCallId association
+Reducer --> Confirmation : verify pending call
+Reducer --> State : reliable current target only
+note bottom of State
+confirming is not ready.
+Receipt is not tool success or termination.
+EOF and empty history do not prove completion.
+Missing target correlation keeps controls gated.
+end note
+@enduml
 
-rectangle "Frontend projection" as Projection {
-  component "User turn" as UserTurn
-  component "Streaming assistant turn" as AssistantTurn
-  rectangle "Chronological Agent activity group" as ActivityGroup {
-    component "Thinking disclosure\nsafe title and summary" as ThinkingRow
-    component "Compact tool activity row\nvertical input then output" as ActivityCard
-    component "Safe argument viewer\ninert key-value tree" as ArgumentViewer
+@startuml target_frontend_components
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
+' Source evidence: frontend/src/App.vue submit; frontend/src/composables/useRuntimeApi.ts loadHistory, requestRaw.
+' Source evidence: frontend/src/projectors/runtimeEventProjector.ts projectRuntimeEvents; frontend/src/types/product.ts.
+' Observed behavior: current app directly owns Runtime state and legacy controls; no public Chat Gateway.
+' Target-only architecture: every class and relationship below is a product integration target.
+' Design reason: isolate protocol and host identity, use per-Chat state, and make recovery read-only.
+title Global product frontend components - all target-only
+top to bottom direction
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+package "Browser views" {
+  class ChatWorkspace <<view>>
+  class ContentViews <<view>> {
+    safe Markdown for Assistant
+    plain text for tool and summary
   }
-  component "Session and composer state" as SessionState
 }
-
-rectangle "User controls while running" as Controls {
-  component "Adjust direction\nafter actual stop" as Adjust
-  component "Stop" as Stop
+package "Per-Chat application" {
+  class ConversationCoordinator <<per-Chat>>
+  class HistoryRecovery <<per-Chat>>
+  class ConfigurationCoordinator <<per-Chat>>
 }
-
-UserEvent --> UserTurn : persist and render
-AssistantEvents --> AssistantTurn : preview then replace with final
-ThinkingEvents --> ThinkingRow : project safe display summary
-ToolSpec --> ActivityCard : correlate by toolCallId
-ToolEvents --> ActivityCard : merge lifecycle and result
-ActivityCard --> ArgumentViewer : render safe arguments
-TerminalEvents --> SessionState : idle, complete, or recoverable error
-
-Adjust --> SessionState : user.message after actual stop
-Stop --> SessionState : Events user.interrupt
-
-note bottom of ActivityCard
-Running and failed tools stay expanded.
-Successful tools collapse after the final answer.
-Input appears above output in one vertical detail body.
-Tools that have not started are not shown.
-No second card is created for late metadata.
+package "Per-Chat state and projection" {
+  class ChatStore <<per-Chat>>
+  class DraftStore <<per-Chat>>
+  class ToolConfirmationStore <<per-Chat>>
+  class ConfigurationStore <<per-Chat>>
+  class PublicEventReducer <<pure>>
+}
+package "Transport boundary" {
+  interface PublicChatGateway {
+    submit(frozenIntent)
+    subscribe(onEvent)
+    readHistory(page)
+  }
+  class MateChatAdapter <<per-Chat>>
+  class MockChatAdapter <<prototype>>
+  class HostTransport <<host-owned>>
+}
+package "External server boundary" {
+  class MatePublicAPI <<target server>>
+  class AuthorizedChatMapping <<target server>>
+  class RuntimeAdapter <<target server>>
+  class RuntimeSessionAPI <<external contract>>
+}
+ChatWorkspace --> ConversationCoordinator : user intents
+ChatWorkspace --> ConfigurationCoordinator : top bar / Slash
+ChatWorkspace --> ContentViews : read-only snapshot
+ConversationCoordinator *-- "1" DraftStore
+ConversationCoordinator *-- "1" ToolConfirmationStore
+ConversationCoordinator *-- "1" ChatStore
+ConversationCoordinator --> PublicChatGateway : submit / subscribe
+ConversationCoordinator --> HistoryRecovery : reconcile only
+HistoryRecovery --> PublicChatGateway : read-only methods
+HistoryRecovery --> PublicEventReducer : history
+ConversationCoordinator --> PublicEventReducer : receipt / live
+PublicEventReducer --> ChatStore : atomic reduced snapshot
+PublicEventReducer --> ToolConfirmationStore : pending decision state
+ContentViews --> ChatStore : immutable view
+ConfigurationCoordinator *-- "1" ConfigurationStore
+ConfigurationCoordinator --> HostTransport : gated config operation
+MateChatAdapter ..|> PublicChatGateway
+MockChatAdapter ..|> PublicChatGateway
+MateChatAdapter --> HostTransport
+HostTransport --> MatePublicAPI : public Chat protocol
+MatePublicAPI --> AuthorizedChatMapping : authorize and resolve
+AuthorizedChatMapping --> RuntimeAdapter
+RuntimeAdapter --> RuntimeSessionAPI : internal protocol
+note bottom of PublicChatGateway
+Adapters selected explicitly; no Runtime fallback.
+Freeze request intent, not mutable authority.
+Server rechecks state for every mutation.
 end note
-
-note bottom of ThinkingRow
-Running thinking may stay expanded.
-Completed thinking collapses to Analysis process.
-Never expose raw chain-of-thought.
-Do not invent a duration without timestamps.
+note bottom of ChatStore
+Generation rejects old-Chat responses.
+Completed events and preview are separate.
+No credentials or internal Session IDs.
 end note
+@enduml
 
-note bottom of ArgumentViewer
-Public bridge duties:
-- redact sensitive values
-- map internal paths and resource IDs
-- clamp depth, length, and collection size
-- never activate HTML, Markdown, or URLs
+@startuml target_conversation_states
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
+' Source evidence: frontend/src/App.vue running, submit; frontend/src/composables/useRuntimeApi.ts abort, matchesPendingSubmission.
+' Observed behavior: connection state and execution state overlap; confirmation uses text matching.
+' Target-only UI state design; not new HTTP enums.
+' Design reason: accepted writes, confirmation, and connection loss cannot imply completion.
+title Conversation state - target-only product model
+hide empty description
+[*] --> Ready
+Ready --> Submitting : explicit send / freeze draft
+Submitting --> Running : complete receipt
+Submitting --> Uncertain : receipt missing
+Running --> Confirming : verified pending tool
+Confirming --> DecisionPending : allow or deny
+DecisionPending --> Running : complete decision receipt
+Running --> Stopping : explicit stop
+Confirming --> Stopping : explicit stop
+Stopping --> StopAccepted : complete interrupt receipt
+StopAccepted --> Ready : reliable target terminal
+Running --> Ready : reliable target terminal
+Running --> Uncertain : connection loss
+DecisionPending --> Uncertain : uncertain decision
+Stopping --> Uncertain : uncertain stop
+StopAccepted --> Uncertain : no target terminal
+Uncertain --> Reconciling : read only
+Reconciling --> Uncertain : insufficient evidence
+Reconciling --> Running : current execution verified
+Reconciling --> Confirming : current pending call verified
+Reconciling --> Ready : current readiness verified
+note right of Confirming
+No second message or config write.
+A historical confirmation card is read-only.
 end note
-
-note bottom of SessionState
-Network loss does not replay the POST.
-Reload persistent history and deduplicate
-by the public event identity.
-
-No running-message queue in the current product.
-Stop first, then submit a new message.
-Other event mappings above are the v1 migration baseline.
+note bottom of Uncertain
+Keep draft and confirmed content.
+Never replay a write automatically.
+No same-text correlation.
+No arbitrary old idle as current terminal.
 end note
 @enduml

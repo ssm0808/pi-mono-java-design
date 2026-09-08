@@ -7,6 +7,8 @@ title Target Slash Command Frontend Components
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts, sendMessage and requestRaw
 ' Source evidence: frontend/src/types/product.ts and frontend/src/types/runtime.ts
 ' Contract evidence: executeSessionCommand response variants at design baseline 88f4df16
+' Contract update: design 2ee2a321 B13 confirms internal Skill SSE; Builtin JSON is unchanged.
+' Public mapping remains gated; Skill shares the target conversation coordinator.
 ' Observed behavior: the current debug workbench has one message draft and no command gateway, catalog, parser, or command result projection.
 ' Target-only design: every element marked target is proposed and is not implemented at the source baseline.
 ' Design reason: keep discovery, immutable invocation decoding, ephemeral results, and ordinary chat history as separate responsibilities.
@@ -49,6 +51,7 @@ package "Slash application state [target-only]" as StatePkg {
   component "CommandCatalogStore\nper active chat" as CatalogStore
   component "CommandParser\npure function" as Parser
   component "CommandPresentationRegistry" as Registry
+  component "Shared ConversationCoordinator\n[target, public integration gated]" as Conversation
 }
 
 package "Gateway boundary [target-only]" as GatewayPkg {
@@ -58,7 +61,7 @@ package "Gateway boundary [target-only]" as GatewayPkg {
 }
 
 cloud "mate-service public API\nGET descriptor confirmed\nexecute contract pending" as MateApi
-cloud "Runtime internal API\nGET and Builtin POST confirmed" as RuntimeApi
+cloud "Runtime internal API\nGET / Builtin JSON / Skill SSE confirmed" as RuntimeApi
 
 App *-- Composer
 App *-- Timeline
@@ -75,6 +78,7 @@ UseSlash *-- CatalogStore
 UseSlash --> Parser
 UseSlash --> Registry : present by expected result kind
 UseSlash --> Gateway
+UseSlash --> Conversation : Skill event execution
 UseSlash --> SessionState : apply validated resource response
 UseSlash --> AttachmentState : preserve or admit files
 Registry --> Renderers
@@ -84,8 +88,8 @@ MateGateway --> MateApi
 RuntimeGateway --> RuntimeApi
 
 note bottom of Timeline
-  Command results never become
-  ConversationTurn or durable history.
+  Builtin results remain ephemeral.
+  Skill uses ordinary message events and history.
 end note
 
 note bottom of MateGateway
@@ -139,7 +143,10 @@ EditingArguments --> MessageDraft : cancel and restore suspended draft
 
 state Executing
 Executing --> EditingArguments : failure, preserve command draft
-Executing --> ResultVisible : success
+Executing --> ResultVisible : Builtin JSON success
+Executing --> ConversationExecution : Skill receipt / public gate passed
+ConversationExecution : Shared message, confirmation and recovery flow
+ConversationExecution --> MessageDraft : restore suspended draft; never auto-send
 
 state ResultVisible
 ResultVisible : Ephemeral result, latest one per active chat
@@ -197,6 +204,7 @@ participant "CommandGateway\n[target]" as Gateway
 participant "Command API" as Api
 participant "Session and model state" as State
 participant "CommandResultRegion\n[target]" as Result
+participant "ConversationCoordinator\n[target, gated]" as Conversation
 
 User -> Composer : enter Slash mode
 Composer -> Slash : open(activeChatId)
@@ -215,13 +223,18 @@ Slash -> Slash : freeze invocation and expected result kind
 Slash -> Gateway : executeCommand(invocation)
 Gateway -> Api : POST command
 
-alt success
+alt Builtin success
   Api --> Gateway : command-specific JSON
   Gateway -> Gateway : validate against expected result kind
   Gateway --> Slash : typed result plus invocation
   Slash -> State : apply authoritative Session or Models when present
   Slash -> Result : render by expected result kind
   Slash -> Slash : mark catalog stale
+else Skill accepted - public integration confirmed
+  Api --> Gateway : ordinary user receipt and event stream
+  Gateway --> Conversation : validate selected protocol and reduce events
+  Conversation -> State : shared execution and recovery state
+  Slash --> Composer : clear acknowledged Skill draft only
 else 404 or 409
   Api --> Gateway : structured error
   Gateway --> Slash : failure

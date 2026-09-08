@@ -19,15 +19,15 @@
   </style>
 </head>
 <body>
-<aside role="note"><p>2026-09-07 控制设计已更新：本期不支持队列或运行中 Steer。停止通过 user.interrupt，实际停止后才可提交新消息。下方旧图片及跟进控件仅为历史视觉基线，不可作为当前调用契约。<a href="README.md#73-running-对话">当前控制规则</a></p></aside>
+<aside role="note"><p>2026-09-08 对齐：保留产品与调试边界；工具确认、停止、历史和配置遵循<a href="public-chat-alignment.md">公共对话前端对齐</a>。内部新契约不能直接作为产品公共协议。</p></aside>
   <h1>ADR-0016 · CampusClaw 产品前端隔离 Runtime 调试协议</h1>
-  <div class="meta">Status: <span class="badge">Proposed</span> · Date: 2026-08-26 · Debug header boundary updated: 2026-08-28 ·
+  <div class="meta">Status: <span class="badge">Proposed</span> · Version: 1.1.0 · Updated: 2026-09-08 · Created: 2026-08-26 ·
     设计文档: <a href="README.md">campusclaw-frontend</a> ·
-    凭据复核基线: <code>320d790726a70aada6100052952d5494d2a378ac</code> ·
-    已评审实现: <code>d03c08dbae870f19eee8d4fa79a707185f7a26b5</code> (Draft PR 181)</div>
+    历史凭据复核基线: <code>320d790726a70aada6100052952d5494d2a378ac</code> ·
+    历史特性实现: <code>d03c08dbae870f19eee8d4fa79a707185f7a26b5</code> (Draft PR 181)</div>
 
   <section><h2>Context</h2>
-    <p>早期 <code>3a6358bc</code> 调试页曾把 Service URL 和协议字段作为主界面元素；这只是历史证据，不能描述当前前端。当前复核基线 <code>320d7907</code> 已实现 Agent 工作区、对话时间线和产品化控制，仍由浏览器直连 Runtime 并在前端维护内部 Session/ETag/SSE，但不支持 JWT/APPKEY 凭据：没有凭据控件、秘密 <code>VITE_*</code> 配置、浏览器 credential store 或 <code>Authorization</code> / <code>X-HW-APPKEY</code> Header 注入路径。统一请求只携带非秘密 <code>X-HW-ID</code> 调用上下文，开发者诊断入口也只有 Agent ID 和 Session ID。为快速验证凭据透传，本 ADR 在不改变产品边界的前提下，允许内部开发构建新增隔离的临时 Header 抽屉。</p>
+    <p>早期 <code>3a6358bc</code> 调试页曾把 Service URL 和协议字段作为主界面元素；这只是历史证据，不能描述当前前端。当时复核基线 <code>320d7907</code> 已实现 Agent 工作区、对话时间线和产品化控制，仍由浏览器直连 Runtime 并在前端维护内部 Session/ETag/SSE，但不支持 JWT/APPKEY 凭据：没有凭据控件、秘密 <code>VITE_*</code> 配置、浏览器 credential store 或 <code>Authorization</code> / <code>X-HW-APPKEY</code> Header 注入路径。统一请求只携带非秘密 <code>X-HW-ID</code> 调用上下文，开发者诊断入口也只有 Agent ID 和 Session ID。为快速验证凭据透传，本 ADR 在不改变产品边界的前提下，允许内部开发构建新增隔离的临时 Header 抽屉。当前源码 <code>dfb90ca</code> 已实现该抽屉和 Markdown，但仍是内部调试工作台；差距按专项源码表记录。</p>
     <p>当前 Runtime 不执行本地集成凭据校验，因此无凭据的直接适配器可以用于受控内部调试；这不等于已经具备生产认证、授权或审计边界。精确 Runtime 设计仍要求生产浏览器经 mate-service 访问，内部 SSE 不得字节透明转发。公共链路必须补齐身份建立与动作授权，但不能通过给 Chat 页面增加 JWT/APPKEY 表单或把秘密编译进浏览器产物来补齐。</p>
   </section>
 
@@ -35,7 +35,7 @@
     <ul>
       <li><strong>继续把当前调试台扩展成产品</strong><br>Pro：改动最小，11 个接口已经接通。<br>Con：内部身份、Session、ETag 和事件模型泄漏到用户边界；信息架构仍围绕接口而不是任务。Rejected。</li>
       <li><strong>保持当前无凭据直接 Runtime 适配器并作为生产链路</strong><br>Pro：无需新增浏览器凭据能力，改动最小。<br>Con：只发送非秘密 <code>X-HW-ID</code> 不能建立生产用户身份、权限和审计；前端仍耦合内部标识与 SSE 契约。Rejected。</li>
-      <li><strong>产品 UI 经 mate-service 公共 bridge，调试台隔离为内部诊断入口</strong><br>Pro：用户模型稳定；认证、Chat/Session 映射、错误脱敏和 Event 投影责任清晰；诊断构建可通过仅内存 Header 快照保留接口联调能力。<br>Con：需要构建隔离、脱敏和请求范围测试；仍需逐项评审 Agent、Chat、Attachment、Model Catalog 和 public SSE 契约。Chosen。</li>
+      <li><strong>产品 UI 经 mate-service 公共 bridge，调试台隔离为内部诊断入口</strong><br>Pro：用户模型稳定；认证、Chat/Session 映射、错误脱敏和 Event 投影责任清晰；诊断构建可通过仅内存 Header 快照保留接口联调能力。<br>Con：需要构建隔离、脱敏和请求范围测试；仍需校准公共与内部契约差异，并完成生产身份和能力绑定。Chosen。</li>
     </ul>
     <p><strong>选择理由：</strong>真实前端不是调试台的视觉换肤，而是资源边界和交互语言的产品化。不能把“没有凭据”误当成“已经认证”，也不能把内部诊断例外扩张成产品 Chat 的凭据管理责任。</p>
   </section>
@@ -51,25 +51,25 @@
       <li>启用行的 Key/Value 必须同时存在；Key 必须是合法 HTTP token，Value 不得包含 CR/LF，重复 Key 按大小写不敏感规则拒绝。Fetch 禁止的请求头名称使用行内错误阻止发送，而不是通过固定 Header 列表限制输入。</li>
       <li>诊断值只存在于当前页面内存与必需的输入元素中，不进入 <code>localStorage</code>、<code>sessionStorage</code>、IndexedDB、URL、<code>VITE_*</code>、遥测、日志或复制摘要；刷新、关闭页签或切换 API base 清除。</li>
       <li>编辑器不根据 Key 猜测值是否为秘密，也不自动修改或补全认证值。真实值可被页面脚本、DOM 输入值与浏览器 DevTools 网络面板观察，因此该能力只能存在于受控开发构建；风险规则写入设计和测试，不在表格中常驻显示说明注释。</li>
-      <li>调试 Header 只在初始 <code>POST /sessions/{sessionId}/events</code> 发送前建立不可变快照；Session、历史、配置、Steer、FollowUp 和 Abort 不携带该快照，运行中编辑只影响下一次普通消息提交。</li>
-      <li>已评审特性提交 <code>d03c08db</code> 中，Agent/Skill/Tool metadata 发现不携带凭据快照；Mate Tool execute 只使用后端契约识别的四项凭据，其他自定义 Header 不自动向下游透传。Runtime 不校验凭据真实性、不持久化、不投影到 Event；PR 合并前不视为 <code>main</code> 现状。</li>
-      <li>诊断抽屉默认关闭，不判断 JWT、APPKEY 或其他认证模式；后端按自身契约判断 Header 组合、认证和授权，不改变生产公共边界一次只选择一种认证模式的约束。</li>
+      <li>现有调试实现只在初始消息发送前建立不可变 Header 快照。新 Events 消息、确认、中断及 Skill 按各 operation 校验请求范围；不能把退役控制路径的免 Header 行为当作新契约，也不能覆盖原执行快照。</li>
+      <li>已评审特性提交 <code>d03c08db</code> 中，Agent/Skill/Tool metadata 发现不携带凭据快照；Mate Tool execute 只使用后端契约识别的四项凭据，其他自定义 Header 不自动向下游透传。Runtime 不校验凭据真实性、不持久化、不投影到 Event；此处仅为历史证据，当前前端观察以 <code>dfb90ca</code> 为准。</li>
+      <li>诊断抽屉默认关闭，不判断 JWT、APPKEY 或其他认证模式；后端按自身契约判断 Header 组合、认证和授权，生产集成按 Mate 已确认的 Header 条件和优先级执行，不由诊断编辑器决定认证策略。</li>
       <li>生产浏览器身份由统一登录、mate-service 或网关边界建立；具体会话承载、续期和注销机制属于待评审公共 API 集成点，不从当前直接适配器推断。</li>
       <li>产品主界面只展示 Agent、Chat、消息、附件、模型、深度思考、工具活动和粗粒度执行状态。</li>
       <li><code>session_id</code>、ETag、原始 JSON、SSE frame 和内部错误只允许进入内部诊断入口，且生产构建默认不可达；Header Value 只允许存在于当前诊断表单内存，请求摘要只显示 Key 和“已配置/未配置”。</li>
-      <li>Steer、FollowUp、Abort 在产品中分别命名为“调整方向”“加入队列”“停止”。运行态 Composer 只显示当前跟进方式；desktop 默认“调整方向”，设置可改为“加入队列”，<code>Cmd/Ctrl+Shift+Enter</code> 对单条消息临时反转。</li>
-      <li>“调整方向”不宣称立即中断当前模型或工具；它在当前 Assistant Turn 与工具结束后的下一次模型调用前送达。“加入队列”只在当前执行本会自然结束时送达。</li>
-      <li>工具 started/completed/result 合并为一个紧凑 activity disclosure；执行中与失败项默认展开，成功项在最终答案出现后折叠，尚未开始的工具不显示。</li>
-      <li>工具展开详情始终按“输入参数 → 输出结果”纵向排列，不采用左右分栏；持久化 completed/result 就地替换瞬时 preview。</li>
+      <li>本期不支持运行中 Steer 或队列。执行、确认等待与停止处理中只保留草稿，不提交第二条普通消息，也不在结束后自动续发。</li>
+      <li>停止使用 <code>user.interrupt</code>。请求回执不等于实际停止；确认目标归属与真实终态后才恢复发送。公共精确目标映射尚未确认时仅提供 mock，不擅自添加内部字段。</li>
+      <li>公共 tool_call、确认决定和 tool_result 合并为一个紧凑 activity disclosure。待确认项显示参数及允许/拒绝；需要确认不代表正在执行，缺少结果不代表成功。</li>
+      <li>工具展开详情始终按“输入参数 → 输出结果”纵向排列，不采用左右分栏；完整工具结果更新同一个工具行，不与文本 delta 混合。</li>
       <li>Thinking 与 Tool 按事件顺序组成 Agent 活动流；Thinking 运行时可展开、完成后折叠为“分析过程”。产品浏览器只接收面向用户的安全标题与摘要，不展示或接收原始私有推理。</li>
-      <li>前端从 Assistant completed 的 <code>tool_call</code> 块提取 <code>toolCallId</code>、名称和入参，再按 <code>toolCallId</code> 合并 execution 与 result；不为后到元数据新建重复卡。</li>
+      <li>前端从独立 <code>agent.tool_call</code> 提取名称和安全入参，按 <code>toolCallId</code> 关联确认与结果；事件自身按 <code>eventId</code> 去重。不再从旧 Assistant 内嵌块推导公共调用。</li>
       <li>产品工具卡只显示 mate-service bridge 经字段策略、脱敏、资源映射和预算后的入参；禁止暴露凭据、内部 ID、绝对路径和原始未脱敏 payload。入参 viewer 不激活 Markdown、HTML 或 URL。</li>
-      <li>Assistant <code>TextContent.text</code> 原样作为 Markdown 源，通过关闭 raw HTML 的 parser、节点与 URL allowlist 以及固定 Vue 组件渲染；禁止 <code>v-html</code>、<code>innerHTML</code>、远程 Markdown 图片、相对应用路由和危险协议链接。</li>
-      <li>User、Thinking 安全摘要、Tool result 与错误不继承 Assistant Markdown 权限，分别使用纯文本或受控结构化 viewer。</li>
-      <li>流式 delta、completed Entry 和 GET history 共用同一 <code>rawMarkdown</code> 与 renderer；未闭合尾块纯文本显示，完成态以持久化全文重新解析。</li>
-      <li>断线后禁止重放副作用 POST；公共客户端重新读取持久化历史并去重。</li>
+      <li>公共 Assistant <code>agent.message.content</code> 原样作为 Markdown 源，通过关闭 raw HTML 的 parser、节点与 URL allowlist 以及固定 Vue 组件渲染；禁止 <code>v-html</code>、<code>innerHTML</code>、远程 Markdown 图片、相对应用路由和危险协议链接。</li>
+      <li>User、Thinking 安全摘要、Tool result 与错误不继承 Assistant Markdown 权限，均使用纯文本；工具入参单独使用安全 JSON viewer。</li>
+      <li>流式 delta、completed Event 和 GET history 共用同一 <code>rawMarkdown</code> 与 renderer；未闭合尾块纯文本显示，完成态以持久化全文重新解析。</li>
+      <li>公共 POST 返回 JSON 回执，独立 GET stream 观察，历史使用固定快照游标。三者共享 Reducer；断线只重开读流并补历史，不重放任何 POST。空页或 EOF 不证明执行完成。</li>
       <li><code>401/403</code> 交给统一登录/权限流程；页面不弹出凭据框、不从 URL 或浏览器存储补采秘密，也不携带原请求自动重试副作用操作。</li>
-      <li>Agent 目录、Chat 列表与标题、附件上传、模型友好名称和 public SSE 均标为目标态公共契约，不宣称 Runtime 已实现。</li>
+      <li>Mate Events 1.4.4 与内部 Claw B01～B15 均按已确认设计读取，但生产实现未据此验证；控制关联、工具文本块、历史快照、配置及 Skill 映射分别设接入门禁。</li>
       <li>产品视觉保留 Codex-inspired 工具层级，采用已确认的 O1 原始图形资产和暖中性表面；O1 不通过生成模型重绘，也不复制 OpenAI/Codex 商标。</li>
     </ul>
   </section>
@@ -78,8 +78,8 @@
     <ul>
       <li><strong>正面：</strong>主界面围绕用户任务；生产身份责任不回流到 Chat 页；Runtime 可继续独立演进；开发者能快速验证临时 Header 到 Tool execute 的透传。</li>
       <li><strong>负面：</strong>需要 mate-service bridge 和多个公共资源契约；前端初期要通过 mock adapter 开发；产品事件与 Runtime 事件之间增加一层投影测试。</li>
-      <li><strong>迁移：</strong>现有页面不直接删除，先迁移到内部诊断路由或独立开发构建；仅在此构建中增加 Header 抽屉，产品路由完成真实集成后再决定是否移除旧入口。</li>
-      <li><strong>安全：</strong>需要构建期和 E2E 门禁，证明生产构建不存在凭据控件或 store；诊断构建不持久化、复制或记录秘密，只有提交消息 POST 收到快照，生产 DOM、网络日志和错误界面不包含真实凭据、Session ID、ETag 或原始 SSE。</li>
+      <li><strong>迁移：</strong>现有页面不直接删除，先迁移到内部诊断路由或独立开发构建；仅在此构建中保留 Header 抽屉，产品路由完成真实集成后再决定是否移除旧入口。</li>
+      <li><strong>安全：</strong>需要构建期和 E2E 门禁，证明生产构建不存在凭据控件或 store；诊断构建不持久化、复制或记录秘密，各类诊断请求严格遵守已确认的 Header 范围，生产 DOM、网络日志和错误界面不包含真实凭据、Session ID、ETag 或原始 SSE。</li>
       <li><strong>运维：</strong>跨源调试需网关/Runtime CORS 显式允许本次调试所需的自定义 Header；通用编辑器不意味着允许无界通配 Header，未获允许时按网络错误处理。</li>
       <li><strong>富文本安全：</strong>需要 XSS corpus、危险 URL、远程图片、超深嵌套、超预算输入和流式分块测试；失败时回退为转义纯文本并保留复制原文。</li>
       <li><strong>活动数据安全：</strong>公共事件投影需要安全思考摘要、入参脱敏、资源映射、结构预算与投影失败测试；前端不得在公共投影缺失时回退显示原始 ThinkingContent 或内部原始入参。</li>
