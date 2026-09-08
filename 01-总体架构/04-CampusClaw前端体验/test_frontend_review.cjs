@@ -178,13 +178,70 @@ test('configuration refresh requires a separate explicit modification', (f) => {
   assert.equal(f.get('chat-draft').value, '配置不影响草稿');
 });
 
+test('Headers presets are optional and never create automatic rows', (f) => {
+  const rows = () => [...f.document.querySelectorAll('[data-header-row]')];
+  assert.deepEqual(rows().map((row) => row.querySelector('.header-key').value),
+    ['access-token', 'X-HW-ID', 'Authorization']);
+  assert.ok(rows().every((row) => row.querySelector('.header-value').value === ''));
+  assert.ok(rows().every((row) => row.querySelector('.header-enabled').checked));
+  assert.equal(f.get('debug-header-count').textContent, '(0)');
+  assert.ok(rows().every((row) => row.querySelector('.header-error').textContent === ''));
+  assert.equal(f.document.querySelector('.headers-body p'), null);
+
+  f.change(rows()[0].querySelector('.header-value'), 'fixture');
+  assert.equal(rows().length, 3);
+  assert.equal(f.get('debug-header-count').textContent, '(1)');
+  rows()[0].querySelector('.header-enabled').click();
+  assert.equal(f.get('debug-header-count').textContent, '(0)');
+  assert.equal(rows()[0].querySelector('.header-value').value, 'fixture');
+  rows()[0].querySelector('.header-enabled').click();
+  f.change(rows()[0].querySelector('.header-value'), '');
+  assert.equal(f.get('debug-header-count').textContent, '(0)');
+  assert.equal(rows()[0].querySelector('.header-error').textContent, '');
+
+  f.click('debug-header-add');
+  assert.equal(rows().length, 4);
+  assert.equal(rows()[3].querySelector('.header-key').value, '');
+  assert.equal(rows()[3].querySelector('.header-value').value, '');
+  assert.equal(f.document.activeElement, rows()[3].querySelector('.header-key'));
+  f.click('debug-header-add');
+  assert.equal(rows().length, 5);
+  f.change(rows()[4].querySelector('.header-key'), 'X-Test');
+  f.change(rows()[4].querySelector('.header-value'), 'fixture');
+  assert.equal(rows().length, 5);
+  assert.equal(f.get('debug-header-count').textContent, '(1)');
+});
+
+test('Headers deletion and clear can leave zero rows without restoring presets', (f) => {
+  const rows = () => [...f.document.querySelectorAll('[data-header-row]')];
+  for (let remaining = 2; remaining >= 0; remaining -= 1) {
+    rows()[0].querySelector('.header-delete').click();
+    assert.equal(rows().length, remaining);
+  }
+  assert.equal(f.document.activeElement, f.get('debug-header-add'));
+  f.click('debug-header-add');
+  assert.equal(rows().length, 1);
+  assert.equal(rows()[0].querySelector('.header-key').value, '');
+  f.change(rows()[0].querySelector('.header-key'), 'X-Test');
+  f.change(rows()[0].querySelector('.header-value'), 'fixture');
+  f.click('debug-header-clear');
+  assert.equal(rows().length, 0);
+  assert.equal(f.get('debug-header-count').textContent, '(0)');
+  assert.equal(f.document.activeElement, f.get('debug-header-add'));
+  f.click('debug-header-clear');
+  assert.equal(rows().length, 0);
+  f.click('debug-header-add');
+  assert.equal(rows().length, 1);
+  assert.equal(rows()[0].querySelector('.header-value').value, '');
+});
+
 test('existing Headers validation remains independent', (f) => {
   const row = f.document.querySelector('[data-header-row]');
   f.change(row.querySelector('.header-key'), 'X-Test');
   assert.match(row.querySelector('.header-error').textContent, /同时填写/);
   f.change(row.querySelector('.header-value'), 'fixture');
   assert.equal(row.querySelector('.header-error').textContent, '');
-  assert.ok(f.document.querySelectorAll('[data-header-row]').length >= 2);
+  assert.equal(f.document.querySelectorAll('[data-header-row]').length, 3);
   f.change(row.querySelector('.header-key'), 'Host');
   assert.match(row.querySelector('.header-error').textContent, /禁止/);
 });

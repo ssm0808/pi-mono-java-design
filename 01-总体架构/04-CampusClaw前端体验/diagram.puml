@@ -53,10 +53,10 @@ end note
 ' Observed behavior: the source baseline captures three headers on event submission and also sends them on discovery requests.
 ' Reviewed implementation: access-token is captured, discovery is credentialless, and only Mate tool execute receives the execution snapshot.
 ' Observed at dfb90ca: initial-message headers exist; new control and Skill request adapters remain target-only.
-' Product-reference evidence: Postman request headers documentation reviewed 2026-08-28.
-' Product-reference evidence: opencode 849c2598 packages/app/src/components/dialog-custom-provider.tsx lines 273-315 and dialog-custom-provider-form.ts lines 97-128.
 ' Security hardening: browser validation, memory-only values, event-only request scope, redacted diagnostics, and no automatic POST replay.
-' Design reason: a generic key-value table supports fast request debugging without freezing current credential names into the UI.
+' UI source evidence: pi-mono-java 4cc8dd86f601417c22cf9306e52152acbb59bb60 frontend/src/components/DebugHeaders.vue ensureTrailingRow, clearRows, template; frontend/src/debugHeaders.ts validateDebugHeaders.
+' Observed UI: automatic blank rows and persistent explanatory prose. Target-only UI decision on 2026-09-09: optional editable presets, explicit Add, no persistent prose; legacy transport below is unchanged.
+' Design reason: presets reduce typing; explicit Add avoids unwanted rows. Unused presets are omitted from validation, counts, and request snapshots.
 
 title Internal debug header flow - legacy adapter scope
 left to right direction
@@ -90,8 +90,8 @@ Execution --> Discovery : discover tools
 Execution --> Execute : invoke a selected tool
 
 note bottom of Drawer
-No preset names or credential modes.
-Keep one trailing blank row.
+Editable presets: access-token, X-HW-ID, Authorization.
+Add one blank row on click; delete may leave no rows.
 Generated headers are not rendered.
 Manual values override generated values.
 

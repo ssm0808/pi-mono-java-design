@@ -245,7 +245,7 @@
       padding-top: 10px;
       border-top: 1px solid var(--border);
     }
-    .debug-header-clear, .header-delete {
+    .debug-header-add, .debug-header-clear, .header-delete {
       min-height: 38px;
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -254,9 +254,9 @@
       cursor: pointer;
       font: inherit;
     }
-    .headers-actions { display: flex; justify-content: flex-end; padding-bottom: 4px; }
-    .debug-header-clear { padding: 0 10px; }
-    .debug-header-clear:hover, .header-delete:hover { border-color: var(--border-strong); }
+    .headers-actions { display: flex; justify-content: space-between; gap: 8px; padding-bottom: 4px; }
+    .debug-header-add, .debug-header-clear { padding: 0 10px; }
+    .debug-header-add:hover, .debug-header-clear:hover, .header-delete:hover { border-color: var(--border-strong); }
     .header-grid-head, .header-row {
       display: grid;
       grid-template-columns: 38px minmax(150px, .75fr) minmax(220px, 1.25fr) 38px;
@@ -388,7 +388,7 @@
         <div class="row">
           <img class="review-brand-mark" src="campusclaw-mark-o1.png" alt="">
           <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">1.5.0</span>
+          <span class="tag">1.6.0</span>
           <span class="tag">主对话 · 确认 · 停止 · 恢复</span>
         </div>
         <code class="base">设计基线 2ee2a32 · 源码 dfb90ca · target-only</code>
@@ -427,11 +427,13 @@
 
       <section class="section" id="debug-headers">
         <div class="section-title"><h2>评审中：Headers</h2><code class="screen-key">debugHeaders</code></div>
-        <p class="description"><code>Headers</code> 是独立面板，不与“开发者诊断入口”合并；它只复用原诊断入口的折叠面板、虚线边框、暖灰表面和次级按钮样式。</p>
         <details class="headers-specimen" open aria-label="Headers 编辑器">
           <summary><span>Headers</span><span class="headers-count" id="debug-header-count">(0)</span></summary>
           <div class="headers-body">
-            <div class="headers-actions"><button class="debug-header-clear" id="debug-header-clear" type="button">全部清空</button></div>
+            <div class="headers-actions">
+              <button class="debug-header-add" id="debug-header-add" type="button">增加请求头</button>
+              <button class="debug-header-clear" id="debug-header-clear" type="button">全部清空</button>
+            </div>
             <div class="header-grid" aria-label="自定义请求 Headers">
                 <div class="header-grid-head">
                   <span><span class="sr-only">启用</span></span>
@@ -440,9 +442,21 @@
                   <span><span class="sr-only">删除</span></span>
                 </div>
                 <div id="debug-header-rows">
-                  <div class="header-row" data-header-row>
+                  <div class="header-row" data-header-row data-default-key="access-token">
                     <label class="header-toggle"><input class="header-enabled" type="checkbox" checked aria-label="启用此请求头"></label>
-                    <div class="header-cell"><input class="header-key" type="text" placeholder="Key" autocomplete="off" spellcheck="false" aria-label="Header Key"></div>
+                    <div class="header-cell"><input class="header-key" type="text" value="access-token" placeholder="Key" autocomplete="off" spellcheck="false" aria-label="Header Key"></div>
+                    <div class="header-cell"><input class="header-value" type="text" placeholder="Value" autocomplete="off" spellcheck="false" aria-label="Header Value"><span class="header-error" role="alert"></span></div>
+                    <button class="header-delete" type="button" aria-label="删除此请求头">×</button>
+                  </div>
+                  <div class="header-row" data-header-row data-default-key="X-HW-ID">
+                    <label class="header-toggle"><input class="header-enabled" type="checkbox" checked aria-label="启用此请求头"></label>
+                    <div class="header-cell"><input class="header-key" type="text" value="X-HW-ID" placeholder="Key" autocomplete="off" spellcheck="false" aria-label="Header Key"></div>
+                    <div class="header-cell"><input class="header-value" type="text" placeholder="Value" autocomplete="off" spellcheck="false" aria-label="Header Value"><span class="header-error" role="alert"></span></div>
+                    <button class="header-delete" type="button" aria-label="删除此请求头">×</button>
+                  </div>
+                  <div class="header-row" data-header-row data-default-key="Authorization">
+                    <label class="header-toggle"><input class="header-enabled" type="checkbox" checked aria-label="启用此请求头"></label>
+                    <div class="header-cell"><input class="header-key" type="text" value="Authorization" placeholder="Key" autocomplete="off" spellcheck="false" aria-label="Header Key"></div>
                     <div class="header-cell"><input class="header-value" type="text" placeholder="Value" autocomplete="off" spellcheck="false" aria-label="Header Value"><span class="header-error" role="alert"></span></div>
                     <button class="header-delete" type="button" aria-label="删除此请求头">×</button>
                   </div>
@@ -558,7 +572,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
 
       <article class="screen-card" id="running-conversation" data-screen-key="runningConversation">
         <header class="screen-head">
-          <strong>主对话交互</strong><span class="tag">1.5.0 · target-only</span>
+          <strong>主对话交互</strong><span class="tag">1.6.0 · target-only</span>
           <a href="public-chat-alignment.md">契约边界与验收</a>
         </header>
         <section class="section" id="conversation-workbench">
@@ -660,7 +674,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         <details class="review-question" open><summary>2. 已确认：O1 品牌标识；暖中性配色进入评审</summary><p>O1 使用原始透明 PNG，不生成式重绘，也不缩进深色品牌方块；暖白、暖灰与深暖黑构成工作台，珊瑚色仅用于品牌标识，绿色继续表达运行与完成。</p></details>
         <details class="review-question" open><summary>3. 运行中只保留草稿和停止</summary><p>不提供队列或运行中注入；停止回执不等于已停止，实际终态到达后才允许新消息。等待确认不能视为空闲。</p></details>
         <details class="review-question" open><summary>4. 已确认：产品前端不持有 JWT/APPKEY</summary><p>生产身份与授权仍由统一登录、mate-service 或网关承担；产品 Chat 不出现凭据表单、秘密构建配置或浏览器持久化。</p></details>
-        <details class="review-question" open><summary>5. 评审中：独立 <code>Headers</code> 面板</summary><p>通用 Key/Value 表格、逐行启停和自动空白行保持不变；请求适配器自动生成的 Header 不在面板中展示。面板不与 Agent/Session 诊断入口合并，仅复用其视觉，值只在页面内存中存活，仅附加到初始 <code>POST /events</code>。</p></details>
+        <details class="review-question" open><summary>5. 已确认：<code>Headers</code> 行编辑</summary><p>默认预置 access-token、X-HW-ID、Authorization，Value 留空，三行均可编辑、启停和删除。点击“增加请求头”追加一行空 Key/Value；填写、删除和清空均不自动补行。面板内去掉常驻文字说明，请求范围与内存生命周期由设计文档维护。</p></details>
         <details class="review-question" open><summary>6. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
         <details class="review-question" open><summary>7. 本轮方向：采用 Codex-inspired 活动 disclosure</summary><p>Thinking 只展示公共安全摘要，标题使用前端状态文案；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。原始推理、内部 ID、绝对路径和凭据都不进入产品浏览器。</p></details>
         <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="public-chat-alignment.md">查看公共对话对齐</a></div>
@@ -669,9 +683,9 @@ HAVING COUNT(*) &gt; 1;</code></pre>
   </main>
   <script>
     (() => {
-      const root = document.getElementById("debug-headers");
       const rows = document.getElementById("debug-header-rows");
       const count = document.getElementById("debug-header-count");
+      const add = document.getElementById("debug-header-add");
       const clear = document.getElementById("debug-header-clear");
       const live = document.getElementById("debug-header-live");
       const forbidden = new Set([
@@ -740,33 +754,17 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         };
       }
 
-      function isBlank(row) {
-        const fields = rowFields(row);
-        return fields.key.value.trim() === "" && fields.value.value === "";
-      }
-
       function bindRow(row) {
         const fields = rowFields(row);
         row.querySelector(".header-delete").addEventListener("click", () => {
+          const nextFocus = row.nextElementSibling || row.previousElementSibling;
           row.remove();
-          ensureTrailingRow();
           validateRows();
+          (nextFocus ? rowFields(nextFocus).key : add).focus();
         });
         fields.enabled.addEventListener("change", validateRows);
-        fields.key.addEventListener("input", handleInput);
-        fields.value.addEventListener("input", handleInput);
-      }
-
-      function handleInput() {
-        ensureTrailingRow();
-        validateRows();
-      }
-
-      function ensureTrailingRow() {
-        const allRows = [...rows.querySelectorAll("[data-header-row]")];
-        if (allRows.length === 0 || !isBlank(allRows[allRows.length - 1])) {
-          rows.append(createRow());
-        }
+        fields.key.addEventListener("input", validateRows);
+        fields.value.addEventListener("input", validateRows);
       }
 
       function setError(row, message) {
@@ -790,6 +788,8 @@ HAVING COUNT(*) &gt; 1;</code></pre>
           row.classList.toggle("is-disabled", !fields.enabled.checked);
           setError(row, "");
           if (!fields.enabled.checked || (key === "" && value === "")) return;
+          // An unused preset is a suggestion, not a required credential.
+          if (key === row.dataset.defaultKey && value === "") return;
 
           let message = "";
           const normalized = key.toLowerCase();
@@ -825,10 +825,16 @@ HAVING COUNT(*) &gt; 1;</code></pre>
       }
 
       [...rows.querySelectorAll("[data-header-row]")].forEach(bindRow);
-      clear.addEventListener("click", () => {
-        rows.replaceChildren(createRow());
+      add.addEventListener("click", () => {
+        const row = createRow();
+        rows.append(row);
         validateRows();
-        rows.querySelector(".header-key").focus();
+        rowFields(row).key.focus();
+      });
+      clear.addEventListener("click", () => {
+        rows.replaceChildren();
+        validateRows();
+        add.focus();
       });
       validateRows();
     })();

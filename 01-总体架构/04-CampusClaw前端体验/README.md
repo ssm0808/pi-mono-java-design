@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.0 |
+| 文档版本 | 1.6.0 |
 | 状态 | target-only 产品设计；主对话、确认、停止与恢复已按当前契约补齐；公共映射和生产身份集成完成前使用 Mock Gateway |
 | 界面评审状态 | 沿用 O1 与浅暖灰；保留首次进入、常规和运行稳定键，增加工具确认、停止处理中、提交不确定、历史恢复与配置冲突样例；视觉验收独立于契约确认 |
 | 主设计依据 | [`README.md`](README.md)，维护源码证据、目标差异、设计理由、状态与 Design Token |
@@ -21,8 +21,9 @@
 | 本轮凭据复核源码基线 | `320d790726a70aada6100052952d5494d2a378ac`；`frontend/README.md`、`frontend/.env.example`、`frontend/src/App.vue`、`frontend/src/components/DevDiagnostics.vue`、`frontend/src/composables/useRuntimeApi.ts` 及 Runtime 路由测试在该 commit 上无本地修改 |
 | 工具凭据实现对齐 | 变更前基线 `pi-mono-java@320d790726a70aada6100052952d5494d2a378ac`；已评审特性提交 `d03c08dbae870f19eee8d4fa79a707185f7a26b5`，位于 [Draft PR #181](https://github.com/superheromeZzh/pi-mono-java/pull/181)，尚未作为 `main` 现状 |
 | Header 编辑器对照基线 | `pi-mono@4af9d21d`、`opencode@849c2598`、`openai/codex@be33f80b`、`deepseek-harness@cd5ef814`；源码路径见 3.1 |
+| 本次 Header 交互复核 | 设计仓 `9b8c5b79eea1d77e42da4b8c73c4b8e572be1d45`；实现仓 `pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60`；仅复核 `frontend/src/components/DebugHeaders.vue` 和 `frontend/src/debugHeaders.ts`，见 6.1；不升级其余 Runtime/公共契约证据 |
 | Postman 核对 | 2026-08-28；核对官方 Headers 编辑文档、`Agent Runtime` collection 及真实 SSE 响应 |
-| 更新日期 | 2026-09-08 |
+| 更新日期 | 2026-09-09 |
 
 2026-09-08 对齐说明：当前交互以[公共对话对齐专项](public-chat-alignment.md)与本页现行规则为准。
 独立 abort、steers、follow-ups 已退役；本期没有消息队列。产品浏览器仍使用 Mate 公共契约，
@@ -40,7 +41,7 @@ Agent 工作台。主界面只暴露用户能够理解并需要决策的概念�
 也不进入产品主流程。为了快速验证 Runtime 到 Mate Tool execute 的凭据传递，
 内部开发构建已实现隔离的 `debugHeaders` 抽屉；它不进入产品构建、不持久化秘密，且只对
 `POST /sessions/{sessionId}/events` 构造请求级 Header 快照。抽屉采用 Postman 风格的通用
-Key/Value 表格，不预先确定凭据模式或 Header 名称；浏览器禁止设置的名称与无效值只在对应行报错。
+Key/Value 表格；按 2026-09-09 用户反馈预置三个可编辑、可删除的常用名称，不限定其他 Header 或凭据模式；浏览器禁止设置的名称与无效值只在对应行报错。
 编辑器作为独立的 `Headers` 面板，不与现有“开发者诊断入口”合并；它只复用该入口的折叠面板、虚线边框、暖灰表面、紧凑字号和次级按钮，
 不引入独立的凭据卡片或认证视觉。
 
@@ -157,7 +158,7 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 | 产品主界面不再直接调用内部 Runtime V1 | 架构变化 | 当前直接适配器没有生产认证能力；浏览器还需要稳定的公共 Chat/Agent 资源，而不是内部 Session 标识。 |
 | 保持产品路由凭据无持有 | 产品约束 + 安全加固 | 统一登录和公共 bridge 仍承担生产身份；产品 Chat 页不新增 JWT/APPKEY/`access-token` 表单、构建配置、存储或 Header 注入。 |
 | 保留已有 `debugHeaders` 内部诊断抽屉 | 架构隔离 + 安全加固 | 快速验证内部 Runtime 凭据透传，但只在 `import.meta.env.DEV` 或独立诊断构建中可达；用户关闭页签或刷新即清除。 |
-| 调试 Header 改为通用 Key/Value 表格 | 架构变化 + 产品约束 | 不把当前四项凭据误写成 UI 固定模式；组件可复用于后续调试请求。每行独立启停、删除，最后一行填写后自动生成新空行。 |
+| 调试 Header 使用通用 Key/Value 表格与可删除预置 | 产品约束（target-only 交互调整） | 预置三个常用名称减少重复输入，保留任意 Key/Value；每行独立启停、删除，仅点击“增加请求头”才追加空行，避免输入过程中不断产生多余行。 |
 | 独立 `Headers` 面板复用原开发者诊断入口视觉 | 产品约束（target-only） | Header 配置与 Agent/Session 诊断职责分离，但沿用已熟悉的虚线边界、暖灰表面和次级控件，保持内部工具一致，也避免将通用 Header 误表达成凭据管理卡片。 |
 | 浏览器受限名称与格式使用行内校验 | 安全加固 | UI 不预设可选 Header，但 `Host`、`Content-Length`、`Cookie`、`Origin`、`Sec-*`、`Proxy-*` 等 Fetch 禁止名称不能发送；无效 token、换行值和大小写不敏感的重复名称在对应行阻止提交。 |
 | 自动生成 Header 不展示，手工值优先 | 产品约束 | 请求适配器生成的 Header 不渲染、不枚举；开发者显式填写同名 Header 时在请求合并阶段采用手工值，但 UI 不显示自动值或覆盖状态。 |
@@ -225,7 +226,7 @@ CampusClaw 页面增加凭据表单或把秘密写入 `VITE_*` 来补齐。
 
 ![开发者调试 Header 请求链路](frontend_debug_header_flow.svg)
 
-[PlantUML 源码：`frontend_debug_header_flow`](diagram.puml#L44)
+[PlantUML 源码：`frontend_debug_header_flow`](diagram.puml#L44) · [原尺寸](frontend_debug_header_flow.svg)
 
 调试 Header 是上图生产边界之外的内部例外：开发者在通用 Key/Value 表格中填写的启用项只在
 当前页面内存中存活，提交时快照并仅附加到初始 `POST /events`。这不是生产登录机制，也不能
@@ -250,7 +251,17 @@ CampusClaw 页面增加凭据表单或把秘密写入 `VITE_*` 来补齐。
 | Composer | 附件、普通消息、Slash 命令入口；运行中保留消息草稿 | 发送新消息、打开命令清单、显式运行当前可用命令；运行中可停止 | operation path、内部请求体 |
 | 开发者诊断 | 请求摘要、原始事件、内部标识、临时 Header | 创建/恢复 Session，以通用 Key/Value 行配置下一次消息提交的 Header | 仅内部构建可见；值只在页面内存中，诊断摘要只显示 Key 和“已配置/未配置” |
 
-### 6.1 开发者调试 Header（现有诊断交互，非新控制适配）
+### 6.1 开发者调试 Header（现有诊断入口，行编辑调整为 target-only）
+
+2026-09-09 用户确认：移除截图中的常驻说明，预置三个可删除请求头，并以明确按钮增加空行。
+这是本专题的产品交互约束，替代 1.0.0 的自动空白尾行规则；本次只更新设计文档与 HTML 原型，Vue 实现待同步。
+
+| 源码证据（`pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60`） | 已观察行为 | 目标与理由 |
+|---|---|---|
+| `frontend/src/components/DebugHeaders.vue` · `rows`、`ensureTrailingRow`、`deleteRow`、`clearRows`、template | 初始一条空行；输入时自动补尾行；删除或清空后仍保留空行；表格上方有截图中的请求范围和内存说明 | 默认三个名称；显式增行、允许删至零行；移除面板常驻说明，减少干扰和无操作新增 |
+| `frontend/src/debugHeaders.ts` · `validateDebugHeaders`、`validateHeaderValue` | 启用行必须同时有 Key/Value；全空行忽略；校验名称、重复与值并生成 Headers | 保留一般行校验；仅未使用的预置行（仍为原始 Key 且 Value 为空）也忽略，避免首次打开即报错或把三个名称误当必填凭据 |
+
+其余章节中的 dfb90ca 和更早源码记录仍是各自范围的历史基线，本次不据上述两个组件文件推断新的传输实现。
 
 `debugHeaders` 使用顶部工具图标打开右侧抽屉，且在首次进入、已建 Session 和执行中都可查看
 当前配置。抽屉内是独立的 `Headers` 面板，不显示“开发者诊断入口”名称，也不包含 Agent ID、Session ID、创建或恢复操作。
@@ -261,15 +272,19 @@ CampusClaw 页面增加凭据表单或把秘密写入 `VITE_*` 来补齐。
 
 | 表格元素 | 行为 |
 |---|---|
+| 默认行 | 按顺序预置 `access-token`、`X-HW-ID`、`Authorization`，Value 均为空；三行默认勾选，均可编辑、关闭和删除，不填充示例秘密或历史值。 |
 | 启用 | 每行独立开关；关闭后保留 Key/Value，但不进入下一次请求快照和启用计数。 |
 | Key | 普通文本输入，不提供固定下拉选项或认证模式；比较、重复校验和请求合并均大小写不敏感。 |
 | Value | 普通文本输入，不自动拼接 `Bearer`、替换变量或根据 Key 推断秘密类型。 |
-| 删除 | 删除当前行；表格始终保留一个空白尾行。 |
+| 增加请求头 | 每点击一次，在末尾追加一行空 Key/Value，默认勾选并聚焦新行 Key；即使已有空行，也只按本次点击增加一行。 |
+| 删除 | 只删除当前行，不补行、不恢复预置；可以删至零行。焦点移到相邻行 Key，无剩余行时移到“增加请求头”。 |
+| 全部清空 | 删除所有行及内存值，保持零行并聚焦“增加请求头”；不自动恢复三项预置。 |
 | `Headers (n)` | `n` 只统计启用、完整且通过校验的自定义 Header。 |
 
-- 首屏只显示一条空白 Key/Value 行；任一输入被填写后自动生成下一条空白行，不需要“添加 Header”按钮。
+- 首屏只显示三个预置行，不附加空白尾行。填写、切换启用和删除都不增加行；关闭再打开面板保留当前行，只有页面重新初始化才恢复三个空值预置。
+- 面板移除“仅当前页面内存；分别附加到消息、命令、停止或确认 POST。读取请求不携带这些临时凭据。协议头由客户端固定。”等常驻说明；只保留标题/计数、操作、表格和必要的行内错误。请求范围和内存生命周期继续在设计说明维护。
 - 请求适配器自动生成的 Header 不渲染、不枚举，也不显示覆盖状态；开发者填写同名 Key 时仍在请求合并阶段采用手工值。
-- Key 和 Value 必须同时填写；空白尾行忽略。启用行的名称必须是合法 HTTP token，Value 不得含 CR/LF，同名自定义 Key 不得重复。
+- 未使用的预置行（仍为原始 Key 且 Value 为空）与全空行忽略：不报错、不计数、不发送空值 Header。预置 Key 被改写后按普通行处理；其余启用行的 Key 和 Value 必须同时填写，名称必须是合法 HTTP token，Value 不得含 CR/LF，同名自定义 Key 不得重复。
 - UI 允许自由输入，但 Fetch 禁止的请求头名称在对应行显示“浏览器禁止设置这个 Header”并阻止提交；不通过常驻说明或固定可选列表限制用户。
 - Header 修改即时写入当前页面内存，不提供“应用”“保存凭据”“从 URL 导入”“复制完整 curl”或“显示原始请求”。“全部清空”覆写内存和输入；关闭抽屉保留，刷新、关闭页签或切换 API base 清除。
 - 页面不保存或回显历史值，日志、遥测、错误和复制摘要只能记录 Header Key 与是否已配置；浏览器 DOM 和 DevTools 仍可观察当前输入与线上请求，因此该能力只存在于受控开发构建。
@@ -546,7 +561,7 @@ Claw B01～B15 又改变了控制关联、工具文本块、Skill 与历史边�
 - 富文本 golden 覆盖段落、列表、引用、链接、行内/块代码、GFM table 与未知节点；每个字符边界拆分流，完成态与历史渲染等价。
 - 安全 corpus 覆盖 raw HTML、事件属性、危险协议、相对路由、远程图片、深层嵌套和超预算输入；无任意 HTML 注入或额外网络请求，降级可复制公开原文。
 - 工具入参覆盖敏感字段、绝对路径、内部资源 ID、超深对象、长数组、HTML/Markdown/ANSI/URL；服务端投影失败时不回退显示内部数据，前端正则不作为唯一脱敏边界。
-- Headers 覆盖任意 Key/Value、尾行、启停、删除、清空、大小写不敏感重复、非法 token、CR/LF、Fetch 禁止名称、启用计数和手工覆盖；自动 Header 不进 DOM，新 operation 快照范围单独验证。
+- Headers 覆盖三个空值预置、可编辑/启停/删除、每次按钮点击只加一条空行、输入不补行、删除与清空可达零行、焦点、未使用预置的忽略、任意 Key/Value、大小写不敏感重复、非法 token、CR/LF、Fetch 禁止名称、启用计数和手工覆盖；自动 Header 不进 DOM，新 operation 快照范围单独验证。
 - 诊断秘密不写入 localStorage、sessionStorage、IndexedDB、URL、构建变量、日志、遥测或错误；刷新、关闭页签、切 API base 和清空后值不存在，修改表单不改变已接受执行。
 - 产品构建不装配 Runtime/Headers 入口，不持有秘密；生产 DOM 与诊断摘要不泄漏内部身份、凭据或原始 SSE，跨源诊断按明确 CORS 名称允许，不使用无界通配。
 - 视觉与可访问性覆盖独立暖灰 Headers、纵向输入/输出、原始 O1、键盘焦点、流式读屏节流、色彩对比、reduced motion 及表格/代码自身滚动。
@@ -572,6 +587,11 @@ PlantUML ASCII、图源行锚点、82 个本地资源引用和 HTML 内联脚本
 浏览器拒绝访问本地 HTML，本轮未绕过该限制；1440/1024/768/390 的真实页面布局、
 真实 Vue、网络、认证与 API 集成仍未验证，不把静态源码或 DOM 检查称为像素验收。
 
+Header 交互验证（2026-09-09）：13 组原型回归通过，包含新增的预置、显式增行、删除/清空至零行和焦点检查。
+Chrome 实际操作确认点击后由三行变四行、删除后回到三行；检查 1440、1024、768、390 宽度的 Headers 布局。
+本专题 6 张 SVG 由 PlantUML 重新生成并通过 XML 校验，仅 Header 图产生变更；ASCII、无 Mermaid、45 个 Markdown 本地引用/图源行锚点及 `git diff --check` 通过。
+已查看 Header SVG 原尺寸与缩放结果，并与修改前图对照；其余图无变更。本次不验证 Vue 或后端集成，也不扩大前述公共对话视觉验收范围。
+
 ## 17. 高保真生成说明
 
 本节仅记录历史资产生成方法，不是本轮生成结果。常规态 v8 与运行态 v8 以 v7 为底稿，不经过生成模型；先清除旧的小号品牌容器，再从
@@ -585,6 +605,7 @@ PlantUML ASCII、图源行锚点、82 个本地资源引用和 HTML 内联脚本
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-09-09 | 按用户反馈精简 Headers 面板：删除常驻说明；预置 access-token、X-HW-ID、Authorization 三个可编辑/可删除的空值行；仅“增加请求头”追加空行，取消自动尾行，删除/清空允许零行；未使用预置不报错、不计数或发送。复核实现 4cc8dd8，更新设计、交互原型及图源，Vue 实现待同步。 |
 | 1.5.0 | 2026-09-08 | 对齐 Mate 公共三接口与内部 B01～B15 差异；补齐主对话、工具确认、中断、恢复、配置共享与目标组件；移除现行原型的旧跟进控件，保持浅暖灰。 |
 | 1.4.0 | 2026-09-07 | 增加 Slash Command 前端专项入口和整体边界：独立 Composer 模式、显式执行、临时结果与公共执行协议门禁；同步清除已退役的 running 队列快捷键表述。 |
 | 1.3.0 | 2026-09-07 | 同步三个控制接口退役与本期无队列；停止执行通过 user.interrupt 完成，实际停止后新提交。旧图片仅为视觉基线，其他 v1 映射待迁移。 |
