@@ -9,8 +9,13 @@ title Target Slash Command Frontend Components
 ' Contract evidence: executeSessionCommand response variants at design baseline 88f4df16
 ' Contract update: design 2ee2a321 B13 confirms internal Skill SSE; Builtin JSON is unchanged.
 ' Public mapping remains gated; Skill shares the target conversation coordinator.
-' Observed behavior: the current debug workbench has one message draft and no command gateway, catalog, parser, or command result projection.
-' Target-only design: every element marked target is proposed and is not implemented at the source baseline.
+' Historical behavior: the 6f52fddc workbench had no command support.
+' UI update baseline: pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60
+' Source evidence: frontend/src/components/ComposerBox.vue, enter, choose, leave, onKeydown, template
+' Source evidence: frontend/src/runtime/commands.ts, parseCommand, filterCommands, freezeInvocation
+' Observed behavior: commands exist inside Composer; rows show slash, kind and hint; selected input edits raw command text.
+' Target-only design: standalone component boundaries and chip presentation below are proposed, not existing classes.
+' Product constraint: More menu, plain command rows and removable selection reduce repeated UI text.
 ' Design reason: keep discovery, immutable invocation decoding, ephemeral results, and ordinary chat history as separate responsibilities.
 
 skinparam backgroundColor #FFFCFA
@@ -38,9 +43,9 @@ package "Existing application shell" as ExistingPkg {
 }
 
 package "Slash presentation [target-only]" as PresentationPkg {
-  component "SlashCommandButton" as SlashButton
+  component "ComposerMoreMenu\ncommand entry" as MoreMenu
   component "CommandPalette" as Palette
-  component "CommandArgumentHint" as ArgumentHint
+  component "SelectedCommandChip\nchange or remove" as CommandChip
   component "CommandResultRegion" as ResultRegion
   component "CommandResultRenderers" as Renderers
 }
@@ -66,11 +71,12 @@ cloud "Runtime internal API\nGET / Builtin JSON / Skill SSE confirmed" as Runtim
 App *-- Composer
 App *-- Timeline
 App *-- ResultRegion
-Composer *-- SlashButton
+Composer *-- MoreMenu
 Composer *-- Palette
-Composer *-- ArgumentHint
+Composer *-- CommandChip
 Composer --> UseSlash
-SlashButton --> UseSlash
+MoreMenu --> UseSlash
+CommandChip --> UseSlash
 Palette --> UseSlash
 ResultRegion --> Registry
 UseSlash *-- DraftStore
@@ -101,17 +107,18 @@ end note
 note bottom of DraftStore
   Separate message and command buffers prevent
   a Slash attempt from destroying user text.
+  Query, selected name and arguments are distinct.
+  Reopening preserves the selection for Escape.
 end note
 @enduml
 
 @startuml slash_composer_state
 title Slash Composer Interaction State
 
-' Source baseline: pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5
-' Source evidence: frontend/src/components/ComposerBox.vue, handleKeydown and textarea binding
-' Source evidence: frontend/src/App.vue, message ref and submit
-' Observed behavior: the current composer has a single message state and Enter submits an ordinary message.
-' Target-only design: this state machine is the proposed Slash interaction model.
+' Source baseline: pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60
+' Source evidence: frontend/src/components/ComposerBox.vue, enter, leave, choose, submit and onKeydown
+' Observed behavior: selection closes the palette; the editor retains the raw slash command and button labels change.
+' Target-only design: removable chips, argument-only editing and consistent Escape restoration are proposed.
 ' Design reason: explicit selection and explicit execution prevent accidental state-changing commands.
 
 skinparam backgroundColor #FFFCFA
@@ -129,21 +136,34 @@ top to bottom direction
 
 [*] --> MessageDraft
 MessageDraft : Ordinary message buffer is authoritative
-MessageDraft --> BrowsingCatalog : first-character slash or Slash button
+MessageDraft --> BrowsingCatalog : first-character slash or More > Commands
 
 state BrowsingCatalog
 BrowsingCatalog : Full list or prefix-filtered list
-BrowsingCatalog --> EditingArguments : select descriptor
-BrowsingCatalog --> MessageDraft : Escape, cancel, or lone slash Backspace
+BrowsingCatalog --> SelectedCommand : select descriptor; close palette
+BrowsingCatalog --> QueryDraft : Escape; keep query
+BrowsingCatalog --> MessageDraft : lone slash Backspace
 
-state EditingArguments
-EditingArguments : Canonical name plus editable arguments
-EditingArguments --> Executing : explicit second Enter or Run
-EditingArguments --> MessageDraft : cancel and restore suspended draft
+state QueryDraft
+QueryDraft : Retained query; submit disabled
+QueryDraft --> BrowsingCatalog : edit query or Enter
+QueryDraft --> MessageDraft : Escape; restore message
+
+state SelectedCommand
+SelectedCommand : Removable canonical name chip
+SelectedCommand : Edit arguments only when input exists
+SelectedCommand --> Executing : new Enter or arrow click
+SelectedCommand --> MessageDraft : remove, Escape, or empty Backspace
+SelectedCommand --> ChangingCommand : click chip name; suspend selection
+
+state ChangingCommand
+ChangingCommand : Browse catalog with saved selection and arguments
+ChangingCommand --> SelectedCommand : select replacement or Escape to restore
 
 state Executing
-Executing --> EditingArguments : failure, preserve command draft
+Executing --> SelectedCommand : failure, preserve command draft
 Executing --> ResultVisible : Builtin JSON success
+ResultVisible : Restore suspended message; never auto-send
 Executing --> ConversationExecution : Skill receipt / public gate passed
 ConversationExecution : Shared message, confirmation and recovery flow
 ConversationExecution --> MessageDraft : restore suspended draft; never auto-send
@@ -158,9 +178,11 @@ note right of BrowsingCatalog
   No fuzzy reordering and no auto-execution.
 end note
 
-note right of EditingArguments
+note right of SelectedCommand
   hint is display-only.
   Files are admitted only when acceptsFiles is true.
+  No-input selection focuses the submit arrow.
+  Repeated Enter does not execute.
 end note
 
 note left of BrowsingCatalog
@@ -169,7 +191,7 @@ note left of BrowsingCatalog
 end note
 
 note right of MessageDraft
-  Slash button entry suspends the existing
+  More menu entry suspends the existing
   message draft and files until exit or success.
 end note
 @enduml
@@ -180,7 +202,11 @@ title Slash Command Discovery and Execution Flow
 ' Source baseline: pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts, requestRaw and return surface
 ' Contract evidence: Runtime operations listSessionCommands and executeSessionCommand
-' Observed behavior: the current frontend has no command HTTP methods or command response projectors.
+' Historical behavior: the 6f52fddc frontend had no command HTTP methods or response projectors.
+' UI update baseline: pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60
+' Source evidence: frontend/src/components/ComposerBox.vue, choose and runCommand
+' Source evidence: frontend/src/runtime/commands.ts, freezeInvocation and decodeCommandResult
+' Observed behavior: current command submission already freezes an invocation and decodes by expected result kind.
 ' Target-only design: the browser workflow and production Mate gateway are proposed.
 ' Design reason: decode from an immutable invocation, never replay an uncertain mutation, and reconcile through authoritative resources.
 
@@ -206,18 +232,18 @@ participant "Session and model state" as State
 participant "CommandResultRegion\n[target]" as Result
 participant "ConversationCoordinator\n[target, gated]" as Conversation
 
-User -> Composer : enter Slash mode
+User -> Composer : first-character slash or More > Commands
 Composer -> Slash : open(activeChatId)
 Slash -> Gateway : listCommands(activeChatId)
 Gateway -> Api : GET command descriptors
 Api --> Gateway : server-ordered descriptors
 Gateway --> Slash : descriptors
-Slash --> Composer : render listbox
+Slash --> Composer : render plain name and description listbox
 
 User -> Composer : select command
 Composer -> Slash : select(name)
-Slash --> Composer : canonical draft and input hint
-User -> Composer : explicit Run
+Slash --> Composer : close list; selected chip and optional argument editor
+User -> Composer : new Enter or submit arrow click
 Composer -> Slash : execute(name, arguments, files)
 Slash -> Slash : freeze invocation and expected result kind
 Slash -> Gateway : executeCommand(invocation)

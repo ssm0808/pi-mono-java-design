@@ -171,9 +171,9 @@
 
     .app-window {
       display: grid;
-      grid-template-rows: 64px minmax(680px, calc(100dvh - 150px));
+      grid-template-rows: 64px minmax(500px, calc(100dvh - 240px));
       max-width: 1180px;
-      min-height: 744px;
+      min-height: 564px;
       margin: 0 auto;
       overflow: hidden;
       border: 1px solid rgb(160 141 131 / 50%);
@@ -221,6 +221,7 @@
 
     .workspace {
       position: relative;
+      container-type: size;
       display: grid;
       grid-template-rows: 1fr auto;
       min-height: 0;
@@ -318,132 +319,50 @@
       box-shadow: var(--shadow);
     }
 
-    .palette-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      min-height: 44px;
-      padding: 8px 12px 8px 15px;
-      border-bottom: 1px solid var(--border-default);
-      background: var(--surface-secondary);
-    }
-    .palette-head strong { font-size: 12px; }
-    .palette-head span { color: var(--text-tertiary); font-size: 11px; }
-    .key-hint { display: inline-flex; gap: 5px; align-items: center; }
-    kbd { padding: 2px 5px; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--border-default); border-radius: 5px; background: #fff; box-shadow: 0 1px 0 var(--border-default); }
 
-    .command-list { max-height: 326px; overflow: auto; padding: 6px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+    .command-list { max-height: min(360px, calc(100cqh - 220px)); overflow: auto; padding: 6px; }
     .command-option {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 4px 10px;
-      width: 100%;
-      min-height: 54px;
-      padding: 8px 10px;
-      color: inherit;
-      text-align: left;
-      border: 1px solid transparent;
-      border-radius: 11px;
-      background: transparent;
-      cursor: pointer;
+      display: grid; grid-template-columns: minmax(120px, 190px) minmax(0, 1fr); align-items: center;
+      gap: 8px 18px; width: 100%; min-height: 44px; padding: 10px 12px; color: inherit;
+      text-align: left; border: 1px solid transparent; border-radius: 9px; background: transparent; cursor: pointer;
     }
-    .command-option:hover, .command-option.active { border-color: #dfcfc7; background: var(--surface-selected); }
-    .command-copy { min-width: 0; }
-    .command-name { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; overflow-wrap: anywhere; font: 650 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .command-description { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 11px; overflow-wrap: anywhere; }
-    .kind-badge { padding: 2px 6px; color: #725447; font: 700 9px Inter, sans-serif; letter-spacing: .04em; border-radius: 999px; background: #f2e7e1; text-transform: uppercase; }
-    .kind-badge.skill { color: #486458; background: #e8f2ec; }
-    .command-input { align-self: center; color: var(--text-tertiary); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
-
+    .command-option:hover, .command-option.active { background: var(--surface-selected); }
+    .command-name { overflow-wrap: anywhere; font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .command-description { color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+    .palette-empty { margin: 0; padding: 18px; color: var(--text-secondary); font-size: 13px; }
     .composer {
-      position: relative;
-      padding: 12px;
-      border: 1px solid var(--border-strong);
-      border-radius: 18px;
-      background: var(--surface-raised);
-      box-shadow: var(--shadow-soft);
+      position: relative; padding: 12px; border: 1px solid var(--border-strong); border-radius: 18px;
+      background: var(--surface-raised); box-shadow: var(--shadow-soft);
     }
-    .composer.command-mode { border-color: #c9856f; box-shadow: 0 0 0 3px rgb(169 71 43 / 8%), var(--shadow-soft); }
-    .mode-line { display: none; align-items: center; justify-content: space-between; gap: 10px; margin: -2px 2px 7px; }
-    .command-mode .mode-line { display: flex; }
-    .mode-pill { display: inline-flex; align-items: center; gap: 7px; color: #8b3e29; font-size: 11px; font-weight: 750; }
-    .mode-pill::before { content: "/"; display: grid; width: 20px; height: 20px; place-items: center; color: #fff; border-radius: 6px; background: #a9472b; }
-    .mode-line span:last-child { color: var(--text-tertiary); font-size: 10px; }
-
+    .composer-editor { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; min-height: 62px; padding: 2px; }
+    .command-chip { display: inline-flex; align-items: center; max-width: 100%; overflow: hidden; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-secondary); }
+    .command-chip button { min-height: 44px; color: var(--text-primary); border: 0; background: transparent; cursor: pointer; }
+    .command-chip button:hover { background: var(--surface-selected); }
+    #selected-command-name { min-width: 44px; padding: 0 10px; overflow-wrap: anywhere; text-align: left; font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    #remove-command { flex: 0 0 44px; width: 44px; font-size: 20px; color: var(--text-secondary); }
     .composer textarea {
-      display: block;
-      width: 100%;
-      min-height: 54px;
-      max-height: 160px;
-      padding: 8px 7px;
-      resize: none;
-      color: var(--text-primary);
-      line-height: 1.5;
-      border: 0;
-      outline: 0;
-      background: transparent;
+      flex: 1 1 180px; min-width: 0; width: 100%; min-height: 54px; max-height: 160px; padding: 10px 7px;
+      resize: none; color: var(--text-primary); line-height: 1.5; border: 0; background: transparent;
     }
-    .composer textarea::placeholder { color: #a3948c; }
-
-    .argument-hint {
-      display: none;
-      align-items: center;
-      gap: 8px;
-      margin: 0 7px 8px;
-      color: var(--text-secondary);
-      font-size: 11px;
-    }
-    .argument-hint.visible { display: flex; }
-    .argument-hint code { padding: 2px 5px; color: #833d29; border-radius: 5px; background: var(--accent-soft); }
-
-    .inline-error {
-      display: none;
-      margin: 0 7px 9px;
-      padding: 9px 10px;
-      color: var(--danger);
-      font-size: 11px;
-      border: 1px solid #efc3bc;
-      border-radius: 9px;
-      background: var(--danger-soft);
-    }
-    .inline-error.visible { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .inline-error button { min-height: 32px; color: var(--danger); font-size: 10px; font-weight: 700; border: 0; background: transparent; cursor: pointer; }
-
+    .composer textarea::placeholder { color: #85766e; }
+    .composer textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+    .inline-error { margin: 3px 7px 10px; color: var(--danger); font-size: 12px; }
     .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .tool-actions { display: flex; gap: 4px; }
-    .tool-button {
-      display: grid;
-      width: 44px;
-      height: 44px;
-      place-items: center;
-      color: var(--text-secondary);
-      border: 1px solid transparent;
-      border-radius: 11px;
-      background: transparent;
-      cursor: pointer;
-    }
-    .tool-button:hover, .tool-button.active { color: #8b3e29; border-color: #ead7cf; background: var(--accent-soft); }
-    .tool-button:disabled { color: #c1b5ae; cursor: not-allowed; }
-    .slash-icon { font: 800 18px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .tool-actions { position: relative; display: flex; gap: 4px; }
+    .tool-button { display: grid; width: 44px; height: 44px; place-items: center; color: var(--text-secondary); border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
+    .tool-button:hover, .tool-button[aria-expanded="true"] { background: var(--surface-secondary); }
+    #more-button { font-size: 26px; font-weight: 400; }
+    .tool-button:disabled { color: #b5a9a2; cursor: not-allowed; }
+    .tool-button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+    .more-menu { position: absolute; z-index: 8; bottom: calc(100% + 10px); left: 0; width: 176px; padding: 5px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-raised); box-shadow: var(--shadow); }
+    .more-menu button { width: 100%; min-height: 44px; padding: 8px 12px; color: var(--text-primary); font: inherit; font-size: 13px; text-align: left; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+    .more-menu button:hover { background: var(--surface-selected); }
+    .submit-button { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; padding: 0; color: #fff; border: 0; border-radius: 50%; background: var(--action-primary); cursor: pointer; }
+    .submit-button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .submit-button:hover:enabled { background: var(--action-primary-hover); }
+    .submit-button:disabled { color: #faf7f5; background: #c2b7b0; cursor: not-allowed; }
 
-    .submit-button {
-      min-width: 94px;
-      min-height: 44px;
-      padding: 0 17px;
-      color: #fff;
-      font-size: 12px;
-      font-weight: 750;
-      border: 0;
-      border-radius: 12px;
-      background: var(--action-primary);
-      cursor: pointer;
-    }
-    .submit-button:hover { background: var(--action-primary-hover); }
-    .submit-button .run-label { display: none; }
-    .command-mode .submit-button .send-label { display: none; }
-    .command-mode .submit-button .run-label { display: inline; }
-
-    .composer-footnote { margin-top: 7px; color: var(--text-tertiary); font-size: 10px; text-align: center; }
 
     .running-banner {
       display: none;
@@ -484,15 +403,15 @@
     @media (max-width: 700px) {
       .review-heading { align-items: flex-start; }
       .review-heading p:last-child, .review-badge { display: none; }
-      .app-window { grid-template-rows: 58px minmax(660px, calc(100dvh - 168px)); min-height: 718px; border-radius: 16px; }
+      .app-window { grid-template-rows: 58px minmax(510px, calc(100dvh - 300px)); min-height: 568px; border-radius: 16px; }
       .app-topbar { padding: 0 14px; }
       .top-actions .icon-action:first-child { display: none; }
       .timeline { padding: 24px 14px 230px; }
       .composer-dock { padding: 14px; }
       .command-palette { max-height: 45dvh; }
-      .command-list { max-height: calc(45dvh - 45px); }
+      .command-list { max-height: min(45dvh, calc(100cqh - 220px)); }
       .command-option { grid-template-columns: minmax(0, 1fr); }
-      .command-input { white-space: normal; overflow-wrap: anywhere; }
+      .command-option { gap: 4px; }
       .use-cases { grid-template-columns: 1fr; }
       .result-region { width: calc(100% - 28px); }
       .prototype-caption { text-align: left; }
@@ -518,13 +437,13 @@
         <button class="state-tab" role="tab" aria-selected="false" data-state="help"><span>Help 结果</span><small>非对话、仅当前页面</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="unmatched"><span>未匹配</span><small>保留草稿、禁止自动回退</small></button>
       </div>
-      <div class="review-note">Target-only 视觉评审稿。公共命令执行协议未确认前，产品运行入口必须 fail closed。</div>
+      <div class="review-note">Target-only 交互评审稿。本页仅模拟操作，不发起真实请求；Skill 执行保持关闭。</div>
     </aside>
 
     <main class="review-main">
       <header class="review-heading">
         <div>
-          <p>前端专项 · 1.3.0</p>
+          <p>前端专项 · 1.4.0</p>
           <h1 id="state-title">命令清单</h1>
           <p id="state-description">空消息中输入 /，读取当前 Chat 的服务端命令清单。</p>
         </div>
@@ -561,7 +480,7 @@
                   <div>
                     <div class="result-eyebrow">命令结果 · 仅当前页面</div>
                     <h2 class="result-title">园区运维助手</h2>
-                    <div class="result-subtitle">/help · 刚刚完成</div>
+                    <div class="result-subtitle">help · 演示结果</div>
                   </div>
                   <button class="result-close" type="button" aria-label="关闭命令结果">×</button>
                 </div>
@@ -577,52 +496,39 @@
 
           <div class="composer-dock">
             <div class="composer-stack">
-              <div class="running-banner" id="running-banner"><i class="running-spinner"></i>当前 Agent 正在执行任务。清单仅展示此刻可运行的查询命令。</div>
+              <div class="running-banner" id="running-banner"><i class="running-spinner"></i>任务执行中</div>
 
-              <div class="command-palette" id="command-palette">
-                <div class="palette-head"><strong id="palette-title">命令清单 · 7 项</strong><span class="key-hint"><kbd>↑</kbd><kbd>↓</kbd> 选择 · <kbd>Enter</kbd> 填入</span></div>
-                <div class="command-list" id="command-list" role="listbox" aria-label="可用命令">
-                  <button class="command-option active" id="cmd-help" role="option" aria-selected="true" data-name="help">
-                    <span class="command-copy"><span class="command-name">/help <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Agent 的用途和典型使用场景</span></span><span class="command-input">无需参数</span>
-                  </button>
-                  <button class="command-option" id="cmd-status" role="option" aria-selected="false" data-name="status">
-                    <span class="command-copy"><span class="command-name">/status <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Session 的运行状态</span></span><span class="command-input">无需参数</span>
-                  </button>
-                  <button class="command-option" id="cmd-name" role="option" aria-selected="false" data-name="name">
-                    <span class="command-copy"><span class="command-name">/name <em class="kind-badge">builtin</em></span><span class="command-description">查看或设置当前会话显示名称</span></span><span class="command-input">[displayName]</span>
-                  </button>
-                  <button class="command-option" id="cmd-model" role="option" aria-selected="false" data-name="model">
-                    <span class="command-copy"><span class="command-name">/model <em class="kind-badge">builtin</em></span><span class="command-description">查看或切换当前模型</span></span><span class="command-input">[modelId]</span>
-                  </button>
-                  <button class="command-option" id="cmd-thinking" role="option" aria-selected="false" data-name="thinking">
-                    <span class="command-copy"><span class="command-name">/thinking <em class="kind-badge">builtin</em></span><span class="command-description">查看或切换思考模式</span></span><span class="command-input">[on|off]</span>
-                  </button>
-                  <button class="command-option" id="cmd-compact" role="option" aria-selected="false" data-name="compact">
-                    <span class="command-copy"><span class="command-name">/compact <em class="kind-badge">builtin</em></span><span class="command-description">压缩当前 Session 的上下文</span></span><span class="command-input">无需参数</span>
-                  </button>
-                  <button class="command-option" id="cmd-skills" role="option" aria-selected="false" data-name="skills">
-                    <span class="command-copy"><span class="command-name">/skills <em class="kind-badge">builtin</em></span><span class="command-description">查看当前 Agent 已加载的技能</span></span><span class="command-input">无需参数</span>
-                  </button>
-                  <button class="command-option" id="cmd-skill-inspection-plan" role="option" aria-selected="false" data-name="skill:inspection-plan">
-                    <span class="command-copy"><span class="command-name">/skill:inspection-plan <em class="kind-badge skill">skill</em></span><span class="command-description">根据当前上下文整理园区巡检计划</span></span><span class="command-input">[request] · 可附文件</span>
-                  </button>
-                </div>
+              <div class="command-palette" id="command-palette" hidden>
+                <div class="command-list" id="command-list" role="listbox" aria-label="可用命令"></div>
+                <p class="palette-empty" id="palette-empty" hidden>没有匹配命令</p>
               </div>
 
-              <div class="composer command-mode" id="composer">
-                <div class="mode-line"><span class="mode-pill">命令模式</span><span>Esc 关闭清单</span></div>
-                <textarea id="composer-input" rows="2" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="command-list" aria-activedescendant="" spellcheck="false">/</textarea>
-                <div class="argument-hint" id="argument-hint"><span>参数提示</span><code id="hint-code">[displayName]</code><span>提示仅用于展示，最终由服务端校验</span></div>
-                <div class="inline-error" id="inline-error"><span>没有与 “/deploy” 匹配的命令。草稿尚未发送。</span><button type="button">转为普通消息…</button></div>
+              <div class="composer" id="composer">
+                <div class="composer-editor">
+                  <div class="command-chip" id="command-chip" hidden>
+                    <button id="selected-command-name" type="button" aria-label="更换命令"></button>
+                    <button id="remove-command" type="button" aria-label="移除命令">×</button>
+                  </div>
+                  <textarea id="composer-input" rows="2" spellcheck="false" aria-label="输入消息"></textarea>
+                </div>
+                <span class="sr-only" id="parameter-hint"></span>
+                <p class="inline-error" id="inline-error" role="alert" hidden></p>
                 <div class="composer-actions">
                   <div class="tool-actions">
-                    <button class="tool-button active" type="button" aria-label="打开命令清单" title="命令"><span class="slash-icon">/</span></button>
-                    <button class="tool-button" id="attach-button" type="button" aria-label="添加附件" title="当前命令不接收附件" disabled>⌕</button>
+                    <button class="tool-button" id="more-button" type="button" aria-label="添加" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu">+</button>
+                    <div class="more-menu" id="more-menu" role="menu" aria-label="添加" hidden>
+                      <button id="command-entry" type="button" role="menuitem">命令</button>
+                    </div>
+                    <button class="tool-button" id="attach-button" type="button" aria-label="添加附件（原型暂不提供上传）" title="原型暂不提供上传" disabled>
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 5-5a3 3 0 0 1 4 4l-7 7a5 5 0 0 1-7-7l7-7"/></svg>
+                    </button>
                   </div>
-                  <button class="submit-button" type="button"><span class="send-label">发送</span><span class="run-label">运行命令</span></button>
+                  <button class="submit-button" id="submit-button" type="button" aria-label="发送消息" disabled>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>
+                  </button>
                 </div>
               </div>
-              <div class="composer-footnote" id="composer-footnote">选择只会填入命令，再次按 Enter 或点击“运行命令”才会执行。</div>
+              <span class="sr-only" id="composer-announcement" aria-live="polite"></span>
             </div>
           </div>
         </div>
@@ -632,158 +538,285 @@
   </div>
 
   <script>
+
+    // Local review fixtures only. Catalog order and omitted input belong to the fixture,
+    // not a production client-side availability matrix. No HTTP calls are made.
+    const idleCatalog = [
+      { name: "help", kind: "builtin", description: "了解助手的用途与使用场景" },
+      { name: "status", kind: "builtin", description: "查看当前会话状态" },
+      { name: "name", kind: "builtin", description: "查看或设置会话名称", input: { hint: "[displayName]" } },
+      { name: "model", kind: "builtin", description: "查看或切换模型", input: { hint: "[modelId]" } },
+      { name: "thinking", kind: "builtin", description: "查看或切换思考模式", input: { hint: "[on|off]" } },
+      { name: "compact", kind: "builtin", description: "压缩当前会话上下文" },
+      { name: "skills", kind: "builtin", description: "查看可用技能" },
+      { name: "skill:inspection-plan", kind: "skill", description: "整理园区巡检计划", input: { hint: "[request]", acceptsFiles: true } }
+    ];
+    const runningCatalog = [
+      { name: "help", kind: "builtin", description: "了解助手的用途与使用场景" },
+      { name: "status", kind: "builtin", description: "查看当前会话状态" },
+      { name: "name", kind: "builtin", description: "查看或设置会话名称", input: { hint: "[displayName]" } },
+      { name: "model", kind: "builtin", description: "查看当前模型" },
+      { name: "thinking", kind: "builtin", description: "查看当前思考模式" },
+      { name: "skills", kind: "builtin", description: "查看可用技能" }
+    ];
     const states = {
-      catalog: {
-        title: "命令清单",
-        description: "空消息中输入 /，读取当前 Chat 的服务端命令清单。",
-        value: "/",
-        commandMode: true,
-        palette: true,
-        result: false,
-        running: false,
-        hint: false,
-        error: false,
-        status: "在线 · 空闲",
-        footnote: "选择只会填入命令，再次按 Enter 或点击“运行命令”才会执行。"
-      },
-      argument: {
-        title: "参数编辑",
-        description: "选中命令只完成规范填入，用户明确运行后才提交。",
-        value: "/name 夜间巡检会话",
-        commandMode: true,
-        palette: false,
-        result: false,
-        running: false,
-        hint: true,
-        hintText: "[displayName]",
-        error: false,
-        status: "在线 · 空闲",
-        footnote: "Enter 运行 · Shift + Enter 换行 · 参数提示不承担最终校验"
-      },
-      running: {
-        title: "运行中清单",
-        description: "不在前端复制状态矩阵；直接展示服务端当前返回的命令和 input。",
-        value: "/",
-        commandMode: true,
-        palette: true,
-        result: false,
-        running: true,
-        hint: false,
-        error: false,
-        status: "执行中 · 可停止",
-        footnote: "普通消息保持草稿；只允许运行当前清单明确返回的命令。"
-      },
-      help: {
-        title: "Help 临时结果",
-        description: "命令结果位于 Timeline 与 Composer 之间，但不是 Assistant 消息。",
-        value: "",
-        commandMode: false,
-        palette: false,
-        result: true,
-        running: false,
-        hint: false,
-        error: false,
-        status: "在线 · 空闲",
-        footnote: "Help 内容按纯文本展示，不解析 Markdown、HTML 或远程图片。"
-      },
-      unmatched: {
-        title: "未匹配命令",
-        description: "保留原始命令草稿，不自动回退到普通消息或自动发送。",
-        value: "/deploy tomorrow",
-        commandMode: true,
-        palette: false,
-        result: false,
-        running: false,
-        hint: false,
-        error: true,
-        status: "在线 · 空闲",
-        footnote: "显式“转为普通消息”也只转移到消息草稿，仍需用户再次确认发送。"
-      }
+      catalog: { title: "命令清单", description: "输入 / 后继续输入可过滤，选择后收起为命令标签。" },
+      argument: { title: "参数编辑", description: "命令名称与参数分开编辑，点击名称可更换，× 可退出。" },
+      running: { title: "运行中清单", description: "按服务端返回的清单与 input 展示；当前示例中的 model 只允许查询。" },
+      help: { title: "Help 临时结果", description: "内置命令结果独立呈现，取消或完成后恢复普通消息草稿。" },
+      unmatched: { title: "未匹配命令", description: "保留原文，继续修改或按 Esc 退出。" }
     };
+    const $ = (selector) => document.querySelector(selector);
+    const input = $("#composer-input");
+    const palette = $("#command-palette");
+    const list = $("#command-list");
+    const chip = $("#command-chip");
+    const chipName = $("#selected-command-name");
+    const submitButton = $("#submit-button");
+    const result = $("#result-region");
+    const initialHelp = $(".help-description").innerHTML;
+    const demoInvocations = [];
+    let catalog = idleCatalog;
+    let message = "", savedMessage = "", query = "/", argumentsText = "";
+    let selected = null, replacement = null;
+    let mode = false, paletteOpen = false, moreOpen = false, composing = false, executing = false;
+    let activeIndex = 0, running = false, generation = 0, error = "";
 
-    const elements = {
-      title: document.querySelector("#state-title"),
-      description: document.querySelector("#state-description"),
-      input: document.querySelector("#composer-input"),
-      palette: document.querySelector("#command-palette"),
-      result: document.querySelector("#result-region"),
-      running: document.querySelector("#running-banner"),
-      hint: document.querySelector("#argument-hint"),
-      hintCode: document.querySelector("#hint-code"),
-      error: document.querySelector("#inline-error"),
-      composer: document.querySelector("#composer"),
-      slashButton: document.querySelector(".tool-button"),
-      agentStatus: document.querySelector("#agent-status"),
-      footnote: document.querySelector("#composer-footnote"),
-      list: document.querySelector("#command-list"),
-      paletteTitle: document.querySelector("#palette-title")
-    };
-
-    function setState(name) {
-      const state = states[name];
-      elements.title.textContent = state.title;
-      elements.description.textContent = state.description;
-      elements.input.value = state.value;
-      elements.input.placeholder = state.commandMode ? "输入命令" : "输入消息，或按 / 查看命令";
-      elements.composer.classList.toggle("command-mode", state.commandMode);
-      elements.slashButton.classList.toggle("active", state.commandMode);
-      elements.palette.hidden = !state.palette;
-      elements.input.setAttribute("aria-expanded", String(state.palette));
-      elements.input.setAttribute("aria-activedescendant", state.palette ? "cmd-help" : "");
-      elements.result.classList.toggle("visible", state.result);
-      elements.running.classList.toggle("visible", state.running);
-      elements.hint.classList.toggle("visible", state.hint);
-      elements.error.classList.toggle("visible", state.error);
-      elements.agentStatus.textContent = state.status;
-      elements.footnote.textContent = state.footnote;
-      if (state.hintText) elements.hintCode.textContent = state.hintText;
-      document.querySelectorAll(".state-tab").forEach((tab) => {
-        tab.setAttribute("aria-selected", String(tab.dataset.state === name));
-      });
-
-      const allOptions = [...document.querySelectorAll(".command-option")];
-      allOptions.forEach((option) => {
-        const hiddenForRunning = state.running && ["compact", "skill:inspection-plan"].includes(option.dataset.name);
-        option.hidden = hiddenForRunning;
-        const input = option.querySelector(".command-input");
-        if (state.running && ["model", "thinking"].includes(option.dataset.name)) input.textContent = "无需参数";
-        else if (option.dataset.name === "model") input.textContent = "[modelId]";
-        else if (option.dataset.name === "thinking") input.textContent = "[on|off]";
-      });
-      const count = allOptions.filter((option) => !option.hidden).length;
-      elements.paletteTitle.textContent = `命令清单 · ${count} 项`;
+    function parse(raw) {
+      const match = /^\/([^\t\n\v\f\r ]*)(?:[\t\n\v\f\r ]+([\s\S]*))?$/u.exec(raw);
+      return match ? { nameToken: match[1], argumentsText: match[2] || "" } : null;
     }
-
+    function matches() {
+      const parsed = parse(query);
+      return parsed ? catalog.filter((item) => item.name.startsWith(parsed.nameToken)) : [];
+    }
+    function announce(text) { $("#composer-announcement").textContent = text; }
+    function focusEditor() { (selected && !selected.input ? submitButton : input).focus(); }
+    function render() {
+      const options = matches();
+      activeIndex = Math.max(0, Math.min(activeIndex, options.length - 1));
+      palette.hidden = !paletteOpen;
+      chip.hidden = !selected;
+      input.hidden = !!selected && !selected.input;
+      input.disabled = executing;
+      $("#more-button").disabled = executing;
+      chipName.disabled = executing;
+      $("#remove-command").disabled = executing;
+      input.value = selected ? argumentsText : mode ? query : message;
+      input.placeholder = selected ? selected.input?.hint || "" : running && !mode ? "任务结束后可发送，草稿可继续编辑" : "输入消息，或输入 / 选择命令";
+      input.setAttribute("aria-label", selected ? "编辑 " + selected.name + " 的参数" : mode ? "查找命令" : "输入消息");
+      ["role", "aria-autocomplete", "aria-expanded", "aria-controls", "aria-activedescendant", "aria-describedby"].forEach((key) => input.removeAttribute(key));
+      if (mode && !selected) {
+        input.setAttribute("role", "combobox");
+        input.setAttribute("aria-autocomplete", "list");
+        input.setAttribute("aria-expanded", String(paletteOpen));
+        input.setAttribute("aria-controls", "command-list");
+        if (paletteOpen && options.length) input.setAttribute("aria-activedescendant", "command-option-" + activeIndex);
+      }
+      if (selected) {
+        chipName.textContent = selected.name;
+        chipName.setAttribute("aria-label", "更换命令 " + selected.name);
+        $("#remove-command").setAttribute("aria-label", "移除命令 " + selected.name);
+        if (selected.input) {
+          $("#parameter-hint").textContent = selected.input.hint;
+          input.setAttribute("aria-describedby", "parameter-hint");
+        }
+      }
+      list.replaceChildren();
+      options.forEach((command, index) => {
+        const option = document.createElement("div");
+        option.className = "command-option" + (index === activeIndex ? " active" : "");
+        option.id = "command-option-" + index;
+        option.dataset.name = command.name;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", String(index === activeIndex));
+        const name = document.createElement("span");
+        name.className = "command-name";
+        name.textContent = command.name;
+        const description = document.createElement("span");
+        description.className = "command-description";
+        description.textContent = command.description;
+        option.append(name, description);
+        option.addEventListener("mousedown", (event) => event.preventDefault());
+        option.addEventListener("click", () => choose(command));
+        list.append(option);
+      });
+      $("#palette-empty").hidden = options.length > 0;
+      $("#palette-empty").textContent = catalog.length ? "没有匹配命令" : "当前没有可用命令";
+      $("#inline-error").hidden = !error && (!mode || selected || paletteOpen || options.length > 0);
+      $("#inline-error").textContent = error || "没有匹配命令";
+      input.setAttribute("aria-invalid", String(!!error));
+      $("#more-menu").hidden = !moreOpen;
+      $("#more-button").setAttribute("aria-expanded", String(moreOpen));
+      submitButton.setAttribute("aria-label", selected ? "运行 " + selected.name : "发送消息");
+      submitButton.title = selected ? "运行 " + selected.name : "发送消息";
+      submitButton.disabled = executing || paletteOpen || (mode ? !selected : running || !message.trim());
+      if (paletteOpen) announce(options.length + " 条匹配命令");
+    }
+    function openCommands() {
+      if (executing) return;
+      if (selected) replacement = { selected, argumentsText };
+      if (!mode) { savedMessage = message; query = "/"; }
+      else if (selected) query = "/";
+      mode = true; selected = null; moreOpen = false; paletteOpen = true; error = ""; activeIndex = 0;
+      render(); input.focus();
+    }
+    function exitCommand() {
+      if (executing) return;
+      mode = false; selected = null; replacement = null; paletteOpen = false; moreOpen = false;
+      query = "/"; argumentsText = ""; error = ""; message = savedMessage;
+      render(); input.focus();
+    }
+    function choose(command) {
+      if (!paletteOpen || executing || composing) return;
+      const parsedArguments = parse(query)?.argumentsText || "";
+      if (!command.input && parsedArguments) {
+        error = "此命令不接收参数"; render(); input.focus(); return;
+      }
+      argumentsText = replacement?.selected.name === command.name && !parsedArguments
+        ? replacement.argumentsText : parsedArguments;
+      selected = command; replacement = null; paletteOpen = false; error = "";
+      render(); announce("已选择 " + command.name); focusEditor();
+    }
+    function escape() {
+      if (moreOpen) { moreOpen = false; render(); $("#more-button").focus(); return; }
+      if (paletteOpen) {
+        paletteOpen = false;
+        if (replacement) {
+          selected = replacement.selected; argumentsText = replacement.argumentsText; replacement = null;
+        }
+        error = ""; render(); focusEditor();
+      } else if (mode) exitCommand();
+    }
+    function updateInput() {
+      if (composing) return;
+      error = "";
+      if (selected) argumentsText = input.value;
+      else if (mode) { query = input.value; activeIndex = 0; paletteOpen = true; }
+      else if (!message && input.value.startsWith("/")) {
+        savedMessage = message; query = input.value; mode = true; paletteOpen = true; activeIndex = 0;
+      } else message = input.value;
+      render();
+    }
+    function showBuiltin(invocation) {
+      result.classList.add("visible");
+      $(".result-subtitle").textContent = invocation.name + " · 演示结果";
+      $(".use-cases").hidden = invocation.name !== "help";
+      if (invocation.name === "help") {
+        $(".result-title").textContent = "园区运维助手";
+        $(".help-description").innerHTML = initialHelp;
+      } else {
+        const text = {
+          status: "当前会话空闲，暂无待确认操作。",
+          name: invocation.arguments ? "会话名称：" + invocation.arguments : "会话名称：园区巡检",
+          model: invocation.arguments ? "当前模型：" + invocation.arguments : "当前模型：默认模型",
+          thinking: invocation.arguments ? "思考模式：" + invocation.arguments : "思考模式：关闭",
+          compact: "本次无需压缩上下文。",
+          skills: "inspection-plan：整理园区巡检计划"
+        };
+        $(".result-title").textContent = "命令结果";
+        $(".help-description").textContent = text[invocation.name];
+      }
+    }
+    async function submit() {
+      if (executing || composing || submitButton.disabled) return;
+      if (!mode) {
+        const article = document.createElement("article");
+        article.className = "message user";
+        const bubble = document.createElement("div");
+        bubble.className = "user-bubble";
+        bubble.textContent = message;
+        article.append(bubble);
+        $(".timeline-inner").insertBefore(article, result);
+        message = ""; render(); input.focus(); return;
+      }
+      if (!selected) return;
+      if (Array.from(argumentsText).length > 2048) {
+        error = "参数最多 2048 个字符"; render(); focusEditor(); return;
+      }
+      if (selected.kind === "skill") {
+        error = "当前暂不支持运行该命令"; render(); focusEditor(); return;
+      }
+      const invocation = Object.freeze({ name: selected.name, arguments: argumentsText });
+      const currentGeneration = generation;
+      demoInvocations.push(invocation);
+      executing = true; render();
+      // Simulate a pending request so repeated submissions can be exercised.
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      if (currentGeneration !== generation) return;
+      executing = false;
+      showBuiltin(invocation);
+      exitCommand();
+      announce(invocation.name + " 演示完成");
+    }
+    $("#composer-input").addEventListener("input", updateInput);
+    input.addEventListener("compositionstart", () => { composing = true; });
+    input.addEventListener("compositionend", () => { composing = false; updateInput(); });
+    $(".composer-stack").addEventListener("keydown", (event) => {
+      if (event.repeat && event.key === "Enter") { event.preventDefault(); return; }
+      if (composing || event.isComposing || event.keyCode === 229 || executing) return;
+      if (event.key === "Escape") { event.preventDefault(); escape(); return; }
+      if (event.target !== input && event.target !== submitButton) return;
+      if (mode && event.key === "Backspace" && ((selected && !argumentsText) || (!selected && query === "/"))) {
+        event.preventDefault(); exitCommand(); return;
+      }
+      if (paletteOpen && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        const last = Math.max(0, matches().length - 1);
+        activeIndex = event.key === "Home" ? 0 : event.key === "End" ? last
+          : Math.max(0, Math.min(last, activeIndex + (event.key === "ArrowDown" ? 1 : -1)));
+        render(); document.getElementById("command-option-" + activeIndex)?.scrollIntoView?.({ block: "nearest" });
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        if (paletteOpen) { const command = matches()[activeIndex]; if (command) choose(command); }
+        else if (mode && !selected) { paletteOpen = true; render(); input.focus(); }
+        else void submit();
+      }
+    });
+    $("#more-button").addEventListener("click", () => {
+      moreOpen = !moreOpen; render();
+      if (moreOpen) $("#command-entry").focus();
+    });
+    $("#command-entry").addEventListener("click", openCommands);
+    chipName.addEventListener("click", openCommands);
+    $("#remove-command").addEventListener("click", exitCommand);
+    submitButton.addEventListener("click", () => void submit());
+    $(".result-close").addEventListener("click", () => { result.classList.remove("visible"); focusEditor(); });
+    document.addEventListener("click", (event) => {
+      if (event.target.closest(".state-tab")) return;
+      if (moreOpen && !$(".tool-actions").contains(event.target)) { moreOpen = false; render(); }
+      if (paletteOpen && !$(".composer-stack").contains(event.target)) { escape(); }
+    });
+    function setState(name) {
+      const state = states[name] || states.catalog;
+      generation++; executing = false; composing = false;
+      running = name === "running"; catalog = running ? runningCatalog : idleCatalog;
+      mode = name !== "help"; paletteOpen = ["catalog", "running", "unmatched"].includes(name);
+      moreOpen = false; message = ""; savedMessage = ""; argumentsText = ""; selected = null; replacement = null;
+      query = name === "unmatched" ? "/deploy tomorrow" : "/"; activeIndex = 0; error = "";
+      if (name === "argument") {
+        selected = idleCatalog.find((item) => item.name === "name"); argumentsText = "夜间巡检会话";
+      }
+      $("#state-title").textContent = state.title;
+      $("#state-description").textContent = state.description;
+      $("#agent-status").textContent = running ? "执行中 · 可停止" : "在线 · 空闲";
+      $("#running-banner").classList.toggle("visible", running);
+      result.classList.remove("visible");
+      if (name === "help") showBuiltin({ name: "help", arguments: "" });
+      document.querySelectorAll(".state-tab").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.state === name)));
+      render();
+    }
     document.querySelectorAll(".state-tab").forEach((tab) => {
       tab.addEventListener("click", () => {
-        setState(tab.dataset.state);
-        history.replaceState(null, "", `#${tab.dataset.state}`);
+        setState(tab.dataset.state); history.replaceState(null, "", "#" + tab.dataset.state);
       });
     });
+    function loadState() { const name = location.hash.slice(1); setState(states[name] ? name : "catalog"); }
+    loadState();
+    window.addEventListener("hashchange", loadState);
 
-    document.querySelectorAll(".command-option").forEach((option) => {
-      option.addEventListener("click", () => {
-        document.querySelectorAll(".command-option").forEach((item) => {
-          const active = item === option;
-          item.classList.toggle("active", active);
-          item.setAttribute("aria-selected", String(active));
-        });
-        elements.input.setAttribute("aria-activedescendant", option.id);
-        const name = option.dataset.name;
-        elements.input.value = `/${name}${["name", "model", "thinking", "skill:inspection-plan"].includes(name) ? " " : ""}`;
-      });
-    });
-
-    document.querySelector(".result-close").addEventListener("click", () => {
-      elements.result.classList.remove("visible");
-    });
-
-    const initialState = location.hash.slice(1);
-    setState(states[initialState] ? initialState : "catalog");
-    window.addEventListener("hashchange", () => {
-      const nextState = location.hash.slice(1);
-      setState(states[nextState] ? nextState : "catalog");
-    });
   </script>
 </body>
 </html>
