@@ -347,6 +347,7 @@
     .chat-notice { padding: 12px; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-secondary); line-height: 1.6; }
     .chat-user { max-width: 85%; width: fit-content; margin: 0 0 24px auto; padding: 12px 16px; border-radius: 12px; background: var(--surface-tertiary); white-space: pre-wrap; overflow-wrap: anywhere; }
     .chat-analysis, .chat-tool { margin: 12px 0; }
+    .chat-analysis p { white-space: pre-wrap; }
     .chat-analysis summary, .chat-tool summary { cursor: pointer; min-height: 44px; padding: 10px 0; }
     .chat-analysis p { padding-left: 18px; color: var(--muted); font-size: 13px; }
     #chat-tool-state { margin-left: 12px; color: var(--muted); font-size: 12px; }
@@ -388,7 +389,7 @@
         <div class="row">
           <img class="review-brand-mark" src="campusclaw-mark-o1.png" alt="">
           <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">1.6.0</span>
+          <span class="tag">1.8.0</span>
           <span class="tag">主对话 · 确认 · 停止 · 恢复</span>
         </div>
         <code class="base">设计基线 2ee2a32 · 源码 dfb90ca · target-only</code>
@@ -521,7 +522,7 @@
           </figure>
           <div class="screen-detail">
             <section class="section"><h3>作用</h3><p class="description">围绕 Agent、Chat、消息、附件和工具活动完成日常任务。协议身份、ETag 和原始 SSE 不进入产品主流程；JWT/APPKEY/<code>access-token</code> 不是产品隐藏高级字段，只存在于内部诊断例外。</p></section>
-            <section class="section"><h3>主要评审点</h3><ul class="review-points"><li>安全的思考摘要与工具是否在同一 Agent 活动区中易于连续阅读，又保持独立信任边界。</li><li>工具详情是否按输入在上、输出在下阅读，并且不显示内部 ID、绝对路径或凭据。</li><li>Assistant-only 安全 Markdown 与 User/Thinking/Tool 专用 viewer 边界是否清楚。</li><li>表格和代码块是否只在自身容器横向滚动，不撑破对话区。</li></ul></section>
+            <section class="section"><h3>主要评审点</h3><ul class="review-points"><li>原始推理与工具是否在同一 Agent 活动区中易于连续阅读，又保持独立信任边界。</li><li>工具详情是否按输入在上、输出在下阅读，并且不显示内部 ID、绝对路径或凭据。</li><li>Assistant-only 安全 Markdown 与 User/Thinking/Tool 专用 viewer 边界是否清楚。</li><li>表格和代码块是否只在自身容器横向滚动，不撑破对话区。</li></ul></section>
           </div>
         </div>
       </article>
@@ -552,10 +553,10 @@ HAVING COUNT(*) &gt; 1;</code></pre>
 
       <section class="section" id="agent-activity">
         <div class="section-title"><h2>Thinking 与 Tool Activity 评审面</h2><code class="screen-key">agentActivity</code></div>
-        <p class="description muted">参考 Codex 的活动披露：思考只展示面向用户的安全摘要，工具用紧凑动作行；当前执行项默认展开，完成项默认折叠。展开详情始终按“输入参数 → 输出结果”纵向排列，不做左右分栏。</p>
+        <p class="description muted">参考 Codex 的活动披露：思考展示模型返回的原始推理文本，工具用紧凑动作行；当前执行项默认展开，完成项默认折叠。展开详情始终按“输入参数 → 输出结果”纵向排列，不做左右分栏。</p>
         <div class="activity-specimen">
           <details class="thinking-specimen">
-            <summary><span>分析过程</span><span>›</span></summary>
+            <summary><span>分析过程 · 原始推理</span><span>›</span></summary>
             <p>先确认订单结构，再检查价格、数量与重复订单。</p>
           </details>
           <details class="tool-specimen" open>
@@ -572,7 +573,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
 
       <article class="screen-card" id="running-conversation" data-screen-key="runningConversation">
         <header class="screen-head">
-          <strong>主对话交互</strong><span class="tag">1.6.0 · target-only</span>
+          <strong>主对话交互</strong><span class="tag">1.8.0 · target-only</span>
           <a href="public-chat-alignment.md">契约边界与验收</a>
         </header>
         <section class="section" id="conversation-workbench">
@@ -610,7 +611,8 @@ HAVING COUNT(*) &gt; 1;</code></pre>
               <div class="chat-scroll">
                 <div class="chat-notice" id="chat-notice" role="status" aria-live="polite"></div>
                 <div class="chat-user" id="chat-user">请分析东区园区告警，并给出处理建议。</div>
-                <details class="chat-analysis"><summary>分析过程</summary><p>已整理允许公开的告警摘要，正在核对影响范围。</p></details>
+                <details class="chat-analysis"><summary>分析过程 · 原始推理</summary><p>我先核对告警发生时间，再比较受影响端口与上联链路。
+需要结合巡检记录判断异常是否集中在同一设备。</p></details>
                 <details class="chat-tool" id="chat-tool" open>
                   <summary><strong>隔离受影响端口</strong><span id="chat-tool-state">等待工具返回</span></summary>
                   <div class="chat-tool-detail">
@@ -676,7 +678,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         <details class="review-question" open><summary>4. 已确认：产品前端不持有 JWT/APPKEY</summary><p>生产身份与授权仍由统一登录、mate-service 或网关承担；产品 Chat 不出现凭据表单、秘密构建配置或浏览器持久化。</p></details>
         <details class="review-question" open><summary>5. 已确认：<code>Headers</code> 行编辑</summary><p>默认预置 access-token、X-HW-ID、Authorization，Value 留空，三行均可编辑、启停和删除。点击“增加请求头”追加一行空 Key/Value；填写、删除和清空均不自动补行。面板内去掉常驻文字说明，请求范围与内存生命周期由设计文档维护。</p></details>
         <details class="review-question" open><summary>6. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
-        <details class="review-question" open><summary>7. 本轮方向：采用 Codex-inspired 活动 disclosure</summary><p>Thinking 只展示公共安全摘要，标题使用前端状态文案；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。原始推理、内部 ID、绝对路径和凭据都不进入产品浏览器。</p></details>
+        <details class="review-question" open><summary>7. 已确认：原始推理与活动 disclosure</summary><p>Thinking 展示模型返回的原始推理，不生成摘要；标题使用前端状态文案；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。内部 ID、绝对路径和凭据不作为产品公共字段。</p></details>
         <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="public-chat-alignment.md">查看公共对话对齐</a></div>
       </section>
     </div>

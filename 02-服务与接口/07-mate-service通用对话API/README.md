@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.4 |
+| 文档版本 | 1.5.0 |
 | 状态 | 三个 operation 已确认；待实现 |
 | 设计性质 | target-only；不得描述为当前 mate-service 或 CampusClaw 已实现行为 |
 | 设计仓变更前基线 | `743eca488ad559387706b5df54e2248a4124e5ef` |
@@ -22,7 +22,12 @@
 | pi 固定参考基线 | `badlogic/pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | Claude Managed Agents 公开文档核对日期 | 2026-09-02；Beta 公共契约，无可归因服务端源码 |
 | OpenAI API 公开文档核对日期 | 2026-09-02 |
-| 更新日期 | 2026-09-02 |
+| 更新日期 | 2026-09-09 |
+
+2026-09-09 局部更新：按用户明确决定展示原始推理，撤销摘要设计。
+源码补充基线为 `pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60`，
+范围、差距和原因见[原始文本决定](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+其余历史源码与外部公开契约证据保持原核对日期，不表示本次全面复核。
 
 ## 1. 已确认接口
 
@@ -392,7 +397,7 @@ data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phas
 | `type` | 是否有 delta | 是否进入历史 | 作用 |
 |---|---:|---:|---|
 | `agent.message` | 是 | 仅 `completed` | Assistant 对用户可见的文本 |
-| `agent.thinking` | 是 | 仅 `completed` | Claw 审核后的公开思考摘要，不是 private chain-of-thought |
+| `agent.thinking` | 是 | 仅 `completed` | 模型实际返回的可读原始推理；不再生成摘要 |
 | `agent.tool_call` | 否 | 是 | 一次已公开的 Tool 调用及安全参数 |
 | `agent.tool_result` | 否 | 是 | Tool 的公开结果或稳定公开错误 |
 | `chat.status_idle` | 否 | 是 | 当前 execution 已停止或暂停等待确认 |
@@ -434,8 +439,10 @@ data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phas
 | `createdAt` | 必须省略 | 必需 | delta 不是持久化事件；completed 是持久化时间 |
 
 客户端按顺序追加 delta；收到 completed 后，以 completed 的完整 `content` 替换 preview。
-若 execution 被中断且没有 completed，则丢弃未完成 preview。`agent.thinking.content` 只允许
-公开摘要；原始推理内容不得到达 Mate 公共边界。
+若 execution 被中断且没有 completed，则丢弃未完成 preview。`agent.thinking.content` 展示模型实际返回的可读原始推理，
+不生成摘要、不使用 publicSummary 门槛。2026-09-09 用户决定同步适用于 Mate 公共边界，
+完整规则与补充源码证据见[原始文本决定](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+思考开关控制后续执行，已保存原文不因后续关闭而隐藏；不透明签名不作为正文。
 
 ### 5.4 `agent.tool_call`
 
@@ -772,7 +779,8 @@ Claude Managed Agents 在核对日仍是 Beta 公共 API。公开文档不能证
 |---|---|
 | 产品约束 | Mate 对外叫 Chat，Claw 内部叫 Session；公共层只保留三种 user event、五种 SSE event 和四个 idle reason，减少客户端状态机 |
 | 产品约束 | `interrupt + message` 不批量提交；终止完成后再提交消息，保证单 active execution |
-| 安全加固 | `agent.thinking` 只允许公开摘要；Tool 参数、结果和错误必须经过安全投影；内部 ID、路径、凭据和 private chain-of-thought 不出边界 |
+| 产品约束 | 2026-09-09 用户明确展示模型返回的原始推理；撤销 Thinking 摘要设计，恢复原文展示能力，流和历史复用完整原文 |
+| 安全加固 | Tool 参数、结果和错误必须经过安全投影；内部 ID、路径、凭据及不透明模型续传签名不作为公共字段 |
 | 架构变化 | POST、live SSE、durable history 分离；live 流不重放，历史固定快照；用 `eventId` 对账，不公开内部 sequence |
 | 架构变化 | POST 成功时在 `result.event` 返回完整、已持久化的 `user.*` 事件，并与历史接口复用同一 Schema；这使创建响应可直接作为权威记录合并，同时不把 Agent execution 结果混入写入响应 |
 | 架构变化 | `eventId` 与 `toolCallId` 分离；`agent.tool_call` 显式公开 OpenAI `call_id` / `tool_calls[].id`，确认和结果原样引用该值。这是有意的 OpenAI 身份耦合，非 OpenAI Provider 不得伪造 `call_` ID；若要纳入本公共契约，必须另行版本决策 |
@@ -796,6 +804,7 @@ VO、Service 与错误组件名称。
   与历史 `UserMessageEvent`、`UserInterruptEvent`、`UserToolConfirmationEvent` Schema 一致；
 - 覆盖 idle interrupt 冲突、interrupt 等待整棵执行树终止、confirming 时消息冲突、确认
   Tool Call 归属，以及中断 Tool 不伪造结果；
+- 覆盖 Mate/GLM 原文在 SSE completed 与历史一致、缺少摘要标记仍可展示、后续关闭不隐藏旧原文，以及仅 signature 时不伪造文本；
 - 覆盖 SSE 只有 `data:`、ping comment、五类事件、同 ID delta/completed、completed 覆盖
   preview、连接断开不取消 execution；
 - 覆盖历史八类事件、无 delta、createdAt inclusive、types OR/去重、固定快照不混入新事件、
@@ -826,6 +835,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.0 | 2026-09-09 | 按用户明确决定展示模型返回的原始推理，撤销摘要设计；同步 Runtime、Mate、前端及历史语义。Thinking 局部源码基线 4cc8dd86，固定 pi 5cd93f6，代码仍待同步。 |
 | 1.4.4 | 2026-09-02 | 为实时流增加“用户同意后执行端口隔离”的完整工具交互示例，覆盖 `tool_call`、`confirming`、POST 确认边界、`tool_result`、Agent 回复与最终 `done`；事件类型和字段不变。 |
 | 1.4.3 | 2026-09-02 | 补充“允许工具调用”的提交成功响应示例，与既有拒绝示例并列展示；明确 `allow` 响应省略 `denyMessage`，字段、Schema 和行为不变。 |
 | 1.4.2 | 2026-09-02 | 整体润色三个 Events 接口的说明与示例，统一为真实、连贯的园区巡检场景，并为实时流和历史页增加命名示例；字段、Schema 和行为不变。 |

@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: mate-service General Chat Events API
-  version: 1.4.4
+  version: 1.5.0
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -482,7 +482,7 @@ paths:
                   content:
                     type: string
                     minLength: 1
-                    description: 本帧新追加的公开摘要片段；允许只含空格或换行
+                    description: 模型返回的原始推理新增片段；允许只含空格或换行，不生成摘要
               - $ref: '#/components/schemas/AgentThinkingCompletedEvent'
               - $ref: '#/components/schemas/AgentToolCallEvent'
               - $ref: '#/components/schemas/AgentToolResultEvent'
@@ -1147,7 +1147,7 @@ components:
           $ref: '#/components/schemas/CreatedAt'
         content:
           type: string
-          description: 完整权威公开摘要，不是 private chain-of-thought
+          description: 模型返回的完整权威推理原文；不生成摘要，不以 publicSummary 过滤
     AgentToolCallEvent:
       type: object
       description: >

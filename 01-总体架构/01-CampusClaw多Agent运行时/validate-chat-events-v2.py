@@ -514,7 +514,7 @@ def validate_history_model(model: dict, post: dict) -> None:
     }, "ordinary pagination is confirmed, without a cross-page snapshot or idle-only restriction")
     proposal = review["historyProposal"]
     require(proposal == {
-        "scope": "current-branch-per-request", "thinkingFilter": "persisted-public-summary-current-access",
+        "scope": "current-branch-per-request", "thinkingFilter": "persisted-original-thinking-current-access",
         "readToolToken": False,
     }, "keep only the remaining candidates, not cursor keys, bindings or expiry")
     require(review["confirmedChoices"] == {

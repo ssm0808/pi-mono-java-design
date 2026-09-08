@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.5.0 |
+| 文档版本 | 0.6.0 |
 | 状态 | 合并方向、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；B01～B15 语义已确认，精确契约已定稿，可进入实现；数据库数值校准，target-only |
 | 设计仓本次变更前基线 | `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
 | L5 字段确认前设计仓基线 | `7349cdf2e037700ddf4917eebef0e19799252f47`；只同步目标字段决定，未重新核对实现 |
@@ -13,9 +13,12 @@
 | 本次实现核对 | `pi-mono-java@918005ee8ccc88d179fc31a0de17a92b4a01383b` |
 | M7 补充源码核对 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；五个并发、流与配置文件相对 `918005e` 无变化，路径与符号见总体设计 §4.4 |
 | 原实现基线 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；复核文件与差距见 §6 |
-| Mate 契约对照 | 通用对话 Events 1.4.4，已确认目标契约，不是实现证据；本轮不修改 |
+| Mate 契约对照 | 通用对话 Events 1.5.0，已确认目标契约；本次仅同步 Thinking 原文规则，不是实现证据 |
 | 外部参考核对 | Claude Managed Agents 官方事件流与 List Events，2026-09-04，Beta |
-| 更新日期 | 2026-09-08 |
+| 更新日期 | 2026-09-09 |
+
+2026-09-09 Thinking 展示以[原始文本决定](chat-events-v2-history-design.md#thinking-original-text)为准；
+该局部决定和源码证据替代旧摘要条款，不整体升级其他专题基线。
 
 ## 1. 当前操作与已确认范围
 
@@ -133,7 +136,7 @@ M1 完成后 M2 才能开始。跨这个完成边界的迟到中断、已接受�
 |---|---|---|
 | user.* 首帧 | 不带 phase，仅本次完整回执 | eventId/type/createdAt 及对应已确认业务字段；完整内容已确认 |
 | agent.message | phase=delta/completed | completed 的 content 为完整正文字符串已确认（L5）；delta content 为增量字符串且无时间，完整 createdAt 保存一次为 UTC 毫秒；同 ID 完整内容替换 preview |
-| agent.thinking | phase=delta/completed | 仅启用且有可公开摘要时输出，不泄露原始推理；B05 已确认公开摘要和历史可见性 |
+| agent.thinking | phase=delta/completed | 执行 thinking=true 且有可读推理时输出原文；不生成摘要、不检查 publicSummary，completed 原文入历史；见[原始文本决定](chat-events-v2-history-design.md#thinking-original-text) |
 | agent.tool_call | 无 phase 的完整事件 | arguments JSON 对象已确认（L6）；Mate 的 toolName=CallMateTool、arguments={tool,args} 已确认（L9）；requiresConfirmation 必填布尔，sourceEventId 指原消息 |
 | agent.tool_result | 无 phase 的完整事件 | content 数组且仅包含 text 块已确认（L7/L8）；每条结果必有布尔 isError、成功 false/失败 true 已确认（L10）；失败必有稳定 errorCode，成功省略；至少一个 text 块，允许空文本 |
 | session.status_idle | 无 phase 的完整事件 | eventId/type/createdAt/reason；reason=done/terminated/failed/confirming 已确认；failed 必有 errorCode/message |
@@ -219,6 +222,7 @@ B01～B15 已一次确认，不再列单字段选项。精确契约已定稿；�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.6.0 | 2026-09-09 | 按用户明确决定展示模型返回的原始推理，撤销摘要设计；同步 Runtime、Mate、前端及历史语义。Thinking 局部源码基线 4cc8dd86，固定 pi 5cd93f6，代码仍待同步。 |
 | 0.5.0 | 2026-09-08 | 确认 B01～B15，补齐根消息绑定、结束原因、控制竞争、跨实例确认与错误处理；例子和字段改为引用共享精确模型，Skill 复用此生命周期。 |
 | 0.4.6 | 2026-09-08 | 同步 L10：每条工具结果必有布尔 isError；errorCode、文案与其他细节合并到 B01～B15 批量评审，接口未整体确认，PlantUML 不变。 |
 | 0.4.5 | 2026-09-08 | 同步 L9 Mate 工具名与参数包装，结果仍为文本块数组；成败标记、错误及整体仍待评审，PlantUML 不变。 |

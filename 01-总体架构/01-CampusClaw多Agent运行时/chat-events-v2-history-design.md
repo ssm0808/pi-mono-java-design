@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.3.0 |
+| 文档版本 | 0.4.0 |
 | 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，target-only |
-| 更新日期 | 2026-09-08 |
+| 更新日期 | 2026-09-09 |
 | 设计仓变更前基线 | `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
 | L5 字段确认前设计仓基线 | `7349cdf2e037700ddf4917eebef0e19799252f47`；沿用下述实现证据，本轮未重新核对实现 |
 | L6 字段确认前设计仓基线 | `050bda2579004b630021300986881ac61ba7142e`；沿用下述实现证据，本轮未重新核对实现 |
@@ -38,8 +38,8 @@ isError 布尔值。用户随后明确要求集中确认剩余问题，不再逐
   [02-list-session-events.json](接口契约-v2/操作/02-list-session-events.json)。
 - [POST 保留评审页](chat-api-review.html#submitSessionEvent) 与
   [请求级 SSE 设计](chat-events-v2-stream-design.md) 继续有效。
-- 只修改 CampusClaw 内部目标契约；当前十项接口由统一清单管理，运行时代码和 Mate
-  公共接口不变。内部 `sessionId` 不直接暴露给浏览器。
+- 原 B01～B15 批次只修改 CampusClaw 内部目标契约；2026-09-09 的 Thinking 决定
+  同步 Mate 公共 API 与前端设计，运行时代码仍待实现。当前十项内部接口由统一清单管理。内部 `sessionId` 不直接暴露给浏览器。
 
 ```http
 GET /campusclaw-service/v1/sessions/{sessionId}/events?page=1&limit=2
@@ -73,8 +73,8 @@ Agent 正文是字符串，工具 arguments 是对象，工具结果是至少一
 无可验证用量时省略而非伪造零；lifetimeUsage 还包括压缩、失败尝试等可计费用量，不能以
 公开消息 usage 简单求和代替 Session 的累计权威统计。
 
-B05 替代此前尚未确认的“按当前 thinking 开关过滤历史”：开关控制后续执行，已有公开摘要
-不会因关闭而隐藏；读取仍受当前授权和保留策略约束。原始推理、凭据、内部序号、执行 ID、
+Thinking 展示按 §2.2 的原文规则执行：开关控制后续执行，已有思考原文
+不会因关闭而隐藏；读取仍受当前授权和保留策略约束。凭据、内部序号、执行 ID、
 Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只决定本次错误 resMsg，
 不重译已保存工具 text 或失败 message；同一事件在 GET 与 POST 必须逐字段相同。
 
@@ -103,7 +103,7 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 | assistant.message.started | 不公开；客户端由第一段 delta 或 completed 建立消息 |
 | assistant.message.delta / completed | agent.message + delta/completed；只有 completed 入历史，完整正文和已知 Usage 保存一次 |
 | assistant.thinking.started | 不公开；不需要额外开始记录 |
-| assistant.thinking.delta / completed | 仅可公开摘要映射 agent.thinking；原始/私有推理只供内部模型上下文，不得当作历史可见摘要 |
+| assistant.thinking.delta / completed | 执行 thinking=true 时将可读推理原文映射 agent.thinking；delta 用于预览、completed 保存并供历史读取；不透明签名保留内部 |
 | tool.execution.started | 参数收集完成后投影完整 agent.tool_call，保存 toolCallId、参数对象和确认标记 |
 | tool.execution.delta / completed | 不单独公开；内部工具进度不构成新的业务历史或通用命令生命周期 |
 | tool.result | 完整 agent.tool_result；至少一个 text 块、必填 isError，失败映射稳定安全码 |
@@ -112,9 +112,9 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 | session.compaction.completed | 完整 session.compacted；内部摘要、恢复边界和独立 Usage 仍保留供恢复与累计，不进入公共 payload |
 | session.status.idle | 对应 session.status_idle；持久化真实 reason/原消息 sourceEventId，确认等待边界与实际执行终态区分 |
 | stream.end / stream.error | 连接级信号不入历史；正常 EOF 跟随对应 idle，不能把断线编造成业务失败 |
-| 独立 Usage 累计记录、私有 thinking/Skill 展开上下文、树结构控制记录 | 不作为额外公共事件；分别用于 lifetimeUsage、模型恢复和分支重建，不能重复计费或泄露私有上下文 |
+| 独立 Usage 累计记录、不透明 thinking 签名/Skill 展开上下文、树结构控制记录 | 不作为额外公共事件；分别用于 lifetimeUsage、模型恢复和分支重建，不能重复计费或泄露私有上下文 |
 
-存量未保存的公开摘要或精确因果关联不能凭空补造。实现应提供一次可重跑的迁移/兼容读取方案，
+存量未保存的思考文本或精确因果关联不能凭空补造。实现应提供一次可重跑的迁移/兼容读取方案，
 对缺少安全映射的历史显式报错并提示迁移处理；不得逐次分配新 ID 或静默丢弃后声称历史完整。
 本次静态契约校验不证明旧数据迁移已实现。
 
@@ -174,6 +174,68 @@ L10 是已确认的目标产品约束：每条完整工具结果必须带 `isErr
 错误码、文案、空文本和块数量按 B01/B02 的确认语义落入当前共享表。
 
 B01～B03 已确认失败码、空文本与 Mate 归一；原 L11 单字段问卷不再恢复。错误码的具体字符串和中英文表已按确认语义写入精确契约。
+
+### 2.2 Thinking 原始文本展示（2026-09-09 已确认）
+
+<a id="thinking-original-text"></a>
+
+用户明确要求：**“展示原始推理不再有摘要设计”**。这是已确认的产品约束，适用于
+Provider 事件投影、Runtime Events、Mate 公共 Chat API 和产品前端；替代 B05、Mate
+1.4.4 及前端 1.6.0 中“只展示公开摘要”的要求。B05 关于后续开关不隐藏既有历史的决定保留。
+本节是当前 Thinking 展示的权威设计；以下源码差距仍需实现，本次没有修改运行时代码。
+
+**目标行为。** `agent.thinking.content` 直接使用模型实际返回的可读推理文本，保留文字、
+空格、换行及片段顺序。不再设计摘要生成、摘要审核、摘要接口、摘要 DTO 或额外模型调用，
+也不再以 `publicSummary` 或等价标记作为展示和持久化门槛。Provider 原始 SSE 仍先转为
+类型化领域事件，再由两层 API 各自投影身份和协议；文本原样展示不等于整帧字节透明转发。
+
+- 本次执行的 `thinking=true` 且 Provider 返回可读文本时，发送 `agent.thinking`；
+  `delta.content` 只含新增文本，`completed.content` 是同一逻辑思考块的完整原文。
+  completed 保存一次，和 delta 复用 eventId；GET 返回与 SSE completed 相同的已保存记录。
+- `thinking=false` 不产生新的公开 Thinking；后续关闭开关不删除或隐藏已保存的思考原文。
+  每次历史读取仍按当前权限、分支和保留策略进行。
+- 没有可读文本时不凭空生成思考内容。仅用于模型续传的不透明 signature、加密载荷或
+  `reasoning_details` 中无文本的结构保留在 Provider 上下文，不解码、猜测或当作 UI 文本。
+  “原始”指模型实际返回的可读内容，不声称取得模型未返回的内部状态。
+- 前端以纯文本展示原文，保留换行，不激活 Markdown/HTML；折叠标题可使用“正在分析”
+  或“分析过程”，内容区域标明“原始推理”。标题是前端状态文案，不由原文另行生成摘要。
+  未收到文本时只显示等待状态，不伪造正文；完成态覆盖 preview，未完成 preview 不冒充历史。
+
+**源码证据与实现差距。** 本次设计仓分析基线为
+`1eb85523fe1d210856851c5185d64858562db0c6`。Java Thinking 链路补充核对至
+`4cc8dd86f601417c22cf9306e52152acbb59bb60`，旧 `dfb90ca` 等基线继续只支持其原有专题；
+本次不整体升级其他模块或外部公共契约证据。pi 仍使用固定
+`5cd93f688aaab89dbb6dfa4aca535f21796ae185`。下列路径相对各自仓库根目录。
+
+| 仓库 / 源码证据 | 已观察行为 | 与本次目标的关系 |
+|---|---|---|
+| Java · `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java:182` · `parseReasoning/appendReasoningText/finishThinking` | 读取 reasoning_content、reasoning、reasoning_text、reasoning_details，将可读文本累加为 Thinking delta/end，签名单独保存；使用默认事件构造器 | 保留已有原文解析能力；Mate/GLM 无需提供新标记 |
+| Java · `modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java:103` · `ThinkingStartEvent/ThinkingDeltaEvent/ThinkingEndEvent` | 事件增加 publicSummary；便利构造器默认 false | 此标记不再属于目标展示策略；实现同步核对生产者、消费者和测试后移除退休字段 |
+| Java · `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeV2EventProjector.java:244` · `projectThinking/emitThinkingDelta/persistThinking` | 仅 publicSummary=true 才发送 delta 或保存 completed，因此 Mate 默认事件被过滤；已有按块分配 eventId、先保存再发送完整事件的骨架 | 撤销摘要门槛，复用事件身份和完整记录链路，不能只改前端文案 |
+| Java · `frontend/src/components/ThinkingDisclosure.vue` · template | 当前标注公开摘要，等待及空态也使用摘要文案 | 更新为原文展示及对应等待/空态；内容继续纯文本 |
+| pi · `packages/ai/src/types.ts:356` · ThinkingContent；`:535` · AssistantMessageEvent | thinking 文本与 thinkingSignature 分离；thinking_start/delta/end 不要求 publicSummary | 支持保留可读文本与不透明恢复数据的区分，不证明企业 HTTP 边界应照搬 pi |
+| pi · `packages/agent/src/agent-loop.ts:281` · streamAssistantResponse；`packages/coding-agent/src/core/agent-session.ts:621` · _handleAgentEvent | thinking 作为 message_update 继续传递；完整 Assistant 消息在 message_end 后进入 Session 持久化 | 保持领域生命周期与完整消息恢复；公共原文展示是本次用户产品决定 |
+
+**变更原因与溯源。** 实现仓 ADR-0030（`e4ef301c`，2026-08-27）曾记录直接展示原始推理。
+随后 Mate 的摘要限制在设计仓 `9bedccc` 进入 v2 候选，`9096f1e` 将其列为 B05 推荐，
+`2ee2a32` 记录四组批量确认；当时没有明确写出与 ADR-0030 的冲突及 Mate/GLM 原有展示能力
+会消失的影响。实现按后来的摘要门槛开发，造成既有能力回退。本次按用户明确决定撤销该限制，
+无需为恢复原文展示补造一个摘要能力。历史批量记录保留作溯源，不能继续作为仅摘要展示的依据。
+差异分类为**产品约束变更**：撤销 Thinking 上的摘要限制；工具/错误投影、凭据和内部身份边界
+各按原契约执行，不把推理文本塞入错误、日志或新增诊断字段。
+
+**实施切片与验收。** 先同步 Provider 事件及 Runtime 投影，再验证 completed 持久化和 GET，
+然后同步 Mate bridge 与前端；沿用现有分层和依赖，不新增 Maven 依赖或摘要组件。
+验收使用 Mate/GLM reasoning_content 流，断言开启时原文 delta/completed/历史一致，后续关闭
+仍可读取旧原文；覆盖多思考块、空格换行、completed 覆盖预览、无文本/仅 signature、关闭时
+不产生新事件，以及 HTML 样文本只能按纯文本显示。可读原文不能因缺少摘要标记被静默记作
+无公开事件；未完成 preview 仍遵循既有断线和权威历史规则。
+
+本次设计交付校验：Runtime `validate-chat-api.py`、Mate `validate-chat-events-v1.py`、
+前端 13 组 DOM 状态回归均通过；PlantUML 生成、SVG XML/同步、ASCII、Markdown 图链及
+图源行锚、全仓 Mermaid 禁用与 `git diff --check` 通过。相关图已按原尺寸和缩放视图检查，
+保留原有分层与职责链，原尺寸入口见本文 §6 和[前端全局目标图](../04-CampusClaw前端体验/target_frontend_components.svg)。
+本地 HTML 浏览器预览被浏览器 URL 安全策略拒绝，本次不宣称浏览器截图验收或后端集成测试完成。
 
 ## 3. 已确认：普通数字页码
 
@@ -279,7 +341,7 @@ Java 文件相对根路径为
 
 新增批次验收：原消息归属在普通输出/续跑/失败/中断中不漂移；迟到中断拒绝新执行；
 失败缺码/成功带码/非布尔 isError/非文本块被拒绝；GET/POST 与 Skill 完整帧同形；
-后续关闭 thinking 不隐藏已有摘要；配置、压缩与 Usage 投影不泄露内部 ID；
+后续关闭 thinking 不隐藏已有思考原文；配置、压缩与 Usage 投影不泄露内部 ID；
 Skill 展开前回执、绑定变更重检、内部上下文恢复与保留策略保持一致。
 
 
@@ -311,7 +373,7 @@ Skill 展开前回执、绑定变更重检、内部上下文恢复与保留策�
 
 批次 `2026-09-08.1`，用户一次提交 tools/events/lifecycle/integration 四组 A-recommended，
 B01～B15 语义全部确认，L1～L10 保持确认。本次确认已实际提交；用户要求完成后通知实现任务，不增加整稿确认门槛。
-本批确认前设计为 `9096f1e9ae445e67292c5e7d5a9e0d2ac10d8f5d`。表中保留获确认的推荐内容，
+本批确认前设计为 `9096f1e9ae445e67292c5e7d5a9e0d2ac10d8f5d`。表中展示当前有效决定；B05 已由 2026-09-09 明确指令替代，
 具体字段与码值按上文共同源展开；实现校准项不要求用户逐个拍数值。
 
 范围为 Claw 内部 Events、配置和 Skill；Mate 公共 API 不随本批修改。B09 的目标/关联字段和
@@ -324,7 +386,7 @@ B13 Skill SSE 是架构变更；B01 脱敏、B14 信任边界是安全加固，�
 | B02 | 空文本与大小 | 工具结果至少一个 text 块，允许 text=""，不强制只有一块；没有正文时不伪造 Agent 回答。沿用工具自身的有说明截断；HTTP 不静默截断完整事件。大小上限由实现校准，超限必须明确失败或断流并可查历史。 |
 | B03 | Mate 文本归一 | CallMateTool 缺省 args 在公开事件中补 {}；Mate result 为字符串时直接作为文本，对象/数组变为 JSON 文本，null 为 ""。这是已确认的适配调整，当前客户端对字符串使用 JSON 序列化的实现将有变化。 |
 | B04 | 时间与增量 | 完整事件 createdAt 使用 Claw 形成该权威记录时的 UTC 毫秒时间，保存一次，GET/POST 复用；delta 使用 content 字符串，只含新增文本，沿用同一 eventId，不带 createdAt。completed 覆盖预览，之后忽略迟到 delta。 |
-| B05 | Thinking 展示 | 只展示可公开摘要，不暴露原始推理。thinking 开关决定后续执行是否产生摘要；之后关闭开关不隐藏此前已公开的历史摘要，读取仍受当前权限约束。此项已替换原先尚未确认的“按当前开关过滤历史”候选。 |
+| B05 | Thinking 展示 | 2026-09-09 用户明确改为展示模型返回的原始推理，撤销摘要设计和 publicSummary 门槛；thinking 控制后续执行，关闭不隐藏已保存原文，读取受当前权限约束。当前完整规则见 §2.2；此项替代 2026-09-08 的仅摘要推荐。 |
 | B06 | 工具确认标记 | 每个完整 agent.tool_call 都带 requiresConfirmation 布尔值；本期顺序发出需确认调用，同一执行一次只挂起一个待确认 toolCallId。允许/拒绝后分别续跑，拒绝产生 isError=true 的工具结果。 |
 | B07 | 结束原因 | session.status_idle.reason 固定 done、failed、terminated、confirming；confirming 只结束当前 SSE，Session 继续 running。failed 携带稳定 errorCode 和可展示 message；工具失败可由 Agent 继续处理，不自动等同于整轮 failed。 |
 | B08 | 控制请求竞争 | 确认与中断在同一执行的事务内重检；停止请求先提交，则拒绝确认；确认先提交，中断仍可停止续跑。重复/过期确认返回 409，不重复执行工具；等待超时不伪造已停止。 |
@@ -350,6 +412,7 @@ B15 不编造公司保留天数；已有策略可在同一答复补充，缺少�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.4.0 | 2026-09-09 | 按用户明确决定展示模型返回的原始推理，撤销摘要设计；同步 Runtime、Mate、前端及历史语义。Thinking 局部源码基线 4cc8dd86，固定 pi 5cd93f6，代码仍待同步。 |
 | 0.3.0 | 2026-09-08 | 记录用户四组全部按推荐确认 B01～B15；补齐共享事件字段、错误码、源消息关联、配置/压缩/Usage 与 Skill 示例，作为统一实施契约。同步相关类图、正文与校验，运行时仍 target-only。 |
 | 0.2.7 | 2026-09-08 | 确认 L10：每条工具结果必有布尔 isError，成功 false、失败 true；同步 POST；按用户要求撤下 L11 单字段问题，集中 B01～B15 为一次批量评审。沿用 dfb90ca/pi 证据，建议未确认，图不变。 |
 | 0.2.6 | 2026-09-08 | 确认 L9 Mate 调用保留 CallMateTool/{tool,args}，同步 GET/POST 示例；复核同一源码基线的工具名及 Schema。继续 L10 成败标记评审，结果仅文本及既有决定不变，图不变。 |

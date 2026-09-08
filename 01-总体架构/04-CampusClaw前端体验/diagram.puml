@@ -1,5 +1,5 @@
 @startuml frontend_product_boundary
-' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target user decision 2026-09-09 displays original text.
 ' Source evidence: frontend/src/App.vue submit; frontend/src/composables/useRuntimeApi.ts sendMessage, dispatchSseFrame.
 ' Observed behavior: the internal workbench still consumes legacy Runtime request-scoped SSE and separate controls.
 ' Contract baseline: design 2ee2a3211da68ad87b0d9cab353e691b00bdaebd.
@@ -189,7 +189,7 @@ note bottom of Input
 Historical source and target policy:
 - Source carries text, not HTML
 - Target completed/history are authoritative
-- Target tool and summary use plain text
+- Target tool and thinking use plain text
 end note
 
 note bottom of Renderer
@@ -210,7 +210,7 @@ end note
 @enduml
 
 @startuml runtime_event_ui_projection
-' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target user decision 2026-09-09 displays original text.
 ' Source evidence: frontend/src/projectors/runtimeEventProjector.ts projectRuntimeEvents, registerToolSpecs.
 ' Source evidence: frontend/src/components/ToolActivity.vue template; frontend/src/types/product.ts ActivityTurn.
 ' Observed behavior: legacy assistant/tool events, no confirmation UI, rich-text tool output.
@@ -221,14 +221,14 @@ left to right direction
 rectangle "Validated public input" {
   component "POST receipt / history\nuser.*" as UserEvents
   component "agent.message\nphase delta / completed" as Message
-  component "agent.thinking\npublic summary only" as Thinking
+  component "agent.thinking\noriginal provider text" as Thinking
   component "agent.tool_call\nagent.tool_result" as Tool
   component "chat.status_idle\nreason" as Idle
 }
 component "PublicEventReducer\nshared by receipt, live, history" as Reducer
 rectangle "Per-Chat UI" {
   component "User and Assistant timeline\ncompleted replaces preview" as Timeline
-  component "Thinking disclosure\nsafe plain text" as Summary
+  component "Thinking disclosure\noriginal plain text" as ThinkingView
   component "Tool activity\ninput above output" as Activity
   component "Confirmation state\nallow / deny / receipt pending" as Confirmation
   component "Business state\nseparate from connection" as State
@@ -239,7 +239,7 @@ Thinking --> Reducer
 Tool --> Reducer
 Idle --> Reducer
 Reducer --> Timeline : eventId
-Reducer --> Summary
+Reducer --> ThinkingView
 Reducer --> Activity : toolCallId association
 Reducer --> Confirmation : verify pending call
 Reducer --> State : reliable current target only
@@ -252,7 +252,7 @@ end note
 @enduml
 
 @startuml target_frontend_components
-' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
+' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target user decision 2026-09-09 displays original text.
 ' Source evidence: frontend/src/App.vue submit; frontend/src/composables/useRuntimeApi.ts loadHistory, requestRaw.
 ' Source evidence: frontend/src/projectors/runtimeEventProjector.ts projectRuntimeEvents; frontend/src/types/product.ts.
 ' Observed behavior: current app directly owns Runtime state and legacy controls; no public Chat Gateway.
@@ -266,7 +266,7 @@ package "Browser views" {
   class ChatWorkspace <<view>>
   class ContentViews <<view>> {
     safe Markdown for Assistant
-    plain text for tool and summary
+    plain text for tool and thinking
   }
 }
 package "Per-Chat application" {

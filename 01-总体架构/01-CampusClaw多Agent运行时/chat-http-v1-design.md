@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.49.0 |
+| 文档版本 | 1.50.0 |
 | 状态 | 保留十个目标 operation；Events 以 v2 已确认目标契约为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 已按 B13/B14 对齐；Mate 公共命令独立管理 |
 | 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的八项保留契约与两项 Events v2 模型 |
@@ -32,13 +32,16 @@
 | Registry 初始候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599` |
 | Registry 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并；最新差距见通用模块证据表 |
 | GET 候选实现 | `7759481a1722422395d46564129827c6ee6df204`，未发布，不能作为已上线契约 |
-| 更新日期 | 2026-09-08 |
+| 更新日期 | 2026-09-09 |
 
 本轮退役独立 `/abort`、`/steers`、`/follow-ups`，清单见 [总览 §4](README.md#4-当前目标-http-接口清单)。
 [合并 POST](chat-api-review.html#submitSessionEvent) 与 [历史查询](chat-api-review.html#listSessionEvents) 采用 v2，目标契约已定稿、待实现。
 旧 POST/GET 字段、类型和分页示例已移除，仅可从 Git 历史追溯。管理规则见 [统一维护规则](chat-api-index.md)。
 [FollowUp 未来设计](chat-follow-up-future-design.md) 只记录扩展方向，本期不支持排队。
 本次源码基线 dfb90cac4e233e09a0b8f047f7e9f4682f5ad238，路径及差异见该专题；不改实现。
+
+2026-09-09 Thinking 展示以[原始文本决定](chat-events-v2-history-design.md#thinking-original-text)为准；
+该局部决定和源码证据替代旧摘要条款，不整体升级其他专题基线。
 
 ## 1. 结论
 
@@ -191,7 +194,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 | `agentId` | string | 创建后不可变的 Agent 绑定 |
 | `modelId` | string | Session 当前默认模型；允许后续切换 |
 | `state` | `idle \| running` | 只回答 Session 当前是否存在 active execution |
-| `thinking` | boolean | 是否对后续用户消息启用深度思考；既有已公开摘要保持历史可见，不随之后关闭而隐藏 |
+| `thinking` | boolean | 是否对后续用户消息启用深度思考；既有思考原文保持历史可见，不随之后关闭而隐藏 |
 | `displayName` | string or null | Session 显示名称；由 `/name` 查看或修改 |
 | `lifetimeUsage` | Usage | Session 创建以来持久化 Assistant 与 Compaction Usage 的原子累计值 |
 | `createdAt` | RFC 3339 timestamp | Session 创建时间 |
@@ -214,7 +217,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
 boolean：`false` 映射为 `off`；`true` 使用当前模型和 Agent 配置的受管非 `off`
-推理强度，不把具体等级开放给调用方。POST Events 按接受用户事件时的快照决定是否生成可公开的 thinking 摘要；GET Events 返回已保存的公开摘要，不因后续关闭开关而隐藏，也不返回私有推理。每页继续检查当前访问边界。
+推理强度，不把具体等级开放给调用方。POST Events 按接受用户事件时的快照决定是否投影模型返回的 thinking 原文；GET Events 返回已保存的完整原文，不因后续关闭开关而隐藏。展示规则见[原始文本决定](chat-events-v2-history-design.md#thinking-original-text)。每页继续检查当前访问边界。
 
 GetSession 使用 `displayName` 返回名称，但不返回 `name` 别名、`historySeq`、完整 `transcript`、
 `queuedSteer`、`phase`、`attached` 或 `locked`。用户可见会话名称属于
@@ -417,7 +420,7 @@ Runtime 必须实时确认目标模型仍属于上述可选集合；不存在、
 非 `off` 推理强度。调用方不选择 `minimal/low/medium/high/xhigh/max` 等具体等级。
 当前模型不支持深度思考时，请求 `true` 返回 `422 THINKING_NOT_SUPPORTED`；请求
 `false` 始终允许。变更只作用于之后接受的 `user.message` 是否生成 thinking 事件，
-不会改变已开始执行的快照；后续关闭不隐藏既有公开摘要。GET 始终按保存值和当前访问边界读取。实际值改变时原子追加原因为
+不会改变已开始执行的快照；后续关闭不隐藏既有思考原文。GET 始终按保存值和当前访问边界读取。实际值改变时原子追加原因为
 `requested` 的 `session.thinking_changed`；同值请求不追加事件。成功响应复用完整
 SessionResource 和新 `ETag`。
 
@@ -723,9 +726,9 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
   Session 和持久化 Events，禁止把无条件重试描述为安全行为。
 - Runtime 不调用文件服务或 OBS；它只把有序 `fileIds` 编码成固定
   `[File IDs]` 文本块并加入本次用户提示。
-- AI Provider 的 thinking 只在执行快照 `thinking=true` 时投影为 started/delta/completed，
-  其中 completed 持久化。GET Events 根据查询时 Session 当前 thinking 值决定是否返回；
-  v2 可见性与配置事件映射待联动评审；普通整数分页不继承旧 page 失效规则。
+- AI Provider 的可读 thinking 原文只在执行快照 `thinking=true` 时投影为 `agent.thinking`
+  delta/completed，其中 completed 持久化。GET 返回已保存原文，不按后续 thinking 开关隐藏；
+  不使用摘要标记。普通整数分页不继承旧 page 失效规则。
 
 ![调用上下文 Header 边界](设计图/HTTP契约/http_dual_authentication.svg)
 
@@ -823,6 +826,7 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.50.0 | 2026-09-09 | 按用户明确决定展示模型返回的原始推理，撤销摘要设计；同步 Runtime、Mate、前端及历史语义。Thinking 局部源码基线 4cc8dd86，固定 pi 5cd93f6，代码仍待同步。 |
 | 1.49.0 | 2026-09-08 | 同步 B01～B15：完整事件、固定公开摘要、配置/压缩/Usage 映射与 Skill SSE；产品语义已定稿，实施数值按校准。 |
 | 1.48.0 | 2026-09-07 | POST Command 成功响应对齐既有 Session/Models 资源与 ETag，移除 command/changed/sourceEventSeq；保留 Help 三业务字段与 Compact/Skills 最小结果，新增跨接口反例校验；GET、请求、错误与 Events v2 不变。 |
 | 1.47.1 | 2026-09-07 | 删除 Command 业务重复副本，改引所属专题；Help 从 Runtime 直接派生；清理废止的历史目标规则，现行报文不变。 |

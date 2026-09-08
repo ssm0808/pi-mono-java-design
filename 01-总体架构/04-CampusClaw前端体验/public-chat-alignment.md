@@ -4,11 +4,16 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 / 日期 | 1.0.0 / 2026-09-08 |
+| 版本 / 日期 | 1.1.0 / 2026-09-09 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
 | 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；本次读取的 frontend 文件无工作树修改 |
-| 性质 | target-only 产品前端；不修改 Vue 实现、Mate 公共接口、Runtime 内核或公司认证规则 |
-| 契约依据 | [Mate Events 1.4.4](../../02-服务与接口/07-mate-service通用对话API/README.md)、[Claw POST 0.5.0](../01-CampusClaw多Agent运行时/chat-events-v2-stream-design.md)、[Claw 历史 0.3.0](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md) |
+| 性质 | target-only 产品前端；Thinking 原文规则同步 Mate 公共契约；Vue 与 Runtime 实现仍待同步，公司认证规则保持 |
+| 契约依据 | [Mate Events 1.5.0](../../02-服务与接口/07-mate-service通用对话API/README.md)、[Claw POST 0.6.0](../01-CampusClaw多Agent运行时/chat-events-v2-stream-design.md)、[Claw 历史 0.4.0](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md) |
+
+2026-09-09 局部更新：按用户明确决定展示原始推理，撤销摘要设计。
+源码补充基线为 `pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60`，
+范围、差距和原因见[原始文本决定](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+其余历史源码与外部公开契约证据保持原核对日期，不表示本次全面复核。
 
 ## 1. 结论与两跳边界
 
@@ -16,7 +21,7 @@
 产品只消费 Mate 公共 Chat；内部诊断适配器独立装配，不能成为生产失败后的回退。
 两份契约都包含已确认决定，但并不相同。本次不修改任何 method/path/VO，不擅自将两层合并。
 
-| 关注点 | Mate 公共契约 1.4.4 | Claw 内部新契约 | 前端与桥接责任 |
+| 关注点 | Mate 公共契约 1.5.0 | Claw 内部新契约 | 前端与桥接责任 |
 |---|---|---|---|
 | 提交 | `POST /mate-service/v1/chats/{chatId}/events` 返回 `result.event` JSON | `POST /campusclaw-service/v1/sessions/{sessionId}/events` 返回 SSE，首帧完整 user.* | 产品先打开公共流再提交；不能把内部首帧处理器直接接到公共 POST |
 | 实时观察 | `GET /mate-service/v1/chats/{chatId}/events/stream`，跨执行长连接 | 无独立 GET stream；对应 idle 后关闭 POST 响应 | 公共 idle 不关闭订阅；断线重开读流，不重放写入 |
@@ -41,10 +46,10 @@
 | `frontend/src/components/ComposerBox.vue` · onKeydown/template | textarea maxlength=262144；有模式反转快捷键；附件按钮禁用 | 公共文本用 Unicode code point 计数至 2048，最多 4 个文件；IME 不发送，附件上传未实现时不得伪造成功 |
 | `frontend/src/composables/useRuntimeApi.ts` · sendMessage/dispatchSseFrame/abort | 提交旧 message/fileIds；读取 SSE event/id；独立 abort 后置 idle | 改为公共 Gateway 三方法，data-only 帧按 type/phase 解码；中断回执不能置为已停止 |
 | 同文件 · loadHistory/normalizeHistoryEvent/matchesPendingSubmission | 字符串 nextPage 与 limit 同传；entryId 去重；按正文和文件匹配确认 | 公共游标续页仅传 page；用服务端事件身份合并；回执丢失时不靠同文历史认定本次成功 |
-| 同文件 · changeModel/changeThinking/requestRaw | 已有完整 Session 替换及 ETag；thinking 修改后重新读历史 | 复用已有配置骨架但隔离内部标识；顶部与 Slash 共用一份配置快照；不能因关闭 thinking 删掉此前公开摘要 |
+| 同文件 · changeModel/changeThinking/requestRaw | 已有完整 Session 替换及 ETag；thinking 修改后重新读历史 | 复用已有配置骨架但隔离内部标识；顶部与 Slash 共用一份配置快照；不能因关闭 thinking 删掉此前思考原文 |
 | `frontend/src/projectors/runtimeEventProjector.ts` · projectRuntimeEvents/registerToolSpecs | 旧 assistant/tool 事件、内嵌 tool_call、entryId；结果截断至 4000 字符 | 公共工具调用已独立；完整事件与显示折叠分开保存，不把展示预算当作权威记录截断 |
 | `frontend/src/types/runtime.ts` / `product.ts` | 有 RuntimeEnvelope、FollowUpMode、AcceptedControl；无确认/恢复状态 | 新增 UI 专用模型；不让 Record<string, unknown> 穿透全部组件 |
-| `frontend/src/components/ConversationTimeline.vue` / `ToolActivity.vue` | 工具 running/error/completed，结果用 SafeRichText，无确认控件 | 产品结果和摘要按纯文本展示；确认、拒绝、已取消、结果未知独立状态，不以缺结果推断成功 |
+| `frontend/src/components/ConversationTimeline.vue` / `ToolActivity.vue` | 工具 running/error/completed，结果用 SafeRichText，无确认控件 | 产品工具结果和思考原文按纯文本展示；确认、拒绝、已取消、结果未知独立状态，不以缺结果推断成功 |
 | `frontend/src/debugHeaders.ts`；App.submit | 有内存 Header 校验/快照，DEV 才装配 | 保留内部诊断边界；新 Events 三类请求各自的 Header 规则另行实现，不沿用旧控制请求免 Header 假设 |
 | `frontend/package.json` | 已有 Vue、markdown-it；无共享状态库 | 使用现有 Composition API 和纯函数即可；本设计不增加 npm/Maven 直接依赖 |
 
@@ -112,7 +117,7 @@ Enter 发送、Shift+Enter 换行；compositionstart 至 compositionend 期间 E
 ### 4.3 停止与结果不确定
 
 点击停止固定当前可验证目标，进入 stopping；未收到回执不得声称“停止请求已接受”。
-公共 1.4.4 缺少 Claw B09 的精确目标字段，这是安全接入门禁：多客户端、断线恢复或迟到控制无法可靠关联时，
+公共 1.5.0 缺少 Claw B09 的精确目标字段，这是安全接入门禁：多客户端、断线恢复或迟到控制无法可靠关联时，
 保留检查状态入口，禁止通过查询“当前执行”后直接拼接中断来掩盖竞态。
 新公共映射确认前仅用 mock 演示精确目标停止；不自动给现行公共请求增加 targetEventId。
 
@@ -126,7 +131,7 @@ Enter 发送、Shift+Enter 换行；compositionstart 至 compositionend 期间 E
 |---|---|
 | POST result.event / history user.message | 同 eventId 一条用户消息；按 content 顺序展示文本和附件引用 |
 | agent.message + delta/completed | 第一帧创建；同 ID completed 覆盖预览，之后迟到 delta 忽略；空完整正文不画空气泡 |
-| agent.thinking + delta/completed | 仅公开摘要；前端标题为“正在分析/分析过程”，不构造额外公共标题字段，不虚构耗时 |
+| agent.thinking + delta/completed | 展示模型返回的可读原文，标注“原始推理”；delta 追加、completed 原文覆盖，历史同形；不生成摘要、不检查 publicSummary。前端标题为“正在分析/分析过程”，不构造额外公共标题字段，不虚构耗时 |
 | agent.tool_call | 按 toolCallId 建立一个工具行；requiresConfirmation=true 时等待确认，不能一收到调用就标记正在执行 |
 | user.tool_confirmation | POST/历史合并为该工具的只读决定记录；不是 Assistant 发言 |
 | agent.tool_result | 使用 isError 判成败，公共字符串作为纯文本；没有结果不伪造成功；工具失败后 Agent 仍可能继续处理 |
@@ -162,7 +167,7 @@ Assistant `content` 保留 rawMarkdown 并使用现有安全渲染骨架；User/
 版本冲突刷新后显示实际值和用户原选择，保留草稿，用户再次确认才修改；不自动用新 ETag 重放 PUT。
 相同配置不提示“已变更”；切模型可能同时关闭 thinking，以完整资源为准，不把旧开关值覆盖回来。
 模型不可用/集合为空时解释状态并禁用修改；已有名称不应由 modelId 字符串猜出供应商或能力。
-已有公开摘要不因关开关而删除。公开配置路径、错误及并发令牌表达未确认时使用能力门禁，不能泄漏内部 ETag。
+已有思考原文不因关开关而删除。公开配置路径、错误及并发令牌表达未确认时使用能力门禁，不能泄漏内部 ETag。
 
 Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate 执行未确认。命令目录 GET 不是执行预约，
 提交前重新准入。公共绑定未完成时保留参数和附件并说明不可运行，不把 Skill 当 Builtin JSON 或普通消息悄悄发送。
@@ -192,4 +197,5 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-09-09 | 按用户明确决定展示原始推理，撤销摘要设计；同步两层契约引用、前端行为与局部 4cc8dd86 源码差距。 |
 | 1.0.0 | 2026-09-08 | 补齐主对话、工具确认、中断、恢复及配置共享；记录公共/内部差异与接入门禁；保持原视觉语言。 |

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.14.0 |
+| 文档版本 | 3.15.0 |
 | 状态 | B01～B15 已全部确认，Events v2 与 Skill 联动契约已定稿，可进入实现；Builtin JSON 保持；当前十项接口共用一个契约入口 |
 | 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
@@ -24,7 +24,10 @@
 | DeepSeek Harness 对照基线 | `141eb6fef83422698aef7a981029e843e8161534` |
 | Codex Harness 对照基线 | `be33f80bc65159c094ecd06bf155afa3061ce23d` |
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989`；PR #210 最终实现 `9d0d76f4a571b559dc77ae52736caebbcc8fad88` 已通过 `a8192e047f4061bd385297d3dc6c4358362d0d49` 合并 |
-| 更新日期 | 2026-09-08 |
+| 更新日期 | 2026-09-09 |
+
+2026-09-09 Thinking 展示以[原始文本决定](chat-events-v2-history-design.md#thinking-original-text)为准；
+该局部决定和源码证据替代旧摘要条款，不整体升级其他专题基线。
 
 ## 1. 当前结论
 
@@ -482,7 +485,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 | 架构变更 | CampusClaw 目标契约改为 `agent-` / `tool-` / `skill-` / `session-` 加 32 位十六进制 UUID；Session 创建成功时固定 `thinking=true`，实现需同步放宽 `t_sessions.agent_id` 并替换 Session ID 生成器 |
 | 当前 Java 差异 | `c1311f69` 的 `SlashCommandRegistry` 仍使用可变索引并解析整段 Slash 文本，`SlashCommandSession` 是宽泛可变门面；生产 Runtime 尚未注册命令 Controller，`t_sessions` 尚无 `display_name`；新契约无需 sidecar 查询 |
 | 架构变更 | 十个目标 operation 全部保留调用上下文 Header，但移除 Runtime 应用内的凭据组合与格式校验及对应 401；`X-HW-ID` 明确表示用户凭据 ID，不是公司、服务或应用标识 |
-| 架构变更 | `thinking=true` 时将内部 thinking 生命周期投影为公共 SSE，并持久化 completed 供 GET 恢复；B05 改为持久化公开摘要，后续关闭不隐藏既有摘要；每页仍检查访问边界 |
+| 架构变更 | `thinking=true` 时将内部 thinking 生命周期投影为公共 SSE，并持久化 completed 供 GET 恢复；2026-09-09 改为展示并保存模型返回的原始推理，撤销摘要门槛；后续关闭不隐藏旧原文，每页仍检查访问边界 |
 | 架构变更 | CampusClaw HTTP 的 path/query/JSON/SSE 字段统一为 lowerCamelCase；Header 原名、事件类型值、错误码和 ID 值保持不变，不接受 snake_case 字段别名 |
 | 架构变更 | Runtime、Cron、Child 共用轻量 AgentSession 和工厂；8 个活动内置工具由启动期 profile 装配，工具实例按 Session 新建 |
 | 架构变更 | 受管目录统一身份文件、缓存优先 prepare 与显式原子 refresh；Skill 和 Child 通过目录名称索引解析，不保存远端工具列表 |
@@ -510,6 +513,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.15.0 | 2026-09-09 | 按用户明确决定展示模型返回的原始推理，撤销摘要设计；同步 Runtime、Mate、前端及历史语义。Thinking 局部源码基线 4cc8dd86，固定 pi 5cd93f6，代码仍待同步。 |
 | 3.14.0 | 2026-09-08 | B01～B15 全部确认，统一 Events/Skill 精确契约、恢复边界与配置映射；清除当前待确认标记，交付实施校准清单。 |
 | 3.13.0 | 2026-09-07 | 同步 HTTP 1.48.0：Command 复用既有业务响应、删除入口及内部回执字段；全局目标主图、GET 与 Events 评审边界不变。 |
 | 3.12.1 | 2026-09-07 | 同步冗余清理：Mate 只保留 GET，Help 直接派生；专题职责见统一维护规则，Runtime 契约不变。 |

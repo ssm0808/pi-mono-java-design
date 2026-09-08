@@ -192,7 +192,7 @@
         "status": "200",
         "tabLabel": "200 · 原消息被中断",
         "label": "OK",
-        "summary": "与“中断完成”配对：原 user.message 响应仍承载原执行输出，目标实际停止后收到与中断响应相同 eventId 的同一条 idle 并关闭。中断回执只出现在新 user.interrupt 响应，不在原响应重复发送。分工已确认；公开摘要、字段和 reason=terminated 按已确认契约展示。",
+        "summary": "与“中断完成”配对：原 user.message 响应仍承载原执行输出，目标实际停止后收到与中断响应相同 eventId 的同一条 idle 并关闭。中断回执只出现在新 user.interrupt 响应，不在原响应重复发送。分工已确认；思考原文、字段和 reason=terminated 按已确认契约展示。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",

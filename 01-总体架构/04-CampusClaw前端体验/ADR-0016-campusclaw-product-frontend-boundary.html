@@ -21,7 +21,7 @@
 <body>
 <aside role="note"><p>2026-09-08 对齐：保留产品与调试边界；工具确认、停止、历史和配置遵循<a href="public-chat-alignment.md">公共对话前端对齐</a>。内部新契约不能直接作为产品公共协议。</p></aside>
   <h1>ADR-0016 · CampusClaw 产品前端隔离 Runtime 调试协议</h1>
-  <div class="meta">Status: <span class="badge">Proposed</span> · Version: 1.1.0 · Updated: 2026-09-08 · Created: 2026-08-26 ·
+  <div class="meta">Status: <span class="badge">Proposed</span> · Version: 1.2.0 · Updated: 2026-09-09 · Created: 2026-08-26 ·
     设计文档: <a href="README.md">campusclaw-frontend</a> ·
     历史凭据复核基线: <code>320d790726a70aada6100052952d5494d2a378ac</code> ·
     历史特性实现: <code>d03c08dbae870f19eee8d4fa79a707185f7a26b5</code> (Draft PR 181)</div>
@@ -61,15 +61,15 @@
       <li>停止使用 <code>user.interrupt</code>。请求回执不等于实际停止；确认目标归属与真实终态后才恢复发送。公共精确目标映射尚未确认时仅提供 mock，不擅自添加内部字段。</li>
       <li>公共 tool_call、确认决定和 tool_result 合并为一个紧凑 activity disclosure。待确认项显示参数及允许/拒绝；需要确认不代表正在执行，缺少结果不代表成功。</li>
       <li>工具展开详情始终按“输入参数 → 输出结果”纵向排列，不采用左右分栏；完整工具结果更新同一个工具行，不与文本 delta 混合。</li>
-      <li>Thinking 与 Tool 按事件顺序组成 Agent 活动流；Thinking 运行时可展开、完成后折叠为“分析过程”。产品浏览器只接收面向用户的安全标题与摘要，不展示或接收原始私有推理。</li>
+      <li>Thinking 与 Tool 按事件顺序组成 Agent 活动流；Thinking 运行时可展开、完成后折叠为“分析过程”。2026-09-09 用户已确认展示模型实际返回的可读原始推理；公共 content 原样以纯文本显示，不再生成摘要或检查 publicSummary。</li>
       <li>前端从独立 <code>agent.tool_call</code> 提取名称和安全入参，按 <code>toolCallId</code> 关联确认与结果；事件自身按 <code>eventId</code> 去重。不再从旧 Assistant 内嵌块推导公共调用。</li>
       <li>产品工具卡只显示 mate-service bridge 经字段策略、脱敏、资源映射和预算后的入参；禁止暴露凭据、内部 ID、绝对路径和原始未脱敏 payload。入参 viewer 不激活 Markdown、HTML 或 URL。</li>
       <li>公共 Assistant <code>agent.message.content</code> 原样作为 Markdown 源，通过关闭 raw HTML 的 parser、节点与 URL allowlist 以及固定 Vue 组件渲染；禁止 <code>v-html</code>、<code>innerHTML</code>、远程 Markdown 图片、相对应用路由和危险协议链接。</li>
-      <li>User、Thinking 安全摘要、Tool result 与错误不继承 Assistant Markdown 权限，均使用纯文本；工具入参单独使用安全 JSON viewer。</li>
+      <li>User、Thinking 原文、Tool result 与错误不继承 Assistant Markdown 权限，均使用纯文本；工具入参单独使用安全 JSON viewer。</li>
       <li>流式 delta、completed Event 和 GET history 共用同一 <code>rawMarkdown</code> 与 renderer；未闭合尾块纯文本显示，完成态以持久化全文重新解析。</li>
       <li>公共 POST 返回 JSON 回执，独立 GET stream 观察，历史使用固定快照游标。三者共享 Reducer；断线只重开读流并补历史，不重放任何 POST。空页或 EOF 不证明执行完成。</li>
       <li><code>401/403</code> 交给统一登录/权限流程；页面不弹出凭据框、不从 URL 或浏览器存储补采秘密，也不携带原请求自动重试副作用操作。</li>
-      <li>Mate Events 1.4.4 与内部 Claw B01～B15 均按已确认设计读取，但生产实现未据此验证；控制关联、工具文本块、历史快照、配置及 Skill 映射分别设接入门禁。</li>
+      <li>Mate Events 1.5.0 与内部 Claw B01～B15 均按已确认设计读取，但生产实现未据此验证；控制关联、工具文本块、历史快照、配置及 Skill 映射分别设接入门禁。</li>
       <li>产品视觉保留 Codex-inspired 工具层级，采用已确认的 O1 原始图形资产和暖中性表面；O1 不通过生成模型重绘，也不复制 OpenAI/Codex 商标。</li>
     </ul>
   </section>
@@ -82,7 +82,7 @@
       <li><strong>安全：</strong>需要构建期和 E2E 门禁，证明生产构建不存在凭据控件或 store；诊断构建不持久化、复制或记录秘密，各类诊断请求严格遵守已确认的 Header 范围，生产 DOM、网络日志和错误界面不包含真实凭据、Session ID、ETag 或原始 SSE。</li>
       <li><strong>运维：</strong>跨源调试需网关/Runtime CORS 显式允许本次调试所需的自定义 Header；通用编辑器不意味着允许无界通配 Header，未获允许时按网络错误处理。</li>
       <li><strong>富文本安全：</strong>需要 XSS corpus、危险 URL、远程图片、超深嵌套、超预算输入和流式分块测试；失败时回退为转义纯文本并保留复制原文。</li>
-      <li><strong>活动数据安全：</strong>公共事件投影需要安全思考摘要、入参脱敏、资源映射、结构预算与投影失败测试；前端不得在公共投影缺失时回退显示原始 ThinkingContent 或内部原始入参。</li>
+      <li><strong>活动数据安全：</strong>公共事件投影保留 Thinking 原文，工具继续执行入参脱敏、资源映射、结构预算与投影失败测试；前端不得在公共投影缺失时回退内部协议或内部原始入参。</li>
       <li><strong>回滚：</strong>可以回滚产品路由和 bridge，但不能把调试台重新定义为已满足生产安全边界。</li>
     </ul>
   </section>

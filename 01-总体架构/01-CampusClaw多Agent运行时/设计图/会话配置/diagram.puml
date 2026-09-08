@@ -19,8 +19,8 @@ title HTTP Session Model and Deep-Thinking Confirmed Configuration
 ' Confirmed product constraint: HTTP thinking is a boolean deep-thinking switch; false maps to off,
 ' while true maps to a managed non-off level supported by the current model and Agent.
 ' Security hardening: model discovery is Session-scoped and exposes only modelId.
-' Architecture change: HTTP configuration writes require an idle Session and a matching ETag.
-' Architecture change: B05 retains published summaries; future thinking changes do not hide history.
+' Architecture change: HTTP configuration writes require an idle Session and a matching ETag. Thinking target: user decision 2026-09-09 removes summary gating; Java 4cc8dd86 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeV2EventProjector.java projectThinking still filters publicSummary.
+' Architecture change: The 2026-09-09 decision retains original thinking; future thinking changes do not hide history.
 ' Architecture change: actual configuration changes append durable domain events in the same transaction.
 ' Architecture change: target HTTP fields use lowerCamelCase while If-Match keeps its header spelling.
 ' Product constraint: all Runtime operations carry integration-context headers without local validation.
@@ -118,7 +118,7 @@ note over API,Models
 thinking controls whether deep thinking is enabled.
 The change applies only to executions accepted afterward.
 POST emits thinking events only for executions accepted with true.
-GET retains already published summaries after later toggles.
+GET retains persisted original thinking after later toggles.
 Each read checks current access; ordinary pages have no expiry.
 end note
 

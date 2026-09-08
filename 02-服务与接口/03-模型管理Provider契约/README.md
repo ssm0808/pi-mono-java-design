@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.4.0 |
+| 文档版本 | 2.5.0 |
 | 状态 | 目标设计；Mate Chat 服务端已实现且契约已冻结，接口 1-3 保持候选 |
 | 设计日期 | 2026-08-26 |
 | pi-mono 源码基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
@@ -446,6 +446,14 @@ data: {"resCode":"UPSTREAM_STREAM_ERROR","resMsg":"The upstream model stream fai
 | `ThinkingLevel` | 不发送 | 推理开关和 effort 完全由 Mate 模型配置决定 |
 | 固定传输字段 | `stream/stream_options` | 固定 `true` 和 `include_usage=true` |
 
+2026-09-09 用户确认展示原始推理，不再有摘要设计。Provider 已解析的可读 Thinking 文本
+直接用于上层 `agent.thinking`，不要求 Mate/GLM 增加 publicSummary 标记；signature 继续只用于
+模型续传。最新局部源码核对为 `pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60` 的
+`modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java`
+`parseReasoning/appendReasoningText/finishThinking`；Runtime 过滤差距、固定 pi 证据和验收见
+[原始文本决定](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+其余 Provider 请求参数与既有源码基线保持，不新增摘要服务或 Maven 依赖。
+
 Provider 解析原始 Chat SSE：
 
 - `chunk.id` → `AssistantMessage.responseId`；
@@ -697,6 +705,7 @@ Mate 的上游模型映射、字段改名、endpoint、credential 注入、请�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.5.0 | 2026-09-09 | 按用户明确决定展示模型返回的原始推理，撤销摘要设计；同步 Runtime、Mate、前端及历史语义。Thinking 局部源码基线 4cc8dd86，固定 pi 5cd93f6，代码仍待同步。 |
 | 2.4.0 | 2026-08-26 | 将目标模型配置分组从 `campusmate.model-manager` 简化为 `campusmate.model`，同步环境变量、Java 绑定、迁移与验收约束；Model Manager 组件名和 `mate-model-manager` Provider ID 保持不变。 |
 | 2.3.0 | 2026-08-26 | 统一到单一 `campusmate` 配置树；Chat path 移入 `campusmate.endpoints`，同步 7 个 path 配置归并为 6 个唯一 operation，并将 Mate Chat 更新为 mate-service 已实现行为。 |
 | 2.2.0 | 2026-08-26 | 将 Mate Tool 纳入共享 CampusMate origin，删除 `mate.innerGWSerive` 独立地址目标配置并同步验收范围。 |

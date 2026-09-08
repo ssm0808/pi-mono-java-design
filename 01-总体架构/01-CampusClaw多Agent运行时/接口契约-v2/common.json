@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "2.0.0-target.1",
+    "version": "2.0.0-target.2",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -125,7 +125,7 @@
         "en-US": "The output exceeded the configured capacity; this execution failed."
       }
     },
-    "historyThinking": "persisted-public-summary-current-access",
+    "historyThinking": "persisted-original-thinking-current-access",
     "eventIdentity": "server-owned opaque string; exact equality; never recycled",
     "rootIdentity": "original user.message.eventId",
     "completeTypes": [
@@ -187,7 +187,7 @@
           "agent.message / agent.thinking",
           "phase/content",
           "必填字符串",
-          "phase=delta/completed；delta content 是非空新增文本，不带 createdAt/usage。completed 完整覆盖；真实 Assistant 无正文可 content=\"\"，不凭空合成回答。thinking 只允许公开摘要。"
+          "phase=delta/completed；delta content 是非空新增文本，不带 createdAt/usage。completed 完整覆盖；真实 Assistant 无正文可 content=\"\"，不凭空合成回答。thinking content 为模型返回的可读原始推理，不生成摘要，不以 publicSummary 过滤；仅 thinking=true 的执行产生新思考事件。"
         ],
         [
           "agent.message completed",
@@ -323,7 +323,7 @@
         ],
         [
           "可见性与保留",
-          "公开摘要不因后续 thinking 开关消失；每次读取重新校验权限。沿用部署统一保留策略，未配置时不新增自动清理；清理保持根消息、工具关联和控制终态所需引用，不留下无法对账的孤立记录。"
+          "已保存思考原文不因后续 thinking 开关消失；每次读取重新校验权限。沿用部署统一保留策略，未配置时不新增自动清理；清理保持根消息、工具关联和控制终态所需引用，不留下无法对账的孤立记录。"
         ],
         [
           "完整性",
