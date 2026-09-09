@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.8.0 |
+| 文档版本 | 1.9.0 |
 | 状态 | target-only 产品设计；主对话、确认、停止与恢复已按当前契约补齐；公共映射和生产身份集成完成前使用 Mock Gateway |
 | 界面评审状态 | 沿用 O1 与浅暖灰；保留首次进入、常规和运行稳定键，增加工具确认、停止处理中、提交不确定、历史恢复与配置冲突样例；视觉验收独立于契约确认 |
 | 主设计依据 | [`README.md`](README.md)，维护源码证据、目标差异、设计理由、状态与 Design Token |
@@ -30,7 +30,7 @@
 不能照搬 Claw 的 POST SSE、数字页码、sourceEventId/targetEventId 或工具文本块。
 旧运行态 PNG 不再作为当前交互稿；当前 HTML 已移除旧跟进控件。
 
-Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
 
 ## 1. 结论
 
@@ -63,7 +63,7 @@ Builtin 结果作为当前页面临时区域而不是对话消息；Skill 在内
 Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和固定 Vue 组件投影为安全
 富文本；表格、列表、引用、链接、行内代码和代码块均有明确样式、溢出和复制行为。用户
 原文、Thinking 原文、工具入参和工具原始结果不进入该 Markdown 渲染链。思考区域以纯文本
-展示模型返回的可读原始推理，保留文字和换行；经类型化事件与公共 bridge 投影。具体规则见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+展示模型返回的可读原始推理，保留文字和换行；经类型化事件与公共 bridge 投影。具体规则见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
 
 布局层级与工具密度继续采用 Codex-inspired 而非品牌复制；品牌层改用已确认的 O1 五片有机
 标识，界面直接引用同一张透明 PNG，不允许生成式重绘。配色由冷灰调整为暖白、暖灰与深暖黑，
@@ -608,6 +608,7 @@ Chrome 实际操作确认点击后由三行变四行、删除后回到三行；�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.9.0 | 2026-09-09 | 同步 Session Events 命名和事件消费边界。 |
 | 1.8.0 | 2026-09-09 | 同步用户确认的 Slash 标签式交互：+ 菜单入口、无前导 Slash 的精简清单、独立参数与统一上箭头，正式交互详见专项 1.4.0。 |
 | 1.7.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 1.6.0 | 2026-09-09 | 按用户反馈精简 Headers 面板：删除常驻说明；预置 access-token、X-HW-ID、Authorization 三个可编辑/可删除的空值行；仅“增加请求头”追加空行，取消自动尾行，删除/清空允许零行；未使用预置不报错、不计数或发送。复核实现 4cc8dd8，更新设计、交互原型及图源，Vue 实现待同步。 |

@@ -17,7 +17,7 @@
 2026-09-07 仅同步 Runtime 控制接口退役：运维停止改走 Events user.interrupt。
 本专题其他旧 Runtime 字段及事件投影仍属 1.37 迁移基线；图中旧 JSON 源路径可在设计仓
 `a48515c` 查看，不再指向当前模型。接入前需对齐
-[Events v2](chat-events-v2-design.md)，不能恢复独立控制入口或依据旧 Entry 水位推断新请求已接受。
+[Session Events](chat-events-design.md)，不能恢复独立控制入口或依据旧 Entry 水位推断新请求已接受。
 [FollowUp 未来设计](chat-follow-up-future-design.md) 本期不启用；未重新核验飞书外部资料或改变公共 Channel 契约。
 
 ## 1. 结论

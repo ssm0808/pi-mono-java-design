@@ -4,13 +4,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 / 日期 | 1.1.0 / 2026-09-09 |
+| 版本 / 日期 | 1.2.0 / 2026-09-09 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
 | 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；本次读取的 frontend 文件无工作树修改 |
 | 性质 | target-only 产品前端；Thinking 原文规则同步 Mate 公共契约；Vue 与 Runtime 实现仍待同步，公司认证规则保持 |
-| 契约依据 | [Mate Events 1.5.0](../../02-服务与接口/07-mate-service通用对话API/README.md)、[Claw POST 0.6.0](../01-CampusClaw多Agent运行时/chat-events-v2-stream-design.md)、[Claw 历史 0.4.0](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md) |
+| 契约依据 | [Mate Events 1.5.0](../../02-服务与接口/07-mate-service通用对话API/README.md)、[Claw POST 0.7.0](../01-CampusClaw多Agent运行时/chat-events-stream-design.md)、[Claw 历史 0.5.0](../01-CampusClaw多Agent运行时/chat-events-history-design.md) |
 
-Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
 
 ## 1. 结论与两跳边界
 
@@ -129,7 +129,7 @@ Enter 发送、Shift+Enter 换行；compositionstart 至 compositionend 期间 E
 | POST result.event / history user.message | 同 eventId 一条用户消息；按 content 顺序展示文本和附件引用 |
 | agent.message + delta/completed | 第一帧创建；同 ID completed 覆盖预览，之后迟到 delta 忽略；空完整正文不画空气泡 |
 | agent.thinking + delta/completed | 展示模型返回的可读原文，标注“原始推理”；delta 追加、completed 原文覆盖，历史同形。前端标题为“正在分析/分析过程”，不构造额外公共标题字段，不虚构耗时 |
-| agent.tool_call | 按 toolCallId 建立一个工具行；requiresConfirmation=true 时等待确认，不能一收到调用就标记正在执行 |
+| agent.tool_call | 按 eventId 建立工具行，toolCallId 用于限定作用域内的结果关联；requiresConfirmation=true 时等待确认，不能一收到调用就标记正在执行 |
 | user.tool_confirmation | POST/历史合并为该工具的只读决定记录；不是 Assistant 发言 |
 | agent.tool_result | 使用 isError 判成败，公共字符串作为纯文本；没有结果不伪造成功；工具失败后 Agent 仍可能继续处理 |
 | chat.status_idle | done/terminated/failed/confirming 分开处理；不关闭公共长连接，不把确认等待视为空闲 |
@@ -140,7 +140,10 @@ Assistant `content` 保留 rawMarkdown 并使用现有安全渲染骨架；User/
 完整数据不可解码时提示“数据格式不兼容”并保留已确认内容，不伪造空列表或回退展示内部 payload。
 
 内部诊断的 text-block viewer 按块顺序显示，空文本显示“未返回文本”，多个块不丢失；CallMateTool
-业务名从 arguments.tool 读取、参数从 args 展示，但保留原始包装的来源。此规则不自动改变 Mate 公共名称契约。
+业务名从 arguments.tool 读取、参数从 args 展示，但保留原始包装的来源。
+模型参数不合法时展示原参数与失败结果，不因业务 Schema 拒绝事件。内部确认按根消息及调用后的提交顺序关联，
+读取 denyMessage 接受 4096 UTF-16 单元；不得套用输入框 2048 code point 上限。
+具体规则及 af858b85 源码依据见[事件消费边界](../01-CampusClaw多Agent运行时/chat-events-history-design.md#event-consumer-boundaries)。此规则不自动改变 Mate 公共名称契约。
 
 ## 6. 历史与断线恢复
 
@@ -194,5 +197,6 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-09 | 明确事件身份、工具业务参数与 Runtime 响应读取边界。 |
 | 1.1.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 1.0.0 | 2026-09-08 | 补齐主对话、工具确认、中断、恢复及配置共享；记录公共/内部差异与接入门禁；保持原视觉语言。 |

@@ -12,9 +12,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-COMMON_PATH = ROOT / "接口契约-v2" / "common.json"
-MODEL_PATH = ROOT / "接口契约-v2" / "操作" / "01-submit-session-event.json"
-HISTORY_PATH = ROOT / "接口契约-v2" / "操作" / "02-list-session-events.json"
+COMMON_PATH = ROOT / "事件契约" / "common.json"
+MODEL_PATH = ROOT / "事件契约" / "操作" / "01-submit-session-event.json"
+HISTORY_PATH = ROOT / "事件契约" / "操作" / "02-list-session-events.json"
 USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
 STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "session.status_idle"}
 HISTORY_TYPES = {"session.model_changed", "session.thinking_changed", "session.compacted"}
@@ -73,7 +73,7 @@ def validate_public_payload(value: object) -> None:
         require(
             not {"entryId", "entrySeq", "eventSeq", "runId", "executionId", "executionGeneration",
                  "targetExecutionId", "ownerInstanceId"}.intersection(value),
-            "v2 public payload must not expose internal identifiers or sequences",
+            "public event payload must not expose internal identifiers or sequences",
         )
         for child in value.values():
             validate_public_payload(child)
@@ -86,7 +86,7 @@ def validate_access_token_rule(operation: dict) -> None:
     modes = operation["requestHeaderExamples"]
     require(
         len(modes) == 2 and {mode["id"] for mode in modes} == {"jwt", "appkey"},
-        "v2 POST must retain both Header modes",
+        "POST Events must retain both Header modes",
     )
     for mode in modes:
         tokens = [header for header in mode["headers"] if header["name"] == "access-token"]
@@ -156,9 +156,6 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
     if event["type"] == "agent.tool_call":
         require(type(event.get("requiresConfirmation")) is bool, "confirmation flag is required")
         require(isinstance(event.get("toolName"), str) and bool(event["toolName"]), "toolName required")
-        if event["toolName"] == "CallMateTool":
-            require(set(event["arguments"]) == {"tool", "args"} and isinstance(event["arguments"]["tool"], str)
-                    and bool(event["arguments"]["tool"]) and isinstance(event["arguments"]["args"], dict), "Mate wrapper must normalize args object")
     contract = json.loads(COMMON_PATH.read_text())["eventContract"]
     if event["type"] == "agent.tool_result":
         require(event.get("errorCode") in contract["toolErrorCodes"] if event["isError"] else "errorCode" not in event,

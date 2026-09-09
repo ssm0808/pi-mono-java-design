@@ -451,7 +451,7 @@ signature 只用于
 模型续传。最新局部源码核对为 `pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60` 的
 `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java`
 `parseReasoning/appendReasoningText/finishThinking`；Runtime 过滤差距、固定 pi 证据和验收见
-[Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+[Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
 Provider 请求参数按上述契约映射，使用现有依赖。
 
 Provider 解析原始 Chat SSE：

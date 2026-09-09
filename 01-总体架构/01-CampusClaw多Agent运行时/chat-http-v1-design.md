@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.50.0 |
-| 状态 | 保留十个目标 operation；Events 以 v2 已确认目标契约为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
+| 文档版本 | 1.51.0 |
+| 状态 | 保留十个目标 operation；Events 以 Session Events 已确认目标契约为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 已按 B13/B14 对齐；Mate 公共命令独立管理 |
-| 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的八项保留契约与两项 Events v2 模型 |
+| 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的八项保留契约与两项 Session Events 模型 |
 | 人类评审契约 | [统一当前接口页](chat-api-review.html)，由 [唯一清单](接口契约/catalog.json) 生成 |
 | 对外机器契约 | 不维护；结构化 JSON 只作为 HTML 生成源，不替代已废弃 OpenAPI |
 | 端到端传输结论 | 两跳均为 HTTP；Runtime POST Events 保留请求级 SSE，POST Command 的 Builtin 返回 JSON、Skill 返回 SSE；公共命令待独立评审 |
@@ -35,12 +35,12 @@
 | 更新日期 | 2026-09-09 |
 
 本轮退役独立 `/abort`、`/steers`、`/follow-ups`，清单见 [总览 §4](README.md#4-当前目标-http-接口清单)。
-[合并 POST](chat-api-review.html#submitSessionEvent) 与 [历史查询](chat-api-review.html#listSessionEvents) 采用 v2，目标契约已定稿、待实现。
+[合并 POST](chat-api-review.html#submitSessionEvent) 与 [历史查询](chat-api-review.html#listSessionEvents) 采用 Session Events，目标契约已定稿、待实现。
 旧 POST/GET 字段、类型和分页示例已移除，仅可从 Git 历史追溯。管理规则见 [统一维护规则](chat-api-index.md)。
 [FollowUp 未来设计](chat-follow-up-future-design.md) 只记录扩展方向，本期不支持排队。
 本次源码基线 dfb90cac4e233e09a0b8f047f7e9f4682f5ad238，路径及差异见该专题；不改实现。
 
-Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-v2-history-design.md#thinking-original-text)。
+Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-history-design.md#thinking-original-text)。
 
 ## 1. 结论
 
@@ -72,7 +72,7 @@ mate-service 不得把内部 SSE 字节透明转发给浏览器。公共 mate-se
 基础路径为 `/campusclaw-service/v1`。网关 Host 可按部署环境配置，
 不属于业务路径的版本契约。
 精确字段、认证、请求、响应和错误按 [catalog.json](接口契约/catalog.json) 指定的唯一模型维护；
-[统一接口页](chat-api-review.html) 是唯一当前入口。八项保留契约与两项 Events v2 使用同一清单、
+[统一接口页](chat-api-review.html) 是唯一当前入口。八项保留契约与两项 Session Events 使用同一清单、
 生成和校验门禁，不再生成平行详情页。本文保留设计理由，Events 理由链接所属专题。
 过渡期 OpenAPI 1.7.1 因长期滞后且仍包含已经被替代的旧 Run 资源，已经由用户
 明确批准废弃并从仓库删除。当前不发布 OpenAPI 等标准机器契约；仓库内 JSON 只是
@@ -216,7 +216,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
 boolean：`false` 映射为 `off`；`true` 使用当前模型和 Agent 配置的受管非 `off`
-推理强度，不把具体等级开放给调用方。POST Events 按接受用户事件时的快照决定是否投影模型返回的 thinking 原文；GET Events 返回已保存的完整原文，不因后续关闭开关而隐藏。展示规则见[Thinking 展示](chat-events-v2-history-design.md#thinking-original-text)。每页继续检查当前访问边界。
+推理强度，不把具体等级开放给调用方。POST Events 按接受用户事件时的快照决定是否投影模型返回的 thinking 原文；GET Events 返回已保存的完整原文，不因后续关闭开关而隐藏。展示规则见[Thinking 展示](chat-events-history-design.md#thinking-original-text)。每页继续检查当前访问边界。
 
 GetSession 使用 `displayName` 返回名称，但不返回 `name` 别名、`historySeq`、完整 `transcript`、
 `queuedSteer`、`phase`、`attached` 或 `locked`。用户可见会话名称属于
@@ -297,8 +297,8 @@ owner 信息。删除操作仍携带调用上下文 Header，但 Runtime 不执�
 
 原 v1 报文已作废，旧请求、SSE 类型及完整示例移除，仅从 Git 历史追溯。
 
-- [POST 提交与推送](chat-api-review.html#submitSessionEvent)：[请求级 SSE 设计](chat-events-v2-stream-design.md)。
-- [GET 历史查询](chat-api-review.html#listSessionEvents)：[普通分页与恢复设计](chat-events-v2-history-design.md)。
+- [POST 提交与推送](chat-api-review.html#submitSessionEvent)：[请求级 SSE 设计](chat-events-stream-design.md)。
+- [GET 历史查询](chat-api-review.html#listSessionEvents)：[普通分页与恢复设计](chat-events-history-design.md)。
 
 当前三类输入为 user.message、user.interrupt、user.tool_confirmation；请求级 SSE、
 eventId、不公开内部序号、普通分页与 B01～B15 已确认，精确契约可进入实现。
@@ -353,7 +353,7 @@ Session lifetime Usage。`willRetry=true` 时，持久化 payload 还包含不�
 
 ### 2.3 持久化事件与恢复
 
-以 [ListEvents v2](chat-events-v2-history-design.md) 为唯一依据：完整事件与 POST 同形，
+以 [ListEvents](chat-events-history-design.md) 为唯一依据：完整事件与 POST 同形，
 按服务端返回顺序展示，用 eventId 去重；普通整数分页默认 50、最多 200，不返回 total。
 旧不透明 page、entryId/entrySeq 和完整旧响应示例已移除。内部模型上下文恢复仍是独立投影。
 配置、thinking、压缩与 Usage 已按 B05/B12 对齐；公共投影见统一契约，内部事件不直接透传。
@@ -475,7 +475,7 @@ Builtin Handler 完成后返回普通 ResultBean JSON，不建立命令 SSE。
 [Builtin §8](../../04-命令与技能/01-内置命令/README.md#8-json-与错误)。
 不产生通用命令生命周期或 Name 历史；这不改变 POST Events 的独立 SSE 契约。
 所有成功结果移除 command、changed、sourceEventSeq；内部领域 Entry 不变。
-不以新命令包装或 eventId 替代这些字段，Skill 分支复用 Events v2，详细行为见 [Skill 设计](../../04-命令与技能/02-技能命令/README.md)。
+不以新命令包装或 eventId 替代这些字段，Skill 分支复用 Session Events，详细行为见 [Skill 设计](../../04-命令与技能/02-技能命令/README.md)。
 
 #### 2.6.2 Help：Agent 元数据使用指南
 
@@ -520,16 +520,16 @@ Spring 单例不保存原始凭据。共享安全约束见 §7，精确 Header �
 已声明的普通 Header 保持各自语义。CampusClaw 不校验凭据组合、共存、格式或真实性。
 
 当前每次 user.message、user.interrupt 或 user.tool_confirmation 使用新的 POST Events，
-各响应按 v2 规则接收本次回执与对应输出。原消息与中断响应各自绑定，不复制输出
+各响应按 Session Events 规则接收本次回执与对应输出。原消息与中断响应各自绑定，不复制输出
 或借断连取消执行。三个独立控制接口已退役；命令仍按独立契约处理。
 
 ## 4. 状态、并发与恢复
 
-本节以 Events v2 的已确认决定为准；旧分页与公共序号规则不再维护。
+本节以 Session Events 的已确认决定为准；旧分页与公共序号规则不再维护。
 当前准入和退役决定优先适用：
 
 - 每个 Session 同一时刻只允许一个 active execution。第二个并发初始
-  `user.message` 返回 `409 SESSION_BUSY`，不接受队列追加；中断与工具确认按 v2 控制条件接受。
+  `user.message` 返回 `409 SESSION_BUSY`，不接受队列追加；中断与工具确认按 Session Events 控制条件接受。
 - 用户 MessageEntry 持久化并开始执行后，不依赖发起 HTTP 连接继续存活；连接关闭
   不等于 interrupt。
 - 直接流式 POST 不使用浏览器 `EventSource` 自动重连，也不接受
@@ -550,7 +550,7 @@ Spring 单例不保存原始凭据。共享安全约束见 §7，精确 Header �
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。八项保留既有契约，两个 Events 操作采用已确认 v2 目标契约。所有普通 JSON 响应都
+草案的公司集成约束。八项保留既有契约，两个 Events 操作采用已确认 Session Events 目标契约。所有普通 JSON 响应都
 遵守同一包装，SSE 事件流和 HTTP
 `204` 无响应体不使用 ResultBean。
 
@@ -598,9 +598,9 @@ HTTP status 仍表达传输和粗粒度失败类别，`resCode` 表达稳定业�
 | `409` | `SESSION_BUSY` | `该 Session 正在处理另一条用户消息。` | `The Session is processing another user message.` |
 | `500` | `SESSION_DELETE_FAILED` | `Session 删除失败。` | `Session deletion failed.` |
 
-Events v2 的成功、错误及确认范围以 [POST](chat-events-v2-stream-design.md) 和
-[GET](chat-events-v2-history-design.md) 为准。旧错误表及 stream.error 规则已移除，
-不能将旧版“已确认”自动继承为 v2 整体通过。
+Session Events 的成功、错误及确认范围以 [POST](chat-events-stream-design.md) 和
+[GET](chat-events-history-design.md) 为准。旧错误表及 stream.error 规则已移除，
+不能将旧版“已确认”自动继承为 Session Events 整体通过。
 
 三个 Session 配置接口复用 Session 标识和不存在错误，并新增以下
 operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑定和无权使用，
@@ -619,7 +619,7 @@ operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑
 | `500` | `SESSION_THINKING_UPDATE_FAILED` | PUT Thinking | 深度思考配置和资源版本未能原子更新 |
 | `503` | `MANAGER_UNAVAILABLE` | GET Models、PUT Model | Model Manager 暂时不可用；复用第一个接口错误码 |
 
-原三个独立控制接口的错误集合随接口退役；中断错误、超时和竞争结果以 v2 继续评审，
+原三个独立控制接口的错误集合随接口退役；中断错误、超时和竞争结果以 Session Events 继续评审，
 不将原 Abort 的 idle 204 规则复制给 user.interrupt。
 
 Locale 从 `Accept-Language` 解析，第一版只支持 `zh-CN` 和
@@ -720,7 +720,7 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 - Agent、Tool、Skill 和 Session 标识必须匹配 [`接口契约/common.json`](接口契约/common.json)
   中各自唯一的类型化资源 ID 正则；不接受无前缀、
   错误类型前缀、带内部连字符的 UUID 或下划线旧格式。
-- POST Events 的三输入联合请求、文件引用与禁止字段以 v2 精确模型为准，不再使用原 message/fileIds 报文。
+- POST Events 的三输入联合请求、文件引用与禁止字段以 Session Events 精确模型为准，不再使用原 message/fileIds 报文。
 - 该 POST 不接收 `Idempotency-Key`，网络结果不确定时调用方必须先读取
   Session 和持久化 Events，禁止把无条件重试描述为安全行为。
 - Runtime 不调用文件服务或 OBS；它只把有序 `fileIds` 编码成固定
@@ -815,9 +815,9 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 `2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9` 为整理基线，未重新分析产品源码，
 未更新 pi 或其他外部参考；删除的是废止目标规则和重复副本，不是新增产品行为。
 
-现行 Events 请求、流和分页只以 v2 专题及精确模型为准；旧事件名、旧分页和控制接口
-不在本节再次列作“已确认设计”。当前实现差距见 [Events 源码复核](chat-events-v2-design.md#42-本次合并方案源码复核)、
-[历史查询证据](chat-events-v2-history-design.md#5-源码证据与差距)与 [FollowUp 未来设计](chat-follow-up-future-design.md)。
+现行 Events 请求、流和分页只以 Session Events 专题及精确模型为准；旧事件名、旧分页和控制接口
+不在本节再次列作“已确认设计”。当前实现差距见 [Events 源码复核](chat-events-design.md#42-本次合并方案源码复核)、
+[历史查询证据](chat-events-history-design.md#5-源码证据与差距)与 [FollowUp 未来设计](chat-follow-up-future-design.md)。
 公司 ResultBean 替换点、HTTP 状态和凭据要求属于产品约束，分别由 §5–§7 维护；
 命令的产品约束、架构变更和安全加固由所属专题维护。
 
@@ -825,13 +825,14 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.51.0 | 2026-09-09 | 统一 Session Events 入口，保留 HTTP v1 路径。 |
 | 1.50.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 1.49.0 | 2026-09-08 | 同步 B01～B15：完整事件、固定公开摘要、配置/压缩/Usage 映射与 Skill SSE；产品语义已定稿，实施数值按校准。 |
-| 1.48.0 | 2026-09-07 | POST Command 成功响应对齐既有 Session/Models 资源与 ETag，移除 command/changed/sourceEventSeq；保留 Help 三业务字段与 Compact/Skills 最小结果，新增跨接口反例校验；GET、请求、错误与 Events v2 不变。 |
+| 1.48.0 | 2026-09-07 | POST Command 成功响应对齐既有 Session/Models 资源与 ETag，移除 command/changed/sourceEventSeq；保留 Help 三业务字段与 Compact/Skills 最小结果，新增跨接口反例校验；GET、请求、错误与 Session Events 不变。 |
 | 1.47.1 | 2026-09-07 | 删除 Command 业务重复副本，改引所属专题；Help 从 Runtime 直接派生；清理废止的历史目标规则，现行报文不变。 |
-| 1.47.0 | 2026-09-07 | 语义合入 ec5492a 的 GET 字段精简、状态过滤与全量清单完整性；保留后续 Help 无参、POST JSON、统一责任和 Events v2，不恢复旧页面。 |
+| 1.47.0 | 2026-09-07 | 语义合入 ec5492a 的 GET 字段精简、状态过滤与全量清单完整性；保留后续 Help 无参、POST JSON、统一责任和 Session Events，不恢复旧页面。 |
 | 1.46.1 | 2026-09-07 | 统一清单、生成与校验入口；移除旧 Events 报文及分页章节，保留注明版本的源码证据；已确认字段和待决项不变。 |
-| 1.46.0 | 2026-09-07 | 退役三个独立控制接口及其示例和错误集合，保留十项；Events 指向 v2，FollowUp 仅记录未来设计，保持单消息准入。 |
+| 1.46.0 | 2026-09-07 | 退役三个独立控制接口及其示例和错误集合，保留十项；Events 指向 Session Events，FollowUp 仅记录未来设计，保持单消息准入。 |
 | 1.45.1 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一设计、实现和集成；同步操作 12/13 的实施责任说明与校验，保留已确认报文及待评审的 Skill 细节。 |
 | 1.45.0 | 2026-09-04 | 用户确认 Help 无参四字段 Agent 使用指南；同步操作 12 描述符、操作 13 非空/空内容结果、参数与缓存语义、全局类图及校验；其他命令、事件和 Mate 公共契约不变。 |
 | 1.44.1 | 2026-09-04 | 澄清 Skill Command 由其他同事同步开发；撤销整体延期/拒绝解释，保留 Builtin 行为并将名称和清单限制限定为 Builtin 切片；共享 HTTP 发布前整合双方契约。 |

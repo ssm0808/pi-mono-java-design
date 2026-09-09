@@ -10,7 +10,7 @@
 
 ## 1. 为什么统一
 
-原入口把 v1 的旧 Events 报文与 v2 新方案分别完整展示，根导航仍指向 v1。
+原入口把 v1 的旧 Events 报文与 Session Events 新方案分别完整展示，根导航仍指向 v1。
 仅加“迁移基线”提示，仍容易把旧字段当作当前契约；聊天中的总览又没有纳入设计仓。
 清单和总览已纳入同一生成、校验和版本控制流程。用户进一步明确：废弃文档直接删除，
 不保留迁移说明页、跳转页或占位文件；历史版本只从 Git 追溯。
@@ -19,7 +19,7 @@
 
 - [catalog.json](接口契约/catalog.json) 唯一决定当前十项 operation、顺序、精确源和关联设计。每个 method + path 只能出现一次，活动目录中的模型必须全部登记。
 - [chat-api-review.html](chat-api-review.html) 是唯一当前人类接口页，从清单及精确模型生成，不手工编辑 HTML。
-- 八项保留契约继续复用 `接口契约/common.json`；两个 Events 使用 `接口契约-v2/common.json`。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
+- 八项保留契约继续复用 `接口契约/common.json`；两个 Events 使用 `事件契约/common.json`。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
 - `review` 与 `reviewState` 继续记录原有确认决定；清单中的说明只解释其适用边界，不替代或自动提升确认状态。B01～B15 已实际提交确认；两个 Events 目标契约已定稿，question 列表清空，数值校准另列。
 - Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；本轮仅清除其已废止 Command POST 内容，保留 GET 投影及待评审公共边界。
 
@@ -39,9 +39,9 @@ GetSession 与 PUT Thinking 的说明移除已作废 Events 名称及游标指�
 | Slash 轻量清单规则与共享结构 | [通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md) | HTTP 与 Mate 引用，不重复状态矩阵 |
 | Builtin 业务、事务与实施验收 | [Builtin 专题](../../04-命令与技能/01-内置命令/README.md) | HTTP 仅保留传输边界及入口 |
 | Help 元数据、缓存与安全展示 | [Help 专题](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) | 专项 HTML 从 Runtime Command 提取，不维护专项 JSON |
-| Events 执行准入、有序追加、数据库中断与机制验收 | [Events 总体设计](chat-events-v2-design.md) | 流设计只保留调用方可见的响应边界 |
-| SSE 首帧、响应绑定、关闭、背压和恢复 | [流设计](chat-events-v2-stream-design.md) | 总体文档引用；参数仍以精确模型为准 |
-| 历史投影、分页与对账 | [历史设计](chat-events-v2-history-design.md) | 流和总体文档不重复分页参数 |
+| Events 执行准入、有序追加、数据库中断与机制验收 | [Events 总体设计](chat-events-design.md) | 流设计只保留调用方可见的响应边界 |
+| SSE 首帧、响应绑定、关闭、背压和恢复 | [流设计](chat-events-stream-design.md) | 总体文档引用；参数仍以精确模型为准 |
+| 历史投影、分页与对账 | [历史设计](chat-events-history-design.md) | 流和总体文档不重复分页参数 |
 
 必要的安全边界摘要可以保留，但不能在摘要中新增字段、规则或未决项的确认。
 废止内容从 Git 追溯；不能继续生成旧报文，也不以“历史”标签保留第二套可调用说明。
@@ -92,7 +92,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 1.0.1 仅删除废弃文档及其生成入口，源码核对沿用 1.0.0 记录，不宣称本次重新核对实现主线。
 不重新分析 Agent Loop 或调整 pi 基线。
 保留既有 Runtime 语义证据 `pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185`，
-对应路径和符号继续由 [Events 设计](chat-events-v2-design.md) 与 [FollowUp 设计](chat-follow-up-future-design.md) 维护。
+对应路径和符号继续由 [Events 设计](chat-events-design.md) 与 [FollowUp 设计](chat-follow-up-future-design.md) 维护。
 
 1.0.0 核对的实现主线 commit 为 `7b3769a5eabe2d131af3023631d7ad24e6d9a9e1`；
 此前边界基线为 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；以下三个文件在两基线间无变化。
@@ -100,12 +100,12 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 源码 | 已观察事实与影响 |
 |---|---|
-| `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeEventController.java` · `submit/list` | 实现仍为 POST SSE / GET 历史入口；路径相同不证明已具备 v2 请求和事件模型。 |
+| `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeEventController.java` · `submit/list` | 实现仍为 POST SSE / GET 历史入口；路径相同不证明已具备 Session Events 请求和事件模型。 |
 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/vo/UserEventRequestVO.java` · `message/fileIds/rejectUnknownField` | 仍使用旧 message/fileIds，请求不是目标三输入联合类型；整理文档不等于完成实现迁移。 |
 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSessionControlController.java` · `steer/followUp/abort` | 主线仍声明三个独立接口；设计退役与代码删除属于不同交付。 |
 
-当前目标十项、旧控制接口退役、Events v2 部分确认都是既有产品/架构决定，非本次新增能力。
-本次不修改 Java、数据库、权限、运行时行为或仍有效的 Mate 公共契约，也不声称 v2 已部署。
+当前目标十项、旧控制接口退役、Session Events 部分确认都是既有产品/架构决定，非本次新增能力。
+本次不修改 Java、数据库、权限、运行时行为或仍有效的 Mate 公共契约，也不声称 Session Events 已部署。
 没有新增结构关系，本次不新增或修改类图；旧 Events 图源与 SVG 已在 1.0.0 一并移除，
 1.2.0 删除 Mate 废止 POST 所属图源及两张 SVG。保留的 PlantUML 与 SVG 保持不变。
 

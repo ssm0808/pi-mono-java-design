@@ -988,7 +988,7 @@
         "status": "200",
         "tabLabel": "200 · Skill SSE",
         "label": "OK",
-        "summary": "Skill 接受后的流式响应：首帧是展开前 user.message，引用同一根消息事件；工具确认、失败、中断和恢复复用 Events v2。",
+        "summary": "Skill 接受后的流式响应：首帧是展开前 user.message，引用同一根消息事件；工具确认、失败、中断和恢复复用 Session Events。",
         "headers": {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-store",

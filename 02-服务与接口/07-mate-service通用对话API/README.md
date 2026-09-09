@@ -24,7 +24,7 @@
 | OpenAI API 公开文档核对日期 | 2026-09-02 |
 | 更新日期 | 2026-09-09 |
 
-Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
 
 ## 1. 已确认接口
 
@@ -437,7 +437,7 @@ data: {"eventId":"d5c19f7c4b1642e6806aeb860752d99b","type":"agent.message","phas
 
 客户端按顺序追加 delta；收到 completed 后，以 completed 的完整 `content` 替换 preview。
 若 execution 被中断且没有 completed，则丢弃未完成 preview。`agent.thinking.content` 展示模型实际返回的可读原始推理，
-完整规则与源码证据见[Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)。
+完整规则与源码证据见[Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
 思考开关控制后续执行，已保存原文不因后续关闭而隐藏；不透明签名不作为正文。
 
 ### 5.4 `agent.tool_call`

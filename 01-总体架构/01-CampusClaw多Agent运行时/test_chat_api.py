@@ -13,8 +13,23 @@ spec = importlib.util.spec_from_file_location("catalog_gate", current.ROOT / "va
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
+events_spec = importlib.util.spec_from_file_location("event_gate", current.ROOT / "validate-chat-events.py")
+event_gate = importlib.util.module_from_spec(events_spec)
+events_spec.loader.exec_module(event_gate)
+
 
 class CatalogTest(unittest.TestCase):
+    def test_business_invalid_tool_arguments_remain_readable_events(self):
+        event = {"type": "agent.tool_call", "eventId": "call-event", "sourceEventId": "root-message",
+                 "createdAt": "2026-09-09T00:00:00.000Z", "toolCallId": "provider-call",
+                 "toolName": "CallMateTool", "requiresConfirmation": False}
+        for arguments in ({}, {"args": {}}, {"tool": 1, "args": {}}, {"tool": "query", "args": "bad"}):
+            with self.subTest(arguments=arguments):
+                event_gate.validate_frame({**event, "arguments": arguments})
+                event_gate.validate_frame({**event, "arguments": arguments}, history=True)
+        with self.assertRaisesRegex(ValueError, "JSON object"):
+            event_gate.validate_frame({**event, "arguments": []})
+
     def setUp(self):
         self.manifest = current.shared.read_json(current.MANIFEST)
         self.read_json = current.shared.read_json
@@ -34,7 +49,7 @@ class CatalogTest(unittest.TestCase):
                 self.read_json(current.ROOT / entry["source"]))
             self.assertEqual(original["operation"], model["operation"])
             self.assertEqual(original["review"], model["review"])
-        state = self.read_json(current.ROOT / "接口契约-v2/common.json")["reviewState"]
+        state = self.read_json(current.ROOT / "事件契约/common.json")["reviewState"]
         self.assertEqual({"currentOperation": "listSessionEvents", "confirmedOperations": ["submitSessionEvent", "listSessionEvents"], "reviewMode": "completed", "semanticBatch": "2026-09-08.1-confirmed"}, state)
 
     def test_duplicate_operation_is_rejected(self):

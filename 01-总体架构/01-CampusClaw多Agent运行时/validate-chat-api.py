@@ -87,7 +87,7 @@ def main():
     for command in (
         ["render_chat_api.py", "--check"],
         ["validate-chat-http-v1.py", *(["--full"] if args.full else [])],
-        ["validate-chat-events-v2.py"],
+        ["validate-chat-events.py"],
         ["test_control_retirement.py"],
         ["test_chat_api.py"],
         ["test_help_contract.py"],

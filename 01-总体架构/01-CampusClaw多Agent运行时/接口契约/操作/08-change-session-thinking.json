@@ -5,7 +5,7 @@
     "method": "PUT",
     "path": "/sessions/{sessionId}/thinking",
     "summary": "开启或关闭 Session 深度思考",
-    "description": "在 Session 处于 idle 时，将 thinking 设置为是否对后续 user.message 启用深度思考。false 映射为关闭推理且 POST /events 不发送 thinking 事件；true 使用当前模型和 Agent 的受管非 off 推理强度。值变化时在同一事务中追加 reason=requested 的 session.thinking_changed；该领域记录不成为模型上下文消息。相同值不追加事件。调用方不选择具体推理等级。B05/B12 已确认：thinking 只影响后续执行，关闭不隐藏已保存的历史思考原文；配置记录按 Events v2 投影；GET 历史已采用普通整数分页，不再继承旧游标失效规则。",
+    "description": "在 Session 处于 idle 时，将 thinking 设置为是否对后续 user.message 启用深度思考。false 映射为关闭推理且 POST /events 不发送 thinking 事件；true 使用当前模型和 Agent 的受管非 off 推理强度。值变化时在同一事务中追加 reason=requested 的 session.thinking_changed；该领域记录不成为模型上下文消息。相同值不追加事件。调用方不选择具体推理等级。B05/B12 已确认：thinking 只影响后续执行，关闭不隐藏已保存的历史思考原文；配置记录按 Session Events 投影；GET 历史已采用普通整数分页，不再继承旧游标失效规则。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"

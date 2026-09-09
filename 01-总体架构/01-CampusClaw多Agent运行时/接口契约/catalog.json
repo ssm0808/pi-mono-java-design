@@ -17,7 +17,7 @@
       "source": "接口契约/操作/02-get-session.json",
       "common": "接口契约/common.json",
       "status": "原契约已确认 · 联动已同步",
-      "note": "Session 响应保持原契约；thinking 与新历史事件的可见性已同步联动，旧事件名不定义 Events v2。",
+      "note": "Session 响应保持原契约；thinking 与新历史事件的可见性已同步联动，旧事件名不定义 Session Events。",
       "design": "chat-http-v1-design.md#211-第二个已确认接口读取-session"
     },
     {
@@ -30,19 +30,19 @@
     },
     {
       "key": "submitSessionEvent",
-      "source": "接口契约-v2/操作/01-submit-session-event.json",
-      "common": "接口契约-v2/common.json",
+      "source": "事件契约/操作/01-submit-session-event.json",
+      "common": "事件契约/common.json",
       "status": "已确认目标契约 · 待实现",
       "note": "B01～B15 四组全部按推荐确认；字段、错误码、事件关联和恢复边界已统一，可进入实现。数据库和容量数值按压测校准。Builtin JSON 保持，Skill 使用共享事件 SSE；Mate 公共协议独立管理。",
-      "design": "chat-events-v2-stream-design.md"
+      "design": "chat-events-stream-design.md"
     },
     {
       "key": "listSessionEvents",
-      "source": "接口契约-v2/操作/02-list-session-events.json",
-      "common": "接口契约-v2/common.json",
+      "source": "事件契约/操作/02-list-session-events.json",
+      "common": "事件契约/common.json",
       "status": "已确认目标契约 · 待实现",
       "note": "B01～B15 四组全部按推荐确认；字段、错误码、事件关联和恢复边界已统一，可进入实现。数据库和容量数值按压测校准。Builtin JSON 保持，Skill 使用共享事件 SSE；Mate 公共协议独立管理。",
-      "design": "chat-events-v2-history-design.md"
+      "design": "chat-events-history-design.md"
     },
     {
       "key": "listSessionModels",
@@ -57,7 +57,7 @@
       "source": "接口契约/操作/07-change-session-model.json",
       "common": "接口契约/common.json",
       "status": "原契约已确认 · 联动已同步",
-      "note": "配置接口保持原契约；配置变更事件如何进入 Events v2 已统一对齐，不能用旧事件示例覆盖新 Events。",
+      "note": "配置接口保持原契约；配置变更事件如何进入 Session Events 已统一对齐，不能用旧事件示例覆盖新 Events。",
       "design": "chat-http-v1-design.md#242-put-session-model"
     },
     {

@@ -2,16 +2,16 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.15.0 |
-| 状态 | B01～B15 已全部确认，Events v2 与 Skill 联动契约已定稿，可进入实现；Builtin JSON 保持；当前十项接口共用一个契约入口 |
-| 当前传输结论 | v2 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
+| 文档版本 | 3.16.0 |
+| 状态 | B01～B15 已全部确认，Session Events 与 Skill 联动契约已定稿，可进入实现；Builtin JSON 保持；当前十项接口共用一个契约入口 |
+| 当前传输结论 | 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 当前核对头 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
-| v2 合并传输核对 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；对比原 `a8192e0` 的七个 HTTP/事件文件无变化，目标变化见 v2 §4.2 |
-| v2 中断优化补充核对 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；五个并发、流与配置文件相对 `918005e` 无变化，见 v2 §4.4；本次设计变更前为 `e370d2d49e6cd20b7dd910944e583d7f67115cf4` |
-| v2 历史查询补充核对 | 同一 `dfb90ca`；查询、编码、游标与 Mapper 四文件相对 `918005e` 不变，见 [历史设计](chat-events-v2-history-design.md)；本次变更前设计 `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
-| v2 事件顺序补充核对 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；证据与原基线对比见 v2 设计 §4.1 |
+| Session Events 合并传输核对 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；对比原 `a8192e0` 的七个 HTTP/事件文件无变化，目标变化见 Session Events §4.2 |
+| Session Events 中断优化补充核对 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；五个并发、流与配置文件相对 `918005e` 无变化，见 Session Events §4.4；本次设计变更前为 `e370d2d49e6cd20b7dd910944e583d7f67115cf4` |
+| Session Events 历史查询补充核对 | 同一 `dfb90ca`；查询、编码、游标与 Mapper 四文件相对 `918005e` 不变，见 [历史设计](chat-events-history-design.md)；本次变更前设计 `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
+| Session Events 事件顺序补充核对 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；证据与原基线对比见 Session Events 设计 §4.1 |
 | pi-mono Slash 对比基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -26,7 +26,7 @@
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989`；PR #210 最终实现 `9d0d76f4a571b559dc77ae52736caebbcc8fad88` 已通过 `a8192e047f4061bd385297d3dc6c4358362d0d49` 合并 |
 | 更新日期 | 2026-09-09 |
 
-Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-v2-history-design.md#thinking-original-text)。
+Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-history-design.md#thinking-original-text)。
 
 ## 1. 当前结论
 
@@ -68,10 +68,10 @@ M1 真实结束并提交可靠状态后才恢复 idle；中断与工具确认按
 索引按实际 GaussDB 执行计划和 100 并发压测选择，不冻结 500 毫秒周期、批次上限或超时。
 固定内部执行身份不穿透 HTTP；B07～B11 已确定竞争、reason 与故障语义，数据库结构、检查周期与容量数值在实施中校准。
 用户明确要求开始修改 ListEvents，当前入口为 [历史查询评审页](chat-api-review.html#listSessionEvents)；
-完整事件与 POST 同形，从旧到新、普通整数页码和取消固定快照已确认，见 [历史设计](chat-events-v2-history-design.md)。
+完整事件与 POST 同形，从旧到新、普通整数页码和取消固定快照已确认，见 [历史设计](chat-events-history-design.md)。
 分页默认 50/最多 200、result 只返回 events/nextPage、合法超范围页返回 200 空列表均已确认，不返回 total。
 POST 的决定与未决项仍见 [合并 POST 保留评审页](chat-api-review.html#submitSessionEvent)、
-[Events v2 设计](chat-events-v2-design.md) 和 [请求级 SSE 设计](chat-events-v2-stream-design.md)。
+[Session Events 设计](chat-events-design.md) 和 [请求级 SSE 设计](chat-events-stream-design.md)。
 旧确认页及其他分散评审页已删除，不保留变更提示或跳转占位；旧 JSON POST 仅从 Git 历史追溯。
 B01～B15 四组已全部按推荐确认，精确字段、错误码与示例已补齐；没有新的产品确认门槛。
 
@@ -97,7 +97,7 @@ SSE；Runtime Command 不建立请求级 SSE，Builtin 与 Skill 执行由用户
 `stream.end`、流内错误或网络中断后连接结束。下一次用户消息、Command、Steer、
 FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。公共 Command 协议待独立评审。
 
-以下段落只描述迁移前 v1，不再代表 v2 目标。v1 的 SSE 不是永久在线的 Session
+以下段落只描述迁移前 v1，不再代表 Session Events 目标。v1 的 SSE 不是永久在线的 Session
 订阅，也不是单独的第二条事件接口。它是一次
 有界执行的流式 HTTP 响应。Steer 和 FollowUp 被接受后进入当前 Session 的内部队列，
 其后续 Assistant、Tool 和状态事件继续由当前仍然打开的执行 SSE 输出；Abort 终止
@@ -109,11 +109,11 @@ FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。公共 Comman
 
 ## 2. 契约权威顺序
 
-1. [catalog.json](接口契约/catalog.json) 唯一决定当前清单：八项保留接口与两项 Events v2，各操作只出现一次。
+1. [catalog.json](接口契约/catalog.json) 唯一决定当前清单：八项保留接口与两项 Session Events，各操作只出现一次。
 2. [chat-api-review.html](chat-api-review.html) 是唯一当前接口详情页；按接口展开，展示各自确认状态和待联动事项。
 3. 清单引用的 JSON 模型是精确编辑源；Markdown 保存设计理由、已确认决定、未决项和注明 commit 的源码证据。
 
-完整维护规则见 [接口统一管理](chat-api-index.md)。原 v1/v2 HTML 已删除，不保留迁移页，
+完整维护规则见 [接口统一管理](chat-api-index.md)。原 旧独立 HTML 已删除，不保留迁移页，
 也不得重新生成旧页面。旧两个 Events 模型已删除，旧字段及报文仅从 Git 历史追溯。
 两个 Events 只有一份已确认目标方案，不保留两套当前契约。
 OpenAPI、WebSocket/AsyncAPI 仍已废弃，不因入口整理而恢复。
@@ -201,7 +201,7 @@ CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` �
 | 9 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回按状态过滤的 Builtin/Skill 轻量清单，固定 Builtin 顺序后追加 Skill |
 | 10 | `POST` | `/sessions/{sessionId}/command` | Builtin JSON / Skill SSE | Builtin 完成后返回；Skill 复用事件执行与恢复 |
 
-本表第 4、5 项采用最新 Events v2；其余八项保留既有契约。配置事件与 Skill 的衔接已按 B12～B14 同步。旧 v1 POST/GET 字段仅作迁移基线，目标语义已定稿。
+本表第 4、5 项采用最新 Session Events；其余八项保留既有契约。配置事件与 Skill 的衔接已按 B12～B14 同步。旧 v1 POST/GET 字段仅作迁移基线，目标语义已定稿。
 三个独立控制接口不再计入目录或作为兼容别名。
 
 公共资源没有 `Run`。一次用户输入会触发内部 active execution，但调用方使用
@@ -329,7 +329,7 @@ Compact 接受后不因 HTTP 断线取消；
 
 ## 6. Runtime 内部设计不变量
 
-本节 HTTP 字段描述保留为 v1 迁移基线；v2 请求与输出字段以独立评审模型为准。
+本节 HTTP 字段描述保留为 v1 迁移基线；Session Events 请求与输出字段以独立评审模型为准。
 
 - 一个 Session 绑定一个不可变 `agentId`，允许切换 `modelId`；模型不是 Session 身份的一部分。
 - 公共标识字段固定命名为 `agentId`、`toolId`、`skillId` 和 `sessionId`；对应值共用类型化资源 ID 规则，精确正则只在 [`接口契约/common.json`](接口契约/common.json) 定义。
@@ -512,6 +512,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.16.0 | 2026-09-09 | 统一 Session Events 设计入口与职责命名。 |
 | 3.15.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 3.14.0 | 2026-09-08 | B01～B15 全部确认，统一 Events/Skill 精确契约、恢复边界与配置映射；清除当前待确认标记，交付实施校准清单。 |
 | 3.13.0 | 2026-09-07 | 同步 HTTP 1.48.0：Command 复用既有业务响应、删除入口及内部回执字段；全局目标主图、GET 与 Events 评审边界不变。 |
@@ -520,25 +521,25 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 | 3.11.1 | 2026-09-07 | 删除四个废弃评审页与迁移占位生成逻辑，修复引用并阻止文件回流；当前十项契约和评审决定不变。 |
 | 3.11.0 | 2026-09-07 | 当前十项 API 统一到仓库清单与页面；旧入口只导航，旧 Events 报文移除，新增统一生成和防回流校验；确认状态不变。 |
 | 3.10.0 | 2026-09-07 | 当前目标收敛为十项，退役三个独立控制接口；补充 FollowUp 未来跨实例设计但不启用，保留 M6 与 Events 部分确认状态。 |
-| 3.9.4 | 2026-09-07 | 合并设计主线 `2d0dba26`，保留 Events v2 历史查询最新决定，同时同步 HTTP 1.45.1 的 Help 元数据指南、全局目标类图与用户统一实施责任；仅整合设计，不修改实现或公共 Mate 契约。 |
-| 3.9.3 | 2026-09-07 | 同步 Events v2 0.5.3、请求级 SSE 0.3.6 与历史查询 0.2.2：确认 L4 合法超范围页 200 空成功；保持实现、Mate 及 v1 不变。 |
-| 3.9.2 | 2026-09-06 | 同步 Events v2 0.5.2、请求级 SSE 0.3.5 与历史查询 0.2.1：确认默认 50/上限 200 与无 total，继续 L4 空页评审；保持实现、Mate 及 v1 不变。 |
-| 3.9.1 | 2026-09-06 | 同步 Events v2 0.5.1、请求级 SSE 0.3.4 与历史查询 0.2.0：确认普通整数分页和取消固定快照，评审数量与 total；保持实现、Mate 及 v1 不变。 |
-| 3.9.0 | 2026-09-06 | 同步 Events v2 0.5.0、请求级 SSE 0.3.3 与历史查询 0.1.0：按用户要求切换 ListEvents，补齐完整事件及固定快照分页候选和目标图；POST 未决项保留，不改实现、Mate 或 v1 迁移基线。 |
-| 3.8.2 | 2026-09-05 | 同步 Events v2 0.4.2 与请求级 SSE 0.3.2：确认同实例提交后通知、等待目标去重及实测索引选型；补齐终态登记竞态和每响应投递门控，保持数值参数、完整操作及 Mate 契约边界不变。 |
-| 3.8.1 | 2026-09-05 | 同步 Events v2 0.4.1 与请求级 SSE 0.3.1：确认单消息数据库准入，M1 未完成前拒绝 M2；明确等待确认时 SSE 结束但资源仍 running，补齐源码证据与目标图。并行修订：同步 HTTP 1.45.1 的统一实施责任；用户负责 Builtin、Skill 及共享集成验收，保留 Help 与 Events v2 已确认设计。 |
-| 3.8.0 | 2026-09-04 | 同步 Events v2 0.4.0 与请求级 SSE 0.3.0：确认数据库中断交接、实例批量检查及共享结束记录，本期不引入 Redis；补齐目标类图、时序、源码差距和验收，未修改实现或整体确认接口。 |
-| 3.7.3 | 2026-09-04 | 同步 HTTP 1.45.0 已确认 Help 四字段元数据指南、无参与缓存演进；保持其他 Builtin、Events v2 评审和 Mate 公共接口不变。 |
-| 3.7.2 | 2026-09-04 | 同步 Events v2 0.3.2 与请求级 SSE 0.2.2：确认原消息保留输出、中断只回执与等待同一停止 idle；补充实例定位的源码证据和解释，尚未选择路由方案。不整体确认操作，不修改实现或 Mate 契约。 |
-| 3.7.1 | 2026-09-04 | 同步 Events v2 0.3.1 与请求级 SSE 0.2.1：确认对应 idle 后关闭，含等待工具确认分段，新确认 POST 接收续跑；不整体确认操作，不改变输出字段、实现或 Mate 公共契约。 |
-| 3.7.0 | 2026-09-04 | 同步 Events v2 0.3.0：合并 POST 提交与 SSE 推送、确认完整本次 user.* 首帧，撤销内部独立 GET stream，保留 ListEvents；更新评审状态、源码证据与图，结束细节仍候选，不修改 Mate 公共契约或 v1 基线。 |
-| 3.6.8 | 2026-09-04 | 同步 Events v2 0.2.2：确认 GET stream S1～S4 的四项 A 选择，移除对应待选题；保留其他具体字段、连接细节和接口整体评审状态，不影响已确认 POST 与 v1 迁移基线。 |
-| 3.6.7 | 2026-09-04 | 同步 Events v2 0.2.1：确认 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 五个基础类型名；增量结构、字段和 GET 整体仍在评审，不改 v1 迁移基线。 |
-| 3.6.6 | 2026-09-04 | 合并并行文档修订，保留 Events v2 POST 已确认及 GET stream 评审状态，同时保留 HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发决定。 |
-| 3.6.5 | 2026-09-04 | 同步 Session Events v2 0.2.0：第一个 POST 已整体确认，移除旧待选题；当前页切换到第二个 GET stream，保留独立已确认页面并开始流契约评审。 并行修订：同步 HTTP 1.44.1：Skill Command 由其他同事并行开发，七个 Builtin 是本会话交付范围，不是全产品禁用规则。 |
-| 3.6.4 | 2026-09-04 | 同步 Session Events v2 0.1.7：确认依赖顺序、短事务有序追加与 ListEvents 展示规则；时间戳不参与重排，内部序号仍不公开；补充源码核对，其他字段保持待评审。 并行修订：同步 HTTP 1.44.0：七个 Builtin 使用普通 JSON，Skill 执行延期，取消 Name 边车与通用生命周期；合并设计主线 `332e7faba9f35b657b17013287507449a68359c3`，保留 Events v2 的 `access-token` 必填决定与独立评审，不推导公共 Command 协议。 |
-| 3.6.3 | 2026-09-04 | 同步 Session Events v2 0.1.6：三种用户事件统一携带 `access-token`，JWT/APPKEY 模式均必填；从待评审项中移除此项，其他字段继续评审。 |
-| 3.6.2 | 2026-09-04 | 同步 Session Events v2 0.1.5：公共事件身份统一使用 `eventId`，POST、live SSE 和权威历史不公开内部 `entryId/entrySeq`；其余 POST 字段继续评审。 |
+| 3.9.4 | 2026-09-07 | 合并设计主线 `2d0dba26`，保留 Session Events 历史查询最新决定，同时同步 HTTP 1.45.1 的 Help 元数据指南、全局目标类图与用户统一实施责任；仅整合设计，不修改实现或公共 Mate 契约。 |
+| 3.9.3 | 2026-09-07 | 同步 Session Events 0.5.3、请求级 SSE 0.3.6 与历史查询 0.2.2：确认 L4 合法超范围页 200 空成功；保持实现、Mate 及 v1 不变。 |
+| 3.9.2 | 2026-09-06 | 同步 Session Events 0.5.2、请求级 SSE 0.3.5 与历史查询 0.2.1：确认默认 50/上限 200 与无 total，继续 L4 空页评审；保持实现、Mate 及 v1 不变。 |
+| 3.9.1 | 2026-09-06 | 同步 Session Events 0.5.1、请求级 SSE 0.3.4 与历史查询 0.2.0：确认普通整数分页和取消固定快照，评审数量与 total；保持实现、Mate 及 v1 不变。 |
+| 3.9.0 | 2026-09-06 | 同步 Session Events 0.5.0、请求级 SSE 0.3.3 与历史查询 0.1.0：按用户要求切换 ListEvents，补齐完整事件及固定快照分页候选和目标图；POST 未决项保留，不改实现、Mate 或 v1 迁移基线。 |
+| 3.8.2 | 2026-09-05 | 同步 Session Events 0.4.2 与请求级 SSE 0.3.2：确认同实例提交后通知、等待目标去重及实测索引选型；补齐终态登记竞态和每响应投递门控，保持数值参数、完整操作及 Mate 契约边界不变。 |
+| 3.8.1 | 2026-09-05 | 同步 Session Events 0.4.1 与请求级 SSE 0.3.1：确认单消息数据库准入，M1 未完成前拒绝 M2；明确等待确认时 SSE 结束但资源仍 running，补齐源码证据与目标图。并行修订：同步 HTTP 1.45.1 的统一实施责任；用户负责 Builtin、Skill 及共享集成验收，保留 Help 与 Session Events 已确认设计。 |
+| 3.8.0 | 2026-09-04 | 同步 Session Events 0.4.0 与请求级 SSE 0.3.0：确认数据库中断交接、实例批量检查及共享结束记录，本期不引入 Redis；补齐目标类图、时序、源码差距和验收，未修改实现或整体确认接口。 |
+| 3.7.3 | 2026-09-04 | 同步 HTTP 1.45.0 已确认 Help 四字段元数据指南、无参与缓存演进；保持其他 Builtin、Session Events 评审和 Mate 公共接口不变。 |
+| 3.7.2 | 2026-09-04 | 同步 Session Events 0.3.2 与请求级 SSE 0.2.2：确认原消息保留输出、中断只回执与等待同一停止 idle；补充实例定位的源码证据和解释，尚未选择路由方案。不整体确认操作，不修改实现或 Mate 契约。 |
+| 3.7.1 | 2026-09-04 | 同步 Session Events 0.3.1 与请求级 SSE 0.2.1：确认对应 idle 后关闭，含等待工具确认分段，新确认 POST 接收续跑；不整体确认操作，不改变输出字段、实现或 Mate 公共契约。 |
+| 3.7.0 | 2026-09-04 | 同步 Session Events 0.3.0：合并 POST 提交与 SSE 推送、确认完整本次 user.* 首帧，撤销内部独立 GET stream，保留 ListEvents；更新评审状态、源码证据与图，结束细节仍候选，不修改 Mate 公共契约或 v1 基线。 |
+| 3.6.8 | 2026-09-04 | 同步 Session Events 0.2.2：确认 GET stream S1～S4 的四项 A 选择，移除对应待选题；保留其他具体字段、连接细节和接口整体评审状态，不影响已确认 POST 与 v1 迁移基线。 |
+| 3.6.7 | 2026-09-04 | 同步 Session Events 0.2.1：确认 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 五个基础类型名；增量结构、字段和 GET 整体仍在评审，不改 v1 迁移基线。 |
+| 3.6.6 | 2026-09-04 | 合并并行文档修订，保留 Session Events POST 已确认及 GET stream 评审状态，同时保留 HTTP 1.44.1 的 Builtin JSON 与 Skill 并行开发决定。 |
+| 3.6.5 | 2026-09-04 | 同步 Session Events 0.2.0：第一个 POST 已整体确认，移除旧待选题；当前页切换到第二个 GET stream，保留独立已确认页面并开始流契约评审。 并行修订：同步 HTTP 1.44.1：Skill Command 由其他同事并行开发，七个 Builtin 是本会话交付范围，不是全产品禁用规则。 |
+| 3.6.4 | 2026-09-04 | 同步 Session Events 0.1.7：确认依赖顺序、短事务有序追加与 ListEvents 展示规则；时间戳不参与重排，内部序号仍不公开；补充源码核对，其他字段保持待评审。 并行修订：同步 HTTP 1.44.0：七个 Builtin 使用普通 JSON，Skill 执行延期，取消 Name 边车与通用生命周期；合并设计主线 `332e7faba9f35b657b17013287507449a68359c3`，保留 Session Events 的 `access-token` 必填决定与独立评审，不推导公共 Command 协议。 |
+| 3.6.3 | 2026-09-04 | 同步 Session Events 0.1.6：三种用户事件统一携带 `access-token`，JWT/APPKEY 模式均必填；从待评审项中移除此项，其他字段继续评审。 |
+| 3.6.2 | 2026-09-04 | 同步 Session Events 0.1.5：公共事件身份统一使用 `eventId`，POST、live SSE 和权威历史不公开内部 `entryId/entrySeq`；其余 POST 字段继续评审。 |
 | 3.6.1 | 2026-09-03 | 同步 HTTP 1.43.5：十三个接口统一采用源码测试中的具体 Header 示例；明确 `X-HW-ID` 是用户凭据 ID；仅在 POST Events/Command 说明凭据的内存保留期限、Mate tool execute 发送范围和禁止落盘范围。 |
 | 3.6.0 | 2026-09-03 | 用户确认 Session Events 资源模型 A：Claw 拆分 POST、Session live SSE 与固定快照历史，执行保持内部状态；保留 HTTP 1.43.4 为迁移前基线，并启动第一个 POST operation 字段评审。 |
 | 3.5.5 | 2026-09-01 | 记录 mate-service 普通消息 Events 公共路径已确认并链接单 operation 评审稿；事件命名、事件身份、Thinking/Tool 投影和 GET 恢复契约保持待确认。 |

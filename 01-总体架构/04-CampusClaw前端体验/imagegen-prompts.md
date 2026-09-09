@@ -1,6 +1,6 @@
 # CampusClaw 高保真视觉稿 ImageGen Prompts
 
-> 以下为历史素材的生成输入。当前产品内容以 [Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-v2-history-design.md#thinking-original-text)和前端正文为准。
+> 以下为历史素材的生成输入。当前产品内容以 [Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)和前端正文为准。
 
 
 | 属性 | 值 |

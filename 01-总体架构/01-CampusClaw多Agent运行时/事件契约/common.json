@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "2.0.0-target.2",
+    "version": "1.51.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -78,7 +78,7 @@
     }
   },
   "eventContract": {
-    "version": "2026-09-08.1",
+    "version": "2026-09-09.1",
     "semanticStatus": "confirmed",
     "detailStatus": "implementation-ready",
     "toolErrorCodes": {
@@ -181,7 +181,7 @@
           "user.tool_confirmation",
           "toolCallId/result/denyMessage",
           "toolCallId、result 必填",
-          "result=allow/deny；denyMessage 仅 deny 可选非空文本，最多 4096 UTF-16 单元；allow 禁止带该字段。一次仅一个待确认调用。"
+          "result=allow/deny；denyMessage 仅 deny 可选非空文本，最多 4096 UTF-16 单元；allow 禁止带该字段。一次仅一个待确认调用。工具结果按 sourceEventId 与 toolCallId 关联；确认回执只匹配对应调用之后、下一条 user.message 之前的提交顺序。输入框的较小上限不用于响应解码。"
         ],
         [
           "agent.message / agent.thinking",
@@ -199,7 +199,7 @@
           "agent.tool_call",
           "toolCallId/toolName/arguments/requiresConfirmation",
           "全部必填",
-          "toolCallId/toolName 非空字符串；arguments JSON 对象；requiresConfirmation 布尔值。CallMateTool 保留 tool/args，省略的 args 归一为 {}。"
+          "toolCallId/toolName 非空字符串；arguments JSON 对象；requiresConfirmation 布尔值。CallMateTool 保留 tool/args，省略的 args 归一为 {}。模型参数不符合工具 Schema 时仍保留调用事件，由执行层返回失败结果；读取不以 tool/args 的业务格式拒绝整个 SSE 或历史。"
         ],
         [
           "agent.tool_result",

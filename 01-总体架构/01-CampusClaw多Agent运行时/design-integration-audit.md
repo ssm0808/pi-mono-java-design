@@ -50,7 +50,7 @@ packages/coding-agent/src/core/slash-commands.ts；未更新 Runtime 内核基�
 | http-v1-campusclaw-directory | 769b819 | 核心决定已吸收，不需重复合并 | [HTTP §2.1](chat-http-v1-design.md#21-session-生命周期) 已有 agent/{agentId}/.campusclaw、HTTP 文件名边界，历史保留 1.31.0 |
 | model-manager-internal-gateway-noauth | 78c01c9 | 已吸收并被后续 Chat 协议演进，不是遗漏 | [Provider 设计](../../02-服务与接口/03-模型管理Provider契约/README.md) 显式记录完整提交、ProviderAuth.none 与免应用认证；原 Responses create/cancel 已被后续 Chat 替代，不能恢复旧接口 |
 | restore-command-global-class-view | 06bea56 | 已按新版 Help 重做并合入，不是遗漏 | main 的 c3ad422 / 04e13e3；[全局主图说明](../../04-命令与技能/00-Slash-Command通用模块/README.md#11-全局目标类图) 明确以 06bea56 为完整版骨架，本次不重排主图 |
-| event-preview-terminology | da6e369 | 旧术语补丁未原样吸收；核心语义已被 v2 覆盖 | [流设计 §事件投影](chat-events-v2-stream-design.md) 已明确 preview 不持久化、不补发及 completed 权威；当前采用 agent.* + phase，不恢复旧事件名及旧预览类型全集 |
+| event-preview-terminology | da6e369 | 旧术语补丁未原样吸收；核心语义已被 Session Events 覆盖 | [流设计 §事件投影](chat-events-stream-design.md) 已明确 preview 不持久化、不补发及 completed 权威；当前采用 agent.* + phase，不恢复旧事件名及旧预览类型全集 |
 | code-layering-rules | b34ef95 | 另一个未合入专题，但不能证明已确认 | 分支中的 01-总体架构/06-CampusClaw代码分层与规则/README.md 明确“推荐目标，待评审”；还含已被替代的并行人员分工。本次只记录，不自动颁布新工程规则 |
 
 补充核对了任务「制定 CampusClaw 内部整改方案」与「分析 event 接口设计稳定性」；其可读取内容是
@@ -61,7 +61,7 @@ packages/coding-agent/src/core/slash-commands.ts；未更新 Runtime 内核基�
 
 - 两跳 GET 共享字段校验，逐状态精确比对响应；反例覆盖旧字段、候选值替代、空/错误 input、false 附件标记、排序、重复命令与状态过滤。
 - 当前十项清单、旧 Claw 文件不存在、HTML 嵌入 JSON 与生成源同步，继续由统一校验入口检查。
-- Help 十组测试保护无参、四字段结果与共享 Header 同步；POST 精确 JSON 源和 Events v2 源与本轮起点保持不变。
+- Help 十组测试保护无参、四字段结果与共享 Header 同步；POST 精确 JSON 源和 Session Events 源与本轮起点保持不变。
 - Command HTTP 流图只调整 GET/POST 来源选择；Skill 图只解释共享 GET 与内部 Builtin 快路径。完整版全局类图不变。
 - 本次是设计整合与有限范围核查，不是对所有历史会话、所有实现 PR 或全部产品行为的完整审计。
   除 GET 精简与 Help Header 投影遗漏外，未找到其他可以证实“已确认、仍有效、却缺失于当前主线”的接口决定；分层专题待评审事项不能归零。
@@ -79,7 +79,7 @@ packages/coding-agent/src/core/slash-commands.ts；未更新 Runtime 内核基�
 - Help 专项 DOM 核对两组 Header、全部响应及无 JS 展示值通过；HTML 字节与共享渲染结果一致。
 - Runtime DOM 测试遍历十项、认证/响应/语言与无 JS 回退，通过；同时只展开一项，滚动 DOM 变更数为 0。
   这不是宿主浏览器的滚动帧率或 HTML 像素级验收，未据此宣称真实滚动性能已验证。
-- Runtime/Mate POST 精确模型与 Events v2 模型未变；未运行 Java、数据库或端到端执行测试。
+- Runtime/Mate POST 精确模型与 Session Events 模型未变；未运行 Java、数据库或端到端执行测试。
   原工作树中无关的虚拟线程 README 删除保持原样，不纳入提交。
 
 ## 4. 冗余清理（2026-09-07）
@@ -101,7 +101,7 @@ packages/coding-agent/src/core/slash-commands.ts；未更新 Runtime 内核基�
 company-http-api-design 的 Markdown、PlantUML/SVG、HTML 脚本和 diff 检查通过。
 DOM 交互遍历当前十项、Help 的两组 Header/六个响应及 Mate GET 的七个响应，
 无脚本回退与生成字节同步通过；当前总览滚动事件的 DOM 变更数为 0。
-当前十项 operation 精确 JSON、Events v2 全部 JSON、catalog、Mate GET 模型和保留图源/图产物
+当前十项 operation 精确 JSON、Session Events 全部 JSON、catalog、Mate GET 模型和保留图源/图产物
 与整理起点相同；变化仅为文档职责、派生流程、废止文件及展示版本。
 未运行 Java、数据库或端到端执行测试；不将 DOM 检查当作宿主浏览器的像素或滚动帧率验收。
 原工作树中无关的虚拟线程 README 删除仍保持原样，不纳入本任务提交。

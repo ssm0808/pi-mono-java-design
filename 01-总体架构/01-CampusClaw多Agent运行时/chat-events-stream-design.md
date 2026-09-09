@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.6.0 |
+| 文档版本 | 0.7.0 |
 | 状态 | 合并方向、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；B01～B15 语义已确认，精确契约已定稿，可进入实现；数据库数值校准，target-only |
 | 设计仓本次变更前基线 | `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
 | L5 字段确认前设计仓基线 | `7349cdf2e037700ddf4917eebef0e19799252f47`；只同步目标字段决定，未重新核对实现 |
@@ -17,7 +17,7 @@
 | 外部参考核对 | Claude Managed Agents 官方事件流与 List Events，2026-09-04，Beta |
 | 更新日期 | 2026-09-09 |
 
-Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-v2-history-design.md#thinking-original-text)。
+Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-history-design.md#thinking-original-text)。
 
 ## 1. 当前操作与已确认范围
 
@@ -33,7 +33,7 @@ access-token: opaque-access-token
 一次 POST 发送一条用户事件，在同一响应中接收对应 SSE，不再先开 GET 再 POST。
 原独立 `GET /sessions/{sessionId}/events/stream` 已撤销；普通
 `GET /sessions/{sessionId}/events` 历史查询保留，不合并进写请求。
-当前模型为 [合并 POST](接口契约-v2/操作/01-submit-session-event.json)，
+当前模型为 [合并 POST](事件契约/操作/01-submit-session-event.json)，
 [POST 保留评审页](chat-api-review.html#submitSessionEvent) 定位统一页面中的 POST 操作。
 用户已明确要求开始修改历史查询，[当前评审页](chat-api-review.html#listSessionEvents) 因此切换为
 ListEvents；POST 已确认决定和未决项仍保留，不视为整体通过。
@@ -45,7 +45,7 @@ S1 data-only、S2 type + phase 与五个输出类型名也继续有效。
 M6 单消息准入已确认：同一 Session 的 M1 未完成前，拒绝任何调用方提交的 M2，
 不将 M2 排队或写入已接受事件历史。接受 user.message 时，在数据库短事务中锁定
 Session、复核 idle、追加消息并改为 running，提交后才启动执行和输出回执。
-具体数据库证据与接受/释放边界见 [总体设计 §3.2](chat-events-v2-design.md#32-已确认一个-session-同时只处理一条用户消息)。
+具体数据库证据与接受/释放边界见 [总体设计 §3.2](chat-events-design.md#32-已确认一个-session-同时只处理一条用户消息)。
 
 用户进一步明确允许首个业务帧返回本次提交的完整 `user.*` 事件，含 eventId；
 它只向本次 POST 回执一次，后续才推送对应 Agent/Session 事件，不广播其他用户输入。
@@ -79,8 +79,8 @@ ResultBean 外壳不再使用；S4 的只读 GET 无工具令牌规则不适用�
 保持本条响应的回执先行。网络写出在事务外，不为等客户端收完首帧而锁住 Session。
 
 B01～B15 已确认，完整字段、成功/失败、工具确认、中断配对和 Skill 示例集中在
-[POST 精确模型](接口契约-v2/操作/01-submit-session-event.json) 与
-[共享字段/错误表](接口契约-v2/common.json)，由统一 HTML 展示；本页不维护第二套示例。
+[POST 精确模型](事件契约/操作/01-submit-session-event.json) 与
+[共享字段/错误表](事件契约/common.json)，由统一 HTML 展示；本页不维护第二套示例。
 
 每帧是单行 JSON 加空行，JSON 内换行必须转义。没有 SSE event/id 字段，不包装 ResultBean。
 200 表示已进入接受后的流式响应，不是任务成功；完整首帧是持久化接收凭据，不是执行终态。
@@ -120,7 +120,7 @@ M1 完成后 M2 才能开始。跨这个完成边界的迟到中断、已接受�
 按 B08/B09 处理：必填 targetEventId 仅匹配原消息，重复停止 409；自然完成保留真实原因。等待超时只断流并对账。
 
 跨实例停止请求、数据库事务、批量检查、M7 本地通知与等待去重，以及容量和故障边界，
-只在[总体设计 §4.4](chat-events-v2-design.md#44-已确认数据库停止请求与实例批量检查)维护。
+只在[总体设计 §4.4](chat-events-design.md#44-已确认数据库停止请求与实例批量检查)维护。
 本流只消费该机制产生的已提交目标终态，并遵守首帧先行、终态去重与慢连接隔离。
 超时或实例失联不能伪造 idle；不把 ListEvents 当作内部通知通道。
 
@@ -135,7 +135,7 @@ M1 完成后 M2 才能开始。跨这个完成边界的迟到中断、已接受�
 |---|---|---|
 | user.* 首帧 | 不带 phase，仅本次完整回执 | eventId/type/createdAt 及对应已确认业务字段；完整内容已确认 |
 | agent.message | phase=delta/completed | completed 的 content 为完整正文字符串已确认（L5）；delta content 为增量字符串且无时间，完整 createdAt 保存一次为 UTC 毫秒；同 ID 完整内容替换 preview |
-| agent.thinking | phase=delta/completed | 执行 thinking=true 且有可读推理时输出原文；completed 原文入历史；见[Thinking 展示](chat-events-v2-history-design.md#thinking-original-text) |
+| agent.thinking | phase=delta/completed | 执行 thinking=true 且有可读推理时输出原文；completed 原文入历史；见[Thinking 展示](chat-events-history-design.md#thinking-original-text) |
 | agent.tool_call | 无 phase 的完整事件 | arguments JSON 对象已确认（L6）；Mate 的 toolName=CallMateTool、arguments={tool,args} 已确认（L9）；requiresConfirmation 必填布尔，sourceEventId 指原消息 |
 | agent.tool_result | 无 phase 的完整事件 | content 数组且仅包含 text 块已确认（L7/L8）；每条结果必有布尔 isError、成功 false/失败 true 已确认（L10）；失败必有稳定 errorCode，成功省略；至少一个 text 块，允许空文本 |
 | session.status_idle | 无 phase 的完整事件 | eventId/type/createdAt/reason；reason=done/terminated/failed/confirming 已确认；failed 必有 errorCode/message |
@@ -172,7 +172,7 @@ L1～L10 和 B01～B15 的原始决定按历史记录保留；最新字段与错
 仍在执行时可以后续补读或重新加载；没有可靠终态证据就不能标为完成。未收到首帧时，没有
 幂等键或客户端相关 ID，就可能无法唯一判定同文请求是否已接受；保留草稿并提示不确定，
 不能凭相同文本猜测后重发。已确认的普通分页边界、完整帧同形和对账细节见
-[ListEvents 设计](chat-events-v2-history-design.md)。原消息与中断响应共用的 idle 在历史
+[ListEvents 设计](chat-events-history-design.md)。原消息与中断响应共用的 idle 在历史
 仅一条；历史页读完、旧 idle 或确认等待的 idle 都不是当前资源可接受 M2 的凭据。
 分页大小、结果元数据与空页规则只在历史专题维护；Claw 执行关联按 sourceEventId 实施；Mate 公共投影仍需独立对齐。
 时间允许回退，不用最后 createdAt 作下界，也不自行构造内部序号。
@@ -185,11 +185,11 @@ L1～L10 和 B01～B15 的原始决定按历史记录保留；最新字段与错
 
 源码为 `918005ee8ccc88d179fc31a0de17a92b4a01383b`，相对原 `a8192e0` 的七个
 复核文件均无变化。完整仓库相对路径与符号列在
-[总体设计 §4.2](chat-events-v2-design.md#42-本次合并方案源码复核)。
+[总体设计 §4.2](chat-events-design.md#42-本次合并方案源码复核)。
 
 观察到的当前代码：POST SSE / GET 历史、单 subscriber、有界流；正常结束为
 session.status.idle + stream.end，失败为 stream.error，随后 complete；断线 detach
-不 abort。目标差距：三输入联合请求、v2 完整首帧、data-only、type + phase、
+不 abort。目标差距：三输入联合请求、Session Events 完整首帧、data-only、type + phase、
 eventId、不公开序号、请求控制绑定与已确认的对应 idle 关闭都还需要改造。
 
 [Claude Managed Agents 事件流](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
@@ -205,41 +205,42 @@ Mate 公共路径、身份映射、读取流或用户授权。桥接方案需后
 
 B01～B15 已一次确认，不再列单字段选项。精确契约已定稿；数据库控制字段/约束、
 实测索引、检查周期、超时和容量数值由实施校准。跨实例确认通过数据库传递已提交决定与
-完整事件，具体应用层骨架见[总体设计 §4.5](chat-events-v2-design.md#45-确认续跑的跨实例交接target-only-实施骨架)。
+完整事件，具体应用层骨架见[总体设计 §4.5](chat-events-design.md#45-确认续跑的跨实例交接target-only-实施骨架)。
 
 实施验收需覆盖：原响应保留执行输出，中断响应只含回执与同一停止 idle，终态 eventId 一致；
 三输入首帧与请求内容一致且只一次；提交前绑定/回执先行；极快完成；
 确认续跑和中断目标竞态；同 Session 下一次执行隔离；断线与慢连接不影响执行；
 失败/确认等待不能被误判成功；无首帧结果不确定；旧时间晚写与有序历史。
-数据库中断、单消息准入与 M7 的完整实施验收统一见[总体设计 §5](chat-events-v2-design.md#5-实施切片与验收)，
+数据库中断、单消息准入与 M7 的完整实施验收统一见[总体设计 §5](chat-events-design.md#5-实施切片与验收)，
 本节不重复维护调度与数据库检查清单。
-本轮仅改设计，未运行尚未实现的 v2 Runtime 集成测试。
+本轮仅改设计，未运行尚未实现的 Session Events Runtime 集成测试。
 
-事件与配置规则见[历史专题 §8](chat-events-v2-history-design.md#8-事件与配置规则)，报文示例与共享契约一致。
+事件与配置规则见[历史专题 §8](chat-events-history-design.md#8-事件与配置规则)，报文示例与共享契约一致。
 
 ## 8. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.7.0 | 2026-09-09 | 统一 Session Events 命名并引用共享事件消费规则。 |
 | 0.6.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
-| 0.5.0 | 2026-09-08 | 确认 B01～B15，补齐根消息绑定、结束原因、控制竞争、跨实例确认与错误处理；例子和字段改为引用共享精确模型，Skill 复用此生命周期。 |
-| 0.4.6 | 2026-09-08 | 同步 L10：每条工具结果必有布尔 isError；errorCode、文案与其他细节合并到 B01～B15 批量评审，接口未整体确认，PlantUML 不变。 |
-| 0.4.5 | 2026-09-08 | 同步 L9 Mate 工具名与参数包装，结果仍为文本块数组；成败标记、错误及整体仍待评审，PlantUML 不变。 |
-| 0.4.4 | 2026-09-08 | 同步 L7/L8：agent.tool_result.content 使用仅含 text 块的数组；Mate 返回链路与待决工具身份投影由历史专题维护，其他字段及 POST 整体仍待评审，PlantUML 不变。 |
-| 0.4.3 | 2026-09-07 | 同步 L6：agent.tool_call.arguments 使用 JSON 对象；其他工具字段、结果与整个 POST 仍待评审，源码证据及 PlantUML 不变。 |
-| 0.4.2 | 2026-09-07 | 同步 L5：agent.message completed 的 content 使用完整正文字符串；其余字段、错误和整个 POST 仍待评审，源码证据及 PlantUML 不变。 |
-| 0.4.1 | 2026-09-07 | 删除数据库中断机制与验收的重复副本，改引总体设计；历史参数引用 ListEvents，流响应与确认范围不变。 |
-| 0.4.0 | 2026-09-07 | 同步三个独立控制接口退役与 FollowUp 暂不启用；本期仍仅三输入且拒绝执行中的下一条消息，输出和未决项不变。 |
-| 0.3.6 | 2026-09-07 | 历史补读同步 L4 合法超范围空成功；空页不证明执行结束或 POST 未接受，POST 报文和确认状态不变。 |
-| 0.3.5 | 2026-09-06 | 历史补读同步默认 50/上限 200 与无 total 决定；POST 报文、结束规则和确认状态不变。 |
-| 0.3.4 | 2026-09-06 | 历史对账同步普通整数分页、取消固定快照决定；POST 报文、结束规则和确认状态不变。 |
-| 0.3.3 | 2026-09-06 | 当前评审切换至 ListEvents；POST 保留独立页面和未决项，链接完整事件同形、固定快照与断线对账候选，不变更 POST 报文或确认状态。 |
-| 0.3.2 | 2026-09-05 | 确认 M7：同实例提交后通知、固定执行目标的等待去重、实测索引选型；补齐登记后补读、每响应终态去重及清理边界。设计基线 `e370d2d`，补充源码 `dfb90ca`；不改变公共报文或冻结数值参数。 |
-| 0.3.1 | 2026-09-05 | 确认 M6：M1 未完成前拒绝 M2，消息与 running 状态同事务提交；确认等待的 SSE idle 不释放资源准入，控制事件另行检查。补充目标生命周期与验收；迟到中断和超时仍待评审。 |
-| 0.3.0 | 2026-09-04 | 确认 M5 数据库停止请求与实例批量检查；明确 A/B 通过持久化结果交接、首帧投递屏障及固定内部目标，本期不引入 Redis；数据库与故障参数仍待评审。 |
-| 0.2.2 | 2026-09-04 | 确认 M4 原消息与中断响应分工、共用同一停止 idle 的 eventId；补充多实例定位问题解释和当前源码链接，更新生命周期图；不选择路由实现或确认其他字段。 |
-| 0.2.1 | 2026-09-04 | 记录用户确认 M3：对应 idle 后关闭，等待工具确认时也关闭，新确认 POST 接收续跑。同步状态和生命周期图；精确 reason、并发输出绑定及错误细节仍候选，已确认目标契约，待实现。 |
-| 0.2.0 | 2026-09-04 | 撤销独立 GET stream，合并到 POST SSE，确认完整本次 user.* 首帧；保留 S1/S2、Header、eventId 与排序；三输入绑定和结束规则仍候选，更新源码基线与三图。 |
-| 0.1.2 | 2026-09-04 | 确认 S1 data-only、S2 type + phase、S3 用户事件只走回执/历史、S4 GET 不要求 access-token；移除四项选择题并记录精确选择，保留其余字段与 GET 整体评审状态。 |
-| 0.1.1 | 2026-09-04 | 按用户指定确认五个基础类型名，同步全部候选示例及流/历史同名约束；S2 仅继续评审增量结构，不保留会重新开放旧名称的选项；phase、字段和 GET 整体仍未确认。 |
-| 0.1.0 | 2026-09-04 | 第一个 POST 确认后启动 GET stream；提供 Header、帧、基础事件、故障与恢复候选，保留四项待确认，记录当前实现差距与 Mate 映射。 |
+| 0.5.0 | 2026-09-08 | 明确 B01～B15，补齐根消息绑定、结束原因、控制竞争、跨实例确认与错误处理。 |
+| 0.4.6 | 2026-09-08 | 同步 L10：每条工具结果必有布尔 isError。 |
+| 0.4.5 | 2026-09-08 | 同步 L9 Mate 工具名与参数包装，结果仍为文本块数组。 |
+| 0.4.4 | 2026-09-08 | 同步 L7/L8：agent.tool_result.content 使用仅含 text 块的数组。 |
+| 0.4.3 | 2026-09-07 | 同步 L6：agent.tool_call.arguments 使用 JSON 对象。 |
+| 0.4.2 | 2026-09-07 | 同步 L5：agent.message completed 的 content 使用完整正文字符串。 |
+| 0.4.1 | 2026-09-07 | 删除数据库中断机制与验收的重复副本，改引总体设计。 |
+| 0.4.0 | 2026-09-07 | 同步三个独立控制接口退役与 FollowUp 暂不启用。 |
+| 0.3.6 | 2026-09-07 | 历史补读同步 L4 合法超范围空成功。 |
+| 0.3.5 | 2026-09-06 | 历史补读同步默认 50/上限 200 与无 total 决定。 |
+| 0.3.4 | 2026-09-06 | 历史对账同步普通整数分页、取消固定快照决定。 |
+| 0.3.3 | 2026-09-06 | 当前评审切换至 ListEvents。 |
+| 0.3.2 | 2026-09-05 | 明确 M7：同实例提交后通知、固定执行目标的等待去重、实测索引选型。 |
+| 0.3.1 | 2026-09-05 | 明确 M6：M1 未完成前拒绝 M2，消息与 running 状态同事务提交。 |
+| 0.3.0 | 2026-09-04 | 明确 M5 数据库停止请求与实例批量检查。 |
+| 0.2.2 | 2026-09-04 | 明确 M4 原消息与中断响应分工、共用同一停止 idle 的 eventId。 |
+| 0.2.1 | 2026-09-04 | 记录用户确认 M3：对应 idle 后关闭，等待工具确认时也关闭，新确认 POST 接收续跑。 |
+| 0.2.0 | 2026-09-04 | 撤销独立 GET stream，合并到 POST SSE，确认完整本次 user.* 首帧。 |
+| 0.1.2 | 2026-09-04 |  S1 data-only、S2 type + phase、S3 用户事件只走回执/历史、S4 GET 不要求 access-token。 |
+| 0.1.1 | 2026-09-04 | 按用户指定确认五个基础类型名，同步全部候选示例及流/历史同名约束。 |
+| 0.1.0 | 2026-09-04 | 第一个 POST 确认后启动 GET stream。 |

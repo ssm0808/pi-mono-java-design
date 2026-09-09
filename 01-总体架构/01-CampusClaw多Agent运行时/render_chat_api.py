@@ -32,7 +32,7 @@ def load_catalog() -> tuple[dict, list[dict]]:
         keys.add(key)
         identities.add(identity)
         sources.add(source.resolve())
-    active_sources = {path.resolve() for folder in ("接口契约/操作", "接口契约-v2/操作")
+    active_sources = {path.resolve() for folder in ("接口契约/操作", "事件契约/操作")
                       for path in (ROOT / folder).glob("*.json")}
     shared.require(sources == active_sources, "Every active operation must be registered exactly once")
     return manifest, models
@@ -81,7 +81,7 @@ def build_html() -> str:
 <main id="claw-current-api-catalog">
 <header class="catalog-header"><h1>CampusClaw 当前接口 · {len(models)} 项</h1>
 <code>{html.escape(manifest["basePath"])}</code>
-<p>唯一当前接口入口。B01～B15 已全部确认；Events v2、配置映射与 Skill SSE 已统一定稿，可进入实现。设计状态不代表代码已合入或已部署。</p>
+<p>唯一当前接口入口。B01～B15 已全部确认；Session Events、配置映射与 Skill SSE 已统一定稿，可进入实现。设计状态不代表代码已合入或已部署。</p>
 <p>本期不支持 FollowUp 排队；停止通过 user.interrupt，实际停止后才可提交下一条消息。</p>
 <p>展开一个接口查看请求头、参数和响应。旧 Events 报文及三个独立控制接口不再展示。</p>
 <p><a href="chat-api-index.md">维护规则与源码边界</a> · <a href="chat-follow-up-future-design.md">FollowUp 未来设计（本期不启用）</a></p>
