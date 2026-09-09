@@ -21,13 +21,13 @@
 <body>
 <aside role="note"><p>2026-09-08 对齐：保留产品与调试边界；工具确认、停止、历史和配置遵循<a href="public-chat-alignment.md">公共对话前端对齐</a>。内部新契约不能直接作为产品公共协议。</p></aside>
   <h1>ADR-0016 · CampusClaw 产品前端隔离 Runtime 调试协议</h1>
-  <div class="meta">Status: <span class="badge">Proposed</span> · Version: 1.2.0 · Updated: 2026-09-09 · Created: 2026-08-26 ·
+  <div class="meta">Status: <span class="badge">Proposed</span> · Version: 1.3.0 · Updated: 2026-09-09 · Created: 2026-08-26 ·
     设计文档: <a href="README.md">campusclaw-frontend</a> ·
     历史凭据复核基线: <code>320d790726a70aada6100052952d5494d2a378ac</code> ·
     历史特性实现: <code>d03c08dbae870f19eee8d4fa79a707185f7a26b5</code> (Draft PR 181)</div>
 
   <section><h2>Context</h2>
-    <p>早期 <code>3a6358bc</code> 调试页曾把 Service URL 和协议字段作为主界面元素；这只是历史证据，不能描述当前前端。当时复核基线 <code>320d7907</code> 已实现 Agent 工作区、对话时间线和产品化控制，仍由浏览器直连 Runtime 并在前端维护内部 Session/ETag/SSE，但不支持 JWT/APPKEY 凭据：没有凭据控件、秘密 <code>VITE_*</code> 配置、浏览器 credential store 或 <code>Authorization</code> / <code>X-HW-APPKEY</code> Header 注入路径。统一请求只携带非秘密 <code>X-HW-ID</code> 调用上下文，开发者诊断入口也只有 Agent ID 和 Session ID。为快速验证凭据透传，本 ADR 在不改变产品边界的前提下，允许内部开发构建新增隔离的临时 Header 抽屉。当前源码 <code>dfb90ca</code> 已实现该抽屉和 Markdown，但仍是内部调试工作台；差距按专项源码表记录。</p>
+    <p>早期 <code>3a6358bc</code> 调试页曾把 Service URL 和协议字段作为主界面元素；这只是历史证据，不能描述当前前端。当时复核基线 <code>320d7907</code> 已实现 Agent 工作区、对话时间线和产品化控制，仍由浏览器直连 Runtime 并在前端维护内部 Session/ETag/SSE，但不支持 JWT/APPKEY 凭据：没有凭据控件、秘密 <code>VITE_*</code> 配置、浏览器 credential store 或 <code>Authorization</code> / <code>X-HW-APPKEY</code> Header 注入路径。统一请求只携带非秘密 <code>X-HW-ID</code> 调用上下文，开发者诊断入口也只有 Agent ID 和 Session ID。为快速验证凭据透传，本 ADR 在不改变产品边界的前提下，允许内部开发构建新增隔离的临时 Header 抽屉。当前源码 <code>7f11262</code> 已实现该抽屉和 Markdown，但仍是内部调试工作台；差距按专项源码表记录。</p>
     <p>当前 Runtime 不执行本地集成凭据校验，因此无凭据的直接适配器可以用于受控内部调试；这不等于已经具备生产认证、授权或审计边界。精确 Runtime 设计仍要求生产浏览器经 mate-service 访问，内部 SSE 不得字节透明转发。公共链路必须补齐身份建立与动作授权，但不能通过给 Chat 页面增加 JWT/APPKEY 表单或把秘密编译进浏览器产物来补齐。</p>
   </section>
 
@@ -44,15 +44,9 @@
     <ul>
       <li>生产浏览器只调用 mate-service 公共 HTTP/SSE；mate-service 终止认证、执行授权、维护公共 Chat 到内部 Session 的映射并投影安全 Event。</li>
       <li>生产产品路由不提供 JWT/APPKEY/<code>access-token</code> 的输入、编辑、查看、存储、刷新或 Header 构造能力；<code>VITE_*</code> 只允许非秘密配置。</li>
-      <li>内部开发构建可提供 <code>debugHeaders</code> 抽屉，采用 Postman 风格的通用 Key/Value 表格；不预设凭据模式、Header 名称或固定字段。</li>
-      <li>Header 编辑器保持为独立 <code>Headers</code> 面板，不与 Agent/Session 的“开发者诊断入口”合并；它只在视觉上复用原诊断入口的折叠面板、暖灰次级表面、虚线边界、输入和次级按钮，不创建凭据卡片或认证主动作。</li>
-      <li>每行包含启用、Key、Value 和删除；填写最后一个空白行后自动生成新空白行。Header 总数只统计启用、完整且通过校验的自定义项。</li>
-      <li>请求适配器自动生成的 Header 不渲染、不枚举；开发者填写同名 Key 时手工值仍在请求合并阶段优先，但界面不显示自动值或覆盖状态。</li>
-      <li>启用行的 Key/Value 必须同时存在；Key 必须是合法 HTTP token，Value 不得包含 CR/LF，重复 Key 按大小写不敏感规则拒绝。Fetch 禁止的请求头名称使用行内错误阻止发送，而不是通过固定 Header 列表限制输入。</li>
-      <li>诊断值只存在于当前页面内存与必需的输入元素中，不进入 <code>localStorage</code>、<code>sessionStorage</code>、IndexedDB、URL、<code>VITE_*</code>、遥测、日志或复制摘要；刷新、关闭页签或切换 API base 清除。</li>
-      <li>编辑器不根据 Key 猜测值是否为秘密，也不自动修改或补全认证值。真实值可被页面脚本、DOM 输入值与浏览器 DevTools 网络面板观察，因此该能力只能存在于受控开发构建；风险规则写入设计和测试，不在表格中常驻显示说明注释。</li>
-      <li>现有调试实现只在初始消息发送前建立不可变 Header 快照。新 Events 消息、确认、中断及 Skill 按各 operation 校验请求范围；不能把退役控制路径的免 Header 行为当作新契约，也不能覆盖原执行快照。</li>
-      <li>已评审特性提交 <code>d03c08db</code> 中，Agent/Skill/Tool metadata 发现不携带凭据快照；Mate Tool execute 只使用后端契约识别的四项凭据，其他自定义 Header 不自动向下游透传。Runtime 不校验凭据真实性、不持久化、不投影到 Event；此处仅为历史证据，当前前端观察以 <code>dfb90ca</code> 为准。</li>
+      <li>内部开发构建提供通用 Headers，预置三条可删除空值行，有效项计数、显式增行、校验及四种 POST 独立快照统一遵循<a href="README.md#61-开发者调试-header">主设计 §6.1</a>。</li>
+      <li>DEV-only IP 认证助手使用本地服务账号密码登录并将 Token 回填页面内存，不建立生产登录入口；会话索引只持久化恢复标识与列表信息，凭据不进入该索引，详见<a href="runtime-workbench-alignment.md">工作台交互对齐</a>。</li>
+      <li>已评审特性提交 <code>d03c08db</code> 中，Agent/Skill/Tool metadata 发现不携带凭据快照；Mate Tool execute 只使用后端契约识别的四项凭据，其他自定义 Header 不自动向下游透传。Runtime 不校验凭据真实性、不持久化、不投影到 Event；此处仅为历史证据，当前前端观察以 <code>7f11262</code> 为准。</li>
       <li>诊断抽屉默认关闭，不判断 JWT、APPKEY 或其他认证模式；后端按自身契约判断 Header 组合、认证和授权，生产集成按 Mate 已确认的 Header 条件和优先级执行，不由诊断编辑器决定认证策略。</li>
       <li>生产浏览器身份由统一登录、mate-service 或网关边界建立；具体会话承载、续期和注销机制属于待评审公共 API 集成点，不从当前直接适配器推断。</li>
       <li>产品主界面只展示 Agent、Chat、消息、附件、模型、深度思考、工具活动和粗粒度执行状态。</li>

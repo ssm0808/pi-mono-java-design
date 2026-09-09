@@ -103,23 +103,17 @@ test("parameters remain separate and preserve text, slash and line breaks", asyn
   await f.complete();
 });
 
-test("plus entry suspends and restores message on cancel and success", async (t) => {
+test("plus opens attachments without changing a message or invoking commands", (t) => {
   const f = fixture(t, "help");
   f.type("原来的消息 /保持普通字符");
-  assert.equal(f.get("command-palette").hidden, true);
   f.click("more-button");
   assert.equal(f.get("more-menu").hidden, false);
-  assert.equal(f.document.activeElement, f.get("command-entry"));
-  f.click("command-entry");
-  f.select("name");
-  f.type("另一个名称");
-  f.click("remove-command");
+  assert.equal(f.get("command-entry"), null);
+  assert.equal(f.get("attachment-entry").disabled, true);
   assert.equal(f.input.value, "原来的消息 /保持普通字符");
-  f.click("more-button"); f.click("command-entry");
-  f.select("help"); f.click("submit-button");
-  await f.complete();
-  assert.equal(f.input.value, "原来的消息 /保持普通字符");
-  assert.equal(f.document.querySelectorAll(".message.user").length, 1);
+  f.key("Escape", {}, f.input);
+  assert.equal(f.get("more-menu").hidden, true);
+  assert.equal(f.calls().length, 0);
 });
 
 test("Escape closes query first, second exits; replacement Escape restores selection", (t) => {
@@ -190,7 +184,9 @@ test("running fixture omits unavailable commands and input; normal draft cannot 
   assert.equal(f.input.hidden, true);
   assert.equal(f.get("submit-button").disabled, false);
   f.click("remove-command"); f.type("等待任务结束");
-  assert.equal(f.get("submit-button").disabled, true);
+  assert.equal(f.get("submit-button").getAttribute("aria-label"), "停止生成");
+  f.key("Enter", {}, f.input);
+  assert.equal(f.get("submit-button").disabled, false);
 });
 
 test("Skill gate and oversized arguments preserve draft without invoking mock executor", (t) => {
@@ -221,4 +217,21 @@ test("result data is rendered as plain text", async (t) => {
   await f.complete();
   assert.equal(f.document.querySelector(".help-description img"), null);
   assert.match(f.document.querySelector(".help-description").textContent, /<img/);
+});
+
+test("running command focus and execution never replace the stop action", async (t) => {
+  const f = fixture(t, "running");
+  f.select("help");
+  assert.equal(f.document.activeElement, f.get("command-run"));
+  assert.equal(f.get("submit-button").getAttribute("aria-label"), "停止生成");
+  f.key("Enter");
+  assert.equal(f.calls().length, 1);
+  assert.equal(f.get("submit-button").disabled, false);
+  await f.complete();
+  f.type("停止后继续"); f.click("submit-button");
+  assert.equal(f.get("submit-button").disabled, true);
+  assert.equal(f.input.value, "停止后继续");
+  f.click("simulate-stop-terminal");
+  assert.equal(f.get("submit-button").getAttribute("aria-label"), "发送消息");
+  assert.equal(f.input.value, "停止后继续");
 });

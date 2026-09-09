@@ -42,91 +42,42 @@ end note
 @enduml
 
 @startuml frontend_debug_header_flow
-' Source baseline: pi-mono-java 320d790726a70aada6100052952d5494d2a378ac.
-' Reviewed implementation commit: pi-mono-java d03c08dbae870f19eee8d4fa79a707185f7a26b5 (Draft PR 181).
-' Source evidence: frontend/src/components/DevDiagnostics.vue lines 1-26.
-' Source evidence: frontend/src/composables/useRuntimeApi.ts lines 139-155 and 480-497 (sendMessage and requestRaw).
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java lines 58-73 (submit).
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java lines 45-50 (mateCredentials).
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java lines 93-190 and 298-373.
-' Historical behavior at 320d7907: no editor; latest dfb90ca has a DEV-only memory editor in frontend/src/debugHeaders.ts and App.vue submit.
-' Observed behavior: the source baseline captures three headers on event submission and also sends them on discovery requests.
-' Reviewed implementation: access-token is captured, discovery is credentialless, and only Mate tool execute receives the execution snapshot.
-' Observed at dfb90ca: initial-message headers exist; new control and Skill request adapters remain target-only.
-' Security hardening: browser validation, memory-only values, event-only request scope, redacted diagnostics, and no automatic POST replay.
-' UI source evidence: pi-mono-java 4cc8dd86f601417c22cf9306e52152acbb59bb60 frontend/src/components/DebugHeaders.vue ensureTrailingRow, clearRows, template; frontend/src/debugHeaders.ts validateDebugHeaders.
-' Observed UI: automatic blank rows and persistent explanatory prose. Target-only UI decision on 2026-09-09: optional editable presets, explicit Add, no persistent prose; legacy transport below is unchanged.
-' Design reason: presets reduce typing; explicit Add avoids unwanted rows. Unused presets are omitted from validation, counts, and request snapshots.
-
-title Internal debug header flow - legacy adapter scope
-left to right direction
-
-actor "Developer" as Developer
-
-rectangle "Internal development frontend" as DevFrontend {
-  component "Generic header table\nKey-value rows and inline validation" as Drawer
-  component "In-memory enabled rows\nclear on reload" as HeaderState
-  component "Event-only request adapter\nimmutable snapshot" as EventAdapter
-}
-
-rectangle "CampusClaw Runtime V1" as Runtime {
-  component "POST sessions/{sessionId}/events\nRuntimeEventController.submit" as Submit
-  component "RuntimeRequestContext\nexecution credential snapshot" as Snapshot
-  component "Agent execution context" as Execution
-}
-
-rectangle "mate-service" as Mate {
-  component "Agent, Skill, and tool metadata\ndiscovery without credentials" as Discovery
-  component "POST runtime/tools/{toolId}/execute\ncredential headers attached" as Execute
-}
-
-Developer --> Drawer : edit temporary rows
-Drawer --> HeaderState : update valid rows or clear
-HeaderState --> EventAdapter : snapshot on message submit
-EventAdapter --> Submit : initial event POST only
-Submit --> Snapshot : capture request headers
-Snapshot --> Execution : immutable for this execution
-Execution --> Discovery : discover tools
-Execution --> Execute : invoke a selected tool
-
-note bottom of Drawer
-Editable presets: access-token, X-HW-ID, Authorization.
-Add one blank row on click; delete may leave no rows.
-Generated headers are not rendered.
-Manual values override generated values.
-
-Reject invalid header tokens and CR/LF values.
-Reject case-insensitive duplicate custom names.
-Reject Fetch-forbidden request header names.
-Show errors only on the affected row.
+' Source baseline: pi-mono-java@7f1126262b16458e430c1a70aba9936e26391385
+' Previous UI baseline: 4cc8dd86f601417c22cf9306e52152acbb59bb60
+' Source evidence: frontend/src/components/DebugHeaders.vue snapshot
+' Source evidence: frontend/src/App.vue submit, executeCommand, stop, decideTool
+' Source evidence: frontend/src/composables/useRuntimeApi.ts writeHeaders, submitStream, executeCommand
+' Observed behavior: each of four write actions freezes current valid custom headers.
+' Target-only changes: whitespace validation and local AuthCenter helper.
+' Design reason: edits affect new requests without mutating an accepted execution.
+title Internal debug headers - request snapshots
+top to bottom direction
+skinparam backgroundColor #FFFCFA
+skinparam shadowing false
+component "Header editor\n3 optional empty presets" as Editor
+component "Memory Header Store\nclear on reload" as Store
+component "Per-request snapshot\nimmutable" as Snapshot
+component "Write adapter\nfixed protocol headers" as Adapter
+component "Runtime API\nexisting internal contract" as Runtime
+component "Local auth helper\n[target-only, DEV]" as Auth
+actor Developer
+Developer --> Editor : edit or get token
+Auth --> Editor : token for matching IP and revision
+Editor --> Store : valid enabled values
+Store --> Snapshot : each new write action
+Snapshot --> Adapter
+Adapter --> Runtime : message / command / interrupt / confirmation
+note bottom of Store
+  Empty presets count as zero.
+  Normalize SP and HTAB; reject CR/LF first.
+  Never persist values in the Session index.
 end note
-
-note bottom of EventAdapter
-Never attach the debug snapshot to:
-- Session create, read, or delete
-- History, model, or thinking
-- Legacy control paths (now retired)
-
-New Events control headers require a separate adapter.
-This legacy allowlist is not the v2 contract.
-
-Do not replay the event POST after disconnect.
-end note
-
-note bottom of Runtime
-Runtime transport behavior:
-- Capture values without authenticating them
-- Do not persist values in Session or events
-- Later edits affect only the next execution
-- Recognize credential fields by the backend contract
-end note
-
-note bottom of Mate
-Reviewed feature implementation:
-- Discovery receives no credential snapshot
-- Tool execute receives recognized credential values
-- Missing required values fail before outbound call
-- Logs and errors show presence only
+note bottom of Adapter
+  Fixed Accept and Content-Type.
+  Remove If-Match, Idempotency-Key, Last-Event-ID.
+  Other custom names use existing merge behavior.
+  Session, history and configuration omit debug rows.
+  No automatic write replay.
 end note
 @enduml
 
@@ -371,4 +322,87 @@ Never replay a write automatically.
 No same-text correlation.
 No arbitrary old idle as current terminal.
 end note
+@enduml
+
+@startuml target_runtime_workbench
+' Source baseline: pi-mono-java@7f1126262b16458e430c1a70aba9936e26391385
+' Source evidence: frontend/src/App.vue threads, drafts, resumeSession, submit, stop
+' Source evidence: frontend/src/composables/useRuntimeApi.ts recover, canSend, canStop
+' Source evidence: frontend/src/components/DebugHeaders.vue snapshot
+' Source evidence: frontend/vite.config.ts defineConfig; no auth middleware exists
+' Observed behavior: local refs lose navigation on reload; topbar owns stop.
+' Target-only architecture: every class and relationship below is proposed.
+' Product constraint: restore navigation; keep Stop in Composer; credentials stay in DEV.
+' Design reason: one coordinator owns execution state and request generations;
+' persistent metadata and transient credentials have separate lifecycles.
+title Runtime Workbench - Target Classes
+left to right direction
+skinparam backgroundColor #FFFCFA
+skinparam shadowing false
+skinparam classBackgroundColor #FFFFFF
+skinparam classBorderColor #BFAEA5
+skinparam packageBackgroundColor #F8F3F0
+skinparam packageBorderColor #CDBEB6
+skinparam ArrowColor #7A6F69
+skinparam defaultFontName Arial
+hide empty members
+package "Browser page [target-only]" {
+  class WorkbenchView <<view>>
+  class Composer <<view>>
+  class HeaderEditor <<DEV view>>
+  class WorkbenchCoordinator <<page lifecycle>> {
+    selectSession(id)
+    restoreIndex()
+    submit(snapshot)
+    stop(target)
+  }
+  class SessionViewState <<active Session>> {
+    generation
+    rootEventId
+    terminal
+    uncertainty
+    primaryAction
+  }
+  class SessionIndexRepository <<persistent metadata>>
+  class RequestSnapshot <<immutable per request>>
+  class DraftStore <<page memory>>
+  class HeaderStore <<DEV page memory>>
+  class TokenCoordinator <<DEV page lifecycle>>
+  interface RuntimeGateway
+  class RuntimeHttpGateway <<HTTP adapter>>
+}
+package "Local Vite serve process [target-only]" {
+  class DevAuthMiddleware <<loopback boundary>>
+  class AuthCenterClient <<HTTPS adapter>>
+  class LocalAuthConfig <<server-only credentials>>
+}
+class "Browser localStorage\nSession metadata only" as Storage <<persistent resource>>
+class "Runtime Session API\nexisting internal API" as Runtime <<external API>>
+class "AuthCenter\nlogin and Set-Cookie" as AuthCenter <<external API>>
+WorkbenchView *-- Composer
+WorkbenchView *-- HeaderEditor
+WorkbenchView --> WorkbenchCoordinator
+Composer --> WorkbenchCoordinator : send / stop / command
+HeaderEditor --> HeaderStore
+HeaderEditor --> TokenCoordinator : explicit get token
+WorkbenchCoordinator *-- "1" SessionViewState
+WorkbenchCoordinator *-- "0..*" RequestSnapshot
+WorkbenchCoordinator *-- "1" DraftStore
+WorkbenchCoordinator --> SessionIndexRepository
+WorkbenchCoordinator --> HeaderStore : snapshot latest values
+WorkbenchCoordinator --> RuntimeGateway
+RuntimeGateway <|.. RuntimeHttpGateway
+RuntimeHttpGateway --> Runtime
+SessionIndexRepository --> Storage
+TokenCoordinator --> HeaderStore : matching IP and edit revision
+TokenCoordinator --> DevAuthMiddleware : same-origin JSON POST
+DevAuthMiddleware --> AuthCenterClient
+AuthCenterClient --> LocalAuthConfig
+AuthCenterClient --> AuthCenter : fixed HTTPS login path
+legend bottom left
+  Header edits do not alter an existing snapshot.
+  Reconciliation never replays a write request.
+  DEV auth has no production or preview registration.
+  Return accessToken only; no browser cookies.
+endlegend
 @enduml

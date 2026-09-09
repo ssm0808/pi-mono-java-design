@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 / 日期 | 1.2.0 / 2026-09-09 |
+| 版本 / 日期 | 1.3.0 / 2026-09-09 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
 | 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；本次读取的 frontend 文件无工作树修改 |
 | 性质 | target-only 产品前端；Thinking 原文规则同步 Mate 公共契约；Vue 与 Runtime 实现仍待同步，公司认证规则保持 |
@@ -57,7 +57,7 @@ Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thin
 
 ![公共对话全局目标组件](target_frontend_components.svg)
 
-[PlantUML 源码](diagram.puml#L254) · [原尺寸](target_frontend_components.svg)
+[PlantUML 源码](diagram.puml#L205) · [原尺寸](target_frontend_components.svg)
 
 Workspace 只发用户意图、读取不可变展示快照。ConversationCoordinator 负责提交、确认、中断和恢复；
 PublicChatGateway 负责公共协议校验，EventReducer 同时消费 POST 完整回执、live 和 history。
@@ -72,7 +72,7 @@ Slash 和恢复后的配置读取共用配置快照；成功资源与并发版�
 
 ![对话、确认与恢复状态](target_conversation_states.svg)
 
-[PlantUML 源码](diagram.puml#L335) · [原尺寸](target_conversation_states.svg)
+[PlantUML 源码](diagram.puml#L286) · [原尺寸](target_conversation_states.svg)
 
 连接使用独立 `connecting/live/offline/reconciling` 状态，不把连接打开当作执行中、EOF 当作完成。
 下列业务状态是前端模型，不是新增 HTTP 枚举。所有目标推导以当前 Chat、请求快照和可靠关联为前提。
@@ -113,7 +113,7 @@ Enter 发送、Shift+Enter 换行；compositionstart 至 compositionend 期间 E
 
 ### 4.3 停止与结果不确定
 
-点击停止固定当前可验证目标，进入 stopping；未收到回执不得声称“停止请求已接受”。
+停止按钮使用 Composer 右下角原发送位置，提交中先切换方块，可信目标可用后启用；顶部不重复提供停止。普通消息编辑器 Enter 不触发停止。点击停止固定当前可验证目标，进入 stopping；未收到回执不得声称“停止请求已接受”。
 公共 1.5.0 缺少 Claw B09 的精确目标字段，这是安全接入门禁：多客户端、断线恢复或迟到控制无法可靠关联时，
 保留检查状态入口，禁止通过查询“当前执行”后直接拼接中断来掩盖竞态。
 新公共映射确认前仅用 mock 演示精确目标停止；不自动给现行公共请求增加 targetEventId。
@@ -193,10 +193,13 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 
 机械校验与原型状态回归不证明生产接入、真实网络、公共认证或像素布局通过。
 
+当前内部工作台的持久化索引、IP 认证助手和请求范围见 [Runtime 工作台交互对齐](runtime-workbench-alignment.md)。这些目标不把公共 Chat 映射替换为内部 Session，也不新增 Mate 生产登录接口。
+
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-09-09 | 将停止收敛到 Composer 主操作并关联内部工作台恢复设计。 |
 | 1.2.0 | 2026-09-09 | 明确事件身份、工具业务参数与 Runtime 响应读取边界。 |
 | 1.1.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 1.0.0 | 2026-09-08 | 补齐主对话、工具确认、中断、恢复及配置共享；记录公共/内部差异与接入门禁；保持原视觉语言。 |

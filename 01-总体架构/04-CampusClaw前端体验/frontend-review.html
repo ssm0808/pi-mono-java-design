@@ -342,7 +342,7 @@
     .chat-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--border); }
     .chat-config-label { font-size: 12px; color: var(--muted); }
     #chat-state-label { color: var(--muted); font-size: 13px; }
-    #chat-stop { margin-left: auto; }
+
     .chat-scroll { padding: 24px; min-height: 350px; }
     .chat-notice { padding: 12px; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-secondary); line-height: 1.6; }
     .chat-user { max-width: 85%; width: fit-content; margin: 0 0 24px auto; padding: 12px 16px; border-radius: 12px; background: var(--surface-tertiary); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -363,7 +363,11 @@
     #conversation-workbench textarea { width: 100%; min-height: 72px; resize: vertical; padding: 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font: inherit; }
     #chat-send, #chat-allow { background: var(--primary) !important; color: var(--primary-text) !important; }
     #chat-count { font-size: 12px; color: var(--muted); }
-    #chat-send { margin-left: auto; }
+    #chat-send { margin-left: auto; border-radius: 50% !important; width: 44px; height: 44px; font-size: 23px !important; padding: 0 !important; }
+    .chat-add-group { position: relative; }
+    #chat-add-menu { position: absolute; bottom: 52px; left: 0; width: 210px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px #2c27241a; }
+    .auth-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; align-items: center; }
+    .auth-row input { flex: 1; min-width: 120px; min-height: 38px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; padding: 8px; }
     #chat-input-error { margin-top: 6px; color: var(--danger); font-size: 13px; }
     #chat-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     #chat-history-note { margin-top: 12px; }
@@ -389,10 +393,10 @@
         <div class="row">
           <img class="review-brand-mark" src="campusclaw-mark-o1.png" alt="">
           <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">1.8.0</span>
+          <span class="tag">1.10.0</span>
           <span class="tag">主对话 · 确认 · 停止 · 恢复</span>
         </div>
-        <code class="base">设计基线 2ee2a32 · 源码 dfb90ca · target-only</code>
+        <code class="base">交互基线 599edb0 · 源码 7f11262 · target-only</code>
       </header>
 
       <section class="section">
@@ -419,7 +423,7 @@
             <tbody>
               <tr><td>当前内部调试链路</td><td>已有临时 Headers；只用于 Runtime 透传调试，不建立生产身份。</td></tr>
               <tr><td>未来生产链路</td><td>统一登录、mate-service 或网关负责身份与授权；具体浏览器会话机制待公共 API 评审。</td></tr>
-              <tr><td>诊断例外</td><td>只在页面内存中接受用户填写的 Key/Value Header，仅附加到提交消息 POST；刷新或关闭页签清除。</td></tr>
+              <tr><td>诊断例外</td><td>只在页面内存中接受用户填写的 Key/Value Header，分别快照到消息、命令、停止与确认 POST；刷新或关闭页签清除。</td></tr>
               <tr><td><code>401/403</code></td><td>交给统一登录/权限流程，不弹出凭据框，也不自动重放副作用请求。</td></tr>
             </tbody>
           </table>
@@ -431,6 +435,8 @@
         <details class="headers-specimen" open aria-label="Headers 编辑器">
           <summary><span>Headers</span><span class="headers-count" id="debug-header-count">(0)</span></summary>
           <div class="headers-body">
+            <div class="auth-row"><label for="debug-auth-ip">认证中心 IP</label><input id="debug-auth-ip" placeholder="192.0.2.10" autocomplete="off" spellcheck="false"><button id="debug-auth-get" class="debug-header-add" type="button">获取 Token</button></div>
+            <span id="debug-auth-status" role="status"></span>
             <div class="headers-actions">
               <button class="debug-header-add" id="debug-header-add" type="button">增加请求头</button>
               <button class="debug-header-clear" id="debug-header-clear" type="button">全部清空</button>
@@ -470,15 +476,20 @@
           <table>
             <thead><tr><th>请求</th><th>是否附加调试 Header</th></tr></thead>
             <tbody>
-              <tr><td data-label="请求">初始 <code>POST /sessions/{sessionId}/events</code></td><td data-label="是否附加调试 Header">是；发送时建立不可变快照。</td></tr>
+              <tr><td data-label="请求">消息、确认、中断 <code>POST /sessions/{sessionId}/events</code></td><td data-label="是否附加调试 Header">是；发送时建立不可变快照。</td></tr>
               <tr><td data-label="请求">Session/历史/模型/Thinking</td><td data-label="是否附加调试 Header">否。</td></tr>
-              <tr><td data-label="请求">旧独立控制接口（已退役）</td><td data-label="是否附加调试 Header">否；修改抽屉不改变正在执行的快照。</td></tr>
+              <tr><td data-label="请求">命令 POST（含 Skill）</td><td data-label="是否附加调试 Header">是；每次动作读取最新值，修改不改变已发请求。</td></tr>
               <tr><td data-label="请求">Mate 发现</td><td data-label="是否附加调试 Header">否；已评审后端特性提交 <code>d03c08db</code> 只在 Tool execute 下游请求中使用后端识别的凭据项。</td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
+      <section class="section" id="workbench-alignment">
+        <h3>工作台对齐 · 原型操作</h3>
+        <p class="description">本页使用合成数据，不登录真实认证中心。填写 IP 并点击获取后，可用下方按钮模拟返回；刷新页面会清空 Header。账号密码配置在本地开发服务。会话索引恢复和真实后端联调以<a href="runtime-workbench-alignment.md">工作台设计</a>为准。</p>
+        <div class="auth-row"><button id="debug-auth-complete" class="debug-header-add" type="button" disabled>模拟 Token 返回</button><button id="debug-auth-fail" class="debug-header-add" type="button" disabled>模拟登录失败</button></div>
+      </section>
       <section class="section" id="brand-direction">
         <h3>已选品牌标识：O1</h3>
         <div class="brand-decision">
@@ -573,7 +584,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
 
       <article class="screen-card" id="running-conversation" data-screen-key="runningConversation">
         <header class="screen-head">
-          <strong>主对话交互</strong><span class="tag">1.8.0 · target-only</span>
+          <strong>主对话交互</strong><span class="tag">1.10.0 · target-only</span>
           <a href="public-chat-alignment.md">契约边界与验收</a>
         </header>
         <section class="section" id="conversation-workbench">
@@ -606,7 +617,6 @@ HAVING COUNT(*) &gt; 1;</code></pre>
                 <strong>园区运维助手</strong>
                 <span id="chat-state-label" role="status" aria-live="polite">正在处理</span>
                 <span class="chat-config-label" id="chat-config-label">模型 A · 深度思考开启</span>
-                <button type="button" id="chat-stop">停止</button>
               </header>
               <div class="chat-scroll">
                 <div class="chat-notice" id="chat-notice" role="status" aria-live="polite"></div>
@@ -632,7 +642,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
                 </details>
                 <p class="chat-answer" id="chat-answer" role="status" aria-label="模拟执行终态" hidden></p>
                 <div class="chat-actions">
-                  <button type="button" id="chat-check" hidden>检查最新状态</button>
+                  <button type="button" id="chat-check" hidden>刷新状态</button>
                   <button type="button" id="chat-config-reload" hidden>读取最新配置</button>
                   <button type="button" id="chat-config-confirm" hidden>确认重新修改</button>
                 </div>
@@ -643,7 +653,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
                 <textarea id="chat-draft" rows="3" aria-describedby="chat-input-help chat-input-error" placeholder="可以先写下新的要求，当前任务结束后再发送"></textarea>
                 <div id="chat-attachments" aria-label="模拟附件"></div>
                 <div class="chat-actions">
-                  <button type="button" id="chat-add-file">添加示例附件</button>
+                  <div class="chat-add-group"><button id="chat-add" type="button" aria-label="添加" aria-expanded="false" aria-controls="chat-add-menu">＋</button><div id="chat-add-menu" hidden><button id="chat-add-file" type="button">添加示例附件</button></div></div>
                   <span id="chat-count">0 / 2048 字 · 0 / 4 个附件</span>
                   <button type="button" id="chat-send" disabled>发送</button>
                 </div>
@@ -786,10 +796,13 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         allRows.forEach((row) => {
           const fields = rowFields(row);
           const key = fields.key.value.trim();
-          const value = fields.value.value;
+          const rawValue = fields.value.value;
+          const value = rawValue.replace(/^[ \t]+|[ \t]+$/g, "");
           row.classList.toggle("is-disabled", !fields.enabled.checked);
           setError(row, "");
-          if (!fields.enabled.checked || (key === "" && value === "")) return;
+          if (!fields.enabled.checked) return;
+          if (/\r|\n/.test(rawValue)) { setError(row, "Header Value 不能包含换行"); return; }
+          if (key === "" && value === "") return;
           // An unused preset is a suggestion, not a required credential.
           if (key === row.dataset.defaultKey && value === "") return;
 
@@ -838,6 +851,48 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         validateRows();
         add.focus();
       });
+      const authIp = document.getElementById('debug-auth-ip');
+      const authGet = document.getElementById('debug-auth-get');
+      const authStatus = document.getElementById('debug-auth-status');
+      const authComplete = document.getElementById('debug-auth-complete');
+      const authFail = document.getElementById('debug-auth-fail');
+      let authFlight = null, headerRevision = 0, generatedRow = null, generatedValue = '';
+      rows.addEventListener('input', () => { headerRevision++; });
+      rows.addEventListener('change', () => { headerRevision++; });
+      rows.addEventListener('click', (event) => { if (event.target.closest('.header-delete')) headerRevision++; });
+      clear.addEventListener('click', () => { headerRevision++; });
+      function authDone(text) {
+        authFlight = null; authGet.disabled = false;
+        authComplete.disabled = true; authFail.disabled = true; authStatus.textContent = text;
+      }
+      authIp.addEventListener('input', () => {
+        if (generatedRow?.isConnected && rowFields(generatedRow).value.value === generatedValue) {
+          rowFields(generatedRow).value.value = ''; validateRows();
+        }
+        generatedRow = null; headerRevision++; authDone('');
+      });
+      authGet.addEventListener('click', () => {
+        const ip = authIp.value.trim();
+        let valid = /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) && ip.split('.').every((part) => +part <= 255);
+        if (ip.includes(':')) { try { valid = new URL('https://[' + ip + ']/').hostname.startsWith('['); } catch {} }
+        if (!valid) { authStatus.textContent = '请输入有效 IP'; authIp.focus(); return; }
+        const matches = [...rows.children].filter((row) => rowFields(row).key.value.trim().toLowerCase() === 'access-token');
+        if (matches.length > 1) { authStatus.textContent = '请先修正重复的 access-token'; return; }
+        authFlight = { ip, revision: headerRevision }; authGet.disabled = true;
+        authComplete.disabled = false; authFail.disabled = false; authStatus.textContent = '正在获取…';
+      });
+      authComplete.addEventListener('click', () => {
+        if (!authFlight) return;
+        if (authFlight.revision !== headerRevision || authFlight.ip !== authIp.value.trim()) {
+          authDone('配置已变化，请重新获取'); return;
+        }
+        let row = [...rows.children].find((item) => rowFields(item).key.value.trim().toLowerCase() === 'access-token');
+        if (!row) { row = createRow(); rows.append(row); rowFields(row).key.value = 'access-token'; }
+        const fields = rowFields(row); fields.enabled.checked = true;
+        fields.value.value = 'synthetic-review-token'; generatedRow = row; generatedValue = fields.value.value;
+        validateRows(); authDone('Token 已更新（原型数据）');
+      });
+      authFail.addEventListener('click', () => { if (authFlight) authDone('认证中心登录失败，请检查本地服务配置'); });
       validateRows();
     })();
   </script>
@@ -863,9 +918,9 @@ HAVING COUNT(*) &gt; 1;</code></pre>
       let toolResultText = '';
 
       const states = {
-        ready: ['已就绪', '可以发送新消息。示例附件仅在本页模拟。'],
+        ready: ['空闲', '可以发送新消息。示例附件仅在本页模拟。'],
         submitting: ['正在提交', '草稿已保留；收到完整消息回执后才确认提交。'],
-        running: ['正在处理', '当前任务结束前只保留新草稿，不发送第二条消息。'],
+        running: ['正在执行', '当前任务结束前只保留新草稿，不发送第二条消息。'],
         confirming: ['等待工具确认', '执行前请检查下方参数；确认等待不是空闲。'],
         confirmingSubmit: ['正在提交决定', '决定尚未收到回执，请勿重复操作。'],
         stopRequested: ['正在请求停止', '停止请求尚未确认，不能显示已经停止。'],
@@ -888,9 +943,16 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         byId('chat-notice').textContent = noticeOverride || states[phase][1];
         byId('chat-count').textContent = `${codePoints(draft.value)} / 2048 字 · ${files.length} / 4 个附件`;
         byId('chat-input-error').textContent = messageError();
-        byId('chat-send').disabled = phase !== 'ready' || !!messageError() || (!draft.value.trim() && !files.length);
-        byId('chat-stop').hidden = !['running', 'confirming', 'stopRequested', 'stopAccepted'].includes(phase);
-        byId('chat-stop').disabled = ['stopRequested', 'stopAccepted'].includes(phase);
+        const active = !['ready', 'conflict'].includes(phase);
+        const primary = byId('chat-send');
+        primary.textContent = active ? '■' : '↑';
+        primary.dataset.action = active ? 'stop' : 'send';
+        primary.setAttribute('aria-label', active ? '停止生成' : '发送消息');
+        primary.title = phase === 'submitting' ? '正在提交，确认接收后可停止'
+          : ['stopRequested', 'stopAccepted'].includes(phase) ? '正在停止' : primary.getAttribute('aria-label');
+        primary.disabled = active ? !['running', 'confirming'].includes(phase)
+          : phase !== 'ready' || !!messageError() || (!draft.value.trim() && !files.length);
+        byId('chat-notice').hidden = ['ready', 'running'].includes(phase) && !noticeOverride;
         byId('chat-confirmation').hidden = phase !== 'confirming' && phase !== 'confirmingSubmit';
         byId('chat-allow').disabled = phase !== 'confirming';
         byId('chat-deny').disabled = phase !== 'confirming';
@@ -922,7 +984,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
       }
 
       function send() {
-        if (composing || byId('chat-send').disabled) return;
+        if (phase !== 'ready' || composing || byId('chat-send').disabled) return;
         submission = { text: draft.value, files: [...files] };
         terminalText = '';
         toolResultText = '';
@@ -948,18 +1010,27 @@ HAVING COUNT(*) &gt; 1;</code></pre>
       draft.addEventListener('compositionstart', () => { composing = true; });
       draft.addEventListener('compositionend', () => { composing = false; render(); });
       draft.addEventListener('keydown', (event) => {
-        if (event.key !== 'Enter' || event.shiftKey || event.isComposing || composing) return;
+        if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229 || composing || event.repeat) return;
         event.preventDefault(); send();
       });
-      byId('chat-send').addEventListener('click', send);
+      byId('chat-send').addEventListener('click', () => {
+        if (['running', 'confirming'].includes(phase)) {
+          showDeny = false; setPhase('stopRequested');
+        } else send();
+      });
+      byId('chat-add').addEventListener('click', () => {
+        const menu = byId('chat-add-menu'); menu.hidden = !menu.hidden;
+        byId('chat-add').setAttribute('aria-expanded', String(!menu.hidden));
+        if (!menu.hidden) byId('chat-add-file').focus();
+      });
       byId('chat-add-file').addEventListener('click', () => {
         if (files.length >= 4) return;
         files.push(nextFile++); renderFiles(); render();
+        byId('chat-add-menu').hidden = true; byId('chat-add').setAttribute('aria-expanded', 'false'); byId('chat-add').focus();
       });
-      byId('chat-stop').addEventListener('click', () => {
-        if (!['running', 'confirming'].includes(phase)) return;
-        showDeny = false;
-        setPhase('stopRequested');
+
+      byId('chat-add-menu').addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') { byId('chat-add-menu').hidden = true; byId('chat-add').setAttribute('aria-expanded', 'false'); byId('chat-add').focus(); }
       });
       byId('chat-allow').addEventListener('click', () => {
         if (phase !== 'confirming') return;

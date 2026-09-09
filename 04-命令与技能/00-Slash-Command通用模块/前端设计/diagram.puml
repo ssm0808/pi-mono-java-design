@@ -15,7 +15,10 @@ title Target Slash Command Frontend Components
 ' Source evidence: frontend/src/runtime/commands.ts, parseCommand, filterCommands, freezeInvocation
 ' Observed behavior: commands exist inside Composer; rows show slash, kind and hint; selected input edits raw command text.
 ' Target-only design: standalone component boundaries and chip presentation below are proposed, not existing classes.
-' Product constraint: More menu, plain command rows and removable selection reduce repeated UI text.
+' Updated source baseline: pi-mono-java@7f1126262b16458e430c1a70aba9936e26391385
+' Source evidence: frontend/src/components/ComposerBox.vue template; frontend/src/composables/useCommandComposer.ts
+' Observed behavior: chips exist; Plus opens commands; Stop is only in App.vue topbar.
+' Product constraint: Plus adds context; Slash discovers commands; running commands never replace Stop.
 ' Design reason: keep discovery, immutable invocation decoding, ephemeral results, and ordinary chat history as separate responsibilities.
 
 skinparam backgroundColor #FFFCFA
@@ -43,7 +46,9 @@ package "Existing application shell" as ExistingPkg {
 }
 
 package "Slash presentation [target-only]" as PresentationPkg {
-  component "ComposerMoreMenu\ncommand entry" as MoreMenu
+  component "AttachmentMenu\nno command entry" as MoreMenu
+  component "CommandRunAction\nvisible while Session runs" as RunAction
+  component "ComposerPrimaryAction\nsend or stop" as PrimaryAction
   component "CommandPalette" as Palette
   component "SelectedCommandChip\nchange or remove" as CommandChip
   component "CommandResultRegion" as ResultRegion
@@ -72,10 +77,14 @@ App *-- Composer
 App *-- Timeline
 App *-- ResultRegion
 Composer *-- MoreMenu
+Composer *-- RunAction
+Composer *-- PrimaryAction
 Composer *-- Palette
 Composer *-- CommandChip
 Composer --> UseSlash
-MoreMenu --> UseSlash
+MoreMenu --> AttachmentState
+RunAction --> UseSlash
+PrimaryAction --> Conversation : stop current execution
 CommandChip --> UseSlash
 Palette --> UseSlash
 ResultRegion --> Registry
@@ -136,7 +145,7 @@ top to bottom direction
 
 [*] --> MessageDraft
 MessageDraft : Ordinary message buffer is authoritative
-MessageDraft --> BrowsingCatalog : first-character slash or More > Commands
+MessageDraft --> BrowsingCatalog : first-character slash
 
 state BrowsingCatalog
 BrowsingCatalog : Full list or prefix-filtered list
@@ -152,7 +161,7 @@ QueryDraft --> MessageDraft : Escape; restore message
 state SelectedCommand
 SelectedCommand : Removable canonical name chip
 SelectedCommand : Edit arguments only when input exists
-SelectedCommand --> Executing : new Enter or arrow click
+SelectedCommand --> Executing : explicit command action or new Enter
 SelectedCommand --> MessageDraft : remove, Escape, or empty Backspace
 SelectedCommand --> ChangingCommand : click chip name; suspend selection
 
@@ -181,7 +190,8 @@ end note
 note right of SelectedCommand
   hint is display-only.
   Files are admitted only when acceptsFiles is true.
-  No-input selection focuses the submit arrow.
+  No-input selection focuses the command action.
+  While running, Stop keeps its primary position.
   Repeated Enter does not execute.
 end note
 
@@ -191,8 +201,8 @@ note left of BrowsingCatalog
 end note
 
 note right of MessageDraft
-  More menu entry suspends the existing
-  message draft and files until exit or success.
+  Slash entry suspends existing files.
+  Plus opens attachments, never commands.
 end note
 @enduml
 
@@ -232,7 +242,7 @@ participant "Session and model state" as State
 participant "CommandResultRegion\n[target]" as Result
 participant "ConversationCoordinator\n[target, gated]" as Conversation
 
-User -> Composer : first-character slash or More > Commands
+User -> Composer : first-character slash
 Composer -> Slash : open(activeChatId)
 Slash -> Gateway : listCommands(activeChatId)
 Gateway -> Api : GET command descriptors
@@ -243,7 +253,7 @@ Slash --> Composer : render plain name and description listbox
 User -> Composer : select command
 Composer -> Slash : select(name)
 Slash --> Composer : close list; selected chip and optional argument editor
-User -> Composer : new Enter or submit arrow click
+User -> Composer : explicit command action or new Enter
 Composer -> Slash : execute(name, arguments, files)
 Slash -> Slash : freeze invocation and expected result kind
 Slash -> Gateway : executeCommand(invocation)

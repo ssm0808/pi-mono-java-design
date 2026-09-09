@@ -60,8 +60,8 @@ function test(name, run) {
 
 test('running keeps a draft without queuing', (f) => {
   f.draft('下一步检查');
-  assert.equal(f.get('chat-send').disabled, true);
-  f.click('chat-send');
+  assert.equal(f.get('chat-send').getAttribute('aria-label'), '停止生成');
+  f.get('chat-draft').dispatchEvent(new f.window.KeyboardEvent('keydown', { key: 'Enter' }));
   assert.equal(f.phase(), 'running');
   f.click('simulate-terminal');
   assert.equal(f.phase(), 'ready');
@@ -109,7 +109,7 @@ test('complete receipt preserves edits made after submission', (f) => {
   assert.equal(f.get('chat-draft').value, '新草稿');
   assert.equal(f.get('chat-attachments').children.length, 1);
   assert.equal(f.phase(), 'running');
-  assert.equal(f.get('chat-send').disabled, true);
+  assert.equal(f.get('chat-send').getAttribute('aria-label'), '停止生成');
 });
 
 test('allow receipt is not tool completion', (f) => {
@@ -120,7 +120,7 @@ test('allow receipt is not tool completion', (f) => {
   f.click('simulate-receipt');
   assert.equal(f.phase(), 'running');
   assert.match(f.get('chat-tool-output').textContent, /尚未收到结果/);
-  assert.equal(f.get('chat-send').disabled, true);
+  assert.equal(f.get('chat-send').getAttribute('aria-label'), '停止生成');
 });
 
 test('deny reason validation, optional reason and no whole-turn failure', (f) => {
@@ -139,9 +139,9 @@ test('deny reason validation, optional reason and no whole-turn failure', (f) =>
 });
 
 test('stop request, receipt and actual termination stay separate', (f) => {
-  f.draft('停止后再发'); f.click('chat-stop');
+  f.draft('停止后再发'); f.click('chat-send');
   assert.equal(f.phase(), 'stopRequested');
-  assert.equal(f.get('chat-stop').disabled, true);
+  assert.equal(f.get('chat-send').disabled, true);
   f.click('simulate-receipt');
   assert.equal(f.phase(), 'stopAccepted');
   assert.equal(f.get('chat-send').disabled, true);
@@ -163,7 +163,7 @@ test('unknown submission stays unknown after history without a receipt', (f) => 
 test('last history page is not execution completion', (f) => {
   f.scenario('offline'); f.draft('断线草稿'); f.click('chat-check'); f.click('simulate-history');
   assert.equal(f.phase(), 'running');
-  assert.equal(f.get('chat-send').disabled, true);
+  assert.equal(f.get('chat-send').getAttribute('aria-label'), '停止生成');
   assert.match(f.get('chat-history-note').textContent, /末页/);
 });
 
@@ -244,6 +244,42 @@ test('existing Headers validation remains independent', (f) => {
   assert.equal(f.document.querySelectorAll('[data-header-row]').length, 3);
   f.change(row.querySelector('.header-key'), 'Host');
   assert.match(row.querySelector('.header-error').textContent, /禁止/);
+});
+
+test('submission immediately changes primary action, but needs an accepted target', (f) => {
+  f.scenario('ready'); f.draft('开始'); f.click('chat-send');
+  assert.equal(f.get('chat-send').dataset.action, 'stop');
+  assert.equal(f.get('chat-send').disabled, true);
+  f.click('simulate-receipt');
+  assert.equal(f.get('chat-send').disabled, false);
+  assert.equal(f.document.getElementById('chat-stop'), null);
+});
+
+test('space-only Header values are omitted', (f) => {
+  const field = f.document.querySelector('.header-value');
+  f.change(field, '   ');
+  assert.equal(f.get('debug-header-count').textContent, '(0)');
+});
+
+test('auth fixture fills one header and protects intervening edits', (f) => {
+  f.change(f.get('debug-auth-ip'), '192.0.2.10'); f.click('debug-auth-get');
+  assert.equal(f.get('debug-auth-get').disabled, true);
+  f.click('debug-auth-complete');
+  const field = f.document.querySelector('.header-value');
+  assert.equal(field.value, 'synthetic-review-token');
+  assert.equal(f.get('debug-header-count').textContent, '(1)');
+  f.click('debug-auth-get'); f.change(field, 'manual-value'); f.click('debug-auth-complete');
+  assert.equal(field.value, 'manual-value');
+  assert.match(f.get('debug-auth-status').textContent, /重新获取/);
+  f.click('debug-auth-get'); f.click('debug-auth-fail');
+  assert.equal(field.value, 'manual-value');
+});
+
+test('changed auth IP invalidates generated token and pending response', (f) => {
+  f.change(f.get('debug-auth-ip'), '192.0.2.10'); f.click('debug-auth-get'); f.click('debug-auth-complete');
+  f.click('debug-auth-get'); f.change(f.get('debug-auth-ip'), '192.0.2.11'); f.click('debug-auth-complete');
+  assert.equal(f.document.querySelector('.header-value').value, '');
+  assert.equal(f.get('debug-header-count').textContent, '(0)');
 });
 
 // No DOM geometry assertions: jsdom is not a layout engine.

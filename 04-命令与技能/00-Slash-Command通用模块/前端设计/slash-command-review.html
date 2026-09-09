@@ -358,6 +358,8 @@
     .more-menu { position: absolute; z-index: 8; bottom: calc(100% + 10px); left: 0; width: 176px; padding: 5px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-raised); box-shadow: var(--shadow); }
     .more-menu button { width: 100%; min-height: 44px; padding: 8px 12px; color: var(--text-primary); font: inherit; font-size: 13px; text-align: left; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
     .more-menu button:hover { background: var(--surface-selected); }
+    #command-run { min-height: 44px; padding: 8px 12px; margin: 4px 4px 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-secondary); color: var(--text-primary); cursor: pointer; }
+    #command-run:disabled { opacity: .6; cursor: default; }
     .submit-button { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; padding: 0; color: #fff; border: 0; border-radius: 50%; background: var(--action-primary); cursor: pointer; }
     .submit-button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .submit-button:hover:enabled { background: var(--action-primary-hover); }
@@ -443,7 +445,7 @@
     <main class="review-main">
       <header class="review-heading">
         <div>
-          <p>前端专项 · 1.4.0</p>
+          <p>前端专项 · 1.5.0</p>
           <h1 id="state-title">命令清单</h1>
           <p id="state-description">空消息中输入 /，读取当前 Chat 的服务端命令清单。</p>
         </div>
@@ -511,17 +513,15 @@
                   </div>
                   <textarea id="composer-input" rows="2" spellcheck="false" aria-label="输入消息"></textarea>
                 </div>
+                <button id="command-run" type="button" hidden>执行命令</button>
                 <span class="sr-only" id="parameter-hint"></span>
                 <p class="inline-error" id="inline-error" role="alert" hidden></p>
                 <div class="composer-actions">
                   <div class="tool-actions">
                     <button class="tool-button" id="more-button" type="button" aria-label="添加" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu">+</button>
-                    <div class="more-menu" id="more-menu" role="menu" aria-label="添加" hidden>
-                      <button id="command-entry" type="button" role="menuitem">命令</button>
+                    <div class="more-menu" id="more-menu" role="menu" aria-label="添加" tabindex="-1" hidden>
+                      <button id="attachment-entry" type="button" role="menuitem" disabled title="暂未接入附件上传">添加附件 · 暂未接入</button>
                     </div>
-                    <button class="tool-button" id="attach-button" type="button" aria-label="添加附件（原型暂不提供上传）" title="原型暂不提供上传" disabled>
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 5-5a3 3 0 0 1 4 4l-7 7a5 5 0 0 1-7-7l7-7"/></svg>
-                    </button>
                   </div>
                   <button class="submit-button" id="submit-button" type="button" aria-label="发送消息" disabled>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>
@@ -533,7 +533,7 @@
           </div>
         </div>
       </section>
-      <p class="prototype-caption">Builtin 结果仅当前页面；Skill 内部 SSE 已确认，公共执行仍待对齐。失败保留草稿，无自动重放。<a href="../../../01-总体架构/04-CampusClaw前端体验/frontend-review.html#conversation-workbench">查看共享对话、确认与恢复</a></p>
+      <p class="prototype-caption"><button id="simulate-stop-terminal" type="button" hidden>模拟本轮终止</button> Builtin 结果仅当前页面；Skill 内部 SSE 已确认，公共执行仍待对齐。失败保留草稿，无自动重放。<a href="../../../01-总体架构/04-CampusClaw前端体验/frontend-review.html#conversation-workbench">查看共享对话、确认与恢复</a></p>
     </main>
   </div>
 
@@ -580,7 +580,7 @@
     let message = "", savedMessage = "", query = "/", argumentsText = "";
     let selected = null, replacement = null;
     let mode = false, paletteOpen = false, moreOpen = false, composing = false, executing = false;
-    let activeIndex = 0, running = false, generation = 0, error = "";
+    let activeIndex = 0, running = false, stopping = false, generation = 0, error = "";
 
     function parse(raw) {
       const match = /^\/([^\t\n\v\f\r ]*)(?:[\t\n\v\f\r ]+([\s\S]*))?$/u.exec(raw);
@@ -591,7 +591,7 @@
       return parsed ? catalog.filter((item) => item.name.startsWith(parsed.nameToken)) : [];
     }
     function announce(text) { $("#composer-announcement").textContent = text; }
-    function focusEditor() { (selected && !selected.input ? submitButton : input).focus(); }
+    function focusEditor() { (selected && !selected.input ? (running ? $("#command-run") : submitButton) : input).focus(); }
     function render() {
       const options = matches();
       activeIndex = Math.max(0, Math.min(activeIndex, options.length - 1));
@@ -648,9 +648,14 @@
       input.setAttribute("aria-invalid", String(!!error));
       $("#more-menu").hidden = !moreOpen;
       $("#more-button").setAttribute("aria-expanded", String(moreOpen));
-      submitButton.setAttribute("aria-label", selected ? "运行 " + selected.name : "发送消息");
-      submitButton.title = selected ? "运行 " + selected.name : "发送消息";
-      submitButton.disabled = executing || paletteOpen || (mode ? !selected : running || !message.trim());
+      submitButton.setAttribute("aria-label", running ? "停止生成" : selected ? "运行 " + selected.name : "发送消息");
+      submitButton.title = stopping ? "正在停止" : submitButton.getAttribute("aria-label");
+      submitButton.innerHTML = running ? '<span aria-hidden="true">■</span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>';
+      submitButton.disabled = running ? stopping : executing || paletteOpen || (mode ? !selected : !message.trim());
+      $("#command-run").hidden = !running || !selected;
+      $("#command-run").disabled = executing || stopping || paletteOpen;
+      $("#command-run").setAttribute("aria-label", selected ? "运行 " + selected.name : "执行命令");
+      $("#simulate-stop-terminal").hidden = !stopping;
       if (paletteOpen) announce(options.length + " 条匹配命令");
     }
     function openCommands() {
@@ -707,7 +712,7 @@
         $(".help-description").innerHTML = initialHelp;
       } else {
         const text = {
-          status: "当前会话空闲，暂无待确认操作。",
+          status: running ? "当前会话正在执行。" : "当前会话空闲，暂无待确认操作。",
           name: invocation.arguments ? "会话名称：" + invocation.arguments : "会话名称：园区巡检",
           model: invocation.arguments ? "当前模型：" + invocation.arguments : "当前模型：默认模型",
           thinking: invocation.arguments ? "思考模式：" + invocation.arguments : "思考模式：关闭",
@@ -719,7 +724,7 @@
       }
     }
     async function submit() {
-      if (executing || composing || submitButton.disabled) return;
+      if (executing || composing || stopping || (running ? !selected || paletteOpen : submitButton.disabled)) return;
       if (!mode) {
         const article = document.createElement("article");
         article.className = "message user";
@@ -728,7 +733,7 @@
         bubble.textContent = message;
         article.append(bubble);
         $(".timeline-inner").insertBefore(article, result);
-        message = ""; render(); input.focus(); return;
+        message = ""; running = true; catalog = runningCatalog; $("#agent-status").textContent = "执行中 · 可停止"; render(); input.focus(); return;
       }
       if (!selected) return;
       if (Array.from(argumentsText).length > 2048) {
@@ -756,7 +761,10 @@
       if (event.repeat && event.key === "Enter") { event.preventDefault(); return; }
       if (composing || event.isComposing || event.keyCode === 229 || executing) return;
       if (event.key === "Escape") { event.preventDefault(); escape(); return; }
-      if (event.target !== input && event.target !== submitButton) return;
+      if (![input, submitButton, $("#command-run")].includes(event.target)) return;
+      if (event.target === submitButton && running && event.key === "Enter") {
+        event.preventDefault(); stop(); return;
+      }
       if (mode && event.key === "Backspace" && ((selected && !argumentsText) || (!selected && query === "/"))) {
         event.preventDefault(); exitCommand(); return;
       }
@@ -777,12 +785,23 @@
     });
     $("#more-button").addEventListener("click", () => {
       moreOpen = !moreOpen; render();
-      if (moreOpen) $("#command-entry").focus();
+      if (moreOpen) $("#more-menu").focus();
     });
-    $("#command-entry").addEventListener("click", openCommands);
+
     chipName.addEventListener("click", openCommands);
     $("#remove-command").addEventListener("click", exitCommand);
-    submitButton.addEventListener("click", () => void submit());
+    function stop() {
+      if (!running || stopping) return;
+      stopping = true; $("#agent-status").textContent = "正在停止"; render();
+    }
+    submitButton.addEventListener("click", () => running ? stop() : void submit());
+    $("#command-run").addEventListener("click", () => void submit());
+    $("#simulate-stop-terminal").addEventListener("click", () => {
+      if (!stopping) return;
+      running = false; stopping = false; catalog = idleCatalog;
+      $("#agent-status").textContent = "本轮已停止";
+      $("#running-banner").classList.remove("visible"); render();
+    });
     $(".result-close").addEventListener("click", () => { result.classList.remove("visible"); focusEditor(); });
     document.addEventListener("click", (event) => {
       if (event.target.closest(".state-tab")) return;
@@ -791,7 +810,7 @@
     });
     function setState(name) {
       const state = states[name] || states.catalog;
-      generation++; executing = false; composing = false;
+      generation++; executing = false; composing = false; stopping = false;
       running = name === "running"; catalog = running ? runningCatalog : idleCatalog;
       mode = name !== "help"; paletteOpen = ["catalog", "running", "unmatched"].includes(name);
       moreOpen = false; message = ""; savedMessage = ""; argumentsText = ""; selected = null; replacement = null;

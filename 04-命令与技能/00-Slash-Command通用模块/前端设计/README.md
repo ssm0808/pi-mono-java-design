@@ -4,21 +4,20 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.0 |
+| 文档版本 | 1.5.0 |
 | 更新日期 | 2026-09-09 |
-| 本次前端修订基线 | 设计仓 `1eb85523fe1d210856851c5185d64858562db0c6` |
+| 本次前端修订基线 | 设计仓 `599edb072cf75e3d8f85c775c53c0e83befd285d` |
 | Runtime 命令契约基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；B13 已确认 Skill SSE，Builtin JSON 不变 |
-| pi-mono-java 本次交互源码基线 | `4cc8dd86f601417c22cf9306e52152acbb59bb60`；早期结构证据保留在 §2.1 |
+| pi-mono-java 本次交互源码基线 | `7f1126262b16458e430c1a70aba9936e26391385`；早期结构证据保留在 §2.1 |
 | 适用端 | CampusClaw Web 产品前端；内部 Runtime 调试台只作为源码证据和受控联调入口 |
 | 状态 | 用户已确认的目标交互；正式评审原型已同步，Vue 交互待同步；公共执行边界沿用原契约门禁 |
 
 ## 1. 设计结论
 
-Slash Command 使用同一 Composer，内部独立保存消息与命令草稿。空草稿首字符输入 `/`，
-或通过“+ → 命令”打开紧贴输入框上方的清单；清单只显示不带前导 `/` 的规范名称和一句说明，
+Slash Command 使用同一 Composer，内部独立保存消息与命令草稿。空草稿首字符输入 `/` 打开紧贴输入框上方的清单；清单只显示不带前导 `/` 的规范名称和一句说明，
 保持服务端顺序做前缀过滤。选中后关闭清单，在输入框内显示可删除的命令标签；有 input 时只编辑参数，
-无 input 时隐藏参数输入。统一的圆形上箭头提交按钮保持同一外观，清单浏览时禁用；
-选择后必须再次按 Enter 或点击上箭头才会执行。界面不再显示独立 `/` 按钮、“命令模式”栏或常驻操作说明。
+无 input 时隐藏参数输入。空闲时圆形上箭头提交，清单浏览时禁用；运行时右下角保留停止方块，命令区显示独立“执行命令”。
+选择后必须再次明确执行，不由选中动作自动提交。`+` 只负责添加附件/上下文。界面不再显示独立 `/` 按钮、“命令模式”栏或常驻操作说明。
 
 Builtin 命令结果不是 Assistant 消息，不进入 ConversationTimeline、Session Event 或持久化历史。
 页面只保留当前 Chat 最近一条临时命令结果，并明确标注“仅当前页面”。失败、清单过期和网络不确定时
@@ -46,19 +45,20 @@ Builtin 命令结果不是 Assistant 消息，不进入 ConversationTimeline、S
 
 早期 `frontend/` 是内部 Runtime 调试工作台。上表记录初版设计的迁移起点，不能用来断言当前仍无命令实现。
 
-**本次交互证据**：以下路径相对 `pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60`，已完整读取这两个文件。
+**当前交互证据**：以下路径相对 `pi-mono-java@7f1126262b16458e430c1a70aba9936e26391385`，更新此前 `4cc8dd86f601417c22cf9306e52152acbb59bb60` 的组件证据。
 
-| 源码与符号 | 已观察行为 | 本次目标差距与理由 |
+| 源码与符号 | 已观察行为 | 目标差距与理由 |
 |---|---|---|
-| `frontend/src/components/ComposerBox.vue` · `enter`、`leave`、`choose`、`onKeydown`、template | 已有独立命令草稿、清单、选择和执行；工具栏是 `/` 按钮，列表显示 `/name`、kind 和 hint；选中后编辑整段命令，提交文案在“填入/运行/发送”间变化 | 改为 + 菜单入口、精简清单、已选标签和独立参数区；避免把浏览、选择和执行混成一个按钮动作 |
-| `frontend/src/runtime/commands.ts` · `parseCommand`、`filterCommands`、`decodeCatalog`、`freezeInvocation` | 首字符解析、大小写敏感前缀过滤、规范名称与 kind 校验、调用快照和结果类型判定已存在 | 保留规范名称、原样参数和提交判定；删除展示前缀不改变请求。标签是编辑器展示模型，不是新接口字段 |
+| `frontend/src/components/ComposerBox.vue`：template、onKeydown；`frontend/src/composables/useCommandComposer.ts` | 已有 + 命令入口、精简清单、标签和独立参数；Composer 没有停止动作 | + 改为附件/上下文，保留首字符 /；运行时命令独立执行，避免覆盖停止按钮 |
+| `frontend/src/runtime/commands.ts`：parseCommand、filterCommands、freezeInvocation | 已有规范名称、原样参数与不可变提交快照 | 保留协议形态；不因按钮位置变化新增接口字段 |
+| `frontend/src/App.vue`：executeCommand；`frontend/src/composables/useRuntimeApi.ts`：executeCommand | 本地 Header 校验失败返回 uncertain；已有 Builtin JSON/Skill SSE 分路 | 校验失败显示本地错误并聚焦 Header；只有发出写请求且结果不可确定才进入恢复 |
 
 本次只修订前端交互和评审材料，不重新定义 Runtime、Mate 或 Skill 协议。图中独立组件与 Store 的拆分仍是 target-only，
 不能把当前 Composer 内已有的功能与目标组件分层混为一谈。
 
 **Codex 参考边界**：2026-09-09 核对 [OpenAI 官方 Slash commands 文档](https://learn.chatgpt.com/docs/reference/slash-commands)，
 公开文档支持“在 Composer 输入 `/`、选择命令或继续输入过滤”的入口模型。紧凑行、隐藏展示前缀、可删除标签、
-“+”菜单和二次执行是本次用户确认的 CampusClaw 目标决策，不声称是 Codex 桌面源码或像素级行为。
+附件“+”与命令分离、运行中独立执行和二次执行是 CampusClaw 目标决策，不声称是 Codex 桌面源码或像素级行为。
 
 ### 2.2 已确认协议约束
 
@@ -82,7 +82,7 @@ Mate 侧当前只确认 Descriptor 字段投影；路径、权限、错误映射
 
 | 决策 | 分类 | 具体理由 |
 |---|---|---|
-| + 菜单入口、精简清单、可删除命令标签、统一上箭头 | 产品约束 | 减少重复信息，保持同一编辑器操作习惯；参数与命令身份分开编辑 |
+| 首字符 /、精简清单、命令标签、运行中独立执行 | 产品约束 | 减少重复信息，保持同一编辑器操作习惯；参数与命令身份分开编辑 |
 | 消息与命令采用两个草稿缓冲区 | 产品约束 | 尝试 Slash、关闭清单或执行失败不能破坏用户已写消息 |
 | 选中后还需再次明确执行 | 安全加固 | 防止键盘浏览时误触 Compact、Name、Model 等状态变更 |
 | Builtin 结果不进入对话历史 | 架构选择 | Builtin 没有通用持久化生命周期；Skill 已按 B13 复用普通消息事件，二者不能混为一个结果分支 |
@@ -102,12 +102,13 @@ Chat Workspace
 ├── ConversationTimeline                 现有权威对话记录
 ├── CommandResultRegion                  当前 Chat 最近一条临时结果
 └── Composer
-    ├── ComposerMoreMenu                 + → 命令入口
+    ├── AttachmentMenu                  + → 附件/上下文，不打开命令
     ├── CommandPalette                   规范名称、一句说明、过滤与空态
     ├── SelectedCommandChip              点击名称换命令，× 退出并恢复消息
     ├── Textarea                          消息、查询词或所选命令参数
     ├── Attachment controls              仅 acceptsFiles=true 时准入
-    └── Submit action                    同一圆形上箭头，无障碍名称随语义变化
+    ├── Command execution               运行中已选命令的独立执行按钮
+    └── Primary action                  空闲时上箭头，运行时停止方块
 ```
 
 桌面端 `CommandPalette` 从 Composer 上方展开，宽度与 Composer 内容区对齐，最大高度 360px。
@@ -122,14 +123,14 @@ Chat Workspace
 
 ![Slash Composer 状态图](./slash_composer_state.svg)
 
-[PlantUML 源码](./diagram.puml#L115) · [展开原尺寸 SVG](./slash_composer_state.svg)
+[PlantUML 源码](./diagram.puml#L124) · [展开原尺寸 SVG](./slash_composer_state.svg)
 
 ### 4.1 进入与退出
 
 | 用户动作 | 前置条件 | 结果 |
 |---|---|---|
 | 在 textarea 输入 `/` | 普通消息草稿为空、光标位于第一个字符、未处于 IME composition | 进入命令模式并读取清单 |
-| 点击 + 菜单中的“命令” | 任意未禁用状态 | 暂存普通消息和附件，建立独立命令草稿并打开清单 |
+| 点击 + | 未禁用状态 | 打开附件/上下文菜单，不改变命令或消息草稿；未接入上传时对应项禁用 |
 | 在已有消息中输入 `/` | 消息草稿非空 | 作为普通字符，不改变模式 |
 | Escape | 首次浏览清单 | 只关闭清单并保留查询草稿；再次 Escape 退出并恢复暂存消息 |
 | 点击已选标签名称 | 已选命令 | 暂存当前选择和参数，重新打开清单；Escape 恢复原标签与参数 |
@@ -138,7 +139,7 @@ Chat Workspace
 | Chat 切换、Session 刷新或登出 | 任意命令状态 | 中止 GET、清除命令草稿和临时结果；绝不迁移到另一个 Chat |
 
 消息草稿与附件沿用产品前端既有恢复策略；新增命令草稿只存在当前页面内存，不写入 localStorage、
-Session Event 或服务端。点击入口暂存的消息在取消或成功后恢复；失败时仍保留在后台，命令草稿保持前台可编辑。
+Session Event 或服务端。进入命令时暂存的消息及附件在取消或成功后恢复；失败时仍保留在后台，命令草稿保持前台可编辑。
 
 ### 4.2 解析规则
 
@@ -159,9 +160,10 @@ Session Event 或服务端。点击入口暂存的消息在取消或成功后恢
 - 仅输入 `/` 时显示完整清单；继续输入名称时做大小写敏感的前缀过滤，并保持服务端相对顺序。
 - 上下方向键移动活动项，Home/End 跳到首尾；Enter 选择活动项，鼠标或触摸点击语义相同。
 - 点击或 Enter 只选择并关闭清单；上箭头在浏览中禁用，不承担“填入”动作。
-- 选中无 input 的命令显示标签、隐藏参数 textarea，焦点进入上箭头；再次明确 Enter 或点击才提交。
+- 选中无 input 的命令显示标签、隐藏参数 textarea，焦点进入当前命令执行按钮（空闲为上箭头，运行中为独立按钮）；再次明确 Enter 或点击才提交。
 - 有 input 时标签与参数编辑器同处输入区，光标进入参数；`input.hint` 作为参数占位提示并通过无障碍描述关联，不再单列常驻说明。
-- 上箭头可访问名称为“运行 <name>”或“发送消息”，图形不变。参数编辑时 Shift+Enter 换行，Enter 执行。
+- 空闲上箭头可访问名称为“运行 <name>”或“发送消息”。运行时右下角固定为“停止生成”，命令区独立显示“执行命令”，可访问名称为“运行 <name>”；无 input 时焦点进入该命令按钮，有 input 时 Enter 执行命令，Shift+Enter 换行。普通消息 textarea 的 Enter 不停止也不发送。
+- 点击停止只走共享对话协调器，命令查询不能遮挡或禁用可用的停止动作；停止请求到真实终态的状态见[工作台专项](../../../01-总体架构/04-CampusClaw前端体验/runtime-workbench-alignment.md#4-composer-的发送与停止)。
 - IME composition、`isComposing`、keyCode 229 及按键长按 repeat 不触发选择或执行；选择那次 Enter 不得再次触发提交。
 - running 状态下普通消息仍遵循 Events 设计的限制，但服务端清单中保留的查询命令仍可运行。
 
@@ -186,7 +188,7 @@ Session Event 或服务端。点击入口暂存的消息在取消或成功后恢
 
 ![Slash Command 执行时序](./slash_command_execution_flow.svg)
 
-[PlantUML 源码](./diagram.puml#L199) · [展开原尺寸 SVG](./slash_command_execution_flow.svg)
+[PlantUML 源码](./diagram.puml#L209) · [展开原尺寸 SVG](./slash_command_execution_flow.svg)
 
 执行请求由已选择 Descriptor 与当前编辑值组装，不重新解析成另一命令。提交期间只锁定命令编辑和“运行”动作，
 保留取消页面读取和浏览历史的能力。当前协议没有 cancel command，离开页面不应声称后端命令已取消。
@@ -200,7 +202,7 @@ Skills 是 `skills`。未知名称或无法确定的形态 fail closed；Skill �
 不匹配时转换为稳定的 `INVALID_RESPONSE` 前端错误，不写入 Session/Model Store，不展示“执行成功”。
 
 附件只有在 `input.acceptsFiles === true` 时才能加入请求；否则附件按钮禁用并提供原因。
-从带附件的普通消息草稿通过“+ → 命令”进入命令状态时，附件和消息一起暂存，不得静默丢弃或带入不接收附件的命令。
+从文本为空但带附件的草稿通过首字符 `/` 进入命令状态时，附件单独暂存，不得静默丢弃或带入不接收附件的命令。
 因为公共 Skill 文件引用契约未确认，生产 Mate Gateway 在该能力确认前必须拒绝真实附件命令并给出明确说明。
 
 网络中断时前端不能判断 POST 是否已到达服务端：
@@ -280,7 +282,7 @@ Help `userCases` 未来若增加“填入输入框”，也只能把纯文本放
 
 | 对象 | 生命周期 | 单一职责 |
 |---|---|---|
-| `ComposerMoreMenu` / `SelectedCommandChip` | Composer 视图 | 提供命令入口、切换及删除，不直接调用 Gateway；统一提交由 Composer 编排 |
+| `AttachmentMenu` / `SelectedCommandChip` / `CommandRunAction` | Composer 视图 | 添加与命令分开；标签更换及删除、运行中独立执行由 Composer 编排，不直接调用 Gateway |
 | `useSlashCommands` | active Chat 视图 | 编排进入、读取、选择、执行、失效和结果投影 |
 | `CommandDraftStore` | active Chat 页面内存 | 分离 message/command 草稿、暂存恢复和光标状态 |
 | `CommandCatalogStore` | active Chat 页面内存 | GET 去重、代次、stale 与服务端顺序 |
@@ -342,7 +344,7 @@ interface CommandGateway {
 - 命令列表只保留不带前导 `/` 的规范名称和一句说明；不显示 kind 标签、逐行 hint、装饰图标、清单标题或操作教学。
 - 宽屏每行名称与说明横向对齐，最小行高 44px；700px 以下改为名称、说明上下排列，允许长文本换行。
 - Composer 沿用普通消息外框，不额外标红或显示“命令模式”；所选命令使用浅灰标签，名称可点击更换，× 可删除。
-- + 菜单包含“命令”入口；参数 placeholder 只在所选命令有 input 时显示，统一上箭头不切换成文字按钮。
+- + 菜单仅包含已接入的附件/上下文能力；参数 placeholder 只在所选命令有 input 时显示；右下角由共享执行状态切换发送与停止。
 
 - 查询 textarea 使用 `role="combobox"`、`aria-autocomplete="list"`、`aria-expanded`、`aria-controls` 和活动项 `aria-activedescendant`；清单使用单选 `listbox/option` 语义。普通消息和参数编辑恢复 textarea 语义；标签名称和删除动作各有独立可访问名称。
 - 清单项活动变化时滚入可视区，但不抢走 textarea DOM 焦点；读屏通过礼貌级 live region 宣布结果数量、读取错误和执行完成。
@@ -359,7 +361,7 @@ interface CommandGateway {
 - Parser 覆盖空值、仅 `/`、前导空格、大小写、ASCII 分隔、多行参数和超长输入。
 - 前缀过滤必须保留服务端相对顺序；禁止模糊评分和客户端 Builtin 固定表。
 - Catalog 覆盖请求合并、Chat 切换中止、迟到响应丢弃、stateKey 失效和 POST 后 stale。
-- Draft 覆盖按钮进入/取消/成功/失败、暂存消息与附件恢复、页面刷新清除。
+- Draft 覆盖首字符进入/取消/成功/失败、暂存消息与附件恢复、页面刷新清除。
 - 调用快照覆盖每个 Builtin，必须单独覆盖 `model` 空参→Models、带参→Session，草稿继续编辑不改变在途快照。
 - Result Registry 覆盖每个 `expectedResultKind`、未知命令 fail closed 和恶意 Help 文本按纯文本展示。
 
@@ -367,7 +369,7 @@ interface CommandGateway {
 
 - IME composing 时 Enter 不选中、不执行；键盘、触摸和鼠标得到同一规范命令。
 - 选择后清单关闭、显示可删除标签；无 input 隐藏参数，有 input 只编辑参数；菜单行没有前导 Slash、kind 或 hint。
-- + 菜单可通过键盘打开“命令”；取消/成功恢复消息和附件，更换命令后 Escape 恢复原选择及参数。
+- + 菜单不含命令，打开和关闭不破坏草稿；首字符 / 发现、取消/成功恢复附件；运行中选择无参数命令后焦点不得误落停止按钮，更换后 Escape 恢复原选择及参数。
 - 第一次 Escape 关闭清单，第二次退出；空参数 Backspace 与 × 退出；未匹配不发送。
 - 选择命令不执行，第二个明确动作才执行；长按 Enter 不提交，重复点击运行只能产生一次在途请求。
 - `acceptsFiles` 缺失时附件无法进入请求，已有附件不被静默清除。
@@ -384,11 +386,11 @@ interface CommandGateway {
 - Mate 执行协议未确认前，端到端测试必须证明生产执行入口 fail closed，而不是落到普通 Events。
 - Builtin JSON 与 Skill SSE fixture 不能互相解码；Skill 完整回执进入共享事件 Store，结果不进入 Builtin 临时区；断流不重发、私有 Skill 正文不公开。
 
-### 11.4 本次原型验证记录（2026-09-09）
+### 11.4 当前原型验证记录（2026-09-09）
 
-- [DOM 交互检查](./test_slash_command_review.cjs) 的 12 个场景通过：过滤、标签/参数、二次执行、重复 Enter、IME、Escape、草稿恢复、running input、省略参数保护、Skill 门禁和纯文本结果。脚本阻断网络 API，未发起真实命令。
-- 主体验原型现有 13 个场景通过；本次未新增 npm 或 Maven 依赖，测试复用已有外部 jsdom 环境。
-- Chrome 实际操作验证 + 菜单、键盘选择、更换取消、消息恢复及无参数命令焦点；320、390、768、1024、1440px 宽度无横向溢出，清单未越过工作区顶部。已查看桌面、手机和长标签布局。
+- [DOM 交互检查](./test_slash_command_review.cjs) 的 13 个场景通过：过滤、标签/参数、二次执行、重复 Enter、IME、Escape、草稿恢复、running input、省略参数保护、Skill 门禁、纯文本结果及运行中独立执行与停止。脚本阻断网络 API，未发起真实命令。
+- 主体验原型 17 个场景通过；未新增 npm 或 Maven 依赖，测试复用已有外部 jsdom 环境。
+- Chrome 实际操作验证运行中独立“执行命令”、同位置停止按钮及无参数命令焦点；390、768、1024、1440px 宽度无页面横向溢出，已查看桌面与手机布局。
 - 三个 PlantUML 块生成成功、ASCII 与 SVG XML 校验通过，重新生成与提交产物一致；已查看原尺寸及缩放图，并与原主组件图对照保留完整职责链。
 - 专项及总览的本地链接和 PlantUML 行锚点已核对，仓库 Markdown 无 Mermaid 围栏，`git diff --check` 通过。
 
@@ -397,7 +399,7 @@ interface CommandGateway {
 
 ## 12. 实施切片与协议门禁
 
-1. 在已有 Composer 和解析器上先落地 MoreMenu、Palette、Chip 与统一提交：独立保存查询、所选名称、参数和恢复快照，用 Mock 验证 §11.2；按目标边界拆分 Store，不引入新的真实 POST。
+1. 在已有 Composer 和解析器上先落地附件菜单、Palette、Chip 与共享发送/停止操作：独立保存查询、所选名称、参数和恢复快照，用 Mock 验证 §11.2；按目标边界拆分 Store，不引入新的真实 POST。
 2. 接入已确认 Descriptor 的 Mate GET 后，完成 idle/running、失效和错误态契约测试。
 3. 实现 Builtin Renderer，并用 Runtime JSON fixture 验证 Session/Models/Help 投影；仍不宣称产品可执行。
 4. Mate 公共执行 operation 需先确认路径、认证、请求联合类型、响应判别、错误、超时和不确定结果对账，再实现 `MateCommandGateway.executeCommand`。
@@ -422,7 +424,8 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.4.0 | 2026-09-09 | 按用户确认重做命令展示与交互：+ 菜单、精简无 Slash 清单、可删除标签、独立参数编辑、统一上箭头；补全 Escape/切换/草稿恢复与重复 Enter 保护。复核实现 4cc8dd8，更新正式原型和三张图，Vue 待同步。 |
+| 1.5.0 | 2026-09-09 | 将 + 归为添加入口，命令由 / 触发，运行中独立执行并保留停止按钮。 |
+| 1.4.0 | 2026-09-09 | 定义精简命令清单、可删除标签、独立参数编辑、统一执行按钮及 Escape、草稿恢复与重复 Enter 保护。 |
 | 1.3.0 | 2026-09-08 | 区分 Builtin 临时 JSON 与内部已确认 Skill SSE；Skill 复用主对话、确认及恢复，公共执行保持门禁；视觉不变。 |
 | 1.2.0 | 2026-09-07 | 按用户反馈恢复浅暖灰评审导航，删除命令装饰图案及占位列；窄屏保留参数提示并支持文字换行，继承原前端视觉基线。 |
 | 1.1.0 | 2026-09-07 | 补充后端精简响应的前端判别规则：提交前冻结调用快照，按命令名与参数形态确定结果类型，区分 model 查询 Models 与修改 Session，未匹配 Schema/ETag 时 fail closed。 |
