@@ -690,7 +690,7 @@ def validate_review_pages(post: dict) -> None:
     history_parser = validator.ContractHtmlParser()
     history_parser.feed(history_source)
     histories, history_scripts = validator.parse_generated_models(history_parser)
-    require(len(histories) == history_parser.static_review_count == 10 and len(history_scripts) == 1,
+    require(len(histories) == history_parser.static_review_count == 11 and len(history_scripts) == 1,
             "show one unified catalog")
     history = next(model for model in histories if model["operation"]["operationKey"] == "listSessionEvents")
     validate_history_model(history, post)
@@ -710,7 +710,7 @@ def validate_review_pages(post: dict) -> None:
     parser = validator.ContractHtmlParser()
     parser.feed(source)
     models, scripts = validator.parse_generated_models(parser)
-    require(len(models) == parser.static_review_count == 10 and len(scripts) == 1, "show one unified catalog")
+    require(len(models) == parser.static_review_count == 11 and len(scripts) == 1, "show one unified catalog")
     merged = next(model for model in models if model["operation"]["operationKey"] == "submitSessionEvent")
     validate_model(merged)
     validator.validate_executable_script(scripts[0])

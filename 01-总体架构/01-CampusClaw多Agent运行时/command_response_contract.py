@@ -52,7 +52,7 @@ def validate_response_reuse(models):
     operations = {model["operation"]["operationKey"]: model["operation"] for model in models}
     session = success(operations["getSession"])
     model_list = success(operations["listSessionModels"])
-    for key in ("changeSessionModel", "changeSessionThinking"):
+    for key in ("changeSessionModel", "changeSessionThinking", "changeSessionName"):
         same_shape(success(operations[key]), session, nullable_name=True)
     responses = [item for item in operations["executeSessionCommand"]["responses"] if item["status"] == "200" and item["id"] != "200-skill-message"]
     cases = {item["id"]: item for item in responses}

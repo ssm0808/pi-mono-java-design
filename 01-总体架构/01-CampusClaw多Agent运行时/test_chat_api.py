@@ -42,7 +42,7 @@ class CatalogTest(unittest.TestCase):
 
     def test_current_models_keep_source_payloads_and_review_decisions(self):
         manifest, models = current.load_catalog()
-        self.assertEqual(10, len(models))
+        self.assertEqual(11, len(models))
         for entry, model in zip(manifest["operations"], models):
             original = current.shared.expand_model(
                 self.read_json(current.ROOT / entry["common"]),

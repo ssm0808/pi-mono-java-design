@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -67,6 +67,14 @@
       "status": "原契约已确认 · 联动已同步",
       "note": "配置请求和响应保持原契约；历史过滤与事件映射已确认并同步，已移除作废的旧事件名和游标失效指引。",
       "design": "chat-http-v1-design.md#243-put-session-thinking"
+    },
+    {
+      "key": "changeSessionName",
+      "source": "接口契约/操作/14-change-session-name.json",
+      "common": "接口契约/common.json",
+      "status": "已确认目标契约 · 待实现",
+      "note": "新增独立 Session 重命名入口；与 /name 共用名称规范化和写入服务，HTTP 写入额外使用 If-Match 保护并发更新。",
+      "design": "chat-http-v1-design.md#244-put-session-name"
     },
     {
       "key": "listSessionCommands",

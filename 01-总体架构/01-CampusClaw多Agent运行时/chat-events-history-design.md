@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.5.0 |
+| 文档版本 | 0.5.1 |
 | 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，target-only |
-| 更新日期 | 2026-09-09 |
+| 更新日期 | 2026-09-10 |
 | 原文展示与消费修复 | 实现提交 `cad6847d901155cc6388989b984d19e302a4fbe3`，见 [Draft PR #287](https://github.com/superheromeZzh/pi-mono-java/pull/287)；合入前不作为实现仓主线行为 |
 | 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
@@ -19,7 +19,7 @@ ListEvents 按已提交顺序从旧到新返回当前分支的完整事件，使
   [02-list-session-events.json](事件契约/操作/02-list-session-events.json)。
 - [POST 保留评审页](chat-api-review.html#submitSessionEvent) 与
   [请求级 SSE 设计](chat-events-stream-design.md) 继续有效。
-- 当前十项内部接口由统一清单管理。Thinking 展示规则由 Runtime、Mate 公共 API 与前端
+- 当前十一项内部接口由统一清单管理。Thinking 展示规则由 Runtime、Mate 公共 API 与前端
   共用；内部 `sessionId` 不直接暴露给浏览器。
 
 ```http
@@ -378,6 +378,7 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.5.1 | 2026-09-10 | 同步 Runtime 十一项当前接口清单，ListEvents 契约不变。 |
 | 0.5.0 | 2026-09-09 | 明确原始推理、业务失败事件、工具确认归属和响应长度边界。 |
 | 0.4.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 0.3.0 | 2026-09-08 | 记录用户四组全部按推荐确认 B01～B15。 |

@@ -42,26 +42,40 @@ end note
 @enduml
 
 @startuml session_name_update
-title Target-only Name Update Under Row Lock
-' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql t_sessions.
-' Architecture change: persist current display_name only; no name event or sidecar.
+title Shared Session Name Update Under Row Lock
+' Source evidence: pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java.
+' Source evidence: same commit modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/contributor/NameCommandContributor.java.
+' Source evidence: same commit modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeSessionRepository.java updateName.
+' Source evidence: same commit modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java updateName.
+' Observed behavior: slash name updates display_name; no direct HTTP name route exists.
+' Target-only architecture: the HTTP adapter supplies a required expected version.
+' Design reason: share validation and persistence while preventing lost direct-UI writes.
 skinparam shadowing false
-participant Handler
+participant "Direct Name API\n[target-only]" as API
+participant "Name Command Handler\n[existing]" as Handler
 participant SessionNamingService as Service
 database SessionRepository as Repo
-Handler -> Service : arguments
-Service -> Service : strip outer whitespace and validate UTF-8 / Unicode
-Service -> Repo : lock Session row
-alt same normalized name
-  Repo --> Service : changed=false, same version
-else new valid name
-  Repo -> Repo : update display_name and resource_version
-  Repo --> Service : changed=true
+alt direct UI rename
+  API -> Service : displayName and expectedVersion from If-Match
+else slash command rename
+  Handler -> Service : arguments and no expectedVersion
 end
-Service --> Handler : NameResultDTO
+Service -> Service : strip outer whitespace and validate 80 UTF-8 bytes / Unicode
+Service -> Repo : lock Session row and optionally compare version
+alt expected version differs
+  Repo --> API : 412 version mismatch
+else same normalized name
+  Repo --> Service : unchanged Session and same ETag
+else new valid name
+  Repo -> Repo : update display_name, updated_at, and resource_version
+  Repo --> Service : updated authoritative Session
+end
+Service --> API : Session resource and ETag
+Service --> Handler : NameResultDTO from same Session
 note over Repo
 Running is allowed.
-Last commit wins.
+Slash keeps last-commit-wins under the row lock.
+Direct HTTP requires optimistic concurrency.
 No Entry or active-leaf mutation.
 end note
 @enduml

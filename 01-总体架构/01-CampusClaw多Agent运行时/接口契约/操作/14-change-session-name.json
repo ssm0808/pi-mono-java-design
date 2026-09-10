@@ -1,0 +1,234 @@
+{
+  "operation": {
+    "shortName": "重命名会话",
+    "operationKey": "changeSessionName",
+    "method": "PUT",
+    "path": "/sessions/{sessionId}/name",
+    "summary": "修改 Session 显示名称",
+    "description": "直接更新 Session displayName，与 Builtin /name 命令共用同一名称规范化与持久化服务。直接 HTTP 调用要求 If-Match，事务内锁定 Session 并再次校验资源版本；/name 命令不接收 ETag，保留现有锁内最终写入语义。名称修改不改变当前执行快照，因此 idle/running 均可调用，不写入 Session Entry。",
+    "parameters": [
+      {
+        "$ref": "parameters.sessionId"
+      },
+      {
+        "in": "header",
+        "name": "If-Match",
+        "required": true,
+        "schema": "strong ETag",
+        "description": "最近一次 GET Session 或成功 Session 变更返回的 ETag；缺失返回 428，不匹配返回 412"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "description": "只接受 displayName。去除首尾空白后必须非空，保留内部空白；禁止 CR/LF、C0/C1 控制字符和双向文本覆盖/隔离字符，UTF-8 编码最多 80 字节。不接受 name、changed、未知字段或 Idempotency-Key。",
+      "example": {
+        "displayName": "园区网络故障分析"
+      }
+    },
+    "responses": [
+      {
+        "id": "200-name-updated",
+        "status": "200",
+        "tabLabel": "200 · 名称已更新",
+        "label": "OK",
+        "summary": "返回更新后的完整 Session 资源及 ETag；示例显式说明 running 期间也允许重命名。",
+        "headers": {
+          "ETag": "\"snp-N8mQ2vK5xR4\"",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "claude-sonnet-4-5",
+              "state": "running",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-09-10T10:15:00+08:00"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-name-unchanged",
+        "status": "200",
+        "tabLabel": "200 · 名称未变",
+        "label": "OK",
+        "summary": "规范化后与当前名称相同时返回原 Session 和原 ETag；updatedAt 不变，不返回 changed。",
+        "headers": {
+          "ETag": "\"snp-N8mQ2vK5xR4\"",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "claude-sonnet-4-5",
+              "state": "running",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-09-10T10:15:00+08:00"
+            }
+          }
+        }
+      },
+      {
+        "id": "400-invalid-session-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_SESSION_ID",
+        "label": "Bad Request",
+        "summary": "sessionId 不符合标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "sessionId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The sessionId format is invalid."
+          }
+        }
+      },
+      {
+        "id": "400-invalid-session-name-request",
+        "status": "400",
+        "tabLabel": "400 · INVALID_SESSION_NAME_REQUEST",
+        "label": "Bad Request",
+        "summary": "JSON 非法、缺少 displayName、值不是字符串、规范化后为空、超限、含禁止字符或未知字段。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_NAME_REQUEST",
+            "resMsg": "Session 名称请求不符合约束。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_NAME_REQUEST",
+            "resMsg": "The Session name request is invalid."
+          }
+        }
+      },
+      {
+        "status": "404",
+        "label": "Not Found",
+        "summary": "Session 不存在或已删除。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        }
+      },
+      {
+        "status": "412",
+        "label": "Precondition Failed",
+        "summary": "If-Match 与当前 Session ETag 不一致；调用方应重新 GET Session 并明确决定是否重试。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_VERSION_MISMATCH",
+            "resMsg": "Session 已发生变化，请刷新后重试。"
+          },
+          "en-US": {
+            "resCode": "SESSION_VERSION_MISMATCH",
+            "resMsg": "The Session has changed. Refresh it before retrying."
+          }
+        }
+      },
+      {
+        "status": "428",
+        "label": "Precondition Required",
+        "summary": "请求缺少必填 If-Match Header。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "IF_MATCH_REQUIRED",
+            "resMsg": "修改 Session 名称必须携带 If-Match。"
+          },
+          "en-US": {
+            "resCode": "IF_MATCH_REQUIRED",
+            "resMsg": "If-Match is required to modify the Session name."
+          }
+        }
+      },
+      {
+        "status": "500",
+        "label": "Internal Server Error",
+        "summary": "Session displayName、updatedAt 和资源版本未能原子更新。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NAME_UPDATE_FAILED",
+            "resMsg": "Session 名称更新失败。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NAME_UPDATE_FAILED",
+            "resMsg": "The Session name could not be updated."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": []
+  }
+}

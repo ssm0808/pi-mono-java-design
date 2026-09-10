@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.16.0 |
-| 状态 | B01～B15 已全部确认，Session Events 与 Skill 联动契约已定稿，可进入实现；Builtin JSON 保持；当前十项接口共用一个契约入口 |
+| 文档版本 | 3.17.0 |
+| 状态 | B01～B15 已全部确认，Session Events 与 Skill 联动契约已定稿；新增独立 Session 重命名目标接口；当前十一项接口共用一个契约入口 |
 | 当前传输结论 | 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -24,7 +24,8 @@
 | DeepSeek Harness 对照基线 | `141eb6fef83422698aef7a981029e843e8161534` |
 | Codex Harness 对照基线 | `be33f80bc65159c094ecd06bf155afa3061ce23d` |
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989`；PR #210 最终实现 `9d0d76f4a571b559dc77ae52736caebbcc8fad88` 已通过 `a8192e047f4061bd385297d3dc6c4358362d0d49` 合并 |
-| 更新日期 | 2026-09-09 |
+| Session 重命名补充核对 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；`SessionNamingService` 与 `RuntimeSessionRepository.updateName` 已实现，但只由 `/name` Command 暴露 |
+| 更新日期 | 2026-09-10 |
 
 Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-history-design.md#thinking-original-text)。
 
@@ -75,7 +76,7 @@ POST 的决定与未决项仍见 [合并 POST 保留评审页](chat-api-review.h
 旧确认页及其他分散评审页已删除，不保留变更提示或跳转占位；旧 JSON POST 仅从 Git 历史追溯。
 B01～B15 四组已全部按推荐确认，精确字段、错误码与示例已补齐；没有新的产品确认门槛。
 
-本次确认移除独立 `/abort`、`/steers`、`/follow-ups`，当前目标共 10 个接口。
+独立 `/abort`、`/steers`、`/follow-ups` 保持退役；新增一个与 `/name` 共用业务服务的重命名接口，当前目标共 11 个接口。
 停止执行通过 user.interrupt 完成，调整方向采用实际停止后新提交消息。本期不支持排队。
 [FollowUp 未来设计](chat-follow-up-future-design.md) 仅记录数据库交接方向，启用另行评审，
 不改变 M1 未完成前拒绝 M2，不新增当前消息队列。
@@ -109,7 +110,7 @@ FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。公共 Comman
 
 ## 2. 契约权威顺序
 
-1. [catalog.json](接口契约/catalog.json) 唯一决定当前清单：八项保留接口与两项 Session Events，各操作只出现一次。
+1. [catalog.json](接口契约/catalog.json) 唯一决定当前清单：九项普通接口与两项 Session Events，各操作只出现一次。
 2. [chat-api-review.html](chat-api-review.html) 是唯一当前接口详情页；按接口展开，展示各自确认状态和待联动事项。
 3. 清单引用的 JSON 模型是精确编辑源；Markdown 保存设计理由、已确认决定、未决项和注明 commit 的源码证据。
 
@@ -198,10 +199,11 @@ CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` �
 | 6 | `GET` | `/sessions/{sessionId}/models` | `200` ResultBean | 返回可用 `modelId` 字符串数组 |
 | 7 | `PUT` | `/sessions/{sessionId}/model` | `200` ResultBean | 修改后续用户消息使用的 Session 默认模型 |
 | 8 | `PUT` | `/sessions/{sessionId}/thinking` | `200` ResultBean | 开关后续用户消息是否启用深度思考 |
-| 9 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回按状态过滤的 Builtin/Skill 轻量清单，固定 Builtin 顺序后追加 Skill |
-| 10 | `POST` | `/sessions/{sessionId}/command` | Builtin JSON / Skill SSE | Builtin 完成后返回；Skill 复用事件执行与恢复 |
+| 9 | `PUT` | `/sessions/{sessionId}/name` | `200` ResultBean | 直接重命名 Session；与 `/name` 共用业务规则，直接调用要求 `If-Match` |
+| 10 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回按状态过滤的 Builtin/Skill 轻量清单，固定 Builtin 顺序后追加 Skill |
+| 11 | `POST` | `/sessions/{sessionId}/command` | Builtin JSON / Skill SSE | Builtin 完成后返回；Skill 复用事件执行与恢复 |
 
-本表第 4、5 项采用最新 Session Events；其余八项保留既有契约。配置事件与 Skill 的衔接已按 B12～B14 同步。旧 v1 POST/GET 字段仅作迁移基线，目标语义已定稿。
+本表第 4、5 项采用最新 Session Events；第 9 项是已确认的 target-only 重命名契约；其余八项保留既有契约。配置事件与 Skill 的衔接已按 B12～B14 同步。
 三个独立控制接口不再计入目录或作为兼容别名。
 
 公共资源没有 `Run`。一次用户输入会触发内部 active execution，但调用方使用
@@ -225,7 +227,7 @@ Session、Entry 和 SSE 恢复，不获得 `runId`，也不存在 GetRun 或 Run
 `ResultBeanAdapter.normal(result)`；独立仓提供默认实现，公司环境以 Bean 替换并在
 适配器内部调用真实 `ResultBeanFactory.getFactory().normal(result)`。
 
-全部十项操作都携带调用上下文 Header。JWT 示例固定为
+全部十一项操作都携带调用上下文 Header。JWT 示例固定为
 `X-HW-ID: credential-jwt` 与 `Authorization: Bearer opaque-token`；APPKEY 示例固定为
 `X-HW-ID: credential-appkey` 与 `X-HW-APPKEY: opaque-appkey`。这些都是当前源码测试使用的
 非生产示例值。`X-HW-ID` 表示用户凭据 ID，不是公司、服务或应用标识。CampusClaw
@@ -334,6 +336,7 @@ Compact 接受后不因 HTTP 断线取消；
 - 一个 Session 绑定一个不可变 `agentId`，允许切换 `modelId`；模型不是 Session 身份的一部分。
 - 公共标识字段固定命名为 `agentId`、`toolId`、`skillId` 和 `sessionId`；对应值共用类型化资源 ID 规则，精确正则只在 [`接口契约/common.json`](接口契约/common.json) 定义。
 - Session 名称属于 CampusClaw Session 领域，持久化为可空 `displayName`；mate-service 不维护副本。
+- 直接重命名与 `/name` 共用规范化和持久化逻辑；HTTP 入口要求 `If-Match`，Command 保留无 ETag 的锁内更新语义。
 - Session 粗粒度状态只有 `idle/running`；模型、工具或消息阶段通过实时事件表达。
 - `thinking` 是“是否启用深度思考”的 boolean，不是原始推理披露等级。
 - 持久化 Session Entry 使用 `id + parentId` 形成树；公共 GET Events 首版只返回当前分支。
@@ -512,6 +515,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.17.0 | 2026-09-10 | 新增独立 Session 重命名目标接口，与 `/name` 共用服务并以 `If-Match` 保护直接写入。 |
 | 3.16.0 | 2026-09-09 | 统一 Session Events 设计入口与职责命名。 |
 | 3.15.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 3.14.0 | 2026-09-08 | B01～B15 全部确认，统一 Events/Skill 精确契约、恢复边界与配置映射；清除当前待确认标记，交付实施校准清单。 |

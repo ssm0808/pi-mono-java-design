@@ -33,7 +33,7 @@ SLASH_DESIGN_PATHS = (
 )
 HELP_ROOT = REPOSITORY_ROOT / "04-命令与技能/01-内置命令/Help-Agent使用指南"
 HELP_RESULT_FIELDS = {"displayName", "description", "userCases"}
-EXPECTED_OPERATION_COUNT = 8
+EXPECTED_OPERATION_COUNT = 9
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
     ("GET", "/sessions/{sessionId}"),
@@ -41,6 +41,7 @@ EXPECTED_OPERATIONS = {
     ("GET", "/sessions/{sessionId}/models"),
     ("PUT", "/sessions/{sessionId}/model"),
     ("PUT", "/sessions/{sessionId}/thinking"),
+    ("PUT", "/sessions/{sessionId}/name"),
     ("GET", "/sessions/{sessionId}/commands"),
     ("POST", "/sessions/{sessionId}/command"),
 }
@@ -381,10 +382,13 @@ def validate_response_contract(
         ("GET", "/sessions/{sessionId}"),
         ("PUT", "/sessions/{sessionId}/model"),
         ("PUT", "/sessions/{sessionId}/thinking"),
+        ("PUT", "/sessions/{sessionId}/name"),
     }:
         success = next(response for response in operation["responses"] if response["status"] == "200")
         result = next(body["result"] for body in success["bodies"].values() if isinstance(body, dict))
         require("displayName" in result, f"SessionResource is missing displayName: {key}")
+        if key == ("PUT", "/sessions/{sessionId}/name"):
+            validate_name_mutation(operation, codes)
     elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
     elif key == ("GET", "/sessions/{sessionId}/commands"):
@@ -431,6 +435,34 @@ def validate_response_contract(
         require("event: command." not in serialized and "event: stream." not in serialized,
                 "POST Command must not expose request-scoped SSE lifecycle events")
         validate_help_operation(operation)
+
+
+def validate_name_mutation(operation: dict[str, Any], codes: set[tuple[str, str]]) -> None:
+    require(set(operation["requestBody"]["example"]) == {"displayName"},
+            "PUT Name request must contain only displayName")
+    parameter_headers = {item["name"] for item in operation["parameters"] if item["in"] == "header"}
+    require("If-Match" in parameter_headers, "PUT Name must require If-Match")
+    for expected in {
+        ("400", "INVALID_SESSION_NAME_REQUEST"),
+        ("404", "SESSION_NOT_FOUND"),
+        ("412", "SESSION_VERSION_MISMATCH"),
+        ("428", "IF_MATCH_REQUIRED"),
+        ("500", "SESSION_NAME_UPDATE_FAILED"),
+    }:
+        require(expected in codes, f"PUT Name is missing {expected}")
+    require(("409", "SESSION_BUSY") not in codes, "PUT Name must remain available while running")
+    serialized = json.dumps(operation, ensure_ascii=False)
+    for phrase in ("UTF-8", "80", "idle/running", "/name", "不写入 Session Entry"):
+        require(phrase in serialized, f"PUT Name contract is incomplete: {phrase}")
+    successes = [item for item in operation["responses"] if item["status"] == "200"]
+    require({item.get("id") for item in successes} == {"200-name-updated", "200-name-unchanged"},
+            "PUT Name must document changed and same-value success")
+    first, second = successes
+    first_body = next(iter(first["bodies"].values()))["result"]
+    second_body = next(iter(second["bodies"].values()))["result"]
+    require(first_body == second_body and first["headers"]["ETag"] == second["headers"]["ETag"],
+            "PUT Name same-value result must retain resource and ETag")
+    require(first_body["state"] == "running", "PUT Name must show the running mutation scenario")
 
 
 def validate_help_descriptor(descriptor: dict[str, Any]) -> None:

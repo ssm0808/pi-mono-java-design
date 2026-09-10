@@ -4,11 +4,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 1.0.0 |
-| 日期 | 2026-09-09 |
+| 版本 | 1.1.0 |
+| 日期 | 2026-09-10 |
 | 设计起点 | `pi-mono-java-design@599edb072cf75e3d8f85c775c53c0e83befd285d` |
-| 实现基线 | `pi-mono-java@7f1126262b16458e430c1a70aba9936e26391385` |
-| 范围 | 当前研发使用的 Runtime Web 工作台；新增恢复、Composer 操作与认证助手为 target-only，尚未修改 Vue 或后端实现 |
+| 实现基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20` |
+| 范围 | 当前研发使用的 Runtime Web 工作台；本轮会话排序、置顶和直接重命名交互均为 target-only |
 
 ## 1. 源码依据与差距
 
@@ -16,7 +16,11 @@
 
 | 路径与符号 | 已观察行为 | 目标与原因 |
 |---|---|---|
-| `frontend/src/App.vue`：`threads`、`drafts`、`resumeSession`、`createSession` | 最近列表、选择与草稿均在页面内存；没有启动恢复 | 保存会话索引，启动时只读恢复，防止刷新后失去会话入口 |
+| `frontend/src/App.vue`：`resumeSession`、sidebar `select` | 选中后读取 Session，并经 `trackSession` 再次记录 | 选择只改变 active Session 和视图，不改变最近顺序 |
+| `frontend/src/runtime/sessionIndex.ts`：`upsert`、`select` | `select` 只保存 active ID，但 `upsert` 将每次读取的项目放到数组首部；当前 schemaVersion=1，无置顶字段 | schemaVersion=2 区分 `lastActivityAt` 和 `pinned`；普通元数据补丁原位更新，只有新会话或已接受新用户消息提升最近顺序 |
+| `frontend/src/composables/useWorkbenchSessions.ts`：`recordSession`、`resumeSession`、`touchCurrentThread` | 恢复、名称或 Session 属性同步都调用前插 `upsert`，因此点击会话会自动置顶 | 拆分 `patchMetadata`、`recordActivity`、`setPinned`；选择/恢复/改名/改配置都不触发活动排序 |
+| `frontend/src/components/AppSidebar.vue`：`threads`、`select` | 按上游数组顺序渲染，只有选择动作，无置顶/取消置顶 | 分组显示“置顶”与“最近”，提供显式置顶操作；分组内保持已存活动顺序 |
+| `RuntimeSessionController`、`RuntimeSessionConfigurationController`、`SessionNamingService` | 后端已有名称校验与持久化，但 Controller 没有直接重命名路由；前端只能执行 `/name` | 新增 `PUT /sessions/{sessionId}/name`，行内重命名调用直接 API；与 `/name` 共用 Service，直接 API 用 `If-Match` 防止并发覆盖 |
 | `frontend/src/App.vue`：`statusLabel`、顶部停止按钮、底部恢复栏 | 顶部存在有效停止操作；底部只有发送按钮，恢复栏常驻 | 停止放到 Composer 原发送位置，异常时才展示恢复动作 |
 | `frontend/src/components/ComposerBox.vue`：template、`onKeydown`；`frontend/src/composables/useCommandComposer.ts` | `+` 打开命令；独立附件按钮禁用；已有命令标签及参数编辑 | `+` 负责添加附件/上下文；命令由首字符 `/` 进入，保持已实现的标签模型 |
 | `frontend/src/components/DebugHeaders.vue`：`snapshot`；`frontend/src/App.vue`：`submit`、`executeCommand`、`stop`、`decideTool` | 四类写操作均在动作发生时读取最新有效 Header 并复制 | 保留此行为，修正文档中“仅初始消息”描述；改值无需保存或新建会话 |
@@ -44,7 +48,7 @@
 | 数据 | 保存位置与语义 |
 |---|---|
 | `schemaVersion`、环境作用域、`activeSessionId` | 浏览器本地会话索引；作用域由 API base、Agent 与工作台 caller 配置组成，避免不同环境混用；作用域不是授权证明 |
-| `sessionId`、`agentId`、显示名称、最近访问时间 | 索引项；ID 来自成功创建/读取响应，名称仅辅助列表显示，恢复后可由后端名称更新 |
+| `sessionId`、`agentId`、显示名称、`lastActivityAt`、`pinned` | 索引项；名称是后端权威值的本地投影，`lastActivityAt` 只在新建或新用户消息已接受时改变，`pinned` 是当前浏览器的显式用户偏好 |
 | 未完成提交的最小标记 | 只保存操作种类、是否已得回执及可用的原目标/回执 ID，不保存请求正文；发送前写入，匹配权威结果后清除，用于刷新后的不确定结果提示 |
 | 消息历史、执行结果与配置版本 | 后端权威资源；通过 GET 重新读取，不把缓存状态当作已完成 |
 | 普通消息、命令及附件草稿、临时命令结果 | 页面内存；会话切换按既有草稿规则处理，本项不承诺刷新恢复未发送内容 |
@@ -58,6 +62,12 @@
 4. 若后端仍在执行，恢复运行态和已加载的确认/停止目标。内部接口没有独立恢复读流，使用有界 GET 历史/Session 补读；不重新发送原 POST。前台可采用 1、2、5 秒退避，最多连续 6 次，仍未结束时显示“后台仍在执行”和“刷新状态”；返回页签或用户点击再启动补读。
 5. 切换会话递增 generation 并中止旧读请求；旧响应不得覆盖新会话。中止浏览器观察不等于终止后台执行。
 6. 网络错误保留索引并显示重试；404/明确无权限显示该会话不可恢复且清除其消息视图，由用户移除列表项。只有明确新建动作才创建新会话。
+
+列表排序使用稳定分区：置顶项在前、未置顶最近项在后，两组内均按已保存的 `lastActivityAt` 降序。选择、GET 恢复、名称/模型/Thinking 变更、执行状态更新只原位补丁元数据，不更新 `lastActivityAt`。置顶/取消置顶只改变分区，不伪造活动时间；取消后回到其原本的最近位置。
+
+schemaVersion=1 迁移到 2 时，保持现有数组顺序，将旧 `updatedAt` 映射为初始 `lastActivityAt`，并以 `pinned=false` 补齐。不用 Runtime `updatedAt` 继续排序，因为它还会因改名、配置和状态变化，不等于用户会话活动。置顶当前仅属内部 Runtime 工作台的浏览器本地状态；产品需要跨端同步时，应设计 mate-service Chat 元数据而不向 Runtime Session 表加 pin 字段。
+
+会话菜单的“重命名”使用直接 Name API，成功后在原位更新列表文案，不调整排序。412 时重读 Session，显示实际名称并保留用户草稿，由用户再次确认；不用新 ETag 自动重放 PUT。网络结果不确定时 GET Session 对账，不盲重试。
 
 索引写入、损坏或版本不兼容不应使页面崩溃：仅处理本功能的命名空间，写入失败告知本次无法保存恢复入口，现有会话仍可使用。读取原目标/回执标记只能辅助对账；未知结果不能按文本相同自动认领，也不能自动重放。不同页签各自保持当前选择，索引变化不强迫另一页签导航。
 
@@ -125,11 +135,12 @@ Token 获取是独立请求，不重放失败的对话 POST。后续是否携带
 
 | 切片 | 目标依赖与验收 |
 |---|---|
-| W1 会话索引与恢复协调器 | 新建/切换后刷新、关闭重开均恢复同一 ID；网络失败不创建新 Session；损坏存储、404、跨环境、旧响应、运行中恢复与未知提交只读对账 |
+| W1 会话索引与恢复协调器 | 新建/切换后刷新、关闭重开均恢复同一 ID；点选/恢复/改名/改配置不重排；置顶分区稳定且取消后回归原最近位置；v1→v2 保留顺序；网络失败不创建新 Session |
 | W2 统一 Composer 操作状态 | 消息提交立即变方块；无回执禁用、可停止时启用、控制回执不释放发送、实际终态恢复；草稿 Enter 不停止；顶部无重复按钮 |
 | W3 Header 与本地错误 | 三空预置 0，纯空白 0，CR/LF 拒绝；四种 POST 使用最新值，旧快照不变；本地校验失败不归类为网络未知结果 |
 | W4 本地认证助手 | 固定 IP/HTTPS/path、账号配置不进入 bundle、独立 Cookie 数组、超时/上限/无 Token/重定向/TLS/异常脱敏、代次与编辑冲突；生产与 preview 路径不存在 |
 | W5 入口与状态提示 | `+` 只含真实附件/上下文能力；`/` 发现命令；空闲不常驻恢复栏；故障动作只读取，不自动续发、重登或重放 |
+| W6 直接重命名 | 请求仅 `displayName`且携带最新 If-Match；与 `/name` 共用空白/Unicode/80 UTF-8 字节反例；running 可改；同值不更新时间/版本；412 和未知结果不自动重放 |
 
 设计原型使用本地 fixture 演示按钮与 Token 回填，不调用真实认证中心，不代表新增能力已实现。真实认证中心的失败响应、CA 配置、Cookie 刷新/删除语义需在实现联调中补证；不阻塞本地组件与 fixture 验证，也不宣称真实登录已通过。
 
@@ -137,4 +148,5 @@ Token 获取是独立请求，不重放失败的对话 POST。后续是否携带
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-09-10 | 选中会话不再改变最近顺序，增加本地置顶和直接重命名交互。 |
 | 1.0.0 | 2026-09-09 | 定义会话索引恢复、Composer 停止、添加入口和本地认证 Token 回填。 |

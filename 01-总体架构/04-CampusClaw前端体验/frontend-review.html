@@ -338,6 +338,11 @@
     .chat-rail { padding: 20px 14px; background: var(--surface-secondary); border-right: 1px solid var(--border); }
     .chat-rail > p { margin-top: 20px; font-size: 13px; }
     .chat-current { padding: 12px; border-radius: 8px; background: var(--selected); }
+    .chat-thread-group { display: grid; gap: 6px; }
+    .chat-thread-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; align-items: center; padding: 4px; border-radius: 8px; }
+    .chat-thread-row.chat-current { padding: 4px; }
+    .chat-thread-select { grid-column: 1 / -1; width: 100%; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+    .chat-thread-action { padding-inline: 7px !important; font-size: 11px !important; }
     .chat-body { min-width: 0; background: var(--surface); }
     .chat-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--border); }
     .chat-config-label { font-size: 12px; color: var(--muted); }
@@ -393,10 +398,10 @@
         <div class="row">
           <img class="review-brand-mark" src="campusclaw-mark-o1.png" alt="">
           <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">1.10.0</span>
+          <span class="tag">1.11.0</span>
           <span class="tag">主对话 · 确认 · 停止 · 恢复</span>
         </div>
-        <code class="base">交互基线 599edb0 · 源码 7f11262 · target-only</code>
+        <code class="base">交互基线 599edb0 · 源码 510d882 · target-only</code>
       </header>
 
       <section class="section">
@@ -584,7 +589,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
 
       <article class="screen-card" id="running-conversation" data-screen-key="runningConversation">
         <header class="screen-head">
-          <strong>主对话交互</strong><span class="tag">1.10.0 · target-only</span>
+          <strong>主对话交互</strong><span class="tag">1.11.0 · target-only</span>
           <a href="public-chat-alignment.md">契约边界与验收</a>
         </header>
         <section class="section" id="conversation-workbench">
@@ -608,9 +613,28 @@ HAVING COUNT(*) &gt; 1;</code></pre>
           <div class="chat-prototype" data-phase="running">
             <aside class="chat-rail" aria-label="示例会话导航">
               <div class="row"><img class="review-brand-mark" src="campusclaw-mark-o1.png" alt=""><strong>CampusClaw</strong></div>
-              <p class="muted">最近会话 · 示例</p>
-              <p class="chat-current">园区告警分析</p>
-              <p>每日巡检计划</p>
+              <p class="muted">置顶 · 示例</p>
+              <div class="chat-thread-group" id="chat-pinned-threads">
+                <div class="chat-thread-row chat-current" id="chat-thread-alarm" data-chat-thread data-session-id="alarm" data-last-activity="3" data-pinned="true">
+                  <button type="button" class="chat-thread-select" data-chat-select>园区告警分析</button>
+                  <button type="button" class="chat-thread-action" data-chat-pin>取消置顶</button>
+                  <button type="button" class="chat-thread-action" data-chat-rename data-next-name="园区告警复盘">重命名</button>
+                </div>
+              </div>
+              <p class="muted">最近 · 示例</p>
+              <div class="chat-thread-group" id="chat-recent-threads">
+                <div class="chat-thread-row" id="chat-thread-daily" data-chat-thread data-session-id="daily" data-last-activity="2" data-pinned="false">
+                  <button type="button" class="chat-thread-select" data-chat-select>每日巡检计划</button>
+                  <button type="button" class="chat-thread-action" data-chat-pin>置顶</button>
+                  <button type="button" class="chat-thread-action" data-chat-rename data-next-name="每日巡检复盘">重命名</button>
+                </div>
+                <div class="chat-thread-row" id="chat-thread-capacity" data-chat-thread data-session-id="capacity" data-last-activity="1" data-pinned="false">
+                  <button type="button" class="chat-thread-select" data-chat-select>网络容量复盘</button>
+                  <button type="button" class="chat-thread-action" data-chat-pin>置顶</button>
+                  <button type="button" class="chat-thread-action" data-chat-rename data-next-name="容量趋势复盘">重命名</button>
+                </div>
+              </div>
+              <p class="muted" id="chat-thread-status" role="status">选择不重排；置顶和重命名是显式动作。</p>
             </aside>
             <div class="chat-body">
               <header class="chat-header">
@@ -689,6 +713,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         <details class="review-question" open><summary>5. 已确认：<code>Headers</code> 行编辑</summary><p>默认预置 access-token、X-HW-ID、Authorization，Value 留空，三行均可编辑、启停和删除。点击“增加请求头”追加一行空 Key/Value；填写、删除和清空均不自动补行。面板内去掉常驻文字说明，请求范围与内存生命周期由设计文档维护。</p></details>
         <details class="review-question" open><summary>6. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
         <details class="review-question" open><summary>7. 已确认：原始推理与活动 disclosure</summary><p>Thinking 展示模型返回的原始推理；标题使用前端状态文案；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。内部 ID、绝对路径和凭据不作为产品公共字段。</p></details>
+        <details class="review-question" open><summary>8. 已确认：会话选择、置顶与重命名分离</summary><p>点选会话只改变 active 视图，不自动移到最近顶部；置顶/取消置顶由用户显式操作。重命名使用直接 Session Name API，与 <code>/name</code> 共用业务规则，成功后原位更新而不重排。</p></details>
         <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="public-chat-alignment.md">查看公共对话对齐</a></div>
       </section>
     </div>
@@ -894,6 +919,40 @@ HAVING COUNT(*) &gt; 1;</code></pre>
       });
       authFail.addEventListener('click', () => { if (authFlight) authDone('认证中心登录失败，请检查本地服务配置'); });
       validateRows();
+    })();
+  </script>
+  <script>
+    (() => {
+      // Target-only session-list fixture. It does not persist or call the Runtime API.
+      const pinned = document.getElementById('chat-pinned-threads');
+      const recent = document.getElementById('chat-recent-threads');
+      const status = document.getElementById('chat-thread-status');
+      const threads = [...document.querySelectorAll('[data-chat-thread]')]
+        .sort((left, right) => Number(right.dataset.lastActivity) - Number(left.dataset.lastActivity));
+
+      function renderGroups() {
+        threads.forEach((thread) => (thread.dataset.pinned === 'true' ? pinned : recent).append(thread));
+        threads.forEach((thread) => {
+          thread.querySelector('[data-chat-pin]').textContent = thread.dataset.pinned === 'true' ? '取消置顶' : '置顶';
+        });
+      }
+
+      threads.forEach((thread) => {
+        thread.querySelector('[data-chat-select]').addEventListener('click', () => {
+          threads.forEach((item) => item.classList.toggle('chat-current', item === thread));
+          status.textContent = `已选择“${thread.querySelector('[data-chat-select]').textContent}”；顺序保持不变。`;
+        });
+        thread.querySelector('[data-chat-pin]').addEventListener('click', () => {
+          thread.dataset.pinned = String(thread.dataset.pinned !== 'true');
+          renderGroups();
+          status.textContent = thread.dataset.pinned === 'true' ? '已置顶；未改变会话活动时间。' : '已取消置顶；回到原最近位置。';
+        });
+        thread.querySelector('[data-chat-rename]').addEventListener('click', (event) => {
+          thread.querySelector('[data-chat-select]').textContent = event.currentTarget.dataset.nextName;
+          status.textContent = '名称已在原位更新（本地契约原型）；顺序保持不变。';
+        });
+      });
+      renderGroups();
     })();
   </script>
   <script>

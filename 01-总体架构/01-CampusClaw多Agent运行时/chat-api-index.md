@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.3.0 |
-| 更新日期 | 2026-09-08 |
+| 文档版本 | 1.4.0 |
+| 更新日期 | 2026-09-10 |
 | 设计仓变更前基线 | `2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9`（1.2.0 清理起点） |
-| 变更性质 | 统一维护职责、删除已废止副本；不修改 Runtime 实现或已确认业务行为 |
-| 唯一当前入口 | [当前十项接口](chat-api-review.html) |
+| 变更性质 | 增加已确认的独立 Session 重命名目标契约；不声称 Runtime 已实现该入口 |
+| 唯一当前入口 | [当前十一项接口](chat-api-review.html) |
 
 ## 1. 为什么统一
 
@@ -17,9 +17,9 @@
 
 ## 2. 权威与状态
 
-- [catalog.json](接口契约/catalog.json) 唯一决定当前十项 operation、顺序、精确源和关联设计。每个 method + path 只能出现一次，活动目录中的模型必须全部登记。
+- [catalog.json](接口契约/catalog.json) 唯一决定当前十一项 operation、顺序、精确源和关联设计。每个 method + path 只能出现一次，活动目录中的模型必须全部登记。
 - [chat-api-review.html](chat-api-review.html) 是唯一当前人类接口页，从清单及精确模型生成，不手工编辑 HTML。
-- 八项保留契约继续复用 `接口契约/common.json`；两个 Events 使用 `事件契约/common.json`。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
+- 九项普通契约复用 `接口契约/common.json`；两个 Events 使用 `事件契约/common.json`。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
 - `review` 与 `reviewState` 继续记录原有确认决定；清单中的说明只解释其适用边界，不替代或自动提升确认状态。B01～B15 已实际提交确认；两个 Events 目标契约已定稿，question 列表清空，数值校准另列。
 - Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；本轮仅清除其已废止 Command POST 内容，保留 GET 投影及待评审公共边界。
 
@@ -54,7 +54,7 @@ Mate 公共 Events 和 FollowUp 未来专题各有独立职责，本次不退役
 
 | 旧入口 | 当前目标 |
 |---|---|
-| `chat-http-v1-review.html` | [全部十项](chat-api-review.html) |
+| `chat-http-v1-review.html` | [全部十一项](chat-api-review.html) |
 | `chat-events-v2-submit-review.html` | [提交事件与推送](chat-api-review.html#submitSessionEvent) |
 | `chat-events-v2-review.html` | [历史查询](chat-api-review.html#listSessionEvents) |
 | `chat-events-v2-confirmed.html` | [当前评审与确认边界](chat-api-review.html#listSessionEvents)，不保留已失效整体确认 |
@@ -75,7 +75,7 @@ python3 validate-chat-api.py --full
 node test_chat_api.cjs
 ```
 
-统一校验复用八项保留契约与两项 Events 的专项门禁，并增加：清单唯一性、活动源覆盖、
+统一校验复用九项普通契约与两项 Events 的专项门禁，并增加：清单唯一性、活动源覆盖、
 报文字节同步、旧文件及生成器不存在、全仓 Markdown/HTML 不链接已删除入口、
 旧模型不得回流、当前链接有效性；回归测试验证重新生成只写当前页，并拒绝旧文件和链接回流。
 Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统一门禁会拒绝过期产物；
@@ -86,6 +86,8 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 禁用 JavaScript 或渲染失败仍可用原生 details 读取完整接口。锚点直接定位对应操作。
 
 ## 4. 源码边界
+
+1.4.0 核对 `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20` 的 `SessionNamingService`、`RuntimeSessionRepository.updateName`、`RuntimeSessionController` 和 `RuntimeSessionConfigurationController`：底层命名已实现，但目前只有 `/name` Command 入口。独立 Name API 是 target-only 设计，不写成已实现行为。
 
 1.3.0 按已确认 B01～B15 补齐目标契约，源码证据沿用 Events 与 Skill 专题的 Java `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`、pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185`。新增关系、差异与验证见相应专题；下列 1.0～1.2 记录只说明此前整理工作。
 
@@ -104,15 +106,13 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/vo/UserEventRequestVO.java` · `message/fileIds/rejectUnknownField` | 仍使用旧 message/fileIds，请求不是目标三输入联合类型；整理文档不等于完成实现迁移。 |
 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSessionControlController.java` · `steer/followUp/abort` | 主线仍声明三个独立接口；设计退役与代码删除属于不同交付。 |
 
-当前目标十项、旧控制接口退役、Session Events 部分确认都是既有产品/架构决定，非本次新增能力。
-本次不修改 Java、数据库、权限、运行时行为或仍有效的 Mate 公共契约，也不声称 Session Events 已部署。
-没有新增结构关系，本次不新增或修改类图；旧 Events 图源与 SVG 已在 1.0.0 一并移除，
-1.2.0 删除 Mate 废止 POST 所属图源及两张 SVG。保留的 PlantUML 与 SVG 保持不变。
+当前十一项中，新增的 Name API 是目标设计；本次不修改 Java、数据库、权限、运行时行为或仍有效的 Mate 公共契约。
 
 ## 5. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-09-10 | 将独立 Session 重命名纳入当前十一项契约，明确它与 `/name` 共用服务且尚待实现。 |
 | 1.3.0 | 2026-09-08 | 关闭 B01～B15 产品待决项；共享 contractSections 维护事件字段与码表，HTML 同步；实现校准独立记录。 |
 | 1.2.0 | 2026-09-07 | 明确各专题唯一维护职责；清除 Mate 废止 POST 副本，Help 直接投影 Runtime，业务决定和未决状态不变。 |
 | 1.1.0 | 2026-09-07 | 同步 GET 精简确认范围和防回退门禁，记录六个未合入分支的语义核查。 |

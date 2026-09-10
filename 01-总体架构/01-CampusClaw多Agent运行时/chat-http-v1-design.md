@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.51.0 |
-| 状态 | 保留十个目标 operation；Events 以 Session Events 已确认目标契约为准；原文件编号 12、13 保留已确认的 Builtin JSON 行为；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
+| 文档版本 | 1.52.0 |
+| 状态 | 保留十一个目标 operation；Events 以 Session Events 已确认目标契约为准；新增独立 Session 重命名契约；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 已按 B13/B14 对齐；Mate 公共命令独立管理 |
-| 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的八项保留契约与两项 Session Events 模型 |
+| 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的九项普通契约与两项 Session Events 模型 |
 | 人类评审契约 | [统一当前接口页](chat-api-review.html)，由 [唯一清单](接口契约/catalog.json) 生成 |
 | 对外机器契约 | 不维护；结构化 JSON 只作为 HTML 生成源，不替代已废弃 OpenAPI |
 | 端到端传输结论 | 两跳均为 HTTP；Runtime POST Events 保留请求级 SSE，POST Command 的 Builtin 返回 JSON、Skill 返回 SSE；公共命令待独立评审 |
@@ -27,6 +27,7 @@
 | Anthropic Managed Agents 文档核对 | 2026-09-01；Session、Events、Skills 与 Session Operations 官方文档 |
 | Agent Skills 规范核对 | 2026-09-01；名称、Skill 文件夹和 `SKILL.md` frontmatter 规则 |
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
+| Session 名称接口差距基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；已实现 `SessionNamingService` 及 Repository 更新，但只有 `/name` Command 入口 |
 | Help 元数据专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；无参、空数组与缓存迁移已确认；1.48.0 去除 command 后保留三个业务字段，仍为 target-only |
 | Command 响应复用源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`；既有 Session/Models 资源投影；源码路径与差距由 Builtin §8 维护 |
 | Registry 初始候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599` |
@@ -49,12 +50,12 @@ Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thin
 调用方通过 Session Event 提交输入，通过同一 POST 的 SSE 观察实时过程，并通过
 同一路径的 GET 分页读取持久化 Entry。
 
-当前目标保留十个 operation，其中两个用于 Slash Command：查看命令清单和执行命令。
+当前目标保留十一个 operation，其中两个用于 Slash Command，新增一个直接 Session 重命名入口。
 普通消息接口不解析 Slash 文本。交互层命中命令清单后，才调用 Command API。
 用户统一实现七个 Builtin（help、status、name、model、thinking、compact、skills）与 Skill Command。
 Extension 和 Prompt 执行不在当前命令目标范围。
 Builtin POST 在 Handler 完成后返回普通 ResultBean JSON。
-`/name` 归 CampusClaw Session；mate-service 只保存 Chat→Session 映射。
+`/name` 与直接重命名均归 CampusClaw Session；mate-service 只保存 Chat→Session 映射。
 
 调用方仍是 `mate-service` Runtime bridge 或明确获授权的内部服务端 SDK。
 浏览器不直连 Runtime；公共 `chat_id` 仍由 mate-service 映射为内部
@@ -72,7 +73,7 @@ mate-service 不得把内部 SSE 字节透明转发给浏览器。公共 mate-se
 基础路径为 `/campusclaw-service/v1`。网关 Host 可按部署环境配置，
 不属于业务路径的版本契约。
 精确字段、认证、请求、响应和错误按 [catalog.json](接口契约/catalog.json) 指定的唯一模型维护；
-[统一接口页](chat-api-review.html) 是唯一当前入口。八项保留契约与两项 Session Events 使用同一清单、
+[统一接口页](chat-api-review.html) 是唯一当前入口。九项普通契约与两项 Session Events 使用同一清单、
 生成和校验门禁，不再生成平行详情页。本文保留设计理由，Events 理由链接所属专题。
 过渡期 OpenAPI 1.7.1 因长期滞后且仍包含已经被替代的旧 Run 资源，已经由用户
 明确批准废弃并从仓库删除。当前不发布 OpenAPI 等标准机器契约；仓库内 JSON 只是
@@ -91,11 +92,11 @@ CampusClaw 当前目标契约的命名边界为：
 
 新契约不接收 snake_case 字段别名；否则同一语义会出现双写、未知字段处理和签名输入不一致。
 
-内部十项 operation 全部携带调用上下文 Header：
+内部十一项 operation 全部携带调用上下文 Header：
 
 | Operation | Header 示例 | Claw 处理 | Claw 错误 |
 |---|---|---|---|
-| 全部十项 operation | JWT：`X-HW-ID: credential-jwt`、`Authorization: Bearer opaque-token`；APPKEY：`X-HW-ID: credential-appkey`、`X-HW-APPKEY: opaque-appkey` | `X-HW-ID` 是用户凭据 ID，不是公司、服务或应用标识；Claw 不解析或校验这些凭据 | 不声明 `UNAUTHENTICATED` / `AUTH_CREDENTIAL_CONFLICT` |
+| 全部十一项 operation | JWT：`X-HW-ID: credential-jwt`、`Authorization: Bearer opaque-token`；APPKEY：`X-HW-ID: credential-appkey`、`X-HW-APPKEY: opaque-appkey` | `X-HW-ID` 是用户凭据 ID，不是公司、服务或应用标识；Claw 不解析或校验这些凭据 | 不声明 `UNAUTHENTICATED` / `AUTH_CREDENTIAL_CONFLICT` |
 | `POST /sessions/{sessionId}/events` 和 `POST /sessions/{sessionId}/command` | 上述 JWT 或 APPKEY 示例均额外必填 `access-token: opaque-access-token` | 从请求读取四项凭据，只在内存中保留到本次 Agent 执行或命令处理结束；仅随实际 Mate tool execute 发送 | 不新增 Claw 本地凭据校验错误 |
 
 JWT 是默认调用示例，APPKEY 是兼容示例；两类 Header 同时出现不会被 Runtime 拒绝。
@@ -194,7 +195,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 | `modelId` | string | Session 当前默认模型；允许后续切换 |
 | `state` | `idle \| running` | 只回答 Session 当前是否存在 active execution |
 | `thinking` | boolean | 是否对后续用户消息启用深度思考；既有思考原文保持历史可见，不随之后关闭而隐藏 |
-| `displayName` | string or null | Session 显示名称；由 `/name` 查看或修改 |
+| `displayName` | string or null | Session 显示名称；由直接 Name API 或 `/name` 查看修改 |
 | `lifetimeUsage` | Usage | Session 创建以来持久化 Assistant 与 Compaction Usage 的原子累计值 |
 | `createdAt` | RFC 3339 timestamp | Session 创建时间 |
 | `updatedAt` | RFC 3339 timestamp | Session 资源最后更新时间 |
@@ -365,14 +366,15 @@ Session lifetime Usage。`willRetry=true` 时，持久化 payload 还包含不�
 | 查询可用模型 | `listSessionModels` | `GET` | `/sessions/{sessionId}/models` | 列出 Agent 目录 allowlist 与 Runtime 当前可用模型交集中的 `modelId` |
 | 切换会话模型 | `changeSessionModel` | `PUT` | `/sessions/{sessionId}/model` | 切换 Session 当前模型 |
 | 设置深度思考 | `changeSessionThinking` | `PUT` | `/sessions/{sessionId}/thinking` | 开启或关闭 Session 深度思考 |
+| 重命名会话 | `changeSessionName` | `PUT` | `/sessions/{sessionId}/name` | 直接修改 Session `displayName`，与 `/name` 共用业务服务 |
 
-这三个 operation 已确认。模型列表使用 Session scope，而不是公开
-`/agents/{agentId}/models`，避免调用方绕过 Session 绑定查询其他 Agent。两个 PUT
+这四个 operation 已确认。模型列表使用 Session scope，而不是公开
+`/agents/{agentId}/models`，避免调用方绕过 Session 绑定查询其他 Agent。Model/Thinking 两个 PUT
 只允许在 Session `idle` 时执行，并要求 `If-Match` 携带最近一次 Session `ETag`：
 缺失返回 `428 IF_MATCH_REQUIRED`，版本不一致返回
 `412 SESSION_VERSION_MISMATCH`。相同值仍完成权限和可用性校验，随后按无变化成功
 返回，`updatedAt` 和 `ETag` 保持不变。
-这三项配置 operation 与其他接口一样携带 `X-HW-ID + Authorization` 或 APPKEY
+这四项 Session 配置与元数据 operation 与其他接口一样携带 `X-HW-ID + Authorization` 或 APPKEY
 兼容 Header；Runtime 不校验组合、共存、格式或真实性，也不返回本地认证 `401`。
 
 #### 2.4.1 GET Session Models
@@ -428,6 +430,25 @@ SessionResource 和新 `ETag`。
 和资源版本原子提交。普通成功响应由 `ResultBeanAdapter.normal(...)` 包装；
 公司替换 Bean 内部调用 `ResultBeanFactory.getFactory().normal(...)`。所有异常仍只包含
 `resCode/resMsg`。
+
+#### 2.4.4 PUT Session Name
+
+`PUT /sessions/{sessionId}/name` 的请求只包含 `displayName`，精确契约由
+[`14-change-session-name.json`](接口契约/操作/14-change-session-name.json) 维护。直接 HTTP 入口要求最近一次
+Session 资源的强 `If-Match`；行锁事务内再次比对资源版本，缺失返回 `428`，冲突返回
+`412`。命名不改变 active execution 快照，因此 `idle/running` 均允许，不返回
+`SESSION_BUSY`。
+
+名称规范化与现有 `/name` 共用：去除首尾空白，保留内部空白；拒绝空值、CR/LF、C0/C1
+控制字符、Unicode 双向覆盖/隔离字符及超过 80 UTF-8 字节的名称。HTTP 请求将这些失败
+映射为 `400 INVALID_SESSION_NAME_REQUEST`；Command 继续使用 `INVALID_COMMAND_REQUEST`，不暴露第二套规则。
+`SessionNamingService` 只对名称做一次规范化：直接 API 传入 expectedVersion，Command 传空并保留
+现有锁内最终写入语义。同值返回原 Session 与 ETag，`updatedAt` 不变；实际变更原子更新
+`displayName/updatedAt/resourceVersion`。两条入口都不写 Name Entry。
+
+![HTTP Session 名称更新](设计图/会话配置/http_session_name_configuration.svg)
+
+[PlantUML 源码：`http_session_name_configuration`](设计图/会话配置/diagram.puml#L131)
 
 管理面 `refresh(agentId)` 成功只发布新目录，不改动 active execution 的模型、thinking
 或工具快照。空闲 DB Session 在下一次 `POST Events` 接受消息前读取新目录；若当前模型
@@ -487,9 +508,9 @@ Help 通过普通 POST Command 提供无参 Agent 使用指南，不新增 HTTP 
 
 #### 2.6.3 Name 与配置更新
 
-Name 的当前状态归属见 [Builtin §5](../../04-命令与技能/01-内置命令/README.md#5-name-当前状态)，
+Name 的共享业务规则见 [Builtin §5](../../04-命令与技能/01-内置命令/README.md#5-name-当前状态)，
 Model/Thinking 的事务和版本规则见 [Builtin §6](../../04-命令与技能/01-内置命令/README.md#6-model--thinking)。
-Command 不削弱本文 §2.4 既有 PUT 的 If-Match/ETag 语义。
+Command 不削弱本文 §2.4 既有 PUT 的 If-Match/ETag 语义；`/name` 与新的直接 Name API 共用服务而不共用 HTTP 前置条件。
 
 ![命令与权威 Session 状态](设计图/Command/command_authoritative_state.svg)
 
@@ -543,14 +564,14 @@ Spring 单例不保存原始凭据。共享安全约束见 §7，精确 Header �
 - 本期无后续消息队列；user.interrupt 响应断开不撤销已接受的中断。
 - 内部顺序只用于持久化与查询，不公开 entryId/entrySeq；GET 使用普通整数 page/nextPage。
 - Pod 重启时如何终止或恢复 active execution、是否持久化 partial Assistant Entry，
-  不属于当前十个 HTTP operation 已确认范围，留待执行恢复实现设计。
+  不属于当前十一个 HTTP operation 已确认范围，留待执行恢复实现设计。
 
 ## 5. ResultBean、HTTP 状态与国际化
 
 公司内部普通 JSON 接口的成功响应使用
 `resCode/resMsg/result` 三字段 ResultBean，异常响应只包含
 `resCode/resMsg`，不使用 RFC 9457 `application/problem+json`。这是相对原 HTTP
-草案的公司集成约束。八项保留既有契约，两个 Events 操作采用已确认 Session Events 目标契约。所有普通 JSON 响应都
+草案的公司集成约束。八项保留既有契约，新增一项 Name 目标契约，两个 Events 操作采用已确认 Session Events 目标契约。所有普通 JSON 响应都
 遵守同一包装，SSE 事件流和 HTTP
 `204` 无响应体不使用 ResultBean。
 
@@ -602,7 +623,7 @@ Session Events 的成功、错误及确认范围以 [POST](chat-events-stream-de
 [GET](chat-events-history-design.md) 为准。旧错误表及 stream.error 规则已移除，
 不能将旧版“已确认”自动继承为 Session Events 整体通过。
 
-三个 Session 配置接口复用 Session 标识和不存在错误，并新增以下
+四个 Session 配置与元数据接口复用 Session 标识和不存在错误，并新增以下
 operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑定和无权使用，
 避免模型目录枚举：
 
@@ -610,13 +631,15 @@ operation-specific 错误。`MODEL_NOT_AVAILABLE` 有意合并不存在、未绑
 |---|---|---|---|
 | `400` | `INVALID_MODEL_REQUEST` | PUT Model | 请求体缺失、格式错误或含未知字段 |
 | `400` | `INVALID_THINKING_REQUEST` | PUT Thinking | 请求体缺失、`thinking` 不是 boolean 或含未知字段 |
-| `409` | `SESSION_BUSY` | 两个 PUT | active execution 存在，配置变更不排队 |
-| `412` | `SESSION_VERSION_MISMATCH` | 两个 PUT | `If-Match` 与当前 ETag 不一致 |
+| `400` | `INVALID_SESSION_NAME_REQUEST` | PUT Name | 请求体或规范化后的名称不符合约束 |
+| `409` | `SESSION_BUSY` | PUT Model、PUT Thinking | active execution 存在，配置变更不排队 |
+| `412` | `SESSION_VERSION_MISMATCH` | 三个 PUT | `If-Match` 与当前 ETag 不一致 |
 | `422` | `MODEL_NOT_AVAILABLE` | PUT Model | 目标模型不在实时可选集合中 |
 | `422` | `THINKING_NOT_SUPPORTED` | PUT Thinking | 请求开启深度思考，但当前模型不支持 |
-| `428` | `IF_MATCH_REQUIRED` | 两个 PUT | 缺少必填 `If-Match` |
+| `428` | `IF_MATCH_REQUIRED` | 三个 PUT | 缺少必填 `If-Match` |
 | `500` | `SESSION_MODEL_UPDATE_FAILED` | PUT Model | 模型配置和资源版本未能原子更新 |
 | `500` | `SESSION_THINKING_UPDATE_FAILED` | PUT Thinking | 深度思考配置和资源版本未能原子更新 |
+| `500` | `SESSION_NAME_UPDATE_FAILED` | PUT Name | 名称和资源版本未能原子更新 |
 | `503` | `MANAGER_UNAVAILABLE` | GET Models、PUT Model | Model Manager 暂时不可用；复用第一个接口错误码 |
 
 原三个独立控制接口的错误集合随接口退役；中断错误、超时和竞争结果以 Session Events 继续评审，
@@ -699,12 +722,12 @@ CampusClaw 自有 Facade + 内部 Adapter；这时可保持相同 JSON 和开发
 
 ## 7. 安全与附件边界
 
-- 全部十项 operation 均携带共享调用上下文 Header 示例：JWT 使用
+- 全部十一项 operation 均携带共享调用上下文 Header 示例：JWT 使用
   `X-HW-ID: credential-jwt` 与 `Authorization: Bearer opaque-token`；APPKEY 使用
   `X-HW-ID: credential-appkey` 与 `X-HW-APPKEY: opaque-appkey`。这些是非生产示例值。
 - `X-HW-ID` 表示用户凭据 ID，不是公司、服务或应用标识。
 - `POST /sessions/{sessionId}/events` 和 `POST /sessions/{sessionId}/command` 额外必填
-  `access-token`；该 Header 不成为其他八个 operation 的共享 Header。
+  `access-token`；该 Header 不成为其他九个 operation 的共享 Header。
 - 目标实现移除进入 Controller 前的认证拦截，也不在 Controller 内调用
   `RuntimeRequestAuthenticator`。Runtime 不检查 Header 是否齐全、是否同时存在、Bearer
   形状或凭据真实性，不声明 `UNAUTHENTICATED` / `AUTH_CREDENTIAL_CONFLICT`。
@@ -810,10 +833,12 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 | 观察到的行为 | Anthropic [List Events API](https://platform.claude.com/docs/en/api/beta/sessions/events/list)：`GET /v1/sessions/{session_id}/events` 通过不透明 `page/next_page` 分页，并按 `processed_at` 排序；公开响应没有固定快照水位 |
 | 已实现行为 | GET Session Models 以 `string[]` 实时返回 Agent allowlist 与当前可用模型交集中的 `modelId` 值，不分页；目标字段 `currentModelId` 允许因管理面后续停用而不在 `models` 中 |
 | 已实现行为 | PR 167 基线的 PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功返回完整 SessionResource 和 ETag，相同值按无变化成功返回 |
+| 观察到的当前 Java 行为 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java`规范化并校验名称，`service/command/contributor/NameCommandContributor.java`将 `/name` 声明为 idle/running 均可用；`persistence/RuntimeSessionRepository.java#updateName` 和 `persistence/MyBatisRuntimeSessionRepository.java#updateName` 在行锁内更新名称与版本 |
+| 当前实现差距 | 同一基线的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java` 只声明 create/get/delete，同目录 `RuntimeSessionConfigurationController.java` 只声明 models/model/thinking；尚无 `PUT /sessions/{sessionId}/name`、`ChangeSessionNameRequestVO` 或 HTTP `If-Match` 映射 |
+| 目标设计与理由 | 直接 Name API 与 `/name` 共用 `SessionNamingService`，但只有 HTTP 适配器要求 expectedVersion；这是避免两套命名规则的架构变更及保护浏览器并发编辑的安全加固，不宣称为已实现行为 |
 
-以上均是固定提交的历史观察，不等于当前源码状态。本轮以设计仓
-`2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9` 为整理基线，未重新分析产品源码，
-未更新 pi 或其他外部参考；删除的是废止目标规则和重复副本，不是新增产品行为。
+表中历史观察保持其固定提交语义；Session Name 行为则重新核对到
+`pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`。本轮不更新 pi 或其他外部参考。
 
 现行 Events 请求、流和分页只以 Session Events 专题及精确模型为准；旧事件名、旧分页和控制接口
 不在本节再次列作“已确认设计”。当前实现差距见 [Events 源码复核](chat-events-design.md#42-本次合并方案源码复核)、
@@ -825,6 +850,7 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.52.0 | 2026-09-10 | 新增 `PUT Session Name`，与 `/name` 共用命名服务，直接写入使用 `If-Match` 且 running 期间仍可重命名。 |
 | 1.51.0 | 2026-09-09 | 统一 Session Events 入口，保留 HTTP v1 路径。 |
 | 1.50.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 1.49.0 | 2026-09-08 | 同步 B01～B15：完整事件、固定公开摘要、配置/压缩/Usage 映射与 Skill SSE；产品语义已定稿，实施数值按校准。 |

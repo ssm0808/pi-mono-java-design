@@ -178,6 +178,27 @@ test('configuration refresh requires a separate explicit modification', (f) => {
   assert.equal(f.get('chat-draft').value, '配置不影响草稿');
 });
 
+test('session selection preserves order while pin and rename are explicit', (f) => {
+  const ids = (groupId) => [...f.get(groupId).children].map((item) => item.dataset.sessionId);
+  assert.deepEqual(ids('chat-pinned-threads'), ['alarm']);
+  assert.deepEqual(ids('chat-recent-threads'), ['daily', 'capacity']);
+
+  f.get('chat-thread-daily').querySelector('[data-chat-select]').click();
+  assert.deepEqual(ids('chat-pinned-threads'), ['alarm']);
+  assert.deepEqual(ids('chat-recent-threads'), ['daily', 'capacity']);
+  assert.ok(f.get('chat-thread-daily').classList.contains('chat-current'));
+
+  f.get('chat-thread-daily').querySelector('[data-chat-pin]').click();
+  assert.deepEqual(ids('chat-pinned-threads'), ['alarm', 'daily']);
+  assert.deepEqual(ids('chat-recent-threads'), ['capacity']);
+  assert.equal(f.get('chat-thread-daily').dataset.lastActivity, '2');
+
+  const beforeRename = ids('chat-pinned-threads');
+  f.get('chat-thread-daily').querySelector('[data-chat-rename]').click();
+  assert.equal(f.get('chat-thread-daily').querySelector('[data-chat-select]').textContent, '每日巡检复盘');
+  assert.deepEqual(ids('chat-pinned-threads'), beforeRename);
+});
+
 test('Headers presets are optional and never create automatic rows', (f) => {
   const rows = () => [...f.document.querySelectorAll('[data-header-row]')];
   assert.deepEqual(rows().map((row) => row.querySelector('.header-key').value),

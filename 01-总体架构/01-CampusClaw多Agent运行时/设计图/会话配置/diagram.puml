@@ -127,3 +127,66 @@ Durable session.model_changed and session.thinking_changed entries are visible i
 They are audit facts and are not restored as model conversation messages.
 end note
 @enduml
+
+@startuml http_session_name_configuration
+title HTTP Session Name Update
+' Source evidence (pi-mono-java commit 510d882ca45541e0086586dab89c429c5a18cf20):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/contributor/NameCommandContributor.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeSessionRepository.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java.
+' Observed behavior: slash name persists display_name; no direct HTTP name route exists.
+' Target-only architecture: PUT name adds a direct route and expected-version adapter.
+' Design reason: direct UI rename and slash name share validation while HTTP avoids lost updates.
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequence {
+  ArrowColor #475569
+  ActorBorderColor #475569
+  ActorFontColor #0F172A
+  LifeLineBorderColor #94A3B8
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #475569
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantFontColor #0F172A
+  GroupBorderColor #64748B
+  GroupFontColor #334155
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #C2410C
+  FontColor #7C2D12
+}
+actor Caller
+participant "Session Name\nAPI [target-only]" as API
+participant "Shared Session\nNaming Service" as Service
+database "Runtime Session\nStore" as Store
+participant ResultBeanAdapter
+Caller -> API : PUT /sessions/{sessionId}/name\ncontext headers, If-Match, and displayName
+API -> API : validate request VO and parse strong ETag
+API -> Service : normalized input and expected resource version
+Service -> Service : strip outer whitespace and validate 80 UTF-8 bytes
+Service -> Store : lock row and compare resource version\nidle or running is allowed
+Store --> Service : current Session resource
+alt version differs
+  Service --> API : 412 SESSION_VERSION_MISMATCH
+else normalized name equals current name
+  Service --> API : unchanged Session and same ETag
+else name changes
+  Service -> Store : atomically update displayName, updatedAt,\nand resource version; no Session Entry
+  Store --> Service : authoritative Session resource
+  Service --> API : updated Session and ETag
+end
+API -> ResultBeanAdapter : normal(SessionResponseVO)
+ResultBeanAdapter --> API : resCode, resMsg, result
+API --> Caller : 200 OK\nSession resource and ETag
+note over Service,Store
+Slash name calls this service without expectedVersion.
+Direct HTTP requires If-Match but does not require idle.
+Neither path creates an Entry or alters the active execution snapshot.
+end note
+@enduml

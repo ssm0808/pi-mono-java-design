@@ -45,10 +45,10 @@ def validate_catalog():
     manifest, models = current.load_catalog()
     require(manifest["output"] == "chat-api-review.html" and "legacyPages" not in manifest,
             "Publish only the current catalog; no legacy aliases")
-    require(len(models) == 10, "Current catalog must contain exactly ten operations")
+    require(len(models) == 11, "Current catalog must contain exactly eleven operations")
     require({model["operation"]["operationKey"] for model in models} == {
         "createSession", "getSession", "deleteSession", "submitSessionEvent", "listSessionEvents",
-        "listSessionModels", "changeSessionModel", "changeSessionThinking",
+        "listSessionModels", "changeSessionModel", "changeSessionThinking", "changeSessionName",
         "listSessionCommands", "executeSessionCommand",
     }, "Current catalog identities differ")
     spec = importlib.util.spec_from_file_location("retained_gate", ROOT / "validate-chat-http-v1.py")
@@ -59,7 +59,7 @@ def validate_catalog():
     parser = gate.ContractHtmlParser()
     parser.feed(source)
     embedded, scripts = gate.parse_generated_models(parser)
-    require(embedded == models and parser.static_review_count == 10, "Rendered model/static catalog differs")
+    require(embedded == models and parser.static_review_count == 11, "Rendered model/static catalog differs")
     require(len(scripts) == len(parser.styles) == 1, "Keep one shared script and style")
     gate.validate_executable_script(scripts[0])
     gate.validate_control_retirement(models)
@@ -97,7 +97,7 @@ def main():
     ):
         subprocess.run([sys.executable, *command], cwd=ROOT, check=True)
     validate_catalog()
-    print("Current catalog valid: ten unique operations; retired pages/generator absent; no retired links; review decisions preserved.")
+    print("Current catalog valid: eleven unique operations; retired pages/generator absent; no retired links; review decisions preserved.")
     return 0
 
 

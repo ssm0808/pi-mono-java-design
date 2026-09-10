@@ -325,14 +325,20 @@ end note
 @enduml
 
 @startuml target_runtime_workbench
-' Source baseline: pi-mono-java@7f1126262b16458e430c1a70aba9936e26391385
-' Source evidence: frontend/src/App.vue threads, drafts, resumeSession, submit, stop
+' Source baseline: pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20
+' Source evidence: frontend/src/App.vue resumeSession and sidebar select
+' Source evidence: frontend/src/runtime/sessionIndex.ts select and upsert
+' Source evidence: frontend/src/composables/useWorkbenchSessions.ts recordSession and touchCurrentThread
+' Source evidence: frontend/src/components/AppSidebar.vue threads and select
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts recover, canSend, canStop
 ' Source evidence: frontend/src/components/DebugHeaders.vue snapshot
 ' Source evidence: frontend/vite.config.ts defineConfig; no auth middleware exists
-' Observed behavior: local refs lose navigation on reload; topbar owns stop.
+' Observed behavior: upsert prepends after selection; no pin field or direct HTTP name route exists.
 ' Target-only architecture: every class and relationship below is proposed.
-' Product constraint: restore navigation; keep Stop in Composer; credentials stay in DEV.
+' Product constraint: selection preserves order; pin and rename are explicit; credentials stay in DEV.
 ' Design reason: one coordinator owns execution state and request generations;
 ' persistent metadata and transient credentials have separate lifecycles.
 title Runtime Workbench - Target Classes
@@ -352,6 +358,8 @@ package "Browser page [target-only]" {
   class HeaderEditor <<DEV view>>
   class WorkbenchCoordinator <<page lifecycle>> {
     selectSession(id)
+    setPinned(id, pinned)
+    renameSession(id, displayName, etag)
     restoreIndex()
     submit(snapshot)
     stop(target)
@@ -363,7 +371,17 @@ package "Browser page [target-only]" {
     uncertainty
     primaryAction
   }
-  class SessionIndexRepository <<persistent metadata>>
+  class SessionIndexRepository <<persistent metadata>> {
+    patchMetadata(entry)
+    recordActivity(id, acceptedAt)
+    setPinned(id, pinned)
+  }
+  class SessionIndexEntry <<browser-local>> {
+    sessionId
+    displayName
+    lastActivityAt
+    pinned
+  }
   class RequestSnapshot <<immutable per request>>
   class DraftStore <<page memory>>
   class HeaderStore <<DEV page memory>>
@@ -377,7 +395,7 @@ package "Local Vite serve process [target-only]" {
   class LocalAuthConfig <<server-only credentials>>
 }
 class "Browser localStorage\nSession metadata only" as Storage <<persistent resource>>
-class "Runtime Session API\nexisting internal API" as Runtime <<external API>>
+class "Runtime Session API\nexisting plus target Name API" as Runtime <<external API>>
 class "AuthCenter\nlogin and Set-Cookie" as AuthCenter <<external API>>
 WorkbenchView *-- Composer
 WorkbenchView *-- HeaderEditor
@@ -388,12 +406,13 @@ HeaderEditor --> TokenCoordinator : explicit get token
 WorkbenchCoordinator *-- "1" SessionViewState
 WorkbenchCoordinator *-- "0..*" RequestSnapshot
 WorkbenchCoordinator *-- "1" DraftStore
-WorkbenchCoordinator --> SessionIndexRepository
+WorkbenchCoordinator --> SessionIndexRepository : selection never reorders
+SessionIndexRepository *-- "0..*" SessionIndexEntry
 WorkbenchCoordinator --> HeaderStore : snapshot latest values
-WorkbenchCoordinator --> RuntimeGateway
+WorkbenchCoordinator --> RuntimeGateway : GET, events, and PUT name
 RuntimeGateway <|.. RuntimeHttpGateway
 RuntimeHttpGateway --> Runtime
-SessionIndexRepository --> Storage
+SessionIndexRepository --> Storage : schema v2
 TokenCoordinator --> HeaderStore : matching IP and edit revision
 TokenCoordinator --> DevAuthMiddleware : same-origin JSON POST
 DevAuthMiddleware --> AuthCenterClient
@@ -402,6 +421,8 @@ AuthCenterClient --> AuthCenter : fixed HTTPS login path
 legend bottom left
   Header edits do not alter an existing snapshot.
   Reconciliation never replays a write request.
+  Only create or accepted user activity changes recent order.
+  Pinning changes the group, not lastActivityAt.
   DEV auth has no production or preview registration.
   Return accessToken only; no browser cookies.
 endlegend

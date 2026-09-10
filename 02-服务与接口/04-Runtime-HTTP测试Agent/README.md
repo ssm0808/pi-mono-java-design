@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.2 |
+| 文档版本 | 1.1.3 |
 | 状态 | 首版执行器与仓库 Skill 已落地到 `codex/campusclaw-tdd-agent`，当前实现契约漂移预期为红 |
 | 设计目标 | 基于已确认 HTTP 契约自动规划、拉起、执行和维护回归测试 |
 | HTTP 契约版本 | `1.37.0`，十一项 operation 均已确认 |
@@ -10,11 +10,11 @@
 | 历史 HTML 契约 SHA-256 | `5c1f235bd04017390bf2a8fd603d176b5f9a3babc019e33cee192ce132672604` |
 | pi-mono-java 实现分析基线 | `1f801dbb82bdda30478e3354e685e3153b179a0c`，`origin/main` |
 | 初始机器用例目录 | [`test-case-catalog.json`](test-case-catalog.json) |
-| 更新日期 | 2026-09-07 |
+| 更新日期 | 2026-09-10 |
 
 > 历史实现回归基线，不是当前目标接口清单。本文与用例目录固定于 HTTP 1.37 / 旧实现，
 > 其中三个控制接口仅供旧版本回归；当前目标已移除，不得据此新增或恢复路由。
-> [当前十项清单](../../01-总体架构/01-CampusClaw多Agent运行时/README.md#4-当前目标-http-接口清单)
+> [当前十一项清单](../../01-总体架构/01-CampusClaw多Agent运行时/README.md#4-当前目标-http-接口清单)
 > 与 Events v2 为迁移目标；测试执行须固定匹配的历史契约 commit，不能用当前 HTML 冒充 1.37。
 
 ## 1. 结论
@@ -41,7 +41,7 @@
 
 本节仅描述 HTTP 1.37 历史回归，测试 Agent 必须在对应历史 commit 读取以下文件。
 当前工作树的旧 HTML 已删除，不保留迁移页，也不得为测试恢复副本。
-当前目标契约统一见 [十项接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html)。
+当前目标契约统一见 [十一项接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html)。
 历史源固定为设计提交 `8ab8eef47b2dc0d9e21ae0ca0bd7617f8a158a32`，当时的目录为
 `pi-mono-java-manager-driven-multi-agent-runtime/`；以下两个文件名是该提交内的路径，
 不是当前工作树链接。历史读取顺序为：
@@ -58,7 +58,7 @@
 本目录校验器按用例目录中的 `sourceKind=git-history`、完整 `sourceCommit`、仓库相对路径
 和 SHA-256，通过 `git show` 在内存中读取历史契约。默认运行
 `python3 validate-http-test-agent-design.py` 不依赖已删除页面；缺少提交或摘要不符直接失败。
-`--contract-ref` 只允许完整提交 ID，仍必须匹配冻结的摘要，不能借此覆盖当前十项接口。
+`--contract-ref` 只允许完整提交 ID，仍必须匹配冻结的摘要，不能借此覆盖当前十一项接口。
 
 Runtime HTTP 接口当前不维护 OpenAPI。Agent 必须从 HTML 中的结构化 review model 提取
 operation，而不是从历史 Git 恢复已经废弃的 OpenAPI。提取结果必须记录契约版本、文件
@@ -489,6 +489,7 @@ Agent 不得自动：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.3 | 2026-09-10 | 同步当前目标为十一项接口，历史 HTTP 1.37 回归基线不变。 |
 | 1.1.2 | 2026-09-07 | 删除旧页的工作树引用；历史校验固定 Git 提交、当时路径和 SHA-256，仅内存读取，不恢复废弃文档。 |
 | 1.1.1 | 2026-09-07 | 标记为旧实现回归资料；三个控制接口不再属于当前目标，保留用例证据与原断言，不据此恢复接口。 |
 | 1.1.0 | 2026-08-20 | 对齐 HTTP V1 1.37.0 和实现基线 `1f801dbb`；目录继续留在设计仓；退役本地认证矩阵，新增全接口调用上下文/no-auth、类型化 ID、`thinking=true`、thinking 事件可见性、Submit 删除 `type`、设计基线证据和实现漂移失败门禁；记录首版执行器、Skill、openGauss 与 Failsafe 落地 |
