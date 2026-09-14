@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/agents/{agentId}/sessions",
     "summary": "创建 Runtime Session",
-    "description": "根据 agentId 创建一个全新的 Runtime Session。CampusClaw 生成 sessionId，直接从受控 agent/{agentId}/.campusclaw/ 目录读取 settings.json、SYSTEM.md 和 skills/，解析并校验默认模型，然后完成 Session 持久化；AgentSession 在首次执行时惰性初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session，默认 thinking=true，lifetimeUsage 的 Token 与 USD Cost 明细全部为零。 mode 是必填的 plan/build 工作模式，与 state 独立；创建默认为 build，创建请求不接受 mode；修改使用统一 POST Session。",
+    "description": "根据 agentId 创建一个全新的 Runtime Session。CampusClaw 生成 sessionId，直接从受控 agent/{agentId}/.campusclaw/ 目录读取 settings.json、SYSTEM.md 和 skills/，从同一目录快照解析并校验默认模型和 mode，然后完成 Session 持久化；AgentSession 在首次执行时惰性初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session，默认 thinking=true，lifetimeUsage 的 Token 与 USD Cost 明细全部为零。 mode 是必填的 plan/build 工作模式，与 state 独立；创建时复制已发布 Agent.mode，旧元数据缺少 mode 时兼容 build；已有 Session 不因 Agent 更新或刷新改变模式，创建请求不接受 mode；修改使用统一 POST Session。Agent.mode=plan 时创建前检查有效 Runtime profile 的 ExitPlanMode 能力，缺失返回 PLAN_MODE_UNAVAILABLE；不创建 Agent 执行对象。",
     "parameters": [
       {
         "$ref": "parameters.agentId"
@@ -18,14 +18,14 @@
     "requestBody": {
       "required": false,
       "contentType": null,
-      "description": "无请求体；不接受 sessionId、modelId 或 thinking。",
+      "description": "无请求体；不接受 sessionId、modelId、thinking 或 mode；mode 来自 Agent 已发布配置。",
       "example": null
     },
     "responses": [
       {
         "status": "201",
         "label": "Created",
-        "summary": "Session 已完成初始化和持久化，可以接受后续请求；初始 state=idle、thinking=true、mode=build。",
+        "summary": "Session 已持久化，初始 state=idle、thinking=true；mode 复制 Agent 默认。示例对应 Agent.mode=build 或旧元数据缺省。",
         "headers": {
           "Location": "/campusclaw-service/v1/sessions/session-550e8400e29b41d4a716446655440003",
           "Content-Language": "en-US"
@@ -102,7 +102,7 @@
         "status": "422",
         "tabLabel": "422 · AGENT_NOT_AVAILABLE",
         "label": "Unprocessable Content",
-        "summary": "Agent 存在，但当前不可用于创建 Session。",
+        "summary": "Agent 存在但当前不可用，包括远端或受管目录中的 mode 类型或值非法；缺字段兼容 build。",
         "headers": {
           "Content-Language": "zh-CN"
         },
@@ -134,6 +134,26 @@
           "en-US": {
             "resCode": "AGENT_MODEL_NOT_CONFIGURED",
             "resMsg": "The Agent has no valid default model configured."
+          }
+        }
+      },
+      {
+        "id": "422-plan-mode-unavailable",
+        "status": "422",
+        "tabLabel": "422 · PLAN_MODE_UNAVAILABLE",
+        "label": "Unprocessable Content",
+        "summary": "Agent 默认 mode=plan，但当前有效 Runtime profile 未提供 ExitPlanMode；不创建 Session。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "PLAN_MODE_UNAVAILABLE",
+            "resMsg": "当前 Session 的计划模式不可用。"
+          },
+          "en-US": {
+            "resCode": "PLAN_MODE_UNAVAILABLE",
+            "resMsg": "Plan mode is unavailable for this Session."
           }
         }
       },

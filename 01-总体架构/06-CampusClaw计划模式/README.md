@@ -2,14 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.0 |
+| 文档版本 | 1.6.0 |
 | 更新日期 | 2026-09-14 |
 | 状态 | 推荐目标设计，target-only；本次不修改产品实现 |
 | 计划模式主基线 | DeepSeek Harness `0a53fb55bea101816fa226bb964ae2bed71c343b`，`dsh-0.1.2-alpha.2` |
 | TODO 公共交互基线 | Claude Managed Agents 官方 Beta 文档，2026-09-14 核对；通用工具事件，不推断内部实现 |
 | Runtime 语义基线 | pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | CampusClaw 实现基线 | `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`；本次分析范围与本地 `f61906b9136246ca60f333704b6fc92b5420d0ec` 内容相同 |
-| 设计仓变更前基线 | `9aac37890edd257354c9dab0819bec0e94e513c8` |
+| 设计仓变更前基线 | `40a159d361f2f3e9da04594f791607dac85fd192` |
 | 源码依据 | [基线、符号与差距](source-evidence.md) |
 
 ## 1. 设计结论
@@ -22,6 +22,7 @@
 
 ### 1.1 明确采用的边界
 
+- **Agent 默认模式与 Session 当前模式分离。** Agent 新增字符串 `mode`，仅支持 build/plan；新建交互 Session 从已发布 Agent 快照初始化，旧元数据缺省 build，已有 Session 不被 Agent 更新覆盖。字段存储、兼容与生效时机唯一维护在[Agent 元数据主设计 §4.4](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)。
 - **工具元数据稳定。** `ToolInfo`、`MateToolMeta`、Agent/Skill 绑定结构、`ListMateTools` 输出、`CallMateTool` 输入均不增加计划字段；不添加 `readOnly`、`sideEffect`、`allowedInPlan`，不改变 `permission` 和 `isConcurrencySafe` 的含义。
 - **通过提示词限制规划行为。** 工具描述和参数帮助模型理解操作；不增加按计划模式拦截业务工具的白名单或副作用分类器。原有工具权限、工作区边界、绑定检查与凭据规则继续生效。该方案不提供服务端强制只读保证。
 - **审核状态由服务端维护。** 普通对话中的“可以”“继续”不自动批准方案。确认请求必须引用当前待审核 `agent.plan.eventId`；旧方案不可被误批准，不建立独立 `planId/version` 管理体系。
@@ -41,6 +42,7 @@
 | standard preset 禁止规划期使用 todo_write，实施进度由工具描述指导 | plan 不调用 TodoUpdate；批准后加入实施指令并创建执行清单 | 直接借鉴阶段边界；进度沿用通用结果事件，不增加 TODO 公共类型 |
 | 通过独立提问能力澄清需求 | 首版使用普通 Assistant 问题和下一条 `user.message` | 架构选择；完成交互闭环，无需新增通用问卷协议 |
 | 新 spawn 默认不继承计划模式 | Child 在调用时复制父执行当前模式，并只向父返回结果 | 产品约束；避免把规划任务委派成默认实施任务；仍是提示词约束 |
+| 没有本专题定义的 Agent.mode → 企业 Session 默认值链 | Agent 定义提供默认值，创建后由 Session 独立维护 | 产品约束与架构扩展；支持默认先规划的 Agent，不重置既有会话 |
 | 插件依赖进程内待切换状态 | 已受理审核决定先持久化，再唤醒原执行实例 | 架构变更；复用 CampusClaw 跨实例确认交接 |
 
 只借鉴 DeepSeek 的计划机制，不引入其 Cordis 插件系统、WebSocket Remote Journal、token 级日志或完整事件溯源存储格式。该参考版本为 alpha，成熟度不作为方案正确性的依据。
@@ -73,17 +75,19 @@
 
 ![计划模式状态与准入](plan_mode_state.svg)
 
-[原尺寸 SVG](plan_mode_state.svg) · [PlantUML 源码：`plan_mode_state`](diagram.puml#L276)
+[原尺寸 SVG](plan_mode_state.svg) · [PlantUML 源码：`plan_mode_state`](diagram.puml#L307)
+
+新建 Session 的初始模式来自 Agent.mode；已是 plan 时直接发消息，无需再切换。创建接口仍无请求体，不自动调用模型或生成任务清单；普通 Session POST 只更新该 Session，不写回 Agent。
 
 ### 2.3 从进入计划到实施完成的整体交互
 
 ![计划模式完整交互](plan_mode_end_to_end.svg)
 
-[原尺寸 SVG](plan_mode_end_to_end.svg) · [PlantUML 源码：`plan_mode_end_to_end`](diagram.puml#L391)
+[原尺寸 SVG](plan_mode_end_to_end.svg) · [PlantUML 源码：`plan_mode_end_to_end`](diagram.puml#L423)
 
 | 阶段 | 用户与 Agent 交互 | 模式 / 进度与权威 |
 |---|---|---|
-| 进入计划 | 模式控件通过统一 Session POST 设置 plan | idle + If-Match；返回同源 Session/ETag |
+| 创建与进入计划 | 创建时复制 Agent 默认；需要切换时通过统一 Session POST 设置 plan | 新建仍 idle；手动切换要求 If-Match，返回同源 Session/ETag |
 | 调研与方案设计 | 普通消息启动；模型读取资料、查询业务、形成方案 | running/plan；正常思考和工具事件，不调用 TODO |
 | 澄清 | 普通回答提问并结束；用户回答后继续 | idle/plan → 新根执行；Session 不变 |
 | 提交审核 | 单独 ExitPlanMode 调用，前端展示完整方案卡 | agent.plan 固定正文；confirming 关闭本段 SSE，Session 仍 running/plan |
@@ -118,6 +122,7 @@
 | `RuntimePlanReviewAdapter`（新增） | 每个根执行一个；实现 `PlanReviewPort`，连接工具与既有等待/续跑机制 |
 | `RuntimeActiveExecution`、`RuntimePendingInteraction`（后者新增） | 每个执行一个；把现有单个工具确认 Future、输出交接和取消责任收敛到一个最多容纳一项交互的对象，支持 `TOOL_PERMISSION` 与 `PLAN_REVIEW` 两种明确类型 |
 | `ManagedAgentSession`、`SessionPlanContext`（后者新增） | 每个执行一个；保存基础提示词、当前执行模式快照、提示词应用方法；不包含 HTTP 请求或数据库句柄 |
+| `RuntimeSessionService`、`FileAgentDirectoryResolver`、`AgentDirectorySnapshotDTO`（扩展） | 创建时从同一已解析目录快照读取 Agent 默认模式并持久化，恢复不重套默认；复用 AgentRuntimeManager 的完整目录发布边界 |
 | `PlanPolicyPromptComposer`（新增） | Spring 单例、启动时固定文本；纯函数根据基础 SYSTEM、模式、入口及已有工具名称快照组合规划/审核/实施段，无请求 I/O、无租户状态 |
 | `TodoUpdateTool`（新增） | Runtime profile 按执行创建的无列表状态工具；校验并返回完整 JSON 文本快照，持久化复用普通 ToolResult 路径 |
 | `deriveTodos`（新增客户端投影） | 页面事件仓库的纯函数；从同一根消息的成功工具结果派生进度，不修改 Runtime 状态 |
@@ -140,7 +145,7 @@
 | 提示词组合 | `compose(basePrompt, mode, entryPoint, toolNames)` → 完整 SYSTEM String | 只消费已有装配结果和权威模式；不新建工具能力元数据，组合矩阵由提示词文档维护 |
 | Session 提示词 | `SessionPlanContext.applyCommittedMode(SessionModeSnapshotDTO)` | 用完整基础文本重新组装提示词，不用字符串删除或重复追加 |
 | 消息接受结果 | `UserMessageAcceptanceDTO` 增加 `SessionModeSnapshotDTO`，`startAccepted` 在启动前应用 | 保留接受前 prepare，避免配置竞争与数据库锁内远程装配 |
-| 工厂参数 | `ManagedAgentSessionRequest` / `ToolAssemblyContext` 增加计划上下文与退出工具工厂 | 这是内部装配参数，不修改 Agent/Tool/Skill 元数据 |
+| 工厂参数 | `ManagedAgentSessionRequest` / `ToolAssemblyContext` 增加计划上下文与退出工具工厂 | 这是内部装配参数；与 Agent 顶层 mode 各自独立，不修改 Tool/Skill 元数据 |
 
 `RuntimeEventService` 当前是三分支 sealed switch；首版增加一个明确的计划确认分支，转交专用服务，不在分支内实现审核逻辑。无需为了增加一个事件整体替换现有分派框架。
 
@@ -220,7 +225,7 @@ Session 是配置权威资源。当前九项目标契约以统一 POST 更新名
 
 ![计划提交、审核与原执行续跑](plan_mode_review_sequence.svg)
 
-[原尺寸 SVG](plan_mode_review_sequence.svg) · [PlantUML 源码：`plan_mode_review_sequence`](diagram.puml#L195)
+[原尺寸 SVG](plan_mode_review_sequence.svg) · [PlantUML 源码：`plan_mode_review_sequence`](diagram.puml#L226)
 
 提交计划时：先由原有 Projector 记录唯一的 `agent.tool_call`，`requiresConfirmation=false`，因为该调用不在申请工具权限。随后在同一个短事务内校验固定目标和模式，追加 `agent.plan` 与 `session.status_idle(confirming)`、关闭原段、登记待审核目标。提交成功后按该顺序推送并关闭 SSE。计划工具尚未返回，不提前制造 `agent.tool_result`。
 
@@ -302,7 +307,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 切片 | 落地范围 | 必须验证 |
 |---|---|---|
-| S1：模式骨架 | Session 更新入口、mode 列、DTO/VO、ETag、既有配置服务、工厂提示词、默认 build | 统一 POST 按提交字段更新四类属性，拒绝只读字段，未提交属性保持；双 Session 隔离；模式与消息接受竞争使用事务快照；相同值不新增事件；新 Session 默认为 build、持久化后按实际 mode 恢复；元数据 JSON 字段完全不变 |
+| S1：模式骨架 | Session 更新入口、mode 列、DTO/VO、ETag、既有配置服务、工厂提示词、Agent 默认 mode | 统一 POST 按提交字段更新四类属性，拒绝只读字段，未提交属性保持；双 Session 隔离；模式与消息接受竞争使用事务快照；相同值不新增事件；新 Session 复制 Agent.mode，旧元数据缺省 build；持久化后按实际 mode 恢复，Agent 更新不覆盖旧 Session；Agent 仅新增 mode，Tool/Skill 字段不变 |
 | S2：稳定工具与审核 | ExitPlanMode 工厂/profile、PlanReviewPort/Adapter、独占审核调用、统一待交互对象 | 普通/计划两次请求工具定义和顺序相同；非计划调用失败；未配置退出工具不能进入计划；无新增权限判断 |
 | S3：事务与续跑 | 三种新事件、审核决定表、控制轮询、原执行续跑段、提示词退出 | 批准指向精确计划；修订后旧ID失效；跨实例决定只领取一次；完整回执先行；旧 SSE 不接收新段；工具调用/结果无重复 |
 | S4：取消和恢复 | GET Session/历史投影、超时、中断、删除清理、压缩与 Child | approve/revise/interrupt 竞争；两类确认不能互相消费；断线无重放；分页未补齐与 Session/事件矛盾时不开放审核；已确认或终止的旧计划不可重审；未可靠结束不释放准入；批准后新 Child 使用 build；摘要不修改模式 |
@@ -324,6 +329,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-09-14 | Agent.mode 初始化新 Session，已有会话独立维护当前模式。 |
 | 1.5.0 | 2026-09-14 | 按模式组合规划审核与实施提示词，TODO 仅记录实施进度并补齐整体交互。 |
 | 1.4.0 | 2026-09-14 | TodoUpdate 通过通用工具调用和成功结果维护任务进度，保持事件与元数据结构稳定。 |
 | 1.3.0 | 2026-09-14 | 计划审核通过事件恢复，待审核目标仅保留在执行内部。 |

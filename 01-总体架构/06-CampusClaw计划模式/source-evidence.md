@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：1.5.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：1.6.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
 ## 1. 固定提交
 
@@ -11,7 +11,7 @@
 | superheromeZzh/pi-mono-java | `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` | 2026-09-14 fetch 后 origin/main；本地 f61906b 已包含全部本专题分析的 Java、Mapper 和 SQL 内容 |
 | anomalyco/opencode | `849c2598abc7d2b40261e74b5826bc74ffc78308` | 仅核对 TODO 描述和 anthropic 模型模板的任务管理段；该模板不是 Claude 官方提示词 |
 | openai/codex | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | 核对指定 gpt_5_1 提示词与 update_plan Handler；不代表所有模型使用同一模板 |
-| pi-mono-java-design | `9aac37890edd257354c9dab0819bec0e94e513c8` | 本次修订前的设计主线；保留当前 Session Events、权限、工具 profile 和元数据契约 |
+| pi-mono-java-design | `40a159d361f2f3e9da04594f791607dac85fd192` | 本次修订前的设计主线；保留当前 Session Events、权限、工具 profile 和元数据契约 |
 
 前序分析使用 Java `510d882ca45541e0086586dab89c429c5a18cf20`。本次采用 `09b32d8e`；两者之间是仓库指引变更，本专题 Runtime 路径不变。对比本地 `f61906b` 至 `09b32d8e` 的差异仅在指引、前端样式/开发代理及配套文档脚本；不据此声称 Agent Loop 或确认机制发生新增变化。
 
@@ -21,7 +21,7 @@
 
 | 路径 / 符号 | 已观察行为 | 设计用途 |
 |---|---|---|
-| [`packages/plan/plan-mode/src/index.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/0a53fb55bea101816fa226bb964ae2bed71c343b/packages/plan/plan-mode/src/index.ts) · `PlanModeConfig`、`resolveConfig` | section 为部署提供的非空指导文本；插件没有自行选择一套业务计划提示词 | 计划指令归 Runtime 部署，不扩充 Agent/工具元数据 |
+| [`packages/plan/plan-mode/src/index.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/0a53fb55bea101816fa226bb964ae2bed71c343b/packages/plan/plan-mode/src/index.ts) · `PlanModeConfig`、`resolveConfig` | section 为部署提供的非空指导文本；插件没有自行选择一套业务计划提示词 | 计划指令正文归 Runtime 部署，不嵌入 Agent/工具元数据；Agent.mode 仅提供创建默认值 |
 | 同文件 · `PlanModeController`、`plan:policy` | 根据 Agent 计划状态提供系统提示词；退出工具持续注册 | 模式影响 Prompt，工具定义跨模式稳定 |
 | 同文件 · `exit_plan_mode` execute | 接收完整 Markdown；通过用户审核取得决定；批准后安排退出 | 复用结构化审核边界；CampusClaw 映射为独立事件 |
 | [`packages/plan/plan-mode/README.md`](https://github.com/deepseek-ai/deepseek-harness/blob/0a53fb55bea101816fa226bb964ae2bed71c343b/packages/plan/plan-mode/README.md) · Implementation / Limitations | 模式不提供工具权限强制隔离；模式日志可恢复，部分未落盘选择仍在进程内 | 明确提示词约束及持久化边界，不承诺硬只读 |
@@ -149,3 +149,7 @@ CampusClaw 采纳工具业务由通用调用/结果承载的风格，仍由 Runt
 [Claude Tools 的 custom tool 指导](https://platform.claude.com/docs/en/managed-agents/tools#custom-tools)只说明应用定义描述与参数、模型选择调用、应用返回结果；[通用事件流程](https://platform.claude.com/docs/en/managed-agents/events-and-streaming#handling-custom-tool-calls)不承诺 TODO 自动调用或进度面板。没有服务端源码 commit，不推断其内部状态机。
 
 [提示词正文](plan-policy.md)和[组合与模型验收](plan-policy.md#8-组合检查与模型场景验收)是当前目标。稳定元数据、build-only 进度和 Child 角色边界属于产品约束；审核精确身份和服务端事务继续作为安全与一致性边界。提示词本身不构成硬只读或自动判定工作完成的保证。本次仅完成静态源码、设计与资源校验，未执行模型遵循率或产品端到端测试。
+
+## 8. Agent 默认模式
+
+Agent 顶层 mode 是本产品新增的默认配置，不归因为 DeepSeek/Claude 的同名字段。Mate 956b547f 与 Runtime 固定 09b32d8e 的 DTO、发布目录、解析快照、Session 创建路径核对，以及相对旧 Mate 9dd5d85 的范围差异，集中记录在[元数据主设计 §2.3](../../03-数据与存储/02-Agent元数据GaussDB/README.md#23-mode-专项源码核对)。本专题继承以下目标：新交互 Session 复制 Agent 默认，缺字段兼容 build；已有 Session、Child 和 Cron 按各自既有模式权威工作。plan 仍不调用 TODO；公共工具事件与审核事务未改变。

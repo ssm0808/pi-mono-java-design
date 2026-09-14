@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.53.2 |
+| 文档版本 | 1.54.0 |
 | 状态 | 保留九个目标 operation；Events 以 Session Events 已确认目标契约为准；统一 Session 名称、模型、思考、模式 POST 契约；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 已按 B13/B14 对齐；Mate 公共命令独立管理 |
 | 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的七项普通契约与两项 Session Events 模型 |
@@ -135,12 +135,12 @@ Header，但 Runtime 不校验其组合或格式。
 1. Controller 接收上游调用上下文 Header，不执行凭据组合、互斥、格式或真实性检查；
    Service 按共享契约中的 Agent ID 正则验证 PATH 中的 `agentId`；
 2. 在受控根目录中解析 `agent/{agentId}/.campusclaw/`，拒绝路径或符号链接越界；
-3. 读取 `agent/{agentId}/.campusclaw/settings.json` 的 `defaultModel` 与 `enabledModels`；
-4. 验证 `enabledModels` 非空、无重复且包含 `defaultModel`；
+3. 读取 `agent/{agentId}/.campusclaw/settings.json` 的 `defaultModel`、`enabledModels` 与 Agent 默认 `mode`；
+4. 验证 `enabledModels` 非空、无重复且包含 `defaultModel`；mode 缺字段兼容 build，显式 null/非法类型或值拒绝；plan 默认在创建前检查有效 Runtime profile 的 ExitPlanMode 能力；
 5. 调用 `resolveModel(agentId, defaultModel)` 获得有效模型 descriptor；
 6. 在所有外部配置校验通过后生成全局唯一、删除后不复用且匹配
    `^session-[0-9a-fA-F]{32}$` 的 `sessionId`；
-7. 保存 Session；首次执行时加载 `SYSTEM.md` 和 Skills，只注册 `read` 工具，
+7. 将同一已解析快照的 mode 保存到新 Session；首次执行时加载 `SYSTEM.md` 和 Skills，只注册 `read` 工具，
    并创建独立 `AgentSession + Agent`；
 8. 由 `ResultBeanAdapter` 包装 SessionResource，返回 `201 Created`、
    `Location` 和 ResultBean。公司工程以 Bean 替换适配器后，在适配器内部调用
@@ -156,6 +156,8 @@ HTTP V1 对同一目录中的文件契约仍固定为 `settings.json`、`SYSTEM.
 `skills/`。本次只将目录位置统一为 `.campusclaw`，不将 CLI 物化文件
 `setting.json` 和 `systemPrompt.md` 当作 HTTP 同义文件。如果部署同时使用两个入口，
 Manager 必须确保 HTTP 所需文件完整，不得让 HTTP 读取 CLI 物化过程中的半成品。
+
+Agent.mode 的字段、存储、目录发布和 Session 初始化规则由[元数据主设计 §4.4](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)唯一维护。新会话复制已发布默认值，不保证管理面更新立即穿透 Runtime 缓存；已有会话不因 Agent 更新、刷新或再次发消息重置 mode。Session 创建保持无请求体、不调用模型；plan 能力缺失返回目标 `422 PLAN_MODE_UNAVAILABLE`。
 
 `settings.json` 是受控 Agent 目录配置，Model Manager 仍是模型绑定、启用状态和
 调用的最终权威。目录缺少有效默认模型时返回 HTTP `422`，
@@ -194,7 +196,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 | `agentId` | string | 创建后不可变的 Agent 绑定 |
 | `modelId` | string | Session 当前默认模型；允许后续切换 |
 | `state` | `idle \| running` | 只回答 Session 当前是否存在 active execution |
-| `mode` | `plan \| build` | Session 当前工作模式；创建默认为 build |
+| `mode` | `plan \| build` | Session 当前工作模式；创建复制已发布 Agent.mode，旧元数据缺省 build |
 | `thinking` | boolean | 是否对后续用户消息启用深度思考；既有思考原文保持历史可见，不随之后关闭而隐藏 |
 | `displayName` | string or null | Session 显示名称；由统一 Session 更新或 `/name` 查看修改 |
 | `lifetimeUsage` | Usage | Session 创建以来持久化 Assistant 与 Compaction Usage 的原子累计值 |
@@ -213,7 +215,7 @@ Session，不调用模型、不消耗 token，也不为了查询而实时调用 
 
 ![GetSession 已确认响应](设计图/会话生命周期/http_get_session_response.svg)
 
-[PlantUML 源码：`http_get_session_response`](设计图/会话生命周期/diagram.puml#L93)
+[PlantUML 源码：`http_get_session_response`](设计图/会话生命周期/diagram.puml#L97)
 
 pi 的 `thinkingLevel` 表示多级推理强度，可取
 `off | minimal | low | medium | high | xhigh | max`。CampusClaw 将该能力收窄为
@@ -287,7 +289,7 @@ owner 信息。删除操作仍携带调用上下文 Header，但 Runtime 不执�
 
 ![HTTP Session 逻辑删除](设计图/会话生命周期/http_delete_session.svg)
 
-[PlantUML 源码：`http_delete_session`](设计图/会话生命周期/diagram.puml#L198)
+[PlantUML 源码：`http_delete_session`](设计图/会话生命周期/diagram.puml#L202)
 
 本小节和生成的 HTML 评审页中的第三个接口已经用户确认。
 
@@ -825,6 +827,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.54.0 | 2026-09-14 | 新 Session 从已发布 Agent.mode 初始化，既有 Session 保持独立模式。 |
 | 1.53.2 | 2026-09-14 | 计划审核通过 Events 恢复，Session 响应不增加待审核目标。 |
 | 1.53.1 | 2026-09-14 | 明确前端单项提交与 Session 可选字段部分更新的契约边界。 |
 | 1.53.0 | 2026-09-14 | 名称、模型、思考与模式统一通过 Session POST 原子更新。 |

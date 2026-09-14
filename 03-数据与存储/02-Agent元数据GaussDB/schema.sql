@@ -1,4 +1,4 @@
--- SR-AGENT-DB-001 v0.15.0
+-- SR-AGENT-DB-001 v0.19.0
 -- 目标：使用兼容 PostgreSQL 语法的 GaussDB 行存表。
 -- 基础 DDL 为兼容 GaussDB 分布式版，不创建物理外键。
 -- Service 在同一事务中维护逻辑关系。
@@ -11,6 +11,7 @@ CREATE TABLE "{dbUser}"."t_agent_definition" (
     type            VARCHAR(16)  NOT NULL DEFAULT 'agent',
     version         BIGINT       NOT NULL DEFAULT 1,
     enabled         BOOLEAN      NOT NULL DEFAULT TRUE,
+    mode            VARCHAR(5)   NOT NULL DEFAULT 'build',
     name            VARCHAR(128) NOT NULL,
     display_name    VARCHAR(128) NOT NULL,
     description     TEXT         NOT NULL,
@@ -29,6 +30,7 @@ CREATE TABLE "{dbUser}"."t_agent_definition" (
     CONSTRAINT uk_t_agent_definition_name UNIQUE (name),
     CONSTRAINT ck_t_agent_definition_type CHECK (type = 'agent'),
     CONSTRAINT ck_t_agent_definition_version CHECK (version >= 1),
+    CONSTRAINT ck_t_agent_definition_mode CHECK (mode IN ('build', 'plan')),
     CONSTRAINT ck_t_agent_definition_name CHECK (btrim(name) <> ''),
     CONSTRAINT ck_t_agent_definition_display_name CHECK (btrim(display_name) <> ''),
     CONSTRAINT ck_t_agent_definition_use_cases CHECK (
@@ -41,6 +43,7 @@ COMMENT ON COLUMN "{dbUser}"."t_agent_definition"."id" IS 'Agent 标识';
 COMMENT ON COLUMN "{dbUser}"."t_agent_definition"."type" IS '资源类型';
 COMMENT ON COLUMN "{dbUser}"."t_agent_definition"."version" IS '版本号';
 COMMENT ON COLUMN "{dbUser}"."t_agent_definition"."enabled" IS '是否启用';
+COMMENT ON COLUMN "{dbUser}"."t_agent_definition"."mode" IS '新建交互会话的默认工作模式';
 COMMENT ON COLUMN "{dbUser}"."t_agent_definition"."name" IS '内部名称';
 COMMENT ON COLUMN "{dbUser}"."t_agent_definition"."display_name" IS '显示名称';
 COMMENT ON COLUMN "{dbUser}"."t_agent_definition"."description" IS '描述';

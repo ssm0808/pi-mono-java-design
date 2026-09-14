@@ -8,6 +8,7 @@
     "name":"agent名称",
     "display_name":"agent展示名称",
     "description":"agent描述",
+    "mode": "build",
     "binding_models":["model标识"],
     "system_prompt":{
         "role":"定义agent的身份、专业能力和责任范围",

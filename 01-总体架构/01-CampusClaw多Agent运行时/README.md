@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.18.1 |
+| 文档版本 | 3.19.0 |
 | 状态 | B01～B15 已全部确认；Session POST 支持四类属性部分更新，前端每次单项提交，接口允许组合；当前九项接口共用一个契约入口 |
 | 当前传输结论 | 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
@@ -29,7 +29,7 @@
 
 Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-history-design.md#thinking-original-text)。
 
-计划模式增量由[计划模式专题](../06-CampusClaw计划模式/README.md)维护，基于 DeepSeek，以 Session 更新承载 mode=plan/build，接入既有配置服务、工厂、工具和执行控制；该 target-only 专题提供主图、接口与验收，mode 与 requested 配置事件已登记到九项契约，计划审核部分仍为专题增量，均不代表运行时已经实现。架构取舍见 [A03](../07-Agent架构对比/README.md#a03)。
+计划模式增量由[计划模式专题](../06-CampusClaw计划模式/README.md)维护，基于 DeepSeek，以 Session 更新承载当前 mode=plan/build，Agent.mode 仅初始化新交互 Session，接入既有配置服务、工厂、工具和执行控制；该 target-only 专题提供主图、接口与验收，mode 与 requested 配置事件已登记到九项契约，计划审核部分仍为专题增量，均不代表运行时已经实现。架构取舍见 [A03](../07-Agent架构对比/README.md#a03)。
 
 ## 1. 当前结论
 
@@ -363,7 +363,7 @@ agent/{agentId}/.campusclaw/
     └── templates/
 ```
 
-`agent.json` 只保存当前 Agent 身份；`settings.json` 保存 default model 与
+`agent.json` 只保存当前 Agent 身份；`settings.json` 保存 Agent 默认 mode（target-only，见[元数据主设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)）、default model 与
 `bindingModels`；`agents/{agentName}.json` 保存一个可直接调用 Child 的身份和固定版本；
 `skill.json` 保存 `schemaVersion=1`、ID、名称和版本。名称必须与路径逐字符一致并在所属
 索引内唯一。目录不保存远端工具列表，Skill references 只包含真实参考资料。
@@ -509,6 +509,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.19.0 | 2026-09-14 | Agent 默认 mode 随目录发布，新建 Session 复制后独立维护。 |
 | 3.18.1 | 2026-09-14 | 明确 Session POST 支持部分更新，前端每次单项提交。 |
 | 3.18.0 | 2026-09-14 | 统一 Session POST 更新四类属性，保留名称与执行配置的准入差异。 |
 | 3.17.2 | 2026-09-14 | 同步 Session 资源更新承载 plan/build 的计划模式边界。 |

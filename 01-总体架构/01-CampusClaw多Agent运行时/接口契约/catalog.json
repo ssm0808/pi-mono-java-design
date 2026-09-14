@@ -1,5 +1,5 @@
 {
-  "version": "1.5.2",
+  "version": "1.6.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -9,7 +9,7 @@
       "source": "接口契约/操作/01-create-session.json",
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 联动已同步",
-      "note": "Session 增加 mode，创建默认为 build；统一更新不改变 state=idle/running、使用量和既有读取边界。目标字段不代表源码已实现。",
+      "note": "Session.mode 在创建时复制已发布 Agent.mode，旧元数据缺省 build；已有会话保持自己的当前模式。该目标链路尚待实现。",
       "design": "chat-http-v1-design.md#21-session-生命周期"
     },
     {
@@ -17,7 +17,7 @@
       "source": "接口契约/操作/02-get-session.json",
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 联动已同步",
-      "note": "Session 增加 mode，创建默认为 build；统一更新不改变 state=idle/running、使用量和既有读取边界。目标字段不代表源码已实现。",
+      "note": "Session.mode 在创建时复制已发布 Agent.mode，旧元数据缺省 build；已有会话保持自己的当前模式。该目标链路尚待实现。",
       "design": "chat-http-v1-design.md#211-第二个已确认接口读取-session"
     },
     {

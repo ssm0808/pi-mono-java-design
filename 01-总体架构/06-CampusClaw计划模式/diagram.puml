@@ -22,6 +22,9 @@
 ' Design reason: TodoUpdate returns a full snapshot through the existing tool result commit path.
 ' Source: DeepSeek packages/preset/agent-presets/presets/standard/agent.cordis.yml :: planning section.
 ' Design reason: plan prompts forbid TODO; build prompts request implementation progress.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java :: create, newSession.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare, refresh, toSettings, toRuntime.
+' Product constraint and target-only change: Agent.mode initializes new Sessions, published via settings.
 title CampusClaw Plan Mode - Complete Target Class View
 top to bottom direction
 allowmixing
@@ -57,6 +60,9 @@ package "HTTP and client boundary" as HttpBoundary {
 }
 
 package "Application and assembly" as Application {
+  class "RuntimeSessionService" as CreateService <<extended>> #FFF7DD {
+    +create(agentId)
+  }
   class "RuntimeSessionConfigurationService" as ModeService <<extended>> #FFF7DD {
     +updateSession(requestVO, ifMatch)
   }
@@ -72,6 +78,23 @@ package "Application and assembly" as Application {
   class "PlanPolicyPromptComposer" as Composer <<target-only>> #EAF2FF {
     +compose(base, mode, entryPoint, toolNames): String
   }
+}
+
+package "Agent definition and published configuration" as AgentConfig {
+  interface "AgentDirectoryResolver" as AgentResolver <<existing>> #ECFDF5
+  class "FileAgentDirectoryResolver" as FileResolver <<extended>> #FFF7DD
+  class "AgentRuntimeManager" as RuntimeManager <<extended>> #FFF7DD
+  class "AgentDirectorySnapshotDTO" as AgentSnapshot <<extended>> #FFF7DD {
+    mode: String [target-only]
+    existing model and path fields
+  }
+  database "Mate Agent definition / managed directory" as AgentSource
+note bottom of AgentSnapshot
+  Agent.mode initializes new interactive Sessions only.
+  Missing legacy field defaults to build.
+  Existing Session.mode is never overwritten by refresh.
+  The settings snapshot is request-scoped and immutable.
+end note
 }
 
 package "Execution ownership" as ExecutionScope {
@@ -129,6 +152,14 @@ UI *-- "1" EventStore
 TodoView -[#2563EB]-> EventStore : reads ordered events
 UI -[#2563EB]-> ConfigApi : POST Session / mode
 UI -[#2563EB]-> EventApi : confirm / read history
+ConfigApi -[#2563EB]-> CreateService : create Session
+CreateService --> AgentResolver
+AgentResolver <|.. FileResolver
+FileResolver --> RuntimeManager : prepare published definition
+RuntimeManager --> AgentSource : cached settings or refresh
+FileResolver -[#2563EB]-> AgentSnapshot : validated immutable result
+CreateService -[#2563EB]-> AgentSnapshot : copy initial mode only
+CreateService -[#2563EB,norank]-> SessionRepo : persist new Session
 ConfigApi -[#2563EB]-> ModeService
 EventApi --> EventService
 EventService -[#2563EB]-> ReviewService : plan branch
@@ -296,7 +327,8 @@ state "Exploring or designing\nstate=running, mode=plan" as Planning
 state "Awaiting plan review\nstate=running, mode=plan\nExecution: CONFIRMING (internal)" as Reviewing
 state "Implementing\nstate=running, mode=build" as Implementing
 
-[*] --> Normal : create
+[*] --> Normal : create with Agent.mode=build or legacy omission
+[*] --> PlanIdle : create with Agent.mode=plan and review capability
 Normal --> PlanIdle : POST Session mode=plan + valid ETag
 PlanIdle --> Normal : POST Session mode=build + valid ETag
 PlanIdle --> Planning : accept user.message
@@ -417,7 +449,16 @@ participant "Runtime\nServices + original Agent" as Runtime
 participant "Model tools" as Tools
 database "Sessions / Events\nExecution controls" as DB
 
-group Enter plan mode
+group Create an interactive Session
+  User -> UI : Start a Session for an Agent
+  UI -> API : POST /agents/{agentId}/sessions; no body
+  API -> Runtime : Resolve published Agent settings snapshot
+  Runtime --> API : Validated initial mode and plan capability
+  API -> DB : Insert idle Session with copied mode
+  API --> UI : Created Session; no model execution
+end
+
+opt Select plan when the new Session starts in build
   User -> UI : Select plan
   UI -> API : POST Session {mode: plan} + If-Match
   API -> DB : Check idle and ETag; commit mode + history

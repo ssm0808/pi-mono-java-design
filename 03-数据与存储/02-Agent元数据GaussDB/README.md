@@ -1,13 +1,15 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.18.9`<br>
-> 日期：`2026-08-12`<br>
-> 状态：Java 接口已实现 / Tool Mapper SQL 待集成<br>
+> 版本：`v0.19.0`<br>
+> 日期：`2026-09-14`<br>
+> 状态：既有行为以所列旧基线为准；Agent.mode 与 Session 默认值链路为 target-only<br>
 > 设计仓库分析基线：`c892946d867ab1ee81f2684229b0343ce9733cc0`<br>
 > Java 实现分析基线：`mate-service@9dd5d85e2ed6561ad654b11f817ef572cc8bac7c`<br>
-> Agent JSON 工作区 SHA-256：`b9aa4376e1b0859e698a69a487a2aca9c4bc73911d0f9fa5da89532229f6adf9`<br>
+> Agent JSON 工作区 SHA-256：`2639da6e9b5566afcc5ca8d1ff15c83570c73faeda13d3d38b20e4f3f012f62c`<br>
 > Tool JSON 工作区 SHA-256：`3f4d88b30f4f22ef28e5356df0e5927adf43e34551384cec0883a895fcaa0746`
+
+> mode 专项设计基线：`40a159d361f2f3e9da04594f791607dac85fd192`；实现核对：`mate-service@956b547f5ca12ca89e68f73012f92a4406b0c9fa`、`pi-mono-java@09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`，范围见 §2.3。
 
 ## 1. 结论
 
@@ -21,9 +23,11 @@
 
 模型绑定全链路统一使用：元数据 `binding_models`、Java `bindingModels`、数据库 `t_agent_binding_models`、数据层 `AgentModelBindingDTO` / `AgentModelBindingMapper`。不保留 `model` 或 `models` 兼容别名。
 
+Agent 顶层 `mode` 是字符串 `build | plan`，定义新建交互 Session 的默认模式；Session 创建后独立持有当前模式。该字段的唯一规则源为 [§4.4](#44-agent-mode)，不增加 Tool/Skill 字段。
+
 System Prompt 的八个细分字段均为可空软约束。数据库不强制非空或非空白；普通详情响应只返回具有值的细分字段，管理前端按实际返回字段动态展示。Runtime 响应将这些字段拼接为单一字符串。
 
-已实现 `GET /mate-service/v1/agents/{agentId}/runtime`。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：根 Agent 不返回创建和更新时间；根 Agent、Tool 与被绑定 Agent 均返回 `type`；Tool 返回包含 `enabled` 和 `isConcurrencySafe` 的十字段定义；被绑定 Agent 返回包含 `enabled` 和字符串 `systemPrompt` 的九字段定义。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
+旧基线已实现 `GET /mate-service/v1/agents/{agentId}/runtime`，新增 mode 尚未实现。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：根 Agent 不返回创建和更新时间；根 Agent、Tool 与被绑定 Agent 均返回 `type`；Tool 返回包含 `enabled` 和 `isConcurrencySafe` 的十字段定义；目标被绑定 Agent 返回包含 `mode`、`enabled` 和字符串 `systemPrompt` 的十字段定义。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
 
 完整初始化 DDL 维护在 [`schema.sql`](./schema.sql)，本文不重复嵌入完整 SQL。
 
@@ -32,8 +36,8 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 ### 2.1 输入元数据
 
 - 基本字段、状态和名称：[`AGENT元数据设计.json` 第 2–10 行](../../06-元数据草案/AGENT元数据设计.json#L2)。
-- 模型绑定和 System Prompt：[`第 11–21 行`](../../06-元数据草案/AGENT元数据设计.json#L11)。
-- Use Cases、Tool、Skill、Agent 绑定及权限：[`第 22–53 行`](../../06-元数据草案/AGENT元数据设计.json#L22)。
+- 默认模式、模型绑定和 System Prompt：[`第 11 行起`](../../06-元数据草案/AGENT元数据设计.json#L11)。
+- Use Cases、Tool、Skill、Agent 绑定及权限：[`第 23 行起`](../../06-元数据草案/AGENT元数据设计.json#L23)。
 - Tool 并行安全标志：[`TOOL元数据设计.json` 第 8 行](../../06-元数据草案/TOOL元数据设计.json#L8)。
 - Tool 输入输出 Schema：[`TOOL元数据设计.json` 第 14–23 行](../../06-元数据草案/TOOL元数据设计.json#L14)；该字段属于 Tool 元数据，但不进入 Runtime Agent 响应。
 
@@ -76,9 +80,23 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 该基线提供 `listAgents`、`getAgent`、`getRuntimeAgent`、`updateAgent` 四项 Service 能力，并通过 `AgentDefinitionController` 暴露四个 HTTP 接口。Controller 使用 Request/Response VO，路径 Agent ID 在边界完成格式校验，成功响应由 `ApiSuccessResponseVO` 包装；读取结果放入 `result`，更新成功时省略空 `result`。Service 实现五表聚合、Runtime 依赖批量解析、批量列表查询以及最后写入生效的模型替换。模型绑定顺序列和 DTO 属性使用 `model_order` / `modelOrder`；可变 Request VO 和 DTO 使用 Lombok `@Data`；Java 注释和 Javadoc 使用中文。异常使用具体的大写 snake_case 错误码，错误码同时作为国际化 key 和 `resCode`。
 
-`AgentDefinitionMapper.selectByBindings` 及其 MyBatis XML 已按 Agent ID/可空版本实现；`ToolDefinitionMapper.selectByBindings`、Tool DTO 和 Runtime VO 已实现。Tool 定义的数据库表、版本保存方式和 Mapper SQL 仍由 Tool 模块负责人提供，这是当前唯一未完成的 Runtime 数据源集成项；在该 SQL 到位前，有 Tool 绑定的 Runtime 查询不具备完整数据库运行条件。
+`AgentDefinitionMapper.selectByBindings` 及其 MyBatis XML 已按 Agent ID/可空版本实现；`ToolDefinitionMapper.selectByBindings`、Tool DTO 和 Runtime VO 已实现。Tool 定义的数据库表、版本保存方式和 Mapper SQL 仍由 Tool 模块负责人提供，这是该旧基线记录的 Runtime 数据源集成项；本版 mode 增量另见 §2.3；在该 SQL 到位前，有 Tool 绑定的 Runtime 查询不具备完整数据库运行条件。
 
 本文只保存当前 JSON 字段，不增加多租户、历史版本、审计、Outbox、Session 或 Memory 表。Agent 固定版本只存储和展示，不查询不存在的历史表。
+
+### 2.3 mode 专项源码核对
+
+本节只更新字段传播与 Session 初始化结论；§2.2 的其他实现状态仍限定于原 `9dd5d85`，不把历史集成差距外推为最新缺陷。Mate 采用本地提交 `956b547f5ca12ca89e68f73012f92a4406b0c9fa`；相对旧提交，上述 Agent DTO/VO 与 DefinitionColumns 未变，Service 的无关调整不改变无 mode 的事实。Runtime 继续采用计划专题固定 `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`，本地 `f61906b` 在下列路径内容相同。
+
+| 仓库相对路径及符号 | 观察到的实现 | mode 目标增量 |
+|---|---|---|
+| Mate `src/main/java/com/huawei/hicampus/mate/agentdefinition/dto/AgentDefinitionDTO.java`；`vo/AgentInfoResponseVO.java`、`RuntimeAgentResponseVO.java`、`RuntimeAgentDefinitionResponseVO.java`（同 package 根） | 主表对象和三类响应均无 mode | DTO 与完整定义 VO 增加 String mode；绑定引用仍只传身份及版本 |
+| Mate `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java` · updateAgent、buildAgentInfo、buildRuntimeAgent、toRuntimeAgentDefinition；`vo/UpdateAgentRequestVO.java`（同 package 根）；`src/main/resources/mapper/AgentDefinitionMapper.xml` · DefinitionColumns、incrementVersion | 更新只替换必填模型绑定，行锁后递增版本；统一列清单无 mode | §6.3 按提交字段更新模型或 mode，版本一次；所有完整响应从主表读取 mode |
+| Runtime `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java` · AgentRuntime；同目录 `AgentRuntimeManager.java` · prepare、refresh、loadSnapshot、toSettings、toRuntime | HTTP DTO 与 settings 无 mode；prepare 优先用完整缓存，refresh 才强制重建 | 解析并校验 mode，写 settings.json，读回相同值；不新增远端刷新接口 |
+| Runtime `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java` · snapshot；同目录 `AgentDirectorySnapshotDTO.java` | 默认模型、白名单与路径组成一次解析快照 | 快照增加已校验 String mode，目录预览与创建使用同一解析结果 |
+| Runtime `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java` · create、newSession、get | 先解析目录和模型，再创建 idle Session；get 只读持久化 Session | 创建把快照 mode 写入 Session；之后读取、恢复及执行均不重套 Agent 默认值 |
+
+Agent 默认模式属于 CampusClaw 产品约束，字段传播属于架构扩展，不是 DeepSeek 或 Claude 已公开的同名元数据能力；基线的计划/实施边界继续引用[计划专题证据](../../01-总体架构/06-CampusClaw计划模式/source-evidence.md)。无新增 Maven 依赖。
 
 ## 3. 表关系
 
@@ -96,6 +114,7 @@ PlantUML：[查看源码](./diagram.puml#L6)
 | `type` | `type` | `VARCHAR(16)` | 否 | 固定为 `agent` |
 | `version` | `version` | `BIGINT` | 否 | 从 1 开始 |
 | `enabled` | `enabled` | `BOOLEAN` | 否 | 默认启用 |
+| `mode` | `mode` | `VARCHAR(5)` | 否 | String；仅 build/plan，默认 build；新建交互 Session 的初始模式 |
 | `name` | `name` | `VARCHAR(128)` | 否 | 唯一；管理前端只读 |
 | `display_name` | `display_name` | `VARCHAR(128)` | 否 | 管理前端只读 |
 | `description` | `description` | `TEXT` | 否 | 管理前端只读 |
@@ -132,6 +151,36 @@ Runtime 拼接顺序固定为 `role`、`objective`、`instructions`、`tool_poli
 Service 聚合读取时校验每项为非空字符串且不可重复；当前没有确定数组数量和单项长度上限。
 
 GaussDB JSON/JSONB 类型参考：[Huawei Cloud GaussDB JSON/JSONB Types](https://support.huaweicloud.com/intl/en-us/distributed-devg-v8-gaussdb/gaussdb-12-0327.html)。
+
+### 4.4 Agent mode
+
+| 项目 | 目标规则 |
+|---|---|
+| 位置与类型 | Agent 顶层 `mode`；元数据 JSON、HTTP、Java DTO/VO 均为 string/String，只接受小写 `build` 或 `plan`，不增加公开枚举类型或对象层 |
+| 含义 | 新建 Runtime 交互 Session 的默认模式，不是 Agent 当前运行状态，也不是强制锁定策略 |
+| 创建缺省 | 旧元数据/旧目录完全缺少 mode 时兼容为 build；新生成定义和响应必须显式返回 mode。显式 null、空白、大小写变体、未知值和非字符串拒绝，不静默降级为 build |
+| 已有 Session | 创建时复制默认值并持久化；以后只使用 Session.mode。Agent 更新、目录刷新、消息重试、模型调整或压缩均不得覆盖已有 Session |
+| 更新 | 管理面通过既有 Agent POST 修改默认值；不调用 Session POST，不批量更新 Session。Session 手动切换仍走既有统一 POST 与准入规则 |
+| 入口优先级 | 仅新的交互根 Session 使用 Agent 默认；Child 复制调用时父执行模式，Cron 保持原 build 入口规则，不引入无人审核流程；绑定 Agent 的 mode 仅是其定义默认值，不覆盖父策略 |
+| 配置生效 | 数据库提交后，既有 refresh/受管发布流程更新完整目录；后续创建使用实际解析到的已发布快照。prepare 复用缓存，不承诺 Agent POST 后各 Runtime 节点立即看到新默认值 |
+| 非职责 | mode 不嵌入基础 systemPrompt，不重装工具，不批准方案，也不创建 TODO；plan 阶段继续禁止 TODO |
+
+持久化沿用 `t_agent_definition`：`mode VARCHAR(5) NOT NULL DEFAULT 'build'`，CHECK 限定两个字面量。现有数据库需要单独增量迁移，先补列并将既有记录填为 build，再启用约束和消费者；不执行本专题带 DROP 的初始化脚本做线上迁移。此次补齐兼容默认不改变既有 Agent.version；后续配置写入按 §6.3 递增版本。
+
+Runtime 的传播链为：Mate Runtime 定义 → `AgentRuntime.mode` → `.campusclaw/settings.json.mode` → `AgentSettings` / `PreparedAgentRuntime` → `AgentDirectorySnapshotDTO.mode` → 新 `Session.mode`。`agent.json` 保持身份文件职责，Agent.mode 不写入 SYSTEM.md。缺省兼容只是升级读规则，schemaVersion 仍为 1；同一发布单元先升级消费端再发布 plan 默认值，旧端会忽略未知字段，不能提前宣称支持 plan。
+
+解析时区分缺少字段与显式 null，禁止 Jackson 将数字/布尔自动转换成 mode 字符串。请求 VO 不设置默认值；Service 统一执行创建默认与业务校验。数据库 mode 为 null 或非法值是数据完整性故障，不能套用旧 wire 缺省规则掩盖数据问题。目录采用既有完整快照校验与发布边界；创建期间配置变化只影响后续解析，不混读两代默认值，也不在持久化锁内拉取远端元数据。
+
+创建 plan Session 前复用与工厂一致的有效 Runtime tool profile 解析，检查 ExitPlanMode 能力；缺少时返回既有目标 `422 PLAN_MODE_UNAVAILABLE`，不创建 Session、不悄悄改成 build，也不实例化 Agent 或调用模型。首次执行仍重验当前能力和持久化模式。非法远端/目录 mode 沿既有 `AGENT_NOT_AVAILABLE` 暴露，详细原因只在内部日志记录。
+
+| 切片 | 实施与验收 |
+|---|---|
+| M1：元数据与数据库 | DTO/VO/Mapper 列贯通；默认/约束正确；列表、详情、根 Runtime、绑定 Runtime 定义均有 mode；未知值、显式 null、非字符串拒绝 |
+| M2：管理更新与发布 | mode-only、models-only、组合更新；未提交字段保持；事务失败全部回滚；版本一次；新目录写入和重载一致，刷新失败保留旧完整目录 |
+| M3：Session 初始化 | Agent=plan/build、旧目录缺省、无审核工具、缓存未刷新、并发刷新；创建响应/DB 同值且无模型调用；已有 Session 不随 Agent 改动，Session 手动切换仍有效 |
+| M4：入口回归 | Child 继承父模式、Cron 保持现有规则；plan 不调用 TODO，批准后 build 正常更新实施进度 |
+
+以上均为 target-only 验收，当前未执行产品数据库迁移、接口或模型测试。全局类图复用[计划模式主图](../../01-总体架构/06-CampusClaw计划模式/README.md#3-推荐全局目标类图)，本模块保留表图与聚合查询流程。
 
 ## 5. 绑定表
 
@@ -181,7 +230,7 @@ Skill ID 必须符合 `^skill-[0-9a-fA-F]{32}$`；当前四个接口没有 Skill
 
 Runtime Agent 查询按照 `bound_agent_id + bound_agent_version` 批量读取主表。`bound_agent_version = NULL` 表示当前版本；非空时查询条件必须同时匹配 ID 和版本。由于 `t_agent_definition` 只保存当前版本，该查询只能验证固定版本是否与当前版本一致，不能恢复已经被新版本替换的历史定义。固定版本无匹配记录或目标 Agent 未启用时，Service 记录根 Agent ID、目标 Agent ID 和请求版本并终止整个查询。
 
-成功匹配后返回目标 Agent 的 `id`、`type`、`version`、`enabled`、`name`、`displayName`、`description`、拼接后的字符串 `systemPrompt` 和 `useCases`。`createdAt` 和 `updatedAt` 不进入被绑定 Agent 的 Runtime 响应；其模型、Tool、Skill 和 Agent 绑定也不递归查询，避免循环依赖和无界展开。未来若要读取历史版本，必须先引入独立的 Agent 历史版本模型；本版不以当前主表伪装历史查询能力。
+成功匹配后返回目标 Agent 的 `id`、`type`、`version`、`enabled`、`name`、`displayName`、`description`、`mode`、拼接后的字符串 `systemPrompt` 和 `useCases`。`createdAt` 和 `updatedAt` 不进入被绑定 Agent 的 Runtime 响应；其模型、Tool、Skill 和 Agent 绑定也不递归查询，避免循环依赖和无界展开。未来若要读取历史版本，必须先引入独立的 Agent 历史版本模型；本版不以当前主表伪装历史查询能力。
 
 ## 6. Service 与 Controller 接口
 
@@ -233,7 +282,7 @@ Controller 响应：
 
 ### 6.2 Get Agent
 
-`AgentInfo` 展示完整 Agent 元数据，顶层主键与元数据保持为 `id`，其余字段包括 `bindingModels`、`systemPrompt`、`useCases`、`bindingTools`、`bindingSkills`、`bindingAgents`、`permission` 和时间字段。`bindingAgents` 元素中的 `agent_id` 按 camelCase 转换为 `agentId`；路径参数和更新请求中的 `agentId` 也保持不变。
+`AgentInfo` 展示完整 Agent 元数据，顶层主键与元数据保持为 `id`，其余字段包括 `mode`、`bindingModels`、`systemPrompt`、`useCases`、`bindingTools`、`bindingSkills`、`bindingAgents`、`permission` 和时间字段。`bindingAgents` 元素中的 `agent_id` 按 camelCase 转换为 `agentId`；路径参数和更新请求中的 `agentId` 也保持不变。
 
 ### 6.3 Update Agent
 
@@ -247,9 +296,20 @@ Controller 响应：
 }
 ```
 
-路径与请求体 `agentId` 必须一致，并符合 `agent-` 加 32 位十六进制 UUID 的格式。`bindingModels` 必填、非空、元素不可重复，每个元素必须符合 `model-` 加 32 位十六进制 UUID 的格式。
+目标请求仍要求路径与请求体 `agentId` 一致并通过原格式校验；`bindingModels` 与 `mode` 均可省略，但至少提交一项。提交的 bindingModels 必须非空、无重复且元素符合原 Model ID 格式；mode 仅接受字符串 build/plan。显式 null、未知字段、重复键和类型强转均拒绝。旧的 models-only 请求继续有效。
 
-更新采用最后写入生效：事务中锁定 Agent 当前行，删除旧模型绑定，按请求顺序插入新绑定，然后基于锁定行的当前版本将 `version` 递增一次。客户端不提交期望版本；即使模型列表未变化，成功请求仍递增一次版本。
+更新采用原有最后写入生效：事务中锁定 Agent 行，只替换提交的模型绑定或写入提交的 mode，未提交值保持；基于锁定版本将 version 递增一次并更新时间。组合提交全部成功或全部回滚；客户端不提交期望版本，即使目标值未变化，成功请求仍递增一次。mode-only 不删除模型绑定，也不操作 Session 表。
+
+新增 mode-only 示例（target-only）：
+
+```json
+{
+  "agentId": "agent-550e8400e29b41d4a716446655440000",
+  "mode": "plan"
+}
+```
+
+UpdateAgentRequestVO 增加 String mode，以 Jakarta `@Pattern(regexp="^(build|plan)$")` 校验提交值，JSON 绑定层拒绝显式 null；模型列表改为提交时非空。Service 校验至少一个可写字段和字段间规则，不在 VO 初始化默认值；Mapper 以 DTO 传递 mode 与锁定版本，主表值及版本同次提交。既有只有模型替换的 Java 实现需要按此扩展。
 
 更新成功响应不包含 `result`：
 
@@ -266,7 +326,7 @@ Controller 响应：
 
 ![Runtime Agent 查询流程](./runtime_agent_query_flow.svg)
 
-PlantUML：[查看源码](./diagram.puml#L175)
+PlantUML：[查看源码](./diagram.puml#L179)
 
 `RuntimeAgentResponseVO` 的根字段以 `AgentInfoResponseVO` 为基础，但不返回 `createdAt` 和 `updatedAt`。根 Agent、`bindingTools[]` 和 `bindingAgents[]` 均返回 `type`；两类绑定元素直接平铺为解析后的 Runtime 定义，不保留资源 ID、绑定版本和定义对象组成的中间包装层：
 
@@ -280,6 +340,7 @@ PlantUML：[查看源码](./diagram.puml#L175)
     "version": 3,
     "enabled": true,
     "name": "campus-assistant",
+    "mode": "plan",
     "displayName": "Campus Assistant",
     "description": "Campus service Agent",
     "bindingModels": [
@@ -311,6 +372,7 @@ PlantUML：[查看源码](./diagram.puml#L175)
         "version": 1,
         "enabled": true,
         "name": "map-specialist",
+        "mode": "build",
         "displayName": "Map Specialist",
         "description": "Campus map specialist",
         "systemPrompt": "Campus map specialist\n\nProvide accurate campus navigation",
@@ -332,7 +394,7 @@ PlantUML：[查看源码](./diagram.puml#L175)
 
 `bindingTools[].version` 和 `bindingAgents[].version` 分别是本次实际解析出的 Tool 与 Agent 版本，必须有值。绑定表中的可空版本只用于选择最新版本或精确匹配固定版本，不在响应中重复展示。
 
-`bindingTools` 包含 `id`、`type`、`version`、`enabled`、`name`、`displayName`、`description`、`permission`、`source` 和 `isConcurrencySafe`；不返回时间、`inputSchema` 或 `outputSchema`。根 Agent 和 `bindingAgents[]` 中被绑定 Agent 的 `systemPrompt` 都是相同规则拼接出的字符串，不返回八字段对象。平铺后的被绑定 Agent 包含 `id`、`type`、`version`、`enabled`、`name`、`displayName`、`description`、`systemPrompt` 和 `useCases`；不返回时间、各类绑定或聚合后的 `permission`。
+`bindingTools` 包含 `id`、`type`、`version`、`enabled`、`name`、`displayName`、`description`、`permission`、`source` 和 `isConcurrencySafe`；不返回时间、`inputSchema` 或 `outputSchema`。根 Agent 和 `bindingAgents[]` 中被绑定 Agent 的 `systemPrompt` 都是相同规则拼接出的字符串，不返回八字段对象。平铺后的被绑定 Agent 包含 `id`、`type`、`version`、`enabled`、`name`、`displayName`、`description`、`mode`、`systemPrompt` 和 `useCases`；不返回时间、各类绑定或聚合后的 `permission`。
 
 Runtime 聚合采用 `REPEATABLE_READ` 只读事务，并执行以下流程：
 
@@ -357,18 +419,21 @@ List<AgentDefinitionDTO> selectByBindings(
 
 依赖解析失败日志必须包含 `rootAgentId`、依赖类型、依赖 ID 和绑定版本，但不得记录 System Prompt 或 Tool Schema。未找到包括资源 ID 不存在以及指定 ID/version 组合不存在；日志记录后仍须抛出错误，不能用跳过依赖作为健壮性策略。
 
+新增 mode 写入的边界校验沿用 `400 AGENT_REQUEST_VALIDATION_FAILED`；空更新、错误类型及显式 null 沿用 `400 AGENT_REQUEST_BODY_INVALID`。新增持久化故障 `AGENT_STORED_MODE_INVALID`（HTTP 500，参数 Agent ID），枚举与中英文 key 同名；Runtime 消费失败的对外映射见 §4.4。
+
 ### 6.5 错误码与国际化
 
 本版将按类别归并的 `AGENT_INVALID_PARAMETER` 和 `AGENT_DATA_CORRUPTION` 替换为具体场景错误码。这是与 mate-service 错误模型对齐的架构调整，不改变 Agent 业务数据结构。
 
 - 请求解析与校验：`AGENT_REQUEST_BODY_INVALID`、`AGENT_REQUEST_VALIDATION_FAILED`、`AGENT_PAGE_INDEX_INVALID`、`AGENT_PAGE_SIZE_INVALID`、`AGENT_NAME_TOO_LONG`、`AGENT_DISPLAY_NAME_TOO_LONG`、`AGENT_VERSION_INVALID`、`AGENT_ID_REQUIRED`、`AGENT_ID_INVALID`、`AGENT_BINDING_MODELS_EMPTY`、`AGENT_MODEL_ID_REQUIRED`、`AGENT_MODEL_ID_INVALID`。
 - 业务规则：`AGENT_ID_MISMATCH`、`AGENT_MODEL_DUPLICATED`、`AGENT_NOT_FOUND`、`AGENT_DISABLED`、`AGENT_BOUND_TOOL_DISABLED`、`AGENT_BOUND_AGENT_DISABLED`。
-- 存储数据完整性：`AGENT_VERSION_MISSING`、`AGENT_VERSION_UPDATE_FAILED`、`AGENT_MODEL_BINDING_MISSING`、`AGENT_PERMISSION_INVALID`、`AGENT_STORED_AGENT_ID_INVALID`、`AGENT_STORED_MODEL_ID_INVALID`、`AGENT_STORED_TOOL_ID_INVALID`、`AGENT_STORED_SKILL_ID_INVALID`、`AGENT_STORED_BOUND_AGENT_ID_INVALID`、`AGENT_USE_CASES_NOT_ARRAY`、`AGENT_USE_CASE_INVALID`、`AGENT_USE_CASES_PARSE_FAILED`、`AGENT_BOUND_TOOL_NOT_FOUND`、`AGENT_BOUND_TOOL_VERSION_MISSING`、`AGENT_BOUND_TOOL_DEFINITION_DUPLICATED`、`AGENT_BOUND_AGENT_NOT_FOUND`、`AGENT_BOUND_AGENT_VERSION_MISSING`、`AGENT_BOUND_AGENT_DEFINITION_DUPLICATED`。
+- 存储数据完整性：`AGENT_STORED_MODE_INVALID`、`AGENT_VERSION_MISSING`、`AGENT_VERSION_UPDATE_FAILED`、`AGENT_MODEL_BINDING_MISSING`、`AGENT_PERMISSION_INVALID`、`AGENT_STORED_AGENT_ID_INVALID`、`AGENT_STORED_MODEL_ID_INVALID`、`AGENT_STORED_TOOL_ID_INVALID`、`AGENT_STORED_SKILL_ID_INVALID`、`AGENT_STORED_BOUND_AGENT_ID_INVALID`、`AGENT_USE_CASES_NOT_ARRAY`、`AGENT_USE_CASE_INVALID`、`AGENT_USE_CASES_PARSE_FAILED`、`AGENT_BOUND_TOOL_NOT_FOUND`、`AGENT_BOUND_TOOL_VERSION_MISSING`、`AGENT_BOUND_TOOL_DEFINITION_DUPLICATED`、`AGENT_BOUND_AGENT_NOT_FOUND`、`AGENT_BOUND_AGENT_VERSION_MISSING`、`AGENT_BOUND_AGENT_DEFINITION_DUPLICATED`。
 
 Runtime 新增错误码参数固定如下；绑定版本为空时，Service 向消息参数传递本地化前的固定字面量 `latest`：
 
 | 错误码 | 消息参数 | 分类 |
 |---|---|---|
+| `AGENT_STORED_MODE_INVALID` | Agent ID | 存储完整性，mode 增量 target-only |
 | `AGENT_DISABLED` | Agent ID | 业务规则 |
 | `AGENT_BOUND_TOOL_NOT_FOUND` | 根 Agent ID、Tool ID、绑定版本或 `latest` | 存储完整性 |
 | `AGENT_BOUND_TOOL_DISABLED` | 根 Agent ID、Tool ID、实际版本 | 业务规则 |
@@ -403,7 +468,7 @@ GaussDB Distributed 不支持物理外键，因此基础 DDL 使用逻辑关系�
 - 必填资源标识使用公共正则常量配合 Jakarta `@NotBlank` 与 `@Pattern`，不增加只包装标准约束的组合注解。
 - Java 注释和 Javadoc 使用中文；标识符、注解名、固定字面量和产品名按需保留英文。
 
-现有 Mapper 操作继续保持：主表查询、分页、行锁和版本递增；Model 绑定查询、删除和批量插入；Tool、Skill、Agent 绑定只提供单个 Agent 和 Agent ID 集合查询。`AgentBindingMapper`、`AgentToolBindingMapper`、`AgentSkillBindingMapper` 不增加 `insertBatch`。
+现有 Mapper 操作继续保持：主表查询、分页、行锁和版本递增；目标增加 mode 与版本同事务写入；Model 绑定查询、删除和批量插入；Tool、Skill、Agent 绑定只提供单个 Agent 和 Agent ID 集合查询。`AgentBindingMapper`、`AgentToolBindingMapper`、`AgentSkillBindingMapper` 不增加 `insertBatch`。
 
 Runtime Agent 已新增两个批量定义查询契约：`AgentDefinitionMapper.selectByBindings` 和 `ToolDefinitionMapper.selectByBindings`。查询条件分别使用 `AgentVersionQueryDTO` 和 `ToolVersionQueryDTO`，不使用 Map 或临时 VO 作为 Mapper 参数。Agent Mapper XML 已实现并使用 `resultType`；Tool 定义 Mapper 暂不在 Agent 模块编写 SQL，同事提供实现后必须保持同一方法契约和 `resultType` 映射规则。
 
@@ -424,6 +489,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.19.0` | 2026-09-14 | Agent 增加字符串 mode，初始化新交互 Session 的默认模式并贯通存储、发布和读取。 |
 | `v0.18.9` | 2026-08-12 | 根 Runtime Agent 删除 `createdAt` 和 `updatedAt`；根 Agent、Tool 与被绑定 Agent 统一返回 `type`，被绑定 Agent 增加 `enabled` |
 | `v0.18.8` | 2026-08-12 | Runtime `bindingTools` 在八个精简字段基础上恢复 `enabled`，形成九字段响应；被绑定 Agent 契约不变 |
 | `v0.18.7` | 2026-08-12 | Runtime `bindingTools` 精简为 `id`、`version`、名称、描述、`permission`、`source` 和 `isConcurrencySafe` 八个字段，移除 `type`、时间和 `enabled` |

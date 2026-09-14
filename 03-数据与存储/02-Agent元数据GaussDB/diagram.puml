@@ -1,4 +1,4 @@
-' Generated for SR-AGENT-DB-001 v0.18.9 on 2026-08-12.
+' Generated for SR-AGENT-DB-001 v0.19.0 on 2026-09-14.
 ' Run from this directory: plantuml -tsvg diagram.puml
 ' Design baseline: c892946d867ab1ee81f2684229b0343ce9733cc0.
 ' Java baseline: mate-service@9dd5d85e2ed6561ad654b11f817ef572cc8bac7c.
@@ -80,6 +80,7 @@ class t_agent_definition <<current Agent>> {
   type: VARCHAR
   version: BIGINT
   enabled: BOOLEAN
+  mode: VARCHAR(5) <<target-only>>
   name: VARCHAR UK
   display_name: VARCHAR
   description: TEXT
@@ -132,6 +133,9 @@ id uses agent- plus 32 hexadecimal characters.
 name and display_name are VARCHAR(128).
 use_cases is a JSONB array.
 version starts at one.
+Target mode: build or plan; default build.
+Initial interactive Session mode only.
+Existing Sessions keep their own mode.
 All eight system_prompt fields are
 optional TEXT soft constraints.
 Null components are omitted from JSON.
@@ -174,6 +178,8 @@ end note
 
 @startuml runtime_agent_query_flow
 !theme plain
+' Target evidence: Mate 956b547f5ca12ca89e68f73012f92a4406b0c9fa; AgentDefinitionDTO and response VOs have no mode.
+' Design reason: expose the definition default in all full Agent views; do not change active Sessions.
 title Runtime Agent Query Flow
 
 skinparam backgroundColor #FFFFFF
@@ -215,6 +221,7 @@ skinparam ParticipantBackgroundColor #F7F9FC
 ' Observed behavior: getRuntimeAgent returns ten-field Tool and nine-field
 ' bound Agent definitions without wrapper objects.
 ' Root and resolved response types include type and omit timestamps.
+' Target-only: root and bound Agent definitions add mode; stored values must be valid.
 ' Observed behavior: root and bound Agent prompts use the same composition.
 ' Integration pending: ToolDefinitionMapper SQL is supplied by the Tool owner.
 ' Design reason: batch dependency queries avoid one query per binding.
@@ -261,7 +268,8 @@ else root Agent available
     Service --> Controller: throw specific error code
   else every dependency resolved
     Service -> Service: compose root and bound Agent prompts
-    Service -> Service: assemble flat Tools and Agents
+    Service -> Service: validate mode; assemble root and flat Agents with mode
+    note right: mode propagation is target-only
     Service --> Controller: RuntimeAgentResponseVO
     Controller --> Consumer: success envelope
   end

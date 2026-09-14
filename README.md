@@ -1,6 +1,6 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.6.7<br>
+> 导航版本：2.6.8<br>
 > 更新日期：2026-09-14<br>
 > 各模块的设计版本、源码基线和实现状态由模块主设计及架构对比条目分别记录。
 
@@ -65,7 +65,7 @@ Session 名称、模型、思考与模式采用部分更新，前端每次单项
 | M05 · Command 与 Skill | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [Builtin](./04-命令与技能/01-内置命令/README.md)、[Skill Command](./04-命令与技能/02-技能命令/README.md)与[Help](./04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)分别维护行为 |
 | M06 · 事件契约与服务边界 | [Session Events](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md) | 内部[请求级 SSE](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-stream-design.md)与[历史](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)；[Mate 公共 Chat](./02-服务与接口/07-mate-service通用对话API/README.md)单独维护公共权威契约 |
 | M07 · 前端与渠道 | [前端体验](./01-总体架构/04-CampusClaw前端体验/README.md) | [Slash 交互](./04-命令与技能/00-Slash-Command通用模块/前端设计/README.md)、[飞书渠道](./01-总体架构/01-CampusClaw多Agent运行时/channel-feishu-v1-design.md)；消费 M06，不另定义事件权威语义 |
-| M08 · Agent 元数据与配置 | [Agent 元数据 GaussDB](./03-数据与存储/02-Agent元数据GaussDB/README.md) | 身份、版本及模型/Tool/Skill 绑定；[数据库模式研究](./03-数据与存储/03-Agent数据库模式/README.md)和[元数据草案](./06-元数据草案/README.md)不自动成为已实现契约 |
+| M08 · Agent 元数据与配置 | [Agent 元数据 GaussDB](./03-数据与存储/02-Agent元数据GaussDB/README.md) | 身份、版本、Agent 默认 mode 及模型/Tool/Skill 绑定；[数据库模式研究](./03-数据与存储/03-Agent数据库模式/README.md)和[元数据草案](./06-元数据草案/README.md)不自动成为已实现契约 |
 | M09 · 附件与文件服务 | [CampusMate 附件服务](./02-服务与接口/01-CampusMate附件服务/README.md) | 文件上传、扫描、解析与删除；Runtime 文件引用边界由 M01/M06 引用 |
 | M10 · 调度与并发治理 | [工具系统](./01-总体架构/02-CampusClaw工具系统/README.md)中的 Cron 与执行入口 | Runtime 准入及控制事务归 M06；[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量与背压结构 |
 | M11 · 可观测性与测试 | [TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | [调用日志](./01-总体架构/05-CampusClaw调用日志/README.md)、[Runtime HTTP 测试](./02-服务与接口/04-Runtime-HTTP测试Agent/README.md)；区分验收要求、已有测试与实测结果 |
@@ -129,6 +129,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.8 | 2026-09-14 | 元数据模块维护 Agent 默认 mode，Session 创建复制后独立维护当前模式。 |
 | 2.6.7 | 2026-09-14 | 模型模块入口纳入 CampusMate 命名统一、AI 削减与架构对比。 |
 | 2.6.6 | 2026-09-14 | 增加计划模式整体交互与提示词入口，明确 TODO 仅跟踪实施进度。 |
 | 2.6.5 | 2026-09-14 | 增加 TodoUpdate 工具、事件恢复与基线取舍入口。 |

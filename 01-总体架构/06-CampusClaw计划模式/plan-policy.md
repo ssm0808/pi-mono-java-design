@@ -1,12 +1,12 @@
 # CampusClaw 计划模式与实施进度指令
 
-版本：1.2.0；日期：2026-09-14。状态：target-only；本文件维护可部署的提示词正文、组合规则和验收，不代表 Java 已加载这些文本。
+版本：1.3.0；日期：2026-09-14。状态：target-only；本文件维护可部署的提示词正文、组合规则和验收，不代表 Java 已加载这些文本。
 
 本文件是提示词的唯一维护源。模式、审核事务和整体交互由[计划模式主设计](README.md)维护；TodoUpdate 的 Schema、结果和事件规则由[工具契约](todo-update.md)维护。下列正文为 CampusClaw 自行编写，基线依据见[源码证据 §7](source-evidence.md#7-提示词组合与逐项更新约束)。
 
 ## 1. 提示词组合与生效
 
-plan 阶段只调研、澄清和设计方案，不使用 TodoUpdate 记录调研进度；build 实施阶段才用它维护执行清单。PlanPolicyPromptComposer 根据不可变基础 SYSTEM、已提交 mode、已有入口类型和实际装配工具名称选择文本。工具可用性从现有 tools 列表计算，不增加 Agent/Tool/Skill 元数据字段。
+plan 阶段只调研、澄清和设计方案，不使用 TodoUpdate 记录调研进度；build 实施阶段才用它维护执行清单。PlanPolicyPromptComposer 根据不可变基础 SYSTEM、已提交 mode、已有入口类型和实际装配工具名称选择文本。工具可用性从现有 tools 列表计算，不增加工具能力元数据。Agent.mode 只在新建交互 Session 时初始化当前模式，其读取与缺省由[Agent 元数据主设计 §4.4](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)维护；本 Composer 消费 Session 已提交模式，不每轮重套 Agent 默认值。
 
 | 段落 | 职责 | 加载条件 |
 |---|---|---|
@@ -143,4 +143,5 @@ Submit the complete proposed plan for user review while the root agent is in pla
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-09-14 | 提示词读取 Session 当前模式，Agent.mode 仅提供创建默认值。 |
 | 1.2.0 | 2026-09-14 | 按模式和入口组合规划、审核及实施指令，TODO 仅跟踪 build 实施进度。 |
