@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.6.1 |
+| 文档版本 | 2.6.2 |
 | 状态 | 目标设计；Mate 发现无凭据、仅 execute 透传 POST Events 执行快照待实现 |
-| 更新日期 | 2026-08-31 |
+| 更新日期 | 2026-09-14 |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -17,6 +17,8 @@
 | pi-mono 对照基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | 精确工具契约 | [8 个活动内置工具契约](built-in-tool-contracts.md) |
+
+计划模式的推荐增量见[独立专题](../06-CampusClaw计划模式/README.md)：Runtime 默认 profile 增加 ExitPlanMode，模式切换保持同一工具定义，Child 按调用时模式生成提示词。该 target-only 扩展不改 Agent/Tool/Skill 元数据字段；现有八项精确契约在正式纳入前保持原值。对应取舍见 [A03](../07-Agent架构对比/README.md#a03)。
 
 ## 1. 设计结论
 
@@ -688,6 +690,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.2 | 2026-09-14 | 关联保持元数据稳定的计划模式目标增量与统一架构对比。 |
 | 2.6.1 | 2026-08-31 | 同步 Slash Command 最新设计：命令由独立 HTTP 模块提供，不进入模型工具清单；`/name` 由 CampusClaw 管理 Session 名称。 |
 | 2.6.0 | 2026-08-27 | POST Events 生成四项 Header 的 execution 瞬态快照；Mate Agent/Skill/metadata 发现全部无凭据，只有实际 Tool execute 原名透传快照中已提供值。 |
 | 2.5.0 | 2026-08-26 | 删除顶层 `mate` 目标配置；Tool 地址、path 和开关统一到 `campusmate`，并让 Runtime 与 Tool 共用唯一 Skill endpoint 配置。模型可见 Mate Tool 名称保持不变。 |

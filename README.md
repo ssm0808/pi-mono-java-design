@@ -1,6 +1,6 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.6.0<br>
+> 导航版本：2.6.1<br>
 > 更新日期：2026-09-14<br>
 > 各模块的设计版本、源码基线和实现状态由模块主设计及架构对比条目分别记录。
 
@@ -17,6 +17,7 @@
 |---|---|---|
 | CampusClaw 整体如何运行 | [多 Agent Runtime 总体设计](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | [HTTP API 设计](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)、[HTTP API 评审页](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html) |
 | CampusClaw 与各 Agent 基线有什么架构和实现差异 | [Agent 架构对比](./01-总体架构/07-Agent架构对比/README.md) | [按模块定位主设计](#module-index)、对比条目的源码证据与讲解要点 |
+| 如何在元数据稳定的前提下提供计划模式 | [计划模式目标设计](./01-总体架构/06-CampusClaw计划模式/README.md) | [接口增量](./01-总体架构/06-CampusClaw计划模式/interface-delta.md)、[全局目标类图](./01-总体架构/06-CampusClaw计划模式/plan_mode_target_classes.svg) |
 | Tool 如何装配、发现和执行 | [CampusClaw 工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具精确契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md) |
 | 前端如何展示 Runtime 状态 | [CampusClaw 前端体验设计](./01-总体架构/04-CampusClaw前端体验/README.md) | [前端评审页](./01-总体架构/04-CampusClaw前端体验/frontend-review.html)、[Slash Command 前端专项](./04-命令与技能/00-Slash-Command通用模块/前端设计/README.md) |
 | 文件、配置和 Model Manager 边界 | [服务与接口导航](./02-服务与接口/README.md) | 附件服务、共享配置、Provider 契约和 HTTP 测试 Agent |
@@ -55,7 +56,7 @@
 
 | 模块 | 主设计 | 关联专题与维护边界 |
 |---|---|---|
-| M01 · Agent Runtime 与多 Agent 编排 | [多 Agent Runtime](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | Loop、Turn、执行生命周期及父子 Session；工具装配引用 M03，HTTP 投影引用 M06 |
+| M01 · Agent Runtime 与多 Agent 编排 | [多 Agent Runtime](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | Loop、Turn、执行生命周期及父子 Session；[计划模式](./01-总体架构/06-CampusClaw计划模式/README.md)维护 Prompt、审核与续跑增量；工具装配引用 M03，HTTP 投影引用 M06 |
 | M02 · 模型与 Provider | [模型管理 Provider 契约](./02-服务与接口/03-模型管理Provider契约/README.md) | 模型目录、Provider 适配与调用取消；[共享客户端配置](./02-服务与接口/02-CampusMate共享客户端配置/README.md)维护服务连接配置 |
 | M03 · Tool 与受管执行环境 | [工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md)、工具发现、执行权限与 Session 隔离 |
 | M04 · Session 上下文与持久化 | [会话记忆 GaussDB](./03-数据与存储/01-会话记忆GaussDB/README.md) | 分支、压缩、恢复与存储；[pi 上下文研究](./05-研究资料/03-pi会话上下文/README.md)是证据入口，客户端事件历史归 M06 |
@@ -126,6 +127,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.1 | 2026-09-14 | 增加 DeepSeek 计划模式设计、接口增量和全局类图入口。 |
 | 2.6.0 | 2026-09-14 | 建立稳定模块索引与独立 Agent 架构对比入口，并明确随模块设计同步维护。 |
 | 2.5.3 | 2026-09-07 | 新增 Slash Command 前端专项导航：独立 Composer 状态、目录、草稿、临时结果、错误恢复、可访问性、交互评审页与生产协议门禁。 |
 | 2.5.2 | 2026-09-07 | Runtime Command 响应对齐既有 Session/Models 资源；Help 保留三个业务字段，相关专题和派生页面同步，全局类图不变。 |

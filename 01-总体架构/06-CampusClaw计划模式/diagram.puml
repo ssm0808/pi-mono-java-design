@@ -1,0 +1,287 @@
+@startuml plan_mode_target_classes
+' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
+' Local f61906b9136246ca60f333704b6fc92b5420d0ec has identical files in this scope.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java :: create, configureAgent.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: beginToolConfirmation, claimAndResumeToolConfirmation.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java :: markToolConfirming, acceptToolConfirmation.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java :: prepare, accept, startAccepted.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java :: start, commitAndRelease.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionControlDispatcher.java :: dispatchConfirmation, dispatchStop.
+' Source: modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java :: invokeModel, runToolPhase.
+' DeepSeek baseline: 0a53fb55bea101816fa226bb964ae2bed71c343b (alpha).
+' Source: packages/plan/plan-mode/src/index.ts :: PlanModeController, exit_plan_mode.
+' Observed behavior: the existing Runtime owns streams, durable controls and active executions.
+' Design reason: add plan policy and review without changing tool metadata or the Agent Loop.
+' Java divergence: HTTP plan review and database handoff are target-only additions.
+title CampusClaw Plan Mode - Complete Target Class View
+top to bottom direction
+allowmixing
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam ArrowColor #64748B
+skinparam classAttributeIconSize 0
+skinparam nodesep 20
+skinparam ranksep 30
+skinparam classBorderColor #64748B
+skinparam packageBorderColor #CBD5E1
+hide empty members
+
+legend bottom left
+  Green: existing structure     Amber: existing, extended
+  Blue: new target-only class   Blue connectors: target-only relations
+  Controllers, services, factories, repositories: Spring singletons
+  Execution package and tools: one instance per execution
+endlegend
+
+package "HTTP and client boundary" as HttpBoundary {
+  class "Runtime Plan UI" as UI <<target-only>> #EAF2FF
+  class "RuntimeSessionConfigurationController" as ConfigApi <<extended>> #FFF7DD
+  class "RuntimeEventController" as EventApi <<extended>> #FFF7DD
+}
+
+package "Application and assembly" as Application {
+  class "SessionPlanModeService" as ModeService <<target-only>> #EAF2FF {
+    +changeMode(requestVO, ifMatch)
+  }
+  class "RuntimeEventService" as EventService <<extended>> #FFF7DD
+  class "RuntimeMessageEventService" as MessageService <<extended>> #FFF7DD
+  class "RuntimeExecutionCoordinator" as Coordinator <<extended>> #FFF7DD
+  class "RuntimeSessionControlDispatcher" as Dispatcher <<extended>> #FFF7DD
+  class "RuntimePlanReviewService" as ReviewService <<target-only>> #EAF2FF {
+    +beginReview(targetDTO, callId, plan)
+    +acceptPlanConfirmation(requestVO)
+  }
+  class "AgentSessionFactory" as Factory <<extended>> #FFF7DD
+  class "PlanPolicyPromptComposer" as Composer <<target-only>> #EAF2FF
+}
+
+package "Execution ownership" as ExecutionScope {
+  class "RuntimeActiveExecution" as Execution <<extended>> #FFF7DD
+  class "RuntimePendingInteraction" as Pending <<target-only>> #EAF2FF {
+    kind: TOOL_PERMISSION | PLAN_REVIEW
+    +claimAndResume(decisionDTO)
+    +cancel(cause)
+  }
+  class "ManagedAgentSession" as Session <<extended>> #FFF7DD
+  class "SessionPlanContext" as PlanContext <<target-only>> #EAF2FF {
+    basePrompt: immutable String
+    mode: committed snapshot
+    +applyCommittedMode(snapshotDTO)
+  }
+  class "RuntimePlanReviewAdapter" as ReviewAdapter <<target-only>> #EAF2FF
+}
+
+package "Core and model tools" as ToolScope {
+  class "Agent" as AgentCore <<existing>> #ECFDF5 {
+    +setSystemPrompt(text)
+  }
+  class "AgentLoop" as Loop <<existing>> #ECFDF5
+  class "ToolExecutionPipeline" as Pipeline <<existing>> #ECFDF5
+  interface "AgentTool" as Tool <<existing>> #ECFDF5
+  class "ExitPlanModeTool" as ExitTool <<target-only>> #EAF2FF
+  class "Existing built-in tools" as ExistingTools <<existing>> #ECFDF5
+  interface "PlanReviewPort" as ReviewPort <<target-only>> #EAF2FF {
+    +review(callId, plan, signal): DecisionDTO
+  }
+}
+
+package "Persistence and event boundary" as PersistenceScope {
+  class "RuntimeExecutionPersistenceService" as Persistence <<extended>> #FFF7DD
+  interface "RuntimeSessionRepository" as SessionRepo <<extended>> #FFF7DD
+  interface "RuntimeExecutionControlRepository" as ControlRepo <<extended>> #FFF7DD
+  class "MyBatisRuntime*Repository" as Repos <<extended>> #FFF7DD
+  interface "Runtime*Mapper" as Mappers <<extended>> #FFF7DD
+  class "RuntimeEventProjector" as Projector <<extended>> #FFF7DD
+  interface "RuntimeEventOutput" as Output <<existing>> #ECFDF5
+  database "GaussDB\nSessions / entries / events\nExecutions / segments / decisions" as DB
+}
+
+HttpBoundary -[hidden]down- Application
+Application -[hidden]down- ExecutionScope
+ExecutionScope -[hidden]right- ToolScope
+ExecutionScope -[hidden]down- PersistenceScope
+
+UI -[#2563EB]-> ConfigApi : mode request VO
+UI -[#2563EB]-> EventApi : confirm / read history
+ConfigApi -[#2563EB]-> ModeService
+EventApi --> EventService
+EventService -[#2563EB]-> ReviewService : plan branch
+EventService --> MessageService
+MessageService --> Coordinator : start accepted execution
+MessageService -[#2563EB,norank]-> PlanContext : accepted mode snapshot
+EventService -[#2563EB]-> Dispatcher : plan handoff
+Dispatcher -[#2563EB]-> Execution : locate via registry
+Dispatcher -[#2563EB,norank]-> ControlRepo : claim plan decision
+Coordinator --> Execution : start / finalize
+ModeService -[#2563EB]-> SessionRepo : idle + ETag transaction
+ReviewService -[#2563EB]-> Persistence : durable review transition
+Factory ..> Session : creates
+Factory -[#2563EB]-> Composer : compose initial policy
+Session *-- "1" AgentCore
+Session *-[#2563EB]- "1" PlanContext
+Execution *-[#2563EB]- "0..1" Pending
+Execution *-[#2563EB]- "1" ReviewAdapter
+Execution --> "1" Session : via existing holder
+ReviewAdapter -[#2563EB]-> Pending : await / cancel
+ReviewAdapter -[#2563EB,norank]-> ReviewService : open review
+ReviewAdapter -[#2563EB]-> PlanContext : apply claimed decision
+PlanContext -[#2563EB,norank]-> Composer
+PlanContext -[#2563EB]-> AgentCore : replace own prompt
+AgentCore ..> Loop
+Loop --> Pipeline
+Pipeline --> "0..*" Tool
+Tool <|.. ExistingTools
+Tool <|.[#2563EB]. ExitTool
+Session *-[#2563EB]- "0..1" ExitTool : Runtime profile
+ExitTool -[#2563EB]-> ReviewPort
+ReviewPort <|.[#2563EB,norank]. ReviewAdapter
+Persistence --> SessionRepo
+Persistence --> ControlRepo
+SessionRepo <|.. Repos
+ControlRepo <|.. Repos
+Repos --> Mappers : DTO only
+Mappers --> DB
+Projector --> Persistence : commit before publish
+Coordinator --> Projector : creates / subscribes
+Projector --> Output
+ReviewAdapter -[#2563EB]-> Output : committed plan then confirming
+Output .[norank].> EventApi : request-bound SSE
+
+note bottom of Pending
+  At most one interaction across both kinds.
+  Current execution and plan identity are
+  rechecked under database locks before claim.
+end note
+note bottom of ExistingTools
+  No metadata fields, tool descriptions or
+  schemas change when plan mode changes.
+end note
+@enduml
+
+@startuml plan_mode_review_sequence
+' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeControlEventService.java :: accept.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java :: markConfirming, acceptConfirmation, claimConfirmation.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionControlDispatcher.java :: dispatchConfirmation.
+' Observed behavior: tool confirmation closes one response and resumes through a new fixed segment.
+' Design reason: target-only plan review reuses this transport and durable handoff.
+' Java divergence: immutable plan event identity is the approval target; tool permissions remain separate.
+title CampusClaw Plan Review - Target Sequence
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 260
+autonumber
+actor User
+participant "Runtime client" as UI
+participant "POST Events\naccepting instance" as API
+participant "Plan review service\nand persistence" as Service
+database GaussDB as DB
+participant "Control dispatcher\noriginal instance" as Dispatcher
+participant "Original execution\nExitPlanMode / Agent" as Agent
+
+group Plan mode is active; an ordinary message already started this execution
+  Agent -> Agent : Produce one ExitPlanMode call with complete Markdown
+  Agent -> Service : Persist unique tool_call; beginReview(fixed target, call, plan)
+  Service -> DB : Lock Session and execution; validate active plan mode
+  Service -> DB : Append agent.plan + confirming idle;
+  note right of DB
+    Same transaction also records the pending plan,
+    closes the current segment and advances ETag.
+    Session remains running.
+  end note
+  DB --> Service : Commit
+  Service --> UI : Original SSE: plan, confirming idle; close
+  Agent -> Agent : Await plan decision; keep tools and current prompt
+end
+
+User -> UI : Approve or request revision
+UI -> API : POST user.plan_confirmation(targetEventId, result)
+API -> API : Reserve response / result wait capacity
+API -> Service : Accept decision
+Service -> DB : Lock Session and execution;
+note right of DB
+  Require the exact pending plan in this Session.
+  Recheck root, branch, current segment and stop state.
+end note
+Service -> DB : Append confirmation; create continuation segment;
+note right of DB
+  Approve: update plan_mode=false and append mode event.
+  Revise: keep plan_mode=true and persist feedback.
+  Clear pending plan. Keep Session running.
+end note
+DB --> Service : Commit fixed continuation target
+Service --> API : Accepted confirmation
+API --> UI : First SSE frame: full committed confirmation
+API -> Dispatcher : Local notify if original execution is local
+note over DB,Dispatcher
+  Existing database control polling is the fallback.
+  The accepting instance does not reconstruct credentials.
+end note
+Dispatcher -> DB : Claim decision with fixed original target
+DB --> Dispatcher : Committed decision, once
+Dispatcher -> Agent : Bind new segment output; complete pending Future
+alt Approved
+  Agent -> Agent : Apply committed false mode to own system prompt
+  Agent -> Service : Persist ExitPlanMode result approved=true
+  Agent -> Agent : Next model request may implement the plan
+else Revision requested
+  Agent -> Service : Persist normal result approved=false and feedback
+  Agent -> Agent : Next request keeps planning; a new plan gets a new eventId
+end
+Service --> UI : New SSE: committed mode/result/output via local or DB path
+note over UI,Agent
+  Every agent event keeps the original message sourceEventId.
+  A new confirming or actual terminal idle closes this response.
+  Disconnect closes observation only; it never grants approval.
+end note
+@enduml
+
+@startuml plan_mode_state
+' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionState.java :: IDLE, RUNNING.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java :: timeout, commitAndRelease.
+' Observed behavior: confirming closes HTTP output without releasing Session admission.
+' Design reason: target-only planMode remains separate from the existing resource state.
+' Java divergence: manual mode switching is idle-only; approval exits within the original execution.
+title CampusClaw Plan Mode - Target State and Admission
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam stateBackgroundColor #EFF6FF
+skinparam stateBorderColor #64748B
+hide empty description
+
+state "Idle / Normal\nstate=idle, planMode=false" as Normal
+state "Idle / Planning\nstate=idle, planMode=true" as PlanIdle
+state "Exploring or designing\nstate=running, planMode=true" as Planning
+state "Awaiting plan review\nstate=running, planMode=true\npendingPlanEventId is present" as Reviewing
+state "Implementing\nstate=running, planMode=false" as Implementing
+
+[*] --> Normal : create / migrate
+Normal --> PlanIdle : PUT true + valid ETag
+PlanIdle --> Normal : PUT false + valid ETag
+PlanIdle --> Planning : accept user.message
+Planning --> PlanIdle : ordinary question / answer ends execution
+Planning --> Reviewing : ExitPlanMode; commit plan and confirming idle
+Reviewing --> Planning : accept revise; resume with feedback
+Reviewing --> Implementing : accept approve; resume next step
+Normal --> Implementing : accept user.message
+Implementing --> Normal : actual terminal committed
+Planning --> PlanIdle : actual stop / failure committed
+Reviewing --> PlanIdle : actual stop / failure committed
+
+note bottom of Reviewing
+  A closed SSE is not an execution terminal.
+  New messages and manual mode PUT are rejected.
+  Only the current plan event can be confirmed.
+  Existing tool permission review is independent.
+end note
+@enduml
