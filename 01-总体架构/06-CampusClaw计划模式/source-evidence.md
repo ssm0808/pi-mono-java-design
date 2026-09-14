@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：1.4.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：1.5.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
 ## 1. 固定提交
 
@@ -9,7 +9,9 @@
 | deepseek-ai/deepseek-harness | `0a53fb55bea101816fa226bb964ae2bed71c343b` | 固定 `dsh-0.1.2-alpha.2`；读取固定提交的源码与 standard preset，未使用本机较新 checkout 替代 |
 | badlogic/pi-mono | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、工具结果与下轮模型调用顺序的固定基线 |
 | superheromeZzh/pi-mono-java | `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` | 2026-09-14 fetch 后 origin/main；本地 f61906b 已包含全部本专题分析的 Java、Mapper 和 SQL 内容 |
-| pi-mono-java-design | `416acef836d32415e39351763ff8ebcf2d3ed015` | 本次修订前的设计主线；保留当前 Session Events、权限、工具 profile 和元数据契约 |
+| anomalyco/opencode | `849c2598abc7d2b40261e74b5826bc74ffc78308` | 仅核对 TODO 描述和 anthropic 模型模板的任务管理段；该模板不是 Claude 官方提示词 |
+| openai/codex | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | 核对指定 gpt_5_1 提示词与 update_plan Handler；不代表所有模型使用同一模板 |
+| pi-mono-java-design | `9aac37890edd257354c9dab0819bec0e94e513c8` | 本次修订前的设计主线；保留当前 Session Events、权限、工具 profile 和元数据契约 |
 
 前序分析使用 Java `510d882ca45541e0086586dab89c429c5a18cf20`。本次采用 `09b32d8e`；两者之间是仓库指引变更，本专题 Runtime 路径不变。对比本地 `f61906b` 至 `09b32d8e` 的差异仅在指引、前端样式/开发代理及配套文档脚本；不据此声称 Agent Loop 或确认机制发生新增变化。
 
@@ -127,3 +129,23 @@ CampusClaw 采纳工具业务由通用调用/结果承载的风格，仍由 Runt
 | Java 同基线：`frontend/src/runtime/eventStore.ts` · mergeEvent、reconcileEvents、executionState | eventId 去重、历史顺序保留 live 尾部，以原根消息关联执行；没有 TODO 投影 | 增加纯函数 deriveTodos 与面板；实时、恢复共用，target-only |
 
 完整 SHA 沿用 §1；本次核验固定提交，没有升级基线。对 Java `modules` 和 `frontend/src` 检索 TodoUpdate/TodoWrite 无实现命中；上述通用路径已存在，未执行 TODO 产品测试。TodoUpdateTool、客户端 deriveTodos 和其整份列表约束均属于新目标，具体生命周期与验收由 [TODO 主设计](todo-update.md) 维护。不从 Claude 文档推断内部 TODO 表、持久化事务或自动恢复调度器。
+
+
+## 7. 提示词组合与逐项更新约束
+
+源码固定点与 §1 相同；没有升级基线。Claude 官方 Tools 与 Session event stream 在 2026-09-14 重新核对，仍为 Beta 公开契约。本文仅借鉴其通用工具承载和 description 指导调用时机，不把 CampusClaw 提示词说成 Claude 托管服务的内部提示词。
+
+| 基线 / 仓库相对路径及符号 | 已观察行为 | CampusClaw 采纳与理由 |
+|---|---|---|
+| DeepSeek `packages/preset/agent-presets/presets/standard/agent.cordis.yml` · planning / config.section | 标准预设要求先检查事实、完成关键取舍、只用 exit_plan_mode 提交完整方案；口头同意不批准；明确禁止用 todo_write 跟踪规划阶段 | plan 只调研和设计，build 才维护实施进度；采用同一阶段边界。将文件/代码案例改写为园区业务与混合工具约束属于产品适配 |
+| DeepSeek `packages/plan/plan-mode/src/index.ts` · resolveConfig、PlanModeController 构造函数中的 plan:policy | 部署提供非空 section，模式控制注入；工具清单保持稳定 | 复用现有基础 SYSTEM；用纯 Composer 选择部署静态段，不迁入 Cordis。组合与部署资源为 target-only 架构扩展 |
+| DeepSeek `packages/todo/tool-todo/src/index.ts` · DESCRIPTION_HEAD/SINGLE/TAIL（45～66 行）、toTodoList | 描述要求全量清单、完成即更新、不积攒完成；工具验证值和部署并行数量规则，不验证业务目标已完成 | 固定工具 description + build 进度段双重说明时机；单进行中是 CampusClaw 产品约束，不将提示词要求冒充强校验 |
+| OpenCode `packages/opencode/src/tool/todowrite.txt` · When to use / Rules；`packages/opencode/src/session/prompt/anthropic.txt` · Task Management | 工具描述与模型模板均要求及时更新；验证后才完成，不积攒多项。该 anthropic.txt 是 OpenCode 自己的模板 | 借鉴工具描述与 SYSTEM 同时指导；不迁入其 priority/cancelled 等字段，不推断 Claude Managed Agents 有同样内部规则 |
+| Codex `codex-rs/core/gpt_5_1_prompt.md` · Planning、update_plan；`codex-rs/core/src/tools/handlers/plan.rs` · handle_call | 指定模板强调及时变更状态，同文件也允许一次更新多项；Handler 解析参数、在 Plan 模式拒绝 update_plan、发出 PlanUpdate | 仅作提示词约束与程序校验的区别对照；不把“一项对应一次调用”或模板内容视作全产品硬保证。CampusClaw 不照搬其 PlanUpdate 专用事件或模式拦截 |
+| Java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java` · create、configureAgent（67～112 行） | 先装配 tools，再加载基础 SYSTEM 并 setSystemPrompt；无计划/实施分段 Composer | 可从实际工具列表判断 TodoUpdate，不增加能力元数据；模式快照接入、分段资源和 Composer 待实现 |
+| Java `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` · setSystemPrompt（109～111 行）；`modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java` · invokeModel（179～183 行） | setter 写入本 Agent 状态，下轮请求读取当前 systemPrompt 和同一 tools | 批准后替换完整 SYSTEM，再让审核工具返回；下轮自然使用 build 组合，无需更改 Loop 分支或重新装配工具 |
+| Java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java` · continueAfterCompaction、finishCompaction | 继续使用同一 Agent，压缩替换消息而非重建工具/系统规则 | 组合规则留在执行 SYSTEM，不依靠摘要推断模式，也不在压缩后重复追加段落 |
+
+[Claude Tools 的 custom tool 指导](https://platform.claude.com/docs/en/managed-agents/tools#custom-tools)只说明应用定义描述与参数、模型选择调用、应用返回结果；[通用事件流程](https://platform.claude.com/docs/en/managed-agents/events-and-streaming#handling-custom-tool-calls)不承诺 TODO 自动调用或进度面板。没有服务端源码 commit，不推断其内部状态机。
+
+[提示词正文](plan-policy.md)和[组合与模型验收](plan-policy.md#8-组合检查与模型场景验收)是当前目标。稳定元数据、build-only 进度和 Child 角色边界属于产品约束；审核精确身份和服务端事务继续作为安全与一致性边界。提示词本身不构成硬只读或自动判定工作完成的保证。本次仅完成静态源码、设计与资源校验，未执行模型遵循率或产品端到端测试。

@@ -1,6 +1,6 @@
 # 计划模式接口增量
 
-版本：1.4.0；日期：2026-09-14；状态：**target-only 推荐设计，统一 Session 更新与 requested 模式事件已登记；计划审核部分尚未纳入当前报文源，全部新增能力仍待实现**。
+版本：1.5.0；日期：2026-09-14；状态：**target-only 推荐设计，统一 Session 更新与 requested 模式事件已登记；计划审核部分尚未纳入当前报文源，全部新增能力仍待实现**。
 
 本文件只定义计划功能的新增内容。现有 Header、普通消息、工具确认、ResultBean、SSE 和历史分页继续引用[当前契约](../01-CampusClaw多Agent运行时/chat-api-review.html)。这里的报文属于目标增量示例，正式纳入时移入统一 operation JSON 和 `eventContract`，本文件随后仅保留理由及链接，不产生第二份当前接口契约。
 
@@ -134,7 +134,7 @@ reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史�
 
 ### 3.5 TodoUpdate 复用通用事件
 
-TODO 进度使用现有 agent.tool_call / agent.tool_result，精确工具输入输出及示例见 [TodoUpdate](todo-update.md#3-事件与执行顺序)。不新增 TODO 专用 event.type、公共字段、用户输入分支、Session 属性或 HTTP 路径；成功结果的 content 文本承载完整 JSON 清单。服务端执行内置工具，浏览器只观察，不引入 Claude 的客户端工具结果提交协议。agent.plan 继续只表示完整待审核方案。
+TODO 仅在 build 实施阶段记录进度，使用现有 agent.tool_call / agent.tool_result，精确工具输入输出及示例见 [TodoUpdate](todo-update.md#3-事件与执行顺序)。不新增 TODO 专用 event.type、公共字段、用户输入分支、Session 属性或 HTTP 路径；成功结果的 content 文本承载完整 JSON 清单。服务端执行内置工具，浏览器只观察，不引入 Claude 的客户端工具结果提交协议。agent.plan 继续只表示完整待审核方案。
 
 ## 4. 发布联动清单
 

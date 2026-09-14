@@ -20,6 +20,8 @@
 ' Source: frontend/src/runtime/eventStore.ts :: mergeEvent, reconcileEvents; deriveTodos is target-only.
 ' Claude public tool events checked 2026-09-14; no native TODO contract.
 ' Design reason: TodoUpdate returns a full snapshot through the existing tool result commit path.
+' Source: DeepSeek packages/preset/agent-presets/presets/standard/agent.cordis.yml :: planning section.
+' Design reason: plan prompts forbid TODO; build prompts request implementation progress.
 title CampusClaw Plan Mode - Complete Target Class View
 top to bottom direction
 allowmixing
@@ -67,7 +69,9 @@ package "Application and assembly" as Application {
     +acceptPlanConfirmation(requestVO)
   }
   class "AgentSessionFactory" as Factory <<extended>> #FFF7DD
-  class "PlanPolicyPromptComposer" as Composer <<target-only>> #EAF2FF
+  class "PlanPolicyPromptComposer" as Composer <<target-only>> #EAF2FF {
+    +compose(base, mode, entryPoint, toolNames): String
+  }
 }
 
 package "Execution ownership" as ExecutionScope {
@@ -80,6 +84,7 @@ package "Execution ownership" as ExecutionScope {
   class "ManagedAgentSession" as Session <<extended>> #FFF7DD
   class "SessionPlanContext" as PlanContext <<target-only>> #EAF2FF {
     basePrompt: immutable String
+    toolNames: immutable assembled snapshot
     mode: committed snapshot
     +applyCommittedMode(snapshotDTO)
   }
@@ -137,7 +142,7 @@ Coordinator --> Execution : start / finalize
 ModeService -[#2563EB]-> SessionRepo : idle + ETag transaction
 ReviewService -[#2563EB]-> Persistence : durable review transition
 Factory ..> Session : creates
-Factory -[#2563EB]-> Composer : compose initial policy
+Factory -[#2563EB]-> Composer : fixed prompt sections
 Session *-- "1" AgentCore
 Session *-[#2563EB]- "1" PlanContext
 Execution *-[#2563EB]- "0..1" Pending
@@ -176,6 +181,7 @@ note bottom of Pending
   rechecked under database locks before claim.
 end note
 note bottom of TodoTool
+  Registered in both modes; prompts allow build use only.
   Stateless full-list validation and JSON result.
   Generic committed ToolResult is the snapshot.
   No TODO table or new public event type.
@@ -252,9 +258,9 @@ Dispatcher -> DB : Claim decision with fixed original target
 DB --> Dispatcher : Committed decision, once
 Dispatcher -> Agent : Bind new segment output; complete pending Future
 alt Approved
-  Agent -> Agent : Apply committed build mode to own system prompt
+  Agent -> Agent : Apply committed build prompt and execution TODO guidance
   Agent -> Service : Persist ExitPlanMode result approved=true
-  Agent -> Agent : Next model request may implement the plan
+  Agent -> Agent : Next request creates execution TODOs, then implements
 else Revision requested
   Agent -> Service : Persist normal result approved=false and feedback
   Agent -> Agent : Next request keeps planning; a new plan gets a new eventId
@@ -323,7 +329,7 @@ end note
 ' Observed behavior: Java commits generic results at the existing TurnEndEvent boundary.
 ' Design reason: keep the public tool envelope stable and derive TODO from committed success.
 ' Java divergence: TodoUpdateTool and client projection are target-only, not Claude built-ins.
-title CampusClaw TodoUpdate - Target Tool and Event Flow
+title CampusClaw TodoUpdate - Build Implementation Progress
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 13
@@ -338,6 +344,10 @@ database "Existing entries / events" as DB
 participant "Client event store\n+ deriveTodos (target-only)" as UI
 participant "Existing history API" as History
 
+note over Loop,Todo
+  Build-mode implementation only.
+  Plan-mode prompts forbid research TODOs.
+end note
 Loop -> Projector : Finalized TodoUpdate call (complete list)
 Projector -> DB : Commit generic tool_call
 Projector --> UI : agent.tool_call
@@ -375,4 +385,132 @@ History -> DB : Read stored generic calls and results
 DB --> History : Ordered stored events
 History --> UI : Existing history response
 UI -> UI : Reconcile events and run the same projection
+@enduml
+
+
+@startuml plan_mode_end_to_end
+' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java :: create, configureAgent.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java :: prepare, accept, startAccepted.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: persistToolResults.
+' Source: frontend/src/composables/useRuntimeApi.ts :: loadHistory, consume.
+' DeepSeek baseline: 0a53fb55bea101816fa226bb964ae2bed71c343b (alpha).
+' Source: packages/preset/agent-presets/presets/standard/agent.cordis.yml :: planning section; no research TODOs.
+' Source: packages/todo/tool-todo/src/index.ts :: DESCRIPTION_TAIL; immediate completion updates.
+' Claude managed-agents/tools and events-and-streaming checked 2026-09-14 (beta).
+' Observed behavior: generic tool results are committed before stream output at batch end.
+' Design reason: separate plan review from build progress and reuse existing public tool events.
+' Java divergence: mode, review, prompt sections and TodoUpdate remain target-only.
+title CampusClaw Plan Mode - Complete Target Interaction
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 235
+hide footbox
+autonumber
+actor User
+participant "Client" as UI
+participant "Session / Events API" as API
+participant "Runtime\nServices + original Agent" as Runtime
+participant "Model tools" as Tools
+database "Sessions / Events\nExecution controls" as DB
+
+group Enter plan mode
+  User -> UI : Select plan
+  UI -> API : POST Session {mode: plan} + If-Match
+  API -> DB : Check idle and ETag; commit mode + history
+  API --> UI : Full Session + matching ETag
+end
+
+group Research and design (no TODO calls)
+  User -> UI : Describe the work
+  UI -> API : POST Events: user.message
+  API -> Runtime : Prepare base prompt and stable tool profile
+  API -> DB : Accept root execution with current mode snapshot
+  API -> Runtime : Apply plan common + root review before start
+  API --> UI : First SSE frame: committed user.message
+  API -> Runtime : Start the accepted execution
+  loop Inspect facts and develop proposal
+    Runtime -> Tools : Queries / read-only analysis
+    Tools --> Runtime : Normal tool results
+    Runtime -> DB : Commit ordinary messages and tool events
+    Runtime --> UI : Thinking / messages / generic tool events
+  end
+  opt User-owned choice requires clarification
+    Runtime -> DB : Commit question and actual terminal; state=idle, mode=plan
+    Runtime --> UI : Question + terminal idle; close response
+    User -> UI : Answer the question
+    UI -> API : POST next user.message
+    API -> Runtime : Prepare, accept and start a new root in the same plan Session
+  end
+end
+
+group Review complete proposal
+  loop Review attempts; exit on approval
+    Runtime -> Tools : ExitPlanMode only; complete Markdown
+    Tools -> Runtime : PlanReviewPort.review
+    Runtime -> DB : Commit agent.plan + confirming idle + pending review
+    Runtime --> UI : Plan card + confirming idle; close response
+    note over Runtime,DB
+      Session state remains running; mode remains plan.
+      The review tool waits. No business execution or TODO calls.
+    end note
+    User -> UI : Approve or request revision
+    UI -> API : POST user.plan_confirmation(targetEventId, result)
+    API -> DB : Lock exact review; accept decision and continuation
+    API --> UI : First new SSE frame: committed confirmation
+    DB --> Runtime : Original instance claims the decision once
+    alt Revise
+      Runtime --> Tools : Resume review with approved=false and feedback
+      Tools --> Runtime : Normal review result
+      Runtime --> UI : Tool result; continued research and new proposal
+    else Approve
+      note over API,DB
+        Approval transaction also commits mode=build and mode event.
+      end note
+      Runtime -> Runtime : Replace plan sections with build + execution TODO guidance
+      Runtime --> Tools : Resume review with approved=true
+      Tools --> Runtime : Normal review result
+      Runtime --> UI : Committed mode change and review result
+    end
+  end
+end
+
+group After successful approval: implement in build
+  Runtime -> DB : Commit TodoUpdate tool call
+  Runtime --> UI : agent.tool_call (toolName=TodoUpdate)
+  Runtime -> Tools : TodoUpdate: full implementation list, first item in_progress
+  Tools --> Runtime : Validated full JSON snapshot
+  Runtime -> DB : At batch end, commit generic tool result
+  Runtime --> UI : agent.tool_result (isError=false)
+  UI -> UI : Match toolName + call identity; display successful snapshot
+  loop Each implementation task
+    Runtime -> Tools : Business work and required verification
+    Tools --> Runtime : Actual results
+    Runtime --> UI : Normal thinking / tool events / messages
+    Runtime -> DB : Commit next TodoUpdate tool call
+    Runtime --> UI : agent.tool_call (toolName=TodoUpdate)
+    Runtime -> Tools : TodoUpdate immediately after task completion;
+    note right of Tools
+      Full list: completed previous item,
+      next item in_progress when starting it.
+      Failure does not claim completion.
+    end note
+    Tools --> Runtime : Validated full JSON snapshot
+    Runtime -> DB : Commit generic result at batch end
+    Runtime --> UI : Successful agent.tool_result
+    UI -> UI : Replace implementation progress
+  end
+  Runtime -> DB : Commit final answer and actual terminal; state=idle
+  Runtime --> UI : Final answer + terminal idle; close response
+end
+
+note over UI,DB
+  Disconnect: GET Events + GET Session for reconciliation; never replay accepted POST.
+  Interrupt: existing user.interrupt targets the current root and stops the execution.
+  The same Session spans clarification roots; approval resumes its original root.
+  Business-tool permission confirmation remains independent.
+end note
 @enduml

@@ -4,13 +4,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.0 |
+| 文档版本 | 1.6.0 |
 | 更新日期 | 2026-09-14 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 设计依据 | `pi-mono-java-design@b07db4dfe0bdc6229b7294bc04ebbde9184b77ec`，具体主设计见各条目 |
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
 | 计划模式专项基线 | A03 使用 DeepSeek `0a53fb55`、Java `09b32d8e`；旧 Java `f61906b` 与该专项相关源码相同，完整 SHA 与路径见专项证据 |
-| 核验范围 | M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A05 的 TODO 工具结果、Java 提交和客户端投影接入点 |
+| 核验范围 | M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A05 的 TODO 工具结果、Java 提交和客户端投影接入点；A03/A05 的计划与实施提示词 |
 | 验证边界 | 静态源码与文档核对，未执行产品集成测试；其余模块与基线的专项差异待补证 |
 
 ## 1. 阅读方式与权威边界
@@ -32,8 +32,8 @@
 |---|---|---|---|
 | pi | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、消息/Tool 生命周期、Session 分支与压缩 | A01 已核对 Loop 和 Agent 类型，A04 已核对配置 RPC，A05 核对 todo 示例的工具结果恢复；Session 树与完整协议快照仍待专项核验 |
 | Claude Managed Agents | 官方文档，核对日期 `2026-09-14`；无服务端源码 commit | 公共 Session API、preview 与历史对账 | A02/A04/A05 已核对公开流、List Events、Session 更新、配置限制和通用 custom tool 交互；仍为 Beta，只证明公开契约 |
-| Codex harness | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | Provider typed event、Turn/Item 客户端生命周期 | A04 已核对配置协议；Provider 与 M07 生命周期仍待专项核验 |
-| OpenCode | `849c2598abc7d2b40261e74b5826bc74ffc78308` | 多客户端、live/durable 分类与 sequence 回放 | A04 已核对 Session 配置/消息/v2 操作；事件流仍待专项核验；v2 源码能力不能自动视为稳定公开契约 |
+| Codex harness | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | Provider typed event、Turn/Item 客户端生命周期 | A04 已核对配置协议，A05 核对指定模型的 update_plan 指令及 Handler；Provider 与完整 M07 生命周期仍待专项核验 |
+| OpenCode | `849c2598abc7d2b40261e74b5826bc74ffc78308` | 多客户端、live/durable 分类与 sequence 回放 | A04 已核对 Session 配置/消息/v2 操作，A05 核对 todowrite 描述与模型提示词；事件流仍待专项核验；v2 源码能力不能自动视为稳定公开契约 |
 | DeepSeek Harness | `0a53fb55bea101816fa226bb964ae2bed71c343b`，`dsh-0.1.2-alpha.2` | 计划模式；完整事件溯源与 token 级回放的成本上限 | A03/A04/A05 已核对计划插件、preset、Session 配置接口和 todo_write 完整列表；完整日志仍待 M04/M06 专项核验；保留 alpha 成熟度边界 |
 
 没有同层、同范围证据时填“未核验”或说明“不适用”的理由，不以功能勾选或总分给系统排名。
@@ -140,8 +140,9 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 架构问题 | 如何在不扩充 Agent/Tool/Skill 元数据的前提下，让用户先审核完整方案，再让原执行实施？ |
 | DeepSeek 已观察行为 | 固定 alpha 提交的 `PlanModeController` 根据计划状态提供 `plan:policy`；退出工具持续注册，以完整 Markdown 请求用户审核；批准后在后续 step 退出。`stateVersion=3` 属于投影结构版本，不是业务计划版本。固定链接与符号见[专项源码证据 §2](../06-CampusClaw计划模式/source-evidence.md#2-deepseek-计划模式)。 |
 | CampusClaw 已观察实现 | Java `09b32d8e` 已具备统一 Session 工厂、逐轮读取系统 Prompt、确认等待、数据库决定和固定续跑段；本专题相关源码与 `f61906b` 相同。工具确认由前端 executionState/loadHistory 根据事件恢复，Session VO 不暴露待确认工具。当前没有计划模式、计划工具或计划事件；RuntimeSessionController 没有通用更新方法，既有配置服务已支持 ETag、idle 和更新结果组装。源码范围见[专项证据 §4](../06-CampusClaw计划模式/source-evidence.md#4-campusclaw-现有接入点)，未运行计划集成测试。 |
-| CampusClaw 目标 | 名称、模型、思考和 plan/build 统一通过 Session POST 更新，mode 是工作模式属性；state 保留 idle/running。复用既有配置 Service，模式控制 Prompt，Runtime 两种模式使用相同工具定义。完整计划事件的 eventId 是批准目标；前端从事件恢复审核卡，当前等待目标仅保留在服务端执行记录，Session 不增加待审核字段。审核决定提交后唤醒原执行，下一轮使用普通模式提示词。 |
+| CampusClaw 目标 | 名称、模型、思考和 plan/build 统一通过 Session POST 更新，mode 是工作模式属性；state 保留 idle/running。复用既有配置 Service，模式控制 Prompt，Runtime 两种模式使用相同工具定义。完整计划事件的 eventId 是批准目标；前端从事件恢复审核卡，当前等待目标仅保留在服务端执行记录，Session 不增加待审核字段。审核决定提交后唤醒原执行，下一轮使用 build 实施指令；plan 阶段不调用 TODO。基础 SYSTEM 与模式段按已有入口和工具装配结果组合，不增加元数据。 |
 | 差异分类 | 产品约束：元数据稳定、模式由 Session 更新、只允许 idle 主动切换、Child 调用时继承模式；架构变更：在既有配置服务增加 Session 更新，并将进程内审核接入 HTTP 和已有数据库执行控制；安全加固：精确目标、单次消费、停止竞争和两跳身份校验。 |
+| 提示词依据 | DeepSeek standard preset 明确禁止规划期 todo_write；CampusClaw 同样仅在 build 记录实施进度。根与 Child 分别组合审核/返回父结果段，批准后替换为实施与 TODO 段。精确正文与矩阵见[提示词设计](../06-CampusClaw计划模式/plan-policy.md)，固定符号见[专项证据 §7](../06-CampusClaw计划模式/source-evidence.md#7-提示词组合与逐项更新约束)。 |
 | 具体理由 | 模式已有明确的 Session 资源归属，更新操作复用其身份、版本与事务，统一四类属性入口，并明确组合原子性。混合查询与变更工具不能依靠新增一个静态只读字段准确表达每次调用用途；稳定字段与工具定义让规划规则独立演进。公共审核需要可对账的事件身份，原有工具权限不能表示对整份方案的批准。展示恢复与锁内接受分离，沿用既有工具确认方式，避免 Session 响应随具体交互增加指针。 |
 | 收益与代价 | 不扩充工具元数据、不增加第二套 Loop 或 Session 待审字段；需要新增模式和审核事件、确认记录及客户端卡片。刷新必须补齐相关事件，缺页或状态矛盾时禁用审核；跨请求读取仍可能过期，确认始终在服务端重新校验。提示词约束不提供服务端强制只读保证；进程失联自动接管不在该功能承诺中。 |
 | 备选与重新评估条件 | 本期不采用副作用白名单、独立 Plan CRUD、Cordis 插件容器或 token 全量日志。若产品要求规划期绝不产生副作用，应单独设计可执行的权限边界，不能将 Prompt 遵循率当作保证。 |
@@ -193,12 +194,13 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | DeepSeek 源码 | 固定 0a53fb55 的 tool-todo 通过 todo_write 整份替换 content/status 列表，追加 todo/write 日志，latest snapshot 投影按下一 turn/start 清空；其 alpha 日志格式不成为 CampusClaw 公共协议。 |
 | pi 源码 | 固定 5cd93f68 的 todo 示例从工具结果 details 恢复列表，证明进度可以由通用结果重建；示例扩展不等于核心公共 TODO 事件。 |
 | CampusClaw 已观察实现 | Java 09b32d8e 已有文本工具结果、TurnEndEvent 批次结果持久化及同形 SSE；前端有 eventId 去重、历史顺序和根消息关联。固定 modules/frontend/src 范围没有 TodoUpdate/TodoWrite 或进度投影；未运行新增工具测试。 |
-| CampusClaw 目标 | TodoUpdate 由 Runtime 内置工具执行，成功结果文本返回完整 JSON 清单；只用现有 agent.tool_call/agent.tool_result，客户端从匹配的已提交成功结果派生进度。每个根执行独立，审核续跑保持归属。 |
-| 差异分类 | 架构变更：采用 Claude 通用工具承载风格，但保留服务端工具执行和现有事件名；采用成功 ToolResult 作为唯一快照记录，省去 DeepSeek 的独立 TODO 日志。产品约束：元数据与公共外层字段稳定、首版 Runtime 根入口、单进行中任务。 |
+| CampusClaw 目标 | TodoUpdate 仅用于 build 实施进度；plan 调研和修订不调用。由 Runtime 内置工具执行，成功结果文本返回完整 JSON 清单；只用现有 agent.tool_call/agent.tool_result，客户端从匹配的已提交成功结果派生进度。每个根执行独立，审核续跑保持归属。 |
+| 调用时机约束 | DeepSeek DESCRIPTION_TAIL 与 OpenCode todowrite 描述要求完成即更新、不积攒完成；指定 Codex 模板同时允许一次更新多项，不能视为严格一项一次的硬规则。CampusClaw 用固定 description 和 build 提示词要求实际完成及验证后立即更新，同次可完成上一项并启动下一项；代码只验证参数，不证明业务完成。出处见[§7](../06-CampusClaw计划模式/source-evidence.md#7-提示词组合与逐项更新约束)。 |
+| 差异分类 | 架构变更：采用 Claude 通用工具承载风格，但保留服务端工具执行和现有事件名；采用成功 ToolResult 作为唯一快照记录，省去 DeepSeek 的独立 TODO 日志。产品约束：元数据与公共外层字段稳定、首版 Runtime 根入口、仅 build 实施进度、单进行中任务。 |
 | 理由与代价 | 既有工具结果已经是可恢复完整记录，无需再同步 TODO 表与专用事件；代价是客户端需识别工具内容，且进度等待现有批次结果提交，不能承诺每次 Java 工具返回即推送。完整列表每次都占用上下文，需限制大小。 |
 | 备选与重新评估条件 | 当前不新增 TODO CRUD、agent.todo_updated、Session todos 或结构化公共结果字段。若需要独立任务身份、多人编辑、调度依赖或工具完成即刻提交，应重新设计任务资源与提交边界，不能直接扩充显示清单语义。 |
 | 设计 / 实现状态 | 已确认方向，target-only；通用复用链局部源码已核验，TodoUpdateTool、枚举/profile 和 deriveTodos/面板待实现。 |
-| 验收与证据 | [T1～T4](../06-CampusClaw计划模式/todo-update.md#6-实施切片与验收) 覆盖成功提交、失败保留、整份替换、跨根隔离、分页/断线和两跳关联；固定路径与符号见[专项源码证据 §6](../06-CampusClaw计划模式/source-evidence.md#6-todo-update-基线与接入证据)。 |
+| 验收与证据 | [T1～T4](../06-CampusClaw计划模式/todo-update.md#6-实施切片与验收) 覆盖 plan 不调用、批准后建清单、逐项完成更新、成功提交、失败保留、跨根隔离、分页/断线和两跳关联；固定路径与符号见[专项源码证据 §6](../06-CampusClaw计划模式/source-evidence.md#6-todo-update-基线与接入证据)。 |
 
 **讲解要点。** TODO 描述 Agent 报告的步骤进度，方案审核决定是否继续实施，两者职责不同。CampusClaw 借鉴 Claude 的通用工具事件，将完整任务清单放入成功结果，前端只做可重建的投影。这样保持 API 外层稳定，代价是需要工具级解析和批次提交等待；不能把清单完成当作业务验收或 Runtime 终态。
 
@@ -257,6 +259,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-09-14 | 明确规划与实施提示词分工，TODO 仅跟踪 build 实施且逐项更新。 |
 | 1.5.0 | 2026-09-14 | 补充 TODO 复用 Claude 风格通用工具结果的架构取舍、源码差距和验收。 |
 | 1.4.0 | 2026-09-14 | 计划审核沿用事件恢复与执行内校验，不扩充 Session 待审字段。 |
 | 1.3.1 | 2026-09-14 | 明确 Claude 资源部分更新的采纳范围与前端单项调用的区别。 |
