@@ -1,16 +1,16 @@
 # 计划模式接口增量
 
-版本：1.2.0；日期：2026-09-14；状态：**target-only 推荐设计，统一 Session 更新与 requested 模式事件已登记；计划审核部分尚未纳入当前报文源，全部新增能力仍待实现**。
+版本：1.3.0；日期：2026-09-14；状态：**target-only 推荐设计，统一 Session 更新与 requested 模式事件已登记；计划审核部分尚未纳入当前报文源，全部新增能力仍待实现**。
 
 本文件只定义计划功能的新增内容。现有 Header、普通消息、工具确认、ResultBean、SSE 和历史分页继续引用[当前契约](../01-CampusClaw多Agent运行时/chat-api-review.html)。这里的报文属于目标增量示例，正式纳入时移入统一 operation JSON 和 `eventContract`，本文件随后仅保留理由及链接，不产生第二份当前接口契约。
 
-## 1. 统一 Session 更新与审核字段增量
+## 1. Session 配置与审核交互边界
 
 名称、模型、思考和模式已统一登记到 `POST /campusclaw-service/v1/sessions/{sessionId}`（updateSession）。精确请求、单字段与组合示例、原子性、错误和 Header 只由[操作 07](../01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)维护；设计理由见[HTTP 主设计 §2.4](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#24-模型目录与统一-session-更新)。本文件不再维护模式更新报文副本。
 
 mode 已是共享 Session 响应必填字段，创建默认 build；state 仍为 idle/running。仅名称请求可在 running 更新；只要携带 mode/modelId/thinking，均需 idle、If-Match 与一次原子提交。主动设置 build 不批准计划、不启动模型。
 
-计划审核接入时，GET、创建、更新及复用 Session 的 Command 响应还须统一增加 `pendingPlanEventId: string|null`：仅当前有效审核等待时指向 agent.plan.eventId，其他时候为 null。该字段为审核增量，尚未进入当前响应源；它是只读字段，不能由 Session 更新指定或清空。
+GET、创建、更新及复用 Session 的 Command 响应保持同一种 Session 结构，不增加待审核目标字段。计划及审核决定通过 Events 传递，卡片按[主设计 §6.2](README.md#62-恢复与结果不确定)从完整事件恢复。当前待审核目标仅保存在服务端执行控制记录中，确认接受时锁内校验；不新增状态查询接口或可写审核字段。
 
 ## 2. 提交审核决定
 
@@ -136,11 +136,11 @@ reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史�
 
 | 维护位置 | 同批需要完成的增量 |
 |---|---|
-| Runtime catalog / operation JSON | 统一 Session 更新与 mode 已登记；审核接入时同步 pendingPlanEventId，POST 联合输入和 GET 历史增加计划/确认及批准模式事件 |
+| Runtime catalog / operation JSON | 统一 Session 更新与 mode 已登记；Session 响应不增加待审核字段，POST 联合输入和 GET 历史增加计划/确认及批准模式事件 |
 | Runtime eventContract / DTO / VO / 编码器 | 增加三种类型、条件字段和错误码；保留原三种输入、原失败码及分页/凭据边界 |
 | 主接口 HTML 与校验器 | 从统一 JSON 生成；接口数量、完整类型集合、首帧样例和流/历史同形检查同步，不能通过删除既有检查适配新功能 |
 | 内置工具契约 | 登记第九项 ExitPlanMode 和 Runtime 默认 profile；原八项工具 Schema 与 Mate 元数据字段保持原值 |
-| Runtime 调试前端 | Session 类型、Session 更新、审核卡片、确认发送及历史恢复 |
+| Runtime 调试前端 | Session mode 类型与更新；基于事件的审核卡片、确认发送及历史恢复，恢复未完成时禁用审核 |
 | Mate 产品集成 | 公共 Chat 模式配置、确认输入、三类事件投影和双跳 ID 映射单独落到 Mate 契约，接通后才能向企业浏览器开放 |
 
 所有新增失败码同时维护 Java 枚举、resCode 和 MessageSource 同名 key，保持 zh-CN/en-US 键集合一致。新增请求 VO 使用标准 Jakarta 校验，模式/目标/竞争检查放在 Service 与数据库事务，不新增自定义元数据校验注解。

@@ -195,8 +195,8 @@ group Plan mode is active; an ordinary message already started this execution
   Service -> DB : Lock Session and execution; validate active plan mode
   Service -> DB : Append agent.plan + confirming idle;
   note right of DB
-    Same transaction also records the pending plan,
-    closes the current segment and advances ETag.
+    Same transaction records the internal pending plan
+    and closes the current segment.
     Session remains running.
   end note
   DB --> Service : Commit
@@ -250,8 +250,9 @@ end note
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionState.java :: IDLE, RUNNING.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java :: timeout, commitAndRelease.
+' Source: frontend/src/runtime/eventStore.ts :: executionState; the plan projection is target-only.
 ' Observed behavior: confirming closes HTTP output without releasing Session admission.
-' Design reason: target-only mode remains separate from the existing resource state.
+' Design reason: review stays in execution state; clients recover from events, without a Session pointer.
 ' Java divergence: manual mode switching is idle-only; approval exits within the original execution.
 title CampusClaw Plan Mode - Target State and Admission
 skinparam backgroundColor #FFFFFF
@@ -265,7 +266,7 @@ hide empty description
 state "Idle / Build\nstate=idle, mode=build" as Normal
 state "Idle / Planning\nstate=idle, mode=plan" as PlanIdle
 state "Exploring or designing\nstate=running, mode=plan" as Planning
-state "Awaiting plan review\nstate=running, mode=plan\npendingPlanEventId is present" as Reviewing
+state "Awaiting plan review\nstate=running, mode=plan\nExecution: CONFIRMING (internal)" as Reviewing
 state "Implementing\nstate=running, mode=build" as Implementing
 
 [*] --> Normal : create

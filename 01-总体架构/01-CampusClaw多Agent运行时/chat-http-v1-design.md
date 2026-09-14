@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.53.1 |
+| 文档版本 | 1.53.2 |
 | 状态 | 保留九个目标 operation；Events 以 Session Events 已确认目标契约为准；统一 Session 名称、模型、思考、模式 POST 契约；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 已按 B13/B14 对齐；Mate 公共命令独立管理 |
 | 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的七项普通契约与两项 Session Events 模型 |
@@ -429,6 +429,8 @@ Repository 扩展一次性的 `updateConfiguration(sessionId, expectedVersion, c
 | 路由替换 | 移除属性专用 PUT 及其请求 VO/调用点（确认无其他消费者后删除）；不保留 PATCH 或兼容写别名；/name、/model、/thinking 命令仍保留既有入口 |
 | 模式接入 | 按计划专题实现模式持久化、Prompt 与能力检查后再开放 plan；不以接口契约已确认声称计划执行已实现 |
 
+计划审核保持独立的事件交互边界，Session 响应不增加待审核目标字段；客户端恢复与服务端执行内校验见[计划模式 §6.2](../06-CampusClaw计划模式/README.md#62-恢复与结果不确定)。
+
 这是 target-only 增量。沿用 Spring/Jackson/MyBatis 现有依赖，无新增 Maven 依赖。mode 的数据库列与迁移归[计划模式](../06-CampusClaw计划模式/README.md#6-持久化与恢复)；本接口不新增通用 metadata 字段或独立配置表。
 
 管理面 refresh(agentId) 仍只发布新目录，不改 active execution 快照。下一次消息接受时如需模型校准，按既有 model_changed、可选 thinking_changed、user.message 顺序提交；本次 SSE 首帧仍为 user.message。没有有效默认模型时，在 SSE 建立前拒绝且不接受消息。
@@ -823,6 +825,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.53.2 | 2026-09-14 | 计划审核通过 Events 恢复，Session 响应不增加待审核目标。 |
 | 1.53.1 | 2026-09-14 | 明确前端单项提交与 Session 可选字段部分更新的契约边界。 |
 | 1.53.0 | 2026-09-14 | 名称、模型、思考与模式统一通过 Session POST 原子更新。 |
 | 1.52.0 | 2026-09-10 | 新增 `PUT Session Name`，与 `/name` 共用命名服务，直接写入使用 `If-Match` 且 running 期间仍可重命名。 |

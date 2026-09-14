@@ -1,6 +1,6 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.6.3<br>
+> 导航版本：2.6.4<br>
 > 更新日期：2026-09-14<br>
 > 各模块的设计版本、源码基线和实现状态由模块主设计及架构对比条目分别记录。
 
@@ -17,7 +17,7 @@
 |---|---|---|
 | CampusClaw 整体如何运行 | [多 Agent Runtime 总体设计](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | [HTTP API 设计](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)、[HTTP API 评审页](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html) |
 | CampusClaw 与各 Agent 基线有什么架构和实现差异 | [Agent 架构对比](./01-总体架构/07-Agent架构对比/README.md) | [按模块定位主设计](#module-index)、对比条目的源码证据与讲解要点 |
-| 如何通过 Session 更新切换 plan/build 并保持元数据稳定 | [计划模式目标设计](./01-总体架构/06-CampusClaw计划模式/README.md) | [接口增量](./01-总体架构/06-CampusClaw计划模式/interface-delta.md)、[全局目标类图](./01-总体架构/06-CampusClaw计划模式/plan_mode_target_classes.svg) |
+| 如何切换 plan/build、保持元数据稳定并通过事件恢复审核 | [计划模式目标设计](./01-总体架构/06-CampusClaw计划模式/README.md) | [接口增量](./01-总体架构/06-CampusClaw计划模式/interface-delta.md)、[全局目标类图](./01-总体架构/06-CampusClaw计划模式/plan_mode_target_classes.svg) |
 | Tool 如何装配、发现和执行 | [CampusClaw 工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具精确契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md) |
 | 前端如何展示 Runtime 状态 | [CampusClaw 前端体验设计](./01-总体架构/04-CampusClaw前端体验/README.md) | [前端评审页](./01-总体架构/04-CampusClaw前端体验/frontend-review.html)、[Slash Command 前端专项](./04-命令与技能/00-Slash-Command通用模块/前端设计/README.md) |
 | 文件、配置和 Model Manager 边界 | [服务与接口导航](./02-服务与接口/README.md) | 附件服务、共享配置、Provider 契约和 HTTP 测试 Agent |
@@ -129,6 +129,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.4 | 2026-09-14 | 计划模式导航明确审核通过事件恢复。 |
 | 2.6.3 | 2026-09-14 | 导航补充 Session 部分更新与前端单项调用边界。 |
 | 2.6.2 | 2026-09-14 | 同步 Session 更新承载 plan/build 的设计入口。 |
 | 2.6.1 | 2026-09-14 | 增加 DeepSeek 计划模式设计、接口增量和全局类图入口。 |

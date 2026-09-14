@@ -24,7 +24,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "仅接受 displayName、modelId、thinking、mode，四项均可省略但至少提交一项；未提交字段保留（仅切换模型时可按能力自动关闭未提交的 thinking）。显式 null、空对象、类型强转、重复 JSON 键、未知字段和只读字段均拒绝。displayName 去除首尾空白后非空，保留内部空白，禁止 CR/LF、C0/C1 控制字符与双向文本覆盖/隔离字符，UTF-8 最多 80 字节。thinking 是 boolean，不接收 level/reasoningEffort；mode 只接受 plan/build。ID、state、pendingPlanEventId、usage 和时间戳不可写，不接收 provider、凭据或 Idempotency-Key；不在请求 VO 设置默认值。",
+      "description": "仅接受 displayName、modelId、thinking、mode，四项均可省略但至少提交一项；未提交字段保留（仅切换模型时可按能力自动关闭未提交的 thinking）。显式 null、空对象、类型强转、重复 JSON 键、未知字段和只读字段均拒绝。displayName 去除首尾空白后非空，保留内部空白，禁止 CR/LF、C0/C1 控制字符与双向文本覆盖/隔离字符，UTF-8 最多 80 字节。thinking 是 boolean，不接收 level/reasoningEffort；mode 只接受 plan/build。ID、state、usage 和时间戳不可写，不接收 provider、凭据或 Idempotency-Key；不在请求 VO 设置默认值。",
       "example": {
         "displayName": "园区网络故障分析"
       },

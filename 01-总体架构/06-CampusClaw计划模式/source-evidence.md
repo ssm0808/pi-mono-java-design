@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：1.2.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：1.3.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
 ## 1. 固定提交
 
@@ -75,16 +75,26 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 | `persistence/MyBatisRuntimeExecutionControlRepository.java` | `markConfirming`、`acceptConfirmation`、`claimConfirmation`、`persistConfirmation` | 锁 Session/执行、登记续跑段、保存决定、原执行至多领取一次；不是自动接管失联执行 |
 | `event/RuntimeExecutionCoordinator.java` | `scheduleTimeout`、`timeout`、`commitAndRelease` | maxDuration 覆盖整个执行，取消 pending confirmation；可靠终态提交后释放资源，失败保留执行并重试终态 |
 | `runtime/RuntimeSessionEngineRegistry.java` | `register`、`createSession`、`complete` | 仅保存活动执行，idle 不缓存 Agent；新执行必须重新读取持久化模式 |
-| `session/RuntimeSessionResponseAssembler.java` | `getView`、`createView` | Session DTO 统一转换 VO 与 ETag；新模式及待审指针应在此统一投影 |
-| `vo/GetSessionResponseVO.java` | 字段集合 | 当前无 mode/pendingPlanEventId；不能把推荐字段标成现有接口 |
+| `session/RuntimeSessionResponseAssembler.java` | `getView`、`createView` | Session DTO 统一转换 VO 与 ETag；目标只补 mode，不投影执行内部待审核目标 |
+| `vo/GetSessionResponseVO.java` | 字段集合 | 当前无 mode，也不暴露待确认工具；本专题仅补工作模式，不增加待审核目标字段 |
 | `event/RuntimeEntryCodec.java` | `effectiveContextEntries`、模型消息转换 | 历史与模型上下文分离；新增计划展示事件不能重复变成模型消息 |
 
-### 4.3 存储与工具元数据
+### 4.3 客户端确认恢复
+
+以下文件实际核对 Java 仓库同一提交 `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`，行号取该提交。它们证明既有工具确认的事件恢复方式；计划分支仍为 target-only。
+
+| 仓库相对路径 / 符号 | 已观察行为 | 计划设计用途 |
+|---|---|---|
+| `frontend/src/runtime/eventStore.ts` · `hasToolConfirmation`、`executionState`（27～51 行） | 从最近根消息、工具调用/结果、确认回执和 idle reason 计算 pendingTool、confirming 及中断状态，不读取 Session 待确认指针 | 增加计划事件与精确 targetEventId 的投影；不把缺失的分页记录当成仍可批准 |
+| `frontend/src/composables/useRuntimeApi.ts` · `loadHistory`、`recover`（161～207 行）、`confirmTool`（339～343 行） | 分页补读后刷新 Session，状态矛盾时提示核对；工具确认同时检查 running、停止状态及事件投影 | 审核恢复沿用事件加 Session 概况对账，前端状态不能替代服务器准入 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java` · `markConfirming`（116～141 行）、`acceptConfirmation`（145～170 行）、`rejectConfirmation`（374～386 行） | 工具等待保存在执行记录；接受时锁 Session/执行，拒绝停止中、非 CONFIRMING 或 pendingToolCallId 不匹配 | 保留内部待审核记录、精确目标检查与决定单次接受；无需增加 Session 公共待审核字段 |
+
+### 4.4 存储与工具元数据
 
 | 仓库相对路径 | 已观察事实 |
 |---|---|
 | `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql` · t_sessions / t_session_executions / t_session_tool_confirmations | 已有 Session 配置、根执行、段和工具决定表；没有本设计的 mode、pending_plan_event_id 或计划决定表 |
-| `modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · markSessionRunning / markSessionIdle / 配置更新 | Session 状态/配置变化更新 resource_version；目标将新增待审核响应字段纳入同源版本维护 |
+| `modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · markSessionRunning / markSessionIdle / 配置更新 | Session 状态/配置变化更新 resource_version；保留其版本规则，不因内部待审核指针变化单独推进版本 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/dto/ToolInfo.java` | Mate 工具原始元数据 DTO；本设计不扩充字段 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/mate/MateToolMeta.java` | 七项投影：toolId、toolName、description、inputSchema、outputSchema、isConcurrencySafe、permission；本设计保持 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateToolsTool.java` · stableJson | 模型只看到 scope 和 name/description/inputSchema；不增加计划字段或计划专用工具定义 |

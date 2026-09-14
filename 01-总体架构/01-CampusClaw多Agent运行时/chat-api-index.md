@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.1 |
+| 文档版本 | 1.5.2 |
 | 更新日期 | 2026-09-14 |
 | 设计仓变更前基线 | `2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9`（1.2.0 清理起点） |
 | 变更性质 | Session POST 按可选字段部分更新；前端单项调用，接口允许组合提交；组合写入及 mode 为 target-only |
@@ -99,12 +99,13 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 | `vo/UserEventRequestVO.java` · message/fileIds/rejectUnknownField | 旧 message/fileIds 请求形状；页面整理不等于完成实现迁移 |
 | `web/RuntimeSessionControlController.java` · steer/followUp/abort | 该提交仍声明三个独立控制接口，设计退役与代码删除属于不同交付 |
 
-本次统一 Session 更新已纳入当前精确源，包含 mode 和 requested 模式历史；计划审核输入、待审核指针及 planApproved 扩展仍由[计划接口增量](../06-CampusClaw计划模式/interface-delta.md)维护，不能将其标为已纳入当前事件联合类型。
+本次统一 Session 更新已纳入当前精确源，包含 mode 和 requested 模式历史；计划审核输入及 planApproved 扩展仍由[计划接口增量](../06-CampusClaw计划模式/interface-delta.md)维护，不能将其标为已纳入当前事件联合类型。
 
 ## 5. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.2 | 2026-09-14 | 计划审核目标保留在执行内部，接口清单不增加 Session 待审字段。 |
 | 1.5.1 | 2026-09-14 | 同步前端单项调用、接口允许组合提交的 Session 更新说明。 |
 | 1.5.0 | 2026-09-14 | 当前清单收敛为九项，四类 Session 修改共用 POST。 |
 | 1.4.0 | 2026-09-10 | 将独立 Session 重命名纳入当前十一项契约，明确它与 `/name` 共用服务且尚待实现。 |

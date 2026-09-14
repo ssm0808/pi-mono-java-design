@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.2.0 |
+| 文档版本 | 1.3.0 |
 | 更新日期 | 2026-09-14 |
 | 状态 | 推荐目标设计，target-only；本次不修改产品实现 |
 | 计划模式主基线 | DeepSeek Harness `0a53fb55bea101816fa226bb964ae2bed71c343b`，`dsh-0.1.2-alpha.2` |
@@ -25,7 +25,7 @@
 - **复用现有执行。** 继续使用 POST Events 对应 SSE、GET 历史、固定根消息和内部续跑段；等待审核期间 Session 仍为 `running`，不接受第二条普通消息。
 - **保持工具定义跨模式一致。** Runtime profile 增加一个内置工具 `ExitPlanMode`，在普通模式和计划模式中都保持注册。新增工具名称不等于新增元数据字段；普通模式调用它返回模式不匹配错误。
 
-统一更新及 mode 已纳入[当前九项契约](../01-CampusClaw多Agent运行时/接口契约/catalog.json)，语义由[HTTP 主设计](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#24-模型目录与统一-session-更新)唯一维护。计划审核输入、pendingPlanEventId 和批准事件仍为[接口增量](interface-delta.md)，尚未进入当前 JSON 源；不能据此声称客户端或服务端已支持完整计划审核。
+统一更新及 mode 已纳入[当前九项契约](../01-CampusClaw多Agent运行时/接口契约/catalog.json)，语义由[HTTP 主设计](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#24-模型目录与统一-session-更新)唯一维护。计划审核输入和批准事件仍为[接口增量](interface-delta.md)，尚未进入当前 JSON 源；不能据此声称客户端或服务端已支持完整计划审核。
 
 ### 1.2 与 DeepSeek 的对应及差异
 
@@ -65,7 +65,7 @@
 | running | plan | 有 | 等待计划审核；接受针对该 eventId 的批准/修订，或中断 |
 | running | build | 无 | 普通执行或批准后的实施；权限确认仍独立适用 |
 
-`session.status_idle(reason=confirming)` 继续表达“当前 HTTP 交互结束、执行等待用户确认”，不增加粗粒度 Session 状态。前端根据 `agent.plan` 和 Session 的 `pendingPlanEventId` 显示计划审核卡片；工具权限确认继续使用 `agent.tool_call.requiresConfirmation`。
+`session.status_idle(reason=confirming)` 继续表达“当前 HTTP 交互结束、执行等待用户确认”，不增加粗粒度 Session 状态。前端根据完整计划、审核决定与结束事件恢复审核卡片，规则见 [§6.2](#62-恢复与结果不确定)；Session 响应不暴露待审核目标。工具权限确认继续使用 `agent.tool_call.requiresConfirmation`。
 
 ![计划模式状态与准入](plan_mode_state.svg)
 
@@ -173,7 +173,7 @@ Session 是配置权威资源。当前九项目标契约以统一 POST 更新名
 | 接口 | 目标增量 |
 |---|---|
 | `POST /campusclaw-service/v1/sessions/{sessionId}` | 已登记四字段部分更新；含 mode/modelId/thinking 时要求 idle，仅名称可在 running 更新；统一要求 `If-Match`、原子提交与同源 Session/ETag |
-| `GET /campusclaw-service/v1/sessions/{sessionId}` | `mode` 已进入共享响应源；可空 `pendingPlanEventId` 仍为审核增量，接入时同步所有完整 Session 响应 |
+| `GET /campusclaw-service/v1/sessions/{sessionId}` | `mode` 已进入共享响应源；Session 响应不增加待审核目标，审核卡片由 Events 恢复 |
 | `POST /campusclaw-service/v1/sessions/{sessionId}/events` | 在原三类输入上增加 `user.plan_confirmation`；复用接受回执和对应续跑 SSE |
 | `GET /campusclaw-service/v1/sessions/{sessionId}/events` | requested 的 `session.mode_changed` 已登记；完整 `agent.plan`、`user.plan_confirmation` 与 planApproved 模式事件仍为审核增量 |
 
@@ -223,14 +223,23 @@ Session 是配置权威资源。当前九项目标契约以统一 POST 更新名
 
 主键为 `(session_id, confirmation_event_id)`；唯一约束为 `(session_id, target_event_id)` 和 `(session_id, execution_id, segment_id)`。仅 revise 可带反馈，时间戳与消费状态约束对齐现有工具决定表。所有追加与查询都带 Session 条件，不单凭 eventId 查询跨 Session 内容。新表必须纳入 Session 删除/保留清理，清理顺序先决定及引用、后执行和事件；SQL COMMENT 使用中文。
 
-`pendingPlanEventId` 是 GetSession 对当前执行待审核指针的投影，不在 `t_sessions` 再保存一份指针。开始审核、接受决定、取消和终态导致此投影变化时，在同一 Session 锁内更新 `resource_version/updated_at`；返回值和 ETag 通过同一条查询快照组装。普通历史分页不作为可批准状态的权威。
+`pending_plan_event_id` 仅属于当前执行的内部控制状态，不投影到 Session 响应，也不在 `t_sessions` 再保存一份指针。它与计划事件、确认决定和执行段在同一事务内维护；不为该内部指针单独增加 Session 的 `resource_version/updated_at` 变更。mode、state 等公共资源变化继续按既有规则维护版本及同源 ETag。
+
+这一边界沿用当前工具确认：客户端从事件计算展示状态，服务端从锁内执行记录判断是否仍可接受决定。减少 Session 响应与具体交互类型的耦合，代价是刷新审核卡需要补齐相关事件，GET Session 本身不能定位待审核方案。该差异属于架构变更；普通历史分页和页面可点击状态均不作为提交准入的权威。
 
 ### 6.2 恢复与结果不确定
 
+审核卡片复用既有工具确认的事件恢复方式，以下计划分支为 target-only：
+
+1. 从完整事件历史确定最近一条 `user.message` 的根消息 eventId；只处理属于该根消息的计划、工具结果和结束事件。`user.plan_confirmation` 通过 `targetEventId` 关联计划，不按最后一段 Markdown 或时间戳猜测目标。
+2. 完整 `agent.plan` 负责正文展示；其后的对应 `session.status_idle(reason=confirming)` 表示本段进入等待。确认回执、对应 ExitPlanMode 的工具结果、中断请求或真实终态出现后，旧计划不再提供审核按钮。修订后的新计划使用新 eventId；历史方案仍可展示。
+3. 刷新时沿用 `loadHistory` 分页补读，再读取 Session 的 mode/state 并按 eventId 对账。历史尚未补齐、缺少关联记录、正在停止或 Session 状态与事件矛盾时禁用审核，显示恢复中或待核对。不能仅凭某页未出现确认记录断言仍可批准；分页读完也不是跨请求固定快照。
+4. 事件投影只决定客户端展示，确认请求始终由服务端在锁内复核当前等待类型、计划 eventId、分支及停止状态。其他客户端已先处理时返回接口增量定义的冲突错误，刷新历史和 Session，不自动重放确认。
+
 | 场景 | 目标行为 |
 |---|---|
-| 浏览器刷新 / SSE 断开 | GET Session 获取模式和当前待审 eventId；分页 GET Events 恢复正文与决定，按 eventId 去重；不自动重发消息或确认 |
-| 计划帧丢失，但原执行仍在等待 | 从历史找到 `pendingPlanEventId` 对应完整计划，恢复同一审核卡片；确认使用新 POST |
+| 浏览器刷新 / SSE 断开 | 分页 GET Events 恢复计划、决定及结束记录，GET Session 核对 mode/state；按上述事件规则恢复审核卡，不自动重发消息或确认 |
+| 计划帧丢失，但原执行仍在等待 | 补齐当前根消息的完整计划和确认等待记录后恢复卡片；读到确认、结果或终态即移除旧审核操作，缺失记录时保持待核对 |
 | 确认由另一实例接收 | 决定入库；原持有执行和凭据的实例领取，接收实例按固定新段读取已提交结果；本地 preview 不承诺跨实例重放 |
 | 批准回执丢失 | 查询目标计划后是否已有确认记录，并读取 Session/后续事件；已接受的确认不重发，EOF 不代表执行成功 |
 | 执行达到既有 maxDuration | 审核等待计入现有执行时限，不无限占用活动容量；取消等待，按既有可靠收尾提交真实终态，不能把超时当成批准 |
@@ -242,7 +251,7 @@ Session 是配置权威资源。当前九项目标契约以统一 POST 更新名
 
 ## 7. 前端与 Mate 边界
 
-CampusClaw 自带 Runtime 调试前端可以直接消费本专题的内部 Session 契约。页面显示独立的模式开关和审核卡片；`running` 时禁用手动切换，审核按钮绑定 eventId 而非“最后一段 Markdown”。提交按钮点击后进入提交中，不能重复创建确认请求；409 后重新获取 Session 和历史。
+CampusClaw 自带 Runtime 调试前端可以直接消费本专题的内部 Session 契约。页面显示独立的模式开关和审核卡片；`running` 时禁用手动切换，审核按钮绑定 eventId 而非“最后一段 Markdown”；卡片恢复按 [§6.2](#62-恢复与结果不确定)处理，Session 类型不新增待审核字段。提交按钮点击后进入提交中，不能重复创建确认请求；409 后重新获取 Session 和历史。
 
 只有收到并对账到服务端接受决定，才显示“已批准”或“已退回修改”；生成方案结束、关闭 SSE、普通回答中的肯定文本都不能触发执行。计划 Markdown 按前端现有安全渲染规则显示，不执行其中 HTML/脚本，外链与工具调用不由文档内容自动触发。
 
@@ -257,8 +266,8 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 | S1：模式骨架 | Session 更新入口、mode 列、DTO/VO、ETag、既有配置服务、工厂提示词、默认 build | 统一 POST 按提交字段更新四类属性，拒绝只读字段，未提交属性保持；双 Session 隔离；模式与消息接受竞争使用事务快照；相同值不新增事件；新 Session 默认为 build、持久化后按实际 mode 恢复；元数据 JSON 字段完全不变 |
 | S2：稳定工具与审核 | ExitPlanMode 工厂/profile、PlanReviewPort/Adapter、独占审核调用、统一待交互对象 | 普通/计划两次请求工具定义和顺序相同；非计划调用失败；未配置退出工具不能进入计划；无新增权限判断 |
 | S3：事务与续跑 | 三种新事件、审核决定表、控制轮询、原执行续跑段、提示词退出 | 批准指向精确计划；修订后旧ID失效；跨实例决定只领取一次；完整回执先行；旧 SSE 不接收新段；工具调用/结果无重复 |
-| S4：取消和恢复 | GET Session/历史投影、超时、中断、删除清理、压缩与 Child | approve/revise/interrupt 竞争；两类确认不能互相消费；断线无重放；未可靠结束不释放准入；批准后新 Child 使用 build；摘要不修改模式 |
-| S5：客户端与契约发布 | 统一 catalog/operation JSON、生成 HTML、Runtime 前端、所需 Mate 公共投影 | Session 更新成功与 ETag 同源；两跳不泄露 ID/凭据；审核卡刷新恢复；未知事件版本兼容；UI 接受才标记批准 |
+| S4：取消和恢复 | GET Session/历史投影、超时、中断、删除清理、压缩与 Child | approve/revise/interrupt 竞争；两类确认不能互相消费；断线无重放；分页未补齐与 Session/事件矛盾时不开放审核；已确认或终止的旧计划不可重审；未可靠结束不释放准入；批准后新 Child 使用 build；摘要不修改模式 |
+| S5：客户端与契约发布 | 统一 catalog/operation JSON、生成 HTML、Runtime 前端、所需 Mate 公共投影 | Session 更新成功与 ETag 同源；两跳不泄露 ID/凭据；审核卡从完整事件恢复；创建/GET/更新/Command 的完整 Session 均不含待审核目标；内部待审指针不单独推进 Session 版本；未知事件版本兼容；UI 接受才标记批准 |
 
 规划行为还需要模型级场景评估：查询型工具可用、混合查询/修改工具依描述选参、Cron 管理/触发属于规划期不应执行的动作、用户口头同意不自动退出、Child 返回待决问题、资料中的诱导执行指令不能改变计划约束。这些评估衡量提示词遵循情况，不宣称证明了强制无副作用。
 
@@ -274,6 +283,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-09-14 | 计划审核通过事件恢复，待审核目标仅保留在执行内部。 |
 | 1.2.0 | 2026-09-14 | 模式写入并入四字段统一 Session POST，复用原子更新与条件准入。 |
 | 1.1.0 | 2026-09-14 | 将 plan/build 归入 Session 资源更新，统一 mode 字段及既有配置服务接入。 |
 | 1.0.0 | 2026-09-14 | 基于 DeepSeek 在现有 Session、工具和事件控制框架上定义稳定元数据的计划模式与审核续跑。 |
