@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.53.0",
+    "version": "1.54.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -78,7 +78,7 @@
     }
   },
   "eventContract": {
-    "version": "2026-09-15.1",
+    "version": "2026-09-15.2",
     "semanticStatus": "confirmed",
     "detailStatus": "implementation-ready",
     "toolErrorCodes": {
@@ -101,6 +101,14 @@
       "TOOL_EXECUTION_FAILED": {
         "zh-CN": "工具执行失败，请核对执行结果。",
         "en-US": "Tool execution failed. Check the execution outcome."
+      },
+      "PLAN_MODE_INACTIVE": {
+        "zh-CN": "当前不是计划模式，不能提交方案审核。",
+        "en-US": "The current mode is not plan; a proposal cannot be submitted for review."
+      },
+      "PLAN_REVIEW_UNAVAILABLE": {
+        "zh-CN": "当前无法提交计划审核。",
+        "en-US": "Plan review is currently unavailable."
       }
     },
     "executionErrorCodes": {
@@ -132,10 +140,12 @@
       "user.message",
       "user.interrupt",
       "user.tool_confirmation",
+      "user.plan_confirmation",
       "agent.message",
       "agent.thinking",
       "agent.tool_call",
       "agent.tool_result",
+      "agent.plan",
       "agent.todo_updated",
       "session.status_idle",
       "session.model_changed",
@@ -147,7 +157,7 @@
   "contractSections": {
     "events0": {
       "title": "完整事件字段（已确认目标契约）",
-      "description": "GET 历史与 POST 完整 SSE 使用同一投影；delta/心跳不入历史。表中条件外字段省略，null 不等于省略。配置事件只出现在历史；自动压缩可出现在所属 SSE，手动 compact 仍返回 JSON。",
+      "description": "GET 历史与 POST 完整 SSE 使用同一投影；delta/心跳不入历史。表中条件外字段省略，null 不等于省略。主动配置变更只进入历史；计划批准的模式变更进入确认续跑 SSE 与历史；自动压缩可出现在所属 SSE，手动 compact 仍返回 JSON。",
       "columns": [
         "事件范围",
         "字段",
@@ -186,6 +196,12 @@
           "result=allow/deny；denyMessage 仅 deny 可选非空文本，最多 4096 UTF-16 单元；allow 禁止带该字段。一次仅一个待确认调用。工具结果按 sourceEventId 与 toolCallId 关联；确认回执只匹配对应调用之后、下一条 user.message 之前的提交顺序。输入框的较小上限不用于响应解码。"
         ],
         [
+          "user.plan_confirmation",
+          "targetEventId/result/feedback",
+          "targetEventId、result 必填",
+          "targetEventId 为非空不透明字符串，最多 128 UTF-16 单元，精确引用当前待审核 agent.plan.eventId；result=approve/revise。feedback 仅 revise 可选，出现时非空且最多 4096 UTF-16 单元；approve 禁止此字段（含 null）。无 phase/sourceEventId，按 targetEventId 关联方案及原根执行。"
+        ],
+        [
           "agent.message / agent.thinking",
           "phase/content",
           "必填字符串",
@@ -208,6 +224,12 @@
           "toolCallId/content/isError/errorCode",
           "前三项必填",
           "content 至少一个且仅 text/text 字符串块，允许空字符串和多个块；isError 必须布尔。失败必有下表稳定 errorCode，成功必须省略；不另设 errorMessage/status/details。"
+        ],
+        [
+          "agent.plan",
+          "toolCallId/content",
+          "全部必填字符串",
+          "完整待审核 Markdown，无 phase。toolCallId 非空；content 原样等于唯一 ExitPlanMode ToolCall 的 plan，首个非空行以 # 开始（# 后必须空格），最多 262144 UTF-16 单元并满足完整帧容量。修订生成新 eventId，不改已提交正文；不要求独立文件，不增加 planId/version。"
         ],
         [
           "agent.todo_updated",
@@ -235,9 +257,9 @@
         ],
         [
           "session.mode_changed",
-          "previousMode/mode/reason",
-          "全部必填",
-          "完整模式事件；previousMode 与 mode 为不同的 plan/build 值，reason=requested。由统一 Session POST 产生，只进入历史；无 phase/sourceEventId，不进入模型上下文。计划批准产生的扩展字段由计划审核专题另行维护。"
+          "previousMode/mode/reason/sourceEventId/confirmationEventId",
+          "前三项必填；后两项条件必填",
+          "previousMode 与 mode 为不同的 plan/build 值，无 phase。reason=requested 由 Session POST 产生，仅进入历史，省略 sourceEventId/confirmationEventId；reason=planApproved 必须 plan→build，sourceEventId 引用原 user.message，confirmationEventId 引用本次 approve 回执，进入确认续跑 SSE 与历史。均不作为模型角色消息。"
         ],
         [
           "session.compacted",
@@ -280,6 +302,16 @@
           "TOOL_EXECUTION_FAILED",
           "工具执行失败，请核对执行结果。",
           "Tool execution failed. Check the execution outcome."
+        ],
+        [
+          "PLAN_MODE_INACTIVE",
+          "当前不是计划模式，不能提交方案审核。",
+          "The current mode is not plan; a proposal cannot be submitted for review."
+        ],
+        [
+          "PLAN_REVIEW_UNAVAILABLE",
+          "当前无法提交计划审核。",
+          "Plan review is currently unavailable."
         ]
       ]
     },
@@ -327,6 +359,10 @@
         "处理"
       ],
       "rows": [
+        [
+          "计划审核（target-only）",
+          "agent.plan 与 confirming 同事务提交后关闭原 SSE，Session 保持 running/plan。审核精确绑定方案 eventId，普通肯定文本不批准。approve 原子保存决定、续跑段、build 模式和模式事件；回执先行，原执行更新提示词后返回工具结果；revise 保持 plan 并提交新方案。两类确认共享至多一个等待点，不能互相消费；中断先提交则拒绝确认，断线补历史不重放 POST。"
+        ],
         [
           "任务快照（target-only）",
           "TodoUpdate 仅用于 build 实施，plan 调研不记录清单。工具结果与 agent.todo_updated 用独立 eventId，同一 ToolResult Entry/事务按顺序保存，提交后依次发送；SSE 与 GET 同形。任务事件不更新 mode/ETag、不表示执行终态；按原 sourceEventId 隔离，新根重新开始。完整事件缺页时先对账，不自动重发写请求。读取端新增类型支持后再启用工具生产；Mate 公共投影需独立同步。"

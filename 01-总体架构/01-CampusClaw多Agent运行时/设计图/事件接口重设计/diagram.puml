@@ -88,7 +88,7 @@ package "Application - singleton" as PApp {
 package "Input dispatch - singleton" as PInput {
   class "SessionEventHandlerRegistry" as Registry
   interface "SessionEventHandler" as Handler
-  class "3 typed user event handlers" as Handlers
+  class "4 typed user event handlers" as Handlers
 }
 package "Runtime and observation" as PRun {
   class "RuntimeExecutionCoordinator" as Runtime <<singleton>>
@@ -116,7 +116,7 @@ Writer -[norank]-> Stream
 App --> Registry
 Handlers -[hidden]down-> Runtime
 Runtime -[hidden]down-> Repo
-Registry o-- "3" Handler
+Registry o-- "4" Handler
 Handler <|.. Handlers
 Handlers --> Runtime
 Handlers -[norank]-> Append

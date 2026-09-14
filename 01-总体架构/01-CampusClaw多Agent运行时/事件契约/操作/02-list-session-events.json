@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}/events",
     "summary": "分页查询与 POST SSE 一致的完整事件",
-    "description": "GET/POST Events 与 Skill 已完成目标契约对齐；这是目标设计，尚未修改 CampusClaw 实现。保留 GET 历史查询，不恢复 GET /events/stream。普通分页已确认：page 从 1 开始，按旧到新的已提交内部顺序返回；nextPage 是下一页整数或 null，不是加密游标。不再固定快照，不增加快照标识、游标密钥或过期时间。每页读取该次查询可见的当前分支完整事件，跨页保持相同 limit；同一分支和过滤条件不变且仅尾部追加时，已有记录的位置不移动，新事件可以进入后续页。分支、过滤条件或历史可见范围改变时，从 page=1 重新加载；本接口不承诺自动检测跨页变化。nextPage=null 仅表示本次查询没有下一页，不表示执行已结束或以后不会新增事件。允许 Session running 时查询，不占用消息执行准入名额。分页数量已确认：省略 limit 时返回最多 50 条，允许 1～200；result 只含 events 和 nextPage，不返回 total。普通 JSON 响应继续使用 ResultBean。L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null，不作为分页参数错误；此规则以 Session 存在、访问检查及查询成功为前提，不掩盖非法参数或读取失败。三类已接受的 user.* 回执与 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 使用 POST SSE 的相同 eventId、createdAt 和业务字段；正文/思考只返回 phase=completed，不返回 delta、心跳或连接结束标记。客户端保持数组顺序，不按 createdAt 重排，不公开 entryId、entrySeq 或执行标识。B05 已确认：按执行时 thinking 开关保存模型返回的可读原始推理，之后关闭 thinking 不隐藏既有思考原文；每页重新检查访问边界，页码不是访问凭据。中断回执只表示已接受；相同停止 idle 在历史中只出现一次。等待确认的 idle 不能解除 M1 的 running 状态；不能用某条历史 idle 判定现在可提交 M2。只读接口不要求 access-token，不创建执行凭据、不调用 Mate 工具，所有凭据都不进入历史或日志。B01～B15 已确认；配置变更、压缩、Usage 已按 B12 补齐统一 Session Events 映射，不能因基础示例未列出而删除既有能力。CampusClaw 内部 sessionId 不直接暴露给浏览器；Thinking 原文规则由 Mate 公共 API 共用。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。 B09 已确认输出用 sourceEventId 关联原消息；先按 eventId 合并，再判断该原消息的对应终态。工具错误文本和已保存思考原文按保存值读取，GET 的 Accept-Language 只影响本次 JSON 错误 resMsg，不重写历史事件。 执行进度已登记为 target-only agent.todo_updated：后端从 TodoUpdate 最终成功结果生成完整 todos，与工具结果同事务保存；前端直接消费任务事件，SSE 与历史同形。plan 不记录调研 TODO。",
+    "description": "GET/POST Events 与 Skill 已完成目标契约对齐；这是目标设计，尚未修改 CampusClaw 实现。保留 GET 历史查询，不恢复 GET /events/stream。普通分页已确认：page 从 1 开始，按旧到新的已提交内部顺序返回；nextPage 是下一页整数或 null，不是加密游标。不再固定快照，不增加快照标识、游标密钥或过期时间。每页读取该次查询可见的当前分支完整事件，跨页保持相同 limit；同一分支和过滤条件不变且仅尾部追加时，已有记录的位置不移动，新事件可以进入后续页。分支、过滤条件或历史可见范围改变时，从 page=1 重新加载；本接口不承诺自动检测跨页变化。nextPage=null 仅表示本次查询没有下一页，不表示执行已结束或以后不会新增事件。允许 Session running 时查询，不占用消息执行准入名额。分页数量已确认：省略 limit 时返回最多 50 条，允许 1～200；result 只含 events 和 nextPage，不返回 total。普通 JSON 响应继续使用 ResultBean。L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null，不作为分页参数错误；此规则以 Session 存在、访问检查及查询成功为前提，不掩盖非法参数或读取失败。三类已接受的 user.* 回执与 agent.message、agent.thinking、agent.tool_call、agent.tool_result、session.status_idle 使用 POST SSE 的相同 eventId、createdAt 和业务字段；正文/思考只返回 phase=completed，不返回 delta、心跳或连接结束标记。客户端保持数组顺序，不按 createdAt 重排，不公开 entryId、entrySeq 或执行标识。B05 已确认：按执行时 thinking 开关保存模型返回的可读原始推理，之后关闭 thinking 不隐藏既有思考原文；每页重新检查访问边界，页码不是访问凭据。中断回执只表示已接受；相同停止 idle 在历史中只出现一次。等待确认的 idle 不能解除 M1 的 running 状态；不能用某条历史 idle 判定现在可提交 M2。只读接口不要求 access-token，不创建执行凭据、不调用 Mate 工具，所有凭据都不进入历史或日志。B01～B15 已确认；配置变更、压缩、Usage 已按 B12 补齐统一 Session Events 映射，不能因基础示例未列出而删除既有能力。CampusClaw 内部 sessionId 不直接暴露给浏览器；Thinking 原文规则由 Mate 公共 API 共用。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。 B09 已确认输出用 sourceEventId 关联原消息；先按 eventId 合并，再判断该原消息的对应终态。工具错误文本和已保存思考原文按保存值读取，GET 的 Accept-Language 只影响本次 JSON 错误 resMsg，不重写历史事件。 执行进度已登记为 target-only agent.todo_updated：后端从 TodoUpdate 最终成功结果生成完整 todos，与工具结果同事务保存；前端直接消费任务事件，SSE 与历史同形。plan 不记录调研 TODO。 计划制作、批准执行与修订的完整事件已登记，与 POST SSE 共用同形记录。agent.plan 的正文来自退出工具，确认以 targetEventId 绑定这一版；planApproved 模式事件同时引用原根与批准回执。",
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -780,6 +780,473 @@
                   "sourceEventId": "c0000000000000000000000000000001",
                   "createdAt": "2026-09-08T02:30:05.000Z",
                   "reason": "done"
+                }
+              ],
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "200-plan-approved",
+        "status": "200",
+        "tabLabel": "200 · 计划制作与批准执行历史",
+        "label": "OK",
+        "summary": "独立场景，显式使用 ?page=1&limit=50；完整事件按提交顺序排列，SSE中的 delta/心跳不入历史。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "eventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "type": "user.message",
+                  "createdAt": "2026-09-03T08:30:15.123Z",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
+                    },
+                    {
+                      "type": "file",
+                      "fileId": "7f12d8a380964fdc8518f48be1cf6a42"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "evt-plan-example-1",
+                  "type": "agent.thinking",
+                  "createdAt": "2026-09-15T06:00:01.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "phase": "completed",
+                  "content": "先核对资料，再给出报告制作和数据校验方案。"
+                },
+                {
+                  "eventId": "evt-plan-example-2",
+                  "type": "agent.tool_call",
+                  "createdAt": "2026-09-15T06:00:02.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_query",
+                  "toolName": "CallMateTool",
+                  "arguments": {
+                    "tool": "inspect_campus_ports",
+                    "args": {}
+                  },
+                  "requiresConfirmation": false
+                },
+                {
+                  "eventId": "evt-plan-example-3",
+                  "type": "agent.tool_result",
+                  "createdAt": "2026-09-15T06:00:03.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_query",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "查询资料已返回，可按现有巡检记录生成报告。"
+                    }
+                  ],
+                  "isError": false
+                },
+                {
+                  "eventId": "evt-plan-example-4",
+                  "type": "agent.tool_call",
+                  "createdAt": "2026-09-15T06:00:04.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_01",
+                  "toolName": "ExitPlanMode",
+                  "arguments": {
+                    "plan": "# 园区巡检报告制作计划\n\n## 实施步骤\n1. 根据巡检记录生成异常告警报告。\n2. 校验报告数据并整理处理建议。\n\n## 验收标准\n报告覆盖附件中的异常记录，建议与核验结果一致。"
+                  },
+                  "requiresConfirmation": false
+                },
+                {
+                  "eventId": "evt-plan-H7qJ4mS9vT2c",
+                  "type": "agent.plan",
+                  "createdAt": "2026-09-15T06:00:05.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_01",
+                  "content": "# 园区巡检报告制作计划\n\n## 实施步骤\n1. 根据巡检记录生成异常告警报告。\n2. 校验报告数据并整理处理建议。\n\n## 验收标准\n报告覆盖附件中的异常记录，建议与核验结果一致。"
+                },
+                {
+                  "eventId": "evt-plan-example-6",
+                  "type": "session.status_idle",
+                  "createdAt": "2026-09-15T06:00:06.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "reason": "confirming"
+                },
+                {
+                  "eventId": "evt-plan-example-7",
+                  "type": "user.plan_confirmation",
+                  "createdAt": "2026-09-15T06:00:07.000Z",
+                  "targetEventId": "evt-plan-H7qJ4mS9vT2c",
+                  "result": "approve"
+                },
+                {
+                  "eventId": "evt-plan-example-8",
+                  "type": "session.mode_changed",
+                  "createdAt": "2026-09-15T06:00:08.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "previousMode": "plan",
+                  "mode": "build",
+                  "reason": "planApproved",
+                  "confirmationEventId": "evt-plan-example-7"
+                },
+                {
+                  "eventId": "evt-plan-example-9",
+                  "type": "agent.tool_result",
+                  "createdAt": "2026-09-15T06:00:09.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_01",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "{\"approved\":true}\n方案已批准，Runtime 已切换为 build。按本次 ExitPlanMode 调用中的方案继续；多步骤实施且 TodoUpdate 可用时先创建完整执行清单，随后逐项实施并验证。具体工具权限仍须遵守。"
+                    }
+                  ],
+                  "isError": false
+                },
+                {
+                  "eventId": "evt-plan-example-10",
+                  "type": "agent.tool_call",
+                  "createdAt": "2026-09-15T06:00:10.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_todo_1",
+                  "toolName": "TodoUpdate",
+                  "arguments": {
+                    "todos": [
+                      {
+                        "content": "生成巡检报告",
+                        "status": "in_progress"
+                      },
+                      {
+                        "content": "校验报告数据",
+                        "status": "pending"
+                      }
+                    ]
+                  },
+                  "requiresConfirmation": false
+                },
+                {
+                  "eventId": "evt-plan-example-11",
+                  "type": "agent.tool_result",
+                  "createdAt": "2026-09-15T06:00:11.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_todo_1",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "{\"todos\":[{\"content\":\"生成巡检报告\",\"status\":\"in_progress\"},{\"content\":\"校验报告数据\",\"status\":\"pending\"}]}"
+                    }
+                  ],
+                  "isError": false
+                },
+                {
+                  "eventId": "evt-plan-example-12",
+                  "type": "agent.todo_updated",
+                  "createdAt": "2026-09-15T06:00:12.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_todo_1",
+                  "todos": [
+                    {
+                      "content": "生成巡检报告",
+                      "status": "in_progress"
+                    },
+                    {
+                      "content": "校验报告数据",
+                      "status": "pending"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "evt-plan-example-13",
+                  "type": "agent.message",
+                  "createdAt": "2026-09-15T06:00:13.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "phase": "completed",
+                  "content": "报告正文已生成，开始校验数据。"
+                },
+                {
+                  "eventId": "evt-plan-example-14",
+                  "type": "agent.tool_call",
+                  "createdAt": "2026-09-15T06:00:14.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_todo_2",
+                  "toolName": "TodoUpdate",
+                  "arguments": {
+                    "todos": [
+                      {
+                        "content": "生成巡检报告",
+                        "status": "completed"
+                      },
+                      {
+                        "content": "校验报告数据",
+                        "status": "in_progress"
+                      }
+                    ]
+                  },
+                  "requiresConfirmation": false
+                },
+                {
+                  "eventId": "evt-plan-example-15",
+                  "type": "agent.tool_result",
+                  "createdAt": "2026-09-15T06:00:15.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_todo_2",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "{\"todos\":[{\"content\":\"生成巡检报告\",\"status\":\"completed\"},{\"content\":\"校验报告数据\",\"status\":\"in_progress\"}]}"
+                    }
+                  ],
+                  "isError": false
+                },
+                {
+                  "eventId": "evt-plan-example-16",
+                  "type": "agent.todo_updated",
+                  "createdAt": "2026-09-15T06:00:16.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_todo_2",
+                  "todos": [
+                    {
+                      "content": "生成巡检报告",
+                      "status": "completed"
+                    },
+                    {
+                      "content": "校验报告数据",
+                      "status": "in_progress"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "evt-plan-example-17",
+                  "type": "agent.message",
+                  "createdAt": "2026-09-15T06:00:17.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "phase": "completed",
+                  "content": "已完成报告与原始记录的核对，未发现不一致。"
+                },
+                {
+                  "eventId": "evt-plan-example-18",
+                  "type": "agent.tool_call",
+                  "createdAt": "2026-09-15T06:00:18.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_todo_3",
+                  "toolName": "TodoUpdate",
+                  "arguments": {
+                    "todos": [
+                      {
+                        "content": "生成巡检报告",
+                        "status": "completed"
+                      },
+                      {
+                        "content": "校验报告数据",
+                        "status": "completed"
+                      }
+                    ]
+                  },
+                  "requiresConfirmation": false
+                },
+                {
+                  "eventId": "evt-plan-example-19",
+                  "type": "agent.tool_result",
+                  "createdAt": "2026-09-15T06:00:19.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_todo_3",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "{\"todos\":[{\"content\":\"生成巡检报告\",\"status\":\"completed\"},{\"content\":\"校验报告数据\",\"status\":\"completed\"}]}"
+                    }
+                  ],
+                  "isError": false
+                },
+                {
+                  "eventId": "evt-plan-example-20",
+                  "type": "agent.todo_updated",
+                  "createdAt": "2026-09-15T06:00:20.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_todo_3",
+                  "todos": [
+                    {
+                      "content": "生成巡检报告",
+                      "status": "completed"
+                    },
+                    {
+                      "content": "校验报告数据",
+                      "status": "completed"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "evt-plan-example-21",
+                  "type": "agent.message",
+                  "createdAt": "2026-09-15T06:00:21.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "phase": "completed",
+                  "content": "巡检报告与处理建议已完成，数据校验通过。"
+                },
+                {
+                  "eventId": "evt-plan-example-22",
+                  "type": "session.status_idle",
+                  "createdAt": "2026-09-15T06:00:22.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "reason": "done"
+                }
+              ],
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "200-plan-revised",
+        "status": "200",
+        "tabLabel": "200 · 计划修订与再次审核历史",
+        "label": "OK",
+        "summary": "独立场景，显式使用 ?page=1&limit=50；完整事件按提交顺序排列，SSE中的 delta/心跳不入历史。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "eventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "type": "user.message",
+                  "createdAt": "2026-09-03T08:30:15.123Z",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "请结合附件中的巡检记录，梳理东区园区的异常告警，并给出处理建议。"
+                    },
+                    {
+                      "type": "file",
+                      "fileId": "7f12d8a380964fdc8518f48be1cf6a42"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "evt-plan-example-1",
+                  "type": "agent.thinking",
+                  "createdAt": "2026-09-15T06:00:01.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "phase": "completed",
+                  "content": "先核对资料，再给出报告制作和数据校验方案。"
+                },
+                {
+                  "eventId": "evt-plan-example-2",
+                  "type": "agent.tool_call",
+                  "createdAt": "2026-09-15T06:00:02.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_query",
+                  "toolName": "CallMateTool",
+                  "arguments": {
+                    "tool": "inspect_campus_ports",
+                    "args": {}
+                  },
+                  "requiresConfirmation": false
+                },
+                {
+                  "eventId": "evt-plan-example-3",
+                  "type": "agent.tool_result",
+                  "createdAt": "2026-09-15T06:00:03.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_query",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "查询资料已返回，可按现有巡检记录生成报告。"
+                    }
+                  ],
+                  "isError": false
+                },
+                {
+                  "eventId": "evt-plan-example-4",
+                  "type": "agent.tool_call",
+                  "createdAt": "2026-09-15T06:00:04.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_01",
+                  "toolName": "ExitPlanMode",
+                  "arguments": {
+                    "plan": "# 园区巡检报告制作计划\n\n## 实施步骤\n1. 根据巡检记录生成异常告警报告。\n2. 校验报告数据并整理处理建议。\n\n## 验收标准\n报告覆盖附件中的异常记录，建议与核验结果一致。"
+                  },
+                  "requiresConfirmation": false
+                },
+                {
+                  "eventId": "evt-plan-H7qJ4mS9vT2c",
+                  "type": "agent.plan",
+                  "createdAt": "2026-09-15T06:00:05.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_01",
+                  "content": "# 园区巡检报告制作计划\n\n## 实施步骤\n1. 根据巡检记录生成异常告警报告。\n2. 校验报告数据并整理处理建议。\n\n## 验收标准\n报告覆盖附件中的异常记录，建议与核验结果一致。"
+                },
+                {
+                  "eventId": "evt-plan-example-6",
+                  "type": "session.status_idle",
+                  "createdAt": "2026-09-15T06:00:06.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "reason": "confirming"
+                },
+                {
+                  "eventId": "evt-plan-example-23",
+                  "type": "user.plan_confirmation",
+                  "createdAt": "2026-09-15T06:00:23.000Z",
+                  "targetEventId": "evt-plan-H7qJ4mS9vT2c",
+                  "result": "revise",
+                  "feedback": "请补充数据校验步骤，再提交完整方案。"
+                },
+                {
+                  "eventId": "evt-plan-example-24",
+                  "type": "agent.tool_result",
+                  "createdAt": "2026-09-15T06:00:24.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_01",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "{\"approved\":false,\"feedback\":\"请补充数据校验步骤，再提交完整方案。\"}\n方案需要修订，当前仍为 plan。根据 feedback 完善；关键问题无法确认时向用户澄清，否则重新提交完整方案。不得开始实施或记录实施进度。"
+                    }
+                  ],
+                  "isError": false
+                },
+                {
+                  "eventId": "evt-plan-example-25",
+                  "type": "agent.tool_call",
+                  "createdAt": "2026-09-15T06:00:25.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_02",
+                  "toolName": "ExitPlanMode",
+                  "arguments": {
+                    "plan": "# 园区巡检报告制作计划\n\n## 实施步骤\n1. 根据巡检记录生成异常告警报告。\n2. 校验报告数据并整理处理建议。\n\n## 验收标准\n报告覆盖附件中的异常记录，建议与核验结果一致。\n\n## 数据校验\n逐项核对告警、设备与统计汇总；发现不一致时修正后重新校验。"
+                  },
+                  "requiresConfirmation": false
+                },
+                {
+                  "eventId": "evt-plan-example-26",
+                  "type": "agent.plan",
+                  "createdAt": "2026-09-15T06:00:26.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "toolCallId": "call_plan_02",
+                  "content": "# 园区巡检报告制作计划\n\n## 实施步骤\n1. 根据巡检记录生成异常告警报告。\n2. 校验报告数据并整理处理建议。\n\n## 验收标准\n报告覆盖附件中的异常记录，建议与核验结果一致。\n\n## 数据校验\n逐项核对告警、设备与统计汇总；发现不一致时修正后重新校验。"
+                },
+                {
+                  "eventId": "evt-plan-example-27",
+                  "type": "session.status_idle",
+                  "createdAt": "2026-09-15T06:00:27.000Z",
+                  "sourceEventId": "b7ef45d40a854c33af7a36df871a21e8",
+                  "reason": "confirming"
                 }
               ],
               "nextPage": null

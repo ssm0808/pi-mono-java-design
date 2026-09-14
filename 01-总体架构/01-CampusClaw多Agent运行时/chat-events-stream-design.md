@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.9.0 |
+| 文档版本 | 0.10.0 |
 | 状态 | 已确认目标契约；请求输出绑定与跨实例控制待实现 |
 | 源码基线 | Java 918005ee、dfb90cac，固定提交与路径见 [模块证据](source-evidence.md#52-post-与流生命周期) |
 | 更新日期 | 2026-09-15 |
@@ -48,19 +48,20 @@ B01～B15 已确认，完整字段、成功/失败、工具确认、中断配对
 |---|---|---|
 | user.message | M1 未完成前拒绝 M2 已确认；本条流对应 M1 的执行段，包括模型、工具与该段状态 | 对应 done/failed/terminated，或进入 confirming；确认等待仍保留 running |
 | user.tool_confirmation | 当前 Session 中指定 toolCallId 的有效待确认操作及由本次确认触发的续跑段 | 对应 done/failed/terminated，或再次进入 confirming |
+| user.plan_confirmation | 精确目标 agent.plan 所属原执行的新续跑段；批准先返回回执、planApproved 模式事件和 ExitPlanMode 结果，修订保留 plan | 执行结束的 done/failed/terminated，或新方案再次进入 confirming |
 | user.interrupt | 首帧后只等待目标停止结果、不复制 Agent 输出已确认；接受时必须在数据库事务中固定内部执行身份；等待确认同样可被指定原消息的中断停止 | 实际停止后的 terminated；失败或未获知退出时按 B07/B11 处理，不能提前伪造终态 |
 
 设计理由：本次交互结束就关闭其 HTTP 响应，不跨下一次无关执行。等待工具确认需要
 用户新动作，以另一次确认 POST 开始下一段交互，避免旧响应无限等待用户操作。
 `confirming` 已由 B07 确认，仍不代表 Session 已空闲。
 
-必填 targetEventId 只匹配原消息，不能取消随后开始的新执行；重复停止返回冲突，接受后自然完成仍保留真实原因。等待超时只断流并对账。跨实例控制和固定目标竞态由 [总体设计 §4.4](chat-events-design.md#44-数据库停止请求与实例批量检查) 维护，本流只消费已提交结果，遵守回执先行、终态去重与慢连接隔离。
+user.interrupt 的必填 targetEventId 只匹配原消息，不能取消随后开始的新执行；重复停止返回冲突，接受后自然完成仍保留真实原因。等待超时只断流并对账。跨实例控制和固定目标竞态由 [总体设计 §4.4](chat-events-design.md#44-数据库停止请求与实例批量检查) 维护，本流只消费已提交结果，遵守回执先行、终态去重与慢连接隔离。
 
-本期每执行仅一个待确认工具，不新增通用工具进度或子 Agent 公共事件；build 执行清单使用 agent.todo_updated。停止后才能重新提交普通消息，FollowUp 为 [未来扩展](chat-follow-up-future-design.md)。
+本期每执行最多一个待交互项：工具权限确认与计划审核互斥，不新增通用工具进度或子 Agent 公共事件；build 执行清单使用 agent.todo_updated。停止后才能重新提交普通消息，FollowUp 为 [未来扩展](chat-follow-up-future-design.md)。
 
 ### 4.1 完整内容与预览
 
-agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的完整权威内容，客户端以完整内容替换预览。user.* 回执、工具调用、工具结果与 idle 都是完整事件，无 phase；精确字段和类型目录由共享模型维护。Thinking 仅在执行快照开启且模型返回可读原文时投影，持久化后的可见性见 [Thinking 展示](chat-events-history-design.md#thinking-original-text)。
+agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的完整权威内容，客户端以完整内容替换预览。user.* 回执、工具调用、工具结果、计划、任务快照、批准模式变更与 idle 都是完整事件，无 phase；精确字段和类型目录由共享模型维护。Thinking 仅在执行快照开启且模型返回可读原文时投影，持久化后的可见性见 [Thinking 展示](chat-events-history-design.md#thinking-original-text)。
 
 完整事件在 SSE 与 ListEvents 同名同形；落盘范围按 B12 与历史同一投影实现，
 不能假定当前 Java 已保存 Tool Call 或 idle。preview 不持久化、不补发；同一 eventId
@@ -114,7 +115,7 @@ agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的�
 完整事件，具体应用层骨架见[总体设计 §4.5](chat-events-design.md#45-确认续跑的跨实例交接target-only-实施骨架)。
 
 实施验收需覆盖：原响应保留执行输出，中断响应只含回执与同一停止 idle，终态 eventId 一致；
-三输入首帧与请求内容一致且只一次；提交前绑定/回执先行；极快完成；
+四输入首帧与请求内容一致且只一次；提交前绑定/回执先行；极快完成；
 确认续跑和中断目标竞态；同 Session 下一次执行隔离；断线与慢连接不影响执行；
 失败/确认等待不能被误判成功；无首帧结果不确定；旧时间晚写与有序历史。
 数据库中断、单消息准入与 M7 的完整实施验收统一见[总体设计 §5](chat-events-design.md#5-实施切片与验收)，
@@ -127,6 +128,7 @@ agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.10.0 | 2026-09-15 | 明确计划审核响应绑定、批准事件顺序与修订再等待。 |
 | 0.9.0 | 2026-09-15 | 纳入后端显式任务更新事件，SSE 与历史共用完整快照。 |
 | 0.8.0 | 2026-09-14 | 聚焦回执、输出绑定和恢复，字段与数据库机制引用所属权威文档。 |
 | 0.7.0 | 2026-09-09 | 统一 Session Events 命名并引用共享事件消费规则。 |

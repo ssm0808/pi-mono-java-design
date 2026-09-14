@@ -15,8 +15,8 @@ ROOT = Path(__file__).resolve().parent
 COMMON_PATH = ROOT / "事件契约" / "common.json"
 MODEL_PATH = ROOT / "事件契约" / "操作" / "01-submit-session-event.json"
 HISTORY_PATH = ROOT / "事件契约" / "操作" / "02-list-session-events.json"
-USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
-STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "agent.todo_updated", "session.status_idle"}
+USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation", "user.plan_confirmation"}
+STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "agent.todo_updated", "agent.plan", "session.mode_changed", "session.status_idle"}
 HISTORY_TYPES = {"session.model_changed", "session.thinking_changed", "session.mode_changed", "session.compacted"}
 BATCH_CHOICES = {f"BATCH-20260908-1-{group}": "A-recommended" for group in ("tools", "events", "lifecycle", "integration")}
 RETIRED_STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", "tool.result", "session.status.idle"}
@@ -62,11 +62,38 @@ RESPONSE_INPUTS = {
     "200-tool-success": "user.message",
     "200-todo-updated": "user.message",
     "200-execution-failed": "user.message",
+    "200-plan-review": "user.message",
+    "200-plan-approved": "user.plan_confirmation",
+    "200-plan-revised": "user.plan_confirmation",
 }
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)
+
+
+
+def java_whitespace(char: str) -> bool:
+    return char in "\t\n\v\f\r\x1c\x1d\x1e\x1f " or ord(char) in {
+        0x1680, *range(0x2000, 0x2007), *range(0x2008, 0x200B), 0x2028, 0x2029, 0x205F, 0x3000}
+
+
+def bounded_nonblank(value: object, limit: int) -> bool:
+    return (isinstance(value, str) and any(not java_whitespace(c) for c in value)
+            and len(value.encode("utf-16-le")) // 2 <= limit)
+
+
+def validate_plan_confirmation(event: dict, receipt: bool = False) -> None:
+    fields = {"type", "targetEventId", "result"}
+    if receipt:
+        fields |= {"eventId", "createdAt"}
+    require(isinstance(event.get("result"), str) and event["result"] in {"approve", "revise"},
+            "invalid plan decision")
+    if event["result"] == "revise" and "feedback" in event:
+        fields.add("feedback")
+        require(bounded_nonblank(event["feedback"], 4096), "invalid revision feedback")
+    require(set(event) == fields, "plan confirmation has unknown, missing or conditional fields")
+    require(bounded_nonblank(event["targetEventId"], 128), "invalid plan target identity")
 
 
 def validate_public_payload(value: object) -> None:
@@ -96,8 +123,8 @@ def validate_access_token_rule(operation: dict) -> None:
         require(token.get("required") is True, f"{mode['id']} must require access-token")
         require(token["value"] == "opaque-access-token", "confirmed access-token example must be preserved")
         require(
-            "三种用户事件均必须携带" in token["description"],
-            f"{mode['id']} must state that all three user event types require access-token",
+            "四种用户事件均必须携带" in token["description"],
+            f"{mode['id']} must state that all four user event types require access-token",
         )
 
 
@@ -147,6 +174,16 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
         require(all(set(block) == {"type", "text"} and block["type"] == "text"
                     and isinstance(block["text"], str) for block in content),
                 "current tool results must contain only public text blocks, never JSON or images")
+    if event["type"] == "user.plan_confirmation":
+        validate_plan_confirmation(event, receipt=True)
+    if event["type"] == "agent.plan":
+        require(set(event) == {"eventId", "type", "createdAt", "sourceEventId", "toolCallId", "content"},
+                "plan must use the complete review event shape")
+        require(bounded_nonblank(event["toolCallId"], 128), "plan requires tool call identity")
+        content = event["content"]
+        require(bounded_nonblank(content, 262144), "plan Markdown is required and bounded")
+        first = next(line for line in content.splitlines() if any(not java_whitespace(c) for c in line))
+        require(first.startswith("# "), "plan first nonblank line must start with a Markdown heading")
     if event["type"] == "agent.todo_updated":
         require(set(event) == {"eventId", "type", "createdAt", "sourceEventId", "toolCallId", "todos"},
                 "task snapshot must use the explicit event shape")
@@ -160,10 +197,6 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
             content = item["content"]
             require(isinstance(content, str) and bool(content) and len(content.encode("utf-16-le")) // 2 <= 1024,
                     "task content must be nonempty and bounded")
-            # Java String.strip uses Character.isWhitespace, not Python's broader str.strip.
-            def java_whitespace(char: str) -> bool:
-                return char in "\t\n\v\f\r\x1c\x1d\x1e\x1f " or ord(char) in {
-                    0x1680, *range(0x2000, 0x2007), *range(0x2008, 0x200B), 0x2028, 0x2029, 0x205F, 0x3000}
             require(not java_whitespace(content[0]) and not java_whitespace(content[-1]),
                     "task content must already be normalized")
             require(content not in contents, "duplicate task content")
@@ -174,7 +207,7 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
     if event["type"] == "session.status_idle":
         require(event.get("reason") in {"done", "failed", "terminated", "confirming"}, "invalid candidate reason")
 
-    if event["type"] in STREAM_TYPES:
+    if event["type"] in STREAM_TYPES - {"session.mode_changed"}:
         require(isinstance(event.get("sourceEventId"), str) and bool(event["sourceEventId"]), "output needs original message sourceEventId")
     if event["type"] == "user.interrupt":
         require(isinstance(event.get("targetEventId"), str) and bool(event["targetEventId"]), "interrupt needs targetEventId")
@@ -213,10 +246,17 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
                     and all(type(event.get(k)) is bool for k in ("previousThinking", "thinking"))
                     and event["previousThinking"] != event["thinking"], "invalid thinking change")
         elif event["type"] == "session.mode_changed":
-            require(set(event) == {"eventId", "type", "createdAt", "previousMode", "mode", "reason"}
-                    and event["reason"] == "requested"
-                    and event["previousMode"] in {"plan", "build"} and event["mode"] in {"plan", "build"}
-                    and event["previousMode"] != event["mode"], "invalid requested mode change")
+            fields = {"eventId", "type", "createdAt", "previousMode", "mode", "reason"}
+            if event.get("reason") == "planApproved":
+                fields |= {"sourceEventId", "confirmationEventId"}
+                require(event.get("previousMode") == "plan" and event.get("mode") == "build"
+                        and bounded_nonblank(event.get("sourceEventId"), 128)
+                        and bounded_nonblank(event.get("confirmationEventId"), 128), "invalid approved mode change")
+            else:
+                require(history and event.get("reason") == "requested", "requested mode change is outside allowed scope; history only")
+                require(event.get("previousMode") in {"plan", "build"} and event.get("mode") in {"plan", "build"}
+                        and event["previousMode"] != event["mode"], "invalid requested mode change")
+            require(set(event) == fields, "mode change conditional fields differ")
         else:
             require(event.get("reason") in {"manual", "threshold", "overflow"}
                     and all(type(event.get(k)) is int and event[k] >= 0 for k in ("tokensBefore", "estimatedTokensAfter")), "invalid compaction")
@@ -277,7 +317,9 @@ def validate_model(model: dict) -> None:
         validate_public_payload(value)
         require(set(value) == {"event"}, "event wrapper must be preserved")
         inputs[value["event"]["type"]] = value["event"]
-    require(set(inputs) == USER_EVENT_TYPES and len(body["examples"]) == 3, "preserve three input examples")
+        if value["event"]["type"] == "user.plan_confirmation":
+            validate_plan_confirmation(value["event"])
+    require(set(inputs) == USER_EVENT_TYPES and len(body["examples"]) == 5, "cover four input types and both plan decisions")
     require(isinstance(inputs["user.message"]["content"], list), "message content remains ordered array")
 
     all_types, receipt_types, response_ids = set(), set(), set()
@@ -298,7 +340,8 @@ def validate_model(model: dict) -> None:
             kind = RESPONSE_INPUTS[response["id"]]
             require(receipt["type"] == kind, "receipt must correspond to this request")
             normalized = {key: value for key, value in receipt.items() if key not in {"eventId", "createdAt"}}
-            require(normalized == inputs[kind], "complete receipt must preserve normalized submitted event")
+            require(any(normalized == example["value"]["event"] for example in body["examples"]),
+                    "complete receipt must preserve normalized submitted event")
             receipt_types.add(kind)
             completed = {receipt["eventId"]}
             for index, event in enumerate(frames[1:], 1):
@@ -353,7 +396,7 @@ def validate_model(model: dict) -> None:
         require(clause in operation["description"], f"missing database interruption constraint: {clause}")
     require("检查周期" in " ".join(review["implementationCalibration"]), "polling interval needs implementation calibration")
     require("等待工具确认时也关闭" in operation["description"], "confirmation wait must also close the response")
-    require("三种用户事件均必须携带 access-token" in review["notice"], "preserve three-type token rule")
+    require("四种用户事件均必须携带 access-token" in review["notice"], "preserve four-type token rule")
     require(review["decisionHistory"]["S3-user-events"]["previous"] == "A-user-events-receipt-history-only",
             "record the explicitly superseded S3")
     require("用户明确调整" in review["decisionHistory"]["S3-user-events"]["status"], "S3 adjustment needs explicit attribution")
@@ -594,6 +637,8 @@ def validate_history_model(model: dict, post: dict) -> None:
         "200-tool-success": complete["200-tool-success"],
         "200-todo-updated": complete["200-todo-updated"],
         "200-execution-failed": complete["200-execution-failed"],
+        "200-plan-approved": complete["200-plan-review"] + complete["200-plan-approved"],
+        "200-plan-revised": complete["200-plan-review"] + complete["200-plan-revised"],
         "200-skill-message": complete_streams(json.loads((ROOT / "接口契约/操作/13-execute-session-command.json").read_text()))["200-skill-message"],
     }
     results, all_types, errors = {}, set(), set()
@@ -837,6 +882,121 @@ def validate_todo_regressions(post: dict) -> int:
     return len(edits)
 
 
+def validate_plan_flow(post: dict) -> None:
+    streams = complete_streams(post)
+    review, approved, revised = (streams[name] for name in
+                                 ("200-plan-review", "200-plan-approved", "200-plan-revised"))
+    plans = [event for event in review if event["type"] == "agent.plan"]
+    require(len(plans) == 1, "review publishes one complete proposal")
+    plan = plans[0]
+    calls = [event for event in review if event.get("toolName") == "ExitPlanMode"]
+    require(len(calls) == 1 and calls[0]["toolCallId"] == plan["toolCallId"]
+            and calls[0]["arguments"] == {"plan": plan["content"]}, "proposal must preserve exact ExitPlanMode input")
+    require(review[-1]["reason"] == "confirming", "review closes with a confirming wait")
+    require(not any(event["type"] == "agent.todo_updated" or event.get("toolName") == "TodoUpdate"
+                    or event["type"] == "agent.tool_result" and event["toolCallId"] == plan["toolCallId"]
+                    for event in review), "research must not publish execution progress or early ExitPlanMode result")
+    for frames, decision in ((approved, "approve"), (revised, "revise")):
+        receipt = frames[0]
+        require(receipt["type"] == "user.plan_confirmation" and receipt["result"] == decision
+                and receipt["targetEventId"] == plan["eventId"], "decision must target the reviewed proposal")
+        result = next(event for event in frames if event["type"] == "agent.tool_result")
+        require(result["toolCallId"] == plan["toolCallId"] and result["isError"] is False,
+                "decision completes the original ExitPlanMode normally")
+        structured = json.loads(result["content"][0]["text"].split("\n", 1)[0])
+        require(structured["approved"] is (decision == "approve"), "tool decision and user decision differ")
+    mode = approved[1]
+    require(mode["type"] == "session.mode_changed" and mode["confirmationEventId"] == approved[0]["eventId"]
+            and mode["sourceEventId"] == review[0]["eventId"], "approval receipt must precede its bound mode change")
+    require(approved[2]["type"] == "agent.tool_result", "approved mode change precedes ExitPlanMode result")
+    updates = [event for event in approved if event["type"] == "agent.todo_updated"]
+    require(len(updates) == 3 and all(todo["status"] == "completed" for todo in updates[-1]["todos"]),
+            "execution example must demonstrate task completion")
+    for index, event in enumerate(approved):
+        if event["type"] == "agent.todo_updated":
+            result = approved[index - 1]
+            require(result["type"] == "agent.tool_result" and result["isError"] is False
+                    and result["toolCallId"] == event["toolCallId"]
+                    and json.loads(result["content"][0]["text"])["todos"] == event["todos"],
+                    "task event must match the finalized result")
+    new_plan = next(event for event in revised if event["type"] == "agent.plan")
+    require(new_plan["eventId"] != plan["eventId"] and revised[-1]["reason"] == "confirming",
+            "revision publishes a new proposal and waits again")
+    require(not any(event["type"] in {"session.mode_changed", "agent.todo_updated"}
+                    or event.get("toolName") == "TodoUpdate" for event in revised),
+            "revision stays in plan without execution progress")
+
+
+def validate_plan_regressions(post: dict) -> int:
+    validate_plan_flow(post)
+    streams = complete_streams(post)
+    plan = next(event for event in streams["200-plan-review"] if event["type"] == "agent.plan")
+    approve = streams["200-plan-approved"][0]
+    revise = streams["200-plan-revised"][0]
+    mode = streams["200-plan-approved"][1]
+    cases = [
+        (plan, lambda e: e.update(content="no heading")),
+        (plan, lambda e: e.update(content="# " + "a" * 262143)),
+        (plan, lambda e: e.update(content="# " + "😀" * 131072)),
+        (plan, lambda e: e.update(content=None)),
+        (plan, lambda e: e.update(phase="completed")),
+        (plan, lambda e: e.pop("toolCallId")),
+        (plan, lambda e: e.pop("sourceEventId")),
+        (approve, lambda e: e.update(feedback=None)),
+        (approve, lambda e: e.update(result="accept")),
+        (approve, lambda e: e.update(result={})),
+        (approve, lambda e: e.update(result=None)),
+        (approve, lambda e: e.update(targetEventId=" ")),
+        (approve, lambda e: e.update(targetEventId="a" * 129)),
+        (approve, lambda e: e.update(planId="unregistered")),
+        (revise, lambda e: e.update(feedback=None)),
+        (revise, lambda e: e.update(feedback="\t")),
+        (revise, lambda e: e.update(feedback=12)),
+        (revise, lambda e: e.update(feedback="😀" * 2049)),
+        (mode, lambda e: e.pop("confirmationEventId")),
+        (mode, lambda e: e.pop("sourceEventId")),
+        (mode, lambda e: e.update(previousMode="build", mode="plan")),
+        (mode, lambda e: e.update(reason="requested")),
+    ]
+    for event, edit in cases:
+        candidate = copy.deepcopy(event)
+        edit(candidate)
+        try:
+            validate_frame(candidate, receipt=candidate["type"].startswith("user."))
+        except (KeyError, ValueError):
+            continue
+        raise ValueError("invalid plan review event accepted")
+    flow_cases = [
+        ("200-plan-review", "agent.plan", lambda e: e.update(content="# Another proposal")),
+        ("200-plan-approved", "user.plan_confirmation", lambda e: e.update(targetEventId="stale-plan")),
+        ("200-plan-approved", "session.mode_changed", lambda e: e.update(confirmationEventId="wrong-receipt")),
+        ("200-plan-revised", "agent.plan", lambda e: e.update(eventId=plan["eventId"])),
+    ]
+    for response_id, event_type, edit in flow_cases:
+        candidate = copy.deepcopy(post)
+        response = next(item for item in candidate["operation"]["responses"] if item["id"] == response_id)
+        frames = parse_stream(response["bodies"]["default"])
+        edit(next(event for event in frames if event["type"] == event_type))
+        response["bodies"]["default"] = "".join("data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+                                                for event in frames)
+        try:
+            validate_plan_flow(candidate)
+        except ValueError:
+            continue
+        raise ValueError("invalid plan review causal link accepted")
+    without_feedback = copy.deepcopy(revise)
+    without_feedback.pop("feedback")
+    validate_frame(without_feedback, receipt=True)
+    request = {key: value for key, value in approve.items() if key not in {"eventId", "createdAt"}}
+    validate_plan_confirmation(request)
+    malformed_request = dict(request, feedback="not allowed")
+    try:
+        validate_plan_confirmation(malformed_request)
+    except ValueError:
+        return len(cases) + len(flow_cases) + 1
+    raise ValueError("approve request accepted feedback")
+
+
 def main() -> int:
     try:
         common = json.loads(COMMON_PATH.read_text(encoding="utf-8"))
@@ -852,6 +1012,7 @@ def main() -> int:
         history_count = validate_history_regressions(history, model)
         batch_count = validate_batch_field_regressions(model, history)
         todo_count = validate_todo_regressions(model)
+        plan_count = validate_plan_regressions(model)
         require(set(common["eventContract"]["completeTypes"]) == USER_EVENT_TYPES | STREAM_TYPES | HISTORY_TYPES,
                 "shared complete event catalog differs from validated types")
         subprocess.run([sys.executable, str(ROOT / "render_chat_api.py"), "--check"], check=True)
@@ -859,7 +1020,7 @@ def main() -> int:
     except (KeyError, OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(f"error: {error}")
         return 2
-    print(f"POST SSE and ListEvents contracts valid; {negative_count} POST and {history_count} history and {batch_count} batch field and {todo_count} task snapshot negative regressions rejected")
+    print(f"POST SSE and ListEvents contracts valid; {negative_count} POST and {history_count} history and {batch_count} batch field and {todo_count} task snapshot and {plan_count} plan review negative regressions rejected")
     print("Static contract validation only; database pagination and runtime concurrency were not executed.")
     return 0
 

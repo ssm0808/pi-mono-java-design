@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.7.0 |
+| 文档版本 | 0.8.0 |
 | 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，target-only |
 | 更新日期 | 2026-09-15 |
 | 原文展示与消费修复 | 实现提交 `cad6847d901155cc6388989b984d19e302a4fbe3`，见 [Draft PR #287](https://github.com/superheromeZzh/pi-mono-java/pull/287)；合入前不作为实现仓主线行为 |
@@ -43,7 +43,7 @@ GET 返回普通 JSON。结果使用
 [公共字段源](事件契约/common.json) 的 `eventContract` / `contractSections` 维护，
 渲染到 GET/POST 的统一 HTML；两个操作引用同一份定义，不各写一套。
 
-历史读取三类已接受 user.*、完整 agent.message/thinking/tool_call/tool_result/todo_updated、
+历史读取四类已接受 user.*、完整 agent.message/thinking/tool_call/tool_result/plan/todo_updated、
 session.status_idle，以及模型、thinking、mode 配置和压缩完整记录。delta、心跳、连接标记不入历史。
 每条完整记录有服务端 eventId 与保存一次的 UTC 毫秒 createdAt；按内部已提交顺序展示，
 不按时间戳排序。agent.* 和 idle 的 sourceEventId 始终引用原始 user.message.eventId，
@@ -68,12 +68,12 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 
 配置事件保留真实变更的 previous/current 值及既有原因；模型自动回退的 agentRefresh 和
 模型能力关闭 thinking 的 modelCapability 不因 Session Events 改名丢失。配置事件不进入模型上下文，
-只在历史展示；自动压缩可在对应执行 SSE 展示，手动 compact 保持 JSON。
+主动配置更新只在历史展示，计划批准的模式变化另进入其固定续跑段；自动压缩可在对应执行 SSE 展示，手动 compact 保持 JSON。
 压缩摘要和 firstKeptEntryId 等恢复数据留在内部，不把提示词、私有摘要和内部关联直接返回。
 全部旧持久化类型必须逐类映射或明确不公开理由；未知持久化类型报 EVENT_LIST_FAILED，
 不能静默跳过后声称完整。
 
-统一 Session POST 的模式真实变化追加 `session.mode_changed(reason=requested)`，与模型、思考变更同事务保存，顺序固定为模型 → 思考 → 模式；同值或仅改名不产生额外历史。该事件仅用于历史，不创建执行或 SSE。mode 取值、previous/current 及精确字段由共享事件源维护；名称、内部字段和凭据不进入配置历史。计划审核批准产生的 `reason=planApproved` 仍在[计划审核增量](../06-CampusClaw计划模式/interface-delta.md#33-sessionmode_changed)中维护，尚未进入当前事件源。
+统一 Session POST 的模式真实变化追加 `session.mode_changed(reason=requested)`，与模型、思考变更同事务保存，顺序固定为模型 → 思考 → 模式；同值或仅改名不产生额外历史。该事件仅用于历史，不创建执行或 SSE。mode 取值、previous/current 及精确字段由共享事件源维护；名称、内部字段和凭据不进入配置历史。计划审核批准产生的 `reason=planApproved` 同样由共享事件源维护，sourceEventId 与 confirmationEventId 绑定原消息和批准回执，完整记录进入确认续跑段 SSE 与历史。
 
 模式事件是新增 target-only 架构变更；Java `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java` 尚无模式 Entry 工厂。统一写入的事务、源码路径与验收由 [Session 更新设计](chat-http-v1-design.md#24-模型目录与统一-session-更新)维护，历史查询沿用共享投影与分页骨架。
 
@@ -263,7 +263,7 @@ eventId 去重只能消除重复，不能弥补漏项；重新加载用于重新
   晚到 delta 不能再追加到已完成事件。多个独立示例场景不能拼成同一 Session 历史。
 - 原消息 SSE 与中断 SSE 收到的是同一个停止 idle；历史只返回一份。中断回执不能
   被展示为“已经停止”；实际停止记录才可说明对应目标结束。
-- 等待工具确认的 idle 只结束对应 HTTP 交互；M1 仍占用 `running`，不可接受 M2。
+- 等待工具确认或计划审核的 idle 只结束对应 HTTP 交互；M1 仍占用 `running`，不可接受 M2。
   历史中的旧 done/terminated 也不是当前状态；提交是否允许仍以数据库原子准入为准。
 - 普通分页补读时，不删除尚未读到的实时内容。按 eventId 合并完整事件；尚未出现在
   读取结果中的实时尾部保留独立顺序，后续补读再对账，不凭时间戳猜测跨通道顺序。
@@ -326,7 +326,7 @@ Skill 展开前回执、绑定变更重检、内部上下文恢复与保留策�
 
 
 1. 先补完整记录的稳定身份和共享投影骨架。POST 与 GET 同一完整事件逐字段相等；
-   保留三种用户回执、工具关联及唯一停止记录，不泄露内部 ID 或凭据。
+   保留四种用户回执、工具关联及唯一停止记录，不泄露内部 ID 或凭据。
 2. 再实现页码归一、查询 DTO 与 Mapper。尾部追加不移动已有位置；分支/过滤变化后
    重读第一页，不承诺跨页快照。保留写侧已确认的因果依赖与短事务串行规则。
 3. 接入类型化只读 Response VO；请求 Request VO 用标准 Jakarta 校验，默认值在
@@ -387,6 +387,7 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.8.0 | 2026-09-15 | 历史纳入计划、审核决定与批准模式事件，保持 SSE 同源。 |
 | 0.7.0 | 2026-09-15 | 纳入后端显式任务更新事件，SSE 与历史共用完整快照。 |
 | 0.6.1 | 2026-09-14 | 精简查询与验收说明，突出共享完整事件投影和单次读取边界。 |
 | 0.6.0 | 2026-09-14 | 历史增加统一 Session 更新产生的 requested 模式事件，按模型、思考、模式顺序展示真实变更。 |

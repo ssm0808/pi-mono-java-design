@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.10.0 |
-| 状态 | 三输入联合契约与 B01～B15 已确认；本文跨实例执行骨架为 target-only |
+| 文档版本 | 0.11.0 |
+| 状态 | 四输入联合契约与 B01～B15 已确认；本文跨实例执行骨架为 target-only |
 | 源码范围 | Java c9d858bc、a8192e04、918005ee、dfb90cac 分项核验；pi 固定 5cd93f68，完整提交和符号见 [源码证据](source-evidence.md#5-session-events-固定源码核验) |
-| 更新日期 | 2026-09-14 |
+| 更新日期 | 2026-09-15 |
 
 ## 1. 资源模型与职责
 
@@ -21,7 +21,7 @@ POST `/sessions/{sessionId}/events` 在同一响应中返回本次用户事件�
 
 ## 2. 当前目标契约
 
-每次 POST 只提交 user.message、user.interrupt 或 user.tool_confirmation 中的一条事件。精确字段、Header、错误和机器评审状态分别由 [POST 模型](事件契约/操作/01-submit-session-event.json)、[GET 模型](事件契约/操作/02-list-session-events.json) 维护，[统一接口页](chat-api-review.html) 为阅读入口。
+每次 POST 只提交 user.message、user.interrupt、user.tool_confirmation 或 user.plan_confirmation 中的一条事件。精确字段、Header、错误和机器评审状态分别由 [POST 模型](事件契约/操作/01-submit-session-event.json)、[GET 模型](事件契约/操作/02-list-session-events.json) 维护，[统一接口页](chat-api-review.html) 为阅读入口。
 
 ### 2.1 传输与执行规则
 
@@ -43,7 +43,7 @@ POST `/sessions/{sessionId}/events` 在同一响应中返回本次用户事件�
 
 Skill 复用消息执行语义，Builtin 保持 JSON，具体由 [Slash 模块](../../04-命令与技能/00-Slash-Command通用模块/README.md) 维护。当前无运行中消息队列，[FollowUp](chat-follow-up-future-design.md) 仅为未来扩展。
 
-[计划审核接口增量](../06-CampusClaw计划模式/interface-delta.md) 是独立 target-only 方案，沿用根消息、确认续跑段与对应 SSE，在批准事务更新 Session.mode；它不扩张当前三输入联合契约的已确认范围。
+[计划审核](../06-CampusClaw计划模式/README.md)沿用根消息、固定续跑段与对应 SSE，在批准事务更新 Session.mode；精确输入和事件已进入共享契约，具体运行时实现仍须验收。计划子域的审核状态和工具边界由该模块唯一维护。
 
 ## 3. 目标分层与生命周期
 
@@ -58,7 +58,7 @@ Skill 复用消息执行语义，Builtin 保持 JSON，具体由 [Slash 模块](
 
 | 图中分组 | 具体协作者 | 职责 |
 |---|---|---|
-| typed user event handlers | UserMessageEventHandler / UserInterruptEventHandler / UserToolConfirmationEventHandler | 分别接受消息、停止请求、确认决定；消息提交后启动，控制提交后只作本地提示 |
+| typed user event handlers | UserMessageEventHandler / UserInterruptEventHandler / UserToolConfirmationEventHandler / UserPlanConfirmationEventHandler | 分别接受消息、停止请求、确认决定；消息提交后启动，控制提交后只作本地提示 |
 | polling services | ExecutionControlPollingService | 读取本机活动目标的停止/确认决定，复核身份并触发本地动作 |
 | polling services | InterruptResultPollingService | 读取本机等待响应对应的权威终态，独立投递 |
 | polling services | ConfirmationResultPollingService | 读取固定续跑段的完整事件，经共享投影投递到对应响应 |
@@ -68,7 +68,7 @@ Skill 复用消息执行语义，Builtin 保持 JSON，具体由 [Slash 模块](
 
 - Controller 验证 Request VO，交给 Service，使用只读 Response VO 编码 SSE；
   DTO/Mapper 不越过 Service 暴露到 HTTP。
-- Service 固定解析结构、对象身份和 locale，使用 Handler Registry 分派三类用户事件。
+- Service 固定解析结构、对象身份和 locale，使用 Handler Registry 分派四类用户事件。
   可变 Session/Tool 状态、容量与执行目标在所属事务或 Session 协调边界内复核。
 - 每个 POST 有独立有界 `RequestEventStream`；目标 `RequestEventRouter` 只按内部绑定
   的执行段或中断目标投递，不按“当前 Session 最新执行”动态猜测归属。
@@ -114,7 +114,7 @@ Skill 复用消息执行语义，Builtin 保持 JSON，具体由 [Slash 模块](
    从第一页重载，不承诺跨页固定结果。数量已确认为默认 50/上限 200，过滤与保留策略按 B05/B15 确认，具体部署期限按配置；这一变更
    不放宽前置依赖与有序提交要求，不改变已确认 SSE 语义。
 
-推荐目标类图用 `SessionEventAppender` 表示共享的接受与有序追加职责：三个用户事件
+推荐目标类图用 `SessionEventAppender` 表示共享的接受与有序追加职责：四个用户事件
 Handler 和 Runtime Projector 都经过该边界，再由 Repository 执行短事务。该类名及具体
 调度机制是 target-only 落地建议；确认的是共同顺序约束，而不是必须增加某种队列。
 它是 Spring 单例协作者，但协调状态按 Session 隔离；多实例场景仍须在持久化事务中
@@ -283,7 +283,7 @@ B08/B09 已确认控制竞争和根消息关联，以下是落实语义所需的
 
 | 切片 | 验收要求 |
 |---|---|
-| 请求与响应 | 三输入严格 VO 与 Handler Registry；每响应有界绑定；完整回执先于输出；Header 前 JSON 错误与 Header 后断开分开验证，EOF 不作为成功 |
+| 请求与响应 | 四输入严格 VO 与 Handler Registry；每响应有界绑定；完整回执先于输出；Header 前 JSON 错误与 Header 后断开分开验证，EOF 不作为成功 |
 | 消息准入 | 两实例竞争 idle 只接受一条消息；拒绝方无记录/模型调用；事务回滚消息和 running 一起回滚；确认、停止中或断线仍拒绝 M2，真正终态提交后才开放 |
 | 因果追加 | 延迟或失败的前置事件不被依赖项超越；同时间/回退时间不影响顺序；锁、序号、追加与提交同短事务，模型/工具不占锁 |
 | 数据库中断 | 消息 A、中断 B；回执前极快结束、重复检查、旧代次信号、数据库故障、A 失联及自然完成竞争均保持固定目标和真实终态；两响应终态 eventId 相同，中断不复制输出 |
@@ -306,6 +306,7 @@ HTTP 路径使用 `/campusclaw-service/v1`。内部开发阶段编号不作为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.11.0 | 2026-09-15 | 计划审核纳入四输入分派，复用固定续跑段与有序追加边界。 |
 | 0.10.0 | 2026-09-14 | 按接受、有序追加与跨实例控制收敛主文，分离源码证据并合并重复验收。 |
 | 0.9.2 | 2026-09-14 | 同步 Session 资源更新承载 plan/build 的计划模式边界。 |
 | 0.9.1 | 2026-09-14 | 关联保持元数据稳定的计划模式目标增量与统一架构对比。 |

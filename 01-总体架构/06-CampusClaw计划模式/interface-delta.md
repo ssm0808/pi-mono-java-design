@@ -1,8 +1,8 @@
 # 计划模式接口增量
 
-版本：1.7.0；日期：2026-09-15；状态：**target-only 推荐设计，统一 Session 更新、requested 模式事件与 agent.todo_updated 已登记；计划审核部分尚未纳入当前报文源，全部新增能力仍待实现**。
+版本：1.8.0；日期：2026-09-15；状态：**已确认目标契约；Session 更新、计划审核与显式任务事件均已登记到共享 JSON，运行时实现待独立验收**。
 
-本文件只定义计划功能的新增内容。现有 Header、普通消息、工具确认、ResultBean、SSE 和历史分页继续引用[当前契约](../01-CampusClaw多Agent运行时/chat-api-review.html)。这里的报文属于目标增量示例，正式纳入时移入统一 operation JSON 和 `eventContract`，本文件随后仅保留理由及链接，不产生第二份当前接口契约。
+本文件维护计划接口的集成边界与理由。精确请求、完整事件、条件字段、错误码及示例由 [共享事件契约](../01-CampusClaw多Agent运行时/事件契约/common.json)、[POST 操作](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 与 [GET 操作](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[统一接口页](../01-CampusClaw多Agent运行时/chat-api-review.html)。登记不代表 Java 或 Mate 已实现。
 
 ## 1. Session 配置与审核交互边界
 
@@ -16,37 +16,7 @@ GET、创建、更新及复用 Session 的 Command 响应保持同一种 Session
 
 复用 `POST /campusclaw-service/v1/sessions/{sessionId}/events`，联合输入增加 `user.plan_confirmation`。沿用现有 POST 的调用上下文及必填 `access-token`；请求凭据不覆盖原消息执行的内存凭据。
 
-批准完整方案：
-
-```json
-{
-  "event": {
-    "type": "user.plan_confirmation",
-    "targetEventId": "evt-plan-H7qJ4mS9vT2c",
-    "result": "approve"
-  }
-}
-```
-
-退回修改：
-
-```json
-{
-  "event": {
-    "type": "user.plan_confirmation",
-    "targetEventId": "evt-plan-H7qJ4mS9vT2c",
-    "result": "revise",
-    "feedback": "先给出故障定位步骤，维护窗口另行安排。"
-  }
-}
-```
-
-| 字段 | 规则 |
-|---|---|
-| `type` | 固定 `user.plan_confirmation` |
-| `targetEventId` | 必填非空不透明字符串，最多 128 UTF-16 单元，精确引用当前待审核计划的公共 eventId；不是 toolCallId 或根消息 ID |
-| `result` | 必填 `approve` 或 `revise`，不接受同义词、大小写变体或普通聊天文本自动推断 |
-| `feedback` | 仅 revise 可选；存在时必须为非空文本，最多 4096 UTF-16 单元；approve 禁止出现，包括 null |
+POST 精确模型提供批准与修订两个请求示例，以及制作计划、批准执行和修订再提交的三个完整 SSE 场景。`targetEventId` 精确绑定当前待审核计划，审核输入不携带新的方案正文；条件反馈规则由同一模型与校验器执行。
 
 不接受调用方传入修改后的计划正文。需要修改时先 revise，Agent 产生新的完整 `agent.plan` 后再批准新 eventId。请求只表述一个决定，不批量批准。
 
@@ -54,14 +24,7 @@ GET、创建、更新及复用 Session 的 Command 响应保持同一种 Session
 
 成功仍为 `200 text/event-stream`：第一个业务帧是本次已提交的完整 `user.plan_confirmation`，然后是固定续跑段输出；收到该段 `session.status_idle` 后关闭。SSE data-only，不包装 ResultBean，不使用 `id:` 或 `Last-Event-ID`。
 
-| HTTP / resCode | 触发条件 |
-|---|---|
-| 400 / `INVALID_EVENT_REQUEST` | 字段、枚举、反馈、包装或 POST 凭据不满足现有及新增格式约束 |
-| 404 / `SESSION_NOT_FOUND` | Session 不存在或已删除 |
-| 409 / `PLAN_CONFIRMATION_NOT_PENDING`（新增） | 没有有效计划等待、targetEventId 不匹配、重复决定或目标不属于当前 Session/分支 |
-| 409 / `EXECUTION_STOPPING` | 原执行已接受中断，不再接受确认 |
-| 503 / `EVENT_SERVICE_UNAVAILABLE` | 接受前无法预留既有输出/等待容量 |
-| 500 / `EVENT_ACCEPTANCE_FAILED` | 确认接受事务失败并回滚 |
+接受前失败沿用 ResultBean；新增审核冲突码与稳定工具失败码由共享错误表维护，不另设控制接口。
 
 同一个 Session 存在时，不通过“目标在其他 Session”与“目标不存在”的差异错误泄露其他 Session 数据。锁内先检查停止状态，再检查审核目标；该顺序与工具确认的停止优先规则一致。
 
@@ -73,53 +36,17 @@ GET、创建、更新及复用 Session 的 Command 响应保持同一种 Session
 
 ### 3.1 `agent.plan`
 
-```json
-{
-  "eventId": "evt-plan-H7qJ4mS9vT2c",
-  "type": "agent.plan",
-  "createdAt": "2026-09-14T03:20:00.000Z",
-  "sourceEventId": "evt-msg-R8kD2pW5nL6x",
-  "toolCallId": "call_plan_01",
-  "content": "# 园区网络故障处置计划\n\n1. 查询告警及影响范围。\n2. 核对设备配置与最近变更。\n3. 根据定位结果提出维护操作和回退步骤。\n4. 经工具权限确认后实施并验证。"
-}
-```
-
-上述字段全部必填。`content` 是经校验后原样保存的完整 plan 字符串；不从 Assistant 普通回答用正则提取，不根据网页编辑后的内容重新计算方案。`sourceEventId` 沿用原始 `user.message.eventId`；`toolCallId` 关联对应 ExitPlanMode 调用。无 phase，不提供计划正文的 token 增量事件。
+`agent.plan` 是无 phase 的完整方案记录。内容原样来自已校验的 ExitPlanMode 参数，不从普通回答或网页内容重新提取；sourceEventId 保持原始消息归属，toolCallId 关联原调用。精确字段与长度约束见共享事件源。
 
 同一计划同时存在模型 ToolCall 与公共展示事件是两种投影：模型恢复使用原 ToolCall，审核使用 agent.plan 的 eventId。两个投影在提交时校验正文完全一致，不分别生成、修剪或二次解析。前端把关联的 ExitPlanMode 调用折叠到计划卡片，避免展示两份正文。
 
 ### 3.2 `user.plan_confirmation`
 
-```json
-{
-  "eventId": "evt-confirm-M3pX8aV2kQ7n",
-  "type": "user.plan_confirmation",
-  "createdAt": "2026-09-14T03:21:00.000Z",
-  "targetEventId": "evt-plan-H7qJ4mS9vT2c",
-  "result": "approve"
-}
-```
-
 在规范化请求字段上增加公共 eventId 和 createdAt；revise 携带被接受的 feedback。无 phase，不额外增加 sourceEventId；通过 targetEventId 查找对应计划及原根消息。
 
 ### 3.3 `session.mode_changed`
 
-主动更新的 reason=requested 模式事件已登记在[共享事件契约](../01-CampusClaw多Agent运行时/事件契约/common.json)，示例由[历史操作](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json)维护。以下仅为计划批准的目标扩展。
-
-批准导致退出时保存：
-
-```json
-{
-  "eventId": "evt-mode-K9bF2wP6sL3q",
-  "type": "session.mode_changed",
-  "createdAt": "2026-09-14T03:21:00.000Z",
-  "previousMode": "plan",
-  "mode": "build",
-  "reason": "planApproved",
-  "sourceEventId": "evt-msg-R8kD2pW5nL6x",
-  "confirmationEventId": "evt-confirm-M3pX8aV2kQ7n"
-}
-```
+主动配置更新与计划批准的两种原因均由共享事件源维护；GET 的配置场景与计划批准场景分别给出完整示例。
 
 reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史，统一 Session POST 本身返回 JSON。reason=planApproved 时二者必填，模式只能 plan→build；该完整事件进入确认续跑段 SSE 和历史。sourceEventId 仍指根消息，confirmationEventId 明确批准因果关系，不混用两种身份。
 
@@ -140,8 +67,8 @@ TODO 仅在 build 实施阶段记录进度。`agent.todo_updated` 已登记到�
 
 | 维护位置 | 同批需要完成的增量 |
 |---|---|
-| Runtime catalog / operation JSON | 统一 Session 更新与 mode 已登记；Session 响应不增加待审核字段，POST 联合输入和 GET 历史增加计划/确认及批准模式事件 |
-| Runtime eventContract / DTO / VO / 编码器 | 接入已登记的 agent.todo_updated，并增加审核类型、条件字段和错误码；保留原三种输入、原失败码及分页/凭据边界 |
+| Runtime catalog / operation JSON | 已登记四输入、计划审核和批准模式事件；完整 Session 响应不增加待审核字段 |
+| Runtime eventContract / DTO / VO / 编码器 | 实现已登记的 agent.todo_updated、审核类型、条件字段和错误码；保留原三种输入、原失败码及分页/凭据边界 |
 | 主接口 HTML 与校验器 | 从统一 JSON 生成；接口数量、完整类型集合、首帧样例和流/历史同形检查同步，不能通过删除既有检查适配新功能 |
 | 内置工具契约 | 登记 ExitPlanMode、TodoUpdate 和 Runtime 默认 profile；原八项工具 Schema 与 Tool/Skill 元数据保持原值；Agent 新增 mode 的定义及发布链路见元数据主设计 |
 | Runtime 调试前端 | Session mode 类型与更新；基于事件的审核卡片、确认发送及历史恢复，恢复未完成时禁用审核；TODO 直接消费 agent.todo_updated，失败不更新 |

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.7.0 |
+| 文档版本 | 1.8.0 |
 | 更新日期 | 2026-09-15 |
 | 状态 | 推荐目标设计，target-only；本次不修改产品实现 |
 | 计划模式主基线 | DeepSeek Harness `0a53fb55bea101816fa226bb964ae2bed71c343b`，`dsh-0.1.2-alpha.2` |
@@ -19,7 +19,7 @@
 | 模式、审核事务、生命周期与验收 | 本页 |
 | 工具与模型提示词的完整正文 | [计划与实施指令](plan-policy.md) |
 | TODO 工具输入输出、进度权威与恢复 | [TodoUpdate](todo-update.md) |
-| 尚未登记到精确契约的审核增量 | [接口增量](interface-delta.md) |
+| 已登记接口的集成边界 | [接口增量](interface-delta.md) |
 | 固定源码提交、符号与实现差距 | [源码证据](source-evidence.md) |
 
 ## 1. 设计结论
@@ -39,7 +39,7 @@
 - **复用现有执行。** 继续使用 POST Events 对应 SSE、GET 历史、固定根消息和内部续跑段；等待审核期间 Session 仍为 `running`，不接受第二条普通消息。
 - **保持工具定义跨模式一致。** Runtime profile 增加内置工具 `ExitPlanMode` 和 `TodoUpdate`，在普通模式和计划模式中都保持注册。新增工具名称不等于新增元数据字段；普通模式调用 ExitPlanMode 返回模式不匹配错误；TodoUpdate 定义保持登记，但提示词规定只在 build 实施阶段调用。
 
-统一更新及 mode 已纳入[当前九项契约](../01-CampusClaw多Agent运行时/接口契约/catalog.json)，语义由[HTTP 主设计](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#24-模型目录与统一-session-更新)唯一维护。计划审核输入和批准事件仍为[接口增量](interface-delta.md)，尚未进入当前 JSON 源；不能据此声称客户端或服务端已支持完整计划审核。
+统一更新及 mode 已纳入[当前九项契约](../01-CampusClaw多Agent运行时/接口契约/catalog.json)，语义由[HTTP 主设计](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#24-模型目录与统一-session-更新)唯一维护。计划审核输入和批准事件已纳入同一共享 JSON 源，[接口集成边界](interface-delta.md)维护接入理由；契约登记不能据此声称客户端或服务端已实现完整计划审核。
 
 ### 1.2 与 DeepSeek 的对应及差异
 
@@ -225,7 +225,7 @@ TodoUpdateTool 不访问数据库或 HTTP，也不维护第二份可变 TODO 状
 
 ## 5. HTTP 与事件接口增量
 
-统一 Session 更新及 requested 模式事件由[当前契约](../01-CampusClaw多Agent运行时/chat-api-review.html#updateSession)维护；尚未登记的计划审核报文由[接口增量设计](interface-delta.md)维护。本节只说明接入关系。
+统一 Session 更新及 requested 模式事件由[当前契约](../01-CampusClaw多Agent运行时/chat-api-review.html#updateSession)维护；计划审核报文同样由共享 JSON 维护，[接口集成边界](interface-delta.md)说明原因与发布联动。本节只说明接入关系。
 
 Session 是配置权威资源。当前九项目标契约以统一 POST 更新名称、模型、思考和模式，入口为 `RuntimeSessionController`，应用编排复用 `RuntimeSessionConfigurationService`。该接口和模式执行仍是 target-only；源码尚未提供统一更新与计划能力。
 
@@ -234,7 +234,7 @@ Session 是配置权威资源。当前九项目标契约以统一 POST 更新名
 | `POST /campusclaw-service/v1/sessions/{sessionId}` | 已登记四字段部分更新；含 mode/modelId/thinking 时要求 idle，仅名称可在 running 更新；统一要求 `If-Match`、原子提交与同源 Session/ETag |
 | `GET /campusclaw-service/v1/sessions/{sessionId}` | `mode` 已进入共享响应源；Session 响应不增加待审核目标，审核卡片由 Events 恢复 |
 | `POST /campusclaw-service/v1/sessions/{sessionId}/events` | 在原三类输入上增加 `user.plan_confirmation`；复用接受回执和对应续跑 SSE |
-| `GET /campusclaw-service/v1/sessions/{sessionId}/events` | requested 的 `session.mode_changed` 已登记；完整 `agent.plan`、`user.plan_confirmation` 与 planApproved 模式事件仍为审核增量 |
+| `GET /campusclaw-service/v1/sessions/{sessionId}/events` | 完整 `agent.plan`、`user.plan_confirmation`、两种原因的模式事件与任务更新均已登记到共享事件源 |
 
 不增加 `/plans` CRUD、单独批准 endpoint、独立 Session 订阅流、公共 Run/Execution ID 或幂等键。本期使用模式按钮调用 Session 更新接口，不同时扩展 `/plan` Slash Command；普通消息接口仍不解析 Slash 文本。
 
@@ -344,6 +344,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.8.0 | 2026-09-15 | 计划审核报文纳入共享契约，制作、批准执行和修订示例与历史同源。 |
 | 1.7.0 | 2026-09-15 | 明确方案以完整事件保存，并由后端显式发布执行任务快照。 |
 | 1.6.1 | 2026-09-14 | 明确专题分工并优化完整类图、审核与实施顺序图的阅读层次。 |
 | 1.6.0 | 2026-09-14 | Agent.mode 初始化新 Session，已有会话独立维护当前模式。 |

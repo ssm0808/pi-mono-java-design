@@ -79,7 +79,8 @@ def validate_catalog():
     for target in re.findall(r'href="([^"#]+)(?:#[^"]*)?"', source):
         require((ROOT / target).exists(), f"Broken current-page link: {target}")
     require("traceparent" not in source, "Forbidden header in current page")
-    require(len(source.encode()) < 500_000, "Unexpected catalog growth")
+    # Full plan review / approval / revision examples are embedded and have static fallbacks.
+    require(len(source.encode()) < 550_000, "Unexpected catalog growth")
     return models
 
 
