@@ -4,11 +4,11 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | 2.0.0 |
+| 文档版本 | 2.0.1 |
 | 状态 | pi-mono 已观察源码事实 |
 | 主题 | `packages/protocol` 对外 `SessionSnapshot` 及其直接类型 |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
-| 更新日期 | 2026-08-16 |
+| 更新日期 | 2026-09-14 |
 
 ## 1. 范围
 
@@ -32,13 +32,13 @@
 | `packages/protocol/src/schemas.ts` | `SessionSnapshotSchema` | 241-258 |
 | `packages/server/src/sessions.ts` | `normalizedSnapshot()`、`forConnection()`、`broadcastSnapshot()` | 276-304 |
 
-## 3. 类图
+## 3. 协议类型关系
 
 ![pi 协议层 SessionSnapshot 类图](pi_protocol_session_snapshot.svg)
 
-[PlantUML 源码：`pi_protocol_session_snapshot`](diagram.puml#L1)
+[原尺寸 SVG](pi_protocol_session_snapshot.svg) · [PlantUML 源码：`pi_protocol_session_snapshot`](diagram.puml#L1)
 
-类图仅保留 `SessionSnapshot` 根对象及它直接使用的模型、枚举、Transcript
+关系图仅保留 `SessionSnapshot` 根对象及它直接使用的模型、枚举、Transcript
 联合类型和 Usage。Content 只在字段类型中标明可用联合，避免把图扩展成
 整个 pi Runtime 架构图。
 
@@ -123,6 +123,7 @@ off | minimal | low | medium | high | xhigh | max
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.0.0 | 2026-08-16 | 根据用户反馈收紧范围；删除 Harness 内部状态、pi-mono-java 和 CampusClaw 目标设计，类图只展示 pi 协议层 SessionSnapshot 及直接类型 |
-| 1.1.0 | 2026-08-15 | 增加跨实现比较与目标模型图，后续已按主题边界拆分 |
-| 1.0.0 | 2026-08-15 | 建立 SessionSnapshot 初始分析 |
+| 2.0.1 | 2026-09-14 | 重排协议类型关系图，字段联合与状态约束集中由正文表格解释。 |
+| 2.0.0 | 2026-08-16 | 限定为 pi 协议层 SessionSnapshot 及直接类型。 |
+| 1.1.0 | 2026-08-15 | 增加跨实现比较与目标模型图。 |
+| 1.0.0 | 2026-08-15 | 建立 SessionSnapshot 初始分析。 |

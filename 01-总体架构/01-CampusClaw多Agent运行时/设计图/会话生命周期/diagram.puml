@@ -1,7 +1,28 @@
 @startuml http_session_creation
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 190
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 ' Source: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2, modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java :: create/newSession; modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare/refresh.
 ' Target-only: Agent mode is published through settings and copied on creation, never on recovery.
-title CampusClaw HTTP Session Creation
+' Current scoped evidence: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/session/RuntimeSessionService.java :: create, newSession.
+' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSessionController.java :: create.
+' Observed behavior at f61906b9: configuration and prompt availability are validated; idle thinking=true is persisted without AgentSession assembly.
+' Target-only differences retained: copied Agent.mode and required plan capability follow the Plan Mode design.
+title Session Creation - Validate and Persist, Assemble on First Execution
 
 ' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, create.
@@ -10,9 +31,9 @@ title CampusClaw HTTP Session Creation
 ' Source evidence (pi-mono-java 304eda06ff603fc9b6bbcaad0c296cc151a7defb):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java, create.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/CreateSessionResponseVO.java.
-' Observed behavior: the current Java wire path and response still use agent_id and session_id.
+' Historical behavior at the recorded baseline: Java wire path and response still use agent_id and session_id.
 ' Observed behavior: settings chooses a default model candidate and the model manager validates it.
-' Observed behavior: current Java accepts agent_ plus 24 alphanumeric characters and persists thinking false.
+' Historical behavior at the recorded baseline: Java accepts agent_ plus 24 alphanumeric characters and persists thinking false.
 ' Observed behavior: RandomSessionIdGenerator.nextId returns 26 Crockford Base32 characters with no prefix.
 ' Architecture change: target Agent and Session IDs use a type prefix plus 32 hex UUID characters.
 ' Architecture change: target HTTP path and payload fields use lowerCamelCase while header names stay unchanged.
@@ -22,75 +43,48 @@ title CampusClaw HTTP Session Creation
 ' Architecture change: the materialized Session starts with zero lifetime Usage.
 ' Design reason: defer expensive runtime initialization until the first accepted user event.
 
-skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-skinparam participant {
-  BackgroundColor #F8FAFC
-  BorderColor #475569
-  FontColor #0F172A
-}
-skinparam ArrowColor #475569
-skinparam sequence {
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F8FAFC
-}
 
-actor "mate-service\nRuntime bridge" as Mate
-participant "Runtime HTTP API" as API
-participant "AgentDirectoryResolver" as Resolver
+actor "mate-service bridge" as Mate
+participant "Session Controller" as API
+participant "Session Service" as Service
+participant "Agent directory resolver" as Resolver
 participant "Model Manager" as Models
-participant "SessionIdGenerator" as Ids
-database "RuntimeSessionStore" as Store
-participant "ResultBeanAdapter" as ResultAdapter
+database "Session Repository" as Store
 
-Mate -> API : POST /agents/{agentId}/sessions\ncontext headers and no request body
-API -> API : do not validate integration credentials
-API -> API : validate agent- plus 32 hex UUID characters
-API -> Resolver : resolve(agentId)
-Resolver -> Resolver : verify controlled root and symlink boundary\nload settings.json and validate Agent mode
-Resolver --> API : one snapshot: directory, defaultModel, enabledModels, mode
-API -> API : if mode=plan, require review tool profile
-API -> Models : resolveDefaultModel(snapshot)
-Models --> API : authoritative ModelDescriptor
-API -> Ids : generate globally unique sessionId
-Ids --> API : session- plus 32 hex UUID characters
-API -> Store : insert SessionRecord\nstate idle, thinking true, mode from snapshot, version 1, zero lifetimeUsage
-Store --> API : committed
-API -> ResultAdapter : normal(CreateSessionResponseVO)
-ResultAdapter --> API : resCode, resMsg, result
-API --> Mate : 201 Created plus Location\nResultBean with SessionResource in result
+== Validate the published configuration ==
+Mate -> API : POST /agents/{agentId}/sessions\ncontext headers; no body
+API -> API : validate typed agentId
+API -> Service : create(agentId)
+Service -> Resolver : resolve(agentId)
+Resolver -> Resolver : validate controlled directory\nand published settings
+Resolver --> Service : immutable configuration snapshot
+Service -> Service : validate prompt availability\nand initial mode capability
+Service -> Models : resolveDefaultModel(snapshot)
+Models --> Service : validated default model
 
-note over API,Store
-Before commit, a failure does not expose sessionId.
-After commit, state is idle and no MessageEntry or AgentSession exists.
-The deep-thinking switch is true. Agent.mode initializes Session.mode.
-Legacy omission defaults to build; existing Sessions are independent.
-AgentSession is initialized lazily by the first user event.
-The response contains only Session identity, current defaults,
-coarse state, and creation time.
+== Commit an idle resource ==
+Service -> Service : allocate sessionId; build Session DTO
+Service -> Store : create(idle, thinking=true, mode,\nversion=1, zero lifetimeUsage)
+Store --> Service : committed Session
+Service --> API : response VO from committed snapshot
+API -> API : wrap with ResultBeanAdapter
+API --> Mate : 201 + Location\nResultBean with Session resource
+
+note over Service,Store
+  Agent.mode initializes Session.mode; missing legacy mode is build.
+  Failure before commit exposes no Session ID.
+  No MessageEntry, AgentSession or model inference is created.
+  The first execution assembles Agent, SYSTEM, Skills and tools.
 end note
-
-note over API,Ids
-The target sessionId has the session- prefix
-and a 32-character hexadecimal UUID payload.
-UUID hyphens and legacy unprefixed IDs are rejected.
-end note
-
 note over Mate,API
-This operation has no Idempotency-Key or If-Match.
-Every successful POST creates a new Session.
-A lost successful response can produce an orphan Session,
-which background timeout cleanup must remove if unbound.
+  No If-Match or Idempotency-Key. Each successful POST creates a Session.
+  Repeating an uncertain request may create another Session.
+  Background cleanup handles unbound orphan Sessions.
 end note
-
-note over API,Store
-The database agent_id value has 38 characters.
-Widen the current VARCHAR(30) column to VARCHAR(64)
-before enabling the new identifier contract.
+note over Resolver,Store
+  Target IDs use agent- or session- plus 32 hexadecimal UUID characters.
+  Database agent_id must support 38 characters; migrate VARCHAR(30) to 64.
+  Context headers are opaque; upstream performs authentication.
 end note
 @enduml
 
@@ -125,11 +119,11 @@ title CampusClaw GetSession Confirmed Response
 ' Product constraint: target-only Session mode is independent from coarse execution state.
 ' Design reason: GET, unified POST and Command share one complete Session projection.
 
-left to right direction
+top to bottom direction
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
-skinparam defaultFontSize 12
+skinparam defaultFontSize 13
 skinparam classAttributeIconSize 0
 skinparam class {
   BackgroundColor #F8FAFC
@@ -147,7 +141,7 @@ skinparam note {
 skinparam ArrowColor #475569
 
 class GetSessionResult <<target_wire_contract>> {
-  +sessionId: session- plus 32 hex UUID characters
+  +sessionId: typed UUID
   +agentId: string
   +modelId: string
   +displayName: string or null
@@ -194,12 +188,29 @@ Usage --> "1" Cost : cost
 
 note bottom of GetSessionResult
 This is the confirmed public Session resource.
+Typed Session ID: session- plus 32 hexadecimal UUID characters.
 State is idle or running and carries no execution identity.
 GET Session Events cursors and live progress belong to other operations.
 end note
 @enduml
 
 @startuml http_delete_session
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 190
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 title CampusClaw HTTP Session Logical Deletion Confirmed Design
 
 ' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
@@ -222,33 +233,13 @@ title CampusClaw HTTP Session Logical Deletion Confirmed Design
 ' Product constraint: all Runtime operations carry integration-context headers without local validation.
 ' Design reason: the API becomes idempotent immediately without exposing cleanup-job state.
 
-skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 12
-skinparam sequence {
-  ArrowColor #475569
-  ActorBorderColor #475569
-  ActorFontColor #0F172A
-  LifeLineBorderColor #94A3B8
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
-  ParticipantBackgroundColor #F8FAFC
-  ParticipantFontColor #0F172A
-  GroupBorderColor #64748B
-  GroupFontColor #334155
-}
-skinparam note {
-  BackgroundColor #FFF7ED
-  BorderColor #C2410C
-  FontColor #7C2D12
-}
 
 actor Caller
 participant "DeleteSession\nAPI" as API
 database "Runtime Session\nStore" as Store
 participant "Cleanup\nWorker" as Worker
 
+== Commit logical deletion ==
 Caller -> API : DELETE /sessions/{sessionId}\ncontext headers and no body
 API -> API : do not validate integration credentials
 API -> API : validate sessionId
@@ -258,6 +249,7 @@ alt existing idle Session
   Store -> Store : transaction: insert tombstone, enqueue cleanup,\ndelete session row
   Store --> API : DELETED
   API --> Caller : 204 No Content
+  == Internal retryable cleanup ==
   Worker -> Store : claim cleanup work item
   Worker -> Store : complete remaining cleanup
   Worker -> Store : complete and delete cleanup work item
@@ -273,18 +265,18 @@ else atomic commit failed
 end
 
 note over API,Store
-Logical deletion is complete at 204.
-Physical cleanup remains retryable and internal.
+  Logical deletion is complete at 204. Physical
+  cleanup remains retryable and internal.
 end note
 
 note over Store,Worker
-mate-service Chat metadata and file objects
-are outside this operation boundary.
+  mate-service Chat metadata and file objects are
+  outside this operation boundary.
 end note
 
 note right of Store
-The permanent tombstone has exactly two fields:
-session_id and deleted_at.
-Cleanup state, retries, errors, and owner data stay out.
+  The permanent tombstone has exactly two fields:
+  session_id and deleted_at. Cleanup state, retries,
+  errors, and owner data stay out.
 end note
 @enduml

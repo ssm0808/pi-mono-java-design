@@ -1,9 +1,9 @@
 # 主流 Agent 数据库模式拆解与 pi-mono Java 采纳边界
 
 > 文档编号：`SR-DB-REF-001`
-> 版本：`v0.3.2`
-> 日期：`2026-08-11`
-> 状态：参考设计
+> 版本：`v0.3.3`
+> 日期：`2026-09-14`
+> 状态：研究参考；厂商事实限原核验日期，CampusClaw 规则以所属模块为准
 > pi 源码基线：[`f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee`](https://github.com/badlogic/pi-mono/tree/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee)
 > Java 源码基线：无；本文的采纳建议均为目标方案，尚无对应 Java 实现
 
@@ -19,20 +19,11 @@
 
 这些数据的写入频率、不可变性、查询方式、保留期限和权限边界不同。Java 目标设计应拆开建模，不应把它们合并到一张通用 `messages` 或 `memory` 表。
 
-对现有 [`SR-MEM-001`](../01-会话记忆GaussDB/README.md) 的本轮采纳结论是：
-
-- 使用 `t_sessions`、`t_session_entries`、`t_session_sequences` 和 `t_session_materialized` 四张表。
-- `t_session_entries.parent_id` 记录 Entry 之间的父子关系，`t_sessions.active_leaf_id` 指向当前路径的最后一条记录。
-- 只允许编辑当前路径最近一条用户消息；编辑创建新的不可变 Entry，旧路径只供内部审计。
-- 不保存 `t_branch_entries`、`t_branch_tips` 或 `t_entry_materialized`，不提供通用分支和标签能力。
-- 普通分页和模型上下文只读取当前路径；只有内部审计查询才按 `entry_seq` 读取全部历史记录。
-- 追加和编辑请求必须提交预期的父记录或当前路径末端，再结合数据库行锁保护集中式 GaussDB 的多实例写入。
-- 当前产品不考虑多租户，因此不采纳外部系统的 tenant、actor 或 user 复合作用域键。
-- Runtime Checkpoint 和跨会话长期记忆仍由独立 SR 定义。
+本研究按五类数据的生命周期比较实现机制。[Session 主设计](../01-会话记忆GaussDB/README.md)维护四表、当前路径、编辑、审计和并发规则；[Agent 元数据主设计](../02-Agent元数据GaussDB/README.md)维护定义及绑定。这里只解释选择依据，不重复定义产品契约。
 
 ![Agent database reference layers](./agent-database-reference-layers.svg)
 
-PlantUML：[查看源码](./diagram.puml#L4)
+[原尺寸 SVG](./agent-database-reference-layers.svg) · PlantUML：[查看源码](./diagram.puml#L4)
 
 ## 2. 证据边界与源码基线
 
@@ -213,7 +204,7 @@ agent_messages(id, session_id, message_data, created_at)
 - 不同生命周期的状态作用域分表。
 - Event JSON 与固定查询列并存。
 
-当前 SR 只吸收“固定作用域列进入约束”的一般原则。由于产品明确不考虑多租户，目标表只使用 `session_id`；不会为了模拟外部系统而增加 `tenant_id`。
+当前 SR 只吸收“固定作用域列进入约束”的一般原则。由于原 Session SR 未纳入多租户，目标表只使用 `session_id`；不会为了模拟外部系统而增加 `tenant_id`。
 
 ### 4.4 Microsoft Agent Framework
 
@@ -302,21 +293,13 @@ agent_messages(id, session_id, message_data, created_at)
 
 ![Pi Memory SR adoption boundary](./pi-memory-adoption-boundary.svg)
 
-PlantUML：[查看源码](./diagram.puml#L75)
+[原尺寸 SVG](./pi-memory-adoption-boundary.svg) · PlantUML：[查看源码](./diagram.puml#L75)
 
 ### 6.1 当前必须保留
 
-- 完整历史以 `t_session_entries` 为准。
-- `parent_id` 记录历史记录之间的父子关系，`entry_seq` 只表示稳定的保存顺序。
-- `t_sessions.active_leaf_id` 指向当前路径末端。
-- 编辑最近用户消息时创建同父节点的新 Entry，旧路径只供内部审计。
-- 新 compaction 使用 `retainedTail`，同时兼容旧 `firstKeptEntryId`。
-- `t_session_materialized` 区分当前路径摘要和全部已持久化用量。
-- Java 上下文转换器负责生成模型输入，SQL 只返回经过完整性校验的当前路径。
+当前规则见 [Session 主设计 §1—§7](../01-会话记忆GaussDB/README.md#1-职责与设计结论)：不可变 Entry、父链、当前路径、四表、双口径用量及上下文投影。pi 新 harness 的 Entry/SQLite 行为是参考；四表、最近消息编辑、不保存分支路径缓存和预期父记录校验是 CampusClaw 目标选择。Runtime 压缩的后续实现单独见[压缩证据](../01-会话记忆GaussDB/compaction.md#5-固定源码证据与范围)。
 
-上述决定的源码证据来自 pi 新 harness 中的 Entry、`parent_id` 关系、模型上下文转换和 SQLite 追加行为。四表结构、最近消息编辑、不保存分支路径缓存，以及预期父记录/路径末端校验，都是 CampusClaw 的目标方案。
-
-### 6.2 本轮吸收
+### 6.2 采纳理由
 
 | 来源 | 吸收内容 | 落点 | 差异分类 |
 |---|---|---|---|
@@ -326,13 +309,13 @@ PlantUML：[查看源码](./diagram.puml#L75)
 | Anthropic / AWS | 不可变事件 + 可重建汇总 | `activePath` + `lifetimeUsage` | 架构改造 |
 | 集中式 GaussDB | 预期父记录/路径末端校验 | 按固定顺序锁定 Session 主表记录和序号表记录 | 并发强化 |
 | LangGraph | 将 checkpoint 与 memory store 分开 | 当前 SR 明确排除二者，分别后续设计 | 架构边界 |
-| Letta / Anthropic | 长期记忆需要版本 | 后续 Memory Store SR 必须包含 version/audit | 后续约束 |
+| Letta / Anthropic | 长期记忆需要版本 | 未来 Memory Store 需评估 version/audit，尚非产品契约 | 研究建议 |
 
 ### 6.3 当前明确不吸收
 
 - 不增加 `runtime_checkpoint*` 表，除非 Java Runtime 明确需要恢复工具调用中的执行状态。
 - 不增加 `memory_store*`、`memory_embedding*` 表，除非跨 Session 记忆的抽取和召回需求已确定。
-- 不增加 tenant、actor 或 user 复合键；当前产品作用域只有 session。
+- 不增加 tenant、actor 或 user 复合键；本专题引用的原 Session SR 只定义 session 作用域。
 - 不复制 SQLite 的 `branch_entries`、`branch_tips` 或 `entry_materialized`；集中式 GaussDB 直接按 `parent_id` 递归回溯当前路径。
 - 不提供 `moveTo`、分支查询、分支选择、任意历史编辑或标签能力。
 - 不把 Agent Definition、Tool Binding、Credential 放入 `t_sessions.metadata`。
@@ -352,8 +335,9 @@ PlantUML：[查看源码](./diagram.puml#L75)
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| `v0.3.2` | 2026-08-11 | 与 SR-MEM-001 v0.14.2 统一中文术语：改用“按 `parent_id` 回溯的当前路径”、“当前路径末端”、“全部历史记录”和“并发校验”等表达；不改变采纳边界 |
-| `v0.3.1` | 2026-08-11 | 优化当前 Memory SR 采纳边界图：与 SR-MEM-001 v0.14.1 统一四表颜色语义，将当前逻辑关系与未来主题依赖分别表示为实线和虚线；不改变采纳边界 |
-| `v0.3.0` | 2026-08-11 | pi 基线更新至 `f0deb8d`；对齐 SR-MEM-001 v0.14 四表设计；删除当前 SR 的分支路径缓存、标签和通用分支能力；补充最近用户消息编辑、当前路径读取、内部审计历史、双口径汇总，以及预期父记录/路径末端并发校验 |
-| `v0.2.0` | 2026-07-30 | 更新 pi 基线；纳入新 harness 和 SQLite 存储事实；当前 Memory SR 改为单 session 作用域、持久化 `leaf`、`retainedTail` 和独立 session state；移除当前 SR 的多租户及独立 leaf event 采纳结论 |
-| `v0.1.0` | 2026-07-20 | 拆解 OpenAI Agents SDK、LangGraph、Google ADK、Microsoft Agent Framework、AWS AgentCore、Anthropic Managed Agents 和 Letta 的公开数据库/持久化模式；建立五类数据平面与当前 pi Memory SR 采纳边界 |
+| `v0.3.3` | 2026-09-14 | 将产品规则归还所属主设计，保留数据库研究的分层证据与采纳理由。 |
+| `v0.3.2` | 2026-08-11 | 与 SR-MEM-001 v0.14.2 统一中文术语。 |
+| `v0.3.1` | 2026-08-11 | 优化当前 Memory SR 采纳边界图：与 SR-MEM-001 v0.14.1 统一四表颜色语义，将当前逻辑关系与未来主题依赖分别表示为实线和虚线。 |
+| `v0.3.0` | 2026-08-11 | pi 基线更新至 `f0deb8d`。 |
+| `v0.2.0` | 2026-07-30 | 更新 pi 基线。 |
+| `v0.1.0` | 2026-07-20 | 拆解 OpenAI Agents SDK、LangGraph、Google ADK、Microsoft Agent Framework、AWS AgentCore、Anthropic Managed Agents 和 Letta 的公开数据库/持久化模式。 |

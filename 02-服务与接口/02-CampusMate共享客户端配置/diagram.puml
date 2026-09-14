@@ -1,6 +1,4 @@
 @startuml campusmate_shared_base_url_configuration
-title CampusMate Configuration and Endpoint Deduplication
-
 ' Source evidence baseline: pi-mono-java 320d790726a70aada6100052952d5494d2a378ac
 ' Local rename evidence: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec
 ' Target-only: rename the Provider; configuration keys and endpoint semantics stay unchanged.
@@ -21,82 +19,58 @@ title CampusMate Configuration and Endpoint Deduplication
 ' Security hardening: endpoint paths cannot carry another origin.
 ' Target-only server scope: Skill and Tool controllers were not found in the analyzed mate-service baseline.
 
-skinparam backgroundColor #FFFFFF
+title CampusMate Configuration - One Origin and One Path Catalog
+top to bottom direction
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
-skinparam defaultFontSize 13
+skinparam defaultFontSize 14
 skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam nodesep 25
+skinparam ranksep 40
 skinparam component {
   BackgroundColor #F8FAFC
-  BorderColor #475569
-  FontColor #0F172A
-}
-skinparam rectangle {
-  BackgroundColor #FFFFFF
-  BorderColor #475569
-  FontColor #0F172A
+  BorderColor #64748B
 }
 skinparam ArrowColor #475569
 
-rectangle "Historical Configuration (320d7907)\n3 service identities, 3 origins, 7 path keys" as Before {
-  component "campusmate.model-manager\nbase-url\nchat-path" as OldModel #FFF7ED
-  component "campusmate.runtime\nbase-url\nagent-runtime-path-template\nskill-info-query-path-template" as OldRuntime #FFF7ED
-  component "mate\ninnerGWSerive\nagent-info-path-prefix\nskill-tools-query-path-prefix\ntool-metadata-query-path\ntool-execute-path-template\ntool.enabled" as OldTool #FEE2E2
-  component "Duplicate operation\nGET /mate-service/v1/skill/query/{skillId}\nRuntime key + Tool key" as Duplicate #FECACA
-
-  OldRuntime --> Duplicate : key A
-  OldTool --> Duplicate : key B
+package "Startup configuration" {
+  [campusmate.base-url] as Origin #DBEAFE
+  [campusmate.endpoints] as Paths #DBEAFE
+  [model / runtime / tool options] as Options
 }
-
-rectangle "Target Configuration\n1 service identity, 1 origin, 6 unique operation paths" as After {
-  component "campusmate.base-url\nCAMPUSMATE_BASE_URL" as BaseUrl #DCFCE7
-  component "campusmate.endpoints\nmodel-chat-path\nagent-info-path-template\nagent-runtime-path-template\nskill-info-path-template\ntool-metadata-query-path\ntool-execute-path-template" as Endpoints #DCFCE7
-  component "campusmate.model\nAPI, capability, SSE timeouts" as ModelOptions
-  component "campusmate.runtime\ncache, short timeout, limits" as RuntimeOptions
-  component "campusmate.tool.enabled" as ToolOptions
+package "Independent clients" {
+  [CampusMateProvider] as ChatClient
+  [MateServiceClient] as RuntimeClient
+  [HttpMateToolClient] as ToolClient
 }
-
-Before -down[#2563EB,dashed]-> After : unify service namespace\nand deduplicate Skill path
-
-rectangle "CampusClaw Clients" {
-  component "CampusMateProvider\n(target-only rename)" as ModelClient
-  component "MateServiceClient" as RuntimeClient
-  component "MateToolClient" as ToolClient
+package "CampusMate - same origin" {
+  [Chat] as Chat
+  [Agent runtime] as Runtime
+  [Shared Skill query] as Skill #DBEAFE
+  [Agent info + Tool operations] as Tools
 }
+Origin --> Paths : join validated path
+Paths --> ChatClient : model-chat-path
+Paths --> RuntimeClient : agent-runtime / skill-info
+Paths --> ToolClient : agent-info / skill-info / tools
+Options ..> ChatClient : model options
+Options ..> RuntimeClient : runtime options
+Options ..> ToolClient : enabled
+ChatClient --> Chat : POST / SSE
+RuntimeClient --> Runtime : GET
+RuntimeClient --> Skill : full Skill projection
+ToolClient --> Skill : tool-binding projection
+ToolClient --> Tools : discover / execute
 
-rectangle "CampusMate Service - Same Origin" {
-  component "POST /mate-service/v1/LLM/chat" as ChatEndpoint
-  component "Agent operations\nGET /mate-service/v1/agents/{agentId}\nGET /mate-service/v1/agents/{agentId}/runtime" as AgentEndpoints
-  component "GET /mate-service/v1/skill/query/{skillId}" as SkillEndpoint #DBEAFE
-  component "Tool operations\nPOST /mate-service/v1/runtime/tools/query\nPOST /mate-service/v1/runtime/tools/{toolId}/execute" as ToolEndpoints
-}
-
-BaseUrl --> ModelClient : shared origin
-BaseUrl --> RuntimeClient : shared origin
-BaseUrl --> ToolClient : shared origin
-Endpoints --> ModelClient : model Chat path
-Endpoints --> RuntimeClient : Agent Runtime + shared Skill path
-Endpoints --> ToolClient : Agent info + shared Skill + Tool paths
-ModelOptions --> ModelClient
-RuntimeOptions --> RuntimeClient
-ToolOptions --> ToolClient
-
-ModelClient --> ChatEndpoint
-RuntimeClient --> AgentEndpoints : Runtime projection
-RuntimeClient --> SkillEndpoint : full Skill projection
-ToolClient --> AgentEndpoints : bindingTools projection
-ToolClient --> SkillEndpoint : bindingTools projection
-ToolClient --> ToolEndpoints : metadata and execute
-
-note bottom of SkillEndpoint
-One HTTP operation and one configuration key.
-Two clients may keep different DTO projections.
+note bottom of Skill
+One operation, one key, two client projections.
 end note
-
-note bottom of Endpoints
-No top-level mate configuration remains.
-No target campusmate.model-manager configuration remains.
-Every ID path uses one %s template.
-Paths start with /mate-service/ and contain no origin.
-end note
+legend bottom left
+Target configuration; HTTP methods and payloads are unchanged.
+Six operation paths share one validated HTTP(S) origin.
+Client instances and DTOs remain independent.
+Provider name is target-only; server evidence varies by operation.
+endlegend
 @enduml

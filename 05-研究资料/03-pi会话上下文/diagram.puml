@@ -15,91 +15,58 @@
 ' and session services before AgentSession assembles tools and the base system prompt.
 ' Design reason: the diagram separates files that configure runtime behavior from
 ' content that is ultimately sent to the model.
-
-skinparam backgroundColor white
+title pi: From Resource Files to Model Context
+top to bottom direction
 skinparam shadowing false
+skinparam backgroundColor white
 skinparam componentStyle rectangle
-skinparam defaultTextAlignment center
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam nodesep 22
+skinparam ranksep 35
 skinparam ArrowColor #475569
-skinparam rectangle {
-  BackgroundColor #F8FAFC
-  BorderColor #64748B
-  FontColor #0F172A
+
+package "1. Inputs" {
+  artifact "settings / trust" as SettingsFiles
+  artifact "auth / models / model cache" as ModelFiles
+  artifact "instructions / resources / packages" as ResourceFiles
+  artifact "Session JSONL" as SessionFiles
 }
-
-title pi-mono AgentSession Creation and Context Assembly
-
-rectangle "CLI main\nresolve cwd and agentDir" as Main
-
-rectangle "Runtime configuration files" as ConfigFiles {
-  rectangle "settings.json\ntrust.json" as SettingsFiles
-  rectangle "auth.json\nmodels.json\nmodels-store.json" as ModelFiles
+package "2. Startup assembly" {
+  component "Settings and trust" as Settings
+  component "ModelRuntime" as Models
+  component "PackageManager\nResourceLoader" as Resources
+  component "SessionManager" as Sessions
+  component "SDK createAgentSession" as SDK
+  component "AgentSession" as Session
+  component "Mode binding" as Binding
 }
-
-rectangle "Prompt and resource files" as ResourceFiles {
-  rectangle "AGENTS.md or CLAUDE.md\nSYSTEM.md\nAPPEND_SYSTEM.md" as PromptFiles
-  rectangle "extensions\nskills\nprompts\nthemes\npackages" as ExtFiles
+package "3. Per-turn request" {
+  component "Input and before_agent_start hooks" as Hooks
+  artifact "Agent context snapshot" as Snapshot
+  component "Context transform\nconvertToLlm" as Transform
+  artifact "Provider Context\nsystemPrompt + messages + tools" as Context
 }
-
-rectangle "Session JSONL" as SessionFiles
-
-rectangle "SettingsManager\nand trust resolution" as Settings
-rectangle "ModelRuntime" as Models
-rectangle "PackageManager.resolve" as Packages
-rectangle "ResourceLoader.reload" as Loader
-rectangle "SessionManager\nbuildSessionContext" as Sessions
-rectangle "SDK createAgentSession" as SDK
-rectangle "Agent\nblank prompt and tools\nrestored messages" as Agent
-rectangle "AgentSession\nbuild tools and base prompt" as AgentSession
-rectangle "Mode binding\nsession_start and resources_discover" as Binding
-rectangle "Per-turn hooks\ninput and before_agent_start" as Hooks
-rectangle "Agent context snapshot" as Snapshot
-rectangle "Extension context transform\nand convertToLlm" as Transform
-rectangle "Provider Context\nsystemPrompt + messages + tools" as Provider
-
-Main --> Settings
 SettingsFiles --> Settings
 ModelFiles --> Models
-Settings --> Packages
-ExtFiles --> Packages
-Packages --> Loader
-PromptFiles --> Loader
+ResourceFiles --> Resources
 SessionFiles --> Sessions
-
-Main --> SDK
+Settings --> Resources : trust and paths
 Settings --> SDK
 Models --> SDK
-Loader --> SDK
-Sessions --> SDK
-
-SDK --> Agent
-SDK --> AgentSession
-Agent --> AgentSession
-Loader --> AgentSession
-AgentSession --> Binding
-Binding --> AgentSession : may extend resources
-AgentSession --> Hooks
+Resources --> SDK
+Sessions --> SDK : current branch
+SDK --> Session : Agent + loaded services
+Session --> Binding
+Binding --> Session : discovered resources
+Session --> Hooks : tools and base prompt
 Hooks --> Snapshot
 Snapshot --> Transform
-Transform --> Provider
-
-note right of Loader
-  Produces parsed extensions, skills,
-  templates, themes, context files,
-  and custom prompt fragments.
-end note
-
-note right of Sessions
-  Produces the selected branch only,
-  with compaction-aware messages,
-  restored model, and thinking level.
-end note
-
-note bottom of Provider
-  settings, auth, themes, packages, and
-  prompt templates are not copied here
-  verbatim. They influence one or more
-  fields through the assembly pipeline.
-end note
-
+Transform --> Context
+legend bottom left
+Observed pi behavior at fc85bdd88be93b1e9a6b6bcfa41c684282ec79cc.
+CLI selects the Session cwd before constructing cwd-bound services.
+Agent starts with an empty prompt and tool list; AgentSession assembles both.
+Settings, credentials and themes configure behavior; their raw files are not sent to the model.
+endlegend
 @enduml

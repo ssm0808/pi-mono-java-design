@@ -16,59 +16,57 @@
 ' Design reason: the logger name must identify the actual failure source and logging arguments must remain typed and visible.
 
 @startuml campusclaw_failure_boundary
-title CampusClaw Simplified Failure Boundary
 
-skinparam backgroundColor #FFFFFF
+title Failure Logging: Record Cause, Return Stable Code
+autonumber
+hide footbox
+skinparam backgroundColor white
 skinparam shadowing false
-skinparam roundcorner 8
+skinparam defaultFontSize 13
+skinparam maxMessageSize 190
+skinparam BoxPadding 10
 skinparam sequence {
-  ArrowColor #334155
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
   ParticipantBackgroundColor #F8FAFC
   GroupBorderColor #94A3B8
-  GroupBackgroundColor #F8FAFC
+  GroupBackgroundColor #F1F5F9
 }
 
 actor Caller
-participant "Failure Source" as Source
-database "Service Log\nSLF4J and ECS" as Log
-participant "Code-only Carrier\nException or AssistantMessage" as Carrier
-participant "Public Boundary\nHTTP or SSE" as Public
+boundary "Public boundary\nHTTP / SSE" as Public
+control "Failure source" as Source
+database "Service log\nSLF4J / ECS" as Log
 
-Caller -> Source : invoke operation
-Source -> Source : catch or classify failure
-Source -> Log : own logger writes stable code, safe context, and cause
-Source -> Carrier : construct with errorCode only
-
-note over Source, Carrier
-The original Throwable never enters the carrier.
-Cause is null and writable stack trace is disabled.
-end note
-
-note over Source
-Deterministic validation and state rejection have no raw cause.
-They create the code-only carrier without a synthetic stack log.
-end note
-
-alt Synchronous Runtime failure
-  Carrier -> Public : RuntimeApiException(errorCode)
-  Public --> Caller : HTTP status, resCode, localized resMsg
-else Mate streaming failure
-  Carrier -> Public : AssistantMessage(errorCode, errorMessage=null)
-  Public --> Caller : existing stream.error contract
-else Startup failure
-  Carrier --> Caller : STARTUP_FAILED only
+== 1. Identify failure at its source ==
+Caller -> Public : Invoke operation
+Public -> Source : Execute
+alt Original Throwable exists
+  Source -> Log : Own Logger: code, safe context, cause
+else Deterministic validation or state rejection
+  Source -> Source : Choose stable code\nNo synthetic exception log
 end
 
-note over Log
-No credentials, headers, prompts, message bodies,
-tool payloads, upstream resMsg, or raw SSE.
-end note
+== 2. Cross the boundary with a code-only carrier ==
+alt Synchronous Runtime failure
+  Source --> Public : RuntimeApiException(errorCode)
+  Public --> Caller : HTTP status + controlled response
+else Mate streaming failure
+  Source --> Public : AssistantMessage(errorCode)\nerrorMessage = null
+  Public --> Caller : Existing stream.error
+end
 
-note over Public
-Public HTTP and SSE contracts remain unchanged.
-Branch on stable codes, never exception messages.
-end note
+== 3. Process-level failures ==
+opt Startup failure (separate entry point)
+  Source -> Log : STARTUP_FAILED and original cause
+  Source --> Caller : StartupException(errorCode)
+end
+
+legend bottom left
+Source constructs the code-only carrier after logging.
+Exception cause is null; writable stack trace is disabled.
+No payloads, credentials, headers, upstream resMsg, or raw SSE in logs.
+Public boundaries do not log the same code-only business failure again.
+endlegend
 @enduml

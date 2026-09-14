@@ -11,9 +11,9 @@ title ResultBeanAdapter Standalone and Company Replacement
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
-skinparam defaultFontName Arial
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 13
-skinparam component {
+skinparam class {
   BackgroundColor #F8FAFC
   BorderColor #475569
   FontColor #0F172A
@@ -30,18 +30,21 @@ skinparam note {
 }
 skinparam ArrowColor #475569
 
+top to bottom direction
+skinparam classAttributeIconSize 0
+hide empty members
 package "Business source" {
-  component "SessionController" as Controller
-  component "RuntimeApiExceptionHandler" as Handler
+  class "SessionController" as Controller
+  class "RuntimeApiExceptionHandler" as Handler
 }
 
 interface "ResultBeanAdapter" as Contract
-component "StandaloneResultBeanAdapter\nresCode, resMsg, result" as Standalone
-component "Company ResultBeanAdapter Bean" as CompanyAdapter
-component "Company ResultBeanFactory" as Company
-component "Company Maven settings" as Settings
+class "StandaloneResultBeanAdapter\nresCode, resMsg, result" as Standalone
+class "Company ResultBeanAdapter Bean" as CompanyAdapter
+class "Company ResultBeanFactory" as Company
+class "Company Maven settings" as Settings
 
-component "MessageSource\nen-US and zh-CN" as Messages
+class "MessageSource\nen-US and zh-CN" as Messages
 
 Controller --> Contract : normal(result)
 Handler --> Contract : error(code, message)
@@ -59,6 +62,22 @@ end note
 @enduml
 
 @startuml http_dual_authentication
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 190
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 title CampusClaw Upstream-Validated Request Context
 
 ' Source evidence (pi-mono-java 320d790726a70aada6100052952d5494d2a378ac):
@@ -74,22 +93,6 @@ title CampusClaw Upstream-Validated Request Context
 ' Security boundary: discovery, model, and other calls are credential-free; only Mate execute forwards
 ' the received X-HW-ID, Authorization, X-HW-APPKEY, and access-token values without renaming.
 
-skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-skinparam participant {
-  BackgroundColor #F8FAFC
-  BorderColor #475569
-  FontColor #0F172A
-}
-skinparam ArrowColor #475569
-skinparam sequence {
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F8FAFC
-}
 
 actor "mate-service" as Caller
 participant "Runtime Controller" as Controller
@@ -97,6 +100,7 @@ participant "Runtime Service" as Service
 participant "Model Manager" as Model
 participant "Mate Tool API" as Mate
 
+== Freeze operation context ==
 alt POST /sessions/{sessionId}/events
   Caller -> Controller : shared context headers\nand required access-token
   Controller -> Controller : bind inputs and create transient snapshot\nof received values in four named header slots
@@ -104,6 +108,7 @@ else any other Runtime operation
   Caller -> Controller : X-HW-ID and Authorization\nor X-HW-APPKEY
   Controller -> Controller : bind operation inputs\nwithout credential validation
 end
+== Route downstream calls ==
 Controller -> Service : execute operation with scoped context
 Service -> Model : model request\nno execution credential headers
 Service -> Mate : Agent, Skill, or metadata discovery\nno execution credential headers
@@ -111,22 +116,24 @@ opt actual Mate tool execution
   Service -> Mate : POST tool execute\nforward received snapshot values only
   Mate --> Service : tool result
 end
+== Complete and release ==
 Service --> Controller : operation result or SSE publisher
 Controller --> Caller : normal HTTP, SSE, or business error response
 
 note over Caller,Controller
-Upstream verifies credential authenticity and action authorization.
-Runtime does not check completeness, mutual exclusion, Bearer shape,
-or whether Authorization and X-HW-APPKEY are both present.
+  Upstream verifies credential authenticity and action
+  authorization. Runtime does not check completeness,
+  mutual exclusion, Bearer shape, or whether
+  Authorization and X-HW-APPKEY are both present.
 end note
 
 note over Controller,Service
-Header names are case-insensitive under HTTP.
-The contract preserves the exact access-token spelling.
-Credential values remain opaque and are never logged,
-persisted, copied into ResultBean, Prompt, or Event,
-or used as Session ownership. The snapshot is discarded
-when the execution ends. Runtime declares no local
-authentication error codes.
+  Header names are case-insensitive under HTTP. The
+  contract preserves the exact access-token spelling.
+  Credential values remain opaque and are never
+  logged, persisted, copied into ResultBean, Prompt,
+  or Event, or used as Session ownership. The snapshot
+  is discarded when the execution ends. Runtime
+  declares no local authentication error codes.
 end note
 @enduml

@@ -1,11 +1,11 @@
 # Anthropic Managed Agents 公开模型（官方契约基线）
 
-> 文档版本：`v0.4.0`<br>
-> 状态：公开契约基线，已补充 Session 历史查询与断线恢复语义<br>
-> 资料核对日期：`2026-08-16`<br>
+> 文档版本：`v0.5.0`<br>
+> 状态：Beta 公开契约研究；无服务端源码<br>
+> 字段原核验：`2026-08-16`；Session 创建、事件恢复与 Agent 更新专项复核：`2026-09-14`<br>
 > 范围：仅提取 Anthropic 公开的 Managed Agents 模型，不掺入我们的 Tool/Agent 元数据设计。
 
-## 1. 本轮结论
+## 1. 核心结论
 
 Anthropic 公开的 Managed Agents 不是一个单独的 `Agent JSON`，而是一组分层资源和运行时契约：
 
@@ -34,12 +34,11 @@ Anthropic 公开的 Managed Agents 不是一个单独的 `Agent JSON`，而是�
 
 ### 2.3 源码基线
 
-Managed Agents 是 Anthropic 托管服务，本轮没有可对齐的官方开源仓库，因此：
+Managed Agents 是 Anthropic 托管服务，没有可对齐的官方开源仓库，因此：
 
 - 源码提交：`N/A`。
 - 实现路径和类符号：`N/A`。
-- 事实基线：Anthropic 官方文档和 API Reference，本轮 Session 事件契约
-  核对日期为 `2026-08-16`。
+- 事实基线：Anthropic 官方文档和 API Reference，原完整字段核验日期为 `2026-08-16`；2026-09-14 只复核本文标出的创建、更新与事件恢复范围。
 
 Anthropic 官方 TypeScript SDK 可作为公开请求/响应类型的补充契约证据；本文固定
 SDK commit `3b45cd3b69c956ac63384fdb09ce1d8109f3fa80`，但该客户端源码不是
@@ -77,7 +76,7 @@ Managed Agents 服务端实现，不能据此推断内部 ID 生成算法、存�
 
 ![Anthropic Managed Agents 公开资源模型](./managed_agents_resource_model.svg)
 
-PlantUML：[查看源码](./diagram.puml#L5)
+[原尺寸 SVG](./managed_agents_resource_model.svg) · PlantUML：[查看源码](./diagram.puml#L5)
 
 ### 4.1 可复用配置资源
 
@@ -97,24 +96,21 @@ PlantUML：[查看源码](./diagram.puml#L5)
 | `SessionThread` | Multiagent 中一个 Agent 的隔离上下文和事件流 |
 | `Event` | 客户端向 Session 发送的 `user.*` / `system.message` 事件，以及服务返回的 `agent.*` / `session.*` / `span.*` 事件 |
 
-Session 创建只准备运行环境，不自动开始任务；客户端发送 `user.message` 后才触发工作。公开状态包括 `idle`、`running`、`rescheduling` 和 `terminated`。
+Session 通常先创建为 `idle`，再由 `user.message` 启动工作。2026-09-14 官方文档还支持创建时提交非空 `initial_events`，直接得到 `running` Session；空数组与省略等效。该增量是公开契约事实，不改变 CampusClaw 已确认入口。[官方创建文档](https://platform.claude.com/docs/en/managed-agents/sessions#seed-the-session-with-initial-events)
+
+`initial_events` 最多 50 项，只接受 `user.message` 和 `user.define_outcome`，按顺序校验、持久化；任一事件无效则不创建 Session。其他资源和字段表仍是原核验范围的摘录，不声称覆盖官方最新字段全集。
 
 #### 4.2.1 Session 基于 Agent 配置的创建顺序
 
 ![Session 基于版本化 Agent 配置的创建顺序](./session_agent_creation_sequence.svg)
 
-PlantUML：[查看源码](./diagram.puml#L71)
+[原尺寸 SVG](./session_agent_creation_sequence.svg) · PlantUML：[查看源码](./diagram.puml#L74)
 
-顺序图将 `POST /v1/sessions` 分为四个逻辑阶段：
+顺序图按解析配置、确定启动边界、观察运行三个阶段阅读。Agent ID 解析为最新或指定版本；Session 覆盖替换完整字段，不创建 Agent 新版本；服务准备独立沙箱，并返回已解析的 Agent 配置。
 
-1. 根据 Agent ID 解析创建时的最新版本，或读取调用方显式锁定的版本。
-2. 深复制基础 Agent 配置，并对 `model`、`system`、`tools`、`mcp_servers`、`skills` 应用 Session 级完整字段替换。
-3. 根据 Environment 创建独立 Sandbox，挂载 Session Resources 和已解析 Skills，绑定 Vault 与 MCP，并形成有效 Tool Registry。
-4. 保存包含 Agent ID、具体版本和解析配置的 Session 快照，初始化主 Thread，并以 `idle` 状态返回。
+未提交初始事件时，创建仅准备 Session；任务由后续事件请求启动。提交合法的非空 `initial_events` 时，创建与启动合并为一个请求。观察仍通过读取事件流完成，不把创建响应误认为实时流。
 
-`POST /v1/sessions` 本身不发送任务给模型。后续 `POST /v1/sessions/{id}/events` 中的 `user.message` 才使 Session 从 `idle` 进入 `running` 并启动 Agent turn。
-
-图中的版本解析、完整替换、解析快照、独立 Sandbox 和事件启动边界来自公开文档。`Config Resolver`、`Resource and Skill Mounter`、`Tool Registry` 等参与者及其精确先后顺序是用于解释职责的逻辑推断，不表示 Anthropic 已公开这些内部服务或源码符号。
+图中 API 自调用只概括公开效果，不表示 Anthropic 内部类、存储表或精确准备顺序。资源挂载、凭据绑定和工具可用性的字段约束仍见所属官方页面。
 
 #### 4.2.2 Session 对话历史查询与恢复展示
 
@@ -154,7 +150,7 @@ SessionSnapshot。
 
 ![Anthropic Managed Agents Session 历史与恢复展示](./managed_agents_session_history_recovery.svg)
 
-PlantUML：[查看源码](./diagram.puml#L446)
+[原尺寸 SVG](./managed_agents_session_history_recovery.svg) · PlantUML：[查看源码](./diagram.puml#L354)
 
 该图的“Conversation reducer”是根据官方 Event History 和 preview 对账要求得出的
 客户端责任推断；Anthropic 没有公开其 Console 内部前端类名或 reducer 实现。
@@ -227,7 +223,7 @@ Anthropic 的模型 ID 约定。
 
 ![Anthropic Managed Agent 公开配置模型](./managed_agent_configuration_model.svg)
 
-PlantUML：[查看源码](./diagram.puml#L235)
+[原尺寸 SVG](./managed_agent_configuration_model.svg) · PlantUML：[查看源码](./diagram.puml#L143)
 
 ### 6.1 `agent_toolset_20260401`
 
@@ -280,7 +276,7 @@ MCP 配置被拆成两个互相校验的部分：
 
 ![Anthropic Managed Agents Tool 执行边界](./managed_agents_tool_execution_model.svg)
 
-PlantUML：[查看源码](./diagram.puml#L373)
+[原尺寸 SVG](./managed_agents_tool_execution_model.svg) · PlantUML：[查看源码](./diagram.puml#L277)
 
 | Tool 类型 | 定义在哪里 | 真正执行者 | 结果如何回到 Agent |
 |---|---|---|---|
@@ -447,17 +443,11 @@ Agent 可通过以下形状成为 Coordinator：
 - 不会实现 `lookup_service_owner` 的执行代码。
 - 不会自动启动任务；任务由 Session 的 `user.message` 事件启动。
 
-## 9. 本阶段刻意保留的问题
+## 9. 与 CampusClaw 设计的边界
 
-为了保持“先忠实提取，再做设计”，本版本暂不回答下面的问题：
+本文只为比较提供公开契约证据。CampusClaw 是否采用工具联合类型、Manifest/Binding 分层、Agent 版本、Session 快照或独立执行器，均由[Agent 架构对比](../../01-总体架构/07-Agent架构对比/README.md)及所属模块主设计决定，不在本研究中重复制定。
 
-1. 我们是否直接沿用 Anthropic 的 `tools[]` 联合类型。
-2. 我们是否把 Tool 的声明、Binding、Credential、Policy 拆成不同资源。
-3. “开发人员只配置元数据就产生 Tool”时，由谁生成并托管真实 Executor。
-4. Agent 版本、Session 快照、环境版本和密钥绑定如何映射到我们的 ToB 平台。
-5. Anthropic 公共模型与其他 Agent 项目的差异如何统一。
-
-这些问题应在确认本公开基线后，作为下一阶段“目标设计”单独记录，避免把现状与方案混在一起。
+2026-09-14 专项复核确认：`initial_events` 支持创建即启动；Agent 更新的 `version` 为可选乐观锁；preview 仍不持久化、不重放，断线需要重开读流并查询完整历史。其余原字段、数量上限和资源模型未作本次全量重核。新的权限策略（例如官方新增的 `auto`）超出原 `always_allow/always_ask` 样例范围；图中的确认分支只示范 `always_ask`，不声称列全所有策略。[Agent 更新](https://platform.claude.com/docs/en/managed-agents/agent-setup#update-an-agent)、[事件恢复](https://platform.claude.com/docs/en/managed-agents/events-and-streaming#limitations)
 
 ## 10. 图表维护与校验
 
@@ -473,7 +463,8 @@ plantuml -tsvg diagram.puml
 
 | 版本 | 日期 | 变化 |
 |---|---|---|
-| `v0.4.0` | 2026-08-16 | 核对官方 Session operations、Event List、Thread Event 和 streaming 契约；明确对话历史通过 `GET /v1/sessions/{session_id}/events` 查询，断线展示通过持久化 Event History 重放、SSE 重连和 buffered `agent.message` 对账恢复；增加 Multiagent Thread 级接口和恢复时序图 |
-| `v0.3.0` | 2026-08-03 | 固定官方 TypeScript SDK 契约证据；记录 Create Agent 的服务端 ID 与当前 `agent_` 加 24 位字母数字示例，区分顶层新建 ID 和被引用 Agent ID；明确公开类型未承诺正则、生成算法或排序，当前 `claude-*` 模型示例仍处于开放 string 类型；并修正 Update Agent 的可选 `version` 乐观锁语义 |
-| `v0.2.0` | 2026-07-21 | 增加 Session 基于版本化 Agent 配置创建的顺序图，区分官方观察行为与服务端逻辑推断；更新根文档索引 |
-| `v0.1.0` | 2026-07-18 | 建立 Anthropic Managed Agents 官方公开契约基线；整理资源、Agent 字段、三类 Tool、Session、Vault、Memory、Skill、Multiagent 和 Deployment；未加入目标元数据设计 |
+| `v0.5.0` | 2026-09-14 | 按阶段简化顺序图，核对创建初始事件、可选版本锁和断线恢复边界。 |
+| `v0.4.0` | 2026-08-16 | 核对官方 Session operations、Event List、Thread Event 和 streaming 契约。 |
+| `v0.3.0` | 2026-08-03 | 固定官方 TypeScript SDK 契约证据。 |
+| `v0.2.0` | 2026-07-21 | 增加 Session 基于版本化 Agent 配置创建的顺序图，区分官方观察行为与服务端逻辑推断。 |
+| `v0.1.0` | 2026-07-18 | 建立 Anthropic Managed Agents 官方公开契约基线。 |

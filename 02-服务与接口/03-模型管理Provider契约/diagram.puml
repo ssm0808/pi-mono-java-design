@@ -1,6 +1,4 @@
 @startuml provider_identity_model
-title Provider Identity and Runtime Contract
-
 ' Source evidence:
 ' Baseline: pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185
 ' pi-mono packages/ai/src/models.ts: Provider, MutableModels, ModelsImpl, and createProvider
@@ -8,66 +6,30 @@ title Provider Identity and Runtime Contract
 ' Observed behavior: provider.id is the registry key and Model.provider selects the owning provider.
 ' Design reason: provider identity, protocol dispatch, model identity, and connection configuration remain separate.
 
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-skinparam class {
+skinparam defaultFontSize 14
+skinparam ArrowColor #475569
+title Provider Identity - Conceptual View
+left to right direction
+skinparam rectangle {
   BackgroundColor #F8FAFC
-  BorderColor #475569
-  FontColor #0F172A
-  ArrowColor #475569
+  BorderColor #64748B
 }
-
-class ProviderIdentity {
-  +providerId: string
-}
-
-class ProviderRuntimeContract {
-  +displayName: string
-  +auth: ProviderAuth.none
-  +streamSimple(model, context, options)
-}
-
-class ModelIdentity {
-  +providerId: string
-  +modelId: string
-}
-
-class ModelDescriptor {
-  +modelId: string
-  +apiId: internal string
-  +capabilities
-  +limits
-  +cost
-}
-
-class ApiProtocol {
-  +configuredApiId: openai-completions
-  +request and SSE implementation
-}
-
-ProviderIdentity "1" *-- "1" ProviderRuntimeContract : identifies
-ProviderIdentity "1" *-- "0..*" ModelIdentity : owns
-ModelIdentity "1" *-- "1" ModelDescriptor : describes
-ModelDescriptor --> ApiProtocol : internal dispatch
-ProviderRuntimeContract --> ApiProtocol : fixed by configuration
-
-note right of ProviderIdentity
-Only providerId determines identity.
-Name, URL, credentials, and apiId
-do not participate in identity.
-end note
-
-note bottom of ModelIdentity
-Runtime model key is
-(providerId, modelId).
+rectangle "Provider identity\nprovider.id" as Provider
+rectangle "Model identity\n(provider.id, model.id)" as Model
+rectangle "Protocol selection\nmodel.api" as API
+rectangle "Connection configuration\norigin / path / timeouts" as Config
+Provider --> Model : owns
+Model --> API : selects protocol
+Provider ..> Config : configured separately
+note bottom of Provider
+Name, URL, credentials and API do not define identity.
 end note
 @enduml
 
 @startuml generic_provider_boundary
-title CampusMate Provider Boundary - Target Design
-
 ' Baseline: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec
 ' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java: streamSimple
 ' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java: streamSimple, eventFlux
@@ -78,61 +40,43 @@ title CampusMate Provider Boundary - Target Design
 ' Target-only: rename the existing provider and identity; catalog HTTP operations remain candidates.
 ' Design reason: Runtime owns model selection and persistence, while AI owns outbound adaptation.
 
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-skinparam componentStyle rectangle
+skinparam defaultFontSize 14
 skinparam ArrowColor #475569
+title Model Invocation - Responsibility Boundaries
+top to bottom direction
+skinparam componentStyle rectangle
 skinparam component {
   BackgroundColor #F8FAFC
-  BorderColor #475569
-  FontColor #0F172A
+  BorderColor #64748B
 }
-
-package "Runtime" {
-  [Agent directory snapshot] as Snapshot
-  [MateRuntimeModelManager] as Models
+package Runtime {
+  [Agent snapshot] as Snapshot
+  [Model selection] as Selection
   [AgentLoop] as Loop
-  [Runtime event and persistence services] as Persistence
+  [Event projection / persistence] as Persistence
 }
 package "AI module" {
-  [CampusClawAiService] as AiService
-  [AiProviderRegistry] as Registry
-  [CampusMateProvider\nID: campusmate\nauth: none] as Provider <<target-only>> #DBEAFE
-  [MateChatRequestMapper] as Mapper
-  [MateChatSseParser\nper invocation] as Parser
-  [WebClient + Reactor Netty] as Http
+  [Provider routing] as Routing
+  [CampusMate adapter] as Provider #DBEAFE
 }
-[Shared campusmate configuration\nbase-url, endpoints, model] as Config
-cloud "CampusMate Chat\nPOST /mate-service/v1/LLM/chat" as Chat
-cloud "Model Catalog HTTP\noperations 1-3" as Catalog <<candidate>> #FEF3C7
-
-Snapshot --> Models : bound model IDs
-Models --> Loop : selected Model
-Loop --> AiService : Context and options
-AiService --> Registry : provider identity
-Registry --> Provider : target-only identity: campusmate
-Provider --> Mapper : request JSON
-Provider --> Http : POST
-Config --> Provider : origin, path, timeouts
-Http --> Chat : no application credentials
-Chat --> Http : Chat SSE
-Http --> Parser : raw SSE events
-Parser --> Loop : AssistantMessageEvent
-Loop --> Persistence : domain messages and events
-Models ..> Catalog : candidate only; no new call in this slice
-
+cloud "CampusMate Chat" as Mate
+Snapshot --> Selection : allowed IDs
+Selection --> Loop : selected Model
+Loop --> Routing : Context / options
+Routing --> Provider : campusmate
+Provider --> Mate : Chat JSON / SSE
+Provider --> Loop : domain events
+Loop --> Persistence : completed messages
 note bottom of Provider
-Only built-in product provider.
-openai-completions remains the protocol ID.
-No OpenAI SDK or direct Session Repository dependency.
+Target-only name; retained Chat behavior.
+No direct Session database access.
 end note
 @enduml
 
 @startuml model_manager_invocation_sequence
-title CampusMate Foreground Chat Invocation and Disconnect Cancellation
-
 ' Source evidence:
 ' pi-mono packages/ai/src/api/openai-completions.ts: stream, convertMessages, tool calls, and usage parsing
 ' pi-mono packages/agent/src/agent-loop.ts: runLoop and streamAssistantResponse
@@ -147,80 +91,74 @@ title CampusMate Foreground Chat Invocation and Disconnect Cancellation
 ' Product constraint: cancellation closes the foreground request and has no separate cancel operation.
 ' Architecture change: successful Chat SSE is returned without ResultBean or payload rewriting.
 
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-skinparam participant {
-  BackgroundColor #F8FAFC
-  BorderColor #475569
-  FontColor #0F172A
-}
+skinparam defaultFontSize 14
 skinparam ArrowColor #475569
+title CampusMate Chat - One Invocation
+hide footbox
+skinparam maxMessageSize 210
+skinparam sequenceMessageAlign left
 skinparam sequence {
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantBorderColor #64748B
+  LifeLineBorderColor #94A3B8
+  GroupBorderColor #CBD5E1
   GroupBackgroundColor #F8FAFC
 }
+participant AgentLoop as Loop
+participant "AI service / registry" as AI
+participant "CampusMateProvider\n(target-only name)" as Provider
+participant "Mate Chat\nvia internal gateway" as Mate
 
-actor Client
-participant "AgentLoop" as Loop
-participant "CampusClawAiService" as AiService
-participant "AiProviderRegistry" as Registry
-participant "CampusMateProvider\n(target-only rename)" as Provider
-participant "Internal Gateway" as Gateway
-participant "mate-service Chat Endpoint" as Mate
-participant "Upstream LLM" as Upstream
+== 1. Select and prepare ==
+Loop -> AI : stream(model, context, options)
+AI -> AI : Resolve Provider identity
+AI -> Provider : streamSimple(model, context, options)
+Provider -> Provider : Validate and map text context
+Provider --> AI : Per-call event stream
+AI --> Loop : Event stream
 
-Client -> Loop : submit prompt
-Loop -> AiService : stream(model, Context, options)
-AiService -> Registry : get(model.providerId)
-Registry --> AiService : Mate provider
-AiService -> Provider : streamSimple(model, Context, options)
-Provider -> Provider : validate text-only context
-Provider -> Provider : map Context to messages, tools, and options
-Provider -> Gateway : POST /mate-service/v1/LLM/chat\nprotocol headers only
-Gateway -> Mate : trusted internal route\nno app identity or credentials
-Mate -> Upstream : Mate-owned invocation
+== 2. Create foreground request ==
+Provider -> Mate : POST /mate-service/v1/LLM/chat\nProtocol headers only
+alt Rejected before SSE
+  Mate --> Provider : HTTP error + ResultBean
+  Provider --> Loop : ERROR (one terminal)
+else SSE established
+  Mate --> Provider : 200 text/event-stream
+  loop While invocation is active
+    Mate --> Provider : Original Chat chunk
+    Provider -> Provider : Parse content, tools and usage
+    Provider --> Loop : AssistantMessageEvent
+  end
 
-loop Raw OpenAI-style Chat SSE
-  Upstream --> Mate : data chunk
-  Mate --> Gateway : unchanged success chunk
-  Gateway --> Provider : unchanged success chunk
-  Provider -> Provider : map text, reasoning, tool calls, and usage
-  Provider --> Loop : AssistantMessageEvent
+  == 3. End the invocation ==
+  alt Normal completion
+    Mate --> Provider : data: [DONE]
+    Provider --> Loop : Final AssistantMessage
+  else Caller cancels
+    Loop -> Provider : Cancel stream
+    Provider -> Mate : Close request and body
+    Mate -> Mate : Stop upstream invocation
+    Provider --> Loop : ABORTED (one terminal)
+  else Stream fails
+    Mate --> Provider : event:error; then close\nNo [DONE]
+    Provider --> Loop : ERROR (one terminal)
+  end
 end
 
-alt Normal completion
-  Upstream --> Mate : data: [DONE]
-  Mate --> Provider : data: [DONE]
-  Provider --> Loop : final AssistantMessage
-else Caller aborts
-  Loop -> Provider : cancel subscription
-  Provider -> Gateway : close request and SSE body
-  Gateway -> Mate : downstream disconnect
-  Mate -> Upstream : abort or close upstream request
-  Provider --> Loop : StopReason.ABORTED
-else Error before SSE starts
-  Mate --> Provider : HTTP error and ResultBean
-  Provider --> Loop : StopReason.ERROR
-else Error after SSE starts
-  Mate --> Provider : event: error then close
-  Provider --> Loop : StopReason.ERROR
-end
-
+note over Loop,Provider
+Tool execution remains in AgentLoop.
+A completed, failed or cancelled call emits one terminal.
+end note
 note over Provider,Mate
-No create POST replay after an unknown outcome.
-No responseId-based cancel request exists.
-Tool execution stays in AgentLoop.
-Mate upstream adaptation is outside this contract.
+No application credentials; no create replay after unknown outcome.
+Mate owns upstream routing and cancellation propagation.
 end note
 @enduml
 
 @startuml java_provider_alignment
-title AI Module - Recommended Target Class View
-
 ' Baseline: pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185
 ' Source evidence: packages/ai/src/models.ts: Provider, ModelsImpl.requireProvider, createProvider
 ' Baseline: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec
@@ -236,107 +174,119 @@ title AI Module - Recommended Target Class View
 ' Target-only: CampusMateProvider, CAMPUSMATE identity, and ModelRegistry without presets.
 ' Design reason: request state stays per invocation; AI does not depend on Runtime persistence.
 
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam defaultFontSize 13
-skinparam classAttributeIconSize 0
-skinparam packageStyle rectangle
-skinparam nodesep 35
-skinparam ranksep 45
 skinparam ArrowColor #475569
+title Model and Provider - Recommended Global Class Structure
+top to bottom direction
+skinparam classAttributeIconSize 0
+hide empty members
+skinparam packageStyle rectangle
+skinparam nodesep 25
+skinparam ranksep 30
+skinparam linetype ortho
 skinparam class {
   BackgroundColor #F8FAFC
-  BorderColor #475569
+  BorderColor #64748B
   FontColor #0F172A
   BackgroundColor<<target-only>> #DBEAFE
   BorderColor<<target-only>> #2563EB
 }
 
-package "Runtime entry and orchestration" {
-  class "Runtime HTTP Controllers" as Controllers <<singleton>>
-  class "Runtime application services" as Services <<singleton>>
+package "Web boundary" as Web {
+  class "Runtime HTTP Controllers" as Controllers
+  class "Request / Response VOs" as VOs
+}
+package "Runtime application - singleton" as Runtime {
+  class "Runtime application services" as Services
   interface RuntimeModelManager
-  class MateRuntimeModelManager <<singleton>>
+  class MateRuntimeModelManager
   class AgentDirectorySnapshotDTO <<request snapshot>>
+
   class AgentLoop <<session execution>>
-  Controllers --> Services : VO boundary
-  Services --> RuntimeModelManager : list / resolve
-  Services --> AgentDirectorySnapshotDTO : acquire snapshot
-  Services --> AgentLoop : prepare and run
-  MateRuntimeModelManager ..up|> RuntimeModelManager
-  MateRuntimeModelManager --> AgentDirectorySnapshotDTO : same bound IDs
+  class "Runtime event projection" as Projection
+  interface RuntimeSessionRepository
 }
-
-package "AI facade and extension registries" {
-  class CampusClawAiService <<singleton>>
-  class AiProviderRegistry <<singleton>>
+package "AI entry and registries - singleton" as AI {
+  class CampusClawAiService
+  class AiProviderRegistry
   interface AiProvider {
-    +id(): ProviderId
-    +auth(): ProviderAuth
-    +streamSimple(model, context, options)
+    +id() / auth()
+    +streamSimple()
   }
-  class ApiProviderRegistry <<singleton>> {
-    +register(provider, sourceId)
-    +unregister(sourceId)
-  }
+  class ApiProviderRegistry
   interface ApiProvider
-  class ModelRegistry <<target-only>> {
-    +register / query / load JSON
-    no built-in model presets
-  }
-  class Model <<descriptor>> {
-    +provider: Provider
-    +api: Api
-  }
-  CampusClawAiService --> "1" AiProviderRegistry : identity first
-  AiProviderRegistry o-- "0..*" AiProvider : keyed by ProviderId
-  CampusClawAiService --> "1" ApiProviderRegistry : API fallback
-  ApiProviderRegistry o-- "0..*" ApiProvider : default empty
-  CampusClawAiService --> ModelRegistry : expose registry
-  ModelRegistry o-- "0..*" Model : external definitions
+  class ModelRegistry <<target-only>>
+  class Model <<descriptor>>
 }
-
-package "CampusMate outbound adapter" {
+package "CampusMate adapter - singleton" as Adapter {
   class CampusMateProvider <<target-only>> {
-    ID = campusmate
+    id = campusmate
     auth = none
   }
-  class MateChatRequestMapper <<provider lifetime>>
-  class MateChatSseParser <<per invocation>>
-  class AssistantMessageEventStream <<per invocation>>
-  class WebClient <<provider lifetime>>
-  class "campusmate.* configuration" as Config <<startup configuration>>
-  class "CampusMate Chat HTTP" as Chat <<external service>>
-  CampusMateProvider ..up|> AiProvider : target-only rename
-  CampusMateProvider *-- "1" MateChatRequestMapper
-  CampusMateProvider *-- "1" WebClient
-  CampusMateProvider ..> MateChatSseParser : create per call
-  CampusMateProvider ..> AssistantMessageEventStream : create and return
-  CampusMateProvider --> Config : validated URL and options
-  MateChatSseParser --> AssistantMessageEventStream : emit domain events
-  WebClient --> Chat : POST JSON / SSE
+  class MateChatRequestMapper
+  class WebClient
+}
+package "Invocation state" as Call {
+  class MateChatSseParser <<per call>>
+  class AssistantMessageEventStream <<per call>>
+}
+package "Configuration and external I/O" as IO {
+  class "campusmate.*" as Config <<startup config>>
+  class "CampusMate Chat" as Chat <<external HTTP>>
 }
 
-MateRuntimeModelManager ..> Model : construct campusmate identity (target-only rename)
-AgentLoop --> Model : selected descriptor
-AgentLoop --> CampusClawAiService : streamSimple
-AgentLoop -[norank]-> AssistantMessageEventStream : consume events
+Controllers -down-> Services
+Controllers ..> VOs
+Services --> RuntimeModelManager
+MateRuntimeModelManager ..|> RuntimeModelManager
+Services --> AgentDirectorySnapshotDTO : acquire
+MateRuntimeModelManager --> AgentDirectorySnapshotDTO
+MateRuntimeModelManager -[norank,dashed]-> Model
+Services -down-> AgentLoop : prepare / run
+AgentLoop -[norank]-> Model
+AgentLoop -[norank]-> Projection : events
+Projection --> RuntimeSessionRepository : persist
 
-AgentDirectorySnapshotDTO -[hidden]down-> CampusClawAiService
-Model -[hidden]down-> CampusMateProvider
+AgentLoop -down-> CampusClawAiService : streamSimple
+CampusClawAiService -down-> AiProviderRegistry : identity first
+AiProviderRegistry o-- "0..*" AiProvider
+CampusClawAiService -down-> ApiProviderRegistry : API fallback
+ApiProviderRegistry o-- "0..*" ApiProvider
+CampusClawAiService -[norank]-> ModelRegistry
+ModelRegistry o-- "0..*" Model
+CampusMateProvider .up.|> AiProvider
+CampusMateProvider *-- "1" MateChatRequestMapper
+CampusMateProvider *-- "1" WebClient
+CampusMateProvider --> Config
+CampusMateProvider ..> MateChatSseParser : create
+CampusMateProvider ..> AssistantMessageEventStream : create / return
+MateChatSseParser --> AssistantMessageEventStream : emit
+AgentLoop -[norank]-> AssistantMessageEventStream : consume
+WebClient --> Chat : POST / SSE
+WebClient -[norank]-> MateChatSseParser : chunks
 
-legend bottom
-Blue: target-only changes at the recorded baseline.
-Other nodes: retained responsibilities, not a full implementation audit.
-Registry is a singleton; Runtime model selection uses the Agent snapshot.
-S1: identity and class rename. S2: presets and built-in adapters.
-S3: dependencies and mirror. S4: invocation and extension regression.
+Controllers -[hidden]down-> Services
+VOs -[hidden]down-> Services
+Services -[hidden]down-> CampusClawAiService
+CampusClawAiService -[hidden]down-> CampusMateProvider
+MateChatRequestMapper -[hidden]right-> WebClient
+MateChatSseParser -[hidden]right-> AssistantMessageEventStream
+
+legend bottom left
+Blue: target-only rename or removal of model presets.
+The whole diagram is a recommended assembly, not an implementation audit.
+Grouped Runtime boxes denote existing collaborators, not new facade classes.
+API registry is empty by default; custom adapters remain supported.
+AI emits events; only Runtime writes Session state.
 endlegend
 @enduml
 
 @startuml token_usage_persistence
-title Session Usage Records and Statistics
+title Session Usage - One Atomic Runtime Write
+top to bottom direction
 
 ' Source evidence:
 ' pi-mono packages/agent/src/harness/session/types.ts: UsageRecord and SessionStats
@@ -377,10 +327,10 @@ database "t_session_stats\nmaterialized totals" as Stats
 database "t_session_materialized\nnon-usage views" as Materialized
 
 Projector --> Repository : assistant message and Usage
-Repository --> Sequence : allocate two ordered sequence values
+Repository --> Sequence : allocate 2 sequence values
 Repository --> Entries : insert Assistant Entry\nupdate active leaf
 Repository --> Records : insert type = usage\ndo not update active leaf
-Repository --> Stats : increment message and usage totals
+Repository --> Stats : update totals
 Repository ..> Materialized : lifetimeUsage removed
 
 note bottom of Repository

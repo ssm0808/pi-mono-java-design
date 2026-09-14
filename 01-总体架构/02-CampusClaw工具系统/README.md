@@ -2,29 +2,17 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.6.5 |
+| 文档版本 | 2.6.6 |
 | 状态 | 目标设计；Mate 发现无凭据、仅 execute 透传 POST Events 执行快照待实现 |
 | 更新日期 | 2026-09-14 |
-| 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
-| CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
-| CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
-| CampusClaw 压缩修订前基线 | `a7f78fed345a289833970cd7b78399f0e8e51d32` |
-| CampusClaw PR 167 审查头 | `bf28e72f94f29acd316eb872a250893ed54e3632` |
-| CampusClaw PR 167 对齐实现 | `bd26e7f81bac8f68be0c3523efe23b51f96c52e4` |
-| CampusMate 地址配置复核基线 | `56be8eee59415a5f86658d6635a7b7e8891263d3` (`origin/main`) |
-| CampusClaw 凭据透传核对基线 | `320d790726a70aada6100052952d5494d2a378ac` |
-| 本次设计仓修订基线 | `79f9818c1b99788eeb8b7ff2dfb8f212f0217581` |
-| pi-mono 对照基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
-| OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
+| 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [8 个活动内置工具契约](built-in-tool-contracts.md) |
 
 计划模式的推荐增量见[独立专题](../06-CampusClaw计划模式/README.md)：Runtime 默认 profile 增加 ExitPlanMode 和 [TodoUpdate](../06-CampusClaw计划模式/todo-update.md)，后者仅在 build 实施阶段以通用工具结果承载进度；plan 提示词明确不调用它；模式切换保持同一工具定义，Child 按调用时模式生成提示词。该 target-only 扩展只增加 Agent.mode 作为新交互 Session 默认值（见[元数据主设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)），Tool/Skill 元数据不变；现有八项精确契约在正式纳入前保持原值。对应取舍见 [A03](../07-Agent架构对比/README.md#a03) 和 [A05](../07-Agent架构对比/README.md#a05)。
 
 ## 1. 设计结论
 
-CampusClaw 作为 TOB Runtime 服务，不再提供 CLI 产品模式。目标工具系统是关闭、严格
-配置且按 Session 装配的内置工具集合，不提供动态工具注册、Java Extension 工具或 Skill
-声明的本地工具。模型只看到以下 8 个区分大小写的 PascalCase 名称：
+CampusClaw 通过 Runtime、Cron 和 Child 三个入口运行 Agent。基础工具采用固定清单和严格启动配置，每次执行独立装配；不提供 CLI 产品入口、动态注册或 Skill 声明的本地工具。基础清单有以下 8 个区分大小写的名称，计划专题的追加工具按上方入口维护：
 
 ```text
 Read
@@ -84,53 +72,9 @@ Cron 的数据库与集群调度属于 Cron Host 的独立专题。本设计只�
 隔离和触发时的 Session 装配；当前 JSON/JSONL、进程内 scheduler、`--cron-tick` 和
 launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 
-## 3. 源码观察与对照证据
+## 3. 依据与设计理由
 
-### 3.1 CampusClaw（pi-mono-java）观察证据
-
-以下事实来自本页记录的 CampusClaw commit，不代表目标状态：
-
-| 观察事实 | 源码路径与符号 |
-|---|---|
-| `AgentTool` 尚无逐工具执行模式；Pipeline 由调用方为整批传入一个 mode | `modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java`，`AgentTool`；`ToolExecutionPipeline.java`，`executeAll` |
-| 大型 CLI `AgentSession` 聚合 ToolCatalog、Skill 激活、reload 和 delegation after-hook | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java`，`initialize`、`configureRuntimeTools`、`handleAfterToolCall` |
-| 工具由 Spring、Extension 和会话本地工厂进入目录 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/catalog/DefaultToolCatalog.java`、`SpringAgentToolSource.java`、`ExtensionToolSource.java` |
-| HTTP Runtime 使用独立 Agent 目录解析和 Session engine 组装 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java`、`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java` |
-| Manager 缓存优先但仍原地写旧文件名及 `references/tools.json` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java`，`prepare`、`materialize` |
-| 当前本地模型工具包含小写 `read/glob/grep/ls`、写工具、`EditDiff`、`loop` 和控制工具 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/**`、`loop/LoopTool.java` |
-| 当前 Mate 工具以 `listMateTool/callMateTool` 暴露，List 刷新会话 name-to-ID 缓存，Call 强制先 List | `tool/mate/ListMateTool.java`、`CallMateTool.java`、`MateToolSessionCache.java` |
-| 当前缓存每次刷新先清空平面 Map，最近一次 Agent/Skill List 会覆盖此前来源 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java`，`refresh` |
-| 当前执行端点按 `toolId` 调用并要求完整的原三项 Mate 凭据 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java`，`invokeTool/toHeaderInfo`，基线 `320d7907` 303-373 行 |
-| 当前 Agent、Skill 与 Tool metadata 发现也透传原三项 Mate 凭据 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:134-185`，`queryToolIdsByAgentId/queryToolIdsBySkillId/queryToolMetaByIds`，基线 `320d7907` |
-| Runtime 当前未捕获入站 `access-token`，既有 `RequestHeaderInfo.accessToken` 对应的是 `X-Access-Token` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:61-69`、`RuntimeRequestContext.java:45-49`、`common/dto/RequestHeaderInfo.java:81-90`，基线 `320d7907` |
-| 当前 Tool 客户端从 `mate.innerGWSerive` 读取独立地址，而它的 Agent、Skill、Tool 元数据和执行路径都位于 `/mate-service/...` | `modules/coding-agent-cli/src/main/resources/application.yml:129-140`、`config/MateToolAutoConfiguration.java:31-81`、`common/client/HttpMateToolClient.java:41-83,132-320` |
-| Runtime 与 Tool 客户端分别配置 `campusmate.runtime.skill-info-query-path-template` 和 `mate.endpoints.skill-tools-query-path-prefix`，但两者规范化后都是 `GET /mate-service/v1/skill/query/{skillId}` | `runtime/MateServiceClient.java:43-113`、`common/client/HttpMateToolClient.java:145-166`、`common/dto/SkillInfoResult.java:12-20` |
-| 当前部署脚本只把 Campus 内网服务地址导出为 `MATE_INNERGWSERIVE` | `mate-campusclaw/scripts/install_value.sh:27-38` |
-| 当前 Child 同时存在 `spawn_agent` 与 `invoke_agent` 两条路径，后者通过 Session after-hook 执行 | `subagent/tool/SpawnAgentTool.java`、`tool/delegation/InvokeAgentTool.java`、`session/AgentSession.java` |
-| 当前 Cron payload 接受 model、system prompt 和 allowed tools，并依赖本地存储与 OS/进程调度 | `modules/cron/src/main/java/com/campusclaw/cron/tool/CronTool.java`、`model/CronPayload.java`、`engine/CronEngine.java` |
-| 当前 `ReadTool` 自行使用 cwd 做路径边界，`BashExecutor` 只设置子进程 cwd | `tool/read/ReadTool.java`、`util/PathUtils.java`、`tool/bash/BashExecutor.java` |
-| PR 167 按 TUI/CLI 包树删除了同时承载入口无关压缩和 Slash Command 的源码 | PR 167 `f60cc3e` 相对 merge base 的 `modules/coding-agent-cli/.../session`、`command`、`modes` 删除差异 |
-| 修订前公共压缩已恢复“至少保留末条消息”，但溢出、Usage、split-turn、重复摘要和摘要请求细节仍未完整对齐 pi | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java`、`session/compaction/SessionCompactor.java`，基线 `a7f78fed` |
-| 审查头在内存中排除了可重试 `LENGTH`，但压缩 Entry 只保存首条保留边界，重载会重新注入被丢弃响应；公共 Agent 也未显式传递模型输出上限 | `RuntimeEntryCodec.effectiveContextEntries`、`RuntimeEventProjector.projectCompactionCompleted`、`Agent.buildStreamOptions`，基线 `bf28e72f` |
-| 对齐实现持久化内部重试候选 Entry ID、重载时精确排除，并在无调用方覆盖时把 `model.maxTokens` 传入实际 Agent 请求 | 同上符号及 `RuntimeEventProjectorTest.reloadExcludesLengthResponseDiscardedBeforeCompactionRetry`，基线 `bd26e7f8` |
-
-### 3.2 pi 与 OpenCode 对照
-
-pi 内置的 `read`、`grep`、`find` 和 `ls` 是本地只读工具语义的对照。pi 的 Subagent
-是 Extension 示例，支持独立上下文、进度和取消，但其用户/项目 Agent、独立进程、
-cwd/model/tool override、parallel/chain 参数不成为 CampusClaw 契约。源码证据：
-`packages/coding-agent/src/core/tools/read.ts`、`grep.ts`、`find.ts`、`ls.ts`，以及
-[pi Subagent 示例](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/examples/extensions/subagent/index.ts)。
-
-公共压缩以 pi `packages/coding-agent/src/core/agent-session.ts` 的
-`_checkCompaction/_runAutoCompaction`、`packages/coding-agent/src/core/compaction/compaction.ts`
-的 `estimateContextTokens/findCutPoint/prepareCompaction/compact/generateSummaryWithUsage`、
-`packages/coding-agent/src/core/compaction/utils.ts` 的 `serializeConversation/extractFileOpsFromMessage`
-及 `packages/ai/src/utils/overflow.ts` 的 `isContextOverflow/isRecoverableLength` 为强制证据。
-
-OpenCode `TaskTool` 仅用于对照父子消息隔离、进度和取消，不继承它的权限、Session
-持久化或工具注册模型。源码证据：
-[OpenCode Task](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/tool/task.ts)。
+源码事实与固定提交集中在[工具系统源码证据](source-evidence.md)。主设计保留目标与理由，工具参数和结果由[精确契约](built-in-tool-contracts.md)维护；两者不重复维护实现状态。
 
 ### 3.3 目标差异分类
 
@@ -250,7 +194,7 @@ public interface BuiltInToolFactory {
 
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L477)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L569)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -277,7 +221,7 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 
 ![三入口 Session 装配](agent_session_assembly.svg)
 
-[PlantUML 源码：`agent_session_assembly`](diagram.puml#L107)
+[PlantUML 源码：`agent_session_assembly`](diagram.puml#L117)
 
 `AgentSessionFactory.create` 固定执行：
 
@@ -295,7 +239,7 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 
 | Host | 创建时机 | Host 持有 | 关闭时机 |
 |---|---|---|---|
-| Runtime | 接受一次 active execution 时 | 数据库 Session/Entry、SSE、Steer/FollowUp/Abort、active execution 注册 | execution 结束或取消后 |
+| Runtime | 接受一次 active execution 时 | 数据库 Session/Entry、请求级 SSE、确认与中断控制、active execution 注册 | execution 结束或取消后 |
 | Cron | Job 触发时 | Job/Run、调度上下文和当前 Agent ID | 本次 Cron execution 结束 |
 | Child | `Agent` 通过绑定校验后 | `SubagentExecutionContext`、进度投影和父取消桥 | 本次 Child execution 结束 |
 
@@ -315,7 +259,7 @@ default ToolExecutionMode executionMode() {
 
 ![逐工具批量调度](tool_batch_scheduling.svg)
 
-[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L426)
+[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L502)
 
 Batch planner 保持模型调用原始顺序，把连续 `PARALLEL` 调用组成并行段并等待整段完成；
 每个 `SEQUENTIAL` 调用是 barrier。结果按原始调用顺序回填，而不是按完成时间排序。
@@ -363,7 +307,7 @@ agent/{agentId}/.campusclaw/
 
 ![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
 
-[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L163)
+[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L177)
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
@@ -378,7 +322,7 @@ agent/{agentId}/.campusclaw/
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L707)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L826)
 
 ## 9. Mate 工具发现、缓存与执行
 
@@ -386,7 +330,7 @@ agent/{agentId}/.campusclaw/
 
 ![Mate 工具实时发现](list_mate_tools_sequence.svg)
 
-[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L236)
+[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L265)
 
 模型输入只有可选 `skillName`。无参数时查询当前 Agent；有名称时通过本地 Skill 索引解析
 ID。模型不能提交 agentId、skillId 或 toolId。
@@ -417,7 +361,7 @@ permission、outputSchema、并发属性或 Mate 原始信封。每次 List 都�
 
 ![CallMateTool 缓存解析与执行](call_mate_tool_sequence.svg)
 
-[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L291)
+[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L331)
 
 模型只提交 `{tool,args?}`，不提交 Skill、Agent、scope 或 toolId。Call 先按 toolName 查询
 Session `MateToolResolutionCache`；命中后使用内部 ID 调用 Mate。未命中时通过 Session 级
@@ -464,7 +408,7 @@ POST 不自动重放等其他契约不变。
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L368)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L425)
 
 模型只使用：
 
@@ -540,7 +484,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L543)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L644)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
@@ -562,7 +506,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L596)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L700)
 
 默认配置为 `enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`。执行正常结束后
 超过阈值则压缩；摘要瞬态重试默认开启、最多 3 次、基础退避 2000ms。`enabled=false`
@@ -670,7 +614,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 - 固定结构摘要、2000 字符截断、无工具/cache、Token 上限、瞬态重试和 Usage/Cost 合并通过测试；
 - 自动 prepare 空结果不发事件，失败回滚、取消 `aborted=true` 和完整摘要恢复通过测试。
 
-## 14. 文档治理与实现顺序
+## 14. 实施顺序
 
 1. 冻结 8 个名称、三入口配置和精确 Schema；
 2. 实现工作区边界、只读工具和受管树链接校验；
@@ -683,24 +627,24 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 9. 删除动态目录、Extension、Loop、旧 delegation 和兼容入口；
 10. 同步生成镜像并完成全量回归。
 
-本设计为 target-only，不能因为文档完成就把目标能力标为已实现。每个实现 PR 都应列出
-实际落地目标与仍存在的源码差异。
+本页描述推荐目标结构；已实现部分及差距须按[源码证据](source-evidence.md)中的提交逐项判断。实现 PR 应列出实际落地范围，不能把旧差距直接延伸为最新状态。
 
 ## 15. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.6 | 2026-09-14 | 集中维护源码证据，收敛工具与 Host 职责并重排架构和执行流程图。 |
 | 2.6.5 | 2026-09-14 | Agent 默认 mode 随 settings 发布，工具定义和 Child 模式继承保持稳定。 |
 | 2.6.4 | 2026-09-14 | 明确 TodoUpdate 仅记录 build 实施进度，保持跨模式工具定义稳定。 |
 | 2.6.3 | 2026-09-14 | 关联 TodoUpdate 目标工具及通用结果事件的进度恢复边界。 |
 | 2.6.2 | 2026-09-14 | 关联保持元数据稳定的计划模式目标增量与统一架构对比。 |
 | 2.6.1 | 2026-08-31 | 同步 Slash Command 最新设计：命令由独立 HTTP 模块提供，不进入模型工具清单；`/name` 由 CampusClaw 管理 Session 名称。 |
-| 2.6.0 | 2026-08-27 | POST Events 生成四项 Header 的 execution 瞬态快照；Mate Agent/Skill/metadata 发现全部无凭据，只有实际 Tool execute 原名透传快照中已提供值。 |
-| 2.5.0 | 2026-08-26 | 删除顶层 `mate` 目标配置；Tool 地址、path 和开关统一到 `campusmate`，并让 Runtime 与 Tool 共用唯一 Skill endpoint 配置。模型可见 Mate Tool 名称保持不变。 |
-| 2.4.0 | 2026-08-26 | 按 Mate 即 CampusMate 的产品约束，删除 Mate Tool 独立地址目标配置，统一读取 `campusmate.base-url`；保留 Tool 路径、凭据和调用语义。 |
-| 2.3.0 | 2026-08-24 | 处理 PR 167 审查意见：按 Entry ID 固化并排除压缩重试候选，保证在线与重载上下文一致；统一公共 Agent 实际请求与 LENGTH 判定的输出上限；记录审查头和对齐实现基线。 |
-| 2.2.0 | 2026-08-24 | 固定 pi 压缩细节：Usage/失效边界、成功 STOP 不重试、错误/length 单次恢复、超大末条保留、split-turn/重复摘要、结构化摘要、Read 路径继承、取消及瞬态摘要重试。 |
-| 2.1.0 | 2026-08-24 | 修订 PR 167 的 TUI 删除边界：保留未注册 Slash 核心及四个处理器，压缩与 Read 追踪迁入公共 Session；明确 Usage/领域事件和 refresh 后下一次执行懒解析。 |
-| 2.0.0 | 2026-08-23 | 收敛为 Runtime/Cron/Child 三入口与 8 个活动工具；删除 CLI/Loop、硬禁用 Bash/Edit/Write、将 Glob/ListDirectory 对齐为 Find/Ls；补充 Mate Session 缓存与 miss 自动刷新，并将 Child 统一为公共 AgentSessionFactory 创建的独立 Execution。 |
+| 2.6.0 | 2026-08-27 | 执行凭据仅供实际 Mate Tool execute 使用，发现链保持无凭据。 |
+| 2.5.0 | 2026-08-26 | Runtime 与 Tool 统一读取 campusmate 配置和 Skill endpoint。 |
+| 2.4.0 | 2026-08-26 | Mate Tool 统一读取 campusmate.base-url。 |
+| 2.3.0 | 2026-08-24 | 按 Entry ID 排除压缩重试候选，保持在线与重载上下文一致。 |
+| 2.2.0 | 2026-08-24 | 固定压缩重试、摘要继承、Read 追踪与取消边界。 |
+| 2.1.0 | 2026-08-24 | 压缩与 Read 追踪归入公共 Session，刷新后按需解析下一次执行。 |
+| 2.0.0 | 2026-08-23 | Runtime、Cron、Child 共用 Session 工厂及八项基础工具。 |
 | 1.1.0 | 2026-08-22 | 将本地文件边界固定为整个 `agent/{agentId}`，补充跨 Agent、符号链接、非普通文件和 Child 根隔离。 |
-| 1.0.0 | 2026-08-22 | 初版 12 工具、四入口、CLI/Loop 和受管目录目标设计，现已由 2.0.0 取代。 |
+| 1.0.0 | 2026-08-22 | 建立工具入口、CLI 与受管目录的初版边界。 |

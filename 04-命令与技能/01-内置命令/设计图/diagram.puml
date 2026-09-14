@@ -1,10 +1,20 @@
 @startuml target_command_core_classes
+top to bottom direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 35
+skinparam linetype ortho
+hide empty members
 title Target-only Executable Builtin Definition
 ' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java.
 ' Design reason: each contributor owns metadata, admission, and handler; no central command-name switch.
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java getView.
 ' Architecture change: project business resources, never serialize the internal command receipt.
-skinparam shadowing false
 interface BuiltinCommandContributor
 class BuiltinCommandSource <<singleton>>
 class BuiltinCommandDefinition <<immutable>>
@@ -20,28 +30,51 @@ class AvailableModelsResponseVO <<existing immutable>>
 class "AgentHelp / Compaction / BoundSkills\nResponseVOs" as BusinessVOs <<target-only immutable>>
 interface NarrowDomainService
 BuiltinCommandSource o-- "7" BuiltinCommandContributor
-BuiltinCommandContributor --> BuiltinCommandDefinition : contribute
-BuiltinCommandSource *-- "7" BuiltinCommandDefinition : startup unique index
+BuiltinCommandContributor --> BuiltinCommandDefinition
+BuiltinCommandSource *-- "7" BuiltinCommandDefinition
 BuiltinCommandDefinition *-- CommandHandler
 BuiltinCommandDefinition *-- CommandAdmissionPolicy
-CommandExecutionService --> CommandExecutionContext : one catalog
-CommandExecutionService --> BuiltinCommandDefinition : selected definition
+CommandExecutionService --> CommandExecutionContext
+CommandExecutionService --> BuiltinCommandDefinition
 CommandHandler --> NarrowDomainService
 CommandHandler ..> CommandResultDTO
 CommandExecutionService --> CommandResponseAssembler
 CommandResponseAssembler ..> CommandResultDTO
-CommandResponseAssembler --> RuntimeSessionResponseAssembler : same authoritative Session DTO
-RuntimeSessionResponseAssembler ..> GetSessionResponseVO : resource and ETag
-CommandResponseAssembler ..> AvailableModelsResponseVO : model query
-CommandResponseAssembler ..> BusinessVOs : minimal business data
+CommandResponseAssembler --> RuntimeSessionResponseAssembler
+RuntimeSessionResponseAssembler ..> GetSessionResponseVO
+CommandResponseAssembler ..> AvailableModelsResponseVO
+CommandResponseAssembler ..> BusinessVOs
 note bottom of CommandResponseAssembler
 Only result-type dispatch lives here.
 Controllers never expose internal DTOs.
 No public command, changed or sourceEventSeq.
 end note
+CommandExecutionService -[hidden]down-> BuiltinCommandDefinition
+BuiltinCommandDefinition -[hidden]down-> CommandHandler
+CommandHandler -[hidden]down-> NarrowDomainService
+CommandResponseAssembler -[hidden]down-> RuntimeSessionResponseAssembler
+AvailableModelsResponseVO -[hidden]down-> BusinessVOs
+BuiltinCommandSource -[hidden]down-> BuiltinCommandContributor
+CommandExecutionContext -[hidden]down-> CommandExecutionService
 @enduml
 
 @startuml session_name_update
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 title Session Name - Shared Validation and Separate Request Admission
 ' Source evidence: pi-mono-java@09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java :: execute, normalizeName.
@@ -50,19 +83,19 @@ title Session Name - Shared Validation and Separate Request Admission
 ' Observed behavior: slash name owns an independent row-locked update with no expected version.
 ' Target-only architecture: Session POST reuses normalization and commits a combined candidate.
 ' Design reason: shared name rules do not require HTTP to call a separately committing command.
-skinparam shadowing false
 participant "Session POST API\n[target-only]" as API
 participant "RuntimeSessionConfigurationService\n[extended singleton]" as App
 participant "Name Command Handler" as Handler
 participant SessionNamingService as Service
 database SessionRepository as Repo
+== Shared naming rules, separate admission ==
 alt Session POST with displayName
   API -> App : submitted fields and If-Match
-  App -> Service : normalizeName(displayName) [target-only pure preparation]
+  App -> Service : normalizeName(displayName)
   Service --> App : normalized name or rejection
   App -> App : prepare all submitted fields
   App -> Repo : updateConfiguration(candidate, expectedVersion)
-  Repo -> Repo : lock; recheck version and field-based admission\nall fields/events or none
+  Repo -> Repo : lock and recheck; commit all or none
   Repo --> App : same or updated authoritative Session
   App --> API : Session resource and same-snapshot ETag
 else slash command rename
@@ -74,37 +107,57 @@ else slash command rename
   Service --> Handler : NameResultDTO from this Session
 end
 note over App,Repo
-Only name: idle or running. Any execution field: idle.
-Slash keeps last-commit-wins under the row lock.
-HTTP checks If-Match even for an unchanged name.
-Name does not create an Entry or change active execution.
+  Only name: idle or running. Any execution field:
+  idle.
+  Slash keeps last-commit-wins under the row lock.
+  HTTP checks If-Match even for an unchanged name.
+  Name does not create an Entry or change active
+  execution.
 end note
 @enduml
 
 @startuml compact_command_execution
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 title Target-only Compact JSON Terminal and Cleanup
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java.
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionHolder.java.
 ' Architecture change: compact terminal Future is independent of Holder lifetime and request transport.
-skinparam shadowing false
 participant "Virtual request thread" as Http
 participant CompactionService as Service
 participant ActiveHolder as Holder
 database Projector
+== Check admission ==
 Http -> Service : compact(sessionId)
 Service -> Service : operation lock and idle recheck
 alt empty history
   Service --> Http : compacted=false, no lease/state/Entry
 else real compaction
-  Service -> Holder : capacity lease, credentials, 30-minute timeout
+  Service -> Holder : create execution; retain lease and credentials
   Http -> Holder : await non-cancelling compact terminal handle
   Holder -> Projector : persist Compaction Entry if changed
   Holder --> Http : complete JSON result immediately
-  Holder -> Holder : release lease and credentials at final cleanup
+  Holder -> Holder : final cleanup; release lease and credentials
 end
 note over Http,Holder
-Client disconnect does not cancel accepted compaction.
-No pending message queue in the current product.
-Interrupt binding through Events requires command-specific review.
+  Client disconnect does not cancel accepted
+  compaction.
+  No pending message queue in the current product.
+  Interrupt binding through Events requires
+  command-specific review.
 end note
 @enduml

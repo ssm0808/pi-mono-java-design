@@ -1,5 +1,8 @@
 @startuml metadata_runtime_directory_mapping
 title Managed Metadata to CampusClaw Runtime Directory
+top to bottom direction
+skinparam nodesep 20
+skinparam ranksep 30
 
 ' Source evidence (CampusClaw PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, prepare and materialize.
@@ -55,11 +58,13 @@ rectangle "Managed Agent directory\nagent/{agentId}/.campusclaw/" as AgentDirect
 
 database "Mate metadata authority\nAgent, Skill, Child bindings" as MateAuthority
 database "Model Manager authority\nmodel availability and credentials" as ModelManager
-rectangle "AgentSessionFactory" as SessionFactory
-rectangle "Immutable name indexes" as Indexes
-database "Runtime Session store" as SessionStore
-rectangle "Next-execution model reconciler" as Reconciler
-rectangle "Active execution snapshot" as ActiveSnapshot
+rectangle "Execution preparation" as Execution {
+  rectangle "Immutable name indexes" as Indexes
+  rectangle "AgentSessionFactory" as SessionFactory
+  rectangle "Next-execution model reconciler" as Reconciler
+  database "Runtime Session store" as SessionStore
+  rectangle "Active execution snapshot" as ActiveSnapshot
+}
 
 AgentMetadata --> Resolve
 SkillMetadata --> Resolve
@@ -67,27 +72,24 @@ ChildMetadata --> Resolve
 Resolve --> Build
 Build --> Validate
 Validate --> Publish
-Publish --> AgentFile
-Publish --> SettingsFile
-Publish --> SystemFile
-Publish --> ChildFile
-Publish --> SkillIdentityFile
-Publish --> SkillPackage
+Publish --> AgentDirectory
 
-Input ..> MateAuthority : fetched only on cold prepare or refresh
-SettingsFile ..> ModelManager : intersect bindingModels with usable credentials
-AgentDirectory --> Indexes : scan exact names
+Resolve .right.> MateAuthority : cold prepare / refresh
+SettingsFile .right.> ModelManager : bound models
+AgentDirectory -down-> Indexes : scan exact names
 Indexes --> SessionFactory : Skill and direct Child resolution
-AgentDirectory --> SessionFactory : prompt, workspace, and model settings
-AgentDirectory --> Reconciler : read only before next idle execution
+AgentDirectory -down-> SessionFactory : prompt, workspace,\nmodel settings
+AgentDirectory -down-> Reconciler : next idle execution
 SessionStore --> Reconciler : current model and thinking
 Reconciler --> SessionStore : optional atomic model/thinking\nchange entries before User Entry
-ActiveSnapshot ..> AgentDirectory : no mutation after refresh
+AgentDirectory .down.> ActiveSnapshot : freeze for execution
+ActiveSnapshot -[hidden]right-> SessionStore
 
 note right of AgentDirectory
 No remote tool list is written to disk.
 The tree is read-only between publications.
 Name and path must match byte-for-byte.
+Refresh does not mutate active snapshots.
 end note
 
 note left of Manager
@@ -101,4 +103,9 @@ Keep the current model while it remains callable.
 Otherwise select the usable new default.
 Reject before accepting a User Entry if none exists.
 end note
+AgentFile -[hidden]down-> ChildFile
+SettingsFile -[hidden]down-> SkillIdentityFile
+SystemFile -[hidden]down-> SkillPackage
+AgentDirectory -[hidden]down-> Execution
+MateAuthority -[hidden]down-> ModelManager
 @enduml

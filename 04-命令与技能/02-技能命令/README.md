@@ -4,14 +4,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 4.0.0 |
-| 更新日期 | 2026-09-08 |
+| 文档版本 | 4.0.1 |
+| 更新日期 | 2026-09-14 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | Skill 发现候选 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`（PR #210，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并） |
 | Skill 名称专项复核 | `0300541fbbe3db8b05ffa1ac953f15f01df74b3e`（2026-09-04，本地源码提交；只复核名称规则与消费者） |
 | 状态 | Builtin 与 Skill Command 由用户统一负责设计、实现和集成；B13/B14 语义已确认，精确契约已定稿，可进入实现，执行仍 target-only |
 
-## 1. 当前实施责任
+## 1. 职责与当前目标
 
 Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、SSE 执行结果和 Events 集成按 B13/B14 已确认语义实施。
 PR #210 的动态 SkillCommandSource 可保留，但 Registry 必须在调用 Source 前按来源过滤。
@@ -78,7 +78,7 @@ pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 
 ![Skill 名称统一严格校验目标](设计图/skill_name_validation.svg)
 
-[PlantUML 源码：`skill_name_validation`](设计图/diagram.puml#L25)
+[PlantUML 源码：`skill_name_validation`](设计图/diagram.puml#L35)
 
 ## 4. 统一实施与集成要求
 
@@ -101,7 +101,7 @@ Handler 委派 SkillExecutionService，后者使用普通消息接受/执行应�
 
 ![Skill 快照与执行下钻](设计图/target_skill_execution.svg)
 
-[PlantUML 源码](设计图/diagram.puml#L61) · [原尺寸 SVG](设计图/target_skill_execution.svg)
+[PlantUML 源码](设计图/diagram.puml#L71) · [原尺寸 SVG](设计图/target_skill_execution.svg)
 
 受理前从一份完整缓存解析绑定、定义和 Skill 正文，固定成不可变请求快照；GET 和 POST 是独立
 快照，不能把先前清单当作授权。POST 在所属锁/事务内重检绑定、权限和容量，原子接受根消息并
@@ -116,7 +116,7 @@ Active Holder 内存，实例丢失不自动恢复凭据或重放副作用工具
 B15 沿用部署统一保留策略，未配置时不新增自动清理；删除按根消息及必要引用保持对账完整。
 不新增 Maven 依赖，继续使用现有缓存、JDK/Jackson 与 Session 组件。
 
-### 4.1 本批源码证据与差异
+### 4.1 执行源码证据与差异
 
 设计基线 `9096f1e9ae445e67292c5e7d5a9e0d2ac10d8f5d`；Java 固定
 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，只补充下面符号，不覆盖 §2 的历史名称专项证据。
@@ -127,10 +127,10 @@ B15 沿用部署统一保留策略，未配置时不新增自动清理；删除�
 | pi-mono · packages/coding-agent/src/core/agent-session.ts · _expandSkillCommand/prompt，固定 5cd93f688aaab89dbb6dfa4aca535f21796ae185 | /skill:name 查本地 Skill 并展开正文；找不到或读失败可返回原文本；扩展后作为模型输入 | 学习展开语义；HTTP 精确匹配失败必须拒绝、不回退；正文不进公共回执。产品约束与安全加固，不复制 CLI 文件路径或内存排队 |
 | pi-mono-java · modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java · userEntry/toAgentMessages | 公开 user payload 与模型恢复已有不同方法，但 userMessage 目前仅按公开文本/附件重建 | 需增加内部展开输入与公开原调用的独立投影，恢复不能重新解释不同版本 Skill；target-only 架构变更 |
 
-上一版的 pi 4af9d21d 对照仍保留在历史证据；本批 Skill 展开使用项目固定 5cd93f，不静默漂移。
+上一版的 pi 4af9d21d 对照仍保留在历史证据；Skill 展开证据使用项目固定 5cd93f，不静默漂移。
 现有源码缺口是执行接入、快照事务及安全恢复，不是改一个 HTTP Content-Type 即可完成。
 
-## 5. 当前验收
+## 5. 实施验收
 
 先落 SkillCommandDefinition/Handler 与 SkillExecutionService 骨架，再复用 SessionEventApplicationService、
 共享投影和响应绑定；最后接入联合 VO。验收 Skill 正常 SSE、确认分段、原消息中断、根 ID 对账，
@@ -152,14 +152,15 @@ skills Builtin 只展示最新完整绑定快照中的名称/描述，不等于�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 4.0.0 | 2026-09-08 | B13/B14/B15 已批量确认：共享 Command 的 Skill 联合请求与 SSE、不可变执行快照、绑定重检、内部恢复与保留；更新全局图引用和执行下钻图，记录 dfb90ca 与固定 pi 5cd93f 源码证据。 |
-| 3.2.0 | 2026-09-07 | 合入共享 GET 的 Skill 轻量投影与 running 过滤，明确完整缓存前置；保留严格名称、统一实施责任及待评审的执行细节。 |
-| 3.1.3 | 2026-09-05 | 用户统一负责 Skill 与 Builtin 的设计、实现和集成；更新实施、发布与验收责任；取代 3.1.1/3.1.2 的同事并行分工。 |
-| 3.1.2 | 2026-09-04 | 加载、命令发现和执行统一严格名称校验，取消存量兼容；追加 `0300541f` 名称专项证据、pi warning 差异、目标校验图与一致性验收，保留并行开发分工。 |
-| 3.1.1 | 2026-09-04 | 用户明确 Skill 由其他同事同步开发；撤销 3.1.0 的执行延期与全局拒绝解释，保留发现/执行职责分离。 |
-| 3.1.0 | 2026-09-04 | Skill 执行延期；保留发现骨架但从 Builtin HTTP 来源过滤，禁止伪 Handler 与通用命令历史。 |
+| 4.0.1 | 2026-09-14 | 按发现、名称与执行职责整理说明，并分阶段呈现执行和恢复时序。 |
+| 4.0.0 | 2026-09-08 | Skill 通过共享 Command SSE 执行，复用快照、绑定重检和历史恢复。 |
+| 3.2.0 | 2026-09-07 | GET 投影轻量描述符并在 running 时过滤 Skill。 |
+| 3.1.3 | 2026-09-05 | Builtin、Skill 与共享 HTTP 统一实施及验收。 |
+| 3.1.2 | 2026-09-04 | 加载、发现和执行统一严格名称校验。 |
+| 3.1.1 | 2026-09-04 | Skill 发现与执行分别维护职责边界。 |
+| 3.1.0 | 2026-09-04 | 发现骨架与执行 Handler 分离，历史复用领域记录。 |
 | 3.0.4 | 2026-09-01 | 命令相关表述只使用“命令清单”；Skill 文件位置统一表述为“文件夹” |
-| 3.0.3 | 2026-09-01 | Skill 名称对齐 Agent Skills 完整规则；参数和附件改为引用普通消息限制，并补齐五类 Harness 的依据边界 |
-| 3.0.2 | 2026-08-31 | 使用规则表和动作式短句简化命名、发现、快照与信任分层说明；不改变 Skill 行为 |
+| 3.0.3 | 2026-09-01 | Skill 名称遵循 Agent Skills 规则，参数和附件复用普通消息限制。 |
+| 3.0.2 | 2026-08-31 | 以规则表说明名称、发现、快照和信任分层。 |
 | 3.0.1 | 2026-08-31 | 面向读者统一使用“命令清单”，明确 Skill 命令发现不依赖磁盘扫描 |
-| 3.0.0 | 2026-08-31 | 废弃旧的本地资源扩展和 Reload 交互设计，收敛为 HTTP `/skill:name`、最新 Agent 解析、调用快照、信任分层和可恢复执行 |
+| 3.0.0 | 2026-08-31 | 定义 HTTP Skill 命令、调用快照与可恢复执行。 |

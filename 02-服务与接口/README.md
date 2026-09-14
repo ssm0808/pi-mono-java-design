@@ -6,11 +6,11 @@
 |---|---|---|
 | CampusMate 附件服务 | 上传、扫描、OBS/openGauss、删除和 Runtime 文件 ID 边界 | [设计](./01-CampusMate附件服务/README.md) |
 | CampusMate 共享客户端配置 | 单一 `campusmate` 配置树、共享 base URL 和 endpoint 去重 | [设计](./02-CampusMate共享客户端配置/README.md) |
-| 模型管理 Provider 契约 | CampusMate 唯一内置 Provider、AI 削减与扩展边界、Chat SSE 和 Usage | [设计](./03-模型管理Provider契约/README.md) |
+| 模型管理 Provider 契约 | CampusMate 唯一内置 Provider、AI 削减与扩展边界、Chat SSE 和 Usage | [主设计](./03-模型管理Provider契约/README.md) · [全局图](./03-模型管理Provider契约/java_provider_alignment.svg) · [Usage](./03-模型管理Provider契约/usage-persistence.md) |
 | Runtime HTTP 测试 Agent | 如何根据已确认契约维护分层回归测试 | [设计](./04-Runtime-HTTP测试Agent/README.md) |
 | CampusClaw TDD 测试 Agent | 如何以版本化能力注册表驱动全产品测试与质量门禁 | [设计](./05-CampusClaw-TDD测试Agent/README.md) |
 | mate-service 聊天命令 API | GET 轻量清单；公共边界与执行协议待独立重审 | [设计与契约](./06-mate-service聊天命令API/README.md) |
-| mate-service 通用对话 Events API | 公共 Chat 事件提交、Chat 级 live SSE、固定快照历史和断线对账 | [三接口设计、HTML 与 OpenAPI](./07-mate-service通用对话API/README.md) |
+| mate-service 通用对话 Events API | 公共 Chat 提交、live SSE、历史对账及未整合分页要求 | [三接口设计、HTML 与 OpenAPI](./07-mate-service通用对话API/README.md) |
 
 精确 Runtime HTTP 契约位于
 [`01-总体架构/01-CampusClaw多Agent运行时/接口契约/`](../01-总体架构/01-CampusClaw多Agent运行时/接口契约/)。

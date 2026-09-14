@@ -4,14 +4,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.2.0 |
-| 日期 | 2026-09-07 |
+| 设计版本 | 1.2.1 |
+| 日期 | 2026-09-14 |
 | 状态 | 已确认无参、三个业务字段、空数组、缓存往返与显式刷新旧缓存；统一响应设计删除 command 回显，target-only |
 | 设计仓基线 | `372fb2cbec6e8a525d30d2310ef68e3da18e33f7` |
-| 本次源码基线 | pi-mono-java `d8e22562e22ac41ef4bb5cc6b36b576139417bd9` |
+| 已核验源码基线 | pi-mono-java `d8e22562e22ac41ef4bb5cc6b36b576139417bd9` |
 | 专项评审页 | [Help HTTP 评审](help-review.html)，直接从 Runtime 操作 13 提取生成 |
 
-## 1. 语义：介绍 Agent，不再介绍命令
+## 1. 职责：介绍当前 Agent
 
 `/help` 回答“这个 Agent 是干什么的、适合什么场景”，直接展示维护者提供的公开介绍。
 `/` 回答“现在有哪些命令可用”。两者不再返回同一份命令清单。
@@ -94,7 +94,7 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
 这里的 `description` 是返回的 Agent 用途介绍；GET 描述符自身的 description 改为“介绍当前 Agent 的用途和使用场景”，二者含义不同。
 
-2026-09-07 用户明确要求合入 GET 字段精简，Runtime 操作 12 的 Help 只返回 name/kind/description，
+Runtime 操作 12 的 Help 只返回 name/kind/description，
 不带 input。idle/running 均保留 Help；共享 GET 无完整缓存整体 503，但 POST Help 仍独立检查缓存并保持既有 422。
 两跳清单的字段、排序与过滤见[共享 GET 契约](../../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
 
@@ -174,16 +174,7 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 
 ## 7. 评审与同步范围
 
-2026-09-04 用户确认四字段结果、无参规则、空内容处理、userCases 缓存往返与显式刷新旧缓存。
-正式契约已同步到 Runtime HTTP 1.45.0 的
-[操作 12](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-session-commands.json) 与
-[操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)。
-专项 HTML 是已确认 Help 的派生展示；不再保存第二份 Help JSON。投影仅筛选场景，Header、参数、请求约束、结果和错误直接继承 Runtime 精确模型。
-Slash 与 Builtin 主文档共同引用 Slash 主题维护的完整全局目标类图；
-本专题只维护 Help 元数据局部补充图，不再维护第二份全局定义。
-9 月 4 日 Help 评审未合并 GET 减法；9 月 7 日 GET 整合阶段只改描述符与清单规则。
-随后用户确认 Slash 响应与既有 API 对齐：Runtime HTTP 1.48.0 删除 command 回显，
-以三个业务字段取代早期四字段结果；其他 Help 元数据和缓存决定继续有效。
+Help 的精确请求、字段与错误由 Runtime [操作 12](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-session-commands.json)与[操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)维护。专项 HTML 只筛选 Help 场景，直接继承 Runtime 的 Header、参数、约束、结果与错误，不保留第二份 JSON。Slash 与 Builtin 引用同一张全局主图，本专题只维护元数据下钻图。
 
 mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 GET 投影及公共边界待决。
 不能将本稿直接当作新公共接口；公共认证、bridge 和执行协议仍待重审，不新增公共路径或跨仓实现。
@@ -198,9 +189,10 @@ mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.2.0 | 2026-09-07 | 跟随统一业务响应设计移除 command，采用 AgentHelpResponseVO 三字段；更新局部图与精确校验，保留无参、空数组、缓存与公共边界。 |
-| 1.1.3 | 2026-09-07 | 移除手工专项 JSON 和正文报文副本；页面直接投影 Runtime 契约，保留元数据映射、缓存理由及实施验收。 |
-| 1.1.2 | 2026-09-07 | 按用户授权同步 GET 精简，Help 描述符不带 input；保持 POST 四字段、缓存及错误语义；修复专项 Header 仍含旧占位符的同步遗漏，专项页版本跟随 Runtime 1.47.0。 |
-| 1.1.1 | 2026-09-07 | 全局主图归回 Slash 主题，Help 类图收敛为元数据与结果投影补充；恢复旧完整版的整体视角。Help 四字段、缓存语义和专项 JSON/HTML 契约保持 1.1.0 已确认内容不变。 |
-| 1.1.0 | 2026-09-04 | 用户确认四字段、无参、空数组及缓存迁移；同步 Runtime 1.45.0、Slash/Builtin 全局视图与精确契约校验；不修改实现或公共 Mate 契约。 |
-| 1.0.0 | 2026-09-04 | 基于已有 description/userCases 设计 Agent 使用指南；记录缓存场景字段丢失的实现缺口、全局目标结构和专项候选契约。 |
+| 1.2.1 | 2026-09-14 | 集中说明 Help 元数据、缓存和契约投影职责。 |
+| 1.2.0 | 2026-09-07 | Help 返回 AgentHelpResponseVO 的三个业务字段。 |
+| 1.1.3 | 2026-09-07 | 页面直接投影 Runtime 契约，正文保留映射与验收。 |
+| 1.1.2 | 2026-09-07 | Help 描述符不带 input，专项页面与 Runtime 契约同步。 |
+| 1.1.1 | 2026-09-07 | Help 类图只补充元数据与结果投影，整体结构复用 Slash 主图。 |
+| 1.1.0 | 2026-09-04 | Help 支持无参查询、空数组和完整元数据缓存。 |
+| 1.0.0 | 2026-09-04 | 基于 description 与 userCases 定义 Agent 使用指南。 |

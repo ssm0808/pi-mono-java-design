@@ -1,13 +1,14 @@
-# 主流 Agent 的“配置生成 Tool / Agent”机制调研与统一元数据设计
+# 配置如何生成 Tool 与 Agent：研究入口
 
-- 文档版本：2.0.0
+- 文档版本：2.1.0
 - 调研日期：2026-07-18
 - 当前结论范围：14 个 Agent/平台样本（Claude Code、Codex、OpenCode、Cline、Qwen Code、Kiro CLI、Amp、Grok Build、OpenClaw、Goose、Coze Studio、Continue、Devin、Pi），补充 Anthropic API/Managed Agents 契约，以及 MCP 协议基线
-- 说明：先前写作 `cozy` 的项目按 Coze Studio（扣子开源版）处理
+- 文档整理：2026-09-14；原核验日期与源码提交保持不变
+- 文档性质：机制研究；候选规范不是 CampusClaw 已确认设计或已实现能力
 
-## 1. 结论先行
+## 1. 核心结论
 
-你的目标可以实现，但必须把“只配置元数据”准确解释为：
+“只配置元数据”的可实现边界是：
 
 > 开发人员不为每个 Tool 或 Agent 编写平台接入代码；平台根据声明式 Manifest，选择一个已经安装且受信任的通用驱动或 Agent Runtime Factory，完成注册、校验、权限控制和运行时装配。
 
@@ -29,7 +30,7 @@
 - **MCP 是“配置即代理”，不是“配置即实现”。** 客户端可根据 MCP Server 配置自动发现并生成代理 Tool，但真实行为仍由 Server 的 `tools/call` 实现。
 - **推荐的数据模型不是一个巨大 Tool JSON。** 应拆成 `ToolManifest`、`AgentManifest` 与环境专属 `Binding`；Manifest 可版本化和共享，Binding 保存密钥引用、端点、工作区、身份与制品 pin。
 
-因此，本调研能够支持你的目标，前提是平台实现本文第 6 节的 Driver Registry、Manifest Compiler、Agent Runtime Factory 和 Binding Resolver。基于调研收敛出的正式提案见 [Tool 与 Agent 元数据规范 V1](./metadata-v1.md)；随附的 [JSON Schema](./agent-tool-platform.schema.json) 已将这些约束编码。
+候选平台需要 Driver Registry、Manifest Compiler、Agent Runtime Factory 和 Binding Resolver。其字段与失败规则只在[元数据候选规范 V1](./metadata-v1.md)维护；[JSON Schema](./agent-tool-platform.schema.json) 是该候选规范的研究制品。
 
 ### 1.1 研究范围、纳入标准与扩展建议
 
@@ -43,12 +44,12 @@
 
 证据等级在本文中严格区分：`源码确认` 表示固定 commit 的实现证据；`协议定义` 表示固定协议 Schema；`API 契约文档` 表示官方公开字段和调用语义；`行为文档` 表示只能确认产品公开行为，不能反推内部类；`目标设计` 表示本文建议，不能当成现有产品能力。
 
-有必要扩大范围，但应分批进行：
+尚未纳入原核验范围的候选：
 
 | 优先级 | 候选 | 为什么值得增加 | 本版处理 |
 |---|---|---|---|
-| P0 | [Gemini CLI](https://github.com/google-gemini/gemini-cli)、[Tools reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/reference/tools.md) | Apache 2.0 开源；公开 `ToolRegistry`、`discoveryCommand`、MCP 与 subagent registry，可验证 Google 系 Agent 的原生模型 | 下一轮纳入完整源码基线，不并入本版结论 |
-| P0 | [OpenHands](https://github.com/OpenHands/OpenHands)、[Software Agent SDK custom tool](https://github.com/OpenHands/software-agent-sdk/blob/main/examples/01_standalone_sdk/02_custom_tools.py) | 显式 `ToolDefinition`、Action、Observation、Executor 和 Agent Server，能补足“SDK + 远程 Agent 平台”样本 | 下一轮纳入完整源码基线，不并入本版结论 |
+| P0 | [Gemini CLI](https://github.com/google-gemini/gemini-cli)、[Tools reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/reference/tools.md) | Apache 2.0 开源；公开 `ToolRegistry`、`discoveryCommand`、MCP 与 subagent registry，可验证 Google 系 Agent 的原生模型 | 未纳入固定源码基线 |
+| P0 | [OpenHands](https://github.com/OpenHands/OpenHands)、[Software Agent SDK custom tool](https://github.com/OpenHands/software-agent-sdk/blob/main/examples/01_standalone_sdk/02_custom_tools.py) | 显式 `ToolDefinition`、Action、Observation、Executor 和 Agent Server，能补足“SDK + 远程 Agent 平台”样本 | 未纳入固定源码基线 |
 | P1 | [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/tool-search) | MCP、custom agent 与延迟 Tool loading 对大规模 Tool catalog 很有参考价值 | 作为闭源兼容性样本，采用官方行为文档 |
 | 独立专题 | OpenAI Agents SDK、Claude Agent SDK、LangGraph、AutoGen、CrewAI、Semantic Kernel | 这些是 Agent SDK/框架，不是与 Claude Code/Codex 同层的终端产品；混入同一矩阵会扭曲结论 | 单独建立“Agent SDK/框架元数据”矩阵 |
 
@@ -99,7 +100,7 @@
 | Codex | 内置 Tool、MCP、App Server `dynamicTools` | 条件式：T2；dynamic tool 是 host callback | Agent role TOML 与配置层 | 是，A1 | Dynamic metadata 产生调用入口，但客户端必须响应执行 |
 | OpenCode | TS/JS Tool `execute`、插件、MCP | 否：T1/T2 | Markdown YAML agent/mode 文件 | 是，A1 | Agent 配置化，Tool 实现代码化 |
 | Cline | SDK Tool `execute`、MCP | 否：T1/T2 | Markdown YAML configured agent；可包装为 subagent Tool | 是，A1 | “Agent 变 Tool”链路清楚，但底层仍有执行器代码 |
-| Qwen Code | 代码 Tool、MCP、`discoveryCommand + callCommand` | **是：T3** | Markdown YAML subagent | 是，A1/A3 | 命令驱动是本设计的重要基线 |
+| Qwen Code | 代码 Tool、MCP、`discoveryCommand + callCommand` | **是：T3** | Markdown YAML subagent | 是，A1/A3 | 命令驱动是候选 Command 驱动的参考 |
 | Kiro CLI | 内置 Tool 分类、MCP Tool | 条件式：T2 | v3 Markdown/JSON Agent Profile | 是，A1 | Profile 很完整；新 Tool 仍来自内置或 MCP |
 | Amp | Plugin `registerTool` + `execute`、MCP | 否：T1/T2 | Plugin `createAgent` / agent mode | 代码辅助，A1 | Agent 定义结构化，但目前不是独立数据文件 |
 | Grok Build | Rust `Tool` + `ToolMetadata`、MCP | 否：T1/T2 | `.grok/agents/*.md` portable identity | 是，A1/A3 | Agent Manifest 强；Tool 明确分 runtime 与 metadata |
@@ -111,490 +112,19 @@
 | Pi | Extension `registerTool` + `execute`；默认无 MCP | 否：T1 | SDK/Extension；核心明确默认无 subagents | 否，A0/代码扩展 | 极简、代码优先；不适合作为纯元数据基线 |
 | MCP 2025-11-25 | `tools/list` + `tools/call` | 仅 T2 | 协议无 Agent 资源 | 否 | Tool 互操作基线，不是 Tool 实现或 Agent Manifest 标准 |
 
-## 4. 逐项目研究结果
 
-### 4.1 Anthropic 产品族：Claude Code、Claude API 与 Managed Agents
+## 阅读入口
 
-**观察到的 Tool 行为**
-
-- Claude API 的 Tool 定义包含名称、描述和 `input_schema`，但这只是模型与应用之间的调用契约。官方明确区分客户端 Tool 与服务端 Tool：客户端 Tool 由应用执行，服务端 Tool 由 Anthropic 基础设施执行。[How tool use works](https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works)、[Tool reference](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-reference)
-- Managed Agents 的 custom tool 同样只产生结构化调用；官方文档明确写明应用在外部执行后回传结果。[Managed Agents tools](https://platform.claude.com/docs/en/managed-agents/tools)
-- Claude Code 的自定义外部 Tool 主要通过 MCP 增加；`.mcp.json`/CLI 配置负责连接 stdio 或 HTTP Server，Server 才是执行者。[Claude Code MCP](https://code.claude.com/docs/en/mcp)
-- 类图中的 `AnthropicClientToolContract` 是依据上述公开字段建立的**归一化概念类**，不是 Claude Code 源码中的类型，也不是 Anthropic 官方公布的类名。Claude Code 的公开仓库采用 proprietary/commercial 条款，不能据此声称已获得其内部 Tool 实现源码。[Claude Code repository](https://github.com/anthropics/claude-code)、[license](https://github.com/anthropics/claude-code/blob/main/LICENSE.md)
-
-**观察到的 Agent 行为**
-
-- Claude Code 扫描 `~/.claude/agents/` 和 `.claude/agents/`。文件为 YAML frontmatter + Markdown body，body 成为 system prompt；frontmatter 可含 `name`、`description`、`tools`、`disallowedTools`、`model`、`permissionMode`、`mcpServers`、`hooks`、`maxTurns`、`skills`、`memory`、`effort`、`background`、`isolation` 等。[Claude Code subagents](https://code.claude.com/docs/en/sub-agents)
-- `--agents` 可用 JSON 在单次会话中注入同一组字段；`--agent` 可让一个定义成为主会话 Agent。
-- Managed Agents 把 `name`、`model`、`system`、`tools`、`mcp_servers`、`skills`、`multiagent`、`description`、`metadata` 保存为有 ID 和递增 version 的资源。[Define your agent](https://platform.claude.com/docs/en/managed-agents/agent-setup)
-- Managed MCP 设计把可复用的 Server URL 声明留在 Agent，把认证留在 Session/vault，这直接支持本文的 Manifest/Binding 分层。[Managed Agents MCP connector](https://platform.claude.com/docs/en/managed-agents/mcp-connector)
-
-**结论**
-
-- Claude Code Agent：达到 A1；外部任意 Tool 通过 MCP 达到 T2。
-- Managed Agents：达到 A2；托管 Tool 达到 T4。
-- Anthropic 客户端 Custom Tool：描述本身只有 T0，应用仍须执行。该契约不能当作 Claude Code 内部 `ToolDefinition` 的源码证据。
-
-### 4.2 Codex
-
-**观察到的 Tool 行为**
-
-- `DynamicToolFunctionSpec` 只保存 `name`、`description`、`input_schema` 和 `defer_loading`。[源码：dynamic_tools.rs](https://github.com/openai/codex/blob/315195492c80fdade38e917c18f9584efd599304/codex-rs/protocol/src/dynamic_tools.rs#L10-L27)
-- Dynamic Tool handler 把描述注册成模型工具，但调用发生后会创建 pending request 并等待 App Server 客户端回传 `DynamicToolResponse`；它没有从 metadata 推导业务逻辑。[源码：dynamic.rs](https://github.com/openai/codex/blob/315195492c80fdade38e917c18f9584efd599304/codex-rs/core/src/tools/handlers/dynamic.rs#L113-L177)
-- App Server 文档也明确要求客户端响应 `item/tool/call`。因此它是“host-provided dynamic callback”，不是 metadata-only executor。[App Server dynamic tool calls](https://github.com/openai/codex/blob/315195492c80fdade38e917c18f9584efd599304/codex-rs/app-server/README.md#dynamic-tool-calls-experimental)
-- MCP Tool 则由 Codex 自动适配为模型 Tool，再转发给已存在的 MCP Server。
-
-**观察到的 Agent 行为**
-
-- Codex 从配置层的 `agents` 目录发现 TOML role 文件，合并同名角色的低优先级缺省值，并验证描述。[源码：load_agent_roles](https://github.com/openai/codex/blob/315195492c80fdade38e917c18f9584efd599304/codex-rs/core/src/config/agent_roles.rs#L19-L115)
-- 独立 role 文件含 `name`、`description`、`nickname_candidates`，并 flatten 完整 `ConfigToml`；因此模型、推理强度、sandbox、MCP、skills 等普通 Codex 配置可作为 role 覆盖层。独立发现的文件必须含非空 `developer_instructions`。[源码：parse_agent_role_file_contents](https://github.com/openai/codex/blob/315195492c80fdade38e917c18f9584efd599304/codex-rs/core/src/config/agent_roles.rs#L218-L315)
-
-**结论**
-
-- Agent：达到 A1。
-- Tool：dynamic metadata 只有 T0 + host callback；MCP 为 T2。若要纳入统一平台，应把 App Server 客户端回调建模为 `artifact` 或 `hostCallback` driver，而不是误称纯元数据执行。
-
-### 4.3 OpenCode
-
-**观察到的 Tool 行为**
-
-- Tool Definition 要求 `id`、`description`、参数 Schema 和 `execute`；plugin Tool 最终也调用插件提供的 `def.execute`。[源码：tool.ts](https://github.com/anomalyco/opencode/blob/3a1c6df9e24672f0761a6ced18e1315d89334baf/packages/opencode/src/tool/tool.ts#L55-L64)、[源码：registry.ts](https://github.com/anomalyco/opencode/blob/3a1c6df9e24672f0761a6ced18e1315d89334baf/packages/opencode/src/tool/registry.ts#L120-L175)
-- JS/TS 文件可以被动态导入为 Tool，但那是代码插件；MCP 配置可创建协议代理。
-
-**观察到的 Agent 行为**
-
-- Agent Schema 包含 `model`、`variant`、temperature、top_p、prompt、tools、description、mode、hidden、steps 和 permission 等。[源码：agent.ts schema](https://github.com/anomalyco/opencode/blob/3a1c6df9e24672f0761a6ced18e1315d89334baf/packages/core/src/v1/config/agent.ts#L12-L88)
-- OpenCode 发现 `{agent,agents}/**/*.md` 与旧 mode 路径，解析 YAML frontmatter，并把 Markdown body 注入 system/prompt 配置。[源码：config plugin](https://github.com/anomalyco/opencode/blob/3a1c6df9e24672f0761a6ced18e1315d89334baf/packages/core/src/config/plugin/agent.ts#L20-L24)
-- Runtime 把配置转成 Agent Info，并提供 list/get/default 选择。[源码：agent runtime](https://github.com/anomalyco/opencode/blob/3a1c6df9e24672f0761a6ced18e1315d89334baf/packages/opencode/src/agent/agent.ts#L35-L55)
-
-**结论**
-
-- Agent：A1。
-- Tool：T1；MCP 时 T2。OpenCode 证明 Markdown Agent Manifest 很实用，但没有通用声明式 Tool driver。
-
-### 4.4 Cline
-
-**观察到的 Tool 行为**
-
-- Cline SDK 明确把 Tool descriptor 与实现分开：`AgentToolDefinition` 只有 `name`、`description`、`inputSchema`；`AgentTool` 在此基础上增加 `execute`。[源码：sdk shared agent.ts](https://github.com/cline/cline/blob/c564045d8135c0c1c330b21d47b68b74917ce614/sdk/packages/shared/src/agent.ts#L146-L186)
-- 这给出了最直接的反例：descriptor 可注册给模型，但若没有实现对象就不能执行。MCP 仍属于 T2。
-
-**观察到的 Agent 行为**
-
-- Configured Agent 文件使用 Markdown/YAML frontmatter，字段包括 `name`、`description`、`tools`、`skills`、`providerId`、`modelId`、`maxIterations`，body 是 system prompt。[源码：configured-agent-config.ts](https://github.com/cline/cline/blob/c564045d8135c0c1c330b21d47b68b74917ce614/sdk/packages/core/src/extensions/tools/team/configured-agent-config.ts#L8-L28)
-- Loader 解析并加载这些定义；`configured-agent-tool.ts` 再把 Agent 配置变成一个 subagent Tool，Tool 的 `execute` 创建并运行委派 Agent。[源码：configured-agent-tool.ts](https://github.com/cline/cline/blob/c564045d8135c0c1c330b21d47b68b74917ce614/sdk/packages/core/src/extensions/tools/team/configured-agent-tool.ts#L113-L138)
-- Agent Runtime 可接收已构建模型，或根据 provider/model 配置创建模型。[源码：agent-runtime.ts](https://github.com/cline/cline/blob/c564045d8135c0c1c330b21d47b68b74917ce614/sdk/packages/agents/src/agent-runtime.ts#L82-L118)
-
-**结论**
-
-- Agent：A1。
-- Tool：T1/T2。值得复用的设计是 `AgentManifest -> AgentProxyDriver -> Tool`，而不是把 Agent 的全部字段复制进 Tool。
-
-### 4.5 Qwen Code
-
-**观察到的 Tool 行为**
-
-- 普通 Declarative Tool 仍有 builder/build 与执行代码。[源码：tools.ts](https://github.com/QwenLM/qwen-code/blob/0ecba4b3c709d271a17faa5ac9537bf1b102eaf1/packages/core/src/tools/tools.ts#L155-L245)
-- MCP Tool 由 `DiscoveredMCPTool` 适配并转发到 MCP client `callTool`，属于 T2。[源码：mcp-tool.ts](https://github.com/QwenLM/qwen-code/blob/0ecba4b3c709d271a17faa5ac9537bf1b102eaf1/packages/core/src/tools/mcp-tool.ts#L349-L373)
-- 关键机制是 Tool Discovery：平台执行 `discoveryCommand`，读取一组 function declarations，再注册 `DiscoveredTool`；调用时把 Tool 名称作为参数，并把 JSON arguments 写入 `callCommand` stdin。[源码：tool-registry.ts](https://github.com/QwenLM/qwen-code/blob/0ecba4b3c709d271a17faa5ac9537bf1b102eaf1/packages/core/src/tools/tool-registry.ts#L42-L181)、[配置文档](https://github.com/QwenLM/qwen-code/blob/0ecba4b3c709d271a17faa5ac9537bf1b102eaf1/docs/users/configuration/settings.md#L315-L331)
-- 这已经是通用 Command Driver。开发人员仍要提供一个可执行程序，但不用为每个 Tool 编写 Qwen 插件适配代码。
-
-**观察到的 Agent 行为**
-
-- `SubagentConfig` 覆盖名称、描述、工具 allow/deny、审批、system prompt、模型、运行参数、颜色、后台、权限、max turns、MCP servers 和 hooks。[源码：types.ts](https://github.com/QwenLM/qwen-code/blob/0ecba4b3c709d271a17faa5ac9537bf1b102eaf1/packages/core/src/subagents/types.ts#L51-L175)
-- `SubagentManager` 解析 Markdown YAML frontmatter；每个 Agent 可独立覆盖 MCP Server，并触发启动和 Tool discovery。[源码：subagent-manager.ts](https://github.com/QwenLM/qwen-code/blob/0ecba4b3c709d271a17faa5ac9537bf1b102eaf1/packages/core/src/subagents/subagent-manager.ts#L1359-L1560)
-
-**结论**
-
-- Tool：Command 路径达到 T3，MCP 路径 T2。
-- Agent：A1/A3。Qwen 的 `discoveryCommand/callCommand` 应直接成为统一规范的 `command` implementation driver。
-
-### 4.6 Kiro CLI
-
-**观察到的 Tool 行为**
-
-- Agent Profile 的 `tools` 选择的是类别标签、内置 Tool 或 MCP Tool；`mcpServers` 可内联定义 stdio/HTTP Server。[Kiro v3 Agent config](https://kiro.dev/docs/cli/v3/agent-config/)
-- MCP 配置提供 command/args/env 或 URL/headers/OAuth，Kiro 负责生命周期与热重载；实际 Tool 由 MCP Server 暴露。[Kiro MCP configuration](https://kiro.dev/docs/cli/mcp/configuration/)
-- 因此“增加一个任意 Tool”不能只写 Tool descriptor；必须是内置 Tool 或已有 MCP Server。
-
-**观察到的 Agent 行为**
-
-- v3 Profile 是 YAML frontmatter + Markdown body，也可用等价 JSON；示例字段包括 `description`、`model`、工具类别、内联 MCP、`resources`、`permissions`、`welcomeMessage`。
-- 工作区目录为 `.kiro/agents/`，用户目录为 `~/.kiro/agents/`；嵌套路径形成 Agent 名称。权限规则采用 capability/effect/match，默认未命中为 ask。[Kiro v3 Agent config](https://kiro.dev/docs/cli/v3/agent-config/)
-
-**结论**
-
-- Agent：A1，且权限模型适合借鉴。
-- Tool：T2；没有独立的 metadata-only arbitrary Tool driver。
-
-### 4.7 Amp
-
-**观察到的 Tool 行为**
-
-- `amp.registerTool` 的定义同时包含 `name`、`description`、`inputSchema` 和 `execute`；插件是 Bun 执行的 TS/JS 程序。[Amp Plugin API](https://ampcode.com/manual/plugin-api)
-- Amp 也支持 MCP 配置，因此已有 MCP Server 的 Tool 可以自动接入，但仍是 T2。
-
-**观察到的 Agent 行为**
-
-- `createAgent` 的 `CreateAgentConfig` 包含 `name`、`model`、`instructions`、tools include/exclude、reasoning effort 和 display；返回的 handle 可 `run` 或 `createThread`。[Amp Plugin API](https://ampcode.com/manual/plugin-api)
-- Custom Agent 目前在 Plugin 程序中创建；注册主 Agent mode 还要求静态 `@amp-agent-mode` 元数据注释与 runtime registration 一致。它是结构化定义，但不是完全独立的 YAML/JSON 数据文件。
-- 官方示例也展示了把 custom Agent 包装成 Tool：Tool `execute` 内调用 `reviewer.run(...)`。[Custom Agents](https://ampcode.com/news/custom-agents)
-
-**结论**
-
-- Agent：代码辅助的 A1。
-- Tool：T1/T2。Amp 的 Agent handle 适合映射到本文的 `agentProxy` driver，但其 Plugin 本身仍是代码制品。
-
-### 4.8 Grok Build
-
-**观察到的 Tool 行为**
-
-- xAI 源码要求每个注册 Tool 同时实现 runtime `Tool` 和 metadata `ToolMetadata`。`ToolMetadata` 的必需方法是 `kind`、`tool_namespace`、`description_template`；只读性与依赖表达式有默认实现。它不直接定义名称和参数 Schema。[源码：tool_metadata.rs](https://github.com/xai-org/grok-build/blob/8adf9013a0929e5c7f1d4e849492d2387837a28d/crates/codegen/xai-grok-tools/src/types/tool_metadata.rs#L1-L10)
-- `versioned_definition` 的默认实现接收运行时导出的 `input_schema`，渲染描述模板并生成 `ToolDefinition`；因此 Grok 的模型可见定义来自 metadata 与 runtime Args Schema 的组合。[源码：tool_metadata.rs](https://github.com/xai-org/grok-build/blob/8adf9013a0929e5c7f1d4e849492d2387837a28d/crates/codegen/xai-grok-tools/src/types/tool_metadata.rs#L75-L102)
-- `Tool` trait 通过关联类型 `Args`/`Output` 以及 `id`、`description`、`capabilities`、`should_list`、`execute`、`run` 提供模型契约和运行行为；因此 metadata 不会自行执行。[源码：tool.rs](https://github.com/xai-org/grok-build/blob/8adf9013a0929e5c7f1d4e849492d2387837a28d/crates/common/xai-tool-runtime/src/tool.rs#L32-L110)
-
-**观察到的 Agent 行为**
-
-- `.grok/agents/*.md` 被注释为 portable, version-control contract。配置覆盖名称、描述、prompt mode、Tool、capability、permission、skills、继承、effort、max turns、isolation、background、MCP、hooks、memory、model 和 completion requirement。[源码：config.rs](https://github.com/xai-org/grok-build/blob/8adf9013a0929e5c7f1d4e849492d2387837a28d/crates/codegen/xai-grok-agent/src/config.rs#L706-L817)
-- Builder 从定义或代码配置构造 Agent；discovery 处理项目/用户范围与优先级。[源码：builder.rs](https://github.com/xai-org/grok-build/blob/8adf9013a0929e5c7f1d4e849492d2387837a28d/crates/codegen/xai-grok-agent/src/builder.rs#L24-L41)
-
-**结论**
-
-- Agent：A1/A3。
-- Tool：T1/T2。`ToolMetadata`/`Tool` 的显式分离证明描述生成和运行行为是不同责任；本文再将它归一化为跨产品的 `descriptor`/`implementation`，这是目标设计而不是 Grok 原生字段映射。
-
-### 4.9 OpenClaw
-
-**观察到的 Tool 行为**
-
-- Plugin registry 可以读取 manifest 的 `contracts.tools` 做静态所有权和发现检查，但 runtime 仍要求插件 factory 实际注册 Tool；静态 contract 与 runtime registration 不一致会被检查。[源码：registry registrar](https://github.com/openclaw/openclaw/blob/55bb6cfa2ec4863b5ece006aee70b5de6d967709/src/plugins/registry-registrars-tools-hooks.ts#L243-L293)、[Plugin manifest 文档](https://github.com/openclaw/openclaw/blob/55bb6cfa2ec4863b5ece006aee70b5de6d967709/docs/plugins/manifest.md#L568-L632)
-- Agent Tool 的运行类型包含 `execute`，所以 manifest contract 是发现/治理元数据，不是实现。[源码：common.ts](https://github.com/openclaw/openclaw/blob/55bb6cfa2ec4863b5ece006aee70b5de6d967709/src/agents/tools/common.ts#L28-L69)
-
-**观察到的 Agent 行为**
-
-- `AgentConfig` 包含 `id`、default、名称/描述、workspace、agentDir、model、thinking、skills、memory、identity、subagents、sandbox、params、tools 和 runtime。[源码：types.agents.ts](https://github.com/openclaw/openclaw/blob/55bb6cfa2ec4863b5ece006aee70b5de6d967709/src/config/types.agents.ts#L18-L166)
-- `agents.list` 定义多个隔离 Agent；每个 Agent 有独立 workspace、agentDir/auth 和 session store，并通过 bindings 做消息路由。[Multi-agent routing](https://github.com/openclaw/openclaw/blob/55bb6cfa2ec4863b5ece006aee70b5de6d967709/docs/concepts/multi-agent.md#L9-L35)
-
-**结论**
-
-- Agent：A3，是 Manifest/Binding 分离的重要参考，但 OpenClaw 当前配置仍把一部分 workspace/runtime binding 放在同一对象中。
-- Tool：T1/T2；manifest ownership 不能替代 runtime factory。
-
-### 4.10 Goose
-
-**观察到的 Tool 行为**
-
-- `ExtensionConfig` 是 discriminated union，源码序列化标签包括 `stdio`、已废弃的 `sse`、`builtin`、`platform`、`streamable_http`、`frontend` 和 `inline_python`。stdio/HTTP 是 MCP client 配置；inline Python 虽可写在配置中，但 `code` 本身就是实现代码，不属于纯描述元数据。[源码：extension.rs](https://github.com/aaif-goose/goose/blob/d6345f75dba4f43afe705e045414edf173e40af4/crates/goose/src/agents/extension.rs#L159-L295)
-- Extension Manager 向各 client 调用 `list_tools`，并在执行时调用对应 client 的 `call_tool`，这是一条标准 T2 代理链路。[源码：extension_manager.rs](https://github.com/aaif-goose/goose/blob/d6345f75dba4f43afe705e045414edf173e40af4/crates/goose/src/agents/extension_manager.rs#L1391-L1485)
-
-**观察到的 Agent 行为**
-
-- Recipe 是 YAML/JSON 可复用配置，字段包括 version、title、description、instructions/prompt、extensions、settings、activities、parameters、response schema、sub-recipes 和 retry。[源码：recipe/mod.rs](https://github.com/aaif-goose/goose/blob/d6345f75dba4f43afe705e045414edf173e40af4/crates/goose/src/recipe/mod.rs#L41-L86)
-- settings 可选择 provider/model/temperature/max turns；sub-recipe 会自动注入 summon extension。官方将 Recipe 定义为可共享并可启动的配置。[Recipe reference](https://github.com/aaif-goose/goose/blob/d6345f75dba4f43afe705e045414edf173e40af4/documentation/docs/guides/recipes/recipe-reference.md#L11-L56)
-
-**结论**
-
-- Agent：A1，准确地说是“配置生成 Agent Session/Workflow”，不是持久化的独立 Agent identity。
-- Tool：MCP T2；inline Python 是携带代码的 T1。
-
-### 4.11 Coze Studio
-
-**观察到的 Tool 行为**
-
-- `PluginManifest` 定义 schema version、模型/人类名称与描述、认证、Logo、API 和 common params。[源码：plugin_manifest.go](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/crossdomain/plugin/model/plugin_manifest.go#L34-L44)
-- 产品元数据引用 Manifest、OpenAPI 文件和 Tool 的 method/sub_url。Loader 校验 Manifest 和 OpenAPI，再把 operation 映射为 ToolInfo。[源码：load_plugin.go](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/plugin/conf/load_plugin.go#L40-L55)、[operation 映射](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/plugin/conf/load_plugin.go#L151-L249)
-- `ExecuteTool` 构建通用 executor、获取认证并执行；`httpCallImpl` 根据 operation、server URL、method 和参数构造 HTTP 请求并发送。[源码：exec_tool.go](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/plugin/service/exec_tool.go#L45-L93)、[源码：invocation_http.go](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/plugin/service/tool/invocation_http.go#L59-L155)
-- 这是完整的 `OpenAPI metadata -> ToolInfo -> generic HTTP driver -> result`，达到 T3。
-
-**观察到的 Agent 行为**
-
-- `SingleAgent` 持久化身份、版本、模型、Prompt、Plugin、Knowledge、Workflow、Database 等配置。[源码：single_agent.go](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/crossdomain/agent/model/single_agent.go#L56-L82)
-- `StreamExecute` 取出版本化 Agent 后调用 `BuildAgent`；builder 解析 persona/variables、构建 knowledge retriever、model、plugin/workflow/database tools，并创建 ReAct Agent。[源码：single_agent_impl.go](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/agent/singleagent/service/single_agent_impl.go#L93-L127)、[源码：agent_flow_builder.go](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/agent/singleagent/internal/agentflow/agent_flow_builder.go#L60-L181)
-- Agent 的 Plugin Tool adapter 从 OpenAPI operation 生成模型 Schema，并把运行调用转回统一 Plugin service。[源码：node_tool_plugin.go](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/agent/singleagent/internal/agentflow/node_tool_plugin.go#L45-L147)
-
-**结论**
-
-- Tool：T3，是本文 OpenAPI driver 的主要源码基线。
-- Agent：A2/A3，是持久化 Agent metadata 经 runtime factory 生成可执行实例的完整案例。
-
-### 4.12 Continue
-
-**观察到的 Tool 行为**
-
-- 内置 Tool 的名称和实现是代码注册；dispatcher 根据 Tool URI 转发 HTTP 或 MCP，或调用内置实现。[源码：callTool.ts](https://github.com/continuedev/continue/blob/d0a3c0b626b5bebc3bef4742eec05a0242be0bab/core/tools/callTool.ts#L28-L109)、[内置 dispatch](https://github.com/continuedev/continue/blob/d0a3c0b626b5bebc3bef4742eec05a0242be0bab/core/tools/callTool.ts#L187-L250)
-- `config.yaml` 的 `mcpServers` 负责启动/连接 Server；真正 Tool 仍由 MCP 提供。[Continue config reference](https://docs.continue.dev/reference)
-
-**观察到的 Agent 行为**
-
-- Continue 官方把 `config.yaml` 定义为 Agent 配置；顶层包含 name/version/schema、models、context、rules、prompts、docs、mcpServers、data。[Continue config.yaml reference](https://docs.continue.dev/reference)
-- 源码 Zod schema 与此一致，并支持 `uses/with/override` 组合 registry blocks。[源码：schemas/index.ts](https://github.com/continuedev/continue/blob/d0a3c0b626b5bebc3bef4742eec05a0242be0bab/packages/config-yaml/src/schemas/index.ts#L100-L167)
-- 另有 Markdown Agent 文件格式，但源码明确标注 experimental/internal；当前字段为 `name`、description、model、tools、rules 和 body prompt。[源码：agentFiles.ts](https://github.com/continuedev/continue/blob/d0a3c0b626b5bebc3bef4742eec05a0242be0bab/packages/config-yaml/src/markdown/agentFiles.ts#L5-L20)
-- CLI subagent Tool 从模型服务获取这些 Agent，并在 `run` 中调用 `executeSubAgent`。[源码：subagent.ts](https://github.com/continuedev/continue/blob/d0a3c0b626b5bebc3bef4742eec05a0242be0bab/extensions/cli/src/tools/subagent.ts#L15-L114)
-
-**结论**
-
-- 主 Agent config：A1。
-- Markdown subagent：A1，但应标注实验性，不宜直接作为稳定跨平台标准。
-- Tool：T1/T2；HTTP URI 路径是有限通用驱动，但没有完整 OpenAPI operation 编译层。
-
-### 4.13 Devin
-
-**观察到的 Tool 行为**
-
-- Devin 可以连接 MCP，也通过官方 Devin MCP 把 session、playbook、knowledge、schedule 等平台能力暴露给其他 Agent。[Devin MCP](https://docs.devin.ai/work-with-devin/devin-mcp)
-- 对调用方而言这是 T2；执行实现是 Devin 托管服务，不是调用方根据描述元数据生成。
-
-**观察到的 Agent 行为**
-
-- Create Session API 以 `prompt` 为必填，并可绑定 playbook、knowledge、repos、secret refs、ACU limit、平台、结构化输出 Schema、tags 和 title。[Create Session API](https://docs.devin.ai/api-reference/v3/sessions/post-organizations-sessions)
-- Playbook 是可复用、版本化的任务提示模板，但不是完整 runtime identity；Knowledge 和 repo skills 提供上下文。[Creating Playbooks](https://docs.devin.ai/product-guides/creating-playbooks)、[Devin Skills](https://docs.devin.ai/product-guides/skills)
-- 用户可选择 Devin agent mode/预置 Agent，但公开 API 没有暴露一个像 Claude Managed Agent 那样可任意声明 model/tools/runtime factory 的通用 AgentManifest。
-
-**结论**
-
-- “配置启动一个 Devin Agent Session”可以，属于 A0/A2。
-- “只配元数据创建任意新 Agent 类型”目前证据不足，应标记为产品约束，而不是宣称已支持。
-
-### 4.14 Pi
-
-**观察到的 Tool 行为**
-
-- `ToolDefinition` 同时要求 name、label、description、TypeBox parameters 与 `execute`；`registerTool` 把整个定义注册到 extension runtime。[源码：extension types](https://github.com/earendil-works/pi/blob/216e672e7c9fc65682553394b74e483c0c9e47f7/packages/coding-agent/src/core/extensions/types.ts#L435-L485)、[源码：loader.ts](https://github.com/earendil-works/pi/blob/216e672e7c9fc65682553394b74e483c0c9e47f7/packages/coding-agent/src/core/extensions/loader.ts#L222-L244)
-- Agent runtime 的 `AgentTool` 也要求 `execute`。[源码：agent types](https://github.com/earendil-works/pi/blob/216e672e7c9fc65682553394b74e483c0c9e47f7/packages/agent/src/types.ts#L372-L396)
-- Pi package manifest 只负责发现 extensions/skills/prompts/themes，extension 是具备完整系统权限的 TS 代码。[源码：README](https://github.com/earendil-works/pi/blob/216e672e7c9fc65682553394b74e483c0c9e47f7/packages/coding-agent/README.md#L401-L448)
-
-**观察到的 Agent 行为**
-
-- Pi 核心明确采用极简、代码扩展哲学，默认没有 MCP、subagents、permission popup 或 plan mode；这些能力由 extension 自建。[源码：README philosophy](https://github.com/earendil-works/pi/blob/216e672e7c9fc65682553394b74e483c0c9e47f7/packages/coding-agent/README.md#L488-L500)
-- 社区/示例 extension 可以读取 Agent 文件并拉起新 Pi 进程，但这不是核心稳定 Agent Manifest 合约。
-
-**结论**
-
-- Tool：T1。
-- Agent：A0/代码扩展。Pi 是“元数据与执行代码必须明确分开”的好基线，但不是“纯配置生成 Agent”的基线。
-
-### 4.15 MCP 2025-11-25
-
-**观察到的 Tool 行为**
-
-- `Tool` 包含 name/title/description、`inputSchema`、可选 `outputSchema`、`execution.taskSupport`、annotations 和 `_meta`。[官方 Schema](https://modelcontextprotocol.io/specification/2025-11-25/schema)、[固定源码](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/26897cc322f356487da89113451bd16b520b9288/schema/2025-11-25/schema.ts#L1244-L1297)
-- `ToolAnnotations` 的 readOnly/destructive/idempotent/openWorld 都只是 hint，规范明确要求客户端不要把来自不可信 Server 的 hint 当作授权依据。[固定源码](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/26897cc322f356487da89113451bd16b520b9288/schema/2025-11-25/schema.ts#L1168-L1222)
-- 客户端通过 `tools/list` 得到描述，通过 `tools/call` 发送 name/arguments，Server 返回内容；因此 Tool 描述与 Server 执行端是一个完整协议对。[固定源码](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/26897cc322f356487da89113451bd16b520b9288/schema/2025-11-25/schema.ts#L1080-L1156)
-
-**结论**
-
-- MCP 是统一平台 `mcp` driver 的协议基线，达到 T2。
-- MCP 本身不定义 AgentManifest；不能用 MCP Tool Schema 代替 Agent 元数据。
-
-## 5. 源码与文档基线
-
-开源项目使用固定 commit，闭源产品使用官方文档并记录访问日期。源码行号基于下表 commit；后续仓库变化不影响本次结论的可复核性。
-
-| 项目 | 基线 | 证据等级 | 重点路径或官方资料 |
-|---|---|---|---|
-| Codex | `315195492c80fdade38e917c18f9584efd599304` | 源码确认 | [`dynamic_tools.rs`](https://github.com/openai/codex/blob/315195492c80fdade38e917c18f9584efd599304/codex-rs/protocol/src/dynamic_tools.rs#L10-L27)、[`dynamic.rs`](https://github.com/openai/codex/blob/315195492c80fdade38e917c18f9584efd599304/codex-rs/core/src/tools/handlers/dynamic.rs#L113-L177) |
-| OpenCode | `3a1c6df9e24672f0761a6ced18e1315d89334baf` | 源码确认 | [`tool.ts`](https://github.com/anomalyco/opencode/blob/3a1c6df9e24672f0761a6ced18e1315d89334baf/packages/opencode/src/tool/tool.ts#L55-L64)、`packages/opencode/src/agent/agent.ts` |
-| Cline | `c564045d8135c0c1c330b21d47b68b74917ce614` | 源码确认 | [`agent.ts`](https://github.com/cline/cline/blob/c564045d8135c0c1c330b21d47b68b74917ce614/sdk/packages/shared/src/agent.ts#L146-L186)、configured agent runtime |
-| Qwen Code | `0ecba4b3c709d271a17faa5ac9537bf1b102eaf1` | 源码确认 | [`tool-registry.ts`](https://github.com/QwenLM/qwen-code/blob/0ecba4b3c709d271a17faa5ac9537bf1b102eaf1/packages/core/src/tools/tool-registry.ts#L42-L181)、`packages/core/src/subagents/*` |
-| Grok Build | `8adf9013a0929e5c7f1d4e849492d2387837a28d` | 源码确认 | [`tool_metadata.rs`](https://github.com/xai-org/grok-build/blob/8adf9013a0929e5c7f1d4e849492d2387837a28d/crates/codegen/xai-grok-tools/src/types/tool_metadata.rs#L1-L10)、[`tool.rs`](https://github.com/xai-org/grok-build/blob/8adf9013a0929e5c7f1d4e849492d2387837a28d/crates/common/xai-tool-runtime/src/tool.rs#L32-L110) |
-| OpenClaw | `55bb6cfa2ec4863b5ece006aee70b5de6d967709` | 源码确认 | [`registry-registrars-tools-hooks.ts`](https://github.com/openclaw/openclaw/blob/55bb6cfa2ec4863b5ece006aee70b5de6d967709/src/plugins/registry-registrars-tools-hooks.ts#L243-L293)、[`common.ts`](https://github.com/openclaw/openclaw/blob/55bb6cfa2ec4863b5ece006aee70b5de6d967709/src/agents/tools/common.ts#L28-L69) |
-| Goose | `d6345f75dba4f43afe705e045414edf173e40af4` | 源码确认 | [`extension.rs`](https://github.com/aaif-goose/goose/blob/d6345f75dba4f43afe705e045414edf173e40af4/crates/goose/src/agents/extension.rs#L159-L295)、[`extension_manager.rs`](https://github.com/aaif-goose/goose/blob/d6345f75dba4f43afe705e045414edf173e40af4/crates/goose/src/agents/extension_manager.rs#L1391-L1485) |
-| Coze Studio | `22275b1c2661d35344a7493cffe401e8cc61cf8e` | 源码确认 | [`load_plugin.go`](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/plugin/conf/load_plugin.go#L151-L249)、[`invocation_http.go`](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/plugin/service/tool/invocation_http.go#L59-L155) |
-| Continue | `d0a3c0b626b5bebc3bef4742eec05a0242be0bab` | 源码确认 | [`callTool.ts`](https://github.com/continuedev/continue/blob/d0a3c0b626b5bebc3bef4742eec05a0242be0bab/core/tools/callTool.ts#L28-L109)、`packages/config-yaml/src/*` |
-| Pi | `216e672e7c9fc65682553394b74e483c0c9e47f7` | 源码确认 | [`extensions/types.ts`](https://github.com/earendil-works/pi/blob/216e672e7c9fc65682553394b74e483c0c9e47f7/packages/coding-agent/src/core/extensions/types.ts#L435-L485)、`packages/agent/src/types.ts` |
-| MCP | `26897cc322f356487da89113451bd16b520b9288` | 协议定义 | [`schema.ts`](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/26897cc322f356487da89113451bd16b520b9288/schema/2025-11-25/schema.ts#L1244-L1297) |
-| Claude Code | 官方资料，访问 2026-07-17 | 行为文档 | [MCP](https://code.claude.com/docs/en/mcp)、[subagents](https://code.claude.com/docs/en/sub-agents)、[public repository license](https://github.com/anthropics/claude-code/blob/main/LICENSE.md) |
-| Anthropic API / Managed Agents | 官方资料，访问 2026-07-17 | API 契约文档 | [Managed Agents tools](https://platform.claude.com/docs/en/managed-agents/tools)、[Tool reference](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-reference)、[Agent setup](https://platform.claude.com/docs/en/managed-agents/agent-setup) |
-| Kiro CLI | 官方资料，访问 2026-07-17 | 行为文档 | [Agent configuration](https://kiro.dev/docs/cli/custom-agents/configuration-reference/)、[MCP configuration](https://kiro.dev/docs/cli/mcp/configuration/) |
-| Amp | 官方资料，访问 2026-07-17 | API 契约文档 | [Plugin API](https://ampcode.com/manual/plugin-api)、Custom Agents |
-| Devin | 官方资料，访问 2026-07-17 | 行为文档 | [Devin MCP](https://docs.devin.ai/work-with-devin/devin-mcp)、Session API、Playbooks、Skills |
-
-## 6. 目标设计：怎样真正做到“只配置元数据”
-
-以下为**目标设计**，不是任何一个被调研项目已经共同实现的标准。
-
-### 6.1 四个不可省略的平台组件
-
-1. **Manifest Validator**
-   - 使用 JSON Schema 校验结构；
-   - 校验名称唯一性、引用存在、driver 类型与字段组合；
-   - 校验 input/output Schema；
-   - 禁止把明文 secret 放进 Manifest。
-
-2. **Manifest Compiler**
-   - 将 Tool descriptor 编译为不同模型供应商需要的 function/tool schema；
-   - 将 implementation ref 编译为 runtime dispatch plan；
-   - 将语义 hint 编译为策略输入，但不能把 hint 直接当授权结论；
-   - 将 Agent 的 model、instructions、tools、skills、memory、policy、subagents 解析为不可变运行计划。
-
-3. **Driver Registry**
-   - 平台预装受信任的 `builtinRef`、`mcp`、`openapi`、`http`、`command`、`artifact`、`workflow`、`agentProxy` driver；
-   - 每个 driver 声明自己支持的 schema 版本、传输、认证类型、隔离要求和结果规范化规则；
-   - Manifest 只能引用 allowlist 中的 driver 和带 integrity/version 的制品。
-
-4. **Agent Runtime Factory Registry**
-   - 根据 `factory` 创建 ReAct、plan/execute、managed session 或其他既有 loop；
-   - 解析模型、Tool、Skill、Memory、Knowledge、Policy、Subagent；
-   - 创建 session state，但不把 mutable state 写回 Manifest。
-
-### 6.2 Tool 注册和调用链
-
-![Tool manifest realization pipeline](./tool_realization_pipeline.svg)
-
-[PlantUML 源码](./diagram.puml#L1)
-
-这个设计把两类常被混淆的数据分开：
-
-- `descriptor`：模型看到什么；
-- `implementation`：平台怎样执行。
-
-只有二者同时存在，且 `implementation.driver` 能在 Driver Registry 中解析，Tool 才能进入 `Ready` 状态。只有 descriptor 的对象最多进入 `Described` 状态，不允许对模型宣称可调用。
-
-建议的 Tool 生命周期：
-
-`Draft -> Validated -> Bound -> Ready -> Disabled/Failed`
-
-- `Validated`：Schema 合法；
-- `Bound`：所有 endpoint/secret/workspace/artifact 引用可解析；
-- `Ready`：driver 健康检查通过，模型才可见；
-- `Failed`：保留诊断，不静默注册一个必然失败的 Tool。
-
-### 6.3 Agent 编译链
-
-![Agent manifest realization pipeline](./agent_realization_pipeline.svg)
-
-[PlantUML 源码](./diagram.puml#L65)
-
-Agent Manifest 不应该直接保存正在运行的线程、conversation、checkpoint 或临时 OAuth token。编译流程应先得到一个 `ResolvedAgentPlan`，至少包含：
-
-- 固定版本的 Manifest digest；
-- 已解析的 model/provider；
-- 完整 system/developer instructions；
-- 已进入 Ready 的 Tool 集合及别名；
-- skills/knowledge 的内容 digest；
-- memory store binding；
-- 权限决策图与 sandbox；
-- subagent roster、并发和深度限制；
-- timeout、turn、cost/token budget；
-- output schema 和 completion contract。
-
-Runtime Factory 使用这个不可变计划创建 Agent Instance。这样同一 Manifest 在测试、预发、生产中可以复现，而 secret、endpoint 和 workspace 由各环境 Binding 决定。
-
-### 6.4 Manifest、Binding、State 三分法
-
-![Portable manifest, binding, and state split](./portable_manifest_and_binding.svg)
-
-[PlantUML 源码](./diagram.puml#L119)
-
-| 资源 | 可放内容 | 禁止放内容 | 生命周期 |
-|---|---|---|---|
-| ToolManifest / AgentManifest | 身份、版本、描述、Schema、实现引用、模型、提示词、能力选择、策略意图 | 明文密钥、机器绝对路径、会话内容、OAuth access token | 版本化、可评审、可复用 |
-| Binding | secretRef、endpoint、workspaceRef、identityRef、artifact pin、环境策略覆盖 | 可移植业务定义、聊天历史 | 环境专属，可轮换 |
-| Runtime State | conversation、memory、checkpoint、task、lease、health | 声明式期望配置 | 高频变化、可清理/归档 |
-
-这是对现有产品的**架构调整**：很多项目把 Agent 配置与 workspace/auth/runtime 参数混在同一个对象里；统一平台应主动拆开，以便供应链校验、环境迁移和最小权限治理。
-
-## 7. 随附统一元数据规范
-
-### 7.1 Schema 文件
-
-[Tool 与 Agent 元数据规范 V1](./metadata-v1.md) 是本轮收敛出的规范正文；[agent-tool-platform.schema.json](./agent-tool-platform.schema.json) 是对应的机器可读契约。V1 使用 `apiVersion: agentkit.example/v1`，定义三种顶层资源：
-
-- `kind: Tool`
-- `kind: Agent`
-- `kind: Binding`
-
-它使用 JSON Schema Draft 2020-12，并将 Tool implementation 定义为封闭的 discriminated union：
-
-| `implementation.kind` | 对应调研基线 | 执行前提 |
-|---|---|---|
-| `builtinRef` | 各 Agent 的内置 Tool | 平台已有实现 |
-| `mcp` | MCP、Claude、Codex、Kiro、Goose 等 | Server 已实现并可连接 |
-| `openapi` | Coze Studio | OpenAPI 文档 + endpoint/auth Binding |
-| `http` | Continue 的 URI dispatcher 等有限模式 | 固定 HTTP mapping |
-| `command` | Qwen Code discovery/call command | 已 pin 的可执行制品与隔离环境 |
-| `artifact` | Amp/Pi/OpenCode/Cline/Grok 的代码 Tool 抽象化 | 签名制品 + 受限 runtime |
-| `workflow` | Coze workflow Tool 等 | 已部署 workflow runtime |
-| `agentProxy` | Cline/Amp/Continue 的 subagent Tool | 被引用 Agent 可编译且可运行 |
-
-Tool Manifest 要求显式配置 `descriptor`、`exposure`、`implementation`、`semantics` 和 `policy`；Agent Manifest 要求显式配置 `runtime`、`instructions`、`tools`、`memory` 和 `policy`。V1 不再为缺失的权限或暴露策略提供隐式默认值。
-
-其中 `spec.exposure` 面向大规模 Tool catalog：
-
-| 字段 | 含义 |
+| 内容 | 入口与职责 |
 |---|---|
-| `mode: eager` | 完整 descriptor 常驻模型上下文，适用于 Tool Search 等引导工具 |
-| `mode: deferred` | 只进入受控搜索索引，命中后才把完整 descriptor 激活到会话 |
-| `mode: hidden` | 不进入模型上下文或 Tool Search；Schema 强制 `searchable: false` |
-| `searchable` | Tool Search 是否可以索引并返回该 Tool；它不能绕过 Agent selector 或 policy |
-| `aliases` / `keywords` / `group` | 在名称、描述和参数描述之外补充检索信号与分组 |
-
-### 7.2 可运行示例
-
-- [OpenAPI Tool](./示例/tool-openapi.json)：由通用 OpenAPI driver 执行；最接近 Coze 模式。
-- [Command Tool](./示例/tool-command.json)：由统一 JSON stdin/stdout driver 执行；对应 Qwen 模式。
-- [MCP Tool](./示例/tool-mcp.json)：只生成协议代理；明确依赖已有 Server。
-- [Tool Search](./示例/tool-search.json)：搜索当前 Agent 已授权的 Ready Tool，并可把命中的 deferred Tool 激活到当前会话。
-- [Code Review Agent](./示例/agent-code-review.json)：模型、指令、Tool selector、Skill、Memory、权限、subagent、hook、输出 Schema。
-- [Development Binding](./示例/binding-development.json)：只保存 secret 引用、endpoint、workspace、identity 和 artifact pin，不保存明文 secret。
-
-### 7.3 为什么 Agent 和 Tool 必须共用 ResourceRef
-
-主流实现反复出现同一模式：Agent 可作为 Tool 被父 Agent 调用。Cline、Amp、Continue 和 Goose sub-recipe 都有对应机制。因此统一规范不应定义另一套“SubagentTool 元数据”，而应使用：
-
-```json
-{
-  "kind": "agentProxy",
-  "driver": "core.agent-proxy@1",
-  "agentRef": {
-    "name": "engineering.security_reviewer",
-    "version": "1.1.0"
-  },
-  "promptTemplate": "{{ arguments.task }}"
-}
-```
-
-这样 Agent 的模型、工具、权限、记忆和升级策略仍由自己的 AgentManifest 管理；父 Agent 只持有引用。
-
-### 7.4 Tool Search 元数据设计
-
-[tool-search.json](./示例/tool-search.json) 是一个完整的 `kind: Tool` 示例。它综合了以下已观察机制：
-
-- GitHub Copilot CLI 按 name、description、parameter name/description 搜索 Tool，并把命中 Tool 按需加载到会话。[官方 Tool Search](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/tool-search)
-- Codex `DynamicToolFunctionSpec` 具有 `defer_loading`，证明 Tool 描述可被延迟暴露。[固定源码](https://github.com/openai/codex/blob/315195492c80fdade38e917c18f9584efd599304/codex-rs/protocol/src/dynamic_tools.rs#L10-L27)
-- MCP 用 `tools/list` 提供可检索描述，用 `tools/call` 保留 Server 执行所有权。[固定 Schema](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/26897cc322f356487da89113451bd16b520b9288/schema/2025-11-25/schema.ts#L1080-L1297)
-- Qwen Code 的 discovery command 说明 catalog 可以由通用 Driver 动态填充，不必把所有 Tool 编译进平台。[固定源码](https://github.com/QwenLM/qwen-code/blob/0ecba4b3c709d271a17faa5ac9537bf1b102eaf1/packages/core/src/tools/tool-registry.ts#L42-L181)
-
-Tool Search 的元数据分层如下：
-
-| 层 | Tool Search 示例中的决定 | 原因 |
-|---|---|---|
-| `metadata` | 稳定资源名 `platform.tool_search` 与不可变版本 | 支持引用、审计、回滚 |
-| `descriptor` | 定义 query、filters、limit、search/activate mode 及结构化结果 | 这是模型可以看到和调用的契约 |
-| `exposure` | `eager` 且 `searchable: false` | 搜索入口必须常驻，但不应搜索到自身 |
-| `implementation` | `builtinRef` + `core.tool-search@1` | 搜索、排序、权限裁剪和会话激活必须由受信任平台代码实现 |
-| `semantics` | 外部只读，但 `contextMutation: true` | 它不修改业务系统，却会改变当前会话可见 Tool 集合 |
-| `policy` | `approval: auto`，仅供 Agent 使用 | 搜索本身低风险，真正 Tool 调用仍执行各自 policy |
-
-被搜索的 Tool 使用如下配置；完整示例见 [MCP Tool](./示例/tool-mcp.json)：
-
-```json
-{
-  "exposure": {
-    "mode": "deferred",
-    "searchable": true,
-    "aliases": ["find_pull_requests", "search_prs"],
-    "keywords": ["pull request", "code review", "github repository"],
-    "group": "github.read"
-  }
-}
-```
-
-这是**目标设计中的架构扩展**，不是声称上述产品共享同一个 JSON。实现时必须满足三个边界：查询 filter 只能缩小候选集，不能扩大授权；只返回当前 Agent selector、identity 和 policy 已允许且处于 `Ready` 的 Tool；结果只包含 ResourceRef 和公开 descriptor，禁止泄漏 secret、endpoint、artifact pin 或内部 implementation config。
+| 逐项目行为和固定来源 | [源码与公开契约](./source-mechanisms.md)，区分实现、协议、公开行为 |
+| Tool 的定义与执行关系 | [图集](./tool-models.md)，一产品一图，沿用同一 diagram.puml |
+| 归一化的字段与失败规则 | [元数据候选规范 V1](./metadata-v1.md)，仅供方案评估 |
+| Schema 和六份示例 | [规范制品](./metadata-v1.md#10-规范制品和示例)，未经 Runtime 执行验证 |
 
 ## 8. 必须补充的安全与治理元数据
 
-MCP 的 annotations 是 hint，不能直接决定授权。若你的目标是让配置自动产生可用 Tool，平台还必须拥有独立、可执行的安全字段：
+MCP 的 annotations 是 hint，不能直接决定授权。候选平台若要从配置装配可用 Tool，平台还必须拥有独立、可执行的安全字段：
 
 1. **实现可信度**：driver allowlist、artifact digest/signature、publisher、SBOM；
 2. **副作用**：read-only、destructive、idempotent、open-world 只是输入，还要经过 policy engine；
@@ -614,9 +144,9 @@ MCP 的 annotations 是 hint，不能直接决定授权。若你的目标是让�
 - “Manifest/Binding/State 分离”是**架构变更**；
 - “已有 Cline/OpenCode Tool 仍需 execute”是**观察到的源码行为**。
 
-## 9. 推荐实施顺序
+## 9. 候选方案验证顺序
 
-### Phase 1：先实现可验证的 80% 场景
+### Phase 1：验证通用驱动
 
 1. 实现 `ToolManifest`、`AgentManifest`、`Binding` registry；
 2. 只开放 `builtinRef`、`mcp`、`openapi`、`command` 四个 driver；
@@ -644,149 +174,9 @@ MCP 的 annotations 是 hint，不能直接决定授权。若你的目标是让�
 4. 禁止把任意代码字符串伪装成普通 metadata；
 5. 建立 driver compatibility contract 和 conformance test kit。
 
-## 10. 各 Agent Tool 的核心定义类图
-
-类图现在采用“一种产品或一种公开契约一张图”的 small-multiple 布局，不再把互不相关的产品塞进一个目录式大图。统一排版规则是：配置或描述对象在上，注册器、客户端或 Driver 居中，最终执行端在下；只绘制源码或官方合约能够证明的关系；不使用跨产品隐藏连线控制位置。MCP 客户端图会局部重复 Server/Tool 边界，使每张图可以独立阅读。
-
-### 10.1 ToolDefinition 内含执行代码
-
-#### 10.1.1 Pi
-
-![Pi tool model](./pi_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L163)
-
-`ExtensionAPI` 注册同时包含模型描述和 `execute` 的 `ToolDefinition`。[源码](https://github.com/earendil-works/pi/blob/216e672e7c9fc65682553394b74e483c0c9e47f7/packages/coding-agent/src/core/extensions/types.ts#L435-L485)
-
-#### 10.1.2 OpenCode
-
-![OpenCode tool model](./opencode_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L197)
-
-Tool 对象包含 Schema、`execute`，并接收会话和工作区上下文。[源码](https://github.com/anomalyco/opencode/blob/3a1c6df9e24672f0761a6ced18e1315d89334baf/packages/opencode/src/tool/tool.ts#L55-L64)
-
-#### 10.1.3 Amp
-
-![Amp plugin tool model](./amp_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L233)
-
-Plugin Tool 将名称、描述、输入 Schema 与 `execute` 放在同一个定义中。[Plugin API](https://ampcode.com/manual/plugin-api)
-
-#### 10.1.4 OpenClaw
-
-![OpenClaw plugin tool model](./openclaw_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L261)
-
-Manifest 只声明 Tool 名称所有权；factory 才创建带执行行为的运行对象。[注册源码](https://github.com/openclaw/openclaw/blob/55bb6cfa2ec4863b5ece006aee70b5de6d967709/src/plugins/registry-registrars-tools-hooks.ts#L243-L293)、[Tool 类型](https://github.com/openclaw/openclaw/blob/55bb6cfa2ec4863b5ece006aee70b5de6d967709/src/agents/tools/common.ts#L28-L69)
-
-### 10.2 描述与执行分离，或交由宿主回调
-
-#### 10.2.1 Cline
-
-![Cline tool model](./cline_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L292)
-
-`AgentTool` 在纯描述的 `AgentToolDefinition` 基础上增加 `execute`。[源码](https://github.com/cline/cline/blob/c564045d8135c0c1c330b21d47b68b74917ce614/sdk/packages/shared/src/agent.ts#L146-L186)
-
-#### 10.2.2 Grok Build
-
-![Grok Build tool model](./grok_build_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L317)
-
-一个注册 Tool 同时实现 metadata trait 和 runtime trait；前者提供种类、命名空间和描述模板，并与 runtime Args Schema 合成版本化定义，后者通过 `Args`/`Output` 及 `execute/run` 提供实际契约和行为。[metadata 源码](https://github.com/xai-org/grok-build/blob/8adf9013a0929e5c7f1d4e849492d2387837a28d/crates/codegen/xai-grok-tools/src/types/tool_metadata.rs#L1-L102)、[runtime 源码](https://github.com/xai-org/grok-build/blob/8adf9013a0929e5c7f1d4e849492d2387837a28d/crates/common/xai-tool-runtime/src/tool.rs#L32-L110)
-
-#### 10.2.3 Anthropic API / Managed Agents
-
-![Anthropic client tool contract](./anthropic_client_tool_contract.svg)
-
-[PlantUML 源码](./diagram.puml#L354)
-
-`AnthropicClientToolContract` 是公开字段的归一化概念类；客户端应用负责执行 `tool_use`，它不是 Claude Code 源码类型。[Managed Agents tools](https://platform.claude.com/docs/en/managed-agents/tools)、[Tool reference](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-reference)
-
-#### 10.2.4 Codex
-
-![Codex dynamic tool model](./codex_dynamic_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L383)
-
-Namespace 聚合动态 Tool 描述，调用发生后由 App Server 客户端回调执行。[描述源码](https://github.com/openai/codex/blob/315195492c80fdade38e917c18f9584efd599304/codex-rs/protocol/src/dynamic_tools.rs#L10-L27)、[回调源码](https://github.com/openai/codex/blob/315195492c80fdade38e917c18f9584efd599304/codex-rs/core/src/tools/handlers/dynamic.rs#L113-L177)
-
-### 10.3 协议与通用 Driver
-
-#### 10.3.1 MCP
-
-![MCP tool contract](./mcp_tool_contract.svg)
-
-[PlantUML 源码](./diagram.puml#L415)
-
-Server 通过 `tools/list` 发布 Tool 描述，并通过 `tools/call` 拥有执行行为。[固定 Schema](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/26897cc322f356487da89113451bd16b520b9288/schema/2025-11-25/schema.ts#L1244-L1297)
-
-#### 10.3.2 Qwen Code
-
-![Qwen Code command tool model](./qwen_command_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L446)
-
-配置选择 discovery/call command，通用 Driver 发现描述并转发调用。[源码](https://github.com/QwenLM/qwen-code/blob/0ecba4b3c709d271a17faa5ac9537bf1b102eaf1/packages/core/src/tools/tool-registry.ts#L42-L181)
-
-#### 10.3.3 Coze Studio
-
-![Coze Studio OpenAPI tool model](./coze_openapi_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L477)
-
-Plugin Manifest 引用 OpenAPI operation，通用 HTTP executor 解释并执行。[Loader](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/plugin/conf/load_plugin.go#L151-L249)、[Executor](https://github.com/coze-dev/coze-studio/blob/22275b1c2661d35344a7493cffe401e8cc61cf8e/backend/domain/plugin/service/tool/invocation_http.go#L59-L155)
-
-#### 10.3.4 Continue
-
-![Continue tool dispatch model](./continue_tool_dispatch_model.svg)
-
-[PlantUML 源码](./diagram.puml#L513)
-
-Tool descriptor 的名称或 URI 选择 built-in、MCP 或 HTTP 分派路径。[源码](https://github.com/continuedev/continue/blob/d0a3c0b626b5bebc3bef4742eec05a0242be0bab/core/tools/callTool.ts#L28-L109)
-
-### 10.4 以 MCP 或托管服务为执行边界
-
-#### 10.4.1 Claude Code
-
-![Claude Code MCP tool model](./claude_code_mcp_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L541)
-
-Claude Code 的 Server 配置包含 transport、command/url、args、env/headers、headers helper、OAuth、timeout 和 always-load 等连接字段；local/project/user 是配置放置范围，不是单个 Server 对象的执行字段。MCP Server 拥有 Tool 描述和业务执行。[官方 MCP 文档](https://code.claude.com/docs/en/mcp)
-
-#### 10.4.2 Kiro CLI
-
-![Kiro CLI MCP tool model](./kiro_mcp_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L587)
-
-Agent Profile 负责选择和权限，MCP Server 配置负责绑定执行端。[Agent configuration](https://kiro.dev/docs/cli/custom-agents/configuration-reference/)、[MCP configuration](https://kiro.dev/docs/cli/mcp/configuration/)
-
-#### 10.4.3 Goose
-
-![Goose extension tool model](./goose_extension_tool_model.svg)
-
-[PlantUML 源码](./diagram.puml#L630)
-
-`ExtensionConfig` 配置 Extension Manager，后者发现并调用 Server 所有的 Tool。[Config 源码](https://github.com/aaif-goose/goose/blob/d6345f75dba4f43afe705e045414edf173e40af4/crates/goose/src/agents/extension.rs#L159-L295)、[Manager 源码](https://github.com/aaif-goose/goose/blob/d6345f75dba4f43afe705e045414edf173e40af4/crates/goose/src/agents/extension_manager.rs#L1391-L1485)
-
-#### 10.4.4 Devin
-
-![Devin managed and MCP tool ownership](./devin_tool_ownership_model.svg)
-
-[PlantUML 源码](./diagram.puml#L674)
-
-托管 Tool 由 Devin 服务执行；外部 MCP Tool 由 Server 执行，两种所有权保持分区。[Devin MCP](https://docs.devin.ai/work-with-devin/devin-mcp)、[MCP Schema](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/26897cc322f356487da89113451bd16b520b9288/schema/2025-11-25/schema.ts#L1244-L1297)
-
 ## 11. 验收标准
 
-若你要判断实现是否真正达到“开发人员只配置元数据即可获得 Tool/Agent”，建议用以下验收项：
+以下是候选方案验收项，尚不表示 CampusClaw 已实现这些能力：
 
 - 新增一个 OpenAPI operation 时，不修改平台代码即可注册、授权并调用；
 - 新增一个符合 command protocol 的 executable 时，不修改平台代码即可注册多个 Tool；
@@ -799,24 +189,119 @@ Agent Profile 负责选择和权限，MCP Server 配置负责绑定执行端。[
 - 所有调用可追溯到 manifest digest、binding revision 和 driver version；
 - schema、driver、result 与 policy 错误都有机器可读错误码。
 
-## 12. 本次验证结果
+## 12. 制品校验范围
 
-- JSON Schema 本身通过 Draft 2020-12 schema check；
-- 六个示例均通过 `jsonschema` 校验；
-- PlantUML 文件只包含 ASCII；
-- `plantuml -tsvg diagram.puml` 生成十九个 SVG；
-- SVG 均通过 XML 解析；
-- Markdown 不含 Mermaid；
-- Markdown 引用的本地 SVG 与 PlantUML source anchor 已检查；
-- 目标目录位于 Git repository；本次变更已通过 `git diff --check`。
+Schema 与示例的静态校验只证明字段符合候选规范，不能证明 Driver 已安装、远端可达、权限正确或 Tool 可执行。原研究记录使用 Draft 2020-12 校验六个示例，并生成十九个 SVG；本专题保留该制品边界，不将其称为可运行实现。
 
 ## 13. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.0.0 | 2026-07-18 | 发布 Tool/Agent Metadata V1 正文与稳定 Schema；明确必填边界和执行所有权；修正 OpenCode、Grok Build、Claude Code MCP 与 Goose 的类图字段 |
-| 1.4.0 | 2026-07-17 | 新增 Tool Search 完整 JSON；增加 Tool exposure/deferred loading 与 session context mutation 元数据，并提供可检索 MCP Tool 示例 |
-| 1.3.0 | 2026-07-17 | 废弃跨产品目录式类图；改为一产品/契约一图的统一纵向布局，移除跨产品隐藏布局关系并完成逐图视觉检查 |
-| 1.2.0 | 2026-07-17 | 拆分 Claude Code、Anthropic API 与 Managed Agents 的证据归属；为类图增加逐对象来源并重排布局；新增范围标准与分层扩展建议 |
-| 1.1.0 | 2026-07-17 | 新增覆盖全部调研项目的四组 ToolDefinition 类图，并同步图源、SVG 与验证结果 |
-| 1.0.0 | 2026-07-17 | 完成 15 个 Agent/平台与 MCP 调研；新增对比矩阵、统一 Schema、五个示例和三张 PlantUML 图 |
+| 2.1.0 | 2026-09-14 | 分离研究入口、逐项目证据与图集，候选规范集中维护字段和执行规则。 |
+| 2.0.0 | 2026-07-18 | 发布 Tool/Agent Metadata V1 正文与稳定 Schema。 |
+| 1.4.0 | 2026-07-17 | 新增 Tool Search 完整 JSON。 |
+| 1.3.0 | 2026-07-17 | 废弃跨产品目录式类图。 |
+| 1.2.0 | 2026-07-17 | 拆分 Claude Code、Anthropic API 与 Managed Agents 的证据归属。 |
+| 1.1.0 | 2026-07-17 | 新增覆盖全部调研项目的四组 ToolDefinition 类图，并同步图源、SVG 与验证结果。 |
+| 1.0.0 | 2026-07-17 | 完成 15 个 Agent/平台与 MCP 调研。 |
+
+<details>
+<summary>原章节链接定位</summary>
+
+<a id="4-逐项目研究结果"></a>[4. 逐项目研究结果](./source-mechanisms.md#4-逐项目研究结果)
+
+<a id="41-anthropic-产品族claude-codeclaude-api-与-managed-agents"></a>[4.1 Anthropic 产品族：Claude Code、Claude API 与 Managed Agents](./source-mechanisms.md#41-anthropic-产品族claude-codeclaude-api-与-managed-agents)
+
+<a id="42-codex"></a>[4.2 Codex](./source-mechanisms.md#42-codex)
+
+<a id="43-opencode"></a>[4.3 OpenCode](./source-mechanisms.md#43-opencode)
+
+<a id="44-cline"></a>[4.4 Cline](./source-mechanisms.md#44-cline)
+
+<a id="45-qwen-code"></a>[4.5 Qwen Code](./source-mechanisms.md#45-qwen-code)
+
+<a id="46-kiro-cli"></a>[4.6 Kiro CLI](./source-mechanisms.md#46-kiro-cli)
+
+<a id="47-amp"></a>[4.7 Amp](./source-mechanisms.md#47-amp)
+
+<a id="48-grok-build"></a>[4.8 Grok Build](./source-mechanisms.md#48-grok-build)
+
+<a id="49-openclaw"></a>[4.9 OpenClaw](./source-mechanisms.md#49-openclaw)
+
+<a id="410-goose"></a>[4.10 Goose](./source-mechanisms.md#410-goose)
+
+<a id="411-coze-studio"></a>[4.11 Coze Studio](./source-mechanisms.md#411-coze-studio)
+
+<a id="412-continue"></a>[4.12 Continue](./source-mechanisms.md#412-continue)
+
+<a id="413-devin"></a>[4.13 Devin](./source-mechanisms.md#413-devin)
+
+<a id="414-pi"></a>[4.14 Pi](./source-mechanisms.md#414-pi)
+
+<a id="415-mcp-2025-11-25"></a>[4.15 MCP 2025-11-25](./source-mechanisms.md#415-mcp-2025-11-25)
+
+<a id="5-源码与文档基线"></a>[5. 源码与文档基线](./source-mechanisms.md#5-源码与文档基线)
+
+<a id="10-各-agent-tool-的核心定义类图"></a>[10. 各 Agent Tool 的核心定义类图](./tool-models.md#10-各-agent-tool-的核心定义类图)
+
+<a id="101-tooldefinition-内含执行代码"></a>[10.1 ToolDefinition 内含执行代码](./tool-models.md#101-tooldefinition-内含执行代码)
+
+<a id="1011-pi"></a>[10.1.1 Pi](./tool-models.md#1011-pi)
+
+<a id="1012-opencode"></a>[10.1.2 OpenCode](./tool-models.md#1012-opencode)
+
+<a id="1013-amp"></a>[10.1.3 Amp](./tool-models.md#1013-amp)
+
+<a id="1014-openclaw"></a>[10.1.4 OpenClaw](./tool-models.md#1014-openclaw)
+
+<a id="102-描述与执行分离或交由宿主回调"></a>[10.2 描述与执行分离，或交由宿主回调](./tool-models.md#102-描述与执行分离或交由宿主回调)
+
+<a id="1021-cline"></a>[10.2.1 Cline](./tool-models.md#1021-cline)
+
+<a id="1022-grok-build"></a>[10.2.2 Grok Build](./tool-models.md#1022-grok-build)
+
+<a id="1023-anthropic-api--managed-agents"></a>[10.2.3 Anthropic API / Managed Agents](./tool-models.md#1023-anthropic-api--managed-agents)
+
+<a id="1024-codex"></a>[10.2.4 Codex](./tool-models.md#1024-codex)
+
+<a id="103-协议与通用-driver"></a>[10.3 协议与通用 Driver](./tool-models.md#103-协议与通用-driver)
+
+<a id="1031-mcp"></a>[10.3.1 MCP](./tool-models.md#1031-mcp)
+
+<a id="1032-qwen-code"></a>[10.3.2 Qwen Code](./tool-models.md#1032-qwen-code)
+
+<a id="1033-coze-studio"></a>[10.3.3 Coze Studio](./tool-models.md#1033-coze-studio)
+
+<a id="1034-continue"></a>[10.3.4 Continue](./tool-models.md#1034-continue)
+
+<a id="104-以-mcp-或托管服务为执行边界"></a>[10.4 以 MCP 或托管服务为执行边界](./tool-models.md#104-以-mcp-或托管服务为执行边界)
+
+<a id="1041-claude-code"></a>[10.4.1 Claude Code](./tool-models.md#1041-claude-code)
+
+<a id="1042-kiro-cli"></a>[10.4.2 Kiro CLI](./tool-models.md#1042-kiro-cli)
+
+<a id="1043-goose"></a>[10.4.3 Goose](./tool-models.md#1043-goose)
+
+<a id="1044-devin"></a>[10.4.4 Devin](./tool-models.md#1044-devin)
+
+</details>
+
+<a id="6-目标设计怎样真正做到只配置元数据"></a>[6. 目标设计：怎样真正做到“只配置元数据”：见候选规范](./metadata-v1.md)。
+
+<a id="61-四个不可省略的平台组件"></a>[6.1 四个不可省略的平台组件：见候选规范](./metadata-v1.md)。
+
+<a id="62-tool-注册和调用链"></a>[6.2 Tool 注册和调用链：见候选规范](./metadata-v1.md)。
+
+<a id="63-agent-编译链"></a>[6.3 Agent 编译链：见候选规范](./metadata-v1.md)。
+
+<a id="64-manifestbindingstate-三分法"></a>[6.4 Manifest、Binding、State 三分法：见候选规范](./metadata-v1.md)。
+
+<a id="7-随附统一元数据规范"></a>[7. 随附统一元数据规范：见候选规范](./metadata-v1.md)。
+
+<a id="71-schema-文件"></a>[7.1 Schema 文件：见候选规范](./metadata-v1.md)。
+
+<a id="72-可运行示例"></a>[7.2 可运行示例：见候选规范](./metadata-v1.md)。
+
+<a id="73-为什么-agent-和-tool-必须共用-resourceref"></a>[7.3 为什么 Agent 和 Tool 必须共用 ResourceRef：见候选规范](./metadata-v1.md)。
+
+<a id="74-tool-search-元数据设计"></a>[7.4 Tool Search 元数据设计：见候选规范](./metadata-v1.md)。

@@ -1,119 +1,118 @@
 @startuml tool_realization_pipeline
-!pragma layout smetana
 ' Source evidence: coze-studio backend/domain/plugin/conf/load_plugin.go loadPluginProductMeta.
 ' Source evidence: coze-studio backend/domain/plugin/service/tool/invocation_http.go httpCallImpl.Do.
 ' Source evidence: qwen-code packages/core/src/tools/tool-registry.ts DiscoveredToolInvocation.execute.
 ' Source evidence: MCP schema/2025-11-25/schema.ts Tool, ListToolsResult, and CallToolRequest.
 ' Observed behavior: metadata becomes executable only when a runtime driver or remote server handles the call.
 ' Design reason: keep the model contract separate from implementation and deployment bindings.
-title Tool manifest realization pipeline
-skinparam componentStyle rectangle
+title Research Proposal: Tool Registration and Execution
+' Target-only research proposal, not the CampusClaw implementation plan.
+top to bottom direction
 skinparam shadowing false
 skinparam backgroundColor white
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam nodesep 22
+skinparam ranksep 35
+skinparam ArrowColor #475569
 
-actor Developer
-rectangle "Control plane" {
-  artifact "ToolManifest\nDescriptor + ImplementationRef" as Manifest
+package "Definition and deployment" {
+  artifact "Tool Manifest" as Manifest
+  artifact "Environment Binding" as Binding
+}
+package "Registration" {
   component "Schema Validator" as Validator
   component "Manifest Compiler" as Compiler
   component "Driver Registry" as Registry
   component "Policy Compiler" as PolicyCompiler
 }
-
-rectangle "Runtime plane" {
-  component "Model Tool Adapter" as ModelAdapter
+package "Invocation" {
+  component "Model Tool Adapter" as Model
   component "Policy Gate" as Gate
   component "Tool Executor" as Executor
-  component "OpenAPI Driver" as OpenApiDriver
-  component "MCP Proxy Driver" as McpDriver
-  component "Command Driver" as CommandDriver
-  component "Artifact Driver" as ArtifactDriver
-  component "Workflow Driver" as WorkflowDriver
-  component "Agent Proxy Driver" as AgentDriver
+  component "Installed Tool Drivers" as Drivers
 }
-
-cloud "External API" as Api
-node "MCP Server" as McpServer
-node "Pinned Artifact" as Artifact
-component "Workflow Runtime" as Workflow
-component "Agent Runtime" as Agent
-
-Developer --> Manifest
+package "Execution owners" {
+  cloud "API / MCP Server" as Remote
+  node "Pinned process / artifact" as Artifact
+  component "Workflow / Agent Runtime" as Runtime
+}
 Manifest --> Validator
+Binding --> Validator : resolve deployment references
 Validator --> Compiler
-Compiler --> ModelAdapter : descriptor
-Compiler --> Registry : implementation ref
-Compiler --> PolicyCompiler : semantics and policy
+Compiler --> Model : descriptor
+Compiler --> Registry : implementation reference
+Compiler --> PolicyCompiler
 PolicyCompiler --> Gate
-ModelAdapter --> Gate : validated call
+Model --> Gate : validated call
 Gate --> Executor
 Registry --> Executor : resolved driver
-Executor --> OpenApiDriver
-Executor --> McpDriver
-Executor --> CommandDriver
-Executor --> ArtifactDriver
-Executor --> WorkflowDriver
-Executor --> AgentDriver
-OpenApiDriver --> Api
-McpDriver --> McpServer
-CommandDriver --> Artifact
-ArtifactDriver --> Artifact
-WorkflowDriver --> Workflow
-AgentDriver --> Agent
+Executor --> Drivers
+Drivers --> Remote
+Drivers --> Artifact
+Drivers --> Runtime
+Model -[hidden]down-> Gate
+Gate -[hidden]down-> Executor
+legend bottom left
+Drivers are separate registered implementations, not one central switch.
+See the implementation union table for the exact driver-to-owner mapping.
+Only a fully bound and healthy Tool may become Ready.
+endlegend
 @enduml
 
 @startuml agent_realization_pipeline
-!pragma layout smetana
 ' Source evidence: codex codex-rs/core/src/config/agent_roles.rs load_agent_roles and parse_agent_role_file_contents.
 ' Source evidence: opencode packages/core/src/config/plugin/agent.ts and packages/opencode/src/agent/agent.ts.
 ' Source evidence: grok-build crates/codegen/xai-grok-agent/src/config.rs and builder.rs.
 ' Source evidence: coze-studio backend/domain/agent/singleagent/internal/agentflow/agent_flow_builder.go BuildAgent.
 ' Observed behavior: agent configuration is compiled by an existing generic agent runtime.
 ' Design reason: resolve capabilities before starting a session and keep runtime state outside the manifest.
-title Agent manifest realization pipeline
-skinparam componentStyle rectangle
+title Research Proposal: Agent Compilation and Runtime
+' Target-only research proposal, not the CampusClaw implementation plan.
+top to bottom direction
 skinparam shadowing false
 skinparam backgroundColor white
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam nodesep 22
+skinparam ranksep 35
+skinparam ArrowColor #475569
 
-actor Developer
-artifact "AgentManifest" as AgentManifest
-artifact "Binding" as Binding
-component "Manifest Validator" as AgentValidator
-component "Agent Compiler" as AgentCompiler
-component "Model Resolver" as ModelResolver
-component "Instruction Resolver" as InstructionResolver
-component "Tool Resolver" as ToolResolver
-component "Skill and Knowledge Resolver" as KnowledgeResolver
-component "Memory Resolver" as MemoryResolver
-component "Policy Resolver" as PolicyResolver
-component "Subagent Resolver" as SubagentResolver
-component "Runtime Factory Registry" as FactoryRegistry
-component "Agent Runtime Factory" as AgentFactory
-node "Runnable Agent Instance" as AgentInstance
-database "Session State" as SessionState
-
-Developer --> AgentManifest
-AgentManifest --> AgentValidator
-Binding --> AgentValidator : deployment references
-AgentValidator --> AgentCompiler
-AgentCompiler --> ModelResolver
-AgentCompiler --> InstructionResolver
-AgentCompiler --> ToolResolver
-AgentCompiler --> KnowledgeResolver
-AgentCompiler --> MemoryResolver
-AgentCompiler --> PolicyResolver
-AgentCompiler --> SubagentResolver
-AgentCompiler --> FactoryRegistry
-FactoryRegistry --> AgentFactory
-ModelResolver --> AgentFactory
-InstructionResolver --> AgentFactory
-ToolResolver --> AgentFactory
-KnowledgeResolver --> AgentFactory
-MemoryResolver --> AgentFactory
-PolicyResolver --> AgentFactory
-SubagentResolver --> AgentFactory
-AgentFactory --> AgentInstance
-AgentInstance --> SessionState
+package "Inputs" {
+  artifact "Agent Manifest" as Manifest
+  artifact "Environment Binding" as Binding
+}
+package "Compilation" {
+  component "Manifest Validator" as Validator
+  component "Agent Compiler" as Compiler
+  component "Capability Resolvers" as Resolvers
+  artifact "ResolvedAgentPlan" as Plan
+}
+package "Runtime creation" {
+  component "Runtime Factory Registry" as Registry
+  component "Agent Runtime Factory" as Factory
+  node "Agent Instance" as Instance
+  database "Session State" as State
+}
+Manifest --> Validator
+Binding --> Validator
+Validator --> Compiler
+Compiler --> Resolvers : resolve references and policies
+Resolvers --> Plan : fixed identities and content digests
+Compiler --> Registry : select factory version
+Registry --> Factory
+Factory --> Plan : reads immutable plan
+Factory --> Instance : creates
+Instance --> State : owns mutable state
+Compiler -[hidden]down-> Plan
+Plan -[hidden]down-> Factory
+legend bottom left
+Resolvers cover model, instructions, Tool, Skill/Knowledge, Memory, policy and subagents.
+Grouped resolvers are separate collaborators; the complete result is one immutable plan.
+Manifest and Binding do not store running tasks or conversation contents.
+endlegend
 @enduml
 
 @startuml portable_manifest_and_binding
@@ -123,7 +122,7 @@ AgentInstance --> SessionState
 ' Observed behavior: reusable configuration and deployment credentials have different lifecycles.
 ' Target-only design: the three-resource split below is a proposed portable architecture, not an existing shared standard.
 ' Design reason: secrets, workspaces, and mutable state must not be embedded in reusable manifests.
-title Portable manifest, binding, and state split
+title Research Proposal: Manifest, Binding and State
 skinparam componentStyle rectangle
 skinparam shadowing false
 skinparam backgroundColor white

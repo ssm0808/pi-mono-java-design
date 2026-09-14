@@ -2,72 +2,39 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.1.0 |
-| 状态 | 目标设计；用于替代“HTTP 回归脚本就是 TDD Agent”的旧定位 |
+| 文档版本 | 2.2.0 |
+| 状态 | target-only 总体架构；知识同步、精确覆盖、测试维护与新门禁待独立验收 |
 | 角色 | 由 Codex 组建的独立 CampusClaw 专业测试工程师 Agent |
 | 产品知识源 | [`capability-registry.json`](capability-registry.json)；聊天上下文不是知识源 |
 | 设计仓分析基线 | `d2b9b4b6f4762e0e9734c144e3eb3273959e7e26`，`pi-mono-java-design/main` |
 | 实现仓分析基线 | `ae0ae7c164b031afacd862794e8914243913f113`，`pi-mono-java/main` |
-| 当前设计契约示例 | Runtime HTTP `1.41.0`，十一项 operation 已确认 |
-| 当前测试资产盘点 | 139 个 Java 测试源文件、3 个前端 Vitest 文件；尚未完成逐需求覆盖审计 |
+| 注册表盘点范围 | 原始盘点使用 Runtime HTTP `1.41.0`；不是当前接口清单 |
+| 固定源码测试资产盘点 | 139 个 Java 测试源文件、3 个前端 Vitest 文件；尚未完成逐需求覆盖审计 |
 | 更新日期 | 2026-09-14 |
 
-## 1. 对齐后的结论
+## 1. 职责与目标
 
-TDD Agent 不是一个每周运行 HTTP 用例的 Python 脚本，也不是在失败后生成文字总结的
-聊天提示词。它是一个**独立的 Codex 测试工程师 Agent**，持续维护三类资产：
+`CampusClaw Quality Engineer` 是独立的 Codex 测试工程师 Agent，维护三类资产：版本化产品知识、可执行测试，以及可审计的运行证据。它读取设计与实现变化，补齐需求到测试的关联，在隔离环境维护测试，并解释失败。
 
-1. CampusClaw 完整功能知识：能力、需求成熟度、设计证据、源码证据和风险等级；
-2. 可执行测试资产：用例、断言、fixture、stub、环境适配器和精确 test selector；
-3. 可审计质量证据：每次变更对应的选择理由、运行命令、日志、seed、JUnit/前端报告和判定。
+判定由签入仓库的确定性断言、契约和状态不变量完成。Agent 不修改产品实现，不放宽断言，也不能把基础设施阻塞、skip 或模型总结当作通过。
 
-测试是否通过仍由签入仓库的确定性断言、契约和状态不变量决定。Codex 负责像测试工程师一样
-理解变更、发现覆盖缺口、维护测试、编排平台、复现失败和解释风险，但不能凭语言模型判断
-覆盖真实失败，也不能为了让流水线变绿而放宽断言。
+PR/push 触发仓库 CI 的变更门禁，夜间独立任务执行深测与测试维护。“实时”指代码变更检测；生产监控、告警和 SLO 属于可观测性模块。
 
-“实时检测”在本设计中指代码变更实时检测：Pull Request 与 push 事件立即触发确定性门禁；
-夜间任务再由独立 Codex Agent 做全量深测、能力盘点和测试维护。它不等同于生产环境监控，
-生产可用性、告警和 SLO 需要单独的可观测性设计。
+## 2. 与领域适配器的关系
 
-## 2. 当前方案为什么没有对齐
+[Runtime HTTP 适配器](../04-Runtime-HTTP测试Agent/README.md)提供 HTTP、数据库和打包进程测试，机器目录仍固定于历史 HTTP 1.37。产品级 TDD Agent 还覆盖模型、Agent Loop、工具、上下文、Child/Cron、控制面、前端和交付，并维护 `capabilityId → requirementId → caseId → testSelector → runEvidence` 追踪链。
 
-现有 [Runtime HTTP 测试 Agent](../04-Runtime-HTTP测试Agent/README.md) 有价值，但只能作为
-`runtime-http` 领域适配器：
-
-- 它固定读取 Runtime HTTP `1.37.0` 和 79 个目录用例，而当前主设计已经演进到 `1.41.0`；
-- 它覆盖十一项 Runtime HTTP operation，没有建模模型提供方、Agent Loop、工具、压缩、Cron、
-  Child Agent、控制面、前端和交付兼容性；
-- “自动维护”只存在于说明文字中，实际执行器不能从设计变化生成精确需求、补测试并提出测试 PR；
-- 用例只映射到测试套件，缺少
-  `capabilityId -> requirementId -> caseId -> testSelector -> runEvidence` 的可追溯链；
-- 当前任务每周执行一次，并通过未合并工作树兜底，既不是变更实时门禁，也不是稳定平台；
-- 契约漂移会直接让整次任务停在 L0，但 Agent 不会把漂移转换为能力注册表和测试维护工作。
-
-因此 2.0 不是扩充旧 HTTP 目录，而是新增一个产品级总控 Agent；旧目录只保留为它调用的
-一个领域测试适配器。
+注册表 `2.1.0` 的全局盘点基线不等于当前目标。Runtime 九项接口和 Events v2、CampusMate 名称与 AI 产品范围等后续目标，需要在 requirement 粒度补齐成熟度、精确 selector 和测试证据，不能仅提高目录版本就宣称覆盖完成。
 
 ## 3. 源证据与事实边界
 
 ### 3.1 已观察实现
 
-以下结论来自实现提交 `ae0ae7c164b031afacd862794e8914243913f113`：
+固定实现提交为 `ae0ae7c164b031afacd862794e8914243913f113`。当时可观察到模型注册与调用、Agent Loop、Runtime HTTP、持久化和压缩、Agent/Skill、工作区及 Mate Tool、Child/Cron、控制面和前端；测试资产有 139 个 Java 测试源文件、3 个 Vitest 文件，`.github/workflows/ci.yml:4-26` 的 PR/push 门禁仅执行 Spotless 与 Maven verify。
 
-| 能力 | 源码证据 | 已观察行为 |
-|---|---|---|
-| 模型调用 | `modules/ai/.../CampusClawAiService.java:CampusClawAiService`、`ModelRegistry.java:ModelRegistry` | 存在多 Provider、模型注册和流事件归一化 |
-| Agent 核心 | `modules/agent-core/.../AgentLoop.java:AgentLoop`、`ToolExecutionPipeline.java:ToolExecutionPipeline` | 存在循环、队列、取消和工具调用管线 |
-| Runtime HTTP | `runtimeapi/web/RuntimeSessionController.java:RuntimeSessionController`、`RuntimeEventController.java:RuntimeEventController` | 存在 Session、配置、控制和 SSE HTTP 边界 |
-| 数据与上下文 | `runtimeapi/persistence/RuntimeSessionRepository.java:RuntimeSessionRepository`、`session/compaction/SessionCompactor.java:SessionCompactor` | 存在 MyBatis 持久化、压缩和重载路径 |
-| Managed Agent/Skill | `runtimeapi/agent/FileAgentDirectoryResolver.java:FileAgentDirectoryResolver`、`skill/SkillLoader.java:SkillLoader` | 存在文件目录解析和 Skill 加载 |
-| 工具体系 | `tool/workspace/WorkspacePathResolver.java:WorkspacePathResolver`、`common/client/HttpMateToolClient.java:HttpMateToolClient` | 存在工作区隔离与 Mate 工具调用 |
-| Child/Cron | `tool/agent/SubagentExecutionService.java:SubagentExecutionService`、`tool/cron/ManagedCronSessionRunner.java:ManagedCronSessionRunner` | 存在子 Agent 与定时 Agent 执行 |
-| 控制面 | `controlplane/api/NodeController.java:NodeController`、`RuntimeController.java:RuntimeController` | 存在节点注册和 Runtime 调度接口 |
-| 前端 | `frontend/src/composables/useRuntimeApi.ts:useRuntimeApi`、`runtimeEventProjector.ts:projectRuntimeEvents` | 存在 Vue 产品界面、Runtime adapter 和事件投影 |
-| 当前 CI | `.github/workflows/ci.yml:4-26` | PR/push 只执行 Spotless 与 Maven verify |
+完整仓库相对路径、符号及 selector 由[能力注册表](capability-registry.json)的 `sourceEvidence/requirements` 保存。`docs/designs/ai.md` 和 `docs/designs/agent-core.md` 是旧代码派生快照，只用来寻找源码，不作为当前行为预期。上述数量和差距不延伸到最新实现；Attachment 公共 bridge 仍为 `proposed`，不进入阻断门禁。
 
-`docs/designs/ai.md` 和 `docs/designs/agent-core.md` 自身声明为旧的代码派生快照，因此只用来
-辅助发现源码，不作为当前产品预期。外部 Attachment 公共 bridge 尚未确认，只记录为
-`proposed`，不进入阻断门禁。
+注册表仍绑定该历史提交；对其他 checkout 使用 `--code-root` 前应先核对基线。2026-09-14 对 `f61906b9136246ca60f333704b6fc92b5420d0ec` 工作树检查未找到 `CC-CAP-001` 的 `RuntimeHttpProcessOpenGaussIT` 和 `CC-CAP-014` 的 `mate-campusclaw` 路径，因此该附加源码检查未通过，不能据此宣称当前覆盖已迁移；固定用例和 selector 暂不改写。
 
 ### 3.2 目标设计决策
 
@@ -76,8 +43,7 @@ PR、前端浏览器 E2E、故障/变异测试和新 CI 门禁均属于 target-o
 
 ### 3.3 设计理由
 
-一个 Agent 不可能靠一次性提示词“知道全部功能”。完整知识必须可版本化、可差分、能声明
-未知项，并同时引用设计与实现；否则每次对话都会重新理解产品，也无法证明漏掉了什么。
+产品知识需要版本、差分、未知项以及设计和实现证据，才能在多次任务之间稳定复用并暴露覆盖缺口。注册表承担这项责任，聊天上下文只辅助当次分析。
 
 ## 4. Agent 的专业角色与权限
 
@@ -121,9 +87,9 @@ PR 中隐式同步另一个仓库。
 - `partial` 代表确实有测试但尚未完成逐需求审计，不能写成“全覆盖”；
 - 每次运行记录设计提交、实现提交和注册表版本，报告可重放。
 
-当前首版盘点包含 15 个能力域：
+固定注册表基线包含 15 个能力域；下表是盘点状态，不代表最新实现验收：
 
-| ID | 能力域 | 风险 | 成熟度 | 当前覆盖结论 |
+| ID | 能力域 | 风险 | 成熟度 | 固定基线覆盖结论 |
 |---|---|---:|---|---|
 | CC-CAP-001 | Runtime HTTP Session/SSE | P0 | accepted | partial；旧目录停在 1.37 |
 | CC-CAP-002 | 持久化、并发与恢复 | P0 | implemented | partial |
@@ -138,19 +104,14 @@ PR 中隐式同步另一个仓库。
 | CC-CAP-011 | CampusMate 共享客户端与模型管理 | P0 | accepted | partial |
 | CC-CAP-012 | 控制面注册与调度 | P1 | implemented | partial |
 | CC-CAP-013 | 前端对话与活动流程 | P0 | accepted | partial；仅 3 个 Vitest 文件 |
-| CC-CAP-014 | 构建、配置、打包与镜像兼容 | P0 | implemented | partial；当前 CI 只跑 Maven |
+| CC-CAP-014 | 构建、配置、打包与镜像兼容 | P0 | implemented | partial；基线 CI 只跑 Maven |
 | CC-CAP-015 | Attachment 与公共 bridge | P1 | proposed | unbound；只告警不阻断 |
 
 首版 registry 是完整功能盘点的起点，不是假装已经完成覆盖证明。普通设计校验会把 P0
 `partial` 输出为警告；未来 `--strict-coverage` 是合并门禁，必须等精确用例绑定补齐后才允许
 通过。
 
-CC-CAP-003/011 的已确认新增目标是[AI 削减与 CampusMate 命名](../03-模型管理Provider契约/README.md#11-ai-削减实施切片)：
-默认仅内置 `CampusMateProvider`（ID `campusmate`），删除第三方适配器、模型预置及两个 SDK，
-保留扩展框架，直接切换且不迁移旧历史。该新增目标为 target-only，不能从能力已有的
-`implemented/partial` 状态推导削减已经落地。注册表 `2.1.0` 用 `gap` 记录目标名称与 S1-S4
-验收；`sourceEvidence/testSelectors` 继续指向实际基线文件，待新测试 `CampusMateProviderTest`
-真正存在并执行后再换 selector。其余能力的全局基线与覆盖状态不因此升级，TDD 架构图无变化。
+CC-CAP-003/011 的[CampusMate 改名与 AI 产品范围](../03-模型管理Provider契约/README.md#11-ai-削减实施切片)为 target-only。注册表以 `gap` 记录 S1–S4，`sourceEvidence/testSelectors` 继续指向实际基线；只有目标测试真实存在且执行后，才替换旧 selector。能力已有的 `implemented/partial` 不能证明新目标落地。
 
 ### 5.2 需求成熟度门
 
@@ -169,7 +130,7 @@ CC-CAP-003/011 的已确认新增目标是[AI 削减与 CampusMate 命名](../03
 
 ![CampusClaw TDD Agent 总体架构](campusclaw_tdd_agent_architecture.svg)
 
-[PlantUML 源码](diagram.puml#L1)
+[PlantUML 源码：`campusclaw_tdd_agent_architecture`](diagram.puml#L1) · [原尺寸 SVG](campusclaw_tdd_agent_architecture.svg)
 
 架构分为三个清晰边界：
 
@@ -179,17 +140,13 @@ CC-CAP-003/011 的已确认新增目标是[AI 削减与 CampusMate 命名](../03
 - **确定性执行平台**：Java、HTTP/OpenGauss、前端/browser、故障与变异适配器执行测试，统一
   证据与判定。
 
-Codex 官方能力支持用 `SKILL.md`、scripts 和 references 封装可复用工作流，也支持 Scheduled
-Task 结合 Skill 在本地项目或隔离 worktree 中运行；因此 Skill 适合保存测试工程师工作法，
-Scheduled Task 适合夜间维护。变更实时门禁仍由仓库 CI 事件承担，不依赖桌面轮询。
-参见 [Build skills](https://learn.chatgpt.com/docs/build-skills) 和
-[Automations](https://learn.chatgpt.com/docs/automations)。
+目标用 Skill 保存测试工程师的工作法，以独立定期任务执行夜间维护；代码变更门禁由 CI 事件触发。具体宿主能力在落地时核验，不能把该目标图当作平台已经完成集成的证明。
 
 ## 7. 设计到测试的 TDD 闭环
 
 ![设计到测试维护闭环](design_to_test_maintenance.svg)
 
-[PlantUML 源码](diagram.puml#L92)
+[PlantUML 源码：`design_to_test_maintenance`](diagram.puml#L77) · [原尺寸 SVG](design_to_test_maintenance.svg)
 
 ### 7.1 Red
 
@@ -222,7 +179,7 @@ Scheduled Task 适合夜间维护。变更实时门禁仍由仓库 CI 事件承�
 |---|---|---|
 | inventory/contract | 设计、API、事件、工具 Schema、配置、UI 流程 | 版本差分、成熟度分类、未映射入口检测 |
 | Java | ai、agent-core、cron、Runtime、Mate、控制面 | JUnit/XML、精确 selector、覆盖率、并发 seed |
-| HTTP/OpenGauss/process | 11 项 Runtime API、持久化、SSE、恢复 | 固定依赖、随机端口、打包 JAR、失败关闭、容器清理 |
+| HTTP/OpenGauss/process | 历史 11 项适配器迁移、持久化、SSE、恢复 | 固定依赖、随机端口、打包 JAR、失败关闭、容器清理 |
 | model/http stub | Provider、CampusMate、Mate Tool | 可编程 SSE、超时、乱序、断流、错误 envelope |
 | frontend | Vue adapter、事件投影、产品流程 | typecheck、Vitest、真实浏览器 E2E、可访问性 |
 | workspace/security | Read/Find/Grep/Ls、Skill、Agent、凭据 | 临时目录、symlink/traversal、脱敏、默认禁用真实外联 |
@@ -251,14 +208,13 @@ pi-mono-java/
 CI 按固定 SHA checkout 设计资产，不能使用执行时漂移的任意本地目录。Agent 维护设计仓原始
 registry，并在实现仓 PR 中同步可复现的 lock/hash 与测试 selector。
 
-现有 PR #160 的 HTTP 执行器只能迁移到 `adapters/runtime_http`；在完成 1.41 同步和
-requirement 绑定前，不应作为产品级 Agent 合并。
+HTTP 执行器接入 `adapters/runtime_http`。只有完成当前契约迁移及 requirement 绑定后，才能作为当前产品回归的一部分。
 
 ## 9. 实时与定期检测
 
 ![实时与定期检测](realtime_and_scheduled_detection.svg)
 
-[PlantUML 源码](diagram.puml#L145)
+[PlantUML 源码：`realtime_and_scheduled_detection`](diagram.puml#L147) · [原尺寸 SVG](realtime_and_scheduled_detection.svg)
 
 | 触发 | 执行者 | 时延目标 | 内容 | 结果用途 |
 |---|---|---:|---|---|
@@ -269,8 +225,7 @@ requirement 绑定前，不应作为产品级 Agent 合并。
 | design accepted | 独立 Codex TDD Task | 事件后尽快 | requirement 差分、Red 测试和 test-only Draft PR | TDD 输入 |
 
 桌面 Scheduled Task 适合 nightly；若平台没有可靠的设计仓事件触发，则由设计 CI 发出
-repository dispatch，或将设计差分作为 nightly 的最高优先级检查。不能用“每周扫描”冒充
-实时门禁。
+repository dispatch，或将设计差分作为 nightly 的最高优先级检查。两种触发分别报告，不能将夜间扫描计为实时门禁。
 
 ## 10. Agent 运行模式
 
@@ -321,18 +276,17 @@ repository dispatch，或将设计差分作为 nightly 的最高优先级检查�
 
 ## 13. 落地顺序
 
-### 阶段 A：纠正身份与知识源
+### 阶段 A：确定模块范围与知识源
 
-- 将旧 HTTP Agent 明确降级为 Runtime HTTP 适配器；
-- 暂停当前每周 HTTP-only 自动化，避免继续产出“全产品回归”误导结论；
+- 将 HTTP 执行器接入领域适配器，并限制其报告范围；
 - 审核首版 15 个 capability，把纳管设计和源码入口的未分类数量降为 0；
-- 将 PR #160 保持 Draft，按新平台边界拆分或重构。
+- 将存量测试资产映射到平台适配器，复核执行器实现基线。
 
 ### 阶段 B：建立可执行追踪链
 
 - 为每个 accepted/implemented P0 拆 requirement 和 case ID；
 - 绑定真实测试 selector，而不是只绑定 Maven suite；
-- 把 Runtime HTTP 目录升级到 1.41，补前端、AI、Agent Core、工具、压缩和交付适配器；
+- 把 Runtime HTTP 目录迁移到当前已确认契约，补前端、AI、Agent Core、工具、压缩和交付适配器；
 - 让 `--strict-coverage` 对全部 P0 通过。
 
 ### 阶段 C：接入实时门禁与独立 Agent
@@ -362,10 +316,10 @@ repository dispatch，或将设计差分作为 nightly 的最高优先级检查�
 
 | 分类 | 内容 |
 |---|---|
-| 已观察行为 | CampusClaw 已有 15 类功能线索、139 个 Java 测试源文件、3 个前端测试；CI 只跑 Maven；旧自动化只覆盖 HTTP |
+| 固定源码观察 | `ae0ae7c1` 的 15 类功能线索、139 个 Java 测试源文件与 3 个前端测试；CI 范围仅 Maven |
 | 产品约束 | Agent 独立于产品 Runtime；产品知识必须版本化；确定性 oracle 决定结果；测试维护不得改产品代码 |
 | 安全加固 | 隔离 worktree、假外部服务、凭据脱敏、生产副作用另行授权、防弱化门禁 |
-| 架构变化 | 从 HTTP runner 升级为 Codex 测试工程师 + 能力注册表 + 多领域确定性平台 + 实时/夜间双通道 |
+| 架构变更 | 独立测试工程师、能力注册表和多领域确定性平台协作，CI 变更门禁与夜间维护分别触发 |
 | target-only | 新 Skill、registry sync、精确追踪、test-only PR、前端 E2E、fault/mutation、新 CI 和发布门禁 |
 | 有意不阻断 | proposed/research 需求，包括尚未确认的 Attachment public bridge |
 
@@ -400,5 +354,6 @@ python3 '02-服务与接口/05-CampusClaw-TDD测试Agent/validate-campusclaw-tdd
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.2.0 | 2026-09-14 | 按产品测试职责和领域适配器边界组织正文，明确固定覆盖基线并重排架构及维护流程。 |
 | 2.1.0 | 2026-09-14 | 纳入 CampusMate 改名与 AI 削减目标，区分未来测试名称和当前可执行基线。 |
-| 2.0.0 | 2026-08-26 | 重新定义为独立 Codex 专业测试工程师；新增 15 域能力注册表、需求成熟度、精确追踪链、多适配器平台、PR/push 实时门禁、nightly 测试维护、test-only Draft PR 与防弱化边界；旧 HTTP 方案降级为领域适配器 |
+| 2.0.0 | 2026-08-26 | 建立独立测试工程师、能力注册表、多领域执行平台与测试防弱化门禁。 |

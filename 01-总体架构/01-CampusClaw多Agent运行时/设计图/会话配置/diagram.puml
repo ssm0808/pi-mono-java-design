@@ -13,14 +13,15 @@ top to bottom direction
 allowmixing
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName SansSerif
-skinparam defaultFontSize 12
+skinparam defaultFontSize 13
 skinparam shadowing false
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
 skinparam packageTitleAlignment left
-skinparam nodesep 25
+skinparam nodesep 20
 skinparam ranksep 35
 skinparam ArrowColor #64748B
+skinparam linetype ortho
 hide empty members
 
 package "Web boundary" as WebLayer {
@@ -32,19 +33,19 @@ package "Web boundary" as WebLayer {
   class "ResultBeanAdapter" as Result <<existing>> #ECFDF5
 }
 package "Application - Spring singletons" as AppLayer {
-  class "RuntimeSessionConfigurationService" as App <<extended>> #FFF7DD {
+  class "RuntimeSession\nConfigurationService" as App <<extended>> #FFF7DD {
     +updateSession(sessionId, ifMatch, requestVO)
   }
   class "SessionNamingService" as Name <<extended>> #FFF7DD
-  class "SessionModelConfigurationService" as Model <<extended>> #FFF7DD
-  class "SessionThinkingConfigurationService" as Thinking <<extended>> #FFF7DD
-  class "RuntimeSessionResponseAssembler" as Assembler <<extended>> #FFF7DD
+  class "SessionModel\nConfigurationService" as Model <<extended>> #FFF7DD
+  class "SessionThinking\nConfigurationService" as Thinking <<extended>> #FFF7DD
+  class "RuntimeSession\nResponseAssembler" as Assembler <<extended>> #FFF7DD
   class "SessionEtagFactory" as Etag <<existing>> #ECFDF5
   class "PlanPolicyPromptComposer" as Policy <<target-only>> #EAF2FF
   class "BuiltInToolProperties" as Profile <<extended>> #FFF7DD
 }
 package "Request snapshot" as RequestLayer {
-  class "SessionUpdateCandidateDTO" as Candidate <<target-only, immutable>> #EAF2FF {
+  class "SessionUpdate\nCandidateDTO" as Candidate <<target-only, immutable>> #EAF2FF {
     expectedVersion / submittedFields
     final values / resolved capabilities
   }
@@ -54,9 +55,9 @@ package "Request snapshot" as RequestLayer {
 }
 package "Persistence / adapters" as PersistenceLayer {
   interface "RuntimeSessionRepository" as Repo <<extended>> #FFF7DD {
-    +updateConfiguration(sessionId, expectedVersion, candidateDTO)
+    +updateConfiguration(...)
   }
-  class "MyBatisRuntimeSessionRepository" as Impl <<extended>> #FFF7DD
+  class "MyBatisRuntime\nSessionRepository" as Impl <<extended>> #FFF7DD
   interface "RuntimeSessionMapper" as Mapper <<extended>> #FFF7DD
   interface "RuntimeModelManager" as Models <<existing>> #ECFDF5
 }
@@ -65,24 +66,24 @@ Name -[hidden]down- Model
 Model -[hidden]down- Thinking
 Assembler -[hidden]down- Policy
 Policy -[hidden]down- Profile
-API -[#2563EB]-> App : updateSession
-API ..> Request : strict binding
-API --> Result : wrap response VO
-App -[#2563EB]-> Name : normalize only
-App -[#2563EB]-> Model : resolve target only
-App -[#2563EB]-> Thinking : validate final model
+API -[#2563EB]down-> App
+API ..> Request
+API --> Result
+App -[#2563EB]-> Name
+App -[#2563EB]-> Model
+App -[#2563EB]-> Thinking
 Model --> Models
-App -[#2563EB]-> Policy : validate plan policy
-App -[#2563EB]-> Profile : read fixed Runtime profile
-App -[#2563EB]-> Candidate : creates once
-App -[#2563EB]left-> Repo : one commit
-Repo ..> Candidate : version-bound values
+App -[#2563EB]-> Policy
+App -[#2563EB]-> Profile
+App -[#2563EB]-> Candidate
+App -[#2563EB]down-> Repo
+Repo ..> Candidate
 Repo <|.. Impl
-Impl --> Mapper : DTO only
+Impl --> Mapper
 Mapper --> DB
-App --> Assembler : committed Session DTO
+App --> Assembler
 Assembler --> Etag
-Assembler ..> Response : same snapshot
+Assembler ..> Response
 API ..> Response
 note bottom of Candidate
   No credentials and no mutable Agent.
@@ -98,10 +99,27 @@ legend bottom left
   Green: existing. Amber: extended. Blue: new target-only.
   Blue arrows: new target-only calls.
   Preparation methods must not independently commit.
+  All nonempty subsets of the four fields are accepted atomically.
 endlegend
 @enduml
 
 @startuml http_session_update
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 190
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: rejectConfigurationUpdate, appendConfigurationEntries.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java :: getView.
@@ -109,12 +127,6 @@ endlegend
 ' Design reason: resolve a combined target before a single version-checked transaction.
 ' Java divergence: unified POST and atomic four-property update are target-only.
 title Unified Session POST - Target Transaction
-skinparam backgroundColor #FFFFFF
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam maxMessageSize 230
-autonumber
 actor Caller
 participant "RuntimeSessionController" as API
 participant "Configuration application\nand shared validation" as App
@@ -122,6 +134,7 @@ participant "Model Manager" as Models
 participant "Session Repository" as Repo
 database GaussDB as DB
 participant "Response assembler\nand ETag factory" as Response
+== Prepare one combined candidate ==
 Caller -> API : POST /sessions/{sessionId}\nIf-Match + submitted fields
 API -> API : Strict VO binding\nReject null, unknown, duplicate or readonly keys
 API -> App : updateSession(sessionId, ifMatch, requestVO)
@@ -134,6 +147,7 @@ opt modelId submitted or thinking=true
 end
 App -> App : Validate final thinking and plan availability\nBuild immutable candidate with expectedVersion
 App -> Repo : updateConfiguration(candidate)
+== Recheck and commit atomically ==
 group One transaction
   Repo -> DB : SELECT Session FOR UPDATE
   DB --> Repo : authoritative current Session
@@ -149,18 +163,21 @@ group One transaction
     Repo --> App : UPDATED; committed Session DTO
   end
 end
+== Project the committed snapshot ==
 alt accepted
   App -> Response : getView(committed DTO)
   Response --> App : Session response VO + same-snapshot ETag
   App --> API : RuntimeSessionView
   API --> Caller : 200 ResultBean<Session>\nETag + no-store
 else rejected
+  App --> API : mapped rejection
   API --> Caller : HTTP error + resCode/resMsg\nNo partial-success fields
 end
 note over Caller,DB
-  Name-only updates may run during execution.
-  An execution field requires idle, even when unchanged.
+  Name-only updates may run during execution. An
+  execution field requires idle, even when unchanged.
   This POST never starts inference or approves a plan.
-  On an uncertain response, GET before deciding to retry.
+  On an uncertain response, GET before deciding to
+  retry.
 end note
 @enduml

@@ -2,21 +2,18 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.3.0 |
+| 文档版本 | 1.4.0 |
 | 状态 | GET Descriptor 已确认；公共路径、认证、bridge 与错误映射待独立评审，target-only |
 | 精确展示源 | [GET 模型](接口契约/操作/01-list-chat-commands.json)与[公共候选上下文](接口契约/common.json) |
 | 人类评审入口 | [GET 命令清单](chat-command-v1-review.html) |
-| 本次整理基线 | 设计仓 `2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9`，仅整理文档与生成流程 |
-| 更新日期 | 2026-09-07 |
+| 更新日期 | 2026-09-14 |
 
 ## 1. 保留范围
 
 只保留 `GET /mate-service/v1/chats/{chatId}/commands` 的轻量字段投影。
 字段确认不等于公共接口整体获批；页面上的认证、Chat 标识与错误响应仍是待重审候选。
 
-旧 POST SSE 已废止，其 JSON、正文规则、历史验收、专用 PlantUML 和 SVG 已删除，
-不保留旧报文展示或跳转占位。需要追溯时查看整理基线的 Git 历史。
-本次没有删除新的公共命令能力：公共执行协议仍需设计，不从 Runtime JSON 自动推导。
+公共命令执行协议仍需独立设计，不从 Runtime JSON 或 Skill SSE 自动推导。
 
 ## 2. GET 共享规则
 
@@ -42,13 +39,12 @@ Help 元数据与缓存行为见 [Help 专题](../../04-命令与技能/01-内�
 ## 4. 证据边界
 
 - 共享 GET 的已核对源码为 pi-mono-java `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`，
-  完整路径、符号与目标差距由 [Slash §3.2](../../04-命令与技能/00-Slash-Command通用模块/README.md#32-本次源码核对与实施验收)维护。
+  完整路径、符号与目标差距由 [Slash §3.2](../../04-命令与技能/00-Slash-Command通用模块/README.md#33-发现层证据与验收)维护。
 - Mate 历史证据点为 `956b547f5ca12ca89e68f73012f92a4406b0c9fa`：
   `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java:39-67`
   与同模块 `modelmanager/controller/LlmChatController.java:34-56`、`modelmanager/service/UpstreamChatCall.java:19-31`。
   当时只观察到 Agent 配置查询和 Model Manager 透明代理；这些证据不能证明当前已有 Chat Command bridge。
-- 本轮未重新分析产品源码，不升级旧实现证据，也不改变已确认 GET 产品约束；
-  去掉废止副本属于文档维护调整，不是新增 Runtime 行为。
+- 实现结论限定于上述固定提交，尚未核验公共 Chat Command bridge。
 
 ## 5. 生成与校验
 
@@ -64,6 +60,7 @@ python3 validate-chat-command-v1.py --full
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-09-14 | 以当前 GET 投影和公共待决边界整理正文，精确契约保持原状态。 |
 | 1.3.0 | 2026-09-07 | 清除废止 POST SSE 及旧图、验收；保留 GET 投影和公共边界待决，规则改为引用。 |
 | 1.2.0 | 2026-09-07 | 合入已确认 GET 字段减法，保留后续 Help 无参，公共边界待重审。 |
 | 1.1.0 | 2026-09-04 | 废止旧公共 POST SSE；旧内容现只从 Git 历史追溯。 |

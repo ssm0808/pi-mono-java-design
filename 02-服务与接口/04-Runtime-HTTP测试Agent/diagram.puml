@@ -1,209 +1,195 @@
 @startuml http_test_agent_architecture
-title CampusClaw HTTP Test Agent Architecture
-
 ' Source evidence: pi-mono-java commit 1f801dbb82bdda30478e3354e685e3153b179a0c.
 ' Source paths: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
 ' Source paths: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java.
 ' Test paths: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeHttpProcessOpenGaussIT.java.
 ' Observed behavior: route tests and opt-in process/OpenGauss integration tests exist, but default CI only runs Maven verify.
 ' Design reason: deterministic contract and state oracles must remain authoritative while the agent plans, launches, and maintains tests.
+' Target-only: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
 
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowColor #475569
+top to bottom direction
 skinparam componentStyle rectangle
 skinparam packageStyle rectangle
-skinparam ArrowColor #35516F
-skinparam DefaultFontName Arial
-
-actor "Developer or CI" as trigger
-database "Git candidate ref\nand merge base" as git
-artifact "Canonical HTTP review HTML\n11 review models" as contract
-artifact "Design-repository case catalog\nand fixtures" as catalog
-
-package "HTTP Test Agent" {
-  component "Baseline Resolver" as resolver
-  component "Contract Extractor" as extractor
-  component "Change Impact Analyzer" as impact
-  component "Deterministic Test Planner" as planner
-  component "Environment Provisioner" as provisioner
-  component "Test Executor" as executor
-  component "Oracle and Evidence Collector" as oracle
-  component "Case Maintenance Proposer" as maintainer
+skinparam nodesep 25
+skinparam ranksep 35
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #64748B
 }
-
-node "Ephemeral Test Environment" {
-  component "Packaged CampusClaw JAR" as jar
-  database "Pinned OpenGauss" as db
-  component "Fake Model SSE Server" as modelstub
-  folder "Managed Agent Fixture" as agentfixture
-  component "Random Local Port" as port
+title Runtime HTTP Test Adapter - Target Structure
+actor "CI / Developer" as Trigger
+package "Inputs and planning" {
+  [Baseline Resolver] as Baseline
+  [Contract Extractor] as Extractor
+  [Change Impact Analyzer] as Impact
+  [Test Planner] as Planner
+  artifact "Immutable test plan" as Plan
 }
-
-package "Deterministic Test Layers" {
-  component "Contract and Implementation Drift" as drift
-  component "MockMvc HTTP Contract Matrix" as mvc
-  component "Service and State Invariants" as service
-  component "Database, Concurrency, and Recovery" as databaseTests
-  component "Packaged Process HTTP and SSE" as processTests
-  component "Mirror and Company Adapter Compatibility" as compatibility
+package "Execution" {
+  [Environment Provisioner] as Env
+  [Test Executor] as Executor
+  [Deterministic Oracle] as Oracle
 }
+package "Test boundaries" {
+  node "Isolated environment\nJAR / openGauss / model stub\nAgent fixture / local ports" as Environment
+  [HTTP and state layers\nL0-L6 adapters] as Layers
+}
+package "Evidence and maintenance" {
+  artifact "Evidence bundle" as Evidence
+  [Case Maintenance Proposer] as Maintainer
+  artifact "Verdict / catalog proposal" as Result
+}
+artifact "Pinned Git commits" as Git
+artifact "Historical HTTP 1.37\nreview model + case catalog" as Contract
 
-artifact "Machine-readable evidence\nJUnit XML, logs, diffs, seeds" as evidence
-artifact "Required-check verdict\nand maintenance proposal" as verdict
+Trigger --> Baseline
+Git --> Baseline
+Contract --> Extractor
+Baseline --> Impact
+Extractor --> Impact
+Impact --> Planner
+Planner --> Plan
+Plan --> Env
+Plan --> Executor
+Env --> Environment
+Env -[hidden]down-> Executor
+Executor -[hidden]down-> Oracle
+Executor --> Layers
+Layers --> Environment : run against
+Layers -down-> Oracle : results
+Oracle --> Evidence
+Oracle --> Result : deterministic verdict
+Impact --> Maintainer : contract / coverage gap
+Evidence --> Maintainer
+Maintainer --> Result : reviewable proposal
 
-trigger --> resolver : candidate ref
-git --> resolver
-contract --> extractor
-catalog --> planner
-resolver --> impact
-extractor --> impact
-impact --> planner
-planner --> provisioner
-provisioner --> jar
-provisioner --> db
-provisioner --> modelstub
-provisioner --> agentfixture
-provisioner --> port
-planner --> executor
-jar --> executor
-db --> executor
-modelstub --> executor
-agentfixture --> executor
-executor --> drift
-executor --> mvc
-executor --> service
-executor --> databaseTests
-executor --> processTests
-executor --> compatibility
-drift --> oracle
-mvc --> oracle
-service --> oracle
-databaseTests --> oracle
-processTests --> oracle
-compatibility --> oracle
-oracle --> evidence
-oracle --> verdict
-extractor --> maintainer
-impact --> maintainer
-oracle --> maintainer
-maintainer --> verdict : proposed catalog delta
-
-note right of planner
-  Large or uncertain changes select the full suite.
-  The agent may narrow execution only when impact
-  evidence is complete and mandatory invariants remain.
-end note
-
-note right of oracle
-  Pass and fail decisions come from checked-in
-  assertions and schemas, never from model judgment.
-end note
+legend bottom left
+Historical contract adapter; current Runtime migration is a separate requirement.
+The immutable plan retains every P0 invariant; unknown impact selects all layers.
+Required environment and tests must run; skip never means pass.
+The Agent can propose cases; checked-in assertions determine the verdict.
+Grouped environments and layers are collaborators, not replacement classes.
+endlegend
 @enduml
 
 @startuml http_test_execution_sequence
-title HTTP Test Agent Execution Sequence
-
 ' Source evidence: pi-mono-java commit 1f801dbb82bdda30478e3354e685e3153b179a0c.
 ' CI path: .github/workflows/ci.yml.
 ' Process test path: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeHttpProcessOpenGaussIT.java.
 ' Observed behavior: integration tests require explicit JAR and OpenGauss properties and can skip when prerequisites are absent.
 ' Design reason: required gates must provision dependencies and fail closed instead of silently skipping.
+' Target-only: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
 
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
-skinparam sequenceMessageAlign center
-skinparam DefaultFontName Arial
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowColor #475569
+hide footbox
+skinparam maxMessageSize 210
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantBorderColor #64748B
+  LifeLineBorderColor #94A3B8
+  GroupBorderColor #CBD5E1
+  GroupBackgroundColor #F8FAFC
+}
+title HTTP Regression - Plan, Run, Verify
+actor "CI / Developer" as Caller
+participant "HTTP Adapter" as Agent
+participant "Git / Contract" as Source
+participant "Environment" as Env
+participant "Runner / Oracle" as Runner
+database "Evidence Store" as Store
 
-actor "CI or Developer" as caller
-participant "HTTP Test Agent" as agent
-participant "Git and Contract" as source
-participant "Environment Controller" as env
-participant "Maven and Test Runners" as runner
-participant "Deterministic Oracle" as oracle
-database "Evidence Store" as store
+== 1. Freeze baseline and plan ==
+Caller -> Agent : test(candidate, mergeBase, mode)
+Agent -> Source : Resolve commits / contract hash
+Source --> Agent : Immutable baseline or error
+break Baseline missing or ambiguous
+  Agent --> Caller : BLOCKED_BASELINE
+end
+Agent -> Source : Extract operations / changed symbols
+Source --> Agent : Contract snapshot and diff
+Agent -> Agent : Plan required cases\nUnknown or large impact selects all
 
-caller -> agent : test(candidateRef, mergeBase, mode)
-agent -> source : resolve immutable commits
-source --> agent : source commit and contract version
-
-alt missing or ambiguous baseline
-  agent --> caller : BLOCKED_BASELINE, no tests claimed
-else baseline resolved
-  agent -> source : extract operations and compute diff
-  source --> agent : operation model and changed symbols
-  agent -> agent : classify impact and expand case catalog
-  alt contract, routing, persistence, build, or uncertain large change
-    agent -> agent : select full regression matrix
-  else bounded implementation change
-    agent -> agent : select impacted cases plus mandatory invariants
+== 2. Provision and run ==
+Agent -> Env : Create isolated resources
+Env --> Agent : Readiness evidence
+alt Required dependency unavailable
+  Agent -> Env : Collect diagnostics / clean up
+  Env --> Agent : Cleanup result
+  Agent --> Caller : FAIL_ENVIRONMENT
+else Ready
+  Agent -> Runner : Execute L0 and fast contracts
+  Runner -> Runner : Check foundation gate
+  opt Foundation passed
+    Runner -> Runner : Run required state, DB and process tests
   end
-  agent -> env : create isolated home, ports, database, and stubs
-  env --> agent : readiness evidence
-  alt required dependency unavailable
-    agent -> env : collect diagnostics and cleanup
-    agent --> caller : FAIL_ENVIRONMENT, no silent skip
-  else environment ready
-    agent -> runner : static drift and fast contract tests
-    runner --> oracle : raw results
-    oracle -> runner : continue only if foundation passes
-    runner -> runner : service, database, concurrency, process, SSE
-    runner --> oracle : JUnit XML, HTTP traces, database assertions
-    oracle -> store : signed manifest, logs, seeds, timings
-    oracle -> env : cleanup and verify no leaked process
-    oracle --> agent : deterministic verdict and gaps
-    agent -> agent : draft additive case updates when needed
-    agent --> caller : pass, fail, or review-required report
-  end
+  Runner -> Store : Manifest, results, logs and seeds
+  Store --> Runner : Evidence stored
+
+  == 3. Clean up and report ==
+  Agent -> Env : Clean up / check resource leaks
+  Env --> Agent : Cleanup evidence
+  Agent -> Runner : Finalize verdict with cleanup result
+  Runner --> Agent : Deterministic verdict / gaps
+  Agent --> Caller : Report + maintenance proposal
 end
 @enduml
 
 @startuml http_test_case_maintenance
-title HTTP Test Case Maintenance Lifecycle
-
 ' Contract evidence: design repository chat-http-v1-review.html version 1.37.0.
 ' Test evidence: pi-mono-java commit 1f801dbb82bdda30478e3354e685e3153b179a0c runtime API route and process tests.
-' Observed behavior: current tests are code-owned and do not have a separate requirement-to-case inventory.
+' Observed behavior at the recorded baseline: tests are code-owned and do not have a separate requirement-to-case inventory.
 ' Design reason: case changes must be reviewable, traceable, and unable to weaken an accepted contract automatically.
+' Target-only: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
 
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
-skinparam DefaultFontName Arial
-
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowColor #475569
+title HTTP Case Maintenance - Preserve the Oracle
 start
-:Read canonical contract version;
-:Read candidate diff and current case catalog;
-
-if (Contract changed?) then (yes)
-  :Create contract delta;
-  :Generate new or changed case proposals;
-elseif (Route or behavior changed?) then (yes)
-  :Map changed symbols to operations and invariants;
-  :Generate missing regression proposals;
-else (no)
-  :Keep catalog unchanged;
-endif
-
-:Run catalog validation and selected tests;
-
-if (Existing assertion is weakened or removed?) then (yes)
-  :Require explicit human approval and contract reference;
-  if (Approved?) then (yes)
-    :Record replacement and version history;
+partition "Find the change" {
+  :Read pinned contract and candidate diff;
+  if (Contract changed?) then (yes)
+    :Propose contract-to-case updates;
+  elseif (Behavior or route changed?) then (yes)
+    :Map symbols and propose regression cases;
   else (no)
-    :Reject catalog update;
-    stop
+    :Keep catalog;
   endif
-else (no)
-  :Accept additive maintenance proposal for review;
-endif
-
-if (Operation retired by confirmed contract?) then (yes)
-  :Keep a route tombstone test;
-  :Mark old cases retired with replacement reference;
-else (no)
-  :Keep active case IDs stable;
-endif
-
-:Merge only after catalog, code, and evidence agree;
+}
+partition "Validate and review" {
+  :Run catalog checks and selected tests;
+  if (Weaken or remove an assertion?) then (yes)
+    :Require contract evidence and human review;
+    if (Approved?) then (yes)
+      :Record replacement and version;
+    else (no)
+      :Reject update;
+      stop
+    endif
+  else (no)
+    :Submit additive proposal for review;
+  endif
+}
+partition "Keep traceability" {
+  if (Retirement confirmed by contract?) then (yes)
+    :Retire case with replacement reference;
+    :Keep route tombstone test;
+  else (no)
+    :Keep active case IDs;
+  endif
+  :Deliver when catalog, code and evidence agree;
+}
 stop
 @enduml

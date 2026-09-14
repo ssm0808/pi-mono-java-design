@@ -1,7 +1,7 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.19.0`<br>
+> 版本：`v0.19.1`<br>
 > 日期：`2026-09-14`<br>
 > 状态：既有行为以所列旧基线为准；Agent.mode 与 Session 默认值链路为 target-only<br>
 > 设计仓库分析基线：`c892946d867ab1ee81f2684229b0343ce9733cc0`<br>
@@ -11,7 +11,9 @@
 
 > mode 专项设计基线：`40a159d361f2f3e9da04594f791607dac85fd192`；实现核对：`mate-service@956b547f5ca12ca89e68f73012f92a4406b0c9fa`、`pi-mono-java@09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`，范围见 §2.3。
 
-## 1. 结论
+## 1. 职责与设计结论
+
+本模块维护 Agent 定义、绑定与运行依赖查询；Session 当前模式、执行状态和历史由 Session 模块维护。
 
 基于当前 [`AGENT元数据设计.json`](../../06-元数据草案/AGENT元数据设计.json)，Agent 当前元数据使用 5 张表：
 
@@ -27,7 +29,7 @@ Agent 顶层 `mode` 是字符串 `build | plan`，定义新建交互 Session 的
 
 System Prompt 的八个细分字段均为可空软约束。数据库不强制非空或非空白；普通详情响应只返回具有值的细分字段，管理前端按实际返回字段动态展示。Runtime 响应将这些字段拼接为单一字符串。
 
-旧基线已实现 `GET /mate-service/v1/agents/{agentId}/runtime`，新增 mode 尚未实现。它以 `getAgent` 的完整元数据为基础，根据绑定中的资源 ID 和可空版本批量解析 Tool 与被绑定 Agent：根 Agent 不返回创建和更新时间；根 Agent、Tool 与被绑定 Agent 均返回 `type`；Tool 返回包含 `enabled` 和 `isConcurrencySafe` 的十字段定义；目标被绑定 Agent 返回包含 `mode`、`enabled` 和字符串 `systemPrompt` 的十字段定义。任何运行依赖缺失、禁用或指定版本不匹配时，Service 记录包含根 Agent、依赖 ID 和版本的错误日志并以具体错误码终止请求，不返回部分 Runtime 配置。
+Runtime 查询按资源 ID 与可空版本批量解析直接绑定，任一依赖无效时整个请求失败；响应字段和失败规则由[§6.4](#64-get-runtime-agent)统一维护。旧基线已实现该查询，mode 传播仍为 target-only，核验范围见 §2。
 
 完整初始化 DDL 维护在 [`schema.sql`](./schema.sql)，本文不重复嵌入完整 SQL。
 
@@ -43,7 +45,7 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 ### 2.2 Java 基线
 
-本次分析的 Java 提交为 `mate-service@9dd5d85e2ed6561ad654b11f817ef572cc8bac7c`，相关路径：
+既有完整分析的 Java 提交为 `mate-service@9dd5d85e2ed6561ad654b11f817ef572cc8bac7c`，相关路径：
 
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/AgentDefinitionService.java`
 - `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`
@@ -86,7 +88,7 @@ System Prompt 的八个细分字段均为可空软约束。数据库不强制非
 
 ### 2.3 mode 专项源码核对
 
-本节只更新字段传播与 Session 初始化结论；§2.2 的其他实现状态仍限定于原 `9dd5d85`，不把历史集成差距外推为最新缺陷。Mate 采用本地提交 `956b547f5ca12ca89e68f73012f92a4406b0c9fa`；相对旧提交，上述 Agent DTO/VO 与 DefinitionColumns 未变，Service 的无关调整不改变无 mode 的事实。Runtime 继续采用计划专题固定 `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`，本地 `f61906b` 在下列路径内容相同。
+本节只核验字段传播与 Session 初始化；§2.2 的其他实现状态仍限定于原 `9dd5d85`，不把历史集成差距外推为最新缺陷。Mate 采用本地提交 `956b547f5ca12ca89e68f73012f92a4406b0c9fa`；相对旧提交，上述 Agent DTO/VO 与 DefinitionColumns 未变，Service 的无关调整不改变无 mode 的事实。Runtime 继续采用计划专题固定 `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`，本地 `f61906b` 在下列路径内容相同。
 
 | 仓库相对路径及符号 | 观察到的实现 | mode 目标增量 |
 |---|---|---|
@@ -102,7 +104,7 @@ Agent 默认模式属于 CampusClaw 产品约束，字段传播属于架构扩�
 
 ![Agent 元数据 GaussDB 表关系](./agent_metadata_gaussdb_model.svg)
 
-PlantUML：[查看源码](./diagram.puml#L6)
+[原尺寸 SVG](./agent_metadata_gaussdb_model.svg) · PlantUML：[查看源码](./diagram.puml#L6)
 
 所有绑定表通过 `agent_id` 逻辑关联 `t_agent_definition.id`。表名统一使用小写 snake_case 和 `t_` 前缀。
 
@@ -138,7 +140,7 @@ Agent 路径参数、更新请求体和模型更新数组元素直接使用 Jaka
 
 ### 4.2 System Prompt
 
-八个 System Prompt 字段是可选的提示词组成部分：数据库使用可空 `TEXT`，不设置 `NOT NULL` 或非空白 `CHECK`。当前四个接口不写 System Prompt，因此不保留对应 Request VO；未来增加写入口时，不对这些字段增加 `@NotBlank`，管理界面可以提示建议填写，但不得阻止保存。本版仍不设置数据库或 Java 最大长度。
+八个 System Prompt 字段是可选的提示词组成部分：数据库使用可空 `TEXT`，不设置 `NOT NULL` 或非空白 `CHECK`。本文四个接口不写 System Prompt，因此不保留对应 Request VO；未来增加写入口时，不对这些字段增加 `@NotBlank`，管理界面可以提示建议填写，但不得阻止保存。本版仍不设置数据库或 Java 最大长度。
 
 普通 `getAgent` 和列表接口使用 Jackson `NON_NULL` 输出策略，值为 `NULL` 的细分字段不出现在结构化 `systemPrompt` 中，管理前端按实际返回字段动态展示。Runtime Agent 的根 Agent 和 `bindingAgents[]` 则把八个字段拼接为单一字符串，供模型直接作为 System Prompt 使用。
 
@@ -202,7 +204,7 @@ Runtime 的传播链为：Mate Runtime 定义 → `AgentRuntime.mode` → `.camp
 
 同一 Tool 只能出现在一个权限数组，权限引用必须对应已绑定 Tool。输出按 `tool_id` 排序。
 
-Tool ID 必须符合 `^tool-[0-9a-fA-F]{32}$`；当前四个接口没有 Tool 写入请求，Service 在读取完整聚合时执行数据完整性校验。
+Tool ID 必须符合 `^tool-[0-9a-fA-F]{32}$`；本文四个接口没有 Tool 写入请求，Service 在读取完整聚合时执行数据完整性校验。
 
 Runtime Agent 查询不把绑定版本仅作为展示字段。Service 将每个 `tool_id + tool_version` 转换为批量查询条件：`tool_version = NULL` 表示解析最新版本，非空表示必须精确匹配指定版本。Tool 定义 Mapper 至少返回响应组装和启用状态校验所需字段；Service 校验 `enabled` 后，Runtime `bindingTools` 保留 `id`、`type`、`version`、`enabled`、`name`、`displayName`、`description`、`permission`、`source` 和 `isConcurrencySafe`。Tool 元数据中的时间、`input_schema` 和 `output_schema` 不进入 Runtime 响应。Tool 表及版本历史不属于本 Agent Schema；对应 Mapper SQL 由 Tool 模块负责人提供。
 
@@ -214,7 +216,7 @@ Runtime Agent 查询不把绑定版本仅作为展示字段。Service 将每个 
 
 主键为 `(agent_id, skill_id)`。`skill_version = NULL` 表示最新版本；不保存顺序，输出按 `skill_id` 排序。
 
-Skill ID 必须符合 `^skill-[0-9a-fA-F]{32}$`；当前四个接口没有 Skill 写入请求，Service 在读取完整聚合时执行数据完整性校验。
+Skill ID 必须符合 `^skill-[0-9a-fA-F]{32}$`；本文四个接口没有 Skill 写入请求，Service 在读取完整聚合时执行数据完整性校验。
 
 ### 5.4 Agent 绑定 `t_agent_binding_agents`
 
@@ -226,7 +228,7 @@ Skill ID 必须符合 `^skill-[0-9a-fA-F]{32}$`；当前四个接口没有 Skill
 
 主键为 `(agent_id, bound_agent_id)`，禁止自绑定，并建立 `(bound_agent_id, agent_id)` 反向索引；固定版本不校验历史版本可用性。输出按 `bound_agent_id` 排序。
 
-当前四个接口不写入 Agent 绑定；读取时校验 `agent_id` 和 `bound_agent_id` 均符合 Agent ID 格式。未来增加写接口时，应在 Service 中继续校验目标 Agent 存在且不可重复绑定。
+本文四个接口不写入 Agent 绑定；读取时校验 `agent_id` 和 `bound_agent_id` 均符合 Agent ID 格式。未来增加写接口时，应在 Service 中继续校验目标 Agent 存在且不可重复绑定。
 
 Runtime Agent 查询按照 `bound_agent_id + bound_agent_version` 批量读取主表。`bound_agent_version = NULL` 表示当前版本；非空时查询条件必须同时匹配 ID 和版本。由于 `t_agent_definition` 只保存当前版本，该查询只能验证固定版本是否与当前版本一致，不能恢复已经被新版本替换的历史定义。固定版本无匹配记录或目标 Agent 未启用时，Service 记录根 Agent ID、目标 Agent ID 和请求版本并终止整个查询。
 
@@ -326,7 +328,7 @@ UpdateAgentRequestVO 增加 String mode，以 Jakarta `@Pattern(regexp="^(build|
 
 ![Runtime Agent 查询流程](./runtime_agent_query_flow.svg)
 
-PlantUML：[查看源码](./diagram.puml#L179)
+[原尺寸 SVG](./runtime_agent_query_flow.svg) · PlantUML：[查看源码](./diagram.puml#L148)
 
 `RuntimeAgentResponseVO` 的根字段以 `AgentInfoResponseVO` 为基础，但不返回 `createdAt` 和 `updatedAt`。根 Agent、`bindingTools[]` 和 `bindingAgents[]` 均返回 `type`；两类绑定元素直接平铺为解析后的 Runtime 定义，不保留资源 ID、绑定版本和定义对象组成的中间包装层：
 
@@ -396,7 +398,7 @@ PlantUML：[查看源码](./diagram.puml#L179)
 
 `bindingTools` 包含 `id`、`type`、`version`、`enabled`、`name`、`displayName`、`description`、`permission`、`source` 和 `isConcurrencySafe`；不返回时间、`inputSchema` 或 `outputSchema`。根 Agent 和 `bindingAgents[]` 中被绑定 Agent 的 `systemPrompt` 都是相同规则拼接出的字符串，不返回八字段对象。平铺后的被绑定 Agent 包含 `id`、`type`、`version`、`enabled`、`name`、`displayName`、`description`、`mode`、`systemPrompt` 和 `useCases`；不返回时间、各类绑定或聚合后的 `permission`。
 
-Runtime 聚合采用 `REPEATABLE_READ` 只读事务，并执行以下流程：
+Runtime 聚合采用 `REPEATABLE_READ` 只读事务。固定 `9dd5d85` 的 `getRuntimeAgent` 依次读取 Model、Tool、Skill、Agent 四类绑定；图中的集合框代表四个独立 Mapper，不表示并行执行。完整流程为：
 
 1. 查询根 Agent；不存在使用现有 `AGENT_NOT_FOUND`，未启用使用 `AGENT_DISABLED`。
 2. 按现有规则读取并校验根 Agent 的四类绑定，保留模型顺序，其余按 ID 稳定排序。
@@ -423,7 +425,7 @@ List<AgentDefinitionDTO> selectByBindings(
 
 ### 6.5 错误码与国际化
 
-本版将按类别归并的 `AGENT_INVALID_PARAMETER` 和 `AGENT_DATA_CORRUPTION` 替换为具体场景错误码。这是与 mate-service 错误模型对齐的架构调整，不改变 Agent 业务数据结构。
+错误码按具体场景命名，枚举、国际化 key 和 `resCode` 保持一致，便于调用方和日志定位同一失败。
 
 - 请求解析与校验：`AGENT_REQUEST_BODY_INVALID`、`AGENT_REQUEST_VALIDATION_FAILED`、`AGENT_PAGE_INDEX_INVALID`、`AGENT_PAGE_SIZE_INVALID`、`AGENT_NAME_TOO_LONG`、`AGENT_DISPLAY_NAME_TOO_LONG`、`AGENT_VERSION_INVALID`、`AGENT_ID_REQUIRED`、`AGENT_ID_INVALID`、`AGENT_BINDING_MODELS_EMPTY`、`AGENT_MODEL_ID_REQUIRED`、`AGENT_MODEL_ID_INVALID`。
 - 业务规则：`AGENT_ID_MISMATCH`、`AGENT_MODEL_DUPLICATED`、`AGENT_NOT_FOUND`、`AGENT_DISABLED`、`AGENT_BOUND_TOOL_DISABLED`、`AGENT_BOUND_AGENT_DISABLED`。
@@ -470,13 +472,13 @@ GaussDB Distributed 不支持物理外键，因此基础 DDL 使用逻辑关系�
 
 现有 Mapper 操作继续保持：主表查询、分页、行锁和版本递增；目标增加 mode 与版本同事务写入；Model 绑定查询、删除和批量插入；Tool、Skill、Agent 绑定只提供单个 Agent 和 Agent ID 集合查询。`AgentBindingMapper`、`AgentToolBindingMapper`、`AgentSkillBindingMapper` 不增加 `insertBatch`。
 
-Runtime Agent 已新增两个批量定义查询契约：`AgentDefinitionMapper.selectByBindings` 和 `ToolDefinitionMapper.selectByBindings`。查询条件分别使用 `AgentVersionQueryDTO` 和 `ToolVersionQueryDTO`，不使用 Map 或临时 VO 作为 Mapper 参数。Agent Mapper XML 已实现并使用 `resultType`；Tool 定义 Mapper 暂不在 Agent 模块编写 SQL，同事提供实现后必须保持同一方法契约和 `resultType` 映射规则。
+Runtime Agent 已新增两个批量定义查询契约：`AgentDefinitionMapper.selectByBindings` 和 `ToolDefinitionMapper.selectByBindings`。查询条件分别使用 `AgentVersionQueryDTO` 和 `ToolVersionQueryDTO`，不使用 Map 或临时 VO 作为 Mapper 参数。Agent Mapper XML 已实现并使用 `resultType`；Tool 定义 Mapper 暂不在 Agent 模块编写 SQL，Tool 模块接入时必须保持同一方法契约和 `resultType` 映射规则。
 
 模型绑定类命名为 `AgentModelBindingDTO` 和 `AgentModelBindingMapper`，与 `AgentToolBindingDTO`、`AgentSkillBindingDTO` 风格一致。
 
 ## 9. 图表生成与验证
 
-表关系图和 Runtime Agent 查询流程图的图源统一维护在 [`diagram.puml`](./diagram.puml#L6)，内容只使用英文和 ASCII：
+[原尺寸 SVG](./runtime_agent_query_flow.svg) · 表关系图和 Runtime Agent 查询流程图的图源统一维护在 [`diagram.puml`](./diagram.puml#L148)，内容只使用英文和 ASCII：
 
 ```bash
 cd '03-数据与存储/02-Agent元数据GaussDB'
@@ -489,35 +491,36 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.19.1` | 2026-09-14 | 收敛重复契约说明，按固定源码校正绑定读取顺序并重排表图与查询流程。 |
 | `v0.19.0` | 2026-09-14 | Agent 增加字符串 mode，初始化新交互 Session 的默认模式并贯通存储、发布和读取。 |
-| `v0.18.9` | 2026-08-12 | 根 Runtime Agent 删除 `createdAt` 和 `updatedAt`；根 Agent、Tool 与被绑定 Agent 统一返回 `type`，被绑定 Agent 增加 `enabled` |
-| `v0.18.8` | 2026-08-12 | Runtime `bindingTools` 在八个精简字段基础上恢复 `enabled`，形成九字段响应；被绑定 Agent 契约不变 |
-| `v0.18.7` | 2026-08-12 | Runtime `bindingTools` 精简为 `id`、`version`、名称、描述、`permission`、`source` 和 `isConcurrencySafe` 八个字段，移除 `type`、时间和 `enabled` |
-| `v0.18.6` | 2026-08-12 | Runtime `bindingAgents` 精简为 `id`、`version`、名称、描述、`systemPrompt` 和 `useCases` 七个字段，移除 `type`、时间和 `enabled` |
-| `v0.18.5` | 2026-08-12 | 将 Runtime `bindingAgents` 改为解析后 Agent 定义的平铺列表，删除 `agentId`、绑定版本和 `agent` 中间包装层 |
-| `v0.18.4` | 2026-08-12 | Runtime 根 Agent 与绑定 Agent 的 `systemPrompt` 改为八个可选字段按固定顺序拼接的字符串；普通详情继续返回结构化对象 |
-| `v0.18.3` | 2026-08-12 | Tool 元数据增加布尔字段 `is_concurrency_safe`；Runtime Tool 增加 `isConcurrencySafe` 并移除 `inputSchema`、`outputSchema`、Schema 校验及专用错误码 |
-| `v0.18.2` | 2026-08-12 | 将 Runtime `bindingTools` 元素改为完整 Tool 元数据平铺结构，删除 `toolId`、绑定版本和 `tool` 中间包装层；同步 Java 实现、测试和源码基线 |
-| `v0.18.1` | 2026-08-12 | 同步 `getRuntimeAgent` Java 实现、最终源码基线、Agent 批量版本查询 XML、Runtime VO、错误码和测试；保留 Tool Mapper SQL 集成边界 |
-| `v0.18.0` | 2026-08-12 | 设计 `getRuntimeAgent` 接口；Tool 与绑定 Agent 按 ID/可空版本批量解析并返回嵌套完整定义；依赖缺失、禁用或版本不匹配时记录日志并整体失败 |
-| `v0.17.0` | 2026-08-11 | 增加三个 HTTP 接口的 `AgentDefinitionController` 可运行示例；增加统一成功响应包装，路径参数校验和 MVC 测试 |
-| `v0.16.1` | 2026-08-10 | `AgentInfoResponseVO` 顶层主键由 `agentId` 改为与元数据一致的 `id`；嵌套 Agent 绑定仍使用 `agentId` |
-| `v0.16.0` | 2026-08-10 | 错误码拆分为具体场景；枚举名、国际化 key 和 `resCode` 统一为大写 snake_case；增加中英文消息和 Locale 适配 |
-| `v0.15.1` | 2026-08-10 | 列表 Service 返回类型由 `ListAgentResultResponseVO` 简化为 `ListAgentResponseVO`，避免 `ResultResponse` 语义重复 |
-| `v0.15.0` | 2026-08-07 | System Prompt 八个细分字段改为可空软约束；删除数据库非空和非空白硬约束；响应省略空字段并由管理前端动态展示 |
-| `v0.14.0` | 2026-08-06 | Service 严格收敛为列表、详情、更新三个方法；删除旧 Controller、VO、异常和不可达 Mapper 语句；Model、Tool、Skill ID 增加前缀加 32 位 UUID 校验；Java 与 SQL 代码注释改为中文 |
-| `v0.13.0` | 2026-08-06 | Agent ID 统一约束为 `agent-` 加 32 位十六进制 UUID；请求 VO、Controller 和 Service 使用 `@AgentId`；可变 Request VO 和 DTO 统一使用 `@Data` |
-| `v0.12.2` | 2026-08-06 | 恢复逐表 `DROP TABLE IF EXISTS` 后立即 `CREATE TABLE` 的 DDL 结构，并增加自动化顺序检查 |
-| `v0.12.1` | 2026-08-06 | 将模型绑定顺序列由 `sort_order` 更名为 `model_order`，DTO 属性同步更名为 `modelOrder`；排序语义和外部 JSON 保持不变 |
-| `v0.12.0` | 2026-08-06 | 模型全链路统一为 `binding_models` / `bindingModels` / `t_agent_binding_models`；新增 Agent 绑定表；增加列表、详情和模型更新 Service 设计；System Prompt 增加非空白检查且不限制长度；DDL、Java 实现和图表同步 |
-| `v0.11.0` | 2026-08-06 | 初始化 DDL 改为 `"{dbUser}"` Schema 限定和先删后建；COMMENT 统一为简洁中文；记录管理前端只允许修改模型配置 |
-| `v0.10.0` | 2026-08-05 | 以输入元数据的 `system_prompt` 对象为准，恢复 8 个数据库展开列并全部设为 `TEXT NOT NULL`；前端固定展示全部字段；同步源 JSON、README、DDL 和图表 |
-| `v0.9.0` | 2026-08-05 | 删除 README 中重复的 SQL 语句章节，`schema.sql` 作为唯一完整 DDL 来源 |
-| `v0.8.0` | 2026-08-04 | 将八个 System Prompt 子列收敛为单一必填 `system TEXT`，后续版本已撤销 |
-| `v0.7.0` | 2026-08-04 | 定义 System Prompt 必填、可空和前端展示规则；将 `resource_type` 更名为 `type` |
-| `v0.6.0` | 2026-08-04 | 增加 SQL 语句章节，后续改由独立 `schema.sql` 维护 |
-| `v0.5.0` | 2026-08-04 | 表名统一采用 `t_` 前缀和小写 snake_case |
-| `v0.4.0` | 2026-07-29 | 增加 `enabled BOOLEAN NOT NULL DEFAULT TRUE` 及管理面、运行时语义 |
-| `v0.3.0` | 2026-07-29 | 主表 ID 对齐元数据；统一 ID 长度；`use_cases` 改为 JSONB；合并 Tool 绑定与权限 |
-| `v0.2.0` | 2026-07-29 | 按 Agent JSON 收敛关系表并增加 GaussDB DDL |
-| `v0.1.0` | 2026-07-28 | 初版扩展设计 |
+| `v0.18.9` | 2026-08-12 | 根 Runtime Agent 删除 `createdAt` 和 `updatedAt`。 |
+| `v0.18.8` | 2026-08-12 | Runtime `bindingTools` 在八个精简字段基础上恢复 `enabled`，形成九字段响应。 |
+| `v0.18.7` | 2026-08-12 | Runtime `bindingTools` 精简为 `id`、`version`、名称、描述、`permission`、`source` 和 `isConcurrencySafe` 八个字段，移除 `type`、时间和 `enabled`。 |
+| `v0.18.6` | 2026-08-12 | Runtime `bindingAgents` 精简为 `id`、`version`、名称、描述、`systemPrompt` 和 `useCases` 七个字段，移除 `type`、时间和 `enabled`。 |
+| `v0.18.5` | 2026-08-12 | 将 Runtime `bindingAgents` 改为解析后 Agent 定义的平铺列表，删除 `agentId`、绑定版本和 `agent` 中间包装层。 |
+| `v0.18.4` | 2026-08-12 | Runtime 根 Agent 与绑定 Agent 的 `systemPrompt` 改为八个可选字段按固定顺序拼接的字符串。 |
+| `v0.18.3` | 2026-08-12 | Tool 元数据增加布尔字段 `is_concurrency_safe`。 |
+| `v0.18.2` | 2026-08-12 | 将 Runtime `bindingTools` 元素改为完整 Tool 元数据平铺结构，删除 `toolId`、绑定版本和 `tool` 中间包装层。 |
+| `v0.18.1` | 2026-08-12 | 同步 `getRuntimeAgent` Java 实现、最终源码基线、Agent 批量版本查询 XML、Runtime VO、错误码和测试。 |
+| `v0.18.0` | 2026-08-12 | 设计 `getRuntimeAgent` 接口。 |
+| `v0.17.0` | 2026-08-11 | 增加三个 HTTP 接口的 `AgentDefinitionController` 可运行示例。 |
+| `v0.16.1` | 2026-08-10 | `AgentInfoResponseVO` 顶层主键由 `agentId` 改为与元数据一致的 `id`。 |
+| `v0.16.0` | 2026-08-10 | 错误码拆分为具体场景。 |
+| `v0.15.1` | 2026-08-10 | 列表 Service 返回类型由 `ListAgentResultResponseVO` 简化为 `ListAgentResponseVO`，避免 `ResultResponse` 语义重复。 |
+| `v0.15.0` | 2026-08-07 | System Prompt 八个细分字段改为可空软约束。 |
+| `v0.14.0` | 2026-08-06 | Service 严格收敛为列表、详情、更新三个方法。 |
+| `v0.13.0` | 2026-08-06 | Agent ID 统一约束为 `agent-` 加 32 位十六进制 UUID。 |
+| `v0.12.2` | 2026-08-06 | 恢复逐表 `DROP TABLE IF EXISTS` 后立即 `CREATE TABLE` 的 DDL 结构，并增加自动化顺序检查。 |
+| `v0.12.1` | 2026-08-06 | 将模型绑定顺序列由 `sort_order` 更名为 `model_order`，DTO 属性同步更名为 `modelOrder`。 |
+| `v0.12.0` | 2026-08-06 | 模型全链路统一为 `binding_models` / `bindingModels` / `t_agent_binding_models`。 |
+| `v0.11.0` | 2026-08-06 | 初始化 DDL 改为 `"{dbUser}"` Schema 限定和先删后建。 |
+| `v0.10.0` | 2026-08-05 | 以输入元数据的 `system_prompt` 对象为准，恢复 8 个数据库展开列并全部设为 `TEXT NOT NULL`。 |
+| `v0.9.0` | 2026-08-05 | 删除 README 中重复的 SQL 语句章节，`schema.sql` 作为唯一完整 DDL 来源。 |
+| `v0.8.0` | 2026-08-04 | 将八个 System Prompt 子列收敛为单一必填 `system TEXT`。 |
+| `v0.7.0` | 2026-08-04 | 定义 System Prompt 必填、可空和前端展示规则。 |
+| `v0.6.0` | 2026-08-04 | 增加 SQL 语句章节。 |
+| `v0.5.0` | 2026-08-04 | 表名统一采用 `t_` 前缀和小写 snake_case。 |
+| `v0.4.0` | 2026-07-29 | 增加 `enabled BOOLEAN NOT NULL DEFAULT TRUE` 及管理面、运行时语义。 |
+| `v0.3.0` | 2026-07-29 | 主表 ID 对齐元数据。 |
+| `v0.2.0` | 2026-07-29 | 按 Agent JSON 收敛关系表并增加 GaussDB DDL。 |
+| `v0.1.0` | 2026-07-28 | 初版扩展设计。 |

@@ -2,126 +2,48 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.9.2 |
-| 状态 | 当前评审 ListEvents；POST 合并、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；B01～B15 语义已确认，精确契约已定稿，可进入实现，target-only |
-| 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
-| CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
-| 本次 HTTP 合并核对提交 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；原 `a8192e0`，变更路径与结论见 §4.2 |
-| 中断优化补充核对提交 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；只补充 §4.4 的容量、注册表及响应生命周期证据，不替换其他主题基线 |
-| 历史查询补充核对 | 同一 `dfb90ca`；查询、编码、游标与 Mapper 四个文件相对 `918005e` 不变，见 [ListEvents 设计](chat-events-history-design.md)；本次变更前设计 `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
-| 事件顺序补充核对提交 | `a8192e047f4061bd385297d3dc6c4358362d0d49`；只补充本文 §4.1 证据，不替换其他主题基线 |
-| pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
-| mate 公共契约基线 | [`mate-service 通用对话 API`](../../02-服务与接口/07-mate-service通用对话API/README.md) 1.5.0 |
-| 外部公共契约核对日 | 2026-09-04；仅对照 preview 与权威历史，不照搬独立读取流 |
+| 文档版本 | 0.10.0 |
+| 状态 | 三输入联合契约与 B01～B15 已确认；本文跨实例执行骨架为 target-only |
+| 源码范围 | Java c9d858bc、a8192e04、918005ee、dfb90cac 分项核验；pi 固定 5cd93f68，完整提交和符号见 [源码证据](source-evidence.md#5-session-events-固定源码核验) |
 | 更新日期 | 2026-09-14 |
 
-Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-history-design.md#thinking-original-text)。
+## 1. 资源模型与职责
 
-计划审核新增输入与事件由[计划模式接口增量](../06-CampusClaw计划模式/interface-delta.md)维护为 target-only 方案；工作模式使用 Session 更新的 mode=plan/build；审核仍沿用根消息、确认续跑段和对应 SSE，以完整计划 eventId 为目标，并在批准事务内更新同一 mode 属性。它不改变当前三输入联合契约的已确认范围；目标结构及差距见[计划模式主设计](../06-CampusClaw计划模式/README.md)和 [A03](../07-Agent架构对比/README.md#a03)。
+POST `/sessions/{sessionId}/events` 在同一响应中返回本次用户事件回执与对应 SSE；GET 同一路径分页读取权威历史。响应连接不代表独立执行资源，完整事件持久化，临时 delta 只作实时预览。
 
-## 1. 已确认资源模型
+请求与观察共用响应是 CampusClaw 的架构选择，便于内部调用方关联输入和输出。[Mate 公共 API](../../02-服务与接口/07-mate-service通用对话API/README.md) 独立采用提交与读取分离，由 bridge 消费 Runtime POST 后安全投影。
 
-一次 POST 请求发送事件，并在同一 HTTP 响应中接收完整回执和对应 SSE。
-ListEvents 独立读取完整历史，负责分页与断线对账。
-
-| Method | Path | 职责 | 当前状态 |
-|---|---|---|---|
-| `POST` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 提交一条用户事件；首帧完整回执，随后推送对应事件 | 合并方向、首帧与对应 idle 关闭已确认；已确认目标契约，待实现 |
-| `GET` | `/campusclaw-service/v1/sessions/{sessionId}/events` | 普通页码查询权威历史及断线对账 | L1～L4 已确认：普通分页、默认 50/上限 200、无 total、超范围 200 空列表；B01～B15 语义已确认，字段与示例整稿已补齐 |
-
-内部 Events 只提供 POST 推送与 GET 历史；执行身份留在内部，响应连接不是公共执行资源。
-完整事件持久化，临时 delta 用于实时预览。
-
-请求与观察共用一个响应属于 CampusClaw 架构选择，便于调用方把输出归属于本次输入。
-Mate 公共 API 保持独立边界，
-其三接口形态仍独立成立；将来由 Mate bridge 消费一次 Claw POST 响应并做安全投影，
-不能机械删除 Mate 的公共读取流。
-
-`user.interrupt` 和 `user.tool_confirmation` 仍走同一 POST 联合类型。三个独立控制
-接口已退役，本期不开放运行中追加消息；调整方向采用实际停止后新提交。
-B13/B14 已确认 Skill 接入同一消息执行语义，Builtin 保持 JSON，旧 v1 控制接口只保留历史证据。
+本文唯一维护接受、有序追加、单消息准入及跨实例控制；[流设计](chat-events-stream-design.md) 维护回执、响应绑定和关闭；[历史设计](chat-events-history-design.md) 维护完整事件投影、分页和对账。
 
 ![Session Events 目标资源模型](设计图/事件接口重设计/target_session_events_resource_model.svg)
 
-[PlantUML 源码：`target_session_events_resource_model`](设计图/事件接口重设计/diagram.puml#L1)
+[原尺寸 SVG](设计图/事件接口重设计/target_session_events_resource_model.svg) · [PlantUML 源码](设计图/事件接口重设计/diagram.puml#L1)
 
-M8 已确认：当前目标十个接口，移除独立 abort、steers、follow-ups。
-[FollowUp 未来设计](chat-follow-up-future-design.md) 已记录数据库排队及跨实例接续方向，
-本期不启用；M6 仍拒绝未完成 M1 时的 M2，不新增输入类型、字段或排队回执。
-这不代表两个 Events operation 整体通过，也不代表已修改实现。
+## 2. 当前目标契约
 
-## 2. 当前目标契约与 POST 已确认边界
-
-2026-09-06 用户明确要求开始修改历史接口，当前切换到
-`GET /sessions/{sessionId}/events`，见 [ListEvents 评审页](chat-api-review.html#listSessionEvents)
-和 [历史查询设计](chat-events-history-design.md)。GET 返回普通 JSON 的完整事件分页，
-不是独立 SSE；已确认的身份、同形和顺序继续有效，从旧到新及普通整数页码已确认，
-不再固定跨页快照；默认 50/上限 200 与 result 仅含 events/nextPage 已确认。
-合法超范围页返回 200、events=[]、nextPage=null 已确认；L5 完整回答 content 字符串与
-L6 工具调用 arguments JSON 对象、L7 工具结果 content 数组与 L8 本期仅文本块也已确认；
-L9 已确认 Mate 调用保留 CallMateTool 与 {tool,args}；L10 已确认每条工具结果必有布尔 isError，
-B01～B15 已确认其余事件字段、错误、关联及 Skill 语义，精确字段已统一。字段原因和实施验收由[历史查询设计 §2](chat-events-history-design.md#2-历史返回什么)维护。
-下面保留 POST 已确认边界，切换评审不等于整体确认 POST。
-
-请求与 Header 报文由 [POST 精确模型](事件契约/操作/01-submit-session-event.json)唯一维护，
-调用方式见[请求级 SSE 设计](chat-events-stream-design.md#1-当前操作与已确认范围)。
-
-已确认继续有效：
-
-- 每次一条 `user.message`、`user.interrupt` 或 `user.tool_confirmation`；
-  使用 `event` 包装、有序 `content[]`，不接受批量。
-- `X-HW-ID` 是用户凭据 ID，不是公司、服务或应用标识。两种 Header 示例及说明不回退：
-  `credential-jwt`、`credential-appkey`、`Bearer opaque-token`、
-  `opaque-appkey`、`opaque-access-token` 都是实现测试中的非生产字面值。
-- 三种用户事件在 JWT/APPKEY 模式下均必须携带 `access-token`。Claw 不自行解析或校验
-  JWT/APPKEY；真实性和授权由上游负责，允许已有两种凭据同时出现，不新增互斥规则。
-- 凭据从 POST 读取，只在内存中保留到本次 Agent 执行结束，只随实际 Mate tool execute
-  发送；不发给模型、工具发现，不进入日志、Session 持久化、事件或回执。HTTP 断开不是
-  执行结束，也不能因此提前清除仍需执行的凭据。
-- 对外使用 `eventId`，不暴露 `entryId/entrySeq/runId/executionId`。
-  Claw 与 Mate 的 eventId 是否共值仍待 bridge 评审，字段同名不等于值相同。
-- 不接受 `Idempotency-Key`；已提交但响应丢失时通过历史对账，不盲目重放 POST。
+每次 POST 只提交 user.message、user.interrupt 或 user.tool_confirmation 中的一条事件。精确字段、Header、错误和机器评审状态分别由 [POST 模型](事件契约/操作/01-submit-session-event.json)、[GET 模型](事件契约/操作/02-list-session-events.json) 维护，[统一接口页](chat-api-review.html) 为阅读入口。
 
 ### 2.1 传输与执行规则
 
-| 原决定 | 合并后的状态 | 原因 / 分类 |
-|---|---|---|
-| Q3：普通 JSON ResultBean 返回完整用户事件 | JSON 外壳被替代；完整用户事件作为首个 SSE 业务帧返回，已确认 | 架构变更：一次响应承载接收回执与输出 |
-| S1：data-only | 保留；不使用 SSE `event:`、`id:` 或 Last-Event-ID 恢复 | 已确认格式不因 HTTP method 改变 |
-| S2：type + phase | 保留；正文/思考为 delta/completed，工具与 idle 不带 phase | 已确认投影 |
-| S3：流不推送 user.*，仅回执/历史可见 | 用户明确调整：首帧返回本次完整 user.*，仅一次，不广播其他用户输入 | 产品约束：同一请求内确认接收，不重复业务输出 |
-| S4：只读 GET 不需要 access-token | 原只读流已撤销，此项不再适用该入口；POST 三类仍必填 | 适用范围改变，不是放宽写入凭据 |
-| M3：响应结束规则 | 已确认收到本次对应 idle 后关闭；等待工具确认时也关闭，之后通过新确认 POST 接收续跑结果 | 产品约束：结束本次 HTTP 交互，不把等待确认当作任务成功；reason 与目标绑定竞态已由 B07～B09 确认 |
-| M4：中断推送分工 | 原消息响应保留原执行输出；中断响应只回执本次 user.interrupt 并等待同一 idle；两条响应复用该 idle 的 eventId 后各自关闭 | 产品约束：接收回执不等于实际停止，停止结果通知两条响应，不复制 Agent 输出；执行机制见 M5 |
-| M5：跨实例中断机制 | 数据库持久化停止请求；各实例独立批量检查本机活动执行，接收实例读取同一权威结束记录；本期不引入 Redis | 架构变更：不依赖粘性路由或实例转发，保留固定目标与结果对账；具体周期与超时数值由实施校准，故障语义见 B11 |
-| M6：单消息准入 | 同一 Session 的 M1 未完成前拒绝 M2；接受消息与 idle→running 在同一数据库事务完成 | 产品约束：按 Session 在不同调用方和实例间互斥；沿用现有数据库准入机制，Session Events 控制与结束边界见 §3.2 |
-| M7：中断查询优化 | 同实例提交后立即通知、等待目标去重、终态提交后本地投递与补读去重、索引按实际数据库与压测选择；批量轮询兜底保留 | 架构优化：降低本地中断延迟和重复查询，不改变数据库权威、回执先行、固定目标与独立响应；数值和索引结构未冻结 |
-| 原 POST 整体已确认 | 仅被本次替代的响应部分重新评审，其余已确认字段保留 | 不把旧整体确认标签误用于新合并接口 |
+| 规则 | 当前设计与理由 |
+|---|---|
+| 接受回执 | 完整本次 user.* 持久化后作为首个 SSE 业务帧，不套 ResultBean；表示已接受，不表示执行结束 |
+| 流格式 | data-only，type 表示语义，正文/思考用 phase 区分 delta/completed；不使用 Last-Event-ID 重发 POST |
+| 响应归属 | 固定到本次执行段或中断目标；对应 idle 后关闭，等待确认的 idle 只结束本段交互 |
+| 中断分工 | 原响应保留执行输出；中断响应只有自己的回执和同一权威 idle，两条响应复用终态 eventId |
+| 单消息准入 | M1 真正结束前不接受 M2，拒绝消息不入库；确认、中断分别检查控制条件 |
+| 跨实例控制 | 数据库保存固定目标与决定，各实例批量检查本机执行或本机等待响应；本地提交后通知缩短延迟，轮询兜底 |
+| 身份与恢复 | eventId 对外去重；内部执行身份与序号不公开，网络结果不确定先查历史，不无条件重试 POST |
 
-完整首帧包括服务端 `eventId`、原事件 `type`、`createdAt` 和规范化业务字段。
-它是已经持久化并接受的用户事件，不代表 Agent 已完成或中断已停止；不额外套 ResultBean，
-不增加 `phase`。首帧只能来自当前 POST，后续推送必须晚于该回执入队。
+完整事件在 SSE 与历史同形。以上概要不取代完整事件目录；配置、压缩、用量及子 Agent 的投影由历史专题维护。Claw/Mate 的 eventId 是否共值仍需 bridge 对齐，字段同名不代表值相同。
 
-五个基础输出类型保留：`agent.message`、`agent.thinking`、`agent.tool_call`、
-`agent.tool_result`、`session.status_idle`。完整事件在 SSE 与历史使用相同名称和字段。
-这不是全部 Runtime 事件清单，不据此删除配置、压缩、进度或子 Agent 能力。
+### 2.2 相邻模块边界
 
-### 2.2 精确契约入口
+凭据的读取、执行期间保留和仅 Mate tool execute 使用见 [HTTP 安全边界](chat-http-v1-design.md#7-安全与附件边界)。工具确认等待仍属于原执行，确认/中断请求不能覆盖原凭据。
 
-- [当前 ListEvents 评审页](chat-api-review.html#listSessionEvents)：
-  [历史 operation model](事件契约/操作/02-list-session-events.json)。
-- [合并 POST 保留评审页](chat-api-review.html#submitSessionEvent)：
-  [POST operation model](事件契约/操作/01-submit-session-event.json)，未决项不变。
-- [响应生命周期与源码差距](chat-events-stream-design.md)：三种输入各自的输出范围、
-  已确认结束规则，以及背压和恢复候选。
-- 旧确认页已删除，不保留变更提示或占位文件；已失效的普通 JSON POST 仅从 Git 历史追溯，
-  不作为当前已确认接口。当前入口统一见上方两个操作锚点。
-- `common.json.reviewState` 当前为 `listSessionEvents`，
-  `confirmedOperations=[]`；这不撤销已确认字段，也不推定任一新操作整体通过。
+Skill 复用消息执行语义，Builtin 保持 JSON，具体由 [Slash 模块](../../04-命令与技能/00-Slash-Command通用模块/README.md) 维护。当前无运行中消息队列，[FollowUp](chat-follow-up-future-design.md) 仅为未来扩展。
 
-当前确认边界集中记录于 §2.1；精确未决字段和评审状态以 operation model 为准。
-本文维护执行准入、有序追加和跨实例中断；流文档维护回执、响应绑定与关闭，
-历史文档维护读取投影、分页及对账。跨专题只链接，不复制数据库参数或分页清单。
+[计划审核接口增量](../06-CampusClaw计划模式/interface-delta.md) 是独立 target-only 方案，沿用根消息、确认续跑段与对应 SSE，在批准事务更新 Session.mode；它不扩张当前三输入联合契约的已确认范围。
 
 ## 3. 目标分层与生命周期
 
@@ -130,7 +52,16 @@ B01～B15 已确认其余事件字段、错误、关联及 Skill 语义，精确
 
 ![Session Events 目标类图](设计图/事件接口重设计/target_session_events_classes.svg)
 
-[PlantUML 源码：`target_session_events_classes`](设计图/事件接口重设计/diagram.puml#L94)
+[PlantUML 源码：`target_session_events_classes`](设计图/事件接口重设计/diagram.puml#L51)
+
+图中重复实现按组展示，精确职责如下；组框不代表一个集中分支类。
+
+| 图中分组 | 具体协作者 | 职责 |
+|---|---|---|
+| typed user event handlers | UserMessageEventHandler / UserInterruptEventHandler / UserToolConfirmationEventHandler | 分别接受消息、停止请求、确认决定；消息提交后启动，控制提交后只作本地提示 |
+| polling services | ExecutionControlPollingService | 读取本机活动目标的停止/确认决定，复核身份并触发本地动作 |
+| polling services | InterruptResultPollingService | 读取本机等待响应对应的权威终态，独立投递 |
+| polling services | ConfirmationResultPollingService | 读取固定续跑段的完整事件，经共享投影投递到对应响应 |
 
 推荐骨架保留 Web、Application、Runtime、流式输出、持久化边界，不保留长期 Session
 订阅 Hub：
@@ -158,7 +89,7 @@ B01～B15 已确认其余事件字段、错误、关联及 Skill 语义，精确
 请求级 SSE 不重放。断线、队列溢出或接收结果不确定都回到 ListEvents 对账；时间不能作
 增量游标，不把重新 POST 当作重连。
 
-### 3.1 已确认的事件处理、写入与展示顺序
+### 3.1 事件处理、写入与展示顺序
 
 本节是已确认的 Session Events 目标要求，属于架构变更，不表示当前实现已完整支持多来源事件的
 依赖检查。“顺序正确”指保持业务因果关系，不是按机器时钟还原所有事件的物理发生顺序。
@@ -190,10 +121,9 @@ Handler 和 Runtime Projector 都经过该边界，再由 Repository 执行短�
 复核依赖和状态，不能只依赖某个 JVM 内的互斥锁。查询不经过该写入边界，不等待模型
 或工具执行完成。
 
-### 3.2 已确认：一个 Session 同时只处理一条用户消息
+### 3.2 一个 Session 同时只处理一条用户消息
 
-2026-09-05 用户明确约束：M1 未执行完之前，不允许接受 M2；消息接受时将数据库中的
-Session 资源状态改为 running。此规则按 Session 生效，覆盖同一用户、不同用户及不同
+M1 未执行完之前不接受 M2；消息接受时将数据库中的 Session 资源状态改为 running。此规则按 Session 生效，覆盖同一用户、不同用户及不同
 服务实例。调用方仍可能同时发出 HTTP 请求，但不能同时成功接受两条尚未完成的消息。
 不把 M2 排队，也不将拒绝的 M2 写入已接受事件历史。
 
@@ -219,10 +149,10 @@ Session 资源状态改为 running。此规则按 Session 生效，覆盖同一�
 复核并提交终态，再开放下一条消息。失败、断线和恢复边界按 B07～B11 确认语义实施。
 
 对调用方，忙时拒绝采用已确认的 `409 / SESSION_BUSY` 表达，SSE 首帧之前
-返回普通错误 JSON；本次确认拒绝语义，不整体确认错误目录或其余接口字段。
+返回普通错误 JSON；精确错误目录以操作模型为准。
 
 本次沿用 `pi-mono-java@918005ee8ccc88d179fc31a0de17a92b4a01383b` 的源码基线。
-以下 Java 路径相对 §4.2 的 runtimeapi 前缀；变更前设计为 `ab9e360fce4d873ab12d570248417fbaa89ceac0`。
+以下 Java 路径相对 `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/`。
 
 | 分类 | 仓库路径 / 符号 | 证据与差距 |
 |---|---|---|
@@ -235,198 +165,54 @@ Session 资源状态改为 running。此规则按 Session 生效，覆盖同一�
 旧中断才到达服务端，则属于跨完成边界的迟到请求；B09 已明确该请求必须引用原始 user.message.eventId。
 B09 现已确认必填 targetEventId，锁内只匹配指定原消息；新一轮已开始则返回 INTERRUPT_TARGET_MISMATCH，不能误停新一轮。
 
-## 4. 源码证据与差距
+## 4. 源码证据与跨实例控制
 
-| 分类 | 源码证据 | 结论 |
-|---|---|---|
-| 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:39-91` · `RuntimeEventController.submit/list` | POST 创建 `SseEmitter` 并返回 `text/event-stream`；GET 只接收 `limit/page` |
-| 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java:45-50` · `mateCredentials`；`campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/common/client/mate/MateCredentials.java:21-74` | 当前实现把 `X-HW-ID` 作为不透明 Header 值读入执行凭据，只检查非空，不解析其业务身份 |
-| 已观察实现 | `campusclaw/src/test/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSessionRoutesTest.java:69-93` · `createWithJwtReturnsConfirmedResultBean/getWithAppKeyReturnsEtagAndNoStore`；`RuntimeEventRoutesTest.java:88-120,193-197` · `postStreamsNamedEventsWithoutResultBean/authenticated` | 当前测试使用 `credential-jwt`、`credential-appkey`、`Bearer opaque-token`、`opaque-appkey` 和 `opaque-access-token` 等非生产字面值；本设计复用它们作为具体示例，但不据此增加格式约束 |
-| 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java:76-139` · `submit/prepareAndSubmit/acceptUserEntry` | 只接受 `user.message`，要求 idle，持久化后直接启动内部执行并返回其 EventStream |
-| 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java:22-159` · `attach/detachInternal` | EventStream 属于一次执行且最多一个 subscriber；断线会清空该流缓冲 |
-| 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventQueryService.java:53-99` · `list/pageOf` | page 只携带 afterSeq 与 thinking，没有固定历史快照水位 |
-| 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java:59-132` · `steer/followUp/abort/prepareAbort` | Abort 是独立接口行为；Steer 与 FollowUp 使用执行内队列 |
-| 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:57-120` · `acceptUserEvent/listCurrentBranch` | `user.message` 在事务内追加并将 Session 标为 running；历史按 afterSeq 开放读取 |
-| 目标架构 | 本文两接口及目标图 | 提交和对应 SSE 合并到 POST，GET 历史保留；多类型输入与请求输出绑定为 target-only |
-| 产品约束 | 本文资源模型 | 无公共 Run/Execution；mate 公共边界只暴露 `chatId` 和公共事件身份 |
-| 产品约束 | `X-HW-ID` | 标识当前请求对应的用户凭据；不是公司、服务或应用调用方标识 |
-| 产品约束（target-only） | POST `access-token` | 三种用户事件在 JWT/APPKEY 模式下均必须携带，统一调用方请求头组装；不把三事件必填表述为现有 Java 已支持的行为 |
-| 安全加固 | POST 凭据处理 | 凭据从请求读入后只在内存中保留到本次 Agent 执行结束，只在必要的实际 Mate tool execute 使用，不进入持久化、日志、SSE 或历史 |
+### 4.1 事件顺序源码核验
 
-### 4.1 事件顺序补充核对
+Java a8192e04 的 Agent.emit 依次回调，Projector 同步处理，Repository 持 Session 行锁追加；它们保存到达写入边界的顺序，不能据此证明多来源的前置依赖已统一校验。完整路径与固定提交见 [排序证据](source-evidence.md#51-事件顺序)。
 
-本节核对 `pi-mono-java@a8192e047f4061bd385297d3dc6c4358362d0d49`，下表路径均相对
-实现仓。与原基线 `c9d858bc8261bf07f5585f545b53495bf2226a56` 比较，下表五个文件均无
-变化；新增的是对这些符号的排序证据分析，不是切换其他主题的实现结论。
+### 4.2 POST 与流生命周期源码核验
 
-| 分类 | 仓库相对路径与符号 | 已观察行为与边界 |
-|---|---|---|
-| 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/agent/Agent.java:294-306` · `emit` | 在当前线程依次通知 listener；这不是多来源的全局因果排序器 |
-| 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventProjector.java:105-116,238-254,382-385` · `onEvent/persistAssistant/emitPersisted` | 同一 Projector 同步处理回调，持久化完成后发送完整事件；不能由此推断不同 Projector 或其他写入入口已共同检查前置依赖 |
-| 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:55-87,208-218` · `acceptUserEvent/appendEntry/appendLocked` | 事务锁定 Session，再取序号、插入和递增；保存到达该写入边界的顺序，并不自动恢复上游乱序 |
-| 已观察实现 | `campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml:47-75,132-164` · `lockSessionForUpdate/lockNextSequence/insertEntry/listCurrentBranch` | 使用行锁；历史 SQL 按 `entry_seq` 排序，不按 `timestamp` 排序 |
-| 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java:53-60,90-99` · `list/pageOf` | 保留查询结果顺序，以最后一项内部序号生成不透明下一页游标；尚非 Session Events 的整数页码 |
-| 架构变更（target-only） | 本文 §3.1 与 `SessionEventAppender` 推荐边界 | 所有来源共同遵守前置依赖和有序提交；ListEvents 读取已提交顺序，时间戳只作展示。需按 §5 实施并测试，不能把数据库行锁当作全部保证 |
+Java 918005ee 已有 POST SSE、单 subscriber 和断线不 abort；该基线只接受消息，仍输出旧 named SSE 和旧终态，并使用内部序号游标。三输入、独立响应绑定、data-only、确认分段、普通整数分页均为目标差距，见 [入口证据](source-evidence.md#52-post-与流生命周期)。
 
-pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime 内核行为参考；
-本次不把 pi 的进程内事件、本地 Session 文件或 CLI 传输直接当成 CampusClaw HTTP 契约。
+### 4.3 多实例问题与选择
 
-[Anthropic Managed Agents 的 Events and streaming](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
-与 [List Events](https://platform.claude.com/docs/en/api/beta/sessions/events/list) 用于校验
-“提交与观察分离、preview 非权威、断线后查询事件历史”的公共边界；这些页面只能证明
-公开契约，不能证明其内部存储或调度实现。
-[OpenCode 官方 Server 文档](https://opencode.ai/docs/server/) 当前公开的是实例级
-`/event` SSE，因此这里只作多客户端通知对照，不把其源码中的 Session durable stream
-描述成公开稳定契约。
+该基线活跃执行保存在每实例 registry 的内存 Map。消息在 A 执行，中断请求可能到 B；数据库中的 running 状态不能让 B 获得 A 的 Java 对象。此结论来自 [固定源码](source-evidence.md#53-进程内执行定位)，不是已验证部署性能。
 
-### 4.2 本次合并方案源码复核
+目标用数据库交接控制决定和权威结果，执行仍由持有原对象的实例完成。它属于架构变更，不增加实例转发或 Redis，不改变 Agent 内核取消语义，也不承诺撤销远端工具副作用。
 
-本次实际读取 `pi-mono-java@918005ee8ccc88d179fc31a0de17a92b4a01383b`。
-以下路径前缀均为
-`campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/`。
-这七个文件相对旧 `a8192e047f4061bd385297d3dc6c4358362d0d49` 均无 diff；
-变化的是目标设计，不是把本次方案误说成已实现。
+### 4.4 数据库停止请求与实例批量检查
 
-| 相对上述前缀的路径 / 符号 | 已观察行为与新目标差距 |
-|---|---|
-| `web/RuntimeEventController.java:61-91` · submit/list | 当前 POST 返回 SSE、GET 返回历史，无独立 GET stream；新方案复用传输方向 |
-| `event/RuntimeEventService.java:101-141` · prepareAndSubmitLocked/acceptUserEntry | 当前只接收消息，保存后发送 user.message 并启动；三类输入和完整 Session Events 回执仍需改造 |
-| `event/RuntimeEventStream.java:84-159` · complete/attach/detachInternal | 单 subscriber、有界缓冲、断线清缓冲，不自行 abort；尚无控制 POST 的独立绑定 |
-| `web/RuntimeSseEmitterSubscriber.java:33-49` · onEvent/onComplete | 当前 named SSE 和可选 id，完成后 emitter.complete；目标 data-only 不等于当前格式 |
-| `event/RuntimeExecutionCoordinator.java:154-168` · completeExecution | 当前收尾持久化、发送终态、complete 流；已确认目标中的等待确认分段关闭不能据此宣称已有 |
-| `event/RuntimeTerminalEventFactory.java:34-57` · emit | 当前成功/中断发 session.status.idle + stream.end，失败发 stream.error；目标已确认收到对应 idle 后关闭，reason 与失败处理已按 B07/B11 确认，尚未实现 |
-| `event/RuntimeEventQueryService.java:53-99` · list/pageOf | 当前按内部序号生成下一页游标；Session Events 目标改为普通整数页码 |
+共享记录必须关联 Session、不可复用的内部执行身份、原消息与中断事件、停止决定以及唯一权威终态；具体表列、索引与保留期由实施设计确定，新增表使用 t_ 前缀，禁止写入原始凭据。
 
-本次不修改 pi Agent Loop、Tool Loop 或 Session 内核语义，也不以 pi 的进程内事件
-证明 HTTP 合并设计。原 pi 固定基线仅保留为其他 Runtime 设计的证据范围。
+#### 接受与执行交接
 
-### 4.3 为什么需要找到执行所在的实例
+1. 消息接受时在数据库登记固定执行身份，再启动模型或工具。中断接收方预留有界响应，在短事务中复核 targetEventId 对应的原消息和状态，原子追加回执与停止决定。不能保存 `sessionId + stop=true` 后再查“最新执行”。
+2. 提交成功后先将本次完整回执入队，再允许结果投递；网络写出不占数据库锁。同实例可立即尝试取消固定对象，通知失败仍由已提交记录和轮询兜底；回滚或提交不确定时不走本地快路径。
+3. 每实例的 ExecutionControlPollingService 分批查询本机活动目标。快照仅缩小范围，实际取消在本地生命周期协调边界内原子复核对象身份和状态；不能检查旧对象后取消新 holder。重复检查不重启任务，取消回调不阻塞整批查询，不扫描无活动目标的全库。
+4. 原执行实际退出后，在有序追加事务中复核固定身份，保存唯一 idle、执行关联与 Session 状态，提交后才能通知。停止请求不能在可靠结果产生前删除；自然完成竞争保留真实结束原因。
+5. 原响应保留 Agent 输出；中断接收方按固定身份读取同一终态，仅投递其回执和该 idle。B 不访问 A 的运行对象或正文流，不创建第二个 idle。
 
-本节继续核对 `pi-mono-java@918005ee8ccc88d179fc31a0de17a92b4a01383b`；
-下表路径相对 §4.2 的 runtimeapi 前缀。这里观察的是当前独立 Abort 实现，
-不是声称目标 `user.interrupt` POST SSE 已实现。
+#### 等待响应与竞态
 
-| 已观察源码 / 符号 | 事实 |
-|---|---|
-| `runtime/RuntimeSessionEngineRegistry.java` · sessions/register/find/complete | 活跃 RuntimeSessionHolder 保存在当前进程的 ConcurrentHashMap 中；find 只查询本实例内存，完成后移除 |
-| `session/RuntimeSessionControlService.java` · prepareAbortLocked/requireRunningHolder | 读取持久化 Session 状态，再从本地 registry 查执行对象；running 状态下本地缺少对象时抛出 SESSION_EXECUTION_UNAVAILABLE |
+InterruptWaitRegistry 每实例维护“固定目标 → 独立响应集合”，按目标去重查询，但每条响应保留自己的回执、locale、队列和连接状态。目标数与实际响应数分别限额，100 个业务执行名额不等于中断响应容量。
 
-由此推导的多实例情形（不是已验证的部署拓扑）：同一个服务部署实例 A、B，
-消息 POST 被交给 A，Agent 执行对象和原 SSE 在 A；后来的中断是另一个 HTTP 请求，
-可能被分给 B。即使 B 从共享数据库读到 Session 正在运行，也没有 A 内存中的执行对象，
-不能仅凭 sessionId 在本地停止它。共享数据库记录不等于共享正在执行的 Java 对象。
+接受前预留容量；提交后按“回执入队 → 登记等待组 → 补读已提交终态”执行。终态早于登记由补读取回，晚于补读由提交后通知或下一轮查询取回。补读失败保留登记作有界重试，不把未读到解释为没有终态。
 
-“路由问题”是让第二次请求或其控制指令到达执行所在实例，不是 SSE 的每一帧会重新
-分配实例。单实例没有此跨实例问题。概念上可把请求送到 A，或让 B 把控制指令交给 A；
-此前只确认响应分工；用户现已选择 §4.4 的数据库交接方案，本期不依赖上述两类直接路由。
-该决定不意味着当前 Java 已有分布式中断，也不提前确定故障接管或工具确认续跑方案。
+通知与补读共用逐响应投递入口，原子检查固定目标、回执顺序和连接状态；每个终态每条响应最多入队一次。队列无法接收只结束该响应，不能阻塞同组其他连接，也不承诺网络必达。移除最后等待者与新登记使用同一协调边界，避免误删新组；断线只解绑观察者，不删除数据库决定和结果。
 
-### 4.4 已确认：数据库停止请求与实例批量检查
+#### 容量与失效边界
 
-M5 为已确认的 target-only 架构变更：本期使用现有数据库保存停止请求，由执行实例
-主动批量检查；不依赖粘性路由，不增加实例间 HTTP 转发，不引入 Redis。
-后续确有低延迟需求时再评估 Redis 通知加速；数据库记录和检查兜底仍保留。
-本次不改变 Agent 内核取消语义，不声称远端工具副作用能被撤销。
+两类查询分别覆盖本机活动执行的停止决定，以及本机中断响应等待的远端终态。查询短小字段、不取大 payload，任务有界且不重叠积压；轮询线程与取消不竞争业务执行名额，但各自受资源限制。虚拟线程不增加数据库连接容量。
 
-#### 逻辑记录与执行绑定
+周期、批次、数据库超时、退避和等待期限配置化。索引须按实际 GaussDB 能力、执行计划、写入成本以及 100 并发背景下的查询/连接等待实测选择；尚无已验证的延迟或吞吐保证。空查询不能导致无界延长中断发现时间。
 
-共享记录至少需要表达：Session、不可复用的内部执行标识或代次、对应中断事件、
-停止请求是否存在、对应权威结束事件。这是逻辑要求，具体表结构、列名、索引、
-部署保留期和内部故障状态枚举属于实施校准；新增表仍须遵守 `t_` 命名规则。
-原始凭据不写入这些记录，也不从中断请求覆盖原执行凭据。
-
-执行被接受时就必须将其内部身份登记到数据库，再开始模型或工具调用。
-中断在短事务中复核当前状态并固定这个身份，与用户事件、停止请求一起提交。
-不能只保存 `sessionId + stop=true`，不能在每次检查时重新选择“当前最新执行”。
-内部身份不穿透 HTTP，不新增公共 runId/executionId。上述保证防止已接受的旧中断
-误伤后续执行。M6 禁止 M1 未结束就接受 M2；若 M1 已结束且中断到达之前已开始下一轮，通过必填 targetEventId 表达调用方原本要停止的原消息，锁内拒绝不匹配目标。
-
-#### 接收、执行与结果交接
-
-1. 接收实例 B 预留有界响应及固定目标绑定；在同一短事务中保存完整 user.interrupt
-   和对应停止请求。事务失败不出现一边成功一边缺失，提交不确定则按既有规则对账。
-2. B 提交后先排入本次完整回执，再放行本条响应的结果投递。A 可能很快发现请求并
-   结束，B 仍能从数据库补读终态；不要求 A 等待 B 的网络写出，不跨实例持锁等回执。
-3. 同实例接收中断时可在提交后立即触发匹配的本地取消，不等待下一轮检查；
-   未命中本地执行或通知失败不撤销已接受事件。各实例仍用独立于模型/工具调用的
-   检查任务，分批查询本机活动执行对应的停止记录；
-   无活动执行时不扫描全库，不为每个执行各自创建高频查询任务。
-   本机快照仅用于缩小查询范围；在本地生命周期协调边界内原子复核身份与状态，
-   并取消这个固定对象，不能先检查旧对象再转而取消 holder 中已经替换的新对象。
-4. A 对匹配的本地执行请求取消。重复读到同一停止请求只作用于同一执行，
-   不重复启动任务，也不提前删除尚未产生可靠结果的停止请求。
-   数据库检查线程不阻塞等待某一个模型或工具完全退出，避免拖住其他中断。
-5. A 实际退出后，通过共享有序追加边界在一个短事务内复核目标身份、保存唯一权威
-   idle、关联执行结果并更新对应状态。提交后才投递；B 不自行创建第二条 idle。
-6. A 的原消息响应保留原执行输出并发送该 idle。接收实例按固定内部执行身份去重等待
-   目标，批量读取对应结束记录；若执行也在本机，可在终态提交后立即通知。
-   两条路径经应用层转换为 Response VO，共用逐响应终态去重，发出同一 eventId 后关闭。
-   B 不订阅 A 的正文、思考或工具流，也不需要访问 A 的内存或知道 A 的地址。
-
-跨实例结果读取是服务内部数据库查询，不新增公共 GET stream，
-不要求客户端轮询，也不把公共 ListEvents 分页查询当作内部信号总线。
-B08 的确认续跑复用该数据库权威与实例隔离原则，具体骨架见 §4.5。
-
-#### M7：已确认的优化与一致性边界
-
-2026-09-05 用户在三项优化建议后回复“可以呀”，确认以下 target-only 架构优化。
-这不确认更多中断可以被接受；去重只作用于按既有准入规则已经接受的等待响应。
-
-1. **同实例提交后立即通知。** 停止请求确定提交成功后，接收方尝试找到固定身份的
-   本地执行，复用批量检查所调用的本地取消入口。入口必须原子复核对象身份与状态；
-   不因通知是本机调用就跳过数据库接受事务，也不取消“当前最新执行”。提交失败或
-   提交结果不确定时不得使用快路径；通知未执行、丢失或失败时，由持久化记录和轮询
-   兜底。本地通知不等待后续终态补读或客户端收完回执；取消回调不得阻塞检查批次、
-   数据库事务或 HTTP 网络写出。
-2. **按目标去重等待，不合并响应。** 接收实例维护内部执行身份到本机等待响应集合的
-   有界登记。每批查询前取不同目标，同一目标只查询一次，再分别通知各响应；不同
-   实例仍维护自己的登记，不尝试共享 Java 对象。每条响应保留自己的完整中断回执、
-   locale、队列和连接状态，不能只因目标相同就复用第一个调用方的回执或可变缓冲。
-   登记不保存原始凭据；等待响应数量及字节容量另行受限，不能用去重后的目标数代替
-   真实响应数量限制，也不能把 100 个业务执行名额当作中断响应容量。
-3. **先登记，再补读已提交终态。** 接受前预留有界响应及固定绑定；提交成功后先把
-   完整回执排入本条响应，再将其加入目标等待组，随后补读数据库的已提交结束记录。
-   若终态早于登记，补读可取回；若终态晚于补读，本地提交后通知或下一轮检查可取回；
-   补读失败时保留登记供有界重试，不把“未读到”解释为“没有终态”。
-   通知与补读使用同一逐响应投递入口：原子检查固定目标、回执已入队以及连接状态，
-   同一终态每条响应最多入队一次，随后完成该响应。队列无法接收时只结束该响应并
-   保留不确定结果，不阻塞同组其他响应，不宣称网络必达或端到端 exactly-once。
-4. **本地终态通知只发生在提交之后。** 执行退出、唯一结束事件、目标关联和状态
-   变更提交成功后，才能用该权威事件唤醒本机等待组；本地 completion 或取消标记
-   不足以充当终态。补读和通知复用同一事件身份，不创建第二条 idle。
-   最后一条响应离开时，在与登记协调的边界内移除空组，避免并发新登记被误删；
-   仅清理本机登记，不删除数据库停止请求或终态，迟到回调也不能影响下一轮执行。
-5. **查询索引按实测选型。** 只查询固定目标的停止请求/权威结束小字段，不读取大段
-   事件 payload，也不扩大为全库扫描。对普通执行标识索引、复合索引、仅覆盖待处理
-   记录的索引等候选，先核对实际 GaussDB 版本能力，再比较执行计划、查询耗时、写入
-   成本和 100 并发下的连接等待。确认的是优化方法，不是提前指定索引 DDL 或表字段。
-
-500 毫秒检查周期、每批 100 个目标、每轮一个虚拟线程均为此前讨论的实施候选，
-不是本次确认的配置值。用户给定的 100 并发是容量背景；在一批且每秒两轮的假设下，
-停止检查约 2 次 SQL/秒，结果检查另计，不能把估算当成实际负载或延迟保证。
-检查和中断处理不竞争业务执行名额，但仍需独立的有界资源保护；虚拟线程不增加
-数据库连接池容量。健康状态下的周期调整要评估中断发现延迟，不能仅因连续空结果
-无限延长检查间隔。本轮不冻结工具调用期限或中断响应等待期限。
-
-#### 参数与失效边界
-
-- 检查周期、单批上限、数据库超时、失败退避和结果等待期限都应配置化；
-  “几百毫秒”只是评估量级，不是已确认默认值或停止时间承诺。
-- 两类检查分别覆盖本机活动执行的停止请求，以及本机仍连接的中断响应所等待的结果；
-  后者不要求目标执行也在本机。检查应有界、不重叠积压，凭据不进入检查队列。
-- 首帧后数据库不可用、实例失联或等待超时均不能合成“已停止”的 idle。
-  没有权威终态时保留结果不确定；按 B11 断开观察响应并对账，错误字段见共享契约；运维恢复不能自动重跑副作用。
-- 心跳或租约过期只能作为故障核对线索，不证明旧实例已停止；本期不授权自动接管
-  重跑。未排除旧执行仍存活前，不能启动可能与其并行的新执行或重复调用有副作用工具。
-- 自然完成与中断竞争时保留真实结束原因，不因存在停止请求就伪造中断成功；
-  接受前目标失效返回 409；接受后真实终态仍按原 sourceEventId 返回。
-- HTTP 断开只移除本机观察响应，不删除已接受的停止请求，不撤销已提交用户事件；
-  后续通过已有历史对账。终态和控制关联的保留期不能短于必要的读取/对账窗口。
+首帧后数据库故障、实例失联或超时不能合成停止成功。没有权威终态时断开观察并对账；心跳/租约到期不证明旧执行已停止，不自动接管或重放副作用。接受前目标失效返回冲突，接受后仍绑定原 sourceEventId 返回真实终态。控制和终态关联的保留期须覆盖必要对账窗口。
 
 #### 源码差距与目标类职责
 
 本节仍以 `918005ee8ccc88d179fc31a0de17a92b4a01383b` 为分析基线，
-不是已实现能力。Java 路径均相对 §4.2 的 runtimeapi 前缀。
+不是已实现能力。Java 路径均相对 `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/`。
 
 | 源码证据 / 符号 | 已观察行为与目标差距 |
 |---|---|
@@ -444,7 +230,7 @@ B08 的确认续跑复用该数据库权威与实例隔离原则，具体骨架�
 具体类名是实施骨架，不是新增已实现类或冻结的公司库接口。
 
 M7 补充核对 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，
-变更前设计为 `e370d2d49e6cd20b7dd910944e583d7f67115cf4`。下表五个文件相对
+下表五个文件相对
 `918005ee8ccc88d179fc31a0de17a92b4a01383b` 均无变化；只补充本主题证据，不漂移
 其他主题基线，不以 pi 内核或托管产品公开契约证明本地数据库调度。
 
@@ -463,11 +249,11 @@ M7 补充核对 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，
 
 ![数据库中断局部目标类图](设计图/事件接口重设计/target_database_interrupt_classes.svg)
 
-[PlantUML 源码：`target_database_interrupt_classes`](设计图/事件接口重设计/diagram.puml#L436)
+[PlantUML 源码：`target_database_interrupt_classes`](设计图/事件接口重设计/diagram.puml#L326)
 
 ![数据库中断交接目标时序](设计图/事件接口重设计/target_database_interrupt_delivery.svg)
 
-[PlantUML 源码：`target_database_interrupt_delivery`](设计图/事件接口重设计/diagram.puml#L340)
+[PlantUML 源码：`target_database_interrupt_delivery`](设计图/事件接口重设计/diagram.puml#L245)
 
 ### 4.5 确认续跑的跨实例交接（target-only 实施骨架）
 
@@ -495,65 +281,20 @@ B08/B09 已确认控制竞争和根消息关联，以下是落实语义所需的
 
 ## 5. 实施切片与验收
 
-以下是 target-only 实施建议，不是本轮实现完成报告：
+| 切片 | 验收要求 |
+|---|---|
+| 请求与响应 | 三输入严格 VO 与 Handler Registry；每响应有界绑定；完整回执先于输出；Header 前 JSON 错误与 Header 后断开分开验证，EOF 不作为成功 |
+| 消息准入 | 两实例竞争 idle 只接受一条消息；拒绝方无记录/模型调用；事务回滚消息和 running 一起回滚；确认、停止中或断线仍拒绝 M2，真正终态提交后才开放 |
+| 因果追加 | 延迟或失败的前置事件不被依赖项超越；同时间/回退时间不影响顺序；锁、序号、追加与提交同短事务，模型/工具不占锁 |
+| 数据库中断 | 消息 A、中断 B；回执前极快结束、重复检查、旧代次信号、数据库故障、A 失联及自然完成竞争均保持固定目标和真实终态；两响应终态 eventId 相同，中断不复制输出 |
+| 等待登记 | 终态早于/并发/晚于登记补读均不漏；快路径仅提交后发生，通知丢失可轮询恢复；同目标只查一次，各回执和缓冲独立，慢连接及清理竞态不影响其他响应 |
+| 确认续跑 | 决定一次消费；固定段关联、重复/过期确认、停止竞争和跨实例完整事件读取；等待期间保留原凭据，实例丢失不自动重跑 |
+| 投影与恢复 | data-only 和完整历史同形；preview 丢弃由完整内容覆盖；断线不取消、不重发；分页、配置/压缩/Usage、存量历史及 Skill 按各所属专题验收 |
+| 容量与安全 | 100 业务名额满载仍可控制；按实际响应数与字节限额；慢取消不堵批次，轮询不挤满连接池；在真实 GaussDB 报告索引计划、成本与延迟，凭据不入记录/队列/响应 |
 
-1. 保留 POST SSE Controller 方向，新增三类联合 Request VO 与 Handler Registry；
-   首个业务帧改为 Session Events 完整用户事件，保留统一凭据边界。
-2. 建立每请求有界流与内部目标绑定；接受前预留容量，在所属锁内复核目标，提交回执
-   后再放行输出，避免快执行漏回执或终态、以及控制请求跨到下一轮执行。复用数据库
-   单消息准入事务，消息与 idle→running 一起提交；M1 未完成前拒绝 M2，控制事件单独准入。
-3. 在 API 投影层映射 data-only、type + phase、eventId；完整事件与历史同形，
-   不把 v1 started/delta/completed 类型直接重命名就宣称实现完成。
-4. 结束规则已确认：对应 idle 后关闭，等待确认时关闭并由新确认 POST 接收续跑；
-   按已确认的输出绑定与错误语义实施。Header 前 JSON 失败、Header 后传输断开和业务失败
-   必须区分，不把单纯 EOF 当作成功。
-5. 增加固定内部目标的数据库控制记录及中断相关 Application 批量检查服务；中断事件与停止
-   请求同事务，终态与关联同事务；用已提交的同一 idle 支撑两条响应，不引入 Redis。
-   同步实现 M7 的提交后本地快路径、按目标分组的等待登记、登记后补读，以及通知和
-   补读共用的逐响应终态去重；数据库批量检查兜底不移除。
-6. 历史改为普通页码与内部有序读取，复用完整事件投影。Mate bridge 将来消费 Claw POST SSE，公共
-   路径和连接策略不因内部改动自动改变；当前不修改 Mate 实现或契约。
-7. 按 §4.5 增加确认决策的一次消费与固定续跑段结果读取；共享消息 Holder 在 confirming 期间保留原执行凭据。验证确认在 B、执行在 A，先登记补读、控制竞争、完整事件关联和实例失联不自动重放。
-8. 配置/压缩/Usage 与存量历史按历史专题迁移表验收；Skill 专题复用本模块的原消息准入、输出绑定与公共投影，Command 实现由其所属任务负责。
+### 5.1 设计与实现验证边界
 
-验收包括：中断响应只含本次回执及同一停止 idle，原响应保留输出且终态 eventId 一致；
-首帧只返回本次用户事件且先于输出；极快完成和写后响应丢失；原消息与中断
-并发、控制目标提前结束、不捕获下一轮事件；工具确认分段与重复确认；preview 丢弃后
-完整内容覆盖；慢流溢出不阻塞执行；断线不取消、不重发；重启后历史对账；
-前置依赖延迟/失败、相同或回退时间、并发提交与普通分页保持数组顺序，以及分支或
-过滤改变后从第一页重载的边界。
-数据库中断专项验收：消息在 A、中断在 B；A 极快结束而 B 回执尚未写出；重复检查
-不重复取消副作用；旧代次信号不取消新执行；数据库短暂不可用后恢复；原流或中断流断开；
-A 失联不伪造成功；自然完成竞争保留真实原因；单个取消慢操作不堵塞批量检查；
-两个实例输出完全相同的终态 eventId，且无凭据进入数据库、检查队列和响应。
-单消息准入验收：两个实例竞争同一 idle Session 且首条尚未结束时只接受一条消息；
-拒绝方不追加消息或启动模型；接受事务回滚后状态与消息一致；等待确认、停止中或
-响应断开期间仍拒绝 M2；对应终态提交后才开放新消息；中断与工具确认不被消息忙检查拦截。
-M7 专项验收：同实例请求只在提交成功后取消，回滚/提交不确定不走快路径；本地通知
-丢失后轮询仍能发现；终态分别早于、并发于和晚于登记/补读均不漏发；通知和查询并发
-到达时每条响应仍先回执、后一次同 eventId 终态；同目标只查一次但回执和队列互不混用；
-一个慢连接不拖住其他等待者；最后等待者退出与新登记并发不误删，停止记录始终保留；
-100 个业务执行名额满载时仍能检查和中断；按真实等待响应数限容量，连接池不被轮询
-挤满。索引方案需在实际 GaussDB 上报告执行计划、写入成本、查询/连接等待及中断发现
-延迟，覆盖无中断和集中中断负载；未压测前不声称延迟或吞吐已验证。
-这些 Session Events 运行时验收尚未实施；本轮验证的是设计源、生成 HTML、PlantUML 与 SVG。
-
-### 5.1 本次设计交付范围与验证
-
-2026-09-08：用户已批量确认 B01～B15，并要求完成后通知「实现非 Slash Command 后端接口」。
-当前没有额外产品确认门槛；实施范围是清单中的八项非 Slash 操作，两项 Command 由其所属实现任务处理。
-Java 分析基线为 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；pi 语义基线为
-`5cd93f688aaab89dbb6dfa4aca535f21796ae185`。精确源码路径、符号与观察/目标差异见 §4 和历史/Skill 证据表。
-
-本批变更统一接口 JSON/HTML、Events 总体/流/历史设计、HTTP 说明和总览，以及 Slash 通用模块、Skill 设计。
-图源及生成 SVG 位于本专题的「事件接口重设计」「事件历史查询」「会话配置」「Command」目录，
-以及 Slash 通用模块和 Skill 的「设计图」目录；每个文档均链接相应图源和 SVG。Builtin/Help 文档只同步图锚点，Help HTML 从共享 Command 源重新生成。
-
-验证包括统一契约完整门禁、179 项事件负向回归、Builtin 响应与 Help 投影测试、六项全局类图检查、
-十项接口的 Header/响应/语言切换与降级交互。PlantUML 生成、ASCII、SVG XML、链接/锚点、产物同步和
-`git diff --check` 均须通过。页面在 1024/360 宽度检查字段表且无水平溢出；全局图按原尺寸和文档缩放检查，
-与修改前完整主图比较，保留分层、真实 Handler、快照、Runtime 和 Repository 职责链。
-这些检查仅证明设计交付一致性，不证明数据库、容量、运行时并发或旧数据迁移已经完成。
+[统一维护规则](chat-api-index.md) 定义契约、生成页面和图源的一致性检查。以上运行时、数据库、容量和迁移验收属于实施工作；设计检查通过不能表示这些能力已经实现或部署。
 
 ## 6. 契约命名与实施依据
 
@@ -565,6 +306,7 @@ HTTP 路径使用 `/campusclaw-service/v1`。内部开发阶段编号不作为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.10.0 | 2026-09-14 | 按接受、有序追加与跨实例控制收敛主文，分离源码证据并合并重复验收。 |
 | 0.9.2 | 2026-09-14 | 同步 Session 资源更新承载 plan/build 的计划模式边界。 |
 | 0.9.1 | 2026-09-14 | 关联保持元数据稳定的计划模式目标增量与统一架构对比。 |
 | 0.9.0 | 2026-09-09 | 统一 Session Events 命名，明确事件消费与实现边界。 |

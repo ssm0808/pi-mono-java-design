@@ -2,60 +2,47 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.2.0 |
+| 文档版本 | 2.2.1 |
 | 状态 | 日志机制已按 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 落地；CampusMate Provider 改名为 target-only |
 | 设计日期 | 2026-08-26 |
 | 实现仓库 | `superheromeZzh/pi-mono-java` |
 | 关联 PR | [pi-mono-java#174](https://github.com/superheromeZzh/pi-mono-java/pull/174) |
-| 主干基线 | `8f9f3c1b51cca5ffbc3501fc4a1cb9ac253124be` |
-| 评审前 PR 提交 | `80e9f266e82b20aabfb1e7f8aa1aae142a41dec0` |
-| 审查意见前实现 | `3e693810e75a0995e59aeea6bbb980523ae4f472` |
 | 本版实现提交 | `bbc1c94f663b0638f83d417975a0bc06dccf2f62` |
 
 ## 1. 结论
 
 CampusClaw 采用一个简单且可执行的异常边界：
 
-> 发现失败的代码先记录原始异常和安全上下文，再创建只携带稳定错误码的异常或错误结果。
+> 发现失败的代码先记录原始异常和安全上下文，再创建只携带稳定错误码的异常或结果。
 
 原始 `Throwable`、上游错误文案和堆栈只进入服务端日志，不进入跨层异常、
 `AssistantMessage` 或 HTTP/SSE 返回。调用方只依赖错误码；开发和运维人员通过同一个错误码在
 后端日志中查找包含原始堆栈的记录。
 
-本版没有引入独立日志 Maven 模块，也不保留统一失败 Helper。实际捕获或识别失败的类使用自己的
-`Logger` 直接记录；共享部分只剩稳定错误码、code-only 异常类型、公共响应映射和日志字段约定。
+日志使用已有依赖，不设独立 Maven 模块或统一失败 Helper。实际捕获或识别失败的类使用自己的
+`Logger` 直接记录；共享部分只剩稳定错误码、只携带错误码的异常类型、公共响应映射和日志字段约定。
 这样日志来源就是实际代码类，调用关系可见，也不会通过 `Object...` 重新发明一层异常 API。
 
 ## 2. 来源证据
 
 ### 2.1 基线说明
 
-| 类型 | 提交 | 说明 |
-|---|---|---|
-| 主干基线 | `8f9f3c1b51cca5ffbc3501fc4a1cb9ac253124be` | 合并 PR 最新主干时的实现基线 |
-| 评审前 PR | `80e9f266e82b20aabfb1e7f8aa1aae142a41dec0` | 已有 Runtime 调用点日志，但未完整覆盖 Mate、启动和类型化执行失败 |
-| 审查意见前实现 | `3e693810e75a0995e59aeea6bbb980523ae4f472` | 通过 `RuntimeFailures` 和 `MateInvocationFailures` 统一记录并构造异常 |
-| 审查意见后实现 | `bbc1c94f663b0638f83d417975a0bc06dccf2f62` | 删除两个 Helper，改为实际失败源类直接记录，再抛 code-only 错误码异常 |
+日志机制以 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 为实现证据；Provider 改名另按 §6.2 标为 target-only。既有源码核验范围未扩展到最新主线。
 
-最初评审前已观察行为与目标设计必须区分：PR 原实现删除了
-`RuntimeApiException(RuntimeErrorCode, Throwable)`，并在多个 Runtime 调用点记录日志；但
-Mate HTTP/SSE 失败仍可能只转换为 `AssistantMessage(stopReason=ERROR)`，启动入口和无
-`Throwable` 的执行失败也没有统一的稳定事件。提交 `3e693810...` 补齐了这些边界，但其统一
-Helper 又造成来源 Logger 失真、类型不安全参数和重复模块实现。本版接受 PR #174 审查意见，
-保留统一字段协议，删除统一失败行为抽象。
+历史基线仅用于追溯：主干 `8f9f3c1b51cca5ffbc3501fc4a1cb9ac253124be`、PR `80e9f266e82b20aabfb1e7f8aa1aae142a41dec0`、中间实现 `3e693810e75a0995e59aeea6bbb980523ae4f472`。当前有效规则是失败源类直接记录，再构造只携带错误码的结果，设计理由见 §4。
 
 ### 2.2 关键实现路径
 
 | 路径 | 符号或基线行 | 证据 |
 |---|---|---|
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/error/RuntimeApiException.java` | 构造器，L18-L21 | message 只有错误码，无 cause、无可写堆栈 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java` | `resolve()`，L35-L59 | 源类自己的 Logger 记录准备失败原始异常，再抛 code-only 异常 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java` | `resolve()`，L35-L59 | 源类自己的 Logger 记录准备失败原始异常，再抛 只携带错误码的异常 |
 | `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateInvocationErrorCode.java` | enum，L13-L48 | Mate 使用稳定内部错误码，不依赖错误文案分支 |
 | `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateModelInvocationException.java` | 构造器，L16-L19 | 只携带 `MateInvocationErrorCode` |
 | `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java` | `decodeResponse()`、`httpError()`，L154-L188 | Provider 自己记录 HTTP/响应类型失败；丢弃上游 `resMsg` |
 | `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java` | `fail()`、`recordFailure()`，L118-L125、L397-L424 | Parser 用本类 Logger 记录 SSE 协议或传输异常 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java` | `recordFailure()`，L215-L237 | 执行协调器自己记录原始执行异常和无错误码终态 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java` | handlers，L45-L95 | code-only 业务异常不重复记录；框架异常和意外异常在边界记录 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java` | handlers，L45-L95 | 只携带错误码的业务异常不重复记录；框架异常和意外异常在边界记录 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/CampusClawApplication.java` | `launch()`，L42-L58 | 启动失败记录原始异常，再抛 `STARTUP_FAILED` |
 | `modules/agent-core/src/main/java/com/campusclaw/agent/util/LoggingUncaughtExceptionHandler.java` | `uncaughtException()`，L31-L44 | 后台未捕获异常记录 `BACKGROUND_TASK_FAILED` |
 | `modules/coding-agent-cli/src/main/resources/application-k8s.yml` | L9-L14 | Kubernetes 控制台默认 ECS 结构化输出 |
@@ -83,7 +70,7 @@ Helper 又造成来源 Logger 失真、类型不安全参数和重复模块实�
 - 不新增数据库、目录、远端服务等启动健康探针；
 - 不建设日志采集、索引、告警或保留策略；
 - 不记录 Prompt、消息正文、thinking、工具参数/结果、凭据、Header 或原始 SSE；
-- 不改造本次范围外的普通第三方 Provider 和 Mate Tool Client。
+- 不改造本专题范围外的普通第三方 Provider 和 Mate Tool Client。
 
 这些删减是有意的架构简化，不代表上述能力永远不需要；只有实际定位证据表明当前简单方案
 不足时，才按独立需求扩展。
@@ -92,14 +79,14 @@ Helper 又造成来源 Logger 失真、类型不安全参数和重复模块实�
 
 ![CampusClaw 简化失败边界](campusclaw_failure_boundary.svg)
 
-[PlantUML 源码：`campusclaw_failure_boundary`](diagram.puml#L18)
+[原尺寸 SVG](campusclaw_failure_boundary.svg) · [PlantUML 源码：`campusclaw_failure_boundary`](diagram.puml#L18)
 
 规则只有三条：
 
 1. **先记录，后转换**：持有原始 `Throwable` 的边界负责记录，不把记录责任推给更上层；
 2. **错误码跨层**：转换后的异常、Assistant 终态和公共响应只传稳定错误码；
 3. **来源类自己记录**：实际捕获或识别失败的类使用自己的 Logger，`RuntimeExceptionHandler`
-   不重复记录 code-only `RuntimeApiException`；执行层只补无错误码的兜底失败。
+   不重复记录 只携带错误码的 `RuntimeApiException`；执行层只补无错误码的兜底失败。
 
 这里刻意接受少量 fluent logging 语句重复。共享的是 `event/operation/errorCode` 字段约定，
 而不是“记录并抛异常”的公共行为。日志归属、级别、上下文类型和异常转换都留在业务源类中，
@@ -139,7 +126,7 @@ JSON 输出，环境变量
 | Mate 非法请求、模型不存在、限流 | WARN |
 | Mate 不可用、超时、上游/协议/解析错误 | ERROR |
 
-确定性的业务校验或状态拒绝没有原始 `Throwable`，直接抛 code-only 错误码异常，不额外制造堆栈
+确定性的业务校验或状态拒绝没有原始 `Throwable`，直接抛 只携带错误码的异常，不额外制造堆栈
 日志。级别由实际记录位置显式选择，或由 Mate 内部错误码的 `warning` 属性选择；不从公开 HTTP
 状态反推。级别只影响检索和告警，不影响公开 HTTP 状态或错误码。
 
@@ -155,7 +142,7 @@ JSON 输出，环境变量
 
 ### 6.1 Runtime HTTP
 
-业务代码分为两个直接分支：
+处理顺序如下：
 
 1. 捕获到真实异常时，当前源类用自己的 Logger 写入错误码、安全上下文和原始 cause；
 2. 随后 `throw new RuntimeApiException(code)`，不把原始异常传入构造器；
@@ -205,7 +192,7 @@ Mate 失败按发生位置分类：
 ### 6.4 启动与后台线程
 
 `CampusClawApplication.launch()` 捕获 Spring 启动的 `RuntimeException`，记录原始异常和
-`STARTUP_FAILED`，随后抛出无 cause、无堆栈的 code-only `StartupException`。Spring Boot 在
+`STARTUP_FAILED`，随后抛出无 cause、无堆栈的 只携带错误码的 `StartupException`。Spring Boot 在
 失败过程中可能先输出自身框架日志，但稳定的 `event/operation/errorCode` 由 CampusClaw 保证。
 
 后台线程未捕获异常记录 `BACKGROUND_TASK_FAILED`，包括线程名和原始 cause。该处理器是进程
@@ -248,8 +235,9 @@ event == "campusclaw.failure" AND sessionId == "<session-id>"
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.0.0 | 2026-08-25 | 初版调用日志设计 |
-| 1.1.0 | 2026-08-25 | 扩展为启动、请求、执行、模型、工具完整生命周期设计 |
-| 2.0.0 | 2026-08-26 | 按 PR #174 实现收敛为异常源头记录、错误码跨层传播的简单架构 |
-| 2.1.0 | 2026-08-26 | 接受 PR 审查意见，删除统一失败 Helper，改为实际失败源类直接记录并抛 code-only 错误码异常 |
+| 1.0.0 | 2026-08-25 | 初版调用日志设计。 |
+| 1.1.0 | 2026-08-25 | 扩展为启动、请求、执行、模型、工具完整生命周期设计。 |
+| 2.0.0 | 2026-08-26 | 失败源头记录异常，跨层只传播错误码。 |
+| 2.1.0 | 2026-08-26 | 实际失败源类直接记录，异常只携带稳定错误码。 |
+| 2.2.1 | 2026-09-14 | 聚焦失败边界与定位规则，压缩变更经过并重排调用顺序图。 |
 | 2.2.0 | 2026-09-14 | 目标 Provider Logger 随 CampusMateProvider 改名，稳定日志字段与错误码保持不变。 |

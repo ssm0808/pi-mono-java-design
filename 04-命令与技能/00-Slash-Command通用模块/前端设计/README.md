@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.0 |
-| 更新日期 | 2026-09-09 |
+| 文档版本 | 1.5.1 |
+| 更新日期 | 2026-09-14 |
 | 本次前端修订基线 | 设计仓 `599edb072cf75e3d8f85c775c53c0e83befd285d` |
 | Runtime 命令契约基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；B13 已确认 Skill SSE，Builtin JSON 不变 |
 | pi-mono-java 本次交互源码基线 | `7f1126262b16458e430c1a70aba9936e26391385`；早期结构证据保留在 §2.1 |
@@ -123,7 +123,7 @@ Chat Workspace
 
 ![Slash Composer 状态图](./slash_composer_state.svg)
 
-[PlantUML 源码](./diagram.puml#L124) · [展开原尺寸 SVG](./slash_composer_state.svg)
+[PlantUML 源码](./diagram.puml#L131) · [展开原尺寸 SVG](./slash_composer_state.svg)
 
 ### 4.1 进入与退出
 
@@ -188,7 +188,7 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 
 ![Slash Command 执行时序](./slash_command_execution_flow.svg)
 
-[PlantUML 源码](./diagram.puml#L209) · [展开原尺寸 SVG](./slash_command_execution_flow.svg)
+[PlantUML 源码](./diagram.puml#L216) · [展开原尺寸 SVG](./slash_command_execution_flow.svg)
 
 执行请求由已选择 Descriptor 与当前编辑值组装，不重新解析成另一命令。提交期间只锁定命令编辑和“运行”动作，
 保留取消页面读取和浏览历史的能力。当前协议没有 cancel command，离开页面不应声称后端命令已取消。
@@ -224,7 +224,7 @@ expectedResultKind。必须校验所选协议的 Content-Type 与完整 Schema�
 公共接口当前仍关闭，不能把内部 Skill 请求直接发给 Mate 或偷偷转换为普通消息。
 
 1.3.0 的历史源码补充核对为 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，
-当时 App.submit、ComposerBox 与 useRuntimeApi 尚无命令适配；当前交互实现以 §2.1 的 4cc8dd8 证据为准。
+当时 App.submit、ComposerBox 与 useRuntimeApi 尚无命令适配；交互实现以 §2.1 中各次明确记录的源码范围为准。
 共享组件与生命周期以[公共对话对齐](../../../01-总体架构/04-CampusClaw前端体验/public-chat-alignment.md)维护。
 此差异是已确认内部契约驱动的 target-only 前端架构调整，不表示公共 Skill 已发布。
 
@@ -332,12 +332,7 @@ interface CommandGateway {
 
 ## 10. 可访问性、视觉与响应式
 
-2026-09-07 用户确认本专项恢复浅暖灰评审导航，并移除每条命令左侧的装饰图案。
-设计仓 `e9db479` 的 `04-命令与技能/00-Slash-Command通用模块/前端设计/slash-command-review.html`
-中，`.review-sidebar` 使用深色背景并在 920px 以下移到顶部，`.command-glyph` 为硬编码字符列；
-两者都是评审原型的视觉选择，并非接口字段或产品前端已实现能力。
-本次按[原前端视觉基线](../../../01-总体架构/04-CampusClaw前端体验/README.md#10-视觉与组件基线)
-落实以下产品约束，以保持新增命令功能与原界面的视觉一致性：
+本专项沿用[前端视觉基线](../../../01-总体架构/04-CampusClaw前端体验/README.md#10-视觉与组件基线)，命令交互保持同一编辑器和浅暖灰视觉。具体规则如下：
 
 - 桌面侧栏和窄屏顶部导航统一使用 `--surface-secondary`（`#F8F3F0`）、深色正文与细边框；
   选中项沿用 `--surface-selected`，说明与提示使用次要文本色。
@@ -424,9 +419,10 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.1 | 2026-09-14 | 精简视觉决策叙述并重排命令组件与提交结果流程。 |
 | 1.5.0 | 2026-09-09 | 将 + 归为添加入口，命令由 / 触发，运行中独立执行并保留停止按钮。 |
 | 1.4.0 | 2026-09-09 | 定义精简命令清单、可删除标签、独立参数编辑、统一执行按钮及 Escape、草稿恢复与重复 Enter 保护。 |
-| 1.3.0 | 2026-09-08 | 区分 Builtin 临时 JSON 与内部已确认 Skill SSE；Skill 复用主对话、确认及恢复，公共执行保持门禁；视觉不变。 |
-| 1.2.0 | 2026-09-07 | 按用户反馈恢复浅暖灰评审导航，删除命令装饰图案及占位列；窄屏保留参数提示并支持文字换行，继承原前端视觉基线。 |
-| 1.1.0 | 2026-09-07 | 补充后端精简响应的前端判别规则：提交前冻结调用快照，按命令名与参数形态确定结果类型，区分 model 查询 Models 与修改 Session，未匹配 Schema/ETag 时 fail closed。 |
-| 1.0.0 | 2026-09-07 | 新增 Slash Composer 模式、清单、独立草稿、结果投影、错误恢复、无障碍、组件边界和实施门禁；全部前端能力明确为 target-only。 |
+| 1.3.0 | 2026-09-08 | Builtin 显示临时 JSON，Skill 复用对话、确认与恢复流程。 |
+| 1.2.0 | 2026-09-07 | 采用浅暖灰导航、精简清单与支持换行的参数提示。 |
+| 1.1.0 | 2026-09-07 | 提交前冻结调用快照，以命令与参数形态判别响应类型。 |
+| 1.0.0 | 2026-09-07 | 定义 Slash Composer、独立草稿、结果投影及错误恢复。 |

@@ -2,19 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.3 |
+| 文档版本 | 1.6.0 |
 | 更新日期 | 2026-09-14 |
-| 设计仓变更前基线 | `2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9`（1.2.0 清理起点） |
 | 变更性质 | Session POST 按可选字段部分更新；前端单项调用，接口允许组合提交；组合写入及 mode 为 target-only |
 | 唯一当前入口 | [当前九项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
 
-## 1. 为什么统一
+## 1. 维护目标
 
-原入口把 v1 的旧 Events 报文与 Session Events 新方案分别完整展示，根导航仍指向 v1。
-仅加“迁移基线”提示，仍容易把旧字段当作当前契约；聊天中的总览又没有纳入设计仓。
-清单和总览已纳入同一生成、校验和版本控制流程。用户进一步明确：废弃文档直接删除，
-不保留迁移说明页、跳转页或占位文件；历史版本只从 Git 追溯。
+一份清单决定当前接口，一套模型维护精确契约，HTML 由模型生成。Markdown 解释设计理由和实现差距；废止报文及整合过程通过 Git 历史追溯。
 
 ## 2. 权威与状态
 
@@ -22,15 +18,14 @@
 - [chat-api-review.html](chat-api-review.html) 是唯一当前人类接口页，从清单及精确模型生成，不手工编辑 HTML。
 - 七项普通契约复用 `接口契约/common.json`；两个 Events 使用 `事件契约/common.json`。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
 - `review` 与 `reviewState` 继续记录原有确认决定；清单中的说明只解释其适用边界，不替代或自动提升确认状态。B01～B15 已实际提交确认；两个 Events 目标契约已定稿，question 列表清空，数值校准另列。
-- Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；本轮仅清除其已废止 Command POST 内容，保留 GET 投影及待评审公共边界。
+- Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；公共命令与普通对话各自维护状态。
 
 已确认的 eventId、无公共 entrySeq、data-only SSE、三输入、普通分页等不回退。
 thinking、配置与 Skill 映射已联动更新，Builtin JSON 保持；公共 Mate 边界独立管理。
 GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和配置事件由当前精确源维护。
 普通整数分页不继承旧不透明 page 的失效规则；不能用旧配置说明覆盖新历史接口。
 
-共享 GET 已恢复精简后的字段、排序和状态过滤；证据与其他分支处理状态见[整合核查](design-integration-audit.md)。
-对应门禁增加两跳 GET 等值与负向测试；后续 Help/POST 修改不得恢复旧 GET 字段。
+共享命令清单的字段、排序和状态过滤由 Slash 模块维护，两跳等值与负向门禁防止派生契约漂移。
 
 三个属性专用 PUT 和 mode-only PATCH 不再作为目标入口或兼容别名。当前只保留一个 updateSession；名称/模型/思考的 Slash Command 仍是命令入口。
 
@@ -49,25 +44,10 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 必要的安全边界摘要可以保留，但不能在摘要中新增字段、规则或未决项的确认。
 废止内容从 Git 追溯；不能继续生成旧报文，也不以“历史”标签保留第二套可调用说明。
 Mate 公共 Events 和 FollowUp 未来专题各有独立职责，本次不退役。
-本节为用户于 2026-09-07 授权的文档维护收敛，不改变已确认业务行为。
 
-## 3. 旧入口与维护流程
+## 3. 生成与校验
 
-以下旧页面已从工作树删除，不保留兼容入口；已有链接统一指向当前页：
-
-| 旧入口 | 当前目标 |
-|---|---|
-| `chat-http-v1-review.html` | [全部九项](chat-api-review.html) |
-| `chat-events-v2-submit-review.html` | [提交事件与推送](chat-api-review.html#submitSessionEvent) |
-| `chat-events-v2-review.html` | [历史查询](chat-api-review.html#listSessionEvents) |
-| `chat-events-v2-confirmed.html` | [当前评审与确认边界](chat-api-review.html#listSessionEvents)，不保留已失效整体确认 |
-
-旧 `04-submit-user-message.json`、`05-list-session-events.json` 已删除；三个独立控制接口此前已删除。
-旧报文和对应事件图从 Git 历史追溯，不恢复为兼容契约。`render_chat_events_v2.py`
-已删除；`render_chat_http_v1.py` 仅保留当前 Runtime 与 Mate 页面仍复用的渲染函数，
-删除旧页输出入口。只有 `render_chat_api.py` 生成当前 Runtime 接口页。
-HTTP 测试 Agent 的历史回归通过 `git show` 读取固定提交和当时路径，不恢复工作树副本，
-其历史实现清单不等于当前目标清单。
+当前 Runtime 页面仅由 render_chat_api.py 生成，共享渲染函数仍供 Mate 使用。历史回归用 git show 读取固定提交，不恢复旧页面、模型或跳转占位文件。
 
 修改精确模型或增删已获批准的接口后，统一执行：
 
@@ -107,6 +87,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-09-14 | 按单一来源和当前生成流程整理维护说明，历史整合记录归 Git 追溯。 |
 | 1.5.3 | 2026-09-14 | 接口展开后直接显示内部栏目和请求示例，静态回退内容同步默认展开。 |
 | 1.5.2 | 2026-09-14 | 计划审核目标保留在执行内部，接口清单不增加 Session 待审字段。 |
 | 1.5.1 | 2026-09-14 | 同步前端单项调用、接口允许组合提交的 Session 更新说明。 |

@@ -1,9 +1,4 @@
 @startuml tool_system_architecture
-title CampusClaw Tool System Target Architecture
-skinparam componentStyle rectangle
-skinparam shadowing false
-skinparam defaultTextAlignment center
-
 ' Source evidence (CampusClaw d649866):
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: AgentTool
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: execute, executeAll
@@ -13,101 +8,129 @@ skinparam defaultTextAlignment center
 ' delegation, and tool assembly; the Runtime path has separate assembly logic.
 ' Design reason: one closed factory and one light session factory keep all managed
 ' entry points aligned while Hosts retain their own persistence and lifecycle.
+title Tool System - Complete Target Structure
+top to bottom direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 35
+skinparam linetype ortho
+hide empty members
 
-package "Managed Hosts" {
-  [Runtime Host] as RuntimeHost
-  [Cron Host] as CronHost
-  [Child Execution Host] as ChildHost
+package "Host boundaries" {
+  class "Runtime / Cron / \nChild Hosts" as Hosts <<separate lifecycles>>
 }
-
-package "Common Session Layer" {
-  [AgentSessionFactory] as SessionFactory
-  [ManagedAgentSession] as Session
-  [SessionCompactor] as Compactor
-  [ConfiguredToolAssembler] as Assembler
-  [BuiltInToolFactory] as ToolFactory
-  [ToolExecutionPipeline] as Pipeline
-  [Immutable hook chain] as Hooks
+package "Assembly - singleton services" {
+  class "AgentSessionFactory" as Factory
+  interface "ConfiguredToolAssembler" as Assembler
+  class "DefaultConfiguredTool\nAssembler" as Configured
+  interface "BuiltInToolFactory" as ToolFactory
+  class "AgentRuntimeManager" as Manager
 }
-
-package "Separate HTTP Command Module" {
-  [CompositeCommandRegistry] as Slash
-  [Builtin and Skill handlers] as SlashHandlers
+package "Execution - new objects per Session" {
+  class "ManagedAgentSession" as Session
+  class "ToolAssemblyContext" as Context <<immutable>>
+  class "AgentWorkspaceBoundary" as Workspace <<immutable>>
+  class "MateToolResolutionCache" as Cache
+  class "Ordered hook chain" as Hooks <<immutable>>
+  class "ToolExecutionPipeline" as Pipeline
+  class "SessionCompactor" as Compactor
 }
-
-package "Active Built-in Tools" {
-  [Read]
-  [Find]
-  [Grep]
-  [Ls]
-  [Cron]
-  [ListMateTools]
-  [CallMateTool]
-  [Agent]
+package "Model tools - per Session" {
+  interface "AgentTool" as Tool
+  class "Read / Find / Grep / Ls" as Local <<4 implementations>>
+  class "ListMateTools" as List
+  class "CallMateTool" as Call
+  class Cron
+  class "Agent" as ChildTool
 }
-
-package "Shared Application Services" {
-  [AgentRuntimeManager] as RuntimeManager
-  [AgentWorkspaceBoundary] as Workspace
-  [MateToolClient] as MateClient
-  [MateToolResolutionCache] as MateCache
-  [Cron Service] as CronService
-  [SubagentExecutionService] as ChildService
+package "Application and external boundaries" {
+  interface "MateToolClient" as Mate
+  class "Cron Service" as CronService
+  class "SubagentExecutionService" as ChildService
+  class "WorkspacePathResolver" as Resolver
 }
-
-RuntimeHost --> SessionFactory : RUNTIME
-CronHost --> SessionFactory : CRON
-ChildHost --> SessionFactory : CHILD_AGENT
-SessionFactory --> RuntimeManager : prepare(agentId)
-SessionFactory --> Workspace : create per session
-SessionFactory --> Assembler : immutable context
-Assembler --> ToolFactory
-ToolFactory --> Read
-ToolFactory --> Find
-ToolFactory --> Grep
-ToolFactory --> Ls
-ToolFactory --> Cron
-ToolFactory --> ListMateTools
-ToolFactory --> CallMateTool
-ToolFactory --> Agent
-SessionFactory --> Session : new instance
-Session --> Pipeline
-Session --> Compactor : threshold and overflow
+package "Independent HTTP command module" {
+  class "CompositeCommandRegistry" as Slash
+  class "Builtin / Skill handlers" as SlashHandlers
+}
+Hosts --> Factory
+Factory --> Manager
+Factory --> Assembler
+Configured ..|> Assembler
+Configured --> ToolFactory
+Factory ..> Context
+Context *-- "1" Workspace
+Factory ..> Session
+Session *-- "1" Pipeline
+Session --> Compactor
+Session *-- "1" Cache
+Session *-- "1" Hooks
+Session *-- "0..*" Tool
 Pipeline --> Hooks
-Slash --> SlashHandlers
-ListMateTools --> MateClient
-ListMateTools --> MateCache : update one source
-CallMateTool --> MateCache : resolve by name
-CallMateTool --> MateClient : discover or execute
+Pipeline --> Tool
+ToolFactory ..> Tool
+Local ..|> Tool
+List ..|> Tool
+Call ..|> Tool
+Cron ..|> Tool
+ChildTool ..|> Tool
+Local --> Resolver
+Resolver --> Workspace
+List --> Mate
+List --> Cache
+Call --> Cache
+Call --> Mate
 Cron --> CronService
-Agent --> ChildService
-Read --> Workspace
-Find --> Workspace
-Grep --> Workspace
-Ls --> Workspace
+ChildTool --> ChildService
+ChildService -[norank]-> Factory
+Slash --> SlashHandlers
+Hosts -[hidden]down-> Factory
+Factory -[hidden]down-> Session
+Session -[hidden]down-> Local
+legend bottom left
+All nodes and relations describe target assembly.
+Hosts own persistence, output and close policy.
+Only the fixed profile creates model tools; no dynamic registry.
+Commands use their own HTTP boundary and never enter the model list.
+List refreshes one source; Call discovers on miss and executes once.
+Plan additions are defined in the Plan Mode topic.
+endlegend
+Factory -[hidden]down-> Assembler
+Assembler -[hidden]down-> Context
+Context -[hidden]down-> Session
+Session -[hidden]down-> Pipeline
+Pipeline -[hidden]down-> Tool
+Tool -[hidden]down-> Local
+Local -[hidden]down-> Resolver
+List -[hidden]down-> Mate
+Cron -[hidden]down-> CronService
+ChildTool -[hidden]down-> ChildService
+Slash -[hidden]down-> SlashHandlers
 
-note bottom of ToolFactory
-Only Read, Find, Grep, Ls, Cron,
-ListMateTools, CallMateTool, Agent.
-No dynamic catalog or extension tools.
-end note
-
-note bottom of Workspace
-Root is agent/{agentId}.
-Reject symlink and realpath escape.
-end note
-
-note bottom of Slash
-Structured HTTP only in version 1.
-Separate from the model tool list.
-POST events does not parse slash text.
-end note
 @enduml
 
 @startuml agent_session_assembly
-title Three Entry Points Use One Session Assembly Contract
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam shadowing false
-
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 ' Source evidence (CampusClaw d649866):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java: prepare
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java
@@ -115,54 +138,60 @@ skinparam shadowing false
 ' Observed behavior: current entry paths do not share one small session factory.
 ' Design reason: parent and child use the same AgentSession type and factory but
 ' receive different instances, state, workspaces, tools, and cancellation scopes.
+title Session Assembly - Three Host Entrypoints
 
-actor "Runtime request" as Runtime
-actor "Cron trigger" as Cron
-actor "Agent tool" as AgentTool
-participant "Runtime Host" as RH
-participant "Cron Host" as CH
-participant "Child Execution Host" as EH
-participant "AgentSessionFactory" as Factory
-participant "AgentRuntimeManager" as Manager
-participant "ConfiguredToolAssembler" as Tools
-participant "ManagedAgentSession" as Session
-
-alt Runtime execution
-  Runtime -> RH : begin(agentId, sessionId)
-  RH -> Factory : create(RUNTIME, agentId, context)
-else Cron execution
-  Cron -> CH : trigger(job.agentId)
-  CH -> Factory : create(CRON, agentId, context)
-else Child execution
-  AgentTool -> EH : begin(boundChild, task)
-  EH -> Factory : create(CHILD_AGENT, childAgentId, context)
+actor "Runtime / Cron / Agent tool" as Caller
+participant "Selected Host" as Host
+participant "Agent Session\nFactory" as Factory
+participant "Agent Runtime\nManager" as Manager
+participant "Tool assembler" as Tools
+participant "New ManagedAgentSession" as Session
+== Select the Host ==
+alt Runtime
+  Caller -> Host : begin(agentId, sessionId)
+else Cron
+  Caller -> Host : trigger(job.agentId)
+else Child
+  Caller -> Host : begin(boundChild, task)
 end
-
+Host -> Factory : create(entryPoint, agentId, context)
+== Prepare one immutable assembly snapshot ==
 Factory -> Manager : prepare(agentId)
 Manager --> Factory : PreparedAgentRuntime
-Factory -> Factory : resolve SYSTEM, models,\nworkspace, skill and child indexes
-Factory -> Tools : assemble(entryPoint, immutableContext)
-Tools --> Factory : new tool instances in profile order
-Factory -> Session ++ : new ManagedAgentSession(state, tools, hooks, cancelScope)
+Factory -> Factory : resolve SYSTEM, model and indexes
+Factory -> Factory : create workspace and context
+Factory -> Tools : assemble(entryPoint, context)
+Tools --> Factory : new tools in profile order
+== Transfer the new Session to its Host ==
+Factory -> Session : create(state, tools, hooks, cancelScope)
 Session --> Factory : ready
-Factory --> RH : Runtime session instance
-Factory --> CH : Cron session instance
-Factory --> EH : Child session instance
-
-note over RH,EH
-Each Host restores or owns its own state,
-events, progress, and close policy.
-end note
-
+Factory --> Host : independent Session
+Host -> Host : restore state; subscribe; own close
 note over Factory,Session
-Same type, compaction, and assembly semantics.
-Never the same Session instance.
+  Same factory and Session type.
+  Independent messages, tools, workspace and
+  cancellation.
 end note
 @enduml
 
 @startuml managed_runtime_refresh
-title Managed Runtime Prepare and Explicit Refresh
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+title Managed Runtime Prepare and Explicit Refresh
 
 ' Source evidence (CampusClaw d649866):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java:
@@ -174,7 +203,7 @@ skinparam shadowing false
 
 actor "Session Host" as Host
 actor "Management workflow" as Admin
-participant "AgentRuntimeManager" as Manager
+participant "Agent Runtime\nManager" as Manager
 participant "Per-agent lock" as Lock
 participant "Mate directory client" as Mate
 participant "Sibling candidate tree" as Candidate
@@ -201,7 +230,7 @@ group prepare(agentId)
       else build or validation failed
         Manager -> Candidate : discard candidate
         note right
-        Keep the old published tree.
+  Keep the old published tree.
         end note
       end
     end
@@ -227,16 +256,29 @@ group refresh(agentId)
 end
 
 note over Published
-No references/tools.json.
-Existing sessions retain their snapshots.
-New sessions use the published tree.
+  No references/tools.json.
+  Existing sessions retain their snapshots.
+  New sessions use the published tree.
 end note
 @enduml
 
 @startuml list_mate_tools_sequence
-title ListMateTools Live Discovery
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam shadowing false
-
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 ' Source evidence (pi-mono-java 320d790726a70aada6100052952d5494d2a378ac):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateTool.java: execute.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java: refresh.
@@ -246,6 +288,7 @@ skinparam shadowing false
 ' Java divergence: current List writes one flat name-to-ID map and Call depends on a prior List.
 ' Security hardening: Agent, Skill, and metadata discovery never receive execution credentials.
 ' Design reason: List stays live and updates only its source cache without exposing credentials.
+title ListMateTools - Live Discovery and Source Cache
 
 actor Model
 participant "ListMateTools" as List
@@ -254,43 +297,55 @@ participant "MateToolClient" as Client
 participant "Mate binding API" as Binding
 participant "Mate metadata API" as Meta
 participant "Session source cache" as Cache
-
-Model -> List : {skillName?}
-alt no skillName
-  List -> Client : listAgentTools(currentAgentId)
-  Client -> Binding : list ordered Agent tool IDs\nno execution credential headers
-  Binding --> Client : [toolId...]
-  Client -> Meta : batch get metadata(toolIds)\nno execution credential headers
-  Meta --> Client : metadata by toolId
-  Client -> Client : join by ID and restore binding order
-  Client --> List : internal tool records
-  List -> Cache : replace Agent source map
-  List -> List : project scope={type:agent}
-else exact direct Skill name
+Model -> List : list(skillName?)
+== Resolve the requested scope ==
+alt Agent scope
+  List -> List : use current Agent ID
+else Direct Skill scope
   List -> Index : resolve(skillName)
-  Index --> List : skillId or error
-  List -> Client : listSkillTools(skillId)
-  Client -> Binding : list ordered Skill tool IDs\nno execution credential headers
-  Binding --> Client : [toolId...]
-  Client -> Meta : batch get metadata(toolIds)\nno execution credential headers
-  Meta --> Client : metadata by toolId
-  Client -> Client : join by ID and restore binding order
-  Client --> List : internal tool records
-  List -> Cache : replace this Skill source map
-  List -> List : project scope={type:skill,name}
+  Index --> List : Skill ID or error
 end
-List --> Model : stable JSON: scope +\nname, description, inputSchema
-
-note over List
-Do not expose agentId, skillId, toolId,
-permission, outputSchema, or execution mode.
-Every List queries Mate.
+== Discover live metadata ==
+List -> Client : listAgentTools or listSkillTools
+Client -> Binding : query ordered tool IDs
+Binding --> Client : tool IDs
+Client -> Meta : query metadata(toolIds)
+Meta --> Client : metadata by ID
+Client -> Client : restore binding order
+Client --> List : ordered internal records
+== Commit cache and project the model result ==
+List -> Cache : atomically replace this source
+List --> Model : scope + name / description / inputSchema
+note over Client,Meta
+  Discovery carries no execution credentials.
+  Every List queries Mate; an empty list is
+  success.
+end note
+note over List,Cache
+  Other source maps remain intact.
+  Model output omits IDs, permission and internal
+  metadata.
 end note
 @enduml
 
 @startuml call_mate_tool_sequence
-title CallMateTool Name Resolution and Single-flight Refresh
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+title CallMateTool Name Resolution and Single-flight Refresh
 
 ' Source evidence (pi-mono-java 320d790726a70aada6100052952d5494d2a378ac):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute.
@@ -311,6 +366,7 @@ participant "Session single-flight" as Flight
 participant "MateToolClient" as Client
 participant "Mate APIs" as Mate
 
+== Resolve a tool name ==
 Model -> Call : {tool, args?}
 Call -> Cache : resolve(toolName)
 alt cache hit
@@ -350,24 +406,40 @@ else cache miss
   deactivate Flight
 end
 
-opt one toolId and an execution snapshot were resolved
-  Call -> Client : callTool(toolId, args or {}, credentials, context)
-  Client -> Mate : execute exactly once\nforward received X-HW-ID, Authorization,\nX-HW-APPKEY, and access-token values only
+== Execute at most once ==
+opt toolId and execution credentials are available
+  Call -> Client : callTool(resolved ID, args, execution snapshot)
+  Client -> Mate : execute once; received credential headers only
   Mate --> Client : result or error
   Client --> Call : result or error
   Call --> Model : ToolResultMessage
 end
 
 note over Mate
-Never replay execute after timeout,
-disconnect, or Mate error.
-Never send execution credentials to discovery.
+  Never replay execute after timeout,
+  disconnect, or Mate error.
+  Never send execution credentials to discovery.
 end note
 @enduml
 
 @startuml subagent_execution_sequence
-title Direct Child Agent Execution Through Common SessionFactory
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+title Direct Child Agent Execution Through Common SessionFactory
 
 ' Source evidence (CampusClaw d649866):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/subagent/tool/SpawnAgentTool.java
@@ -383,23 +455,26 @@ skinparam shadowing false
 actor "Parent model" as Model
 participant "Agent tool" as Agent
 participant "BoundAgentResolver" as Resolver
-participant "SubagentExecutionService" as Service
-participant "AgentRuntimeManager" as Manager
-participant "AgentSessionFactory" as Factory
+participant "Subagent Execution\nService" as Service
+participant "Agent Runtime\nManager" as Manager
+participant "Agent Session\nFactory" as Factory
 participant "Child AgentSession" as Child
 participant "Progress sink" as Progress
 
+== Validate direct binding ==
 Model -> Agent : {agentName, task}
 Agent -> Resolver : resolve direct binding
 Resolver -> Resolver : validate exact name, self, enabled,\nversion, depth=1, and ancestry
 Resolver --> Agent : BoundAgent or error
+== Create an independent Child ==
 Agent -> Service : execute(boundAgent, task, parentContext)
 Service -> Manager : prepare(childAgentId)
 Manager --> Service : PreparedAgentRuntime
 Service -> Service : validate fixed version and child model
 Service -> Factory : create(CHILD_AGENT, childAgentId, context)
 Factory --> Service : independent AgentSession instance
-Service -> Child ++ : run task with empty child messages
+== Run and project progress ==
+Service -> Child ++ : run(task), empty messages
 loop high-level progress only
   Child -> Service : target, tool start/end, completion
   Service -> Progress : project progress
@@ -417,15 +492,31 @@ end
 Agent --> Model : ToolResultMessage
 
 note over Factory,Child
-Same AgentSession type and pipeline as the parent.
-Separate messages, workspace, SYSTEM, tools,
-cache, hooks, state, and cancellation scope.
+  Same AgentSession type and pipeline as the
+  parent.
+  Separate messages, workspace, SYSTEM, tools,
+  cache, hooks, state, and cancellation scope.
 end note
 @enduml
 
 @startuml tool_batch_scheduling
-title Tool Batch Scheduling with Sequential Barriers
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+title Tool Batch Scheduling with Sequential Barriers
 
 ' Source evidence (CampusClaw d649866):
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: AgentTool
@@ -468,15 +559,31 @@ end
 Planner -> Results : store #1, #2, #3, #4, #5
 
 note over Planner
-PARALLEL: Read, Find, Grep, Ls, ListMateTools.
-SEQUENTIAL: Cron, CallMateTool, Agent.
-Results follow model call order, not completion order.
+  PARALLEL: Read, Find, Grep, Ls, ListMateTools.
+  SEQUENTIAL: Cron, CallMateTool, Agent.
+  Results follow model call order, not completion
+  order.
 end note
 @enduml
 
 @startuml read_agent_workspace_isolation
-title Agent Workspace Boundary for Local Read-only Tools
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+title Agent Workspace Boundary for Local Read-only Tools
 
 ' Source evidence (CampusClaw d649866):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java
@@ -490,12 +597,10 @@ skinparam shadowing false
 
 actor Model
 participant "Read / Find / Grep / Ls" as Tool
-participant "WorkspacePathResolver" as Resolver
-participant "AgentWorkspaceBoundary" as Boundary
+participant "Workspace Path\nResolver" as Resolver
+participant "Agent Workspace\nBoundary" as Boundary
 participant "Read-only operations" as Operations
 database "agent/{agentId}" as Root
-database "agent/{otherAgentId}" as Other
-database "External path" as External
 
 Model -> Tool : path or search path
 Tool -> Resolver : resolve and validate(requestPath)
@@ -529,19 +634,18 @@ else lexical path is inside root
   end
 end
 
-Root -[hidden]-> Other
-Other -[hidden]-> External
-note over Other
-Never read sibling Agent data.
-Do not expose its ID or path in errors.
-end note
-note over External
-Absolute paths do not widen the boundary.
+note over Resolver,Root
+  Reject sibling Agent and external paths.
+  Errors never reveal their IDs or physical
+  locations.
 end note
 @enduml
 
 @startuml tui_capability_migration
 title TUI and CLI Capability Migration Boundary
+left to right direction
+skinparam nodesep 20
+skinparam ranksep 30
 skinparam componentStyle rectangle
 skinparam shadowing false
 
@@ -594,8 +698,23 @@ end note
 @enduml
 
 @startuml managed_session_compaction
-title Common Session Compaction and Overflow Recovery
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+title Common Session Compaction and Overflow Recovery
 
 ' Source evidence (pi 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
 ' packages/coding-agent/src/core/agent-session.ts: _checkCompaction, _runAutoCompaction
@@ -620,6 +739,7 @@ participant "FileOperationTracker" as Tracker
 participant "Model Manager" as Model
 database "Append-only history" as History
 
+== Recover persisted overflow before accepting input ==
 Host -> Session : prompt(message)
 Session -> Compactor : decide restored context before prompt
 opt stale ERROR or LENGTH overflow is recoverable
@@ -631,6 +751,7 @@ opt stale ERROR or LENGTH overflow is recoverable
     Session -> Session : publish compacted context
   end
 end
+== Execute and choose compaction policy ==
 Session -> Agent : execute with model max output\nwhen no caller override exists
 Agent --> Session : Assistant with stop reason and Usage
 Session -> Compactor : decide by same model, boundary,\noverflow, Usage, and fallback estimate
@@ -688,25 +809,38 @@ end
 Session --> Host : execution result
 
 note over Session,Compactor
-Defaults: enabled=true, reserveTokens=16384,
-keepRecentTokens=20000. Disabled means no auto compaction.
-Safe cut points are User or Assistant; retain an oversized last Assistant.
-Update previous summaries and inherit sorted Read paths.
-Recoverable LENGTH uses the same max output sent to the model.
+  Use safe User / Assistant boundaries.
+  Retain the last Assistant and sorted Read paths.
+  Use the actual model output limit for LENGTH
+  recovery.
 end note
 
 note over Compactor,Model
-Summary calls use no tools, no cache, and a fresh routing ID.
-History and split-turn max outputs are 80% and 50% of reserve.
-Blank summaries, tool calls, failures, and aborts never replace context.
-History entries are never deleted.
-The internal discarded Entry ID is never exposed in public events.
+  No tools or cache in summary requests.
+  Invalid summaries never replace the old context.
+  History remains append-only; discard IDs stay
+  internal.
 end note
 @enduml
 
 @startuml refresh_next_execution
-title Refresh Affects the Next Idle Session Execution
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+title Refresh Affects the Next Idle Session Execution
 
 ' Source evidence (CampusClaw PR 167 f60cc3e): AgentRuntimeManager refresh and Runtime Session store.
 ' Target-only Java design: RuntimeSessionModelReconciler runs before accepting user.message.
@@ -715,21 +849,24 @@ skinparam shadowing false
 
 actor Admin
 actor Caller
-participant "AgentRuntimeManager" as Runtime
+participant "Runtime Session\nModel Reconciler" as Reconciler
+participant "Agent Runtime\nManager" as Runtime
 database "Published Agent directory" as Directory
-participant "RuntimeSessionModelReconciler" as Reconciler
 participant "Model Manager" as Models
 database "Session and Entry store" as Store
 participant "Execution Host" as Host
 
+== Publish directory ==
 Admin -> Runtime : refresh(agentId)
 Runtime -> Directory : atomically publish validated tree
 Runtime --> Admin : success
 note over Host
-Any active execution keeps its existing snapshot.
+  Any active execution keeps its existing
+  snapshot.
 end note
 
-Caller -> Reconciler : POST next user event for idle Session
+== Resolve the next idle execution ==
+Caller -> Reconciler : POST next user event
 Reconciler -> Directory : load latest bindingModels and default
 Reconciler -> Models : resolve current model with credentials
 alt current model remains callable
@@ -746,6 +883,7 @@ else current model is invalid
     Reconciler --> Caller : reject before user.message
   end
 end
-Reconciler -> Store : accept user.message and mark running
+== Accept only with a callable model ==
+Reconciler -> Store : accept user.message; mark running
 Reconciler -> Host : start with reconciled immutable snapshot
 @enduml

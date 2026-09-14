@@ -1,4 +1,20 @@
 @startuml command_http_flow
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 190
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 title Target-only Shared GET and Typed Command POST
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java getSession.
 ' Architecture change: Builtin routes return JSON; B13/B14 Skill reuses the message SSE boundary.
@@ -6,15 +22,16 @@ title Target-only Shared GET and Typed Command POST
 ' Product decision: GET uses full sources and state-filtered name/kind/description/input; POST keeps locked admission.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached and toRuntime.
 ' Product decision: Help uses authored Agent metadata; it does not format the command catalog.
-skinparam shadowing false
 actor Caller
 participant Controller
 participant Application
 participant Registry
 participant Handler
 participant "Narrow service" as Service
+== Bind the request ==
 Caller -> Controller : GET commands\nor POST command
 Controller -> Application : validated VO\nlocale + headers
+== Resolve once and dispatch ==
 alt GET shared catalog
   Application -> Registry : resolve all sources\ncomplete Agent cache
   Registry --> Application : immutable catalog or target 503
@@ -42,8 +59,11 @@ else POST Skill (target-only B13/B14)
   Registry --> Application : real Skill definition and snapshot
   Application -> Handler : immutable invocation
   Handler -> Service : shared message admission and execution
-  Service --> Controller : typed message stream result
+  Service --> Handler : typed message stream result
+  Handler --> Application : stream result
+  Application --> Controller : stream response
 end
+== Return the selected protocol ==
 alt Builtin or GET
   Controller --> Caller : ResultBean application/json
 else Skill

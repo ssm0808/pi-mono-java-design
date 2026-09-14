@@ -2,30 +2,17 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.12.1 |
+| 文档版本 | 1.12.2 |
 | 状态 | target-only 产品设计；会话选择不重排，置顶与重命名使用显式操作；公共映射和生产身份集成完成前使用 Mock Gateway |
 | 界面评审状态 | 沿用 O1 与浅暖灰；保留首次进入、常规和运行稳定键，增加工具确认、停止处理中、提交不确定、历史恢复与配置冲突样例；视觉验收独立于契约确认 |
 | 主设计依据 | [`README.md`](README.md)，维护源码证据、目标差异、设计理由、状态与 Design Token |
 | 人类评审界面 | [`frontend-review.html`](frontend-review.html)，集中展示低保真、高保真和待确认项 |
 | 品牌标识资产 | [`campusclaw-mark-o1.png`](campusclaw-mark-o1.png)，原始透明 PNG；界面直接引用，不通过生成模型重绘，也不缩进深色品牌方块 |
 | 图源 | [`diagram.puml`](diagram.puml)，含产品边界、全局目标组件类图、事件投影与状态流 |
-| 本次对齐基线 | 设计仓 `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；Mate Events 1.5.0、内部 Events B01～B15 与 Thinking 展示规则 |
-| 本次前端源码复核 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；`sessionIndex.upsert` 的前插行为使点选会话自动到顶部，直接 Name Controller 路由缺失；详见 [工作台专项](runtime-workbench-alignment.md) |
-| 本专题修改基线 | 设计仓 `ee2c8e61800d95e609982e3ee354b1ee06f70fe4`；该提交中的原路径为 `campusclaw-frontend-design/`，当前路径为 `01-总体架构/04-CampusClaw前端体验/` |
-| 早期设计仓基线 | `3cc234f068209c90639f812bcb8e1825301fa565` |
-| HTTP 设计风格基线 | 当前工作区 `chat-http-v1-design.md` 1.38.0；设计仓 `c250e3f07536871d3d676242e552a5eb4346b0c7` |
-| Codex 视觉证据 | 本机 `ChatGPT.app` 26.814.41407（build 6720）中的 light-theme CSS Token；`app.asar` SHA-256 `8fba32f8baa6d984b0f0f4149d3da46221e3adb3b52836f85fe65e31e655a8c0` |
-| Codex 跟进交互证据 | 同一安装包 `webview/assets/app-initial-BCLYDefw.js` 的 `followUpQueueMode`、`K9s()`、submit action，以及 `webview/assets/zh-CN-ByRVSIXt.js` 的 Composer 文案 |
-| Codex 活动展示证据 | 本机 `ChatGPT.app` 26.820.60940（build 7119）的 `tool-activity-disclosure-CZUjU0Tu.js`、`agent-activity-item-BL0IhzOn.js`、`reasoning-item-heading-Cdl3NWmT.js`、`local-conversation-turn-Ngva_Lp3.js`；`app.asar` SHA-256 `c964aebbf9a6a0f70799d01215c611d8ef6ee63f816b3d57beccddd47a811fd9` |
-| pi-mono-java 原体验证据基线 | `bde123706305a41e51c9a47b22e6ad11bbd8204c`；用于本文既有活动流与富文本分析 |
-| 本轮凭据复核源码基线 | `320d790726a70aada6100052952d5494d2a378ac`；`frontend/README.md`、`frontend/.env.example`、`frontend/src/App.vue`、`frontend/src/components/DevDiagnostics.vue`、`frontend/src/composables/useRuntimeApi.ts` 及 Runtime 路由测试在该 commit 上无本地修改 |
-| 工具凭据实现对齐 | 变更前基线 `pi-mono-java@320d790726a70aada6100052952d5494d2a378ac`；已评审特性提交 `d03c08dbae870f19eee8d4fa79a707185f7a26b5`，位于 [Draft PR #181](https://github.com/superheromeZzh/pi-mono-java/pull/181)，尚未作为 `main` 现状 |
-| Header 编辑器对照基线 | `pi-mono@4af9d21d`、`opencode@849c2598`、`openai/codex@be33f80b`、`deepseek-harness@cd5ef814`；源码路径见 3.1 |
-| 当前工作台设计起点 | 设计仓 `599edb072cf75e3d8f85c775c53c0e83befd285d`；Header 前次交互基线为 `4cc8dd86f601417c22cf9306e52152acbb59bb60`，升级范围见工作台专项 |
-| Postman 核对 | 2026-08-28；核对官方 Headers 编辑文档、`Agent Runtime` collection 及真实 SSE 响应 |
-| 更新日期 | 2026-09-10 |
+| 源码与视觉依据 | [证据分册](source-evidence.md)，保留各次固定源码提交、安装包版本与核验范围 |
+| 更新日期 | 2026-09-14 |
 
-当前公共交互以[公共对话对齐专项](public-chat-alignment.md)与本页现行规则为准。
+本页维护产品边界、整体布局、视觉和安全展示；[公共对话专项](public-chat-alignment.md)维护生产 Chat 交互与接入条件，[工作台专项](runtime-workbench-alignment.md)维护内部 Session 索引、Header 与认证助手，[Slash 前端专项](../../04-命令与技能/00-Slash-Command通用模块/前端设计/README.md)维护命令交互。
 独立 abort、steers、follow-ups 已退役；本期没有消息队列。产品浏览器仍使用 Mate 公共契约，
 不能照搬 Claw 的 POST SSE、数字页码、sourceEventId/targetEventId 或工具文本块。
 旧运行态 PNG 不再作为当前交互稿；当前 HTML 已移除旧跟进控件。
@@ -42,11 +29,11 @@ Agent 工作台。主界面只暴露用户能够理解并需要决策的概念�
 产品路由仍保持浏览器凭据无持有，`Service URL`、`session_id`、ETag、原始 JSON 和 SSE frame
 也不进入产品主流程。为了快速验证 Runtime 到 Mate Tool execute 的凭据传递，
 内部开发构建已实现隔离的 `debugHeaders` 抽屉；它不进入产品构建、不持久化秘密，按 §6.1 的请求范围构造 Header 快照。抽屉采用 Postman 风格的通用
-Key/Value 表格；按 2026-09-09 用户反馈预置三个可编辑、可删除的常用名称，不限定其他 Header 或凭据模式；浏览器禁止设置的名称与无效值只在对应行报错。
+Key/Value 表格；预置三个可编辑、可删除的常用名称，不限定其他 Header 或凭据模式；浏览器禁止设置的名称与无效值只在对应行报错。
 编辑器作为独立的 `Headers` 面板，不与现有“开发者诊断入口”合并；它只复用该入口的折叠面板、虚线边框、暖灰表面、紧凑字号和次级按钮，
 不引入独立的凭据卡片或认证视觉。
 
-本轮提出一个桌面优先的单工作区方案：左侧会话导航、中央对话、顶部 Session 能力、
+采用桌面优先的单工作区：左侧会话导航、中央对话、顶部 Session 能力、
 底部 Composer。思考和工具调用按实际时间顺序组成对话内 Agent 活动流；每次工具调用合并为
 一条紧凑 activity disclosure，并在安全投影后显示调用入参。展开详情始终按
 “输入参数 → 输出结果”纵向排列，不做左右分栏。运行中保留停止、新消息草稿和清单允许的命令查询；
@@ -68,7 +55,7 @@ Assistant 正文以原始 Markdown 文本为权威，经过受限语法解析和
 标识，界面直接引用同一张透明 PNG，不允许生成式重绘。配色由冷灰调整为暖白、暖灰与深暖黑，
 O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色，不使用 OpenAI/Codex 商标或标志。
 
-## 2. 设计权威顺序与 HTTP 风格对齐
+## 2. 文档与原型分工
 
 本专题沿用 Runtime HTTP 设计的“设计依据与人类评审面分离”方式，但不引入没有实际
 消费方的 UI JSON Schema：
@@ -81,64 +68,9 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 4. 低保真 HTML 是可编辑布局源，PNG 是其评审快照；高保真 PNG 是视觉方向稿，不是
    可直接切图的实现资产。
 
-| 对齐项 | HTTP 设计方式 | 前端设计采用方式 |
-|---|---|---|
-| 文档入口 | 顶部属性表记录版本、状态、权威源和基线 | 采用相同属性表，并显式记录三个 `screenKey` 的评审状态 |
-| 人类评审 | 独立 HTML 按 `operationKey` 展示 operation | 独立 HTML 按 `screenKey` 展示 first-use、idle、running |
-| 视觉语言 | HTTP 评审页使用中性表面、细边框和蓝色选择态 | 文档评审面保持同一结构；产品稿保留 Codex-inspired 工具层级，改用 O1 品牌标识、暖中性表面和深陶土色焦点/链接 |
-| 证据表达 | 区分观察行为、产品约束、安全加固和架构变化 | 保持相同分类，不把高保真目标误写为现有实现 |
-| 机器契约 | JSON 是字段级精确契约源 | 不新增目标不明确的 UI JSON；这是产品设计制品差异 |
-
 ## 3. 源码与契约证据
 
-### 3.1 早期已观察行为（历史证据，不作本次实现现状）
-
-| 证据 | 已观察事实 |
-|---|---|
-| `frontend/README.md:26-28, 40-58` | 当前工作台明确不提供 JWT/APPKEY 凭据编辑器，所有 `VITE_*` 只允许非秘密浏览器参数，并禁止把 Provider 凭据、JWT 或 APPKEY 编译进浏览器产物。 |
-| `frontend/.env.example:1-7` | 示例环境变量只包含 API 基址、非秘密 `callerId` 和 Agent 展示/内部 ID，没有 JWT、APPKEY、Token 或认证 Header 配置。 |
-| `frontend/src/App.vue:177-290`、`frontend/src/components/DevDiagnostics.vue:4-10, 13-25` | 产品工作区与开发者诊断入口只提供 Agent/Session、模型、Thinking、会话和执行控制；诊断入口也没有凭据输入或查看能力。 |
-| `frontend/src/style.css:650-704` | 现有 `.dev-diagnostics` 是 680 px 最大宽度的折叠面板，使用暖灰次级表面、虚线强边框、12 px 字号、8 px 圆角输入和次级按钮；这是本轮 Header 编辑器的视觉基线。 |
-| `frontend/src/composables/useRuntimeApi.ts:18-20, 480-495` | `requestRaw` 只统一附加 `Accept`、`Accept-Language` 和非秘密 `X-HW-ID`；没有构造 `Authorization` 或 `X-HW-APPKEY`，也没有 credential store。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:58-73`、`RuntimeRequestContext.java:45-50` | 当前只有提交消息的 `POST /sessions/{sessionId}/events` 会读取 `X-HW-ID`、`X-HW-APPKEY`、`Authorization` 并生成本次执行快照；基线尚无 `access-token`。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:93-190, 298-373` | 变更前基线实现把三项凭据同时用于 Mate 发现和 Tool execute；该行为已在特性提交中收敛，但仍是 `main@320d7907` 的已观察基线。 |
-| `modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionRoutesTest.java:102-120` | 当前 Runtime 删除请求可在没有凭据 Header 时通过，JWT 与 APPKEY 同时出现也不由 Runtime 本地校验；当前直接调试链路依赖这一内部无本地认证边界。 |
-| `frontend/src/App.vue:1-291` | 当前 Vue 前端已经形成 Agent 工作区壳、对话时间线、Composer 与运行中控制，但浏览器仍直接调用 Runtime V1，尚未落地 mate-service 公共 bridge。 |
-| `frontend/src/components/ConversationTimeline.vue:37-65` | Assistant 正文使用 Vue 文本插值直接输出 `turn.text`；Thinking 是 Assistant body 内的一个“查看思考过程”折叠区；Tool 活动卡展开后只显示结果，不显示调用入参。 |
-| `frontend/src/style.css:784-789` | `.assistant-message` 仅设置 `white-space: pre-wrap` 和换行，没有标题、表格、引用、链接或代码块样式。 |
-| `frontend/package.json:13-21` | 运行依赖只有 Vue，没有 Markdown parser、AST renderer 或 sanitizer。 |
-| `frontend/src/composables/useRuntimeApi.ts:157-176, 311-352` | 浏览器直接调用 `/campusclaw-service/v1` 并消费请求范围 SSE；流事件的 `data` 先作为 JSON 解析，不产生服务端 HTML。 |
-| `frontend/src/projectors/runtimeEventProjector.ts:40-90, 112-145` | delta 按文本追加，completed 以完整文本替换 preview；Thinking 按 `assistantEntryId` 追加到 Assistant turn；Tool 只从 `tool.*` 事件读取名称、状态和结果，没有解析 Assistant completed 中的 `tool_call.arguments`。 |
-| `frontend/src/types/product.ts:22-37` | `AssistantTurn` 仅有单个 `thinking:string`；`ActivityTurn` 只有 `toolCallId`、`toolName`、`status` 和 `result`，尚无入参字段或安全投影类型。 |
-| `RuntimeSessionController`、`RuntimeEventController`、`RuntimeSessionConfigurationController`、`RuntimeSessionControlController` | 当前后端已实现 11 个内部 Session Runtime operation。 |
-| `RuntimeEventType.java:13-26` | 对外事件同时包含持久化消息、瞬时 Assistant delta、工具进度和流终止事件。 |
-| `RuntimeEventProjector.java:149-213, 215-238, 257-285` | Assistant preview 与 completed 分离；Thinking started/delta/completed 按 `assistantEntryId + contentIndex` 投影；`tool.execution.*` 只携带 `toolCallId`、`toolName`、状态和 delta，不携带入参。 |
-| `RuntimeEntryCodec.java:67-88, 430-442, 512-517, 557-601` | `assistant.message.completed.message.content[]` 保留 `tool_call` 的 `toolCallId`、`name` 和结构化 `arguments`；这是工具入参的现有内部来源，前端可在工具开始前按 `toolCallId` 建立关联。 |
-| Postman `Agent Runtime` collection | Session、Configuration、Events、Control 四组请求与源码 11 个 operation 一致；真实 `POST /events` 响应按 frame 展示大量 delta，证明原始事件视图适合诊断，不适合终端用户阅读。 |
-| `pi-mono@4af9d21d` 的 `packages/coding-agent/docs/custom-provider.md:96-119`、`packages/coding-agent/src/core/model-config.ts:160-207` | PI Provider 将 Headers 建模为通用字符串映射，但只提供配置/扩展接口，没有逐请求图形编辑器。 |
-| `opencode@849c2598` 的 `packages/app/src/components/dialog-custom-provider.tsx:273-315`、`packages/app/src/components/dialog-custom-provider-form.ts:97-128` | OpenCode 已提供可增删的 Header/Value 行，并执行去空白与大小写不敏感的重复名称校验；这是四个本地实现中最接近的通用编辑器。 |
-| `openai/codex@be33f80b` 的 `codex-rs/config/src/mcp_types.rs:258-260`、`codex-rs/tui/src/history_cell/mcp.rs:427-445`；[Codex 官方配置参考](https://developers.openai.com/codex/config-reference) | Codex 通过 `http_headers` / `env_http_headers` 通用映射配置 Provider/MCP Header，TUI 展示时遮蔽静态值，但没有逐请求 Key/Value 编辑器。 |
-| `deepseek-harness@cd5ef814` 的 `packages/llm/llm-pi-ai/src/config.ts:147-148, 325, 458`、`packages/client/ui-settings-models/src/client/ProviderEditor.tsx:1-21` | DSH Provider 配置支持通用 Header 映射；当前 UI 只暴露精选字段，其余配置由 `settings.yaml` 维护。 |
-| [Postman 官方 Headers 文档](https://learning.postman.com/latest-v-12/docs/use/send-requests/create-requests/headers) | Postman 允许任意 Key/Value、逐行启停、Header 预设与自动补全，并折叠自动生成 Header、显示手工覆盖关系；本设计借鉴其表格交互而不复制完整 API 客户端信息架构。 |
-| 本机 `ChatGPT.app` 26.814.41407 的 `app.asar` light-theme Token | 可观察到 `gray-0/50/75/100/500/750/900`、近黑 primary solid、5%/10% alpha border、灰色 user message background、green success 与 blue focus/link；这是 Codex-inspired 视觉证据，不是公开品牌规范。 |
-| 同一 `app.asar` 的 `webview/assets/app-initial-BCLYDefw.js`：`followUpQueueMode`、`K9s()`、`composer.submitButtonTooltip.*` 与 submit telemetry | Codex desktop 的跟进模式取值为 `steer` / `queue`，desktop 默认 `steer`；`Cmd/Ctrl+Shift+Enter` 对单条消息执行相反模式；已排队消息支持送入当前运行、编辑、删除、重试与恢复。历史 `interrupt` 配置会归一为 `steer`。 |
-| 同一 `app.asar` 的 `webview/assets/zh-CN-ByRVSIXt.js` | 产品文案使用“调整方向”“加入队列”“停止”；“调整方向”的说明是提交但不中断正在运行的模型，而不是立即中止当前模型或工具。 |
-| 本机 `ChatGPT.app` 26.820.60940 的 `tool-activity-disclosure-CZUjU0Tu.js` 与 `agent-activity-item-BL0IhzOn.js` | Codex activity body 使用纵向 `flex-col` 和缩进详情；执行中 item 默认展开，完成项折叠为动作摘要，输入和输出不采用左右分栏。 |
-| 同一安装包的 `reasoning-item-heading-Cdl3NWmT.js` 与 `local-conversation-turn-Ngva_Lp3.js` | 思考展示从 reasoning summary / 当前 activity 推导简短标题；完成后收敛为轻量 disclosure。该证据只支持折叠交互借鉴；CampusClaw 展示模型返回的原始推理。 |
-| [OpenAI 官方 ChatGPT desktop app 文档](https://learn.chatgpt.com/docs/app) | 官方文档确认桌面应用上下文，但未公开 activity disclosure 的精确视觉规则；本设计的交互细节以本机可观察实现证据和 CampusClaw 产品约束为依据。 |
-| [OpenAI 官方 Codex use cases](https://developers.openai.com/codex/use-cases) | 官方将 Codex 表述为理解代码、构建/测试、评审并交付任务的工作界面；官方未公开可复制的 Codex Design Token，因此具体色值以本机可观察资源和本设计决策为依据。 |
-
-### 3.2 早期已评审特性分支实现（历史证据）
-
-| 证据 | 已评审行为 |
-|---|---|
-| `pi-mono-java@d03c08db` 的 `RuntimeRequestContext.mateCredentials:45-50`、`MateCredentialHeaders:13-23` | 提交消息时精确读取 `X-HW-ID`、`X-HW-APPKEY`、`Authorization`、`access-token` 四个 Header。 |
-| `MateCredentials:21-86` | 凭据是不可变执行快照；完整性要求 `X-HW-ID` + `access-token` + 至少一种 APPKEY/JWT，诊断字符串只记录是否存在。 |
-| `HttpMateToolClient:95-180, 298-370`、`MateToolDiscovery` | Agent、Skill 和 Tool metadata 发现方法不再接受凭据参数；只有 Tool execute 检查完整性并附加四项快照。 |
-| `HttpMateToolClientTest:270-400, 476-483` | 回归测试覆盖发现无凭据、JWT、APPKEY、双凭据、缺少 `access-token` fail closed 和脱敏 `toString`。 |
-
-上表保留当时的评审记录，不用于判断该 PR 当前状态。本次前端实现现状以
-[dfb90ca 源码证据](public-chat-alignment.md#2-源码证据与差距)为准。
+[源码与视觉证据](source-evidence.md)保存早期实现和视觉取样。当前公共接入差距见[公共对话专项](public-chat-alignment.md#2-源码证据与差距)，内部工作台差距见[工作台专项](runtime-workbench-alignment.md#1-源码依据与差距)；各项结论只适用于其记录的提交。
 
 ### 3.3 已确认契约约束
 
@@ -196,7 +128,7 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 - 次要用户：需要查看 Agent 活动与失败原因的支持人员。
 - 开发者：只在内部诊断入口中查看 Runtime IDs、原始事件和请求信息，并可为提交消息配置临时 Header。
 
-### 4.2 本轮目标
+### 4.2 目标
 
 - 确认桌面端信息架构与三个关键状态。
 - 确认产品化执行控制、工具活动呈现与断线恢复文案。
@@ -208,9 +140,9 @@ O1 珊瑚色只承担品牌识别，运行和完成状态仍使用语义绿色�
 
 ### 4.3 非目标
 
-- 本轮不实现 Vue 组件、不替换现有调试客户端。
-- 本轮不设计 mate-service 公共 API 的精确路径和 VO。
-- 本轮不承诺移动端完整功能等价；只定义响应式降级原则。
+- 本文定义目标体验；产品实现状态按专项源码证据判断。
+- mate-service 公共 API 的精确路径与 VO 由接口专题维护。
+- 移动端按本文响应式规则降级，不承诺所有桌面功能等价。
 - 高保真 PNG 是视觉方向，不是可直接切图交付的组件资产。
 
 ## 5. 产品边界
@@ -230,7 +162,7 @@ CampusClaw 页面增加凭据表单或把秘密写入 `VITE_*` 来补齐。
 [PlantUML 源码：`frontend_debug_header_flow`](diagram.puml#L44) · [原尺寸](frontend_debug_header_flow.svg)
 
 调试 Header 是上图生产边界之外的内部例外：开发者在通用 Key/Value 表格中填写的启用项只在
-当前页面内存中存活，提交时快照并仅附加到初始 `POST /events`。这不是生产登录机制，也不能
+当前页面内存中存活，每次写操作独立快照，附加到消息、命令、中断或工具确认 POST，详见 §6.1。这不是生产登录机制，也不能
 证明 Runtime 已验证凭据；编辑器不会根据 Key 猜测凭据类型或自动建立认证模式。
 
 ## 6. 信息架构与界面状态
@@ -584,40 +516,36 @@ HTML 内联脚本语法、仓库 Markdown 无 Mermaid 围栏及 `git diff --chec
 已实际查看五张新增或调整结构的图的原尺寸与文档缩放效果，Slash 主图与原完整版对照保留完整职责链。
 上述结果验证设计原型；基线 Vue 的顶部停止另有实测证据，新增会话恢复与认证助手尚未实现，真实认证中心登录未验证。
 
-## 17. 高保真生成说明
+## 17. 历史视觉资产
 
-本节仅记录历史资产生成方法，不是本轮生成结果。常规态 v8 与运行态 v8 以 v7 为底稿，不经过生成模型；先清除旧的小号品牌容器，再从
-`campusclaw-mark-o1.png` 进行 Lanczos 等比缩放和 alpha 合成。该处理不改变五个色块的形状、比例、
-间距、方向或颜色。活动区、暖中性色、导航、顶部栏、最终答案与 Composer 保持 v7 不变；实际实现也直接
-引用同一 PNG，并以本设计文档的字段、Token 与交互规则为准。
-
-[查看生成使用的完整 Prompt](imagegen-prompts.md)
+高保真 PNG 是历史视觉资料，当前交互由 HTML 原型和本页规则定义；其中已退役的控制不得恢复到产品。品牌资产仍为原始 O1 透明 PNG。完整生成提示词与确定性合成记录见[资产生成资料](imagegen-prompts.md)。
 
 ## 18. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.12.2 | 2026-09-14 | 分离历史证据与当前体验规则，统一专题入口并优化目标组件图。 |
 | 1.12.1 | 2026-09-14 | 会话属性控件每次单项提交，并同步完整 Session 更新结果。 |
 | 1.12.0 | 2026-09-14 | 名称、模型、思考与模式通过统一 Session POST 更新，共享版本与冲突处理。 |
 | 1.11.0 | 2026-09-10 | 选择会话保持顺序，增加显式置顶与直接重命名交互。 |
 | 1.10.0 | 2026-09-09 | 对齐会话恢复、Composer 停止与添加入口，并定义本地认证 Token 回填。 |
 | 1.9.0 | 2026-09-09 | 同步 Session Events 命名和事件消费边界。 |
-| 1.8.0 | 2026-09-09 | 同步用户确认的 Slash 标签式交互：+ 菜单入口、无前导 Slash 的精简清单、独立参数与统一上箭头，正式交互详见专项 1.4.0。 |
+| 1.8.0 | 2026-09-09 | 定义标签式命令选择、独立参数与统一执行按钮。 |
 | 1.7.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
 | 1.6.0 | 2026-09-09 | 精简 Headers 面板，提供三个可编辑空预置、显式增行和删除至零行，空预置不报错、不计数或发送。 |
-| 1.5.0 | 2026-09-08 | 对齐 Mate 公共三接口与内部 B01～B15 差异；补齐主对话、工具确认、中断、恢复、配置共享与目标组件；移除现行原型的旧跟进控件，保持浅暖灰。 |
-| 1.4.0 | 2026-09-07 | 增加 Slash Command 前端专项入口和整体边界：独立 Composer 模式、显式执行、临时结果与公共执行协议门禁；同步清除已退役的 running 队列快捷键表述。 |
-| 1.3.0 | 2026-09-07 | 同步三个控制接口退役与本期无队列；停止执行通过 user.interrupt 完成，实际停止后新提交。旧图片仅为视觉基线，其他 v1 映射待迁移。 |
-| 1.2.0 | 2026-08-28 | 按用户确认删除“隐藏的请求头”区域及覆盖状态展示；`Headers` 面板只呈现可编辑的通用 Key/Value 行。请求适配器自动生成 Header 的内部行为不变，手工同名值仍在请求合并阶段优先。 |
-| 1.1.0 | 2026-08-28 | 按用户选择将通用 Header 编辑器保持为独立 `Headers` 面板，不与 Agent/Session 的“开发者诊断入口”合并；视觉复用原诊断入口的折叠 summary、暖灰次级表面、虚线边界、紧凑字号、38 px 输入和次级按钮；表格交互和请求边界不变，仍不提供凭据模式、固定 Header 或主动作。 |
-| 1.0.0 | 2026-08-28 | 按用户确认改用 Postman 风格的通用 Headers 表格：删除固定四 Header、认证模式、应用按钮和常驻说明；新增任意 Key/Value、逐行启停/删除、自动空白尾行、启用计数、折叠的自动 Header、手工覆盖状态和浏览器限制行内校验；补充 PI、OpenCode、Codex、DSH 与 Postman 对照证据。 |
-| 0.9.0 | 2026-08-27 | 在产品路由仍保持无凭据的前提下，新增 target-only `debugHeaders` 内部诊断设计：固定支持 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`、`access-token`，只在页面内存中存活，仅快照到初始 `POST /events`；对齐已评审实现 `pi-mono-java@d03c08db`，其 Agent/Skill/Tool 发现不透传、只有 Tool execute 使用四项快照；补充隔离、脱敏、CORS、断线不重放和验收规则。 |
-| 0.8.0 | 2026-08-27 | 基于 `pi-mono-java@320d7907` 修正凭据边界：当前前端只发送非秘密 `X-HW-ID`，不支持 JWT/APPKEY 输入、配置、存储或 Header 注入；删除“凭据可在开发者诊断中查看”的错误设计，明确生产身份与授权由 mate-service / 网关承担且具体浏览器会话机制待评审；同步 ADR、评审页、低保真与 PlantUML/SVG。 |
-| 0.7.1 | 2026-08-26 | 修正 O1 在界面中被深色方块和过小身份容器弱化的问题；品牌位改为透明底原图直接显示并等比放大，同步常规态/运行态 v8、低保真与评审面。 |
-| 0.7.0 | 2026-08-26 | 对照本机 Codex activity disclosure 实现，将思考改为安全标题/摘要而非原始推理；工具改为紧凑活动行，执行中展开、完成后折叠，输入与输出始终纵向排列，未开始工具不显示；同步常规态/运行态 v7、低保真、评审面和 PlantUML/SVG。 |
-| 0.6.0 | 2026-08-26 | 确认 O1 为 CampusClaw 品牌标识，新增原始透明 PNG 权威资产；禁止生成式重绘，低保真/评审 HTML 直接引用同一文件，高保真 v6 采用确定性缩放与合成；将冷灰表面调整为暖白、暖灰和深暖黑，保留绿色运行/完成语义。 |
-| 0.5.0 | 2026-08-26 | 基于 `pi-mono-java@bde12370` 的 Thinking 持久化投影、Assistant `tool_call.arguments` 与工具生命周期实现，将思考与工具按时序组成 Agent 活动流；增加工具入参关联、服务端脱敏、资源映射、结构化 viewer、降级与测试规则；同步常规态/运行态 v5、低保真、评审面和 PlantUML/SVG。 |
-| 0.4.0 | 2026-08-26 | 基于 `pi-mono-java@56be8eee` 的当前 Vue 文本插值、事件投影和 Runtime 文本保真行为，新增 Assistant-only 安全 Markdown 设计：支持语法、信任边界、AST-to-Vue 渲染、链接/图片/HTML 策略、流式稳定尾块、复制/响应式/可访问性与安全测试；新增富文本 PlantUML/SVG、常规态 v4、低保真和评审面。 |
-| 0.3.0 | 2026-08-20 | 对照本机 Codex desktop 实现，将运行中跟进改为单一当前模式：desktop 默认“调整方向”，可配置“加入队列”，`Cmd/Ctrl+Shift+Enter` 单次反转；明确 Steer 不硬中断当前模型/工具、队列 UI 与现有 HTTP 控制项身份缺口；更新低保真、运行态 v4、评审页、ADR 与图。 |
-| 0.2.0 | 2026-08-20 | 对齐 Runtime HTTP 1.37.0 的属性表、权威顺序、稳定评审键、证据分类和 HTML 评审风格；新增 `frontend-review.html`；依据本机 Codex/ChatGPT 应用可观察 Token 将视觉改为 Codex-inspired 黑白中性体系，并生成常规态与运行态 v3 高保真稿。 |
-| 0.1.0 | 2026-08-20 | 基于现有 Vue 调试台、Runtime V1 源码、精确契约和 Postman 实测，提出低保真三状态、高保真常规/运行态、产品边界和公共契约缺口。 |
+| 1.5.0 | 2026-09-08 | 补齐公共主对话、工具确认、中断恢复与配置共享边界。 |
+| 1.4.0 | 2026-09-07 | 定义 Slash 独立草稿、显式执行、临时结果及公共协议接入条件。 |
+| 1.3.0 | 2026-09-07 | 停止通过 user.interrupt 完成，停止后重新提交消息。 |
+| 1.2.0 | 2026-08-28 | Headers 仅展示可编辑 Key/Value 行。 |
+| 1.1.0 | 2026-08-28 | Headers 保持独立折叠面板并复用暖灰视觉样式。 |
+| 1.0.0 | 2026-08-28 | Headers 采用支持增删、启停和校验的通用表格。 |
+| 0.9.0 | 2026-08-27 | 内部诊断凭据仅在页面内存与执行快照中存活。 |
+| 0.8.0 | 2026-08-27 | 明确产品浏览器与 Mate 服务的身份及凭据职责。 |
+| 0.7.1 | 2026-08-26 | O1 以透明底原图等比展示。 |
+| 0.7.0 | 2026-08-26 | 定义思考及工具活动行的折叠和纵向排列。 |
+| 0.6.0 | 2026-08-26 | 统一 O1 品牌原图与暖白暖灰视觉。 |
+| 0.5.0 | 2026-08-26 | 思考和工具按时序组成活动流并关联输入输出。 |
+| 0.4.0 | 2026-08-26 | 定义 Assistant 安全 Markdown 渲染和流式展示规则。 |
+| 0.3.0 | 2026-08-20 | 定义运行中方向调整与跟进队列的初版交互。 |
+| 0.2.0 | 2026-08-20 | 统一评审属性、证据分类和中性视觉基线。 |
+| 0.1.0 | 2026-08-20 | 建立前端产品边界、三态原型及公共契约差距。 |

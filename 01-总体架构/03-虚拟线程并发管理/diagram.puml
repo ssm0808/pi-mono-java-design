@@ -5,8 +5,10 @@
 ' Target-only design: capacity leases and bounded admission are not implemented.
 
 @startuml virtual_thread_capacity_overview
-!pragma layout elk
-title Virtual Thread Capacity and Component Boundary
+top to bottom direction
+skinparam nodesep 25
+skinparam ranksep 35
+title Target-only Capacity: Boundary and Resource Ownership
 
 ' Source evidence:
 ' modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java, VIRTUAL_THREAD_EXECUTOR and startExecution
@@ -64,102 +66,102 @@ task --> file : file phase
 task --> mailbox : durable Entry writes
 mailbox --> store : commit before publish
 task --> sse : live events
-sse --> api : text/event-stream
-control --> session : queue or cancel
+sse -[norank]-> api : text/event-stream
+control -[norank]-> session : queue or cancel
 
-note bottom of task
-ActiveExecution and ExecutionLease are internal.
-No public execution id or resource exists.
-Virtual threads are never pooled as objects.
-end note
 
-note bottom of sse
-An SSE disconnect stops projection only.
-Accepted execution continues and durable Entries
-are recovered through GET Session Events.
-end note
+
+legend bottom left
+Retained capacity proposal; source evidence remains at the fixed 1957466 baseline.
+Execution state and leases are internal; no public execution resource or ID.
+Virtual threads are not pooled. Disconnect closes SSE projection only.
+Accepted work continues; durable recovery reads Session Events.
+endlegend
 @enduml
 
-@startuml execution_admission_and_lifecycle
-title Session Event Admission and Execution Lifecycle
 
+@startuml execution_admission_and_lifecycle
 ' Source evidence:
 ' modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java, startExecution
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java, prompt and abort
 ' Observed behavior: one Agent execution is protected by a lock and runs asynchronously.
 ' Architecture change: add transactional acceptance and deployment-level capacity leases.
 ' Design reason: acceptance must survive an HTTP disconnect without exposing an execution resource.
-
-skinparam backgroundColor #FFFFFF
+title Target-only Admission and Execution Lifecycle
+autonumber
+hide footbox
+skinparam backgroundColor white
 skinparam shadowing false
-skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam maxMessageSize 190
+skinparam BoxPadding 10
 skinparam sequence {
-  ArrowColor #334155
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
   ParticipantBackgroundColor #F8FAFC
   GroupBorderColor #94A3B8
-  GroupBackgroundColor #F8FAFC
+  GroupBackgroundColor #F1F5F9
 }
 
-actor "mate-service" as client
-participant "Session Event API" as api
-participant "Session Coordinator" as session
-participant "Capacity Manager" as capacity
-queue "Bounded Admission" as queue
-database "RuntimeSessionStore" as store
-participant "Execution Virtual Thread" as task
-participant "Model and Tools" as downstream
-participant "SSE Writer" as sse
+actor "mate-service" as Client
+boundary "Session Event API" as API
+control "Session Coordinator" as Session
+participant "Capacity Manager\nand bounded admission" as Capacity
+database "RuntimeSessionStore" as Store
+participant "Execution task\nvirtual thread" as Task
+participant "SSE Writer" as SSE
 
-client -> api : POST /sessions/{session_id}/events
-api -> api : authenticate and validate message and file_ids
-api -> session : reserve the idle Session
-
-alt Session already running
-  session --> api : conflict
-  api --> client : ResultBean error
-else Session reserved
-  session -> capacity : acquire count and byte lease
-  alt immediate capacity
-    capacity --> session : ExecutionLease
-  else bounded wait
-    capacity -> queue : enqueue immutable descriptor
-    queue --> session : ExecutionLease or timeout
-  end
-
-  session -> store : commit User Entry, running state, and fence
-  alt commit fails before acceptance
-    store --> session : rollback
-    session -> capacity : close lease once
-    api --> client : ResultBean error
-  else acceptance committed
-    store --> session : entry_id and entry_seq
-    api --> client : 200 text/event-stream
-    api -> sse : publish user.message
-    session -> task : submit immutable ExecutionContext
-    task -> downstream : model, tool, and file phases
-    downstream --> task : bounded events and results
-    task -> store : commit completed Entries
-    store --> task : committed
-    task -> sse : publish live and completed events
-    task -> store : set Session idle and clear fence
-    task -> capacity : close ExecutionLease once
-    task -> sse : session.status.idle and stream.end
-  end
+== 1. Reserve capacity ==
+Client -> API : Submit Session event
+API -> API : Validate request and attachments
+API -> Session : Reserve idle Session
+break Session already running
+  Session --> API : Conflict
+  API --> Client : ResultBean error
+end
+Session -> Capacity : Acquire count and byte lease
+Capacity --> Session : Lease or admission timeout
+break No lease before deadline
+  Session --> API : Admission rejected
+  API --> Client : ResultBean error
 end
 
-note over client,sse
-If the client disconnects after acceptance,
-the execution continues without SSE projection.
-The client uses GET Session Events to recover.
-end note
-@enduml
+== 2. Commit acceptance ==
+Session -> Store : Commit User Entry, running state and fence
+break Commit failed
+  Store --> Session : Rolled back
+  Session -> Capacity : Close lease once
+  Session --> API : Rejected before acceptance
+  API --> Client : ResultBean error
+end
+  Store --> Session : Committed Entry
+  Session --> API : Accepted
+  API --> Client : 200 text/event-stream
+  API -> SSE : Publish accepted user.message
+Session -> Task : Submit immutable execution context
 
+== 3. Execute and release ==
+Task -> Task : Model / Tool / File phases\nEach owns its resource lease
+Task -> Store : Commit completed Entries
+Store --> Task : Committed
+Task -> SSE : Publish live and completed events
+Task -> Store : Set idle; clear fence
+Task -> Capacity : Close execution lease once
+Task -> SSE : Idle and stream end
+SSE -->> Client : Project available events
+
+legend bottom left
+This diagram belongs to the retained target-only capacity proposal.
+An accepted execution survives disconnect; only SSE projection closes.
+Admission groups two collaborators; it does not introduce a combined class.
+endlegend
+@enduml
 @startuml bounded_sse_and_downstream
-!pragma layout elk
-title Bounded SSE and Downstream Isolation
+top to bottom direction
+skinparam nodesep 25
+skinparam ranksep 35
+title Target-only Capacity: Bounded Channels and Downstream Isolation
 
 ' Source evidence:
 ' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java, consumeStream
@@ -201,21 +203,18 @@ loop --> tools : phase-local Tool Lease
 loop --> files : phase-local File Lease
 loop --> mailbox : completed Entry
 mailbox --> store : durable commit
-store --> loop : commit acknowledged
+store -[norank]-> loop : commit acknowledged
 loop --> coalescer : live delta and completion
 coalescer --> buffer : ordered SSE event
 buffer --> writer : bounded write
 writer --> client : text/event-stream
 
-note bottom of model_channel
-When the channel stalls beyond its deadline,
-cancel the model phase and release its lease.
-Never allow an unbounded provider buffer.
-end note
 
-note bottom of writer
-A disconnect closes this projection only.
-No Last-Event-ID replay is provided.
-Durable recovery uses GET Session Events.
-end note
+
+legend bottom left
+Every channel bounds both items and bytes. A stalled model phase is cancelled
+at its deadline and releases its lease; it never buffers without a bound.
+Disconnect closes projection only. No Last-Event-ID replay is provided.
+Durable recovery reads Session Events.
+endlegend
 @enduml

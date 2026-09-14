@@ -1,9 +1,9 @@
 # Tool 与 Agent 元数据规范 V1
 
-- 规范版本：1.0.0
+- 规范版本：1.0.1
 - API 版本：`agentkit.example/v1`
-- 状态：目标设计（target-only），不是任何现有产品的原生标准
-- 日期：2026-07-18
+- 状态：研究候选（target-only）；不是 CampusClaw 已确认设计，也不是现有产品的原生标准
+- 原核验日期：2026-07-18；文档整理：2026-09-14
 - JSON Schema：[agent-tool-platform.schema.json](./agent-tool-platform.schema.json)
 
 ## 1. 目标和边界
@@ -28,7 +28,7 @@ V1 是对现有机制的归一化设计，不声称下列项目共享同一个 J
 | 协议代理 | MCP `tools/list` / `tools/call` | commit `26897cc322f356487da89113451bd16b520b9288`，`schema/2025-11-25/schema.ts`，约 1080-1297 行 | `mcp` driver 发现描述并把调用转给 Server |
 | 命令驱动 | Qwen Code discovery/call command | commit `0ecba4b3c709d271a17faa5ac9537bf1b102eaf1`，`packages/core/src/tools/tool-registry.ts`，约 42-181 行 | `command` driver 使用固定 JSON stdin/stdout 契约 |
 | OpenAPI 驱动 | Coze Studio Plugin | commit `22275b1c2661d35344a7493cffe401e8cc61cf8e`，`backend/domain/plugin/conf/load_plugin.go`、`backend/domain/plugin/service/tool/invocation_http.go` | `openapi` driver 编译 operation 并构造 HTTP 请求 |
-| Agent Profile 编译 | Codex、OpenCode、Grok Build、Coze Studio | 详见[总调研文档](./README.md#5-源码与文档基线) | Agent Manifest 先编译为不可变计划，再由 Runtime Factory 创建实例 |
+| Agent Profile 编译 | Codex、OpenCode、Grok Build、Coze Studio | 详见[总调研文档](./source-mechanisms.md#5-源码与文档基线) | Agent Manifest 先编译为不可变计划，再由 Runtime Factory 创建实例 |
 | 托管 Tool / Custom Tool | Anthropic Managed Agents | [Tools](https://platform.claude.com/docs/en/managed-agents/tools)、[Tool reference](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-reference) | 区分厂商托管执行和应用回调，不反推 Claude Code 内部类型 |
 
 ## 3. V1 的核心决定
@@ -95,94 +95,8 @@ Tool、Agent 和 Binding 共用以下资源封套。下面仅展示公共结构�
 
 ### 5.1 完整 JSON
 
-以下示例由 OpenAPI Driver 执行；同一内容保存在 [tool-openapi.json](./示例/tool-openapi.json)。
+完整示例只维护在 [`tool-openapi.json`](./示例/tool-openapi.json)；下表解释字段与约束。该 JSON 通过结构校验不代表对应执行端已存在。
 
-```json
-{
-  "apiVersion": "agentkit.example/v1",
-  "kind": "Tool",
-  "metadata": {
-    "name": "weather.current",
-    "version": "1.0.0",
-    "displayName": "Current Weather",
-    "description": "Returns current weather for a city.",
-    "labels": {
-      "domain": "weather",
-      "owner": "platform-team"
-    }
-  },
-  "spec": {
-    "descriptor": {
-      "name": "get_current_weather",
-      "title": "Get current weather",
-      "description": "Get current weather observations for one city.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "city": {
-            "type": "string",
-            "description": "City name."
-          },
-          "units": {
-            "type": "string",
-            "enum": ["metric", "imperial"]
-          }
-        },
-        "required": ["city"],
-        "additionalProperties": false
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "temperature": { "type": "number" },
-          "conditions": { "type": "string" }
-        },
-        "required": ["temperature", "conditions"]
-      },
-      "tags": ["weather", "read"]
-    },
-    "exposure": {
-      "mode": "eager",
-      "searchable": true,
-      "keywords": ["weather", "temperature", "conditions"],
-      "group": "weather.read"
-    },
-    "implementation": {
-      "kind": "openapi",
-      "driver": "core.openapi@1",
-      "documentRef": "registry://openapi/weather-service/3.2.0",
-      "operationId": "getCurrentWeather"
-    },
-    "semantics": {
-      "readOnly": true,
-      "destructive": false,
-      "idempotent": true,
-      "openWorld": true,
-      "timeoutMs": 10000,
-      "retry": {
-        "maxAttempts": 2,
-        "backoffMs": 250,
-        "retryOn": ["timeout", "http_502", "http_503"]
-      }
-    },
-    "requires": [
-      {
-        "name": "weather-api-token",
-        "kind": "secret",
-        "description": "Service token supplied by the deployment binding."
-      },
-      {
-        "name": "weather-api-base-url",
-        "kind": "endpoint"
-      }
-    ],
-    "policy": {
-      "approval": "auto",
-      "audience": ["agent", "developer"]
-    }
-  }
-}
-```
 
 ### 5.2 Tool 字段
 
@@ -223,7 +137,7 @@ Tool、Agent 和 Binding 共用以下资源封套。下面仅展示公共结构�
 
 ![Tool manifest realization pipeline](./tool_realization_pipeline.svg)
 
-[PlantUML 源码](./diagram.puml#L1)
+[原尺寸 SVG](./tool_realization_pipeline.svg) · [PlantUML 源码](./diagram.puml#L1)
 
 1. Validator 校验 V1 JSON、嵌入的 input/output Schema 和字段不变量。
 2. Binding Resolver 解析 endpoint、secret、workspace、identity 和 artifact pin。
@@ -240,83 +154,8 @@ Tool、Agent 和 Binding 共用以下资源封套。下面仅展示公共结构�
 
 ### 6.1 完整 JSON
 
-以下示例是只读代码审查 Agent；扩展示例见 [agent-code-review.json](./示例/agent-code-review.json)。
+完整示例只维护在 [`agent-code-review.json`](./示例/agent-code-review.json)；下表解释字段与约束。该 JSON 通过结构校验不代表对应执行端已存在。
 
-```json
-{
-  "apiVersion": "agentkit.example/v1",
-  "kind": "Agent",
-  "metadata": {
-    "name": "engineering.code_reviewer",
-    "version": "1.3.0",
-    "displayName": "Code Reviewer",
-    "description": "Reviews a change set for correctness, security, and missing tests.",
-    "labels": {
-      "domain": "engineering",
-      "role": "reviewer"
-    }
-  },
-  "spec": {
-    "runtime": {
-      "factory": "core.react-agent@2",
-      "provider": "configured-provider",
-      "model": "configured-provider/reasoning-model",
-      "reasoningEffort": "high",
-      "maxTurns": 40,
-      "timeoutMs": 1200000
-    },
-    "instructions": {
-      "inline": "Review only the requested change set. Cite files and line numbers. Do not modify files.",
-      "refs": ["policy://engineering/review-standard/4.0.0"]
-    },
-    "tools": [
-      {
-        "ref": {
-          "name": "repository.dependency_audit",
-          "version": "2.1.0"
-        },
-        "approval": "auto"
-      },
-      {
-        "selector": {
-          "tags": ["repository", "read"]
-        },
-        "exclude": ["shell_write"]
-      }
-    ],
-    "memory": {
-      "mode": "project",
-      "storeRef": "binding://memory/project-review",
-      "readOnly": false
-    },
-    "policy": {
-      "defaultApproval": "ask",
-      "sandbox": "worktree",
-      "permissions": [
-        {
-          "capability": "filesystem.read",
-          "effect": "allow"
-        },
-        {
-          "capability": "filesystem.write",
-          "effect": "deny"
-        }
-      ],
-      "maxParallelTools": 4
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "findings": {
-          "type": "array",
-          "items": { "type": "object" }
-        }
-      },
-      "required": ["findings"]
-    }
-  }
-}
-```
 
 ### 6.2 Agent 字段
 
@@ -341,7 +180,7 @@ Tool、Agent 和 Binding 共用以下资源封套。下面仅展示公共结构�
 
 ![Agent manifest realization pipeline](./agent_realization_pipeline.svg)
 
-[PlantUML 源码](./diagram.puml#L65)
+[原尺寸 SVG](./agent_realization_pipeline.svg) · [PlantUML 源码](./diagram.puml#L64)
 
 Agent Compiler 必须生成不可变 `ResolvedAgentPlan`，至少包含 Manifest digest、已解析模型、完整指令 digest、Ready Tool 集合、Skill/Knowledge digest、Memory Binding、权限图、Sandbox、Subagent roster 和预算边界。Runtime Factory 只接受该计划，不在会话中重新解释原始 Manifest。
 
@@ -358,7 +197,7 @@ Agent Instance 启动后的循环为：
 
 ![Portable manifest, binding, and state split](./portable_manifest_and_binding.svg)
 
-[PlantUML 源码](./diagram.puml#L119)
+[原尺寸 SVG](./portable_manifest_and_binding.svg) · [PlantUML 源码](./diagram.puml#L118)
 
 V1 Schema 保留 `Binding`，因为 Tool/Agent Manifest 中的执行引用不应包含部署密钥。完整示例见 [binding-development.json](./示例/binding-development.json)。
 
@@ -412,4 +251,5 @@ V1 Schema 保留 `Binding`，因为 Tool/Agent Manifest 中的执行引用不应
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.0.0 | 2026-07-18 | 基于主流 Agent、MCP、Command Driver 和 OpenAPI Driver 调研，发布 Tool/Agent Metadata V1；明确必填字段、执行所有权、Binding 边界和失败规则 |
+| 1.0.1 | 2026-09-14 | 明确研究候选边界并将完整 JSON 示例集中到制品文件。 |
+| 1.0.0 | 2026-07-18 | 基于主流 Agent、MCP、Command Driver 和 OpenAPI Driver 调研，发布 Tool/Agent Metadata V1。 |

@@ -1,273 +1,307 @@
 @startuml channel_feishu_option_decision
-title Feishu Channel Implementation Options
-
 ' Source evidence: larksuite/cli@755daa4de3ea12785c43a15244ffb8f012122c13 skills/lark-event/SKILL.md lines 15-110
 ' Source evidence: larksuite/cli@755daa4de3ea12785c43a15244ffb8f012122c13 events/im/message_receive.go lines 15-108
 ' Source evidence: larksuite/channel-sdk-python@731d459cca55ac76e85911bba2b1666508145e03 lark_channel/channel/channel.py lines 289-400 and 780-950
 ' Source evidence: larksuite/lark-openapi-mcp@21920354ec6e3966b52e89152620c5085e496b55 README.md
-' Observed behavior: lark-cli consumes one EventKey per subprocess and emits NDJSON through stdout.
-' Observed behavior: lark-mcp exposes OpenAPI tools and is not a durable inbound Channel transport.
-' Target-only design: mate-service uses the official Java Server SDK in process; CLI and Python SDK remain alternative adapters.
-' Design reason: the Java service must own durable admission, ordering, recovery, and the transactional outbox.
 
-skinparam backgroundColor #FFFFFF
-skinparam componentStyle rectangle
+' Observed behavior at fixed source baselines: CLI emits NDJSON; Python offers Channel transport; MCP exposes tools.
+' Target-only design: Java SDK runs inside mate-service; other event transports require adapters.
+' Design reason: Channel Core must own durable admission, ordering, recovery and the outbox.
+skinparam backgroundColor white
 skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
 skinparam ArrowColor #475569
-skinparam defaultFontName sans-serif
 skinparam packageStyle rectangle
-
-cloud "Feishu Open Platform" as Feishu
-
+skinparam componentStyle rectangle
+skinparam nodesep 25
+skinparam ranksep 35
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #64748B
+}
+title Feishu Integration - Transport and Tool Boundaries
+left to right direction
+cloud "Feishu Platform" as Feishu
 package "Production target" {
-  component "Official Java Server SDK\nWS default or Webhook" as JavaSdk
-  component "Feishu Provider Adapter" as JavaAdapter
-  component "mate-service Channel Core" as ChannelCore
+  [Official Java Server SDK\nWS / Webhook] as Java
+  [Feishu Provider Adapter] as Adapter
 }
-
-package "Alternative adapters" {
-  component "Official lark-cli\nevent consume plus im commands" as Cli
-  component "CLI Process Adapter\nNDJSON and stderr lifecycle" as CliAdapter
-  component "Official Python Channel SDK" as PySdk
-  component "Separate Connector Service" as PyConnector
+package "Optional connector targets" {
+  [lark-cli\nNDJSON process adapter] as CLI
+  [Python Channel SDK\nSeparate connector] as Python
 }
-
+[Channel Core\nInbox / FIFO / recovery / outbox] as Core
 package "Separate tool plane" {
-  component "Official lark-mcp" as Mcp
-  component "Agent Feishu Tools" as Tools
+  [lark-mcp] as MCP
+  [Agent Feishu tools] as Tools
 }
-
-Feishu --> JavaSdk : events and OpenAPI
-JavaSdk --> JavaAdapter : SDK event types
-JavaAdapter --> ChannelCore : normalized message
-
-Feishu --> Cli : local event bus and OpenAPI
-Cli --> CliAdapter : stdout NDJSON
-CliAdapter ..> ChannelCore : prototype adapter
-
-Feishu --> PySdk : WS or webhook
-PySdk --> PyConnector : normalized Channel API
-PyConnector ..> ChannelCore : private intake if deployed
-
-Feishu --> Mcp : OpenAPI calls
-Mcp --> Tools : MCP tool results
-Tools ..> ChannelCore : no inbound ownership
-
-note right of ChannelCore
-  Own database deduplication, per-conversation
-  ordering, recovery, and outbound outbox.
-end note
-
-note bottom of CliAdapter
-  Good for local agents and prototypes.
-  Not the default multi-instance data plane.
-end note
-
-note bottom of Tools
-  Tool access does not replace event ingestion.
-end note
-
+Feishu --> Java : events
+Java --> Adapter : SDK types
+Adapter --> Core : normalized message
+Feishu --> CLI : events
+Feishu --> Python : events
+CLI ..> Core : private intake if deployed
+Python ..> Core : private intake if deployed
+Feishu --> MCP : OpenAPI
+MCP --> Tools : tool results
+legend bottom left
+Production assembly is target-only. Optional connectors need a private intake contract.
+MCP tool access does not provide durable inbound message ownership.
+endlegend
 @enduml
 
 @startuml channel_feishu_target_architecture
-title Feishu Channel Target Architecture
-
 ' Source evidence: pi-mono-java@1f801dbb82bdda30478e3354e685e3153b179a0c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java lines 66-102
 ' Source evidence: pi-mono-java@1f801dbb82bdda30478e3354e685e3153b179a0c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java lines 48-79 and 107-138
 ' Source evidence: openclaw/openclaw@b015925bc30f6a8363f290b07d5f8588e21422b8 extensions/feishu/src/feishu-ingress.ts lines 330-500
 ' Source evidence: openclaw/openclaw@b015925bc30f6a8363f290b07d5f8588e21422b8 extensions/feishu/src/streaming-card.ts lines 266-403 and 405-726
-' Observed behavior: the Runtime POST accepts and persists user.message before starting execution, and disconnect only detaches one stream subscriber.
-' Target-only design: no Feishu or Channel implementation exists in mate-service at its analyzed baseline.
-' Architecture change: Channel calls the mate-service Chat application port, not CampusClaw directly.
-' Design reason: mate-service owns chat_id to session_id mapping and must keep provider identifiers out of CampusClaw.
 
-skinparam backgroundColor #FFFFFF
-skinparam componentStyle rectangle
+' Observed behavior at fixed Java source baseline: accepted messages persist before execution; disconnection detaches a subscriber.
+' Target-only: every Channel class and relationship below is a recommended assembly, not an implemented Java inventory.
+' Architecture change: Channel uses the Chat application port; Provider identifiers never enter Runtime requests.
+' Design reason: separate durable admission, execution, projection and delivery while sharing fenced persistent state.
+skinparam backgroundColor white
 skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
 skinparam ArrowColor #475569
-skinparam defaultFontName sans-serif
+skinparam defaultFontSize 13
 skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 20
+skinparam ranksep 35
+skinparam class {
+  BackgroundColor #F8FAFC
+  BorderColor #64748B
+}
+hide empty members
 top to bottom direction
-
-cloud "Feishu Event Service" as FeishuEvents
-cloud "Feishu Message and CardKit APIs" as FeishuApi
-
-package "mate-service" {
-  component "Feishu Ingress\nTransport and Provider Adapter" as Ingress
-  component "Channel Core\nInbound Service and policy" as ChannelCore
-  database "Channel Store\nInbox, binding, execution, delivery, outbox" as Store
-  component "Channel Workers\nExecution, reconciliation, projection" as Workers
-  component "Chat Boundary\nChannelChatPort and Chat Core" as Chat
-  component "Runtime HTTP Client" as RuntimeClient
-  component "Feishu Gateway\nMessage and CardKit" as Gateway
-  component "Secret Manager Client" as Secrets
+title Feishu Channel - Global Target Classes
+allowmixing
+package "Provider ingress | singleton lifecycle" {
+  interface ChannelEventSource {
+    +start()
+    +stop()
+  }
+  class FeishuTransport
+  class FeishuProviderAdapter
+  FeishuTransport .up.|> ChannelEventSource
+  FeishuTransport --> FeishuProviderAdapter : verified event
 }
-
-package "CampusClaw" {
-  component "Runtime HTTP API" as RuntimeApi
-  component "Session and Active Execution" as RuntimeCore
-  database "Session and Entry Store" as RuntimeStore
+package "Channel application | singleton services" {
+  interface ChannelInboundPort {
+    +accept(message): receipt
+  }
+  class ChannelInboundService
+  class ChannelExecutionWorker {
+    +executeNext()
+    +reconcileAccepted()
+  }
+  class ChannelDeliveryWorker
+  class ChannelEventProjector {
+    +projectAllowedContent()
+  }
+  ChannelInboundService .up.|> ChannelInboundPort
+  ChannelExecutionWorker --> ChannelEventProjector
 }
-
-FeishuEvents -down-> Ingress : im.message.receive_v1
-Ingress -right-> ChannelCore : verified DTO
-ChannelCore -right-> Store : inbox transaction
-Store -down-> Workers : claim with lease
-Workers -right-> Chat : submit or reconcile
-Chat -right-> RuntimeClient : Runtime request
-RuntimeClient -down-> RuntimeApi : HTTP and request-scoped SSE
-RuntimeApi -right-> RuntimeCore
-RuntimeCore -right-> RuntimeStore : durable entries
-RuntimeApi .up.> RuntimeClient : SSE or JSON
-RuntimeClient .left.> Workers : safe event DTO
-Workers .up.> Store : checkpoint and outbox
-Store -down-> Gateway : claim delivery task
-Gateway -down-> FeishuApi : message and CardKit calls
-Ingress .down.> Secrets : app credentials
-Gateway .right.> Secrets : token credentials
-Chat .up.> Store : chat_id and session_id
-
-note bottom of Ingress
-  Provider tenant, user, chat, thread,
-  event, and message identifiers end here.
-end note
-
-note bottom of Chat
-  Local application port in the selected deployment.
-  A remote connector needs a separately reviewed
-  private intake HTTP contract.
-end note
-
-note bottom of RuntimeClient
-  Never replay an uncertain POST before
-  durable Entry reconciliation succeeds.
-end note
-
+package "Chat application | singleton boundary" {
+  interface ChannelChatPort {
+    +ensureChat()
+    +submit()
+    +listEvents()
+    +getSession()
+  }
+  class "Chat Application Core" as Chat
+  class "Runtime HTTP Client" as Client
+  Chat .up.|> ChannelChatPort
+  Chat --> Client
+}
+package "Channel persistence | durable authority" {
+  class "Channel Store" as Store {
+    +acceptInboxAndOutbox()
+    +claimWithFence()
+    +saveReceiptAndClearContent()
+  }
+  class "Execution snapshot DTO" as Snapshot <<per execution>> {
+    accepted_event_id
+    observed_event_ids
+  }
+  class "Channel tables" as Tables <<persistent>>
+  Store o-- "0..*" Snapshot : loads
+  Store --> Tables : transaction
+}
+package "Outbound adapter | singleton lifecycle" {
+  interface ChannelMessageGateway {
+    +create()
+    +update()
+    +finish()
+  }
+  class FeishuMessageGateway
+  class "Secret Manager Client" as Secrets
+  FeishuMessageGateway .up.|> ChannelMessageGateway
+  FeishuMessageGateway --> Secrets
+}
+cloud "CampusClaw Runtime\nSession / full events / execution" as Runtime
+cloud "Feishu Platform\nEvents / Messages / CardKit" as Feishu
+FeishuProviderAdapter --> ChannelInboundPort : normalized DTO
+ChannelInboundService --> Store : durable acceptance
+ChannelExecutionWorker --> Store
+ChannelExecutionWorker --> ChannelChatPort
+ChannelExecutionWorker o-- "1" Snapshot
+ChannelEventProjector --> Store : desired view / outbox
+ChannelDeliveryWorker --> Store : claim delivery
+ChannelDeliveryWorker --> ChannelMessageGateway : invoke
+Client --> Runtime
+FeishuMessageGateway --> Feishu : stable uuid / sequence
+FeishuTransport -[norank]-> Secrets : credential reference
+ChannelInboundPort -[hidden]right-> ChannelExecutionWorker
+ChannelEventProjector -[hidden]right-> ChannelDeliveryWorker
+ChannelChatPort -[hidden]down-> ChannelMessageGateway
+Store -[hidden]down-> Runtime
+legend bottom left
+All Channel classes and relations are target-only. SDK types stop at the Provider Adapter.
+Store = account, conversation, inbox, execution, delivery and outbox (six t_channel_* tables).
+Services are shared; snapshots belong to one fenced execution; tables own durable state.
+Only saved accepted_event_id enables history recovery; unknown acceptance needs manual reconciliation.
+endlegend
 @enduml
 
 @startuml channel_feishu_message_sequence
-title Feishu Message, Runtime SSE, and Recovery Sequence
-
-' Source evidence: 01-%E6%80%BB%E4%BD%93%E6%9E%B6%E6%9E%84/01-CampusClaw%E5%A4%9AAgent%E8%BF%90%E8%A1%8C%E6%97%B6/%E6%8E%A5%E5%8F%A3%E5%A5%91%E7%BA%A6/%E6%93%8D%E4%BD%9C/04-submit-user-message.json, submitUserMessage
-' Source evidence: 01-%E6%80%BB%E4%BD%93%E6%9E%B6%E6%9E%84/01-CampusClaw%E5%A4%9AAgent%E8%BF%90%E8%A1%8C%E6%97%B6/%E6%8E%A5%E5%8F%A3%E5%A5%91%E7%BA%A6/%E6%93%8D%E4%BD%9C/05-list-session-events.json, listSessionEvents
+' Source evidence: 01-%E6%80%BB%E4%BD%93%E6%9E%B6%E6%9E%84/01-CampusClaw%E5%A4%9AAgent%E8%BF%90%E8%A1%8C%E6%97%B6/%E4%BA%8B%E4%BB%B6%E5%A5%91%E7%BA%A6/%E6%93%8D%E4%BD%9C/01-submit-session-event.json, submitSessionEvent
+' Source evidence: 01-%E6%80%BB%E4%BD%93%E6%9E%B6%E6%9E%84/01-CampusClaw%E5%A4%9AAgent%E8%BF%90%E8%A1%8C%E6%97%B6/%E4%BA%8B%E4%BB%B6%E5%A5%91%E7%BA%A6/%E6%93%8D%E4%BD%9C/02-list-session-events.json, listSessionEvents
 ' Source evidence: larksuite/cli@755daa4de3ea12785c43a15244ffb8f012122c13 events/im/message_receive.go lines 15-108
 ' Source evidence: larksuite/channel-sdk-python@731d459cca55ac76e85911bba2b1666508145e03 lark_channel/channel/outbound/streaming/markdown_stream.py lines 34-213
-' Observed behavior: POST events has no Idempotency-Key and cannot be replayed on an uncertain response.
-' Target-only design: persist a pre-submit Entry watermark and reconcile GET events before any retry.
-' Product constraint: each Channel conversation exclusively owns its Chat and Runtime Session write path.
-' Design reason: the existing Session and Entry contract remains authoritative without restoring a public Run resource.
 
-skinparam backgroundColor #FFFFFF
+' Target-only adaptation: current Runtime event wrapper, ordered content, eventId/sourceEventId and data-only SSE.
+' Design reason: acknowledge durable Channel acceptance first; keep Chat ownership and persist the Runtime receipt before projection.
+' Security hardening: no automatic replay after lost or unsaved acceptance receipts; recovery is shown in the state diagram.
+skinparam backgroundColor white
 skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
 skinparam ArrowColor #475569
-skinparam defaultFontName sans-serif
-
-autonumber
-actor "Feishu user" as User
+hide footbox
+skinparam maxMessageSize 170
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantBorderColor #64748B
+  LifeLineBorderColor #94A3B8
+  GroupBorderColor #CBD5E1
+  GroupBackgroundColor #F8FAFC
+}
+title Feishu Message - Durable Admission to Visible Reply
 participant "Feishu Platform" as Feishu
-participant "Feishu Adapter" as Adapter
-participant "ChannelInboundService" as Inbound
+participant "Adapter /\nInbound Service" as Inbound
 database "Channel Store" as Store
-queue "Outbox" as Outbox
-participant "ChannelExecutionWorker" as Worker
-participant "Chat Application Core" as Chat
+participant "Execution Worker" as Worker
+participant "Chat Core /\nRuntime Client" as Chat
 participant "CampusClaw Runtime" as Runtime
-participant "ChannelEventProjector" as Projector
-participant "FeishuMessageGateway" as Gateway
+participant "Projector /\nMessage Gateway" as Outbound
 
-User -> Feishu : send message
-Feishu -> Adapter : im.message.receive_v1
-Adapter -> Adapter : verify, normalize, and apply policy
-Adapter -> Inbound : accept normalized inbound DTO
-Inbound -> Store : insert by account_id and message_id
-
-alt duplicate provider message
-  Store --> Inbound : existing durable receipt
-  Inbound --> Adapter : accepted
-  Adapter --> Feishu : handler return
-else first provider delivery
-  Inbound -> Store : bind conversation and inbox
-  Inbound -> Outbox : enqueue PROCESS_INBOUND atomically
-  Inbound --> Adapter : durable receipt
-  Adapter --> Feishu : handler return
-
-  Outbox -> Worker : claim per-conversation task
-  Worker -> Chat : ensure dedicated chat and session mapping
-  Chat -> Runtime : create Session when mapping is absent
-  Runtime --> Chat : session_id
-  Chat -> Store : persist chat_id and session_id before submit
-  Worker -> Runtime : GET persisted events from page one
-  Runtime --> Worker : current highest entry_seq
-  Worker -> Store : persist SUBMITTING and pre_submit_entry_seq
-  Worker -> Runtime : POST /sessions/{id}/events as SSE
-
-  alt POST accepted and stream is connected
-    Runtime --> Worker : user.message with entry_id and entry_seq
-    Worker -> Store : persist accepted Entry identity
-    Worker -> Projector : assistant and tool SSE events
-    Projector -> Store : checkpoint durable Entry and desired card
-    Projector -> Outbox : enqueue coalesced card update
-    Outbox -> Gateway : create or update streaming card
-    Gateway -> Feishu : CardKit request with sequence and uuid
-    Runtime --> Worker : session.status.idle and stream.end
-    Worker -> Store : mark execution terminal
-  else connection result is uncertain
-    Worker -> Store : mark RECONCILING, do not replay POST
-    loop until Session is idle or recovery timeout
-      Worker -> Runtime : GET Session and GET events from page one
-      Runtime --> Worker : state and durable Entries
-      Worker -> Store : inspect entry_seq above pre-submit watermark
-    end
-    alt matching user Entry exists
-      Worker -> Store : record accepted Entry and continue final projection
-    else no matching Entry and Session is idle
-      Worker -> Store : return to READY_TO_SUBMIT
-      note right of Worker
-        A retry is allowed only after strong-read
-        reconciliation proves no acceptance.
-      end note
-    else ownership or history is ambiguous
-      Worker -> Store : mark MANUAL_RECONCILIATION
-      Worker -> Gateway : send bounded failure notice
-      Gateway -> Feishu : visible terminal result
-    end
-  end
+== 1. Accept durably ==
+Feishu -> Inbound : Deliver message
+Inbound -> Inbound : Verify and normalize
+Inbound -> Store : Dedupe + Inbox + Outbox\nOne transaction
+Store --> Inbound : Durable receipt
+Inbound --> Feishu : Acknowledge delivery
+break Duplicate provider message
+  Inbound -> Inbound : Keep existing receipt
 end
 
+== 2. Bind and submit once ==
+Worker -> Store : Claim FIFO task with fence
+Store --> Worker : Message and lease
+Worker -> Chat : Ensure dedicated Chat / Session
+Chat -> Runtime : Create Session if absent
+Runtime --> Chat : Session identity
+Chat --> Worker : Persisted mapping
+Worker -> Store : Save SUBMITTING and correlation
+Store --> Worker : Commit
+Worker -> Chat : Submit normalized content
+Chat -> Runtime : POST event: user.message\nwith ordered content
+Runtime --> Chat : data: full user.message\neventId
+Chat --> Worker : Complete receipt
+Worker -> Store : Save accepted_event_id\nClear content ciphertext atomically
+Store --> Worker : Commit
+
+== 3. Project and deliver ==
+loop Live response before corresponding session.status_idle
+  Runtime --> Chat : data: preview or complete event\nsourceEventId links original message
+  Chat --> Worker : ChannelChatEventDTO
+  Worker -> Outbound : Project allowed Assistant text
+  Outbound -> Store : Save desired view + Outbox
+  Store --> Outbound : Versioned delivery task
+  Outbound -> Store : Save uuid / sequence before call
+  Store --> Outbound : Commit
+  Outbound -> Feishu : Create or update fixed card
+  Feishu --> Outbound : Delivery result
+end
+Runtime --> Chat : data: corresponding session.status_idle
+Chat --> Worker : Correlated reason
+alt done / failed / terminated
+  Worker -> Store : Save result + final projection task
+  Store --> Outbound : Finalize card
+  Outbound -> Feishu : Final text; close streaming mode
+  Feishu --> Outbound : Delivery result
+else confirming
+  Worker -> Store : Keep execution active\nObserve full history; do not resubmit
+  Store --> Worker : Waiting state saved
+end
+note over Worker,Runtime
+confirming is a running wait, never success.
+No Feishu confirmation entry exists in v1; constrain tools before launch.
+Disconnect recovery depends on a saved receipt; see the recovery state diagram.
+end note
 @enduml
 
 @startuml channel_feishu_recovery_state
-title Channel Inbound Execution Recovery State
-
 ' Source evidence: pi-mono-java@1f801dbb82bdda30478e3354e685e3153b179a0c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/UserEventAcceptance.java lines 17-25
 ' Source evidence: pi-mono-java@1f801dbb82bdda30478e3354e685e3153b179a0c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java lines 68-82 and 150-164
-' Observed behavior: Runtime acceptance is durable before execution starts, while execution completion persists Session idle state.
-' Target-only design: Channel state makes uncertain HTTP results explicit and recoverable through durable Entry inspection.
-' Design reason: automatic blind replay would duplicate user.message because the current POST has no idempotency key.
 
-skinparam backgroundColor #FFFFFF
+' Observed behavior at fixed Java baseline: acceptance persists before execution; disconnect does not undo acceptance.
+' Target-only adaptation: current complete Runtime events identify acceptance and causality via eventId/sourceEventId.
+' Security hardening: missing receipt, empty history, matching text or idle state cannot prove non-acceptance.
+' Design reason: the current POST has no business idempotency key; retry only an explicit not-accepted error.
+skinparam backgroundColor white
 skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
 skinparam ArrowColor #475569
-skinparam defaultFontName sans-serif
-
-[*] --> ACCEPTED : inbox and outbox committed
-ACCEPTED --> READY_TO_SUBMIT : conversation lease acquired
-READY_TO_SUBMIT --> SUBMITTING : pre-submit watermark persisted
-SUBMITTING --> STREAMING : user.message Entry observed
-SUBMITTING --> RECONCILING : HTTP result uncertain
-STREAMING --> RECONCILING : SSE disconnected before terminal
-STREAMING --> COMPLETED : stream.end and final projection
-STREAMING --> FAILED : stream.error and final projection
-RECONCILING --> STREAMING : accepted Entry found and Session running
-RECONCILING --> COMPLETED : accepted Entry and terminal Entries found
-RECONCILING --> READY_TO_SUBMIT : no accepted Entry and Session idle
-RECONCILING --> MANUAL_RECONCILIATION : ownership or history ambiguous
-MANUAL_RECONCILIATION --> COMPLETED : operator records recovered outcome
-MANUAL_RECONCILIATION --> FAILED : operator closes unresolved outcome
-
-note right of RECONCILING
-  Do not POST again while acceptance
-  remains uncertain.
-end note
-
+skinparam state {
+  BackgroundColor #F8FAFC
+  BorderColor #64748B
+}
+skinparam nodesep 35
+skinparam ranksep 40
+title Channel Execution - Acceptance Determines Recovery
+state "Saved Runtime receipt" as Observed {
+  state STREAMING
+  state RECONCILING
+  STREAMING --> RECONCILING : Disconnect / restart /\nconfirming wait
+  RECONCILING --> RECONCILING : Read full history pages
+}
+[*] --> ACCEPTED : Inbox + Outbox committed
+ACCEPTED --> READY_TO_SUBMIT : FIFO lease acquired
+READY_TO_SUBMIT --> SUBMITTING : Persist local correlation
+SUBMITTING --> STREAMING : Save accepted_event_id\nand clear content
+SUBMITTING --> READY_TO_SUBMIT : Not accepted:\nretryable error
+SUBMITTING --> FAILED : Not accepted:\npermanent error
+SUBMITTING --> MANUAL_RECONCILIATION : Receipt lost or not saved
+Observed --> COMPLETED : Correlated terminal: done
+Observed --> FAILED : Correlated terminal:\nfailed / terminated
+RECONCILING --> MANUAL_RECONCILIATION : Ambiguous writer / branch /\nhistory / ownership
+MANUAL_RECONCILIATION --> COMPLETED : Verified outcome
+MANUAL_RECONCILIATION --> FAILED : Unresolved outcome
+COMPLETED --> [*]
+FAILED --> [*]
+legend bottom left
+RECONCILING matches eventId / sourceEventId in full history; it never POSTs again.
+Only the corresponding session.status_idle gives a terminal execution result.
+Idle alone, empty history and equal text are not acceptance or completion evidence.
+Fencing coordinates Channel workers; an expired lease does not stop old Runtime work.
+Delivery retries reuse the stored uuid and sequence; permanent delivery errors dead-letter.
+endlegend
 @enduml

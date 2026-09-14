@@ -1,16 +1,18 @@
 # CampusClaw Java 四表 GaussDB Session 事件存储 SR 设计
 
 > 文档编号：SR-MEM-001<br>
-> 版本：v0.14.2<br>
-> 日期：2026-08-11<br>
+> 版本：v0.15.0<br>
+> 日期：2026-09-14<br>
 > 状态：设计评审稿<br>
 > pi 源码基线：[`f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee`](https://github.com/badlogic/pi-mono/tree/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee)<br>
 > 设计仓库分析基线：`b5b0d1ecc3419c5960cac394b683a635ac9f853e`<br>
-> CampusClaw Java 源码基线：无；本文中的 Java 实现、GaussDB 存储和数据库发布机制均为目标方案<br>
+> CampusClaw Java 源码基线：四表方案未核验 Java 实现；本文 Java 接口、GaussDB 存储和发布机制为目标方案，压缩专题单独登记已核验实现<br>
 > 目标数据库：集中式 GaussDB<br>
 > JDBC 约束：openGauss JDBC `6.0.0-htrunks.csi.gaussdb_kernel.opengaussjdbc.r1`
 
-## 1. 结论
+## 1. 职责与设计结论
+
+本模块维护 Session 历史、当前路径、模型上下文恢复和累计用量。四表方案的源码范围见 §2；运行时压缩算法另见[压缩与恢复](./compaction.md)，其实现证据独立登记，不把四表目标等同于最新 Runtime 数据库全貌。公共事件投影由[Session Events](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)维护。
 
 CampusClaw 的 Session 存储由四张表组成：
 
@@ -32,7 +34,7 @@ CampusClaw 的 Session 存储由四张表组成：
 
 ![CampusClaw 四表 Session 架构](./设计图/memory-architecture.svg)
 
-[查看 PlantUML 源码](./设计图/diagram.puml#L6)
+[原尺寸 SVG](./设计图/memory-architecture.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L6)
 
 ### 1.1 术语约定
 
@@ -113,7 +115,7 @@ pi 基线使用七张 Session 数据表：`sessions`、`session_entries`、`sess
 
 ![CampusClaw 四表 Session 数据模型](./设计图/memory-data-model.svg)
 
-[查看 PlantUML 源码](./设计图/diagram.puml#L165)
+[原尺寸 SVG](./设计图/memory-data-model.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L165)
 
 ### 3.1 `t_sessions`
 
@@ -194,76 +196,8 @@ pi 基线使用七张 Session 数据表：`sessions`、`session_entries`、`sess
 
 ## 4. 最终态 GaussDB DDL
 
-```sql
-CREATE TABLE t_sessions (
-    id                 VARCHAR(128)   PRIMARY KEY,
-    created_at         TIMESTAMPTZ(3) NOT NULL,
-    cwd                VARCHAR(512)   NOT NULL,
-    parent_session_id  VARCHAR(128),
-    metadata           JSONB,
-    active_leaf_id     VARCHAR(128)
-);
+完整初始化语句见 [`schema.sql`](./schema.sql)，字段含义见 §3；SQL 只在该文件维护。
 
-COMMENT ON COLUMN t_sessions.id IS '会话的唯一 ID，用于关联该会话的历史记录、序号和汇总数据';
-COMMENT ON COLUMN t_sessions.created_at IS '创建这个会话的时间';
-COMMENT ON COLUMN t_sessions.cwd IS '创建会话时使用的工作目录；可用于按工作目录筛选会话';
-COMMENT ON COLUMN t_sessions.parent_session_id IS '当前会话复制自哪个来源会话；没有来源时为空，复制内容只包含来源会话的当前路径';
-COMMENT ON COLUMN t_sessions.metadata IS '创建会话时由调用方提供的附加信息 JSON；未提供时为 SQL NULL';
-COMMENT ON COLUMN t_sessions.active_leaf_id IS '当前路径最后一条历史记录的 ID；空会话时为空，普通读取只展示从该记录回溯得到的路径';
-
-CREATE INDEX idx_t_sessions_created_at
-    ON t_sessions (created_at DESC);
-
-CREATE INDEX idx_t_sessions_cwd
-    ON t_sessions (cwd);
-
-CREATE INDEX idx_t_sessions_parent
-    ON t_sessions (parent_session_id);
-
-CREATE TABLE t_session_entries (
-    session_id  VARCHAR(128)   NOT NULL,
-    id          VARCHAR(128)   NOT NULL,
-    entry_seq   BIGINT         NOT NULL,
-    parent_id   VARCHAR(128),
-    type        VARCHAR(64)    NOT NULL,
-    timestamp   TIMESTAMPTZ(3) NOT NULL,
-    payload     JSONB          NOT NULL,
-    PRIMARY KEY (session_id, id)
-);
-
-COMMENT ON COLUMN t_session_entries.session_id IS '这条历史记录属于哪个会话；对应 t_sessions.id';
-COMMENT ON COLUMN t_session_entries.id IS '这条历史记录的 ID；在同一个会话内唯一';
-COMMENT ON COLUMN t_session_entries.entry_seq IS '这条历史记录在会话中的持久化顺序号；从 1 开始且严格递增，不表示当前聊天路径';
-COMMENT ON COLUMN t_session_entries.parent_id IS '这条历史记录的直接父记录 ID；根记录为空，系统按该字段回溯当前路径，并保留编辑前的旧路径';
-COMMENT ON COLUMN t_session_entries.type IS '这条历史记录的种类；新写入不接受 leaf、branch_summary 和 label';
-COMMENT ON COLUMN t_session_entries.timestamp IS '这条历史记录产生时携带的事件时间；不是数据库保存该行的时间';
-COMMENT ON COLUMN t_session_entries.payload IS '这条历史记录的类型相关 JSON 内容；ID、父记录、事件时间和类型分别保存在其他字段中';
-
-CREATE UNIQUE INDEX idx_t_session_entries_session_seq
-    ON t_session_entries (session_id, entry_seq);
-
-CREATE INDEX idx_t_session_entries_session_parent
-    ON t_session_entries (session_id, parent_id);
-
-CREATE INDEX idx_t_session_entries_session_type
-    ON t_session_entries (session_id, type);
-
-CREATE TABLE t_session_sequences (
-    session_id  VARCHAR(128) PRIMARY KEY,
-    next_seq    BIGINT       NOT NULL
-);
-
-COMMENT ON COLUMN t_session_sequences.session_id IS '这行序号记录属于哪个会话；对应 t_sessions.id，每个会话一行';
-COMMENT ON COLUMN t_session_sequences.next_seq IS '下一条新历史记录要使用的 entry_seq；新建会话时为 1，每次成功追加后加 1';
-
-CREATE TABLE t_session_materialized (
-    session_id  VARCHAR(128) PRIMARY KEY,
-    payload     JSONB        NOT NULL
-);
-
-COMMENT ON COLUMN t_session_materialized.session_id IS '这份汇总属于哪个会话；对应 t_sessions.id，每个会话一行';
-COMMENT ON COLUMN t_session_materialized.payload IS '会话汇总 JSON；activePath 保存当前路径的名称、消息数、模型和思考级别，lifetimeUsage 保存会话自创建以来的 Token 和费用总和';
-```
 
 最终的 Session 应用 Schema 只包含上述四张表和 17 个字段。数据库发布平台负责初始化新环境，并在已有环境中删除三张不再使用的派生表。AgentService 运行账号只允许执行 DML，不具备 DDL 权限。
 
@@ -332,7 +266,7 @@ newUserMessage
 
 ![CampusClaw 四表 Session 写事务](./设计图/memory-write-transaction.svg)
 
-[查看 PlantUML 源码](./设计图/diagram.puml#L95)
+[原尺寸 SVG](./设计图/memory-write-transaction.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L95)
 
 ### 6.1 创建 Session
 
@@ -404,7 +338,7 @@ COMMIT
 
 ![CampusClaw 不依赖路径缓存的模型上下文重建](./设计图/memory-context-rebuild.svg)
 
-[查看 PlantUML 源码](./设计图/diagram.puml#L258)
+[原尺寸 SVG](./设计图/memory-context-rebuild.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L258)
 
 ### 7.1 读取当前路径
 
@@ -420,7 +354,7 @@ Repository 使用递归 CTE，从 `active_leaf_id` 指向的记录开始，按 `
 
 ### 7.2 普通分页与审计分页
 
-- `pageEntries`：先读取当前路径，再按路径内的 `entry_seq` 使用游标分页；仅供普通 UI、Session 打开流程和运行时使用。
+- `pageEntries`：内部读取当前路径，再按路径内 `entry_seq` 分批加载，供 Session 打开和模型恢复使用。公共 UI 经 [ListEvents](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#3-普通数字页码) 读取已过滤的完整事件，并使用普通 `page/nextPage`；内部读取位置不作为公共游标暴露。
 - `pageAllEntriesForAudit`：经过内部授权后，按整个 Session 的 `entry_seq` 分页，同时显示旧路径和当前路径；返回结果不得作为模型上下文。
 
 ### 7.3 重建模型上下文
@@ -516,20 +450,7 @@ JSONL 导入器只写入四张表。它先保存全部 Entry，再确定目标 `
 
 ## 11. 设计决策
 
-| ID | 决策 | 分类 |
-|---|---|---|
-| TD-MEM-01 | Session 应用 Schema 严格只使用四张 `t_` 表 | 产品约束 |
-| TD-MEM-02 | 完整历史以 `t_session_entries` 中的 `parent_id` 关系为准，`active_leaf_id` 指向当前路径末端 | 产品约束 |
-| TD-MEM-03 | 删除分支路径缓存，且不提供通用分支 API | 架构变化 |
-| TD-MEM-04 | 只允许编辑当前路径最近用户消息 | 产品约束 |
-| TD-MEM-05 | 编辑使用不可变新 Entry，不记录结构化替换字段 | 产品约束 |
-| TD-MEM-06 | 删除标签能力和 `t_entry_materialized` | 产品约束 |
-| TD-MEM-07 | 普通分页只读取当前路径，全部历史仅供内部审计 | 安全与产品约束 |
-| TD-MEM-08 | `t_session_materialized.payload` 分开保存当前路径摘要与会话累计用量 | 架构变化 |
-| TD-MEM-09 | 追加和编辑使用预期父记录/路径末端校验与数据库行锁 | 并发强化 |
-| TD-MEM-10 | 复制 Session 时只复制当前路径 | 产品约束 |
-| TD-MEM-11 | 不映射 pi 的 migration 记录，数据库发布平台是唯一升级入口 | 架构变化 |
-| TD-MEM-12 | Java 持久层使用 MyBatis Spring Boot Starter 3.0.4，并遵守 DTO/VO 分层边界 | Java 实现规范 |
+决策及理由集中在[§2.2](#22-campusclaw-目标决策)。实施引用保留以下编号：TD-MEM-01 四表、02 当前路径、03 无分支缓存、04 最近用户消息编辑、05 不可变新 Entry、06 无标签、07 审计隔离、08 双口径汇总、09 并发校验、10 当前路径复制、11 平台发布、12 MyBatis 3.0.4 与 DTO/VO 分层。它们不另定义一套规则。
 
 ## 12. 图表生成与验证
 
@@ -553,16 +474,17 @@ plantuml -tsvg diagram.puml
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| v0.14.2 | 2026-08-11 | 统一中文术语和行文风格：用按 `parent_id` 回溯的路径、当前路径末端、全部历史记录、并发校验和可重建的会话汇总解释相关概念；同步简化图中英文标签，不改变设计语义 |
-| v0.14.1 | 2026-08-11 | 优化四张图的可视化表达：统一颜色语义，将写事务和模型上下文长序列图收敛为并发校验流程与分层数据流，将数据模型调整为紧凑的四表布局；不改变 Schema、接口、事务和错误语义 |
-| v0.14 | 2026-08-11 | Session Schema 从七表收敛为四表；删除分支路径缓存、Entry 标签派生数据和通用分支能力；新增最近用户消息编辑、预期父记录/路径末端校验、当前路径分页、内部全历史审计分页，以及 `activePath`/`lifetimeUsage` 双口径汇总 |
-| v0.13 | 2026-08-06 | 目标表采用 `t_` 前缀；不映射 pi 的 migration 记录；数据库发布平台成为唯一升级入口；目标 DDL 合并为最终状态 |
+| v0.15.0 | 2026-09-14 | 集中维护 Session 存储与压缩职责，独立 DDL 并收敛重复说明。 |
+| v0.14.2 | 2026-08-11 | 统一中文术语和行文风格。 |
+| v0.14.1 | 2026-08-11 | 优化四张图的可视化表达。 |
+| v0.14 | 2026-08-11 | Session Schema 从七表收敛为四表。 |
+| v0.13 | 2026-08-06 | 采用 `t_` 表名与数据库发布平台统一升级。 |
 | v0.12 | 2026-08-03 | 调整数据库中文列注释表述，不改变 DDL 结构 |
 | v0.11 | 2026-08-03 | 为目标字段增加中文 `COMMENT ON COLUMN` |
 | v0.10 | 2026-08-03 | 标识字段、`type` 和 `cwd` 采用显式长度，增加长度预检和边界测试 |
 | v0.9 | 2026-08-03 | 补充各表职责，明确原始历史、缓存和派生汇总的边界 |
 | v0.8 | 2026-08-03 | 使用 `BIGINT`、`TIMESTAMPTZ(3)` 和 `JSONB` 原生类型 |
-| v0.7 | 2026-08-03 | 收敛为与 SQLite 物理表结构对齐的方案，并删除早期可靠性扩展 |
+| v0.7 | 2026-08-03 | 采用与 SQLite 物理表结构对应的初始方案 |
 | v0.6 | 2026-08-03 | 更新 pi 基线，并对齐写入序号、会话汇总、分支路径缓存和模型上下文处理 |
 | v0.5 | 2026-07-30 | 更新 pi 基线，并采用新 harness 的当前路径末端与 `retainedTail` 语义 |
 | v0.4 | 2026-07-20 | 将范围收敛为 Session 事件存储 |

@@ -295,7 +295,7 @@ rectangle "PATH INTEGRITY GUARD\nSame session\nComplete parents\nNo repeated IDs
 artifact "VALIDATED ACTIVE PATH\nroot to leaf" as path #E4F4E8
 
 package "Ordinary Product Reads" as ordinary {
-  rectangle "ACTIVE-PATH PAGE\nCursor page for UI" as page #DCEBFF
+  rectangle "ACTIVE-PATH PAGE\nComplete events for UI" as page #DCEBFF
   rectangle "CONTEXT PROJECTOR\nCompaction trim\nModel + thinking + tools\nMessage projection" as projector #EEE8FF
   rectangle "MODEL CONTEXT" as context #E4F4E8
 

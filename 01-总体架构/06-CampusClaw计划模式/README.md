@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.6.0 |
+| 文档版本 | 1.6.1 |
 | 更新日期 | 2026-09-14 |
 | 状态 | 推荐目标设计，target-only；本次不修改产品实现 |
 | 计划模式主基线 | DeepSeek Harness `0a53fb55bea101816fa226bb964ae2bed71c343b`，`dsh-0.1.2-alpha.2` |
@@ -11,6 +11,16 @@
 | CampusClaw 实现基线 | `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`；本次分析范围与本地 `f61906b9136246ca60f333704b6fc92b5420d0ec` 内容相同 |
 | 设计仓变更前基线 | `40a159d361f2f3e9da04594f791607dac85fd192` |
 | 源码依据 | [基线、符号与差距](source-evidence.md) |
+
+本页维护模式与审核的整体设计；专题按职责分工：
+
+| 需要查阅 | 唯一维护位置 |
+|---|---|
+| 模式、审核事务、生命周期与验收 | 本页 |
+| 工具与模型提示词的完整正文 | [计划与实施指令](plan-policy.md) |
+| TODO 工具输入输出、进度权威与恢复 | [TodoUpdate](todo-update.md) |
+| 尚未登记到精确契约的审核增量 | [接口增量](interface-delta.md) |
+| 固定源码提交、符号与实现差距 | [源码证据](source-evidence.md) |
 
 ## 1. 设计结论
 
@@ -75,7 +85,7 @@
 
 ![计划模式状态与准入](plan_mode_state.svg)
 
-[原尺寸 SVG](plan_mode_state.svg) · [PlantUML 源码：`plan_mode_state`](diagram.puml#L307)
+[原尺寸 SVG](plan_mode_state.svg) · [PlantUML 源码：`plan_mode_state`](diagram.puml#L329)
 
 新建 Session 的初始模式来自 Agent.mode；已是 plan 时直接发消息，无需再切换。创建接口仍无请求体，不自动调用模型或生成任务清单；普通 Session POST 只更新该 Session，不写回 Agent。
 
@@ -83,7 +93,7 @@
 
 ![计划模式完整交互](plan_mode_end_to_end.svg)
 
-[原尺寸 SVG](plan_mode_end_to_end.svg) · [PlantUML 源码：`plan_mode_end_to_end`](diagram.puml#L423)
+[原尺寸 SVG](plan_mode_end_to_end.svg) · [PlantUML 源码：`plan_mode_end_to_end`](diagram.puml#L460)
 
 | 阶段 | 用户与 Agent 交互 | 模式 / 进度与权威 |
 |---|---|---|
@@ -225,7 +235,7 @@ Session 是配置权威资源。当前九项目标契约以统一 POST 更新名
 
 ![计划提交、审核与原执行续跑](plan_mode_review_sequence.svg)
 
-[原尺寸 SVG](plan_mode_review_sequence.svg) · [PlantUML 源码：`plan_mode_review_sequence`](diagram.puml#L226)
+[原尺寸 SVG](plan_mode_review_sequence.svg) · [PlantUML 源码：`plan_mode_review_sequence`](diagram.puml#L229)
 
 提交计划时：先由原有 Projector 记录唯一的 `agent.tool_call`，`requiresConfirmation=false`，因为该调用不在申请工具权限。随后在同一个短事务内校验固定目标和模式，追加 `agent.plan` 与 `session.status_idle(confirming)`、关闭原段、登记待审核目标。提交成功后按该顺序推送并关闭 SSE。计划工具尚未返回，不提前制造 `agent.tool_result`。
 
@@ -319,16 +329,15 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 不新增 Maven 直接依赖；复用 JDK CompletableFuture、现有 Spring、MyBatis、Jackson、Bean Validation、取消和 SSE 设施。部署提示词和审核页只使用已有文件/Markdown能力，不引入 YAML 解析器或工作流库。新增 Java 类型和方法按仓库的中文 Javadoc、DTO/VO、方法长度规则实现；只改 `modules/*` 主源码，再经仓库同步机制生成镜像。
 
-## 9. 交付与校验
+## 9. 文档校验范围
 
-本次交付包括目标设计、接口增量、源码证据、默认计划提示词、一张全局类图、一张审核时序图、一张 TODO 工具事件时序图、一张完整交互时序图和一张状态图。仅修改设计仓，未执行尚不存在的 Runtime 计划模式测试。
-
-校验覆盖全仓 Mermaid/ASCII 扫描、专题 PlantUML 生成、SVG XML 与生成同步、Markdown 本地链接与块锚点、JSON 示例、原尺寸/文档缩放视觉检查和 `git diff --check`。源码证据表逐项校验路径与固定 Java 基线；本专题没有 OpenAPI/HTML 产品契约增量，相关检查不适用。设计校验不替代计划模式运行时验收。
+本专题维护一张完整目标类图、审核与 TODO 执行时序、端到端交互及状态图。修改图源后生成 SVG，检查 ASCII、XML、链接、行锚点、生成同步及原尺寸/文档缩放可读性；修改接口增量时检查 JSON 示例。设计校验不代替计划模式实现测试、模型遵循评估或跨实例恢复验收。
 
 ## 10. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.1 | 2026-09-14 | 明确专题分工并优化完整类图、审核与实施顺序图的阅读层次。 |
 | 1.6.0 | 2026-09-14 | Agent.mode 初始化新 Session，已有会话独立维护当前模式。 |
 | 1.5.0 | 2026-09-14 | 按模式组合规划审核与实施提示词，TODO 仅记录实施进度并补齐整体交互。 |
 | 1.4.0 | 2026-09-14 | TodoUpdate 通过通用工具调用和成功结果维护任务进度，保持事件与元数据结构稳定。 |

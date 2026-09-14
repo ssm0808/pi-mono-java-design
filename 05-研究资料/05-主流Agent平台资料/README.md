@@ -1,6 +1,6 @@
 # 主流 Agent 平台 Agent、Tool 与 Skill 创建官方文档
 
-> 文档版本：2.2.0
+> 文档版本：2.2.1
 >
 > 调研日期：2026-07-21
 >
@@ -18,7 +18,7 @@
 
 本文只采用平台官方文档、官方 API Reference、官方 SDK 文档或官方开源仓库。它是一份代表性入口清单，不承诺覆盖所有 Agent 产品，也不把名称相近但语义不同的对象强行对齐。
 
-本版已移除 `metadata` 字段调研。文档不讨论字段设计、统一数据模型或兼容层方案。
+本文不承担字段设计、统一数据模型或兼容层方案；资料状态限于原调研日期，选型时应重新核验。
 
 ## 2. 阅读口径
 
@@ -37,7 +37,7 @@ Tool 常见的创建方式包括函数定义、OpenAPI、MCP Server、插件和 
 
 ### 2.1 链接审查标记
 
-本版对全文链接进行了内容级复核，不以“域名官方、页面可打开”作为通过标准。每个入口同时检查官方归属、当前状态、页面语义、资源层级和是否存在更直接的创建文档。当平台公开了对应对象的独立资源 API 时，具体的 create API Reference 必须作为主入口，操作指南只能作为补充；只有代码定义、控制台创建或文件装载路径没有独立资源 API 时，指南才可作为主入口。详表使用以下标记：
+链接按原核验日期的内容分类，不能仅凭“域名官方、页面可打开”判定其用途。每个入口同时检查官方归属、当前状态、页面语义、资源层级和是否存在更直接的创建文档。当平台公开了对应对象的独立资源 API 时，具体的 create API Reference 必须作为主入口，操作指南只能作为补充；只有代码定义、控制台创建或文件装载路径没有独立资源 API 时，指南才可作为主入口。详表使用以下标记：
 
 | 标记 | 判定标准 |
 | --- | --- |
@@ -259,7 +259,7 @@ OSS Agent 是代码对象；LangSmith Assistant 是部署后的持久化配置�
 - **主入口**：[Build an Agent — New Agent Beta](https://docs.dify.ai/en/self-host/use-dify/build/new-agent/build)：在 self-hosted New Agent Beta 中新建 Agent、选择单/多 Agent 模式并配置模型、Tool 和 Skill。
 - **边界**：[Agent runtime API](https://docs.dify.ai/en/api-reference/guides/agent)：调用已发布 Agent 应用的运行时接口，不是 Agent 应用创建 API。
 
-Dify 官方公开 API 以运行已发布应用为主；创建和编排 Agent 应用主要通过 Studio 控制台完成。旧的“应用创建 Quickstart”实际演示的是 Workflow 内容生成应用，不能作为 Agent 创建主入口，故本版已移除。
+Dify 官方公开 API 以运行已发布应用为主；创建和编排 Agent 应用主要通过 Studio 控制台完成。Workflow 内容生成指南不属于 Agent 创建入口。
 
 #### Tool
 
@@ -322,25 +322,10 @@ Skill 的最常见可移植结构是一个带 YAML front matter 的 `SKILL.md` �
 
 ## 7. 证据边界与维护规则
 
-### 7.1 历次链接审查结果
+<a id="71-历次链接审查结果"></a>
+### 7.1 入口选择规则
 
-本轮再次逐页检查总览和详表中的所有官方链接，并增加“独立资源必须优先列对象级 create API Reference”的规则。当前修正项与上一轮保留的审查记录如下：
-
-| 平台 | 原入口或原判断 | 审查结果与处理 |
-| --- | --- | --- |
-| OpenAI | Skills 指南被列为 API Skill 创建主入口 | 改为对象级 [Create a Skill API](https://developers.openai.com/api/reference/resources/skills/methods/create)；Skills 指南降为包结构、版本和装载流程补充；Codex 文件型 Skill 继续单列 |
-| Microsoft | Prompt agent quickstart 被列为唯一 Agent 主入口 | 增加对象级 [Create an Agent REST API](https://learn.microsoft.com/en-us/rest/api/aifoundry/project/agents) 为主入口，quickstart 改为端到端补充 |
-| Anthropic | Managed Agents Tools 曾容易被理解为 Tool 创建页 | 确认 [Define tools](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools) 是定义主入口，Managed Agents Tools 仅作绑定与运行补充 |
-| Google | 上一轮以完整流程为由用 quickstart 取代对象级 API Reference | 恢复 [reasoningEngines.create API](https://docs.cloud.google.com/gemini-enterprise-agent-platform/reference/rest/v1beta1/projects.locations.reasoningEngines/create) 为云资源创建主入口，Agent Runtime ADK quickstart 保留为补充，两者分别回答“接口是什么”和“如何完成部署” |
-| AWS | AgentCore quickstart 和 Code Interpreter 指南被列为资源创建主入口 | 增加 [CreateAgentRuntime API](https://docs.aws.amazon.com/bedrock-agentcore-control/latest/APIReference/API_CreateAgentRuntime.html) 与 [CreateCodeInterpreter API](https://docs.aws.amazon.com/bedrock-agentcore-control/latest/APIReference/API_CreateCodeInterpreter.html) 为对象级主入口，原指南保留为操作流程补充 |
-| LangChain | Skills architecture 与 Deep Agents Skills 并列，主次不清 | 将 Deep Agents Skills 设为 `SKILL.md` 创建/装载主入口，架构页降为补充 |
-| 阿里云 | Plugins 总览 | 替换为直接包含创建、添加 Tool、调试和发布步骤的 Custom plugins；总览降为补充 |
-| 腾讯云 | CreatePlugin 被当作唯一 Tool 创建入口，且使用 `/api/` 路径 | 增加直接的“新建工具”页面，并采用官方页面的 `/product/1759/133501` 规范路径保留 CreatePlugin API |
-| Coze | 泛化 Python SDK 和开源版插件配置 | 移除不能直接证明 Bot 创建的 SDK；改用商业平台“基于 API 创建插件”，开源版配置页仅作补充 |
-| Dify | Workflow Quickstart 被误作 Agent 创建页；判断为无 Skill | 改用 Cloud Agent 与 self-hosted New Agent Beta 创建页；补充 New Agent Beta 的 `SKILL.md` 包上传/创建能力 |
-| 百度千帆 | 平台概述被用作 Tool 创建页 | 替换为直接说明组件创建、调试、发布和 Function Calling 的“工作流创建组件” |
-
-其余链接经内容级检查后保留。国产平台中，阿里云、腾讯云已有对象级创建 API，继续以 API Reference 为主；Coze、Dify、百度千帆没有用运行时 API 或泛化概述冒充未公开的同层级创建 API。只覆盖运行时、旧版产品或相邻概念的页面统一标为“边界”，不与创建主入口混列。
+有独立资源 API 时以对象级 Create Reference 为主入口；只有代码、控制台或文件装载路径时以实际操作指南为主入口。概念、部署和运行时调用文档分别标为补充或边界，不能冒充未公开的创建接口。具体平台已在 §4—§5 保留判断依据，无需再维护一份纠错经过表。
 
 ### 7.2 已观察事实
 
@@ -366,11 +351,12 @@ Skill 的最常见可移植结构是一个带 YAML front matter 的 `SKILL.md` �
 
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
-| 2.2.0 | 2026-07-21 | 按“对象级 create API Reference 优先”规则重新全量审查；OpenAI Skill 改用 Create API；补充 Microsoft Foundry Create Agent、Google reasoningEngines.create、AWS CreateAgentRuntime 与 CreateCodeInterpreter API；保留对应指南为补充 |
-| 2.1.0 | 2026-07-21 | 全量内容级审查官方链接；替换 Google 云端 Agent、阿里云自定义插件、腾讯云 Tool、Coze 插件、Dify Agent、百度组件入口；移除 Coze 泛化 SDK；补充 Dify New Agent Beta Skill；增加主入口、补充和边界标记 |
-| 2.0.1 | 2026-07-21 | 将 Anthropic `Define tools` 设为 Tool 创建/定义主入口，保留 Managed Agents Tools 作为绑定与运行补充 |
-| 2.0.0 | 2026-07-21 | 移除 metadata 字段调研；改为主流平台 Agent、Tool、Skill 创建官方文档索引；补充创建形态、证据边界和官方入口 |
-| 1.0.0 | 2026-07-21 | 初始版本，整理 Agent 创建 API 与 metadata 字段 |
+| 2.2.1 | 2026-09-14 | 将链接纠错经过收敛为入口选择规则，并明确原资料核验时效。 |
+| 2.2.0 | 2026-07-21 | 优先采用对象级 create API Reference 入口。 |
+| 2.1.0 | 2026-07-21 | 核对官方链接的对象与创建语义。 |
+| 2.0.1 | 2026-07-21 | 将 Anthropic `Define tools` 设为 Tool 创建/定义主入口，保留 Managed Agents Tools 作为绑定与运行补充。 |
+| 2.0.0 | 2026-07-21 | 移除 metadata 字段调研。 |
+| 1.0.0 | 2026-07-21 | 初始版本，整理 Agent 创建 API 与 metadata 字段。 |
 
 ## 9. 图表说明
 

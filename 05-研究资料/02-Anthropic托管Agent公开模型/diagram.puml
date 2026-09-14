@@ -3,15 +3,14 @@
 ' Source baseline: public documentation; Anthropic does not publish a source commit for this managed service.
 
 @startuml managed_agents_resource_model
-!pragma layout elk
 title Anthropic Managed Agents Public Resource Model
 top to bottom direction
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam roundcorner 8
-skinparam nodesep 45
-skinparam ranksep 55
+skinparam nodesep 25
+skinparam ranksep 35
 skinparam ArrowColor #53657D
 skinparam RectangleBorderColor #53657D
 skinparam RectangleBackgroundColor #F7F9FC
@@ -28,61 +27,51 @@ skinparam RectangleBackgroundColor #F7F9FC
 ' Observed behavior: vaults and memory stores are referenced by a session instead of being embedded in the reusable agent.
 ' Design reason: the layout centers the session and records only public relationships without inferring internal implementation.
 
-rectangle "Skill\ncustom versions or Anthropic skill" as Skill #F3EEFF
-rectangle "Agent\nversioned reusable configuration" as Agent #EAF2FF
-rectangle "Environment\nunversioned sandbox configuration" as Environment #EAF2FF
-
-rectangle "Vault\nworkspace credentials\n0..20 credentials per vault" as Vault #FFF4E6
-rectangle "Session\nruntime state machine\nidle | running | rescheduling | terminated" as Session #E9F7EF
-rectangle "Memory Store\nworkspace text documents\nmounted through resources" as MemoryStore #FFF4E6
-rectangle "Deployment\nschedule plus session configuration" as Deployment #FDEEF4
-
-rectangle "Agent snapshot\nresolved id, version, and session overrides" as Snapshot #F7F9FC
-rectangle "Sandbox\nisolated per session" as Sandbox #F7F9FC
-rectangle "Session thread\ncontext-isolated conversation" as Thread #F7F9FC
-rectangle "Deployment run\nattempt with session_id or error" as DeploymentRun #F7F9FC
-rectangle "Event stream\nuser events, system.message, agent events, session events, span events" as Event #F7F9FC
-
-Skill -[hidden]right- Agent
-Agent -[hidden]right- Environment
-Vault -[hidden]right- Session
-Session -[hidden]right- MemoryStore
-MemoryStore -[hidden]right- Deployment
-Snapshot -[hidden]right- Sandbox
-Sandbox -[hidden]right- Thread
-Thread -[hidden]right- DeploymentRun
-
-Skill --> Agent : referenced by skills
-Agent --> Session : resolve id and version
+package "Reusable configuration" #EAF2FF {
+  rectangle "Skill\ncustom or Anthropic" as Skill
+  rectangle "Agent\nversioned" as Agent
+  rectangle "Environment\nunversioned" as Environment
+  Skill -[hidden]down- Agent
+  Agent -[hidden]right- Environment
+}
+package "Session resources" #E9F7EF {
+  rectangle "Session\nruntime state machine" as Session
+  rectangle "Agent snapshot\nid, version, overrides" as Snapshot
+  rectangle "Sandbox\nisolated per Session" as Sandbox
+  rectangle "Session thread\nisolated conversation" as Thread
+  rectangle "Event stream\npersisted complete events" as Event
+  Snapshot -[hidden]right- Sandbox
+}
+package "Workspace services" #FFF4E6 {
+  rectangle "Vault\ncredentials" as Vault
+  rectangle "Memory Store\ntext documents" as MemoryStore
+  rectangle "Deployment\nschedule + Session config" as Deployment
+  rectangle "Deployment run\nsession_id or error" as DeploymentRun
+  Vault -[hidden]down- MemoryStore
+  MemoryStore -[hidden]down- Deployment
+}
+Skill --> Agent : skills
+Agent --> Session : resolve version
 Environment --> Session : environment_id
-Vault --> Session : vault_ids
-MemoryStore --> Session : resources
+Vault -[norank]-> Session : vault_ids
+MemoryStore -[norank]-> Session : resources
 Session *--> Snapshot : freezes
 Session *--> Sandbox : provisions
-Session *--> Thread : contains 1..*
-Thread *--> Event : persists 0..*
-Deployment --> Agent : agent configuration
-Deployment --> Environment : environment configuration
-Deployment *--> DeploymentRun : records 0..*
-Deployment --> Session : creates scheduled sessions
+Session *--> "1..*" Thread
+Thread *--> "0..*" Event
+Deployment -[norank]-> Agent : Agent config
+Deployment -[norank]-> Environment : Environment config
+Deployment *--> "0..*" DeploymentRun
+Deployment -[norank]-> Session : schedules
+legend bottom left
+Public resource relationships, not internal tables or services.
+Session: idle / running / rescheduling / terminated.
+Vault: at most 20 credentials. Exact fields and event types are in the document.
+endlegend
 
 @enduml
 
 @startuml session_agent_creation_sequence
-title Session Creation from a Versioned Agent Configuration
-
-autonumber
-hide footbox
-skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam sequenceArrowThickness 1
-skinparam sequenceParticipantBorderColor #53657D
-skinparam sequenceParticipantBackgroundColor #F7F9FC
-skinparam ArrowColor #53657D
-skinparam LifeLineBorderColor #90A0B5
-skinparam responseMessageBelowArrow true
-skinparam sequenceMessageAlign center
-
 ' Source evidence:
 ' - https://platform.claude.com/docs/en/managed-agents/sessions
 ' - https://platform.claude.com/docs/en/api/beta/sessions/create
@@ -90,158 +79,76 @@ skinparam sequenceMessageAlign center
 ' - https://platform.claude.com/docs/en/managed-agents/tools
 ' - https://platform.claude.com/docs/en/managed-agents/mcp-connector
 ' - https://platform.claude.com/docs/en/managed-agents/skills
-' Observed behavior: a session stores a resolved agent snapshot, provisions an isolated sandbox, starts idle, and begins work only after a user event is sent.
+' Observed behavior: a session stores a resolved agent snapshot, provisions an isolated sandbox, starts idle when initial_events is omitted or empty, and begins work after a user event is accepted.
 ' Logical inference: component boundaries and the exact preparation order below are explanatory architecture, not claims about Anthropic internal implementation.
 ' Design reason: separate immutable agent version resolution from session-local overrides and runtime resource preparation so the resulting session is traceable.
+title Managed Agents: Create, Then Start Work
+' Public contract checked 2026-09-14: sessions, create Session, and events-and-streaming.
+' Observed update: a non-empty initial_events list starts the Session as running.
+' Logical inference: API self-actions summarize public effects, not internal service order.
+autonumber
+hide footbox
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam maxMessageSize 190
+skinparam BoxPadding 10
+skinparam sequence {
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
+  ParticipantBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F1F5F9
+}
 
-actor Caller
-boundary "Session API" as SessionAPI
-database "Agent Store" as AgentStore
-control "Config Resolver" as Resolver
-database "Environment Store" as EnvStore
-control "Sandbox Provisioner" as Sandbox
-control "Resource and Skill Mounter" as Mounter
-control "Vault and MCP Binder" as VaultBinder
-control "Tool Registry" as ToolRegistry
-database "Session Store" as SessionStore
-boundary "Event API" as EventAPI
-control "Agent Runtime" as Runtime
-entity "Claude Model" as Model
+actor Client
+boundary "Managed Agents\nSession API" as API
+participant "Claude Model" as Model
 
-Caller -> SessionAPI: POST /v1/sessions\nagent, environment_id, resources, vault_ids
-activate SessionAPI
+== 1. Resolve the Session ==
+Client -> API : Create Session\nAgent and Environment references
+API -> API : Resolve latest or pinned Agent version
+API -> API : Apply complete-field overrides
+break Invalid effective configuration
+  API --> Client : Validation error; no Session
+end
+API -> API : Prepare isolated sandbox and resources
+API -> API : Capture resolved Agent configuration
 
-group Resolve the base agent version [Observed result]
-  SessionAPI -> AgentStore: Resolve agent ID and requested version
-  alt Agent ID string or version omitted
-    AgentStore -> AgentStore: Select latest version at creation time
-  else Explicit version
-    AgentStore -> AgentStore: Select the requested immutable version
-  end
-  AgentStore --> SessionAPI: AgentVersion(id, version, configuration)
+== 2. Select the start boundary ==
+alt initial_events omitted or empty
+  API --> Client : Session: idle
+  ... Client starts a task later ...
+  Client -> API : Send user.message
+  API --> Client : Accepted event
+else Non-empty initial_events
+  API -> API : Validate and persist initial events
+  API --> Client : Session: running
 end
 
-group Materialize the effective agent [Observed rules, inferred component]
-  SessionAPI -> Resolver: Build effective configuration
-  activate Resolver
-  Resolver -> Resolver: Deep-copy the base AgentVersion
+== 3. Observe work ==
+API -> Model : Run with resolved context and tools
+Model --> API : Message or tool request
+Client -> API : Open event stream
+API -->> Client : Session and Agent events
 
-  loop model, system, tools, mcp_servers, skills
-    alt Override field is omitted
-      Resolver -> Resolver: Inherit the base field
-    else Override is null or an empty list
-      Resolver -> Resolver: Clear the field
-    else Override has a value
-      Resolver -> Resolver: Replace the complete field; do not merge
-    end
-  end
-
-  Resolver -> Resolver: Require a model
-  Resolver -> Resolver: Validate skills and read-tool compatibility
-  Resolver -> Resolver: Validate MCP server and toolset references
-
-  alt Effective configuration is invalid
-    Resolver --> SessionAPI: Validation error
-    deactivate Resolver
-    SessionAPI --> Caller: 400 error
-    deactivate SessionAPI
-  else Effective configuration is valid
-    Resolver -> Resolver: Resolve defaults and concrete references
-    note right of Resolver
-      Examples:
-      - Normalize model and speed
-      - Expand tool defaults
-      - Resolve skill versions
-      - Keep concrete subagent versions
-    end note
-    Resolver --> SessionAPI: ResolvedAgentSnapshot
-    deactivate Resolver
-  end
-end
-
-group Prepare the session runtime [Observed effects, inferred order]
-  SessionAPI -> EnvStore: Read environment configuration
-  EnvStore --> SessionAPI: Packages, networking, runtime settings
-
-  SessionAPI -> Sandbox: Provision a fresh isolated sandbox
-  activate Sandbox
-  Sandbox -> Sandbox: Install or attach environment packages
-  Sandbox -> Sandbox: Apply networking policy
-  Sandbox --> SessionAPI: Sandbox handle
-  deactivate Sandbox
-
-  SessionAPI -> Mounter: Mount session resources
-  activate Mounter
-  opt Files or repositories are attached
-    Mounter -> Mounter: Mount files and clone requested revisions
-  end
-  opt Memory stores are attached
-    Mounter -> Mounter: Mount stores and prepare memory instructions
-  end
-  Mounter -> Mounter: Mount resolved agent skills
-  Mounter --> SessionAPI: Mounted resource descriptors
-  deactivate Mounter
-
-  SessionAPI -> VaultBinder: Bind vault credentials to MCP server URLs
-  activate VaultBinder
-  VaultBinder -> VaultBinder: Prepare MCP connections without storing secrets in the agent
-  VaultBinder --> SessionAPI: Session-local MCP bindings
-  deactivate VaultBinder
-
-  SessionAPI -> ToolRegistry: Register effective tools and permission policies
-  activate ToolRegistry
-  ToolRegistry -> ToolRegistry: Register built-in, MCP, and custom tool contracts
-  ToolRegistry --> SessionAPI: Effective tool registry
-  deactivate ToolRegistry
-end
-
-group Persist the session boundary [Observed result]
-  SessionAPI -> SessionStore: Create session with resolved agent snapshot
-  activate SessionStore
-  SessionStore -> SessionStore: Store base agent ID and concrete version
-  SessionStore -> SessionStore: Store environment, resources, vault IDs, and metadata
-  SessionStore -> SessionStore: Initialize primary thread and status = idle
-  SessionStore --> SessionAPI: Session(id, agent snapshot, status = idle)
-  deactivate SessionStore
-  note over SessionAPI, SessionStore
-    POST /v1/sessions provisions the runtime boundary.
-    It does not send task work to the model.
-  end note
-end
-
-SessionAPI --> Caller: 200 Session
-deactivate SessionAPI
-
-== Work starts in a separate event request ==
-
-Caller -> EventAPI: POST /v1/sessions/{id}/events\nuser.message
-activate EventAPI
-EventAPI -> SessionStore: Load session and resolved snapshot
-SessionStore --> EventAPI: Session status = idle
-EventAPI -> Runtime: Start agent turn with snapshot and user event
-activate Runtime
-Runtime -> SessionStore: Set status = running
-Runtime -> Model: Invoke resolved model with system, history, and tools
-activate Model
-Model --> Runtime: Message or tool request
-deactivate Model
-Runtime --> EventAPI: Stream agent and session events
-deactivate Runtime
-EventAPI --> Caller: Event stream or acknowledgement
-deactivate EventAPI
-
+legend bottom left
+Beta public contract; internal preparation order is not published.
+Session overrides do not create a new Agent version.
+initial_events: user.message / user.define_outcome only; at most 50.
+endlegend
 @enduml
 
 @startuml managed_agent_configuration_model
-!pragma layout smetana
 title Anthropic Managed Agent Public Configuration Model
 top to bottom direction
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam roundcorner 8
-skinparam nodesep 40
-skinparam ranksep 45
+skinparam nodesep 20
+skinparam ranksep 30
 skinparam classAttributeIconSize 0
 skinparam ArrowColor #53657D
 skinparam ClassBorderColor #53657D
@@ -257,6 +164,7 @@ skinparam ClassBackgroundColor #F7F9FC
 ' Observed behavior: an MCP server declaration and its MCP toolset reference must match by name.
 ' Design reason: field names and discriminator values follow the public request and response contract.
 
+package "Reusable Agent" #EAF2FF {
 class ManagedAgent <<public API resource>> {
   id: String
   type: agent
@@ -265,16 +173,36 @@ class ManagedAgent <<public API resource>> {
   description: String?
   system: String?
   metadata: Map<String, String>
-  created_at: Timestamp
-  updated_at: Timestamp
-  archived_at: Timestamp?
 }
 
+}
+
+package "Model and capabilities" #F3EEFF {
 class ModelConfig {
   id: String
   speed: standard | fast
 }
 
+class SkillReference {
+  type: anthropic | custom
+  skill_id: String
+  version: String?
+}
+
+class MultiagentCoordinator {
+  type: coordinator
+  agents: AgentReference[]
+}
+
+class AgentReference <<tagged union>> {
+  type: agent | self
+  id: String?
+  version: Integer?
+}
+
+}
+
+package "Tool contract and configuration" #E9F7EF {
 abstract class ToolDefinition <<tagged union>> {
   type: String
 }
@@ -315,23 +243,10 @@ class McpServer {
   url: String
 }
 
-class SkillReference {
-  type: anthropic | custom
-  skill_id: String
-  version: String?
 }
 
-class MultiagentCoordinator {
-  type: coordinator
-  agents: AgentReference[]
-}
-
-class AgentReference <<tagged union>> {
-  type: agent | self
-  id: String?
-  version: Integer?
-}
-
+ModelConfig -[hidden]down- SkillReference
+SkillReference -[hidden]down- MultiagentCoordinator
 ManagedAgent *-- "1" ModelConfig : model
 ManagedAgent *-- "0..*" ToolDefinition : tools
 ToolDefinition <|-- AgentToolset
@@ -340,48 +255,26 @@ ToolDefinition <|-- CustomTool
 AgentToolset *-- "0..*" ToolConfig : configures
 McpToolset *-- "0..*" ToolConfig : configures
 ToolConfig o-- "0..1" PermissionPolicy
-ManagedAgent *-- "0..20" McpServer : mcp_servers
+ManagedAgent *-[norank]- "0..20" McpServer : mcp_servers
 McpToolset --> "1" McpServer : matches by name
-ManagedAgent *-- "0..*" SkillReference : skills
-ManagedAgent *-- "0..1" MultiagentCoordinator : multiagent
+ManagedAgent *-[norank]- "0..*" SkillReference : skills
+ManagedAgent *-[norank]- "0..1" MultiagentCoordinator : multiagent
 MultiagentCoordinator *-- "1..20" AgentReference : roster
 
-note right of ManagedAgent
-Create requires name and model.
-Update requires the current version.
-Configuration changes create a new version.
-end note
 
-note right of AgentToolset
-Built-in names:
-bash, read, write, edit,
-glob, grep, web_fetch, web_search
-end note
 
-note left of ToolDefinition
-Maximum 128 effective tools
-across all toolsets.
-end note
 
-note right of SkillReference
-The session-wide limit is 500 skills
-across every agent in the session.
-end note
 
+
+legend bottom left
+Research map of the 2026-08-16 field baseline; exact fields are maintained in tables.
+Create requires name and model. Update version is an optional optimistic lock (2026-09-14).
+Maximums: 128 effective tools, 500 skills across a Session, 20 roster Agents.
+PermissionPolicy shows the original two policy examples; it is not the current full union.
+endlegend
 @enduml
 
 @startuml managed_agents_tool_execution_model
-title Anthropic Managed Agents Public Tool Execution Boundaries
-
-skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam roundcorner 8
-skinparam sequenceArrowThickness 1
-skinparam sequenceParticipantBorderColor #53657D
-skinparam sequenceParticipantBackgroundColor #F7F9FC
-skinparam ArrowColor #53657D
-skinparam LifeLineBorderColor #90A0B5
-
 ' Source evidence:
 ' - https://platform.claude.com/docs/en/managed-agents/tools
 ' - https://platform.claude.com/docs/en/managed-agents/mcp-connector
@@ -390,62 +283,75 @@ skinparam LifeLineBorderColor #90A0B5
 ' Observed behavior: built-in tools run in the session sandbox, MCP tools run on the declared remote server, and custom tools run in the client application.
 ' Observed behavior: always_ask pauses the session for user.tool_confirmation; custom calls pause for user.custom_tool_result.
 ' Design reason: the sequence separates declaration from runtime ownership and does not imply a shared executable format.
+title Managed Agents: Who Executes Each Tool?
+' Public contract checked 2026-09-14: tools and events-and-streaming.
+' Design reason: each branch exposes only the public API and the actual executor.
+autonumber
+hide footbox
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam maxMessageSize 190
+skinparam BoxPadding 10
+skinparam sequence {
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
+  ParticipantBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F1F5F9
+}
 
-actor User
-participant "Client application" as Client
-participant "Managed Agents API" as API
-participant "Session runtime" as Runtime
+actor "Client application" as Client
+boundary "Managed Agents API" as API
 participant "Session sandbox" as Sandbox
-participant "Vault service" as Vault
 participant "Remote MCP server" as MCP
 
-User -> Client : submit task
-Client -> API : create session(agent, environment_id, vault_ids)
-API -> Runtime : provision resolved agent snapshot
-Client -> API : user.message
-API -> Runtime : start work
+Client -> API : Send user.message
+API --> Client : Accepted event
 
-group Built-in agent tool
-  Runtime -> API : agent.tool_use
+== Server-executed tools ==
+alt Built-in tool selected
+  API -->> Client : agent.tool_use
   opt permission_policy = always_ask
-    API -->> Client : session.status_idle(requires_action)
-    Client -> API : user.tool_confirmation(allow | deny)
+    API -->> Client : Idle: requires_action
+    Client -> API : user.tool_confirmation
   end
-  API -> Sandbox : execute built-in tool
-  Sandbox --> API : tool result
-  API --> Runtime : continue with result
-end
-
-group MCP tool
-  Runtime -> API : agent.mcp_tool_use
+  alt Allowed
+    API -> Sandbox : Execute built-in tool
+    Sandbox --> API : Tool result
+  else Denied
+    API -> API : Continue without executing the tool
+  end
+else MCP tool selected
+  API -->> Client : agent.mcp_tool_use
   opt permission_policy = always_ask
-    API -->> Client : session.status_idle(requires_action)
-    Client -> API : user.tool_confirmation(allow | deny)
+    API -->> Client : Idle: requires_action
+    Client -> API : user.tool_confirmation
   end
-  API -> Vault : resolve credential by server URL
-  Vault --> API : runtime credential
-  API -> MCP : invoke MCP tool
-  MCP --> API : MCP result
-  API --> Runtime : continue with result
+  alt Allowed
+    API -> MCP : tools/call\nSession Vault credential
+    MCP --> API : Tool result
+  else Denied
+    API -> API : Continue without executing the tool
+  end
 end
 
-group Custom tool
-  Runtime -> API : agent.custom_tool_use(name, input)
-  API -->> Client : event plus session.status_idle(requires_action)
-  Client -> Client : execute application code
-  Client -> API : user.custom_tool_result(custom_tool_use_id, content)
-  API -> Runtime : resume when all blocking calls resolve
-end
+== Application-executed tool ==
+API -->> Client : agent.custom_tool_use\nIdle: requires_action
+Client -> Client : Execute application code
+Client -> API : user.custom_tool_result
+API -> API : Resume when blocking calls resolve
+API -->> Client : agent.message and Session status
 
-Runtime --> API : agent.message and session status
-API -->> Client : event stream
-Client --> User : result
-
+legend bottom left
+Illustrative tool paths; not a requirement to call all three tool types.
+Custom tools are controlled by the application, outside permission_policy.
+Credentials belong to Session bindings, not reusable Agent definitions.
+endlegend
 @enduml
 
 @startuml managed_agents_session_history_recovery
-title Anthropic Managed Agents Session History and Display Recovery
-
 ' Official source evidence accessed 2026-08-16:
 ' https://platform.claude.com/docs/en/api/beta/sessions/events/list
 ' https://platform.claude.com/docs/en/api/typescript/beta/sessions/threads/events/list
@@ -458,66 +364,65 @@ title Anthropic Managed Agents Session History and Display Recovery
 ' Observed behavior: multiagent child histories and live previews are thread-scoped.
 ' Design reason: the client rebuilds display state from persisted events, opens the live stream,
 ' and replaces temporary previews when the authoritative buffered event arrives.
-
+title Managed Agents: Restore History and Reconcile Preview
+' Public contract checked 2026-09-14: events-and-streaming.
+' Design reason: one API participant represents public endpoints; the reducer is a client responsibility.
 autonumber
 hide footbox
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
-skinparam sequenceArrowThickness 1
-skinparam sequenceParticipantBorderColor #53657D
-skinparam sequenceParticipantBackgroundColor #F7F9FC
-skinparam ArrowColor #53657D
-skinparam LifeLineBorderColor #90A0B5
-skinparam responseMessageBelowArrow true
-skinparam sequenceMessageAlign center
+skinparam defaultFontSize 13
+skinparam maxMessageSize 190
+skinparam BoxPadding 10
+skinparam sequence {
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
+  ParticipantBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F1F5F9
+}
 
 actor User
 boundary "Client UI" as Client
-control "Conversation reducer" as Reducer
-boundary "Session API" as SessionAPI
-boundary "Event History API" as HistoryAPI
-boundary "Event Stream API" as StreamAPI
+control "Conversation\nprojection" as View
+boundary "Managed Agents\nPublic APIs" as API
 
-User -> Client : Open an existing session
-Client -> SessionAPI : GET /v1/sessions/{session_id}
-SessionAPI --> Client : Session resource and current status
-
+== 1. Restore authoritative history ==
+User -> Client : Open Session
+Client -> API : Retrieve Session
+API --> Client : Resource and current status
 loop Until next_page is null
-  Client -> HistoryAPI : GET /v1/sessions/{session_id}/events\norder=asc, limit, page
-  HistoryAPI --> Client : data, next_page, prev_page
-  Client -> Reducer : Apply persisted events in order
+  Client -> API : List events: order=asc, page
+  API --> Client : Persisted event page
+  Client -> View : Apply complete events in order
 end
-Reducer --> Client : Rebuilt authoritative conversation display
-
-opt Multiagent session
-  Client -> SessionAPI : GET /v1/sessions/{session_id}/threads
-  SessionAPI --> Client : Primary and child threads
-  loop Each visible thread
-    Client -> HistoryAPI : GET /v1/sessions/{session_id}/threads/{thread_id}/events
-    HistoryAPI --> Client : Persisted thread events
-    Client -> Reducer : Build the thread timeline
-  end
+opt Multiagent Session
+  Client -> API : List Threads and visible Thread history
+  API --> Client : Thread resources and event pages
+  Client -> View : Build each Thread timeline
 end
+View --> Client : Restored display
 
-Client -> StreamAPI : GET /v1/sessions/{session_id}/events/stream\nevent_deltas[]=agent.message
-StreamAPI -->> Client : event_start and event_delta previews
-Client -> Reducer : Accumulate preview by event ID and content index
-Reducer --> Client : Render temporary text
-StreamAPI -->> Client : Buffered agent.message with the same event ID
-Client -> Reducer : Replace preview with authoritative event
-Reducer --> Client : Render committed message
+== 2. Reconcile live preview ==
+Client -> API : Open stream with agent.message deltas
+API -->> Client : event_start / event_delta
+Client -> View : Accumulate by event ID and content index
+API -->> Client : Complete agent.message
+Client -> View : Replace matching preview
+View --> Client : Authoritative message
 
-... Network disconnect ...
+== 3. Recover after disconnect ==
+... Connection lost ...
+Client -> API : Reopen event stream
+Client -> API : Query persisted history again
+API --> Client : Complete events missed offline
+Client -> View : Deduplicate IDs and reconcile
+View --> Client : Recovered display
 
-Client -> StreamAPI : Reopen the stream
-Client -> HistoryAPI : List persisted event history again
-HistoryAPI --> Client : Buffered events emitted while disconnected
-Client -> Reducer : Deduplicate by event ID and reconcile display
-Reducer --> Client : Recovered conversation display
-
-note over Client, StreamAPI
-Missed event deltas cannot be requested again.
-Only persisted buffered events restore authoritative history.
-end note
-
+legend bottom left
+Preview is best-effort, never persisted or replayed.
+The complete event is authoritative; child previews stay Thread-scoped.
+Endpoint paths and paging fields are listed in the accompanying document.
+endlegend
 @enduml

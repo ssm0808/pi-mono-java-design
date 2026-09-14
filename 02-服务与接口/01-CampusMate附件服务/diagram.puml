@@ -1,4 +1,4 @@
-' Generated for CampusMate File Service v3.0.0 on 2026-08-18.
+' Generated for CampusMate File Service v3.1.0 on 2026-09-14.
 ' Run from this directory: plantuml -tsvg diagram.puml
 ' Design repository baseline: 2b747808e93609a4fc71d919dbd72bcd56a6e502.
 ' pi-mono baseline: 086c32e74530564922d011ade23ff582c9d63116.
@@ -6,8 +6,6 @@
 ' Target-only design: neither source baseline implements this managed file service.
 
 @startuml file_upload_and_scan_flow
-title File Streaming Upload and Asynchronous Scan
-
 ' Source evidence:
 ' pi-mono packages/agent/src/agent.ts, prompt
 ' pi-mono packages/ai/src/types.ts, ImageContent
@@ -16,74 +14,88 @@ title File Streaming Upload and Asynchronous Scan
 ' Architecture change: mate-service streams files to private OBS and stores metadata in openGauss.
 ' Security hardening: uploaded scripts remain untrusted bytes and are never executed.
 
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam maxMessageSize 210
+skinparam sequenceMessageAlign left
+hide footbox
 skinparam sequence {
-  ArrowColor #334155
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
   ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
+  GroupBorderColor #CBD5E1
   GroupBackgroundColor #F8FAFC
 }
+title File Upload - Store, Scan, Respond
+actor Client
+participant "File API" as API
+database "Chat Store" as Chats
+database openGauss as DB
+participant "Private OBS" as OBS
+participant "Scan Worker" as Worker
+participant Scanner
 
-actor "CampusMate Client" as client
-participant "mate-service File API" as api
-database "Mate Chat Store" as chats
-database "Shared openGauss" as db
-participant "Private OBS" as obs
-participant "Scan Worker" as worker
-participant "Security Scanner" as scanner
+== 1. Authorize and allocate ==
+Client -> API : Upload file\nJWT, X-File-Size, Prefer
+API -> Chats : Authorize Chat / resolve Session
+Chats --> API : session_id
+API -> API : Normalize name / validate size
+API -> DB : Insert identity + active detail
+DB --> API : Commit file_id
 
-client -> api : POST /v1/chats/{chat_id}/attachments\nJWT, file, X-File-Size, and Prefer
-api -> chats : authorize chat_id and resolve session_id
-chats --> api : authorized session_id
-api -> api : normalize filename and validate size
-api -> api : generate file_id
-api -> db : insert t_file and t_file_active_detail
-db --> api : identity committed
-api -> obs : create-only streaming PUT by file_id
-obs --> api : immutable object persisted
-api -> api : verify length, EOF, and SHA-256
-api -> db : set PROCESSING and trusted digest
-db --> api : update committed
+== 2. Store immutable bytes ==
+API -> OBS : Create-only PUT(file_id)\nCount bytes and calculate SHA-256
+alt Object key already exists
+  OBS --> API : Conflict
+  API -> DB : FAILED + OBJECT_KEY_CONFLICT
+  DB --> API : Quarantine committed
+  API --> Client : Storage error
+else Object stored
+  OBS --> API : PUT complete
+  API -> API : Check declared length and EOF
+  API -> DB : Set PROCESSING + digest
+  DB --> API : Commit
 
-alt Prefer wait and READY within at most 10 seconds
-  worker -> db : claim short scan lease and commit
-  worker -> obs : streaming GET by file_id
-  obs --> worker : bounded byte stream
-  worker -> scanner : sniff MIME and scan stream
-  scanner --> worker : safe
-  worker -> db : conditional READY update
-  api --> client : 201 ResultBean with READY resource
-else default, asynchronous, or wait expires
-  api --> client : 202 ResultBean with PROCESSING resource
-  worker -> db : claim short scan lease and commit
-  worker -> obs : streaming GET by file_id
-  obs --> worker : bounded byte stream
-  worker -> scanner : sniff MIME and scan stream
-  scanner --> worker : safe, blocked, or failure
-  worker -> db : conditional terminal or retry update
+  == 3. Respond and scan independently ==
+  par HTTP response policy
+    alt No wait preference
+      API --> Client : 202 PROCESSING
+    else Prefer wait=N (at most 10 seconds)
+      API -> DB : Observe committed scan state
+      DB --> API : State within wait window
+      alt READY
+        API --> Client : 201 READY
+      else BLOCKED
+        API --> Client : 422 FILE_BLOCKED
+      else Wait expires
+        API --> Client : 202 PROCESSING
+      end
+    end
+  else Scan work
+    Worker -> DB : Claim short lease
+    DB --> Worker : Lease committed
+    Worker -> OBS : Stream GET(file_id)
+    OBS --> Worker : Bounded byte stream
+    Worker -> Scanner : Detect MIME / scan bytes
+    Scanner --> Worker : Safe, blocked or failure
+    Worker -> DB : Conditional state / retry update
+    DB --> Worker : Commit
+  end
 end
 
-note over api,obs
-No Pod-local file and no complete byte array.
-file_id is the exact OBS Object Key.
-Create-only conflict enters audited quarantine.
+note over API,OBS
+file_id is the OBS Object Key.
+No local file or complete byte array.
 end note
-
-note over db,worker
-OBS I/O and scanning never hold a DB transaction.
-Only READY files can be resolved by CampusClaw.
+note over DB,Worker
+Release the database transaction before external I/O.
 end note
 @enduml
 
 @startuml file_obs_opengauss_storage_split
-!pragma layout elk
-title File OBS and openGauss Responsibility Split
-
 ' Source evidence:
 ' pi-mono packages/ai/src/types.ts, ImageContent
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/types/ImageContent.java, ImageContent
@@ -91,67 +103,53 @@ title File OBS and openGauss Responsibility Split
 ' Architecture change: OBS owns immutable bytes and openGauss owns identity, state, and worker leases.
 ' Product constraint: Mate Chat Store alone owns chat_id to session_id mappings.
 ' Design reason: isolate large-object throughput from relational state and database backup.
-
-skinparam backgroundColor #FFFFFF
+' Target-only design: shared file storage for every stateless API Pod and background worker.
+skinparam backgroundColor white
 skinparam shadowing false
-skinparam roundcorner 8
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
 skinparam ArrowColor #475569
-skinparam ComponentBorderColor #475569
-skinparam ComponentBackgroundColor #F8FAFC
-skinparam DatabaseBorderColor #475569
-skinparam DatabaseBackgroundColor #F8FAFC
-
-rectangle "mate-service Deployment" as mate {
-  component "File API Pod A" as a
-  component "File API Pod B" as b
-  component "Scan and Delete Worker" as worker
-  interface "FileContentStore" as port
-  component "ObsFileContentStore" as adapter
-  a --> port : stream by file_id
-  b --> port : stream by file_id
-  worker --> port : stat or delete by file_id
-  port --> adapter : implemented by
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam nodesep 25
+skinparam ranksep 35
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #64748B
 }
-
-database "Mate Chat Store\nchat_id to session_id" as chats
-database "Shared openGauss" as db {
-  rectangle "t_file\npermanent identity and status" as main
-  rectangle "t_file_active_detail\nremoved after content deletion" as detail
-  main -- detail : one-to-one while active
+title File Storage - Shared Authority Across Pods
+top to bottom direction
+component "CampusClaw" as Runtime
+package "mate-service deployment" {
+  component "File API Pods (1..N)" as API
+  component "Scan / Delete Workers" as Worker
+  interface "FileContentStore" as Port
+  component "ObsFileContentStore" as Adapter
+  API --> Port : stream(file_id)
+  Worker --> Port : stat / delete(file_id)
+  Adapter .up.|> Port
 }
-cloud "Private OBS\nimmutable file bytes" as obs
-component "CampusClaw" as runtime
-
-a --> chats : authorize chat and resolve Session
-b --> chats : authorize chat and resolve Session
-a --> db : metadata transactions
-b --> db : metadata transactions
-worker --> db : lease and state transactions
-adapter --> obs : TLS and private bucket
-runtime --> b : internal resolve and content stream
-
-note bottom of db
-t_file retains file_id, session_id, status,
-created_at, and deleted_at as a permanent tombstone.
-Active detail owns filename, trusted MIME, size,
-digest, reference, expiry, retry, and lease fields.
-end note
-
-note bottom of obs
-One immutable object per file_id.
-The exact Object Key equals file_id.
-There is no second resource id, prefix, or file-name part.
-end note
-
-note bottom of mate
-No BLOB, URL, credential, local file,
-authoritative in-memory map, or complete file cache.
-end note
+database "Mate Chat Store\nchat_id -> session_id" as Chat
+database "Shared openGauss" as DB {
+  rectangle "t_file\nPermanent identity / status" as File
+  rectangle "t_file_active_detail\nLive metadata / lease / retry" as Detail
+  File -- "0..1" Detail
+}
+cloud "Private OBS\nObject Key = file_id" as OBS
+Runtime --> API : resolve / content
+API --> Chat : authorize / resolve
+API --> DB : metadata transaction
+Worker --> DB : state / lease transaction
+Adapter --> OBS : immutable bytes over TLS
+legend bottom left
+Target-only deployment; every Pod uses the same Chat, metadata and content authorities.
+OBS stores one immutable object per file_id; no extra resource ID or path prefix.
+Deletion removes active detail and retains the five-field t_file tombstone.
+No file BLOB, URL, credentials, local authority or complete-file cache.
+endlegend
 @enduml
 
 @startuml file_cross_pod_resolution_flow
-title Cross-Pod File Resolution and Content Streaming
-
 ' Source evidence:
 ' pi-mono packages/agent/src/agent.ts, prompt
 ' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java, prompt
@@ -159,154 +157,182 @@ title Cross-Pod File Resolution and Content Streaming
 ' Architecture change: CampusClaw resolves ordered file_ids and streams verified content through mate-service.
 ' Security hardening: CampusClaw receives no OBS location or credential and validates length and digest.
 
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam maxMessageSize 210
+skinparam sequenceMessageAlign left
+hide footbox
 skinparam sequence {
-  ArrowColor #334155
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
   ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
+  GroupBorderColor #CBD5E1
   GroupBackgroundColor #F8FAFC
 }
+title File Resolution - Atomic Batch, Verified Content
+participant CampusClaw as Runtime
+participant "File API" as API
+database openGauss as DB
+participant "Private OBS" as OBS
+participant "Model Input Adapter" as Model
 
-participant "CampusClaw" as runtime
-participant "mate-service File API" as api
-database "Shared openGauss" as db
-participant "Private OBS" as obs
-participant "Model Input Adapter" as model
+== 1. Resolve the complete batch ==
+Runtime -> API : POST files:resolve\nsessionId + ordered fileIds
+API -> API : Verify one service credential mode
+API -> DB : Lock all IDs in stable order
+DB --> API : Current rows
+API -> API : Check Session, READY and expiry
+alt Any file is invalid
+  API -> DB : Roll back
+  DB --> API : No references changed
+  API --> Runtime : INVALID_FILE or FILE_NOT_READY
+else All files are valid
+  API -> DB : Set first reference / clear expiry
+  DB --> API : Commit trusted snapshots
+  API --> Runtime : ResultBean in request order
 
-runtime -> api : POST /internal/v1/files:resolve\nservice credential, sessionId, ordered fileIds
-api -> api : select exactly one auth mode
-api -> db : begin and lock all IDs in stable order
-db --> api : matching rows
-api -> api : require same Session, READY, and active
-
-alt any file fails validation
-  api -> db : rollback
-  api --> runtime : ErrorResponse without result
-else complete batch is valid
-  api -> db : preserve referenced_at and clear expiry
-  db --> api : ordered trusted snapshots
-  api --> runtime : ResultBean with ordered files
+  == 2. Read each accepted file ==
+  loop Each resolved file
+    Runtime -> API : GET content\nSession, file_id, expected SHA-256
+    API -> DB : Recheck READY, reference and digest
+    DB --> API : Size / digest / trusted MIME
+    API -> OBS : Stream GET(file_id)
+    OBS --> API : Original bytes
+    API -> API : Verify length and digest
+    API --> Runtime : Bounded binary stream
+    Runtime -> Runtime : Verify length and digest
+    Runtime -> Model : Untrusted user content
+  end
 end
 
-loop each accepted file
-  runtime -> api : GET content with session_id, file_id, and expected SHA-256
-  api -> db : authorize READY and referenced file
-  db --> api : size, digest, and trusted MIME
-  api -> obs : streaming GET by file_id
-  obs --> api : bounded original bytes
-  api --> runtime : binary stream, length, and SHA-256
-  runtime -> runtime : incrementally verify length and digest
-  runtime -> model : provider-neutral untrusted content
-end
-
-note over runtime,api
-Resolve is all-or-nothing and preserves request order.
-Runtime stores only a trusted metadata snapshot with the User Entry.
+note over Runtime,API
+Persist only the trusted metadata snapshot with User Entry.
+A failed batch never starts content reads.
 end note
-
-note over api,obs
-Backpressure and cancellation propagate through the content stream.
-No local file or complete in-memory object is created.
+note over API,OBS
+Backpressure and cancellation propagate through the stream.
+No local file or complete in-memory object.
 end note
 @enduml
 
 @startuml file_deletion_and_reconciliation
-title File Deletion and Reconciliation
-
 ' Source evidence:
 ' pi-mono-java modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java, abort
 ' Observed behavior: the baseline has no generic file tombstone, lease, or reconciliation flow.
 ' Architecture change: conditional database state, short leases, and idempotent OBS operations replace XA.
 ' Product constraint: referenced files are retained until Chat and Runtime Session cleanup.
 
-skinparam backgroundColor #FFFFFF
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam maxMessageSize 210
+skinparam sequenceMessageAlign left
+hide footbox
 skinparam sequence {
-  ArrowColor #334155
-  LifeLineBorderColor #64748B
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
   ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
+  GroupBorderColor #CBD5E1
   GroupBackgroundColor #F8FAFC
 }
+title File Deletion - Eligibility and Cleanup
+actor Client
+participant "File API" as API
+participant "Chat / Session cleanup" as Cleanup
+database openGauss as DB
+participant "Delete Worker" as Worker
+participant "Private OBS" as OBS
 
-actor "CampusMate Client" as client
-participant "mate-service" as mate
-participant "CampusClaw" as runtime
-database "Mate Chat Store" as chats
-database "Shared openGauss" as db
-participant "Delete and Reconcile Worker" as worker
-participant "Private OBS" as obs
-
-group Delete one unreferenced file
-  client -> mate : DELETE /v1/chats/{chat_id}/attachments/{file_id}
-  mate -> chats : authorize chat and resolve session_id
-  chats --> mate : authorized session_id
-  mate -> db : conditional state update
-  alt file is referenced
-    db --> mate : referenced_at is set
-    mate --> client : 409 FILE_REFERENCED
-  else object-key conflict quarantine
-    db --> mate : retain FAILED active detail
-    mate --> client : bounded 503
-  else unreferenced or already deleting
-    db --> mate : DELETING persisted or already present
-    mate --> client : 202 ResultBean
+== 1. Establish deletion eligibility ==
+alt Delete one file
+  Client -> API : DELETE attachment
+  API -> Cleanup : Authorize Chat / resolve Session
+  Cleanup --> API : session_id
+  API -> DB : Check reference / conditional update
+  alt Referenced
+    DB --> API : referenced_at is set
+    API --> Client : 409 FILE_REFERENCED
+  else Object-key quarantine
+    DB --> API : Retain FAILED detail
+    API --> Client : Bounded 503 error
+  else Unreferenced or already deleting
+    DB --> API : DELETING
+    API --> Client : 202 ResultBean
   end
+else Delete Chat and Session
+  Client -> Cleanup : Delete Chat
+  Cleanup -> Cleanup : Authorize / hide Runtime Session\nStop execution and reads
+  Cleanup -> DB : Mark normal Session files DELETING
+  DB --> Cleanup : Cleanup committed
 end
 
-group Chat and Runtime Session deletion
-  client -> mate : delete Chat
-  mate -> chats : authorize chat and load session_id
-  chats --> mate : authorized session_id
-  mate -> runtime : DELETE Runtime Session
-  runtime --> mate : Session hidden and execution stopped
-  mate -> db : mark normal Session files DELETING
-  db --> mate : cleanup registered
+== 2. Delete bytes outside a transaction ==
+Worker -> DB : Claim eligible DELETING lease
+DB --> Worker : Committed file_id / row_version
+Worker -> OBS : Idempotent DELETE(file_id)
+alt Deleted or NotFound
+  OBS --> Worker : Success
+  Worker -> DB : Remove detail / write DELETED
+  DB --> Worker : Tombstone committed
+else Temporary failure
+  OBS --> Worker : Retryable failure
+  Worker -> DB : Release lease / schedule retry
+  DB --> Worker : Retry state committed
 end
 
-group Background delete
-  worker -> db : claim expired DELETING lease and commit
-  db --> worker : file_id and row_version
-  worker -> obs : idempotent DELETE by file_id
-  alt deleted or NotFound
-    obs --> worker : success
-    worker -> db : delete active detail and mark DELETED
-  else temporary failure
-    obs --> worker : retryable error
-    worker -> db : schedule bounded retry and release lease
-  end
-end
-
-group Audited reconciliation
-  worker -> db : find stale or quarantined rows
-  db --> worker : candidate file_ids
-  worker -> obs : stat by file_id
-  alt owned valid object
-    obs --> worker : matching object
-    worker -> db : recover processing or delete safely
-  else object absent
-    obs --> worker : NotFound
-    worker -> db : remove detail and mark DELETED
-  end
-end
-
-note over db,obs
-Database state controls eligibility.
-OBS controls original-byte existence.
-NotFound succeeds for idempotent deletion.
+note over DB,OBS
+Only audited reconciliation may resolve object-key quarantine.
+DELETED retains five identity fields; file_id is never reused.
 end note
+@enduml
 
-note over mate,db
-After deletion only file_id, session_id, status,
-created_at, and deleted_at remain.
-The ID is never issued again.
-end note
+
+@startuml file_audited_reconciliation
+' Baseline: pi-mono-java 195746614096312d4e93afb029d387837db78e0b.
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: abort.
+' Target-only architecture: no generic file cleanup in that baseline.
+' Design reason: ownership evidence is required before deleting a conflicting OBS object.
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam maxMessageSize 210
+skinparam sequenceMessageAlign left
+hide footbox
+skinparam sequence {
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
+  ParticipantBackgroundColor #F8FAFC
+  GroupBorderColor #CBD5E1
+  GroupBackgroundColor #F8FAFC
+}
+title File Reconciliation - Prove Object Ownership
+participant "Audited Reconciler" as Worker
+database openGauss as DB
+participant "Private OBS" as OBS
+
+== 1. Compare recorded state and object ==
+Worker -> DB : Read stale / quarantined candidates
+DB --> Worker : file_id + recorded metadata
+Worker -> OBS : Stat(file_id)
+OBS --> Worker : Object metadata or NotFound
+
+== 2. Reconcile only with evidence ==
+alt Owned valid object
+  Worker -> Worker : Verify ownership
+  Worker -> DB : Recover processing or allow safe deletion
+  DB --> Worker : Conditional update committed
+else NotFound
+  Worker -> DB : Remove detail / set DELETED
+  DB --> Worker : Tombstone committed
+else Ownership remains unknown
+  Worker -> DB : Retain quarantine
+  DB --> Worker : No deletion authorized
+end
 @enduml

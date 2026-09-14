@@ -1,6 +1,4 @@
 @startuml mate_agent_service_responsibility_boundary
-title HTTP Boundaries: Message SSE and Builtin JSON
-
 ' Source evidence (pi-mono-java 1f801dbb82bdda30478e3354e685e3153b179a0c):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java.
@@ -10,54 +8,32 @@ title HTTP Boundaries: Message SSE and Builtin JSON
 ' Product constraint: the UI receives chatId only; sessionId remains an internal Runtime identifier.
 ' Security hardening: mate-service terminates public auth and projects internal events instead of forwarding bytes transparently.
 ' Design reason: keep user-facing Chat lifecycle separate from durable Runtime Session identity and execution.
-
-skinparam backgroundColor #FFFFFF
+' Layout-only update: public and internal contract details remain owned by their design topics.
+title HTTP Service Boundaries: Chat Identity, Session Execution
+top to bottom direction
+skinparam backgroundColor white
 skinparam shadowing false
-skinparam roundcorner 18
-skinparam defaultFontName Arial
-skinparam defaultFontColor #0F172A
+skinparam nodesep 30
+skinparam ranksep 35
 skinparam ArrowColor #64748B
-skinparam ArrowThickness 1.5
-skinparam rectangle {
-  BorderColor #94A3B8
-  FontColor #0F172A
-}
-skinparam database {
-  BorderColor #94A3B8
-  BackgroundColor #F8FAFC
-  FontColor #334155
-}
-
-left to right direction
-
-rectangle "Agent UI\n\nCall public HTTP operations\nUse chatId only\nRead execution-scoped SSE\nClose on stream end or error\nNever receive sessionId" as UI #EFF6FF
-
-rectangle "mate-service\n\nOwn public HTTP and SSE\nAuthenticate the end user\nOwn Chat metadata and chatId\nMap public Chat ID to internal Session ID\nRun guardrails and orchestration\nCall CampusClaw with request credentials\nProject safe public events and errors" as Mate #FFF7ED
-
-rectangle "CampusClaw\n\nOwn internal HTTP and SSE\nReceive request context without credential checks\nOwn Runtime Session and sessionId\nValidate Agent and Model\nBuild Context and execute Model and read tool\nPersist current-branch Entries\nOwn Events interruption; no pending message queue" as Runtime #ECFDF5
-
-database "Mate Chat Store\n\nPublic Chat ID to internal Session ID\nProduct state (no Session name copy)\nUser ownership" as MateStore
-
-database "RuntimeSessionStore\n\nSession state and configuration\nCurrent-branch Entries\nInternal execution state" as RuntimeStore
-
-UI <--> Mate : public HTTP requests\nMessage JSON or scoped SSE\nPublic command protocol pending\nchatId scope
-Mate <--> Runtime : internal HTTP requests\nResultBean, 204, or message SSE\nBuiltin command: JSON only\nsessionId scope
-Mate --> MateStore : own and update
-Runtime --> RuntimeStore : own and update
-
-note bottom of Mate
-The public and internal hops are independent contracts.
-mate-service does not forward the internal stream byte for byte.
-Public paths, VOs, errors, and event projection require
-a separate operation-by-operation review.
-end note
-
-note bottom of Runtime
-Each user-message POST owns one bounded SSE response.
-Builtin commands return JSON; shared Skill integration is reviewed separately.
-Each interrupt or tool confirmation uses a new POST Events response.
-No standalone control routes. No queued next message in this release.
-Future FollowUp requires separate activation review.
-The Runtime does not read chatId or end-user identity.
-end note
+skinparam RectangleBorderColor #94A3B8
+skinparam DatabaseBorderColor #94A3B8
+rectangle "Agent UI\nchatId and public events" as UI #EFF6FF
+rectangle "mate-service\nPublic HTTP / authentication\nChat identity and event projection\nGuardrails and orchestration" as Mate #FFF7ED
+rectangle "CampusClaw\nInternal HTTP / Session lifecycle\nAgent, Model, Context and Tools\nCurrent-branch Entries" as Runtime #ECFDF5
+database "Mate Chat Store\nChat-to-Session association\nOwnership and product state" as MateStore #FFF7ED
+database "RuntimeSessionStore\nSession configuration and state\nEntries and internal execution state" as RuntimeStore #ECFDF5
+UI <--> Mate : Public HTTP\nJSON or request-scoped SSE
+Mate <--> Runtime : Internal HTTP + request context\nResultBean / 204 / scoped SSE
+Mate --> MateStore : owns
+Runtime --> RuntimeStore : owns
+MateStore -[hidden]down- RuntimeStore
+legend bottom left
+Public and internal hops have independent identities, VOs, errors, and event contracts.
+Mate projects events; it does not forward Runtime bytes or sessionId to the browser.
+Runtime receives request context without adding end-user credential checks.
+Message / Skill executions stream SSE; Runtime Builtin commands return JSON.
+Interrupt and confirmation each use a new Events POST. No current FollowUp queue.
+Exact public paths and projection remain owned by the public Chat API design.
+endlegend
 @enduml

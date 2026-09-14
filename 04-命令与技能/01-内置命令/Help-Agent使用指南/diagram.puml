@@ -1,11 +1,16 @@
 @startuml target_help_metadata_classes
-title Help Metadata Detail - Supplement to the Global Command Diagram
 top to bottom direction
-skinparam shadowing false
 skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam classAttributeIconSize 0
-skinparam nodesep 35
-skinparam ranksep 45
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 35
+skinparam linetype ortho
+hide empty members
+title Help Metadata Detail - Supplement to the Global Command Diagram
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/execution/CommandExecutionContext.java session and catalog.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached, toIdentity:630, toRuntime:646, AgentIdentity:717.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java metadata.

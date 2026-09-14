@@ -18,7 +18,7 @@
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 联动已同步",
       "note": "Session.mode 在创建时复制已发布 Agent.mode，旧元数据缺省 build；已有会话保持自己的当前模式。该目标链路尚待实现。",
-      "design": "chat-http-v1-design.md#211-第二个已确认接口读取-session"
+      "design": "chat-http-v1-design.md#211-读取-session"
     },
     {
       "key": "deleteSession",
@@ -26,7 +26,7 @@
       "common": "接口契约/common.json",
       "status": "已确认 · 停止指引已同步",
       "note": "运行中拒绝删除；经 user.interrupt 确认实际停止后重试，删除事务仍复核空闲。",
-      "design": "chat-http-v1-design.md#212-第三个已确认接口删除-session"
+      "design": "chat-http-v1-design.md#212-删除-session"
     },
     {
       "key": "submitSessionEvent",

@@ -203,6 +203,17 @@ end note
 @enduml
 
 @startuml target_frontend_components
+top to bottom direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 35
+skinparam linetype ortho
+hide empty members
 ' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target displays original model reasoning.
 ' Source evidence: frontend/src/App.vue submit; frontend/src/composables/useRuntimeApi.ts loadHistory, requestRaw.
 ' Source evidence: frontend/src/projectors/runtimeEventProjector.ts projectRuntimeEvents; frontend/src/types/product.ts.
@@ -210,9 +221,6 @@ end note
 ' Target-only architecture: every class and relationship below is a product integration target.
 ' Design reason: isolate protocol and host identity, use per-Chat state, and make recovery read-only.
 title Global product frontend components - all target-only
-top to bottom direction
-skinparam classAttributeIconSize 0
-skinparam packageStyle rectangle
 package "Browser views" {
   class ChatWorkspace <<view>>
   class ContentViews <<view>> {
@@ -248,29 +256,29 @@ package "External server boundary" {
   class RuntimeAdapter <<target server>>
   class RuntimeSessionAPI <<external contract>>
 }
-ChatWorkspace --> ConversationCoordinator : user intents
-ChatWorkspace --> ConfigurationCoordinator : top bar / Slash
-ChatWorkspace --> ContentViews : read-only snapshot
+ChatWorkspace --> ConversationCoordinator
+ChatWorkspace --> ConfigurationCoordinator
+ChatWorkspace --> ContentViews
 ConversationCoordinator *-- "1" DraftStore
 ConversationCoordinator *-- "1" ToolConfirmationStore
 ConversationCoordinator *-- "1" ChatStore
-ConversationCoordinator --> PublicChatGateway : submit / subscribe
-ConversationCoordinator --> HistoryRecovery : reconcile only
-HistoryRecovery --> PublicChatGateway : read-only methods
-HistoryRecovery --> PublicEventReducer : history
-ConversationCoordinator --> PublicEventReducer : receipt / live
-PublicEventReducer --> ChatStore : atomic reduced snapshot
-PublicEventReducer --> ToolConfirmationStore : pending decision state
-ContentViews --> ChatStore : immutable view
+ConversationCoordinator --> PublicChatGateway
+ConversationCoordinator --> HistoryRecovery
+HistoryRecovery --> PublicChatGateway
+HistoryRecovery --> PublicEventReducer
+ConversationCoordinator --> PublicEventReducer
+PublicEventReducer --> ChatStore
+PublicEventReducer --> ToolConfirmationStore
+ContentViews --> ChatStore
 ConfigurationCoordinator *-- "1" ConfigurationStore
-ConfigurationCoordinator --> HostTransport : gated config operation
+ConfigurationCoordinator --> HostTransport
 MateChatAdapter ..|> PublicChatGateway
 MockChatAdapter ..|> PublicChatGateway
 MateChatAdapter --> HostTransport
-HostTransport --> MatePublicAPI : public Chat protocol
-MatePublicAPI --> AuthorizedChatMapping : authorize and resolve
+HostTransport --> MatePublicAPI
+MatePublicAPI --> AuthorizedChatMapping
 AuthorizedChatMapping --> RuntimeAdapter
-RuntimeAdapter --> RuntimeSessionAPI : internal protocol
+RuntimeAdapter --> RuntimeSessionAPI
 note bottom of PublicChatGateway
 Adapters selected explicitly; no Runtime fallback.
 Freeze request intent, not mutable authority.
@@ -325,6 +333,17 @@ end note
 @enduml
 
 @startuml target_runtime_workbench
+top to bottom direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 35
+skinparam linetype ortho
+hide empty members
 ' Source baseline: pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20
 ' Source evidence: frontend/src/App.vue resumeSession and sidebar select
 ' Source evidence: frontend/src/runtime/sessionIndex.ts select and upsert
@@ -342,16 +361,6 @@ end note
 ' Design reason: one coordinator owns execution state and request generations;
 ' persistent metadata and transient credentials have separate lifecycles.
 title Runtime Workbench - Target Classes
-left to right direction
-skinparam backgroundColor #FFFCFA
-skinparam shadowing false
-skinparam classBackgroundColor #FFFFFF
-skinparam classBorderColor #BFAEA5
-skinparam packageBackgroundColor #F8F3F0
-skinparam packageBorderColor #CDBEB6
-skinparam ArrowColor #7A6F69
-skinparam defaultFontName Arial
-hide empty members
 package "Browser page [target-only]" {
   class WorkbenchView <<view>>
   class Composer <<view>>
@@ -400,24 +409,24 @@ class "AuthCenter\nlogin and Set-Cookie" as AuthCenter <<external API>>
 WorkbenchView *-- Composer
 WorkbenchView *-- HeaderEditor
 WorkbenchView --> WorkbenchCoordinator
-Composer --> WorkbenchCoordinator : send / stop / command
+Composer --> WorkbenchCoordinator
 HeaderEditor --> HeaderStore
-HeaderEditor --> TokenCoordinator : explicit get token
+HeaderEditor --> TokenCoordinator
 WorkbenchCoordinator *-- "1" SessionViewState
 WorkbenchCoordinator *-- "0..*" RequestSnapshot
 WorkbenchCoordinator *-- "1" DraftStore
-WorkbenchCoordinator --> SessionIndexRepository : selection never reorders
+WorkbenchCoordinator --> SessionIndexRepository
 SessionIndexRepository *-- "0..*" SessionIndexEntry
-WorkbenchCoordinator --> HeaderStore : snapshot latest values
-WorkbenchCoordinator --> RuntimeGateway : GET, events, and Session POST
+WorkbenchCoordinator --> HeaderStore
+WorkbenchCoordinator --> RuntimeGateway
 RuntimeGateway <|.. RuntimeHttpGateway
 RuntimeHttpGateway --> Runtime
-SessionIndexRepository --> Storage : schema v2
-TokenCoordinator --> HeaderStore : matching IP and edit revision
-TokenCoordinator --> DevAuthMiddleware : same-origin JSON POST
+SessionIndexRepository --> Storage
+TokenCoordinator --> HeaderStore
+TokenCoordinator --> DevAuthMiddleware
 DevAuthMiddleware --> AuthCenterClient
 AuthCenterClient --> LocalAuthConfig
-AuthCenterClient --> AuthCenter : fixed HTTPS login path
+AuthCenterClient --> AuthCenter
 legend bottom left
   Header edits do not alter an existing snapshot.
   Reconciliation never replays a write request.

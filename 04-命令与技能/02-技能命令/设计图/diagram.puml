@@ -1,8 +1,18 @@
 @startuml skill_catalog
+top to bottom direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 35
+skinparam linetype ortho
+hide empty members
 title Target-only Shared GET and Internal Source Selection
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java list.
 ' Product decision: shared GET requires complete Agent cache; internal BUILTIN selection skips Skill sources.
-skinparam shadowing false
 class CompositeCommandRegistry
 interface CommandDefinitionSource
 class BuiltinCommandSource
@@ -59,6 +69,22 @@ end note
 @enduml
 
 @startuml target_skill_execution
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 title Target Skill Execution - Snapshot, Admission and Shared Events
 ' Source: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java list/resolved.
@@ -67,7 +93,6 @@ title Target Skill Execution - Snapshot, Admission and Shared Events
 ' Observed behavior: Java discovery captures metadata; pi expands Skill body into model input.
 ' Target-only architecture: preserve original public input and a private recoverable expansion.
 ' Design reason: reuse one message admission and event projection; do not reinterpret new Skill versions on recovery.
-skinparam shadowing false
 actor Caller
 participant "Command Application" as C
 participant "Skill Execution Service" as S
@@ -76,7 +101,8 @@ participant "Shared Message Application" as A
 database "Session / Context Store" as D
 participant "Runtime / Event Projector" as R
 participant "Event Query Application" as Q
-Caller -> C : POST command: skill:name / arguments / files
+== Resolve and freeze the invocation ==
+Caller -> C : POST Skill command
 C -> S : selected real Skill Definition
 S -> I : resolve complete Agent / body / binding version
 S -> S : validate expansion budget and trust boundary
@@ -86,20 +112,28 @@ group Owning admission transaction
   A -> D : append original public user event + private context\nregister root event and set running
   D --> A : committed receipt and fixed execution
 end
-A --> Caller : SSE: complete original user.message first
+== Execute the accepted root ==
+A --> Caller : SSE: original user.message first
 A -> R : execute with in-memory credentials
 R -> D : ordered complete events / safe projection
 R --> Caller : same root sourceEventId; preview best-effort
 R -> D : confirming boundary or actual terminal
 R --> Caller : matching idle; close response
-Caller -> Q : GET Events for reconciliation
-Q -> D : current visible complete history
-D --> Caller : original invocation / output; no private Skill body
+== Reconcile through history ==
+Caller -> Q : GET Events
+Q -> D : read visible complete history
+D --> Q : original invocation and output
+Q --> Caller : history; private Skill body omitted
 note over I,D
-Freeze parsed body and metadata for this invocation.
-Recheck mutable bindings under owning locks before acceptance.
-Keep recoverable expansion in existing private Session context.
-No separate Skill full-text audit copy; use deployment retention.
-No raw credential persistence or automatic side-effect replay.
+  Freeze parsed body and metadata for this
+  invocation.
+  Recheck mutable bindings under owning locks
+  before acceptance.
+  Keep recoverable expansion in existing private
+  Session context.
+  No separate Skill full-text audit copy; use
+  deployment retention.
+  No raw credential persistence or automatic
+  side-effect replay.
 end note
 @enduml

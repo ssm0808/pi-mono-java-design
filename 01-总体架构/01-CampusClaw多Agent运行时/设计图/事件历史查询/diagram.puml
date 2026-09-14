@@ -7,101 +7,122 @@ title Target Event History - Shared Complete Projection
 ' Observed behavior: current pages are sequence-based opaque cursors, not integers.
 ' Design reason: one complete projection prevents SSE/history identity drift. Thinking target: display original model reasoning; Java 4cc8dd86 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeV2EventProjector.java projectThinking still filters publicSummary.
 ' All new classes and relations are target-only; existing boundaries are changed.
+top to bottom direction
 hide empty members
+skinparam backgroundColor white
+skinparam shadowing false
 skinparam classAttributeIconSize 0
-package "Web boundary" {
-  class RuntimeEventController <<singleton, existing-changed>>
-  class ListSessionEventsRequestVO <<request, target-only>>
-  class ListSessionEventsResponseVO <<immutable, target-only>>
-  class SessionEventResponseVO <<immutable union, target-only>>
+skinparam nodesep 25
+skinparam ranksep 30
+skinparam ArrowColor #475569
+skinparam ClassBorderColor #64748B
+skinparam ClassBackgroundColor #F8FAFC
+skinparam stereotypeFontSize 10
+
+package "Web boundary" as WEB {
+  class "RuntimeEvent\nController" as RuntimeEventController <<singleton, existing-changed>>
+  class "ListSessionEvents\nRequestVO" as ListSessionEventsRequestVO <<request, target-only>>
+  class "ListSessionEvents\nResponseVO" as ListSessionEventsResponseVO <<immutable, target-only>>
+  class "SessionEvent\nResponseVO" as SessionEventResponseVO <<immutable union, target-only>>
 }
-package "Application" {
-  class SessionEventQueryService <<singleton, target-only>>
-  class HistoryPageQueryDTO <<request immutable, target-only>>
-  class CommittedEventProjection <<stateless singleton, target-only>>
+package "Application" as APP {
+  class "SessionEvent\nQueryService" as SessionEventQueryService <<singleton, target-only>>
+  class "HistoryPage\nQueryDTO" as HistoryPageQueryDTO <<request immutable, target-only>>
+  class "CommittedEvent\nProjection" as CommittedEventProjection <<stateless singleton, target-only>>
   class RequestEventRouter <<singleton, target-only>>
 }
-package "Persistence boundary" {
-  interface RuntimeSessionRepository <<existing-changed>>
-  class MyBatisRuntimeSessionRepository <<singleton, existing-changed>>
+package "Persistence boundary" as DB {
+  interface "RuntimeSession\nRepository" as RuntimeSessionRepository <<existing-changed>>
+  class "MyBatisRuntime\nSessionRepository" as MyBatisRuntimeSessionRepository <<singleton, existing-changed>>
   class CommittedEventDTO <<immutable transfer, target-only>>
   class RuntimeSessionMapper <<singleton, existing-changed>>
 }
-RuntimeEventController --> ListSessionEventsRequestVO : validates
+RuntimeEventController -[norank]-> ListSessionEventsRequestVO : validates
+WEB -[hidden]down- APP
+APP -[hidden]down- DB
 RuntimeEventController --> SessionEventQueryService : list
-RuntimeEventController ..> ListSessionEventsResponseVO : returns
+RuntimeEventController .[norank].> ListSessionEventsResponseVO : returns
 ListSessionEventsResponseVO *-- "0..*" SessionEventResponseVO : ordered events
-SessionEventQueryService ..> HistoryPageQueryDTO : validates page / limit / offset
+SessionEventQueryService ..> HistoryPageQueryDTO : page / limit / offset
 SessionEventQueryService --> RuntimeSessionRepository : consistent read
 SessionEventQueryService --> CommittedEventProjection : complete history
 RequestEventRouter --> CommittedEventProjection : committed SSE only
 CommittedEventProjection ..> CommittedEventDTO : reads
-CommittedEventProjection ..> SessionEventResponseVO : creates
+CommittedEventProjection .[norank].> SessionEventResponseVO : creates
 RuntimeSessionRepository <|.. MyBatisRuntimeSessionRepository
 MyBatisRuntimeSessionRepository --> RuntimeSessionMapper
 RuntimeSessionMapper ..> CommittedEventDTO : maps records
-RuntimeSessionRepository ..> HistoryPageQueryDTO : ordinary page criteria
-note bottom of HistoryPageQueryDTO
-  Positive page number and stable per-traversal limit.
-  Resolve current branch and current access per request.
-  No cross-request snapshot or cursor encryption.
-  Recheck access; no retained database connection.
-end note
-note bottom of CommittedEventProjection
-  Same eventId, createdAt and complete payload for SSE and history.
-Root sourceEventId references the original user.message.
-Persisted original thinking ignores later thinking switches.
-  No credentials, delta records or execution IDs.
-  Not the execution-scoped SessionEventProjector.
-end note
+RuntimeSessionRepository ..> HistoryPageQueryDTO : page criteria
+
+legend bottom left
+All new types and relations are target-only. Web VOs are immutable output.
+One complete projection fixes eventId, createdAt, sourceEventId, and saved thinking.
+Each query rechecks access and branch; no cross-request transaction or snapshot.
+The execution-scoped SessionEventProjector owns normalization and appends separately.
+endlegend
 @enduml
 @startuml target_event_history_paging
-title Target Ordinary Integer Paging - Oldest First
 ' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
 ' Source: campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml, listCurrentBranch.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java, list/pageOf.
 ' Observed behavior: each current query resolves active_leaf_id again.
 ' Design reason: user approved ordinary pages without cross-request snapshots.
 ' Target-only: default 50, max 200, events/nextPage and empty-page success confirmed.
+autonumber
+hide footbox
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam maxMessageSize 190
+skinparam sequence {
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
+  ParticipantBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F1F5F9
+}
+title Target-only Event History: Read, Append, Read Again
 actor "Internal caller" as C
-participant "History service" as Q
+control "History service" as Q
 database "Session / Event store" as D
 participant "Execution appender" as A
-C -> Q : GET events (page = 1, limit = 50)
-Q -> Q : Validate positive integers and offset bounds
-group Short consistent read transaction
-  Q -> D : Check access / existence / visibility
-  Q -> D : Resolve current branch and current access
-  Q -> D : Read ordered complete events (offset 0, limit + 1)
-  D --> Q : First page and one possible extra event
-end
-Q -> Q : nextPage = 2 if extra event exists, else null
-Q --> C : ResultBean(events, nextPage)
-A -> D : Commit new complete events at the tail
-note right of D : New records may enter later pages.
-C -> Q : GET events (page = 2, same limit)
-Q -> Q : Validate page / limit / offset
-alt Valid parameters
-  group Short consistent read transaction
-    Q -> D : Recheck access, existence and visibility
-    Q -> D : Resolve current branch and visible complete events
-    Q -> D : Read ordered page (offset = (page - 1) * limit)
-    D --> Q : Page plus one possible extra event
-  end
-  alt Session readable
-    Q -> Q : nextPage = page + 1 if extra event, else null
-    Q --> C : 200 ordered events (empty page: [], null)
-  else Deleted / access revoked
-    Q --> C : Error, no stale access reuse
-  end
-else Invalid parameters
+== 1. Read the first page ==
+C -> Q : List events: page 1, limit 50
+Q -> Q : Normalize and validate page / limit / offset
+break Invalid query
   Q --> C : INVALID_EVENT_LIST_QUERY
 end
-note over C,Q
-  null means no next page at query time, not execution finished.
-  Reload page 1 if branch, filter or page size changes.
-  No automatic cross-page change detection is promised.
-  No automatic replay of accepted POST requests.
-Use sourceEventId for root ownership, not as a paging cursor.
-end note
+group One consistent read
+  Q -> D : Check access and resolve current branch
+  break Session missing or access revoked
+    D --> Q : Not readable
+    Q --> C : Error; no stale access reuse
+  end
+  Q -> D : Read visible complete events\nOffset 0, limit + 1
+  D --> Q : Ordered records
+end
+Q -> Q : Build shared complete projection\nSet nextPage from extra record
+Q --> C : ResultBean(events, nextPage)
+== 2. Append without a cross-page snapshot ==
+A -> D : Commit new complete events at the tail
+D --> A : Committed
+== 3. Recheck and read the next page ==
+C -> Q : List events: page 2, same limit
+Q -> Q : Validate page / limit / offset
+group New consistent read
+  Q -> D : Recheck access and resolve current branch
+  break Session missing or access revoked
+    D --> Q : Not readable
+    Q --> C : Error; no stale access reuse
+  end
+  Q -> D : Read visible complete events\nOffset 50, limit + 1
+  D --> Q : Ordered records, including newer tail
+end
+Q --> C : ResultBean(events, nextPage)
+legend bottom left
+Valid empty page: events=[], nextPage=null. Null is not execution completion.
+Rebuild from page 1 after branch, access, retention, or page-size changes.
+No automatic change detection or POST replay. sourceEventId is not a cursor.
+endlegend
 @enduml

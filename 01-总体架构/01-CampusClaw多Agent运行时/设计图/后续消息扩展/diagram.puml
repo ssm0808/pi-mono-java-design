@@ -1,5 +1,4 @@
 @startuml target_follow_up_handoff
-skinparam backgroundColor white
 ' Target-only. Direction accepted; disabled in the current product.
 ' Source: pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/session/RuntimeSessionControlService.java
@@ -7,42 +6,60 @@ skinparam backgroundColor white
 ' Source: pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185
 ' packages/agent/src/agent-loop.ts: runLoop. Observed behavior: follow-up continues the same loop.
 ' Design reason: durable application handoff avoids sticky routing and live output relay.
-title Future FollowUp - durable handoff, not enabled
-actor "Caller via Mate" as Caller
+autonumber
+hide footbox
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam maxMessageSize 190
+skinparam sequence {
+  ArrowColor #475569
+  LifeLineBorderColor #94A3B8
+  ParticipantBorderColor #64748B
+  ParticipantBackgroundColor #F8FAFC
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F1F5F9
+}
+title Future FollowUp: Cross-instance Handoff (Disabled)
+actor "Caller via Mate" as C
 participant "Instance A\nM1 execution" as A
-database "Shared database\nqueue + execution authority" as DB
-participant "Instance B\nM2 application service" as B
-participant "B batch dispatcher" as Watch
-Caller -> A: POST Events M1
-A -> DB: Accept M1 and claim execution
-A --> Caller: M1 receipt and output
-Caller -> B: Future queue submission M2
-note over Caller, B: Public queue fields and activation require review
-B -> DB: Short transaction: accept ordered pending M2
-DB --> B: Committed association
-B --> Caller: M2 receipt first; keep its own SSE
-B -> Watch: Register local pending M2, then recheck
-note over B, Watch: M2 credentials remain only in B memory
-A -> DB: Commit recoverable context + real terminal + release
-A --> Caller: M1 terminal; close M1 SSE only
+participant "Instance B\nM2 application" as B
+control "B batch dispatcher" as W
+database "Shared database\nqueue / execution authority" as D
+== 1. Accept into separate response scopes ==
+C -> A : Submit M1
+A -> D : Accept M1 and claim execution
+D --> A : Committed
+A --> C : M1 receipt and output
+C -> B : Future queue submission M2
+B -> D : Short transaction: accept ordered M2
+D --> B : Committed association
+B --> C : M2 receipt; retain its own SSE
+B -> W : Register pending M2, then recheck
+== 2. Publish real predecessor completion ==
+A -> D : Commit context, terminal, and release
+D --> A : Committed
+A --> C : M1 terminal; close M1 SSE
 loop Bounded instance-level batches
-Watch -> DB: Read predecessor completion and queue head
-DB --> Watch: Authoritative committed state
+  W -> D : Read predecessor and queue head
+  D --> W : Committed state
 end
-Watch -> B: Eligible candidate, not final admission
-B -> DB: Short transaction: recheck head and atomically claim M2
-DB --> B: One winning internal execution identity
-B -> DB: Restore internal model context after claim
-note over B, DB: Never restore from public ListEvents
-B -> B: Start M2 using its own credentials
-B --> Caller: M2 output on M2 SSE only
-B -> DB: Commit M2 real completion
-B --> Caller: M2 terminal; close M2 SSE
-note over A, B
-  No cross-instance Java object transfer or token relay.
-  Lost owner or credentials require a separate recovery protocol.
-  A lease expiry is not proof that remote side effects stopped.
-end note
+== 3. Claim, restore, and run M2 ==
+W -> B : Candidate eligible for recheck
+B -> D : Short transaction: recheck and claim M2
+D --> B : One winning execution identity
+B -> D : Restore internal model context
+D --> B : Recoverable M1 result
+B -> B : Start M2 with its own credentials
+B --> C : M2 output on M2 SSE
+B -> D : Commit M2 real completion
+B --> C : M2 terminal; close M2 SSE
+legend bottom left
+Target-only and disabled. Public queue fields and failure policy need a separate design.
+M2 credentials stay only in B memory. Restore from internal context, never ListEvents.
+No object or token relay. Lost owner / credentials require separate recovery.
+Lease expiry does not prove remote side effects stopped.
+endlegend
 @enduml
 
 @startuml target_follow_up_classes
@@ -53,44 +70,62 @@ skinparam backgroundColor white
 ' Symbols: register, find, createHolder. Observed behavior: process-local execution objects.
 ' Design reason: application-level queue authority stays separate from runtime and request credentials.
 title Future FollowUp - target-only responsibility boundaries
+top to bottom direction
 hide empty members
-package "Web / API" {
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam nodesep 25
+skinparam ranksep 30
+skinparam ArrowColor #475569
+skinparam ClassBorderColor #64748B
+skinparam ClassBackgroundColor #F8FAFC
+skinparam stereotypeFontSize 10
+
+package "Web / API" as WEB {
   class EventsController <<singleton, target-only>>
 }
-package "Application" {
-  class EventSubmissionService <<singleton, target-only>>
+package "Application" as APP {
+  class "EventSubmission\nService" as EventSubmissionService <<singleton, target-only>>
   class FollowUpQueueService <<singleton, target-only>>
   class FollowUpDispatcher <<singleton per instance, target-only>>
-  class PendingSubmissionRegistry <<singleton per instance, target-only>>
-  interface FollowUpQueueRepository <<target-only>>
+  class "PendingSubmission\nRegistry" as PendingSubmissionRegistry <<singleton per instance, target-only>>
+  interface "FollowUpQueue\nRepository" as FollowUpQueueRepository <<target-only>>
+  class PendingSubmission <<memory only, target-only>>
 }
-package "Persistence adapter" {
-  class MyBatisFollowUpQueueRepository <<singleton, target-only>>
+package "Persistence adapter" as PERSIST {
+  class "MyBatisFollowUp\nQueueRepository" as MyBatisFollowUpQueueRepository <<singleton, target-only>>
   class "Shared database\nqueue / claim authority" as DB <<durable store>>
 }
-package "Runtime boundary" {
-  interface RuntimeExecutionLauncher <<target-only>>
-  interface SessionContextRestorer <<target-only>>
+package "Runtime boundary" as CORE {
+  interface "RuntimeExecution\nLauncher" as RuntimeExecutionLauncher <<target-only>>
+  interface "SessionContext\nRestorer" as SessionContextRestorer <<target-only>>
+  class SessionExecution <<per execution, target-only>>
+  interface ExecutionIO <<runtime port, target-only>>
 }
+WEB -[hidden]down- APP
+APP -[hidden]down- CORE
+CORE -[hidden]down- PERSIST
 EventsController --> EventSubmissionService
-EventSubmissionService --> FollowUpQueueService : admit / convert VO and DTO
-EventSubmissionService --> PendingSubmissionRegistry : register after commit
-FollowUpDispatcher --> PendingSubmissionRegistry : bounded local candidates
+EventSubmissionService --> FollowUpQueueService : admit
+EventSubmissionService --> PendingSubmissionRegistry : register
+FollowUpDispatcher --> PendingSubmissionRegistry : bounded candidates
 FollowUpDispatcher --> FollowUpQueueService : recheck and claim
-FollowUpQueueService --> FollowUpQueueRepository : transactional authority
+FollowUpQueueService --> FollowUpQueueRepository : transaction
 MyBatisFollowUpQueueRepository ..|> FollowUpQueueRepository
 MyBatisFollowUpQueueRepository --> DB : Mapper / DTO
-FollowUpDispatcher --> RuntimeExecutionLauncher : launch only after claim
-RuntimeExecutionLauncher --> SessionContextRestorer : internal durable projection
-SessionContextRestorer --> DB
-note bottom of FollowUpQueueService
-  Revalidate mutable state inside the claim transaction.
-  No network IO or model calls while holding DB locks.
-end note
-note right of EventsController
-  RequestVO / ResponseVO only at the API boundary.
-  All shown types and relations are target-only.
-end note
+FollowUpDispatcher --> RuntimeExecutionLauncher : launch after claim
+RuntimeExecutionLauncher --> SessionContextRestorer : restore context
+SessionContextRestorer -[norank]-> DB : internal context
+RuntimeExecutionLauncher ..> SessionExecution : creates
+SessionExecution --> ExecutionIO
+PendingSubmissionRegistry "1" *-- "0..bounded" PendingSubmission
+PendingSubmission ..|> ExecutionIO
+legend bottom left
+Future target-only; disabled in the current product.
+Recheck queue and execution state in the claim transaction; no network IO under DB locks.
+Controller uses RequestVO / ResponseVO; persistence uses Mapper / DTO.
+endlegend
 @enduml
 
 @startuml target_follow_up_local_lifecycle
@@ -101,12 +136,23 @@ skinparam backgroundColor white
 ' Observed behavior: registry holds local execution objects only.
 ' Design reason: bound pending capacity and keep request credentials out of persistence.
 title Future FollowUp - local lifecycle, not enabled
+top to bottom direction
 hide empty members
-class PendingSubmissionRegistry <<singleton, target-only>>
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam nodesep 25
+skinparam ranksep 30
+skinparam ArrowColor #475569
+skinparam ClassBorderColor #64748B
+skinparam ClassBackgroundColor #F8FAFC
+skinparam stereotypeFontSize 10
+
+class "PendingSubmission\nRegistry" as PendingSubmissionRegistry <<singleton, target-only>>
 class PendingSubmission <<pending / execution, target-only>>
 class CredentialSnapshot <<memory only, target-only>>
-class BoundedResponseBuffer <<HTTP response, target-only>>
-interface RuntimeExecutionLauncher <<target-only>>
+class "BoundedResponse\nBuffer" as BoundedResponseBuffer <<HTTP response, target-only>>
+interface "RuntimeExecution\nLauncher" as RuntimeExecutionLauncher <<target-only>>
 class SessionExecution <<execution, target-only>>
 interface ExecutionIO <<runtime port, target-only>>
 PendingSubmissionRegistry "1" *-- "0..bounded" PendingSubmission

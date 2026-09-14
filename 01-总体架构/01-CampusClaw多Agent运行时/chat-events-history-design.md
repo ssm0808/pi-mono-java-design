@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.6.0 |
+| 文档版本 | 0.6.1 |
 | 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，target-only |
 | 更新日期 | 2026-09-14 |
 | 原文展示与消费修复 | 实现提交 `cad6847d901155cc6388989b984d19e302a4fbe3`，见 [Draft PR #287](https://github.com/superheromeZzh/pi-mono-java/pull/287)；合入前不作为实现仓主线行为 |
@@ -37,7 +37,7 @@ GET 返回普通 JSON。结果使用
 
 ## 2. 历史返回什么
 
-L1～L10 与 B01～B15 已确认。精确字段、条件必填、枚举、错误码和语言文案由
+精确字段、条件必填、枚举、错误码和语言文案由
 [公共字段源](事件契约/common.json) 的 `eventContract` / `contractSections` 维护，
 渲染到 GET/POST 的统一 HTML；两个操作引用同一份定义，不各写一套。
 
@@ -101,7 +101,7 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 
 存量未保存的思考文本或精确因果关联不能凭空补造。实现应提供一次可重跑的迁移/兼容读取方案，
 对缺少安全映射的历史显式报错并提示迁移处理；不得逐次分配新 ID 或静默丢弃后声称历史完整。
-本次静态契约校验不证明旧数据迁移已实现。
+旧数据迁移必须通过实现验收，静态契约校验不证明迁移已完成。
 
 ### 2.1 Mate 工具的文本返回与源码边界
 
@@ -212,7 +212,8 @@ Mate 公共 Chat API 和前端，便于用户直接查看模型本次返回的�
 原文在 delta、completed 和历史中的一致性，并覆盖多思考块、空格换行、完成态覆盖预览、
 仅 signature、关闭时不产生新事件、关闭后仍可读取旧原文，以及 HTML 样文本的纯文本展示。
 
-## 3. 已确认：普通数字页码
+<a id="3-已确认普通数字页码"></a>
+## 3. 普通数字页码
 
 `page=1、2、3……`，省略按第一页处理；有后续页时返回整数 `nextPage=page+1`，
 没有下一页时返回 `null`。不使用加密游标，不额外增加快照标识、密钥、过期时间或
@@ -245,8 +246,8 @@ eventId 去重只能消除重复，不能弥补漏项；重新加载用于重新
 若读完后又有新增事件，客户端需要再次查询或合并其已收到的完整 SSE 事件；重新补读
 可从第一页开始按 eventId 合并，不凭页尾 null 自动重发 POST。
 
-L2/L3 已确认：默认 `limit=50`、上限 `200`，成功 result 只保留 `events/nextPage`，
-不返回 `total`，也不为这个响应增加总数统计查询。L4 已确认：合法但超出当前记录范围
+成功 result 只保留 `events/nextPage`，
+不返回 `total`，也不为这个响应增加总数统计查询。合法但超出当前记录范围
 的页码返回 `200`，`result.events=[]`、`result.nextPage=null`；不返回 `204` 或空正文，
 也不因没有记录而报 `INVALID_EVENT_LIST_QUERY`。此产品约束表示查询成功但没有匹配记录，
 不表示 Session 执行完成。前提是 Session 存在、访问检查通过且查询成功；不能把不存在、
@@ -277,8 +278,8 @@ Java 文件相对根路径为
 | 相对路径与符号 | 已观察行为 | 目标差异 / 理由 |
 |---|---|---|
 | `web/RuntimeEventController.java` · `list` | GET 返回普通 ResultBean，不创建 Mate 执行凭据 | 保留 JSON 读取边界；不是再建实时长连接 |
-| `event/RuntimeEventQueryService.java` · `list/pageOf/parseLimit` | 默认 100、上限 200；每页读取 Session，afterSeq 分页 | 用户已确认默认改为 50、上限仍为 200；普通整数页码与默认值尚未落入实现，不能将当前 100 当作目标值 |
-| `event/RuntimeEventCursorCodec.java` · `encode/decode` | AES-GCM page 绑定 Session、afterSeq、thinking 和到期时间；无固定分支/上界；未配置 secret 时用进程随机密钥 | 此编码器退出 Session Events ListEvents 读取链路，不为普通页码增加密钥或签名；v1 实现目前未改 |
+| `event/RuntimeEventQueryService.java` · `list/pageOf/parseLimit` | 默认 100、上限 200；每页读取 Session，afterSeq 分页 | 目标默认 50、上限仍为 200；普通整数页码与默认值尚未落入实现，不能将当前 100 当作目标值 |
+| `event/RuntimeEventCursorCodec.java` · `encode/decode` | AES-GCM page 绑定 Session、afterSeq、thinking 和到期时间；无固定分支/上界；未配置 secret 时用进程随机密钥 | 此编码器退出 Session Events ListEvents 读取链路，不为普通页码增加密钥或签名；差距只针对本表固定基线 |
 | `event/RuntimeEntryCodec.java` · `toHistoryEvent/toSseData` | 旧类型、entryId/entrySeq，用户 message/fileIds；工具调用嵌在 Assistant 内容中 | 共用完整事件投影；工具调用身份要持久化或稳定映射，不能每次读取生成新 ID |
 | `vo/EventPageResponseVO.java` | events 为 `List<Map<String,Object>>`，另有 nextPage | 目标使用只读类型化事件 Response VO，DTO 不穿透 HTTP |
 | `campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · `listCurrentBranch` | 每页从当前 active_leaf_id 递归；只按 afterSeq 下界与旧类型白名单查询、按 entry_seq 升序 | 保留每次读取当前分支；以可见完整事件为分页单位，用页码计算偏移；新增控制、工具调用、结束记录的完整投影 |
@@ -286,7 +287,7 @@ Java 文件相对根路径为
 
 分类：JSON ResultBean、公司上下文、M1 准入是产品约束；凭据不落盘与每页访问复核是
 安全加固；普通数字页码取代不透明游标是用户明确的产品约束，取消跨页固定快照是
-架构简化；默认 50/上限 200 与只返回 events/nextPage 是本轮已确认产品约束；共享完整
+架构简化；默认 50/上限 200 与只返回 events/nextPage 是产品约束；共享完整
 事件投影和新增可恢复记录仍是 target-only 架构变更。
 
 [Claude 官方事件流文档](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
@@ -294,13 +295,13 @@ Java 文件相对根路径为
 [List Events 官方参考](https://platform.claude.com/docs/en/api/beta/sessions/events/list)
 是公开读取契约。本次只借鉴该边界；Beta 文档不能证明其服务端表结构、ID 算法、
 事务、调度或分页实现。Claw 的 POST 合并、type + phase、thinking 策略及普通页码
-是本项目目标决定/候选，不声称与 Claude 完全相同。
+是本项目目标决定，不声称与 Claude 完全相同。
 
 ## 6. 推荐目标类图与查询时序
 
 ![共享权威事件投影与普通分页查询](设计图/事件历史查询/target_event_history_classes.svg)
 
-[PlantUML 源码：target_event_history_classes](设计图/事件历史查询/diagram.puml#L1)
+[原尺寸 SVG](设计图/事件历史查询/target_event_history_classes.svg) · [PlantUML 源码：target_event_history_classes](设计图/事件历史查询/diagram.puml#L1)
 
 无状态单例 `CommittedEventProjection` 只接收已提交且完成可见性处理所需的 DTO，产出
 不可变 Response VO；POST 的完整帧与 GET 复用它。它不接收原始 Provider delta，
@@ -310,13 +311,13 @@ Java 文件相对根路径为
 
 ![普通分页与尾部追加](设计图/事件历史查询/target_event_history_paging.svg)
 
-[PlantUML 源码：target_event_history_paging](设计图/事件历史查询/diagram.puml#L58)
+[原尺寸 SVG](设计图/事件历史查询/target_event_history_paging.svg) · [PlantUML 源码：target_event_history_paging](设计图/事件历史查询/diagram.puml#L64)
 
 ## 7. 实施切片与验收
 
 配置更新验收：组合更新的模型、思考和模式事件全部提交或全部回滚；仅实际变化产生记录，顺序与提交一致；requested 模式事件不进入 SSE 或模型历史。
 
-新增批次验收：原消息归属在普通输出/续跑/失败/中断中不漂移；迟到中断拒绝新执行；
+跨事件验收：原消息归属在普通输出/续跑/失败/中断中不漂移；迟到中断拒绝新执行；
 失败缺码/成功带码/非布尔 isError/非文本块被拒绝；GET/POST 与 Skill 完整帧同形；
 后续关闭 thinking 不隐藏已有思考原文；配置、压缩与 Usage 投影不泄露内部 ID；
 Skill 展开前回执、绑定变更重检、内部上下文恢复与保留策略保持一致。
@@ -338,13 +339,13 @@ Skill 展开前回执、绑定变更重检、内部上下文恢复与保留策�
    以及没有回执时不自动重发。工具无结果不伪造，未知持久化类型不静默丢弃。
 6. L7/L8 验收工具结果 content 为仅含 text 块的数组、GET 与 POST 同一完整结果逐字段相等；
    JSON 文本仍放在 text 中，不变为 JSON 或图片块，不把内部 details 或 Mate 原始信封顺带暴露。
-   空文本和块数量约束仍须确认后补齐验收。
+   按 B02 验收至少一个纯文本块，允许空 text 和多个块。
 7. L9 验收 Mate 调用的 toolName 为 CallMateTool、arguments 保留 tool/args 包装；
    GET 与 POST 不发生二次展开，关联 ID 和业务参数值不变，不公开内部 toolId。
 8. L10 验收每条完整工具结果均带布尔 isError，成功 false、失败 true；缺失、null、
    数字或字符串不符合该字段契约，不能以 status 或错误文本替代。
 
-当前交付是契约示例与静态验证，不包含上述运行时测试的通过声明。B01～B15 语义已确认，精确报文与码值已补齐，可进入实现。部署与数据库数值仍需实现校准。
+精确报文与码值由操作模型维护；上述验收项仍需实现测试，部署与数据库数值需按实际环境校准。
 
 ## 8. 事件与配置规则
 
@@ -356,13 +357,13 @@ B09 的事件关联与 B13 Skill SSE 属于架构变更，B01 错误投影与 B1
 |---|---|---|
 | B01 | 失败错误码 | 失败时必有稳定 errorCode，成功时省略；区分用户拒绝、参数错误、工具不存在、超时和执行失败。文案放在 text，使用脱敏可展示信息；不透传 Mate 原始错误码、异常栈或凭据。 |
 | B02 | 空文本与大小 | 工具结果至少一个 text 块，允许 text=""，不强制只有一块；没有正文时不伪造 Agent 回答。沿用工具自身的有说明截断；HTTP 不静默截断完整事件。大小上限由实现校准，超限必须明确失败或断流并可查历史。 |
-| B03 | Mate 文本归一 | CallMateTool 缺省 args 在公开事件中补 {}；Mate result 为字符串时直接作为文本，对象/数组变为 JSON 文本，null 为 ""。这是已确认的适配调整，当前客户端对字符串使用 JSON 序列化的实现将有变化。 |
+| B03 | Mate 文本归一 | CallMateTool 缺省 args 在公开事件中补 {}；Mate result 为字符串时直接作为文本，对象/数组变为 JSON 文本，null 为 ""。适配差距见 §2.1。 |
 | B04 | 时间与增量 | 完整事件 createdAt 使用 Claw 形成该权威记录时的 UTC 毫秒时间，保存一次，GET/POST 复用；delta 使用 content 字符串，只含新增文本，沿用同一 eventId，不带 createdAt。completed 覆盖预览，之后忽略迟到 delta。 |
-| B05 | Thinking 展示 | 展示模型返回的原始推理。thinking 控制后续执行，关闭不隐藏已保存原文；读取受当前权限约束，完整规则见 §2.2。 |
+| B05 | Thinking 展示 | 展示模型返回的原始推理。thinking 控制后续执行，关闭不隐藏已保存原文；读取受当前权限约束，完整规则见 §2.3。 |
 | B06 | 工具确认标记 | 每个完整 agent.tool_call 都带 requiresConfirmation 布尔值；本期顺序发出需确认调用，同一执行一次只挂起一个待确认 toolCallId。允许/拒绝后分别续跑，拒绝产生 isError=true 的工具结果。 |
 | B07 | 结束原因 | session.status_idle.reason 固定 done、failed、terminated、confirming；confirming 只结束当前 SSE，Session 继续 running。failed 携带稳定 errorCode 和可展示 message；工具失败可由 Agent 继续处理，不自动等同于整轮 failed。 |
 | B08 | 控制请求竞争 | 确认与中断在同一执行的事务内重检；停止请求先提交，则拒绝确认；确认先提交，中断仍可停止续跑。重复/过期确认返回 409，不重复执行工具；等待超时不伪造已停止。 |
-| B09 | 防止误停下一轮 | 给 user.interrupt 增加必填 targetEventId，引用原 user.message 的 eventId；不匹配当前执行时返回 409。agent.* 和 idle 用 sourceEventId 引用同一原消息，便于历史对账。复用已有事件身份，不新增 runId/executionId；这是已确认的字段扩展。 |
+| B09 | 防止误停下一轮 | 给 user.interrupt 增加必填 targetEventId，引用原 user.message 的 eventId；不匹配当前执行时返回 409。agent.* 和 idle 用 sourceEventId 引用同一原消息，便于历史对账。复用已有事件身份，不新增 runId/executionId；这是产品字段约束。 |
 | B10 | 断线与回执丢失 | 保留无自动写重试的方案：没有收到首帧时显示“提交结果不确定”，不靠相同文本猜测成功，不新增幂等键。收到回执后按 eventId 和 B09 的关联补读历史；断流本身不取消执行，也不代表失败。 |
 | B11 | HTTP 故障与心跳 | 接受前：非法参数 400、不存在 404、状态冲突 409、容量/依赖暂不可用 503、内部失败 500，统一 ResultBean；接受后不得伪装成未接受。SSE 已开始则不改成 JSON，能保存权威失败则发送 failed，否则断流并对账。采用 : ping 注释心跳；慢客户端可丢 preview，完整帧不能入队则断开。 |
 | B12 | 配置、压缩与用量 | 模型/思考/模式配置变更和压缩保留独立完整事件，映射到统一 Session Events；Usage 放在对应完整 Agent 消息，Session 保留累计用量。不新增通用 command 生命周期、进度或子 Agent 公共事件；已有内部记录逐类标明公开映射或不公开理由。 |
@@ -384,11 +385,12 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.6.1 | 2026-09-14 | 精简查询与验收说明，突出共享完整事件投影和单次读取边界。 |
 | 0.6.0 | 2026-09-14 | 历史增加统一 Session 更新产生的 requested 模式事件，按模型、思考、模式顺序展示真实变更。 |
 | 0.5.1 | 2026-09-10 | 同步 Runtime 十一项当前接口清单，ListEvents 契约不变。 |
 | 0.5.0 | 2026-09-09 | 明确原始推理、业务失败事件、工具确认归属和响应长度边界。 |
 | 0.4.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |
-| 0.3.0 | 2026-09-08 | 记录用户四组全部按推荐确认 B01～B15。 |
+| 0.3.0 | 2026-09-08 | 定义 B01～B15 的错误、事件归属、恢复与保留规则。 |
 | 0.2.7 | 2026-09-08 |  L10：每条工具结果必有布尔 isError，成功 false、失败 true。 |
 | 0.2.6 | 2026-09-08 |  L9 Mate 调用保留 CallMateTool/{tool,args}，同步 GET/POST 示例。 |
 | 0.2.5 | 2026-09-08 |  L7 内容块数组与 L8 本期仅文本并同步 POST。 |
@@ -397,4 +399,4 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 | 0.2.2 | 2026-09-07 |  L4 合法超范围页返回 200 空列表和 nextPage=null。 |
 | 0.2.1 | 2026-09-06 |  L2 默认 50/上限 200、L3 仅 events/nextPage，不返回 total。 |
 | 0.2.0 | 2026-09-06 | 从旧到新、普通整数 page/nextPage，取消跨页固定快照、快照标识及加密游标。 |
-| 0.1.0 | 2026-09-06 | 按用户要求开启 ListEvents 修改：完整事件与 POST 对齐、固定分支/提交上界候选、两页与中断/确认示例、源码差距、目标图及验收。 |
+| 0.1.0 | 2026-09-06 | 建立完整事件历史与 POST 共享投影的查询设计。 |

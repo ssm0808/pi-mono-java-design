@@ -2,15 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.0.0 |
-| 状态 | 目标设计，尚未实施 |
+| 文档版本 | 3.1.0 |
+| 状态 | target-only 目标；实现状态仅限下列固定源码范围 |
 | OpenAPI | [`attachment-api.openapi.yaml`](attachment-api.openapi.yaml) |
 | openGauss DDL | [`schema.sql`](schema.sql) |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
 | pi-mono-java 源码基线 | `195746614096312d4e93afb029d387837db78e0b` |
-| 更新日期 | 2026-08-18 |
+| 更新日期 | 2026-09-14 |
 
-## 1. 结论
+## 1. 职责与边界
 
 mate-service 提供文件上传、状态、删除和 CampusClaw 内部读取能力。原始字节只保存
 在共享私有 OBS；openGauss 保存身份、Session 绑定、处理状态、可信元数据、清理和
@@ -18,14 +18,13 @@ Worker lease。Pod 不保存本地文件，也不聚合完整 byte array。
 
 文件的唯一资源 ID 是 `file_id`，JSON/Java 字段使用 `fileId/fileIds`。`file_id`
 同时是完整 OBS Object Key；系统不维护第二套文件资源 ID 或 object-key 映射。
-Runtime 的 `POST Session Events` 接收有序 `file_ids`，与本服务内部接口使用同一 ID。
+Runtime 通过 `event.content[]` 的文件块引用同一文件 ID；精确请求由 [Session Events 契约](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html)维护，内部批量解析仍使用 `fileIds`。
 
 公共接口按 `chat_id` 鉴权，mate-service 从权威 Chat Store 解析 `session_id`；公共
 响应不披露 Session。内部接口只接受 CampusClaw 服务身份和 `session_id`，不接受
 `chat_id`。
 
-本专题是 target-only 设计。pi-mono 和 pi-mono-java 当前只有 inline image 内容，
-没有这里定义的通用文件上传、扫描、OBS、openGauss 或跨 Pod 内容服务。
+本专题为 target-only。固定 pi 基线 `086c32e7` 的 `packages/agent/src/agent.ts:prompt`、`packages/ai/src/types.ts:ImageContent`，以及 Java 基线 `19574661` 的 `modules/ai/src/main/java/com/campusclaw/ai/types/ImageContent.java` 和 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java:prompt/abort`，只提供内联图片与会话调用能力，未包含这里定义的文件服务。最新实现未在本次文档整理中复核。
 
 ## 2. API 总览
 
@@ -45,31 +44,8 @@ Runtime 的 `POST Session Events` 接收有序 `file_ids`，与本服务内部�
 
 ### 2.1 ResultBean
 
-JSON 成功响应统一为：
-
-```json
-{
-  "resCode": "0",
-  "resMsg": "success",
-  "result": {
-    "fileId": "file_01JY8X2E3R4T5Y6U7I8O9P0A1S"
-  }
-}
-```
-
-异常响应只有 `resCode` 和国际化 `resMsg`，没有 `result`：
-
-```json
-{
-  "resCode": "FILE_NOT_READY",
-  "resMsg": "文件仍在处理中。"
-}
-```
-
-真实 HTTP status 保留。二进制 content 响应不包装；未来若有 `204` 也不包装。
-Java Controller 返回 VO，Service 使用
-`ResultBeanFactory.getFactory().normal(result)`；本地环境通过兼容 Adapter 保持
-同一调用形式，公司环境切换为内部制品。
+JSON 成功响应为 `resCode/resMsg/result`，失败只有 `resCode/resMsg`；完整示例见 OpenAPI。保留真实 HTTP status，二进制 content 与 `204` 不包装。
+Service 返回未包装的响应 VO，Controller 负责 ResultBean 包装；只有实际内部制品或兼容 Adapter 已验证提供该 API 时，才调用 `ResultBeanFactory.getFactory().normal(result)`。
 
 JSON 使用 Jackson 默认 lowerCamelCase。路径参数和 SQL 列继续使用 snake_case，
 两者不要求同名。
@@ -93,7 +69,7 @@ JSON 使用 Jackson 默认 lowerCamelCase。路径参数和 SQL 列继续使用 
 
 ![文件上传与异步扫描](file_upload_and_scan_flow.svg)
 
-[PlantUML 源码：`file_upload_and_scan_flow`](diagram.puml#L8)
+[PlantUML 源码：`file_upload_and_scan_flow`](diagram.puml#L8) · [原尺寸 SVG](file_upload_and_scan_flow.svg)
 
 上传使用单文件 `multipart/form-data` 和必填 `X-File-Size`。服务端：
 
@@ -118,7 +94,7 @@ OBS PUT 必须 create-only。若理论上的同名对象已存在，不覆盖或
 
 ![OBS 与 openGauss 责任分离](file_obs_opengauss_storage_split.svg)
 
-[PlantUML 源码：`file_obs_opengauss_storage_split`](diagram.puml#L83)
+[PlantUML 源码：`file_obs_opengauss_storage_split`](diagram.puml#L98) · [原尺寸 SVG](file_obs_opengauss_storage_split.svg)
 
 ### 4.1 `t_file`
 
@@ -154,7 +130,7 @@ lease 并提交，之后才进行 OBS 或扫描 I/O；外部 I/O 期间不持有
 
 ![跨 Pod 文件解析和正文流](file_cross_pod_resolution_flow.svg)
 
-[PlantUML 源码：`file_cross_pod_resolution_flow`](diagram.puml#L152)
+[PlantUML 源码：`file_cross_pod_resolution_flow`](diagram.puml#L152) · [原尺寸 SVG](file_cross_pod_resolution_flow.svg)
 
 CampusClaw 接受 User Event 后调用：
 
@@ -194,7 +170,7 @@ Runtime 只把可信元数据快照随 User Entry 保存：
 
 ![文件删除和对账](file_deletion_and_reconciliation.svg)
 
-[PlantUML 源码：`file_deletion_and_reconciliation`](diagram.puml#L218)
+[PlantUML 源码：`file_deletion_and_reconciliation`](diagram.puml#L221) · [原尺寸 SVG](file_deletion_and_reconciliation.svg)
 
 - 未引用文件可被公共 DELETE 条件更新为 `DELETING`，重复调用幂等返回 `202`；
 - `referenced_at` 非空的文件不能单独删除，返回 `409 FILE_REFERENCED`；
@@ -204,8 +180,11 @@ Runtime 只把可信元数据快照随 User Entry 保存：
 - `OBJECT_KEY_CONFLICT` 隔离项不进入普通删除或 24 小时清理，只由受审计对账处理；
 - `DELETED` tombstone 永久保留五个字段，不恢复、不复用 ID。
 
-OBS 与 openGauss 之间不使用 XA。数据库决定处理资格，OBS 决定原始字节是否存在；
-短 lease、条件更新、幂等对象操作和周期 reconciliation 收敛故障。
+OBS 与 openGauss 之间不使用 XA。数据库决定处理资格，OBS 决定原始字节是否存在；短 lease、条件更新和幂等操作用于故障恢复。对象归属不明时保留隔离，由受审计的对账流程处理。
+
+![受审计的对象对账](file_audited_reconciliation.svg)
+
+[PlantUML 源码：`file_audited_reconciliation`](diagram.puml#L295) · [原尺寸 SVG](file_audited_reconciliation.svg)
 
 ## 7. 错误目录
 
@@ -227,7 +206,7 @@ OBS 与 openGauss 之间不使用 XA。数据库决定处理资格，OBS 决定�
 
 - OpenAPI 所有 JSON Schema 使用 lowerCamelCase，成功/异常 envelope 与公司约定一致；
 - 公共 operation 只允许 JWT Header 对，内部 operation 明示 JWT/APPKEY OR 关系并拒绝混用；
-- 全仓当前文件资源字段只使用 `file_id/fileId/file_ids/fileIds`；
+- 文件资源使用同一 `file_id` 身份；文件服务 JSON 使用 `fileId/fileIds`，Runtime 按当前 content 文件块契约引用；
 - `file_id` 格式、SQL 长度、OpenAPI Schema 与 Runtime 示例完全一致；
 - 上传和下载全程有界流式，无本地文件或完整 byte array；
 - resolve 批次全成全败并保持请求顺序；
@@ -240,6 +219,7 @@ OBS 与 openGauss 之间不使用 XA。数据库决定处理资格，OBS 决定�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 3.0.0 | 2026-08-18 | 资源身份从 attachment_id 统一为 file_id；JSON 改为 lowerCamelCase；成功/异常改为 ResultBean；公共 JWT、内部 JWT/APPKEY 双模式；agent-service 改为 CampusClaw，内部路径与 Session Events 的 file_ids 对齐 |
+| 3.1.0 | 2026-09-14 | 按阶段重排文件生命周期及存储图，统一 Runtime content 引用入口与响应包装职责。 |
+| 3.0.0 | 2026-08-18 | 统一 file_id、lowerCamelCase、ResultBean 和双模式认证，对齐 CampusClaw 文件解析边界。 |
 | 2.0.0 | 2026-08-04 | 历史版 OBS/openGauss 两表、扫描、删除和 reconciliation 设计 |
 | 1.0.0 | 2026-08-03 | 初版附件服务目标设计 |

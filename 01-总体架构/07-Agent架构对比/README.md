@@ -4,13 +4,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.8.0 |
+| 文档版本 | 1.9.0 |
 | 更新日期 | 2026-09-14 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
-| 设计依据 | `pi-mono-java-design@b07db4dfe0bdc6229b7294bc04ebbde9184b77ec`，具体主设计见各条目 |
+| 设计依据 | `pi-mono-java-design@6026ba48e58449e6d64e6e91688b04a2fdd562e2`，具体主设计见各条目 |
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
 | 计划模式专项基线 | A03 使用 DeepSeek `0a53fb55`、Java `09b32d8e`；旧 Java `f61906b` 与该专项相关源码相同，完整 SHA 与路径见专项证据 |
-| 核验范围 | M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A05 的 TODO 工具结果、Java 提交和客户端投影接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、注册框架、模型预置及 SDK 依赖；M08 的 Agent 默认 mode、目录快照及 Session 初始化 |
+| 核验范围 | M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A05 的 TODO 工具结果、Java 提交和客户端投影接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、注册框架、模型预置及 SDK 依赖；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
 | 验证边界 | 静态源码与文档核对，未执行产品集成测试；其余模块与基线的专项差异待补证 |
 
 ## 1. 阅读方式与权威边界
@@ -50,7 +50,7 @@
 | M05 · Command 与 Skill | 清单和执行如何共享解析；命令、Skill 与 Tool 的边界是什么 | pi | 待补证；不从存在 SKILL.md 推导相同执行机制 |
 | M06 · 事件与服务边界 | 写入与观察是否分离；流绑定谁；断线如何恢复；控制状态谁权威 | Claude；OpenCode，必要时 pi/DeepSeek | [A02](#a02)覆盖 Claw/Mate 分层与流范围；[A03](#a03)补充计划审核所复用的数据库确认交接，完整回放专项待补证；[A04](#a04)覆盖 Session 配置更新；[A05](#a05)覆盖 TODO 复用通用事件 |
 | M07 · 前端与渠道 | preview 何时被权威内容替换；Turn/Item 与产品 UI 如何映射 | Codex；Claude 辅助 | [A05](#a05)核对既有事件合并与根执行归属，TODO 投影为 target-only；其余展示与取消行为待补证 |
-| M08 · 元数据与配置 | 定义、发布快照和运行对象如何分离；刷新如何影响活动执行 | pi；托管产品仅对照公开资源 | Agent.mode 专项已核对 Mate 956b547f / Runtime 09b32d8e；默认值链为 target-only，见 A03 和元数据主设计；其余待补证 |
+| M08 · 元数据与配置 | 定义、发布快照和运行对象如何分离；刷新如何影响活动执行 | pi；托管产品仅对照公开资源 | Agent.mode 专项已核对 Mate 956b547f / Runtime 09b32d8e；默认值链为 target-only，见 A03 和元数据主设计；元数据组合查询顺序另在 Mate `9dd5d85e` 核对，见 J06；发布事务一致性仍待补证 |
 | M09 · 附件与文件 | 文件服务与 Agent 工作区是什么关系；何时解析与授权 | pi；托管产品公开文件契约按需核对 | 待补证；明确企业产品约束 |
 | M10 · 调度与并发 | Session 准入、Tool 并行和全局容量分别如何限制 | pi；OpenCode/DeepSeek 按问题补充 | 待核验并发设计与实测依据；不声称虚拟线程自动解决容量问题 |
 | M11 · 可观测性与测试 | 日志、审计历史与模型上下文如何分开；如何证明差异可接受 | 按验证对象选基线，不设统一主基线 | 待补证；区分测试存在、测试运行和生产观测 |
@@ -95,7 +95,7 @@
 | 连接绑定 | 提供 Session 及 Thread 的读取流 | 绑定本次请求对应的执行段或控制结果；对应 idle 后关闭，含 confirming | Chat 级连接可跨执行与空闲；idle 不关闭连接 |
 | 增量与权威 | preview 临时且不重放，完整消息用于对账 | delta 作预览，完整事件用于历史对账 | 同 ID completed 替换 preview，完整公共历史用于对账 |
 | 断线恢复 | 重开流并查询历史 | 查询历史；不恢复已经断开的 POST，不自动重发已接受写入 | 重开公共流并查询历史，不自动重发 POST |
-| 证据性质 | 2026-09-14 核对的 Beta 文档；不证明服务端内部实现 | 主设计目标；J02/J03/J04/J05 仅证明下述局部实现 | Mate 文档 1.5.0 的 target-only 契约；未核对 mate-service 源码 |
+| 证据性质 | 2026-09-14 核对的 Beta 文档；不证明服务端内部实现 | 主设计目标；J02/J03/J04/J05 仅证明下述局部实现 | Mate 公共目标契约；数字分页与快照仍待整合；未核对 mate-service 源码 |
 
 Claude 的比较依据为官方 [Session event stream](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
 与 [List Events](https://platform.claude.com/docs/en/api/beta/sessions/events/list)。这里只采纳流与权威记录的公开边界，
@@ -117,6 +117,8 @@ Mate 的 Chat 身份、授权和公共投影属于产品约束及安全边界；
 断线后需要历史对账。Mate 的公共流与内部请求流生命周期不同，需要显式桥接和授权投影；
 不能字节透明转发，也不能假定内部连接结束就应关闭公共 Chat 流。桥接的多客户端分发、恢复、
 背压和确认续跑仍需独立设计与实际 mate-service 源码证据，本文不补造其内部实现。
+
+**渠道同步。** [飞书目标设计](../01-CampusClaw多Agent运行时/channel-feishu-v1-design.md#73-不确定结果恢复) 同步采用当前 eventId/sourceEventId，不再依赖已撤销的公开 Entry 水位。无可靠回执时不能由空历史或同文消息证明未接受，因此保留人工对账。这是适配当前契约的安全加固，代价是部分故障不能自动恢复提交；未新增幂等字段、自动接管或副作用重跑能力。
 
 **重新评估条件。** 如果内部调用方需要脱离写请求独立订阅、多客户端共同观察或可恢复读流，
 应重新评估连接范围、权威事件来源和恢复契约；这会改变架构边界，不能仅增加一个 GET 路径就视为完成。
@@ -140,7 +142,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 架构问题 | 如何让 Agent 提供默认工作模式、Session 独立维护当前模式，同时保持 Tool/Skill 元数据稳定并支持方案审核？ |
 | DeepSeek 已观察行为 | 固定 alpha 提交的 `PlanModeController` 根据计划状态提供 `plan:policy`；退出工具持续注册，以完整 Markdown 请求用户审核；批准后在后续 step 退出。`stateVersion=3` 属于投影结构版本，不是业务计划版本。固定链接与符号见[专项源码证据 §2](../06-CampusClaw计划模式/source-evidence.md#2-deepseek-计划模式)。 |
 | CampusClaw 已观察实现 | Java `09b32d8e` 已具备统一 Session 工厂、逐轮读取系统 Prompt、确认等待、数据库决定和固定续跑段；本专题相关源码与 `f61906b` 相同。工具确认由前端 executionState/loadHistory 根据事件恢复，Session VO 不暴露待确认工具。当前没有计划模式、计划工具或计划事件；RuntimeSessionController 没有通用更新方法，既有配置服务已支持 ETag、idle 和更新结果组装。源码范围见[专项证据 §4](../06-CampusClaw计划模式/source-evidence.md#4-campusclaw-现有接入点)，未运行计划集成测试。 |
-| CampusClaw 目标 | 名称、模型、思考和 plan/build 统一通过 Session POST 更新，mode 是工作模式属性；state 保留 idle/running。复用既有配置 Service，模式控制 Prompt，Runtime 两种模式使用相同工具定义。完整计划事件的 eventId 是批准目标；前端从事件恢复审核卡，当前等待目标仅保留在服务端执行记录，Session 不增加待审核字段。审核决定提交后唤醒原执行，下一轮使用 build 实施指令；plan 阶段不调用 TODO。基础 SYSTEM 与模式段按入口和实际工具组合。Agent 顶层新增 String mode，仅初始化新交互 Session；缺字段兼容 build，已有会话不跟随 Agent 更新。字段权威及源码范围见[元数据主设计 §4.4](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)。 |
+| CampusClaw 目标 | Agent 默认 mode 只初始化新 Session，Session 独立维护当前模式；模式更新复用统一 Session POST。计划以完整事件身份审核，沿用原执行与数据库确认交接，批准后以 build 指令续跑；Tool/Skill 定义保持稳定。具体字段、Prompt 和恢复归计划与元数据主设计。 |
 | 差异分类 | 产品约束：Agent 默认 mode 与 Session 当前模式分离、Tool/Skill 元数据稳定、当前模式由 Session 更新、只允许 idle 主动切换、Child 调用时继承模式；架构变更：在既有配置服务增加 Session 更新，并将进程内审核接入 HTTP 和已有数据库执行控制；安全加固：精确目标、单次消费、停止竞争和两跳身份校验。 |
 | 提示词依据 | DeepSeek standard preset 明确禁止规划期 todo_write；CampusClaw 同样仅在 build 记录实施进度。根与 Child 分别组合审核/返回父结果段，批准后替换为实施与 TODO 段。精确正文与矩阵见[提示词设计](../06-CampusClaw计划模式/plan-policy.md)，固定符号见[专项证据 §7](../06-CampusClaw计划模式/source-evidence.md#7-提示词组合与逐项更新约束)。 |
 | 具体理由 | 模式已有明确的 Session 资源归属，更新操作复用其身份、版本与事务，统一四类属性入口，并明确组合原子性。混合查询与变更工具不能依靠新增一个静态只读字段准确表达每次调用用途；稳定字段与工具定义让规划规则独立演进。公共审核需要可对账的事件身份，原有工具权限不能表示对整份方案的批准。展示恢复与锁内接受分离，沿用既有工具确认方式，避免 Session 响应随具体交互增加指针。 |
@@ -153,6 +155,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 **讲解要点。** DeepSeek 提供了计划模式与工具元数据解耦的参考。CampusClaw 保留这一边界，
 以统一 Session POST 更新承载工作模式，把计划审核接入已有 Session Events 和数据库确认续跑；计划正文用事件身份固定，工具授权继续独立执行。
 代价是新增审核持久化与客户端交互，同时必须承认提示词约束和失联执行恢复的能力边界。
+
 
 <a id="a04"></a>
 
@@ -214,7 +217,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 模块与主设计 | M02，关联 M08/M11；[模型与 Provider 主设计 §4](../../02-服务与接口/03-模型管理Provider契约/README.md#4-provider-与配置)维护命名、削减及依赖边界；复用其[唯一全局目标类图](../../02-服务与接口/03-模型管理Provider契约/java_provider_alignment.svg)。 |
 | 架构问题 | 企业产品默认只从 CampusMate 调用模型时，是否必须同时删除通用 Provider 注册能力？ |
 | pi 已观察行为 | 固定 `5cd93f688aaab89dbb6dfa4aca535f21796ae185` 的 `packages/ai/src/models.ts`：`Provider` 持有身份、认证、目录和流能力；`ModelsImpl.requireProvider` 按身份查找；`createProvider` 组合模型目录与单个/按 API 分派的流实现。`packages/ai/src/providers/anthropic.ts`：`anthropicProvider` 通过该工厂组装厂商能力。源码证明组合与扩展边界，不要求每个产品交付全部厂商。 |
-| CampusClaw 已观察实现 | Java `f61906b9136246ca60f333704b6fc92b5420d0ec` 已有独立 Mate WebClient/Mapper/Parser；身份仍为 `mate-model-manager`，四个第三方适配器、第三方模型预置与两个 SDK 仍存在。AI 服务优先身份路由、再查 API；Runtime 从 Agent 快照解析 Mate 模型。精确路径与符号见主设计 J-AI-01～08。 |
+| CampusClaw 已观察实现 | Java `f61906b9136246ca60f333704b6fc92b5420d0ec` 已有独立 Mate WebClient/Mapper/Parser；身份仍为 `mate-model-manager`，四个第三方适配器、第三方模型预置与两个 SDK 仍存在。AI 服务优先身份路由、再查 API；Runtime 从 Agent 快照解析 Mate 模型。精确路径与符号见[Provider 源码证据](../../02-服务与接口/03-模型管理Provider契约/source-evidence.md) J-AI-01～08。 |
 | CampusClaw 目标 | 唯一内置实现为 `CampusMateProvider`、ID 为 `campusmate`、enum 为 `CAMPUSMATE`；删除厂商适配器/预置/SDK，保留两种注册表、接口、公共类型和 JSON 加载；不增加目录 HTTP、身份别名或存量迁移。 |
 | 差异分类 | 产品约束：提供方集中在 CampusMate，取消开箱厂商直连；产品身份变更：名称直接切换。保留既有双注册表是本次架构边界，不借裁剪引入 ProtocolAdapter 重构。既有网关认证与事件契约保持独立。 |
 | 理由与代价 | 删除发布产品不再使用的厂商代码和预置数据，减少 SDK 升级维护范围；代价是旧配置需更新、旧历史 Provider 不归一、直连用户需迁至 CampusMate 或自行提供扩展。通用注册仍有维护成本，未实测包体积或性能收益。 |
@@ -243,10 +246,11 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 | J03 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java](https://github.com/superheromeZzh/pi-mono-java/blob/f61906b9136246ca60f333704b6fc92b5420d0ec/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java#L53) | `submit`：三类用户事件分派；不证明被调用服务的全部事务与取消语义 |
 | J04 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java](https://github.com/superheromeZzh/pi-mono-java/blob/f61906b9136246ca60f333704b6fc92b5420d0ec/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java#L173) | `requireIdleSession`、`accept`、`startAccepted`：idle 预检查、持久化接受调用及回执先于启动；不证明数据库事务实现 |
 | J05 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java](https://github.com/superheromeZzh/pi-mono-java/blob/f61906b9136246ca60f333704b6fc92b5420d0ec/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java#L174) | `attach`、`emit`、`emitBestEffort`、`detachInternal`：单订阅者、有界缓冲及输出解绑 |
+| J06 | Mate `9dd5d85e2ed6561ad654b11f817ef572cc8bac7c` · `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java` | `getRuntimeAgent` 顺序读取四类绑定；更正原图的并行表达，未据此推断跨查询快照一致性；详见[元数据证据](../../03-数据与存储/02-Agent元数据GaussDB/README.md#2-来源证据与设计边界) |
 
 请求级 SSE 主设计的旧实现核对点为 `918005ee8ccc88d179fc31a0de17a92b4a01383b`。
 在本文的新核对点，J02/J03/J04 已出现新的请求 VO、三事件分派和回执启动顺序；
-因此该主设计 §6 中“三输入联合请求和完整首帧还需改造”的旧差距只适用于原基线，不能直接用于判断新提交。
+因此[旧基线证据](../01-CampusClaw多Agent运行时/source-evidence.md#52-post-与流生命周期)中的“三输入联合请求和完整首帧还需改造”只适用于原基线，不能直接用于判断新提交。
 这不改变目标方案，也不自动关闭该模块其余实现差距；完整差距表的复核仍需扩大到持久化、控制和集成测试。
 
 ## 8. 条目格式与维护检查
@@ -281,6 +285,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.9.0 | 2026-09-14 | 对比引用模块权威内容，登记公共分页待整合与渠道无回执恢复边界。 |
 | 1.8.0 | 2026-09-14 | 区分 Agent 默认 mode 与 Session 当前模式，并记录目录发布的生效边界。 |
 | 1.7.0 | 2026-09-14 | 补充 CampusMate 唯一内置 Provider 的裁剪取舍、身份切换、源码证据与依赖验收。 |
 | 1.6.0 | 2026-09-14 | 明确规划与实施提示词分工，TODO 仅跟踪 build 实施且逐项更新。 |

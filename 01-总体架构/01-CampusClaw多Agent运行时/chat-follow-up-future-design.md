@@ -2,27 +2,18 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.1 |
+| 文档版本 | 0.2.0 |
 | 状态 | 方向已确认；本期不支持，启用另行评审；target-only |
-| 更新日期 | 2026-09-10 |
-| 设计仓变更前基线 | `fd8604956632c880264434791465d1f59917038d`；本轮保留已合入的 Help 与命令归属设计 |
+| 更新日期 | 2026-09-14 |
 | CampusClaw 源码基线 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185`；通过该 commit 读取，不采用工作区较新的 HEAD |
 
-## 1. 本次决定与当前产品边界
+<a id="1-本次决定与当前产品边界"></a>
+## 1. 当前产品边界
 
-本次只修改设计契约，不修改 CampusClaw 实现。当前目标从 13 个接口收敛为
-11 个，完整清单见 [Runtime 总览 §4](README.md#4-当前目标-http-接口清单)。
+FollowUp 是未来扩展，当前产品不支持消息排队。有效入口见 [Runtime 接口清单](README.md#4-当前目标-http-接口清单)：中断通过 Events 提交 `user.interrupt`，回执不表示已经停止；调整方向需等待实际停止后重新提交 `user.message`。不提供独立 Steer、FollowUp 或 Abort 路由。
 
-| 退役的独立接口 | 当前替代或限制 |
-|---|---|
-| `POST /sessions/{sessionId}/abort` | `POST /sessions/{sessionId}/events` 提交 `user.interrupt`；回执不等于实际停止 |
-| `POST /sessions/{sessionId}/steers` | 产品采用“中断、确认实际停止、再提交 user.message”调整方向；不提供运行中注入 |
-| `POST /sessions/{sessionId}/follow-ups` | 本期不支持后续消息排队；只记录本文的未来扩展方向 |
-
-三个 operation model 与活动评审入口删除，不保留兼容别名或新独立路径。
-原有实现证据、版本历史和针对旧实现的回归资料保留并标明范围，不能作为当前目标契约。
-实现尚有旧 Controller；删除实现路由属于后续迁移切片，不在本次完成声明之内。
+固定 Java 基线仍有旧控制 Controller，其源码事实见 §2；这不构成当前公共契约，也不证明较新实现仍保留旧入口。
 
 当前 POST Events 仍仅接受 `user.message`、`user.interrupt`、`user.tool_confirmation`。
 M1 未完成前拒绝所有调用方的 M2，不排队、不写入已接受历史；确认等待、中断未完成或
@@ -50,7 +41,7 @@ pi 路径相对 `pi-mono`。行号针对上表固定 commit，不代表未来实
 | 架构变更，target-only | 应用层持久化队列，前序完成后由接收 M2 的实例启动新执行 | 不要求 M2 请求命中 A，不向 A 的内存队列远程注入；与 pi 同一 Loop 内续跑刻意不同 |
 | 安全约束 | 凭据仅在所属请求/执行的内存对象中保留 | 不能为容灾把 JWT、AppKey 或 access-token 写入队列、事件、日志或复用 M1 凭据 |
 
-这里没有引入新的托管产品契约或推断其服务端调度；选择依据是本地实现差距与产品边界。
+本方案依据固定源码中的本机队列与产品单消息准入约束；未来数据库交接属于架构变更，不是 pi 的既有持久化能力。
 
 ## 3. 未来正常流程：数据库交接，不需要粘性路由
 
@@ -77,7 +68,7 @@ pi 路径相对 `pi-mono`。行号针对上表固定 commit，不代表未来实
 
 ![未来 FollowUp 跨实例接续：方案方向已确认，本期不启用](设计图/后续消息扩展/target_follow_up_handoff.svg)
 
-[PlantUML 源码：`target_follow_up_handoff`](设计图/后续消息扩展/diagram.puml#L1)
+[原尺寸 SVG](设计图/后续消息扩展/target_follow_up_handoff.svg) · [PlantUML 源码：`target_follow_up_handoff`](设计图/后续消息扩展/diagram.puml#L1)
 
 ## 4. 推荐目标类图与职责
 
@@ -85,13 +76,13 @@ pi 路径相对 `pi-mono`。行号针对上表固定 commit，不代表未来实
 
 ![未来 FollowUp 应用层与运行时边界](设计图/后续消息扩展/target_follow_up_classes.svg)
 
-[PlantUML 源码：`target_follow_up_classes`](设计图/后续消息扩展/diagram.puml#L48)
+[原尺寸 SVG](设计图/后续消息扩展/target_follow_up_classes.svg) · [PlantUML 源码：`target_follow_up_classes`](设计图/后续消息扩展/diagram.puml#L65)
 
-请求凭据、等待登记与执行对象的局部组合关系单独展开，避免挤在全局图中：
+全局图包含准入、数据库权威和执行输出端口；下图补充本机凭据与缓冲的生命周期：
 
 ![未来 FollowUp 本机对象生命周期](设计图/后续消息扩展/target_follow_up_local_lifecycle.svg)
 
-[PlantUML 源码：`target_follow_up_local_lifecycle`](设计图/后续消息扩展/diagram.puml#L96)
+[原尺寸 SVG](设计图/后续消息扩展/target_follow_up_local_lifecycle.svg) · [PlantUML 源码：`target_follow_up_local_lifecycle`](设计图/后续消息扩展/diagram.puml#L131)
 
 | 目标职责 | 生命周期与边界 |
 |---|---|
@@ -129,13 +120,13 @@ SessionExecution 只依赖运行时拥有的 ExecutionIO 端口；应用层 Pend
   准入与快照规则启用前统一评审。配置不能随实例取到的不同缓存悄悄改变同一排队消息。
 
 若新增表，采用 `t_` 加小写 snake_case，例如候选 `t_session_pending_message`。
-本次不冻结表结构、状态字面值、索引、轮询周期、租约、排队 TTL 或错误码；需结合实际
+本方案尚未冻结表结构、状态字面值、索引、轮询周期、租约、排队 TTL 或错误码；需结合实际
 GaussDB 版本、事务能力与压测确定。Redis 只可作为后续通知优化，不能移走数据库的
 消息/领取权威，也不能解决内存凭据失效和外部副作用恢复问题。
 
 ## 6. 未来启用前的实施切片与验收
 
-本期只落“退役契约、客户端限制、文档与展示同步”切片。下表不代表已批准启动实现。
+下表是未来启用条件，不属于当前实施范围。
 
 | 未来切片 | 启用前必须完成 |
 |---|---|
@@ -152,5 +143,6 @@ GaussDB 版本、事务能力与压测确定。Redis 只可作为后续通知优
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.1.1 | 2026-09-10 | 同步独立 Name API 后的十一项当前接口，FollowUp 仍不启用。 |
-| 0.1.0 | 2026-09-07 | 记录已同意的未来 FollowUp 方向，明确暂不启用；退役三个独立控制接口，保留现行单消息准入，补齐源码、跨实例交接、目标类图与未来启用门禁。 |
+| 0.2.0 | 2026-09-14 | 集中说明未来队列边界，按接受、交接和领取阶段重排流程与目标结构。 |
+| 0.1.1 | 2026-09-10 | 同步当前接口清单，FollowUp 仍不启用。 |
+| 0.1.0 | 2026-09-07 | 定义暂不启用的跨实例 FollowUp 交接方案和实施条件。 |

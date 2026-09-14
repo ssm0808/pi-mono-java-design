@@ -1,4 +1,15 @@
 @startuml plan_mode_target_classes
+top to bottom direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 35
+skinparam linetype ortho
+hide empty members
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Local f61906b9136246ca60f333704b6fc92b5420d0ec has identical files in this scope.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java :: create, configureAgent.
@@ -26,21 +37,7 @@
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare, refresh, toSettings, toRuntime.
 ' Product constraint and target-only change: Agent.mode initializes new Sessions, published via settings.
 title CampusClaw Plan Mode - Complete Target Class View
-top to bottom direction
 allowmixing
-skinparam backgroundColor #FFFFFF
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 12
-skinparam shadowing false
-skinparam roundcorner 8
-skinparam packageStyle rectangle
-skinparam ArrowColor #64748B
-skinparam classAttributeIconSize 0
-skinparam nodesep 20
-skinparam ranksep 30
-skinparam classBorderColor #64748B
-skinparam packageBorderColor #CBD5E1
-hide empty members
 
 legend bottom left
   Green: existing structure     Amber: existing, extended
@@ -63,13 +60,13 @@ package "Application and assembly" as Application {
   class "RuntimeSessionService" as CreateService <<extended>> #FFF7DD {
     +create(agentId)
   }
-  class "RuntimeSessionConfigurationService" as ModeService <<extended>> #FFF7DD {
+  class "RuntimeSession\nConfigurationService" as ModeService <<extended>> #FFF7DD {
     +updateSession(requestVO, ifMatch)
   }
   class "RuntimeEventService" as EventService <<extended>> #FFF7DD
-  class "RuntimeMessageEventService" as MessageService <<extended>> #FFF7DD
-  class "RuntimeExecutionCoordinator" as Coordinator <<extended>> #FFF7DD
-  class "RuntimeSessionControlDispatcher" as Dispatcher <<extended>> #FFF7DD
+  class "RuntimeMessageEvent\nService" as MessageService <<extended>> #FFF7DD
+  class "RuntimeExecution\nCoordinator" as Coordinator <<extended>> #FFF7DD
+  class "RuntimeSessionControl\nDispatcher" as Dispatcher <<extended>> #FFF7DD
   class "RuntimePlanReviewService" as ReviewService <<target-only>> #EAF2FF {
     +beginReview(targetDTO, callId, plan)
     +acceptPlanConfirmation(requestVO)
@@ -82,24 +79,23 @@ package "Application and assembly" as Application {
 
 package "Agent definition and published configuration" as AgentConfig {
   interface "AgentDirectoryResolver" as AgentResolver <<existing>> #ECFDF5
-  class "FileAgentDirectoryResolver" as FileResolver <<extended>> #FFF7DD
+  class "FileAgentDirectory\nResolver" as FileResolver <<extended>> #FFF7DD
   class "AgentRuntimeManager" as RuntimeManager <<extended>> #FFF7DD
-  class "AgentDirectorySnapshotDTO" as AgentSnapshot <<extended>> #FFF7DD {
+  class "AgentDirectory\nSnapshotDTO" as AgentSnapshot <<extended>> #FFF7DD {
     mode: String [target-only]
     existing model and path fields
   }
   database "Mate Agent definition / managed directory" as AgentSource
 note bottom of AgentSnapshot
-  Agent.mode initializes new interactive Sessions only.
-  Missing legacy field defaults to build.
-  Existing Session.mode is never overwritten by refresh.
-  The settings snapshot is request-scoped and immutable.
+  Initial mode only; legacy omission = build.
+  Refresh never overwrites Session.mode.
+  Immutable request snapshot.
 end note
 }
 
 package "Execution ownership" as ExecutionScope {
   class "RuntimeActiveExecution" as Execution <<extended>> #FFF7DD
-  class "RuntimePendingInteraction" as Pending <<target-only>> #EAF2FF {
+  class "RuntimePending\nInteraction" as Pending <<target-only>> #EAF2FF {
     kind: permission or plan
     +claimAndResume(decisionDTO)
     +cancel(cause)
@@ -132,10 +128,10 @@ package "Core and model tools" as ToolScope {
 }
 
 package "Persistence and event boundary" as PersistenceScope {
-  class "RuntimeExecutionPersistenceService" as Persistence <<extended>> #FFF7DD
+  class "RuntimeExecution\nPersistenceService" as Persistence <<extended>> #FFF7DD
   interface "RuntimeSessionRepository" as SessionRepo <<extended>> #FFF7DD
-  interface "RuntimeExecutionControlRepository" as ControlRepo <<extended>> #FFF7DD
-  class "MyBatisRuntime*Repository" as Repos <<extended>> #FFF7DD
+  interface "RuntimeExecution\nControlRepository" as ControlRepo <<extended>> #FFF7DD
+  class "MyBatisRuntime*\nRepository" as Repos <<extended>> #FFF7DD
   interface "Runtime*Mapper" as Mappers <<extended>> #FFF7DD
   class "RuntimeEventProjector" as Projector <<extended>> #FFF7DD
   interface "RuntimeEventOutput" as Output <<existing>> #ECFDF5
@@ -143,67 +139,68 @@ package "Persistence and event boundary" as PersistenceScope {
 }
 
 HttpBoundary -[hidden]down- Application
-Application -[hidden]down- ExecutionScope
-ExecutionScope -[hidden]right- ToolScope
-ExecutionScope -[hidden]down- PersistenceScope
+Application -[hidden]down- AgentConfig
+AgentConfig -[hidden]down- ExecutionScope
+ExecutionScope -[hidden]down- ToolScope
+ToolScope -[hidden]down- PersistenceScope
 
 UI *-[#2563EB]- "1" TodoView : client projection
 UI *-- "1" EventStore
-TodoView -[#2563EB]-> EventStore : reads ordered events
-UI -[#2563EB]-> ConfigApi : POST Session / mode
-UI -[#2563EB]-> EventApi : confirm / read history
-ConfigApi -[#2563EB]-> CreateService : create Session
+TodoView -[#2563EB]-> EventStore
+UI -[#2563EB]-> ConfigApi
+UI -[#2563EB]-> EventApi
+ConfigApi -[#2563EB]-> CreateService
 CreateService --> AgentResolver
 AgentResolver <|.. FileResolver
-FileResolver --> RuntimeManager : prepare published definition
-RuntimeManager --> AgentSource : cached settings or refresh
-FileResolver -[#2563EB]-> AgentSnapshot : validated immutable result
-CreateService -[#2563EB]-> AgentSnapshot : copy initial mode only
-CreateService -[#2563EB,norank]-> SessionRepo : persist new Session
+FileResolver --> RuntimeManager
+RuntimeManager --> AgentSource
+FileResolver -[#2563EB]-> AgentSnapshot
+CreateService -[#2563EB]-> AgentSnapshot
+CreateService -[#2563EB,norank]-> SessionRepo
 ConfigApi -[#2563EB]-> ModeService
 EventApi --> EventService
-EventService -[#2563EB]-> ReviewService : plan branch
+EventService -[#2563EB]-> ReviewService
 EventService --> MessageService
-MessageService --> Coordinator : start accepted execution
-MessageService -[#2563EB,norank]-> PlanContext : accepted mode snapshot
-EventService -[#2563EB]-> Dispatcher : plan handoff
-Dispatcher -[#2563EB]-> Execution : locate via registry
-Dispatcher -[#2563EB,norank]-> ControlRepo : claim plan decision
-Coordinator --> Execution : start / finalize
-ModeService -[#2563EB]-> SessionRepo : idle + ETag transaction
-ReviewService -[#2563EB]-> Persistence : durable review transition
-Factory ..> Session : creates
-Factory -[#2563EB]-> Composer : fixed prompt sections
+MessageService --> Coordinator
+MessageService -[#2563EB,norank]-> PlanContext
+EventService -[#2563EB]-> Dispatcher
+Dispatcher -[#2563EB]-> Execution
+Dispatcher -[#2563EB,norank]-> ControlRepo
+Coordinator --> Execution
+ModeService -[#2563EB]-> SessionRepo
+ReviewService -[#2563EB]-> Persistence
+Factory ..> Session
+Factory -[#2563EB]-> Composer
 Session *-- "1" AgentCore
 Session *-[#2563EB]- "1" PlanContext
 Execution *-[#2563EB]- "0..1" Pending
 Execution *-[#2563EB]- "1" ReviewAdapter
-Execution --> "1" Session : via existing holder
-ReviewAdapter -[#2563EB]-> Pending : await / cancel
-ReviewAdapter -[#2563EB,norank]-> ReviewService : open review
-ReviewAdapter -[#2563EB]-> PlanContext : apply claimed decision
+Execution --> "1" Session
+ReviewAdapter -[#2563EB]-> Pending
+ReviewAdapter -[#2563EB,norank]-> ReviewService
+ReviewAdapter -[#2563EB]-> PlanContext
 PlanContext -[#2563EB,norank]-> Composer
-PlanContext -[#2563EB]-> AgentCore : replace own prompt
+PlanContext -[#2563EB]-> AgentCore
 AgentCore ..> Loop
 Loop --> Pipeline
 Pipeline --> "0..*" Tool
 Tool <|.. ExistingTools
 Tool <|.[#2563EB]. ExitTool
 Tool <|.[#2563EB]. TodoTool
-Session *-[#2563EB]- "0..1" ExitTool : Runtime profile
-Session *-[#2563EB]- "0..1" TodoTool : Runtime profile
+Session *-[#2563EB]- "0..1" ExitTool
+Session *-[#2563EB]- "0..1" TodoTool
 ExitTool -[#2563EB]-> ReviewPort
 ReviewPort <|.[#2563EB,norank]. ReviewAdapter
 Persistence --> SessionRepo
 Persistence --> ControlRepo
 SessionRepo <|.. Repos
 ControlRepo <|.. Repos
-Repos --> Mappers : DTO only
+Repos --> Mappers
 Mappers --> DB
-Projector --> Persistence : commit before publish
-Coordinator --> Projector : creates / subscribes
+Projector --> Persistence
+Coordinator --> Projector
 Projector --> Output
-ReviewAdapter -[#2563EB]-> Output : committed plan then confirming
+ReviewAdapter -[#2563EB]-> Output
 Output .[norank].> EventApi : request-bound SSE
 
 note bottom of Pending
@@ -212,18 +209,40 @@ note bottom of Pending
   rechecked under database locks before claim.
 end note
 note bottom of TodoTool
-  Registered in both modes; prompts allow build use only.
-  Stateless full-list validation and JSON result.
-  Generic committed ToolResult is the snapshot.
-  No TODO table or new public event type.
+  Same tool in both modes; build-only prompt.
+  Committed ToolResult is the snapshot.
+  No TODO table or public event type.
 end note
 note bottom of ExistingTools
   No metadata fields, tool descriptions or
   schemas change when plan mode changes.
 end note
+CreateService -[hidden]down-> ModeService
+ModeService -[hidden]down-> MessageService
+EventService -[hidden]down-> ReviewService
+ReviewService -[hidden]down-> Dispatcher
+Dispatcher -[hidden]down-> Coordinator
+Factory -[hidden]down-> Composer
+RuntimeManager -[hidden]down-> AgentSource
 @enduml
 
 @startuml plan_mode_review_sequence
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeControlEventService.java :: accept.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java :: markConfirming, acceptConfirmation, claimConfirmation.
@@ -232,13 +251,6 @@ end note
 ' Design reason: target-only plan review reuses this transport and durable handoff.
 ' Java divergence: immutable plan event identity is the approval target; tool permissions remain separate.
 title CampusClaw Plan Review - Target Sequence
-skinparam backgroundColor #FFFFFF
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign center
-skinparam maxMessageSize 260
-autonumber
 actor User
 participant "Runtime client" as UI
 participant "POST Events\naccepting instance" as API
@@ -247,33 +259,37 @@ database GaussDB as DB
 participant "Control dispatcher\noriginal instance" as Dispatcher
 participant "Original execution\nExitPlanMode / Agent" as Agent
 
-group Plan mode is active; an ordinary message already started this execution
+group 1. Publish a plan in the active root
   Agent -> Agent : Produce one ExitPlanMode call with complete Markdown
   Agent -> Service : Persist unique tool_call; beginReview(fixed target, call, plan)
   Service -> DB : Lock Session and execution; validate active plan mode
   Service -> DB : Append agent.plan + confirming idle;
   note right of DB
-    Same transaction records the internal pending plan
-    and closes the current segment.
-    Session remains running.
+  Same transaction records the internal pending
+  plan
+  and closes the current segment.
+  Session remains running.
   end note
   DB --> Service : Commit
   Service --> UI : Original SSE: plan, confirming idle; close
   Agent -> Agent : Await plan decision; keep tools and current prompt
 end
 
-User -> UI : Approve or request revision
+== 2. Accept one review decision ==
+User -> UI : Approve or revise
 UI -> API : POST user.plan_confirmation(targetEventId, result)
 API -> API : Reserve response / result wait capacity
 API -> Service : Accept decision
 Service -> DB : Lock Session and execution;
 note right of DB
   Require the exact pending plan in this Session.
-  Recheck root, branch, current segment and stop state.
+  Recheck root, branch, current segment and stop
+  state.
 end note
 Service -> DB : Append confirmation; create continuation segment;
 note right of DB
-  Approve: update mode=build and append mode event.
+  Approve: update mode=build and append mode
+  event.
   Revise: keep mode=plan and persist feedback.
   Clear pending plan. Keep Session running.
 end note
@@ -282,25 +298,31 @@ Service --> API : Accepted confirmation
 API --> UI : First SSE frame: full committed confirmation
 API -> Dispatcher : Local notify if original execution is local
 note over DB,Dispatcher
-  Existing database control polling is the fallback.
-  The accepting instance does not reconstruct credentials.
+  Existing database control polling is the
+  fallback.
+  The accepting instance does not reconstruct
+  credentials.
 end note
-Dispatcher -> DB : Claim decision with fixed original target
+== 3. Resume the original execution ==
+Dispatcher -> DB : Claim decision for fixed target
 DB --> Dispatcher : Committed decision, once
 Dispatcher -> Agent : Bind new segment output; complete pending Future
 alt Approved
   Agent -> Agent : Apply committed build prompt and execution TODO guidance
   Agent -> Service : Persist ExitPlanMode result approved=true
-  Agent -> Agent : Next request creates execution TODOs, then implements
+  Agent -> Agent : Next step: TODOs and implementation
 else Revision requested
   Agent -> Service : Persist normal result approved=false and feedback
-  Agent -> Agent : Next request keeps planning; a new plan gets a new eventId
+  Agent -> Agent : Continue plan; use new plan eventId
 end
 Service --> UI : New SSE: committed mode/result/output via local or DB path
 note over UI,Agent
-  Every agent event keeps the original message sourceEventId.
-  A new confirming or actual terminal idle closes this response.
-  Disconnect closes observation only; it never grants approval.
+  Every agent event keeps the original message
+  sourceEventId.
+  A new confirming or actual terminal idle closes
+  this response.
+  Disconnect closes observation only; it never
+  grants approval.
 end note
 @enduml
 
@@ -351,6 +373,22 @@ end note
 
 
 @startuml todo_update_sequence
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Source: modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentToolResult.java :: content, details.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: project, persistToolResults.
@@ -362,16 +400,9 @@ end note
 ' Design reason: keep the public tool envelope stable and derive TODO from committed success.
 ' Java divergence: TodoUpdateTool and client projection are target-only, not Claude built-ins.
 title CampusClaw TodoUpdate - Build Implementation Progress
-skinparam backgroundColor #FFFFFF
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign center
-skinparam maxMessageSize 210
-autonumber
 participant "AgentLoop / Pipeline" as Loop
 participant "TodoUpdateTool\n(target-only)" as Todo
-participant "RuntimeEventProjector" as Projector
+participant "Runtime Event\nProjector" as Projector
 database "Existing entries / events" as DB
 participant "Client event store\n+ deriveTodos (target-only)" as UI
 participant "Existing history API" as History
@@ -380,14 +411,16 @@ note over Loop,Todo
   Build-mode implementation only.
   Plan-mode prompts forbid research TODOs.
 end note
-Loop -> Projector : Finalized TodoUpdate call (complete list)
+== 1. Record the call ==
+Loop -> Projector : Finalized TodoUpdate call
 Projector -> DB : Commit generic tool_call
 Projector --> UI : agent.tool_call
 note right of UI
   Show updating if useful.
   Do not replace committed progress yet.
 end note
-Loop -> Todo : Validate schema; execute(args)
+== 2. Execute and commit the result ==
+Loop -> Todo : Validate; execute(args)
 alt Valid complete list
   Todo --> Loop : AgentToolResult with one JSON text block
   Loop -> Projector : Existing TurnEndEvent with tool results
@@ -397,8 +430,8 @@ alt Valid complete list
   Projector --> UI : agent.tool_result (isError=false)
   UI -> UI : Match sourceEventId + toolCallId;
   note right of UI
-    Check call.toolName and result JSON.
-    Replace the complete TODO projection.
+  Check call.toolName and result JSON.
+  Replace the complete TODO projection.
   end note
 else Invalid or failed
   Todo --> Loop : Existing tool error path
@@ -408,10 +441,14 @@ else Invalid or failed
   UI -> UI : Keep previous successful list
 end
 note over Loop,UI
-  Ordinary thinking, messages and business tools continue.
-  No confirmation idle, new segment, mode update or TODO endpoint.
-  Each later update replaces the list; actual execution terminal stays independent.
+  Ordinary thinking, messages and business tools
+  continue.
+  No confirmation idle, new segment, mode update
+  or TODO endpoint.
+  Each later update replaces the list; actual
+  execution terminal stays independent.
 end note
+== 3. Rebuild the same projection ==
 UI -> History : GET Events
 History -> DB : Read stored generic calls and results
 DB --> History : Ordered stored events
@@ -421,6 +458,22 @@ UI -> UI : Reconcile events and run the same projection
 
 
 @startuml plan_mode_end_to_end
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 165
+skinparam sequenceArrowColor #526777
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java :: create, configureAgent.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java :: prepare, accept, startAccepted.
@@ -434,14 +487,6 @@ UI -> UI : Reconcile events and run the same projection
 ' Design reason: separate plan review from build progress and reuse existing public tool events.
 ' Java divergence: mode, review, prompt sections and TodoUpdate remain target-only.
 title CampusClaw Plan Mode - Complete Target Interaction
-skinparam backgroundColor #FFFFFF
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign center
-skinparam maxMessageSize 235
-hide footbox
-autonumber
 actor User
 participant "Client" as UI
 participant "Session / Events API" as API
@@ -449,7 +494,7 @@ participant "Runtime\nServices + original Agent" as Runtime
 participant "Model tools" as Tools
 database "Sessions / Events\nExecution controls" as DB
 
-group Create an interactive Session
+group 1. Create a Session
   User -> UI : Start a Session for an Agent
   UI -> API : POST /agents/{agentId}/sessions; no body
   API -> Runtime : Resolve published Agent settings snapshot
@@ -465,7 +510,7 @@ opt Select plan when the new Session starts in build
   API --> UI : Full Session + matching ETag
 end
 
-group Research and design (no TODO calls)
+group 2. Research and clarify
   User -> UI : Describe the work
   UI -> API : POST Events: user.message
   API -> Runtime : Prepare base prompt and stable tool profile
@@ -488,15 +533,17 @@ group Research and design (no TODO calls)
   end
 end
 
-group Review complete proposal
+group 3. Review the complete proposal
   loop Review attempts; exit on approval
     Runtime -> Tools : ExitPlanMode only; complete Markdown
     Tools -> Runtime : PlanReviewPort.review
     Runtime -> DB : Commit agent.plan + confirming idle + pending review
     Runtime --> UI : Plan card + confirming idle; close response
     note over Runtime,DB
-      Session state remains running; mode remains plan.
-      The review tool waits. No business execution or TODO calls.
+  Session state remains running; mode remains
+  plan.
+  The review tool waits. No business execution or
+  TODO calls.
     end note
     User -> UI : Approve or request revision
     UI -> API : POST user.plan_confirmation(targetEventId, result)
@@ -509,7 +556,8 @@ group Review complete proposal
       Runtime --> UI : Tool result; continued research and new proposal
     else Approve
       note over API,DB
-        Approval transaction also commits mode=build and mode event.
+  Approval transaction also commits mode=build and
+  mode event.
       end note
       Runtime -> Runtime : Replace plan sections with build + execution TODO guidance
       Runtime --> Tools : Resume review with approved=true
@@ -519,7 +567,7 @@ group Review complete proposal
   end
 end
 
-group After successful approval: implement in build
+group 4. Implement after approval
   Runtime -> DB : Commit TodoUpdate tool call
   Runtime --> UI : agent.tool_call (toolName=TodoUpdate)
   Runtime -> Tools : TodoUpdate: full implementation list, first item in_progress
@@ -533,11 +581,11 @@ group After successful approval: implement in build
     Runtime --> UI : Normal thinking / tool events / messages
     Runtime -> DB : Commit next TodoUpdate tool call
     Runtime --> UI : agent.tool_call (toolName=TodoUpdate)
-    Runtime -> Tools : TodoUpdate immediately after task completion;
+    Runtime -> Tools : TodoUpdate after verified completion
     note right of Tools
-      Full list: completed previous item,
-      next item in_progress when starting it.
-      Failure does not claim completion.
+  Full list: completed previous item,
+  next item in_progress when starting it.
+  Failure does not claim completion.
     end note
     Tools --> Runtime : Validated full JSON snapshot
     Runtime -> DB : Commit generic result at batch end
@@ -549,9 +597,13 @@ group After successful approval: implement in build
 end
 
 note over UI,DB
-  Disconnect: GET Events + GET Session for reconciliation; never replay accepted POST.
-  Interrupt: existing user.interrupt targets the current root and stops the execution.
-  The same Session spans clarification roots; approval resumes its original root.
-  Business-tool permission confirmation remains independent.
+  Disconnect: GET Events + GET Session for
+  reconciliation; never replay accepted POST.
+  Interrupt: existing user.interrupt targets the
+  current root and stops the execution.
+  The same Session spans clarification roots;
+  approval resumes its original root.
+  Business-tool permission confirmation remains
+  independent.
 end note
 @enduml

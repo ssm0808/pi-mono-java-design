@@ -1,7 +1,4 @@
 @startuml public_chat_event_boundary
-title Public Chat Events Boundary
-skinparam shadowing false
-
 ' Source evidence: pi-mono-java@7e54b47f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java submitEvent/listEvents
 ' Source evidence: pi-mono-java@7e54b47f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java projection methods
 ' Source evidence: pi-mono-java@7e54b47f modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java handleOutputItemAdded/handleOutputItemDone/convertToolResultInput
@@ -10,75 +7,93 @@ skinparam shadowing false
 ' Target-only design: Mate separates event submission, live Chat observation, and authoritative fixed-snapshot history.
 ' Design reason: a transport disconnect must not determine whether a write succeeded or whether an execution continues.
 ' Architecture changes: Mate keeps eventId independent, publishes OpenAI Tool Call IDs, and returns the complete accepted user event.
-
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+title Public Chat - Responsibility Boundary (target-only)
+top to bottom direction
+skinparam nodesep 30
+skinparam ranksep 35
+skinparam packageStyle rectangle
 actor "Authorized client" as Client
-component "mate-service\nChat Events API" as Mate
-component "Private Chat to Session\nresolver" as Resolver
-component "CampusClaw\nSession runtime" as Claw
-database "Authoritative\nevent history" as History
-
-Client -> Mate : POST /chats/{chatId}/events
-Mate -> Mate : authenticate and authorize Chat
-Mate -> Resolver : resolve private Session
-Resolver --> Mate : sessionId
-Mate -> Claw : submit one user event
-Claw -> History : persist accepted event
-Mate --> Client : ResultBean with complete accepted user event
-
-Client -> Mate : GET /chats/{chatId}/events/stream
-Claw --> Mate : normalized live domain events
-Mate --> Client : data-only SSE from connection time
-
-note right of Mate
-OpenAI Responses call_id becomes Claw ToolCall.id.
-Mate publishes it unchanged as toolCallId.
-Mate eventId remains a separate event identity.
+package "mate-service" {
+  component "Chat Events API\nAuthentication and Chat authorization" as API
+  component "Runtime bridge\nPrivate Chat to Session mapping" as Bridge
+  component "Public event projection" as Projection
+  database "Public complete history" as History
+}
+package "CampusClaw" {
+  component "Session runtime" as Runtime
+  database "Runtime entries" as Entries
+}
+Client --> API : submit / observe / reconcile
+API --> Bridge : authorized command
+Bridge --> Runtime : internal POST SSE
+Runtime --> Entries : ordered commit
+Runtime --> Bridge : normalized events
+Bridge --> Projection : safety mapping
+Projection --> History : full events
+API --> History : fixed snapshot
+Projection --> API : live preview and notification
+note bottom of Projection
+Public eventId and OpenAI toolCallId have separate meanings.
+Bridge mappings remain target-only and require contract alignment.
 end note
-
-Client -> Mate : GET /chats/{chatId}/events
-Mate -> History : read fixed snapshot
-History --> Mate : complete durable events
-Mate --> Client : ResultBean page
 @enduml
 
 @startuml public_chat_event_recovery
-title Live Stream and Durable History Reconciliation
-skinparam shadowing false
-
 ' Public evidence: Claude Managed Agents events-and-streaming docs, checked 2026-09-02.
 ' Source evidence: pi@5cd93f68 packages/protocol/src/schemas.ts TranscriptProgressSchema/SessionSnapshotSchema
 ' Source evidence: pi@5cd93f68 packages/server/src/sessions.ts handleRuntimeEvent/broadcastSnapshot
 ' Design reason: deltas are disposable preview while completed history is authoritative.
 ' Architecture change: public eventId replaces exposure of internal sequence for reconciliation.
-
-participant Client
-participant "Mate live stream" as Stream
-participant "Mate history API" as Query
-participant "CampusClaw runtime" as Claw
-
-Client -> Stream : open Chat SSE
-Client -> Claw : submit user.message through Mate
-Claw --> Stream : agent.message delta, same eventId
-Stream --> Client : data JSON preview
-Claw --> Stream : agent.message completed, same eventId
-Stream --> Client : data JSON authoritative completion
-
-... network disconnect ...
-
-Client -> Stream : reopen Chat SSE
-Client -> Query : GET history with createdAtGte
-Query --> Client : fixed snapshot page
-Client -> Client : deduplicate by eventId
-Client -> Client : replace preview with completed event
-
-loop while nextPage exists
-  Client -> Query : GET history with opaque page only
-  Query --> Client : next fixed-snapshot page
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+hide footbox
+skinparam BoxPadding 10
+skinparam maxMessageSize 190
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  ParticipantBackgroundColor #F5F5F5
+  ParticipantBorderColor #555555
+  LifeLineBorderColor #A0A0A0
+  ArrowColor #444444
+}
+title Public Chat - Live Stream and History Recovery (target-only)
+actor Client
+participant "Mate Chat API" as Mate
+participant "Runtime bridge" as Bridge
+database "Public history" as History
+== 1. Submit and observe ==
+Client -> Mate : open Chat SSE
+Client -> Mate : POST user.message
+Mate -> Bridge : submit through private Session mapping
+Bridge --> Mate : accepted user event
+Mate --> Client : JSON complete receipt
+Bridge -> Mate : normalized output
+Mate --> Client : delta, then completed\nsame eventId
+note over Client,Mate
+The Chat stream stays open across idle and later executions.
+User events appear in POST receipts and history only.
+end note
+== 2. Recover after disconnect ==
+Client -> Mate : reopen Chat SSE
+Client -> Mate : GET history with filters
+Mate -> History : capture fixed snapshot
+History --> Mate : first complete page
+Mate --> Client : authoritative events
+Client -> Client : deduplicate; replace preview
+loop Current snapshot has nextPage
+  Client -> Mate : GET opaque page only
+  Mate -> History : read same snapshot
+  History --> Mate : next page
+  Mate --> Client : complete events
 end
-
-note over Client,Claw
-Never replay an uncertain POST automatically.
-An SSE disconnect does not cancel the execution.
-New history polling starts with inclusive createdAtGte.
+note over Client,History
+No automatic POST replay and no cancellation on disconnect.
+Digital page requirement is pending snapshot contract integration.
 end note
 @enduml

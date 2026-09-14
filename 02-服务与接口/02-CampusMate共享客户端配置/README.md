@@ -2,19 +2,18 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.3.0 |
-| 状态 | 目标设计；统一配置与“发现无凭据、仅 Tool execute 透传”待实现 |
-| 设计日期 | 2026-08-27 |
+| 文档版本 | 2.4.0 |
+| 状态 | 已确认目标；不同客户端的实现核验范围见 §2 |
+| 更新日期 | 2026-09-14 |
 | pi-mono-java 源码基线 | `320d790726a70aada6100052952d5494d2a378ac` |
 | mate-service 源码基线 | `956b547f5ca12ca89e68f73012f92a4406b0c9fa` |
-| 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | 适用边界 | CampusClaw -> CampusMate Model Manager、受管 Runtime 与 Tool 接口 |
 
-## 1. 结论
+## 1. 职责与目标配置
 
-Mate 和 CampusMate 是同一个服务。目标配置不能再用顶层 `mate` 表达第二套服务身份，
-也不能把同一个 HTTP operation 分散为两个路径配置。所有连接与路径统一归入一个
-`campusmate` 配置树：
+本专题维护 CampusClaw 调用 CampusMate 的连接配置：唯一服务地址、唯一 operation 路径目录，以及各客户端独立的传输参数。模型调用、Runtime 发现与 Tool 执行的业务契约分别由所属模块维护。
+
+Mate 与 CampusMate 是同一个服务，所有连接与路径使用以下 `campusmate` 配置树：
 
 ```yaml
 campusmate:
@@ -43,7 +42,7 @@ campusmate:
     enabled: ${CAMPUSMATE_TOOL_ENABLED:true}
 ```
 
-目标状态具有三个硬约束：
+配置有四项约束：
 
 1. `campusmate.base-url` 是唯一 origin 权威；
 2. `campusmate.endpoints` 是唯一出站路径目录；
@@ -56,78 +55,19 @@ campusmate:
 metadata 发现无凭据，仅 Tool execute 透传 POST Events execution 快照中已提供的
 `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 和 `access-token`。
 
-## 2. 源码观察
+## 2. 源码与实现状态
 
-### 2.1 当前地址与命名空间分裂
+Java 基线 `320d7907` 中，三个客户端使用三套地址和七个路径配置，其中两项 Skill path 指向同一 operation。Mate 基线 `956b547f` 可证明 Chat 与两个 Agent operation；该提交未发现 Skill/Tool 三个 Controller。完整路径、符号与规范化结果见[源码证据](source-evidence.md)。
 
-| 源码证据 | 已观察行为 |
-|---|---|
-| `modules/coding-agent-cli/src/main/resources/application.yml:89-108` | Model Manager 和 Runtime 分别声明 `campusmate.model-manager.base-url` 与 `campusmate.runtime.base-url`。 |
-| `application.yml:129-140` | Tool 客户端另用顶层 `mate.innerGWSerive` 和 `mate.endpoints.*`。 |
-| `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-90` | Chat Provider 从 `campusmate.model-manager` 读取专属 base URL、Chat path、API 与传输超时，校验错误也使用该旧前缀。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/MateModelManagerProperties.java:17-24` | 模型能力默认值通过 `@ConfigurationProperties(prefix = "campusmate.model-manager")` 绑定。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeProperties.java:15-34`、`runtime/MateServiceClient.java:43-69,76-113,184-197` | Runtime 客户端从 `campusmate.runtime` 读取另一 base URL 及 Agent/Skill 路径。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/config/MateToolAutoConfiguration.java:31-81` | Tool 客户端从 `mate.innerGWSerive` 与 `mate.endpoints.*` 注入第三套配置。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:41-87,132-190,299-373` | Agent、Skill、Tool metadata 与 execute 请求都发送到该 Tool 地址；当前发现与 execute 都使用原三项 Mate 凭据。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java:61-69`、`RuntimeRequestContext.java:45-49`、`common/dto/RequestHeaderInfo.java:81-90` | 当前 Runtime 只捕获 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`；既有 access token 出站名是 `X-Access-Token`，与目标 `access-token` 不同且未赋值。 |
-| `mate-campusclaw/src/main/resources/application.properties:70-102` | 镜像 properties 重复了相同的三套地址和分散路径配置。 |
-| `mate-campusclaw/scripts/install_value.sh:27-38` | 部署变量 `CAMPUSINNERGWSERVICE_DOMAIN_NAME_URL` 被转换为拼写错误的 `MATE_INNERGWSERIVE`。 |
+Java 局部复核 `f61906b9` 已证明 Chat Provider 读取统一配置。这个局部结论不更新其他客户端、凭据边界或服务端的验收状态。目标配置不以旧提交中的差距作为当前未实现结论。
 
-以上均是基线代码的 **已观察行为**。同一 CampusMate 服务在客户端配置中被表达成
-`campusmate.model-manager`、`campusmate.runtime` 和顶层 `mate` 三个身份。
-
-### 2.2 Endpoint 去重结果
-
-盘点范围是三个出站客户端当前实际构造的 URL。把路径前缀与 `%s` 模板统一规范化后，
-当前共有 7 个路径配置，但只有 6 个唯一 HTTP operation：
-
-| Method | 规范化 Path | 当前配置键 | 消费符号 | 判定 |
-|---|---|---|---|---|
-| `POST` | `/mate-service/v1/LLM/chat` | `campusmate.model-manager.chat-path` | `MateServiceModelManagerProvider.eventFlux` | 唯一 |
-| `GET` | `/mate-service/v1/agents/{agentId}` | `mate.endpoints.agent-info-path-prefix` | `HttpMateToolClient.queryToolIdsByAgentId` | 唯一；与 Runtime path 返回用途不同 |
-| `GET` | `/mate-service/v1/agents/{agentId}/runtime` | `campusmate.runtime.agent-runtime-path-template` | `MateServiceClient.getAgentRuntime` | 唯一 |
-| `GET` | `/mate-service/v1/skill/query/{skillId}` | `campusmate.runtime.skill-info-query-path-template` | `MateServiceClient.querySkillInfo` | **重复项 A** |
-| `GET` | `/mate-service/v1/skill/query/{skillId}` | `mate.endpoints.skill-tools-query-path-prefix` | `HttpMateToolClient.queryToolIdsBySkillId` | **重复项 B** |
-| `POST` | `/mate-service/v1/runtime/tools/query` | `mate.endpoints.tool-metadata-query-path` | `HttpMateToolClient.queryToolMetaByIds` | 唯一 |
-| `POST` | `/mate-service/v1/runtime/tools/{toolId}/execute` | `mate.endpoints.tool-execute-path-template` | `HttpMateToolClient.invokeTool` | 唯一 |
-
-Skill 两项是同一个 operation：method 和规范化 path 完全相同，两个客户端只是从同一
-Skill 响应中读取不同字段。`SkillInfoResult` 的类注释也明确把它对齐到
-`MateServiceClient.SkillInfo` 的真实契约。因此目标只保留一个
-`campusmate.endpoints.skill-info-path-template`，两个客户端共同读取。
-
-`GET /agents/{agentId}` 与 `GET /agents/{agentId}/runtime` 不是重复。前者为 Tool 发现读取
-Agent 绑定工具，后者为受管 Runtime 准备读取完整运行配置；不能因为 path 前缀相同而合并。
-
-另有一项源码文档漂移：
-`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/dto/SkillBindingTool.java:13`
-仍写作 `/skill/info/query/{skillId}`，而实际配置和调用是 `/skill/query/{skillId}`。
-实现迁移时应同步修正文档，但不能据此创建第七个 endpoint。
-
-### 2.3 mate-service 服务端证据
-
-mate-service 基线 `956b547f` 已观察到：
-
-- `LlmChatController.CHAT_PATH` 实现 `POST /mate-service/v1/LLM/chat`；
-- `AgentDefinitionController` 实现 `GET /mate-service/v1/agents/{agentId}` 和
-  `GET /mate-service/v1/agents/{agentId}/runtime`；
-- 同一 Controller 还实现 Agent list 与 update，但当前三个出站客户端不消费它们，
-  因此不纳入本次客户端 endpoint 目录；
-- 该基线未发现 Skill query、Tool metadata query 或 Tool execute Controller。
-
-所以 Chat 与两个 Agent operation 是 **已实现服务端行为**；Skill 与 Tool 三个 operation
-是 pi-mono-java 客户端已经依赖、但在所分析 mate-service 仓库中未找到对应 Controller 的
-契约。后者必须标为服务端待补齐，不能写成已实现行为。
-
-## 3. 修改前后可视化
+## 3. 配置与客户端关系
 
 ![CampusMate 配置与 Endpoint 去重](campusmate_shared_base_url_configuration.svg)
 
-[PlantUML 源码：`campusmate_shared_base_url_configuration`](diagram.puml#L1)
+[PlantUML 源码：`campusmate_shared_base_url_configuration`](diagram.puml#L1) · [原尺寸 SVG](campusmate_shared_base_url_configuration.svg)
 
-图中的关键变化是：三个服务身份收敛为一个 `campusmate`，模型配置分组从组件式命名
-`model-manager` 简化为能力式命名 `model`，7 个路径配置收敛为 6 个唯一 endpoint；Runtime
-与 Tool 客户端共同引用唯一 Skill path。
+三个客户端共享地址和路径定义，各自保留传输实现及 DTO。Skill 查询只有一个 operation、一个配置键，Runtime 与 Tool 从同一响应读取各自所需字段。Agent info 与 Agent runtime 的职责和路径不同，保持两个 operation。
 
 ## 4. 配置责任
 
@@ -202,12 +142,7 @@ endpoint = normalized(campusmate.base-url) + validated(campusmate.endpoints.<ope
 
 ## 7. Java 目标映射
 
-Provider 目标类名为 `CampusMateProvider`，身份为 `campusmate`；具体裁剪、直接切换和无旧值
-别名规则由[模型与 Provider 主设计 §4.3](../03-模型管理Provider契约/README.md#43-命名与直接切换)
-唯一维护。该改名为 target-only；本节源码表仍保留 `320d7907` 的旧路径。局部复核
-`pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec` 的
-`modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java`
-构造器已读取统一配置；这里不把旧配置差距延伸为该新基线的缺陷，也不据此更新其他客户端验收。
+Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具体规则由[模型主设计 §4.3](../03-模型管理Provider契约/README.md#43-命名与直接切换)维护。下表是从固定源码到目标的映射，实施前应复核最新代码。
 
 | Java 符号 | 目标调整 |
 |---|---|
@@ -268,24 +203,20 @@ Provider 目标类名为 `CampusMateProvider`，身份为 `campusmate`；具体�
   不被改写为 `X-Access-Token`；
 - 服务端尚未实现的 Skill/Tool Controller 仍明确标记为待补齐，不因客户端配置存在而宣称已实现。
 
-## 11. 文档同步范围
+## 11. 相关契约
 
-本主题同步修订：
-
-- [模型管理 Provider 契约](../03-模型管理Provider契约/README.md)：Chat path 改读统一 endpoint 目录，并更新 mate-service Chat 已实现证据；
-- [CampusClaw 工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md)：Tool 配置统一到 `campusmate`，Skill path 与 Runtime 去重，并固定发现无凭据、仅 execute 透传；
-- 仓库根 README：将主题描述更新为统一配置与 endpoint 去重。
-
-Model Manager operation JSON 没有变化。Runtime POST Events operation JSON 与 HTML 因新增
-`access-token` Header 已在 Runtime HTTP 1.42 中重新生成。
+- [模型与 Provider](../03-模型管理Provider契约/README.md)：Chat 参数、SSE 与 Provider 身份。
+- [工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md)：发现与执行，以及 execution 凭据快照。
+- [源码证据](source-evidence.md)：客户端路径归属、历史重复项和服务端核验范围。
 
 ## 12. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.4.0 | 2026-09-14 | 以目标配置与客户端关系组织正文，将历史源码差距集中为证据专题并重排配置图。 |
 | 2.3.0 | 2026-09-14 | 目标 Provider 统一为 CampusMateProvider，沿用共享配置并保留旧提交源码证据。 |
-| 2.2.0 | 2026-08-27 | 同步 Runtime HTTP 1.42 的凭据边界：Agent/Skill/Tool metadata 发现无凭据，只有 Tool execute 原名透传 POST Events execution 快照中已提供的四项 Header。 |
-| 2.1.0 | 2026-08-26 | 将目标模型配置分组从 `campusmate.model-manager` 简化为 `campusmate.model`，同步 `CAMPUSMATE_MODEL_*` 环境变量、Java 绑定、迁移规则和可视化；Model Manager 组件名与 `mate-model-manager` Provider ID 不变。 |
-| 2.0.0 | 2026-08-26 | 按 Mate 与 CampusMate 是同一服务的约束删除顶层 `mate`；新增统一 `campusmate.endpoints`，将 7 个路径配置归并为 6 个唯一 operation，并去重 Skill 查询路径。 |
+| 2.2.0 | 2026-08-27 | Metadata 发现不携带凭据，Tool 执行透传当前 execution 的四项调用 Header。 |
+| 2.1.0 | 2026-08-26 | 模型配置统一为 `campusmate.model` 与 `CAMPUSMATE_MODEL_*`。 |
+| 2.0.0 | 2026-08-26 | 统一 CampusMate 配置树与端点目录，归并重复的 Skill 查询路径。 |
 | 1.1.0 | 2026-08-26 | 将 `mate.innerGWSerive` 纳入共享 base URL，但仍保留顶层 `mate.endpoints`。 |
 | 1.0.0 | 2026-08-26 | 新增 CampusMate 统一 `campusmate.base-url` 设计。 |

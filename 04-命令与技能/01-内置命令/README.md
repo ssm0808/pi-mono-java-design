@@ -7,7 +7,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.11.1 |
+| 文档版本 | 2.11.2 |
 | 更新日期 | 2026-09-14 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -18,13 +18,13 @@
 | 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
 | 状态 | 七个 Builtin 目标已由用户确认；公开执行为 target-only |
 
-2026-09-07 Runtime 独立控制接口退役，本期不支持排队续跑；本次仅同步 Compact 相关指引。
+本期不支持排队续跑；Compact 复用 Runtime 已有执行与可靠清理边界。
 [FollowUp 未来专题](../../01-总体架构/01-CampusClaw多Agent运行时/chat-follow-up-future-design.md)
 记录 dfb90ca 源码证据与待启用方向，不改变七个 Builtin、Help 或 Skill 的归属与字段。
 
 ## 1. 范围与证据
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、执行结果和 HTTP 发布集成仍需评审。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。Builtin 使用已确认 JSON 契约；Skill 的当前契约状态、执行与发布要求由[Skill 专题](../02-技能命令/README.md#4-统一实施与集成要求)维护。
 
 本文的 Builtin 实现切片覆盖 help、status、name、model、thinking、compact、skills，不转换成模型提示词，不接受附件。
 精确请求和结果以 Runtime
@@ -39,7 +39,6 @@ d84dd3d6 的 `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/ses
 这些差距是本次 Java 架构变更，不是 pi 已有 HTTP 行为。
 
 Skill 名称统一使用 Skill 域的严格规则，加载、命令发现和执行不能保留存量兼容例外。
-原设计把 `3004419a` 的“加载宽松、清单严格”解释为迁移兼容，这个判断已撤销；
 `0300541fbbe3db8b05ffa1ac953f15f01df74b3e` 名称专项复核仍观察到 LEGACY/STRICT 分裂，
 属于必须整改的差距。源码路径、符号、统一规则和验收见 [Skill 设计](../02-技能命令/README.md#2-源码证据)。
 Builtin 的来源过滤与 Skill 名称校验是不同职责，不能以过滤 Skill Source 代替加载时拒绝非法名称。
@@ -47,8 +46,8 @@ Builtin 的来源过滤与 Skill 名称校验是不同职责，不能以过滤 S
 ## 2. 全局目标与核心扩展
 
 先看完整 Web → Application → Command Core → Builtin Adapter → Runtime/持久化结构；
-主图恢复设计仓 `06bea56` 的完整骨架。七个 Contributor、七个 Handler、窄业务服务分别分组，
-Runtime Coordinator、执行对象和 Repository 分开表达；仅替换 Help 元数据查询路径和旧人员分工。
+主图沿用设计仓 `06bea56` 的完整分层骨架。七个 Contributor、七个 Handler、窄业务服务分别分组，
+Runtime Coordinator、执行对象和 Repository 分开表达。
 这些分组表示协作者集合，不要求实现同名大类，也不改变 Service 的 Java 包归属。
 
 ![Builtin 完整全局目标类图](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
@@ -123,7 +122,7 @@ Skills 不触发刷新：无完整快照返回 AGENT_NOT_AVAILABLE；完整空�
 
 ![Name 行锁更新](设计图/session_name_update.svg)
 
-[PlantUML 源码](设计图/diagram.puml#L44)
+[PlantUML 源码](设计图/diagram.puml#L61)
 
 `t_sessions` 使用可空 `display_name`；GET Session 始终保留 `displayName`，即使为 null。
 修改去除两端空白、保留内部空白，拒绝空值、CR/LF、C0/C1、Unicode 双向覆盖/隔离字符及超过 80 UTF-8 字节。
@@ -147,7 +146,7 @@ Manager 不可用为 MANAGER_UNAVAILABLE。Model 切换到不支持 Thinking 的
 
 ![Compact 独立终态与清理](设计图/compact_command_execution.svg)
 
-[PlantUML 源码](设计图/diagram.puml#L84)
+[PlantUML 源码](设计图/diagram.puml#L119)
 
 只接受 idle Session 和空参数。空历史观察无副作用：不占容量、不改状态、不写 Entry，返回 compacted=false。
 真实压缩与 POST Events 共用操作锁、全局容量、Active Holder、Event Projector 和 30 分钟超时。
@@ -204,7 +203,7 @@ Command 请求仍拒绝 If-Match，统一 Session POST 强制 If-Match；复用�
 
 ### 8.2 源码证据、差距与理由
 
-本轮主基线是既有 CampusClaw API，而非重新选择外部 Harness。实现核对固定在
+响应复用以既有 CampusClaw API 为依据。实现核对固定在
 `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`，设计基线为 `bb3bd26d5cc52efede08645dfe266af0b31e3490`。
 以下路径均相对于 pi-mono-java；既有 pi 命令/Session 行为基线不变。
 
@@ -241,32 +240,32 @@ sync-campusclaw 和 diff --check；最终 HTTP PR 执行完整 mvnw verify。
 `command_response_contract.py` 和 `test_command_response_contract.py` 由 `validate-chat-api.py --full` 统一执行，
 直接比较各操作的资源形状，不另存 Session 字段清单。门禁同时检查仅名称的 Session POST
 的 `If-Match`、错误码、running 准入、同值结果和命名边界，并覆盖 JSON/HTML 字节同步、
-PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。Name 时序图已检查原尺寸；
-Compact 只因同源图块行号变化重新生成，全局主图不变。接口评审页桌面布局已查看，360px 浏览器像素布局未验收。
+PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。图形还需检查原尺寸与文档缩放视图。
 以上不证明 Java 的事务快照、缓存往返、并发或端到端执行已经实现，仍按上述实施切片验收。
 
 ## 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.11.1 | 2026-09-14 | 取消新增行数预算与门禁要求，复用通用模块的交付规模规则。 |
+| 2.11.2 | 2026-09-14 | 统一引用 Skill 契约状态并重排命名与压缩流程，精确命令行为保持不变。 |
+| 2.11.1 | 2026-09-14 | 实施按职责与验收边界组织，不设新增行数预算。 |
 | 2.11.0 | 2026-09-14 | 名称、模型、思考和模式统一由 Session POST 更新，Command 保留原入口与准入规则。 |
 | 2.10.0 | 2026-09-10 | 增加独立 Session Name API，与 `/name` 共用命名服务并以 `If-Match` 保护直接调用。 |
-| 2.9.0 | 2026-09-07 | POST 成功响应复用既有 Session/Models 业务资源与 ETag，移除 command/changed/sourceEventSeq；Help 保留三个业务字段，Compact/Skills 保留最小结果；记录 6f52fddc 源码差距，全局主图和请求/错误不变。 |
-| 2.8.0 | 2026-09-07 | 同步 GET 轻量描述符与状态过滤；Help 保留无参四字段，POST JSON 及各命令领域行为不变。 |
-| 2.7.1 | 2026-09-07 | 重新引用 Slash 完整全局主图，恢复 Handler/业务服务与 Coordinator/执行对象/Repository 的独立关系；Help 图仅作下钻，既有命令语义和源码基线不变。 |
-| 2.7.0 | 2026-09-07 | 同步独立控制接口退役，不再承诺 Compact 后排队续跑；保留 JSON 与清理边界，停止与 Events 绑定另评审。 |
-| 2.6.1 | 2026-09-05 | Builtin 与 Skill Command 改由用户统一实现；保留 Builtin 分批计划，并将 Skill 与共享 HTTP 集成纳入统一发布验收。 |
-| 2.6.0 | 2026-09-04 | 确认 Help 元数据指南、无参四字段结果、空数组与缓存迁移；同步 Runtime 描述符、全局主图、验收；其他六个 Builtin 不变。 |
-| 2.5.0 | 2026-09-04 | 新增 Help 元数据使用指南专项评审入口；旧 Help 清单语义标记为变更前基线，细节待确认后统一切换，其他命令不变。 |
-| 2.4.2 | 2026-09-04 | 撤销无产品依据的 Skill 宽松加载兼容判断；引用名称专项源码复核与统一严格校验要求，保留 Builtin 与 Skill 并行分工。 |
-| 2.4.1 | 2026-09-04 | 将七个 Builtin 限定为本会话责任；Skill 由同事并行开发，共享 HTTP 发布前对齐；确认设计和发现层前置 PR 已合并。 |
-| 2.4.0 | 2026-09-04 | 冻结七个 Builtin JSON 行为、当前名称、领域 Entry、Compact 独立终态与串行九 PR 预算。 |
-| 2.3.0 | 2026-09-03 | 设计正文只保留推荐目标类图；移除当前实现类图，继续用源码证据与差距表表达现状，并保持目标核心类图和 Builtin 扩展类图作为实施结构基线 |
-| 2.2.0 | 2026-09-03 | 复核 `3004419a` 发现层和 `fb49e86d` GET 清单；新增当前实现类图、目标核心类图和七个 Builtin 扩展类图，明确应用层、请求快照、DTO/VO 边界与 Help 无环依赖 |
-| 2.1.0 | 2026-09-02 | 复核 `c9d858bc` 主线与未合入的 `fc06c618` 命令清单骨架，增加实施权威顺序、差距、竖切片、事务边界、参数语法、公司镜像规则和三个实施决策门；不改变已确认的七个 Builtin 清单 |
+| 2.9.0 | 2026-09-07 | 成功响应复用业务资源，Help、Compact、Skills 返回最小业务结果。 |
+| 2.8.0 | 2026-09-07 | GET 使用轻量描述符并按执行状态过滤。 |
+| 2.7.1 | 2026-09-07 | 复用完整全局主图，保留 Handler、业务服务和持久化职责边界。 |
+| 2.7.0 | 2026-09-07 | Compact 独立结束执行并按生命周期清理资源。 |
+| 2.6.1 | 2026-09-05 | Builtin、Skill 与共享 HTTP 统一集成验收。 |
+| 2.6.0 | 2026-09-04 | Help 基于元数据返回无参指南并统一空数组与缓存规则。 |
+| 2.5.0 | 2026-09-04 | 将 Help 元数据指南作为独立设计专题。 |
+| 2.4.2 | 2026-09-04 | Skill 加载、发现和执行统一严格名称校验。 |
+| 2.4.1 | 2026-09-04 | 明确 Builtin 实施切片与共享 HTTP 集成边界。 |
+| 2.4.0 | 2026-09-04 | 定义七项 Builtin 的 JSON 行为、领域记录与 Compact 终态。 |
+| 2.3.0 | 2026-09-03 | 正文保留推荐目标类图，以证据表表达实现差距。 |
+| 2.2.0 | 2026-09-03 | 明确应用层、请求快照、DTO/VO 与 Help 无环依赖。 |
+| 2.1.0 | 2026-09-02 | 定义实施权威顺序、事务边界与参数语法。 |
 | 2.0.4 | 2026-09-01 | 命令相关表述统一使用“命令清单”，移除可能被理解为文件路径的用词 |
 | 2.0.3 | 2026-08-31 | 统一七个 Builtin 的动作式短句，简化运行状态和组件职责说明；不改变命令行为 |
 | 2.0.2 | 2026-08-31 | 简化 `/help` 命令矩阵文案，改为“列出命令清单”“查看指定命令详情”“始终可用” |
 | 2.0.1 | 2026-08-31 | 将 `/help` 无参行为改述为列出当前 Session 可发现的命令，避免被理解为文件路径 |
-| 2.0.0 | 2026-08-31 | 废弃旧 GUI/Extension 执行面设计，收敛为 HTTP v1 七个 Builtin、窄职责服务和 CampusClaw Session Name 所有权 |
+| 2.0.0 | 2026-08-31 | 收敛为 HTTP 七项 Builtin 和窄职责服务。 |

@@ -16,7 +16,10 @@ title pi Protocol SessionSnapshot
 ' Design reason: this diagram intentionally excludes Agent Harness internals, pi-mono-java,
 ' CampusClaw target types, persistence records, and HTTP response models.
 
-left to right direction
+top to bottom direction
+skinparam nodesep 22
+skinparam ranksep 35
+skinparam packageStyle rectangle
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -80,15 +83,15 @@ abstract class TranscriptItem <<tagged_union>> {
 
 class UserTranscriptItem {
   +role: user
-  +content: (TextContent | ImageContent)[*]
+  +content: Content[*]
 }
 
 class AssistantTranscriptItem {
   +role: assistant
-  +content: (TextContent | ThinkingContent | ToolCallContent)[*]
+  +content: Content[*]
   +responseModel: string?
-  +status: streaming | complete | error | aborted
-  +stopReason: stop | length | toolUse | error | aborted?
+  +status: AssistantStatus
+  +stopReason: StopReason?
   +errorMessage: string?
 }
 
@@ -97,9 +100,9 @@ class ToolTranscriptItem {
   +toolCallId: string
   +toolName: string
   +input: JsonValue
-  +content: (TextContent | ImageContent)[*]
+  +content: Content[*]
   +details: JsonValue?
-  +status: running | complete | error
+  +status: ToolStatus
   +isError: boolean
 }
 
@@ -141,8 +144,9 @@ Transcript progress events are incremental updates,
 not fields contained by SessionSnapshot.
 end note
 
-note bottom of TranscriptItem
-The transcript is a client-visible projection.
-It is not the final model context.
-end note
+legend bottom left
+Observed public schema; not CampusClaw target classes.
+Transcript is a display projection, not the next model request.
+Content unions and status/stopReason constraints are defined in the document tables.
+endlegend
 @enduml
