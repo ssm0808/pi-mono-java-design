@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.9.1 |
+| 文档版本 | 0.9.2 |
 | 状态 | 当前评审 ListEvents；POST 合并、完整 user.* 首帧、对应 idle 关闭（含等待工具确认）、中断推送分工、数据库中断机制、单消息准入及中断查询优化已确认；B01～B15 语义已确认，精确契约已定稿，可进入实现，target-only |
 | 设计仓基线 | `c4f1ba2f2b8f4ee7cf9b7d5eaa554c42bd525bed` |
 | CampusClaw 实现核对提交 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
@@ -17,7 +17,7 @@
 
 Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-history-design.md#thinking-original-text)。
 
-计划审核新增输入与事件由[计划模式接口增量](../06-CampusClaw计划模式/interface-delta.md)维护为 target-only 方案；沿用本专题的根消息、确认续跑段和对应 SSE，并以完整计划 eventId 作为审核目标。它不改变当前三输入联合契约的已确认范围；目标结构及差距见[计划模式主设计](../06-CampusClaw计划模式/README.md)和 [A03](../07-Agent架构对比/README.md#a03)。
+计划审核新增输入与事件由[计划模式接口增量](../06-CampusClaw计划模式/interface-delta.md)维护为 target-only 方案；工作模式使用 Session 更新的 mode=plan/build；审核仍沿用根消息、确认续跑段和对应 SSE，以完整计划 eventId 为目标，并在批准事务内更新同一 mode 属性。它不改变当前三输入联合契约的已确认范围；目标结构及差距见[计划模式主设计](../06-CampusClaw计划模式/README.md)和 [A03](../07-Agent架构对比/README.md#a03)。
 
 ## 1. 已确认资源模型
 
@@ -565,6 +565,7 @@ HTTP 路径使用 `/campusclaw-service/v1`。内部开发阶段编号不作为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.9.2 | 2026-09-14 | 同步 Session 资源更新承载 plan/build 的计划模式边界。 |
 | 0.9.1 | 2026-09-14 | 关联保持元数据稳定的计划模式目标增量与统一架构对比。 |
 | 0.9.0 | 2026-09-09 | 统一 Session Events 命名，明确事件消费与实现边界。 |
 | 0.8.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |

@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：1.0.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：1.1.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
 ## 1. 固定提交
 
@@ -9,7 +9,7 @@
 | deepseek-ai/deepseek-harness | `0a53fb55bea101816fa226bb964ae2bed71c343b` | 固定 `dsh-0.1.2-alpha.2`；读取固定提交的源码与 standard preset，未使用本机较新 checkout 替代 |
 | badlogic/pi-mono | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、工具结果与下轮模型调用顺序的固定基线 |
 | superheromeZzh/pi-mono-java | `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` | 2026-09-14 fetch 后 origin/main；本地 f61906b 已包含全部本专题分析的 Java、Mapper 和 SQL 内容 |
-| pi-mono-java-design | `b1c409e55af2b21fb4986bd8969c3fbf5b69060d` | 本次新增专题前的设计主线；保留当前 Session Events、权限、工具 profile 和元数据契约 |
+| pi-mono-java-design | `337346b1f59267392a631e22e92bb9829b335f26` | 本次修订前的设计主线；保留当前 Session Events、权限、工具 profile 和元数据契约 |
 
 前序分析使用 Java `510d882ca45541e0086586dab89c429c5a18cf20`。本次采用 `09b32d8e`；两者之间是仓库指引变更，本专题 Runtime 路径不变。对比本地 `f61906b` 至 `09b32d8e` 的差异仅在指引、前端样式/开发代理及配套文档脚本；不据此声称 Agent Loop 或确认机制发生新增变化。
 
@@ -61,6 +61,10 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 
 | R 下路径 | 符号 | 已观察行为与差距 |
 |---|---|---|
+| `web/RuntimeSessionController.java` | create、get、delete | 目前只有创建、查询和删除；目标在 Session 资源路径增加 updateSession，尚不存在通用 PATCH 方法 |
+| `web/RuntimeSessionConfigurationController.java` | listModels、changeModel、changeThinking | 既有 model/thinking 使用属性路径；它们的存在不能推导应为每个新 Session 属性再建 endpoint |
+| `session/RuntimeSessionConfigurationService.java` | requireMutableSession、requireUpdated、changeModel、changeThinking | 已有 ETag、idle、原子更新结果映射及统一响应装配；扩展 updateSession 复用这一应用边界，不新增模式专用 Service |
+| `dto/SessionConfigurationUpdateDTO.java` | Status | 已区分 UPDATED、UNCHANGED、NOT_FOUND、BUSY、VERSION_MISMATCH；模式更新复用该结果模型 |
 | `event/RuntimeEventService.java` | `submit`、`submitConfirmation` | 已分派三类 user.*；不存在计划确认输入，目标增加第四分支 |
 | `event/RuntimeMessageEventService.java` | `prepare`、`accept`、`startAccepted` | 先准备未启动的执行再接受消息；目标由接受事务返回最新模式快照，在启动前应用，不能把工厂 I/O 移入锁内 |
 | `event/RuntimeControlEventService.java` | `acceptToolConfirmation`、`accept` | 接受前预留响应/等待容量、提交后回执先行、按固定结果段补读；可以复用传输流程 |
@@ -72,14 +76,14 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 | `event/RuntimeExecutionCoordinator.java` | `scheduleTimeout`、`timeout`、`commitAndRelease` | maxDuration 覆盖整个执行，取消 pending confirmation；可靠终态提交后释放资源，失败保留执行并重试终态 |
 | `runtime/RuntimeSessionEngineRegistry.java` | `register`、`createSession`、`complete` | 仅保存活动执行，idle 不缓存 Agent；新执行必须重新读取持久化模式 |
 | `session/RuntimeSessionResponseAssembler.java` | `getView`、`createView` | Session DTO 统一转换 VO 与 ETag；新模式及待审指针应在此统一投影 |
-| `vo/GetSessionResponseVO.java` | 字段集合 | 当前无 planMode/pendingPlanEventId；不能把推荐字段标成现有接口 |
+| `vo/GetSessionResponseVO.java` | 字段集合 | 当前无 mode/pendingPlanEventId；不能把推荐字段标成现有接口 |
 | `event/RuntimeEntryCodec.java` | `effectiveContextEntries`、模型消息转换 | 历史与模型上下文分离；新增计划展示事件不能重复变成模型消息 |
 
 ### 4.3 存储与工具元数据
 
 | 仓库相对路径 | 已观察事实 |
 |---|---|
-| `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql` · t_sessions / t_session_executions / t_session_tool_confirmations | 已有 Session 配置、根执行、段和工具决定表；没有本设计的 plan_mode、pending_plan_event_id 或计划决定表 |
+| `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql` · t_sessions / t_session_executions / t_session_tool_confirmations | 已有 Session 配置、根执行、段和工具决定表；没有本设计的 mode、pending_plan_event_id 或计划决定表 |
 | `modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · markSessionRunning / markSessionIdle / 配置更新 | Session 状态/配置变化更新 resource_version；目标将新增待审核响应字段纳入同源版本维护 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/dto/ToolInfo.java` | Mate 工具原始元数据 DTO；本设计不扩充字段 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/mate/MateToolMeta.java` | 七项投影：toolId、toolName、description、inputSchema、outputSchema、isConcurrencySafe、permission；本设计保持 |
@@ -88,6 +92,6 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 
 ## 5. 明确未实现的目标
 
-SessionPlanModeService、RuntimePlanReviewService、PlanReviewPort、RuntimePlanReviewAdapter、SessionPlanContext、PlanPolicyPromptComposer、RuntimePendingInteraction、ExitPlanModeTool，以及新 VO/DTO 和数据库列/表均为目标结构。上述类名、方法和关系帮助实施切片，不代表源码中已经存在。
+RuntimePlanReviewService、PlanReviewPort、RuntimePlanReviewAdapter、SessionPlanContext、PlanPolicyPromptComposer、RuntimePendingInteraction、ExitPlanModeTool，以及新 VO/DTO 和数据库列/表均为目标结构。上述类名、方法和关系帮助实施切片，不代表源码中已经存在。既有 RuntimeSessionController 与 RuntimeSessionConfigurationService 的 updateSession 方法，以及 Repository 的模式写入方法也是 target-only 增量，原类本身已存在。
 
-接口新增、跨实例审核和提示词更新属于架构扩展；元数据稳定、idle 主动切换、Child 继承与自然语言澄清属于产品约束；精确审核目标校验、单次消费、跨 Session 隔离与凭据不落盘属于安全加固。提示词引导本身不被归类为强制安全隔离。
+Session 工作模式通过资源更新表达属于产品约束与 API 架构调整；当前缺少通用 Session 更新入口是实施差距。跨实例审核和提示词更新属于架构扩展；元数据稳定、idle 主动切换、Child 继承与自然语言澄清属于产品约束；精确审核目标校验、单次消费、跨 Session 隔离与凭据不落盘属于安全加固。提示词引导本身不被归类为强制安全隔离。

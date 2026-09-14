@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.17.1 |
+| 文档版本 | 3.17.2 |
 | 状态 | B01～B15 已全部确认，Session Events 与 Skill 联动契约已定稿；新增独立 Session 重命名目标接口；当前十一项接口共用一个契约入口 |
 | 当前传输结论 | 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
@@ -29,7 +29,7 @@
 
 Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-history-design.md#thinking-original-text)。
 
-计划模式增量由[计划模式专题](../06-CampusClaw计划模式/README.md)维护，基于 DeepSeek 接入现有 Session、工厂、工具和执行控制；该 target-only 专题提供主图、接口与验收，不代表当前十一项契约已支持计划功能。架构取舍见 [A03](../07-Agent架构对比/README.md#a03)。
+计划模式增量由[计划模式专题](../06-CampusClaw计划模式/README.md)维护，基于 DeepSeek，以 Session 更新承载 mode=plan/build，接入既有配置服务、工厂、工具和执行控制；该 target-only 专题提供主图、接口与验收，不代表当前十一项契约已支持计划功能。架构取舍见 [A03](../07-Agent架构对比/README.md#a03)。
 
 ## 1. 当前结论
 
@@ -517,6 +517,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.17.2 | 2026-09-14 | 同步 Session 资源更新承载 plan/build 的计划模式边界。 |
 | 3.17.1 | 2026-09-14 | 关联保持元数据稳定的计划模式目标增量与统一架构对比。 |
 | 3.17.0 | 2026-09-10 | 新增独立 Session 重命名目标接口，与 `/name` 共用服务并以 `If-Match` 保护直接写入。 |
 | 3.16.0 | 2026-09-09 | 统一 Session Events 设计入口与职责命名。 |

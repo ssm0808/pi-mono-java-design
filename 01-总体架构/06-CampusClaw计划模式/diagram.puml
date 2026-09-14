@@ -7,6 +7,9 @@
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java :: prepare, accept, startAccepted.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java :: start, commitAndRelease.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionControlDispatcher.java :: dispatchConfirmation, dispatchStop.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java :: create, get, delete; update is target-only.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java :: requireMutableSession, requireUpdated.
+' Design reason: mode is updated on the Session resource through the existing configuration service.
 ' Source: modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java :: invokeModel, runToolPhase.
 ' DeepSeek baseline: 0a53fb55bea101816fa226bb964ae2bed71c343b (alpha).
 ' Source: packages/plan/plan-mode/src/index.ts :: PlanModeController, exit_plan_mode.
@@ -39,13 +42,13 @@ endlegend
 
 package "HTTP and client boundary" as HttpBoundary {
   class "Runtime Plan UI" as UI <<target-only>> #EAF2FF
-  class "RuntimeSessionConfigurationController" as ConfigApi <<extended>> #FFF7DD
+  class "RuntimeSessionController" as ConfigApi <<extended>> #FFF7DD
   class "RuntimeEventController" as EventApi <<extended>> #FFF7DD
 }
 
 package "Application and assembly" as Application {
-  class "SessionPlanModeService" as ModeService <<target-only>> #EAF2FF {
-    +changeMode(requestVO, ifMatch)
+  class "RuntimeSessionConfigurationService" as ModeService <<extended>> #FFF7DD {
+    +updateSession(requestVO, ifMatch)
   }
   class "RuntimeEventService" as EventService <<extended>> #FFF7DD
   class "RuntimeMessageEventService" as MessageService <<extended>> #FFF7DD
@@ -62,7 +65,7 @@ package "Application and assembly" as Application {
 package "Execution ownership" as ExecutionScope {
   class "RuntimeActiveExecution" as Execution <<extended>> #FFF7DD
   class "RuntimePendingInteraction" as Pending <<target-only>> #EAF2FF {
-    kind: TOOL_PERMISSION | PLAN_REVIEW
+    kind: permission or plan
     +claimAndResume(decisionDTO)
     +cancel(cause)
   }
@@ -105,7 +108,7 @@ Application -[hidden]down- ExecutionScope
 ExecutionScope -[hidden]right- ToolScope
 ExecutionScope -[hidden]down- PersistenceScope
 
-UI -[#2563EB]-> ConfigApi : mode request VO
+UI -[#2563EB]-> ConfigApi : PATCH Session / mode
 UI -[#2563EB]-> EventApi : confirm / read history
 ConfigApi -[#2563EB]-> ModeService
 EventApi --> EventService
@@ -212,8 +215,8 @@ note right of DB
 end note
 Service -> DB : Append confirmation; create continuation segment;
 note right of DB
-  Approve: update plan_mode=false and append mode event.
-  Revise: keep plan_mode=true and persist feedback.
+  Approve: update mode=build and append mode event.
+  Revise: keep mode=plan and persist feedback.
   Clear pending plan. Keep Session running.
 end note
 DB --> Service : Commit fixed continuation target
@@ -228,7 +231,7 @@ Dispatcher -> DB : Claim decision with fixed original target
 DB --> Dispatcher : Committed decision, once
 Dispatcher -> Agent : Bind new segment output; complete pending Future
 alt Approved
-  Agent -> Agent : Apply committed false mode to own system prompt
+  Agent -> Agent : Apply committed build mode to own system prompt
   Agent -> Service : Persist ExitPlanMode result approved=true
   Agent -> Agent : Next model request may implement the plan
 else Revision requested
@@ -248,7 +251,7 @@ end note
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionState.java :: IDLE, RUNNING.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java :: timeout, commitAndRelease.
 ' Observed behavior: confirming closes HTTP output without releasing Session admission.
-' Design reason: target-only planMode remains separate from the existing resource state.
+' Design reason: target-only mode remains separate from the existing resource state.
 ' Java divergence: manual mode switching is idle-only; approval exits within the original execution.
 title CampusClaw Plan Mode - Target State and Admission
 skinparam backgroundColor #FFFFFF
@@ -259,15 +262,15 @@ skinparam stateBackgroundColor #EFF6FF
 skinparam stateBorderColor #64748B
 hide empty description
 
-state "Idle / Normal\nstate=idle, planMode=false" as Normal
-state "Idle / Planning\nstate=idle, planMode=true" as PlanIdle
-state "Exploring or designing\nstate=running, planMode=true" as Planning
-state "Awaiting plan review\nstate=running, planMode=true\npendingPlanEventId is present" as Reviewing
-state "Implementing\nstate=running, planMode=false" as Implementing
+state "Idle / Build\nstate=idle, mode=build" as Normal
+state "Idle / Planning\nstate=idle, mode=plan" as PlanIdle
+state "Exploring or designing\nstate=running, mode=plan" as Planning
+state "Awaiting plan review\nstate=running, mode=plan\npendingPlanEventId is present" as Reviewing
+state "Implementing\nstate=running, mode=build" as Implementing
 
-[*] --> Normal : create / migrate
-Normal --> PlanIdle : PUT true + valid ETag
-PlanIdle --> Normal : PUT false + valid ETag
+[*] --> Normal : create
+Normal --> PlanIdle : PATCH mode=plan + valid ETag
+PlanIdle --> Normal : PATCH mode=build + valid ETag
 PlanIdle --> Planning : accept user.message
 Planning --> PlanIdle : ordinary question / answer ends execution
 Planning --> Reviewing : ExitPlanMode; commit plan and confirming idle
@@ -280,7 +283,7 @@ Reviewing --> PlanIdle : actual stop / failure committed
 
 note bottom of Reviewing
   A closed SSE is not an execution terminal.
-  New messages and manual mode PUT are rejected.
+  New messages and Session mode updates are rejected.
   Only the current plan event can be confirmed.
   Existing tool permission review is independent.
 end note
