@@ -10,8 +10,6 @@ a { color: light-dark(#0969da, #79b8ff); }
 .catalog-path { display: block; margin-top: 5px; padding-left: 18px; overflow-wrap: anywhere; }
 .catalog-caveat { padding: 10px 12px; border-left: 3px solid #bf8700; background: light-dark(#fff9e6, #302919); }
 .catalog-links { font-size: 13px; }
-.company-api-review .catalog-part { margin: 0; }
-.company-api-review .catalog-part > summary { padding: 15px; }
 .company-api-review pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
 .catalog-item:target { border-color: #0969da; }
 @media (max-width: 680px) {

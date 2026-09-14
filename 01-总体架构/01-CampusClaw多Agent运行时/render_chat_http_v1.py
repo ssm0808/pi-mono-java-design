@@ -134,7 +134,7 @@ def static_table(columns: list[str], rows: list[list[Any]]) -> str:
     return f'<div class="table-wrap"><table><thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
 
 
-def static_response(response: dict[str, Any], index: int) -> str:
+def static_response(response: dict[str, Any], index: int, *, expand_details: bool = False) -> str:
     tab_label = response.get("tabLabel") or response["status"]
     summary = f'{response["status"]} {response["label"]} — {response["summary"]}'
     locales = []
@@ -145,11 +145,11 @@ def static_response(response: dict[str, Any], index: int) -> str:
         header_lines = [f"{name}: {value}" for name, value in headers.items()]
         rendered = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False, indent=2)
         output = "\n".join([*header_lines, "" if header_lines else "", rendered]).lstrip("\n")
-        open_attribute = " open" if locale_index == 0 else ""
+        open_attribute = " open" if expand_details or locale_index == 0 else ""
         locales.append(
             f'<details class="static-choice"{open_attribute}><summary>{html.escape(locale)}</summary>{static_pre(output)}</details>'
         )
-    open_attribute = " open" if index == 0 else ""
+    open_attribute = " open" if expand_details or index == 0 else ""
     return (
         f'<details class="static-response"{open_attribute}>'
         f'<summary><code>{html.escape(str(tab_label))}</code> {html.escape(summary)}</summary>'
@@ -193,7 +193,7 @@ def static_review(model: dict[str, Any]) -> str:
     )
 
 
-def render_static(model: dict[str, Any]) -> str:
+def render_static(model: dict[str, Any], *, expand_details: bool = False) -> str:
     api = model["api"]
     operation = model["operation"]
     full_path = f'{api["basePath"].rstrip("/")}/{operation["path"].lstrip("/")}'
@@ -207,7 +207,7 @@ def render_static(model: dict[str, Any]) -> str:
         request = "\n".join(
             [f'{operation["method"]} {full_path}', *(f'{item["name"]}: {item["value"]}' for item in mode["headers"])]
         )
-        open_attribute = " open" if mode.get("preferred") or auth_index == 0 else ""
+        open_attribute = " open" if expand_details or mode.get("preferred") or auth_index == 0 else ""
         auth_blocks.append(
             f'<details class="static-choice"{open_attribute}><summary>{html.escape(mode["label"])}</summary>'
             f'{static_table(["Header", "必填", "示例值", "说明"], rows)}{static_pre(request)}</details>'
@@ -224,13 +224,14 @@ def render_static(model: dict[str, Any]) -> str:
     request_example = static_pre(request_body["example"]) if request_body.get("example") is not None else ""
     request_examples = []
     for example_index, example in enumerate(request_body.get("examples", [])):
-        open_attribute = " open" if example_index == 0 else ""
+        open_attribute = " open" if expand_details or example_index == 0 else ""
         request_examples.append(
             f'<details class="static-choice"{open_attribute}><summary>{html.escape(example["label"])}</summary>'
             f'<p class="muted empty">{html.escape(example.get("description", ""))}</p>'
             f'{static_pre(example["value"])}</details>'
         )
-    responses = "".join(static_response(response, index) for index, response in enumerate(operation["responses"]))
+    responses = "".join(static_response(response, index, expand_details=expand_details)
+                        for index, response in enumerate(operation["responses"]))
     sections = "".join(
         f'<section class="section contract-detail"><h3>{html.escape(item["title"])}</h3>'
         f'<p class="description">{html.escape(item.get("description", ""))}</p>'

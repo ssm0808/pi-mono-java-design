@@ -22,14 +22,7 @@
       staging.appendChild(shell);
       try {
         renderOperation(staging, slot.model);
-        shell.querySelectorAll('.contract-detail').forEach((section) => {
-          const heading = section.querySelector('h3');
-          const part = make('details', 'catalog-part');
-          part.appendChild(make('summary', '', heading.textContent));
-          heading.remove();
-          section.replaceWith(part);
-          part.appendChild(section);
-        });
+        shell.querySelectorAll('details').forEach((part) => { part.open = true; });
         slot.cache = detach(shell);
       } catch (error) {
         // Rendering failure must leave the complete native contract available.

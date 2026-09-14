@@ -34,6 +34,7 @@ const create = (markup, runScripts) => {
     }
     assert.ok(item.querySelector('.auth-section .static-choice'));
     assert.ok(item.querySelector('.response-section .static-response'));
+    assert.equal(item.querySelectorAll('details:not([open])').length, 0);
   }
   assert.equal(fallback.errors.length, 0);
   fallback.dom.window.close();
@@ -60,12 +61,12 @@ const create = (markup, runScripts) => {
     assert.equal(surface.querySelectorAll('[data-mounted]').length, 1);
     assert.equal(surface.querySelectorAll('[data-api-shell] > article').length, 1);
     assert.ok(item.textContent.includes(operation.description));
-    assert.equal(item.querySelectorAll('.catalog-part').length, 3 + (operation.contractSections || []).length);
+    assert.equal(item.querySelectorAll('.contract-detail').length, 3 + (operation.contractSections || []).length);
     for (const section of operation.contractSections || []) {
       assert.ok(item.textContent.includes(section.title));
       for (const row of section.rows) for (const value of row) assert.ok(item.textContent.includes(String(value)));
     }
-    assert.equal(item.querySelectorAll('.catalog-part[open]').length, 0);
+    assert.equal(item.querySelectorAll('.catalog-part, details:not([open])').length, 0);
 
     const auth = item.querySelector('.auth-section');
     for (const mode of operation.requestHeaderExamples) {
