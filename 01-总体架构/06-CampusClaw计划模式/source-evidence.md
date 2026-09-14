@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：1.3.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：1.4.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
 ## 1. 固定提交
 
@@ -9,7 +9,7 @@
 | deepseek-ai/deepseek-harness | `0a53fb55bea101816fa226bb964ae2bed71c343b` | 固定 `dsh-0.1.2-alpha.2`；读取固定提交的源码与 standard preset，未使用本机较新 checkout 替代 |
 | badlogic/pi-mono | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、工具结果与下轮模型调用顺序的固定基线 |
 | superheromeZzh/pi-mono-java | `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` | 2026-09-14 fetch 后 origin/main；本地 f61906b 已包含全部本专题分析的 Java、Mapper 和 SQL 内容 |
-| pi-mono-java-design | `337346b1f59267392a631e22e92bb9829b335f26` | 本次修订前的设计主线；保留当前 Session Events、权限、工具 profile 和元数据契约 |
+| pi-mono-java-design | `416acef836d32415e39351763ff8ebcf2d3ed015` | 本次修订前的设计主线；保留当前 Session Events、权限、工具 profile 和元数据契约 |
 
 前序分析使用 Java `510d882ca45541e0086586dab89c429c5a18cf20`。本次采用 `09b32d8e`；两者之间是仓库指引变更，本专题 Runtime 路径不变。对比本地 `f61906b` 至 `09b32d8e` 的差异仅在指引、前端样式/开发代理及配套文档脚本；不据此声称 Agent Loop 或确认机制发生新增变化。
 
@@ -51,7 +51,7 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 | `modules/agent-core/src/main/java/com/campusclaw/agent/tool/BeforeToolCallContext.java` | record `assistantMessage/toolCall/args/context` | 可判断审核调用是否是该 Assistant 唯一 ToolCall，无需新增模型工具元数据 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java` | `create`、`configureAgent`（约 67、97 行） | 三入口统一 prepare、工具装配、Prompt 和 hook；目标在此接入模式快照与退出工具工厂 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java` | `prompt`、`compactBeforePrompt`、`continueAfterCompaction` | 包装执行与压缩；新增 SessionPlanContext，不把摘要当模式权威 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java` | defaults、`toolsFor` | 现有 Runtime/Cron/Child 固定配置与顺序；目标只为 Runtime 增加 ExitPlanMode |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java` | defaults、`toolsFor` | 现有 Runtime/Cron/Child 固定配置与顺序；目标为 Runtime 增加 ExitPlanMode、TodoUpdate |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultConfiguredToolAssembler.java` | `assemble` | 依当前入口 profile 调用工厂；不按计划模式过滤工具 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java` | `runChild` | 用独立 ManagedAgentSessionRequest 创建 Child；当前没有计划模式传递，需增加调用时快照 |
 
@@ -107,3 +107,23 @@ RuntimePlanReviewService、PlanReviewPort、RuntimePlanReviewAdapter、SessionPl
 Session 工作模式通过资源更新表达属于产品约束与 API 架构调整；当前缺少通用 Session 更新入口是实施差距。跨实例审核和提示词更新属于架构扩展；元数据稳定、idle 主动切换、Child 继承与自然语言澄清属于产品约束；精确审核目标校验、单次消费、跨 Session 隔离与凭据不落盘属于安全加固。提示词引导本身不被归类为强制安全隔离。
 
 统一 Session 更新的组合事务、名称复用和接口替换证据集中见[HTTP 专项核对](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#81-统一-session-更新源码核对)；已有独立属性写入不能当作组合原子性证明。
+
+
+## 6. TODO UPDATE 基线与接入证据
+
+TODO 公共工具交互以 Claude Managed Agents 官方 Beta 文档为主基线，核对日期 2026-09-14：
+[Tools](https://platform.claude.com/docs/en/managed-agents/tools) 的 Available tools / Custom tools 未提供内置 TODO；[Session event stream](https://platform.claude.com/docs/en/managed-agents/events-and-streaming#handling-custom-tool-calls) 通过 agent.custom_tool_use、requires_action 和 user.custom_tool_result 组织外部执行。[List Events](https://platform.claude.com/docs/en/api/beta/sessions/events/list) 是公开事件联合类型。它们只证明公开契约，无服务端源码 commit。
+
+CampusClaw 采纳工具业务由通用调用/结果承载的风格，仍由 Runtime 内置工具执行，并用已有 agent.tool_call/agent.tool_result 输出；不迁入客户端执行、requires_action 或新的用户结果提交接口。TODO 参数和状态并非 Claude 的原生约定。
+
+| 固定源码路径 / 符号 | 已观察行为 | 采纳与差异 |
+|---|---|---|
+| DeepSeek 0a53fb55：`packages/todo/tool-todo/src/index.ts` · apply、toTodoList、execute；`packages/todo/tool-todo/src/types.ts` · TodoItem、SessionEventMap | todo_write 整份替换，只有 content/status；状态 pending/in_progress/completed，部署可选择并行进行中；追加 todo/write，最新快照投影于下一 turn/start 清空 | 参考最小完整列表；CampusClaw 首版最多一个进行中；公共进度直接用工具成功结果，不增加 todo/write 的第二份领域日志，属于产品约束及架构变更 |
+| pi 5cd93f68：`packages/coding-agent/examples/extensions/todo.ts` · reconstructState、execute | 示例从当前分支的 todo 工具结果 details 恢复完整列表 | 借鉴结果可恢复；CampusClaw 公共事件不暴露 details，改用既有 content.text 的工具 JSON。不是迁入 pi 扩展系统 |
+| Java 09b32d8e：`modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentToolResult.java` · record | 工具返回 content 与内部 details | TodoUpdate 直接返回 text ContentBlock，保留公共接口 |
+| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java` · runtime、toolsFor | Runtime 默认八工具，显式配置按入口解析；没有 TodoUpdate | 新工具、枚举、工厂与 Runtime 默认追加为 target-only；Cron/Child 默认值不变 |
+| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java` · project、persistToolResults（188～198、358～366 行） | TurnEndEvent 批次结果进入通用 ToolResult 路径；检查帧后 appendEntry，再 emit | 复用权威提交，无需 TodoUpdate 专用事件分支；进度发送时点是公共结果提交，不是工具 Java 方法刚返回 |
+| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java` · toolResultEntry（134～155 行）；`RuntimeCommittedEventFactory.java` · agentToolResult（103～113 行） | Entry 保存工具名与内容，公共结果包含 sourceEventId/toolCallId/content/isError，成功结果不含 details/toolName | 客户端关联调用取工具名，从成功结果文本读清单；不扩充外层字段 |
+| Java 同基线：`frontend/src/runtime/eventStore.ts` · mergeEvent、reconcileEvents、executionState | eventId 去重、历史顺序保留 live 尾部，以原根消息关联执行；没有 TODO 投影 | 增加纯函数 deriveTodos 与面板；实时、恢复共用，target-only |
+
+完整 SHA 沿用 §1；本次核验固定提交，没有升级基线。对 Java `modules` 和 `frontend/src` 检索 TodoUpdate/TodoWrite 无实现命中；上述通用路径已存在，未执行 TODO 产品测试。TodoUpdateTool、客户端 deriveTodos 和其整份列表约束均属于新目标，具体生命周期与验收由 [TODO 主设计](todo-update.md) 维护。不从 Claude 文档推断内部 TODO 表、持久化事务或自动恢复调度器。

@@ -16,6 +16,10 @@
 ' Observed behavior: the existing Runtime owns streams, durable controls and active executions.
 ' Design reason: add plan policy and review without changing tool metadata or the Agent Loop.
 ' Java divergence: HTTP plan review and database handoff are target-only additions.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: persistToolResults.
+' Source: frontend/src/runtime/eventStore.ts :: mergeEvent, reconcileEvents; deriveTodos is target-only.
+' Claude public tool events checked 2026-09-14; no native TODO contract.
+' Design reason: TodoUpdate returns a full snapshot through the existing tool result commit path.
 title CampusClaw Plan Mode - Complete Target Class View
 top to bottom direction
 allowmixing
@@ -42,6 +46,10 @@ endlegend
 
 package "HTTP and client boundary" as HttpBoundary {
   class "Runtime Plan UI" as UI <<target-only>> #EAF2FF
+  class "Todo projection" as TodoView <<target-only>> #EAF2FF {
+    +deriveTodos(events, rootEventId)
+  }
+  class "Client event store" as EventStore <<existing>> #ECFDF5
   class "RuntimeSessionController" as ConfigApi <<extended>> #FFF7DD
   class "RuntimeEventController" as EventApi <<extended>> #FFF7DD
 }
@@ -86,6 +94,9 @@ package "Core and model tools" as ToolScope {
   class "ToolExecutionPipeline" as Pipeline <<existing>> #ECFDF5
   interface "AgentTool" as Tool <<existing>> #ECFDF5
   class "ExitPlanModeTool" as ExitTool <<target-only>> #EAF2FF
+  class "TodoUpdateTool" as TodoTool <<target-only>> #EAF2FF {
+    +execute(args): AgentToolResult
+  }
   class "Existing built-in tools" as ExistingTools <<existing>> #ECFDF5
   interface "PlanReviewPort" as ReviewPort <<target-only>> #EAF2FF {
     +review(callId, plan, signal): DecisionDTO
@@ -108,6 +119,9 @@ Application -[hidden]down- ExecutionScope
 ExecutionScope -[hidden]right- ToolScope
 ExecutionScope -[hidden]down- PersistenceScope
 
+UI *-[#2563EB]- "1" TodoView : client projection
+UI *-- "1" EventStore
+TodoView -[#2563EB]-> EventStore : reads ordered events
 UI -[#2563EB]-> ConfigApi : POST Session / mode
 UI -[#2563EB]-> EventApi : confirm / read history
 ConfigApi -[#2563EB]-> ModeService
@@ -139,7 +153,9 @@ Loop --> Pipeline
 Pipeline --> "0..*" Tool
 Tool <|.. ExistingTools
 Tool <|.[#2563EB]. ExitTool
+Tool <|.[#2563EB]. TodoTool
 Session *-[#2563EB]- "0..1" ExitTool : Runtime profile
+Session *-[#2563EB]- "0..1" TodoTool : Runtime profile
 ExitTool -[#2563EB]-> ReviewPort
 ReviewPort <|.[#2563EB,norank]. ReviewAdapter
 Persistence --> SessionRepo
@@ -158,6 +174,11 @@ note bottom of Pending
   At most one interaction across both kinds.
   Current execution and plan identity are
   rechecked under database locks before claim.
+end note
+note bottom of TodoTool
+  Stateless full-list validation and JSON result.
+  Generic committed ToolResult is the snapshot.
+  No TODO table or new public event type.
 end note
 note bottom of ExistingTools
   No metadata fields, tool descriptions or
@@ -288,4 +309,70 @@ note bottom of Reviewing
   Only the current plan event can be confirmed.
   Existing tool permission review is independent.
 end note
+@enduml
+
+
+@startuml todo_update_sequence
+' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
+' Source: modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentToolResult.java :: content, details.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: project, persistToolResults.
+' Source: frontend/src/runtime/eventStore.ts :: reconcileEvents, executionState.
+' Claude public docs: managed-agents/events-and-streaming, checked 2026-09-14 (beta).
+' DeepSeek baseline: 0a53fb55bea101816fa226bb964ae2bed71c343b (alpha).
+' Source: packages/todo/tool-todo/src/index.ts :: apply, execute; whole-list replacement.
+' Observed behavior: Java commits generic results at the existing TurnEndEvent boundary.
+' Design reason: keep the public tool envelope stable and derive TODO from committed success.
+' Java divergence: TodoUpdateTool and client projection are target-only, not Claude built-ins.
+title CampusClaw TodoUpdate - Target Tool and Event Flow
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 210
+autonumber
+participant "AgentLoop / Pipeline" as Loop
+participant "TodoUpdateTool\n(target-only)" as Todo
+participant "RuntimeEventProjector" as Projector
+database "Existing entries / events" as DB
+participant "Client event store\n+ deriveTodos (target-only)" as UI
+participant "Existing history API" as History
+
+Loop -> Projector : Finalized TodoUpdate call (complete list)
+Projector -> DB : Commit generic tool_call
+Projector --> UI : agent.tool_call
+note right of UI
+  Show updating if useful.
+  Do not replace committed progress yet.
+end note
+Loop -> Todo : Validate schema; execute(args)
+alt Valid complete list
+  Todo --> Loop : AgentToolResult with one JSON text block
+  Loop -> Projector : Existing TurnEndEvent with tool results
+  Projector -> Projector : Encode and check complete frame size
+  Projector -> DB : Commit ToolResult Entry and public event
+  DB --> Projector : Committed
+  Projector --> UI : agent.tool_result (isError=false)
+  UI -> UI : Match sourceEventId + toolCallId;
+  note right of UI
+    Check call.toolName and result JSON.
+    Replace the complete TODO projection.
+  end note
+else Invalid or failed
+  Todo --> Loop : Existing tool error path
+  Loop -> Projector : Existing TurnEndEvent with failed result
+  Projector -> DB : Commit failed generic result
+  Projector --> UI : agent.tool_result (isError=true)
+  UI -> UI : Keep previous successful list
+end
+note over Loop,UI
+  Ordinary thinking, messages and business tools continue.
+  No confirmation idle, new segment, mode update or TODO endpoint.
+  Each later update replaces the list; actual execution terminal stays independent.
+end note
+UI -> History : GET Events
+History -> DB : Read stored generic calls and results
+DB --> History : Ordered stored events
+History --> UI : Existing history response
+UI -> UI : Reconcile events and run the same projection
 @enduml

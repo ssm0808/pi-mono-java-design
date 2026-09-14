@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.3.1 |
+| 文档版本 | 2.3.2 |
 | 状态 | 目标设计；Mate 工具 Schema 不变，凭据可见边界收紧 |
-| 更新日期 | 2026-08-31 |
+| 更新日期 | 2026-09-14 |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -14,9 +14,11 @@
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | 上位设计 | [工具系统主设计](README.md) |
 
+计划能力的 target-only 增量由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约) 和 [TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 维护；正式接入时统一登记枚举、工厂和 Runtime profile。本文以下八项基础契约不因新增 TODO 改变字段，新增工具并非当前源码已实现。
+
 ## 1. 契约总则
 
-目标版本只向模型暴露下表中的 8 个内置工具。`name` 使用区分大小写的 PascalCase，
+基础工具契约包含下表中的 8 个内置工具；计划专题的目标追加项见上方链接。`name` 使用区分大小写的 PascalCase，
 实现、配置、模型请求和事件中的工具名必须完全一致，不提供旧名别名。
 
 | Name | Description | 执行模式 | 成功输出 |
@@ -402,6 +404,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.2 | 2026-09-14 | 登记计划与 TODO 目标工具的契约入口，基础工具字段保持稳定。 |
 | 2.3.1 | 2026-08-31 | 明确 Slash Command 由独立 HTTP 模块提供，命令不属于模型工具。 |
 | 2.3.0 | 2026-08-27 | 保持 8 个模型工具 Schema 不变；List 与 Call miss 发现不带执行凭据，只有实际 Mate execute 透传 POST Events execution 快照中已提供的四项 Header。 |
 | 2.2.0 | 2026-08-24 | 保持 8 个模型工具 Schema 不变；固定压缩只追踪 PascalCase Read，路径排序去重并跨重复摘要继承。 |
