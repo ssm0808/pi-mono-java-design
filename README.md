@@ -1,19 +1,22 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.5.3<br>
-> 整理日期：2026-09-07<br>
-> Slash Command 设计基线：`0eaa70ff365bf4d4e328b3473809341ca4cfc58d`<br>
-> 通用对话 Events 三接口设计前基线：`743eca488ad559387706b5df54e2248a4124e5ef`<br>
-> 变更性质：Builtin 分层、普通 JSON 与串行 PR；Builtin 与 Skill Command 由用户统一负责设计、实现和集成
+> 导航版本：2.6.0<br>
+> 更新日期：2026-09-14<br>
+> 各模块的设计版本、源码基线和实现状态由模块主设计及架构对比条目分别记录。
 
 本仓库维护 CampusClaw Runtime、mate-service 边界、pi-mono-java 目标设计，
 以及相关源码和产品研究。这是设计与契约资料仓库，不是产品源码仓库。
+
+设计以模块为长期维护单位。[模块索引](#module-index)定位主设计，
+[Agent 架构对比](./01-总体架构/07-Agent架构对比/README.md)集中解释与各基线的差异、理由、代价和实现进度，
+用于设计讨论、架构答辩和面试准备。
 
 ## 1. 按问题快速找文档
 
 | 我想了解 | 首选入口 | 继续阅读 |
 |---|---|---|
 | CampusClaw 整体如何运行 | [多 Agent Runtime 总体设计](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | [HTTP API 设计](./01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)、[HTTP API 评审页](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html) |
+| CampusClaw 与各 Agent 基线有什么架构和实现差异 | [Agent 架构对比](./01-总体架构/07-Agent架构对比/README.md) | [按模块定位主设计](#module-index)、对比条目的源码证据与讲解要点 |
 | Tool 如何装配、发现和执行 | [CampusClaw 工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具精确契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md) |
 | 前端如何展示 Runtime 状态 | [CampusClaw 前端体验设计](./01-总体架构/04-CampusClaw前端体验/README.md) | [前端评审页](./01-总体架构/04-CampusClaw前端体验/frontend-review.html)、[Slash Command 前端专项](./04-命令与技能/00-Slash-Command通用模块/前端设计/README.md) |
 | 文件、配置和 Model Manager 边界 | [服务与接口导航](./02-服务与接口/README.md) | 附件服务、共享配置、Provider 契约和 HTTP 测试 Agent |
@@ -43,10 +46,34 @@
 `操作/`、`页面资源/` 或 `示例/`。文件名中保留产品名、协议名和稳定的机器契约名，
 以避免破坏生成脚本和外部语义。
 
+<a id="module-index"></a>
+
+### 2.1 模块索引
+
+模块编号是稳定的引用标识，不对应 Maven 制品，也不要求移动现有目录。
+主设计维护模块职责与目标，关联专题承接细节；研究资料提供证据，架构对比解释取舍。
+
+| 模块 | 主设计 | 关联专题与维护边界 |
+|---|---|---|
+| M01 · Agent Runtime 与多 Agent 编排 | [多 Agent Runtime](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | Loop、Turn、执行生命周期及父子 Session；工具装配引用 M03，HTTP 投影引用 M06 |
+| M02 · 模型与 Provider | [模型管理 Provider 契约](./02-服务与接口/03-模型管理Provider契约/README.md) | 模型目录、Provider 适配与调用取消；[共享客户端配置](./02-服务与接口/02-CampusMate共享客户端配置/README.md)维护服务连接配置 |
+| M03 · Tool 与受管执行环境 | [工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md)、工具发现、执行权限与 Session 隔离 |
+| M04 · Session 上下文与持久化 | [会话记忆 GaussDB](./03-数据与存储/01-会话记忆GaussDB/README.md) | 分支、压缩、恢复与存储；[pi 上下文研究](./05-研究资料/03-pi会话上下文/README.md)是证据入口，客户端事件历史归 M06 |
+| M05 · Command 与 Skill | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [Builtin](./04-命令与技能/01-内置命令/README.md)、[Skill Command](./04-命令与技能/02-技能命令/README.md)与[Help](./04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)分别维护行为 |
+| M06 · 事件契约与服务边界 | [Session Events](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md) | 内部[请求级 SSE](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-stream-design.md)与[历史](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)；[Mate 公共 Chat](./02-服务与接口/07-mate-service通用对话API/README.md)单独维护公共权威契约 |
+| M07 · 前端与渠道 | [前端体验](./01-总体架构/04-CampusClaw前端体验/README.md) | [Slash 交互](./04-命令与技能/00-Slash-Command通用模块/前端设计/README.md)、[飞书渠道](./01-总体架构/01-CampusClaw多Agent运行时/channel-feishu-v1-design.md)；消费 M06，不另定义事件权威语义 |
+| M08 · Agent 元数据与配置 | [Agent 元数据 GaussDB](./03-数据与存储/02-Agent元数据GaussDB/README.md) | 身份、版本及模型/Tool/Skill 绑定；[数据库模式研究](./03-数据与存储/03-Agent数据库模式/README.md)和[元数据草案](./06-元数据草案/README.md)不自动成为已实现契约 |
+| M09 · 附件与文件服务 | [CampusMate 附件服务](./02-服务与接口/01-CampusMate附件服务/README.md) | 文件上传、扫描、解析与删除；Runtime 文件引用边界由 M01/M06 引用 |
+| M10 · 调度与并发治理 | [工具系统](./01-总体架构/02-CampusClaw工具系统/README.md)中的 Cron 与执行入口 | Runtime 准入及控制事务归 M06；[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量与背压结构 |
+| M11 · 可观测性与测试 | [TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | [调用日志](./01-总体架构/05-CampusClaw调用日志/README.md)、[Runtime HTTP 测试](./02-服务与接口/04-Runtime-HTTP测试Agent/README.md)；区分验收要求、已有测试与实测结果 |
+
+认证、租户隔离、凭据传递和审计是跨模块产品约束，按实际权威边界在 M06、M03、M09、M11 中定义并交叉引用。
+新增专题先确定所属模块；多个模块共同变更时分别更新主设计，并在架构对比中关联同一差异条目。
+
 ## 3. Runtime 契约权威顺序
 
-1. [当前接口清单](./01-总体架构/01-CampusClaw多Agent运行时/接口契约/catalog.json) 唯一登记十个接口及其精确 JSON 源：八项保留契约 + 两项 Events v2。
-2. [统一接口页](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html) 是唯一当前接口详情入口；两项 Events 未整体确认，其他联动待决事项按接口标明。
+1. [当前接口清单](./01-总体架构/01-CampusClaw多Agent运行时/接口契约/catalog.json) 唯一登记当前接口及其精确 JSON 源；首页不重复维护接口数量。
+2. [统一接口页](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html) 是唯一当前接口详情入口；确认状态与实施边界在所属模块维护。
 3. [统一维护规则](./01-总体架构/01-CampusClaw多Agent运行时/chat-api-index.md) 管理权威顺序、生成、校验及旧入口退役。Markdown 负责设计原因与源码证据，不维护平行报文。
 4. 废弃的 Claw v1/v2 评审页直接删除，不保留迁移页或跳转占位；历史仅从 Git 追溯。Runtime HTTP 测试 Agent 的旧清单仅为固定提交的历史实现回归，不能证明当前 v2 已实现。
 
@@ -63,12 +90,11 @@ mate-service 通用对话 Events API 已确认事件提交、Chat 级 live SSE �
 operation；standalone HTML 是主要人类契约，OpenAPI 3.1 是同步的机器契约，均位于
 [`02-服务与接口/07-mate-service通用对话API/`](./02-服务与接口/07-mate-service通用对话API/)。
 
-本次 GET 精简与其他未合入分支的核查见[设计整合记录](./01-总体架构/01-CampusClaw多Agent运行时/design-integration-audit.md)。
-
 ## 4. 文档维护约定
 
-- 新专题先选择一级中文分类，再建立中文专题目录；不再向根目录平铺设计文件。
+- 新专题先确定模块归属及主设计，再选择一级中文分类和中文专题目录；不再向根目录平铺设计文件。
 - 专题入口统一使用 `README.md`，根 README 和所属分类 README 同时增加导航。
+- 模块内容、架构对比及同步要求见 [工作指引](AGENTS.md#按模块维护设计与-agent-架构对比)；每次架构变更同步维护受影响的比较条目。
 - 设计图使用 PlantUML，每个图纸专题保留一份 `diagram.puml`，并提交生成后的 SVG。
 - `.puml` 内容只使用英文 ASCII；中文路径在源证据注释中使用 URL 百分号编码。
 - 代码对齐的设计必须记录源码 commit、仓库相对路径以及相关符号或基线行号。
@@ -100,6 +126,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.0 | 2026-09-14 | 建立稳定模块索引与独立 Agent 架构对比入口，并明确随模块设计同步维护。 |
 | 2.5.3 | 2026-09-07 | 新增 Slash Command 前端专项导航：独立 Composer 状态、目录、草稿、临时结果、错误恢复、可访问性、交互评审页与生产协议门禁。 |
 | 2.5.2 | 2026-09-07 | Runtime Command 响应对齐既有 Session/Models 资源；Help 保留三个业务字段，相关专题和派生页面同步，全局类图不变。 |
 | 2.5.1 | 2026-09-07 | 清除废止与重复文档，明确专题单一维护职责；Help 派生展示，Mate 仅保留有效 GET 投影和待评审边界。 |
