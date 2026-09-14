@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -8,16 +8,16 @@
       "key": "createSession",
       "source": "接口契约/操作/01-create-session.json",
       "common": "接口契约/common.json",
-      "status": "原契约已确认",
-      "note": "创建会话规则保持不变。",
+      "status": "已确认目标契约 · 联动已同步",
+      "note": "Session 增加 mode，创建默认为 build；统一更新不改变 state=idle/running、使用量和既有读取边界。目标字段不代表源码已实现。",
       "design": "chat-http-v1-design.md#21-session-生命周期"
     },
     {
       "key": "getSession",
       "source": "接口契约/操作/02-get-session.json",
       "common": "接口契约/common.json",
-      "status": "原契约已确认 · 联动已同步",
-      "note": "Session 响应保持原契约；thinking 与新历史事件的可见性已同步联动，旧事件名不定义 Session Events。",
+      "status": "已确认目标契约 · 联动已同步",
+      "note": "Session 增加 mode，创建默认为 build；统一更新不改变 state=idle/running、使用量和既有读取边界。目标字段不代表源码已实现。",
       "design": "chat-http-v1-design.md#211-第二个已确认接口读取-session"
     },
     {
@@ -53,28 +53,12 @@
       "design": "chat-http-v1-design.md#241-get-session-models"
     },
     {
-      "key": "changeSessionModel",
-      "source": "接口契约/操作/07-change-session-model.json",
-      "common": "接口契约/common.json",
-      "status": "原契约已确认 · 联动已同步",
-      "note": "配置接口保持原契约；配置变更事件如何进入 Session Events 已统一对齐，不能用旧事件示例覆盖新 Events。",
-      "design": "chat-http-v1-design.md#242-put-session-model"
-    },
-    {
-      "key": "changeSessionThinking",
-      "source": "接口契约/操作/08-change-session-thinking.json",
-      "common": "接口契约/common.json",
-      "status": "原契约已确认 · 联动已同步",
-      "note": "配置请求和响应保持原契约；历史过滤与事件映射已确认并同步，已移除作废的旧事件名和游标失效指引。",
-      "design": "chat-http-v1-design.md#243-put-session-thinking"
-    },
-    {
-      "key": "changeSessionName",
-      "source": "接口契约/操作/14-change-session-name.json",
+      "key": "updateSession",
+      "source": "接口契约/操作/07-update-session.json",
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 待实现",
-      "note": "新增独立 Session 重命名入口；与 /name 共用名称规范化和写入服务，HTTP 写入额外使用 If-Match 保护并发更新。",
-      "design": "chat-http-v1-design.md#244-put-session-name"
+      "note": "统一 POST 更新名称、模型、思考和模式；按需提交、同事务生效，复用 Session ETag。仅名称允许运行中更新，执行配置要求 idle。",
+      "design": "chat-http-v1-design.md#242-post-session-统一更新"
     },
     {
       "key": "listSessionCommands",

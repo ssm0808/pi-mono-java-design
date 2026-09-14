@@ -26,7 +26,7 @@ const create = (markup, runScripts) => {
 
 (async () => {
   const fallback = create(source);
-  assert.equal(fallback.document.querySelectorAll('[data-static-review]').length, 11);
+  assert.equal(fallback.document.querySelectorAll('[data-static-review]').length, 9);
   for (const item of fallback.document.querySelectorAll('.catalog-item')) {
     const text = item.textContent;
     for (const label of ['作用', '调用上下文 Header', '参数与请求体', '响应']) {
@@ -44,7 +44,7 @@ const create = (markup, runScripts) => {
   const items = Array.from(surface.querySelectorAll('.catalog-item'));
   const models = JSON.parse(document.querySelector('[data-review-models]').textContent);
   const initialNodes = surface.querySelectorAll('*').length;
-  assert.equal(items.length, 11);
+  assert.equal(items.length, 9);
   assert.equal(enhanced.renders(), 0, 'Closed operations must not be initialized');
   assert.equal(surface.querySelectorAll('[data-api-shell] > *').length, 0);
   assert.ok(initialNodes < 200, `Initial live DOM unexpectedly large: ${initialNodes}`);
@@ -92,7 +92,7 @@ const create = (markup, runScripts) => {
   // Return to a previous operation without rebuilding it or losing its tab state.
   items[0].querySelector('summary').click();
   await pause();
-  assert.equal(enhanced.renders(), 11);
+  assert.equal(enhanced.renders(), 9);
   const lastAuth = models[0].operation.requestHeaderExamples.at(-1);
   assert.equal(items[0].querySelector('.auth-section [aria-pressed="true"]').dataset.authId, lastAuth.id);
   assert.equal(surface.querySelectorAll('[data-mounted]').length, 1);
@@ -108,7 +108,7 @@ const create = (markup, runScripts) => {
   await pause();
   observer.disconnect();
   assert.equal(mutations.length, 0, 'Scroll must not change the visualization DOM');
-  assert.equal(enhanced.renders(), 11);
+  assert.equal(enhanced.renders(), 9);
 
   assert.equal(enhanced.errors.length, 0, enhanced.errors.join('\n'));
   items[0].querySelector('summary').click();
@@ -141,7 +141,7 @@ const create = (markup, runScripts) => {
   broken.dom.window.close();
 
   console.log(JSON.stringify({
-    operationsTested: 11,
+    operationsTested: 9,
     initialLiveElements: initialNodes,
     peakLiveElements: peakNodes,
     initialDynamicRenders: 0,

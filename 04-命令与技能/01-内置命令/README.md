@@ -7,13 +7,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.10.0 |
-| 更新日期 | 2026-09-10 |
+| 文档版本 | 2.11.0 |
+| 更新日期 | 2026-09-14 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；已有核心 SPI，Help Handler/查询与缓存补齐仍为 target-only |
 | 响应复用源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`；既有 Session/Models API，Command 响应投影仍为 target-only |
-| Name 最新复核基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；已有命名服务和持久化，独立 HTTP Name API 仍为 target-only |
+| Name 最新复核基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；已有命名服务和持久化，统一 Session POST 仍为 target-only |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
 | 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
 | 状态 | 七个 Builtin 目标已由用户确认；公开执行为 target-only |
@@ -89,7 +89,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 | 1 | codex/builtin-command-core | 来源过滤、可执行定义、准入/Handler/Context、Contributor、快照与查重；实现设计、PlantUML/SVG、未占用序号 ADR；无 HTTP |
 | 2 | codex/builtin-command-readonly | Help/Status/Skills 服务、Contributor、Handler、DTO；Help 前置补齐 userCases 保存/重载、显式刷新旧缓存与读取/发布互斥；无 HTTP |
 | 3 | codex/builtin-command-name | display_name、Mapper/Repository/DTO 与 GET Session；无 Command 路由 |
-| 4 | codex/builtin-command-model | Model 窄服务与可选 expectedVersion；既有 PUT 条件更新不变 |
+| 4 | codex/builtin-command-model | Model 窄服务与可选 expectedVersion；统一 Session POST 复用条件更新规则 |
 | 5 | codex/builtin-command-thinking | Thinking 窄服务与同一事务入口 |
 | 6 | codex/compact-runtime-lifecycle | 操作锁、容量、Holder、持久化 Projector、30 分钟超时与独立终态 Future |
 | 7 | codex/builtin-command-compact | Compact Contributor/Handler/Application Service、中断绑定与清理 |
@@ -128,15 +128,17 @@ Skills 不触发刷新：无完整快照返回 AGENT_NOT_AVAILABLE；完整空�
 
 `t_sessions` 使用可空 `display_name`；GET Session 始终保留 `displayName`，即使为 null。
 修改去除两端空白、保留内部空白，拒绝空值、CR/LF、C0/C1、Unicode 双向覆盖/隔离字符及超过 80 UTF-8 字节。
-命名规则和 Repository 更新只保留一份。目标直接 `PUT /sessions/{sessionId}/name` 传入必填 expectedVersion，行锁内与 `If-Match` 复核；`/name` Command 不接收 ETag，保留锁内 last-commit-wins。同一归一值不升版本，running 允许两条入口修改。
+命名规则和 Repository 更新只保留一份。目标统一 `POST /sessions/{sessionId}` 的仅名称更新传入必填 expectedVersion，行锁内与 `If-Match` 复核；`/name` Command 不接收 ETag，保留锁内 last-commit-wins。同一归一值不升版本，running 允许两条入口修改。
 不写 `session.name.changed` 或通用命令事件，不修改 active leaf；重启只恢复当前名称。
 
-当前 `SessionNamingService` 只由 `NameCommandContributor` 进入，Controller 尚无 Name 路由。实施时由 Session 应用服务将
-`ChangeSessionNameRequestVO` 和 `If-Match` 转换为命名服务参数；请求 VO 负责必填与类型/未知字段边界，名称字节和 Unicode 规则由共享 Service 负责。无新增 Maven 依赖或数据库字段。
+当前 `SessionNamingService` 只由 `NameCommandContributor` 进入，Controller 尚无统一更新路由。实施时由 Session 应用服务将
+`UpdateSessionRequestVO` 和 `If-Match` 转换为命名服务参数；请求 VO 负责必填与类型/未知字段边界，名称字节和 Unicode 规则由共享 Service 负责。无新增 Maven 依赖或数据库字段。
+
+统一 POST 的组合字段准备复用本节名称规则，最终一次事务提交；不调用会自行提交的 execute，再拼接模型/思考更新。完整规则由[HTTP §2.4](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-update)维护。
 
 ## 6. Model / Thinking
 
-Repository 在行锁内支持可选 expectedVersion。既有 PUT 继续要求 If-Match 并返回 ETag；
+Repository 在行锁内支持可选 expectedVersion。统一 Session POST 继续要求 If-Match 并返回 ETag；
 Command 不接收 If-Match，使用锁内当前版本。同值操作不写领域 Entry。
 查询在 running 可用，修改在锁内重新检查并返回 SESSION_BUSY。
 Model 不可用为 MODEL_NOT_AVAILABLE；开启不受支持的 Thinking 为 THINKING_NOT_SUPPORTED；
@@ -146,7 +148,7 @@ Manager 不可用为 MANAGER_UNAVAILABLE。Model 切换到不支持 Thinking 的
 
 ![Compact 独立终态与清理](设计图/compact_command_execution.svg)
 
-[PlantUML 源码](设计图/diagram.puml#L83)
+[PlantUML 源码](设计图/diagram.puml#L84)
 
 只接受 idle Session 和空参数。空历史观察无副作用：不占容量、不改状态、不写 Entry，返回 compacted=false。
 真实压缩与 POST Events 共用操作锁、全局容量、Active Holder、Event Projector 和 30 分钟超时。
@@ -168,10 +170,10 @@ Builtin 请求拒绝 fileIds、未知字段、If-Match 和 Idempotency-Key。该
 |---|---|---|
 | help | displayName、description[]、userCases[] / AgentHelpResponseVO（target-only） | 无独立 API，保留最小业务结果；无 ETag |
 | status；name/thinking 空参查询 | 完整 Session / GetSessionResponseVO | [GET Session](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/02-get-session.json)，包含 ETag |
-| name 修改（包括同值） | 完整 Session / GetSessionResponseVO | [PUT Name](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/14-change-session-name.json)；响应含 ETag，Command 不要求 If-Match |
+| name 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)；响应含 ETag，Command 不要求 If-Match |
 | model 空参查询 | currentModelId、models[] / AvailableModelsResponseVO | [GET Models](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/06-list-session-models.json)；无 ETag |
-| model 修改（包括同值） | 完整 Session / GetSessionResponseVO | [PUT Model](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-change-session-model.json)，包含 ETag |
-| thinking 修改（包括同值） | 完整 Session / GetSessionResponseVO | [PUT Thinking](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/08-change-session-thinking.json)，包含 ETag |
+| model 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)，包含 ETag |
+| thinking 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)，包含 ETag |
 | compact | compacted:boolean / CompactionResponseVO（target-only） | 无独立 API，保留压缩有无变化；无 ETag |
 | skills | skills[{name, description}] / BoundSkillsResponseVO（target-only） | 无独立 API，保留最小列表；无 ETag |
 
@@ -198,7 +200,7 @@ RuntimeSessionResponseAssembler，模型查询使用 AvailableModelsResponseVO�
 
 同值更新返回原资源，updatedAt 和 ETag 不变，不写 Entry；发生变更时沿用既有资源版本规则。
 ETag 承担直接 Model/Thinking/Name 条件更新职责，不新增对实时 state/usage 的缓存版本承诺。
-Command 请求仍拒绝 If-Match，三个直接 PUT 均强制 If-Match；复用响应不等于复用请求准入规则。
+Command 请求仍拒绝 If-Match，统一 Session POST 强制 If-Match；复用响应不等于复用请求准入规则。
 领域 Entry 继续内部持久化，客户端用 GET Session/Events 对账；删除公开序号不替 Events v2 决定新的身份或恢复协议。
 
 ### 8.2 源码证据、差距与理由
@@ -212,7 +214,7 @@ Command 请求仍拒绝 If-Match，三个直接 PUT 均强制 If-Match；复用�
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java` · listModels、sessionResponse | Models 返回 ResultBean；PUT 返回完整资源和 ETag | Command 对应业务复用相同结果，避免客户端维护两套资源形状（架构变更） |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java` · getView | 从同一 RuntimeSessionDTO 生成资源及 ETag | 复用投影且保留同一权威快照，避免资源与版本不一致（架构变更） |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java`、`AvailableModelsResponseVO.java` | 已有 Session、currentModelId/models 响应；前者尚无 lifetimeUsage | 复用这些 VO，并补齐既有 Session 目标差距；不能以源码缺字段为由缩减已确认契约 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java` · listModels、changeModel、changeThinking、requireUpdated | PUT 共享窄服务，UPDATED/UNCHANGED 均投影 Session；要求条件版本 | 仅共享成功结果，不削弱原 If-Match 和错误语义（产品约束） |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java` · listModels、changeModel、changeThinking、requireUpdated | 基线 PUT 共享窄服务，UPDATED/UNCHANGED 均投影 Session；要求条件版本 | 仅共享成功结果，不削弱统一 POST 的 If-Match 和错误语义（产品约束） |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionModelConfigurationService.java` · query、execute、change、modelChangeEntries | execute 仍返回含 changed/sourceEventSeq 的内部 Model DTO；change 保留 Session 更新结果 | Command HTTP 投影尚待实现；让修改结果带权威 Session 数据，不透传内部 DTO（架构变更） |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/dto/SessionConfigurationUpdateDTO.java` | sourceEventSeq 是内部最后 Entry 序号 | 内部信息不必成为公共响应；不新增命令回执或公共路径（架构变更） |
 
@@ -231,14 +233,14 @@ sync-campusclaw、diff --check 和新增行数门禁；最终 HTTP PR 执行完�
 - Help 无参、空白归一、拒绝非空参数与附件；idle/running 均无副作用；显示名回退与空数组。
 - Help 的 userCases 远端 → 保存 → 重载 → 重启往返不丢失；旧缓存显式刷新、刷新失败保留旧值、单次完整快照与并发发布一致性。
 - Name Unicode/UTF-8 字节边界、并发、幂等、重启和 GET Session。
-- 直接 Name PUT 必须 If-Match，缺失 428、冲突 412；running 可改名且不返回 SESSION_BUSY；与 `/name` 运行同一组 Unicode/字节边界反例。
-- Model/Thinking 忙状态、能力、自动关闭、事件序号和 PUT ETag/If-Match 回归。
+- 仅名称的 Session POST 必须 If-Match，缺失 428、冲突 412；running 可改名且不返回 SESSION_BUSY；与 `/name` 运行同一组 Unicode/字节边界反例。
+- Model/Thinking 忙状态、能力、自动关闭、事件序号和 统一 POST ETag/If-Match 回归。
 - Compact 空历史、真实压缩、容量、锁竞争、超时、断线和清理；拒绝排队续跑，中断绑定衔接另评审。
 - 无通用命令或 Name 历史；POST Events SSE 完全不变。
 - openGauss 跨进程：创建 → Name/Model/Thinking → Help/Status/Skills → Compact → GET Session/Events。
 
 `command_response_contract.py` 和 `test_command_response_contract.py` 由 `validate-chat-api.py --full` 统一执行，
-直接比较各操作的资源形状，不另存 Session 字段清单。门禁同时检查直接 Name PUT
+直接比较各操作的资源形状，不另存 Session 字段清单。门禁同时检查仅名称的 Session POST
 的 `If-Match`、错误码、running 准入、同值结果和命名边界，并覆盖 JSON/HTML 字节同步、
 PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。Name 时序图已检查原尺寸；
 Compact 只因同源图块行号变化重新生成，全局主图不变。接口评审页桌面布局已查看，360px 浏览器像素布局未验收。
@@ -248,6 +250,7 @@ Compact 只因同源图块行号变化重新生成，全局主图不变。接口
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.11.0 | 2026-09-14 | 名称、模型、思考和模式统一由 Session POST 更新，Command 保留原入口与准入规则。 |
 | 2.10.0 | 2026-09-10 | 增加独立 Session Name API，与 `/name` 共用命名服务并以 `If-Match` 保护直接调用。 |
 | 2.9.0 | 2026-09-07 | POST 成功响应复用既有 Session/Models 业务资源与 ETag，移除 command/changed/sourceEventSeq；Help 保留三个业务字段，Compact/Skills 保留最小结果；记录 6f52fddc 源码差距，全局主图和请求/错误不变。 |
 | 2.8.0 | 2026-09-07 | 同步 GET 轻量描述符与状态过滤；Help 保留无参四字段，POST JSON 及各命令领域行为不变。 |

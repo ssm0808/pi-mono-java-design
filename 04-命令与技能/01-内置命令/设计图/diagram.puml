@@ -42,41 +42,42 @@ end note
 @enduml
 
 @startuml session_name_update
-title Shared Session Name Update Under Row Lock
-' Source evidence: pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java.
-' Source evidence: same commit modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/contributor/NameCommandContributor.java.
-' Source evidence: same commit modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeSessionRepository.java updateName.
-' Source evidence: same commit modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java updateName.
-' Observed behavior: slash name updates display_name; no direct HTTP name route exists.
-' Target-only architecture: the HTTP adapter supplies a required expected version.
-' Design reason: share validation and persistence while preventing lost direct-UI writes.
+title Session Name - Shared Validation and Separate Request Admission
+' Source evidence: pi-mono-java@09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java :: execute, normalizeName.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java :: requireMutableSession.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeSessionRepository.java :: updateName.
+' Observed behavior: slash name owns an independent row-locked update with no expected version.
+' Target-only architecture: Session POST reuses normalization and commits a combined candidate.
+' Design reason: shared name rules do not require HTTP to call a separately committing command.
 skinparam shadowing false
-participant "Direct Name API\n[target-only]" as API
-participant "Name Command Handler\n[existing]" as Handler
+participant "Session POST API\n[target-only]" as API
+participant "RuntimeSessionConfigurationService\n[extended singleton]" as App
+participant "Name Command Handler" as Handler
 participant SessionNamingService as Service
 database SessionRepository as Repo
-alt direct UI rename
-  API -> Service : displayName and expectedVersion from If-Match
+alt Session POST with displayName
+  API -> App : submitted fields and If-Match
+  App -> Service : normalizeName(displayName) [target-only pure preparation]
+  Service --> App : normalized name or rejection
+  App -> App : prepare all submitted fields
+  App -> Repo : updateConfiguration(candidate, expectedVersion)
+  Repo -> Repo : lock; recheck version and field-based admission\nall fields/events or none
+  Repo --> App : same or updated authoritative Session
+  App --> API : Session resource and same-snapshot ETag
 else slash command rename
-  Handler -> Service : arguments and no expectedVersion
+  Handler -> Service : execute(arguments), no expectedVersion
+  Service -> Service : same name normalization
+  Service -> Repo : updateName; lock current Session
+  Repo -> Repo : same name: no write\nchanged name: update name, time and version
+  Repo --> Service : same or updated authoritative Session
+  Service --> Handler : NameResultDTO from this Session
 end
-Service -> Service : strip outer whitespace and validate 80 UTF-8 bytes / Unicode
-Service -> Repo : lock Session row and optionally compare version
-alt expected version differs
-  Repo --> API : 412 version mismatch
-else same normalized name
-  Repo --> Service : unchanged Session and same ETag
-else new valid name
-  Repo -> Repo : update display_name, updated_at, and resource_version
-  Repo --> Service : updated authoritative Session
-end
-Service --> API : Session resource and ETag
-Service --> Handler : NameResultDTO from same Session
-note over Repo
-Running is allowed.
+note over App,Repo
+Only name: idle or running. Any execution field: idle.
 Slash keeps last-commit-wins under the row lock.
-Direct HTTP requires optimistic concurrency.
-No Entry or active-leaf mutation.
+HTTP checks If-Match even for an unchanged name.
+Name does not create an Entry or change active execution.
 end note
 @enduml
 

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.0 |
+| 文档版本 | 1.2.0 |
 | 更新日期 | 2026-09-14 |
 | 状态 | 推荐目标设计，target-only；本次不修改产品实现 |
 | 计划模式主基线 | DeepSeek Harness `0a53fb55bea101816fa226bb964ae2bed71c343b`，`dsh-0.1.2-alpha.2` |
@@ -13,7 +13,7 @@
 
 ## 1. 设计结论
 
-Session 的工作模式使用 `mode=plan|build` 表达，切换归属 Session 资源更新。`state=idle|running` 继续表示执行忙闲，两者共同描述 Session，不能合并为一个枚举。采用 DeepSeek 的“稳定工具清单、计划提示词、完整方案审核、批准后续跑”机制，接入 CampusClaw 已有的 `AgentSessionFactory`、`ManagedAgentSession`、Session Events 和数据库执行控制。
+名称、模型、思考和模式统一通过 `POST /sessions/{sessionId}` 更新；单字段与组合提交共享一笔事务。Session 的工作模式使用 `mode=plan|build` 表达，切换归属 Session 资源更新。`state=idle|running` 继续表示执行忙闲，两者共同描述 Session，不能合并为一个枚举。采用 DeepSeek 的“稳定工具清单、计划提示词、完整方案审核、批准后续跑”机制，接入 CampusClaw 已有的 `AgentSessionFactory`、`ManagedAgentSession`、Session Events 和数据库执行控制。
 
 用户在同一个 Session 中进入计划模式，Agent 查询资料、澄清需求并形成完整方案；用户批准指定方案后，原执行继续实施。多轮澄清可以跨越多次 `user.message`，无需更换 Agent 或 Session。
 
@@ -25,7 +25,7 @@ Session 的工作模式使用 `mode=plan|build` 表达，切换归属 Session �
 - **复用现有执行。** 继续使用 POST Events 对应 SSE、GET 历史、固定根消息和内部续跑段；等待审核期间 Session 仍为 `running`，不接受第二条普通消息。
 - **保持工具定义跨模式一致。** Runtime profile 增加一个内置工具 `ExitPlanMode`，在普通模式和计划模式中都保持注册。新增工具名称不等于新增元数据字段；普通模式调用它返回模式不匹配错误。
 
-本专题给出可实施的接口增量和结构方案；现有十一项接口的已确认报文仍由[统一契约目录](../01-CampusClaw多Agent运行时/接口契约/catalog.json)维护。这里的新接口、新事件和 Session 字段均是 target-only 增量，不能据此宣称现有客户端或服务器已经支持。正式纳入统一契约时，按 §8 的同一实施切片更新 JSON 源、生成页面和消费者，不维护另一套已发布契约。
+统一更新及 mode 已纳入[当前九项契约](../01-CampusClaw多Agent运行时/接口契约/catalog.json)，语义由[HTTP 主设计](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#24-模型目录与统一-session-更新)唯一维护。计划审核输入、pendingPlanEventId 和批准事件仍为[接口增量](interface-delta.md)，尚未进入当前 JSON 源；不能据此声称客户端或服务端已支持完整计划审核。
 
 ### 1.2 与 DeepSeek 的对应及差异
 
@@ -61,7 +61,7 @@ Session 的工作模式使用 `mode=plan|build` 表达，切换归属 Session �
 |---|---:|---|---|
 | idle | build | 无 | 普通模式；可进入计划、发送消息 |
 | idle | plan | 无 | 计划模式等待下一条用户输入；可退出计划、回答澄清问题 |
-| running | plan | 无 | 正在调研或生成方案；允许中断，不接受 M2 或 Session 更新 |
+| running | plan | 无 | 正在调研或生成方案；允许中断，不接受 M2 或执行配置更新；仅名称更新允许 |
 | running | plan | 有 | 等待计划审核；接受针对该 eventId 的批准/修订，或中断 |
 | running | build | 无 | 普通执行或批准后的实施；权限确认仍独立适用 |
 
@@ -87,7 +87,7 @@ Session 的工作模式使用 `mode=plan|build` 表达，切换归属 Session �
 |---|---|
 | `RuntimeSessionController`、`RuntimeEventController` | Spring 单例；分别增加 Session 更新和计划确认输入，保持 ResultBean / SSE 分工 |
 | `RuntimeMessageEventService`、`RuntimeExecutionCoordinator`、`RuntimeSessionControlDispatcher` | 既有 Spring 单例；分别在接受后应用模式快照、收尾时取消待交互、按固定执行目标领取计划决定；通过原有 registry/holder 定位执行 |
-| `RuntimeSessionConfigurationService`（扩展） | 既有 Spring 单例；增加 `updateSession`，处理 Session 可写属性、ETag、idle 与模式能力检查，复用响应组装；不持有活动 Agent |
+| `RuntimeSessionConfigurationService`（扩展） | 既有 Spring 单例；增加 `updateSession`，处理四类属性、ETag、按提交字段准入、最终配置与模式能力检查，复用响应组装；不持有活动 Agent |
 | `RuntimePlanReviewService`（新增） | Spring 单例；校验方案审核业务、构造事件，调用既有事务边界；不长期持有用户请求 |
 | `RuntimeExecutionPersistenceService`、两个 Repository | 既有 Spring 单例；增加计划等待和确认事务；数据库仍是跨实例权威 |
 | `RuntimePlanReviewAdapter`（新增） | 每个根执行一个；实现 `PlanReviewPort`，连接工具与既有等待/续跑机制 |
@@ -166,16 +166,16 @@ Child 继承发生在调用时。不能把根执行创建时的 `plan` 永久捕
 
 ## 5. HTTP 与事件接口增量
 
-精确新增字段、请求和完整事件示例由[接口增量设计](interface-delta.md)集中维护。本节只说明接入关系，不重复报文。
+统一 Session 更新及 requested 模式事件由[当前契约](../01-CampusClaw多Agent运行时/chat-api-review.html#updateSession)维护；尚未登记的计划审核报文由[接口增量设计](interface-delta.md)维护。本节只说明接入关系。
 
-Session 是配置权威资源，模式变化不建立子资源或模式专用 endpoint。当前源码与十一项目录尚无通用 Session 更新操作；本专题为其定义模式字段增量，落在 `RuntimeSessionController` 和既有 `RuntimeSessionConfigurationService`，不得描述为已存在的调用能力。现有 model/thinking/name 路径的整合由 Session 契约统一维护，不在本专题另建替代报文。
+Session 是配置权威资源。当前九项目标契约以统一 POST 更新名称、模型、思考和模式，入口为 `RuntimeSessionController`，应用编排复用 `RuntimeSessionConfigurationService`。该接口和模式执行仍是 target-only；源码尚未提供统一更新与计划能力。
 
 | 接口 | 目标增量 |
 |---|---|
-| `PATCH /campusclaw-service/v1/sessions/{sessionId}` | 更新 Session 的 `mode`（plan/build）；只允许 idle，要求 `If-Match`；返回完整 Session 和 ETag |
-| `GET /campusclaw-service/v1/sessions/{sessionId}` | 增加 `mode`、可空 `pendingPlanEventId`；同一快照组装资源与 ETag |
+| `POST /campusclaw-service/v1/sessions/{sessionId}` | 已登记四字段部分更新；含 mode/modelId/thinking 时要求 idle，仅名称可在 running 更新；统一要求 `If-Match`、原子提交与同源 Session/ETag |
+| `GET /campusclaw-service/v1/sessions/{sessionId}` | `mode` 已进入共享响应源；可空 `pendingPlanEventId` 仍为审核增量，接入时同步所有完整 Session 响应 |
 | `POST /campusclaw-service/v1/sessions/{sessionId}/events` | 在原三类输入上增加 `user.plan_confirmation`；复用接受回执和对应续跑 SSE |
-| `GET /campusclaw-service/v1/sessions/{sessionId}/events` | 增加完整 `agent.plan`、`user.plan_confirmation`、`session.mode_changed` 的同形历史投影 |
+| `GET /campusclaw-service/v1/sessions/{sessionId}/events` | requested 的 `session.mode_changed` 已登记；完整 `agent.plan`、`user.plan_confirmation` 与 planApproved 模式事件仍为审核增量 |
 
 不增加 `/plans` CRUD、单独批准 endpoint、独立 Session 订阅流、公共 Run/Execution ID 或幂等键。本期使用模式按钮调用 Session 更新接口，不同时扩展 `/plan` Slash Command；普通消息接口仍不解析 Slash 文本。
 
@@ -254,7 +254,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 切片 | 落地范围 | 必须验证 |
 |---|---|---|
-| S1：模式骨架 | Session 更新入口、mode 列、DTO/VO、ETag、既有配置服务、工厂提示词、默认 build | PATCH 只更新 mode，拒绝只读字段，其他属性保持；双 Session 隔离；模式与消息接受竞争使用事务快照；相同值不新增事件；新 Session 默认为 build、持久化后按实际 mode 恢复；元数据 JSON 字段完全不变 |
+| S1：模式骨架 | Session 更新入口、mode 列、DTO/VO、ETag、既有配置服务、工厂提示词、默认 build | 统一 POST 按提交字段更新四类属性，拒绝只读字段，未提交属性保持；双 Session 隔离；模式与消息接受竞争使用事务快照；相同值不新增事件；新 Session 默认为 build、持久化后按实际 mode 恢复；元数据 JSON 字段完全不变 |
 | S2：稳定工具与审核 | ExitPlanMode 工厂/profile、PlanReviewPort/Adapter、独占审核调用、统一待交互对象 | 普通/计划两次请求工具定义和顺序相同；非计划调用失败；未配置退出工具不能进入计划；无新增权限判断 |
 | S3：事务与续跑 | 三种新事件、审核决定表、控制轮询、原执行续跑段、提示词退出 | 批准指向精确计划；修订后旧ID失效；跨实例决定只领取一次；完整回执先行；旧 SSE 不接收新段；工具调用/结果无重复 |
 | S4：取消和恢复 | GET Session/历史投影、超时、中断、删除清理、压缩与 Child | approve/revise/interrupt 竞争；两类确认不能互相消费；断线无重放；未可靠结束不释放准入；批准后新 Child 使用 build；摘要不修改模式 |
@@ -274,5 +274,6 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-14 | 模式写入并入四字段统一 Session POST，复用原子更新与条件准入。 |
 | 1.1.0 | 2026-09-14 | 将 plan/build 归入 Session 资源更新，统一 mode 字段及既有配置服务接入。 |
 | 1.0.0 | 2026-09-14 | 基于 DeepSeek 在现有 Session、工具和事件控制框架上定义稳定元数据的计划模式与审核续跑。 |

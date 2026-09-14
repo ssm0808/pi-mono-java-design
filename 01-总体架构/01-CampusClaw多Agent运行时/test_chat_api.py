@@ -18,6 +18,69 @@ event_gate = importlib.util.module_from_spec(events_spec)
 events_spec.loader.exec_module(event_gate)
 
 
+http_spec = importlib.util.spec_from_file_location("http_gate", current.ROOT / "validate-chat-http-v1.py")
+http_gate = importlib.util.module_from_spec(http_spec)
+http_spec.loader.exec_module(http_gate)
+
+
+class SessionUpdateContractTest(unittest.TestCase):
+    def setUp(self):
+        _, self.models = current.load_catalog()
+        self.operation = next(model["operation"] for model in self.models
+                              if model["operation"]["operationKey"] == "updateSession")
+
+    def check(self):
+        http_gate.validate_session_update(self.operation, http_gate.response_codes(self.operation))
+
+    def test_optional_fields_cannot_become_full_replacement(self):
+        self.operation["requestBody"]["schema"]["required"] = ["modelId"]
+        with self.assertRaisesRegex(RuntimeError, "optional"):
+            self.check()
+
+    def test_false_cannot_be_removed_from_partial_examples(self):
+        for example in self.operation["requestBody"]["examples"]:
+            if "thinking" in example["value"]:
+                example["value"]["thinking"] = True
+        with self.assertRaisesRegex(RuntimeError, "Explicit false"):
+            self.check()
+
+    def test_update_cannot_make_if_match_optional(self):
+        next(item for item in self.operation["parameters"] if item["name"] == "If-Match")["required"] = False
+        with self.assertRaisesRegex(RuntimeError, "require If-Match"):
+            self.check()
+
+    def test_unchanged_cannot_advance_version(self):
+        next(item for item in self.operation["responses"] if item["id"] == "200-unchanged")["headers"]["ETag"] = '"new"'
+        with self.assertRaisesRegex(RuntimeError, "preserve resource and ETag"):
+            self.check()
+
+    def test_alternate_success_must_keep_complete_session_shape(self):
+        from command_response_contract import validate_response_reuse
+        response = next(item for item in self.operation["responses"] if item["id"] == "200-name-running")
+        del response["bodies"]["zh-CN"]["result"]["mode"]
+        with self.assertRaisesRegex(RuntimeError, "Fields differ"):
+            validate_response_reuse(self.models)
+
+    def test_creation_requires_build_mode(self):
+        from command_response_contract import validate_response_reuse
+        create = next(model["operation"] for model in self.models if model["operation"]["operationKey"] == "createSession")
+        response = next(item for item in create["responses"] if item["status"] == "201")
+        next(iter(response["bodies"].values()))["result"].pop("mode")
+        with self.assertRaisesRegex(RuntimeError, "default to build"):
+            validate_response_reuse(self.models)
+
+    def test_requested_mode_event_is_history_only_and_records_change(self):
+        event = {"type": "session.mode_changed", "eventId": "mode-event",
+                 "createdAt": "2026-09-14T00:00:00.000Z", "previousMode": "build",
+                 "mode": "plan", "reason": "requested"}
+        event_gate.validate_frame(event, history=True)
+        with self.assertRaisesRegex(ValueError, "allowed scope"):
+            event_gate.validate_frame(event)
+        for fields in ({"mode": "build"}, {"reason": "planApproved"}, {"sourceEventId": "root"}):
+            with self.subTest(fields=fields), self.assertRaises(ValueError):
+                event_gate.validate_frame({**event, **fields}, history=True)
+
+
 class CatalogTest(unittest.TestCase):
     def test_business_invalid_tool_arguments_remain_readable_events(self):
         event = {"type": "agent.tool_call", "eventId": "call-event", "sourceEventId": "root-message",
@@ -42,7 +105,7 @@ class CatalogTest(unittest.TestCase):
 
     def test_current_models_keep_source_payloads_and_review_decisions(self):
         manifest, models = current.load_catalog()
-        self.assertEqual(11, len(models))
+        self.assertEqual(9, len(models))
         for entry, model in zip(manifest["operations"], models):
             original = current.shared.expand_model(
                 self.read_json(current.ROOT / entry["common"]),
@@ -83,6 +146,7 @@ class CatalogTest(unittest.TestCase):
             with self.subTest(name=name):
                 with tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)
+                    (root / name).parent.mkdir(parents=True, exist_ok=True)
                     (root / name).touch()
                     with self.assertRaisesRegex(ValueError, "Retired artifact reintroduced"):
                         gate.validate_retired_artifacts(root, root)
@@ -90,7 +154,8 @@ class CatalogTest(unittest.TestCase):
     def test_retired_local_link_reintroduction_is_rejected(self):
         for source in ('[旧页](chat-events-v2-confirmed.html)',
                        '<a href="chat-http-v1-review.html#old">旧页</a>',
-                       '[旧页](../topic/chat-events-v2-%72eview.html)'):
+                       '[旧页](../topic/chat-events-v2-%72eview.html)',
+                       '[旧接口](接口契约/操作/07-change-session-model.json)'):
             with self.subTest(source=source), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 (root / "README.md").write_text(source, encoding="utf-8")

@@ -519,7 +519,7 @@
         "status": "200",
         "tabLabel": "200 · 配置与手动压缩",
         "label": "OK",
-        "summary": "独立场景，?page=1&limit=50；已关闭 thinking 仍不改变更早思考原文的可见性。配置与手动压缩不冒用 user.message 的 sourceEventId。",
+        "summary": "独立场景，?page=1&limit=4；已关闭 thinking 仍不改变更早思考原文的可见性。配置与手动压缩不冒用 user.message 的 sourceEventId。 包含统一 Session 更新产生的完整模式变更；该页示例按 limit=4 请求。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -546,6 +546,14 @@
                   "previousThinking": true,
                   "thinking": false,
                   "reason": "modelCapability"
+                },
+                {
+                  "eventId": "evt-mode-V4xN7sR9cT2m",
+                  "type": "session.mode_changed",
+                  "createdAt": "2026-09-08T02:01:00.000Z",
+                  "previousMode": "build",
+                  "mode": "plan",
+                  "reason": "requested"
                 },
                 {
                   "eventId": "f0000000000000000000000000000003",

@@ -1,192 +1,166 @@
-@startuml http_session_model_configuration
-title HTTP Session Model and Deep-Thinking Confirmed Configuration
-
-' Source evidence (pi-mono commit 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
-' packages/coding-agent/src/core/agent-session.ts, setModel and setThinkingLevel,
-' lines 1586-1600 and 1684-1730
-' packages/ai/src/types.ts, Model, lines 793-809
-' packages/ai/src/models.ts, getSupportedThinkingLevels, lines 900-910
-' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/CatalogRuntimeModelManager.java.
-' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/AvailableModelsResponseVO.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/ChangeModelRequestVO.java.
-' Observed behavior: current Java paths and model fields are snake_case.
-' Observed behavior: both pi baselines can list models and change the active model.
-' Their thinkingLevel values control model reasoning effort.
-' Confirmed product constraint: HTTP thinking is a boolean deep-thinking switch; false maps to off,
-' while true maps to a managed non-off level supported by the current model and Agent.
-' Security hardening: model discovery is Session-scoped and exposes only modelId.
-' Architecture change: HTTP configuration writes require an idle Session and a matching ETag. Thinking target: display original model reasoning; Java 4cc8dd86 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeV2EventProjector.java projectThinking still filters publicSummary.
-' Architecture change: Persisted original thinking remains visible; future thinking changes do not hide history.
-' Architecture change: actual configuration changes append durable domain events in the same transaction.
-' Architecture change: target HTTP fields use lowerCamelCase while If-Match keeps its header spelling.
-' Product constraint: all Runtime operations carry integration-context headers without local validation.
-' Design reason: prevent a configuration change from racing with an active execution while
-' returning the common Session resource after every successful mutation.
-
+@startuml http_session_update_classes
+' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java :: create, get, delete.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java :: requireMutableSession, requireUpdated.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java :: normalizeName, execute.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: updateModelLocked, updateThinkingLocked, updateName.
+' Observed behavior: existing services commit individual properties; there is no combined update.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java :: toolsFor, afterPropertiesSet.
+' Design reason: one candidate and one transaction prevent partial multi-field writes.
+' Java divergence: POST, preparation methods, candidate DTO and combined commit are target-only.
+title Unified Session Update - Complete Target Class View
+top to bottom direction
+allowmixing
 skinparam backgroundColor #FFFFFF
-skinparam shadowing false
-skinparam defaultFontName Arial
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 12
-skinparam sequence {
-  ArrowColor #475569
-  ActorBorderColor #475569
-  ActorFontColor #0F172A
-  LifeLineBorderColor #94A3B8
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
-  ParticipantBackgroundColor #F8FAFC
-  ParticipantFontColor #0F172A
-  GroupBorderColor #64748B
-  GroupFontColor #334155
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam packageTitleAlignment left
+skinparam nodesep 25
+skinparam ranksep 35
+skinparam ArrowColor #64748B
+hide empty members
+
+package "Web boundary" as WebLayer {
+  class "RuntimeSessionController" as API <<extended>> #FFF7DD
+  class "UpdateSessionRequestVO" as Request <<target-only>> #EAF2FF {
+    displayName / modelId
+    thinking / mode
+  }
+  class "ResultBeanAdapter" as Result <<existing>> #ECFDF5
 }
-skinparam note {
-  BackgroundColor #FFF7ED
-  BorderColor #C2410C
-  FontColor #7C2D12
+package "Application - Spring singletons" as AppLayer {
+  class "RuntimeSessionConfigurationService" as App <<extended>> #FFF7DD {
+    +updateSession(sessionId, ifMatch, requestVO)
+  }
+  class "SessionNamingService" as Name <<extended>> #FFF7DD
+  class "SessionModelConfigurationService" as Model <<extended>> #FFF7DD
+  class "SessionThinkingConfigurationService" as Thinking <<extended>> #FFF7DD
+  class "RuntimeSessionResponseAssembler" as Assembler <<extended>> #FFF7DD
+  class "SessionEtagFactory" as Etag <<existing>> #ECFDF5
+  class "PlanPolicyPromptComposer" as Policy <<target-only>> #EAF2FF
+  class "BuiltInToolProperties" as Profile <<extended>> #FFF7DD
 }
-
-actor Caller
-participant "Session Configuration\nAPI" as API
-database "Runtime Session\nStore" as Store
-participant "Model Manager" as Models
-participant ResultBeanAdapter
-
-group List available models
-  Caller -> API : GET /sessions/{sessionId}/models\ncontext headers
-  API -> API : do not validate integration credentials
-  API -> Store : read Agent binding and current modelId
-  Store --> API : agentId, enabledModels, current modelId
-  API -> Models : list callable models for Agent
-  Models --> API : ordered modelId string array
-  API -> ResultBeanAdapter : normal(ModelListResponseVO)
-  ResultBeanAdapter --> API : resCode, resMsg, result
-  API --> Caller : 200 OK\ncurrentModelId and models string array
-end
-
-group Change current model
-  Caller -> API : PUT /sessions/{sessionId}/model\ncontext headers, If-Match, and modelId
-  API -> API : do not validate integration credentials
-  API -> Store : require idle and compare ETag
-  Store --> API : current Session resource
-  API -> Models : resolve target model
-  Models --> API : authoritative model and reasoning capability
-  alt requested model equals current model
-    API -> Store : no mutation and no domain event
-  else model changes
-    opt target model does not support deep thinking
-      API -> API : normalize thinking to false
-    end
-    API -> Store : atomically update model, thinking, ETag,\nsession.model_changed reason requested,\nand optional session.thinking_changed reason modelCapability
-  end
-  Store --> API : updated Session resource and ETag
-  API -> ResultBeanAdapter : normal(SessionResponseVO)
-  ResultBeanAdapter --> API : resCode, resMsg, result
-  API --> Caller : 200 OK\nSession resource and ETag
-end
-
-group Change future deep-thinking default
-  Caller -> API : PUT /sessions/{sessionId}/thinking\ncontext headers, If-Match, and boolean thinking
-  API -> API : do not validate integration credentials
-  API -> Store : require idle and compare ETag
-  Store --> API : current Session resource
-  opt requested value is true
-    API -> Models : verify current model supports reasoning
-    Models --> API : managed non-off level or 422
-  end
-  alt requested value equals current value
-    API -> Store : no mutation and no domain event
-  else thinking changes
-    API -> Store : atomically update thinking, ETag,\nand session.thinking_changed reason requested
-  end
-  Store --> API : updated Session resource and ETag
-  API -> ResultBeanAdapter : normal(SessionResponseVO)
-  ResultBeanAdapter --> API : resCode, resMsg, result
-  API --> Caller : 200 OK\nSession resource and ETag
-end
-
-note over API,Models
-The public models field is a string array of modelId values.
-Names and display metadata come from the caller model catalog.
-The current model can be absent when it was disabled later.
+package "Request snapshot" as RequestLayer {
+  class "SessionUpdateCandidateDTO" as Candidate <<target-only, immutable>> #EAF2FF {
+    expectedVersion / submittedFields
+    final values / resolved capabilities
+  }
+  class "RuntimeSessionView" as Response <<extended>> #FFF7DD {
+    GetSessionResponseVO / ETag
+  }
+}
+package "Persistence / adapters" as PersistenceLayer {
+  interface "RuntimeSessionRepository" as Repo <<extended>> #FFF7DD {
+    +updateConfiguration(sessionId, expectedVersion, candidateDTO)
+  }
+  class "MyBatisRuntimeSessionRepository" as Impl <<extended>> #FFF7DD
+  interface "RuntimeSessionMapper" as Mapper <<extended>> #FFF7DD
+  interface "RuntimeModelManager" as Models <<existing>> #ECFDF5
+}
+database "GaussDB\nSession + entries + public events" as DB
+Name -[hidden]down- Model
+Model -[hidden]down- Thinking
+Assembler -[hidden]down- Policy
+Policy -[hidden]down- Profile
+API -[#2563EB]-> App : updateSession
+API ..> Request : strict binding
+API --> Result : wrap response VO
+App -[#2563EB]-> Name : normalize only
+App -[#2563EB]-> Model : resolve target only
+App -[#2563EB]-> Thinking : validate final model
+Model --> Models
+App -[#2563EB]-> Policy : validate plan policy
+App -[#2563EB]-> Profile : read fixed Runtime profile
+App -[#2563EB]-> Candidate : creates once
+App -[#2563EB]left-> Repo : one commit
+Repo ..> Candidate : version-bound values
+Repo <|.. Impl
+Impl --> Mapper : DTO only
+Mapper --> DB
+App --> Assembler : committed Session DTO
+Assembler --> Etag
+Assembler ..> Response : same snapshot
+API ..> Response
+note bottom of Candidate
+  No credentials and no mutable Agent.
+  Snapshot is not final admission.
+  Recheck version and state under the row lock.
 end note
-
-note over API,Models
-thinking controls whether deep thinking is enabled.
-The change applies only to executions accepted afterward.
-POST emits thinking events only for executions accepted with true.
-GET retains persisted original thinking after later toggles.
-Each read checks current access; ordinary pages have no expiry.
+note bottom of Repo
+  Name-only: idle or running.
+  Any execution field: idle, even for equal values.
+  One version increment; all fields/events or none.
 end note
-
-note over API,Store
-Durable session.model_changed and session.thinking_changed entries are visible in GET Events.
-They are audit facts and are not restored as model conversation messages.
-end note
+legend bottom left
+  Green: existing. Amber: extended. Blue: new target-only.
+  Blue arrows: new target-only calls.
+  Preparation methods must not independently commit.
+endlegend
 @enduml
 
-@startuml http_session_name_configuration
-title HTTP Session Name Update
-' Source evidence (pi-mono-java commit 510d882ca45541e0086586dab89c429c5a18cf20):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/contributor/NameCommandContributor.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeSessionRepository.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java.
-' Observed behavior: slash name persists display_name; no direct HTTP name route exists.
-' Target-only architecture: PUT name adds a direct route and expected-version adapter.
-' Design reason: direct UI rename and slash name share validation while HTTP avoids lost updates.
+@startuml http_session_update
+' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: rejectConfigurationUpdate, appendConfigurationEntries.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java :: getView.
+' Observed behavior: existing configuration writes use row locks and durable events.
+' Design reason: resolve a combined target before a single version-checked transaction.
+' Java divergence: unified POST and atomic four-property update are target-only.
+title Unified Session POST - Target Transaction
 skinparam backgroundColor #FFFFFF
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
 skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 12
-skinparam sequence {
-  ArrowColor #475569
-  ActorBorderColor #475569
-  ActorFontColor #0F172A
-  LifeLineBorderColor #94A3B8
-  LifeLineBackgroundColor #F8FAFC
-  ParticipantBorderColor #475569
-  ParticipantBackgroundColor #F8FAFC
-  ParticipantFontColor #0F172A
-  GroupBorderColor #64748B
-  GroupFontColor #334155
-}
-skinparam note {
-  BackgroundColor #FFF7ED
-  BorderColor #C2410C
-  FontColor #7C2D12
-}
+skinparam maxMessageSize 230
+autonumber
 actor Caller
-participant "Session Name\nAPI [target-only]" as API
-participant "Shared Session\nNaming Service" as Service
-database "Runtime Session\nStore" as Store
-participant ResultBeanAdapter
-Caller -> API : PUT /sessions/{sessionId}/name\ncontext headers, If-Match, and displayName
-API -> API : validate request VO and parse strong ETag
-API -> Service : normalized input and expected resource version
-Service -> Service : strip outer whitespace and validate 80 UTF-8 bytes
-Service -> Store : lock row and compare resource version\nidle or running is allowed
-Store --> Service : current Session resource
-alt version differs
-  Service --> API : 412 SESSION_VERSION_MISMATCH
-else normalized name equals current name
-  Service --> API : unchanged Session and same ETag
-else name changes
-  Service -> Store : atomically update displayName, updatedAt,\nand resource version; no Session Entry
-  Store --> Service : authoritative Session resource
-  Service --> API : updated Session and ETag
+participant "RuntimeSessionController" as API
+participant "Configuration application\nand shared validation" as App
+participant "Model Manager" as Models
+participant "Session Repository" as Repo
+database GaussDB as DB
+participant "Response assembler\nand ETag factory" as Response
+Caller -> API : POST /sessions/{sessionId}\nIf-Match + submitted fields
+API -> API : Strict VO binding\nReject null, unknown, duplicate or readonly keys
+API -> App : updateSession(sessionId, ifMatch, requestVO)
+App -> Repo : read current Session
+Repo --> App : current values and resource version
+App -> App : Precheck version and field-based admission\nNormalize name; derive final model first
+opt modelId submitted or thinking=true
+  App -> Models : Resolve required model and capabilities
+  Models --> App : Validated model snapshot, or failure
 end
-API -> ResultBeanAdapter : normal(SessionResponseVO)
-ResultBeanAdapter --> API : resCode, resMsg, result
-API --> Caller : 200 OK\nSession resource and ETag
-note over Service,Store
-Slash name calls this service without expectedVersion.
-Direct HTTP requires If-Match but does not require idle.
-Neither path creates an Entry or alters the active execution snapshot.
+App -> App : Validate final thinking and plan availability\nBuild immutable candidate with expectedVersion
+App -> Repo : updateConfiguration(candidate)
+group One transaction
+  Repo -> DB : SELECT Session FOR UPDATE
+  DB --> Repo : authoritative current Session
+  Repo -> Repo : Recheck existence, version and field-based idle
+  alt validation fails or version/state changed
+    Repo --> App : Reject entire update; no fields/events committed
+  else all final values equal
+    Repo --> App : UNCHANGED; original Session and version
+  else real changes
+    Repo -> DB : Update all changed properties\nAdvance updated_at/resource_version once
+    Repo -> DB : Append changed model, thinking, mode events in order\nNo name event
+    DB --> Repo : Commit all, or roll back all
+    Repo --> App : UPDATED; committed Session DTO
+  end
+end
+alt accepted
+  App -> Response : getView(committed DTO)
+  Response --> App : Session response VO + same-snapshot ETag
+  App --> API : RuntimeSessionView
+  API --> Caller : 200 ResultBean<Session>\nETag + no-store
+else rejected
+  API --> Caller : HTTP error + resCode/resMsg\nNo partial-success fields
+end
+note over Caller,DB
+  Name-only updates may run during execution.
+  An execution field requires idle, even when unchanged.
+  This POST never starts inference or approves a plan.
+  On an uncertain response, GET before deciding to retry.
 end note
 @enduml

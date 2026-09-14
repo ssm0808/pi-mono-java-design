@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.0 |
-| 更新日期 | 2026-09-10 |
+| 文档版本 | 1.5.0 |
+| 更新日期 | 2026-09-14 |
 | 设计仓变更前基线 | `2c10a70ceb105d6ff10ba9bd5a3fbf760c6a10a9`（1.2.0 清理起点） |
-| 变更性质 | 增加已确认的独立 Session 重命名目标契约；不声称 Runtime 已实现该入口 |
-| 唯一当前入口 | [当前十一项接口](chat-api-review.html) |
+| 变更性质 | 统一 Session POST 更新四类属性；组合写入及 mode 为 target-only |
+| 唯一当前入口 | [当前九项接口](chat-api-review.html) |
 
 ## 1. 为什么统一
 
@@ -17,19 +17,21 @@
 
 ## 2. 权威与状态
 
-- [catalog.json](接口契约/catalog.json) 唯一决定当前十一项 operation、顺序、精确源和关联设计。每个 method + path 只能出现一次，活动目录中的模型必须全部登记。
+- [catalog.json](接口契约/catalog.json) 唯一决定当前九项 operation、顺序、精确源和关联设计。每个 method + path 只能出现一次，活动目录中的模型必须全部登记。
 - [chat-api-review.html](chat-api-review.html) 是唯一当前人类接口页，从清单及精确模型生成，不手工编辑 HTML。
-- 九项普通契约复用 `接口契约/common.json`；两个 Events 使用 `事件契约/common.json`。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
+- 七项普通契约复用 `接口契约/common.json`；两个 Events 使用 `事件契约/common.json`。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
 - `review` 与 `reviewState` 继续记录原有确认决定；清单中的说明只解释其适用边界，不替代或自动提升确认状态。B01～B15 已实际提交确认；两个 Events 目标契约已定稿，question 列表清空，数值校准另列。
 - Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；本轮仅清除其已废止 Command POST 内容，保留 GET 投影及待评审公共边界。
 
 已确认的 eventId、无公共 entrySeq、data-only SSE、三输入、普通分页等不回退。
 thinking、配置与 Skill 映射已联动更新，Builtin JSON 保持；公共 Mate 边界独立管理。
-GetSession 与 PUT Thinking 的说明移除已作废 Events 名称及游标指引，参数和响应不变。
+GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和配置事件由当前精确源维护。
 普通整数分页不继承旧不透明 page 的失效规则；不能用旧配置说明覆盖新历史接口。
 
 共享 GET 已恢复精简后的字段、排序和状态过滤；证据与其他分支处理状态见[整合核查](design-integration-audit.md)。
 对应门禁增加两跳 GET 等值与负向测试；后续 Help/POST 修改不得恢复旧 GET 字段。
+
+三个属性专用 PUT 和 mode-only PATCH 不再作为目标入口或兼容别名。当前只保留一个 updateSession；名称/模型/思考的 Slash Command 仍是命令入口。
 
 ### 2.1 单一维护职责
 
@@ -54,7 +56,7 @@ Mate 公共 Events 和 FollowUp 未来专题各有独立职责，本次不退役
 
 | 旧入口 | 当前目标 |
 |---|---|
-| `chat-http-v1-review.html` | [全部十一项](chat-api-review.html) |
+| `chat-http-v1-review.html` | [全部九项](chat-api-review.html) |
 | `chat-events-v2-submit-review.html` | [提交事件与推送](chat-api-review.html#submitSessionEvent) |
 | `chat-events-v2-review.html` | [历史查询](chat-api-review.html#listSessionEvents) |
 | `chat-events-v2-confirmed.html` | [当前评审与确认边界](chat-api-review.html#listSessionEvents)，不保留已失效整体确认 |
@@ -75,7 +77,7 @@ python3 validate-chat-api.py --full
 node test_chat_api.cjs
 ```
 
-统一校验复用九项普通契约与两项 Events 的专项门禁，并增加：清单唯一性、活动源覆盖、
+统一校验复用七项普通契约与两项 Events 的专项门禁，并增加：清单唯一性、活动源覆盖、
 报文字节同步、旧文件及生成器不存在、全仓 Markdown/HTML 不链接已删除入口、
 旧模型不得回流、当前链接有效性；回归测试验证重新生成只写当前页，并拒绝旧文件和链接回流。
 Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统一门禁会拒绝过期产物；
@@ -87,31 +89,23 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 ## 4. 源码边界
 
-1.4.0 核对 `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20` 的 `SessionNamingService`、`RuntimeSessionRepository.updateName`、`RuntimeSessionController` 和 `RuntimeSessionConfigurationController`：底层命名已实现，但目前只有 `/name` Command 入口。独立 Name API 是 target-only 设计，不写成已实现行为。
+统一 Session 更新的源码核对、相对旧基线的变化及 target-only 差距由[HTTP 主设计 §8.1](chat-http-v1-design.md#81-统一-session-更新源码核对)唯一维护。基线 Java 09b32d8e 已有独立模型/思考 PUT、名称 Command 及各自事务，没有四字段组合 POST。设计退役不代表实现仓路由已删除。
 
-1.3.0 按已确认 B01～B15 补齐目标契约，源码证据沿用 Events 与 Skill 专题的 Java `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`、pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185`。新增关系、差异与验证见相应专题；下列 1.0～1.2 记录只说明此前整理工作。
+其他接口的固定源码证据继续由 [Events 设计](chat-events-design.md) 与 [FollowUp 设计](chat-follow-up-future-design.md)维护，不能将配置专项核对视为这些模块整体升级。旧入口清理核对基线为 Java `7b3769a5eabe2d131af3023631d7ad24e6d9a9e1`，相对 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 的下列文件无变化；该历史观察不延伸为最新主线缺陷。源码前缀为 `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/`。
 
-1.0.1 仅删除废弃文档及其生成入口，源码核对沿用 1.0.0 记录，不宣称本次重新核对实现主线。
-不重新分析 Agent Loop 或调整 pi 基线。
-保留既有 Runtime 语义证据 `pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185`，
-对应路径和符号继续由 [Events 设计](chat-events-design.md) 与 [FollowUp 设计](chat-follow-up-future-design.md) 维护。
-
-1.0.0 核对的实现主线 commit 为 `7b3769a5eabe2d131af3023631d7ad24e6d9a9e1`；
-此前边界基线为 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；以下三个文件在两基线间无变化。
-以下为仓库相对路径：
-
-| 源码 | 已观察事实与影响 |
+| 历史源码 / 符号 | 已观察事实 |
 |---|---|
-| `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeEventController.java` · `submit/list` | 实现仍为 POST SSE / GET 历史入口；路径相同不证明已具备 Session Events 请求和事件模型。 |
-| `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/vo/UserEventRequestVO.java` · `message/fileIds/rejectUnknownField` | 仍使用旧 message/fileIds，请求不是目标三输入联合类型；整理文档不等于完成实现迁移。 |
-| `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSessionControlController.java` · `steer/followUp/abort` | 主线仍声明三个独立接口；设计退役与代码删除属于不同交付。 |
+| `web/RuntimeEventController.java` · submit/list | POST SSE / GET 历史路径存在，路径相同不证明已具备目标请求和事件联合类型 |
+| `vo/UserEventRequestVO.java` · message/fileIds/rejectUnknownField | 旧 message/fileIds 请求形状；页面整理不等于完成实现迁移 |
+| `web/RuntimeSessionControlController.java` · steer/followUp/abort | 该提交仍声明三个独立控制接口，设计退役与代码删除属于不同交付 |
 
-当前十一项中，新增的 Name API 是目标设计；本次不修改 Java、数据库、权限、运行时行为或仍有效的 Mate 公共契约。
+本次统一 Session 更新已纳入当前精确源，包含 mode 和 requested 模式历史；计划审核输入、待审核指针及 planApproved 扩展仍由[计划接口增量](../06-CampusClaw计划模式/interface-delta.md)维护，不能将其标为已纳入当前事件联合类型。
 
 ## 5. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.0 | 2026-09-14 | 当前清单收敛为九项，四类 Session 修改共用 POST。 |
 | 1.4.0 | 2026-09-10 | 将独立 Session 重命名纳入当前十一项契约，明确它与 `/name` 共用服务且尚待实现。 |
 | 1.3.0 | 2026-09-08 | 关闭 B01～B15 产品待决项；共享 contractSections 维护事件字段与码表，HTML 同步；实现校准独立记录。 |
 | 1.2.0 | 2026-09-07 | 明确各专题唯一维护职责；清除 Mate 废止 POST 副本，Help 直接投影 Runtime，业务决定和未决状态不变。 |

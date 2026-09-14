@@ -47,6 +47,8 @@
 `操作/`、`页面资源/` 或 `示例/`。文件名中保留产品名、协议名和稳定的机器契约名，
 以避免破坏生成脚本和外部语义。
 
+Session 名称、模型、思考与模式的统一更新见[Runtime Session POST](01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#updateSession)，其与各 Agent 基线的取舍见[架构对比 A04](01-总体架构/07-Agent架构对比/README.md#a04)。
+
 <a id="module-index"></a>
 
 ### 2.1 模块索引

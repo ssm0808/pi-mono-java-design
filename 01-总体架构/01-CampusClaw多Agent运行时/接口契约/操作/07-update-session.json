@@ -1,0 +1,559 @@
+{
+  "operation": {
+    "shortName": "更新会话",
+    "operationKey": "updateSession",
+    "method": "POST",
+    "path": "/sessions/{sessionId}",
+    "summary": "统一更新 Session 名称、模型、思考和工作模式",
+    "description": "按明确提交的 displayName、modelId、thinking、mode 部分更新同一 Session，允许单字段或多字段组合。所有字段先校验、再在同一行锁事务中提交；任何字段失败整笔回滚，禁止依次调用旧修改接口。仅 displayName 请求在 idle/running 均可用；只要携带 modelId、thinking 或 mode，即使值相同也要求 idle，否则 SESSION_BUSY。请求使用 If-Match 保护同一资源版本；真实变化只增加一次 resourceVersion 并更新一次 updatedAt。模型、思考、模式实际变化按顺序追加 session.model_changed、session.thinking_changed、session.mode_changed；名称不写入 Session Entry。全部无变化返回原 Session 和 ETag。成功不启动模型、不批准计划，也不排队；既有思考原文不因关闭 thinking 而隐藏。",
+    "parameters": [
+      {
+        "$ref": "parameters.sessionId"
+      },
+      {
+        "in": "header",
+        "name": "If-Match",
+        "required": true,
+        "schema": "strong ETag",
+        "description": "最近一次 GET Session 或成功 Session 更新返回的单个强 ETag；必填，缺失 428，不匹配 412。禁止弱标签、通配符和标签列表。"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "description": "仅接受 displayName、modelId、thinking、mode，四项均可省略但至少提交一项；未提交字段保留（仅切换模型时可按能力自动关闭未提交的 thinking）。显式 null、空对象、类型强转、重复 JSON 键、未知字段和只读字段均拒绝。displayName 去除首尾空白后非空，保留内部空白，禁止 CR/LF、C0/C1 控制字符与双向文本覆盖/隔离字符，UTF-8 最多 80 字节。thinking 是 boolean，不接收 level/reasoningEffort；mode 只接受 plan/build。ID、state、pendingPlanEventId、usage 和时间戳不可写，不接收 provider、凭据或 Idempotency-Key；不在请求 VO 设置默认值。",
+      "example": {
+        "displayName": "园区网络故障分析",
+        "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+        "thinking": true,
+        "mode": "plan"
+      },
+      "examples": [
+        {
+          "label": "仅修改名称",
+          "description": "running 也可提交；不会修改执行配置。",
+          "value": {
+            "displayName": "教学楼网络排障"
+          }
+        },
+        {
+          "label": "仅切换模型",
+          "description": "省略 thinking，目标模型不支持思考时沿用自动关闭规则。",
+          "value": {
+            "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS"
+          }
+        },
+        {
+          "label": "仅修改思考",
+          "description": "false 必须作为明确提交的布尔值处理，不能当成省略。",
+          "value": {
+            "thinking": false
+          }
+        },
+        {
+          "label": "仅修改模式",
+          "description": "要求 idle；切到 build 不等于批准任何计划。",
+          "value": {
+            "mode": "build"
+          }
+        }
+      ],
+      "schema": {
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "modelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"
+          },
+          "thinking": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "plan",
+              "build"
+            ]
+          }
+        }
+      }
+    },
+    "responses": [
+      {
+        "id": "200-updated",
+        "status": "200",
+        "tabLabel": "200 · 多字段更新",
+        "label": "OK",
+        "summary": "示例同时修改四项；目标模型支持思考且计划能力可用，返回同一提交的完整 Session 与 ETag。",
+        "headers": {
+          "ETag": "\"snp-U8kR4mN6vT2\"",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-09-14T10:15:00+08:00",
+              "mode": "plan"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-unchanged",
+        "status": "200",
+        "tabLabel": "200 · 配置未变",
+        "label": "OK",
+        "summary": "以最新 ETag 重复相同目标且校验通过，返回原 Session、原 ETag 和原 updatedAt。",
+        "headers": {
+          "ETag": "\"snp-U8kR4mN6vT2\"",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-09-14T10:15:00+08:00",
+              "mode": "plan"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-name-running",
+        "status": "200",
+        "tabLabel": "200 · 运行中仅改名",
+        "label": "OK",
+        "summary": "仅提交 displayName；执行快照不变，running 期间也允许。",
+        "headers": {
+          "ETag": "\"snp-N8mQ2vK5xR4\"",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "claude-sonnet-4-5",
+              "state": "running",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-09-10T10:15:00+08:00",
+              "mode": "build"
+            }
+          }
+        }
+      },
+      {
+        "status": "200",
+        "label": "OK",
+        "summary": "仅切换到不支持思考的模型且省略 thinking，原 thinking=true 自动关闭；该归一与模型更新原子提交。",
+        "headers": {
+          "ETag": "\"snp-H7vK3mQ8cN2\"",
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": false,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:20:31+08:00",
+              "mode": "build"
+            }
+          }
+        },
+        "id": "200-model-normalized",
+        "tabLabel": "200 · 模型能力归一"
+      },
+      {
+        "id": "400-invalid-session-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_SESSION_ID",
+        "label": "Bad Request",
+        "summary": "Session 标识不符合类型化 ID 规则。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "sessionId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The sessionId format is invalid."
+          }
+        }
+      },
+      {
+        "id": "400-invalid-session-update-request",
+        "status": "400",
+        "tabLabel": "400 · INVALID_SESSION_UPDATE_REQUEST",
+        "label": "Bad Request",
+        "summary": "非法 JSON、重复键、空更新、null、错误类型、非法字段值、名称规范化失败、未知/只读字段或非法 If-Match 形状。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_UPDATE_REQUEST",
+            "resMsg": "Session 更新请求不符合约束。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_UPDATE_REQUEST",
+            "resMsg": "The Session update request is invalid."
+          }
+        }
+      },
+      {
+        "id": "404-session-not-found",
+        "status": "404",
+        "tabLabel": "404 · SESSION_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "Session 不存在或已删除。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        }
+      },
+      {
+        "id": "409-session-busy",
+        "status": "409",
+        "tabLabel": "409 · SESSION_BUSY",
+        "label": "Conflict",
+        "summary": "请求携带 modelId/thinking/mode 且 Session 非 idle；整笔失败，displayName 也不写入。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_BUSY",
+            "resMsg": "该 Session 正在处理另一条用户消息。"
+          },
+          "en-US": {
+            "resCode": "SESSION_BUSY",
+            "resMsg": "The Session is processing another user message."
+          }
+        }
+      },
+      {
+        "id": "412-session-version-mismatch",
+        "status": "412",
+        "tabLabel": "412 · SESSION_VERSION_MISMATCH",
+        "label": "Precondition Failed",
+        "summary": "If-Match 与锁内当前版本不一致；先 GET 对账，不自动重放。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_VERSION_MISMATCH",
+            "resMsg": "Session 已发生变化，请刷新后重试。"
+          },
+          "en-US": {
+            "resCode": "SESSION_VERSION_MISMATCH",
+            "resMsg": "The Session has changed. Refresh it before retrying."
+          }
+        }
+      },
+      {
+        "id": "422-model-not-available",
+        "status": "422",
+        "tabLabel": "422 · MODEL_NOT_AVAILABLE",
+        "label": "Unprocessable Content",
+        "summary": "提交的 modelId 不在实时可选集合；不区分不存在、未绑定与无权使用。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MODEL_NOT_AVAILABLE",
+            "resMsg": "指定模型当前不可用于该 Session。"
+          },
+          "en-US": {
+            "resCode": "MODEL_NOT_AVAILABLE",
+            "resMsg": "The specified model is not available for this Session."
+          }
+        }
+      },
+      {
+        "id": "422-thinking-not-supported",
+        "status": "422",
+        "tabLabel": "422 · THINKING_NOT_SUPPORTED",
+        "label": "Unprocessable Content",
+        "summary": "显式 thinking=true 与合并后的目标模型不兼容；全部字段回滚。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "THINKING_NOT_SUPPORTED",
+            "resMsg": "当前模型不支持深度思考。"
+          },
+          "en-US": {
+            "resCode": "THINKING_NOT_SUPPORTED",
+            "resMsg": "The current model does not support deep thinking."
+          }
+        }
+      },
+      {
+        "id": "422-plan-mode-unavailable",
+        "status": "422",
+        "tabLabel": "422 · PLAN_MODE_UNAVAILABLE",
+        "label": "Unprocessable Content",
+        "summary": "请求 mode=plan 但提示词或 ExitPlanMode 不可用；全部字段不变。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "PLAN_MODE_UNAVAILABLE",
+            "resMsg": "当前 Session 的计划模式不可用。"
+          },
+          "en-US": {
+            "resCode": "PLAN_MODE_UNAVAILABLE",
+            "resMsg": "Plan mode is unavailable for this Session."
+          }
+        }
+      },
+      {
+        "id": "428-if-match-required",
+        "status": "428",
+        "tabLabel": "428 · IF_MATCH_REQUIRED",
+        "label": "Precondition Required",
+        "summary": "缺少 If-Match。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "IF_MATCH_REQUIRED",
+            "resMsg": "修改 Session 配置必须携带 If-Match。"
+          },
+          "en-US": {
+            "resCode": "IF_MATCH_REQUIRED",
+            "resMsg": "If-Match is required to modify Session configuration."
+          }
+        }
+      },
+      {
+        "id": "500-session-update-failed",
+        "status": "500",
+        "tabLabel": "500 · SESSION_UPDATE_FAILED",
+        "label": "Internal Server Error",
+        "summary": "Session 属性、领域事件、updatedAt 或资源版本事务失败并全部回滚。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_UPDATE_FAILED",
+            "resMsg": "Session 更新失败。"
+          },
+          "en-US": {
+            "resCode": "SESSION_UPDATE_FAILED",
+            "resMsg": "Failed to update the Session."
+          }
+        }
+      },
+      {
+        "id": "503-manager-unavailable",
+        "status": "503",
+        "tabLabel": "503 · MANAGER_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "本请求需要模型校验而 Model Manager 暂不可用，全部字段不变。仅名称、仅模式、仅关闭思考不增加无关 Manager 调用。",
+        "headers": {
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "Model Manager 暂时不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "Model Manager is temporarily unavailable. Try again later."
+          }
+        }
+      }
+    ],
+    "contractSections": [
+      {
+        "title": "字段合并与准入",
+        "columns": [
+          "输入",
+          "规则"
+        ],
+        "rows": [
+          [
+            "displayName",
+            "与 /name 共用一次名称规范化；仅名称更新允许 idle/running。"
+          ],
+          [
+            "modelId",
+            "实时验证当前 Agent allowlist 与 Model Manager 可用模型交集；同值也校验，失败不更新其他字段。 格式沿用 ^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$，不新增模型 ID 规则。"
+          ],
+          [
+            "thinking",
+            "先解析本次最终 modelId，再校验 thinking。显式 true 且目标模型不支持时返回 422 THINKING_NOT_SUPPORTED，整笔失败。显式 false 关闭；省略且模型实际切换到不支持思考的模型时归一为 false。"
+          ],
+          [
+            "mode",
+            "plan 需要有效计划提示词和固定 Runtime profile 中的 ExitPlanMode；build 不依赖该能力。与 state 分离，不增加 Agent/Tool/Skill 元数据字段。"
+          ],
+          [
+            "多字段请求",
+            "先形成候选最终配置，再执行一次事务；资源版本不匹配、busy、模型不可用、思考或模式不支持都不得部分写入名称。"
+          ],
+          [
+            "省略与 null",
+            "只接受已出现且非 null 的字段；不以 Boolean false 或缺省值判断是否提交。更新请求没有缺省值。"
+          ],
+          [
+            "同值请求",
+            "仍执行适用的版本、状态、模型/计划能力检查；规范化后的最终配置无变化才返回原 ETag，不更新 updatedAt、不追加历史。"
+          ]
+        ]
+      },
+      {
+        "title": "事务、事件与恢复",
+        "columns": [
+          "事项",
+          "约束"
+        ],
+        "rows": [
+          [
+            "事务",
+            "锁定 t_sessions 后复核存在、expectedVersion 和按提交字段决定的 idle 条件；一次更新全部配置与 updated_at/resource_version，领域事件同事务保存。"
+          ],
+          [
+            "历史",
+            "按 model → thinking → mode 顺序只追加实际变化。显式 thinking 的 reason=requested；省略后自动关闭为 modelCapability。直接模式更新 reason=requested；不产生名称事件。"
+          ],
+          [
+            "响应",
+            "200 ResultBean<GetSessionResponseVO> 与同一提交快照生成的 ETag，Cache-Control: no-store；失败只有 resCode/resMsg。"
+          ],
+          [
+            "结果不确定",
+            "先 GET Session 对账，不自动使用新 ETag 重放旧意图；If-Match 是并发前置条件，不是执行幂等键。"
+          ],
+          [
+            "状态边界",
+            "主动设置 mode=build 只影响之后的消息，不启动执行或确认计划；等待计划审核时只有仅名称更新可走此接口。"
+          ]
+        ]
+      }
+    ]
+  },
+  "review": {
+    "questions": []
+  }
+}

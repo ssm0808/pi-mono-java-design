@@ -395,7 +395,7 @@ package "Local Vite serve process [target-only]" {
   class LocalAuthConfig <<server-only credentials>>
 }
 class "Browser localStorage\nSession metadata only" as Storage <<persistent resource>>
-class "Runtime Session API\nexisting plus target Name API" as Runtime <<external API>>
+class "Runtime Session API\nexisting plus target Session POST" as Runtime <<external API>>
 class "AuthCenter\nlogin and Set-Cookie" as AuthCenter <<external API>>
 WorkbenchView *-- Composer
 WorkbenchView *-- HeaderEditor
@@ -409,7 +409,7 @@ WorkbenchCoordinator *-- "1" DraftStore
 WorkbenchCoordinator --> SessionIndexRepository : selection never reorders
 SessionIndexRepository *-- "0..*" SessionIndexEntry
 WorkbenchCoordinator --> HeaderStore : snapshot latest values
-WorkbenchCoordinator --> RuntimeGateway : GET, events, and PUT name
+WorkbenchCoordinator --> RuntimeGateway : GET, events, and Session POST
 RuntimeGateway <|.. RuntimeHttpGateway
 RuntimeHttpGateway --> Runtime
 SessionIndexRepository --> Storage : schema v2

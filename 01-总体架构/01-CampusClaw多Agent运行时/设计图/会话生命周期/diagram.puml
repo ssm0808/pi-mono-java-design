@@ -55,7 +55,7 @@ API -> Models : resolveDefaultModel(snapshot)
 Models --> API : authoritative ModelDescriptor
 API -> Ids : generate globally unique sessionId
 Ids --> API : session- plus 32 hex UUID characters
-API -> Store : insert SessionRecord\nstate idle, thinking true, version 1, zero lifetimeUsage
+API -> Store : insert SessionRecord\nstate idle, thinking true, mode build, version 1, zero lifetimeUsage
 Store --> API : committed
 API -> ResultAdapter : normal(CreateSessionResponseVO)
 ResultAdapter --> API : resCode, resMsg, result
@@ -64,7 +64,7 @@ API --> Mate : 201 Created plus Location\nResultBean with SessionResource in res
 note over API,Store
 Before commit, a failure does not expose sessionId.
 After commit, state is idle and no MessageEntry or AgentSession exists.
-The persisted deep-thinking switch is true.
+The persisted deep-thinking switch is true; mode defaults to build.
 AgentSession is initialized lazily by the first user event.
 The response contains only Session identity, current defaults,
 coarse state, and creation time.
@@ -115,7 +115,11 @@ title CampusClaw GetSession Confirmed Response
 ' Architecture change: lifetimeUsage is atomically accumulated in t_session_materialized.
 ' Design reason: Session state is the coarse control-plane signal; GET Session Events and the
 ' initiating POST stream own durable recovery and live execution detail.
-' Observed behavior: these wire-contract fields exist in GetSessionResponseVO.
+' Source evidence (pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java.
+' Observed behavior: the response has displayName but no mode field.
+' Product constraint: target-only Session mode is independent from coarse execution state.
+' Design reason: GET, unified POST and Command share one complete Session projection.
 
 left to right direction
 skinparam backgroundColor #FFFFFF
@@ -142,6 +146,7 @@ class GetSessionResult <<target_wire_contract>> {
   +sessionId: session- plus 32 hex UUID characters
   +agentId: string
   +modelId: string
+  +displayName: string or null
   +createdAt: timestamp
   +updatedAt: timestamp
 }
@@ -172,6 +177,12 @@ enum DeepThinkingSwitch {
   true
 }
 
+enum SessionMode <<target_only>> {
+  build
+  plan
+}
+
+GetSessionResult --> "1" SessionMode : mode
 GetSessionResult --> "1" SessionState : state
 GetSessionResult --> "1" DeepThinkingSwitch : thinking
 GetSessionResult --> "1" Usage : lifetimeUsage

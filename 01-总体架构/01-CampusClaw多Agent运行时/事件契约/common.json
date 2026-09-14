@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.52.0",
+    "version": "1.53.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -78,7 +78,7 @@
     }
   },
   "eventContract": {
-    "version": "2026-09-09.1",
+    "version": "2026-09-14.1",
     "semanticStatus": "confirmed",
     "detailStatus": "implementation-ready",
     "toolErrorCodes": {
@@ -139,6 +139,7 @@
       "session.status_idle",
       "session.model_changed",
       "session.thinking_changed",
+      "session.mode_changed",
       "session.compacted"
     ]
   },
@@ -224,6 +225,12 @@
           "previousThinking/thinking/reason",
           "全部必填",
           "完整事件，无 phase/sourceEventId；两个布尔值，reason=requested/modelCapability；后者表示切换模型导致自动关闭。"
+        ],
+        [
+          "session.mode_changed",
+          "previousMode/mode/reason",
+          "全部必填",
+          "完整模式事件；previousMode 与 mode 为不同的 plan/build 值，reason=requested。由统一 Session POST 产生，只进入历史；无 phase/sourceEventId，不进入模型上下文。计划批准产生的扩展字段由计划审核专题另行维护。"
         ],
         [
           "session.compacted",

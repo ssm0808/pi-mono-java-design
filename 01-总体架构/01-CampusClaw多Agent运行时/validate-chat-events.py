@@ -17,7 +17,7 @@ MODEL_PATH = ROOT / "事件契约" / "操作" / "01-submit-session-event.json"
 HISTORY_PATH = ROOT / "事件契约" / "操作" / "02-list-session-events.json"
 USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
 STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "session.status_idle"}
-HISTORY_TYPES = {"session.model_changed", "session.thinking_changed", "session.compacted"}
+HISTORY_TYPES = {"session.model_changed", "session.thinking_changed", "session.mode_changed", "session.compacted"}
 BATCH_CHOICES = {f"BATCH-20260908-1-{group}": "A-recommended" for group in ("tools", "events", "lifecycle", "integration")}
 RETIRED_STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", "tool.result", "session.status.idle"}
 CONFIRMED_CHOICES = {
@@ -187,6 +187,11 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
             require("sourceEventId" not in event and event.get("reason") in {"requested", "modelCapability"}
                     and all(type(event.get(k)) is bool for k in ("previousThinking", "thinking"))
                     and event["previousThinking"] != event["thinking"], "invalid thinking change")
+        elif event["type"] == "session.mode_changed":
+            require(set(event) == {"eventId", "type", "createdAt", "previousMode", "mode", "reason"}
+                    and event["reason"] == "requested"
+                    and event["previousMode"] in {"plan", "build"} and event["mode"] in {"plan", "build"}
+                    and event["previousMode"] != event["mode"], "invalid requested mode change")
         else:
             require(event.get("reason") in {"manual", "threshold", "overflow"}
                     and all(type(event.get(k)) is int and event[k] >= 0 for k in ("tokensBefore", "estimatedTokensAfter")), "invalid compaction")
@@ -587,7 +592,7 @@ def validate_history_model(model: dict, post: dict) -> None:
             if response["id"] != "200-configuration":
                 require(result["events"] == expected[response["id"]], "history complete records drift from POST frames")
             else:
-                require([e["type"] for e in result["events"]] == ["session.model_changed", "session.thinking_changed", "session.compacted"], "configuration projection coverage")
+                require([e["type"] for e in result["events"]] == ["session.model_changed", "session.thinking_changed", "session.mode_changed", "session.compacted"], "configuration projection coverage")
             seen = set()
             for event in result["events"]:
                 validate_frame(event, receipt=event["type"].startswith("user."), history=True)
@@ -690,7 +695,7 @@ def validate_review_pages(post: dict) -> None:
     history_parser = validator.ContractHtmlParser()
     history_parser.feed(history_source)
     histories, history_scripts = validator.parse_generated_models(history_parser)
-    require(len(histories) == history_parser.static_review_count == 11 and len(history_scripts) == 1,
+    require(len(histories) == history_parser.static_review_count == 9 and len(history_scripts) == 1,
             "show one unified catalog")
     history = next(model for model in histories if model["operation"]["operationKey"] == "listSessionEvents")
     validate_history_model(history, post)
@@ -710,7 +715,7 @@ def validate_review_pages(post: dict) -> None:
     parser = validator.ContractHtmlParser()
     parser.feed(source)
     models, scripts = validator.parse_generated_models(parser)
-    require(len(models) == parser.static_review_count == 11 and len(scripts) == 1, "show one unified catalog")
+    require(len(models) == parser.static_review_count == 9 and len(scripts) == 1, "show one unified catalog")
     merged = next(model for model in models if model["operation"]["operationKey"] == "submitSessionEvent")
     validate_model(merged)
     validator.validate_executable_script(scripts[0])

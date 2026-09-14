@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.17.2 |
-| 状态 | B01～B15 已全部确认，Session Events 与 Skill 联动契约已定稿；新增独立 Session 重命名目标接口；当前十一项接口共用一个契约入口 |
+| 文档版本 | 3.18.0 |
+| 状态 | B01～B15 已全部确认；名称、模型、思考与模式统一由 Session POST 更新；当前九项接口共用一个契约入口 |
 | 当前传输结论 | 同一 POST 提交与接收对应 SSE，另保留 GET 普通页码历史；执行仍是内部状态，无 `executionId/runId` |
 | 设计仓分析基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
@@ -29,7 +29,7 @@
 
 Thinking 展示模型返回的原始推理，具体规则与源码依据见[Thinking 展示](chat-events-history-design.md#thinking-original-text)。
 
-计划模式增量由[计划模式专题](../06-CampusClaw计划模式/README.md)维护，基于 DeepSeek，以 Session 更新承载 mode=plan/build，接入既有配置服务、工厂、工具和执行控制；该 target-only 专题提供主图、接口与验收，不代表当前十一项契约已支持计划功能。架构取舍见 [A03](../07-Agent架构对比/README.md#a03)。
+计划模式增量由[计划模式专题](../06-CampusClaw计划模式/README.md)维护，基于 DeepSeek，以 Session 更新承载 mode=plan/build，接入既有配置服务、工厂、工具和执行控制；该 target-only 专题提供主图、接口与验收，mode 与 requested 配置事件已登记到九项契约，计划审核部分仍为专题增量，均不代表运行时已经实现。架构取舍见 [A03](../07-Agent架构对比/README.md#a03)。
 
 ## 1. 当前结论
 
@@ -78,7 +78,7 @@ POST 的决定与未决项仍见 [合并 POST 保留评审页](chat-api-review.h
 旧确认页及其他分散评审页已删除，不保留变更提示或跳转占位；旧 JSON POST 仅从 Git 历史追溯。
 B01～B15 四组已全部按推荐确认，精确字段、错误码与示例已补齐；没有新的产品确认门槛。
 
-独立 `/abort`、`/steers`、`/follow-ups` 保持退役；新增一个与 `/name` 共用业务服务的重命名接口，当前目标共 11 个接口。
+独立 `/abort`、`/steers`、`/follow-ups` 保持退役；名称、模型、思考与模式由统一 Session POST 更新，当前目标共 9 个接口。
 停止执行通过 user.interrupt 完成，调整方向采用实际停止后新提交消息。本期不支持排队。
 [FollowUp 未来设计](chat-follow-up-future-design.md) 仅记录数据库交接方向，启用另行评审，
 不改变 M1 未完成前拒绝 M2，不新增当前消息队列。
@@ -112,7 +112,7 @@ FollowUp 或 Abort 都是新的 HTTP 请求，不复用旧连接。公共 Comman
 
 ## 2. 契约权威顺序
 
-1. [catalog.json](接口契约/catalog.json) 唯一决定当前清单：九项普通接口与两项 Session Events，各操作只出现一次。
+1. [catalog.json](接口契约/catalog.json) 唯一决定当前清单：七项普通接口与两项 Session Events，各操作只出现一次。
 2. [chat-api-review.html](chat-api-review.html) 是唯一当前接口详情页；按接口展开，展示各自确认状态和待联动事项。
 3. 清单引用的 JSON 模型是精确编辑源；Markdown 保存设计理由、已确认决定、未决项和注明 commit 的源码证据。
 
@@ -189,27 +189,19 @@ CampusClaw 不读取 `chatId` 或最终用户身份。它按内部 `sessionId` �
 
 ## 4. 当前目标 HTTP 接口清单
 
-基础路径统一为 `/campusclaw-service/v1`。
+基础路径为 `/campusclaw-service/v1`。以下九项以 catalog 为唯一清单；统一 Session 更新及 mode 仍为 target-only。
 
-| # | Method | Path | 响应形态 | 作用 |
-|---:|---|---|---|---|
-| 1 | `POST` | `/agents/{agentId}/sessions` | `201` ResultBean | 创建并初始化 Session；默认模型由 Agent 配置选择，`thinking=true` |
-| 2 | `GET` | `/sessions/{sessionId}` | `200` ResultBean | 读取当前模型、是否深度思考和 `idle/running` 状态 |
-| 3 | `DELETE` | `/sessions/{sessionId}` | `204` | 逻辑删除并安排 Runtime 数据清理，只保留最小 tombstone |
-| 4 | `POST` | `/sessions/{sessionId}/events` | `200 text/event-stream` | 提交三类 `user.*` 之一，完整首帧与对应推送；已确认目标 |
-| 5 | `GET` | `/sessions/{sessionId}/events` | `200` ResultBean | 普通整数 `page/nextPage` 读取完整事件；分页规则已确认 |
-| 6 | `GET` | `/sessions/{sessionId}/models` | `200` ResultBean | 返回可用 `modelId` 字符串数组 |
-| 7 | `PUT` | `/sessions/{sessionId}/model` | `200` ResultBean | 修改后续用户消息使用的 Session 默认模型 |
-| 8 | `PUT` | `/sessions/{sessionId}/thinking` | `200` ResultBean | 开关后续用户消息是否启用深度思考 |
-| 9 | `PUT` | `/sessions/{sessionId}/name` | `200` ResultBean | 直接重命名 Session；与 `/name` 共用业务规则，直接调用要求 `If-Match` |
-| 10 | `GET` | `/sessions/{sessionId}/commands` | `200` ResultBean | 返回按状态过滤的 Builtin/Skill 轻量清单，固定 Builtin 顺序后追加 Skill |
-| 11 | `POST` | `/sessions/{sessionId}/command` | Builtin JSON / Skill SSE | Builtin 完成后返回；Skill 复用事件执行与恢复 |
-
-本表第 4、5 项采用最新 Session Events；第 9 项是已确认的 target-only 重命名契约；其余八项保留既有契约。配置事件与 Skill 的衔接已按 B12～B14 同步。
-三个独立控制接口不再计入目录或作为兼容别名。
-
-公共资源没有 `Run`。一次用户输入会触发内部 active execution，但调用方使用
-Session、Entry 和 SSE 恢复，不获得 `runId`，也不存在 GetRun 或 Run Events。
+| # | Method | Path | 成功响应 | 职责 |
+|---|---|---|---|---|
+| 1 | `POST` | `/agents/{agentId}/sessions` | `201` JSON | 创建 Runtime Session |
+| 2 | `GET` | `/sessions/{sessionId}` | `200` JSON | 读取 Session 当前资源 |
+| 3 | `DELETE` | `/sessions/{sessionId}` | `204` 无响应体 | 删除 Runtime Session |
+| 4 | `POST` | `/sessions/{sessionId}/events` | `200` SSE | 一次 POST 提交用户事件，在同一响应中接收 SSE |
+| 5 | `GET` | `/sessions/{sessionId}/events` | `200` JSON | 分页查询与 POST SSE 一致的完整事件 |
+| 6 | `GET` | `/sessions/{sessionId}/models` | `200` JSON | 列出 Session 当前可选模型 |
+| 7 | `POST` | `/sessions/{sessionId}` | `200` JSON | 统一更新 Session 名称、模型、思考和工作模式 |
+| 8 | `GET` | `/sessions/{sessionId}/commands` | `200` JSON | 列出当前 Session 可调用的 Builtin 和 Skill 命令形态 |
+| 9 | `POST` | `/sessions/{sessionId}/command` | `200` JSON / SSE | 执行 Builtin（JSON）或 Skill（SSE）命令 |
 
 ## 5. 迁移前 v1 HTTP 与 SSE 行为
 
@@ -229,7 +221,7 @@ Session、Entry 和 SSE 恢复，不获得 `runId`，也不存在 GetRun 或 Run
 `ResultBeanAdapter.normal(result)`；独立仓提供默认实现，公司环境以 Bean 替换并在
 适配器内部调用真实 `ResultBeanFactory.getFactory().normal(result)`。
 
-全部十一项操作都携带调用上下文 Header。JWT 示例固定为
+全部九项操作都携带调用上下文 Header。JWT 示例固定为
 `X-HW-ID: credential-jwt` 与 `Authorization: Bearer opaque-token`；APPKEY 示例固定为
 `X-HW-ID: credential-appkey` 与 `X-HW-APPKEY: opaque-appkey`。这些都是当前源码测试使用的
 非生产示例值。`X-HW-ID` 表示用户凭据 ID，不是公司、服务或应用标识。CampusClaw
@@ -448,7 +440,7 @@ Runtime 持久化 `assistant.message.completed` 和 `session.compaction.complete
 
 Agent 目录决定默认模型候选，Model Manager 仍是模型 descriptor、可用性、凭据和
 调用的最终权威。Session 可以在 idle 时切换 `modelId`；每次用户事件接受时读取
-当前 `modelId/thinking` 形成内部执行快照。Provider 的结构化增量由 Runtime
+当前 `modelId/thinking/mode` 形成内部执行快照。Provider 的结构化增量由 Runtime
 转换为已确认的 Assistant/Tool SSE 事件，不把 Provider model ID、API Key、
 base URL 或成本字段公开给 mate-service。
 
@@ -496,7 +488,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 | 架构变更 | Mate 发现改为 `ListMateTools({skillName?})` 稳定 JSON 与实时查询；Call 通过 Session 名称到 ID 缓存解析，miss 时 single-flight 自动刷新完整有效集合，实际执行不重试 |
 | 架构变更 | `Agent({agentName,task})` 只解析直接绑定 Child；公共 `AgentSessionFactory` 创建独立 Child Session 实例，父子使用相同类型和执行语义但隔离消息、工作区、工具与上下文 |
 | 架构变更 | HTTP-only Slash 模块使用不可变 Definition、Strategy Handler、Composite Registry、Contributor 和 Admission Policy；增加命令不修改中央分派；Builtin 与 Skill 由用户统一实现；Builtin 来源过滤不是全局命名空间限制 |
-| 架构变更 | 当前 `displayName` 与资源版本由 CampusClaw Session 持有；不保存 Name Entry 或通用命令生命周期；只有 Model/Thinking/Compact 复用既有领域历史 |
+| 架构变更 | 当前 `displayName` 与资源版本由 CampusClaw Session 持有；不保存 Name Entry 或通用命令生命周期；Model/Thinking/Compact 复用既有领域历史；Mode 增加独立配置事件 |
 | 架构变更 | Assistant/Compaction Usage 持久化并累计 lifetimeUsage；模型、thinking、compaction 领域事件历史可见，工具 delta 与压缩 started/failed 保持瞬态 |
 | 架构变更 | refresh 只影响下一次空闲 Session 执行；模型懒校准事件先于 user.message，无有效 default 时不接受消息 |
 | 产品约束 | 浏览器命令接口只识别 `chatId`，CampusClaw 内部契约只识别 `sessionId`；ChatSessionResolver 维护稳定映射，公共接口不泄露 Runtime 标识 |
@@ -517,6 +509,7 @@ CampusClaw POST Events 对附件只消费有序 `fileIds`，把它们编码为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.18.0 | 2026-09-14 | 统一 Session POST 更新四类属性，保留名称与执行配置的准入差异。 |
 | 3.17.2 | 2026-09-14 | 同步 Session 资源更新承载 plan/build 的计划模式边界。 |
 | 3.17.1 | 2026-09-14 | 关联保持元数据稳定的计划模式目标增量与统一架构对比。 |
 | 3.17.0 | 2026-09-10 | 新增独立 Session 重命名目标接口，与 `/name` 共用服务并以 `If-Match` 保护直接写入。 |

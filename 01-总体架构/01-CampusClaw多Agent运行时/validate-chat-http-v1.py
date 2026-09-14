@@ -33,15 +33,13 @@ SLASH_DESIGN_PATHS = (
 )
 HELP_ROOT = REPOSITORY_ROOT / "04-命令与技能/01-内置命令/Help-Agent使用指南"
 HELP_RESULT_FIELDS = {"displayName", "description", "userCases"}
-EXPECTED_OPERATION_COUNT = 9
+EXPECTED_OPERATION_COUNT = 7
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
     ("GET", "/sessions/{sessionId}"),
     ("DELETE", "/sessions/{sessionId}"),
     ("GET", "/sessions/{sessionId}/models"),
-    ("PUT", "/sessions/{sessionId}/model"),
-    ("PUT", "/sessions/{sessionId}/thinking"),
-    ("PUT", "/sessions/{sessionId}/name"),
+    ("POST", "/sessions/{sessionId}"),
     ("GET", "/sessions/{sessionId}/commands"),
     ("POST", "/sessions/{sessionId}/command"),
 }
@@ -380,15 +378,13 @@ def validate_response_contract(
         validate_create_session(agent_pattern, session_pattern, operation)
     elif key in {
         ("GET", "/sessions/{sessionId}"),
-        ("PUT", "/sessions/{sessionId}/model"),
-        ("PUT", "/sessions/{sessionId}/thinking"),
-        ("PUT", "/sessions/{sessionId}/name"),
+        ("POST", "/sessions/{sessionId}"),
     }:
         success = next(response for response in operation["responses"] if response["status"] == "200")
         result = next(body["result"] for body in success["bodies"].values() if isinstance(body, dict))
         require("displayName" in result, f"SessionResource is missing displayName: {key}")
-        if key == ("PUT", "/sessions/{sessionId}/name"):
-            validate_name_mutation(operation, codes)
+        if key == ("POST", "/sessions/{sessionId}"):
+            validate_session_update(operation, codes)
     elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
     elif key == ("GET", "/sessions/{sessionId}/commands"):
@@ -437,32 +433,51 @@ def validate_response_contract(
         validate_help_operation(operation)
 
 
-def validate_name_mutation(operation: dict[str, Any], codes: set[tuple[str, str]]) -> None:
-    require(set(operation["requestBody"]["example"]) == {"displayName"},
-            "PUT Name request must contain only displayName")
-    parameter_headers = {item["name"] for item in operation["parameters"] if item["in"] == "header"}
-    require("If-Match" in parameter_headers, "PUT Name must require If-Match")
+def validate_session_update(operation: dict[str, Any], codes: set[tuple[str, str]]) -> None:
+    fields = {"displayName", "modelId", "thinking", "mode"}
+    request = operation["requestBody"]
+    require(set(request["example"]) == fields, "Unified Session example must show all four fields")
+    schema = request["schema"]
+    require(schema["type"] == "object" and schema["minProperties"] == 1
+            and schema["additionalProperties"] is False and set(schema["properties"]) == fields,
+            "Session update must allow nonempty partial updates with no additional fields")
+    require(not schema.get("required") and not any("default" in field for field in schema["properties"].values()),
+            "Partial update must keep all four fields optional and without defaults")
+    require(schema["properties"]["thinking"] == {"type": "boolean"}, "Thinking must remain boolean")
+    require(schema["properties"]["mode"] == {"type": "string", "enum": ["plan", "build"]},
+            "Mode must use plan/build without a request default")
+    examples = [case["value"] for case in request["examples"]]
+    require({frozenset(case) for case in examples} == {frozenset({field}) for field in fields},
+            "Every individual field must have a partial-update example")
+    require({"thinking": False} in examples, "Explicit false must not be treated as omission")
+    require(any(item.get("name") == "If-Match" and item.get("required") is True
+                for item in operation["parameters"]), "Session POST must require If-Match")
     for expected in {
-        ("400", "INVALID_SESSION_NAME_REQUEST"),
-        ("404", "SESSION_NOT_FOUND"),
-        ("412", "SESSION_VERSION_MISMATCH"),
-        ("428", "IF_MATCH_REQUIRED"),
-        ("500", "SESSION_NAME_UPDATE_FAILED"),
+        ("400", "INVALID_SESSION_UPDATE_REQUEST"), ("404", "SESSION_NOT_FOUND"),
+        ("409", "SESSION_BUSY"), ("412", "SESSION_VERSION_MISMATCH"),
+        ("422", "MODEL_NOT_AVAILABLE"), ("422", "THINKING_NOT_SUPPORTED"),
+        ("422", "PLAN_MODE_UNAVAILABLE"), ("428", "IF_MATCH_REQUIRED"),
+        ("500", "SESSION_UPDATE_FAILED"), ("503", "MANAGER_UNAVAILABLE"),
     }:
-        require(expected in codes, f"PUT Name is missing {expected}")
-    require(("409", "SESSION_BUSY") not in codes, "PUT Name must remain available while running")
+        require(expected in codes, f"Session POST is missing {expected}")
     serialized = json.dumps(operation, ensure_ascii=False)
-    for phrase in ("UTF-8", "80", "idle/running", "/name", "不写入 Session Entry"):
-        require(phrase in serialized, f"PUT Name contract is incomplete: {phrase}")
-    successes = [item for item in operation["responses"] if item["status"] == "200"]
-    require({item.get("id") for item in successes} == {"200-name-updated", "200-name-unchanged"},
-            "PUT Name must document changed and same-value success")
-    first, second = successes
-    first_body = next(iter(first["bodies"].values()))["result"]
-    second_body = next(iter(second["bodies"].values()))["result"]
-    require(first_body == second_body and first["headers"]["ETag"] == second["headers"]["ETag"],
-            "PUT Name same-value result must retain resource and ETag")
-    require(first_body["state"] == "running", "PUT Name must show the running mutation scenario")
+    for phrase in ("UTF-8", "80", "idle/running", "/name", "名称不写入 Session Entry",
+                   "整笔", "显式 null", "重复", "目标模型", "不启动", "未提交"):
+        require(phrase in serialized, f"Session update contract is incomplete: {phrase}")
+    cases = {case["id"]: case for case in operation["responses"] if case["status"] == "200"}
+    require(set(cases) == {"200-updated", "200-unchanged", "200-name-running", "200-model-normalized"},
+            "Session update must cover combined, unchanged, running-name and normalization cases")
+    result = lambda identity: next(iter(cases[identity]["bodies"].values()))["result"]
+    require(result("200-updated") == result("200-unchanged")
+            and cases["200-updated"]["headers"]["ETag"] == cases["200-unchanged"]["headers"]["ETag"],
+            "Unchanged update must preserve resource and ETag")
+    require(result("200-name-running")["state"] == "running", "Name-only update remains available while running")
+    require(result("200-updated")["state"] == "idle" and result("200-updated")["mode"] == "plan",
+            "Combined execution settings require idle")
+    require(result("200-model-normalized")["thinking"] is False, "Preserve omitted-thinking normalization")
+    for case in cases.values():
+        require(case["headers"].get("Cache-Control") == "no-store" and "ETag" in case["headers"],
+                "Session update response must carry a noncached resource and ETag")
 
 
 def validate_help_descriptor(descriptor: dict[str, Any]) -> None:

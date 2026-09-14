@@ -1,54 +1,16 @@
 # 计划模式接口增量
 
-版本：1.1.0；日期：2026-09-14；状态：**target-only 推荐设计，尚未纳入当前十一项已确认接口的报文源，也未实现**。
+版本：1.2.0；日期：2026-09-14；状态：**target-only 推荐设计，统一 Session 更新与 requested 模式事件已登记；计划审核部分尚未纳入当前报文源，全部新增能力仍待实现**。
 
 本文件只定义计划功能的新增内容。现有 Header、普通消息、工具确认、ResultBean、SSE 和历史分页继续引用[当前契约](../01-CampusClaw多Agent运行时/chat-api-review.html)。这里的报文属于目标增量示例，正式纳入时移入统一 operation JSON 和 `eventContract`，本文件随后仅保留理由及链接，不产生第二份当前接口契约。
 
-## 1. 更新 Session 的工作模式
+## 1. 统一 Session 更新与审核字段增量
 
-`PATCH /campusclaw-service/v1/sessions/{sessionId}`，operation 为 `updateSession`。
+名称、模型、思考和模式已统一登记到 `POST /campusclaw-service/v1/sessions/{sessionId}`（updateSession）。精确请求、单字段与组合示例、原子性、错误和 Header 只由[操作 07](../01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)维护；设计理由见[HTTP 主设计 §2.4](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#24-模型目录与统一-session-更新)。本文件不再维护模式更新报文副本。
 
-工作模式是 Session 可写属性，采用 Session 资源的部分更新：进入计划传 `{"mode":"plan"}`，进入执行模式传 `{"mode":"build"}`。这是目标 Session 更新契约；当前目录与源码尚无该通用操作，不能把它写成已实现接口。本专题只定义它承载的 mode 增量，后续其他可写属性由同一 Session 更新契约维护。
+mode 已是共享 Session 响应必填字段，创建默认 build；state 仍为 idle/running。仅名称请求可在 running 更新；只要携带 mode/modelId/thinking，均需 idle、If-Match 与一次原子提交。主动设置 build 不批准计划、不启动模型。
 
-请求携带既有调用上下文 Header、`Content-Type: application/json`、必填强 ETag `If-Match`，可选 `Accept-Language`。沿用配置接口的凭据边界，不新增 `access-token` 要求。PATCH 表示只更新明确提交的可写属性，未提交的 Session 属性保持原值；不把完整 GET 资源原样回传作更新请求。
-
-```json
-{"mode": "plan"}
-```
-
-| 规则 | 定义 |
-|---|---|
-| 请求 | 本专题定义的可写字段为 mode，值只允许小写字符串 plan/build；首版只开放该字段时，缺少 mode、空对象、null、大小写变体、boolean 和未知字段均拒绝；不在请求 VO 设置默认值 |
-| 只读边界 | state、pendingPlanEventId、ID、usage、时间戳等服务端管理字段不能写入；不能通过 state=idle 释放执行或通过 pendingPlanEventId 指定审核目标 |
-| 准入 | 锁内验证 Session 存在、ETag 一致、state=idle；running 即使提交相同 mode 也返回 SESSION_BUSY |
-| plan 可用性 | Runtime 有可用计划提示词且固定工具 profile 包含 ExitPlanMode；不检查模型工具元数据中的计划属性；改为 build 不依赖退出工具可用 |
-| 相同值 | 在前置条件满足时返回原 Session 与 ETag；不追加事件、不增加资源版本 |
-| 真实变化 | 同事务更新 mode、resource_version/updated_at 并追加模式领域 Entry 与完整公共事件 |
-| 成功 | 200 ResultBean，result 为完整 GetSessionResponseVO，带同源 ETag、no-store 和 Content-Language；只为请求边界新增 UpdateSessionRequestVO |
-
-Session 响应统一增加以下字段：
-
-| 字段 | 类型 | 规则 |
-|---|---|---|
-| `mode` | 必填 string，plan/build | 当前工作模式；新 Session 默认 build，默认值由 Service 应用 |
-| `pendingPlanEventId` | 必填 string 或 null | 只有当前有效等待计划审核时为该 agent.plan.eventId；其他情况为 null |
-
-`state=idle|running` 保留其执行状态含义，与 `mode` 分开。GET、创建、Session 更新及所有复用 Session 资源的配置/Command 成功响应同步这两个字段；创建时返回 build/null。创建请求保持原格式，模式通过 Session 更新设置。
-
-| HTTP / resCode | 触发条件 |
-|---|---|
-| 400 / `INVALID_SESSION_UPDATE_REQUEST`（新增） | 非法 JSON、空更新、非法 mode、未知或只读字段 |
-| 400 / `INVALID_SESSION_ID` | 既有 Session ID 校验失败 |
-| 404 / `SESSION_NOT_FOUND` | Session 不存在或已删除 |
-| 409 / `SESSION_BUSY` | 当前 Session 非 idle |
-| 412 / `SESSION_VERSION_MISMATCH` | If-Match 过期 |
-| 428 / `IF_MATCH_REQUIRED` | 缺少 If-Match |
-| 422 / `PLAN_MODE_UNAVAILABLE`（新增） | 请求 plan 时缺少提示词或退出工具；恢复计划执行前亦检查该条件 |
-| 500 / `SESSION_UPDATE_FAILED`（新增） | 属性、历史和资源版本更新事务失败并回滚 |
-
-先校验请求格式及 If-Match 是否存在，再依次检查 Session 存在、版本、idle、模式能力并写入。mode 的格式与枚举由请求 VO/Jackson 边界校验；Service 负责可写属性、状态和转换，Repository 在事务内复核版本与忙闲状态。复用现有配置更新结果的 UPDATED/UNCHANGED/NOT_FOUND/BUSY/VERSION_MISMATCH，不另建模式更新结果层。
-
-设置 build 只影响后续普通消息，不启动模型、不批准历史方案。等待计划审核时 Session 为 running，普通 Session 更新仍被拒绝；批准指定方案使用下一节确认事件，在审核事务内更新同一 mode 属性并续跑，无需前端再发一次 PATCH。
+计划审核接入时，GET、创建、更新及复用 Session 的 Command 响应还须统一增加 `pendingPlanEventId: string|null`：仅当前有效审核等待时指向 agent.plan.eventId，其他时候为 null。该字段为审核增量，尚未进入当前响应源；它是只读字段，不能由 Session 更新指定或清空。
 
 ## 2. 提交审核决定
 
@@ -142,18 +104,7 @@ Session 响应统一增加以下字段：
 
 ### 3.3 `session.mode_changed`
 
-Session 更新成功且模式真正变化时保存：
-
-```json
-{
-  "eventId": "evt-mode-V4xN7sR9cT2m",
-  "type": "session.mode_changed",
-  "createdAt": "2026-09-14T03:19:00.000Z",
-  "previousMode": "build",
-  "mode": "plan",
-  "reason": "requested"
-}
-```
+主动更新的 reason=requested 模式事件已登记在[共享事件契约](../01-CampusClaw多Agent运行时/事件契约/common.json)，示例由[历史操作](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json)维护。以下仅为计划批准的目标扩展。
 
 批准导致退出时保存：
 
@@ -170,7 +121,7 @@ Session 更新成功且模式真正变化时保存：
 }
 ```
 
-reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史，PATCH 本身返回 JSON。reason=planApproved 时二者必填，模式只能 plan→build；该完整事件进入确认续跑段 SSE 和历史。sourceEventId 仍指根消息，confirmationEventId 明确批准因果关系，不混用两种身份。
+reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史，统一 Session POST 本身返回 JSON。reason=planApproved 时二者必填，模式只能 plan→build；该完整事件进入确认续跑段 SSE 和历史。sourceEventId 仍指根消息，confirmationEventId 明确批准因果关系，不混用两种身份。
 
 ### 3.4 既有事件的使用
 
@@ -185,7 +136,7 @@ reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史�
 
 | 维护位置 | 同批需要完成的增量 |
 |---|---|
-| Runtime catalog / operation JSON | 登记 Session 更新 operation updateSession 及其 mode 字段；更新 Get/Create/配置/Command 共享 Session 响应；POST 联合输入增加计划确认；GET 历史增加完整事件 |
+| Runtime catalog / operation JSON | 统一 Session 更新与 mode 已登记；审核接入时同步 pendingPlanEventId，POST 联合输入和 GET 历史增加计划/确认及批准模式事件 |
 | Runtime eventContract / DTO / VO / 编码器 | 增加三种类型、条件字段和错误码；保留原三种输入、原失败码及分页/凭据边界 |
 | 主接口 HTML 与校验器 | 从统一 JSON 生成；接口数量、完整类型集合、首帧样例和流/历史同形检查同步，不能通过删除既有检查适配新功能 |
 | 内置工具契约 | 登记第九项 ExitPlanMode 和 Runtime 默认 profile；原八项工具 Schema 与 Mate 元数据字段保持原值 |

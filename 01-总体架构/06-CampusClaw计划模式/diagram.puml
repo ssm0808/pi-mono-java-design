@@ -108,7 +108,7 @@ Application -[hidden]down- ExecutionScope
 ExecutionScope -[hidden]right- ToolScope
 ExecutionScope -[hidden]down- PersistenceScope
 
-UI -[#2563EB]-> ConfigApi : PATCH Session / mode
+UI -[#2563EB]-> ConfigApi : POST Session / mode
 UI -[#2563EB]-> EventApi : confirm / read history
 ConfigApi -[#2563EB]-> ModeService
 EventApi --> EventService
@@ -269,8 +269,8 @@ state "Awaiting plan review\nstate=running, mode=plan\npendingPlanEventId is pre
 state "Implementing\nstate=running, mode=build" as Implementing
 
 [*] --> Normal : create
-Normal --> PlanIdle : PATCH mode=plan + valid ETag
-PlanIdle --> Normal : PATCH mode=build + valid ETag
+Normal --> PlanIdle : POST Session mode=plan + valid ETag
+PlanIdle --> Normal : POST Session mode=build + valid ETag
 PlanIdle --> Planning : accept user.message
 Planning --> PlanIdle : ordinary question / answer ends execution
 Planning --> Reviewing : ExitPlanMode; commit plan and confirming idle

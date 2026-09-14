@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 1.1.0 |
-| 日期 | 2026-09-10 |
+| 版本 | 1.2.0 |
+| 日期 | 2026-09-14 |
 | 设计起点 | `pi-mono-java-design@599edb072cf75e3d8f85c775c53c0e83befd285d` |
 | 实现基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20` |
 | 范围 | 当前研发使用的 Runtime Web 工作台；本轮会话排序、置顶和直接重命名交互均为 target-only |
@@ -20,7 +20,7 @@
 | `frontend/src/runtime/sessionIndex.ts`：`upsert`、`select` | `select` 只保存 active ID，但 `upsert` 将每次读取的项目放到数组首部；当前 schemaVersion=1，无置顶字段 | schemaVersion=2 区分 `lastActivityAt` 和 `pinned`；普通元数据补丁原位更新，只有新会话或已接受新用户消息提升最近顺序 |
 | `frontend/src/composables/useWorkbenchSessions.ts`：`recordSession`、`resumeSession`、`touchCurrentThread` | 恢复、名称或 Session 属性同步都调用前插 `upsert`，因此点击会话会自动置顶 | 拆分 `patchMetadata`、`recordActivity`、`setPinned`；选择/恢复/改名/改配置都不触发活动排序 |
 | `frontend/src/components/AppSidebar.vue`：`threads`、`select` | 按上游数组顺序渲染，只有选择动作，无置顶/取消置顶 | 分组显示“置顶”与“最近”，提供显式置顶操作；分组内保持已存活动顺序 |
-| `RuntimeSessionController`、`RuntimeSessionConfigurationController`、`SessionNamingService` | 后端已有名称校验与持久化，但 Controller 没有直接重命名路由；前端只能执行 `/name` | 新增 `PUT /sessions/{sessionId}/name`，行内重命名调用直接 API；与 `/name` 共用 Service，直接 API 用 `If-Match` 防止并发覆盖 |
+| `RuntimeSessionController`、`RuntimeSessionConfigurationController`、`SessionNamingService` | 后端已有名称校验与持久化，但 Controller 没有直接重命名路由；前端只能执行 `/name` | 使用统一 `POST /sessions/{sessionId}` 的 displayName 字段，行内重命名调用直接 API；与 `/name` 共用 Service，直接 API 用 `If-Match` 防止并发覆盖 |
 | `frontend/src/App.vue`：`statusLabel`、顶部停止按钮、底部恢复栏 | 顶部存在有效停止操作；底部只有发送按钮，恢复栏常驻 | 停止放到 Composer 原发送位置，异常时才展示恢复动作 |
 | `frontend/src/components/ComposerBox.vue`：template、`onKeydown`；`frontend/src/composables/useCommandComposer.ts` | `+` 打开命令；独立附件按钮禁用；已有命令标签及参数编辑 | `+` 负责添加附件/上下文；命令由首字符 `/` 进入，保持已实现的标签模型 |
 | `frontend/src/components/DebugHeaders.vue`：`snapshot`；`frontend/src/App.vue`：`submit`、`executeCommand`、`stop`、`decideTool` | 四类写操作均在动作发生时读取最新有效 Header 并复制 | 保留此行为，修正文档中“仅初始消息”描述；改值无需保存或新建会话 |
@@ -67,7 +67,9 @@
 
 schemaVersion=1 迁移到 2 时，保持现有数组顺序，将旧 `updatedAt` 映射为初始 `lastActivityAt`，并以 `pinned=false` 补齐。不用 Runtime `updatedAt` 继续排序，因为它还会因改名、配置和状态变化，不等于用户会话活动。置顶当前仅属内部 Runtime 工作台的浏览器本地状态；产品需要跨端同步时，应设计 mate-service Chat 元数据而不向 Runtime Session 表加 pin 字段。
 
-会话菜单的“重命名”使用直接 Name API，成功后在原位更新列表文案，不调整排序。412 时重读 Session，显示实际名称并保留用户草稿，由用户再次确认；不用新 ETag 自动重放 PUT。网络结果不确定时 GET Session 对账，不盲重试。
+名称、模型、思考和模式选择器共用 updateSession 客户端方法，只提交本次编辑字段；禁止 GET 资源全量回传。组合修改只发送一次请求，按返回 Session 和 ETag 原位更新；模型导致 thinking 归一时以返回值为准。
+
+会话菜单的“重命名”使用统一 Session 更新 API，成功后在原位更新列表文案，不调整排序。412 时重读 Session，显示实际名称并保留用户草稿，由用户再次确认；不用新 ETag 自动重放 POST。网络结果不确定时 GET Session 对账，不盲重试。
 
 索引写入、损坏或版本不兼容不应使页面崩溃：仅处理本功能的命名空间，写入失败告知本次无法保存恢复入口，现有会话仍可使用。读取原目标/回执标记只能辅助对账；未知结果不能按文本相同自动认领，也不能自动重放。不同页签各自保持当前选择，索引变化不强迫另一页签导航。
 
@@ -148,5 +150,6 @@ Token 获取是独立请求，不重放失败的对话 POST。后续是否携带
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-14 | 四类会话设置使用统一 POST，按需提交并复用条件更新及对账。 |
 | 1.1.0 | 2026-09-10 | 选中会话不再改变最近顺序，增加本地置顶和直接重命名交互。 |
 | 1.0.0 | 2026-09-09 | 定义会话索引恢复、Composer 停止、添加入口和本地认证 Token 回填。 |
