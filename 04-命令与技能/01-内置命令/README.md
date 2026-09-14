@@ -7,7 +7,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.11.0 |
+| 文档版本 | 2.11.1 |
 | 更新日期 | 2026-09-14 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -78,7 +78,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 | thinking | SessionThinkingConfigurationService |
 | compact | SessionCompactionApplicationService |
 
-## 3. 串行 PR 与预算
+## 3. 串行 PR 与交付边界
 
 下表保留 Builtin 的分批实施顺序；Skill 执行与共享 HTTP 集成同时纳入[统一实施计划](../00-Slash-Command通用模块/README.md#5-实施与验收)。
 设计先修 PR #4 和前置实现 PR #210 已合并；每个后续 Builtin PR 必须等前一 Builtin PR 合并，
@@ -96,9 +96,8 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 | 8 | codex/builtin-command-application | Catalog/Execution 应用边界；复用业务资源 VO 与 Session 投影，不为每个命令新建响应类型 |
 | 9 | codex/builtin-command-http | 统一对齐 Skill 清单与请求类型后发布 GET/POST、VO/Header/ResultBean、契约和跨进程测试；删除旧 command 原型；更新实施状态 |
 
-单 PR 模块侧新增不超过 850 行，sync-campusclaw 后总量超过 1800 行不发布，硬上限 2000。
-删除行不抵扣新增。触及预算时在相邻职责边界拆分，不提前公开未完成路由。
-门禁以 `bash scripts/check-commit-additions.sh origin/main HEAD` 为准；ADR 在同步最新 main 后分配。
+开发规模统一遵守[通用模块交付规则](../00-Slash-Command通用模块/README.md#5-实施与验收)。
+按职责和验收边界组织 PR，不提前公开未完成路由；ADR 在同步最新 main 后分配。
 
 ## 4. 命令行为
 
@@ -223,7 +222,7 @@ Command 请求仍拒绝 If-Match，统一 Session POST 强制 If-Match；复用�
 ## 9. 测试与交付
 
 每个 PR 执行针对性单元测试、新增测试质量检查、Spotless/Checkstyle、模块测试、
-sync-campusclaw、diff --check 和新增行数门禁；最终 HTTP PR 执行完整 mvnw verify。
+sync-campusclaw 和 diff --check；最终 HTTP PR 执行完整 mvnw verify。
 测试覆盖：
 
 - 七项稳定排序、重名启动失败、单次快照、Builtin 不调用 Skill Source。
@@ -250,6 +249,7 @@ Compact 只因同源图块行号变化重新生成，全局主图不变。接口
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.11.1 | 2026-09-14 | 取消新增行数预算与门禁要求，复用通用模块的交付规模规则。 |
 | 2.11.0 | 2026-09-14 | 名称、模型、思考和模式统一由 Session POST 更新，Command 保留原入口与准入规则。 |
 | 2.10.0 | 2026-09-10 | 增加独立 Session Name API，与 `/name` 共用命名服务并以 `If-Match` 保护直接调用。 |
 | 2.9.0 | 2026-09-07 | POST 成功响应复用既有 Session/Models 业务资源与 ETag，移除 command/changed/sourceEventSeq；Help 保留三个业务字段，Compact/Skills 保留最小结果；记录 6f52fddc 源码差距，全局主图和请求/错误不变。 |
