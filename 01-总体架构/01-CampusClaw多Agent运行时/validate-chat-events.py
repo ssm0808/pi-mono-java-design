@@ -179,7 +179,8 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
     if event["type"] == "agent.plan":
         require(set(event) == {"eventId", "type", "createdAt", "sourceEventId", "toolCallId", "content"},
                 "plan must use the complete review event shape")
-        require(bounded_nonblank(event["toolCallId"], 128), "plan requires tool call identity")
+        require(isinstance(event["toolCallId"], str)
+                and any(not java_whitespace(c) for c in event["toolCallId"]), "plan requires tool call identity")
         content = event["content"]
         require(bounded_nonblank(content, 262144), "plan Markdown is required and bounded")
         first = next(line for line in content.splitlines() if any(not java_whitespace(c) for c in line))
@@ -984,6 +985,9 @@ def validate_plan_regressions(post: dict) -> int:
         except ValueError:
             continue
         raise ValueError("invalid plan review causal link accepted")
+    # Provider tool call identities retain the existing contract without a 128-unit limit.
+    long_tool_identity = dict(plan, toolCallId="provider-call-" + "x" * 200)
+    validate_frame(long_tool_identity)
     without_feedback = copy.deepcopy(revise)
     without_feedback.pop("feedback")
     validate_frame(without_feedback, receipt=True)
