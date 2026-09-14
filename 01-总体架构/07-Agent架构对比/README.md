@@ -4,13 +4,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.10.0 |
+| 文档版本 | 1.11.0 |
 | 更新日期 | 2026-09-15 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 设计依据 | `pi-mono-java-design@0a74625e0dd4ea6387b6765c7cb0f9105970d05c`，具体主设计见各条目 |
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
 | 计划模式专项基线 | A03 使用 DeepSeek `0a53fb55`、Java `09b32d8e`；旧 Java `f61906b` 与该专项相关源码相同，完整 SHA 与路径见专项证据 |
-| 核验范围 | M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、注册框架、模型预置及 SDK 依赖；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
+| 前端专项基线 | A07：Java `29ebec6a8cad99896414211cda28c6fffec71bee`；Codex 固定 `d58d0e58`；官方界面与协议 2026-09-15 核对 |
+| 核验范围 | A07 的模式入口、TUI 实施选择、方案/任务分离与前端接入范围；M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、注册框架、模型预置及 SDK 依赖；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
 | 验证边界 | 静态源码与文档核对，未执行产品集成测试；其余模块与基线的专项差异待补证 |
 
 ## 1. 阅读方式与权威边界
@@ -32,7 +33,7 @@
 |---|---|---|---|
 | pi | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、消息/Tool 生命周期、Session 分支与压缩 | A01 已核对 Loop 和 Agent 类型，A04 已核对配置 RPC，A05 核对 todo 示例的工具结果恢复，A06 核对 Provider 组合与模型注册；Session 树与完整协议快照仍待专项核验 |
 | Claude Managed Agents | 官方文档，核对日期 `2026-09-14`；无服务端源码 commit | 公共 Session API、preview 与历史对账 | A02/A04/A05 已核对公开流、List Events、Session 更新、配置限制和通用 custom tool 交互；仍为 Beta，只证明公开契约 |
-| Codex harness | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | Provider typed event、Turn/Item 客户端生命周期 | A04 已核对配置协议，A05 核对指定模型的 update_plan 指令及 Handler；Provider 与完整 M07 生命周期仍待专项核验 |
+| Codex harness | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | Provider typed event、Turn/Item 客户端生命周期 | A04 已核对配置协议，A05 核对指定模型的 update_plan 指令及 Handler；A07 核对 TUI 方案实施与 plan Item/TODO 分离；Provider 与其余 M07 生命周期仍待专项核验 |
 | OpenCode | `849c2598abc7d2b40261e74b5826bc74ffc78308` | 多客户端、live/durable 分类与 sequence 回放 | A04 已核对 Session 配置/消息/v2 操作，A05 核对 todowrite 描述与模型提示词；事件流仍待专项核验；v2 源码能力不能自动视为稳定公开契约 |
 | DeepSeek Harness | `0a53fb55bea101816fa226bb964ae2bed71c343b`，`dsh-0.1.2-alpha.2` | 计划模式；完整事件溯源与 token 级回放的成本上限 | A03/A04/A05 已核对计划插件、preset、Session 配置接口和 todo_write 完整列表；完整日志仍待 M04/M06 专项核验；保留 alpha 成熟度边界 |
 
@@ -49,7 +50,7 @@
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；其他上下文与存储比较待补证，不默认 token 全量落盘 |
 | M05 · Command 与 Skill | 清单和执行如何共享解析；命令、Skill 与 Tool 的边界是什么 | pi | 待补证；不从存在 SKILL.md 推导相同执行机制 |
 | M06 · 事件与服务边界 | 写入与观察是否分离；流绑定谁；断线如何恢复；控制状态谁权威 | Claude；OpenCode，必要时 pi/DeepSeek | [A02](#a02)覆盖 Claw/Mate 分层与流范围；[A03](#a03)补充计划审核所复用的数据库确认交接，完整回放专项待补证；[A04](#a04)覆盖 Session 配置更新；[A05](#a05)覆盖后端显式任务事件 |
-| M07 · 前端与渠道 | preview 何时被权威内容替换；Turn/Item 与产品 UI 如何映射 | Codex；Claude 辅助 | [A05](#a05)核对既有事件合并与根执行归属，TODO 投影为 target-only；其余展示与取消行为待补证 |
+| M07 · 前端与渠道 | preview 何时被权威内容替换；Turn/Item 与产品 UI 如何映射 | Codex；Claude 辅助 | [A05](#a05)核对既有事件合并与根执行归属，TODO 投影为 target-only；[A07](#a07)覆盖计划交互与 Codex 对齐，其他展示/渠道仍待补证 |
 | M08 · 元数据与配置 | 定义、发布快照和运行对象如何分离；刷新如何影响活动执行 | pi；托管产品仅对照公开资源 | Agent.mode 专项已核对 Mate 956b547f / Runtime 09b32d8e；默认值链为 target-only，见 A03 和元数据主设计；元数据组合查询顺序另在 Mate `9dd5d85e` 核对，见 J06；发布事务一致性仍待补证 |
 | M09 · 附件与文件 | 文件服务与 Agent 工作区是什么关系；何时解析与授权 | pi；托管产品公开文件契约按需核对 | 待补证；明确企业产品约束 |
 | M10 · 调度与并发 | Session 准入、Tool 并行和全局容量分别如何限制 | pi；OpenCode/DeepSeek 按问题补充 | 待核验并发设计与实测依据；不声称虚拟线程自动解决容量问题 |
@@ -232,6 +233,25 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 默认只交付 CampusMate。减掉的是厂商实现、预置和 SDK，通用 AI 消息与注册仍可复用。
 代价是失去开箱直连及旧身份兼容；目前独立 Mate 调用链已存在，裁剪和新名称仍待实现验收。
 
+<a id="a07"></a>
+
+## 6.4 A07 · Codex 交互风格与 CampusClaw 计划语义
+
+| 维度 | 结论 |
+|---|---|
+| 模块与主设计 | M07，关联 M01/M06；[前端主设计](../04-CampusClaw前端体验/README.md)及[计划交互](../04-CampusClaw前端体验/plan-interaction.md)，复用前端唯一全局组件图。 |
+| 架构问题 | 如何采用 Codex 的工作区密度、完整方案与轻量进度展示，同时保持 CampusClaw 的审核续跑和企业边界？ |
+| Codex 观察 | 固定 d58d0e58 的 plan_implementation.rs / selection_view_params 提供实施、清上下文实施、继续规划；实施发起带 Default mode 的用户消息。PlanHandler::handle_call 在 Plan mode 拒绝 update_plan，另发 PlanUpdate；App Server 区分方案 Item、任务更新与提问。完整路径与官方 2026-09-15 公开证据见[专项 §1](../04-CampusClaw前端体验/plan-interaction.md#1-源码与交互依据)。TUI 不证明桌面像素布局；官方提问及固定版本方案增量保留实验性边界。 |
+| CampusClaw 目标 | 配置聚合到 Composer；完整方案内联审核，批准后原执行续跑，方案收起；后端显式任务快照驱动只读进度；工具授权独立。 |
+| 已观察实现 | Java 29ebec6a 的 frontend App/Composer 已有草稿与同位置停止，eventStore 已按事件身份/根消息恢复；runtime 类型、projector 与配置客户端尚无计划模式、审核或任务面板。RuntimeSessionController 仍为 create/get/delete。其他特性分支/部署未核验，前端目标按既定计划模式契约定义。 |
+| 差异分类 | 产品约束：常驻模式按钮、O1 暖灰、普通消息澄清、无清上下文执行/运行中排队；架构变更：审核事件绑定方案并续跑原执行、公共两跳映射；安全加固：缺页禁审、服务端目标复核、写入不自动重放。 |
+| 理由与代价 | 阅读与决策相邻，方案、审批与任务不混为一个状态；代价是增加审核投影和恢复协调，暂不能复制 Codex 的结构化提问及新上下文执行。提示词规划不构成只读沙箱。 |
+| 备选与重评条件 | 不直接复刻 Codex JSON-RPC、提问问卷、clear-context 选项或其品牌。若需要新执行/上下文选择，先重新确定审核目标、凭据、历史与启动权威。 |
+| 设计状态 / 实现状态 | 已确定目标、target-only / 所列主线范围局部核验；新 HTML 是设计原型，真实 Java 计划能力与 Mate 公共集成未验收。 |
+| 验收 | [PF1～PF5](../04-CampusClaw前端体验/plan-interaction.md#6-组件与接入切片)：模式回执、精确方案、修订新身份、任务完整快照、终态独立、两跳与恢复；浏览器视觉与原型状态分别验证。 |
+
+**讲解要点。** 参考 Codex 的输入邻近设置、方案与进度分离，让用户在同一工作区读方案、做决定、看实施进展。CampusClaw 的审核决定续跑原执行，不照搬 Codex 的新消息实施路径。这个差异保留执行归属，但增加事件映射与恢复要求；已核验主线的计划接入仍需实现与集成验收。
+
 <a id="source-evidence"></a>
 
 ## 7. 源码证据与更新边界
@@ -288,6 +308,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.11.0 | 2026-09-15 | 对比 Codex 方案与进度交互，明确 CampusClaw 原执行审核续跑和前端接入边界。 |
 | 1.10.0 | 2026-09-15 | 对比计划文件与正文载体，并采用后端显式任务更新事件。 |
 | 1.9.0 | 2026-09-14 | 对比引用模块权威内容，登记公共分页待整合与渠道无回执恢复边界。 |
 | 1.8.0 | 2026-09-14 | 区分 Agent 默认 mode 与 Session 当前模式，并记录目录发布的生效边界。 |

@@ -398,14 +398,14 @@
         <div class="row">
           <img class="review-brand-mark" src="campusclaw-mark-o1.png" alt="">
           <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">1.11.0</span>
+          <span class="tag">1.13.0</span>
           <span class="tag">主对话 · 确认 · 停止 · 恢复</span>
         </div>
         <code class="base">交互基线 599edb0 · 源码 510d882 · target-only</code>
       </header>
 
       <section class="section">
-        <h3>评审方式</h3>
+        <h3>当前工作台</h3><p class="description"><a href="plan-workbench.html">打开计划模式与 Codex 风格工作台 →</a> · 模式选择、完整方案、审核修订、实施进度与恢复。<a href="plan-interaction.md">设计依据</a>。下方保留基础场景与历史视觉资料。</p><h3 style="margin-top:14px">评审方式</h3>
         <p class="description">本页沿用 Runtime HTTP 评审面的卡片结构和稳定评审键。每个界面状态使用固定 <code>screenKey</code>，依次评审作用、用户动作、系统约束和视觉材料；精确设计理由与源码证据仍以 Markdown 为准。</p>
       </section>
 
@@ -713,7 +713,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
         <details class="review-question" open><summary>5. 已确认：<code>Headers</code> 行编辑</summary><p>默认预置 access-token、X-HW-ID、Authorization，Value 留空，三行均可编辑、启停和删除。点击“增加请求头”追加一行空 Key/Value；填写、删除和清空均不自动补行。面板内去掉常驻文字说明，请求范围与内存生命周期由设计文档维护。</p></details>
         <details class="review-question" open><summary>6. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
         <details class="review-question" open><summary>7. 已确认：原始推理与活动 disclosure</summary><p>Thinking 展示模型返回的原始推理；标题使用前端状态文案；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。内部 ID、绝对路径和凭据不作为产品公共字段。</p></details>
-        <details class="review-question" open><summary>8. 已确认：会话选择、置顶与重命名分离</summary><p>点选会话只改变 active 视图，不自动移到最近顶部；置顶/取消置顶由用户显式操作。重命名使用直接 Session Name API，与 <code>/name</code> 共用业务规则，成功后原位更新而不重排。</p></details>
+        <details class="review-question" open><summary>8. 已确认：会话选择、置顶与重命名分离</summary><p>点选会话只改变 active 视图，不自动移到最近顶部；置顶/取消置顶由用户显式操作。重命名使用统一 Session POST 的 displayName 字段，与 <code>/name</code> 共用业务规则，成功后原位更新而不重排。</p></details>
         <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="public-chat-alignment.md">查看公共对话对齐</a></div>
       </section>
     </div>

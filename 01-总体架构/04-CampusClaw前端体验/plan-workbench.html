@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>CampusClaw · 计划模式工作台</title>
+<style>
+:root{color-scheme:light;--bg:#fffcfa;--rail:#f8f3f0;--soft:#f4ece8;--selected:#efe4de;--ink:#2c2724;--muted:#6c625d;--line:#ded4cf;--focus:#a9472b;--action:#2b2522;--good:#008635}
+*{box-sizing:border-box}body{height:100dvh;display:flex;flex-direction:column;margin:0;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;color:var(--ink);background:var(--bg)}button,textarea,select{font:inherit;color:inherit}button,select{min-height:44px;min-width:44px;cursor:pointer}button{border:0;background:transparent;border-radius:8px;padding:8px 12px}button:hover{background:var(--soft)}button:disabled{opacity:.5;cursor:default}button:focus-visible,summary:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--focus);outline-offset:3px}a{color:var(--focus)}[hidden]{display:none!important}h1,h2,h3,p{margin:0}h1{font-size:16px;font-weight:600}h2{font-size:21px;line-height:1.45;letter-spacing:-.35px}h3{font-size:14px;margin:18px 0 6px}.muted{color:var(--muted)}.small{font-size:12px}.primary{background:var(--action);color:var(--bg)}.primary:hover{background:#463b36}.secondary{border:1px solid var(--line)}.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.demo{flex-shrink:0;padding:8px 20px;border-bottom:1px solid var(--line);background:#fff;font-size:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}.demo>strong{font-weight:600}.demo select{max-width:100%;border:1px solid var(--line);background:white;border-radius:8px;padding:6px}.demo button{font-size:12px;padding:6px 10px}.demo .divider{height:18px;border-left:1px solid var(--line)}.app{display:grid;grid-template-columns:232px minmax(0,1fr);flex:1;min-height:0}.rail{background:var(--rail);padding:22px 14px;display:flex;flex-direction:column;gap:22px;border-right:1px solid #eee5df}.brand{display:flex;align-items:center;gap:10px;padding:0 10px}.brand img{width:28px;height:28px;object-fit:contain}.brand strong{font-size:16px}.nav-block{display:grid;gap:3px}.nav-block>p{padding:6px 12px;color:var(--muted);font-size:11px}.nav-block button{text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.nav-block .selected{background:var(--selected)}.rail-footer{margin-top:auto;padding:10px;font-size:12px}.workspace{min-width:0;display:flex;flex-direction:column;min-height:0}.header{height:64px;flex-shrink:0;padding:0 30px;display:flex;align-items:center;justify-content:space-between;gap:12px}.header-title{display:flex;align-items:center;gap:12px}.status{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:7px}.status:before{content:"";width:6px;height:6px;background:var(--muted);border-radius:50%}.status[data-active=true]:before{background:var(--good)}#nav-open,#nav-close{display:none}.scroll{overflow-y:auto;flex:1;min-height:0;scrollbar-gutter:stable}.thread{max-width:888px;margin:auto;padding:24px 24px 36px}.user{background:var(--soft);border-radius:18px;padding:12px 18px;width:fit-content;max-width:85%;margin-left:auto;white-space:pre-wrap;overflow-wrap:anywhere}.agent-mark{width:25px;height:25px;object-fit:contain;margin:28px 0 12px}.activity summary{color:var(--muted);font-size:13px;cursor:pointer;min-height:44px;padding:10px 0}.activity .detail{padding:8px 16px;border-left:1px solid var(--line);color:var(--muted);font-size:13px;white-space:pre-wrap}.activity{margin:2px 0}.activity p{line-height:1.8}.commentary{margin:10px 0 24px;line-height:1.8}.plan{border:1px solid var(--line);border-radius:12px;margin-top:18px;background:var(--bg);overflow:hidden}.plan>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding:13px 20px;cursor:pointer;list-style:none}.plan>summary::-webkit-details-marker{display:none}.plan>summary:after{content:"⌄";color:var(--muted)}.plan[open]>summary:after{content:"⌃"}.plan-badge{font-size:11px;color:var(--muted);margin-left:auto}.plan-body{padding:4px 24px 24px;line-height:1.8;overflow-wrap:anywhere}.plan-body p{margin-top:10px}.plan-body ol{margin:8px 0;padding-left:22px}.plan-body li{padding:3px 0}.plan-footer{border-top:1px solid var(--line);padding:14px 20px}.plan-actions{justify-content:space-between}.review-buttons{display:flex;gap:8px;flex-wrap:wrap}.feedback{margin-top:14px}.feedback label{display:block;margin:8px 0}.feedback textarea{width:100%;min-height:100px;border:1px solid var(--line);background:var(--bg);padding:10px;border-radius:8px;resize:vertical}.feedback .row{margin-top:8px}.error{color:#af271f;font-size:12px;margin:8px 0}.notice{padding:12px 16px;border:1px solid var(--line);border-radius:10px;background:var(--rail);margin:18px 0}.notice button{margin-top:6px}.tool-permission{border-left:2px solid var(--line);padding:12px 18px;margin:20px 0}.tool-permission p{margin:8px 0}.result{line-height:1.8;margin-top:24px;white-space:pre-wrap}.dock{width:min(888px,100%);margin:auto;padding:0 24px 20px;background:var(--bg)}.progress{margin:0 2px 10px;border:1px solid var(--line);border-radius:10px}.progress summary{min-height:44px;padding:10px 14px;font-size:12px;cursor:pointer}.progress ul{max-height:30dvh;overflow:auto;list-style:none;padding:0 14px 10px;margin:0}.progress li{display:flex;gap:10px;align-items:baseline;padding:5px 0;font-size:13px;overflow-wrap:anywhere}.progress li span:first-child{min-width:18px}.progress li span:last-child{margin-left:auto;white-space:nowrap;color:var(--muted);font-size:11px}.progress [data-status=completed] span:first-child{color:var(--good)}.composer{border:1px solid #cdbeb6;border-radius:18px;padding:12px 12px 10px;box-shadow:0 3px 12px #2c272406}.composer:focus-within{border-color:var(--focus);box-shadow:0 0 0 2px #a9472b22}.composer textarea{display:block;width:100%;min-height:68px;max-height:200px;resize:vertical;border:0;outline:0;background:transparent;padding:6px 8px}.toolbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.toolbar button{font-size:12px}.toolbar #send{margin-left:auto;width:44px;min-height:44px;font-size:21px;border-radius:50%;padding:0}.mode-wrap{position:relative}.mode-menu{position:absolute;bottom:50px;left:0;min-width:210px;border:1px solid var(--line);background:var(--bg);box-shadow:0 8px 25px #2c272415;border-radius:10px;padding:6px;z-index:5}.mode-menu button{display:block;width:100%;text-align:left}.mode-menu small{display:block;color:var(--muted);font-size:11px}.mode-active{background:var(--soft)}.composer-note{text-align:center;font-size:11px;color:var(--muted);padding-top:7px}.settings{margin:6px 0;padding:8px 10px;background:var(--rail);border-radius:8px}.settings select{border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:6px}.settings label{font-size:12px}#settings-toggle{display:none}#copy-state{min-height:20px}.history-plan{margin-top:18px;color:var(--muted);font-size:12px}.history-plan summary{min-height:44px;cursor:pointer}.history-plan pre{white-space:pre-wrap;font:inherit;line-height:1.8}.kbd{font:11px ui-monospace,monospace;color:var(--muted)}
+@media(max-width:1100px){.app{grid-template-columns:190px minmax(0,1fr)}.header{padding:0 22px}.thread{padding-top:18px}.demo{padding:8px 12px;gap:6px}.rail{padding:18px 10px}}
+@media(max-width:900px){.app{display:block}.workspace{height:100%}.rail{display:none;position:fixed;inset:0 auto 0 0;width:250px;z-index:20;box-shadow:4px 0 30px #0002}.rail[data-open=true]{display:flex}#nav-open,#nav-close{display:block}#nav-close{margin-left:auto}.demo .divider{display:none}.header{height:60px}.desktop-config{display:none}#settings-toggle{display:block}.thread{padding:14px 20px 28px}.dock{padding:0 20px 16px}.settings{display:block}}
+@media(max-width:480px){.demo{padding:8px;gap:4px}.demo>strong{width:100%}.demo button{padding:5px 7px}.header{padding:0 12px}.header h1{font-size:14px}.header-title{gap:4px}.header .small{display:none}.thread{padding:14px 14px 24px}.user{max-width:94%;font-size:13px}.plan-body{padding:4px 16px 20px}.plan>summary,.plan-footer{padding:12px 14px}.plan-actions{gap:12px}.review-buttons{width:100%}.review-buttons button{flex:1}h2{font-size:19px}.dock{padding:0 12px 12px}.composer{padding:9px}.toolbar{gap:0}.toolbar button{padding:8px}.composer-note{text-align:left;padding-left:8px}.plan-badge{font-size:10px}.progress li span:last-child{font-size:10px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="demo" aria-label="设计演示控制，不属于产品">
+ <strong>交互原型 · 1.0.0</strong><select id="scenario" aria-label="演示场景"><option value="review">待审核方案</option><option value="idle">普通对话</option><option value="planIdle">计划模式空闲</option><option value="research">调研中</option><option value="clarifying">澄清问题</option><option value="executing">实施进度</option><option value="recovering">恢复审核</option><option value="stopped">已停止</option></select>
+ <button id="receipt" class="secondary">模拟服务端回执</button><button id="advance">下一步事件</button><button id="disconnect">断开连接</button><button id="other-client">其他端已处理</button><button id="reject-mode">模式更新失败</button><span class="divider"></span><a href="plan-interaction.md">设计说明</a><span class="muted">本地模拟，无网络或工具执行</span>
+</div>
+<div class="app" id="app">
+ <aside class="rail" id="rail" aria-label="会话导航">
+  <div class="brand"><img src="campusclaw-mark-o1.png" alt=""><strong>CampusClaw</strong><button id="nav-close" aria-label="关闭导航">×</button></div>
+  <div class="nav-block"><button id="new-chat">＋ 新建会话</button></div>
+  <div class="nav-block"><p>置顶</p><button class="selected" id="current-chat">园区告警处置</button></div>
+  <div class="nav-block"><p>最近</p><button id="other-chat">每日巡检汇总</button></div>
+  <div class="rail-footer"><p>园区运维助手</p><p class="muted">让日常工作更从容</p></div>
+ </aside>
+ <main class="workspace">
+  <header class="header"><div class="header-title"><button id="nav-open" aria-label="打开会话导航">☰</button><div><h1 id="title">园区告警处置</h1><p class="small muted">园区运维助手</p></div></div><span class="status" id="status" role="status" aria-live="polite"></span></header>
+  <div class="scroll" id="scroll"><div class="thread">
+   <p class="user" id="user-message">请分析东区网络告警，先给出排查和处置方案，确认后再实施。</p>
+   <img class="agent-mark" src="campusclaw-mark-o1.png" alt="CampusClaw">
+   <details class="activity" id="analysis"><summary>分析过程 · 原始推理</summary><p class="detail">需要先核对告警时段与受影响设备，再结合近期变更判断排查范围。</p></details>
+   <details class="activity" id="activity"><summary id="activity-title">已查询告警与设备状态</summary><div class="detail"><p>输入参数</p><p>区域：东区 · 时间：最近 24 小时</p><p style="margin-top:12px">输出结果</p><p id="activity-result">示例查询已完成，告警集中在同一上联链路。</p></div></details>
+   <p class="commentary" id="commentary"></p>
+   <div class="notice" id="notice" hidden><p id="notice-text" role="status" aria-live="polite" tabindex="-1"></p><button id="recover" class="secondary">读取历史与状态</button></div>
+   <details class="history-plan" id="old-plan" hidden><summary>查看上一份方案 · 已退回修改</summary><pre id="old-plan-text"></pre></details>
+   <details class="plan" id="plan" open>
+    <summary><strong>处置方案</strong><span class="plan-badge" id="plan-state">待审核</span></summary>
+    <div class="plan-body"><h2 id="plan-title">东区网络告警排查与处置</h2><p id="plan-intro">先确认影响范围和变更原因，再在允许的维护窗口内处理，最后核验告警与业务恢复情况。</p><h3>执行步骤</h3><ol id="plan-steps"><li>核对受影响设备、上联链路与告警发生时间。</li><li>比对近期配置变更，确认故障原因与影响范围。</li><li>在维护窗口内实施处置；需要权限时单独请求工具授权。</li><li>复核告警、链路与业务状态，整理结果和回退记录。</li></ol><h3>验证与回退</h3><p>以告警恢复、链路状态和业务验证结果判断处置效果。验证未通过时停止后续变更，按已确认的回退步骤处理并报告结果。</p></div>
+    <div class="plan-footer"><div class="row plan-actions"><button id="copy" class="muted">复制方案</button><div class="review-buttons" id="review-buttons"><button id="revise" class="secondary">修改方案</button><button id="approve" class="primary">批准并执行</button></div></div>
+     <div id="feedback" class="feedback" hidden><label for="feedback-text">修改意见 <span class="muted small">选填</span></label><textarea id="feedback-text" placeholder="例如：先定位原因，维护操作安排在今晚 22:00 之后"></textarea><p id="feedback-error" class="error" role="alert"></p><div class="row"><button id="revise-submit" class="primary">提交修改意见</button><button id="revise-cancel">取消</button></div></div>
+     <p id="decision-status" class="small muted" role="status" aria-live="polite" tabindex="-1"></p><p id="copy-state" class="small muted" role="status" hidden></p>
+    </div>
+   </details>
+   <section class="tool-permission" id="permission" hidden><strong>工具授权 · 调整端口配置</strong><p>设备：SW-DC-01 · 端口：GigabitEthernet0/0/24</p><p class="muted small">方案已批准。本次操作会修改设备配置，仍需你的工具授权。</p><div class="row"><button id="tool-allow" class="primary">允许本次操作</button><button id="tool-deny" class="secondary">拒绝</button></div></section>
+   <p id="result" class="result" hidden></p>
+  </div></div>
+  <div class="dock">
+   <details class="progress" id="progress" open><summary id="progress-summary">实施进度</summary><ul id="todos"></ul></details>
+   <div class="composer"><label for="draft" class="sr-only">消息草稿</label><textarea id="draft" rows="2" placeholder="补充目标、约束或期望结果…"></textarea>
+    <div class="toolbar"><button aria-label="添加附件，暂未接入" title="原型未接入附件上传" disabled>＋</button><div class="mode-wrap"><button id="mode" aria-haspopup="menu" aria-expanded="false" aria-controls="mode-menu">计划模式 ⌄</button><div class="mode-menu" id="mode-menu" role="menu" hidden><button id="mode-build" role="menuitemradio" aria-checked="false">普通模式<small>直接推进任务</small></button><button id="mode-plan" role="menuitemradio" aria-checked="true">计划模式<small>先形成方案，审核后实施</small></button></div></div><button id="model" class="desktop-config" title="演示模型设置">模型 A ⌄</button><button id="thinking" class="desktop-config" aria-pressed="true">深度思考</button><button id="settings-toggle" aria-expanded="false" aria-controls="settings">设置</button><button id="send" class="primary" aria-label="停止生成">■</button></div>
+    <div id="settings" class="settings" hidden><span class="small muted" id="config-current">模型 A · 深度思考开启</span><p class="small muted">模型与思考控件复用完整会话配置；运行中不可修改。</p></div>
+    <p id="input-error" class="error" role="alert" hidden></p>
+   </div><p id="input-help" class="composer-note">可保留草稿；审核或停止后继续。</p>
+  </div>
+ </main>
+</div>
+<script>
+(() => {
+ 'use strict';
+ // All data is a local target-design fixture. No production gateway is installed.
+ const $ = id => document.getElementById(id);
+ const initialPlan = '# 东区网络告警排查与处置\n\n先确认影响范围和变更原因，再在允许的维护窗口内处理，最后核验告警与业务恢复情况。\n\n## 执行步骤\n\n1. 核对受影响设备、上联链路与告警发生时间。\n2. 比对近期配置变更，确认故障原因与影响范围。\n3. 在维护窗口内实施处置；需要权限时单独请求工具授权。\n4. 复核告警、链路与业务状态，整理结果和回退记录。\n\n## 验证与回退\n\n以告警恢复、链路状态和业务验证结果判断处置效果。验证未通过时停止后续变更，按已确认的回退步骤处理并报告结果。';
+ const taskText = ['核对影响范围与近期变更', '实施处置并验证恢复', '整理结果与回退记录'];
+ let phase, mode, plan, planStatus, pending, todos, rootId, generation = 0, priorPhase, composing = false, progressStep = 0, showFeedback = false, view = 'alarm';
+ let receipts = 0, writes = 0, requestedMode = '', staleTarget = false, result = '', messageSnapshot = '', seen = new Set();
+ const labels = {idle:'空闲',planIdle:'计划模式',research:'正在制定方案',clarifying:'等待你的补充',review:'等待方案审核',decisionPending:'正在提交决定',revising:'正在修改方案',executing:'正在实施',toolReview:'等待工具授权',toolPending:'正在提交工具决定',toolDenied:'工具已拒绝，等待结果',stopping:'正在请求停止',stopAccepted:'停止处理中',recovering:'正在核对状态',uncertain:'结果待核对',stopped:'已停止',done:'已完成',modePending:'正在切换模式',submitting:'正在提交'};
+ const ready = () => ['idle','planIdle','clarifying','stopped','done'].includes(phase);
+ const canStop = () => ['research','review','revising','executing','toolReview','toolDenied'].includes(phase);
+ function renderTasks() {
+  $('progress').hidden = todos === null;
+  $('todos').replaceChildren();
+  if (todos === null) return;
+  const completed = todos.filter(t => t.status === 'completed').length;
+  const active = todos.find(t => t.status === 'in_progress');
+  $('progress-summary').textContent = !todos.length ? '任务清单已清空' : `已完成 ${completed} / ${todos.length}` + (active ? ` · ${active.content}` : completed === todos.length && ['recovering','uncertain'].includes(phase) ? ' · 清单已完成，执行状态待核对' : completed === todos.length && !ready() ? ' · 清单已完成，任务仍在执行' : ' · 实施进度');
+  for (const task of todos) {
+   const li = document.createElement('li'); li.dataset.status = task.status;
+   const icon = document.createElement('span'); icon.setAttribute('aria-hidden','true'); icon.textContent = {pending:'○',in_progress:'◉',completed:'✓'}[task.status];
+   const content = document.createElement('span'); content.textContent = task.content;
+   const status = document.createElement('span'); status.textContent = {pending:'待处理',in_progress:'进行中',completed:'已完成'}[task.status];
+   li.append(icon, content, status); $('todos').append(li);
+  }
+ }
+ function render() {
+  $('app').dataset.phase = phase; $('app').dataset.mode = mode; $('app').dataset.writes = String(writes);
+  $('app').dataset.root = rootId; $('app').dataset.plan = plan?.eventId || '';
+  $('status').textContent = labels[phase]; $('status').dataset.active = String(canStop());
+  $('mode').textContent = mode === 'plan' ? '计划模式 ⌄' : '普通模式 ⌄'; $('mode').classList.toggle('mode-active',mode === 'plan');
+  $('mode').disabled = !ready(); $('model').disabled = !ready(); $('thinking').disabled = !ready();
+  $('mode-plan').setAttribute('aria-checked',String(mode === 'plan')); $('mode-build').setAttribute('aria-checked',String(mode === 'build'));
+  $('send').textContent = ready() ? '↑' : '■'; $('send').setAttribute('aria-label',ready() ? '发送消息' : '停止生成');
+  const over = Array.from($('draft').value).length > 2048;
+  $('send').disabled = ready() ? !$('draft').value.trim() || over : !canStop();
+  $('input-error').hidden = !over; $('input-error').textContent = over ? '消息最多 2048 个 Unicode 字符。' : '';
+  $('input-help').textContent = ready() ? (mode === 'plan' ? '先调研并形成方案，审核后实施。Enter 发送，Shift+Enter 换行。' : 'Enter 发送 · Shift+Enter 换行') : '当前任务仍在进行；新消息只保留为草稿。';
+  $('plan').hidden = !plan; $('plan-state').textContent = planStatus;
+  $('review-buttons').hidden = !['review','decisionPending'].includes(phase);
+  $('approve').disabled = phase !== 'review' || staleTarget; $('revise').disabled = phase !== 'review' || staleTarget;
+  $('feedback').hidden = !showFeedback || phase !== 'review';
+  $('notice').hidden = !['uncertain','recovering','modePending'].includes(phase);
+  $('recover').hidden = phase === 'modePending';
+  $('notice-text').textContent = phase === 'modePending' ? '正在保存模式，成功后才更新当前选择。' : phase === 'recovering' ? '已知内容已保留。需要补齐当前方案、审核决定和执行状态。' : '提交或执行结果待核对。读取历史与状态，不会重新提交决定。';
+  $('permission').hidden = !['toolReview','toolPending'].includes(phase);
+  $('tool-allow').disabled = $('tool-deny').disabled = phase !== 'toolReview';
+  $('result').hidden = !result; $('result').textContent = result;
+  $('receipt').disabled = !pending; $('reject-mode').disabled = phase !== 'modePending';
+  $('advance').disabled = !['research','revising','executing','stopAccepted','toolDenied'].includes(phase);
+  $('other-client').disabled = !plan || !['review','decisionPending','recovering','uncertain'].includes(phase);
+  $('disconnect').disabled = ['recovering','uncertain'].includes(phase);
+  $('commentary').textContent = {idle:'可以从一个具体目标开始。',planIdle:'描述目标和约束，我会先调研并形成可审核的方案。',clarifying:'处置是否需要安排在维护窗口内？请补充可操作的时间范围。',research:'我正在核对告警与近期变更，随后整理排查、验证和回退步骤。',review:'方案已整理完成，请检查实施范围和验证方式。',decisionPending:'正在等待审核决定的接受结果。',revising:'已收到修改意见，我会更新方案并重新提交审核。',executing:'方案已批准，正在推进实施；需要工具授权时会单独提示。',toolReview:'接下来需要调整端口配置，请确认本次工具操作。',toolPending:'正在等待工具决定回执。'}[phase] || '';
+  $('analysis').hidden = $('activity').hidden = ['idle','planIdle','submitting','modePending'].includes(phase);
+  $('activity-title').textContent = ['research','revising'].includes(phase) ? '正在核对告警与设备状态' : '已查询告警与设备状态';
+  renderTasks();
+ }
+ function reset(scene = 'review') {
+  generation++; $('user-message').hidden=false; phase = scene; mode = ['idle','executing','done','stopped'].includes(scene) ? 'build' : 'plan';
+  rootId = `demo-root-${generation}`; plan = ['review','executing','recovering','stopped'].includes(scene) ? {eventId:`demo-plan-${generation}`,content:initialPlan} : null;
+  planStatus = scene === 'executing' || scene === 'stopped' ? '已批准' : scene === 'recovering' ? '待核对' : '待审核';
+  pending = null; todos = null; progressStep = 0; showFeedback = false; staleTarget = false; result = ''; seen = new Set(); priorPhase = 'review';
+  $('decision-status').textContent = ''; $('feedback-text').value = ''; $('feedback-error').textContent = ''; $('old-plan').hidden = true; $('copy-state').hidden = true;
+  $('plan-title').textContent = '东区网络告警排查与处置'; $('plan-intro').textContent = '先确认影响范围和变更原因，再在允许的维护窗口内处理，最后核验告警与业务恢复情况。';
+  $('plan').open = scene !== 'executing' && scene !== 'stopped'; $('progress').open = true; closeMode(false);
+  if (scene === 'executing' || scene === 'stopped') { todos = taskText.map((content,i) => ({content,status:i === 0?'completed':i === 1?'in_progress':'pending'})); progressStep = 1; }
+  if (scene === 'stopped') result = '任务已停止。已完成的工作与最后进度保留；没有把其余任务标为完成。';
+  render();
+ }
+ function closeMode(focus = true) { $('mode-menu').hidden = true; $('mode').setAttribute('aria-expanded','false'); if(focus) $('mode').focus(); }
+ function write(kind, data = {}) { pending = Object.freeze({kind,generation,rootId,...data}); writes++; }
+ function decide(decision) {
+  if (phase !== 'review' || staleTarget || !plan) return;
+  const feedback = $('feedback-text').value;
+  if(decision === 'revise' && ((feedback && !feedback.trim()) || feedback.length > 4096)) { $('feedback-error').textContent='修改意见如填写，需非空白且不超过 4096 UTF-16 单元（内部原型限制）。'; $('feedback-text').focus(); return; }
+  write('plan',{target:plan.eventId,decision,...(decision === 'revise' && feedback ? {feedback} : {})});
+  phase='decisionPending'; $('decision-status').textContent='正在提交决定…'; render(); $('decision-status').focus();
+ }
+ function receipt() {
+  if(!pending || pending.generation !== generation) return;
+  const accepted = pending; pending = null; receipts++;
+  if(accepted.kind === 'mode') { mode=accepted.mode; phase=mode==='plan'?'planIdle':'idle'; }
+  if(accepted.kind === 'message') { $('user-message').hidden=false; if($('draft').value === messageSnapshot) $('draft').value=''; $('user-message').textContent=messageSnapshot; phase=mode==='plan'?'research':'executing'; }
+  if(accepted.kind === 'plan') {
+   if(accepted.target !== plan?.eventId || staleTarget) return;
+   if(accepted.decision === 'approve') { planStatus='已批准'; mode='build'; phase='executing'; $('plan').open=false; $('decision-status').textContent='批准已接受，原任务继续实施。'; }
+   else { planStatus='已退回修改'; phase='revising'; showFeedback=false; $('decision-status').textContent='修改意见已接受，正在等待新的完整方案。'; }
+  }
+  if(accepted.kind === 'stop') { phase='stopAccepted'; planStatus = planStatus === '已批准' ? '已批准' : '停止处理中'; }
+  if(accepted.kind === 'tool') { phase=accepted.decision==='allow'?'executing':'toolDenied'; $('decision-status').textContent=accepted.decision==='allow'?'工具授权已接受，等待实际结果。':'已拒绝本次工具，等待执行结果。'; }
+  render();
+ }
+ function applyTodo(event) {
+  if(event.type !== 'agent.todo_updated' || event.sourceEventId !== rootId || seen.has(event.eventId)) return;
+  seen.add(event.eventId); todos=event.todos.map(t => ({...t})); render();
+ }
+ function advance() {
+  if(phase==='toolDenied'){phase='stopped';result='示例返回停止记录。本次设备配置未修改，其余任务保留原状态。';$('progress').open=false;render();return;}
+  if(phase === 'research' || phase === 'revising') {
+   if(plan) { $('old-plan').hidden=false; $('old-plan-text').textContent=plan.content; }
+   const revised=phase==='revising'; plan={eventId:`demo-plan-${generation}-${receipts}`,content:initialPlan+(revised?'\n\n维护操作安排在今晚 22:00 后。':'')};
+   $('plan-intro').textContent='先确认影响范围和变更原因，再在允许的维护窗口内处理，最后核验告警与业务恢复情况。'+(revised?' 维护操作安排在今晚 22:00 后。':'');
+   phase='review'; planStatus='待审核'; $('plan').open=true; $('decision-status').textContent=''; $('feedback-text').value=''; render(); return;
+  }
+  if(phase === 'stopAccepted') { phase='stopped'; planStatus=planStatus==='已批准'?'已批准':'审核已结束'; result='已收到当前任务的真实停止记录。原草稿与最后任务进度保留。'; $('progress').open=false; render(); return; }
+  if(phase !== 'executing') return;
+  if(progressStep >= 4) { phase='done'; result='任务已完成。处置与验证结果已记录，可以继续发送新消息。'; $('progress').open=false; render(); return; }
+  applyTodo({eventId:`demo-todo-${generation}-${progressStep}`,type:'agent.todo_updated',sourceEventId:rootId,todos:taskText.map((content,i)=>({content,status:i<progressStep?'completed':i===progressStep?'in_progress':'pending'}))});
+  progressStep++;
+  if(progressStep===2) { phase='toolReview'; render(); }
+ }
+ function send() {
+  if(!ready() || composing || $('send').disabled) return;
+  messageSnapshot=$('draft').value; rootId=`demo-root-${generation}-${writes+1}`; todos=null; plan=null; result=''; progressStep=0; seen=new Set();
+  write('message'); phase='submitting'; render();
+ }
+ $('scenario').onchange=e=>reset(e.target.value);
+ $('mode').onclick=()=>{ if(!ready())return; $('mode-menu').hidden=!$('mode-menu').hidden; $('mode').setAttribute('aria-expanded',String(!$('mode-menu').hidden)); if(!$('mode-menu').hidden) $(mode==='plan'?'mode-plan':'mode-build').focus(); };
+ for(const value of ['build','plan']) $('mode-'+value).onclick=()=>{ if(!ready())return; closeMode(); if(mode===value)return; requestedMode=value; write('mode',{mode:value}); phase='modePending'; render(); };
+ $('mode-menu').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();closeMode();} if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();$(e.key==='Home'?'mode-build':e.key==='End'?'mode-plan':document.activeElement===$('mode-plan')?'mode-build':'mode-plan').focus();}};
+ document.addEventListener('click',e=>{if(!e.target.closest('.mode-wrap'))closeMode(false);});
+ $('reject-mode').onclick=()=>{if(phase!=='modePending')return;pending=null;phase=mode==='plan'?'planIdle':'idle';render();$('notice').hidden=false;$('notice-text').textContent=`模式更新未成功。当前仍为${mode==='plan'?'计划':'普通'}模式；原选择为${requestedMode==='plan'?'计划':'普通'}模式，请核对后重新选择。`;$('recover').hidden=true;};
+ $('approve').onclick=()=>decide('approve'); $('revise').onclick=()=>{if(phase!=='review')return;showFeedback=true;render();$('feedback-text').focus();};
+ $('revise-submit').onclick=()=>decide('revise'); $('revise-cancel').onclick=()=>{showFeedback=false;render();$('revise').focus();};
+ $('feedback-text').onkeydown=e=>{if(e.key==='Escape'&&!e.isComposing){e.preventDefault();$('revise-cancel').click();}};
+ $('receipt').onclick=receipt; $('advance').onclick=advance;
+ $('send').onclick=()=>{if(canStop()){write('stop',{target:rootId});showFeedback=false;phase='stopping';render();}else send();};
+ $('draft').oninput=render; $('draft').addEventListener('compositionstart',()=>{composing=true;}); $('draft').addEventListener('compositionend',()=>{composing=false;});
+ $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&!composing&&e.keyCode!==229&&!e.repeat){e.preventDefault();send();}};
+ $('disconnect').onclick=()=>{priorPhase=phase;phase='uncertain';if(plan&&planStatus==='待审核')planStatus='待核对';render();};
+ $('other-client').onclick=()=>{if(!plan)return;staleTarget=true;pending=null;phase='recovering';planStatus='其他端已处理，正在核对';render();};
+ $('recover').onclick=()=>{if(!['recovering','uncertain'].includes(phase))return;phase='recovering';render();};
+ // Recovery completion is explicit and read-only; an unknown write stays unknown without its receipt.
+ function recovered() {
+  if(phase!=='recovering')return;
+  if(staleTarget){planStatus='已批准';mode='build';phase='executing';pending=null;$('plan').open=false;}
+  else if(pending){phase='uncertain';}
+  else {phase=priorPhase==='review'?'review':priorPhase; if(phase==='review')planStatus='待审核';}
+  render();
+ }
+ const recoveryButton=document.createElement('button');recoveryButton.id='history-result';recoveryButton.textContent='模拟历史补齐';recoveryButton.onclick=recovered;document.querySelector('.demo').insertBefore(recoveryButton,$('other-client'));
+ for(const decision of ['allow','deny']) $('tool-'+decision).onclick=()=>{if(phase!=='toolReview')return;write('tool',{decision});phase='toolPending';render();};
+ $('copy').onclick=async()=>{if(!plan)return;const source=plan.content;$('copy-state').hidden=false;try{await navigator.clipboard.writeText(source);$('copy-state').textContent='已复制方案原文';}catch{$('copy-state').textContent='当前浏览器不允许复制，请选择方案正文复制。';}};
+ $('model').onclick=()=>{$('settings').hidden=!$('settings').hidden;};
+ $('thinking').onclick=()=>{if(!ready())return;$('settings').hidden=false;$('config-current').textContent='模型与思考更新沿用主设计的配置回执流程；此原型仅演示模式更新。';};
+ $('settings-toggle').onclick=()=>{$('settings').hidden=!$('settings').hidden;$('settings-toggle').setAttribute('aria-expanded',String(!$('settings').hidden));};
+ $('nav-open').onclick=()=>{$('rail').dataset.open='true';$('nav-close').focus();};$('nav-close').onclick=()=>{$('rail').dataset.open='false';$('nav-open').focus();};
+ const drafts=new Map();
+ function switchView(next,title){drafts.set(view,$('draft').value);view=next;$('draft').value=drafts.get(view)||'';$('title').textContent=title;reset(next==='alarm'?'review':'planIdle');$('user-message').textContent=next==='alarm'?'请分析东区网络告警，先给出排查和处置方案，确认后再实施。':'请整理今天的巡检结果。';$('current-chat').classList.toggle('selected',next==='alarm');$('other-chat').classList.toggle('selected',next==='daily');$('rail').dataset.open='false';}
+ $('other-chat').onclick=()=>switchView('daily','每日巡检汇总');$('current-chat').onclick=()=>switchView('alarm','园区告警处置');
+ $('new-chat').onclick=()=>{switchView('new','新会话');$('draft').value='';reset('idle');$('user-message').hidden=true;};
+ // Deterministic probes consume synthetic events only; no API or persistence methods.
+ window.planDemo={applyTodo,recovered,receipt,advance,reset,get snapshot(){return {phase,mode,plan,pending,todos,rootId,generation,writes,receipts};}};
+ reset('review');
+})();
+</script>
+</body>
+</html>

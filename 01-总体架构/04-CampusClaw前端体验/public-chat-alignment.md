@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 / 日期 | 1.3.0 / 2026-09-09 |
+| 版本 / 日期 | 1.4.0 / 2026-09-15 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
 | 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；本次读取的 frontend 文件无工作树修改 |
 | 性质 | target-only 产品前端；Thinking 原文规则同步 Mate 公共契约；Vue 与 Runtime 实现仍待同步，公司认证规则保持 |
@@ -72,7 +72,7 @@ Slash 和恢复后的配置读取共用配置快照；成功资源与并发版�
 
 ![对话、确认与恢复状态](target_conversation_states.svg)
 
-[PlantUML 源码](diagram.puml#L294) · [原尺寸](target_conversation_states.svg)
+[PlantUML 源码](diagram.puml#L325) · [原尺寸](target_conversation_states.svg)
 
 连接使用独立 `connecting/live/offline/reconciling` 状态，不把连接打开当作执行中、EOF 当作完成。
 下列业务状态是前端模型，不是新增 HTTP 枚举。所有目标推导以当前 Chat、请求快照和可靠关联为前提。
@@ -134,6 +134,8 @@ Enter 发送、Shift+Enter 换行；compositionstart 至 compositionend 期间 E
 | agent.tool_result | 使用 isError 判成败，公共字符串作为纯文本；没有结果不伪造成功；工具失败后 Agent 仍可能继续处理 |
 | chat.status_idle | done/terminated/failed/confirming 分开处理；不关闭公共长连接，不把确认等待视为空闲 |
 
+计划方案是新增的受限 Markdown 内容面，界面和两跳接入门禁见[计划交互专项](plan-interaction.md)；当前 Mate 精确模型未接入计划审核与任务事件前，只装配 Mock，不直接转发内部事件。
+
 Assistant `content` 保留 rawMarkdown 并使用现有安全渲染骨架；User/Thinking/Tool/error 不继承 Markdown 权限。
 参数是已安全投影的 JSON 对象，使用惰性展开的键值 viewer；文本即使像 JSON/URL 也不变成可执行结构。
 本地展示预算只控制展开、虚拟列表或纯文本回退，不覆写权威完整记录；复制只复制允许公开的数据。
@@ -162,7 +164,7 @@ Assistant `content` 保留 rawMarkdown 并使用现有安全渲染骨架；User/
 
 ## 7. 配置、命令及身份集成
 
-顶部模型/思考、Builtin model/name/thinking/status 与恢复读取共用 ConfigurationStore。
+Composer 模型/思考/模式、Builtin model/name/thinking/status 与恢复读取共用 ConfigurationStore。
 内部成功响应的完整 Session + ETag 必须原子替换；model 空参返回 Models 不覆盖 ETag。
 版本冲突刷新后显示实际值和用户原选择，保留草稿，用户再次确认才修改；不自动用新 ETag 重放 PUT。
 相同配置不提示“已变更”；切模型可能同时关闭 thinking，以完整资源为准，不把旧开关值覆盖回来。
@@ -199,6 +201,7 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-09-15 | 配置入口收敛到 Composer，新增计划审核与任务展示的公共接入引用。 |
 | 1.3.0 | 2026-09-09 | 将停止收敛到 Composer 主操作并关联内部工作台恢复设计。 |
 | 1.2.0 | 2026-09-09 | 明确事件身份、工具业务参数与 Runtime 响应读取边界。 |
 | 1.1.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |

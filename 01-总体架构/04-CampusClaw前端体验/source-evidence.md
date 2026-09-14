@@ -2,7 +2,7 @@
 
 [返回前端主设计](README.md)
 
-版本：1.0.0；整理日期：2026-09-14。设计仓整理基线 `6026ba48`。本文件保存历史核验资料，结论只适用于标明的 commit 或安装包；当前设计以主设计为准，工作台与公共接入差距由各专项维护。
+版本：1.1.0；更新日期：2026-09-15。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；当前设计以主设计为准，工作台与公共接入差距由各专项维护。
 
 | 证据 | 基线 |
 |---|---|
@@ -67,5 +67,16 @@
 | `HttpMateToolClient:95-180, 298-370`、`MateToolDiscovery` | Agent、Skill 和 Tool metadata 发现方法不再接受凭据参数；只有 Tool execute 检查完整性并附加四项快照。 |
 | `HttpMateToolClientTest:270-400, 476-483` | 回归测试覆盖发现无凭据、JWT、APPKEY、双凭据、缺少 `access-token` fail closed 和脱敏 `toString`。 |
 
-上表保留当时的评审记录，不用于判断该 PR 当前状态。本次前端实现现状以
-[dfb90ca 源码证据](public-chat-alignment.md#2-源码证据与差距)为准。
+上表保留当时的评审记录，不用于判断该 PR 当前状态。该阶段公共接入差距见
+[dfb90ca 源码证据](public-chat-alignment.md#2-源码证据与差距)；本次计划前端核验范围见下节。
+
+
+<a id="plan-frontend-evidence"></a>
+
+## 3. 计划模式前端核验（2026-09-15）
+
+前端设计基线 `pi-mono-java-design@42243077d8605024a5d4470867525879b0d1a088`；Java 核验 `origin/main@29ebec6a8cad99896414211cda28c6fffec71bee`。旧前端基线 `510d882ca45541e0086586dab89c429c5a18cf20` 仅保留原范围。全量读取本次涉及的 App、ComposerBox、ConversationTimeline、runtime/product 类型、eventStore、runtimeEventProjector、useRuntimeApi；后端读取 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java`，create/get/delete 尚无通用 update。该范围尚无计划类型与 UI，不证明其他特性分支或部署不支持计划模式。
+
+Codex 固定源码仍为 `d58d0e5841e0de08e251673db2d5af8cf3a1ad51`，通过 git show 读取，未使用工作树 HEAD `be33f80b` 替换。完整读取 `codex-rs/tui/src/chatwidget/plan_implementation.rs`、`codex-rs/core/src/tools/handlers/plan.rs`、`codex-rs/protocol/src/plan_tool.rs`，定向读取 `codex-rs/app-server/README.md` 的 plan/Item/提问协议段。符号与结论见[计划交互 §1](plan-interaction.md#1-源码与交互依据)。前者证明 TUI 的实施选择，不能当作桌面前端源码；具体卡片尺寸与位置是 CampusClaw 目标设计。
+
+官方 [Features](https://learn.chatgpt.com/docs/features) 与 [App Server](https://learn.chatgpt.com/docs/app-server) 于 2026-09-15 重新核对。前者显示侧栏与 Add/Plan mode；后者区分方案 Item、delta、任务更新与提问。当前公开文档与固定源码可能不同，分别使用，不升级固定 commit，也不推断服务端存储。

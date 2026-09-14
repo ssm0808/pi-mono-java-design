@@ -1,0 +1,112 @@
+# 计划模式与 Codex 交互对齐
+
+[前端主设计](README.md) · [可操作工作台](plan-workbench.html) · [计划模式主设计](../06-CampusClaw计划模式/README.md)
+
+版本：1.0.0；日期：2026-09-15。性质：已确定的前端目标，target-only；原型使用本地合成事件，不代表部署验证。
+
+本页维护 M07 的模式入口、方案阅读、审核和进度展示。模式、审核事务与恢复权威归 M01 的计划模式专题；精确字段归 Runtime 共享契约和审核增量，企业接入归 Mate 公共契约。本页不增加 HTTP API、Slash Command 或后端状态。
+
+## 1. 源码与交互依据
+
+设计仓起点为 `42243077d8605024a5d4470867525879b0d1a088`。实现仓核对 `origin/main@29ebec6a`（完整 SHA 见[证据分册](source-evidence.md#plan-frontend-evidence)）；旧前端证据 `510d882c` 不延伸为最新缺陷。前端按当前已确定的计划模式契约接入；本次可核验主线的下列路径尚无计划类型与交互，其他特性分支和部署状态未核验。
+
+| 证据 | 已观察事实与适用边界 |
+|---|---|
+| Java `frontend/src/types/runtime.ts` · RuntimeSession/UserEvent/RuntimeEvent | 无 mode、计划审核与 TODO 类型；不能把后端已确定设计当成此客户端已接通。 |
+| `frontend/src/App.vue` · submit/stop/decideTool；`components/ComposerBox.vue` · template/primaryKeydown | 已有同位置发送/停止、草稿和独立工具确认；模式入口与方案组件需要扩展。 |
+| `frontend/src/runtime/eventStore.ts` · mergeEvent/reconcileEvents/executionState | 事件身份去重、历史顺序与实时尾部合并、根消息关联可以复用；待交互只识别工具确认。 |
+| `frontend/src/composables/useRuntimeApi.ts` · loadHistory/recover/changeSetting | 已有分页恢复、请求代次、完整 Session/ETag 更新；changeSetting 仍走独立 PUT。 |
+| `frontend/src/projectors/runtimeEventProjector.ts` · projectRuntimeEvents；`components/ConversationTimeline.vue` | 原始推理、普通回答和工具已有各自展示；confirming 目前固定解释为工具确认，需要按交互类型投影。 |
+| Codex `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` · `codex-rs/tui/src/chatwidget/plan_implementation.rs` · selection_view_params | 完整方案后提供实施、清上下文实施、继续规划；实施动作提交带 Default mode 的用户消息。这是 TUI 行为证据，不是桌面像素规范。 |
+| 同一 Codex · `codex-rs/core/src/tools/handlers/plan.rs` · PlanHandler::handle_call；`codex-rs/protocol/src/plan_tool.rs` | update_plan 是 TODO 工具，Plan mode 调用被拒绝；进度显式发出 PlanUpdate，不从方案正文解析。CampusClaw 只借鉴阶段与展示分离，继续采用自己的提示词约束。 |
+| 同一 Codex · `codex-rs/app-server/README.md:1771,1789,1830,1924` | turn/plan/updated、plan Item、实验性 plan delta 与用户提问请求分离；不将四种对象合并为一种“计划”。 |
+| [官方 Features](https://learn.chatgpt.com/docs/features)，2026-09-15 核对 | 展示侧栏、输入区 Add 与 Plan mode 入口。这里只证明公开布局例子，不推断安装包中的精确菜单或色值。 |
+| [官方 App Server](https://learn.chatgpt.com/docs/app-server)，2026-09-15 核对 | 最终 plan Item 为权威，delta 可能与最终内容不同；提问与批准有独立协议。公开文档与固定源码分别记录，不静默升级源码基线。 |
+
+其余 Codex 暖灰、轻边界、活动折叠取样仍沿用[历史安装包证据](source-evidence.md)，本次不声称重新测量桌面 CSS。没有修改 Runtime Loop，不新增 pi 行为结论；pi 语义证据继续由计划模式主设计维护。
+
+## 2. 对齐范围与设计理由
+
+| 交互问题 | CampusClaw 当前目标 | 差异分类、收益与代价 |
+|---|---|---|
+| 工作区密度 | 左侧会话列表、中央开放式回答、底部同宽 Composer；顶部只保留任务标题、Agent 与状态，模型/思考/模式放在 Composer 工具栏 | 产品约束：输入相关选择聚合，减少上下找控件；与原顶部配置位置不同，配置状态仍共享。 |
+| 模式入口 | Composer 常驻“普通模式 / 计划模式”轻量按钮，选择菜单只含这两项；计划激活后保留文字标识 | 产品约束：参考 Codex 的输入邻近入口，额外保持常驻可见以降低企业用户发现成本；不复制 Add 菜单。 |
+| 方案阅读 | 对话内一张轻边界方案卡，默认展开完整正文，紧邻审核动作；原始 O1 不变 | 产品约束：阅读与决定同处，不用全屏审核向导；长文依靠页面滚动，正文不困在矮小滚动框。 |
+| 批准执行 | “批准并执行”提交当前方案的审核决定，原执行续跑；“修改方案”展开独立反馈区 | 架构变更：沿用 CampusClaw 审核事务，与 Codex TUI 的新用户消息方式不同；需要可靠的目标身份与回执。 |
+| 上下文选择 | 首版无“清空上下文并执行”选项 | 产品约束：当前设计保留原执行、凭据和模型上下文；不引入第二条启动路径。 |
+| 澄清问题 | 普通 Assistant 问题结束本轮；在 idle/plan 用原 Composer 回答 | 产品约束：不从自然语言解析成问卷控件，也不复刻 Codex 实验性提问协议；缺少结构化选择能力，但可完成多轮澄清。 |
+| 实施清单 | build 才显示后端显式任务快照，位置在 Composer 上方；轻量行展示进行中项和完成数量，展开查看全表 | 架构变更：展示脱离工具日志；产品约束：不从计划 Markdown 生成进度、不手工勾选、不将进度全完成等同执行终态。 |
+| 执行透明度 | Thinking 与工具沿原时序排列；当前项展开、完成项折叠，工具输入在上、输出在下 | 产品约束：借鉴 Codex disclosure；保留 CampusClaw 原始推理展示，不生成推理摘要冒充原文。 |
+| 运行中输入 | 可写草稿，停止位于原发送位置；审核等待仍 running | 产品约束：不开放队列、Steer 或随意运行中模式切换；牺牲部分交互灵活性以保持既定准入。 |
+
+计划模式说明为“先调研并形成方案，审核后实施”。不能标为“只读沙箱”或“绝不会修改”：现有计划设计靠提示词约束，原工具权限仍独立生效。
+
+## 3. 模式、方案与清单的状态
+
+三个对象分别维护：Session mode 为 plan/build；执行按当前根消息判定；PlanReviewState 只投影完整方案及审核事实。模式控件不能根据当前卡片颜色反推 Session mode。
+
+| screenKey / 场景 | 主要显示 | 允许的交互 |
+|---|---|---|
+| `planIdle` | 计划模式标识、普通 Composer | 发消息、回答澄清；手动退出计划只更新模式。 |
+| `planResearch` | “正在制定方案”，连续活动流 | 停止、编辑草稿；无审核按钮、无调研进度百分比。 |
+| `planClarifying` | 普通问题正文、计划模式仍激活 | 真实终态与 idle 对齐后回答；不自动批准或运行。 |
+| `planReview` | 完整方案、“待审核”、“批准并执行 / 修改方案” | 绑定已恢复且当前有效的方案 eventId；没有隐式肯定词识别。 |
+| `planDecisionPending` | “正在提交决定” | 两个审核动作与停止共享提交锁，暂时禁用；不标记已批准、不清草稿。 |
+| `planRevising` | 旧方案标为“已退回修改”，活动流继续 | 仍 plan/running；新方案新身份，旧方案只读；反馈不会变成第二条普通 user.message。 |
+| `planExecuting` | 已批准方案折叠、普通模式、实施活动与任务摘要 | 等待首个任务事件前不显示虚构清单；工具授权单独出现；停止仍指向原根。 |
+| `planRecovering` | 保留已知方案/清单与“正在核对” | 只读恢复；缺页、冲突、旧响应或失联不能开放审核。 |
+| `planTerminal` | 实际完成/失败/停止与最后任务快照 | 根据可靠终态恢复普通发送；未完成的任务保持原状态。 |
+
+![计划模式前端交互](target_plan_interaction.svg)
+
+[PlantUML 源码](diagram.puml#L471) · [原尺寸 SVG](target_plan_interaction.svg)
+
+手动切换只在 idle、历史与状态已对齐、无写入和恢复请求时开放。内部每次只提交 mode，携带最新 If-Match；收到完整 Session 与 ETag 后原子替换配置，不先更新指示器。412 显示实际模式和原选择，显式重选才重试；网络不确定只读取资源。缺少计划能力时显示不可用原因，不默认为 build 覆盖未知模式。新建会话以创建结果为准，不把前一会话的模式带入；Agent 默认 mode 仅初始化新 Session。
+
+## 4. 方案卡与审核反馈
+
+1. 完整 `agent.plan` 和对应确认等待到齐才开放审核，按计划专题 §6.2 核对当前根、分支与状态。Agent 普通正文即使写有“计划”或包含复选框，也只是回答。无 plan delta 契约，不从 ExitPlanMode 参数流拼接可批准的草稿。
+2. 卡片使用方案 content 的受限 Markdown，沿用前端安全 AST、代码复制、表格自身滚动和外链策略。方案是新增的受限富文本内容面，User、Thinking、Tool 和错误仍按原边界显示。复制得到原始 Markdown；纯显示预算不截断权威正文。
+3. 关联 ExitPlanMode 工具行合并为方案卡的来源，不在普通工具详情再展示一次 plan；没有完整方案时仅显示“正在准备方案”，不能把工具参数当审核正文。历史可展开方案全文，操作只在当前有效卡片上出现。
+4. “修改方案”就地展开反馈 textarea；“提交修改意见”提交 revise，“取消”只收起编辑区。反馈草稿按会话与方案身份隔离，普通消息草稿保持不变。内部按既有 4096 UTF-16 单元校验，可不填；空白但非空或超长时行内报错。公共限制必须由 Mate 精确模型确认，不自动继承内部长度。
+5. approve 不带 feedback，revise 不提交修改后的方案正文。点击冻结会话、generation、当前方案身份和决定；双击只创建一次请求。回执到达才标记决定已接受，批准的 mode 以关联 mode_changed/资源对账更新；后续失败或停止不撤销已保存的批准事实。
+6. 409 表示该目标不再待审核：禁用旧卡片并补读，不自动批准新方案。关闭/折叠、Esc、超时、模型肯定文本、EOF 均不表示批准。等待审核时要结束任务使用原停止动作，真实终态后才能切模式。
+
+焦点规则：打开反馈聚焦 textarea，取消回到“修改方案”；提交后焦点移到可聚焦状态摘要，防止 disabled 按钮吞掉焦点。新方案到达只通知“方案已就绪”，不抢走正在编辑草稿的焦点。审核按钮不绑定全局 Enter；IME 和长按按原 Composer 规则处理。
+
+## 5. 实施进度与恢复
+
+进度权威、整表替换与排序规则唯一维护在 [TodoUpdate §4](../06-CampusClaw计划模式/todo-update.md#4-客户端投影与恢复)。前端追加以下展示约束：
+
+- 只读任务清单显示“已完成 1 / 3 · 正在验证结果”，展开项用 pending/in_progress/completed 对应图标与中文状态；无任务百分比、ETA 或可勾选控件。
+- 活动期间默认展开清单，用户主动折叠后不随新事件反复展开；终态收起为摘要，仍可查看原任务。长清单最多占视口约 30%，内部纵向滚动；方案全文仍用页面滚动。
+- 尚无任务事件不显示面板；明确 todos=[] 显示“任务清单已清空”，不呈现“0/0 已完成”。失败工具结果不改变上一快照。列表全部 completed 时显示“清单已完成，任务仍在执行”，实际终态独立显示。
+- root 变化后旧清单只留在旧轮历史；修订与批准续跑保持原 root。无稳定 taskId，不把同名/改名条目当成独立持久资源，不用内容哈希制造后端任务身份。
+- 恢复期间以已合并的事件顺序重算最新快照，迟到旧页不能覆盖 live 尾部；重复帧不增计数，createdAt 回退不重排。不完整历史只允许只读展示，不恢复审核权限。
+- 断网和审核回执丢失保留“结果待核对”，只重读；批准、revise、消息和停止均不自动重放。内部恢复是 GET 历史/Session，公共恢复是公共读流及历史，不混用两种连接模型。
+
+## 6. 组件与接入切片
+
+复用[公共接入的全局目标组件图](public-chat-alignment.md#3-全局目标结构)，不再维护一套局部现状类图。图中新增关系均为 target-only。
+
+| 切片 | 组件责任与先后依赖 | 验收重点 |
+|---|---|---|
+| PF1 配置入口 | ModeControl 与模型/思考共享 ConfigurationCoordinator/Store；先接统一 Session 部分更新，再移动配置控件 | idle 允许、running/审核/恢复禁用；单字段提交；完整资源/ETag 同步；412、未知模式、默认 mode 与新会话隔离。 |
+| PF2 方案投影 | PublicEventReducer → PlanReviewStore → PlanCard；计划正文复用 ContentViews 安全渲染 | 只有完整有效方案可审；ExitPlanMode 不重复正文；历史旧卡只读；原始 Markdown 复制、安全降级和长文。 |
+| PF3 审核编排 | PlanCard → ConversationCoordinator → Gateway，复用控制锁；ReviewDraftStore 与消息草稿独立 | 精确 target；approve 无反馈；revise 可选反馈；双击/IME/取消/停止竞争；回执与实际实施分开。 |
+| PF4 进度 | PublicEventReducer → ExecutionProgressStore → ProgressDisclosure；全部输入为显式完整事件 | 无事件/空列表/失败区分；新根隔离；全完成不当终态；旧页与 live 交错、重复事件、长列表可读。 |
+| PF5 恢复和两跳 | HistoryRecovery 共用 Reducer；Gateway 显式选择内部、Mock 或 Mate | 缺页禁审、迟到响应丢弃、跨端已处理不重发；公共模式/审核/任务关联确认后才接真实 Gateway。 |
+
+Store 生命周期按 Chat 隔离，审核草稿再按 plan eventId 隔离；视图只读不可变投影，不直调 Runtime Controller、Mapper 或持有凭据。审核与停止共享当前执行控制锁，进度独立于配置版本。服务端仍在事务中检查目标，前端快照不是接受凭证。
+
+不新增 Maven/npm 直接依赖；复用 Vue Composition API、现有 Markdown renderer 与 Gateway，原型使用原生 HTML/CSS/JS。
+
+## 7. 视觉、原型与交付边界
+
+[plan-workbench.html](plan-workbench.html) 是本专题当前交互原型；[旧综合评审页](frontend-review.html)继续保留 Headers、基础对话与历史视觉样例。原型上方的场景/回执/事件按钮属于演示控制，不进入产品工作区。没有真实工具执行、网络请求或后端认证。修订场景的模拟服务端固定返回“22:00 后实施”的示例，不分析反馈文本；模型与思考沿用主设计，原型只演示模式更新。
+
+桌面侧栏 232 px、顶部 64 px、正文与 Composer 最大 840 px；14 px 正文，方案行高 1.8，弱边界与小面积深色主动作；O1 继续引用原 PNG。已完成活动收为一行，避免每个事件形成一张大卡。窄屏侧栏抽屉化；模型/思考收进设置入口，模式文字和审核动作保留；390 px 下方案、按钮和工具条自然换行，只有表格/代码自身横向滚动。
+
+1440/1024/768/390 px 检查常规、审核、修订、实施和恢复；键盘检查模式菜单、反馈取消、折叠与焦点恢复。主交互目标区至少 44 px，aria-live 只播报状态变化，reduced-motion 下取消旋转。对比度沿用主设计已核对色值。
+
+验收必须分别记录：设计原型状态测试、真实浏览器布局、PlantUML 生成与视觉、实现集成。原型通过不能证明 Java 计划实现或 Mate 公共桥接通过。未核验特性分支是证据限制，不阻塞目标前端设计。

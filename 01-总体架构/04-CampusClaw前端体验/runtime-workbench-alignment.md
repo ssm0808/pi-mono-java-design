@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 1.3.0 |
-| 日期 | 2026-09-14 |
+| 版本 | 1.4.0 |
+| 日期 | 2026-09-15 |
 | 设计起点 | `pi-mono-java-design@599edb072cf75e3d8f85c775c53c0e83befd285d` |
 | 实现基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20` |
 | 范围 | 当前研发使用的 Runtime Web 工作台；本轮会话排序、置顶和直接重命名交互均为 target-only |
@@ -35,7 +35,7 @@
 
 ![工作台目标组件](target_runtime_workbench.svg)
 
-[PlantUML 源码](diagram.puml#L335) · [原尺寸 SVG](target_runtime_workbench.svg)
+[PlantUML 源码](diagram.puml#L366) · [原尺寸 SVG](target_runtime_workbench.svg)
 
 图中新增对象均为 target-only。页面协调器统一拥有选中会话与请求代次；Composer、恢复和停止读取同一执行状态，不各自推导可发送。索引只提供恢复入口，消息与执行状态仍以后端为权威。Header Store 与会话索引分开，避免恢复列表时顺带保存凭据。
 
@@ -69,7 +69,7 @@ schemaVersion=1 迁移到 2 时，保持现有数组顺序，将旧 `updatedAt` 
 
 名称、模型、思考和模式控件共用 updateSession 客户端方法，每次操作只提交对应的一个字段；禁止 GET 资源全量回传。接口允许组合提交是资源更新能力，当前页面不增加批量编辑或保存流程。成功后按返回的完整 Session 和 ETag 原位更新；仅提交 modelId 时，模型能力导致的 thinking 自动归一也以返回值为准。字段准入与组合提交规则由 [HTTP 主设计 §2.4](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-update)维护。
 
-计划审核为 target-only 扩展：沿用工具确认的事件恢复方式，Session 类型只接入工作模式，不增加待审核指针。卡片展示、分页未完成时禁用审核和服务器最终校验统一引用[计划模式 §6.2](../06-CampusClaw计划模式/README.md#62-恢复与结果不确定)。
+模式按钮常驻 Composer，与模型/思考共享配置快照；界面位置、反馈编辑和实施进度见[计划交互专项](plan-interaction.md)。计划审核为 target-only 扩展：沿用工具确认的事件恢复方式，Session 类型只接入工作模式，不增加待审核指针。卡片展示、分页未完成时禁用审核和服务器最终校验统一引用[计划模式 §6.2](../06-CampusClaw计划模式/README.md#62-恢复与结果不确定)。
 
 会话菜单的“重命名”使用统一 Session 更新 API，成功后在原位更新列表文案，不调整排序。412 时重读 Session，显示实际名称并保留用户草稿，由用户再次确认；不用新 ETag 自动重放 POST。网络结果不确定时 GET Session 对账，不盲重试。
 
@@ -144,6 +144,7 @@ Token 获取是独立请求，不重放失败的对话 POST。后续是否携带
 | W3 Header 与本地错误 | 三空预置 0，纯空白 0，CR/LF 拒绝；四种 POST 使用最新值，旧快照不变；本地校验失败不归类为网络未知结果 |
 | W4 本地认证助手 | 固定 IP/HTTPS/path、账号配置不进入 bundle、独立 Cookie 数组、超时/上限/无 Token/重定向/TLS/异常脱敏、代次与编辑冲突；生产与 preview 路径不存在 |
 | W5 入口与状态提示 | `+` 只含真实附件/上下文能力；`/` 发现命令；空闲不常驻恢复栏；故障动作只读取，不自动续发、重登或重放 |
+| W7 计划交互 | 按[PF1～PF5](plan-interaction.md#6-组件与接入切片)接入模式、方案、审核和任务面板；不将工具 confirming 固定解释为计划待审 |
 | W6a 四类属性控件 | 每次操作只提交对应字段并携带 If-Match；仅切换模型时不主动补发 thinking，按完整 Session 同步归一结果；各控件共用 updateSession 与冲突对账流程 |
 | W6 直接重命名 | 请求仅 `displayName`且携带最新 If-Match；与 `/name` 共用空白/Unicode/80 UTF-8 字节反例；running 可改；同值不更新时间/版本；412 和未知结果不自动重放 |
 
@@ -153,6 +154,7 @@ Token 获取是独立请求，不重放失败的对话 POST。后续是否携带
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-09-15 | 模式与配置集中到 Composer，并引用计划审核、反馈和进度专项。 |
 | 1.3.0 | 2026-09-14 | 计划审核卡从事件恢复，Session 类型不增加待审核指针。 |
 | 1.2.1 | 2026-09-14 | 四个会话属性控件每次只提交对应字段，复用允许组合的 Session 更新契约。 |
 | 1.2.0 | 2026-09-14 | 四类会话设置使用统一 POST，按需提交并复用条件更新及对账。 |
