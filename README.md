@@ -1,6 +1,6 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.6.2<br>
+> 导航版本：2.6.3<br>
 > 更新日期：2026-09-14<br>
 > 各模块的设计版本、源码基线和实现状态由模块主设计及架构对比条目分别记录。
 
@@ -47,7 +47,7 @@
 `操作/`、`页面资源/` 或 `示例/`。文件名中保留产品名、协议名和稳定的机器契约名，
 以避免破坏生成脚本和外部语义。
 
-Session 名称、模型、思考与模式的统一更新见[Runtime Session POST](01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#updateSession)，其与各 Agent 基线的取舍见[架构对比 A04](01-总体架构/07-Agent架构对比/README.md#a04)。
+Session 名称、模型、思考与模式采用部分更新，前端每次单项提交，接口允许组合；契约见[Runtime Session POST](01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#updateSession)，其与各 Agent 基线的取舍见[架构对比 A04](01-总体架构/07-Agent架构对比/README.md#a04)。
 
 <a id="module-index"></a>
 
@@ -129,6 +129,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.3 | 2026-09-14 | 导航补充 Session 部分更新与前端单项调用边界。 |
 | 2.6.2 | 2026-09-14 | 同步 Session 更新承载 plan/build 的设计入口。 |
 | 2.6.1 | 2026-09-14 | 增加 DeepSeek 计划模式设计、接口增量和全局类图入口。 |
 | 2.6.0 | 2026-09-14 | 建立稳定模块索引与独立 Agent 架构对比入口，并明确随模块设计同步维护。 |

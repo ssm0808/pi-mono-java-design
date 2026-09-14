@@ -44,6 +44,17 @@ class SessionUpdateContractTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Explicit false"):
             self.check()
 
+    def test_frontend_single_field_action_cannot_restrict_contract(self):
+        self.operation["requestBody"]["schema"]["maxProperties"] = 1
+        with self.assertRaisesRegex(RuntimeError, "allow combined fields"):
+            self.check()
+
+    def test_combined_request_example_must_remain_available(self):
+        request = self.operation["requestBody"]
+        request["examples"] = [case for case in request["examples"] if len(case["value"]) == 1]
+        with self.assertRaisesRegex(RuntimeError, "combined four-field request"):
+            self.check()
+
     def test_update_cannot_make_if_match_optional(self):
         next(item for item in self.operation["parameters"] if item["name"] == "If-Match")["required"] = False
         with self.assertRaisesRegex(RuntimeError, "require If-Match"):

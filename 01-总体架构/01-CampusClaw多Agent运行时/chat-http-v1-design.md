@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.53.0 |
+| 文档版本 | 1.53.1 |
 | 状态 | 保留九个目标 operation；Events 以 Session Events 已确认目标契约为准；统一 Session 名称、模型、思考、模式 POST 契约；Builtin 与 Skill Command 由用户统一负责设计、实现和集成 |
 | 接口评审状态 | 原有 operation 与 Builtin 行为保持确认；共享 GET 轻量清单已确认；Skill POST 已按 B13/B14 对齐；Mate 公共命令独立管理 |
 | 精确契约源 | [catalog.json](接口契约/catalog.json) 指定的七项普通契约与两项 Session Events 模型 |
@@ -364,9 +364,9 @@ Session lifetime Usage。`willRetry=true` 时，持久化 payload 还包含不�
 
 ### 2.4 模型目录与统一 Session 更新
 
-Session 的名称、默认模型、深度思考和工作模式统一由 `POST /sessions/{sessionId}` 修改，operationKey 为 `updateSession`。这是用户选择的资源级部分更新契约，HTTP 方法固定为 POST；不要求提交完整 GET 资源。精确字段、单项/组合示例、错误和 Header 唯一维护在[操作 07](接口契约/操作/07-update-session.json)。
+Session 的名称、默认模型、深度思考和工作模式统一由 `POST /sessions/{sessionId}` 修改，operationKey 为 `updateSession`。采用 Claude Managed Agents 的资源级 POST 与可选属性更新方式；当前前端每次只提交所操作的一个字段，接口同时允许多字段组合，未提交属性保留，不要求提交完整 GET 资源。精确字段、单项/组合示例、错误和 Header 唯一维护在[操作 07](接口契约/操作/07-update-session.json)。
 
-`GET /sessions/{sessionId}/models` 继续提供 Session scope 的可选模型清单。统一操作属于 API 架构变更：将多属性变更放入同一资源版本和事务，避免客户端连续修改时出现半完成状态。保留原有名称与执行配置不同的准入规则；不照搬 Claude 的会话模型不可变约束，也不改变 Agent/Tool/Skill 元数据。
+`GET /sessions/{sessionId}/models` 继续提供 Session scope 的可选模型清单。统一操作属于 API 架构变更：四类操作共用资源更新与冲突对账流程，不将当前页面的一次单项操作固化为服务端只能修改一项的限制。多字段请求按同一资源版本和事务校验提交；当前前端无需增加批量编辑或保存流程。保留原有名称与执行配置不同的准入规则；不照搬 Claude 的会话模型不可变约束，也不改变 Agent/Tool/Skill 元数据。
 
 #### 2.4.1 GET Session Models
 
@@ -376,7 +376,7 @@ Session 的名称、默认模型、深度思考和工作模式统一由 `POST /s
 
 #### 2.4.2 POST Session 统一更新
 
-四个可写字段为 `displayName/modelId/thinking/mode`，均可省略，至少提交一个；所有显式 null、未知或只读字段、重复键、类型强转和空对象均拒绝。Boolean false 是有效的明确提交，不能按真假判断字段是否出现。未提交字段保留；仅模型实际切换且未提交 thinking 时，沿用模型能力导致自动关闭的既有规则。
+四个可写字段为 `displayName/modelId/thinking/mode`，均可省略，至少提交一个，可提交任意非空子集，不设置 `maxProperties: 1` 或字段互斥规则；所有显式 null、未知或只读字段、重复键、类型强转和空对象均拒绝。Boolean false 是有效的明确提交，不能按真假判断字段是否出现。未提交字段保留；仅模型实际切换且未提交 thinking 时，沿用模型能力导致自动关闭的既有规则。
 
 | 输入 | 准入与合并 |
 |---|---|
@@ -425,7 +425,7 @@ Repository 扩展一次性的 `updateConfiguration(sessionId, expectedVersion, c
 | 请求与入口 | UpdateSessionRequestVO、POST 路由、统一错误映射；每个单字段与四字段组合均可表达；拒绝空/null/重复键/未知/只读字段；false 不被忽略 |
 | 业务准备 | 复用名称规则，目标模型先于思考校验；显式 true 不兼容整笔拒绝，省略才允许自动关闭；无关字段不触发 Manager I/O |
 | 原子持久化 | 两实例同 ETag 只成功一次；锁内 busy/版本失败时所有字段不变；多字段只升一次版本；领域事件插入失败时全部回滚 |
-| 响应与消费者 | GET/Create/Command 的 Session 投影包含 mode；统一更新复用 GET 结构与同源 ETag；前端只发送被编辑字段，冲突/断网先对账 |
+| 响应与消费者 | GET/Create/Command 的 Session 投影包含 mode；统一更新复用 GET 结构与同源 ETag；前端每个选择器或重命名操作只发送对应一个字段，以返回 Session 同步派生的 thinking，冲突/断网先对账 |
 | 路由替换 | 移除属性专用 PUT 及其请求 VO/调用点（确认无其他消费者后删除）；不保留 PATCH 或兼容写别名；/name、/model、/thinking 命令仍保留既有入口 |
 | 模式接入 | 按计划专题实现模式持久化、Prompt 与能力检查后再开放 plan；不以接口契约已确认声称计划执行已实现 |
 
@@ -815,7 +815,7 @@ Codex Harness、2026-09-01 的 Anthropic Managed Agents 官方文档和 Agent Sk
 | R/persistence/MyBatisRuntimeSessionRepository.java · updateModelLocked/updateThinkingLocked/updateName | 行锁、版本/busy、同值判断、Entry 与资源更新 | 候选以锁内版本绑定；统一提交和 mode 为 target-only |
 | modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java · MODEL_ID_REGEX | 首字符为字母/数字，后续允许字母/数字及 ._:/-，总长 1～128 | 标识格式不变；不因接口合并扩大输入 |
 | pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185` / packages/coding-agent/src/core/agent-session.ts · setModel/setThinkingLevel | 模型变化会按能力收敛推理等级 | 保留省略 thinking 时的归一规则；显式组合校验是 CampusClaw API 设计 |
-| Claude Managed Agents 官方 Update Session / Session operations，2026-09-14 核对，Beta | POST 更新 Session 属性；已有会话不可修改模型配置 | 只参考资源更新组织；CampusClaw 可变模型属于产品约束，不能声称完全照搬 |
+| Claude Managed Agents 官方 Update Session / Session operations，2026-09-14 核对，Beta | POST 更新 Session；title、metadata、budget、agent 均为可选属性，公开契约未列出单字段互斥限制，主示例只提交 title；已有会话不可修改模型配置 | 参考资源 POST、可选字段部分更新及单字段主示例；CampusClaw 的可写字段、null 规则、If-Match 与原子提交由本设计定义，不能据公开契约推断 Claude 服务端事务 |
 
 Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/beta/sessions/update)、[Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations)。各基线 API 组织与本次取舍集中见[架构对比 A04](../07-Agent架构对比/README.md#a04)。未运行 Java 集成测试；设计确认与实现/部署状态分开记录。
 
@@ -823,6 +823,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.53.1 | 2026-09-14 | 明确前端单项提交与 Session 可选字段部分更新的契约边界。 |
 | 1.53.0 | 2026-09-14 | 名称、模型、思考与模式统一通过 Session POST 原子更新。 |
 | 1.52.0 | 2026-09-10 | 新增 `PUT Session Name`，与 `/name` 共用命名服务，直接写入使用 `If-Match` 且 running 期间仍可重命名。 |
 | 1.51.0 | 2026-09-09 | 统一 Session Events 入口，保留 HTTP v1 路径。 |

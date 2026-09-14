@@ -436,19 +436,25 @@ def validate_response_contract(
 def validate_session_update(operation: dict[str, Any], codes: set[tuple[str, str]]) -> None:
     fields = {"displayName", "modelId", "thinking", "mode"}
     request = operation["requestBody"]
-    require(set(request["example"]) == fields, "Unified Session example must show all four fields")
+    require(len(request["example"]) == 1 and set(request["example"]) <= fields,
+            "Primary Session example must match a single-field frontend action")
     schema = request["schema"]
     require(schema["type"] == "object" and schema["minProperties"] == 1
             and schema["additionalProperties"] is False and set(schema["properties"]) == fields,
             "Session update must allow nonempty partial updates with no additional fields")
+    require(schema.get("maxProperties", len(fields)) >= len(fields),
+            "Session update must allow combined fields, not impose a single-field maximum")
     require(not schema.get("required") and not any("default" in field for field in schema["properties"].values()),
             "Partial update must keep all four fields optional and without defaults")
     require(schema["properties"]["thinking"] == {"type": "boolean"}, "Thinking must remain boolean")
     require(schema["properties"]["mode"] == {"type": "string", "enum": ["plan", "build"]},
             "Mode must use plan/build without a request default")
     examples = [case["value"] for case in request["examples"]]
-    require({frozenset(case) for case in examples} == {frozenset({field}) for field in fields},
+    require({frozenset({field}) for field in fields} <= {frozenset(case) for case in examples},
             "Every individual field must have a partial-update example")
+    require(all(case and set(case) <= fields for case in examples)
+            and any(set(case) == fields for case in examples),
+            "Partial-update examples must cover the combined four-field request")
     require({"thinking": False} in examples, "Explicit false must not be treated as omission")
     require(any(item.get("name") == "If-Match" and item.get("required") is True
                 for item in operation["parameters"]), "Session POST must require If-Match")

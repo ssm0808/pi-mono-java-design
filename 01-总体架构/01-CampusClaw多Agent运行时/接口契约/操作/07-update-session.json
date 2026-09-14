@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}",
     "summary": "统一更新 Session 名称、模型、思考和工作模式",
-    "description": "按明确提交的 displayName、modelId、thinking、mode 部分更新同一 Session，允许单字段或多字段组合。所有字段先校验、再在同一行锁事务中提交；任何字段失败整笔回滚，禁止依次调用旧修改接口。仅 displayName 请求在 idle/running 均可用；只要携带 modelId、thinking 或 mode，即使值相同也要求 idle，否则 SESSION_BUSY。请求使用 If-Match 保护同一资源版本；真实变化只增加一次 resourceVersion 并更新一次 updatedAt。模型、思考、模式实际变化按顺序追加 session.model_changed、session.thinking_changed、session.mode_changed；名称不写入 Session Entry。全部无变化返回原 Session 和 ETag。成功不启动模型、不批准计划，也不排队；既有思考原文不因关闭 thinking 而隐藏。",
+    "description": "按明确提交的 displayName、modelId、thinking、mode 部分更新同一 Session，允许单字段或多字段组合。当前前端每次选择器或重命名操作仅提交对应一个字段，接口不限制为只能提交一项。所有字段先校验、再在同一行锁事务中提交；任何字段失败整笔回滚，禁止依次调用旧修改接口。仅 displayName 请求在 idle/running 均可用；只要携带 modelId、thinking 或 mode，即使值相同也要求 idle，否则 SESSION_BUSY。请求使用 If-Match 保护同一资源版本；真实变化只增加一次 resourceVersion 并更新一次 updatedAt。模型、思考、模式实际变化按顺序追加 session.model_changed、session.thinking_changed、session.mode_changed；名称不写入 Session Entry。全部无变化返回原 Session 和 ETag。成功不启动模型、不批准计划，也不排队；既有思考原文不因关闭 thinking 而隐藏。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -26,10 +26,7 @@
       "contentType": "application/json",
       "description": "仅接受 displayName、modelId、thinking、mode，四项均可省略但至少提交一项；未提交字段保留（仅切换模型时可按能力自动关闭未提交的 thinking）。显式 null、空对象、类型强转、重复 JSON 键、未知字段和只读字段均拒绝。displayName 去除首尾空白后非空，保留内部空白，禁止 CR/LF、C0/C1 控制字符与双向文本覆盖/隔离字符，UTF-8 最多 80 字节。thinking 是 boolean，不接收 level/reasoningEffort；mode 只接受 plan/build。ID、state、pendingPlanEventId、usage 和时间戳不可写，不接收 provider、凭据或 Idempotency-Key；不在请求 VO 设置默认值。",
       "example": {
-        "displayName": "园区网络故障分析",
-        "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
-        "thinking": true,
-        "mode": "plan"
+        "displayName": "园区网络故障分析"
       },
       "examples": [
         {
@@ -58,6 +55,16 @@
           "description": "要求 idle；切到 build 不等于批准任何计划。",
           "value": {
             "mode": "build"
+          }
+        },
+        {
+          "label": "多字段组合更新",
+          "description": "展示接口支持的组合提交；当前前端仍按单项操作调用，不要求新增批量保存交互。全部校验通过后一次提交。",
+          "value": {
+            "displayName": "园区网络故障分析",
+            "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+            "thinking": true,
+            "mode": "plan"
           }
         }
       ],
@@ -90,6 +97,49 @@
       }
     },
     "responses": [
+      {
+        "id": "200-name-running",
+        "status": "200",
+        "tabLabel": "200 · 运行中仅改名",
+        "label": "OK",
+        "summary": "仅提交 displayName；执行快照不变，running 期间也允许。",
+        "headers": {
+          "ETag": "\"snp-N8mQ2vK5xR4\"",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "claude-sonnet-4-5",
+              "state": "running",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-09-10T10:15:00+08:00",
+              "mode": "build"
+            }
+          }
+        }
+      },
       {
         "id": "200-updated",
         "status": "200",
@@ -172,49 +222,6 @@
               "createdAt": "2026-08-15T10:30:00+08:00",
               "updatedAt": "2026-09-14T10:15:00+08:00",
               "mode": "plan"
-            }
-          }
-        }
-      },
-      {
-        "id": "200-name-running",
-        "status": "200",
-        "tabLabel": "200 · 运行中仅改名",
-        "label": "OK",
-        "summary": "仅提交 displayName；执行快照不变，running 期间也允许。",
-        "headers": {
-          "ETag": "\"snp-N8mQ2vK5xR4\"",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "0",
-            "resMsg": "success",
-            "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "claude-sonnet-4-5",
-              "state": "running",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-09-10T10:15:00+08:00",
-              "mode": "build"
             }
           }
         }
@@ -492,6 +499,10 @@
           "规则"
         ],
         "rows": [
+          [
+            "前端调用与契约能力",
+            "当前前端每次仅提交被操作的一个字段，共用 updateSession；接口接受非空字段子集，允许多字段组合，不设置只能提交一项的限制。按返回的完整 Session 和 ETag 更新界面，包括模型变化导致的 thinking 自动归一。"
+          ],
           [
             "displayName",
             "与 /name 共用一次名称规范化；仅名称更新允许 idle/running。"
