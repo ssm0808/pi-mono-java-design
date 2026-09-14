@@ -1,6 +1,6 @@
 # CampusClaw / pi-mono-java 设计仓库
 
-> 导航版本：2.6.6<br>
+> 导航版本：2.6.7<br>
 > 更新日期：2026-09-14<br>
 > 各模块的设计版本、源码基线和实现状态由模块主设计及架构对比条目分别记录。
 
@@ -59,7 +59,7 @@ Session 名称、模型、思考与模式采用部分更新，前端每次单项
 | 模块 | 主设计 | 关联专题与维护边界 |
 |---|---|---|
 | M01 · Agent Runtime 与多 Agent 编排 | [多 Agent Runtime](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | Loop、Turn、执行生命周期及父子 Session；[计划模式](./01-总体架构/06-CampusClaw计划模式/README.md)维护规划/实施 Prompt、审核、续跑及仅 build 实施阶段的 TODO 增量；工具装配引用 M03，HTTP 投影引用 M06 |
-| M02 · 模型与 Provider | [模型管理 Provider 契约](./02-服务与接口/03-模型管理Provider契约/README.md) | 模型目录、Provider 适配与调用取消；[共享客户端配置](./02-服务与接口/02-CampusMate共享客户端配置/README.md)维护服务连接配置 |
+| M02 · 模型与 Provider | [模型管理 Provider 契约](./02-服务与接口/03-模型管理Provider契约/README.md) | 默认仅内置 CampusMate、Provider 扩展与模型预置削减；[共享客户端配置](./02-服务与接口/02-CampusMate共享客户端配置/README.md)维护服务连接配置 |
 | M03 · Tool 与受管执行环境 | [工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md)、工具发现、执行权限与 Session 隔离 |
 | M04 · Session 上下文与持久化 | [会话记忆 GaussDB](./03-数据与存储/01-会话记忆GaussDB/README.md) | 分支、压缩、恢复与存储；[pi 上下文研究](./05-研究资料/03-pi会话上下文/README.md)是证据入口，客户端事件历史归 M06 |
 | M05 · Command 与 Skill | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [Builtin](./04-命令与技能/01-内置命令/README.md)、[Skill Command](./04-命令与技能/02-技能命令/README.md)与[Help](./04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)分别维护行为 |
@@ -129,6 +129,7 @@ RunRecord 或历史 Run-based Channel 模型。旧内容只用于 Git 历史追�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.7 | 2026-09-14 | 模型模块入口纳入 CampusMate 命名统一、AI 削减与架构对比。 |
 | 2.6.6 | 2026-09-14 | 增加计划模式整体交互与提示词入口，明确 TODO 仅跟踪实施进度。 |
 | 2.6.5 | 2026-09-14 | 增加 TodoUpdate 工具、事件恢复与基线取舍入口。 |
 | 2.6.4 | 2026-09-14 | 计划模式导航明确审核通过事件恢复。 |

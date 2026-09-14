@@ -9,7 +9,7 @@
     "method": "GET",
     "path": "/models",
     "summary": "读取通用 Provider 的全局模型目录",
-    "description": "为 pi-mono-java 的 MateServiceModelManagerProvider 提供不含 Agent 可调用性判断的全局安全模型描述，支持 ETag 条件读取。请求经内部网关到达，不携带应用层身份或凭据。MateService 托管调用的资源模型已经确认，但本 operation 的字段仍是待后续评审的同步候选。",
+    "description": "为 pi-mono-java 的 CampusMateProvider 提供不含 Agent 可调用性判断的全局安全模型描述，支持 ETag 条件读取。请求经内部网关到达，不携带应用层身份或凭据。MateService 托管调用的资源模型已经确认，但本 operation 的字段仍是待后续评审的同步候选。",
     "authModes": [],
     "parameters": [
       {

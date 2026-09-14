@@ -1,6 +1,9 @@
 @startuml campusmate_shared_base_url_configuration
 title CampusMate Configuration and Endpoint Deduplication
 
+' Source evidence baseline: pi-mono-java 320d790726a70aada6100052952d5494d2a378ac
+' Local rename evidence: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec
+' Target-only: rename the Provider; configuration keys and endpoint semantics stay unchanged.
 ' Source evidence:
 ' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-140
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-76 and eventFlux
@@ -35,7 +38,7 @@ skinparam rectangle {
 }
 skinparam ArrowColor #475569
 
-rectangle "Observed Configuration\n3 service identities, 3 origins, 7 path keys" as Before {
+rectangle "Historical Configuration (320d7907)\n3 service identities, 3 origins, 7 path keys" as Before {
   component "campusmate.model-manager\nbase-url\nchat-path" as OldModel #FFF7ED
   component "campusmate.runtime\nbase-url\nagent-runtime-path-template\nskill-info-query-path-template" as OldRuntime #FFF7ED
   component "mate\ninnerGWSerive\nagent-info-path-prefix\nskill-tools-query-path-prefix\ntool-metadata-query-path\ntool-execute-path-template\ntool.enabled" as OldTool #FEE2E2
@@ -56,7 +59,7 @@ rectangle "Target Configuration\n1 service identity, 1 origin, 6 unique operatio
 Before -down[#2563EB,dashed]-> After : unify service namespace\nand deduplicate Skill path
 
 rectangle "CampusClaw Clients" {
-  component "MateServiceModelManagerProvider" as ModelClient
+  component "CampusMateProvider\n(target-only rename)" as ModelClient
   component "MateServiceClient" as RuntimeClient
   component "MateToolClient" as ToolClient
 }

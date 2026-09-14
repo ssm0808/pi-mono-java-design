@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.2.0 |
+| 文档版本 | 2.3.0 |
 | 状态 | 目标设计；统一配置与“发现无凭据、仅 Tool execute 透传”待实现 |
 | 设计日期 | 2026-08-27 |
 | pi-mono-java 源码基线 | `320d790726a70aada6100052952d5494d2a378ac` |
@@ -202,9 +202,16 @@ endpoint = normalized(campusmate.base-url) + validated(campusmate.endpoints.<ope
 
 ## 7. Java 目标映射
 
-| 当前符号 | 目标调整 |
+Provider 目标类名为 `CampusMateProvider`，身份为 `campusmate`；具体裁剪、直接切换和无旧值
+别名规则由[模型与 Provider 主设计 §4.3](../03-模型管理Provider契约/README.md#43-命名与直接切换)
+唯一维护。该改名为 target-only；本节源码表仍保留 `320d7907` 的旧路径。局部复核
+`pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec` 的
+`modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java`
+构造器已读取统一配置；这里不把旧配置差距延伸为该新基线的缺陷，也不据此更新其他客户端验收。
+
+| Java 符号 | 目标调整 |
 |---|---|
-| `MateServiceModelManagerProvider` | 注入 `${campusmate.base-url}`、`${campusmate.endpoints.model-chat-path}` 及 `campusmate.model` 下的 API/超时参数；Provider 协议语义不变 |
+| `CampusMateProvider`（target-only 改名） | 注入 `${campusmate.base-url}`、`${campusmate.endpoints.model-chat-path}` 及 `campusmate.model` 下的 API/超时参数；Provider 协议语义不变 |
 | `MateModelManagerProperties` | 绑定前缀从 `campusmate.model-manager` 改为 `campusmate.model`；类名表达 Model Manager 组件，可保留 |
 | `AgentRuntimeProperties` | 删除 `baseUrl`；只绑定 `campusmate.runtime` 的非 endpoint 参数 |
 | `MateServiceClient` | 注入共享 base URL，以及统一目录中的 Agent Runtime 与 Skill path |
@@ -276,6 +283,7 @@ Model Manager operation JSON 没有变化。Runtime POST Events operation JSON �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.0 | 2026-09-14 | 目标 Provider 统一为 CampusMateProvider，沿用共享配置并保留旧提交源码证据。 |
 | 2.2.0 | 2026-08-27 | 同步 Runtime HTTP 1.42 的凭据边界：Agent/Skill/Tool metadata 发现无凭据，只有 Tool execute 原名透传 POST Events execution 快照中已提供的四项 Header。 |
 | 2.1.0 | 2026-08-26 | 将目标模型配置分组从 `campusmate.model-manager` 简化为 `campusmate.model`，同步 `CAMPUSMATE_MODEL_*` 环境变量、Java 绑定、迁移规则和可视化；Model Manager 组件名与 `mate-model-manager` Provider ID 不变。 |
 | 2.0.0 | 2026-08-26 | 按 Mate 与 CampusMate 是同一服务的约束删除顶层 `mate`；新增统一 `campusmate.endpoints`，将 7 个路径配置归并为 6 个唯一 operation，并去重 Skill 查询路径。 |

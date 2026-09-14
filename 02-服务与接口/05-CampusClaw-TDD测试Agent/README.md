@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.0.0 |
+| 文档版本 | 2.1.0 |
 | 状态 | 目标设计；用于替代“HTTP 回归脚本就是 TDD Agent”的旧定位 |
 | 角色 | 由 Codex 组建的独立 CampusClaw 专业测试工程师 Agent |
 | 产品知识源 | [`capability-registry.json`](capability-registry.json)；聊天上下文不是知识源 |
@@ -10,7 +10,7 @@
 | 实现仓分析基线 | `ae0ae7c164b031afacd862794e8914243913f113`，`pi-mono-java/main` |
 | 当前设计契约示例 | Runtime HTTP `1.41.0`，十一项 operation 已确认 |
 | 当前测试资产盘点 | 139 个 Java 测试源文件、3 个前端 Vitest 文件；尚未完成逐需求覆盖审计 |
-| 更新日期 | 2026-08-26 |
+| 更新日期 | 2026-09-14 |
 
 ## 1. 对齐后的结论
 
@@ -144,6 +144,13 @@ PR 中隐式同步另一个仓库。
 首版 registry 是完整功能盘点的起点，不是假装已经完成覆盖证明。普通设计校验会把 P0
 `partial` 输出为警告；未来 `--strict-coverage` 是合并门禁，必须等精确用例绑定补齐后才允许
 通过。
+
+CC-CAP-003/011 的已确认新增目标是[AI 削减与 CampusMate 命名](../03-模型管理Provider契约/README.md#11-ai-削减实施切片)：
+默认仅内置 `CampusMateProvider`（ID `campusmate`），删除第三方适配器、模型预置及两个 SDK，
+保留扩展框架，直接切换且不迁移旧历史。该新增目标为 target-only，不能从能力已有的
+`implemented/partial` 状态推导削减已经落地。注册表 `2.1.0` 用 `gap` 记录目标名称与 S1-S4
+验收；`sourceEvidence/testSelectors` 继续指向实际基线文件，待新测试 `CampusMateProviderTest`
+真正存在并执行后再换 selector。其余能力的全局基线与覆盖状态不因此升级，TDD 架构图无变化。
 
 ### 5.2 需求成熟度门
 
@@ -393,4 +400,5 @@ python3 '02-服务与接口/05-CampusClaw-TDD测试Agent/validate-campusclaw-tdd
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.0 | 2026-09-14 | 纳入 CampusMate 改名与 AI 削减目标，区分未来测试名称和当前可执行基线。 |
 | 2.0.0 | 2026-08-26 | 重新定义为独立 Codex 专业测试工程师；新增 15 域能力注册表、需求成熟度、精确追踪链、多适配器平台、PR/push 实时门禁、nightly 测试维护、test-only Draft PR 与防弱化边界；旧 HTTP 方案降级为领域适配器 |

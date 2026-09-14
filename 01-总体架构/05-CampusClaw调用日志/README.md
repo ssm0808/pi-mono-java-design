@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.1.0 |
-| 状态 | 已按实现提交 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 落地 |
+| 文档版本 | 2.2.0 |
+| 状态 | 日志机制已按 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 落地；CampusMate Provider 改名为 target-only |
 | 设计日期 | 2026-08-26 |
 | 实现仓库 | `superheromeZzh/pi-mono-java` |
 | 关联 PR | [pi-mono-java#174](https://github.com/superheromeZzh/pi-mono-java/pull/174) |
@@ -168,6 +168,13 @@ JSON 输出，环境变量
 
 ### 6.2 Mate Model Manager
 
+目标 Provider 类名为 `CampusMateProvider`，Logger 使用该类；这是[模型模块命名设计](../../02-服务与接口/03-模型管理Provider契约/README.md#43-命名与直接切换)
+的 target-only 改名。固定源码 `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec` 中
+`modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java`
+仍通过旧类取得 Logger，源码证据路径不改写。`event/operation/errorCode`、其他 Mapper/Parser
+的 Logger 及 `MATE_MODEL_MANAGER_ERROR` 保持不变；后续将 Provider 测试类和 Logger name
+断言同步为 `CampusMateProviderTest` 与新类名。日志架构图无结构变化。
+
 Mate 失败按发生位置分类：
 
 | 阶段 | 典型错误码 |
@@ -245,3 +252,4 @@ event == "campusclaw.failure" AND sessionId == "<session-id>"
 | 1.1.0 | 2026-08-25 | 扩展为启动、请求、执行、模型、工具完整生命周期设计 |
 | 2.0.0 | 2026-08-26 | 按 PR #174 实现收敛为异常源头记录、错误码跨层传播的简单架构 |
 | 2.1.0 | 2026-08-26 | 接受 PR 审查意见，删除统一失败 Helper，改为实际失败源类直接记录并抛 code-only 错误码异常 |
+| 2.2.0 | 2026-09-14 | 目标 Provider Logger 随 CampusMateProvider 改名，稳定日志字段与错误码保持不变。 |

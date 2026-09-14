@@ -4,13 +4,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.6.0 |
+| 文档版本 | 1.7.0 |
 | 更新日期 | 2026-09-14 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 设计依据 | `pi-mono-java-design@b07db4dfe0bdc6229b7294bc04ebbde9184b77ec`，具体主设计见各条目 |
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
 | 计划模式专项基线 | A03 使用 DeepSeek `0a53fb55`、Java `09b32d8e`；旧 Java `f61906b` 与该专项相关源码相同，完整 SHA 与路径见专项证据 |
-| 核验范围 | M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A05 的 TODO 工具结果、Java 提交和客户端投影接入点；A03/A05 的计划与实施提示词 |
+| 核验范围 | M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A05 的 TODO 工具结果、Java 提交和客户端投影接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、注册框架、模型预置及 SDK 依赖 |
 | 验证边界 | 静态源码与文档核对，未执行产品集成测试；其余模块与基线的专项差异待补证 |
 
 ## 1. 阅读方式与权威边界
@@ -30,7 +30,7 @@
 
 | 基线 | 固定参考点 | 用于哪些问题 | 本文证据状态 |
 |---|---|---|---|
-| pi | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、消息/Tool 生命周期、Session 分支与压缩 | A01 已核对 Loop 和 Agent 类型，A04 已核对配置 RPC，A05 核对 todo 示例的工具结果恢复；Session 树与完整协议快照仍待专项核验 |
+| pi | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、消息/Tool 生命周期、Session 分支与压缩 | A01 已核对 Loop 和 Agent 类型，A04 已核对配置 RPC，A05 核对 todo 示例的工具结果恢复，A06 核对 Provider 组合与模型注册；Session 树与完整协议快照仍待专项核验 |
 | Claude Managed Agents | 官方文档，核对日期 `2026-09-14`；无服务端源码 commit | 公共 Session API、preview 与历史对账 | A02/A04/A05 已核对公开流、List Events、Session 更新、配置限制和通用 custom tool 交互；仍为 Beta，只证明公开契约 |
 | Codex harness | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | Provider typed event、Turn/Item 客户端生命周期 | A04 已核对配置协议，A05 核对指定模型的 update_plan 指令及 Handler；Provider 与完整 M07 生命周期仍待专项核验 |
 | OpenCode | `849c2598abc7d2b40261e74b5826bc74ffc78308` | 多客户端、live/durable 分类与 sequence 回放 | A04 已核对 Session 配置/消息/v2 操作，A05 核对 todowrite 描述与模型提示词；事件流仍待专项核验；v2 源码能力不能自动视为稳定公开契约 |
@@ -44,7 +44,7 @@
 | 模块 | 需要解释的架构问题 | 主基线及辅助对照 | 条目与待补证范围 |
 |---|---|---|---|
 | M01 · Runtime 与多 Agent | Loop 扩展能力如何与产品准入分离；父子执行如何隔离和终止 | pi；Codex、DeepSeek 辅助 | [A01](#a01)覆盖 Loop 与消息准入；[A03](#a03)覆盖计划模式接入与 Child 模式传递，其他父子生命周期待补证 |
-| M02 · 模型与 Provider | Provider 原始事件在哪一层归一化；模型目录与调用权威归谁 | Codex；pi 辅助 | 待核对适配器、领域事件、取消链及错误投影 |
+| M02 · 模型与 Provider | 内置提供方如何削减而保留扩展；模型目录与调用权威归谁；原始事件在哪层归一化 | 本次裁剪/注册采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、注册框架和 SDK 削减；Codex 事件归一化对比及完整取消链仍待专项核验 |
 | M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；其他工具问题待补证 |
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；其他上下文与存储比较待补证，不默认 token 全量落盘 |
 | M05 · Command 与 Skill | 清单和执行如何共享解析；命令、Skill 与 Tool 的边界是什么 | pi | 待补证；不从存在 SKILL.md 推导相同执行机制 |
@@ -204,6 +204,27 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 **讲解要点。** TODO 描述 Agent 报告的步骤进度，方案审核决定是否继续实施，两者职责不同。CampusClaw 借鉴 Claude 的通用工具事件，将完整任务清单放入成功结果，前端只做可重建的投影。这样保持 API 外层稳定，代价是需要工具级解析和批次提交等待；不能把清单完成当作业务验收或 Runtime 终态。
 
+<a id="a06"></a>
+
+## 6.3 A06 · 只内置 CampusMate，保留 Provider 扩展框架
+
+| 维度 | 结论 |
+|---|---|
+| 模块与主设计 | M02，关联 M08/M11；[模型与 Provider 主设计 §4](../../02-服务与接口/03-模型管理Provider契约/README.md#4-provider-与配置)维护命名、削减及依赖边界；复用其[唯一全局目标类图](../../02-服务与接口/03-模型管理Provider契约/java_provider_alignment.svg)。 |
+| 架构问题 | 企业产品默认只从 CampusMate 调用模型时，是否必须同时删除通用 Provider 注册能力？ |
+| pi 已观察行为 | 固定 `5cd93f688aaab89dbb6dfa4aca535f21796ae185` 的 `packages/ai/src/models.ts`：`Provider` 持有身份、认证、目录和流能力；`ModelsImpl.requireProvider` 按身份查找；`createProvider` 组合模型目录与单个/按 API 分派的流实现。`packages/ai/src/providers/anthropic.ts`：`anthropicProvider` 通过该工厂组装厂商能力。源码证明组合与扩展边界，不要求每个产品交付全部厂商。 |
+| CampusClaw 已观察实现 | Java `f61906b9136246ca60f333704b6fc92b5420d0ec` 已有独立 Mate WebClient/Mapper/Parser；身份仍为 `mate-model-manager`，四个第三方适配器、第三方模型预置与两个 SDK 仍存在。AI 服务优先身份路由、再查 API；Runtime 从 Agent 快照解析 Mate 模型。精确路径与符号见主设计 J-AI-01～08。 |
+| CampusClaw 目标 | 唯一内置实现为 `CampusMateProvider`、ID 为 `campusmate`、enum 为 `CAMPUSMATE`；删除厂商适配器/预置/SDK，保留两种注册表、接口、公共类型和 JSON 加载；不增加目录 HTTP、身份别名或存量迁移。 |
+| 差异分类 | 产品约束：提供方集中在 CampusMate，取消开箱厂商直连；产品身份变更：名称直接切换。保留既有双注册表是本次架构边界，不借裁剪引入 ProtocolAdapter 重构。既有网关认证与事件契约保持独立。 |
+| 理由与代价 | 删除发布产品不再使用的厂商代码和预置数据，减少 SDK 升级维护范围；代价是旧配置需更新、旧历史 Provider 不归一、直连用户需迁至 CampusMate 或自行提供扩展。通用注册仍有维护成本，未实测包体积或性能收益。 |
+| 备选与重新评估条件 | 本次不删除扩展框架，也不只关闭 Spring Bean 后继续携带 SDK。若未来需彻底禁用自定义提供方、恢复厂商直连或兼容存量身份，需重新确定产品入口和迁移边界。 |
+| 设计状态 / 实现状态 | 已确认目标、target-only / 局部源码已核验，确认当前范围仍使用旧名称与第三方实现；仅当前 AI 运行时 Maven 依赖树已解析成功，未修改代码、未执行削减后产品测试。 |
+| 验收与证据 | 主设计 S1～S4 覆盖新身份、空注册表、自定义扩展、外部 JSON、无隐式 fallback、Mate 协议回归、SDK/镜像及旧历史原值保留；命名后的测试 selector 待实际实现才替换。 |
+
+**讲解要点。** pi 把提供方、模型和协议实现组合起来；CampusClaw 保留这个扩展思路，但企业产品
+默认只交付 CampusMate。减掉的是厂商实现、预置和 SDK，通用 AI 消息与注册仍可复用。
+代价是失去开箱直连及旧身份兼容；目前独立 Mate 调用链已存在，裁剪和新名称仍待实现验收。
+
 <a id="source-evidence"></a>
 
 ## 7. 源码证据与更新边界
@@ -259,6 +280,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.0 | 2026-09-14 | 补充 CampusMate 唯一内置 Provider 的裁剪取舍、身份切换、源码证据与依赖验收。 |
 | 1.6.0 | 2026-09-14 | 明确规划与实施提示词分工，TODO 仅跟踪 build 实施且逐项更新。 |
 | 1.5.0 | 2026-09-14 | 补充 TODO 复用 Claude 风格通用工具结果的架构取舍、源码差距和验收。 |
 | 1.4.0 | 2026-09-14 | 计划审核沿用事件恢复与执行内校验，不扩充 Session 待审字段。 |

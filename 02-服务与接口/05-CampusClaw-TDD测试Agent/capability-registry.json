@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0.0",
-  "registryVersion": "2.0.0",
+  "registryVersion": "2.1.0",
   "product": "CampusClaw",
-  "generatedAt": "2026-08-26",
+  "generatedAt": "2026-09-14",
   "baselines": {
     "designRepository": {
       "commit": "d2b9b4b6f4762e0e9734c144e3eb3273959e7e26",
@@ -108,7 +108,7 @@
         "testSelectors": ["CampusClawAiServiceTest", "ModelRegistryTest", "*ProviderTest"]
       }],
       "adapters": ["java", "model-sse-stub", "fault"],
-      "gap": "Provider contract parity and retry/error matrices need explicit cross-provider case IDs."
+      "gap": "Accepted target-only AI reduction: ship only CampusMateProvider with ID campusmate; delete four built-in vendor adapters, vendor model presets, anthropic-java and openai-java; preserve registration and external JSON loading. The f61906b9136246ca60f333704b6fc92b5420d0ec source still contains the old adapters and presets. Add exact empty-registry, custom-extension, missing-adapter and dependency/mirror cases; current baseline selectors do not prove the target."
     },
     {
       "id": "CC-CAP-004",
@@ -269,7 +269,7 @@
         "testSelectors": ["MateServiceModelManagerProviderTest", "HttpMateToolClientTest"]
       }],
       "adapters": ["java", "http-contract", "http-stub"],
-      "gap": "Shared endpoint, header, timeout, and error mapping contracts are not tested as one cross-client matrix."
+      "gap": "Shared endpoint, header, timeout, and error mapping contracts still need a cross-client matrix. Accepted target-only rename at f61906b9136246ca60f333704b6fc92b5420d0ec: MateServiceModelManagerProvider -> CampusMateProvider, MATE_MODEL_MANAGER -> CAMPUSMATE, mate-model-manager -> campusmate, with no alias or data migration. Keep the baseline sourceEvidence and MateServiceModelManagerProviderTest until CampusMateProviderTest actually exists and runs; then replace the source path and selector. Old history values remain unchanged. See the Provider design S1-S4 acceptance."
     },
     {
       "id": "CC-CAP-012",
