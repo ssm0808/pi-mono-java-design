@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：1.6.0；核对日期：2026-09-14。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：1.7.0；核对日期：2026-09-15。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
 ## 1. 固定提交
 
@@ -9,9 +9,9 @@
 | deepseek-ai/deepseek-harness | `0a53fb55bea101816fa226bb964ae2bed71c343b` | 固定 `dsh-0.1.2-alpha.2`；读取固定提交的源码与 standard preset，未使用本机较新 checkout 替代 |
 | badlogic/pi-mono | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、工具结果与下轮模型调用顺序的固定基线 |
 | superheromeZzh/pi-mono-java | `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` | 2026-09-14 fetch 后 origin/main；本地 f61906b 已包含全部本专题分析的 Java、Mapper 和 SQL 内容 |
-| anomalyco/opencode | `849c2598abc7d2b40261e74b5826bc74ffc78308` | 仅核对 TODO 描述和 anthropic 模型模板的任务管理段；该模板不是 Claude 官方提示词 |
-| openai/codex | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | 核对指定 gpt_5_1 提示词与 update_plan Handler；不代表所有模型使用同一模板 |
-| pi-mono-java-design | `40a159d361f2f3e9da04594f791607dac85fd192` | 本次修订前的设计主线；保留当前 Session Events、权限、工具 profile 和元数据契约 |
+| anomalyco/opencode | `849c2598abc7d2b40261e74b5826bc74ffc78308` | 核对计划文件路径、TODO 工具/存储/事件及任务管理模板；该模板不是 Claude 官方提示词 |
+| openai/codex | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | 核对 Plan 模板、计划正文提取、update_plan Handler 与 App Server 通知；不代表所有模型使用同一模板 |
+| pi-mono-java-design | `0a74625e0dd4ea6387b6765c7cb0f9105970d05c` | 本次修订前的设计主线；保留当前 Session Events、权限、工具 profile 和元数据契约 |
 
 前序分析使用 Java `510d882ca45541e0086586dab89c429c5a18cf20`。本次采用 `09b32d8e`；两者之间是仓库指引变更，本专题 Runtime 路径不变。对比本地 `f61906b` 至 `09b32d8e` 的差异仅在指引、前端样式/开发代理及配套文档脚本；不据此声称 Agent Loop 或确认机制发生新增变化。
 
@@ -113,23 +113,23 @@ Session 工作模式通过资源更新表达属于产品约束与 API 架构调�
 
 ## 6. TODO UPDATE 基线与接入证据
 
-TODO 公共工具交互以 Claude Managed Agents 官方 Beta 文档为主基线，核对日期 2026-09-14：
-[Tools](https://platform.claude.com/docs/en/managed-agents/tools) 的 Available tools / Custom tools 未提供内置 TODO；[Session event stream](https://platform.claude.com/docs/en/managed-agents/events-and-streaming#handling-custom-tool-calls) 通过 agent.custom_tool_use、requires_action 和 user.custom_tool_result 组织外部执行。[List Events](https://platform.claude.com/docs/en/api/beta/sessions/events/list) 是公开事件联合类型。它们只证明公开契约，无服务端源码 commit。
-
-CampusClaw 采纳工具业务由通用调用/结果承载的风格，仍由 Runtime 内置工具执行，并用已有 agent.tool_call/agent.tool_result 输出；不迁入客户端执行、requires_action 或新的用户结果提交接口。TODO 参数和状态并非 Claude 的原生约定。
+清单领域事件的主要证据为 DeepSeek / OpenCode / Codex 的固定源码。公共历史与断线对账采用 Claude Managed Agents 官方 Beta 文档（2026-09-15 重新核对）：[Tools](https://platform.claude.com/docs/en/managed-agents/tools)、[Events](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)。公开文档未提供内置 TodoUpdate 或同名更新事件；没有可归因的服务端源码 commit，不推断其内部表、事务或调度。
 
 | 固定源码路径 / 符号 | 已观察行为 | 采纳与差异 |
 |---|---|---|
-| DeepSeek 0a53fb55：`packages/todo/tool-todo/src/index.ts` · apply、toTodoList、execute；`packages/todo/tool-todo/src/types.ts` · TodoItem、SessionEventMap | todo_write 整份替换，只有 content/status；状态 pending/in_progress/completed，部署可选择并行进行中；追加 todo/write，最新快照投影于下一 turn/start 清空 | 参考最小完整列表；CampusClaw 首版最多一个进行中；公共进度直接用工具成功结果，不增加 todo/write 的第二份领域日志，属于产品约束及架构变更 |
-| pi 5cd93f68：`packages/coding-agent/examples/extensions/todo.ts` · reconstructState、execute | 示例从当前分支的 todo 工具结果 details 恢复完整列表 | 借鉴结果可恢复；CampusClaw 公共事件不暴露 details，改用既有 content.text 的工具 JSON。不是迁入 pi 扩展系统 |
-| Java 09b32d8e：`modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentToolResult.java` · record | 工具返回 content 与内部 details | TodoUpdate 直接返回 text ContentBlock，保留公共接口 |
-| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java` · runtime、toolsFor | Runtime 默认八工具，显式配置按入口解析；没有 TodoUpdate | 新工具、枚举、工厂与 Runtime 默认追加为 target-only；Cron/Child 默认值不变 |
-| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java` · project、persistToolResults（188～198、358～366 行） | TurnEndEvent 批次结果进入通用 ToolResult 路径；检查帧后 appendEntry，再 emit | 复用权威提交，无需 TodoUpdate 专用事件分支；进度发送时点是公共结果提交，不是工具 Java 方法刚返回 |
-| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java` · toolResultEntry（134～155 行）；`RuntimeCommittedEventFactory.java` · agentToolResult（103～113 行） | Entry 保存工具名与内容，公共结果包含 sourceEventId/toolCallId/content/isError，成功结果不含 details/toolName | 客户端关联调用取工具名，从成功结果文本读清单；不扩充外层字段 |
-| Java 同基线：`frontend/src/runtime/eventStore.ts` · mergeEvent、reconcileEvents、executionState | eventId 去重、历史顺序保留 live 尾部，以原根消息关联执行；没有 TODO 投影 | 增加纯函数 deriveTodos 与面板；实时、恢复共用，target-only |
+| DeepSeek 0a53fb55：`packages/todo/tool-todo/src/index.ts` · apply、toTodoList、execute；`src/types.ts` · TodoItem、SessionEventMap | todo_write 整份替换 content/status，追加 todo/write；投影在下一 turn/start 清空 | 采纳最小列表与显式快照；CampusClaw 首版单进行中，使用原根消息作用域，不照搬 alpha 日志格式 |
+| OpenCode 849c2598：`packages/core/src/tool/todowrite.ts` · execute；`packages/core/src/session/todo.ts` · SessionTodo.update；`packages/schema/src/session-todo.ts` · Event.Updated | 工具调用服务，事务替换 TODO 表后发布 todo.updated，携带 sessionID/todos | 采纳后端明确发布领域更新；不引入独立 TODO 表；这是固定 v2 源码，不等于稳定公共 HTTP 契约 |
+| Codex d58d0e58：`codex-rs/core/src/tools/handlers/plan.rs` · PlanHandler.handle_call；`codex-rs/protocol/src/plan_tool.rs` · UpdatePlanArgs；`codex-rs/app-server/README.md:1771` | update_plan 解析参数并发出 EventMsg::PlanUpdate；App Server 文档定义 turn/plan/updated；Plan 模式拒绝调用此清单工具 | 采纳工具到显式进度通知的分层；CampusClaw 使用既有请求 SSE 与持久化历史，不照搬 JSON-RPC、字段命名或模式拦截 |
+| pi 5cd93f68：`packages/coding-agent/examples/extensions/todo.ts` · reconstructState、execute | 示例从当前分支工具结果 details 恢复列表 | 说明结果也可承载进度；不是 pi 内核公共 TODO 事件，CampusClaw 客户端不采用该派生方式 |
+| Java 09b32d8e：`modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentToolResult.java` · record | content 与内部 details 分离 | 保持模型 ToolResult 文本；公共 todos 由后端最终结果映射 |
+| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java` · defaults、toolsFor | Runtime 默认八工具，无 TodoUpdate | 新工具、枚举、工厂和 Runtime 默认 profile 均为 target-only |
+| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java` · project、persistToolResults | TurnEndEvent 批次保存结果；先构造/检查帧，再 appendEntry 后 emit | 目标增加成功 TODO 的显式事件映射；仍在批次结果提交点发布 |
+| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java` · appendEntry | 接收 List<CommittedEventDTO>，在段提交事务内追加 Entry 与事件列表 | 既有接口可传工具结果及任务事件两条记录，工具无须依赖数据库或 SSE |
+| Java 同基线：同目录 `MyBatisRuntimeSessionRepository.java` · appendEventsLocked、recordProjectionIfComplete、findEventPage | 按列表保存多事件，投影数量取 events.size；历史直接读持久化事件并检查投影完整性 | 目标同 anchor 两事件、计数 2；GET 不重新构造 TODO，不新增持久化 API |
+| Java 同基线：`modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql` · t_session_events、t_session_event_projection | eventId/eventSeq 唯一，anchor_entry_id 非唯一；投影表保存 event_count | 已有结构支持一 Entry 多事件，不需要 TODO 表或新列 |
+| Java 同基线：`frontend/src/runtime/eventStore.ts` · mergeEvent、reconcileEvents、executionState | eventId 去重、历史/live 合并和根消息归属；无 TODO 面板 | 复用统一仓库，新增 applyTodoUpdated，直接消费显式快照 |
 
-完整 SHA 沿用 §1；本次核验固定提交，没有升级基线。对 Java `modules` 和 `frontend/src` 检索 TodoUpdate/TodoWrite 无实现命中；上述通用路径已存在，未执行 TODO 产品测试。TodoUpdateTool、客户端 deriveTodos 和其整份列表约束均属于新目标，具体生命周期与验收由 [TODO 主设计](todo-update.md) 维护。不从 Claude 文档推断内部 TODO 表、持久化事务或自动恢复调度器。
-
+完整 SHA 沿用 §1，未升级固定基线；Java modules 与 frontend/src 范围无 TodoUpdate/TodoWrite。TodoUpdateTool、RuntimeTodoEventMapper、TodoSnapshotDTO、TodoUpdatedEventResponseVO、事件分支及面板均为 target-only。已核验的是可复用的提交骨架，未运行新增产品测试。公共显式事件属于架构变更，build 范围、元数据稳定和根执行隔离属于产品约束。
 
 ## 7. 提示词组合与逐项更新约束
 
@@ -141,7 +141,7 @@ CampusClaw 采纳工具业务由通用调用/结果承载的风格，仍由 Runt
 | DeepSeek `packages/plan/plan-mode/src/index.ts` · resolveConfig、PlanModeController 构造函数中的 plan:policy | 部署提供非空 section，模式控制注入；工具清单保持稳定 | 复用现有基础 SYSTEM；用纯 Composer 选择部署静态段，不迁入 Cordis。组合与部署资源为 target-only 架构扩展 |
 | DeepSeek `packages/todo/tool-todo/src/index.ts` · DESCRIPTION_HEAD/SINGLE/TAIL（45～66 行）、toTodoList | 描述要求全量清单、完成即更新、不积攒完成；工具验证值和部署并行数量规则，不验证业务目标已完成 | 固定工具 description + build 进度段双重说明时机；单进行中是 CampusClaw 产品约束，不将提示词要求冒充强校验 |
 | OpenCode `packages/opencode/src/tool/todowrite.txt` · When to use / Rules；`packages/opencode/src/session/prompt/anthropic.txt` · Task Management | 工具描述与模型模板均要求及时更新；验证后才完成，不积攒多项。该 anthropic.txt 是 OpenCode 自己的模板 | 借鉴工具描述与 SYSTEM 同时指导；不迁入其 priority/cancelled 等字段，不推断 Claude Managed Agents 有同样内部规则 |
-| Codex `codex-rs/core/gpt_5_1_prompt.md` · Planning、update_plan；`codex-rs/core/src/tools/handlers/plan.rs` · handle_call | 指定模板强调及时变更状态，同文件也允许一次更新多项；Handler 解析参数、在 Plan 模式拒绝 update_plan、发出 PlanUpdate | 仅作提示词约束与程序校验的区别对照；不把“一项对应一次调用”或模板内容视作全产品硬保证。CampusClaw 不照搬其 PlanUpdate 专用事件或模式拦截 |
+| Codex `codex-rs/core/gpt_5_1_prompt.md` · Planning、update_plan；`codex-rs/core/src/tools/handlers/plan.rs` · handle_call | 指定模板强调及时变更状态，同文件也允许一次更新多项；Handler 解析参数、在 Plan 模式拒绝 update_plan、发出 PlanUpdate | 仅作提示词约束与程序校验的区别对照；不把“一项对应一次调用”或模板内容视作全产品硬保证。CampusClaw 参考其显式进度通知，使用自己的公共事件名，仍不引入模式拦截 |
 | Java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java` · create、configureAgent（67～112 行） | 先装配 tools，再加载基础 SYSTEM 并 setSystemPrompt；无计划/实施分段 Composer | 可从实际工具列表判断 TodoUpdate，不增加能力元数据；模式快照接入、分段资源和 Composer 待实现 |
 | Java `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` · setSystemPrompt（109～111 行）；`modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java` · invokeModel（179～183 行） | setter 写入本 Agent 状态，下轮请求读取当前 systemPrompt 和同一 tools | 批准后替换完整 SYSTEM，再让审核工具返回；下轮自然使用 build 组合，无需更改 Loop 分支或重新装配工具 |
 | Java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java` · continueAfterCompaction、finishCompaction | 继续使用同一 Agent，压缩替换消息而非重建工具/系统规则 | 组合规则留在执行 SYSTEM，不依靠摘要推断模式，也不在压缩后重复追加段落 |
@@ -153,3 +153,18 @@ CampusClaw 采纳工具业务由通用调用/结果承载的风格，仍由 Runt
 ## 8. Agent 默认模式
 
 Agent 顶层 mode 是本产品新增的默认配置，不归因为 DeepSeek/Claude 的同名字段。Mate 956b547f 与 Runtime 固定 09b32d8e 的 DTO、发布目录、解析快照、Session 创建路径核对，以及相对旧 Mate 9dd5d85 的范围差异，集中记录在[元数据主设计 §2.3](../../03-数据与存储/02-Agent元数据GaussDB/README.md#23-mode-专项源码核对)。本专题继承以下目标：新交互 Session 复制 Agent 默认，缺字段兼容 build；已有 Session、Child 和 Cron 按各自既有模式权威工作。plan 仍不调用 TODO；公共工具事件与审核事务未改变。
+
+## 8. 计划文件与方案载体
+
+核对日期：2026-09-15。下列结论仅覆盖指明的固定代码或官方公开契约；Session 日志文件不等于单独的业务计划文件。
+
+| 基线 | 方案保存与提交 | 证据与适用边界 |
+|---|---|---|
+| DeepSeek Harness | exit_plan_mode 直接接收完整 Markdown 字符串，交互 detail 展示该正文；此路径不要求计划文件 | 固定 0a53fb55，`packages/plan/plan-mode/src/index.ts` · exit_plan_mode parameters/execute、interaction.ask；alpha |
+| OpenCode | 使用 Markdown 计划文件，退出规划时引用并确认该文件 | 固定 849c2598，`packages/opencode/src/tool/plan.ts` · PlanExitTool；`packages/opencode/src/session/session.ts:331` · plan；Git 项目在 .opencode/plans，否则全局 data/plans |
+| Codex | Plan 模板输出 proposed_plan 正文块；会话处理为计划 item，此协议不依赖独立文件 | 固定 d58d0e58，`codex-rs/collaboration-mode-templates/templates/plan.md` · Finalization rule；`codex-rs/core/src/session/turn.rs` · extract_proposed_plan_text；不据此断言不存在可选文件工作流 |
+| pi | plan-mode 示例提取 Assistant 编号计划，并用自定义 Session Entry 保存执行状态；不要求独立方案文件 | 固定 5cd93f68，`packages/coding-agent/examples/extensions/plan-mode/index.ts` · persistState、agent_end、session_start；示例扩展，不是全产品内置计划协议 |
+| Claude Code | 官方 plansDirectory 配置指定计划文件目录，文档缺省 ~/.claude/plans | [官方设置](https://code.claude.com/docs/en/configuration)，本次官方检索条目明确该设置；新 settings-reference 页面抓取超限。没有服务端源码归因 |
+| Claude Managed Agents | 迁移文档建议先 planning-only session，再用第二个 session 执行；该公开说明未要求统一原生计划文件 | [官方迁移文档](https://platform.claude.com/docs/en/managed-agents/migration) · Plan mode；Beta，不能与 Claude Code 文件机制混同 |
+
+CampusClaw 当前选择完整 ToolCall + agent.plan 审核记录，理由与代价由[主设计 §1.3](README.md#13-完整方案保存在哪里)维护；执行清单另由显式 agent.todo_updated 记录，不把清单写回批准方案，也不为调研引入 TODO。

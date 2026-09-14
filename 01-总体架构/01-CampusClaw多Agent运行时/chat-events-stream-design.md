@@ -2,16 +2,18 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.8.0 |
+| 文档版本 | 0.9.0 |
 | 状态 | 已确认目标契约；请求输出绑定与跨实例控制待实现 |
 | 源码基线 | Java 918005ee、dfb90cac，固定提交与路径见 [模块证据](source-evidence.md#52-post-与流生命周期) |
-| 更新日期 | 2026-09-14 |
+| 更新日期 | 2026-09-15 |
 
 ## 1. 当前操作与已确认范围
 
 POST `/campusclaw-service/v1/sessions/{sessionId}/events` 提交一条用户事件，在同一响应读取本次 SSE；GET 同路径独立读取完整历史。精确字段、请求头、示例与错误由 [POST 模型](事件契约/操作/01-submit-session-event.json) 维护并生成 [接口页](chat-api-review.html#submitSessionEvent)。
 
 本文维护响应的帧顺序、归属、关闭和失败处理。[Events 主设计](chat-events-design.md) 维护单消息准入、数据库事务与跨实例控制，[历史设计](chat-events-history-design.md) 维护权威记录及分页。
+
+任务更新的 target-only 增量已登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java 09b32d8e 的多事件 appendEntry 骨架可复用，新增工具与事件分支尚待实现。Mate 公共桥接需单独同步后开放。
 
 ## 2. 请求与凭据边界
 
@@ -54,7 +56,7 @@ B01～B15 已确认，完整字段、成功/失败、工具确认、中断配对
 
 必填 targetEventId 只匹配原消息，不能取消随后开始的新执行；重复停止返回冲突，接受后自然完成仍保留真实原因。等待超时只断流并对账。跨实例控制和固定目标竞态由 [总体设计 §4.4](chat-events-design.md#44-数据库停止请求与实例批量检查) 维护，本流只消费已提交结果，遵守回执先行、终态去重与慢连接隔离。
 
-本期每执行仅一个待确认工具，不新增通用进度或子 Agent 公共事件。停止后才能重新提交普通消息，FollowUp 为 [未来扩展](chat-follow-up-future-design.md)。
+本期每执行仅一个待确认工具，不新增通用工具进度或子 Agent 公共事件；build 执行清单使用 agent.todo_updated。停止后才能重新提交普通消息，FollowUp 为 [未来扩展](chat-follow-up-future-design.md)。
 
 ### 4.1 完整内容与预览
 
@@ -125,6 +127,7 @@ agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.9.0 | 2026-09-15 | 纳入后端显式任务更新事件，SSE 与历史共用完整快照。 |
 | 0.8.0 | 2026-09-14 | 聚焦回执、输出绑定和恢复，字段与数据库机制引用所属权威文档。 |
 | 0.7.0 | 2026-09-09 | 统一 Session Events 命名并引用共享事件消费规则。 |
 | 0.6.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |

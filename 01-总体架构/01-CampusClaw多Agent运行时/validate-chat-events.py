@@ -16,7 +16,7 @@ COMMON_PATH = ROOT / "事件契约" / "common.json"
 MODEL_PATH = ROOT / "事件契约" / "操作" / "01-submit-session-event.json"
 HISTORY_PATH = ROOT / "事件契约" / "操作" / "02-list-session-events.json"
 USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation"}
-STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "session.status_idle"}
+STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "agent.todo_updated", "session.status_idle"}
 HISTORY_TYPES = {"session.model_changed", "session.thinking_changed", "session.mode_changed", "session.compacted"}
 BATCH_CHOICES = {f"BATCH-20260908-1-{group}": "A-recommended" for group in ("tools", "events", "lifecycle", "integration")}
 RETIRED_STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", "tool.result", "session.status.idle"}
@@ -60,6 +60,7 @@ RESPONSE_INPUTS = {
     "200-interrupt": "user.interrupt",
     "200-message-interrupted": "user.message",
     "200-tool-success": "user.message",
+    "200-todo-updated": "user.message",
     "200-execution-failed": "user.message",
 }
 
@@ -146,6 +147,30 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
         require(all(set(block) == {"type", "text"} and block["type"] == "text"
                     and isinstance(block["text"], str) for block in content),
                 "current tool results must contain only public text blocks, never JSON or images")
+    if event["type"] == "agent.todo_updated":
+        require(set(event) == {"eventId", "type", "createdAt", "sourceEventId", "toolCallId", "todos"},
+                "task snapshot must use the explicit event shape")
+        require(isinstance(event["toolCallId"], str) and bool(event["toolCallId"]), "task provenance required")
+        todos = event["todos"]
+        require(isinstance(todos, list) and len(todos) <= 100, "task snapshot must be a bounded full array")
+        contents = set()
+        active = 0
+        for item in todos:
+            require(isinstance(item, dict) and set(item) == {"content", "status"}, "task item fields differ")
+            content = item["content"]
+            require(isinstance(content, str) and bool(content) and len(content.encode("utf-16-le")) // 2 <= 1024,
+                    "task content must be nonempty and bounded")
+            # Java String.strip uses Character.isWhitespace, not Python's broader str.strip.
+            def java_whitespace(char: str) -> bool:
+                return char in "\t\n\v\f\r\x1c\x1d\x1e\x1f " or ord(char) in {
+                    0x1680, *range(0x2000, 0x2007), *range(0x2008, 0x200B), 0x2028, 0x2029, 0x205F, 0x3000}
+            require(not java_whitespace(content[0]) and not java_whitespace(content[-1]),
+                    "task content must already be normalized")
+            require(content not in contents, "duplicate task content")
+            contents.add(content)
+            require(item["status"] in {"pending", "in_progress", "completed"}, "invalid task status")
+            active += item["status"] == "in_progress"
+        require(active <= 1, "at most one task may be in progress")
     if event["type"] == "session.status_idle":
         require(event.get("reason") in {"done", "failed", "terminated", "confirming"}, "invalid candidate reason")
 
@@ -567,6 +592,7 @@ def validate_history_model(model: dict, post: dict) -> None:
         "200-empty": [],
         "200-out-of-range": [],
         "200-tool-success": complete["200-tool-success"],
+        "200-todo-updated": complete["200-todo-updated"],
         "200-execution-failed": complete["200-execution-failed"],
         "200-skill-message": complete_streams(json.loads((ROOT / "接口契约/操作/13-execute-session-command.json").read_text()))["200-skill-message"],
     }
@@ -771,6 +797,46 @@ def validate_batch_field_regressions(post: dict, history: dict) -> int:
     return len(cases)
 
 
+def validate_todo_regressions(post: dict) -> int:
+    frames = complete_streams(post)["200-todo-updated"]
+    updates = [e for e in frames if e["type"] == "agent.todo_updated"]
+    require(len(updates) == 2, "example must demonstrate replacement snapshots")
+    for index, event in enumerate(frames):
+        if event["type"] != "agent.todo_updated":
+            continue
+        result = frames[index - 1]
+        require(result["type"] == "agent.tool_result" and result["isError"] is False
+                and result["toolCallId"] == event["toolCallId"], "task event follows the matching successful result")
+        require(json.loads(result["content"][0]["text"])["todos"] == event["todos"],
+                "tool result and public task snapshot must have one source")
+    empty = copy.deepcopy(updates[0])
+    empty["todos"] = []
+    validate_frame(empty)
+    edits = [
+        lambda e: e.pop("todos"), lambda e: e.update(todos=None),
+        lambda e: e.update(todos="[]"), lambda e: e.update(phase="delta"),
+        lambda e: e.pop("sourceEventId"), lambda e: e.update(toolCallId=""),
+        lambda e: e["todos"][0].update(status="done"),
+        lambda e: e["todos"][0].update(content=" "),
+        lambda e: e["todos"][0].update(content=" padded"),
+        lambda e: e["todos"][0].update(content="a" * 1025),
+        lambda e: e["todos"][0].update(content="😀" * 513),
+        lambda e: e["todos"][0].update(priority="high"),
+        lambda e: e["todos"].append(copy.deepcopy(e["todos"][0])),
+        lambda e: e["todos"][0].update(status="in_progress"),
+        lambda e: e.update(todos=[dict(content=str(i), status="pending") for i in range(101)]),
+    ]
+    for edit in edits:
+        candidate = copy.deepcopy(updates[0])
+        edit(candidate)
+        try:
+            validate_frame(candidate)
+        except ValueError:
+            continue
+        raise ValueError("invalid task snapshot accepted")
+    return len(edits)
+
+
 def main() -> int:
     try:
         common = json.loads(COMMON_PATH.read_text(encoding="utf-8"))
@@ -785,12 +851,15 @@ def main() -> int:
         validate_history_model(history, model)
         history_count = validate_history_regressions(history, model)
         batch_count = validate_batch_field_regressions(model, history)
+        todo_count = validate_todo_regressions(model)
+        require(set(common["eventContract"]["completeTypes"]) == USER_EVENT_TYPES | STREAM_TYPES | HISTORY_TYPES,
+                "shared complete event catalog differs from validated types")
         subprocess.run([sys.executable, str(ROOT / "render_chat_api.py"), "--check"], check=True)
         validate_review_pages(model)
     except (KeyError, OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(f"error: {error}")
         return 2
-    print(f"POST SSE and ListEvents contracts valid; {negative_count} POST and {history_count} history and {batch_count} batch field negative regressions rejected")
+    print(f"POST SSE and ListEvents contracts valid; {negative_count} POST and {history_count} history and {batch_count} batch field and {todo_count} task snapshot negative regressions rejected")
     print("Static contract validation only; database pagination and runtime concurrency were not executed.")
     return 0
 

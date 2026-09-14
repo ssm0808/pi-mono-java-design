@@ -78,7 +78,7 @@
     }
   },
   "eventContract": {
-    "version": "2026-09-14.1",
+    "version": "2026-09-15.1",
     "semanticStatus": "confirmed",
     "detailStatus": "implementation-ready",
     "toolErrorCodes": {
@@ -136,6 +136,7 @@
       "agent.thinking",
       "agent.tool_call",
       "agent.tool_result",
+      "agent.todo_updated",
       "session.status_idle",
       "session.model_changed",
       "session.thinking_changed",
@@ -207,6 +208,12 @@
           "toolCallId/content/isError/errorCode",
           "前三项必填",
           "content 至少一个且仅 text/text 字符串块，允许空字符串和多个块；isError 必须布尔。失败必有下表稳定 errorCode，成功必须省略；不另设 errorMessage/status/details。"
+        ],
+        [
+          "agent.todo_updated",
+          "toolCallId/todos",
+          "全部必填",
+          "完整任务快照，无 phase。toolCallId 为非空来源标识，展示无需关联工具记录；todos 数组 0～100 项，整份替换，空数组清空；每项只有必填 content/status。content 为经 String.strip 规范化的非空文本，最多 1024 UTF-16 单元且列表内不重复；status=pending/in_progress/completed，最多一项 in_progress。后端从成功 TodoUpdate 最终结果生成，与 agent.tool_result 同源同事务，失败不发；前端直接消费 todos，不解析工具结果。"
         ],
         [
           "session.status_idle",
@@ -320,6 +327,10 @@
         "处理"
       ],
       "rows": [
+        [
+          "任务快照（target-only）",
+          "TodoUpdate 仅用于 build 实施，plan 调研不记录清单。工具结果与 agent.todo_updated 用独立 eventId，同一 ToolResult Entry/事务按顺序保存，提交后依次发送；SSE 与 GET 同形。任务事件不更新 mode/ETag、不表示执行终态；按原 sourceEventId 隔离，新根重新开始。完整事件缺页时先对账，不自动重发写请求。读取端新增类型支持后再启用工具生产；Mate 公共投影需独立同步。"
+        ],
         [
           "空文本与超限",
           "无文本的工具结果归一为一个空 text 块。工具自身有说明的截断保持；HTTP 不截断完整事件。持久化大小先校验，确实无法保存时保存小型失败终态；仅 SSE 队列或发送大小超限则断开该响应，已保存事件仍可查历史。"

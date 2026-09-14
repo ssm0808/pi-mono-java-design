@@ -28,9 +28,11 @@ hide empty members
 ' Design reason: add plan policy and review without changing tool metadata or the Agent Loop.
 ' Java divergence: HTTP plan review and database handoff are target-only additions.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: persistToolResults.
-' Source: frontend/src/runtime/eventStore.ts :: mergeEvent, reconcileEvents; deriveTodos is target-only.
-' Claude public tool events checked 2026-09-14; no native TODO contract.
-' Design reason: TodoUpdate returns a full snapshot through the existing tool result commit path.
+' Source: frontend/src/runtime/eventStore.ts :: mergeEvent, reconcileEvents; applyTodoUpdated is target-only.
+' Claude public tool events checked 2026-09-15; no native TODO contract.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java :: appendEntry.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: appendEventsLocked, recordProjectionIfComplete.
+' Design reason: one ToolResult Entry anchors both generic result and explicit task snapshot events.
 ' Source: DeepSeek packages/preset/agent-presets/presets/standard/agent.cordis.yml :: planning section.
 ' Design reason: plan prompts forbid TODO; build prompts request implementation progress.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java :: create, newSession.
@@ -42,14 +44,14 @@ allowmixing
 legend bottom left
   Green: existing structure     Amber: existing, extended
   Blue: new target-only class   Blue connectors: target-only relations
-  Controllers, services, factories, repositories: Spring singletons
+  Controllers, services, factories, repositories, TODO mapper: Spring singletons
   Execution package and tools: one instance per execution
 endlegend
 
 package "HTTP and client boundary" as HttpBoundary {
   class "Runtime Plan UI" as UI <<target-only>> #EAF2FF
   class "Todo projection" as TodoView <<target-only>> #EAF2FF {
-    +deriveTodos(events, rootEventId)
+    +applyTodoUpdated(event.todos, rootEventId)
   }
   class "Client event store" as EventStore <<existing>> #ECFDF5
   class "RuntimeSessionController" as ConfigApi <<extended>> #FFF7DD
@@ -134,6 +136,12 @@ package "Persistence and event boundary" as PersistenceScope {
   class "MyBatisRuntime*\nRepository" as Repos <<extended>> #FFF7DD
   interface "Runtime*Mapper" as Mappers <<extended>> #FFF7DD
   class "RuntimeEventProjector" as Projector <<extended>> #FFF7DD
+  class "RuntimeTodoEventMapper" as TodoMapper <<target-only>> #EAF2FF {
+    +map(finalCall, finalResult): TodoSnapshotDTO
+  }
+  class "RuntimeCommitted\nEventFactory" as EventFactory <<extended>> #FFF7DD {
+    +agentTodoUpdated(snapshot)
+  }
   interface "RuntimeEventOutput" as Output <<existing>> #ECFDF5
   database "GaussDB\nSessions / entries / events\nExecutions / segments / decisions" as DB
 }
@@ -198,6 +206,10 @@ ControlRepo <|.. Repos
 Repos --> Mappers
 Mappers --> DB
 Projector --> Persistence
+Projector -[#2563EB]down-> TodoMapper : final successful result
+Projector -[#2563EB,norank]-> EventFactory
+TodoMapper -[hidden]down- EventFactory
+EventFactory -[hidden]down- Output
 Coordinator --> Projector
 Projector --> Output
 ReviewAdapter -[#2563EB]-> Output
@@ -210,8 +222,8 @@ note bottom of Pending
 end note
 note bottom of TodoTool
   Same tool in both modes; build-only prompt.
-  Committed ToolResult is the snapshot.
-  No TODO table or public event type.
+  ToolResult and task event share one commit.
+  No TODO table or metadata fields.
 end note
 note bottom of ExistingTools
   No metadata fields, tool descriptions or
@@ -393,18 +405,18 @@ autonumber
 ' Source: modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentToolResult.java :: content, details.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: project, persistToolResults.
 ' Source: frontend/src/runtime/eventStore.ts :: reconcileEvents, executionState.
-' Claude public docs: managed-agents/events-and-streaming, checked 2026-09-14 (beta).
+' Claude public docs: managed-agents/events-and-streaming, checked 2026-09-15 (beta).
 ' DeepSeek baseline: 0a53fb55bea101816fa226bb964ae2bed71c343b (alpha).
 ' Source: packages/todo/tool-todo/src/index.ts :: apply, execute; whole-list replacement.
 ' Observed behavior: Java commits generic results at the existing TurnEndEvent boundary.
-' Design reason: keep the public tool envelope stable and derive TODO from committed success.
-' Java divergence: TodoUpdateTool and client projection are target-only, not Claude built-ins.
+' Design reason: commit explicit task snapshots with the successful tool result.
+' Java divergence: TodoUpdateTool, task event mapping and client reducer are target-only, not Claude built-ins.
 title CampusClaw TodoUpdate - Build Implementation Progress
 participant "AgentLoop / Pipeline" as Loop
 participant "TodoUpdateTool\n(target-only)" as Todo
-participant "Runtime Event\nProjector" as Projector
+participant "Runtime Event\nProjector + TODO mapper" as Projector
 database "Existing entries / events" as DB
-participant "Client event store\n+ deriveTodos (target-only)" as UI
+participant "Client event store\n+ applyTodoUpdated (target-only)" as UI
 participant "Existing history API" as History
 
 note over Loop,Todo
@@ -416,29 +428,31 @@ Loop -> Projector : Finalized TodoUpdate call
 Projector -> DB : Commit generic tool_call
 Projector --> UI : agent.tool_call
 note right of UI
-  Show updating if useful.
-  Do not replace committed progress yet.
+  Ordinary tool card only.
+  No task progress derived from calls.
 end note
 == 2. Execute and commit the result ==
 Loop -> Todo : Validate; execute(args)
 alt Valid complete list
   Todo --> Loop : AgentToolResult with one JSON text block
   Loop -> Projector : Existing TurnEndEvent with tool results
-  Projector -> Projector : Encode and check complete frame size
-  Projector -> DB : Commit ToolResult Entry and public event
+  Projector -> Projector : Validate final success; map full TODO snapshot
+  Projector -> Projector : Build both events; validate payloads and sizes
+  Projector -> DB : One transaction: ToolResult Entry +\nagent.tool_result + agent.todo_updated
   DB --> Projector : Committed
   Projector --> UI : agent.tool_result (isError=false)
-  UI -> UI : Match sourceEventId + toolCallId;
+  Projector --> UI : agent.todo_updated (full todos)
+  UI -> UI : Replace todos for sourceEventId
   note right of UI
-  Check call.toolName and result JSON.
-  Replace the complete TODO projection.
+  No tool-name matching or result JSON parsing.
+  Each public event has a distinct eventId.
   end note
 else Invalid or failed
   Todo --> Loop : Existing tool error path
   Loop -> Projector : Existing TurnEndEvent with failed result
   Projector -> DB : Commit failed generic result
   Projector --> UI : agent.tool_result (isError=true)
-  UI -> UI : Keep previous successful list
+  note right of UI : No task event; keep previous list
 end
 note over Loop,UI
   Ordinary thinking, messages and business tools
@@ -450,10 +464,10 @@ note over Loop,UI
 end note
 == 3. Rebuild the same projection ==
 UI -> History : GET Events
-History -> DB : Read stored generic calls and results
+History -> DB : Read stored events including task snapshots
 DB --> History : Ordered stored events
 History --> UI : Existing history response
-UI -> UI : Reconcile events and run the same projection
+UI -> UI : Reconcile event order; apply explicit task snapshots
 @enduml
 
 
@@ -572,9 +586,10 @@ group 4. Implement after approval
   Runtime --> UI : agent.tool_call (toolName=TodoUpdate)
   Runtime -> Tools : TodoUpdate: full implementation list, first item in_progress
   Tools --> Runtime : Validated full JSON snapshot
-  Runtime -> DB : At batch end, commit generic tool result
+  Runtime -> DB : At batch end, atomically commit result + task event
   Runtime --> UI : agent.tool_result (isError=false)
-  UI -> UI : Match toolName + call identity; display successful snapshot
+  Runtime --> UI : agent.todo_updated (full todos)
+  UI -> UI : Display explicit task snapshot
   loop Each implementation task
     Runtime -> Tools : Business work and required verification
     Tools --> Runtime : Actual results
@@ -588,8 +603,9 @@ group 4. Implement after approval
   Failure does not claim completion.
     end note
     Tools --> Runtime : Validated full JSON snapshot
-    Runtime -> DB : Commit generic result at batch end
+    Runtime -> DB : At batch end, atomically commit result + task event
     Runtime --> UI : Successful agent.tool_result
+    Runtime --> UI : agent.todo_updated (full todos)
     UI -> UI : Replace implementation progress
   end
   Runtime -> DB : Commit final answer and actual terminal; state=idle

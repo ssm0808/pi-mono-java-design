@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.6.1 |
+| 文档版本 | 0.7.0 |
 | 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，target-only |
-| 更新日期 | 2026-09-14 |
+| 更新日期 | 2026-09-15 |
 | 原文展示与消费修复 | 实现提交 `cad6847d901155cc6388989b984d19e302a4fbe3`，见 [Draft PR #287](https://github.com/superheromeZzh/pi-mono-java/pull/287)；合入前不作为实现仓主线行为 |
 | 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
@@ -35,13 +35,15 @@ GET 返回普通 JSON。结果使用
 不创建执行凭据、不调用 Mate 工具，不把任何凭据写进事件或日志。
 上游认证、授权和隔离边界仍有效，Claw 不新增 JWT/APPKEY 解析或互斥校验。
 
+任务更新的 target-only 增量已登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java 09b32d8e 的多事件 appendEntry 骨架可复用，新增工具与事件分支尚待实现。Mate 公共桥接需单独同步后开放。
+
 ## 2. 历史返回什么
 
 精确字段、条件必填、枚举、错误码和语言文案由
 [公共字段源](事件契约/common.json) 的 `eventContract` / `contractSections` 维护，
 渲染到 GET/POST 的统一 HTML；两个操作引用同一份定义，不各写一套。
 
-历史读取三类已接受 user.*、完整 agent.message/thinking/tool_call/tool_result、
+历史读取三类已接受 user.*、完整 agent.message/thinking/tool_call/tool_result/todo_updated、
 session.status_idle，以及模型、thinking、mode 配置和压缩完整记录。delta、心跳、连接标记不入历史。
 每条完整记录有服务端 eventId 与保存一次的 UTC 毫秒 createdAt；按内部已提交顺序展示，
 不按时间戳排序。agent.* 和 idle 的 sourceEventId 始终引用原始 user.message.eventId，
@@ -91,7 +93,7 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 | assistant.thinking.delta / completed | 执行 thinking=true 时将可读推理原文映射 agent.thinking；delta 用于预览、completed 保存并供历史读取；不透明签名保留内部 |
 | tool.execution.started | 参数收集完成后投影完整 agent.tool_call，保存 toolCallId、参数对象和确认标记 |
 | tool.execution.delta / completed | 不单独公开；内部工具进度不构成新的业务历史或通用命令生命周期 |
-| tool.result | 完整 agent.tool_result；至少一个 text 块、必填 isError，失败映射稳定安全码 |
+| tool.result | 完整 agent.tool_result；至少一个 text 块、必填 isError，失败映射稳定安全码；成功内置 TodoUpdate 额外同事务投影 agent.todo_updated，一 Entry 两事件，分别计入分页 |
 | session.model.changed / session.thinking.changed | session.model_changed / session.thinking_changed；保留真实 previous/current 与原有 reason，只进入历史 |
 | session.compaction.started / failed | 不单独公开；内部压缩过程与恢复判断保留，最终整轮确实失败时才产生 failed idle；手工 Compact 失败仍按其 JSON 错误契约 |
 | session.compaction.completed | 完整 session.compacted；内部摘要、恢复边界和独立 Usage 仍保留供恢复与累计，不进入公共 payload |
@@ -366,7 +368,7 @@ B09 的事件关联与 B13 Skill SSE 属于架构变更，B01 错误投影与 B1
 | B09 | 防止误停下一轮 | 给 user.interrupt 增加必填 targetEventId，引用原 user.message 的 eventId；不匹配当前执行时返回 409。agent.* 和 idle 用 sourceEventId 引用同一原消息，便于历史对账。复用已有事件身份，不新增 runId/executionId；这是产品字段约束。 |
 | B10 | 断线与回执丢失 | 保留无自动写重试的方案：没有收到首帧时显示“提交结果不确定”，不靠相同文本猜测成功，不新增幂等键。收到回执后按 eventId 和 B09 的关联补读历史；断流本身不取消执行，也不代表失败。 |
 | B11 | HTTP 故障与心跳 | 接受前：非法参数 400、不存在 404、状态冲突 409、容量/依赖暂不可用 503、内部失败 500，统一 ResultBean；接受后不得伪装成未接受。SSE 已开始则不改成 JSON，能保存权威失败则发送 failed，否则断流并对账。采用 : ping 注释心跳；慢客户端可丢 preview，完整帧不能入队则断开。 |
-| B12 | 配置、压缩与用量 | 模型/思考/模式配置变更和压缩保留独立完整事件，映射到统一 Session Events；Usage 放在对应完整 Agent 消息，Session 保留累计用量。不新增通用 command 生命周期、进度或子 Agent 公共事件；已有内部记录逐类标明公开映射或不公开理由。 |
+| B12 | 配置、压缩与用量 | 模型/思考/模式配置变更和压缩保留独立完整事件，映射到统一 Session Events；Usage 放在对应完整 Agent 消息，Session 保留累计用量。不新增通用 command 生命周期或子 Agent 公共事件；build 任务进度由 agent.todo_updated 表达；已有内部记录逐类标明公开映射或不公开理由。 |
 | B13 | Skill 请求与响应 | 共享 POST /sessions/{sessionId}/command：Skill 用 name="skill:<name>"、arguments 字符串和可选 fileIds；Skill 执行返回与消息一致的 SSE，Builtin 保持普通 JSON。Skill 遵循同一 Session 单消息准入，首帧回执为展开前的 user.message，随后普通 Agent/Tool/idle 事件，不新增 commandId。 |
 | B14 | Skill 快照与恢复 | 受理前解析完整 Agent/Skill 快照并重检绑定、权限和容量，受理后本次执行固定快照；Skill 正文按资源内容处理，不提升为系统权限。内部恢复所需内容沿用 Session 持久化与保留策略，公共历史只展示用户调用和执行结果，不另建 Skill 全文审计副本。 |
 | B15 | 数据保留 | 沿用部署统一的数据保留策略，不为 Events 或 Skill 另定天数；没有已配置策略时不新增自动清理。保留范围变化后重新从第 1 页加载，不能承诺永久可恢复。 |
@@ -385,6 +387,7 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.7.0 | 2026-09-15 | 纳入后端显式任务更新事件，SSE 与历史共用完整快照。 |
 | 0.6.1 | 2026-09-14 | 精简查询与验收说明，突出共享完整事件投影和单次读取边界。 |
 | 0.6.0 | 2026-09-14 | 历史增加统一 Session 更新产生的 requested 模式事件，按模型、思考、模式顺序展示真实变更。 |
 | 0.5.1 | 2026-09-10 | 同步 Runtime 十一项当前接口清单，ListEvents 契约不变。 |
