@@ -1,8 +1,8 @@
 # CampusClaw Java 四表 GaussDB Session 事件存储 SR 设计
 
 > 文档编号：SR-MEM-001<br>
-> 版本：v0.15.0<br>
-> 日期：2026-09-14<br>
+> 版本：v0.16.0<br>
+> 日期：2026-09-15<br>
 > 状态：设计评审稿<br>
 > pi 源码基线：[`f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee`](https://github.com/badlogic/pi-mono/tree/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee)<br>
 > 设计仓库分析基线：`b5b0d1ecc3419c5960cac394b683a635ac9f853e`<br>
@@ -334,6 +334,8 @@ COMMIT
 
 不使用 `ON DELETE CASCADE` 代替事务顺序。
 
+接入 [M05 调用统计](../../04-命令与技能/03-Skill加载统计/README.md)时，删除路径在同一 Session 生命周期锁和事务中清理该 Session 的可追溯调用事实；累计/日汇总按所属专题保留。该统计增量为 target-only，使用独立专题表，不改变四张基础表 DDL；恢复、fork 和历史导入不触发新调用记账，具体规则及全局图由 M05 维护。
+
 ## 7. 当前路径、分页和模型上下文
 
 ![CampusClaw 不依赖路径缓存的模型上下文重建](./设计图/memory-context-rebuild.svg)
@@ -474,6 +476,7 @@ plantuml -tsvg diagram.puml
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v0.16.0 | 2026-09-15 | Session 删除与恢复引用 Skill 调用事实的清理和不重计边界。 |
 | v0.15.0 | 2026-09-14 | 集中维护 Session 存储与压缩职责，独立 DDL 并收敛重复说明。 |
 | v0.14.2 | 2026-08-11 | 统一中文术语和行文风格。 |
 | v0.14.1 | 2026-08-11 | 优化四张图的可视化表达。 |

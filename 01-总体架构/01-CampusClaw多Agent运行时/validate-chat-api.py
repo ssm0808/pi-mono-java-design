@@ -53,7 +53,7 @@ def validate_catalog():
         "createSession", "getSession", "deleteSession", "submitSessionEvent", "listSessionEvents",
         "listSessionModels", "updateSession",
         "listSessionCommands", "executeSessionCommand",
-        "listSkillLoadStatistics", "getSkillLoadDailyStatistics",
+        "listSkillInvocationStatistics", "getSkillInvocationDailyStatistics",
     }, "Current catalog identities differ")
     spec = importlib.util.spec_from_file_location("retained_gate", ROOT / "validate-chat-http-v1.py")
     gate = importlib.util.module_from_spec(spec)

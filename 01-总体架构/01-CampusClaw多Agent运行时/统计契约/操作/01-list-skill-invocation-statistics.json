@@ -1,11 +1,11 @@
 {
   "operation": {
-    "shortName": "查询 Skill 加载排名",
-    "operationKey": "listSkillLoadStatistics",
+    "shortName": "查询 Skill 调用排名",
+    "operationKey": "listSkillInvocationStatistics",
     "method": "GET",
-    "path": "/skills/load-statistics",
-    "summary": "直接分页查询累计或近 7/30 天 Skill 加载统计",
-    "description": "无需 skillIds。服务端确定统计窗口、汇总、排序后分页；只返回窗口内次数大于零的 Skill。累计查累计表，近 7/30 天查日汇总。统计集合不是全部 Skill 目录，名称及目录权限由 CampusMate 维护。本接口为全文加载口径候选，target-only，口径待评审；不是实施基线。",
+    "path": "/skills/invocation-statistics",
+    "summary": "直接分页查询累计或近 7/30 天 Skill 调用统计",
+    "description": "直接分页查询成功 Skill 指令交付的累计或近 7/30 天调用次数，无需 skillIds。服务端先聚合、排序，再分页；仅返回窗口内正计数。首版 scope=runtime，名称由 CampusMate 维护。来源事实与权威事件、累计及日汇总同事务提交。本接口为推荐目标，target-only，尚未实施。",
     "parameters": [
       {
         "name": "period",
@@ -16,7 +16,7 @@
       },
       {
         "name": "sort",
-        "schema": "fullLoadCount | lastLoadedAt; default fullLoadCount",
+        "schema": "invocationCount | lastInvokedAt; default invocationCount",
         "description": "所选字段倒序，并列时按 skillId 升序；不接受任意 SQL 或自定义排序表达式。",
         "in": "query",
         "required": false
@@ -42,7 +42,7 @@
     "requestBody": {
       "required": false,
       "contentType": null,
-      "description": "无请求体。示例：?period=7d&sort=fullLoadCount&page=1&limit=2。",
+      "description": "无请求体。示例：?period=7d&sort=invocationCount&page=1&limit=2。",
       "example": null
     },
     "responses": [
@@ -51,7 +51,7 @@
         "status": "200",
         "tabLabel": "200 · 近 7 天排名",
         "label": "OK",
-        "summary": "近 7 天排名：period=7d&sort=fullLoadCount&page=1&limit=2；该快照还有第三项，因此 nextPage=2。",
+        "summary": "近 7 天排名：period=7d&sort=invocationCount&page=1&limit=2；该快照还有第三项，因此 nextPage=2。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -62,6 +62,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
+              "scope": "runtime",
               "period": "7d",
               "timeZone": "Asia/Shanghai",
               "fromDate": "2026-09-09",
@@ -73,13 +74,13 @@
               "items": [
                 {
                   "skillId": "skill-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                  "fullLoadCount": 12,
-                  "lastLoadedAt": "2026-09-15T08:20:00.000Z"
+                  "invocationCount": 12,
+                  "lastInvokedAt": "2026-09-15T08:20:00.000Z"
                 },
                 {
                   "skillId": "skill-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                  "fullLoadCount": 8,
-                  "lastLoadedAt": "2026-09-14T09:00:00.000Z"
+                  "invocationCount": 8,
+                  "lastInvokedAt": "2026-09-14T09:00:00.000Z"
                 }
               ]
             }
@@ -102,6 +103,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
+              "scope": "runtime",
               "period": "all",
               "timeZone": "Asia/Shanghai",
               "fromDate": null,
@@ -113,8 +115,8 @@
               "items": [
                 {
                   "skillId": "skill-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                  "fullLoadCount": 120,
-                  "lastLoadedAt": "2026-09-15T08:20:00.000Z"
+                  "invocationCount": 120,
+                  "lastInvokedAt": "2026-09-15T08:20:00.000Z"
                 }
               ]
             }
@@ -137,6 +139,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
+              "scope": "runtime",
               "period": "7d",
               "timeZone": "Asia/Shanghai",
               "fromDate": "2026-09-09",
@@ -151,9 +154,9 @@
         }
       },
       {
-        "id": "400-invalid_skill_load_statistics_query",
+        "id": "400-invalid_skill_invocation_statistics_query",
         "status": "400",
-        "label": "INVALID_SKILL_LOAD_STATISTICS_QUERY",
+        "label": "INVALID_SKILL_INVOCATION_STATISTICS_QUERY",
         "summary": "统计查询参数不合法。",
         "headers": {
           "Content-Language": "zh-CN",
@@ -161,40 +164,40 @@
         },
         "bodies": {
           "zh-CN": {
-            "resCode": "INVALID_SKILL_LOAD_STATISTICS_QUERY",
+            "resCode": "INVALID_SKILL_INVOCATION_STATISTICS_QUERY",
             "resMsg": "统计查询参数不合法。"
           },
           "en-US": {
-            "resCode": "INVALID_SKILL_LOAD_STATISTICS_QUERY",
+            "resCode": "INVALID_SKILL_INVOCATION_STATISTICS_QUERY",
             "resMsg": "The statistics query parameters are invalid."
           }
         }
       },
       {
-        "id": "500-skill_load_statistics_query_failed",
+        "id": "500-skill_invocation_statistics_query_failed",
         "status": "500",
-        "label": "SKILL_LOAD_STATISTICS_QUERY_FAILED",
-        "summary": "加载统计查询失败。",
+        "label": "SKILL_INVOCATION_STATISTICS_QUERY_FAILED",
+        "summary": "调用统计查询失败。",
         "headers": {
           "Content-Language": "zh-CN",
           "Cache-Control": "no-store"
         },
         "bodies": {
           "zh-CN": {
-            "resCode": "SKILL_LOAD_STATISTICS_QUERY_FAILED",
-            "resMsg": "加载统计查询失败。"
+            "resCode": "SKILL_INVOCATION_STATISTICS_QUERY_FAILED",
+            "resMsg": "调用统计查询失败。"
           },
           "en-US": {
-            "resCode": "SKILL_LOAD_STATISTICS_QUERY_FAILED",
-            "resMsg": "The load statistics query failed."
+            "resCode": "SKILL_INVOCATION_STATISTICS_QUERY_FAILED",
+            "resMsg": "The invocation statistics query failed."
           }
         }
       },
       {
-        "id": "503-skill_load_statistics_unavailable",
+        "id": "503-skill_invocation_statistics_unavailable",
         "status": "503",
-        "label": "SKILL_LOAD_STATISTICS_UNAVAILABLE",
-        "summary": "加载统计暂时不可用，请稍后重试。",
+        "label": "SKILL_INVOCATION_STATISTICS_UNAVAILABLE",
+        "summary": "调用统计暂时不可用，请稍后重试。",
         "headers": {
           "Content-Language": "zh-CN",
           "Cache-Control": "no-store",
@@ -202,12 +205,12 @@
         },
         "bodies": {
           "zh-CN": {
-            "resCode": "SKILL_LOAD_STATISTICS_UNAVAILABLE",
-            "resMsg": "加载统计暂时不可用，请稍后重试。"
+            "resCode": "SKILL_INVOCATION_STATISTICS_UNAVAILABLE",
+            "resMsg": "调用统计暂时不可用，请稍后重试。"
           },
           "en-US": {
-            "resCode": "SKILL_LOAD_STATISTICS_UNAVAILABLE",
-            "resMsg": "Load statistics are temporarily unavailable. Try again later."
+            "resCode": "SKILL_INVOCATION_STATISTICS_UNAVAILABLE",
+            "resMsg": "Invocation statistics are temporarily unavailable. Try again later."
           }
         }
       }
@@ -222,27 +225,31 @@
         "rows": [
           [
             "计量单位",
-            "成功记账的 SKILL.md 全文加载次数；跨 Agent、版本与入口累计。技术失败可能漏计，不代表任务采用、模型接收或任务成功。"
+            "invocationCount 为成功指令交付次数：一次显式注入或一次实际交付主文档正文的成功 Read 各计 1。分段 Read 分别计数，重复投递同一来源不重计；不表示全文覆盖、任务采用或业务执行成功。"
+          ],
+          [
+            "统计范围",
+            "scope 固定为 runtime；仅含接入持久化统计的 Runtime 会话，跨 Agent/版本/plan/build 累计。Child/Cron 尚未接入，不能解释为它们的零调用。"
           ],
           [
             "统计时区",
-            "Asia/Shanghai；日期为 YYYY-MM-DD，时间戳为 UTC 毫秒。queriedAt 和本页数据取同一数据库查询语句快照；时间戳不是提交水位。"
+            "Asia/Shanghai；日期 YYYY-MM-DD，时间戳 UTC 毫秒。按来源 occurredAt 归日，重试不改日期；queriedAt 和当前页取同一查询语句快照，不是执行完成水位。"
           ],
           [
-            "窗口",
-            "7d/30d 包含今天的自然日：数据库日期为 2026-09-15 时，7d 为 [2026-09-09, 2026-09-16)。今天只含查询时可见的已提交记账。"
+            "窗口与保留",
+            "7d/30d 包含今天的自然日：2026-09-15 的 7d 为 [2026-09-09, 2026-09-16)。仅含功能启用以来已提交事实，不回填旧历史；实际保留策略不覆盖窗口时返回 503，不能把过期数据补零。"
           ],
           [
             "授权边界",
-            "仅供已获部署级统计权限的管理端经 CampusMate/部署入口调用；Claw 沿用上游授权，现有凭据 ID 不能推导租户。浏览器不直连，不将全库统计分页后过滤为租户统计。部署级范围为本版推荐边界，尚待权限选项确认。"
+            "仅供已获部署级统计权限的管理端经 CampusMate/部署入口调用；Claw 沿用上游授权，凭据 ID 不能推导租户。浏览器不直连；权限未落实不开放，禁止全库分页后再做租户过滤。"
           ],
           [
             "参数校验",
-            "拒绝未知参数、重复参数、空字符串、非法枚举、非整数页码及请求体。所有缺省值在 Service 统一应用，不在 request VO 初始化。"
+            "拒绝未知/重复参数、空字符串、非法枚举、非整数页码及请求体。缺省值由 Service 统一应用，路径 Skill ID 使用既有精确格式。"
           ],
           [
             "字段类型",
-            "fullLoadCount 为非负 64 位整数；Skill ID 沿用现有格式和精确大小写身份。客户端须使用可保留整数精度的读取方式。数据库错误不能转换成零或空列表。"
+            "invocationCount 为非负 64 位整数；客户端使用保留整数精度的读取方式。scope 为固定字符串，数据库错误不能转换成零或空列表。"
           ]
         ]
       },
@@ -255,23 +262,23 @@
         "rows": [
           [
             "result 字段",
-            "period、timeZone、fromDate、toDate、queriedAt、page、limit、nextPage、items 均存在。all 的 fromDate/toDate 为 null；7d/30d 的日期边界左闭右开。"
+            "scope、period、timeZone、fromDate、toDate、queriedAt、page、limit、nextPage、items 均存在。all 日期边界为 null；7d/30d 日期边界左闭右开。"
           ],
           [
             "items",
-            "只含 skillId、fullLoadCount、lastLoadedAt；fullLoadCount 大于 0，lastLoadedAt 为同一窗口最近时间且非 null。没有记录不构造虚拟 Skill 项。"
+            "每项仅含 skillId、invocationCount、lastInvokedAt；次数大于 0，最近时间非 null；无统计不构造虚拟 Skill。"
           ],
           [
             "nextPage",
-            "取 limit+1 项判定；有下一页返回 page+1，否则为 null。不返回 total，不承诺跨请求稳定排名。"
+            "取 limit+1 判定；有下一页返回 page+1，否则 null。不返回 total。"
           ],
           [
-            "刷新",
-            "跨页间有新记账时可能重复或遗漏；改变 period/sort/limit 时从 page=1 重新查。实时分页不能作为一致性导出。"
+            "刷新与排序",
+            "先聚合再按固定枚举排序，并列按 skillId 升序；跨页可能因新调用重复或遗漏，不承诺稳定导出。改变 period/sort/limit 后从第一页重查。"
           ],
           [
-            "SQL 边界",
-            "先统计后分页；排序字段由 Service 枚举选择固定 SQL，禁止原样拼接客户端字符串。"
+            "一致性",
+            "来源、事实、累计和日汇总同事务提交；技术重复按规范来源事件去重。查询失败返回错误，不切换为部分表的成功响应。"
           ]
         ]
       }

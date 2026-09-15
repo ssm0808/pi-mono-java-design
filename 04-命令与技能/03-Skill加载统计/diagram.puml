@@ -1,101 +1,124 @@
 @startuml skill_load_statistics_classes
 allowmixing
-' Source evidence: pi-mono-java 3dfd990a982f610a97c7ecb45e07bde73f45ecb3
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java: recordSkillLoad
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/skill/SkillCommandExecutionService.java: execute
-' modules/coding-agent-cli/src/main/resources/mapper/session/SkillLoadMapper.xml: insert/query
-' pi 5cd93f688aaab89dbb6dfa4aca535f21796ae185 packages/coding-agent/src/core/agent-session.ts: _expandSkillCommand
-' Observed behavior: host attributes Read coverage and explicit command admission to Skill loads.
-' Design reason: aggregate once in one transaction; keep query and collection responsibilities separate.
-' Java divergence: all new classes, methods, tables and relationships below are target-only.
-title Skill Load Statistics - Target-only Design
+' Source evidence: codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51 codex-rs/core/src/skills.rs emit_explicit_skill_invocations
+' Source evidence: pi 5cd93f688aaab89dbb6dfa4aca535f21796ae185 packages/agent/src/types.ts AgentEvent
+' Source evidence: Java f61906b9136246ca60f333704b6fc92b5420d0ec modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage/appendEntry
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java persistToolResults
+' Observed behavior: Runtime owns root input and tool result persistence; Codex has separate metrics and analytics.
+' Design reason: stable source identity and one transaction align committed delivery with statistics.
+' Java divergence: all new types and integration relationships are target-only; scope is Runtime.
+title Skill Invocation Statistics - Recommended Target (Runtime)
 top to bottom direction
 skinparam shadowing false
+skinparam backgroundColor #FFFFFF
 skinparam linetype polyline
-skinparam nodesep 35
-skinparam ranksep 50
+skinparam nodesep 32
+skinparam ranksep 42
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
-skinparam packageTitleAlignment left
 skinparam defaultFontName SansSerif
 skinparam ArrowFontSize 11
 skinparam classFontSize 12
 
-package "Management boundary" {
+package "Management query" {
   actor "Authorized management caller" as Caller
-  class "SkillLoadStatisticsController" as Controller <<target-only, singleton>> {
-    +list(requestVO): responseVO
-    +daily(skillId, requestVO): responseVO
-  }
-  class "SkillLoadStatisticsQueryService" as Query <<target-only, singleton>> {
-    +normalizeWindowAndPage()
-    +list() / daily()
-  }
-  class "SkillStatisticsQueryDTO" as QueryDTO <<target-only, request snapshot>>
+  class "SkillInvocationStatistics\nController" as Controller <<target-only, singleton>>
+  class "SkillInvocationStatistics\nQueryService" as Query <<target-only, singleton>>
 }
-
-package "Managed execution" {
-  class "AgentSessionFactory / Read hook" as Host <<target-only integration>>
-  class "SkillCommandExecutionService" as Command <<target-only integration>>
-  class "SkillReadCoverage" as Coverage <<execution scope>>
+package "Runtime execution and attribution" {
+  class "SkillCommand\nExecutionService" as Command <<target-only integration>>
+  class "Generic Read / final tool result" as Read <<target-only integration>>
+  class "ReadEvidenceDTO" as Evidence <<target-only, immutable per call>>
   class "Prepared Skill snapshot" as Snapshot <<immutable, execution scope>>
-  class "SkillLoadRecorder" as Recorder <<target-only, singleton>> {
-    +record(skillId)
-    +handleFailureAfterRollback()
+  class "SkillInvocationResolver" as Resolver <<target-only, singleton>>
+  class "SkillInvocation\nCandidateDTO" as Candidate <<target-only, immutable per call>>
+  class "Runtime admission / result projector" as Projector <<target-only integration>>
+}
+package "Application transaction" {
+  class "RuntimeExecution\nPersistenceService" as Owner <<target-only integration>> {
+    +acceptMessage()
+    +appendEntry()
+  }
+  interface "SkillInvocationWritePort" as Port <<target-only>> {
+    +recordNewSource(candidateDTO)
+  }
+  class "SkillInvocationWriteService" as Writer <<target-only, singleton>> {
+    MANDATORY transaction
+    +checkIdentityAndWrite()
   }
 }
-
-package "Application transaction and GaussDB persistence" {
-  class "SkillLoadStatisticsWriteService" as Writer <<target-only, singleton>> {
-    +record(skillId)
-    REQUIRES_NEW
-  }
-  interface "SkillLoadStatisticsMapper" as Mapper <<target-only>> {
-    +incrementTotal(dto)
-    +incrementDaily(dto)
-    +list(dto) / daily(dto)
-  }
-  class "SkillLoadStatisticsDTO" as DTO <<target-only, internal>>
-  together {
-    entity "t_skill_load_stats" as Total <<target-only>> {
-      * skill_id : PK
-      --
-      full_load_count
-      last_loaded_at
-    }
-    entity "t_skill_load_daily_stats" as Daily <<target-only>> {
-      * stat_date : PK
-      * skill_id : PK
-      --
-      full_load_count
-      last_loaded_at
-    }
-  }
+package "MyBatis and GaussDB" {
+  interface "SkillInvocationMapper" as Mapper <<target-only>>
+  entity "Existing source entries and events" as Events
+  entity "t_skill_invocation" as Fact <<target-only>>
+  entity "t_skill_invocation_stats" as Total <<target-only>>
+  entity "t_skill_invocation_daily_stats" as Daily <<target-only>>
 }
-
-Caller --> Controller : GET + upstream authorization
+Caller --> Controller : GET
 Controller --> Query : request/response VO
-Query "1" --> "1 per query" QueryDTO : creates
-Query --> Mapper : bounded query DTO
-Host "1" *-- "1" Coverage
-Host --> Snapshot : validate actual read evidence
-Command --> Snapshot : admitted full input
-Host --> Recorder : completed coverage
-Command --> Recorder : accepted full input
-Recorder --> Writer : one attempt
-Writer --> Mapper : same DB transaction
-Mapper --> DTO : maps records
-Mapper --> Total : total
-Mapper --> Daily : daily
+Query --> Mapper : query DTO
+Command --> Snapshot : same admission snapshot
+Command --> Candidate : explicit delivery
+Read "1" *-- "1 per call" Evidence : evidence
+Resolver --> Evidence : verify final result
+Resolver "1" --> "1 per execution" Snapshot : identity
+Resolver --> Candidate : successful read delivery
+Projector --> Resolver : after all hooks
+Projector --> Owner : stable source/result events
+Command --> Owner : root acceptance + candidate
+Owner --> Port : participates in source TX
+Port <|.. Writer
+Writer --> Mapper : fact then total then daily
+Mapper --> Fact
+Mapper --> Total
+Mapper --> Daily
+Owner --> Events : existing persistence boundary
+note bottom of Fact
+  PK: session_id + source_event_id + skill_id
+  Source: root input or canonical tool-call event.
+  Preserve root and successful result references.
+end note
+@enduml
 
-note bottom of Writer
-  Total then daily; commit both or rollback both.
-  Catch failures outside the transaction proxy.
-  No automatic retry after an uncertain commit.
-end note
-note bottom of Daily
-  Asia/Shanghai calendar days.
-  Recent 7/30-day queries; retain 90 days.
-  Cleanup never decrements lifetime totals.
-end note
+@startuml skill_invocation_commit
+' Source evidence: Java f61906b9136246ca60f333704b6fc92b5420d0ec modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java appendEntry
+' Source evidence: codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51 codex-rs/analytics/src/reducer.rs ingest_skill_invoked
+' Observed behavior: Codex uses in-memory deduplication; Runtime has an authoritative append transaction.
+' Design reason: avoid a commit-to-notification loss window and distinguish replay from a new invocation.
+' Java divergence: this sequence is target-only; it is not the Codex delivery pipeline.
+title Skill Invocation Commit - Target-only
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+participant "Runtime caller / projector" as P
+participant "Attribution resolver" as R
+participant "Runtime persistence owner" as O
+participant "Skill write port" as W
+database "Same GaussDB database" as DB
+participant "Existing event output" as E
+P -> R : final result + immutable Skill snapshot
+R --> P : candidate, or no Skill fact
+P -> O : stable source/result + optional candidate
+O -> DB : begin; existing execution and Session locks
+O -> DB : validate source identity and prior completion
+alt same source already committed
+  DB --> O : original committed records
+  O -> DB : end without increments
+  O --> P : original result
+else new valid source
+  O -> DB : append authoritative input/result and projection
+  opt successful Skill candidate
+    O -> W : recordNewSource (same transaction)
+    W -> DB : insert fact; increment total; increment day
+  end
+  alt all writes succeed
+    O -> DB : commit
+    O -> E : publish existing complete event
+    O --> P : committed result
+  else any write fails
+    O -> DB : rollback source, fact and summaries
+    O --> P : persistence failure; do not replay tool execution
+  end
+end
 @enduml
