@@ -1,6 +1,6 @@
 # CampusClaw 设计仓库
 
-导航版本 3.1.0 · 2026-09-15
+导航版本 3.2.0 · 2026-09-15
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
@@ -20,7 +20,7 @@
 | M04 · Session 上下文与持久化 | [会话记忆 GaussDB](./03-数据与存储/01-会话记忆GaussDB/README.md) | 分支、压缩、恢复与存储；[pi 上下文研究](./05-研究资料/03-pi会话上下文/README.md)是证据入口，客户端事件历史归 M06 |
 | M05 · Command 与 Skill | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [Builtin](./04-命令与技能/01-内置命令/README.md)、[Skill Command](./04-命令与技能/02-技能命令/README.md)与[Help](./04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)分别维护行为 |
 | M06 · 事件契约与服务边界 | [Session Events](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md) | 内部[请求级 SSE](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-stream-design.md)与[历史](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)；[Mate 公共 Chat](./02-服务与接口/07-mate-service通用对话API/README.md)单独维护公共权威契约 |
-| M07 · 前端与渠道 | [前端体验](./01-总体架构/04-CampusClaw前端体验/README.md) | [计划模式与 Codex 交互](./01-总体架构/04-CampusClaw前端体验/plan-interaction.md)、[可操作工作台](./01-总体架构/04-CampusClaw前端体验/plan-workbench.html)； [Slash 交互](./04-命令与技能/00-Slash-Command通用模块/前端设计/README.md)、[飞书渠道](./01-总体架构/01-CampusClaw多Agent运行时/channel-feishu-v1-design.md)；消费 M06，不另定义事件权威语义 |
+| M07 · 前端体验 | [前端体验](./01-总体架构/04-CampusClaw前端体验/README.md) | [计划模式与 Codex 交互](./01-总体架构/04-CampusClaw前端体验/plan-interaction.md)、[可操作工作台](./01-总体架构/04-CampusClaw前端体验/plan-workbench.html)；[Slash 交互](./04-命令与技能/00-Slash-Command通用模块/前端设计/README.md)；消费 M06，不另定义事件权威语义 |
 | M08 · Agent 元数据与配置 | [Agent 元数据 GaussDB](./03-数据与存储/02-Agent元数据GaussDB/README.md) | 身份、版本、Agent 默认 mode 及模型/Tool/Skill 绑定；[数据库模式研究](./03-数据与存储/03-Agent数据库模式/README.md)和[元数据草案](./06-元数据草案/README.md)不自动成为已实现契约 |
 | M09 · 附件与文件服务 | [CampusMate 附件服务](./02-服务与接口/01-CampusMate附件服务/README.md) | 文件上传、扫描、访问与删除；Runtime 文件引用边界由 M01/M06 引用 |
 | M10 · 调度与并发治理 | [工具系统](./01-总体架构/02-CampusClaw工具系统/README.md)中的 Cron 与执行入口 | Runtime 准入及控制事务归 M06；[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量与背压结构 |
@@ -49,6 +49,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.2.0 | 2026-09-15 | 移除飞书渠道设计及图纸入口，M07 聚焦前端体验。 |
 | 3.1.0 | 2026-09-15 | 前端模块增加计划模式、Codex 交互对齐与可操作工作台导航。 |
 | 3.0.1 | 2026-09-15 | 计划模式补充方案载体与后端显式任务事件导航。 |
 | 3.0.0 | 2026-09-14 | 首页以模块为唯一主导航，契约、证据与图索引按用途下钻。 |
