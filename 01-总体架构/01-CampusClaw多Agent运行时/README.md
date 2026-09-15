@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.22.0 |
-| 更新日期 | 2026-09-15 |
+| 文档版本 | 3.23.0 |
+| 更新日期 | 2026-09-16 |
 | 职责 | M01：Agent 执行装配、入口协作与父子执行生命周期 |
 | 设计状态 | 当前目标；实现状态按专项源码证据分别判断 |
 | 源码证据 | [固定提交、路径、符号与差距](source-evidence.md) |
@@ -63,10 +63,10 @@ Runtime 通过 `sessionId` 定位持久化配置、当前分支和执行状态�
 | 7 | `POST` | `/sessions/{sessionId}` | 更新会话 |
 | 8 | `GET` | `/sessions/{sessionId}/commands` | 查看会话命令清单 |
 | 9 | `POST` | `/sessions/{sessionId}/command` | 执行会话命令 |
-| 10 | `GET` | `/skills/invocation-statistics` | Runtime Skill 累计或近 7/30 天调用排名，推荐目标 |
-| 11 | `GET` | `/skills/{skillId}/invocation-statistics/daily` | 单 Skill 调用日趋势，推荐目标 |
+| 10 | `GET` | `/skills/usage-statistics` | Runtime Skill 累计或近 7/30 天使用排名，已确认目标 |
+| 11 | `GET` | `/skills/{skillId}/usage-statistics/daily` | 单 Skill 使用日趋势，已确认目标 |
 
-统计的数据库、权限范围、计数口径和实现差距由 [M05 调用统计](../../04-命令与技能/03-Skill加载统计/README.md)维护；推荐成功交付事实与来源同事务、累计及按日查询，首版 scope=runtime。新增操作与事务改造为 target-only，不提升既有接口的确认状态。
+统计的口径、数据库、权限和实现差距由 [M05 使用统计](../../04-命令与技能/03-Skill加载统计/README.md)维护：同根/Skill 的显式与 Read 信号统一去重，三表独立短事务，失败不阻断主执行但允许漏计。首版 scope=runtime，累计及近 7/30 天按首次入账归日；目标已确认，target-only，尚未实施。
 
 ## 5. 执行主线与恢复
 
@@ -136,6 +136,7 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.23.0 | 2026-09-16 | 统计清单采用 usage-statistics 并明确根去重与失败隔离。 |
 | 3.22.0 | 2026-09-15 | Runtime 接口清单改用成功调用统计并关联来源事务设计。 |
 | 3.21.1 | 2026-09-15 | 明确统计接口的候选口径与设计仓调用观测依据。 |
 | 3.21.0 | 2026-09-15 | 接口清单登记 Skill 加载排名与日趋势推荐方案。 |

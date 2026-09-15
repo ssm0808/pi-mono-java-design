@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
+  "version": "1.9.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -77,19 +77,19 @@
       "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"
     },
     {
-      "key": "listSkillInvocationStatistics",
-      "source": "统计契约/操作/01-list-skill-invocation-statistics.json",
+      "key": "listSkillUsageStatistics",
+      "source": "统计契约/操作/01-list-skill-usage-statistics.json",
       "common": "接口契约/common.json",
-      "status": "调用统计推荐方案 · target-only",
-      "note": "累计＋按日及近 7/30 天为已确认需求。本版推荐成功调用事实、规范来源幂等及三表同事务，首版 scope=runtime；Child/Cron 须补权威身份与持久化后接入。口径、权限和一致性是设计提案，未表示代码已实现或另经产品验收。",
+      "status": "使用统计目标已确认 · target-only",
+      "note": "按根执行/Skill 统一去重显式与 Read 使用信号；部分正文即可，累计及近 7/30 天按首次入账信号归日。独立统计短事务失败不阻断主执行，允许漏计；首版 scope=runtime。目标方案已确认，未表示代码已实现或通过运行验收。",
       "design": "../../04-命令与技能/03-Skill加载统计/README.md"
     },
     {
-      "key": "getSkillInvocationDailyStatistics",
-      "source": "统计契约/操作/02-get-skill-invocation-daily-statistics.json",
+      "key": "getSkillUsageDailyStatistics",
+      "source": "统计契约/操作/02-get-skill-usage-daily-statistics.json",
       "common": "接口契约/common.json",
-      "status": "调用统计推荐方案 · target-only",
-      "note": "累计＋按日及近 7/30 天为已确认需求。本版推荐成功调用事实、规范来源幂等及三表同事务，首版 scope=runtime；Child/Cron 须补权威身份与持久化后接入。口径、权限和一致性是设计提案，未表示代码已实现或另经产品验收。",
+      "status": "使用统计目标已确认 · target-only",
+      "note": "按根执行/Skill 统一去重显式与 Read 使用信号；部分正文即可，累计及近 7/30 天按首次入账信号归日。独立统计短事务失败不阻断主执行，允许漏计；首版 scope=runtime。目标方案已确认，未表示代码已实现或通过运行验收。",
       "design": "../../04-命令与技能/03-Skill加载统计/README.md"
     }
   ]

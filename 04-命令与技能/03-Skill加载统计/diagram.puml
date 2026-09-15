@@ -1,124 +1,142 @@
 @startuml skill_load_statistics_classes
 allowmixing
-' Source evidence: codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51 codex-rs/core/src/skills.rs emit_explicit_skill_invocations
+' Source evidence: Codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51 codex-rs/core/src/skills.rs emit_explicit_skill_invocations
 ' Source evidence: pi 5cd93f688aaab89dbb6dfa4aca535f21796ae185 packages/agent/src/types.ts AgentEvent
-' Source evidence: Java f61906b9136246ca60f333704b6fc92b5420d0ec modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage/appendEntry
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java persistToolResults
-' Observed behavior: Runtime owns root input and tool result persistence; Codex has separate metrics and analytics.
-' Design reason: stable source identity and one transaction align committed delivery with statistics.
-' Java divergence: all new types and integration relationships are target-only; scope is Runtime.
-title Skill Invocation Statistics - Recommended Target (Runtime)
+' Source evidence: Java f61906b9136246ca60f333704b6fc92b5420d0ec modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/dto/ExecutionTargetDTO.java
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java configureAgent
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java accept/startAccepted
+' Observed behavior: Runtime binds a real root after admission; generic hooks can alter tool results.
+' Design reason: one tracker per root unifies signals; statistics failures leave main execution unchanged.
+' Java divergence: all statistics types and integration arrows are target-only; scope is Runtime.
+title Skill Usage Statistics - Target-only (Runtime)
 top to bottom direction
 skinparam shadowing false
 skinparam backgroundColor #FFFFFF
 skinparam linetype polyline
-skinparam nodesep 32
-skinparam ranksep 42
+skinparam nodesep 28
+skinparam ranksep 35
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
 skinparam defaultFontName SansSerif
 skinparam ArrowFontSize 11
 skinparam classFontSize 12
-
+package "Runtime entry and assembly" {
+  class "SkillCommandExecutionService /\nRuntimeMessageEventService" as Command <<integration>>
+  class "RuntimeActiveExecution" as Execution <<per root>>
+  class "RuntimeSessionEngineRegistry /\nAgentSessionFactory" as Factory <<singleton, assembly>>
+}
+package "Generic tool boundary" {
+  class "ReadTool" as Read <<integration>>
+  class "ReadEvidenceDTO" as Evidence <<immutable, per call>>
+  class "Final hook observer" as Observer <<target-only, per execution>>
+}
+package "Skill usage attribution" {
+  class "ExecutionTargetDTO +\nSkill snapshot" as Snapshot <<immutable, per execution>>
+  class "SkillUsageResolver" as Resolver <<target-only, singleton>>
+  class "SkillUsageTracker" as Tracker <<target-only, per root>> {
+    +onExplicit(candidate)
+    +onRead(finalResult)
+    +close()
+    catches statistics failures
+  }
+  class "SkillUsageCandidateDTO" as Candidate <<target-only, immutable>>
+}
 package "Management query" {
-  actor "Authorized management caller" as Caller
-  class "SkillInvocationStatistics\nController" as Controller <<target-only, singleton>>
-  class "SkillInvocationStatistics\nQueryService" as Query <<target-only, singleton>>
+  class "SkillUsageStatistics\nController" as Controller <<target-only, singleton>>
+  class "SkillUsageStatistics\nQueryService" as Query <<target-only, singleton>>
 }
-package "Runtime execution and attribution" {
-  class "SkillCommand\nExecutionService" as Command <<target-only integration>>
-  class "Generic Read / final tool result" as Read <<target-only integration>>
-  class "ReadEvidenceDTO" as Evidence <<target-only, immutable per call>>
-  class "Prepared Skill snapshot" as Snapshot <<immutable, execution scope>>
-  class "SkillInvocationResolver" as Resolver <<target-only, singleton>>
-  class "SkillInvocation\nCandidateDTO" as Candidate <<target-only, immutable per call>>
-  class "Runtime admission / result projector" as Projector <<target-only integration>>
-}
-package "Application transaction" {
-  class "RuntimeExecution\nPersistenceService" as Owner <<target-only integration>> {
-    +acceptMessage()
-    +appendEntry()
+package "Statistics persistence" {
+  class "SkillUsageService" as Writer <<target-only, singleton>> {
+    +record(candidateDTO)
+    independent REQUIRES_NEW TX
   }
-  interface "SkillInvocationWritePort" as Port <<target-only>> {
-    +recordNewSource(candidateDTO)
-  }
-  class "SkillInvocationWriteService" as Writer <<target-only, singleton>> {
-    MANDATORY transaction
-    +checkIdentityAndWrite()
-  }
+  interface "SkillUsageMapper" as Mapper <<target-only>>
 }
-package "MyBatis and GaussDB" {
-  interface "SkillInvocationMapper" as Mapper <<target-only>>
-  entity "Existing source entries and events" as Events
-  entity "t_skill_invocation" as Fact <<target-only>>
-  entity "t_skill_invocation_stats" as Total <<target-only>>
-  entity "t_skill_invocation_daily_stats" as Daily <<target-only>>
+database "GaussDB" {
+    entity "Existing Session / root records" as Session
+    entity "t_skill_usage" as Fact <<target-only>>
+    entity "t_skill_usage_stats" as Total <<target-only>>
+    entity "t_skill_usage_daily_stats" as Daily <<target-only>>
 }
-Caller --> Controller : GET
-Controller --> Query : request/response VO
+Factory --> Execution : assemble
+Writer -[hidden]right-> Controller
+Factory -[norank]-> Observer : install after mutations
+Execution "1" *-- "1" Tracker : owns lifetime
+Tracker "1" *-- "1" Snapshot : bound root and snapshot
+Command --> Tracker : after admission commit\nbefore model start
+Read "1" *-- "1 per call" Evidence
+Evidence -[hidden]down-> Observer
+Execution -[hidden]right-> Read
+Observer --> Tracker : final result, no mutation
+Tracker --> Resolver : attribute Read
+Resolver -[norank]-> Evidence : verify body and fingerprint
+Resolver --> Snapshot : match managed document
+Tracker --> Candidate : freeze first signal
+Tracker --> Writer : proxy call, outside main TX
+Controller --> Query : request / response VO
 Query --> Mapper : query DTO
-Command --> Snapshot : same admission snapshot
-Command --> Candidate : explicit delivery
-Read "1" *-- "1 per call" Evidence : evidence
-Resolver --> Evidence : verify final result
-Resolver "1" --> "1 per execution" Snapshot : identity
-Resolver --> Candidate : successful read delivery
-Projector --> Resolver : after all hooks
-Projector --> Owner : stable source/result events
-Command --> Owner : root acceptance + candidate
-Owner --> Port : participates in source TX
-Port <|.. Writer
-Writer --> Mapper : fact then total then daily
-Mapper --> Fact
-Mapper --> Total
-Mapper --> Daily
-Owner --> Events : existing persistence boundary
+Writer --> Mapper : write DTO
+Mapper --> Session : admission / lifecycle lock
+Mapper --> Fact : insert unique root + Skill
+Mapper --> Total : increment only after insert
+Mapper --> Daily : same statistics TX
 note bottom of Fact
-  PK: session_id + source_event_id + skill_id
-  Source: root input or canonical tool-call event.
-  Preserve root and successful result references.
+  PK: session_id + root_event_id + skill_id
+  First recorded source and time remain unchanged.
+  Statistics may miss signals; main execution continues.
 end note
 @enduml
 
-@startuml skill_invocation_commit
-' Source evidence: Java f61906b9136246ca60f333704b6fc92b5420d0ec modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java appendEntry
-' Source evidence: codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51 codex-rs/analytics/src/reducer.rs ingest_skill_invoked
-' Observed behavior: Codex uses in-memory deduplication; Runtime has an authoritative append transaction.
-' Design reason: avoid a commit-to-notification loss window and distinguish replay from a new invocation.
-' Java divergence: this sequence is target-only; it is not the Codex delivery pipeline.
-title Skill Invocation Commit - Target-only
+@startuml skill_usage_record
+' Source evidence: Java f61906b9136246ca60f333704b6fc92b5420d0ec modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java startAccepted
+' Source evidence: modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java execute/applyAfterHook
+' Source evidence: Codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51 codex-rs/analytics/src/client.rs AnalyticsEventsQueue.try_send
+' Observed behavior: hook failures can become tool failures; Codex analytics can drop signals.
+' Design reason: catch outside the statistics transaction and retain one fact per root and Skill.
+' Java divergence: bounded synchronous recording is target-only, not the Codex queue pipeline.
+title Skill Usage Recording and Failure Isolation - Target-only
 skinparam shadowing false
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName SansSerif
 skinparam sequenceMessageAlign center
-participant "Runtime caller / projector" as P
-participant "Attribution resolver" as R
-participant "Runtime persistence owner" as O
-participant "Skill write port" as W
-database "Same GaussDB database" as DB
-participant "Existing event output" as E
-P -> R : final result + immutable Skill snapshot
-R --> P : candidate, or no Skill fact
-P -> O : stable source/result + optional candidate
-O -> DB : begin; existing execution and Session locks
-O -> DB : validate source identity and prior completion
-alt same source already committed
-  DB --> O : original committed records
-  O -> DB : end without increments
-  O --> P : original result
-else new valid source
-  O -> DB : append authoritative input/result and projection
-  opt successful Skill candidate
-    O -> W : recordNewSource (same transaction)
-    W -> DB : insert fact; increment total; increment day
+participant "Runtime input / final hook" as R
+participant "Root SkillUsageTracker" as T
+participant "SkillUsageService proxy" as S
+database "GaussDB" as DB
+note over R, T
+  Explicit: input already committed, target bound, model not started.
+  Read: final successful body verified against the Skill snapshot.
+  No active Runtime database transaction at either entry.
+end note
+R -> T : qualified signal + real root + source
+alt same Skill already attempted in this Tracker
+  T --> R : unchanged result
+else first qualified signal
+  T -> T : atomically retain candidate; release memory lock
+  T -> S : record(candidate)
+  S -> DB : begin independent TX; Session lifecycle lock
+  S -> DB : check admission and existing root / Skill fact
+  alt admission closed or fact already present
+    S -> DB : finish without increments
+    S --> T : skipped / already recorded
+  else new fact
+    S -> DB : INSERT t_skill_usage
+    S -> DB : increment total, then daily
+    alt all statistics writes and commit succeed
+      S -> DB : commit three tables
+      S --> T : recorded
+    else write / unique key / commit error
+      S -> DB : rollback statistics when possible
+      S --> T : exception after TX boundary
+      T -> T : classify duplicate or failure; controlled diagnostic
+    end
   end
-  alt all writes succeed
-    O -> DB : commit
-    O -> E : publish existing complete event
-    O --> P : committed result
-  else any write fails
-    O -> DB : rollback source, fact and summaries
-    O --> P : persistence failure; do not replay tool execution
-  end
+  T --> R : unchanged result; no automatic retry
 end
+R -> R : continue main execution
+note over T, DB
+  Commit acknowledgement may be uncertain; never rerun the tool.
+  Persistent PK prevents another increment after restoration.
+  Missing observations are accepted; this is not an audit ledger.
+end note
 @enduml

@@ -17,12 +17,22 @@ def validate_storage_design():
     topic = Path(__file__).resolve().parents[2] / '04-命令与技能/03-Skill加载统计'
     schema = (topic / 'schema.sql').read_text(encoding='utf-8')
     tables = re.findall(r'CREATE TABLE (\w+)', schema)
-    require(tables == ['t_skill_invocation', 't_skill_invocation_stats',
-                       't_skill_invocation_daily_stats'], 'Statistics storage responsibilities drifted')
-    require('PRIMARY KEY (session_id, source_event_id, skill_id)' in schema,
-            'Invocation identity must use the canonical source event')
+    require(tables == ['t_skill_usage', 't_skill_usage_stats',
+                       't_skill_usage_daily_stats'], 'Statistics storage responsibilities drifted')
+    require('PRIMARY KEY (session_id, root_event_id, skill_id)' in schema,
+            'Usage identity must use the canonical root event')
     require('full_load_count' not in schema and 'execution_id' not in schema,
             'Retired metric or synthetic statistics execution identity returned')
+    statement = (topic / 'record-usage.sql').read_text(encoding='utf-8')
+    require('REQUIRES_NEW' in statement, 'Statistics transaction boundary missing')
+    require('pk_skill_usage' in schema and 'pk_skill_usage' in statement,
+            'Named root/Skill uniqueness conflict cannot be classified')
+    statements = [line for line in statement.splitlines() if not line.lstrip().startswith('--')]
+    sql = '\n'.join(statements)
+    require(sql.count('ON DUPLICATE KEY UPDATE') == 2, 'Only summaries use UPSERT')
+    positions = [sql.index('INSERT INTO ' + name + ' (') for name in tables]
+    require(positions == sorted(positions), 'Fact must precede total and daily writes')
+    require('result_event_id' not in schema, 'Read observation is not a persisted result claim')
     for table, body in re.findall(r'CREATE TABLE (\w+) \((.*?)\n\);', schema, re.S):
         columns = re.findall(r'^    (\w+)\s+(?:VARCHAR|BIGINT|DATE|TIMESTAMPTZ)', body, re.M)
         for column in columns:
@@ -34,10 +44,10 @@ def main():
     validate_storage_design()
     manifest, models = load_catalog()
     by_key = {model['operation']['operationKey']: model for model in models}
-    listing = by_key['listSkillInvocationStatistics']['operation']
-    daily = by_key['getSkillInvocationDailyStatistics']['operation']
-    require((listing['method'], listing['path']) == ('GET', '/skills/invocation-statistics'), 'List resource route changed')
-    require((daily['method'], daily['path']) == ('GET', '/skills/{skillId}/invocation-statistics/daily'), 'Daily resource route changed')
+    listing = by_key['listSkillUsageStatistics']['operation']
+    daily = by_key['getSkillUsageDailyStatistics']['operation']
+    require((listing['method'], listing['path']) == ('GET', '/skills/usage-statistics'), 'List resource route changed')
+    require((daily['method'], daily['path']) == ('GET', '/skills/{skillId}/usage-statistics/daily'), 'Daily resource route changed')
     list_params = {p['name']: p for p in listing['parameters']}
     require(set(list_params) == {'period', 'sort', 'page', 'limit', 'Accept-Language'}, 'List requires an unexpected parameter or ID')
     require(not any(p['required'] for p in list_params.values()), 'List must work without preselected IDs')
@@ -59,24 +69,25 @@ def main():
                     require(set(payload) == {'resCode', 'resMsg'}, 'Error contains a result or an invalid envelope')
     results = {r['id']: next(iter(r['bodies'].values()))['result']
                for r in daily['responses'] if r['status'] == '200'}
+    require({item['period'] for item in results.values()} == {'7d', '30d'}, 'Missing calendar-window example')
     for result in results.values():
         start, end = date.fromisoformat(result['fromDate']), date.fromisoformat(result['toDate'])
         days = int(result['period'][:-1])
         require((end - start).days == days, 'Date window has wrong length')
         require([row['date'] for row in result['items']] == [str(start + timedelta(days=n)) for n in range(days)], 'Daily sequence has a gap or duplicate')
-        require(sum(row['invocationCount'] for row in result['items']) == result['invocationCount'], 'Daily values and window total disagree')
-        require((result['lastInvokedAt'] is None) == (result['invocationCount'] == 0), 'Zero window timestamp differs')
+        require(sum(row['usageCount'] for row in result['items']) == result['usageCount'], 'Daily values and window total disagree')
+        require((result['lastUsedAt'] is None) == (result['usageCount'] == 0), 'Zero window timestamp differs')
         require(result['timeZone'] == 'Asia/Shanghai', 'Business timezone changed')
     ranked = next(iter(next(r for r in listing['responses'] if r['id'] == '200-ranking')['bodies'].values()))['result']
     detail = results['200-daily']
     row = next(item for item in ranked['items'] if item['skillId'] == detail['skillId'])
-    require(row['invocationCount'] == detail['invocationCount'] and row['lastInvokedAt'] == detail['lastInvokedAt'], 'List and detail disagree for the same snapshot')
-    require(all(r['invocationCount'] > 0 for r in ranked['items']), 'List fabricated a zero-count resource')
+    require(row['usageCount'] == detail['usageCount'] and row['lastUsedAt'] == detail['lastUsedAt'], 'List and detail disagree for the same snapshot')
+    require(all(r['usageCount'] > 0 for r in ranked['items']), 'List fabricated a zero-count resource')
     missing = [r for r in daily['responses'] if r['status'] == '404']
-    require(len(missing) == 1 and all(b['resCode'] == 'SKILL_INVOCATION_STATISTICS_NOT_FOUND' for b in missing[0]['bodies'].values()), 'Missing statistics must not imply missing Skill')
-    entries = [entry for entry in manifest['operations'] if entry['key'] in {'listSkillInvocationStatistics', 'getSkillInvocationDailyStatistics'}]
-    require(all(entry['status'] == '调用统计推荐方案 · target-only' for entry in entries), 'Proposal silently promoted to confirmed')
-    print('Skill statistics: two GET routes; ID-free ranking; calendar windows; matching list/daily counts; empty/missing distinction; Runtime scope; envelopes; proposal state and three-table design passed. No database execution.')
+    require(len(missing) == 1 and all(b['resCode'] == 'SKILL_USAGE_STATISTICS_NOT_FOUND' for b in missing[0]['bodies'].values()), 'Missing statistics must not imply missing Skill')
+    entries = [entry for entry in manifest['operations'] if entry['key'] in {'listSkillUsageStatistics', 'getSkillUsageDailyStatistics'}]
+    require(all(entry['status'] == '使用统计目标已确认 · target-only' for entry in entries), 'Usage design status drifted')
+    print('Skill statistics: two GET routes; ID-free ranking; calendar windows; matching list/daily counts; empty/missing distinction; Runtime scope; envelopes; confirmed target state, root/Skill key, isolated write order and three-table design passed. No database execution.')
 
 
 if __name__ == '__main__':
