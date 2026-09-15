@@ -35,7 +35,7 @@
 
 ![工作台目标组件](target_runtime_workbench.svg)
 
-[PlantUML 源码](diagram.puml#L366) · [原尺寸 SVG](target_runtime_workbench.svg)
+[PlantUML 源码](diagram.puml#L380) · [原尺寸 SVG](target_runtime_workbench.svg)
 
 图中新增对象均为 target-only。页面协调器统一拥有选中会话与请求代次；Composer、恢复和停止读取同一执行状态，不各自推导可发送。索引只提供恢复入口，消息与执行状态仍以后端为权威。Header Store 与会话索引分开，避免恢复列表时顺带保存凭据。
 

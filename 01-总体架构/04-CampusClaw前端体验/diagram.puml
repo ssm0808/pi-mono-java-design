@@ -214,11 +214,13 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-' Source baseline: pi-mono-java 29ebec6a8cad99896414211cda28c6fffec71bee. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target displays original model reasoning.
+' Source baseline: pi-mono-java 699f929f6826b595ed1d0162f6def66e2f84760b. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target displays original model reasoning.
 ' Source evidence: frontend/src/App.vue submit; frontend/src/composables/useRuntimeApi.ts loadHistory, requestRaw.
 ' Source evidence: frontend/src/projectors/runtimeEventProjector.ts projectRuntimeEvents; frontend/src/types/product.ts.
 ' Source evidence: frontend/src/runtime/eventStore.ts executionState, reconcileEvents; types/runtime.ts RuntimeEvent.
-' Observed behavior: no plan review or TODO view in this source; existing event merge and control locks are reusable.
+' Observed behavior: PlanCard, ProgressDisclosure, mode and Slash exist in this development commit.
+' Source: frontend/src/components/PlanCard.vue; ProgressDisclosure.vue; composables/useCommandComposer.ts.
+' Target question extension: complete question events, exact answers and a shared pending-interaction gate.
 ' Codex d58d0e58: codex-rs/tui/src/chatwidget/plan_implementation.rs selection_view_params.
 ' Java divergence: exact proposal approval resumes the original execution, not a new user message.
 ' Target-only architecture: every class and relationship below is a product integration target.
@@ -227,6 +229,7 @@ title Global product frontend components - all target-only
 package "Browser views" as Views {
   class ChatWorkspace <<view>>
   class PlanCard <<view>>
+  class QuestionCard <<view>>
   class ModeControl <<view>>
   class ProgressDisclosure <<view>>
   class ContentViews <<view>> {
@@ -245,6 +248,10 @@ package "Per-Chat state and projection" as State {
   class ToolConfirmationStore <<per-Chat>>
   class ConfigurationStore <<per-Chat>>
   class PlanReviewStore <<per-Chat>>
+  class QuestionInteractionStore <<per-Chat>> {
+    complete questions and accepted answers
+    isolated event drafts
+  }
   class ReviewDraftStore <<per-plan>>
   class ExecutionProgressStore <<per-root>>
   class PublicEventReducer <<pure>>
@@ -269,6 +276,9 @@ ChatWorkspace -down-> ConversationCoordinator
 ChatWorkspace -down-> ConfigurationCoordinator
 ChatWorkspace --> ContentViews
 ChatWorkspace *-down- PlanCard
+ChatWorkspace *-down- QuestionCard
+QuestionCard -down-> ConversationCoordinator
+QuestionCard --> QuestionInteractionStore
 ChatWorkspace *-down- ModeControl
 ChatWorkspace *-down- ProgressDisclosure
 PlanCard --> ContentViews
@@ -281,6 +291,7 @@ ConversationCoordinator *-down- "1" DraftStore
 ConversationCoordinator *-down- "1" ToolConfirmationStore
 ConversationCoordinator *-down- "1" ChatStore
 ConversationCoordinator *-down- "1" PlanReviewStore
+ConversationCoordinator *-down- "1" QuestionInteractionStore
 ConversationCoordinator *-down- "1" ExecutionProgressStore
 ConversationCoordinator *-down- "0..*" ReviewDraftStore
 ConversationCoordinator --> PublicChatGateway
@@ -291,6 +302,7 @@ ConversationCoordinator -down-> PublicEventReducer
 PublicEventReducer -down-> ChatStore
 PublicEventReducer -down-> ToolConfirmationStore
 PublicEventReducer -down-> PlanReviewStore
+PublicEventReducer -down-> QuestionInteractionStore
 PublicEventReducer -down-> ExecutionProgressStore
 ContentViews --> ChatStore
 ConfigurationCoordinator *-down- "1" ConfigurationStore
@@ -312,7 +324,9 @@ Generation rejects old-Chat responses.
 Completed events and preview are separate.
 No credentials or internal Session IDs.
 Plan, approval and progress have separate authority.
-All views share control and recovery state.
+One current pending kind / target is derived from events.
+Question, plan review and permission are mutually exclusive.
+All views and Slash share submission and recovery admission.
 end note
 ContentViews -[hidden]down-> ConversationCoordinator
 ContentViews -[hidden]down-> ConfigurationCoordinator
@@ -469,13 +483,14 @@ endlegend
 @enduml
 
 @startuml target_plan_interaction
-' Source baseline: pi-mono-java 29ebec6a8cad99896414211cda28c6fffec71bee.
+' Source baseline: pi-mono-java 699f929f6826b595ed1d0162f6def66e2f84760b.
 ' Source evidence: frontend/src/runtime/eventStore.ts executionState and reconcileEvents.
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts recover, submitStream and consume.
 ' Codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51:
 ' codex-rs/tui/src/chatwidget/plan_implementation.rs selection_view_params;
 ' codex-rs/core/src/tools/handlers/plan.rs PlanHandler::handle_call.
-' Observed behavior: Java has tool confirmation and history recovery, but no plan UI at this baseline.
+' Observed behavior: Java has plan UI, Slash and progress; structured questions are a later extension.
+' Source: frontend/src/components/PlanCard.vue; runtime/eventStore.ts; types/runtime.ts.
 ' Java divergence: approve resumes the original root execution; no clear-context path.
 ' Design reason: proposal, decision receipt, execution progress and terminal are separate facts.
 ' All interactions below are target-only UI projections, not HTTP enums.
@@ -485,7 +500,7 @@ skinparam shadowing false
 skinparam defaultFontName SansSerif
 skinparam sequenceMessageAlign center
 actor User
-participant "Composer / PlanCard" as UI
+participant "Composer / PlanCard / QuestionCard" as UI
 participant "Coordinators / Projection" as State
 participant "Gateway / Server authority" as API
 User -> UI : Select plan while idle
@@ -496,13 +511,23 @@ State --> UI : Show committed plan mode
 User -> UI : Send request
 UI -> State : Freeze request
 State -> API : Submit once; retain original root
-API --> State : Research activities\nthen complete proposal + confirming
+API --> State : Research activities
+opt Question batch during planning
+  API --> State : Complete question + confirming
+  State --> UI : Inline fields; Session still running
+  User -> UI : Answer every question; submit once
+  UI -> State : Freeze exact question target and answers
+  State -> API : Submit answer; shared control lock
+  API --> State : Accepted complete answer receipt
+  State --> UI : Show accepted answers; retain mode and TODO
+  API --> State : Original root continues
+end
+API --> State : Complete proposal + confirming
 State --> UI : Render full proposal; enable exact target
 note over UI, State
-  AskUserQuestion waits in the same plan root.
-  user.question_answer resumes without mode changes.
+  Questions do not approve a proposal or grant tool permission.
   Ordinary messages are a no-tool fallback only.
-  In that fallback, the next answer uses the normal Composer.
+  Waiting uses running Slash descriptors; no new messages.
 end note
 opt Revise the current proposal
   User -> UI : Open feedback; submit revision decision
@@ -527,6 +552,8 @@ loop Explicit TODO snapshots during implementation
   State --> UI : Replace task list; preserve user fold choice
 end
 note over UI, State
+  Build questions reuse the same batch-answer path,
+  retaining build mode and the current TODO snapshot.
   No TODO event: no invented task list.
   All tasks completed does not imply execution completion.
 end note

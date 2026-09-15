@@ -235,3 +235,16 @@ test("running command focus and execution never replace the stop action", async 
   assert.equal(f.get("submit-button").getAttribute("aria-label"), "发送消息");
   assert.equal(f.input.value, "停止后继续");
 });
+
+test("palette temporarily collapses the result and restores its disclosure choice", (t) => {
+  const f = fixture(t, "help"), result = f.get("result-region");
+  assert.equal(result.open, true);
+  f.type("/");
+  assert.equal(result.open, false);
+  f.key("Escape");
+  assert.equal(result.open, true);
+  f.key("Escape");
+  result.open = false;
+  f.type("/"); f.key("Escape");
+  assert.equal(result.open, false);
+});

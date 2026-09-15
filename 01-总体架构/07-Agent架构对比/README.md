@@ -4,17 +4,17 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.16.0 |
+| 文档版本 | 1.17.0 |
 | 更新日期 | 2026-09-15 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 设计依据 | `pi-mono-java-design@0233763eb846a297cd390eda1f2da05004c91dd7`，具体主设计见各条目 |
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
 | 计划模式专项基线 | A03 使用 DeepSeek `0a53fb55`、Java `09b32d8e`；旧 Java `f61906b` 与该专项相关源码相同，完整 SHA 与路径见专项证据 |
-| 前端专项基线 | A07：Java `29ebec6a8cad99896414211cda28c6fffec71bee`；Codex 固定 `d58d0e58`；官方界面与协议 2026-09-15 核对 |
-| 提问专项基线 | A08：Java 开发分支 699f929；DeepSeek 0a53fb55；pi 5cd93f68；Claude 官方文档 2026-09-15；不升级其他条目的旧核验范围 |
+| 前端专项基线 | A07：Java 开发分支 `699f929f6826b595ed1d0162f6def66e2f84760b`，另记录问答工作树观察；Codex 固定 `d58d0e58`；官方界面与协议 2026-09-15 核对 |
+| 提问专项基线 | A08：Java 开发分支 9f785bea3ffff8f6566cd1b2727285af46a2aead；DeepSeek 0a53fb55；pi 5cd93f68；Claude 官方文档 2026-09-15；不升级其他条目的旧核验范围 |
 | Skill 统计专项基线 | A09：Codex d58d0e58 的完整计数链；Java f61906b9 的 Runtime/Read/Child/Cron 骨架，#295/#298 仅作固定对照，不升级其他 M05 结论 |
-| 核验范围 | A07 的模式入口、TUI 实施选择、方案/任务分离与前端接入范围；M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、注册框架、模型预置及 SDK 依赖；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
-| 验证边界 | 静态源码与文档核对，未执行产品集成测试；其余模块与基线的专项差异待补证 |
+| 核验范围 | A07 的模式入口、TUI 实施选择、方案/任务/问题分离、Slash 协同与前端接入范围；M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、注册框架、模型预置及 SDK 依赖；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
+| 验证边界 | A08 已补充固定开发分支的 Runtime/数据库/前端确定性验证；其余条目保留各自静态核验范围，企业接入与真实模型行为不在已验证范围 |
 
 ## 1. 阅读方式与权威边界
 
@@ -242,15 +242,15 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 模块与主设计 | M07，关联 M01/M06；[前端主设计](../04-CampusClaw前端体验/README.md)及[计划交互](../04-CampusClaw前端体验/plan-interaction.md)，复用前端唯一全局组件图。 |
 | 架构问题 | 如何采用 Codex 的工作区密度、完整方案与轻量进度展示，同时保持 CampusClaw 的审核续跑和企业边界？ |
 | Codex 观察 | 固定 d58d0e58 的 plan_implementation.rs / selection_view_params 提供实施、清上下文实施、继续规划；实施发起带 Default mode 的用户消息。PlanHandler::handle_call 在 Plan mode 拒绝 update_plan，另发 PlanUpdate；App Server 区分方案 Item、任务更新与提问。完整路径与官方 2026-09-15 公开证据见[专项 §1](../04-CampusClaw前端体验/plan-interaction.md#1-源码与交互依据)。TUI 不证明桌面像素布局；官方提问及固定版本方案增量保留实验性边界。 |
-| CampusClaw 目标 | 配置聚合到 Composer；完整方案内联审核，批准后原执行续跑，方案收起；后端显式任务快照驱动只读进度；工具授权独立。 |
-| 已观察实现 | Java 29ebec6a 的 frontend App/Composer 已有草稿与同位置停止，eventStore 已按事件身份/根消息恢复；runtime 类型、projector 与配置客户端尚无计划模式、审核或任务面板。RuntimeSessionController 仍为 create/get/delete。其他特性分支/部署未核验，前端目标按既定计划模式契约定义。 |
-| 差异分类 | 产品约束：常驻模式按钮、O1 暖灰、结构化提问及无工具降级、无清上下文执行/运行中排队；架构变更：审核事件绑定方案并续跑原执行、公共两跳映射；安全加固：缺页禁审、服务端目标复核、写入不自动重放。 |
+| CampusClaw 目标 | 配置聚合到 Composer；完整方案内联审核，批准后原执行续跑，方案收起；后端显式任务快照驱动只读进度；问题卡在原任务中收集全部答案，等待期间 Slash 使用 running 清单；工具授权独立。 |
+| 已观察实现 | Java `699f929f` 的 frontend App/Composer、PlanCard、ProgressDisclosure、useCommandComposer、useRuntimeApi、eventStore、types/runtime 已有模式、审核、任务和标签式 Slash。旧 `29ebec6a` 无计划结论不适用于该开发提交。问答开发工作树已出现 QuestionCard 与 QuestionDraftStore，具体文件摘要见[证据 §4](../04-CampusClaw前端体验/source-evidence.md#question-slash-evidence)，不表示发布或集成通过。 |
+| 差异分类 | 产品约束：常驻模式按钮、O1 暖灰、结构化提问及无工具降级、无清上下文执行/运行中排队、不复制 Codex `/plan` 与 `/approve`；架构变更：审核事件绑定方案并续跑原执行、公共两跳映射；安全加固：缺页禁审、服务端目标复核、写入不自动重放。 |
 | 理由与代价 | 阅读与决策相邻，方案、审批与任务不混为一个状态；代价是增加审核投影和恢复协调，结构化提问采用 CampusClaw 自有事件契约；新上下文执行不在范围。提示词规划不构成只读沙箱。 |
 | 备选与重评条件 | 不直接复刻 Codex JSON-RPC、clear-context 选项或其品牌。若需要新执行/上下文选择，先重新确定审核目标、凭据、历史与启动权威。 |
-| 设计状态 / 实现状态 | 已确定目标、target-only / 所列主线范围局部核验；新 HTML 是设计原型，真实 Java 计划能力与 Mate 公共集成未验收。 |
-| 验收 | [PF1～PF5](../04-CampusClaw前端体验/plan-interaction.md#6-组件与接入切片)：模式回执、精确方案、修订新身份、任务完整快照、终态独立、两跳与恢复；浏览器视觉与原型状态分别验证。 |
+| 设计状态 / 实现状态 | 已确定目标、target-only / 所列开发分支与工作树范围局部核验；HTML 是设计原型；开发分支已有计划前端，问答工作树正在开发，Mate 公共集成未验收。 |
+| 验收 | [PF1～PF6](../04-CampusClaw前端体验/plan-interaction.md#6-组件与接入切片)：模式回执、精确方案、修订新身份、任务完整快照、终态独立、两跳与恢复；浏览器视觉与原型状态分别验证。 |
 
-**讲解要点。** 参考 Codex 的输入邻近设置、方案与进度分离，让用户在同一工作区读方案、做决定、看实施进展。CampusClaw 的审核决定续跑原执行，不照搬 Codex 的新消息实施路径。这个差异保留执行归属，但增加事件映射与恢复要求；已核验主线的计划接入仍需实现与集成验收。
+**讲解要点。** 参考 Codex 的输入邻近设置、方案与进度分离，让用户在同一工作区读方案、做决定、看实施进展。CampusClaw 的审核决定续跑原执行，不照搬 Codex 的新消息实施路径。这个差异保留执行归属，但增加事件映射与恢复要求；现有开发分支能力需继续完成问答协同与企业集成验收。
 
 ## 6.5 A08 · 结构化提问与原执行续跑
 
@@ -262,12 +262,12 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 架构问题 | 如何显式关联问题和答案、驱动前端控件，并在回答后继续同一根任务？ |
 | 基线证据与行为 | DeepSeek 固定 0a53fb55（alpha）的 tool-ask-user apply/execute、UserQuestionService.ask、types.ts：问题 id、selected/custom、根上下文校验、等待后返回工具结果。pi 固定 5cd93f68 的 runLoop 将工具结果送入下一次模型请求。Claude Managed Agents 官方 Tools/Events 2026-09-15 核对（Beta）：应用提供自定义工具结果和权威历史；无同名原生问题事件声明。完整路径和链接见主设计 §2。 |
 | CampusClaw 目标 | AskUserQuestion 在 plan/build 保持相同定义；后端 agent.question 驱动前端，user.question_answer 经现有 POST Events 回答全部问题；原根/模式/凭据保持，plan 无调研 TODO，build 不重置清单。 |
-| 已观察实现 | Java 开发分支 699f929f6826b595ed1d0162f6def66e2f84760b（代码17dbb20）已有两类互斥等待、计划审核控制事务和四输入；内置列表及根计划 Prompt 尚无结构化提问。核验路径含 RuntimeActiveExecution、RuntimeEventProjector、RuntimeControlEventService、SessionUserEventRequestVO、PlanReviewPort 和 session_schema.sql；只证明开发分支范围，不代表主线已合入。 |
+| 已观察实现 | Java 开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead` 已实现第十一项 AskUserQuestion、三类互斥等待、五输入及答案事务，调试前端从显式问题/答案恢复卡片。核验路径及符号见[主设计 §2](../06-CampusClaw计划模式/ask-user-question.md#2-基线与已观察实现)；RuntimeActiveExecution 直接实现工具窄端口，RuntimePendingInteraction 管理先绑定输出再唤醒的交接。 |
 | 差异分类 | 架构变更：显式公共事件、GaussDB 答案交接及统一三类待交互槽；产品约束：1～3题、全部作答、仅交互根、独立计划审核；安全加固：闭合字段、目标/选项/分支锁内复核与停止优先。 |
 | 理由与代价 | 问答恢复无需解析消息或工具文本，build 中澄清保留任务归属；代价是两种新事件、控制表及客户端同步发布。保留无工具普通消息降级；不承诺进程崩溃接管或模型必定提问。 |
 | 备选边界 | 不复制 DeepSeek Cordis、plan-review intent 或空答案跳过；不新增问卷 CRUD、Session 指针、元数据字段或通用工作流。若需 Child 直接提问/部分提交/持久化草稿，重新确定交互归属与控制边界。 |
-| 设计状态 / 实现状态 | 已确定目标、target-only / 所列开发分支已核验且无 AskUserQuestion；本次只做设计与契约校验，没有问答工具运行验收。 |
-| 验收 | Q1～Q5：结构与选项校验、问题/答案原子提交、三类互斥、跨实例竞争、停止/超时、前端重连和模式/进度不变。 |
+| 设计状态 / 实现状态 | 设计已确定 / Runtime 与调试前端已在 PR #301 实现并独立验证；主线合入、企业 Mate 桥接和真实模型遵循不能由该结论推断。 |
+| 验收 | Q1～Q5 对应 clean verify 2085 项、独立数据库 140 项及前端 172 项通过；实际 JAR HTTP 继续/竞争/中断、214 契约样例、10 投影场景和浏览器 18 项检查通过。公司 NativeParent 缺失、外部 Mate 与真实模型未验证；完整环境边界见主设计 §2。 |
 
 **讲解要点。** 借鉴 DeepSeek 的工具式提问，将 UI 等待接入 CampusClaw 已有执行段和控制事务。用户回答成为原调用结果，前端消费显式问题；计划批准与工具权限保持独立。获得精确关联和原根续跑的同时，需要维护答案交接与恢复，元数据结构保持稳定。
 
@@ -348,7 +348,9 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.16.0 | 2026-09-15 | 对比 Codex 完整计数链与 Runtime 来源事实、三表事务和入口覆盖。 |
+| 1.17.0 | 2026-09-15 | 对比 Codex 完整计数链与 Runtime 来源事实、三表事务和入口覆盖。 |
+| 1.16.1 | 2026-09-15 | 同步结构化问答的实现证据、独立验证和外部接入边界。 |
+| 1.16.0 | 2026-09-15 | 更新计划前端源码范围，比较问题卡与 Slash 等待交互及共享恢复边界。 |
 | 1.15.0 | 2026-09-15 | 对比 Codex/OpenCode 的 Skill 调用观测，区分分析事件、计数器与统计权威。 |
 | 1.14.0 | 2026-09-15 | 增加 Skill 加载汇总、采集职责与管理查询的架构取舍。 |
 | 1.13.0 | 2026-09-15 | 对比工具式提问与权威事件，明确问题回答和原执行续跑的取舍。 |

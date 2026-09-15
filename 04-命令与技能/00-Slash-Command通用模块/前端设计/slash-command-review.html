@@ -284,7 +284,7 @@
       background: var(--success-soft);
       box-shadow: var(--shadow-soft);
     }
-    .result-region.visible { display: block; }
+    .result-region.visible { display: block; max-height: 24dvh; overflow: auto; }
     .result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
     .result-eyebrow { color: var(--success); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
     .result-title { margin: 4px 0 1px; font-size: 18px; }
@@ -422,6 +422,28 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
     }
+    /* Shared CampusClaw workbench visual hierarchy; no new protocol or command. */
+    :root { --content-width: 840px; }
+    body { background: var(--surface-primary); }
+    .review-shell { grid-template-columns: 232px minmax(0,1fr); height: 100dvh; min-height: 0; }
+    .review-main { padding: 20px; display: flex; flex-direction: column; min-height: 0; }
+    .review-heading { width: 100%; flex-shrink: 0; }
+    .review-heading h1 { font-size: 22px; }
+    .app-window { width: 100%; flex: 1; min-height: 0; grid-template-rows: 64px minmax(0,1fr); border-radius: 12px; box-shadow: none; }
+    .workspace { grid-template-rows: minmax(0,1fr) auto; background: var(--surface-primary); }
+    .timeline { padding-bottom: 24px; }
+    .composer-dock { position: relative; background: var(--surface-primary); }
+    .prototype-caption { flex-shrink: 0; }
+    .review-brand img,.agent-avatar,.message-avatar { object-fit: contain; background: transparent; border-radius: 0; width: 28px; height: 28px; }
+    .result-region { background: var(--surface-secondary); border-color: var(--border-default); box-shadow: none; border-radius: 10px; }
+    .result-eyebrow { color: var(--text-secondary); font-weight: 500; }
+    .result-title { font-size: 15px; }
+    .result-region>summary { min-height: 44px; cursor: pointer; }
+    .result-region>summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .use-cases { display: block; }
+    .use-case { padding: 6px 0; border: 0; background: transparent; }
+    .running-banner { border: 0; padding: 3px 0; color: var(--text-secondary); background: transparent; }
+    @media(max-width:920px) { .review-shell { grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); } .review-main { padding: 14px; } }
   </style>
 </head>
 <body>
@@ -445,7 +467,7 @@
     <main class="review-main">
       <header class="review-heading">
         <div>
-          <p>前端专项 · 1.5.0</p>
+          <p>前端专项 · 1.6.0</p>
           <h1 id="state-title">命令清单</h1>
           <p id="state-description">空消息中输入 /，读取当前 Chat 的服务端命令清单。</p>
         </div>
@@ -455,7 +477,7 @@
       <section class="app-window" aria-labelledby="state-title">
         <header class="app-topbar">
           <div class="agent-id">
-            <div class="agent-avatar">C</div>
+            <img class="agent-avatar" src="../../../01-总体架构/04-CampusClaw前端体验/campusclaw-mark-o1.png" alt="">
             <div><strong>园区运维助手</strong><small><i class="status-dot"></i><span id="agent-status">在线 · 空闲</span></small></div>
           </div>
           <div class="top-actions" aria-label="会话操作">
@@ -470,17 +492,17 @@
               <div class="date-divider">今天 15:42</div>
               <article class="message user"><div class="user-bubble">帮我梳理一下园区明天的巡检重点。</div></article>
               <article class="message">
-                <div class="message-avatar">C</div>
+                <img class="message-avatar" src="../../../01-总体架构/04-CampusClaw前端体验/campusclaw-mark-o1.png" alt="">
                 <div class="message-body">
                   <div class="message-meta">园区运维助手 · 15:42</div>
                   <p class="message-copy">建议优先检查消防通道、配电房告警和室外施工区域。我可以继续把这些内容整理成按楼栋执行的检查清单。</p>
                 </div>
               </article>
 
-              <section class="result-region" id="result-region" aria-label="命令结果">
+              <details class="result-region" id="result-region" aria-label="命令结果" open>
+                <summary class="result-eyebrow">命令结果 · 仅当前页面</summary>
                 <div class="result-head">
                   <div>
-                    <div class="result-eyebrow">命令结果 · 仅当前页面</div>
                     <h2 class="result-title">园区运维助手</h2>
                     <div class="result-subtitle">help · 演示结果</div>
                   </div>
@@ -492,7 +514,7 @@
                   <div class="use-case">生成按楼栋划分的巡检建议</div>
                   <div class="use-case">解释设备异常并列出处置步骤</div>
                 </div>
-              </section>
+              </details>
             </div>
           </div>
 
@@ -533,7 +555,7 @@
           </div>
         </div>
       </section>
-      <p class="prototype-caption"><button id="simulate-stop-terminal" type="button" hidden>模拟本轮终止</button> Builtin 结果仅当前页面；Skill 内部 SSE 已确认，公共执行仍待对齐。失败保留草稿，无自动重放。<a href="../../../01-总体架构/04-CampusClaw前端体验/frontend-review.html#conversation-workbench">查看共享对话、确认与恢复</a></p>
+      <p class="prototype-caption"><button id="simulate-stop-terminal" type="button" hidden>模拟本轮终止</button> Builtin 结果仅当前页面；Skill 内部 SSE 已确认，公共执行仍待对齐。失败保留草稿，无自动重放。<a href="../../../01-总体架构/04-CampusClaw前端体验/plan-workbench.html?scene=question">查看计划、问答与命令联合交互</a></p>
     </main>
   </div>
 
@@ -574,6 +596,7 @@
     const chipName = $("#selected-command-name");
     const submitButton = $("#submit-button");
     const result = $("#result-region");
+    $(".composer-dock").insertBefore(result, $(".composer-stack"));
     const initialHelp = $(".help-description").innerHTML;
     const demoInvocations = [];
     let catalog = idleCatalog;
@@ -581,6 +604,7 @@
     let selected = null, replacement = null;
     let mode = false, paletteOpen = false, moreOpen = false, composing = false, executing = false;
     let activeIndex = 0, running = false, stopping = false, generation = 0, error = "";
+    let resultFold = null;
 
     function parse(raw) {
       const match = /^\/([^\t\n\v\f\r ]*)(?:[\t\n\v\f\r ]+([\s\S]*))?$/u.exec(raw);
@@ -593,6 +617,8 @@
     function announce(text) { $("#composer-announcement").textContent = text; }
     function focusEditor() { (selected && !selected.input ? (running ? $("#command-run") : submitButton) : input).focus(); }
     function render() {
+      if (paletteOpen && result.classList.contains("visible") && resultFold === null) { resultFold = result.open; result.open = false; }
+      else if (!paletteOpen && resultFold !== null) { result.open = resultFold; resultFold = null; }
       const options = matches();
       activeIndex = Math.max(0, Math.min(activeIndex, options.length - 1));
       palette.hidden = !paletteOpen;
@@ -705,6 +731,7 @@
     }
     function showBuiltin(invocation) {
       result.classList.add("visible");
+      result.open = true; resultFold = null;
       $(".result-subtitle").textContent = invocation.name + " · 演示结果";
       $(".use-cases").hidden = invocation.name !== "help";
       if (invocation.name === "help") {
@@ -732,7 +759,7 @@
         bubble.className = "user-bubble";
         bubble.textContent = message;
         article.append(bubble);
-        $(".timeline-inner").insertBefore(article, result);
+        $(".timeline-inner").append(article);
         message = ""; running = true; catalog = runningCatalog; $("#agent-status").textContent = "执行中 · 可停止"; render(); input.focus(); return;
       }
       if (!selected) return;
@@ -823,6 +850,7 @@
       $("#agent-status").textContent = running ? "执行中 · 可停止" : "在线 · 空闲";
       $("#running-banner").classList.toggle("visible", running);
       result.classList.remove("visible");
+      resultFold = null;
       if (name === "help") showBuiltin({ name: "help", arguments: "" });
       document.querySelectorAll(".state-tab").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.state === name)));
       render();

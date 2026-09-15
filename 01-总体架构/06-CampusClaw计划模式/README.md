@@ -2,13 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.9.0 |
+| 文档版本 | 1.9.1 |
 | 更新日期 | 2026-09-15 |
-| 状态 | 当前目标设计；AskUserQuestion 为 target-only，已有开发范围与差距见专项证据 |
+| 状态 | 当前设计；计划与结构化问答已在 PR #301 开发分支实现，企业接入边界见专项证据 |
 | 计划模式主基线 | DeepSeek Harness `0a53fb55bea101816fa226bb964ae2bed71c343b`，`dsh-0.1.2-alpha.2` |
 | TODO 公共交互基线 | DeepSeek / OpenCode / Codex 显式清单事件；Claude Managed Agents Beta 的历史与对账，2026-09-15 核对 |
 | Runtime 语义基线 | pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
-| CampusClaw 实现基线 | 计划原证据为 `09b32d8e`；提问接入专项核对开发分支 `699f929f6826b595ed1d0162f6def66e2f84760b`，已存在计划审核与 TODO、没有提问工具；详见 [提问证据](ask-user-question.md#2-基线与已观察实现) |
+| CampusClaw 实现基线 | 计划原证据为 `09b32d8e`；提问接入专项核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`，已实现计划审核、TODO 与结构化提问；详见 [提问证据](ask-user-question.md#2-基线与已观察实现) |
 | 设计仓变更前基线 | `b6ea996537925d702022ee13a6b030e8bea054f5` |
 | 源码依据 | [基线、符号与差距](source-evidence.md) |
 
@@ -62,7 +62,7 @@
 
 当前目标不要求独立计划文件。Agent 通过 `ExitPlanMode({plan})` 提交完整 Markdown；原 ToolCall 保留在模型历史，后端同时保存 `agent.plan` 作为审核与展示记录，提交时保证正文一致。修订生成新的完整计划事件，批准的 targetEventId 精确绑定这一版；执行 TODO 不修改方案正文。
 
-这是参考 DeepSeek 的架构选择：复用 Session 的持久化、分支、权限和保留边界，避免文件路径与数据库审核记录形成两份权威。代价是不能直接使用工作区文件进行外部编辑、Git 评审或跨会话引用；如产品需要这些能力，再设计方案文件的身份与版本绑定。基线并非都要求计划文件，逐项证据见[方案载体对照](source-evidence.md#8-计划文件与方案载体)。本节说明现有目标，不代表 Java 已实现计划审核。
+这是参考 DeepSeek 的架构选择：复用 Session 的持久化、分支、权限和保留边界，避免文件路径与数据库审核记录形成两份权威。代价是不能直接使用工作区文件进行外部编辑、Git 评审或跨会话引用；如产品需要这些能力，再设计方案文件的身份与版本绑定。基线并非都要求计划文件，逐项证据见[方案载体对照](source-evidence.md#8-计划文件与方案载体)。本节说明当前设计；开发分支实现与验证范围见[专项证据](ask-user-question.md#2-基线与已观察实现)。
 
 ## 2. 用户流程与状态
 
@@ -121,7 +121,7 @@
 
 ## 3. 推荐全局目标类图
 
-图中绿色为既有结构，蓝色为 target-only 新增结构；`extended` 表示既有类需要扩展。所有标为 target-only 的连线均为推荐关系，不能视作当前已实现关系。
+图中绿色为复用结构，蓝色为推荐新增结构，`extended` 表示扩展职责；该图是推荐结构蓝图，不是当前实现类图。具体类名、关系的落地映射与尚未接入边界见[专项源码证据](ask-user-question.md#2-基线与已观察实现)。
 
 ![CampusClaw 计划模式全局目标类图](plan_mode_target_classes.svg)
 
@@ -168,7 +168,7 @@
 | 消息接受结果 | `UserMessageAcceptanceDTO` 增加 `SessionModeSnapshotDTO`，`startAccepted` 在启动前应用 | 保留接受前 prepare，避免配置竞争与数据库锁内远程装配 |
 | 工厂参数 | `ManagedAgentSessionRequest` / `ToolAssemblyContext` 增加计划上下文与退出工具工厂 | 这是内部装配参数；与 Agent 顶层 mode 各自独立，不修改 Tool/Skill 元数据 |
 
-开发分支 699f929 的 RuntimeEventService 已有四输入；新增第五个 user.question_answer 分支，转交应用服务，不在 switch 内实现答案或审核逻辑。保留明确的类型分派。
+开发分支已通过 RuntimeEventService 接收五类输入；user.question_answer 转交应用服务，分派处不实现答案或审核业务规则。
 
 公共 `AgentTool` 接口保持不变。`ExitPlanMode` 使用现有 `SEQUENTIAL`；在 `BeforeToolCallContext.assistantMessage` 中校验该响应只包含一个 ToolCall，防止一张审核卡与同批其他调用共用等待点。该检查只约束审核协议，不用于识别或阻断其他业务工具的副作用。
 
@@ -231,7 +231,7 @@ TodoUpdateTool 不访问数据库或 HTTP，也不维护第二份可变 TODO 状
 
 统一 Session 更新及 requested 模式事件由[当前契约](../01-CampusClaw多Agent运行时/chat-api-review.html#updateSession)维护；计划审核报文同样由共享 JSON 维护，[接口集成边界](interface-delta.md)说明原因与发布联动。本节只说明接入关系。
 
-Session 是配置权威资源。当前九项目标契约以统一 POST 更新名称、模型、思考和模式，入口为 `RuntimeSessionController`，应用编排复用 `RuntimeSessionConfigurationService`。699f929 开发分支已提供统一更新与计划能力，本次提问增量仍为 target-only；所列源码核对不代表主线已合入或 Mate 已接通。
+Session 是配置权威资源。当前九项目标契约以统一 POST 更新名称、模型、思考和模式，入口为 `RuntimeSessionController`，应用编排复用 `RuntimeSessionConfigurationService`。9f785bea 开发分支已提供统一更新、计划和结构化提问；所列源码与测试核对不代表主线已合入或 Mate 已接通。
 
 | 接口 | 目标增量 |
 |---|---|
@@ -292,7 +292,7 @@ Session 是配置权威资源。当前九项目标契约以统一 POST 更新名
 
 ### 6.2 恢复与结果不确定
 
-审核卡片复用既有工具确认的事件恢复方式，以下计划分支为 target-only：
+审核卡片复用既有工具确认的事件恢复方式，以下是当前计划恢复规则，开发分支验证范围见专项证据：
 
 1. 从完整事件历史确定最近一条 `user.message` 的根消息 eventId；只处理属于该根消息的计划、工具结果和结束事件。`user.plan_confirmation` 通过 `targetEventId` 关联计划，不按最后一段 Markdown 或时间戳猜测目标。
 2. 完整 `agent.plan` 负责正文展示；其后的对应 `session.status_idle(reason=confirming)` 表示本段进入等待。确认回执、对应 ExitPlanMode 的工具结果、中断请求或真实终态出现后，旧计划不再提供审核按钮。修订后的新计划使用新 eventId；历史方案仍可展示。
@@ -349,6 +349,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.9.1 | 2026-09-15 | 同步计划与结构化问答的开发分支证据和验证边界。 |
 | 1.9.0 | 2026-09-15 | 澄清采用 AskUserQuestion 和显式问题/答案事件，保持原执行续跑。 |
 | 1.8.0 | 2026-09-15 | 计划审核报文纳入共享契约，制作、批准执行和修订示例与历史同源。 |
 | 1.7.0 | 2026-09-15 | 明确方案以完整事件保存，并由后端显式发布执行任务快照。 |

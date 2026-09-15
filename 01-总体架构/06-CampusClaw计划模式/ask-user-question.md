@@ -1,6 +1,6 @@
 # AskUserQuestion：结构化提问与原执行续跑
 
-版本：1.0.0；日期：2026-09-15。状态：已确定的目标设计，**target-only，尚未实现**。
+版本：1.1.0；日期：2026-09-15。状态：Runtime 与调试前端已在 PR #301 开发分支实现并通过独立验证；企业 Mate 接入和真实模型行为评估尚未验证。
 
 本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#submitSessionEvent)。提示词组合由 [plan-policy.md](plan-policy.md) 维护。
 
@@ -16,19 +16,24 @@
 
 ## 2. 基线与已观察实现
 
-设计仓起点：`b6ea996537925d702022ee13a6b030e8bea054f5`。实现核对：`pi-mono-java@699f929f6826b595ed1d0162f6def66e2f84760b`（代码提交 `17dbb20ae998c58c2b3f5ae19c254922e9f93210`，开发分支，非主线合入声明）。它比计划专题旧核对点 `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` 已增加 mode、审核与 TODO；本次只更新所列接入范围，不将旧差距表当作新提交缺陷。
+实施设计基线：`pi-mono-java-design@497d34a4f05def36d4e3c62085d9eb4848b70f69`。实际分析与验证：`pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead`，见 [PR #301](https://github.com/superheromeZzh/pi-mono-java/pull/301)；这是开发分支证据，不是主线合入或生产上线声明。相对旧核对点 `699f929f6826b595ed1d0162f6def66e2f84760b`，增加结构化提问、统一三类等待、答案事务及前端恢复；旧计划基线 `09b32d8e` 的差距不能延伸为当前缺陷。
 
-下表 Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`；资源前缀为 `modules/coding-agent-cli/src/main/resources/`。
+下表 Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`；资源前缀为 `modules/coding-agent-cli/src/main/resources/`；所有路径绑定上述完整提交。
 
-| 源码 / 符号 | 已观察事实 | 本次目标增量 |
+| 源码 / 符号 | 已观察实现 | 验证与边界 |
 |---|---|---|
-| R `tool/builtin/BuiltInToolName.java`、`tool/plan/ExitPlanModeTool.java`、`PlanReviewPort.java` | 十项工具已有 ExitPlanMode/TodoUpdate；没有提问工具；审核工具依赖窄端口 | 增加枚举、工厂和 `UserQuestionPort`，不改变 AgentTool 接口 |
-| 资源 `prompts/plan/PLAN_ROOT_REVIEW.txt` | 普通回复提问后结束执行，等待下一条消息 | 工具可用时结构化等待；未装配时才使用原降级 |
-| R `runtimeapi/event/RuntimeEventProjector.java` · `beginPlanReview`、`finishConfirmingOutput` | 验证完整且唯一的审核调用，保存计划与 confirming，关闭该段 SSE | 复用提交顺序，增加问题快照解析、问题事件和等待登记 |
-| R `runtimeapi/runtime/RuntimeActiveExecution.java` · `beginPlanReview`、`await`、`claimAndResumePlanReview`、`prepareStop` | 两类 Future 互斥；批准切换 mode；新段保持根身份；停止可切到已提交续跑目标 | 收敛为一个 `RuntimePendingInteraction`，增加 USER_QUESTION；回答不切模式 |
-| R `runtimeapi/event/RuntimeControlEventService.java` · `acceptPlanConfirmation`、`accept` | 预留响应容量、事务接受、完整回执先行、固定段补读 | 添加答案分支与严格答案校验，保留同一接受骨架 |
-| R `runtimeapi/vo/SessionUserEventRequestVO.java`、`UserPlanConfirmationEventRequestVO.java` | sealed 联合类型为四输入，严格区分条件字段、省略和 null | 新增 UserQuestionAnswerEventRequestVO 及嵌套请求 VO |
-| 资源 `db/gaussdb/install/session_schema.sql` · `t_session_executions`、`t_session_plan_confirmations` | 已有内部待审指针和跨实例决定表；没有问题等待/答案表 | 增加内部问题指针及专用答案交接表，见 §6 |
+| R `tool/question/AskUserQuestionTool.java`、`QuestionRequestParser.java`、`UserQuestionPort.java`；`tool/builtin/BuiltInToolProperties.java` | 第十一项 Runtime 默认工具；SEQUENTIAL；不可变快照与窄等待端口，两模式定义一致 | 独立契约探针验证 Schema/description、默认值、UTF-16/strip；Child/Cron 不装配，显式调用仍检查交互根 |
+| R `session/PlanPolicyPromptComposer.java`；资源 `prompts/plan/ASK_USER.txt` | 六份固定资源按模式、角色及真实工具可用性组合 | 逐字核对设计资源；受控 Provider 请求确认回答保持 plan、批准才进入 build；真实模型遵循率未测 |
+| R `runtimeapi/event/RuntimeEventProjector.java` · `beginQuestion` | 共享最终调用快照，tool_call 先保存，再原子提交 question/confirming 并关闭旧段 | 实际 JAR/HTTP 顺序和 GET 历史同形；问题/答案展示 Entry 不重复进入模型消息 |
+| R `runtimeapi/runtime/RuntimeActiveExecution.java`、`RuntimePendingInteraction.java` | 一个 TOOL_PERMISSION/PLAN_REVIEW/USER_QUESTION 槽；答案领取先绑定新段输出再完成 Future | 提前答案与同步消费竞态探针通过；九种等待/输入组合隔离；原根及原执行凭据保持 |
+| R `runtimeapi/event/RuntimeControlEventService.java`、`RuntimeUserQuestionService.java` | 复用接受骨架；锁内先停止/精确等待，再规范化答案；回执先行 | 实际 HTTP 当前无效答案 400 无写入，过期目标 409；两客户端仅接受一次；回答不批准方案 |
+| R `runtimeapi/vo/SessionUserEventRequestVO.java`、`UserQuestionAnswerEventRequestVO.java`、`QuestionAnswerRequestVO.java` | 五输入 sealed 联合；closed JSON 与嵌套 @Valid；归一文本后验证长度 | 实际 Jackson/Jakarta 以及 HTTP 4096 字符边界通过；Session 和元数据不增字段 |
+| R `runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java`；资源 `mapper/session/RuntimeExecutionControlMapper.xml`、`db/gaussdb/install/session_schema.sql` | 统一行锁顺序、问题指针、答案交接表和单次领取；答案只引用权威事件 | 专用 openGauss 事务回滚/竞争及安装重复执行通过；仅完整安装 SQL，无升级脚本 |
+| `frontend/src/components/QuestionCard.vue`、`frontend/src/runtime/questionInteraction.ts`、`frontend/src/runtime/eventStore.ts`、`frontend/src/composables/useRuntimeApi.ts` | 显式问题卡、按 Session/问题事件隔离草稿、权威答案覆盖、共用历史/live 投影及失败恢复只读 | 前端单测、共享契约及浏览器恢复/跨会话/390px 验证；不依赖工具日志建卡 |
+
+干净 `clean verify` 生成 373 份报告、2085 项测试，失败/错误/跳过均为 0；专用 openGauss 回归另计 16 类、140 项（132 项全量重跑及修复旧路由测试后的 8 项聚焦重跑），前端 14 文件、172 项通过。父审查另验证 5 组 Java 探针、最终 JAR 的实际 HTTP/数据库流程、214 个前端契约样例、10 个投影场景及 18 项浏览器检查；合成 UI 后端与实际 Runtime HTTP 验证分别记录。
+
+限制：公司镜像因 `NativeParent:26.0.0-SNAPSHOT` 无法解析，未进入企业源码编译；外部 mate-service 公共桥接没有在本仓实现或联调。真实模型遵循率及操作系统 IME 候选确认未测；已验证 textarea Enter 换行和显式按钮提交。openGauss 测试不等同生产 GaussDB 环境认证。
 
 ### 2.1 同层基线与取舍
 
@@ -80,7 +85,7 @@ SSE 和 GET 历史的两种新事件完全同形，无 phase/delta。agent.quest
 
 ## 5. 推荐目标结构与内部接口
 
-复用并扩展[计划与交互全局目标类图](README.md#3-推荐全局目标类图)。入口 → 应用服务 → 执行对象/工具窄端口 → 持久化与输出的完整链在同一张图中；下表所有新增类型和方法均是 target-only，不等同于已开发分支的现有 API。
+复用并扩展[计划与交互全局目标类图](README.md#3-推荐全局目标类图)。入口 → 应用服务 → 执行对象/工具窄端口 → 持久化与输出的完整链在同一张图中；下表描述推荐职责，不要求实现类名逐字一致；当前落地以 §2 固定源码为准。
 
 | 组件 / 接口 | 生命周期与责任 |
 |---|---|
@@ -94,7 +99,7 @@ SSE 和 GET 历史的两种新事件完全同形，无 phase/delta。agent.quest
 | `RuntimeSessionControlDispatcher` / `RuntimeExecutionCoordinator` | 单例；领取精确答案与可靠终态；对三种等待统一取消、超时及资源释放，不增加第二套 Loop 或调度器 |
 | 前端 `QuestionCard` / `QuestionInteractionStore` | 每 Session 投影，草稿再按问题事件分组；实时与历史共享 reducer；不持有后端 DTO、凭据或可变执行对象 |
 
-现有实现将计划 Future 和权限 Future 放在 RuntimeActiveExecution；本设计要求先抽出共同的等待/取消/输出交接责任，再接入第三种交互。抽取必须保留“回答已持久化但尚未被工具消费”的窗口，不能先清空 Future 使工具误报 unavailable，也不能在停止后继续唤醒模型。它是窄的状态收敛，不是通用工作流框架。
+实现已由 RuntimeActiveExecution 直接实现 UserQuestionPort，并将共同等待/取消/输出交接收敛到 RuntimePendingInteraction；没有额外的 RuntimeUserQuestionAdapter 类。beginQuestion 位于 RuntimeEventProjector，acceptAnswer 编排位于 RuntimeControlEventService，RuntimeUserQuestionService 负责当前问题及答案规则；前端草稿实现名为 QuestionDraftStore。抽取必须保留“回答已持久化但尚未被工具消费”的窗口，不能先清空 Future 使工具误报 unavailable，也不能在停止后继续唤醒模型。它是窄的状态收敛，不是通用工作流框架。
 
 ## 6. 状态、事务与恢复
 
@@ -107,7 +112,7 @@ SSE 和 GET 历史的两种新事件完全同形，无 phase/delta。agent.quest
 | `t_session_entries` / `t_session_events` | 问题 Entry 和完整问题事件；答案 Entry 和完整回执。交接表只引用 answer_event_id，领取时读取同一已提交答案记录，不再复制一份 answers JSON 权威 |
 | `t_session_execution_segments` | 复用原段关闭、新段接受与段内事件排序；新段触发事件可以为 user.question_answer，原始根不变 |
 
-所有引用带 Session 条件及相应外键/完整性约束，删除与保留清理先删除交接引用、再删执行/事件。SQL COMMENT 用中文。安装与既有部署迁移都要交付；不修改用户可见 Session Schema，不为内部问题指针或答案单独推进资源版本，真实 mode/state/name 等变化仍按原规则更新 ETag。
+所有引用带 Session 条件及相应外键/完整性约束，删除与保留清理先删除交接引用、再删执行/事件。SQL COMMENT 用中文。首版交付完整安装 SQL；当前没有已发布数据库基线，不增加升级脚本。不修改用户可见 Session Schema，不为内部问题指针或答案单独推进资源版本，真实 mode/state/name 等变化仍按原规则更新 ETag。
 
 接受答案沿用锁顺序 `t_sessions → 当前 t_session_executions → 段/答案行`：先确认 Session 存在和访问范围，再检查停止，随后校验当前分支、根、固定执行、等待类型与精确问题目标；再根据该已提交问题快照核对答案。结构错误 400；当前 Session 无有效对应等待 409；不能通过错误区分另一 Session 存在同 ID。
 
@@ -152,10 +157,11 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 | Q4 前端及桥接 | QuestionCard/Store、规范化提交、同 reducer 历史恢复；需要企业入口时同步 Mate 公共契约 | 单/多/文本展示无需工具日志；缺页禁答、重复帧、跨端已回答、回执丢失、切会话草稿、IME/键盘/390px；plan 不建 TODO，build 回答不重置清单 |
 | Q5 提示词与场景 | 通用提问指令、plan/build 组合、降级与角色边界 | 可查事实自行检查；需选择时使用工具；问题肯定不批准方案；不编造/重复问；无工具回退普通消息；模型评估与确定性测试分别记录 |
 
-不新增 Maven/npm 直接依赖；复用 JDK、Jackson、Jakarta Validation、现有 Spring/MyBatis、取消、SSE 与 Vue 设施。Java 方法、DTO/VO、中文文档及镜像规则沿用仓库约定。设计校验只证明文档/契约一致性，Q1～Q5 的产品实施、数据库竞争和真实模型遵循仍待开发后验收。
+不新增 Maven/npm 直接依赖；复用 JDK、Jackson、Jakarta Validation、现有 Spring/MyBatis、取消、SSE 与 Vue 设施。Java 方法、DTO/VO、中文文档及镜像规则沿用仓库约定。Q1～Q5 的 Runtime 与调试前端实施、确定性验证结果见 §2；企业桥接、公司编译环境和真实模型行为仍按该处边界记录，不能用单测代替外部验收。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-09-15 | 登记结构化问答实现、独立验证与企业接入边界，明确首版完整安装 SQL。 |
 | 1.0.0 | 2026-09-15 | 增加结构化提问工具、显式问题与回答事件及原执行续跑设计。 |
