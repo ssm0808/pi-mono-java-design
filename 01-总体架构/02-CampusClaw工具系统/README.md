@@ -2,13 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.6.7 |
+| 文档版本 | 2.7.0 |
 | 状态 | 目标设计；Mate 发现无凭据、仅 execute 透传 POST Events 执行快照待实现 |
 | 更新日期 | 2026-09-15 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [8 个活动内置工具契约](built-in-tool-contracts.md) |
 
 计划模式的推荐增量见[独立专题](../06-CampusClaw计划模式/README.md)：Runtime 默认 profile 增加 ExitPlanMode 和 [TodoUpdate](../06-CampusClaw计划模式/todo-update.md)，后者仅在 build 实施阶段返回完整清单，由后端同事务发布 agent.todo_updated；plan 提示词明确不调用它；模式切换保持同一工具定义，Child 按调用时模式生成提示词。该 target-only 扩展只增加 Agent.mode 作为新交互 Session 默认值（见[元数据主设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)），Tool/Skill 元数据不变；现有八项精确契约在正式纳入前保持原值。对应取舍见 [A03](../07-Agent架构对比/README.md#a03) 和 [A05](../07-Agent架构对比/README.md#a05)。
+
+结构化人机交互增加 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)，两模式定义一致，默认仅交互 Runtime 根装配；通过既有 Events 回答并续跑，不扩充元数据。提问为 target-only；开发分支 699f929 已有 ExitPlanMode/TodoUpdate，工具原证据仅适用于其固定旧提交。
 
 ## 1. 设计结论
 
@@ -633,6 +635,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.7.0 | 2026-09-15 | 工具装配增加 AskUserQuestion 目标入口并保持元数据稳定。 |
 | 2.6.7 | 2026-09-15 | 接入 TodoUpdate 后端显式任务事件，前端直接消费完整清单。 |
 | 2.6.6 | 2026-09-14 | 集中维护源码证据，收敛工具与 Host 职责并重排架构和执行流程图。 |
 | 2.6.5 | 2026-09-14 | Agent 默认 mode 随 settings 发布，工具定义和 Child 模式继承保持稳定。 |

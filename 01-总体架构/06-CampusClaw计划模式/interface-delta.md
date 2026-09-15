@@ -1,6 +1,6 @@
 # 计划模式接口增量
 
-版本：1.8.0；日期：2026-09-15；状态：**已确认目标契约；Session 更新、计划审核与显式任务事件均已登记到共享 JSON，运行时实现待独立验收**。
+版本：1.9.0；日期：2026-09-15；状态：**已确认目标契约；Session 更新、计划审核与显式任务事件均已登记到共享 JSON，提问增量为 target-only；已有开发分支的核对范围见提问源码证据**。
 
 本文件维护计划接口的集成边界与理由。精确请求、完整事件、条件字段、错误码及示例由 [共享事件契约](../01-CampusClaw多Agent运行时/事件契约/common.json)、[POST 操作](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 与 [GET 操作](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[统一接口页](../01-CampusClaw多Agent运行时/chat-api-review.html)。登记不代表 Java 或 Mate 已实现。
 
@@ -55,7 +55,7 @@ reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史�
 - ExitPlanMode 的 `agent.tool_call` 保持原结构，`toolName=ExitPlanMode`、`arguments={plan}`、`requiresConfirmation=false`。计划审核由 agent.plan 表达，不能同时生成一次工具权限审核。
 - 进入审核等待仍使用 `session.status_idle(reason=confirming)`；它不释放 Session running。
 - 批准/修订后的 `agent.tool_result` 保持 `toolCallId/content/isError`；正常批准与正常修订均 `isError=false`，无 errorCode。
-- 原始 user.message、修订后生成的计划、后续业务工具及最终回答均按同一个根消息的 sourceEventId 关联，直到原执行真实结束；普通澄清后新发 user.message 则形成新的根执行。
+- 原始 user.message、问题回答后的续跑、修订后生成的计划、后续业务工具及最终回答均按同一个根消息的 sourceEventId 关联，直到原执行真实结束；普通澄清后新发 user.message 则形成新的根执行。
 
 计划工具新增稳定失败码：`PLAN_MODE_INACTIVE`（当前模式不允许提交计划）、`PLAN_REVIEW_UNAVAILABLE`（不支持审核或当前调用不满足独占审核条件）。按现有工具错误映射保存安全文本；不把用户反馈字符串直接当作 errorCode。
 
@@ -63,14 +63,18 @@ reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史�
 
 TODO 仅在 build 实施阶段记录进度。`agent.todo_updated` 已登记到共享 eventContract，POST SSE 与 GET 历史共用精确字段和示例；前端直接消费 todos，不再从通用工具记录推导。成功工具结果与任务事件同源同事务，失败不发任务更新；具体提交与恢复边界见 [TodoUpdate](todo-update.md#3-事件与执行顺序)。不新增用户输入、Session 属性、元数据字段或 HTTP 路径；agent.plan 继续表示完整待审核方案。
 
+### 3.6 结构化问题与答案
+
+新增完整 agent.question 和 user.question_answer，精确结构由共享 questionContract 与 POST/GET 模型维护。前端直接显示 questions；答案 targetEventId 绑定问题事件，后端锁内校验每题与选项归属。等待复用 confirming，回答保持原 mode/root，不创建调研 TODO。问题、审核与工具授权三类互斥；新增 QUESTION_ANSWER_INVALID、QUESTION_ANSWER_NOT_PENDING 和 USER_QUESTION_UNAVAILABLE，复用原接受回执、固定段和历史。完整生命周期见 [AskUserQuestion](ask-user-question.md)。无新路径或 Session 字段；普通澄清仅作未装配工具时的降级。
+
 ## 4. 发布联动清单
 
 | 维护位置 | 同批需要完成的增量 |
 |---|---|
-| Runtime catalog / operation JSON | 已登记四输入、计划审核和批准模式事件；完整 Session 响应不增加待审核字段 |
+| Runtime catalog / operation JSON | 已登记五输入、计划审核和批准模式事件；完整 Session 响应不增加待审核字段 |
 | Runtime eventContract / DTO / VO / 编码器 | 实现已登记的 agent.todo_updated、审核类型、条件字段和错误码；保留原三种输入、原失败码及分页/凭据边界 |
 | 主接口 HTML 与校验器 | 从统一 JSON 生成；接口数量、完整类型集合、首帧样例和流/历史同形检查同步，不能通过删除既有检查适配新功能 |
-| 内置工具契约 | 登记 ExitPlanMode、TodoUpdate 和 Runtime 默认 profile；原八项工具 Schema 与 Tool/Skill 元数据保持原值；Agent 新增 mode 的定义及发布链路见元数据主设计 |
+| 内置工具契约 | 登记 ExitPlanMode、TodoUpdate、AskUserQuestion 和 Runtime 默认 profile；原八项工具 Schema 与 Tool/Skill 元数据保持原值；Agent 新增 mode 的定义及发布链路见元数据主设计 |
 | Runtime 调试前端 | Session mode 类型与更新；基于事件的审核卡片、确认发送及历史恢复，恢复未完成时禁用审核；TODO 直接消费 agent.todo_updated，失败不更新 |
 | Mate 产品集成 | 公共 Chat 模式配置、确认输入、计划审核与任务更新事件投影和双跳 ID 映射单独落到 Mate 契约，接通后才能向企业浏览器开放 |
 

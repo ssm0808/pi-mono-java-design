@@ -38,7 +38,12 @@ hide empty members
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java :: create, newSession.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare, refresh, toSettings, toRuntime.
 ' Product constraint and target-only change: Agent.mode initializes new Sessions, published via settings.
-title CampusClaw Plan Mode - Complete Target Class View
+' Question source baseline: pi-mono-java 699f929f6826b595ed1d0162f6def66e2f84760b.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: beginPlanReview, await, prepareStop.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeControlEventService.java :: acceptPlanConfirmation, accept.
+' Observed behavior: separate permission and plan futures; no AskUserQuestion tool.
+' Design reason: share one interaction slot and immutable parsed question snapshot; preserve separate business decisions.
+title CampusClaw Plan and User Interaction - Complete Target Class View
 allowmixing
 
 legend bottom left
@@ -53,6 +58,7 @@ package "HTTP and client boundary" as HttpBoundary {
   class "Todo projection" as TodoView <<target-only>> #EAF2FF {
     +applyTodoUpdated(event.todos, rootEventId)
   }
+  class "Question card / projection" as QuestionUI <<target-only>> #EAF2FF
   class "Client event store" as EventStore <<existing>> #ECFDF5
   class "RuntimeSessionController" as ConfigApi <<extended>> #FFF7DD
   class "RuntimeEventController" as EventApi <<extended>> #FFF7DD
@@ -73,6 +79,11 @@ package "Application and assembly" as Application {
     +beginReview(targetDTO, callId, plan)
     +acceptPlanConfirmation(requestVO)
   }
+  class "RuntimeUserQuestionService" as QuestionService <<target-only>> #EAF2FF {
+    +beginQuestion(finalCall, targetDTO)
+    +acceptAnswer(requestVO)
+  }
+  class "QuestionRequestParser" as QuestionParser <<target-only>> #EAF2FF
   class "AgentSessionFactory" as Factory <<extended>> #FFF7DD
   class "PlanPolicyPromptComposer" as Composer <<target-only>> #EAF2FF {
     +compose(base, mode, entryPoint, toolNames): String
@@ -98,7 +109,7 @@ end note
 package "Execution ownership" as ExecutionScope {
   class "RuntimeActiveExecution" as Execution <<extended>> #FFF7DD
   class "RuntimePending\nInteraction" as Pending <<target-only>> #EAF2FF {
-    kind: permission or plan
+    kind: permission / plan / question
     +claimAndResume(decisionDTO)
     +cancel(cause)
   }
@@ -110,6 +121,10 @@ package "Execution ownership" as ExecutionScope {
     +applyCommittedMode(snapshotDTO)
   }
   class "RuntimePlanReviewAdapter" as ReviewAdapter <<target-only>> #EAF2FF
+  class "RuntimeUserQuestionAdapter" as QuestionAdapter <<target-only>> #EAF2FF
+  class "QuestionRequestSnapshotDTO" as QuestionSnapshot <<target-only>> #EAF2FF {
+    immutable normalized questions
+  }
 }
 
 package "Core and model tools" as ToolScope {
@@ -122,6 +137,10 @@ package "Core and model tools" as ToolScope {
   class "ExitPlanModeTool" as ExitTool <<target-only>> #EAF2FF
   class "TodoUpdateTool" as TodoTool <<target-only>> #EAF2FF {
     +execute(args): AgentToolResult
+  }
+  class "AskUserQuestionTool" as QuestionTool <<target-only>> #EAF2FF
+  interface "UserQuestionPort" as QuestionPort <<target-only>> #EAF2FF {
+    +await(callId, signal): QuestionAnswerResultDTO
   }
   class "Existing built-in tools" as ExistingTools <<existing>> #ECFDF5
   interface "PlanReviewPort" as ReviewPort <<target-only>> #EAF2FF {
@@ -154,6 +173,20 @@ ToolScope -[hidden]down- PersistenceScope
 
 UI *-[#2563EB]- "1" TodoView : client projection
 UI *-- "1" EventStore
+UI *-[#2563EB]- "1" QuestionUI
+QuestionUI -[#2563EB]-> EventStore
+EventService -[#2563EB]-> QuestionService
+QuestionService -[#2563EB]-> QuestionParser
+QuestionParser ..[#2563EB]> QuestionSnapshot : creates
+QuestionService -[#2563EB,norank]-> Persistence
+Projector -[#2563EB,norank]-> QuestionService : finalized question call
+Pending o-[#2563EB]- "0..1" QuestionSnapshot
+Execution *-[#2563EB]- "1" QuestionAdapter
+QuestionAdapter -[#2563EB]-> Pending
+QuestionPort <|.[#2563EB,norank]. QuestionAdapter
+QuestionTool -[#2563EB]-> QuestionPort
+Tool <|.[#2563EB]. QuestionTool
+Session *-[#2563EB]- "0..1" QuestionTool
 TodoView -[#2563EB]-> EventStore
 UI -[#2563EB]-> ConfigApi
 UI -[#2563EB]-> EventApi
@@ -216,8 +249,8 @@ ReviewAdapter -[#2563EB]-> Output
 Output .[norank].> EventApi : request-bound SSE
 
 note bottom of Pending
-  At most one interaction across both kinds.
-  Current execution and plan identity are
+  At most one interaction across all three kinds.
+  Current execution and interaction identity are
   rechecked under database locks before claim.
 end note
 note bottom of TodoTool
@@ -231,7 +264,8 @@ note bottom of ExistingTools
 end note
 CreateService -[hidden]down-> ModeService
 ModeService -[hidden]down-> MessageService
-EventService -[hidden]down-> ReviewService
+EventService -[hidden]down-> QuestionService
+QuestionService -[hidden]down-> ReviewService
 ReviewService -[hidden]down-> Dispatcher
 Dispatcher -[hidden]down-> Coordinator
 Factory -[hidden]down-> Composer
@@ -360,13 +394,21 @@ state "Idle / Planning\nstate=idle, mode=plan" as PlanIdle
 state "Exploring or designing\nstate=running, mode=plan" as Planning
 state "Awaiting plan review\nstate=running, mode=plan\nExecution: CONFIRMING (internal)" as Reviewing
 state "Implementing\nstate=running, mode=build" as Implementing
+state "Awaiting answers / Plan\nstate=running, mode=plan" as AskingPlan
+state "Awaiting answers / Build\nstate=running, mode=build" as AskingBuild
 
 [*] --> Normal : create with Agent.mode=build or legacy omission
 [*] --> PlanIdle : create with Agent.mode=plan and review capability
 Normal --> PlanIdle : POST Session mode=plan + valid ETag
 PlanIdle --> Normal : POST Session mode=build + valid ETag
 PlanIdle --> Planning : accept user.message
-Planning --> PlanIdle : ordinary question / answer ends execution
+Planning --> AskingPlan : AskUserQuestion; commit question + confirming
+AskingPlan --> Planning : accept answers; same root and mode
+Implementing --> AskingBuild : AskUserQuestion; preserve TODO snapshot
+AskingBuild --> Implementing : accept answers; same root and mode
+AskingPlan --> PlanIdle : actual stop / failure committed
+AskingBuild --> Normal : actual stop / failure committed
+Planning --> PlanIdle : no-question-tool fallback ends execution
 Planning --> Reviewing : ExitPlanMode; commit plan and confirming idle
 Reviewing --> Planning : accept revise; resume with feedback
 Reviewing --> Implementing : accept approve; resume next step
@@ -539,11 +581,16 @@ group 2. Research and clarify
     Runtime --> UI : Thinking / messages / generic tool events
   end
   opt User-owned choice requires clarification
-    Runtime -> DB : Commit question and actual terminal; state=idle, mode=plan
-    Runtime --> UI : Question + terminal idle; close response
-    User -> UI : Answer the question
-    UI -> API : POST next user.message
-    API -> Runtime : Prepare, accept and start a new root in the same plan Session
+    Runtime -> Tools : AskUserQuestion only
+    Runtime -> DB : Commit question + confirming + pending target
+    Runtime --> UI : agent.question + confirming; close response
+    User -> UI : Answer all questions
+    UI -> API : POST user.question_answer(targetEventId, answers)
+    API -> DB : Accept answers + new segment; keep mode and root
+    API --> UI : First SSE frame: full answer receipt
+    DB --> Runtime : Original instance claims accepted answers
+    Runtime --> Tools : Resume waiting call with answers
+    Tools --> Runtime : Normal tool result; continue the same plan root
   end
 end
 
@@ -617,9 +664,90 @@ note over UI,DB
   reconciliation; never replay accepted POST.
   Interrupt: existing user.interrupt targets the
   current root and stops the execution.
-  The same Session spans clarification roots;
-  approval resumes its original root.
+  Structured answers and approval resume the original root.
+  Only the no-tool message fallback starts a new root.
   Business-tool permission confirmation remains
   independent.
 end note
+@enduml
+
+@startuml ask_user_question_sequence
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 160
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+' Java baseline: 699f929f6826b595ed1d0162f6def66e2f84760b (development branch).
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: beginPlanReview, finishConfirmingOutput.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeControlEventService.java :: accept.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: await, claimAndResumePlanReview, prepareStop.
+' DeepSeek 0a53fb55bea101816fa226bb964ae2bed71c343b (alpha): packages/interaction/tool-ask-user/src/index.ts :: execute; packages/interaction/user-questions/src/index.ts :: ask.
+' Observed behavior: tools await decisions and continue through original execution segments.
+' Design reason: target-only questions use explicit durable events, one pending slot and immutable question definitions.
+title AskUserQuestion - Target Interaction and Recovery
+actor User
+participant "Question card" as UI
+participant "POST / GET Events" as API
+participant "Question service /\nexisting control service" as Service
+database GaussDB as DB
+participant "Original execution /\ncontrol dispatcher" as Runtime
+participant "AgentLoop /\nAskUserQuestion" as Tool
+
+group 1. Publish and wait (plan or build)
+  Tool -> Runtime : Finalized sole tool call; before hook
+  Runtime -> Service : Parse once; bind immutable snapshot
+  Service -> DB : Require committed tool_call; lock fixed target
+  Service -> DB : Commit question + confirming + pending pointer
+  Service --> UI : agent.question; confirming; close original SSE
+  Tool -> Runtime : UserQuestionPort.await(callId, cancellation)
+  note over DB,Tool
+    Session stays running; mode stays unchanged.
+    One pending interaction: permission, plan or question.
+    Plan: no research TODOs. Build: preserve progress.
+  end note
+end
+group 2. Accept a complete answer
+  User -> UI : Select options and/or enter text; submit
+  UI -> API : user.question_answer(targetEventId, answers)
+  API -> Service : Reserve response capacity; validate shape
+  Service -> DB : Lock Session -> execution -> segment/answer
+  Service -> DB : Recheck pending type, question, branch and stop
+  Service -> DB : Validate answers against committed question snapshot
+  Service -> DB : Commit receipt + answer handoff + new segment
+  Service --> API : Accepted fixed target; same root and mode
+  API --> UI : First SSE frame: full user.question_answer
+end
+group 3. Resume the original call
+  Runtime -> DB : Claim exact accepted answer once
+  DB --> Runtime : Original committed answer record
+  Runtime -> Runtime : Bind current segment; recheck stop
+  Runtime --> Tool : Complete waiting call with answers
+  Tool -> Runtime : Normal ToolResult; next model request
+  Runtime -> DB : Persist result and subsequent output
+  API -> DB : Read committed continuation events
+  API --> UI : tool_result, thinking, tools, message
+  note over UI,Tool
+    Every agent event keeps the original sourceEventId.
+    Answering never approves a plan or tool permission.
+    A new wait or actual terminal closes this response.
+  end note
+end
+group 4. Reconcile after a browser disconnect
+  UI -> API : GET history pages and GET Session
+  API -> DB : Read committed records
+  API --> UI : Same complete question / answer events
+  UI -> UI : Rebuild card; no automatic POST replay
+  note over UI,Runtime
+    Missing pages or uncertain execution: read-only recovery.
+    Stop targets the root message; races are checked in DB.
+    Process-loss takeover is outside this feature.
+  end note
+end
 @enduml

@@ -1,5 +1,5 @@
 {
-  "version": "1.6.0",
+  "version": "1.7.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -33,7 +33,7 @@
       "source": "事件契约/操作/01-submit-session-event.json",
       "common": "事件契约/common.json",
       "status": "已确认目标契约 · 待实现",
-      "note": "B01～B15 四组全部按推荐确认；字段、错误码、事件关联和恢复边界已统一，可进入实现。数据库和容量数值按压测校准。Builtin JSON 保持，Skill 使用共享事件 SSE；Mate 公共协议独立管理。",
+      "note": "B01～B15 四组全部按推荐确认；字段、错误码、事件关联和恢复边界已统一，可进入实现。数据库和容量数值按压测校准。Builtin JSON 保持，Skill 使用共享事件 SSE；Mate 公共协议独立管理。 AskUserQuestion 增加显式问题及回答事件，保持原根续跑；本增量尚未实现，Mate 公共协议需独立同步。",
       "design": "chat-events-stream-design.md"
     },
     {
@@ -41,7 +41,7 @@
       "source": "事件契约/操作/02-list-session-events.json",
       "common": "事件契约/common.json",
       "status": "已确认目标契约 · 待实现",
-      "note": "B01～B15 四组全部按推荐确认；字段、错误码、事件关联和恢复边界已统一，可进入实现。数据库和容量数值按压测校准。Builtin JSON 保持，Skill 使用共享事件 SSE；Mate 公共协议独立管理。",
+      "note": "B01～B15 四组全部按推荐确认；字段、错误码、事件关联和恢复边界已统一，可进入实现。数据库和容量数值按压测校准。Builtin JSON 保持，Skill 使用共享事件 SSE；Mate 公共协议独立管理。 AskUserQuestion 增加显式问题及回答事件，保持原根续跑；本增量尚未实现，Mate 公共协议需独立同步。",
       "design": "chat-events-history-design.md"
     },
     {

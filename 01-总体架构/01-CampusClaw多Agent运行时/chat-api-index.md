@@ -2,11 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.8.0 |
+| 文档版本 | 1.9.0 |
 | 更新日期 | 2026-09-15 |
 | 变更性质 | Session POST 按可选字段部分更新；前端单项调用，接口允许组合提交；组合写入及 mode 为 target-only |
 | 唯一当前入口 | [当前九项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
+
+结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 target-only，Session/元数据不增字段，Mate 公共投影独立集成。
 
 ## 1. 维护目标
 
@@ -22,7 +24,7 @@
 - `review` 与 `reviewState` 继续记录原有确认决定；清单中的说明只解释其适用边界，不替代或自动提升确认状态。B01～B15 已实际提交确认；两个 Events 目标契约已定稿，question 列表清空，数值校准另列。
 - Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；公共命令与普通对话各自维护状态。
 
-已确认的 eventId、无公共 entrySeq、data-only SSE、四输入、普通分页等不回退。
+已确认的 eventId、无公共 entrySeq、data-only SSE、五输入、普通分页等不回退。
 thinking、配置与 Skill 映射已联动更新，Builtin JSON 保持；公共 Mate 边界独立管理。
 GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和配置事件由当前精确源维护。
 普通整数分页不继承旧不透明 page 的失效规则；不能用旧配置说明覆盖新历史接口。
@@ -83,13 +85,14 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 | `vo/UserEventRequestVO.java` · message/fileIds/rejectUnknownField | 旧 message/fileIds 请求形状；页面整理不等于完成实现迁移 |
 | `web/RuntimeSessionControlController.java` · steer/followUp/abort | 该提交仍声明三个独立控制接口，设计退役与代码删除属于不同交付 |
 
-统一 Session 更新与计划审核均已纳入当前精确源，包括 mode、四类用户输入、agent.plan、agent.todo_updated，以及 requested / planApproved 模式事件。[计划接口集成边界](../06-CampusClaw计划模式/interface-delta.md)仅维护理由与接入要求，不复制报文。
+统一 Session 更新与计划审核均已纳入当前精确源，包括 mode、五类用户输入、agent.plan、agent.todo_updated，以及 requested / planApproved 模式事件。[计划接口集成边界](../06-CampusClaw计划模式/interface-delta.md)仅维护理由与接入要求，不复制报文。
 
 ## 5. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.8.0 | 2026-09-15 | 登记四类用户输入及计划审核完整事件，统一展示制作与执行示例。 |
+| 1.9.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |
+| 1.8.0 | 2026-09-15 | 登记五类用户输入及计划审核完整事件，统一展示制作与执行示例。 |
 | 1.7.0 | 2026-09-15 | 纳入后端显式任务更新事件，SSE 与历史共用完整快照。 |
 | 1.6.0 | 2026-09-14 | 按单一来源和当前生成流程整理维护说明，历史整合记录归 Git 追溯。 |
 | 1.5.3 | 2026-09-14 | 接口展开后直接显示内部栏目和请求示例，静态回退内容同步默认展开。 |

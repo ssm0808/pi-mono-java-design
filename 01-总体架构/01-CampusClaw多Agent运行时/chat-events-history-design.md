@@ -2,13 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.8.0 |
+| 文档版本 | 0.9.0 |
 | 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，target-only |
 | 更新日期 | 2026-09-15 |
 | 原文展示与消费修复 | 实现提交 `cad6847d901155cc6388989b984d19e302a4fbe3`，见 [Draft PR #287](https://github.com/superheromeZzh/pi-mono-java/pull/287)；合入前不作为实现仓主线行为 |
 | 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
 | 官方公共契约核对 | Claude Managed Agents，2026-09-06，Beta；只证明公开行为 |
+
+结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 target-only，Session/元数据不增字段，Mate 公共投影独立集成。
 
 ## 1. 查询范围与契约入口
 
@@ -43,7 +45,7 @@ GET 返回普通 JSON。结果使用
 [公共字段源](事件契约/common.json) 的 `eventContract` / `contractSections` 维护，
 渲染到 GET/POST 的统一 HTML；两个操作引用同一份定义，不各写一套。
 
-历史读取四类已接受 user.*、完整 agent.message/thinking/tool_call/tool_result/plan/todo_updated、
+历史读取五类已接受 user.*、完整 agent.message/thinking/tool_call/tool_result/plan/todo_updated、
 session.status_idle，以及模型、thinking、mode 配置和压缩完整记录。delta、心跳、连接标记不入历史。
 每条完整记录有服务端 eventId 与保存一次的 UTC 毫秒 createdAt；按内部已提交顺序展示，
 不按时间戳排序。agent.* 和 idle 的 sourceEventId 始终引用原始 user.message.eventId，
@@ -326,7 +328,7 @@ Skill 展开前回执、绑定变更重检、内部上下文恢复与保留策�
 
 
 1. 先补完整记录的稳定身份和共享投影骨架。POST 与 GET 同一完整事件逐字段相等；
-   保留四种用户回执、工具关联及唯一停止记录，不泄露内部 ID 或凭据。
+   保留五种用户回执、工具关联及唯一停止记录，不泄露内部 ID 或凭据。
 2. 再实现页码归一、查询 DTO 与 Mapper。尾部追加不移动已有位置；分支/过滤变化后
    重读第一页，不承诺跨页快照。保留写侧已确认的因果依赖与短事务串行规则。
 3. 接入类型化只读 Response VO；请求 Request VO 用标准 Jakarta 校验，默认值在
@@ -387,6 +389,7 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.9.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |
 | 0.8.0 | 2026-09-15 | 历史纳入计划、审核决定与批准模式事件，保持 SSE 同源。 |
 | 0.7.0 | 2026-09-15 | 纳入后端显式任务更新事件，SSE 与历史共用完整快照。 |
 | 0.6.1 | 2026-09-14 | 精简查询与验收说明，突出共享完整事件投影和单次读取边界。 |

@@ -11,12 +11,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from question_contract import validate_question_event, validate_answer_event, validate_question_regressions
+
 ROOT = Path(__file__).resolve().parent
 COMMON_PATH = ROOT / "事件契约" / "common.json"
 MODEL_PATH = ROOT / "事件契约" / "操作" / "01-submit-session-event.json"
 HISTORY_PATH = ROOT / "事件契约" / "操作" / "02-list-session-events.json"
-USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation", "user.plan_confirmation"}
-STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "agent.todo_updated", "agent.plan", "session.mode_changed", "session.status_idle"}
+USER_EVENT_TYPES = {"user.message", "user.interrupt", "user.tool_confirmation", "user.plan_confirmation", "user.question_answer"}
+STREAM_TYPES = {"agent.message", "agent.thinking", "agent.tool_call", "agent.tool_result", "agent.todo_updated", "agent.plan", "agent.question", "session.mode_changed", "session.status_idle"}
 HISTORY_TYPES = {"session.model_changed", "session.thinking_changed", "session.mode_changed", "session.compacted"}
 BATCH_CHOICES = {f"BATCH-20260908-1-{group}": "A-recommended" for group in ("tools", "events", "lifecycle", "integration")}
 RETIRED_STREAM_TYPES = {"assistant.message", "assistant.thinking", "tool.call", "tool.result", "session.status.idle"}
@@ -65,6 +67,8 @@ RESPONSE_INPUTS = {
     "200-plan-review": "user.message",
     "200-plan-approved": "user.plan_confirmation",
     "200-plan-revised": "user.plan_confirmation",
+    "200-question-asking": "user.message",
+    "200-question-answered": "user.question_answer",
 }
 
 def require(condition: bool, message: str) -> None:
@@ -123,8 +127,8 @@ def validate_access_token_rule(operation: dict) -> None:
         require(token.get("required") is True, f"{mode['id']} must require access-token")
         require(token["value"] == "opaque-access-token", "confirmed access-token example must be preserved")
         require(
-            "四种用户事件均必须携带" in token["description"],
-            f"{mode['id']} must state that all four user event types require access-token",
+            "五种用户事件均必须携带" in token["description"],
+            f"{mode['id']} must state that all five user event types require access-token",
         )
 
 
@@ -176,6 +180,10 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
                 "current tool results must contain only public text blocks, never JSON or images")
     if event["type"] == "user.plan_confirmation":
         validate_plan_confirmation(event, receipt=True)
+    if event["type"] == "agent.question":
+        validate_question_event(event)
+    if event["type"] == "user.question_answer":
+        validate_answer_event(event, receipt=True)
     if event["type"] == "agent.plan":
         require(set(event) == {"eventId", "type", "createdAt", "sourceEventId", "toolCallId", "content"},
                 "plan must use the complete review event shape")
@@ -320,7 +328,9 @@ def validate_model(model: dict) -> None:
         inputs[value["event"]["type"]] = value["event"]
         if value["event"]["type"] == "user.plan_confirmation":
             validate_plan_confirmation(value["event"])
-    require(set(inputs) == USER_EVENT_TYPES and len(body["examples"]) == 5, "cover four input types and both plan decisions")
+        if value["event"]["type"] == "user.question_answer":
+            validate_answer_event(value["event"])
+    require(set(inputs) == USER_EVENT_TYPES and len(body["examples"]) == 6, "cover five input types and both plan decisions")
     require(isinstance(inputs["user.message"]["content"], list), "message content remains ordered array")
 
     all_types, receipt_types, response_ids = set(), set(), set()
@@ -397,7 +407,7 @@ def validate_model(model: dict) -> None:
         require(clause in operation["description"], f"missing database interruption constraint: {clause}")
     require("检查周期" in " ".join(review["implementationCalibration"]), "polling interval needs implementation calibration")
     require("等待工具确认时也关闭" in operation["description"], "confirmation wait must also close the response")
-    require("四种用户事件均必须携带 access-token" in review["notice"], "preserve four-type token rule")
+    require("五种用户事件均必须携带 access-token" in review["notice"], "preserve five-type token rule")
     require(review["decisionHistory"]["S3-user-events"]["previous"] == "A-user-events-receipt-history-only",
             "record the explicitly superseded S3")
     require("用户明确调整" in review["decisionHistory"]["S3-user-events"]["status"], "S3 adjustment needs explicit attribution")
@@ -640,6 +650,7 @@ def validate_history_model(model: dict, post: dict) -> None:
         "200-execution-failed": complete["200-execution-failed"],
         "200-plan-approved": complete["200-plan-review"] + complete["200-plan-approved"],
         "200-plan-revised": complete["200-plan-review"] + complete["200-plan-revised"],
+        "200-question-answered": complete["200-question-asking"] + complete["200-question-answered"],
         "200-skill-message": complete_streams(json.loads((ROOT / "接口契约/操作/13-execute-session-command.json").read_text()))["200-skill-message"],
     }
     results, all_types, errors = {}, set(), set()
@@ -1017,6 +1028,7 @@ def main() -> int:
         batch_count = validate_batch_field_regressions(model, history)
         todo_count = validate_todo_regressions(model)
         plan_count = validate_plan_regressions(model)
+        question_count = validate_question_regressions(model)
         require(set(common["eventContract"]["completeTypes"]) == USER_EVENT_TYPES | STREAM_TYPES | HISTORY_TYPES,
                 "shared complete event catalog differs from validated types")
         subprocess.run([sys.executable, str(ROOT / "render_chat_api.py"), "--check"], check=True)
@@ -1024,7 +1036,7 @@ def main() -> int:
     except (KeyError, OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(f"error: {error}")
         return 2
-    print(f"POST SSE and ListEvents contracts valid; {negative_count} POST and {history_count} history and {batch_count} batch field and {todo_count} task snapshot and {plan_count} plan review negative regressions rejected")
+    print(f"POST SSE and ListEvents contracts valid; {negative_count} POST and {history_count} history and {batch_count} batch field and {todo_count} task snapshot and {plan_count} plan review and {question_count} question negative regressions rejected")
     print("Static contract validation only; database pagination and runtime concurrency were not executed.")
     return 0
 

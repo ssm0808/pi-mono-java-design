@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.3.3 |
+| 文档版本 | 2.4.0 |
 | 状态 | 目标设计；Mate 工具 Schema 不变，凭据可见边界收紧 |
-| 更新日期 | 2026-09-14 |
+| 更新日期 | 2026-09-15 |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -15,6 +15,8 @@
 | 上位设计 | [工具系统主设计](README.md) |
 
 计划能力的 target-only 增量由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约) 和 [TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 维护；正式接入时统一登记枚举、工厂和 Runtime profile。本文以下八项基础契约不因新增 TODO 改变字段，新增工具并非当前源码已实现。
+
+提问工具的精确 Schema、问题/答案与等待边界见 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)。Runtime 默认在 ExitPlanMode、TodoUpdate 后追加它；Child/Cron 不装配，两模式工具定义相同。原八项 Schema 不变，新增工具不新增元数据字段。
 
 ## 1. 契约总则
 
@@ -374,6 +376,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.4.0 | 2026-09-15 | 登记 AskUserQuestion 工具契约与 Runtime 默认装配边界。 |
 | 2.3.3 | 2026-09-14 | 工具实现证据统一引用主设计，保留八项精确输入输出契约。 |
 | 2.3.2 | 2026-09-14 | 登记计划与 TODO 目标工具的契约入口，基础工具字段保持稳定。 |
 | 2.3.1 | 2026-08-31 | 明确 Slash Command 由独立 HTTP 模块提供，命令不属于模型工具。 |

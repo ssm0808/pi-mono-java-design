@@ -2,7 +2,7 @@
 
 [前端主设计](README.md) · [可操作工作台](plan-workbench.html) · [计划模式主设计](../06-CampusClaw计划模式/README.md)
 
-版本：1.0.0；日期：2026-09-15。性质：已确定的前端目标，target-only；原型使用本地合成事件，不代表部署验证。
+版本：1.1.0；日期：2026-09-15。性质：已确定的前端目标，target-only；原型使用本地合成事件，不代表部署验证。
 
 本页维护 M07 的模式入口、方案阅读、审核和进度展示。模式、审核事务与恢复权威归 M01 的计划模式专题；精确字段归 Runtime 共享契约和审核增量，企业接入归 Mate 公共契约。本页不增加 HTTP API、Slash Command 或后端状态。
 
@@ -34,7 +34,7 @@
 | 方案阅读 | 对话内一张轻边界方案卡，默认展开完整正文，紧邻审核动作；原始 O1 不变 | 产品约束：阅读与决定同处，不用全屏审核向导；长文依靠页面滚动，正文不困在矮小滚动框。 |
 | 批准执行 | “批准并执行”提交当前方案的审核决定，原执行续跑；“修改方案”展开独立反馈区 | 架构变更：沿用 CampusClaw 审核事务，与 Codex TUI 的新用户消息方式不同；需要可靠的目标身份与回执。 |
 | 上下文选择 | 首版无“清空上下文并执行”选项 | 产品约束：当前设计保留原执行、凭据和模型上下文；不引入第二条启动路径。 |
-| 澄清问题 | 普通 Assistant 问题结束本轮；在 idle/plan 用原 Composer 回答 | 产品约束：不从自然语言解析成问卷控件，也不复刻 Codex 实验性提问协议；缺少结构化选择能力，但可完成多轮澄清。 |
+| 澄清问题 | AskUserQuestion 的显式 agent.question 显示问题卡；回答走 user.question_answer，在原根继续 | 架构变更：问题与答案精确关联，前端无需解析工具参数；完整设计见 [提问专题](../06-CampusClaw计划模式/ask-user-question.md)。未装配工具时才普通消息降级。 |
 | 实施清单 | build 才显示后端显式任务快照，位置在 Composer 上方；轻量行展示进行中项和完成数量，展开查看全表 | 架构变更：展示脱离工具日志；产品约束：不从计划 Markdown 生成进度、不手工勾选、不将进度全完成等同执行终态。 |
 | 执行透明度 | Thinking 与工具沿原时序排列；当前项展开、完成项折叠，工具输入在上、输出在下 | 产品约束：借鉴 Codex disclosure；保留 CampusClaw 原始推理展示，不生成推理摘要冒充原文。 |
 | 运行中输入 | 可写草稿，停止位于原发送位置；审核等待仍 running | 产品约束：不开放队列、Steer 或随意运行中模式切换；牺牲部分交互灵活性以保持既定准入。 |
@@ -49,7 +49,7 @@
 |---|---|---|
 | `planIdle` | 计划模式标识、普通 Composer | 发消息、回答澄清；手动退出计划只更新模式。 |
 | `planResearch` | “正在制定方案”，连续活动流 | 停止、编辑草稿；无审核按钮、无调研进度百分比。 |
-| `planClarifying` | 普通问题正文、计划模式仍激活 | 真实终态与 idle 对齐后回答；不自动批准或运行。 |
+| `planClarifying` | 结构化问题卡、计划模式仍激活 | 保持 running；提交全部答案后原根继续，不自动批准。缺工具降级才按普通消息规则结束。 |
 | `planReview` | 完整方案、“待审核”、“批准并执行 / 修改方案” | 绑定已恢复且当前有效的方案 eventId；没有隐式肯定词识别。 |
 | `planDecisionPending` | “正在提交决定” | 两个审核动作与停止共享提交锁，暂时禁用；不标记已批准、不清草稿。 |
 | `planRevising` | 旧方案标为“已退回修改”，活动流继续 | 仍 plan/running；新方案新身份，旧方案只读；反馈不会变成第二条普通 user.message。 |
@@ -85,6 +85,8 @@
 - 恢复期间以已合并的事件顺序重算最新快照，迟到旧页不能覆盖 live 尾部；重复帧不增计数，createdAt 回退不重排。不完整历史只允许只读展示，不恢复审核权限。
 - 断网和审核回执丢失保留“结果待核对”，只重读；批准、revise、消息和停止均不自动重放。内部恢复是 GET 历史/Session，公共恢复是公共读流及历史，不混用两种连接模型。
 
+问题卡片、选项、自由文本、草稿、提交锁与键盘规则由 [AskUserQuestion §7](../06-CampusClaw计划模式/ask-user-question.md#7-前端交互与企业服务边界) 维护。build 中提问保留原任务快照。现有 plan-workbench.html 尚未实现结构化问题卡，旧普通澄清场景仅代表无工具降级，不能作为本版问答交互验收。
+
 ## 6. 组件与接入切片
 
 复用[公共接入的全局目标组件图](public-chat-alignment.md#3-全局目标结构)，不再维护一套局部现状类图。图中新增关系均为 target-only。
@@ -95,6 +97,7 @@
 | PF2 方案投影 | PublicEventReducer → PlanReviewStore → PlanCard；计划正文复用 ContentViews 安全渲染 | 只有完整有效方案可审；ExitPlanMode 不重复正文；历史旧卡只读；原始 Markdown 复制、安全降级和长文。 |
 | PF3 审核编排 | PlanCard → ConversationCoordinator → Gateway，复用控制锁；ReviewDraftStore 与消息草稿独立 | 精确 target；approve 无反馈；revise 可选反馈；双击/IME/取消/停止竞争；回执与实际实施分开。 |
 | PF4 进度 | PublicEventReducer → ExecutionProgressStore → ProgressDisclosure；全部输入为显式完整事件 | 无事件/空列表/失败区分；新根隔离；全完成不当终态；旧页与 live 交错、重复事件、长列表可读。 |
+| PF6 问答卡片 | QuestionCard / QuestionInteractionStore → 原控制提交入口；实时/历史共用投影 | 问题事件直接展示、全部作答、原根续跑、缺页禁答、回执丢失与重复提交；见 Q1～Q5。 |
 | PF5 恢复和两跳 | HistoryRecovery 共用 Reducer；Gateway 显式选择内部、Mock 或 Mate | 缺页禁审、迟到响应丢弃、跨端已处理不重发；公共模式/审核/任务关联确认后才接真实 Gateway。 |
 
 Store 生命周期按 Chat 隔离，审核草稿再按 plan eventId 隔离；视图只读不可变投影，不直调 Runtime Controller、Mapper 或持有凭据。审核与停止共享当前执行控制锁，进度独立于配置版本。服务端仍在事务中检查目标，前端快照不是接受凭证。

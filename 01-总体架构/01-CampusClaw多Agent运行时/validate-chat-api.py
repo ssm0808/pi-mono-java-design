@@ -79,8 +79,9 @@ def validate_catalog():
     for target in re.findall(r'href="([^"#]+)(?:#[^"]*)?"', source):
         require((ROOT / target).exists(), f"Broken current-page link: {target}")
     require("traceparent" not in source, "Forbidden header in current page")
-    # Full plan review / approval / revision examples are embedded and have static fallbacks.
-    require(len(source.encode()) < 550_000, "Unexpected catalog growth")
+    # Plan and question contracts include complete SSE/history examples and static fallbacks.
+    # The question addition is 569,507 bytes; retain a bounded growth guard.
+    require(len(source.encode()) < 600_000, "Unexpected catalog growth")
     return models
 
 

@@ -499,8 +499,10 @@ State -> API : Submit once; retain original root
 API --> State : Research activities\nthen complete proposal + confirming
 State --> UI : Render full proposal; enable exact target
 note over UI, State
-  Ordinary clarification ends the execution in plan mode.
-  The next answer uses the normal Composer.
+  AskUserQuestion waits in the same plan root.
+  user.question_answer resumes without mode changes.
+  Ordinary messages are a no-tool fallback only.
+  In that fallback, the next answer uses the normal Composer.
 end note
 opt Revise the current proposal
   User -> UI : Open feedback; submit revision decision

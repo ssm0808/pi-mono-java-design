@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.54.0",
+    "version": "1.55.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -78,7 +78,7 @@
     }
   },
   "eventContract": {
-    "version": "2026-09-15.2",
+    "version": "2026-09-15.3",
     "semanticStatus": "confirmed",
     "detailStatus": "implementation-ready",
     "toolErrorCodes": {
@@ -109,6 +109,10 @@
       "PLAN_REVIEW_UNAVAILABLE": {
         "zh-CN": "当前无法提交计划审核。",
         "en-US": "Plan review is currently unavailable."
+      },
+      "USER_QUESTION_UNAVAILABLE": {
+        "zh-CN": "当前无法向用户提问。",
+        "en-US": "User questions are currently unavailable."
       }
     },
     "executionErrorCodes": {
@@ -141,11 +145,13 @@
       "user.interrupt",
       "user.tool_confirmation",
       "user.plan_confirmation",
+      "user.question_answer",
       "agent.message",
       "agent.thinking",
       "agent.tool_call",
       "agent.tool_result",
       "agent.plan",
+      "agent.question",
       "agent.todo_updated",
       "session.status_idle",
       "session.model_changed",
@@ -202,6 +208,12 @@
           "targetEventId 为非空不透明字符串，最多 128 UTF-16 单元，精确引用当前待审核 agent.plan.eventId；result=approve/revise。feedback 仅 revise 可选，出现时非空且最多 4096 UTF-16 单元；approve 禁止此字段（含 null）。无 phase/sourceEventId，按 targetEventId 关联方案及原根执行。"
         ],
         [
+          "user.question_answer",
+          "targetEventId/answers",
+          "全部必填",
+          "targetEventId 精确引用当前 agent.question.eventId，非空且最多 128 UTF-16 单元；answers 1～3 项，字段与联合约束见提问契约。无 phase/sourceEventId；不接受修改问题、选项或工具结果。回答保持原 mode/root，不批准方案。"
+        ],
+        [
           "agent.message / agent.thinking",
           "phase/content",
           "必填字符串",
@@ -238,10 +250,16 @@
           "完整任务快照，无 phase。toolCallId 为非空来源标识，展示无需关联工具记录；todos 数组 0～100 项，整份替换，空数组清空；每项只有必填 content/status。content 为经 String.strip 规范化的非空文本，最多 1024 UTF-16 单元且列表内不重复；status=pending/in_progress/completed，最多一项 in_progress。后端从成功 TodoUpdate 最终结果生成，与 agent.tool_result 同源同事务，失败不发；前端直接消费 todos，不解析工具结果。"
         ],
         [
+          "agent.question",
+          "toolCallId/questions",
+          "全部必填",
+          "完整问题快照，无 phase；toolCallId 非空且不另收紧既有长度；questions 与已校验的唯一 AskUserQuestion 调用同源，multiSelect 缺省归一为 false 后显式返回。后端保存后直接发送，前端不解析工具参数。字段/大小见提问契约。"
+        ],
+        [
           "session.status_idle",
           "reason/errorCode/message",
           "reason 必填",
-          "reason=done/failed/terminated/confirming；仅 failed 必有稳定 errorCode 与非空 message，其他 reason 省略二者。confirming 不释放 Session running；实际结束才释放。"
+          "reason=done/failed/terminated/confirming；仅 failed 必有稳定 errorCode 与非空 message，其他 reason 省略二者。confirming 不释放 Session running；实际结束才释放。 confirming 表示等待用户处理，可为问题回答、方案审核或工具授权，由对应完整事件识别；不自动选择或批准。"
         ],
         [
           "session.model_changed",
@@ -312,6 +330,11 @@
           "PLAN_REVIEW_UNAVAILABLE",
           "当前无法提交计划审核。",
           "Plan review is currently unavailable."
+        ],
+        [
+          "USER_QUESTION_UNAVAILABLE",
+          "当前无法向用户提问。",
+          "User questions are currently unavailable."
         ]
       ]
     },
@@ -361,7 +384,11 @@
       "rows": [
         [
           "计划审核（target-only）",
-          "agent.plan 与 confirming 同事务提交后关闭原 SSE，Session 保持 running/plan。审核精确绑定方案 eventId，普通肯定文本不批准。approve 原子保存决定、续跑段、build 模式和模式事件；回执先行，原执行更新提示词后返回工具结果；revise 保持 plan 并提交新方案。两类确认共享至多一个等待点，不能互相消费；中断先提交则拒绝确认，断线补历史不重放 POST。"
+          "agent.plan 与 confirming 同事务提交后关闭原 SSE，Session 保持 running/plan。审核精确绑定方案 eventId，普通肯定文本不批准。approve 原子保存决定、续跑段、build 模式和模式事件；回执先行，原执行更新提示词后返回工具结果；revise 保持 plan 并提交新方案。工具授权、计划审核与问题回答共享至多一个等待点，不能互相消费；中断先提交则拒绝确认，断线补历史不重放 POST。"
+        ],
+        [
+          "结构化提问（target-only）",
+          "AskUserQuestion 生成 agent.question；user.question_answer 精确关联问题并续跑原执行。问题等待复用 confirming，不释放 running、不改变 mode；三类交互互斥。前端直接使用 questions，模型读取答案工具结果，展示事件不重复注入模型历史。新增内部等待指针和答案交接表，不扩充 Session/元数据响应。"
         ],
         [
           "任务快照（target-only）",
@@ -392,6 +419,182 @@
           "Controller 使用请求/只读响应 VO，Service 转 DTO 并校验状态，Mapper 只收发 DTO；继续现有 Jackson/JDK，不新增 Maven 依赖。"
         ]
       ]
+    },
+    "questions": {
+      "title": "AskUserQuestion 与回答契约（target-only）",
+      "description": "questionContract 是精确 Schema 源；问题与答案均通过现有 Events，无新 HTTP 路径。工具只装配交互 Runtime 根，两模式定义相同。",
+      "columns": [
+        "字段/场景",
+        "精确约束"
+      ],
+      "rows": [
+        [
+          "questions",
+          "数组 1～3 项；每项仅 id/question、可选 header/options/multiSelect。展示字符串 String.strip 后非空，服务端按 UTF-16 单元校验。"
+        ],
+        [
+          "id / question / header",
+          "id 匹配 ^[A-Za-z][A-Za-z0-9_-]{0,63}$，本批内唯一且精确比较；question 1～2048；header 可选 1～64；null 不等于省略。id 是本批局部标识，不是公共事件 ID。"
+        ],
+        [
+          "options / multiSelect",
+          "options 可选，出现时 2～6 项；每项只有 label（1～160）及可选 description（1～1024），规范化 label 同题唯一。multiSelect 可选布尔，Service 缺省 false，完整事件必返；无 options 时只能 false。"
+        ],
+        [
+          "answers",
+          "数组 1～3 项；必须覆盖目标全部问题且每个 id 恰好一次。每项仅 id/selected、可选 custom；selected 数组 0～6 个不重复的原选项 label，custom 出现时 strip 后非空、最多 4096。未知字段、未知选项/问题、null 或缺题均拒绝。"
+        ],
+        [
+          "答案联合约束",
+          "纯文本：selected=[] 且 custom 必填；单选：一个 selected 或 custom 二选一；多选可同时选择与补充 custom。至少有选择或非空 custom，不允许空答案跳过。服务端按问题与选项原顺序规范化，回执/工具结果同源。"
+        ],
+        [
+          "权限与等待",
+          "requiresConfirmation=false；agent.question 与 confirming/内部等待同事务。与工具授权、计划审核共用最多一个等待点；不同类型输入不能互相消费。回答不改变 mode，不创建调研 TODO。"
+        ],
+        [
+          "恢复与并发",
+          "完整问题事件直接驱动问题卡；历史未补齐禁答，终态或回答后旧卡只读。重复/过期答案 409；停止优先检查。回答原子保存回执/新段，原实例单次领取，先回执后输出；断线不自动重发。"
+        ]
+      ]
     }
+  },
+  "questionContract": {
+    "version": "2026-09-15.1",
+    "status": "target-only",
+    "toolName": "AskUserQuestion",
+    "description": "Ask the user one to three concise questions when required information or a user-owned choice blocks further work. Use stable question ids, optional choices and optional multiSelect; free text is always supported. Ask only what cannot be established by inspecting available information. This must be the only tool call in the assistant response. Wait for the returned answers before continuing the same task. Answers do not approve a plan, change mode, or replace business-tool permission confirmation. Never invent an answer or treat cancellation, silence or failure as consent.",
+    "parameters": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "questions"
+      ],
+      "properties": {
+        "questions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "question"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              },
+              "question": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "header": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "options": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 6,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "label"
+                  ],
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    }
+                  }
+                }
+              },
+              "multiSelect": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "answerEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "targetEventId",
+        "answers"
+      ],
+      "properties": {
+        "type": {
+          "const": "user.question_answer"
+        },
+        "targetEventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "answers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "selected"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              },
+              "selected": {
+                "type": "array",
+                "maxItems": 6,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                }
+              },
+              "custom": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            }
+          }
+        }
+      }
+    },
+    "normalization": "Display strings and custom answers use Java String.strip; ids and selected labels are exact. Service enforces UTF-16 limits in addition to JSON Schema character counts. Missing multiSelect becomes false; explicit null is invalid. Answers follow question order and selected labels follow option order.",
+    "crossFieldRules": [
+      "Question ids and normalized option labels are unique in their scope.",
+      "No options means multiSelect=false and a nonempty custom answer.",
+      "Answer every question exactly once; no skipped questions or unknown ids.",
+      "Selected labels must belong to the exact immutable target question.",
+      "Single-select permits one selected label OR custom; multi-select permits both.",
+      "An answer needs a selection or nonempty custom; null is never omission."
+    ]
   }
 }

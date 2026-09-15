@@ -2,10 +2,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.11.0 |
-| 状态 | 四输入联合契约与 B01～B15 已确认；本文跨实例执行骨架为 target-only |
+| 文档版本 | 0.12.0 |
+| 状态 | 五输入联合契约与 B01～B15 已确认；本文跨实例执行骨架为 target-only |
 | 源码范围 | Java c9d858bc、a8192e04、918005ee、dfb90cac 分项核验；pi 固定 5cd93f68，完整提交和符号见 [源码证据](source-evidence.md#5-session-events-固定源码核验) |
 | 更新日期 | 2026-09-15 |
+
+结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 target-only，Session/元数据不增字段，Mate 公共投影独立集成。
 
 ## 1. 资源模型与职责
 
@@ -21,7 +23,7 @@ POST `/sessions/{sessionId}/events` 在同一响应中返回本次用户事件�
 
 ## 2. 当前目标契约
 
-每次 POST 只提交 user.message、user.interrupt、user.tool_confirmation 或 user.plan_confirmation 中的一条事件。精确字段、Header、错误和机器评审状态分别由 [POST 模型](事件契约/操作/01-submit-session-event.json)、[GET 模型](事件契约/操作/02-list-session-events.json) 维护，[统一接口页](chat-api-review.html) 为阅读入口。
+每次 POST 只提交 user.message、user.interrupt、user.tool_confirmation、user.plan_confirmation 或 user.question_answer 中的一条事件。精确字段、Header、错误和机器评审状态分别由 [POST 模型](事件契约/操作/01-submit-session-event.json)、[GET 模型](事件契约/操作/02-list-session-events.json) 维护，[统一接口页](chat-api-review.html) 为阅读入口。
 
 ### 2.1 传输与执行规则
 
@@ -283,7 +285,7 @@ B08/B09 已确认控制竞争和根消息关联，以下是落实语义所需的
 
 | 切片 | 验收要求 |
 |---|---|
-| 请求与响应 | 四输入严格 VO 与 Handler Registry；每响应有界绑定；完整回执先于输出；Header 前 JSON 错误与 Header 后断开分开验证，EOF 不作为成功 |
+| 请求与响应 | 五输入严格 VO 与 Handler Registry；每响应有界绑定；完整回执先于输出；Header 前 JSON 错误与 Header 后断开分开验证，EOF 不作为成功 |
 | 消息准入 | 两实例竞争 idle 只接受一条消息；拒绝方无记录/模型调用；事务回滚消息和 running 一起回滚；确认、停止中或断线仍拒绝 M2，真正终态提交后才开放 |
 | 因果追加 | 延迟或失败的前置事件不被依赖项超越；同时间/回退时间不影响顺序；锁、序号、追加与提交同短事务，模型/工具不占锁 |
 | 数据库中断 | 消息 A、中断 B；回执前极快结束、重复检查、旧代次信号、数据库故障、A 失联及自然完成竞争均保持固定目标和真实终态；两响应终态 eventId 相同，中断不复制输出 |
@@ -306,7 +308,8 @@ HTTP 路径使用 `/campusclaw-service/v1`。内部开发阶段编号不作为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.11.0 | 2026-09-15 | 计划审核纳入四输入分派，复用固定续跑段与有序追加边界。 |
+| 0.12.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |
+| 0.11.0 | 2026-09-15 | 计划审核纳入五输入分派，复用固定续跑段与有序追加边界。 |
 | 0.10.0 | 2026-09-14 | 按接受、有序追加与跨实例控制收敛主文，分离源码证据并合并重复验收。 |
 | 0.9.2 | 2026-09-14 | 同步 Session 资源更新承载 plan/build 的计划模式边界。 |
 | 0.9.1 | 2026-09-14 | 关联保持元数据稳定的计划模式目标增量与统一架构对比。 |
