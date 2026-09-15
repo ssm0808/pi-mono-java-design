@@ -2,22 +2,22 @@
 
 [前端主设计](README.md) · [可操作工作台](plan-workbench.html) · [计划模式主设计](../06-CampusClaw计划模式/README.md)
 
-版本：1.2.0；日期：2026-09-15。性质：已确定的前端目标，target-only；原型使用本地合成事件，不代表部署验证。
+版本：1.3.0；日期：2026-09-15。性质：内部 Runtime 前端已实现计划、审核、问答与任务投影；具体切片见当前实现证据。Mate 公共接入仍为目标设计，原型不代表部署验证。
 
 本页维护 M07 的模式入口、方案阅读、审核和进度展示。模式、审核事务与恢复权威归 M01 的计划模式专题；精确字段归 Runtime 共享契约和审核增量，企业接入归 Mate 公共契约。本页不增加 HTTP API、Slash Command 或后端状态。
 
 ## 1. 源码与交互依据
 
-设计依据为设计仓 `761b7640f76b74162423c0372496cdef0b88d708` 上的计划模式 1.9.0、接口增量 1.9.0 和 AskUserQuestion 1.0.0。实现固定核验开发分支 `699f929f6826b595ed1d0162f6def66e2f84760b`，替代旧前端 `29ebec6a` 在下列路径上的差距结论；不据此推断主线合入或部署状态。另行观察正在开发的问答工作树，身份和文件摘要见[证据分册 §4](source-evidence.md#question-slash-evidence)。
+当前设计起点为 `pi-mono-java-design@3d76ec37311d134f27235e1ed6a2a35dd64ce6b2`，沿用计划模式与 AskUserQuestion 的已确认契约。内部前端实现起点为 `pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead`，当前交互补齐提交为 `fcae53829c2884ea1d3cc522c183f5a125a67f45`；完整提交、增量实现和验证范围统一见[当前实现证据](source-evidence.md#current-implementation)。此前 `699f929f` 和未提交问答工作树的记录保留在[历史证据](source-evidence.md#question-slash-evidence)，不用于判断当前是否已有问答能力。
 
 | 证据 | 已观察事实与适用边界 |
 |---|---|
-| Java `frontend/src/types/runtime.ts` · RuntimeSession/UserEvent/RuntimeEvent | 已有 mode、计划审核和 TODO；固定提交没有问题/答案类型。 |
-| `frontend/src/App.vue` · decidePlan/changeMode、template；`components/PlanCard.vue`、`ProgressDisclosure.vue` | 已有输入附近模式配置、完整方案、反馈、批准与进度；原型目标继续收敛为 Composer 内轻量模式菜单。 |
-| `frontend/src/runtime/eventStore.ts` · executionState/executionTodos/canReviewPlan | 已关联原根、待审方案和任务，历史就绪及控制锁参与审核；固定提交没有结构化问题投影。 |
-| `frontend/src/composables/useRuntimeApi.ts` · changeSetting/confirmPlan/recover | 已使用统一 Session POST、完整配置/ETag 和原根审核恢复；仍为内部 Runtime 适配。 |
-| `frontend/src/composables/useCommandComposer.ts`、`runtime/commands.ts` · choose/selectedError/freezeInvocation | 标签式 Slash、参数草稿、清单失效、类型化结果和独立执行已存在；不能再称为尚无 Slash。 |
-| 问答开发工作树 · `frontend/src/components/QuestionCard.vue`、`runtime/questionInteraction.ts` | 已新增三类输入、按会话/问题事件保存草稿及全部作答校验；未提交观察，不代表发布完成，本页目标补齐收起、焦点及 Slash 协同验收。 |
+| Java `frontend/src/types/runtime.ts` · RuntimeSession/UserEvent/RuntimeEvent | 已有 mode、计划审核、TODO 及问题/答案类型。 |
+| `frontend/src/App.vue`；`components/PlanCard.vue`、`ProgressDisclosure.vue`、`QuestionCard.vue` | 已装配完整方案、反馈、批准、显式进度与结构化问题；UI 增量状态见源码证据。 |
+| `frontend/src/runtime/eventStore.ts` · executionState/executionTodos/canReviewPlan/canAnswerQuestion | 已关联原根、待审方案、待答问题和任务，历史就绪及共享控制锁参与准入。 |
+| `frontend/src/composables/useRuntimeApi.ts` · changeSetting/confirmPlan/answerQuestion/recover | 已使用统一 Session POST、完整配置/ETag 以及原根审核与问答恢复；仍为内部 Runtime 适配。 |
+| `frontend/src/composables/useCommandComposer.ts`、`runtime/commands.ts` · choose/selectedError/freezeInvocation | 已有标签式 Slash、独立参数草稿、清单失效、类型化结果和运行中独立执行。 |
+| `frontend/src/runtime/questionInteraction.ts` · QuestionDraftStore/validateQuestionDrafts/questionAnswerEvent | 已实现按会话/问题事件隔离的三类输入与全部作答校验；接受事实来自权威答案事件。 |
 | Codex `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` · `codex-rs/tui/src/chatwidget/plan_implementation.rs` · selection_view_params | 完整方案后提供实施、清上下文实施、继续规划；实施动作提交带 Default mode 的用户消息。这是 TUI 行为证据，不是桌面像素规范。 |
 | 同一 Codex · `codex-rs/core/src/tools/handlers/plan.rs` · PlanHandler::handle_call；`codex-rs/protocol/src/plan_tool.rs` | update_plan 是 TODO 工具，Plan mode 调用被拒绝；进度显式发出 PlanUpdate，不从方案正文解析。CampusClaw 只借鉴阶段与展示分离，继续采用自己的提示词约束。 |
 | 同一 Codex · `codex-rs/app-server/README.md:1771,1789,1830,1924` | turn/plan/updated、plan Item、实验性 plan delta 与用户提问请求分离；不将四种对象合并为一种“计划”。 |
@@ -117,7 +117,7 @@
 
 ## 6. 组件与接入切片
 
-复用[公共接入的全局目标组件图](public-chat-alignment.md#3-全局目标结构)，不再维护一套局部现状类图。图中新增关系均为 target-only。
+复用[公共接入的全局目标组件图](public-chat-alignment.md#3-全局目标结构)，不再维护一套局部现状类图。图中的公共 Chat 分层是目标结构，内部 Runtime 行为的实现状态由源码证据判断，不因目标组件命名不同而标成未实现。
 
 | 切片 | 组件责任与先后依赖 | 验收重点 |
 |---|---|---|
@@ -140,4 +140,4 @@ Store 生命周期按 Chat 隔离，审核草稿与问题草稿再按各自 even
 
 1440/1024/768/390 px 检查常规、审核、修订、实施和恢复；键盘检查模式菜单、反馈取消、折叠与焦点恢复。主交互目标区至少 44 px，aria-live 只播报状态变化，reduced-motion 下取消旋转。对比度沿用主设计已核对色值。
 
-验收必须分别记录：设计原型状态测试、真实浏览器布局、PlantUML 生成与视觉、实现集成。原型通过不能证明 Java 计划实现或 Mate 公共桥接通过。已核验特性提交和开发工作树只证明所列源码范围，集成与发布需独立验证。
+验收必须分别记录：设计原型状态测试、真实浏览器布局、PlantUML 生成与视觉、实现集成。原型通过不能证明 Java 计划实现或 Mate 公共桥接通过。Claw 当前实现及验证范围见[当前实现证据](source-evidence.md#current-implementation)；Draft PR 中的代码不等于已合入或部署。

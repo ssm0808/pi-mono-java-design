@@ -4,10 +4,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 / 日期 | 1.4.0 / 2026-09-15 |
+| 版本 / 日期 | 1.5.0 / 2026-09-15 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
-| 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；本次读取的 frontend 文件无工作树修改 |
-| 性质 | target-only 产品前端；Thinking 原文规则同步 Mate 公共契约；Vue 与 Runtime 实现仍待同步，公司认证规则保持 |
+| 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 仅作历史迁移证据；当前 Runtime 前端见[实现状态](source-evidence.md#current-implementation) |
+| 性质 | Mate 公共接入为 target-only；内部 Runtime 前端已有实现，公司认证及 Chat/Session 边界保持 |
 | 契约依据 | [Mate Events 1.5.0](../../02-服务与接口/07-mate-service通用对话API/README.md)、[Claw POST 0.7.0](../01-CampusClaw多Agent运行时/chat-events-stream-design.md)、[Claw 历史 0.5.0](../01-CampusClaw多Agent运行时/chat-events-history-design.md) |
 
 Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
@@ -34,7 +34,7 @@ Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thin
 
 ## 2. 源码证据与差距
 
-以下文件均按上述 dfb90ca 完整读取，路径相对实现仓；这不是服务器部署或端到端通过证明。
+以下文件均按上述 dfb90ca 完整读取，是历史迁移差距，不能延伸为当前实现缺陷。当前 Runtime 前端已具备显式事件、统一 Session 更新、确认/问答、Composer 停止及只读恢复；公共 Gateway 仍待接入，详见[当前实现证据](source-evidence.md#current-implementation)。路径相对实现仓，源码不等于部署证明。
 
 | 路径 / 符号 | 已观察行为 | 目标差距与理由 |
 |---|---|---|
@@ -166,7 +166,7 @@ Assistant `content` 保留 rawMarkdown 并使用现有安全渲染骨架；User/
 
 Composer 模型/思考/模式、Builtin model/name/thinking/status 与恢复读取共用 ConfigurationStore。
 内部成功响应的完整 Session + ETag 必须原子替换；model 空参返回 Models 不覆盖 ETag。
-版本冲突刷新后显示实际值和用户原选择，保留草稿，用户再次确认才修改；不自动用新 ETag 重放 PUT。
+版本冲突刷新后显示实际值和用户原选择，保留草稿，用户再次确认才修改；不自动用新 ETag 重放更新请求。
 相同配置不提示“已变更”；切模型可能同时关闭 thinking，以完整资源为准，不把旧开关值覆盖回来。
 模型不可用/集合为空时解释状态并禁用修改；已有名称不应由 modelId 字符串猜出供应商或能力。
 已有思考原文不因关开关而删除。公开配置路径、错误及并发令牌表达未确认时使用能力门禁，不能泄漏内部 ETag。
@@ -201,6 +201,7 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.0 | 2026-09-15 | 区分已实现的 Runtime 前端与待接入的 Mate 公共能力。 |
 | 1.4.0 | 2026-09-15 | 配置入口收敛到 Composer，新增计划审核与任务展示的公共接入引用。 |
 | 1.3.0 | 2026-09-09 | 将停止收敛到 Composer 主操作并关联内部工作台恢复设计。 |
 | 1.2.0 | 2026-09-09 | 明确事件身份、工具业务参数与 Runtime 响应读取边界。 |

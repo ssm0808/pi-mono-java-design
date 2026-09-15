@@ -4,11 +4,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.6.0 |
+| 文档版本 | 1.7.0 |
 | 更新日期 | 2026-09-15 |
 | 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
 | Runtime 命令契约基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；B13 已确认 Skill SSE，Builtin JSON 不变 |
-| pi-mono-java 本次交互源码基线 | 开发分支 `699f929f6826b595ed1d0162f6def66e2f84760b`；早期结构证据保留在 §2.1 |
+| pi-mono-java 交互源码基线 | 当前 PR #301 提交见[实现状态](../../../01-总体架构/04-CampusClaw前端体验/source-evidence.md#current-implementation)；早期结构证据保留在 §2.1 |
 | 适用端 | CampusClaw Web 产品前端；内部 Runtime 调试台只作为源码证据和受控联调入口 |
 | 状态 | 用户已确认的目标交互；问答/审核协同原型已同步，Vue 源码范围见 §2.1；公共执行边界沿用原契约门禁 |
 
@@ -53,12 +53,11 @@ Builtin 命令结果不是 Assistant 消息，不进入 ConversationTimeline、S
 | `frontend/src/runtime/commands.ts`：parseCommand、filterCommands、freezeInvocation | 已有规范名称、原样参数与不可变提交快照 | 保留协议形态；不因按钮位置变化新增接口字段 |
 | `frontend/src/App.vue`：executeCommand；`frontend/src/composables/useRuntimeApi.ts`：executeCommand | 本地 Header 校验失败返回 uncertain；已有 Builtin JSON/Skill SSE 分路 | 校验失败显示本地错误并聚焦 Header；只有发出写请求且结果不可确定才进入恢复 |
 
-**当前固定源码观察（2026-09-15）**：开发分支 `699f929f6826b595ed1d0162f6def66e2f84760b` 已更新上述路径。`ComposerBox.vue` 的 + 为附件、输入首字符 / 打开清单，标签/参数分离，运行中 command-run 与停止同屏；`useCommandComposer.ts` 的 selectedError 保留过期参数并阻止执行；`useRuntimeApi.ts` 已有 listCommands、executeCommand、统一 Session POST、方案审核与任务投影。此范围不再存在表中旧的入口/停止缺口；产品组件分层、Mate 接入和问答协同仍须按目标验收。
+**计划交互历史观察（2026-09-15）**：开发分支 `699f929f6826b595ed1d0162f6def66e2f84760b` 已更新上述路径。`ComposerBox.vue` 的 + 为附件、输入首字符 / 打开清单，标签/参数分离，运行中 command-run 与停止同屏；`useCommandComposer.ts` 的 selectedError 保留过期参数并阻止执行；`useRuntimeApi.ts` 已有 listCommands、executeCommand、统一 Session POST、方案审核与任务投影。此范围不再存在表中旧的入口/停止缺口；产品组件分层、Mate 接入和问答协同仍须按目标验收。
 
-问答开发工作树已新增 QuestionCard 与 QuestionDraftStore，观察身份、摘要与边界见[前端源码证据 §4](../../../01-总体架构/04-CampusClaw前端体验/source-evidence.md#question-slash-evidence)。正在开发的文件不能当作发布或集成通过；本专项只修改设计和原型，不改该工作树。
+当前计划、问答、任务与 Slash 已在 `pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead` 集成，完整前端交互补齐与验证见[实现证据 §5](../../../01-总体架构/04-CampusClaw前端体验/source-evidence.md#current-implementation)。不能继续按早期工作树把问题卡或 Slash 标成未实现。公共 Mate 执行不在本次 Claw 开发范围。
 
-本次只修订前端交互和评审材料，不重新定义 Runtime、Mate 或 Skill 协议。图中独立组件与 Store 的拆分仍是 target-only，
-不能把当前 Composer 内已有的功能与目标组件分层混为一谈。
+图中独立组件与 Store 的精确拆分仍是推荐目标结构；实际实现使用 Composer、组合函数和事件投影分工，不因类名不同认定行为缺失。本专项不重新定义 Runtime、Mate 或 Skill 协议。
 
 **Codex 参考边界**：2026-09-15 重新核对 [OpenAI 官方 Slash commands 文档](https://learn.chatgpt.com/docs/reference/slash-commands)，
 公开文档支持“在 Composer 输入 `/`、选择命令或继续输入过滤”的入口模型。紧凑行、隐藏展示前缀、可删除标签、
@@ -304,7 +303,7 @@ Help `userCases` 未来若增加“填入输入框”，也只能把纯文本放
 [PlantUML 源码](./diagram.puml#L1) · [展开原尺寸 SVG](./target_slash_command_frontend_components.svg)
 
 图中的独立 Slash 组件、Store、Registry 和 Gateway 拆分均为 target-only。现有 App、Composer、Timeline 和状态对象是迁移落点；
-当前 Composer 已具备命令功能，本次目标将其展示更新为标签式编辑，图不代表这些独立组件已落地。
+当前 Composer 已具备标签式命令功能，图不代表所有独立组件均按所示类名落地。
 
 | 对象 | 生命周期 | 单一职责 |
 |---|---|---|
@@ -455,6 +454,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.0 | 2026-09-15 | 同步 Claw 命令与计划问答的实现状态及 Dock 协同验收。 |
 | 1.6.0 | 2026-09-15 | 对齐 Codex 就地命令交互，补齐计划问答等待、共享准入与轻量结果展示。 |
 | 1.5.1 | 2026-09-14 | 精简视觉决策叙述并重排命令组件与提交结果流程。 |
 | 1.5.0 | 2026-09-09 | 将 + 归为添加入口，命令由 / 触发，运行中独立执行并保留停止按钮。 |

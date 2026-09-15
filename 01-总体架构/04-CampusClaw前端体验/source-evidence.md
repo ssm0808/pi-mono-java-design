@@ -2,12 +2,12 @@
 
 [返回前端主设计](README.md)
 
-版本：1.2.0；更新日期：2026-09-15。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；当前设计以主设计为准，工作台与公共接入差距由各专项维护。
+版本：1.3.0；更新日期：2026-09-15。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；当前实现状态见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
 
 | 证据 | 基线 |
 |---|---|
 | 本次对齐基线 | 设计仓 `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；Mate Events 1.5.0、内部 Events B01～B15 与 Thinking 展示规则 |
-| 本次前端源码复核 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；`sessionIndex.upsert` 的前插行为使点选会话自动到顶部，直接 Name Controller 路由缺失；详见 [工作台专项](runtime-workbench-alignment.md) |
+| 历史前端源码复核 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；当时 `sessionIndex.upsert` 的前插行为使点选会话自动到顶部，直接 Name Controller 路由缺失；详见 [工作台专项](runtime-workbench-alignment.md) |
 | 本专题修改基线 | 设计仓 `ee2c8e61800d95e609982e3ee354b1ee06f70fe4`；该提交中的原路径为 `campusclaw-frontend-design/`，当前路径为 `01-总体架构/04-CampusClaw前端体验/` |
 | 早期设计仓基线 | `3cc234f068209c90639f812bcb8e1825301fa565` |
 | HTTP 设计风格基线 | 当前工作区 `chat-http-v1-design.md` 1.38.0；设计仓 `c250e3f07536871d3d676242e552a5eb4346b0c7` |
@@ -107,3 +107,46 @@ Java 固定源码 `699f929f6826b595ed1d0162f6def66e2f84760b`（开发分支，�
 Codex 固定基线仍为 `d58d0e5841e0de08e251673db2d5af8cf3a1ad51`。新增全量读取 `codex-rs/protocol/src/request_user_input.rs`（RequestUserInputArgs/RequestUserInputEvent）及 `codex-rs/core/src/tools/handlers/request_user_input.rs`（RequestUserInputHandler::handle_call）：根执行限制、模式相关阻塞、问题与回答模型可归因于源码。CampusClaw plan/build 均等待全部答案，固定三种输入与事件恢复是自身目标约束，不复制 Codex 的可选非阻塞、isSecret 或自动解决字段。
 
 官方 [Slash commands](https://learn.chatgpt.com/docs/reference/slash-commands) 与 [App Server](https://learn.chatgpt.com/docs/app-server) 于 2026-09-15 核对：输入 `/` 选择/过滤、命令随环境变化；提问是 experimental，resolved 也可由清理或中断产生。前者只支持发现方式，后者只支持公开协议边界；CampusClaw 颜色、选项卡片位置和单选/多选规则不是 Codex 官方 Token 或复制协议。
+
+<a id="current-implementation"></a>
+
+## 5. 当前实现状态（2026-09-15）
+
+设计起点为 `pi-mono-java-design@3d76ec37311d134f27235e1ed6a2a35dd64ce6b2`。实现起点为 `pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead`，位于 [Draft PR #301](https://github.com/superheromeZzh/pi-mono-java/pull/301) 的 `codex/plan-mode-runtime` 分支；“已实现”指已提交代码和下列验证范围，不等于已合入主线或已部署。
+
+| 能力 | 实现状态与源码证据（路径相对 pi-mono-java） |
+|---|---|
+| 模式、计划审核与实施进度 | 已实现。`frontend/src/composables/useRuntimeApi.ts` 的 changeSetting/confirmPlan、`runtime/eventStore.ts` 的 executionState/executionTodos/canReviewPlan、`components/PlanCard.vue` 与 ProgressDisclosure 从显式事件消费完整方案和任务快照。plan 不生成调研进度，批准后续跑原根。 |
+| AskUserQuestion | 已实现。`frontend/src/components/QuestionCard.vue`、`runtime/questionInteraction.ts`、`projectors/runtimeEventProjector.ts` 和 useRuntimeApi.answerQuestion 已接入三类问题、全批校验、权威答案、原根恢复与独立草稿；不解析工具文本生成问题。 |
+| Session 恢复与不确定结果 | 已实现。`frontend/src/composables/useWorkbenchSessions.ts` 的 resumeSession/refreshState 与 `useRuntimeApi.ts` 的 recover 只读历史和 Session，受 generation、分页完成与原执行状态控制，不自动重放 POST；本地索引保留恢复身份。 |
+| Composer 停止与 Slash | 已实现。`frontend/src/components/ComposerBox.vue` 的主按钮在发送位置切为停止，运行中命令独立执行；`composables/useCommandComposer.ts` 和 `runtime/commands.ts` 保留标签、参数、服务端顺序和冻结调用。 |
+| Header 校验与独立快照 | 已实现。`frontend/src/debugHeaders.ts` 的 validateDebugHeaders 先拒绝 CR/LF，再规范化空格/Tab；`App.vue` 的 submit/executeCommand/stop/decideTool/decidePlan/answerQuestion 六类动作独立读取开发 Header，读取与 Session 配置不携带这些自定义值。 |
+| DEV 按 IP 获取 Token | 已实现，真实认证中心未联调。`frontend/dev/authMiddleware.ts` 的 createAuthMiddleware/devAuthPlugin、`dev/authCenter.ts` 与 `vite.config.ts` 已装配仅本机开发接口；`components/DebugHeaders.vue` 处理回填及迟到响应。账号密码只由开发服务读取，不编入浏览器。 |
+
+上述起点的验证来自 [AskUserQuestion 实现记录](../06-CampusClaw计划模式/ask-user-question.md#2-基线与已观察实现)：前端 172 项、类型检查与构建通过，浏览器 18 项使用真实 Vue 与合成 HTTP 响应；实际 JAR HTTP 另外验证原执行问答/审核/任务事件闭环。前端布局用合成响应的结果不替代生产 Mate、真实认证中心或真实模型联调。
+
+### Claw 前端交互补齐
+
+当前实现提交为 `fcae53829c2884ea1d3cc522c183f5a125a67f45`，相对上述 `9f785bea` 仅修改前端及实施说明，仍由 Draft PR #301 交付。未新增依赖，未修改后端、公共契约或数据库。后续 `b9f51cd1` 仅校正实施说明中的事件数量与验证基线。
+
+| 已实现交互 | 源码证据（路径相对 pi-mono-java）与验收边界 |
+|---|---|
+| Composer 配置 | `frontend/src/components/ModeControl.vue`、`ComposerBox.vue`、`composables/useModeMenu.ts`：常驻模式菜单，支持方向键、Enter、Escape 与焦点返回；配置仍等待权威 Session/ETag，900 px 及以下收纳模型与思考。 |
+| 问答与方案卡 | `frontend/src/components/QuestionCard.vue`、`PlanCard.vue`、`runtime/planClipboard.ts`：问题可折叠，首个错误可达，接受后摘要最多三行、可展开完整权威答案；复制完整原始 Markdown，失败有反馈，不触发批准。 |
+| 任务与命令结果 | `frontend/src/composables/useDockDisclosures.ts`、`components/ProgressDisclosure.vue`、`CommandResultRegion.vue` 与 `runtime.css`：分开保留折叠偏好，Slash 清单临时收起两者；新根默认展开实施任务，终态自动收起，共用区域最高 30dvh。 |
+| 本地会话索引 | `frontend/src/runtime/sessionIndex.ts` 的 decodeLegacyIndex/patchMetadata/recordActivity/setPinned：v1 原序迁移到 v2；选择、恢复、改名和配置不改变活动排序，新建或接受新消息才更新；元数据补丁保留最新存储中的活动、置顶与 pending 身份。 |
+| Sidebar 操作 | `frontend/src/components/AppSidebar.vue`、`composables/useSessionRename.ts`、`useRuntimeApi.ts#renameSession`：搜索本地会话、置顶和直接改名；运行中可只改名称，统一 Session POST 使用同源 ETag；412 或不确定回执保留草稿，不自动重发。 |
+
+独立复核在该提交运行 Vitest **19 文件、189 项**、`npm run typecheck` 和生产构建，均通过；首次受限沙箱运行中的四项本地 HTTP 认证测试因监听限制未通过，允许回环监听后完整回归通过。无独立 lint script；未重跑本次未修改的 Java/数据库验证，上述 `9f785bea` 记录仍保留原提交范围。
+
+真实 Vue 浏览器配合合成 HTTP 验证模式键盘操作、问题校验/草稿/只读答案、计划复制与批准、运行中改名、412 和丢失回执后的无重放、置顶/搜索/刷新恢复，以及 Dock 偏好恢复。1440×900 时长命令结果与任务清单共用区域实测 270 px；840 px 使用窄屏设置，390×844 无横向溢出，复制/批准/停止按钮为 44 px。最终构建复验空名称错误聚焦，无浏览器控制台异常。合成夹具只证明这些前端行为，真实认证、系统输入法候选窗和移动端软键盘仍未联调。
+
+### 企业接入（本次范围外）
+
+| 项目 | 已核验边界与依赖 |
+|---|---|
+| Mate 公共 Chat Gateway | 当前 Vue 使用内部 `/campusclaw-service/v1` 请求级 SSE。公共提交 JSON、独立 GET stream、Chat 身份和恢复需要单独适配；[Mate 待决事项 C-001/C-003/C-004/C-006/C-007](../../02-服务与接口/07-mate-service通用对话API/协作/README.md) 尚涉及分页、创建/配置及控制/计划/问答映射，不可直接复用内部字段。 |
+| 附件上传 | Composer 未接真实上传。[附件服务](../../02-服务与接口/01-CampusMate附件服务/README.md) 以公共 Chat 归属并在 READY 后绑定；内部 Session ID 不能当成 chat_id，也不能用本地 fileId 模拟成功。 |
+| 面向用户的 Agent 中心 | `mate-agent-definition-service@956b547f5ca12ca89e68f73012f92a4406b0c9fa` 的 `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java#listAgents` 是管理用元数据列表，返回完整 systemPrompt、permission 和绑定信息。它不是已确认的用户可用 Agent 目录，也没有公共 Chat 创建链路；不能直接打开生产目录入口。 |
+
+Mate 示例仓上述 HEAD 于 2026-09-15 与远端 HEAD 核对一致，Controller 清单只有 AgentDefinitionController 和 `agentdefinition/modelmanager/controller/LlmChatController.java`，所查源码没有公共 Chat/附件 Controller。该结论仅限此仓与提交，不证明其他企业仓库或部署不存在这些服务。本次只实现 Claw 前端，不开发 Mate 接入。后续接入需补充对应实现位置、身份与已确认契约，再进行两跳验收；现有禁用入口保留具体原因。

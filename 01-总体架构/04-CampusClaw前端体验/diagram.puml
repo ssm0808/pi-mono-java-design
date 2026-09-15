@@ -42,13 +42,13 @@ end note
 @enduml
 
 @startuml frontend_debug_header_flow
-' Source baseline: pi-mono-java@7f1126262b16458e430c1a70aba9936e26391385
+' Source baseline: pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead
 ' Previous UI baseline: 4cc8dd86f601417c22cf9306e52152acbb59bb60
 ' Source evidence: frontend/src/components/DebugHeaders.vue snapshot
-' Source evidence: frontend/src/App.vue submit, executeCommand, stop, decideTool
+' Source evidence: frontend/src/App.vue submit, executeCommand, stop, decideTool, decidePlan, answerQuestion
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts writeHeaders, submitStream, executeCommand
-' Observed behavior: each of four write actions freezes current valid custom headers.
-' Target-only changes: whitespace validation and local AuthCenter helper.
+' Observed behavior: each of six write actions freezes current valid custom headers.
+' Observed behavior: debugHeaders.ts validates whitespace; dev/authMiddleware.ts registers the DEV helper.
 ' Design reason: edits affect new requests without mutating an accepted execution.
 title Internal debug headers - request snapshots
 top to bottom direction
@@ -59,14 +59,14 @@ component "Memory Header Store\nclear on reload" as Store
 component "Per-request snapshot\nimmutable" as Snapshot
 component "Write adapter\nfixed protocol headers" as Adapter
 component "Runtime API\nexisting internal contract" as Runtime
-component "Local auth helper\n[target-only, DEV]" as Auth
+component "Local auth helper\n[implemented, DEV]" as Auth
 actor Developer
 Developer --> Editor : edit or get token
 Auth --> Editor : token for matching IP and revision
 Editor --> Store : valid enabled values
 Store --> Snapshot : each new write action
 Snapshot --> Adapter
-Adapter --> Runtime : message / command / interrupt / confirmation
+Adapter --> Runtime : message / command / interrupt\ntool decision / plan decision / question answer
 note bottom of Store
   Empty presets count as zero.
   Normalize SP and HTAB; reject CR/LF first.
@@ -214,13 +214,13 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-' Source baseline: pi-mono-java 699f929f6826b595ed1d0162f6def66e2f84760b. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target displays original model reasoning.
-' Source evidence: frontend/src/App.vue submit; frontend/src/composables/useRuntimeApi.ts loadHistory, requestRaw.
+' Source baseline: pi-mono-java 9f785bea3ffff8f6566cd1b2727285af46a2aead. Thinking-only evidence: 4cc8dd86 frontend/src/components/ThinkingDisclosure.vue template; target displays original model reasoning.
+' Source evidence: frontend/src/App.vue submit; frontend/src/composables/useRuntimeApi.ts loadHistory, request.
 ' Source evidence: frontend/src/projectors/runtimeEventProjector.ts projectRuntimeEvents; frontend/src/types/product.ts.
 ' Source evidence: frontend/src/runtime/eventStore.ts executionState, reconcileEvents; types/runtime.ts RuntimeEvent.
-' Observed behavior: PlanCard, ProgressDisclosure, mode and Slash exist in this development commit.
+' Observed behavior: PlanCard, QuestionCard, ProgressDisclosure, mode and Slash exist in this development commit.
 ' Source: frontend/src/components/PlanCard.vue; ProgressDisclosure.vue; composables/useCommandComposer.ts.
-' Target question extension: complete question events, exact answers and a shared pending-interaction gate.
+' Public integration target: complete question events, exact answers and a shared pending-interaction gate.
 ' Codex d58d0e58: codex-rs/tui/src/chatwidget/plan_implementation.rs selection_view_params.
 ' Java divergence: exact proposal approval resumes the original execution, not a new user message.
 ' Target-only architecture: every class and relationship below is a product integration target.
@@ -389,8 +389,8 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-' Source baseline: pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20
-' Source evidence: frontend/src/App.vue resumeSession and sidebar select
+' Source baseline: pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead
+' Source evidence: frontend/src/composables/useWorkbenchSessions.ts resumeSession; frontend/src/App.vue sidebar select
 ' Source evidence: frontend/src/runtime/sessionIndex.ts select and upsert
 ' Source evidence: frontend/src/composables/useWorkbenchSessions.ts recordSession and touchCurrentThread
 ' Source evidence: frontend/src/components/AppSidebar.vue threads and select
@@ -399,14 +399,14 @@ hide empty members
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionConfigurationController.java
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts recover, canSend, canStop
 ' Source evidence: frontend/src/components/DebugHeaders.vue snapshot
-' Source evidence: frontend/vite.config.ts defineConfig; no auth middleware exists
-' Observed behavior: upsert prepends after selection; no pin field or direct HTTP name route exists.
-' Target-only architecture: every class and relationship below is proposed.
+' Source evidence: frontend/vite.config.ts defineConfig; frontend/dev/authMiddleware.ts devAuthPlugin
+' Observed behavior: recovery, Session POST and DEV auth exist; see source-evidence.md for UI alignment status.
+' Target responsibility view: named facades may be implemented by functions; see source-evidence.md for actual symbols.
 ' Product constraint: selection preserves order; pin and rename are explicit; credentials stay in DEV.
 ' Design reason: one coordinator owns execution state and request generations;
 ' persistent metadata and transient credentials have separate lifecycles.
-title Runtime Workbench - Target Classes
-package "Browser page [target-only]" {
+title Runtime Workbench - Target Responsibilities
+package "Browser page [target responsibilities]" {
   class WorkbenchView <<view>>
   class Composer <<view>>
   class HeaderEditor <<DEV view>>
@@ -443,13 +443,13 @@ package "Browser page [target-only]" {
   interface RuntimeGateway
   class RuntimeHttpGateway <<HTTP adapter>>
 }
-package "Local Vite serve process [target-only]" {
+package "Local Vite serve process [implemented capability]" {
   class DevAuthMiddleware <<loopback boundary>>
   class AuthCenterClient <<HTTPS adapter>>
   class LocalAuthConfig <<server-only credentials>>
 }
 class "Browser localStorage\nSession metadata only" as Storage <<persistent resource>>
-class "Runtime Session API\nexisting plus target Session POST" as Runtime <<external API>>
+class "Runtime Session API\nincluding Session POST" as Runtime <<external API>>
 class "AuthCenter\nlogin and Set-Cookie" as AuthCenter <<external API>>
 WorkbenchView *-- Composer
 WorkbenchView *-- HeaderEditor
@@ -483,18 +483,18 @@ endlegend
 @enduml
 
 @startuml target_plan_interaction
-' Source baseline: pi-mono-java 699f929f6826b595ed1d0162f6def66e2f84760b.
+' Source baseline: pi-mono-java 9f785bea3ffff8f6566cd1b2727285af46a2aead.
 ' Source evidence: frontend/src/runtime/eventStore.ts executionState and reconcileEvents.
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts recover, submitStream and consume.
 ' Codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51:
 ' codex-rs/tui/src/chatwidget/plan_implementation.rs selection_view_params;
 ' codex-rs/core/src/tools/handlers/plan.rs PlanHandler::handle_call.
-' Observed behavior: Java has plan UI, Slash and progress; structured questions are a later extension.
+' Observed behavior: the internal frontend has plan UI, Slash, progress and structured questions.
 ' Source: frontend/src/components/PlanCard.vue; runtime/eventStore.ts; types/runtime.ts.
 ' Java divergence: approve resumes the original root execution; no clear-context path.
 ' Design reason: proposal, decision receipt, execution progress and terminal are separate facts.
-' All interactions below are target-only UI projections, not HTTP enums.
-title Plan interaction - target-only frontend
+' Internal flow is implemented; public transport remains target-only. View states are not HTTP enums.
+title Plan interaction - authority and UI
 skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName SansSerif
