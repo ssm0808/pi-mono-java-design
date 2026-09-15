@@ -2,7 +2,7 @@
 
 [返回前端主设计](README.md)
 
-版本：1.1.0；更新日期：2026-09-15。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；当前设计以主设计为准，工作台与公共接入差距由各专项维护。
+版本：1.2.0；更新日期：2026-09-15。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；当前设计以主设计为准，工作台与公共接入差距由各专项维护。
 
 | 证据 | 基线 |
 |---|---|
@@ -73,10 +73,37 @@
 
 <a id="plan-frontend-evidence"></a>
 
-## 3. 计划模式前端核验（2026-09-15）
+## 3. 计划模式前端历史核验（2026-09-15）
 
 前端设计基线 `pi-mono-java-design@42243077d8605024a5d4470867525879b0d1a088`；Java 核验 `origin/main@29ebec6a8cad99896414211cda28c6fffec71bee`。旧前端基线 `510d882ca45541e0086586dab89c429c5a18cf20` 仅保留原范围。全量读取本次涉及的 App、ComposerBox、ConversationTimeline、runtime/product 类型、eventStore、runtimeEventProjector、useRuntimeApi；后端读取 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java`，create/get/delete 尚无通用 update。该范围尚无计划类型与 UI，不证明其他特性分支或部署不支持计划模式。
 
 Codex 固定源码仍为 `d58d0e5841e0de08e251673db2d5af8cf3a1ad51`，通过 git show 读取，未使用工作树 HEAD `be33f80b` 替换。完整读取 `codex-rs/tui/src/chatwidget/plan_implementation.rs`、`codex-rs/core/src/tools/handlers/plan.rs`、`codex-rs/protocol/src/plan_tool.rs`，定向读取 `codex-rs/app-server/README.md` 的 plan/Item/提问协议段。符号与结论见[计划交互 §1](plan-interaction.md#1-源码与交互依据)。前者证明 TUI 的实施选择，不能当作桌面前端源码；具体卡片尺寸与位置是 CampusClaw 目标设计。
 
 官方 [Features](https://learn.chatgpt.com/docs/features) 与 [App Server](https://learn.chatgpt.com/docs/app-server) 于 2026-09-15 重新核对。前者显示侧栏与 Add/Plan mode；后者区分方案 Item、delta、任务更新与提问。当前公开文档与固定源码可能不同，分别使用，不升级固定 commit，也不推断服务端存储。
+
+
+<a id="question-slash-evidence"></a>
+
+## 4. 计划、问答与 Slash 的前端核验（2026-09-15）
+
+设计仓基线 `761b7640f76b74162423c0372496cdef0b88d708`；计划/问答目标来自计划模式 1.9.0、interface-delta 1.9.0 和 AskUserQuestion 1.0.0；核验时另有只涉及首版安装 SQL 的工作树增量，不纳入本前端任务。
+
+Java 固定源码 `699f929f6826b595ed1d0162f6def66e2f84760b`（开发分支，代码提交 `17dbb20a`）；旧 `29ebec6a` 的无计划前端结论不延伸到该提交。全量读取以下仓库相对路径：
+
+- `frontend/src/App.vue`：decidePlan、changeMode、配置/PlanCard/进度装配。
+- `frontend/src/components/ComposerBox.vue`、`PlanCard.vue`、`ProgressDisclosure.vue`：标签式命令、同位置停止、按方案身份隔离反馈、安全 Markdown、显式任务摘要。
+- `frontend/src/composables/useRuntimeApi.ts`、`useCommandComposer.ts`：统一 Session POST、confirmPlan/recover、独立草稿和清单失效。
+- `frontend/src/runtime/commands.ts`、`eventStore.ts`、`types/runtime.ts`、`projectors/runtimeEventProjector.ts`：freezeInvocation、expectedKind、executionState/executionTodos/canReviewPlan 与方案/任务事件投影。
+
+上述源码已有计划、审核与 Slash，固定提交没有问题/答案事件类型。公开 Mate Gateway 与桌面精确像素未由这些路径证明。
+
+另观察同一实现仓问答开发工作树（HEAD `79cfa34daef20adfa13ae1bee7cc9c41ba5c9dc7`，未提交增量），全量读取两个文件；它们已实现问题输入与草稿校验，不能表述为“前端完全未开发”，也不视为已发布。以下 SHA-256 固定本次观察，不追踪进行中的后续修改：
+
+| 仓库相对路径 / 符号 | SHA-256 |
+|---|---|
+| `frontend/src/components/QuestionCard.vue` · state / choose / writeCustom / submit / template | `95e2d8107d55d193e666c8d7bb8dde5707ba7371fb0710be11a2b0bf549d7408` |
+| `frontend/src/runtime/questionInteraction.ts` · QuestionDraftStore / validateQuestionDrafts / questionAnswerEvent | `3563257198efd22ce5664c3e5236b3050f32362eb666bb8a3f4ef37a621d97b1` |
+
+Codex 固定基线仍为 `d58d0e5841e0de08e251673db2d5af8cf3a1ad51`。新增全量读取 `codex-rs/protocol/src/request_user_input.rs`（RequestUserInputArgs/RequestUserInputEvent）及 `codex-rs/core/src/tools/handlers/request_user_input.rs`（RequestUserInputHandler::handle_call）：根执行限制、模式相关阻塞、问题与回答模型可归因于源码。CampusClaw plan/build 均等待全部答案，固定三种输入与事件恢复是自身目标约束，不复制 Codex 的可选非阻塞、isSecret 或自动解决字段。
+
+官方 [Slash commands](https://learn.chatgpt.com/docs/reference/slash-commands) 与 [App Server](https://learn.chatgpt.com/docs/app-server) 于 2026-09-15 核对：输入 `/` 选择/过滤、命令随环境变化；提问是 experimental，resolved 也可由清理或中断产生。前者只支持发现方式，后者只支持公开协议边界；CampusClaw 颜色、选项卡片位置和单选/多选规则不是 Codex 官方 Token 或复制协议。

@@ -13,13 +13,19 @@
 @media(max-width:900px){.app{display:block}.workspace{height:100%}.rail{display:none;position:fixed;inset:0 auto 0 0;width:250px;z-index:20;box-shadow:4px 0 30px #0002}.rail[data-open=true]{display:flex}#nav-open,#nav-close{display:block}#nav-close{margin-left:auto}.demo .divider{display:none}.header{height:60px}.desktop-config{display:none}#settings-toggle{display:block}.thread{padding:14px 20px 28px}.dock{padding:0 20px 16px}.settings{display:block}}
 @media(max-width:480px){.demo{padding:8px;gap:4px}.demo>strong{width:100%}.demo button{padding:5px 7px}.header{padding:0 12px}.header h1{font-size:14px}.header-title{gap:4px}.header .small{display:none}.thread{padding:14px 14px 24px}.user{max-width:94%;font-size:13px}.plan-body{padding:4px 16px 20px}.plan>summary,.plan-footer{padding:12px 14px}.plan-actions{gap:12px}.review-buttons{width:100%}.review-buttons button{flex:1}h2{font-size:19px}.dock{padding:0 12px 12px}.composer{padding:9px}.toolbar{gap:0}.toolbar button{padding:8px}.composer-note{text-align:left;padding-left:8px}.plan-badge{font-size:10px}.progress li span:last-child{font-size:10px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+.demo-panel{flex-shrink:0;background:#fff;border-bottom:1px solid var(--line)}.demo-panel>summary{min-height:44px;padding:10px 20px;font-size:12px;cursor:pointer}.demo{border:0;padding-top:0}.question-card{border:1px solid var(--line);border-radius:12px;margin:18px 0;overflow:hidden}.question-card>summary{display:flex;gap:12px;justify-content:space-between;align-items:center;min-height:56px;padding:14px 20px;cursor:pointer;flex-wrap:wrap}.question-card fieldset{min-width:0;border:0;border-top:1px solid var(--line);padding:20px;margin:0}.question-card legend{float:left;width:100%;margin-bottom:12px;font-weight:600;overflow-wrap:anywhere}.question-card legend small{display:block;color:var(--muted);font-weight:400}.question-options{clear:both;display:grid;gap:7px}.question-option{display:flex;align-items:flex-start;gap:10px;min-height:44px;padding:11px 12px;border:1px solid var(--line);border-radius:9px;cursor:pointer;overflow-wrap:anywhere}.question-option:has(input:checked){background:var(--soft);border-color:#96867b}.question-option input{margin:5px 0 0;accent-color:var(--action);flex-shrink:0}.question-option small{display:block;color:var(--muted);font-weight:400}.question-custom{clear:both;display:block;margin-top:12px;font-size:12px;color:var(--muted)}.question-custom textarea{display:block;width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);resize:vertical;min-height:68px;margin-top:7px;color:var(--ink)}.question-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:14px 20px;border-top:1px solid var(--line)}.question-card fieldset:disabled .question-option{cursor:default}.question-card input:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.composer{position:relative}.command-palette{position:absolute;z-index:8;left:0;right:0;bottom:calc(100% + 8px);max-height:min(360px,45dvh);overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #2c272417;padding:6px}.command-option{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;min-height:44px;padding:10px 12px;border-radius:8px;cursor:pointer;align-items:center}.command-option[aria-selected=true]{background:var(--soft)}.command-option strong{font:600 13px ui-monospace,monospace;overflow-wrap:anywhere}.command-option span{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.command-chip{display:inline-flex;border:1px solid var(--line);background:var(--rail);border-radius:9px;max-width:100%}.command-chip button:first-child{font:600 13px ui-monospace,monospace;overflow-wrap:anywhere}.command-result{margin-bottom:8px;border-bottom:1px solid var(--line);font-size:12px}.command-result summary{min-height:44px;padding:10px;cursor:pointer;color:var(--muted)}.command-result .row{max-height:15dvh;overflow:auto;padding:0 12px 8px;justify-content:space-between}.command-result p{white-space:pre-wrap;overflow-wrap:anywhere}#command-empty{padding:14px}.command-chip+label+textarea[hidden]{display:none}
+@media(max-width:480px){.question-card fieldset{padding:16px}.question-card>summary,.question-footer{padding:12px 16px}.command-option{grid-template-columns:minmax(0,1fr);gap:3px}.demo-panel>summary{padding:10px 12px}}
+.dock:has(#command-result:not([hidden])) .progress ul{max-height:15dvh}
+.question-card>summary{list-style:none}.question-card>summary::-webkit-details-marker{display:none}.question-card>summary:after{content:"⌄";color:var(--muted)}.question-card[open]>summary:after{content:"⌃"}#question-status{margin-left:auto}
 </style>
 </head>
 <body>
-<div class="demo" aria-label="设计演示控制，不属于产品">
- <strong>交互原型 · 1.0.0</strong><select id="scenario" aria-label="演示场景"><option value="review">待审核方案</option><option value="idle">普通对话</option><option value="planIdle">计划模式空闲</option><option value="research">调研中</option><option value="clarifying">澄清问题</option><option value="executing">实施进度</option><option value="recovering">恢复审核</option><option value="stopped">已停止</option></select>
+<details class="demo-panel" open><summary>原型场景与模拟事件 <span class="muted">· 设计评审</span></summary><div class="demo" aria-label="设计演示控制，不属于产品">
+ <strong>交互原型 · 1.2.0</strong><select id="scenario" aria-label="演示场景"><option value="review">待审核方案</option><option value="idle">普通对话</option><option value="planIdle">计划模式空闲</option><option value="research">调研中</option><option value="question">计划中提问</option><option value="buildQuestion">实施中提问</option><option value="clarifying">无工具时普通澄清</option><option value="slash">Slash 命令</option><option value="executing">实施进度</option><option value="recovering">恢复审核</option><option value="stopped">已停止</option></select>
  <button id="receipt" class="secondary">模拟服务端回执</button><button id="advance">下一步事件</button><button id="disconnect">断开连接</button><button id="other-client">其他端已处理</button><button id="reject-mode">模式更新失败</button><span class="divider"></span><a href="plan-interaction.md">设计说明</a><span class="muted">本地模拟，无网络或工具执行</span>
-</div>
+</div></details>
 <div class="app" id="app">
  <aside class="rail" id="rail" aria-label="会话导航">
   <div class="brand"><img src="campusclaw-mark-o1.png" alt=""><strong>CampusClaw</strong><button id="nav-close" aria-label="关闭导航">×</button></div>
@@ -46,13 +52,15 @@
      <p id="decision-status" class="small muted" role="status" aria-live="polite" tabindex="-1"></p><p id="copy-state" class="small muted" role="status" hidden></p>
     </div>
    </details>
+   <details id="question-card" class="question-card" hidden open><summary><strong id="question-title">需要你的回答</strong><span id="question-status" class="small muted" role="status" tabindex="-1"></span></summary><form id="question-form"><div id="question-fields"></div><div class="question-footer"><span class="small muted">提交后继续当前任务</span><button id="question-submit" class="primary" type="submit">提交全部回答</button></div></form></details>
    <section class="tool-permission" id="permission" hidden><strong>工具授权 · 调整端口配置</strong><p>设备：SW-DC-01 · 端口：GigabitEthernet0/0/24</p><p class="muted small">方案已批准。本次操作会修改设备配置，仍需你的工具授权。</p><div class="row"><button id="tool-allow" class="primary">允许本次操作</button><button id="tool-deny" class="secondary">拒绝</button></div></section>
    <p id="result" class="result" hidden></p>
   </div></div>
   <div class="dock">
    <details class="progress" id="progress" open><summary id="progress-summary">实施进度</summary><ul id="todos"></ul></details>
-   <div class="composer"><label for="draft" class="sr-only">消息草稿</label><textarea id="draft" rows="2" placeholder="补充目标、约束或期望结果…"></textarea>
-    <div class="toolbar"><button aria-label="添加附件，暂未接入" title="原型未接入附件上传" disabled>＋</button><div class="mode-wrap"><button id="mode" aria-haspopup="menu" aria-expanded="false" aria-controls="mode-menu">计划模式 ⌄</button><div class="mode-menu" id="mode-menu" role="menu" hidden><button id="mode-build" role="menuitemradio" aria-checked="false">普通模式<small>直接推进任务</small></button><button id="mode-plan" role="menuitemradio" aria-checked="true">计划模式<small>先形成方案，审核后实施</small></button></div></div><button id="model" class="desktop-config" title="演示模型设置">模型 A ⌄</button><button id="thinking" class="desktop-config" aria-pressed="true">深度思考</button><button id="settings-toggle" aria-expanded="false" aria-controls="settings">设置</button><button id="send" class="primary" aria-label="停止生成">■</button></div>
+   <details id="command-result" class="command-result" hidden open><summary>命令结果 · 仅当前页面</summary><div class="row"><p id="command-result-text"></p><button id="command-result-close" aria-label="关闭命令结果">×</button></div></details>
+   <div class="composer"><div id="command-palette" class="command-palette" hidden><div id="command-list" role="listbox" aria-label="可用命令"></div><p id="command-empty" class="muted" hidden>没有匹配命令</p></div><div id="command-chip" class="command-chip" hidden><button id="command-name" aria-label="更换命令"></button><button id="command-remove" aria-label="移除命令">×</button></div><label for="draft" class="sr-only">消息草稿</label><textarea id="draft" rows="2" placeholder="补充目标、约束或期望结果…"></textarea>
+    <button id="command-run" class="secondary" hidden>执行命令</button><p id="command-error" class="error" role="alert" hidden></p><div class="toolbar"><button aria-label="添加附件，暂未接入" title="原型未接入附件上传" disabled>＋</button><div class="mode-wrap"><button id="mode" aria-haspopup="menu" aria-expanded="false" aria-controls="mode-menu">计划模式 ⌄</button><div class="mode-menu" id="mode-menu" role="menu" hidden><button id="mode-build" role="menuitemradio" aria-checked="false">普通模式<small>直接推进任务</small></button><button id="mode-plan" role="menuitemradio" aria-checked="true">计划模式<small>先形成方案，审核后实施</small></button></div></div><button id="model" class="desktop-config" title="演示模型设置">模型 A ⌄</button><button id="thinking" class="desktop-config" aria-pressed="true">深度思考</button><button id="settings-toggle" aria-expanded="false" aria-controls="settings">设置</button><button id="send" class="primary" aria-label="停止生成">■</button></div>
     <div id="settings" class="settings" hidden><span class="small muted" id="config-current">模型 A · 深度思考开启</span><p class="small muted">模型与思考控件复用完整会话配置；运行中不可修改。</p></div>
     <p id="input-error" class="error" role="alert" hidden></p>
    </div><p id="input-help" class="composer-note">可保留草稿；审核或停止后继续。</p>
@@ -67,10 +75,12 @@
  const initialPlan = '# 东区网络告警排查与处置\n\n先确认影响范围和变更原因，再在允许的维护窗口内处理，最后核验告警与业务恢复情况。\n\n## 执行步骤\n\n1. 核对受影响设备、上联链路与告警发生时间。\n2. 比对近期配置变更，确认故障原因与影响范围。\n3. 在维护窗口内实施处置；需要权限时单独请求工具授权。\n4. 复核告警、链路与业务状态，整理结果和回退记录。\n\n## 验证与回退\n\n以告警恢复、链路状态和业务验证结果判断处置效果。验证未通过时停止后续变更，按已确认的回退步骤处理并报告结果。';
  const taskText = ['核对影响范围与近期变更', '实施处置并验证恢复', '整理结果与回退记录'];
  let phase, mode, plan, planStatus, pending, todos, rootId, generation = 0, priorPhase, composing = false, progressStep = 0, showFeedback = false, view = 'alarm';
+ let question = null, questionAnswers = null, questionDrafts = [], questionClosed = false, questionOther = false;
+ const cmd = {active:false,palette:false,selected:null,args:"",query:"/",message:"",index:0,replacement:null};
  let receipts = 0, writes = 0, requestedMode = '', staleTarget = false, result = '', messageSnapshot = '', seen = new Set();
- const labels = {idle:'空闲',planIdle:'计划模式',research:'正在制定方案',clarifying:'等待你的补充',review:'等待方案审核',decisionPending:'正在提交决定',revising:'正在修改方案',executing:'正在实施',toolReview:'等待工具授权',toolPending:'正在提交工具决定',toolDenied:'工具已拒绝，等待结果',stopping:'正在请求停止',stopAccepted:'停止处理中',recovering:'正在核对状态',uncertain:'结果待核对',stopped:'已停止',done:'已完成',modePending:'正在切换模式',submitting:'正在提交'};
+ const labels = {question:'等待你的回答',questionPending:'正在提交回答',questionAnswered:'回答已接受',commandPending:'正在运行命令',idle:'空闲',planIdle:'计划模式',research:'正在制定方案',clarifying:'等待你的补充',review:'等待方案审核',decisionPending:'正在提交决定',revising:'正在修改方案',executing:'正在实施',toolReview:'等待工具授权',toolPending:'正在提交工具决定',toolDenied:'工具已拒绝，等待结果',stopping:'正在请求停止',stopAccepted:'停止处理中',recovering:'正在核对状态',uncertain:'结果待核对',stopped:'已停止',done:'已完成',modePending:'正在切换模式',submitting:'正在提交'};
  const ready = () => ['idle','planIdle','clarifying','stopped','done'].includes(phase);
- const canStop = () => ['research','review','revising','executing','toolReview','toolDenied'].includes(phase);
+ const canStop = () => ['research','review','revising','executing','toolReview','toolDenied','question','questionAnswered'].includes(phase);
  function renderTasks() {
   $('progress').hidden = todos === null;
   $('todos').replaceChildren();
@@ -109,15 +119,19 @@
   $('tool-allow').disabled = $('tool-deny').disabled = phase !== 'toolReview';
   $('result').hidden = !result; $('result').textContent = result;
   $('receipt').disabled = !pending; $('reject-mode').disabled = phase !== 'modePending';
-  $('advance').disabled = !['research','revising','executing','stopAccepted','toolDenied'].includes(phase);
-  $('other-client').disabled = !plan || !['review','decisionPending','recovering','uncertain'].includes(phase);
+  $('advance').disabled = !['research','revising','executing','stopAccepted','toolDenied','questionAnswered'].includes(phase);
+  $('other-client').disabled = !(plan || question) || !['review','decisionPending','question','questionPending','recovering','uncertain'].includes(phase);
   $('disconnect').disabled = ['recovering','uncertain'].includes(phase);
   $('commentary').textContent = {idle:'可以从一个具体目标开始。',planIdle:'描述目标和约束，我会先调研并形成可审核的方案。',clarifying:'处置是否需要安排在维护窗口内？请补充可操作的时间范围。',research:'我正在核对告警与近期变更，随后整理排查、验证和回退步骤。',review:'方案已整理完成，请检查实施范围和验证方式。',decisionPending:'正在等待审核决定的接受结果。',revising:'已收到修改意见，我会更新方案并重新提交审核。',executing:'方案已批准，正在推进实施；需要工具授权时会单独提示。',toolReview:'接下来需要调整端口配置，请确认本次工具操作。',toolPending:'正在等待工具决定回执。'}[phase] || '';
   $('analysis').hidden = $('activity').hidden = ['idle','planIdle','submitting','modePending'].includes(phase);
   $('activity-title').textContent = ['research','revising'].includes(phase) ? '正在核对告警与设备状态' : '已查询告警与设备状态';
-  renderTasks();
+  renderTasks(); renderQuestionState(); renderCommands();
  }
  function reset(scene = 'review') {
+  const buildQuestion = scene === 'buildQuestion', slashScene = scene === 'slash';
+  scene = buildQuestion ? 'question' : slashScene ? 'planIdle' : scene;
+  question=null; questionAnswers=null; questionDrafts=[]; questionClosed=false; questionOther=false;
+  clearCommand(false);$('command-result').hidden=true;
   generation++; $('user-message').hidden=false; phase = scene; mode = ['idle','executing','done','stopped'].includes(scene) ? 'build' : 'plan';
   rootId = `demo-root-${generation}`; plan = ['review','executing','recovering','stopped'].includes(scene) ? {eventId:`demo-plan-${generation}`,content:initialPlan} : null;
   planStatus = scene === 'executing' || scene === 'stopped' ? '已批准' : scene === 'recovering' ? '待核对' : '待审核';
@@ -127,7 +141,10 @@
   $('plan').open = scene !== 'executing' && scene !== 'stopped'; $('progress').open = true; closeMode(false);
   if (scene === 'executing' || scene === 'stopped') { todos = taskText.map((content,i) => ({content,status:i === 0?'completed':i === 1?'in_progress':'pending'})); progressStep = 1; }
   if (scene === 'stopped') result = '任务已停止。已完成的工作与最后进度保留；没有把其余任务标为完成。';
+  if(buildQuestion) {mode='build';todos=taskText.map((content,i)=>({content,status:i===0?'completed':i===1?'in_progress':'pending'}));}
+  if(scene==='question') setQuestion(questionFixture());
   render();
+  if(slashScene) {cmd.message=$('draft').value;cmd.active=true;cmd.palette=true;$('draft').value='/';renderCommands();}
  }
  function closeMode(focus = true) { $('mode-menu').hidden = true; $('mode').setAttribute('aria-expanded','false'); if(focus) $('mode').focus(); }
  function write(kind, data = {}) { pending = Object.freeze({kind,generation,rootId,...data}); writes++; }
@@ -141,6 +158,8 @@
  function receipt() {
   if(!pending || pending.generation !== generation) return;
   const accepted = pending; pending = null; receipts++;
+  if(accepted.kind === 'question') { if(accepted.target!==question?.eventId)return; questionAnswers=accepted.answers;phase='questionAnswered';$('question-card').open=false; }
+  if(accepted.kind === 'command') { phase=accepted.from;showCommandResult(accepted);clearCommand(); }
   if(accepted.kind === 'mode') { mode=accepted.mode; phase=mode==='plan'?'planIdle':'idle'; }
   if(accepted.kind === 'message') { $('user-message').hidden=false; if($('draft').value === messageSnapshot) $('draft').value=''; $('user-message').textContent=messageSnapshot; phase=mode==='plan'?'research':'executing'; }
   if(accepted.kind === 'plan') {
@@ -157,6 +176,7 @@
   seen.add(event.eventId); todos=event.todos.map(t => ({...t})); render();
  }
  function advance() {
+  if(phase==='questionAnswered'){phase=mode==='plan'?'research':'executing';render();return;}
   if(phase==='toolDenied'){phase='stopped';result='示例返回停止记录。本次设备配置未修改，其余任务保留原状态。';$('progress').open=false;render();return;}
   if(phase === 'research' || phase === 'revising') {
    if(plan) { $('old-plan').hidden=false; $('old-plan-text').textContent=plan.content; }
@@ -172,6 +192,7 @@
   if(progressStep===2) { phase='toolReview'; render(); }
  }
  function send() {
+  if(cmd.active){executeCommand();return;}
   if(!ready() || composing || $('send').disabled) return;
   messageSnapshot=$('draft').value; rootId=`demo-root-${generation}-${writes+1}`; todos=null; plan=null; result=''; progressStep=0; seen=new Set();
   write('message'); phase='submitting'; render();
@@ -186,16 +207,17 @@
  $('revise-submit').onclick=()=>decide('revise'); $('revise-cancel').onclick=()=>{showFeedback=false;render();$('revise').focus();};
  $('feedback-text').onkeydown=e=>{if(e.key==='Escape'&&!e.isComposing){e.preventDefault();$('revise-cancel').click();}};
  $('receipt').onclick=receipt; $('advance').onclick=advance;
- $('send').onclick=()=>{if(canStop()){write('stop',{target:rootId});showFeedback=false;phase='stopping';render();}else send();};
- $('draft').oninput=render; $('draft').addEventListener('compositionstart',()=>{composing=true;}); $('draft').addEventListener('compositionend',()=>{composing=false;});
- $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&!composing&&e.keyCode!==229&&!e.repeat){e.preventDefault();send();}};
+ $('send').onclick=()=>{if(canStop()){write('stop',{target:rootId});questionClosed=!!question;showFeedback=false;phase='stopping';render();}else send();};
+ $('draft').oninput=()=>{commandInput();render();}; $('draft').addEventListener('compositionstart',()=>{composing=true;}); $('draft').addEventListener('compositionend',()=>{composing=false;});
+ $('draft').onkeydown=e=>{if(commandKey(e))return;if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&!composing&&e.keyCode!==229&&!e.repeat){e.preventDefault();send();}};
  $('disconnect').onclick=()=>{priorPhase=phase;phase='uncertain';if(plan&&planStatus==='待审核')planStatus='待核对';render();};
- $('other-client').onclick=()=>{if(!plan)return;staleTarget=true;pending=null;phase='recovering';planStatus='其他端已处理，正在核对';render();};
+ $('other-client').onclick=()=>{if(question&&!questionAnswers){questionOther=true;pending=null;phase='recovering';render();return;}if(!plan)return;staleTarget=true;pending=null;phase='recovering';planStatus='其他端已处理，正在核对';render();};
  $('recover').onclick=()=>{if(!['recovering','uncertain'].includes(phase))return;phase='recovering';render();};
  // Recovery completion is explicit and read-only; an unknown write stays unknown without its receipt.
  function recovered() {
   if(phase!=='recovering')return;
-  if(staleTarget){planStatus='已批准';mode='build';phase='executing';pending=null;$('plan').open=false;}
+  if(questionOther){questionAnswers=question.questions.map((q)=>({id:q.id,selected:[],custom:'其他端已提交的示例回答'}));phase='questionAnswered';$('question-card').open=false;}
+  else if(staleTarget){planStatus='已批准';mode='build';phase='executing';pending=null;$('plan').open=false;}
   else if(pending){phase='uncertain';}
   else {phase=priorPhase==='review'?'review':priorPhase; if(phase==='review')planStatus='待审核';}
   render();
@@ -207,13 +229,144 @@
  $('thinking').onclick=()=>{if(!ready())return;$('settings').hidden=false;$('config-current').textContent='模型与思考更新沿用主设计的配置回执流程；此原型仅演示模式更新。';};
  $('settings-toggle').onclick=()=>{$('settings').hidden=!$('settings').hidden;$('settings-toggle').setAttribute('aria-expanded',String(!$('settings').hidden));};
  $('nav-open').onclick=()=>{$('rail').dataset.open='true';$('nav-close').focus();};$('nav-close').onclick=()=>{$('rail').dataset.open='false';$('nav-open').focus();};
- const drafts=new Map();
- function switchView(next,title){drafts.set(view,$('draft').value);view=next;$('draft').value=drafts.get(view)||'';$('title').textContent=title;reset(next==='alarm'?'review':'planIdle');$('user-message').textContent=next==='alarm'?'请分析东区网络告警，先给出排查和处置方案，确认后再实施。':'请整理今天的巡检结果。';$('current-chat').classList.toggle('selected',next==='alarm');$('other-chat').classList.toggle('selected',next==='daily');$('rail').dataset.open='false';}
+ const drafts=new Map(), questionViews=new Map();
+ function switchView(next,title){questionViews.set(view,question?{question,questionAnswers,questionDrafts,questionClosed,phase:pending?'uncertain':phase,mode,todos,rootId}:null);drafts.set(view,cmd.active?cmd.message:$('draft').value);view=next;$('draft').value=drafts.get(view)||'';$('title').textContent=title;reset(next==='alarm'?'review':'planIdle');const cached=questionViews.get(next);if(cached){({question,questionAnswers,questionDrafts,questionClosed,phase,mode,todos,rootId}=cached);buildQuestionFields();render();}$('user-message').textContent=next==='alarm'?'请分析东区网络告警，先给出排查和处置方案，确认后再实施。':'请整理今天的巡检结果。';$('current-chat').classList.toggle('selected',next==='alarm');$('other-chat').classList.toggle('selected',next==='daily');$('rail').dataset.open='false';}
  $('other-chat').onclick=()=>switchView('daily','每日巡检汇总');$('current-chat').onclick=()=>switchView('alarm','园区告警处置');
  $('new-chat').onclick=()=>{switchView('new','新会话');$('draft').value='';reset('idle');$('user-message').hidden=true;};
+ // Complete question fixtures, never inferred from assistant text or tool arguments.
+ function questionFixture() { return {type:'agent.question',eventId:`demo-question-${generation}`,sourceEventId:rootId,questions:[
+  {id:'window',header:'实施时间',question:'设备处置安排在哪个时间段？',multiSelect:false,options:[{label:'今晚 22:00 后',description:'业务结束后实施，减少对教学的影响。'},{label:'本周末',description:'保留更充裕的验证和回退时间。'}]},
+  {id:'scope',header:'验证范围',question:'恢复后需要核验哪些业务？',multiSelect:true,options:[{label:'教学网络',description:'检查教室与实验室连通性。'},{label:'办公网络',description:'检查办公终端和认证服务。'},{label:'无线覆盖',description:'检查公共区域接入情况。'}]},
+  {id:'constraints',header:'其他约束',question:'还有哪些需要保留的业务或现场限制？',multiSelect:false}
+ ]}; }
+ function setQuestion(event) {
+  if(event.type!=='agent.question'||event.sourceEventId!==rootId||question?.eventId===event.eventId)return;
+  question=JSON.parse(JSON.stringify(event));questionAnswers=null;questionClosed=false;questionOther=false;
+  questionDrafts=question.questions.map(()=>({selected:[],custom:''}));buildQuestionFields();$('question-card').open=true;
+ }
+ function buildQuestionFields() {
+  $('question-fields').replaceChildren();
+  if(!question)return;
+  question.questions.forEach((q,i)=>{
+   const field=document.createElement('fieldset'),legend=document.createElement('legend'),heading=document.createElement('small');
+   field.id=`question-field-${i}`;heading.textContent=q.header||`问题 ${i+1}`;legend.append(heading,document.createTextNode(`${i+1}. ${q.question}`));field.append(legend);
+   const options=document.createElement('div');options.className='question-options';
+   (q.options||[]).forEach((o,j)=>{
+    const label=document.createElement('label');label.className='question-option';
+    const input=document.createElement('input');input.type=q.multiSelect?'checkbox':'radio';input.name=`question-choice-${i}`;input.id=`question-option-${i}-${j}`;
+    const text=document.createElement('span'),title=document.createElement('strong'),desc=document.createElement('small');title.textContent=o.label;desc.textContent=o.description||'';text.append(title,desc);label.append(input,text);options.append(label);
+    input.onchange=()=>{if(!canAnswer())return;const d=questionDrafts[i];if(q.multiSelect)d.selected=input.checked?[...new Set([...d.selected,o.label])]:d.selected.filter(x=>x!==o.label);else{d.selected=[o.label];d.custom='';}clearQuestionError(i);renderQuestionState();};
+   });field.append(options);
+   const custom=document.createElement('label');custom.className='question-custom';custom.textContent=q.options?(q.multiSelect?'补充回答（可选）':'或填写自己的回答'):'你的回答';
+   const input=document.createElement('textarea');input.rows=2;input.id=`question-custom-${i}`;input.placeholder=q.options?'填写其他安排或约束…':'没有额外限制也可以直接说明';
+   input.oninput=()=>{if(!canAnswer())return;questionDrafts[i].custom=input.value;if(!q.multiSelect&&strip(input.value))questionDrafts[i].selected=[];clearQuestionError(i);renderQuestionState();};
+   custom.append(input);field.append(custom);
+   const error=document.createElement('p');error.id=`question-error-${i}`;error.className='error';error.setAttribute('role','alert');error.hidden=true;field.append(error);$('question-fields').append(field);
+  });
+ }
+ // Match the internal fixture's Java strip boundary; option labels and IDs remain exact.
+ function strip(value){return value.replace(/^[\u0009-\u000d\u001c-\u0020\u1680\u2000-\u2006\u2008-\u200a\u2028\u2029\u205f\u3000]+|[\u0009-\u000d\u001c-\u0020\u1680\u2000-\u2006\u2008-\u200a\u2028\u2029\u205f\u3000]+$/gu,'');}
+ function canAnswer(){return phase==='question'&&!pending&&!questionClosed&&!questionAnswers;}
+ function clearQuestionError(i){const error=$(`question-error-${i}`);error.hidden=true;error.textContent='';$(`question-field-${i}`).removeAttribute('aria-describedby');}
+ function renderQuestionState(){
+  $('question-card').hidden=!question;if(!question)return;
+  $('question-title').textContent=`需要你的回答 · ${question.questions.length} 个问题`;
+  const text=questionAnswers?'已回答':questionClosed?'问题已关闭':phase==='questionPending'?'正在提交回答':['recovering','uncertain'].includes(phase)?'正在核对问题状态':'等待回答';
+  $('question-status').textContent=text;$('question-card').dataset.state=questionAnswers?'answered':questionClosed?'closed':phase==='questionPending'?'submitting':['recovering','uncertain'].includes(phase)?'recovering':'waiting';
+  question.questions.forEach((q,i)=>{
+   const field=$(`question-field-${i}`);if(!field)return;field.disabled=!canAnswer();const d=questionAnswers?.[i]||questionDrafts[i];
+   (q.options||[]).forEach((o,j)=>{$(`question-option-${i}-${j}`).checked=d.selected.includes(o.label);});
+   const custom=$(`question-custom-${i}`);if(custom.value!==(d.custom||''))custom.value=d.custom||'';
+  });
+  $('question-submit').disabled=!canAnswer();$('question-submit').hidden=!!questionAnswers||questionClosed;
+  if(phase==='question')$('commentary').textContent=mode==='plan'?'开始整理方案前，需要确认几项实施约束。':'继续实施前，需要补充几项现场信息。';
+ }
+ $('question-form').onsubmit=e=>{
+  e.preventDefault();if(!canAnswer()||composing)return;
+  let invalid=-1;
+  const answers=question.questions.map((q,i)=>{const d=questionDrafts[i],custom=strip(d.custom),selected=(q.options||[]).filter(o=>d.selected.includes(o.label)).map(o=>o.label);let error='';
+   if(custom.length>4096)error='回答过长，请缩短后再提交。';
+   else if(!selected.length&&!custom)error=q.options?'请选择一个选项或填写回答。':'请填写回答。';
+   else if(!q.multiSelect&&(selected.length>1||(selected.length&&custom)))error='请选择一个选项，或填写自己的回答。';
+   if(error){if(invalid<0)invalid=i;$(`question-error-${i}`).textContent=error;$(`question-error-${i}`).hidden=false;$(`question-field-${i}`).setAttribute('aria-describedby',`question-error-${i}`);}
+   return {id:q.id,selected,...(custom?{custom}:{})};
+  });
+  if(invalid>=0){$(`question-field-${invalid}`).querySelector('input,textarea').focus();return;}
+  write('question',{target:question.eventId,answers});phase='questionPending';render();$('question-status').focus();
+ };
+ $('question-form').addEventListener('compositionstart',()=>{composing=true;});
+ $('question-form').addEventListener('compositionend',()=>{composing=false;});
+ $('question-form').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.isComposing||e.repeat||e.keyCode===229))e.preventDefault();});
+ // Separate local command buffers. Server fixtures own availability, never mode captions.
+ const catalogIdle=[
+  {name:'help',description:'了解助手的用途与使用场景'}, {name:'status',description:'查看当前会话状态'},
+  {name:'name',description:'查看或设置会话名称',input:'[displayName]'}, {name:'model',description:'查看或切换模型',input:'[modelId]'},
+  {name:'thinking',description:'查看或切换思考模式',input:'[on|off]'}, {name:'compact',description:'压缩当前会话上下文'},
+  {name:'skills',description:'查看可用技能'}, {name:'skill:inspection-plan',description:'整理园区巡检计划',input:'[request]',skill:true}
+ ];
+ function catalog(){return ready()?catalogIdle:catalogIdle.filter(c=>!c.skill&&c.name!=='compact').map(c=>['model','thinking'].includes(c.name)?{name:c.name,description:c.name==='model'?'查看当前模型':'查看当前思考模式'}:c);}
+ function commandMatches(){const name=/^\/([^\s]*)/u.exec(cmd.query)?.[1];return name===undefined?[]:catalog().filter(c=>c.name.startsWith(name));}
+ function commandValid(){const current=catalog().find(c=>c.name===cmd.selected?.name);return !!current&&(!cmd.args||!!current.input)&&!current.skill;}
+ function commandAllowed(){return (ready()||canStop())&&!pending;}
+ function clearCommand(focus=true){if(cmd.active)$('draft').value=cmd.message;Object.assign(cmd,{active:false,palette:false,selected:null,args:'',query:'/',index:0,replacement:null});if(focus)$('draft').focus();}
+ function chooseCommand(c){if(!c||composing)return;const args=cmd.query.match(/^\/[^\s]+\s+([\s\S]*)$/u)?.[1]||'';
+  if(args&&!c.input){$('command-error').textContent='此命令不接受参数';$('command-error').hidden=false;return;}
+  cmd.args=cmd.replacement?.selected.name===c.name&&!args?cmd.replacement.args:args;cmd.selected=c;cmd.replacement=null;cmd.palette=false;$('draft').value=cmd.args;render();
+  (c.input?$('draft'):ready()?$('send'):$('command-run')).focus();
+ }
+ function commandInput(){if(composing)return;const value=$('draft').value;
+  if(cmd.selected)cmd.args=value;
+  else if(cmd.active){cmd.query=value;cmd.palette=true;cmd.index=0;}
+  else if(value.startsWith('/')){cmd.active=true;cmd.message='';cmd.query=value;cmd.palette=true;cmd.index=0;}
+ }
+ let dockFolds=null;
+ function renderCommands(){
+  if(cmd.palette&&!dockFolds){dockFolds=[$('progress').open,$('command-result').open];$('progress').open=false;$('command-result').open=false;}
+  else if(!cmd.palette&&dockFolds){[$('progress').open,$('command-result').open]=dockFolds;dockFolds=null;}
+  const options=commandMatches();cmd.index=Math.max(0,Math.min(cmd.index,options.length-1));
+  $('command-palette').hidden=!cmd.palette;$('command-chip').hidden=!cmd.selected;$('command-name').textContent=cmd.selected?.name||'';
+  $('command-list').replaceChildren();options.forEach((c,i)=>{const option=document.createElement('div');option.id=`workbench-command-${i}`;option.className='command-option';option.dataset.name=c.name;option.setAttribute('role','option');option.setAttribute('aria-selected',String(i===cmd.index));const name=document.createElement('strong'),desc=document.createElement('span');name.textContent=c.name;desc.textContent=c.description;option.append(name,desc);option.onmousedown=e=>e.preventDefault();option.onclick=()=>chooseCommand(c);$('command-list').append(option);});
+  $('command-empty').hidden=!!options.length;
+  const descriptor=catalog().find(c=>c.name===cmd.selected?.name);
+  $('draft').hidden=!!cmd.selected&&!descriptor?.input&&!cmd.args;
+  $('draft').placeholder=cmd.selected?descriptor?.input||'当前命令不接受参数':cmd.active?'输入名称筛选命令':'补充目标、约束或期望结果，或输入 / 选择命令…';
+  $('draft').setAttribute('aria-label',cmd.selected?`编辑 ${cmd.selected.name} 参数`:cmd.active?'查找命令':'消息草稿');
+  for(const key of ['role','aria-controls','aria-expanded','aria-autocomplete','aria-activedescendant'])$('draft').removeAttribute(key);
+  if(cmd.active&&!cmd.selected){$('draft').setAttribute('role','combobox');$('draft').setAttribute('aria-autocomplete','list');$('draft').setAttribute('aria-controls','command-list');$('draft').setAttribute('aria-expanded',String(cmd.palette));if(cmd.palette&&options.length)$('draft').setAttribute('aria-activedescendant',`workbench-command-${cmd.index}`);}
+  $('command-run').hidden=ready()||!cmd.selected;$('command-run').disabled=!commandAllowed()||!commandValid()||cmd.palette;
+  let error=cmd.selected&&!descriptor?'当前状态下此命令不可用，草稿已保留。':cmd.selected&&cmd.args&&!descriptor?.input?'当前只可查询。请先清除参数，再明确执行。':cmd.selected?.skill?'公共 Skill 执行尚未接入。':'';
+  if(cmd.active&&Array.from(cmd.args).length>2048)error='参数过长，请缩短后再提交。';
+  $('command-error').textContent=error;$('command-error').hidden=!error;
+  if(cmd.active&&ready()){$('send').disabled=!cmd.selected||cmd.palette||!!error||!commandAllowed();$('send').setAttribute('aria-label',cmd.selected?`运行 ${cmd.selected.name}`:'选择命令后运行');}
+  if(cmd.active){$('input-error').hidden=true;$('input-help').textContent='选择命令后明确执行 · Esc 收起，再按一次退出';}
+  $('command-run').disabled ||= !!error;
+  $('command-name').disabled=$('command-remove').disabled=phase==='commandPending';
+  $('draft').disabled=pending?.kind==='command';
+ }
+ function executeCommand(){if(!cmd.selected||cmd.palette||!commandAllowed()||!commandValid()||Array.from(cmd.args).length>2048||composing)return;
+  write('command',{name:cmd.selected.name,args:cmd.args,from:phase});phase='commandPending';render();
+ }
+ function showCommandResult(invocation){const texts={help:'园区运维助手\n分析告警、组织巡检，协助形成处置方案。',status:`当前会话：${labels[phase]} · ${mode==='plan'?'计划模式':'普通模式'}`,name:`会话名称：${invocation.args||$('title').textContent}`,model:'当前模型：模型 A',thinking:'深度思考：开启',compact:'本次无需压缩上下文。',skills:'inspection-plan · 整理园区巡检计划'};
+  if(invocation.name==='name'&&invocation.args)$('title').textContent=invocation.args;
+  $('command-result').hidden=false;$('command-result').open=true;$('command-result-text').textContent=texts[invocation.name];
+ }
+ function commandKey(e){if(!cmd.active)return false;if(e.isComposing||composing||e.keyCode===229)return true;if(e.repeat&&e.key==='Enter'){e.preventDefault();return true;}
+  if(e.key==='Escape'){e.preventDefault();if(cmd.palette){cmd.palette=false;if(cmd.replacement){cmd.selected=cmd.replacement.selected;cmd.args=cmd.replacement.args;cmd.replacement=null;$('draft').value=cmd.args;}}else clearCommand();render();return true;}
+  if(cmd.palette&&['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();cmd.index=e.key==='Home'?0:e.key==='End'?commandMatches().length-1:cmd.index+(e.key==='ArrowDown'?1:-1);renderCommands();$(`workbench-command-${cmd.index}`)?.scrollIntoView?.({block:'nearest'});return true;}
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(cmd.palette)chooseCommand(commandMatches()[cmd.index]);else if(cmd.selected)executeCommand();else{cmd.palette=true;renderCommands();}return true;}
+  if(e.key==='Backspace'&&((cmd.selected&&!cmd.args)||(!cmd.selected&&cmd.query==='/'))){e.preventDefault();clearCommand();render();return true;}
+  return false;
+ }
+ $('command-run').onclick=executeCommand;$('command-remove').onclick=()=>{clearCommand();render();};
+ $('command-name').onclick=()=>{cmd.replacement={selected:cmd.selected,args:cmd.args};cmd.selected=null;cmd.query='/';cmd.palette=true;$('draft').value='/';render();$('draft').focus();};
+ $('command-result-close').onclick=()=>{$('command-result').hidden=true;$('draft').focus();};
+ document.querySelector('.composer').addEventListener('keydown',e=>{if(e.target!==$('draft')&&cmd.active&&e.key==='Escape')commandKey(e);});
+ document.addEventListener('click',e=>{if(cmd.palette&&!e.target.closest('.composer')){cmd.palette=false;renderCommands();}});
+
  // Deterministic probes consume synthetic events only; no API or persistence methods.
- window.planDemo={applyTodo,recovered,receipt,advance,reset,get snapshot(){return {phase,mode,plan,pending,todos,rootId,generation,writes,receipts};}};
+ window.planDemo={setQuestion,applyTodo,recovered,receipt,advance,reset,get snapshot(){return {phase,mode,plan,pending,todos,rootId,generation,writes,receipts,question,questionAnswers,questionDrafts,cmd};}};
  reset('review');
+ const entry=new URLSearchParams(location.search).get('scene');if(['question','buildQuestion','slash','review'].includes(entry)){$('scenario').value=entry;reset(entry);}
 })();
 </script>
 </body>

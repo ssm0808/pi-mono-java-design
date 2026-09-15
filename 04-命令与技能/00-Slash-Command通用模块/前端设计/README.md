@@ -4,13 +4,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.1 |
-| 更新日期 | 2026-09-14 |
-| 本次前端修订基线 | 设计仓 `599edb072cf75e3d8f85c775c53c0e83befd285d` |
+| 文档版本 | 1.6.0 |
+| 更新日期 | 2026-09-15 |
+| 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
 | Runtime 命令契约基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；B13 已确认 Skill SSE，Builtin JSON 不变 |
-| pi-mono-java 本次交互源码基线 | `7f1126262b16458e430c1a70aba9936e26391385`；早期结构证据保留在 §2.1 |
+| pi-mono-java 本次交互源码基线 | 开发分支 `699f929f6826b595ed1d0162f6def66e2f84760b`；早期结构证据保留在 §2.1 |
 | 适用端 | CampusClaw Web 产品前端；内部 Runtime 调试台只作为源码证据和受控联调入口 |
-| 状态 | 用户已确认的目标交互；正式评审原型已同步，Vue 交互待同步；公共执行边界沿用原契约门禁 |
+| 状态 | 用户已确认的目标交互；问答/审核协同原型已同步，Vue 源码范围见 §2.1；公共执行边界沿用原契约门禁 |
 
 ## 1. 设计结论
 
@@ -45,7 +45,7 @@ Builtin 命令结果不是 Assistant 消息，不进入 ConversationTimeline、S
 
 早期 `frontend/` 是内部 Runtime 调试工作台。上表记录初版设计的迁移起点，不能用来断言当前仍无命令实现。
 
-**当前交互证据**：以下路径相对 `pi-mono-java@7f1126262b16458e430c1a70aba9936e26391385`，更新此前 `4cc8dd86f601417c22cf9306e52152acbb59bb60` 的组件证据。
+**历史交互证据**：以下路径相对 `pi-mono-java@7f1126262b16458e430c1a70aba9936e26391385`，更新此前 `4cc8dd86f601417c22cf9306e52152acbb59bb60` 的组件证据。
 
 | 源码与符号 | 已观察行为 | 目标差距与理由 |
 |---|---|---|
@@ -53,10 +53,14 @@ Builtin 命令结果不是 Assistant 消息，不进入 ConversationTimeline、S
 | `frontend/src/runtime/commands.ts`：parseCommand、filterCommands、freezeInvocation | 已有规范名称、原样参数与不可变提交快照 | 保留协议形态；不因按钮位置变化新增接口字段 |
 | `frontend/src/App.vue`：executeCommand；`frontend/src/composables/useRuntimeApi.ts`：executeCommand | 本地 Header 校验失败返回 uncertain；已有 Builtin JSON/Skill SSE 分路 | 校验失败显示本地错误并聚焦 Header；只有发出写请求且结果不可确定才进入恢复 |
 
+**当前固定源码观察（2026-09-15）**：开发分支 `699f929f6826b595ed1d0162f6def66e2f84760b` 已更新上述路径。`ComposerBox.vue` 的 + 为附件、输入首字符 / 打开清单，标签/参数分离，运行中 command-run 与停止同屏；`useCommandComposer.ts` 的 selectedError 保留过期参数并阻止执行；`useRuntimeApi.ts` 已有 listCommands、executeCommand、统一 Session POST、方案审核与任务投影。此范围不再存在表中旧的入口/停止缺口；产品组件分层、Mate 接入和问答协同仍须按目标验收。
+
+问答开发工作树已新增 QuestionCard 与 QuestionDraftStore，观察身份、摘要与边界见[前端源码证据 §4](../../../01-总体架构/04-CampusClaw前端体验/source-evidence.md#question-slash-evidence)。正在开发的文件不能当作发布或集成通过；本专项只修改设计和原型，不改该工作树。
+
 本次只修订前端交互和评审材料，不重新定义 Runtime、Mate 或 Skill 协议。图中独立组件与 Store 的拆分仍是 target-only，
 不能把当前 Composer 内已有的功能与目标组件分层混为一谈。
 
-**Codex 参考边界**：2026-09-09 核对 [OpenAI 官方 Slash commands 文档](https://learn.chatgpt.com/docs/reference/slash-commands)，
+**Codex 参考边界**：2026-09-15 重新核对 [OpenAI 官方 Slash commands 文档](https://learn.chatgpt.com/docs/reference/slash-commands)，
 公开文档支持“在 Composer 输入 `/`、选择命令或继续输入过滤”的入口模型。紧凑行、隐藏展示前缀、可删除标签、
 附件“+”与命令分离、运行中独立执行和二次执行是 CampusClaw 目标决策，不声称是 Codex 桌面源码或像素级行为。
 
@@ -119,11 +123,33 @@ Chat Workspace
 [交互评审稿](./slash-command-review.html) 提供命令清单、参数编辑、running 清单、Help 结果和未匹配错误五个状态。
 评审稿是视觉与交互验收材料，不是可发布产品代码，也不定义新的 HTTP 字段。
 
+<a id="slash-pending-interaction"></a>
+
+### 3.1 计划、问答与运行中命令
+
+[统一工作台](../../../01-总体架构/04-CampusClaw前端体验/plan-workbench.html?scene=question)在相同界面检查问题卡、方案、TODO 和 Slash；[命令专项原型](slash-command-review.html)聚焦选择、参数、临时结果与未匹配。两者遵循同一交互规则，均为合成数据，不证明生产接通。
+
+| 当前执行 | Composer 与命令行为 |
+|---|---|
+| idle，mode 为 plan 或 build | 模式不决定命令目录；按最新完整 Descriptor 展示 Builtin 和 Skill，选择后再执行。公共 Skill 未接入时保留明确禁用理由。 |
+| 等待回答、方案审核、工具授权 | Session 仍 running，使用 running Descriptor；原问题/方案留在时间线，右下角仍为停止。可编辑消息草稿，也可单独执行清单允许的 Builtin；命令不会回答问题或批准方案。 |
+| 提交回答/审核/授权/停止，或状态未对账 | 浏览与草稿保留，命令执行暂时禁用。前端协调器用同一提交/恢复准入检查，避免操作期间使用旧状态；不能仅因清单可见就允许执行。 |
+| 命令返回 Session/Models | 按既有完整快照/版本规则更新配置，不推断该任务已结束或问题已回答；待交互仍由原根的完整事件与历史核对。 |
+| 清单更新后参数权限收窄 | 保留命令与参数，并提示“当前只可查询，请先清除参数”；用户明确清空后才允许运行，不能自动删参数并悄悄执行查询。命令消失则保留禁用标签。 |
+
+服务端规范是唯一可用性来源。当前 running 清单中 help/status/skills 为无参查询、name 保留 input、model/thinking 不返回 input、compact 和 skill:name 不返回；这组事实只用于契约 fixture，产品组件不编码第二份矩阵。计划模式不新增 `/plan`、`/approve`、`/answer` 或 `/todo`；也不因新增 Skill 统计而增加热度排序或次数徽标。
+
+命令区、消息草稿、问题答案、方案反馈分别持有自己的缓冲；取消 Slash 只恢复消息草稿。问题卡的选项键盘动作和自由文本 Enter 不触发 Composer 命令。清单打开时焦点留在输入，Arrow/Home/End 只选择候选；Enter 收成标签，下一次明确 Enter 才执行，长按和 IME 不触发。退出更换列表恢复原标签与参数。
+
+Builtin 结果放在 Composer 上方的轻量可折叠区域，标题保留“命令结果 · 仅当前页面”；正文纯文本、限高滚动，不做大面积绿色成功卡。已有 TODO 时两个区域合计最多约 30% 视口；清单打开时临时收起结果和进度详情，关闭后恢复用户原折叠选择。问题卡放在时间线中随页面滚动，避免多个表单挤占输入区。
+
+此协同是产品约束：参考 Codex 的输入就地发现与紧凑 disclosure，同时保留 CampusClaw 原根等待和服务端清单；代价是共享控制状态、草稿隔离和跨来源对账。不是新增命令 API 或对 Codex 协议的复制。
+
 ## 4. Composer 状态模型
 
 ![Slash Composer 状态图](./slash_composer_state.svg)
 
-[PlantUML 源码](./diagram.puml#L131) · [展开原尺寸 SVG](./slash_composer_state.svg)
+[PlantUML 源码](./diagram.puml#L140) · [展开原尺寸 SVG](./slash_composer_state.svg)
 
 ### 4.1 进入与退出
 
@@ -188,7 +214,7 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 
 ![Slash Command 执行时序](./slash_command_execution_flow.svg)
 
-[PlantUML 源码](./diagram.puml#L216) · [展开原尺寸 SVG](./slash_command_execution_flow.svg)
+[PlantUML 源码](./diagram.puml#L228) · [展开原尺寸 SVG](./slash_command_execution_flow.svg)
 
 执行请求由已选择 Descriptor 与当前编辑值组装，不重新解析成另一命令。提交期间只锁定命令编辑和“运行”动作，
 保留取消页面读取和浏览历史的能力。当前协议没有 cancel command，离开页面不应声称后端命令已取消。
@@ -392,6 +418,16 @@ interface CommandGateway {
 上述验证只覆盖设计原型；真实上传、后端集成、屏幕阅读器和移动端软键盘验收仍属于实现阶段。
 执行 DOM 检查时设置 `JSDOM_MODULE` 指向已有 jsdom，再运行 `node --test test_slash_command_review.cjs`。
 
+### 11.5 问答与命令联合验收
+
+2026-09-15 验证：专项原型 14 组检查通过，统一工作台 33 组通过；四档浏览器布局及两专题图文校验结果统一记录在[前端验收](../../../01-总体架构/04-CampusClaw前端体验/README.md#15-测试与验收)。
+
+- 三类等待均保持 running 清单与原位置停止；未知等待不能按 idle 放开 Skill 或模式修改。
+- 问答草稿、命令参数与消息草稿互不覆盖，切换会话丢弃迟到请求；命令查询不清除问题身份。
+- 双击回答/命令只创建一次请求；提交锁与恢复禁用生效；断线或回执丢失不重放写入。
+- model/thinking 参数随清单收窄时保留并禁用，删除参数后显式执行；未知 Slash 不成为普通消息。
+- 1440/1024/768/390 px 检查长选项、问题 textarea、命令列表和任务摘要；清单不遮住命令执行与停止，用户可滚动访问全部问题。
+
 ## 12. 实施切片与协议门禁
 
 1. 在已有 Composer 和解析器上先落地附件菜单、Palette、Chip 与共享发送/停止操作：独立保存查询、所选名称、参数和恢复快照，用 Mock 验证 §11.2；按目标边界拆分 Store，不引入新的真实 POST。
@@ -419,6 +455,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-09-15 | 对齐 Codex 就地命令交互，补齐计划问答等待、共享准入与轻量结果展示。 |
 | 1.5.1 | 2026-09-14 | 精简视觉决策叙述并重排命令组件与提交结果流程。 |
 | 1.5.0 | 2026-09-09 | 将 + 归为添加入口，命令由 / 触发，运行中独立执行并保留停止按钮。 |
 | 1.4.0 | 2026-09-09 | 定义精简命令清单、可删除标签、独立参数编辑、统一执行按钮及 Escape、草稿恢复与重复 Enter 保护。 |

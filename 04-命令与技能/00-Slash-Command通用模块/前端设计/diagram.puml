@@ -30,6 +30,10 @@ title Target Slash Command Frontend Components
 ' Source evidence: frontend/src/components/ComposerBox.vue template; frontend/src/composables/useCommandComposer.ts
 ' Observed behavior: chips exist; Plus opens commands; Stop is only in App.vue topbar.
 ' Product constraint: Plus adds context; Slash discovers commands; running commands never replace Stop.
+' Updated source: pi-mono-java@699f929f6826b595ed1d0162f6def66e2f84760b
+' Source: frontend/src/composables/useCommandComposer.ts selectedError, choose; components/ComposerBox.vue template.
+' Observed behavior: attachment Plus, chip and running Stop now exist. Earlier observations are historical.
+' Target-only: shared question, plan and command admission below; public mapping is still gated.
 ' Design reason: keep discovery, immutable invocation decoding, ephemeral results, and ordinary chat history as separate responsibilities.
 
 
@@ -57,7 +61,8 @@ package "Slash application state [target-only]" as StatePkg {
   class "CommandCatalogStore\nper active chat" as CatalogStore
   class "CommandParser\npure function" as Parser
   class "CommandPresentation\nRegistry" as Registry
-  class "ConversationCoordinator\nSkill execution / stop; gated" as Conversation
+  class "ConversationCoordinator\nSkill / stop / pending interaction; gated" as Conversation
+  class "Shared Chat interaction state\nquestion / plan / permission\none current target" as InteractionState
 }
 
 package "Gateway boundary [target-only]" as GatewayPkg {
@@ -90,6 +95,8 @@ UseSlash --> Parser
 UseSlash --> Registry
 UseSlash --> Gateway
 UseSlash --> Conversation
+UseSlash --> InteractionState : admission only
+Conversation *-- InteractionState
 UseSlash --> SessionState
 UseSlash --> AttachmentState
 Registry --> Renderers
@@ -99,6 +106,8 @@ MateGateway --> MateApi
 RuntimeGateway --> RuntimeApi
 
 note bottom of Timeline
+  Questions and plans remain in the timeline.
+  Only complete accepted events resolve an interaction.
   Builtin results remain ephemeral.
   Skill uses ordinary message events and history.
 end note
@@ -168,7 +177,7 @@ QueryDraft --> MessageDraft : Escape; restore message
 state SelectedCommand
 SelectedCommand : Removable canonical name chip
 SelectedCommand : Edit arguments only when input exists
-SelectedCommand --> Executing : explicit command action or new Enter
+SelectedCommand --> Executing : explicit action; current descriptor and shared gate
 SelectedCommand --> MessageDraft : remove, Escape, or empty Backspace
 SelectedCommand --> ChangingCommand : click chip name; suspend selection
 
@@ -195,6 +204,9 @@ note right of BrowsingCatalog
 end note
 
 note right of SelectedCommand
+  Question, review and permission waits remain running.
+  Submission or recovery blocks command execution.
+  A stale argument draft is preserved, never auto-cleared.
   hint is display-only.
   Files are admitted only when acceptsFiles is true.
   No-input selection focuses the command action.
@@ -268,7 +280,8 @@ Slash --> Composer : close list; selected chip and optional argument editor
 == Freeze and submit ==
 User -> Composer : explicit execution
 Composer -> Slash : execute(name, arguments, files)
-Slash -> Slash : freeze invocation and expected result kind
+Slash -> Conversation : check shared submission and recovery admission
+Slash -> Slash : validate latest descriptor; freeze invocation and result kind
 Slash -> Gateway : executeCommand(invocation)
 Gateway -> Api : POST command
 
@@ -278,6 +291,10 @@ alt Builtin success
   Gateway -> Gateway : validate against expected result kind
   Gateway --> Slash : typed result plus invocation
   Slash -> State : apply authoritative Session or Models when present
+  note over Conversation,State
+  Command results never answer questions or approve plans.
+  Current pending target is reconciled from complete events.
+  end note
   Slash -> Result : render by expected result kind
   Slash -> Slash : mark catalog stale
 else Skill accepted - public integration confirmed
