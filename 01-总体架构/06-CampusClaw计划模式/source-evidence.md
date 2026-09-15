@@ -1,8 +1,10 @@
 # 计划模式源码证据与实现差距
 
-版本：1.8.1；核对日期：2026-09-15。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：1.9.0；核对日期：2026-09-15。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
 提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 target-only 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
+
+当前 Build/Plan 与提问展示的静态核验绑定 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，具体已实现行为、新目标与基线区别由[§9](#9-buildplan-与逐题交互核验)维护。下方历史接入表继续保留各自固定提交范围，不能据其 target-only 标记判断 1d08f98e 尚无模式、审核、TODO 或结构化提问。
 
 ## 1. 固定提交
 
@@ -104,7 +106,7 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateToolsTool.java` · stableJson | 模型只看到 scope 和 name/description/inputSchema；不增加计划字段或计划专用工具定义 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeToolPermissionPolicy.java` · decide | 既有 CallMateTool 权限路径独立于计划；approve 不覆盖 allow/ask/deny |
 
-## 5. 明确未实现的目标
+## 5. 09b32d8e 基线下未实现的目标
 
 RuntimePlanReviewService、PlanReviewPort、RuntimePlanReviewAdapter、SessionPlanContext、PlanPolicyPromptComposer、RuntimePendingInteraction、ExitPlanModeTool，以及新 VO/DTO 和数据库列/表均为目标结构。上述类名、方法和关系帮助实施切片，不代表源码中已经存在。既有 RuntimeSessionController 与 RuntimeSessionConfigurationService 的 updateSession 方法，以及 Repository 的模式写入方法也是 target-only 增量，原类本身已存在。
 
@@ -170,3 +172,37 @@ Agent 顶层 mode 是本产品新增的默认配置，不归因为 DeepSeek/Clau
 | Claude Managed Agents | 迁移文档建议先 planning-only session，再用第二个 session 执行；该公开说明未要求统一原生计划文件 | [官方迁移文档](https://platform.claude.com/docs/en/managed-agents/migration) · Plan mode；Beta，不能与 Claude Code 文件机制混同 |
 
 CampusClaw 当前选择完整 ToolCall + agent.plan 审核记录，理由与代价由[主设计 §1.3](README.md#13-完整方案保存在哪里)维护；执行清单另由显式 agent.todo_updated 记录，不把清单写回批准方案，也不为调研引入 TODO。
+
+
+## 9. Build/Plan 与逐题交互核验
+
+核对日期：2026-09-15；实施仓固定为 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，静态读取工作树 `/private/tmp/campusclaw-latest.qKWgL8`。前次问答证据 `9f785bea3ffff8f6566cd1b2727285af46a2aead` 的验证结果仍只绑定旧提交；本次没有重跑实现测试、实际模型或企业桥接。相对旧提交，本次涉及的变化包含 `QuestionCard.vue`、`PlanCard.vue`、`ModeControl.vue`、`App.vue` 的交互与草稿调整；下表给出当前观察，避免把既有问答闭环与本版新增体验混写。
+
+### 9.1 CampusClaw 已观察行为与新增目标
+
+下表路径相对 pi-mono-java；Java 前缀 R = `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 路径 / 符号 | 1d08f98e 已观察行为 | 当前目标与理由 |
+|---|---|---|
+| `frontend/src/components/ModeControl.vue` · labels；`frontend/src/projectors/runtimeEventProjector.ts` · projectRuntimeEvents | 协议使用 build/plan，UI 显示普通模式/计划模式 | UI 统一 Build/Plan，协议枚举不改；产品展示约束 |
+| `frontend/src/components/QuestionCard.vue` · fieldset v-for、submit；`frontend/src/runtime/questionInteraction.ts` · QuestionDraftStore、validateQuestionDrafts、normalizeQuestionAnswers | 一次渲染全部问题；按 Session/问题事件保存页内草稿；校验整批后一次发出答案 | target-only：每次显示一题、保存当前题位置、前后导航保留草稿、末题统一提交；降低同时阅读和操作的负担，保留整批事务 |
+| `frontend/src/projectors/runtimeEventProjector.ts` · agent.tool_call/agent.tool_result/agent.question；`frontend/src/components/ToolActivity.vue` · details | 只有关联 agent.plan 的 ExitPlanMode 被主图吸收；提问仍生成通用工具活动，等待时默认展开，问题参数和结果重复出现 | target-only：问题/答案卡吸收精确关联的调用与结果，原始日志仅诊断可见；失败和缺关联显示简短状态，保留错误可见性 |
+| `frontend/src/App.vue` · ConversationTimeline、conversation-dock、statusLabel；`frontend/src/runtime/eventStore.ts` · executionState/canAnswerQuestion/canReviewPlan | 问题卡在时间线，普通 Composer 留在底部；confirming 使用统一等待文案，历史与 Session 决定交互可用性 | target-only：活动问题在原时间线位置逐题展示，Composer 以独立布局行保留草稿编辑、Slash 和停止归属，发送仍按 running 禁用；回答、审核和授权区分文案；客户端状态继续从事件恢复 |
+| R `tool/question/AskUserQuestionTool.java` · execute；R `runtimeapi/event/RuntimeUserQuestionService.java` · normalizeCurrent | 工具等待完整答案，返回 JSON 文本；答案根据已提交问题快照归一 | 保留模型工具结果和服务端整批校验；隐藏 UI JSON 不删除工具调用/结果，也不重复注入公共问答事件 |
+| R `runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java` · acceptQuestionAnswer、rejectQuestionAnswer、acceptPlanConfirmation、rejectPlanConfirmation、persistPlanConfirmation | 先锁 Session 和当前执行，精确检查待交互及停止；问题回答不改模式；批准才原子更新 build、保存决定并创建续跑段 | 保留数据库审核权威和三种交互隔离；逐题 UI、普通肯定和卡片关闭不能替代正式批准 |
+| R `session/PlanPolicyPromptComposer.java` · compose/planPrompt；`modules/coding-agent-cli/src/main/resources/prompts/plan/PLAN_ROOT_REVIEW.txt`、`ASK_USER.txt` | 六段资源按 mode、入口和工具清单组合；现有文字允许集中问 1～3 题，未明确默认优先一题 | target-only：必要时优先一题、无待决信息不问、工具 JSON 不作为最终答复；同步资源并单独做模型评估，description/Schema 保持 |
+
+本版不改变审核协议、原根续跑、工具清单稳定或提示词式规划边界。UI 汇聚属于产品展示约束；数据库精确接受和现有权限检查仍提供各自保障，Plan 不因此成为强制只读沙箱。
+
+### 9.2 固定参考实现与适用边界
+
+| 基线与仓库相对路径 / 符号 | 已观察行为 | 采用与明确差异 |
+|---|---|---|
+| Codex `d58d0e5841e0de08e251673db2d5af8cf3a1ad51`：`codex-rs/tui/src/bottom_pane/request_user_input/mod.rs` · current_question、move_question、go_next_or_submit、submit_answers（251、788、872、886 行）；同目录 multi_question_first/last 快照 | TUI 以 current_idx 显示一题，切题保存草稿，到最后组装全部答案并提交，历史插入结构化问答摘要 | 参考逐题阅读与聚合回答；CampusClaw 继续要求每题有效回答，不照搬该 TUI 的空答确认、自动处理或附件能力；此证据不等同闭源桌面 UI |
+| 同 Codex：`codex-rs/core/src/tools/handlers/request_user_input.rs` · RequestUserInputHandler.handle_call（47 行） | 等待 request_user_input 响应，serde_json 序列化答案，作为成功 FunctionToolOutput 返回模型 | 工具 JSON 是模型续跑数据，UI 可以显示语义摘要；无需移除后端结果 |
+| 同 Codex：`codex-rs/collaboration-mode-templates/templates/plan.md` · explore first、Asking questions、Finalization rule | 先探索可查事实，只为影响方案的未知提问，完整方案以 proposed_plan 输出；清单工具与 Plan 分离 | 参考必要澄清和简洁方案；CampusClaw 继续使用已提交 agent.plan 与正式计划审核，不把 proposed_plan 文本标签变成批准凭据 |
+| OpenCode `849c2598abc7d2b40261e74b5826bc74ffc78308`：`packages/opencode/src/agent/agent.ts` · build/plan；`packages/opencode/src/tool/plan.ts` · PlanExitTool | 内置 build/plan 两个 primary Agent；Plan 有 edit deny 及计划文件例外，退出工具通过问题选择后创建 synthetic build 用户消息 | 采用 Build/Plan 命名；CampusClaw mode 属于同一 Session，批准续跑同一根，不照搬 Agent 切换、文件审核或权限模式 |
+| 同 OpenCode：`packages/app/src/pages/session/composer/session-question-dock.tsx` · SessionQuestionDock、question、next/back/jump、submit | Web 输入区问题卡以 store.tab 显示当前题；缓存位置与答案，末题一次提交 answers；卡片测量可用高度，含收起与恢复 | 参考紧凑的逐题交互和视口适配；CampusClaw 关闭只收起，不等于其 question.reject；该固定 v2 源码不是已稳定公共 API 声明 |
+| pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185`：`packages/agent/src/agent-loop.ts` · runLoop（155 行）、executeToolCalls；约 218 行将 toolResults 追加 context | 工具完整结果加入上下文后进入后续模型调用 | 保留模型调用/结果配对；问题卡展示调整不改变 Loop 语义，数据库与请求级 SSE 仍为 CampusClaw 架构扩展 |
+
+固定基线没有升级：本机 Codex HEAD 为 be33f80b、pi HEAD 为 4af9d21d，以上读取均显式指定固定提交；OpenCode 工作树 HEAD 就是 849c2598。没有借助产品名称推断未读取的服务端实现，也没有把源码静态核验记作交互或模型测试通过。

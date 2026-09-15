@@ -2,7 +2,7 @@
 
 [返回前端主设计](README.md)
 
-版本：1.3.0；更新日期：2026-09-15。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；当前实现状态见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
+版本：1.4.0；更新日期：2026-09-16。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；当前体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
 
 | 证据 | 基线 |
 |---|---|
@@ -150,3 +150,25 @@ Codex 固定基线仍为 `d58d0e5841e0de08e251673db2d5af8cf3a1ad51`。新增全�
 | 面向用户的 Agent 中心 | `mate-agent-definition-service@956b547f5ca12ca89e68f73012f92a4406b0c9fa` 的 `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java#listAgents` 是管理用元数据列表，返回完整 systemPrompt、permission 和绑定信息。它不是已确认的用户可用 Agent 目录，也没有公共 Chat 创建链路；不能直接打开生产目录入口。 |
 
 Mate 示例仓上述 HEAD 于 2026-09-15 与远端 HEAD 核对一致，Controller 清单只有 AgentDefinitionController 和 `agentdefinition/modelmanager/controller/LlmChatController.java`，所查源码没有公共 Chat/附件 Controller。该结论仅限此仓与提交，不证明其他企业仓库或部署不存在这些服务。本次只实现 Claw 前端，不开发 Mate 接入。后续接入需补充对应实现位置、身份与已确认契约，再进行两跳验收；现有禁用入口保留具体原因。
+
+<a id="experience-evidence"></a>
+
+## 6. 配置、布局与 Plan 体验核验
+
+设计起点 `pi-mono-java-design@e179513`；实际源码 `pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，核验日期 2026-09-15。前次验证 `fcae53829c2884ea1d3cc522c183f5a125a67f45` 的 189 项测试只证明当时场景；本次完整阅读下列文件确认新反馈涉及的源码，不把旧测试结果当作新体验验收。截图是问题证据，不能单凭截图判断部署 commit；本节以明确提交为实现分析对象。
+
+| 用户问题 | 仓库相对路径 / 符号 | 已观察行为与目标差距 |
+|---|---|---|
+| 1、2：刷新重填 | `frontend/src/components/DebugHeaders.vue:12` rows/snapshot；`frontend/src/composables/useDebugAuth.ts:7` ip | 组件内存初始化，刷新丢失；按环境持久化与保存应用为 target-only。 |
+| 3、4：菜单与搜索遮挡 | `frontend/src/style.css:208,274` thread-nav/thread-menu；`frontend/src/runtime.css:6,137` conversation-dock/mode-menu；`frontend/src/components/ModeControl.vue` | 绝对定位菜单处于 overflow 滚动祖先内，能够被裁切；独立浮层、边缘定位与布局占位为 target-only。截图搜索区域遮挡的具体像素触发条件未实测，纳入布局验收。 |
+| 4：缺删除与菜单关闭 | `frontend/src/components/AppSidebar.vue:24,109` openMenuId/menu template；`frontend/src/App.vue:117,262` deleteConversation | 会话菜单只有改名/置顶，无外点/Esc 关闭；删除只取当前 Session 并从顶部触发。按行删除与统一菜单关闭为 target-only。 |
+| 5：JSON 与字体 | `frontend/src/components/ToolActivity.vue:57,68` dl/pre；`frontend/src/projectors/runtimeEventProjector.ts:36,37` 参数 stringify/结果原文；`frontend/src/runtime.css:30` plain-result；`frontend/src/style.css:1536` tool-arguments | 输入为 12px 等宽键值布局，结果继承 UI 字体且不解析 JSON；共享安全结构 viewer 与无损原文回退为 target-only。 |
+| 6：完成/等待文案 | `frontend/src/projectors/runtimeEventProjector.ts:80` session.status_idle；`frontend/src/components/ConversationTimeline.vue` hasVisibleRunningTurn | 追加“本轮已完成” notice，waiting_answer 未算可见等待会生成运行占位；共享状态文案与去重复投影为 target-only。 |
+| 7：统一配置/热更新 | `frontend/.env.example`；`frontend/vite.config.ts` defineConfig；`frontend/src/components/DevDiagnostics.vue`；`frontend/src/composables/useRuntimeApi.ts` apiBase/callerId；`frontend/dev/authMiddleware.ts` createAuthMiddleware | 环境变量启动时加载，诊断入口只有创建/恢复；运行时配置服务与面板热应用无实现。九个既有键及完整边界见[工作台 §6.3～6.6](runtime-workbench-alignment.md#63-统一开发者设置与既有配置映射target-only)。未读取真实 env.local 的值。 |
+| 8、9、10：问答与 Plan | `frontend/src/components/QuestionCard.vue` fieldset v-for/submit；`frontend/src/runtime/questionInteraction.ts` QuestionDraftStore；`frontend/src/projectors/runtimeEventProjector.ts:24,33` | 已实现整批回答与原执行等待，但一次渲染全部题，仅 ExitPlanMode 被专用卡吸收；逐题导航、AskUserQuestion 工具合并和提示词调整为 target-only，详见[计划证据 §9](../06-CampusClaw计划模式/source-evidence.md#9-buildplan-与逐题交互核验)。 |
+
+固定 Codex `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` 的 `codex-rs/tui/src/bottom_pane/request_user_input/mod.rs`（current_question/go_next_or_submit/submit_answers）证明 TUI 逐题、末题整批提交；Handler 仍将 JSON 答案返回模型。这是开源 TUI 证据，不冒充闭源桌面源码或像素规范。OpenCode `849c2598abc7d2b40261e74b5826bc74ffc78308` 的 `packages/opencode/src/agent/agent.ts` 与 `packages/app/src/pages/session/composer/session-question-dock.tsx` 证明 Build/Plan 与逐题状态；其输入区位置作为对照，CampusClaw 保留时间线题卡与独立 Composer。
+
+OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对，公开 Build/Plan 与权限模式；本设计只采用命名，不将其权限保证带入 CampusClaw 的提示词式 Plan。Vite [环境变量](https://vite.dev/guide/env-and-mode) 与 [HMR](https://vite.dev/guide/api-hmr) 同日核对。实现 `frontend/package-lock.json` 锁定 Vite 6.4.3 与 @vitejs/plugin-vue 5.2.4；读取对应安装源码的 handleHMRUpdate（env/config 触发 restartServerWithUrls）和 Vue rerender/reload 分支，支持代码热更新边界，不证明新配置服务已存在。
+
+本次没有修改或测试产品实现、真实认证、模型遵循或 Mate 接入。新规则属于前端产品约束及配置架构变更；模型仍保留原 ToolCall/ToolResult，公共事件与运行时权限不因隐藏 JSON 改变。

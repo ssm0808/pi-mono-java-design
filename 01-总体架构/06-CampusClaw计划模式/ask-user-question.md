@@ -1,15 +1,15 @@
 # AskUserQuestion：结构化提问与原执行续跑
 
-版本：1.1.0；日期：2026-09-15。状态：Runtime 与调试前端已在 PR #301 开发分支实现并通过独立验证；企业 Mate 接入和真实模型行为评估尚未验证。
+版本：1.2.0；日期：2026-09-16。状态：1d08f98e 已实现 Runtime 问答及调试卡片；逐题展示、工具日志汇聚及必要性提示词为 target-only。既有独立验证绑定 §2 所列 9f785bea，企业 Mate 接入和真实模型行为评估尚未验证。
 
 本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#submitSessionEvent)。提示词组合由 [plan-policy.md](plan-policy.md) 维护。
 
 ## 1. 目标与边界
 
-根 Agent 遇到需要用户决定的目标、约束或重要取舍时，调用 `AskUserQuestion`。后端发布完整 `agent.question`，前端据此展示问题；用户通过既有 POST Events 提交 `user.question_answer`。回答作为该工具的正常结果返回，原 Agent Loop 继续，保持根消息、Session、mode、原执行凭据和实施进度归属。
+根 Agent 先检查已有信息；只有用户掌握的信息或重要选择仍会影响后续工作时，才调用 `AskUserQuestion`。已有明确答案、可查询事实和能够合理采用且不会影响关键方案的默认值不再提问；合理假设在方案中简要说明。优先一题，不为了工具允许三题而凑题。后端发布完整 `agent.question`，前端据此展示问题；用户通过既有 POST Events 提交 `user.question_answer`。回答作为该工具的正常结果返回，原 Agent Loop 继续，保持根消息、Session、mode、原执行凭据和实施进度归属。
 
 - Runtime 默认 profile 在现有十项之后追加 `AskUserQuestion`，执行模式为 `SEQUENTIAL`；plan/build 的名称、Schema、description、顺序一致。默认 Child/Cron 不装配；即使显式配置也必须拒绝无交互根上下文的调用。Child 把待决问题交给父 Agent，Cron 汇报缺失信息并按既有任务生命周期结束。
-- 一次询问包含 1～3 个问题，支持单选、多选和自由文本。一次提交回答全部问题；首版没有跳过、附件、动态表单、问题编辑或问题 CRUD。用户可以明确回答“无法确定”；不使用空答案表示默认同意。
+- 一次工具请求包含 1～3 个问题，支持单选、多选和自由文本；只有确需同时回答的独立问题才合成多题。一张活动卡每次只显示一题，本地完成后统一提交该批全部答案；下一题依赖前一题答案时，由 Agent 收到本批结果后发起新的问题事件，不预先拼成固定三题。首版没有跳过、附件、动态表单、问题定义编辑或问题 CRUD；提交前可以返回修改自己的答案。用户可以明确回答“无法确定”，不使用空答案表示默认同意。
 - `AskUserQuestion` 收集信息；`ExitPlanMode` 审核完整方案；`user.tool_confirmation` 控制工具权限。回答不会改变 mode、批准方案、扩大工具权限或修改 TODO。build 中的问题回答继续受已有任务授权约束；实质改写获批方案仍按原规则结束执行后重新进入 plan。
 - 不新增 HTTP 路径、Session 响应字段或 Agent/Tool/Skill 元数据字段。问题数组和答案属于运行事件，不是元数据。内部执行控制与答案交接需要持久化增量，不能只增加模型工具说明和前端卡片。
 - 工具可用时，需要用户回答的澄清使用该工具。显式 profile 未装配它时保留普通 Assistant 提问并结束执行的降级方式；不得生成不存在的问题事件或自动补装工具，也不因此禁止 plan 模式。
@@ -34,6 +34,8 @@
 干净 `clean verify` 生成 373 份报告、2085 项测试，失败/错误/跳过均为 0；专用 openGauss 回归另计 16 类、140 项（132 项全量重跑及修复旧路由测试后的 8 项聚焦重跑），前端 14 文件、172 项通过。父审查另验证 5 组 Java 探针、最终 JAR 的实际 HTTP/数据库流程、214 个前端契约样例、10 个投影场景及 18 项浏览器检查；合成 UI 后端与实际 Runtime HTTP 验证分别记录。
 
 限制：公司镜像因 `NativeParent:26.0.0-SNAPSHOT` 无法解析，未进入企业源码编译；外部 mate-service 公共桥接没有在本仓实现或联调。真实模型遵循率及操作系统 IME 候选确认未测；已验证 textarea Enter 换行和显式按钮提交。openGauss 测试不等同生产 GaussDB 环境认证。
+
+当前交互核验：`pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`。相对 9f785bea 已有前端菜单、方案卡和草稿相关调整；本次实际读取的 QuestionCard、投影、工具、答案与计划接受路径见[源码证据 §9](source-evidence.md#9-buildplan-与逐题交互核验)。已有卡片一次渲染所有问题，且仍显示 AskUserQuestion 通用工具日志；本版新增展示不得引用前述测试数量作为已通过证据。
 
 ### 2.1 同层基线与取舍
 
@@ -76,8 +78,8 @@ Ask the user one to three concise questions when required information or a user-
 
 1. Agent 形成完整 `AskUserQuestion` ToolCall；该 Assistant 响应只能包含这一项 ToolCall，普通说明文本可同时存在。框架先校验 Schema，Runtime 再从最终调用解析一个不可变问题快照；before hook、等待对象、持久化事件和工具端口共享该快照，不从普通回复提取问题，也不再次各自解析不同版本。
 2. 既有路径保存唯一 `agent.tool_call`，`requiresConfirmation=false`。随后在同一短事务保存 `agent.question`、`session.status_idle(reason=confirming)`，登记内部等待目标并关闭旧段；提交后推送并关闭本次 SSE。`confirming` 统一表示本段等待用户处理，具体是提问、计划审核还是授权由对应完整事件确定；它不是执行成功或 Session idle。
-3. 前端直接消费 `agent.question.questions`，显示问题卡片；无需根据工具名称或工具参数解析问卷。Session 保持 running，mode 不变，Agent 在该工具处等待；不能提交下一条普通消息，也不能手动修改执行配置。
-4. 用户点击“提交回答”，沿用 `POST /campusclaw-service/v1/sessions/{sessionId}/events`，事件为 `user.question_answer`。`targetEventId` 精确指向这张 `agent.question.eventId`；不是问题条目的 id、toolCallId 或根消息 id。请求不复制问题、选项或方案。
+3. 前端直接消费 `agent.question.questions`，显示当前一题及题号；前进、返回和答案编辑只更新本地草稿，末题完整校验后一次提交。问题卡吸收按同一 sourceEventId/toolCallId 关联的调用和结果，主对话不重复显示原始 JSON；无需根据工具名称或工具参数解析问卷。Session 保持 running，mode 不变，Agent 在该工具处等待；不能提交下一条普通消息，也不能手动修改执行配置。
+4. 用户在最后一题点击“提交回答”，沿用 `POST /campusclaw-service/v1/sessions/{sessionId}/events`，事件为 `user.question_answer`。`targetEventId` 精确指向这张 `agent.question.eventId`；不是问题条目的 id、toolCallId 或根消息 id。请求不复制问题、选项或方案。
 5. 服务端原子接受答案和新段后，响应第一个业务帧为完整 `user.question_answer` 回执。原实例领取答案、绑定新段，再唤醒工具等待；工具正常返回，后续 `agent.tool_result`、思考、业务工具和回答继续落在同一根 `sourceEventId` 下。
 6. plan 中继续调研或单独调用 ExitPlanMode；build 中继续实施，已有 TODO 不重置、不自动 completed。下一次确需提问时产生新的 agent.question.eventId；旧问题及回答保持不可变。
 
@@ -139,11 +141,23 @@ SSE 和 GET 历史的两种新事件完全同形，无 phase/delta。agent.quest
 
 ## 7. 前端交互与企业服务边界
 
-问题卡片直接使用后端问题快照：单选 radio、多选 checkbox、纯文本 textarea；有选项时同时提供自由输入。没有预选即自动提交、自动超时选择或默认肯定。每题独立显示校验错误，一次提交全部答案；普通 Composer 草稿独立保留，提问等待中其发送功能仍按 running 禁用。
+### 7.1 一次一题，整批提交
+
+问题卡片直接使用后端问题快照：单选 radio、多选 checkbox、纯文本 textarea；有选项时同时提供自由文本输入。单题显示问题和提交按钮；多题显示“1/3”等当前位置、当前一题、“上一步”及“下一步”，末题按钮为“提交回答”。选择选项不会自动跳题或发请求，没有预选、自动超时选择或默认肯定。
+
+前进时只校验当前题，返回保留已填答案；末题校验整批，缺题时定位第一处错误。题号、页内滚动位置与答案都是客户端草稿，不新增公共事件、逐题接口或数据库等待状态。一次提交全部答案，服务端继续执行原有精确 targetEventId 和整批规范化校验。只有新收到 agent.question 才是一批新的模型提问，UI 翻页不是模型新回合。
+
+活动问题卡保留在可滚动时间线的原位置，每次只显示一题。普通 Composer 保留为独立布局行，不覆盖题卡；用户可以继续编辑普通草稿，发送仍按 running 禁用。这样保留已有草稿、Slash 和停止操作的归属，遮挡通过真实布局行与滚动解决。长题随时间线滚动，卡片操作区可滚动到可见位置；窄屏、浏览器缩放、软键盘与长选项下均须能读完当前题并到达按钮。收起卡片只改变展示，仍显示“等待回答”和恢复入口。历史问答在时间线显示简短摘要，展开可回看，不同时保留两份可操作问卷。
+
+### 7.2 状态与主对话投影
 
 卡片投影状态为 waiting/submitting/answered/closed/recovering，仅为 UI 派生值，不新增 Session 状态。提交中冻结会话、generation、targetEventId 和答案快照；与停止共用写入控制锁，双击只发一次。收到完整回执才标记 answered，后续执行失败不抹掉回答事实；不确定则 recovering。停止或终态前无回答时标记 closed，不伪造用户跳过。新批问题重新建卡，旧卡只读；折叠不丢草稿，切换 Session 不把草稿带到另一张卡。
 
-标题、问题、选项和回答按普通文本转义，不执行 HTML/Markdown；只读工具日志可折叠，问题交互不依赖工具日志是否加载。问题 id 仅作关联，不作为页面 HTML id 直接拼接。使用 fieldset/legend、明确 label、键盘可操作控件与行内错误；新卡片通知不抢正在编辑的焦点；textarea 的 Enter 换行，显式提交按钮提交，IME 组合不触发发送。窄屏选项纵向排布，长文自然换行。
+完整 agent.question 是问题显示来源，user.question_answer 是已接受答案来源。默认主对话不单列其 AskUserQuestion 参数、工具成功 JSON 或“向用户提问”工具行；按同一 sourceEventId/toolCallId 与问题事件汇聚，已回答后显示“已回答”及答案摘要。ToolCall/ToolResult 仍完整保存、返回模型，原始事件在开发者诊断中按需查看，不删除协议记录。出现问题事件前可显示短暂“准备问题”；失败且没有权威问题事件时显示简短错误，不能隐藏失败或从参数伪造可回答问题。只有工具结果而问题尚未补齐时显示恢复状态，原始 JSON 不回退到主对话。
+
+标题、问题、选项和回答按普通文本转义，不执行 HTML/Markdown；问题交互不依赖工具日志是否加载。问题 id 仅作关联，不作为页面 HTML id 直接拼接。使用 fieldset/legend、明确 label、键盘可操作控件与行内错误；新卡片通知不抢正在编辑的焦点；用户点击下一步/上一步后把焦点移至当前题标题，错误时定位首个错误控件，结束后返回合理操作点；textarea 的 Enter 换行，显式提交按钮提交，IME 组合不触发发送。窄屏选项纵向排布，长文自然换行。
+
+### 7.3 企业服务边界
 
 Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是单独契约：新增事件和回答输入需要独立投影、公共问题 eventId 与内部事件 ID 的校验映射，以及原公共根身份关联；不暴露 sessionId/executionId，也不把内部 request-scoped SSE 透传成公共 live 流。未同步的 Mate/客户端不开放此工具入口。默认工具启用必须在事件解码、持久化、控制、恢复和客户端已就绪的同一发布切片中完成；旧二进制不能直接回退读取新类型。
 
@@ -154,14 +168,15 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 | Q1 契约及工具 | 严格 Schema/DTO/VO、Parser、Port/Adapter、枚举/profile、两种新事件及错误 | 单/多/纯文本；UTF-16、strip、重复/未知/null/缺题/选项归属；Runtime 两模式工具定义相同；Child/Cron 拒绝；无元数据和 Session 字段扩展 |
 | Q2 等待与事务 | 收敛唯一待交互槽；问题/confirming/指针同事务；答案/回执/新段同事务；答案领取与消费 | tool_call 前置；共享不可变快照；错误无卡片；三类不能互相消费；插入失败整笔回滚；在工具 await 前已领取答案仍正常返回；原根与凭据不变 |
 | Q3 控制及恢复 | 跨实例轮询与单次领取、中断/超时、可靠终态、删除和保留清理 | 回答/回答、回答/停止、回答/超时竞争；原段关闭；新段首帧完整回执；不重放写；失联不假装成功或自动接管 |
-| Q4 前端及桥接 | QuestionCard/Store、规范化提交、同 reducer 历史恢复；需要企业入口时同步 Mate 公共契约 | 单/多/文本展示无需工具日志；缺页禁答、重复帧、跨端已回答、回执丢失、切会话草稿、IME/键盘/390px；plan 不建 TODO，build 回答不重置清单 |
-| Q5 提示词与场景 | 通用提问指令、plan/build 组合、降级与角色边界 | 可查事实自行检查；需选择时使用工具；问题肯定不批准方案；不编造/重复问；无工具回退普通消息；模型评估与确定性测试分别记录 |
+| Q4 前端及桥接 | QuestionCard/Store、规范化提交、同 reducer 历史恢复；需要企业入口时同步 Mate 公共契约 | 单/多/文本展示无需工具日志；缺页禁答、重复帧、跨端已回答、回执丢失、切会话草稿、IME/键盘/390px；plan 不建 TODO，build 回答不重置清单；target-only：当前仅一题可见、翻页不 POST、末题仅一次提交、前后导航保留答案、调用/结果汇聚且失败可见、收起不提交 |
+| Q5 提示词与场景 | 通用提问指令、plan/build 组合、降级与角色边界 | 可查事实自行检查；需选择时使用工具；问题肯定不批准方案；不编造/重复问；无工具回退普通消息；target-only：优先一题、不固定三题、无待决信息不提问、有关联的后续问题在下一批提出、工具 JSON 不作为最终答复；模型评估与确定性测试分别记录 |
 
-不新增 Maven/npm 直接依赖；复用 JDK、Jackson、Jakarta Validation、现有 Spring/MyBatis、取消、SSE 与 Vue 设施。Java 方法、DTO/VO、中文文档及镜像规则沿用仓库约定。Q1～Q5 的 Runtime 与调试前端实施、确定性验证结果见 §2；企业桥接、公司编译环境和真实模型行为仍按该处边界记录，不能用单测代替外部验收。
+不新增 Maven/npm 直接依赖；复用 JDK、Jackson、Jakarta Validation、现有 Spring/MyBatis、取消、SSE 与 Vue 设施。Java 方法、DTO/VO、中文文档及镜像规则沿用仓库约定。Q1～Q5 的既有 Runtime 与调试前端验证结果见 §2；本版 Q4/Q5 新增交互与提示词仍为 target-only，实施后须重新验收。企业桥接、公司编译环境和真实模型行为仍按该处边界记录，不能用单测代替外部验收。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-16 | 明确必要时优先一题、逐题完整提交及问题答案卡吸收工具日志。 |
 | 1.1.0 | 2026-09-15 | 登记结构化问答实现、独立验证与企业接入边界，明确首版完整安装 SQL。 |
 | 1.0.0 | 2026-09-15 | 增加结构化提问工具、显式问题与回答事件及原执行续跑设计。 |

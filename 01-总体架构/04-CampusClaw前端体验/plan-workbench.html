@@ -19,11 +19,12 @@
 @media(max-width:480px){.question-card fieldset{padding:16px}.question-card>summary,.question-footer{padding:12px 16px}.command-option{grid-template-columns:minmax(0,1fr);gap:3px}.demo-panel>summary{padding:10px 12px}}
 .dock:has(#command-result:not([hidden])) .progress ul{max-height:15dvh}
 .question-card>summary{list-style:none}.question-card>summary::-webkit-details-marker{display:none}.question-card>summary:after{content:"⌄";color:var(--muted)}.question-card[open]>summary:after{content:"⌃"}#question-status{margin-left:auto}
+.mode-menu{position:fixed;bottom:auto;min-width:0;width:210px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);overflow:auto;z-index:40}.rail{min-height:0;overflow-y:auto}.question-footer .row{margin-left:auto}.question-summary{flex-basis:100%;padding:0;color:var(--muted);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.question-card[open] .question-summary{display:none}.question-card>summary strong{font-weight:600}.question-step{font-variant-numeric:tabular-nums}.commentary:empty{display:none}.dock{flex-shrink:0}
 </style>
 </head>
 <body>
 <details class="demo-panel" open><summary>原型场景与模拟事件 <span class="muted">· 设计评审</span></summary><div class="demo" aria-label="设计演示控制，不属于产品">
- <strong>交互原型 · 1.2.0</strong><select id="scenario" aria-label="演示场景"><option value="review">待审核方案</option><option value="idle">普通对话</option><option value="planIdle">计划模式空闲</option><option value="research">调研中</option><option value="question">计划中提问</option><option value="buildQuestion">实施中提问</option><option value="clarifying">无工具时普通澄清</option><option value="slash">Slash 命令</option><option value="executing">实施进度</option><option value="recovering">恢复审核</option><option value="stopped">已停止</option></select>
+ <strong>交互原型 · 1.3.0</strong><select id="scenario" aria-label="演示场景"><option value="review">待审核方案</option><option value="idle">Build 空闲</option><option value="planIdle">Plan 空闲</option><option value="research">调研中</option><option value="question">Plan 提问</option><option value="buildQuestion">Build 提问</option><option value="clarifying">无工具时普通澄清</option><option value="slash">Slash 命令</option><option value="executing">实施进度</option><option value="recovering">恢复审核</option><option value="stopped">已停止</option></select>
  <button id="receipt" class="secondary">模拟服务端回执</button><button id="advance">下一步事件</button><button id="disconnect">断开连接</button><button id="other-client">其他端已处理</button><button id="reject-mode">模式更新失败</button><span class="divider"></span><a href="plan-interaction.md">设计说明</a><span class="muted">本地模拟，无网络或工具执行</span>
 </div></details>
 <div class="app" id="app">
@@ -42,17 +43,17 @@
    <details class="activity" id="analysis"><summary>分析过程 · 原始推理</summary><p class="detail">需要先核对告警时段与受影响设备，再结合近期变更判断排查范围。</p></details>
    <details class="activity" id="activity"><summary id="activity-title">已查询告警与设备状态</summary><div class="detail"><p>输入参数</p><p>区域：东区 · 时间：最近 24 小时</p><p style="margin-top:12px">输出结果</p><p id="activity-result">示例查询已完成，告警集中在同一上联链路。</p></div></details>
    <p class="commentary" id="commentary"></p>
-   <div class="notice" id="notice" hidden><p id="notice-text" role="status" aria-live="polite" tabindex="-1"></p><button id="recover" class="secondary">读取历史与状态</button></div>
+   <div class="notice" id="notice" hidden><p id="notice-text" role="status" aria-live="polite" tabindex="-1"></p><button id="recover" class="secondary">刷新状态</button></div>
    <details class="history-plan" id="old-plan" hidden><summary>查看上一份方案 · 已退回修改</summary><pre id="old-plan-text"></pre></details>
    <details class="plan" id="plan" open>
     <summary><strong>处置方案</strong><span class="plan-badge" id="plan-state">待审核</span></summary>
     <div class="plan-body"><h2 id="plan-title">东区网络告警排查与处置</h2><p id="plan-intro">先确认影响范围和变更原因，再在允许的维护窗口内处理，最后核验告警与业务恢复情况。</p><h3>执行步骤</h3><ol id="plan-steps"><li>核对受影响设备、上联链路与告警发生时间。</li><li>比对近期配置变更，确认故障原因与影响范围。</li><li>在维护窗口内实施处置；需要权限时单独请求工具授权。</li><li>复核告警、链路与业务状态，整理结果和回退记录。</li></ol><h3>验证与回退</h3><p>以告警恢复、链路状态和业务验证结果判断处置效果。验证未通过时停止后续变更，按已确认的回退步骤处理并报告结果。</p></div>
-    <div class="plan-footer"><div class="row plan-actions"><button id="copy" class="muted">复制方案</button><div class="review-buttons" id="review-buttons"><button id="revise" class="secondary">修改方案</button><button id="approve" class="primary">批准并执行</button></div></div>
+    <div class="plan-footer"><div class="row plan-actions"><button id="copy" class="muted">复制计划</button><div class="review-buttons" id="review-buttons"><button id="revise" class="secondary">修改计划</button><button id="approve" class="primary">执行计划</button></div></div>
      <div id="feedback" class="feedback" hidden><label for="feedback-text">修改意见 <span class="muted small">选填</span></label><textarea id="feedback-text" placeholder="例如：先定位原因，维护操作安排在今晚 22:00 之后"></textarea><p id="feedback-error" class="error" role="alert"></p><div class="row"><button id="revise-submit" class="primary">提交修改意见</button><button id="revise-cancel">取消</button></div></div>
      <p id="decision-status" class="small muted" role="status" aria-live="polite" tabindex="-1"></p><p id="copy-state" class="small muted" role="status" hidden></p>
     </div>
    </details>
-   <details id="question-card" class="question-card" hidden open><summary><strong id="question-title">需要你的回答</strong><span id="question-status" class="small muted" role="status" tabindex="-1"></span></summary><form id="question-form"><div id="question-fields"></div><div class="question-footer"><span class="small muted">提交后继续当前任务</span><button id="question-submit" class="primary" type="submit">提交全部回答</button></div></form></details>
+   <details id="question-card" class="question-card" hidden open><summary><strong id="question-title">等待回答</strong><span id="question-status" class="small muted" role="status" tabindex="-1"></span><span id="question-summary" class="question-summary" hidden></span></summary><form id="question-form"><div id="question-fields"></div><div class="question-footer"><span id="question-step" class="small muted question-step" aria-live="polite"></span><div class="row"><button id="question-previous" class="secondary" type="button">上一步</button><button id="question-next" class="primary" type="button">下一步</button><button id="question-submit" class="primary" type="submit">提交回答</button></div></div></form></details>
    <section class="tool-permission" id="permission" hidden><strong>工具授权 · 调整端口配置</strong><p>设备：SW-DC-01 · 端口：GigabitEthernet0/0/24</p><p class="muted small">方案已批准。本次操作会修改设备配置，仍需你的工具授权。</p><div class="row"><button id="tool-allow" class="primary">允许本次操作</button><button id="tool-deny" class="secondary">拒绝</button></div></section>
    <p id="result" class="result" hidden></p>
   </div></div>
@@ -60,7 +61,7 @@
    <details class="progress" id="progress" open><summary id="progress-summary">实施进度</summary><ul id="todos"></ul></details>
    <details id="command-result" class="command-result" hidden open><summary>命令结果 · 仅当前页面</summary><div class="row"><p id="command-result-text"></p><button id="command-result-close" aria-label="关闭命令结果">×</button></div></details>
    <div class="composer"><div id="command-palette" class="command-palette" hidden><div id="command-list" role="listbox" aria-label="可用命令"></div><p id="command-empty" class="muted" hidden>没有匹配命令</p></div><div id="command-chip" class="command-chip" hidden><button id="command-name" aria-label="更换命令"></button><button id="command-remove" aria-label="移除命令">×</button></div><label for="draft" class="sr-only">消息草稿</label><textarea id="draft" rows="2" placeholder="补充目标、约束或期望结果…"></textarea>
-    <button id="command-run" class="secondary" hidden>执行命令</button><p id="command-error" class="error" role="alert" hidden></p><div class="toolbar"><button aria-label="添加附件，暂未接入" title="原型未接入附件上传" disabled>＋</button><div class="mode-wrap"><button id="mode" aria-haspopup="menu" aria-expanded="false" aria-controls="mode-menu">计划模式 ⌄</button><div class="mode-menu" id="mode-menu" role="menu" hidden><button id="mode-build" role="menuitemradio" aria-checked="false">普通模式<small>直接推进任务</small></button><button id="mode-plan" role="menuitemradio" aria-checked="true">计划模式<small>先形成方案，审核后实施</small></button></div></div><button id="model" class="desktop-config" title="演示模型设置">模型 A ⌄</button><button id="thinking" class="desktop-config" aria-pressed="true">深度思考</button><button id="settings-toggle" aria-expanded="false" aria-controls="settings">设置</button><button id="send" class="primary" aria-label="停止生成">■</button></div>
+    <button id="command-run" class="secondary" hidden>执行命令</button><p id="command-error" class="error" role="alert" hidden></p><div class="toolbar"><button aria-label="添加附件，暂未接入" title="原型未接入附件上传" disabled>＋</button><div class="mode-wrap"><button id="mode" aria-haspopup="menu" aria-expanded="false" aria-controls="mode-menu">Plan ⌄</button><div class="mode-menu" id="mode-menu" role="menu" hidden><button id="mode-build" role="menuitemradio" aria-checked="false">Build<small>直接推进任务</small></button><button id="mode-plan" role="menuitemradio" aria-checked="true">Plan<small>先形成方案，审核后实施</small></button></div></div><button id="model" class="desktop-config" title="演示模型设置">模型 A ⌄</button><button id="thinking" class="desktop-config" aria-pressed="true">深度思考</button><button id="settings-toggle" aria-expanded="false" aria-controls="settings">设置</button><button id="send" class="primary" aria-label="停止生成">■</button></div>
     <div id="settings" class="settings" hidden><span class="small muted" id="config-current">模型 A · 深度思考开启</span><p class="small muted">模型与思考控件复用完整会话配置；运行中不可修改。</p></div>
     <p id="input-error" class="error" role="alert" hidden></p>
    </div><p id="input-help" class="composer-note">可保留草稿；审核或停止后继续。</p>
@@ -75,10 +76,10 @@
  const initialPlan = '# 东区网络告警排查与处置\n\n先确认影响范围和变更原因，再在允许的维护窗口内处理，最后核验告警与业务恢复情况。\n\n## 执行步骤\n\n1. 核对受影响设备、上联链路与告警发生时间。\n2. 比对近期配置变更，确认故障原因与影响范围。\n3. 在维护窗口内实施处置；需要权限时单独请求工具授权。\n4. 复核告警、链路与业务状态，整理结果和回退记录。\n\n## 验证与回退\n\n以告警恢复、链路状态和业务验证结果判断处置效果。验证未通过时停止后续变更，按已确认的回退步骤处理并报告结果。';
  const taskText = ['核对影响范围与近期变更', '实施处置并验证恢复', '整理结果与回退记录'];
  let phase, mode, plan, planStatus, pending, todos, rootId, generation = 0, priorPhase, composing = false, progressStep = 0, showFeedback = false, view = 'alarm';
- let question = null, questionAnswers = null, questionDrafts = [], questionClosed = false, questionOther = false;
+ let question = null, questionAnswers = null, questionDrafts = [], questionClosed = false, questionOther = false, questionIndex = 0;
  const cmd = {active:false,palette:false,selected:null,args:"",query:"/",message:"",index:0,replacement:null};
  let receipts = 0, writes = 0, requestedMode = '', staleTarget = false, result = '', messageSnapshot = '', seen = new Set();
- const labels = {question:'等待你的回答',questionPending:'正在提交回答',questionAnswered:'回答已接受',commandPending:'正在运行命令',idle:'空闲',planIdle:'计划模式',research:'正在制定方案',clarifying:'等待你的补充',review:'等待方案审核',decisionPending:'正在提交决定',revising:'正在修改方案',executing:'正在实施',toolReview:'等待工具授权',toolPending:'正在提交工具决定',toolDenied:'工具已拒绝，等待结果',stopping:'正在请求停止',stopAccepted:'停止处理中',recovering:'正在核对状态',uncertain:'结果待核对',stopped:'已停止',done:'已完成',modePending:'正在切换模式',submitting:'正在提交'};
+ const labels = {question:'等待回答',questionPending:'提交中',questionAnswered:'已回答',commandPending:'处理中',idle:'空闲',planIdle:'Plan',research:'规划中',clarifying:'等待回答',review:'等待审核',decisionPending:'提交中',revising:'规划中',executing:'处理中',toolReview:'等待确认',toolPending:'提交中',toolDenied:'工具已拒绝，等待结果',stopping:'停止中',stopAccepted:'停止中',recovering:'同步中',uncertain:'连接中断，状态待确认',stopped:'已停止',done:'已完成',modePending:'提交中',submitting:'提交中'};
  const ready = () => ['idle','planIdle','clarifying','stopped','done'].includes(phase);
  const canStop = () => ['research','review','revising','executing','toolReview','toolDenied','question','questionAnswered'].includes(phase);
  function renderTasks() {
@@ -100,14 +101,14 @@
   $('app').dataset.phase = phase; $('app').dataset.mode = mode; $('app').dataset.writes = String(writes);
   $('app').dataset.root = rootId; $('app').dataset.plan = plan?.eventId || '';
   $('status').textContent = labels[phase]; $('status').dataset.active = String(canStop());
-  $('mode').textContent = mode === 'plan' ? '计划模式 ⌄' : '普通模式 ⌄'; $('mode').classList.toggle('mode-active',mode === 'plan');
+  $('mode').textContent = mode === 'plan' ? 'Plan ⌄' : 'Build ⌄'; $('mode').classList.toggle('mode-active',mode === 'plan');
   $('mode').disabled = !ready(); $('model').disabled = !ready(); $('thinking').disabled = !ready();
   $('mode-plan').setAttribute('aria-checked',String(mode === 'plan')); $('mode-build').setAttribute('aria-checked',String(mode === 'build'));
   $('send').textContent = ready() ? '↑' : '■'; $('send').setAttribute('aria-label',ready() ? '发送消息' : '停止生成');
   const over = Array.from($('draft').value).length > 2048;
   $('send').disabled = ready() ? !$('draft').value.trim() || over : !canStop();
   $('input-error').hidden = !over; $('input-error').textContent = over ? '消息最多 2048 个 Unicode 字符。' : '';
-  $('input-help').textContent = ready() ? (mode === 'plan' ? '先调研并形成方案，审核后实施。Enter 发送，Shift+Enter 换行。' : 'Enter 发送 · Shift+Enter 换行') : '当前任务仍在进行；新消息只保留为草稿。';
+  $('input-help').textContent = ready() ? 'Enter 发送 · Shift+Enter 换行' : phase === 'question' ? '请回答上方问题' : phase === 'review' ? '请审核上方方案' : phase === 'questionPending' ? '提交中' : '可先写下一条消息';
   $('plan').hidden = !plan; $('plan-state').textContent = planStatus;
   $('review-buttons').hidden = !['review','decisionPending'].includes(phase);
   $('approve').disabled = phase !== 'review' || staleTarget; $('revise').disabled = phase !== 'review' || staleTarget;
@@ -130,7 +131,7 @@
  function reset(scene = 'review') {
   const buildQuestion = scene === 'buildQuestion', slashScene = scene === 'slash';
   scene = buildQuestion ? 'question' : slashScene ? 'planIdle' : scene;
-  question=null; questionAnswers=null; questionDrafts=[]; questionClosed=false; questionOther=false;
+  question=null; questionAnswers=null; questionDrafts=[]; questionClosed=false; questionOther=false; questionIndex=0;
   clearCommand(false);$('command-result').hidden=true;
   generation++; $('user-message').hidden=false; phase = scene; mode = ['idle','executing','done','stopped'].includes(scene) ? 'build' : 'plan';
   rootId = `demo-root-${generation}`; plan = ['review','executing','recovering','stopped'].includes(scene) ? {eventId:`demo-plan-${generation}`,content:initialPlan} : null;
@@ -140,20 +141,28 @@
   $('plan-title').textContent = '东区网络告警排查与处置'; $('plan-intro').textContent = '先确认影响范围和变更原因，再在允许的维护窗口内处理，最后核验告警与业务恢复情况。';
   $('plan').open = scene !== 'executing' && scene !== 'stopped'; $('progress').open = true; closeMode(false);
   if (scene === 'executing' || scene === 'stopped') { todos = taskText.map((content,i) => ({content,status:i === 0?'completed':i === 1?'in_progress':'pending'})); progressStep = 1; }
-  if (scene === 'stopped') result = '任务已停止。已完成的工作与最后进度保留；没有把其余任务标为完成。';
+  if (scene === 'stopped') result = '已停止，进度已保留。';
   if(buildQuestion) {mode='build';todos=taskText.map((content,i)=>({content,status:i===0?'completed':i===1?'in_progress':'pending'}));}
   if(scene==='question') setQuestion(questionFixture());
   render();
   if(slashScene) {cmd.message=$('draft').value;cmd.active=true;cmd.palette=true;$('draft').value='/';renderCommands();}
  }
  function closeMode(focus = true) { $('mode-menu').hidden = true; $('mode').setAttribute('aria-expanded','false'); if(focus) $('mode').focus(); }
+ function positionMode() {
+  const menu=$('mode-menu'),anchor=$('mode').getBoundingClientRect(),bounds=menu.getBoundingClientRect(),gap=8;
+  const left=Math.min(Math.max(gap,anchor.left),Math.max(gap,window.innerWidth-bounds.width-gap));
+  const above=anchor.top-bounds.height-gap,below=anchor.bottom+gap;
+  const top=above>=gap?above:Math.min(below,Math.max(gap,window.innerHeight-bounds.height-gap));
+  menu.style.left=`${left}px`;menu.style.top=`${Math.max(gap,top)}px`;
+ }
+ function openMode(index=mode==='plan'?1:0) {if(!ready())return;$('mode-menu').hidden=false;$('mode').setAttribute('aria-expanded','true');positionMode();$(index?'mode-plan':'mode-build').focus();}
  function write(kind, data = {}) { pending = Object.freeze({kind,generation,rootId,...data}); writes++; }
  function decide(decision) {
   if (phase !== 'review' || staleTarget || !plan) return;
   const feedback = $('feedback-text').value;
   if(decision === 'revise' && ((feedback && !feedback.trim()) || feedback.length > 4096)) { $('feedback-error').textContent='修改意见如填写，需非空白且不超过 4096 UTF-16 单元（内部原型限制）。'; $('feedback-text').focus(); return; }
   write('plan',{target:plan.eventId,decision,...(decision === 'revise' && feedback ? {feedback} : {})});
-  phase='decisionPending'; $('decision-status').textContent='正在提交决定…'; render(); $('decision-status').focus();
+  phase='decisionPending'; $('decision-status').textContent='提交中'; render(); $('decision-status').focus();
  }
  function receipt() {
   if(!pending || pending.generation !== generation) return;
@@ -184,9 +193,9 @@
    $('plan-intro').textContent='先确认影响范围和变更原因，再在允许的维护窗口内处理，最后核验告警与业务恢复情况。'+(revised?' 维护操作安排在今晚 22:00 后。':'');
    phase='review'; planStatus='待审核'; $('plan').open=true; $('decision-status').textContent=''; $('feedback-text').value=''; render(); return;
   }
-  if(phase === 'stopAccepted') { phase='stopped'; planStatus=planStatus==='已批准'?'已批准':'审核已结束'; result='已收到当前任务的真实停止记录。原草稿与最后任务进度保留。'; $('progress').open=false; render(); return; }
+  if(phase === 'stopAccepted') { phase='stopped'; planStatus=planStatus==='已批准'?'已批准':'审核已结束'; result='已停止，进度已保留。'; $('progress').open=false; render(); return; }
   if(phase !== 'executing') return;
-  if(progressStep >= 4) { phase='done'; result='任务已完成。处置与验证结果已记录，可以继续发送新消息。'; $('progress').open=false; render(); return; }
+  if(progressStep >= 4) { phase='done'; result='处置完成，告警与业务状态已验证。'; $('progress').open=false; render(); return; }
   applyTodo({eventId:`demo-todo-${generation}-${progressStep}`,type:'agent.todo_updated',sourceEventId:rootId,todos:taskText.map((content,i)=>({content,status:i<progressStep?'completed':i===progressStep?'in_progress':'pending'}))});
   progressStep++;
   if(progressStep===2) { phase='toolReview'; render(); }
@@ -198,11 +207,17 @@
   write('message'); phase='submitting'; render();
  }
  $('scenario').onchange=e=>reset(e.target.value);
- $('mode').onclick=()=>{ if(!ready())return; $('mode-menu').hidden=!$('mode-menu').hidden; $('mode').setAttribute('aria-expanded',String(!$('mode-menu').hidden)); if(!$('mode-menu').hidden) $(mode==='plan'?'mode-plan':'mode-build').focus(); };
+ document.body.append($('mode-menu'));
+ $('mode').onclick=()=>{if($('mode-menu').hidden)openMode();else closeMode();};
+ $('mode').onkeydown=e=>{if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();openMode(e.key==='ArrowDown'?0:1);}};
  for(const value of ['build','plan']) $('mode-'+value).onclick=()=>{ if(!ready())return; closeMode(); if(mode===value)return; requestedMode=value; write('mode',{mode:value}); phase='modePending'; render(); };
  $('mode-menu').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();closeMode();} if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();$(e.key==='Home'?'mode-build':e.key==='End'?'mode-plan':document.activeElement===$('mode-plan')?'mode-build':'mode-plan').focus();}};
- document.addEventListener('click',e=>{if(!e.target.closest('.mode-wrap'))closeMode(false);});
- $('reject-mode').onclick=()=>{if(phase!=='modePending')return;pending=null;phase=mode==='plan'?'planIdle':'idle';render();$('notice').hidden=false;$('notice-text').textContent=`模式更新未成功。当前仍为${mode==='plan'?'计划':'普通'}模式；原选择为${requestedMode==='plan'?'计划':'普通'}模式，请核对后重新选择。`;$('recover').hidden=true;};
+ document.addEventListener('click',e=>{if(e.target!==$('mode')&&!$('mode').contains(e.target)&&!$('mode-menu').contains(e.target))closeMode(false);});
+ document.addEventListener('focusin',e=>{if(e.target!==$('mode')&&!$('mode-menu').contains(e.target))closeMode(false);});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('mode-menu').hidden){e.preventDefault();closeMode();}});
+ window.addEventListener('resize',()=>closeMode(false));
+ document.addEventListener('scroll',e=>{if(!$('mode-menu').contains(e.target))closeMode(false);},true);
+ $('reject-mode').onclick=()=>{if(phase!=='modePending')return;pending=null;phase=mode==='plan'?'planIdle':'idle';render();$('notice').hidden=false;$('notice-text').textContent=`模式更新未成功。当前仍为${mode==='plan'?'Plan':'Build'}；原选择为${requestedMode==='plan'?'Plan':'Build'}，请核对后重新选择。`;$('recover').hidden=true;};
  $('approve').onclick=()=>decide('approve'); $('revise').onclick=()=>{if(phase!=='review')return;showFeedback=true;render();$('feedback-text').focus();};
  $('revise-submit').onclick=()=>decide('revise'); $('revise-cancel').onclick=()=>{showFeedback=false;render();$('revise').focus();};
  $('feedback-text').onkeydown=e=>{if(e.key==='Escape'&&!e.isComposing){e.preventDefault();$('revise-cancel').click();}};
@@ -224,13 +239,13 @@
  }
  const recoveryButton=document.createElement('button');recoveryButton.id='history-result';recoveryButton.textContent='模拟历史补齐';recoveryButton.onclick=recovered;document.querySelector('.demo').insertBefore(recoveryButton,$('other-client'));
  for(const decision of ['allow','deny']) $('tool-'+decision).onclick=()=>{if(phase!=='toolReview')return;write('tool',{decision});phase='toolPending';render();};
- $('copy').onclick=async()=>{if(!plan)return;const source=plan.content;$('copy-state').hidden=false;try{await navigator.clipboard.writeText(source);$('copy-state').textContent='已复制方案原文';}catch{$('copy-state').textContent='当前浏览器不允许复制，请选择方案正文复制。';}};
+ $('copy').onclick=async()=>{if(!plan)return;const source=plan.content;$('copy-state').hidden=false;try{await navigator.clipboard.writeText(source);$('copy-state').textContent='已复制';}catch{$('copy-state').textContent='复制失败，请选择正文复制。';}};
  $('model').onclick=()=>{$('settings').hidden=!$('settings').hidden;};
  $('thinking').onclick=()=>{if(!ready())return;$('settings').hidden=false;$('config-current').textContent='模型与思考更新沿用主设计的配置回执流程；此原型仅演示模式更新。';};
  $('settings-toggle').onclick=()=>{$('settings').hidden=!$('settings').hidden;$('settings-toggle').setAttribute('aria-expanded',String(!$('settings').hidden));};
  $('nav-open').onclick=()=>{$('rail').dataset.open='true';$('nav-close').focus();};$('nav-close').onclick=()=>{$('rail').dataset.open='false';$('nav-open').focus();};
  const drafts=new Map(), questionViews=new Map();
- function switchView(next,title){questionViews.set(view,question?{question,questionAnswers,questionDrafts,questionClosed,phase:pending?'uncertain':phase,mode,todos,rootId}:null);drafts.set(view,cmd.active?cmd.message:$('draft').value);view=next;$('draft').value=drafts.get(view)||'';$('title').textContent=title;reset(next==='alarm'?'review':'planIdle');const cached=questionViews.get(next);if(cached){({question,questionAnswers,questionDrafts,questionClosed,phase,mode,todos,rootId}=cached);buildQuestionFields();render();}$('user-message').textContent=next==='alarm'?'请分析东区网络告警，先给出排查和处置方案，确认后再实施。':'请整理今天的巡检结果。';$('current-chat').classList.toggle('selected',next==='alarm');$('other-chat').classList.toggle('selected',next==='daily');$('rail').dataset.open='false';}
+ function switchView(next,title){questionViews.set(view,question?{question,questionAnswers,questionDrafts,questionClosed,questionIndex,phase:pending?'uncertain':phase,mode,todos,rootId}:null);drafts.set(view,cmd.active?cmd.message:$('draft').value);view=next;$('draft').value=drafts.get(view)||'';$('title').textContent=title;reset(next==='alarm'?'review':'planIdle');const cached=questionViews.get(next);if(cached){({question,questionAnswers,questionDrafts,questionClosed,questionIndex,phase,mode,todos,rootId}=cached);buildQuestionFields();render();}$('user-message').textContent=next==='alarm'?'请分析东区网络告警，先给出排查和处置方案，确认后再实施。':'请整理今天的巡检结果。';$('current-chat').classList.toggle('selected',next==='alarm');$('other-chat').classList.toggle('selected',next==='daily');$('rail').dataset.open='false';}
  $('other-chat').onclick=()=>switchView('daily','每日巡检汇总');$('current-chat').onclick=()=>switchView('alarm','园区告警处置');
  $('new-chat').onclick=()=>{switchView('new','新会话');$('draft').value='';reset('idle');$('user-message').hidden=true;};
  // Complete question fixtures, never inferred from assistant text or tool arguments.
@@ -242,14 +257,14 @@
  function setQuestion(event) {
   if(event.type!=='agent.question'||event.sourceEventId!==rootId||question?.eventId===event.eventId)return;
   question=JSON.parse(JSON.stringify(event));questionAnswers=null;questionClosed=false;questionOther=false;
-  questionDrafts=question.questions.map(()=>({selected:[],custom:''}));buildQuestionFields();$('question-card').open=true;
+  questionDrafts=question.questions.map(()=>({selected:[],custom:''}));questionIndex=0;buildQuestionFields();$('question-card').open=true;renderQuestionState();
  }
  function buildQuestionFields() {
   $('question-fields').replaceChildren();
   if(!question)return;
   question.questions.forEach((q,i)=>{
    const field=document.createElement('fieldset'),legend=document.createElement('legend'),heading=document.createElement('small');
-   field.id=`question-field-${i}`;heading.textContent=q.header||`问题 ${i+1}`;legend.append(heading,document.createTextNode(`${i+1}. ${q.question}`));field.append(legend);
+   field.id=`question-field-${i}`;legend.id=`question-heading-${i}`;legend.tabIndex=-1;heading.textContent=q.header||`问题 ${i+1}`;legend.append(heading,document.createTextNode(`${i+1}. ${q.question}`));field.append(legend);
    const options=document.createElement('div');options.className='question-options';
    (q.options||[]).forEach((o,j)=>{
     const label=document.createElement('label');label.className='question-option';
@@ -270,33 +285,50 @@
  function clearQuestionError(i){const error=$(`question-error-${i}`);error.hidden=true;error.textContent='';$(`question-field-${i}`).removeAttribute('aria-describedby');}
  function renderQuestionState(){
   $('question-card').hidden=!question;if(!question)return;
-  $('question-title').textContent=`需要你的回答 · ${question.questions.length} 个问题`;
-  const text=questionAnswers?'已回答':questionClosed?'问题已关闭':phase==='questionPending'?'正在提交回答':['recovering','uncertain'].includes(phase)?'正在核对问题状态':'等待回答';
+  $('question-title').textContent=questionAnswers?'已回答':question.questions[questionIndex].header||'等待回答';
+  const text=questionAnswers?(question.questions.length>1?`${question.questions.length} 个回答`:''):questionClosed?'已关闭':phase==='questionPending'?'提交中':['recovering','uncertain'].includes(phase)?'同步中':question.questions.length>1?`${questionIndex+1} / ${question.questions.length}`:'';
   $('question-status').textContent=text;$('question-card').dataset.state=questionAnswers?'answered':questionClosed?'closed':phase==='questionPending'?'submitting':['recovering','uncertain'].includes(phase)?'recovering':'waiting';
+  $('question-summary').hidden=!questionAnswers;
+  $('question-summary').textContent=questionAnswers?question.questions.map((q,i)=>`${q.header||`问题 ${i+1}`}：${[...questionAnswers[i].selected,...(questionAnswers[i].custom?[questionAnswers[i].custom]:[])].join('、')}`).join('\n'):'';
   question.questions.forEach((q,i)=>{
-   const field=$(`question-field-${i}`);if(!field)return;field.disabled=!canAnswer();const d=questionAnswers?.[i]||questionDrafts[i];
+   const field=$(`question-field-${i}`);if(!field)return;field.hidden=i!==questionIndex;field.disabled=!canAnswer();const d=questionAnswers?.[i]||questionDrafts[i];
    (q.options||[]).forEach((o,j)=>{$(`question-option-${i}-${j}`).checked=d.selected.includes(o.label);});
    const custom=$(`question-custom-${i}`);if(custom.value!==(d.custom||''))custom.value=d.custom||'';
   });
-  $('question-submit').disabled=!canAnswer();$('question-submit').hidden=!!questionAnswers||questionClosed;
+  const last=questionIndex===question.questions.length-1,navigable=canAnswer()||!!questionAnswers||questionClosed;
+  $('question-step').textContent=question.questions.length>1?`${questionIndex+1} / ${question.questions.length}`:'';$('question-step').hidden=question.questions.length===1;
+  $('question-previous').disabled=!navigable||questionIndex===0;$('question-previous').hidden=question.questions.length===1;
+  $('question-next').hidden=last;$('question-next').disabled=!navigable;
+  $('question-submit').disabled=!canAnswer();$('question-submit').hidden=!last||!!questionAnswers||questionClosed;
   if(phase==='question')$('commentary').textContent=mode==='plan'?'开始整理方案前，需要确认几项实施约束。':'继续实施前，需要补充几项现场信息。';
  }
+ function validateQuestion(i){
+  const q=question.questions[i],d=questionDrafts[i],custom=strip(d.custom),selected=(q.options||[]).filter(o=>d.selected.includes(o.label)).map(o=>o.label);let error='';
+  if(custom.length>4096)error='回答过长，请缩短后再提交。';
+  else if(!selected.length&&!custom)error=q.options?'请选择或填写回答。':'请填写回答。';
+  else if(!q.multiSelect&&(selected.length>1||(selected.length&&custom)))error='请选择或填写一种回答。';
+  clearQuestionError(i);
+  if(error){$(`question-error-${i}`).textContent=error;$(`question-error-${i}`).hidden=false;$(`question-field-${i}`).setAttribute('aria-describedby',`question-error-${i}`);}
+  return {error,answer:{id:q.id,selected,...(custom?{custom}:{})}};
+ }
+ function focusQuestion(error=false){const field=$(`question-field-${questionIndex}`);if(error)field?.querySelector('input,textarea')?.focus();else $(`question-heading-${questionIndex}`).focus();field?.scrollIntoView?.({block:'nearest'});}
+ function moveQuestion(offset){
+  if(composing||(!canAnswer()&&!questionAnswers&&!questionClosed))return;
+  if(offset>0&&canAnswer()&&validateQuestion(questionIndex).error){focusQuestion(true);return;}
+  questionIndex=Math.max(0,Math.min(question.questions.length-1,questionIndex+offset));renderQuestionState();focusQuestion();
+ }
+ $('question-previous').onclick=()=>moveQuestion(-1);$('question-next').onclick=()=>moveQuestion(1);
  $('question-form').onsubmit=e=>{
-  e.preventDefault();if(!canAnswer()||composing)return;
+  e.preventDefault();if(!canAnswer()||composing||questionIndex!==question.questions.length-1)return;
   let invalid=-1;
-  const answers=question.questions.map((q,i)=>{const d=questionDrafts[i],custom=strip(d.custom),selected=(q.options||[]).filter(o=>d.selected.includes(o.label)).map(o=>o.label);let error='';
-   if(custom.length>4096)error='回答过长，请缩短后再提交。';
-   else if(!selected.length&&!custom)error=q.options?'请选择一个选项或填写回答。':'请填写回答。';
-   else if(!q.multiSelect&&(selected.length>1||(selected.length&&custom)))error='请选择一个选项，或填写自己的回答。';
-   if(error){if(invalid<0)invalid=i;$(`question-error-${i}`).textContent=error;$(`question-error-${i}`).hidden=false;$(`question-field-${i}`).setAttribute('aria-describedby',`question-error-${i}`);}
-   return {id:q.id,selected,...(custom?{custom}:{})};
-  });
-  if(invalid>=0){$(`question-field-${invalid}`).querySelector('input,textarea').focus();return;}
+  const answers=question.questions.map((q,i)=>{const checked=validateQuestion(i);if(checked.error&&invalid<0)invalid=i;return checked.answer;});
+  if(invalid>=0){questionIndex=invalid;renderQuestionState();focusQuestion(true);return;}
   write('question',{target:question.eventId,answers});phase='questionPending';render();$('question-status').focus();
  };
  $('question-form').addEventListener('compositionstart',()=>{composing=true;});
  $('question-form').addEventListener('compositionend',()=>{composing=false;});
  $('question-form').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.isComposing||e.repeat||e.keyCode===229))e.preventDefault();});
+ $('question-card').addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!composing){e.preventDefault();$('question-card').open=false;$('question-card').querySelector('summary').focus();}});
  // Separate local command buffers. Server fixtures own availability, never mode captions.
  const catalogIdle=[
   {name:'help',description:'了解助手的用途与使用场景'}, {name:'status',description:'查看当前会话状态'},
@@ -346,7 +378,7 @@
  function executeCommand(){if(!cmd.selected||cmd.palette||!commandAllowed()||!commandValid()||Array.from(cmd.args).length>2048||composing)return;
   write('command',{name:cmd.selected.name,args:cmd.args,from:phase});phase='commandPending';render();
  }
- function showCommandResult(invocation){const texts={help:'园区运维助手\n分析告警、组织巡检，协助形成处置方案。',status:`当前会话：${labels[phase]} · ${mode==='plan'?'计划模式':'普通模式'}`,name:`会话名称：${invocation.args||$('title').textContent}`,model:'当前模型：模型 A',thinking:'深度思考：开启',compact:'本次无需压缩上下文。',skills:'inspection-plan · 整理园区巡检计划'};
+ function showCommandResult(invocation){const texts={help:'园区运维助手\n分析告警、组织巡检，协助形成处置方案。',status:`当前会话：${labels[phase]} · ${mode==='plan'?'Plan':'Build'}`,name:`会话名称：${invocation.args||$('title').textContent}`,model:'当前模型：模型 A',thinking:'深度思考：开启',compact:'本次无需压缩上下文。',skills:'inspection-plan · 整理园区巡检计划'};
   if(invocation.name==='name'&&invocation.args)$('title').textContent=invocation.args;
   $('command-result').hidden=false;$('command-result').open=true;$('command-result-text').textContent=texts[invocation.name];
  }
@@ -364,7 +396,7 @@
  document.addEventListener('click',e=>{if(cmd.palette&&!e.target.closest('.composer')){cmd.palette=false;renderCommands();}});
 
  // Deterministic probes consume synthetic events only; no API or persistence methods.
- window.planDemo={setQuestion,applyTodo,recovered,receipt,advance,reset,get snapshot(){return {phase,mode,plan,pending,todos,rootId,generation,writes,receipts,question,questionAnswers,questionDrafts,cmd};}};
+ window.planDemo={setQuestion,applyTodo,recovered,receipt,advance,reset,get snapshot(){return {phase,mode,plan,pending,todos,rootId,generation,writes,receipts,question,questionAnswers,questionDrafts,questionIndex,cmd};}};
  reset('review');
  const entry=new URLSearchParams(location.search).get('scene');if(['question','buildQuestion','slash','review'].includes(entry)){$('scenario').value=entry;reset(entry);}
 })();

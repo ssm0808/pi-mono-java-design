@@ -49,21 +49,26 @@ end note
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts writeHeaders, submitStream, executeCommand
 ' Observed behavior: each of six write actions freezes current valid custom headers.
 ' Observed behavior: debugHeaders.ts validates whitespace; dev/authMiddleware.ts registers the DEV helper.
-' Design reason: edits affect new requests without mutating an accepted execution.
-title Internal debug headers - request snapshots
+' New evidence: pi-mono-java 1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4; DebugHeaders.vue rows; useDebugAuth.ts ip.
+' Observed behavior: settings are memory-only; persistence and unified settings are target-only.
+' Design reason: saved configuration survives reload; edits cannot mutate an accepted execution.
+title Internal debug headers - target persistence and request snapshots
 top to bottom direction
 skinparam backgroundColor #FFFCFA
 skinparam shadowing false
 component "Header editor\n3 optional empty presets" as Editor
-component "Memory Header Store\nclear on reload" as Store
+component "Applied DEV settings\nversioned snapshot [target-only]" as Store
+component "Browser settings storage\nscoped Headers and IP [target-only]" as ConfigStorage
 component "Per-request snapshot\nimmutable" as Snapshot
 component "Write adapter\nfixed protocol headers" as Adapter
 component "Runtime API\nexisting internal contract" as Runtime
 component "Local auth helper\n[implemented, DEV]" as Auth
 actor Developer
 Developer --> Editor : edit or get token
-Auth --> Editor : token for matching IP and revision
-Editor --> Store : valid enabled values
+Auth --> Store : save token for matching IP and revision
+Editor --> Store : save and apply valid values
+Store --> ConfigStorage : persist explicit changes
+ConfigStorage --> Store : restore matching environment
 Store --> Snapshot : each new write action
 Snapshot --> Adapter
 Adapter --> Runtime : message / command / interrupt\ntool decision / plan decision / question answer
@@ -224,6 +229,9 @@ hide empty members
 ' Codex d58d0e58: codex-rs/tui/src/chatwidget/plan_implementation.rs selection_view_params.
 ' Java divergence: exact proposal approval resumes the original execution, not a new user message.
 ' Target-only architecture: every class and relationship below is a product integration target.
+' Source delta: pi-mono-java 1d08f98e frontend/src/components/QuestionCard.vue; runtimeEventProjector.ts.
+' Observed behavior: all questions render together; AskUserQuestion also renders as a generic activity.
+' Target-only UI: one visible question, grouped question activity, safe JSON viewer and root overlay.
 ' Design reason: isolate protocol and host identity, use per-Chat state, and make recovery read-only.
 title Global product frontend components - all target-only
 package "Browser views" as Views {
@@ -231,10 +239,13 @@ package "Browser views" as Views {
   class PlanCard <<view>>
   class QuestionCard <<view>>
   class ModeControl <<view>>
+  class OverlayHost <<page view>>
+  class StructuredValueView <<view>>
   class ProgressDisclosure <<view>>
   class ContentViews <<view>> {
     safe Markdown for Assistant and plan
-    plain text for tool and thinking
+    plain text for thinking
+    safe JSON or plain text for tools
   }
 }
 package "Per-Chat application" as Application {
@@ -250,7 +261,8 @@ package "Per-Chat state and projection" as State {
   class PlanReviewStore <<per-Chat>>
   class QuestionInteractionStore <<per-Chat>> {
     complete questions and accepted answers
-    isolated event drafts
+    isolated event drafts and current question index
+    one final answer batch
   }
   class ReviewDraftStore <<per-plan>>
   class ExecutionProgressStore <<per-root>>
@@ -280,6 +292,9 @@ ChatWorkspace *-down- QuestionCard
 QuestionCard -down-> ConversationCoordinator
 QuestionCard --> QuestionInteractionStore
 ChatWorkspace *-down- ModeControl
+ChatWorkspace *-- "1" OverlayHost
+ModeControl --> OverlayHost
+ContentViews *-- StructuredValueView
 ChatWorkspace *-down- ProgressDisclosure
 PlanCard --> ContentViews
 PlanCard -down-> ConversationCoordinator
@@ -404,12 +419,17 @@ hide empty members
 ' Target responsibility view: named facades may be implemented by functions; see source-evidence.md for actual symbols.
 ' Product constraint: selection preserves order; pin and rename are explicit; credentials stay in DEV.
 ' Design reason: one coordinator owns execution state and request generations;
-' persistent metadata and transient credentials have separate lifecycles.
+' Session metadata and scoped DEV settings have separate repositories.
+' New baseline: pi-mono-java 1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4.
+' Source: frontend/vite.config.ts defineConfig; frontend/dev/authMiddleware.ts createAuthMiddleware.
+' Observed behavior: proxy and auth capture startup configuration; runtime config saving is absent.
+' Target-only classes and relationships: DeveloperSettings, DeveloperSettingsStore,
+' SettingsRepository, DevConfigService, LocalConfigRepository and ConfigFile.
 title Runtime Workbench - Target Responsibilities
 package "Browser page [target responsibilities]" {
   class WorkbenchView <<view>>
   class Composer <<view>>
-  class HeaderEditor <<DEV view>>
+  class DeveloperSettings <<DEV target view>>
   class WorkbenchCoordinator <<page lifecycle>> {
     selectSession(id)
     setPinned(id, pinned)
@@ -438,42 +458,57 @@ package "Browser page [target responsibilities]" {
   }
   class RequestSnapshot <<immutable per request>>
   class DraftStore <<page memory>>
-  class HeaderStore <<DEV page memory>>
+  class DeveloperSettingsStore <<DEV target snapshot>>
+  class SettingsRepository <<DEV target storage>>
   class TokenCoordinator <<DEV page lifecycle>>
   interface RuntimeGateway
   class RuntimeHttpGateway <<HTTP adapter>>
 }
-package "Local Vite serve process [implemented capability]" {
+package "Local Vite serve process [existing auth, target config]" {
   class DevAuthMiddleware <<loopback boundary>>
   class AuthCenterClient <<HTTPS adapter>>
-  class LocalAuthConfig <<server-only credentials>>
+  class LocalAuthConfig <<server-only snapshot>>
+  class DevConfigService <<target singleton>>
+  class LocalConfigRepository <<target persistence>>
 }
-class "Browser localStorage\nSession metadata only" as Storage <<persistent resource>>
+class "Browser localStorage\nseparate metadata and DEV settings keys" as Storage <<persistent resource>>
+class "Private local config file\nnot served; ignored by Git" as ConfigFile <<target resource>>
 class "Runtime Session API\nincluding Session POST" as Runtime <<external API>>
 class "AuthCenter\nlogin and Set-Cookie" as AuthCenter <<external API>>
 WorkbenchView *-- Composer
-WorkbenchView *-- HeaderEditor
+WorkbenchView *-- DeveloperSettings
 WorkbenchView --> WorkbenchCoordinator
 Composer --> WorkbenchCoordinator
-HeaderEditor --> HeaderStore
-HeaderEditor --> TokenCoordinator
+DeveloperSettings --> DeveloperSettingsStore
+DeveloperSettings --> TokenCoordinator
+DeveloperSettingsStore --> SettingsRepository
+SettingsRepository --> Storage
+DeveloperSettingsStore --> DevConfigService : save server fields
 WorkbenchCoordinator *-- "1" SessionViewState
 WorkbenchCoordinator *-- "0..*" RequestSnapshot
 WorkbenchCoordinator *-- "1" DraftStore
 WorkbenchCoordinator --> SessionIndexRepository
 SessionIndexRepository *-- "0..*" SessionIndexEntry
-WorkbenchCoordinator --> HeaderStore
+WorkbenchCoordinator --> DeveloperSettingsStore : freeze applied version
 WorkbenchCoordinator --> RuntimeGateway
 RuntimeGateway <|.. RuntimeHttpGateway
 RuntimeHttpGateway --> Runtime
 SessionIndexRepository --> Storage
-TokenCoordinator --> HeaderStore
+TokenCoordinator --> DeveloperSettingsStore
 TokenCoordinator --> DevAuthMiddleware
 DevAuthMiddleware --> AuthCenterClient
 AuthCenterClient --> LocalAuthConfig
+DevConfigService --> LocalConfigRepository
+LocalConfigRepository --> ConfigFile
+DevConfigService --> LocalAuthConfig
+RuntimeHttpGateway --> DevConfigService : proxy version check
 AuthCenterClient --> AuthCenter
 legend bottom left
+  Saved headers survive reload in their environment.
   Header edits do not alter an existing snapshot.
+  Server secrets are write-only from the browser.
+  LocalAuthConfig changes only after successful saving.
+  Proxy checks the confirmed connection version.
   Reconciliation never replays a write request.
   Only create or accepted user activity changes recent order.
   Pinning changes the group, not lastActivityAt.
@@ -514,12 +549,20 @@ State -> API : Submit once; retain original root
 API --> State : Research activities
 opt Question batch during planning
   API --> State : Complete question + confirming
-  State --> UI : Inline fields; Session still running
-  User -> UI : Answer every question; submit once
+  State --> UI : One question card; Session still running
+  loop Browse questions locally [target-only UI]
+    User -> UI : Answer current question; next or back
+    UI -> UI : Validate current answer; preserve all drafts
+  end
+  User -> UI : Submit answers on final question
   UI -> State : Freeze exact question target and answers
   State -> API : Submit answer; shared control lock
   API --> State : Accepted complete answer receipt
-  State --> UI : Show accepted answers; retain mode and TODO
+  State --> UI : Compact answer summary; retain mode and TODO
+  note over UI, State
+    Question card absorbs matching tool activity.
+    Raw tool results remain in model history.
+  end note
   API --> State : Original root continues
 end
 API --> State : Complete proposal + confirming

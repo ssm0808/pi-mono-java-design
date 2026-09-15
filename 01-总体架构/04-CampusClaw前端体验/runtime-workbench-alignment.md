@@ -4,42 +4,38 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 1.5.0 |
-| 日期 | 2026-09-15 |
+| 版本 | 1.6.0 |
+| 日期 | 2026-09-16 |
 | 设计起点 | `pi-mono-java-design@599edb072cf75e3d8f85c775c53c0e83befd285d` |
-| 实现基线 | 当前开发分支见[实现状态](source-evidence.md#current-implementation)；`510d882ca45541e0086586dab89c429c5a18cf20` 仅为下表历史迁移证据 |
+| 实现基线 | `pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`；配置能力核验见下表，其他实现记录见[源码证据](source-evidence.md#current-implementation) |
 | 范围 | 内部 Runtime Web 工作台；已实现能力与企业接入缺口分别记录 |
 
 ## 1. 源码依据与差距
 
-以下为 `510d882c` 的历史迁移证据，路径相对实现仓；不能据此认定当前仍有这些缺口。当前会话恢复、停止、统一更新、计划问答和 DEV 认证助手已实现，逐项状态及提交见[当前实现证据](source-evidence.md#current-implementation)。此前交互基线为 `4cc8dd86f601417c22cf9306e52152acbb59bb60`，传输历史基线为 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`；各项结论仅适用于对应范围。
+本节核验 `pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，路径相对实现仓。相对前次前端证据 `fcae53829c2884ea1d3cc522c183f5a125a67f45`，下列配置结论经过重新读取；历史迁移结论由 Git 和[源码证据](source-evidence.md)保留。
 
-| 路径与符号 | 已观察行为 | 目标与原因 |
+| 路径与符号 | 已观察行为 | 当前目标与具体理由 |
 |---|---|---|
-| `frontend/src/App.vue`：`resumeSession`、sidebar `select` | 选中后读取 Session，并经 `trackSession` 再次记录 | 选择只改变 active Session 和视图，不改变最近顺序 |
-| `frontend/src/runtime/sessionIndex.ts`：`upsert`、`select` | `select` 只保存 active ID，但 `upsert` 将每次读取的项目放到数组首部；当前 schemaVersion=1，无置顶字段 | schemaVersion=2 区分 `lastActivityAt` 和 `pinned`；普通元数据补丁原位更新，只有新会话或已接受新用户消息提升最近顺序 |
-| `frontend/src/composables/useWorkbenchSessions.ts`：`recordSession`、`resumeSession`、`touchCurrentThread` | 恢复、名称或 Session 属性同步都调用前插 `upsert`，因此点击会话会自动置顶 | 拆分 `patchMetadata`、`recordActivity`、`setPinned`；选择/恢复/改名/改配置都不触发活动排序 |
-| `frontend/src/components/AppSidebar.vue`：`threads`、`select` | 按上游数组顺序渲染，只有选择动作，无置顶/取消置顶 | 分组显示“置顶”与“最近”，提供显式置顶操作；分组内保持已存活动顺序 |
-| `RuntimeSessionController`、`RuntimeSessionConfigurationController`、`SessionNamingService` | 后端已有名称校验与持久化，但 Controller 没有直接重命名路由；前端只能执行 `/name` | 使用统一 `POST /sessions/{sessionId}` 的 displayName 字段，行内重命名调用直接 API；与 `/name` 共用 Service，直接 API 用 `If-Match` 防止并发覆盖 |
-| `frontend/src/App.vue`：`statusLabel`、顶部停止按钮、底部恢复栏 | 顶部存在有效停止操作；底部只有发送按钮，恢复栏常驻 | 停止放到 Composer 原发送位置，异常时才展示恢复动作 |
-| `frontend/src/components/ComposerBox.vue`：template、`onKeydown`；`frontend/src/composables/useCommandComposer.ts` | `+` 打开命令；独立附件按钮禁用；已有命令标签及参数编辑 | `+` 负责添加附件/上下文；命令由首字符 `/` 进入，保持已实现的标签模型 |
-| `frontend/src/components/DebugHeaders.vue`：`snapshot`；`frontend/src/App.vue`：`submit`、`executeCommand`、`stop`、`decideTool` | 四类写操作均在动作发生时读取最新有效 Header 并复制 | 保留此行为，修正文档中“仅初始消息”描述；改值无需保存或新建会话 |
-| `frontend/src/debugHeaders.ts`：`validateDebugHeaders` | 三个空预置计数为零；仅空格/Tab 的值可被计数，构造 Headers 后变为空值 | 保留有效项计数；按 HTTP 空白规范化后的值判断是否为空 |
-| `frontend/src/composables/useRuntimeApi.ts`：`canSend`、`recover`、`consume`；`frontend/src/runtime/eventStore.ts`：`executionState` | `canSend` 未排除有回执但无本轮终态的 `uncertainty` | 状态文字与按钮共用准入判定，旧 idle/末页/EOF 均不能释放新消息 |
-| `frontend/src/App.vue`：`executeCommand` | 本地 Header 校验失败也返回 `uncertain` | 未发 POST 应标为本地校验失败，不能提示已提交但结果未知 |
-| `frontend/vite.config.ts`；`frontend/package.json` | 已有 Vite、Node 和 Runtime 代理，没有 AuthCenter 登录助手 | 使用 DEV middleware 和 Node 内置 HTTPS；账号密码留在本地服务 |
+| `frontend/src/components/DebugHeaders.vue:12,49`：`rows`、`snapshot`；`frontend/src/composables/useDebugAuth.ts:7`：`ip` | Header 行及认证 IP 由组件内存初始化，刷新恢复三个空预置与空 IP；快照返回独立 Headers | 按环境持久化 IP、Header 值和启用态，消除重复输入；每个动作继续冻结独立快照。持久化与统一设置均为 target-only |
+| `frontend/src/App.vue:22`：`configuredAgentId` 与 `agent`；`frontend/src/composables/useRuntimeApi.ts:12,13`：`apiBase`、`callerId` | 默认 Agent、展示信息、API base 和 caller 在模块初始化时读取 `import.meta.env` | 由运行时设置快照提供这些值；保存后对新动作生效，避免重新编辑文件和启动进程。target-only 架构变更 |
+| `frontend/src/composables/useWorkbenchSessions.ts:10`：`SessionIndexRepository` | 本地索引作用域只有 API base、Agent 与 caller，同源代理目标未进入作用域 | 使用实际后端环境身份隔离索引、Header 和待对账标记，避免两个同源代理目标混用 Session。target-only 安全加固 |
+| `frontend/src/components/DevDiagnostics.vue:4,14` | 开发者入口只支持 Agent ID 创建和 Session ID 恢复 | 同一设置入口提供连接、默认 Agent、认证与 Headers，并保留诊断操作；沿用暖灰折叠风格。target-only 产品约束 |
+| `frontend/.env.example:2-12`、`frontend/vite.config.ts:7-17` | 示例包含六个 `VITE_CAMPUSCLAW_*` 与两个本地认证键；代理另外读取示例未列出的 `VITE_BACKEND_URL`；账号密码和代理目标在配置加载时捕获 | 面板覆盖这九项既有设置，公开默认项与本地秘密各自只有一份权威配置；不把整个 `.env` 当成可编辑文本。target-only 架构变更 |
+| `frontend/dev/authMiddleware.ts`：`createAuthMiddleware`、`devAuthPlugin`；`frontend/dev/authCenter.ts`：`parseAuthIp`、`loginAuthCenter` | 本机同源 DEV 接口按固定 HTTPS 地址登录；配置来自闭包，响应只返回提取的 Token；未实测真实认证中心 | 复用本地边界，新增读取配置状态、保存已知设置的私有职责；下一次认证读取新配置快照，不新增 Java API 或数据库。target-only |
+| `frontend/src/App.vue`：`submit/executeCommand/stop/decideTool/decidePlan/answerQuestion`；`frontend/src/composables/useRuntimeApi.ts:265`：`writeHeaders` | 六类写动作分别复制自定义 Header；读取及 Session 配置不带这些值；协议头固定 | 持久化只改变值的来源和寿命，保持传递范围，避免把编辑器变成全站认证注入器 |
+| `frontend/package.json`：`dev`；`frontend/vite.config.ts`：`vue()` | 已接入 Vite 与 Vue 插件，没有运行时设置保存/重载服务 | 保留代码 HMR，面板设置通过 store/本地服务直接应用；不把修改环境文件等同于无重启更新。具体边界见 §6.6 |
 
-源码分支不能替代实际交互验证：在基线运行页面发起纯文本长输出，顶部停止按钮经过“正在停止”到“本轮已停止”，证实停止能力存在；Composer 中缺少同位置停止才是本次修正对象。确定性探针复现了纯空白 Header 和有回执无终态时 `canSend=true`。基线 100 个单元测试与类型检查通过，不代表这些边界已覆盖。
+以上为源码检查结果，不是浏览器热更新或真实认证验收。配置持久化、统一面板与运行时配置更新尚无对应实现。
 
 ## 2. 目标职责与生命周期
 
 ![工作台目标组件](target_runtime_workbench.svg)
 
-[PlantUML 源码](diagram.puml#L380) · [原尺寸 SVG](target_runtime_workbench.svg)
+[PlantUML 源码](diagram.puml#L395) · [原尺寸 SVG](target_runtime_workbench.svg)
 
-此图表达推荐职责分层，组件的精确命名与拆分属于目标结构；不能据此把已经由组合函数实现的行为标成未实现。页面协调器统一拥有选中会话与请求代次；Composer、恢复和停止读取同一执行状态，不各自推导可发送。索引只提供恢复入口，消息与执行状态仍以后端为权威。Header Store 与会话索引分开，避免恢复列表时顺带保存凭据。
+此图表达推荐职责分层，组件的精确命名与拆分属于目标结构；不能据此把已经由组合函数实现的行为标成未实现。页面协调器统一拥有选中会话与请求代次；Composer、恢复和停止读取同一执行状态，不各自推导可发送。索引只提供恢复入口，消息与执行状态仍以后端为权威。开发者设置 Store 与会话索引分开；它拥有生效的配置快照，Header Store 从对应环境读取已保存值，Session 索引仍不保存凭据。
 
-本地认证助手属于 Vite 开发进程，不进入 Vue 包或 Java 服务。它只负责一次认证和 Token 提取，不负责 Session、工具执行或生产身份建立。此划分复用现有开发环境，不增加 Java API、数据库表、Maven 或 npm 直接依赖；Node 内置 `https`、`net` 足够完成定址请求与 IP 校验，无新增传递依赖。
+本地认证助手属于 Vite 开发进程，不进入 Vue 包或 Java 服务。它负责本机开发配置的读取/保存及一次认证和 Token 提取，不负责 Session、工具执行或生产身份建立。此划分复用现有开发环境；目标使用现有 Vite/Vue 与 Node 内置 `fs`、`http`、`https`、`net`，不增加 Java API、数据库表、Maven 或 npm 直接依赖，也不新增传递依赖。
 
 ## 3. 会话保存与恢复
 
@@ -47,19 +43,20 @@
 
 | 数据 | 保存位置与语义 |
 |---|---|
-| `schemaVersion`、环境作用域、`activeSessionId` | 浏览器本地会话索引；作用域由 API base、Agent 与工作台 caller 配置组成，避免不同环境混用；作用域不是授权证明 |
+| `schemaVersion`、环境作用域、`activeSessionId` | 浏览器本地会话索引；目标作用域包含实际后端身份、Agent 与工作台 caller；同源代理模式必须包含代理目标，不能只使用空 API base；作用域不是授权证明 |
 | `sessionId`、`agentId`、显示名称、`lastActivityAt`、`pinned` | 索引项；名称是后端权威值的本地投影，`lastActivityAt` 只在新建或新用户消息已接受时改变，`pinned` 是当前浏览器的显式用户偏好 |
 | 未完成提交的最小标记 | 只保存操作种类、是否已得回执及可用的原目标/回执 ID，不保存请求正文；发送前写入，匹配权威结果后清除，用于刷新后的不确定结果提示 |
 | 消息历史、执行结果与配置版本 | 后端权威资源；通过 GET 重新读取，不把缓存状态当作已完成 |
 | 普通消息、命令及附件草稿、临时命令结果 | 页面内存；会话切换按既有草稿规则处理，本项不承诺刷新恢复未发送内容 |
-| Header、Token、登录密码、Cookie | 不进入会话索引或其他浏览器持久存储；页面刷新后 Header 值清空 |
+| 认证 IP、自定义 Header 行 | 独立的浏览器开发设置中按环境保存，包含 `X-HW-ID`、`Authorization`、`access-token` 的值及启用态；刷新与关闭重开可恢复，不进入会话索引或聊天历史 |
+| 认证账号、登录密码、Cookie | 账号密码由本地开发服务持久化；读取只返回配置状态，不将保存的秘密回传页面；Cookie 不保存到浏览器。详细生命周期见 §6.3～§6.5 |
 
 启动恢复顺序：
 
 1. 校验版本、结构与作用域，显示最近列表和“正在恢复会话”；没有索引时显示新会话入口，不自动创建会话。
 2. 用保存的 ID 调用现有 `GET /sessions/{sessionId}`，随后读取历史、模型并更新配置；完整读取分页后按现有事件规则重建本轮状态。
 3. 恢复期间允许编辑草稿，发送保持禁用。已有根事件时，只有其匹配的终态与当前资源一致才恢复发送；尚未加载到根事件时不猜测停止目标。
-4. 若后端仍在执行，恢复运行态和已加载的确认/停止目标。内部接口没有独立恢复读流，使用有界 GET 历史/Session 补读；不重新发送原 POST。前台可采用 1、2、5 秒退避，最多连续 6 次，仍未结束时显示“后台仍在执行”和“刷新状态”；返回页签或用户点击再启动补读。
+4. 若后端仍在执行，恢复运行态和已加载的确认/停止目标。内部接口没有独立恢复读流，使用有界 GET 历史/Session 补读；不重新发送原 POST。前台可采用 1、2、5 秒退避，最多连续 6 次，仍未结束且没有已确认的用户等待时显示“处理中”和“刷新状态”；已确认问题/方案/权限等待分别显示“等待回答 / 等待审核 / 等待确认”，暂停无意义轮询；返回页签或用户点击再启动补读。
 5. 切换会话递增 generation 并中止旧读请求；旧响应不得覆盖新会话。中止浏览器观察不等于终止后台执行。
 6. 网络错误保留索引并显示重试；404/明确无权限显示该会话不可恢复且清除其消息视图，由用户移除列表项。只有明确新建动作才创建新会话。
 
@@ -85,13 +82,13 @@ schemaVersion=1 迁移到 2 时，保持现有数组顺序，将旧 `updatedAt` 
 | 消息/Skill 提交中，尚无完整回执 | 停止方块，禁用，提示“正在提交，确认接收后可停止” | 立即切换外观；尚无可信目标时不发送伪造中断 |
 | 执行中 / 等待工具确认 | 停止方块，“停止生成” | 不受输入框是否有草稿影响；点击绑定当前根目标提交一次中断 |
 | 确认决定正在提交 | 停止方块，暂时禁用 | 共用控制操作锁，避免重复或竞争控制请求 |
-| 停止请求发送中 / 已接受但未终止 | 停止方块，禁用，“正在停止” | 回执只说明接受；草稿保留，不提前恢复发送 |
+| 停止请求发送中 / 已接受但未终止 | 停止方块，禁用，“停止中” | 回执只说明接受；草稿保留，不提前恢复发送 |
 | 结果未知 / 恢复中 | 根据已确认执行保留停止语义；目标未确认时禁用 | 显示恢复动作，不把“未知”降级为可发送 |
 | 当前目标可信终态 | 上箭头 | `done/terminated/failed` 按实际结果显示；保留运行中写入的草稿，不自动发送 |
 
 顶部不再重复提供停止按钮。鼠标点击停止或键盘焦点明确位于停止按钮时 Enter 才停止；在普通消息 textarea 内按 Enter 不得因按钮改形而停止任务。IME、长按 Enter、重复点击仍须防重。
 
-“已就绪”仅曾表示客户端判断没有活动执行，不能证明凭据有效。目标顶部空闲文案为“空闲”，执行时为“正在执行”“等待确认”“正在停止”；输入框上方不重复显示健康状态和常驻“重新核对”。只有恢复中、连接异常或提交结果未知时显示状态条及“刷新状态”；该动作只读历史/Session，不校验 Token，也不重发消息。
+“已就绪”仅曾表示客户端判断没有活动执行，不能证明凭据有效。目标顶部空闲文案为“空闲”，执行时按[主设计文案](README.md#106-简洁文案)使用“处理中”“等待确认”“停止中”；输入框上方不重复显示健康状态和常驻“重新核对”。只有恢复中、连接异常或提交结果未知时显示状态条及“刷新状态”；该动作只读历史/Session，不校验 Token，也不重发消息。
 
 运行中命令的入口、执行按钮与焦点规则统一见 [Slash 专项 §4.3](../../04-命令与技能/00-Slash-Command通用模块/前端设计/README.md#43-选择与执行)。普通消息仍无 Follow-up 队列和 Steer，不把运行中草稿自动续发。
 
@@ -99,7 +96,7 @@ schemaVersion=1 迁移到 2 时，保持现有数组顺序，将旧 `updatedAt` 
 
 `+` 的产品语义为添加附件或上下文，不再包含“命令”；命令仍由空消息首字符 `/` 触发，或点击已选标签更换。附件与上下文实际能力必须与已接入资源一致，当前无上传实现时“添加附件”禁用并提示“暂未接入附件上传”，不虚构上传或新增一个未定义的上下文 API。移除工具栏重复的独立附件按钮。
 
-Header 行、计数与生命周期以 [主设计 §6.1](README.md#61-开发者调试-header) 为唯一规则。三条空预置显示 `Headers (0)` 正确；仅空格或 Tab 的值按 HTTP 首尾空白规范化后视为空。CR/LF 一律拒绝，不用 trim 掩盖非法换行。每次新消息、命令、中断、工具确认、计划审核和问题回答读取最新有效值；修改不追溯影响已发请求或正在执行的凭据快照。
+Header 行编辑与计数以 [主设计 §6.1](README.md#61-开发者调试-header) 为唯一规则；统一设置、持久化与配置生效由本专题 §6.3～§6.6 维护。三条空预置显示 `Headers (0)` 正确；仅空格或 Tab 的值按 HTTP 首尾空白规范化后视为空。CR/LF 一律拒绝，不用 trim 掩盖非法换行。每次新消息、命令、中断、工具确认、计划审核和问题回答读取最新已应用的有效值；修改不追溯影响已发请求或正在执行的凭据快照。
 
 ## 6. 按认证中心 IP 获取 Token
 
@@ -113,11 +110,11 @@ Header 行、计数与生命周期以 [主设计 §6.1](README.md#61-开发者�
 
 ### 6.1 页面流程
 
-Headers 面板增加“认证中心 IP”输入和“获取 Token”次级按钮。IP 输入只改变草稿；点击按钮才登录，不在每次键入或刷新时自动登录。获取中按钮禁用，成功后自动填充并启用唯一的 `access-token` 行，显示短暂“Token 已更新”；没有对应行时创建一行，已有重复同名行时先要求解决重复。
+统一开发者设置中的“认证”区提供认证中心 IP 和“获取 Token”。保存 IP 只更新配置；点击获取按钮才登录，不在键入、刷新、切换环境或保存时自动登录。获取只读取已应用 IP 与本地认证配置；认证区仍有未保存更改时提示先保存，不隐式应用任何其他分组草稿；获取中按钮禁用。成功后填充并启用唯一的 `access-token` 行，保存到当前环境并显示“Token 已更新”；没有对应行时创建一行，已有重复同名行时先要求解决重复。
 
-账号与密码配置在未提交的本地开发服务配置中，例如 `.env.local` 的 `CAMPUSCLAW_DEV_AUTH_ACCOUNT`、`CAMPUSCLAW_DEV_AUTH_PASSWORD`。不得使用 `VITE_` 前缀、传给 `define` 或进入客户端包。页面不显示账号密码。IP 与 Token 均先保持页面内存，刷新后可重新输入并获取。
+账号与密码在同一入口输入，由仅本机可访问的开发服务保存；`.env.local` 的 `CAMPUSCLAW_DEV_AUTH_ACCOUNT`、`CAMPUSCLAW_DEV_AUTH_PASSWORD` 只作为尚无本地覆盖时的启动默认值。页面重新打开只显示“已配置”，提供替换或清除，不读取已保存的账号密码。秘密不得使用 `VITE_` 前缀、传给 `define` 或进入客户端产物；IP 与 Header 的浏览器持久化遵守 §6.4。
 
-获取过程冻结 IP 与请求代次。切换 IP、清空 Header、关闭页面或切换环境后旧结果不得回填；请求过程中手动编辑 Token 行时也不得用迟到结果覆盖手工值，提示重新获取。修改 IP 时清除本助手为原 IP 生成且未被手工修改的 Token。失败不覆盖同一 IP 的现有有效值，不产生虚构的有效期或“认证成功”标记。
+获取过程冻结环境、IP、本地认证配置版本及请求代次。切换 IP、清空 Header、关闭页面、替换认证配置或切换环境后旧结果不得回填或重新落盘；请求过程中手动编辑 Token 行时也不得用迟到结果覆盖手工值。编辑 IP 不改变 Header 草稿的原环境归属；应用新 IP 后才装载该认证环境自己的 Header，不把旧 IP 的自动 Token 复制过去；原环境已保存值保持，未保存 Header 草稿在页面内按原作用域保留，不能随 IP 修改写入新环境；失败不覆盖原环境的已有值，不产生虚构的有效期或“认证成功”标记。
 
 ### 6.2 本地开发服务接口（已实现的私有开发接口）
 
@@ -131,9 +128,68 @@ Headers 面板增加“认证中心 IP”输入和“获取 Token”次级按钮
 | 提取 | 仅在上游 HTTP 2xx 后遍历 Node 的独立 `set-cookie` 数组，按 Cookie 名精确匹配 `access-token`，不以逗号拆分；空、删除或相互冲突的 Token 视为失败；不返回 `JSESSIONID` 或原始响应 |
 | 成功 | HTTP 200，`{ "resCode": "0", "resMsg": "Token 已获取", "result": { "accessToken": "synthetic-token" } }`；示例是合成值 |
 | 失败 | 使用非 2xx 与 `resCode/resMsg`，不带 result；`INVALID_AUTH_IP`(400)、`DEV_AUTH_NOT_CONFIGURED`(503)、`AUTH_UPSTREAM_REJECTED`(502)、`AUTH_TOKEN_MISSING`(502)、`AUTH_UPSTREAM_UNAVAILABLE`(502)、`AUTH_UPSTREAM_TIMEOUT`(504) 为本地稳定目标码，不声称是上游错误码 |
-| 存储与错误 | 响应 `Cache-Control: no-store`；不设置浏览器 Cookie，不记录请求正文、密码、Token、Set-Cookie 或原始上游错误；页面仅更新内存 Header |
+| 存储与错误 | 响应 `Cache-Control: no-store`；不设置浏览器 Cookie，不记录请求正文、密码、Token、Set-Cookie 或原始上游错误；当前实现只更新内存，目标页面按 §6.4 保存 Token |
 
 Token 获取是独立请求，不重放失败的对话 POST。后续是否携带新 Token 由该 Header 行启用状态和提交时快照决定；不自动拼接 `Bearer`。Token 到期后按实际失败提示重新获取，不从截图推断续期接口或有效时长。
+
+### 6.3 统一开发者设置与既有配置映射（target-only）
+
+开发者设置只有一个入口，使用原诊断面板的暖灰表面、虚线分组和紧凑输入。面板按“连接”（含默认项）、“认证”“Headers”“Session 诊断”分组；创建/恢复操作不再要求用户切换页面。每个可保存分组提供“保存并应用”和保存结果，关闭面板不提交未保存草稿。会话模式、模型和 Thinking 继续属于当前 Session，不与本地开发默认配置混为一份资源。
+
+| 现有键或输入 | 页面字段 | 保存权威与生效范围 |
+|---|---|---|
+| `VITE_CAMPUSCLAW_API_BASE` | API 地址，留空使用同源代理 | 浏览器开发设置；应用时切换连接环境，下一次请求使用新地址 |
+| `VITE_BACKEND_URL` | 本地代理后端地址 | 本地开发服务配置；仅同源代理模式使用，应用后新代理请求使用新目标 |
+| `VITE_CAMPUSCLAW_CALLER_ID` | 默认调用方 | 浏览器开发设置；缺省仍为 `campusclaw-web`，用于请求适配器与索引作用域；显式 Header 的同名覆盖保持既有规则 |
+| `VITE_CAMPUSCLAW_AGENT_ID` | 默认 Agent ID | 浏览器开发设置；影响新建与默认环境，不修改已有 Session 的 agentId |
+| `VITE_CAMPUSCLAW_AGENT_NAME` | Agent 名称 | 浏览器开发设置；更新默认 Agent 展示，不重命名已有会话 |
+| `VITE_CAMPUSCLAW_AGENT_DESCRIPTION` | Agent 描述 | 浏览器开发设置；更新默认入口描述 |
+| `VITE_CAMPUSCLAW_AGENT_CATEGORY` | Agent 分类 | 浏览器开发设置；更新默认展示分类 |
+| `CAMPUSCLAW_DEV_AUTH_ACCOUNT` | 认证账号 | 本地开发服务秘密配置；写入后不回显原值，下一次获取 Token 使用新值 |
+| `CAMPUSCLAW_DEV_AUTH_PASSWORD` | 认证密码 | 本地开发服务秘密配置；写入后不回显原值，下一次获取 Token 使用新值 |
+| 认证中心 IP | 认证中心 IP | 浏览器开发设置；恢复上次选择，不自动登录 |
+| 自定义 Header 行 | Headers | 浏览器按环境保存完整行、顺序与启用态，至少覆盖 `X-HW-ID`、`Authorization` 与 `access-token`；具体编辑规则引用主设计 |
+
+本表完整覆盖 `.env.example` 的八个键，并补齐 `vite.config.ts` 已读取但示例缺少的 `VITE_BACKEND_URL`。实现时补充示例键，不能把缺项误写成新增运行能力。浏览器设置的优先级为已保存覆盖值 → 现有非秘密环境默认值 → 代码默认值；本地服务字段为已保存覆盖值 → 启动配置 → 默认值。清除秘密必须保存显式空值，不得因删除覆盖后回退到旧 `.env.local` 密码；“恢复默认”与“清除”使用不同动作。
+
+连接区同时涉及浏览器与本地代理配置时，先完成本地服务校验和持久化，再应用浏览器快照。若任一存储失败，分别显示实际保存状态并保留草稿，暂停使用不一致的连接配置并重新读取服务状态；不能显示整个分组保存成功。不提供任意环境变量、文件路径或原始 `.env` 编辑器。
+
+### 6.4 浏览器持久化与本地秘密边界（target-only）
+
+IP 和 Header 持久化是内部开发工作台的产品约束；环境隔离、秘密不进入构建产物和本机接口限制属于安全加固。
+
+- 使用独立且带 schemaVersion 的开发设置命名空间，不写入 Session 索引、消息历史、URL、日志或遥测。同一浏览器、同一前端站点刷新和关闭重开后恢复；清除站点数据后恢复入口与浏览器设置会丢失，不承诺跨设备同步。
+- 保存的 Header 环境由实际 API 后端身份与认证 IP 区分；代理模式的后端身份必须包含代理目标。切换环境读取各自设置，缺少已保存配置时显示三个空预置，不复制上一个环境的 Authorization 或 Token。“全部清空”立即将当前作用域的草稿和已应用行置零、取消旧 Token 回填并清除持久值，成功后刷新不会补回预置；清除落盘失败仍停用当前值并提示刷新可能恢复，不回滚恢复旧凭据；“恢复预置”必须是显式动作。
+- 普通 Header 编辑只在该区点击“保存并应用”后替换生效快照；“全部清空”和成功获取 Token 是显式例外。Token 仅更新匹配环境的 access-token 行，在已保存快照上合并这一行并同步未冲突草稿，不提交其他 Header 草稿；持久化成功后才应用并提示“Token 已更新”。普通保存或 Token 写入因存储不可用、格式不兼容而失败，保留原生效配置并显示“未保存”，不静默宣称持久化成功，也不全站清空其他数据。
+- `Authorization` 和 `access-token` 默认遮蔽，开发者可主动查看、替换或清除；遮蔽不是加密。已保存值仍可被同源页面脚本与浏览器开发工具读取，因此该能力仅装配到本机开发工作台，生产包不包含入口、配置读取或持久化 store。
+- 本地账号密码由开发服务写入固定位置、Git 忽略且不由 Vite 静态服务暴露的配置文件，限制为当前 OS 用户读写；使用原子替换，拒绝浏览器指定存储路径。保存输入在请求期间短暂经过页面，成功后立即清空；读取配置只返回已配置标志与非秘密字段。
+- 本地配置 API 为 target-only 私有开发职责，复用 loopback、Host、同源来源检查和有限 JSON 请求体；不注册于 build/preview，不允许跨源访问，不在失败信息中回显提交值。读取配置、保存配置与获取 Token 分开，保存本身不执行上游登录。无须新建 Java 接口、数据库、密钥库或额外 npm 依赖。
+
+### 6.5 保存、生效与在途请求（target-only）
+
+设置 Store 同时维护编辑草稿、已应用快照与配置版本。每个动作在发送前校验并复制所需的 API 地址、caller、Header、Session/根事件目标及配置代次；本地代理和认证助手分别捕获本次使用的后端目标与认证配置。修改表单不能改变这个对象。
+
+1. 仅修改 Header 或默认展示信息：保存成功后新动作读取新值；已发消息、工具执行及在途 SSE 保留原凭据/连接，不自动重放请求。
+2. 修改 API 地址、代理目标、默认 Agent 或 caller：按环境切换处理，先保留旧环境的活动索引与待对账标记，再递增视图代次、中止旧读取并清除当前 Session、ETag 和临时投影；从新作用域只读恢复。旧请求的迟到结果不得进入新环境，已接受的后台执行不因页面离开而被自动停止。
+3. 同源代理在转发前核对页面已确认的连接版本；配置已变化的旧请求须在转发前拒绝并要求刷新配置，不能携带旧环境凭据被路由到新目标。已转发请求保持原上游连接。跨页签更新只提示配置已变化，不静默把另一页签切换到新后端。
+4. 配置版本冲突时重新读取已保存配置，保留编辑草稿；不自动覆盖他人更新。浏览器设置、本地服务配置及 Session ETag 各管自身资源，不能互换或伪造版本。
+5. 既有索引按原来源保留；无法确定原代理后端的旧索引不能自动归属于新目标。任何结果未知的写请求仍需回到原环境只读对账；保存配置不解除原请求的不确定状态，不以新环境同名 Session 认领原执行。
+
+默认值变化不会改写已有 Session 的 mode、modelId、thinking、agentId 或 displayName；这些状态继续使用各自的显式 Session 操作。新本地设置不得把自动 Header 扩大到历史、配置等原来不携带自定义值的请求。
+
+### 6.6 代码与配置热更新边界
+
+| 修改类型 | 当前事实与目标行为 |
+|---|---|
+| Vue 模板、样式和前端模块 | 当前已接入 Vite/Vue HMR；常规修改自动更新。模板/样式可局部更新，脚本变更可能重建组件或触发整页刷新，不承诺所有组件内存状态保留 |
+| 面板管理的 IP、Headers、连接和默认项 | target-only 运行时设置；保存并应用后更新 store 或本地服务快照，不改写 `.env.local`，不要求重启 Vite；不强制刷新页面 |
+| 面板管理的认证账号密码 | target-only 本地配置热应用；下一次获取 Token 使用新快照，不影响已发认证请求；配置失效后迟到结果不回填 |
+| 手工修改 `.env*`、`vite.config.ts` 或其插件依赖 | 属于 Vite 启动配置更新；可能自动重启开发服务器，不是本方案承诺的运行时无重启配置路径 |
+| 安装/升级 npm 依赖、修改监听端口、Node 启动参数或 `NODE_EXTRA_CA_CERTS` | 按对应开发进程的启动边界重启；生产构建产物更新仍需重新构建和部署 |
+
+Vite 官方文档说明环境文件在启动时加载，HMR API 也允许模块失效后扩大更新范围；核对日期为 2026-09-15。[环境变量与模式](https://vite.dev/guide/env-and-mode)、[HMR API](https://vite.dev/guide/api-hmr)。本地安装 Vite 6.4.3 的 `handleHMRUpdate` 还会将 `.env*`/配置依赖变更转入服务器重启，Vue 插件则区分 rerender 与 reload；这属于开发工具行为，不是 CampusClaw 已实现的设置热应用。
+
+代码更新导致组件重建或页面刷新时，从已保存设置和 Session 索引恢复，再只读核对权威历史；不能为恢复体验重放原消息、回答或批准。未发送草稿的跨 HMR 保留不是本设计已有承诺；无需手动重启服务与所有内存状态无损是不同验收项。
 
 ## 7. 实施与验收
 
@@ -141,8 +197,11 @@ Token 获取是独立请求，不重放失败的对话 POST。后续是否携带
 |---|---|
 | W1 会话索引与恢复协调器 | 新建/切换后刷新、关闭重开均恢复同一 ID；点选/恢复/改名/改配置不重排；置顶分区稳定且取消后回归原最近位置；v1→v2 保留顺序；网络失败不创建新 Session |
 | W2 统一 Composer 操作状态 | 消息提交立即变方块；无回执禁用、可停止时启用、控制回执不释放发送、实际终态恢复；草稿 Enter 不停止；顶部无重复按钮 |
-| W3 Header 与本地错误 | 三空预置 0，纯空白 0，CR/LF 拒绝；六类动作使用最新值，旧快照不变；本地校验失败不归类为网络未知结果 |
+| W3 Header 与本地错误 | 三空预置 0，纯空白 0，CR/LF 拒绝；六类动作使用最新已应用值，旧快照不变；本地校验失败不归类为网络未知结果 |
 | W4 本地认证助手 | 固定 IP/HTTPS/path、账号配置不进入 bundle、独立 Cookie 数组、超时/上限/无 Token/重定向/TLS/异常脱敏、代次与编辑冲突；生产与 preview 路径不存在 |
+| W8 统一开发者设置 | 面板覆盖九个既有配置键与认证 IP/Headers；清除秘密不回退旧环境值；读取仅返回配置状态；生产构建及 preview 不暴露配置能力 |
+| W9 持久化与切环境 | IP、X-HW-ID、Authorization 刷新/关闭重开可恢复；清空立即停用、落盘成功后刷新仍为零行；存储失败不显示成功；代理后端与认证 IP 隔离；跨页签不静默切换连接 |
+| W10 配置与代码更新 | 面板保存后下一次请求使用新快照，无须重启 Vite；在途请求保持原目标与 Header；旧连接版本不转发到新后端；代码 HMR/组件重建后只读恢复，无重复 POST |
 | W5 入口与状态提示 | `+` 只含真实附件/上下文能力；`/` 发现命令；空闲不常驻恢复栏；故障动作只读取，不自动续发、重登或重放 |
 | W7 计划交互 | 按[PF1～PF5](plan-interaction.md#6-组件与接入切片)接入模式、方案、审核和任务面板；不将工具 confirming 固定解释为计划待审 |
 | W6a 四类属性控件 | 每次操作只提交对应字段并携带 If-Match；仅切换模型时不主动补发 thinking，按完整 Session 同步归一结果；各控件共用 updateSession 与冲突对账流程 |
@@ -154,6 +213,7 @@ Token 获取是独立请求，不重放失败的对话 POST。后续是否携带
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-09-16 | 统一开发者设置，按环境保存 IP 与 Headers，并明确本地秘密配置和热更新边界。 |
 | 1.5.0 | 2026-09-15 | 校正恢复、停止、计划审核和认证助手状态，补齐会话交互实现证据。 |
 | 1.4.0 | 2026-09-15 | 模式与配置集中到 Composer，并引用计划审核、反馈和进度专项。 |
 | 1.3.0 | 2026-09-14 | 计划审核卡从事件恢复，Session 类型不增加待审核指针。 |

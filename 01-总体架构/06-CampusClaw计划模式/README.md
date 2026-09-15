@@ -2,13 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.9.1 |
-| 更新日期 | 2026-09-15 |
-| 状态 | 当前设计；计划与结构化问答已在 PR #301 开发分支实现，企业接入边界见专项证据 |
+| 文档版本 | 1.10.0 |
+| 更新日期 | 2026-09-16 |
+| 状态 | 当前设计；1d08f98e 已实现模式、审核与结构化问答；逐题交互、日志汇聚及精简提示词为 target-only |
 | 计划模式主基线 | DeepSeek Harness `0a53fb55bea101816fa226bb964ae2bed71c343b`，`dsh-0.1.2-alpha.2` |
 | TODO 公共交互基线 | DeepSeek / OpenCode / Codex 显式清单事件；Claude Managed Agents Beta 的历史与对账，2026-09-15 核对 |
 | Runtime 语义基线 | pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
-| CampusClaw 实现基线 | 计划原证据为 `09b32d8e`；提问接入专项核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`，已实现计划审核、TODO 与结构化提问；详见 [提问证据](ask-user-question.md#2-基线与已观察实现) |
+| CampusClaw 实现基线 | `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`；前次提问验证为 `9f785bea3ffff8f6566cd1b2727285af46a2aead`；本次静态核验范围与新增目标见 [源码证据 §9](source-evidence.md#9-buildplan-与逐题交互核验) |
 | 设计仓变更前基线 | `b6ea996537925d702022ee13a6b030e8bea054f5` |
 | 源码依据 | [基线、符号与差距](source-evidence.md) |
 
@@ -27,7 +27,9 @@
 
 名称、模型、思考和模式统一通过 `POST /sessions/{sessionId}` 更新；单字段与组合提交共享一笔事务。Session 的工作模式使用 `mode=plan|build` 表达，切换归属 Session 资源更新。`state=idle|running` 继续表示执行忙闲，两者共同描述 Session，不能合并为一个枚举。采用 DeepSeek 的“稳定工具清单、计划提示词、完整方案审核、批准后续跑”机制，接入 CampusClaw 已有的 `AgentSessionFactory`、`ManagedAgentSession`、Session Events 和数据库执行控制。
 
-用户在同一个 Session 中进入计划模式，Agent 查询资料、澄清需求并形成完整方案；用户批准指定方案后，原执行继续实施。多轮澄清通过 AskUserQuestion 与 user.question_answer 续跑同一根执行，无需更换 Agent 或 Session；显式 profile 不含提问工具时才降级为普通问题和下一条 user.message。
+用户界面统一显示 **Build** 和 **Plan**，协议继续使用小写 `build|plan`。Plan 的流程是调研、必要澄清、完整方案、明确批准，再进入 Build 实施。Agent 先查明可查询的事实；目标与约束已明确时直接形成方案，不固定先问三题，也不把每个请求变成问卷。纯解释或状态查询可以直接回答，不为没有实施内容的请求生成审核卡。
+
+需要用户掌握的信息或重要选择时，优先只问一个当前关键问题；确有多个相互独立且必须同时解决的问题时，一次工具请求可包含 2～3 题。前端每次只显示一题，允许回看修改，全部完成后一次提交 `user.question_answer`；逐题导航只改变本地草稿，不逐题恢复 Agent。多轮澄清保持同一根执行、Agent 与 Session；工具未装配时才降级为普通问题和下一条 user.message。问题答案、工具调用 JSON 和方案批准各有不同职责，详见[提问交互](ask-user-question.md#7-前端交互与企业服务边界)。
 
 执行任务清单在 build 实施阶段由 [TodoUpdate](todo-update.md) 独立维护；plan 调研、方案生成和修订不记录 TODO 进度。后端在成功 ToolResult 的同一事务中保存显式 `agent.todo_updated` 快照；前端直接消费 todos 并从历史恢复。方案审核、Session 模式和任务进度各自保持职责；不增加 Session 或元数据字段。
 
@@ -70,10 +72,10 @@
 
 1. 用户在空闲 Session 通过更新 `mode=plan` 进入计划模式，成功响应返回最新 Session 资源及 ETag。
 2. 用户提交普通消息。工厂恢复当前模式并加入计划提示词；Agent 使用已有工具调研。
-3. 需要澄清时，Agent 单独调用 AskUserQuestion；后端保存 agent.question 与 confirming，Session 仍 running/plan。用户提交 user.question_answer 后原执行继续；未装配工具时才用普通回复结束并等待下一条消息。
+3. 仅在存在不能自行查明的关键问题时，Agent 单独调用 AskUserQuestion；后端保存 agent.question 与 confirming，Session 仍 running/plan。前端逐题收集，同一批完整答案一次提交 user.question_answer 后原执行继续；无待决问题直接进入方案阶段，未装配工具时才普通回复提问。
 4. 方案完整时，Agent 单独调用 `ExitPlanMode({plan})`。服务端保存完整计划，进入审核等待并关闭当前 SSE。
-5. “修改方案”提交 `result=revise` 和可选反馈；原执行继续规划，重新提交时产生新的计划 eventId。
-6. “批准并执行”提交 `result=approve`；服务端原子接受决定、关闭计划模式并创建续跑段。原执行收到决定后更新提示词，返回工具结果，下一次模型请求创建实施清单并开始实施；逐项完成及验证后调用 TodoUpdate 更新进度。
+5. “修改计划”提交 `result=revise` 和可选反馈；原执行继续规划，重新提交时产生新的计划 eventId。
+6. “执行计划”提交 `result=approve`；服务端原子接受决定、关闭计划模式并创建续跑段。原执行收到决定后更新提示词，返回工具结果，下一次模型请求创建实施清单并开始实施；逐项完成及验证后调用 TodoUpdate 更新进度。
 7. 业务工具仍按既有 `allow/ask/deny` 执行；方案批准不能代替具体工具的权限确认。
 
 关闭计划卡片不发送批准请求。审核等待中要退出任务，使用现有 `user.interrupt`，目标仍是原始 `user.message.eventId`；收到真实终态后再修改模式或发送新消息。
@@ -108,7 +110,7 @@
 |---|---|---|
 | 创建与进入计划 | 创建时复制 Agent 默认；需要切换时通过统一 Session POST 设置 plan | 新建仍 idle；手动切换要求 If-Match，返回同源 Session/ETag |
 | 调研与方案设计 | 普通消息启动；模型读取资料、查询业务、形成方案 | running/plan；正常思考和工具事件，不调用 TODO |
-| 澄清 | AskUserQuestion 产生结构化问题，user.question_answer 返回答案 | running/plan；同一根新段续跑，不创建调研 TODO |
+| 必要澄清 | 仅询问待决信息；每次显示一题，同批完整答案一次提交 | running/plan；同一根新段续跑，不创建调研 TODO；没有待决问题时跳过 |
 | 提交审核 | 单独 ExitPlanMode 调用，前端展示完整方案卡 | agent.plan 固定正文；confirming 关闭本段 SSE，Session 仍 running/plan |
 | 修订 | 用户针对计划 eventId 提交 revise | 原执行新段继续 plan；不创建实施清单，新方案使用新 eventId |
 | 批准 | 用户提交 approve，服务端事务接受并唤醒原执行 | mode=build；替换系统指令；批准本身不代表任何实施项已完成 |
@@ -316,7 +318,9 @@ TODO 恢复复用同一事件历史，规则由 [TodoUpdate §4](todo-update.md#
 
 ## 7. 前端与 Mate 边界
 
-CampusClaw 自带 Runtime 调试前端可以直接消费本专题的内部 Session 契约。页面显示独立的模式开关和审核卡片；`running` 时禁用手动切换，审核按钮绑定 eventId 而非“最后一段 Markdown”；卡片恢复按 [§6.2](#62-恢复与结果不确定)处理，Session 类型不新增待审核字段。提交按钮点击后进入提交中，不能重复创建确认请求；409 后重新获取 Session 和历史。
+CampusClaw 自带 Runtime 调试前端可以直接消费本专题的内部 Session 契约。模式控件显示 Build/Plan；Plan 卡片直接展示完整方案和“执行计划”“修改计划”，必要澄清采用[逐题问题卡](ask-user-question.md#7-前端交互与企业服务边界)。待回答时显示“等待回答”，待审核时显示“等待审核”，工具权限交互显示“等待确认”；这些是现有事件的客户端展示状态，不扩展 Session 枚举。页面显示独立的模式开关和审核卡片；`running` 时禁用手动切换，审核按钮绑定 eventId 而非“最后一段 Markdown”；卡片恢复按 [§6.2](#62-恢复与结果不确定)处理，Session 类型不新增待审核字段。提交按钮点击后进入提交中，不能重复创建确认请求；409 后重新获取 Session 和历史。
+
+主对话中的问题和答案卡吸收与之精确关联的 AskUserQuestion 调用/结果；完整方案卡继续吸收 ExitPlanMode 调用/结果。模型历史与完整事件保持，原始参数和结果仅在开发者诊断中按需查看；关联缺失或调用失败时给出简短状态，不把 JSON 当作最终用户答复。此项展示与逐题导航在 1d08f98e 尚未实现，不改变审核、工具结果或续跑协议。
 
 只有收到并对账到服务端接受决定，才显示“已批准”或“已退回修改”；生成方案结束、关闭 SSE、普通回答中的肯定文本都不能触发执行。计划 Markdown 按前端现有安全渲染规则显示，不执行其中 HTML/脚本，外链与工具调用不由文档内容自动触发。
 
@@ -334,8 +338,9 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 | S4：取消和恢复 | GET Session/历史投影、超时、中断、删除清理、压缩与 Child | approve/revise/interrupt 竞争；两类确认不能互相消费；断线无重放；分页未补齐与 Session/事件矛盾时不开放审核；已确认或终止的旧计划不可重审；未可靠结束不释放准入；批准后新 Child 使用 build；摘要不修改模式 |
 | S5：客户端与契约发布 | 统一 catalog/operation JSON、生成 HTML、Runtime 前端、所需 Mate 公共投影 | Session 更新成功与 ETag 同源；两跳不泄露 ID/凭据；审核卡从完整事件恢复；创建/GET/更新/Command 的完整 Session 均不含待审核目标；内部待审指针不单独推进 Session 版本；未知事件版本兼容；UI 接受才标记批准 |
 | S6：TODO 进度 | TodoUpdateTool/profile、显式任务事件及 applyTodoUpdated，精确切片见 [T1～T4](todo-update.md#6-实施切片与验收) | plan 不调用 TODO，build 正常消息与进度交错；成功提交才更新；失败/缺页/断线/重复帧恢复一致；新根隔离；增加完整 agent.todo_updated，保持 Session 和元数据字段不变 |
-| S7：提示词组合与模型评估 | 固定指令段及工具可用性组合、模式/入口组合、工具 description 和审核结果引导 | [P01～P13](plan-policy.md#8-组合检查与模型场景验收)：plan 不记录 TODO；批准后加入实施段；逐项更新；失败不虚报；双 Session 与压缩无串扰；模型遵循与代码校验分别记录 |
+| S7：提示词组合与模型评估 | 固定指令段及工具可用性组合、模式/入口组合、工具 description 和审核结果引导 | [P01～P14](plan-policy.md#8-组合检查与模型场景验收)：plan 不记录 TODO；批准后加入实施段；逐项更新；失败不虚报；双 Session 与压缩无串扰；模型遵循与代码校验分别记录 |
 | S8：结构化提问 | [Q1～Q5](ask-user-question.md#8-实施切片与验收) | 精确问题/答案、三类互斥、原根续跑、取消与恢复；Session 与元数据字段稳定；plan 无调研 TODO，build 保留原清单 |
+| S9：Plan 交互优化（target-only） | Build/Plan 文案、逐题问题卡、调用/结果汇聚、必要澄清提示词 | 一题无需导航，多题前进/返回不发请求、最后仅一次完整提交；回答不批准；完整事件保留；无问答事件的失败可见；无待决问题不强制提问；窄屏和缩放下当前题与操作可达 |
 
 规划行为还需要模型级场景评估：查询型工具可用、混合查询/修改工具依描述选参、Cron 管理/触发属于规划期不应执行的动作、用户口头同意不自动退出、Child 返回待决问题、资料中的诱导执行指令不能改变计划约束。这些评估衡量提示词遵循情况，不宣称证明了强制无副作用。
 
@@ -349,6 +354,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.10.0 | 2026-09-16 | 明确 Build/Plan、必要澄清、逐题聚合提交及问题卡吸收工具日志的目标交互。 |
 | 1.9.1 | 2026-09-15 | 同步计划与结构化问答的开发分支证据和验证边界。 |
 | 1.9.0 | 2026-09-15 | 澄清采用 AskUserQuestion 和显式问题/答案事件，保持原执行续跑。 |
 | 1.8.0 | 2026-09-15 | 计划审核报文纳入共享契约，制作、批准执行和修订示例与历史同源。 |

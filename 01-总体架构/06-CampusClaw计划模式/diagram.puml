@@ -684,13 +684,18 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-' Java baseline: 699f929f6826b595ed1d0162f6def66e2f84760b (development branch).
+' Java baseline: 1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4.
+' Previous baseline: 699f929f6826b595ed1d0162f6def66e2f84760b.
+' Source: frontend/src/components/QuestionCard.vue :: fieldset v-for, submit.
+' Source: frontend/src/projectors/runtimeEventProjector.ts :: projectRuntimeEvents.
+' Codex d58d0e58: codex-rs/tui/src/bottom_pane/request_user_input/mod.rs :: go_next_or_submit.
+' Observed behavior: question control is implemented; one-at-a-time UI is target-only.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: beginPlanReview, finishConfirmingOutput.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeControlEventService.java :: accept.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: await, claimAndResumePlanReview, prepareStop.
 ' DeepSeek 0a53fb55bea101816fa226bb964ae2bed71c343b (alpha): packages/interaction/tool-ask-user/src/index.ts :: execute; packages/interaction/user-questions/src/index.ts :: ask.
 ' Observed behavior: tools await decisions and continue through original execution segments.
-' Design reason: target-only questions use explicit durable events, one pending slot and immutable question definitions.
+' Design reason: local navigation reduces density; one answer batch preserves existing control authority.
 title AskUserQuestion - Target Interaction and Recovery
 actor User
 participant "Question card" as UI
@@ -714,7 +719,11 @@ group 1. Publish and wait (plan or build)
   end note
 end
 group 2. Accept a complete answer
-  User -> UI : Select options and/or enter text; submit
+  loop Local question navigation [target-only UI]
+    User -> UI : Answer current question; next or back
+    UI -> UI : Validate one question; keep all drafts; no request
+  end
+  User -> UI : Final question: submit complete answer batch
   UI -> API : user.question_answer(targetEventId, answers)
   API -> Service : Reserve response capacity; validate shape
   Service -> DB : Lock Session -> execution -> segment/answer
@@ -733,6 +742,12 @@ group 3. Resume the original call
   Runtime -> DB : Persist result and subsequent output
   API -> DB : Read committed continuation events
   API --> UI : tool_result, thinking, tools, message
+  UI -> UI : Merge matching question tool into answer summary
+  note right of UI
+    No duplicate raw question or answer JSON.
+    Preserve model ToolCall and ToolResult.
+    Missing question or failed call stays visible.
+  end note
   note over UI,Tool
     Every agent event keeps the original sourceEventId.
     Answering never approves a plan or tool permission.

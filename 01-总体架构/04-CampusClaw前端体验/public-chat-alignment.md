@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 / 日期 | 1.5.0 / 2026-09-15 |
+| 版本 / 日期 | 1.6.0 / 2026-09-16 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
 | 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 仅作历史迁移证据；当前 Runtime 前端见[实现状态](source-evidence.md#current-implementation) |
 | 性质 | Mate 公共接入为 target-only；内部 Runtime 前端已有实现，公司认证及 Chat/Session 边界保持 |
@@ -57,7 +57,7 @@ Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thin
 
 ![公共对话全局目标组件](target_frontend_components.svg)
 
-[PlantUML 源码](diagram.puml#L205) · [原尺寸](target_frontend_components.svg)
+[PlantUML 源码](diagram.puml#L210) · [原尺寸](target_frontend_components.svg)
 
 Workspace 只发用户意图、读取不可变展示快照。ConversationCoordinator 负责提交、确认、中断和恢复；
 PublicChatGateway 负责公共协议校验，EventReducer 同时消费 POST 完整回执、live 和 history。
@@ -72,7 +72,7 @@ Slash 和恢复后的配置读取共用配置快照；成功资源与并发版�
 
 ![对话、确认与恢复状态](target_conversation_states.svg)
 
-[PlantUML 源码](diagram.puml#L339) · [原尺寸](target_conversation_states.svg)
+[PlantUML 源码](diagram.puml#L354) · [原尺寸](target_conversation_states.svg)
 
 连接使用独立 `connecting/live/offline/reconciling` 状态，不把连接打开当作执行中、EOF 当作完成。
 下列业务状态是前端模型，不是新增 HTTP 枚举。所有目标推导以当前 Chat、请求快照和可靠关联为前提。
@@ -86,7 +86,7 @@ Slash 和恢复后的配置读取共用配置快照；成功资源与并发版�
 | confirmingSubmit | 正在提交决定 | 两个决定按钮同时禁用；完整确认回执后等待结果，不把回执当工具成功 |
 | stopping | 正在请求停止 / 停止请求已接受，等待结束 | 禁止重复中断及新消息；可靠终态后显示实际原因；自然完成不能伪装成被中断 |
 | uncertain | 提交结果不确定 / 连接中断，执行可能继续 | 保留草稿与已确认内容；只提供“检查最新状态”，不自动重发、不按同文推断接受 |
-| terminal | 已完成 / 已停止 / 执行失败 | 显示对应轻量状态，恢复普通发送；已停止不意味着此前远端副作用回滚 |
+| terminal | 正常完成不重复最终回答；异常显示已停止 / 执行失败 | 按[统一文案](README.md#106-简洁文案)显示，恢复普通发送；已停止不意味着此前远端副作用回滚 |
 
 ### 4.1 文本与附件
 
@@ -131,17 +131,17 @@ Enter 发送、Shift+Enter 换行；compositionstart 至 compositionend 期间 E
 | agent.thinking + delta/completed | 展示模型返回的可读原文，标注“原始推理”；delta 追加、completed 原文覆盖，历史同形。前端标题为“正在分析/分析过程”，不构造额外公共标题字段，不虚构耗时 |
 | agent.tool_call | 按 eventId 建立工具行，toolCallId 用于限定作用域内的结果关联；requiresConfirmation=true 时等待确认，不能一收到调用就标记正在执行 |
 | user.tool_confirmation | POST/历史合并为该工具的只读决定记录；不是 Assistant 发言 |
-| agent.tool_result | 使用 isError 判成败，公共字符串作为纯文本；没有结果不伪造成功；工具失败后 Agent 仍可能继续处理 |
+| agent.tool_result | 使用 isError 判成败，公共字符串按主设计 §9.6 展示 JSON 或纯文本，仍是只读内容；没有结果不伪造成功；工具失败后 Agent 仍可能继续处理 |
 | chat.status_idle | done/terminated/failed/confirming 分开处理；不关闭公共长连接，不把确认等待视为空闲 |
 
 计划方案是新增的受限 Markdown 内容面，界面和两跳接入门禁见[计划交互专项](plan-interaction.md)；当前 Mate 精确模型未接入计划审核与任务事件前，只装配 Mock，不直接转发内部事件。
 
 Assistant `content` 保留 rawMarkdown 并使用现有安全渲染骨架；User/Thinking/Tool/error 不继承 Markdown 权限。
-参数是已安全投影的 JSON 对象，使用惰性展开的键值 viewer；文本即使像 JSON/URL 也不变成可执行结构。
+参数是已安全投影的 JSON 对象，与可无损解析的完整 JSON 结果共用[安全 viewer](README.md#96-工具参数与结果)；JSON 格式化只作只读显示，JSON/URL/HTML 不变成可执行内容。
 本地展示预算只控制展开、虚拟列表或纯文本回退，不覆写权威完整记录；复制只复制允许公开的数据。
 完整数据不可解码时提示“数据格式不兼容”并保留已确认内容，不伪造空列表或回退展示内部 payload。
 
-内部诊断的 text-block viewer 按块顺序显示，空文本显示“未返回文本”，多个块不丢失；CallMateTool
+内部诊断的 text-block viewer 按块顺序显示，各块独立判断 JSON 或纯文本，多个块不丢失；无内容省略空详情区，需要说明时在摘要显示“无结果”；CallMateTool
 业务名从 arguments.tool 读取、参数从 args 展示，但保留原始包装的来源。
 模型参数不合法时展示原参数与失败结果，不因业务 Schema 拒绝事件。内部确认按根消息及调用后的提交顺序关联，
 读取 denyMessage 接受 4096 UTF-16 单元；不得套用输入框 2048 code point 上限。
@@ -201,6 +201,7 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-09-16 | 工具结果复用安全结构视图并统一简洁状态文案，保持公共内容与权限边界。 |
 | 1.5.0 | 2026-09-15 | 区分已实现的 Runtime 前端与待接入的 Mate 公共能力。 |
 | 1.4.0 | 2026-09-15 | 配置入口收敛到 Composer，新增计划审核与任务展示的公共接入引用。 |
 | 1.3.0 | 2026-09-09 | 将停止收敛到 Composer 主操作并关联内部工作台恢复设计。 |
