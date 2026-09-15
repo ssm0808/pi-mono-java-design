@@ -54,7 +54,7 @@ def main():
     missing = [r for r in daily['responses'] if r['status'] == '404']
     require(len(missing) == 1 and all(b['resCode'] == 'SKILL_LOAD_STATISTICS_NOT_FOUND' for b in missing[0]['bodies'].values()), 'Missing statistics must not imply missing Skill')
     entries = [entry for entry in manifest['operations'] if entry['key'] in {'listSkillLoadStatistics', 'getSkillLoadDailyStatistics'}]
-    require(all('推荐方案' in entry['status'] and '待评审' in entry['status'] for entry in entries), 'Proposal silently promoted to confirmed')
+    require(all(entry['status'] == '全文加载候选 · target-only · 口径待评审' for entry in entries), 'Proposal silently promoted to confirmed')
     print('Skill statistics: two GET routes; ID-free ranking; calendar windows; matching list/daily counts; empty/missing distinction; envelopes and proposal state passed.')
 
 

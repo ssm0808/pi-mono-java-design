@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/skills/{skillId}/load-statistics/daily",
     "summary": "查看一个 Skill 近 7/30 天的逐日加载趋势",
-    "description": "路径 skillId 来自统计列表或已知 Skill，用于定位单项统计详情。先检查累计统计资源，再在同一 SQL 快照中按自然日补齐 7/30 项；零值只代表该日无记账。没有累计统计资源返回 404，不据此断言 Skill 主数据不存在。本接口为 target-only 推荐方案。",
+    "description": "路径 skillId 来自统计列表或已知 Skill，用于定位单项统计详情。先检查累计统计资源，再在同一 SQL 快照中按自然日补齐 7/30 项；零值只代表该日无记账。没有累计统计资源返回 404，不据此断言 Skill 主数据不存在。本接口为全文加载口径候选，target-only，口径待评审；不是实施基线。",
     "parameters": [
       {
         "name": "skillId",

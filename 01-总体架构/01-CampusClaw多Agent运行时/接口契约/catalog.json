@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0",
+  "version": "1.7.1",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -80,16 +80,16 @@
       "key": "listSkillLoadStatistics",
       "source": "统计契约/操作/01-list-skill-load-statistics.json",
       "common": "接口契约/common.json",
-      "status": "推荐方案 · target-only · 待评审",
-      "note": "累计＋按日统计及近 7/30 天已确认；表、接口及部署级权限范围为本版推荐方案，尚未实现。",
+      "status": "全文加载候选 · target-only · 口径待评审",
+      "note": "仅累计＋按日及近 7/30 天已确认；全文加载与任务采用口径尚待确定。本候选不是实施基线，需按设计仓调用事实、关联和权限边界重新评审。",
       "design": "../../04-命令与技能/03-Skill加载统计/README.md"
     },
     {
       "key": "getSkillLoadDailyStatistics",
       "source": "统计契约/操作/02-get-skill-load-daily-statistics.json",
       "common": "接口契约/common.json",
-      "status": "推荐方案 · target-only · 待评审",
-      "note": "累计＋按日统计及近 7/30 天已确认；表、接口及部署级权限范围为本版推荐方案，尚未实现。",
+      "status": "全文加载候选 · target-only · 口径待评审",
+      "note": "仅累计＋按日及近 7/30 天已确认；全文加载与任务采用口径尚待确定。本候选不是实施基线，需按设计仓调用事实、关联和权限边界重新评审。",
       "design": "../../04-命令与技能/03-Skill加载统计/README.md"
     }
   ]

@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/skills/load-statistics",
     "summary": "直接分页查询累计或近 7/30 天 Skill 加载统计",
-    "description": "无需 skillIds。服务端确定统计窗口、汇总、排序后分页；只返回窗口内次数大于零的 Skill。累计查累计表，近 7/30 天查日汇总。统计集合不是全部 Skill 目录，名称及目录权限由 CampusMate 维护。本接口为 target-only 推荐方案。",
+    "description": "无需 skillIds。服务端确定统计窗口、汇总、排序后分页；只返回窗口内次数大于零的 Skill。累计查累计表，近 7/30 天查日汇总。统计集合不是全部 Skill 目录，名称及目录权限由 CampusMate 维护。本接口为全文加载口径候选，target-only，口径待评审；不是实施基线。",
     "parameters": [
       {
         "name": "period",
