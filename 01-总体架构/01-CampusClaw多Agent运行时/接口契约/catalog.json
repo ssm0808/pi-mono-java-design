@@ -75,6 +75,22 @@
       "status": "已确认目标契约 · 待实现",
       "note": "B01～B15 四组全部按推荐确认；字段、错误码、事件关联和恢复边界已统一，可进入实现。数据库和容量数值按压测校准。Builtin JSON 保持，Skill 使用共享事件 SSE；Mate 公共协议独立管理。",
       "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"
+    },
+    {
+      "key": "listSkillLoadStatistics",
+      "source": "统计契约/操作/01-list-skill-load-statistics.json",
+      "common": "接口契约/common.json",
+      "status": "推荐方案 · target-only · 待评审",
+      "note": "累计＋按日统计及近 7/30 天已确认；表、接口及部署级权限范围为本版推荐方案，尚未实现。",
+      "design": "../../04-命令与技能/03-Skill加载统计/README.md"
+    },
+    {
+      "key": "getSkillLoadDailyStatistics",
+      "source": "统计契约/操作/02-get-skill-load-daily-statistics.json",
+      "common": "接口契约/common.json",
+      "status": "推荐方案 · target-only · 待评审",
+      "note": "累计＋按日统计及近 7/30 天已确认；表、接口及部署级权限范围为本版推荐方案，尚未实现。",
+      "design": "../../04-命令与技能/03-Skill加载统计/README.md"
     }
   ]
 }

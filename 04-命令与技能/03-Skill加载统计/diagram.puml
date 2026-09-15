@@ -1,0 +1,101 @@
+@startuml skill_load_statistics_classes
+allowmixing
+' Source evidence: pi-mono-java 3dfd990a982f610a97c7ecb45e07bde73f45ecb3
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java: recordSkillLoad
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/skill/SkillCommandExecutionService.java: execute
+' modules/coding-agent-cli/src/main/resources/mapper/session/SkillLoadMapper.xml: insert/query
+' pi 5cd93f688aaab89dbb6dfa4aca535f21796ae185 packages/coding-agent/src/core/agent-session.ts: _expandSkillCommand
+' Observed behavior: host attributes Read coverage and explicit command admission to Skill loads.
+' Design reason: aggregate once in one transaction; keep query and collection responsibilities separate.
+' Java divergence: all new classes, methods, tables and relationships below are target-only.
+title Skill Load Statistics - Target-only Design
+top to bottom direction
+skinparam shadowing false
+skinparam linetype polyline
+skinparam nodesep 35
+skinparam ranksep 50
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam packageTitleAlignment left
+skinparam defaultFontName SansSerif
+skinparam ArrowFontSize 11
+skinparam classFontSize 12
+
+package "Management boundary" {
+  actor "Authorized management caller" as Caller
+  class "SkillLoadStatisticsController" as Controller <<target-only, singleton>> {
+    +list(requestVO): responseVO
+    +daily(skillId, requestVO): responseVO
+  }
+  class "SkillLoadStatisticsQueryService" as Query <<target-only, singleton>> {
+    +normalizeWindowAndPage()
+    +list() / daily()
+  }
+  class "SkillStatisticsQueryDTO" as QueryDTO <<target-only, request snapshot>>
+}
+
+package "Managed execution" {
+  class "AgentSessionFactory / Read hook" as Host <<target-only integration>>
+  class "SkillCommandExecutionService" as Command <<target-only integration>>
+  class "SkillReadCoverage" as Coverage <<execution scope>>
+  class "Prepared Skill snapshot" as Snapshot <<immutable, execution scope>>
+  class "SkillLoadRecorder" as Recorder <<target-only, singleton>> {
+    +record(skillId)
+    +handleFailureAfterRollback()
+  }
+}
+
+package "Application transaction and GaussDB persistence" {
+  class "SkillLoadStatisticsWriteService" as Writer <<target-only, singleton>> {
+    +record(skillId)
+    REQUIRES_NEW
+  }
+  interface "SkillLoadStatisticsMapper" as Mapper <<target-only>> {
+    +incrementTotal(dto)
+    +incrementDaily(dto)
+    +list(dto) / daily(dto)
+  }
+  class "SkillLoadStatisticsDTO" as DTO <<target-only, internal>>
+  together {
+    entity "t_skill_load_stats" as Total <<target-only>> {
+      * skill_id : PK
+      --
+      full_load_count
+      last_loaded_at
+    }
+    entity "t_skill_load_daily_stats" as Daily <<target-only>> {
+      * stat_date : PK
+      * skill_id : PK
+      --
+      full_load_count
+      last_loaded_at
+    }
+  }
+}
+
+Caller --> Controller : GET + upstream authorization
+Controller --> Query : request/response VO
+Query "1" --> "1 per query" QueryDTO : creates
+Query --> Mapper : bounded query DTO
+Host "1" *-- "1" Coverage
+Host --> Snapshot : validate actual read evidence
+Command --> Snapshot : admitted full input
+Host --> Recorder : completed coverage
+Command --> Recorder : accepted full input
+Recorder --> Writer : one attempt
+Writer --> Mapper : same DB transaction
+Mapper --> DTO : maps records
+Mapper --> Total : total
+Mapper --> Daily : daily
+
+note bottom of Writer
+  Total then daily; commit both or rollback both.
+  Catch failures outside the transaction proxy.
+  No automatic retry after an uncertain commit.
+end note
+note bottom of Daily
+  Asia/Shanghai calendar days.
+  Recent 7/30-day queries; retain 90 days.
+  Cleanup never decrements lifetime totals.
+end note
+@enduml

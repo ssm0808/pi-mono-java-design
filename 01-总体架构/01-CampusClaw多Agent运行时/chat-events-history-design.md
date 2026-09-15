@@ -21,7 +21,7 @@ ListEvents 按已提交顺序从旧到新返回当前分支的完整事件，使
   [02-list-session-events.json](事件契约/操作/02-list-session-events.json)。
 - [POST 保留评审页](chat-api-review.html#submitSessionEvent) 与
   [请求级 SSE 设计](chat-events-stream-design.md) 继续有效。
-- 当前九项内部接口由统一清单管理。Thinking 展示规则由 Runtime、Mate 公共 API 与前端
+- 当前内部接口由统一清单管理。Thinking 展示规则由 Runtime、Mate 公共 API 与前端
   共用；内部 `sessionId` 不直接暴露给浏览器。
 
 ```http

@@ -48,11 +48,12 @@ def validate_catalog():
     manifest, models = current.load_catalog()
     require(manifest["output"] == "chat-api-review.html" and "legacyPages" not in manifest,
             "Publish only the current catalog; no legacy aliases")
-    require(len(models) == 9, "Current catalog must contain exactly nine operations")
+    require(len(models) == 11, "Current catalog must contain exactly eleven operations")
     require({model["operation"]["operationKey"] for model in models} == {
         "createSession", "getSession", "deleteSession", "submitSessionEvent", "listSessionEvents",
         "listSessionModels", "updateSession",
         "listSessionCommands", "executeSessionCommand",
+        "listSkillLoadStatistics", "getSkillLoadDailyStatistics",
     }, "Current catalog identities differ")
     spec = importlib.util.spec_from_file_location("retained_gate", ROOT / "validate-chat-http-v1.py")
     gate = importlib.util.module_from_spec(spec)
@@ -62,7 +63,7 @@ def validate_catalog():
     parser = gate.ContractHtmlParser()
     parser.feed(source)
     embedded, scripts = gate.parse_generated_models(parser)
-    require(embedded == models and parser.static_review_count == 9, "Rendered model/static catalog differs")
+    require(embedded == models and parser.static_review_count == 11, "Rendered model/static catalog differs")
     require(len(scripts) == len(parser.styles) == 1, "Keep one shared script and style")
     gate.validate_executable_script(scripts[0])
     gate.validate_control_retirement(models)
@@ -80,8 +81,8 @@ def validate_catalog():
         require((ROOT / target).exists(), f"Broken current-page link: {target}")
     require("traceparent" not in source, "Forbidden header in current page")
     # Plan and question contracts include complete SSE/history examples and static fallbacks.
-    # The question addition is 569,507 bytes; retain a bounded growth guard.
-    require(len(source.encode()) < 600_000, "Unexpected catalog growth")
+    # Eleven operations including statistics render to 614,684 bytes; keep bounded headroom.
+    require(len(source.encode()) < 650_000, "Unexpected catalog growth")
     return models
 
 
@@ -93,6 +94,7 @@ def main():
         ["render_chat_api.py", "--check"],
         ["validate-chat-http-v1.py", *(["--full"] if args.full else [])],
         ["validate-chat-events.py"],
+        ["validate-skill-statistics.py"],
         ["test_control_retirement.py"],
         ["test_chat_api.py"],
         ["test_help_contract.py"],
@@ -102,7 +104,7 @@ def main():
     ):
         subprocess.run([sys.executable, *command], cwd=ROOT, check=True)
     validate_catalog()
-    print("Current catalog valid: nine unique operations; retired pages/generator absent; no retired links; review decisions preserved.")
+    print("Current catalog valid: eleven unique operations; retired pages/generator absent; no retired links; review decisions preserved.")
     return 0
 
 
