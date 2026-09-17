@@ -2,7 +2,7 @@
 
 [返回前端主设计](README.md)
 
-版本：1.5.0；更新日期：2026-09-17。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§7](#mate-tool-display-evidence)，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
+版本：1.6.0；更新日期：2026-09-17。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§7](#mate-tool-display-evidence)，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
 
 | 证据 | 基线 |
 |---|---|
@@ -178,18 +178,28 @@ OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对�
 
 ## 7. CallMateTool 具体名称展示核验（2026-09-17）
 
-设计起点 `pi-mono-java-design@1fd29a535c7d1ba47bfb9c6413a10ff46f492643`；实现核验使用本地 `main` 的明确快照 `pi-mono-java@21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`，不是最新上游声明。下列文件完整读取且与该提交无工作树差异，仅升级工具名称展示范围；此前 §6 的 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4` 保留其他体验证据，不把旧缺口延伸到新提交。
+设计起点 `pi-mono-java-design@2a24aaeb127910e62dd3e96c5a1ea72f5931bf4f`；实现核验使用本地 `main` 的明确快照 `pi-mono-java@21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`，不是最新上游声明。下列文件按所列符号读取且与该提交无工作树差异，仅升级工具名称展示范围；此前 §6 的 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4` 保留其他体验证据，不把旧缺口延伸到新提交。
 
 | 仓库相对路径 / 符号 | 已观察实现 | 目标差距 |
 |---|---|---|
 | `frontend/src/components/ToolActivity.vue` · `BUILT_IN_TOOL_LABELS`、`toolLabel`、template | CallMateTool 固定映射为“调用业务工具”，两种标题分支只传入外层 toolName | 标题读取具体名称，复用同一展示函数；当前尚未实现 |
-| `frontend/src/projectors/runtimeEventProjector.ts` · `projectRuntimeEvents`、`matchingToolResult` | 调用保留 toolName、原始 argumentValue 和格式化参数行；按 sourceEventId + toolCallId 关联结果，孤立结果有缺调用占位 | 直接消费已有结构，无需修改事件字段或凭名称配对 |
-| `frontend/src/types/product.ts` · `ActivityTurn` | 已有 toolName、argumentValue、status | 不覆盖 toolName，不增加公共显示字段 |
+| `frontend/src/projectors/runtimeEventProjector.ts` · `projectRuntimeEvents`、`matchingToolResult` | 调用保留 toolName、原始 argumentValue 和格式化参数行；按 sourceEventId + toolCallId 关联结果，孤立结果有缺调用占位 | argumentValue 可提供技术名回退；还需消费新增展示名投影，关联键保持 |
+| `frontend/src/types/product.ts` · `ActivityTurn`；`frontend/src/types/runtime.ts` · `RuntimeEvent` | 已有 toolName、argumentValue、status；agent.tool_call 类型没有 displayName | 展示模型保留独立 displayName；需要上游传递，不能覆盖 toolName |
 | `frontend/src/components/ToolConfirmation.vue` · template | 确认标题直接显示 tool.toolName，参数来自 tool.arguments | 与活动行共用具体名称规则，授权目标和参数保持 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java` · `name`、`parameters`、`execute` | 包装器名为 CallMateTool；tool 是 Exact Mate tool name；execute 以该名称解析 ID，再传 args 执行 | 前端已有名称来源，不用工具结果或远端目录反推名称 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java` · `name`、`parameters`、`execute` | 包装器名为 CallMateTool；tool 是 Exact Mate tool name；execute 以该名称解析 ID，再传 args 执行 | 已有技术名称来源；displayName 仍须从服务端元数据传递 |
 
-同时读取 `frontend/src/components/structuredActivity.test.ts`：已有结构 viewer 与结果文本块测试，未运行本次产品测试；不能用既有测试证明具体名称已显示。实现仍显示通用标题，新增[标题规则](README.md#mate-tool-display)为 target-only。
+新增元数据核对（同一实现提交，2026-09-17）：
 
-这是项目自身的展示产品约束；不比较或改变 Agent Loop、工具生命周期、Provider/API 事件语义。本次不新增外部 Agent 基线结论，也不升级既有 Codex/pi/OpenCode 的历史证据。类关系与 PlantUML 图源不变，不新增依赖；没有修改实现仓或验证部署页面。
+| 仓库相对路径 / 符号 | 已观察实现与缺口 |
+|---|---|
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/dto/ToolInfo.java` · displayName / JsonNaming | 元数据 DTO 已有 displayName，SNAKE_CASE 将网关 display_name 映射到该属性；字段存在不证明每个工具实际都有值 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java` · queryToolMetaByIds / toMeta | 查询反序列化为 ToolInfo，再构造 MateToolMeta；toMeta 未读取 getDisplayName |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/mate/MateToolMeta.java` · record | 有 toolId/toolName/description/schema/permission 等字段，无 displayName |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java` · toNameIndex / CacheState | 保存 name-to-ID 索引，没有展示名称快照 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolDiscovery.java` · listAgentTools / listSkillTools / resolveToolId | 发现写入 Session 缓存，执行按名解析 ID；当前返回 ID 的路径不足以同时提供展示名称 |
 
-验证（2026-09-17）：72 份在库 Markdown 无 Mermaid、34 份 PlantUML 为 ASCII、119 张 SVG 为有效 XML，213 个 SVG 引用、124 个图源链接及其中 118 个行锚点有效；新增标题链接有效。前端专题在隔离目录执行 `plantuml -tsvg diagram.puml` 成功，8 张 SVG 与在库文件逐字节一致，`git diff --check` 通过。图源及生成图无变更，未重做图形视觉验收；本次仅修改设计文字，未运行产品测试或页面布局验收。
+同时读取 `frontend/src/components/structuredActivity.test.ts`：已有结构 viewer 与结果文本块测试，未运行本次产品测试。标题优先 displayName 是[已确认目标](README.md#mate-tool-display)，元数据保留、调用名称快照、事件传递及前端消费尚未接通；不能表述为只改 UI 即可完成。
+
+本项是项目展示产品约束与数据传递扩展，不新增外部 Agent 基线比较结论；既有历史证据不升级。展示名快照和事件精确字段由 M03/M06 权威设计进一步落实，当前前端文档不是已发布契约。没有修改实现仓或验证部署页面，未新增依赖；现有前端类关系与 PlantUML 图源不变。
+
+验证（2026-09-17）：Markdown 无 Mermaid、PlantUML ASCII、SVG XML、图源与 SVG 引用及行锚点、新标题链接均通过检查；前端专题隔离执行 `plantuml -tsvg diagram.puml`，8 张生成 SVG 与在库文件逐字节一致。图源与生成图无变更，未重做视觉验收；`git diff --check` 通过，未运行产品测试。

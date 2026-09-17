@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 / 日期 | 1.7.0 / 2026-09-17 |
+| 版本 / 日期 | 1.8.0 / 2026-09-17 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
 | 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 仅作历史迁移证据；当前 Runtime 前端见[实现状态](source-evidence.md#current-implementation) |
 | 性质 | Mate 公共接入为 target-only；内部 Runtime 前端已有实现，公司认证及 Chat/Session 边界保持 |
@@ -142,7 +142,7 @@ Assistant `content` 保留 rawMarkdown 并使用现有安全渲染骨架；User/
 完整数据不可解码时提示“数据格式不兼容”并保留已确认内容，不伪造空列表或回退展示内部 payload。
 
 内部诊断的 text-block viewer 按块顺序显示，各块独立判断 JSON 或纯文本，多个块不丢失；无内容省略空详情区，需要说明时在摘要显示“无结果”；CallMateTool
-业务名从 arguments.tool 读取、参数从 args 展示，但保留原始包装的来源。内部活动行与确认卡直接使用具体工具名，名称来源、缺失降级与历史一致性统一见[主设计 §9.7](README.md#mate-tool-display)；公共 Chat 仍使用公共名称，不自动读取内部包装。
+技术名从 arguments.tool 读取、参数从 args 展示，但保留原始包装的来源。活动行与确认卡优先使用服务端工具元数据的 displayName，缺失回退技术名；来源、调用快照与历史一致性统一见[主设计 §9.7](README.md#mate-tool-display)。内部事件目前没有展示名，传递与持久化为接入前置；公共 Chat 的展示名须经独立契约与授权投影，不自动读取内部包装。
 模型参数不合法时展示原参数与失败结果，不因业务 Schema 拒绝事件。内部确认按根消息及调用后的提交顺序关联，
 读取 denyMessage 接受 4096 UTF-16 单元；不得套用输入框 2048 code point 上限。
 具体规则及 af858b85 源码依据见[事件消费边界](../01-CampusClaw多Agent运行时/chat-events-history-design.md#event-consumer-boundaries)。此规则不自动改变 Mate 公共名称契约。
@@ -201,6 +201,7 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.8.0 | 2026-09-17 | 工具展示优先使用 displayName，明确内部传递与公共映射的接入前置。 |
 | 1.7.0 | 2026-09-17 | 引用具体工具标题规则，保持内部包装与公共名称的接入边界。 |
 | 1.6.0 | 2026-09-16 | 工具结果复用安全结构视图并统一简洁状态文案，保持公共内容与权限边界。 |
 | 1.5.0 | 2026-09-15 | 区分已实现的 Runtime 前端与待接入的 Mate 公共能力。 |
