@@ -2,7 +2,7 @@
 
 [返回前端主设计](README.md)
 
-版本：1.4.0；更新日期：2026-09-16。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；当前体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
+版本：1.5.0；更新日期：2026-09-17。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§7](#mate-tool-display-evidence)，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
 
 | 证据 | 基线 |
 |---|---|
@@ -172,3 +172,24 @@ Mate 示例仓上述 HEAD 于 2026-09-15 与远端 HEAD 核对一致，Controlle
 OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对，公开 Build/Plan 与权限模式；本设计只采用命名，不将其权限保证带入 CampusClaw 的提示词式 Plan。Vite [环境变量](https://vite.dev/guide/env-and-mode) 与 [HMR](https://vite.dev/guide/api-hmr) 同日核对。实现 `frontend/package-lock.json` 锁定 Vite 6.4.3 与 @vitejs/plugin-vue 5.2.4；读取对应安装源码的 handleHMRUpdate（env/config 触发 restartServerWithUrls）和 Vue rerender/reload 分支，支持代码热更新边界，不证明新配置服务已存在。
 
 本次没有修改或测试产品实现、真实认证、模型遵循或 Mate 接入。新规则属于前端产品约束及配置架构变更；模型仍保留原 ToolCall/ToolResult，公共事件与运行时权限不因隐藏 JSON 改变。
+
+
+<a id="mate-tool-display-evidence"></a>
+
+## 7. CallMateTool 具体名称展示核验（2026-09-17）
+
+设计起点 `pi-mono-java-design@1fd29a535c7d1ba47bfb9c6413a10ff46f492643`；实现核验使用本地 `main` 的明确快照 `pi-mono-java@21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`，不是最新上游声明。下列文件完整读取且与该提交无工作树差异，仅升级工具名称展示范围；此前 §6 的 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4` 保留其他体验证据，不把旧缺口延伸到新提交。
+
+| 仓库相对路径 / 符号 | 已观察实现 | 目标差距 |
+|---|---|---|
+| `frontend/src/components/ToolActivity.vue` · `BUILT_IN_TOOL_LABELS`、`toolLabel`、template | CallMateTool 固定映射为“调用业务工具”，两种标题分支只传入外层 toolName | 标题读取具体名称，复用同一展示函数；当前尚未实现 |
+| `frontend/src/projectors/runtimeEventProjector.ts` · `projectRuntimeEvents`、`matchingToolResult` | 调用保留 toolName、原始 argumentValue 和格式化参数行；按 sourceEventId + toolCallId 关联结果，孤立结果有缺调用占位 | 直接消费已有结构，无需修改事件字段或凭名称配对 |
+| `frontend/src/types/product.ts` · `ActivityTurn` | 已有 toolName、argumentValue、status | 不覆盖 toolName，不增加公共显示字段 |
+| `frontend/src/components/ToolConfirmation.vue` · template | 确认标题直接显示 tool.toolName，参数来自 tool.arguments | 与活动行共用具体名称规则，授权目标和参数保持 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java` · `name`、`parameters`、`execute` | 包装器名为 CallMateTool；tool 是 Exact Mate tool name；execute 以该名称解析 ID，再传 args 执行 | 前端已有名称来源，不用工具结果或远端目录反推名称 |
+
+同时读取 `frontend/src/components/structuredActivity.test.ts`：已有结构 viewer 与结果文本块测试，未运行本次产品测试；不能用既有测试证明具体名称已显示。实现仍显示通用标题，新增[标题规则](README.md#mate-tool-display)为 target-only。
+
+这是项目自身的展示产品约束；不比较或改变 Agent Loop、工具生命周期、Provider/API 事件语义。本次不新增外部 Agent 基线结论，也不升级既有 Codex/pi/OpenCode 的历史证据。类关系与 PlantUML 图源不变，不新增依赖；没有修改实现仓或验证部署页面。
+
+验证（2026-09-17）：72 份在库 Markdown 无 Mermaid、34 份 PlantUML 为 ASCII、119 张 SVG 为有效 XML，213 个 SVG 引用、124 个图源链接及其中 118 个行锚点有效；新增标题链接有效。前端专题在隔离目录执行 `plantuml -tsvg diagram.puml` 成功，8 张 SVG 与在库文件逐字节一致，`git diff --check` 通过。图源及生成图无变更，未重做图形视觉验收；本次仅修改设计文字，未运行产品测试或页面布局验收。
