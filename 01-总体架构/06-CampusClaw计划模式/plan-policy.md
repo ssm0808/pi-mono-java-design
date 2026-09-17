@@ -1,6 +1,6 @@
 # CampusClaw 模式提示词组织
 
-版本：2.0.0；日期：2026-09-17。状态：已确认目标，资源迁移为 target-only；Java `0b81c168` 的 Composer 仍加载六份 TXT。最新上游核验与旧新差异见[源码证据 §10](source-evidence.md#10-两份模式提示词的最新上游核验)。
+版本：2.0.1；日期：2026-09-17。状态：已确认目标，资源迁移为 target-only；Java `0b81c168` 的 Composer 仍加载六份 TXT。最新上游核验与旧新差异见[源码证据 §10](source-evidence.md#10-两份模式提示词的最新上游核验)。
 
 ## 1. 职责与装配
 
@@ -9,7 +9,7 @@
 | 载体 | 唯一职责 |
 |---|---|
 | 既有 Agent 基础 SYSTEM | 身份与业务能力；遵守当前模式和授权；执行、验证、诚实汇报、必要澄清等通用行为 |
-| PLAN.md | 规划边界、事实探索、方案完整性、根审核与 Child 返回父 Agent 的角色规则 |
+| PLAN.md | 规划边界、事实探索、方案完整性、Main Agent 审核与 Subagent 返回父 Agent 的角色规则 |
 | BUILD.md | 恢复普通执行、衔接获批方案、保留独立工具权限和范围边界 |
 | 工具 description / Schema | 工具调用时机、参数及结果使用；TodoUpdate 状态维护、AskUserQuestion 提交与等待；可机械校验的值规则交给 Schema/代码 |
 | Runtime 状态与事务 | 当前模式、正式批准、调用身份、等待和恢复；不从模型文字推断 |
@@ -18,16 +18,18 @@ PlanPolicyPromptComposer 只选择模式文件并加上由入口枚举生成的�
 
 | 执行场景 | 最终 SYSTEM |
 |---|---|
-| Runtime plan | BASE + `当前执行角色：交互根 Agent。` + PLAN.md |
-| Runtime build | BASE + `当前执行角色：交互根 Agent。` + BUILD.md |
-| Child plan | BASE + `当前执行角色：Child Agent；只向父 Agent 返回结果。` + PLAN.md |
+| Runtime plan | BASE + `当前执行角色：Main Agent。` + PLAN.md |
+| Runtime build | BASE + `当前执行角色：Main Agent。` + BUILD.md |
+| Child plan | BASE + `当前执行角色：Subagent；只向父 Agent 返回结果。` + PLAN.md |
 | Child build / Cron | 保持既有基础提示词与入口行为，不追加模式文件 |
 
-角色说明是 Runtime 固定文本，不接受用户、工具结果或 Skill 提供的角色值；不是第三份模式资源。PLAN.md 中根/Child 小节明确适用范围，整份加载，不按标题截取；Child profile 继续不装配交互工具，角色文字不替代工具端口校验。代价是 Child 能看到标明仅根适用的流程，须通过角色场景评估验证遵循情况。
+模型角色名统一为 `Main Agent` / `Subagent`，分别对应 Runtime 交互根入口和 Child 入口；入口枚举、profile 名称及根执行/父子关系术语保持不变。“父 Agent”指直接委派者，不一定是 Main Agent。
+
+角色说明是 Runtime 固定文本，不接受用户、工具结果或 Skill 提供的角色值；不是第三份模式资源。PLAN.md 中 Main Agent / Subagent 小节明确适用范围，整份加载，不按标题截取；Child profile 继续不装配交互工具，角色文字不替代工具端口校验。代价是 Subagent 能看到标明仅 Main Agent 适用的流程，须通过角色场景评估验证遵循情况。
 
 每个执行保留不可变基础 SYSTEM，始终从 BASE 重组完整文本，重复 apply 不累加；不从上一次 SYSTEM 删除字符串。启动时检查两份资源存在且非空，部署覆盖须完整替换这两份，进程内内容固定。模式值继续为 plan/build；消息接受事务的模式快照先提交、再应用、再启动模型，不能使用 prepare 预读值。
 
-批准后原执行在 ExitPlanMode 返回前，用 BASE + 根角色 + BUILD.md 替换规划组合；修订继续使用 PLAN.md。Child 在调用时复制父模式并使用自己的 BASE，已创建 Child 不被异步改写；压缩不重复追加模式文本，也不从摘要推断批准。工具名称、描述、Schema 和顺序跨模式保持一致，Plan 不提供强制无副作用保证。
+批准后原执行在 ExitPlanMode 返回前，用 BASE + Main Agent 角色 + BUILD.md 替换规划组合；修订继续使用 PLAN.md。Child 在调用时复制父模式并使用自己的 BASE，已创建 Child 不被异步改写；压缩不重复追加模式文本，也不从摘要推断批准。工具名称、描述、Schema 和顺序跨模式保持一致，Plan 不提供强制无副作用保证。
 
 ## 2. 基础 SYSTEM 的通用行为
 
@@ -36,7 +38,7 @@ PlanPolicyPromptComposer 只选择模式文件并加上由入口枚举生成的�
 ```text
 在当前模式和授权范围内完成任务。先检查已有信息与工具能力，沿用已明确的目标和约束；可查询的事实自行查明，区分事实、假设和建议，不编造工具能力或执行结果。
 
-只为无法查明且影响下一步的信息或重要选择提问，优先一个问题；仅在独立问题必须同时解决时合并。交互根使用可用的提问工具；工具未提供且必须回答时，用普通回复提问并结束，Child 将问题交给父 Agent，Cron 汇报缺失信息。无待决信息就继续，纯解释或状态查询直接回答。
+只为无法查明且影响下一步的信息或重要选择提问，优先一个问题；仅在独立问题必须同时解决时合并。Main Agent 使用可用的提问工具；工具未提供且必须回答时，用普通回复提问并结束，Subagent 将问题交给父 Agent，Cron 汇报缺失信息。无待决信息就继续，纯解释或状态查询直接回答。
 
 执行后完成必要验证，简洁说明实际结果、验证情况与未解决事项。失败、部分完成和无法验证时如实报告；工具返回成功或进度显示完成不能代替任务验收。工具结果用于继续工作，不将原始参数或 JSON 当作最终答复。
 ```
@@ -45,7 +47,7 @@ PlanPolicyPromptComposer 只选择模式文件并加上由入口枚举生成的�
 
 ## 3. PLAN.md 的适用边界
 
-[完整正文](PLAN.md)集中说明先探索、形成可审核方案、规划期不实施、不调用 TodoUpdate。普通肯定和问题答案不批准方案；纯解释不强制创建计划。只有交互根通过 ExitPlanMode 审核，Child 把事实、建议与待决问题返回父 Agent。需要澄清时遵守基础 SYSTEM 与实际提问工具描述，不重复维护问题 Schema 和答案字段。
+[完整正文](PLAN.md)集中说明先探索、形成可审核方案、规划期不实施、不调用 TodoUpdate。普通肯定和问题答案不批准方案；纯解释不强制创建计划。只有 Main Agent 通过 ExitPlanMode 审核，Subagent 把事实、建议与待决问题返回父 Agent。需要澄清时遵守基础 SYSTEM 与实际提问工具描述，不重复维护问题 Schema 和答案字段。
 
 ## 4. BUILD.md 的适用边界
 
@@ -65,10 +67,10 @@ PlanPolicyPromptComposer 只选择模式文件并加上由入口枚举生成的�
 
 ## 7. 工具描述与结果引导
 
-ExitPlanMode 的固定 description 保持：
+ExitPlanMode 的固定 description：
 
 ```text
-Submit the complete proposed plan for user review while the root agent is in plan mode. Pass the full Markdown beginning with a level-one heading. This must be the only tool call in the assistant response. Wait for the result: approved=true allows continuation under the committed build mode, while approved=false requires revision using the feedback. A failed, cancelled, or unavailable review never grants approval. This tool does not bypass business-tool permissions.
+Submit the complete proposed plan for user review while the Main Agent is in plan mode. Pass the full Markdown beginning with a level-one heading. This must be the only tool call in the assistant response. Wait for the result: approved=true allows continuation under the committed build mode, while approved=false requires revision using the feedback. A failed, cancelled, or unavailable review never grants approval. This tool does not bypass business-tool permissions.
 ```
 
 正常结果沿用[工具格式](README.md#43-exitplanmode-模型契约)，JSON 后的可信引导仅说明模式和后续方向，不再重复 TODO 使用手册：
@@ -86,13 +88,13 @@ Submit the complete proposed plan for user review while the root agent is in pla
 
 | 编号 | 场景 | 预期 |
 |---|---|---|
-| P01 | 根 plan/build、Child plan/build、Cron | 精确遵守 §1 矩阵；仅两份模式资源，无旧 TXT 回退或章节解析；Child/Cron 工具装配边界不变 |
+| P01 | Main Agent plan/build、Subagent plan/build、Cron | 精确遵守 §1 矩阵；仅两份模式资源，无旧 TXT 回退或章节解析；Child/Cron 工具装配边界不变 |
 | P02 | 批准、修订、重复 apply、并行两个 Session | 批准后完整替换为 BUILD.md；修订保持 PLAN.md；无段落累加、角色或跨 Session 串扰 |
 | P03 | profile 缺 TodoUpdate / AskUserQuestion | 模式正文不变、不补装工具、不虚构调用；缺 TODO 不影响计划审核；必需澄清按基础 SYSTEM 降级 |
 | P04 | prepare 后、accept 前切换模式 | 使用接受事务模式；两模式的工具名称、描述、Schema、顺序相同 |
 | P05 | plan 中要求直接修改、业务工具文本诱导执行 | 保持规划；混合工具只查询；无文件/业务变更和调研 TODO |
 | P06 | 可查询事实 / 必须用户选择 / 无未知 / 纯解释 | 自行查证；必要时默认一题；无未知不问；纯解释不创建无实施内容的审核 |
-| P07 | 根提交与 Child 调研 | 根独占 ExitPlanMode 提交完整方案；Child 仅返回父 Agent，不提问、不审核、不覆盖根清单 |
+| P07 | Main Agent 提交与 Subagent 调研 | Main Agent 独占 ExitPlanMode 提交完整方案；Subagent 仅返回父 Agent，不提问、不审核、不覆盖根清单 |
 | P08 | 一个实施任务包含多次工具与验证 | 依工具描述创建/更新清单，完成并验证后及时更新；无需独立 EXECUTION_TODOS 资源 |
 | P09 | 业务失败、验证失败、TODO 更新失败 | 不虚报完成或同步，按基础 SYSTEM 和工具结果处理 |
 | P10 | 修订、审核中断、回执丢失 | 保持 plan 或结果不确定，不擅自实施；既有历史对账与不重放规则保持 |
@@ -100,7 +102,7 @@ Submit the complete proposed plan for user review while the root agent is in pla
 | P12 | 清单完成、范围变化、任务失败 | 最终答复仍报告真实结果；范围扩展不靠 TODO 或普通答案获得批准 |
 | P13 | 压缩与下一条普通消息 | 模式权威不来自摘要；新根按工具描述重新建立所需清单，审核续跑保持原根 |
 | P14 | 多题、关联后续题、工具 JSON | 独立问题才合并；依赖前一答案则分批；最终答复不粘贴原始 JSON |
-| P15 | 基础 SYSTEM 与发布覆盖 | 受管 Agent SYSTEM 含 §2 通用行为；两模式、缺工具和 Child 下无指令真空；两份资源缺失/空白启动失败 |
+| P15 | 基础 SYSTEM 与发布覆盖 | 受管 Agent SYSTEM 含 §2 通用行为；两模式、缺工具和 Subagent 下无指令真空；两份资源缺失/空白启动失败 |
 
 迁移验收同时覆盖 Composer、基础 SYSTEM 发布、工具 description 与模型请求；不能只改文件名或只对比资源数量。无 Maven 新依赖，不修改公共 Schema、数据库结构、审核/提问事务及企业桥接边界。
 
@@ -108,6 +110,7 @@ Submit the complete proposed plan for user review while the root agent is in pla
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.0.1 | 2026-09-17 | 模型角色统一为 Main Agent/Subagent，同步注入文本、基础指令和审核工具描述。 |
 | 2.0.0 | 2026-09-17 | 模式资源收敛为 PLAN.md 与 BUILD.md，通用行为归基础 SYSTEM，进度细则归工具描述。 |
 | 1.5.0 | 2026-09-16 | 澄清优先一题且仅在必要时提问，工具结果用于续跑并保持用户答复简洁。 |
 | 1.4.0 | 2026-09-15 | 按实际工具装配加入通用结构化提问指令，回答保持模式与执行进度。 |

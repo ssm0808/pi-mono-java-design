@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：2.0.0；核对日期：2026-09-17。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：2.0.1；核对日期：2026-09-17。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
 提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 target-only 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
 
@@ -245,3 +245,17 @@ Java 本次静态读取本地 `pi-mono-java@0b81c168d816aed7864cc9fbb9caa0771407
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java` · load | 读取受管 SYSTEM.md 和 Skill 提示，SYSTEM.md 可以缺省；不自动提供本次所需的通用执行规范。 | 经现有受管 Agent 发布机制落实 [BASE 通用规则](plan-policy.md#2-基础-system-的通用行为)，是两文件迁移验收的一部分；不新增第三份内置 BASE 资源，也不宣称现有 loader 已补齐这些规则。 |
 
 当前有效模型正文见 [PLAN.md](PLAN.md)、[BUILD.md](BUILD.md)，部署组合与 P01～P15 验收见 [plan-policy.md](plan-policy.md)。本仓此次只修改设计与目标提示词资产；Java 资源替换、受管 SYSTEM 发布及实际模型评估均需实施仓完成。
+
+
+### 10.4 模型角色名称
+
+2026-09-17 再次查询并 fetch 四个上游默认分支，commit 均与 §10.1 相同。角色用词核验范围如下；模式和多 Agent 角色提示词是不同来源，不能把角色名归因为 Plan 模板的统一约定。
+
+| 基线与仓库相对路径 / 符号 | 已观察用词 |
+|---|---|
+| Codex `codex-rs/prompts/src/model_messages/multi_agent.rs:7` · DEFAULT_MULTI_AGENT_V2_ROOT_AGENT_USAGE_HINT_TEXT | 角色提示词为 “You are `/root`, the primary agent…”；`/root` 是树中位置，角色措辞是 primary agent；子 Agent 提示词使用 parent agent。 |
+| OpenCode `packages/opencode/src/agent/agent.ts:153,179` · build/plan 定义；`packages/opencode/src/session/prompt/plan.txt` | build/plan 在定义中分类为 primary，与 subagent 区分；规划提示词直接称“你”，无“交互根 Agent”标题。 |
+| DeepSeek `packages/preset/agent-presets/presets/standard/agent.cordis.yml:115` · planning | 标准规划政策直接以 “You are in plan mode.” 开始，未单列根 Agent 小节。 |
+| pi `packages/coding-agent/examples/extensions/subagent/agents/worker.md:3,20` | 示例角色说明使用 subagent，返回说明使用 main agent；这是扩展示例，不是内核固定角色协议。 |
+
+CampusClaw 采用 `Main Agent` / `Subagent` 作为模型可见角色名称，与 pi 示例的用词一致；这是产品表述选择，不改变架构和权限。Runtime/Child 入口名、根执行和父子关系继续表达技术归属；Subagent 的“父 Agent”仍指直接委派者。角色由 Runtime 固定注入，具体正文与映射由 [PLAN.md](PLAN.md) 和[提示词组织](plan-policy.md#1-职责与装配)维护。

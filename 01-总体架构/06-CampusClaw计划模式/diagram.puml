@@ -354,7 +354,7 @@ Dispatcher -> DB : Claim decision for fixed target
 DB --> Dispatcher : Committed decision, once
 Dispatcher -> Agent : Bind new segment output; complete pending Future
 alt Approved
-  Agent -> Agent : Recompose base + root role + BUILD.md
+  Agent -> Agent : Recompose base + Main Agent role + BUILD.md
   Agent -> Service : Persist ExitPlanMode result approved=true
   Agent -> Agent : Next step: TODOs and implementation
 else Revision requested
@@ -571,7 +571,7 @@ group 2. Research and clarify
   UI -> API : POST Events: user.message
   API -> Runtime : Prepare base prompt and stable tool profile
   API -> DB : Accept root execution with current mode snapshot
-  API -> Runtime : Apply base + root role + PLAN.md before start
+  API -> Runtime : Apply base + Main Agent role + PLAN.md before start
   API --> UI : First SSE frame: committed user.message
   API -> Runtime : Start the accepted execution
   loop Inspect facts and develop proposal
@@ -620,7 +620,7 @@ group 3. Review the complete proposal
   Approval transaction also commits mode=build and
   mode event.
       end note
-      Runtime -> Runtime : Recompose base + root role + BUILD.md
+      Runtime -> Runtime : Recompose base + Main Agent role + BUILD.md
       Runtime --> Tools : Resume review with approved=true
       Tools --> Runtime : Normal review result
       Runtime --> UI : Committed mode change and review result

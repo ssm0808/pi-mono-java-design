@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.12.0 |
+| 文档版本 | 1.12.1 |
 | 更新日期 | 2026-09-17 |
 | 状态 | 当前设计；两份模式资源与通用指令迁移为 target-only，Java 0b81c168 仍使用六份 TXT；既有交互证据按各自提交保留 |
 | 计划模式主基线 | 2026-09-17 更新至 DeepSeek `0d1f50007f9bca3f52b06e1c3074fa14d5fb0720`；提示词组织辅以最新 Codex/OpenCode/pi，完整旧新范围见[证据 §10](source-evidence.md#10-两份模式提示词的最新上游核验) |
@@ -178,7 +178,7 @@
 
 ### 4.1 提示词应用
 
-模式正文仅在 [PLAN.md](PLAN.md) 与 [BUILD.md](BUILD.md) 维护，组合与通用行为归属见[提示词组织](plan-policy.md)。Runtime 根使用基础 SYSTEM + 可信根角色 + 当前模式文件；Child plan 使用自身基础 SYSTEM + 可信 Child 角色 + PLAN.md，Child build/Cron 保持既有基础行为。两份文件作为 classpath UTF-8 文本随部署提供，启动时校验并固定，不按 Markdown 标题解析或按工具拼接段落。
+模式正文仅在 [PLAN.md](PLAN.md) 与 [BUILD.md](BUILD.md) 维护，组合与通用行为归属见[提示词组织](plan-policy.md)。Runtime 根使用基础 SYSTEM + 可信 Main Agent 角色 + 当前模式文件；Child plan 使用自身基础 SYSTEM + 可信 Subagent 角色 + PLAN.md，Child build/Cron 保持既有基础行为。两份文件作为 classpath UTF-8 文本随部署提供，启动时校验并固定，不按 Markdown 标题解析或按工具拼接段落。
 
 通用执行、验证、汇报与必要澄清要求写入现有受管 SYSTEM.md；TodoUpdate 状态细则归工具 description，BUILD.md 只说明模式恢复与获批方案衔接。迁移必须同步受管基础指令和工具描述，不能只删除六份 TXT 造成指令缺失；Java 0b81c168 的加载器不会自动补通用文本。
 
@@ -340,7 +340,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 | S4：取消和恢复 | GET Session/历史投影、超时、中断、删除清理、压缩与 Child | approve/revise/interrupt 竞争；未领取审核决定随真实终态取消消费，STOPPING 不提前收尾、已领取记录和批准事实不变；两类确认不能互相消费；断线无重放；分页未补齐与 Session/事件矛盾时不开放审核；已确认或终止的旧计划不可重审；未可靠结束不释放准入；批准后新 Child 使用 build；摘要不修改模式 |
 | S5：客户端与契约发布 | 统一 catalog/operation JSON、生成 HTML、Runtime 前端、所需 Mate 公共投影 | Session 更新成功与 ETag 同源；两跳不泄露 ID/凭据；审核卡从完整事件恢复；创建/GET/更新/Command 的完整 Session 均不含待审核目标；内部待审指针不单独推进 Session 版本；未知事件版本兼容；UI 接受才标记批准 |
 | S6：TODO 进度 | TodoUpdateTool/profile、显式任务事件及 applyTodoUpdated，精确切片见 [T1～T4](todo-update.md#6-实施切片与验收) | plan 不调用 TODO，build 正常消息与进度交错；成功提交才更新；失败/缺页/断线/重复帧恢复一致；新根隔离；增加完整 agent.todo_updated，保持 Session 和元数据字段不变 |
-| S7：两文件提示词与模型评估 | PLAN.md/BUILD.md、基础 SYSTEM 发布、工具 description、角色/模式组合和简短审核结果引导 | [P01～P15](plan-policy.md#8-组合检查与模型场景验收)：无旧 TXT 回退；基础行为无缺失；plan 无 TODO；批准后替换模式文件；缺工具降级、Child 角色、双 Session 与压缩；代码校验和模型遵循分别记录 |
+| S7：两文件提示词与模型评估 | PLAN.md/BUILD.md、基础 SYSTEM 发布、工具 description、角色/模式组合和简短审核结果引导 | [P01～P15](plan-policy.md#8-组合检查与模型场景验收)：无旧 TXT 回退；基础行为无缺失；plan 无 TODO；批准后替换模式文件；缺工具降级、Subagent 角色、双 Session 与压缩；代码校验和模型遵循分别记录 |
 | S8：结构化提问 | [Q1～Q5](ask-user-question.md#8-实施切片与验收) | 精确问题/答案、三类互斥、原根续跑、取消与恢复；Session 与元数据字段稳定；plan 无调研 TODO，build 保留原清单 |
 | S9：Plan 交互优化（target-only） | Build/Plan 文案、逐题问题卡、调用/结果汇聚、必要澄清提示词 | 一题无需导航，多题前进/返回不发请求、最后仅一次完整提交；回答不批准；完整事件保留；无问答事件的失败可见；无待决问题不强制提问；窄屏和缩放下当前题与操作可达 |
 
@@ -356,6 +356,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.12.1 | 2026-09-17 | 模型角色统一为 Main Agent/Subagent，保持 Runtime/Child 入口及执行关系术语。 |
 | 1.12.0 | 2026-09-17 | 模式提示词仅保留 PLAN.md/BUILD.md，通用行为与工具细则按职责集中维护。 |
 | 1.11.0 | 2026-09-17 | 计划审核复用统一 CANCELED 消费终态，可靠结束时收尾未领取决定且保留批准事实。 |
 | 1.10.0 | 2026-09-16 | 明确 Build/Plan、必要澄清、逐题聚合提交及问题卡吸收工具日志的目标交互。 |

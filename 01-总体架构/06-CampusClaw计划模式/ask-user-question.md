@@ -1,12 +1,12 @@
 # AskUserQuestion：结构化提问与原执行续跑
 
-版本：1.4.0；日期：2026-09-17。状态：1d08f98e 已实现 Runtime 问答及调试卡片；逐题展示、工具日志汇聚及必要性提示词为 target-only。未领取答案的 CANCELED 终态以 74f1b831 为专项核验基线，属于已确认目标，见[统一消费状态](../01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)。既有独立验证绑定 §2 所列 9f785bea，企业 Mate 接入和真实模型行为评估尚未验证。
+版本：1.4.1；日期：2026-09-17。状态：1d08f98e 已实现 Runtime 问答及调试卡片；逐题展示、工具日志汇聚及必要性提示词为 target-only。未领取答案的 CANCELED 终态以 74f1b831 为专项核验基线，属于已确认目标，见[统一消费状态](../01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)。既有独立验证绑定 §2 所列 9f785bea，企业 Mate 接入和真实模型行为评估尚未验证。
 
 本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#submitSessionEvent)。模式仅使用 PLAN.md/BUILD.md；必要性、优先一题和简洁结果使用归基础 SYSTEM，工具独占调用与等待规则归本页 description/共享 Schema，不保留独立 ASK_USER 资源。装配与迁移由 [plan-policy.md](plan-policy.md) 维护。
 
 ## 1. 目标与边界
 
-根 Agent 先检查已有信息；只有用户掌握的信息或重要选择仍会影响后续工作时，才调用 `AskUserQuestion`。已有明确答案、可查询事实和能够合理采用且不会影响关键方案的默认值不再提问；合理假设在方案中简要说明。优先一题，不为了工具允许三题而凑题。后端发布完整 `agent.question`，前端据此展示问题；用户通过既有 POST Events 提交 `user.question_answer`。回答作为该工具的正常结果返回，原 Agent Loop 继续，保持根消息、Session、mode、原执行凭据和实施进度归属。
+Main Agent 先检查已有信息；只有用户掌握的信息或重要选择仍会影响后续工作时，才调用 `AskUserQuestion`。已有明确答案、可查询事实和能够合理采用且不会影响关键方案的默认值不再提问；合理假设在方案中简要说明。优先一题，不为了工具允许三题而凑题。后端发布完整 `agent.question`，前端据此展示问题；用户通过既有 POST Events 提交 `user.question_answer`。回答作为该工具的正常结果返回，原 Agent Loop 继续，保持根消息、Session、mode、原执行凭据和实施进度归属。
 
 - Runtime 默认 profile 在现有十项之后追加 `AskUserQuestion`，执行模式为 `SEQUENTIAL`；plan/build 的名称、Schema、description、顺序一致。默认 Child/Cron 不装配；即使显式配置也必须拒绝无交互根上下文的调用。Child 把待决问题交给父 Agent，Cron 汇报缺失信息并按既有任务生命周期结束。
 - 一次工具请求包含 1～3 个问题，支持单选、多选和自由文本；只有确需同时回答的独立问题才合成多题。一张活动卡每次只显示一题，本地完成后统一提交该批全部答案；下一题依赖前一题答案时，由 Agent 收到本批结果后发起新的问题事件，不预先拼成固定三题。首版没有跳过、附件、动态表单、问题定义编辑或问题 CRUD；提交前可以返回修改自己的答案。用户可以明确回答“无法确定”，不使用空答案表示默认同意。
@@ -178,6 +178,7 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.1 | 2026-09-17 | 提问职责使用统一的 Main Agent 角色名称。 |
 | 1.4.0 | 2026-09-17 | 提问原则归基础 SYSTEM，工具契约保持，模式装配改为 PLAN.md/BUILD.md。 |
 | 1.3.0 | 2026-09-17 | 未领取答案随真实根执行终态标记为 CANCELED，并保留已接受答案事件。 |
 | 1.2.0 | 2026-09-16 | 明确必要时优先一题、逐题完整提交及问题答案卡吸收工具日志。 |
