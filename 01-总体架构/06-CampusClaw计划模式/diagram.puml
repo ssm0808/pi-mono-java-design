@@ -11,7 +11,7 @@ skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
-' Local f61906b9136246ca60f333704b6fc92b5420d0ec has identical files in this scope.
+' Prompt scope: Java 0b81c168d816aed7864cc9fbb9caa0771407e880; modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/PlanPolicyPromptComposer.java :: compose.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java :: create, configureAgent.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: beginToolConfirmation, claimAndResumeToolConfirmation.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java :: markToolConfirming, acceptToolConfirmation.
@@ -33,8 +33,8 @@ hide empty members
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java :: appendEntry.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: appendEventsLocked, recordProjectionIfComplete.
 ' Design reason: one ToolResult Entry anchors both generic result and explicit task snapshot events.
-' Source: DeepSeek packages/preset/agent-presets/presets/standard/agent.cordis.yml :: planning section.
-' Design reason: plan prompts forbid TODO; build prompts request implementation progress.
+' Prompt baseline: DeepSeek 0d1f50007f9bca3f52b06e1c3074fa14d5fb0720 (alpha); packages/preset/agent-presets/presets/standard/agent.cordis.yml :: planning.
+' Design reason: PLAN.md limits planning; tool descriptions own progress; BUILD.md is a short transition policy.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java :: create, newSession.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare, refresh, toSettings, toRuntime.
 ' Product constraint and target-only change: Agent.mode initializes new Sessions, published via settings.
@@ -85,8 +85,8 @@ package "Application and assembly" as Application {
   }
   class "QuestionRequestParser" as QuestionParser <<target-only>> #EAF2FF
   class "AgentSessionFactory" as Factory <<extended>> #FFF7DD
-  class "PlanPolicyPromptComposer" as Composer <<target-only>> #EAF2FF {
-    +compose(base, mode, entryPoint, toolNames): String
+  class "PlanPolicyPromptComposer\nPLAN.md / BUILD.md" as Composer <<extended>> #FFF7DD {
+    +compose(base, mode, entryPoint): String
   }
 }
 
@@ -254,7 +254,7 @@ note bottom of Pending
   rechecked under database locks before claim.
 end note
 note bottom of TodoTool
-  Same tool in both modes; build-only prompt.
+  Stable tool; progress policy in description.
   ToolResult and task event share one commit.
   No TODO table or metadata fields.
 end note
@@ -354,7 +354,7 @@ Dispatcher -> DB : Claim decision for fixed target
 DB --> Dispatcher : Committed decision, once
 Dispatcher -> Agent : Bind new segment output; complete pending Future
 alt Approved
-  Agent -> Agent : Apply committed build prompt and execution TODO guidance
+  Agent -> Agent : Recompose base + root role + BUILD.md
   Agent -> Service : Persist ExitPlanMode result approved=true
   Agent -> Agent : Next step: TODOs and implementation
 else Revision requested
@@ -541,7 +541,7 @@ autonumber
 ' Claude managed-agents/tools and events-and-streaming checked 2026-09-14 (beta).
 ' Observed behavior: generic tool results are committed before stream output at batch end.
 ' Design reason: separate plan review from build progress and reuse existing public tool events.
-' Java divergence: mode, review, prompt sections and TodoUpdate remain target-only.
+' Java divergence: two mode resources and base-policy migration are target-only; see source-evidence.md section 10.
 title CampusClaw Plan Mode - Complete Target Interaction
 actor User
 participant "Client" as UI
@@ -571,7 +571,7 @@ group 2. Research and clarify
   UI -> API : POST Events: user.message
   API -> Runtime : Prepare base prompt and stable tool profile
   API -> DB : Accept root execution with current mode snapshot
-  API -> Runtime : Apply plan common + root review before start
+  API -> Runtime : Apply base + root role + PLAN.md before start
   API --> UI : First SSE frame: committed user.message
   API -> Runtime : Start the accepted execution
   loop Inspect facts and develop proposal
@@ -620,7 +620,7 @@ group 3. Review the complete proposal
   Approval transaction also commits mode=build and
   mode event.
       end note
-      Runtime -> Runtime : Replace plan sections with build + execution TODO guidance
+      Runtime -> Runtime : Recompose base + root role + BUILD.md
       Runtime --> Tools : Resume review with approved=true
       Tools --> Runtime : Normal review result
       Runtime --> UI : Committed mode change and review result

@@ -1,10 +1,12 @@
 # 计划模式源码证据与实现差距
 
-版本：1.9.0；核对日期：2026-09-15。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：2.0.0；核对日期：2026-09-17。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
 提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 target-only 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
 
 当前 Build/Plan 与提问展示的静态核验绑定 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，具体已实现行为、新目标与基线区别由[§9](#9-buildplan-与逐题交互核验)维护。下方历史接入表继续保留各自固定提交范围，不能据其 target-only 标记判断 1d08f98e 尚无模式、审核、TODO 或结构化提问。
+
+当前模式提示词以 [§10 最新上游核验](#10-两份模式提示词的最新上游核验)为依据；§1～§9 保留各自历史提交和核验范围，不代表最新上游或当前 Java 的完整实现状态。
 
 ## 1. 固定提交
 
@@ -143,10 +145,10 @@ Session 工作模式通过资源更新表达属于产品约束与 API 架构调�
 |---|---|---|
 | DeepSeek `packages/preset/agent-presets/presets/standard/agent.cordis.yml` · planning / config.section | 标准预设要求先检查事实、完成关键取舍、只用 exit_plan_mode 提交完整方案；口头同意不批准；明确禁止用 todo_write 跟踪规划阶段 | plan 只调研和设计，build 才维护实施进度；采用同一阶段边界。将文件/代码案例改写为园区业务与混合工具约束属于产品适配 |
 | DeepSeek `packages/plan/plan-mode/src/index.ts` · resolveConfig、PlanModeController 构造函数中的 plan:policy | 部署提供非空 section，模式控制注入；工具清单保持稳定 | 复用现有基础 SYSTEM；用纯 Composer 选择部署静态段，不迁入 Cordis。组合与部署资源为 target-only 架构扩展 |
-| DeepSeek `packages/todo/tool-todo/src/index.ts` · DESCRIPTION_HEAD/SINGLE/TAIL（45～66 行）、toTodoList | 描述要求全量清单、完成即更新、不积攒完成；工具验证值和部署并行数量规则，不验证业务目标已完成 | 固定工具 description + build 进度段双重说明时机；单进行中是 CampusClaw 产品约束，不将提示词要求冒充强校验 |
-| OpenCode `packages/opencode/src/tool/todowrite.txt` · When to use / Rules；`packages/opencode/src/session/prompt/anthropic.txt` · Task Management | 工具描述与模型模板均要求及时更新；验证后才完成，不积攒多项。该 anthropic.txt 是 OpenCode 自己的模板 | 借鉴工具描述与 SYSTEM 同时指导；不迁入其 priority/cancelled 等字段，不推断 Claude Managed Agents 有同样内部规则 |
+| DeepSeek `packages/todo/tool-todo/src/index.ts` · DESCRIPTION_HEAD/SINGLE/TAIL（45～66 行）、toTodoList | 描述要求全量清单、完成即更新、不积攒完成；工具验证值和部署并行数量规则，不验证业务目标已完成 | TODO 调用时机集中由固定工具 description 维护；单进行中是 CampusClaw 产品约束，不将提示词要求冒充强校验 |
+| OpenCode `packages/opencode/src/tool/todowrite.txt` · When to use / Rules；`packages/opencode/src/session/prompt/anthropic.txt` · Task Management | 工具描述与模型模板均要求及时更新；验证后才完成，不积攒多项。该 anthropic.txt 是 OpenCode 自己的模板 | 借鉴工具描述指导调用；通用执行原则留在 SYSTEM，不要求 BUILD 重复细则；不迁入其字段或推断 Claude Managed Agents 内部规则 |
 | Codex `codex-rs/core/gpt_5_1_prompt.md` · Planning、update_plan；`codex-rs/core/src/tools/handlers/plan.rs` · handle_call | 指定模板强调及时变更状态，同文件也允许一次更新多项；Handler 解析参数、在 Plan 模式拒绝 update_plan、发出 PlanUpdate | 仅作提示词约束与程序校验的区别对照；不把“一项对应一次调用”或模板内容视作全产品硬保证。CampusClaw 参考其显式进度通知，使用自己的公共事件名，仍不引入模式拦截 |
-| Java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java` · create、configureAgent（67～112 行） | 先装配 tools，再加载基础 SYSTEM 并 setSystemPrompt；无计划/实施分段 Composer | 可从实际工具列表判断 TodoUpdate，不增加能力元数据；模式快照接入、分段资源和 Composer 待实现 |
+| Java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java` · create、configureAgent（67～112 行） | 先装配 tools，再加载基础 SYSTEM 并 setSystemPrompt；无计划/实施分段 Composer | 这是旧提交接入点；当前 Composer 及两份资源的迁移差距见 §10，不再按 TodoUpdate 能力拼接进度段 |
 | Java `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` · setSystemPrompt（109～111 行）；`modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java` · invokeModel（179～183 行） | setter 写入本 Agent 状态，下轮请求读取当前 systemPrompt 和同一 tools | 批准后替换完整 SYSTEM，再让审核工具返回；下轮自然使用 build 组合，无需更改 Loop 分支或重新装配工具 |
 | Java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java` · continueAfterCompaction、finishCompaction | 继续使用同一 Agent，压缩替换消息而非重建工具/系统规则 | 组合规则留在执行 SYSTEM，不依靠摘要推断模式，也不在压缩后重复追加段落 |
 
@@ -190,7 +192,7 @@ CampusClaw 当前选择完整 ToolCall + agent.plan 审核记录，理由与代�
 | `frontend/src/App.vue` · ConversationTimeline、conversation-dock、statusLabel；`frontend/src/runtime/eventStore.ts` · executionState/canAnswerQuestion/canReviewPlan | 问题卡在时间线，普通 Composer 留在底部；confirming 使用统一等待文案，历史与 Session 决定交互可用性 | target-only：活动问题在原时间线位置逐题展示，Composer 以独立布局行保留草稿编辑、Slash 和停止归属，发送仍按 running 禁用；回答、审核和授权区分文案；客户端状态继续从事件恢复 |
 | R `tool/question/AskUserQuestionTool.java` · execute；R `runtimeapi/event/RuntimeUserQuestionService.java` · normalizeCurrent | 工具等待完整答案，返回 JSON 文本；答案根据已提交问题快照归一 | 保留模型工具结果和服务端整批校验；隐藏 UI JSON 不删除工具调用/结果，也不重复注入公共问答事件 |
 | R `runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java` · acceptQuestionAnswer、rejectQuestionAnswer、acceptPlanConfirmation、rejectPlanConfirmation、persistPlanConfirmation | 先锁 Session 和当前执行，精确检查待交互及停止；问题回答不改模式；批准才原子更新 build、保存决定并创建续跑段 | 保留数据库审核权威和三种交互隔离；逐题 UI、普通肯定和卡片关闭不能替代正式批准 |
-| R `session/PlanPolicyPromptComposer.java` · compose/planPrompt；`modules/coding-agent-cli/src/main/resources/prompts/plan/PLAN_ROOT_REVIEW.txt`、`ASK_USER.txt` | 六段资源按 mode、入口和工具清单组合；现有文字允许集中问 1～3 题，未明确默认优先一题 | target-only：必要时优先一题、无待决信息不问、工具 JSON 不作为最终答复；同步资源并单独做模型评估，description/Schema 保持 |
+| R `session/PlanPolicyPromptComposer.java` · compose/planPrompt；`modules/coding-agent-cli/src/main/resources/prompts/plan/PLAN_ROOT_REVIEW.txt`、`ASK_USER.txt` | 六段资源按 mode、入口和工具清单组合；现有文字允许集中问 1～3 题，未明确默认优先一题 | target-only：通用提问原则归入基础 SYSTEM，模式资源收敛为 PLAN.md / BUILD.md；description/Schema 保持，当前源码与迁移验收见 §10 |
 
 本版不改变审核协议、原根续跑、工具清单稳定或提示词式规划边界。UI 汇聚属于产品展示约束；数据库精确接受和现有权限检查仍提供各自保障，Plan 不因此成为强制只读沙箱。
 
@@ -206,3 +208,40 @@ CampusClaw 当前选择完整 ToolCall + agent.plan 审核记录，理由与代�
 | pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185`：`packages/agent/src/agent-loop.ts` · runLoop（155 行）、executeToolCalls；约 218 行将 toolResults 追加 context | 工具完整结果加入上下文后进入后续模型调用 | 保留模型调用/结果配对；问题卡展示调整不改变 Loop 语义，数据库与请求级 SSE 仍为 CampusClaw 架构扩展 |
 
 固定基线没有升级：本机 Codex HEAD 为 be33f80b、pi HEAD 为 4af9d21d，以上读取均显式指定固定提交；OpenCode 工作树 HEAD 就是 849c2598。没有借助产品名称推断未读取的服务端实现，也没有把源码静态核验记作交互或模型测试通过。
+
+
+## 10. 两份模式提示词的最新上游核验
+
+核对日期：2026-09-17。先以 `git ls-remote --symref <upstream> HEAD` 确认远端默认分支，再在临时 bare 仓库 fetch 并读取对应 commit；没有用本机 checkout 冒充最新上游，也没有改动既有基线工作树。“最新”指此次查询时的默认分支 HEAD，不代表稳定发布版。本节只升级提示词、模式装配和相关工具描述的证据；其他生命周期、公共 API 和前端结论仍绑定原核验提交。Claude 托管产品未参与本次提示词源码比较，未更新其公开文档核对日期。
+
+### 10.1 新旧提交与核验范围
+
+| 基线 / 上游默认分支 | 原核验 commit | 本次最新 commit | 读取路径、关键符号与变化 |
+|---|---|---|---|
+| [Codex / main](https://github.com/openai/codex) | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | `b0659c53865dd48b0cd69c454368cea3980017cc` | `codex-rs/collaboration-mode-templates/templates/{plan,default}.md`；`codex-rs/core/src/context/world_state/collaboration_mode.rs` 的模式消息构造；`codex-rs/core/gpt_5_1_prompt.md` 的 Planning/执行规则；`codex-rs/core/src/tools/handlers/plan_spec.rs` 的 update_plan 描述。plan、所列模型基础模板和工具描述未变；default 将模式名占位符展开为 Default and Plan；模式解析类型迁入 codex_prompts，未改变本节的分工结论。 |
+| [OpenCode / dev](https://github.com/anomalyco/opencode) | `849c2598abc7d2b40261e74b5826bc74ffc78308` | `88c6c7abc7f320b6aabed2634ac0b2d6e6ecea67` | `packages/opencode/src/session/reminders.ts`；`prompt/{plan,plan-mode,build-switch,anthropic}.txt`（相对该 session 目录）；`packages/core/src/tool/todowrite.ts` 的 description/execute。上述文件相对旧提交未变；保留普通与实验规划流程的差别，不把其中一种说成唯一模式实现。 |
+| [DeepSeek Harness / master](https://github.com/deepseek-ai/deepseek-harness) | `0a53fb55bea101816fa226bb964ae2bed71c343b` | `0d1f50007f9bca3f52b06e1c3074fa14d5fb0720` | `packages/preset/agent-presets/presets/standard/agent.cordis.yml` 的 planning；`packages/plan/plan-mode/src/index.ts` 的 PlanModeController/plan:policy/exit_plan_mode；`packages/todo/tool-todo/src/index.ts` 的 DESCRIPTION_HEAD/SINGLE/TAIL。规划政策语义未变，TODO 文件未变；插件增加命令定义身份并调整附件接口，不影响当前取舍。根 package.json 为 `0.1.6-alpha.1`，仍为 alpha。 |
+| [pi / main](https://github.com/badlogic/pi-mono) | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | `e4c75a73222ae2c72abb5f5314fa35ee8effc508` | `packages/coding-agent/src/core/system-prompt.ts` 的 buildSystemPromptSections/buildRules/diffSystemPromptSections；`packages/coding-agent/examples/extensions/plan-mode/index.ts` 的模式上下文与 persistState；`packages/agent/src/agent-loop.ts` 的 runLoop/prepareNextTurn。基础提示词新增命名分节、工具 guidelines 与差异计算；plan-mode 示例未变。示例仍不是内核自带 Plan/Build 协议。 |
+
+### 10.2 已观察风格与目标取舍
+
+| 已观察源码行为 | CampusClaw 当前目标与具体理由 |
+|---|---|
+| Codex Plan 模板详细界定规划流程；Default 模板很短。具体模型基础模板另含执行、测试和进度要求，update_plan 描述并未承载全部工作规范。 | 学习短模式增量的写法；PLAN.md 负责规划和审核边界，BUILD.md 只负责实施模式与批准后的衔接。不能据 Default 短就断言其他 Agent 没有详细规则。 |
+| OpenCode 分开模型基础模板、模式提醒与工具描述；build-switch 很短，模式提醒经合成消息注入，实验规划模板更细。其 anthropic.txt 是 OpenCode 自有模板。 | 学习职责分离，不迁移其消息注入或五阶段模板。CampusClaw 沿用每轮读取 SYSTEM 与批准后完整重组的现有接入。 |
+| DeepSeek 由配置提供 plan:policy，退出规划后不注入该规划政策；TODO description 规定完整列表、完成即更新和简单任务跳过。 | 规划期禁止 TODO 留在 PLAN.md；实施进度细则集中在 TodoUpdate description。保留短 BUILD.md 是为了明确原审核方案和 CampusClaw 模式切换规则，不复制一份执行手册。 |
+| pi 最新基础 Prompt 按命名块组织规则，工具 guidelines 可参与基础规则；计划示例独立注入上下文。 | 只借鉴规则归属与简洁表达；不引入分节差异协议、模板解析器或新框架。两份文件整体加载，Composer 仍是纯组合。 |
+
+上述收敛属于**架构变更**：减少部署模式资源及重复规则；根/Child 的职责、正式审核、混合工具的规划限制、稳定元数据属于**产品约束**；服务端审核身份、权限和事务仍沿用既有安全边界。收益是规则单一维护、模式资源更短；代价是迁移时必须同时校准基础 SYSTEM 和工具描述，并对根/Child 的模型遵循情况重新验收。提示词不提供强制只读或自动验证业务完成的保证。
+
+### 10.3 当前 Java 与实施差距
+
+Java 本次静态读取本地 `pi-mono-java@0b81c168d816aed7864cc9fbb9caa0771407e880`，不是远端最新声明；相对 §9 的 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，本次只核验下列提示词装配范围，未重跑产品或模型测试。
+
+| 仓库相对路径 / 符号 | 已观察实现 | target-only 调整 |
+|---|---|---|
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/PlanPolicyPromptComposer.java` · compose、planPrompt | 仍读取 PLAN_COMMON、PLAN_ROOT_REVIEW、PLAN_CHILD、BUILD_ROOT、EXECUTION_TODOS、ASK_USER 六份 .txt，按入口、模式与工具名选择段落。 | 仅加载 PLAN.md / BUILD.md；`compose(base, mode, entryPoint)` 选择完整文件并增加确定的一行角色说明；不按工具清单拼接提问或 TODO 段。ExitPlanMode 可用性仍由独立校验保持。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java` · create、configureAgent、applyPrompt | 工具装配后加载基础 SYSTEM，使用 Composer 并保留执行基础快照。 | 保留此接入及批准后从原始 BASE 重组的顺序，不叠加旧模式文本，不改变 Tool/Skill 元数据。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java` · load | 读取受管 SYSTEM.md 和 Skill 提示，SYSTEM.md 可以缺省；不自动提供本次所需的通用执行规范。 | 经现有受管 Agent 发布机制落实 [BASE 通用规则](plan-policy.md#2-基础-system-的通用行为)，是两文件迁移验收的一部分；不新增第三份内置 BASE 资源，也不宣称现有 loader 已补齐这些规则。 |
+
+当前有效模型正文见 [PLAN.md](PLAN.md)、[BUILD.md](BUILD.md)，部署组合与 P01～P15 验收见 [plan-policy.md](plan-policy.md)。本仓此次只修改设计与目标提示词资产；Java 资源替换、受管 SYSTEM 发布及实际模型评估均需实施仓完成。

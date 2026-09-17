@@ -1,6 +1,6 @@
 # TodoUpdate：后端显式发布任务进度
 
-版本：1.2.0；日期：2026-09-15。状态：已确认目标，target-only；固定 Java 基线尚无 TodoUpdate 工具与任务更新事件。
+版本：1.3.0；日期：2026-09-17。状态：当前目标；历史 Java 09b32d8e 的工具缺口仅适用于旧提交，既有实现见[提问证据](ask-user-question.md#2-基线与已观察实现)；description 集中维护及两文件迁移尚待实现。
 
 本专题属于 M03/M06/M07，复用[计划模式全局目标类图](README.md#3-推荐全局目标类图)。本文件维护工具契约、提交边界、进度生命周期与验收；公共事件精确字段由[共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json)维护，POST SSE 与 GET 历史共用。
 
@@ -35,10 +35,10 @@
 固定 description：
 
 ```text
-Track implementation progress in build mode; do not call this tool during plan-mode research or proposal design. Before multi-step implementation, submit the complete task list and mark the first active task in_progress. Mark each task completed immediately after its work and required verification finish; do not batch independent completions. The same call may complete the previous task and start the next one. Send the entire list every time, retaining completed tasks that should remain visible; use pending, in_progress, or completed with at most one task in_progress. Skip trivial work. This tool reports progress only and does not execute tasks, approve proposals, or change session mode.
+Track implementation progress in build mode; do not call this tool during plan-mode research or proposal design. Before multi-step implementation, submit the complete task list and mark the first active task in_progress. Mark each task completed immediately after its work and required verification finish; do not batch independent completions. The same call may complete the previous task and start the next one. Send the entire list every time, retaining completed tasks that should remain visible; use pending, in_progress, or completed with at most one task in_progress. Skip trivial work. Do not mark failed, partial, or unverified work completed. Adjust the list when the work changes within the authorized scope; remove cancelled items with an explanation instead of marking them completed. Read the result and do not claim a failed update was saved. Submit the required full list again when a new user-message execution continues earlier work. This tool reports progress only and does not execute tasks, approve proposals, change session mode, or replace the final answer.
 ```
 
-仅 build 根执行注入完整的实施进度指令，逐项更新、失败与收尾规则见[提示词 §6](plan-policy.md#6-execution_todos实施进度)。plan 中不注入该段，PLAN_COMMON 和固定 description 都明确不调用。此处是模型行为约束，工具层的值校验不负责判断业务任务是否真正完成，也不新增模式拦截。
+进度调用与状态维护只在上述 description 定义，不再注入独立 EXECUTION_TODOS 资源或在 BUILD.md 复制操作步骤。[PLAN.md](PLAN.md)仅强调规划期不调用 TODO，基础 SYSTEM 负责通用验证和真实汇报。description 在两模式保持同一文本；它是模型行为约束，值校验不判断业务任务是否真正完成，也不新增模式拦截。
 
 参数 Schema：
 
@@ -136,4 +136,10 @@ Mate 集成须显式映射 `agent.todo_updated` 到公共 Chat 事件，复用�
 | T3 | applyTodoUpdated 与任务面板 | 不读取工具名或工具结果文本；仅任务事件也能展示；实时与历史一致；分页分割两个事件、旧页与 live 交错、重复帧、空列表、新根、断线及终态分别验证 |
 | T4 | 提示词与 Mate 场景 | plan 调研/修订无 TODO；批准后创建实施清单；完成且验证后逐项更新；正常消息工具与任务事件交错；公共两跳关联不串根、不泄露内部身份 |
 
-先实现 T1/T2 的权威提交，再接入 T3/T4；build 清单可独立于计划审核验证。文档契约检查不代替尚不存在的产品集成测试。
+先实现 T1/T2 的权威提交，再接入 T3/T4；build 清单可独立于计划审核验证。文档契约检查不代替产品集成测试；既有测试证据仅适用于记录的提交，新提示词行为仍需重新验收。
+
+## 7. 版本历史
+
+| 版本 | 日期 | 变更 |
+|---|---|---|
+| 1.3.0 | 2026-09-17 | 进度细则集中到工具 description，取消独立实施进度提示词段。 |

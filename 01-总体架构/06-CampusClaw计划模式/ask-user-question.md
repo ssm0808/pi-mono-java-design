@@ -1,8 +1,8 @@
 # AskUserQuestion：结构化提问与原执行续跑
 
-版本：1.3.0；日期：2026-09-17。状态：1d08f98e 已实现 Runtime 问答及调试卡片；逐题展示、工具日志汇聚及必要性提示词为 target-only。未领取答案的 CANCELED 终态以 74f1b831 为专项核验基线，属于已确认目标，见[统一消费状态](../01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)。既有独立验证绑定 §2 所列 9f785bea，企业 Mate 接入和真实模型行为评估尚未验证。
+版本：1.4.0；日期：2026-09-17。状态：1d08f98e 已实现 Runtime 问答及调试卡片；逐题展示、工具日志汇聚及必要性提示词为 target-only。未领取答案的 CANCELED 终态以 74f1b831 为专项核验基线，属于已确认目标，见[统一消费状态](../01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)。既有独立验证绑定 §2 所列 9f785bea，企业 Mate 接入和真实模型行为评估尚未验证。
 
-本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#submitSessionEvent)。提示词组合由 [plan-policy.md](plan-policy.md) 维护。
+本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#submitSessionEvent)。模式仅使用 PLAN.md/BUILD.md；必要性、优先一题和简洁结果使用归基础 SYSTEM，工具独占调用与等待规则归本页 description/共享 Schema，不保留独立 ASK_USER 资源。装配与迁移由 [plan-policy.md](plan-policy.md) 维护。
 
 ## 1. 目标与边界
 
@@ -170,7 +170,7 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 | Q2 等待与事务 | 收敛唯一待交互槽；问题/confirming/指针同事务；答案/回执/新段同事务；答案领取与消费 | tool_call 前置；共享不可变快照；错误无卡片；三类不能互相消费；插入失败整笔回滚；在工具 await 前已领取答案仍正常返回；原根与凭据不变 |
 | Q3 控制及恢复 | 跨实例轮询与单次领取、中断/超时、可靠终态、删除和保留清理 | 回答/回答、回答/停止、回答/超时竞争；未领取答案随真实终态取消消费且回执保留；STOPPING/回滚/已领取记录不误改；原段关闭；新段首帧完整回执；不重放写；失联不假装成功或自动接管 |
 | Q4 前端及桥接 | QuestionCard/Store、规范化提交、同 reducer 历史恢复；需要企业入口时同步 Mate 公共契约 | 单/多/文本展示无需工具日志；缺页禁答、重复帧、跨端已回答、回执丢失、切会话草稿、IME/键盘/390px；plan 不建 TODO，build 回答不重置清单；target-only：当前仅一题可见、翻页不 POST、末题仅一次提交、前后导航保留答案、调用/结果汇聚且失败可见、收起不提交 |
-| Q5 提示词与场景 | 通用提问指令、plan/build 组合、降级与角色边界 | 可查事实自行检查；需选择时使用工具；问题肯定不批准方案；不编造/重复问；无工具回退普通消息；target-only：优先一题、不固定三题、无待决信息不提问、有关联的后续问题在下一批提出、工具 JSON 不作为最终答复；模型评估与确定性测试分别记录 |
+| Q5 提示词与场景 | 基础 SYSTEM 提问原则、工具 description、两模式文件、降级与角色边界 | 可查事实自行检查；需选择时使用工具；问题肯定不批准方案；不编造/重复问；无工具回退普通消息；target-only：优先一题、不固定三题、无待决信息不提问、有关联的后续问题在下一批提出、工具 JSON 不作为最终答复；模型评估与确定性测试分别记录 |
 
 不新增 Maven/npm 直接依赖；复用 JDK、Jackson、Jakarta Validation、现有 Spring/MyBatis、取消、SSE 与 Vue 设施。Java 方法、DTO/VO、中文文档及镜像规则沿用仓库约定。Q1～Q5 的既有 Runtime 与调试前端验证结果见 §2；本版 Q4/Q5 新增交互与提示词仍为 target-only，实施后须重新验收。企业桥接、公司编译环境和真实模型行为仍按该处边界记录，不能用单测代替外部验收。
 
@@ -178,6 +178,7 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-09-17 | 提问原则归基础 SYSTEM，工具契约保持，模式装配改为 PLAN.md/BUILD.md。 |
 | 1.3.0 | 2026-09-17 | 未领取答案随真实根执行终态标记为 CANCELED，并保留已接受答案事件。 |
 | 1.2.0 | 2026-09-16 | 明确必要时优先一题、逐题完整提交及问题答案卡吸收工具日志。 |
 | 1.1.0 | 2026-09-15 | 登记结构化问答实现、独立验证与企业接入边界，明确首版完整安装 SQL。 |
