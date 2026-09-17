@@ -1,6 +1,6 @@
-# 模型与 Provider
+# Model
 
-版本：2.8.1 · 2026-09-17 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置是唯一模型来源，旧全局目录的删除仍待实现。
+版本：2.8.2 · 2026-09-17 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置是唯一模型来源，旧全局目录的删除仍待实现。
 
 | 内容 | 维护位置 |
 |---|---|
@@ -14,9 +14,9 @@
 
 Runtime 选择模型、执行工具并保存会话；AI 模块把上下文转换为模型请求，把响应流转换为统一消息事件；CampusMate 管理上游路由、协议差异、endpoint 和凭据。
 
-![模型与 Provider 全局目标类图](provider-classes.svg)
+![Model 全局目标类图](model-classes.svg)
 
-[PlantUML 源码](diagram.puml#L1) · [原尺寸 SVG](provider-classes.svg)
+[PlantUML 源码](diagram.puml#L1) · [原尺寸 SVG](model-classes.svg)
 
 主图是推荐目标结构，分组表示职责边界。已有骨架与待清理实现见源码证据；不再保留另一套现状类图。Provider、请求 Mapper 和 WebClient 是共享对象；Parser、事件流和累积状态每次调用独立创建。AI 返回事件与最终消息，数据库写入留在 Runtime。
 
@@ -136,6 +136,7 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.8.2 | 2026-09-17 | 模块统一命名为 Model，更新目录、图名与引用。 |
 | 2.8.1 | 2026-09-17 | 精简目录、文件名和重复说明，集中模型规则、调用适配及实施验收。 |
 | 2.8.0 | 2026-09-17 | 模型来源收敛为业务 Agent `.campusclaw/settings.json`，删除全局 JSON 目录及目录适配链。 |
 | 2.7.0 | 2026-09-14 | 按模块职责重写正文，集中源码与用量专题，复用接口说明并重排全局类图及调用顺序图。 |

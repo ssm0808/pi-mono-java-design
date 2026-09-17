@@ -1,6 +1,6 @@
 # Session 模型用量：Record 与 Stats
 
-版本：1.0.1 · 2026-09-14。状态：已确认目标，SQL 实现未按最新提交验收。返回[模型与 Provider 主设计](README.md)。
+版本：1.0.2 · 2026-09-17。状态：已确认目标，SQL 实现未按最新提交验收。返回[Model 主设计](README.md)。
 
 本专题维护模型用量的存储规则。Provider 解析 Usage，Runtime 将其作为不可变运行事实保存；Usage 不参加消息分支。pi 固定基线为 `5cd93f688aaab89dbb6dfa4aca535f21796ae185`，Java SQL 历史观察基线为 `d649866a6cae967ace18ceaeb9597edd47e5721e`；具体路径、符号及差距见[源码证据](source-evidence.md)。
 

@@ -19,7 +19,7 @@ Runtime 采用同一 POST 提交用户事件并接收该请求的 SSE，GET 读�
 | 本模块负责 | 所属模块维护的协作边界 |
 |---|---|
 | Runtime、Cron、Child 的执行对象装配与关闭 | [工具系统](../02-CampusClaw工具系统/README.md)维护 profile、工具实例、受管目录与缓存 |
-| 模型与工具循环的入口协作 | [Provider](../../02-服务与接口/03-模型与Provider/README.md)维护业务 Agent 设置的模型选择与流适配 |
+| 模型与工具循环的入口协作 | [Model](../../02-服务与接口/03-Model/README.md)维护业务 Agent 设置的模型选择与流适配 |
 | 父子执行的独立上下文与生命周期 | [工具系统 Agent 工具](../02-CampusClaw工具系统/built-in-tool-contracts.md)维护委派参数与结果 |
 | Session 运行对象与持久化恢复的衔接 | [会话记忆](../../03-数据与存储/01-会话记忆GaussDB/README.md)维护上下文与存储 |
 | 模式与执行快照的衔接 | [计划模式](../06-CampusClaw计划模式/README.md)维护 plan/build 提示词、审核与续跑 |
@@ -111,9 +111,9 @@ Command 通过 HTTP 进入应用服务。Builtin 调用窄职责服务并返回 
 
 压缩属于公共 Session 能力，手工命令只是入口。算法、上下文恢复与 Usage 累计见 [HTTP 中的压缩入口](chat-http-v1-design.md#221-公共-session-压缩能力内部算法与已确认公共映射)及其所属存储专题。
 
-### 7.4 模型与 Provider
+### 7.4 Model
 
-业务 Agent 的 `.campusclaw/settings.json` 提供默认模型和允许列表，Runtime 从同一次准备的快照选择模型。Provider 把外部增量转换为统一模型事件，再由 Runtime 形成领域消息。生命周期与目标类图见 [Provider 主设计](../../02-服务与接口/03-模型与Provider/README.md)。
+业务 Agent 的 `.campusclaw/settings.json` 提供默认模型和允许列表，Runtime 从同一次准备的快照选择模型。Provider 把外部增量转换为统一模型事件，再由 Runtime 形成领域消息。生命周期与目标类图见 [Model 主设计](../../02-服务与接口/03-Model/README.md)。
 
 ### 7.5 数据与附件边界
 

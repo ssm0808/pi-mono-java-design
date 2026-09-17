@@ -1,4 +1,4 @@
-@startuml provider-classes
+@startuml model-classes
 ' Baseline: pi-mono 16235fd93521f9f96164f5891beea62e6bea5b18
 ' Source evidence: packages/ai/src/models.ts: ModelsImpl, createProvider
 ' Source evidence: packages/coding-agent/src/core/model-runtime.ts: ModelRuntime.create, rebuildProviders
@@ -22,7 +22,7 @@ skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam defaultFontSize 13
 skinparam ArrowColor #475569
-title Model and Provider - Recommended Global Class Structure
+title Model - Recommended Global Class Structure
 top to bottom direction
 skinparam classAttributeIconSize 0
 hide empty members

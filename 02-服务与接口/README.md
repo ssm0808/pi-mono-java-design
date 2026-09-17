@@ -6,7 +6,7 @@
 |---|---|---|
 | CampusMate 附件服务 | 上传、扫描、OBS/openGauss、删除和 Runtime 文件 ID 边界 | [设计](./01-CampusMate附件服务/README.md) |
 | CampusMate 共享客户端配置 | 单一 `campusmate` 配置树、共享 base URL 和 endpoint 去重 | [设计](./02-CampusMate共享客户端配置/README.md) |
-| 模型与 Provider | 业务 Agent 模型设置、CampusMate 调用与用量记录 | [主设计](./03-模型与Provider/README.md) · [全局图](./03-模型与Provider/provider-classes.svg) · [用量](./03-模型与Provider/usage.md) |
+| Model | 业务 Agent 模型设置、CampusMate 调用与用量记录 | [主设计](./03-Model/README.md) · [全局图](./03-Model/model-classes.svg) · [用量](./03-Model/usage.md) |
 | Runtime HTTP 测试 Agent | 如何根据已确认契约维护分层回归测试 | [设计](./04-Runtime-HTTP测试Agent/README.md) |
 | CampusClaw TDD 测试 Agent | 如何以版本化能力注册表驱动全产品测试与质量门禁 | [设计](./05-CampusClaw-TDD测试Agent/README.md) |
 | mate-service 聊天命令 API | GET 轻量清单；公共边界与执行协议待独立重审 | [设计与契约](./06-mate-service聊天命令API/README.md) |
