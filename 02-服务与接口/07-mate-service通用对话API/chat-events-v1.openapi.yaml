@@ -2,7 +2,7 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: mate-service General Chat Events API
-  version: 1.5.0
+  version: 1.6.0
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -300,6 +300,7 @@ paths:
                           toolCallId: call_unLAR8MvFNptuiZK6K6HCy5k
                           createdAt: '2026-09-02T08:30:16.000Z'
                           toolName: isolate_campus_port
+                          displayName: 隔离园区端口
                           arguments:
                             deviceName: SW-DC-01
                             portName: GigabitEthernet0/0/24
@@ -504,7 +505,7 @@ paths:
 
                     data: {"eventId":"4b3e522e7f6746be8781a2c8876fd1da","type":"agent.thinking","phase":"completed","createdAt":"2026-09-02T08:30:17.305Z","content":"已完成巡检记录、告警时间线和影响范围的梳理。"}
 
-                    data: {"eventId":"c8de683be2ab4e25a8d97f7cf507c150","type":"agent.tool_call","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","createdAt":"2026-09-02T08:30:17.420Z","toolName":"query_campus_alarm","arguments":{"siteName":"东区园区"},"requiresConfirmation":false}
+                    data: {"eventId":"c8de683be2ab4e25a8d97f7cf507c150","type":"agent.tool_call","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","createdAt":"2026-09-02T08:30:17.420Z","toolName":"query_campus_alarm","displayName":"查询园区告警","arguments":{"siteName":"东区园区"},"requiresConfirmation":false}
 
                     : ping
 
@@ -525,7 +526,7 @@ paths:
 
                     data: {"eventId":"5e9a24c8d7134f6baa10c9827d45e301","type":"agent.thinking","phase":"completed","createdAt":"2026-09-02T08:30:16.000Z","content":"已确认异常集中在 SW-DC-01 的上联端口，隔离操作会修改生产配置。"}
 
-                    data: {"eventId":"6c7d8e9f01234567a89bcdef01234567","type":"agent.tool_call","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","createdAt":"2026-09-02T08:30:16.100Z","toolName":"isolate_campus_port","arguments":{"deviceName":"SW-DC-01","portName":"GigabitEthernet0/0/24"},"requiresConfirmation":true}
+                    data: {"eventId":"6c7d8e9f01234567a89bcdef01234567","type":"agent.tool_call","toolCallId":"call_unLAR8MvFNptuiZK6K6HCy5k","createdAt":"2026-09-02T08:30:16.100Z","toolName":"isolate_campus_port","displayName":"隔离园区端口","arguments":{"deviceName":"SW-DC-01","portName":"GigabitEthernet0/0/24"},"requiresConfirmation":true}
 
                     data: {"eventId":"7d8e9f0123456789abcdef0123456789","type":"chat.status_idle","createdAt":"2026-09-02T08:30:16.200Z","reason":"confirming"}
 
@@ -1178,6 +1179,15 @@ components:
           maxLength: 128
           pattern: '\S'
           description: 非空白的稳定公开 Tool 名称
+        displayName:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: >
+            可选的本次调用展示名称快照。普通工具来自框架 label，Mate 来自具体业务工具元数据，
+            经授权投影并保存后供实时与历史共用；去除首尾空白，缺失或无效时省略，不输出 null。
+            前端缺失时回退公开 toolName。名称不参与执行、授权或确认，
+            不采用模型参数或结果文本中的同名字段，不另返回 label。
         arguments:
           type: object
           description: 允许空对象；只包含完成安全投影的公开 JSON 参数

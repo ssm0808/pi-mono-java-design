@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.7.0 |
+| 文档版本 | 2.8.0 |
 | 状态 | 目标设计；Mate 发现无凭据、仅 execute 透传 POST Events 执行快照待实现 |
-| 更新日期 | 2026-09-15 |
+| 更新日期 | 2026-09-17 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [8 个活动内置工具契约](built-in-tool-contracts.md) |
 
@@ -381,6 +381,27 @@ execution 的 Child execution 以只读方式传递，但不存入 Child Session
 本次 HTTP 契约变更不新定义 Cron 的凭据来源；无当前 Host execution 凭据时，
 `CallMateTool` 仍按通用可用性规则返回 unavailable。
 
+<a id="tool-display-name"></a>
+
+### 9.2.1 工具展示名称映射（target-only）
+
+工具执行身份与用户展示名称分开。框架接口继续使用 `AgentTool.name()` / `label()`；Host 向事件层提供统一的可选 `displayName`，不再公开一个同义 `label` 字段。名称映射由本节唯一维护，事件快照及消费规则见 [M06 调用名称快照](../01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)，UI 见[前端 §9.7](../04-CampusClaw前端体验/README.md#mate-tool-display)。
+
+| 调用类型 | displayName 来源 | 缺失时 UI 使用的技术名 |
+|---|---|---|
+| 普通框架工具 | 本次执行装配的 `AgentTool.label()` | `toolName` |
+| `CallMateTool` | 本次唯一解析到的 Mate 工具元数据 `displayName` | `arguments.tool` |
+
+`CallMateTool.label()` 只命名外层入口，不能覆盖具体业务工具；业务展示名缺失时不回退为 “Call Mate Tool” 或“调用业务工具”。展示名称可以重复，也可以与技术名相同，不参与名称到 ID 解析、权限、确认身份或结果关联。仅接受服务端工具定义/元数据，不采用模型 arguments 或结果文本中的同名字段。
+
+`HttpMateToolClient.toMeta` 保留 `ToolInfo.displayName` 到 `MateToolMeta`。Session 缓存的每个已解析工具同时固定 ID、技术名和可选展示名，发现结果原子替换该来源；执行与展示取同一份不可变解析结果，不能先按 name 查名称、再独立查 ID。保留原有来源范围、single-flight 和同名不同 ID 冲突规则；同名同 ID 的多个来源若展示名不一致，仅省略展示名并使用技术名，不因展示字段冲突改变执行身份。
+
+Host 在第一次发布调用事件（包括待确认调用）之前完成此次解析，复用已有发现与缓存路径；缓存 miss 使用原有发现流程和超时边界，不增加一条仅为 UI 查询元数据的链路。解析结果绑定本次调用，确认后仍使用同一工具 ID；后续目录刷新只影响新的调用。解析失败或参数非法仍按原失败规则记录调用与结果，不伪造展示名、不放宽权限。名称缺失不会使本来合法的工具不可用；远端执行前仍须复核实时绑定、凭据与权限，快照不是准入证明。
+
+`ListMateTools` 的模型输出仍为 name/description/inputSchema；展示名不进入工具参数、模型 ToolCall/ToolResult 或提示词。`AgentTool` 和内核工具执行事件无需新增展示字段；由 Host 利用本次工具装配与解析结果补齐外部调用事件。本增量是产品可读性约束和展示数据传递的架构变更，不新增 Maven/npm 依赖，也不新增工具类型或改变现有主图的分层关系。
+
+实施先贯通 `ToolInfo → MateToolMeta → Session 解析结果`，再连接 M06 的首次调用快照和 M07 消费。验收覆盖普通 label 与 name 不同、空 label、Mate 名称有效/缺失/冲突、相同展示名对应不同 ID、确认等待期间目录改名或刷新，以及解析失败仍保留原调用。源码与 pi 对照见[名称专项证据](source-evidence.md#tool-display-evidence)；这些是实施要求，尚未执行产品回归。
+
 ### 9.3 CampusMate 连接地址
 
 Mate Tool 的目标地址由
@@ -635,6 +656,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.8.0 | 2026-09-17 | 统一框架 label 与 Mate 元数据到 displayName 的映射，并固定调用解析快照。 |
 | 2.7.0 | 2026-09-15 | 工具装配增加 AskUserQuestion 目标入口并保持元数据稳定。 |
 | 2.6.7 | 2026-09-15 | 接入 TodoUpdate 后端显式任务事件，前端直接消费完整清单。 |
 | 2.6.6 | 2026-09-14 | 集中维护源码证据，收敛工具与 Host 职责并重排架构和执行流程图。 |

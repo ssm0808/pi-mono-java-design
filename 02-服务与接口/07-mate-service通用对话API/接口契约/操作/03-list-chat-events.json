@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · target-only"
   },
@@ -9,7 +9,7 @@
     "method": "GET",
     "path": "/chats/{chatId}/events",
     "summary": "查询 Chat 事件历史",
-    "description": "读取可用于界面恢复和审计的完整事件历史。结果按 createdAt 升序排列；首次查询会固定本次快照的上界，后续通过 page 继续读取，因此翻页期间产生的新事件不会混入当前快照。历史包含三类用户事件、已完成的消息与思考原文、工具调用与结果，以及 chat.status_idle；不包含实时 delta、SSE ping 或内部事件。 agent.thinking.content 直接承载模型返回的可读原始推理；执行 thinking 开关控制新思考事件，历史原文不因后续关闭而隐藏。",
+    "description": "读取可用于界面恢复和审计的完整事件历史。结果按 createdAt 升序排列；首次查询会固定本次快照的上界，后续通过 page 继续读取，因此翻页期间产生的新事件不会混入当前快照。历史包含三类用户事件、已完成的消息与思考原文、工具调用与结果，以及 chat.status_idle；不包含实时 delta、SSE ping 或内部事件。 agent.thinking.content 直接承载模型返回的可读原始推理；执行 thinking 开关控制新思考事件，历史原文不因后续关闭而隐藏。 agent.tool_call 的可选 displayName 是服务端固定的调用展示名，经授权投影后供实时与历史共用；普通工具来自框架 label，Mate 来自具体业务工具元数据。有效时为去除首尾空白的非空字符串，无效、null 或缺失时省略，不输出 null。前端优先 displayName，缺失回退公开 toolName；技术名、参数、确认身份及结果不变，不新增同义 label，也不从模型 arguments 或工具结果推断名称。",
     "authModes": [
       {
         "id": "jwt",
@@ -161,6 +161,7 @@
                   "toolCallId": "call_unLAR8MvFNptuiZK6K6HCy5k",
                   "createdAt": "2026-09-02T08:30:16.000Z",
                   "toolName": "isolate_campus_port",
+                  "displayName": "隔离园区端口",
                   "arguments": {
                     "deviceName": "SW-DC-01",
                     "portName": "GigabitEthernet0/0/24"
@@ -413,6 +414,6 @@
     "questions": [],
     "followUpTitle": "三个接口已确认",
     "promptPrefix": "更新 GET /mate-service/v1/chats/{chatId}/events",
-    "promptSuffix": "保持与三接口 1.5.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
+    "promptSuffix": "保持与三接口 1.6.0 契约、OpenAPI、Markdown 和 PlantUML/SVG 同步。"
   }
 }

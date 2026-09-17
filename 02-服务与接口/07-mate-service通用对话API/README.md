@@ -4,12 +4,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.6.1 |
+| 文档版本 | 1.7.0 |
 | 状态 | 三接口已形成目标契约，尚待实现；数字分页要求待与快照方案整合 |
 | Java 源码基线 | 7e54b47f2539982f8f1855a0b6bb38b6ab8742ae，范围见 §9 |
 | pi 固定基线 | 5cd93f688aaab89dbb6dfa4aca535f21796ae185 |
 | 公开契约证据日期 | Claude Managed Agents / OpenAI 2026-09-02；只作为该日公开契约记录 |
-| 更新日期 | 2026-09-15 |
+| 更新日期 | 2026-09-17 |
 
 ## 1. 接口与权威来源
 
@@ -104,6 +104,10 @@ delta 顺序累积为 preview，completed 的完整内容覆盖同 ID 预览。�
 ### 5.4 工具调用
 
 requiresConfirmation=true 时公开安全参数并进入 confirming。确认使用原 toolCallId，不混用 eventId；完整调用保留审计记录。
+
+公共 `agent.tool_call` 增加可选 `displayName`，由 bridge 从 Runtime 已固定的调用名称快照安全投影，授权通过后与公共调用事件一同保存；live 与 history 读取同一保存值。普通工具来源是框架 label，Mate 来源是具体业务工具元数据，精确映射由 [M03](../../01-总体架构/02-CampusClaw工具系统/README.md#tool-display-name)维护。bridge 不额外查目录、不按当前工具名称覆盖历史，也不接受模型提供的展示名。
+
+公共 toolName 继续表示既有公开技术名，arguments 保持公开安全参数；不因新增名称暴露内部 CallMateTool 包装或工具 ID。UI 优先 displayName，缺失回退公共 toolName；确认和结果关联仍用 toolCallId。无效或空白展示名按缺失处理，服务端省略字段。名称作为纯文本显示，不用于授权，也不在 tool_result 或确认请求中重复。此增量已进入公共流/历史精确模型和 OpenAPI，bridge 与后端落地仍为 target-only；服务端、bridge 与消费者同步更新字段定义和解码规则。
 
 ### 5.5 工具结果
 
@@ -260,6 +264,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.0 | 2026-09-17 | 公共工具调用增加可选 displayName，实时与历史复用授权投影的调用快照。 |
 | 1.6.1 | 2026-09-15 | 登记后端显式任务事件的公共桥接与根消息关联增量。 |
 | 1.6.0 | 2026-09-14 | 主文聚焦公共边界与恢复，移除重复报文并显式登记未整合设计要求。 |
 | 1.5.0 | 2026-09-09 | 明确 Thinking 展示模型返回的原始推理。 |

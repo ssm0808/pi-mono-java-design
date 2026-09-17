@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.11.0 |
+| 文档版本 | 0.12.0 |
 | 状态 | 已确认目标契约；请求输出绑定与跨实例控制待实现 |
 | 源码基线 | Java 918005ee、dfb90cac，固定提交与路径见 [模块证据](source-evidence.md#52-post-与流生命周期) |
-| 更新日期 | 2026-09-15 |
+| 更新日期 | 2026-09-17 |
 
 结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 target-only，Session/元数据不增字段，Mate 公共投影独立集成。
 
@@ -71,6 +71,8 @@ agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的�
 等待完整内容覆盖，避免把缺片段的拼接结果显示为完整答案。工具参数、结果不泄露凭据、
 堆栈或不允许公开的内部数据，Mate 还需进行公共安全投影。
 
+调用事件的可选 displayName 在首次提交前固定，包括 requiresConfirmation=true 的调用；SSE 直接使用已提交快照，确认续跑及结果事件不重取名。字段规则和消费边界见[调用名称快照](chat-events-design.md#tool-display-snapshot)。
+
 ## 5. 已确认失败、背压与恢复
 
 | 时点 | 已确认语义，精确错误表见统一 HTML |
@@ -130,6 +132,7 @@ agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.12.0 | 2026-09-17 | 工具调用展示名复用已提交快照。 |
 | 0.11.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |
 | 0.10.0 | 2026-09-15 | 明确计划审核响应绑定、批准事件顺序与修订再等待。 |
 | 0.9.0 | 2026-09-15 | 纳入后端显式任务更新事件，SSE 与历史共用完整快照。 |

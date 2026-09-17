@@ -126,7 +126,7 @@ def validate_auth(operation: dict[str, Any]) -> None:
 
 
 def validate_common_model(model: dict[str, Any]) -> None:
-    require(model["api"]["version"] == "1.5.0", "Unexpected contract version")
+    require(model["api"]["version"] == "1.6.0", "Unexpected contract version")
     require(model["api"]["basePath"] == "/mate-service/v1", "Unexpected base path")
     require("已确认" in model["api"]["visibility"], "Contract must be confirmed")
     require(model["review"]["questions"] == [], "Confirmed contract must not contain review choices")
@@ -262,9 +262,12 @@ def validate_stream_payload(payload: dict[str, Any]) -> None:
     else:
         validate_created_at(payload["createdAt"], payload["type"])
     if payload["type"] == "agent.tool_call":
-        require(set(payload) == {
-            "eventId", "type", "toolCallId", "createdAt", "toolName", "arguments", "requiresConfirmation"
-        }, "Tool Call shape changed")
+        required = {"eventId", "type", "toolCallId", "createdAt", "toolName", "arguments", "requiresConfirmation"}
+        require(required <= set(payload) <= required | {"displayName"}, "Tool Call shape changed")
+        if "displayName" in payload:
+            name = payload["displayName"]
+            require(isinstance(name, str) and bool(name.strip()) and name == name.strip(),
+                    "displayName must be normalized nonempty text or omitted")
         validate_tool_call_id(payload["toolCallId"], "tool call")
         require(payload["toolCallId"] != payload["eventId"], "Tool Call identities must remain distinct")
         require(isinstance(payload["arguments"], dict), "Tool arguments must be an object")
@@ -308,6 +311,27 @@ def validate_stream_example(stream: str, variant: str) -> None:
     require("stream.error" not in stream and "stream.end" not in stream, "Terminal stream events are forbidden")
 
 
+def validate_display_name_regressions(model: dict[str, Any]) -> None:
+    stream = response(model, "200-live-stream")["bodies"][STREAM_QUERY_VARIANT]
+    call = next(event for event in parse_sse(stream) if event["type"] == "agent.tool_call")
+    require(call.get("displayName") == "查询园区告警", "public display name example missing")
+    unnamed = {key: value for key, value in call.items() if key != "displayName"}
+    validate_stream_payload(unnamed)
+    validate_history_event(unnamed)
+    for validator in (validate_stream_payload, validate_history_event):
+        for value in (None, "", "  ", " 名称 ", 42, False, {}):
+            try:
+                validator({**unnamed, "displayName": value})
+            except RuntimeError:
+                continue
+            raise RuntimeError("producer must omit invalid displayName")
+        try:
+            validator({**call, "label": "duplicate"})
+        except RuntimeError:
+            continue
+        raise RuntimeError("synonymous label must not be published")
+
+
 def validate_stream(model: dict[str, Any]) -> None:
     operation = model["operation"]
     require((operation["method"], operation["path"]) == ("GET", "/chats/{chatId}/events/stream"),
@@ -329,9 +353,7 @@ def validate_history_event(event: dict[str, Any]) -> None:
     if event["type"] in {"agent.message", "agent.thinking"}:
         require(event["phase"] == "completed", "History must contain completed text only")
     if event["type"] == "agent.tool_call":
-        validate_tool_call_id(event["toolCallId"], "history Tool Call")
-        require(event["toolCallId"] != event["eventId"], "History Tool Call identities must remain distinct")
-        require(isinstance(event["arguments"], dict), "Tool Call arguments must be an object")
+        validate_stream_payload(event)
     if event["type"] == "agent.tool_result":
         validate_tool_call_id(event["toolCallId"], "history Tool Result")
         require("errorCode" not in event or event["isError"], "History errorCode is only allowed for errors")
@@ -485,6 +507,12 @@ def validate_openapi_tool_call_id(spec: dict[str, Any]) -> None:
         require(reference == "#/components/schemas/ToolCallId", f"{name}.toolCallId schema changed")
     required = set(schemas["AgentToolCallEvent"]["required"])
     require("toolCallId" in required, "Agent Tool Call must publish toolCallId")
+    properties = schemas["AgentToolCallEvent"]["properties"]
+    require("displayName" not in required and properties["displayName"]["type"] == "string",
+            "displayName must be optional non-null text")
+    require(properties["displayName"].get("minLength") == 1
+            and properties["displayName"].get("pattern") == r"\S", "displayName must be nonblank")
+    require("label" not in properties, "do not add a synonymous label field")
     baselines = spec["x-source-baselines"]
     require(baselines["designRepositoryBeforeOpenAiToolCallId"]
             == "ecf4cc06619f7a02c467d7212a0a12d86ab56a9f", "Design baseline changed")
@@ -753,6 +781,7 @@ def main() -> None:
         validate_common_model(model)
     validate_submit(models[0])
     validate_stream(models[1])
+    validate_display_name_regressions(models[1])
     validate_history(models[2])
     validate_cross_operation_examples(models)
     validate_openapi(models)

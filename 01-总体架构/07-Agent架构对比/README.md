@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.26.0 |
+| 文档版本 | 1.27.0 |
 | 更新日期 | 2026-09-17 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 设计依据 | 当前各模块主设计；M02 采用 Model 主设计 2.8.2，具体入口见各条目 |
@@ -259,7 +259,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 **讲解要点。** 参考 Codex 的输入邻近设置、方案与进度分离，让用户在同一工作区读方案、做决定、看实施进展。CampusClaw 的审核决定续跑原执行，不照搬 Codex 的新消息实施路径。这个差异保留执行归属，但增加事件映射与恢复要求；内部前端按已实现代码验收，企业集成另行对齐公共契约。
 
-**具体工具标题专项（2026-09-17）。** M07 活动行与确认卡优先展示业务工具元数据的 displayName，缺失时回退技术名；权威规则见[前端 §9.7](../04-CampusClaw前端体验/README.md#mate-tool-display)。这是产品可读性约束与展示数据传递扩展，代价是保留调用名称快照、贯通字段及兼容旧历史；事件身份和模型参数不改。Java `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7` 的 ToolInfo 已有 displayName，但 toMeta、MateToolMeta、缓存及前端事件尚未贯通；路径与符号见[专项证据 §7](../04-CampusClaw前端体验/source-evidence.md#mate-tool-display-evidence)。目标为 target-only，M03/M06 的传递与持久化契约是前端接入前置，不能仅改标题函数。只升级这一范围，其余前端差距保留原提交归属；外部 Agent 比较结论不变，复用现有前端全局图。
+**工具名称专项（2026-09-17，M03/M06/M07）。** pi 默认 main 的 `5a3a03a7f5db43692915d6ae45e6d96497ea248d` 中 AgentTool 有 label，AgentEvent 不携带 label/displayName；TUI 按技术名选 renderer，通用回退仍用 toolName。Claude Managed Agents 当日公开 Beta 的 custom tool 事件只有 name/input 等字段，不能由此推断 Console 标题。精确路径、旧新提交与读取范围见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#tool-display-evidence)。CampusClaw 目标在 Host 把普通工具 label、具体 Mate 工具元数据统一映射为可选 displayName，并随调用保存快照供内部/公共流与历史消费；来源由[M03](../02-CampusClaw工具系统/README.md#tool-display-name)、快照由[M06](../01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)、展示由[M07](../04-CampusClaw前端体验/README.md#mate-tool-display)维护。该产品可读性约束与架构变更避免前端另查目录及历史标题漂移，代价是贯通字段、缺失元数据的显示回退和解码器同步更新。Java `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7` 已有 label/ToolInfo.displayName，缓存、事件及前端尚未贯通；契约已确认、实现 target-only。技术名、模型参数与确认身份保持；复用现有全局主图，不升级其他条目的基线结论。
 
 ## 6.5 A08 · 结构化提问与原执行续跑
 
@@ -357,6 +357,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.27.0 | 2026-09-17 | 对比 pi/Claude 的名称边界，统一框架 label 与业务 displayName 的事件快照设计。 |
 | 1.26.0 | 2026-09-17 | 工具展示优先 displayName，登记元数据、事件传递和历史快照的目标差距。 |
 | 1.25.0 | 2026-09-17 | M07 增加具体工具标题的产品约束与局部实现差距，外部基线对比结论不变。 |
 | 1.24.2 | 2026-09-17 | M02 统一命名为 Model，架构比较结论与源码基线不变。 |

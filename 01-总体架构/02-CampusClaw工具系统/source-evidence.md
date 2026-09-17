@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.0.0；整理日期：2026-09-14。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `6026ba48`。旧提交差距不代表最新实现状态。
+版本：1.1.0；整理日期：2026-09-17。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `6026ba48`。旧提交差距不代表最新实现状态。
 
 | 基线 | 提交 |
 |---|---|
@@ -63,3 +63,30 @@ cwd/model/tool override、parallel/chain 参数不成为 CampusClaw 契约。源
 OpenCode `TaskTool` 仅用于对照父子消息隔离、进度和取消，不继承它的权限、Session
 持久化或工具注册模型。源码证据：
 [OpenCode Task](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/tool/task.ts)。
+
+
+<a id="tool-display-evidence"></a>
+
+## 3. 工具展示名称专项（2026-09-17）
+
+本节独立记录本次读取，不升级前两节的旧观察。设计起点 `dab7226`；Java 本地 `main` 固定快照 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`，不是最新远端声明。以下路径均相对 `pi-mono-java`，本次读取的文件与该提交一致。
+
+| 路径 / 符号 | 已观察行为与目标差距 |
+|---|---|
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java` · label；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java` · label | 框架有 label；Read 返回 Read。普通工具 label 映射为外部 displayName 尚未实现。 |
+| 同模块 `tool/mate/CallMateTool.java` · label / execute | 外层 label 为 Call Mate Tool；执行按 arguments.tool 解析内部 ID。目标改用具体业务元数据命名此调用，保留执行参数。 |
+| 同模块 `common/dto/ToolInfo.java` · displayName；`common/client/HttpMateToolClient.java` · toMeta；`common/client/mate/MateToolMeta.java` · record | 网关 display_name 已能进入 ToolInfo，但 toMeta 和 MateToolMeta 丢失该字段。 |
+| 同模块 `tool/mate/MateToolSessionCache.java` · CacheState / toNameIndex；`MateToolDiscovery.java` · resolveToolId | 当前索引仅 name-to-ID；目标让单次解析同时固定 ID 和可选展示名，执行与事件复用。 |
+| 同模块 `runtimeapi/runtime/RuntimeToolPermissionPolicy.java` · decide；`runtimeapi/event/RuntimeEventProjector.java` · persistFinalizedToolCall / persistToolCall | ALLOW/DENY 调用可在 Assistant 完整响应时先持久化，不能等 execute 或 tool_execution_start 再补名称；ASK 路径也须在首次调用事件前固定。权限决定仍独立。 |
+| 同模块 `runtimeapi/event/RuntimeCommittedEventFactory.java` · agentToolCall；`runtimeapi/dto/CommittedEventDTO.java` · payload；`runtimeapi/event/CommittedEventProjection.java` · projectToolCall；`runtimeapi/vo/SessionEventResponseVO.java` · AgentToolCallResponseVO | 现有 JSON payload 与共享投影可承载快照，当前 factory/VO/projection 均无 displayName；新增字段为 target-only。 |
+| `frontend/src/runtime/protocol.ts` · fields / only；`frontend/src/types/runtime.ts` · RuntimeEvent | 工具事件类型和字段白名单未含 displayName，需与服务端新增字段同步更新。 |
+
+pi 上游为 `https://github.com/badlogic/pi-mono.git`。2026-09-17 通过 `ls-remote --symref ... HEAD` 确认默认分支 `main`，在隔离 bare 仓库 fetch 后读取 `5a3a03a7f5db43692915d6ae45e6d96497ea248d`；这是当次默认分支源码快照，不声明为稳定发布。前次名称讨论使用 `42cd371ba49ac2cd398de6a37bb06542792cf613`，专题历史总基线 `5cd93f688aaab89dbb6dfa4aca535f21796ae185` 继续保留。仅复核以下路径，名称结论未变，未升级其他工具或压缩结论：
+
+- `packages/agent/src/types.ts` · AgentTool.label（405～407 行）、AgentEvent（460～462 行）：定义有供 UI 使用的 label，但 start/update/end 事件没有 label/displayName。
+- `packages/coding-agent/src/modes/interactive/interactive-mode.ts` · getRegisteredToolDefinition（2025 行）：按 toolName 取得定义与 renderer。
+- `packages/coding-agent/src/modes/interactive/components/tool-execution.ts` · createCallFallback（152 行）：通用回退显示技术 toolName，不能表述为 pi 自动把 label 放进事件或统一渲染 label。
+
+Claude Managed Agents 的[工具事件模型](https://platform.claude.com/docs/en/api/beta/sessions/events/list)与[事件流](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)于 2026-09-17 重新核对，仍为 Beta。公开 `agent.custom_tool_use` 提供 name/input，没有通用 displayName；文档不能证明 Console 的标题实现，不推断私有服务端或 UI。
+
+CampusClaw 选择在 Host 外部事件中固定展示名，是产品可读性约束和架构变更，不是照搬 pi/Claude 的既有字段。可选字段、快照存储、缺失元数据降级及公共授权投影是已确认目标，相关 Java/前端改动和端到端回归尚未执行；无新增依赖。主图分层与执行关系不变，本次只补元数据和事件字段。

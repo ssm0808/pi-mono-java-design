@@ -223,6 +223,11 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
     if event["type"] == "agent.tool_call":
         require(type(event.get("requiresConfirmation")) is bool, "confirmation flag is required")
         require(isinstance(event.get("toolName"), str) and bool(event["toolName"]), "toolName required")
+        require("label" not in event, "tool call must not duplicate displayName as label")
+        if "displayName" in event:
+            name = event["displayName"]
+            require(isinstance(name, str) and bool(name.strip()) and name == name.strip(),
+                    "displayName must be normalized nonempty text or omitted")
     contract = json.loads(COMMON_PATH.read_text())["eventContract"]
     if event["type"] == "agent.tool_result":
         require(event.get("errorCode") in contract["toolErrorCodes"] if event["isError"] else "errorCode" not in event,
@@ -811,6 +816,30 @@ def validate_review_pages(post: dict) -> None:
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
 
 
+def validate_display_name_regressions(post: dict) -> None:
+    calls = [event for events in complete_streams(post).values() for event in events
+             if event["type"] == "agent.tool_call"]
+    require(any(event["toolName"] != "CallMateTool" for event in calls), "include framework label examples")
+    require(any(event["toolName"] == "CallMateTool" for event in calls), "include business display names")
+    call = next(event for event in calls if event["toolName"] == "CallMateTool")
+    require(call.get("displayName") == "隔离园区端口", "business metadata example missing")
+    unnamed = {key: value for key, value in call.items() if key != "displayName"}
+    validate_frame(unnamed)
+    validate_frame(unnamed, history=True)
+    for value in (None, "", "  ", " 名称 ", 42, False, {}):
+        for history in (False, True):
+            try:
+                validate_frame({**unnamed, "displayName": value}, history=history)
+            except ValueError:
+                continue
+            raise ValueError("producer must omit invalid displayName; UI tolerance is a separate boundary")
+    try:
+        validate_frame({**call, "label": "duplicate"})
+    except ValueError:
+        return
+    raise ValueError("synonymous label must not be published")
+
+
 def validate_batch_field_regressions(post: dict, history: dict) -> int:
     streams = complete_streams(post)
     call = next(e for e in streams["200-confirming"] if e["type"] == "agent.tool_call")
@@ -1025,6 +1054,7 @@ def main() -> int:
         negative_count = validate_negative_regressions(model)
         validate_history_model(history, model)
         history_count = validate_history_regressions(history, model)
+        validate_display_name_regressions(model)
         batch_count = validate_batch_field_regressions(model, history)
         todo_count = validate_todo_regressions(model)
         plan_count = validate_plan_regressions(model)

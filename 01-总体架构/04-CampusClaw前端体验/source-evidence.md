@@ -2,7 +2,7 @@
 
 [返回前端主设计](README.md)
 
-版本：1.6.0；更新日期：2026-09-17。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§7](#mate-tool-display-evidence)，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
+版本：1.7.0；更新日期：2026-09-17。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§7](#mate-tool-display-evidence)，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
 
 | 证据 | 基线 |
 |---|---|
@@ -200,6 +200,6 @@ OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对�
 
 同时读取 `frontend/src/components/structuredActivity.test.ts`：已有结构 viewer 与结果文本块测试，未运行本次产品测试。标题优先 displayName 是[已确认目标](README.md#mate-tool-display)，元数据保留、调用名称快照、事件传递及前端消费尚未接通；不能表述为只改 UI 即可完成。
 
-本项是项目展示产品约束与数据传递扩展，不新增外部 Agent 基线比较结论；既有历史证据不升级。展示名快照和事件精确字段由 M03/M06 权威设计进一步落实，当前前端文档不是已发布契约。没有修改实现仓或验证部署页面，未新增依赖；现有前端类关系与 PlantUML 图源不变。
+工具名称专项已扩展为普通框架 label 和业务元数据统一映射 displayName；新增事件 factory、持久化投影与严格前端解码器证据，以及 pi/Claude 最新核对见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#tool-display-evidence)。M03/M06 和 Mate 公共精确契约已补齐此目标；传递和 UI 消费仍待实现。其他历史证据不升级。没有修改实现仓或验证部署页面，未新增依赖；现有前端类关系与 PlantUML 图源不变。
 
 验证（2026-09-17）：Markdown 无 Mermaid、PlantUML ASCII、SVG XML、图源与 SVG 引用及行锚点、新标题链接均通过检查；前端专题隔离执行 `plantuml -tsvg diagram.puml`，8 张生成 SVG 与在库文件逐字节一致。图源与生成图无变更，未重做视觉验收；`git diff --check` 通过，未运行产品测试。

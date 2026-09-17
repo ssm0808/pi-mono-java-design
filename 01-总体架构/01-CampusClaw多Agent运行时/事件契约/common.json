@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.55.0",
+    "version": "1.56.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -78,7 +78,7 @@
     }
   },
   "eventContract": {
-    "version": "2026-09-15.3",
+    "version": "2026-09-17.1",
     "semanticStatus": "confirmed",
     "detailStatus": "implementation-ready",
     "toolErrorCodes": {
@@ -230,6 +230,12 @@
           "toolCallId/toolName/arguments/requiresConfirmation",
           "全部必填",
           "toolCallId/toolName 非空字符串；arguments JSON 对象；requiresConfirmation 布尔值。CallMateTool 保留 tool/args，省略的 args 归一为 {}。模型参数不符合工具 Schema 时仍保留调用事件，由执行层返回失败结果；读取不以 tool/args 的业务格式拒绝整个 SSE 或历史。"
+        ],
+        [
+          "agent.tool_call",
+          "displayName",
+          "可选非空字符串",
+          "displayName 是本次调用的展示名称快照：普通工具来自 AgentTool.label()，CallMateTool 来自按本次工具身份解析的 Mate 元数据 displayName，不能用外层 label 覆盖业务名称。有效值为去除首尾空白的非空字符串；缺失、null、错误类型或仅空白按无值处理，服务端省略而不输出 null。首次调用事件提交前固定，确认、SSE 与历史共用。客户端缺失时普通工具回退 toolName，CallMateTool 回退 arguments.tool。展示名不是身份或权限依据，模型参数和工具结果不得提供或覆盖该值；事件不新增同义 label，工具结果及确认请求不重复名称。"
         ],
         [
           "agent.tool_result",

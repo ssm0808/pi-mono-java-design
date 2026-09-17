@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.11.0 |
+| 文档版本 | 0.12.0 |
 | 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，target-only |
-| 更新日期 | 2026-09-16 |
+| 更新日期 | 2026-09-17 |
 | 原文展示与消费修复 | 实现提交 `cad6847d901155cc6388989b984d19e302a4fbe3`，见 [Draft PR #287](https://github.com/superheromeZzh/pi-mono-java/pull/287)；合入前不作为实现仓主线行为 |
 | 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
@@ -80,6 +80,8 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 统一 Session POST 的模式真实变化追加 `session.mode_changed(reason=requested)`，与模型、思考变更同事务保存，顺序固定为模型 → 思考 → 模式；同值或仅改名不产生额外历史。该事件仅用于历史，不创建执行或 SSE。mode 取值、previous/current 及精确字段由共享事件源维护；名称、内部字段和凭据不进入配置历史。计划审核批准产生的 `reason=planApproved` 同样由共享事件源维护，sourceEventId 与 confirmationEventId 绑定原消息和批准回执，完整记录进入确认续跑段 SSE 与历史。
 
 模式事件是新增 target-only 架构变更；Java `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java` 尚无模式 Entry 工厂。统一写入的事务、源码路径与验收由 [Session 更新设计](chat-http-v1-design.md#24-模型目录与统一-session-更新)维护，历史查询沿用共享投影与分页骨架。
+
+历史读取调用事件中已保存的可选 displayName，不重新查询工具目录或按当前 label 取名。普通工具和 CallMateTool 的显示回退与首次快照统一见[调用名称快照](chat-events-design.md#tool-display-snapshot)；同一调用在 SSE、确认卡与历史中使用同一值。
 
 ### 2.0 既有事件的完整迁移清单
 
@@ -391,6 +393,7 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.12.0 | 2026-09-17 | 工具调用展示名复用已提交快照。 |
 | 0.11.0 | 2026-09-16 | Skill 使用统计独立于权威事件事务，失败不影响主执行。 |
 | 0.10.0 | 2026-09-15 | Skill 调用统计关联权威来源事务，不增加公共事件类型。 |
 | 0.9.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |
