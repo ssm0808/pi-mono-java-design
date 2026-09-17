@@ -405,3 +405,59 @@ Control polling cancels local execution; result polling fills waiting responses.
 Polling has separate budgets from business execution.
 endlegend
 @enduml
+
+@startuml target_decision_consumption_state
+' Source evidence: pi-mono-java 74f1b8314c9a5eb3d1659dfed2ab90b787dd647f.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/ToolConfirmationState.java
+' Existing symbols: PENDING, CLAIMED, COMPLETED.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java
+' Existing symbol: markTerminal, with Session/execution locking and terminal commit.
+' modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeExecutionControlMapper.xml
+' Existing symbols: claimConfirmation, claimPlanConfirmation, claimQuestionAnswer, markTerminal.
+' Observed behavior: terminal execution blocks new claims but leaves unclaimed decisions PENDING.
+' Target-only: CANCELED closes unclaimed decisions in the successful terminal transaction.
+' Design reason: preserve accepted user facts while making abandoned consumption explicit.
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam state {
+  BackgroundColor #F4F7FB
+  BorderColor #42576E
+  ArrowColor #42576E
+}
+title Accepted Decisions - Consumption State (target-only)
+top to bottom direction
+
+state PENDING
+state CLAIMED
+state COMPLETED
+state CANCELED #FCE8DD
+
+[*] --> PENDING : accepted decision committed
+PENDING --> CLAIMED : claim wins while execution is RUNNING\nand stop_event_id is NULL
+CLAIMED --> COMPLETED : acknowledge processing
+PENDING --> CANCELED : root execution enters TERMINAL\nin the same transaction
+COMPLETED --> [*]
+CANCELED --> [*]
+
+note left of PENDING
+  STOPPING alone keeps PENDING.
+  Rollback keeps the previous state.
+  A confirming segment is not a root terminal.
+end note
+
+note right of CANCELED
+  All three decision tables share this rule.
+  Match session_id + execution_id.
+  claimed_at remains NULL.
+  completed_at equals root terminal_at.
+  done / failed / terminated all close pending rows.
+end note
+
+legend bottom
+  Terminal handling never rewrites CLAIMED or COMPLETED.
+  Accepted user events and committed mode changes remain intact.
+  Internal consumption state adds no public HTTP field or event.
+endlegend
+@enduml

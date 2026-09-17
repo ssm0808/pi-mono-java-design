@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.12.0 |
+| 文档版本 | 0.13.0 |
 | 状态 | 五输入联合契约与 B01～B15 已确认；本文跨实例执行骨架为 target-only |
 | 源码范围 | Java c9d858bc、a8192e04、918005ee、dfb90cac 分项核验；pi 固定 5cd93f68，完整提交和符号见 [源码证据](source-evidence.md#5-session-events-固定源码核验) |
-| 更新日期 | 2026-09-15 |
+| 更新日期 | 2026-09-17 |
 
 结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 target-only，Session/元数据不增字段，Mate 公共投影独立集成。
 
@@ -281,6 +281,38 @@ B08/B09 已确认控制竞争和根消息关联，以下是落实语义所需的
 依赖链。轮询/响应对象有界、无原始凭据；具体表字段/唯一约束和批次周期由实施设计校准。
 不新增 Maven 依赖；使用现有数据库、JDK 并发与 Jackson 投影能力。
 
+### 4.6 已接受决定的消费终态
+
+本节统一维护工具确认、计划审核和问题答案的内部消费状态，适用于 `t_session_tool_confirmations`、`t_session_plan_confirmations`、`t_session_question_answers`。用户回执保存“决定已接受”的事实；消费状态表示原执行是否领取、处理或放弃该决定，两者分别维护。此项为已确认的架构变更，相对下述源码基线仍为 target-only，不新增公共 HTTP 字段、事件或 Session 状态。
+
+| 消费状态 | 含义 | claimed_at | completed_at |
+|---|---|---|---|
+| `PENDING` | 决定已接受，原执行尚未领取 | NULL | NULL |
+| `CLAIMED` | 原执行已取得决定 | 非空 | NULL |
+| `COMPLETED` | 已领取决定的处理已确认完成 | 非空 | 非空 |
+| `CANCELED` | 原执行已真正结束，此前未领取的决定不再消费 | NULL | 与根执行 `terminal_at` 相同 |
+
+![已接受决定的消费状态](设计图/事件接口重设计/target_decision_consumption_state.svg)
+
+[原尺寸 SVG](设计图/事件接口重设计/target_decision_consumption_state.svg) · [PlantUML 源码：`target_decision_consumption_state`](设计图/事件接口重设计/diagram.puml#L409)
+
+1. 成功接受决定时写入 `PENDING`；原执行按既有固定 Session、根执行、旧段、目标和停止条件领取，正常路径为 `PENDING → CLAIMED → COMPLETED`。领取与终态提交共用 Session、执行行锁顺序，竞争结果取决于先成功提交的一方。
+2. 根执行成功进入 `TERMINAL` 的同一事务内，将该 `session_id + execution_id` 下三类表的全部 `PENDING` 行改为 `CANCELED`。不依赖已被清空的等待指针，也不只处理当前段。`done/failed/terminated` 均执行收尾；确认等待的段结束不是真实根执行终态。
+3. `CANCELED` 保持 `claimed_at=NULL`，`completed_at` 使用与根执行 `terminal_at` 一致的归一化时间。`CLAIMED/COMPLETED` 保持原状态与时间，不把已经领取的处理伪装成未消费；后续正常 acknowledge 仍按既有规则完成已领取记录。
+4. 只接受停止请求或进入 `STOPPING` 时仍保持 `PENDING`；领取条件已阻止停止后的新消费。可靠终态落库失败时，决定收尾、执行终态和相关历史一起回滚；重复终态或旧目标冲突不能再次改写决定的完成时间。进程失联且未取得可靠退出事实时也不提前取消消费。
+5. `CANCELED` 不删除或改写用户确认、批准、反馈和答案事件，不撤销已提交的 Session mode 变更，不伪造工具结果；前端“已回答/已批准”仍根据已接受事件恢复。物理删除继续由 Session 删除后的清理任务处理，执行结束本身不删除历史；Session 未删除时保留带明确消费终态的记录。
+
+理由是“已接受但尚未领取”可能被根执行结束永久截断。单独保留 `PENDING` 虽不会突破领取条件，却要求每次查看记录都联查执行才能区分待处理和永不消费；增加 `CANCELED` 可直接表达该区别。代价是三表枚举、时间约束和终态事务增加更新，不需要新表、定时清扫或 Maven 依赖。首版继续交付完整安装 SQL；不在本项中新增历史升级、旧终态记录回填或自动接管能力。
+
+源码核验基线：`pi-mono-java@74f1b8314c9a5eb3d1659dfed2ab90b787dd647f`，核对日期 2026-09-17；仅更新消费状态专项，不把本页旧基线差距延伸到当前实现。以下路径相对实现仓根目录，R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`，S 为 `modules/coding-agent-cli/src/main/resources/`。
+
+| 源码 / 符号 | 已观察行为与本项目标差距 |
+|---|---|
+| R `session/ToolConfirmationState.java` | 仅 `PENDING/CLAIMED/COMPLETED`；目标增加 `CANCELED`，供三类决定共用 |
+| R `persistence/MyBatisRuntimeExecutionControlRepository.java` · `markTerminal` | 持有 Session/执行锁，追加终态、关联段并更新执行；目标在同一事务收尾三类未领取决定 |
+| S `mapper/session/RuntimeExecutionControlMapper.xml` · `claimConfirmation/claimPlanConfirmation/claimQuestionAnswer/markTerminal` | 领取要求决定为 PENDING、执行 RUNNING 且无 stop_event_id；终态只清执行指针，未更新决定行 |
+| S `db/gaussdb/install/session_schema.sql` · 三张决定表的 state/claim CHECK | 只允许现有三态；目标允许 CANCELED 且未领取时间为空、完成时间非空 |
+
 ## 5. 实施切片与验收
 
 | 切片 | 验收要求 |
@@ -291,6 +323,7 @@ B08/B09 已确认控制竞争和根消息关联，以下是落实语义所需的
 | 数据库中断 | 消息 A、中断 B；回执前极快结束、重复检查、旧代次信号、数据库故障、A 失联及自然完成竞争均保持固定目标和真实终态；两响应终态 eventId 相同，中断不复制输出 |
 | 等待登记 | 终态早于/并发/晚于登记补读均不漏；快路径仅提交后发生，通知丢失可轮询恢复；同目标只查一次，各回执和缓冲独立，慢连接及清理竞态不影响其他响应 |
 | 确认续跑 | 决定一次消费；固定段关联、重复/过期确认、停止竞争和跨实例完整事件读取；等待期间保留原凭据，实例丢失不自动重跑 |
+| 决定收尾 | 三类决定均验证接受后未领取与停止/超时竞争；STOPPING 仍 PENDING，真实 done/failed/terminated 同事务取消全部未领取记录；CLAIMED/COMPLETED 不变；时间与 terminal_at 一致；回滚、重复终态及旧目标不误改；用户事实保留，CANCELED 不再领取 |
 | 投影与恢复 | data-only 和完整历史同形；preview 丢弃由完整内容覆盖；断线不取消、不重发；分页、配置/压缩/Usage、存量历史及 Skill 按各所属专题验收 |
 | 容量与安全 | 100 业务名额满载仍可控制；按实际响应数与字节限额；慢取消不堵批次，轮询不挤满连接池；在真实 GaussDB 报告索引计划、成本与延迟，凭据不入记录/队列/响应 |
 
@@ -308,6 +341,7 @@ HTTP 路径使用 `/campusclaw-service/v1`。内部开发阶段编号不作为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.13.0 | 2026-09-17 | 根执行真实终态同事务将三类未领取决定标记为 CANCELED，并保留已接受用户事实。 |
 | 0.12.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |
 | 0.11.0 | 2026-09-15 | 计划审核纳入五输入分派，复用固定续跑段与有序追加边界。 |
 | 0.10.0 | 2026-09-14 | 按接受、有序追加与跨实例控制收敛主文，分离源码证据并合并重复验收。 |
