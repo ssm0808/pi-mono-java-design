@@ -1,12 +1,12 @@
 # 计划模式源码证据与实现差距
 
-版本：2.0.1；核对日期：2026-09-17。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：2.1.0；核对日期：2026-09-17。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
 提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 target-only 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
 
 当前 Build/Plan 与提问展示的静态核验绑定 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，具体已实现行为、新目标与基线区别由[§9](#9-buildplan-与逐题交互核验)维护。下方历史接入表继续保留各自固定提交范围，不能据其 target-only 标记判断 1d08f98e 尚无模式、审核、TODO 或结构化提问。
 
-当前模式提示词以 [§10 最新上游核验](#10-两份模式提示词的最新上游核验)为依据；§1～§9 保留各自历史提交和核验范围，不代表最新上游或当前 Java 的完整实现状态。
+业务 Agent 模式文件覆盖与当前 Java 发布差距见 [§11](#11-业务-agent-模式提示词覆盖)。当前模式提示词以 [§10 最新上游核验](#10-两份模式提示词的最新上游核验)为依据；§1～§9 保留各自历史提交和核验范围，不代表最新上游或当前 Java 的完整实现状态。
 
 ## 1. 固定提交
 
@@ -240,11 +240,11 @@ Java 本次静态读取本地 `pi-mono-java@0b81c168d816aed7864cc9fbb9caa0771407
 
 | 仓库相对路径 / 符号 | 已观察实现 | target-only 调整 |
 |---|---|---|
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/PlanPolicyPromptComposer.java` · compose、planPrompt | 仍读取 PLAN_COMMON、PLAN_ROOT_REVIEW、PLAN_CHILD、BUILD_ROOT、EXECUTION_TODOS、ASK_USER 六份 .txt，按入口、模式与工具名选择段落。 | 仅加载 PLAN.md / BUILD.md；`compose(base, mode, entryPoint)` 选择完整文件并增加确定的一行角色说明；不按工具清单拼接提问或 TODO 段。ExitPlanMode 可用性仍由独立校验保持。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/PlanPolicyPromptComposer.java` · compose、planPrompt | 仍读取 PLAN_COMMON、PLAN_ROOT_REVIEW、PLAN_CHILD、BUILD_ROOT、EXECUTION_TODOS、ASK_USER 六份 .txt，按入口、模式与工具名选择段落。 | 仅加载 PLAN.md / BUILD.md；当前 `compose(prompts, mode, entryPoint)` 消费 §11 的业务/预制文本快照并增加确定的一行角色说明；不按工具清单拼接提问或 TODO 段。ExitPlanMode 可用性仍由独立校验保持。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java` · create、configureAgent、applyPrompt | 工具装配后加载基础 SYSTEM，使用 Composer 并保留执行基础快照。 | 保留此接入及批准后从原始 BASE 重组的顺序，不叠加旧模式文本，不改变 Tool/Skill 元数据。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java` · load | 读取受管 SYSTEM.md 和 Skill 提示，SYSTEM.md 可以缺省；不自动提供本次所需的通用执行规范。 | 经现有受管 Agent 发布机制落实 [BASE 通用规则](plan-policy.md#2-基础-system-的通用行为)，是两文件迁移验收的一部分；不新增第三份内置 BASE 资源，也不宣称现有 loader 已补齐这些规则。 |
 
-当前有效模型正文见 [PLAN.md](PLAN.md)、[BUILD.md](BUILD.md)，部署组合与 P01～P15 验收见 [plan-policy.md](plan-policy.md)。本仓此次只修改设计与目标提示词资产；Java 资源替换、受管 SYSTEM 发布及实际模型评估均需实施仓完成。
+当前有效模型正文见 [PLAN.md](PLAN.md)、[BUILD.md](BUILD.md)，部署组合与 P01～P21 验收见 [plan-policy.md](plan-policy.md)。本仓此次只修改设计与目标提示词资产；Java 资源替换、受管 SYSTEM 发布及实际模型评估均需实施仓完成。
 
 
 ### 10.4 模型角色名称
@@ -259,3 +259,41 @@ Java 本次静态读取本地 `pi-mono-java@0b81c168d816aed7864cc9fbb9caa0771407
 | pi `packages/coding-agent/examples/extensions/subagent/agents/worker.md:3,20` | 示例角色说明使用 subagent，返回说明使用 main agent；这是扩展示例，不是内核固定角色协议。 |
 
 CampusClaw 采用 `Main Agent` / `Subagent` 作为模型可见角色名称，与 pi 示例的用词一致；这是产品表述选择，不改变架构和权限。Runtime/Child 入口名、根执行和父子关系继续表达技术归属；Subagent 的“父 Agent”仍指直接委派者。角色由 Runtime 固定注入，具体正文与映射由 [PLAN.md](PLAN.md) 和[提示词组织](plan-policy.md#1-职责与装配)维护。
+
+
+## 11. 业务 Agent 模式提示词覆盖
+
+2026-09-17 本次设计前再次查询上游默认分支并 fetch：Codex main `b0659c53865dd48b0cd69c454368cea3980017cc`、OpenCode dev `88c6c7abc7f320b6aabed2634ac0b2d6e6ecea67`、DeepSeek master `0d1f50007f9bca3f52b06e1c3074fa14d5fb0720`、pi main `e4c75a73222ae2c72abb5f5314fa35ee8effc508`。相对 §10.1 提交未变化，本节扩大读取范围以核验自定义/回退机制；最新默认分支不等于稳定版，DeepSeek 仍为 `0.1.6-alpha.1`，OpenCode 实验规划路径保留 experimental 边界。
+
+### 11.1 基线覆盖机制与区别
+
+| 基线、仓库相对路径与符号 | 已观察实现 | 与本次目标的关系 |
+|---|---|---|
+| pi `packages/coding-agent/src/core/resource-loader.ts:1023` · discoverSystemPromptFile；526～530 行；`packages/coding-agent/src/core/system-prompt.ts:121` · buildSystemPromptSections | 没有显式 systemPromptSource 时，先找可信项目 `.pi/SYSTEM.md`，再找全局 Agent 目录 SYSTEM.md；都没有则返回 undefined。自定义正文用于 preamble 分支，否则生成内置基础内容；APPEND_SYSTEM.md 是另一条追加来源。 | 参考“业务文件优先，缺失回退”的思想。它覆盖基础 SYSTEM，并非原生发现 PLAN.md/BUILD.md；不把它的追加机制混入完整替换规则。 |
+| DeepSeek `packages/plan/plan-mode/src/index.ts:100` · resolveConfig；212～218 行 · plan:policy；`packages/preset/agent-presets/presets/standard/agent.cordis.yml:114` · config.section | 插件要求部署提供非空 section，标准 preset 给出规划政策；规划开启时注入该段，关闭时返回空字符串。插件自身没有目录同名文件回退规则。 | 直接支持“部署可自定义规划政策”的职责分离；CampusClaw 选择业务 Agent 本地文件和内置默认值，不引入 Cordis 配置体系。 |
+| OpenCode `packages/opencode/src/config/agent.ts:11` · load；`config/variable.ts:34` · substitute；`agent/agent.ts:283` · prompt 合并；`session/llm/request.ts:56` · prepare；上述路径相对 packages/opencode/src | Agent Markdown 正文作为 prompt，也支持配置 `{file:...}` 引用；同名 Agent 可合并自定义 prompt；模型请求优先 agent.prompt，否则使用 Provider 基础模板，之后仍加入其他 system 内容。 | 说明 Agent 级自定义提示词是已有模式，但覆盖的是 Agent 基础 prompt。`session/reminders.ts` 仍单独注入内置 plan/build-switch 提醒；不能声称自定义 plan Agent prompt 就完整替换它们。 |
+| Codex `codex-rs/protocol/src/openai_models.rs:624` · CollaborationModeMessages；`codex-rs/prompts/src/model_messages/collaboration.rs` · ResolvedCollaborationModeMessages::new；`codex-rs/core/src/context/world_state/collaboration_mode.rs:24` · from_collaboration_mode | 模型目录可提供独立 default/plan 文本；解析器有 bundled 默认，运行时优先目录覆盖，再选 mode.settings.developer_instructions。 | 有模式文本可替换的源码机制，入口是目录/调用配置，未在此路径发现业务目录 PLAN.md/BUILD.md 自动发现约定。不能把全部指令来源简化成同名文件优先。 |
+| Codex `codex-rs/core/src/config/mod.rs:3889` · model_instructions_file 读取 | 支持从指定文件提供基础指令，作为 base_instructions 的一类来源。 | 属于基础指令覆盖，不等于仅替换 Plan/Default 模板。 |
+
+以上是源码事实，不推断托管产品内部提示词。CampusClaw 的精确文件名、逐文件回退和作用目录是本产品选择；类似机制支持该扩展的合理性，但没有据此宣称四个基线具有完全相同的文件协议。
+
+### 11.2 Java 当前装配与发布差距
+
+本次读取本地干净源码 `pi-mono-java@21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`，不是远端最新声明。相对前次 `0b81c168d816aed7864cc9fbb9caa0771407e880`，以下范围只有 AgentSessionFactory 增加 prepare 返回空值校验；其他所列文件无变化。未运行实现或模型测试。
+
+以下 Java 路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 路径 / 符号 | 已观察行为 | target-only 调整 |
+|---|---|---|
+| `runtimeapi/agent/RuntimeAgentPromptLoader.java` · load、readOptionalFile、safeRealPath、requireManagedSize | 仅 SYSTEM.md 与 Skill 摘要；受管目录内真实路径、普通文件、无链接与大小检查。 | 复用安全读取；新增两可选模式文件的独立选择、空白/编码错误失败与不可变 AgentPromptSnapshotDTO；默认资源由 Loader 启动时固定。 |
+| `session/PlanPolicyPromptComposer.java` · compose、load | 全局六份固定资源，无按 Agent 路径读取。 | 纯 `compose(prompts, mode, entryPoint)`，不持有 Agent 可变状态；业务选择已由 Loader 完成。 |
+| `session/AgentSessionFactory.java` · create、applyPrompt | prepare 返回后另从 `.campusclaw` 读取 BASE；工厂调用 Composer。 | PreparedAgentRuntime 带提示词快照，工厂与执行直接使用，不再通过可变目录路径重读。 |
+| `runtime/PreparedAgentRuntime.java` · record | 仅 agentId、agentRoot、metadata、skills，未携带模式正文。 | 增加不可变 prompts 快照，执行内共享；不暴露到公共 VO。 |
+| `runtime/AgentRuntimeManager.java` · prepare、refresh、withAgentLock、loadSnapshot | prepare 缓存命中在锁外读取；刷新/重建在每 Agent 的 ReentrantLock 内。 | 包括缓存命中在内，同锁读取完整 PreparedAgentRuntime 与提示词快照，使发布和读取不交错；不是分布式锁。 |
+| 同文件 · rebuild、writeRuntimeTree、publish、containsForbiddenEntry | staging 只生成 agent/settings/SYSTEM/绑定 Agent/Skill 文件，整目录替换并清理备份；额外合法普通文件可存在，但 refresh 不保留它们。 | 明确保留当前 PLAN.md/BUILD.md 两可选文件到 staging，统一校验发布；缺失不创建，非法文件报错，不通过“缓存不完整 → 重建”擦掉错误覆盖。 |
+
+受管文本上限沿用 `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java` · Skill.MAX_FILE_BYTES（1 MiB）。不新增 Maven 依赖、Agent 元数据字段、公共 API 或数据库字段。仅新增内部 DTO 与装配/刷新行为；部署方负责文件分发，现有 Mate Runtime 响应没有这两份提示词字段。
+
+### 11.3 决策与验收
+
+业务文件独立完整替换、仅缺失回退、当前执行固定快照、Subagent 使用自身目录、refresh 保留可选文件是**架构扩展**；角色与正式审核仍为**产品约束**；复用受管路径限制且对无效覆盖失败，是**安全加固/配置可靠性约束**。收益是业务可定制工作方式而不改预制资源；代价是发布与读取需保持一致，自定义正文承担自身行为评估。规则由 [plan-policy.md §1](plan-policy.md#11-业务文件优先与独立回退)维护，实施必须覆盖 P16～P21，不能以文件能够读取替代生命周期和刷新验证。

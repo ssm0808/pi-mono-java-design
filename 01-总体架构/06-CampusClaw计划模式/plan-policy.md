@@ -1,10 +1,10 @@
 # CampusClaw 模式提示词组织
 
-版本：2.0.1；日期：2026-09-17。状态：已确认目标，资源迁移为 target-only；Java `0b81c168` 的 Composer 仍加载六份 TXT。最新上游核验与旧新差异见[源码证据 §10](source-evidence.md#10-两份模式提示词的最新上游核验)。
+版本：2.1.0；日期：2026-09-17。状态：已确认目标，资源迁移为 target-only；Java `21c3f59b` 的 Composer 仍加载六份 TXT，业务模式文件覆盖尚未实现。最新上游核验与旧新差异见[源码证据 §10](source-evidence.md#10-两份模式提示词的最新上游核验)。
 
 ## 1. 职责与装配
 
-模式资源仅保留 [PLAN.md](PLAN.md) 与 [BUILD.md](BUILD.md)，两文件是模型可见模式正文的唯一维护源；本页维护装配、规则归属和验收，不复制正文。实现时原样打包到 `modules/coding-agent-cli/src/main/resources/prompts/plan/PLAN.md`、`BUILD.md`，删除六份旧资源及其加载分支。Markdown 直接作为 UTF-8 文本读取，不解析章节、替换模板变量或引入 Prompt Registry。
+模式资源仅保留 [PLAN.md](PLAN.md) 与 [BUILD.md](BUILD.md)，两文件维护内置默认正文，业务 Agent 可通过自己的 `.campusclaw` 同名文件完整替换对应模式正文；本页维护装配、规则归属和验收，不复制正文。实现时原样打包到 `modules/coding-agent-cli/src/main/resources/prompts/plan/PLAN.md`、`BUILD.md`，删除六份旧资源及其加载分支。Markdown 直接作为 UTF-8 文本读取，不解析章节、替换模板变量或引入 Prompt Registry。
 
 | 载体 | 唯一职责 |
 |---|---|
@@ -14,7 +14,7 @@
 | 工具 description / Schema | 工具调用时机、参数及结果使用；TodoUpdate 状态维护、AskUserQuestion 提交与等待；可机械校验的值规则交给 Schema/代码 |
 | Runtime 状态与事务 | 当前模式、正式批准、调用身份、等待和恢复；不从模型文字推断 |
 
-PlanPolicyPromptComposer 只选择模式文件并加上由入口枚举生成的一行角色说明。`compose(base, mode, entryPoint)` 不再按 AskUserQuestion/TodoUpdate 是否存在裁剪正文；`planModeAvailable(toolNames)` 继续独立校验 ExitPlanMode 是否装配。实际工具列表仍是可调用能力的来源，文件提到工具名称不等于工具已提供。
+RuntimeAgentPromptLoader 先解析业务文件或预制文件，形成不可变 `AgentPromptSnapshotDTO`；PlanPolicyPromptComposer 只消费此快照并加上由入口枚举生成的一行角色说明。`compose(prompts, mode, entryPoint)` 不再按 AskUserQuestion/TodoUpdate 是否存在裁剪正文；`planModeAvailable(toolNames)` 继续独立校验 ExitPlanMode 是否装配。实际工具列表仍是可调用能力的来源，文件提到工具名称不等于工具已提供。
 
 | 执行场景 | 最终 SYSTEM |
 |---|---|
@@ -27,9 +27,38 @@ PlanPolicyPromptComposer 只选择模式文件并加上由入口枚举生成的�
 
 角色说明是 Runtime 固定文本，不接受用户、工具结果或 Skill 提供的角色值；不是第三份模式资源。PLAN.md 中 Main Agent / Subagent 小节明确适用范围，整份加载，不按标题截取；Child profile 继续不装配交互工具，角色文字不替代工具端口校验。代价是 Subagent 能看到标明仅 Main Agent 适用的流程，须通过角色场景评估验证遵循情况。
 
-每个执行保留不可变基础 SYSTEM，始终从 BASE 重组完整文本，重复 apply 不累加；不从上一次 SYSTEM 删除字符串。启动时检查两份资源存在且非空，部署覆盖须完整替换这两份，进程内内容固定。模式值继续为 plan/build；消息接受事务的模式快照先提交、再应用、再启动模型，不能使用 prepare 预读值。
+矩阵中的 BASE、PLAN.md、BUILD.md 均来自同一次准备的提示词快照。每个执行始终从该快照重组完整文本，重复 apply 不累加；不从上一次 SYSTEM 删除字符串。启动时检查两份内置资源存在且非空，其进程内内容固定；业务覆盖按下述规则解析。模式值继续为 plan/build；消息接受事务的模式快照先提交、再应用、再启动模型，不能使用 prepare 预读值。
 
-批准后原执行在 ExitPlanMode 返回前，用 BASE + Main Agent 角色 + BUILD.md 替换规划组合；修订继续使用 PLAN.md。Child 在调用时复制父模式并使用自己的 BASE，已创建 Child 不被异步改写；压缩不重复追加模式文本，也不从摘要推断批准。工具名称、描述、Schema 和顺序跨模式保持一致，Plan 不提供强制无副作用保证。
+批准后原执行在 ExitPlanMode 返回前，用 BASE + Main Agent 角色 + BUILD.md 替换规划组合；修订继续使用 PLAN.md。Child 在调用时复制父模式，并从被调用业务 Agent 的目录获取自己的 BASE 和模式文件，已创建 Child 不被异步改写；压缩不重复追加模式文本，也不从摘要推断批准。工具名称、描述、Schema 和顺序跨模式保持一致，Plan 不提供强制无副作用保证。
+
+### 1.1 业务文件优先与独立回退
+
+只查找已解析业务 Agent 目录下的两个精确文件名，不搜索工作目录、上级目录、用户 home 或父 Agent 目录：
+
+| 模式 | 优先来源 | 文件不存在时 |
+|---|---|---|
+| plan | `<agentRoot>/.campusclaw/PLAN.md` | classpath `prompts/plan/PLAN.md` |
+| build | `<agentRoot>/.campusclaw/BUILD.md` | classpath `prompts/plan/BUILD.md` |
+
+两份文件分别选择，允许只覆盖其中一份。业务文件替换整个对应模式正文，不追加预制正文、不合并 Markdown 小节；基础 SYSTEM、Runtime 固定角色和工具 description 继续独立装配。BUILD 文件存在不会改变 Child build/Cron 不追加模式段的既有矩阵。Subagent 读取被调用业务 Agent 的文件，不继承父 Agent 的覆盖文本。
+
+只有确认文件不存在才回退。存在但为空白、不是普通文件、是符号链接、超出受管真实目录、不是有效 UTF-8、超过既有受管文本上限 1 MiB 或读取失败，均使本次 Agent 准备失败；不能用“空文件”表示关闭模式指令，也不能把错误悄悄改为预制内容。复用 RuntimeAgentPromptLoader 的目录真实性、大小和失败映射，新增文件使用严格 UTF-8 解码；权限/IO 错误不得通过 `Files.exists=false` 冒充不存在。内置资源错误使服务启动失败，业务文件错误沿用 Agent 不可用路径，不新增公共错误码。
+
+文件内容由可信业务部署方维护，Agent 工具继续只读受管目录。替换范围是提示词正文，不是权限、正式批准或 Tool/Skill 定义；不改变服务端准入和事务。业务方负责保留适合自身场景的规划/审核及 Subagent 行为，使用自定义正文须重新做模型场景评估；完整替换后不能宣称预制文案仍被强制注入。
+
+### 1.2 快照、刷新与生效时机
+
+`RuntimeAgentPromptLoader.loadSnapshot(directory)` 返回 `AgentPromptSnapshotDTO(basePrompt, planPrompt, buildPrompt, planSource, buildSource)`；其中来源字段只标识 `AGENT_FILE` / `BUILTIN`，用于内部诊断；日志不记录完整正文，也不增加公共 Session 字段。`PreparedAgentRuntime` 携带此不可变快照，工厂与 SessionPlanContext 共享它。Loader 持有启动时校验的两份预制文本；Composer 不读文件、不按 Agent 缓存可变文本，也不依赖 Loader。
+
+AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建、提示词读取和 PreparedAgentRuntime 返回；缓存命中的 prepare 也经过此边界。刷新发布与快照读取不能交错，避免 SYSTEM 来自旧目录而 BUILD 来自新目录。该锁是实例内边界；部署不得让多个进程并发修改同一受管目录，跨实例文件一致性由业务发布保证，不把本地锁表述为分布式锁。
+
+每次新执行准备时读取当时文件；后续模型轮次、压缩、问题回答、审核修订与批准续跑都复用本执行快照。批准后使用预先选定的 buildPrompt，不重新读盘；活动执行不因修改、删除或刷新文件改变规则。新 Subagent 以自己的准备时点获取快照，只有模式从父执行复制。这里不增加跨进程接管承诺。
+
+业务部署可独立增删这两份可选文件；修改须在停止目录写入竞争的部署窗口内完成，或通过同一目录锁的受管发布路径完成，不支持执行工具在线改写。删除某一文件表示后续新执行回退该模式预制正文。首版不增加 Mate Agent 元数据字段或上传 API，文件分发属于部署职责。
+
+当前 `AgentRuntimeManager.refresh` 重建并替换整个 `.campusclaw`，不会自动保留额外模式文件。目标是在既有同 Agent 锁内读取并校验旧目录的这两个可选文件，将存在者复制到 staging，再与新 SYSTEM/配置一起校验和发布；该保留规则覆盖 refresh 和缓存不完整触发的 rebuild，包括首次只预置了模式文件的目录。只保留这两个明确文件，不任意复制整个旧目录。没有旧文件就保持缺失，删除后不会从备份恢复；读取或发布失败保留旧目录并报错。业务需要更新覆盖时以其新发布文件为准，普通 Mate 刷新保留当前覆盖，不能意外擦除业务配置。
+
+这属于架构扩展：沿用受管目录和现有发布锁，新增执行级文本快照与明确的可选文件保留规则；不引入模板引擎、监听器、Prompt Registry 或新依赖。代价是每次准备读取两份小文本，快照保留到执行结束；细粒度热更新和远端提示词管理不在本次范围。
 
 ## 2. 基础 SYSTEM 的通用行为
 
@@ -57,7 +86,7 @@ PlanPolicyPromptComposer 只选择模式文件并加上由入口枚举生成的�
 
 采用 Codex 的独立模式文件、短 Default 指令风格，结合 DeepSeek 的集中规划政策及工具自带进度说明。OpenCode 的基础 Prompt 加模式提醒说明通用执行要求无需再复制进 Build；pi 最新结构化 Prompt 和工具贡献规则仅作职责归属对照，不迁入其分段补丁机制。
 
-这是提示词组织的架构调整，不是删去必要验证或改变审核协议。中文正文按 CampusClaw 工具与业务边界自行编写；保留“基础行为—模式差异—工具契约”的职责，避免同一 TODO 规则在三处重复。文件少不等于模型 token 必然更少，也不代表遵循率已经提高。完整 commit、路径、符号和更新范围由[最新证据](source-evidence.md#10-两份模式提示词的最新上游核验)维护；其他模块历史基线不自动升级。
+这是提示词组织的架构调整，不是删去必要验证或改变审核协议。中文正文按 CampusClaw 工具与业务边界自行编写；保留“基础行为—模式差异—工具契约”的职责，避免同一 TODO 规则在三处重复。文件少不等于模型 token 必然更少，也不代表遵循率已经提高。业务覆盖参考 pi 的文件优先级、DeepSeek 的部署政策和 Codex 的模式文本覆盖；OpenCode 的 Agent prompt 覆盖不等同于替换模式提醒。精确差异见[覆盖证据 §11](source-evidence.md#11-业务-agent-模式提示词覆盖)。完整 commit、路径、符号和更新范围由[最新证据](source-evidence.md#10-两份模式提示词的最新上游核验)维护；其他模块历史基线不自动升级。
 
 ## 6. 工具规则的归属
 
@@ -102,7 +131,13 @@ Submit the complete proposed plan for user review while the Main Agent is in pla
 | P12 | 清单完成、范围变化、任务失败 | 最终答复仍报告真实结果；范围扩展不靠 TODO 或普通答案获得批准 |
 | P13 | 压缩与下一条普通消息 | 模式权威不来自摘要；新根按工具描述重新建立所需清单，审核续跑保持原根 |
 | P14 | 多题、关联后续题、工具 JSON | 独立问题才合并；依赖前一答案则分批；最终答复不粘贴原始 JSON |
-| P15 | 基础 SYSTEM 与发布覆盖 | 受管 Agent SYSTEM 含 §2 通用行为；两模式、缺工具和 Subagent 下无指令真空；两份资源缺失/空白启动失败 |
+| P15 | 基础 SYSTEM 与发布覆盖 | 受管 Agent SYSTEM 含 §2 通用行为；两模式、缺工具和 Subagent 下无指令真空；内置资源缺失/空白启动失败，业务文件缺失按 §1.1 回退 |
+| P16 | 两业务文件皆无 / 仅 PLAN / 仅 BUILD / 两者都有 | 逐文件精确选择业务或内置正文；自定义与内置不拼接；BASE、角色和工具描述保留 |
+| P17 | 空白、目录、链接、越界、非法 UTF-8、超限、无权限和 IO 错误 | 准备失败且无模型调用；仅不存在回退，失败不重建擦掉错误文件或误报默认生效 |
+| P18 | 首轮后覆盖文件变更/删除，批准续跑与压缩 | 当前执行始终使用原快照；下一新执行读新文件或默认值；批准不重新读盘 |
+| P19 | 两个业务 Agent、父子 Agent、自定义 BUILD 与 Cron | 无跨 Agent 串用；子读取自身文件，保留模式继承和入口适用矩阵 |
+| P20 | prepare 缓存命中与 refresh 竞争 | 同一目录锁内获取一致快照；不会组合新旧目录文本；读取不进入 Session 数据库锁 |
+| P21 | refresh、覆盖文件删除、staging 校验失败/发布失败 | 普通刷新保留两份合法可选文件，删除不复活；失败保留旧目录与活动执行快照 |
 
 迁移验收同时覆盖 Composer、基础 SYSTEM 发布、工具 description 与模型请求；不能只改文件名或只对比资源数量。无 Maven 新依赖，不修改公共 Schema、数据库结构、审核/提问事务及企业桥接边界。
 
@@ -110,6 +145,7 @@ Submit the complete proposed plan for user review while the Main Agent is in pla
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.0 | 2026-09-17 | 支持业务 Agent 同名模式文件独立覆盖、缺失回退、执行快照及刷新保留。 |
 | 2.0.1 | 2026-09-17 | 模型角色统一为 Main Agent/Subagent，同步注入文本、基础指令和审核工具描述。 |
 | 2.0.0 | 2026-09-17 | 模式资源收敛为 PLAN.md 与 BUILD.md，通用行为归基础 SYSTEM，进度细则归工具描述。 |
 | 1.5.0 | 2026-09-16 | 澄清优先一题且仅在必要时提问，工具结果用于续跑并保持用户答复简洁。 |

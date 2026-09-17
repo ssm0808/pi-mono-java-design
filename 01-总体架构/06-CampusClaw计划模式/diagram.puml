@@ -11,7 +11,7 @@ skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
-' Prompt scope: Java 0b81c168d816aed7864cc9fbb9caa0771407e880; modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/PlanPolicyPromptComposer.java :: compose.
+' Prompt scope: Java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7; modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/PlanPolicyPromptComposer.java :: compose.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java :: create, configureAgent.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: beginToolConfirmation, claimAndResumeToolConfirmation.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java :: markToolConfirming, acceptToolConfirmation.
@@ -43,6 +43,10 @@ hide empty members
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeControlEventService.java :: acceptPlanConfirmation, accept.
 ' Observed behavior: separate permission and plan futures; no AskUserQuestion tool.
 ' Design reason: share one interaction slot and immutable parsed question snapshot; preserve separate business decisions.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java :: load, readOptionalFile.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare, rebuild, writeRuntimeTree, publish.
+' Java divergence: optional mode files, refresh preservation and immutable prompt snapshots are target-only.
+' Design reason: resolve files under the publication lock once; approval reuses the original snapshot.
 title CampusClaw Plan and User Interaction - Complete Target Class View
 allowmixing
 
@@ -85,8 +89,8 @@ package "Application and assembly" as Application {
   }
   class "QuestionRequestParser" as QuestionParser <<target-only>> #EAF2FF
   class "AgentSessionFactory" as Factory <<extended>> #FFF7DD
-  class "PlanPolicyPromptComposer\nPLAN.md / BUILD.md" as Composer <<extended>> #FFF7DD {
-    +compose(base, mode, entryPoint): String
+  class "PlanPolicyPromptComposer" as Composer <<extended>> #FFF7DD {
+    +compose(prompts, mode, entryPoint): String
   }
 }
 
@@ -94,6 +98,15 @@ package "Agent definition and published configuration" as AgentConfig {
   interface "AgentDirectoryResolver" as AgentResolver <<existing>> #ECFDF5
   class "FileAgentDirectory\nResolver" as FileResolver <<extended>> #FFF7DD
   class "AgentRuntimeManager" as RuntimeManager <<extended>> #FFF7DD
+  class "RuntimeAgentPromptLoader" as PromptLoader <<extended>> #FFF7DD {
+    +loadSnapshot(directory): AgentPromptSnapshotDTO
+  }
+  class "PreparedAgentRuntime" as PreparedRuntime <<extended>> #FFF7DD
+note bottom of PromptLoader
+  Agent PLAN.md / BUILD.md override each default.
+  Only missing files fall back; invalid files fail.
+  Read under the same Agent lock as publication.
+end note
   class "AgentDirectory\nSnapshotDTO" as AgentSnapshot <<extended>> #FFF7DD {
     mode: String [target-only]
     existing model and path fields
@@ -115,10 +128,14 @@ package "Execution ownership" as ExecutionScope {
   }
   class "ManagedAgentSession" as Session <<extended>> #FFF7DD
   class "SessionPlanContext" as PlanContext <<target-only>> #EAF2FF {
-    basePrompt: immutable String
+    prompts: immutable AgentPromptSnapshotDTO
     toolNames: immutable assembled snapshot
     mode: committed snapshot
     +applyCommittedMode(snapshotDTO)
+  }
+  class "AgentPromptSnapshotDTO" as PromptSnapshot <<target-only>> #EAF2FF {
+    immutable basePrompt, planPrompt, buildPrompt
+    immutable planSource, buildSource
   }
   class "RuntimePlanReviewAdapter" as ReviewAdapter <<target-only>> #EAF2FF
   class "RuntimeUserQuestionAdapter" as QuestionAdapter <<target-only>> #EAF2FF
@@ -195,6 +212,14 @@ CreateService --> AgentResolver
 AgentResolver <|.. FileResolver
 FileResolver --> RuntimeManager
 RuntimeManager --> AgentSource
+RuntimeManager -[#2563EB]-> PromptLoader
+PromptLoader --> AgentSource : managed files
+RuntimeManager -[#2563EB]-> PreparedRuntime
+PreparedRuntime *-[#2563EB,norank]- "1" PromptSnapshot
+Factory --> RuntimeManager
+Factory -[#2563EB]-> PreparedRuntime
+PlanContext o-[#2563EB,norank]- "1" PromptSnapshot
+Composer -[#2563EB,norank]-> PromptSnapshot : pure input
 FileResolver -[#2563EB]-> AgentSnapshot
 CreateService -[#2563EB]-> AgentSnapshot
 CreateService -[#2563EB,norank]-> SessionRepo
@@ -354,7 +379,7 @@ Dispatcher -> DB : Claim decision for fixed target
 DB --> Dispatcher : Committed decision, once
 Dispatcher -> Agent : Bind new segment output; complete pending Future
 alt Approved
-  Agent -> Agent : Recompose base + Main Agent role + BUILD.md
+  Agent -> Agent : Recompose captured BASE + Main Agent role + BUILD
   Agent -> Service : Persist ExitPlanMode result approved=true
   Agent -> Agent : Next step: TODOs and implementation
 else Revision requested
@@ -541,7 +566,7 @@ autonumber
 ' Claude managed-agents/tools and events-and-streaming checked 2026-09-14 (beta).
 ' Observed behavior: generic tool results are committed before stream output at batch end.
 ' Design reason: separate plan review from build progress and reuse existing public tool events.
-' Java divergence: two mode resources and base-policy migration are target-only; see source-evidence.md section 10.
+' Java divergence: per-Agent mode overrides and execution snapshots are target-only; see source-evidence.md section 11.
 title CampusClaw Plan Mode - Complete Target Interaction
 actor User
 participant "Client" as UI
@@ -569,9 +594,9 @@ end
 group 2. Research and clarify
   User -> UI : Describe the work
   UI -> API : POST Events: user.message
-  API -> Runtime : Prepare base prompt and stable tool profile
+  API -> Runtime : Prepare prompt snapshot (Agent files or defaults) and stable tools
   API -> DB : Accept root execution with current mode snapshot
-  API -> Runtime : Apply base + Main Agent role + PLAN.md before start
+  API -> Runtime : Apply captured BASE + Main Agent role + PLAN before start
   API --> UI : First SSE frame: committed user.message
   API -> Runtime : Start the accepted execution
   loop Inspect facts and develop proposal
@@ -620,7 +645,7 @@ group 3. Review the complete proposal
   Approval transaction also commits mode=build and
   mode event.
       end note
-      Runtime -> Runtime : Recompose base + Main Agent role + BUILD.md
+      Runtime -> Runtime : Recompose captured BASE + Main Agent role + BUILD
       Runtime --> Tools : Resume review with approved=true
       Tools --> Runtime : Normal review result
       Runtime --> UI : Committed mode change and review result
