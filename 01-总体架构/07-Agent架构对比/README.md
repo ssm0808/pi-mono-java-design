@@ -4,17 +4,18 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.23.0 |
+| 文档版本 | 1.24.0 |
 | 更新日期 | 2026-09-17 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
-| 设计依据 | `pi-mono-java-design@0233763eb846a297cd390eda1f2da05004c91dd7`，具体主设计见各条目 |
+| 设计依据 | 当前各模块主设计；M02 采用模型与 Provider 主设计 2.8.0，具体入口见各条目 |
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
+| 模型来源专项基线 | A06 于 2026-09-17 核验 pi 默认分支 `main` 的 `16235fd93521f9f96164f5891beea62e6bea5b18` 与 Java `main` 的 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`；只升级模型配置、Provider 组合和业务 Agent 设置链结论 |
 | 计划模式专项基线 | A03/A05 的提示词专项于 2026-09-17 更新至 Codex `b0659c53`、OpenCode `88c6c7ab`、DeepSeek `0d1f5000`、pi `e4c75a73`；业务覆盖再次确认四个上游 HEAD 不变，Java 装配/发布读取本地 `21c3f59b`，完整 SHA、路径及差距见[§11](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖) |
 | 前端专项基线 | A07：Java `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4` 的体验差距见[新核验](../04-CampusClaw前端体验/source-evidence.md#experience-evidence)，前次验证见[实现证据](../04-CampusClaw前端体验/source-evidence.md#current-implementation)；Codex 固定 `d58d0e58`，既有官方核对日期为 2026-09-15 |
 | 提问专项基线 | A08：问答闭环验证为 Java 9f785bea3ffff8f6566cd1b2727285af46a2aead；新增交互核验为 Java 1d08f98e、Codex d58d0e58 与 OpenCode 849c2598，见[逐题交互证据 §9](../06-CampusClaw计划模式/source-evidence.md#9-buildplan-与逐题交互核验)；DeepSeek 0a53fb55、pi 5cd93f68、Claude 官方文档 2026-09-15 的原范围不变 |
 | Skill 统计专项基线 | A09：Codex d58d0e58 的完整计数链；Java f61906b9 的 Runtime/Read/Child/Cron 骨架，#295/#298 仅作固定对照，不升级其他 M05 结论 |
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
-| 核验范围 | A07 的模式入口、TUI 实施选择、方案/任务/问题分离、Slash 协同与前端接入范围；M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、注册框架、模型预置及 SDK 依赖；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
+| 核验范围 | A07 的模式入口、TUI 实施选择、方案/任务/问题分离、Slash 协同与前端接入范围；M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、业务 Agent 设置唯一模型来源及旧全局目录差距；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
 | 验证边界 | A08 已补充固定开发分支的 Runtime/数据库/前端确定性验证；其余条目保留各自静态核验范围，企业接入与真实模型行为不在已验证范围 |
 
 ## 1. 阅读方式与权威边界
@@ -29,12 +30,12 @@
 
 ## 2. 基线登记与证据范围
 
-基线选择与每次更新规则来自 [Agent Runtime 参考基线](../../AGENTS.md#agent-runtime-参考基线)。下表是各专题的历史核验登记；本次仅升级 A03/A05 的提示词证据至[最新快照](../06-CampusClaw计划模式/source-evidence.md#10-两份模式提示词的最新上游核验)，不能将其余条目一并标为最新。
+基线选择与每次更新规则来自 [Agent Runtime 参考基线](../../AGENTS.md#agent-runtime-参考基线)。下表是各专题的历史核验登记；A03/A05 的提示词证据与 A06 的模型来源证据分别按各自专项升级，不能将其余条目一并标为最新。
 下表登记的 commit 不是全量核验声明。使用其他 commit 时，条目必须同时记录旧值、新值和受影响结论。
 
 | 基线 | 固定参考点 | 用于哪些问题 | 本文证据状态 |
 |---|---|---|---|
-| pi | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、消息/Tool 生命周期、Session 分支与压缩 | A01 已核对 Loop 和 Agent 类型，A04 已核对配置 RPC，A05 核对 todo 示例的工具结果恢复，A06 核对 Provider 组合与模型注册；Session 树与完整协议快照仍待专项核验 |
+| pi | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、消息/Tool 生命周期、Session 分支与压缩 | A01 已核对 Loop 和 Agent 类型，A04 已核对配置 RPC，A05 核对 todo 示例的工具结果恢复；A06 的模型配置和 Provider 组合已专项升级到 `16235fd9`；Session 树与完整协议快照仍待专项核验 |
 | Claude Managed Agents | 官方文档，核对日期 `2026-09-14`；无服务端源码 commit | 公共 Session API、preview 与历史对账 | A02/A04/A05 已核对公开流、List Events、Session 更新、配置限制和通用 custom tool 交互；仍为 Beta，只证明公开契约 |
 | Codex harness | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | Provider typed event、Turn/Item 客户端生命周期 | A04 已核对配置协议，A05 核对指定模型的 update_plan 指令及 Handler；A07 核对 TUI 方案实施与 plan Item/TODO 分离；A09 核对 Skill 触发/身份/两级去重/指标/上报；Provider 与其余 M07 生命周期仍待专项核验 |
 | OpenCode | `849c2598abc7d2b40261e74b5826bc74ffc78308` | 多客户端、live/durable 分类与 sequence 回放 | A04 已核对 Session 配置/消息/v2 操作，A05 核对 todowrite 描述与模型提示词；事件流仍待专项核验；v2 源码能力不能自动视为稳定公开契约 |
@@ -48,7 +49,7 @@
 | 模块 | 需要解释的架构问题 | 主基线及辅助对照 | 条目与待补证范围 |
 |---|---|---|---|
 | M01 · Runtime 与多 Agent | Loop 扩展能力如何与产品准入分离；父子执行如何隔离和终止 | pi；Codex、DeepSeek 辅助 | [A01](#a01)覆盖 Loop 与消息准入；[A03](#a03)覆盖计划模式接入与 Child 模式传递，其他父子生命周期待补证 |
-| M02 · 模型与 Provider | 内置提供方如何削减而保留扩展；模型目录与调用权威归谁；原始事件在哪层归一化 | 本次裁剪/注册采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、注册框架和 SDK 削减；Codex 事件归一化对比及完整取消链仍待专项核验 |
+| M02 · 模型与 Provider | 如何让业务 Agent 设置成为唯一模型权威；Provider 调用与模型选择如何分层；原始事件在哪层归一化 | 模型目录差异采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、业务 Agent 设置、旧全局目录删除和 SDK 削减；Codex 事件归一化对比及完整取消链仍待专项核验 |
 | M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；其他工具问题待补证 |
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；其他上下文与存储比较待补证，不默认 token 全量落盘 |
 | M05 · Command 与 Skill | 清单、执行、调用观测和统计分别维护什么权威状态 | pi；统计参照 Codex/OpenCode | [A09](#a09)覆盖使用信号、根去重、失败隔离与入口范围；其他清单一致性仍待专项核验 |
@@ -218,24 +219,24 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 <a id="a06"></a>
 
-## 6.3 A06 · 只内置 CampusMate，保留 Provider 扩展框架
+## 6.3 A06 · 业务 Agent 设置是唯一模型权威
 
 | 维度 | 结论 |
 |---|---|
 | 模块与主设计 | M02，关联 M08/M11；[模型与 Provider 主设计 §4](../../02-服务与接口/03-模型管理Provider契约/README.md#4-provider-与配置)维护命名、削减及依赖边界；复用其[唯一全局目标类图](../../02-服务与接口/03-模型管理Provider契约/java_provider_alignment.svg)。 |
-| 架构问题 | 企业产品默认只从 CampusMate 调用模型时，是否必须同时删除通用 Provider 注册能力？ |
-| pi 已观察行为 | 固定 `5cd93f688aaab89dbb6dfa4aca535f21796ae185` 的 `packages/ai/src/models.ts`：`Provider` 持有身份、认证、目录和流能力；`ModelsImpl.requireProvider` 按身份查找；`createProvider` 组合模型目录与单个/按 API 分派的流实现。`packages/ai/src/providers/anthropic.ts`：`anthropicProvider` 通过该工厂组装厂商能力。源码证明组合与扩展边界，不要求每个产品交付全部厂商。 |
-| CampusClaw 已观察实现 | Java `f61906b9136246ca60f333704b6fc92b5420d0ec` 已有独立 Mate WebClient/Mapper/Parser；身份仍为 `mate-model-manager`，四个第三方适配器、第三方模型预置与两个 SDK 仍存在。AI 服务优先身份路由、再查 API；Runtime 从 Agent 快照解析 Mate 模型。精确路径与符号见[Provider 源码证据](../../02-服务与接口/03-模型管理Provider契约/source-evidence.md) J-AI-01～08。 |
-| CampusClaw 目标 | 唯一内置实现为 `CampusMateProvider`、ID 为 `campusmate`、enum 为 `CAMPUSMATE`；删除厂商适配器/预置/SDK，保留两种注册表、接口、公共类型和 JSON 加载；不增加目录 HTTP、身份别名或存量迁移。 |
-| 差异分类 | 产品约束：提供方集中在 CampusMate，取消开箱厂商直连；产品身份变更：名称直接切换。保留既有双注册表是本次架构边界，不借裁剪引入 ProtocolAdapter 重构。既有网关认证与事件契约保持独立。 |
-| 理由与代价 | 删除发布产品不再使用的厂商代码和预置数据，减少 SDK 升级维护范围；代价是旧配置需更新、旧历史 Provider 不归一、直连用户需迁至 CampusMate 或自行提供扩展。通用注册仍有维护成本，未实测包体积或性能收益。 |
-| 备选与重新评估条件 | 本次不删除扩展框架，也不只关闭 Spring Bean 后继续携带 SDK。若未来需彻底禁用自定义提供方、恢复厂商直连或兼容存量身份，需重新确定产品入口和迁移边界。 |
-| 设计状态 / 实现状态 | 已确认目标、target-only / 局部源码已核验，确认当前范围仍使用旧名称与第三方实现；仅当前 AI 运行时 Maven 依赖树已解析成功，未修改代码、未执行削减后产品测试。 |
-| 验收与证据 | 主设计 S1～S4 覆盖新身份、空注册表、自定义扩展、外部 JSON、无隐式 fallback、Mate 协议回归、SDK/镜像及旧历史原值保留；命名后的测试 selector 待实际实现才替换。 |
+| 架构问题 | 企业产品只通过 CampusMate 调用模型时，如何保证每个业务 Agent 的默认模型和允许列表只有一个权威来源，同时避免进程级配置跨 Agent 注入模型？ |
+| pi 最新观察 | 2026-09-17 核验默认分支 `main` 的 `16235fd93521f9f96164f5891beea62e6bea5b18`：`packages/coding-agent/src/core/model-runtime.ts` 的 `ModelRuntime.create/rebuildProviders` 默认读取 Agent Dir `models.json` 并组合内置、JSON 与扩展 Provider；`core/model-config.ts#ModelConfig.load` 校验 JSON；`core/agent-session-services.ts#createAgentSessionServices` 将模型目录和 `SettingsManager` 的默认选择分开。`packages/ai/src/models.ts#ModelsImpl/createProvider` 让 Provider 同时发布模型并流式调用。 |
+| CampusClaw 目标 | 唯一内置实现为 `CampusMateProvider`；每次业务 Agent 运行时准备或 Session 启动只从该 Agent `.campusclaw/settings.json` 读取 `defaultModel/bindingModels`，再由同一快照完成列表和解析。删除 `ModelRegistry`、classpath/用户 JSON、`ModelCatalogService`、`CatalogRuntimeModelManager` 及相关日志；Provider SPI 只路由已解析 Model，不成为目录。 |
+| CampusClaw 已观察实现 | Java `21c3f59b` 的 `AgentRuntimeManager#loadSnapshot/validSettings`、`AgentDirectorySnapshots#from` 和 `MateRuntimeModelManager#resolveModel/listAvailableModels` 已形成业务 Agent 设置主链；但 `ModelRegistry#init` 仍自动探测两处 JSON，`ModelCatalogService/CatalogRuntimeModelManager` 仍保留另一套目录解析，`CampusClawAiService` 仍注入注册表。完整路径见主设计源码证据 J-AI-N01～J-AI-N05。 |
+| 差异分类 | 产品约束：CampusMate 唯一出口、业务 Agent 设置唯一模型来源；架构变更：Provider 只适配调用，Runtime 快照选择模型；安全加固：拒绝 classpath、用户 Home 和环境凭据在进程级改变 Agent 可用模型。 |
+| 理由与代价 | 同一发布快照同时固定默认值和允许列表，避免全局目录与 Agent 绑定分叉，也避免一个用户文件影响多个业务 Agent。代价是失去 pi 式本地模型扩展；模型变更必须先进入 Agent 配置并重新发布。 |
+| 备选与重新评估条件 | 不保留旧 JSON 加载作为隐藏开关，也不以空目录日志冒充兼容。只有产品明确重新引入非 CampusMate 模型时，才重新设计模型身份、凭据、租户隔离、发布和回滚，不能直接恢复全局文件扫描。 |
+| 设计状态 / 实现状态 | 已确认目标 / Java 主模型链已存在，旧全局目录与日志删除为 target-only；未执行实现修改或回归测试。 |
+| 验收与证据 | 主设计 S1～S4 验证 settings 唯一来源、无回退、全局目录 Bean/日志消失、默认/切换/压缩/Child/Cron 共用快照，以及 Provider、Chat、SDK 和公司镜像回归。 |
 
-**讲解要点。** pi 把提供方、模型和协议实现组合起来；CampusClaw 保留这个扩展思路，但企业产品
-默认只交付 CampusMate。减掉的是厂商实现、预置和 SDK，通用 AI 消息与注册仍可复用。
-代价是失去开箱直连及旧身份兼容；目前独立 Mate 调用链已存在，裁剪和新名称仍待实现验收。
+**讲解要点。** pi 最新实现把内置、`models.json` 和扩展 Provider 组合成全局模型运行时；CampusClaw
+有意采用更窄的企业边界：模型只能来自当前业务 Agent 的已发布 `settings.json`，Provider 只负责调用。
+这样避免全局配置影响多个 Agent，代价是失去本地模型扩展；当前主链已存在，但旧目录和日志尚待删除。
 
 <a id="a07"></a>
 
@@ -354,6 +355,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.24.0 | 2026-09-17 | 对比 pi 最新模型目录与业务 Agent 设置唯一权威，登记旧全局目录及日志删除差距。 |
 | 1.23.0 | 2026-09-17 | 对比 Agent 自定义与模式覆盖机制，明确业务同名文件回退和目录发布一致性。 |
 | 1.22.1 | 2026-09-17 | 提示词角色采用 Main Agent/Subagent，基线分工与架构结论保持不变。 |
 | 1.22.0 | 2026-09-17 | 按最新上游提示词证据将模式资源收敛为 PLAN.md / BUILD.md，并明确基础 SYSTEM 与工具描述的职责。 |

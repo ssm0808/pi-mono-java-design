@@ -1,6 +1,6 @@
 @startuml provider_identity_model
 ' Source evidence:
-' Baseline: pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185
+' Baseline: pi-mono 16235fd93521f9f96164f5891beea62e6bea5b18
 ' pi-mono packages/ai/src/models.ts: Provider, MutableModels, ModelsImpl, and createProvider
 ' pi-mono packages/ai/src/types.ts: ProviderId, Model, SimpleStreamOptions, and ToolChoice
 ' Observed behavior: provider.id is the registry key and Model.provider selects the owning provider.
@@ -30,14 +30,15 @@ end note
 @enduml
 
 @startuml generic_provider_boundary
-' Baseline: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec
+' Baseline: pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7
 ' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java: streamSimple
-' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java: streamSimple, eventFlux
+' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java: streamSimple, eventFlux
 ' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java: accept
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/MateRuntimeModelManager.java: resolveModel
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java: loadSnapshot, validSettings
 ' Observed behavior: the Mate client owns JSON mapping and SSE decoding without a vendor SDK.
-' Product constraint: only CampusMate ships as a built-in provider; explicit extensions remain possible.
-' Target-only: rename the existing provider and identity; catalog HTTP operations remain candidates.
+' Product constraint: each business Agent settings file is the only model source.
+' Target-only: remove the process-wide model catalog and external model JSON loading.
 ' Design reason: Runtime owns model selection and persistence, while AI owns outbound adaptation.
 
 skinparam backgroundColor white
@@ -53,6 +54,8 @@ skinparam component {
   BorderColor #64748B
 }
 package Runtime {
+  [Business Agent settings] as Settings
+  [Agent runtime preparation] as Preparation
   [Agent snapshot] as Snapshot
   [Model selection] as Selection
   [AgentLoop] as Loop
@@ -60,9 +63,11 @@ package Runtime {
 }
 package "AI module" {
   [Provider routing] as Routing
-  [CampusMate adapter] as Provider #DBEAFE
+  [CampusMate adapter] as Provider
 }
 cloud "CampusMate Chat" as Mate
+Settings --> Preparation : default and allowed IDs
+Preparation --> Snapshot : immutable snapshot
 Snapshot --> Selection : allowed IDs
 Selection --> Loop : selected Model
 Loop --> Routing : Context / options
@@ -70,9 +75,9 @@ Routing --> Provider : campusmate
 Provider --> Mate : Chat JSON / SSE
 Provider --> Loop : domain events
 Loop --> Persistence : completed messages
-note bottom of Provider
-Target-only name; retained Chat behavior.
-No direct Session database access.
+note bottom of Settings
+Only .campusclaw/settings.json is authoritative.
+No classpath or user-home model catalog.
 end note
 @enduml
 
@@ -81,10 +86,10 @@ end note
 ' pi-mono packages/ai/src/api/openai-completions.ts: stream, convertMessages, tool calls, and usage parsing
 ' pi-mono packages/agent/src/agent-loop.ts: runLoop and streamAssistantResponse
 ' pi-mono packages/coding-agent/src/core/compaction/compaction.ts: completeSummarization with toolChoice none
-' Baseline: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java: streamSimple, eventFlux, cancel
+' Baseline: pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java: streamSimple, eventFlux, cancel
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java: accept, parseUsage, abort
-' Target-only: CampusMateProvider is the new name; Chat behavior remains unchanged.
+' Observed behavior: CampusMateProvider is the current implementation name.
 ' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel and consumeStream
 ' mate-service src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/controller/LlmChatController.java:35-55
 ' Observed behavior: POST /mate-service/v1/LLM/chat exists in the analyzed mate-service baseline.
@@ -108,8 +113,8 @@ skinparam sequence {
   GroupBackgroundColor #F8FAFC
 }
 participant AgentLoop as Loop
-participant "AI service / registry" as AI
-participant "CampusMateProvider\n(target-only name)" as Provider
+participant "AI service / provider registry" as AI
+participant CampusMateProvider as Provider
 participant "Mate Chat\nvia internal gateway" as Mate
 
 == 1. Select and prepare ==
@@ -159,19 +164,22 @@ end note
 @enduml
 
 @startuml java_provider_alignment
-' Baseline: pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185
-' Source evidence: packages/ai/src/models.ts: Provider, ModelsImpl.requireProvider, createProvider
-' Baseline: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec
+' Baseline: pi-mono 16235fd93521f9f96164f5891beea62e6bea5b18
+' Source evidence: packages/ai/src/models.ts: ModelsImpl, createProvider
+' Source evidence: packages/coding-agent/src/core/model-runtime.ts: ModelRuntime.create, rebuildProviders
+' Baseline: pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7
 ' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java: streamSimple, resolveManagedProvider, resolveProvider
 ' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/AiProviderRegistry.java: getProvider
 ' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java: register, getProvider, unregister
-' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java: streamSimple, subscribe
-' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/model/ModelRegistry.java: init, register, loadFromJsonFile
+' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java: streamSimple, subscribe
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java: loadSnapshot, validSettings
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/AgentDirectorySnapshots.java: from
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/MateRuntimeModelManager.java: resolveModel, listAvailableModels
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java: create
 ' Observed behavior: identity dispatch precedes API dispatch; Mate owns an independent WebClient path.
-' Product constraint: remove bundled vendor adapters and presets while retaining registration APIs.
-' Target-only: CampusMateProvider, CAMPUSMATE identity, and ModelRegistry without presets.
+' Product constraint: business Agent settings are the only model authority.
+' Architecture change: provider registries route calls but do not discover or authorize models.
+' Target-only: remove ModelRegistry, external model JSON, and the alternate catalog manager.
 ' Design reason: request state stays per invocation; AI does not depend on Runtime persistence.
 
 skinparam backgroundColor white
@@ -195,12 +203,15 @@ skinparam class {
   BorderColor<<target-only>> #2563EB
 }
 
+class "Business Agent\n.campusclaw/settings.json" as AgentSettings <<published file>>
 package "Web boundary" as Web {
   class "Runtime HTTP Controllers" as Controllers
   class "Request / Response VOs" as VOs
 }
 package "Runtime application - singleton" as Runtime {
   class "Runtime application services" as Services
+  class AgentRuntimeManager
+  class PreparedAgentRuntime <<agent snapshot>>
   interface RuntimeModelManager
   class MateRuntimeModelManager
   class AgentDirectorySnapshotDTO <<request snapshot>>
@@ -218,11 +229,10 @@ package "AI entry and registries - singleton" as AI {
   }
   class ApiProviderRegistry
   interface ApiProvider
-  class ModelRegistry <<target-only>>
   class Model <<descriptor>>
 }
 package "CampusMate adapter - singleton" as Adapter {
-  class CampusMateProvider <<target-only>> {
+  class CampusMateProvider {
     id = campusmate
     auth = none
   }
@@ -240,6 +250,10 @@ package "Configuration and external I/O" as IO {
 
 Controllers -down-> Services
 Controllers ..> VOs
+Services --> AgentRuntimeManager : prepare Agent
+AgentSettings -down-> AgentRuntimeManager : only model source
+AgentRuntimeManager --> PreparedAgentRuntime : validate / create
+PreparedAgentRuntime --> AgentDirectorySnapshotDTO : project
 Services --> RuntimeModelManager
 MateRuntimeModelManager ..|> RuntimeModelManager
 Services --> AgentDirectorySnapshotDTO : acquire
@@ -255,8 +269,6 @@ CampusClawAiService -down-> AiProviderRegistry : identity first
 AiProviderRegistry o-- "0..*" AiProvider
 CampusClawAiService -down-> ApiProviderRegistry : API fallback
 ApiProviderRegistry o-- "0..*" ApiProvider
-CampusClawAiService -[norank]-> ModelRegistry
-ModelRegistry o-- "0..*" Model
 CampusMateProvider .up.|> AiProvider
 CampusMateProvider *-- "1" MateChatRequestMapper
 CampusMateProvider *-- "1" WebClient
@@ -276,10 +288,10 @@ MateChatRequestMapper -[hidden]right-> WebClient
 MateChatSseParser -[hidden]right-> AssistantMessageEventStream
 
 legend bottom left
-Blue: target-only rename or removal of model presets.
 The whole diagram is a recommended assembly, not an implementation audit.
 Grouped Runtime boxes denote existing collaborators, not new facade classes.
-API registry is empty by default; custom adapters remain supported.
+Provider registries only route an already resolved Model.
+Business Agent settings are the only model source.
 AI emits events; only Runtime writes Session state.
 endlegend
 @enduml

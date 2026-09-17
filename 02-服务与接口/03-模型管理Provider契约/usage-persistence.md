@@ -103,7 +103,7 @@ Session 创建时初始化 Stats，清理时删除 Records 和 Stats。
 
 ![Token Usage Record 与 Stats](token_usage_persistence.svg)
 
-[PlantUML 源码：`token_usage_persistence`](diagram.puml#L287) · [原尺寸 SVG](token_usage_persistence.svg)
+[PlantUML 源码：`token_usage_persistence`](diagram.puml#L299) · [原尺寸 SVG](token_usage_persistence.svg)
 
 ## 4. 验收
 

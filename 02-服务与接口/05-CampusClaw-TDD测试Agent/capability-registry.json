@@ -1,15 +1,15 @@
 {
   "schemaVersion": "1.0.0",
-  "registryVersion": "2.1.0",
+  "registryVersion": "2.2.0",
   "product": "CampusClaw",
-  "generatedAt": "2026-09-14",
+  "generatedAt": "2026-09-17",
   "baselines": {
     "designRepository": {
-      "commit": "d2b9b4b6f4762e0e9734c144e3eb3273959e7e26",
+      "commit": "648730b7c55ff25099d3a0feccbaccf5a681a031",
       "root": "."
     },
     "implementationRepository": {
-      "commit": "ae0ae7c164b031afacd862794e8914243913f113",
+      "commit": "21c3f59be033e7bdd5506a2d9d48baa2581bc3c7",
       "rootHint": "pi-mono-java"
     }
   },
@@ -91,7 +91,7 @@
     },
     {
       "id": "CC-CAP-003",
-      "name": "LLM providers, model registry, and normalized streaming",
+      "name": "LLM provider, business Agent model settings, and normalized streaming",
       "domain": "ai",
       "criticality": "P0",
       "maturity": "implemented",
@@ -100,7 +100,8 @@
       "sourceEvidence": [
         "modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java:CampusClawAiService",
         "modules/ai/src/main/java/com/campusclaw/ai/model/ModelRegistry.java:ModelRegistry",
-        "modules/ai/src/main/java/com/campusclaw/ai/provider/ApiProviderRegistry.java:ApiProviderRegistry"
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java:AgentRuntimeManager",
+        "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/MateRuntimeModelManager.java:MateRuntimeModelManager"
       ],
       "requirements": [{
         "id": "CC-REQ-003",
@@ -108,7 +109,7 @@
         "testSelectors": ["CampusClawAiServiceTest", "ModelRegistryTest", "*ProviderTest"]
       }],
       "adapters": ["java", "model-sse-stub", "fault"],
-      "gap": "Accepted target-only AI reduction: ship only CampusMateProvider with ID campusmate; delete four built-in vendor adapters, vendor model presets, anthropic-java and openai-java; preserve registration and external JSON loading. The f61906b9136246ca60f333704b6fc92b5420d0ec source still contains the old adapters and presets. Add exact empty-registry, custom-extension, missing-adapter and dependency/mirror cases; current baseline selectors do not prove the target."
+      "gap": "Accepted target-only model-source reduction: each business Agent .campusclaw/settings.json is the only source for defaultModel and bindingModels. Java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7 already has the settings snapshot and MateRuntimeModelManager path, but still contains ModelRegistry JSON loading, ModelCatalogService, CatalogRuntimeModelManager and related logs. Replace external-JSON coverage with exact settings-only, no-fallback, default/list consistency, Child/Cron/compaction reuse, removed-bean/log and company-mirror cases; current selectors do not prove the target."
     },
     {
       "id": "CC-CAP-004",
