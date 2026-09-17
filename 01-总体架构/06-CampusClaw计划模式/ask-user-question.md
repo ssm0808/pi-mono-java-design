@@ -1,6 +1,6 @@
 # AskUserQuestion：结构化提问与原执行续跑
 
-版本：1.2.0；日期：2026-09-16。状态：1d08f98e 已实现 Runtime 问答及调试卡片；逐题展示、工具日志汇聚及必要性提示词为 target-only。既有独立验证绑定 §2 所列 9f785bea，企业 Mate 接入和真实模型行为评估尚未验证。
+版本：1.3.0；日期：2026-09-17。状态：1d08f98e 已实现 Runtime 问答及调试卡片；逐题展示、工具日志汇聚及必要性提示词为 target-only。未领取答案的 CANCELED 终态以 74f1b831 为专项核验基线，属于已确认目标，见[统一消费状态](../01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)。既有独立验证绑定 §2 所列 9f785bea，企业 Mate 接入和真实模型行为评估尚未验证。
 
 本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#submitSessionEvent)。提示词组合由 [plan-policy.md](plan-policy.md) 维护。
 
@@ -110,7 +110,7 @@ SSE 和 GET 历史的两种新事件完全同形，无 phase/delta。agent.quest
 | 持久化位置 | 目标增量与权威 |
 |---|---|
 | `t_session_executions` | 可空 `pending_question_event_id VARCHAR(128)`；非空时 state=CONFIRMING、pending_tool_call_id 非空、pending_plan_event_id 为空。与已有 pending_plan 指针互斥；两指针均空的确认等待仍是工具权限。三类接受路径都必须检查类型 |
-| `t_session_question_answers`（新增） | `session_id/execution_id/answer_event_id/target_event_id/previous_segment_id/segment_id/tool_call_id/state/created_at/claimed_at/completed_at`；ID 列 VARCHAR(128)，tool_call_id TEXT，消费状态沿用 PENDING/CLAIMED/COMPLETED；主键 `(session_id, answer_event_id)`，唯一 `(session_id,target_event_id)` 与 `(session_id,execution_id,segment_id)` |
+| `t_session_question_answers`（新增） | `session_id/execution_id/answer_event_id/target_event_id/previous_segment_id/segment_id/tool_call_id/state/created_at/claimed_at/completed_at`；ID 列 VARCHAR(128)，tool_call_id TEXT，消费状态使用 PENDING/CLAIMED/COMPLETED/CANCELED；主键 `(session_id, answer_event_id)`，唯一 `(session_id,target_event_id)` 与 `(session_id,execution_id,segment_id)` |
 | `t_session_entries` / `t_session_events` | 问题 Entry 和完整问题事件；答案 Entry 和完整回执。交接表只引用 answer_event_id，领取时读取同一已提交答案记录，不再复制一份 answers JSON 权威 |
 | `t_session_execution_segments` | 复用原段关闭、新段接受与段内事件排序；新段触发事件可以为 user.question_answer，原始根不变 |
 
@@ -126,6 +126,7 @@ SSE 和 GET 历史的两种新事件完全同形，无 phase/delta。agent.quest
 - 任何一种等待只能被对应输入消费。权限确认/计划批准不能回答问题，question_answer 不能消费权限或计划等待；生成问题的前置调用必须已提交。只校验当前待交互，不根据“最新一条问题”猜测目标。
 - AskUserQuestion 与其他 ToolCall 同批时，不建立问题等待，返回 `USER_QUESTION_UNAVAILABLE`；该规则不承诺撤销同批已执行的其他工具。参数错误沿用 TOOL_ARGUMENTS_INVALID。
 - 中断先提交则拒绝答案；答案先提交则停止仍针对同一根执行，并使用数据库当前段可靠收尾。持久化成功的回答事实保留，但不能被解释成一定已续跑；超时回调与重试也必须重新检查当前段，避免旧段终态失败后永久 running。
+- 已接受而未领取的答案随真实根执行终态在同事务变为 `CANCELED`；只进入 STOPPING 不提前取消消费，已经领取的记录保持原状态。时间约束、回滚与幂等要求统一见[Session Events §4.6](../01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)，取消消费不改写答案回执或伪造模型已获得答案。
 - 关闭卡片、切会话、SSE 断开和浏览器退出都不提交答案，也不取消任务。显式停止走 user.interrupt，目标是原 user.message.eventId；等待计入既有执行 maxDuration，不新增客户端自定义超时或无限等待。
 - 取消/超时唤醒等待为失败，模型不能编造答案；有可靠退出事实时提交真实终态，再释放 Session 和执行容量。答案已接受而续跑失败沿用 EXECUTION_RESUME_FAILED；不能回头返回声称未接受的 JSON。
 
@@ -167,7 +168,7 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 |---|---|---|
 | Q1 契约及工具 | 严格 Schema/DTO/VO、Parser、Port/Adapter、枚举/profile、两种新事件及错误 | 单/多/纯文本；UTF-16、strip、重复/未知/null/缺题/选项归属；Runtime 两模式工具定义相同；Child/Cron 拒绝；无元数据和 Session 字段扩展 |
 | Q2 等待与事务 | 收敛唯一待交互槽；问题/confirming/指针同事务；答案/回执/新段同事务；答案领取与消费 | tool_call 前置；共享不可变快照；错误无卡片；三类不能互相消费；插入失败整笔回滚；在工具 await 前已领取答案仍正常返回；原根与凭据不变 |
-| Q3 控制及恢复 | 跨实例轮询与单次领取、中断/超时、可靠终态、删除和保留清理 | 回答/回答、回答/停止、回答/超时竞争；原段关闭；新段首帧完整回执；不重放写；失联不假装成功或自动接管 |
+| Q3 控制及恢复 | 跨实例轮询与单次领取、中断/超时、可靠终态、删除和保留清理 | 回答/回答、回答/停止、回答/超时竞争；未领取答案随真实终态取消消费且回执保留；STOPPING/回滚/已领取记录不误改；原段关闭；新段首帧完整回执；不重放写；失联不假装成功或自动接管 |
 | Q4 前端及桥接 | QuestionCard/Store、规范化提交、同 reducer 历史恢复；需要企业入口时同步 Mate 公共契约 | 单/多/文本展示无需工具日志；缺页禁答、重复帧、跨端已回答、回执丢失、切会话草稿、IME/键盘/390px；plan 不建 TODO，build 回答不重置清单；target-only：当前仅一题可见、翻页不 POST、末题仅一次提交、前后导航保留答案、调用/结果汇聚且失败可见、收起不提交 |
 | Q5 提示词与场景 | 通用提问指令、plan/build 组合、降级与角色边界 | 可查事实自行检查；需选择时使用工具；问题肯定不批准方案；不编造/重复问；无工具回退普通消息；target-only：优先一题、不固定三题、无待决信息不提问、有关联的后续问题在下一批提出、工具 JSON 不作为最终答复；模型评估与确定性测试分别记录 |
 
@@ -177,6 +178,7 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-09-17 | 未领取答案随真实根执行终态标记为 CANCELED，并保留已接受答案事件。 |
 | 1.2.0 | 2026-09-16 | 明确必要时优先一题、逐题完整提交及问题答案卡吸收工具日志。 |
 | 1.1.0 | 2026-09-15 | 登记结构化问答实现、独立验证与企业接入边界，明确首版完整安装 SQL。 |
 | 1.0.0 | 2026-09-15 | 增加结构化提问工具、显式问题与回答事件及原执行续跑设计。 |
