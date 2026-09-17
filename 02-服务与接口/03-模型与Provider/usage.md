@@ -1,6 +1,6 @@
 # Session 模型用量：Record 与 Stats
 
-版本：1.0.0 · 2026-09-14。状态：已确认目标，SQL 实现未按最新提交验收。返回[模型与 Provider 主设计](README.md)。
+版本：1.0.1 · 2026-09-14。状态：已确认目标，SQL 实现未按最新提交验收。返回[模型与 Provider 主设计](README.md)。
 
 本专题维护模型用量的存储规则。Provider 解析 Usage，Runtime 将其作为不可变运行事实保存；Usage 不参加消息分支。pi 固定基线为 `5cd93f688aaab89dbb6dfa4aca535f21796ae185`，Java SQL 历史观察基线为 `d649866a6cae967ace18ceaeb9597edd47e5721e`；具体路径、符号及差距见[源码证据](source-evidence.md)。
 
@@ -101,9 +101,9 @@ Thinking、Usage、运行状态和流控制事件不计入消息数。
 `t_session_materialized.payload` 删除 `lifetimeUsage` 责任，只保留 `activePath` 等其他物化视图；
 Session 创建时初始化 Stats，清理时删除 Records 和 Stats。
 
-![Token Usage Record 与 Stats](token_usage_persistence.svg)
+![Token Usage Record 与 Stats](usage-write.svg)
 
-[PlantUML 源码：`token_usage_persistence`](diagram.puml#L299) · [原尺寸 SVG](token_usage_persistence.svg)
+[PlantUML 源码](diagram.puml#L216) · [原尺寸 SVG](usage-write.svg)
 
 ## 4. 验收
 

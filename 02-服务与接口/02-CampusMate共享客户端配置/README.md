@@ -142,7 +142,7 @@ endpoint = normalized(campusmate.base-url) + validated(campusmate.endpoints.<ope
 
 ## 7. Java 目标映射
 
-Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具体规则由[模型主设计 §4.3](../03-模型管理Provider契约/README.md#43-命名与直接切换)维护。下表是从固定源码到目标的映射，实施前应复核最新代码。
+Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具体规则由[模型主设计 §3](../03-模型与Provider/README.md#provider-identity)维护。下表是从固定源码到目标的映射，实施前应复核最新代码。
 
 | Java 符号 | 目标调整 |
 |---|---|
@@ -205,7 +205,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 ## 11. 相关契约
 
-- [模型与 Provider](../03-模型管理Provider契约/README.md)：Chat 参数、SSE 与 Provider 身份。
+- [模型与 Provider](../03-模型与Provider/README.md)：Chat 参数、SSE 与 Provider 身份。
 - [工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md)：发现与执行，以及 execution 凭据快照。
 - [源码证据](source-evidence.md)：客户端路径归属、历史重复项和服务端核验范围。
 

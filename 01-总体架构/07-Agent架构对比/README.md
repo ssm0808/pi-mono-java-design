@@ -4,10 +4,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.24.0 |
+| 文档版本 | 1.24.1 |
 | 更新日期 | 2026-09-17 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
-| 设计依据 | 当前各模块主设计；M02 采用模型与 Provider 主设计 2.8.0，具体入口见各条目 |
+| 设计依据 | 当前各模块主设计；M02 采用模型与 Provider 主设计 2.8.1，具体入口见各条目 |
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
 | 模型来源专项基线 | A06 于 2026-09-17 核验 pi 默认分支 `main` 的 `16235fd93521f9f96164f5891beea62e6bea5b18` 与 Java `main` 的 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`；只升级模型配置、Provider 组合和业务 Agent 设置链结论 |
 | 计划模式专项基线 | A03/A05 的提示词专项于 2026-09-17 更新至 Codex `b0659c53`、OpenCode `88c6c7ab`、DeepSeek `0d1f5000`、pi `e4c75a73`；业务覆盖再次确认四个上游 HEAD 不变，Java 装配/发布读取本地 `21c3f59b`，完整 SHA、路径及差距见[§11](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖) |
@@ -223,7 +223,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 | 维度 | 结论 |
 |---|---|
-| 模块与主设计 | M02，关联 M08/M11；[模型与 Provider 主设计 §4](../../02-服务与接口/03-模型管理Provider契约/README.md#4-provider-与配置)维护命名、削减及依赖边界；复用其[唯一全局目标类图](../../02-服务与接口/03-模型管理Provider契约/java_provider_alignment.svg)。 |
+| 模块与主设计 | M02，关联 M08/M11；[模型与 Provider 主设计 §3、§5](../../02-服务与接口/03-模型与Provider/README.md#provider)维护命名、削减及依赖边界；复用其[唯一全局目标类图](../../02-服务与接口/03-模型与Provider/provider-classes.svg)。 |
 | 架构问题 | 企业产品只通过 CampusMate 调用模型时，如何保证每个业务 Agent 的默认模型和允许列表只有一个权威来源，同时避免进程级配置跨 Agent 注入模型？ |
 | pi 最新观察 | 2026-09-17 核验默认分支 `main` 的 `16235fd93521f9f96164f5891beea62e6bea5b18`：`packages/coding-agent/src/core/model-runtime.ts` 的 `ModelRuntime.create/rebuildProviders` 默认读取 Agent Dir `models.json` 并组合内置、JSON 与扩展 Provider；`core/model-config.ts#ModelConfig.load` 校验 JSON；`core/agent-session-services.ts#createAgentSessionServices` 将模型目录和 `SettingsManager` 的默认选择分开。`packages/ai/src/models.ts#ModelsImpl/createProvider` 让 Provider 同时发布模型并流式调用。 |
 | CampusClaw 目标 | 唯一内置实现为 `CampusMateProvider`；每次业务 Agent 运行时准备或 Session 启动只从该 Agent `.campusclaw/settings.json` 读取 `defaultModel/bindingModels`，再由同一快照完成列表和解析。删除 `ModelRegistry`、classpath/用户 JSON、`ModelCatalogService`、`CatalogRuntimeModelManager` 及相关日志；Provider SPI 只路由已解析 Model，不成为目录。 |
@@ -355,6 +355,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.24.1 | 2026-09-17 | 更新模型模块的文档与图入口，架构比较结论和源码基线不变。 |
 | 1.24.0 | 2026-09-17 | 对比 pi 最新模型目录与业务 Agent 设置唯一权威，登记旧全局目录及日志删除差距。 |
 | 1.23.0 | 2026-09-17 | 对比 Agent 自定义与模式覆盖机制，明确业务同名文件回退和目录发布一致性。 |
 | 1.22.1 | 2026-09-17 | 提示词角色采用 Main Agent/Subagent，基线分工与架构结论保持不变。 |

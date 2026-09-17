@@ -111,7 +111,7 @@ PR 中隐式同步另一个仓库。
 `partial` 输出为警告；未来 `--strict-coverage` 是合并门禁，必须等精确用例绑定补齐后才允许
 通过。
 
-CC-CAP-003/011 的[CampusMate 改名与 AI 产品范围](../03-模型管理Provider契约/README.md#11-ai-削减实施切片)为 target-only。注册表以 `gap` 记录 S1–S4，`sourceEvidence/testSelectors` 继续指向实际基线；只有目标测试真实存在且执行后，才替换旧 selector。能力已有的 `implemented/partial` 不能证明新目标落地。
+CC-CAP-003/011 的[CampusMate 改名与 AI 产品范围](../03-模型与Provider/README.md#implementation)为 target-only。注册表以 `gap` 记录 S1–S4，`sourceEvidence/testSelectors` 继续指向实际基线；只有目标测试真实存在且执行后，才替换旧 selector。能力已有的 `implemented/partial` 不能证明新目标落地。
 
 ### 5.2 需求成熟度门
 

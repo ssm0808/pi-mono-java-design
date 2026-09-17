@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "registryVersion": "2.2.0",
+  "registryVersion": "2.2.1",
   "product": "CampusClaw",
   "generatedAt": "2026-09-17",
   "baselines": {
@@ -30,7 +30,7 @@
       "01-总体架构/02-CampusClaw工具系统",
       "01-总体架构/04-CampusClaw前端体验",
       "03-数据与存储/02-Agent元数据GaussDB",
-      "02-服务与接口/03-模型管理Provider契约",
+      "02-服务与接口/03-模型与Provider",
       "02-服务与接口/02-CampusMate共享客户端配置",
       "02-服务与接口/01-CampusMate附件服务",
       "04-命令与技能/02-技能命令/README.md",
@@ -96,7 +96,7 @@
       "criticality": "P0",
       "maturity": "implemented",
       "coverageState": "partial",
-      "designRefs": ["02-服务与接口/03-模型管理Provider契约/README.md"],
+      "designRefs": ["02-服务与接口/03-模型与Provider/README.md"],
       "sourceEvidence": [
         "modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java:CampusClawAiService",
         "modules/ai/src/main/java/com/campusclaw/ai/model/ModelRegistry.java:ModelRegistry",
@@ -259,7 +259,7 @@
       "criticality": "P0",
       "maturity": "accepted",
       "coverageState": "partial",
-      "designRefs": ["02-服务与接口/02-CampusMate共享客户端配置/README.md", "02-服务与接口/03-模型管理Provider契约/README.md"],
+      "designRefs": ["02-服务与接口/02-CampusMate共享客户端配置/README.md", "02-服务与接口/03-模型与Provider/README.md"],
       "sourceEvidence": [
         "modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:MateServiceModelManagerProvider",
         "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:HttpMateToolClient"

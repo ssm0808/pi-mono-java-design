@@ -40,7 +40,7 @@ modelId 和思考设置属于 Chat/Session 配置，不进入 user.message；消
 
 Provider 契约定义大小写敏感的 1–64 字符不透明标识；Runtime 的配置契约沿用 1–128 和限定字符集。公共 Chat 配置在校准前不选取任一方作为共同约束。
 
-证据：本仓 [Provider 主设计](../../03-模型管理Provider契约/README.md)；Java c9d858bc 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/RuntimeApiConstants.java#MODEL_ID_PATTERN` 及 `vo/ChangeModelRequestVO.java#modelId`。此处记录契约差异，不推断底层模型目录已经统一。
+证据：本仓 [Provider 主设计](../../03-模型与Provider/README.md)；Java c9d858bc 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/RuntimeApiConstants.java#MODEL_ID_PATTERN` 及 `vo/ChangeModelRequestVO.java#modelId`。此处记录契约差异，不推断底层模型目录已经统一。
 
 <a id="c-006"></a>
 

@@ -1,6 +1,6 @@
 {
   "api": {
-    "title": "MateService Unified Chat Provider API",
+    "title": "CampusMate Chat 接口说明",
     "version": "2.0.0",
     "basePath": "/mate-service/v1",
     "visibility": "Internal · 已冻结"
@@ -269,6 +269,6 @@
     "questions": [],
     "followUpTitle": "调整 Mate Chat 接口",
     "promptPrefix": "继续调整 POST /mate-service/v1/LLM/chat",
-    "promptSuffix": "请同步更新‘02-服务与接口/03-模型管理Provider契约’中的主 Markdown、结构化评审模型、HTML 和 PlantUML；保持原始 Chat SSE、断连取消和内部网关免认证边界。"
+    "promptSuffix": "请同步更新“02-服务与接口/03-模型与Provider”中的主设计、chat-api.json、生成的 chat-api.html 与相关图；保持原始 Chat SSE、断连取消和内部网关免认证边界。"
   }
 }

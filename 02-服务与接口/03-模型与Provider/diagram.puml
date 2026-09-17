@@ -1,169 +1,4 @@
-@startuml provider_identity_model
-' Source evidence:
-' Baseline: pi-mono 16235fd93521f9f96164f5891beea62e6bea5b18
-' pi-mono packages/ai/src/models.ts: Provider, MutableModels, ModelsImpl, and createProvider
-' pi-mono packages/ai/src/types.ts: ProviderId, Model, SimpleStreamOptions, and ToolChoice
-' Observed behavior: provider.id is the registry key and Model.provider selects the owning provider.
-' Design reason: provider identity, protocol dispatch, model identity, and connection configuration remain separate.
-
-skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam ArrowColor #475569
-title Provider Identity - Conceptual View
-left to right direction
-skinparam rectangle {
-  BackgroundColor #F8FAFC
-  BorderColor #64748B
-}
-rectangle "Provider identity\nprovider.id" as Provider
-rectangle "Model identity\n(provider.id, model.id)" as Model
-rectangle "Protocol selection\nmodel.api" as API
-rectangle "Connection configuration\norigin / path / timeouts" as Config
-Provider --> Model : owns
-Model --> API : selects protocol
-Provider ..> Config : configured separately
-note bottom of Provider
-Name, URL, credentials and API do not define identity.
-end note
-@enduml
-
-@startuml generic_provider_boundary
-' Baseline: pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7
-' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/CampusClawAiService.java: streamSimple
-' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java: streamSimple, eventFlux
-' Source evidence: modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java: accept
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/MateRuntimeModelManager.java: resolveModel
-' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java: loadSnapshot, validSettings
-' Observed behavior: the Mate client owns JSON mapping and SSE decoding without a vendor SDK.
-' Product constraint: each business Agent settings file is the only model source.
-' Target-only: remove the process-wide model catalog and external model JSON loading.
-' Design reason: Runtime owns model selection and persistence, while AI owns outbound adaptation.
-
-skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam ArrowColor #475569
-title Model Invocation - Responsibility Boundaries
-top to bottom direction
-skinparam componentStyle rectangle
-skinparam component {
-  BackgroundColor #F8FAFC
-  BorderColor #64748B
-}
-package Runtime {
-  [Business Agent settings] as Settings
-  [Agent runtime preparation] as Preparation
-  [Agent snapshot] as Snapshot
-  [Model selection] as Selection
-  [AgentLoop] as Loop
-  [Event projection / persistence] as Persistence
-}
-package "AI module" {
-  [Provider routing] as Routing
-  [CampusMate adapter] as Provider
-}
-cloud "CampusMate Chat" as Mate
-Settings --> Preparation : default and allowed IDs
-Preparation --> Snapshot : immutable snapshot
-Snapshot --> Selection : allowed IDs
-Selection --> Loop : selected Model
-Loop --> Routing : Context / options
-Routing --> Provider : campusmate
-Provider --> Mate : Chat JSON / SSE
-Provider --> Loop : domain events
-Loop --> Persistence : completed messages
-note bottom of Settings
-Only .campusclaw/settings.json is authoritative.
-No classpath or user-home model catalog.
-end note
-@enduml
-
-@startuml model_manager_invocation_sequence
-' Source evidence:
-' pi-mono packages/ai/src/api/openai-completions.ts: stream, convertMessages, tool calls, and usage parsing
-' pi-mono packages/agent/src/agent-loop.ts: runLoop and streamAssistantResponse
-' pi-mono packages/coding-agent/src/core/compaction/compaction.ts: completeSummarization with toolChoice none
-' Baseline: pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java: streamSimple, eventFlux, cancel
-' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java: accept, parseUsage, abort
-' Observed behavior: CampusMateProvider is the current implementation name.
-' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel and consumeStream
-' mate-service src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/controller/LlmChatController.java:35-55
-' Observed behavior: POST /mate-service/v1/LLM/chat exists in the analyzed mate-service baseline.
-' Product constraint: cancellation closes the foreground request and has no separate cancel operation.
-' Architecture change: successful Chat SSE is returned without ResultBean or payload rewriting.
-
-skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam ArrowColor #475569
-title CampusMate Chat - One Invocation
-hide footbox
-skinparam maxMessageSize 210
-skinparam sequenceMessageAlign left
-skinparam sequence {
-  ParticipantBackgroundColor #F8FAFC
-  ParticipantBorderColor #64748B
-  LifeLineBorderColor #94A3B8
-  GroupBorderColor #CBD5E1
-  GroupBackgroundColor #F8FAFC
-}
-participant AgentLoop as Loop
-participant "AI service / provider registry" as AI
-participant CampusMateProvider as Provider
-participant "Mate Chat\nvia internal gateway" as Mate
-
-== 1. Select and prepare ==
-Loop -> AI : stream(model, context, options)
-AI -> AI : Resolve Provider identity
-AI -> Provider : streamSimple(model, context, options)
-Provider -> Provider : Validate and map text context
-Provider --> AI : Per-call event stream
-AI --> Loop : Event stream
-
-== 2. Create foreground request ==
-Provider -> Mate : POST /mate-service/v1/LLM/chat\nProtocol headers only
-alt Rejected before SSE
-  Mate --> Provider : HTTP error + ResultBean
-  Provider --> Loop : ERROR (one terminal)
-else SSE established
-  Mate --> Provider : 200 text/event-stream
-  loop While invocation is active
-    Mate --> Provider : Original Chat chunk
-    Provider -> Provider : Parse content, tools and usage
-    Provider --> Loop : AssistantMessageEvent
-  end
-
-  == 3. End the invocation ==
-  alt Normal completion
-    Mate --> Provider : data: [DONE]
-    Provider --> Loop : Final AssistantMessage
-  else Caller cancels
-    Loop -> Provider : Cancel stream
-    Provider -> Mate : Close request and body
-    Mate -> Mate : Stop upstream invocation
-    Provider --> Loop : ABORTED (one terminal)
-  else Stream fails
-    Mate --> Provider : event:error; then close\nNo [DONE]
-    Provider --> Loop : ERROR (one terminal)
-  end
-end
-
-note over Loop,Provider
-Tool execution remains in AgentLoop.
-A completed, failed or cancelled call emits one terminal.
-end note
-note over Provider,Mate
-No application credentials; no create replay after unknown outcome.
-Mate owns upstream routing and cancellation propagation.
-end note
-@enduml
-
-@startuml java_provider_alignment
+@startuml provider-classes
 ' Baseline: pi-mono 16235fd93521f9f96164f5891beea62e6bea5b18
 ' Source evidence: packages/ai/src/models.ts: ModelsImpl, createProvider
 ' Source evidence: packages/coding-agent/src/core/model-runtime.ts: ModelRuntime.create, rebuildProviders
@@ -296,7 +131,89 @@ AI emits events; only Runtime writes Session state.
 endlegend
 @enduml
 
-@startuml token_usage_persistence
+@startuml chat-sequence
+' Source evidence:
+' pi-mono packages/ai/src/api/openai-completions.ts: stream, convertMessages, tool calls, and usage parsing
+' pi-mono packages/agent/src/agent-loop.ts: runLoop and streamAssistantResponse
+' pi-mono packages/coding-agent/src/core/compaction/compaction.ts: completeSummarization with toolChoice none
+' Baseline: pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java: streamSimple, eventFlux, cancel
+' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java: accept, parseUsage, abort
+' Observed behavior: CampusMateProvider is the current implementation name.
+' pi-mono-java modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel and consumeStream
+' mate-service src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/controller/LlmChatController.java:35-55
+' Observed behavior: POST /mate-service/v1/LLM/chat exists in the analyzed mate-service baseline.
+' Product constraint: cancellation closes the foreground request and has no separate cancel operation.
+' Architecture change: successful Chat SSE is returned without ResultBean or payload rewriting.
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowColor #475569
+title CampusMate Chat - One Invocation
+hide footbox
+skinparam maxMessageSize 210
+skinparam sequenceMessageAlign left
+skinparam sequence {
+  ParticipantBackgroundColor #F8FAFC
+  ParticipantBorderColor #64748B
+  LifeLineBorderColor #94A3B8
+  GroupBorderColor #CBD5E1
+  GroupBackgroundColor #F8FAFC
+}
+participant AgentLoop as Loop
+participant "AI service / provider registry" as AI
+participant CampusMateProvider as Provider
+participant "Mate Chat\nvia internal gateway" as Mate
+
+== 1. Select and prepare ==
+Loop -> AI : stream(model, context, options)
+AI -> AI : Resolve Provider identity
+AI -> Provider : streamSimple(model, context, options)
+Provider -> Provider : Validate and map text context
+Provider --> AI : Per-call event stream
+AI --> Loop : Event stream
+
+== 2. Create foreground request ==
+Provider -> Mate : POST /mate-service/v1/LLM/chat\nProtocol headers only
+alt Rejected before SSE
+  Mate --> Provider : HTTP error + ResultBean
+  Provider --> Loop : ERROR (one terminal)
+else SSE established
+  Mate --> Provider : 200 text/event-stream
+  loop While invocation is active
+    Mate --> Provider : Original Chat chunk
+    Provider -> Provider : Parse content, tools and usage
+    Provider --> Loop : AssistantMessageEvent
+  end
+
+  == 3. End the invocation ==
+  alt Normal completion
+    Mate --> Provider : data: [DONE]
+    Provider --> Loop : Final AssistantMessage
+  else Caller cancels
+    Loop -> Provider : Cancel stream
+    Provider -> Mate : Close request and body
+    Mate -> Mate : Stop upstream invocation
+    Provider --> Loop : ABORTED (one terminal)
+  else Stream fails
+    Mate --> Provider : event:error; then close\nNo [DONE]
+    Provider --> Loop : ERROR (one terminal)
+  end
+end
+
+note over Loop,Provider
+Tool execution remains in AgentLoop.
+A completed, failed or cancelled call emits one terminal.
+end note
+note over Provider,Mate
+No application credentials; no create replay after unknown outcome.
+Mate owns upstream routing and cancellation propagation.
+end note
+@enduml
+
+@startuml usage-write
 title Session Usage - One Atomic Runtime Write
 top to bottom direction
 

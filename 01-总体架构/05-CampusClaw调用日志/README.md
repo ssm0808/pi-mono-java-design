@@ -155,7 +155,7 @@ JSON 输出，环境变量
 
 ### 6.2 Mate Model Manager
 
-目标 Provider 类名为 `CampusMateProvider`，Logger 使用该类；这是[模型模块命名设计](../../02-服务与接口/03-模型管理Provider契约/README.md#43-命名与直接切换)
+目标 Provider 类名为 `CampusMateProvider`，Logger 使用该类；这是[模型模块命名设计](../../02-服务与接口/03-模型与Provider/README.md#provider-identity)
 的 target-only 改名。固定源码 `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec` 中
 `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java`
 仍通过旧类取得 Logger，源码证据路径不改写。`event/operation/errorCode`、其他 Mapper/Parser
