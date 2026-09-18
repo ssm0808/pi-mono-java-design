@@ -1,0 +1,314 @@
+@startuml model_call
+' Baseline: pi-mono-java main 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7, checked 2026-09-18.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/agent/loop/AgentLoop.java :: invokeModel, consumeStream, runTurns.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/ai/CampusClawAiService.java :: streamSimple.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/ai/provider/mate/CampusMateProvider.java :: streamSimple, subscribe, eventFlux.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/ai/provider/mate/MateChatSseParser.java :: accept, finish, finishTools.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: projectMessageUpdate, persistAssistant.
+' Observed behavior: provider deltas become typed AI events and then Agent events; Runtime persists completed messages.
+hide footbox
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam ArrowColor #334155
+skinparam ParticipantBorderColor #64748B
+skinparam ParticipantBackgroundColor #EEF4FB
+skinparam ParticipantFontColor #0F172A
+skinparam NoteBackgroundColor #FFF8E8
+skinparam NoteBorderColor #D6BB74
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 120
+title Model call / observed CampusMate path
+autonumber
+participant "AgentLoop" as Loop
+participant "CampusClaw\nAiService" as AI
+participant "CampusMate\nProvider" as Provider
+participant "CampusMate\nHTTP service" as Mate
+participant "MateChat\nSseParser" as Parser
+participant "RuntimeEvent\nProjector" as Projector
+
+Loop -> Loop: invokeModel()\nContext(system, messages, tool schemas)
+Loop -> AI: streamSimple(model, context, options)
+AI -> Provider: resolve provider "campusmate"\nstreamSimple(...)
+Provider -> Provider: MateChatRequestMapper.map()\nmessages + tools + stream options
+Provider -> Parser: create parser for this response
+Provider -> Mate: POST /mate-service/v1/LLM/chat\nstream=true, include_usage=true
+note over AI, Provider
+Fallback ApiProvider routing exists.
+This diagram follows the default CampusMate model.
+end note
+loop Response chunks
+  Mate -->> Parser: SSE data via WebClient subscription
+  Parser -->> Loop: AssistantMessageEventStream\ntext / thinking / tool-call deltas
+  Loop -> Projector: MessageUpdateEvent\nvia Agent listener
+  Projector -> Projector: best-effort text / thinking preview\nvia RuntimeEventOutput
+end
+Mate -->> Parser: [DONE]
+Parser -> Parser: finalize content and tool arguments\nusage + stop reason
+Parser -->> Loop: DoneEvent(AssistantMessage)
+Loop -> Loop: append AssistantMessage to context
+Loop -> Projector: MessageEndEvent
+Projector -> Projector: persist Assistant + usage + public event\nthen emit completed frame
+alt ToolCalls present and response not ERROR / ABORTED
+  Loop -> Loop: runToolPhase()\nappend tool results; invoke model again
+else No ToolCalls or terminal response
+  Loop -> Loop: finish / inspect queued controls
+end
+note over Loop, Projector
+ThinkingEnd persists reasoning when enabled; Coordinator finalizes execution.
+CampusMate server internals are outside this source scope.
+end note
+@enduml
+
+@startuml tool_execution
+' Baseline: pi-mono-java main 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7, checked 2026-09-18.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/agent/loop/AgentLoop.java :: resolveToolCallsSafe, runToolPhase.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/agent/tool/ToolExecutionPipeline.java :: executePlanned, execute, applyBeforeHook, invokeTool.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: beforeToolCall.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeToolPermissionPolicy.java :: decide.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: persistToolResults, beforeToolCall.
+' Observed behavior: schema validation precedes hooks; tool results return to the loop in original model order.
+hide footbox
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam ArrowColor #334155
+skinparam ParticipantBorderColor #64748B
+skinparam ParticipantBackgroundColor #EEF4FB
+skinparam ParticipantFontColor #0F172A
+skinparam NoteBackgroundColor #FFF8E8
+skinparam NoteBorderColor #D6BB74
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 240
+skinparam activityBackgroundColor #EEF4FB
+skinparam activityBorderColor #64748B
+skinparam activityDiamondBackgroundColor #FFF8E8
+title Tool execution / observed Runtime HTTP path
+start
+:Completed AssistantMessage contains ToolCalls;
+:AgentLoop.resolveToolCallsSafe()\nMatch exact names against this Session's tools;
+if (All requested names known?) then (yes)
+else (no)
+  :Create error results for unknown names;\nkeep known calls for normal execution;
+endif
+:ToolExecutionPipeline.executePlanned()\nAdjacent PARALLEL calls form a batch;\nSEQUENTIAL calls separate batches;
+note right
+Unknown results are merged back later.
+Cancellation aborts the pipeline;
+it is not a normal error result.
+end note
+while (More known calls?) is (yes)
+  :Select call / parallel batch;\ncheck cancellation;
+  if (Tool JSON Schema valid?) then (yes)
+    :beforeToolCall hook\nRuntimeActiveExecution;
+    if (Allowed or interaction accepted?) then (yes)
+      :ToolExecutionStartEvent;
+      :AgentTool.execute()\nLocal read / Mate / Agent / Cron /\nPlan / Question / Todo;
+      :Normalize return value;\nordinary exception becomes error result;
+      :afterToolCall hook;\nToolExecutionEndEvent;
+    else (denied or hook error)
+      :Create ToolResultMessage(isError=true)\nwithout executing the tool;
+    endif
+  else (no)
+    :Create ToolResultMessage(isError=true)\nwithout before hook or execution;
+  endif
+endwhile (no)
+:AgentLoop merges known / unknown results\nin original ToolCall order;
+:Append ToolResultMessages to context;\nemit TurnEndEvent;
+:RuntimeEventProjector persists tool results\nand emits committed public events;
+:AgentLoop starts next model turn;
+stop
+legend bottom
+  CallMateTool permission: ALLOW / DENY / ASK.
+  ASK waits for user.tool_confirmation before execution.
+  ExitPlanMode and AskUserQuestion use separate interaction ports.
+endlegend
+@enduml
+
+@startuml mate_tool_call
+' Baseline: pi-mono-java main 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7, checked 2026-09-18.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/ListMateToolsTool.java :: execute.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/CallMateTool.java :: execute.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/MateToolDiscovery.java :: resolveToolId, loadAllSources.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/MateToolSessionCache.java :: resolveOrRefresh.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/common/client/HttpMateToolClient.java :: listAgentTools, listSkillTools, invokeTool.
+' Observed behavior: discovery supplies a name-to-id index; execute uses an invocation credential snapshot.
+hide footbox
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam ArrowColor #334155
+skinparam ParticipantBorderColor #64748B
+skinparam ParticipantBackgroundColor #EEF4FB
+skinparam ParticipantFontColor #0F172A
+skinparam NoteBackgroundColor #FFF8E8
+skinparam NoteBorderColor #D6BB74
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 160
+title Mate tools / discovery and execution
+autonumber
+participant "ToolExecution\nPipeline" as Pipeline
+participant "ListMateTools /\nCallMateTool" as Tool
+participant "MateToolDiscovery\n+ SessionCache" as Discovery
+participant "HttpMateToolClient" as Client
+participant "CampusMate" as Mate
+
+opt Model requests ListMateTools
+  Pipeline -> Tool: execute({skillName?})
+  Tool -> Discovery: listAgentTools() / listSkillTools(name)
+  Discovery -> Client: query bound tools for one source
+  Client -> Mate: GET Agent or Skill bindings
+  Mate --> Client: bound tool IDs
+  Client -> Mate: POST /runtime/tools/query\n{"toolIds": [...]}
+  Mate --> Client: tool metadata
+  Client --> Discovery: ordered metadata
+  Discovery -> Discovery: update this source's name-to-id index
+  Discovery --> Tool: metadata
+  Tool --> Pipeline: scope + name + description + inputSchema
+end
+
+Pipeline -> Tool: execute CallMateTool({tool, args?})\nafter Runtime permission hook
+Tool -> Tool: require complete execution credentials
+Tool -> Discovery: resolveToolId(tool)
+alt Name present in Session cache
+  Discovery --> Tool: toolId
+else Cache miss
+  Discovery -> Client: load Agent + ALL directly bound Skills\nunder refresh lock
+  Client -> Mate: binding queries + metadata queries
+  Mate --> Client: metadata for all sources
+  Client --> Discovery: complete source snapshots
+  Discovery -> Discovery: reject conflicting names;\npublish complete index atomically
+  Discovery --> Tool: toolId or unresolved/error
+end
+alt Name resolved
+  Tool -> Client: callTool(toolId, args, credentials)
+  Client -> Mate: POST /runtime/tools/{toolId}/execute\n{"arguments": {...}} + credential headers
+  Mate --> Client: ResultBean result
+  Client --> Tool: ToolResult(content, metadata, isError)
+  Tool --> Pipeline: AgentToolResult or exception
+else Unresolved or discovery failed
+  Tool --> Pipeline: exception -> error ToolResultMessage
+end
+note over Client, Mate
+Paths in this diagram share prefix /mate-service/v1.
+Discovery carries no execution credential headers.
+The execution method has no automatic replay loop.
+end note
+@enduml
+
+@startuml skill_command
+' Baseline: pi-mono-java main 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7, checked 2026-09-18.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeCommandController.java :: executeSkill.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/service/command/skill/SkillCommandExecutionService.java :: execute, expand, publicInvocation.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeExecutionContextFactory.java :: createPreparedMessage.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/session/AgentSessionFactory.java :: create, request.runtimeValidator().accept.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeMessageEventService.java :: accept, startAccepted.
+' Observed behavior: expansion runs against the actual prepared runtime before user-message acceptance.
+hide footbox
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam ArrowColor #334155
+skinparam ParticipantBorderColor #64748B
+skinparam ParticipantBackgroundColor #EEF4FB
+skinparam ParticipantFontColor #0F172A
+skinparam NoteBackgroundColor #FFF8E8
+skinparam NoteBorderColor #D6BB74
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 140
+title Explicit Skill command / observed execution
+autonumber
+actor "HTTP caller" as User
+participant "SkillCommand\nExecutionService" as Skill
+participant "RuntimeMessage\nEventService" as Messages
+participant "Session preparation\nContextFactory / Registry /\nAgentSessionFactory" as Prep
+database "Runtime persistence" as DB
+participant "Agent execution\nCoordinator / Session / Loop" as Run
+
+User -> Skill: POST /sessions/{id}/command\nname="skill:example", arguments="..."\nvia RuntimeCommandController
+Skill -> Skill: normalize input;\npublic text="/skill:example ..."
+Skill -> Messages: submitPreparedMessage(publicText,\nexpansion callback, fileIds)
+Messages -> Messages: Session lock; require idle;\nreconcile model
+Messages -> Prep: createPreparedMessage()\nrestore history and prepare Session
+Prep -> Prep: AgentRuntimeManager.prepare(agentId)
+Prep -> Skill: runtimeValidator callback\nexpand(agentId, actualRuntime, input)
+Skill -> Skill: require directly bound Skill;\ncontent + optional arguments;\nvalidate expanded size
+Skill --> Prep: expanded Skill Markdown
+Prep -> Prep: create UserMessage in callback;\nbuild tools + prompt; register holder
+Prep --> Messages: context with expanded input
+Messages -> DB: acceptMessage() transaction
+note over Messages, DB
+Internal Entry: expanded Skill Markdown.
+Public user.message: /skill:example ...
+Execution identity and result segment are registered.
+end note
+DB --> Messages: accepted execution target
+Messages -> Messages: queue public receipt
+Messages -> Run: start(holder, execution, expanded UserMessage)
+Run -> Run: start asynchronous\nmodel / tool loop
+Messages --> User: RuntimeEventStream -> SSE emitter
+note over User, Run
+No separate Skill executor and no independent Skill tool.
+The command reuses ordinary message execution and SSE.
+end note
+@enduml
+
+@startuml skill_model_read
+' Baseline: pi-mono-java main 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7, checked 2026-09-18.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtime/AgentRuntimeManager.java :: prepare, writeSkills, loadSkill.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java :: load, loadSkills.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/skill/SkillPromptFormatter.java :: format.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/read/ReadTool.java :: execute.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/workspace/WorkspacePathResolver.java :: resolveFile.
+' Observed behavior: on this path, metadata points to SKILL.md and a model-issued Read loads instructions into conversation.
+hide footbox
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam ArrowColor #334155
+skinparam ParticipantBorderColor #64748B
+skinparam ParticipantBackgroundColor #EEF4FB
+skinparam ParticipantFontColor #0F172A
+skinparam NoteBackgroundColor #FFF8E8
+skinparam NoteBorderColor #D6BB74
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 240
+title Model-selected Skill / metadata then Read
+autonumber
+participant "Session setup\nManager / Factory /\nPromptLoader" as Setup
+collections "Managed Agent\nworkspace" as Files
+participant "AgentLoop" as Loop
+participant "Model\nvia CampusMate" as Model
+participant "Tool Pipeline\n+ ReadTool" as Read
+
+Setup -> Files: prepare runtime cache\nfetch and publish if incomplete
+Setup -> Files: load SYSTEM.md and Skill metadata
+Files --> Setup: name, description, SKILL.md location
+Setup -> Setup: filter disable-model-invocation;\nformat available_skills + policy prompt
+Setup -> Loop: configure Agent system prompt and tools
+Loop -> Model: ordinary message + system prompt\n+ built-in tool schemas
+opt Model chooses a visible Skill
+  Model --> Loop: ToolCall Read({path: SKILL.md})
+  Loop -> Read: resolve tool; validate schema; before hook
+  Read -> Files: validate Agent workspace boundary;\nread UTF-8 file
+  Files --> Read: Skill file bytes
+  Read --> Loop: text ToolResultMessage\nwith output limits / truncation details
+  Loop -> Model: next request contains Skill text\nas tool result
+  opt Skill instructions need a Mate business tool
+    Model --> Loop: ListMateTools({skillName: ...})\nthen CallMateTool({tool: ..., args: ...})
+    ref over Loop, Read
+      Reuse the tool pipeline and Mate discovery / execute path.
+    end ref
+  end
+end
+note over Loop, Model
+Model choice is not guaranteed by source code.
+No activate_skill tool is registered.
+Read may require further offset/limit requests for long files.
+end note
+@enduml
