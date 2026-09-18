@@ -77,20 +77,12 @@
       "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"
     },
     {
-      "key": "listSkillUsageStatistics",
-      "source": "统计契约/操作/01-list-skill-usage-statistics.json",
+      "key": "querySkillLoadStatistics",
+      "source": "统计契约/操作/01-query-skill-load-statistics.json",
       "common": "接口契约/common.json",
-      "status": "使用统计目标已确认 · target-only",
-      "note": "按根执行/Skill 统一去重显式与 Read 使用信号；部分正文即可，累计及近 7/30 天按首次入账信号归日。独立统计短事务失败不阻断主执行，允许漏计；首版 scope=runtime。目标方案已确认，未表示代码已实现或通过运行验收。",
-      "design": "../../04-命令与技能/03-Skill加载统计/README.md"
-    },
-    {
-      "key": "getSkillUsageDailyStatistics",
-      "source": "统计契约/操作/02-get-skill-usage-daily-statistics.json",
-      "common": "接口契约/common.json",
-      "status": "使用统计目标已确认 · target-only",
-      "note": "按根执行/Skill 统一去重显式与 Read 使用信号；部分正文即可，累计及近 7/30 天按首次入账信号归日。独立统计短事务失败不阻断主执行，允许漏计；首版 scope=runtime。目标方案已确认，未表示代码已实现或通过运行验收。",
-      "design": "../../04-命令与技能/03-Skill加载统计/README.md"
+      "status": "F19 查询契约已对齐 PR #295",
+      "note": "按指定 skillIds 批量查询 activationCount；可选 from/to。排名、趋势暂无需求，延后增加。PR 实现不表示已合入、部署或整项验收；F20 单独维护。",
+      "design": "../../04-命令与技能/03-Skill加载统计/README.md#6-查询接口"
     }
   ]
 }

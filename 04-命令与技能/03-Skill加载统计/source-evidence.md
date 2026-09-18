@@ -1,6 +1,6 @@
 # Skill 使用统计源码证据与实现差距
 
-版本 3.0.0 · 2026-09-16。[主设计](README.md)维护已确认目标；[Codex 专项](codex-skill-counting.md)维护其详细生产调用链。本页只把实际读取范围作为事实，不以 PR 结构决定产品需求。
+版本 3.1.0 · 2026-09-18。[主设计](README.md)维护已确认目标；[Codex 专项](codex-skill-counting.md)维护其详细生产调用链。本页只把实际读取范围作为事实，不以 PR 结构决定产品需求。
 
 ## 1. 固定基线
 
@@ -47,9 +47,9 @@ PR #298（依赖 #295）中的以下行为仅作为对照：
 | 路径 | 固定 PR 观察 | 对本设计的意义 |
 |---|---|---|
 | modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql · t_skill_load_events | 每次全文加载事件、独立 invocation/execution UUID | 本方案使用真实根/Skill 键；事实存在的理由是幂等/追溯，不是照搬原事件字段 |
-| modules/coding-agent-cli/src/main/resources/mapper/session/SkillLoadMapper.xml；runtimeapi/service/SkillLoadService.java | 根据调用方 IDs 做 COUNT/MAX；写失败只 WARN | 本方案从统计集合排名，三张统计表独立事务且失败隔离；不存在的统计资源不伪造目录存在 |
+| modules/coding-agent-cli/src/main/resources/mapper/session/SkillLoadMapper.xml；runtimeapi/service/SkillLoadService.java | 根据调用方 IDs 做 COUNT/MAX；写失败只 WARN | 历史对照；F19 当前使用批量 ID 查询，三表事务与采集边界仍由各自实现证据维护 |
 | session/AgentSessionFactory.java · recordSkillLoad；skill/usage/SkillReadCoverage.java | Host 按版本/摘要合并完整行覆盖 | 本方案统计根执行的使用信号，首次部分正文即可，同根反复 Read 不增加次数 |
-| runtimeapi/web/SkillLoadStatisticsController.java；modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java | POST /internal/skills/load-statistics/query，必传 skillIds | 该地址只作为 PR 观察，目标 GET 以 catalog 为准，无旧入口兼容声明 |
+| runtimeapi/web/SkillLoadStatisticsController.java；modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java | POST /internal/skills/load-statistics/query，必传 skillIds | 历史提交观察；2026-09-18 F19 已采用此批量 POST，最新字段及时间语义见下方专项核验 |
 
 本节缩写的 runtimeapi/session/skill 前缀同 §2，完整路径来自上述固定 PR 树。没有修改实现仓或向 PR 提交评审评论。
 
@@ -58,3 +58,21 @@ PR #298（依赖 #295）中的以下行为仅作为对照：
 2026-09-15 核对 [openGauss 5.0 INSERT 官方文档](https://docs.opengauss.org/en/docs/5.0.0/docs/SQLReference/insert.html)：ON DUPLICATE KEY UPDATE 处理唯一键冲突，EXCLUDED 表示待插入值；该语法不与 WITH/RETURNING 组合。本专题只在各有一个主键的汇总表使用它，事实先查同根/Skill，普通 INSERT 成功后才增量，主键冲突回滚统计事务，禁止依赖受影响行数猜测插入还是更新。
 
 这是语法参考，不证明公司 GaussDB 版本完全一致。未连接目标数据库执行新 DDL/事务、并发冲突、索引计划或保留策略。验证记录将设计制品检查与运行验收分开；未测结果不得标为通过。
+
+<a id="f19-query"></a>
+
+## F19 查询专项核验
+
+2026-09-18 读取 pi-mono-java PR #295 `c8cbda4946403d5e51b95ceaf0d7485166c54395`。本次只更新查询契约，不重新核验上游框架，也不将历史 Child/Cron 差距当作当前实现结论。
+
+以下 Java 路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`：
+
+| 路径与符号 | 已核实行为 |
+|---|---|
+| runtimeapi/web/SkillLoadStatisticsController.java#query | POST 内部查询、ResultBean、no-store 与错误映射 |
+| runtimeapi/vo/SkillLoadStatisticsRequestVO.java#Deserializer | skillIds 1～100、严格字符串及时间、未知字段拒绝 |
+| runtimeapi/service/SkillLoadService.java#query | 精确去重、保持顺序、有效范围校验、历史不完整返回 503 |
+| runtimeapi/vo/SkillLoadStatisticsResponseVO.java；SkillLoadStatisticsItemResponseVO.java | queriedAt/from/to/items 与 activationCount/lastLoadedAt；无 scope/metric/version |
+| modules/coding-agent-cli/src/main/resources/mapper/session/SkillLoadMapper.xml#query（仓库根相对路径） | 无时间条件读累计表，有时间条件读事实；同语句快照、零值补齐、清理范围检查 |
+
+F19 需求决定为保留当前查询、暂缓排名及趋势；无需为未来接口预先改表。F20、写入表目标与采集时序的其他差异不在本次修订中宣称解决。

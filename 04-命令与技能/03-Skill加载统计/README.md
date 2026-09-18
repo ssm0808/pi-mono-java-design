@@ -1,20 +1,22 @@
 # Skill 使用统计设计
 
-[命令与技能](../README.md) · [M05 主设计](../00-Slash-Command通用模块/README.md) · [Codex 机制详解](codex-skill-counting.md) · [统一接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#listSkillUsageStatistics)
+[命令与技能](../README.md) · [M05 主设计](../00-Slash-Command通用模块/README.md) · [Codex 机制详解](codex-skill-counting.md) · [统一接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#querySkillLoadStatistics)
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.0.0 |
-| 更新日期 | 2026-09-16 |
+| 文档版本 | 3.1.0 |
+| 更新日期 | 2026-09-18 |
 | 所属模块 | M05 负责 Skill 使用归因与统计；M06 提供真实根执行和工具来源；M04 维护 Session 生命周期 |
-| 状态 | 目标方案已确认，target-only；尚未实施或通过运行验收 |
-| 设计依据 | 不可变 Skill 快照、通用 Read、Runtime 根执行身份与独立观测边界；PR 的表和全文覆盖算法只作为实现对照 |
+| 状态 | F19 查询契约已对齐 PR #295；其余采集、存储及 F20 范围仍按所列历史基线待对齐，不表示整项验收 |
+| 设计依据 | F19 按 2026-09-18 需求确认采用现有批量 POST；其他章节保留 v3.0.0 的目标与核验范围 |
 | 源码基线 | Codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51；Java f61906b9136246ca60f333704b6fc92b5420d0ec；pi 5cd93f688aaab89dbb6dfa4aca535f21796ae185 |
-| 精确模型 | Runtime catalog 的两项统计 operation JSON；本文维护计量、职责、存储与实施约束 |
+| 精确模型 | Runtime catalog 的批量统计查询 operation JSON；本文维护计量、职责、存储与实施约束 |
+
+本次仅修订 F19 查询契约。§6 的 `activationCount` / `lastLoadedAt` 是现行响应字段；其他章节的 `usageCount` / `lastUsedAt`、Runtime 范围及目标表结构仍是 v3.0.0 待对齐内容，不应据此要求现行接口返回旧字段或 `scope`。F20 不在本次修订中关闭。
 
 ## 1. 目标、口径与范围
 
-管理端查询 Skill 的累计使用频度、近 7/30 天排名和每日趋势。**usageCount 表示已记录到合格使用信号的根执行数：同一 (sessionId, rootEventId, skillId) 至多计 1。** 显式注入与 Read 共用这一规则，不因分页、反复读取或确认续跑增加次数。
+管理端按指定 skillIds 查询累计激活次数或精确时间范围内的次数。排名、日趋势当前没有需求，待管理面明确需要后再增加。**usageCount 表示已记录到合格使用信号的根执行数：同一 (sessionId, rootEventId, skillId) 至多计 1。** 显式注入与 Read 共用这一规则，不因分页、反复读取或确认续跑增加次数。
 
 合格信号是实际 Skill 指令已随输入成功受理，或成功 Read 最终结果中确有受管主文档正文。部分正文即可触发；它证明执行接触过该 Skill，不证明模型理解、实际遵循了指令或业务成功。因此展示为“使用次数”，不能标为“全文加载次数”“每次工具调用次数”或已经验证的“任务采用率”。
 
@@ -172,37 +174,53 @@ Session 生命周期锁不会让统计与 Runtime 主事务成为同一个事务
 
 ## 6. 查询接口
 
-统一前缀 /campusclaw-service/v1，两项 GET、无请求体。成功 ResultBean，错误保留 HTTP 状态且不带 result。精确模型和示例见[统一接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#listSkillUsageStatistics)。
+当前提供一个只读批量查询：`POST /campusclaw-service/v1/internal/skills/load-statistics/query`。
+操作标识为 `querySkillLoadStatistics`，成功使用 ResultBean；精确模型和示例见[统一接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#querySkillLoadStatistics)。
+实现证据为 PR #295 `c8cbda4946403d5e51b95ceaf0d7485166c54395` 的 Controller、Request/Response VO、Service 和 Mapper，详见[查询证据](source-evidence.md#f19-query)。
 
-| 操作 | 路径 | 参数 |
+### 6.1 请求与时间边界
+
+| 字段 | 规则 |
+|---|---|
+| skillIds | 必填字符串数组，原始数组 1～100 项；每项符合 `skill-[0-9A-Fa-f]{32}`，精确去重且保留首次出现顺序 |
+| from | 可省略；带明确时区的 RFC 3339 时间戳，最多毫秒精度；左闭边界 |
+| to | 可省略；同上；右开边界，缺省取本次数据库查询时间 queriedAt |
+
+请求体只允许这三个字段；显式 null、非字符串 ID/时间、未知字段和多个根 JSON 对象拒绝。提供 from 时必须早于生效的 to。
+
+- from、to 均省略：读取累计表，返回功能启用以来所有已入账激活；历史事实清理不扣减累计。
+- 任一时间字段出现：从事实表按 `[from, to)` 精确聚合；省略 from 表示无下界，省略 to 使用 queriedAt。
+- 时间按绝对时刻比较，不按日表或近 7/30 个自然日近似替代。请求可带偏移，响应统一 UTC 毫秒。
+- 返回有效 to；from 未提供时为 null。累计分支的 to 是查询快照时间标记，不代表重新按事实时间过滤累计表。
+
+### 6.2 响应与错误
+
+result 固定为 `queriedAt`、`from`、`to`、`items`；每项固定为 `skillId`、`activationCount`、`lastLoadedAt`。
+同一查询使用数据库语句快照，items 按请求 ID 首次出现的顺序返回，不排序、不分页。
+activationCount 为非负 64 位整数；lastLoadedAt 是所查询集合内最近的已计激活时间，不是最近一次重复读取时间。
+没有统计记录的合法 ID 也返回一项，activationCount=0、lastLoadedAt=null；不查询远端主数据，也不据此判断 Skill 是否存在，不返回统计资源 404。
+响应不含 metric、definitionVersion、scope、period、排名、分页或趋势字段。统计允许漏计，不证明模型遵循指令或任务成功。
+
+| HTTP | 错误码 | 条件 |
 |---|---|---|
-| listSkillUsageStatistics | /skills/usage-statistics | period=all/7d/30d，sort=usageCount/lastUsedAt，page、limit |
-| getSkillUsageDailyStatistics | /skills/{skillId}/usage-statistics/daily | 路径 skillId；period=7d/30d |
+| 400 | INVALID_SKILL_LOAD_STATISTICS_QUERY | 请求字段、类型、ID、时间格式或范围不合法 |
+| 500 | SKILL_LOAD_STATISTICS_QUERY_FAILED | 数据库查询等内部失败；不得伪装为零 |
+| 503 | SKILL_LOAD_STATISTICS_HISTORY_UNAVAILABLE | 请求时间范围与已清理事实的范围相交，无法提供精确统计 |
 
-### 6.1 排名与时间窗口
-
-默认 all、usageCount 倒序、page=1、limit=50（最大 200）；并列按 Skill ID 升序。直接查询统计集合，不要求 skillIds。累计读累计表，7/30 天读日表 SUM/MAX，先过滤/聚合，再排序分页；只返回正计数。取 limit+1 判定 nextPage，不返回 total；空库、空窗口和合法超范围页返回空 items。
-
-返回 scope、period、timeZone、fromDate、toDate、queriedAt、page、limit、nextPage、items；每项 skillId、usageCount、lastUsedAt。all 日期边界为 null，表示功能启用以来累计。queriedAt 与数据取同语句快照，是查询时间，不是观测完整性水位。跨请求分页为实时排名，新增使用可能导致重复/遗漏，不能当稳定导出。
-
-7d/30d 包含今天，Asia/Shanghai 自然日，边界左闭右开。例如 2026-09-15 的 7d 是 [2026-09-09, 2026-09-16)。跨天续跑不产生新日计数。日期按固定时区转换，不依赖 JVM 默认时区或固定毫秒天数。
-
-### 6.2 单项日趋势与不存在
-
-同一 SQL 快照检查累计资源，再补齐连续 7/30 日。返回 scope、skillId、period、timeZone、fromDate、toDate、queriedAt、usageCount、lastUsedAt、items；合计等于日项之和，lastUsedAt 为窗口内最后一个已计事实时间。
-
-- 累计存在而窗口内无记录：200，连续零值日期，usageCount=0、lastUsedAt=null。
-- 累计不存在：404 SKILL_USAGE_STATISTICS_NOT_FOUND，只说明没有统计资源，不推断 Skill 主数据不存在。
-- 非法 ID/参数：400；查询失败或保留窗口不可用：500/503，不能伪装成零。
-- 首次合格事实自动创建三表对应行；无主数据查询或预初始化依赖。不存在统计行不会妨碍 Runtime 执行。
+错误沿用现有 ResultBean 错误包装及请求语言，不带 result。成功响应 Cache-Control 为 no-store。
 
 ### 6.3 权限与分层
 
-只供有部署级统计权限的管理调用方经 CampusMate/部署入口访问内部 Runtime。Claw 沿用上游授权；X-HW-ID 是凭据 ID，不能推导 tenantId。无法证明整个统计集合访问权限时不开放。多租户扩展须先补可信归属、表键和聚合前过滤，不能先全库分页再筛当前页。
+只供有部署级统计权限的管理调用方经 CampusMate/部署入口访问内部 Runtime；传入 skillIds 不构成授权。
+Claw 沿用上游授权；X-HW-ID 是凭据 ID，不能推导 tenantId。没有可信租户维度前不能宣称提供租户隔离统计。
+Skill 名称和目录状态由元数据所有者补充，接口只返回请求 ID 的统计。
+Controller 使用 SkillLoadStatisticsRequestVO / SkillLoadStatisticsResponseVO；Service 精确去重、校验有效时间边界并转换响应；Mapper 负责快照查询。
 
-名称和目录状态由元数据所有者补充；先确定统计页，再批量补名称，不能拿目录当前页冒充全局排名。名称不可用时保留 ID 和统计结果。
+### 6.4 暂缓排名与趋势
 
-Controller 使用 SkillUsageStatisticsListRequestVO / SkillUsageDailyStatisticsRequestVO 和各自 ResponseVO；格式/必填由 Jakarta 校验，默认值和窗口在 Service 统一归一。Service 转换 VO/DTO，Mapper 只用 DTO/标量，排序枚举映射固定 SQL，Controller 包装 ResultBean。遵守现有中文 Javadoc、Lombok、50 行方法约束，不新增 PO/DO/Entity。
+F19 可以暂不实施，等管理面明确需要排名、趋势时再增加。当前不发布 `/skills/usage-statistics` 和 `/skills/{skillId}/usage-statistics/daily` 两项 GET，也不保留其分页或 7/30 日参数作为现行契约。
+若未来沿用现有统计维度及 Asia/Shanghai 自然日口径，可复用累计表和日汇总表，增加查询接口、查询逻辑和测试，无需为此预先变更表结构。
+按入口等新维度拆分、保留窗口、排名分页一致性及缺日处理，待需求明确后另行设计，不预先承诺接口形状。
 
 ## 7. 推荐全局目标类图
 
@@ -224,10 +242,10 @@ Controller 使用 SkillUsageStatisticsListRequestVO / SkillUsageDailyStatisticsR
 |---|---|---|
 | S1 · 数据与失败隔离 | 三表、Mapper、独立 Service 事务、外层异常隔离、生命周期准入 | 重复键不加数；并发首写和不同根共享 Skill 不丢更新；任一统计写/提交失败只回滚三表；主受理/工具保持成功；超时与连接释放 |
 | S2 · 信号与根绑定 | Read 通用证据、Resolver、执行级 Tracker、最终 hook 和显式受理后接入 | 显式加三次 Read 共 1；部分/中段正文计数；A/B 分别计；新根再计；确认续跑不变；失败/空/改写/取消无信号；规范 ID 缺失安全跳过 |
-| S3 · 查询契约 | 两项 GET、VO/DTO、scope、分页、日期和管理授权 | 无 skillIds；先聚合后排序；并列/空页；7/30 日连续、合计同源；404/零值/500/503；跨天重复不刷新 lastUsedAt |
+| S3 · 查询契约 | 批量 POST、skillIds、可选 from/to、activationCount 与管理授权 | 原始 1～100 项、精确去重及顺序；累计/精确范围；零值与 null；400/500/503；事实清理后累计保留 |
 | S4 · 生命周期与部署 | Tracker 关闭/恢复、清理准入、三表一致备份、发布脚本 | 活跃根事实不清理；删除与迟到写竞争；历史读取/fork 不重计；失败漏计边界；热点/连接/锁/端到端等待与 30 日查询实测 |
 
-首版无历史回填或旧报表兼容要求；目标 SQL 是安装设计片段，不自动执行数据库变更。PR #295/#298 的全文事件和 POST 是所查提交的观察，不作为本目标的接口兼容要求。
+首版无历史回填或旧报表兼容要求；目标 SQL 是安装设计片段，不自动执行数据库变更。F19 查询以 §6 的现有 POST 为准；采集和数据库目标的历史差距不因本次接口对齐而自动关闭。
 
 ## 9. Child、Cron 与后续扩展
 
@@ -249,6 +267,7 @@ openGauss 5.0 INSERT 文档作为 UPSERT 语法依据；公司 GaussDB 版本、
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.1.0 | 2026-09-18 | F19 对齐现有批量 POST 与 activationCount 响应，排名和趋势延后按需设计。 |
 | 3.0.0 | 2026-09-16 | 按根执行统一去重 Skill 使用信号，统计独立短事务且失败不阻断主执行。 |
 | 2.0.0 | 2026-09-15 | 基于 Codex 观测机制定义成功调用事实、来源幂等、三表同事务和 Runtime 统计查询。 |
 | 1.1.0 | 2026-09-15 | 按设计仓职责补充 Skill 调用观测基线，明确全文加载方案的候选边界。 |

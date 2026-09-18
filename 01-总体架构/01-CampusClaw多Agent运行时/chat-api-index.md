@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.13.0 |
-| 更新日期 | 2026-09-17 |
+| 文档版本 | 1.14.0 |
+| 更新日期 | 2026-09-18 |
 | 变更性质 | Session POST 按可选字段部分更新；前端单项调用，接口允许组合提交；组合写入及 mode 为 target-only |
-| 唯一当前入口 | [当前十一项接口](chat-api-review.html) |
+| 唯一当前入口 | [当前十项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
 
 结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 target-only，Session/元数据不增字段，Mate 公共投影独立集成。
@@ -20,9 +20,9 @@
 
 ## 2. 权威与状态
 
-- [catalog.json](接口契约/catalog.json) 唯一决定当前十一项 operation（九项原有目标、两项已确认使用统计目标）、顺序、精确源和关联设计。每个 method + path 只能出现一次，活动目录中的模型必须全部登记。
+- [catalog.json](接口契约/catalog.json) 唯一决定当前十项 operation（九项原有目标、一项 Skill 批量统计查询）、顺序、精确源和关联设计。每个 method + path 只能出现一次，活动目录中的模型必须全部登记。
 - [chat-api-review.html](chat-api-review.html) 是唯一当前人类接口页，从清单及精确模型生成，不手工编辑 HTML。
-- 七项 Session/Command 普通契约和两项已确认使用统计目标复用 `接口契约/common.json`；两个 Events 使用 `事件契约/common.json`。统计源位于 `统计契约/操作`，两项精确字段只在该处维护。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
+- 七项 Session/Command 普通契约和一项 Skill 批量统计查询复用 `接口契约/common.json`；两个 Events 使用 `事件契约/common.json`。统计源位于 `统计契约/操作`，查询精确字段只在该处维护。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
 - `review` 与 `reviewState` 继续记录原有确认决定；清单中的说明只解释其适用边界，不替代或自动提升确认状态。B01～B15 已实际提交确认；两个 Events 目标契约已定稿，question 列表清空，数值校准另列。
 - Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；公共命令与普通对话各自维护状态。
 
@@ -46,7 +46,7 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 | Events 执行准入、有序追加、数据库中断与机制验收 | [Events 总体设计](chat-events-design.md) | 流设计只保留调用方可见的响应边界 |
 | SSE 首帧、响应绑定、关闭、背压和恢复 | [流设计](chat-events-stream-design.md) | 总体文档引用；参数仍以精确模型为准 |
 | 历史投影、分页与对账 | [历史设计](chat-events-history-design.md) | 流和总体文档不重复分页参数 |
-| Skill 使用统计口径、数据库与失败隔离 | [M05 统计主设计](../../04-命令与技能/03-Skill加载统计/README.md) | 两项 GET 的精确字段归统计 operation JSON，按根执行去重，独立目标状态 |
+| Skill 使用统计口径、数据库与失败隔离 | [M05 统计主设计](../../04-命令与技能/03-Skill加载统计/README.md) | 批量 POST 的精确字段归统计 operation JSON；F19 对齐 PR #295，F20 单独维护 |
 
 必要的安全边界摘要可以保留，但不能在摘要中新增字段、规则或未决项的确认。
 废止内容从 Git 追溯；不能继续生成旧报文，也不以“历史”标签保留第二套可调用说明。
@@ -94,6 +94,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.14.0 | 2026-09-18 | F19 对齐批量 POST，排名和趋势暂缓，接口清单调整为十项。 |
 | 1.13.0 | 2026-09-17 | 登记调用事件 displayName 的共享契约和快照维护入口。 |
 | 1.12.0 | 2026-09-16 | 两项使用统计目标按根执行统一去重并更新确认状态。 |
 | 1.11.0 | 2026-09-15 | 统一维护调用统计的 Runtime 范围、来源幂等和新资源路径。 |

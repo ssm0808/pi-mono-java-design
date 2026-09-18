@@ -1,23 +1,15 @@
 # Skill 使用统计设计验证
 
-版本 3.0.0 · 2026-09-16。目标方案已确认，新增实现仍为 target-only。[源码证据](source-evidence.md)维护固定 Java/pi/PR 基线，[Codex 专项](codex-skill-counting.md)维护计数器与分析事件的区别。
+版本 3.1.0 · 2026-09-18。F19 查询契约已对齐 PR #295；采集、存储目标及 F20 不在本次修改范围。[源码证据](source-evidence.md)维护固定 Java/pi/PR 基线，[Codex 专项](codex-skill-counting.md)维护计数器与分析事件的区别。
 
-## 1. 设计制品检查
+## 1. F19 设计制品检查
 
-| 检查 | 结果及证明范围 |
-|---|---|
-| 源码与边界 | 沿用 Codex d58d0e58、pi 5cd93f68；Java f61906b9 核对 ExecutionTargetDTO、根绑定、消息受理/启动、Factory/hook 组合、工具调用映射、最终结果与 details 投影。新方案独立标为 target-only，不把固定 PR 对照升级为最新主线事实。 |
-| Runtime 全量契约 | python3 validate-chat-api.py --full：11 个唯一 operation、原 7 项普通接口、两项 Events、两项统计；原确认状态保持，14 个既有图主题及关联负向回归通过。 |
-| 统计专项 | python3 validate-skill-statistics.py：两项 GET、无需 ID 列表、Runtime scope、7/30 日连续序列及合计、同窗口排名/趋势一致、零值/404、ResultBean、目标状态、三表/中文注释、根/Skill 主键与 SQL 写入顺序通过。仅检查文档模型，未执行数据库事务。 |
-| 页面交互 | JSDOM_MODULE=/private/tmp/campusclaw-session-contract-check/node_modules/jsdom node test_chat_api.cjs：11 项接口的 Header/语言/响应切换、重开状态、无 JS 与渲染失败回退通过。 |
-| 浏览器视觉 | 独立临时 Chrome 检查 1440×1000 的排名和 30 日趋势、390×844 窄屏；无页面横向溢出、无 pageerror。实际查看截图，未使用用户浏览器资料。 |
-| PlantUML 与 SVG | plantuml -tsvg diagram.puml 成功；两图为有效 XML，图源 ASCII。全局类图与失败隔离时序已查看原尺寸和 860px 缩放图，检查职责链、箭头、标签及遮挡；Markdown 提供原尺寸入口。 |
-| API 设计技能校验 | validate_api_design.py 本专题通过：5 份 Markdown 的 SVG 路径及 PlantUML 锚点、2 张生成 SVG、Git whitespace。无 OpenAPI 为不适用；精确报文由 catalog 的 JSON 维护。 |
-| 导航与退役检查 | 模块主设计、M04/M06、A09 对比及图索引同步；当前目标使用 usage-statistics、usageCount、t_skill_usage 三表；旧名称仅留在明确的基线证据和版本历史。无 Mermaid 围栏，图源/图文件/链接同步，git diff --check 通过。 |
+- 读取实现仓 PR #295 `c8cbda4946403d5e51b95ceaf0d7485166c54395` 的查询 Controller、VO、Service、Mapper，核对路径、ID 数量及顺序、时间边界、累计与范围分支、零值与错误码。
+- `python3 validate-chat-api.py` 检查生成页面同步、10 项唯一接口、请求/响应模型、原有契约回归及导航；统计专项检查批量 POST、activationCount/lastLoadedAt、零值响应、错误码，确认排名和趋势 GET 已退出当前接口清单。
+- 本次没有修改统计类图和时序图的结构，不重新核验上游框架；仅更新 A09 的 CampusClaw 查询目标。图中其他 target-only 类与 F20 范围仍待独立对齐。
+- 本次为设计契约修改，没有运行 Java、数据库、部署鉴权、浏览器视觉或 JSDOM 交互测试；旧版排名/趋势的页面验证结果不用于本版验收。HTML 生成一致性及内嵌脚本语法检查通过，git diff --check 通过。
 
-校验工具为已有本地依赖，没有新增 Maven 依赖。本次改写不改变其他模块主图的架构结论；M05 的统计全局主图和时序图统一维护于本专题。
-
-## 2. 必须由实现验收关闭的项目
+## 2. v3.0.0 历史验收范围（本次未重新核验）
 
 - 未连接公司 GaussDB 执行 schema.sql / record-usage.sql；没有可用的目标数据库验证环境。openGauss 5.0 文档仅支持语法选择，不证明公司版本、唯一键异常映射或并发行为。
 - 未实现或运行新 Java 统计代码。S1/S2 需验证实际事务代理、无主事务嵌套、提交阶段异常、重复主键及任意统计写失败只回滚三表，主受理与工具保持原结果。

@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 1.1.0；2026-09-16 |
+| 版本 | 1.1.1；2026-09-18（仅更新 CampusClaw 查询目标，上游证据未变） |
 | 固定仓库与提交 | openai/codex，d58d0e5841e0de08e251673db2d5af8cf3a1ad51 |
 | 证据性质 | 固定源码静态分析、测试用例阅读、官方文档核对；未运行基线或访问分析后台 |
 | 范围 | Skill 选择、主提示加载、Shell 识别、资源读取、身份、去重、metric、analytics、Turn 耗时归因 |
@@ -150,7 +150,7 @@ SkillTelemetry 在 Turn 开始保存计时器。调用时 record_plugin_turn_usa
 | best-effort 遥测 | 统计失败不改变主执行结果；三张统计表在独立事务中一起提交 | 架构变更：内部汇总一致但允许漏计，不保证与 Runtime 历史恒等 |
 | 有界异步分析队列 | 首版一次有等待预算的同步写入，无新增 MQ/OTel 依赖 | 架构变更：实现较少，但连接/锁/语句等待仍影响延迟，须实测；不能称作 Codex 同一投递架构 |
 | Thread/Turn 关联 | 复用 sessionId/rootEventId；确认、问答、审核续跑保持根 | 产品约束：根执行不等同 Codex Turn 或整个 Session |
-| 无公开后台表证据 | 自行设计 t_skill_usage、累计/日表和两项 GET | 证据边界：这是 CampusClaw 目标，不是 Codex 后台实现 |
+| 无公开后台表证据 | 自行设计 t_skill_usage、累计/日表；查询采用批量 POST，排名与趋势暂缓 | 证据边界：这是 CampusClaw 目标，不是 Codex 后台实现 |
 
 显式 A 后 Read A 三次，在本目标中共计 1；Codex 的不同入口可能输出不同数量。CampusClaw usageCount 表示已记录使用信号的根执行数，不证明模型实际采用。日期归首个入账信号，同根跨天重复不刷新计数或 lastUsedAt。范围、失败和清理以[主设计](README.md)为准；目标已确认但仍为 target-only。
 

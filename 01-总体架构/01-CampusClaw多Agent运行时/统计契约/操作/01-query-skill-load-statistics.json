@@ -1,0 +1,183 @@
+{
+  "operation": {
+    "shortName": "批量查询 Skill 激活统计",
+    "operationKey": "querySkillLoadStatistics",
+    "method": "POST",
+    "path": "/internal/skills/load-statistics/query",
+    "summary": "按指定 Skill ID 查询累计或精确时间范围内的激活次数",
+    "description": "F19 对齐 PR #295 c8cbda49。排名、日趋势暂缓；接口不返回 scope，采集入口与 F20 范围由专题单独维护。统计允许漏计，不代表模型遵循指令或业务成功。",
+    "parameters": [
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "description": "skillIds 必填，原始数组 1～100 项，精确去重并保留顺序。from/to 可省略；出现时必须为带时区且精度不超过毫秒的 RFC 3339 字符串，不能是 null。只接受这三个字段。",
+      "example": {
+        "skillIds": [
+          "skill-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "skill-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+      }
+    },
+    "responses": [
+      {
+        "id": "200-cumulative",
+        "status": "200",
+        "label": "OK",
+        "summary": "累计查询（省略 from/to）",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "queriedAt": "2026-09-18T02:15:00.000Z",
+              "from": null,
+              "to": "2026-09-18T02:15:00.000Z",
+              "items": [
+                {
+                  "skillId": "skill-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "activationCount": 12,
+                  "lastLoadedAt": "2026-09-17T08:20:00.000Z"
+                },
+                {
+                  "skillId": "skill-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "activationCount": 0,
+                  "lastLoadedAt": null
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "200-range",
+        "status": "200",
+        "label": "OK",
+        "summary": "精确范围查询（请求提供 from，可省略 to）",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "queriedAt": "2026-09-18T02:15:00.000Z",
+              "from": "2026-09-01T00:00:00.000Z",
+              "to": "2026-09-18T02:15:00.000Z",
+              "items": [
+                {
+                  "skillId": "skill-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "activationCount": 3,
+                  "lastLoadedAt": "2026-09-17T08:20:00.000Z"
+                },
+                {
+                  "skillId": "skill-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "activationCount": 0,
+                  "lastLoadedAt": null
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "400-invalid_skill_load_statistics_query",
+        "status": "400",
+        "label": "INVALID_SKILL_LOAD_STATISTICS_QUERY",
+        "summary": "Skill 加载统计查询参数不合法。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SKILL_LOAD_STATISTICS_QUERY",
+            "resMsg": "Skill 加载统计查询参数不合法。"
+          }
+        }
+      },
+      {
+        "id": "500-skill_load_statistics_query_failed",
+        "status": "500",
+        "label": "SKILL_LOAD_STATISTICS_QUERY_FAILED",
+        "summary": "Skill 加载统计查询失败。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SKILL_LOAD_STATISTICS_QUERY_FAILED",
+            "resMsg": "Skill 加载统计查询失败。"
+          }
+        }
+      },
+      {
+        "id": "503-skill_load_statistics_history_unavailable",
+        "status": "503",
+        "label": "SKILL_LOAD_STATISTICS_HISTORY_UNAVAILABLE",
+        "summary": "所请求时间范围的 Skill 加载明细已不完整，无法提供精确统计。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SKILL_LOAD_STATISTICS_HISTORY_UNAVAILABLE",
+            "resMsg": "所请求时间范围的 Skill 加载明细已不完整，无法提供精确统计。"
+          }
+        }
+      }
+    ],
+    "contractSections": [
+      {
+        "title": "批量查询契约",
+        "columns": [
+          "项目",
+          "规则"
+        ],
+        "rows": [
+          [
+            "ID",
+            "skill-[0-9A-Fa-f]{32}；原始数组 1～100 项，精确去重，按首次出现顺序返回。合法但无记录的 ID 返回 0/null，不返回 404。"
+          ],
+          [
+            "时间",
+            "from 左闭，to 右开；省略 to 使用 queriedAt。提供 from 时须早于有效 to。两项均省略读取累计；任一出现读取事实，不使用日表近似。"
+          ],
+          [
+            "快照与字段",
+            "同一数据库语句快照；响应 UTC 毫秒。result 为 queriedAt/from/to/items；项为 skillId/activationCount/lastLoadedAt，无 scope、metric、definitionVersion、排序分页或趋势。"
+          ],
+          [
+            "历史清理",
+            "累计保留；精确范围与已清理事实范围相交返回 503，不补零伪造精确结果。"
+          ],
+          [
+            "授权",
+            "仅内部授权管理调用方访问；skillIds 不是授权凭据，不证明已实现租户隔离。"
+          ],
+          [
+            "后续",
+            "排名、趋势待管理面明确需要后再设计增加；当前不提供两项 GET。"
+          ]
+        ]
+      }
+    ]
+  },
+  "review": {
+    "questions": []
+  },
+  "designStatus": "implemented-in-pr"
+}
