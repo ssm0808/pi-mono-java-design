@@ -7,7 +7,7 @@
 ' Source paths: frontend/src/composables/useRuntimeApi.ts.
 ' Observed behavior at the recorded baseline: tests cover many modules, while CI runs only Maven verify and the legacy agent covers Runtime HTTP.
 ' Design reason: an independent Codex quality engineer must maintain product knowledge and tests while deterministic executors decide pass or fail.
-' Target-only: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
+' Pending implementation: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
 
 skinparam backgroundColor white
 skinparam shadowing false
@@ -67,7 +67,7 @@ Triage --> Report
 Triage --> Maintainer : reproducible gap
 
 legend bottom left
-Target-only assembly; exact source evidence remains bound to recorded commits.
+Pending implementation assembly; exact source evidence remains bound to recorded commits.
 The registry is long-term product knowledge; chat memory is not authoritative.
 Checked-in assertions decide results; the Agent explains and maintains tests.
 Product code, weakened assertions and automatic merging are outside Agent authority.
@@ -81,7 +81,7 @@ endlegend
 ' Test paths: modules/coding-agent-cli/src/test/java and modules/agent-core/src/test/java.
 ' Observed behavior: design versions and implementation tests evolve independently and exact requirement-to-test binding is incomplete.
 ' Design reason: mature requirements must create executable red tests before product implementation, while proposals must not block delivery.
-' Target-only: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
+' Pending implementation: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
 
 skinparam backgroundColor white
 skinparam shadowing false
@@ -150,7 +150,7 @@ end note
 ' Frontend paths: frontend/src/composables/useRuntimeApi.ts and frontend/src/projectors/runtimeEventProjector.ts.
 ' Observed behavior: pull requests and pushes run Maven verification, but frontend and deep environment suites are not required.
 ' Design reason: event-driven deterministic gates provide near-real-time detection, while Codex scheduled tasks perform deeper maintenance and triage.
-' Target-only: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
+' Pending implementation: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
 
 skinparam backgroundColor white
 skinparam shadowing false

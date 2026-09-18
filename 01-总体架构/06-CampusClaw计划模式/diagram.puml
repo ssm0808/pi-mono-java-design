@@ -11,14 +11,14 @@ skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
-' Prompt scope: Java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7; modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/PlanPolicyPromptComposer.java :: compose.
+' Tool/prompt status checked 2026-09-18: Java 8c5fda1dde51675859bc9c07e145dbe253656dea; modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/PlanPolicyPromptComposer.java :: compose.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java :: create, configureAgent.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: beginToolConfirmation, claimAndResumeToolConfirmation.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java :: markToolConfirming, acceptToolConfirmation.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java :: prepare, accept, startAccepted.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java :: start, commitAndRelease.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionControlDispatcher.java :: dispatchConfirmation, dispatchStop.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java :: create, get, delete; update is target-only.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java :: create, get, delete; update is pending implementation.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java :: requireMutableSession, requireUpdated.
 ' Design reason: mode is updated on the Session resource through the existing configuration service.
 ' Source: modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java :: invokeModel, runToolPhase.
@@ -26,9 +26,9 @@ hide empty members
 ' Source: packages/plan/plan-mode/src/index.ts :: PlanModeController, exit_plan_mode.
 ' Observed behavior: the existing Runtime owns streams, durable controls and active executions.
 ' Design reason: add plan policy and review without changing tool metadata or the Agent Loop.
-' Java divergence: HTTP plan review and database handoff are target-only additions.
+' Java divergence: HTTP plan review and database handoff are implemented product extensions.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: persistToolResults.
-' Source: frontend/src/runtime/eventStore.ts :: mergeEvent, reconcileEvents; applyTodoUpdated is target-only.
+' Source: frontend/src/runtime/eventStore.ts :: executionTodos; implemented explicit task-event consumption.
 ' Claude public tool events checked 2026-09-15; no native TODO contract.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java :: appendEntry.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: appendEventsLocked, recordProjectionIfComplete.
@@ -37,32 +37,33 @@ hide empty members
 ' Design reason: PLAN.md limits planning; tool descriptions own progress; BUILD.md is a short transition policy.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java :: create, newSession.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare, refresh, toSettings, toRuntime.
-' Product constraint and target-only change: Agent.mode initializes new Sessions, published via settings.
+' Product constraint and pending implementation change: Agent.mode initializes new Sessions, published via settings.
 ' Question source baseline: pi-mono-java 699f929f6826b595ed1d0162f6def66e2f84760b.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: beginPlanReview, await, prepareStop.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeControlEventService.java :: acceptPlanConfirmation, accept.
-' Observed behavior: separate permission and plan futures; no AskUserQuestion tool.
+' Historical behavior at 699f929f: separate permission and plan futures; no AskUserQuestion tool.
 ' Design reason: share one interaction slot and immutable parsed question snapshot; preserve separate business decisions.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java :: load, readOptionalFile.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java :: loadSnapshot, readOptionalFile.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare, rebuild, writeRuntimeTree, publish.
-' Java divergence: optional mode files, refresh preservation and immutable prompt snapshots are target-only.
+' Observed at 8c5fda1d: optional mode files, refresh preservation and immutable prompt snapshots are implemented.
 ' Design reason: resolve files under the publication lock once; approval reuses the original snapshot.
 title CampusClaw Plan and User Interaction - Complete Target Class View
 allowmixing
 
 legend bottom left
-  Green: existing structure     Amber: existing, extended
-  Blue: new target-only class   Blue connectors: target-only relations
+  Green: implemented structure     Amber: recommended extension
+  Blue: pending implementation of extraction; responsibilities already implemented
+  Blue connectors: recommended responsibility links, not missing features
   Controllers, services, factories, repositories, TODO mapper: Spring singletons
   Execution package and tools: one instance per execution
 endlegend
 
 package "HTTP and client boundary" as HttpBoundary {
-  class "Runtime Plan UI" as UI <<target-only>> #EAF2FF
-  class "Todo projection" as TodoView <<target-only>> #EAF2FF {
-    +applyTodoUpdated(event.todos, rootEventId)
+  class "Runtime Plan UI" as UI <<implemented>> #ECFDF5
+  class "Todo projection" as TodoView <<implemented>> #ECFDF5 {
+    +executionTodos(events)
   }
-  class "Question card / projection" as QuestionUI <<target-only>> #EAF2FF
+  class "Question card / projection" as QuestionUI <<implemented>> #ECFDF5
   class "Client event store" as EventStore <<existing>> #ECFDF5
   class "RuntimeSessionController" as ConfigApi <<extended>> #FFF7DD
   class "RuntimeEventController" as EventApi <<extended>> #FFF7DD
@@ -79,15 +80,15 @@ package "Application and assembly" as Application {
   class "RuntimeMessageEvent\nService" as MessageService <<extended>> #FFF7DD
   class "RuntimeExecution\nCoordinator" as Coordinator <<extended>> #FFF7DD
   class "RuntimeSessionControl\nDispatcher" as Dispatcher <<extended>> #FFF7DD
-  class "RuntimePlanReviewService" as ReviewService <<target-only>> #EAF2FF {
+  class "RuntimePlanReviewService" as ReviewService <<pending implementation>> #EAF2FF {
     +beginReview(targetDTO, callId, plan)
     +acceptPlanConfirmation(requestVO)
   }
-  class "RuntimeUserQuestionService" as QuestionService <<target-only>> #EAF2FF {
+  class "RuntimeUserQuestionService" as QuestionService <<implemented>> #ECFDF5 {
     +beginQuestion(finalCall, targetDTO)
     +acceptAnswer(requestVO)
   }
-  class "QuestionRequestParser" as QuestionParser <<target-only>> #EAF2FF
+  class "QuestionRequestParser" as QuestionParser <<implemented>> #ECFDF5
   class "AgentSessionFactory" as Factory <<extended>> #FFF7DD
   class "PlanPolicyPromptComposer" as Composer <<extended>> #FFF7DD {
     +compose(prompts, mode, entryPoint): String
@@ -108,7 +109,7 @@ note bottom of PromptLoader
   Read under the same Agent lock as publication.
 end note
   class "AgentDirectory\nSnapshotDTO" as AgentSnapshot <<extended>> #FFF7DD {
-    mode: String [target-only]
+    mode: String [pending implementation]
     existing model and path fields
   }
   database "Mate Agent definition / managed directory" as AgentSource
@@ -121,25 +122,25 @@ end note
 
 package "Execution ownership" as ExecutionScope {
   class "RuntimeActiveExecution" as Execution <<extended>> #FFF7DD
-  class "RuntimePending\nInteraction" as Pending <<target-only>> #EAF2FF {
+  class "RuntimePending\nInteraction" as Pending <<implemented>> #ECFDF5 {
     kind: permission / plan / question
     +claimAndResume(decisionDTO)
     +cancel(cause)
   }
   class "ManagedAgentSession" as Session <<extended>> #FFF7DD
-  class "SessionPlanContext" as PlanContext <<target-only>> #EAF2FF {
+  class "SessionPlanContext" as PlanContext <<pending implementation>> #EAF2FF {
     prompts: immutable AgentPromptSnapshotDTO
     toolNames: immutable assembled snapshot
     mode: committed snapshot
     +applyCommittedMode(snapshotDTO)
   }
-  class "AgentPromptSnapshotDTO" as PromptSnapshot <<target-only>> #EAF2FF {
+  class "AgentPromptSnapshotDTO" as PromptSnapshot <<implemented>> #ECFDF5 {
     immutable basePrompt, planPrompt, buildPrompt
     immutable planSource, buildSource
   }
-  class "RuntimePlanReviewAdapter" as ReviewAdapter <<target-only>> #EAF2FF
-  class "RuntimeUserQuestionAdapter" as QuestionAdapter <<target-only>> #EAF2FF
-  class "QuestionRequestSnapshotDTO" as QuestionSnapshot <<target-only>> #EAF2FF {
+  class "RuntimePlanReviewAdapter" as ReviewAdapter <<pending implementation>> #EAF2FF
+  class "RuntimeUserQuestionAdapter" as QuestionAdapter <<pending implementation>> #EAF2FF
+  class "QuestionRequestSnapshotDTO" as QuestionSnapshot <<implemented>> #ECFDF5 {
     immutable normalized questions
   }
 }
@@ -151,16 +152,16 @@ package "Core and model tools" as ToolScope {
   class "AgentLoop" as Loop <<existing>> #ECFDF5
   class "ToolExecutionPipeline" as Pipeline <<existing>> #ECFDF5
   interface "AgentTool" as Tool <<existing>> #ECFDF5
-  class "ExitPlanModeTool" as ExitTool <<target-only>> #EAF2FF
-  class "TodoUpdateTool" as TodoTool <<target-only>> #EAF2FF {
+  class "ExitPlanModeTool" as ExitTool <<implemented>> #ECFDF5
+  class "TodoUpdateTool" as TodoTool <<implemented>> #ECFDF5 {
     +execute(args): AgentToolResult
   }
-  class "AskUserQuestionTool" as QuestionTool <<target-only>> #EAF2FF
-  interface "UserQuestionPort" as QuestionPort <<target-only>> #EAF2FF {
+  class "AskUserQuestionTool" as QuestionTool <<implemented>> #ECFDF5
+  interface "UserQuestionPort" as QuestionPort <<implemented>> #ECFDF5 {
     +await(callId, signal): QuestionAnswerResultDTO
   }
   class "Existing built-in tools" as ExistingTools <<existing>> #ECFDF5
-  interface "PlanReviewPort" as ReviewPort <<target-only>> #EAF2FF {
+  interface "PlanReviewPort" as ReviewPort <<implemented>> #ECFDF5 {
     +review(callId, plan, signal): DecisionDTO
   }
 }
@@ -172,7 +173,7 @@ package "Persistence and event boundary" as PersistenceScope {
   class "MyBatisRuntime*\nRepository" as Repos <<extended>> #FFF7DD
   interface "Runtime*Mapper" as Mappers <<extended>> #FFF7DD
   class "RuntimeEventProjector" as Projector <<extended>> #FFF7DD
-  class "RuntimeTodoEventMapper" as TodoMapper <<target-only>> #EAF2FF {
+  class "RuntimeTodoEventMapper" as TodoMapper <<implemented>> #ECFDF5 {
     +map(finalCall, finalResult): TodoSnapshotDTO
   }
   class "RuntimeCommitted\nEventFactory" as EventFactory <<extended>> #FFF7DD {
@@ -319,7 +320,7 @@ autonumber
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java :: markConfirming, acceptConfirmation, claimConfirmation.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionControlDispatcher.java :: dispatchConfirmation.
 ' Observed behavior: tool confirmation closes one response and resumes through a new fixed segment.
-' Design reason: target-only plan review reuses this transport and durable handoff.
+' Design reason: plan review reuses this transport and durable handoff.
 ' Java divergence: immutable plan event identity is the approval target; tool permissions remain separate.
 title CampusClaw Plan Review - Target Sequence
 actor User
@@ -401,7 +402,7 @@ end note
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionState.java :: IDLE, RUNNING.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java :: timeout, commitAndRelease.
-' Source: frontend/src/runtime/eventStore.ts :: executionState; the plan projection is target-only.
+' Source: frontend/src/runtime/eventStore.ts :: executionState; historical baseline, current implementation evidence in section 12.
 ' Observed behavior: confirming closes HTTP output without releasing Session admission.
 ' Design reason: review stays in execution state; clients recover from events, without a Session pointer.
 ' Java divergence: manual mode switching is idle-only; approval exits within the original execution.
@@ -477,13 +478,13 @@ autonumber
 ' Source: packages/todo/tool-todo/src/index.ts :: apply, execute; whole-list replacement.
 ' Observed behavior: Java commits generic results at the existing TurnEndEvent boundary.
 ' Design reason: commit explicit task snapshots with the successful tool result.
-' Java divergence: TodoUpdateTool, task event mapping and client reducer are target-only, not Claude built-ins.
+' Java status at 8c5fda1d: TodoUpdateTool, RuntimeTodoEventMapper and executionTodos are implemented; not Claude built-ins.
 title CampusClaw TodoUpdate - Build Implementation Progress
 participant "AgentLoop / Pipeline" as Loop
-participant "TodoUpdateTool\n(target-only)" as Todo
+participant "TodoUpdateTool\n(implemented)" as Todo
 participant "Runtime Event\nProjector + TODO mapper" as Projector
 database "Existing entries / events" as DB
-participant "Client event store\n+ applyTodoUpdated (target-only)" as UI
+participant "Client event store\n+ executionTodos" as UI
 participant "Existing history API" as History
 
 note over Loop,Todo
@@ -566,7 +567,7 @@ autonumber
 ' Claude managed-agents/tools and events-and-streaming checked 2026-09-14 (beta).
 ' Observed behavior: generic tool results are committed before stream output at batch end.
 ' Design reason: separate plan review from build progress and reuse existing public tool events.
-' Java divergence: per-Agent mode overrides and execution snapshots are target-only; see source-evidence.md section 11.
+' Observed at 8c5fda1d: per-Agent mode overrides and execution snapshots are implemented; see source-evidence.md section 12.
 title CampusClaw Plan Mode - Complete Target Interaction
 actor User
 participant "Client" as UI
@@ -709,12 +710,12 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-' Java baseline: 1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4.
+' Java UI baseline: 8c5fda1dde51675859bc9c07e145dbe253656dea, checked 2026-09-18.
 ' Previous baseline: 699f929f6826b595ed1d0162f6def66e2f84760b.
-' Source: frontend/src/components/QuestionCard.vue :: fieldset v-for, submit.
+' Source: frontend/src/components/QuestionCard.vue :: currentIndex, displayedQuestions, submit.
 ' Source: frontend/src/projectors/runtimeEventProjector.ts :: projectRuntimeEvents.
 ' Codex d58d0e58: codex-rs/tui/src/bottom_pane/request_user_input/mod.rs :: go_next_or_submit.
-' Observed behavior: question control is implemented; one-at-a-time UI is target-only.
+' Observed behavior: question control, one-at-a-time UI and tool activity grouping are implemented.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: beginPlanReview, finishConfirmingOutput.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeControlEventService.java :: accept.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: await, claimAndResumePlanReview, prepareStop.
@@ -744,7 +745,7 @@ group 1. Publish and wait (plan or build)
   end note
 end
 group 2. Accept a complete answer
-  loop Local question navigation [target-only UI]
+  loop Local question navigation [implemented UI]
     User -> UI : Answer current question; next or back
     UI -> UI : Validate one question; keep all drafts; no request
   end

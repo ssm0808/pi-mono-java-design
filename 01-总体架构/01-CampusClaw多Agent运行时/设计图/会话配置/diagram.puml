@@ -7,7 +7,7 @@
 ' Observed behavior: existing services commit individual properties; there is no combined update.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java :: toolsFor, afterPropertiesSet.
 ' Design reason: one candidate and one transaction prevent partial multi-field writes.
-' Java divergence: POST, preparation methods, candidate DTO and combined commit are target-only.
+' Java divergence: POST, preparation methods, candidate DTO and combined commit are pending implementation.
 title Unified Session Update - Complete Target Class View
 top to bottom direction
 allowmixing
@@ -26,7 +26,7 @@ hide empty members
 
 package "Web boundary" as WebLayer {
   class "RuntimeSessionController" as API <<extended>> #FFF7DD
-  class "UpdateSessionRequestVO" as Request <<target-only>> #EAF2FF {
+  class "UpdateSessionRequestVO" as Request <<pending implementation>> #EAF2FF {
     displayName / modelId
     thinking / mode
   }
@@ -41,11 +41,11 @@ package "Application - Spring singletons" as AppLayer {
   class "SessionThinking\nConfigurationService" as Thinking <<extended>> #FFF7DD
   class "RuntimeSession\nResponseAssembler" as Assembler <<extended>> #FFF7DD
   class "SessionEtagFactory" as Etag <<existing>> #ECFDF5
-  class "PlanPolicyPromptComposer" as Policy <<target-only>> #EAF2FF
+  class "PlanPolicyPromptComposer" as Policy <<pending implementation>> #EAF2FF
   class "BuiltInToolProperties" as Profile <<extended>> #FFF7DD
 }
 package "Request snapshot" as RequestLayer {
-  class "SessionUpdate\nCandidateDTO" as Candidate <<target-only, immutable>> #EAF2FF {
+  class "SessionUpdate\nCandidateDTO" as Candidate <<pending implementation, immutable>> #EAF2FF {
     expectedVersion / submittedFields
     final values / resolved capabilities
   }
@@ -96,8 +96,8 @@ note bottom of Repo
   One version increment; all fields/events or none.
 end note
 legend bottom left
-  Green: existing. Amber: extended. Blue: new target-only.
-  Blue arrows: new target-only calls.
+  Green: existing. Amber: extended. Blue: new pending implementation.
+  Blue arrows: new pending implementation calls.
   Preparation methods must not independently commit.
   All nonempty subsets of the four fields are accepted atomically.
 endlegend
@@ -125,7 +125,7 @@ autonumber
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java :: getView.
 ' Observed behavior: existing configuration writes use row locks and durable events.
 ' Design reason: resolve a combined target before a single version-checked transaction.
-' Java divergence: unified POST and atomic four-property update are target-only.
+' Java divergence: unified POST and atomic four-property update are pending implementation.
 title Unified Session POST - Target Transaction
 actor Caller
 participant "RuntimeSessionController" as API

@@ -28,7 +28,7 @@ skinparam NoteBackgroundColor #FFF8D9
 ' - packages/storage/sqlite-node/src/sqlite/storage/index.ts: appendEntry
 ' Observed behavior: pi stores parent links, an active leaf, materialized state,
 ' branch caches, and entry materialized labels in a local SQLite backend.
-' Target-only product constraint: CampusClaw exposes one active path and only
+' Pending implementation product constraint: CampusClaw exposes one active path and only
 ' allows editing the latest user message on that path.
 ' Architecture change: centralized GaussDB keeps four tables and reconstructs
 ' the active path from parent_id without branch cache tables.
@@ -114,7 +114,7 @@ skinparam NoteBackgroundColor #FFF8D9
 ' - packages/storage/sqlite-node/src/sqlite/storage/session-materialized.ts
 ' Observed behavior: pi serializes writes in one process and updates seven
 ' categories of Session state in one SQLite transaction.
-' Target-only edit rule: a new user entry shares the old user entry parent and
+' Pending implementation edit rule: a new user entry shares the old user entry parent and
 ' becomes the new active leaf while the old subtree stays immutable.
 ' Architecture change: branch caches and label projection writes are removed.
 ' Concurrency hardening: lock session before sequence and require expected leaf.
@@ -185,7 +185,7 @@ skinparam NoteBackgroundColor #FFF8D9
 ' - packages/storage/sqlite-node/src/sqlite/migrations/002_branch_tips.sql: lines 1-12
 ' - packages/storage/sqlite-node/src/sqlite/storage/session-materialized.ts
 ' Observed behavior: pi has seven Session tables after its two migrations.
-' Target-only product constraint: CampusClaw removes branch cache tables,
+' Pending implementation product constraint: CampusClaw removes branch cache tables,
 ' entry materialized labels, generic moveTo, and arbitrary branch queries.
 ' Target adaptation: retain parent_id and active_leaf_id for immutable edits.
 ' Type adaptation: bounded VARCHAR, BIGINT, TIMESTAMPTZ(3), and JSONB.

@@ -389,15 +389,15 @@
       ],
       "rows": [
         [
-          "计划审核（target-only）",
+          "计划审核（Runtime 已实现）",
           "agent.plan 与 confirming 同事务提交后关闭原 SSE，Session 保持 running/plan。审核精确绑定方案 eventId，普通肯定文本不批准。approve 原子保存决定、续跑段、build 模式和模式事件；回执先行，原执行更新提示词后返回工具结果；revise 保持 plan 并提交新方案。工具授权、计划审核与问题回答共享至多一个等待点，不能互相消费；中断先提交则拒绝确认，断线补历史不重放 POST。"
         ],
         [
-          "结构化提问（target-only）",
+          "结构化提问（Runtime 已实现）",
           "AskUserQuestion 生成 agent.question；user.question_answer 精确关联问题并续跑原执行。问题等待复用 confirming，不释放 running、不改变 mode；三类交互互斥。前端直接使用 questions，模型读取答案工具结果，展示事件不重复注入模型历史。新增内部等待指针和答案交接表，不扩充 Session/元数据响应。"
         ],
         [
-          "任务快照（target-only）",
+          "任务快照（Runtime 已实现）",
           "TodoUpdate 仅用于 build 实施，plan 调研不记录清单。工具结果与 agent.todo_updated 用独立 eventId，同一 ToolResult Entry/事务按顺序保存，提交后依次发送；SSE 与 GET 同形。任务事件不更新 mode/ETag、不表示执行终态；按原 sourceEventId 隔离，新根重新开始。完整事件缺页时先对账，不自动重发写请求。读取端新增类型支持后再启用工具生产；Mate 公共投影需独立同步。"
         ],
         [
@@ -427,7 +427,7 @@
       ]
     },
     "questions": {
-      "title": "AskUserQuestion 与回答契约（target-only）",
+      "title": "AskUserQuestion 与回答契约（Runtime 已实现）",
       "description": "questionContract 是精确 Schema 源；问题与答案均通过现有 Events，无新 HTTP 路径。工具只装配交互 Runtime 根，两模式定义相同。",
       "columns": [
         "字段/场景",
@@ -467,7 +467,7 @@
   },
   "questionContract": {
     "version": "2026-09-15.1",
-    "status": "target-only",
+    "status": "Runtime 已实现；Mate 桥接待实现",
     "toolName": "AskUserQuestion",
     "description": "Ask the user one to three concise questions when required information or a user-owned choice blocks further work. Use stable question ids, optional choices and optional multiSelect; free text is always supported. Ask only what cannot be established by inspecting available information. This must be the only tool call in the assistant response. Wait for the returned answers before continuing the same task. Answers do not approve a plan, change mode, or replace business-tool permission confirmation. Never invent an answer or treat cancellation, silence or failure as consent.",
     "parameters": {

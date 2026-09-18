@@ -6,7 +6,7 @@
 |---|---|
 | 设计版本 | 1.2.1 |
 | 日期 | 2026-09-14 |
-| 状态 | 已确认无参、三个业务字段、空数组、缓存往返与显式刷新旧缓存；统一响应设计删除 command 回显，target-only |
+| 状态 | 已确认无参、三个业务字段、空数组、缓存往返与显式刷新旧缓存；统一响应设计删除 command 回显，待实现 |
 | 设计仓基线 | `372fb2cbec6e8a525d30d2310ef68e3da18e33f7` |
 | 已核验源码基线 | pi-mono-java `d8e22562e22ac41ef4bb5cc6b36b576139417bd9` |
 | 专项评审页 | [Help HTTP 评审](help-review.html)，直接从 Runtime 操作 13 提取生成 |
@@ -46,7 +46,7 @@
 整体系统先看[Slash 完整全局目标类图](../../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)；
 其 [PlantUML 源码](../../00-Slash-Command通用模块/设计图/diagram.puml#L95) 为 Slash 与 Builtin 共用的唯一全局主图。
 本专题只下钻 Help 的元数据、缓存和结果投影，不再以 Help 为中心重排全局关系或合并其他命令的职责边界。
-以下类图是局部补充，不代表完整 Command 系统；所有新增类和连接仍为 target-only。
+以下类图是局部补充，不代表完整 Command 系统；所有新增类和连接仍为 待实现。
 
 ![Help 元数据与结果投影补充类图](target_help_metadata_classes.svg)
 
@@ -148,7 +148,7 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 | 同上，toIdentity:630、toRuntime:646、AgentIdentity:717 | userCases 未落盘，恢复时固定空列表 | 缓存字段往返是 Help 开发的前置验收，而不是只写一个展示 Handler |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java`，metadata | 既有不可变快照持有 AgentRuntime | 单次读取后复制白名单字段，避免请求内重复取数 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/execution/CommandExecutionContext.java`，session / catalog | Session 来自同一次 Catalog；注释仍描述 Help 清单 | 保留共享执行上下文，移除 Help 内容对清单的依赖并修订过时注释 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/builtin/BuiltinCommandContributor.java`、`BuiltinCommandDefinition.java`；`command/execution/CommandHandler.java` | 核心 SPI 已存在；该基线未出现 Help Handler/Query Service | 复用 SPI，Help 实现和新响应仍是 target-only |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/builtin/BuiltinCommandContributor.java`、`BuiltinCommandDefinition.java`；`command/execution/CommandHandler.java` | 核心 SPI 已存在；该基线未出现 Help Handler/Query Service | 复用 SPI，Help 实现和新响应仍是 待实现 |
 
 - **产品决策**：用户明确将 Help 从命令目录改为当前 Agent 的介绍；不需要引用其他 Harness 的 Help 来证明这一产品选择。
 - **架构变更**：Help 从 Catalog Formatter 改为元数据查询；补齐已有 userCases 的缓存往返和读取/发布互斥，不新增独立存储。

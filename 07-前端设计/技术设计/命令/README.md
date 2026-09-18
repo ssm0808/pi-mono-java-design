@@ -251,7 +251,7 @@ expectedResultKind。必须校验所选协议的 Content-Type 与完整 Schema�
 1.3.0 的历史源码补充核对为 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，
 当时 App.submit、ComposerBox 与 useRuntimeApi 尚无命令适配；交互实现以 §2.1 中各次明确记录的源码范围为准。
 共享组件与生命周期以[公共对话对齐](../public-chat-alignment.md)维护。
-此差异是已确认内部契约驱动的 target-only 前端架构调整，不表示公共 Skill 已发布。
+此差异是已确认内部契约驱动的 待实现 前端架构调整，不表示公共 Skill 已发布。
 
 ## 7. 结果投影
 
@@ -302,7 +302,7 @@ Help `userCases` 未来若增加“填入输入框”，也只能把纯文本放
 
 [PlantUML 源码](diagram.puml#L1) · [展开原尺寸 SVG](target_slash_command_frontend_components.svg)
 
-图中的独立 Slash 组件、Store、Registry 和 Gateway 拆分均为 target-only。现有 App、Composer、Timeline 和状态对象是迁移落点；
+图中的独立 Slash 组件、Store、Registry 和 Gateway 拆分均为 待实现。现有 App、Composer、Timeline 和状态对象是迁移落点；
 当前 Composer 已具备标签式命令功能，图不代表所有独立组件均按所示类名落地。
 
 | 对象 | 生命周期 | 单一职责 |

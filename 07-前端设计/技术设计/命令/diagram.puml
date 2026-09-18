@@ -25,7 +25,7 @@ title Target Slash Command Frontend Components
 ' Source evidence: frontend/src/components/ComposerBox.vue, enter, choose, leave, onKeydown, template
 ' Source evidence: frontend/src/runtime/commands.ts, parseCommand, filterCommands, freezeInvocation
 ' Observed behavior: commands exist inside Composer; rows show slash, kind and hint; selected input edits raw command text.
-' Target-only design: standalone class boundaries and chip presentation below are proposed, not existing classes.
+' Pending implementation design: standalone class boundaries and chip presentation below are proposed, not existing classes.
 ' Updated source baseline: pi-mono-java@7f1126262b16458e430c1a70aba9936e26391385
 ' Source evidence: frontend/src/components/ComposerBox.vue template; frontend/src/composables/useCommandComposer.ts
 ' Observed behavior: chips exist; Plus opens commands; Stop is only in App.vue topbar.
@@ -33,7 +33,7 @@ title Target Slash Command Frontend Components
 ' Updated source: pi-mono-java@699f929f6826b595ed1d0162f6def66e2f84760b
 ' Source: frontend/src/composables/useCommandComposer.ts selectedError, choose; components/ComposerBox.vue template.
 ' Observed behavior: attachment Plus, chip and running Stop now exist. Earlier observations are historical.
-' Target-only: shared question, plan and command admission below; public mapping is still gated.
+' Pending implementation: shared question, plan and command admission below; public mapping is still gated.
 ' Design reason: keep discovery, immutable invocation decoding, ephemeral results, and ordinary chat history as separate responsibilities.
 
 
@@ -45,7 +45,7 @@ package "Existing application shell" as ExistingPkg {
   class "Attachment draft state\n[current concept, extended]" as AttachmentState
 }
 
-package "Slash presentation [target-only]" as PresentationPkg {
+package "Slash presentation [pending implementation]" as PresentationPkg {
   class "AttachmentMenu\nno command entry" as MoreMenu
   class "CommandRunAction\nvisible while Session runs" as RunAction
   class "ComposerPrimaryAction\nsend or stop" as PrimaryAction
@@ -55,7 +55,7 @@ package "Slash presentation [target-only]" as PresentationPkg {
   class "CommandResultRenderers" as Renderers
 }
 
-package "Slash application state [target-only]" as StatePkg {
+package "Slash application state [pending implementation]" as StatePkg {
   class "useSlashCommands" as UseSlash
   class "CommandDraftStore\nper active chat" as DraftStore
   class "CommandCatalogStore\nper active chat" as CatalogStore
@@ -65,7 +65,7 @@ package "Slash application state [target-only]" as StatePkg {
   class "Shared Chat interaction state\nquestion / plan / permission\none current target" as InteractionState
 }
 
-package "Gateway boundary [target-only]" as GatewayPkg {
+package "Gateway boundary [pending implementation]" as GatewayPkg {
   interface "CommandGateway" as Gateway
   class "MateCommandGateway\nproduction target" as MateGateway
   class "RuntimeCommandGateway\ncontrolled development only" as RuntimeGateway
@@ -143,7 +143,7 @@ title Slash Composer Interaction State
 ' Source baseline: pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60
 ' Source evidence: frontend/src/components/ComposerBox.vue, enter, leave, choose, submit and onKeydown
 ' Observed behavior: selection closes the palette; the editor retains the raw slash command and button labels change.
-' Target-only design: removable chips, argument-only editing and consistent Escape restoration are proposed.
+' Pending implementation design: removable chips, argument-only editing and consistent Escape restoration are proposed.
 ' Design reason: explicit selection and explicit execution prevent accidental state-changing commands.
 
 skinparam backgroundColor #FFFCFA
@@ -252,7 +252,7 @@ title Slash Command Discovery and Execution Flow
 ' Source evidence: frontend/src/components/ComposerBox.vue, choose and runCommand
 ' Source evidence: frontend/src/runtime/commands.ts, freezeInvocation and decodeCommandResult
 ' Observed behavior: current command submission already freezes an invocation and decodes by expected result kind.
-' Target-only design: the browser workflow and production Mate gateway are proposed.
+' Pending implementation design: the browser workflow and production Mate gateway are proposed.
 ' Design reason: decode from an immutable invocation, never replay an uncertain mutation, and reconcile through authoritative resources.
 
 

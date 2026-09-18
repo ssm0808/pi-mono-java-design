@@ -2,7 +2,7 @@
 
 [前端主设计](../README.md) · [可操作工作台](../原型/plan-workbench.html) · [计划模式主设计](../../01-总体架构/06-CampusClaw计划模式/README.md)
 
-版本：1.4.0；日期：2026-09-16。性质：内部 Runtime 已有计划、审核、问答与任务投影；Build/Plan 命名、逐题卡片及工具日志合并是 target-only 新交互，见[体验证据](../source-evidence.md#experience-evidence)。Mate 公共接入仍为目标设计，原型不代表部署验证。
+版本：1.5.0；日期：2026-09-18。性质：内部 Runtime 已有计划、审核、问答与任务投影；逐题卡片及工具日志合并已在主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 实现，见[最新局部核验](../../01-总体架构/06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)。其他体验保留原核验范围。Mate 公共接入待实现，原型不代表部署验证。
 
 本页维护 M07 的模式入口、方案阅读、审核和进度展示。模式、审核事务与恢复权威归 M01 的计划模式专题；精确字段归 Runtime 共享契约和审核增量，企业接入归 Mate 公共契约。本页不增加 HTTP API、Slash Command 或后端状态。
 

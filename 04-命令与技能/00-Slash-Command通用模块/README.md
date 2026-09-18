@@ -12,7 +12,7 @@
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
 | 发现层前置证据 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`；已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
 | Command GET 候选 | `7759481a1722422395d46564129827c6ee6df204`（未发布） |
-| 状态 | 用户确认的目标设计；公开实现为 target-only |
+| 状态 | 用户确认的目标设计；公开实现为 待实现 |
 
 前端 Composer、命令清单、独立草稿、临时结果和错误恢复由
 [Slash Command 前端专项](../../07-前端设计/技术设计/命令/README.md)统一维护；本文件继续维护共享 Command 核心与 HTTP 语义，
@@ -32,7 +32,7 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享
 
 ### Skill 统计职责
 
-[Skill 使用统计](../03-Skill加载统计/README.md)维护 M05 的使用信号、根执行/Skill 去重、累计/日表及批量 POST 查询（F19 已对齐 PR #295，排名、趋势暂缓）；[Codex 专项](../03-Skill加载统计/codex-skill-counting.md)维护固定源码机制。显式输入受理提交后与通用 Read 最终成功观察共用执行级 Tracker，三张统计表独立事务且失败不影响主执行。首版 Runtime，目标已确认、target-only；精确口径、权限、失败和 Child/Cron 接入前提由该专题维护。
+[Skill 使用统计](../03-Skill加载统计/README.md)维护 M05 的使用信号、根执行/Skill 去重、累计/日表及批量 POST 查询（F19 已对齐 PR #295，排名、趋势暂缓）；[Codex 专项](../03-Skill加载统计/codex-skill-counting.md)维护固定源码机制。显式输入受理提交后与通用 Read 最终成功观察共用执行级 Tracker，三张统计表独立事务且失败不影响主执行。首版 Runtime，目标已确认、待实现；精确口径、权限、失败和 Child/Cron 接入前提由该专题维护。
 
 ### 1.1 全局目标类图
 
@@ -40,7 +40,7 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享
 主图以设计仓 `06bea56c7a725bb749cffb6682bcf98a8f51884a` 的完整版为结构与排版基线，
 保留 Web、Application、Command Core、Builtin 委派和 Runtime/持久化的完整关系。
 主图完整表达 Help 元数据查询、Builtin 委派、Skill 执行和共享消息接受链。
-所有装配关系均为 target-only；分组仅归并重复实现，不把 Handler、业务服务、Coordinator 和 Repository 合成一个对象。
+所有装配关系均为 待实现；分组仅归并重复实现，不把 Handler、业务服务、Coordinator 和 Repository 合成一个对象。
 
 ![Slash Command 完整全局目标类图](设计图/target_slash_command_global_classes.svg)
 
@@ -210,7 +210,7 @@ GET 需按 operation 映射 503，不能全局修改同名错误的 422 映射�
 | modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/dto/command/ResolvedCommandDTO.java · InputDTO | 内部仍有 mode、双层 available、placeholder、suggestions | 允许内部保留，禁止泄漏进轻量响应 VO |
 | modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java · list/resolved | prepareCached 缺失返回空清单；running 生成不可用标记 | 共享 GET 在组装前区分缓存缺失与完整空绑定，缺失整体 503；running 整项过滤 |
 | modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/BuiltinCommandSource.java · definitions/list | Contributor 来源已装配，内部按名称排序 | 在 Application 投影固定显示顺序；不集中按名称执行 |
-| modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/ | 该固定 commit 无 RuntimeCommandController | GET 轻量 HTTP 尚为 target-only，不宣称设计合入即已上线 |
+| modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/ | 该固定 commit 无 RuntimeCommandController | GET 轻量 HTTP 尚为 待实现，不宣称设计合入即已上线 |
 
 pi 固定基线仍用 `5cd93f688aaab89dbb6dfa4aca535f21796ae185`：
 `packages/coding-agent/src/core/slash-commands.ts` 的 BuiltinSlashCommand 为 name/description/可选

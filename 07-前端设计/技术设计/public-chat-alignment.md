@@ -7,7 +7,7 @@
 | 版本 / 日期 | 1.9.0 / 2026-09-17 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
 | 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 仅作历史迁移证据；当前 Runtime 前端见[实现状态](../source-evidence.md#current-implementation) |
-| 性质 | Mate 公共接入为 target-only；内部 Runtime 前端已有实现，公司认证及 Chat/Session 边界保持 |
+| 性质 | Mate 公共接入为 待实现；内部 Runtime 前端已有实现，公司认证及 Chat/Session 边界保持 |
 | 契约依据 | [Mate Events 1.6.0](../../02-服务与接口/07-mate-service通用对话API/README.md)、[Claw POST 0.12.0](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-stream-design.md)、[Claw 历史 0.12.0](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md) |
 
 Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
@@ -51,7 +51,7 @@ Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thin
 | `frontend/package.json` | 已有 Vue、markdown-it；无共享状态库 | 使用现有 Composition API 和纯函数即可；本设计不增加 npm/Maven 直接依赖 |
 
 旧设计的 320d7907/bde1237 源码证据保留为历史。本文不重新分析 pi Agent Loop，也不将
-新状态机表述为 pi 既有 UI；行为依据是项目已确认契约，组件关系均为 target-only。
+新状态机表述为 pi 既有 UI；行为依据是项目已确认契约，组件关系均为 待实现。
 
 ## 3. 全局目标结构
 

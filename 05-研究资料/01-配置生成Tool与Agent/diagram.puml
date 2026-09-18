@@ -6,7 +6,7 @@
 ' Observed behavior: metadata becomes executable only when a runtime driver or remote server handles the call.
 ' Design reason: keep the model contract separate from implementation and deployment bindings.
 title Research Proposal: Tool Registration and Execution
-' Target-only research proposal, not the CampusClaw implementation plan.
+' Pending implementation research proposal, not the CampusClaw implementation plan.
 top to bottom direction
 skinparam shadowing false
 skinparam backgroundColor white
@@ -69,7 +69,7 @@ endlegend
 ' Observed behavior: agent configuration is compiled by an existing generic agent runtime.
 ' Design reason: resolve capabilities before starting a session and keep runtime state outside the manifest.
 title Research Proposal: Agent Compilation and Runtime
-' Target-only research proposal, not the CampusClaw implementation plan.
+' Pending implementation research proposal, not the CampusClaw implementation plan.
 top to bottom direction
 skinparam shadowing false
 skinparam backgroundColor white
@@ -120,7 +120,7 @@ endlegend
 ' Source evidence: Claude Managed Agents separates reusable MCP declarations from session authentication.
 ' Source evidence: OpenClaw agents.list separates agent identity from routing bindings and workspace state.
 ' Observed behavior: reusable configuration and deployment credentials have different lifecycles.
-' Target-only design: the three-resource split below is a proposed portable architecture, not an existing shared standard.
+' Pending implementation design: the three-resource split below is a proposed portable architecture, not an existing shared standard.
 ' Design reason: secrets, workspaces, and mutable state must not be embedded in reusable manifests.
 title Research Proposal: Manifest, Binding and State
 skinparam componentStyle rectangle

@@ -51,8 +51,8 @@ def check_structure(block):
             raise ValueError("Superseded or collapsed structure: " + obsolete)
     if "One owner implements Builtin and Skill" not in block:
         raise ValueError("Missing unified ownership")
-    if "06bea56" not in block or "Target-only" not in block:
-        raise ValueError("Missing presentation baseline or target-only boundary")
+    if "06bea56" not in block or "Pending implementation" not in block:
+        raise ValueError("Missing presentation baseline or 待实现 boundary")
 
 
 def first_diagram(markdown):

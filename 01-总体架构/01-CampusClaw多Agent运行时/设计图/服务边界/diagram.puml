@@ -3,7 +3,7 @@
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java.
 ' Observed behavior: the CampusClaw internal HTTP POST returns execution-scoped SSE without a public WebSocket path.
-' Target-only design: the mate-service public HTTP contract and its SSE projection are not implemented in this repository.
+' Pending implementation design: the mate-service public HTTP contract and its SSE projection are not implemented in this repository.
 ' Architecture change: both hops use HTTP request-response, message responses stream SSE; Runtime Builtin commands return JSON.
 ' Product constraint: the UI receives chatId only; sessionId remains an internal Runtime identifier.
 ' Security hardening: mate-service terminates public auth and projects internal events instead of forwarding bytes transparently.

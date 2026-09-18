@@ -5,7 +5,7 @@
 ' Test paths: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeHttpProcessOpenGaussIT.java.
 ' Observed behavior: route tests and opt-in process/OpenGauss integration tests exist, but default CI only runs Maven verify.
 ' Design reason: deterministic contract and state oracles must remain authoritative while the agent plans, launches, and maintains tests.
-' Target-only: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
+' Pending implementation: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
 
 skinparam backgroundColor white
 skinparam shadowing false
@@ -83,7 +83,7 @@ endlegend
 ' Process test path: modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeHttpProcessOpenGaussIT.java.
 ' Observed behavior: integration tests require explicit JAR and OpenGauss properties and can skip when prerequisites are absent.
 ' Design reason: required gates must provision dependencies and fail closed instead of silently skipping.
-' Target-only: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
+' Pending implementation: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
 
 skinparam backgroundColor white
 skinparam shadowing false
@@ -149,7 +149,7 @@ end
 ' Test evidence: pi-mono-java commit 1f801dbb82bdda30478e3354e685e3153b179a0c runtime API route and process tests.
 ' Observed behavior at the recorded baseline: tests are code-owned and do not have a separate requirement-to-case inventory.
 ' Design reason: case changes must be reviewable, traceable, and unable to weaken an accepted contract automatically.
-' Target-only: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
+' Pending implementation: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
 
 skinparam backgroundColor white
 skinparam shadowing false

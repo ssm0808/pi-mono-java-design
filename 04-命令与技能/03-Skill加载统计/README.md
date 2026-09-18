@@ -85,7 +85,7 @@ occurred_at 为被记录信号的服务端 UTC 毫秒时间：显式取受理时
 
 现有 afterHooks 可组合：业务 hook 依次完成结果改写，末尾观察器只观察最终值并原样传回。Hook 链提前失败、最终 isError=true 或观察时取消均不记；统计/归因异常在观察适配器内隔离，不能被 ToolExecutionPipeline 当作工具失败。主流程自身的取消仍遵循原语义，不由统计清除中断标志。观察之后发生的任务失败不撤销事实。
 
-Factory 只把执行入口提供的 Tracker/快照绑定到链尾；ManagedAgentSessionRequest 当前尚无统计装配参数，该扩展及 Host 的规范调用映射属于 target-only。使用请求范围的不可变 DTO 或显式依赖传递，不能在单例上保存“当前执行”、在工具线程中从 ThreadLocal 猜根，或让 Child/Cron 意外复用 Runtime Tracker。
+Factory 只把执行入口提供的 Tracker/快照绑定到链尾；ManagedAgentSessionRequest 当前尚无统计装配参数，该扩展及 Host 的规范调用映射属于 待实现。使用请求范围的不可变 DTO 或显式依赖传递，不能在单例上保存“当前执行”、在工具线程中从 ThreadLocal 猜根，或让 Child/Cron 意外复用 Runtime Tracker。
 
 Tracker 在 root 完成并释放执行对象时关闭，等待确认期间保持同一去重域；恢复时可重建内存优化，数据库键仍负责最终去重。每个 Skill 在一个 Tracker 内至多一次数据库尝试；失败状态也不循环重试。不得在持有 Tracker 的全局互斥锁时进行数据库 I/O，避免不同 Skill 的信号互相阻塞。
 
@@ -234,7 +234,7 @@ F19 可以暂不实施，等管理面明确需要排名、趋势时再增加。�
 
 [PlantUML 源码](diagram.puml#L90) · [原尺寸 SVG](skill_usage_record.svg)
 
-时序将主流程和统计事务分开；只在新事实插入后加数，异常必须在统计事务结束后隔离。它是 CampusClaw target-only 方案，不是 Codex 实际队列实现。
+时序将主流程和统计事务分开；只在新事实插入后加数，异常必须在统计事务结束后隔离。它是 CampusClaw 待实现 方案，不是 Codex 实际队列实现。
 
 ## 8. 实施切片与验收
 

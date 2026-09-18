@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.1.0；整理日期：2026-09-17。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `6026ba48`。旧提交差距不代表最新实现状态。
+版本：1.2.0；整理日期：2026-09-18。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `6026ba48`。旧提交差距不代表最新实现状态。活动工具的当前主线状态见 §4。
 
 | 基线 | 提交 |
 |---|---|
@@ -78,7 +78,7 @@ OpenCode `TaskTool` 仅用于对照父子消息隔离、进度和取消，不继
 | 同模块 `common/dto/ToolInfo.java` · displayName；`common/client/HttpMateToolClient.java` · toMeta；`common/client/mate/MateToolMeta.java` · record | 网关 display_name 已能进入 ToolInfo，但 toMeta 和 MateToolMeta 丢失该字段。 |
 | 同模块 `tool/mate/MateToolSessionCache.java` · CacheState / toNameIndex；`MateToolDiscovery.java` · resolveToolId | 当前索引仅 name-to-ID；目标让单次解析同时固定 ID 和可选展示名，执行与事件复用。 |
 | 同模块 `runtimeapi/runtime/RuntimeToolPermissionPolicy.java` · decide；`runtimeapi/event/RuntimeEventProjector.java` · persistFinalizedToolCall / persistToolCall | ALLOW/DENY 调用可在 Assistant 完整响应时先持久化，不能等 execute 或 tool_execution_start 再补名称；ASK 路径也须在首次调用事件前固定。权限决定仍独立。 |
-| 同模块 `runtimeapi/event/RuntimeCommittedEventFactory.java` · agentToolCall；`runtimeapi/dto/CommittedEventDTO.java` · payload；`runtimeapi/event/CommittedEventProjection.java` · projectToolCall；`runtimeapi/vo/SessionEventResponseVO.java` · AgentToolCallResponseVO | 现有 JSON payload 与共享投影可承载快照，当前 factory/VO/projection 均无 displayName；新增字段为 target-only。 |
+| 同模块 `runtimeapi/event/RuntimeCommittedEventFactory.java` · agentToolCall；`runtimeapi/dto/CommittedEventDTO.java` · payload；`runtimeapi/event/CommittedEventProjection.java` · projectToolCall；`runtimeapi/vo/SessionEventResponseVO.java` · AgentToolCallResponseVO | 现有 JSON payload 与共享投影可承载快照，当前 factory/VO/projection 均无 displayName；新增字段为 待实现。 |
 | `frontend/src/runtime/protocol.ts` · fields / only；`frontend/src/types/runtime.ts` · RuntimeEvent | 工具事件类型和字段白名单未含 displayName，需与服务端新增字段同步更新。 |
 
 pi 上游为 `https://github.com/badlogic/pi-mono.git`。2026-09-17 通过 `ls-remote --symref ... HEAD` 确认默认分支 `main`，在隔离 bare 仓库 fetch 后读取 `5a3a03a7f5db43692915d6ae45e6d96497ea248d`；这是当次默认分支源码快照，不声明为稳定发布。前次名称讨论使用 `42cd371ba49ac2cd398de6a37bb06542792cf613`，专题历史总基线 `5cd93f688aaab89dbb6dfa4aca535f21796ae185` 继续保留。仅复核以下路径，名称结论未变，未升级其他工具或压缩结论：
@@ -90,3 +90,20 @@ pi 上游为 `https://github.com/badlogic/pi-mono.git`。2026-09-17 通过 `ls-r
 Claude Managed Agents 的[工具事件模型](https://platform.claude.com/docs/en/api/beta/sessions/events/list)与[事件流](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)于 2026-09-17 重新核对，仍为 Beta。公开 `agent.custom_tool_use` 提供 name/input，没有通用 displayName；文档不能证明 Console 的标题实现，不推断私有服务端或 UI。
 
 CampusClaw 选择在 Host 外部事件中固定展示名，是产品可读性约束和架构变更，不是照搬 pi/Claude 的既有字段。可选字段、快照存储、缺失元数据降级及公共授权投影是已确认目标，相关 Java/前端改动和端到端回归尚未执行；无新增依赖。主图分层与执行关系不变，本次只补元数据和事件字段。
+
+## 4. 活动工具与主线实现状态（2026-09-18）
+
+通过 `git ls-remote --symref origin HEAD` 确认 pi-mono-java 默认分支为 main，fetch 后显式读取 `8c5fda1dde51675859bc9c07e145dbe253656dea`。本次只核验三个交互工具、装配、事件和模式资源，不将前文其他旧基线升级为当前结论。相对旧工具接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 和前次本地 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`，当前已包含结构化问答及两文件提示词装配。
+
+下列 Java 路径均相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 路径 / 符号 | 已核验实现 |
+|---|---|
+| `tool/builtin/BuiltInToolName.java`；`BuiltInToolProperties.java` · runtime/cron/childAgent；`DefaultBuiltInToolFactory.java` · create | 共 11 个活动名称；Runtime 默认依次包含八项基础工具、ExitPlanMode、TodoUpdate、AskUserQuestion；Cron/Child 缺省不含后三项。显式 profile 完全替换默认值。 |
+| `tool/plan/ExitPlanModeTool.java` · execute；`runtimeapi/runtime/RuntimeActiveExecution.java` · await、claimAndResumePlanReview | 校验完整计划、等待审核并返回真实决定；领取批准后应用 build 提示词再完成等待。 |
+| `tool/todo/TodoUpdateTool.java` · execute；`runtimeapi/event/RuntimeTodoEventMapper.java` · map；`RuntimeEventProjector.java` · persistToolResults、toolResultEvents | 校验完整列表，从最终成功结果生成任务快照；ToolResult 与 agent.todo_updated 同一次 appendEntry 提交。 |
+| `tool/question/AskUserQuestionTool.java` · execute；`runtimeapi/event/RuntimeEventProjector.java` · beginQuestion；`runtimeapi/runtime/RuntimeActiveExecution.java` · await、claimAndResumeQuestionAnswer | 发布问题并等待答案，接续同一执行；三个交互类型共享 RuntimePendingInteraction。 |
+| `runtimeapi/runtime/RuntimeSessionEngineRegistry.java` · createSession | 为审核和提问创建绑定当前执行的工具；工具通过窄端口等待，不直接依赖 HTTP 或数据库。 |
+| 资源 `modules/coding-agent-cli/src/main/resources/application.yml` · campusclaw.tools | 实际默认配置包含上述 11 项，与枚举/工厂一致。 |
+
+模式资源、逐题前端、历史证据与剩余边界集中见[计划源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)。本次是源码静态核验与设计校验，未重跑 Java、数据库、浏览器或真实模型测试；旧测试数量仍只归属于原提交。Mate 公共桥接待实现，不能据此将三个 Runtime 工具标为待实现。

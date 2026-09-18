@@ -1,5 +1,5 @@
 @startuml target_follow_up_handoff
-' Target-only. Direction accepted; disabled in the current product.
+' Pending implementation. Direction accepted; disabled in the current product.
 ' Source: pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/session/RuntimeSessionControlService.java
 ' Symbols: acceptLocked, requireRunningHolder, queueControl. Observed behavior: local Holder queues.
@@ -55,7 +55,7 @@ B --> C : M2 output on M2 SSE
 B -> D : Commit M2 real completion
 B --> C : M2 terminal; close M2 SSE
 legend bottom left
-Target-only and disabled. Public queue fields and failure policy need a separate design.
+Pending implementation and disabled. Public queue fields and failure policy need a separate design.
 M2 credentials stay only in B memory. Restore from internal context, never ListEvents.
 No object or token relay. Lost owner / credentials require separate recovery.
 Lease expiry does not prove remote side effects stopped.
@@ -64,12 +64,12 @@ endlegend
 
 @startuml target_follow_up_classes
 skinparam backgroundColor white
-' All types and relations below are target-only; names are not frozen.
+' All types and relations below are pending implementation; names are not frozen.
 ' Source: pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java
 ' Symbols: register, find, createHolder. Observed behavior: process-local execution objects.
 ' Design reason: application-level queue authority stays separate from runtime and request credentials.
-title Future FollowUp - target-only responsibility boundaries
+title Future FollowUp - pending implementation responsibility boundaries
 top to bottom direction
 hide empty members
 skinparam backgroundColor white
@@ -83,25 +83,25 @@ skinparam ClassBackgroundColor #F8FAFC
 skinparam stereotypeFontSize 10
 
 package "Web / API" as WEB {
-  class EventsController <<singleton, target-only>>
+  class EventsController <<singleton, pending implementation>>
 }
 package "Application" as APP {
-  class "EventSubmission\nService" as EventSubmissionService <<singleton, target-only>>
-  class FollowUpQueueService <<singleton, target-only>>
-  class FollowUpDispatcher <<singleton per instance, target-only>>
-  class "PendingSubmission\nRegistry" as PendingSubmissionRegistry <<singleton per instance, target-only>>
-  interface "FollowUpQueue\nRepository" as FollowUpQueueRepository <<target-only>>
-  class PendingSubmission <<memory only, target-only>>
+  class "EventSubmission\nService" as EventSubmissionService <<singleton, pending implementation>>
+  class FollowUpQueueService <<singleton, pending implementation>>
+  class FollowUpDispatcher <<singleton per instance, pending implementation>>
+  class "PendingSubmission\nRegistry" as PendingSubmissionRegistry <<singleton per instance, pending implementation>>
+  interface "FollowUpQueue\nRepository" as FollowUpQueueRepository <<pending implementation>>
+  class PendingSubmission <<memory only, pending implementation>>
 }
 package "Persistence adapter" as PERSIST {
-  class "MyBatisFollowUp\nQueueRepository" as MyBatisFollowUpQueueRepository <<singleton, target-only>>
+  class "MyBatisFollowUp\nQueueRepository" as MyBatisFollowUpQueueRepository <<singleton, pending implementation>>
   class "Shared database\nqueue / claim authority" as DB <<durable store>>
 }
 package "Runtime boundary" as CORE {
-  interface "RuntimeExecution\nLauncher" as RuntimeExecutionLauncher <<target-only>>
-  interface "SessionContext\nRestorer" as SessionContextRestorer <<target-only>>
-  class SessionExecution <<per execution, target-only>>
-  interface ExecutionIO <<runtime port, target-only>>
+  interface "RuntimeExecution\nLauncher" as RuntimeExecutionLauncher <<pending implementation>>
+  interface "SessionContext\nRestorer" as SessionContextRestorer <<pending implementation>>
+  class SessionExecution <<per execution, pending implementation>>
+  interface ExecutionIO <<runtime port, pending implementation>>
 }
 WEB -[hidden]down- APP
 APP -[hidden]down- CORE
@@ -122,7 +122,7 @@ SessionExecution --> ExecutionIO
 PendingSubmissionRegistry "1" *-- "0..bounded" PendingSubmission
 PendingSubmission ..|> ExecutionIO
 legend bottom left
-Future target-only; disabled in the current product.
+Future pending implementation; disabled in the current product.
 Recheck queue and execution state in the claim transaction; no network IO under DB locks.
 Controller uses RequestVO / ResponseVO; persistence uses Mapper / DTO.
 endlegend
@@ -130,7 +130,7 @@ endlegend
 
 @startuml target_follow_up_local_lifecycle
 skinparam backgroundColor white
-' Target-only local lifecycle, no public queue API or durable credentials.
+' Pending implementation local lifecycle, no public queue API or durable credentials.
 ' Source: pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java
 ' Observed behavior: registry holds local execution objects only.
@@ -148,13 +148,13 @@ skinparam ClassBorderColor #64748B
 skinparam ClassBackgroundColor #F8FAFC
 skinparam stereotypeFontSize 10
 
-class "PendingSubmission\nRegistry" as PendingSubmissionRegistry <<singleton, target-only>>
-class PendingSubmission <<pending / execution, target-only>>
-class CredentialSnapshot <<memory only, target-only>>
-class "BoundedResponse\nBuffer" as BoundedResponseBuffer <<HTTP response, target-only>>
-interface "RuntimeExecution\nLauncher" as RuntimeExecutionLauncher <<target-only>>
-class SessionExecution <<execution, target-only>>
-interface ExecutionIO <<runtime port, target-only>>
+class "PendingSubmission\nRegistry" as PendingSubmissionRegistry <<singleton, pending implementation>>
+class PendingSubmission <<pending / execution, pending implementation>>
+class CredentialSnapshot <<memory only, pending implementation>>
+class "BoundedResponse\nBuffer" as BoundedResponseBuffer <<HTTP response, pending implementation>>
+interface "RuntimeExecution\nLauncher" as RuntimeExecutionLauncher <<pending implementation>>
+class SessionExecution <<execution, pending implementation>>
+interface ExecutionIO <<runtime port, pending implementation>>
 PendingSubmissionRegistry "1" *-- "0..bounded" PendingSubmission
 PendingSubmission "1" *-- "1" CredentialSnapshot
 PendingSubmission "1" *-- "0..1" BoundedResponseBuffer

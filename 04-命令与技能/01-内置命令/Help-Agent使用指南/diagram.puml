@@ -16,7 +16,7 @@ title Help Metadata Detail - Supplement to the Global Command Diagram
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java metadata.
 ' Observed behavior: the identity cache omits userCases; reload currently returns an empty list.
 ' Design reason: move cache and response detail out of the global diagram without hiding the global responsibility chain.
-' Target-only: Help adapters, query service, DTOs, response projection and cache completion are confirmed targets.
+' Pending implementation: Help adapters, query service, DTOs, response projection and cache completion are confirmed targets.
 
 class CommandExecutionContext <<request snapshot>>
 class HelpCommandHandler <<singleton>>
@@ -34,7 +34,7 @@ class "AgentIdentity / agent.json" as AgentIdentity <<stored metadata>> {
 }
 class "AgentHelpDTO / HelpResultDTO" as HelpData <<immutable request data>> #E3F2E1
 class CommandResponseAssembler <<singleton>>
-class AgentHelpResponseVO <<target-only immutable response>> #E3F2E1 {
+class AgentHelpResponseVO <<pending implementation immutable response>> #E3F2E1 {
   displayName
   description[]
   userCases[]

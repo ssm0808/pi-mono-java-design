@@ -1,7 +1,7 @@
 @startuml campusmate_shared_base_url_configuration
 ' Source evidence baseline: pi-mono-java 320d790726a70aada6100052952d5494d2a378ac
 ' Local rename evidence: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec
-' Target-only: rename the Provider; configuration keys and endpoint semantics stay unchanged.
+' Pending implementation: rename the Provider; configuration keys and endpoint semantics stay unchanged.
 ' Source evidence:
 ' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-140
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-76 and eventFlux
@@ -17,7 +17,7 @@
 ' Architecture change: one campusmate tree owns one origin and six unique operation paths.
 ' Architecture change: target model options move from campusmate.model-manager to campusmate.model.
 ' Security hardening: endpoint paths cannot carry another origin.
-' Target-only server scope: Skill and Tool controllers were not found in the analyzed mate-service baseline.
+' Pending implementation server scope: Skill and Tool controllers were not found in the analyzed mate-service baseline.
 
 title CampusMate Configuration - One Origin and One Path Catalog
 top to bottom direction
@@ -71,6 +71,6 @@ legend bottom left
 Target configuration; HTTP methods and payloads are unchanged.
 Six operation paths share one validated HTTP(S) origin.
 Client instances and DTOs remain independent.
-Provider name is target-only; server evidence varies by operation.
+Provider name is pending implementation; server evidence varies by operation.
 endlegend
 @enduml

@@ -37,7 +37,7 @@ title Model Manager Provider Streaming Flow
 
 
 actor Client
-participant "Events application\n(target-only)" as Events
+participant "Events application\n(pending implementation)" as Events
 participant "Managed Agent\nSession" as Session
 participant "AgentLoop" as Loop
 participant "CampusClaw\nAI Service" as AiService
@@ -81,7 +81,7 @@ opt a safe prepared threshold or overflow window exists
 end
 
 == Stop the fixed execution ==
-opt Session-scoped interrupt (target-only)
+opt Session-scoped interrupt (pending implementation)
   Client -> Events : POST /sessions/{sessionId}/events\nuser.interrupt
   Events -> Events : persist fixed-target stop request\ninstance batch check and local cancellation
   Events -> Loop : request cancellation of fixed execution
@@ -89,7 +89,7 @@ opt Session-scoped interrupt (target-only)
   Provider -> ModelManager : close stream
 end
 
-' Target-only control migration, confirmed 2026-09-07: no independent abort route.
+' Pending implementation control migration, confirmed 2026-09-07: no independent abort route.
 ' Source: pi-mono-java@dfb90cac RuntimeSessionControlService.requireRunningHolder uses local state.
 ' Design reason: Events application coordinates DB-backed cancellation; HTTP never calls AgentLoop directly.
 

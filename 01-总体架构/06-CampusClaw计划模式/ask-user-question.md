@@ -1,6 +1,6 @@
 # AskUserQuestion：结构化提问与原执行续跑
 
-版本：1.4.1；日期：2026-09-17。状态：1d08f98e 已实现 Runtime 问答及调试卡片；逐题展示、工具日志汇聚及必要性提示词为 target-only。未领取答案的 CANCELED 终态以 74f1b831 为专项核验基线，属于已确认目标，见[统一消费状态](../01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)。既有独立验证绑定 §2 所列 9f785bea，企业 Mate 接入和真实模型行为评估尚未验证。
+版本：1.5.0；日期：2026-09-18。状态：主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已实现 Runtime 问答、工具装配、逐题展示、工具日志汇聚和两文件提示词装配，见[源码证据 §12](source-evidence.md#12-主线实现状态核验2026-09-18)。Mate 公共接入待实现；业务 SYSTEM 发布与真实模型行为未核验。既有独立测试仍绑定 §2 所列 9f785bea，本次未重跑。
 
 本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#submitSessionEvent)。模式仅使用 PLAN.md/BUILD.md；必要性、优先一题和简洁结果使用归基础 SYSTEM，工具独占调用与等待规则归本页 description/共享 Schema，不保留独立 ASK_USER 资源。装配与迁移由 [plan-policy.md](plan-policy.md) 维护。
 
@@ -16,7 +16,7 @@ Main Agent 先检查已有信息；只有用户掌握的信息或重要选择仍
 
 ## 2. 基线与已观察实现
 
-实施设计基线：`pi-mono-java-design@497d34a4f05def36d4e3c62085d9eb4848b70f69`。实际分析与验证：`pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead`，见 [PR #301](https://github.com/superheromeZzh/pi-mono-java/pull/301)；这是开发分支证据，不是主线合入或生产上线声明。相对旧核对点 `699f929f6826b595ed1d0162f6def66e2f84760b`，增加结构化提问、统一三类等待、答案事务及前端恢复；旧计划基线 `09b32d8e` 的差距不能延伸为当前缺陷。
+当前源码状态由[§12](source-evidence.md#12-主线实现状态核验2026-09-18)维护；以下保留历史验证范围。实施设计基线：`pi-mono-java-design@497d34a4f05def36d4e3c62085d9eb4848b70f69`。历史实际分析与验证：`pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead`，见 [PR #301](https://github.com/superheromeZzh/pi-mono-java/pull/301)；该测试证据不代表生产上线。相对旧核对点 `699f929f6826b595ed1d0162f6def66e2f84760b`，增加结构化提问、统一三类等待、答案事务及前端恢复；旧计划基线 `09b32d8e` 的差距不能延伸为当前缺陷。
 
 下表 Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`；资源前缀为 `modules/coding-agent-cli/src/main/resources/`；所有路径绑定上述完整提交。
 
@@ -35,7 +35,7 @@ Main Agent 先检查已有信息；只有用户掌握的信息或重要选择仍
 
 限制：公司镜像因 `NativeParent:26.0.0-SNAPSHOT` 无法解析，未进入企业源码编译；外部 mate-service 公共桥接没有在本仓实现或联调。真实模型遵循率及操作系统 IME 候选确认未测；已验证 textarea Enter 换行和显式按钮提交。openGauss 测试不等同生产 GaussDB 环境认证。
 
-当前交互核验：`pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`。相对 9f785bea 已有前端菜单、方案卡和草稿相关调整；本次实际读取的 QuestionCard、投影、工具、答案与计划接受路径见[源码证据 §9](source-evidence.md#9-buildplan-与逐题交互核验)。已有卡片一次渲染所有问题，且仍显示 AskUserQuestion 通用工具日志；本版新增展示不得引用前述测试数量作为已通过证据。
+历史交互核验 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4` 的卡片曾同时渲染全部问题并显示通用工具日志，证据见[§9](source-evidence.md#9-buildplan-与逐题交互核验)。这些展示差距已由 §12 的主线源码核验更新；旧测试数量不作为新展示的通过证据。
 
 ### 2.1 同层基线与取舍
 
@@ -74,7 +74,7 @@ Ask the user one to three concise questions when required information or a user-
 
 ![结构化提问与原执行续跑](ask_user_question_sequence.svg)
 
-[原尺寸 SVG](ask_user_question_sequence.svg) · [PlantUML 源码](diagram.puml#L699)
+[原尺寸 SVG](ask_user_question_sequence.svg) · [PlantUML 源码](diagram.puml#L700)
 
 1. Agent 形成完整 `AskUserQuestion` ToolCall；该 Assistant 响应只能包含这一项 ToolCall，普通说明文本可同时存在。框架先校验 Schema，Runtime 再从最终调用解析一个不可变问题快照；before hook、等待对象、持久化事件和工具端口共享该快照，不从普通回复提取问题，也不再次各自解析不同版本。
 2. 既有路径保存唯一 `agent.tool_call`，`requiresConfirmation=false`。随后在同一短事务保存 `agent.question`、`session.status_idle(reason=confirming)`，登记内部等待目标并关闭旧段；提交后推送并关闭本次 SSE。`confirming` 统一表示本段等待用户处理，具体是提问、计划审核还是授权由对应完整事件确定；它不是执行成功或 Session idle。
@@ -169,15 +169,16 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 | Q1 契约及工具 | 严格 Schema/DTO/VO、Parser、Port/Adapter、枚举/profile、两种新事件及错误 | 单/多/纯文本；UTF-16、strip、重复/未知/null/缺题/选项归属；Runtime 两模式工具定义相同；Child/Cron 拒绝；无元数据和 Session 字段扩展 |
 | Q2 等待与事务 | 收敛唯一待交互槽；问题/confirming/指针同事务；答案/回执/新段同事务；答案领取与消费 | tool_call 前置；共享不可变快照；错误无卡片；三类不能互相消费；插入失败整笔回滚；在工具 await 前已领取答案仍正常返回；原根与凭据不变 |
 | Q3 控制及恢复 | 跨实例轮询与单次领取、中断/超时、可靠终态、删除和保留清理 | 回答/回答、回答/停止、回答/超时竞争；未领取答案随真实终态取消消费且回执保留；STOPPING/回滚/已领取记录不误改；原段关闭；新段首帧完整回执；不重放写；失联不假装成功或自动接管 |
-| Q4 前端及桥接 | QuestionCard/Store、规范化提交、同 reducer 历史恢复；需要企业入口时同步 Mate 公共契约 | 单/多/文本展示无需工具日志；缺页禁答、重复帧、跨端已回答、回执丢失、切会话草稿、IME/键盘/390px；plan 不建 TODO，build 回答不重置清单；target-only：当前仅一题可见、翻页不 POST、末题仅一次提交、前后导航保留答案、调用/结果汇聚且失败可见、收起不提交 |
-| Q5 提示词与场景 | 基础 SYSTEM 提问原则、工具 description、两模式文件、降级与角色边界 | 可查事实自行检查；需选择时使用工具；问题肯定不批准方案；不编造/重复问；无工具回退普通消息；target-only：优先一题、不固定三题、无待决信息不提问、有关联的后续问题在下一批提出、工具 JSON 不作为最终答复；模型评估与确定性测试分别记录 |
+| Q4 前端及桥接 | QuestionCard/Store、规范化提交、同 reducer 历史恢复；需要企业入口时同步 Mate 公共契约 | 单/多/文本展示无需工具日志；缺页禁答、重复帧、跨端已回答、回执丢失、切会话草稿、IME/键盘/390px；plan 不建 TODO，build 回答不重置清单；已实现展示的验收要求：当前仅一题可见、翻页不 POST、末题仅一次提交、前后导航保留答案、调用/结果汇聚且失败可见、收起不提交 |
+| Q5 提示词与场景 | 基础 SYSTEM 提问原则、工具 description、两模式文件、降级与角色边界 | 可查事实自行检查；需选择时使用工具；问题肯定不批准方案；不编造/重复问；无工具回退普通消息；模型行为待验收：优先一题、不固定三题、无待决信息不提问、有关联的后续问题在下一批提出、工具 JSON 不作为最终答复；模型评估与确定性测试分别记录 |
 
-不新增 Maven/npm 直接依赖；复用 JDK、Jackson、Jakarta Validation、现有 Spring/MyBatis、取消、SSE 与 Vue 设施。Java 方法、DTO/VO、中文文档及镜像规则沿用仓库约定。Q1～Q5 的既有 Runtime 与调试前端验证结果见 §2；本版 Q4/Q5 新增交互与提示词仍为 target-only，实施后须重新验收。企业桥接、公司编译环境和真实模型行为仍按该处边界记录，不能用单测代替外部验收。
+不新增 Maven/npm 直接依赖；复用 JDK、Jackson、Jakarta Validation、现有 Spring/MyBatis、取消、SSE 与 Vue 设施。Java 方法、DTO/VO、中文文档及镜像规则沿用仓库约定。Q1～Q5 的历史 Runtime 与调试前端验证结果见 §2；当前逐题展示、日志汇聚和模式资源已有实现，验收状态单列。企业桥接待实现，业务 SYSTEM 发布、公司环境与真实模型行为未核验，不能用单测代替外部验收。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.0 | 2026-09-18 | 同步主线结构化问答、逐题卡片和提示词装配，分离实现与验收状态。 |
 | 1.4.1 | 2026-09-17 | 提问职责使用统一的 Main Agent 角色名称。 |
 | 1.4.0 | 2026-09-17 | 提问原则归基础 SYSTEM，工具契约保持，模式装配改为 PLAN.md/BUILD.md。 |
 | 1.3.0 | 2026-09-17 | 未领取答案随真实根执行终态标记为 CANCELED，并保留已接受答案事件。 |

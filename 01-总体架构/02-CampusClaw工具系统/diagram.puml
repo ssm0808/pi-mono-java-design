@@ -42,6 +42,7 @@ package "Execution - new objects per Session" {
 }
 package "Model tools - per Session" {
   interface "AgentTool" as Tool
+  class "ExitPlanMode / TodoUpdate /\nAskUserQuestion" as InteractionTools <<3 implementations>>
   class "Read / Find / Grep / Ls" as Local <<4 implementations>>
   class "ListMateTools" as List
   class "CallMateTool" as Call
@@ -79,6 +80,7 @@ List ..|> Tool
 Call ..|> Tool
 Cron ..|> Tool
 ChildTool ..|> Tool
+InteractionTools ..|> Tool
 Local --> Resolver
 Resolver --> Workspace
 List --> Mate
@@ -98,7 +100,8 @@ Hosts own persistence, output and close policy.
 Only the fixed profile creates model tools; no dynamic registry.
 Commands use their own HTTP boundary and never enter the model list.
 List refreshes one source; Call discovers on miss and executes once.
-Plan additions are defined in the Plan Mode topic.
+Runtime profile: eleven tools; Cron and Child exclude the three interaction tools.
+Interaction tools are implemented at Java 8c5fda1d; details in the Plan Mode topic.
 endlegend
 Factory -[hidden]down-> Assembler
 Assembler -[hidden]down-> Context
@@ -843,7 +846,7 @@ autonumber
 title Refresh Affects the Next Idle Session Execution
 
 ' Source evidence (CampusClaw PR 167 f60cc3e): AgentRuntimeManager refresh and Runtime Session store.
-' Target-only Java design: RuntimeSessionModelReconciler runs before accepting user.message.
+' Pending implementation Java design: RuntimeSessionModelReconciler runs before accepting user.message.
 ' Architecture change: refresh does not mutate an active execution snapshot.
 ' Design reason: make directory publication atomic while preserving execution consistency.
 

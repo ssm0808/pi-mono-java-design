@@ -3,7 +3,7 @@
 | 属性 | 值 |
 |---|---|
 | 文档版本 | 2.2.0 |
-| 状态 | target-only 总体架构；知识同步、精确覆盖、测试维护与新门禁待独立验收 |
+| 状态 | 待实现 总体架构；知识同步、精确覆盖、测试维护与新门禁待独立验收 |
 | 角色 | 由 Codex 组建的独立 CampusClaw 专业测试工程师 Agent |
 | 产品知识源 | [`capability-registry.json`](capability-registry.json)；聊天上下文不是知识源 |
 | 设计仓分析基线 | `d2b9b4b6f4762e0e9734c144e3eb3273959e7e26`，`pi-mono-java-design/main` |
@@ -39,7 +39,7 @@ PR/push 触发仓库 CI 的变更门禁，夜间独立任务执行深测与测�
 ### 3.2 目标设计决策
 
 本目录描述尚未完整落地的目标架构。特别是能力注册表同步器、精确需求绑定、测试维护 Draft
-PR、前端浏览器 E2E、故障/变异测试和新 CI 门禁均属于 target-only，不能描述为当前已经运行。
+PR、前端浏览器 E2E、故障/变异测试和新 CI 门禁均属于 待实现，不能描述为当前已经运行。
 
 ### 3.3 设计理由
 
@@ -111,7 +111,7 @@ PR 中隐式同步另一个仓库。
 `partial` 输出为警告；未来 `--strict-coverage` 是合并门禁，必须等精确用例绑定补齐后才允许
 通过。
 
-CC-CAP-003/011 的[CampusMate 改名与 AI 产品范围](../03-Model/README.md#implementation)为 target-only。注册表以 `gap` 记录 S1–S4，`sourceEvidence/testSelectors` 继续指向实际基线；只有目标测试真实存在且执行后，才替换旧 selector。能力已有的 `implemented/partial` 不能证明新目标落地。
+CC-CAP-003/011 的[CampusMate 改名与 AI 产品范围](../03-Model/README.md#implementation)为 待实现。注册表以 `gap` 记录 S1–S4，`sourceEvidence/testSelectors` 继续指向实际基线；只有目标测试真实存在且执行后，才替换旧 selector。能力已有的 `implemented/partial` 不能证明新目标落地。
 
 ### 5.2 需求成熟度门
 
@@ -123,7 +123,7 @@ CC-CAP-003/011 的[CampusMate 改名与 AI 产品范围](../03-Model/README.md#i
 | frozen | 发布范围内冻结契约 | 全层强制回归，变化必须显式审批 | 是 |
 | implemented | 从当前源码观察且仍受支持 | 防回归；与 accepted 冲突时报告设计漂移 | 是 |
 
-同一文档可能同时含现状、target-only 和待确认内容，Agent 必须在 requirement 粒度分类，不能
+同一文档可能同时含现状、待实现 和待确认内容，Agent 必须在 requirement 粒度分类，不能
 只看文档标题或版本号。
 
 ## 6. 总体架构
@@ -320,7 +320,7 @@ repository dispatch，或将设计差分作为 nightly 的最高优先级检查�
 | 产品约束 | Agent 独立于产品 Runtime；产品知识必须版本化；确定性 oracle 决定结果；测试维护不得改产品代码 |
 | 安全加固 | 隔离 worktree、假外部服务、凭据脱敏、生产副作用另行授权、防弱化门禁 |
 | 架构变更 | 独立测试工程师、能力注册表和多领域确定性平台协作，CI 变更门禁与夜间维护分别触发 |
-| target-only | 新 Skill、registry sync、精确追踪、test-only PR、前端 E2E、fault/mutation、新 CI 和发布门禁 |
+| 待实现 | 新 Skill、registry sync、精确追踪、test-only PR、前端 E2E、fault/mutation、新 CI 和发布门禁 |
 | 有意不阻断 | proposed/research 需求，包括尚未确认的 Attachment public bridge |
 
 ## 16. 设计验证

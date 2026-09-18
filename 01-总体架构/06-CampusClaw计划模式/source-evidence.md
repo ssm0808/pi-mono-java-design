@@ -1,10 +1,10 @@
 # 计划模式源码证据与实现差距
 
-版本：2.1.0；核对日期：2026-09-17。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：2.2.0；核对日期：2026-09-18。当前主线实现结论见[§12](#12-主线实现状态核验2026-09-18)。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
 
-提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 target-only 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
+提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 待实现 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
 
-当前 Build/Plan 与提问展示的静态核验绑定 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，具体已实现行为、新目标与基线区别由[§9](#9-buildplan-与逐题交互核验)维护。下方历史接入表继续保留各自固定提交范围，不能据其 target-only 标记判断 1d08f98e 尚无模式、审核、TODO 或结构化提问。
+当前 Build/Plan 与提问展示的静态核验绑定 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，具体已实现行为、新目标与基线区别由[§9](#9-buildplan-与逐题交互核验)维护。下方历史接入表继续保留各自固定提交范围，不能据其 待实现 标记判断 1d08f98e 尚无模式、审核、TODO 或结构化提问。
 
 业务 Agent 模式文件覆盖与当前 Java 发布差距见 [§11](#11-业务-agent-模式提示词覆盖)。当前模式提示词以 [§10 最新上游核验](#10-两份模式提示词的最新上游核验)为依据；§1～§9 保留各自历史提交和核验范围，不代表最新上游或当前 Java 的完整实现状态。
 
@@ -89,7 +89,7 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 
 ### 4.3 客户端确认恢复
 
-以下文件实际核对 Java 仓库同一提交 `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`，行号取该提交。它们证明既有工具确认的事件恢复方式；计划分支仍为 target-only。
+以下文件实际核对 Java 仓库同一提交 `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`，行号取该提交。它们证明既有工具确认的事件恢复方式；计划分支仍为 待实现。
 
 | 仓库相对路径 / 符号 | 已观察行为 | 计划设计用途 |
 |---|---|---|
@@ -110,7 +110,7 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 
 ## 5. 09b32d8e 基线下未实现的目标
 
-RuntimePlanReviewService、PlanReviewPort、RuntimePlanReviewAdapter、SessionPlanContext、PlanPolicyPromptComposer、RuntimePendingInteraction、ExitPlanModeTool，以及新 VO/DTO 和数据库列/表均为目标结构。上述类名、方法和关系帮助实施切片，不代表源码中已经存在。既有 RuntimeSessionController 与 RuntimeSessionConfigurationService 的 updateSession 方法，以及 Repository 的模式写入方法也是 target-only 增量，原类本身已存在。
+RuntimePlanReviewService、PlanReviewPort、RuntimePlanReviewAdapter、SessionPlanContext、PlanPolicyPromptComposer、RuntimePendingInteraction、ExitPlanModeTool，以及新 VO/DTO 和数据库列/表均为目标结构。上述类名、方法和关系帮助实施切片，不代表源码中已经存在。既有 RuntimeSessionController 与 RuntimeSessionConfigurationService 的 updateSession 方法，以及 Repository 的模式写入方法也是 待实现 增量，原类本身已存在。
 
 Session 工作模式通过资源更新表达属于产品约束与 API 架构调整；当前缺少通用 Session 更新入口是实施差距。跨实例审核和提示词更新属于架构扩展；元数据稳定、idle 主动切换、Child 继承与自然语言澄清属于产品约束；精确审核目标校验、单次消费、跨 Session 隔离与凭据不落盘属于安全加固。提示词引导本身不被归类为强制安全隔离。
 
@@ -128,14 +128,14 @@ Session 工作模式通过资源更新表达属于产品约束与 API 架构调�
 | Codex d58d0e58：`codex-rs/core/src/tools/handlers/plan.rs` · PlanHandler.handle_call；`codex-rs/protocol/src/plan_tool.rs` · UpdatePlanArgs；`codex-rs/app-server/README.md:1771` | update_plan 解析参数并发出 EventMsg::PlanUpdate；App Server 文档定义 turn/plan/updated；Plan 模式拒绝调用此清单工具 | 采纳工具到显式进度通知的分层；CampusClaw 使用既有请求 SSE 与持久化历史，不照搬 JSON-RPC、字段命名或模式拦截 |
 | pi 5cd93f68：`packages/coding-agent/examples/extensions/todo.ts` · reconstructState、execute | 示例从当前分支工具结果 details 恢复列表 | 说明结果也可承载进度；不是 pi 内核公共 TODO 事件，CampusClaw 客户端不采用该派生方式 |
 | Java 09b32d8e：`modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentToolResult.java` · record | content 与内部 details 分离 | 保持模型 ToolResult 文本；公共 todos 由后端最终结果映射 |
-| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java` · defaults、toolsFor | Runtime 默认八工具，无 TodoUpdate | 新工具、枚举、工厂和 Runtime 默认 profile 均为 target-only |
+| Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java` · defaults、toolsFor | Runtime 默认八工具，无 TodoUpdate | 新工具、枚举、工厂和 Runtime 默认 profile 均为 待实现 |
 | Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java` · project、persistToolResults | TurnEndEvent 批次保存结果；先构造/检查帧，再 appendEntry 后 emit | 目标增加成功 TODO 的显式事件映射；仍在批次结果提交点发布 |
 | Java 同基线：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java` · appendEntry | 接收 List<CommittedEventDTO>，在段提交事务内追加 Entry 与事件列表 | 既有接口可传工具结果及任务事件两条记录，工具无须依赖数据库或 SSE |
 | Java 同基线：同目录 `MyBatisRuntimeSessionRepository.java` · appendEventsLocked、recordProjectionIfComplete、findEventPage | 按列表保存多事件，投影数量取 events.size；历史直接读持久化事件并检查投影完整性 | 目标同 anchor 两事件、计数 2；GET 不重新构造 TODO，不新增持久化 API |
 | Java 同基线：`modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql` · t_session_events、t_session_event_projection | eventId/eventSeq 唯一，anchor_entry_id 非唯一；投影表保存 event_count | 已有结构支持一 Entry 多事件，不需要 TODO 表或新列 |
 | Java 同基线：`frontend/src/runtime/eventStore.ts` · mergeEvent、reconcileEvents、executionState | eventId 去重、历史/live 合并和根消息归属；无 TODO 面板 | 复用统一仓库，新增 applyTodoUpdated，直接消费显式快照 |
 
-完整 SHA 沿用 §1，未升级固定基线；Java modules 与 frontend/src 范围无 TodoUpdate/TodoWrite。TodoUpdateTool、RuntimeTodoEventMapper、TodoSnapshotDTO、TodoUpdatedEventResponseVO、事件分支及面板均为 target-only。已核验的是可复用的提交骨架，未运行新增产品测试。公共显式事件属于架构变更，build 范围、元数据稳定和根执行隔离属于产品约束。
+完整 SHA 沿用 §1，未升级固定基线；Java modules 与 frontend/src 范围无 TodoUpdate/TodoWrite。TodoUpdateTool、RuntimeTodoEventMapper、TodoSnapshotDTO、TodoUpdatedEventResponseVO、事件分支及面板均为 待实现。已核验的是可复用的提交骨架，未运行新增产品测试。公共显式事件属于架构变更，build 范围、元数据稳定和根执行隔离属于产品约束。
 
 ## 7. 提示词组合与逐项更新约束
 
@@ -144,7 +144,7 @@ Session 工作模式通过资源更新表达属于产品约束与 API 架构调�
 | 基线 / 仓库相对路径及符号 | 已观察行为 | CampusClaw 采纳与理由 |
 |---|---|---|
 | DeepSeek `packages/preset/agent-presets/presets/standard/agent.cordis.yml` · planning / config.section | 标准预设要求先检查事实、完成关键取舍、只用 exit_plan_mode 提交完整方案；口头同意不批准；明确禁止用 todo_write 跟踪规划阶段 | plan 只调研和设计，build 才维护实施进度；采用同一阶段边界。将文件/代码案例改写为园区业务与混合工具约束属于产品适配 |
-| DeepSeek `packages/plan/plan-mode/src/index.ts` · resolveConfig、PlanModeController 构造函数中的 plan:policy | 部署提供非空 section，模式控制注入；工具清单保持稳定 | 复用现有基础 SYSTEM；用纯 Composer 选择部署静态段，不迁入 Cordis。组合与部署资源为 target-only 架构扩展 |
+| DeepSeek `packages/plan/plan-mode/src/index.ts` · resolveConfig、PlanModeController 构造函数中的 plan:policy | 部署提供非空 section，模式控制注入；工具清单保持稳定 | 复用现有基础 SYSTEM；用纯 Composer 选择部署静态段，不迁入 Cordis。组合与部署资源为 待实现 架构扩展 |
 | DeepSeek `packages/todo/tool-todo/src/index.ts` · DESCRIPTION_HEAD/SINGLE/TAIL（45～66 行）、toTodoList | 描述要求全量清单、完成即更新、不积攒完成；工具验证值和部署并行数量规则，不验证业务目标已完成 | TODO 调用时机集中由固定工具 description 维护；单进行中是 CampusClaw 产品约束，不将提示词要求冒充强校验 |
 | OpenCode `packages/opencode/src/tool/todowrite.txt` · When to use / Rules；`packages/opencode/src/session/prompt/anthropic.txt` · Task Management | 工具描述与模型模板均要求及时更新；验证后才完成，不积攒多项。该 anthropic.txt 是 OpenCode 自己的模板 | 借鉴工具描述指导调用；通用执行原则留在 SYSTEM，不要求 BUILD 重复细则；不迁入其字段或推断 Claude Managed Agents 内部规则 |
 | Codex `codex-rs/core/gpt_5_1_prompt.md` · Planning、update_plan；`codex-rs/core/src/tools/handlers/plan.rs` · handle_call | 指定模板强调及时变更状态，同文件也允许一次更新多项；Handler 解析参数、在 Plan 模式拒绝 update_plan、发出 PlanUpdate | 仅作提示词约束与程序校验的区别对照；不把“一项对应一次调用”或模板内容视作全产品硬保证。CampusClaw 参考其显式进度通知，使用自己的公共事件名，仍不引入模式拦截 |
@@ -187,12 +187,12 @@ CampusClaw 当前选择完整 ToolCall + agent.plan 审核记录，理由与代�
 | 路径 / 符号 | 1d08f98e 已观察行为 | 当前目标与理由 |
 |---|---|---|
 | `frontend/src/components/ModeControl.vue` · labels；`frontend/src/projectors/runtimeEventProjector.ts` · projectRuntimeEvents | 协议使用 build/plan，UI 显示普通模式/计划模式 | UI 统一 Build/Plan，协议枚举不改；产品展示约束 |
-| `frontend/src/components/QuestionCard.vue` · fieldset v-for、submit；`frontend/src/runtime/questionInteraction.ts` · QuestionDraftStore、validateQuestionDrafts、normalizeQuestionAnswers | 一次渲染全部问题；按 Session/问题事件保存页内草稿；校验整批后一次发出答案 | target-only：每次显示一题、保存当前题位置、前后导航保留草稿、末题统一提交；降低同时阅读和操作的负担，保留整批事务 |
-| `frontend/src/projectors/runtimeEventProjector.ts` · agent.tool_call/agent.tool_result/agent.question；`frontend/src/components/ToolActivity.vue` · details | 只有关联 agent.plan 的 ExitPlanMode 被主图吸收；提问仍生成通用工具活动，等待时默认展开，问题参数和结果重复出现 | target-only：问题/答案卡吸收精确关联的调用与结果，原始日志仅诊断可见；失败和缺关联显示简短状态，保留错误可见性 |
-| `frontend/src/App.vue` · ConversationTimeline、conversation-dock、statusLabel；`frontend/src/runtime/eventStore.ts` · executionState/canAnswerQuestion/canReviewPlan | 问题卡在时间线，普通 Composer 留在底部；confirming 使用统一等待文案，历史与 Session 决定交互可用性 | target-only：活动问题在原时间线位置逐题展示，Composer 以独立布局行保留草稿编辑、Slash 和停止归属，发送仍按 running 禁用；回答、审核和授权区分文案；客户端状态继续从事件恢复 |
+| `frontend/src/components/QuestionCard.vue` · fieldset v-for、submit；`frontend/src/runtime/questionInteraction.ts` · QuestionDraftStore、validateQuestionDrafts、normalizeQuestionAnswers | 一次渲染全部问题；按 Session/问题事件保存页内草稿；校验整批后一次发出答案 | 待实现：每次显示一题、保存当前题位置、前后导航保留草稿、末题统一提交；降低同时阅读和操作的负担，保留整批事务 |
+| `frontend/src/projectors/runtimeEventProjector.ts` · agent.tool_call/agent.tool_result/agent.question；`frontend/src/components/ToolActivity.vue` · details | 只有关联 agent.plan 的 ExitPlanMode 被主图吸收；提问仍生成通用工具活动，等待时默认展开，问题参数和结果重复出现 | 待实现：问题/答案卡吸收精确关联的调用与结果，原始日志仅诊断可见；失败和缺关联显示简短状态，保留错误可见性 |
+| `frontend/src/App.vue` · ConversationTimeline、conversation-dock、statusLabel；`frontend/src/runtime/eventStore.ts` · executionState/canAnswerQuestion/canReviewPlan | 问题卡在时间线，普通 Composer 留在底部；confirming 使用统一等待文案，历史与 Session 决定交互可用性 | 待实现：活动问题在原时间线位置逐题展示，Composer 以独立布局行保留草稿编辑、Slash 和停止归属，发送仍按 running 禁用；回答、审核和授权区分文案；客户端状态继续从事件恢复 |
 | R `tool/question/AskUserQuestionTool.java` · execute；R `runtimeapi/event/RuntimeUserQuestionService.java` · normalizeCurrent | 工具等待完整答案，返回 JSON 文本；答案根据已提交问题快照归一 | 保留模型工具结果和服务端整批校验；隐藏 UI JSON 不删除工具调用/结果，也不重复注入公共问答事件 |
 | R `runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java` · acceptQuestionAnswer、rejectQuestionAnswer、acceptPlanConfirmation、rejectPlanConfirmation、persistPlanConfirmation | 先锁 Session 和当前执行，精确检查待交互及停止；问题回答不改模式；批准才原子更新 build、保存决定并创建续跑段 | 保留数据库审核权威和三种交互隔离；逐题 UI、普通肯定和卡片关闭不能替代正式批准 |
-| R `session/PlanPolicyPromptComposer.java` · compose/planPrompt；`modules/coding-agent-cli/src/main/resources/prompts/plan/PLAN_ROOT_REVIEW.txt`、`ASK_USER.txt` | 六段资源按 mode、入口和工具清单组合；现有文字允许集中问 1～3 题，未明确默认优先一题 | target-only：通用提问原则归入基础 SYSTEM，模式资源收敛为 PLAN.md / BUILD.md；description/Schema 保持，当前源码与迁移验收见 §10 |
+| R `session/PlanPolicyPromptComposer.java` · compose/planPrompt；`modules/coding-agent-cli/src/main/resources/prompts/plan/PLAN_ROOT_REVIEW.txt`、`ASK_USER.txt` | 六段资源按 mode、入口和工具清单组合；现有文字允许集中问 1～3 题，未明确默认优先一题 | 待实现：通用提问原则归入基础 SYSTEM，模式资源收敛为 PLAN.md / BUILD.md；description/Schema 保持，当前源码与迁移验收见 §10 |
 
 本版不改变审核协议、原根续跑、工具清单稳定或提示词式规划边界。UI 汇聚属于产品展示约束；数据库精确接受和现有权限检查仍提供各自保障，Plan 不因此成为强制只读沙箱。
 
@@ -238,7 +238,7 @@ CampusClaw 当前选择完整 ToolCall + agent.plan 审核记录，理由与代�
 
 Java 本次静态读取本地 `pi-mono-java@0b81c168d816aed7864cc9fbb9caa0771407e880`，不是远端最新声明；相对 §9 的 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，本次只核验下列提示词装配范围，未重跑产品或模型测试。
 
-| 仓库相对路径 / 符号 | 已观察实现 | target-only 调整 |
+| 仓库相对路径 / 符号 | 已观察实现 | 待实现 调整 |
 |---|---|---|
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/PlanPolicyPromptComposer.java` · compose、planPrompt | 仍读取 PLAN_COMMON、PLAN_ROOT_REVIEW、PLAN_CHILD、BUILD_ROOT、EXECUTION_TODOS、ASK_USER 六份 .txt，按入口、模式与工具名选择段落。 | 仅加载 PLAN.md / BUILD.md；当前 `compose(prompts, mode, entryPoint)` 消费 §11 的业务/预制文本快照并增加确定的一行角色说明；不按工具清单拼接提问或 TODO 段。ExitPlanMode 可用性仍由独立校验保持。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java` · create、configureAgent、applyPrompt | 工具装配后加载基础 SYSTEM，使用 Composer 并保留执行基础快照。 | 保留此接入及批准后从原始 BASE 重组的顺序，不叠加旧模式文本，不改变 Tool/Skill 元数据。 |
@@ -283,7 +283,7 @@ CampusClaw 采用 `Main Agent` / `Subagent` 作为模型可见角色名称，与
 
 以下 Java 路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
 
-| 路径 / 符号 | 已观察行为 | target-only 调整 |
+| 路径 / 符号 | 已观察行为 | 待实现 调整 |
 |---|---|---|
 | `runtimeapi/agent/RuntimeAgentPromptLoader.java` · load、readOptionalFile、safeRealPath、requireManagedSize | 仅 SYSTEM.md 与 Skill 摘要；受管目录内真实路径、普通文件、无链接与大小检查。 | 复用安全读取；新增两可选模式文件的独立选择、空白/编码错误失败与不可变 AgentPromptSnapshotDTO；默认资源由 Loader 启动时固定。 |
 | `session/PlanPolicyPromptComposer.java` · compose、load | 全局六份固定资源，无按 Agent 路径读取。 | 纯 `compose(prompts, mode, entryPoint)`，不持有 Agent 可变状态；业务选择已由 Loader 完成。 |
@@ -297,3 +297,22 @@ CampusClaw 采用 `Main Agent` / `Subagent` 作为模型可见角色名称，与
 ### 11.3 决策与验收
 
 业务文件独立完整替换、仅缺失回退、当前执行固定快照、Subagent 使用自身目录、refresh 保留可选文件是**架构扩展**；角色与正式审核仍为**产品约束**；复用受管路径限制且对无效覆盖失败，是**安全加固/配置可靠性约束**。收益是业务可定制工作方式而不改预制资源；代价是发布与读取需保持一致，自定义正文承担自身行为评估。规则由 [plan-policy.md §1](plan-policy.md#11-业务文件优先与独立回退)维护，实施必须覆盖 P16～P21，不能以文件能够读取替代生命周期和刷新验证。
+
+## 12. 主线实现状态核验（2026-09-18）
+
+上游 `https://github.com/superheromeZzh/pi-mono-java.git` 默认分支 main，经 `ls-remote --symref` 与隔离于工作树的 fetch 确认并读取完整提交 `8c5fda1dde51675859bc9c07e145dbe253656dea`。相对前次本地 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`，本次新增核验两文件提示词、目录覆盖和快照装配；相对问答开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead` 与 UI 旧点 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，核对当前主线工具、事件、逐题卡片和工具日志汇聚。§1～§11 保留历史证据，只能在各自提交范围解释“待实现”。外部 Agent 比较结论未变，本次未升级外部基线。
+
+Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`，资源前缀 S 为 `modules/coding-agent-cli/src/main/resources/`。
+
+| 核验范围 | 仓库相对路径 / 关键符号 | 当前实现与边界 |
+|---|---|---|
+| 三工具与装配 | R `tool/{plan/ExitPlanModeTool,todo/TodoUpdateTool,question/AskUserQuestionTool}.java` · execute；`tool/builtin/{BuiltInToolName,BuiltInToolProperties,DefaultBuiltInToolFactory}.java`；S `application.yml` | 已实现；11 项 Runtime 缺省工具，两种模式共用定义；Child/Cron 缺省不装配三工具。 |
+| 审核/提问等待 | R `runtimeapi/runtime/RuntimeSessionEngineRegistry.java` · createSession；`RuntimeActiveExecution.java` · await、claimAndResumePlanReview、claimAndResumeQuestionAnswer；`RuntimePendingInteraction.java` | 已实现；执行对象直接实现 PlanReviewPort/UserQuestionPort，共享一个交互槽；批准应用模式后才完成等待。目标图中的独立 Adapter 为推荐职责拆分，不代表工具功能缺失。 |
+| 权威事件 | R `runtimeapi/event/RuntimeEventProjector.java` · beginPlanReview、beginQuestion、persistToolResults、toolResultEvents；`RuntimeTodoEventMapper.java` · map | 已实现 agent.plan、agent.question 和 agent.todo_updated；计划/问题与 confirming 同次提交，TODO 与最终成功 ToolResult 同次提交。 |
+| 模式文件与选择 | R `runtimeapi/agent/RuntimeAgentPromptLoader.java` · loadSnapshot、loadOverrides、readOptionalModeFile、decodeUtf8；S `prompts/plan/{PLAN,BUILD}.md` | 已实现两资源、逐文件覆盖/缺失回退、严格 UTF-8 与非法覆盖失败；六份 TXT 已删除。BASE 仍来自受管 SYSTEM 和 Skill，通用业务指令是否已发布不能由代码推断。 |
+| 快照及刷新 | R `runtime/AgentRuntimeManager.java` · prepare、rebuild、loadExistingModeOverrides、writeRuntimeTree、loadSnapshot；`PreparedAgentRuntime.java`；`runtimeapi/agent/AgentPromptSnapshotDTO.java` | 已实现同一 Agent 锁内准备、不可变文本及来源快照、重建保留两可选文件。 |
+| 提示词应用 | R `session/PlanPolicyPromptComposer.java` · compose；`AgentSessionFactory.java` · applyPrompt；`ManagedAgentSession.java` · applyMode | 已实现从原执行快照组合 BASE/角色/当前模式；批准后重组不重新读盘。SessionPlanContext 是目标拆分，实际职责由上述对象承担。 |
+| 逐题问答与日志汇聚 | `frontend/src/components/QuestionCard.vue` · currentIndex、displayedQuestions、previousQuestion、nextQuestion、submit；`frontend/src/projectors/runtimeEventProjector.ts` · projectRuntimeEvents、matchingQuestion、questionToolStatus | 已实现当前一题、本地前后导航、整批答案提交；问题/方案卡吸收关联调用结果，问题生成失败保留状态。 |
+| TODO 客户端恢复 | `frontend/src/runtime/eventStore.ts` · executionTodos | 从当前根的最后一条 agent.todo_updated 读取完整快照；主图同步使用实际消费符号，不能据推荐职责名不同判断功能缺失。 |
+
+验证状态：本次读取源码、对比指定旧新提交并校验设计；未执行新的 Java/数据库/浏览器或模型回归。§2/§9 的历史测试结果仍绑定原提交，不升级为本次通过。Mate 公共桥接保持待实现；业务 SYSTEM 发布、真实模型遵循和生产环境验收为未核验。独立服务/Adapter 等推荐类名与实际职责归属分开记录，禁止用某个目标类不存在概括整个功能待实现。

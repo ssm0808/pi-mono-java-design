@@ -3,7 +3,7 @@
 | 属性 | 值 |
 |---|---|
 | 文档版本 | 3.1.0 |
-| 状态 | target-only 目标；实现状态仅限下列固定源码范围 |
+| 状态 | 待实现 目标；实现状态仅限下列固定源码范围 |
 | OpenAPI | [`attachment-api.openapi.yaml`](attachment-api.openapi.yaml) |
 | openGauss DDL | [`schema.sql`](schema.sql) |
 | pi-mono 源码基线 | `086c32e74530564922d011ade23ff582c9d63116` |
@@ -24,7 +24,7 @@ Runtime 通过 `event.content[]` 的文件块引用同一文件 ID；精确请�
 响应不披露 Session。内部接口只接受 CampusClaw 服务身份和 `session_id`，不接受
 `chat_id`。
 
-本专题为 target-only。固定 pi 基线 `086c32e7` 的 `packages/agent/src/agent.ts:prompt`、`packages/ai/src/types.ts:ImageContent`，以及 Java 基线 `19574661` 的 `modules/ai/src/main/java/com/campusclaw/ai/types/ImageContent.java` 和 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java:prompt/abort`，只提供内联图片与会话调用能力，未包含这里定义的文件服务。最新实现未在本次文档整理中复核。
+本专题为 待实现。固定 pi 基线 `086c32e7` 的 `packages/agent/src/agent.ts:prompt`、`packages/ai/src/types.ts:ImageContent`，以及 Java 基线 `19574661` 的 `modules/ai/src/main/java/com/campusclaw/ai/types/ImageContent.java` 和 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java:prompt/abort`，只提供内联图片与会话调用能力，未包含这里定义的文件服务。最新实现未在本次文档整理中复核。
 
 ## 2. API 总览
 

@@ -6,7 +6,7 @@ title Target Event History - Shared Complete Projection
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventCursorCodec.java, encode/decode.
 ' Observed behavior: current pages are sequence-based opaque cursors, not integers.
 ' Design reason: one complete projection prevents SSE/history identity drift. Thinking target: display original model reasoning; Java 4cc8dd86 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeV2EventProjector.java projectThinking still filters publicSummary.
-' All new classes and relations are target-only; existing boundaries are changed.
+' All new classes and relations are pending implementation; existing boundaries are changed.
 top to bottom direction
 hide empty members
 skinparam backgroundColor white
@@ -21,20 +21,20 @@ skinparam stereotypeFontSize 10
 
 package "Web boundary" as WEB {
   class "RuntimeEvent\nController" as RuntimeEventController <<singleton, existing-changed>>
-  class "ListSessionEvents\nRequestVO" as ListSessionEventsRequestVO <<request, target-only>>
-  class "ListSessionEvents\nResponseVO" as ListSessionEventsResponseVO <<immutable, target-only>>
-  class "SessionEvent\nResponseVO" as SessionEventResponseVO <<immutable union, target-only>>
+  class "ListSessionEvents\nRequestVO" as ListSessionEventsRequestVO <<request, pending implementation>>
+  class "ListSessionEvents\nResponseVO" as ListSessionEventsResponseVO <<immutable, pending implementation>>
+  class "SessionEvent\nResponseVO" as SessionEventResponseVO <<immutable union, pending implementation>>
 }
 package "Application" as APP {
-  class "SessionEvent\nQueryService" as SessionEventQueryService <<singleton, target-only>>
-  class "HistoryPage\nQueryDTO" as HistoryPageQueryDTO <<request immutable, target-only>>
-  class "CommittedEvent\nProjection" as CommittedEventProjection <<stateless singleton, target-only>>
-  class RequestEventRouter <<singleton, target-only>>
+  class "SessionEvent\nQueryService" as SessionEventQueryService <<singleton, pending implementation>>
+  class "HistoryPage\nQueryDTO" as HistoryPageQueryDTO <<request immutable, pending implementation>>
+  class "CommittedEvent\nProjection" as CommittedEventProjection <<stateless singleton, pending implementation>>
+  class RequestEventRouter <<singleton, pending implementation>>
 }
 package "Persistence boundary" as DB {
   interface "RuntimeSession\nRepository" as RuntimeSessionRepository <<existing-changed>>
   class "MyBatisRuntime\nSessionRepository" as MyBatisRuntimeSessionRepository <<singleton, existing-changed>>
-  class CommittedEventDTO <<immutable transfer, target-only>>
+  class CommittedEventDTO <<immutable transfer, pending implementation>>
   class RuntimeSessionMapper <<singleton, existing-changed>>
 }
 RuntimeEventController -[norank]-> ListSessionEventsRequestVO : validates
@@ -55,7 +55,7 @@ RuntimeSessionMapper ..> CommittedEventDTO : maps records
 RuntimeSessionRepository ..> HistoryPageQueryDTO : page criteria
 
 legend bottom left
-All new types and relations are target-only. Web VOs are immutable output.
+All new types and relations are pending implementation. Web VOs are immutable output.
 One complete projection fixes eventId, createdAt, sourceEventId, and saved thinking.
 Each query rechecks access and branch; no cross-request transaction or snapshot.
 The execution-scoped SessionEventProjector owns normalization and appends separately.
@@ -67,7 +67,7 @@ endlegend
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java, list/pageOf.
 ' Observed behavior: each current query resolves active_leaf_id again.
 ' Design reason: user approved ordinary pages without cross-request snapshots.
-' Target-only: default 50, max 200, events/nextPage and empty-page success confirmed.
+' Pending implementation: default 50, max 200, events/nextPage and empty-page success confirmed.
 autonumber
 hide footbox
 skinparam backgroundColor white
@@ -82,7 +82,7 @@ skinparam sequence {
   GroupBorderColor #94A3B8
   GroupBackgroundColor #F1F5F9
 }
-title Target-only Event History: Read, Append, Read Again
+title Pending implementation Event History: Read, Append, Read Again
 actor "Internal caller" as C
 control "History service" as Q
 database "Session / Event store" as D

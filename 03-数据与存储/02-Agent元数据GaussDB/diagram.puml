@@ -61,7 +61,7 @@ skinparam classAttributeIconSize 0
 ' Product constraint: only binding_models preserves input array order.
 ' Product constraint: Agent IDs use agent- plus a 32-character hexadecimal UUID.
 ' Product constraint: Model, Tool, and Skill IDs use typed prefixes plus UUIDs.
-' Target-only rule: future Agent binding writes validate current targets but
+' Pending implementation rule: future Agent binding writes validate current targets but
 ' do not validate pinned history; Runtime reads require an exact current match.
 ' Observed behavior: getRuntimeAgent resolves Tool and Agent bindings by typed
 ' identifier and optional version, then returns flat Tools and Agents.
@@ -79,7 +79,7 @@ class t_agent_definition <<current Agent>> {
   type: VARCHAR
   version: BIGINT
   enabled: BOOLEAN
-  mode: VARCHAR(5) <<target-only>>
+  mode: VARCHAR(5) <<pending implementation>>
   name: VARCHAR UK
   display_name: VARCHAR
   description: TEXT
@@ -141,7 +141,7 @@ legend bottom left
 Logical relations; no physical foreign keys in the base DDL.
 Models preserve input order; other bindings use stable ID order.
 Nullable versions select current/latest; no historical Agent table.
-Target-only mode: build or plan; copied only to new interactive Sessions.
+Pending implementation mode: build or plan; copied only to new interactive Sessions.
 endlegend
 @enduml
 
@@ -179,7 +179,7 @@ endlegend
 ' Observed behavior: getRuntimeAgent returns ten-field Tool and nine-field
 ' bound Agent definitions without wrapper objects.
 ' Root and resolved response types include type and omit timestamps.
-' Target-only: root and bound Agent definitions add mode; stored values must be valid.
+' Pending implementation: root and bound Agent definitions add mode; stored values must be valid.
 ' Observed behavior: root and bound Agent prompts use the same composition.
 ' Integration pending: ToolDefinitionMapper SQL is supplied by the Tool owner.
 ' Design reason: batch dependency queries avoid one query per binding.
@@ -243,7 +243,7 @@ end
 == 3. Complete response ==
 Service -> Service : Compose prompts and flat definitions
 note right of Service
-Target-only: validate and expose mode.
+Pending implementation: validate and expose mode.
 end note
 Service --> Controller : RuntimeAgentResponseVO
 Controller --> Consumer : Success envelope

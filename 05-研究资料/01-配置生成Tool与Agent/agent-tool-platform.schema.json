@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.invalid/schemas/agent-tool-platform-v1.json",
   "title": "Tool and Agent Metadata V1",
-  "description": "Target-only V1 portable manifests and deployment bindings. A manifest is executable only through a platform-supplied driver or runtime factory.",
+  "description": "待实现 V1 portable manifests and deployment bindings. A manifest is executable only through a platform-supplied driver or runtime factory.",
   "oneOf": [
     { "$ref": "#/$defs/ToolManifest" },
     { "$ref": "#/$defs/AgentManifest" },

@@ -152,7 +152,7 @@ SkillTelemetry 在 Turn 开始保存计时器。调用时 record_plugin_turn_usa
 | Thread/Turn 关联 | 复用 sessionId/rootEventId；确认、问答、审核续跑保持根 | 产品约束：根执行不等同 Codex Turn 或整个 Session |
 | 无公开后台表证据 | 自行设计 t_skill_usage、累计/日表；查询采用批量 POST，排名与趋势暂缓 | 证据边界：这是 CampusClaw 目标，不是 Codex 后台实现 |
 
-显式 A 后 Read A 三次，在本目标中共计 1；Codex 的不同入口可能输出不同数量。CampusClaw usageCount 表示已记录使用信号的根执行数，不证明模型实际采用。日期归首个入账信号，同根跨天重复不刷新计数或 lastUsedAt。范围、失败和清理以[主设计](README.md)为准；目标已确认但仍为 target-only。
+显式 A 后 Read A 三次，在本目标中共计 1；Codex 的不同入口可能输出不同数量。CampusClaw usageCount 表示已记录使用信号的根执行数，不证明模型实际采用。日期归首个入账信号，同根跨天重复不刷新计数或 lastUsedAt。范围、失败和清理以[主设计](README.md)为准；目标已确认但仍为 待实现。
 
 ## 9. 核验记录
 

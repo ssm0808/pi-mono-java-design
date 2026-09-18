@@ -15,7 +15,7 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title Target-only Shared GET and Typed Command POST
+title Pending implementation Shared GET and Typed Command POST
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java getSession.
 ' Architecture change: Builtin routes return JSON; B13/B14 Skill reuses the message SSE boundary.
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CompositeCommandRegistry.java resolve.
@@ -54,7 +54,7 @@ else POST Builtin
   Service --> Handler : command-specific DTO
   Handler --> Application : command result
   Application --> Controller : immutable response VO
-else POST Skill (target-only B13/B14)
+else POST Skill (pending implementation B13/B14)
   Application -> Registry : resolve full sources once
   Registry --> Application : real Skill definition and snapshot
   Application -> Handler : immutable invocation
@@ -72,7 +72,7 @@ end
 @enduml
 
 @startuml command_authoritative_state
-title Target-only Command Recovery Boundary
+title Pending implementation Command Recovery Boundary
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql.
 ' Design reason: synchronous JSON results need no generic command lifecycle storage.
 skinparam shadowing false

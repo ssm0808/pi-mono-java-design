@@ -3,7 +3,7 @@
 ' Design repository baseline: 2b747808e93609a4fc71d919dbd72bcd56a6e502.
 ' pi-mono baseline: 086c32e74530564922d011ade23ff582c9d63116.
 ' pi-mono-java baseline: 195746614096312d4e93afb029d387837db78e0b.
-' Target-only design: neither source baseline implements this managed file service.
+' Pending implementation design: neither source baseline implements this managed file service.
 
 @startuml file_upload_and_scan_flow
 ' Source evidence:
@@ -103,7 +103,7 @@ end note
 ' Architecture change: OBS owns immutable bytes and openGauss owns identity, state, and worker leases.
 ' Product constraint: Mate Chat Store alone owns chat_id to session_id mappings.
 ' Design reason: isolate large-object throughput from relational state and database backup.
-' Target-only design: shared file storage for every stateless API Pod and background worker.
+' Pending implementation design: shared file storage for every stateless API Pod and background worker.
 skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -142,7 +142,7 @@ API --> DB : metadata transaction
 Worker --> DB : state / lease transaction
 Adapter --> OBS : immutable bytes over TLS
 legend bottom left
-Target-only deployment; every Pod uses the same Chat, metadata and content authorities.
+Pending implementation deployment; every Pod uses the same Chat, metadata and content authorities.
 OBS stores one immutable object per file_id; no extra resource ID or path prefix.
 Deletion removes active detail and retains the five-field t_file tombstone.
 No file BLOB, URL, credentials, local authority or complete-file cache.
@@ -295,7 +295,7 @@ end note
 @startuml file_audited_reconciliation
 ' Baseline: pi-mono-java 195746614096312d4e93afb029d387837db78e0b.
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: abort.
-' Target-only architecture: no generic file cleanup in that baseline.
+' Pending implementation architecture: no generic file cleanup in that baseline.
 ' Design reason: ownership evidence is required before deleting a conflicting OBS object.
 skinparam backgroundColor white
 skinparam shadowing false

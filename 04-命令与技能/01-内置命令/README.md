@@ -11,12 +11,12 @@
 | 更新日期 | 2026-09-14 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
-| Help 专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；已有核心 SPI，Help Handler/查询与缓存补齐仍为 target-only |
-| 响应复用源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`；既有 Session/Models API，Command 响应投影仍为 target-only |
-| Name 最新复核基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；已有命名服务和持久化，统一 Session POST 仍为 target-only |
+| Help 专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；已有核心 SPI，Help Handler/查询与缓存补齐仍为 待实现 |
+| 响应复用源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`；既有 Session/Models API，Command 响应投影仍为 待实现 |
+| Name 最新复核基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；已有命名服务和持久化，统一 Session POST 仍为 待实现 |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
 | 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
-| 状态 | 七个 Builtin 目标已由用户确认；公开执行为 target-only |
+| 状态 | 七个 Builtin 目标已由用户确认；公开执行为 待实现 |
 
 本期不支持排队续跑；Compact 复用 Runtime 已有执行与可靠清理边界。
 [FollowUp 未来专题](../../01-总体架构/01-CampusClaw多Agent运行时/chat-follow-up-future-design.md)
@@ -166,14 +166,14 @@ Builtin 请求拒绝 fileIds、未知字段、If-Match 和 Idempotency-Key。该
 
 | 命令与操作 | 成功 result / 响应 VO | 复用基线 / ETag |
 |---|---|---|
-| help | displayName、description[]、userCases[] / AgentHelpResponseVO（target-only） | 无独立 API，保留最小业务结果；无 ETag |
+| help | displayName、description[]、userCases[] / AgentHelpResponseVO（待实现） | 无独立 API，保留最小业务结果；无 ETag |
 | status；name/thinking 空参查询 | 完整 Session / GetSessionResponseVO | [GET Session](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/02-get-session.json)，包含 ETag |
 | name 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)；响应含 ETag，Command 不要求 If-Match |
 | model 空参查询 | currentModelId、models[] / AvailableModelsResponseVO | [GET Models](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/06-list-session-models.json)；无 ETag |
 | model 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)，包含 ETag |
 | thinking 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)，包含 ETag |
-| compact | compacted:boolean / CompactionResponseVO（target-only） | 无独立 API，保留压缩有无变化；无 ETag |
-| skills | skills[{name, description}] / BoundSkillsResponseVO（target-only） | 无独立 API，保留最小列表；无 ETag |
+| compact | compacted:boolean / CompactionResponseVO（待实现） | 无独立 API，保留压缩有无变化；无 ETag |
+| skills | skills[{name, description}] / BoundSkillsResponseVO（待实现） | 无独立 API，保留最小列表；无 ETag |
 
 完整 Session 的字段、空值和类型只由 GET Session 维护，不能裁剪成 Status/Name/Thinking 的子集；
 这包含既有目标 lifetimeUsage，而非新增上下文用量估算。模型修改只返回 Session，不再重复带候选模型；

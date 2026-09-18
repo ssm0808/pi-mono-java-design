@@ -131,8 +131,8 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
                 "Human review summary is required")
         require(isinstance(business_view.get("flow"), list) and business_view["flow"],
                 "Human review flow is required")
-        require("target-only design" in operation["description"] and "不得作为实现依据" in operation["description"],
-                "Operation must state the pending target-only public boundary")
+        require("待实现 design" in operation["description"] and "不得作为实现依据" in operation["description"],
+                "Operation must state the pending 待实现 public boundary")
         placeholders = re.findall(r"{([^}]+)}", operation["path"])
         require(all(LOWER_CAMEL.fullmatch(item) for item in placeholders), "Path fields must be lowerCamelCase")
         for response in operation["responses"]:

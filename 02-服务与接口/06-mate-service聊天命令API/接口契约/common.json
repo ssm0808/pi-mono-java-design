@@ -3,7 +3,7 @@
     "title": "mate-service Chat Command API",
     "version": "1.3.0",
     "basePath": "/mate-service/v1",
-    "visibility": "Public · GET 字段已确认，公共边界待评审 · target-only",
+    "visibility": "Public · GET 字段已确认，公共边界待评审 · 待实现",
     "fieldNaming": "lowerCamelCase",
     "headerNaming": "保留原名"
   },

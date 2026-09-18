@@ -2,12 +2,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.12.0 |
+| 文档版本 | 0.13.0 |
 | 状态 | 已确认目标契约；请求输出绑定与跨实例控制待实现 |
 | 源码基线 | Java 918005ee、dfb90cac，固定提交与路径见 [模块证据](source-evidence.md#52-post-与流生命周期) |
-| 更新日期 | 2026-09-17 |
+| 更新日期 | 2026-09-18 |
 
-结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 target-only，Session/元数据不增字段，Mate 公共投影独立集成。
+结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量已在 Runtime 主线实现（`8c5fda1d`，见[源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)）；Session/元数据不增字段，Mate 公共投影待实现。本文其他历史源码范围不因此升级。
 
 ## 1. 当前操作与已确认范围
 
@@ -15,7 +15,7 @@ POST `/campusclaw-service/v1/sessions/{sessionId}/events` 提交一条用户事�
 
 本文维护响应的帧顺序、归属、关闭和失败处理。[Events 主设计](chat-events-design.md) 维护单消息准入、数据库事务与跨实例控制，[历史设计](chat-events-history-design.md) 维护权威记录及分页。
 
-任务更新的 target-only 增量已登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java 09b32d8e 的多事件 appendEntry 骨架可复用，新增工具与事件分支尚待实现。Mate 公共桥接需单独同步后开放。
+任务更新已实现并登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java `8c5fda1d` 已具备 TodoUpdate、RuntimeTodoEventMapper 与显式任务事件分支；本次静态核验不等于测试通过。Mate 公共桥接需单独同步后开放。
 
 ## 2. 请求与凭据边界
 
@@ -116,7 +116,7 @@ agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的�
 
 精确契约已定稿；数据库控制字段/约束、
 实测索引、检查周期、超时和容量数值由实施校准。跨实例确认通过数据库传递已提交决定与
-完整事件，具体应用层骨架见[总体设计 §4.5](chat-events-design.md#45-确认续跑的跨实例交接target-only-实施骨架)。
+完整事件，具体应用层骨架见[总体设计 §4.5](chat-events-design.md#45-确认续跑的跨实例交接待实现-实施骨架)。
 
 实施验收需覆盖：原响应保留执行输出，中断响应只含回执与同一停止 idle，终态 eventId 一致；
 五输入首帧与请求内容一致且只一次；提交前绑定/回执先行；极快完成；
@@ -132,7 +132,7 @@ agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.12.0 | 2026-09-17 | 工具调用展示名复用已提交快照。 |
+| 0.13.0 | 2026-09-18 | 工具调用展示名复用已提交快照。 |
 | 0.11.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |
 | 0.10.0 | 2026-09-15 | 明确计划审核响应绑定、批准事件顺序与修订再等待。 |
 | 0.9.0 | 2026-09-15 | 纳入后端显式任务更新事件，SSE 与历史共用完整快照。 |

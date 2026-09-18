@@ -1,6 +1,6 @@
 # 计划模式接口增量
 
-版本：1.9.0；日期：2026-09-15；状态：**已确认目标契约；Session 更新、计划审核与显式任务事件均已登记到共享 JSON，提问增量为 target-only；已有开发分支的核对范围见提问源码证据**。
+版本：1.10.0；日期：2026-09-18；状态：**三个交互工具及内部计划/任务/问题事件已在主线实现，当前源码见[§12](source-evidence.md#12-主线实现状态核验2026-09-18)；Mate 公共桥接待实现，部署与模型验收分别记录**。
 
 本文件维护计划接口的集成边界与理由。精确请求、完整事件、条件字段、错误码及示例由 [共享事件契约](../01-CampusClaw多Agent运行时/事件契约/common.json)、[POST 操作](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 与 [GET 操作](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[统一接口页](../01-CampusClaw多Agent运行时/chat-api-review.html)。登记不代表 Java 或 Mate 已实现。
 

@@ -3,7 +3,7 @@
 | 属性 | 值 |
 |---|---|
 | 文档版本 | 0.2.0 |
-| 状态 | 方向已确认；本期不支持，启用另行评审；target-only |
+| 状态 | 方向已确认；本期不支持，启用另行评审；待实现 |
 | 更新日期 | 2026-09-14 |
 | CampusClaw 源码基线 | `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | pi Runtime 固定基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185`；通过该 commit 读取，不采用工作区较新的 HEAD |
@@ -38,7 +38,7 @@ pi 路径相对 `pi-mono`。行号针对上表固定 commit，不代表未来实
 | 已观察 Java | `C/agent/Agent.java`，steer/followUp/abort；`C/agent/loop/AgentLoop.java`，runInternal、drainNextControl | 本机 Steer/FollowUp 队列与取消；Steer 优先，FollowUp 在本轮工具和更优先控制结束后继续 |
 | 已观察 pi | `packages/agent/src/agent-loop.ts`，runLoop，155–275 行；`packages/agent/src/types.ts`，getSteeringMessages/getFollowUpMessages，230–257 行 | 没有更多工具或 Steering 时才取 FollowUp；同一 Agent Loop 继续执行，最终才发 agent_end，不是分布式持久化调度 |
 | 产品约束 | 本期拒绝执行中的下一条消息 | 保持 M6 单消息准入，不为未来扩展增加本期排队与恢复成本 |
-| 架构变更，target-only | 应用层持久化队列，前序完成后由接收 M2 的实例启动新执行 | 不要求 M2 请求命中 A，不向 A 的内存队列远程注入；与 pi 同一 Loop 内续跑刻意不同 |
+| 架构变更，待实现 | 应用层持久化队列，前序完成后由接收 M2 的实例启动新执行 | 不要求 M2 请求命中 A，不向 A 的内存队列远程注入；与 pi 同一 Loop 内续跑刻意不同 |
 | 安全约束 | 凭据仅在所属请求/执行的内存对象中保留 | 不能为容灾把 JWT、AppKey 或 access-token 写入队列、事件、日志或复用 M1 凭据 |
 
 本方案依据固定源码中的本机队列与产品单消息准入约束；未来数据库交接属于架构变更，不是 pi 的既有持久化能力。
@@ -72,7 +72,7 @@ pi 路径相对 `pi-mono`。行号针对上表固定 commit，不代表未来实
 
 ## 4. 推荐目标类图与职责
 
-以下所有新增类及关系都是 target-only。命名用于职责讨论，不冻结 Java 包或公共 VO 字段。
+以下所有新增类及关系都是 待实现。命名用于职责讨论，不冻结 Java 包或公共 VO 字段。
 
 ![未来 FollowUp 应用层与运行时边界](设计图/后续消息扩展/target_follow_up_classes.svg)
 

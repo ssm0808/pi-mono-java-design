@@ -7,8 +7,8 @@ allowmixing
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java accept/startAccepted
 ' Observed behavior: Runtime binds a real root after admission; generic hooks can alter tool results.
 ' Design reason: one tracker per root unifies signals; statistics failures leave main execution unchanged.
-' Java divergence: all statistics types and integration arrows are target-only; scope is Runtime.
-title Skill Usage Statistics - Target-only (Runtime)
+' Java divergence: all statistics types and integration arrows are pending implementation; scope is Runtime.
+title Skill Usage Statistics - Pending implementation (Runtime)
 top to bottom direction
 skinparam shadowing false
 skinparam backgroundColor #FFFFFF
@@ -28,35 +28,35 @@ package "Runtime entry and assembly" {
 package "Generic tool boundary" {
   class "ReadTool" as Read <<integration>>
   class "ReadEvidenceDTO" as Evidence <<immutable, per call>>
-  class "Final hook observer" as Observer <<target-only, per execution>>
+  class "Final hook observer" as Observer <<pending implementation, per execution>>
 }
 package "Skill usage attribution" {
   class "ExecutionTargetDTO +\nSkill snapshot" as Snapshot <<immutable, per execution>>
-  class "SkillUsageResolver" as Resolver <<target-only, singleton>>
-  class "SkillUsageTracker" as Tracker <<target-only, per root>> {
+  class "SkillUsageResolver" as Resolver <<pending implementation, singleton>>
+  class "SkillUsageTracker" as Tracker <<pending implementation, per root>> {
     +onExplicit(candidate)
     +onRead(finalResult)
     +close()
     catches statistics failures
   }
-  class "SkillUsageCandidateDTO" as Candidate <<target-only, immutable>>
+  class "SkillUsageCandidateDTO" as Candidate <<pending implementation, immutable>>
 }
 package "Management query" {
-  class "SkillUsageStatistics\nController" as Controller <<target-only, singleton>>
-  class "SkillUsageStatistics\nQueryService" as Query <<target-only, singleton>>
+  class "SkillUsageStatistics\nController" as Controller <<pending implementation, singleton>>
+  class "SkillUsageStatistics\nQueryService" as Query <<pending implementation, singleton>>
 }
 package "Statistics persistence" {
-  class "SkillUsageService" as Writer <<target-only, singleton>> {
+  class "SkillUsageService" as Writer <<pending implementation, singleton>> {
     +record(candidateDTO)
     independent REQUIRES_NEW TX
   }
-  interface "SkillUsageMapper" as Mapper <<target-only>>
+  interface "SkillUsageMapper" as Mapper <<pending implementation>>
 }
 database "GaussDB" {
     entity "Existing Session / root records" as Session
-    entity "t_skill_usage" as Fact <<target-only>>
-    entity "t_skill_usage_stats" as Total <<target-only>>
-    entity "t_skill_usage_daily_stats" as Daily <<target-only>>
+    entity "t_skill_usage" as Fact <<pending implementation>>
+    entity "t_skill_usage_stats" as Total <<pending implementation>>
+    entity "t_skill_usage_daily_stats" as Daily <<pending implementation>>
 }
 Factory --> Execution : assemble
 Writer -[hidden]right-> Controller
@@ -93,8 +93,8 @@ end note
 ' Source evidence: Codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51 codex-rs/analytics/src/client.rs AnalyticsEventsQueue.try_send
 ' Observed behavior: hook failures can become tool failures; Codex analytics can drop signals.
 ' Design reason: catch outside the statistics transaction and retain one fact per root and Skill.
-' Java divergence: bounded synchronous recording is target-only, not the Codex queue pipeline.
-title Skill Usage Recording and Failure Isolation - Target-only
+' Java divergence: bounded synchronous recording is pending implementation, not the Codex queue pipeline.
+title Skill Usage Recording and Failure Isolation - Pending implementation
 skinparam shadowing false
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName SansSerif

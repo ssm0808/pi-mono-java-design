@@ -15,7 +15,7 @@
 
 Java 增加 f61906b9 的集成骨架核验，没有将旧 PR 的计数器结论延伸为该主线行为。其他 Command/Session/计划模块仍保留自己的核验点。PR 提交仅作为固定历史证据，不将其状态推断为最新主线。
 
-## 2. Java 集成骨架与 target-only 改造
+## 2. Java 集成骨架与 待实现 改造
 
 以下路径相对 pi-mono-java；完整 modules/ 开头的路径直接相对仓库，其余以 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/ 为前缀。
 
@@ -32,7 +32,7 @@ Java 增加 f61906b9 的集成骨架核验，没有将旧 PR 的计数器结论�
 | J09 | modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java · execute/applyAfterResult/toToolResultMessage | 工具执行后取消检查、after hook、最终结果事件；hook 可以改写正文/details | 复用最终 after hook 观察；统计异常在事务外捕获，避免被 applyAfterHook 转为工具失败；无需新增 agent-core 回调 |
 | J10 | modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql · t_session_executions/t_session_execution_segments | 固定 root_event_id、执行/段和规范事件持久化结构 | 新增三表的主键使用 root_event_id；独立统计事务借 Session 生命周期锁防止删除后迟到写，不加入来源事务 |
 | J11 | runtimeapi/dto/ExecutionTargetDTO.java；runtimeapi/runtime/RuntimeActiveExecution.java · bindTarget/target | 真实 sessionId/executionId/rootEventId/segmentId；target 在受理后绑定，确认续跑继续关联原根 | Tracker 每根一份；绑定真实 target，禁止按 HTTP 段或随机 UUID 建去重域 |
-| J12 | runtimeapi/runtime/RuntimeSessionEngineRegistry.java · createSession；session/ManagedAgentSessionRequest.java | Runtime 请求带 beforeHooks/afterHooks，after 当前为空；请求没有统计根或 Tracker 参数 | Host 装配末尾观察入口，显式信号与 Read 共享执行持有者；快照及目标绑定扩展为 target-only |
+| J12 | runtimeapi/runtime/RuntimeSessionEngineRegistry.java · createSession；session/ManagedAgentSessionRequest.java | Runtime 请求带 beforeHooks/afterHooks，after 当前为空；请求没有统计根或 Tracker 参数 | Host 装配末尾观察入口，显式信号与 Read 共享执行持有者；快照及目标绑定扩展为 待实现 |
 | J13 | runtimeapi/event/RuntimeMessageEventService.java · submitLocked/accept/startAccepted | accept 调用事务服务后返回真实 target；startAccepted 绑定并启动模型；当前 submitPreparedMessage 只返回事件流 | 在受理提交与模型启动之间转交显式候选；不能从返回的流反推根身份 |
 | J14 | runtimeapi/event/RuntimeEntryCodec.java · toolResultEntry；RuntimeCommittedEventFactory.java · agentToolResult | 工具结果按字段构造，成功分支不复制 details；错误仅从 details 取稳定错误码 | Read 证据保持内部观测用途，沿用字段白名单，不新增公共/持久化路径与摘要 |
 

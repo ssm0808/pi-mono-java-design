@@ -4,14 +4,14 @@
 ' Source evidence: pi-mono-java@7e54b47f modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java handleOutputItemAdded/handleOutputItemDone/convertToolResultInput
 ' Observed behavior: the current Claw HTTP layer has request-scoped POST SSE and history GET, but no independent long-lived stream GET.
 ' Observed identity: OpenAI Responses call_id maps to Claw ToolCall.id and is written back for Tool results.
-' Target-only design: Mate separates event submission, live Chat observation, and authoritative fixed-snapshot history.
+' Pending implementation design: Mate separates event submission, live Chat observation, and authoritative fixed-snapshot history.
 ' Design reason: a transport disconnect must not determine whether a write succeeded or whether an execution continues.
 ' Architecture changes: Mate keeps eventId independent, publishes OpenAI Tool Call IDs, and returns the complete accepted user event.
 skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam defaultFontSize 13
-title Public Chat - Responsibility Boundary (target-only)
+title Public Chat - Responsibility Boundary (pending implementation)
 top to bottom direction
 skinparam nodesep 30
 skinparam ranksep 35
@@ -38,7 +38,7 @@ API --> History : fixed snapshot
 Projection --> API : live preview and notification
 note bottom of Projection
 Public eventId and OpenAI toolCallId have separate meanings.
-Bridge mappings remain target-only and require contract alignment.
+Bridge mappings remain pending implementation and require contract alignment.
 end note
 @enduml
 
@@ -62,7 +62,7 @@ skinparam sequence {
   LifeLineBorderColor #A0A0A0
   ArrowColor #444444
 }
-title Public Chat - Live Stream and History Recovery (target-only)
+title Public Chat - Live Stream and History Recovery (pending implementation)
 actor Client
 participant "Mate Chat API" as Mate
 participant "Runtime bridge" as Bridge

@@ -2,7 +2,7 @@
 
 - 规范版本：1.0.1
 - API 版本：`agentkit.example/v1`
-- 状态：研究候选（target-only）；不是 CampusClaw 已确认设计，也不是现有产品的原生标准
+- 状态：研究候选（待实现）；不是 CampusClaw 已确认设计，也不是现有产品的原生标准
 - 原核验日期：2026-07-18；文档整理：2026-09-14
 - JSON Schema：[agent-tool-platform.schema.json](./agent-tool-platform.schema.json)
 

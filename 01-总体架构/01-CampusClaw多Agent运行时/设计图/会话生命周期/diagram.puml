@@ -16,12 +16,12 @@ skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
 ' Source: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2, modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java :: create/newSession; modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare/refresh.
-' Target-only: Agent mode is published through settings and copied on creation, never on recovery.
+' Pending implementation: Agent mode is published through settings and copied on creation, never on recovery.
 ' Current scoped evidence: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec.
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/session/RuntimeSessionService.java :: create, newSession.
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSessionController.java :: create.
 ' Observed behavior at f61906b9: configuration and prompt availability are validated; idle thinking=true is persisted without AgentSession assembly.
-' Target-only differences retained: copied Agent.mode and required plan capability follow the Plan Mode design.
+' Pending implementation differences retained: copied Agent.mode and required plan capability follow the Plan Mode design.
 title Session Creation - Validate and Persist, Assemble on First Execution
 
 ' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
@@ -116,7 +116,7 @@ title CampusClaw GetSession Confirmed Response
 ' Source evidence (pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java.
 ' Observed behavior: the response has displayName but no mode field.
-' Product constraint: target-only Session mode is independent from coarse execution state.
+' Product constraint: pending implementation Session mode is independent from coarse execution state.
 ' Design reason: GET, unified POST and Command share one complete Session projection.
 
 top to bottom direction

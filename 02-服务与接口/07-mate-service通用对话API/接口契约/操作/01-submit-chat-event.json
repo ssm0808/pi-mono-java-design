@@ -3,7 +3,7 @@
     "title": "mate-service General Chat Events API",
     "version": "1.6.0",
     "basePath": "/mate-service/v1",
-    "visibility": "Public · 已确认 · target-only"
+    "visibility": "Public · 已确认 · 待实现"
   },
   "operation": {
     "method": "POST",

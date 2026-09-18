@@ -1,6 +1,6 @@
 # TodoUpdate：后端显式发布任务进度
 
-版本：1.3.0；日期：2026-09-17。状态：当前目标；历史 Java 09b32d8e 的工具缺口仅适用于旧提交，既有实现见[提问证据](ask-user-question.md#2-基线与已观察实现)；description 集中维护及两文件迁移尚待实现。
+版本：1.4.0；日期：2026-09-18。状态：主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已实现工具、装配、显式任务事件、前端快照恢复和 description/两文件迁移，见[源码证据 §12](source-evidence.md#12-主线实现状态核验2026-09-18)。Mate 公共桥接待实现；本次未重跑产品或真实模型测试，历史测试保留原提交范围。
 
 本专题属于 M03/M06/M07，复用[计划模式全局目标类图](README.md#3-推荐全局目标类图)。本文件维护工具契约、提交边界、进度生命周期与验收；公共事件精确字段由[共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json)维护，POST SSE 与 GET 历史共用。
 
@@ -73,7 +73,7 @@ Track implementation progress in build mode; do not call this tool during plan-m
 
 ![TodoUpdate 后端任务事件流程](todo_update_sequence.svg)
 
-[原尺寸 SVG](todo_update_sequence.svg) · [PlantUML 源码：`todo_update_sequence`](diagram.puml#L454)
+[原尺寸 SVG](todo_update_sequence.svg) · [PlantUML 源码：`todo_update_sequence`](diagram.puml#L455)
 
 1. 模型生成 TodoUpdate ToolCall；Projector 按原路径保存和发送 `agent.tool_call`，`requiresConfirmation=false`。调用参数不提交进度。
 2. Pipeline 校验参数并执行工具，工具返回规范化完整列表，不直接写数据库或发 SSE。
@@ -123,9 +123,9 @@ Track implementation progress in build mode; do not call this tool during plan-m
 
 已知 TodoUpdate 的成功结果损坏、载荷超限或事务失败时，整组不提交、不发成功快照，进入现有投影失败与可靠收尾路径；不能先发布工具成功再尝试另写进度。提交成功但只送出工具结果就断线时，两条事件仍在历史中。公共事件共享原执行/段/分支/保留及访问规则，不推进 Session 配置 ETag。历史查询读取已保存事件，不在每次 GET 时重算列表或重新分配 ID。
 
-新增 `TodoUpdatedEventResponseVO` 及既有事件枚举、Factory、共享完整投影/编解码分支；Controller 仍通过既有 VO 边界返回，Mapper 只使用 DTO。复用 JDK、既有 Jackson 与校验库，不新增 Maven 依赖。发布前先升级读取端的类型联合和解码器，再启用新工具生产；不为未部署过的 TodoUpdate 假造旧进度历史。
+任务事件响应及既有事件枚举、Factory、共享完整投影/编解码分支已有实现；实际响应类为 `SessionEventResponseVO.AgentTodoUpdatedResponseVO`。Controller 仍通过既有 VO 边界返回，Mapper 只使用 DTO。复用 JDK、既有 Jackson 与校验库，不新增 Maven 依赖。部署仍须确保读取端类型联合和解码器已升级；不为未部署过的 TodoUpdate 假造旧进度历史。
 
-Mate 集成须显式映射 `agent.todo_updated` 到公共 Chat 事件，复用私有 Chat→Session 映射，并补齐公共 eventId 与原消息 sourceEventId 的对应关系；toolCallId 遵守 Mate 当前工具身份规则，不直接泄露内部 Session 身份。公共端保存后发布、去重并直接提供 todos。该 target-only 桥接增量由 [Mate C-007](../../02-服务与接口/07-mate-service通用对话API/协作/README.md#c-007) 登记，需同步公共精确模型后开放；现有 Mate 公共模型尚无 sourceEventId，不能声称两跳已实现。
+Mate 集成须显式映射 `agent.todo_updated` 到公共 Chat 事件，复用私有 Chat→Session 映射，并补齐公共 eventId 与原消息 sourceEventId 的对应关系；toolCallId 遵守 Mate 当前工具身份规则，不直接泄露内部 Session 身份。公共端保存后发布、去重并直接提供 todos。该 待实现 桥接增量由 [Mate C-007](../../02-服务与接口/07-mate-service通用对话API/协作/README.md#c-007) 登记，需同步公共精确模型后开放；现有 Mate 公共模型尚无 sourceEventId，不能声称两跳已实现。
 
 ## 6. 实施切片与验收
 
@@ -136,10 +136,11 @@ Mate 集成须显式映射 `agent.todo_updated` 到公共 Chat 事件，复用�
 | T3 | applyTodoUpdated 与任务面板 | 不读取工具名或工具结果文本；仅任务事件也能展示；实时与历史一致；分页分割两个事件、旧页与 live 交错、重复帧、空列表、新根、断线及终态分别验证 |
 | T4 | 提示词与 Mate 场景 | plan 调研/修订无 TODO；批准后创建实施清单；完成且验证后逐项更新；正常消息工具与任务事件交错；公共两跳关联不串根、不泄露内部身份 |
 
-先实现 T1/T2 的权威提交，再接入 T3/T4；build 清单可独立于计划审核验证。文档契约检查不代替产品集成测试；既有测试证据仅适用于记录的提交，新提示词行为仍需重新验收。
+T1/T2 的工具与权威提交、T3 的内部前端投影已有实现；T4 的提示词资源迁移已实现，Mate 桥接待实现，实际模型行为待验收。build 清单可独立于计划审核验证。文档契约检查不代替产品集成测试，既有测试证据仅适用于记录的提交。
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-09-18 | 登记主线工具、任务事件和提示词迁移实现，保留 Mate 桥接待实现边界。 |
 | 1.3.0 | 2026-09-17 | 进度细则集中到工具 description，取消独立实施进度提示词段。 |

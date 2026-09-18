@@ -30,7 +30,7 @@
 
 modelId 和思考设置属于 Chat/Session 配置，不进入 user.message；消息被接受时固定执行配置，运行中配置变化不追溯已有执行。公共创建/配置接口的具体形状仍待确定。
 
-[Runtime Session 更新](../../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-update) 已确认用 POST 原子更新 displayName/modelId/thinking/mode，按字段决定 busy 准入并要求 If-Match。原先“只能拆成两次 PUT 或增加原子操作”的目标选择已经解决；实际组合事务仍为 target-only，不能让 Mate 顺序调用旧 PUT 假装原子成功。
+[Runtime Session 更新](../../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-update) 已确认用 POST 原子更新 displayName/modelId/thinking/mode，按字段决定 busy 准入并要求 If-Match。原先“只能拆成两次 PUT 或增加原子操作”的目标选择已经解决；实际组合事务仍为 待实现，不能让 Mate 顺序调用旧 PUT 假装原子成功。
 
 原冲突的实际源码基线为 Java c9d858bc8261bf07f5585f545b53495bf2226a56：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/` 下 `web/RuntimeSessionConfigurationController.java#changeModel/changeThinking`、`session/RuntimeSessionConfigurationService.java#changeModel/changeThinking` 和 `persistence/MyBatisRuntimeSessionRepository.java#updateModel/updateThinking` 分别提供独立更新与事务。新的专项证据由 Runtime 主设计 §8.1 维护，未将旧差距延伸为最新实现审计。
 

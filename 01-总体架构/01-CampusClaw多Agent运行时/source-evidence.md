@@ -23,7 +23,7 @@
 | Codex Harness 源码基线 | `be33f80bc65159c094ecd06bf155afa3061ce23d` |
 | Anthropic TypeScript SDK 源码基线 | `64a1e8e285bbcc4cef2b15ebcadccd8e5f6987ff` |
 | Builtin 实现分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
-| Help 元数据专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；无参、空数组与缓存迁移已确认；1.48.0 去除 command 后保留三个业务字段，仍为 target-only |
+| Help 元数据专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；无参、空数组与缓存迁移已确认；1.48.0 去除 command 后保留三个业务字段，仍为 待实现 |
 | Command 响应复用源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`；既有 Session/Models 资源投影；源码路径与差距由 Builtin §8 维护 |
 | Session Events 合并传输核对 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；对比原 `a8192e0` 的七个 HTTP/事件文件无变化，目标变化见 Session Events §4.2 |
 | Session Events 历史查询补充核对 | 同一 `dfb90ca`；查询、编码、游标与 Mapper 四文件相对 `918005e` 不变，见 [历史设计](chat-events-history-design.md)；本次变更前设计 `c16ed3f904a85d01d69deb1a3575e2c52cdaa958` |
@@ -114,7 +114,7 @@ Session Entry、生命周期、HTTP 入口、凭据和字段命名的事实已�
 
 | 路径与符号 | 已观察行为 | 设计边界 |
 |---|---|---|
-| `runtimeapi/session/RuntimeSessionService.java` · create/newSession/get/delete | create 校验目录和默认模型后持久化 idle Session；不创建 Agent 执行对象，thinking 初始为 true；get 查询持久化资源；delete 调用 beginDeletion | 创建与执行装配分开；Agent.mode 复制仍按元数据与计划专题标记 target-only |
+| `runtimeapi/session/RuntimeSessionService.java` · create/newSession/get/delete | create 校验目录和默认模型后持久化 idle Session；不创建 Agent 执行对象，thinking 初始为 true；get 查询持久化资源；delete 调用 beginDeletion | 创建与执行装配分开；Agent.mode 复制仍按元数据与计划专题标记 待实现 |
 | `runtimeapi/web/RuntimeSessionController.java` · create/get/delete | Controller 包装 ResultBean；GET 返回同源 ETag，DELETE 返回 204；没有统一更新路由 | 统一 Session POST 的目标与差距见 [HTTP §8.1](chat-http-v1-design.md#81-统一-session-更新源码核对) |
 | `runtimeapi/web/RuntimeEventController.java` · submit/list | POST 绑定独立 SseEmitter，完成/超时/错误调用 detach；GET 接受 limit/page | 只证明入口与绑定结构，不能证明全部事件语义、数据库并发与恢复已验收 |
 
@@ -134,10 +134,10 @@ Session Entry、生命周期、HTTP 入口、凭据和字段命名的事实已�
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventQueryService.java:53-99` · `list/pageOf` | page 只携带 afterSeq 与 thinking，没有固定历史快照水位 |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java:59-132` · `steer/followUp/abort/prepareAbort` | Abort 是独立接口行为；Steer 与 FollowUp 使用执行内队列 |
 | 已观察实现 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:57-120` · `acceptUserEvent/listCurrentBranch` | `user.message` 在事务内追加并将 Session 标为 running；历史按 afterSeq 开放读取 |
-| 目标架构 | [Events 主设计与目标图](chat-events-design.md) | 提交和对应 SSE 合并到 POST，GET 历史保留；多类型输入与请求输出绑定为 target-only |
+| 目标架构 | [Events 主设计与目标图](chat-events-design.md) | 提交和对应 SSE 合并到 POST，GET 历史保留；多类型输入与请求输出绑定为 待实现 |
 | 产品约束 | [Events 资源模型](chat-events-design.md#1-资源模型与职责) | 无公共 Run/Execution；mate 公共边界只暴露 `chatId` 和公共事件身份 |
 | 产品约束 | `X-HW-ID` | 标识当前请求对应的用户凭据；不是公司、服务或应用调用方标识 |
-| 产品约束（target-only） | POST `access-token` | 三种用户事件在 JWT/APPKEY 模式下均必须携带，统一调用方请求头组装；不把三事件必填表述为现有 Java 已支持的行为 |
+| 产品约束（待实现） | POST `access-token` | 三种用户事件在 JWT/APPKEY 模式下均必须携带，统一调用方请求头组装；不把三事件必填表述为现有 Java 已支持的行为 |
 | 安全加固 | POST 凭据处理 | 凭据从请求读入后只在内存中保留到本次 Agent 执行结束，只在必要的实际 Mate tool execute 使用，不进入持久化、日志、SSE 或历史 |
 
 ### 5.1 事件顺序
@@ -153,7 +153,7 @@ Session Entry、生命周期、HTTP 入口、凭据和字段命名的事实已�
 | 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:55-87,208-218` · `acceptUserEvent/appendEntry/appendLocked` | 事务锁定 Session，再取序号、插入和递增；保存到达该写入边界的顺序，并不自动恢复上游乱序 |
 | 已观察实现 | `campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml:47-75,132-164` · `lockSessionForUpdate/lockNextSequence/insertEntry/listCurrentBranch` | 使用行锁；历史 SQL 按 `entry_seq` 排序，不按 `timestamp` 排序 |
 | 已观察实现 | `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventQueryService.java:53-60,90-99` · `list/pageOf` | 保留查询结果顺序，以最后一项内部序号生成不透明下一页游标；尚非 Session Events 的整数页码 |
-| 架构变更（target-only） | [Events 有序追加](chat-events-design.md#31-事件处理写入与展示顺序) 与 `SessionEventAppender` 推荐边界 | 所有来源共同遵守前置依赖和有序提交；ListEvents 读取已提交顺序，时间戳只作展示。需按 [Events 实施验收](chat-events-design.md#5-实施切片与验收) 落地并测试，不能把数据库行锁当作全部保证 |
+| 架构变更（待实现） | [Events 有序追加](chat-events-design.md#31-事件处理写入与展示顺序) 与 `SessionEventAppender` 推荐边界 | 所有来源共同遵守前置依赖和有序提交；ListEvents 读取已提交顺序，时间戳只作展示。需按 [Events 实施验收](chat-events-design.md#5-实施切片与验收) 落地并测试，不能把数据库行锁当作全部保证 |
 
 pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime 内核行为参考；
 本次不把 pi 的进程内事件、本地 Session 文件或 CLI 传输直接当成 CampusClaw HTTP 契约。

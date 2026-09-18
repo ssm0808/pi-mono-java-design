@@ -2,12 +2,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.14.0 |
-| 状态 | 五输入联合契约与 B01～B15 已确认；本文跨实例执行骨架为 target-only |
+| 文档版本 | 0.15.0 |
+| 状态 | 五输入联合契约与 B01～B15 已确认；本文跨实例执行骨架为 待实现 |
 | 源码范围 | Java c9d858bc、a8192e04、918005ee、dfb90cac 分项核验；pi 固定 5cd93f68，完整提交和符号见 [源码证据](source-evidence.md#5-session-events-固定源码核验) |
-| 更新日期 | 2026-09-17 |
+| 更新日期 | 2026-09-18 |
 
-结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 target-only，Session/元数据不增字段，Mate 公共投影独立集成。
+结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量已在 Runtime 主线实现（`8c5fda1d`，见[源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)）；Session/元数据不增字段，Mate 公共投影待实现。本文其他历史源码范围不因此升级。
 
 ## 1. 资源模型与职责
 
@@ -49,7 +49,7 @@ Skill 复用消息执行语义，Builtin 保持 JSON，具体由 [Slash 模块](
 
 <a id="tool-display-snapshot"></a>
 
-### 2.3 工具调用名称快照（target-only）
+### 2.3 工具调用名称快照（待实现）
 
 `agent.tool_call` 增加可选 `displayName`，精确字段约束由[共享事件源](事件契约/common.json)维护。普通框架 label 与 Mate 业务展示名按 [M03 映射规则](../02-CampusClaw工具系统/README.md#tool-display-name)归一；`toolName`、`arguments`、确认请求和调用关联不变，`agent.tool_result` 不重复名称。公共 Chat 的字段与授权投影见[Mate §5.4](../../02-服务与接口/07-mate-service通用对话API/README.md#54-工具调用)。
 
@@ -134,7 +134,7 @@ Application/Host 在第一次提交调用事件前，从本次装配的工具定
 
 推荐目标类图用 `SessionEventAppender` 表示共享的接受与有序追加职责：四个用户事件
 Handler 和 Runtime Projector 都经过该边界，再由 Repository 执行短事务。该类名及具体
-调度机制是 target-only 落地建议；确认的是共同顺序约束，而不是必须增加某种队列。
+调度机制是 待实现 落地建议；确认的是共同顺序约束，而不是必须增加某种队列。
 它是 Spring 单例协作者，但协调状态按 Session 隔离；多实例场景仍须在持久化事务中
 复核依赖和状态，不能只依赖某个 JVM 内的互斥锁。查询不经过该写入边界，不等待模型
 或工具执行完成。
@@ -273,7 +273,7 @@ M7 补充核对 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，
 
 [PlantUML 源码：`target_database_interrupt_delivery`](设计图/事件接口重设计/diagram.puml#L245)
 
-### 4.5 确认续跑的跨实例交接（target-only 实施骨架）
+### 4.5 确认续跑的跨实例交接（待实现 实施骨架）
 
 B08/B09 已确认控制竞争和根消息关联，以下是落实语义所需的架构细化；不新增产品资源或
 远端凭据传递。原执行的凭据保留在所属实例直至 M1 实际结束，包含工具确认等待；确认请求
@@ -299,7 +299,7 @@ B08/B09 已确认控制竞争和根消息关联，以下是落实语义所需的
 
 ### 4.6 已接受决定的消费终态
 
-本节统一维护工具确认、计划审核和问题答案的内部消费状态，适用于 `t_session_tool_confirmations`、`t_session_plan_confirmations`、`t_session_question_answers`。用户回执保存“决定已接受”的事实；消费状态表示原执行是否领取、处理或放弃该决定，两者分别维护。此项为已确认的架构变更，相对下述源码基线仍为 target-only，不新增公共 HTTP 字段、事件或 Session 状态。
+本节统一维护工具确认、计划审核和问题答案的内部消费状态，适用于 `t_session_tool_confirmations`、`t_session_plan_confirmations`、`t_session_question_answers`。用户回执保存“决定已接受”的事实；消费状态表示原执行是否领取、处理或放弃该决定，两者分别维护。此项为已确认的架构变更，相对下述源码基线仍为 待实现，不新增公共 HTTP 字段、事件或 Session 状态。
 
 | 消费状态 | 含义 | claimed_at | completed_at |
 |---|---|---|---|
@@ -320,7 +320,7 @@ B08/B09 已确认控制竞争和根消息关联，以下是落实语义所需的
 
 理由是“已接受但尚未领取”可能被根执行结束永久截断。单独保留 `PENDING` 虽不会突破领取条件，却要求每次查看记录都联查执行才能区分待处理和永不消费；增加 `CANCELED` 可直接表达该区别。代价是三表枚举、时间约束和终态事务增加更新，不需要新表、定时清扫或 Maven 依赖。首版继续交付完整安装 SQL；不在本项中新增历史升级、旧终态记录回填或自动接管能力。
 
-源码核验基线：`pi-mono-java@74f1b8314c9a5eb3d1659dfed2ab90b787dd647f`，核对日期 2026-09-17；仅更新消费状态专项，不把本页旧基线差距延伸到当前实现。以下路径相对实现仓根目录，R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`，S 为 `modules/coding-agent-cli/src/main/resources/`。
+源码核验基线：`pi-mono-java@74f1b8314c9a5eb3d1659dfed2ab90b787dd647f`，核对日期 2026-09-18；仅更新消费状态专项，不把本页旧基线差距延伸到当前实现。以下路径相对实现仓根目录，R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`，S 为 `modules/coding-agent-cli/src/main/resources/`。
 
 | 源码 / 符号 | 已观察行为与本项目标差距 |
 |---|---|
@@ -357,8 +357,8 @@ HTTP 路径使用 `/campusclaw-service/v1`。内部开发阶段编号不作为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.14.0 | 2026-09-17 | 调用事件保存可选 displayName 快照，统一映射、持久化与前端投影边界。 |
-| 0.13.0 | 2026-09-17 | 根执行真实终态同事务将三类未领取决定标记为 CANCELED，并保留已接受用户事实。 |
+| 0.15.0 | 2026-09-18 | 调用事件保存可选 displayName 快照，统一映射、持久化与前端投影边界。 |
+| 0.13.0 | 2026-09-18 | 根执行真实终态同事务将三类未领取决定标记为 CANCELED，并保留已接受用户事实。 |
 | 0.12.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |
 | 0.11.0 | 2026-09-15 | 计划审核纳入五输入分派，复用固定续跑段与有序追加边界。 |
 | 0.10.0 | 2026-09-14 | 按接受、有序追加与跨实例控制收敛主文，分离源码证据并合并重复验收。 |

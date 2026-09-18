@@ -1,8 +1,10 @@
 # CampusClaw 设计仓库
 
-导航版本 3.15.0 · 2026-09-18
+导航版本 3.16.0 · 2026-09-18
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
+
+实现状态统一使用“已实现”“待实现”“未核验”，测试验收另列。`ExitPlanMode`、`TodoUpdate`、`AskUserQuestion` 已在 Runtime 主线实现，最新核验范围见[工具与计划模式证据](01-总体架构/06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)；Mate 公共桥接与未核验范围分别记录。
 
 [Agent 架构对比](01-总体架构/07-Agent架构对比/README.md) · [全部设计图](设计图索引.html) · [工作指引](AGENTS.md)
 

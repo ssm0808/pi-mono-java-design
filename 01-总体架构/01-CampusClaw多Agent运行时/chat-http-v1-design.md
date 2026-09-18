@@ -149,7 +149,7 @@ Repository 扩展一次性的 `updateConfiguration(sessionId, expectedVersion, c
 
 计划审核保持独立的事件交互边界，Session 响应不增加待审核目标字段；客户端恢复与服务端执行内校验见[计划模式 §6.2](../06-CampusClaw计划模式/README.md#62-恢复与结果不确定)。
 
-这是 target-only 增量。沿用 Spring/Jackson/MyBatis 现有依赖，无新增 Maven 依赖。mode 的数据库列与迁移归[计划模式](../06-CampusClaw计划模式/README.md#6-持久化与恢复)；本接口不新增通用 metadata 字段或独立配置表。
+这是 待实现 增量。沿用 Spring/Jackson/MyBatis 现有依赖，无新增 Maven 依赖。mode 的数据库列与迁移归[计划模式](../06-CampusClaw计划模式/README.md#6-持久化与恢复)；本接口不新增通用 metadata 字段或独立配置表。
 
 管理面 refresh(agentId) 仍只发布新目录，不改 active execution 快照。下一次消息接受时如需模型校准，按既有 model_changed、可选 thinking_changed、user.message 顺序提交；本次 SSE 首帧仍为 user.message。没有有效默认模型时，在 SSE 建立前拒绝且不接受消息。
 
@@ -311,7 +311,7 @@ POST Events/Command 额外携带 access-token。四项凭据只在本次执行�
 
 ## 8. 源码证据与差异分类
 
-[模块源码证据](source-evidence.md) 集中记录固定提交、相对路径、符号和已观察行为；历史差距只适用于对应提交。本文的统一更新仍为 target-only，专项证据如下。公司响应格式与凭据边界是产品约束，原子配置更新是架构变更，版本冲突保护属于安全加固。
+[模块源码证据](source-evidence.md) 集中记录固定提交、相对路径、符号和已观察行为；历史差距只适用于对应提交。本文的统一更新仍为 待实现，专项证据如下。公司响应格式与凭据边界是产品约束，原子配置更新是架构变更，版本冲突保护属于安全加固。
 
 ### 8.1 统一 Session 更新源码核对
 
@@ -324,7 +324,7 @@ POST Events/Command 额外携带 access-token。四项凭据只在本次执行�
 | R/session/RuntimeSessionConfigurationService.java · requireMutableSession/requireUpdated | ETag、idle、结果状态映射及统一响应组装 | 扩展为按提交字段准入和一次组合提交 |
 | R/service/command/SessionNamingService.java · normalizeName/execute | 名称规则与单独 updateName | 提取可复用准备职责，HTTP 不调用会独立提交的 execute |
 | R/persistence/RuntimeSessionRepository.java · updateModel/updateThinking/updateName | 不同属性有独立事务 API，名称尚无 expectedVersion | 扩展组合事务并复用已有领域写入，不能顺序调用三个旧更新 |
-| R/persistence/MyBatisRuntimeSessionRepository.java · updateModelLocked/updateThinkingLocked/updateName | 行锁、版本/busy、同值判断、Entry 与资源更新 | 候选以锁内版本绑定；统一提交和 mode 为 target-only |
+| R/persistence/MyBatisRuntimeSessionRepository.java · updateModelLocked/updateThinkingLocked/updateName | 行锁、版本/busy、同值判断、Entry 与资源更新 | 候选以锁内版本绑定；统一提交和 mode 为 待实现 |
 | modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java · MODEL_ID_REGEX | 首字符为字母/数字，后续允许字母/数字及 ._:/-，总长 1～128 | 标识格式不变；不因接口合并扩大输入 |
 | pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185` / packages/coding-agent/src/core/agent-session.ts · setModel/setThinkingLevel | 模型变化会按能力收敛推理等级 | 保留省略 thinking 时的归一规则；显式组合校验是 CampusClaw API 设计 |
 | Claude Managed Agents 官方 Update Session / Session operations，2026-09-14 核对，Beta | POST 更新 Session；title、metadata、budget、agent 均为可选属性，公开契约未列出单字段互斥限制，主示例只提交 title；已有会话不可修改模型配置 | 参考资源 POST、可选字段部分更新及单字段主示例；CampusClaw 的可写字段、null 规则、If-Match 与原子提交由本设计定义，不能据公开契约推断 Claude 服务端事务 |

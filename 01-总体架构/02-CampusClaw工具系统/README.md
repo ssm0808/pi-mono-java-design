@@ -2,19 +2,19 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.8.0 |
+| 文档版本 | 2.9.0 |
 | 状态 | 目标设计；Mate 发现无凭据、仅 execute 透传 POST Events 执行快照待实现 |
-| 更新日期 | 2026-09-17 |
+| 更新日期 | 2026-09-18 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
-| 精确工具契约 | [8 个活动内置工具契约](built-in-tool-contracts.md) |
+| 精确工具契约 | [11 个活动内置工具与专题契约](built-in-tool-contracts.md) |
 
-计划模式的推荐增量见[独立专题](../06-CampusClaw计划模式/README.md)：Runtime 默认 profile 增加 ExitPlanMode 和 [TodoUpdate](../06-CampusClaw计划模式/todo-update.md)，后者仅在 build 实施阶段返回完整清单，由后端同事务发布 agent.todo_updated；plan 提示词明确不调用它；模式切换保持同一工具定义，Child 按调用时模式生成提示词。该 target-only 扩展只增加 Agent.mode 作为新交互 Session 默认值（见[元数据主设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)），Tool/Skill 元数据不变；现有八项精确契约在正式纳入前保持原值。对应取舍见 [A03](../07-Agent架构对比/README.md#a03) 和 [A05](../07-Agent架构对比/README.md#a05)。
+Runtime 默认 profile 已包含 ExitPlanMode、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md) 和 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)，共 11 项。2026-09-18 已取回并核验主线 `8c5fda1dde51675859bc9c07e145dbe253656dea`：三个工具、工厂、配置、审核/问答续跑和 TODO 事件均已有实现；详见[工具源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
 
-结构化人机交互增加 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)，两模式定义一致，默认仅交互 Runtime 根装配；通过既有 Events 回答并续跑，不扩充元数据。提问为 target-only；开发分支 699f929 已有 ExitPlanMode/TodoUpdate，工具原证据仅适用于其固定旧提交。
+三个工具在 plan/build 保持同一定义，默认仅 Runtime 根装配；TodoUpdate 由提示词约束只在 build 实施阶段使用，成功结果同事务发布 agent.todo_updated。精确契约与验收由[计划专题](../06-CampusClaw计划模式/README.md)维护；Tool/Skill 元数据不变。Mate 公共桥接仍按所属专题标记待实现，不能据此把 Runtime 工具标记为待实现。对应取舍见 [A03](../07-Agent架构对比/README.md#a03) 和 [A05](../07-Agent架构对比/README.md#a05)。
 
 ## 1. 设计结论
 
-CampusClaw 通过 Runtime、Cron 和 Child 三个入口运行 Agent。基础工具采用固定清单和严格启动配置，每次执行独立装配；不提供 CLI 产品入口、动态注册或 Skill 声明的本地工具。基础清单有以下 8 个区分大小写的名称，计划专题的追加工具按上方入口维护：
+CampusClaw 通过 Runtime、Cron 和 Child 三个入口运行 Agent。工具采用固定清单和严格启动配置，每次执行独立装配；不提供 CLI 产品入口、动态注册或 Skill 声明的本地工具。活动清单有以下 11 个区分大小写的名称，其中后三项的精确交互契约由计划专题维护：
 
 ```text
 Read
@@ -25,6 +25,9 @@ Cron
 ListMateTools
 CallMateTool
 Agent
+ExitPlanMode
+TodoUpdate
+AskUserQuestion
 ```
 
 Runtime、Cron 和 Child Agent 使用同一个轻量 `AgentSession` 类型和同一条
@@ -47,7 +50,7 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 
 本专题负责：
 
-- 8 个活动内置工具的名称、Schema、输出、可用条件和并发模式；
+- 11 个活动内置工具的名称、装配、可用条件和并发模式；八项基础工具的 Schema 与输出，及三个交互工具的专题契约入口；
 - Runtime、Cron、Child Agent 三入口的配置与 Session 装配；
 - 受管 Agent 工作区边界、目录 prepare/refresh 和 Skill/Child 名称索引；
 - Mate 工具发现、Session 名称到 ID 缓存、远端调用和共享 CampusMate origin 边界；
@@ -82,7 +85,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 
 | 分类 | 目标差异 | 设计原因 |
 |---|---|---|
-| 产品约束 | 只暴露 8 个活动 PascalCase 工具 | 冻结可测试的 TOB 能力面，禁用写入和命令执行 |
+| 产品约束 | 只暴露 11 个活动 PascalCase 工具 | 冻结可测试的 TOB 能力面，禁用本地写入和命令执行 |
 | 产品约束 | 删除 CLI/TUI 产品入口、Loop、旧名和兼容 payload | 产品没有交互终端生命周期，不承担首版兼容 |
 | 架构改造 | 三入口共用轻量 Session 与工厂 | 防止模型、hook、工具、错误和取消语义漂移 |
 | 架构改造 | 压缩与 Read 文件追踪迁入公共 Session | 入口删除不能让 Runtime、Cron、Child 丢失上下文治理 |
@@ -116,7 +119,10 @@ public enum BuiltInToolName {
     CRON("Cron"),
     LIST_MATE_TOOLS("ListMateTools"),
     CALL_MATE_TOOL("CallMateTool"),
-    AGENT("Agent");
+    AGENT("Agent"),
+    EXIT_PLAN_MODE("ExitPlanMode"),
+    TODO_UPDATE("TodoUpdate"),
+    ASK_USER_QUESTION("AskUserQuestion");
 }
 
 public enum ToolEntryPoint {
@@ -144,6 +150,9 @@ campusclaw:
       - ListMateTools
       - CallMateTool
       - Agent
+      - ExitPlanMode
+      - TodoUpdate
+      - AskUserQuestion
     cron:
       - Read
       - Find
@@ -196,7 +205,7 @@ public interface BuiltInToolFactory {
 
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L569)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L572)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -223,7 +232,7 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 
 ![三入口 Session 装配](agent_session_assembly.svg)
 
-[PlantUML 源码：`agent_session_assembly`](diagram.puml#L117)
+[PlantUML 源码：`agent_session_assembly`](diagram.puml#L120)
 
 `AgentSessionFactory.create` 固定执行：
 
@@ -257,11 +266,11 @@ default ToolExecutionMode executionMode() {
 ```
 
 `Read`、`Find`、`Grep`、`Ls`、`ListMateTools` 为 `PARALLEL`；`Cron`、
-`CallMateTool`、`Agent` 为 `SEQUENTIAL`。
+`CallMateTool`、`Agent`、`ExitPlanMode`、`TodoUpdate`、`AskUserQuestion` 为 `SEQUENTIAL`。
 
 ![逐工具批量调度](tool_batch_scheduling.svg)
 
-[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L502)
+[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L505)
 
 Batch planner 保持模型调用原始顺序，把连续 `PARALLEL` 调用组成并行段并等待整段完成；
 每个 `SEQUENTIAL` 调用是 barrier。结果按原始调用顺序回填，而不是按完成时间排序。
@@ -297,7 +306,7 @@ agent/{agentId}/.campusclaw/
     └── templates/
 ```
 
-`agent.json` 只保存当前 Agent 身份；`settings.json` 保存 Agent 默认 `mode`（target-only）、`defaultModel` 和
+`agent.json` 只保存当前 Agent 身份；`settings.json` 保存 Agent 默认 `mode`（待实现）、`defaultModel` 和
 `bindingModels`；`agents/{agentName}.json` 保存一个直接 Child 的身份、描述、enabled 和
 固定版本；`skill.json` 保存 `schemaVersion=1`、ID、名称和版本。名称必须与路径逐字符
 一致，所属索引内唯一。扫描结果形成不可变的 `skillName -> skillId` 和
@@ -309,7 +318,7 @@ agent/{agentId}/.campusclaw/
 
 ![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
 
-[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L177)
+[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L180)
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
@@ -324,7 +333,7 @@ agent/{agentId}/.campusclaw/
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L826)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L829)
 
 ## 9. Mate 工具发现、缓存与执行
 
@@ -332,7 +341,7 @@ agent/{agentId}/.campusclaw/
 
 ![Mate 工具实时发现](list_mate_tools_sequence.svg)
 
-[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L265)
+[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L268)
 
 模型输入只有可选 `skillName`。无参数时查询当前 Agent；有名称时通过本地 Skill 索引解析
 ID。模型不能提交 agentId、skillId 或 toolId。
@@ -363,7 +372,7 @@ permission、outputSchema、并发属性或 Mate 原始信封。每次 List 都�
 
 ![CallMateTool 缓存解析与执行](call_mate_tool_sequence.svg)
 
-[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L331)
+[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L334)
 
 模型只提交 `{tool,args?}`，不提交 Skill、Agent、scope 或 toolId。Call 先按 toolName 查询
 Session `MateToolResolutionCache`；命中后使用内部 ID 调用 Mate。未命中时通过 Session 级
@@ -383,7 +392,7 @@ execution 的 Child execution 以只读方式传递，但不存入 Child Session
 
 <a id="tool-display-name"></a>
 
-### 9.2.1 工具展示名称映射（target-only）
+### 9.2.1 工具展示名称映射（待实现）
 
 工具执行身份与用户展示名称分开。框架接口继续使用 `AgentTool.name()` / `label()`；Host 向事件层提供统一的可选 `displayName`，不再公开一个同义 `label` 字段。名称映射由本节唯一维护，事件快照及消费规则见 [M06 调用名称快照](../01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)，UI 见[前端 §9.7](../../07-前端设计/技术设计/内容渲染.md#mate-tool-display)。
 
@@ -431,7 +440,7 @@ POST 不自动重放等其他契约不变。
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L425)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L428)
 
 模型只使用：
 
@@ -507,7 +516,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L644)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L647)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
@@ -529,7 +538,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L700)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L703)
 
 默认配置为 `enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`。执行正常结束后
 超过阈值则压缩；摘要瞬态重试默认开启、最多 3 次、基础退避 2000ms。`enabled=false`
@@ -598,7 +607,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 ### 13.1 配置、Pipeline 与 Session
 
 - 三入口缺省、显式空数组和完全替换语义正确；
-- 8 个活动名之外的旧名、禁用名、重复名和大小写错误阻止启动；
+- 11 个活动名之外的旧名、禁用名、重复名和大小写错误阻止启动；
 - Child 缺省无 `Agent`，Cron 缺省无 `Cron`；
 - 同一入口连续创建两个 Session，工具实例不同且应用协作者可安全共享；
 - Schema 在 before hook 前校验，hook 顺序固定；
@@ -639,7 +648,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 ## 14. 实施顺序
 
-1. 冻结 8 个名称、三入口配置和精确 Schema；
+1. 维护 11 个名称、三入口配置和精确 Schema，交互工具引用计划专题；
 2. 实现工作区边界、只读工具和受管树链接校验；
 3. 完成逐工具 batch planner、严格 Schema 和 hook 顺序；
 4. 实现工厂、不可变上下文和公共 Session；
@@ -656,6 +665,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.9.0 | 2026-09-18 | 同步主线三项交互工具实现、十一项活动清单及待实现用语。 |
 | 2.8.0 | 2026-09-17 | 统一框架 label 与 Mate 元数据到 displayName 的映射，并固定调用解析快照。 |
 | 2.7.0 | 2026-09-15 | 工具装配增加 AskUserQuestion 目标入口并保持元数据稳定。 |
 | 2.6.7 | 2026-09-15 | 接入 TodoUpdate 后端显式任务事件，前端直接消费完整清单。 |

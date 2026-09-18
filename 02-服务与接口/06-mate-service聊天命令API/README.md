@@ -3,7 +3,7 @@
 | 属性 | 值 |
 |---|---|
 | 文档版本 | 1.4.0 |
-| 状态 | GET Descriptor 已确认；公共路径、认证、bridge 与错误映射待独立评审，target-only |
+| 状态 | GET Descriptor 已确认；公共路径、认证、bridge 与错误映射待独立评审，待实现 |
 | 精确展示源 | [GET 模型](接口契约/操作/01-list-chat-commands.json)与[公共候选上下文](接口契约/common.json) |
 | 人类评审入口 | [GET 命令清单](chat-command-v1-review.html) |
 | 更新日期 | 2026-09-14 |

@@ -3,7 +3,7 @@
 | 属性 | 值 |
 |---|---|
 | 文档版本 | 2.2.1 |
-| 状态 | 日志机制已按 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 落地；CampusMate Provider 改名为 target-only |
+| 状态 | 日志机制已按 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 落地；CampusMate Provider 改名为 待实现 |
 | 设计日期 | 2026-08-26 |
 | 实现仓库 | `superheromeZzh/pi-mono-java` |
 | 关联 PR | [pi-mono-java#174](https://github.com/superheromeZzh/pi-mono-java/pull/174) |
@@ -27,7 +27,7 @@ CampusClaw 采用一个简单且可执行的异常边界：
 
 ### 2.1 基线说明
 
-日志机制以 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 为实现证据；Provider 改名另按 §6.2 标为 target-only。既有源码核验范围未扩展到最新主线。
+日志机制以 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 为实现证据；Provider 改名另按 §6.2 标为 待实现。既有源码核验范围未扩展到最新主线。
 
 历史基线仅用于追溯：主干 `8f9f3c1b51cca5ffbc3501fc4a1cb9ac253124be`、PR `80e9f266e82b20aabfb1e7f8aa1aae142a41dec0`、中间实现 `3e693810e75a0995e59aeea6bbb980523ae4f472`。当前有效规则是失败源类直接记录，再构造只携带错误码的结果，设计理由见 §4。
 
@@ -156,7 +156,7 @@ JSON 输出，环境变量
 ### 6.2 Mate Model Manager
 
 目标 Provider 类名为 `CampusMateProvider`，Logger 使用该类；这是[Model 命名设计](../../02-服务与接口/03-Model/README.md#provider-identity)
-的 target-only 改名。固定源码 `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec` 中
+的 待实现 改名。固定源码 `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec` 中
 `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java`
 仍通过旧类取得 Logger，源码证据路径不改写。`event/operation/errorCode`、其他 Mapper/Parser
 的 Logger 及 `MATE_MODEL_MANAGER_ERROR` 保持不变；后续将 Provider 测试类和 Logger name

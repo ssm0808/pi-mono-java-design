@@ -9,7 +9,7 @@
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | Skill 发现候选 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`（PR #210，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并） |
 | Skill 名称专项复核 | `0300541fbbe3db8b05ffa1ac953f15f01df74b3e`（2026-09-04，本地源码提交；只复核名称规则与消费者） |
-| 状态 | Builtin 与 Skill Command 由用户统一负责设计、实现和集成；B13/B14 语义已确认，精确契约已定稿，可进入实现，执行仍 target-only |
+| 状态 | Builtin 与 Skill Command 由用户统一负责设计、实现和集成；B13/B14 语义已确认，精确契约已定稿，可进入实现，执行仍 待实现 |
 
 ## 1. 职责与当前目标
 
@@ -51,7 +51,7 @@ pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 | 复核实现 / `0300541f` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillLoader.java`：`parseSkillFile:110-118`、`validateName:138-150` | 缺少名称仍回退文件夹名；加载仍使用 `SkillNamePatterns.LEGACY` |
 | 复核实现 / `0300541f` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java`：`resolved` | 命令发现使用 `SkillNamePatterns.isStrictValid`；`-pdf`、`pdf-`、`pdf--tools` 仍形成加载与发现差异 |
 | pi 对照 / `4af9d21d` | `packages/coding-agent/src/core/skills.ts`：`validateName`、`loadSkillFromFile:320-344` | 检查首尾及连续连字符，但名称错误仅记录 warning，描述有效时仍加载；CampusClaw 不采用此容忍行为 |
-| 已确认目标 / 产品约束与安全加固 | Skill 域唯一严格规则；所有消费者一致拒绝 | 删除兼容分支，让加载、模型发现、命令发现与执行共享相同名称边界；执行仍属 target-only |
+| 已确认目标 / 产品约束与安全加固 | Skill 域唯一严格规则；所有消费者一致拒绝 | 删除兼容分支，让加载、模型发现、命令发现与执行共享相同名称边界；执行仍属 待实现 |
 
 ## 3. 名称统一严格校验
 
@@ -125,12 +125,12 @@ B15 沿用部署统一保留策略，未配置时不新增自动清理；删除�
 |---|---|---|
 | pi-mono-java · modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java · list/resolved/hasSkillMarkdown | prepareCached 后产生发现 DTO 和 SkillCommandSnapshotDTO，包含内部 Skill 身份、版本与内容；使用 ClawConstants.Skill.isValidName，检查规范位置；不执行 Skill | 保留发现事实，增加真实执行 Definition/Handler 与共享消息接受链；不能将发现实现当成 HTTP Skill 执行已发布 |
 | pi-mono · packages/coding-agent/src/core/agent-session.ts · _expandSkillCommand/prompt，固定 5cd93f688aaab89dbb6dfa4aca535f21796ae185 | /skill:name 查本地 Skill 并展开正文；找不到或读失败可返回原文本；扩展后作为模型输入 | 学习展开语义；HTTP 精确匹配失败必须拒绝、不回退；正文不进公共回执。产品约束与安全加固，不复制 CLI 文件路径或内存排队 |
-| pi-mono-java · modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java · userEntry/toAgentMessages | 公开 user payload 与模型恢复已有不同方法，但 userMessage 目前仅按公开文本/附件重建 | 需增加内部展开输入与公开原调用的独立投影，恢复不能重新解释不同版本 Skill；target-only 架构变更 |
+| pi-mono-java · modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java · userEntry/toAgentMessages | 公开 user payload 与模型恢复已有不同方法，但 userMessage 目前仅按公开文本/附件重建 | 需增加内部展开输入与公开原调用的独立投影，恢复不能重新解释不同版本 Skill；待实现 架构变更 |
 
 上一版的 pi 4af9d21d 对照仍保留在历史证据；Skill 展开证据使用项目固定 5cd93f，不静默漂移。
 现有源码缺口是执行接入、快照事务及安全恢复，不是改一个 HTTP Content-Type 即可完成。
 
-使用统计的已确认 target-only 增量由[统计主设计](../03-Skill加载统计/README.md)维护：显式 Skill 候选来自同一输入快照，在根消息受理提交、真实 target 绑定后且模型启动前交给 SkillUsageTracker；与 Read 共用根/Skill 去重。三张统计表独立事务，失败不改变受理结果；恢复、确认与审核续跑不因重用正文重计。全局结构引用统计专题主图，Command 请求和公共 SSE 字段保持。
+使用统计的已确认 待实现 增量由[统计主设计](../03-Skill加载统计/README.md)维护：显式 Skill 候选来自同一输入快照，在根消息受理提交、真实 target 绑定后且模型启动前交给 SkillUsageTracker；与 Read 共用根/Skill 去重。三张统计表独立事务，失败不改变受理结果；恢复、确认与审核续跑不因重用正文重计。全局结构引用统计专题主图，Command 请求和公共 SSE 字段保持。
 
 ## 5. 实施验收
 

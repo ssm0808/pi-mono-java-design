@@ -4,9 +4,9 @@
 ' Observed behavior: the internal workbench still consumes legacy Runtime request-scoped SSE and separate controls.
 ' Contract baseline: design 2ee2a3211da68ad87b0d9cab353e691b00bdaebd.
 ' Contract references: public-chat-alignment.md section 1, relative to this topic.
-' Target-only architecture: product integration through Mate; no direct Runtime fallback.
+' Pending implementation architecture: product integration through Mate; no direct Runtime fallback.
 ' Design reason: public identity, protocol, and data visibility do not equal the internal transport.
-title Product boundary - target-only integration
+title Product boundary - pending implementation integration
 left to right direction
 actor "User" as User
 rectangle "Product browser" {
@@ -50,15 +50,15 @@ end note
 ' Observed behavior: each of six write actions freezes current valid custom headers.
 ' Observed behavior: debugHeaders.ts validates whitespace; dev/authMiddleware.ts registers the DEV helper.
 ' New evidence: pi-mono-java 1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4; DebugHeaders.vue rows; useDebugAuth.ts ip.
-' Observed behavior: settings are memory-only; persistence and unified settings are target-only.
+' Observed behavior: settings are memory-only; persistence and unified settings are pending implementation.
 ' Design reason: saved configuration survives reload; edits cannot mutate an accepted execution.
 title Internal debug headers - target persistence and request snapshots
 top to bottom direction
 skinparam backgroundColor #FFFCFA
 skinparam shadowing false
 component "Header editor\n3 optional empty presets" as Editor
-component "Applied DEV settings\nversioned snapshot [target-only]" as Store
-component "Browser settings storage\nscoped Headers and IP [target-only]" as ConfigStorage
+component "Applied DEV settings\nversioned snapshot [pending implementation]" as Store
+component "Browser settings storage\nscoped Headers and IP [pending implementation]" as ConfigStorage
 component "Per-request snapshot\nimmutable" as Snapshot
 component "Write adapter\nfixed protocol headers" as Adapter
 component "Runtime API\nexisting internal contract" as Runtime
@@ -96,7 +96,7 @@ end note
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java lines 149-176 and 215-238.
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java lines 67-88, 195-210, 430-442, and 557-601.
 ' Observed behavior: assistant text is preserved across delta, completed entry, SSE, and history but the current Vue component renders it as plain text.
-' Target-only design: the Markdown parser, safe AST policy, Vue rich-text components, and rendering budget are not implemented at this baseline.
+' Pending implementation design: the Markdown parser, safe AST policy, Vue rich-text components, and rendering budget are not implemented at this baseline.
 ' Security hardening: raw HTML, remote Markdown images, relative application routes, and dangerous URL schemes never become active DOM.
 ' Design reason: use one raw Markdown source and one renderer so streaming, completion, and history recovery converge to equivalent UI.
 
@@ -170,9 +170,9 @@ end note
 ' Source evidence: frontend/src/projectors/runtimeEventProjector.ts projectRuntimeEvents, registerToolSpecs.
 ' Source evidence: frontend/src/components/ToolActivity.vue template; frontend/src/types/product.ts ActivityTurn.
 ' Observed behavior: legacy assistant/tool events, no confirmation UI, rich-text tool output.
-' Target-only product projection follows the Mate public contract, not internal wire aliases.
+' Pending implementation product projection follows the Mate public contract, not internal wire aliases.
 ' Design reason: shared reduction prevents duplicate messages and separates preview from authority.
-title Public event to UI projection - target-only
+title Public event to UI projection - pending implementation
 left to right direction
 rectangle "Validated public input" {
   component "POST receipt / history\nuser.*" as UserEvents
@@ -228,12 +228,12 @@ hide empty members
 ' Public integration target: complete question events, exact answers and a shared pending-interaction gate.
 ' Codex d58d0e58: codex-rs/tui/src/chatwidget/plan_implementation.rs selection_view_params.
 ' Java divergence: exact proposal approval resumes the original execution, not a new user message.
-' Target-only architecture: every class and relationship below is a product integration target.
+' Pending implementation architecture: every class and relationship below is a product integration target.
 ' Source delta: pi-mono-java 1d08f98e frontend/src/components/QuestionCard.vue; runtimeEventProjector.ts.
 ' Observed behavior: all questions render together; AskUserQuestion also renders as a generic activity.
-' Target-only UI: one visible question, grouped question activity, safe JSON viewer and root overlay.
+' Pending implementation UI: one visible question, grouped question activity, safe JSON viewer and root overlay.
 ' Design reason: isolate protocol and host identity, use per-Chat state, and make recovery read-only.
-title Global product frontend components - all target-only
+title Global product frontend components - all pending implementation
 package "Browser views" as Views {
   class ChatWorkspace <<view>>
   class PlanCard <<view>>
@@ -355,9 +355,9 @@ Transport -[hidden]down-> External
 ' Source baseline: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
 ' Source evidence: frontend/src/App.vue running, submit; frontend/src/composables/useRuntimeApi.ts abort, matchesPendingSubmission.
 ' Observed behavior: connection state and execution state overlap; confirmation uses text matching.
-' Target-only UI state design; not new HTTP enums.
+' Pending implementation UI state design; not new HTTP enums.
 ' Design reason: accepted writes, confirmation, and connection loss cannot imply completion.
-title Conversation state - target-only product model
+title Conversation state - pending implementation product model
 hide empty description
 [*] --> Ready
 Ready --> Submitting : explicit send / freeze draft
@@ -423,7 +423,7 @@ hide empty members
 ' New baseline: pi-mono-java 1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4.
 ' Source: frontend/vite.config.ts defineConfig; frontend/dev/authMiddleware.ts createAuthMiddleware.
 ' Observed behavior: proxy and auth capture startup configuration; runtime config saving is absent.
-' Target-only classes and relationships: DeveloperSettings, DeveloperSettingsStore,
+' Pending implementation classes and relationships: DeveloperSettings, DeveloperSettingsStore,
 ' SettingsRepository, DevConfigService, LocalConfigRepository and ConfigFile.
 title Runtime Workbench - Target Responsibilities
 package "Browser page [target responsibilities]" {
@@ -528,7 +528,7 @@ endlegend
 ' Source: frontend/src/components/PlanCard.vue; runtime/eventStore.ts; types/runtime.ts.
 ' Java divergence: approve resumes the original root execution; no clear-context path.
 ' Design reason: proposal, decision receipt, execution progress and terminal are separate facts.
-' Internal flow is implemented; public transport remains target-only. View states are not HTTP enums.
+' Internal flow is implemented; public transport remains pending implementation. View states are not HTTP enums.
 title Plan interaction - authority and UI
 skinparam backgroundColor white
 skinparam shadowing false
@@ -550,7 +550,7 @@ API --> State : Research activities
 opt Question batch during planning
   API --> State : Complete question + confirming
   State --> UI : One question card; Session still running
-  loop Browse questions locally [target-only UI]
+  loop Browse questions locally [pending implementation UI]
     User -> UI : Answer current question; next or back
     UI -> UI : Validate current answer; preserve all drafts
   end

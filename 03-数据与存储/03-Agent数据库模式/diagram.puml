@@ -32,7 +32,7 @@ skinparam RectangleBackgroundColor #F7F9FC
 ' long-term memory, and audit data with different lifecycle and query semantics.
 ' Design reason: separate data planes prevent conversation logs, execution recovery,
 ' and cross-session memory from becoming one overloaded messages table.
-' Target-only mapping: the layer names below are a comparative model, not a claim that
+' Pending implementation mapping: the layer names below are a comparative model, not a claim that
 ' every referenced product implements all layers with these exact names.
 
 rectangle "Control Plane\nagent definition and version\nenvironment and policy" as Control #EAF2FF
@@ -94,7 +94,7 @@ skinparam NoteBackgroundColor #FFF8D9
 ' packages/storage/sqlite-node/src/sqlite/storage/index.ts: readHead and appendEntry.
 ' Observed behavior: pi persists seven Session tables, including parent links,
 ' an active leaf, branch caches, and entry materialized labels.
-' Target-only product constraint: SR-MEM-001 v0.14.2 keeps four tables, exposes one
+' Pending implementation product constraint: SR-MEM-001 v0.14.2 keeps four tables, exposes one
 ' active path, and only allows editing the latest user message on that path.
 ' Architecture change: parent links are read directly without branch cache tables.
 ' Concurrency hardening: expected path-end and parent checks protect centralized writes.

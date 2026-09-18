@@ -4,19 +4,19 @@
 |---|---|
 | 文档版本 | 1.14.0 |
 | 更新日期 | 2026-09-18 |
-| 变更性质 | Session POST 按可选字段部分更新；前端单项调用，接口允许组合提交；组合写入及 mode 为 target-only |
+| 变更性质 | Session POST 按可选字段部分更新；前端单项调用，接口允许组合提交；组合写入及 mode 为 待实现 |
 | 唯一当前入口 | [当前十项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
 
-结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 target-only，Session/元数据不增字段，Mate 公共投影独立集成。
+结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 待实现，Session/元数据不增字段，Mate 公共投影独立集成。
 
 ## 1. 维护目标
 
 一份清单决定当前接口，一套模型维护精确契约，HTML 由模型生成。Markdown 解释设计理由和实现差距；废止报文及整合过程通过 Git 历史追溯。
 
-任务更新的 target-only 增量已登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java 09b32d8e 的多事件 appendEntry 骨架可复用，新增工具与事件分支尚待实现。Mate 公共桥接需单独同步后开放。
+任务更新的 待实现 增量已登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java 09b32d8e 的多事件 appendEntry 骨架可复用，新增工具与事件分支尚待实现。Mate 公共桥接需单独同步后开放。
 
-工具调用展示名的 target-only 增量已进入共享事件源：普通框架 label 与 Mate 元数据统一映射为可选 displayName，POST SSE 与 GET 历史同形；快照与两跳投影见[调用名称快照](chat-events-design.md#tool-display-snapshot)。
+工具调用展示名的 待实现 增量已进入共享事件源：普通框架 label 与 Mate 元数据统一映射为可选 displayName，POST SSE 与 GET 历史同形；快照与两跳投影见[调用名称快照](chat-events-design.md#tool-display-snapshot)。
 
 ## 2. 权威与状态
 
@@ -78,7 +78,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 ## 4. 源码边界
 
-统一 Session 更新的源码核对、相对旧基线的变化及 target-only 差距由[HTTP 主设计 §8.1](chat-http-v1-design.md#81-统一-session-更新源码核对)唯一维护。基线 Java 09b32d8e 已有独立模型/思考 PUT、名称 Command 及各自事务，没有四字段组合 POST。设计退役不代表实现仓路由已删除。
+统一 Session 更新的源码核对、相对旧基线的变化及 待实现 差距由[HTTP 主设计 §8.1](chat-http-v1-design.md#81-统一-session-更新源码核对)唯一维护。基线 Java 09b32d8e 已有独立模型/思考 PUT、名称 Command 及各自事务，没有四字段组合 POST。设计退役不代表实现仓路由已删除。
 
 其他接口的固定源码证据继续由 [Events 设计](chat-events-design.md) 与 [FollowUp 设计](chat-follow-up-future-design.md)维护，不能将配置专项核对视为这些模块整体升级。旧入口清理核对基线为 Java `7b3769a5eabe2d131af3023631d7ad24e6d9a9e1`，相对 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 的下列文件无变化；该历史观察不延伸为最新主线缺陷。源码前缀为 `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/`。
 

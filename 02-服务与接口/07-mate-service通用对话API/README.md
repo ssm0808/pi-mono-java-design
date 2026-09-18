@@ -95,7 +95,7 @@ Chat SSE 从连接建立后观察新事件，可跨越多次执行。idle 不关
 
 实时流包含 agent.message、agent.thinking、agent.tool_call、agent.tool_result 和 chat.status_idle。user.* 只在提交回执与历史出现，避免同一提交被重复显示。精确阶段和字段由流模型维护。
 
-Runtime 新增显式任务更新的接入要求见 [C-007](协作/README.md#c-007)：公共层也由后端返回 todos，前端不解析通用工具结果。它是已确认 target-only 增量，尚未并入本公共三接口的精确模型；当前五类清单不得当作已包含该能力。
+Runtime 新增显式任务更新的接入要求见 [C-007](协作/README.md#c-007)：公共层也由后端返回 todos，前端不解析通用工具结果。它是已确认 待实现 增量，尚未并入本公共三接口的精确模型；当前五类清单不得当作已包含该能力。
 
 ### 5.3 正文与思考
 
@@ -107,7 +107,7 @@ requiresConfirmation=true 时公开安全参数并进入 confirming。确认使�
 
 公共 `agent.tool_call` 增加可选 `displayName`，由 bridge 从 Runtime 已固定的调用名称快照安全投影，授权通过后与公共调用事件一同保存；live 与 history 读取同一保存值。普通工具来源是框架 label，Mate 来源是具体业务工具元数据，精确映射由 [M03](../../01-总体架构/02-CampusClaw工具系统/README.md#tool-display-name)维护。bridge 不额外查目录、不按当前工具名称覆盖历史，也不接受模型提供的展示名。
 
-公共 toolName 继续表示既有公开技术名，arguments 保持公开安全参数；不因新增名称暴露内部 CallMateTool 包装或工具 ID。UI 优先 displayName，缺失回退公共 toolName；确认和结果关联仍用 toolCallId。无效或空白展示名按缺失处理，服务端省略字段。名称作为纯文本显示，不用于授权，也不在 tool_result 或确认请求中重复。此增量已进入公共流/历史精确模型和 OpenAPI，bridge 与后端落地仍为 target-only；服务端、bridge 与消费者同步更新字段定义和解码规则。
+公共 toolName 继续表示既有公开技术名，arguments 保持公开安全参数；不因新增名称暴露内部 CallMateTool 包装或工具 ID。UI 优先 displayName，缺失回退公共 toolName；确认和结果关联仍用 toolCallId。无效或空白展示名按缺失处理，服务端省略字段。名称作为纯文本显示，不用于授权，也不在 tool_result 或确认请求中重复。此增量已进入公共流/历史精确模型和 OpenAPI，bridge 与后端落地仍为 待实现；服务端、bridge 与消费者同步更新字段定义和解码规则。
 
 ### 5.5 工具结果
 
@@ -177,7 +177,7 @@ Header 前的认证、授权、资源或容量错误使用 JSON；Header 后编�
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java` · encode/decode methods | 该基线持久记录有内部 entry identity、sequence 和 createdAt；本设计不把内部 sequence 暴露为 `eventSeq` |
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java` · append/query methods | 该基线历史按内部 entry sequence 和当前分支读取，不是本设计的 createdAt 固定快照公共分页 |
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java` · abort methods；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java` · child cancellation | 该基线取消可以等待主执行收敛，并向 Tool/Child Session 传播；该基线 idle abort是 no-op，公共 idle interrupt 冲突是目标差异 |
-| 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java` · permission handling | ASK/确认公共闭环尚未实现；`user.tool_confirmation` 是 target-only |
+| 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java` · permission handling | ASK/确认公共闭环尚未实现；`user.tool_confirmation` 是 待实现 |
 | `pi-mono-java@7e54b47f` | `modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java:415-426,465-473,515-521,534-544` · `handleOutputItemAdded` / `handleOutputItemDone` / `convertAssistantInput` / `convertToolResultInput` | OpenAI Responses function call 的 `call_id` 被写入 `ToolCall.id`，后续 Tool Call 和 Tool Result 输入都把同一值写回 `callId`；该链路未使用 function call item `id` |
 | 同上 | `modules/ai/src/main/java/com/campusclaw/ai/types/ToolCall.java:24-28` · `ToolCall.id`；`modules/ai/src/main/java/com/campusclaw/ai/types/ToolResultMessage.java:26-32` · `toolCallId` | Claw 归一化模型使用独立 Tool Call ID 关联调用和结果 |
 | 同上 | `modules/ai/src/test/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProviderIntegrationTest.java:217-262` · `streamsToolCallResponse` | 测试明确区分 item `id="fc_1"` 和 `call_id="call_xyz"`，并断言归一化 `ToolCall.id()` 等于 `call_xyz` |
@@ -214,10 +214,10 @@ Claude Managed Agents 在核对日仍是 Beta 公共 API。公开文档不能证
 | 架构变化 | POST 成功时在 `result.event` 返回完整、已持久化的 `user.*` 事件，并与历史接口复用同一 Schema；这使创建响应可直接作为权威记录合并，同时不把 Agent execution 结果混入写入响应 |
 | 架构变化 | `eventId` 与 `toolCallId` 分离；`agent.tool_call` 显式公开 OpenAI `call_id` / `tool_calls[].id`，确认和结果原样引用该值。这是有意的 OpenAI 身份耦合，非 OpenAI Provider 不得伪造 `call_` ID；若要纳入本公共契约，必须另行版本决策 |
 | 架构变化 | 确认事件持久化，与 Tool Call 和 Tool Result 共享 `toolCallId`，同时各自保留独立 `eventId`，以满足恢复和审计 |
-| target-only | 新增 `user.interrupt`、`user.tool_confirmation`、独立 stream GET、固定快照历史和新的公共事件投影；这些均未在该基线 Claw HTTP 层实现 |
+| 待实现 | 新增 `user.interrupt`、`user.tool_confirmation`、独立 stream GET、固定快照历史和新的公共事件投影；这些均未在该基线 Claw HTTP 层实现 |
 
 本设计没有读取或引用本地 mate-service 实现作为设计基线；Mate 三个 operation 全部按
-target-only 处理。实现阶段必须补充实际 mate-service commit、路径和符号，再校准 Controller、
+待实现 处理。实现阶段必须补充实际 mate-service commit、路径和符号，再校准 Controller、
 VO、Service 与错误组件名称。
 
 ## 10. 实现和测试门禁

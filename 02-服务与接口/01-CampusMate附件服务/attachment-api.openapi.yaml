@@ -13,7 +13,7 @@ info:
 
     普通 JSON 成功响应使用 resCode/resMsg/result，异常响应仅使用
     resCode/resMsg。二进制 content 响应不包装。JSON 字段使用 lowerCamelCase。
-    本契约是 target-only design，不表示现有 Java 服务已实现这些 operation。
+    本契约是 待实现 design，不表示现有 Java 服务已实现这些 operation。
 servers:
   - url: https://{host}/mate-service
     description: 部署网关；host 由环境配置

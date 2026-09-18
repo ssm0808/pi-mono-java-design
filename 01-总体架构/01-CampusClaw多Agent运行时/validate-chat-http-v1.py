@@ -761,7 +761,7 @@ def validate_control_retirement(models: list[dict[str, Any]]) -> None:
     html_text = HTML_PATH.read_text(encoding="utf-8")
     require(not any(path in html_text for path in paths), "Retired control path found in active review HTML")
     future = (ROOT / "chat-follow-up-future-design.md").read_text(encoding="utf-8")
-    for phrase in ("本期不支持", "启用另行评审", "target-only", "M1 未完成前拒绝", "内存凭据"):
+    for phrase in ("本期不支持", "启用另行评审", "待实现", "M1 未完成前拒绝", "内存凭据"):
         require(phrase in future, f"Future FollowUp must retain the disabled boundary: {phrase}")
 
 

@@ -1,5 +1,5 @@
 @startuml target_slash_command_boundaries
-title Target-only Command Layers - Builtin JSON and Skill SSE
+title Pending implementation Command Layers - Builtin JSON and Skill SSE
 ' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CompositeCommandRegistry.java resolve.
 ' Architecture change: JSON command execution uses narrow services and no generic lifecycle store.
 skinparam shadowing false
@@ -41,7 +41,7 @@ CommandResponseAssembler ..> ResponseVO : DTO to VO
 @enduml
 
 @startuml target_command_resolution_classes
-title Target-only Immutable Request Catalog
+title Pending implementation Immutable Request Catalog
 ' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/ResolvedCommandCatalog.java.
 ' Design reason: catalog, admission, and dispatch share definition identity; Help content uses Agent metadata instead.
 skinparam shadowing false
@@ -72,7 +72,7 @@ end note
 @enduml
 
 @startuml authoritative_command_state
-title Target-only Authoritative Command State
+title Pending implementation Authoritative Command State
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql t_sessions.
 ' Architecture change: current name and existing domain entries replace generic command history.
 skinparam shadowing false
@@ -107,7 +107,7 @@ skinparam linetype ortho
 ' Revision: preserve the complete skeleton; add confirmed Skill execution and root message SSE.
 ' Source evidence: pi-mono-java@dfb90ca modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java list/resolved.
 ' Source evidence: pi-mono@5cd93f packages/coding-agent/src/core/agent-session.ts _expandSkillCommand.
-' Observed behavior: discovery snapshots and CLI expansion exist; this HTTP execution is target-only.
+' Observed behavior: discovery snapshots and CLI expansion exist; this HTTP execution is pending implementation.
 ' Design reason: Skill adapters use shared message admission and immutable request snapshots.'
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/definition/CommandDefinition.java.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/builtin/BuiltinCommandDefinition.java implements CommandDefinition; admission and handler.
@@ -120,10 +120,10 @@ skinparam linetype ortho
 ' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/SkillCommandSource.java preparedRuntime.
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start, finish, and releaseExecution.
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionHolder.java managedSession and activeExecution.
-' Observed behavior: discovery snapshots and Runtime execution collaborators exist at the cited baselines; executable Builtin assembly remains target-only.
+' Observed behavior: discovery snapshots and Runtime execution collaborators exist at the cited baselines; executable Builtin assembly remains pending implementation.
 ' Design reason: preserve one connected global view; collapse repeated implementations, not responsibility boundaries.
 ' Architecture decision retained: narrow services own state changes; no generic command lifecycle or Name sidecar store.
-' Target-only: every node and relationship below describes the target assembly, not an inventory of implemented behavior.
+' Pending implementation: every node and relationship below describes the target assembly, not an inventory of implemented behavior.
 
 package "Web boundary" {
   class RuntimeCommandController {
@@ -248,7 +248,7 @@ No model call, implicit refresh, or history write.
 end note
 
 legend bottom left
-Target-only assembly; existing symbols are reused where applicable.
+Pending implementation assembly; existing symbols are reused where applicable.
 Grouped boxes denote multiple collaborators, not new classes.
 One owner implements Builtin and Skill; no fake Skill Handler is assigned.
 Builtin produces JSON; Skill produces the shared message SSE and durable events.

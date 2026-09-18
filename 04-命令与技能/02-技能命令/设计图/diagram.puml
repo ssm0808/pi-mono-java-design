@@ -10,14 +10,14 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-title Target-only Shared GET and Internal Source Selection
+title Pending implementation Shared GET and Internal Source Selection
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java list.
 ' Product decision: shared GET requires complete Agent cache; internal BUILTIN selection skips Skill sources.
 class CompositeCommandRegistry
 interface CommandDefinitionSource
 class BuiltinCommandSource
 class SkillCommandSource
-class SkillCommandDefinition <<target-only executable>>
+class SkillCommandDefinition <<pending implementation executable>>
 BuiltinCommandSource ..|> CommandDefinitionSource
 SkillCommandSource ..|> CommandDefinitionSource
 CompositeCommandRegistry o-- CommandDefinitionSource
@@ -42,7 +42,7 @@ skinparam componentStyle rectangle
 ' Source evidence: pi-mono-java@0300541f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java resolved
 ' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/core/skills.ts loadSkillFromFile:320-344
 ' Observed behavior: Java loading uses LEGACY while command discovery uses STRICT; pi warns but still loads invalid names.
-' Target-only design: all consumers use one strict Skill-domain rule; remove LEGACY loading.
+' Pending implementation design: all consumers use one strict Skill-domain rule; remove LEGACY loading.
 ' Design reason: invalid names must not enter loaded Skills, model discovery, command catalogs, or execution.
 ' Product constraint and security hardening: invalid existing names require correction before loading.
 
@@ -91,7 +91,7 @@ title Target Skill Execution - Snapshot, Admission and Shared Events
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java userEntry/toAgentMessages.
 ' Source: pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185 packages/coding-agent/src/core/agent-session.ts _expandSkillCommand.
 ' Observed behavior: Java discovery captures metadata; pi expands Skill body into model input.
-' Target-only architecture: preserve original public input and a private recoverable expansion.
+' Pending implementation architecture: preserve original public input and a private recoverable expansion.
 ' Design reason: reuse one message admission and event projection; do not reinterpret new Skill versions on recovery.
 actor Caller
 participant "Command Application" as C

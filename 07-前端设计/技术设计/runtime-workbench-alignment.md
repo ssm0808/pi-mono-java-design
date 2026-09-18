@@ -16,12 +16,12 @@
 
 | 路径与符号 | 已观察行为 | 当前目标与具体理由 |
 |---|---|---|
-| `frontend/src/components/DebugHeaders.vue:12,49`：`rows`、`snapshot`；`frontend/src/composables/useDebugAuth.ts:7`：`ip` | Header 行及认证 IP 由组件内存初始化，刷新恢复三个空预置与空 IP；快照返回独立 Headers | 按环境持久化 IP、Header 值和启用态，消除重复输入；每个动作继续冻结独立快照。持久化与统一设置均为 target-only |
-| `frontend/src/App.vue:22`：`configuredAgentId` 与 `agent`；`frontend/src/composables/useRuntimeApi.ts:12,13`：`apiBase`、`callerId` | 默认 Agent、展示信息、API base 和 caller 在模块初始化时读取 `import.meta.env` | 由运行时设置快照提供这些值；保存后对新动作生效，避免重新编辑文件和启动进程。target-only 架构变更 |
-| `frontend/src/composables/useWorkbenchSessions.ts:10`：`SessionIndexRepository` | 本地索引作用域只有 API base、Agent 与 caller，同源代理目标未进入作用域 | 使用实际后端环境身份隔离索引、Header 和待对账标记，避免两个同源代理目标混用 Session。target-only 安全加固 |
-| `frontend/src/components/DevDiagnostics.vue:4,14` | 开发者入口只支持 Agent ID 创建和 Session ID 恢复 | 同一设置入口提供连接、默认 Agent、认证与 Headers，并保留诊断操作；沿用暖灰折叠风格。target-only 产品约束 |
-| `frontend/.env.example:2-12`、`frontend/vite.config.ts:7-17` | 示例包含六个 `VITE_CAMPUSCLAW_*` 与两个本地认证键；代理另外读取示例未列出的 `VITE_BACKEND_URL`；账号密码和代理目标在配置加载时捕获 | 面板覆盖这九项既有设置，公开默认项与本地秘密各自只有一份权威配置；不把整个 `.env` 当成可编辑文本。target-only 架构变更 |
-| `frontend/dev/authMiddleware.ts`：`createAuthMiddleware`、`devAuthPlugin`；`frontend/dev/authCenter.ts`：`parseAuthIp`、`loginAuthCenter` | 本机同源 DEV 接口按固定 HTTPS 地址登录；配置来自闭包，响应只返回提取的 Token；未实测真实认证中心 | 复用本地边界，新增读取配置状态、保存已知设置的私有职责；下一次认证读取新配置快照，不新增 Java API 或数据库。target-only |
+| `frontend/src/components/DebugHeaders.vue:12,49`：`rows`、`snapshot`；`frontend/src/composables/useDebugAuth.ts:7`：`ip` | Header 行及认证 IP 由组件内存初始化，刷新恢复三个空预置与空 IP；快照返回独立 Headers | 按环境持久化 IP、Header 值和启用态，消除重复输入；每个动作继续冻结独立快照。持久化与统一设置均为 待实现 |
+| `frontend/src/App.vue:22`：`configuredAgentId` 与 `agent`；`frontend/src/composables/useRuntimeApi.ts:12,13`：`apiBase`、`callerId` | 默认 Agent、展示信息、API base 和 caller 在模块初始化时读取 `import.meta.env` | 由运行时设置快照提供这些值；保存后对新动作生效，避免重新编辑文件和启动进程。待实现 架构变更 |
+| `frontend/src/composables/useWorkbenchSessions.ts:10`：`SessionIndexRepository` | 本地索引作用域只有 API base、Agent 与 caller，同源代理目标未进入作用域 | 使用实际后端环境身份隔离索引、Header 和待对账标记，避免两个同源代理目标混用 Session。待实现 安全加固 |
+| `frontend/src/components/DevDiagnostics.vue:4,14` | 开发者入口只支持 Agent ID 创建和 Session ID 恢复 | 同一设置入口提供连接、默认 Agent、认证与 Headers，并保留诊断操作；沿用暖灰折叠风格。待实现 产品约束 |
+| `frontend/.env.example:2-12`、`frontend/vite.config.ts:7-17` | 示例包含六个 `VITE_CAMPUSCLAW_*` 与两个本地认证键；代理另外读取示例未列出的 `VITE_BACKEND_URL`；账号密码和代理目标在配置加载时捕获 | 面板覆盖这九项既有设置，公开默认项与本地秘密各自只有一份权威配置；不把整个 `.env` 当成可编辑文本。待实现 架构变更 |
+| `frontend/dev/authMiddleware.ts`：`createAuthMiddleware`、`devAuthPlugin`；`frontend/dev/authCenter.ts`：`parseAuthIp`、`loginAuthCenter` | 本机同源 DEV 接口按固定 HTTPS 地址登录；配置来自闭包，响应只返回提取的 Token；未实测真实认证中心 | 复用本地边界，新增读取配置状态、保存已知设置的私有职责；下一次认证读取新配置快照，不新增 Java API 或数据库。待实现 |
 | `frontend/src/App.vue`：`submit/executeCommand/stop/decideTool/decidePlan/answerQuestion`；`frontend/src/composables/useRuntimeApi.ts:265`：`writeHeaders` | 六类写动作分别复制自定义 Header；读取及 Session 配置不带这些值；协议头固定 | 持久化只改变值的来源和寿命，保持传递范围，避免把编辑器变成全站认证注入器 |
 | `frontend/package.json`：`dev`；`frontend/vite.config.ts`：`vue()` | 已接入 Vite 与 Vue 插件，没有运行时设置保存/重载服务 | 保留代码 HMR，面板设置通过 store/本地服务直接应用；不把修改环境文件等同于无重启更新。具体边界见 §6.6 |
 
@@ -132,7 +132,7 @@ Header 行编辑与计数以 [主设计 §6.1](开发调试.md#61-开发者调�
 
 Token 获取是独立请求，不重放失败的对话 POST。后续是否携带新 Token 由该 Header 行启用状态和提交时快照决定；不自动拼接 `Bearer`。Token 到期后按实际失败提示重新获取，不从截图推断续期接口或有效时长。
 
-### 6.3 统一开发者设置与既有配置映射（target-only）
+### 6.3 统一开发者设置与既有配置映射（待实现）
 
 开发者设置只有一个入口，使用原诊断面板的暖灰表面、虚线分组和紧凑输入。面板按“连接”（含默认项）、“认证”“Headers”“Session 诊断”分组；创建/恢复操作不再要求用户切换页面。每个可保存分组提供“保存并应用”和保存结果，关闭面板不提交未保存草稿。会话模式、模型和 Thinking 继续属于当前 Session，不与本地开发默认配置混为一份资源。
 
@@ -154,7 +154,7 @@ Token 获取是独立请求，不重放失败的对话 POST。后续是否携带
 
 连接区同时涉及浏览器与本地代理配置时，先完成本地服务校验和持久化，再应用浏览器快照。若任一存储失败，分别显示实际保存状态并保留草稿，暂停使用不一致的连接配置并重新读取服务状态；不能显示整个分组保存成功。不提供任意环境变量、文件路径或原始 `.env` 编辑器。
 
-### 6.4 浏览器持久化与本地秘密边界（target-only）
+### 6.4 浏览器持久化与本地秘密边界（待实现）
 
 IP 和 Header 持久化是内部开发工作台的产品约束；环境隔离、秘密不进入构建产物和本机接口限制属于安全加固。
 
@@ -163,9 +163,9 @@ IP 和 Header 持久化是内部开发工作台的产品约束；环境隔离、
 - 普通 Header 编辑只在该区点击“保存并应用”后替换生效快照；“全部清空”和成功获取 Token 是显式例外。Token 仅更新匹配环境的 access-token 行，在已保存快照上合并这一行并同步未冲突草稿，不提交其他 Header 草稿；持久化成功后才应用并提示“Token 已更新”。普通保存或 Token 写入因存储不可用、格式不兼容而失败，保留原生效配置并显示“未保存”，不静默宣称持久化成功，也不全站清空其他数据。
 - `Authorization` 和 `access-token` 默认遮蔽，开发者可主动查看、替换或清除；遮蔽不是加密。已保存值仍可被同源页面脚本与浏览器开发工具读取，因此该能力仅装配到本机开发工作台，生产包不包含入口、配置读取或持久化 store。
 - 本地账号密码由开发服务写入固定位置、Git 忽略且不由 Vite 静态服务暴露的配置文件，限制为当前 OS 用户读写；使用原子替换，拒绝浏览器指定存储路径。保存输入在请求期间短暂经过页面，成功后立即清空；读取配置只返回已配置标志与非秘密字段。
-- 本地配置 API 为 target-only 私有开发职责，复用 loopback、Host、同源来源检查和有限 JSON 请求体；不注册于 build/preview，不允许跨源访问，不在失败信息中回显提交值。读取配置、保存配置与获取 Token 分开，保存本身不执行上游登录。无须新建 Java 接口、数据库、密钥库或额外 npm 依赖。
+- 本地配置 API 为 待实现 私有开发职责，复用 loopback、Host、同源来源检查和有限 JSON 请求体；不注册于 build/preview，不允许跨源访问，不在失败信息中回显提交值。读取配置、保存配置与获取 Token 分开，保存本身不执行上游登录。无须新建 Java 接口、数据库、密钥库或额外 npm 依赖。
 
-### 6.5 保存、生效与在途请求（target-only）
+### 6.5 保存、生效与在途请求（待实现）
 
 设置 Store 同时维护编辑草稿、已应用快照与配置版本。每个动作在发送前校验并复制所需的 API 地址、caller、Header、Session/根事件目标及配置代次；本地代理和认证助手分别捕获本次使用的后端目标与认证配置。修改表单不能改变这个对象。
 
@@ -182,8 +182,8 @@ IP 和 Header 持久化是内部开发工作台的产品约束；环境隔离、
 | 修改类型 | 当前事实与目标行为 |
 |---|---|
 | Vue 模板、样式和前端模块 | 当前已接入 Vite/Vue HMR；常规修改自动更新。模板/样式可局部更新，脚本变更可能重建组件或触发整页刷新，不承诺所有组件内存状态保留 |
-| 面板管理的 IP、Headers、连接和默认项 | target-only 运行时设置；保存并应用后更新 store 或本地服务快照，不改写 `.env.local`，不要求重启 Vite；不强制刷新页面 |
-| 面板管理的认证账号密码 | target-only 本地配置热应用；下一次获取 Token 使用新快照，不影响已发认证请求；配置失效后迟到结果不回填 |
+| 面板管理的 IP、Headers、连接和默认项 | 待实现 运行时设置；保存并应用后更新 store 或本地服务快照，不改写 `.env.local`，不要求重启 Vite；不强制刷新页面 |
+| 面板管理的认证账号密码 | 待实现 本地配置热应用；下一次获取 Token 使用新快照，不影响已发认证请求；配置失效后迟到结果不回填 |
 | 手工修改 `.env*`、`vite.config.ts` 或其插件依赖 | 属于 Vite 启动配置更新；可能自动重启开发服务器，不是本方案承诺的运行时无重启配置路径 |
 | 安装/升级 npm 依赖、修改监听端口、Node 启动参数或 `NODE_EXTRA_CA_CERTS` | 按对应开发进程的启动边界重启；生产构建产物更新仍需重新构建和部署 |
 

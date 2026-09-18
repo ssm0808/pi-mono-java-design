@@ -2,13 +2,13 @@
 ' Run from this directory: plantuml -tsvg diagram.puml
 ' Design repository baseline: 2b747808e93609a4fc71d919dbd72bcd56a6e502.
 ' pi-mono-java baseline: 195746614096312d4e93afb029d387837db78e0b.
-' Target-only design: capacity leases and bounded admission are not implemented.
+' Pending implementation design: capacity leases and bounded admission are not implemented.
 
 @startuml virtual_thread_capacity_overview
 top to bottom direction
 skinparam nodesep 25
 skinparam ranksep 35
-title Target-only Capacity: Boundary and Resource Ownership
+title Pending implementation Capacity: Boundary and Resource Ownership
 
 ' Source evidence:
 ' modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java, VIRTUAL_THREAD_EXECUTOR and startExecution
@@ -87,7 +87,7 @@ endlegend
 ' Observed behavior: one Agent execution is protected by a lock and runs asynchronously.
 ' Architecture change: add transactional acceptance and deployment-level capacity leases.
 ' Design reason: acceptance must survive an HTTP disconnect without exposing an execution resource.
-title Target-only Admission and Execution Lifecycle
+title Pending implementation Admission and Execution Lifecycle
 autonumber
 hide footbox
 skinparam backgroundColor white
@@ -152,7 +152,7 @@ Task -> SSE : Idle and stream end
 SSE -->> Client : Project available events
 
 legend bottom left
-This diagram belongs to the retained target-only capacity proposal.
+This diagram belongs to the retained pending implementation capacity proposal.
 An accepted execution survives disconnect; only SSE projection closes.
 Admission groups two collaborators; it does not introduce a combined class.
 endlegend
@@ -161,7 +161,7 @@ endlegend
 top to bottom direction
 skinparam nodesep 25
 skinparam ranksep 35
-title Target-only Capacity: Bounded Channels and Downstream Isolation
+title Pending implementation Capacity: Bounded Channels and Downstream Isolation
 
 ' Source evidence:
 ' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java, consumeStream

@@ -9,7 +9,7 @@
 ' Confirmed target architecture: combine submission and output in one POST;
 ' the first business frame is the complete accepted user event, exactly once.
 ' Design reason: remove the gap between a write and an independent live subscription.
-' Target-only: union input, response projection, causal ordering and integer paging.
+' Pending implementation: union input, response projection, causal ordering and integer paging.
 ' Source evidence: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
 ' acceptUserEvent: row lock, idle recheck, message append and running update in one transaction.
 ' Confirmed product constraint: one unfinished user.message per Session across instances.
@@ -17,7 +17,7 @@ skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam defaultFontSize 13
-title Session Events - Resources and Ownership (target-only)
+title Session Events - Resources and Ownership (pending implementation)
 left to right direction
 skinparam packageStyle rectangle
 actor "Internal client\n(mate-service)" as Client
@@ -55,7 +55,7 @@ end note
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java,
 ' completeExecution, lines 154-168: persistence, terminal events, stream completion.
 ' Observed behavior: a current stream belongs to one active execution.
-' Target-only architecture: per-request bindings support union input without a
+' Pending implementation architecture: per-request bindings support union input without a
 ' public Session subscription API. Interrupt delivery and database coordination are confirmed.
 ' RuntimeActiveExecution.requestAbort is local; target polling is not current behavior.
 ' Design reason: keep web VOs, application admission, runtime and persistence separate;
@@ -148,7 +148,7 @@ Append -[hidden]down-> Projection
 Projection -[hidden]down-> Pollers
 
 legend bottom left
-Recommended target-only structure; existing classes are extended.
+Recommended pending implementation structure; existing classes are extended.
 Grouped boxes represent the concrete handlers and polling services listed below the diagram.
 Causal acceptance and ordered commit use short transactions; model/tool/network work stays outside.
 Per-request buffers and fixed targets prevent output crossing into later executions.
@@ -163,13 +163,13 @@ endlegend
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSseEmitterSubscriber.java,
 ' onEvent/onComplete, lines 33-49: named SSE; explicit emitter completion.
 ' Confirmed: one POST for input/output, user receipt first, data-only and type+phase.
-' Confirmed target-only: matching idle ends this response, including confirmation waits.
+' Confirmed pending implementation: matching idle ends this response, including confirmation waits.
 ' Design reason: do not keep a completed request open for unrelated later messages.
 ' Confirmed: original output stays on A; B receives receipt and the same stop idle only.
-' Confirmed target-only: durable DB stop requests and per-instance batch polling; no Redis.
+' Confirmed pending implementation: durable DB stop requests and per-instance batch polling; no Redis.
 ' Batch 2026-09-08.1 confirms root references, control races and failure semantics.
 ' Source evidence: pi-mono-java dfb90ca RuntimeEntryCodec; current projection still exposes Entry IDs.
-' Target-only: DB confirmation handoff; preview remains local and best-effort.
+' Pending implementation: DB confirmation handoff; preview remains local and best-effort.
 skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -184,7 +184,7 @@ skinparam sequence {
   LifeLineBorderColor #A0A0A0
   ArrowColor #444444
 }
-title POST SSE - Input, Output and Closing (target-only)
+title POST SSE - Input, Output and Closing (pending implementation)
 actor "mate-service" as Client
 participant "Events application" as API
 participant "Bound execution" as Run
@@ -253,9 +253,9 @@ end note
 ' Observed behavior: current Java has no durable cross-instance interrupt handoff.
 ' Confirmed target architecture: DB stop intent and per-instance batch polling.
 ' Confirmed M7: post-commit local wake-up, unique target queries, measured indexes.
-' Target-only: registration recovery and terminal delivery gates are not implemented.
+' Pending implementation: registration recovery and terminal delivery gates are not implemented.
 ' Design reason: accept on any instance without sticky routing or remote Java references.
-' Confirmed target-only: reject stale root, duplicate stop and conflicting confirmation.
+' Confirmed pending implementation: reject stale root, duplicate stop and conflicting confirmation.
 ' Schema, interval and capacity numbers require implementation calibration.
 skinparam backgroundColor white
 skinparam shadowing false
@@ -271,7 +271,7 @@ skinparam sequence {
   LifeLineBorderColor #A0A0A0
   ArrowColor #444444
 }
-title Database Interrupt - Cross-instance Handoff (target-only)
+title Database Interrupt - Cross-instance Handoff (pending implementation)
 actor "mate-service" as Client
 participant "Instance B\nInterrupt handler / result reader" as B
 database "Shared control / events" as DB
@@ -330,7 +330,7 @@ end note
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java,
 ' acceptUserEvent/finishExecution: existing transaction adapter; no durable stop handoff.
 ' Observed behavior: current control and completion handles cannot cross JVM boundaries.
-' Target-only design: every instance deploys both polling services; each owns local work only.
+' Pending implementation design: every instance deploys both polling services; each owns local work only.
 ' Design reason: share durable identity and results, never a remote mutable Agent reference.
 ' Supplementary source: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventStream.java,
@@ -338,7 +338,7 @@ end note
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java,
 ' completeExecution: current persistence/completion, not a v2 after-commit terminal callback.
 ' Observed behavior: registry, properties, stream, coordinator and application.properties
-' are unchanged between 918005e and dfb90ca; M7 remains a target-only architecture change.
+' are unchanged between 918005e and dfb90ca; M7 remains a pending implementation architecture change.
 skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Arial
@@ -350,7 +350,7 @@ skinparam linetype ortho
 skinparam ranksep 32
 skinparam classAttributeIconSize 0
 hide empty members
-title Database Interrupt - Local Ownership (target-only)
+title Database Interrupt - Local Ownership (pending implementation)
 top to bottom direction
 package "Application - per-instance singleton" {
   class "UserInterruptEventHandler" as Accept
@@ -415,7 +415,7 @@ endlegend
 ' modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeExecutionControlMapper.xml
 ' Existing symbols: claimConfirmation, claimPlanConfirmation, claimQuestionAnswer, markTerminal.
 ' Observed behavior: terminal execution blocks new claims but leaves unclaimed decisions PENDING.
-' Target-only: CANCELED closes unclaimed decisions in the successful terminal transaction.
+' Pending implementation: CANCELED closes unclaimed decisions in the successful terminal transaction.
 ' Design reason: preserve accepted user facts while making abandoned consumption explicit.
 skinparam backgroundColor white
 skinparam shadowing false
@@ -426,7 +426,7 @@ skinparam state {
   BorderColor #42576E
   ArrowColor #42576E
 }
-title Accepted Decisions - Consumption State (target-only)
+title Accepted Decisions - Consumption State (pending implementation)
 top to bottom direction
 
 state PENDING

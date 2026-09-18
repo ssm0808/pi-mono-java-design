@@ -10,7 +10,7 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-title Target-only Executable Builtin Definition
+title Pending implementation Executable Builtin Definition
 ' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java.
 ' Design reason: each contributor owns metadata, admission, and handler; no central command-name switch.
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java getView.
@@ -27,7 +27,7 @@ class CommandResultDTO
 class RuntimeSessionResponseAssembler <<existing singleton>>
 class GetSessionResponseVO <<existing immutable>>
 class AvailableModelsResponseVO <<existing immutable>>
-class "AgentHelp / Compaction / BoundSkills\nResponseVOs" as BusinessVOs <<target-only immutable>>
+class "AgentHelp / Compaction / BoundSkills\nResponseVOs" as BusinessVOs <<pending implementation immutable>>
 interface NarrowDomainService
 BuiltinCommandSource o-- "7" BuiltinCommandContributor
 BuiltinCommandContributor --> BuiltinCommandDefinition
@@ -81,9 +81,9 @@ title Session Name - Shared Validation and Separate Request Admission
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java :: requireMutableSession.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeSessionRepository.java :: updateName.
 ' Observed behavior: slash name owns an independent row-locked update with no expected version.
-' Target-only architecture: Session POST reuses normalization and commits a combined candidate.
+' Pending implementation architecture: Session POST reuses normalization and commits a combined candidate.
 ' Design reason: shared name rules do not require HTTP to call a separately committing command.
-participant "Session POST API\n[target-only]" as API
+participant "Session POST API\n[pending implementation]" as API
 participant "RuntimeSessionConfigurationService\n[extended singleton]" as App
 participant "Name Command Handler" as Handler
 participant SessionNamingService as Service
@@ -133,7 +133,7 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title Target-only Compact JSON Terminal and Cleanup
+title Pending implementation Compact JSON Terminal and Cleanup
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java.
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionHolder.java.
 ' Architecture change: compact terminal Future is independent of Holder lifetime and request transport.

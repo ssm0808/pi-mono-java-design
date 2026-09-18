@@ -3,7 +3,7 @@
 > 文档编号：`SR-AGENT-DB-001`<br>
 > 版本：`v0.19.1`<br>
 > 日期：`2026-09-14`<br>
-> 状态：既有行为以所列旧基线为准；Agent.mode 与 Session 默认值链路为 target-only<br>
+> 状态：既有行为以所列旧基线为准；Agent.mode 与 Session 默认值链路为 待实现<br>
 > 设计仓库分析基线：`c892946d867ab1ee81f2684229b0343ce9733cc0`<br>
 > Java 实现分析基线：`mate-service@9dd5d85e2ed6561ad654b11f817ef572cc8bac7c`<br>
 > Agent JSON 工作区 SHA-256：`2639da6e9b5566afcc5ca8d1ff15c83570c73faeda13d3d38b20e4f3f012f62c`<br>
@@ -29,7 +29,7 @@ Agent 顶层 `mode` 是字符串 `build | plan`，定义新建交互 Session 的
 
 System Prompt 的八个细分字段均为可空软约束。数据库不强制非空或非空白；普通详情响应只返回具有值的细分字段，管理前端按实际返回字段动态展示。Runtime 响应将这些字段拼接为单一字符串。
 
-Runtime 查询按资源 ID 与可空版本批量解析直接绑定，任一依赖无效时整个请求失败；响应字段和失败规则由[§6.4](#64-get-runtime-agent)统一维护。旧基线已实现该查询，mode 传播仍为 target-only，核验范围见 §2。
+Runtime 查询按资源 ID 与可空版本批量解析直接绑定，任一依赖无效时整个请求失败；响应字段和失败规则由[§6.4](#64-get-runtime-agent)统一维护。旧基线已实现该查询，mode 传播仍为 待实现，核验范围见 §2。
 
 完整初始化 DDL 维护在 [`schema.sql`](./schema.sql)，本文不重复嵌入完整 SQL。
 
@@ -182,7 +182,7 @@ Runtime 的传播链为：Mate Runtime 定义 → `AgentRuntime.mode` → `.camp
 | M3：Session 初始化 | Agent=plan/build、旧目录缺省、无审核工具、缓存未刷新、并发刷新；创建响应/DB 同值且无模型调用；已有 Session 不随 Agent 改动，Session 手动切换仍有效 |
 | M4：入口回归 | Child 继承父模式、Cron 保持现有规则；plan 不调用 TODO，批准后 build 正常更新实施进度 |
 
-以上均为 target-only 验收，当前未执行产品数据库迁移、接口或模型测试。全局类图复用[计划模式主图](../../01-总体架构/06-CampusClaw计划模式/README.md#3-推荐全局目标类图)，本模块保留表图与聚合查询流程。
+以上均为 待实现 验收，当前未执行产品数据库迁移、接口或模型测试。全局类图复用[计划模式主图](../../01-总体架构/06-CampusClaw计划模式/README.md#3-推荐全局目标类图)，本模块保留表图与聚合查询流程。
 
 ## 5. 绑定表
 
@@ -302,7 +302,7 @@ Controller 响应：
 
 更新采用原有最后写入生效：事务中锁定 Agent 行，只替换提交的模型绑定或写入提交的 mode，未提交值保持；基于锁定版本将 version 递增一次并更新时间。组合提交全部成功或全部回滚；客户端不提交期望版本，即使目标值未变化，成功请求仍递增一次。mode-only 不删除模型绑定，也不操作 Session 表。
 
-新增 mode-only 示例（target-only）：
+新增 mode-only 示例（待实现）：
 
 ```json
 {
@@ -435,7 +435,7 @@ Runtime 新增错误码参数固定如下；绑定版本为空时，Service 向�
 
 | 错误码 | 消息参数 | 分类 |
 |---|---|---|
-| `AGENT_STORED_MODE_INVALID` | Agent ID | 存储完整性，mode 增量 target-only |
+| `AGENT_STORED_MODE_INVALID` | Agent ID | 存储完整性，mode 增量 待实现 |
 | `AGENT_DISABLED` | Agent ID | 业务规则 |
 | `AGENT_BOUND_TOOL_NOT_FOUND` | 根 Agent ID、Tool ID、绑定版本或 `latest` | 存储完整性 |
 | `AGENT_BOUND_TOOL_DISABLED` | 根 Agent ID、Tool ID、实际版本 | 业务规则 |

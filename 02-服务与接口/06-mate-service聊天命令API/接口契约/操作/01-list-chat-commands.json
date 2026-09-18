@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/chats/{chatId}/commands",
     "summary": "查看轻量命令清单（字段投影已确认，公共边界待重审）",
-    "description": "GET Descriptor 字段投影已确认，按当前 Runtime 轻量清单同步：必填 name/kind/description，可选 input.hint 与仅为 true 时输出的 input.acceptsFiles；running 隐藏 Compact/Skill，Model/Thinking 仅无参；Help 无参且无 input。固定 Builtin 顺序后追加按 name 排序的 Skill。公共认证、Chat→Session bridge 和错误映射仍为 target-only design，尚未整体确认，不得作为实现依据；旧公共 POST SSE 已废止，不能由本次 GET 投影恢复。",
+    "description": "GET Descriptor 字段投影已确认，按当前 Runtime 轻量清单同步：必填 name/kind/description，可选 input.hint 与仅为 true 时输出的 input.acceptsFiles；running 隐藏 Compact/Skill，Model/Thinking 仅无参；Help 无参且无 input。固定 Builtin 顺序后追加按 name 排序的 Skill。公共认证、Chat→Session bridge 和错误映射仍为 待实现 design，尚未整体确认，不得作为实现依据；旧公共 POST SSE 已废止，不能由本次 GET 投影恢复。",
     "parameters": [
       {
         "$ref": "parameters.chatId"

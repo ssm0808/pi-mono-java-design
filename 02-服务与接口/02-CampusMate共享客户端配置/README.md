@@ -146,7 +146,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | Java 符号 | 目标调整 |
 |---|---|
-| `CampusMateProvider`（target-only 改名） | 注入 `${campusmate.base-url}`、`${campusmate.endpoints.model-chat-path}` 及 `campusmate.model` 下的 API/超时参数；Provider 协议语义不变 |
+| `CampusMateProvider`（待实现 改名） | 注入 `${campusmate.base-url}`、`${campusmate.endpoints.model-chat-path}` 及 `campusmate.model` 下的 API/超时参数；Provider 协议语义不变 |
 | `MateModelManagerProperties` | 绑定前缀从 `campusmate.model-manager` 改为 `campusmate.model`；类名表达 Model Manager 组件，可保留 |
 | `AgentRuntimeProperties` | 删除 `baseUrl`；只绑定 `campusmate.runtime` 的非 endpoint 参数 |
 | `MateServiceClient` | 注入共享 base URL，以及统一目录中的 Agent Runtime 与 Skill path |

@@ -2,15 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.12.0 |
-| 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，target-only |
-| 更新日期 | 2026-09-17 |
+| 文档版本 | 0.13.0 |
+| 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，待实现 |
+| 更新日期 | 2026-09-18 |
 | 原文展示与消费修复 | 实现提交 `cad6847d901155cc6388989b984d19e302a4fbe3`，见 [Draft PR #287](https://github.com/superheromeZzh/pi-mono-java/pull/287)；合入前不作为实现仓主线行为 |
 | 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
 | 官方公共契约核对 | Claude Managed Agents，2026-09-06，Beta；只证明公开行为 |
 
-结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 target-only，Session/元数据不增字段，Mate 公共投影独立集成。
+结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量已在 Runtime 主线实现（`8c5fda1d`，见[源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)）；Session/元数据不增字段，Mate 公共投影待实现。本文其他历史源码范围不因此升级。
 
 ## 1. 查询范围与契约入口
 
@@ -37,9 +37,9 @@ GET 返回普通 JSON。结果使用
 不创建执行凭据、不调用 Mate 工具，不把任何凭据写进事件或日志。
 上游认证、授权和隔离边界仍有效，Claw 不新增 JWT/APPKEY 解析或互斥校验。
 
-任务更新的 target-only 增量已登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java 09b32d8e 的多事件 appendEntry 骨架可复用，新增工具与事件分支尚待实现。Mate 公共桥接需单独同步后开放。
+任务更新已实现并登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java `8c5fda1d` 已具备 TodoUpdate、RuntimeTodoEventMapper 与显式任务事件分支；本次静态核验不等于测试通过。Mate 公共桥接需单独同步后开放。
 
-[Skill 使用统计](../../04-命令与技能/03-Skill加载统计/README.md)是已确认的 target-only 增量：复用真实根消息与规范工具调用身份，按根/Skill 统一去重。显式受理提交后或 Read 最终成功信号触发独立统计事务，失败不回滚受理与工具结果；因此使用统计不与权威历史条数恒等。统计不新增公共事件、不进入模型上下文，SSE/历史字段及分页保持；计量与保留由 M05 唯一维护。
+[Skill 使用统计](../../04-命令与技能/03-Skill加载统计/README.md)是已确认的 待实现 增量：复用真实根消息与规范工具调用身份，按根/Skill 统一去重。显式受理提交后或 Read 最终成功信号触发独立统计事务，失败不回滚受理与工具结果；因此使用统计不与权威历史条数恒等。统计不新增公共事件、不进入模型上下文，SSE/历史字段及分页保持；计量与保留由 M05 唯一维护。
 
 ## 2. 历史返回什么
 
@@ -79,7 +79,7 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 
 统一 Session POST 的模式真实变化追加 `session.mode_changed(reason=requested)`，与模型、思考变更同事务保存，顺序固定为模型 → 思考 → 模式；同值或仅改名不产生额外历史。该事件仅用于历史，不创建执行或 SSE。mode 取值、previous/current 及精确字段由共享事件源维护；名称、内部字段和凭据不进入配置历史。计划审核批准产生的 `reason=planApproved` 同样由共享事件源维护，sourceEventId 与 confirmationEventId 绑定原消息和批准回执，完整记录进入确认续跑段 SSE 与历史。
 
-模式事件是新增 target-only 架构变更；Java `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java` 尚无模式 Entry 工厂。统一写入的事务、源码路径与验收由 [Session 更新设计](chat-http-v1-design.md#24-模型目录与统一-session-更新)维护，历史查询沿用共享投影与分页骨架。
+模式事件是新增 待实现 架构变更；Java `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java` 尚无模式 Entry 工厂。统一写入的事务、源码路径与验收由 [Session 更新设计](chat-http-v1-design.md#24-模型目录与统一-session-更新)维护，历史查询沿用共享投影与分页骨架。
 
 历史读取调用事件中已保存的可选 displayName，不重新查询工具目录或按当前 label 取名。普通工具和 CallMateTool 的显示回退与首次快照统一见[调用名称快照](chat-events-design.md#tool-display-snapshot)；同一调用在 SSE、确认卡与历史中使用同一值。
 
@@ -87,7 +87,7 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 
 源码基线为 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，以下旧名称来自
 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventType.java`
-与同目录 `RuntimeEntryCodec.java` 的各 Entry 工厂及恢复投影。此表描述 target-only 架构变更：
+与同目录 `RuntimeEntryCodec.java` 的各 Entry 工厂及恢复投影。此表描述 待实现 架构变更：
 内部原始事件先归一，再经共享完整事件投影供历史与 SSE 使用；旧名称不是兼容 wire 别名。
 
 | 既有内部类型或记录 | 公共目标投影 / 不公开理由 |
@@ -296,7 +296,7 @@ Java 文件相对根路径为
 分类：JSON ResultBean、公司上下文、M1 准入是产品约束；凭据不落盘与每页访问复核是
 安全加固；普通数字页码取代不透明游标是用户明确的产品约束，取消跨页固定快照是
 架构简化；默认 50/上限 200 与只返回 events/nextPage 是产品约束；共享完整
-事件投影和新增可恢复记录仍是 target-only 架构变更。
+事件投影和新增可恢复记录仍是 待实现 架构变更。
 
 [Claude 官方事件流文档](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
 区分不持久化的 preview 与权威完整事件，并用历史补齐断线期间的记录；
@@ -393,7 +393,7 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.12.0 | 2026-09-17 | 工具调用展示名复用已提交快照。 |
+| 0.13.0 | 2026-09-18 | 工具调用展示名复用已提交快照。 |
 | 0.11.0 | 2026-09-16 | Skill 使用统计独立于权威事件事务，失败不影响主执行。 |
 | 0.10.0 | 2026-09-15 | Skill 调用统计关联权威来源事务，不增加公共事件类型。 |
 | 0.9.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |

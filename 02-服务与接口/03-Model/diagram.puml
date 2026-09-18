@@ -14,7 +14,7 @@
 ' Observed behavior: identity dispatch precedes API dispatch; Mate owns an independent WebClient path.
 ' Product constraint: business Agent settings are the only model authority.
 ' Architecture change: provider registries route calls but do not discover or authorize models.
-' Target-only: remove ModelRegistry, external model JSON, and the alternate catalog manager.
+' Pending implementation: remove ModelRegistry, external model JSON, and the alternate catalog manager.
 ' Design reason: request state stays per invocation; AI does not depend on Runtime persistence.
 
 skinparam backgroundColor white
@@ -34,8 +34,8 @@ skinparam class {
   BackgroundColor #F8FAFC
   BorderColor #64748B
   FontColor #0F172A
-  BackgroundColor<<target-only>> #DBEAFE
-  BorderColor<<target-only>> #2563EB
+  BackgroundColor<<pending implementation>> #DBEAFE
+  BorderColor<<pending implementation>> #2563EB
 }
 
 class "Business Agent\n.campusclaw/settings.json" as AgentSettings <<published file>>
@@ -228,7 +228,7 @@ top to bottom direction
 ' Historical baseline: pi-mono-java d649866a6cae967ace18ceaeb9597edd47e5721e
 ' Observed behavior at that baseline: centralized persistence drops usage and has no record or stats write path.
 ' Scope: the AI reduction does not re-audit usage persistence at f61906b9.
-' Target-only design: add t_session_records and t_session_stats without changing the message branch leaf.
+' Pending implementation design: add t_session_records and t_session_stats without changing the message branch leaf.
 ' Design reason: usage is an immutable execution fact and must not become a branchable conversation entry.
 
 skinparam backgroundColor #FFFFFF

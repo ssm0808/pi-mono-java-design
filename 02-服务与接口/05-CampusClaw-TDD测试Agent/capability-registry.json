@@ -109,7 +109,7 @@
         "testSelectors": ["CampusClawAiServiceTest", "ModelRegistryTest", "*ProviderTest"]
       }],
       "adapters": ["java", "model-sse-stub", "fault"],
-      "gap": "Accepted target-only model-source reduction: each business Agent .campusclaw/settings.json is the only source for defaultModel and bindingModels. Java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7 already has the settings snapshot and MateRuntimeModelManager path, but still contains ModelRegistry JSON loading, ModelCatalogService, CatalogRuntimeModelManager and related logs. Replace external-JSON coverage with exact settings-only, no-fallback, default/list consistency, Child/Cron/compaction reuse, removed-bean/log and company-mirror cases; current selectors do not prove the target."
+      "gap": "Accepted 待实现 model-source reduction: each business Agent .campusclaw/settings.json is the only source for defaultModel and bindingModels. Java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7 already has the settings snapshot and MateRuntimeModelManager path, but still contains ModelRegistry JSON loading, ModelCatalogService, CatalogRuntimeModelManager and related logs. Replace external-JSON coverage with exact settings-only, no-fallback, default/list consistency, Child/Cron/compaction reuse, removed-bean/log and company-mirror cases; current selectors do not prove the target."
     },
     {
       "id": "CC-CAP-004",
@@ -270,7 +270,7 @@
         "testSelectors": ["MateServiceModelManagerProviderTest", "HttpMateToolClientTest"]
       }],
       "adapters": ["java", "http-contract", "http-stub"],
-      "gap": "Shared endpoint, header, timeout, and error mapping contracts still need a cross-client matrix. Accepted target-only rename at f61906b9136246ca60f333704b6fc92b5420d0ec: MateServiceModelManagerProvider -> CampusMateProvider, MATE_MODEL_MANAGER -> CAMPUSMATE, mate-model-manager -> campusmate, with no alias or data migration. Keep the baseline sourceEvidence and MateServiceModelManagerProviderTest until CampusMateProviderTest actually exists and runs; then replace the source path and selector. Old history values remain unchanged. See the Model design S1-S4 acceptance."
+      "gap": "Shared endpoint, header, timeout, and error mapping contracts still need a cross-client matrix. Accepted 待实现 rename at f61906b9136246ca60f333704b6fc92b5420d0ec: MateServiceModelManagerProvider -> CampusMateProvider, MATE_MODEL_MANAGER -> CAMPUSMATE, mate-model-manager -> campusmate, with no alias or data migration. Keep the baseline sourceEvidence and MateServiceModelManagerProviderTest until CampusMateProviderTest actually exists and runs; then replace the source path and selector. Old history values remain unchanged. See the Model design S1-S4 acceptance."
     },
     {
       "id": "CC-CAP-012",
