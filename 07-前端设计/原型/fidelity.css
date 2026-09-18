@@ -1,0 +1,51 @@
+/* One DOM/state machine; wireframe mode changes presentation only. */
+html[data-fidelity=low]{--bg:#fff;--rail:#f5f5f5;--soft:#eee;--selected:#ddd;--ink:#222;--muted:#555;--line:#aaa;--focus:#333;--action:#222;--good:#555;--surface:#fff;--surface-secondary:#f5f5f5;--surface-tertiary:#eee;--text:#222;--border:#aaa;--border-strong:#777;--success:#444}
+html[data-fidelity=low] body{background:#fff!important;color:#222!important}
+html[data-fidelity=low] :is(button,input,select,textarea,details,.plan,.composer,.chat-composer,.chat-tool,.chat-prototype,.question-option,.user,.chat-user,.command-chip){border-radius:2px!important;box-shadow:none!important}
+html[data-fidelity=low] :is(.brand img,.agent-mark,.review-brand-mark){visibility:hidden}
+html[data-fidelity=low] :is(.rail,.chat-rail,.header,.chat-header,.composer,.chat-composer,.thread,.chat-scroll,.headers-specimen,.composer-dock){outline:1px dashed #999;outline-offset:-1px;position:relative}
+html[data-fidelity=low] :is(.rail,.chat-rail)::before{content:"01 / 会话导航";display:block;font:10px/1.7 ui-monospace,monospace;color:#666;margin-bottom:8px}
+html[data-fidelity=low] :is(.thread,.chat-scroll)::before{content:"02 / 内容与反馈";display:block;font:10px/1.7 ui-monospace,monospace;color:#666;margin-bottom:12px}
+html[data-fidelity=low] :is(.composer,.chat-composer)::before{content:"03 / 输入与操作";display:block;font:10px/1.7 ui-monospace,monospace;color:#666;margin-bottom:5px}
+html[data-fidelity=low] .headers-specimen::before{content:"配置 / 请求头表格";display:block;font:10px/1.7 ui-monospace,monospace;color:#666;margin-bottom:8px}
+html[data-fidelity=low] :is(h1,h2,h3){font-weight:500!important;font-size:15px!important;letter-spacing:0!important}
+html[data-fidelity=low] :is(a,.error,.tool-check){color:#333!important}
+html[data-fidelity=low] .primary{background:#333!important;color:white!important}
+html[data-fidelity=low] .demo-panel{background:#f3f3f3}
+html[data-view=chat] .fixture-nav,html[data-view=headers] .fixture-nav{padding:10px 16px;font-size:12px;border-bottom:1px solid #ded4cf;background:#fffcfa}
+html[data-view=chat] .review-shell,html[data-view=headers] .review-shell{max-width:none;padding:0;gap:0}
+html[data-view=chat] :is(#debug-headers,#workbench-alignment),html[data-view=headers] #running-conversation{display:none}
+html[data-view=chat] :is(#running-conversation,#conversation-workbench){border:0;border-radius:0;margin:0;padding:0;background:transparent}
+html[data-view=chat] :is(.screen-head,#conversation-workbench>.description,#conversation-workbench>.muted,.scenario-bar label,.scenario-bar select){display:none}
+html[data-view=chat] .scenario-bar{padding:4px 16px;margin:0;border-bottom:1px solid #ded4cf;min-height:44px;background:#f8f3f0}
+html[data-view=chat] .chat-prototype{border:0;border-radius:0;margin:0;min-height:0;height:calc(100dvh - 86px);grid-template-columns:232px minmax(0,1fr)}
+html[data-view=chat] .chat-body{min-height:0;display:flex;flex-direction:column}
+html[data-view=chat] .chat-scroll{min-height:0;flex:1;max-height:none;overflow:auto}
+html[data-view=chat] .chat-composer{flex-shrink:0}
+html[data-view=chat] .chat-rail{overflow:auto;min-height:0}
+html[data-view=chat] .chat-thread-row{min-width:0}
+html[data-view=chat] .chat-thread-select{min-width:0;overflow:hidden;text-overflow:ellipsis}
+html[data-view=chat] #chat-nav-toggle{display:none}
+html[data-view=headers] .company-design-review{padding:0}
+html[data-view=headers] #debug-headers{max-width:900px;margin:20px auto;border:0}
+html[data-view=headers] #debug-headers>.table-wrap{display:none}
+html[data-view=headers] #workbench-alignment{max-width:900px;margin:0 auto;border:0}
+html[data-view=headers] .headers-specimen{max-width:none}
+@media(max-width:1100px){html[data-view=chat] .chat-prototype{grid-template-columns:190px minmax(0,1fr)}}
+@media(max-width:900px){html[data-view=chat] .chat-prototype{display:block}html[data-view=chat] .chat-body{height:100%}html[data-view=chat] .chat-rail{display:none;position:fixed;inset:86px auto 0 0;width:245px;z-index:30;background:#f8f3f0;box-shadow:4px 0 20px #0002}html[data-view=chat] .chat-rail[data-open=true]{display:block}html[data-view=chat] #chat-nav-toggle{display:inline-block}html[data-view=chat] .chat-header{flex-wrap:wrap;gap:8px;padding:8px 12px}html[data-view=chat] .chat-config-label{display:none}html[data-view=chat] .chat-scroll{padding:14px}html[data-view=chat] .chat-composer{padding:12px}html[data-view=headers] #debug-headers,html[data-view=headers] #workbench-alignment{margin:8px;padding:12px}}
+html[data-view=chat] body,html[data-view=headers] body{padding:0}
+html[data-view=chat] main,html[data-view=headers] main{width:100%;margin:0}
+html[data-view=chat] .review-shell,html[data-view=headers] .review-shell{border:0;border-radius:0}
+html[data-view=chat] body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+html[data-view=chat] .fixture-nav{flex-shrink:0}
+html[data-view=chat] main{flex:1;min-height:0}
+html[data-view=chat] :is(.review-shell,#running-conversation){height:100%}
+html[data-view=chat] #conversation-workbench{display:flex;flex-direction:column;height:100%;min-height:0}
+html[data-view=chat] .scenario-bar{flex-shrink:0}
+html[data-view=chat] .chat-prototype{height:auto;flex:1;min-height:0}
+html[data-fidelity=low]{--surface-primary:#fff;--surface-elevated:#fff;--surface-hover:#eee;--surface-active:#ddd}
+html[data-fidelity=low] :is(.review-brand img,.conversation-identity img){visibility:hidden}
+html[data-fidelity=low] :is(.review-sidebar,.conversation,.command-palette,.palette,.composer-stack){outline:1px dashed #999;outline-offset:-1px;border-radius:2px!important;box-shadow:none!important}
+html[data-fidelity=low]{--radius-sm:2px;--radius-md:2px;--radius-lg:2px;--surface-selected:#ddd;--text-primary:#222;--text-secondary:#555;--text-tertiary:#666;--border-default:#aaa;--action-primary:#333;--action-primary-hover:#444;--accent-soft:#eee;--success-soft:#eee;--danger-soft:#eee;--warning-soft:#eee;--shadow:none;--shadow-soft:none}
+html[data-fidelity=low] img{visibility:hidden!important}
+html[data-fidelity=low] :is(.app-window,.command-popover,.app-topbar,.review-sidebar){border-radius:2px!important;box-shadow:none!important;outline:1px dashed #999;outline-offset:-1px}

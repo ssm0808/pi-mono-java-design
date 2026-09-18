@@ -11,7 +11,7 @@
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
 | 模型来源专项基线 | A06 于 2026-09-17 核验 pi 默认分支 `main` 的 `16235fd93521f9f96164f5891beea62e6bea5b18` 与 Java `main` 的 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`；只升级模型配置、Provider 组合和业务 Agent 设置链结论 |
 | 计划模式专项基线 | A03/A05 的提示词专项于 2026-09-17 更新至 Codex `b0659c53`、OpenCode `88c6c7ab`、DeepSeek `0d1f5000`、pi `e4c75a73`；业务覆盖再次确认四个上游 HEAD 不变，Java 装配/发布读取本地 `21c3f59b`，完整 SHA、路径及差距见[§11](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖) |
-| 前端专项基线 | A07：Java `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4` 的体验差距见[新核验](../04-CampusClaw前端体验/source-evidence.md#experience-evidence)，前次验证见[实现证据](../04-CampusClaw前端体验/source-evidence.md#current-implementation)；Codex 固定 `d58d0e58`，既有官方核对日期为 2026-09-15 |
+| 前端专项基线 | A07：Java `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4` 的体验差距见[新核验](../../07-前端设计/source-evidence.md#experience-evidence)，前次验证见[实现证据](../../07-前端设计/source-evidence.md#current-implementation)；Codex 固定 `d58d0e58`，既有官方核对日期为 2026-09-15 |
 | 提问专项基线 | A08：问答闭环验证为 Java 9f785bea3ffff8f6566cd1b2727285af46a2aead；新增交互核验为 Java 1d08f98e、Codex d58d0e58 与 OpenCode 849c2598，见[逐题交互证据 §9](../06-CampusClaw计划模式/source-evidence.md#9-buildplan-与逐题交互核验)；DeepSeek 0a53fb55、pi 5cd93f68、Claude 官方文档 2026-09-15 的原范围不变 |
 | Skill 统计专项基线 | A09：Codex d58d0e58 的完整计数链；Java f61906b9 的 Runtime/Read/Child/Cron 骨架，#295/#298 仅作固定对照，不升级其他 M05 结论 |
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
@@ -244,22 +244,22 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 | 维度 | 结论 |
 |---|---|
-| 模块与主设计 | M07，关联 M01/M06；[前端主设计](../04-CampusClaw前端体验/README.md)及[计划交互](../04-CampusClaw前端体验/plan-interaction.md)，复用前端唯一全局组件图。 |
+| 模块与主设计 | M07，关联 M01/M06；[前端主设计](../../07-前端设计/README.md)及[计划交互](../../07-前端设计/技术设计/plan-interaction.md)，复用前端唯一全局组件图。 |
 | 架构问题 | 如何采用 Codex 的工作区密度、完整方案与轻量进度展示，同时保持 CampusClaw 的审核续跑和企业边界？ |
-| Codex 观察 | 固定 d58d0e58 的 plan_implementation.rs / selection_view_params 提供实施、清上下文实施、继续规划；实施发起带 Default mode 的用户消息。PlanHandler::handle_call 在 Plan mode 拒绝 update_plan，另发 PlanUpdate；App Server 区分方案 Item、任务更新与提问。完整路径与官方 2026-09-15 公开证据见[专项 §1](../04-CampusClaw前端体验/plan-interaction.md#1-源码与交互依据)。TUI 不证明桌面像素布局；官方提问及固定版本方案增量保留实验性边界。 |
+| Codex 观察 | 固定 d58d0e58 的 plan_implementation.rs / selection_view_params 提供实施、清上下文实施、继续规划；实施发起带 Default mode 的用户消息。PlanHandler::handle_call 在 Plan mode 拒绝 update_plan，另发 PlanUpdate；App Server 区分方案 Item、任务更新与提问。完整路径与官方 2026-09-15 公开证据见[专项 §1](../../07-前端设计/技术设计/plan-interaction.md#1-源码与交互依据)。TUI 不证明桌面像素布局；官方提问及固定版本方案增量保留实验性边界。 |
 | CampusClaw 目标 | Composer 显示 Build/Plan；统一开发者设置按环境保存 IP/Header 并热应用；模式及会话菜单复用独立浮层；工具使用安全结构 viewer。问题每次显示一题、末题整批提交，专用卡吸收提问工具日志；完整方案正式批准后续跑原执行，进度与工具权限独立。 |
-| 前次实现验证 | Java 开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead` 已有计划审核、显式任务、结构化问题和标签式 Slash，恢复、Composer 停止与 DEV Token 助手也已实现；交互补齐提交 `fcae53829c2884ea1d3cc522c183f5a125a67f45` 已实现模式菜单、卡片折叠与复制、Dock 协同和 Sidebar 操作；189 项前端测试及浏览器验收的路径、符号和范围集中见[实现证据 §5](../04-CampusClaw前端体验/source-evidence.md#current-implementation)。旧提交或未提交工作树不再用于判断这些能力是否存在。 |
-| 本次已观察实现 | Java `1d08f98e` 的 DebugHeaders/useDebugAuth 仍仅内存、Vite 使用启动 env、QuestionCard 一次展示所有题，projector 未吸收 AskUserQuestion；侧栏菜单缺删除/外点关闭、绝对菜单在 overflow 祖先内。完整路径、符号及限制见[体验证据 §6](../04-CampusClaw前端体验/source-evidence.md#experience-evidence)。 |
+| 前次实现验证 | Java 开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead` 已有计划审核、显式任务、结构化问题和标签式 Slash，恢复、Composer 停止与 DEV Token 助手也已实现；交互补齐提交 `fcae53829c2884ea1d3cc522c183f5a125a67f45` 已实现模式菜单、卡片折叠与复制、Dock 协同和 Sidebar 操作；189 项前端测试及浏览器验收的路径、符号和范围集中见[实现证据 §5](../../07-前端设计/source-evidence.md#current-implementation)。旧提交或未提交工作树不再用于判断这些能力是否存在。 |
+| 本次已观察实现 | Java `1d08f98e` 的 DebugHeaders/useDebugAuth 仍仅内存、Vite 使用启动 env、QuestionCard 一次展示所有题，projector 未吸收 AskUserQuestion；侧栏菜单缺删除/外点关闭、绝对菜单在 overflow 祖先内。完整路径、符号及限制见[体验证据 §6](../../07-前端设计/source-evidence.md#experience-evidence)。 |
 | 新对照证据 | 固定 Codex d58d0e58 的 `codex-rs/tui/src/bottom_pane/request_user_input/mod.rs` 使用 current_question/go_next_or_submit/submit_answers；固定 OpenCode 849c2598 的 `packages/opencode/src/agent/agent.ts` 和 `packages/app/src/pages/session/composer/session-question-dock.tsx` 提供 build/plan 与逐题导航。公开 [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 核对；不据此推断 Codex 桌面像素或迁移 OpenCode 权限。 |
 | 差异分类 | 产品约束：常驻模式按钮、O1 暖灰、结构化提问及无工具降级、无清上下文执行/运行中排队、不复制 Codex `/plan` 与 `/approve`；架构变更：审核事件绑定方案并续跑原执行、公共两跳映射；安全加固：缺页禁审、服务端目标复核、写入不自动重放。 |
 | 理由与代价 | 逐题降低同时阅读量，整批提交复用已实现控制事务；隐藏重复工具 JSON 保留模型配对。持久化减少重复配置，但增加本机数据暴露面、配置版本与环境隔离维护；独立浮层增加定位/焦点工作。开发设置与生产身份分离，提示词规划不构成只读沙箱。 |
 | 备选与重评条件 | 不直接复刻 Codex JSON-RPC、clear-context 选项或其品牌。若需要新执行/上下文选择，先重新确定审核目标、凭据、历史与启动权威。 |
 | 设计状态 / 实现状态 | 新体验已定义、target-only / `1d08f98e` 已有问答与审核闭环，但上述持久化、逐题、浮层和展示缺口在所查源码中仍存在；本次只改设计及原型。Mate 公共集成独立待实施，原型不证明部署或产品回归通过。 |
-| 验收 | [PF1～PF6](../04-CampusClaw前端体验/plan-interaction.md#6-组件与接入切片)：模式回执、精确方案、修订新身份、任务完整快照、终态独立、两跳与恢复；浏览器视觉与原型状态分别验证。 |
+| 验收 | [PF1～PF6](../../07-前端设计/技术设计/plan-interaction.md#6-组件与接入切片)：模式回执、精确方案、修订新身份、任务完整快照、终态独立、两跳与恢复；浏览器视觉与原型状态分别验证。 |
 
 **讲解要点。** 参考 Codex 的输入邻近设置、方案与进度分离，让用户在同一工作区读方案、做决定、看实施进展。CampusClaw 的审核决定续跑原执行，不照搬 Codex 的新消息实施路径。这个差异保留执行归属，但增加事件映射与恢复要求；内部前端按已实现代码验收，企业集成另行对齐公共契约。
 
-**工具名称专项（2026-09-17，M03/M06/M07）。** pi 默认 main 的 `5a3a03a7f5db43692915d6ae45e6d96497ea248d` 中 AgentTool 有 label，AgentEvent 不携带 label/displayName；TUI 按技术名选 renderer，通用回退仍用 toolName。Claude Managed Agents 当日公开 Beta 的 custom tool 事件只有 name/input 等字段，不能由此推断 Console 标题。精确路径、旧新提交与读取范围见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#tool-display-evidence)。CampusClaw 目标在 Host 把普通工具 label、具体 Mate 工具元数据统一映射为可选 displayName，并随调用保存快照供内部/公共流与历史消费；来源由[M03](../02-CampusClaw工具系统/README.md#tool-display-name)、快照由[M06](../01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)、展示由[M07](../04-CampusClaw前端体验/README.md#mate-tool-display)维护。该产品可读性约束与架构变更避免前端另查目录及历史标题漂移，代价是贯通字段、缺失元数据的显示回退和解码器同步更新。Java `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7` 已有 label/ToolInfo.displayName，缓存、事件及前端尚未贯通；契约已确认、实现 target-only。技术名、模型参数与确认身份保持；复用现有全局主图，不升级其他条目的基线结论。
+**工具名称专项（2026-09-17，M03/M06/M07）。** pi 默认 main 的 `5a3a03a7f5db43692915d6ae45e6d96497ea248d` 中 AgentTool 有 label，AgentEvent 不携带 label/displayName；TUI 按技术名选 renderer，通用回退仍用 toolName。Claude Managed Agents 当日公开 Beta 的 custom tool 事件只有 name/input 等字段，不能由此推断 Console 标题。精确路径、旧新提交与读取范围见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#tool-display-evidence)。CampusClaw 目标在 Host 把普通工具 label、具体 Mate 工具元数据统一映射为可选 displayName，并随调用保存快照供内部/公共流与历史消费；来源由[M03](../02-CampusClaw工具系统/README.md#tool-display-name)、快照由[M06](../01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)、展示由[M07](../../07-前端设计/技术设计/内容渲染.md#mate-tool-display)维护。该产品可读性约束与架构变更避免前端另查目录及历史标题漂移，代价是贯通字段、缺失元数据的显示回退和解码器同步更新。Java `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7` 已有 label/ToolInfo.displayName，缓存、事件及前端尚未贯通；契约已确认、实现 target-only。技术名、模型参数与确认身份保持；复用现有全局主图，不升级其他条目的基线结论。
 
 ## 6.5 A08 · 结构化提问与原执行续跑
 

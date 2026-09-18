@@ -1,16 +1,16 @@
 # 公共对话前端对齐
 
-[整体体验](README.md) · [交互评审](frontend-review.html#conversation-workbench)
+[整体体验](../README.md) · [交互评审](../原型/frontend-review.html#conversation-workbench)
 
 | 属性 | 值 |
 |---|---|
 | 版本 / 日期 | 1.9.0 / 2026-09-17 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
-| 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 仅作历史迁移证据；当前 Runtime 前端见[实现状态](source-evidence.md#current-implementation) |
+| 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 仅作历史迁移证据；当前 Runtime 前端见[实现状态](../source-evidence.md#current-implementation) |
 | 性质 | Mate 公共接入为 target-only；内部 Runtime 前端已有实现，公司认证及 Chat/Session 边界保持 |
-| 契约依据 | [Mate Events 1.6.0](../../02-服务与接口/07-mate-service通用对话API/README.md)、[Claw POST 0.12.0](../01-CampusClaw多Agent运行时/chat-events-stream-design.md)、[Claw 历史 0.12.0](../01-CampusClaw多Agent运行时/chat-events-history-design.md) |
+| 契约依据 | [Mate Events 1.6.0](../../02-服务与接口/07-mate-service通用对话API/README.md)、[Claw POST 0.12.0](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-stream-design.md)、[Claw 历史 0.12.0](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md) |
 
-Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
+Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
 
 ## 1. 结论与两跳边界
 
@@ -34,7 +34,7 @@ Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thin
 
 ## 2. 源码证据与差距
 
-以下文件均按上述 dfb90ca 完整读取，是历史迁移差距，不能延伸为当前实现缺陷。当前 Runtime 前端已具备显式事件、统一 Session 更新、确认/问答、Composer 停止及只读恢复；公共 Gateway 仍待接入，详见[当前实现证据](source-evidence.md#current-implementation)。路径相对实现仓，源码不等于部署证明。
+以下文件均按上述 dfb90ca 完整读取，是历史迁移差距，不能延伸为当前实现缺陷。当前 Runtime 前端已具备显式事件、统一 Session 更新、确认/问答、Composer 停止及只读恢复；公共 Gateway 仍待接入，详见[当前实现证据](../source-evidence.md#current-implementation)。路径相对实现仓，源码不等于部署证明。
 
 | 路径 / 符号 | 已观察行为 | 目标差距与理由 |
 |---|---|---|
@@ -86,7 +86,7 @@ Slash 和恢复后的配置读取共用配置快照；成功资源与并发版�
 | confirmingSubmit | 正在提交决定 | 两个决定按钮同时禁用；完整确认回执后等待结果，不把回执当工具成功 |
 | stopping | 正在请求停止 / 停止请求已接受，等待结束 | 禁止重复中断及新消息；可靠终态后显示实际原因；自然完成不能伪装成被中断 |
 | uncertain | 提交结果不确定 / 连接中断，执行可能继续 | 保留草稿与已确认内容；只提供“检查最新状态”，不自动重发、不按同文推断接受 |
-| terminal | 正常完成不重复最终回答；异常显示已停止 / 执行失败 | 按[统一文案](README.md#106-简洁文案)显示，恢复普通发送；已停止不意味着此前远端副作用回滚 |
+| terminal | 正常完成不重复最终回答；异常显示已停止 / 执行失败 | 按[统一文案](../公共规范.md#106-简洁文案)显示，恢复普通发送；已停止不意味着此前远端副作用回滚 |
 
 ### 4.1 文本与附件
 
@@ -137,15 +137,15 @@ Enter 发送、Shift+Enter 换行；compositionstart 至 compositionend 期间 E
 计划方案是新增的受限 Markdown 内容面，界面和两跳接入门禁见[计划交互专项](plan-interaction.md)；当前 Mate 精确模型未接入计划审核与任务事件前，只装配 Mock，不直接转发内部事件。
 
 Assistant `content` 保留 rawMarkdown 并使用现有安全渲染骨架；User/Thinking/Tool/error 不继承 Markdown 权限。
-参数是已安全投影的 JSON 对象，与可无损解析的完整 JSON 结果共用[安全 viewer](README.md#96-工具参数与结果)；JSON 格式化只作只读显示，JSON/URL/HTML 不变成可执行内容。
+参数是已安全投影的 JSON 对象，与可无损解析的完整 JSON 结果共用[安全 viewer](内容渲染.md#96-工具参数与结果)；JSON 格式化只作只读显示，JSON/URL/HTML 不变成可执行内容。
 本地展示预算只控制展开、虚拟列表或纯文本回退，不覆写权威完整记录；复制只复制允许公开的数据。
 完整数据不可解码时提示“数据格式不兼容”并保留已确认内容，不伪造空列表或回退展示内部 payload。
 
 内部诊断的 text-block viewer 按块顺序显示，各块独立判断 JSON 或纯文本，多个块不丢失；无内容省略空详情区，需要说明时在摘要显示“无结果”；CallMateTool
-技术名从 arguments.tool 读取、参数从 args 展示，但保留原始包装的来源。活动行与确认卡优先使用服务端工具元数据的 displayName，缺失回退技术名；来源、调用快照与历史一致性统一见[主设计 §9.7](README.md#mate-tool-display)。普通工具同样消费 displayName，由后端映射框架 label；无有效值时回退原始技术名。内部与公共精确契约均已纳入可选 displayName，传递、持久化和公共授权投影仍待实现；服务端输出与解码器字段白名单同步更新，不自动读取内部包装。
+技术名从 arguments.tool 读取、参数从 args 展示，但保留原始包装的来源。活动行与确认卡优先使用服务端工具元数据的 displayName，缺失回退技术名；来源、调用快照与历史一致性统一见[主设计 §9.7](内容渲染.md#mate-tool-display)。普通工具同样消费 displayName，由后端映射框架 label；无有效值时回退原始技术名。内部与公共精确契约均已纳入可选 displayName，传递、持久化和公共授权投影仍待实现；服务端输出与解码器字段白名单同步更新，不自动读取内部包装。
 模型参数不合法时展示原参数与失败结果，不因业务 Schema 拒绝事件。内部确认按根消息及调用后的提交顺序关联，
 读取 denyMessage 接受 4096 UTF-16 单元；不得套用输入框 2048 code point 上限。
-具体规则及 af858b85 源码依据见[事件消费边界](../01-CampusClaw多Agent运行时/chat-events-history-design.md#event-consumer-boundaries)。此规则不自动改变 Mate 公共名称契约。
+具体规则及 af858b85 源码依据见[事件消费边界](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#event-consumer-boundaries)。此规则不自动改变 Mate 公共名称契约。
 
 ## 6. 历史与断线恢复
 

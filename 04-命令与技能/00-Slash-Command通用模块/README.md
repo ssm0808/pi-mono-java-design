@@ -15,8 +15,8 @@
 | 状态 | 用户确认的目标设计；公开实现为 target-only |
 
 前端 Composer、命令清单、独立草稿、临时结果和错误恢复由
-[Slash Command 前端专项](./前端设计/README.md)统一维护；本文件继续维护共享 Command 核心与 HTTP 语义，
-不在两处重复定义交互状态机。[打开前端交互评审稿](./前端设计/slash-command-review.html)。
+[Slash Command 前端专项](../../07-前端设计/技术设计/命令/README.md)统一维护；本文件继续维护共享 Command 核心与 HTTP 语义，
+不在两处重复定义交互状态机。[打开前端交互评审稿](../../07-前端设计/原型/slash-command-review.html)。
 
 ## 1. 职责与目标
 

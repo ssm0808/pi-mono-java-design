@@ -19,10 +19,10 @@
   </style>
 </head>
 <body>
-<aside role="note"><p>2026-09-08 对齐：保留产品与调试边界；工具确认、停止、历史和配置遵循<a href="public-chat-alignment.md">公共对话前端对齐</a>。内部新契约不能直接作为产品公共协议。</p></aside>
+<aside role="note"><p>2026-09-08 对齐：保留产品与调试边界；工具确认、停止、历史和配置遵循<a href="../技术设计/public-chat-alignment.md">公共对话前端对齐</a>。内部新契约不能直接作为产品公共协议。</p></aside>
   <h1>ADR-0016 · CampusClaw 产品前端隔离 Runtime 调试协议</h1>
   <div class="meta">Status: <span class="badge">Proposed</span> · Version: 1.3.0 · Updated: 2026-09-09 · Created: 2026-08-26 ·
-    设计文档: <a href="README.md">campusclaw-frontend</a> ·
+    设计文档: <a href="../README.md">campusclaw-frontend</a> ·
     历史凭据复核基线: <code>320d790726a70aada6100052952d5494d2a378ac</code> ·
     历史特性实现: <code>d03c08dbae870f19eee8d4fa79a707185f7a26b5</code> (Draft PR 181)</div>
 
@@ -44,8 +44,8 @@
     <ul>
       <li>生产浏览器只调用 mate-service 公共 HTTP/SSE；mate-service 终止认证、执行授权、维护公共 Chat 到内部 Session 的映射并投影安全 Event。</li>
       <li>生产产品路由不提供 JWT/APPKEY/<code>access-token</code> 的输入、编辑、查看、存储、刷新或 Header 构造能力；<code>VITE_*</code> 只允许非秘密配置。</li>
-      <li>内部开发构建提供通用 Headers，预置三条可删除空值行，有效项计数、显式增行、校验及四种 POST 独立快照统一遵循<a href="README.md#61-开发者调试-header">主设计 §6.1</a>。</li>
-      <li>DEV-only IP 认证助手使用本地服务账号密码登录并将 Token 回填页面内存，不建立生产登录入口；会话索引只持久化恢复标识与列表信息，凭据不进入该索引，详见<a href="runtime-workbench-alignment.md">工作台交互对齐</a>。</li>
+      <li>内部开发构建提供通用 Headers，预置三条可删除空值行，有效项计数、显式增行、校验及四种 POST 独立快照统一遵循<a href="../技术设计/开发调试.md#61-开发者调试-header">主设计 §6.1</a>。</li>
+      <li>DEV-only IP 认证助手使用本地服务账号密码登录并将 Token 回填页面内存，不建立生产登录入口；会话索引只持久化恢复标识与列表信息，凭据不进入该索引，详见<a href="../技术设计/runtime-workbench-alignment.md">工作台交互对齐</a>。</li>
       <li>已评审特性提交 <code>d03c08db</code> 中，Agent/Skill/Tool metadata 发现不携带凭据快照；Mate Tool execute 只使用后端契约识别的四项凭据，其他自定义 Header 不自动向下游透传。Runtime 不校验凭据真实性、不持久化、不投影到 Event；此处仅为历史证据，当前前端观察以 <code>7f11262</code> 为准。</li>
       <li>诊断抽屉默认关闭，不判断 JWT、APPKEY 或其他认证模式；后端按自身契约判断 Header 组合、认证和授权，生产集成按 Mate 已确认的 Header 条件和优先级执行，不由诊断编辑器决定认证策略。</li>
       <li>生产浏览器身份由统一登录、mate-service 或网关边界建立；具体会话承载、续期和注销机制属于待评审公共 API 集成点，不从当前直接适配器推断。</li>
@@ -83,8 +83,8 @@
 
   <section><h2>Related</h2>
     <ul>
-      <li><a href="README.md">设计文档：CampusClaw 产品前端体验设计</a></li>
-      <li><a href="../01-CampusClaw多Agent运行时/chat-http-v1-design.md">设计文档：Coding Agent 启动与 Runtime HTTP 设计</a></li>
+      <li><a href="../README.md">设计文档：CampusClaw 产品前端体验设计</a></li>
+      <li><a href="../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md">设计文档：Coding Agent 启动与 Runtime HTTP 设计</a></li>
       <li><a href="https://github.com/superheromeZzh/pi-mono-java/blob/56be8eee59415a5f86658d6635a7b7e8891263d3/docs/plans/campusclaw-http-v1-implementation.md">实施记录：CampusClaw HTTP V1</a></li>
     </ul>
   </section>

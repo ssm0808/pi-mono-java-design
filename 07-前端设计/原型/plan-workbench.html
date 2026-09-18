@@ -21,15 +21,16 @@
 .question-card>summary{list-style:none}.question-card>summary::-webkit-details-marker{display:none}.question-card>summary:after{content:"⌄";color:var(--muted)}.question-card[open]>summary:after{content:"⌃"}#question-status{margin-left:auto}
 .mode-menu{position:fixed;bottom:auto;min-width:0;width:210px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);overflow:auto;z-index:40}.rail{min-height:0;overflow-y:auto}.question-footer .row{margin-left:auto}.question-summary{flex-basis:100%;padding:0;color:var(--muted);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.question-card[open] .question-summary{display:none}.question-card>summary strong{font-weight:600}.question-step{font-variant-numeric:tabular-nums}.commentary:empty{display:none}.dock{flex-shrink:0}
 </style>
+<link rel="stylesheet" href="fidelity.css?v=1.0.0">
 </head>
 <body>
 <details class="demo-panel" open><summary>原型场景与模拟事件 <span class="muted">· 设计评审</span></summary><div class="demo" aria-label="设计演示控制，不属于产品">
  <strong>交互原型 · 1.3.0</strong><select id="scenario" aria-label="演示场景"><option value="review">待审核方案</option><option value="idle">Build 空闲</option><option value="planIdle">Plan 空闲</option><option value="research">调研中</option><option value="question">Plan 提问</option><option value="buildQuestion">Build 提问</option><option value="clarifying">无工具时普通澄清</option><option value="slash">Slash 命令</option><option value="executing">实施进度</option><option value="recovering">恢复审核</option><option value="stopped">已停止</option></select>
- <button id="receipt" class="secondary">模拟服务端回执</button><button id="advance">下一步事件</button><button id="disconnect">断开连接</button><button id="other-client">其他端已处理</button><button id="reject-mode">模式更新失败</button><span class="divider"></span><a href="plan-interaction.md">设计说明</a><span class="muted">本地模拟，无网络或工具执行</span>
+ <button id="receipt" class="secondary">模拟服务端回执</button><button id="advance">下一步事件</button><button id="disconnect">断开连接</button><button id="other-client">其他端已处理</button><button id="reject-mode">模式更新失败</button><span class="divider"></span><a href="../技术设计/plan-interaction.md">设计说明</a><span class="muted">本地模拟，无网络或工具执行</span>
 </div></details>
 <div class="app" id="app">
  <aside class="rail" id="rail" aria-label="会话导航">
-  <div class="brand"><img src="campusclaw-mark-o1.png" alt=""><strong>CampusClaw</strong><button id="nav-close" aria-label="关闭导航">×</button></div>
+  <div class="brand"><img src="../资源/campusclaw-mark-o1.png" alt=""><strong>CampusClaw</strong><button id="nav-close" aria-label="关闭导航">×</button></div>
   <div class="nav-block"><button id="new-chat">＋ 新建会话</button></div>
   <div class="nav-block"><p>置顶</p><button class="selected" id="current-chat">园区告警处置</button></div>
   <div class="nav-block"><p>最近</p><button id="other-chat">每日巡检汇总</button></div>
@@ -39,7 +40,7 @@
   <header class="header"><div class="header-title"><button id="nav-open" aria-label="打开会话导航">☰</button><div><h1 id="title">园区告警处置</h1><p class="small muted">园区运维助手</p></div></div><span class="status" id="status" role="status" aria-live="polite"></span></header>
   <div class="scroll" id="scroll"><div class="thread">
    <p class="user" id="user-message">请分析东区网络告警，先给出排查和处置方案，确认后再实施。</p>
-   <img class="agent-mark" src="campusclaw-mark-o1.png" alt="CampusClaw">
+   <img class="agent-mark" src="../资源/campusclaw-mark-o1.png" alt="CampusClaw">
    <details class="activity" id="analysis"><summary>分析过程 · 原始推理</summary><p class="detail">需要先核对告警时段与受影响设备，再结合近期变更判断排查范围。</p></details>
    <details class="activity" id="activity"><summary id="activity-title">已查询告警与设备状态</summary><div class="detail"><p>输入参数</p><p>区域：东区 · 时间：最近 24 小时</p><p style="margin-top:12px">输出结果</p><p id="activity-result">示例查询已完成，告警集中在同一上联链路。</p></div></details>
    <p class="commentary" id="commentary"></p>
@@ -401,5 +402,6 @@
  const entry=new URLSearchParams(location.search).get('scene');if(['question','buildQuestion','slash','review'].includes(entry)){$('scenario').value=entry;reset(entry);}
 })();
 </script>
+<script src="preview.js?v=1.0.0"></script>
 </body>
 </html>

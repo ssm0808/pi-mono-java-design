@@ -1,6 +1,6 @@
 # CampusClaw 高保真视觉稿 ImageGen Prompts
 
-> 以下为历史素材的生成输入。当前产品内容以 [Thinking 展示](../01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)和前端正文为准。
+> 以下为历史素材的生成输入。当前产品内容以 [Thinking 展示](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)和前端正文为准。
 
 
 | 属性 | 值 |
@@ -291,5 +291,5 @@ Do not expose raw chain-of-thought and do not import Image 2's brand mark or pal
 
 - 图形权威只能是 `campusclaw-mark-o1.png`；不从截图描摹，不让 imagegen 重新解释。
 - 仅使用保持宽高比的 Lanczos 缩放和 alpha 合成；不得旋转、扭曲、拆分、重新着色或改变五个色块间距。
-- HTML 原型直接通过 `<img src="campusclaw-mark-o1.png">` 引用同一文件。
+- HTML 原型直接通过 `<img src="../资源/campusclaw-mark-o1.png">` 引用同一文件。
 - 产品品牌位默认直接显示透明底 O1，不增加会改变感知轮廓的深色 tile、描边、阴影或小号身份容器。

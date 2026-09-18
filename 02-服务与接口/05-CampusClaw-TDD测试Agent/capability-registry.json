@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0.0",
-  "registryVersion": "2.2.2",
+  "registryVersion": "2.2.3",
   "product": "CampusClaw",
-  "generatedAt": "2026-09-17",
+  "generatedAt": "2026-09-18",
   "baselines": {
     "designRepository": {
       "commit": "648730b7c55ff25099d3a0feccbaccf5a681a031",
@@ -28,7 +28,7 @@
       "README.md",
       "01-总体架构/01-CampusClaw多Agent运行时",
       "01-总体架构/02-CampusClaw工具系统",
-      "01-总体架构/04-CampusClaw前端体验",
+      "07-前端设计",
       "03-数据与存储/02-Agent元数据GaussDB",
       "02-服务与接口/03-Model",
       "02-服务与接口/02-CampusMate共享客户端配置",
@@ -299,7 +299,7 @@
       "criticality": "P0",
       "maturity": "accepted",
       "coverageState": "partial",
-      "designRefs": ["01-总体架构/04-CampusClaw前端体验/README.md"],
+      "designRefs": ["07-前端设计/README.md"],
       "sourceEvidence": [
         "frontend/src/composables/useRuntimeApi.ts:useRuntimeApi",
         "frontend/src/projectors/runtimeEventProjector.ts:projectRuntimeEvents",
@@ -341,7 +341,7 @@
       "criticality": "P1",
       "maturity": "proposed",
       "coverageState": "unbound",
-      "designRefs": ["02-服务与接口/01-CampusMate附件服务/README.md", "01-总体架构/04-CampusClaw前端体验/README.md"],
+      "designRefs": ["02-服务与接口/01-CampusMate附件服务/README.md", "07-前端设计/README.md"],
       "sourceEvidence": ["frontend/src/components/ConversationTimeline.vue:attachment-summary"],
       "requirements": [{
         "id": "CC-REQ-015",

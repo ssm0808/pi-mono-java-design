@@ -7,8 +7,8 @@
 | 证据 | 基线 |
 |---|---|
 | 本次对齐基线 | 设计仓 `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；Mate Events 1.5.0、内部 Events B01～B15 与 Thinking 展示规则 |
-| 历史前端源码复核 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；当时 `sessionIndex.upsert` 的前插行为使点选会话自动到顶部，直接 Name Controller 路由缺失；详见 [工作台专项](runtime-workbench-alignment.md) |
-| 本专题修改基线 | 设计仓 `ee2c8e61800d95e609982e3ee354b1ee06f70fe4`；该提交中的原路径为 `campusclaw-frontend-design/`，当前路径为 `01-总体架构/04-CampusClaw前端体验/` |
+| 历史前端源码复核 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；当时 `sessionIndex.upsert` 的前插行为使点选会话自动到顶部，直接 Name Controller 路由缺失；详见 [工作台专项](技术设计/runtime-workbench-alignment.md) |
+| 本专题修改基线 | 设计仓 `ee2c8e61800d95e609982e3ee354b1ee06f70fe4`；该提交中的原路径为 `campusclaw-frontend-design/`，当前路径为 `07-前端设计/` |
 | 早期设计仓基线 | `3cc234f068209c90639f812bcb8e1825301fa565` |
 | HTTP 设计风格基线 | 当前工作区 `chat-http-v1-design.md` 1.38.0；设计仓 `c250e3f07536871d3d676242e552a5eb4346b0c7` |
 | Codex 视觉证据 | 本机 `ChatGPT.app` 26.814.41407（build 6720）中的 light-theme CSS Token；`app.asar` SHA-256 `8fba32f8baa6d984b0f0f4149d3da46221e3adb3b52836f85fe65e31e655a8c0` |
@@ -68,7 +68,7 @@
 | `HttpMateToolClientTest:270-400, 476-483` | 回归测试覆盖发现无凭据、JWT、APPKEY、双凭据、缺少 `access-token` fail closed 和脱敏 `toString`。 |
 
 上表保留当时的评审记录，不用于判断该 PR 当前状态。该阶段公共接入差距见
-[dfb90ca 源码证据](public-chat-alignment.md#2-源码证据与差距)；本次计划前端核验范围见下节。
+[dfb90ca 源码证据](技术设计/public-chat-alignment.md#2-源码证据与差距)；本次计划前端核验范围见下节。
 
 
 <a id="plan-frontend-evidence"></a>
@@ -77,7 +77,7 @@
 
 前端设计基线 `pi-mono-java-design@42243077d8605024a5d4470867525879b0d1a088`；Java 核验 `origin/main@29ebec6a8cad99896414211cda28c6fffec71bee`。旧前端基线 `510d882ca45541e0086586dab89c429c5a18cf20` 仅保留原范围。全量读取本次涉及的 App、ComposerBox、ConversationTimeline、runtime/product 类型、eventStore、runtimeEventProjector、useRuntimeApi；后端读取 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java`，create/get/delete 尚无通用 update。该范围尚无计划类型与 UI，不证明其他特性分支或部署不支持计划模式。
 
-Codex 固定源码仍为 `d58d0e5841e0de08e251673db2d5af8cf3a1ad51`，通过 git show 读取，未使用工作树 HEAD `be33f80b` 替换。完整读取 `codex-rs/tui/src/chatwidget/plan_implementation.rs`、`codex-rs/core/src/tools/handlers/plan.rs`、`codex-rs/protocol/src/plan_tool.rs`，定向读取 `codex-rs/app-server/README.md` 的 plan/Item/提问协议段。符号与结论见[计划交互 §1](plan-interaction.md#1-源码与交互依据)。前者证明 TUI 的实施选择，不能当作桌面前端源码；具体卡片尺寸与位置是 CampusClaw 目标设计。
+Codex 固定源码仍为 `d58d0e5841e0de08e251673db2d5af8cf3a1ad51`，通过 git show 读取，未使用工作树 HEAD `be33f80b` 替换。完整读取 `codex-rs/tui/src/chatwidget/plan_implementation.rs`、`codex-rs/core/src/tools/handlers/plan.rs`、`codex-rs/protocol/src/plan_tool.rs`，定向读取 `codex-rs/app-server/README.md` 的 plan/Item/提问协议段。符号与结论见[计划交互 §1](技术设计/plan-interaction.md#1-源码与交互依据)。前者证明 TUI 的实施选择，不能当作桌面前端源码；具体卡片尺寸与位置是 CampusClaw 目标设计。
 
 官方 [Features](https://learn.chatgpt.com/docs/features) 与 [App Server](https://learn.chatgpt.com/docs/app-server) 于 2026-09-15 重新核对。前者显示侧栏与 Add/Plan mode；后者区分方案 Item、delta、任务更新与提问。当前公开文档与固定源码可能不同，分别使用，不升级固定 commit，也不推断服务端存储。
 
@@ -123,7 +123,7 @@ Codex 固定基线仍为 `d58d0e5841e0de08e251673db2d5af8cf3a1ad51`。新增全�
 | Header 校验与独立快照 | 已实现。`frontend/src/debugHeaders.ts` 的 validateDebugHeaders 先拒绝 CR/LF，再规范化空格/Tab；`App.vue` 的 submit/executeCommand/stop/decideTool/decidePlan/answerQuestion 六类动作独立读取开发 Header，读取与 Session 配置不携带这些自定义值。 |
 | DEV 按 IP 获取 Token | 已实现，真实认证中心未联调。`frontend/dev/authMiddleware.ts` 的 createAuthMiddleware/devAuthPlugin、`dev/authCenter.ts` 与 `vite.config.ts` 已装配仅本机开发接口；`components/DebugHeaders.vue` 处理回填及迟到响应。账号密码只由开发服务读取，不编入浏览器。 |
 
-上述起点的验证来自 [AskUserQuestion 实现记录](../06-CampusClaw计划模式/ask-user-question.md#2-基线与已观察实现)：前端 172 项、类型检查与构建通过，浏览器 18 项使用真实 Vue 与合成 HTTP 响应；实际 JAR HTTP 另外验证原执行问答/审核/任务事件闭环。前端布局用合成响应的结果不替代生产 Mate、真实认证中心或真实模型联调。
+上述起点的验证来自 [AskUserQuestion 实现记录](../01-总体架构/06-CampusClaw计划模式/ask-user-question.md#2-基线与已观察实现)：前端 172 项、类型检查与构建通过，浏览器 18 项使用真实 Vue 与合成 HTTP 响应；实际 JAR HTTP 另外验证原执行问答/审核/任务事件闭环。前端布局用合成响应的结果不替代生产 Mate、真实认证中心或真实模型联调。
 
 ### Claw 前端交互补齐
 
@@ -145,8 +145,8 @@ Codex 固定基线仍为 `d58d0e5841e0de08e251673db2d5af8cf3a1ad51`。新增全�
 
 | 项目 | 已核验边界与依赖 |
 |---|---|
-| Mate 公共 Chat Gateway | 当前 Vue 使用内部 `/campusclaw-service/v1` 请求级 SSE。公共提交 JSON、独立 GET stream、Chat 身份和恢复需要单独适配；[Mate 待决事项 C-001/C-003/C-004/C-006/C-007](../../02-服务与接口/07-mate-service通用对话API/协作/README.md) 尚涉及分页、创建/配置及控制/计划/问答映射，不可直接复用内部字段。 |
-| 附件上传 | Composer 未接真实上传。[附件服务](../../02-服务与接口/01-CampusMate附件服务/README.md) 以公共 Chat 归属并在 READY 后绑定；内部 Session ID 不能当成 chat_id，也不能用本地 fileId 模拟成功。 |
+| Mate 公共 Chat Gateway | 当前 Vue 使用内部 `/campusclaw-service/v1` 请求级 SSE。公共提交 JSON、独立 GET stream、Chat 身份和恢复需要单独适配；[Mate 待决事项 C-001/C-003/C-004/C-006/C-007](../02-服务与接口/07-mate-service通用对话API/协作/README.md) 尚涉及分页、创建/配置及控制/计划/问答映射，不可直接复用内部字段。 |
+| 附件上传 | Composer 未接真实上传。[附件服务](../02-服务与接口/01-CampusMate附件服务/README.md) 以公共 Chat 归属并在 READY 后绑定；内部 Session ID 不能当成 chat_id，也不能用本地 fileId 模拟成功。 |
 | 面向用户的 Agent 中心 | `mate-agent-definition-service@956b547f5ca12ca89e68f73012f92a4406b0c9fa` 的 `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java#listAgents` 是管理用元数据列表，返回完整 systemPrompt、permission 和绑定信息。它不是已确认的用户可用 Agent 目录，也没有公共 Chat 创建链路；不能直接打开生产目录入口。 |
 
 Mate 示例仓上述 HEAD 于 2026-09-15 与远端 HEAD 核对一致，Controller 清单只有 AgentDefinitionController 和 `agentdefinition/modelmanager/controller/LlmChatController.java`，所查源码没有公共 Chat/附件 Controller。该结论仅限此仓与提交，不证明其他企业仓库或部署不存在这些服务。本次只实现 Claw 前端，不开发 Mate 接入。后续接入需补充对应实现位置、身份与已确认契约，再进行两跳验收；现有禁用入口保留具体原因。
@@ -164,8 +164,8 @@ Mate 示例仓上述 HEAD 于 2026-09-15 与远端 HEAD 核对一致，Controlle
 | 4：缺删除与菜单关闭 | `frontend/src/components/AppSidebar.vue:24,109` openMenuId/menu template；`frontend/src/App.vue:117,262` deleteConversation | 会话菜单只有改名/置顶，无外点/Esc 关闭；删除只取当前 Session 并从顶部触发。按行删除与统一菜单关闭为 target-only。 |
 | 5：JSON 与字体 | `frontend/src/components/ToolActivity.vue:57,68` dl/pre；`frontend/src/projectors/runtimeEventProjector.ts:36,37` 参数 stringify/结果原文；`frontend/src/runtime.css:30` plain-result；`frontend/src/style.css:1536` tool-arguments | 输入为 12px 等宽键值布局，结果继承 UI 字体且不解析 JSON；共享安全结构 viewer 与无损原文回退为 target-only。 |
 | 6：完成/等待文案 | `frontend/src/projectors/runtimeEventProjector.ts:80` session.status_idle；`frontend/src/components/ConversationTimeline.vue` hasVisibleRunningTurn | 追加“本轮已完成” notice，waiting_answer 未算可见等待会生成运行占位；共享状态文案与去重复投影为 target-only。 |
-| 7：统一配置/热更新 | `frontend/.env.example`；`frontend/vite.config.ts` defineConfig；`frontend/src/components/DevDiagnostics.vue`；`frontend/src/composables/useRuntimeApi.ts` apiBase/callerId；`frontend/dev/authMiddleware.ts` createAuthMiddleware | 环境变量启动时加载，诊断入口只有创建/恢复；运行时配置服务与面板热应用无实现。九个既有键及完整边界见[工作台 §6.3～6.6](runtime-workbench-alignment.md#63-统一开发者设置与既有配置映射target-only)。未读取真实 env.local 的值。 |
-| 8、9、10：问答与 Plan | `frontend/src/components/QuestionCard.vue` fieldset v-for/submit；`frontend/src/runtime/questionInteraction.ts` QuestionDraftStore；`frontend/src/projectors/runtimeEventProjector.ts:24,33` | 已实现整批回答与原执行等待，但一次渲染全部题，仅 ExitPlanMode 被专用卡吸收；逐题导航、AskUserQuestion 工具合并和提示词调整为 target-only，详见[计划证据 §9](../06-CampusClaw计划模式/source-evidence.md#9-buildplan-与逐题交互核验)。 |
+| 7：统一配置/热更新 | `frontend/.env.example`；`frontend/vite.config.ts` defineConfig；`frontend/src/components/DevDiagnostics.vue`；`frontend/src/composables/useRuntimeApi.ts` apiBase/callerId；`frontend/dev/authMiddleware.ts` createAuthMiddleware | 环境变量启动时加载，诊断入口只有创建/恢复；运行时配置服务与面板热应用无实现。九个既有键及完整边界见[工作台 §6.3～6.6](技术设计/runtime-workbench-alignment.md#63-统一开发者设置与既有配置映射target-only)。未读取真实 env.local 的值。 |
+| 8、9、10：问答与 Plan | `frontend/src/components/QuestionCard.vue` fieldset v-for/submit；`frontend/src/runtime/questionInteraction.ts` QuestionDraftStore；`frontend/src/projectors/runtimeEventProjector.ts:24,33` | 已实现整批回答与原执行等待，但一次渲染全部题，仅 ExitPlanMode 被专用卡吸收；逐题导航、AskUserQuestion 工具合并和提示词调整为 target-only，详见[计划证据 §9](../01-总体架构/06-CampusClaw计划模式/source-evidence.md#9-buildplan-与逐题交互核验)。 |
 
 固定 Codex `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` 的 `codex-rs/tui/src/bottom_pane/request_user_input/mod.rs`（current_question/go_next_or_submit/submit_answers）证明 TUI 逐题、末题整批提交；Handler 仍将 JSON 答案返回模型。这是开源 TUI 证据，不冒充闭源桌面源码或像素规范。OpenCode `849c2598abc7d2b40261e74b5826bc74ffc78308` 的 `packages/opencode/src/agent/agent.ts` 与 `packages/app/src/pages/session/composer/session-question-dock.tsx` 证明 Build/Plan 与逐题状态；其输入区位置作为对照，CampusClaw 保留时间线题卡与独立 Composer。
 
@@ -198,8 +198,8 @@ OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对�
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java` · toNameIndex / CacheState | 保存 name-to-ID 索引，没有展示名称快照 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolDiscovery.java` · listAgentTools / listSkillTools / resolveToolId | 发现写入 Session 缓存，执行按名解析 ID；当前返回 ID 的路径不足以同时提供展示名称 |
 
-同时读取 `frontend/src/components/structuredActivity.test.ts`：已有结构 viewer 与结果文本块测试，未运行本次产品测试。标题优先 displayName 是[已确认目标](README.md#mate-tool-display)，元数据保留、调用名称快照、事件传递及前端消费尚未接通；不能表述为只改 UI 即可完成。
+同时读取 `frontend/src/components/structuredActivity.test.ts`：已有结构 viewer 与结果文本块测试，未运行本次产品测试。标题优先 displayName 是[已确认目标](技术设计/内容渲染.md#mate-tool-display)，元数据保留、调用名称快照、事件传递及前端消费尚未接通；不能表述为只改 UI 即可完成。
 
-工具名称专项已扩展为普通框架 label 和业务元数据统一映射 displayName；新增事件 factory、持久化投影与严格前端解码器证据，以及 pi/Claude 最新核对见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#tool-display-evidence)。M03/M06 和 Mate 公共精确契约已补齐此目标；传递和 UI 消费仍待实现。其他历史证据不升级。没有修改实现仓或验证部署页面，未新增依赖；现有前端类关系与 PlantUML 图源不变。
+工具名称专项已扩展为普通框架 label 和业务元数据统一映射 displayName；新增事件 factory、持久化投影与严格前端解码器证据，以及 pi/Claude 最新核对见[M03 专项证据](../01-总体架构/02-CampusClaw工具系统/source-evidence.md#tool-display-evidence)。M03/M06 和 Mate 公共精确契约已补齐此目标；传递和 UI 消费仍待实现。其他历史证据不升级。没有修改实现仓或验证部署页面，未新增依赖；现有前端类关系与 PlantUML 图源不变。
 
 验证（2026-09-17）：Markdown 无 Mermaid、PlantUML ASCII、SVG XML、图源与 SVG 引用及行锚点、新标题链接均通过检查；前端专题隔离执行 `plantuml -tsvg diagram.puml`，8 张生成 SVG 与在库文件逐字节一致。图源与生成图无变更，未重做视觉验收；`git diff --check` 通过，未运行产品测试。

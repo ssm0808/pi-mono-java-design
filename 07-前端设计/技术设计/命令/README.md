@@ -1,6 +1,6 @@
 # CampusClaw Slash Command 前端设计
 
-[返回 Slash Command 通用模块](../README.md) · [打开交互评审稿](./slash-command-review.html)
+[返回 Slash Command 通用模块](../../../04-命令与技能/00-Slash-Command通用模块/README.md) · [打开交互评审稿](../../原型/slash-command-review.html)
 
 | 属性 | 值 |
 |---|---|
@@ -8,7 +8,7 @@
 | 更新日期 | 2026-09-15 |
 | 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
 | Runtime 命令契约基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；B13 已确认 Skill SSE，Builtin JSON 不变 |
-| pi-mono-java 交互源码基线 | 当前 PR #301 提交见[实现状态](../../../01-总体架构/04-CampusClaw前端体验/source-evidence.md#current-implementation)；早期结构证据保留在 §2.1 |
+| pi-mono-java 交互源码基线 | 当前 PR #301 提交见[实现状态](../../source-evidence.md#current-implementation)；早期结构证据保留在 §2.1 |
 | 适用端 | CampusClaw Web 产品前端；内部 Runtime 调试台只作为源码证据和受控联调入口 |
 | 状态 | 用户已确认的目标交互；问答/审核协同原型已同步，Vue 源码范围见 §2.1；公共执行边界沿用原契约门禁 |
 
@@ -55,7 +55,7 @@ Builtin 命令结果不是 Assistant 消息，不进入 ConversationTimeline、S
 
 **计划交互历史观察（2026-09-15）**：开发分支 `699f929f6826b595ed1d0162f6def66e2f84760b` 已更新上述路径。`ComposerBox.vue` 的 + 为附件、输入首字符 / 打开清单，标签/参数分离，运行中 command-run 与停止同屏；`useCommandComposer.ts` 的 selectedError 保留过期参数并阻止执行；`useRuntimeApi.ts` 已有 listCommands、executeCommand、统一 Session POST、方案审核与任务投影。此范围不再存在表中旧的入口/停止缺口；产品组件分层、Mate 接入和问答协同仍须按目标验收。
 
-当前计划、问答、任务与 Slash 已在 `pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead` 集成，完整前端交互补齐与验证见[实现证据 §5](../../../01-总体架构/04-CampusClaw前端体验/source-evidence.md#current-implementation)。不能继续按早期工作树把问题卡或 Slash 标成未实现。公共 Mate 执行不在本次 Claw 开发范围。
+当前计划、问答、任务与 Slash 已在 `pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead` 集成，完整前端交互补齐与验证见[实现证据 §5](../../source-evidence.md#current-implementation)。不能继续按早期工作树把问题卡或 Slash 标成未实现。公共 Mate 执行不在本次 Claw 开发范围。
 
 图中独立组件与 Store 的精确拆分仍是推荐目标结构；实际实现使用 Composer、组合函数和事件投影分工，不因类名不同认定行为缺失。本专项不重新定义 Runtime、Mate 或 Skill 协议。
 
@@ -119,14 +119,14 @@ Chat Workspace
 实际高度同时受工作区剩余空间约束，短窗口中滚动清单，不覆盖会话顶部栏。
 两个布局共享同一 DOM 顺序、活动项和键盘状态，避免响应式切换后语义漂移。
 
-[交互评审稿](./slash-command-review.html) 提供命令清单、参数编辑、running 清单、Help 结果和未匹配错误五个状态。
+[交互评审稿](../../原型/slash-command-review.html) 提供命令清单、参数编辑、running 清单、Help 结果和未匹配错误五个状态。
 评审稿是视觉与交互验收材料，不是可发布产品代码，也不定义新的 HTTP 字段。
 
 <a id="slash-pending-interaction"></a>
 
 ### 3.1 计划、问答与运行中命令
 
-[统一工作台](../../../01-总体架构/04-CampusClaw前端体验/plan-workbench.html?scene=question)在相同界面检查问题卡、方案、TODO 和 Slash；[命令专项原型](slash-command-review.html)聚焦选择、参数、临时结果与未匹配。两者遵循同一交互规则，均为合成数据，不证明生产接通。
+[统一工作台](../../原型/plan-workbench.html?scene=question)在相同界面检查问题卡、方案、TODO 和 Slash；[命令专项原型](../../原型/slash-command-review.html)聚焦选择、参数、临时结果与未匹配。两者遵循同一交互规则，均为合成数据，不证明生产接通。
 
 | 当前执行 | Composer 与命令行为 |
 |---|---|
@@ -146,9 +146,9 @@ Builtin 结果放在 Composer 上方的轻量可折叠区域，标题保留“�
 
 ## 4. Composer 状态模型
 
-![Slash Composer 状态图](./slash_composer_state.svg)
+![Slash Composer 状态图](slash_composer_state.svg)
 
-[PlantUML 源码](./diagram.puml#L140) · [展开原尺寸 SVG](./slash_composer_state.svg)
+[PlantUML 源码](diagram.puml#L140) · [展开原尺寸 SVG](slash_composer_state.svg)
 
 ### 4.1 进入与退出
 
@@ -188,7 +188,7 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 - 选中无 input 的命令显示标签、隐藏参数 textarea，焦点进入当前命令执行按钮（空闲为上箭头，运行中为独立按钮）；再次明确 Enter 或点击才提交。
 - 有 input 时标签与参数编辑器同处输入区，光标进入参数；`input.hint` 作为参数占位提示并通过无障碍描述关联，不再单列常驻说明。
 - 空闲上箭头可访问名称为“运行 <name>”或“发送消息”。运行时右下角固定为“停止生成”，命令区独立显示“执行命令”，可访问名称为“运行 <name>”；无 input 时焦点进入该命令按钮，有 input 时 Enter 执行命令，Shift+Enter 换行。普通消息 textarea 的 Enter 不停止也不发送。
-- 点击停止只走共享对话协调器，命令查询不能遮挡或禁用可用的停止动作；停止请求到真实终态的状态见[工作台专项](../../../01-总体架构/04-CampusClaw前端体验/runtime-workbench-alignment.md#4-composer-的发送与停止)。
+- 点击停止只走共享对话协调器，命令查询不能遮挡或禁用可用的停止动作；停止请求到真实终态的状态见[工作台专项](../runtime-workbench-alignment.md#4-composer-的发送与停止)。
 - IME composition、`isComposing`、keyCode 229 及按键长按 repeat 不触发选择或执行；选择那次 Enter 不得再次触发提交。
 - running 状态下普通消息仍遵循 Events 设计的限制，但服务端清单中保留的查询命令仍可运行。
 
@@ -211,9 +211,9 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 
 ## 6. 执行与不确定结果
 
-![Slash Command 执行时序](./slash_command_execution_flow.svg)
+![Slash Command 执行时序](slash_command_execution_flow.svg)
 
-[PlantUML 源码](./diagram.puml#L228) · [展开原尺寸 SVG](./slash_command_execution_flow.svg)
+[PlantUML 源码](diagram.puml#L228) · [展开原尺寸 SVG](slash_command_execution_flow.svg)
 
 执行请求由已选择 Descriptor 与当前编辑值组装，不重新解析成另一命令。提交期间只锁定命令编辑和“运行”动作，
 保留取消页面读取和浏览历史的能力。当前协议没有 cancel command，离开页面不应声称后端命令已取消。
@@ -250,7 +250,7 @@ expectedResultKind。必须校验所选协议的 Content-Type 与完整 Schema�
 
 1.3.0 的历史源码补充核对为 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，
 当时 App.submit、ComposerBox 与 useRuntimeApi 尚无命令适配；交互实现以 §2.1 中各次明确记录的源码范围为准。
-共享组件与生命周期以[公共对话对齐](../../../01-总体架构/04-CampusClaw前端体验/public-chat-alignment.md)维护。
+共享组件与生命周期以[公共对话对齐](../public-chat-alignment.md)维护。
 此差异是已确认内部契约驱动的 target-only 前端架构调整，不表示公共 Skill 已发布。
 
 ## 7. 结果投影
@@ -298,9 +298,9 @@ Help `userCases` 未来若增加“填入输入框”，也只能把纯文本放
 
 ## 9. 目标组件与边界
 
-![Slash Command 前端目标组件图](./target_slash_command_frontend_components.svg)
+![Slash Command 前端目标组件图](target_slash_command_frontend_components.svg)
 
-[PlantUML 源码](./diagram.puml#L1) · [展开原尺寸 SVG](./target_slash_command_frontend_components.svg)
+[PlantUML 源码](diagram.puml#L1) · [展开原尺寸 SVG](target_slash_command_frontend_components.svg)
 
 图中的独立 Slash 组件、Store、Registry 和 Gateway 拆分均为 target-only。现有 App、Composer、Timeline 和状态对象是迁移落点；
 当前 Composer 已具备标签式命令功能，图不代表所有独立组件均按所示类名落地。
@@ -357,7 +357,7 @@ interface CommandGateway {
 
 ## 10. 可访问性、视觉与响应式
 
-本专项沿用[前端视觉基线](../../../01-总体架构/04-CampusClaw前端体验/README.md#10-视觉与组件基线)，命令交互保持同一编辑器和浅暖灰视觉。具体规则如下：
+本专项沿用[前端视觉基线](../../公共规范.md#10-视觉与组件基线)，命令交互保持同一编辑器和浅暖灰视觉。具体规则如下：
 
 - 桌面侧栏和窄屏顶部导航统一使用 `--surface-secondary`（`#F8F3F0`）、深色正文与细边框；
   选中项沿用 `--surface-selected`，说明与提示使用次要文本色。
@@ -408,7 +408,7 @@ interface CommandGateway {
 
 ### 11.4 当前原型验证记录（2026-09-09）
 
-- [DOM 交互检查](./test_slash_command_review.cjs) 的 13 个场景通过：过滤、标签/参数、二次执行、重复 Enter、IME、Escape、草稿恢复、running input、省略参数保护、Skill 门禁、纯文本结果及运行中独立执行与停止。脚本阻断网络 API，未发起真实命令。
+- [DOM 交互检查](../../原型/test_slash_command_review.cjs) 的 13 个场景通过：过滤、标签/参数、二次执行、重复 Enter、IME、Escape、草稿恢复、running input、省略参数保护、Skill 门禁、纯文本结果及运行中独立执行与停止。脚本阻断网络 API，未发起真实命令。
 - 主体验原型 17 个场景通过；未新增 npm 或 Maven 依赖，测试复用已有外部 jsdom 环境。
 - Chrome 实际操作验证运行中独立“执行命令”、同位置停止按钮及无参数命令焦点；390、768、1024、1440px 宽度无页面横向溢出，已查看桌面与手机布局。
 - 三个 PlantUML 块生成成功、ASCII 与 SVG XML 校验通过，重新生成与提交产物一致；已查看原尺寸及缩放图，并与原主组件图对照保留完整职责链。
@@ -419,7 +419,7 @@ interface CommandGateway {
 
 ### 11.5 问答与命令联合验收
 
-2026-09-15 验证：专项原型 14 组检查通过，统一工作台 33 组通过；四档浏览器布局及两专题图文校验结果统一记录在[前端验收](../../../01-总体架构/04-CampusClaw前端体验/README.md#15-测试与验收)。
+2026-09-15 验证：专项原型 14 组检查通过，统一工作台 33 组通过；四档浏览器布局及两专题图文校验结果统一记录在[前端验收](../验收.md#15-测试与验收)。
 
 - 三类等待均保持 running 清单与原位置停止；未知等待不能按 idle 放开 Skill 或模式修改。
 - 问答草稿、命令参数与消息草稿互不覆盖，切换会话丢弃迟到请求；命令查询不清除问题身份。

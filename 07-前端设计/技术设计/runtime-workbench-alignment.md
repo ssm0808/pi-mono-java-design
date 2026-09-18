@@ -1,18 +1,18 @@
 # Runtime 工作台交互对齐
 
-[返回前端体验](README.md) · [交互原型](frontend-review.html#conversation-workbench)
+[返回前端体验](../README.md) · [交互原型](../原型/frontend-review.html#conversation-workbench)
 
 | 属性 | 值 |
 |---|---|
 | 版本 | 1.6.0 |
 | 日期 | 2026-09-16 |
 | 设计起点 | `pi-mono-java-design@599edb072cf75e3d8f85c775c53c0e83befd285d` |
-| 实现基线 | `pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`；配置能力核验见下表，其他实现记录见[源码证据](source-evidence.md#current-implementation) |
+| 实现基线 | `pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`；配置能力核验见下表，其他实现记录见[源码证据](../source-evidence.md#current-implementation) |
 | 范围 | 内部 Runtime Web 工作台；已实现能力与企业接入缺口分别记录 |
 
 ## 1. 源码依据与差距
 
-本节核验 `pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，路径相对实现仓。相对前次前端证据 `fcae53829c2884ea1d3cc522c183f5a125a67f45`，下列配置结论经过重新读取；历史迁移结论由 Git 和[源码证据](source-evidence.md)保留。
+本节核验 `pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，路径相对实现仓。相对前次前端证据 `fcae53829c2884ea1d3cc522c183f5a125a67f45`，下列配置结论经过重新读取；历史迁移结论由 Git 和[源码证据](../source-evidence.md)保留。
 
 | 路径与符号 | 已观察行为 | 当前目标与具体理由 |
 |---|---|---|
@@ -64,9 +64,9 @@
 
 schemaVersion=1 迁移到 2 时，保持现有数组顺序，将旧 `updatedAt` 映射为初始 `lastActivityAt`，并以 `pinned=false` 补齐。不用 Runtime `updatedAt` 继续排序，因为它还会因改名、配置和状态变化，不等于用户会话活动。置顶当前仅属内部 Runtime 工作台的浏览器本地状态；产品需要跨端同步时，应设计 mate-service Chat 元数据而不向 Runtime Session 表加 pin 字段。
 
-名称、模型、思考和模式控件共用 updateSession 客户端方法，每次操作只提交对应的一个字段；禁止 GET 资源全量回传。接口允许组合提交是资源更新能力，当前页面不增加批量编辑或保存流程。成功后按返回的完整 Session 和 ETag 原位更新；仅提交 modelId 时，模型能力导致的 thinking 自动归一也以返回值为准。字段准入与组合提交规则由 [HTTP 主设计 §2.4](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-update)维护。
+名称、模型、思考和模式控件共用 updateSession 客户端方法，每次操作只提交对应的一个字段；禁止 GET 资源全量回传。接口允许组合提交是资源更新能力，当前页面不增加批量编辑或保存流程。成功后按返回的完整 Session 和 ETag 原位更新；仅提交 modelId 时，模型能力导致的 thinking 自动归一也以返回值为准。字段准入与组合提交规则由 [HTTP 主设计 §2.4](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-update)维护。
 
-模式按钮常驻 Composer，与模型/思考共享配置快照；界面位置、反馈编辑和实施进度见[计划交互专项](plan-interaction.md)。计划审核已在 PR #301 实现，沿用事件恢复方式；Session 类型只接入工作模式，不增加待审核指针。卡片展示、分页未完成时禁用审核和服务器最终校验统一引用[计划模式 §6.2](../06-CampusClaw计划模式/README.md#62-恢复与结果不确定)。
+模式按钮常驻 Composer，与模型/思考共享配置快照；界面位置、反馈编辑和实施进度见[计划交互专项](plan-interaction.md)。计划审核已在 PR #301 实现，沿用事件恢复方式；Session 类型只接入工作模式，不增加待审核指针。卡片展示、分页未完成时禁用审核和服务器最终校验统一引用[计划模式 §6.2](../../01-总体架构/06-CampusClaw计划模式/README.md#62-恢复与结果不确定)。
 
 会话菜单的“重命名”使用统一 Session 更新 API，成功后在原位更新列表文案，不调整排序。412 时重读 Session，显示实际名称并保留用户草稿，由用户再次确认；不用新 ETag 自动重放 POST。网络结果不确定时 GET Session 对账，不盲重试。
 
@@ -88,19 +88,19 @@ schemaVersion=1 迁移到 2 时，保持现有数组顺序，将旧 `updatedAt` 
 
 顶部不再重复提供停止按钮。鼠标点击停止或键盘焦点明确位于停止按钮时 Enter 才停止；在普通消息 textarea 内按 Enter 不得因按钮改形而停止任务。IME、长按 Enter、重复点击仍须防重。
 
-“已就绪”仅曾表示客户端判断没有活动执行，不能证明凭据有效。目标顶部空闲文案为“空闲”，执行时按[主设计文案](README.md#106-简洁文案)使用“处理中”“等待确认”“停止中”；输入框上方不重复显示健康状态和常驻“重新核对”。只有恢复中、连接异常或提交结果未知时显示状态条及“刷新状态”；该动作只读历史/Session，不校验 Token，也不重发消息。
+“已就绪”仅曾表示客户端判断没有活动执行，不能证明凭据有效。目标顶部空闲文案为“空闲”，执行时按[主设计文案](../公共规范.md#106-简洁文案)使用“处理中”“等待确认”“停止中”；输入框上方不重复显示健康状态和常驻“重新核对”。只有恢复中、连接异常或提交结果未知时显示状态条及“刷新状态”；该动作只读历史/Session，不校验 Token，也不重发消息。
 
-运行中命令的入口、执行按钮与焦点规则统一见 [Slash 专项 §4.3](../../04-命令与技能/00-Slash-Command通用模块/前端设计/README.md#43-选择与执行)。普通消息仍无 Follow-up 队列和 Steer，不把运行中草稿自动续发。
+运行中命令的入口、执行按钮与焦点规则统一见 [Slash 专项 §4.3](命令/README.md#43-选择与执行)。普通消息仍无 Follow-up 队列和 Steer，不把运行中草稿自动续发。
 
 ## 5. 添加入口与 Header
 
 `+` 的产品语义为添加附件或上下文，不再包含“命令”；命令仍由空消息首字符 `/` 触发，或点击已选标签更换。附件与上下文实际能力必须与已接入资源一致，当前无上传实现时“添加附件”禁用并提示“暂未接入附件上传”，不虚构上传或新增一个未定义的上下文 API。移除工具栏重复的独立附件按钮。
 
-Header 行编辑与计数以 [主设计 §6.1](README.md#61-开发者调试-header) 为唯一规则；统一设置、持久化与配置生效由本专题 §6.3～§6.6 维护。三条空预置显示 `Headers (0)` 正确；仅空格或 Tab 的值按 HTTP 首尾空白规范化后视为空。CR/LF 一律拒绝，不用 trim 掩盖非法换行。每次新消息、命令、中断、工具确认、计划审核和问题回答读取最新已应用的有效值；修改不追溯影响已发请求或正在执行的凭据快照。
+Header 行编辑与计数以 [主设计 §6.1](开发调试.md#61-开发者调试-header) 为唯一规则；统一设置、持久化与配置生效由本专题 §6.3～§6.6 维护。三条空预置显示 `Headers (0)` 正确；仅空格或 Tab 的值按 HTTP 首尾空白规范化后视为空。CR/LF 一律拒绝，不用 trim 掩盖非法换行。每次新消息、命令、中断、工具确认、计划审核和问题回答读取最新已应用的有效值；修改不追溯影响已发请求或正在执行的凭据快照。
 
 ## 6. 按认证中心 IP 获取 Token
 
-此能力是 DEV-only 产品约束与凭据边界加固，Vite middleware、Node HTTPS 客户端和 Token 回填已实现，源码见[当前实现证据](source-evidence.md#current-implementation)。用户提供的 Postman 界面证明了以下调用形态；尚未对真实认证中心发起验证，不能把它当作完整上游契约：
+此能力是 DEV-only 产品约束与凭据边界加固，Vite middleware、Node HTTPS 客户端和 Token 回填已实现，源码见[当前实现证据](../source-evidence.md#current-implementation)。用户提供的 Postman 界面证明了以下调用形态；尚未对真实认证中心发起验证，不能把它当作完整上游契约：
 
 - `POST https://{ip}/service/AuthCenter/0.1.0/auth/login`，JSON 字段 `loginAccount`、`password`。
 - 成功响应 Cookies 中出现 `access-token` 与 `JSESSIONID`；截图中的 `access-token` 标记 HttpOnly、Secure。

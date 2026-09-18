@@ -389,54 +389,13 @@
     }
 
   </style>
+<link rel="stylesheet" href="fidelity.css?v=1.0.0">
 </head>
 <body>
-
-  <main class="company-design-review">
-    <div class="review-shell">
-      <header class="topbar">
-        <div class="row">
-          <img class="review-brand-mark" src="campusclaw-mark-o1.png" alt="">
-          <h1>CampusClaw Frontend UX</h1>
-          <span class="tag">1.13.0</span>
-          <span class="tag">主对话 · 确认 · 停止 · 恢复</span>
-        </div>
-        <code class="base">交互基线 599edb0 · 源码 510d882 · target-only</code>
-      </header>
-
-      <section class="section">
-        <h3>当前工作台</h3><p class="description"><a href="plan-workbench.html">打开计划模式与 Codex 风格工作台 →</a> · 模式选择、完整方案、审核修订、实施进度与恢复。<a href="plan-interaction.md">设计依据</a>。下方保留基础场景与历史视觉资料。</p><h3 style="margin-top:14px">评审方式</h3>
-        <p class="description">本页沿用 Runtime HTTP 评审面的卡片结构和稳定评审键。每个界面状态使用固定 <code>screenKey</code>，依次评审作用、用户动作、系统约束和视觉材料；精确设计理由与源码证据仍以 Markdown 为准。</p>
-      </section>
-
-      <section class="section">
-        <h3>设计权威顺序</h3>
-        <ol class="authority">
-          <li><a href="README.md">README.md</a>：源码证据、目标差异、设计理由、交互和 Token。</li>
-          <li>本 HTML：主要人类评审界面。</li>
-          <li><a href="diagram.puml">diagram.puml</a>：架构图唯一图源。</li>
-          <li><a href="low-fidelity.html">low-fidelity.html</a>：低保真布局源；PNG 为评审快照。</li>
-        </ol>
-      </section>
-
-      <section class="section" id="credential-boundary">
-        <div class="section-title"><h2>已确认：产品前端不持有 JWT/APPKEY</h2><code class="screen-key">credentialBoundary</code></div>
-        <p class="description">当前内部工作台已有 DEV-only Headers，但不具备生产公共 Chat 集成。产品不新增凭据表单或秘密存储；身份由宿主、mate-service 或网关边界建立。</p>
-        <div class="table-wrap" style="margin-top:12px">
-          <table>
-            <thead><tr><th>边界</th><th>设计结论</th></tr></thead>
-            <tbody>
-              <tr><td>当前内部调试链路</td><td>已有临时 Headers；只用于 Runtime 透传调试，不建立生产身份。</td></tr>
-              <tr><td>未来生产链路</td><td>统一登录、mate-service 或网关负责身份与授权；具体浏览器会话机制待公共 API 评审。</td></tr>
-              <tr><td>诊断例外</td><td>只在页面内存中接受用户填写的 Key/Value Header，分别快照到消息、命令、停止与确认 POST；刷新或关闭页签清除。</td></tr>
-              <tr><td><code>401/403</code></td><td>交给统一登录/权限流程，不弹出凭据框，也不自动重放副作用请求。</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
+<nav class="fixture-nav"><a href="index.html">场景目录</a> · <a href="?view=chat">基础对话</a> · <a href="?view=headers">开发者设置</a> · 本地示例数据</nav>
+<main class="company-design-review"><div class="review-shell">
       <section class="section" id="debug-headers">
-        <div class="section-title"><h2>评审中：Headers</h2><code class="screen-key">debugHeaders</code></div>
+        <div class="section-title"><h2>开发者设置 · Headers</h2><code class="screen-key">debugHeaders</code></div>
         <details class="headers-specimen" open aria-label="Headers 编辑器">
           <summary><span>Headers</span><span class="headers-count" id="debug-header-count">(0)</span></summary>
           <div class="headers-body">
@@ -491,106 +450,14 @@
       </section>
 
       <section class="section" id="workbench-alignment">
-        <h3>工作台对齐 · 原型操作</h3>
-        <p class="description">本页使用合成数据，不登录真实认证中心。填写 IP 并点击获取后，可用下方按钮模拟返回；刷新页面会清空 Header。账号密码配置在本地开发服务。会话索引恢复和真实后端联调以<a href="runtime-workbench-alignment.md">工作台设计</a>为准。</p>
+        <h3>认证助手 · 模拟结果</h3>
+        <p class="description">本页使用合成数据，不登录真实认证中心。填写 IP 并点击获取后，可用下方按钮模拟返回；刷新页面会清空 Header。账号密码配置在本地开发服务。会话索引恢复和真实后端联调以<a href="../技术设计/runtime-workbench-alignment.md">工作台设计</a>为准。</p>
         <div class="auth-row"><button id="debug-auth-complete" class="debug-header-add" type="button" disabled>模拟 Token 返回</button><button id="debug-auth-fail" class="debug-header-add" type="button" disabled>模拟登录失败</button></div>
       </section>
-      <section class="section" id="brand-direction">
-        <h3>已选品牌标识：O1</h3>
-        <div class="brand-decision">
-          <img src="campusclaw-mark-o1.png" alt="CampusClaw O1 品牌标识">
-          <p class="description">界面直接引用同一张透明 PNG，不通过生成模型重绘。五个有机色块的形状、比例、间距与颜色保持不变；<code>#D97757</code> 只承担品牌识别，暖中性表面负责与其协调。</p>
-        </div>
-      </section>
-
-      <article class="screen-card" id="first-use" data-screen-key="firstUse">
-        <header class="screen-head">
-          <span class="status-dot" aria-hidden="true"></span>
-          <strong>首次进入 / 选择 Agent</strong>
-          <span class="screen-name">首次进入</span>
-          <code class="screen-key">firstUse</code>
-          <span class="muted">待确认</span>
-        </header>
-        <div class="screen-grid">
-          <figure>
-            <p class="description">首次进入 → 选择 Agent → 创建 Chat → 编辑消息</p><p class="review-links"><a href="low-fidelity.html">打开当前低保真布局</a></p>
-            <figcaption>首次进入状态使用可编辑低保真板评审；Agent 目录和公共 Chat 创建仍是 mate-service 目标态。</figcaption>
-          </figure>
-          <div class="screen-detail">
-            <section class="section"><h3>作用</h3><p class="description">让用户先选择一个受管 Agent，再进入真实任务会话；用户身份由统一登录、mate-service 或网关建立，前端不接收 JWT/APPKEY。Runtime Session 创建、授权和默认模型初始化均在后台完成。</p></section>
-            <section class="section"><h3>主要评审点</h3><ul class="review-points"><li>是否以 Agent 能力而不是协议配置开始。</li><li>首次进入是否需要单独高保真稿。</li><li>Agent 卡片的名称、描述和权限提示是否足够。</li></ul></section>
-          </div>
-        </div>
-      </article>
-
-      <article class="screen-card" id="idle-conversation" data-screen-key="idleConversation">
-        <header class="screen-head">
-          <span class="status-dot success" aria-hidden="true"></span>
-          <strong>常规对话</strong>
-          <span class="screen-name">常规对话</span>
-          <code class="screen-key">idleConversation</code>
-          <span class="muted">待确认</span>
-        </header>
-        <div class="screen-grid">
-          <figure>
-            <a href="high-fidelity-conversation-v8.png"><img src="high-fidelity-conversation-v8.png" alt="CampusClaw O1 暖中性常规对话高保真稿"></a>
-            <figcaption>历史常规视觉基线：仅对照 O1、暖灰表面和正文排版；当前消息字段、状态及操作以下方交互样例为准。</figcaption>
-          </figure>
-          <div class="screen-detail">
-            <section class="section"><h3>作用</h3><p class="description">围绕 Agent、Chat、消息、附件和工具活动完成日常任务。协议身份、ETag 和原始 SSE 不进入产品主流程；JWT/APPKEY/<code>access-token</code> 不是产品隐藏高级字段，只存在于内部诊断例外。</p></section>
-            <section class="section"><h3>主要评审点</h3><ul class="review-points"><li>原始推理与工具是否在同一 Agent 活动区中易于连续阅读，又保持独立信任边界。</li><li>工具详情是否按输入在上、输出在下阅读，并且不显示内部 ID、绝对路径或凭据。</li><li>Assistant-only 安全 Markdown 与 User/Thinking/Tool 专用 viewer 边界是否清楚。</li><li>表格和代码块是否只在自身容器横向滚动，不撑破对话区。</li></ul></section>
-          </div>
-        </div>
-      </article>
-
-      <section class="section" id="assistant-rich-text">
-        <div class="section-title"><h2>Assistant 安全富文本评审面</h2><code class="screen-key">assistantRichText</code></div>
-        <p class="description muted">此处使用真实 HTML 语义展示目标排版，但实现必须由关闭 raw HTML 的 Markdown AST 通过固定 Vue 组件生成，禁止把模型输出直接写入 <code>v-html</code> 或 <code>innerHTML</code>。</p>
-        <div class="rich-text-specimen">
-          <h3>异常汇总</h3>
-          <p>已读取文件，发现以下 3 类异常：</p>
-          <div class="table-scroll" tabindex="0" aria-label="异常汇总表，可横向滚动">
-            <table>
-              <thead><tr><th>异常类型</th><th class="number">数量</th><th>处理建议</th></tr></thead>
-              <tbody>
-                <tr><td>价格异常</td><td class="number">24</td><td>复核定价</td></tr>
-                <tr><td>数量异常</td><td class="number">17</td><td>校验原始数据</td></tr>
-                <tr><td>重复下单</td><td class="number">9</td><td>合并并联系用户</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p style="margin-top:12px">建议优先检查 <code>order_id</code> 重复记录。</p>
-          <pre aria-label="SQL 代码示例"><code>SELECT order_id, COUNT(*)
-FROM t_order
-GROUP BY order_id
-HAVING COUNT(*) &gt; 1;</code></pre>
-        </div>
-      </section>
-
-      <section class="section" id="agent-activity">
-        <div class="section-title"><h2>Thinking 与 Tool Activity 评审面</h2><code class="screen-key">agentActivity</code></div>
-        <p class="description muted">参考 Codex 的活动披露：思考展示模型返回的原始推理文本，工具用紧凑动作行；当前执行项默认展开，完成项默认折叠。展开详情始终按“输入参数 → 输出结果”纵向排列，不做左右分栏。</p>
-        <div class="activity-specimen">
-          <details class="thinking-specimen">
-            <summary><span>分析过程 · 原始推理</span><span>›</span></summary>
-            <p>先确认订单结构，再检查价格、数量与重复订单。</p>
-          </details>
-          <details class="tool-specimen" open>
-            <summary><span class="tool-check" aria-hidden="true">✓</span><span><b>读取</b> 订单明细.xlsx</span><span class="tool-status">3,482 行</span><span aria-hidden="true">⌄</span></summary>
-            <div class="tool-input">
-              <strong>输入参数</strong>
-              <dl><dt>file</dt><dd>订单明细.xlsx</dd><dt>sheet</dt><dd>订单明细</dd></dl>
-              <span class="tool-output-label">输出结果</span>
-              <p class="tool-output-result">已读取 3,482 行。</p>
-            </div>
-          </details>
-        </div>
-      </section>
-
       <article class="screen-card" id="running-conversation" data-screen-key="runningConversation">
         <header class="screen-head">
           <strong>主对话交互</strong><span class="tag">1.11.0 · target-only</span>
-          <a href="public-chat-alignment.md">契约边界与验收</a>
+          <a href="../技术设计/public-chat-alignment.md">契约边界与验收</a>
         </header>
         <section class="section" id="conversation-workbench">
           <p class="description">沿用原来的浅暖灰导航、开放式正文和纵向工具详情。以下全部为本地模拟，不上传文件、不执行工具、不调用后端。公共目标关联和桥接未完成前不可据此开启生产接入。</p>
@@ -612,7 +479,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
           <p class="muted">上方按钮模拟服务端响应；下方按钮模拟用户操作。“收到回执”与“实际完成”是两个步骤。</p>
           <div class="chat-prototype" data-phase="running">
             <aside class="chat-rail" aria-label="示例会话导航">
-              <div class="row"><img class="review-brand-mark" src="campusclaw-mark-o1.png" alt=""><strong>CampusClaw</strong></div>
+              <div class="row"><img class="review-brand-mark" src="../资源/campusclaw-mark-o1.png" alt=""><strong>CampusClaw</strong></div>
               <p class="muted">置顶 · 示例</p>
               <div class="chat-thread-group" id="chat-pinned-threads">
                 <div class="chat-thread-row chat-current" id="chat-thread-alarm" data-chat-thread data-session-id="alarm" data-last-activity="3" data-pinned="true">
@@ -689,35 +556,7 @@ HAVING COUNT(*) &gt; 1;</code></pre>
           <noscript><p>脚本未启用：可阅读默认执行中布局。确认先提交决定、停止先等待回执，实际终态到达前不开放普通发送；详细状态见设计说明。</p></noscript>
         </section>
       </article>
-
-      <section class="section">
-        <div class="section-title"><h2>O1 warm-neutral light theme</h2><span class="primary-action">深暖黑主动作</span></div>
-        <p class="description muted">保留工具工作台的克制层级，将冷灰表面调整为暖白与暖灰；O1 珊瑚色只用于品牌标识，不承担状态语义。</p>
-        <div class="swatches" style="margin-top:12px">
-          <div class="swatch"><div class="swatch-color" style="background:#fffcfa"></div><div class="swatch-label"><code>#FFFCFA</code><br>main surface</div></div>
-          <div class="swatch"><div class="swatch-color" style="background:#f8f3f0"></div><div class="swatch-label"><code>#F8F3F0</code><br>shell/sidebar</div></div>
-          <div class="swatch"><div class="swatch-color" style="background:#efe4de"></div><div class="swatch-label"><code>#EFE4DE</code><br>selected</div></div>
-          <div class="swatch"><div class="swatch-color" style="background:#2b2522"></div><div class="swatch-label"><code>#2B2522</code><br>primary action</div></div>
-          <div class="swatch"><div class="swatch-color" style="background:#d97757"></div><div class="swatch-label"><code>#D97757</code><br>brand mark</div></div>
-          <div class="swatch"><div class="swatch-color" style="background:#00a240"></div><div class="swatch-label"><code>#00A240</code><br>running</div></div>
-          <div class="swatch"><div class="swatch-color" style="background:#a9472b"></div><div class="swatch-label"><code>#A9472B</code><br>focus/link</div></div>
-        </div>
-      </section>
-
-      <section class="section">
-        <h2>本轮确认项</h2>
-        <details class="review-question" open><summary>1. 本轮交互覆盖</summary><p>保留首次进入、常规、运行三键，新增工具确认、停止处理中、不确定提交、历史恢复与配置冲突；沿用原视觉风格。</p></details>
-        <details class="review-question" open><summary>2. 已确认：O1 品牌标识；暖中性配色进入评审</summary><p>O1 使用原始透明 PNG，不生成式重绘，也不缩进深色品牌方块；暖白、暖灰与深暖黑构成工作台，珊瑚色仅用于品牌标识，绿色继续表达运行与完成。</p></details>
-        <details class="review-question" open><summary>3. 运行中只保留草稿和停止</summary><p>不提供队列或运行中注入；停止回执不等于已停止，实际终态到达后才允许新消息。等待确认不能视为空闲。</p></details>
-        <details class="review-question" open><summary>4. 已确认：产品前端不持有 JWT/APPKEY</summary><p>生产身份与授权仍由统一登录、mate-service 或网关承担；产品 Chat 不出现凭据表单、秘密构建配置或浏览器持久化。</p></details>
-        <details class="review-question" open><summary>5. 已确认：<code>Headers</code> 行编辑</summary><p>默认预置 access-token、X-HW-ID、Authorization，Value 留空，三行均可编辑、启停和删除。点击“增加请求头”追加一行空 Key/Value；填写、删除和清空均不自动补行。面板内去掉常驻文字说明，请求范围与内存生命周期由设计文档维护。</p></details>
-        <details class="review-question" open><summary>6. 是否确认 Assistant-only 安全富文本边界？</summary><p>Assistant 正文支持受限 Markdown；User、Thinking 和 Tool 原始结果保持纯文本/专用 viewer。raw HTML、远程 Markdown 图片、相对路由和危险协议永不激活。</p></details>
-        <details class="review-question" open><summary>7. 已确认：原始推理与活动 disclosure</summary><p>Thinking 展示模型返回的原始推理；标题使用前端状态文案；工具以紧凑动作行出现，当前项展开、完成项折叠，详情按“输入参数 → 输出结果”纵向排列。内部 ID、绝对路径和凭据不作为产品公共字段。</p></details>
-        <details class="review-question" open><summary>8. 已确认：会话选择、置顶与重命名分离</summary><p>点选会话只改变 active 视图，不自动移到最近顶部；置顶/取消置顶由用户显式操作。重命名使用统一 Session POST 的 displayName 字段，与 <code>/name</code> 共用业务规则，成功后原位更新而不重排。</p></details>
-        <div class="review-links"><a href="README.md">查看完整设计依据</a><span class="muted">·</span><a href="ADR-0016-campusclaw-product-frontend-boundary.html">查看 ADR</a><span class="muted">·</span><a href="public-chat-alignment.md">查看公共对话对齐</a></div>
-      </section>
-    </div>
-  </main>
+</div></main>
   <script>
     (() => {
       const rows = document.getElementById("debug-header-rows");
@@ -1165,5 +1004,6 @@ HAVING COUNT(*) &gt; 1;</code></pre>
       render();
     })();
   </script>
+<script src="preview.js?v=1.0.0"></script>
 </body>
 </html>

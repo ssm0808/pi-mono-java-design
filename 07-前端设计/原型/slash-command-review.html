@@ -445,12 +445,13 @@
     .running-banner { border: 0; padding: 3px 0; color: var(--text-secondary); background: transparent; }
     @media(max-width:920px) { .review-shell { grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); } .review-main { padding: 14px; } }
   </style>
+<link rel="stylesheet" href="fidelity.css?v=1.0.0">
 </head>
 <body>
   <div class="review-shell">
     <aside class="review-sidebar" aria-label="评审状态">
       <div class="review-brand">
-        <img src="../../../01-总体架构/04-CampusClaw前端体验/campusclaw-mark-o1.png" alt="">
+        <img src="../资源/campusclaw-mark-o1.png" alt="">
         <div><strong>CampusClaw</strong><span>Slash Command · UX review</span></div>
       </div>
       <p class="review-label">界面状态</p>
@@ -477,7 +478,7 @@
       <section class="app-window" aria-labelledby="state-title">
         <header class="app-topbar">
           <div class="agent-id">
-            <img class="agent-avatar" src="../../../01-总体架构/04-CampusClaw前端体验/campusclaw-mark-o1.png" alt="">
+            <img class="agent-avatar" src="../资源/campusclaw-mark-o1.png" alt="">
             <div><strong>园区运维助手</strong><small><i class="status-dot"></i><span id="agent-status">在线 · 空闲</span></small></div>
           </div>
           <div class="top-actions" aria-label="会话操作">
@@ -492,7 +493,7 @@
               <div class="date-divider">今天 15:42</div>
               <article class="message user"><div class="user-bubble">帮我梳理一下园区明天的巡检重点。</div></article>
               <article class="message">
-                <img class="message-avatar" src="../../../01-总体架构/04-CampusClaw前端体验/campusclaw-mark-o1.png" alt="">
+                <img class="message-avatar" src="../资源/campusclaw-mark-o1.png" alt="">
                 <div class="message-body">
                   <div class="message-meta">园区运维助手 · 15:42</div>
                   <p class="message-copy">建议优先检查消防通道、配电房告警和室外施工区域。我可以继续把这些内容整理成按楼栋执行的检查清单。</p>
@@ -555,7 +556,7 @@
           </div>
         </div>
       </section>
-      <p class="prototype-caption"><button id="simulate-stop-terminal" type="button" hidden>模拟本轮终止</button> Builtin 结果仅当前页面；Skill 内部 SSE 已确认，公共执行仍待对齐。失败保留草稿，无自动重放。<a href="../../../01-总体架构/04-CampusClaw前端体验/plan-workbench.html?scene=question">查看计划、问答与命令联合交互</a></p>
+      <p class="prototype-caption"><button id="simulate-stop-terminal" type="button" hidden>模拟本轮终止</button> Builtin 结果仅当前页面；Skill 内部 SSE 已确认，公共执行仍待对齐。失败保留草稿，无自动重放。<a href="plan-workbench.html?scene=question">查看计划、问答与命令联合交互</a></p>
     </main>
   </div>
 
@@ -865,5 +866,6 @@
     window.addEventListener("hashchange", loadState);
 
   </script>
+<script src="preview.js?v=1.0.0"></script>
 </body>
 </html>

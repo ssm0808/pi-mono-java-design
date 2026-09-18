@@ -1,14 +1,14 @@
 # 计划模式与 Codex 交互对齐
 
-[前端主设计](README.md) · [可操作工作台](plan-workbench.html) · [计划模式主设计](../06-CampusClaw计划模式/README.md)
+[前端主设计](../README.md) · [可操作工作台](../原型/plan-workbench.html) · [计划模式主设计](../../01-总体架构/06-CampusClaw计划模式/README.md)
 
-版本：1.4.0；日期：2026-09-16。性质：内部 Runtime 已有计划、审核、问答与任务投影；Build/Plan 命名、逐题卡片及工具日志合并是 target-only 新交互，见[体验证据](source-evidence.md#experience-evidence)。Mate 公共接入仍为目标设计，原型不代表部署验证。
+版本：1.4.0；日期：2026-09-16。性质：内部 Runtime 已有计划、审核、问答与任务投影；Build/Plan 命名、逐题卡片及工具日志合并是 target-only 新交互，见[体验证据](../source-evidence.md#experience-evidence)。Mate 公共接入仍为目标设计，原型不代表部署验证。
 
 本页维护 M07 的模式入口、方案阅读、审核和进度展示。模式、审核事务与恢复权威归 M01 的计划模式专题；精确字段归 Runtime 共享契约和审核增量，企业接入归 Mate 公共契约。本页不增加 HTTP API、Slash Command 或后端状态。
 
 ## 1. 源码与交互依据
 
-当前设计起点为 `pi-mono-java-design@e179513`，本次源码核验为 `pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，沿用计划模式与 AskUserQuestion 的已确认契约。内部前端实现起点为 `pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead`，前次交互验证提交为 `fcae53829c2884ea1d3cc522c183f5a125a67f45`；完整提交、增量实现和验证范围统一见[当前实现证据](source-evidence.md#current-implementation)。此前 `699f929f` 和未提交问答工作树的记录保留在[历史证据](source-evidence.md#question-slash-evidence)，不用于判断当前是否已有问答能力。
+当前设计起点为 `pi-mono-java-design@e179513`，本次源码核验为 `pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，沿用计划模式与 AskUserQuestion 的已确认契约。内部前端实现起点为 `pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead`，前次交互验证提交为 `fcae53829c2884ea1d3cc522c183f5a125a67f45`；完整提交、增量实现和验证范围统一见[当前实现证据](../source-evidence.md#current-implementation)。此前 `699f929f` 和未提交问答工作树的记录保留在[历史证据](../source-evidence.md#question-slash-evidence)，不用于判断当前是否已有问答能力。
 
 | 证据 | 已观察事实与适用边界 |
 |---|---|
@@ -27,7 +27,7 @@
 
 [官方 Slash commands](https://learn.chatgpt.com/docs/reference/slash-commands) 于 2026-09-15 核对：Composer 输入 `/` 后选择或继续过滤，集合随环境变化。CampusClaw 保留服务端 Descriptor、规范名称和前缀过滤，不复制 Codex 的 `/plan`、`/approve` 或 `$` 技能入口。[官方 App Server](https://learn.chatgpt.com/docs/app-server) 的提问仍为 experimental；`serverRequest/resolved` 也可能来自中断/清理，不能据此显示“已回答”。
 
-其余 Codex 暖灰、轻边界、活动折叠取样仍沿用[历史安装包证据](source-evidence.md)，本次不声称重新测量桌面 CSS。没有修改 Runtime Loop，不新增 pi 行为结论；pi 语义证据继续由计划模式主设计维护。
+其余 Codex 暖灰、轻边界、活动折叠取样仍沿用[历史安装包证据](../source-evidence.md)，本次不声称重新测量桌面 CSS。没有修改 Runtime Loop，不新增 pi 行为结论；pi 语义证据继续由计划模式主设计维护。
 
 ## 2. 对齐范围与设计理由
 
@@ -38,7 +38,7 @@
 | 方案阅读 | 对话内一张轻边界方案卡，默认展开完整正文，紧邻审核动作；原始 O1 不变 | 产品约束：阅读与决定同处，不用全屏审核向导；长文依靠页面滚动，正文不困在矮小滚动框。 |
 | 批准执行 | “执行计划”提交当前方案的审核决定，原执行续跑；“修改计划”展开独立反馈区 | 架构变更：沿用 CampusClaw 审核事务，与 Codex TUI 的新用户消息方式不同；需要可靠的目标身份与回执。 |
 | 上下文选择 | 首版无“清空上下文并执行”选项 | 产品约束：当前设计保留原执行、凭据和模型上下文；不引入第二条启动路径。 |
-| 澄清问题 | AskUserQuestion 的显式 agent.question 显示问题卡；回答走 user.question_answer，在原根继续 | 架构变更：问题与答案精确关联，前端无需解析工具参数；完整设计见 [提问专题](../06-CampusClaw计划模式/ask-user-question.md)。未装配工具时才普通消息降级。 |
+| 澄清问题 | AskUserQuestion 的显式 agent.question 显示问题卡；回答走 user.question_answer，在原根继续 | 架构变更：问题与答案精确关联，前端无需解析工具参数；完整设计见 [提问专题](../../01-总体架构/06-CampusClaw计划模式/ask-user-question.md)。未装配工具时才普通消息降级。 |
 | 实施清单 | build 才显示后端显式任务快照，位置在 Composer 上方；轻量行展示进行中项和完成数量，展开查看全表 | 架构变更：展示脱离工具日志；产品约束：不从计划 Markdown 生成进度、不手工勾选、不将进度全完成等同执行终态。 |
 | 执行透明度 | Thinking 与工具沿原时序排列；当前项展开、完成项折叠，工具输入在上、输出在下 | 产品约束：借鉴 Codex disclosure；保留 CampusClaw 原始推理展示，不生成推理摘要冒充原文。 |
 | 运行中输入 | 可写草稿，停止位于原发送位置；审核等待仍 running | 产品约束：不开放队列、Steer 或随意运行中模式切换；牺牲部分交互灵活性以保持既定准入。 |
@@ -80,7 +80,7 @@
 
 ## 5. 实施进度与恢复
 
-进度权威、整表替换与排序规则唯一维护在 [TodoUpdate §4](../06-CampusClaw计划模式/todo-update.md#4-客户端投影与恢复)。前端追加以下展示约束：
+进度权威、整表替换与排序规则唯一维护在 [TodoUpdate §4](../../01-总体架构/06-CampusClaw计划模式/todo-update.md#4-客户端投影与恢复)。前端追加以下展示约束：
 
 - 只读任务清单显示“已完成 1 / 3 · 正在验证结果”，展开项用 pending/in_progress/completed 对应图标与中文状态；无任务百分比、ETA 或可勾选控件。
 - 活动期间默认展开清单，用户主动折叠后不随新事件反复展开；终态收起为摘要，仍可查看原任务。长清单最多占视口约 30%，内部纵向滚动；方案全文仍用页面滚动。
@@ -89,7 +89,7 @@
 - 恢复期间以已合并的事件顺序重算最新快照，迟到旧页不能覆盖 live 尾部；重复帧不增计数，createdAt 回退不重排。不完整历史只允许只读展示，不恢复审核权限。
 - 断网和审核回执丢失保留“结果待核对”，只重读；批准、revise、消息和停止均不自动重放。内部恢复是 GET 历史/Session，公共恢复是公共读流及历史，不混用两种连接模型。
 
-结构化问答的权威规则由 [AskUserQuestion §7](../06-CampusClaw计划模式/ask-user-question.md#7-前端交互与企业服务边界) 维护。以下限定其产品呈现，不另定义字段或后端状态。
+结构化问答的权威规则由 [AskUserQuestion §7](../../01-总体架构/06-CampusClaw计划模式/ask-user-question.md#7-前端交互与企业服务边界) 维护。以下限定其产品呈现，不另定义字段或后端状态。
 
 ### 5.1 问题卡与回答
 
@@ -113,11 +113,11 @@
 
 全部草稿与当前题索引按 Chat + question eventId 隔离，仅当前页面内存保存；刷新只恢复权威问题和答案，不假称已恢复未提交草稿。切换会话后先核对等待身份，过期草稿只读，权限撤销清理；普通消息、命令、修订草稿互不覆盖。
 
-**设计理由。** 逐题降低同屏阅读量，整批提交保留已实现的原执行等待和答案原子性；代价是额外的当前题索引、前后导航、错误跳题和摘要投影。Codex 固定源码的 TUI 也区分 `current_question`、`go_next_or_submit` 与 `submit_answers`，具体路径见[计划证据](../06-CampusClaw计划模式/source-evidence.md)；它不证明 Codex 桌面的精确布局。CampusClaw 全部作答、无跳过、答案不批准方案是自身产品约束。
+**设计理由。** 逐题降低同屏阅读量，整批提交保留已实现的原执行等待和答案原子性；代价是额外的当前题索引、前后导航、错误跳题和摘要投影。Codex 固定源码的 TUI 也区分 `current_question`、`go_next_or_submit` 与 `submit_answers`，具体路径见[计划证据](../../01-总体架构/06-CampusClaw计划模式/source-evidence.md)；它不证明 Codex 桌面的精确布局。CampusClaw 全部作答、无跳过、答案不批准方案是自身产品约束。
 
 ### 5.2 与 Slash 的协同
 
-等待问题、方案审核和工具授权仍是 running；清单按[Slash 专项 §3.1](../../04-命令与技能/00-Slash-Command通用模块/前端设计/README.md#slash-pending-interaction)显示当前可用命令。输入区 Slash 不替换题目或充当回答；命令结果不进入问题卡。模式、清单和待交互由同一会话协调器消费，命令返回一个 Session 不能清除待回答状态。
+等待问题、方案审核和工具授权仍是 running；清单按[Slash 专项 §3.1](命令/README.md#slash-pending-interaction)显示当前可用命令。输入区 Slash 不替换题目或充当回答；命令结果不进入问题卡。模式、清单和待交互由同一会话协调器消费，命令返回一个 Session 不能清除待回答状态。
 
 
 ## 6. 组件与接入切片
@@ -139,13 +139,13 @@ Store 生命周期按 Chat 隔离，审核草稿与问题草稿再按各自 even
 
 ## 7. 视觉、原型与交付边界
 
-[plan-workbench.html](plan-workbench.html) 是本专题当前交互原型；[旧综合评审页](frontend-review.html)继续保留 Headers、基础对话与历史视觉样例。原型上方的场景/回执/事件按钮属于演示控制，不进入产品工作区。没有真实工具执行、网络请求或后端认证；问题与 Slash 的合成场景共用本页，命令详细边界还可在 Slash 专项原型检查。修订场景的模拟服务端固定返回“22:00 后实施”的示例，不分析反馈文本；模型与思考沿用主设计，原型只演示模式更新。
+[plan-workbench.html](../原型/plan-workbench.html) 是本专题当前交互原型；[旧综合评审页](../原型/frontend-review.html)继续保留 Headers、基础对话与历史视觉样例。原型上方的场景/回执/事件按钮属于演示控制，不进入产品工作区。没有真实工具执行、网络请求或后端认证；问题与 Slash 的合成场景共用本页，命令详细边界还可在 Slash 专项原型检查。修订场景的模拟服务端固定返回“22:00 后实施”的示例，不分析反馈文本；模型与思考沿用主设计，原型只演示模式更新。
 
 桌面侧栏 232 px、顶部 64 px、正文与 Composer 最大 840 px；14 px 正文，方案行高 1.8，弱边界与小面积深色主动作；O1 继续引用原 PNG。已完成活动收为一行，避免每个事件形成一张大卡。窄屏侧栏抽屉化；模型/思考收进设置入口，模式文字和审核动作保留；390 px 下方案、按钮和工具条自然换行，只有表格/代码自身横向滚动。
 
 1440/1024/768/390 px 检查常规、审核、修订、实施和恢复；键盘检查模式菜单、反馈取消、折叠与焦点恢复。主交互目标区至少 44 px，aria-live 只播报状态变化，reduced-motion 下取消旋转。对比度沿用主设计已核对色值。
 
-验收必须分别记录：设计原型状态测试、真实浏览器布局、PlantUML 生成与视觉、实现集成。原型通过不能证明 Java 计划实现或 Mate 公共桥接通过。Claw 当前实现及验证范围见[当前实现证据](source-evidence.md#current-implementation)；Draft PR 中的代码不等于已合入或部署。
+验收必须分别记录：设计原型状态测试、真实浏览器布局、PlantUML 生成与视觉、实现集成。原型通过不能证明 Java 计划实现或 Mate 公共桥接通过。Claw 当前实现及验证范围见[当前实现证据](../source-evidence.md#current-implementation)；Draft PR 中的代码不等于已合入或部署。
 
 ## 8. 版本历史
 
