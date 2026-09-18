@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.5.0 |
+| 文档版本 | 2.6.0 |
 | 状态 | 目标设计；Mate 工具 Schema 不变，凭据可见边界收紧 |
 | 更新日期 | 2026-09-18 |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
@@ -366,8 +366,9 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 ## 7. 禁用和删除项
 
-`Bash`、`Edit`、`Write` 不属于公共枚举、配置、工厂或模型契约；其底层源码可暂时保留，
-但任何入口都不得装配。`Loop`、`activate_skill`、`EditDiff`、`spawn_agent`、
+`Bash`、`Edit`、`Write` 不属于公共枚举、配置、工厂或模型契约，其工具源码和专属支撑完全删除，
+不保留未装配实现、别名或隐藏开关；删除边界和验收由[主设计 §12.4](README.md#124-删除禁用与替换)维护。
+11 项活动契约与 Runtime/Cron/Child profile 不变。`Loop`、`activate_skill`、`EditDiff`、`spawn_agent`、
 `invoke_agent`、动态 `ToolCatalog` 和 Extension 工具入口属于迁移删除项。本节仅记录迁移
 边界，不为这些名称保留 Schema、别名或兼容执行器。
 
@@ -379,6 +380,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.0 | 2026-09-18 | 明确删除 Bash/Edit/Write 本体及专属支撑，不再保留未装配代码。 |
 | 2.5.0 | 2026-09-18 | 登记三个已实现交互工具及十一项 Runtime 默认清单。 |
 | 2.4.0 | 2026-09-15 | 登记 AskUserQuestion 工具契约与 Runtime 默认装配边界。 |
 | 2.3.3 | 2026-09-14 | 工具实现证据统一引用主设计，保留八项精确输入输出契约。 |

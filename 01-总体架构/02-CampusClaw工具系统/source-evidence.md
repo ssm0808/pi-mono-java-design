@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.2.0；整理日期：2026-09-18。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `6026ba48`。旧提交差距不代表最新实现状态。活动工具的当前主线状态见 §4。
+版本：1.3.0；整理日期：2026-09-18。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `6026ba48`。旧提交差距不代表最新实现状态。活动工具的当前主线状态见 §4，三项退役工具的源码删除边界见 §5。
 
 | 基线 | 提交 |
 |---|---|
@@ -107,3 +107,24 @@ CampusClaw 选择在 Host 外部事件中固定展示名，是产品可读性约
 | 资源 `modules/coding-agent-cli/src/main/resources/application.yml` · campusclaw.tools | 实际默认配置包含上述 11 项，与枚举/工厂一致。 |
 
 模式资源、逐题前端、历史证据与剩余边界集中见[计划源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)。本次是源码静态核验与设计校验，未重跑 Java、数据库、浏览器或真实模型测试；旧测试数量仍只归属于原提交。Mate 公共桥接待实现，不能据此将三个 Runtime 工具标为待实现。
+
+## 5. Bash/Edit/Write 源码删除边界（2026-09-18）
+
+设计修订基线为 `b5ed15ba5582d500a7095c93f16061cfe4863ab0`。当日重新确认 Java 与 pi 上游默认分支均为 main 并 fetch，显式读取下列提交，不改动原工作树。Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 §4 相同；pi 工具组合证据从历史 `5cd93f688aaab89dbb6dfa4aca535f21796ae185` 专项更新到 `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`，仅升级本节工具组合结论。该 pi 快照的 package version 为 0.85.1，默认分支 HEAD 不等于稳定发布保证；其他基线证据不升级。
+
+Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`，对应生成镜像位于 `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/`。
+
+| 路径 / 关键符号 | 已观察事实 | 删除或保留依据 |
+|---|---|---|
+| R `tool/builtin/BuiltInToolName.java` · fromExternalName；`BuiltInToolProperties.java`；`DefaultBuiltInToolFactory.java` · create | 已有 11 项闭合活动工具，无 Bash/Edit/Write 枚举和工厂分支 | 删除源码不改变活动工具集合和三入口配置语义；非法名称继续拒绝 |
+| R `tool/bash/BashTool.java` · execute；`BashExecutor.java`；`ShellResolver.java`；R `tool/ops/{BashOperations,LocalBashOperations}.java` | 旧 Bash 类及命令执行支撑仍存在，BashTool.name 返回小写 bash | 目标完全删除，不保留独立执行器或备用 shell 工具入口 |
+| R `tool/edit/EditTool.java` · execute、performEdit、performMultiEdit；`{DiffUtils,FuzzyMatch,EditToolDetails}.java`；R `tool/write/WriteTool.java` · execute | 旧 edit/write 实现仍可完成替换/覆盖；使用 EditOperations/WriteOperations 和 FileMutationQueue | 删除这三项模型能力及只为它们服务的实现、结果类型和专属测试 |
+| R `tool/ops/{EditOperations,LocalEditOperations,WriteOperations,LocalWriteOperations}.java`；R `util/FileMutationQueue.java` | 主源码引用集中于旧 Edit/Write；EditOperations 继承 ReadOperations/WriteOperations | 删除专属写接口和队列，但 ReadOperations 不随继承方删除 |
+| R `util/PathUtils.java` · resolveToCwd、resolveReadPath | 主源码仅 EditTool/WriteTool 调用 resolveToCwd，resolveReadPath 无主源码消费者；其余引用为专属测试 | 随无消费者辅助代码删除，不影响活动工具使用的 WorkspacePathResolver |
+| R `tool/read/{ReadTool,ReadToolDetails}.java`；R `tool/ls/LsTool.java` | 仍使用 TruncationUtils | 保留共享截断及测试，不按旧工具依赖树一并删除 |
+| `modules/coding-agent-cli/pom.xml` | 旧工具依赖 JDK 和现有 Jackson、SLF4J 等共享组件，无三工具专属直接 Maven 声明 | 不新增依赖；删除前复核其他消费者，本节未声称完整传递依赖图已验证 |
+| pi `packages/coding-agent/src/core/tools/index.ts` · createCodingTools、createReadOnlyTools、createTool、ToolName | coding 组合为 read/bash/edit/write；只读组合为 read/grep/find/ls；bash/edit/write 仍有工厂与类型导出 | CampusClaw 删除为产品约束及安全加固，不是上游已废弃或 pi 无此能力 |
+
+当前目标：按主设计 §12.4 完全删除三项工具及专属代码，保留有效公共消费者、受管目录发布和部署脚本。删除前的主线仍有这些类，因此“已不装配”不等于“源码已删除”；实现状态与分支验证结果单独登记，不把未合入开发分支表述为主线完成。
+
+实现状态：源码删除待实现；活动 profile 排除三项工具已实现。验证要求见主设计 §13.1.1。

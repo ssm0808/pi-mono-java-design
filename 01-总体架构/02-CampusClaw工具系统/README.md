@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.9.0 |
+| 文档版本 | 2.10.0 |
 | 状态 | 目标设计；Mate 发现无凭据、仅 execute 透传 POST Events 执行快照待实现 |
 | 更新日期 | 2026-09-18 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
@@ -37,8 +37,9 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 
 所有本地文件工具只能访问当前受管 Agent 的整个 `agent/{agentId}` 目录，包括其中的
 `.campusclaw` 子树；它们不能通过相对路径、绝对路径、符号链接或真实路径访问其他 Agent。
-`Bash`、`Edit`、`Write` 的旧实现可以保留为未装配代码，但不属于公共工具枚举、配置、
-工厂或模型能力。`Loop` 完全删除。
+`Bash`、`Edit`、`Write` 从产品源码与生成镜像中彻底删除，不保留未装配实现、兼容别名、
+隐藏开关或可单独调用的执行器；删除边界与验收见[§12.4](#124-删除禁用与替换)。
+11 项活动工具及三入口 profile 保持不变，`Agent` 子代理能力不因删除而调整。`Loop` 完全删除。
 
 ![工具系统目标架构](tool_system_architecture.svg)
 
@@ -86,6 +87,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 分类 | 目标差异 | 设计原因 |
 |---|---|---|
 | 产品约束 | 只暴露 11 个活动 PascalCase 工具 | 冻结可测试的 TOB 能力面，禁用本地写入和命令执行 |
+| 产品约束、安全加固 | 删除 Bash/Edit/Write 及无其他消费者的专属代码 | 本产品不提供通用本机命令和文件写入工具，缩小重新接入面并停止维护无产品用途的实现；不宣称整个 Runtime 无副作用 |
 | 产品约束 | 删除 CLI/TUI 产品入口、Loop、旧名和兼容 payload | 产品没有交互终端生命周期，不承担首版兼容 |
 | 架构改造 | 三入口共用轻量 Session 与工厂 | 防止模型、hook、工具、错误和取消语义漂移 |
 | 架构改造 | 压缩与 Read 文件追踪迁入公共 Session | 入口删除不能让 Runtime、Cron、Child 丢失上下文治理 |
@@ -584,7 +586,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 删除或停止使用 | 目标处理 |
 |---|---|
-| `Bash`、`Edit`、`Write` AgentTool 装配 | 旧相关代码可保留，但不进入公共枚举、配置或工厂 |
+| `Bash`、`Edit`、`Write` 工具及专属实现 | 完全删除源码、专属测试、无消费者配置/资源及生成镜像；拒绝配置，不保留执行器或兼容入口 |
 | `LoopTool`、`LoopManager` 和所有 Loop Host 接线 | 完全删除 |
 | `ToolCatalog`、`DefaultToolCatalog`、`ToolSelection` | 启动期严格 profile 和关闭工厂 |
 | Java Extension 工具、manifest tools/commands、PackageManager | 完全删除；Skill 只扫描受管目录 |
@@ -599,8 +601,23 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 | HTTP 硬编码 Read | `runtime` profile |
 | Cron model/system_prompt/tools payload | 触发时按当前受管 Agent 解析 |
 
-实现只修改 `modules/*` 主源码；`mate-campusclaw/` 通过
-`scripts/sync-mate-campusclaw.sh` 生成，不双份手工维护。
+实现只修改 `modules/*` 主源码；`campusclaw/` 通过
+`scripts/sync-campusclaw.sh` 生成，不双份手工维护。
+
+删除范围包括 `tool/bash`、`tool/edit`、`tool/write`，专属 `BashOperations`、`EditOperations`、
+`WriteOperations` 及对应 Local 实现，以及仅供这两项写工具使用的 `FileMutationQueue`。
+`BashExecutor`、`ShellResolver`、`DiffUtils`、`FuzzyMatch` 和相应结果类型随所属工具删除；
+实现时复核引用，若发现新的有效消费者，应分离其最小职责，不能仅为保留旧工具而留下整套实现。
+
+保留仍被活动能力使用的 `ReadOperations`、`TruncationUtils`、工作区边界与压缩逻辑；通用路径工具
+按实际消费者逐项处理。受管目录发布、日志、数据库、安装脚本和受控搜索进程的正常写入/执行
+不是模型工具，不因名称或 API 中出现 write/bash/ProcessBuilder 而删除。历史事件继续可读，
+但恢复不能重新装配退役工具；未知工具调用仍沿用既有错误处理。
+
+不新增 Maven 依赖。删除依赖前核对全部模块与公司镜像的其他消费者；JDK、Jackson、SLF4J 等
+共享依赖不能随旧工具删除。精确源码、依赖核对和实现状态见[证据 §5](source-evidence.md#5-basheditwrite-源码删除边界2026-09-18)。
+此项为产品能力收敛及安全加固：代价是放弃这三项本地能力及其 Java 实现复用；保留未装配代码
+不满足目标，也不以删除它们替代 Mate/Cron 等活动工具自身的权限控制。
 
 ## 13. 实现验收
 
@@ -613,6 +630,15 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 - Schema 在 before hook 前校验，hook 顺序固定；
 - `P,P,S,P,P` 形成两个并行段和一个 barrier，结果保持原始顺序；
 - Schema、hook、工具异常成为文本结果和 `isError=true`。
+
+### 13.1.1 退役工具删除验收
+
+- 主源码及公司镜像不存在三项工具类、专属 operations/executor 和无消费者的写入队列；干净构建产物不得残留旧 class；
+- 三入口拒绝 `Bash/Edit/Write` 及对应小写旧名；11 项活动枚举、工厂及 Runtime/Cron/Child 缺省集合不变；
+- 移除旧功能专属测试，补充退役类/包不存在与配置拒绝回归，不能用减少测试数量代替能力删除证明；
+- Read/Find/Grep/Ls、共享截断、目录 prepare/refresh、压缩及 Agent 子代理的相关回归通过；
+- 当前产品文档不再允许保留源码或指导调用；历史源码证据、拒绝配置负例与历史事件中的名称允许保留；
+- 生成镜像与主源码一致；格式、Checkstyle、相关测试及构建分别记录，公司父 POM 不可用时明确公司编译未验证。
 
 ### 13.2 目录与本地工具
 
@@ -656,7 +682,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 6. 统一目录 prepare/refresh、Skill/Child 索引和模型解析；
 7. 先统一 CampusMate 配置树和 endpoint 目录、去重 Skill path，再实现 Mate 发现、Session 缓存和 miss 自动刷新；
 8. 迁移 Child Execution 与 Cron 工具；
-9. 删除动态目录、Extension、Loop、旧 delegation 和兼容入口；
+9. 删除 Bash/Edit/Write 及专属死代码、动态目录、Extension、Loop、旧 delegation 和兼容入口；
 10. 同步生成镜像并完成全量回归。
 
 本页描述推荐目标结构；已实现部分及差距须按[源码证据](source-evidence.md)中的提交逐项判断。实现 PR 应列出实际落地范围，不能把旧差距直接延伸为最新状态。
@@ -665,6 +691,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.10.0 | 2026-09-18 | 明确彻底删除 Bash/Edit/Write 源码和专属支撑，保留活动消费者并补充删除验收。 |
 | 2.9.0 | 2026-09-18 | 同步主线三项交互工具实现、十一项活动清单及待实现用语。 |
 | 2.8.0 | 2026-09-17 | 统一框架 label 与 Mate 元数据到 displayName 的映射，并固定调用解析快照。 |
 | 2.7.0 | 2026-09-15 | 工具装配增加 AskUserQuestion 目标入口并保持元数据稳定。 |
