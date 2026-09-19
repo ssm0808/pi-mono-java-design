@@ -1,6 +1,6 @@
 # 计划模式接口增量
 
-版本：1.10.0；日期：2026-09-18；状态：**三个交互工具及内部计划/任务/问题事件已在主线实现，当前源码见[§12](source-evidence.md#12-主线实现状态核验2026-09-18)；Mate 公共桥接待实现，部署与模型验收分别记录**。
+版本：1.11.0；日期：2026-09-19；状态：**既有交互工具与事件已实现；正文流式绑定及 sourceMessageEventId 增量待实现，当前范围见[§13](source-evidence.md#plan-streaming-evidence)；Mate 公共桥接待实现，部署与模型验收分别记录**。
 
 本文件维护计划接口的集成边界与理由。精确请求、完整事件、条件字段、错误码及示例由 [共享事件契约](../01-CampusClaw多Agent运行时/事件契约/common.json)、[POST 操作](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 与 [GET 操作](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[统一接口页](../01-CampusClaw多Agent运行时/chat-api-review.html)。登记不代表 Java 或 Mate 已实现。
 
@@ -36,9 +36,9 @@ POST 精确模型提供批准与修订两个请求示例，以及制作计划、
 
 ### 3.1 `agent.plan`
 
-`agent.plan` 是无 phase 的完整方案记录。内容原样来自已校验的 ExitPlanMode 参数，不从普通回答或网页内容重新提取；sourceEventId 保持原始消息归属，toolCallId 关联原调用。精确字段与长度约束见共享事件源。
+`agent.plan` 是无 phase 的完整方案记录。content 原样等于同一 Assistant 响应已提交的完整正文；新增 sourceMessageEventId 指向该 agent.message(completed)。sourceEventId 仍为原始用户根消息，toolCallId 关联唯一退出调用，审核目标仍是计划 eventId。新写引用必填、旧历史允许省略，出现时不可空；精确约束见共享事件源。
 
-同一计划同时存在模型 ToolCall 与公共展示事件是两种投影：模型恢复使用原 ToolCall，审核使用 agent.plan 的 eventId。两个投影在提交时校验正文完全一致，不分别生成、修剪或二次解析。前端把关联的 ExitPlanMode 调用折叠到计划卡片，避免展示两份正文。
+生成期复用 agent.message delta/completed；模型历史保留完整正文和空参数 ToolCall，审核使用 agent.plan。通过当前响应快照共享同一正文投影，不从最近历史、相邻卡片或标题猜测。前端按 sourceMessageEventId 在原消息位置合并计划卡、吸收关联调用/结果；完整事件均保留。失败、分页和两跳映射见[流式设计](plan-streaming.md#4-公共事件与页面恢复)。
 
 ### 3.2 `user.plan_confirmation`
 
@@ -52,7 +52,7 @@ reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史�
 
 ### 3.4 既有事件的使用
 
-- ExitPlanMode 的 `agent.tool_call` 保持原结构，`toolName=ExitPlanMode`、`arguments={plan}`、`requiresConfirmation=false`。计划审核由 agent.plan 表达，不能同时生成一次工具权限审核。
+- ExitPlanMode 的 `agent.tool_call` 保持原结构，`toolName=ExitPlanMode`、`arguments={}`、`requiresConfirmation=false`；只在同响应正文保存并绑定后提交审核，不能同时生成工具权限审核。
 - 进入审核等待仍使用 `session.status_idle(reason=confirming)`；它不释放 Session running。
 - 批准/修订后的 `agent.tool_result` 保持 `toolCallId/content/isError`；正常批准与正常修订均 `isError=false`，无 errorCode。
 - 原始 user.message、问题回答后的续跑、修订后生成的计划、后续业务工具及最终回答均按同一个根消息的 sourceEventId 关联，直到原执行真实结束；普通澄清后新发 user.message 则形成新的根执行。

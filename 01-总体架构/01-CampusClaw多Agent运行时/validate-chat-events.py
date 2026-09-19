@@ -197,8 +197,12 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
     if event["type"] == "user.question_answer":
         validate_answer_event(event, receipt=True)
     if event["type"] == "agent.plan":
-        require(set(event) == {"eventId", "type", "createdAt", "sourceEventId", "toolCallId", "content"},
+        fields = {"eventId", "type", "createdAt", "sourceEventId", "toolCallId", "content"}
+        require(set(event) in (fields, fields | {"sourceMessageEventId"}),
                 "plan must use the complete review event shape")
+        if "sourceMessageEventId" in event:
+            require(bounded_nonblank(event["sourceMessageEventId"], 128),
+                    "plan source message identity must be nonblank and bounded")
         require(isinstance(event["toolCallId"], str)
                 and any(not java_whitespace(c) for c in event["toolCallId"]), "plan requires tool call identity")
         content = event["content"]
@@ -966,6 +970,27 @@ def validate_todo_regressions(post: dict) -> int:
     return len(edits)
 
 
+def validate_plan_source(frames: list, plan: dict) -> None:
+    """New writes bind completed text; legacy reads may omit the source field."""
+    source_id = plan.get("sourceMessageEventId")
+    require(bounded_nonblank(source_id, 128), "new plan writes require the source message")
+    sources = [e for e in frames if e["eventId"] == source_id]
+    require(len(sources) == 1, "plan source must identify one complete message")
+    source = sources[0]
+    require(source["type"] == "agent.message" and source.get("phase") == "completed"
+            and source["content"] == plan["content"]
+            and source["sourceEventId"] == plan["sourceEventId"],
+            "plan must preserve exact completed source text and root")
+    calls = [e for e in frames if e.get("type") == "agent.tool_call"
+             and e["toolCallId"] == plan["toolCallId"]]
+    require(len(calls) == 1 and calls[0].get("toolName") == "ExitPlanMode"
+            and calls[0]["arguments"] == {} and calls[0]["requiresConfirmation"] is False
+            and calls[0]["sourceEventId"] == plan["sourceEventId"],
+            "plan requires its exact empty-argument exit call")
+    require(frames.index(source) < frames.index(calls[0]) < frames.index(plan),
+            "source commit must precede call and proposal")
+
+
 def validate_plan_flow(post: dict) -> None:
     streams = complete_streams(post)
     review, approved, revised = (streams[name] for name in
@@ -973,9 +998,12 @@ def validate_plan_flow(post: dict) -> None:
     plans = [event for event in review if event["type"] == "agent.plan"]
     require(len(plans) == 1, "review publishes one complete proposal")
     plan = plans[0]
-    calls = [event for event in review if event.get("toolName") == "ExitPlanMode"]
-    require(len(calls) == 1 and calls[0]["toolCallId"] == plan["toolCallId"]
-            and calls[0]["arguments"] == {"plan": plan["content"]}, "proposal must preserve exact ExitPlanMode input")
+    require(len([e for e in review if e.get("toolName") == "ExitPlanMode"]) == 1,
+            "review example must contain one exit call")
+    for frames in streams.values():
+        for candidate in frames:
+            if candidate["type"] == "agent.plan":
+                validate_plan_source(frames, candidate)
     require(review[-1]["reason"] == "confirming", "review closes with a confirming wait")
     require(not any(event["type"] == "agent.todo_updated" or event.get("toolName") == "TodoUpdate"
                     or event["type"] == "agent.tool_result" and event["toolCallId"] == plan["toolCallId"]
@@ -1026,6 +1054,10 @@ def validate_plan_regressions(post: dict) -> int:
         (plan, lambda e: e.update(phase="completed")),
         (plan, lambda e: e.pop("toolCallId")),
         (plan, lambda e: e.pop("sourceEventId")),
+        (plan, lambda e: e.update(sourceMessageEventId=None)),
+        (plan, lambda e: e.update(sourceMessageEventId=" ")),
+        (plan, lambda e: e.update(sourceMessageEventId=123)),
+        (plan, lambda e: e.update(sourceMessageEventId="x" * 129)),
         (approve, lambda e: e.update(feedback=None)),
         (approve, lambda e: e.update(result="accept")),
         (approve, lambda e: e.update(result={})),
@@ -1052,6 +1084,11 @@ def validate_plan_regressions(post: dict) -> int:
         raise ValueError("invalid plan review event accepted")
     flow_cases = [
         ("200-plan-review", "agent.plan", lambda e: e.update(content="# Another proposal")),
+        ("200-plan-review", "agent.plan", lambda e: e.pop("sourceMessageEventId")),
+        ("200-plan-review", "agent.plan", lambda e: e.update(sourceMessageEventId="wrong-message")),
+        ("200-plan-review", "agent.plan", lambda e: e.update(sourceEventId="wrong-root")),
+        ("200-plan-revised", "agent.plan", lambda e: e.update(sourceMessageEventId=plan["sourceMessageEventId"])),
+        ("200-question-answered", "agent.plan", lambda e: e.update(content="# Wrong question continuation")),
         ("200-plan-approved", "user.plan_confirmation", lambda e: e.update(targetEventId="stale-plan")),
         ("200-plan-approved", "session.mode_changed", lambda e: e.update(confirmationEventId="wrong-receipt")),
         ("200-plan-revised", "agent.plan", lambda e: e.update(eventId=plan["eventId"])),
@@ -1068,6 +1105,25 @@ def validate_plan_regressions(post: dict) -> int:
         except ValueError:
             continue
         raise ValueError("invalid plan review causal link accepted")
+    # Empty parameters and commit ordering are new-write invariants, not legacy-read requirements.
+    for mutation in ("arguments", "order"):
+        frames = copy.deepcopy(streams["200-plan-review"])
+        candidate = next(e for e in frames if e["type"] == "agent.plan")
+        call = next(e for e in frames if e.get("toolName") == "ExitPlanMode")
+        if mutation == "arguments":
+            call["arguments"] = {"plan": candidate["content"]}
+        else:
+            source = next(e for e in frames if e["eventId"] == candidate["sourceMessageEventId"])
+            frames.remove(source)
+            frames.append(source)
+        try:
+            validate_plan_source(frames, candidate)
+        except ValueError:
+            continue
+        raise ValueError("invalid plan source order or arguments accepted")
+    legacy = copy.deepcopy(plan)
+    legacy.pop("sourceMessageEventId")
+    validate_frame(legacy, history=True)
     # Provider tool call identities retain the existing contract without a 128-unit limit.
     long_tool_identity = dict(plan, toolCallId="provider-call-" + "x" * 200)
     validate_frame(long_tool_identity)
@@ -1080,7 +1136,7 @@ def validate_plan_regressions(post: dict) -> int:
     try:
         validate_plan_confirmation(malformed_request)
     except ValueError:
-        return len(cases) + len(flow_cases) + 1
+        return len(cases) + len(flow_cases) + 3
     raise ValueError("approve request accepted feedback")
 
 

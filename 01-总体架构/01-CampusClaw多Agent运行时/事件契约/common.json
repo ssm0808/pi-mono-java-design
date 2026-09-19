@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.58.0",
+    "version": "1.59.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -78,7 +78,7 @@
     }
   },
   "eventContract": {
-    "version": "2026-09-17.1",
+    "version": "2026-09-19.1",
     "semanticStatus": "confirmed",
     "detailStatus": "implementation-ready",
     "toolErrorCodes": {
@@ -245,9 +245,9 @@
         ],
         [
           "agent.plan",
-          "toolCallId/content",
-          "全部必填字符串",
-          "完整待审核 Markdown，无 phase。toolCallId 非空；content 原样等于唯一 ExitPlanMode ToolCall 的 plan，首个非空行以 # 开始（# 后必须空格），最多 262144 UTF-16 单元并满足完整帧容量。修订生成新 eventId，不改已提交正文；不要求独立文件，不增加 planId/version。"
+          "toolCallId/content/sourceMessageEventId",
+          "新写三项必填；旧历史可省略来源引用",
+          "完整待审核 Markdown，无 phase。toolCallId 非空；sourceMessageEventId 指同一 Assistant 响应已提交的 agent.message(completed)，与计划同 Session/原根，非空且最多 128 UTF-16 单元；旧记录缺省时按旧完整卡展示，不猜测引用，出现时不可 null。content 精确等于来源消息全部正文，首个非空行以 # 开始（# 后必须空格），最多 262144 UTF-16 单元且满足完整帧容量。新工具参数为 {}，只允许同响应正文之后的唯一 ExitPlanMode 调用。正文 delta/completed 先于 plan，仅完整 plan 与 confirming 对账后可审；targetEventId 仍指计划 eventId。修订使用新消息与计划 ID，不增加 planId/version。来源绑定增量待实现。"
         ],
         [
           "agent.todo_updated",

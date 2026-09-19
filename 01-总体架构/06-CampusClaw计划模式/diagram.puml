@@ -47,12 +47,16 @@ hide empty members
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare, rebuild, writeRuntimeTree, publish.
 ' Observed at 8c5fda1d: optional mode files, refresh preservation and immutable prompt snapshots are implemented.
 ' Design reason: resolve files under the publication lock once; approval reuses the original snapshot.
+' Streaming scope: Java fb842b1ac6cb4818f6b146f79dd184a5cd88bf12; RuntimeEventProjector.java :: persistAssistant, beginPlanReview.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeCommittedEventFactory.java :: textContent, agentPlan.
+' Observed behavior: completed text precedes tools; current review reads the plan argument.
+' Design reason: pending binding shares the committed text snapshot and rechecks mutable state in the review transaction.
 title CampusClaw Plan and User Interaction - Complete Target Class View
 allowmixing
 
 legend bottom left
   Green: implemented structure     Amber: recommended extension
-  Blue: pending implementation of extraction; responsibilities already implemented
+  Blue: pending extraction or explicitly marked streaming additions
   Blue connectors: recommended responsibility links, not missing features
   Controllers, services, factories, repositories, TODO mapper: Spring singletons
   Execution package and tools: one instance per execution
@@ -81,8 +85,11 @@ package "Application and assembly" as Application {
   class "RuntimeExecution\nCoordinator" as Coordinator <<extended>> #FFF7DD
   class "RuntimeSessionControl\nDispatcher" as Dispatcher <<extended>> #FFF7DD
   class "RuntimePlanReviewService" as ReviewService <<pending implementation>> #EAF2FF {
-    +beginReview(targetDTO, callId, plan)
+    +beginReview(proposalSnapshotDTO)
     +acceptPlanConfirmation(requestVO)
+  }
+  class "PlanProposalBinder" as ProposalBinder <<Pending implementation>> #EAF2FF {
+    +bind(currentResponse): SnapshotDTO
   }
   class "RuntimeUserQuestionService" as QuestionService <<implemented>> #ECFDF5 {
     +beginQuestion(finalCall, targetDTO)
@@ -143,6 +150,10 @@ package "Execution ownership" as ExecutionScope {
   class "QuestionRequestSnapshotDTO" as QuestionSnapshot <<implemented>> #ECFDF5 {
     immutable normalized questions
   }
+  class "PlanProposalSnapshotDTO" as ProposalSnapshot <<Pending implementation>> #EAF2FF {
+    immutable target, sourceMessageEventId
+    immutable sourceEventId, toolCallId, content
+  }
 }
 
 package "Core and model tools" as ToolScope {
@@ -162,7 +173,7 @@ package "Core and model tools" as ToolScope {
   }
   class "Existing built-in tools" as ExistingTools <<existing>> #ECFDF5
   interface "PlanReviewPort" as ReviewPort <<implemented>> #ECFDF5 {
-    +review(callId, plan, signal): DecisionDTO
+    +review(callId, signal): DecisionDTO [pending change]
   }
 }
 
@@ -265,6 +276,10 @@ ControlRepo <|.. Repos
 Repos --> Mappers
 Mappers --> DB
 Projector --> Persistence
+Projector -[#2563EB,norank]-> ProposalBinder : bind committed source
+ProposalBinder .[norank].> ProposalSnapshot : creates
+Pending o-[#2563EB]- "0..1" ProposalSnapshot : pending addition
+ReviewService -[#2563EB,norank]-> ProposalSnapshot : locked recheck
 Projector -[#2563EB]down-> TodoMapper : final successful result
 Projector -[#2563EB,norank]-> EventFactory
 TodoMapper -[hidden]down- EventFactory
@@ -332,8 +347,10 @@ participant "Control dispatcher\noriginal instance" as Dispatcher
 participant "Original execution\nExitPlanMode / Agent" as Agent
 
 group 1. Publish a plan in the active root
-  Agent -> Agent : Produce one ExitPlanMode call with complete Markdown
-  Agent -> Service : Persist unique tool_call; beginReview(fixed target, call, plan)
+  Agent --> UI : Stream ordinary assistant Markdown (pending change)
+  Agent -> Agent : Same response: one ExitPlanMode({}) call after text
+  Agent -> Service : Commit message, then call; bind immutable source snapshot
+  Agent -> Service : beginReview(proposalSnapshotDTO)
   Service -> DB : Lock Session and execution; validate active plan mode
   Service -> DB : Append agent.plan + confirming idle;
   note right of DB
@@ -622,10 +639,12 @@ end
 
 group 3. Review the complete proposal
   loop Review attempts; exit on approval
-    Runtime -> Tools : ExitPlanMode only; complete Markdown
-    Tools -> Runtime : PlanReviewPort.review
+    Runtime --> UI : Stream ordinary Markdown; commit completed message
+    Runtime -> Runtime : Finalize sole ExitPlanMode({}) after text; commit call
+    Runtime -> Runtime : Bind committed message and current call (pending change)
     Runtime -> DB : Commit agent.plan + confirming idle + pending review
-    Runtime --> UI : Plan card + confirming idle; close response
+    Runtime --> UI : Plan with sourceMessageEventId + confirming; merge original row
+    Runtime -> Tools : Execute ExitPlanMode({}); await the bound review
     note over Runtime,DB
   Session state remains running; mode remains
   plan.
@@ -789,6 +808,80 @@ group 4. Reconcile after a browser disconnect
     Missing pages or uncertain execution: read-only recovery.
     Stop targets the root message; races are checked in DB.
     Process-loss takeover is outside this feature.
+  end note
+end
+@enduml
+
+@startuml plan_streaming_sequence
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam maxMessageSize 115
+skinparam sequenceMessageAlign left
+skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBorderColor #8496A4
+hide footbox
+autonumber
+' Source baseline: pi-mono-java fb842b1ac6cb4818f6b146f79dd184a5cd88bf12.
+' Source: modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java :: runTurns.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: persistAssistant, beforeToolCall, beginPlanReview.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeCommittedEventFactory.java :: textContent, agentPlan.
+' Observed behavior: text deltas already stream; current review reads the complete plan tool argument.
+' Design reason: same-response text binding avoids a second model request and a stale-history lookup.
+' Pending implementation: empty arguments, immutable source binding and client row merge.
+title Plan Text Streaming and Review Binding - Target (Pending implementation)
+actor User
+participant "Client" as UI
+participant "Model / AgentLoop" as Loop
+participant "Runtime Projector\nand proposal binder" as Runtime
+database "Persistence" as DB
+participant "ExitPlanMode" as Tool
+
+group 1. Generate once in a single model response
+  loop Text chunks
+    Loop -> Runtime : TextDelta
+    Runtime --> UI : agent.message delta
+    UI -> UI : Render ordinary Markdown; no approval actions
+  end
+  Loop -> Loop : Emit sole ExitPlanMode({}) after text
+  Loop -> Runtime : Complete Assistant response (text + call)
+  Runtime -> DB : Commit source Assistant and completed message
+  DB --> Runtime : Immutable committed message identity and text
+  Runtime --> UI : agent.message completed replaces preview
+  Runtime -> DB : Commit complete tool_call with arguments={}
+  Runtime -> Runtime : Bind current response + committed message + sole call
+end
+
+group 2. Submit a complete proposal, not a tool-result stream
+  Loop -> Runtime : beforeToolCall(current Assistant, call)
+  Runtime -> DB : Lock and recheck target, source, text, mode and stop
+  Runtime -> DB : Commit plan + pending target + confirming; close segment
+  DB --> Runtime : Committed review
+  Runtime --> UI : agent.plan(sourceMessageEventId, content), confirming
+  UI -> UI : Merge source row in place; enable review only after reconciliation
+  Loop -> Tool : execute({})
+  Tool -> Runtime : Await exact pending call decision
+  note over UI,Tool
+    Session remains running / plan. Closing SSE is not approval.
+    A failed binding leaves ordinary text, never an actionable plan.
+  end note
+end
+
+group 3. Decide and resume the original execution
+  User -> UI : Approve or revise exact plan eventId
+  UI -> Runtime : Existing user.plan_confirmation
+  Runtime -> DB : Accept once; new segment; approve changes mode to build
+  DB --> Runtime : Committed receipt and fixed continuation target
+  Runtime --> UI : Committed receipt and applicable mode change
+  Runtime -> DB : Original execution claims exact committed decision
+  DB --> Runtime : Claimed once; recheck stop and current target
+  Runtime --> Tool : Decision; update captured prompt first
+  Tool --> Loop : Complete approved / feedback result, no repeated plan
+  Loop -> Loop : Next model request retains source plan and call/result pair
+  note over UI,Loop
+    Revise: new complete text and new message/plan IDs; mode stays plan.
+    Disconnect: read history and Session; never replay an accepted POST.
   end note
 end
 @enduml

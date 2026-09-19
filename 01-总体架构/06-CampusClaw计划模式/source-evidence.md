@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：2.2.0；核对日期：2026-09-18。当前主线实现结论见[§12](#12-主线实现状态核验2026-09-18)。本文区分源码事实、基线能力和 CampusClaw 推荐增量；不把历史设计中“待实现”标签当作当前源码结论。
+版本：2.3.0；核对日期：2026-09-19。正文流式专项见[§13](#plan-streaming-evidence)，其他主线范围保留[§12](#12-主线实现状态核验2026-09-18)。本文区分源码事实、基线能力和推荐增量；不把历史“待实现”标签当作当前源码结论。
 
 提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 待实现 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
 
@@ -173,7 +173,7 @@ Agent 顶层 mode 是本产品新增的默认配置，不归因为 DeepSeek/Clau
 | Claude Code | 官方 plansDirectory 配置指定计划文件目录，文档缺省 ~/.claude/plans | [官方设置](https://code.claude.com/docs/en/configuration)，本次官方检索条目明确该设置；新 settings-reference 页面抓取超限。没有服务端源码归因 |
 | Claude Managed Agents | 迁移文档建议先 planning-only session，再用第二个 session 执行；该公开说明未要求统一原生计划文件 | [官方迁移文档](https://platform.claude.com/docs/en/managed-agents/migration) · Plan mode；Beta，不能与 Claude Code 文件机制混同 |
 
-CampusClaw 当前选择完整 ToolCall + agent.plan 审核记录，理由与代价由[主设计 §1.3](README.md#13-完整方案保存在哪里)维护；执行清单另由显式 agent.todo_updated 记录，不把清单写回批准方案，也不为调研引入 TODO。
+上表保留历史证据。CampusClaw 当前目标采用 Assistant 正文 + 空参数退出调用 + agent.plan 来源绑定，理由与代价由[主设计 §1.3](README.md#13-完整方案保存在哪里)维护；最新核验见[§13](#plan-streaming-evidence)。执行清单仍由独立 agent.todo_updated 记录。
 
 
 ## 9. Build/Plan 与逐题交互核验
@@ -316,3 +316,54 @@ Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/c
 | TODO 客户端恢复 | `frontend/src/runtime/eventStore.ts` · executionTodos | 从当前根的最后一条 agent.todo_updated 读取完整快照；主图同步使用实际消费符号，不能据推荐职责名不同判断功能缺失。 |
 
 验证状态：本次读取源码、对比指定旧新提交并校验设计；未执行新的 Java/数据库/浏览器或模型回归。§2/§9 的历史测试结果仍绑定原提交，不升级为本次通过。Mate 公共桥接保持待实现；业务 SYSTEM 发布、真实模型遵循和生产环境验收为未核验。独立服务/Adapter 等推荐类名与实际职责归属分开记录，禁止用某个目标类不存在概括整个功能待实现。
+
+<a id="plan-streaming-evidence"></a>
+
+## 13. 正文流式与审核绑定专项
+
+2026-09-19 确认相关上游默认分支并隔离 fetch HEAD；下表为当次源码快照，不是稳定发布声明。设计仓基于 main `8f7fc06ab8990dd657c1a7671250434a628b7525`。只升级正文、调用及审核来源范围，其他历史结论不自动升级。
+
+| 仓库 | 旧证据 → 本次默认分支完整 commit | 核验范围与变化影响 |
+|---|---|---|
+| pi-mono-java | `8c5fda1dde51675859bc9c07e145dbe253656dea` → main `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` | 旧完整参数审核仍存在；文本流已实现，同响应来源绑定待实现；读取远端 commit，未覆盖本地 `21c3f59b` 工作树 |
+| openai/codex | `b0659c53865dd48b0cd69c454368cea3980017cc` → main `78245b47af2a7aafcabe025828ceecca69db4df1` | Plan 模板与正文解析仍分离于工具结果；仅核验下列源码，不将实验性 App Server plan delta 说成稳定公共 API |
+| badlogic/pi-mono | `e4c75a73222ae2c72abb5f5314fa35ee8effc508` → main `36b60d2e8985899743c4cf5bd5f8929832a3f05d` | 保留 Assistant 文本/调用生命周期与完整结果后续轮次；不把示例计划扩展等同统一产品协议 |
+| deepseek-ai/deepseek-harness | `0d1f50007f9bca3f52b06e1c3074fa14d5fb0720` → master `ddefc45fbc7f8e46dd73185e68295696d1297887` | `packages/plan/plan-mode/package.json` 为 `0.1.6-alpha.2`；退出工具仍接收完整 plan，不支持“所有基线都用正文提交”的概括 |
+
+### 13.1 已观察源码
+
+以下 Java 前缀 R = `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`；路径相对各仓库。
+
+| 来源与路径 / 符号 | 实际行为与对目标的约束 |
+|---|---|
+| Java `modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java` · runTurns、invokeModel、runToolPhase | 一次模型响应可同时有文本与 ToolCall；先写上下文、发 MessageEnd，再执行工具。无调用且无控制消息则结束；目标不能指望纯正文结束后自动再请求退出工具 |
+| Java R `tool/plan/ExitPlanModeTool.java` · parameters、requirePlan、execute | required plan 字符串，校验标题/长度后 reviews.await(callId, plan)；工具不负责生成计划。空参数契约与结果引导待实现 |
+| Java R `runtimeapi/event/RuntimeEventProjector.java` · projectMessageUpdate、persistAssistant、beforeToolCall、beginPlanReview | 普通 TextDelta 已投影；完整 Assistant 先提交，再记录调用。beginPlanReview 从调用参数取正文；persistAssistant 末尾清空 assistantEntryId，目标需另保留不可变已提交映射，不能读已清空字段 |
+| Java R `runtimeapi/event/RuntimeCommittedEventFactory.java` · agentMessage、textContent、agentPlan | 消息正文将 TextContent 直接按顺序拼接；计划 payload 只有调用与正文，无 sourceMessageEventId。目标共用正文提取，不二次修剪或插入换行 |
+| Java R `runtimeapi/runtime/RuntimeActiveExecution.java` · beginPlanReview、await、claimAndResumePlanReview | 原执行等待、领取决定并应用模式；完整审核与批准续跑已经实现，新增来源绑定不能表述为整套审核待实现 |
+| Java `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java` · appendText、appendToolCall | 模型文本与工具参数分别产生增量；参数生成不等于工具执行，公共 projector 没有因此自动暴露参数 preview |
+| Java `frontend/src/projectors/runtimeEventProjector.ts` · projectRuntimeEvents | 消息与计划分别投影，计划吸收关联工具日志；目标须按来源消息合并正文，不能仅改提示词造成两份正文 |
+| pi `packages/agent/src/agent-loop.ts` · streamAssistantResponse、executeToolCalls、executePreparedToolCall；`packages/agent/src/types.ts` · AgentEvent | Assistant 增量与工具执行更新、完整工具结果属于不同阶段；工具回调可报更新，最终结果参与模型历史。无需为计划正文引入通用工具结果流 |
+| Codex `codex-rs/collaboration-mode-templates/templates/plan.md` · Finalization rule | 方案作为模型正文中的 proposed_plan 块；Plan 模式由开发者模式指令退出，不是 CampusClaw 的 ExitPlanMode({}) 审核工具 |
+| Codex `codex-rs/core/src/session/turn.rs` · handle_plan_segments、emit_streamed_assistant_text_delta、maybe_complete_plan_item_from_message | 流式解析正文为普通文本或 ProposedPlanDelta；最终从完整消息提取 plan item。支持正文流式与最终权威分离，但并非我们空参数工具方案的原样实现 |
+| DeepSeek `packages/plan/plan-mode/src/index.ts` · PlanModeController 中 EXIT_PLAN_MODE parameters/execute/presentCall | plan 必填；交互 detail 取 args.plan，批准后 pendingIntents 安排模式变化。第一种不是所有 Agent 的通用实现 |
+
+### 13.2 托管公开契约与目标差异
+
+2026-09-19 重新读取 [Claude Managed Agents Events and streaming](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)：Beta preview 为临时 best-effort，不持久化、不重放；文本 agent.message 支持增量，agent.thinking 仅 start，工具调用/结果及 MCP 事件不走这套 preview。仅说明公开观察契约，不能据此推断内部工具是否渐进执行，更不能证明其实现了 CampusClaw 的计划审核工具。
+
+CampusClaw 采用同响应正文流和空参数退出调用是**架构变更，待实现**：借鉴 Codex 正文与最终计划分离，复用本产品完整审核事务及 pi 式 Loop；不复制 proposed_plan 解析器，也不照搬 DeepSeek 大参数承载。精确来源绑定是安全/一致性边界，保留用户批准及企业两跳身份是产品约束。理由、代价、发布和验收由[流式主文](plan-streaming.md)维护。
+
+本次只有静态源码与设计契约验证。未运行 Java、数据库、实际 Provider、浏览器端到端或性能测试；首字时间改善是设计目的，不能宣称已验证的耗时收益。
+
+### 13.3 设计验收范围
+
+| 检查 | 结果与证明边界 |
+|---|---|
+| 共享事件校验器 | POST/GET 同形、来源正文/根/调用/先后关系、旧历史兼容通过；38 项计划反例被拒绝，另保留 114 POST、57 历史、15 批次、15 TODO、31 问答反例检查 |
+| 契约静态测试 | test_chat_api、test_document_maintenance、test_control_retirement、test_command_catalog_contract、test_command_response_contract、test_help_contract 共 53 项通过；skill-statistics 校验通过；生成 HTML 与 JSON 同步 |
+| 专题机械与视觉 | 7 个 SVG 由 PlantUML 生成；ASCII、XML、Markdown SVG/图源行锚点、git diff --check 通过；完整类图与旧版对照，新增时序及受影响审核/端到端图检查原尺寸与缩放阅读 |
+| 全仓 API 总入口 | validate-chat-api.py --full 未通过：全仓 Markdown 扫描遇到本次范围外的失效路径 `../../02-服务与接口/03-模型管理Provider契约/diagram.puml`；未修改或跳过该检查冒充全通过 |
+| 接口页 DOM 测试 | test_chat_api.cjs 未运行成功：本地及桌面捆绑 Node 环境均缺 jsdom；Python 静态测试不替代 DOM 交互验收 |
+
+模型同响应输出、压缩保护、数据库事务、两跳桥接、真实前端流式合并及性能均仍待实施验收。原有 AskUserQuestion/TODO/状态图随同一图源重新生成及行锚点更新，不新增这些功能的架构结论。

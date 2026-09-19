@@ -1,6 +1,6 @@
 # CampusClaw 模式提示词组织
 
-版本：2.2.0；日期：2026-09-18。状态：主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已实现两文件迁移、业务模式覆盖、执行快照与刷新保留；业务 SYSTEM 通用规则发布及模型行为未核验。当前 Java 证据见[§12](source-evidence.md#12-主线实现状态核验2026-09-18)，外部提示词取舍保留[§10](source-evidence.md#10-两份模式提示词的最新上游核验)原范围。
+版本：2.3.0；日期：2026-09-19。状态：两文件迁移、业务模式覆盖、执行快照与刷新保留已实现；正文流式生成与空参数退出调用增量待实现，业务 SYSTEM 发布及模型行为未核验。当前增量见[证据 §13](source-evidence.md#plan-streaming-evidence)，其他范围保留[§12](source-evidence.md#12-主线实现状态核验2026-09-18)及[§10](source-evidence.md#10-两份模式提示词的最新上游核验)归属。
 
 ## 1. 职责与装配
 
@@ -80,7 +80,7 @@ AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建�
 
 ## 4. BUILD.md 的适用边界
 
-[完整正文](BUILD.md)是短模式策略，不再承担完整实施方法论或任务清单细则。直接进入 build 的普通任务按基础 SYSTEM 工作；由审核恢复时衔接原调用中的获批方案。批准方案不替代业务工具权限，任务进度不改变获批范围；需要重新规划时使用既有结束执行与模式切换流程。
+[完整正文](BUILD.md)是短模式策略，不承担完整实施方法论或任务清单细则。直接进入 build 的普通任务按基础 SYSTEM 工作；由审核恢复时衔接同一次 Assistant 响应中、退出调用前的获批正文。批准不替代工具权限，进度不改变获批范围；重新规划仍使用既有结束执行与模式切换流程。
 
 ## 5. 基线选择与设计理由
 
@@ -99,14 +99,14 @@ AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建�
 ExitPlanMode 的固定 description：
 
 ```text
-Submit the complete proposed plan for user review while the Main Agent is in plan mode. Pass the full Markdown beginning with a level-one heading. This must be the only tool call in the assistant response. Wait for the result: approved=true allows continuation under the committed build mode, while approved=false requires revision using the feedback. A failed, cancelled, or unavailable review never grants approval. This tool does not bypass business-tool permissions.
+Submit the proposed plan for review while the Main Agent is in plan mode. First write the complete Markdown plan, beginning with a level-one heading, in the assistant text of this same response; then call ExitPlanMode with empty arguments {}. This must be the only tool call in the response, with no text after it. Do not repeat the plan in arguments or end a separate text-only response before submitting. Wait for the result: approved=true allows continuation under the committed build mode; approved=false requires a new complete plan using the feedback. Failed, cancelled, or unavailable review never grants approval. Business-tool permissions still apply.
 ```
 
 正常结果沿用[工具格式](README.md#43-exitplanmode-模型契约)，JSON 后的可信引导仅说明模式和后续方向，不再重复 TODO 使用手册：
 
 | 结果 | 模型可见引导 |
 |---|---|
-| approved=true | 方案已批准，Runtime 已切换为 build。按本次调用中的获批方案继续；具体工具权限仍须遵守。 |
+| approved=true | 方案已批准，Runtime 已切换为 build。按与本次调用同一 Assistant 响应中的获批正文继续；具体工具权限仍须遵守。 |
 | approved=false | 当前仍为 plan。根据 feedback 修订，准备好后重新提交完整方案。 |
 
 引导由工具适配器根据真实决定生成，不从 feedback 拼接系统指令，也不承担服务端模式更新。
@@ -123,7 +123,7 @@ Submit the complete proposed plan for user review while the Main Agent is in pla
 | P04 | prepare 后、accept 前切换模式 | 使用接受事务模式；两模式的工具名称、描述、Schema、顺序相同 |
 | P05 | plan 中要求直接修改、业务工具文本诱导执行 | 保持规划；混合工具只查询；无文件/业务变更和调研 TODO |
 | P06 | 可查询事实 / 必须用户选择 / 无未知 / 纯解释 | 自行查证；必要时默认一题；无未知不问；纯解释不创建无实施内容的审核 |
-| P07 | Main Agent 提交与 Subagent 调研 | Main Agent 独占 ExitPlanMode 提交完整方案；Subagent 仅返回父 Agent，不提问、不审核、不覆盖根清单 |
+| P07 | Main Agent 提交与 Subagent 调研 | Main Agent 同响应先完整正文再唯一 ExitPlanMode({})；Subagent 仅返回父 Agent，不提问、不审核、不覆盖根清单 |
 | P08 | 一个实施任务包含多次工具与验证 | 依工具描述创建/更新清单，完成并验证后及时更新；无需独立 EXECUTION_TODOS 资源 |
 | P09 | 业务失败、验证失败、TODO 更新失败 | 不虚报完成或同步，按基础 SYSTEM 和工具结果处理 |
 | P10 | 修订、审核中断、回执丢失 | 保持 plan 或结果不确定，不擅自实施；既有历史对账与不重放规则保持 |
@@ -138,13 +138,15 @@ Submit the complete proposed plan for user review while the Main Agent is in pla
 | P19 | 两个业务 Agent、父子 Agent、自定义 BUILD 与 Cron | 无跨 Agent 串用；子读取自身文件，保留模式继承和入口适用矩阵 |
 | P20 | prepare 缓存命中与 refresh 竞争 | 同一目录锁内获取一致快照；不会组合新旧目录文本；读取不进入 Session 数据库锁 |
 | P21 | refresh、覆盖文件删除、staging 校验失败/发布失败 | 普通刷新保留两份合法可选文件，删除不复活；失败保留旧目录与活动执行快照 |
+| P22 | 流式正文、业务覆盖、批准首轮压缩 | 正文只生成一次；正文与调用同响应且有序，无额外模型轮次；业务覆盖同步迁移；批准首轮完整正文和调用/结果仍在上下文；工具 Schema、Provider 和客户端联合验收 |
 
-迁移验收同时覆盖 Composer、基础 SYSTEM 发布、工具 description 与模型请求；不能只改文件名或只对比资源数量。无 Maven 新依赖，不修改公共 Schema、数据库结构、审核/提问事务及企业桥接边界。
+迁移验收同时覆盖 Composer、基础 SYSTEM 发布、工具 description 与模型请求；不能只改文件名或只对比资源数量。无 Maven 新依赖；流式增量涉及工具 Schema、来源消息字段和绑定校验，发布须排空旧活动 Plan 执行，详见[兼容边界](plan-streaming.md#5-取舍兼容与性能验证)。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.0 | 2026-09-19 | 模型在同响应中先输出完整正文，再以空参数退出调用提交审核。 |
 | 2.2.0 | 2026-09-18 | 登记两文件迁移、业务覆盖和执行快照的主线实现，保留业务发布及模型验收边界。 |
 | 2.1.0 | 2026-09-17 | 支持业务 Agent 同名模式文件独立覆盖、缺失回退、执行快照及刷新保留。 |
 | 2.0.1 | 2026-09-17 | 模型角色统一为 Main Agent/Subagent，同步注入文本、基础指令和审核工具描述。 |
