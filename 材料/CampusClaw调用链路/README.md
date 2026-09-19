@@ -1,6 +1,6 @@
 # CampusClaw 模型、工具与 Skill 调用链路
 
-版本：1.0.0 · 核对日期：2026-09-18
+版本：1.1.0 · 核对日期：2026-09-19
 
 ## 1. 阅读范围与结论
 
@@ -10,9 +10,9 @@
 |---|---|
 | 实现仓 | `/Users/z/pi-mono-java` |
 | 源码目录 | `campusclaw/`，不以同仓其他模块的同名类替代 |
-| 源码基线 | 本地 `main`：`21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`；分析时该目录无工作树修改 |
+| 源码基线 | 本地 `main`：`fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；源码工作树无已跟踪修改，仅有无关未跟踪 `.m2/` |
 | 主入口 | Runtime HTTP 的普通消息与 Skill 命令 |
-| 模型适配 | 当前默认 `MateRuntimeModelManager → CampusMateProvider` 路径 |
+| 模型适配 | 当前默认 `settings.json → MateRuntimeModelManager → CampusMateProvider` 路径；旧全局模型注册表已删除 |
 | 边界 | 追踪到发往 CampusMate 的 HTTP 请求；未据此推断 CampusMate 服务端内部实现 |
 | 图的性质 | 当前实现时序图、活动图，不是目标类图；组合参与者明确列出所含组件 |
 
@@ -38,7 +38,7 @@
 | 2 | [RuntimeMessageEventService.submit / prepare](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeMessageEventService.java) | 在 Session 操作锁内检查当前 Session 空闲；准备输入、历史和实际执行对象 |
 | 3 | [RuntimeSessionModelReconciler.reconcile](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/session/RuntimeSessionModelReconciler.java) | 根据当前 Agent 绑定配置核对所选模型；旧模型不可用时尝试当前默认模型，而非直接使用请求随意指定的模型 |
 | 4 | [RuntimeExecutionContextFactory.create](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeExecutionContextFactory.java) + [RuntimeContextHistoryService.restoreHistory](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeContextHistoryService.java) | 从当前分支 Entry 恢复上下文；构造 `UserMessage`、事件流、`RuntimeActiveExecution`，向引擎注册表注册 |
-| 5 | [RuntimeSessionEngineRegistry.register / createSession](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java) → [AgentSessionFactory.create](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/session/AgentSessionFactory.java) | 准备 Agent 运行目录；为本次执行新建 Session、工具和 Mate 缓存；装配模型、Hook、系统提示词及历史 |
+| 5 | [RuntimeSessionEngineRegistry.register / createSession](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java) → [AgentSessionFactory.create](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/session/AgentSessionFactory.java) | 准备 Agent 运行目录；从 `settings.json` 快照解析模型；为本次执行新建 Session、工具和 Mate 缓存；按入口与模式装配提示词、Hook、工具及历史 |
 | 6 | [RuntimeMessageEventService.accept / startAccepted](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeMessageEventService.java) → [RuntimeExecutionPersistenceService.acceptMessage](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java) | 在事务中接纳用户消息、记录执行身份及公开事件；将已提交的用户回执入队后才启动执行 |
 | 7 | [RuntimeExecutionCoordinator.start](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java) → [ManagedAgentSession.prompt](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/session/ManagedAgentSession.java) → [Agent.prompt / startExecution](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/agent/Agent.java) | 安装事件投影和交互 Hook、订阅事件、管理超时；随后在虚拟线程上运行 `AgentLoop` |
 
@@ -58,7 +58,7 @@
 ### 3.1 请求如何构造与发出
 
 1. [AgentLoop.invokeModel](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/agent/loop/AgentLoop.java) 将可选消息变换、消息转换后的历史，与系统提示词和工具定义组成 `Context`。工具定义来自**当前 Session 实际装配的** `AgentTool`，不是目录下存在的全部工具类。
-2. [AgentLoopConfig.effectiveStreamFunction](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/agent/loop/AgentLoopConfig.java) 默认采用 `CampusClawAiService.streamSimple`；[CampusClawAiService.streamSimple](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/ai/CampusClawAiService.java) 先按 `model.provider` 查找 Provider，找不到再按 `model.api` 回退。当前 Runtime 默认模型来自 [MateRuntimeModelManager](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/model/MateRuntimeModelManager.java)，标识为 `CAMPUSMATE`。
+2. [AgentLoopConfig.effectiveStreamFunction](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/agent/loop/AgentLoopConfig.java) 默认采用 `CampusClawAiService.streamSimple`；[CampusClawAiService.streamSimple](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/ai/CampusClawAiService.java) 对 CampusMate 模型先按 Provider 路由到 `AiProviderRegistry`，普通 API 模型再按 `ApiProviderRegistry` 查找。当前 Runtime 默认模型由 [MateRuntimeModelManager](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/model/MateRuntimeModelManager.java) 根据 Agent 目录快照的 `enabledModelIds` 构造，标识为 `CAMPUSMATE`。
 3. [MateChatRequestMapper.map](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/ai/provider/mate/MateChatRequestMapper.java) 构建 `model`、`messages`、`tools`、`stream=true` 和 `stream_options.include_usage=true`。消息覆盖 system/user/assistant/tool；Assistant 的 tool calls 和工具结果会一起进入后续请求。该适配器当前处理文本输入，不能据通用消息类型推断其已支持图片输入。
 4. [CampusMateProvider.streamSimple / subscribe / eventFlux](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/ai/provider/mate/CampusMateProvider.java) 使用 WebClient 向配置的模型端点发送 POST，默认端点路径为 `/mate-service/v1/LLM/chat`。这是模型推理请求，不是下文业务工具的 `/runtime/tools/{toolId}/execute`。
 
@@ -81,7 +81,7 @@
 
 ![工具执行活动图](tool_execution.svg)
 
-[原尺寸 SVG](tool_execution.svg) · [PlantUML 源码](diagram.puml#L64)
+[原尺寸 SVG](tool_execution.svg) · [PlantUML 源码](diagram.puml#L65)
 
 核心代码：[AgentLoop.runToolPhase / resolveToolCallsSafe](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/agent/loop/AgentLoop.java)、[ToolExecutionPipeline.executeAll / executePlanned / execute](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/agent/tool/ToolExecutionPipeline.java)。
 
@@ -105,7 +105,7 @@
 | `ExitPlanMode`、`AskUserQuestion` | SEQUENTIAL | 计划审批、向用户提问及等待交互结果 | Runtime |
 | `TodoUpdate` | SEQUENTIAL | 更新执行中的 Todo 状态 | Runtime |
 
-这是配置默认值，部署可替换各入口工具列表。当前允许枚举和工厂没有 `Bash`、`Write`、`Edit`；尽管仓内有对应源码，不能把它们列为当前默认可调用工具。也没有单独注册每个 Skill 为 `AgentTool`。
+这是配置默认值，部署可替换各入口工具列表。当前允许枚举和工厂没有 `Bash`、`Write`、`Edit`；这些名称及对应源码路径已不在当前 `campusclaw` 工具树中，不能把它们列为当前可调用工具。也没有单独注册每个 Skill 为 `AgentTool`。
 
 ### 4.3 HTTP Runtime 的权限与等待交互
 
@@ -123,7 +123,7 @@
 
 ![Mate 工具发现与执行](mate_tool_call.svg)
 
-[原尺寸 SVG](mate_tool_call.svg) · [PlantUML 源码](diagram.puml#L130)
+[原尺寸 SVG](mate_tool_call.svg) · [PlantUML 源码](diagram.puml#L131)
 
 | 动作 | 当前客户端请求（公共前缀 `/mate-service/v1`） | 作用 |
 |---|---|---|
@@ -138,7 +138,8 @@
 - [CallMateTool.execute](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/CallMateTool.java) 接受 `tool` 与可选 `args`。没有“必须先 List”这一执行前置条件：[MateToolDiscovery.resolveToolId](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/MateToolDiscovery.java) 命中缓存直接取 ID，未命中则加载 Agent 和全部直接绑定 Skills 的工具元数据。
 - [MateToolSessionCache.resolveOrRefresh](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/MateToolSessionCache.java) 串行协调刷新；完整加载成功才发布新索引。不同 ID 的同名工具冲突会失败，不能任意选择一个执行。
 - [HttpMateToolClient.invokeTool](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/common/client/HttpMateToolClient.java) 将名称解析后的 ID 放入执行 URL，`args` 作为 `arguments` 转交。通用流水线校验的是 `CallMateTool` 外层参数 Schema；不能把它说成已校验业务工具的全部 inputSchema。
-- 工具执行使用 [RuntimeRequestContext.mateCredentials](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeRequestContext.java) 取得的本次凭据快照，并在执行请求上设置 `X-HW-ID`、`X-HW-APPKEY`、`Authorization`、`access-token` 对应头。绑定与元数据查询不加这组执行凭据头。这里只记录头名称，不记录任何凭据值。
+- 工具执行使用 [RuntimeRequestContext.mateCredentials](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeRequestContext.java) 取得的本次凭据快照，并在执行请求上按已提供值设置 `X-HW-ID`、`X-HW-APPKEY`、`Authorization`、`access-token` 对应头；缺失值不在 Claw 侧补齐或拒绝，最终授权交给 Mate。绑定与元数据查询不加这组执行凭据头。这里只记录头名称，不记录任何凭据值。
+- 工具调用展示名使用 [RuntimeToolCallSnapshotResolver](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeToolCallSnapshotResolver.java) 从本次 Agent/Skill 绑定元数据解析并固定；名称、ID 或展示名冲突时不猜测展示名，执行仍按工具名解析和权限规则处理。
 - 模型 Provider 当前使用 `ProviderAuth.none()`；不能把业务工具的凭据透传链套用到模型请求。客户端 `invokeTool` 方法没有自动重放循环；本文不据此承诺整条网络基础设施提供 exactly-once。
 
 ## 5. Skill 调用链：显式命令与模型读取
@@ -155,7 +156,7 @@ Skill 是指令和资源载体，不是 Java 方法注册机制；绑定工具�
 
 ![显式 Skill 命令](skill_command.svg)
 
-[原尺寸 SVG](skill_command.svg) · [PlantUML 源码](diagram.puml#L202)
+[原尺寸 SVG](skill_command.svg) · [PlantUML 源码](diagram.puml#L205)
 
 入口是 `POST /campusclaw-service/v1/sessions/{sessionId}/command`，例如：
 
@@ -184,7 +185,7 @@ Skill 是指令和资源载体，不是 Java 方法注册机制；绑定工具�
 
 ![模型自主读取 Skill](skill_model_read.svg)
 
-[原尺寸 SVG](skill_model_read.svg) · [PlantUML 源码](diagram.puml#L260)
+[原尺寸 SVG](skill_model_read.svg) · [PlantUML 源码](diagram.puml#L263)
 
 1. [RuntimeAgentPromptLoader.load / loadSkills](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java) 读取 `SYSTEM.md` 并扫描技能元数据；过滤 `disable-model-invocation` 的 Skill。
 2. [SkillPromptFormatter.format](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/skill/SkillPromptFormatter.java) 将 name、description、location 放入 `<available_skills>`，提示模型在任务匹配时用 `Read` 读取对应文件。初始提示词不是直接拼入所有 Skill 全文。
@@ -232,7 +233,7 @@ Skill 是指令和资源载体，不是 Java 方法注册机制；绑定工具�
 
 ## 8. 证据与验证边界
 
-本文全部实现结论限定在上述 commit 的 `campusclaw` 源码。图内保留仓库相对源码路径、关键符号和基线注释；正文链接定位本机源码。旧模块路径清单用于导航，本材料进一步区分“源码存在”和“当前被装配执行”。
+本文全部实现结论限定在上述 commit 的 `campusclaw` 源码。图内保留仓库相对源码路径、关键符号和基线注释；正文链接定位本机源码。旧模块路径清单用于导航，本材料进一步区分“源码存在”和“当前被装配执行”。本次更新特别核对了模型全局目录删除、写入类工具删除、可选凭据透传和 Mate 工具展示名快照。
 
 本次不修改 Java、配置、API 契约或数据库结构，不新增依赖，不将静态调用链当作吞吐量、容量或端到端可用性证明；不读取或更新学习笔记。
 

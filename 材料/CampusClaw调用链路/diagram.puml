@@ -1,9 +1,10 @@
 @startuml model_call
-' Baseline: pi-mono-java main 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7, checked 2026-09-18.
+' Baseline: pi-mono-java main fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-19.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/agent/loop/AgentLoop.java :: invokeModel, consumeStream, runTurns.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/ai/CampusClawAiService.java :: streamSimple.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/ai/provider/mate/CampusMateProvider.java :: streamSimple, subscribe, eventFlux.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/ai/provider/mate/MateChatSseParser.java :: accept, finish, finishTools.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/model/MateRuntimeModelManager.java :: resolveModel.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: projectMessageUpdate, persistAssistant.
 ' Observed behavior: provider deltas become typed AI events and then Agent events; Runtime persists completed messages.
 hide footbox
@@ -62,7 +63,7 @@ end note
 @enduml
 
 @startuml tool_execution
-' Baseline: pi-mono-java main 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7, checked 2026-09-18.
+' Baseline: pi-mono-java main fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-19.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/agent/loop/AgentLoop.java :: resolveToolCallsSafe, runToolPhase.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/agent/tool/ToolExecutionPipeline.java :: executePlanned, execute, applyBeforeHook, invokeTool.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: beforeToolCall.
@@ -128,12 +129,13 @@ endlegend
 @enduml
 
 @startuml mate_tool_call
-' Baseline: pi-mono-java main 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7, checked 2026-09-18.
+' Baseline: pi-mono-java main fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-19.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/ListMateToolsTool.java :: execute.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/CallMateTool.java :: execute.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/MateToolDiscovery.java :: resolveToolId, loadAllSources.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate/MateToolSessionCache.java :: resolveOrRefresh.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/common/client/HttpMateToolClient.java :: listAgentTools, listSkillTools, invokeTool.
+' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeToolCallSnapshotResolver.java :: resolveDisplayName.
 ' Observed behavior: discovery supplies a name-to-id index; execute uses an invocation credential snapshot.
 hide footbox
 skinparam backgroundColor #FFFFFF
@@ -171,7 +173,7 @@ opt Model requests ListMateTools
 end
 
 Pipeline -> Tool: execute CallMateTool({tool, args?})\nafter Runtime permission hook
-Tool -> Tool: require complete execution credentials
+Tool -> Tool: capture optional execution credentials
 Tool -> Discovery: resolveToolId(tool)
 alt Name present in Session cache
   Discovery --> Tool: toolId
@@ -195,12 +197,13 @@ end
 note over Client, Mate
 Paths in this diagram share prefix /mate-service/v1.
 Discovery carries no execution credential headers.
+Execution forwards only non-empty credential values; Claw does not require a complete combination.
 The execution method has no automatic replay loop.
 end note
 @enduml
 
 @startuml skill_command
-' Baseline: pi-mono-java main 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7, checked 2026-09-18.
+' Baseline: pi-mono-java main fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-19.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeCommandController.java :: executeSkill.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/service/command/skill/SkillCommandExecutionService.java :: execute, expand, publicInvocation.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeExecutionContextFactory.java :: createPreparedMessage.
@@ -258,7 +261,7 @@ end note
 @enduml
 
 @startuml skill_model_read
-' Baseline: pi-mono-java main 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7, checked 2026-09-18.
+' Baseline: pi-mono-java main fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-19.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtime/AgentRuntimeManager.java :: prepare, writeSkills, loadSkill.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java :: load, loadSkills.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/skill/SkillPromptFormatter.java :: format.
