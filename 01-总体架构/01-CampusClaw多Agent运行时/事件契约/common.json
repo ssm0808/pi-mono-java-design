@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.56.0",
+    "version": "1.57.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -28,14 +28,14 @@
         {
           "name": "X-HW-ID",
           "value": "credential-jwt",
-          "required": true,
-          "description": "用户凭据 ID；不是公司、服务或应用标识"
+          "required": false,
+          "description": "可选的用户凭据 ID；不是公司、服务或应用标识。Claw 只捕获已提供值，不在 HTTP 入口校验"
         },
         {
           "name": "Authorization",
           "value": "Bearer opaque-token",
-          "required": true,
-          "description": "Bearer JWT；Claw 当前只从请求读取，不解析或校验"
+          "required": false,
+          "description": "可选的 Bearer JWT；Claw 只捕获已提供值，不在 HTTP 入口校验"
         }
       ]
     },
@@ -47,14 +47,14 @@
         {
           "name": "X-HW-ID",
           "value": "credential-appkey",
-          "required": true,
-          "description": "用户凭据 ID；不是公司、服务或应用标识"
+          "required": false,
+          "description": "可选的用户凭据 ID；不是公司、服务或应用标识。Claw 只捕获已提供值，不在 HTTP 入口校验"
         },
         {
           "name": "X-HW-APPKEY",
           "value": "opaque-appkey",
-          "required": true,
-          "description": "AppKey 凭据；Claw 当前只从请求读取，不校验；可与 Authorization 同时出现"
+          "required": false,
+          "description": "可选的 AppKey 凭据；Claw 只捕获已提供值，不在 HTTP 入口校验；可与 Authorization 同时出现"
         }
       ]
     }

@@ -21,8 +21,8 @@
     const section = make('section', 'section review-section');
     const heading = make('div', 'review-heading');
     const copy = make('div', '');
-    append(copy, make('h3', '', '本轮需要你确认'), make('p', 'muted', review.notice || '选择后可直接发送本轮评审答复。'));
-    append(heading, copy, make('span', 'review-status', review.status || '评审中'));
+    append(copy, make('h3', '', '本轮需要你确认'), make('p', 'muted', review.currentNotice || review.notice || '选择后可直接发送本轮评审答复。'));
+    append(heading, copy, make('span', 'review-status', review.currentStatus || review.status || '评审中'));
     section.appendChild(heading);
     const form = make('form', 'review-form');
     form.dataset.operationKey = model.operation.operationKey;

@@ -120,8 +120,12 @@ def validate_header_examples(
         actual_values = {name: header.get("value") for name, header in headers.items()}
         require(actual_values == expected_values[example["id"]],
                 f"{context} request Header values differ: {example['id']}")
-        require(all(header.get("required") is True for header in headers.values()),
-                f"{context} request Header requiredness differs: {example['id']}")
+        required_headers = {name for name, header in headers.items() if header.get("required") is True}
+        require(required_headers <= {"Content-Type", "Accept"},
+                f"{context} credential Header must remain optional: {example['id']}")
+        require(all(header.get("required") is False for name, header in headers.items()
+                    if name not in {"Content-Type", "Accept"}),
+                f"{context} credential Header requiredness differs: {example['id']}")
         x_hw_id_description = headers["X-HW-ID"].get("description", "")
         require("用户凭据 ID" in x_hw_id_description and "不是公司、服务或应用标识" in x_hw_id_description,
                 f"{context} must define X-HW-ID as the user credential ID")
@@ -197,6 +201,8 @@ def validate_common_contract(common: dict[str, Any]) -> None:
     }
     require(header_names == EXPECTED_CONTEXT_HEADERS, "Shared HTTP Header names changed unexpectedly")
     validate_header_examples(header_examples, EXPECTED_SHARED_HEADER_VALUES, "Shared")
+    require(all(header.get("required") is False for example in header_examples for header in example["headers"]),
+            "Shared credential Headers must be optional")
     require("可与 Authorization 同时提供" in json.dumps(header_examples, ensure_ascii=False),
             "Request header contract must state that both credential modes may be provided")
 
@@ -303,6 +309,14 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
             else EXPECTED_SHARED_HEADER_VALUES
         )
         validate_header_examples(operation["requestHeaderExamples"], expected_values, str(key))
+        if key in {POST_EVENTS, POST_COMMAND}:
+            policy = operation.get("credentialPolicy", {})
+            require(policy.get("requestHeadersRequired") is False,
+                    f"Execution credential Headers must be optional: {key}")
+            require(policy.get("entryRejectsMissingCredentials") is False,
+                    f"Execution entry must not reject missing credentials: {key}")
+            require("tool execute" in policy.get("toolExecuteFailure", ""),
+                    f"Execution must defer credential failure to tool execute: {key}")
         parameter_headers = {
             parameter["name"] for parameter in operation["parameters"] if parameter["in"] == "header"
         }
@@ -618,6 +632,8 @@ def validate_source_deduplication() -> None:
             }
             require(len(examples) == 2 and header_names == POST_EVENTS_CONTEXT_HEADERS,
                     "Execution POST must override shared Header examples only to add access-token")
+            require(operation.get("credentialPolicy", {}).get("requestHeadersRequired") is False,
+                    "Execution POST credential Headers must be optional")
         else:
             require("requestHeaderExamples" not in operation,
                     f"Shared request headers duplicated in {operation_path.name}")

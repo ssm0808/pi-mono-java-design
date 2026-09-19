@@ -223,7 +223,7 @@ OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对�
 | `frontend/dev/authCenter.ts` · `loginAuthCenter/extractAccessToken` | 固定 HTTPS 登录，独立 Set-Cookie 数组提取，10 秒超时、64 KiB 上限；返回 Token 字符串，没有有效期字段、续期接口或旧 Token 并存保证。当前源码设置 `rejectUnauthorized: false`，与保留的 TLS 校验目标不同。 |
 | `frontend/dev/localConfig.ts` · `LocalConfigRepository.toSnapshot/writeStored/DevConfigService`；`useDeveloperSettings.ts` · `acceptLocalStatus/makeRow` | 本地配置持久化、版本与热读取已实现；status 返回账号密码，页面接受回填且 Header 初始 revealed=true，与秘密只写不回显、默认遮蔽目标不同；仅记录差距，不推断其意图。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java` · `mateCredentials` | 精确读取四项 Header 并创建 `MateCredentials`。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java:59-70` · `submit` | 五类事件都检查凭据完整性，但只有新消息把凭据传给执行路径；四类控制分支不传递新凭据，不能通过回答/批准实现原执行换 Token。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java:59-70` · `submit` | 当前五类事件仍在入口检查凭据完整性，但目标设计要求移除该前置检查；只有实际 Mate tool execute 应因凭据不完整返回工具失败。只有新消息把凭据传给执行路径，四类控制分支不传递新凭据，不能通过回答/批准实现原执行换 Token。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:203-236` · `createSession` | 将凭据放入 `ManagedAgentSessionRequest` 和 `SubagentExecutionContext.root`，绑定本次执行。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/mate/MateCredentials.java` · record / `isComplete`；`common/client/HttpMateToolClient.java:310-377` · `invokeTool/toHeaderInfo`（同一 `codingagent/` 前缀） | 不可变凭据快照检查完整性，工具用原 Token 调用；该路径没有从浏览器新设置取值或运行中续期。完整性不证明有效期或真实性。 |
 

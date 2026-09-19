@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.15.0 |
+| 文档版本 | 0.16.0 |
 | 状态 | 五输入联合契约与 B01～B15 已确认；本文跨实例执行骨架为 待实现 |
 | 源码范围 | Java c9d858bc、a8192e04、918005ee、dfb90cac 分项核验；pi 固定 5cd93f68，完整提交和符号见 [源码证据](source-evidence.md#5-session-events-固定源码核验) |
-| 更新日期 | 2026-09-18 |
+| 更新日期 | 2026-09-19 |
 
 结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量已在 Runtime 主线实现（`8c5fda1d`，见[源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)）；Session/元数据不增字段，Mate 公共投影待实现。本文其他历史源码范围不因此升级。
 
@@ -41,7 +41,7 @@ POST `/sessions/{sessionId}/events` 在同一响应中返回本次用户事件�
 
 ### 2.2 相邻模块边界
 
-凭据的读取、执行期间保留和仅 Mate tool execute 使用见 [HTTP 安全边界](chat-http-v1-design.md#7-安全与附件边界)。工具确认等待仍属于原执行，确认/中断请求不能覆盖原凭据。
+凭据的读取、执行期间保留和仅 Mate tool execute 使用见 [HTTP 安全边界](chat-http-v1-design.md#7-安全与附件边界)。所有凭据 Header 在 HTTP 入口均为可选；工具确认等待仍属于原执行，确认/中断请求不能覆盖原凭据。缺失凭据不阻止事件接收，只有实际 Mate tool execute 才因最低凭据不完整返回工具失败结果。
 
 Skill 复用消息执行语义，Builtin 保持 JSON，具体由 [Slash 模块](../../04-命令与技能/00-Slash-Command通用模块/README.md) 维护。当前无运行中消息队列，[FollowUp](chat-follow-up-future-design.md) 仅为未来扩展。
 
@@ -356,6 +356,7 @@ HTTP 路径使用 `/campusclaw-service/v1`。内部开发阶段编号不作为�
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
+| 0.16.0 | 2026-09-19 | 取消事件入口的凭据必填校验，将缺失凭据的失败推迟到实际 Mate 工具调用。 |
 |---|---|---|
 | 0.15.0 | 2026-09-18 | 调用事件保存可选 displayName 快照，统一映射、持久化与前端投影边界。 |
 | 0.13.0 | 2026-09-18 | 根执行真实终态同事务将三类未领取决定标记为 CANCELED，并保留已接受用户事实。 |

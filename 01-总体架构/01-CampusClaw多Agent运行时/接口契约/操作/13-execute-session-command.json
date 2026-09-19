@@ -5,7 +5,12 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/command",
     "summary": "执行 Builtin（JSON）或 Skill（SSE）命令",
-    "description": "本页展示已确认的 Builtin 开发切片：help、status、name、model、thinking、compact 和 skills。Builtin 与 Skill Command 由用户统一负责设计、实现和集成，B13/B14 已确认共享命令入口，Builtin 返回 JSON，Skill 返回与 POST Events 相同的请求级 SSE。Service 将省略或 null 的 arguments 归一为空字符串，Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。Builtin 成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Compact 复用权威领域 Entry。Compact 被接受后断线不取消，结果不确定时通过 GET Session/Events 对账，不自动重放 POST。本接口额外必填 access-token。Claw 从请求读取四项凭据，非 Compact 命令只在内存中保留到本次命令处理结束；Compact 仅在 Active Holder 保留到压缩及本次压缩执行结束。仅随实际 Mate tool execute 原名发送，不写入 Session、事件或日志，不进入 Prompt，也不随工具发现、模型或其他请求发送；Claw 不解析或校验凭据。 Help 已确认改为 Agent 使用指南：只取 Session 绑定 Agent 最近成功发布的一份完整本地缓存，不消费命令清单，不调用 prepare、refresh、远端 Mate、模型或 Tool，不写历史或模型上下文、不占执行容量。AgentRuntime 的 userCases 必须完成保存与重载往返；旧缓存显式刷新前缺场景返回 []。三个介绍字段同取一份 PreparedAgentRuntime，读取与发布复用 Agent 级锁，不取 Session 执行锁。元数据仅作不可信纯文本展示，不执行 HTML、脚本或自动加载远程图片。 响应对齐既有 API：status/name/thinking 查询及 name/model/thinking 修改统一返回 GET Session 的完整资源与 ETag；model 查询返回 GET Models 的 currentModelId/models。仅复用业务响应 VO 和投影，不调用其他 Controller；Session 资源与 ETag 同取权威查询快照或锁内更新结果，不从旧命令清单拼接。Help、Compact、Skills 无对应独立 API，保留最小业务结果，不新增公共路径。所有成功结果删除 command、changed、sourceEventSeq，不新增类型判别或命令回执包装；调用方依据自身请求区分响应。配置同值成功保留原 updatedAt/ETag，不写领域 Entry。 Skill name 使用 skill:<name>；接受时取完整解析快照，锁内重检绑定、访问和容量，与 user.message 共用单消息准入。Skill 正文只进入原有 Session 内部模型上下文，不能作为系统权限；公开首帧和历史保留展开前调用。Skill 的 Active Holder 使用原始消息执行凭据直到本轮实际结束，支持确认分段及 targetEventId 中断；断线不取消，不新增 commandId 或独立 Skill 全文审计表。",
+    "description": "本页展示已确认的 Builtin 开发切片：help、status、name、model、thinking、compact 和 skills。Builtin 与 Skill Command 由用户统一负责设计、实现和集成，B13/B14 已确认共享命令入口，Builtin 返回 JSON，Skill 返回与 POST Events 相同的请求级 SSE。Service 将省略或 null 的 arguments 归一为空字符串，Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。Builtin 成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Compact 复用权威领域 Entry。Compact 被接受后断线不取消，结果不确定时通过 GET Session/Events 对账，不自动重放 POST。本接口的凭据 Header 均可选。Claw 从请求读取已提供的四项凭据，非 Compact 命令只在内存中保留到本次命令处理结束；Compact 仅在 Active Holder 保留到本次压缩执行结束。仅随实际 Mate tool execute 原名发送，不写入 Session、事件或日志，不进入 Prompt，也不随工具发现、模型或其他请求发送；缺少凭据不在命令入口拒绝，实际 Mate tool execute 时再因凭据不完整返回工具失败结果，Claw 不解析或校验凭据。 Help 已确认改为 Agent 使用指南：只取 Session 绑定 Agent 最近成功发布的一份完整本地缓存，不消费命令清单，不调用 prepare、refresh、远端 Mate、模型或 Tool，不写历史或模型上下文、不占执行容量。AgentRuntime 的 userCases 必须完成保存与重载往返；旧缓存显式刷新前缺场景返回 []。三个介绍字段同取一份 PreparedAgentRuntime，读取与发布复用 Agent 级锁，不取 Session 执行锁。元数据仅作不可信纯文本展示，不执行 HTML、脚本或自动加载远程图片。 响应对齐既有 API：status/name/thinking 查询及 name/model/thinking 修改统一返回 GET Session 的完整资源与 ETag；model 查询返回 GET Models 的 currentModelId/models。仅复用业务响应 VO 和投影，不调用其他 Controller；Session 资源与 ETag 同取权威查询快照或锁内更新结果，不从旧命令清单拼接。Help、Compact、Skills 无对应独立 API，保留最小业务结果，不新增公共路径。所有成功结果删除 command、changed、sourceEventSeq，不新增类型判别或命令回执包装；调用方依据自身请求区分响应。配置同值成功保留原 updatedAt/ETag，不写领域 Entry。 Skill name 使用 skill:<name>；接受时取完整解析快照，锁内重检绑定、访问和容量，与 user.message 共用单消息准入。Skill 正文只进入原有 Session 内部模型上下文，不能作为系统权限；公开首帧和历史保留展开前调用。Skill 的 Active Holder 使用原始消息执行凭据直到本轮实际结束，支持确认分段及 targetEventId 中断；断线不取消，不新增 commandId 或独立 Skill 全文审计表。",
+    "credentialPolicy": {
+      "requestHeadersRequired": false,
+      "entryRejectsMissingCredentials": false,
+      "toolExecuteFailure": "Mate tool execute returns a failed ToolResult when X-HW-ID, access-token, and both JWT/AppKey credentials are incomplete"
+    },
     "requestHeaderExamples": [
       {
         "id": "jwt",
@@ -15,19 +20,19 @@
           {
             "name": "X-HW-ID",
             "value": "credential-jwt",
-            "required": true,
+            "required": false,
             "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           },
           {
             "name": "Authorization",
             "value": "Bearer opaque-token",
-            "required": true,
+            "required": false,
             "description": "Bearer JWT；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           },
           {
             "name": "access-token",
             "value": "opaque-access-token",
-            "required": true,
+            "required": false,
             "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           }
         ]
@@ -40,19 +45,19 @@
           {
             "name": "X-HW-ID",
             "value": "credential-appkey",
-            "required": true,
+            "required": false,
             "description": "用户凭据 ID；不是公司、服务或应用标识。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           },
           {
             "name": "X-HW-APPKEY",
             "value": "opaque-appkey",
-            "required": true,
+            "required": false,
             "description": "AppKey 凭据；可与 Authorization 同时提供。Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           },
           {
             "name": "access-token",
             "value": "opaque-access-token",
-            "required": true,
+            "required": false,
             "description": "Mate tool 调用凭据；Claw 只在内存中保留到本次命令处理结束，Compact 时由 Active Holder 保留到本次压缩执行结束；仅随实际 Mate tool execute 请求发送，不写入 Session、事件或日志；Skill 由原消息 Active Holder 保留到实际执行结束，等待工具确认不释放"
           }
         ]

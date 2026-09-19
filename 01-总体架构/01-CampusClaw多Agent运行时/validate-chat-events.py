@@ -115,6 +115,13 @@ def validate_public_payload(value: object) -> None:
 
 
 def validate_access_token_rule(operation: dict) -> None:
+    policy = operation.get("credentialPolicy", {})
+    require(policy.get("requestHeadersRequired") is False,
+            "POST Events credential Headers must be optional")
+    require(policy.get("entryRejectsMissingCredentials") is False,
+            "POST Events must not reject missing credentials at the entry")
+    require("tool execute" in policy.get("toolExecuteFailure", ""),
+            "POST Events must defer missing credential failure to tool execute")
     modes = operation["requestHeaderExamples"]
     require(
         len(modes) == 2 and {mode["id"] for mode in modes} == {"jwt", "appkey"},
@@ -124,11 +131,11 @@ def validate_access_token_rule(operation: dict) -> None:
         tokens = [header for header in mode["headers"] if header["name"] == "access-token"]
         require(len(tokens) == 1, f"{mode['id']} must contain exactly one access-token Header")
         token = tokens[0]
-        require(token.get("required") is True, f"{mode['id']} must require access-token")
+        require(token.get("required") is False, f"{mode['id']} access-token must be optional")
         require(token["value"] == "opaque-access-token", "confirmed access-token example must be preserved")
         require(
-            "五种用户事件均必须携带" in token["description"],
-            f"{mode['id']} must state that all five user event types require access-token",
+            "可选" in token["description"] and "入口不因缺失凭据拒绝" in token["description"],
+            f"{mode['id']} must state deferred credential failure",
         )
 
 
@@ -298,6 +305,11 @@ def validate_headers(operation: dict) -> None:
         require(len(headers) == len(mode["headers"]), "duplicate Header")
         require(headers["Accept"]["value"] == "text/event-stream", "POST must request SSE")
         require(headers["Content-Type"]["value"] == "application/json", "POST body remains JSON")
+        require(headers["Accept"].get("required") is True and headers["Content-Type"].get("required") is True,
+                "POST transport Headers must remain required")
+        require(all(item.get("required") is False for name, item in headers.items()
+                    if name not in {"Accept", "Content-Type"}),
+                "POST credential Headers must be optional")
         require(headers["X-HW-ID"]["value"] == expected_ids[mode["id"]], "credential ID example changed")
         require("用户凭据 ID" in headers["X-HW-ID"]["description"]
                 and "不是公司、服务或应用标识" in headers["X-HW-ID"]["description"], "credential ID meaning changed")
@@ -412,7 +424,10 @@ def validate_model(model: dict) -> None:
         require(clause in operation["description"], f"missing database interruption constraint: {clause}")
     require("检查周期" in " ".join(review["implementationCalibration"]), "polling interval needs implementation calibration")
     require("等待工具确认时也关闭" in operation["description"], "confirmation wait must also close the response")
-    require("五种用户事件均必须携带 access-token" in review["notice"], "preserve five-type token rule")
+    require(operation.get("credentialPolicy", {}).get("requestHeadersRequired") is False,
+            "credential Header policy must remain optional")
+    require(review.get("credentialPolicyChange", {}).get("status") == "confirmed",
+            "credential Header change must be explicitly confirmed")
     require(review["decisionHistory"]["S3-user-events"]["previous"] == "A-user-events-receipt-history-only",
             "record the explicitly superseded S3")
     require("用户明确调整" in review["decisionHistory"]["S3-user-events"]["status"], "S3 adjustment needs explicit attribution")
@@ -430,7 +445,8 @@ def validate_negative_regressions(model: dict) -> int:
         mutations.append((label, candidate))
     changed("GET method", lambda m: m["operation"].update(method="GET"))
     changed("JSON success", lambda m: m["operation"]["responses"][0]["headers"].update({"Content-Type": "application/json"}))
-    changed("missing token", lambda m: m["operation"]["requestHeaderExamples"][0]["headers"][2].update(required=False))
+    changed("reintroduced required token", lambda m: m["operation"]["requestHeaderExamples"][0]["headers"][2].update(required=True))
+    changed("entry credential rejection", lambda m: m["operation"]["credentialPolicy"].update(entryRejectsMissingCredentials=True))
     changed("reopened receipt", lambda m: m["review"].update(questions=[{"id": "M2-receipt"}]))
     changed("reopened product gate", lambda m: m["review"].update(pendingReview=["whole approval"]))
     changed("missing database decision", lambda m: m["operation"].update(
@@ -575,6 +591,8 @@ def validate_history_model(model: dict, post: dict) -> None:
         headers = {h["name"]: h for h in mode["headers"]}
         require(len(headers) == len(mode["headers"]), "duplicate read Header")
         require("access-token" not in headers, "history must not ask for a tool token")
+        require(all(headers[name].get("required") is False for name in headers),
+                "history credential and transport Headers must remain optional")
         require(headers["X-HW-ID"]["value"] == f"credential-{mode['id']}", "read credential example drift")
         require("用户凭据 ID" in headers["X-HW-ID"]["description"], "credential ID is not a company ID")
         name = "Authorization" if mode["id"] == "jwt" else "X-HW-APPKEY"
