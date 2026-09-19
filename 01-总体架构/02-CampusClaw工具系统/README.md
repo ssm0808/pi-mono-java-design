@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.12.1 |
+| 文档版本 | 2.13.0 |
 | 状态 | 当前目标；空或部分凭据只透传、由 Mate 校验的增量待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-09-19 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
@@ -335,7 +335,7 @@ agent/{agentId}/.campusclaw/
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L829)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L835)
 
 ## 9. Mate 工具发现、缓存与执行
 
@@ -550,43 +550,9 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 [PlantUML 源码：`managed_session_compaction`](diagram.puml#L703)
 
-默认配置为 `enabled=true`、`reserveTokens=16384`、`keepRecentTokens=20000`。执行正常结束后
-超过阈值则压缩；摘要瞬态重试默认开启、最多 3 次、基础退避 2000ms。`enabled=false`
-同时关闭阈值和溢出自动压缩。判定只接受当前
-provider/model 且晚于最新压缩边界的 Assistant。优先使用最后一条有效 Assistant Usage；
-Usage 不可用时，从该位置以后估算尾部消息，文本与 JSON 参数使用 `ceil(chars/4)`，image
-按 4800 chars。只有 Token 严格大于 `contextWindow-reserveTokens` 才触发阈值压缩。
+压缩由公共 ManagedAgentSession 管理，Runtime、Child 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
 
-自动压缩必须区分两类溢出：
-
-1. 正常 `STOP` 且 Usage 已超过窗口是“静默成功溢出”。压缩包含成功 Assistant 的完整
-   上下文，向 Host 返回原成功答案，不重放已经成功的模型调用。
-2. `ERROR`、`LENGTH`、provider 显式 overflow 或可恢复 length 是“失败溢出”。只在压缩
-   候选中排除该失败 Assistant，成功后重试一次；第二次仍溢出时发出明确失败，不再进入
-   “压缩—重试”循环。数据库恢复出的未处理失败溢出在接受下一条 prompt 前先压缩恢复。
-
-模型窗口、可选输出上限及 LENGTH 判定由[Model 能力专题](../../02-服务与接口/03-Model/model-capabilities.md#4-可选-maxtokens-的消费规则)统一维护：从 Mate 查询后发布到 Agent 快照，未知上限不自动填普通 Chat 额度，也不触发依赖该值的恢复启发式；该增量待实现。压缩生命周期的权威规则见[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。
-
-自动流程先执行 `prepare`；如果没有安全可压缩窗口则静默跳过，不投影 started/failed。
-切点只允许 User 或 Assistant，ToolResult 不能成为第一条保留消息。最后一条 Assistant
-即使独自超过 `keepRecentTokens` 也必须保留；同一轮被切掉的前缀单独摘要，再与历史摘要
-合并 Usage/Cost。重复压缩更新上一次摘要并继承已排序的 `<read-files>`，边界始终指向
-当前上下文第一条保留消息。
-
-摘要使用固定 Goal/Constraints/Progress/Decisions/Next Steps/Critical Context 结构和
-`<conversation>/<previous-summary>` 标签，序列化 thinking、tool name 和 JSON 参数；单个
-ToolResult 最多 2000 字符。摘要调用无工具、cache 为 none、使用新的 routing session ID；
-历史摘要与轮次前缀预算按 Session 压缩设计执行；模型输出上限未知时仍保留摘要自身预算；
-仅瞬态失败按有界退避重试。摘要为空、包含 ToolCall、失败或被取消时不替换旧上下文，
-历史 Entry 不删除。
-
-Runtime 只在 prepare 成功后发 `session.compaction.started`。失败事件包含
-`reason/willRetry/aborted/message` 且不持久化；成功事件保存完整摘要、保留边界、压缩前后
-Token 和本次 Usage。`willRetry=true` 时还在持久化 payload 内保存 `_discardedEntryId`，重载
-按该 ID 精确排除已经从在线上下文移除的 `ERROR/LENGTH`；该内部字段不进入历史或 SSE
-公共事件。旧 Entry 缺少该字段时只回退识别压缩前最后一条可重试 Assistant。CampusClaw
-只追踪 PascalCase `Read`，不恢复 pi 的 Bash/Edit/Write、
-JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
+每个新执行从 Mate 查询当前模型窗口，同一根的 Tool Loop、自动压缩与确认续跑复用结果；独立手工压缩查询一次。普通调用及摘要均由 Mate 控制输出额度，Claw 不传输出上限，也不据此推断 LENGTH 恢复。前置输入检查、窗口变化与失败边界见[Model 专题](../../02-服务与接口/03-Model/model-capabilities.md#4-输出控制与上下文消费)，该增量待实现。成功答案不重放、失败摘要不替换上下文、历史 Entry 不删除。
 
 ### 12.4 删除、禁用与替换
 
@@ -674,7 +640,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 - Slash Command 与模型工具分开注册和测试，所有命令都不出现在模型工具清单中；
 - Usage/估算阈值、失效边界、显式/静默/Xiaomi/可恢复 length 溢出通过测试；
 - 成功 STOP 只压缩不重试，ERROR/LENGTH 最多重试一次，第二次溢出显式失败；
-- 模型能力来自同一 Mate 快照，已知/未知输出上限、显式小预算、摘要额度与 LENGTH 恢复通过 Model 能力专题 C3 验收；
+- 每个新执行查询窗口，同根续跑复用；调用与摘要无输出额度，窗口缩小及 LENGTH 判断按 Model 专题 C2～C4 验收；
 - compaction completed → retry → reload 后不恢复被丢弃的 LENGTH，在线与重载上下文一致；
 - 超大末条 Assistant、ToolResult 安全切点、split-turn、重复摘要边界和 Read 路径继承通过测试；
 - 固定结构摘要、2000 字符截断、无工具/cache、Token 上限、瞬态重试和 Usage/Cost 合并通过测试；
@@ -699,6 +665,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.13.0 | 2026-09-19 | 公共压缩复用执行级模型窗口，输出额度统一由 Mate 控制。 |
 | 2.12.1 | 2026-09-19 | 压缩段落引用 Mate 能力与可选输出上限规则，避免未知上限自动填充和误判。 |
 | 2.12.0 | 2026-09-19 | 工具可用条件不依赖凭据完整性，空快照同样交由 Mate execute 判断。 |
 | 2.11.0 | 2026-09-19 | 展示名读取已加载的 Agent/Skill 绑定元数据，保留执行时工具解析并取消调用级 ID 与失败绑定。 |

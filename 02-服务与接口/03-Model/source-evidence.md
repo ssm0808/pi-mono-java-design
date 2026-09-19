@@ -1,6 +1,6 @@
 # Model：源码证据与实现差距
 
-版本：1.2.0 · 2026-09-19。返回[模块主设计](README.md)。
+版本：1.3.0 · 2026-09-19。返回[模块主设计](README.md)。
 
 本文集中保存已读取的源码证据。每项结论仅适用于对应提交与核验范围；目标规则和验收见主设计。独立核验范围分别记录；本次未运行产品测试。
 
@@ -41,12 +41,17 @@ pi 当次通过 ls-remote 确认默认分支 main，并在临时仓库 fetch 得
 | 同上 | `packages/ai/src/api/simple-options.ts` · buildBaseOptions/clampMaxTokensToContext；`packages/coding-agent/src/core/compaction/compaction.ts` · shouldCompact | 普通 options 优先显式额度再取模型值，并按剩余窗口及 4096 安全余量收紧；压缩阈值为 contextWindow-reserveTokens。CampusClaw 本专题不迁移该安全余量算法。 |
 | CampusClaw 本地 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7` | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/MateModelManagerProperties.java`、`MateRuntimeModelManager.java` · resolveModel | 所有绑定模型共用 128000/8192 配置默认值；这是实际行为，不是 Mate 返回的能力。 |
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java` · rebuild/toSettings/loadSnapshot/publish；`MateServiceClient.java` · AgentRuntime；`runtimeapi/agent/AgentDirectorySnapshotDTO.java`（同 codingagent 包） | 只取得模型 ID 列表；目录 staging/完整性校验/原子发布已有骨架，settings 和请求快照均无逐模型能力。 |
-| 同上 | `modules/ai/src/main/java/com/campusclaw/ai/types/Model.java`、`SimpleStreamOptionsFactory.java`；`modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` · buildStreamOptions | Model.maxTokens 为 int；工厂存在直接算术，Agent 无显式额度时填模型值；可选能力需要消费链改造。 |
-| 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/compaction/SessionCompactor.java` · overflowDecision/summaryMaxTokens；`modules/ai/src/main/java/com/campusclaw/ai/utils/ContextOverflowDetector.java` · isRecoverableLength | 模型上限用于 LENGTH 恢复比较和摘要预算；未知上限不能仅删除配置而保留消费假设。 |
+| 同上 | `modules/ai/src/main/java/com/campusclaw/ai/types/Model.java`、`SimpleStreamOptionsFactory.java`；`modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java` · buildStreamOptions | Model.maxTokens 为 int；工厂存在直接算术，Agent 无显式额度时填模型值；输出控制移交需要清理整条消费链。 |
+| 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/compaction/SessionCompactor.java` · overflowDecision/summaryMaxTokens；`modules/ai/src/main/java/com/campusclaw/ai/utils/ContextOverflowDetector.java` · isRecoverableLength | 模型上限用于 LENGTH 恢复比较和摘要预算；移交 Mate 后不能只删除配置而保留消费假设。 |
 | Mate 本地 `4b957a3a846659f5b7569c9d6133abc070cd2e3c` | `src/main/java/com/huawei/hicampus/mate/agentdefinition/vo/RuntimeAgentResponseVO.java`；`service/impl/AgentDefinitionServiceImpl.java` · getRuntimeAgent/buildRuntimeAgent（同 agentdefinition 包） | runtime 返回 bindingModels ID 数组，未提供 token 能力；当前查询组合模型、Tool、Skill 和 Agent 绑定。 |
 | 同上 | `src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/config/ModelManagerProperties.java` · ModelRoute；`service/ConfiguredModelRouteResolver.java` · resolve；`vo/LlmChatRequestVO.java`；`service/LlmChatService.java` · rewriteMaxOutputTokens（后三者同 modelmanager 包） | 路由包含 endpoint/上游 ID/凭据/输出字段名，没有 contextWindow/maxTokens 数值；Chat 输出参数为可选正整数，按路由改名或删除；没有证据证明可直接复用现成能力目录。 |
 
-Java 与 Mate 是本地明确提交的静态核验，未声称本次已更新其远端。Mate `src/main/java` 范围搜索未发现独立模型能力查询 Controller。已确认目标为独立查询后发布完整快照、contextWindow 必填、maxTokens 可选；这两项与查询/发布链为待实现。未知上限与 pi 的必填 Model/默认补值不同，属于企业模型权威的产品约束及架构变更；具体代价与验收见[能力专题](model-capabilities.md)。
+| pi 同一 main 提交 | `packages/coding-agent/src/core/compaction/compaction.ts` · createSummarizationOptions/generateSummaryWithUsage/generateTurnPrefixSummary | 摘要仍显式设置 maxTokens，历史/前缀取 reserve 的 80%/50% 并受模型上限限制；Claw 将全部输出控制交给 Mate 是有意差异。 |
+| Java 同一 `21c3f59b` 提交 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java` · submitPrepared/submitLocked/prepare；`session/RuntimeSessionModelReconciler.java` · reconcile（同 runtimeapi 包） | 消息准备在 withOperationLock 内，reconcile 可提交模型校准；新增远程信息查询必须拆成观察、锁外读取与锁内复核，不能直接插入现有锁内路径。 |
+| 同上 | `runtimeapi/event/RuntimeExecutionContextFactory.java` · create/createPreparedMessage；`session/AgentSessionFactory.java` · create（均在 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent 下） | 执行工厂收到已解析 Model，公共 Session 工厂服务 Runtime/Child/Cron；当前没有执行前信息查询和独立能力 DTO。 |
+| 同上 | `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatRequestMapper.java` · appendOptions | options.maxTokens 非空就写 max_output_tokens；目标需要删除该映射，包括摘要与显式 options 的入口。 |
+
+2026-09-19 再次确认上游默认分支并 fetch，pi 仍为上述 `36b60d2e8985899743c4cf5bd5f8929832a3f05d`；新增核验摘要输出策略，其他历史范围不升级。Java 与 Mate 为本地明确提交的静态核验，未声称已更新其远端。Mate `src/main/java` 未发现独立信息查询 Controller。目标为新执行锁外查询 contextWindow、固定执行快照，普通调用及摘要均由 Mate 控制输出；查询/准入拆分、前置预算检查和输出策略迁移待实现。与 pi 保留本地额度及摘要预算的差异属于产品约束和架构变更，代价与验收见[模型信息专题](model-capabilities.md)。
 
 ## 2. pi 历史固定行为基线
 
@@ -104,6 +109,7 @@ mate-service 固定基线 `956b547f`：`src/main/java/com/huawei/hicampus/mate/a
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-09-19 | 补充执行锁内准备、请求额度映射与 pi 摘要证据，登记按执行读窗口和 Mate 输出权威的差距。 |
 | 1.2.0 | 2026-09-19 | 核验 pi 逐模型能力与 Java/Mate 默认值链，登记独立查询、能力快照及未知输出上限的实现差距。 |
 | 1.1.2 | 2026-09-17 | 模块统一命名为 Model，源码基线与实现差距不变。 |
 | 1.1.1 | 2026-09-17 | 精简重复目标说明和辅助图入口，保留各项源码证据及核验范围。 |

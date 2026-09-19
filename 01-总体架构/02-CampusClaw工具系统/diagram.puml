@@ -730,7 +730,10 @@ title Common Session Compaction and Overflow Recovery
 ' Reviewed Java baseline bf28e72f: compaction retry did not persist its discarded Entry identity.
 ' Implemented Java baseline bd26e7f8: Agent.buildStreamOptions, RuntimeEntryCodec.effectiveContextEntries,
 ' RuntimeEventProjector.projectCompactionCompleted, and SessionCompactor.decide.
-' Observed implementation: common compaction aligns request limits and restored retry context.
+' Observed implementation at bd26e7f8: compaction aligns request limits and restored retry context.
+' Pending implementation: each new execution queries Mate contextWindow; Mate controls all output limits.
+' Source evidence at Java 21c3f59b: SessionCompactor.summaryOptions and overflowDecision still use maxTokens.
+' Architecture change: validate input budgets and summary gain; remove output-limit recovery heuristics.
 ' Design reason: Runtime, Cron, and Child require one failure-safe context policy.
 ' Java divergence: append-only Entries use an internal discarded Entry ID; only Read paths are tracked.
 
@@ -742,8 +745,9 @@ participant "FileOperationTracker" as Tracker
 participant "Model Manager" as Model
 database "Append-only history" as History
 
-== Recover persisted overflow before accepting input ==
-Host -> Session : prompt(message)
+== Prepare with the captured execution window [P] ==
+Host -> Session : prompt(message, captured model)
+Session -> Compactor : check new input and window before inference [P]
 Session -> Compactor : decide restored context before prompt
 opt stale ERROR or LENGTH overflow is recoverable
   Session -> Compactor : prepare without failed Assistant
@@ -755,7 +759,7 @@ opt stale ERROR or LENGTH overflow is recoverable
   end
 end
 == Execute and choose compaction policy ==
-Session -> Agent : execute with model max output\nwhen no caller override exists
+Session -> Agent : execute without output token limits [P]
 Agent --> Session : Assistant with stop reason and Usage
 Session -> Compactor : decide by same model, boundary,\noverflow, Usage, and fallback estimate
 alt ERROR or LENGTH overflow and no prior recovery
@@ -814,12 +818,14 @@ Session --> Host : execution result
 note over Session,Compactor
   Use safe User / Assistant boundaries.
   Retain the last Assistant and sorted Read paths.
-  Use the actual model output limit for LENGTH
-  recovery.
+  LENGTH alone is not overflow evidence [P].
+  No comparison with model output limits [P].
 end note
 
 note over Compactor,Model
   No tools or cache in summary requests.
+  No output token cap; Mate owns it [P].
+  Check input fit and summary gain [P].
   Invalid summaries never replace the old context.
   History remains append-only; discard IDs stay
   internal.

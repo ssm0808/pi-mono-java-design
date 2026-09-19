@@ -4,7 +4,7 @@
 ' Verified 2026-09-19: pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7 uses CampusMateProvider.
 ' Pending implementation: Mate model capability query and removal of global token defaults.
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/MateRuntimeModelManager.java: resolveModel
-' Design reason: Mate owns per-model token capabilities; Runtime publishes complete snapshots.
+' Design reason: Mate owns per-model token capabilities; each new execution queries its context window.
 ' Source evidence:
 ' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-140
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-76 and eventFlux
@@ -64,7 +64,7 @@ Options ..> RuntimeClient : runtime options
 Options ..> ToolClient : enabled
 ChatClient --> Chat : POST / SSE
 RuntimeClient --> Runtime : GET
-RuntimeClient --> Capabilities : GET by modelId
+RuntimeClient --> Capabilities : GET once per new execution
 RuntimeClient --> Skill : full Skill projection
 ToolClient --> Skill : tool-binding projection
 ToolClient --> Tools : discover / execute
@@ -73,7 +73,7 @@ note bottom of Skill
 One operation, one key, two client projections.
 end note
 legend bottom left
-Existing operation contracts remain unchanged.
+Mate owns Chat output limits; see the Model contract.
 Seven target paths share one validated HTTP(S) origin.
 No global contextWindow or maxTokens default.
 Client instances and DTOs remain independent.

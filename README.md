@@ -1,6 +1,6 @@
 # CampusClaw 设计仓库
 
-导航版本 3.21.0 · 2026-09-19
+导航版本 3.23.0 · 2026-09-19
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
@@ -19,7 +19,7 @@ M03 明确[彻底删除 Bash/Edit/Write](01-总体架构/02-CampusClaw工具系�
 | 模块 | 主设计 | 关联专题与维护边界 |
 |---|---|---|
 | M01 · Agent Runtime 与多 Agent 编排 | [多 Agent Runtime](./01-总体架构/01-CampusClaw多Agent运行时/README.md) | Loop、Turn、执行生命周期及父子 Session；[计划模式](./01-总体架构/06-CampusClaw计划模式/README.md)维护方案载体、[PLAN.md](./01-总体架构/06-CampusClaw计划模式/PLAN.md)/[BUILD.md](./01-总体架构/06-CampusClaw计划模式/BUILD.md)、[业务模式覆盖](./01-总体架构/06-CampusClaw计划模式/plan-policy.md#11-业务文件优先与独立回退)、审核与续跑；[结构化提问](./01-总体架构/06-CampusClaw计划模式/ask-user-question.md)维护问题、答案与原执行等待；[显式任务事件](./01-总体架构/06-CampusClaw计划模式/todo-update.md)仅用于 build 实施进度；工具装配引用 M03，HTTP 投影引用 M06 |
-| M02 · Model | [Model](./02-服务与接口/03-Model/README.md) | Provider 身份、业务 Agent 绑定、[Mate 模型能力查询与快照](./02-服务与接口/03-Model/model-capabilities.md)及流式适配；[共享客户端配置](./02-服务与接口/02-CampusMate共享客户端配置/README.md)维护服务连接配置 |
+| M02 · Model | [Model](./02-服务与接口/03-Model/README.md) | Provider 身份、业务 Agent 绑定、[Mate 模型信息与执行快照](./02-服务与接口/03-Model/model-capabilities.md)及流式适配；[共享客户端配置](./02-服务与接口/02-CampusMate共享客户端配置/README.md)维护服务连接配置 |
 | M03 · Tool 与受管执行环境 | [工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md)、工具发现、[展示名称映射](./01-总体架构/02-CampusClaw工具系统/README.md#tool-display-name)、[凭据透传与工具可用条件](./01-总体架构/02-CampusClaw工具系统/README.md#mate-credential-forwarding)、执行权限与 Session 隔离；AskUserQuestion 的等待生命周期归 M01 |
 | M04 · Session 上下文与持久化 | [会话记忆 GaussDB](./03-数据与存储/01-会话记忆GaussDB/README.md) | 分支、压缩、恢复与存储；[pi 上下文研究](./05-研究资料/03-pi会话上下文/README.md)是证据入口，客户端事件历史归 M06 |
 | M05 · Command 与 Skill | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [Builtin](./04-命令与技能/01-内置命令/README.md)、[Skill Command](./04-命令与技能/02-技能命令/README.md)、[使用统计与 Codex 研究](./04-命令与技能/03-Skill加载统计/README.md)与[Help](./04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)分别维护行为 |
@@ -54,6 +54,7 @@ M03 明确[彻底删除 Bash/Edit/Write](01-总体架构/02-CampusClaw工具系�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.23.0 | 2026-09-19 | 模型窗口按新执行查询，Mate 统一控制普通调用与摘要输出。 |
 | 3.21.0 | 2026-09-19 | M02 增加 Mate 按模型能力查询、快照发布及可选输出上限入口。 |
 | 3.20.0 | 2026-09-19 | 增加计划正文流式生成、来源消息绑定与审核卡合并的专题入口。 |
 | 3.19.0 | 2026-09-19 | 增加 Claw 凭据透传与工具可用条件入口，区分开发工作台刷新策略。 |

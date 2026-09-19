@@ -17,8 +17,8 @@
 ' Source evidence: packages/coding-agent/src/core/provider-composer.ts: modelFromJson
 ' Mate baseline: 4b957a3a846659f5b7569c9d6133abc070cd2e3c
 ' Source evidence: src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/config/ModelManagerProperties.java: ModelRoute
-' Pending implementation: standalone capability query, immutable snapshot and nullable maxTokens.
-' Design reason: remote reads happen before publication, never during locked model resolution.
+' Pending implementation: per-execution capability query and Mate-owned output limits.
+' Design reason: query outside locks, then revalidate bindings and Session version at admission.
 ' Architecture change: provider registries route calls but do not discover or authorize models.
 ' Pending implementation: remove ModelRegistry, external model JSON, and the alternate catalog manager.
 ' Design reason: request state stays per invocation; AI does not depend on Runtime persistence.
@@ -33,9 +33,9 @@ top to bottom direction
 skinparam classAttributeIconSize 0
 hide empty members
 skinparam packageStyle rectangle
-skinparam nodesep 25
-skinparam ranksep 30
-skinparam linetype ortho
+skinparam nodesep 40
+skinparam ranksep 55
+skinparam linetype polyline
 skinparam class {
   BackgroundColor #F8FAFC
   BorderColor #64748B
@@ -53,14 +53,15 @@ package "Runtime application - singleton" as Runtime {
   class "Runtime application services" as Services
   class AgentRuntimeManager
   class MateServiceClient
+  class ExecutionModelResolver <<pending implementation>>
+  class RuntimeExecutionContextDTO <<execution>>
   class ModelCapabilityDTO <<pending implementation>> {
     contextWindow : int
-    maxTokens : Integer [0..1]
   }
   class PreparedAgentRuntime <<agent snapshot>>
   interface RuntimeModelManager
   class MateRuntimeModelManager
-  class AgentDirectorySnapshotDTO <<request snapshot>>
+  class AgentDirectorySnapshotDTO <<binding snapshot>>
 
   class AgentLoop <<session execution>>
   class "Runtime event projection" as Projection
@@ -77,7 +78,6 @@ package "AI entry and registries - singleton" as AI {
   interface ApiProvider
   class Model <<descriptor>> {
     contextWindow : int
-    maxTokens : Integer [0..1]
   }
 }
 package "CampusMate adapter - singleton" as Adapter {
@@ -105,7 +105,9 @@ Controllers -down-> Services
 Controllers ..> VOs
 Services --> AgentRuntimeManager : prepare Agent
 AgentSettings -down-> AgentRuntimeManager
-AgentRuntimeManager --> MateServiceClient : prepare / refresh
+Services --> ExecutionModelResolver : before admission [P]
+ExecutionModelResolver --> MateServiceClient : query [P]
+Services --> RuntimeExecutionContextDTO : accept [P]
 MateServiceClient --> Config : query config
 MateServiceClient --> ModelCapabilityController : GET by modelId [P]
 ModelCapabilityController --> ModelCapabilityService
@@ -113,14 +115,15 @@ ModelCapabilityController ..> ModelCapabilityResponseVO
 ModelCapabilityService --> Metadata : capabilities [P]
 ModelCapabilityService ..> ModelCapabilityResponseVO : assemble
 MateServiceClient ..> ModelCapabilityDTO : [P]
-AgentDirectorySnapshotDTO *-- "0..*" ModelCapabilityDTO : [P]
+RuntimeExecutionContextDTO *-- "1" ModelCapabilityDTO : [P]
+ExecutionModelResolver ..> ModelCapabilityDTO : create [P]
+ExecutionModelResolver ..> Model : assemble [P]
 AgentRuntimeManager --> PreparedAgentRuntime : validate / create
 PreparedAgentRuntime --> AgentDirectorySnapshotDTO : project
 Services --> RuntimeModelManager
 MateRuntimeModelManager ..|> RuntimeModelManager
-Services --> AgentDirectorySnapshotDTO
 MateRuntimeModelManager --> AgentDirectorySnapshotDTO
-MateRuntimeModelManager -[norank,dashed]-> Model
+ExecutionModelResolver --> RuntimeModelManager : select [P]
 Services -down-> AgentLoop : prepare / run
 AgentLoop -[norank]-> Model
 AgentLoop -[norank]-> Projection : events
@@ -153,9 +156,11 @@ legend bottom left
 The whole diagram is a recommended assembly, not an implementation audit.
 Grouped Runtime boxes denote existing collaborators, not new facade classes.
 Provider registries only route an already resolved Model.
-Agent settings fix bindings and the complete Mate capability snapshot.
-Query before atomic publication; resolve Model locally.
-[P] relations and nullable maxTokens: Pending implementation.
+Agent settings fix bindings; each new execution queries its selected model.
+Query outside Session locks; revalidate before acceptance.
+Tool loops and original-root resumes reuse the execution snapshot.
+Mate controls all output limits, including summaries.
+[P] relations and marked classes: Pending implementation.
 AI emits events; only Runtime writes Session state.
 endlegend
 @enduml
@@ -200,7 +205,7 @@ participant "Mate Chat\nvia internal gateway" as Mate
 Loop -> AI : stream(model, context, options)
 AI -> AI : Resolve Provider identity
 AI -> Provider : streamSimple(model, context, options)
-Provider -> Provider : Validate and map text context
+Provider -> Provider : Validate and map text context\nOmit every output token limit [P]
 Provider --> AI : Per-call event stream
 AI --> Loop : Event stream
 
@@ -238,7 +243,8 @@ A completed, failed or cancelled call emits one terminal.
 end note
 note over Provider,Mate
 No application credentials; no create replay after unknown outcome.
-Mate owns upstream routing and cancellation propagation.
+Mate owns upstream routing, output limits and cancellation propagation.
+Execution preparation supplies the captured context window [P].
 end note
 @enduml
 

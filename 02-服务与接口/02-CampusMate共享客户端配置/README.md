@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.5.0 |
+| 文档版本 | 2.6.0 |
 | 状态 | 已确认目标；不同客户端的实现核验范围见 §2 |
 | 更新日期 | 2026-09-19 |
 | pi-mono-java 源码基线 | `320d790726a70aada6100052952d5494d2a378ac` |
@@ -45,7 +45,7 @@ campusmate:
 
 1. `campusmate.base-url` 是唯一 origin 权威；
 2. `campusmate.endpoints` 是唯一出站路径目录；
-3. 模型协议、传输与尚未迁移的 reasoning 配置放在 `campusmate.model`；token 能力只从 Mate 查询并发布到 Agent 快照；
+3. 模型协议、传输与尚未迁移的 reasoning 配置放在 `campusmate.model`；窗口信息按新执行查询 Mate 并固定到执行快照，输出额度仅由 Mate 控制；
 4. 目标配置中不存在顶层 `mate`、`mate.endpoints`、`mate.tool` 或
    `campusmate.model-manager`。
 
@@ -126,8 +126,8 @@ endpoint = normalized(campusmate.base-url) + validated(campusmate.endpoints.<ope
 | `campusmate.model-manager.api` / `CAMPUSMATE_MODEL_MANAGER_API` | `campusmate.model.api` / `CAMPUSMATE_MODEL_API` | 配置分组改为模型能力语义；不保留兼容别名 |
 | `campusmate.model-manager.connect-timeout` / `CAMPUSMATE_MODEL_MANAGER_CONNECT_TIMEOUT` | `campusmate.model.connect-timeout` / `CAMPUSMATE_MODEL_CONNECT_TIMEOUT` | 同步迁移模型连接超时 |
 | `campusmate.model-manager.response-timeout` / `CAMPUSMATE_MODEL_MANAGER_RESPONSE_TIMEOUT` | `campusmate.model.response-timeout` / `CAMPUSMATE_MODEL_RESPONSE_TIMEOUT` | 同步迁移模型流响应超时 |
-| `campusmate.model.context-window` 及旧 `model-manager` 键与环境变量 | Mate 查询后快照中的 `contextWindow` | 删除部署默认值及 Java fallback；必填正整数 |
-| `campusmate.model.max-output-tokens` 及旧 `model-manager` 键与环境变量 | Mate 查询后快照中的可选 `maxTokens` | 删除部署默认值及 Java fallback；未知保持缺失 |
+| `campusmate.model.context-window` 及旧 `model-manager` 键与环境变量 | 每个新执行查询得到的 `contextWindow` | 删除部署默认值及 Java fallback；必填正整数 |
+| `campusmate.model.max-output-tokens` 及旧 `model-manager` 键与环境变量 | Mate 内部输出策略 | 删除部署默认值及 Java fallback；Claw 不查询、不设置输出额度 |
 | `campusmate.model-manager.reasoning` / `CAMPUSMATE_MODEL_MANAGER_REASONING` | `campusmate.model.reasoning` / `CAMPUSMATE_MODEL_REASONING` | 同步迁移推理能力开关 |
 | `mate.endpoints.agent-info-path-prefix` | `campusmate.endpoints.agent-info-path-template` | 移入统一目录并用 `%s` 模板 |
 | `campusmate.runtime.agent-runtime-path-template` | `campusmate.endpoints.agent-runtime-path-template` | 路径移入统一目录 |
@@ -169,7 +169,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 | 架构改造 | 删除顶层 `mate`，全部配置统一到 `campusmate`。 | 避免服务命名和地址权威分裂。 |
 | 架构改造 | 模型参数从 `campusmate.model-manager` 改为 `campusmate.model`。 | 配置树描述能力域，不重复暴露 Model Manager 组件名。 |
 | 架构改造 | endpoint 统一维护，历史 6 个 operation 加 1 个模型能力查询。 | path 属于服务契约，不属于某个客户端。 |
-| 架构改造 | 删除统一 token 能力默认值，Mate 按模型提供并完整发布。 | 避免不同模型共用错误窗口；输出上限未知时保持未知。 |
+| 架构改造 | 删除统一 token 能力默认值，每个新执行查询窗口，Mate 自主控制输出。 | 避免窗口长期陈旧及两端重复控制额度。 |
 | 架构改造 | Runtime 与 Tool client 共享一个 Skill endpoint 配置。 | 两者调用相同 method/path 与响应契约。 |
 | 安全加固 | base URL 只允许 HTTP(S) origin，path 不能携带 origin。 | 防止单客户端改道。 |
 | 安全加固 | Agent/Skill/metadata 发现无凭据，仅 Tool execute 透传 POST Events execution 快照。 | 将凭据可见面限制到真正执行工具的单一端点。 |
@@ -184,13 +184,13 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 4. 将 `mate.tool.enabled` 迁入 `campusmate.tool.enabled`；
 5. 删除 `mate.*`、三个旧地址变量、旧 path 变量和部署脚本转换；
 6. 同步 canonical YAML、镜像 properties、README、DTO 注释和配置/客户端测试；
-7. 实现 Mate 能力查询与完整快照后，同步删除 modules YAML、镜像 properties 及 Java 中两个 token 默认值；部署先提供查询端，再更新消费者，旧快照按新 schema 重建；
+7. 实现 Mate 信息查询、自主输出与执行快照后，同步删除 modules YAML、镜像 properties 及 Java 中两个 token 默认值；部署先提供查询端，再更新消费者，Agent 目录不增加能力字段；Chat 字段退役按 Model 专题协同发布；
 8. 补充端到端断言：三个客户端 origin 相同、Skill endpoint 只解析一次且两种消费均成功。
 
 ## 10. 验收标准
 
 - 目标配置源中只有一个顶层 `campusmate`，不存在顶层 `mate`；
-- 模型协议、传输及既有 reasoning 配置位于 `campusmate.model.*`，token 能力由 Model 快照维护；目标配置和环境变量中不存在
+- 模型协议、传输及既有 reasoning 配置位于 `campusmate.model.*`，窗口由执行快照维护、输出额度由 Mate 控制；目标配置和环境变量中不存在
   `campusmate.model-manager.*` 或 `CAMPUSMATE_MODEL_MANAGER_*`；
 - 只有 `campusmate.base-url` / `CAMPUSMATE_BASE_URL` 能决定 CampusMate origin；
 - 只有 `campusmate.endpoints` 能决定目标 7 个出站 operation path；
@@ -200,7 +200,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 - canonical YAML 与镜像 properties 的业务配置绑定等价，公司地址默认值例外按 §5 维护；两者均无 `CAMPUSMATE_MODEL_CONTEXT_WINDOW`、`CAMPUSMATE_MODEL_MAX_OUTPUT_TOKENS` 及对应 Java fallback；
 - base URL 或 path 非法时启动失败且不发送网络请求；
 - Chat、Runtime、Tool 请求使用相同 scheme、host、port；
-- 既有 operation 的 HTTP method/path、请求/响应、SSE、超时与 execute 不重放语义保持不变；新增能力查询符合 Model 专题；
+- 配置归并本身不改变 HTTP 语义；Chat 输出字段退役与新增信息查询按 Model 专题，其他契约保持；
 - 模型能力、Agent、Skill 和 Tool metadata 发现请求不含四项 execution Header；
 - 仅 Tool execute 透传 POST Events 快照中已提供的四项 Header，且 `access-token`
   不被改写为 `X-Access-Token`；
@@ -216,6 +216,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.0 | 2026-09-19 | 模型窗口按新执行读取，输出额度归 Mate，配置迁移与 Chat 字段退役协同发布。 |
 | 2.5.0 | 2026-09-19 | 新增 Mate 模型能力查询 endpoint，删除统一 token 默认值并注明公司镜像地址例外。 |
 | 2.4.0 | 2026-09-14 | 以目标配置与客户端关系组织正文，将历史源码差距集中为证据专题并重排配置图。 |
 | 2.3.0 | 2026-09-14 | 目标 Provider 统一为 CampusMateProvider，沿用共享配置并保留旧提交源码证据。 |

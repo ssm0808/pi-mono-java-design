@@ -1,9 +1,9 @@
 {
   "api": {
     "title": "CampusMate Chat 接口说明",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "basePath": "/mate-service/v1",
-    "visibility": "Internal · 已冻结"
+    "visibility": "Internal · 已确认目标，输出策略迁移待实现"
   },
   "operation": {
     "method": "POST",
@@ -30,7 +30,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "Mate 统一 Chat 请求。model、非空 messages、stream=true 和 stream_options.include_usage=true 必填。messages 只支持 system、user、assistant、tool 文本消息；assistant 可携带 tool_calls 及白名单推理重放字段。tools 只支持 function 的 name、description 和 parameters。tool_choice 可选且仅为 auto/none。max_output_tokens 是 Mate 扩展字段，CampusClaw 不改名、不截断。temperature 可选且范围 0-2。未知字段返回 400；已定义但目标模型不支持的可选参数允许 Mate 静默忽略。",
+      "description": "Mate 统一 Chat 请求。model、非空 messages、stream=true 和 stream_options.include_usage=true 必填。messages 只支持 system、user、assistant、tool 文本消息；assistant 可携带 tool_calls 及白名单推理重放字段。tools 只支持 function 的 name、description 和 parameters。tool_choice 可选且仅为 auto/none。输出额度完全由 Mate 的逐模型策略控制；请求不接受 max_output_tokens、max_tokens 或 max_completion_tokens，出现时按未知字段返回 400。temperature 可选且范围 0-2。未知字段返回 400；已定义但目标模型不支持的可选参数允许 Mate 静默忽略。",
       "example": {
         "model": "managed-coding-model",
         "messages": [
@@ -84,7 +84,6 @@
           }
         ],
         "tool_choice": "auto",
-        "max_output_tokens": 4096,
         "temperature": 0.2,
         "stream": true,
         "stream_options": {

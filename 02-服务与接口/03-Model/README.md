@@ -1,12 +1,12 @@
 # Model
 
-版本：2.9.0 · 2026-09-19 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置决定模型绑定，Mate 按模型提供能力并发布到同一快照；能力查询和旧全局目录删除待实现。
+版本：2.10.0 · 2026-09-19 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置决定模型绑定；每个新执行查询 Mate 窗口，输出额度由 Mate 控制；查询与输出策略迁移、旧全局目录删除待实现。
 
 | 内容 | 维护位置 |
 |---|---|
 | 模型选择、Provider 分层、调用适配与验收 | 本文 |
-| Mate 模型能力查询、可选输出上限与快照 | [模型能力](model-capabilities.md)；新增查询精确契约由该专题维护，待实现 |
-| Chat 请求、响应、错误码和示例 | [Chat 接口说明](chat-api.html)，由 [chat-api.json](chat-api.json) 生成；已冻结的接口行为保持不变 |
+| Mate 模型信息查询与执行快照 | [模型能力](model-capabilities.md)；新增查询精确契约由该专题维护，待实现 |
+| Chat 请求、响应、错误码和示例 | [Chat 接口说明](chat-api.html)，由 [chat-api.json](chat-api.json) 生成；输出额度由 Mate 控制，其他 Chat 行为保持 |
 | 用量表、事务与统计 | [用量持久化](usage.md) |
 | 固定源码基线、观察结果和实现差距 | [源码证据](source-evidence.md) |
 | 服务地址、路径、超时和配置校验 | [共享客户端配置](../02-CampusMate共享客户端配置/README.md) |
@@ -25,15 +25,13 @@ Runtime 选择模型、执行工具并保存会话；AI 模块把上下文转换
 
 ## 2. 模型来源
 
-每次业务 Agent 运行时准备或 Session 启动，从该 Agent 已发布目录的 `.campusclaw/settings.json` 读取 `defaultModel`、`bindingModels` 和由 Mate 查询结果生成的 `modelCapabilities`。默认模型必须属于绑定列表；设置缺失、值为空白、重复或不一致时明确失败。
+Agent 的 `.campusclaw/settings.json` 维护 `defaultModel/bindingModels`；默认模型必须属于绑定列表，缺失、空白、重复或不一致时失败。`AgentRuntimeManager` 加载设置，`PreparedAgentRuntime/AgentDirectorySnapshotDTO` 固定同一次准备的绑定数据；本地模型列表与选择不访问远端，也不填虚假能力。
 
-`AgentRuntimeManager` 加载并校验设置，`PreparedAgentRuntime` 与 `AgentDirectorySnapshotDTO` 固定同一次准备的数据，`MateRuntimeModelManager` 从该快照提供默认模型、列表和解析。模型切换、压缩、Child/Cron 复用这条链；执行或修改 Session 时仍在所属锁或事务内复核可变状态。
+每个新执行在锁外单独查询 Mate 当前选中模型的 `contextWindow`，应用服务在锁内复核 Session 版本、模型与绑定后，固定该执行的不可变模型信息。自动压缩、Tool Loop 和原根确认续跑共用结果；下一次新执行再次查询。独立手工压缩和 Child/Cron 各自查询。能力不写入 Agent 目录，不由 refresh 控制更新；查询失败不回退旧窗口。精确字段、入口、锁边界及压缩规则由[模型信息专题](model-capabilities.md)统一维护。
 
-模型能力在准备/刷新阶段按绑定 modelId 独立查询 Mate，并与 Agent 设置完整发布；Session 模型解析只读快照，不在锁内调用远端。`contextWindow` 必填，`maxTokens` 可选，缺失表示未知；删除 `campusmate.model.context-window/max-output-tokens` 及 Java 默认值。字段、查询契约、失效与刷新边界由[模型能力专题](model-capabilities.md)统一维护。
+Claw 不查询或消费 maxTokens，不为普通 Chat 或摘要指定输出额度；Mate 自行管理输出参数及上游差异。删除 `campusmate.model.context-window/max-output-tokens` 与 Java 默认值。现有已发布绑定仍是模型使用范围的唯一权威，远端信息不能扩大允许列表。
 
-模型变更经业务 Agent 配置发布链生效。启动和选择不查询 classpath、用户 Home、环境凭据或其他 Agent 的模型目录；能力查询只能补充绑定模型，不能成为第二允许列表。
-
-这是产品约束与安全加固：同一发布快照固定默认选择、允许列表和逐模型能力，避免全局配置影响多个 Agent；代价是失去本地模型扩展，变更必须发布后生效。与 pi 的差异及固定证据见[架构对比 A06](../../01-总体架构/07-Agent架构对比/README.md#a06)。
+这是产品约束与架构变更：绑定按业务发布，动态窗口按执行读取，避免能力长期陈旧；Mate 统一控制生成额度。代价是新执行多一次查询及故障依赖，并失去 Claw 自有摘要输出预算。与 pi 的差异及源码证据见[架构对比 A06](../../01-总体架构/07-Agent架构对比/README.md#a06)。
 
 <a id="provider"></a>
 
@@ -71,7 +69,7 @@ Provider 身份与协议路由分开，避免按厂商堆叠中央分支。内�
 
 ![Chat 调用时序](chat-sequence.svg)
 
-[PlantUML 源码](diagram.puml#L163) · [原尺寸 SVG](chat-sequence.svg)
+[PlantUML 源码](diagram.puml#L168) · [原尺寸 SVG](chat-sequence.svg)
 
 ### 请求映射
 
@@ -86,14 +84,14 @@ Provider 身份与协议路由分开，避免按厂商堆叠中央分支。内�
 | `ThinkingContent.thinkingSignature` | Assistant reasoning 白名单字段 | 按原字段种类重放 |
 | Agent Tool | `tools[].function` | JSON Schema 原样投影，不发送 `strict` |
 | `SimpleStreamOptions.toolChoice` | `tool_choice` | 只允许 `auto/none` |
-| 最终 `SimpleStreamOptions.maxTokens` | `max_output_tokens` | Mapper 未收到时省略；Agent 按[能力与调用预算规则](model-capabilities.md#4-可选-maxtokens-的消费规则)生成 options，未知模型上限不自动补值 |
+| 输出 token 上限 | 不发送 | 普通调用及摘要均由 Mate 控制；Mapper 不转发 options 中残留额度，见[输出与上下文规则](model-capabilities.md#4-输出控制与上下文消费) |
 | 显式 temperature | `temperature` | 未设置时省略 |
 | `ThinkingLevel` | 不发送 | 推理开关和 effort 由 Mate 配置 |
 | 固定字段 | `stream/stream_options.include_usage` | 均为 `true` |
 
 reasoning 白名单为 `reasoning_content/reasoning/reasoning_text/reasoning_details`，前三项为字符串，最后一项为不透明 JSON 数组。可读内容展示模型原始推理，signature 用于下次重放；展示规则见 [Thinking 设计](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#thinking-original-text)。
 
-首版只支持文本、function Tool 和上述 reasoning。图片、音频、文件、content part 数组与 Tool 图片在发 HTTP 前失败，不丢块后继续。未知字段及已定义可选字段的处理遵循接口说明；`max_output_tokens` 与 `event:error` 是 Mate 扩展。
+首版只支持文本、function Tool 和上述 reasoning。图片、音频、文件、content part 数组与 Tool 图片在发 HTTP 前失败，不丢块后继续。未知字段及已定义可选字段的处理遵循接口说明；`event:error` 是 Mate 扩展；请求中的输出额度字段按未知字段拒绝。
 
 ### 响应、用量与运行约束
 
@@ -117,7 +115,7 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 
 | 步骤 | 实施内容 | 验收 |
 |---|---|---|
-| S0 · 模型能力（待实现） | 按[能力专题 C1～C4](model-capabilities.md#5-java-分层与实施切片)实现 Mate 查询、原子发布、可空上限及默认值删除 | 验证不同模型能力、未知上限、查询失败、旧 schema、调用与摘要预算及镜像一致性 |
+| S0 · 模型能力（待实现） | 按[能力专题 C1～C4](model-capabilities.md#5-java-分层与实施切片)实现 Mate 查询、自主输出策略、执行快照及默认值删除 | 验证每个新执行一次查询、锁外读取与竞争、窗口变化、所有调用无输出额度及镜像一致性 |
 | S1 · 模型选择 | 固定 §2 的设置加载与快照链 | 覆盖缺失、空白、重复、默认值不在列表、Agent 隔离，以及默认/切换/压缩/Child/Cron 同源；禁止回退 |
 | S2 · 全局目录清理 | 删除 `ModelRegistry`、两处 JSON 探测、`ModelCatalogService`、`CatalogRuntimeModelManager` 及专用环境凭据解析；迁移 SSE 仍使用的成本计算 | Spring 不再装配上述目录 Bean；启动无外部模型文件探测及加载日志；无消费者的能力辅助方法删除 |
 | S3 · 调用与依赖清理 | 移除 AI Service 的目录依赖；删除 Anthropic、OpenAI Completions、OpenAI Responses、Mistral 具体适配器及专属测试，按下表清理 SDK 并同步公司镜像 | 只内置 CampusMate，空 API 注册表可启动；新旧身份遵守 §3；公共消息、流、枚举与有消费者的工具不误删 |
@@ -140,6 +138,7 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.10.0 | 2026-09-19 | Mate 控制全部输出额度，Claw 每个新执行读取模型窗口并在执行内复用。 |
 | 2.9.0 | 2026-09-19 | 按模型查询 Mate 能力并发布到 Agent 快照，窗口必填、输出上限可选，删除统一 token 默认值。 |
 | 2.8.2 | 2026-09-17 | 模块统一命名为 Model，更新目录、图名与引用。 |
 | 2.8.1 | 2026-09-17 | 精简目录、文件名和重复说明，集中模型规则、调用适配及实施验收。 |

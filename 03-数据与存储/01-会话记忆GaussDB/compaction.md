@@ -1,6 +1,6 @@
 # Session 压缩与恢复
 
-版本：1.1.0；日期：2026-09-19。
+版本：1.2.0；日期：2026-09-19。
 
 [返回 Session 主设计](./README.md)
 
@@ -16,7 +16,7 @@
 
 ## 2. 触发与单次恢复
 
-自动判定对齐 pi `agent-session.ts::_checkCompaction/_runAutoCompaction`、
+安全切点与恢复流程参考历史 pi `agent-session.ts::_checkCompaction/_runAutoCompaction`、
 `compaction.ts::estimateContextTokens/prepareCompaction/compact` 和
 `overflow.ts::isContextOverflow/isRecoverableLength`：只接受当前 provider/model 且晚于最新
 压缩边界的 Assistant。优先使用最后一条有效 Usage；不可用时估算后续消息，文本和 JSON
@@ -24,24 +24,23 @@
 `contextWindow-reserveTokens` 才触发阈值压缩。
 
 正常 `STOP` 但 Usage 已越界表示模型调用成功：压缩完整上下文后保留并返回该答案，绝不
-重放。`ERROR`、`LENGTH`、显式 provider overflow 或可恢复 length 才从候选中排除失败
+重放。只有明确 provider overflow 或经过验证的 contextWindow/Usage 溢出证据才从候选中排除失败
 Assistant，压缩成功后重试一次；第二次仍溢出发 `session.compaction.failed`，不再压缩重试。
 从数据库恢复出的未处理失败溢出在接受下一条 prompt 前先完成恢复压缩。
 
-模型窗口和可选输出上限从 Mate 查询后发布到 Agent 快照，字段与消费规则唯一维护于[Model 能力专题](../../02-服务与接口/03-Model/model-capabilities.md#4-可选-maxtokens-的消费规则)，该增量待实现。模型上限未知时普通 Chat 不自动填输出额度，跳过依赖该上限的 LENGTH 启发式；仍保留基于 contextWindow 的阈值及明确 overflow 信号。已知上限时按该次调用实际期望额度判断，不能忽略显式小预算而误判需要压缩。
+每个新执行在首次生成前取得 Mate 当前窗口，执行内自动压缩与续跑复用不可变结果。完整输入的前置预算检查、窗口缩小处理及输出权威由[Model 专题](../../02-服务与接口/03-Model/model-capabilities.md#4-输出控制与上下文消费)维护；该增量待实现。Claw 不设置普通调用或摘要输出上限，不使用 output 小于 model.maxTokens 的 LENGTH 恢复启发式；普通 LENGTH 不能单独证明上下文不足。reserveTokens 只作为输入余量，不是输出承诺。窗口变化后的新输入与系统/工具开销也必须估算，不能只依赖上次 Usage。
 
 ## 3. 安全窗口与摘要
 
-自动压缩先 prepare；没有安全可压缩窗口时静默跳过，不发送 started/failed。安全切点只允许
+自动压缩先 prepare；没有安全可压缩窗口时不发送 started/failed。若新请求前置检查已超预算，则明确拒绝继续生成；执行后维护性压缩跳过时保留并返回成功答案。安全切点只允许
 User 或 Assistant，ToolResult 不能成为第一条保留消息；单独超过 `keepRecentTokens` 的末条
 Assistant 仍必须保留。同轮前缀单独摘要并与历史摘要合并 Usage/Cost；重复压缩更新旧摘要、
 继承排序后的 `<read-files>`，并把 `firstKeptEntryId` 映射到当前上下文第一条保留消息。
 
 摘要使用固定结构和 `<conversation>/<previous-summary>` 标签，包含 thinking 与 tool JSON
 参数，单个 ToolResult 最多 2000 字符。请求不带工具、cache 为 none、使用新的 routing
-session ID；历史和 turn-prefix 输出上限分别为 reserve 的 80% 和 50%，且不超过模型
-maxTokens（已知时）；未知上限时保留摘要自身预算，不伪造模型能力。只对瞬态摘要失败执行有界退避。摘要为空、包含 ToolCall、失败或取消时不发布
-新上下文，已经持久化的历史 Entry 一律不删除。`FileOperationTracker` 只跟踪 PascalCase
+session ID；历史和 turn-prefix 均不设置输出额度，由 Mate 控制。只对瞬态摘要失败执行有界退避。摘要截断（LENGTH）、为空、包含 ToolCall、失败或取消时不发布
+新上下文；完整摘要仍需通过压缩收益与新上下文预算校验。摘要请求本身超窗口时首版失败，不自动分块或硬截断。已经持久化的历史 Entry 一律不删除。`FileOperationTracker` 只跟踪 PascalCase
 `Read`；Bash/Edit/Write 均未装配，也不参与追踪。
 
 ## 4. 持久化、取消与重载一致性
@@ -70,17 +69,18 @@ Session lifetime Usage。`willRetry=true` 时，持久化 payload 还包含不�
 
 已有实现差距证据仍保留其作用范围：`a7f78fed345a289833970cd7b78399f0e8e51d32` 对 pi 压缩规则尚不完整；`bf28e72f94f29acd316eb872a250893ed54e3632` 的在线失败候选已排除，但重载和模型输出上限仍有差距；`bd26e7f8` 已修复这两项。对应更早 PR 167 基线 `f60cc3e78bb8b700527ac082c7c8e10524ede095`、merge base `d649866a6cae967ace18ceaeb9597edd47e5721e` 仅用于追溯，不定义当前行为。
 
-与 pi 的差异分类：公共事件隐藏摘要和内部字段属于产品约束与安全加固；持久化精确丢弃 ID、统一在线与重载上下文属于架构变更；摘要算法和单次恢复优先保持 pi 语义。该整理不引入 Maven 依赖。
+与 pi 的差异分类：公共事件隐藏摘要和内部字段属于产品约束与安全加固；持久化精确丢弃 ID、统一在线与重载上下文属于架构变更；安全切点与单次恢复优先保持 pi 语义；输出控制完全交给 Mate、每个新执行读窗口和前置预算检查属于架构变更。该整理不引入 Maven 依赖。
 
-2026-09-19 可选上限增量的静态源码核验见[Model 证据](../../02-服务与接口/03-Model/source-evidence.md#model-capability-evidence)：当前 Model.maxTokens 仍为 int，相关改造待实现；不升级本节其他算法和持久化历史证据。
+2026-09-19 窗口与输出增量的静态核验见[Model 证据](../../02-服务与接口/03-Model/source-evidence.md#model-capability-evidence)：pi 最新 main 仍设置摘要输出额度，Java `21c3f59b` 仍补模型上限、按 reserve 比例生成摘要额度；上述差异改造待实现。不升级本节其他算法和持久化历史证据。
 
 ## 6. 验收
 
 - 成功 STOP 越界只压缩、不重试；ERROR/LENGTH 恢复最多一次，且始终保留历史 Entry。
-- 输出上限未知时无自动普通 Chat 额度、无依赖该值的 LENGTH 恢复；摘要预算仍生效；已知上限与显式小额度不发生误判。
+- 普通调用及摘要无输出额度字段；普通 LENGTH 不误触发压缩重试；下一新执行使用新窗口，原根续跑保持原快照。
+- 窗口缩小、超大新输入、摘要输入超窗、无安全切点、无收益摘要及关闭压缩均有界失败并保留历史和成功答案。
 - 阈值等值不触发；旧模型或旧压缩边界的 Usage 不触发错误恢复；无安全窗口无 started/failed。
 - 超大末条 Assistant、ToolResult 切点、拆分轮次、重复摘要及 Read 路径继承均符合 §3。
-- 摘要请求无 tools、cache=none、独立 routing session ID，两个输出上限和瞬态重试界限准确。
+- 摘要请求无 tools、cache=none、独立 routing session ID，无输出额度且瞬态重试界限准确。
 - 摘要失败、空摘要、ToolCall 和取消均不发布新上下文；completed 与 lifetime Usage 同次提交。
 - 对 completed → retry → reload 比较在线与重载消息集合，确认失败 Assistant 不重新出现；旧 Entry 回退范围准确。
 - 公共 SSE 和 GET 均无 `_discardedEntryId`、摘要正文及内部边界；公开类型以 Events 契约为准。
@@ -89,5 +89,6 @@ Session lifetime Usage。`willRetry=true` 时，持久化 payload 还包含不�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-19 | 使用执行级窗口进行前置预算检查，摘要输出归 Mate，移除输出上限截断推断。 |
 | 1.1.0 | 2026-09-19 | 支持 Mate 快照中未知输出上限，明确普通调用、LENGTH 判断与摘要预算边界。 |
 | 1.0.0 | 2026-09-14 | 将压缩算法、取消、用量与重载一致性集中到 Session 模块。 |
