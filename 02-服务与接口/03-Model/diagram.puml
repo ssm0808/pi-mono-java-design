@@ -12,7 +12,13 @@
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/MateRuntimeModelManager.java: resolveModel, listAvailableModels
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java: create
 ' Observed behavior: identity dispatch precedes API dispatch; Mate owns an independent WebClient path.
-' Product constraint: business Agent settings are the only model authority.
+' Product constraint: Agent bindings authorize models; Mate supplies per-model token capabilities.
+' Capability evidence: pi-mono main 36b60d2e8985899743c4cf5bd5f8929832a3f05d
+' Source evidence: packages/coding-agent/src/core/provider-composer.ts: modelFromJson
+' Mate baseline: 4b957a3a846659f5b7569c9d6133abc070cd2e3c
+' Source evidence: src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/config/ModelManagerProperties.java: ModelRoute
+' Pending implementation: standalone capability query, immutable snapshot and nullable maxTokens.
+' Design reason: remote reads happen before publication, never during locked model resolution.
 ' Architecture change: provider registries route calls but do not discover or authorize models.
 ' Pending implementation: remove ModelRegistry, external model JSON, and the alternate catalog manager.
 ' Design reason: request state stays per invocation; AI does not depend on Runtime persistence.
@@ -46,6 +52,11 @@ package "Web boundary" as Web {
 package "Runtime application - singleton" as Runtime {
   class "Runtime application services" as Services
   class AgentRuntimeManager
+  class MateServiceClient
+  class ModelCapabilityDTO <<pending implementation>> {
+    contextWindow : int
+    maxTokens : Integer [0..1]
+  }
   class PreparedAgentRuntime <<agent snapshot>>
   interface RuntimeModelManager
   class MateRuntimeModelManager
@@ -64,7 +75,10 @@ package "AI entry and registries - singleton" as AI {
   }
   class ApiProviderRegistry
   interface ApiProvider
-  class Model <<descriptor>>
+  class Model <<descriptor>> {
+    contextWindow : int
+    maxTokens : Integer [0..1]
+  }
 }
 package "CampusMate adapter - singleton" as Adapter {
   class CampusMateProvider {
@@ -81,17 +95,30 @@ package "Invocation state" as Call {
 package "Configuration and external I/O" as IO {
   class "campusmate.*" as Config <<startup config>>
   class "CampusMate Chat" as Chat <<external HTTP>>
+  class ModelCapabilityController <<pending implementation>>
+  class ModelCapabilityService <<pending implementation>>
+  class ModelCapabilityResponseVO <<pending implementation>>
+  interface "Mate model metadata / route source" as Metadata <<existing boundary>>
 }
 
 Controllers -down-> Services
 Controllers ..> VOs
 Services --> AgentRuntimeManager : prepare Agent
-AgentSettings -down-> AgentRuntimeManager : only model source
+AgentSettings -down-> AgentRuntimeManager
+AgentRuntimeManager --> MateServiceClient : prepare / refresh
+MateServiceClient --> Config : query config
+MateServiceClient --> ModelCapabilityController : GET by modelId [P]
+ModelCapabilityController --> ModelCapabilityService
+ModelCapabilityController ..> ModelCapabilityResponseVO
+ModelCapabilityService --> Metadata : capabilities [P]
+ModelCapabilityService ..> ModelCapabilityResponseVO : assemble
+MateServiceClient ..> ModelCapabilityDTO : [P]
+AgentDirectorySnapshotDTO *-- "0..*" ModelCapabilityDTO : [P]
 AgentRuntimeManager --> PreparedAgentRuntime : validate / create
 PreparedAgentRuntime --> AgentDirectorySnapshotDTO : project
 Services --> RuntimeModelManager
 MateRuntimeModelManager ..|> RuntimeModelManager
-Services --> AgentDirectorySnapshotDTO : acquire
+Services --> AgentDirectorySnapshotDTO
 MateRuntimeModelManager --> AgentDirectorySnapshotDTO
 MateRuntimeModelManager -[norank,dashed]-> Model
 Services -down-> AgentLoop : prepare / run
@@ -126,7 +153,9 @@ legend bottom left
 The whole diagram is a recommended assembly, not an implementation audit.
 Grouped Runtime boxes denote existing collaborators, not new facade classes.
 Provider registries only route an already resolved Model.
-Business Agent settings are the only model source.
+Agent settings fix bindings and the complete Mate capability snapshot.
+Query before atomic publication; resolve Model locally.
+[P] relations and nullable maxTokens: Pending implementation.
 AI emits events; only Runtime writes Session state.
 endlegend
 @enduml

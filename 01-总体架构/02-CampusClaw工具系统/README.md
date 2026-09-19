@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.12.0 |
+| 文档版本 | 2.12.1 |
 | 状态 | 当前目标；空或部分凭据只透传、由 Mate 校验的增量待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-09-19 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
@@ -565,9 +565,7 @@ Usage 不可用时，从该位置以后估算尾部消息，文本与 JSON 参�
    候选中排除该失败 Assistant，成功后重试一次；第二次仍溢出时发出明确失败，不再进入
    “压缩—重试”循环。数据库恢复出的未处理失败溢出在接受下一条 prompt 前先压缩恢复。
 
-公共 Agent 在调用方没有显式覆盖时，必须把当前 `model.maxTokens` 作为实际请求输出上限；
-因此可恢复 `LENGTH` 比较的期望上限和 provider 收到的请求上限一致，不能被 OpenAI provider
-历史上的 32000 缺省上限静默改变。模型目录上限大于 32000 时必须同时验证请求参数和恢复判定。
+模型窗口、可选输出上限及 LENGTH 判定由[Model 能力专题](../../02-服务与接口/03-Model/model-capabilities.md#4-可选-maxtokens-的消费规则)统一维护：从 Mate 查询后发布到 Agent 快照，未知上限不自动填普通 Chat 额度，也不触发依赖该值的恢复启发式；该增量待实现。压缩生命周期的权威规则见[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。
 
 自动流程先执行 `prepare`；如果没有安全可压缩窗口则静默跳过，不投影 started/failed。
 切点只允许 User 或 Assistant，ToolResult 不能成为第一条保留消息。最后一条 Assistant
@@ -578,7 +576,7 @@ Usage 不可用时，从该位置以后估算尾部消息，文本与 JSON 参�
 摘要使用固定 Goal/Constraints/Progress/Decisions/Next Steps/Critical Context 结构和
 `<conversation>/<previous-summary>` 标签，序列化 thinking、tool name 和 JSON 参数；单个
 ToolResult 最多 2000 字符。摘要调用无工具、cache 为 none、使用新的 routing session ID；
-历史摘要与轮次前缀输出上限分别是 reserve 的 80% 和 50%，且不超过模型 maxTokens；
+历史摘要与轮次前缀预算按 Session 压缩设计执行；模型输出上限未知时仍保留摘要自身预算；
 仅瞬态失败按有界退避重试。摘要为空、包含 ToolCall、失败或被取消时不替换旧上下文，
 历史 Entry 不删除。
 
@@ -676,7 +674,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 - Slash Command 与模型工具分开注册和测试，所有命令都不出现在模型工具清单中；
 - Usage/估算阈值、失效边界、显式/静默/Xiaomi/可恢复 length 溢出通过测试；
 - 成功 STOP 只压缩不重试，ERROR/LENGTH 最多重试一次，第二次溢出显式失败；
-- 公共 Agent 对大输出模型传递真实 `maxTokens`，LENGTH 恢复判定使用同一上限；
+- 模型能力来自同一 Mate 快照，已知/未知输出上限、显式小预算、摘要额度与 LENGTH 恢复通过 Model 能力专题 C3 验收；
 - compaction completed → retry → reload 后不恢复被丢弃的 LENGTH，在线与重载上下文一致；
 - 超大末条 Assistant、ToolResult 安全切点、split-turn、重复摘要边界和 Read 路径继承通过测试；
 - 固定结构摘要、2000 字符截断、无工具/cache、Token 上限、瞬态重试和 Usage/Cost 合并通过测试；
@@ -701,6 +699,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.12.1 | 2026-09-19 | 压缩段落引用 Mate 能力与可选输出上限规则，避免未知上限自动填充和误判。 |
 | 2.12.0 | 2026-09-19 | 工具可用条件不依赖凭据完整性，空快照同样交由 Mate execute 判断。 |
 | 2.11.0 | 2026-09-19 | 展示名读取已加载的 Agent/Skill 绑定元数据，保留执行时工具解析并取消调用级 ID 与失败绑定。 |
 | 2.10.0 | 2026-09-18 | 明确彻底删除 Bash/Edit/Write 源码和专属支撑，保留活动消费者并补充删除验收。 |

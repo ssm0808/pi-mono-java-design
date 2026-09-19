@@ -1,10 +1,11 @@
 # Model
 
-版本：2.8.2 · 2026-09-17 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置是唯一模型来源，旧全局目录的删除仍待实现。
+版本：2.9.0 · 2026-09-19 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置决定模型绑定，Mate 按模型提供能力并发布到同一快照；能力查询和旧全局目录删除待实现。
 
 | 内容 | 维护位置 |
 |---|---|
 | 模型选择、Provider 分层、调用适配与验收 | 本文 |
+| Mate 模型能力查询、可选输出上限与快照 | [模型能力](model-capabilities.md)；新增查询精确契约由该专题维护，待实现 |
 | Chat 请求、响应、错误码和示例 | [Chat 接口说明](chat-api.html)，由 [chat-api.json](chat-api.json) 生成；已冻结的接口行为保持不变 |
 | 用量表、事务与统计 | [用量持久化](usage.md) |
 | 固定源码基线、观察结果和实现差距 | [源码证据](source-evidence.md) |
@@ -12,7 +13,7 @@
 
 ## 1. 职责与全局结构
 
-Runtime 选择模型、执行工具并保存会话；AI 模块把上下文转换为模型请求，把响应流转换为统一消息事件；CampusMate 管理上游路由、协议差异、endpoint 和凭据。
+Runtime 选择模型、执行工具并保存会话；AI 模块把上下文转换为模型请求，把响应流转换为统一消息事件；CampusMate 管理上游路由、逐模型能力、协议差异、endpoint 和凭据。
 
 ![Model 全局目标类图](model-classes.svg)
 
@@ -24,13 +25,15 @@ Runtime 选择模型、执行工具并保存会话；AI 模块把上下文转换
 
 ## 2. 模型来源
 
-每次业务 Agent 运行时准备或 Session 启动，从该 Agent 已发布目录的 `.campusclaw/settings.json` 读取 `defaultModel` 和 `bindingModels`。默认模型必须属于绑定列表；设置缺失、值为空白、重复或不一致时明确失败。
+每次业务 Agent 运行时准备或 Session 启动，从该 Agent 已发布目录的 `.campusclaw/settings.json` 读取 `defaultModel`、`bindingModels` 和由 Mate 查询结果生成的 `modelCapabilities`。默认模型必须属于绑定列表；设置缺失、值为空白、重复或不一致时明确失败。
 
 `AgentRuntimeManager` 加载并校验设置，`PreparedAgentRuntime` 与 `AgentDirectorySnapshotDTO` 固定同一次准备的数据，`MateRuntimeModelManager` 从该快照提供默认模型、列表和解析。模型切换、压缩、Child/Cron 复用这条链；执行或修改 Session 时仍在所属锁或事务内复核可变状态。
 
-模型变更经业务 Agent 配置发布链生效。启动和选择阶段不查询 classpath、用户 Home、环境凭据或其他 Agent 的模型目录，也不新增模型发现 HTTP 接口。模型能力默认值由 `campusmate.model` 提供，不成为另一份允许列表。
+模型能力在准备/刷新阶段按绑定 modelId 独立查询 Mate，并与 Agent 设置完整发布；Session 模型解析只读快照，不在锁内调用远端。`contextWindow` 必填，`maxTokens` 可选，缺失表示未知；删除 `campusmate.model.context-window/max-output-tokens` 及 Java 默认值。字段、查询契约、失效与刷新边界由[模型能力专题](model-capabilities.md)统一维护。
 
-这是产品约束与安全加固：同一发布快照固定默认值和允许列表，避免全局配置影响多个 Agent；代价是失去本地模型扩展，变更必须发布后生效。与 pi 的差异及固定证据见[架构对比 A06](../../01-总体架构/07-Agent架构对比/README.md#a06)。
+模型变更经业务 Agent 配置发布链生效。启动和选择不查询 classpath、用户 Home、环境凭据或其他 Agent 的模型目录；能力查询只能补充绑定模型，不能成为第二允许列表。
+
+这是产品约束与安全加固：同一发布快照固定默认选择、允许列表和逐模型能力，避免全局配置影响多个 Agent；代价是失去本地模型扩展，变更必须发布后生效。与 pi 的差异及固定证据见[架构对比 A06](../../01-总体架构/07-Agent架构对比/README.md#a06)。
 
 <a id="provider"></a>
 
@@ -68,7 +71,7 @@ Provider 身份与协议路由分开，避免按厂商堆叠中央分支。内�
 
 ![Chat 调用时序](chat-sequence.svg)
 
-[PlantUML 源码](diagram.puml#L134) · [原尺寸 SVG](chat-sequence.svg)
+[PlantUML 源码](diagram.puml#L163) · [原尺寸 SVG](chat-sequence.svg)
 
 ### 请求映射
 
@@ -83,7 +86,7 @@ Provider 身份与协议路由分开，避免按厂商堆叠中央分支。内�
 | `ThinkingContent.thinkingSignature` | Assistant reasoning 白名单字段 | 按原字段种类重放 |
 | Agent Tool | `tools[].function` | JSON Schema 原样投影，不发送 `strict` |
 | `SimpleStreamOptions.toolChoice` | `tool_choice` | 只允许 `auto/none` |
-| 显式 `SimpleStreamOptions.maxTokens` | `max_output_tokens` | 未设置时省略，不用 `Model.maxTokens` 补值 |
+| 最终 `SimpleStreamOptions.maxTokens` | `max_output_tokens` | Mapper 未收到时省略；Agent 按[能力与调用预算规则](model-capabilities.md#4-可选-maxtokens-的消费规则)生成 options，未知模型上限不自动补值 |
 | 显式 temperature | `temperature` | 未设置时省略 |
 | `ThinkingLevel` | 不发送 | 推理开关和 effort 由 Mate 配置 |
 | 固定字段 | `stream/stream_options.include_usage` | 均为 `true` |
@@ -114,6 +117,7 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 
 | 步骤 | 实施内容 | 验收 |
 |---|---|---|
+| S0 · 模型能力（待实现） | 按[能力专题 C1～C4](model-capabilities.md#5-java-分层与实施切片)实现 Mate 查询、原子发布、可空上限及默认值删除 | 验证不同模型能力、未知上限、查询失败、旧 schema、调用与摘要预算及镜像一致性 |
 | S1 · 模型选择 | 固定 §2 的设置加载与快照链 | 覆盖缺失、空白、重复、默认值不在列表、Agent 隔离，以及默认/切换/压缩/Child/Cron 同源；禁止回退 |
 | S2 · 全局目录清理 | 删除 `ModelRegistry`、两处 JSON 探测、`ModelCatalogService`、`CatalogRuntimeModelManager` 及专用环境凭据解析；迁移 SSE 仍使用的成本计算 | Spring 不再装配上述目录 Bean；启动无外部模型文件探测及加载日志；无消费者的能力辅助方法删除 |
 | S3 · 调用与依赖清理 | 移除 AI Service 的目录依赖；删除 Anthropic、OpenAI Completions、OpenAI Responses、Mistral 具体适配器及专属测试，按下表清理 SDK 并同步公司镜像 | 只内置 CampusMate，空 API 注册表可启动；新旧身份遵守 §3；公共消息、流、枚举与有消费者的工具不误删 |
@@ -136,6 +140,7 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.9.0 | 2026-09-19 | 按模型查询 Mate 能力并发布到 Agent 快照，窗口必填、输出上限可选，删除统一 token 默认值。 |
 | 2.8.2 | 2026-09-17 | 模块统一命名为 Model，更新目录、图名与引用。 |
 | 2.8.1 | 2026-09-17 | 精简目录、文件名和重复说明，集中模型规则、调用适配及实施验收。 |
 | 2.8.0 | 2026-09-17 | 模型来源收敛为业务 Agent `.campusclaw/settings.json`，删除全局 JSON 目录及目录适配链。 |

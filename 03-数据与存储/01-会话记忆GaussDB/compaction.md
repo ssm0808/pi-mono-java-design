@@ -1,6 +1,6 @@
 # Session 压缩与恢复
 
-版本：1.0.0；日期：2026-09-14。
+版本：1.1.0；日期：2026-09-19。
 
 [返回 Session 主设计](./README.md)
 
@@ -28,9 +28,7 @@
 Assistant，压缩成功后重试一次；第二次仍溢出发 `session.compaction.failed`，不再压缩重试。
 从数据库恢复出的未处理失败溢出在接受下一条 prompt 前先完成恢复压缩。
 
-公共 Agent 在调用方没有显式覆盖时把当前 `model.maxTokens` 写入实际模型请求；可恢复
-`LENGTH` 也使用该期望上限判定。因此目录上限大于 32000 的模型不会被 OpenAI provider
-历史缺省值静默截断后误触发无效压缩重试。该约束同时校验 Agent 请求参数和压缩决策。
+模型窗口和可选输出上限从 Mate 查询后发布到 Agent 快照，字段与消费规则唯一维护于[Model 能力专题](../../02-服务与接口/03-Model/model-capabilities.md#4-可选-maxtokens-的消费规则)，该增量待实现。模型上限未知时普通 Chat 不自动填输出额度，跳过依赖该上限的 LENGTH 启发式；仍保留基于 contextWindow 的阈值及明确 overflow 信号。已知上限时按该次调用实际期望额度判断，不能忽略显式小预算而误判需要压缩。
 
 ## 3. 安全窗口与摘要
 
@@ -42,7 +40,7 @@ Assistant 仍必须保留。同轮前缀单独摘要并与历史摘要合并 Usa
 摘要使用固定结构和 `<conversation>/<previous-summary>` 标签，包含 thinking 与 tool JSON
 参数，单个 ToolResult 最多 2000 字符。请求不带工具、cache 为 none、使用新的 routing
 session ID；历史和 turn-prefix 输出上限分别为 reserve 的 80% 和 50%，且不超过模型
-maxTokens；只对瞬态摘要失败执行有界退避。摘要为空、包含 ToolCall、失败或取消时不发布
+maxTokens（已知时）；未知上限时保留摘要自身预算，不伪造模型能力。只对瞬态摘要失败执行有界退避。摘要为空、包含 ToolCall、失败或取消时不发布
 新上下文，已经持久化的历史 Entry 一律不删除。`FileOperationTracker` 只跟踪 PascalCase
 `Read`；Bash/Edit/Write 均未装配，也不参与追踪。
 
@@ -74,9 +72,12 @@ Session lifetime Usage。`willRetry=true` 时，持久化 payload 还包含不�
 
 与 pi 的差异分类：公共事件隐藏摘要和内部字段属于产品约束与安全加固；持久化精确丢弃 ID、统一在线与重载上下文属于架构变更；摘要算法和单次恢复优先保持 pi 语义。该整理不引入 Maven 依赖。
 
+2026-09-19 可选上限增量的静态源码核验见[Model 证据](../../02-服务与接口/03-Model/source-evidence.md#model-capability-evidence)：当前 Model.maxTokens 仍为 int，相关改造待实现；不升级本节其他算法和持久化历史证据。
+
 ## 6. 验收
 
 - 成功 STOP 越界只压缩、不重试；ERROR/LENGTH 恢复最多一次，且始终保留历史 Entry。
+- 输出上限未知时无自动普通 Chat 额度、无依赖该值的 LENGTH 恢复；摘要预算仍生效；已知上限与显式小额度不发生误判。
 - 阈值等值不触发；旧模型或旧压缩边界的 Usage 不触发错误恢复；无安全窗口无 started/failed。
 - 超大末条 Assistant、ToolResult 切点、拆分轮次、重复摘要及 Read 路径继承均符合 §3。
 - 摘要请求无 tools、cache=none、独立 routing session ID，两个输出上限和瞬态重试界限准确。
@@ -88,4 +89,5 @@ Session lifetime Usage。`willRetry=true` 时，持久化 payload 还包含不�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-09-19 | 支持 Mate 快照中未知输出上限，明确普通调用、LENGTH 判断与摘要预算边界。 |
 | 1.0.0 | 2026-09-14 | 将压缩算法、取消、用量与重载一致性集中到 Session 模块。 |

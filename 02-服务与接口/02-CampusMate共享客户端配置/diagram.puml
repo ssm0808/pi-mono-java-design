@@ -1,7 +1,10 @@
 @startuml campusmate_shared_base_url_configuration
 ' Source evidence baseline: pi-mono-java 320d790726a70aada6100052952d5494d2a378ac
 ' Local rename evidence: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec
-' Pending implementation: rename the Provider; configuration keys and endpoint semantics stay unchanged.
+' Verified 2026-09-19: pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7 uses CampusMateProvider.
+' Pending implementation: Mate model capability query and removal of global token defaults.
+' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/model/MateRuntimeModelManager.java: resolveModel
+' Design reason: Mate owns per-model token capabilities; Runtime publishes complete snapshots.
 ' Source evidence:
 ' pi-mono-java modules/coding-agent-cli/src/main/resources/application.yml:89-140
 ' pi-mono-java modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:68-76 and eventFlux
@@ -49,17 +52,19 @@ package "CampusMate - same origin" {
   [Chat] as Chat
   [Agent runtime] as Runtime
   [Shared Skill query] as Skill #DBEAFE
+  [Model capability query\nPending implementation] as Capabilities #DBEAFE
   [Agent info + Tool operations] as Tools
 }
 Origin --> Paths : join validated path
 Paths --> ChatClient : model-chat-path
-Paths --> RuntimeClient : agent-runtime / skill-info
+Paths --> RuntimeClient : agent-runtime / skill-info / model-capability
 Paths --> ToolClient : agent-info / skill-info / tools
 Options ..> ChatClient : model options
 Options ..> RuntimeClient : runtime options
 Options ..> ToolClient : enabled
 ChatClient --> Chat : POST / SSE
 RuntimeClient --> Runtime : GET
+RuntimeClient --> Capabilities : GET by modelId
 RuntimeClient --> Skill : full Skill projection
 ToolClient --> Skill : tool-binding projection
 ToolClient --> Tools : discover / execute
@@ -68,9 +73,10 @@ note bottom of Skill
 One operation, one key, two client projections.
 end note
 legend bottom left
-Target configuration; HTTP methods and payloads are unchanged.
-Six operation paths share one validated HTTP(S) origin.
+Existing operation contracts remain unchanged.
+Seven target paths share one validated HTTP(S) origin.
+No global contextWindow or maxTokens default.
 Client instances and DTOs remain independent.
-Provider name is pending implementation; server evidence varies by operation.
+Capability query is pending implementation; other server evidence varies by operation.
 endlegend
 @enduml

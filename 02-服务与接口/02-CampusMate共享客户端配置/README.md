@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.4.0 |
+| 文档版本 | 2.5.0 |
 | 状态 | 已确认目标；不同客户端的实现核验范围见 §2 |
-| 更新日期 | 2026-09-14 |
+| 更新日期 | 2026-09-19 |
 | pi-mono-java 源码基线 | `320d790726a70aada6100052952d5494d2a378ac` |
 | mate-service 源码基线 | `956b547f5ca12ca89e68f73012f92a4406b0c9fa` |
 | 适用边界 | CampusClaw -> CampusMate Model Manager、受管 Runtime 与 Tool 接口 |
@@ -19,6 +19,7 @@ Mate 与 CampusMate 是同一个服务，所有连接与路径使用以下 `camp
 campusmate:
   base-url: ${CAMPUSMATE_BASE_URL}
   endpoints:
+    model-capability-path-template: ${CAMPUSMATE_MODEL_CAPABILITY_PATH_TEMPLATE:/mate-service/v1/models/%s}
     model-chat-path: ${CAMPUSMATE_MODEL_CHAT_PATH:/mate-service/v1/LLM/chat}
     agent-info-path-template: ${CAMPUSMATE_AGENT_INFO_PATH_TEMPLATE:/mate-service/v1/agents/%s}
     agent-runtime-path-template: ${CAMPUSMATE_AGENT_RUNTIME_PATH_TEMPLATE:/mate-service/v1/agents/%s/runtime}
@@ -29,8 +30,6 @@ campusmate:
     api: ${CAMPUSMATE_MODEL_API:openai-completions}
     connect-timeout: ${CAMPUSMATE_MODEL_CONNECT_TIMEOUT:PT10S}
     response-timeout: ${CAMPUSMATE_MODEL_RESPONSE_TIMEOUT:PT10M}
-    context-window: ${CAMPUSMATE_MODEL_CONTEXT_WINDOW:128000}
-    max-output-tokens: ${CAMPUSMATE_MODEL_MAX_OUTPUT_TOKENS:8192}
     reasoning: ${CAMPUSMATE_MODEL_REASONING:true}
   runtime:
     agents-root: ${CAMPUSCLAW_AGENTS_ROOT:agent}
@@ -46,12 +45,12 @@ campusmate:
 
 1. `campusmate.base-url` 是唯一 origin 权威；
 2. `campusmate.endpoints` 是唯一出站路径目录；
-3. 模型协议、能力与传输参数只放在 `campusmate.model`；
+3. 模型协议、传输与尚未迁移的 reasoning 配置放在 `campusmate.model`；token 能力只从 Mate 查询并发布到 Agent 快照；
 4. 目标配置中不存在顶层 `mate`、`mate.endpoints`、`mate.tool` 或
    `campusmate.model-manager`。
 
 这是一项 **架构改造**。HTTP method、path、请求/响应、SSE 和超时语义不因
-配置归并而改变。凭据边界按 Runtime HTTP 1.42 另行收紧：Agent、Skill 与 Tool
+配置归并而改变。新增模型能力查询是独立增量，精确契约见[能力专题](../03-Model/model-capabilities.md)。凭据边界按 Runtime HTTP 1.42 另行收紧：Agent、Skill 与 Tool
 metadata 发现无凭据，仅 Tool execute 透传 POST Events execution 快照中已提供的
 `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 和 `access-token`。
 
@@ -60,6 +59,8 @@ metadata 发现无凭据，仅 Tool execute 透传 POST Events execution 快照�
 Java 基线 `320d7907` 中，三个客户端使用三套地址和七个路径配置，其中两项 Skill path 指向同一 operation。Mate 基线 `956b547f` 可证明 Chat 与两个 Agent operation；该提交未发现 Skill/Tool 三个 Controller。完整路径、符号与规范化结果见[源码证据](source-evidence.md)。
 
 Java 局部复核 `f61906b9` 已证明 Chat Provider 读取统一配置。这个局部结论不更新其他客户端、凭据边界或服务端的验收状态。目标配置不以旧提交中的差距作为当前未实现结论。
+
+2026-09-19 token 能力专项核对 Java 本地 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7` 和 Mate 本地 `4b957a3a846659f5b7569c9d6133abc070cd2e3c`：统一配置和 CampusMateProvider 已存在；逐模型能力查询、快照及两个默认字段删除仍待实现。证据集中于[Model 源码专题](../03-Model/source-evidence.md#model-capability-evidence)。
 
 ## 3. 配置与客户端关系
 
@@ -74,8 +75,8 @@ Java 局部复核 `f61906b9` 已证明 Chat Provider 读取统一配置。这个
 | 配置 | 责任 | 禁止事项 |
 |---|---|---|
 | `campusmate.base-url` | CampusMate scheme、host、port | 子模块覆盖 origin |
-| `campusmate.endpoints.*` | 当前 CampusClaw 消费的 6 个 HTTP operation path | 完整 URL、重复 operation、客户端私有副本 |
-| `campusmate.model.*` | API 适配、模型能力默认值、SSE 传输参数 | 保存 URL 或 path |
+| `campusmate.endpoints.*` | 目标 7 个 HTTP operation path（含待实现的模型能力查询） | 完整 URL、重复 operation、客户端私有副本 |
+| `campusmate.model.*` | API 适配、SSE 传输与既有 reasoning 参数 | 保存 URL、path 或 contextWindow/maxTokens 默认值 |
 | `campusmate.runtime.*` | 本地缓存、短请求超时、成功码与响应上限 | 保存 URL 或 path |
 | `campusmate.tool.enabled` | 是否装配 Tool 能力 | 决定 URL 或 path |
 
@@ -96,13 +97,13 @@ Spring 服务命名空间。本主题不为了配置归并破坏工具名；若�
 2. 必须有 host，不允许 user-info、query 或 fragment；
 3. path 必须为空或 `/`；
 4. 规范化只移除末尾 `/`，不改写 host 或 port；
-5. 无产品级默认值，部署必须显式提供。
+5. 通用 modules 必须显式提供；公司镜像按实现仓 ADR-0042 使用 `${CAMPUSMATE_BASE_URL:https://localhost:8591}`。该公司集成例外不改变 origin 校验。
 
 每个 endpoint path 必须：
 
 1. 以 `/mate-service/` 开头；
 2. 不是完整 URL；
-3. `{agentId}`、`{skillId}`、`{toolId}` 对应的配置统一使用一个 `%s`；
+3. `{agentId}`、`{skillId}`、`{toolId}`、`{modelId}` 对应的配置统一使用一个 `%s`；
 4. 不能包含 query、fragment、`..` 或第二个 origin；
 5. 同一 method + 规范化 path 只能有一个配置键。
 
@@ -125,8 +126,8 @@ endpoint = normalized(campusmate.base-url) + validated(campusmate.endpoints.<ope
 | `campusmate.model-manager.api` / `CAMPUSMATE_MODEL_MANAGER_API` | `campusmate.model.api` / `CAMPUSMATE_MODEL_API` | 配置分组改为模型能力语义；不保留兼容别名 |
 | `campusmate.model-manager.connect-timeout` / `CAMPUSMATE_MODEL_MANAGER_CONNECT_TIMEOUT` | `campusmate.model.connect-timeout` / `CAMPUSMATE_MODEL_CONNECT_TIMEOUT` | 同步迁移模型连接超时 |
 | `campusmate.model-manager.response-timeout` / `CAMPUSMATE_MODEL_MANAGER_RESPONSE_TIMEOUT` | `campusmate.model.response-timeout` / `CAMPUSMATE_MODEL_RESPONSE_TIMEOUT` | 同步迁移模型流响应超时 |
-| `campusmate.model-manager.context-window` / `CAMPUSMATE_MODEL_MANAGER_CONTEXT_WINDOW` | `campusmate.model.context-window` / `CAMPUSMATE_MODEL_CONTEXT_WINDOW` | 同步迁移模型能力默认值 |
-| `campusmate.model-manager.max-output-tokens` / `CAMPUSMATE_MODEL_MANAGER_MAX_OUTPUT_TOKENS` | `campusmate.model.max-output-tokens` / `CAMPUSMATE_MODEL_MAX_OUTPUT_TOKENS` | 同步迁移模型能力默认值 |
+| `campusmate.model.context-window` 及旧 `model-manager` 键与环境变量 | Mate 查询后快照中的 `contextWindow` | 删除部署默认值及 Java fallback；必填正整数 |
+| `campusmate.model.max-output-tokens` 及旧 `model-manager` 键与环境变量 | Mate 查询后快照中的可选 `maxTokens` | 删除部署默认值及 Java fallback；未知保持缺失 |
 | `campusmate.model-manager.reasoning` / `CAMPUSMATE_MODEL_MANAGER_REASONING` | `campusmate.model.reasoning` / `CAMPUSMATE_MODEL_REASONING` | 同步迁移推理能力开关 |
 | `mate.endpoints.agent-info-path-prefix` | `campusmate.endpoints.agent-info-path-template` | 移入统一目录并用 `%s` 模板 |
 | `campusmate.runtime.agent-runtime-path-template` | `campusmate.endpoints.agent-runtime-path-template` | 路径移入统一目录 |
@@ -146,16 +147,16 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | Java 符号 | 目标调整 |
 |---|---|
-| `CampusMateProvider`（待实现 改名） | 注入 `${campusmate.base-url}`、`${campusmate.endpoints.model-chat-path}` 及 `campusmate.model` 下的 API/超时参数；Provider 协议语义不变 |
-| `MateModelManagerProperties` | 绑定前缀从 `campusmate.model-manager` 改为 `campusmate.model`；类名表达 Model Manager 组件，可保留 |
+| `CampusMateProvider`（已实现身份） | 注入 `${campusmate.base-url}`、`${campusmate.endpoints.model-chat-path}` 及 `campusmate.model` 下的 API/超时参数；Provider 协议语义不变 |
+| `MateModelManagerProperties` | 已绑定 `campusmate.model`；删除 contextWindow/maxOutputTokens，仅保留仍有消费者的字段 |
 | `AgentRuntimeProperties` | 删除 `baseUrl`；只绑定 `campusmate.runtime` 的非 endpoint 参数 |
-| `MateServiceClient` | 注入共享 base URL，以及统一目录中的 Agent Runtime 与 Skill path |
+| `MateServiceClient` | 注入共享 base URL，以及统一目录中的 Agent Runtime、Skill 和模型能力 path；能力查询复用 runtime 短请求超时与响应上限，不发送 execution 凭据 |
 | `MateToolAutoConfiguration` | 条件键改为 `campusmate.tool.enabled`；读取共享 base URL 和统一 endpoint 目录，不再读取任何 `mate.*` |
 | `HttpMateToolClient` | Agent 与 Skill 前缀参数改为 `%s` path template；Skill path 与 Runtime client 读同一配置键；Agent/Skill/metadata 发现方法不接收凭据，仅 execute 接收不可变的四项 execution 凭据快照 |
 | `MateToolProperties` | 绑定前缀改为 `campusmate.tool`；类名可保留以避免无关 Java API 改名 |
 | `MateRestUtil` | 参数和诊断术语改为 CampusMate base URL；传输行为不变 |
 | canonical YAML 与镜像 properties | 只保留一个 `campusmate` 根和一个 Skill endpoint 键 |
-| 配置与客户端测试 | 断言 7 个旧路径配置归并为 6 个唯一 operation，并拒绝旧 `mate.*` 绑定 |
+| 配置与客户端测试 | 断言历史归并后的 6 个 operation 加 1 个能力查询，各自唯一，并拒绝旧 `mate.*` 绑定 |
 
 不同 Maven 模块不必为了共享一个属性对象形成反向依赖；它们可以分别注入相同的
 `campusmate.*` 属性。唯一权威是配置键与启动校验，不是某个客户端类。
@@ -167,7 +168,8 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 | 产品约束 | Mate 与 CampusMate 只表达一个服务身份。 | 部署中不存在第二个 Mate 服务 origin。 |
 | 架构改造 | 删除顶层 `mate`，全部配置统一到 `campusmate`。 | 避免服务命名和地址权威分裂。 |
 | 架构改造 | 模型参数从 `campusmate.model-manager` 改为 `campusmate.model`。 | 配置树描述能力域，不重复暴露 Model Manager 组件名。 |
-| 架构改造 | 建立 `campusmate.endpoints`，把 7 个配置归并为 6 个唯一 operation。 | path 属于服务契约，不属于某个客户端。 |
+| 架构改造 | endpoint 统一维护，历史 6 个 operation 加 1 个模型能力查询。 | path 属于服务契约，不属于某个客户端。 |
+| 架构改造 | 删除统一 token 能力默认值，Mate 按模型提供并完整发布。 | 避免不同模型共用错误窗口；输出上限未知时保持未知。 |
 | 架构改造 | Runtime 与 Tool client 共享一个 Skill endpoint 配置。 | 两者调用相同 method/path 与响应契约。 |
 | 安全加固 | base URL 只允许 HTTP(S) origin，path 不能携带 origin。 | 防止单客户端改道。 |
 | 安全加固 | Agent/Skill/metadata 发现无凭据，仅 Tool execute 透传 POST Events execution 快照。 | 将凭据可见面限制到真正执行工具的单一端点。 |
@@ -182,23 +184,24 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 4. 将 `mate.tool.enabled` 迁入 `campusmate.tool.enabled`；
 5. 删除 `mate.*`、三个旧地址变量、旧 path 变量和部署脚本转换；
 6. 同步 canonical YAML、镜像 properties、README、DTO 注释和配置/客户端测试；
-7. 补充端到端断言：三个客户端 origin 相同、Skill endpoint 只解析一次且两种消费均成功。
+7. 实现 Mate 能力查询与完整快照后，同步删除 modules YAML、镜像 properties 及 Java 中两个 token 默认值；部署先提供查询端，再更新消费者，旧快照按新 schema 重建；
+8. 补充端到端断言：三个客户端 origin 相同、Skill endpoint 只解析一次且两种消费均成功。
 
 ## 10. 验收标准
 
 - 目标配置源中只有一个顶层 `campusmate`，不存在顶层 `mate`；
-- 模型参数只存在于 `campusmate.model.*`，目标配置和环境变量中不存在
+- 模型协议、传输及既有 reasoning 配置位于 `campusmate.model.*`，token 能力由 Model 快照维护；目标配置和环境变量中不存在
   `campusmate.model-manager.*` 或 `CAMPUSMATE_MODEL_MANAGER_*`；
 - 只有 `campusmate.base-url` / `CAMPUSMATE_BASE_URL` 能决定 CampusMate origin；
-- 只有 `campusmate.endpoints` 能决定当前 6 个出站 operation path；
+- 只有 `campusmate.endpoints` 能决定目标 7 个出站 operation path；
 - `GET /mate-service/v1/skill/query/{skillId}` 只有一个配置键，并由 Runtime 与 Tool client 共用；
 - `GET /agents/{agentId}` 与 `GET /agents/{agentId}/runtime` 保持两个独立 operation；
 - `mate.innerGWSerive`、`mate.endpoints.*`、`mate.tool.enabled` 及所有 `MATE_*` 应用变量删除；
-- canonical YAML 与镜像 properties 绑定等价；
+- canonical YAML 与镜像 properties 的业务配置绑定等价，公司地址默认值例外按 §5 维护；两者均无 `CAMPUSMATE_MODEL_CONTEXT_WINDOW`、`CAMPUSMATE_MODEL_MAX_OUTPUT_TOKENS` 及对应 Java fallback；
 - base URL 或 path 非法时启动失败且不发送网络请求；
 - Chat、Runtime、Tool 请求使用相同 scheme、host、port；
-- HTTP method/path、请求/响应、SSE、超时与 execute 不重放语义保持不变；
-- Agent、Skill 和 Tool metadata 发现请求不含四项 execution Header；
+- 既有 operation 的 HTTP method/path、请求/响应、SSE、超时与 execute 不重放语义保持不变；新增能力查询符合 Model 专题；
+- 模型能力、Agent、Skill 和 Tool metadata 发现请求不含四项 execution Header；
 - 仅 Tool execute 透传 POST Events 快照中已提供的四项 Header，且 `access-token`
   不被改写为 `X-Access-Token`；
 - 服务端尚未实现的 Skill/Tool Controller 仍明确标记为待补齐，不因客户端配置存在而宣称已实现。
@@ -213,6 +216,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.5.0 | 2026-09-19 | 新增 Mate 模型能力查询 endpoint，删除统一 token 默认值并注明公司镜像地址例外。 |
 | 2.4.0 | 2026-09-14 | 以目标配置与客户端关系组织正文，将历史源码差距集中为证据专题并重排配置图。 |
 | 2.3.0 | 2026-09-14 | 目标 Provider 统一为 CampusMateProvider，沿用共享配置并保留旧提交源码证据。 |
 | 2.2.0 | 2026-08-27 | Metadata 发现不携带凭据，Tool 执行透传当前 execution 的四项调用 Header。 |
