@@ -4,7 +4,7 @@
 
 [返回前端主设计](README.md) · [认证与发送链路最新核验](#token-refresh-evidence)
 
-版本：1.8.2；更新日期：2026-09-19。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§7](#mate-tool-display-evidence)，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
+版本：1.9.0；更新日期：2026-09-19。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§9](#tool-title-layout-evidence)，§7 保留名称字段引入前的历史证据，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
 
 | 证据 | 基线 |
 |---|---|
@@ -234,3 +234,25 @@ OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对�
 验收状态：本次为设计与源码核验，未修改实现仓、未运行新产品测试、未连接真实认证中心。[自动刷新原型](原型/index.html#scene=message&fidelity=high&state=token-ready)已模拟消息准备、失败与草稿保留，其独立校验见[原型验证](迁移校验.md#自动刷新原型校验2026-09-19)，不代表产品接入；认证有效期、重复登录撤销旧 Token、限流与并行会话需真实联调，不能由合成测试证明。设计验证结果单独记录，不沿用历史 189 项测试为自动刷新验收。
 
 设计验证（2026-09-19）：已跟踪的 89 份现存 Markdown 无 Mermaid，35 份 PlantUML 为 ASCII，124 份 SVG XML 有效；226 处 SVG 引用与 128 处图源引用/行锚点通过检查。前端技术专题执行 `plantuml -tsvg diagram.puml`，8 张 SVG 与隔离重新生成结果逐字节一致；两张结构变化图完成原尺寸及 840 px 文档宽度检查，并对照旧工作台完整图保留职责链。其余 SVG 仅同步图源行号。图索引从已提交内容加本任务文件生成，未吸收无关本地删除；`git diff --check` 通过。
+
+
+<a id="tool-title-layout-evidence"></a>
+
+## 9. 工具名称标题布局（2026-09-19）
+
+设计修订起点为 `9e766a030aa4c777da96586db4c7778fc84c7995`；实现默认分支 main 已 fetch，并读取 `6a331d3477df23f8404582c3922b55c265530605`，其中 PR #313 已合入。只核验本节列出的名称组件、样式及展示函数，不升级前述认证、其他体验或外部 Agent 基线。
+
+| 实现仓相对路径 / 符号 | 已观察行为 | 当前展示约束 |
+|---|---|---|
+| `frontend/src/components/ToolActivity.vue` · identity/template | 标题已优先使用 displayName，但展开区又列“工具名称”“展示名称 / 技术名称” | 名称只在标题呈现；详情直接显示参数与结果，展开标题可换行 |
+| `frontend/src/components/ToolConfirmation.vue` · identity/template | 确认标题显示具体名称，详情再次列两种名称 | 确认标题完整换行；详情只展示参数，保留允许/拒绝行为 |
+| `frontend/src/runtime/toolDisplay.ts` · toolDisplayIdentity | 有效展示名优先，CallMateTool 以 arguments.tool 回退，普通工具以 toolName 回退 | 继续共用现有函数，不改变事件字段或身份关联 |
+| `frontend/src/style.css`、`frontend/src/runtime.css` · tool-identity/tool-activity/tool-confirmation-title | 独立名称卡片有专用背景和布局；标题单行省略 | 移除名称卡片样式；折叠活动保留摘要，展开与确认标题可完整阅读 |
+
+此项属于产品展示约束：同一次调用已经在标题命名，额外列两种名称重复占用参数和结果空间。工具身份仍由原始事件和调用标识确定，布局不参与执行或授权。全局组件职责、事件契约和 Agent 架构对比结论不变，继续复用现有 PlantUML/SVG，不增加组件或依赖。
+
+实现状态：修订提交 `733c7f9fb511cef09a49a1e776677c09d3627608` 已删除活动与确认详情里的独立名称区及其专属样式，保留标题映射、原始参数、结果和确认处理；尚未合入 main。活动展开后标题自然换行，确认标题完整换行，可访问名称不再附加技术名。
+
+验证：`structuredActivity.test.ts` 的 5 项组件测试通过，`npm run typecheck` 与 `npm run build` 通过。使用实际 Vue 组件和合成数据，在 390×844 与 1440×1000 视口查看标题、参数、结果及确认区；名称卡片数量为 0，展开标题无横向溢出，允许/拒绝点击均发出预期组件事件。此处只证明组件布局与交互，不代表真实 Mate、Java HTTP 或数据库联调；未重跑后端测试。
+
+设计检查：前端技术专题的 8 张 PlantUML SVG 重新生成后无差异；全局目标组件图按原尺寸与 840 px 文档宽度查看，结构与现有图一致。本次不改变架构对比结论或全局图的职责关系。Markdown 无 Mermaid、PUML ASCII、SVG XML、图源链接及行锚点与 diff 检查通过。
