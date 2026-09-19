@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.3.1；整理日期：2026-09-18。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `6026ba48`。旧提交差距不代表最新实现状态。活动工具的当前主线状态见 §4，三项退役工具的源码删除边界见 §5。
+版本：1.4.0；整理日期：2026-09-19。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `12244d49576d17239e21c6e75e542fd61c69b826`。旧提交差距不代表最新实现状态。活动工具的当前主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的当前来源与实现范围见 §6。
 
 | 基线 | 提交 |
 |---|---|
@@ -67,7 +67,7 @@ OpenCode `TaskTool` 仅用于对照父子消息隔离、进度和取消，不继
 
 <a id="tool-display-evidence"></a>
 
-## 3. 工具展示名称专项（2026-09-17）
+## 3. 工具展示名称历史核验（2026-09-17）
 
 本节独立记录本次读取，不升级前两节的旧观察。设计起点 `dab7226`；Java 本地 `main` 固定快照 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`，不是最新远端声明。以下路径均相对 `pi-mono-java`，本次读取的文件与该提交一致。
 
@@ -89,7 +89,7 @@ pi 上游为 `https://github.com/badlogic/pi-mono.git`。2026-09-17 通过 `ls-r
 
 Claude Managed Agents 的[工具事件模型](https://platform.claude.com/docs/en/api/beta/sessions/events/list)与[事件流](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)于 2026-09-17 重新核对，仍为 Beta。公开 `agent.custom_tool_use` 提供 name/input，没有通用 displayName；文档不能证明 Console 的标题实现，不推断私有服务端或 UI。
 
-CampusClaw 选择在 Host 外部事件中固定展示名，是产品可读性约束和架构变更，不是照搬 pi/Claude 的既有字段。可选字段、快照存储、缺失元数据降级及公共授权投影是已确认目标，相关 Java/前端改动和端到端回归尚未执行；无新增依赖。主图分层与执行关系不变，本次只补元数据和事件字段。
+本节保留当日字段缺口与外部基线证据，不能用于推断后续分支仍无实现。当前名称来源、执行边界和分支验收由 §6 维护；历史上提出的调用级执行 ID 绑定不属于现行展示设计。
 
 ## 4. 活动工具与主线实现状态（2026-09-18）
 
@@ -130,3 +130,28 @@ Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/c
 实现状态：开发分支 `codex/remove-retired-write-tools` 的 `1b35422c61d471e11b9e1c126b57a82ef808ced2` 已实现源码删除，[Draft PR #315](https://github.com/superheromeZzh/pi-mono-java/pull/315) 待合入 main；活动 profile 排除三项工具原本已实现。该分支删除 21 个主源码类和 13 个专属测试，并同步公司镜像，不改变 11 项活动工具及三入口缺省集合。
 
 验证：JDK 21 `./mvnw clean verify` 的 2009 项测试无失败、错误或跳过；Checkstyle 和 Spotless 通过。新增三入口 × 六种退役名称的 18 项拒绝组合，以及 21 类 classpath 不存在检查。父任务复核源码/镜像变更一致、最终 class/JAR 无上述退役类、修改测试的版权与方法长度检查通过；保留能力的回归包含在本次 Reactor 测试中，不等同真实模型或部署环境验证。公司镜像布局及 pre-push 同步检查通过；公司编译因无法解析 `com.huawei.hicampus:NativeParent:26.0.0-SNAPSHOT` 未验证，使用脚本允许的 `--no-verify` 完成生成同步。验收边界见主设计 §13.1.1。
+
+<a id="tool-display-binding-evidence"></a>
+
+## 6. 工具展示名来源与执行职责（2026-09-19）
+
+本次设计修订起点为 `12244d49576d17239e21c6e75e542fd61c69b826`，交付前同步设计主线 `91b5bd2c9b3a83ee69264262eb96e6abd8a3cf21` 并保留其凭据职责规则。Java 默认分支 main 已 fetch，读取 `561d732ad591ba1f6aabbbc8590fc1d262c2c583`；PR #313 的原实现为 `9ea89f0ff5bc2c197117ec9dd80ba74c3e56e258`，同步 main 的 merge commit 为 `50db636c1e0b19d74db9e7bf5ada3b76681a8966`。以下路径均相对 `pi-mono-java`，Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 范围与符号 | 已观察行为 | 当前设计依据 |
+|---|---|---|
+| main：R `runtime/MateServiceClient.java` · BoundTool | 已有 id/name/displayName/permission/version 等字段 | 业务展示名已有可信绑定来源，不需要为取名称新增远程发现 |
+| main：R `runtime/AgentRuntimeManager.java` · writeRuntimeTree/toSettings/toRuntime/AgentSettings/SkillManifest | Agent bindingTools 写入并读回 settings.json；直接 Skill bindingTools 写入并读回 skill.json；mode 已存在于 AgentSettings | 文件职责为身份与运行配置分开；绑定元数据跟随同一次运行准备，文件名不决定所属 Agent/Skill |
+| main：R `runtimeapi/runtime/RuntimeToolPermissionPolicy.java` · from/decide | 从当前 PreparedAgentRuntime 的 Agent/Skill 绑定构造权限判定 | 名称读取复用相同范围的可信元数据，但不修改权限决定 |
+| main：R `tool/mate/CallMateTool.java` · execute；MateToolDiscovery · resolveToolId | 实际执行时按名称通过既有 Session 缓存和发现机制解析工具 ID | 展示功能保留该执行时点、原失败语义及发现恢复能力 |
+| PR 原实现：R `runtimeapi/runtime/RuntimeToolCallSnapshotResolver.java` · resolveDisplayName；R `tool/mate/CallMateTool.java` · bindInvocation/resolve | 取名时解析并按 toolCallId 保留执行 ID，连解析异常也保存 | 这部分由纯展示名读取替代；产品中的工具只会启停，不为假设的同名改绑新增调用状态 |
+| PR 原实现：R `runtimeapi/event/RuntimeCommittedEventFactory.java` · agentToolCall；CommittedEventProjection · projectToolCall；`frontend/src/runtime/protocol.ts` 与工具活动/确认卡 | displayName 的调用事件保存、实时/历史投影及前端展示已在分支实现 | 保留这些展示能力；公共 Mate bridge 不在该实现仓中，仍按所属模块记录待实现 |
+
+现行目标是 Host 从本次 `PreparedAgentRuntime.metadata().bindingTools()` 与直接 `skills().bindingTools()` 读取 `BoundTool.displayName`，普通工具使用实际实例 `label()`。取名不访问网络、不改变发现缓存、不绑定执行目标或缓存解析失败；名称随调用事件保存，后续确认与历史读取沿用该值。工具启停、绑定、凭据与权限仍由实际执行链路作最终检查。业务名称长度 `varchar(256)` 与仅启停的生命周期是本次明确的产品约束，不从模拟的超长名称或动态改绑场景推导额外功能。
+
+pi 上游默认分支在本次通过 `ls-remote --symref ... HEAD` 确认为 main，并在隔离仓库 fetch `36b60d2e8985899743c4cf5bd5f8929832a3f05d`，包版本为 0.85.1；这是默认分支源码快照，不声明为稳定发布验证。相对名称专项旧提交 `5a3a03a7f5db43692915d6ae45e6d96497ea248d`，重新读取 `packages/agent/src/types.ts` 的 `AgentTool.label`（408 行）与 `AgentEvent`（461–463 行）：label 存在，三类工具执行事件仍没有 label/displayName。仅升级此字段边界，不升级历史 TUI、Claude 或其他模块结论。CampusClaw 的外部展示字段仍是产品可读性约束和事件投影架构扩展。
+
+实现状态：PR #313 的 `40f4dd964dbb091eda6a33a0173a8d40342a4a7a` 已按上述目标实现，尚未合入 main。R `runtimeapi/runtime/RuntimeToolCallSnapshotResolver.java` 的 from/indexMateBindings/resolveDisplayName 从当前运行绑定建立只读名称索引；`RuntimeSessionEngineRegistry#createHolder` 传入同一个 session.runtime。`CallMateTool`、`MateToolDiscovery`、`MateToolSessionCache`、`HttpMateToolClient` 和 `MateToolMeta` 与上述 main 基线内容一致；名称功能没有改写原执行与发现职责。
+
+验证：JDK 21 下展示与执行相关测试 63 项、绑定元数据来源回归 87 项通过，零失败、错误或跳过；覆盖普通 label、Agent 与直接 Skill、空白和冲突降级、ASK/ALLOW/DENY 取名零发现调用、确认续跑只取名一次以及发现失败后再次调用可恢复。前端 4 个相关文件共 100 项测试、类型检查与构建通过；Spotless、Checkstyle、Java 方法长度与版权/布局检查、补充测试质量检查及人工核对通过。公司镜像已按脚本同步，因本机无法解析企业 NativeParent 未验证镜像编译。本次未运行真实 Mate、openGauss 或 Java HTTP 端到端联调；390×844 和 1440×1000 的本地模拟服务浏览器验收仅归属于原 `9ea89f0`，本次未重跑。
+
+图中 Host、工具执行与持久化职责不变，不新增目标类或关系。工具系统、事件设计与前端主题的现有 PlantUML 已重新生成，SVG 无差异；已检查工具系统主图的原尺寸和文档缩放显示。设计契约脚本、Markdown/图源链接、PUML ASCII、SVG XML 与 diff 检查通过。

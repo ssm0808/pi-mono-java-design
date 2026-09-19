@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.31.0 |
+| 文档版本 | 1.32.0 |
 | 更新日期 | 2026-09-19 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -261,7 +261,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 **讲解要点。** 参考 Codex 的输入邻近设置、方案与进度分离，让用户在同一工作区读方案、做决定、看实施进展。CampusClaw 的审核决定续跑原执行，不照搬 Codex 的新消息实施路径。这个差异保留执行归属，但增加事件映射与恢复要求；内部前端按已实现代码验收，企业集成另行对齐公共契约。
 
-**工具名称专项（2026-09-17，M03/M06/M07）。** pi 默认 main 的 `5a3a03a7f5db43692915d6ae45e6d96497ea248d` 中 AgentTool 有 label，AgentEvent 不携带 label/displayName；TUI 按技术名选 renderer，通用回退仍用 toolName。Claude Managed Agents 当日公开 Beta 的 custom tool 事件只有 name/input 等字段，不能由此推断 Console 标题。精确路径、旧新提交与读取范围见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#tool-display-evidence)。CampusClaw 目标在 Host 把普通工具 label、具体 Mate 工具元数据统一映射为可选 displayName，并随调用保存快照供内部/公共流与历史消费；来源由[M03](../02-CampusClaw工具系统/README.md#tool-display-name)、快照由[M06](../01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)、展示由[M07](../../07-前端设计/技术设计/内容渲染.md#mate-tool-display)维护。该产品可读性约束与架构变更避免前端另查目录及历史标题漂移，代价是贯通字段、缺失元数据的显示回退和解码器同步更新。Java `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7` 已有 label/ToolInfo.displayName，缓存、事件及前端尚未贯通；契约已确认、实现 待实现。技术名、模型参数与确认身份保持；复用现有全局主图，不升级其他条目的基线结论。
+**工具名称专项（2026-09-19，M03/M06/M07）。** 本次 fetch 并核验 pi 默认 main `36b60d2e8985899743c4cf5bd5f8929832a3f05d`：AgentTool 有 label，工具执行事件仍不携带 label/displayName；该结论从名称专项旧基线 `5a3a03a7f5db43692915d6ae45e6d96497ea248d` 更新，其他基线与 UI 历史观察不随之升级。CampusClaw 在 Host 将实际工具 label 与已加载 Agent/Skill 绑定中的业务展示名写入调用事件，前端和历史直接使用保存值；来源由[M03](../02-CampusClaw工具系统/README.md#tool-display-name)、快照由[M06](../01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)、展示由[M07](../../07-前端设计/技术设计/内容渲染.md#mate-tool-display)维护。工具只有启停变化，因此取展示名不调用远程发现，不新增调用级执行 ID 绑定或解析失败缓存；实际执行继续校验可用性。该产品可读性约束与事件投影架构扩展避免前端另查目录及历史标题变化，代价是名称按已准备的元数据快照展示，并同步各消费端字段。Runtime/前端已有 PR #313 的分支实现，元数据读取修订与验收范围见[专项证据](../02-CampusClaw工具系统/source-evidence.md#tool-display-binding-evidence)；公共 Mate bridge 待实现。模型参数、确认身份与既有工具执行链保持，复用现有全局主图。
 
 **开发认证专项（2026-09-19，M07）。** 这是 CampusClaw 开发环境的产品约束与前端编排变更，不引入新的外部 Agent 比较。Java 默认 `main@840d04405d2bcc80a41b9d3b3f16606cc4845338` 已有统一设置、持久化与手动获取；`App.vue` 六类写动作仍直接调用 `snapshotHeaders`。目标由[工作台 §6](../../07-前端设计/技术设计/runtime-workbench-alignment.md#6-发送前自动获取-token)唯一维护：每次先重新获取，成功后提交，失败不回退旧 Token。代价是认证往返与故障依赖；后端不可变执行凭据不随确认/回答更新，不能保证长任务续期。精确路径、旧新基线影响及真实认证未验收边界见[源码证据 §8](../../07-前端设计/source-evidence.md#token-refresh-evidence)。复用工作台全局目标图；自动门禁待实现，其他外部基线与体验结论不升级。
 
@@ -378,6 +378,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.32.0 | 2026-09-19 | 工具展示名复用本地绑定元数据，与执行时 ID 解析分离，并更新 pi 事件字段证据。 |
 | 1.31.0 | 2026-09-19 | M07 开发写动作提交前自动获取 Token，明确已实现配置基础与待实现门禁及运行期限制。 |
 | 1.30.1 | 2026-09-18 | 登记三项退役工具的开发分支实现、回归结果和公司编译限制。 |
 | 1.30.0 | 2026-09-18 | 增加 Bash/Edit/Write 完全删除与公共消费者保留的 A10 对比。 |
