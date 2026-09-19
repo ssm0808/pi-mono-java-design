@@ -158,6 +158,41 @@ def validate_event_ordering_rule(review: dict) -> None:
 
 
 
+def validate_plan_shape(event: dict) -> None:
+    fields = {"eventId", "type", "sourceEventId", "content"}
+    preview = event.get("phase") == "delta"
+    fields |= {"phase"} if preview else {"createdAt", "toolCallId"}
+    if "phase" in event:
+        fields.add("phase")
+    require(set(event) == fields, "plan must use its exact delta/completed/legacy shape")
+    require(bounded_nonblank(event["eventId"], 128), "plan identity must be bounded")
+    content = event["content"]
+    require(isinstance(content, str) and 0 < len(content.encode("utf-16-le")) // 2 <= 262144,
+            "plan content must be nonempty and bounded")
+    if preview:
+        return
+    require(isinstance(event["toolCallId"], str)
+            and any(not java_whitespace(c) for c in event["toolCallId"]), "plan requires tool call identity")
+    require(bounded_nonblank(content, 262144), "complete plan Markdown is required")
+    first = next(line for line in content.splitlines() if any(not java_whitespace(c) for c in line))
+    require(first.startswith("# "), "plan first nonblank line must start with a Markdown heading")
+
+
+def validate_plan_preview_flow(frames: list) -> None:
+    identities, completed = {}, set()
+    for event in frames:
+        identity = event["eventId"]
+        binding = (event["type"], event.get("sourceEventId"))
+        require(identity not in identities or identities[identity] == binding,
+                "preview identity cannot change type or root")
+        require(identity not in completed, "completed identity cannot accept later output")
+        identities[identity] = binding
+        if event["type"] == "agent.plan":
+            require(event.get("phase") in {"delta", "completed"}, "new plan writes require phase")
+        if event.get("phase") != "delta":
+            completed.add(identity)
+
+
 def validate_frame(event: dict, receipt: bool = False, history: bool = False) -> None:
     validate_public_payload(event)
     require(event.get("type") in (USER_EVENT_TYPES if receipt else STREAM_TYPES | (HISTORY_TYPES if history else {"session.compacted"})),
@@ -171,9 +206,14 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
                    if event["type"] == "agent.message" and event["phase"] == "completed"
                    else "candidate text content must be a string")
         require(isinstance(event.get("content"), str), message)
+    elif event["type"] == "agent.plan":
+        require("phase" not in event or event["phase"] in {"delta", "completed"},
+                "plan supports delta/completed or legacy omitted phase")
+        require(isinstance(event.get("content"), str), "plan content must be a string")
     else:
         require("phase" not in event, "tool/idle events have no phase")
     if event.get("phase") == "delta":
+        require(not history, "history never contains preview deltas")
         require("createdAt" not in event and bool(event["content"]), "delta must omit createdAt and be nonempty")
     else:
         require(isinstance(event.get("createdAt"), str) and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", event["createdAt"]) is not None, "complete event requires createdAt")
@@ -197,18 +237,7 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
     if event["type"] == "user.question_answer":
         validate_answer_event(event, receipt=True)
     if event["type"] == "agent.plan":
-        fields = {"eventId", "type", "createdAt", "sourceEventId", "toolCallId", "content"}
-        require(set(event) in (fields, fields | {"sourceMessageEventId"}),
-                "plan must use the complete review event shape")
-        if "sourceMessageEventId" in event:
-            require(bounded_nonblank(event["sourceMessageEventId"], 128),
-                    "plan source message identity must be nonblank and bounded")
-        require(isinstance(event["toolCallId"], str)
-                and any(not java_whitespace(c) for c in event["toolCallId"]), "plan requires tool call identity")
-        content = event["content"]
-        require(bounded_nonblank(content, 262144), "plan Markdown is required and bounded")
-        first = next(line for line in content.splitlines() if any(not java_whitespace(c) for c in line))
-        require(first.startswith("# "), "plan first nonblank line must start with a Markdown heading")
+        validate_plan_shape(event)
     if event["type"] == "agent.todo_updated":
         require(set(event) == {"eventId", "type", "createdAt", "sourceEventId", "toolCallId", "todos"},
                 "task snapshot must use the explicit event shape")
@@ -402,6 +431,7 @@ def validate_model(model: dict) -> None:
                     require(index == len(frames) - 1, "confirmed idle closes this response; no later output")
                 all_types.add(event["type"])
             require(frames[-1]["type"] == "session.status_idle", "normal-close example must end at matching idle")
+            validate_plan_preview_flow(frames)
     require(set(RESPONSE_INPUTS).issubset(response_ids), "examples must cover message, confirming, confirmation and interrupt")
     streams = {item["id"]: parse_stream(item["bodies"]["default"])
                for item in operation["responses"] if item["status"] == "200"}
@@ -970,25 +1000,21 @@ def validate_todo_regressions(post: dict) -> int:
     return len(edits)
 
 
-def validate_plan_source(frames: list, plan: dict) -> None:
-    """New writes bind completed text; legacy reads may omit the source field."""
-    source_id = plan.get("sourceMessageEventId")
-    require(bounded_nonblank(source_id, 128), "new plan writes require the source message")
-    sources = [e for e in frames if e["eventId"] == source_id]
-    require(len(sources) == 1, "plan source must identify one complete message")
-    source = sources[0]
-    require(source["type"] == "agent.message" and source.get("phase") == "completed"
-            and source["content"] == plan["content"]
-            and source["sourceEventId"] == plan["sourceEventId"],
-            "plan must preserve exact completed source text and root")
+def validate_plan_commit(frames: list, plan: dict) -> None:
+    """Validate public commit ordering; internal Assistant binding needs runtime tests."""
+    require(plan.get("phase") == "completed", "new committed plans require completed phase")
     calls = [e for e in frames if e.get("type") == "agent.tool_call"
              and e["toolCallId"] == plan["toolCallId"]]
     require(len(calls) == 1 and calls[0].get("toolName") == "ExitPlanMode"
             and calls[0]["arguments"] == {} and calls[0]["requiresConfirmation"] is False
             and calls[0]["sourceEventId"] == plan["sourceEventId"],
             "plan requires its exact empty-argument exit call")
-    require(frames.index(source) < frames.index(calls[0]) < frames.index(plan),
-            "source commit must precede call and proposal")
+    require(frames.index(calls[0]) < frames.index(plan), "call commit must precede proposal")
+    require(any(e["type"] == "session.status_idle" and e.get("reason") == "confirming"
+                and e["sourceEventId"] == plan["sourceEventId"] for e in frames[frames.index(plan) + 1:]),
+            "committed plan must have a matching confirming boundary")
+    require(not any(e["type"] == "agent.tool_result" and e["toolCallId"] == plan["toolCallId"]
+                    for e in frames), "review submission cannot complete its pending exit call")
 
 
 def validate_plan_flow(post: dict) -> None:
@@ -1003,7 +1029,7 @@ def validate_plan_flow(post: dict) -> None:
     for frames in streams.values():
         for candidate in frames:
             if candidate["type"] == "agent.plan":
-                validate_plan_source(frames, candidate)
+                validate_plan_commit(frames, candidate)
     require(review[-1]["reason"] == "confirming", "review closes with a confirming wait")
     require(not any(event["type"] == "agent.todo_updated" or event.get("toolName") == "TodoUpdate"
                     or event["type"] == "agent.tool_result" and event["toolCallId"] == plan["toolCallId"]
@@ -1039,6 +1065,58 @@ def validate_plan_flow(post: dict) -> None:
             "revision stays in plan without execution progress")
 
 
+def validate_plan_preview_regressions(post: dict) -> int:
+    response = next(r for r in post["operation"]["responses"] if r["id"] == "200-plan-review")
+    frames = parse_stream(response["bodies"]["default"])
+    delta = next(e for e in frames if e["type"] == "agent.plan" and e.get("phase") == "delta")
+    plan = next(e for e in frames if e["type"] == "agent.plan" and e.get("phase") == "completed")
+    require(delta["eventId"] == plan["eventId"], "sample preview must target the committed plan card")
+    edits = [lambda e: e.update(content=""), lambda e: e.update(content=None),
+             lambda e: e.update(content="😀" * 131073), lambda e: e.update(phase="started"),
+             lambda e: e.update(phase=None), lambda e: e.pop("phase"),
+             lambda e: e.update(createdAt=plan["createdAt"]), lambda e: e.update(toolCallId="call"),
+             lambda e: e.update(usage={}), lambda e: e.update(sourceMessageEventId="message"),
+             lambda e: e.update(eventId=" ")]
+    rejected = 0
+    for edit in edits:
+        candidate = copy.deepcopy(delta)
+        edit(candidate)
+        try:
+            validate_frame(candidate)
+        except (KeyError, TypeError, ValueError):
+            rejected += 1
+            continue
+        raise ValueError("invalid plan preview accepted")
+    bad_flows = [[plan, delta], [delta, dict(plan, sourceEventId="other")],
+                 [delta, dict(plan, type="agent.message")],
+                 [{k: v for k, v in plan.items() if k != "phase"}]]
+    for candidate in bad_flows:
+        try:
+            validate_plan_preview_flow(candidate)
+        except ValueError:
+            rejected += 1
+            continue
+        raise ValueError("invalid plan preview lifecycle accepted")
+    try:
+        validate_frame(delta, history=True)
+    except ValueError:
+        rejected += 1
+    else:
+        raise ValueError("history accepted plan preview")
+    # Missing previews and a changed final snapshot are legal; repeated text is not deduplicated.
+    validate_plan_preview_flow([delta, copy.deepcopy(delta), dict(plan, content="# Corrected final")])
+    validate_plan_preview_flow([plan])
+    validate_frame(dict(delta, content="fragment without heading"))
+    validate_frame(dict(delta, content=" "))
+    for payload in response["bodies"].values():
+        sample = parse_stream(payload)
+        validate_plan_preview_flow(sample)
+        for complete in sample:
+            if complete["type"] == "agent.plan" and complete.get("phase") == "completed":
+                validate_plan_commit(sample, complete)
+    return rejected
+
+
 def validate_plan_regressions(post: dict) -> int:
     validate_plan_flow(post)
     streams = complete_streams(post)
@@ -1051,7 +1129,7 @@ def validate_plan_regressions(post: dict) -> int:
         (plan, lambda e: e.update(content="# " + "a" * 262143)),
         (plan, lambda e: e.update(content="# " + "😀" * 131072)),
         (plan, lambda e: e.update(content=None)),
-        (plan, lambda e: e.update(phase="completed")),
+        (plan, lambda e: e.update(phase="started")),
         (plan, lambda e: e.pop("toolCallId")),
         (plan, lambda e: e.pop("sourceEventId")),
         (plan, lambda e: e.update(sourceMessageEventId=None)),
@@ -1083,12 +1161,12 @@ def validate_plan_regressions(post: dict) -> int:
             continue
         raise ValueError("invalid plan review event accepted")
     flow_cases = [
-        ("200-plan-review", "agent.plan", lambda e: e.update(content="# Another proposal")),
-        ("200-plan-review", "agent.plan", lambda e: e.pop("sourceMessageEventId")),
-        ("200-plan-review", "agent.plan", lambda e: e.update(sourceMessageEventId="wrong-message")),
+        ("200-plan-review", "agent.plan", lambda e: e.update(toolCallId="wrong-call")),
+        ("200-plan-review", "agent.plan", lambda e: e.pop("phase")),
+        ("200-plan-review", "agent.plan", lambda e: e.update(phase="delta")),
         ("200-plan-review", "agent.plan", lambda e: e.update(sourceEventId="wrong-root")),
-        ("200-plan-revised", "agent.plan", lambda e: e.update(sourceMessageEventId=plan["sourceMessageEventId"])),
-        ("200-question-answered", "agent.plan", lambda e: e.update(content="# Wrong question continuation")),
+        ("200-plan-revised", "agent.plan", lambda e: e.update(toolCallId=plan["toolCallId"])),
+        ("200-question-answered", "agent.plan", lambda e: e.update(toolCallId="wrong-question-call")),
         ("200-plan-approved", "user.plan_confirmation", lambda e: e.update(targetEventId="stale-plan")),
         ("200-plan-approved", "session.mode_changed", lambda e: e.update(confirmationEventId="wrong-receipt")),
         ("200-plan-revised", "agent.plan", lambda e: e.update(eventId=plan["eventId"])),
@@ -1097,7 +1175,7 @@ def validate_plan_regressions(post: dict) -> int:
         candidate = copy.deepcopy(post)
         response = next(item for item in candidate["operation"]["responses"] if item["id"] == response_id)
         frames = parse_stream(response["bodies"]["default"])
-        edit(next(event for event in frames if event["type"] == event_type))
+        edit(next(event for event in frames if event["type"] == event_type and event.get("phase") != "delta"))
         response["bodies"]["default"] = "".join("data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
                                                 for event in frames)
         try:
@@ -1113,16 +1191,15 @@ def validate_plan_regressions(post: dict) -> int:
         if mutation == "arguments":
             call["arguments"] = {"plan": candidate["content"]}
         else:
-            source = next(e for e in frames if e["eventId"] == candidate["sourceMessageEventId"])
-            frames.remove(source)
-            frames.append(source)
+            frames.remove(call)
+            frames.append(call)
         try:
-            validate_plan_source(frames, candidate)
+            validate_plan_commit(frames, candidate)
         except ValueError:
             continue
         raise ValueError("invalid plan source order or arguments accepted")
     legacy = copy.deepcopy(plan)
-    legacy.pop("sourceMessageEventId")
+    legacy.pop("phase")
     validate_frame(legacy, history=True)
     # Provider tool call identities retain the existing contract without a 128-unit limit.
     long_tool_identity = dict(plan, toolCallId="provider-call-" + "x" * 200)
@@ -1147,6 +1224,12 @@ def main() -> int:
         history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
         require(common["reviewState"] == {"currentOperation": "listSessionEvents", "confirmedOperations": ["submitSessionEvent", "listSessionEvents"], "reviewMode": "completed", "semanticBatch": "2026-09-08.1-confirmed"}, "target contracts ready after confirmed batch")
         require(common["eventContract"]["detailStatus"] == "implementation-ready", "no extra review gate")
+        require(common["eventContract"].get("planStreaming") == {
+            "phases": ["delta", "completed"], "previewPersisted": False,
+            "identity": "same-eventId-for-preview-and-completed",
+            "completion": "after-review-transaction-commit",
+            "legacyRead": "missing-phase-is-completed", "status": "confirmed-pending-implementation",
+        }, "shared plan lifecycle must match the two-phase contract")
         require(sorted(MODEL_PATH.parent.glob("*.json")) == [MODEL_PATH, HISTORY_PATH],
                 "only POST and GET history remain active, not the retired stream")
         validate_model(model)
@@ -1156,7 +1239,7 @@ def main() -> int:
         validate_display_name_regressions(model)
         batch_count = validate_batch_field_regressions(model, history)
         todo_count = validate_todo_regressions(model)
-        plan_count = validate_plan_regressions(model)
+        plan_count = validate_plan_regressions(model) + validate_plan_preview_regressions(model)
         question_count = validate_question_regressions(model)
         require(set(common["eventContract"]["completeTypes"]) == USER_EVENT_TYPES | STREAM_TYPES | HISTORY_TYPES,
                 "shared complete event catalog differs from validated types")

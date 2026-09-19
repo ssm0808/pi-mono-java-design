@@ -1,6 +1,6 @@
 # 计划模式接口增量
 
-版本：1.11.0；日期：2026-09-19；状态：**既有交互工具与事件已实现；正文流式绑定及 sourceMessageEventId 增量待实现，当前范围见[§13](source-evidence.md#plan-streaming-evidence)；Mate 公共桥接待实现，部署与模型验收分别记录**。
+版本：1.12.0；日期：2026-09-19；状态：**既有交互工具与事件已实现；标记解析与 agent.plan delta/completed 增量待实现，当前范围见[§14](source-evidence.md#plan-marker-evidence)；Mate 公共桥接待实现，部署与模型验收分别记录**。
 
 本文件维护计划接口的集成边界与理由。精确请求、完整事件、条件字段、错误码及示例由 [共享事件契约](../01-CampusClaw多Agent运行时/事件契约/common.json)、[POST 操作](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 与 [GET 操作](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[统一接口页](../01-CampusClaw多Agent运行时/chat-api-review.html)。登记不代表 Java 或 Mate 已实现。
 
@@ -36,9 +36,9 @@ POST 精确模型提供批准与修订两个请求示例，以及制作计划、
 
 ### 3.1 `agent.plan`
 
-`agent.plan` 是无 phase 的完整方案记录。content 原样等于同一 Assistant 响应已提交的完整正文；新增 sourceMessageEventId 指向该 agent.message(completed)。sourceEventId 仍为原始用户根消息，toolCallId 关联唯一退出调用，审核目标仍是计划 eventId。新写引用必填、旧历史允许省略，出现时不可空；精确约束见共享事件源。
+`agent.plan` 使用 phase=delta/completed；delta 只含计划 eventId、type、sourceEventId、phase 和非空新增 content，不带 createdAt、toolCallId 或 usage。开始标记只分配内部候选 ID，不发送 started 或空 delta；第一条 delta 建卡。completed 保存完整块正文及 toolCallId/createdAt，沿用相同 eventId；审核目标仍是计划 eventId，sourceEventId 仍为原用户根。精确字段由共享事件源维护。
 
-生成期复用 agent.message delta/completed；模型历史保留完整正文和空参数 ToolCall，审核使用 agent.plan。通过当前响应快照共享同一正文投影，不从最近历史、相邻卡片或标题猜测。前端按 sourceMessageEventId 在原消息位置合并计划卡、吸收关联调用/结果；完整事件均保留。失败、分页和两跳映射见[流式设计](plan-streaming.md#4-公共事件与页面恢复)。
+后端在 Plan Main Agent 范围解析唯一 proposed_plan 块，前置普通说明继续 agent.message，原始 Assistant 与空参数 ToolCall 保留在模型历史。完整响应解析结果供普通消息投影和审核绑定共享；来源 Entry 在后端校验，不使用 sourceMessageEventId 转卡。审核事务成功才发 completed，旧无 phase 完整计划仍可读取；SSE 与 GET 的完整记录保持同形，详见[流式设计](plan-streaming.md#4-公共事件与页面恢复)。
 
 ### 3.2 `user.plan_confirmation`
 
@@ -52,7 +52,7 @@ reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史�
 
 ### 3.4 既有事件的使用
 
-- ExitPlanMode 的 `agent.tool_call` 保持原结构，`toolName=ExitPlanMode`、`arguments={}`、`requiresConfirmation=false`；只在同响应正文保存并绑定后提交审核，不能同时生成工具权限审核。
+- ExitPlanMode 的 `agent.tool_call` 保持原结构，`toolName=ExitPlanMode`、`arguments={}`、`requiresConfirmation=false`；只在同响应原始 Entry 保存且唯一闭合块解析绑定后提交审核，不能同时生成工具权限审核。
 - 进入审核等待仍使用 `session.status_idle(reason=confirming)`；它不释放 Session running。
 - 批准/修订后的 `agent.tool_result` 保持 `toolCallId/content/isError`；正常批准与正常修订均 `isError=false`，无 errorCode。
 - 原始 user.message、问题回答后的续跑、修订后生成的计划、后续业务工具及最终回答均按同一个根消息的 sourceEventId 关联，直到原执行真实结束；普通澄清后新发 user.message 则形成新的根执行。

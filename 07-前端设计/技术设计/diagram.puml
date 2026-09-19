@@ -542,7 +542,9 @@ endlegend
 ' Source: frontend/src/components/PlanCard.vue; runtime/eventStore.ts; types/runtime.ts.
 ' Java divergence: approve resumes the original root execution; no clear-context path.
 ' Design reason: proposal, decision receipt, execution progress and terminal are separate facts.
-' Internal flow is implemented; public transport remains pending implementation. View states are not HTTP enums.
+' Internal review is implemented; plan preview and public transport are pending implementation. View states are not HTTP enums.
+' Streaming source: Java fb842b1ac6cb4818f6b146f79dd184a5cd88bf12; runtimeapi/event/RuntimeEventProjector.java :: projectMessageUpdate, beginPlanReview.
+' Design reason: backend classifies plan deltas; the frontend never parses model markers or authorizes previews.
 title Plan interaction - authority and UI
 skinparam backgroundColor white
 skinparam shadowing false
@@ -579,8 +581,16 @@ opt Question batch during planning
   end note
   API --> State : Original root continues
 end
-API --> State : Complete proposal + confirming
-State --> UI : Render full proposal; enable exact target
+opt Plan preview [Pending implementation]
+  API --> State : Nonempty agent.plan delta, stable plan eventId
+  State --> UI : First delta creates plan card; later deltas append
+  note over State, API
+    No started event. No marker parsing in the frontend.
+    Preview never authorizes approval and is not replayed.
+  end note
+end
+API --> State : Complete proposal + confirming [completed phase pending]
+State --> UI : Replace same-ID preview, or create complete card; reconcile before enabling
 note over UI, State
   Questions do not approve a proposal or grant tool permission.
   Ordinary messages are a no-tool fallback only.

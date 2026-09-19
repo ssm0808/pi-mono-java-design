@@ -50,7 +50,8 @@ hide empty members
 ' Streaming scope: Java fb842b1ac6cb4818f6b146f79dd184a5cd88bf12; RuntimeEventProjector.java :: persistAssistant, beginPlanReview.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeCommittedEventFactory.java :: textContent, agentPlan.
 ' Observed behavior: completed text precedes tools; current review reads the plan argument.
-' Design reason: pending binding shares the committed text snapshot and rechecks mutable state in the review transaction.
+' Codex baseline: 78245b47af2a7aafcabe025828ceecca69db4df1; codex-rs/utils/stream-parser/src/proposed_plan.rs :: ProposedPlanParser.
+' Design reason: pending parser shares one final text snapshot for projection and binding; review rechecks mutable state.
 title CampusClaw Plan and User Interaction - Complete Target Class View
 allowmixing
 
@@ -59,7 +60,7 @@ legend bottom left
   Blue: pending extraction or explicitly marked streaming additions
   Blue connectors: recommended responsibility links, not missing features
   Controllers, services, factories, repositories, TODO mapper: Spring singletons
-  Execution package and tools: one instance per execution
+  Execution and tools: per execution; parser: per response; final snapshots: immutable
 endlegend
 
 package "HTTP and client boundary" as HttpBoundary {
@@ -89,7 +90,7 @@ package "Application and assembly" as Application {
     +acceptPlanConfirmation(requestVO)
   }
   class "PlanProposalBinder" as ProposalBinder <<Pending implementation>> #EAF2FF {
-    +bind(currentResponse): SnapshotDTO
+    +bind(finalTextSnapshot, committedEntry, call): SnapshotDTO
   }
   class "RuntimeUserQuestionService" as QuestionService <<implemented>> #ECFDF5 {
     +beginQuestion(finalCall, targetDTO)
@@ -151,8 +152,17 @@ package "Execution ownership" as ExecutionScope {
     immutable normalized questions
   }
   class "PlanProposalSnapshotDTO" as ProposalSnapshot <<Pending implementation>> #EAF2FF {
-    immutable target, sourceMessageEventId
+    immutable target, assistantEntryId, planEventId
     immutable sourceEventId, toolCallId, content
+  }
+  class "PlanTextParser" as TextParser <<Pending implementation>> #EAF2FF {
+    one per Assistant response
+    +push(text): classified deltas
+    +finish(fullResponse): PlanTextSnapshotDTO
+  }
+  class "PlanTextSnapshotDTO" as TextSnapshot <<Pending implementation>> #EAF2FF {
+    immutable ordinaryText, planText, validity
+    immutable response identity, planEventId
   }
 }
 
@@ -190,7 +200,7 @@ package "Persistence and event boundary" as PersistenceScope {
   class "RuntimeCommitted\nEventFactory" as EventFactory <<extended>> #FFF7DD {
     +agentTodoUpdated(snapshot)
   }
-  interface "RuntimeEventOutput" as Output <<existing>> #ECFDF5
+  interface "RuntimeEventOutput\n(request-bound SSE)" as Output <<existing>> #ECFDF5
   database "GaussDB\nSessions / entries / events\nExecutions / segments / decisions" as DB
 }
 
@@ -276,8 +286,12 @@ ControlRepo <|.. Repos
 Repos --> Mappers
 Mappers --> DB
 Projector --> Persistence
-Projector -[#2563EB,norank]-> ProposalBinder : bind committed source
-ProposalBinder .[norank].> ProposalSnapshot : creates
+Projector -[#2563EB,norank]-> ProposalBinder : pending binding
+Projector *-[#2563EB,norank]- "0..1" TextParser : pending
+TextParser ..[#2563EB]> TextSnapshot : pending final parse
+ProposalBinder -[#2563EB,norank]-> TextSnapshot : pending
+EventFactory -[#2563EB,norank]-> TextSnapshot : pending ordinary projection
+ProposalBinder .[norank].> ProposalSnapshot
 Pending o-[#2563EB]- "0..1" ProposalSnapshot : pending addition
 ReviewService -[#2563EB,norank]-> ProposalSnapshot : locked recheck
 Projector -[#2563EB]down-> TodoMapper : final successful result
@@ -287,12 +301,18 @@ EventFactory -[hidden]down- Output
 Coordinator --> Projector
 Projector --> Output
 ReviewAdapter -[#2563EB]-> Output
-Output .[norank].> EventApi : request-bound SSE
+Output .[norank].> EventApi
 
 note bottom of Pending
   At most one interaction across all three kinds.
   Current execution and interaction identity are
   rechecked under database locks before claim.
+end note
+note bottom of TextParser
+  Backend consumes proposed_plan markers.
+  First nonempty plan delta creates a card.
+  Same eventId for delta and completed; no started.
+  Raw Assistant Entry keeps original model context.
 end note
 note bottom of TodoTool
   Stable tool; progress policy in description.
@@ -347,12 +367,13 @@ participant "Control dispatcher\noriginal instance" as Dispatcher
 participant "Original execution\nExitPlanMode / Agent" as Agent
 
 group 1. Publish a plan in the active root
-  Agent --> UI : Stream ordinary assistant Markdown (pending change)
+  Agent --> UI : Backend-classified agent.plan delta (pending change)
+  UI -> UI : First nonempty delta creates read-only plan card
   Agent -> Agent : Same response: one ExitPlanMode({}) call after text
-  Agent -> Service : Commit message, then call; bind immutable source snapshot
+  Agent -> Service : Final parse; commit raw Assistant, ordinary projection and call
   Agent -> Service : beginReview(proposalSnapshotDTO)
   Service -> DB : Lock Session and execution; validate active plan mode
-  Service -> DB : Append agent.plan + confirming idle;
+  Service -> DB : Append agent.plan completed + confirming idle;
   note right of DB
   Same transaction records the internal pending
   plan
@@ -360,7 +381,7 @@ group 1. Publish a plan in the active root
   Session remains running.
   end note
   DB --> Service : Commit
-  Service --> UI : Original SSE: plan, confirming idle; close
+  Service --> UI : Same-ID plan completed, confirming idle; close
   Agent -> Agent : Await plan decision; keep tools and current prompt
 end
 
@@ -639,11 +660,11 @@ end
 
 group 3. Review the complete proposal
   loop Review attempts; exit on approval
-    Runtime --> UI : Stream ordinary Markdown; commit completed message
+    Runtime --> UI : Parse markers; stream agent.plan delta (pending change)
     Runtime -> Runtime : Finalize sole ExitPlanMode({}) after text; commit call
-    Runtime -> Runtime : Bind committed message and current call (pending change)
-    Runtime -> DB : Commit agent.plan + confirming idle + pending review
-    Runtime --> UI : Plan with sourceMessageEventId + confirming; merge original row
+    Runtime -> Runtime : Bind final parse snapshot, raw Assistant Entry and current call
+    Runtime -> DB : Commit agent.plan completed + confirming idle + pending review
+    Runtime --> UI : Same-ID completed replaces preview; confirming enables reconciliation
     Runtime -> Tools : Execute ExitPlanMode({}); await the bound review
     note over Runtime,DB
   Session state remains running; mode remains
@@ -829,7 +850,9 @@ autonumber
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeCommittedEventFactory.java :: textContent, agentPlan.
 ' Observed behavior: text deltas already stream; current review reads the complete plan tool argument.
 ' Design reason: same-response text binding avoids a second model request and a stale-history lookup.
-' Pending implementation: empty arguments, immutable source binding and client row merge.
+' Codex: 78245b47af2a7aafcabe025828ceecca69db4df1; codex-rs/utils/stream-parser/src/proposed_plan.rs :: ProposedPlanParser.
+' Codex: codex-rs/core/src/session/turn.rs :: handle_plan_segments, maybe_complete_plan_item_from_message.
+' Pending implementation: marker parser, empty arguments, immutable source binding and same-ID plan card.
 title Plan Text Streaming and Review Binding - Target (Pending implementation)
 actor User
 participant "Client" as UI
@@ -839,32 +862,39 @@ database "Persistence" as DB
 participant "ExitPlanMode" as Tool
 
 group 1. Generate once in a single model response
+  Loop -> Runtime : Optional ordinary introduction
+  Runtime --> UI : agent.message delta (ordinary text only)
+  Loop -> Runtime : Opening proposed_plan marker, possibly split across chunks
+  Runtime -> Runtime : Enter plan parsing; allocate plan eventId; emit no start event
   loop Text chunks
     Loop -> Runtime : TextDelta
-    Runtime --> UI : agent.message delta
-    UI -> UI : Render ordinary Markdown; no approval actions
+    Runtime --> UI : Nonempty agent.plan delta, same eventId
+    UI -> UI : First delta creates plan card; append without approval actions
   end
+  Loop -> Runtime : Closing marker; no extra completion event yet
   Loop -> Loop : Emit sole ExitPlanMode({}) after text
   Loop -> Runtime : Complete Assistant response (text + call)
-  Runtime -> DB : Commit source Assistant and completed message
-  DB --> Runtime : Immutable committed message identity and text
-  Runtime --> UI : agent.message completed replaces preview
+  Runtime -> Runtime : Reparse full response into shared immutable final snapshot
+  Runtime -> DB : Commit raw Assistant Entry and ordinary completed message
+  DB --> Runtime : Immutable committed Entry identity
+  Runtime --> UI : Ordinary agent.message completed; retain usage, hide empty bubble
   Runtime -> DB : Commit complete tool_call with arguments={}
-  Runtime -> Runtime : Bind current response + committed message + sole call
+  Runtime -> Runtime : Bind final snapshot + committed Entry + sole call
 end
 
 group 2. Submit a complete proposal, not a tool-result stream
   Loop -> Runtime : beforeToolCall(current Assistant, call)
   Runtime -> DB : Lock and recheck target, source, text, mode and stop
-  Runtime -> DB : Commit plan + pending target + confirming; close segment
+  Runtime -> DB : Commit plan completed + pending target + confirming; close segment
   DB --> Runtime : Committed review
-  Runtime --> UI : agent.plan(sourceMessageEventId, content), confirming
-  UI -> UI : Merge source row in place; enable review only after reconciliation
+  Runtime --> UI : Same-ID agent.plan completed with full content, confirming
+  UI -> UI : Replace plan preview; enable review only after reconciliation
   Loop -> Tool : execute({})
   Tool -> Runtime : Await exact pending call decision
   note over UI,Tool
     Session remains running / plan. Closing SSE is not approval.
-    A failed binding leaves ordinary text, never an actionable plan.
+    Failed binding never creates an actionable plan.
+    Trusted segment end seals uncommitted previews as read-only.
   end note
 end
 

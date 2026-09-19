@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.59.0",
+    "version": "1.60.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -78,7 +78,7 @@
     }
   },
   "eventContract": {
-    "version": "2026-09-19.1",
+    "version": "2026-09-19.2",
     "semanticStatus": "confirmed",
     "detailStatus": "implementation-ready",
     "toolErrorCodes": {
@@ -158,12 +158,23 @@
       "session.thinking_changed",
       "session.mode_changed",
       "session.compacted"
-    ]
+    ],
+    "planStreaming": {
+      "phases": [
+        "delta",
+        "completed"
+      ],
+      "previewPersisted": false,
+      "identity": "same-eventId-for-preview-and-completed",
+      "completion": "after-review-transaction-commit",
+      "legacyRead": "missing-phase-is-completed",
+      "status": "confirmed-pending-implementation"
+    }
   },
   "contractSections": {
     "events0": {
       "title": "完整事件字段（已确认目标契约）",
-      "description": "GET 历史与 POST 完整 SSE 使用同一投影；delta/心跳不入历史。表中条件外字段省略，null 不等于省略。主动配置变更只进入历史；计划批准的模式变更进入确认续跑 SSE 与历史；自动压缩可出现在所属 SSE，手动 compact 仍返回 JSON。",
+      "description": "GET 历史与 POST 完整 SSE 使用同一投影；delta/心跳不入历史。表中条件外字段省略，null 不等于省略。主动配置变更只进入历史；计划批准的模式变更进入确认续跑 SSE 与历史；自动压缩可出现在所属 SSE，手动 compact 仍返回 JSON。 计划使用 delta/completed，delta 行仅说明临时预览，历史只返回完整计划；旧无 phase 记录兼容读取。",
       "columns": [
         "事件范围",
         "字段",
@@ -244,10 +255,22 @@
           "content 至少一个且仅 text/text 字符串块，允许空字符串和多个块；isError 必须布尔。失败必有下表稳定 errorCode，成功必须省略；不另设 errorMessage/status/details。"
         ],
         [
-          "agent.plan",
-          "toolCallId/content/sourceMessageEventId",
-          "新写三项必填；旧历史可省略来源引用",
-          "完整待审核 Markdown，无 phase。toolCallId 非空；sourceMessageEventId 指同一 Assistant 响应已提交的 agent.message(completed)，与计划同 Session/原根，非空且最多 128 UTF-16 单元；旧记录缺省时按旧完整卡展示，不猜测引用，出现时不可 null。content 精确等于来源消息全部正文，首个非空行以 # 开始（# 后必须空格），最多 262144 UTF-16 单元且满足完整帧容量。新工具参数为 {}，只允许同响应正文之后的唯一 ExitPlanMode 调用。正文 delta/completed 先于 plan，仅完整 plan 与 confirming 对账后可审；targetEventId 仍指计划 eventId。修订使用新消息与计划 ID，不增加 planId/version。来源绑定增量待实现。"
+          "agent.plan delta",
+          "eventId/type/sourceEventId/phase/content",
+          "五项必填",
+          "phase=delta；content 为非空新增字符串，允许片段尚无标题，不带 createdAt/toolCallId/usage/sourceMessageEventId。后端识别 proposed_plan 开始标记时仅分配计划 ID，第一条非空正文 delta 建卡，无 started 或空 delta。计划块不再作为 agent.message 正文重复发送。增量不保存、不重放，与 completed 共用同一 eventId 和原用户根 sourceEventId。"
+        ],
+        [
+          "agent.plan completed",
+          "eventId/type/sourceEventId/phase/content/createdAt/toolCallId",
+          "七项必填；旧完整记录可无 phase",
+          "新写 phase=completed；仅在审核事务成功后发送，与 confirming 同事务保存。content 为去除标记行后的完整 Markdown，首个非空行以 # 开始（# 后必须空格），最多 262144 UTF-16 单元且满足完整帧容量；toolCallId 非空。完整内容覆盖同 ID preview，不要求等于已收到 delta 的拼接；无 delta 也可直接建卡。sourceEventId 仍为原始用户根，targetEventId 审核目标仍为计划 eventId。不新增 sourceMessageEventId、planId/version、usage；后端绑定同响应原 Entry 和唯一 ExitPlanMode({})。修订使用新计划 ID。旧无 phase 完整记录按 completed 解码，无需重写历史。标记解析、两 phase 和空参数绑定待实现。"
+        ],
+        [
+          "agent.plan 生命周期",
+          "预览与审核",
+          "无新增开始事件",
+          "仅 delta/completed；开始/结束标记都不是审核授权。completed 后该 ID 不再发送 delta；客户端忽略迟到 delta。只有完整计划和对应 confirming、当前状态对账通过后可审。未完成预览在该段可信结束后标为未提交审核；EOF/断线显示待核对，补读历史及 Session，不重放 POST。旧无 phase 兼容不允许新生产端省略 phase。"
         ],
         [
           "agent.todo_updated",

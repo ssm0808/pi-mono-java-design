@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.13.0 |
+| 文档版本 | 0.14.0 |
 | 状态 | 已确认目标契约；请求输出绑定与跨实例控制待实现 |
 | 源码基线 | Java 918005ee、dfb90cac，固定提交与路径见 [模块证据](source-evidence.md#52-post-与流生命周期) |
-| 更新日期 | 2026-09-18 |
+| 更新日期 | 2026-09-19 |
 
 结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量已在 Runtime 主线实现（`8c5fda1d`，见[源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)）；Session/元数据不增字段，Mate 公共投影待实现。本文其他历史源码范围不因此升级。
 
@@ -63,13 +63,15 @@ user.interrupt 的必填 targetEventId 只匹配原消息，不能取消随后�
 
 ### 4.1 完整内容与预览
 
-agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的完整权威内容，客户端以完整内容替换预览。user.* 回执、工具调用、工具结果、计划、任务快照、批准模式变更与 idle 都是完整事件，无 phase；精确字段和类型目录由共享模型维护。Thinking 仅在执行快照开启且模型返回可读原文时投影，持久化后的可见性见 [Thinking 展示](chat-events-history-design.md#thinking-original-text)。
+agent.message、agent.thinking 与 agent.plan 的 delta 是增量，completed 是同 ID 的完整权威内容，客户端以完整内容替换预览。user.* 回执、工具调用、工具结果、任务快照、批准模式变更与 idle 都是完整事件，无 phase；精确字段和类型目录由共享模型维护。Thinking 仅在执行快照开启且模型返回可读原文时投影，持久化后的可见性见 [Thinking 展示](chat-events-history-design.md#thinking-original-text)。
 
 完整事件在 SSE 与 ListEvents 同名同形；落盘范围按 B12 与历史同一投影实现，
 不能假定当前 Java 已保存 Tool Call 或 idle。preview 不持久化、不补发；同一 eventId
 出现 completed 后不再发送 delta。背压丢弃某个 preview 后，该连接停止此 ID 后续 delta，
 等待完整内容覆盖，避免把缺片段的拼接结果显示为完整答案。工具参数、结果不泄露凭据、
 堆栈或不允许公开的内部数据，Mate 还需进行公共安全投影。
+
+计划仅第一条非空 delta 建卡，不发 started；审核事务保存计划与 confirming 后发 completed，旧无 phase 完整计划兼容读取。原始模型标记只由后端解析，完整计划内容不在普通消息重复投影；规则见[计划流式专题](../06-CampusClaw计划模式/plan-streaming.md)。
 
 调用事件的可选 displayName 在首次提交前固定，包括 requiresConfirmation=true 的调用；SSE 直接使用已提交快照，确认续跑及结果事件不重取名。字段规则和消费边界见[调用名称快照](chat-events-design.md#tool-display-snapshot)。
 
@@ -132,6 +134,7 @@ agent.message 与 agent.thinking 的 delta 是增量，completed 是同 ID 的�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.14.0 | 2026-09-19 | 计划采用 delta/completed，预览不入历史，审核事务成功后完成。 |
 | 0.13.0 | 2026-09-18 | 工具调用展示名复用已提交快照。 |
 | 0.11.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |
 | 0.10.0 | 2026-09-15 | 明确计划审核响应绑定、批准事件顺序与修订再等待。 |

@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：2.3.0；核对日期：2026-09-19。正文流式专项见[§13](#plan-streaming-evidence)，其他主线范围保留[§12](#12-主线实现状态核验2026-09-18)。本文区分源码事实、基线能力和推荐增量；不把历史“待实现”标签当作当前源码结论。
+版本：2.4.0；核对日期：2026-09-19。标记与计划事件专项见[§14](#plan-marker-evidence)，其他主线范围保留[§12](#12-主线实现状态核验2026-09-18)及[§13](#plan-streaming-evidence)的独立核验记录。本文区分源码事实、基线能力和推荐增量；不把历史“待实现”标签当作当前源码结论。
 
 提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 待实现 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
 
@@ -342,7 +342,7 @@ Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/c
 | Java R `runtimeapi/event/RuntimeCommittedEventFactory.java` · agentMessage、textContent、agentPlan | 消息正文将 TextContent 直接按顺序拼接；计划 payload 只有调用与正文，无 sourceMessageEventId。目标共用正文提取，不二次修剪或插入换行 |
 | Java R `runtimeapi/runtime/RuntimeActiveExecution.java` · beginPlanReview、await、claimAndResumePlanReview | 原执行等待、领取决定并应用模式；完整审核与批准续跑已经实现，新增来源绑定不能表述为整套审核待实现 |
 | Java `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java` · appendText、appendToolCall | 模型文本与工具参数分别产生增量；参数生成不等于工具执行，公共 projector 没有因此自动暴露参数 preview |
-| Java `frontend/src/projectors/runtimeEventProjector.ts` · projectRuntimeEvents | 消息与计划分别投影，计划吸收关联工具日志；目标须按来源消息合并正文，不能仅改提示词造成两份正文 |
+| Java `frontend/src/projectors/runtimeEventProjector.ts` · projectRuntimeEvents | 消息与计划分别投影，计划吸收关联工具日志；新计划 preview 与 completed 同 ID 投影待实现，当前目标见 §14 |
 | pi `packages/agent/src/agent-loop.ts` · streamAssistantResponse、executeToolCalls、executePreparedToolCall；`packages/agent/src/types.ts` · AgentEvent | Assistant 增量与工具执行更新、完整工具结果属于不同阶段；工具回调可报更新，最终结果参与模型历史。无需为计划正文引入通用工具结果流 |
 | Codex `codex-rs/collaboration-mode-templates/templates/plan.md` · Finalization rule | 方案作为模型正文中的 proposed_plan 块；Plan 模式由开发者模式指令退出，不是 CampusClaw 的 ExitPlanMode({}) 审核工具 |
 | Codex `codex-rs/core/src/session/turn.rs` · handle_plan_segments、emit_streamed_assistant_text_delta、maybe_complete_plan_item_from_message | 流式解析正文为普通文本或 ProposedPlanDelta；最终从完整消息提取 plan item。支持正文流式与最终权威分离，但并非我们空参数工具方案的原样实现 |
@@ -352,11 +352,13 @@ Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/c
 
 2026-09-19 重新读取 [Claude Managed Agents Events and streaming](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)：Beta preview 为临时 best-effort，不持久化、不重放；文本 agent.message 支持增量，agent.thinking 仅 start，工具调用/结果及 MCP 事件不走这套 preview。仅说明公开观察契约，不能据此推断内部工具是否渐进执行，更不能证明其实现了 CampusClaw 的计划审核工具。
 
-CampusClaw 采用同响应正文流和空参数退出调用是**架构变更，待实现**：借鉴 Codex 正文与最终计划分离，复用本产品完整审核事务及 pi 式 Loop；不复制 proposed_plan 解析器，也不照搬 DeepSeek 大参数承载。精确来源绑定是安全/一致性边界，保留用户批准及企业两跳身份是产品约束。理由、代价、发布和验收由[流式主文](plan-streaming.md)维护。
+CampusClaw 同响应正文与空参数退出调用的当前目标及标记解析增量统一见[§14](#plan-marker-evidence)和[流式主文](plan-streaming.md)。此处的 pi、DeepSeek 与 Claude 记录仅证明各自当次读取的行为，不替代 §14 的局部更新，也不证明其他基线采用相同的计划事件。
 
 本次只有静态源码与设计契约验证。未运行 Java、数据库、实际 Provider、浏览器端到端或性能测试；首字时间改善是设计目的，不能宣称已验证的耗时收益。
 
-### 13.3 设计验收范围
+### 13.3 历史设计验收范围
+
+以下记录对应设计提交 `f5eaa8c752905e65b2292dee4d350f980fab8ed5`，不是标记解析方案的当前验收；当前检查单独登记在 §14。
 
 | 检查 | 结果与证明边界 |
 |---|---|
@@ -367,3 +369,51 @@ CampusClaw 采用同响应正文流和空参数退出调用是**架构变更，�
 | 接口页 DOM 测试 | test_chat_api.cjs 未运行成功：本地及桌面捆绑 Node 环境均缺 jsdom；Python 静态测试不替代 DOM 交互验收 |
 
 模型同响应输出、压缩保护、数据库事务、两跳桥接、真实前端流式合并及性能均仍待实施验收。原有 AskUserQuestion/TODO/状态图随同一图源重新生成及行锚点更新，不新增这些功能的架构结论。
+
+<a id="plan-marker-evidence"></a>
+
+## 14. 标记解析与计划专用流式事件
+
+核对日期 2026-09-19；设计起点为 `9282157268d26e7d9135a54df5474fed7b522701`。重新确认 Codex 默认分支 main 并隔离 fetch；Java 使用重新 fetch 的 origin/main，未改用户工作树。只更新下表列出的范围，不将其他模块或 §13 的 pi、DeepSeek、Claude 核验日期滚动为本次最新。
+
+| 仓库 | 上次证据 → 本次完整提交 | 范围与结论影响 |
+|---|---|---|
+| pi-mono-java / main | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` → `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` | 未变化；重新读取 ExitPlanMode 参数/执行、RuntimeEventProjector 文本投影/提交/审核及 RuntimeCommittedEventFactory 完整消息/计划。已实现完整审核，标记解析、空参数绑定和 plan delta/completed 待实现 |
+| openai/codex / main | `78245b47af2a7aafcabe025828ceecca69db4df1` → `78245b47af2a7aafcabe025828ceecca69db4df1` | 未变化；重新读取模板、流式解析器、plan Item 生命周期及 App Server 事件映射。源码仍将 item/plan/delta 标为 EXPERIMENTAL，不宣称稳定发布 |
+
+### 14.1 源码事实与公开契约
+
+Java 路径前缀 R 沿用 §13.1；Codex 路径相对其仓库。
+
+| 来源 / 路径 / 关键符号 | 已观察行为 |
+|---|---|
+| Codex `codex-rs/collaboration-mode-templates/templates/plan.md` · Finalization rule | 正式方案位于独占行的 proposed_plan 标签内，每轮最多一块；模板不承担网络流解析 |
+| Codex `codex-rs/utils/stream-parser/src/proposed_plan.rs` · ProposedPlanParser、extract_proposed_plan、closes_unterminated_plan_block_on_finish | 增量识别标记，区分普通文本和计划片段；包含响应结束时补闭合未闭合块的测试。不能将 CampusClaw 严格闭合规则说成 Codex 原样行为 |
+| Codex `codex-rs/core/src/session/turn.rs` · ProposedPlanItemState（约 1918）、handle_plan_segments（约 2115）、maybe_complete_plan_item_from_message（约 2246） | 后端创建 Plan item、发送计划增量，完整消息到达后提取权威方案；不是前端收到普通完整消息才包装为计划 |
+| Codex `codex-rs/app-server-protocol/src/protocol/event_mapping.rs` · EventMsg::PlanDelta（约 372）；同目录 `common.rs` · PlanDelta（约 1954） | 映射为 item/plan/delta；公开通知标记为 EXPERIMENTAL，Item started/completed 属于 Codex 生命周期 |
+| Java R `tool/plan/ExitPlanModeTool.java` · parameters、requirePlan、execute | 当前 required plan 字符串，完成标题/长度检查后 await；不是工具生成正文 |
+| Java R `runtimeapi/event/RuntimeEventProjector.java` · projectMessageUpdate、persistAssistant、beginPlanReview | 当前普通 TextDelta 投影、原 Assistant 提交、工具调用提交及完整审核事务已存在；审核从参数取文，提交后清理 assistantEntryId，新绑定须保存不可变已提交来源 |
+| Java R `runtimeapi/event/RuntimeCommittedEventFactory.java` · agentMessage、textContent、agentPlan | TextContent 直接拼接，usage 放在完整消息；计划没有 phase。目标需分离公开普通正文与原始模型历史，不能删除原始方案或重复 usage |
+
+2026-09-19 重新读取 [OpenAI App Server 官方文档](https://learn.chatgpt.com/docs/app-server)：plan Item 的增量是实时展示，最终完整文本为权威且可能不同；文档和上表源码共同支持“增量预览 + 最终全量覆盖”，不证明 CampusClaw 的持久化事务或退出审核工具。
+
+### 14.2 CampusClaw 目标与差异理由
+
+- **架构变更，待实现**：后端 PlanTextParser 识别标记，最终 PlanTextSnapshotDTO 同时供普通消息投影与 PlanProposalBinder 使用；原 Entry 保留完整模型响应，来源绑定不暴露成新的公共字段。
+- **产品约束，待实现**：agent.plan 只用 delta/completed，第一条非空 delta 建卡，不引入 Codex 的 started；同一计划 ID 延续到审核事务提交后的完整事件，保持现有 type + phase 契约。
+- **安全加固，待实现**：要求唯一显式闭合块与同响应唯一 ExitPlanMode({})；拒绝未闭合、多块/嵌套及混合调用进入审核。相对 Codex 的结束补闭合更严格，代价是模型格式不合格时需要修正。
+- **产品约束**：继续使用企业两跳身份、当前待审核状态和明确批准；预览、闭合标签及流关闭均不授权执行。首字延迟改善是目标，未完成性能验证。
+
+实施、故障、发布和运行时验收唯一维护在[流式主文 §2～§6](plan-streaming.md#2-目标标记识别与计划专用增量)。公共样例校验不能证明模型始终同响应输出、内部 Entry 绑定、事务原子性、断线并发或实际前端渲染。
+
+### 14.3 当前设计验证
+
+| 检查 | 实际结果与边界 |
+|---|---|
+| validate-chat-events.py | 通过；54 项计划反例拒绝，覆盖字段、两 phase、非空增量、身份冲突、迟到增量、历史排除 preview、新写提交顺序及审核关联；保留 114 POST、57 历史、15 批次、15 TODO、31 问答反例。允许无 preview、最终全量校准、合法重复片段与旧无 phase 读取 |
+| Python 静态测试与生成同步 | test_chat_api、test_document_maintenance、test_control_retirement、test_command_catalog_contract、test_command_response_contract、test_help_contract 共 53 项通过；skill-statistics 通过；render_chat_api.py --check 通过 |
+| 图形与文档 | 计划专题 7 个 SVG 与前端相关图重新生成；专题及前端机械校验通过：PlantUML ASCII、XML、Markdown 图/源码行锚点及 git diff --check。全局类图对照旧版，类图与受影响时序按原尺寸及文档宽度查看；问答/TODO 图仅生成同步和锚点更新，不新增其行为结论 |
+| 全仓 API 校验 | validate-chat-api.py --full 未通过：范围外 Markdown 仍引用不存在的 `../../02-服务与接口/03-模型管理Provider契约/diagram.puml`；不以局部通过冒充全仓通过 |
+| 接口页交互与视口 | test_chat_api.cjs 未运行成功：缺少 jsdom。本地 HTML 的浏览器访问被 URL 安全策略阻止，未绕过；桌面与 360 px 页面显示、键盘/焦点交互未验收。静态 HTML 内容检查不替代真实 DOM 验证 |
+
+当前交付仅设计文档、接口样例、设计校验器与生成图；没有修改产品实现。Java 解析器、数据库竞争、真实前端流式、Mate 两跳和模型首字性能仍为待实现/待验收。
