@@ -14,7 +14,7 @@ GET、创建、更新及复用 Session 的 Command 响应保持同一种 Session
 
 ## 2. 提交审核决定
 
-复用 `POST /campusclaw-service/v1/sessions/{sessionId}/events`，联合输入增加 `user.plan_confirmation`。沿用现有 POST 的可选调用上下文 Header；入口不因缺少凭据拒绝，请求凭据也不覆盖原消息执行的内存凭据，实际 Mate tool execute 时再按最低完整性失败。
+复用 `POST /campusclaw-service/v1/sessions/{sessionId}/events`，联合输入增加 `user.plan_confirmation`。沿用现有 POST 的可选调用上下文 Header；入口不因缺少凭据拒绝，请求凭据也不覆盖原消息执行的内存凭据，实际 Mate tool execute 时透传已提供 Header，由 Mate 返回对应结果。
 
 POST 精确模型提供批准与修订两个请求示例，以及制作计划、批准执行和修订再提交的三个完整 SSE 场景。`targetEventId` 精确绑定当前待审核计划，审核输入不携带新的方案正文；条件反馈规则由同一模型与校验器执行。
 

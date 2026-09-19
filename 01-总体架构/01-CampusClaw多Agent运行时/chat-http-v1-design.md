@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.56.0 |
+| 文档版本 | 1.57.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新专项见 §8.1 |
@@ -301,7 +301,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 Runtime 接收调用上下文，不检查 JWT/APPKEY 的组合、格式或真实性，也不建立 Session owner；认证与动作授权由上游负责。X-HW-ID 表示用户凭据 ID。每次请求仍校验所属的资源、标识、版本和业务状态，不能把“不认证凭据”解释为跳过业务校验。
 
-POST Events/Command 可以携带 access-token。四项凭据只在本次执行或命令处理的内存对象中保存，仅实际 Mate tool execute 原名发送；工具发现、模型调用和其他请求不得读取。HTTP 入口不因缺少任一凭据头而拒绝请求；实际调用 Mate tool execute 时由工具客户端检查 `X-HW-ID`、`access-token` 以及 JWT/AppKey 至少一种的最低完整性，缺失时返回工具失败结果。确认、中断请求不得覆盖原执行凭据；等待确认期间保持原执行上下文，真正结束后释放。Header 不写日志、ResultBean、Session、Prompt 或 Event，Spring 单例不保存原值。
+POST Events/Command 可以携带 access-token。四项凭据只在本次执行或命令处理的内存对象中保存，仅实际 Mate tool execute 原名发送；工具发现、模型调用和其他请求不得读取。HTTP 入口不因缺少任一凭据头而拒绝请求；Claw 不检查凭据最低完整性，实际调用 Mate tool execute 时将已提供的 Header 原样透传，由 Mate 判断凭据并返回成功或失败结果。确认、中断请求不得覆盖原执行凭据；等待确认期间保持原执行上下文，真正结束后释放。Header 不写日志、ResultBean、Session、Prompt 或 Event，Spring 单例不保存原值。
 
 标识大小写敏感且不透明，精确格式归共享契约。Runtime 不下载附件；从 `event.content[]` 的 file 块按顺序提取 `fileId`，内部传递 `fileIds` 并编码为固定 `[File IDs]` 提示块；文件的访问与生命周期由 [附件服务](../../02-服务与接口/01-CampusMate附件服务/README.md) 维护。Thinking 的生成与历史可见性由 [历史设计](chat-events-history-design.md#thinking-original-text) 维护。
 
@@ -334,8 +334,9 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
-| 1.56.0 | 2026-09-19 | 取消 Runtime HTTP 入口的凭据必填校验，将缺失凭据的失败推迟到实际 Mate 工具调用。 |
 |---|---|---|
+| 1.57.0 | 2026-09-19 | 取消 Claw 对凭据最低完整性的本地校验，将凭据判断交给 Mate execute。 |
+| 1.56.0 | 2026-09-19 | 取消 Runtime HTTP 入口的凭据必填校验，将缺失凭据的失败推迟到实际 Mate 工具调用。 |
 | 1.55.0 | 2026-09-14 | 按 HTTP 职责收敛正文，统一引用事件、压缩与源码证据，明确创建与执行装配的边界。 |
 | 1.54.0 | 2026-09-14 | 新 Session 从已发布 Agent.mode 初始化，既有 Session 保持独立模式。 |
 | 1.53.2 | 2026-09-14 | 计划审核通过 Events 恢复，Session 响应不增加待审核目标。 |

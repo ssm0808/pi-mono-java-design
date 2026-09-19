@@ -1,6 +1,6 @@
 # Runtime 源码证据与实现差距
 
-版本：1.1.0；整理日期：2026-09-19。
+版本：1.2.0；整理日期：2026-09-19。
 
 本文集中保存 Runtime / HTTP 主设计使用的源码观察。**每项结论仅适用于所标提交和路径**；旧实现的差距不自动延伸到当前实现。目标契约见 [HTTP 设计](chat-http-v1-design.md)，Events、Command、工具和计划模式的专项证据由所属专题维护。
 
@@ -138,7 +138,7 @@ Session Entry、生命周期、HTTP 入口、凭据和字段命名的事实已�
 | 目标架构 | [Events 主设计与目标图](chat-events-design.md) | 提交和对应 SSE 合并到 POST，GET 历史保留；多类型输入与请求输出绑定为 待实现 |
 | 产品约束 | [Events 资源模型](chat-events-design.md#1-资源模型与职责) | 无公共 Run/Execution；mate 公共边界只暴露 `chatId` 和公共事件身份 |
 | 产品约束 | `X-HW-ID` | 标识当前请求对应的用户凭据；不是公司、服务或应用调用方标识 |
-| 目标设计（待实现） | Runtime 凭据 Header | `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 与 `access-token` 均可缺省；入口只捕获已提供值，实际 Mate tool execute 再由 `MateCredentials.isComplete` 检查最低完整性并返回工具失败。当前 Java `RuntimeEventService.requireCredentials` 仍在事件入口预检查，属于待移除的实现差距 |
+| 目标设计（待实现） | Runtime 凭据 Header | `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 与 `access-token` 均可缺省；Claw 只捕获并透传已提供值，不检查凭据组合或最低完整性，由 Mate execute 返回成功或失败。当前 Java `RuntimeEventService.requireCredentials`、`CallMateTool.execute` 与 `HttpMateToolClient.invokeTool` 仍有本地检查，属于待移除的实现差距 |
 | 安全加固 | POST 凭据处理 | 凭据从请求读入后只在内存中保留到本次 Agent 执行结束，只在必要的实际 Mate tool execute 使用，不进入持久化、日志、SSE 或历史 |
 
 ### 5.1 事件顺序

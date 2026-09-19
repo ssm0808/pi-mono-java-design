@@ -225,7 +225,7 @@ OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对�
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java` · `mateCredentials` | 精确读取四项 Header 并创建 `MateCredentials`。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java:59-70` · `submit` | 当前五类事件仍在入口检查凭据完整性，但目标设计要求移除该前置检查；只有实际 Mate tool execute 应因凭据不完整返回工具失败。只有新消息把凭据传给执行路径，四类控制分支不传递新凭据，不能通过回答/批准实现原执行换 Token。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:203-236` · `createSession` | 将凭据放入 `ManagedAgentSessionRequest` 和 `SubagentExecutionContext.root`，绑定本次执行。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/mate/MateCredentials.java` · record / `isComplete`；`common/client/HttpMateToolClient.java:310-377` · `invokeTool/toHeaderInfo`（同一 `codingagent/` 前缀） | 不可变凭据快照检查完整性，工具用原 Token 调用；该路径没有从浏览器新设置取值或运行中续期。完整性不证明有效期或真实性。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/mate/MateCredentials.java` · record / `isComplete`；`common/client/HttpMateToolClient.java:310-377` · `invokeTool/toHeaderInfo`（同一 `codingagent/` 前缀） | 当前不可变凭据快照和工具客户端仍检查完整性；目标改为只透传已提供 Header，由 Mate execute 判断并返回结果。该路径没有从浏览器新设置取值或运行中续期。有效性仍不由 Claw 证明。 |
 
 相对旧 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，设置主要职责由组件内存 `DebugHeaders/useDebugAuth` 转入 `useDeveloperSettings`、`DeveloperSettingsRepository` 和本地 `DevConfigService`；因此配置与手动获取已实现，不应随自动刷新增量整体标为待实现。历史 §6 保留原提交归属。
 

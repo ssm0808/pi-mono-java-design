@@ -315,6 +315,10 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
                     f"Execution credential Headers must be optional: {key}")
             require(policy.get("entryRejectsMissingCredentials") is False,
                     f"Execution entry must not reject missing credentials: {key}")
+            require(policy.get("clawChecksCredentialCompleteness") is False,
+                    f"Claw must not check credential completeness: {key}")
+            require(policy.get("mateDecidesCredentialFailure") is True,
+                    f"Mate must decide credential failure: {key}")
             require("tool execute" in policy.get("toolExecuteFailure", ""),
                     f"Execution must defer credential failure to tool execute: {key}")
         parameter_headers = {
@@ -634,6 +638,10 @@ def validate_source_deduplication() -> None:
                     "Execution POST must override shared Header examples only to add access-token")
             require(operation.get("credentialPolicy", {}).get("requestHeadersRequired") is False,
                     "Execution POST credential Headers must be optional")
+            require(operation["credentialPolicy"].get("clawChecksCredentialCompleteness") is False,
+                    "Execution POST must not check credential completeness in Claw")
+            require(operation["credentialPolicy"].get("mateDecidesCredentialFailure") is True,
+                    "Execution POST Mate must decide credential failure")
         else:
             require("requestHeaderExamples" not in operation,
                     f"Shared request headers duplicated in {operation_path.name}")

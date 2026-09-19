@@ -9,7 +9,9 @@
     "credentialPolicy": {
       "requestHeadersRequired": false,
       "entryRejectsMissingCredentials": false,
-      "toolExecuteFailure": "Mate tool execute returns a failed ToolResult when X-HW-ID, access-token, and both JWT/AppKey credentials are incomplete"
+      "clawChecksCredentialCompleteness": false,
+      "mateDecidesCredentialFailure": true,
+      "toolExecuteFailure": "Claw forwards each provided credential Header; Mate tool execute decides credential validity and returns a failed ToolResult when needed"
     },
     "requestHeaderExamples": [
       {

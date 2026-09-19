@@ -120,6 +120,10 @@ def validate_access_token_rule(operation: dict) -> None:
             "POST Events credential Headers must be optional")
     require(policy.get("entryRejectsMissingCredentials") is False,
             "POST Events must not reject missing credentials at the entry")
+    require(policy.get("clawChecksCredentialCompleteness") is False,
+            "POST Events Claw must not check credential completeness")
+    require(policy.get("mateDecidesCredentialFailure") is True,
+            "POST Events Mate must decide credential failure")
     require("tool execute" in policy.get("toolExecuteFailure", ""),
             "POST Events must defer missing credential failure to tool execute")
     modes = operation["requestHeaderExamples"]
@@ -134,7 +138,8 @@ def validate_access_token_rule(operation: dict) -> None:
         require(token.get("required") is False, f"{mode['id']} access-token must be optional")
         require(token["value"] == "opaque-access-token", "confirmed access-token example must be preserved")
         require(
-            "可选" in token["description"] and "入口不因缺失凭据拒绝" in token["description"],
+            "可选" in token["description"] and "Claw 不检查凭据完整性" in token["description"]
+            and "Mate execute" in token["description"],
             f"{mode['id']} must state deferred credential failure",
         )
 
@@ -426,6 +431,10 @@ def validate_model(model: dict) -> None:
     require("等待工具确认时也关闭" in operation["description"], "confirmation wait must also close the response")
     require(operation.get("credentialPolicy", {}).get("requestHeadersRequired") is False,
             "credential Header policy must remain optional")
+    require(operation["credentialPolicy"].get("clawChecksCredentialCompleteness") is False,
+            "Claw must not check credential completeness")
+    require(operation["credentialPolicy"].get("mateDecidesCredentialFailure") is True,
+            "Mate must decide credential failure")
     require(review.get("credentialPolicyChange", {}).get("status") == "confirmed",
             "credential Header change must be explicitly confirmed")
     require(review["decisionHistory"]["S3-user-events"]["previous"] == "A-user-events-receipt-history-only",
