@@ -1,6 +1,6 @@
 # CampusClaw 前端设计
 
-版本：2.1.1 · 2026-09-19 · 模块 M07
+版本：2.2.0 · 2026-09-19 · 模块 M07
 
 [仓库导航](../README.md) · [打开场景原型](原型/index.html) · [公共规范](公共规范.md) · [技术设计与全局类图](技术设计/README.md)
 
@@ -19,7 +19,7 @@
 | 07 | [命令与技能](场景/07-命令与技能/README.md) | 在当前会话快速发现命令、填写参数，并理解命令结果如何影响任务。 | [高](原型/index.html#scene=commands&fidelity=high) · [低](原型/index.html#scene=commands&fidelity=low) |
 | 08 | [开发者设置](场景/08-开发者设置/README.md) | 在开发环境配置连接、认证和请求头，理解配置何时生效。 | [高](原型/index.html#scene=settings&fidelity=high) · [低](原型/index.html#scene=settings&fidelity=low) |
 
-[自动刷新交互原型](原型/index.html#scene=message&fidelity=high&state=token-ready)提供发送、刷新中、失败保留草稿及设置面板演示，可切换高低保真。
+[自动刷新交互原型](原型/index.html#scene=message&fidelity=high&state=token-ready)只展示发送进度、失败保留草稿及重试；技术演示选项默认收起，可切换高低保真。
 
 开发工作台发送前自动获取 `access-token` 的目标流程见[认证与发送门禁](技术设计/runtime-workbench-alignment.md#61-页面流程)；该增量待实现，手动获取与配置保存已实现，长任务续期边界单列。
 
@@ -50,6 +50,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.2.0 | 2026-09-19 | 自动刷新使用统一发送反馈，技术演示选项默认折叠。 |
 | 2.1.1 | 2026-09-19 | 增加自动刷新 Token 的交互原型与高低保真状态入口。 |
 | 2.1.0 | 2026-09-19 | 开发写动作提交前自动获取 Token，补充失败、取消与运行中续期边界。 |
 | 2.0.0 | 2026-09-18 | 前端设计独立维护，提供八个场景及共享行为的高低保真入口。 |

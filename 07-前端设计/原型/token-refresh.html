@@ -2,28 +2,28 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">
-<title>CampusClaw · 发送前自动更新 Token</title>
+<title>CampusClaw · 消息发送</title>
 <style>
 :root{color-scheme:light;--surface:#fffcfa;--canvas:#f8f3f0;--text:#2c2724;--muted:#786d66;--border:#e4dad4;--selected:#efe4de;--primary:#2b2522;--link:#a9472b}
 *{box-sizing:border-box}body{margin:0;color:var(--text);background:var(--surface);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;height:100dvh;display:flex;flex-direction:column}button,input,textarea,select{font:inherit;color:inherit}button,select{min-height:44px;border:1px solid var(--border);background:var(--surface);border-radius:9px;padding:8px 12px;cursor:pointer}button:disabled{cursor:default;opacity:.48}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #b35c3c;outline-offset:3px}a{color:var(--link)}[hidden]{display:none!important}h1,h2,p{margin:0}h1{font-size:15px;font-weight:600}h2{font-size:18px}.muted{color:var(--muted);font-size:12px}
-.demo{padding:10px 18px;border-bottom:1px solid var(--border);background:#f2eae5;flex-shrink:0}.demo-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.demo-top strong{font-size:12px}.demo-top label{font-size:12px}.demo select{font-size:12px;min-height:36px}.demo button{min-height:36px;font-size:12px}.demo a{margin-left:auto;font-size:12px}.observations{display:flex;gap:18px;flex-wrap:wrap;margin-top:6px;color:var(--muted);font-size:11px}.observations b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.demo{padding:10px 18px;border-bottom:1px solid var(--border);background:#f2eae5;flex-shrink:0}.demo summary{cursor:pointer;font-size:12px;color:var(--muted);width:fit-content}.demo[open] summary{margin-bottom:10px}.demo summary:focus-visible{outline:2px solid #b35c3c;outline-offset:3px}.demo-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.demo-top strong{font-size:12px}.demo-top label{font-size:12px}.demo select{font-size:12px;min-height:36px}.demo button{min-height:36px;font-size:12px}.demo a{margin-left:auto;font-size:12px}.observations{display:flex;gap:18px;flex-wrap:wrap;margin-top:6px;color:var(--muted);font-size:11px}.observations b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
 .workspace{display:grid;grid-template-columns:220px minmax(0,1fr);min-height:0;flex:1}.rail{background:var(--canvas);border-right:1px solid var(--border);padding:24px 14px;display:flex;flex-direction:column;gap:24px}.brand{display:flex;align-items:center;gap:9px;padding:0 10px;font-size:16px;font-weight:600}.brand img{width:28px;height:28px}.rail button{text-align:left;border:0;background:transparent}.rail .selected{background:var(--selected)}.rail .settings{margin-top:auto}.rail .muted{padding:0 10px}.thread-list{display:grid;gap:3px}.conversation{display:flex;flex-direction:column;min-height:0;min-width:0;position:relative}.header{display:flex;align-items:center;padding:18px 28px;border-bottom:1px solid var(--border);gap:14px}.header .status{margin-left:auto;font-size:12px;color:var(--muted)}.header button{font-size:12px;min-height:36px}.thread{flex:1;overflow:auto;padding:30px max(24px,calc((100% - 740px)/2));min-height:110px}.welcome{padding-top:6vh;max-width:560px}.welcome img{width:40px;height:40px;margin-bottom:15px}.welcome h2{font-size:23px;letter-spacing:-.4px;margin-bottom:10px}.welcome p{color:var(--muted);font-size:14px}.user{margin:10px 0 22px auto;padding:12px 17px;border-radius:16px;background:var(--selected);max-width:85%;white-space:pre-wrap;overflow-wrap:anywhere}.assistant{white-space:pre-wrap;line-height:1.9;margin:12px 0}.composer-zone{padding:12px 24px 22px;width:min(820px,100%);margin:auto}.composer{border:1px solid #d4c5bc;border-radius:18px;background:var(--surface);box-shadow:0 4px 20px #6d433908;overflow:hidden}.composer textarea{display:block;width:100%;border:0;resize:none;padding:16px 18px 8px;background:transparent;min-height:100px;outline-offset:-4px;line-height:1.7}.composer-bar{padding:6px 10px 10px;display:flex;align-items:center;gap:10px}.composer-bar .model{font-size:12px;color:var(--muted);padding-left:8px}.send{margin-left:auto;width:44px;height:44px;min-width:44px;border-radius:50%;background:var(--primary);color:#fff;border:0;font-size:23px;padding:0;display:grid;place-items:center}.spinner{display:inline-block;width:17px;height:17px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .9s linear infinite}.feedback{margin-bottom:10px;display:flex;align-items:center;gap:10px;min-height:28px;font-size:13px}.feedback.error{background:#fff0e9;border:1px solid #edc4b0;border-radius:10px;padding:11px 13px;align-items:flex-start}.feedback.error button{margin-left:auto;flex-shrink:0;font-size:12px;background:transparent}.hint{font-size:11px;color:var(--muted);margin-top:8px;text-align:center}.backdrop{position:absolute;inset:0;background:#2b252222;z-index:3;display:flex;justify-content:flex-end}.settings-panel{width:min(390px,100%);height:100%;background:var(--surface);box-shadow:-5px 0 30px #0001;padding:24px;overflow:auto}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:22px}.panel-head button{font-size:22px}.config-group{border:1px dashed #cebbb0;padding:16px;border-radius:12px;margin-bottom:18px}.config-group label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}.config-group input{width:100%;min-height:42px;border:1px solid var(--border);border-radius:7px;background:var(--canvas);padding:9px}.config-group p{margin:9px 0}.config-group strong{font-size:13px}.token-status{font-size:12px;color:#52754d}.primary{background:var(--primary);color:#fff}.panel-foot{font-size:11px;color:var(--muted);margin-top:16px}
 @keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.spinner{animation:none}}@media(max-width:760px){.workspace{display:block}.rail{display:none}.conversation{height:100%}.header{padding:12px 16px}.thread{padding:24px 18px}.composer-zone{padding:8px 12px 14px}.demo{padding:8px 12px}.demo-top{gap:6px}.demo-top a{display:none}.observations{gap:12px}.welcome{padding-top:10px}.welcome h2{font-size:21px}.header h1{font-size:14px}.feedback{font-size:12px}.feedback.error{flex-wrap:wrap}.feedback.error button{margin-left:0}.composer textarea{min-height:80px}.hint{font-size:10px}.settings-panel{padding:18px}}@media(max-height:650px){.welcome{padding-top:0}.welcome img{display:none}.thread{padding-top:18px}.composer textarea{min-height:70px}}
 </style>
 <link rel="stylesheet" href="fidelity.css?v=1.0.0">
 </head>
 <body>
-<section class="demo" aria-label="原型演示控制，不属于产品界面">
+<details class="demo" aria-label="原型演示控制，不属于产品界面"><summary>演示选项</summary>
  <div class="demo-top"><strong>本地原型 · 自动更新 Token</strong><label for="outcome">模拟认证</label><select id="outcome"><option value="success">成功</option><option value="failure">失败</option></select><label><input id="pause" type="checkbox">暂停回执</label><button id="return-auth" disabled>返回认证结果</button><button id="return-receipt" disabled>返回消息回执</button><button id="reset">重置</button><a href="../技术设计/runtime-workbench-alignment.md#61-页面流程">设计说明 ↗</a></div>
  <div class="observations"><span>模拟登录 <b id="auth-count">0</b> 次</span><span>模拟消息提交 <b id="write-count">0</b> 次</span><span id="demo-note">仅合成数据，不连接认证中心或后端。</span></div>
-</section>
+</details>
 <div class="workspace">
  <aside class="rail"><div class="brand"><img src="../资源/campusclaw-mark-o1.png" alt="">CampusClaw</div><button id="new-chat">＋ 新会话</button><div class="thread-list"><span class="muted">最近</span><button class="selected" id="current-chat">园区告警分析</button><button id="other-chat">每日巡检计划</button></div><button class="settings" id="rail-settings">⚙ 开发者设置</button></aside>
  <main class="conversation" data-phase="ready">
   <header class="header"><h1>园区运维助手</h1><span id="status" class="status" role="status">空闲</span><button id="settings">开发者设置</button></header>
   <section class="thread" aria-label="对话内容"><div class="welcome" id="welcome"><img src="../资源/campusclaw-mark-o1.png" alt=""><h2>从一个问题开始</h2><p>分析告警、检查巡检记录，或梳理下一步处理建议。</p></div><div id="user-message" class="user" hidden></div><p id="assistant" class="assistant" hidden></p></section>
   <div class="composer-zone">
-   <div id="feedback" class="feedback" hidden><span id="feedback-spinner" class="spinner" aria-hidden="true" hidden></span><span id="feedback-text" role="status" aria-live="polite"></span><button id="fix-settings" hidden>检查认证设置</button></div>
+   <div id="feedback" class="feedback" hidden><span id="feedback-spinner" class="spinner" aria-hidden="true" hidden></span><span id="feedback-text" role="status" aria-live="polite"></span><button id="retry-send" hidden>重试</button></div>
    <div class="composer"><textarea id="draft" aria-label="消息草稿" placeholder="给园区运维助手发送消息…">请分析东区园区告警，并给出处理建议。</textarea><div class="composer-bar"><span class="model">Build · 模型 A</span><button class="send" id="send" aria-label="发送消息" title="发送消息">↑</button></div></div>
    <p class="hint" id="hint">Enter 发送 · Shift+Enter 换行</p>
   </div>
@@ -35,16 +35,16 @@
  'use strict';
  const $ = id => document.getElementById(id), root = document.querySelector('main');
  let phase='ready', generation=0, pending=null, timer, receiptTimer, authCount=0, writes=0, composing=false, opener;
- const statuses={ready:'空闲',refreshing:'准备发送',submitting:'正在提交',running:'处理中',failed:'空闲'};
+ const statuses={ready:'空闲',refreshing:'正在发送…',submitting:'正在发送…',running:'处理中',failed:'空闲'};
  function clearTimers(){clearTimeout(timer);clearTimeout(receiptTimer);}
- function feedback(text='', error=false){$('feedback').hidden=!text;$('feedback-text').textContent=text;$('feedback').classList.toggle('error',error);$('fix-settings').hidden=!error;}
+ function feedback(text='', error=false){$('feedback').hidden=!text;$('feedback-text').textContent=text;$('feedback').classList.toggle('error',error);$('retry-send').hidden=!error;}
  function render(){
   root.dataset.phase=phase;$('status').textContent=statuses[phase];
   $('auth-count').textContent=authCount;$('write-count').textContent=writes;
   $('send').disabled=!['ready','failed'].includes(phase)||!$('draft').value.trim()||Array.from($('draft').value).length>2048;
-  $('send').textContent=phase==='refreshing'?'↻':'↑';$('send').setAttribute('aria-label',phase==='refreshing'?'正在更新 Token':phase==='submitting'?'正在提交消息':'发送消息');$('send').title=$('send').getAttribute('aria-label');
-  $('return-auth').disabled=phase!=='refreshing';$('return-receipt').disabled=phase!=='submitting';$('feedback-spinner').hidden=phase!=='refreshing';
-  $('hint').textContent=phase==='refreshing'?'消息尚未发送，Token 更新后会自动提交。':phase==='running'?'演示已完成；可重置后再次体验。':'Enter 发送 · Shift+Enter 换行';
+  $('send').textContent='↑';$('send').setAttribute('aria-label',['refreshing','submitting'].includes(phase)?'正在发送…':'发送消息');$('send').title=$('send').getAttribute('aria-label');
+  $('return-auth').disabled=phase!=='refreshing';$('return-receipt').disabled=phase!=='submitting';$('feedback-spinner').hidden=!['refreshing','submitting'].includes(phase);
+  $('hint').textContent=phase==='running'?'正在处理你的消息…':'Enter 发送 · Shift+Enter 换行';
  }
  function receipt(expected=generation){
   if(expected!==generation||phase!=='submitting'||!pending)return;
@@ -56,7 +56,7 @@
   if(expected!==generation||phase!=='refreshing'||!pending)return;
   clearTimeout(timer);
   if(pending.outcome==='failure'){
-   pending=null;phase='failed';feedback('Token 更新失败，消息尚未发送。认证中心暂不可用，请检查配置后再次发送。',true);render();return;
+   pending=null;phase='failed';feedback('认证暂不可用，消息未发送，请重试。',true);render();return;
   }
   $('token-value').value=`synthetic-fresh-token-${authCount}`;$('token-status').textContent='Token 已自动更新（示例）';
   writes++;phase='submitting';feedback('正在发送…');render();
@@ -64,7 +64,7 @@
  }
  function send(){
   if(!['ready','failed'].includes(phase)||$('send').disabled||composing)return;
-  const expected=++generation;pending={text:$('draft').value,outcome:$('outcome').value};authCount++;phase='refreshing';feedback('正在更新 Token…');render();
+  const expected=++generation;pending={text:$('draft').value,outcome:$('outcome').value};authCount++;phase='refreshing';feedback('正在发送…');render();
   if(!$('pause').checked)timer=setTimeout(()=>authReturned(expected),1500);
  }
  function cancel(text){
@@ -83,12 +83,13 @@
  $('send').onclick=send;$('return-auth').onclick=()=>authReturned();$('return-receipt').onclick=()=>receipt();$('reset').onclick=()=>reset();
  $('draft').oninput=render;$('draft').addEventListener('compositionstart',()=>{composing=true;});$('draft').addEventListener('compositionend',()=>{composing=false;});
  $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&!composing&&!e.repeat){e.preventDefault();send();}};
- for(const id of ['settings','rail-settings','fix-settings'])$(id).onclick=openSettings;
+ $('retry-send').onclick=send;
+ for(const id of ['settings','rail-settings'])$(id).onclick=openSettings;
  $('close-settings').onclick=closeSettings;
- $('save-settings').onclick=()=>{cancel('认证配置已更新，消息尚未发送，请重新发送。');$('outcome').value='success';$('save-status').textContent='示例配置已应用，下一次发送将模拟认证成功。';};
+ $('save-settings').onclick=()=>{cancel('设置已变更，消息未发送，请重新发送。');$('outcome').value='success';$('save-status').textContent='示例配置已应用，下一次发送将模拟认证成功。';};
  $('settings-backdrop').onclick=e=>{if(e.target===$('settings-backdrop'))closeSettings();};
  $('settings-backdrop').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();closeSettings();}if(e.key==='Tab'){const nodes=[...$('settings-backdrop').querySelectorAll('button,input')];const first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}};
- for(const id of ['new-chat','other-chat'])$(id).onclick=()=>{if(['submitting','running'].includes(phase))return;cancel('已切换示例会话，原消息未发送；草稿保留。');};
+ for(const id of ['new-chat','other-chat'])$(id).onclick=()=>{if(['submitting','running'].includes(phase))return;cancel('发送已取消，草稿已保留。');};
  $('pause').onchange=()=>{clearTimers();if(!$('pause').checked){const expected=generation;if(phase==='refreshing')timer=setTimeout(()=>authReturned(expected),1500);if(phase==='submitting')receiptTimer=setTimeout(()=>receipt(expected),650);}};
  window.addEventListener('pagehide',()=>{generation++;clearTimers();});
  window.tokenDemo=Object.freeze({reset,get snapshot(){return {phase,authCount,writes};}});

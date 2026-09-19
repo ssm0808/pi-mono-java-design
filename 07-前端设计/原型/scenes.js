@@ -43,24 +43,24 @@ window.frontendScenes = [
       },
       {
         "id": "token-ready",
-        "label": "发送前自动刷新",
+        "label": "发送消息",
         "frame": "token-refresh.html",
         "view": "token"
       },
       {
         "id": "token-refreshing",
-        "label": "正在更新 Token",
+        "label": "正在发送",
         "frame": "token-refresh.html",
         "view": "token"
       },
       {
         "id": "token-failed",
-        "label": "刷新失败 · 草稿保留",
+        "label": "发送失败 · 草稿保留",
         "frame": "token-refresh.html",
         "view": "token"
       }
     ],
-    "coverage": "包含自动更新 Token、成功后提交、失败保留输入和配置变更取消的本地演示；附件仍为示例材料，上传与 READY 绑定需服务实现。",
+    "coverage": "发送过程仅显示进度与必要失败反馈，认证在后台完成；技术演示选项默认收起；附件仍为示例材料，上传与 READY 绑定需服务实现。",
     "directory": "02-发送消息与附件",
     "doc": "../场景/02-发送消息与附件/README.md"
   },
@@ -215,19 +215,19 @@ window.frontendScenes = [
       },
       {
         "id": "token-ready",
-        "label": "发送前自动刷新",
+        "label": "发送消息",
         "frame": "token-refresh.html",
         "view": "token"
       },
       {
         "id": "token-refreshing",
-        "label": "正在更新 Token",
+        "label": "正在发送",
         "frame": "token-refresh.html",
         "view": "token"
       },
       {
         "id": "token-failed",
-        "label": "刷新失败 · 草稿保留",
+        "label": "发送失败 · 草稿保留",
         "frame": "token-refresh.html",
         "view": "token"
       }

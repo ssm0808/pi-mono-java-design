@@ -12,12 +12,13 @@ function test(name,run){
  try{run({w,$,click,snapshot});assert.deepEqual(errors,[]);assert.equal(network,0);count++;console.log('PASS',name);}finally{w.close();}
 }
 test('fresh auth precedes one business write; receipt alone clears submitted draft',({$,click,snapshot})=>{
- const original=$('draft').value;click('send');click('send');assert.equal(snapshot().authCount,1);assert.equal(snapshot().writes,0);assert.equal($('draft').value,original);assert.equal($('return-receipt').disabled,true);
- click('return-auth');click('return-auth');assert.equal(snapshot().writes,1);assert.equal($('draft').value,original);click('return-receipt');assert.equal($('draft').value,'');assert.equal($('user-message').textContent,original);
+ assert.equal($('send').ownerDocument.querySelector('.demo').open,false);
+ const original=$('draft').value;click('send');assert.equal($('feedback-text').textContent,'正在发送…');click('send');assert.equal(snapshot().authCount,1);assert.equal(snapshot().writes,0);assert.equal($('draft').value,original);assert.equal($('return-receipt').disabled,true);
+ click('return-auth');click('return-auth');assert.equal(snapshot().writes,1);assert.equal($('feedback-text').textContent,'正在发送…');assert.equal($('draft').value,original);click('return-receipt');assert.equal($('draft').value,'');assert.equal($('user-message').textContent,original);
 });
 test('failure retains input, old token and zero writes; explicit retry fetches again',({$,click,snapshot})=>{
  $('outcome').value='failure';const original=$('draft').value;click('send');click('return-auth');assert.equal(snapshot().phase,'failed');assert.equal(snapshot().writes,0);assert.equal($('draft').value,original);assert.equal($('token-value').value,'synthetic-old-token');
- click('fix-settings');click('save-settings');click('close-settings');click('send');assert.equal(snapshot().authCount,2);click('return-auth');assert.equal(snapshot().writes,1);
+ click('settings');click('save-settings');click('close-settings');click('retry-send');assert.equal(snapshot().authCount,2);click('return-auth');assert.equal(snapshot().writes,1);
 });
 test('editing a newer draft survives delayed receipt',({$,click,snapshot})=>{click('send');$('draft').value='接下来检查西区';click('return-auth');click('return-receipt');assert.equal($('draft').value,'接下来检查西区');assert.equal(snapshot().writes,1);});
 test('closing settings preserves send-owned auth',({click,snapshot})=>{click('send');click('settings');click('close-settings');assert.equal(snapshot().phase,'refreshing');click('return-auth');assert.equal(snapshot().writes,1);});
