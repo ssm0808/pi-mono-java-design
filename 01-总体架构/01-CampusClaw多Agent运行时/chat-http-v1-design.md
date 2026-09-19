@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.57.0 |
+| 文档版本 | 1.58.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新专项见 §8.1 |
@@ -297,11 +297,45 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 5. 公司 profile 的依赖树不包含兼容制品，standalone profile
    的依赖树不包含内部制品。
 
+<a id="credential-forwarding"></a>
+
 ## 7. 安全与附件边界
 
 Runtime 接收调用上下文，不检查 JWT/APPKEY 的组合、格式或真实性，也不建立 Session owner；认证与动作授权由上游负责。X-HW-ID 表示用户凭据 ID。每次请求仍校验所属的资源、标识、版本和业务状态，不能把“不认证凭据”解释为跳过业务校验。
 
-POST Events/Command 可以携带 access-token。四项凭据只在本次执行或命令处理的内存对象中保存，仅实际 Mate tool execute 原名发送；工具发现、模型调用和其他请求不得读取。HTTP 入口不因缺少任一凭据头而拒绝请求；Claw 不检查凭据最低完整性，实际调用 Mate tool execute 时将已提供的 Header 原样透传，由 Mate 判断凭据并返回成功或失败结果。确认、中断请求不得覆盖原执行凭据；等待确认期间保持原执行上下文，真正结束后释放。Header 不写日志、ResultBean、Session、Prompt 或 Event，Spring 单例不保存原值。
+### 7.1 凭据读取与透传
+
+四项凭据 Header 为 `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 和 `access-token`，其中 `access-token` 适用于 POST Events/Command。它们均为可选；HTTP 入口、工具装配、`CallMateTool` 和 Mate HTTP 客户端均不检查必填、最低完整性或 JWT/APPKEY 组合。两种认证 Header 同时提供时一并透传，不由 Claw 选择或回退认证模式。
+
+新执行只捕获本次请求的四项值，复用不可变 `MateCredentials`；全部缺失时使用空快照，不把空快照等同于缺少 Host 执行上下文。凭据不完整不能使已配置的 `CallMateTool` 被隐藏或返回 unavailable。资源不存在、执行上下文缺失、工具无法解析、取消和权限确认等既有失败仍由所属层处理，不为了让 Mate 判断凭据而跳过这些条件。
+
+实际调用 Mate tool execute 时，仅发送快照中已提供的非空值，使用原 Header 名称和值；null 和空字符串沿用请求构建器的省略行为，不生成默认值、不补 Bearer、不借用其他请求或 Session 的凭据。Header 的 HTTP 语法约束仍由协议组件处理，不属于凭据完整性判断。工具发现、模型调用和其他出站请求不得读取该快照。
+
+### 7.2 生命周期与失败结果
+
+四项值仅保存在本次执行或命令处理的内存对象中。Child 可只读使用同一次父执行快照，不存入 Child Session。中断、工具确认、计划审核和问题回答请求不覆盖原执行凭据；等待期间保留原快照，真正结束后释放。Header 不写日志、ResultBean、Session、Prompt、Event 或工具结果，Spring 单例不保存原值。
+
+Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行失败按既有工具结果通道转换为 `isError=true`，不把已经接受的 Events 请求改报为“缺少 Header”的入口错误，也不因空快照在调用前伪造 Mate 认证失败。保留可安全展示的错误信息，不原样转发上游 HTTP 信封或可能含秘密的错误正文；公共错误码与文本投影沿用现有契约，不新增凭据专用码。网络、超时或不可解析响应同样按既有工具失败处理，不能断言是凭据错误。实际 execute 不自动重放。
+
+本规则是产品约束与职责调整：Mate 是凭据判断的权威，Claw 不复制其组合规则；未使用 Mate 工具的对话和命令不会仅因这些 Header 缺失而失败。代价是凭据错误到真正执行工具时才可见，可能在此前已经发生模型调用。上游认证授权与 Claw 业务校验保持不变，不将内部接口变成公开匿名接口。DEV 工作台的[发送前刷新](../../07-前端设计/技术设计/runtime-workbench-alignment.md#61-页面流程)独立维护：刷新失败仍不提交，不能由后端 Header 可选推导为前端继续发送。
+
+### 7.3 实施切片与验收（待实现）
+
+复用现有凭据对象和客户端，无新增依赖。源码路径、符号和三个本地拦截点见[凭据专项证据](source-evidence.md#credential-forwarding-evidence)；实施依次移除事件入口检查、工具执行检查和 HTTP 客户端检查，再验证真实出站请求。工具可用条件与执行时序同步见[M03 §9.2](../02-CampusClaw工具系统/README.md#mate-credential-forwarding)。
+
+| 场景 | 验收要求 |
+|---|---|
+| 四项全缺失、只有一项、任意部分组合 | 资源/状态等其他条件满足时 Events/Command 不因凭据拒绝；工具已解析且获准执行时，Mate execute 恰好收到一次请求，Header 集合等于本次已提供的非空项 |
+| JWT 与 APPKEY 同时出现 | 两项原值均到达 Mate；Claw 不选模式、不补默认值、不验证组合 |
+| 无 Mate 工具调用 | 不发 execute，不产生缺少 Mate 凭据错误 |
+| Mate 返回凭据失败 | 已实际请求 Mate；模型工具结果及公开结果均为失败，不生成新的入口 400，不泄漏 Header |
+| 发现失败、取消、缺 Host 上下文或确认拒绝 | 保持各自错误/取消语义；不得与空凭据混为 unavailable，也不得绕过原有准入 |
+| 确认/回答携带新值，或并行两个执行 | 原执行与 Child 继续使用自己的快照，不被控制请求或其他执行覆盖；发现、模型、日志和持久化无四项值 |
+| Mate 超时或异常 | 按现有工具失败返回，不自动重复 execute，也不假定失败一定由凭据造成 |
+
+静态契约校验只证明设计源与派生页面一致；以上请求次数、Header 集合、生命周期和失败投影须由实现测试单独证明。
+
+### 7.4 附件与其他边界
 
 标识大小写敏感且不透明，精确格式归共享契约。Runtime 不下载附件；从 `event.content[]` 的 file 块按顺序提取 `fileId`，内部传递 `fileIds` 并编码为固定 `[File IDs]` 提示块；文件的访问与生命周期由 [附件服务](../../02-服务与接口/01-CampusMate附件服务/README.md) 维护。Thinking 的生成与历史可见性由 [历史设计](chat-events-history-design.md#thinking-original-text) 维护。
 
@@ -335,6 +369,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.58.0 | 2026-09-19 | 统一空凭据快照、Mate 失败投影与实现验收，并区分前端刷新门禁。 |
 | 1.57.0 | 2026-09-19 | 取消 Claw 对凭据最低完整性的本地校验，将凭据判断交给 Mate execute。 |
 | 1.56.0 | 2026-09-19 | 取消 Runtime HTTP 入口的凭据必填校验，将缺失凭据的失败推迟到实际 Mate 工具调用。 |
 | 1.55.0 | 2026-09-14 | 按 HTTP 职责收敛正文，统一引用事件、压缩与源码证据，明确创建与执行装配的边界。 |

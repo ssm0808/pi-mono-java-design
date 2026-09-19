@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.6.0 |
+| 文档版本 | 2.7.0 |
 | 状态 | 目标设计；Mate 工具 Schema 不变，凭据可见边界收紧 |
-| 更新日期 | 2026-09-18 |
+| 更新日期 | 2026-09-19 |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -301,8 +301,10 @@ Skill 查询时 `scope` 固定为：
 快照传给发现、模型或其他出站请求。快照不写日志、Session、Prompt、
 ToolResult 或持久化存储，execution 结束即丢弃。
 
-可用条件：Session 具有当前受管 Agent、完整直接 Skill 索引、`MateToolClient`、当前 Host execution 凭据、
-Session 缓存和 single-flight 协调器。
+可用条件：Session 具有当前受管 Agent、完整直接 Skill 索引、`MateToolClient`、当前 Host execution 上下文、
+Session 缓存和 single-flight 协调器。凭据不是可用条件；上下文中的不可变快照允许四项全缺失或部分缺失，
+不得因此返回 unavailable 或隐藏工具。调用条件满足后实际请求 Mate，由 Mate 校验并将失败映射为
+`isError=true`，不在 Claw 构造最低完整性错误。精确边界和验收见[主设计 §9.2](README.md#mate-credential-forwarding)。
 
 ## 5. `Agent`
 
@@ -380,6 +382,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.7.0 | 2026-09-19 | CallMateTool 区分执行上下文与可为空的凭据，取消凭据完整性可用条件。 |
 | 2.6.0 | 2026-09-18 | 明确删除 Bash/Edit/Write 本体及专属支撑，不再保留未装配代码。 |
 | 2.5.0 | 2026-09-18 | 登记三个已实现交互工具及十一项 Runtime 默认清单。 |
 | 2.4.0 | 2026-09-15 | 登记 AskUserQuestion 工具契约与 Runtime 默认装配边界。 |

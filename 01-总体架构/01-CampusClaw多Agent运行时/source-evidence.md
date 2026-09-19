@@ -1,6 +1,6 @@
 # Runtime 源码证据与实现差距
 
-版本：1.2.0；整理日期：2026-09-19。
+版本：1.3.0；整理日期：2026-09-19。
 
 本文集中保存 Runtime / HTTP 主设计使用的源码观察。**每项结论仅适用于所标提交和路径**；旧实现的差距不自动延伸到当前实现。目标契约见 [HTTP 设计](chat-http-v1-design.md)，Events、Command、工具和计划模式的专项证据由所属专题维护。
 
@@ -208,3 +208,28 @@ pi 固定基线中的 Agent Loop、Message/Tool 生命周期继续作为 Runtime
 分配实例。单实例没有此跨实例问题。概念上可把请求送到 A，或让 B 把控制指令交给 A；
 当前目标采用 [Events 数据库控制](chat-events-design.md#44-数据库停止请求与实例批量检查) 的数据库交接方案，本期不依赖上述两类直接路由。
 该目标不证明最新 Java 已完成分布式中断；故障自动接管仍在范围外，工具确认交接由 Events 主设计单独维护。
+
+<a id="credential-forwarding-evidence"></a>
+
+## 6. 凭据判断下沉到 Mate（2026-09-19）
+
+设计修订起点为 `pi-mono-java-design@86abd68`。实现核验固定于本地明确快照
+`pi-mono-java@21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`，不声明为最新上游或已部署版本。
+源码前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`；
+下列读取没有升级其他模块和外部 Agent 的历史证据。
+
+| 路径与符号 | 已观察实现 | 目标差距 |
+|---|---|---|
+| R `runtimeapi/web/RuntimeRequestContext.java` · mateCredentials | 按四个固定 Header 名取值，缺失为 null，创建 MateCredentials | 读取本身已允许缺省，保留 |
+| R `common/client/mate/MateCredentials.java` · record / empty / isComplete | 不可变四值与空快照已存在；isComplete 要求 ID、access-token 及 JWT/APPKEY 至少一种 | 保留载体与空快照，完整性结果不再作为 Claw 准入条件 |
+| R `runtimeapi/event/RuntimeEventService.java` · submit / requireCredentials | 五类事件分派前拒绝不完整凭据；仅 message 分支向执行传入快照 | 移除前置凭据检查，保留资源与事件业务校验，控制请求不换原快照 |
+| R `tool/mate/CallMateTool.java` · execute | 解析工具前检查 isComplete，缺失即抛错 | 移除此检查；保留解析、取消、确认及失败转换 |
+| R `common/client/HttpMateToolClient.java` · invokeTool / toHeaderInfo / toToolResult | 不完整时不请求 Mate；toHeaderInfo 已能把 null 归为空快照；resCode 非 0 转为失败，调用异常转通用失败 | 移除提前返回，让空/部分快照也实际发出 execute；复用结果通道，不新增远端响应模型 |
+| R `common/dto/RequestHeaderInfo.java` · toHeaders；R `common/util/MateRestUtil.java` · newRequestBuilder | 使用原 Header 名，跳过 null 和空字符串，不按 JWT/APPKEY 组合判断 | 保留省略与协议构造行为；测试必须观察出站 Header，而非仅检查入站 DTO |
+
+当前三处本地检查尚在，移除增量为**待实现**；Header 捕获、不可变载体、出站映射和工具失败转换已有实现。
+目标与理由由 [HTTP §7](chat-http-v1-design.md#credential-forwarding)维护，工具可用条件由
+[M03 §9.2](../02-CampusClaw工具系统/README.md#mate-credential-forwarding)维护。
+不修改 Java，不新增依赖；未运行真实 Mate 或产品集成测试，不能把静态契约通过当作空凭据请求已联调成功。
+
+设计验收：在排除无关工作树修改的交付副本运行 `validate-chat-api.py --full`，十项接口及附属测试通过；事件校验拒绝 114 个 POST、57 个历史及其他专项负向变体，新增反例覆盖本地完整性判断、旧必填说明与重复 current 字段。14 个图形专题重新生成并逐字节比较通过；90 份 Markdown 无 Mermaid、35 份 PUML 为 ASCII、124 份 SVG 为有效 XML，图像链接和图源行锚点有效。凭据 HTTP 与工具执行两张 SVG 已对照修改前图，检查原尺寸与 840 px 文档宽度；发现/缓存及 Host/工具分层不变。前端图形无需结构调整，沿用原刷新门禁。`git diff --check` 通过；以上不包含 Java 或真实认证、Mate 验收。

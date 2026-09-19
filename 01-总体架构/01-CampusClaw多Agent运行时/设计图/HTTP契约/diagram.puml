@@ -78,17 +78,17 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title CampusClaw Upstream-Validated Request Context
+title CampusClaw Optional Credential Forwarding (Pending implementation)
 
-' Source evidence (pi-mono-java 320d790726a70aada6100052952d5494d2a378ac):
+' Source evidence (pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/
 ' RuntimeEventController.java: submit; RuntimeRequestContext.java: mateCredentials.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/
 ' HttpMateToolClient.java: invokeTool, queryToolIdsByAgentId, queryToolIdsBySkillId, queryToolMetaByIds.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/dto/RequestHeaderInfo.java: toHeaders.
-' Observed behavior: Runtime captures three headers and forwards them to discovery and execute requests.
-' Java divergence: Runtime does not capture access-token; RequestHeaderInfo instead names X-Access-Token.
-' Product constraint: all operations keep shared context headers; POST Events also requires access-token.
+' Observed behavior: four headers are captured; RuntimeEventService.requireCredentials still rejects incomplete values.
+' Pending implementation: remove local checks in the entry, CallMateTool.execute, and HttpMateToolClient.invokeTool.
+' Product constraint: context headers are optional; POST Events and Command may include access-token.
 ' Security hardening: keep received values only in one execution snapshot and never persist or log them.
 ' Security boundary: discovery, model, and other calls are credential-free; only Mate execute forwards
 ' the received X-HW-ID, Authorization, X-HW-APPKEY, and access-token values without renaming.
@@ -101,11 +101,11 @@ participant "Model Manager" as Model
 participant "Mate Tool API" as Mate
 
 == Freeze operation context ==
-alt POST /sessions/{sessionId}/events
-  Caller -> Controller : shared context headers\nand required access-token
-  Controller -> Controller : bind inputs and create transient snapshot\nof received values in four named header slots
+alt POST Events or Command
+  Caller -> Controller : optional context headers\nand optional access-token
+  Controller -> Controller : bind inputs and create immutable snapshot\nempty or partial values are allowed
 else any other Runtime operation
-  Caller -> Controller : X-HW-ID and Authorization\nor X-HW-APPKEY
+  Caller -> Controller : optional X-HW-ID, Authorization, X-HW-APPKEY
   Controller -> Controller : bind operation inputs\nwithout credential validation
 end
 == Route downstream calls ==
@@ -113,8 +113,8 @@ Controller -> Service : execute operation with scoped context
 Service -> Model : model request\nno execution credential headers
 Service -> Mate : Agent, Skill, or metadata discovery\nno execution credential headers
 opt actual Mate tool execution
-  Service -> Mate : POST tool execute\nforward received snapshot values only
-  Mate --> Service : tool result
+  Service -> Mate : POST tool execute, even with an empty snapshot\nforward provided non-empty values only
+  Mate --> Service : validate credentials; success or failure\nClaw maps failure to isError=true
 end
 == Complete and release ==
 Service --> Controller : operation result or SSE publisher

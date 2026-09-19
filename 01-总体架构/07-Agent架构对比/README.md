@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.32.0 |
+| 文档版本 | 1.33.0 |
 | 更新日期 | 2026-09-19 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -137,6 +137,8 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 我们采纳临时 preview 与权威记录的区分，同时保留自己的产品边界。
 代价是两跳需要明确的事件桥接；内部入口代码已经存在，公共桥接还不能用设计文档冒充实现证据。
 
+**企业凭据专项（2026-09-19，M03/M06）。** Claw 只捕获和透传四项可选 Header，空或部分快照不触发工具 unavailable，实际 execute 的凭据判断归 Mate；[HTTP §7](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)维护精确边界，[M03 §9.2](../02-CampusClaw工具系统/README.md#mate-credential-forwarding)维护工具条件。此为 CampusClaw 产品约束及职责调整，不由外部 Agent 的认证机制推导，也不改变本节 SSE 比较。收益是避免在 Claw 重复维护 Mate 凭据规则，代价是缺失凭据到工具实际调用时才反馈；固定 Java `21c3f59b` 三处本地检查仍待移除，路径与符号见[专项证据](../01-CampusClaw多Agent运行时/source-evidence.md#credential-forwarding-evidence)。不新增外部基线结论、不升级历史 SHA；Mate 联调与空/部分 Header 出站验收待实现测试证明。
+
 <a id="a03"></a>
 
 ## 6. A03 · Agent 默认模式、Session 当前模式与计划审核
@@ -263,7 +265,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 **工具名称专项（2026-09-19，M03/M06/M07）。** 本次 fetch 并核验 pi 默认 main `36b60d2e8985899743c4cf5bd5f8929832a3f05d`：AgentTool 有 label，工具执行事件仍不携带 label/displayName；该结论从名称专项旧基线 `5a3a03a7f5db43692915d6ae45e6d96497ea248d` 更新，其他基线与 UI 历史观察不随之升级。CampusClaw 在 Host 将实际工具 label 与已加载 Agent/Skill 绑定中的业务展示名写入调用事件，前端和历史直接使用保存值；来源由[M03](../02-CampusClaw工具系统/README.md#tool-display-name)、快照由[M06](../01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)、展示由[M07](../../07-前端设计/技术设计/内容渲染.md#mate-tool-display)维护。工具只有启停变化，因此取展示名不调用远程发现，不新增调用级执行 ID 绑定或解析失败缓存；实际执行继续校验可用性。该产品可读性约束与事件投影架构扩展避免前端另查目录及历史标题变化，代价是名称按已准备的元数据快照展示，并同步各消费端字段。Runtime/前端已有 PR #313 的分支实现，元数据读取修订与验收范围见[专项证据](../02-CampusClaw工具系统/source-evidence.md#tool-display-binding-evidence)；公共 Mate bridge 待实现。模型参数、确认身份与既有工具执行链保持，复用现有全局主图。
 
-**开发认证专项（2026-09-19，M07）。** 这是 CampusClaw 开发环境的产品约束与前端编排变更，不引入新的外部 Agent 比较。Java 默认 `main@840d04405d2bcc80a41b9d3b3f16606cc4845338` 已有统一设置、持久化与手动获取；`App.vue` 六类写动作仍直接调用 `snapshotHeaders`。目标由[工作台 §6](../../07-前端设计/技术设计/runtime-workbench-alignment.md#6-发送前自动获取-token)唯一维护：每次先重新获取，成功后提交，失败不回退旧 Token。代价是认证往返与故障依赖；后端不可变执行凭据不随确认/回答更新，不能保证长任务续期。精确路径、旧新基线影响及真实认证未验收边界见[源码证据 §8](../../07-前端设计/source-evidence.md#token-refresh-evidence)。复用工作台全局目标图；自动门禁待实现，其他外部基线与体验结论不升级。
+**开发认证专项（2026-09-19，M07）。** 这是 CampusClaw 开发环境的产品约束与前端编排变更，不引入新的外部 Agent 比较。Java 默认 `main@840d04405d2bcc80a41b9d3b3f16606cc4845338` 已有统一设置、持久化与手动获取；`App.vue` 六类写动作仍直接调用 `snapshotHeaders`。Claw 接口的可选凭据不改变此 DEV 工作台准备策略。目标由[工作台 §6](../../07-前端设计/技术设计/runtime-workbench-alignment.md#6-发送前自动获取-token)唯一维护：每次先重新获取，成功后提交，失败不回退旧 Token。代价是认证往返与故障依赖；后端不可变执行凭据不随确认/回答更新，不能保证长任务续期。精确路径、旧新基线影响及真实认证未验收边界见[源码证据 §8](../../07-前端设计/source-evidence.md#token-refresh-evidence)。复用工作台全局目标图；自动门禁待实现，其他外部基线与体验结论不升级。
 
 ## 6.5 A08 · 结构化提问与原执行续跑
 
@@ -378,6 +380,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.33.0 | 2026-09-19 | 区分 Mate 凭据判断、工具上下文可用性与 DEV 工作台刷新门禁。 |
 | 1.32.0 | 2026-09-19 | 工具展示名复用本地绑定元数据，与执行时 ID 解析分离，并更新 pi 事件字段证据。 |
 | 1.31.0 | 2026-09-19 | M07 开发写动作提交前自动获取 Token，明确已实现配置基础与待实现门禁及运行期限制。 |
 | 1.30.1 | 2026-09-18 | 登记三项退役工具的开发分支实现、回归结果和公司编译限制。 |

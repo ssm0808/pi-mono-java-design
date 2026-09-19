@@ -327,6 +327,16 @@ def validate_headers(operation: dict) -> None:
 
 def validate_model(model: dict) -> None:
     operation, review = model["operation"], model["review"]
+    require(not {"currentStatus", "currentNotice", "credentialPolicyChange"} & review.keys(),
+            "Use existing review fields for the effective policy, not shadow overrides")
+    require("凭据 Header 可选" in review["status"],
+            "Current review status must match optional credential Headers")
+    require("Claw 不检查凭据完整性" in review["notice"],
+            "Current review notice must delegate credential checks to Mate")
+    require("access-token 必填" not in review["status"]
+            and "必须携带 access-token" not in review["notice"]
+            and "不能用于免除 POST 的工具令牌" not in review["notice"],
+            "Superseded credential requirements must not remain in current review fields")
     require(operation["method"] == "POST" and operation["path"] == "/sessions/{sessionId}/events",
             "merged operation must be POST /events")
     require(operation["operationKey"] == "submitSessionEvent", "review operation identity changed")
@@ -435,8 +445,8 @@ def validate_model(model: dict) -> None:
             "Claw must not check credential completeness")
     require(operation["credentialPolicy"].get("mateDecidesCredentialFailure") is True,
             "Mate must decide credential failure")
-    require(review.get("credentialPolicyChange", {}).get("status") == "confirmed",
-            "credential Header change must be explicitly confirmed")
+    require("凭据 Header 可选与 Mate 校验规则已确认" in review["status"],
+            "Effective credential policy must be confirmed in the existing review status")
     require(review["decisionHistory"]["S3-user-events"]["previous"] == "A-user-events-receipt-history-only",
             "record the explicitly superseded S3")
     require("用户明确调整" in review["decisionHistory"]["S3-user-events"]["status"], "S3 adjustment needs explicit attribution")
@@ -456,6 +466,12 @@ def validate_negative_regressions(model: dict) -> int:
     changed("JSON success", lambda m: m["operation"]["responses"][0]["headers"].update({"Content-Type": "application/json"}))
     changed("reintroduced required token", lambda m: m["operation"]["requestHeaderExamples"][0]["headers"][2].update(required=True))
     changed("entry credential rejection", lambda m: m["operation"]["credentialPolicy"].update(entryRejectsMissingCredentials=True))
+    changed("local tool credential check", lambda m: m["operation"]["credentialPolicy"].update(clawChecksCredentialCompleteness=True))
+    changed("Mate not authoritative", lambda m: m["operation"]["credentialPolicy"].update(mateDecidesCredentialFailure=False))
+    changed("shadow current status", lambda m: m["review"].update(currentStatus="override"))
+    changed("shadow current notice", lambda m: m["review"].update(currentNotice="override"))
+    changed("stale required status", lambda m: m["review"].update(status=m["review"]["status"] + " access-token 必填"))
+    changed("stale required notice", lambda m: m["review"].update(notice=m["review"]["notice"] + " 五种用户事件均必须携带 access-token"))
     changed("reopened receipt", lambda m: m["review"].update(questions=[{"id": "M2-receipt"}]))
     changed("reopened product gate", lambda m: m["review"].update(pendingReview=["whole approval"]))
     changed("missing database decision", lambda m: m["operation"].update(

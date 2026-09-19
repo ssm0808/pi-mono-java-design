@@ -348,17 +348,17 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title CallMateTool Name Resolution and Single-flight Refresh
+title CallMateTool Resolution and Credential Forwarding (Pending implementation)
 
-' Source evidence (pi-mono-java 320d790726a70aada6100052952d5494d2a378ac):
+' Source evidence (pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:
 ' invokeTool and toHeaderInfo.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/
-' RuntimeEventController.java: submit; RuntimeRequestContext.java: mateCredentials.
-' Observed behavior: discovery and execute receive three credentials; access-token is not captured.
-' Architecture change: a cache miss is resolved inside Call without any execution credentials.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java: mateCredentials.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java: requireCredentials.
+' Observed behavior: RuntimeEventService, CallMateTool and HttpMateToolClient reject incomplete credentials.
+' Pending implementation: remove local completeness checks; only Mate decides credential validity.
 ' Security hardening: only one Mate execute request receives the POST Events execution snapshot.
 ' Design reason: discovery may retry, but execute and its credential exposure occur at most once.
 
@@ -410,17 +410,17 @@ else cache miss
 end
 
 == Execute at most once ==
-opt toolId and execution credentials are available
-  Call -> Client : callTool(resolved ID, args, execution snapshot)
-  Client -> Mate : execute once; received credential headers only
-  Mate --> Client : result or error
-  Client --> Call : result or error
+opt toolId resolved and execution allowed
+  Call -> Client : callTool(resolved ID, args, possibly empty snapshot)
+  Client -> Mate : execute once; provided non-empty headers only
+  Mate --> Client : validate credentials; result or error
+  Client --> Call : ToolResult; isError=true on failure
   Call --> Model : ToolResultMessage
 end
 
 note over Mate
   Never replay execute after timeout,
-  disconnect, or Mate error.
+  disconnect, or Mate error. No local completeness check.
   Never send execution credentials to discovery.
 end note
 @enduml

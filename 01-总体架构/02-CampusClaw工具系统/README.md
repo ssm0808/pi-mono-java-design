@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.11.0 |
-| 状态 | 目标设计；Mate 发现无凭据、仅 execute 透传 POST Events 执行快照待实现 |
+| 文档版本 | 2.12.0 |
+| 状态 | 当前目标；空或部分凭据只透传、由 Mate 校验的增量待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-09-19 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [11 个活动内置工具与专题契约](built-in-tool-contracts.md) |
@@ -354,12 +354,12 @@ ID。模型不能提交 agentId、skillId 或 toolId。
 List<MateToolMeta> listAgentTools(String agentId);
 List<MateToolMeta> listSkillTools(String skillId);
 ToolResult callTool(String toolId, Map<String, Object> args,
-    ToolExecutionCredentials credentials, MateInvocationContext context);
+    MateCredentials credentials);
 ```
 
 `listAgentTools` 与 `listSkillTools` 的 binding/metadata HTTP 请求始终不带
 `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 或 `access-token`。
-在 Runtime POST Events 路径，`ToolExecutionCredentials` 只由本次 execution 创建，
+在 Runtime POST Events 路径，`MateCredentials` 只由本次 execution 创建，
 以不可变值对象保留收到的四项 Header，不提供日志或持久化转换。
 其他 Host 如需凭据必须使用自身已评审的 execution 凭据源，不得从 Session
 或历史记录恢复 POST Events Header。
@@ -370,11 +370,13 @@ permission、outputSchema、并发属性或 Mate 原始信封。每次 List 都�
 是成功结果。成功查询同时原子刷新 Session 缓存中对应来源的名称到 ID 映射，不清除其他
 来源。
 
+<a id="mate-credential-forwarding"></a>
+
 ### 9.2 `CallMateTool`
 
 ![CallMateTool 缓存解析与执行](call_mate_tool_sequence.svg)
 
-[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L334)
+[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L334) · [原尺寸 SVG](call_mate_tool_sequence.svg)
 
 模型只提交 `{tool,args?}`，不提交 Skill、Agent、scope 或 toolId。Call 先按 toolName 查询
 Session `MateToolResolutionCache`；命中后使用内部 ID 调用 Mate。未命中时通过 Session 级
@@ -389,8 +391,14 @@ single-flight 刷新当前 Agent 的完整有效集合：当前 Agent 直接工�
 实际 execute 请求只透传快照中已提供的 `X-HW-ID`、`Authorization`、
 `X-HW-APPKEY` 与 `access-token`，不改名、不生成缺失值。该快照可随同一次 Runtime
 execution 的 Child execution 以只读方式传递，但不存入 Child Session。
-本次 HTTP 契约变更不新定义 Cron 的凭据来源；无当前 Host execution 凭据时，
-`CallMateTool` 仍按通用可用性规则返回 unavailable。
+当前 Host execution 上下文及工具协作者必须存在，但凭据快照可为空或只含部分 Header。
+所有本地层均不以凭据完整性决定工具装配或可用性；工具名成功解析且满足确认、取消等原有条件后，
+即使四项全缺失，也向 Mate execute 发出请求，由 Mate 校验并返回结果。缺少受管 Agent、
+执行上下文或必要协作者时仍按通用可用性规则失败，不能把这类缺失与空凭据混淆。
+Cron 不新增凭据来源，也不从历史恢复或借用其他执行的值；Host 未提供 Header 时使用空快照，
+其余执行条件满足后同样交由 Mate 判断。精确读取、省略、失败投影与跨请求隔离由
+[HTTP §7](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)唯一维护；
+对应现有源码检查和待实现切片见[凭据证据](source-evidence.md#credential-forwarding-evidence)。
 
 <a id="tool-display-name"></a>
 
@@ -659,7 +667,9 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 - Tool path 只从 `campusmate.endpoints` 读取，Skill path 与 Runtime 共用唯一配置键；
 - 不同来源刷新互不覆盖，Session 间缓存隔离；
 - Call cache miss 只触发一次完整刷新，重名冲突失败，实际执行不自动重放；
-- POST Events 快照中已提供的四项 Header 只在 Tool execute 中原名透传；模型、日志、事件、持久化和其他出站请求均不包含；
+- POST Events/Skill Command 快照中已提供的四项 Header 只在 Tool execute 中原名透传；模型、日志、事件、持久化和其他出站请求均不包含；
+- 四项全缺失、任意部分组合与 JWT/APPKEY 同时提供均不触发本地完整性拒绝；解析/确认成功后执行请求恰好一次，Mate 失败映射为 isError=true；
+- 空快照不触发 unavailable；缺 Host 上下文、发现失败、取消和确认拒绝仍保持原有处理；完整验收矩阵见 HTTP §7.3；
 - Agent 校验直接绑定、固定版本、深度、循环、父取消和模型白名单；
 - 父与 Child Session 实例隔离但使用相同 Factory/执行语义；
 - Cron Job 按 Agent 隔离，触发时使用当前配置，不接受旧 payload 字段。
@@ -691,6 +701,7 @@ JSONL/tree/Extension 或 CLI 提示能力；这些是已明确的产品约束。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.12.0 | 2026-09-19 | 工具可用条件不依赖凭据完整性，空快照同样交由 Mate execute 判断。 |
 | 2.11.0 | 2026-09-19 | 展示名读取已加载的 Agent/Skill 绑定元数据，保留执行时工具解析并取消调用级 ID 与失败绑定。 |
 | 2.10.0 | 2026-09-18 | 明确彻底删除 Bash/Edit/Write 源码和专属支撑，保留活动消费者并补充删除验收。 |
 | 2.9.0 | 2026-09-18 | 同步主线三项交互工具实现、十一项活动清单及待实现用语。 |

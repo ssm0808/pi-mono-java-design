@@ -4,7 +4,7 @@
 
 [返回前端主设计](README.md) · [认证与发送链路最新核验](#token-refresh-evidence)
 
-版本：1.8.1；更新日期：2026-09-19。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§7](#mate-tool-display-evidence)，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
+版本：1.8.2；更新日期：2026-09-19。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§7](#mate-tool-display-evidence)，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
 
 | 证据 | 基线 |
 |---|---|
@@ -223,13 +223,13 @@ OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对�
 | `frontend/dev/authCenter.ts` · `loginAuthCenter/extractAccessToken` | 固定 HTTPS 登录，独立 Set-Cookie 数组提取，10 秒超时、64 KiB 上限；返回 Token 字符串，没有有效期字段、续期接口或旧 Token 并存保证。当前源码设置 `rejectUnauthorized: false`，与保留的 TLS 校验目标不同。 |
 | `frontend/dev/localConfig.ts` · `LocalConfigRepository.toSnapshot/writeStored/DevConfigService`；`useDeveloperSettings.ts` · `acceptLocalStatus/makeRow` | 本地配置持久化、版本与热读取已实现；status 返回账号密码，页面接受回填且 Header 初始 revealed=true，与秘密只写不回显、默认遮蔽目标不同；仅记录差距，不推断其意图。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java` · `mateCredentials` | 精确读取四项 Header 并创建 `MateCredentials`。 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java:59-70` · `submit` | 当前五类事件仍在入口检查凭据完整性，但目标设计要求移除该前置检查；只有实际 Mate tool execute 应因凭据不完整返回工具失败。只有新消息把凭据传给执行路径，四类控制分支不传递新凭据，不能通过回答/批准实现原执行换 Token。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java:59-70` · `submit` | 当前五类事件仍在入口检查凭据完整性，但目标设计要求移除该前置检查；Claw 不在工具层补做完整性检查，实际 execute 的凭据失败由 Mate 决定，详见[Runtime 凭据证据](../01-总体架构/01-CampusClaw多Agent运行时/source-evidence.md#credential-forwarding-evidence)。只有新消息把凭据传给执行路径，四类控制分支不传递新凭据，不能通过回答/批准实现原执行换 Token。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:203-236` · `createSession` | 将凭据放入 `ManagedAgentSessionRequest` 和 `SubagentExecutionContext.root`，绑定本次执行。 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/mate/MateCredentials.java` · record / `isComplete`；`common/client/HttpMateToolClient.java:310-377` · `invokeTool/toHeaderInfo`（同一 `codingagent/` 前缀） | 当前不可变凭据快照和工具客户端仍检查完整性；目标改为只透传已提供 Header，由 Mate execute 判断并返回结果。该路径没有从浏览器新设置取值或运行中续期。有效性仍不由 Claw 证明。 |
 
 相对旧 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，设置主要职责由组件内存 `DebugHeaders/useDebugAuth` 转入 `useDeveloperSettings`、`DeveloperSettingsRepository` 和本地 `DevConfigService`；因此配置与手动获取已实现，不应随自动刷新增量整体标为待实现。历史 §6 保留原提交归属。
 
-目标与原因：[工作台 §6](技术设计/runtime-workbench-alignment.md#6-发送前自动获取-token)定义发送前强制重新获取、失败不提交、版本/目标复核与原执行快照边界；减少陈旧 Token 启动任务的概率，但不能保证任务超过有效期仍可调用工具。分类为开发产品约束与前端编排变更，不改变 Runtime 事件协议或生产身份。复用现有 Vue/Vite/Node 能力，无新增 Maven/npm 依赖。
+目标与原因：[工作台 §6](技术设计/runtime-workbench-alignment.md#6-发送前自动获取-token)定义发送前强制重新获取、失败不提交、版本/目标复核与原执行快照边界；减少陈旧 Token 启动任务的概率，但不能保证任务超过有效期仍可调用工具。分类为开发产品约束与前端编排变更，不改变 Runtime 事件协议或生产身份。该前端门禁与 Claw API 允许空/部分凭据相互独立；后端放宽不能推导为工作台认证失败继续提交。复用现有 Vue/Vite/Node 能力，无新增 Maven/npm 依赖。
 
 验收状态：本次为设计与源码核验，未修改实现仓、未运行新产品测试、未连接真实认证中心。[自动刷新原型](原型/index.html#scene=message&fidelity=high&state=token-ready)已模拟消息准备、失败与草稿保留，其独立校验见[原型验证](迁移校验.md#自动刷新原型校验2026-09-19)，不代表产品接入；认证有效期、重复登录撤销旧 Token、限流与并行会话需真实联调，不能由合成测试证明。设计验证结果单独记录，不沿用历史 189 项测试为自动刷新验收。
 
