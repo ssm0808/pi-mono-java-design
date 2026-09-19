@@ -42,47 +42,51 @@ end note
 @enduml
 
 @startuml frontend_debug_header_flow
-' Source baseline: pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead
-' Previous UI baseline: 4cc8dd86f601417c22cf9306e52152acbb59bb60
-' Source evidence: frontend/src/components/DebugHeaders.vue snapshot
-' Source evidence: frontend/src/App.vue submit, executeCommand, stop, decideTool, decidePlan, answerQuestion
-' Source evidence: frontend/src/composables/useRuntimeApi.ts writeHeaders, submitStream, executeCommand
-' Observed behavior: each of six write actions freezes current valid custom headers.
-' Observed behavior: debugHeaders.ts validates whitespace; dev/authMiddleware.ts registers the DEV helper.
-' New evidence: pi-mono-java 1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4; DebugHeaders.vue rows; useDebugAuth.ts ip.
-' Observed behavior: settings are memory-only; persistence and unified settings are pending implementation.
-' Design reason: saved configuration survives reload; edits cannot mutate an accepted execution.
-title Internal debug headers - target persistence and request snapshots
+' Source baseline: pi-mono-java 840d04405d2bcc80a41b9d3b3f16606cc4845338; main fetched 2026-09-19.
+' Source: frontend/src/App.vue submit, executeCommand, stop, decideTool, decidePlan, answerQuestion.
+' Source: frontend/src/composables/useDeveloperSettings.ts getToken, snapshotHeaders, tokenExpectationMatches.
+' Source: frontend/dev/authMiddleware.ts createAuthMiddleware; dev/authCenter.ts loginAuthCenter.
+' Observed behavior: manual token retrieval and scoped persistence exist; writes take synchronous snapshots.
+' Design reason: obtain a fresh token before each write; fail before dispatch rather than reuse an old token.
+' Pending implementation: automatic preparation, operation ownership, and target revalidation.
+title DEV writes - automatic token preparation (Pending implementation)
 top to bottom direction
 skinparam backgroundColor #FFFCFA
 skinparam shadowing false
-component "Header editor\n3 optional empty presets" as Editor
-component "Applied DEV settings\nversioned snapshot [pending implementation]" as Store
-component "Browser settings storage\nscoped Headers and IP [pending implementation]" as ConfigStorage
+actor Developer
+component "Six write actions\nmessage / command / interrupt\ntool / plan / question decision" as Action
+component "TokenCoordinator\nprepareWrite(intent)\n[Pending implementation]" as Prepare
+component "Applied DEV settings\nscoped Headers and IP" as Store
+component "Browser settings storage\nseparate from Session index" as Storage
+component "Local auth helper\nlogin and extract token [implemented]" as Auth
 component "Per-request snapshot\nimmutable" as Snapshot
 component "Write adapter\nfixed protocol headers" as Adapter
 component "Runtime API\nexisting internal contract" as Runtime
-component "Local auth helper\n[implemented, DEV]" as Auth
-actor Developer
-Developer --> Editor : edit or get token
-Auth --> Store : save token for matching IP and revision
-Editor --> Store : save and apply valid values
-Store --> ConfigStorage : persist explicit changes
-ConfigStorage --> Store : restore matching environment
-Store --> Snapshot : each new write action
-Snapshot --> Adapter
-Adapter --> Runtime : message / command / interrupt\ntool decision / plan decision / question answer
+component "Not submitted\nkeep input; show reason" as Failure
+Developer --> Action
+Action --> Prepare : lock and freeze intent / scope
+Prepare --> Auth : 1. await fresh token
+Auth --> Prepare : token or failure
+Prepare --> Store : 2. verify scope; save token only
+Store --> Storage : persist before apply
+Prepare --> Snapshot : 3. recheck target and admission
+Prepare --> Failure : failure / conflict / cancelled
+Snapshot --> Adapter : 4. dispatch once
+Adapter --> Runtime
 note bottom of Store
-  Empty presets count as zero.
-  Normalize SP and HTAB; reject CR/LF first.
-  Never persist values in the Session index.
+  No fallback to cached token after failure.
+  Enable or create the unique access-token row.
+  Do not apply unrelated Header drafts.
+end note
+note bottom of Runtime
+  Accepted executions keep their original credentials.
+  Control requests do not renew an active execution.
+  No automatic write replay or background login.
 end note
 note bottom of Adapter
   Fixed Accept and Content-Type.
   Remove If-Match, Idempotency-Key, Last-Event-ID.
-  Other custom names use existing merge behavior.
-  Session, history and configuration omit debug rows.
-  No automatic write replay.
+  Reads and Session configuration omit debug rows.
 end note
 @enduml
 
@@ -420,11 +424,13 @@ hide empty members
 ' Product constraint: selection preserves order; pin and rename are explicit; credentials stay in DEV.
 ' Design reason: one coordinator owns execution state and request generations;
 ' Session metadata and scoped DEV settings have separate repositories.
-' New baseline: pi-mono-java 1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4.
-' Source: frontend/vite.config.ts defineConfig; frontend/dev/authMiddleware.ts createAuthMiddleware.
-' Observed behavior: proxy and auth capture startup configuration; runtime config saving is absent.
-' Pending implementation classes and relationships: DeveloperSettings, DeveloperSettingsStore,
-' SettingsRepository, DevConfigService, LocalConfigRepository and ConfigFile.
+' Auth/config baseline: pi-mono-java 840d04405d2bcc80a41b9d3b3f16606cc4845338.
+' Source: frontend/src/composables/useDeveloperSettings.ts getToken, snapshotHeaders, close.
+' Source: frontend/src/developerSettingsStorage.ts DeveloperSettingsRepository.
+' Source: frontend/dev/localConfig.ts DevConfigService, LocalConfigRepository.
+' Observed behavior: scoped settings, manual token retrieval and local configuration already exist.
+' Pending implementation: prepareWrite and coordinator-to-token admission before each of six writes.
+' Design reason: keep auth preparation before immutable request creation; preserve accepted credentials.
 title Runtime Workbench - Target Responsibilities
 package "Browser page [target responsibilities]" {
   class WorkbenchView <<view>>
@@ -460,11 +466,14 @@ package "Browser page [target responsibilities]" {
   class DraftStore <<page memory>>
   class DeveloperSettingsStore <<DEV target snapshot>>
   class SettingsRepository <<DEV target storage>>
-  class TokenCoordinator <<DEV page lifecycle>>
+  class TokenCoordinator <<DEV page lifecycle>> {
+    getToken() : existing manual retrieval
+    prepareWrite(intent) : Pending implementation
+  }
   interface RuntimeGateway
   class RuntimeHttpGateway <<HTTP adapter>>
 }
-package "Local Vite serve process [existing auth, target config]" {
+package "Local Vite serve process [existing auth and config]" {
   class DevAuthMiddleware <<loopback boundary>>
   class AuthCenterClient <<HTTPS adapter>>
   class LocalAuthConfig <<server-only snapshot>>
@@ -490,7 +499,8 @@ WorkbenchCoordinator *-- "1" DraftStore
 WorkbenchCoordinator --> SessionIndexRepository
 SessionIndexRepository *-- "0..*" SessionIndexEntry
 WorkbenchCoordinator --> DeveloperSettingsStore : freeze applied version
-WorkbenchCoordinator --> RuntimeGateway
+WorkbenchCoordinator -[#B45309,dashed]-> TokenCoordinator
+WorkbenchCoordinator --> RuntimeGateway : after preparation succeeds
 RuntimeGateway <|.. RuntimeHttpGateway
 RuntimeHttpGateway --> Runtime
 SessionIndexRepository --> Storage
@@ -504,6 +514,10 @@ DevConfigService --> LocalAuthConfig
 RuntimeHttpGateway --> DevConfigService : proxy version check
 AuthCenterClient --> AuthCenter
 legend bottom left
+  Six write actions await a fresh token before dispatch.
+  Dashed amber dependency: Pending implementation.
+  Failure or stale intent sends no business request.
+  Active executions retain their original credentials.
   Saved headers survive reload in their environment.
   Header edits do not alter an existing snapshot.
   Server secrets are write-only from the browser.

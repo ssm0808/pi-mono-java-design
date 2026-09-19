@@ -2,9 +2,9 @@
 
 主线状态补充（2026-09-18）：`8c5fda1dde51675859bc9c07e145dbe253656dea` 已实现逐题展示、整批提交和提问工具日志汇聚，路径与符号见[计划专题 §12](../01-总体架构/06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)。下文旧提交的相应缺口不再代表当前主线；其他体验与测试证据不在本次升级范围。
 
-[返回前端主设计](README.md)
+[返回前端主设计](README.md) · [认证与发送链路最新核验](#token-refresh-evidence)
 
-版本：1.7.0；更新日期：2026-09-17。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§7](#mate-tool-display-evidence)，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
+版本：1.8.0；更新日期：2026-09-19。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§7](#mate-tool-display-evidence)，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
 
 | 证据 | 基线 |
 |---|---|
@@ -205,3 +205,32 @@ OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对�
 工具名称专项已扩展为普通框架 label 和业务元数据统一映射 displayName；新增事件 factory、持久化投影与严格前端解码器证据，以及 pi/Claude 最新核对见[M03 专项证据](../01-总体架构/02-CampusClaw工具系统/source-evidence.md#tool-display-evidence)。M03/M06 和 Mate 公共精确契约已补齐此目标；传递和 UI 消费仍待实现。其他历史证据不升级。没有修改实现仓或验证部署页面，未新增依赖；现有前端类关系与 PlantUML 图源不变。
 
 验证（2026-09-17）：Markdown 无 Mermaid、PlantUML ASCII、SVG XML、图源与 SVG 引用及行锚点、新标题链接均通过检查；前端专题隔离执行 `plantuml -tsvg diagram.puml`，8 张生成 SVG 与在库文件逐字节一致。图源与生成图无变更，未重做视觉验收；`git diff --check` 通过，未运行产品测试。
+
+<a id="token-refresh-evidence"></a>
+
+## 8. 发送前获取 Token 核验（2026-09-19）
+
+上游 `https://github.com/superheromeZzh/pi-mono-java.git` 经 `ls-remote --symref origin HEAD` 确认默认分支 `main`，fetch 后明确读取 `840d04405d2bcc80a41b9d3b3f16606cc4845338`；保留本地工作树 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7` 不切换。所列前端认证与后端凭据文件除 `authCenter.ts` 新增关闭证书验证外，与本地已读源码一致；该差异单独读取。此处只升级认证、设置与发送链路证据，不升级其他前端、外部 Agent 或模型结论，不代表稳定发布或部署。
+
+| 仓库相对路径与符号 | 已观察实现与影响 |
+|---|---|
+| `frontend/src/App.vue:158-229` · `submit/executeCommand/stop/decideTool/decidePlan/answerQuestion` | 六类动作直接读取 `settings.snapshotHeaders()`；没有等待获取 Token；每次发送自动获取待实现。 |
+| `frontend/src/composables/useDeveloperSettings.ts:376-490` · `getToken/tokenReadinessIssue/tokenExpectationMatches/syncTokenDraft/snapshotHeaders` | 手动获取先检查认证配置与草稿，冻结环境/IP/认证版本/Token 草稿；调用私有接口，保存成功后合并唯一 Token 行并启用，再同步草稿。可复用，尚无业务动作准备门禁。 |
+| 同文件 · `saveConnection/saveAuthentication/saveHeaders/applyConnection/cancelToken/close/dispose` | 已有配置应用、环境作用域、保存/清空取消与迟到结果校验；`close` 无条件取消 Token，自动刷新接入需区分动作持有者与面板持有者。 |
+| `frontend/src/developerSettingsStorage.ts` · `DeveloperSettingsRepository/developerEnvironmentKey` | 独立开发设置 schema、revision、API 后端身份 + 认证 IP 的 Header 作用域已存在；保存失败抛错；跨页签 revision 检查不是原子互斥证明。 |
+| `frontend/src/types/developerSettings.ts` · `DeveloperSettingsController/AppliedDeveloperSettings` | 当前暴露 `getToken(): Promise<SaveResult>` 和同步 `snapshotHeaders()`，连接、Header、认证版本分开；没有异步 `prepareWrite`。 |
+| `frontend/dev/authMiddleware.ts` · `createAuthMiddleware/authSnapshot` | `POST /__debug/auth/token` 调用本地登录，返回 Token；核对 `X-CampusClaw-Auth-Version` 与 `X-CampusClaw-Auth-Key`，冲突返回 `DEV_AUTH_CONFIG_CHANGED`。 |
+| `frontend/dev/authCenter.ts` · `loginAuthCenter/extractAccessToken` | 固定 HTTPS 登录，独立 Set-Cookie 数组提取，10 秒超时、64 KiB 上限；返回 Token 字符串，没有有效期字段、续期接口或旧 Token 并存保证。当前源码设置 `rejectUnauthorized: false`，与保留的 TLS 校验目标不同。 |
+| `frontend/dev/localConfig.ts` · `LocalConfigRepository.toSnapshot/writeStored/DevConfigService`；`useDeveloperSettings.ts` · `acceptLocalStatus/makeRow` | 本地配置持久化、版本与热读取已实现；status 返回账号密码，页面接受回填且 Header 初始 revealed=true，与秘密只写不回显、默认遮蔽目标不同；仅记录差距，不推断其意图。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java` · `mateCredentials` | 精确读取四项 Header 并创建 `MateCredentials`。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java:59-70` · `submit` | 五类事件都检查凭据完整性，但只有新消息把凭据传给执行路径；四类控制分支不传递新凭据，不能通过回答/批准实现原执行换 Token。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:203-236` · `createSession` | 将凭据放入 `ManagedAgentSessionRequest` 和 `SubagentExecutionContext.root`，绑定本次执行。 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/mate/MateCredentials.java` · record / `isComplete`；`common/client/HttpMateToolClient.java:310-377` · `invokeTool/toHeaderInfo`（同一 `codingagent/` 前缀） | 不可变凭据快照检查完整性，工具用原 Token 调用；该路径没有从浏览器新设置取值或运行中续期。完整性不证明有效期或真实性。 |
+
+相对旧 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，设置主要职责由组件内存 `DebugHeaders/useDebugAuth` 转入 `useDeveloperSettings`、`DeveloperSettingsRepository` 和本地 `DevConfigService`；因此配置与手动获取已实现，不应随自动刷新增量整体标为待实现。历史 §6 保留原提交归属。
+
+目标与原因：[工作台 §6](技术设计/runtime-workbench-alignment.md#6-发送前自动获取-token)定义发送前强制重新获取、失败不提交、版本/目标复核与原执行快照边界；减少陈旧 Token 启动任务的概率，但不能保证任务超过有效期仍可调用工具。分类为开发产品约束与前端编排变更，不改变 Runtime 事件协议或生产身份。复用现有 Vue/Vite/Node 能力，无新增 Maven/npm 依赖。
+
+验收状态：本次为设计与源码核验，未修改实现仓、未运行新产品测试、未连接真实认证中心。原型尚未模拟自动刷新；认证有效期、重复登录撤销旧 Token、限流与并行会话需真实联调，不能由合成测试证明。设计验证结果单独记录，不沿用历史 189 项测试为自动刷新验收。
+
+设计验证（2026-09-19）：已跟踪的 89 份现存 Markdown 无 Mermaid，35 份 PlantUML 为 ASCII，124 份 SVG XML 有效；226 处 SVG 引用与 128 处图源引用/行锚点通过检查。前端技术专题执行 `plantuml -tsvg diagram.puml`，8 张 SVG 与隔离重新生成结果逐字节一致；两张结构变化图完成原尺寸及 840 px 文档宽度检查，并对照旧工作台完整图保留职责链。其余 SVG 仅同步图源行号。图索引从已提交内容加本任务文件生成，未吸收无关本地删除；`git diff --check` 通过。

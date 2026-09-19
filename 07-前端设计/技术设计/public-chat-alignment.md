@@ -57,7 +57,7 @@ Thinking 展示模型返回的原始推理，规则与局部源码依据见[Thin
 
 ![公共对话全局目标组件](target_frontend_components.svg)
 
-[PlantUML 源码](diagram.puml#L210) · [原尺寸](target_frontend_components.svg)
+[PlantUML 源码](diagram.puml#L214) · [原尺寸](target_frontend_components.svg)
 
 Workspace 只发用户意图、读取不可变展示快照。ConversationCoordinator 负责提交、确认、中断和恢复；
 PublicChatGateway 负责公共协议校验，EventReducer 同时消费 POST 完整回执、live 和 history。
@@ -72,7 +72,7 @@ Slash 和恢复后的配置读取共用配置快照；成功资源与并发版�
 
 ![对话、确认与恢复状态](target_conversation_states.svg)
 
-[PlantUML 源码](diagram.puml#L354) · [原尺寸](target_conversation_states.svg)
+[PlantUML 源码](diagram.puml#L358) · [原尺寸](target_conversation_states.svg)
 
 连接使用独立 `connecting/live/offline/reconciling` 状态，不把连接打开当作执行中、EOF 当作完成。
 下列业务状态是前端模型，不是新增 HTTP 枚举。所有目标推导以当前 Chat、请求快照和可靠关联为前提。

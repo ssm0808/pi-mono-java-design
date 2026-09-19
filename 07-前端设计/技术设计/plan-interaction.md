@@ -63,7 +63,7 @@
 
 ![计划模式前端交互](target_plan_interaction.svg)
 
-[PlantUML 源码](diagram.puml#L520) · [原尺寸 SVG](target_plan_interaction.svg)
+[PlantUML 源码](diagram.puml#L534) · [原尺寸 SVG](target_plan_interaction.svg)
 
 手动切换只在 idle、历史与状态已对齐、无写入和恢复请求时开放。内部每次只提交 mode，携带最新 If-Match；收到完整 Session 与 ETag 后原子替换配置，不先更新指示器。412 显示实际模式和原选择，显式重选才重试；网络不确定只读取资源。缺少计划能力时显示不可用原因，不默认为 build 覆盖未知模式。新建会话以创建结果为准，不把前一会话的模式带入；Agent 默认 mode 仅初始化新 Session。
 

@@ -1,6 +1,6 @@
 # CampusClaw 前端设计
 
-版本：2.0.0 · 2026-09-18 · 模块 M07
+版本：2.1.0 · 2026-09-19 · 模块 M07
 
 [仓库导航](../README.md) · [打开场景原型](原型/index.html) · [公共规范](公共规范.md) · [技术设计与全局类图](技术设计/README.md)
 
@@ -18,6 +18,8 @@
 | 06 | [审核与修改计划](场景/06-审核与修改计划/README.md) | 检查实施范围、步骤、验证和回退方式，再批准实施或提出修改。 | [高](原型/index.html#scene=plan&fidelity=high) · [低](原型/index.html#scene=plan&fidelity=low) |
 | 07 | [命令与技能](场景/07-命令与技能/README.md) | 在当前会话快速发现命令、填写参数，并理解命令结果如何影响任务。 | [高](原型/index.html#scene=commands&fidelity=high) · [低](原型/index.html#scene=commands&fidelity=low) |
 | 08 | [开发者设置](场景/08-开发者设置/README.md) | 在开发环境配置连接、认证和请求头，理解配置何时生效。 | [高](原型/index.html#scene=settings&fidelity=high) · [低](原型/index.html#scene=settings&fidelity=low) |
+
+开发工作台发送前自动获取 `access-token` 的目标流程见[认证与发送门禁](技术设计/runtime-workbench-alignment.md#61-页面流程)；该增量待实现，手动获取与配置保存已实现，长任务续期边界单列。
 
 ## 阅读与维护
 
@@ -46,6 +48,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.0 | 2026-09-19 | 开发写动作提交前自动获取 Token，补充失败、取消与运行中续期边界。 |
 | 2.0.0 | 2026-09-18 | 前端设计独立维护，提供八个场景及共享行为的高低保真入口。 |
 
 [1.x 版本与历史验证](归档/版本与验证记录.md)
