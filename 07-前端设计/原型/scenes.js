@@ -40,9 +40,27 @@ window.frontendScenes = [
       {
         "id": "offline",
         "label": "断线恢复"
+      },
+      {
+        "id": "token-ready",
+        "label": "发送前自动刷新",
+        "frame": "token-refresh.html",
+        "view": "token"
+      },
+      {
+        "id": "token-refreshing",
+        "label": "正在更新 Token",
+        "frame": "token-refresh.html",
+        "view": "token"
+      },
+      {
+        "id": "token-failed",
+        "label": "刷新失败 · 草稿保留",
+        "frame": "token-refresh.html",
+        "view": "token"
       }
     ],
-    "coverage": "附件按钮添加本页示例材料，上传、扫描和 READY 绑定由附件服务实现；当前原型只演示数量限制与回执后的草稿处理。",
+    "coverage": "包含自动更新 Token、成功后提交、失败保留输入和配置变更取消的本地演示；附件仍为示例材料，上传与 READY 绑定需服务实现。",
     "directory": "02-发送消息与附件",
     "doc": "../场景/02-发送消息与附件/README.md"
   },
@@ -194,9 +212,27 @@ window.frontendScenes = [
       {
         "id": "headers",
         "label": "Headers 与认证助手"
+      },
+      {
+        "id": "token-ready",
+        "label": "发送前自动刷新",
+        "frame": "token-refresh.html",
+        "view": "token"
+      },
+      {
+        "id": "token-refreshing",
+        "label": "正在更新 Token",
+        "frame": "token-refresh.html",
+        "view": "token"
+      },
+      {
+        "id": "token-failed",
+        "label": "刷新失败 · 草稿保留",
+        "frame": "token-refresh.html",
+        "view": "token"
       }
     ],
-    "coverage": "当前可操作范围为 Header 增删、启停、校验和模拟 Token 回填。统一设置页、按环境保存、热更新与本地秘密配置仍按工作台目标设计实施。",
+    "coverage": "Header 编辑与手动获取沿用现有原型；自动刷新演示含配置面板、关闭不取消发送、保存配置取消准备。均为本地合成数据，不证明真实认证或完整设置持久化。",
     "directory": "08-开发者设置",
     "doc": "../场景/08-开发者设置/README.md"
   }

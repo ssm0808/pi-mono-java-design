@@ -1,6 +1,6 @@
 # CampusClaw 前端设计
 
-版本：2.1.0 · 2026-09-19 · 模块 M07
+版本：2.1.1 · 2026-09-19 · 模块 M07
 
 [仓库导航](../README.md) · [打开场景原型](原型/index.html) · [公共规范](公共规范.md) · [技术设计与全局类图](技术设计/README.md)
 
@@ -18,6 +18,8 @@
 | 06 | [审核与修改计划](场景/06-审核与修改计划/README.md) | 检查实施范围、步骤、验证和回退方式，再批准实施或提出修改。 | [高](原型/index.html#scene=plan&fidelity=high) · [低](原型/index.html#scene=plan&fidelity=low) |
 | 07 | [命令与技能](场景/07-命令与技能/README.md) | 在当前会话快速发现命令、填写参数，并理解命令结果如何影响任务。 | [高](原型/index.html#scene=commands&fidelity=high) · [低](原型/index.html#scene=commands&fidelity=low) |
 | 08 | [开发者设置](场景/08-开发者设置/README.md) | 在开发环境配置连接、认证和请求头，理解配置何时生效。 | [高](原型/index.html#scene=settings&fidelity=high) · [低](原型/index.html#scene=settings&fidelity=low) |
+
+[自动刷新交互原型](原型/index.html#scene=message&fidelity=high&state=token-ready)提供发送、刷新中、失败保留草稿及设置面板演示，可切换高低保真。
 
 开发工作台发送前自动获取 `access-token` 的目标流程见[认证与发送门禁](技术设计/runtime-workbench-alignment.md#61-页面流程)；该增量待实现，手动获取与配置保存已实现，长任务续期边界单列。
 
@@ -42,12 +44,13 @@
 
 在仓库根目录运行 `python3 -m http.server 8765 --bind 127.0.0.1`，打开 `/07-前端设计/原型/index.html`。原型入口也可直接打开；跨文件框架访问受浏览器本地文件策略限制时使用本地服务。
 
-原型的三个既有回归脚本位于 `原型/`，使用 Node.js 与 jsdom；运行方法和当前迁移结果见[迁移校验](迁移校验.md)。图纸在 `技术设计/` 与 `技术设计/命令/` 分别执行 `plantuml -tsvg diagram.puml`，然后更新仓库图索引。
+原型的四个交互回归脚本及场景入口回归脚本位于 `原型/`，使用 Node.js 与 jsdom；运行方法和当前迁移结果见[迁移校验](迁移校验.md)。图纸在 `技术设计/` 与 `技术设计/命令/` 分别执行 `plantuml -tsvg diagram.puml`，然后更新仓库图索引。
 
 ## 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.1 | 2026-09-19 | 增加自动刷新 Token 的交互原型与高低保真状态入口。 |
 | 2.1.0 | 2026-09-19 | 开发写动作提交前自动获取 Token，补充失败、取消与运行中续期边界。 |
 | 2.0.0 | 2026-09-18 | 前端设计独立维护，提供八个场景及共享行为的高低保真入口。 |
 
