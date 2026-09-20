@@ -7,6 +7,8 @@ allowmixing
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java accept/startAccepted
 ' Observed behavior: Runtime binds a real root after admission; generic hooks can alter tool results.
 ' Design reason: one tracker per root unifies signals; statistics failures leave main execution unchanged.
+' Source evidence: Java fb842b1ac6cb4818f6b146f79dd184a5cd88bf12 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultBuiltInToolFactory.java create
+' Pending implementation: SkillTool reuses the existing reading evidence and final observer integration.
 ' Java divergence: all statistics types and integration arrows are pending implementation; scope is Runtime.
 title Skill Usage Statistics - Pending implementation (Runtime)
 top to bottom direction
@@ -26,7 +28,7 @@ package "Runtime entry and assembly" {
   class "RuntimeSessionEngineRegistry /\nAgentSessionFactory" as Factory <<singleton, assembly>>
 }
 package "Generic tool boundary" {
-  class "ReadTool" as Read <<integration>>
+  class "ReadTool /\nSkillTool [P]" as Read <<integration>>
   class "ReadEvidenceDTO" as Evidence <<immutable, per call>>
   class "Final hook observer" as Observer <<pending implementation, per execution>>
 }
@@ -68,7 +70,7 @@ Read "1" *-- "1 per call" Evidence
 Evidence -[hidden]down-> Observer
 Execution -[hidden]right-> Read
 Observer --> Tracker : final result, no mutation
-Tracker --> Resolver : attribute Read
+Tracker --> Resolver : attribute Read / Skill
 Resolver -[norank]-> Evidence : verify body and fingerprint
 Resolver --> Snapshot : match managed document
 Tracker --> Candidate : freeze first signal
@@ -85,6 +87,9 @@ note bottom of Fact
   First recorded source and time remain unchanged.
   Statistics may miss signals; main execution continues.
 end note
+legend bottom left
+  [P] SkillTool and its evidence integration: Pending implementation
+endlegend
 @enduml
 
 @startuml skill_usage_record
@@ -105,7 +110,7 @@ participant "SkillUsageService proxy" as S
 database "GaussDB" as DB
 note over R, T
   Explicit: input already committed, target bound, model not started.
-  Read: final successful body verified against the Skill snapshot.
+  Read / Skill: final successful body verified against the Skill snapshot.
   No active Runtime database transaction at either entry.
 end note
 R -> T : qualified signal + real root + source

@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.5.0；整理日期：2026-09-19。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `12244d49576d17239e21c6e75e542fd61c69b826`。旧提交差距不代表最新实现状态。活动工具的当前主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的当前来源与实现范围见 §6。
+版本：1.6.0；整理日期：2026-09-20。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `12244d49576d17239e21c6e75e542fd61c69b826`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的最新专项核验见 §8。
 
 | 基线 | 提交 |
 |---|---|
@@ -167,3 +167,57 @@ pi 上游默认分支在本次通过 `ls-remote --symref ... HEAD` 确认为 mai
 目标不再把凭据完整性当成工具可用条件；空快照不等于 Host 执行上下文缺失。
 复用既有 `MateToolClient.callTool(toolId, args, MateCredentials)`，不引入额外调用上下文类型。
 执行时序图只调整出站条件和结果归属，其他工具发现与缓存规则不变；不升级名称展示或外部 Agent 基线。
+
+<a id="skill-tool-discovery-evidence"></a>
+
+## 8. Agent 工具代理与 Skill 渐进披露（2026-09-20）
+
+本节只核验工具注册、Skill/资源发现及调用边界。设计起点为 `a2f3f9d05c97495d8917d84c0ca2018a7112671c`；Java 读取本地固定快照 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，不将其表述为当日上游最新。外部基线已重新确认默认分支并在隔离仓库 fetch；以下为默认分支源码快照，不是稳定发布保证。
+
+| 基线 / 默认分支 | 历史登记或前次快照 → 本次提交 | 本次升级范围 |
+|---|---|---|
+| OpenCode / `dev` | `849c2598abc7d2b40261e74b5826bc74ffc78308` → `ebb7b76eca82342642c78645109e865614533827` | 新增 Skill 加载与普通 MCP 适配证据；不升级旧 Task、事件或实验性 Code Mode 结论 |
+| DSH / `master` | `0a53fb55bea101816fa226bb964ae2bed71c343b` → `ddefc45fbc7f8e46dd73185e68295696d1297887` | 新增 Skill 与 MCP 注册证据；当前 `0.1.6-alpha.2` 为开发预览，不升级旧事件溯源结论 |
+| Codex / `main` | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` → `5c5308fc9a9ee789049d646ef11e5400384b9c6f` | 核验来源分流、专用资源读取及 MCP 适配；Skill 当前路径为 `codex-rs/ext/skills/src/`，不能沿用旧 `core/src/skills/` 定位 |
+| pi / `main` | `d1230ea2000d876b479a69b8b061f9d670f262f5` → `19451accdeec671c1f4da9eafac8fc270f510ef4` | `core/skills.ts` 与 `core/agent-session.ts` 两文件无差异，元数据目录＋按需读取结论不变；包版本 `0.86.1`，不升级工具事件等旧证据 |
+
+前三项历史登记未覆盖本节完整链路，本节按新提交独立核验，不据此断言这些能力首次出现的版本。前文其他专题的旧 SHA 和验收结果保持原归属。
+
+### 8.1 CampusClaw 已观察实现与差距
+
+Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`；其余路径相对 `pi-mono-java`。
+
+| 路径 / 关键符号 | 已观察行为 | 目标差距 |
+|---|---|---|
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java` · name/description/parameters；同模块 `loop/AgentLoop.java` · invokeModel/toLlmTools | 每次模型请求从当前 AgentTool 集合生成名称、描述和 Schema；实例可承载不同元数据 | 可复用接口构造 Agent 直接工具代理，不需要 Java 反射代理或业务工具专属类 |
+| R `tool/builtin/DefaultConfiguredToolAssembler.java` · assemble；`DefaultBuiltInToolFactory.java` · create | 仅把 profile 中的内置名称转换成实例，包含 ListMateTools/CallMateTool；没有 Skill 工具或业务代理装配 | 新增 Skill、CallTool 与 Agent 直接工具装配为待实现 |
+| R `skill/SkillPromptFormatter.java` · format；`tool/read/ReadTool.java` · execute | 目录只提供名称、描述、位置并指示 Read；Read 只读取文件，不注册工具 | 改为 Skill 读取正文和资源入口、Read 读取具体参考文件为待实现；读取不激活工具的边界可保留 |
+| R `runtimeapi/service/command/skill/SkillCommandExecutionService.java` · expand | 用户 Skill 命令按可信绑定展开正文和用户参数，没有基础目录/文件清单包装 | 显式命令与模型加载路径需要复用内容装配，不增加业务工具注册副作用 |
+| R `tool/mate/ListMateToolsTool.java` · execute/stableJson；`CallMateTool.java` · parameters/execute | List 返回一个来源的全部 name/description/inputSchema 文本；Call 接收 tool/args 并请求 Mate | 业务 Schema 当前不是模型独立工具声明；移除 List 模型入口、Call 改为 CallTool 并限制 Skill 来源为待实现 |
+| R `tool/mate/MateToolDiscovery.java` · resolveToolId/loadAllSources；`MateToolSessionCache.java` · CacheState/toNameIndex | 缓存仅存来源及名称到 ID；miss 可在后端完整发现 Agent 和直接 Skill，但不会把定义重新返回模型 | 后端能解析 ID 不等于模型知道参数；Skill 单工具文件提供按需重读入口 |
+| R `runtime/MateServiceClient.java` · BoundTool；`common/client/mate/MateToolMeta.java`；`HttpMateToolClient.java` · queryToolMetaByIds | 可信绑定已有 ID/name/displayName/permission 等信息，但不含 inputSchema；独立工具元数据已有 inputSchema | 代理与文件内容均需要完整元数据；本节不决定同步、生成及刷新流程 |
+| R `runtime/AgentRuntimeManager.java` · writeSkills/writeResources/loadSkill/containsForbiddenEntry | 写入 SKILL.md、skill.json、references 和 templates；拒绝聚合 tools.json；未从绑定生成单工具定义文件 | 单工具 JSON 资源与资源清单为待实现；不移动 skill.json，不把已有普通资源写入能力称为工具定义生成已实现 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java` · validateArguments；R `runtimeapi/runtime/RuntimeToolPermissionPolicy.java` · from/decide | Pipeline 按 AgentTool.parameters 校验；权限策略合并可信绑定，但只特殊识别 CallMateTool，其他工具名直接 ALLOW | 代理须进入同一权限判断，CallTool 须校验内部业务参数；仅改名称或增加实例不足以完成接入 |
+| R `session/compaction/CompactionPromptBuilder.java` · appendMessage/TOOL_RESULT_MAX_CHARS | 提交摘要的单条工具结果最多保留 2,000 字符 | 一次 List 或 Read 不能保证定义长期在场；文件按需披露提供重读能力，不保证模型永不遗忘 |
+
+### 8.2 基线行为与采用边界
+
+下列路径相对各自仓库，并绑定上表本次提交。
+
+| 基线 / 源码路径与符号 | 已观察行为 | CampusClaw 采用边界 |
+|---|---|---|
+| OpenCode `packages/opencode/src/tool/skill.ts` · SkillTool；`tool/read.ts` | skill 只有 name 参数；返回正文、基础目录、最多 10 个抽样文件绝对路径，排除 SKILL.md 并提示抽样，不展开文件内容或提供资源简介；后续资源由普通 read 读取 | Skill 工具的直接行为基线；宿主受管目录与可信绑定限制仍属 CampusClaw 产品约束 |
+| OpenCode `packages/opencode/src/mcp/catalog.ts` · convertTool；`session/tools.ts` · MCP 工具装配；`session/llm.ts` · streamText | 普通模式从远端定义创建通用动态工具，execute 调用 client.callTool，并将工具集合交给模型；实验性 Code Mode 是独立分支 | Agent 直接工具元数据代理的结构参考；不要求 Mate 改用 MCP，也不照搬全量暴露 Skill 工具 |
+| DSH `packages/skill/tool-skill/src/index.ts` · apply；`packages/skill/skill/src/index.ts` · renderSkillContent/renderResourceHint | skill(name) 加载正文和资源基础位置，不列目录；资源按需读取，资源位置可为 directory/url/opaque | 支持加载指令与读取资源分工；未采用其多提供方资源协议，不能描述为 DSH 同样返回 10 个文件 |
+| DSH `packages/mcp/mcp-client/src/tools.ts` · syncTools/createMcpToolDefinition | 从 MCP 工具定义构造通用代理并注册到 ToolRuntime，执行转发远端；与 skill 加载独立 | 证明通用代理无需每业务工具单独实现；不照搬其工具同步与替换生命周期 |
+| Codex `codex-rs/ext/skills/src/catalog_prompt.rs`；`tools/read.rs` · ReadArgs/ReadTool；`tools/mod.rs` · skill_tools | 本地 Skill 走文件读取；executor/orchestrator 资源通过有条件提供的 skills.read(package,resource?,cursor?) 逐项读取，不一次加载全部资源 | 不能把专用读取工具描述为 Codex 对所有本地 Skill 的统一默认入口 |
+| Codex `codex-rs/core/src/tools/handlers/mcp.rs` · McpHandler；`handlers/tool_search.rs` · search_output_tools；`tools/spec_plan.rs` · search_tool_enabled | MCP 通过通用 Handler 承载定义；延迟搜索返回可加载定义，启用依赖模型 supports_search_tool 与 Provider namespace_tools | 代理与延迟暴露是独立策略；本设计不引入模型工具搜索和逐工具动态注册 |
+| pi `packages/coding-agent/src/core/skills.ts` · formatSkillsForPrompt | 初始只呈现 Skill 名称、描述、位置，提示按需使用 read（或配置的 bash）读取 Skill；相对资源基于 Skill 目录解析 | 保留元数据→正文→所需资源的披露层次；不引入 Bash 或可执行脚本 |
+
+### 8.3 目标决策与验收边界
+
+当前有效方案为：Agent 直接绑定工具以 `MateToolAdapter` 实例进入模型工具集合；Skill 绑定工具经 `Skill → Read references/<tool-name>.json → CallTool` 按需使用，读取操作不增加代理或权限；`ListMateTools` 退出模型工具列表。单工具文件仅提供 name/description/inputSchema，工具身份与权限由可信绑定决定；两种入口共用业务执行、参数校验与授权规则。精确契约由[主设计](README.md)维护。
+
+这是 **CampusClaw 架构变更**：借鉴 OpenCode 的 Skill 加载入口和基线的远端代理结构，但 Skill 绑定工具通过固定 CallTool 执行、Schema 留在资源文件中，是为逐工具披露作出的产品选择，并非上游标准 Skill/MCP 行为。代价是普通读取结果可能被压缩，需要按需重读；不能声称该方案已证明比动态注入更快。无 Bash、受管边界与可信权限属于产品约束及安全加固。
+
+实现状态：新入口、代理装配及对应权限接入均为 **待实现**；本次仅静态核验源码，未运行 Java、真实模型或 Mate 联调。验收重点为初始集合仅含框架工具与 Agent 直接业务代理、Skill/Read 无注册副作用、资源清单不展开定义、CallTool 只解析 Skill 绑定业务工具，以及两入口的 ALLOW/ASK/DENY 和参数错误一致。元数据同步、文件生成与刷新、执行版本一致性另行设计，本节不冻结其策略。

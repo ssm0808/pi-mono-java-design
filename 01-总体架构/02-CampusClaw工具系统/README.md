@@ -2,19 +2,19 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.13.0 |
-| 状态 | 当前目标；空或部分凭据只透传、由 Mate 校验的增量待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-09-19 |
+| 文档版本 | 2.14.0 |
+| 状态 | 当前目标；Skill / CallTool、Agent 工具代理及共用执行适配待实现，其余能力按源码证据分项判断 |
+| 更新日期 | 2026-09-20 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
-| 精确工具契约 | [11 个活动内置工具与专题契约](built-in-tool-contracts.md) |
+| 精确工具契约 | [11 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
-Runtime 默认 profile 已包含 ExitPlanMode、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md) 和 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)，共 11 项。2026-09-18 已取回并核验主线 `8c5fda1dde51675859bc9c07e145dbe253656dea`：三个工具、工厂、配置、审核/问答续跑和 TODO 事件均已有实现；详见[工具源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
+本设计区分框架工具、Agent 直接绑定业务工具与 Skill 绑定业务工具。注册和发现增量见 [§9](#9-工具注册与发现)，当前源码及基线对照见[专项证据](source-evidence.md#skill-tool-discovery-evidence)。新增工具定义的数据来源接入、文件生成、同步、缓存刷新与版本一致性另行设计；本页不指定新同步方案。
 
-三个工具在 plan/build 保持同一定义，默认仅 Runtime 根装配；TodoUpdate 由提示词约束只在 build 实施阶段使用，成功结果同事务发布 agent.todo_updated。精确契约与验收由[计划专题](../06-CampusClaw计划模式/README.md)维护；Tool/Skill 元数据不变。Mate 公共桥接仍按所属专题标记待实现，不能据此把 Runtime 工具标记为待实现。对应取舍见 [A03](../07-Agent架构对比/README.md#a03) 和 [A05](../07-Agent架构对比/README.md#a05)。
+`ExitPlanMode`、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md) 和 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 已在 Runtime 主线实现，plan/build 共用定义；具体交互及实现范围由[计划专题](../06-CampusClaw计划模式/README.md)维护。Mate 公共桥接状态独立判断。
 
 ## 1. 设计结论
 
-CampusClaw 通过 Runtime、Cron 和 Child 三个入口运行 Agent。工具采用固定清单和严格启动配置，每次执行独立装配；不提供 CLI 产品入口、动态注册或 Skill 声明的本地工具。活动清单有以下 11 个区分大小写的名称，其中后三项的精确交互契约由计划专题维护：
+CampusClaw 通过 Runtime、Cron 和 Child 三个入口运行 Agent。框架工具采用严格启动 profile；宿主另按当前 Agent 的直接业务绑定创建远端代理。Skill 绑定工具逐个按需披露，通过固定入口 `CallTool` 执行。11 个区分大小写的框架工具如下，业务代理不计入该数量：
 
 ```text
 Read
@@ -22,8 +22,8 @@ Find
 Grep
 Ls
 Cron
-ListMateTools
-CallMateTool
+Skill
+CallTool
 Agent
 ExitPlanMode
 TodoUpdate
@@ -39,11 +39,13 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 `.campusclaw` 子树；它们不能通过相对路径、绝对路径、符号链接或真实路径访问其他 Agent。
 `Bash`、`Edit`、`Write` 从产品源码与生成镜像中彻底删除，不保留未装配实现、兼容别名、
 隐藏开关或可单独调用的执行器；删除边界与验收见[§12.4](#124-删除禁用与替换)。
-11 项活动工具及三入口 profile 保持不变，`Agent` 子代理能力不因删除而调整。`Loop` 完全删除。
+本设计不引入 Bash、可执行脚本或 Skill 加载后的工具动态注入。`Agent` 子代理能力保持；`Loop` 完全删除。
 
 ![工具系统目标架构](tool_system_architecture.svg)
 
-[PlantUML 源码：`tool_system_architecture`](diagram.puml#L1)
+[PlantUML 源码：`tool_system_architecture`](diagram.puml#L1) · [原尺寸 SVG](tool_system_architecture.svg)
+
+主图保留 Host、公共 Session、工具接口和外部执行边界。新增 `MateToolAdapter` 与 `CallTool` 共用 `MateToolExecutor`，不同的是模型定义的披露方式；`SkillTool` 与只读文件工具共用工作区边界，读取不承担工具注册。标记 `[P]` 的节点及蓝色关系待实现。
 
 ## 2. 范围与权威边界
 
@@ -51,10 +53,10 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 
 本专题负责：
 
-- 11 个活动内置工具的名称、装配、可用条件和并发模式；八项基础工具的 Schema 与输出，及三个交互工具的专题契约入口；
+- 11 个框架工具的名称、装配、可用条件与并发模式，以及 Agent 业务代理的注册边界；
 - Runtime、Cron、Child Agent 三入口的配置与 Session 装配；
 - 受管 Agent 工作区边界、目录 prepare/refresh 和 Skill/Child 名称索引；
-- Mate 工具发现、Session 名称到 ID 缓存、远端调用和共享 CampusMate origin 边界；
+- Skill 逐工具发现、`CallTool` 名称解析、共用远端执行和共享 CampusMate origin 边界；
 - Child Agent Execution、Cron 工具边界与实现迁移。
 - TUI/CLI 删除边界和公共 Session 压缩；Slash 只保留与模型工具的隔离边界。
 
@@ -67,7 +69,8 @@ Runtime HTTP 的资源、ResultBean、SSE、Entry 和数据库契约仍由
 - CLI、TUI、JSONL、one-shot、RPC、ACP 和 OS 调度安装产品入口；
 - Slash Command 的注册、HTTP 路由和命令行为，详见
   [Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)；
-- 自定义工具、动态注册、公共 Extension SDK 和 Skill 本地工具激活；
+- 任意自定义工具、运行中工具热注册、公共 Extension SDK 和 Skill 本地工具激活；
+- 新工具定义文件的生成和数据同步、Schema 更新与运行时版本切换策略；
 - `Bash` 沙箱、`Edit`/`Write` 工作区写入模型和旧工具名兼容；
 - 跨节点 Child 调度、常驻 Child worker、Runtime 租约和分布式取消；
 - 版本驱动、TTL、watcher 或 Mate 推送触发的目录自动刷新；
@@ -86,24 +89,25 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 
 | 分类 | 目标差异 | 设计原因 |
 |---|---|---|
-| 产品约束 | 只暴露 11 个活动 PascalCase 工具 | 冻结可测试的 TOB 能力面，禁用本地写入和命令执行 |
+| 产品约束 | 11 个 PascalCase 框架工具，另装配 Agent 直接业务代理 | 固定框架能力面，业务名称和 Schema 来自可信绑定 |
 | 产品约束、安全加固 | 删除 Bash/Edit/Write 及无其他消费者的专属代码 | 本产品不提供通用本机命令和文件写入工具，缩小重新接入面并停止维护无产品用途的实现；不宣称整个 Runtime 无副作用 |
 | 产品约束 | 删除 CLI/TUI 产品入口、Loop、旧名和兼容 payload | 产品没有交互终端生命周期，不承担首版兼容 |
 | 架构改造 | 三入口共用轻量 Session 与工厂 | 防止模型、hook、工具、错误和取消语义漂移 |
 | 架构改造 | 压缩与 Read 文件追踪迁入公共 Session | 入口删除不能让 Runtime、Cron、Child 丢失上下文治理 |
 | 架构改造 | Runtime 使用 append-only 数据库 Entry 保存摘要与边界 | 替代 pi JSONL compaction entry，同时保持历史不可变和模型恢复边界独立 |
 | 架构改造 | 用独立 HTTP Command 模块替换旧 Slash 原型 | Slash Command 不是模型工具，也不进入工具目录 |
-| 架构改造 | 删除 ToolCatalog、动态注册和 Java Extension 工具 | 启动期严格 profile 是唯一模型工具来源 |
+| 架构变更 | 框架 profile 与受管业务代理分开装配 | 业务工具共用一个适配实现，不恢复任意 Extension 或运行中热注册 |
+| 架构变更 | Skill 正文与具体工具定义分层披露 | 借鉴 OpenCode 的 Skill 加载，逐工具通过 Read 查看定义，避免一次性展开所有 Skill Schema |
 | 架构改造 | 逐工具并发模式与串行 barrier | 只读工具并行且有副作用工具不跨越顺序边界 |
-| 安全加固 | Schema 在 hook 前校验且拒绝未知字段 | hook 与执行器只处理已验证结构 |
+| 安全加固 | 注册 Schema 在 hook 前校验；框架外层拒绝未知字段，业务参数遵守业务 Schema | CallTool 外层校验与远端调用前的业务校验分层，复用既有确认生命周期 |
 | 安全加固 | 每个 Session 固化 Agent 工作区边界 | 阻止本地工具读取兄弟 Agent 或外部路径 |
 | 安全加固 | Find/Grep 不在调用期下载二进制且不回退到 shell | TOB Runtime 的可执行依赖必须在部署和启动期受控 |
 | 安全加固 | 受管树在同级临时目录完整校验后发布 | Session 不读取半成品，refresh 失败保留旧树 |
 | 安全加固 | Mate Agent/Skill/metadata 发现请求不携带执行凭据 | 凭据只向真正执行并产生副作用的端点暴露 |
 | 安全加固 | 仅 Mate execute 原名透传 POST Events 的四项执行快照 | 限定凭据寿命与可见面，防止进入模型、日志、事件或持久化 |
 | 安全加固 | 拒绝空摘要、摘要 ToolCall、失败或取消摘要 | 不允许无效摘要覆盖可恢复的旧上下文 |
-| 架构改造 | Mate 名称到 ID 缓存按 Session 和来源维护 | 模型直接按名称调用，同时适配现有 ID 执行接口 |
-| 产品约束 | Call 缓存 miss 自动刷新，不强制模型先 List | 缓存是实现细节，不成为模型调用顺序 |
+| 架构变更 | Agent 代理与 CallTool 共用 Mate 执行适配 | 两种披露方式使用一致的业务参数校验、权限与凭据规则 |
+| 产品约束 | Skill 读取不激活工具或授予权限 | 定义文件提供说明，执行身份由宿主可信绑定确定 |
 | 架构改造 | Model Manager、受管 Runtime 与 Tool 共用单一 `campusmate` 配置树 | Mate 与 CampusMate 是同一个服务，不保留顶层 `mate` |
 | 架构改造 | Runtime 与 Tool 共用 `campusmate.endpoints.skill-info-path-template` | 两个旧键调用完全相同的 Skill HTTP operation |
 | 产品约束 | Child 只按直接绑定名称调用，首版深度 1 | 避免全局枚举、循环和无边界递归 |
@@ -119,8 +123,8 @@ public enum BuiltInToolName {
     GREP("Grep"),
     LS("Ls"),
     CRON("Cron"),
-    LIST_MATE_TOOLS("ListMateTools"),
-    CALL_MATE_TOOL("CallMateTool"),
+    SKILL("Skill"),
+    CALL_TOOL("CallTool"),
     AGENT("Agent"),
     EXIT_PLAN_MODE("ExitPlanMode"),
     TODO_UPDATE("TodoUpdate"),
@@ -134,9 +138,9 @@ public enum ToolEntryPoint {
 }
 ```
 
-`BuiltInToolName` 是配置、工厂和模型名的唯一映射。不得通过 `Enum.valueOf` 暴露 Java
+`BuiltInToolName` 是框架配置、工厂和模型名的唯一映射；业务代理名称来自 Agent 直接绑定，不加入此枚举。不得通过 `Enum.valueOf` 暴露 Java
 常量名，也不得做大小写归一化。`Bash`、`Edit`、`Write`、`Glob`、`ListDirectory`、
-`Loop` 以及所有旧小写名都是未知配置值，必须阻止启动。
+`Loop`、`ListMateTools`、`CallMateTool` 以及旧小写名都是未知目标配置值，必须阻止启动。旧实现名称只保留于源码证据和历史记录。
 
 ### 4.2 工具配置
 
@@ -149,8 +153,8 @@ campusclaw:
       - Grep
       - Ls
       - Cron
-      - ListMateTools
-      - CallMateTool
+      - Skill
+      - CallTool
       - Agent
       - ExitPlanMode
       - TodoUpdate
@@ -160,27 +164,27 @@ campusclaw:
       - Find
       - Grep
       - Ls
-      - ListMateTools
-      - CallMateTool
+      - Skill
+      - CallTool
       - Agent
     child-agent:
       - Read
       - Find
       - Grep
       - Ls
-      - ListMateTools
-      - CallMateTool
+      - Skill
+      - CallTool
 ```
 
 三个键遵循相同严格规则：
 
 1. 键缺失时使用上例缺省值；
 2. 显式 `[]` 表示该入口不向模型暴露工具；
-3. 非空数组完全替换缺省值，不做 merge；
+3. 非空数组完全替换框架缺省值，不做 merge；宿主另追加当前 Agent 直接业务工具代理；
 4. 未知、重复、旧名或大小写错误阻止应用启动；
 5. 配置只在启动期绑定和验证，目录 `refresh` 不重新读取配置；
-6. Agent 文件、Cron payload、Child 文件和模型输入不能扩大或缩小 profile；
-7. profile 决定模型可见能力，执行上下文仍在调用时校验。
+6. 业务绑定不能修改框架 profile；Cron payload、Child 文件和模型输入不能增加任意工具；
+7. 显式空 profile 不追加业务代理；其他情况下业务代理仍受 Mate 工具装配开关、当前 Agent 绑定与权限约束。
 
 `Cron` 只在 Runtime profile 中出现，防止 Cron execution 管理或递归创建 Job。首版最大
 Child 深度为 1，因此 Child profile 不暴露必然不可执行的 `Agent`。
@@ -202,6 +206,8 @@ public interface BuiltInToolFactory {
 上下文，以及可选 Cron 上下文。只读 operations、Mate client、Cron service 和
 `SubagentExecutionService` 等应用协作者可以共享，但每个 `AgentTool` 实例必须按 Session
 新建。任何工具不得把 agentId、工作区、凭据或绑定写入 Spring 单例。
+
+`ConfiguredToolAssembler` 先装配框架工具，再委托 `MateToolsetFactory` 按 Agent 直接绑定创建 `MateToolAdapter`；每个绑定一个实例，不为每个业务能力编写 Java 类。装配前检查工具名与框架名冲突、同名不同 ID 冲突，禁止覆盖。不同入口只使用自己的受管 Agent 绑定。新增装配待实现，不新增 Maven 依赖。
 
 ## 5. Agent 工作区边界
 
@@ -234,7 +240,7 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 
 ![三入口 Session 装配](agent_session_assembly.svg)
 
-[PlantUML 源码：`agent_session_assembly`](diagram.puml#L120)
+[PlantUML 源码：`agent_session_assembly`](diagram.puml#L140)
 
 `AgentSessionFactory.create` 固定执行：
 
@@ -242,13 +248,12 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 2. 构造 Agent 工作区边界并解析 SYSTEM、Skill、Child 名称索引；
 3. 用 `bindingModels`、Model Manager 可用性和凭据求可用模型；
 4. 构造不可变 `ToolAssemblyContext`；
-5. 按入口 profile 顺序创建全新的工具实例；
+5. 按入口 profile 创建框架实例，追加 Agent 直接绑定工具代理；显式空 profile 返回空集合；
 6. 复制有序不可变 before/after hook 链；
 7. 创建新的 `AgentSession`、`AgentState`、消息队列和取消域；
 8. 返回给 Host，由 Host 恢复消息、订阅事件并负责关闭。
 
-首版生产 hook 链为空，但接口保留。Schema 校验发生在 before hook 之前；单次调用内按
-固定列表顺序执行。并行工具调用可以同时进入同一 handler，因此 handler 必须线程安全。
+通用业务扩展 hook 可为空；Host 权限与确认 hook 按入口安装。已注册模型工具的输入 Schema 在 before hook 前校验，CallTool 的内部业务参数在请求 Mate 前另行校验。单次调用内按固定列表顺序执行；并行调用可以同时进入同一 handler，因此 handler 必须线程安全。
 
 | Host | 创建时机 | Host 持有 | 关闭时机 |
 |---|---|---|---|
@@ -267,12 +272,12 @@ default ToolExecutionMode executionMode() {
 }
 ```
 
-`Read`、`Find`、`Grep`、`Ls`、`ListMateTools` 为 `PARALLEL`；`Cron`、
-`CallMateTool`、`Agent`、`ExitPlanMode`、`TodoUpdate`、`AskUserQuestion` 为 `SEQUENTIAL`。
+`Read`、`Find`、`Grep`、`Ls`、`Skill` 为 `PARALLEL`；`Cron`、
+`CallTool`、Agent 业务代理、`Agent`、`ExitPlanMode`、`TodoUpdate`、`AskUserQuestion` 为 `SEQUENTIAL`。业务工具首版保持串行，不因改成代理而提升并发。
 
 ![逐工具批量调度](tool_batch_scheduling.svg)
 
-[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L505)
+[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L504)
 
 Batch planner 保持模型调用原始顺序，把连续 `PARALLEL` 调用组成并行段并等待整段完成；
 每个 `SEQUENTIAL` 调用是 barrier。结果按原始调用顺序回填，而不是按完成时间排序。
@@ -280,7 +285,7 @@ Batch planner 保持模型调用原始顺序，把连续 `PARALLEL` 调用组成
 每次调用固定经过：
 
 ```text
-resolve configured tool
+resolve assembled tool
   -> validate JSON Schema
   -> ordered before hooks
   -> emit execution start
@@ -305,6 +310,7 @@ agent/{agentId}/.campusclaw/
     ├── skill.json
     ├── SKILL.md
     ├── references/
+    │   └── {toolName}.json         # 待实现：单个业务工具的模型可读定义
     └── templates/
 ```
 
@@ -314,13 +320,13 @@ agent/{agentId}/.campusclaw/
 一致，所属索引内唯一。扫描结果形成不可变的 `skillName -> skillId` 和
 `agentName -> BoundAgent` 索引。
 
-目录不生成或读取 `references/tools.json`。Skill references 只保存真实资料；模型通过
-`Read` 按需读取 `SKILL.md`、references 和 templates。删除 `activate_skill`；读取 Skill
-不会改变模型工具列表，需要远端能力时调用 `ListMateTools({skillName})`。
+Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其他参考资料并存，一文件一工具；模型可读字段为 `name`、`description`、`inputSchema`，不包含 ID、权限或凭据。不生成一次性展开所有工具定义的聚合文件，也不覆盖已有同名资料。模型通过 `Skill` 加载正文，再由 `Read` 按需读取具体定义；不会因此注册工具。
+
+该布局属于待实现的发现契约；文件生成、缓存有效性、新旧版本切换和与可信元数据的同步由后续数据同步设计确定。本次不移动 `skill.json`，不把下述既有目录刷新流程视为已解决新增定义文件的一致性。
 
 ![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
 
-[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L180)
+[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L201)
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
@@ -337,56 +343,55 @@ agent/{agentId}/.campusclaw/
 
 [PlantUML 源码：`refresh_next_execution`](diagram.puml#L835)
 
-## 9. Mate 工具发现、缓存与执行
+## 9. 工具注册与发现
 
-### 9.1 `ListMateTools`
+### 9.1 两种披露方式，共用远端执行
 
-![Mate 工具实时发现](list_mate_tools_sequence.svg)
+| 来源 | 模型如何发现 | 模型如何调用 |
+|---|---|---|
+| 框架工具 | 入口 profile | 按框架名称直接调用 |
+| Agent 直接绑定工具 | 装配 `MateToolAdapter`，提供完整 name / description / inputSchema | 按业务工具名称直接调用 |
+| 直接 Skill 绑定工具 | Skill 目录 → `Skill({name})` → 按需 `Read` 单个定义文件 | `CallTool({tool,args?})` |
 
-[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L268)
+初始模型工具集合是框架工具加 Agent 直接业务代理；仅由 Skill 绑定的业务 Schema 不提前加入，也不在读取 Skill 后整组或逐个注入。宿主保留工具的绑定来源；代理名称和模型可读 JSON 都不能代替执行授权。`ListMateTools` 退出模型工具列表，底层元数据查询能力仍由宿主使用。
 
-模型输入只有可选 `skillName`。无参数时查询当前 Agent；有名称时通过本地 Skill 索引解析
-ID。模型不能提交 agentId、skillId 或 toolId。
+`Skill` 只接收 `name`，按当前 Agent 可见的直接 Skill 精确解析，返回正文、基础目录和除 `SKILL.md` 外最多 10 个资源文件的绝对路径，明确清单为抽样。文件内容不随清单展开，路径遵守 §5 的工作区边界；遗漏文件通过 `Ls/Find/Grep` 定位，具体文件继续由普通 `Read` 读取。不提供 `resource` 参数或在每个业务步骤中强制引用文件；也不强制每次调用前重复读取已在上下文中的完整定义。
 
-`MateToolClient` 发现接口拆为：
+![Skill 工具渐进披露](list_mate_tools_sequence.svg)
 
-```java
-List<MateToolMeta> listAgentTools(String agentId);
-List<MateToolMeta> listSkillTools(String skillId);
-ToolResult callTool(String toolId, Map<String, Object> args,
-    MateCredentials credentials);
-```
+[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L289) · [原尺寸 SVG](list_mate_tools_sequence.svg)
 
-`listAgentTools` 与 `listSkillTools` 的 binding/metadata HTTP 请求始终不带
-`X-HW-ID`、`Authorization`、`X-HW-APPKEY` 或 `access-token`。
-在 Runtime POST Events 路径，`MateCredentials` 只由本次 execution 创建，
-以不可变值对象保留收到的四项 Header，不提供日志或持久化转换。
-其他 Host 如需凭据必须使用自身已评审的 execution 凭据源，不得从 Session
-或历史记录恢复 POST Events Header。
+`Skill` 是模型工具，HTTP Skill Command 是用户命令，两者共用可信 Skill 名称与绑定解析，但模型可见性与用户显式调用资格分别判断；`disableModelInvocation` 不因此关闭用户命令入口。两者不互相注册或改变各自协议。宿主提示词列出 Skill 名称、描述和 `Skill` 使用规则；正文已显式加载时按需继续读取资源，避免只为调用形式再次读取正文。
 
-List 先取得有序 binding tool IDs，再批量查询元数据，以 ID 关联并恢复绑定顺序。模型
-输出只含 `scope` 和每项 `name`、`description`、`inputSchema`，不含任何资源 ID、
-permission、outputSchema、并发属性或 Mate 原始信封。每次 List 都实时访问 Mate；空列表
-是成功结果。成功查询同时原子刷新 Session 缓存中对应来源的名称到 ID 映射，不清除其他
-来源。
+### 9.2 CallTool 与 Agent 代理
+
+`CallTool` 保留 `{tool,args?}`；`args` 省略时使用空对象。当前只解析当前 Agent 直接绑定 Skill 的业务工具，未知名称或同名不同 ID 明确失败；不接收 agentId、skillId、toolId、任意 URL，也不转发框架工具。直接 Agent 工具由其代理调用；同一工具同时来自两个范围时保留两种来源，不能因入口不同绕过权限。
+
+`MateToolAdapter` 和 `CallTool` 共用 `MateToolExecutor`，由可信绑定解析执行目标和业务 Schema，使用现有校验能力检查业务参数并请求 Mate。权限与确认仍由 Host 的既有 before hook 承担，两入口共用可信绑定和权限策略，不把确认生命周期迁入执行器。代理的完整 Schema 进入模型请求；`CallTool` 的固定外层 Schema 不替代业务参数校验。定义文件只是模型说明，不作为执行目标或权限的权威来源。
+
+![业务代理与 CallTool 共用执行](call_mate_tool_sequence.svg)
+
+[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L351) · [原尺寸 SVG](call_mate_tool_sequence.svg)
+
+逐工具读取减少无关定义并提供重读入口，不保证模型永不遗忘。定义不可读或参数校验失败应返回明确错误；模型按错误补充读取、修正参数。读取 Skill/JSON 不是授权状态，不增加已加载工具集合。实际执行请求一经发出，超时、断连和 Mate 错误均不自动重放。
+
+注册与发现的最小结构如下，新增类与接线均待实现：
+
+| 组件 | 职责与生命周期 |
+|---|---|
+| `MateToolsetFactory` | 共享工厂；按本次执行的 Agent 直接绑定创建代理及执行协作者 |
+| `MateToolAdapter` | 每个 Agent 直接工具一个 Session 实例；提供业务 Schema，委托执行 |
+| `SkillTool` | Session 实例；加载 Skill 内容与抽样资源路径，不注册业务工具 |
+| `CallTool` | Session 实例；受限的名称调用入口，不维护第二套业务执行逻辑 |
+| `MateToolExecutor` | 本次执行内共享；使用可信绑定完成统一业务校验和 Mate 调用 |
+
+两类调用都复用原有取消、权限确认、工具结果和凭据规则；框架 Pipeline 在 before hook 前校验框架或代理的参数；CallTool 的业务 args 由共享执行层在远端请求前校验。执行层不重复确认。未知权限或冲突按拒绝处理。内部定义存放、准备和刷新时机不在此冻结。
 
 <a id="mate-credential-forwarding"></a>
 
-### 9.2 `CallMateTool`
+### 9.3 执行凭据
 
-![CallMateTool 缓存解析与执行](call_mate_tool_sequence.svg)
-
-[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L334) · [原尺寸 SVG](call_mate_tool_sequence.svg)
-
-模型只提交 `{tool,args?}`，不提交 Skill、Agent、scope 或 toolId。Call 先按 toolName 查询
-Session `MateToolResolutionCache`；命中后使用内部 ID 调用 Mate。未命中时通过 Session 级
-single-flight 刷新当前 Agent 的完整有效集合：当前 Agent 直接工具加所有直接 Skill
-工具。完整查询、合并和唯一性校验成功后才原子替换缓存，然后再次解析名称。
-
-同名映射到相同 ID 时去重，同名映射到不同 ID 时作为配置冲突失败。刷新失败保留旧缓存，
-本次未命中调用返回 `isError=true`。只允许自动重试名称发现；一旦向执行端点提交请求，
-网络中断、超时和 Mate 错误都不得自动重放。Mate 对当前 Agent 身份、凭据、实时绑定和
-权限做最终校验。
+Agent、Skill 与工具元数据查询不携带执行凭据。`MateCredentials` 只来自本次 Host execution，不从 Session 或历史记录恢复；Agent 代理和 `CallTool` 使用同一规则。
 
 实际 execute 请求只透传快照中已提供的 `X-HW-ID`、`Authorization`、
 `X-HW-APPKEY` 与 `access-token`，不改名、不生成缺失值。该快照可随同一次 Runtime
@@ -402,26 +407,21 @@ Cron 不新增凭据来源，也不从历史恢复或借用其他执行的值；
 
 <a id="tool-display-name"></a>
 
-### 9.2.1 工具展示名称映射
+### 9.4 工具展示名称映射
 
 工具执行身份与用户展示名称分开。框架接口继续使用 `AgentTool.name()` / `label()`；Host 向事件层提供统一的可选 `displayName`，不再公开一个同义 `label` 字段。名称映射由本节唯一维护，事件快照及消费规则见 [M06 调用名称快照](../01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)，UI 见[前端 §9.7](../../07-前端设计/技术设计/内容渲染.md#mate-tool-display)。
 
 | 调用类型 | displayName 来源 | 缺失时 UI 使用的技术名 |
 |---|---|---|
 | 普通框架工具 | 本次执行装配的 `AgentTool.label()` | `toolName` |
-| `CallMateTool` | 本次 `PreparedAgentRuntime` 中 Agent 及直接 Skill 的 `BoundTool.displayName` | `arguments.tool` |
+| Agent 直接业务代理 | 对应可信绑定的 `displayName`，由代理 label 提供 | 代理业务名称 |
+| `CallTool` | 按 `arguments.tool` 找到的可信 Skill 工具 `displayName` | `arguments.tool` |
 
-`CallMateTool.label()` 只命名外层入口，不能覆盖具体业务工具；业务展示名缺失时不回退为 “Call Mate Tool” 或“调用业务工具”。展示名称可以重复，也可以与技术名相同，不参与名称到 ID 解析、权限、确认身份或结果关联。仅接受服务端工具定义/元数据，不采用模型 arguments 或结果文本中的同名字段。
+展示名只影响标题，不参与执行身份、权限或工具去重。`CallTool.label()` 只命名外层入口，不覆盖具体业务名称；展示名缺失时回退技术名。读取展示名不得发起远端发现或执行，也不得采用模型参数或结果中的同名展示字段。
 
-Host 从本次已经准备的 Agent `metadata.bindingTools` 与直接 Skill `bindingTools` 按技术名取得展示名。读取过程只访问本地不可变元数据，不调用 `MateToolDiscovery` 或远程接口，不改变 Session 名称到 ID 缓存。业务展示名由上游 `varchar(256)` 字段约束；缺失、空白或同名记录的身份/展示名冲突时仅省略展示字段，不影响原来的执行判定。普通工具从实际装配实例读取 `label()`，同样不为展示执行工具。
+Host 在首次发布调用事件（包括待确认调用）前固定展示名，确认续跑和历史读取沿用该值。既有 `CallMateTool` 历史事件保留原名；新入口的投影与前端消费增量待实现，精确外部契约由 M06/M07 跟进，不能把更名视为已完成兼容迁移。对应当前实现见[名称来源证据](source-evidence.md#tool-display-binding-evidence)。
 
-Host 在第一次发布调用事件（包括待确认调用）前取得并保存本次展示名称。确认续跑和历史读取沿用已经保存的名称；展示快照不保存执行目标，也不按 `toolCallId` 缓存工具解析异常。`CallMateTool.execute` 继续在实际执行时按名称解析工具 ID，保留原有发现、single-flight、同名冲突与失败处理。产品中的工具只会启停，不以调用期间同名工具动态改绑作为本展示需求的前提；实际执行仍由原有链路校验当前启停、绑定、凭据与权限，确认前的名称不是可执行证明。
-
-`ListMateTools` 的模型输出仍为 name/description/inputSchema；展示名不进入工具参数、模型 ToolCall/ToolResult 或提示词。`AgentTool` 和内核工具执行事件无需新增展示字段；由 Host 利用本次工具装配与绑定元数据补齐外部调用事件。本增量是产品可读性约束和展示数据传递的架构变更，不新增 Maven/npm 依赖，也不新增工具类型或改变现有主图的分层关系。
-
-实施从 `PreparedAgentRuntime → Host 展示名 → M06 调用事件 → M07 标题` 完成字段传递。验收覆盖普通 label 与 name 不同、空 label、Agent/Skill 业务名有效/缺失/冲突、相同展示名对应不同技术名、ASK/ALLOW/DENY 首次取名不发起发现请求、确认及历史标题一致，以及实际执行时的原解析与失败恢复语义。源码、pi 对照、分支实现和验证范围见[名称来源专项证据](source-evidence.md#tool-display-binding-evidence)；公共 Mate bridge 的实现状态独立记录。
-
-### 9.3 CampusMate 连接地址
+### 9.5 CampusMate 连接地址
 
 Mate Tool 的目标地址由
 [CampusMate 统一配置与 Endpoint 目录设计](../../02-服务与接口/02-CampusMate共享客户端配置/README.md)
@@ -440,17 +440,15 @@ campusmate.base-url + formatted(campusmate.endpoints.tool-execute-path-template,
 `campusmate.tool.enabled` 只控制工具装配；所有 path 只由 `campusmate.endpoints` 保存。
 Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-template`，但仍可使用不同 DTO
 投影同一响应。Agent、Skill 与 Tool metadata 发现必须不带凭据；只有 Tool execute
-读取 POST Events 执行快照并透传其中已提供的四项 Header。Session 缓存和执行
-POST 不自动重放等其他契约不变。
+读取 POST Events 执行快照并透传其中已提供的四项 Header。执行 POST 不自动重放。
 
-`ListMateTools`、`CallMateTool` 与 `MateToolClient` 是既有模型/Java 契约，不因 Spring
-配置树统一而改名。若要改模型可见工具名，必须独立评审 Schema、提示词和兼容性。
+`CallTool` 是后端中立的模型入口名；`MateToolClient` 保留 Mate 适配职责。更名不改变远端 HTTP endpoint 或凭据约定。
 
 ## 10. Child Agent Execution
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L428)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L427)
 
 模型只使用：
 
@@ -510,7 +508,7 @@ usableModels = settings.bindingModels
 |---|---|
 | Agent loop、消息队列、tool pipeline、hook、取消 | 公共轻量 `AgentSession` |
 | 模型、SYSTEM、工具和 hook 统一构造 | `AgentSessionFactory` |
-| 工具筛选和实例创建 | `ConfiguredToolAssembler` + `BuiltInToolFactory` |
+| 框架与业务代理装配 | `ConfiguredToolAssembler` + `BuiltInToolFactory` + `MateToolsetFactory` |
 | HTTP 数据库恢复、SSE 和 active execution | Runtime Host |
 | Cron Job/Run 与调度入口 | Cron Host |
 | Child 绑定、进度与父取消 | `SubagentExecutionService` |
@@ -560,13 +558,14 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 |---|---|
 | `Bash`、`Edit`、`Write` 工具及专属实现 | 完全删除源码、专属测试、无消费者配置/资源及生成镜像；拒绝配置，不保留执行器或兼容入口 |
 | `LoopTool`、`LoopManager` 和所有 Loop Host 接线 | 完全删除 |
-| `ToolCatalog`、`DefaultToolCatalog`、`ToolSelection` | 启动期严格 profile 和关闭工厂 |
+| 任意动态 `ToolCatalog`、`DefaultToolCatalog`、`ToolSelection` | 框架 profile 与受管 Agent 代理装配 |
 | Java Extension 工具、manifest tools/commands、PackageManager | 完全删除；Skill 只扫描受管目录 |
-| `activate_skill` | `Read(SKILL.md)` + `ListMateTools` |
+| `activate_skill`、`ListMateTools` | `Skill` 加载指引，`Read` 按需读取单个工具定义 |
+| `CallMateTool` | `CallTool`，保留 `{tool,args?}` 并限定 Skill 绑定业务范围 |
 | `EditDiff` | 无；写工具首版硬禁用 |
 | `spawn_agent`、`invoke_agent` 和 Session delegation after-hook | `Agent` + `SubagentExecutionService` |
 | ACP/HTTP/A2A SubAgent backend、registry、approval placeholder | 不进入首版 Child Agent Execution |
-| `references/tools.json` | Skill 身份索引 + Mate 实时发现和 Session 解析缓存 |
+| 聚合 `references/tools.json` 工具清单 | `references/{toolName}.json` 单工具定义；生成与同步另行设计 |
 | 顶层 `mate.*` / `MATE_*` 应用变量 | 删除；地址、endpoint 与 Tool 开关分别迁入 `campusmate.base-url`、`campusmate.endpoints`、`campusmate.tool` |
 | 重复 Skill path 配置 | 删除；Runtime 与 Tool 共读 `campusmate.endpoints.skill-info-path-template` |
 | `FileAgentDirectoryResolver` 独立文件契约 | `AgentRuntimeManager.prepare` |
@@ -596,7 +595,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 ### 13.1 配置、Pipeline 与 Session
 
 - 三入口缺省、显式空数组和完全替换语义正确；
-- 11 个活动名之外的旧名、禁用名、重复名和大小写错误阻止启动；
+- 框架 profile 拒绝未知名、旧名、重复名和大小写错误；业务名来自绑定且不覆盖框架名；
 - Child 缺省无 `Agent`，Cron 缺省无 `Cron`；
 - 同一入口连续创建两个 Session，工具实例不同且应用协作者可安全共享；
 - Schema 在 before hook 前校验，hook 顺序固定；
@@ -606,7 +605,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 ### 13.1.1 退役工具删除验收
 
 - 主源码及公司镜像不存在三项工具类、专属 operations/executor 和无消费者的写入队列；干净构建产物不得残留旧 class；
-- 三入口拒绝 `Bash/Edit/Write` 及对应小写旧名；11 项活动枚举、工厂及 Runtime/Cron/Child 缺省集合不变；
+- 三入口拒绝 `Bash/Edit/Write` 及对应小写旧名；目标框架清单及 Runtime/Cron/Child 缺省集合符合 §4；
 - 移除旧功能专属测试，补充退役类/包不存在与配置拒绝回归，不能用减少测试数量代替能力删除证明；
 - Read/Find/Grep/Ls、共享截断、目录 prepare/refresh、压缩及 Agent 子代理的相关回归通过；
 - 当前产品文档不再允许保留源码或指导调用；历史源码证据、拒绝配置负例与历史事件中的名称允许保留；
@@ -618,19 +617,22 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - refresh 失败保留旧树，活动 Session 继续使用自身 runtime 快照；
 - refresh 后空闲 Session 下一次执行懒校准模型；无可用 default 时不接受用户 Entry；
 - 名称/路径不一致、Skill/Child 重名、固定版本缺失和符号链接使目录无效；
-- 任何目录都不生成或读取 `references/tools.json`；
+- Skill 资源路径不越界；新增工具 JSON 逐文件可读，不依赖聚合工具清单；文件同步另行验收；
 - Read、Find、Grep、Ls 只能访问本 Agent 根，Child 只能访问 Child 根；
 - 跨 Agent 绝对路径、`..`、符号链接、realpath 越界和非普通文件被脱敏拒绝。
 
 ### 13.3 Mate、Child 与 Cron
 
-- ListMateTools 每次实时查询，输出只含稳定公开字段并恢复绑定顺序；
+- Agent 直接工具由同一适配类创建独立实例；名称、描述和 Schema 正确进入每步模型请求；
+- Skill 初始目录只披露元数据；`Skill` 输出正文、基础目录和最多 10 条抽样路径，不展开文件或增加工具；
+- 普通 `Read` 可读取单个定义，正文无需逐文件引用；工具定义遗忘后仍可定位并重读；
+- `CallTool` 仅解析 Skill 范围，拒绝未知、冲突和框架工具目标；同名同 ID 去重；
+- 两个入口业务 Schema 校验与 ALLOW/ASK/DENY 一致，失败不产生 Mate 执行请求；
 - Agent、Skill 和 Tool metadata 发现请求精确不含四项执行凭据 Header；
-- ListMateTools、CallMateTool 与 Model Manager、受管 Runtime 的所有出站终端使用相同 scheme/host/port；
+- MateToolExecutor 与 Model Manager、受管 Runtime 共用 CampusMate scheme/host/port；
 - 顶层 `mate`、`mate.endpoints.*`、`mate.tool.enabled` 与 `MATE_*` 应用变量已删除；
 - Tool path 只从 `campusmate.endpoints` 读取，Skill path 与 Runtime 共用唯一配置键；
-- 不同来源刷新互不覆盖，Session 间缓存隔离；
-- Call cache miss 只触发一次完整刷新，重名冲突失败，实际执行不自动重放；
+- 代理和 CallTool 不向模型暴露 ID 或凭据；实际执行不自动重放，执行上下文不跨 Session 泄漏；
 - POST Events/Skill Command 快照中已提供的四项 Header 只在 Tool execute 中原名透传；模型、日志、事件、持久化和其他出站请求均不包含；
 - 四项全缺失、任意部分组合与 JWT/APPKEY 同时提供均不触发本地完整性拒绝；解析/确认成功后执行请求恰好一次，Mate 失败映射为 isError=true；
 - 空快照不触发 unavailable；缺 Host 上下文、发现失败、取消和确认拒绝仍保持原有处理；完整验收矩阵见 HTTP §7.3；
@@ -648,15 +650,15 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ## 14. 实施顺序
 
-1. 维护 11 个名称、三入口配置和精确 Schema，交互工具引用计划专题；
+1. 更新框架清单、`Skill` / `CallTool` 契约及宿主提示词，保留三入口空 profile 语义；
 2. 实现工作区边界、只读工具和受管树链接校验；
 3. 完成逐工具 batch planner、严格 Schema 和 hook 顺序；
 4. 实现工厂、不可变上下文和公共 Session；
 5. 迁移 Runtime Host 并删除 CLI 产品入口；
 6. 统一目录 prepare/refresh、Skill/Child 索引和模型解析；
-7. 先统一 CampusMate 配置树和 endpoint 目录、去重 Skill path，再实现 Mate 发现、Session 缓存和 miss 自动刷新；
+7. 用已提供的可信工具定义实现 MateToolAdapter 和共用执行层，接入权限、确认与展示；工具数据同步另行设计后接入；
 8. 迁移 Child Execution 与 Cron 工具；
-9. 删除 Bash/Edit/Write 及专属死代码、动态目录、Extension、Loop、旧 delegation 和兼容入口；
+9. 删除 Bash/Edit/Write 及专属死代码、任意动态注册、Extension、Loop、旧 delegation 和退役模型入口；
 10. 同步生成镜像并完成全量回归。
 
 本页描述推荐目标结构；已实现部分及差距须按[源码证据](source-evidence.md)中的提交逐项判断。实现 PR 应列出实际落地范围，不能把旧差距直接延伸为最新状态。
@@ -665,6 +667,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.14.0 | 2026-09-20 | Agent 直接工具采用通用代理，Skill 经专用加载与单工具文件渐进披露后由 CallTool 执行。 |
 | 2.13.0 | 2026-09-19 | 公共压缩复用执行级模型窗口，输出额度统一由 Mate 控制。 |
 | 2.12.1 | 2026-09-19 | 压缩段落引用 Mate 能力与可选输出上限规则，避免未知上限自动填充和误判。 |
 | 2.12.0 | 2026-09-19 | 工具可用条件不依赖凭据完整性，空快照同样交由 Mate execute 判断。 |

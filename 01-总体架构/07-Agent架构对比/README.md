@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.38.0 |
-| 更新日期 | 2026-09-19 |
+| 文档版本 | 1.39.0 |
+| 更新日期 | 2026-09-20 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -15,6 +15,7 @@
 | 历史计划模式专项基线 | A03/A05 的提示词专项于 2026-09-17 更新至 Codex `b0659c53`、OpenCode `88c6c7ab`、DeepSeek `0d1f5000`、pi `e4c75a73`；业务覆盖再次确认四个上游 HEAD 不变，Java 装配/发布读取本地 `21c3f59b`，完整 SHA、路径及差距见[§11](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖) |
 | 前端专项基线 | A07：Java `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4` 的体验差距见[新核验](../../07-前端设计/source-evidence.md#experience-evidence)，前次验证见[实现证据](../../07-前端设计/source-evidence.md#current-implementation)；Codex 固定 `d58d0e58`，既有官方核对日期为 2026-09-15 |
 | 历史提问专项基线 | A08：问答闭环验证为 Java 9f785bea3ffff8f6566cd1b2727285af46a2aead；新增交互核验为 Java 1d08f98e、Codex d58d0e58 与 OpenCode 849c2598，见[逐题交互证据 §9](../06-CampusClaw计划模式/source-evidence.md#9-buildplan-与逐题交互核验)；DeepSeek 0a53fb55、pi 5cd93f68、Claude 官方文档 2026-09-15 的原范围不变 |
+| 工具发现专项基线 | A11：2026-09-20 fetch OpenCode `dev@ebb7b76eca82342642c78645109e865614533827`、DSH `master@ddefc45fbc7f8e46dd73185e68295696d1297887`；Java `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，只核验 Skill 加载与远端工具适配，默认分支快照不等于稳定发布，其他模块历史证据不变 |
 | Skill 统计专项基线 | A09：Codex d58d0e58 的完整计数链；Java f61906b9 的 Runtime/Read/Child/Cron 骨架，#295/#298 仅作固定对照，不升级其他 M05 结论 |
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
 | 核验范围 | A07 的模式入口、TUI 实施选择、方案/任务/问题分离、Slash 协同与前端接入范围；M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、业务 Agent 设置唯一模型来源及旧全局目录差距；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
@@ -32,7 +33,7 @@
 
 ## 2. 基线登记与证据范围
 
-基线选择与每次更新规则来自 [Agent Runtime 参考基线](../../AGENTS.md#agent-runtime-参考基线)。下表是各专题的历史核验登记；A03/A05 的提示词证据与 A06 的模型来源证据分别按各自专项升级，不能将其余条目一并标为最新。
+基线选择与每次更新规则来自 [Agent Runtime 参考基线](../../AGENTS.md#agent-runtime-参考基线)。下表是各专题的历史核验登记；A03/A05 的提示词证据、A06 的模型来源证据与 A11 的工具发现证据分别按各自专项升级，不能将其余条目一并标为最新。
 下表登记的 commit 不是全量核验声明。使用其他 commit 时，条目必须同时记录旧值、新值和受影响结论。
 
 | 基线 | 固定参考点 | 用于哪些问题 | 本文证据状态 |
@@ -52,9 +53,9 @@
 |---|---|---|---|
 | M01 · Runtime 与多 Agent | Loop 扩展能力如何与产品准入分离；父子执行如何隔离和终止 | pi；Codex、DeepSeek 辅助 | [A01](#a01)覆盖 Loop 与消息准入；[A03](#a03)覆盖计划模式接入与 Child 模式传递，其他父子生命周期待补证 |
 | M02 · Model | 如何让业务 Agent 设置成为唯一模型权威；Provider 调用与模型选择如何分层；原始事件在哪层归一化 | 模型目录差异采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、业务 Agent 设置、旧全局目录删除和 SDK 削减；Codex 事件归一化对比及完整取消链仍待专项核验 |
-| M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；其他工具问题待补证 |
+| M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；[A11](#a11)覆盖远端代理与 Skill 工具按需披露 |
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；其他上下文与存储比较待补证，不默认 token 全量落盘 |
-| M05 · Command 与 Skill | 清单、执行、调用观测和统计分别维护什么权威状态 | pi；统计参照 Codex/OpenCode | [A09](#a09)覆盖使用信号、根去重、失败隔离与入口范围；其他清单一致性仍待专项核验 |
+| M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计参照 Codex/OpenCode | [A09](#a09)覆盖使用信号、根去重、失败隔离与入口范围；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；同步一致性另行设计 |
 | M06 · 事件与服务边界 | 写入与观察是否分离；流绑定谁；断线如何恢复；控制状态谁权威 | Claude；OpenCode，必要时 pi/DeepSeek | [A02](#a02)覆盖 Claw/Mate 分层与流范围；[A03](#a03)补充计划审核所复用的数据库确认交接，完整回放专项待补证；[A04](#a04)覆盖 Session 配置更新；[A05](#a05)覆盖后端显式任务事件 |
 | M07 · 前端体验 | preview 何时被权威内容替换；Turn/Item 与产品 UI 如何映射 | Codex；Claude 辅助 | [A05](#a05)保留旧提交的事件合并与根执行证据；当前计划/TODO/问答前端实现见[A07](#a07)及[A08](#a08)，公共 Mate 接入仍为目标设计 |
 | M08 · 元数据与配置 | 定义、发布快照和运行对象如何分离；刷新如何影响活动执行 | pi；托管产品仅对照公开资源 | Agent.mode 专项已核对 Mate 956b547f / Runtime 09b32d8e；默认值链为 待实现，见 A03 和元数据主设计；元数据组合查询顺序另在 Mate `9dd5d85e` 核对，见 J06；发布事务一致性仍待补证 |
@@ -307,7 +308,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | Codex 观察 | 固定 d58d0e58 有 codex.skill.injected 和 skill_invocation；Host 显式指标包含失败、Shell 执行前识别、资源首屏计数，计数器与分析事件去重位置不同。队列 256 且可能丢弃。身份、字段和路径见[Codex 详解](../../04-命令与技能/03-Skill加载统计/codex-skill-counting.md)。 |
 | pi / OpenCode 对照 | pi 固定 5cd93f68 的 Skill 展开和工具生命周期可作归因入口；OpenCode 固定 849c2598 提供显式 Skill 工具记录。它们不能证明已有企业三表或管理统计 API。 |
 | CampusClaw 已观察实现 | Java f61906b9 已有 Runtime 根消息、工具调用/结果和短事务；Read details 尚无完整归因证据；Child 为内存执行/进度，Cron runner 未传 job/run。#295 ee2f4dd/#298 3dfd990 仅作全文候选实现对照，未提升为新主线统计。完整路径与符号见[证据](../../04-命令与技能/03-Skill加载统计/source-evidence.md)。 |
-| CampusClaw 已确认目标 | 同一 sessionId/rootEventId/skillId 至多计 1；显式受理与最终成功 Read 共用 Tracker，部分正文即可。三张统计表独立短事务，仅新事实加数；失败不阻断主执行，允许漏计。F19 查询改为 POST + skillIds，返回 activationCount/lastLoadedAt，排名与趋势暂缓；F20 的 Runtime 范围与当前三入口实现仍待单独对齐。 |
+| CampusClaw 已确认目标 | 同一 sessionId/rootEventId/skillId 至多计 1；显式受理与最终成功 Skill/Read 共用 Tracker，部分正文即可。三张统计表独立短事务，仅新事实加数；失败不阻断主执行，允许漏计。F19 查询改为 POST + skillIds，返回 activationCount/lastLoadedAt，排名与趋势暂缓；F20 的 Runtime 范围与当前三入口实现仍待单独对齐。 |
 | 差异分类 | 产品约束：根执行使用频度、Runtime 首版、既有 Skill 身份；架构变更：统一跨入口去重，独立同步统计替代 Codex 的异步遥测输出；安全加固：可信快照、管理授权与删除准入。 |
 | 理由与代价 | 减少分页和重复 Read 对排名的影响；以失败隔离保持受理和工具语义。代价是失去逐次调用明细、允许漏计，仍有同步等待与热门 Skill 行锁；lastUsedAt 仅反映已计使用。 |
 | 备选与重评 | 只有累计/日表不能去重，纯 Trace 可能缺失，仅事实表使累计扫描增长。若同步等待实测不达标，再设计有界异步投递、关闭及失败策略；不提前增加 MQ/OTel。 |
@@ -333,6 +334,25 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 实现状态与验收 | 活动 profile 排除已实现；开发分支 `1b35422c61d471e11b9e1c126b57a82ef808ced2` 已删除源码，[Draft PR #315](https://github.com/superheromeZzh/pi-mono-java/pull/315) 待合入。2009 项测试、退役类缺席与三入口拒绝检查通过；公司编译因 NativeParent 不可解析未验证，完整范围见[证据 §5](../02-CampusClaw工具系统/source-evidence.md#5-basheditwrite-源码删除边界2026-09-18)，不把分支完成写成主线完成 |
 
 **讲解要点。** pi 面向通用 coding 保留执行和写入工具；CampusClaw 的产品能力更窄，因此不仅不注册，还删除无用实现。保留仍有消费者的公共能力，避免把模型写工具退役扩大成整个系统禁止文件写入。
+
+<a id="a11"></a>
+
+## 6.8 A11 · 远端工具代理与 Skill 按需披露
+
+| 维度 | 结论 |
+|---|---|
+| 模块与主设计 | M03/M05；[工具注册与发现](../02-CampusClaw工具系统/README.md#9-工具注册与发现)维护契约、全局目标类图及验收；本条只解释基线与差异。 |
+| 架构问题 | 远端业务工具如何复用执行能力，同时让 Agent 常规工具直接可用、Skill 工具定义按实际步骤披露？ |
+| OpenCode 观察 | `SkillTool` 仅接收 name，返回正文、基础目录和最多 10 个抽样文件路径，后续资源由普通 read 获取；`convertTool` 把 MCP 名称对应的描述、inputSchema 和 client.callTool 包装成通用工具，普通工具路径将其提供给模型，实验性 Code Mode 另行处理。Skill 加载与 MCP 工具注册分离，不等同于本设计的 Skill 绑定 JSON 调用机制。 |
+| DSH 观察 | `apply` 注册 skill(name)，`renderSkillContent` 返回正文与资源基础位置，不枚举文件；`syncTools/createMcpToolDefinition` 将 MCP 定义注册为工具并统一远端调用。版本 `0.1.6-alpha.2` 为开发预览；这里只采纳职责分离，不迁入 Cordis 或 MCP 协议。 |
+| CampusClaw 已观察实现 | Java `SkillPromptFormatter.format` 指引普通 Read 读取正文；`ListMateToolsTool.execute/stableJson` 一次返回当前 Agent 或指定 Skill 的整组定义；`CallMateTool.execute` 按名称解析 ID 后调用 Mate。所核验的 `DefaultBuiltInToolFactory` 与 `MateToolsetFactory` 装配链尚无专用 Skill 工具或 Agent 业务工具代理。完整 SHA、仓库相对路径及符号见[专项证据](../02-CampusClaw工具系统/source-evidence.md#skill-tool-discovery-evidence)。 |
+| 已确认目标 | Agent 直接绑定工具以通用代理提供模型 Schema；Skill 采用 OpenCode 的正文与资源路径入口，具体定义由 Read 按需读取，再经 CallTool 执行。读取 Skill 或资源不增加模型工具或权限；ListMateTools 退出模型工具列表。具体参数、可用范围与命名规则由主设计唯一维护。 |
+| 差异分类 | 产品约束：不引入 Bash 或可执行脚本，Skill 工具要求逐工具披露；架构变更：按绑定来源区分模型暴露方式，两种入口共用 Mate 执行与授权，Skill 绑定定义以参考文件提供。这是 CampusClaw 的选择，不是基线 Skill 规范的强制要求。 |
+| 收益与代价 | 常规工具直接调用，Skill 工具无需整组 Schema 常驻；不维护 Skill 加载后的工具注入状态。代价是两种模型调用形式、首次读取定义的额外步骤，普通读取结果仍可能被压缩；重读和业务参数校验不能等同于模型永不遗忘，也无已验证的性能提升。 |
+| 范围与重评 | 这里只确定注册、发现与调用入口；数据同步、刷新及版本一致性另行设计。暂不增加 ToolSearch、Skill 整组注入或单工具动态注入；将来资源定位成本成为实测问题时，再评估发现入口。 |
+| 状态与验收 | 已确认目标；Skill、CallTool、Agent 代理及配套发现链待实现。验收应证明初始工具集合不含仅由 Skill 绑定的业务 Schema、读取不改工具集合、Agent 代理与 CallTool 共用授权校验、资源抽样可继续查找；细则见主设计，文档校验不代表产品验收。 |
+
+**讲解要点。** 参考 OpenCode 的 Skill 资源入口和 OpenCode/DSH 的通用远端适配，CampusClaw 将执行复用与定义披露分开：Agent 直接工具进入模型工具集合，Skill 工具在需要时读取定义后通过固定入口执行。它保留逐工具披露且不引入动态注入状态，代价是额外读取与双入口；同步设计和实现验收仍待完成。
 
 <a id="source-evidence"></a>
 
@@ -390,6 +410,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.39.0 | 2026-09-20 | 增加 Agent 远端代理与 Skill 工具按需披露的 A11 对比，明确 CallTool 及独立同步边界。 |
 | 1.38.0 | 2026-09-19 | 计划标记由后端解析，公共事件采用 delta/completed 并保留审核事务边界。 |
 | 1.37.0 | 2026-09-19 | A06 对比 Mate 输出权威与按执行查询窗口，记录生命周期、故障代价及 pi 摘要差异。 |
 | 1.35.0 | 2026-09-19 | A06 增加 Mate 逐模型能力查询与快照，比较可选输出上限与 pi 默认补值的差异。 |

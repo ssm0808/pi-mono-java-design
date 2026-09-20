@@ -4,21 +4,21 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.1.0 |
-| 更新日期 | 2026-09-18 |
+| 文档版本 | 3.2.0 |
+| 更新日期 | 2026-09-20 |
 | 所属模块 | M05 负责 Skill 使用归因与统计；M06 提供真实根执行和工具来源；M04 维护 Session 生命周期 |
 | 状态 | F19 查询契约已对齐 PR #295；其余采集、存储及 F20 范围仍按所列历史基线待对齐，不表示整项验收 |
-| 设计依据 | F19 按 2026-09-18 需求确认采用现有批量 POST；其他章节保留 v3.0.0 的目标与核验范围 |
+| 设计依据 | F19 沿用现有批量 POST；新增模型 Skill 正文读取入口复用既有根去重，其余实现状态保留各节核验范围 |
 | 源码基线 | Codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51；Java f61906b9136246ca60f333704b6fc92b5420d0ec；pi 5cd93f688aaab89dbb6dfa4aca535f21796ae185 |
 | 精确模型 | Runtime catalog 的批量统计查询 operation JSON；本文维护计量、职责、存储与实施约束 |
 
-本次仅修订 F19 查询契约。§6 的 `activationCount` / `lastLoadedAt` 是现行响应字段；其他章节的 `usageCount` / `lastUsedAt`、Runtime 范围及目标表结构仍是 v3.0.0 待对齐内容，不应据此要求现行接口返回旧字段或 `scope`。F20 不在本次修订中关闭。
+§6 的 `activationCount` / `lastLoadedAt` 是现行响应字段；其他章节的 `usageCount` / `lastUsedAt`、Runtime 范围及目标表结构仍是 v3.0.0 待对齐内容，不应据此要求现行接口返回旧字段或 `scope`。新增模型 Skill 入口不改变查询契约、表结构或 F20 待对齐范围。
 
 ## 1. 目标、口径与范围
 
-管理端按指定 skillIds 查询累计激活次数或精确时间范围内的次数。排名、日趋势当前没有需求，待管理面明确需要后再增加。**usageCount 表示已记录到合格使用信号的根执行数：同一 (sessionId, rootEventId, skillId) 至多计 1。** 显式注入与 Read 共用这一规则，不因分页、反复读取或确认续跑增加次数。
+管理端按指定 skillIds 查询累计激活次数或精确时间范围内的次数。排名、日趋势当前没有需求，待管理面明确需要后再增加。**usageCount 表示已记录到合格使用信号的根执行数：同一 (sessionId, rootEventId, skillId) 至多计 1。** 显式注入、模型 Skill 工具与 Read 共用这一规则，不因分页、反复读取或确认续跑增加次数。
 
-合格信号是实际 Skill 指令已随输入成功受理，或成功 Read 最终结果中确有受管主文档正文。部分正文即可触发；它证明执行接触过该 Skill，不证明模型理解、实际遵循了指令或业务成功。因此展示为“使用次数”，不能标为“全文加载次数”“每次工具调用次数”或已经验证的“任务采用率”。
+合格信号是实际 Skill 指令已随输入成功受理，或 Skill/Read 工具的成功最终结果中确有受管主文档正文。部分正文即可触发；它证明执行接触过该 Skill，不证明模型理解、实际遵循了指令或业务成功。因此展示为“使用次数”，不能标为“全文加载次数”“每次工具调用次数”或已经验证的“任务采用率”。
 
 首版 **scope=runtime**，跨 Agent、Skill 版本及 plan/build 汇总；同一根执行跨模式仍只有一个去重域。Child/Cron 尚未接入，不能把它们的缺席解释为零使用。真实执行身份和关联持久化前提见 §9。
 
@@ -39,13 +39,15 @@ Codex 在运行时产生使用信号，分别输出 metric 和 analytics；不�
 
 ## 3. 到底怎么记
 
+模型 `Skill({name})` 的职责由 [M03](../../01-总体架构/02-CampusClaw工具系统/README.md#9-工具注册与发现)维护。其成功正文加载属于既有 **READ** 信号，与普通 Read 共用最终结果观察、受管身份归因及根去重，后文的读取时间、失败与 hook 规则同等适用；无需新增信号类型、表或公共协议。仅展示目录、读取 references 文件或调用 CallTool 不产生新的 Skill 使用信号。该入口接入待实现，不据此改变历史统计实现核验。
+
 ### 3.1 触发与去重示例
 
 下表的加数假定统计写入成功；失败边界见 §5。
 
 | 场景 | usageCount 增量 | 说明 |
 |---|---:|---|
-| 根 R1 显式注入 A，随后 Read A 三次 | A +1 | 四个信号共享 R1/A；保留首次事实 |
+| 根 R1 显式注入 A，随后 Skill 加载 A、Read A 三次 | A +1 | 所有入口共享 R1/A；保留首次事实 |
 | R1 分三段 Read A | A +1 | 第一次交付部分正文即可，不累加全文覆盖 |
 | R1 先读文档中段，再读首页 | A +1 | CampusClaw 不使用 Codex cursor 首屏规则 |
 | R1 使用 A、B | A +1，B +1 | 按 Skill 分别记录 |
@@ -63,7 +65,7 @@ Codex 在运行时产生使用信号，分别输出 metric 和 analytics；不�
 
 skillId 来自本次执行的不可变受管快照，精确匹配，不归一大小写；版本更新、Agent 或执行段不进入去重键。路径匹配只用于归因，任意同名 SKILL.md 不能生成受管 Skill 身份。
 
-source_event_id 只记录首次事实的来源：EXPLICIT 为根消息，READ 为 Runtime 已保存的规范工具调用事件 ID。Provider toolCallId 只在当前执行映射内查找规范 ID，不能直接作为数据库业务身份。规范映射未就绪时跳过统计并诊断，不临时补造来源。Host 通过线程安全的按调用查询或不可变快照提供映射，不向并行工具线程暴露可变 Map。
+source_event_id 只记录首次事实的来源：EXPLICIT 为根消息，READ 为 Skill 或 Read 对应的 Runtime 已保存规范工具调用事件 ID。Provider toolCallId 只在当前执行映射内查找规范 ID，不能直接作为数据库业务身份。规范映射未就绪时跳过统计并诊断，不临时补造来源。Host 通过线程安全的按调用查询或不可变快照提供映射，不向并行工具线程暴露可变 Map。
 
 occurred_at 为被记录信号的服务端 UTC 毫秒时间：显式取受理时间；Read 取最终成功结果被观测的时间。候选形成后固定，SQL 等待/重试不改时间。Read 采集发生在权威结果追加之前，所以表不声称已保存成功结果，不要求 result_event_id。
 
@@ -73,15 +75,15 @@ occurred_at 为被记录信号的服务端 UTC 毫秒时间：显式取受理时
 
 | 位置 | 职责与接入时点 | 不承担的职责 |
 |---|---|---|
-| ReadTool / ReadToolDetails | 在实际已读字节上生成通用证据：规范路径、文件 SHA-256、实际返回正文字符数、返回内容 SHA-256 指纹 | 不引用 Skill ID、统计 Service、Mapper；不额外重读磁盘 |
+| ReadTool / SkillTool 读取证据 | 在实际交付正文上提供规范路径、文件 SHA-256、返回正文字符数和内容指纹；Skill 包装中的目录与清单不算正文 | 读取证据不携带 Skill ID；工具不依赖统计 Service/Mapper，不为统计重读磁盘 |
 | skill/usage/SkillUsageResolver，Spring 单例 | 在所有改写 hook 之后，用最终 isError/content/details 与执行快照验证受管主文档，生成不可变 SkillUsageCandidateDTO | 不持有跨执行集合，不维护 BitSet、行覆盖或全文轮次 |
-| skill/usage/SkillUsageTracker，每个 Runtime 根执行一份 | 绑定真实根和不可变快照，接收 explicit/read 信号；线程安全地选择每个 Skill 的首个候选，调用统计服务并隔离异常 | 内存集合不是持久化去重依据；不生成根身份、不决定工具成败 |
+| skill/usage/SkillUsageTracker，每个 Runtime 根执行一份 | 绑定真实根和不可变快照，接收 explicit/read 信号（read 包含 Skill 工具）；线程安全地选择每个 Skill 的首个候选，调用统计服务并隔离异常 | 内存集合不是持久化去重依据；不生成根身份、不决定工具成败 |
 | RuntimeSessionEngineRegistry / RuntimeActiveExecution | 为当前执行组装 Tracker；根受理后绑定 ExecutionTargetDTO；工具调用落库后提供只读规范 ID 映射 | 不把用户请求、Provider ID 或旧执行实例当新根 |
 | AgentSessionFactory / AgentSessionHookChain | 保留现有 hook 扩展，组装最终只读观察入口；工厂仅组装依赖 | 不集中实现路径匹配、统计规则和数据库写入，不给 agent-core 新增通用回调 |
 | SkillCommandExecutionService / RuntimeMessageEventService | 将已解析的 Skill 候选随内部受理上下文传递；acceptMessage 已提交且 target 绑定后、模型启动前交给同一个 Tracker | 不在返回 SSE 后凭随机 ID 加数；不在受理事务内写统计 |
 | SkillUsageService / SkillUsageMapper | 独立统计事务、生命周期准入、唯一事实和原子汇总；查询复用 Mapper | 不控制模型、工具与 Runtime 主事务 |
 
-读取证据仅用于内部观察，不新增公共事件或持久化工具结果字段；沿用 RuntimeEntryCodec / RuntimeCommittedEventFactory 的字段白名单，不将路径、摘要或指纹拼入正文。
+Skill 的受管身份取自可信加载结果，不能从返回 XML、模型参数或工具名称猜测；最终正文仍须经过改写 hook 后验证。读取证据仅用于内部观察，不新增公共事件或持久化工具结果字段；沿用 RuntimeEntryCodec / RuntimeCommittedEventFactory 的字段白名单，不将路径、摘要或指纹拼入正文。
 
 现有 afterHooks 可组合：业务 hook 依次完成结果改写，末尾观察器只观察最终值并原样传回。Hook 链提前失败、最终 isError=true 或观察时取消均不记；统计/归因异常在观察适配器内隔离，不能被 ToolExecutionPipeline 当作工具失败。主流程自身的取消仍遵循原语义，不由统计清除中断标志。观察之后发生的任务失败不撤销事实。
 
@@ -228,11 +230,11 @@ F19 可以暂不实施，等管理面明确需要排名、趋势时再增加。�
 
 [PlantUML 源码](diagram.puml#L1) · [原尺寸 SVG](skill_load_statistics_classes.svg)
 
-专题路径和类图文件名保留稳定链接；图中是当前使用统计目标。执行持有 Tracker，通用 Read 提供证据，Resolver 负责 Skill 归因，统计 Service 负责独立事务。Factory 只装配，Controller 不访问 Mapper，任何统计依赖都不进入 agent-core。
+专题路径和类图文件名保留稳定链接；图中是当前使用统计目标，新增 Skill 入口及证据接入标为待实现。执行持有 Tracker，Read/Skill 提供读取证据，Resolver 负责 Skill 归因，统计 Service 负责独立事务。Factory 只装配，Controller 不访问 Mapper，任何统计依赖都不进入 agent-core。
 
 ![Skill 使用记录与失败隔离](skill_usage_record.svg)
 
-[PlantUML 源码](diagram.puml#L90) · [原尺寸 SVG](skill_usage_record.svg)
+[PlantUML 源码](diagram.puml#L95) · [原尺寸 SVG](skill_usage_record.svg)
 
 时序将主流程和统计事务分开；只在新事实插入后加数，异常必须在统计事务结束后隔离。它是 CampusClaw 待实现 方案，不是 Codex 实际队列实现。
 
@@ -241,7 +243,7 @@ F19 可以暂不实施，等管理面明确需要排名、趋势时再增加。�
 | 切片 | 实施内容 | 关键验收 |
 |---|---|---|
 | S1 · 数据与失败隔离 | 三表、Mapper、独立 Service 事务、外层异常隔离、生命周期准入 | 重复键不加数；并发首写和不同根共享 Skill 不丢更新；任一统计写/提交失败只回滚三表；主受理/工具保持成功；超时与连接释放 |
-| S2 · 信号与根绑定 | Read 通用证据、Resolver、执行级 Tracker、最终 hook 和显式受理后接入 | 显式加三次 Read 共 1；部分/中段正文计数；A/B 分别计；新根再计；确认续跑不变；失败/空/改写/取消无信号；规范 ID 缺失安全跳过 |
+| S2 · 信号与根绑定 | Skill/Read 正文证据、Resolver、执行级 Tracker、最终 hook 和显式受理后接入 | 显式加 Skill 加载和三次 Read 共 1，参考文件及 CallTool 不另计；部分/中段正文计数；A/B 分别计；新根再计；确认续跑不变；失败/空/改写/取消无信号；规范 ID 缺失安全跳过 |
 | S3 · 查询契约 | 批量 POST、skillIds、可选 from/to、activationCount 与管理授权 | 原始 1～100 项、精确去重及顺序；累计/精确范围；零值与 null；400/500/503；事实清理后累计保留 |
 | S4 · 生命周期与部署 | Tracker 关闭/恢复、清理准入、三表一致备份、发布脚本 | 活跃根事实不清理；删除与迟到写竞争；历史读取/fork 不重计；失败漏计边界；热点/连接/锁/端到端等待与 30 日查询实测 |
 
@@ -267,6 +269,7 @@ openGauss 5.0 INSERT 文档作为 UPSERT 语法依据；公司 GaussDB 版本、
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.2.0 | 2026-09-20 | 模型 Skill 成功正文读取纳入既有 READ 信号及根去重，不增加表或查询协议。 |
 | 3.1.0 | 2026-09-18 | F19 对齐现有批量 POST 与 activationCount 响应，排名和趋势延后按需设计。 |
 | 3.0.0 | 2026-09-16 | 按根执行统一去重 Skill 使用信号，统计独立短事务且失败不阻断主执行。 |
 | 2.0.0 | 2026-09-15 | 基于 Codex 观测机制定义成功调用事实、来源幂等、三表同事务和 Runtime 统计查询。 |

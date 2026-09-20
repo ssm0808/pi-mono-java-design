@@ -1,13 +1,14 @@
 @startuml tool_system_architecture
-' Source evidence (CampusClaw d649866):
+' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12):
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: AgentTool
-' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: execute, executeAll
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: initialize, configureRuntimeTools
-' PR 167 f60cc3e: TUI/CLI removal diff deleted entry-independent session capabilities.
-' Observed behavior: the current CLI session combines catalogs, reload, skills,
-' delegation, and tool assembly; the Runtime path has separate assembly logic.
-' Design reason: one closed factory and one light session factory keep all managed
-' entry points aligned while Hosts retain their own persistence and lifecycle.
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: executeAll
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java: create
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolsetFactory.java: createSession
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute
+' Observed behavior: closed framework assembly and generic Mate calls already exist.
+' Design reason: one remote executor supports direct Agent adapters and progressive Skill calls.
+' Permission and confirmation remain in Host hooks; execution does not duplicate them.
+' Pending implementation: SkillTool, CallTool, MateToolAdapter, MateToolExecutor and their marked wiring.
 title Tool System - Complete Target Structure
 top to bottom direction
 skinparam backgroundColor white
@@ -30,12 +31,14 @@ package "Assembly - singleton services" {
   class "DefaultConfiguredTool\nAssembler" as Configured
   interface "BuiltInToolFactory" as ToolFactory
   class "AgentRuntimeManager" as Manager
+  class "MateToolsetFactory" as MateFactory
 }
 package "Execution - new objects per Session" {
   class "ManagedAgentSession" as Session
   class "ToolAssemblyContext" as Context <<immutable>>
   class "AgentWorkspaceBoundary" as Workspace <<immutable>>
-  class "MateToolResolutionCache" as Cache
+  class "MateToolExecutor [P]" as Executor
+  class "PreparedAgentRuntime" as Runtime <<immutable>>
   class "Ordered hook chain" as Hooks <<immutable>>
   class "ToolExecutionPipeline" as Pipeline
   class "SessionCompactor" as Compactor
@@ -44,8 +47,9 @@ package "Model tools - per Session" {
   interface "AgentTool" as Tool
   class "ExitPlanMode / TodoUpdate /\nAskUserQuestion" as InteractionTools <<3 implementations>>
   class "Read / Find / Grep / Ls" as Local <<4 implementations>>
-  class "ListMateTools" as List
-  class "CallMateTool" as Call
+  class "SkillTool [P]" as Skill
+  class "CallTool [P]" as Call
+  class "MateToolAdapter [P]" as Adapter <<one per direct binding>>
   class Cron
   class "Agent" as ChildTool
 }
@@ -54,6 +58,7 @@ package "Application and external boundaries" {
   class "Cron Service" as CronService
   class "SubagentExecutionService" as ChildService
   class "WorkspacePathResolver" as Resolver
+  class "SKILL.md / references" as Resources <<managed files>>
 }
 package "Independent HTTP command module" {
   class "CompositeCommandRegistry" as Slash
@@ -61,32 +66,41 @@ package "Independent HTTP command module" {
 }
 Hosts --> Factory
 Factory --> Manager
+Manager --> Runtime
+Context --> Runtime
+Executor -[#346DA5]-> Runtime : trusted bindings
 Factory --> Assembler
 Configured ..|> Assembler
 Configured --> ToolFactory
+Configured -[#346DA5]-> MateFactory : direct bindings
+MateFactory .[#346DA5].> Adapter : creates
+MateFactory .[#346DA5].> Executor : creates
 Factory ..> Context
 Context *-- "1" Workspace
 Factory ..> Session
 Session *-- "1" Pipeline
 Session --> Compactor
-Session *-- "1" Cache
+Session *-[#346DA5]- "1" Executor
 Session *-- "1" Hooks
 Session *-- "0..*" Tool
 Pipeline --> Hooks
 Pipeline --> Tool
 ToolFactory ..> Tool
 Local ..|> Tool
-List ..|> Tool
-Call ..|> Tool
+Skill .[#346DA5].|> Tool
+Adapter .[#346DA5].|> Tool
+Call .[#346DA5].|> Tool
 Cron ..|> Tool
 ChildTool ..|> Tool
 InteractionTools ..|> Tool
 Local --> Resolver
 Resolver --> Workspace
-List --> Mate
-List --> Cache
-Call --> Cache
-Call --> Mate
+Skill -[#346DA5]-> Resolver
+Skill -[#346DA5]-> Resources
+Local --> Resources : read
+Adapter -[#346DA5]-> Executor
+Call -[#346DA5]-> Executor
+Executor -[#346DA5]-> Mate : execute once
 Cron --> CronService
 ChildTool --> ChildService
 ChildService -[norank]-> Factory
@@ -97,10 +111,15 @@ Session -[hidden]down-> Local
 legend bottom left
 All nodes and relations describe target assembly.
 Hosts own persistence, output and close policy.
-Only the fixed profile creates model tools; no dynamic registry.
+Model tools = framework profile + direct Agent adapters [P].
+Skill loading never registers its business tools [P].
 Commands use their own HTTP boundary and never enter the model list.
-List refreshes one source; Call discovers on miss and executes once.
-Runtime profile: eleven tools; Cron and Child exclude the three interaction tools.
+Skill resources disclose one business definition at a time [P].
+CallTool uses Skill bindings; adapters use direct Agent bindings [P].
+Runtime: eleven framework tools plus direct Agent adapters [P].
+Cron and Child exclude the three interaction tools.
+[P] nodes and blue relations = Pending implementation.
+Metadata synchronization is designed separately.
 Interaction tools are implemented at Java 8c5fda1d; details in the Plan Mode topic.
 endlegend
 Factory -[hidden]down-> Assembler
@@ -110,7 +129,8 @@ Session -[hidden]down-> Pipeline
 Pipeline -[hidden]down-> Tool
 Tool -[hidden]down-> Local
 Local -[hidden]down-> Resolver
-List -[hidden]down-> Mate
+Skill -[hidden]down-> Resolver
+Call -[hidden]down-> Mate
 Cron -[hidden]down-> CronService
 ChildTool -[hidden]down-> ChildService
 Slash -[hidden]down-> SlashHandlers
@@ -164,7 +184,7 @@ Manager --> Factory : PreparedAgentRuntime
 Factory -> Factory : resolve SYSTEM, model and indexes
 Factory -> Factory : create workspace and context
 Factory -> Tools : assemble(entryPoint, context)
-Tools --> Factory : new tools in profile order
+Tools --> Factory : framework instances + direct Agent adapters [P]
 == Transfer the new Session to its Host ==
 Factory -> Session : create(state, tools, hooks, cancelScope)
 Session --> Factory : ready
@@ -174,6 +194,7 @@ note over Factory,Session
   Same factory and Session type.
   Independent messages, tools, workspace and
   cancellation.
+  [P] = Pending implementation; empty profile yields no tools.
 end note
 @enduml
 
@@ -259,8 +280,8 @@ group refresh(agentId)
 end
 
 note over Published
-  No references/tools.json.
-  Existing sessions retain their snapshots.
+  Existing sessions retain their runtime metadata snapshots.
+  New per-tool document synchronization is designed separately.
   New sessions use the published tree.
 end note
 @enduml
@@ -282,52 +303,48 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-' Source evidence (pi-mono-java 320d790726a70aada6100052952d5494d2a378ac):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/ListMateTool.java: execute.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java: refresh.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:
-' queryToolIdsByAgentId, queryToolIdsBySkillId, and queryToolMetaByIds.
-' Observed behavior: discovery currently receives the same three Mate credentials as execute.
-' Java divergence: current List writes one flat name-to-ID map and Call depends on a prior List.
-' Security hardening: Agent, Skill, and metadata discovery never receive execution credentials.
-' Design reason: List stays live and updates only its source cache without exposing credentials.
-title ListMateTools - Live Discovery and Source Cache
+title Skill Tool Discovery (Pending implementation)
+' Source evidence (OpenCode ebb7b76eca82342642c78645109e865614533827):
+' packages/opencode/src/tool/skill.ts: SkillTool
+' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillPromptFormatter.java: format
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java: execute
+' Observed behavior: CampusClaw currently uses Read for the body and ListMateTools for definitions.
+' Design reason: disclose instructions, then one tool definition, without mutating model tools.
+' Stable block identity retained for existing document links.
 
 actor Model
-participant "ListMateTools" as List
-participant "SkillNameIndex" as Index
-participant "MateToolClient" as Client
-participant "Mate binding API" as Binding
-participant "Mate metadata API" as Meta
-participant "Session source cache" as Cache
-Model -> List : list(skillName?)
-== Resolve the requested scope ==
-alt Agent scope
-  List -> List : use current Agent ID
-else Direct Skill scope
-  List -> Index : resolve(skillName)
-  Index --> List : Skill ID or error
-end
-== Discover live metadata ==
-List -> Client : listAgentTools or listSkillTools
-Client -> Binding : query ordered tool IDs
-Binding --> Client : tool IDs
-Client -> Meta : query metadata(toolIds)
-Meta --> Client : metadata by ID
-Client -> Client : restore binding order
-Client --> List : ordered internal records
-== Commit cache and project the model result ==
-List -> Cache : atomically replace this source
-List --> Model : scope + name / description / inputSchema
-note over Client,Meta
-  Discovery carries no execution credentials.
-  Every List queries Mate; an empty list is
-  success.
+participant "Skill tool" as Skill
+participant "Direct Skill index" as Index
+database "Managed Skill files" as Files
+participant "Read / Ls / Find / Grep" as Read
+participant "CallTool" as Call
+
+Model -> Skill : {name}
+Skill -> Index : resolve visible direct Skill
+Index --> Skill : validated base directory or error
+Skill -> Files : read SKILL.md and sample resource paths
+Files --> Skill : body and at most 10 paths
+Skill --> Model : body, base directory, sampled file list
+note over Model,Skill
+  No business schemas in this result.
+  No tool registration or permission change.
 end note
-note over List,Cache
-  Other source maps remain intact.
-  Model output omits IDs, permission and internal
-  metadata.
+opt needed definition is not in sampled paths
+  Model -> Read : locate the resource within this Skill
+  Read -> Files : list / find / grep
+  Files --> Read : matching paths
+  Read --> Model : bounded results
+end
+Model -> Read : read references/{toolName}.json
+Read -> Files : read one validated path
+Files --> Read : name, description, inputSchema
+Read --> Model : individual tool definition
+Model -> Call : {tool, args}
+Call --> Model : business result through shared executor
+note over Skill,Files
+  Paths use the current Agent workspace boundary.
+  File generation and synchronization are outside this design slice.
 end note
 @enduml
 
@@ -348,80 +365,62 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title CallMateTool Resolution and Credential Forwarding (Pending implementation)
-
-' Source evidence (pi-mono-java 21c3f59be033e7bdd5506a2d9d48baa2581bc3c7):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionCache.java.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:
-' invokeTool and toHeaderInfo.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeRequestContext.java: mateCredentials.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java: requireCredentials.
-' Observed behavior: RuntimeEventService, CallMateTool and HttpMateToolClient reject incomplete credentials.
-' Pending implementation: remove local completeness checks; only Mate decides credential validity.
-' Security hardening: only one Mate execute request receives the POST Events execution snapshot.
-' Design reason: discovery may retry, but execute and its credential exposure occur at most once.
+title Agent Adapters and CallTool (Pending implementation)
+' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeToolPermissionPolicy.java: decide
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java: callTool
+' Observed behavior: current calls use one wrapper; permission policy recognizes only that wrapper.
+' Design reason: two disclosure paths share target resolution, validation and remote execution.
+' Pending implementation: shared executor wiring includes existing Host permission and confirmation hooks.
+' Stable block identity retained for existing document links.
 
 actor Model
-participant "CallMateTool" as Call
-participant "Session resolution cache" as Cache
-participant "Session single-flight" as Flight
+participant "Tool pipeline / Host hooks" as Pipeline
+participant "Agent adapter / CallTool" as Entry
+participant "MateToolExecutor" as Executor
+participant "Trusted business bindings" as Bindings
 participant "MateToolClient" as Client
-participant "Mate APIs" as Mate
+participant "Mate" as Mate
 
-== Resolve a tool name ==
-Model -> Call : {tool, args?}
-Call -> Cache : resolve(toolName)
-alt cache hit
-  Cache --> Call : toolId
-else cache miss
-  Cache --> Call : missing
-  Call -> Flight : join or start full discovery
-  activate Flight
-  Flight -> Client : listAgentTools(currentAgentId)
-  Client -> Mate : discover Agent tools\nno execution credential headers
-  Mate --> Client : ordered records
-  Client --> Flight : Agent records
-  loop every directly bound Skill
-    Flight -> Client : listSkillTools(skillId)
-    Client -> Mate : discover Skill tools\nno execution credential headers
-    Mate --> Client : ordered records
-    Client --> Flight : Skill records
-  end
-  Flight -> Flight : merge all sources
-  alt same name maps to different IDs
-    Flight --> Call : discovery conflict
-    Call --> Model : isError=true
-  else every source succeeded
-    Flight -> Cache : atomically replace full snapshot
-    Flight --> Call : discovery complete
-    Call -> Cache : resolve(toolName) again
-    alt still missing
-      Cache --> Call : missing
-      Call --> Model : isError=true
-    else resolved
-      Cache --> Call : toolId
-    end
-  else discovery failed
-    Flight --> Call : error; old snapshot retained
-    Call --> Model : isError=true
-  end
-  deactivate Flight
+alt Agent direct tool
+  Model -> Pipeline : business_name(args)
+  Pipeline -> Entry : resolve Agent adapter
+else Skill business tool
+  Model -> Pipeline : CallTool({tool, args})
+  Pipeline -> Entry : resolve CallTool
 end
-
-== Execute at most once ==
-opt toolId resolved and execution allowed
-  Call -> Client : callTool(resolved ID, args, possibly empty snapshot)
-  Client -> Mate : execute once; provided non-empty headers only
-  Mate --> Client : validate credentials; result or error
-  Client --> Call : ToolResult; isError=true on failure
-  Call --> Model : ToolResultMessage
+Pipeline -> Pipeline : validate registered tool schema
+Pipeline -> Bindings : Host resolves scope and permission
+Bindings --> Pipeline : permission decision or error
+Pipeline -> Pipeline : existing permission / confirmation once
+alt allowed
+  Pipeline -> Entry : execute
+  Entry -> Executor : business name, args, allowed scope
+  Executor -> Bindings : resolve trusted target and schema
+  Bindings --> Executor : ID and business schema or error
+  Executor -> Executor : validate business args before HTTP
+  opt target and args are valid
+  Executor -> Client : callTool(ID, args, execution credentials)
+  Client -> Mate : one execute request
+  Mate --> Client : authority checks and result
+  Client --> Executor : result or error
+  end
+  Executor --> Entry : normalized result or validation error
+  Entry --> Pipeline : tool result
+else denied / cancelled / invalid outer schema
+  Pipeline -> Pipeline : fail without remote execution
 end
-
-note over Mate
-  Never replay execute after timeout,
-  disconnect, or Mate error. No local completeness check.
-  Never send execution credentials to discovery.
+Pipeline --> Model : ToolResultMessage
+note over Entry,Bindings
+  Adapters use direct Agent bindings.
+  CallTool uses direct Skill bindings.
+  Framework tools and model-provided IDs are not valid targets.
+end note
+note over Client,Mate
+  Forward only the headers provided by the Host.
+  Never replay execute after timeout, disconnect or Mate error.
+  Metadata queries do not carry execution credentials.
 end note
 @enduml
 
@@ -533,7 +532,7 @@ participant "Batch planner" as Planner
 participant "Virtual thread executor" as Executor
 participant "Read call #1" as P1
 participant "Grep call #2" as P2
-participant "CallMateTool #3" as S3
+participant "CallTool #3 [P]" as S3
 participant "Find call #4" as P4
 participant "Ls call #5" as P5
 collections "Ordered results" as Results
@@ -562,8 +561,9 @@ end
 Planner -> Results : store #1, #2, #3, #4, #5
 
 note over Planner
-  PARALLEL: Read, Find, Grep, Ls, ListMateTools.
-  SEQUENTIAL: Cron, CallMateTool, Agent.
+  PARALLEL: Read, Find, Grep, Ls, Skill [P].
+  SEQUENTIAL: Cron, CallTool [P], Agent, business adapters [P].
+  [P] = Pending implementation of new tool entries.
   Results follow model call order, not completion
   order.
 end note

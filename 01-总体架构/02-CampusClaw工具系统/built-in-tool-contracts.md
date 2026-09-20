@@ -2,9 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.7.0 |
-| 状态 | 目标设计；Mate 工具 Schema 不变，凭据可见边界收紧 |
-| 更新日期 | 2026-09-19 |
+| 文档版本 | 3.0.0 |
+| 状态 | 目标设计；Skill、CallTool 与 Agent 直接工具代理待实现，其余状态见源码证据 |
+| 更新日期 | 2026-09-20 |
+| CampusClaw 注册与发现核验基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
 | CampusClaw merge base | `d649866a6cae967ace18ceaeb9597edd47e5721e` |
@@ -14,14 +15,13 @@
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | 上位设计 | [工具系统主设计](README.md) |
 
-活动内置工具共 11 项。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。下列八项基础工具 Schema 保持原值。
+目标框架工具共 11 项，Agent 直接绑定的业务工具代理不计入此数量。`Skill` 替代发现入口 `ListMateTools`，`CallTool` 替代 `CallMateTool`；二者及代理装配均待实现。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
 
-提问工具的精确 Schema、问题/答案与等待边界见 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)。Runtime 默认在 ExitPlanMode、TodoUpdate 后追加它；Child/Cron 不装配，两模式工具定义相同。原八项 Schema 不变，新增工具不新增元数据字段。
+提问工具的精确 Schema、问题/答案与等待边界见 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)。Runtime 默认在 ExitPlanMode、TodoUpdate 后追加它；Child/Cron 不装配，两模式工具定义相同。
 
 ## 1. 契约总则
 
-基础工具契约包含下表中的 8 个内置工具；另外三个已实现的交互工具契约见上方链接。`name` 使用区分大小写的 PascalCase，
-实现、配置、模型请求和事件中的工具名必须完全一致，不提供旧名别名。
+基础工具契约包含下表中的 8 个框架工具；另外三个已实现的交互工具契约见上方链接。框架工具 `name` 使用区分大小写的 PascalCase，实现、配置、模型请求和事件中的工具名必须完全一致，不提供旧名别名。业务工具保留可信元数据中的名称与 Schema，不强制转换大小写。
 
 | Name | Description | 执行模式 | 成功输出 |
 |---|---|---|---|
@@ -30,14 +30,13 @@
 | `Grep` | `Search file contents for a pattern.` | `PARALLEL` | 带路径和行号的匹配文本 |
 | `Ls` | `List directory contents.` | `PARALLEL` | 排序后的目录项文本 |
 | `Cron` | `Manage scheduled tasks bound to the current managed Agent.` | `SEQUENTIAL` | Job 或 Run 摘要文本 |
-| `ListMateTools` | `List live Mate tools for the current Agent or one directly bound Skill.` | `PARALLEL` | 稳定 JSON 文本 |
-| `CallMateTool` | `Call a Mate tool by name.` | `SEQUENTIAL` | Mate 执行结果文本 |
+| `Skill` | `Load instructions and resource paths for an available Skill by name.` | `PARALLEL` | 正文、基础目录、抽样资源绝对路径 |
+| `CallTool` | `Call a managed business tool available through a directly bound Skill. Read its definition when needed.` | `SEQUENTIAL` | 业务工具执行结果文本 |
 | `Agent` | `Run one directly bound child Agent and return its final answer.` | `SEQUENTIAL` | Child 最终 Assistant 文本 |
 
-所有输入 Schema 均为 JSON Schema 2020-12 对象 Schema，并显式设置
+框架工具输入 Schema 均为 JSON Schema 2020-12 对象 Schema，并显式设置
 `additionalProperties: false`。默认值由工具或 Service 统一归一化，不在 Schema 中写
-`default`。Pipeline 必须先完成 Schema 校验，再进入 before hook、执行、after hook 和
-事件投影。
+`default`。Pipeline 先校验当前模型工具的输入 Schema，再进入 before hook、执行、after hook 和事件投影：Agent 代理校验完整业务 Schema，`CallTool` 在此只校验 `tool/args` 外层 Schema。
 
 所有工具最终统一产生 `ToolResultMessage`：
 
@@ -47,6 +46,8 @@
 - `details` 是 Runtime 内部扩展位，不属于模型可依赖的稳定公共契约；
 - 配置决定工具是否暴露，运行条件只在调用时检查；已暴露但缺少上下文时返回
   `unavailable`，不临时改变本轮工具列表。
+
+模型工具集合由当前入口的框架工具和 Agent 直接绑定工具的代理组成。仅由 Skill 绑定的工具不展开为独立模型工具；同一工具同时由 Agent 直接绑定时，已有一个常驻代理。`Skill` 和 `Read` 均不增加工具或改变授权。注册与发现的职责见[主设计 §9](README.md#9-工具注册与发现)。
 
 `Read`、`Find`、`Grep`、`Ls` 共用由 `PreparedAgentRuntime.agentRoot()` 创建的不可变
 `AgentWorkspaceBoundary`。其根精确为当前 `agent/{agentId}`，不是进程 cwd，也不是
@@ -217,94 +218,94 @@ Cron Host 独立设计；当前 JSON 存储、进程内 scheduler 和 OS CLI 调
 
 可用条件：Runtime Session 具有受管 Agent 身份和 Agent 隔离的 Cron 管理上下文。
 
-## 4. Mate 工具
+## 4. Skill 与受管业务工具
 
-### 4.1 `ListMateTools`
+本节为待实现契约。工具定义如何生成、同步、刷新及维持版本一致性留后续设计；不改变 `skill.json` 的位置，不在这里指定缓存、single-flight 或自动刷新策略。
+
+### 4.1 `Skill`
 
 ```json
 {
   "type": "object",
   "properties": {
-    "skillName": {"type": "string", "description": "Exact name of one Skill directly bound to the current Agent."}
+    "name": {"type": "string", "description": "Exact name of an available Skill directly bound to the current Agent."}
   },
+  "required": ["name"],
   "additionalProperties": false
 }
 ```
 
-无 `skillName` 时实时查询当前 Agent 工具；有值时先通过本地 `skill.json` 索引解析直接
-绑定 Skill ID，再实时查询该 Skill 工具。未知名称、非直接绑定、名称冲突或远端错误返回
-`isError=true`；空集合是成功结果。
+宿主在初始提示词中提供可见 Skill 的名称和描述；模型匹配任务后调用 `Skill`。工具只解析当前 Agent 直接绑定且对模型可见的 Skill，返回其正文、基础目录和资源路径；不读取所有资源内容，也不展开业务工具 Schema。
 
-成功输出是键顺序稳定的 JSON 文本：
+成功输出采用以下文本结构，正文不包含 YAML frontmatter：
+
+```xml
+<skill_content name="course">
+# Skill: course
+Skill instructions...
+
+Base directory for this skill: /.../.campusclaw/skills/course
+Relative resource paths are relative to this base directory.
+Note: file list is sampled.
+
+<skill_files>
+<file>/.../.campusclaw/skills/course/references/query-course.json</file>
+</skill_files>
+</skill_content>
+```
+
+资源清单只列 Skill 目录内的普通资源文件绝对路径，排除 `SKILL.md`，最多 10 条并明确提示 sampled；不生成用途简介。扫描沿用工作区边界且不跟随符号链接。清单不完整时模型可以使用 `Ls`、`Find`、`Grep` 定位其余资源，再用普通 `Read` 读取。
+
+Skill 业务工具定义以单文件 `references/<toolName>.json` 提供：
 
 ```json
 {
-  "scope": {"type": "agent"},
-  "tools": [
-    {
-      "name": "ExampleTool",
-      "description": "Example description",
-      "inputSchema": {"type": "object", "properties": {}}
-    }
-  ]
+  "name": "query-course",
+  "description": "查询课程",
+  "inputSchema": {
+    "type": "object",
+    "properties": {"courseName": {"type": "string"}},
+    "required": ["courseName"],
+    "additionalProperties": false
+  }
 }
 ```
 
-Skill 查询时 `scope` 固定为：
+文件只披露 `name`、`description`、`inputSchema`，不包含内部 ID、绑定权限、凭据或 Mate 原始信封；工具名称须能作为安全文件名，不允许路径分隔符或目录穿越。定义文件不是执行授权来源。业务步骤无需逐个引用所有文件；使用时按需读取，当前上下文已有完整定义时无需重复读取。`Skill`、`Read` 都不建立“已激活”状态，也不修改模型 `tools`。
 
-```json
-{"type": "skill", "name": "research"}
-```
+未知名称、不可见或非直接绑定、目录或文件不可读返回 `isError=true`；没有资源文件仍是成功结果。可用条件：当前受管 Agent、可见的直接 Skill 索引、工作区边界和取消域。
 
-输出不得包含 Agent ID、Skill ID、tool ID、`permission`、`outputSchema`、并发属性或 Mate
-原始信封。`MateToolClient.listAgentTools(agentId)` 和 `listSkillTools(skillId)` 先获得按
-绑定顺序排列的内部 tool ID，再批量查询元数据，以 ID 关联并恢复顺序，最后丢弃 ID。
-
-每次 List 都访问 Mate，不使用查询结果缓存。成功后只更新该来源在当前 Session 的
-名称到 ID 缓存快照，以便 Call 复用；不得清空其他 Agent/Skill 来源。
-所有 Agent binding、Skill binding 和 Tool metadata 发现 HTTP 请求都不得携带
-`X-HW-ID`、`Authorization`、`X-HW-APPKEY` 或 `access-token`。
-
-可用条件：Session 具有当前受管 Agent、直接 Skill 索引、Mate 查询能力和 Session 缓存。
-
-### 4.2 `CallMateTool`
+### 4.2 `CallTool`
 
 ```json
 {
   "type": "object",
   "properties": {
-    "tool": {"type": "string", "description": "Exact Mate tool name to call."},
-    "args": {"type": "object", "description": "Arguments passed unchanged to the selected Mate tool."}
+    "tool": {"type": "string", "description": "Exact business tool name from a directly bound Skill's definition file."},
+    "args": {"type": "object", "description": "Arguments for the selected business tool; omitted means an empty object."}
   },
   "required": ["tool"],
   "additionalProperties": false
 }
 ```
 
-`args` 缺省时归一化为空对象。模型只给出工具名，不传 Skill、scope 或 tool ID。调用流程：
+`args` 缺省时归一化为空对象。宿主按可信绑定解析当前 Agent 直接绑定 Skill 的工具；模型不传 Skill、scope、tool ID 或 URL。不解析仅由 Agent 直接绑定的工具，不转发 `Read`、`Skill`、`Agent` 等框架工具；同一工具同时属于 Agent 和 Skill 时仍须满足 Skill 绑定范围。
 
-1. 在当前 Session 的完整有效名称到 ID 快照中查找 `tool`；
-2. 命中则直接调用 Mate；
-3. 未命中时通过 Session 内 single-flight 实时发现当前 Agent 与所有直接绑定 Skill 的
-   完整工具集合；
-4. 同名同 ID 合并，同名不同 ID 使刷新失败；所有来源成功后原子替换完整快照；
-5. 再查一次名称；仍未命中则返回未知工具错误；
-6. 命中后只调用一次 Mate execute。
+权限与确认继续由 Host before hook 执行；两种入口使用同一可信绑定解析和 `RuntimeToolPermissionPolicy`。`MateToolExecutor` 负责可信解析、业务 Schema 校验和 Mate 调用；`CallTool.args` 的业务校验在 execute 内完成，只要求发生在实际 HTTP 调用前，不改变确认生命周期。未知名称、歧义名称、未绑定、拒绝或参数错误均返回 `isError=true`；不能依据模型传入的定义文件内容扩展可调用范围。是否已读取 Skill 或定义文件不作为授权条件。
 
-自动刷新只重试发现，不重放实际工具调用。Mate execute 一旦发出，无论超时、连接断开、
-业务失败或返回未知工具，都不进行自动重试，避免副作用重复。Mate 继续负责最终授权、
-凭据、参数校验与执行。
+实际 Mate execute 只发出一次；超时、断线或业务失败不自动重放。可用条件：当前受管 Agent、可信直接 Skill 工具绑定、共享 Mate 执行能力及当前 Host execution 上下文。
 
-`CallMateTool` 只在实际 execute HTTP 请求中读取本次 POST Events execution 的
-不可变瞬态快照，并原名透传其中已提供的 `X-HW-ID`、`Authorization`、
-`X-HW-APPKEY` 和 `access-token`。不生成缺失值，不改写为 `X-Access-Token`，不将
-快照传给发现、模型或其他出站请求。快照不写日志、Session、Prompt、
-ToolResult 或持久化存储，execution 结束即丢弃。
+### 4.3 Agent 直接工具代理
 
-可用条件：Session 具有当前受管 Agent、完整直接 Skill 索引、`MateToolClient`、当前 Host execution 上下文、
-Session 缓存和 single-flight 协调器。凭据不是可用条件；上下文中的不可变快照允许四项全缺失或部分缺失，
-不得因此返回 unavailable 或隐藏工具。调用条件满足后实际请求 Mate，由 Mate 校验并将失败映射为
-`isError=true`，不在 Claw 构造最低完整性错误。精确边界和验收见[主设计 §9.2](README.md#mate-credential-forwarding)。
+宿主通过 `MateToolsetFactory` 对 Agent 直接绑定的每个工具实例化同一种 `MateToolAdapter implements AgentTool`，以实际 `name`、`description`、`inputSchema` 加入模型工具集合。业务 Schema 保留原义，不套用 `CallTool` 的 `tool/args` 外壳，也不为每个业务工具新增 Java 类或本地业务实现。
+
+代理与 `CallTool` 共享 `MateToolExecutor` 的可信解析、业务 Schema 校验和 Mate 调用；权限与确认仍接入 Host before hook，默认串行执行。框架名称保留，同名同 ID 的业务工具可去重，同名不同 ID 或与框架重名必须明确失败，不能静默覆盖或自动改名。仅由 Skill 绑定的工具不创建模型代理；读取 Skill 或定义文件不触发注册。
+
+### 4.4 凭据边界
+
+代理和 `CallTool` 只在实际 execute HTTP 请求中读取本次 POST Events execution 的不可变瞬态快照，原名透传已提供的 `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 和 `access-token`；不生成缺失值，不改写为 `X-Access-Token`。所有 Agent binding、Skill binding 和 Tool metadata 请求都不得携带这些凭据。
+
+凭据不进入发现、模型或其他出站请求，不写日志、Session、Prompt、ToolResult 或持久化存储，execution 结束即丢弃。快照允许全部或部分缺失，不因此隐藏工具或返回 unavailable；实际请求由 Mate 校验，不在 Claw 构造最低完整性错误。精确边界和验收见[主设计凭据边界](README.md#mate-credential-forwarding)。
 
 ## 5. `Agent`
 
@@ -347,7 +348,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 ## 6. 缺省 profile
 
-应用配置显式数组完全替换对应缺省值；显式空数组表示该入口无模型工具。
+应用配置显式数组完全替换对应框架工具缺省值；非空 profile 再追加当前 Agent 直接绑定的业务工具代理。显式空数组保留“该入口无模型工具”的语义，连同代理一并关闭。该追加行为待实现。
 
 | 工具 | Runtime | Cron | Child Agent |
 |---|:---:|:---:|:---:|
@@ -356,8 +357,8 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 | `Grep` | ✓ | ✓ | ✓ |
 | `Ls` | ✓ | ✓ | ✓ |
 | `Cron` | ✓ |  |  |
-| `ListMateTools` | ✓ | ✓ | ✓ |
-| `CallMateTool` | ✓ | ✓ | ✓ |
+| `Skill` | ✓ | ✓ | ✓ |
+| `CallTool` | ✓ | ✓ | ✓ |
 | `Agent` | ✓ | ✓ |  |
 | `ExitPlanMode` | ✓ |  |  |
 | `TodoUpdate` | ✓ |  |  |
@@ -370,9 +371,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 `Bash`、`Edit`、`Write` 不属于公共枚举、配置、工厂或模型契约，其工具源码和专属支撑完全删除，
 不保留未装配实现、别名或隐藏开关；删除边界和验收由[主设计 §12.4](README.md#124-删除禁用与替换)维护。
-11 项活动契约与 Runtime/Cron/Child profile 不变。`Loop`、`activate_skill`、`EditDiff`、`spawn_agent`、
-`invoke_agent`、动态 `ToolCatalog` 和 Extension 工具入口属于迁移删除项。本节仅记录迁移
-边界，不为这些名称保留 Schema、别名或兼容执行器。
+目标保留 11 项框架契约，`ListMateTools` 和 `CallMateTool` 从枚举、配置、工厂与模型入口移除，不保留别名；底层元数据获取和 Mate 执行能力复用。`Loop`、`activate_skill`、`EditDiff`、`spawn_agent`、`invoke_agent`、旧动态 `ToolCatalog` 和 Extension 工具入口属于迁移删除项，不为这些名称保留 Schema、别名或兼容执行器；Agent 直接绑定工具的元数据代理是本版新增目标，不恢复旧目录激活机制。
 
 ## 8. 源码观察与目标差异
 
@@ -382,6 +381,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.0.0 | 2026-09-20 | Agent 直接工具采用元数据代理，Skill 工具经 Skill、Read 与 CallTool 按需发现调用。 |
 | 2.7.0 | 2026-09-19 | CallMateTool 区分执行上下文与可为空的凭据，取消凭据完整性可用条件。 |
 | 2.6.0 | 2026-09-18 | 明确删除 Bash/Edit/Write 本体及专属支撑，不再保留未装配代码。 |
 | 2.5.0 | 2026-09-18 | 登记三个已实现交互工具及十一项 Runtime 默认清单。 |
