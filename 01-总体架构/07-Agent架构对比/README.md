@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.39.0 |
-| 更新日期 | 2026-09-20 |
+| 文档版本 | 1.39.1 |
+| 更新日期 | 2026-09-21 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -346,11 +346,11 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | OpenCode 观察 | `SkillTool` 仅接收 name，返回正文、基础目录和最多 10 个抽样文件路径，后续资源由普通 read 获取；`convertTool` 把 MCP 名称对应的描述、inputSchema 和 client.callTool 包装成通用工具，普通工具路径将其提供给模型，实验性 Code Mode 另行处理。Skill 加载与 MCP 工具注册分离，不等同于本设计的 Skill 绑定 JSON 调用机制。 |
 | DSH 观察 | `apply` 注册 skill(name)，`renderSkillContent` 返回正文与资源基础位置，不枚举文件；`syncTools/createMcpToolDefinition` 将 MCP 定义注册为工具并统一远端调用。版本 `0.1.6-alpha.2` 为开发预览；这里只采纳职责分离，不迁入 Cordis 或 MCP 协议。 |
 | CampusClaw 已观察实现 | Java `SkillPromptFormatter.format` 指引普通 Read 读取正文；`ListMateToolsTool.execute/stableJson` 一次返回当前 Agent 或指定 Skill 的整组定义；`CallMateTool.execute` 按名称解析 ID 后调用 Mate。所核验的 `DefaultBuiltInToolFactory` 与 `MateToolsetFactory` 装配链尚无专用 Skill 工具或 Agent 业务工具代理。完整 SHA、仓库相对路径及符号见[专项证据](../02-CampusClaw工具系统/source-evidence.md#skill-tool-discovery-evidence)。 |
-| 已确认目标 | Agent 直接绑定工具以通用代理提供模型 Schema；Skill 采用 OpenCode 的正文与资源路径入口，具体定义由 Read 按需读取，再经 CallTool 执行。读取 Skill 或资源不增加模型工具或权限；ListMateTools 退出模型工具列表。具体参数、可用范围与命名规则由主设计唯一维护。 |
-| 差异分类 | 产品约束：不引入 Bash 或可执行脚本，Skill 工具要求逐工具披露；架构变更：按绑定来源区分模型暴露方式，两种入口共用 Mate 执行与授权，Skill 绑定定义以参考文件提供。这是 CampusClaw 的选择，不是基线 Skill 规范的强制要求。 |
+| 已确认目标 | Agent 直接关联的业务工具以通用代理提供模型 Schema；Skill 采用 OpenCode 的正文与资源路径入口，具体定义由 Read 按需读取，再经 CallTool 执行。读取 Skill 或资源不增加模型工具或权限；ListMateTools 退出模型工具列表。具体参数、可用范围与命名规则由主设计唯一维护。 |
+| 差异分类 | 产品约束：不引入 Bash 或可执行脚本，Skill 工具要求逐工具披露；架构变更：按工具关联来源区分模型暴露方式，两种入口共用 Mate 执行与授权，Skill 关联的业务工具定义以参考文件提供。这是 CampusClaw 的选择，不是基线 Skill 规范的强制要求。 |
 | 收益与代价 | 常规工具直接调用，Skill 工具无需整组 Schema 常驻；不维护 Skill 加载后的工具注入状态。代价是两种模型调用形式、首次读取定义的额外步骤，普通读取结果仍可能被压缩；重读和业务参数校验不能等同于模型永不遗忘，也无已验证的性能提升。 |
 | 范围与重评 | 这里只确定注册、发现与调用入口；数据同步、刷新及版本一致性另行设计。暂不增加 ToolSearch、Skill 整组注入或单工具动态注入；将来资源定位成本成为实测问题时，再评估发现入口。 |
-| 状态与验收 | 已确认目标；Skill、CallTool、Agent 代理及配套发现链待实现。验收应证明初始工具集合不含仅由 Skill 绑定的业务 Schema、读取不改工具集合、Agent 代理与 CallTool 共用授权校验、资源抽样可继续查找；细则见主设计，文档校验不代表产品验收。 |
+| 状态与验收 | 已确认目标；Skill、CallTool、Agent 代理及配套发现链待实现。验收应证明初始工具集合不含仅由 Skill 关联的业务工具 Schema、读取不改工具集合、Agent 代理与 CallTool 共用授权校验、资源抽样可继续查找；细则见主设计，文档校验不代表产品验收。 |
 
 **讲解要点。** 参考 OpenCode 的 Skill 资源入口和 OpenCode/DSH 的通用远端适配，CampusClaw 将执行复用与定义披露分开：Agent 直接工具进入模型工具集合，Skill 工具在需要时读取定义后通过固定入口执行。它保留逐工具披露且不引入动态注入状态，代价是额外读取与双入口；同步设计和实现验收仍待完成。
 
@@ -410,6 +410,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.39.1 | 2026-09-21 | A11 采用“关联的业务工具”表述配置关系，架构与权限结论不变。 |
 | 1.39.0 | 2026-09-20 | 增加 Agent 远端代理与 Skill 工具按需披露的 A11 对比，明确 CallTool 及独立同步边界。 |
 | 1.38.0 | 2026-09-19 | 计划标记由后端解析，公共事件采用 delta/completed 并保留审核事务边界。 |
 | 1.37.0 | 2026-09-19 | A06 对比 Mate 输出权威与按执行查询窗口，记录生命周期、故障代价及 pi 摘要差异。 |

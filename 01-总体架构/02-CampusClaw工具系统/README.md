@@ -2,19 +2,19 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.14.4 |
+| 文档版本 | 2.14.5 |
 | 状态 | 当前目标；Skill / CallTool、Agent 工具代理及共用执行适配待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-09-21 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [11 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
-本设计区分框架工具、Agent 直接绑定业务工具与 Skill 绑定业务工具。注册和发现增量见 [§9](#9-工具注册与发现)，当前源码及基线对照见[专项证据](source-evidence.md#skill-tool-discovery-evidence)。新增工具定义的数据来源接入、文件生成、同步、缓存刷新与版本一致性另行设计；本页不指定新同步方案。
+本设计区分框架工具、Agent 直接关联的业务工具与 Skill 关联的业务工具。“关联”表示 Agent 或 Skill 与业务工具的配置关系，不代表执行授权；实际调用仍须通过权限检查。注册和发现增量见 [§9](#9-工具注册与发现)，当前源码及基线对照见[专项证据](source-evidence.md#skill-tool-discovery-evidence)。新增工具定义的数据来源接入、文件生成、同步、缓存刷新与版本一致性另行设计；本页不指定新同步方案。
 
 `ExitPlanMode`、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md) 和 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 已在 Runtime 主线实现，plan/build 共用定义；具体交互及实现范围由[计划专题](../06-CampusClaw计划模式/README.md)维护。Mate 公共桥接状态独立判断。
 
 ## 1. 设计结论
 
-CampusClaw 通过 Runtime、Cron 和 Child 三个入口运行 Agent。框架工具采用严格启动 profile；宿主另按当前 Agent 的直接业务绑定创建远端代理。Skill 绑定工具逐个按需披露，通过固定入口 `CallTool` 执行。11 个区分大小写的框架工具如下，业务代理不计入该数量：
+CampusClaw 通过 Runtime、Cron 和 Child 三个入口运行 Agent。框架工具采用严格启动 profile；宿主另按当前 Agent 直接关联的业务工具创建远端代理。Skill 关联的业务工具逐个按需披露，通过固定入口 `CallTool` 执行。11 个区分大小写的框架工具如下，业务代理不计入该数量：
 
 ```text
 Read
@@ -56,8 +56,8 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 | 类型 | 第一次提供给模型的内容 | 模型如何使用 |
 |---|---|---|
 | 框架工具，如 `Read`、`Skill`、`CallTool` | 按入口配置（profile）把完整工具定义放入 `tools` | 按框架工具名称直接调用 |
-| 当前 Agent 直接绑定的业务工具 | 把完整业务工具定义放入 `tools` | 按业务工具名称直接调用 |
-| 可见 Skill 及其绑定的业务工具 | 提示词只列出 Skill 名称、描述和使用规则；仅由 Skill 绑定的业务工具定义不放入 `tools` | 按需通过 `Skill` 加载正文、通过 `Read` 读取单个业务工具定义，再经 `CallTool` 执行 |
+| 当前 Agent 直接关联的业务工具 | 把完整业务工具定义放入 `tools` | 按业务工具名称直接调用 |
+| 可见 Skill 及其关联的业务工具 | 提示词只列出 Skill 名称、描述和使用规则；仅由 Skill 关联的业务工具定义不放入 `tools` | 按需通过 `Skill` 加载正文、通过 `Read` 读取单个业务工具定义，再经 `CallTool` 执行 |
 
 **加载 Skill 或读取业务工具定义只补充模型上下文，不扩充 `tools` 集合。** 完整调用示例见 [§1.2](#skill-call-scenario)。
 
@@ -217,7 +217,7 @@ campusclaw:
 三个键遵循相同严格规则：
 
 1. 键缺失时使用上例缺省值；
-2. 显式 `[]` 表示该入口完全不向模型提供工具，模型请求的 `tools=[]`，框架工具和 Agent 直接绑定业务工具均不提供；
+2. 显式 `[]` 表示该入口完全不向模型提供工具，模型请求的 `tools=[]`，框架工具和 Agent 直接关联的业务工具均不提供；
 3. 非空数组完全替换框架缺省值，不做 merge；宿主另追加当前 Agent 直接业务工具代理；
 4. 未知、重复、旧名或大小写错误阻止应用启动；
 5. 配置只在启动期绑定和验证，目录 `refresh` 不重新读取配置；
@@ -365,10 +365,10 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 | 来源 | 模型如何发现 | 模型如何调用 |
 |---|---|---|
 | 框架工具 | 入口 profile | 按框架名称直接调用 |
-| Agent 直接绑定工具 | 装配 `MateToolAdapter`，提供完整 name / description / inputSchema | 按业务工具名称直接调用 |
-| 直接 Skill 绑定工具 | Skill 目录 → `Skill({name})` → 按需 `Read` 单个定义文件 | `CallTool({tool,args?})` |
+| Agent 直接关联的业务工具 | 装配 `MateToolAdapter`，提供完整 name / description / inputSchema | 按业务工具名称直接调用 |
+| 直接 Skill 关联的业务工具 | Skill 目录 → `Skill({name})` → 按需 `Read` 单个定义文件 | `CallTool({tool,args?})` |
 
-初始模型工具集合是框架工具加 Agent 直接业务代理；仅由 Skill 绑定的业务 Schema 不提前加入，也不在读取 Skill 后整组或逐个注入。宿主保留工具的绑定来源；代理名称和模型可读 JSON 都不能代替执行授权。`ListMateTools` 退出模型工具列表，底层元数据查询能力仍由宿主使用。
+初始模型工具集合是框架工具加 Agent 直接业务代理；仅由 Skill 关联的业务工具 Schema 不提前加入，也不在读取 Skill 后整组或逐个注入。宿主保留工具的关联来源；代理名称和模型可读 JSON 都不能代替执行授权。`ListMateTools` 退出模型工具列表，底层元数据查询能力仍由宿主使用。
 
 `Skill` 只接收 `name`，按当前 Agent 可见的直接 Skill 精确解析，返回正文、基础目录和除 `SKILL.md` 外最多 10 个资源文件的绝对路径，明确清单为抽样。文件内容不随清单展开，路径遵守 §5 的工作区边界；遗漏文件通过 `Ls/Find/Grep` 定位，具体文件继续由普通 `Read` 读取。不提供 `resource` 参数或在每个业务步骤中强制引用文件；也不强制每次调用前重复读取已在上下文中的完整定义。
 
@@ -384,7 +384,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 `MateToolAdapter` 和 `CallTool` 共用 `MateToolExecutor`，由可信绑定解析执行目标和业务 Schema，使用现有校验能力检查业务参数并请求 Mate。权限与确认仍由 Host 的既有 before hook 承担，两入口共用可信绑定和权限策略，不把确认生命周期迁入执行器。代理的完整 Schema 进入模型请求；`CallTool` 的固定外层 Schema 不替代业务参数校验。定义文件只是模型说明，不作为执行目标或权限的权威来源。
 
-代理传入 Agent 直接绑定范围，CallTool 传入直接 Skill 绑定范围；两者经各自的参数转换后委托同一个执行器。目标解析、参数校验、Mate 请求和结果返回见[执行细节：业务执行](execution-details.md#business-execution)。
+代理传入 Agent 直接关联的业务工具范围，CallTool 传入直接 Skill 关联的业务工具范围；两者经各自的参数转换后委托同一个执行器。目标解析、参数校验、Mate 请求和结果返回见[执行细节：业务执行](execution-details.md#business-execution)。
 
 逐工具读取减少无关定义并提供重读入口，不保证模型永不遗忘。定义不可读或参数校验失败应返回明确错误；模型按错误补充读取、修正参数。读取 Skill/JSON 不是授权状态，不增加已加载工具集合。实际执行请求一经发出，超时、断连和 Mate 错误均不自动重放。
 
@@ -574,7 +574,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 | 任意动态 `ToolCatalog`、`DefaultToolCatalog`、`ToolSelection` | 框架 profile 与受管 Agent 代理装配 |
 | Java Extension 工具、manifest tools/commands、PackageManager | 完全删除；Skill 只扫描受管目录 |
 | `activate_skill`、`ListMateTools` | `Skill` 加载指引，`Read` 按需读取单个工具定义 |
-| `CallMateTool` | `CallTool`，保留 `{tool,args?}` 并限定 Skill 绑定业务范围 |
+| `CallMateTool` | `CallTool`，保留 `{tool,args?}` 并限定 Skill 关联的业务工具范围 |
 | `EditDiff` | 无；写工具首版硬禁用 |
 | `spawn_agent`、`invoke_agent` 和 Session delegation after-hook | `Agent` + `SubagentExecutionService` |
 | ACP/HTTP/A2A SubAgent backend、registry、approval placeholder | 不进入首版 Child Agent Execution |
@@ -680,6 +680,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.14.5 | 2026-09-21 | 使用“关联的业务工具”描述配置关系，明确关联不等于执行授权。 |
 | 2.14.4 | 2026-09-21 | 明确显式空配置完全不提供模型工具，并区分配置缺失时的默认值。 |
 | 2.14.3 | 2026-09-21 | 用分类表说明初始模型工具与 Skill 的披露和调用方式，移除重复时序图。 |
 | 2.14.2 | 2026-09-21 | 主文突出初始工具集合与完整 Skill 场景，对象调用和批次时序集中到执行细节。 |

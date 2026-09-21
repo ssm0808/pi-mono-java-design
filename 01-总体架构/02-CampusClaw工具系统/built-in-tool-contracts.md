@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.0.1 |
+| 文档版本 | 3.0.2 |
 | 状态 | 目标设计；Skill、CallTool 与 Agent 直接工具代理待实现，其余状态见源码证据 |
 | 更新日期 | 2026-09-21 |
 | CampusClaw 注册与发现核验基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` |
@@ -15,7 +15,7 @@
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | 上位设计 | [工具系统主设计](README.md) |
 
-目标框架工具共 11 项，Agent 直接绑定的业务工具代理不计入此数量。`Skill` 替代发现入口 `ListMateTools`，`CallTool` 替代 `CallMateTool`；二者及代理装配均待实现。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
+目标框架工具共 11 项，Agent 直接关联的业务工具代理不计入此数量。`Skill` 替代发现入口 `ListMateTools`，`CallTool` 替代 `CallMateTool`；二者及代理装配均待实现。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
 
 提问工具的精确 Schema、问题/答案与等待边界见 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)。Runtime 默认在 ExitPlanMode、TodoUpdate 后追加它；Child/Cron 不装配，两模式工具定义相同。
 
@@ -47,7 +47,7 @@
 - 配置决定工具是否暴露，运行条件只在调用时检查；已暴露但缺少上下文时返回
   `unavailable`，不临时改变本轮工具列表。
 
-模型工具集合由当前入口的框架工具和 Agent 直接绑定工具的代理组成。仅由 Skill 绑定的工具不展开为独立模型工具；同一工具同时由 Agent 直接绑定时，已有一个常驻代理。`Skill` 和 `Read` 均不增加工具或改变授权。注册与发现的职责见[主设计 §9](README.md#9-工具注册与发现)。
+模型工具集合由当前入口的框架工具和 Agent 直接关联的业务工具的代理组成。仅由 Skill 关联的业务工具不展开为独立模型工具；同一工具同时与 Agent 直接关联时，已有一个常驻代理。`Skill` 和 `Read` 均不增加工具或改变授权。注册与发现的职责见[主设计 §9](README.md#9-工具注册与发现)。
 
 `Read`、`Find`、`Grep`、`Ls` 共用由 `PreparedAgentRuntime.agentRoot()` 创建的不可变
 `AgentWorkspaceBoundary`。其根精确为当前 `agent/{agentId}`，不是进程 cwd，也不是
@@ -289,7 +289,7 @@ Skill 业务工具定义以单文件 `references/<toolName>.json` 提供：
 }
 ```
 
-`args` 缺省时归一化为空对象。宿主按可信绑定解析当前 Agent 直接绑定 Skill 的工具；模型不传 Skill、scope、tool ID 或 URL。不解析仅由 Agent 直接绑定的工具，不转发 `Read`、`Skill`、`Agent` 等框架工具；同一工具同时属于 Agent 和 Skill 时仍须满足 Skill 绑定范围。
+`args` 缺省时归一化为空对象。宿主按可信绑定解析当前 Agent 直接绑定 Skill 的工具；模型不传 Skill、scope、tool ID 或 URL。不解析仅与 Agent 直接关联的业务工具，不转发 `Read`、`Skill`、`Agent` 等框架工具；同一工具同时属于 Agent 和 Skill 时仍须满足 Skill 关联的业务工具范围。
 
 权限与确认继续由 Host before hook 执行；两种入口使用同一可信绑定解析和 `RuntimeToolPermissionPolicy`。`MateToolExecutor` 负责可信解析、业务 Schema 校验和 Mate 调用；`CallTool.args` 的业务校验在 execute 内完成，只要求发生在实际 HTTP 调用前，不改变确认生命周期。未知名称、歧义名称、未绑定、拒绝或参数错误均返回 `isError=true`；不能依据模型传入的定义文件内容扩展可调用范围。是否已读取 Skill 或定义文件不作为授权条件。
 
@@ -297,9 +297,9 @@ Skill 业务工具定义以单文件 `references/<toolName>.json` 提供：
 
 ### 4.3 Agent 直接工具代理
 
-宿主通过 `MateToolsetFactory` 对 Agent 直接绑定的每个工具实例化同一种 `MateToolAdapter implements AgentTool`，以实际 `name`、`description`、`inputSchema` 加入模型工具集合。业务 Schema 保留原义，不套用 `CallTool` 的 `tool/args` 外壳，也不为每个业务工具新增 Java 类或本地业务实现。
+宿主通过 `MateToolsetFactory` 对 Agent 直接关联的每个业务工具实例化同一种 `MateToolAdapter implements AgentTool`，以实际 `name`、`description`、`inputSchema` 加入模型工具集合。业务 Schema 保留原义，不套用 `CallTool` 的 `tool/args` 外壳，也不为每个业务工具新增 Java 类或本地业务实现。
 
-代理与 `CallTool` 共享 `MateToolExecutor` 的可信解析、业务 Schema 校验和 Mate 调用；权限与确认仍接入 Host before hook，默认串行执行。框架名称保留，同名同 ID 的业务工具可去重，同名不同 ID 或与框架重名必须明确失败，不能静默覆盖或自动改名。仅由 Skill 绑定的工具不创建模型代理；读取 Skill 或定义文件不触发注册。
+代理与 `CallTool` 共享 `MateToolExecutor` 的可信解析、业务 Schema 校验和 Mate 调用；权限与确认仍接入 Host before hook，默认串行执行。框架名称保留，同名同 ID 的业务工具可去重，同名不同 ID 或与框架重名必须明确失败，不能静默覆盖或自动改名。仅由 Skill 关联的业务工具不创建模型代理；读取 Skill 或定义文件不触发注册。
 
 ### 4.4 凭据边界
 
@@ -348,7 +348,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 ## 6. 缺省 profile
 
-配置项缺失时使用下表默认值；显式 `[]` 时完全不向模型提供工具，模型请求的 `tools=[]`；非空数组完全替换框架工具缺省值，并在装配开关与绑定约束允许时追加当前 Agent 直接绑定的业务工具代理，代理追加行为待实现。完整配置规则见[主设计 §4.2](README.md#42-工具配置)。
+配置项缺失时使用下表默认值；显式 `[]` 时完全不向模型提供工具，模型请求的 `tools=[]`；非空数组完全替换框架工具缺省值，并在装配开关与绑定约束允许时追加当前 Agent 直接关联的业务工具代理，代理追加行为待实现。完整配置规则见[主设计 §4.2](README.md#42-工具配置)。
 
 | 工具 | Runtime | Cron | Child Agent |
 |---|:---:|:---:|:---:|
@@ -371,7 +371,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 `Bash`、`Edit`、`Write` 不属于公共枚举、配置、工厂或模型契约，其工具源码和专属支撑完全删除，
 不保留未装配实现、别名或隐藏开关；删除边界和验收由[主设计 §12.4](README.md#124-删除禁用与替换)维护。
-目标保留 11 项框架契约，`ListMateTools` 和 `CallMateTool` 从枚举、配置、工厂与模型入口移除，不保留别名；底层元数据获取和 Mate 执行能力复用。`Loop`、`activate_skill`、`EditDiff`、`spawn_agent`、`invoke_agent`、旧动态 `ToolCatalog` 和 Extension 工具入口属于迁移删除项，不为这些名称保留 Schema、别名或兼容执行器；Agent 直接绑定工具的元数据代理是本版新增目标，不恢复旧目录激活机制。
+目标保留 11 项框架契约，`ListMateTools` 和 `CallMateTool` 从枚举、配置、工厂与模型入口移除，不保留别名；底层元数据获取和 Mate 执行能力复用。`Loop`、`activate_skill`、`EditDiff`、`spawn_agent`、`invoke_agent`、旧动态 `ToolCatalog` 和 Extension 工具入口属于迁移删除项，不为这些名称保留 Schema、别名或兼容执行器；Agent 直接关联的业务工具的元数据代理是本版新增目标，不恢复旧目录激活机制。
 
 ## 8. 源码观察与目标差异
 
@@ -381,6 +381,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.0.2 | 2026-09-21 | 业务工具关系统一表述为关联，执行权限规则保持独立。 |
 | 3.0.1 | 2026-09-21 | 明确显式空配置完全不提供模型工具，配置项缺失采用默认值。 |
 | 3.0.0 | 2026-09-20 | Agent 直接工具采用元数据代理，Skill 工具经 Skill、Read 与 CallTool 按需发现调用。 |
 | 2.7.0 | 2026-09-19 | CallMateTool 区分执行上下文与可为空的凭据，取消凭据完整性可用条件。 |

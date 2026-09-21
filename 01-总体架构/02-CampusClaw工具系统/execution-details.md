@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.1 |
+| 文档版本 | 1.0.2 |
 | 更新日期 | 2026-09-21 |
 | 主设计 | [CampusClaw 工具系统设计](README.md) |
 | 源码基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，具体路径与符号见[源码证据 §9](source-evidence.md#sequence-evidence) |
@@ -38,7 +38,7 @@
 
 装配器读取入口 profile。显式 `[]` 直接返回空集合，完全不向模型提供工具；配置项缺失时先采用默认值。有效配置非空时先检查目标名称冲突，再经 `BuiltInToolFactory` 创建框架工具，并按当前 Agent 直接绑定调用 `MateToolsetFactory` 创建业务代理。冲突使装配失败，不返回部分列表。框架工厂仍可通过上下文中的 Host 工厂回调创建宿主相关工具。
 
-返回的列表用于配置 Agent 并提供给模型。仅由 Skill 绑定的业务工具不在这里展开 Schema 或创建代理；同时被 Agent 直接绑定的工具按直接绑定路径装配。读取 Skill 正文或定义文件不触发本图再次装配。业务代理及新增框架入口的装配接线待实现，具体 profile 与冲突规则见[主设计 §4](README.md#4-关闭的公共接口与配置)。
+返回的列表用于配置 Agent 并提供给模型。仅由 Skill 关联的业务工具不在这里展开 Schema 或创建代理；同时与 Agent 直接关联的业务工具按直接关联路径装配。读取 Skill 正文或定义文件不触发本图再次装配。业务代理及新增框架入口的装配接线待实现，具体 profile 与冲突规则见[主设计 §4](README.md#4-关闭的公共接口与配置)。
 
 <a id="tool-invocation"></a>
 
@@ -66,7 +66,7 @@ Agent 业务代理的注册 Schema 包含完整业务参数；`CallTool` 在此�
 
 [PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L413) · [原尺寸 SVG](call_mate_tool_sequence.svg)
 
-代理使用已绑定的业务名称和直接参数；`CallTool` 解析外层名称与参数。两者分别携带 Agent 直接绑定范围、直接 Skill 绑定范围，委托同一个 `MateToolExecutor` 完成可信目标解析、业务 Schema 校验和 Mate 调用。解析或校验失败时返回错误，不进入 HTTP 执行；成功时由 Mate client 发出请求并返回结果。
+代理使用已绑定的业务名称和直接参数；`CallTool` 解析外层名称与参数。两者分别携带 Agent 直接关联的业务工具范围、直接 Skill 关联的业务工具范围，委托同一个 `MateToolExecutor` 完成可信目标解析、业务 Schema 校验和 Mate 调用。解析或校验失败时返回错误，不进入 HTTP 执行；成功时由 Mate client 发出请求并返回结果。
 
 该共用执行适配待实现。执行器不接管 Host 的权限与确认，不把模型读到的定义文件作为执行目标或权限依据。精确调用范围、参数、失败处理和[凭据](README.md#mate-credential-forwarding)由[主设计 §9.2](README.md#92-calltool-与-agent-代理)及工具契约维护。
 
