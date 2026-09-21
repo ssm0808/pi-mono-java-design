@@ -137,6 +137,56 @@ Slash -[hidden]down-> SlashHandlers
 
 @enduml
 
+@startuml tool_registration_sequence
+skinparam backgroundColor white
+skinparam defaultFontName "PingFang SC"
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 280
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam sequenceReferenceBackgroundColor #EEF4FA
+skinparam sequenceReferenceBorderColor #8496A4
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java: create, configureAgent, applyPrompt
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultConfiguredToolAssembler.java: assemble
+' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel
+' Observed behavior: the factory configures tools before the Agent loop requests the model.
+' Design reason: show model-visible definitions and Skill metadata at the runtime boundary, without repeating factory internals.
+' Pending implementation: Skill/CallTool framework entries, Agent business proxies and the new Skill prompt contract.
+' Chinese labels are explicitly requested for tool registration and execution sequences.
+title 初始工具集合：第一次模型请求（含待实现增量）
+
+participant "Agent 运行时\n本图作为整体" as Runtime
+participant "工具装配器\nConfiguredToolAssembler" as Assembler
+participant "模型" as Model
+
+Runtime -> Assembler ++ : 装配当前 Session 的工具\n入口与可信 Agent 上下文
+alt profile 显式为空
+  Assembler --> Runtime : tools = []
+else profile 非空
+  Assembler -> Assembler : 按 profile 创建框架工具\n按直接绑定追加业务代理【待实现】
+  Assembler --> Runtime : 框架工具与 Agent 业务代理
+end
+deactivate Assembler
+Runtime -> Runtime : 配置工具集合与提示词\nSkill 目录只含名称、描述和使用规则
+Runtime -> Model : 第一次请求：用户任务与提示词\n附已装配工具的 name / description / inputSchema
+
+note over Runtime, Model
+  仅由 Skill 绑定的业务 Schema 尚未披露。
+  后续 Skill / Read 不扩展模型 tools。
+end note
+@enduml
+
 @startuml agent_session_assembly
 skinparam backgroundColor white
 skinparam defaultFontName "PingFang SC"
@@ -177,7 +227,7 @@ Manager --> Factory -- : 已验证的运行时快照
 Factory -> Factory : 校验运行条件，解析模型\n构造工作区边界与工具上下文
 Factory -> Tools ++ : assemble(entryPoint, context)
 ref over Factory, Tools
-  工具集合装配（见 §4.3）
+  工具集合装配（实现说明 §2）
 end ref
 Tools --> Factory -- : 本 Session 的工具实例列表
 Factory -> Factory : 创建 Agent，安装模型、工具、\n有序钩子与 SYSTEM 提示词
@@ -360,42 +410,53 @@ autonumber
 ' Source evidence (OpenCode ebb7b76eca82342642c78645109e865614533827, checked 2026-09-20):
 ' packages/opencode/src/tool/skill.ts: SkillTool
 ' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
-
 ' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel, runToolPhase
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillPromptFormatter.java: format
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java: execute, readText
-' Observed behavior: current CampusClaw loads content via Read and exposes definitions through ListMateTools.
-' Design reason: show model-request boundaries, with unchanged registered tools across progressive disclosure.
-' Pending implementation: Skill loader and per-tool definition resources; file production and synchronization are out of scope.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java: callTool
+' Observed behavior: tool results return to the loop before its next model request; Read returns file text.
+' Design reason: complete one business scenario from user request to model answer, retaining request boundaries and fixed tools.
+' Pending implementation: Skill/CallTool, per-tool resources and business executor wiring; file production and synchronization are out of scope.
 ' Stable block identity retained for existing document links.
-title 首次使用 Skill：指引、单工具定义与调用（待实现）
+title 首次使用 Skill：查询课程并回答用户（含待实现增量）
 
+actor "用户" as User
 participant "Agent 运行时\n本图作为整体" as Runtime
 participant "模型" as Model
 collections "当前 Agent 的\nSkill 文件" as Files
+participant "Mate 服务" as Mate
 
-== 读取业务指引 ==
-Runtime -> Model ++ : 模型请求：Skill 名称/描述目录\n及已注册工具集合
-Model --> Runtime -- : tool_call：Skill({name})
-Runtime -> Files ++ : 解析可见 Skill，读取 SKILL.md\n抽样资源路径（排除 SKILL.md）
-Files --> Runtime -- : 正文、基础目录、最多 10 条路径
+User -> Runtime : 查询高等数学课程
+Runtime -> Model ++ : 用户任务、Skill 目录\n及已装配工具集合
+Model --> Runtime -- : Skill(name="course")
 
-== 读取当前步骤需要的一个定义 ==
-Runtime -> Model ++ : 下一次模型请求：包含 Skill 结果
-Model --> Runtime -- : tool_call：Read(references/xxx.json)
-Runtime -> Files ++ : 经工作区校验后读取这个文件
-Files --> Runtime -- : 单个定义文件的 JSON 文本
+== 获取业务指引 ==
+Runtime -> Files ++ : 读取 course/SKILL.md\n抽样资源路径
+Files --> Runtime -- : 正文、基础目录 base\n及最多 10 条资源路径
+Runtime -> Model ++ : 下一次请求：加入 Skill 结果
+Model --> Runtime -- : Read(path=base +\n"/references/query-course.json")
 
-== 发起业务调用 ==
-Runtime -> Model ++ : 下一次模型请求\n加入 Read 返回文本
-Model --> Runtime -- : tool_call：CallTool({tool, args})
-ref over Runtime
-  公共调用流程 §7；业务执行 §9.2
-end ref
+== 获取一个工具的定义 ==
+Runtime -> Files ++ : 经工作区校验后读取单个文件
+Files --> Runtime -- : query-course 的名称、描述\n和 inputSchema（JSON 文本）
+Runtime -> Model ++ : 下一次请求：加入 Read 结果
+Model --> Runtime -- : CallTool(tool="query-course",\nargs={courseName:"高等数学"})
+
+== 执行业务调用 ==
+Runtime -> Runtime : 校验 CallTool 外层参数\nHost 权限检查允许执行
+Runtime -> Runtime : 按可信 Skill 绑定解析目标\n校验业务参数
+Runtime -> Mate ++ : 发出一次 execute 请求\n可信工具 ID 与业务参数
+Mate --> Runtime -- : 课程查询结果
+Runtime -> Runtime : 完成 Pipeline，形成 ToolResultMessage
+
+== 基于结果回答用户 ==
+Runtime -> Model ++ : 下一次请求：加入业务工具结果
+Model --> Runtime -- : 基于课程结果生成的答案
+Runtime --> User : 返回课程查询答案
 
 note over Runtime, Model
-  所有模型请求沿用已装配的工具集合。
-  Skill / Read 不追加工具，也不改变权限。
+  每次请求沿用相同的工具集合。
+  Skill / Read 只提供信息，不改变权限。
 end note
 @enduml
 
@@ -456,7 +517,7 @@ deactivate Executor
 Tool --> Pipeline -- : 结果或普通执行异常
 
 note over Pipeline, Tool
-  本图展开 §7 的 execute 调用。
+  本图展开实现说明 §3 的 execute 调用。
   注册 Schema 校验与 before hooks 已通过。
 end note
 @enduml
@@ -586,7 +647,7 @@ end
 Pipeline -> Pipeline : 发布工具执行开始事件
 Pipeline -> Tool ++ : execute(callId, args, ...)
 ref over Tool
-  业务工具内部执行见 §9.2
+  业务工具内部执行（实现说明 §4）
 end ref
 Tool --> Pipeline -- : 工具结果或普通执行异常
 Pipeline -> Pipeline : 归一化结果与 isError
@@ -633,7 +694,7 @@ participant "Ls 任务\nFuture #5" as Ls
 
 note over Pipeline, Call
   输入顺序：Read、Grep、CallTool、Find、Ls。
-  每个调用仍经过 §7 的完整单次调用流程。
+  每个调用仍经过实现说明 §3 的完整调用流程。
 end note
 activate Pipeline
 group 并行段一

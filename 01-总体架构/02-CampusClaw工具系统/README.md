@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.14.1 |
+| 文档版本 | 2.14.2 |
 | 状态 | 当前目标；Skill / CallTool、Agent 工具代理及共用执行适配待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-09-21 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
@@ -47,6 +47,38 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 
 主图保留 Host、公共 Session、工具接口和外部执行边界。新增 `MateToolAdapter` 与 `CallTool` 共用 `MateToolExecutor`，不同的是模型定义的披露方式；`SkillTool` 与只读文件工具共用工作区边界，读取不承担工具注册。标记 `[P]` 的节点及蓝色关系待实现。
 
+<a id="initial-model-tools"></a>
+
+### 1.1 初始模型工具集合
+
+场景从入口与当前 Agent 已确定、装配所需的可信元数据可用开始，到发出第一次模型请求为止。图中的运行时代表 Session 创建与 Agent 执行的整体；具体对象调用见[Session 创建与工具装配](execution-details.md#session-creation)。
+
+![初始模型工具集合](tool_registration_sequence.svg)
+
+[PlantUML 源码：`tool_registration_sequence`](diagram.puml#L140) · [原尺寸 SVG](tool_registration_sequence.svg)
+
+| 模型收到的位置 | 内容 | 用途 |
+|---|---|---|
+| `tools` | 入口 profile 的框架工具及当前 Agent 直接绑定工具的完整定义 | 模型可以直接生成对应名称的工具调用 |
+| 提示词 | 可见 Skill 的名称、描述和使用规则 | 模型先判断是否需要加载某个 Skill |
+| 后续工具结果 | 按需读取的 Skill 正文和单个业务工具定义 | 模型理解业务步骤及 `CallTool` 参数 |
+
+显式空 profile 时 `tools=[]`，也不追加业务代理。非空 profile 下，业务代理仍受装配开关与绑定约束，名称冲突使装配失败。仅由 Skill 绑定的业务 Schema 不进入 `tools`；读取 Skill 或定义文件也不扩展集合。精确规则见 [§4](#4-关闭的公共接口与配置)和 [§9](#9-工具注册与发现)。
+
+<a id="skill-call-scenario"></a>
+
+### 1.2 一次完整的 Skill 工具调用
+
+以用户“查询高等数学课程”为例，使用契约中的示例 Skill `course` 和业务工具 `query-course`。这是首次使用的成功路径：上下文还没有正文与定义，抽样清单包含目标文件，权限允许执行，Mate 成功返回。示例名称和业务数据不代表已有平台工具。
+
+![从课程查询到用户答案的完整流程](list_mate_tools_sequence.svg)
+
+[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L391) · [原尺寸 SVG](list_mate_tools_sequence.svg)
+
+模型先获取业务指引，再读取当前步骤需要的单个定义，通过 `CallTool` 执行；运行时将业务结果放入下一次模型请求，最终由模型生成答案。所有模型请求沿用已装配的工具集合。图中运行时合并表示工具派发、权限与执行协作，内部顺序见[单次调用](execution-details.md#tool-invocation)和[业务执行](execution-details.md#business-execution)。
+
+已有正文或完整定义可以复用，不要求每次重复这三个调用。抽样清单遗漏文件时可先定位再读取；读取或业务调用失败时，模型收到错误并决定后续动作，运行时不会自动继续或重放业务请求。发现与执行规则由 [§9](#9-工具注册与发现)维护。
+
 ## 2. 范围与权威边界
 
 ### 2.1 本设计是工具系统唯一主设计
@@ -85,13 +117,13 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 
 源码事实与固定提交集中在[工具系统源码证据](source-evidence.md)。主设计保留目标与理由，工具参数和结果由[精确契约](built-in-tool-contracts.md)维护；两者不重复维护实现状态。
 
-### 3.1 时序图的阅读边界
+### 3.1 阅读方式
 
-装配、发现与调用时序使用中文描述，保留代码标识。每张图只表达一个场景：§6 展示 Session 创建，§4.3 展开工具集合装配；§9.1 展示模型多轮发现，§7 与 §9.2 分别展示公共调用流程和业务执行内部。批次调度另用具体调用展示并发与顺序。
+先通过全局目标类图了解职责与依赖，再看 [§1.1](#initial-model-tools) 的初始模型请求和 [§1.2](#skill-call-scenario) 的完整业务场景。[执行细节](execution-details.md)按需展开 Session 创建、工具装配、单次调用、业务执行和批次调度；本页其余章节维护规则，精确参数见工具契约。
 
-实线实心箭头表示同步调用，虚线表示返回；批次图的开放箭头表示异步提交，重叠的激活条表示执行可以重叠。`alt` 表示互斥路径，`break` 表示条件命中后退出本次交互，`ref` 指向已单独展开的交互。类名对应的生命线表示对象或职责实例，`tool : AgentTool` 是本次已解析的一个工具对象；Session 的生命线从创建消息开始。
+场景图使用逻辑参与方，实现图使用对象或职责实例；两者不混读为同一层 Java 调用。装配与工具调用时序使用中文描述、保留代码标识，图前说明前提和起止。实线箭头表示调用或请求，虚线表示返回；批次图的开放箭头表示异步提交。完整交互按场景拆分，失败边界在对应规则与实现图中展开。
 
-图前说明场景与起止，图中只标必要参数、结果和分支。已实现的公共装配与 Pipeline 不整体标成待实现；Skill、CallTool、业务代理及相关接线保留待实现标记。[时序源码核验](source-evidence.md#sequence-evidence)记录固定提交与核验范围；这些图不调整 Cron、Subagent 的入口或生命周期。
+该组织方式参考了基线的场景示例、契约示例和实现下钻，证据与适用边界见[文档风格核验](source-evidence.md#documentation-style-evidence)。已有公共装配与 Pipeline、新增待实现入口分别标注；运行时事实仍以[时序源码核验](source-evidence.md#sequence-evidence)为准。
 
 ### 3.3 目标差异分类
 
@@ -217,17 +249,13 @@ public interface BuiltInToolFactory {
 
 `ConfiguredToolAssembler` 先装配框架工具，再委托 `MateToolsetFactory` 按 Agent 直接绑定创建 `MateToolAdapter`；每个绑定一个实例，不为每个业务能力编写 Java 类。装配前检查工具名与框架名冲突、同名不同 ID 冲突，禁止覆盖。不同入口只使用自己的受管 Agent 绑定。新增装配待实现，不新增 Maven 依赖。
 
-下图展开 `assemble`：输入为已准备的入口与上下文，输出为本 Session 的工具实例列表。展示正常装配与显式空 profile 两条路径；名称冲突使装配失败，不返回部分列表。框架工厂仍可通过上下文中的 Host 工厂回调创建宿主相关工具。
-
-![初始工具集合装配](tool_set_assembly.svg)
-
-[PlantUML 源码：`tool_set_assembly`](diagram.puml#L195) · [原尺寸 SVG](tool_set_assembly.svg)
+`assemble` 输入已准备的入口与上下文，输出本 Session 的工具实例列表；失败不返回部分列表。框架工厂可通过上下文中的 Host 工厂回调创建宿主相关工具。完整对象交互见[执行细节：工具装配](execution-details.md#tool-assembly)。
 
 ## 5. Agent 工作区边界
 
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L667)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L728)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -252,22 +280,9 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 
 ## 6. 公共轻量 AgentSession
 
-场景从 Host 已确定入口和 Agent 后开始，到公共工厂返回新的 Session 为止。`prepare` 仍由 Factory 调用；入口选择、历史恢复和执行关闭由 Host 负责，不在创建交互中展开。图示为创建成功路径，工具装配内部见 §4.3。
+`AgentSessionFactory.create` 调用 `AgentRuntimeManager.prepare(agentId)`，校验运行条件与 Agent 启用状态，再用 `bindingModels`、Model Manager 可用性和凭据解析可用模型。Factory 基于受管快照构造工作区边界与不可变工具上下文，装配工具，安装模型、SYSTEM 与有序不可变 hook 链，创建独立的 `ManagedAgentSession`。状态、消息队列和取消域按实例隔离。
 
-![公共 Session 创建](agent_session_assembly.svg)
-
-[PlantUML 源码：`agent_session_assembly`](diagram.puml#L140) · [原尺寸 SVG](agent_session_assembly.svg)
-
-`AgentSessionFactory.create` 固定执行：
-
-1. 调用 `AgentRuntimeManager.prepare(agentId)`；
-2. 校验运行条件与 Agent 启用状态；
-3. 用 `bindingModels`、Model Manager 可用性和凭据求可用模型；
-4. 基于运行时快照构造工作区边界与不可变 `ToolAssemblyContext`，使用其中的 Skill、Child 名称索引；
-5. 按入口 profile 创建框架实例，追加 Agent 直接绑定工具代理；显式空 profile 返回空集合；
-6. 创建 Agent，安装模型、工具、SYSTEM 与有序不可变 before/after hook 链；
-7. 创建新的 `ManagedAgentSession`，保持状态、消息队列和取消域独立；
-8. 返回给 Host，由 Host 按需恢复消息、订阅事件并负责关闭。
+入口选择、消息恢复、事件订阅和最终关闭由 Host 负责。具体创建顺序见[执行细节：Session 创建](execution-details.md#session-creation)；工具集合遵守 §4 的 profile 与绑定规则。
 
 通用业务扩展 hook 可为空；Host 权限与确认 hook 按入口安装。已注册模型工具的输入 Schema 在 before hook 前校验，CallTool 的内部业务参数在请求 Mate 前另行校验。单次调用内按固定列表顺序执行；并行调用可以同时进入同一 handler，因此 handler 必须线程安全。
 
@@ -291,24 +306,14 @@ default ToolExecutionMode executionMode() {
 `Read`、`Find`、`Grep`、`Ls`、`Skill` 为 `PARALLEL`；`Cron`、
 `CallTool`、Agent 业务代理、`Agent`、`ExitPlanMode`、`TodoUpdate`、`AskUserQuestion` 为 `SEQUENTIAL`。业务工具首版保持串行，不因改成代理而提升并发。
 
-下图从 AgentLoop 已解析工具实例后开始，到返回一条 `ToolResultMessage` 为止。Pipeline 与宿主钩子分开：前者管理统一调用生命周期，后者承担权限与必要确认。图示包含已安装权限钩子的路径；入口接线的实现状态见源码证据。
-
-![单次工具调用生命周期](tool_invocation_pipeline.svg)
-
-[PlantUML 源码：`tool_invocation_pipeline`](diagram.puml#L541) · [原尺寸 SVG](tool_invocation_pipeline.svg)
+Pipeline 管理单次调用的校验、执行、结果与事件，Host hook 承担权限与必要确认。已解析工具实例的调用顺序、正常返回与提前退出见[执行细节：单次调用](execution-details.md#tool-invocation)；各入口的 hook 接线状态见源码证据。
 
 代理在 Pipeline 校验完整业务 Schema；CallTool 此处只校验固定外层 `{tool,args?}`，内部业务参数在 §9.2 的执行器中校验。Schema 失败在 before hook 前返回，before hook 拒绝或出错在工具执行前返回；这两种情况均不进入 after hook。普通工具执行错误归一化后仍进入 after hook。
 
 Schema、可用性、hook 和工具异常都转换为文本结果及 `isError=true`，不因单个工具失败
 终止完整 Agent loop。取消终止当前 execution，并由 Session/Host 投影统一终态。
 
-批次调度从有序的五个工具调用开始，到得到同序的五个结果为止。连续 `PARALLEL` 调用组成并行段，等待整段完成后才能执行下一个串行调用或并行段；每个 `SEQUENTIAL` 调用是 barrier。
-
-![批次并行与串行屏障](tool_batch_scheduling.svg)
-
-[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L599) · [原尺寸 SVG](tool_batch_scheduling.svg)
-
-图中并行任务及其 Future 作为一个执行单元表示：#2 先于 #1 完成，但调度器先等待 Future #1，再取出 Future #2 的已保存结果；第二段同理。每个异步任务内部仍执行完整 Pipeline，完成顺序不会改变结果顺序。该分段调度已在核验提交实现，CallTool 等新入口的接入待实现。
+连续 `PARALLEL` 调用组成并行段，等待整段完成后才能执行下一个串行调用或并行段；每个 `SEQUENTIAL` 调用是 barrier。每个调用仍执行完整 Pipeline，结果按输入顺序汇总。具体并行与等待过程见[执行细节：批次调度](execution-details.md#batch-scheduling)。分段调度已在核验提交实现，CallTool 等新入口接入待实现。
 
 ## 8. 统一受管目录与刷新
 
@@ -338,7 +343,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 ![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
 
-[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L253)
+[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L303)
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
@@ -353,7 +358,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L930)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L991)
 
 ## 9. 工具注册与发现
 
@@ -369,11 +374,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 `Skill` 只接收 `name`，按当前 Agent 可见的直接 Skill 精确解析，返回正文、基础目录和除 `SKILL.md` 外最多 10 个资源文件的绝对路径，明确清单为抽样。文件内容不随清单展开，路径遵守 §5 的工作区边界；遗漏文件通过 `Ls/Find/Grep` 定位，具体文件继续由普通 `Read` 读取。不提供 `resource` 参数或在每个业务步骤中强制引用文件；也不强制每次调用前重复读取已在上下文中的完整定义。
 
-下图选择一个首次使用的成功场景：正文和所需定义尚未在上下文中，抽样清单恰好包含目标文件；从模型获得 Skill 目录开始，到生成 `CallTool` 调用为止。运行时在图中作为整体，每次模型返回工具调用后，先执行工具，再把结果放入下一次模型请求；公共 Pipeline 不在本图重复展开。
-
-![Skill 多轮渐进披露](list_mate_tools_sequence.svg)
-
-[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L341) · [原尺寸 SVG](list_mate_tools_sequence.svg)
+完整业务场景见 [§1.2](#skill-call-scenario)：每次模型返回工具调用后，运行时执行工具并把结果放入下一次模型请求，直至模型生成用户答案。
 
 正文或定义已在上下文中时可跳过对应读取；抽样中没有目标文件时先用 `Ls/Find/Grep` 定位，再由 `Read` 返回单文件文本。读取失败向模型返回明确错误，由模型决定补充读取或停止，运行时不会自动推进到业务调用。`Skill` 不自动展开参考文件中的工具定义，正文自身可以包含调用说明。
 
@@ -385,11 +386,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 `MateToolAdapter` 和 `CallTool` 共用 `MateToolExecutor`，由可信绑定解析执行目标和业务 Schema，使用现有校验能力检查业务参数并请求 Mate。权限与确认仍由 Host 的既有 before hook 承担，两入口共用可信绑定和权限策略，不把确认生命周期迁入执行器。代理的完整 Schema 进入模型请求；`CallTool` 的固定外层 Schema 不替代业务参数校验。定义文件只是模型说明，不作为执行目标或权限的权威来源。
 
-下图展开 §7 的一次 `tool.execute`，从 Pipeline 调用已获准执行的业务工具开始，到工具结果或普通执行异常返回 Pipeline 为止。`tool : AgentTool` 是本次调用的真实实例，可能是一个 `MateToolAdapter`，也可能是 `CallTool`；两者经各自的参数转换后委托同一个执行器。代理传入 Agent 直接绑定范围，CallTool 传入直接 Skill 绑定范围。
-
-![业务工具共用远端执行](call_mate_tool_sequence.svg)
-
-[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L402) · [原尺寸 SVG](call_mate_tool_sequence.svg)
+代理传入 Agent 直接绑定范围，CallTool 传入直接 Skill 绑定范围；两者经各自的参数转换后委托同一个执行器。目标解析、参数校验、Mate 请求和结果返回见[执行细节：业务执行](execution-details.md#business-execution)。
 
 逐工具读取减少无关定义并提供重读入口，不保证模型永不遗忘。定义不可读或参数校验失败应返回明确错误；模型按错误补充读取、修正参数。读取 Skill/JSON 不是授权状态，不增加已加载工具集合。实际执行请求一经发出，超时、断连和 Mate 错误均不自动重放。
 
@@ -466,7 +463,7 @@ Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-templat
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L464)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L525)
 
 模型只使用：
 
@@ -542,7 +539,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L742)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L803)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
@@ -564,7 +561,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L798)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L859)
 
 压缩由公共 ManagedAgentSession 管理，Runtime、Child 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
 
@@ -685,6 +682,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.14.2 | 2026-09-21 | 主文突出初始工具集合与完整 Skill 场景，对象调用和批次时序集中到执行细节。 |
 | 2.14.1 | 2026-09-21 | 用中文分场景重绘工具装配、渐进发现、公共调用与批次时序，明确返回、失败出口和对象生命周期。 |
 | 2.14.0 | 2026-09-20 | Agent 直接工具采用通用代理，Skill 经专用加载与单工具文件渐进披露后由 CallTool 执行。 |
 | 2.13.0 | 2026-09-19 | 公共压缩复用执行级模型窗口，输出额度统一由 Mate 控制。 |

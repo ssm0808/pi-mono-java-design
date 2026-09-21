@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.6.1；整理日期：2026-09-21。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `12244d49576d17239e21c6e75e542fd61c69b826`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的最新专项核验见 §8。
+版本：1.6.2；整理日期：2026-09-21。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `12244d49576d17239e21c6e75e542fd61c69b826`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的专项核验见 §8，文档组织与图形选择见 §10。
 
 | 基线 | 提交 |
 |---|---|
@@ -239,3 +239,26 @@ Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codinga
 | R `tool/read/ReadTool.java:96` · execute；`:106` · readText | Read 返回文件文本及必要的截断提示，不自动把 JSON 变成工具定义对象。图选择目标文件已在抽样清单内的首次成功读取场景，重读、查找和失败边界在图前后说明。 |
 
 本次只进行设计与静态源码核验；未执行 Java 或远端 Mate 测试。图形校验验证 PlantUML、SVG 与文档引用，不替代功能验收。
+
+<a id="documentation-style-evidence"></a>
+
+## 10. 文档组织与图形选择的基线证据（2026-09-21）
+
+本次逐仓通过 `git ls-remote --symref` 确认默认分支，在 `/tmp` 隔离仓 fetch 后按提交读取。四仓均与同日上一轮文档调查的提交相同，相关路径无快照变化；下表仅用于文档呈现比较，不升级 §1—§9 的历史运行时结论，也不将默认分支 HEAD 等同于稳定发布。
+
+| 基线 | 默认分支 | 本次及同日上一轮完整提交 |
+|---|---|---|
+| Codex | `main` | `774d64258260f94628cc9fc55cfabd59a668571c` |
+| OpenCode | `dev` | `c10134729dd2ce00beb18604ec91f10319f59a78` |
+| DeepSeek Harness | `master` | `ddefc45fbc7f8e46dd73185e68295696d1297887`；根版本 `0.1.6-alpha.2` |
+| pi | `main` | `890f920884f6d21fc7617d236ef9e1cc5d7a0ef8` |
+
+| 实际读取的文档样本 | 已观察呈现方式与对应源码 | 对本模块的借鉴及边界 |
+|---|---|---|
+| Codex [协议示例流程](https://github.com/openai/codex/blob/774d64258260f94628cc9fc55cfabd59a668571c/codex-rs/docs/protocol_v1.md#example-flows) | 先定义对象，再以 UI、Daemon、Model 分组；正常交互与中断分别画时序，并明确省略不重要事件。文首声明可能与代码不完全一致。 | 借鉴场景拆分与参与者分组。该文仍使用源码已无的 `Op::ConfigureSession`，且 TurnComplete 的描述与 `codex-rs/protocol/src/protocol.rs:2147` · `TurnCompleteEvent` 不一致，不能据此更新现行协议。 |
+| Codex [App Server 附件契约示例](https://github.com/openai/codex/blob/774d64258260f94628cc9fc55cfabd59a668571c/codex-rs/app-server/README.md#example-manage-stored-thread-attachments) | 方法列表、JSON 请求/响应/通知、顺序与幂等边界配合说明。`codex-rs/app-server/src/request_processors/thread_attachments.rs:36` · `thread_attachment_add` 对应先响应后通知，重复添加不通知。 | 精确调用形式用代码示例和契约表表达；无需把每项规则都塞进时序。`codex-rs/core/README.md` 主要说明 crate、测试及依赖，不是架构时序范本。 |
+| DSH [Agent 生命周期](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/docs/agent-lifecycle.md)与[工具流水线](https://github.com/deepseek-ai/deepseek-harness/blob/ddefc45fbc7f8e46dd73185e68295696d1297887/docs/tool-execution-pipeline.md) | 前者以运行时职责为参与者画时序，后者用流程图表达许可、钩子、执行及结果分支；分别对应 `packages/core/agent-loop/src/agent.ts:353` · `ReactLoopAgent.step` 与 `packages/core/tools/src/index.ts:1348` · `ToolRuntime.execute`。 | 生命周期与单次工具流水线分别表达。两图由 `scripts/gen-doc-graphs.ts:1394` · `renderLifecycle`、`:1487` · `renderToolPipeline` 的手工编排模板生成，文档明确标注 curated；不是从源码自动抽取的完整时序，alpha 实现也不作为行业规范。 |
+| OpenCode [Skills 页](https://github.com/anomalyco/opencode/blob/c10134729dd2ce00beb18604ec91f10319f59a78/packages/web/src/content/docs/skills.mdx) | 目录与 frontmatter 约束、完整 SKILL.md 示例、目录 XML、`skill({ name: "git-release" })` 调用、权限配置和表格，无时序图。`packages/opencode/src/tool/skill.ts:12` · `SkillTool` 对应正文加载及资源路径输出。 | 发现与调用主要用小型代码示例表达。该页把目录位置描述为工具说明，而当前 `packages/opencode/src/session/system.ts:107` · `SystemPrompt.skills` 负责组装 Skill 提示；这里只借鉴表达形式，不照搬该位置描述。 |
+| pi [Agent Event Flow](https://github.com/badlogic/pi-mono/blob/890f920884f6d21fc7617d236ef9e1cc5d7a0ef8/packages/agent/README.md#event-flow) | 普通 prompt 与带工具调用分别用文本事件树，配事件表和并发顺序说明；`packages/agent/src/agent-loop.ts:162` · `runLoop`、`:829` · `emitToolExecutionEnd` 对应事件发出点。 | 关注可观察事件顺序时，事件列举比展开内部对象更直接；不把事件树推导成所有内部调用的同步关系。 |
+
+本模块据此选择职责清单、调用示例和少量具体场景图，图中只保留解释该场景所需的参与者；分支和顺序以当前源码证据及目标契约为准。上游使用的图形语法不构成格式要求，本仓仍使用 PlantUML。此次仅调整文档组织与图形表达，不改变工具注册、Skill 渐进式披露、CallTool、权限或同步方案，也不新增运行时机制。
