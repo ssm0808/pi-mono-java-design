@@ -137,56 +137,6 @@ Slash -[hidden]down-> SlashHandlers
 
 @enduml
 
-@startuml tool_registration_sequence
-skinparam backgroundColor white
-skinparam defaultFontName "PingFang SC"
-skinparam defaultFontSize 14
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 280
-skinparam sequenceArrowColor #425B70
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F1F5F9
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #FAFBFC
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam sequenceReferenceBackgroundColor #EEF4FA
-skinparam sequenceReferenceBorderColor #8496A4
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
-' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java: create, configureAgent, applyPrompt
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultConfiguredToolAssembler.java: assemble
-' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel
-' Observed behavior: the factory configures tools before the Agent loop requests the model.
-' Design reason: show model-visible definitions and Skill metadata at the runtime boundary, without repeating factory internals.
-' Pending implementation: Skill/CallTool framework entries, Agent business proxies and the new Skill prompt contract.
-' Chinese labels are explicitly requested for tool registration and execution sequences.
-title 初始工具集合：第一次模型请求（含待实现增量）
-
-participant "Agent 运行时\n本图作为整体" as Runtime
-participant "工具装配器\nConfiguredToolAssembler" as Assembler
-participant "模型" as Model
-
-Runtime -> Assembler ++ : 装配当前 Session 的工具\n入口与可信 Agent 上下文
-alt profile 显式为空
-  Assembler --> Runtime : tools = []
-else profile 非空
-  Assembler -> Assembler : 按 profile 创建框架工具\n按直接绑定追加业务代理【待实现】
-  Assembler --> Runtime : 框架工具与 Agent 业务代理
-end
-deactivate Assembler
-Runtime -> Runtime : 配置工具集合与提示词\nSkill 目录只含名称、描述和使用规则
-Runtime -> Model : 第一次请求：用户任务与提示词\n附已装配工具的 name / description / inputSchema
-
-note over Runtime, Model
-  仅由 Skill 绑定的业务 Schema 尚未披露。
-  后续 Skill / Read 不扩展模型 tools。
-end note
-@enduml
-
 @startuml agent_session_assembly
 skinparam backgroundColor white
 skinparam defaultFontName "PingFang SC"

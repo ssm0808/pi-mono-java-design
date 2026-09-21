@@ -20,7 +20,7 @@
 
 ![公共 Session 创建](agent_session_assembly.svg)
 
-[PlantUML 源码：`agent_session_assembly`](diagram.puml#L190) · [原尺寸 SVG](agent_session_assembly.svg)
+[PlantUML 源码：`agent_session_assembly`](diagram.puml#L140) · [原尺寸 SVG](agent_session_assembly.svg)
 
 `AgentSessionFactory.create` 先调用 `AgentRuntimeManager.prepare(agentId)`，取得受管运行时快照，再校验运行条件、解析可用模型并准备工作区与工具装配上下文。工具列表由下节的装配过程返回；Factory 随后配置 Agent 的模型、工具、SYSTEM 和 hook，创建独立的 `ManagedAgentSession` 并交还 Host。
 
@@ -34,7 +34,7 @@
 
 ![初始工具集合装配](tool_set_assembly.svg)
 
-[PlantUML 源码：`tool_set_assembly`](diagram.puml#L245) · [原尺寸 SVG](tool_set_assembly.svg)
+[PlantUML 源码：`tool_set_assembly`](diagram.puml#L195) · [原尺寸 SVG](tool_set_assembly.svg)
 
 装配器读取入口 profile。显式空列表直接返回空工具集合；其他路径先检查目标名称冲突，再经 `BuiltInToolFactory` 创建框架工具，并按当前 Agent 直接绑定调用 `MateToolsetFactory` 创建业务代理。冲突使装配失败，不返回部分列表。框架工厂仍可通过上下文中的 Host 工厂回调创建宿主相关工具。
 
@@ -48,7 +48,7 @@
 
 ![单次工具调用生命周期](tool_invocation_pipeline.svg)
 
-[PlantUML 源码：`tool_invocation_pipeline`](diagram.puml#L602) · [原尺寸 SVG](tool_invocation_pipeline.svg)
+[PlantUML 源码：`tool_invocation_pipeline`](diagram.puml#L552) · [原尺寸 SVG](tool_invocation_pipeline.svg)
 
 Pipeline 先校验已注册工具的输入 Schema，再调用 before hook；允许执行后才发出执行开始事件并调用 `tool.execute`。工具返回结果或抛出普通执行异常后，Pipeline 归一化结果，进入 after hook，最后发出结束事件并返回结果。
 
@@ -64,7 +64,7 @@ Agent 业务代理的注册 Schema 包含完整业务参数；`CallTool` 在此�
 
 ![业务工具共用远端执行](call_mate_tool_sequence.svg)
 
-[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L463) · [原尺寸 SVG](call_mate_tool_sequence.svg)
+[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L413) · [原尺寸 SVG](call_mate_tool_sequence.svg)
 
 代理使用已绑定的业务名称和直接参数；`CallTool` 解析外层名称与参数。两者分别携带 Agent 直接绑定范围、直接 Skill 绑定范围，委托同一个 `MateToolExecutor` 完成可信目标解析、业务 Schema 校验和 Mate 调用。解析或校验失败时返回错误，不进入 HTTP 执行；成功时由 Mate client 发出请求并返回结果。
 
@@ -78,7 +78,7 @@ Agent 业务代理的注册 Schema 包含完整业务参数；`CallTool` 在此�
 
 ![批次并行与串行屏障](tool_batch_scheduling.svg)
 
-[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L660) · [原尺寸 SVG](tool_batch_scheduling.svg)
+[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L610) · [原尺寸 SVG](tool_batch_scheduling.svg)
 
 调度器把连续 `PARALLEL` 调用组成并行段，等待整段完成后再执行后续调用；每个 `SEQUENTIAL` 调用构成屏障。因此前两个调用可并行，`CallTool` 等待它们完成后执行，最后两个调用再组成新的并行段。工具模式的权威清单见[主设计 §7](README.md#7-pipelinehook-与批量调度)。
 

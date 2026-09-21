@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.14.2 |
+| 文档版本 | 2.14.3 |
 | 状态 | 当前目标；Skill / CallTool、Agent 工具代理及共用执行适配待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-09-21 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
@@ -51,19 +51,17 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 
 ### 1.1 初始模型工具集合
 
-场景从入口与当前 Agent 已确定、装配所需的可信元数据可用开始，到发出第一次模型请求为止。图中的运行时代表 Session 创建与 Agent 执行的整体；具体对象调用见[Session 创建与工具装配](execution-details.md#session-creation)。
+第一次请求模型时，可直接调用的工具和可按需加载的 Skill 分别提供：
 
-![初始模型工具集合](tool_registration_sequence.svg)
-
-[PlantUML 源码：`tool_registration_sequence`](diagram.puml#L140) · [原尺寸 SVG](tool_registration_sequence.svg)
-
-| 模型收到的位置 | 内容 | 用途 |
+| 类型 | 第一次提供给模型的内容 | 模型如何使用 |
 |---|---|---|
-| `tools` | 入口 profile 的框架工具及当前 Agent 直接绑定工具的完整定义 | 模型可以直接生成对应名称的工具调用 |
-| 提示词 | 可见 Skill 的名称、描述和使用规则 | 模型先判断是否需要加载某个 Skill |
-| 后续工具结果 | 按需读取的 Skill 正文和单个业务工具定义 | 模型理解业务步骤及 `CallTool` 参数 |
+| 框架工具，如 `Read`、`Skill`、`CallTool` | 按入口配置（profile）把完整工具定义放入 `tools` | 按框架工具名称直接调用 |
+| 当前 Agent 直接绑定的业务工具 | 把完整业务工具定义放入 `tools` | 按业务工具名称直接调用 |
+| 可见 Skill 及其绑定的业务工具 | 提示词只列出 Skill 名称、描述和使用规则；仅由 Skill 绑定的业务工具定义不放入 `tools` | 按需通过 `Skill` 加载正文、通过 `Read` 读取单个业务工具定义，再经 `CallTool` 执行 |
 
-显式空 profile 时 `tools=[]`，也不追加业务代理。非空 profile 下，业务代理仍受装配开关与绑定约束，名称冲突使装配失败。仅由 Skill 绑定的业务 Schema 不进入 `tools`；读取 Skill 或定义文件也不扩展集合。精确规则见 [§4](#4-关闭的公共接口与配置)和 [§9](#9-工具注册与发现)。
+**加载 Skill 或读取业务工具定义只补充模型上下文，不扩充 `tools` 集合。** 完整调用示例见 [§1.2](#skill-call-scenario)。
+
+显式空 profile 时 `tools=[]`，也不追加业务代理；非空 profile 下，业务代理仍受装配开关与绑定约束，名称冲突使装配失败。精确规则见 [§4](#4-关闭的公共接口与配置)和 [§9](#9-工具注册与发现)，对象调用见[Session 创建与工具装配](execution-details.md#session-creation)。
 
 <a id="skill-call-scenario"></a>
 
@@ -73,7 +71,7 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 
 ![从课程查询到用户答案的完整流程](list_mate_tools_sequence.svg)
 
-[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L391) · [原尺寸 SVG](list_mate_tools_sequence.svg)
+[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L341) · [原尺寸 SVG](list_mate_tools_sequence.svg)
 
 模型先获取业务指引，再读取当前步骤需要的单个定义，通过 `CallTool` 执行；运行时将业务结果放入下一次模型请求，最终由模型生成答案。所有模型请求沿用已装配的工具集合。图中运行时合并表示工具派发、权限与执行协作，内部顺序见[单次调用](execution-details.md#tool-invocation)和[业务执行](execution-details.md#business-execution)。
 
@@ -255,7 +253,7 @@ public interface BuiltInToolFactory {
 
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L728)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L678)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -343,7 +341,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 ![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
 
-[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L303)
+[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L253)
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
@@ -358,7 +356,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L991)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L941)
 
 ## 9. 工具注册与发现
 
@@ -463,7 +461,7 @@ Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-templat
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L525)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L475)
 
 模型只使用：
 
@@ -539,7 +537,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L803)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L753)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
@@ -561,7 +559,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L859)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L809)
 
 压缩由公共 ManagedAgentSession 管理，Runtime、Child 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
 
@@ -682,6 +680,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.14.3 | 2026-09-21 | 用分类表说明初始模型工具与 Skill 的披露和调用方式，移除重复时序图。 |
 | 2.14.2 | 2026-09-21 | 主文突出初始工具集合与完整 Skill 场景，对象调用和批次时序集中到执行细节。 |
 | 2.14.1 | 2026-09-21 | 用中文分场景重绘工具装配、渐进发现、公共调用与批次时序，明确返回、失败出口和对象生命周期。 |
 | 2.14.0 | 2026-09-20 | Agent 直接工具采用通用代理，Skill 经专用加载与单工具文件渐进披露后由 CallTool 执行。 |
