@@ -61,7 +61,7 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 
 **加载 Skill 或读取业务工具定义只补充模型上下文，不扩充 `tools` 集合。** 完整调用示例见 [§1.2](#skill-call-scenario)。
 
-业务代理受装配开关与绑定约束，名称冲突使装配失败。精确规则见 [§4](#4-关闭的公共接口与配置)和 [§9](#9-工具注册与发现)，对象调用见[Session 创建与工具装配](execution-details.md#session-creation)。
+业务代理受装配开关与绑定约束，名称冲突使装配失败。精确规则见 [§4](#4-工具集合与入口配置)和 [§9](#9-工具注册与发现)，对象调用见[Session 创建与工具装配](execution-details.md#session-creation)。
 
 <a id="skill-call-scenario"></a>
 
@@ -149,7 +149,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 架构改造 | Runtime 与 Tool 共用 `campusmate.endpoints.skill-info-path-template` | 两个旧键调用完全相同的 Skill HTTP operation |
 | 产品约束 | Child 只按直接绑定名称调用，首版深度 1 | 避免全局枚举、循环和无边界递归 |
 
-## 4. 关闭的公共接口与配置
+## 4. 工具集合与入口配置
 
 ### 4.1 名称与入口枚举
 
