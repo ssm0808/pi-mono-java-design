@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.6.0；整理日期：2026-09-20。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `12244d49576d17239e21c6e75e542fd61c69b826`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的最新专项核验见 §8。
+版本：1.6.1；整理日期：2026-09-21。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `12244d49576d17239e21c6e75e542fd61c69b826`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的最新专项核验见 §8。
 
 | 基线 | 提交 |
 |---|---|
@@ -221,3 +221,21 @@ Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codinga
 这是 **CampusClaw 架构变更**：借鉴 OpenCode 的 Skill 加载入口和基线的远端代理结构，但 Skill 绑定工具通过固定 CallTool 执行、Schema 留在资源文件中，是为逐工具披露作出的产品选择，并非上游标准 Skill/MCP 行为。代价是普通读取结果可能被压缩，需要按需重读；不能声称该方案已证明比动态注入更快。无 Bash、受管边界与可信权限属于产品约束及安全加固。
 
 实现状态：新入口、代理装配及对应权限接入均为 **待实现**；本次仅静态核验源码，未运行 Java、真实模型或 Mate 联调。验收重点为初始集合仅含框架工具与 Agent 直接业务代理、Skill/Read 无注册副作用、资源清单不展开定义、CallTool 只解析 Skill 绑定业务工具，以及两入口的 ALLOW/ASK/DENY 和参数错误一致。元数据同步、文件生成与刷新、执行版本一致性另行设计，本节不冻结其策略。
+
+<a id="sequence-evidence"></a>
+
+## 9. 时序交互与生命周期核验（2026-09-21）
+
+本节仅支撑中文时序图的表达修正，沿用并重新读取 Java 固定快照 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；没有升级外部 Agent 基线，也不将该本地快照称为上游最新。图示使用现行目标设计，不调整 Cron、Subagent 或元数据同步方案。类图与架构对比结论不变。
+
+| 路径 / 符号（行号归属上述提交） | 已观察行为与图示边界 |
+|---|---|
+| R `session/AgentSessionFactory.java:69` · create；`:105` · configureAgent；`:121` · applyPrompt | 公共 Factory 已实现；Factory 调用 prepare，校验 runtime，解析模型与上下文，装配工具并配置 Agent，最后创建 ManagedAgentSession。图从 Host 已确定入口后开始，不把 prepare 迁给 Host。 |
+| R `tool/builtin/DefaultConfiguredToolAssembler.java:32` · assemble；`DefaultBuiltInToolFactory.java:56` · create | profile 到框架实例的映射已实现；宿主相关工具通过上下文回调创建。Skill、CallTool、直接 Agent 代理和名称冲突校验仍待实现，空 profile 不追加工具。 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java:146` · runToolPhase；`:179` · invokeModel；`:278` · resolveToolCallsSafe | AgentLoop 先解析已注册工具实例并执行，结果进入后续模型请求。发现图把运行时作为整体，模型返回 tool_call，运行时执行后再请求模型，不画成模型直接调用 Java 对象。 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:49` · execute；`:87` · applyBeforeHook；`:107` · invokeTool；`:133` · applyAfterHook | 注册 Schema 校验先于 before hook；校验失败或 before hook 拒绝/异常直接返回，不调用工具和 after hook。普通执行异常转错误后进入 after hook；取消向上抛出，由 execution 统一处理，不画成普通失败返回。 |
+| R `runtimeapi/runtime/RuntimeActiveExecution.java:155` · beforeToolCall；`RuntimeToolPermissionPolicy.java:41` · decide | ALLOW/ASK/DENY 与确认属于 Host，和 Pipeline 分开表示；新增业务入口的策略识别及各入口接线状态按 §8 判断，不用本图宣称已完成迁移。 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:161` · executePlanned；`:192` · executeInParallel | 连续并行段、虚拟线程提交、按输入顺序收集 future，以及串行屏障已实现。批次图用异步提交和重叠激活表示并发，乱序完成示例不改变结果顺序；新工具入口的并发模式接线待实现。 |
+| R `tool/read/ReadTool.java:96` · execute；`:106` · readText | Read 返回文件文本及必要的截断提示，不自动把 JSON 变成工具定义对象。图选择目标文件已在抽样清单内的首次成功读取场景，重读、查找和失败边界在图前后说明。 |
+
+本次只进行设计与静态源码核验；未执行 Java 或远端 Mate 测试。图形校验验证 PlantUML、SVG 与文档引用，不替代功能验收。

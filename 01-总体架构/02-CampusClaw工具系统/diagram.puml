@@ -139,62 +139,114 @@ Slash -[hidden]down-> SlashHandlers
 
 @startuml agent_session_assembly
 skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
+skinparam defaultFontName "PingFang SC"
+skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
+skinparam maxMessageSize 210
+skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
+skinparam sequenceReferenceBackgroundColor #EEF4FA
+skinparam sequenceReferenceBorderColor #8496A4
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-' Source evidence (CampusClaw d649866):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java: prepare
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: initialize
-' Observed behavior: current entry paths do not share one small session factory.
-' Design reason: parent and child use the same AgentSession type and factory but
-' receive different instances, state, workspaces, tools, and cancellation scopes.
-title Session Assembly - Three Host Entrypoints
+' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
 
-actor "Runtime / Cron / Agent tool" as Caller
-participant "Selected Host" as Host
-participant "Agent Session\nFactory" as Factory
-participant "Agent Runtime\nManager" as Manager
-participant "Tool assembler" as Tools
-participant "New ManagedAgentSession" as Session
-== Select the Host ==
-alt Runtime
-  Caller -> Host : begin(agentId, sessionId)
-else Cron
-  Caller -> Host : trigger(job.agentId)
-else Child
-  Caller -> Host : begin(boundChild, task)
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java: create, configureAgent, applyPrompt
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java: prepare
+' Observed behavior: the common factory prepares the runtime, configures an Agent, then creates its ManagedAgentSession.
+' Design reason: show the common creation boundary; entry-specific admission and lifecycle are outside this interaction.
+' Pending implementation: new Skill/CallTool entries and direct business adapters, expanded in tool_set_assembly.
+' Chinese labels are explicitly requested for these sequence diagrams on 2026-09-21.
+title 创建一次执行的 Session
+
+participant "入口宿主\nHost" as Host
+participant "Session 工厂\nAgentSessionFactory" as Factory
+participant "受管运行时\nAgentRuntimeManager" as Manager
+participant "工具装配器\nConfiguredToolAssembler" as Tools
+
+Host -> Factory ++ : create(request)\n入口、Agent 与本次执行上下文
+Factory -> Manager ++ : prepare(agentId)
+Manager --> Factory -- : 已验证的运行时快照
+Factory -> Factory : 校验运行条件，解析模型\n构造工作区边界与工具上下文
+Factory -> Tools ++ : assemble(entryPoint, context)
+ref over Factory, Tools
+  工具集合装配（见 §4.3）
+end ref
+Tools --> Factory -- : 本 Session 的工具实例列表
+Factory -> Factory : 创建 Agent，安装模型、工具、\n有序钩子与 SYSTEM 提示词
+create participant "本次执行的 Session\nManagedAgentSession" as Session
+Factory -> Session ++ : new(runtime, agent, tools, ...)
+Session --> Factory -- : 创建完成
+Factory --> Host -- : 新的 Session 实例
+
+note over Host, Factory
+  成功路径；宿主已选定入口。
+  创建失败直接返回宿主，不进入模型执行。
+end note
+@enduml
+
+@startuml tool_set_assembly
+skinparam backgroundColor white
+skinparam defaultFontName "PingFang SC"
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 210
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam sequenceReferenceBackgroundColor #EEF4FA
+skinparam sequenceReferenceBorderColor #8496A4
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
+
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultConfiguredToolAssembler.java: assemble
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultBuiltInToolFactory.java: create, contextualTool
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolsetFactory.java: createSession
+' Observed behavior: the assembler currently maps framework profiles only; contextual tools use Host-provided factories.
+' Design reason: separate framework construction from direct Agent adapters, retaining the explicit empty profile.
+' Pending implementation: name-conflict checks, Skill/CallTool entries, and direct Agent adapter construction.
+title 装配初始工具集合（含待实现增量）
+
+participant "Session 工厂\nAgentSessionFactory" as Factory
+participant "工具装配器\nConfiguredToolAssembler" as Assembler
+participant "框架工具工厂\nBuiltInToolFactory" as BuiltIn
+participant "业务工具工厂\nMateToolsetFactory" as MateFactory
+
+Factory -> Assembler ++ : assemble(entryPoint, context)
+Assembler -> Assembler : 读取入口 profile
+alt profile 显式为空
+  Assembler --> Factory : 空列表（不追加业务代理）
+else profile 非空
+  Assembler -> Assembler : 检查框架名与业务绑定名冲突\n【待实现】
+  loop profile 中的每个框架名称
+    Assembler -> BuiltIn ++ : create(name, context)
+    BuiltIn --> Assembler -- : 本 Session 的框架工具实例
+  end
+  opt Mate 装配已启用且存在 Agent 直接绑定
+    Assembler -> MateFactory ++ : 按 Agent 直接绑定创建代理\n【待实现】
+    MateFactory --> Assembler -- : 每个绑定一个 MateToolAdapter
+  end
+  Assembler --> Factory : 框架实例与业务代理的有序列表
 end
-Host -> Factory : create(entryPoint, agentId, context)
-== Prepare one immutable assembly snapshot ==
-Factory -> Manager : prepare(agentId)
-Manager --> Factory : PreparedAgentRuntime
-Factory -> Factory : resolve SYSTEM, model and indexes
-Factory -> Factory : create workspace and context
-Factory -> Tools : assemble(entryPoint, context)
-Tools --> Factory : framework instances + direct Agent adapters [P]
-== Transfer the new Session to its Host ==
-Factory -> Session : create(state, tools, hooks, cancelScope)
-Session --> Factory : ready
-Factory --> Host : independent Session
-Host -> Host : restore state; subscribe; own close
-note over Factory,Session
-  Same factory and Session type.
-  Independent messages, tools, workspace and
-  cancellation.
-  [P] = Pending implementation; empty profile yields no tools.
+deactivate Assembler
+
+note over Assembler, MateFactory
+  仅由 Skill 绑定的工具，其业务 Schema 不进入此列表。
+  Skill / CallTool 框架入口接线及业务代理待实现。
 end note
 @enduml
 
@@ -288,139 +340,124 @@ end note
 
 @startuml list_mate_tools_sequence
 skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
+skinparam defaultFontName "PingFang SC"
+skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
+skinparam maxMessageSize 210
+skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
+skinparam sequenceReferenceBackgroundColor #EEF4FA
+skinparam sequenceReferenceBorderColor #8496A4
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title Skill Tool Discovery (Pending implementation)
-' Source evidence (OpenCode ebb7b76eca82342642c78645109e865614533827):
+' Source evidence (OpenCode ebb7b76eca82342642c78645109e865614533827, checked 2026-09-20):
 ' packages/opencode/src/tool/skill.ts: SkillTool
-' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12):
+' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
+
+' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: invokeModel, runToolPhase
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillPromptFormatter.java: format
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java: execute
-' Observed behavior: CampusClaw currently uses Read for the body and ListMateTools for definitions.
-' Design reason: disclose instructions, then one tool definition, without mutating model tools.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java: execute, readText
+' Observed behavior: current CampusClaw loads content via Read and exposes definitions through ListMateTools.
+' Design reason: show model-request boundaries, with unchanged registered tools across progressive disclosure.
+' Pending implementation: Skill loader and per-tool definition resources; file production and synchronization are out of scope.
 ' Stable block identity retained for existing document links.
+title 首次使用 Skill：指引、单工具定义与调用（待实现）
 
-actor Model
-participant "Skill tool" as Skill
-participant "Direct Skill index" as Index
-database "Managed Skill files" as Files
-participant "Read / Ls / Find / Grep" as Read
-participant "CallTool" as Call
+participant "Agent 运行时\n本图作为整体" as Runtime
+participant "模型" as Model
+collections "当前 Agent 的\nSkill 文件" as Files
 
-Model -> Skill : {name}
-Skill -> Index : resolve visible direct Skill
-Index --> Skill : validated base directory or error
-Skill -> Files : read SKILL.md and sample resource paths
-Files --> Skill : body and at most 10 paths
-Skill --> Model : body, base directory, sampled file list
-note over Model,Skill
-  No business schemas in this result.
-  No tool registration or permission change.
-end note
-opt needed definition is not in sampled paths
-  Model -> Read : locate the resource within this Skill
-  Read -> Files : list / find / grep
-  Files --> Read : matching paths
-  Read --> Model : bounded results
-end
-Model -> Read : read references/{toolName}.json
-Read -> Files : read one validated path
-Files --> Read : name, description, inputSchema
-Read --> Model : individual tool definition
-Model -> Call : {tool, args}
-Call --> Model : business result through shared executor
-note over Skill,Files
-  Paths use the current Agent workspace boundary.
-  File generation and synchronization are outside this design slice.
+== 读取业务指引 ==
+Runtime -> Model ++ : 模型请求：Skill 名称/描述目录\n及已注册工具集合
+Model --> Runtime -- : tool_call：Skill({name})
+Runtime -> Files ++ : 解析可见 Skill，读取 SKILL.md\n抽样资源路径（排除 SKILL.md）
+Files --> Runtime -- : 正文、基础目录、最多 10 条路径
+
+== 读取当前步骤需要的一个定义 ==
+Runtime -> Model ++ : 下一次模型请求：包含 Skill 结果
+Model --> Runtime -- : tool_call：Read(references/xxx.json)
+Runtime -> Files ++ : 经工作区校验后读取这个文件
+Files --> Runtime -- : 单个定义文件的 JSON 文本
+
+== 发起业务调用 ==
+Runtime -> Model ++ : 下一次模型请求\n加入 Read 返回文本
+Model --> Runtime -- : tool_call：CallTool({tool, args})
+ref over Runtime
+  公共调用流程 §7；业务执行 §9.2
+end ref
+
+note over Runtime, Model
+  所有模型请求沿用已装配的工具集合。
+  Skill / Read 不追加工具，也不改变权限。
 end note
 @enduml
 
 @startuml call_mate_tool_sequence
 skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
+skinparam defaultFontName "PingFang SC"
+skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
+skinparam maxMessageSize 210
+skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
+skinparam sequenceReferenceBackgroundColor #EEF4FA
+skinparam sequenceReferenceBorderColor #8496A4
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title Agent Adapters and CallTool (Pending implementation)
-' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12):
+' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
+
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeToolPermissionPolicy.java: decide
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java: callTool
-' Observed behavior: current calls use one wrapper; permission policy recognizes only that wrapper.
-' Design reason: two disclosure paths share target resolution, validation and remote execution.
-' Pending implementation: shared executor wiring includes existing Host permission and confirmation hooks.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeToolPermissionPolicy.java: decide
+' Observed behavior: a single CallMateTool wrapper currently resolves names and calls Mate.
+' Design reason: business entry instances use one executor; registered-schema validation and Host hooks belong to the parent interaction.
+' Pending implementation: MateToolAdapter, CallTool, MateToolExecutor and their permission wiring.
 ' Stable block identity retained for existing document links.
+title 两类业务工具共用远端执行（待实现）
 
-actor Model
-participant "Tool pipeline / Host hooks" as Pipeline
-participant "Agent adapter / CallTool" as Entry
-participant "MateToolExecutor" as Executor
-participant "Trusted business bindings" as Bindings
-participant "MateToolClient" as Client
-participant "Mate" as Mate
+participant "调用流水线\nToolExecutionPipeline" as Pipeline
+participant "本次业务工具实例\ntool : AgentTool" as Tool
+participant "共享业务执行器\nMateToolExecutor" as Executor
+participant "Mate 客户端\nMateToolClient" as Client
+participant "Mate 服务" as Mate
 
-alt Agent direct tool
-  Model -> Pipeline : business_name(args)
-  Pipeline -> Entry : resolve Agent adapter
-else Skill business tool
-  Model -> Pipeline : CallTool({tool, args})
-  Pipeline -> Entry : resolve CallTool
+Pipeline -> Tool ++ : execute(callId, args, ...)
+alt tool 是 MateToolAdapter
+  Tool -> Tool : 采用代理绑定的业务名称\n参数为直接调用参数
+else tool 是 CallTool
+  Tool -> Tool : 读取 tool / args\nargs 省略时使用空对象
 end
-Pipeline -> Pipeline : validate registered tool schema
-Pipeline -> Bindings : Host resolves scope and permission
-Bindings --> Pipeline : permission decision or error
-Pipeline -> Pipeline : existing permission / confirmation once
-alt allowed
-  Pipeline -> Entry : execute
-  Entry -> Executor : business name, args, allowed scope
-  Executor -> Bindings : resolve trusted target and schema
-  Bindings --> Executor : ID and business schema or error
-  Executor -> Executor : validate business args before HTTP
-  opt target and args are valid
-  Executor -> Client : callTool(ID, args, execution credentials)
-  Client -> Mate : one execute request
-  Mate --> Client : authority checks and result
-  Client --> Executor : result or error
-  end
-  Executor --> Entry : normalized result or validation error
-  Entry --> Pipeline : tool result
-else denied / cancelled / invalid outer schema
-  Pipeline -> Pipeline : fail without remote execution
+Tool -> Executor ++ : 业务名称、参数、入口绑定范围
+Executor -> Executor : 解析可信 ID 与业务 Schema\n校验业务参数
+alt 目标解析或业务参数校验失败
+  Executor --> Tool : 明确的执行错误
+else 目标与参数有效
+  Executor -> Client ++ : callTool(ID, args, credentials)
+  Client -> Mate ++ : 发出一次 execute 请求
+  Mate --> Client -- : 执行结果或服务错误
+  Client --> Executor -- : 结果或调用错误
+  Executor --> Tool : 业务结果或执行错误
 end
-Pipeline --> Model : ToolResultMessage
-note over Entry,Bindings
-  Adapters use direct Agent bindings.
-  CallTool uses direct Skill bindings.
-  Framework tools and model-provided IDs are not valid targets.
-end note
-note over Client,Mate
-  Forward only the headers provided by the Host.
-  Never replay execute after timeout, disconnect or Mate error.
-  Metadata queries do not carry execution credentials.
+deactivate Executor
+Tool --> Pipeline -- : 结果或普通执行异常
+
+note over Pipeline, Tool
+  本图展开 §7 的 execute 调用。
+  注册 Schema 校验与 before hooks 已通过。
 end note
 @enduml
 
@@ -501,72 +538,130 @@ note over Factory,Child
 end note
 @enduml
 
-@startuml tool_batch_scheduling
+@startuml tool_invocation_pipeline
 skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
+skinparam defaultFontName "PingFang SC"
+skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
+skinparam maxMessageSize 210
+skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
+skinparam sequenceReferenceBackgroundColor #EEF4FA
+skinparam sequenceReferenceBorderColor #8496A4
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title Tool Batch Scheduling with Sequential Barriers
+' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
 
-' Source evidence (CampusClaw d649866):
-' modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: AgentTool
-' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: executeAll
-' Observed behavior: the pipeline does not yet implement the target adjacent
-' parallel-segment planner.
-' Design reason: read-only tools may overlap, but Cron, Mate execution, and Child
-' execution preserve their model order as explicit barriers.
+' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: resolveToolCallsSafe, runToolPhase
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: execute, validate, applyBeforeHook, invokeTool, applyAfterHook
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java: beforeToolCall
+' Observed behavior: schema validation precedes before hooks; blocked calls return before execution and after hooks.
+' Design reason: keep common lifecycle separate from business delegation; cancellation is propagated to the upper execution scope.
+' Pending implementation: new business entry permissions must be wired into the existing Host policy.
+title 单次工具调用：校验、宿主钩子与执行
 
-participant "Batch planner" as Planner
-participant "Virtual thread executor" as Executor
-participant "Read call #1" as P1
-participant "Grep call #2" as P2
-participant "CallTool #3 [P]" as S3
-participant "Find call #4" as P4
-participant "Ls call #5" as P5
-collections "Ordered results" as Results
+participant "Agent 循环\nAgentLoop" as Loop
+participant "调用流水线\nToolExecutionPipeline" as Pipeline
+participant "宿主提供的钩子链\nHost hooks" as Hooks
+participant "已解析的工具实例\ntool : AgentTool" as Tool
 
-Planner -> Planner : classify P, P, S, P, P
-group first parallel segment
-  Planner -> Executor : submit call #1
-  Executor -> P1 : validate, hooks, execute
-  Planner -> Executor : submit call #2
-  Executor -> P2 : validate, hooks, execute
-  P1 --> Executor : result #1
-  P2 --> Executor : result #2
-  Planner -> Executor : join segment
+Loop -> Pipeline ++ : execute(tool, call, args, ...)
+Pipeline -> Pipeline : 按 tool.parameters 校验参数
+break Schema 无效
+  Pipeline --> Loop : 错误 ToolResultMessage
 end
-Planner -> S3 : execute sequential barrier
-S3 --> Planner : result #3
-group second parallel segment
-  Planner -> Executor : submit call #4
-  Executor -> P4 : validate, hooks, execute
-  Planner -> Executor : submit call #5
-  Executor -> P5 : validate, hooks, execute
-  P4 --> Executor : result #4
-  P5 --> Executor : result #5
-  Planner -> Executor : join segment
+Pipeline -> Hooks ++ : 执行有序 before hooks
+Hooks -> Hooks : 权限判断；需要时进入确认流程
+Hooks --> Pipeline -- : 允许、拒绝或钩子错误
+break 被拒绝或 before hook 出错
+  Pipeline --> Loop : 错误 ToolResultMessage
 end
-Planner -> Results : store #1, #2, #3, #4, #5
+Pipeline -> Pipeline : 发布工具执行开始事件
+Pipeline -> Tool ++ : execute(callId, args, ...)
+ref over Tool
+  业务工具内部执行见 §9.2
+end ref
+Tool --> Pipeline -- : 工具结果或普通执行异常
+Pipeline -> Pipeline : 归一化结果与 isError
+Pipeline -> Hooks ++ : 执行有序 after hooks
+Hooks --> Pipeline -- : 保留或调整后的结果
+Pipeline -> Pipeline : 发布工具执行结束事件
+Pipeline --> Loop -- : ToolResultMessage
+@enduml
 
-note over Planner
-  PARALLEL: Read, Find, Grep, Ls, Skill [P].
-  SEQUENTIAL: Cron, CallTool [P], Agent, business adapters [P].
-  [P] = Pending implementation of new tool entries.
-  Results follow model call order, not completion
-  order.
+@startuml tool_batch_scheduling
+skinparam backgroundColor white
+skinparam defaultFontName "PingFang SC"
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 210
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam sequenceReferenceBackgroundColor #EEF4FA
+skinparam sequenceReferenceBorderColor #8496A4
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
+
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: executePlanned, executeInParallel, findParallelSegmentEnd
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: executionMode
+' Observed behavior: consecutive parallel calls run in virtual-thread tasks; futures are collected in input order before the next segment.
+' Design reason: asynchronous arrows and overlapping activations show concurrency, while the sequential call separates both segments.
+' Pending implementation: CallTool replaces the existing business wrapper; the adjacent-segment scheduling itself is implemented.
+title 批次执行：并行读取与串行屏障
+
+participant "批次调度\nToolExecutionPipeline" as Pipeline
+participant "Read 任务\nFuture #1" as Read
+participant "Grep 任务\nFuture #2" as Grep
+participant "CallTool\n调用 #3（待实现）" as Call
+participant "Find 任务\nFuture #4" as Find
+participant "Ls 任务\nFuture #5" as Ls
+
+note over Pipeline, Call
+  输入顺序：Read、Grep、CallTool、Find、Ls。
+  每个调用仍经过 §7 的完整单次调用流程。
 end note
+activate Pipeline
+group 并行段一
+  Pipeline ->> Read ++ : 提交 #1
+  Pipeline ->> Grep ++ : 提交 #2
+  Pipeline -> Read : 等待 Future #1
+  Grep -> Grep : 先完成，保存结果 #2
+  deactivate Grep
+  Read --> Pipeline -- : 结果 #1
+  Pipeline -> Grep ++ : 读取 Future #2（已完成）
+  Grep --> Pipeline -- : 结果 #2
+end
+group 串行屏障
+  Pipeline -> Call ++ : 执行 #3
+  Call --> Pipeline -- : 结果 #3
+end
+group 并行段二
+  Pipeline ->> Find ++ : 提交 #4
+  Pipeline ->> Ls ++ : 提交 #5
+  Pipeline -> Find : 等待 Future #4
+  Ls -> Ls : 先完成，保存结果 #5
+  deactivate Ls
+  Find --> Pipeline -- : 结果 #4
+  Pipeline -> Ls ++ : 读取 Future #5（已完成）
+  Ls --> Pipeline -- : 结果 #5
+end
+Pipeline -> Pipeline : 汇总结果 #1、#2、#3、#4、#5
+deactivate Pipeline
 @enduml
 
 @startuml read_agent_workspace_isolation
