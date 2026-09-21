@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.14.5 |
+| 文档版本 | 2.14.6 |
 | 状态 | 当前目标；Skill / CallTool、Agent 工具代理及共用执行适配待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-09-21 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
@@ -67,15 +67,14 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 
 ### 1.2 一次完整的 Skill 工具调用
 
-以用户“查询高等数学课程”为例，使用契约中的示例 Skill `course` 和业务工具 `query-course`。这是首次使用的成功路径：上下文还没有正文与定义，抽样清单包含目标文件，权限允许执行，Mate 成功返回。示例名称和业务数据不代表已有平台工具。
+以下说明首次使用一个 Skill 关联工具的成功流程，前提是当前入口已提供 `Skill`、`Read` 和 `CallTool`。`example-skill`、`example-tool` 仅为占位名称。
 
-![从课程查询到用户答案的完整流程](list_mate_tools_sequence.svg)
+1. **加载 Skill。** 模型根据提示词中的名称和描述选择 Skill，调用 `Skill({name: "example-skill"})`。运行时返回 Skill 正文、基础目录和抽样资源路径。
+2. **读取工具定义。** 模型按当前步骤需要，通过 `Read` 读取单个业务工具定义文件，了解 `example-tool` 的名称、用途和参数要求。
+3. **调用关联工具。** 模型调用 `CallTool`，将 `tool` 设为 `example-tool`，并按定义填写 `args`。运行时依据可信关联元数据解析目标，在权限检查和参数校验通过后调用 Mate，将执行结果返回模型。
+4. **生成回答。** 运行时把工具结果放入下一次模型请求，模型根据结果回答用户。
 
-[PlantUML 源码：`list_mate_tools_sequence`](diagram.puml#L341) · [原尺寸 SVG](list_mate_tools_sequence.svg)
-
-模型先获取业务指引，再读取当前步骤需要的单个定义，通过 `CallTool` 执行；运行时将业务结果放入下一次模型请求，最终由模型生成答案。所有模型请求沿用已装配的工具集合。图中运行时合并表示工具派发、权限与执行协作，内部顺序见[单次调用](execution-details.md#tool-invocation)和[业务执行](execution-details.md#business-execution)。
-
-已有正文或完整定义可以复用，不要求每次重复这三个调用。抽样清单遗漏文件时可先定位再读取；读取或业务调用失败时，模型收到错误并决定后续动作，运行时不会自动继续或重放业务请求。发现与执行规则由 [§9](#9-工具注册与发现)维护。
+每次工具结果都会进入后续模型上下文，所有模型请求沿用已装配的 `tools`。已有正文或完整定义时可复用，抽样路径中没有所需文件时可先定位再读取。读取或调用失败时，模型根据错误决定下一步；运行时不会自动继续或重放业务请求。精确规则见 [§9](#9-工具注册与发现)，内部执行边界见[单次调用](execution-details.md#tool-invocation)和[业务执行](execution-details.md#business-execution)。
 
 ## 2. 范围与权威边界
 
@@ -117,9 +116,9 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 
 ### 3.1 阅读方式
 
-先通过全局目标类图了解职责与依赖，再看 [§1.1](#initial-model-tools) 的初始模型请求和 [§1.2](#skill-call-scenario) 的完整业务场景。[执行细节](execution-details.md)按需展开 Session 创建、工具装配、单次调用、业务执行和批次调度；本页其余章节维护规则，精确参数见工具契约。
+先通过全局目标类图了解职责与依赖，再看 [§1.1](#initial-model-tools) 的初始模型请求和 [§1.2](#skill-call-scenario) 的完整调用步骤。[执行细节](execution-details.md)按需展开 Session 创建、工具装配、单次调用、业务执行和批次调度；本页其余章节维护规则，精确参数见工具契约。
 
-场景图使用逻辑参与方，实现图使用对象或职责实例；两者不混读为同一层 Java 调用。装配与工具调用时序使用中文描述、保留代码标识，图前说明前提和起止。实线箭头表示调用或请求，虚线表示返回；批次图的开放箭头表示异步提交。完整交互按场景拆分，失败边界在对应规则与实现图中展开。
+工具集合用表格说明，简单调用流程用文字步骤说明。需要展开内部协作时，图中使用对象或职责实例，图前说明前提和起止。实线箭头表示调用或请求，虚线表示返回；批次图的开放箭头表示异步提交。完整交互按场景拆分，失败边界在对应规则与实现图中展开。
 
 该组织方式参考了基线的场景示例、契约示例和实现下钻，证据与适用边界见[文档风格核验](source-evidence.md#documentation-style-evidence)。已有公共装配与 Pipeline、新增待实现入口分别标注；运行时事实仍以[时序源码核验](source-evidence.md#sequence-evidence)为准。
 
@@ -253,7 +252,7 @@ public interface BuiltInToolFactory {
 
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L678)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L606)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -356,7 +355,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L941)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L869)
 
 ## 9. 工具注册与发现
 
@@ -372,7 +371,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 `Skill` 只接收 `name`，按当前 Agent 可见的直接 Skill 精确解析，返回正文、基础目录和除 `SKILL.md` 外最多 10 个资源文件的绝对路径，明确清单为抽样。文件内容不随清单展开，路径遵守 §5 的工作区边界；遗漏文件通过 `Ls/Find/Grep` 定位，具体文件继续由普通 `Read` 读取。不提供 `resource` 参数或在每个业务步骤中强制引用文件；也不强制每次调用前重复读取已在上下文中的完整定义。
 
-完整业务场景见 [§1.2](#skill-call-scenario)：每次模型返回工具调用后，运行时执行工具并把结果放入下一次模型请求，直至模型生成用户答案。
+完整调用步骤见 [§1.2](#skill-call-scenario)：每次模型返回工具调用后，运行时执行工具并把结果放入下一次模型请求，直至模型生成用户答案。
 
 正文或定义已在上下文中时可跳过对应读取；抽样中没有目标文件时先用 `Ls/Find/Grep` 定位，再由 `Read` 返回单文件文本。读取失败向模型返回明确错误，由模型决定补充读取或停止，运行时不会自动推进到业务调用。`Skill` 不自动展开参考文件中的工具定义，正文自身可以包含调用说明。
 
@@ -461,7 +460,7 @@ Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-templat
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L475)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L403)
 
 模型只使用：
 
@@ -537,7 +536,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L753)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L681)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
@@ -559,7 +558,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L809)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L737)
 
 压缩由公共 ManagedAgentSession 管理，Runtime、Child 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
 
@@ -680,6 +679,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.14.6 | 2026-09-21 | Skill 关联工具调用改为中性占位名称的四步说明，删除课程查询时序图。 |
 | 2.14.5 | 2026-09-21 | 使用“关联的业务工具”描述配置关系，明确关联不等于执行授权。 |
 | 2.14.4 | 2026-09-21 | 明确显式空配置完全不提供模型工具，并区分配置缺失时的默认值。 |
 | 2.14.3 | 2026-09-21 | 用分类表说明初始模型工具与 Skill 的披露和调用方式，移除重复时序图。 |
