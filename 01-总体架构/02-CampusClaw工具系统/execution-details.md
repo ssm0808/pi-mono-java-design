@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
+| 文档版本 | 1.0.1 |
 | 更新日期 | 2026-09-21 |
 | 主设计 | [CampusClaw 工具系统设计](README.md) |
 | 源码基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，具体路径与符号见[源码证据 §9](source-evidence.md#sequence-evidence) |
@@ -36,7 +36,7 @@
 
 [PlantUML 源码：`tool_set_assembly`](diagram.puml#L195) · [原尺寸 SVG](tool_set_assembly.svg)
 
-装配器读取入口 profile。显式空列表直接返回空工具集合；其他路径先检查目标名称冲突，再经 `BuiltInToolFactory` 创建框架工具，并按当前 Agent 直接绑定调用 `MateToolsetFactory` 创建业务代理。冲突使装配失败，不返回部分列表。框架工厂仍可通过上下文中的 Host 工厂回调创建宿主相关工具。
+装配器读取入口 profile。显式 `[]` 直接返回空集合，完全不向模型提供工具；配置项缺失时先采用默认值。有效配置非空时先检查目标名称冲突，再经 `BuiltInToolFactory` 创建框架工具，并按当前 Agent 直接绑定调用 `MateToolsetFactory` 创建业务代理。冲突使装配失败，不返回部分列表。框架工厂仍可通过上下文中的 Host 工厂回调创建宿主相关工具。
 
 返回的列表用于配置 Agent 并提供给模型。仅由 Skill 绑定的业务工具不在这里展开 Schema 或创建代理；同时被 Agent 直接绑定的工具按直接绑定路径装配。读取 Skill 正文或定义文件不触发本图再次装配。业务代理及新增框架入口的装配接线待实现，具体 profile 与冲突规则见[主设计 §4](README.md#4-关闭的公共接口与配置)。
 
