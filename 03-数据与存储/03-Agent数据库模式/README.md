@@ -1,11 +1,11 @@
 # 主流 Agent 数据库模式拆解与 pi-mono Java 采纳边界
 
 > 文档编号：`SR-DB-REF-001`
-> 版本：`v0.3.3`
-> 日期：`2026-09-14`
+> 版本：`v0.4.0`
+> 日期：`2026-09-22`
 > 状态：研究参考；厂商事实限原核验日期，CampusClaw 规则以所属模块为准
 > pi 源码基线：[`f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee`](https://github.com/badlogic/pi-mono/tree/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee)
-> Java 源码基线：无；本文的采纳建议均为目标方案，尚无对应 Java 实现
+> Java 专项状态：Session 追加与历史分页已有实现，非递归读取待实现；2026-09-22 核验 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，精确路径与范围见 [Session 主设计 §2.3](../01-会话记忆GaussDB/README.md#23-java-已实现行为与差距)
 
 ## 1. 结论
 
@@ -19,7 +19,7 @@
 
 这些数据的写入频率、不可变性、查询方式、保留期限和权限边界不同。Java 目标设计应拆开建模，不应把它们合并到一张通用 `messages` 或 `memory` 表。
 
-本研究按五类数据的生命周期比较实现机制。[Session 主设计](../01-会话记忆GaussDB/README.md)维护四表、当前路径、编辑、审计和并发规则；[Agent 元数据主设计](../02-Agent元数据GaussDB/README.md)维护定义及绑定。这里只解释选择依据，不重复定义产品契约。
+本研究按五类数据的生命周期比较实现机制。[Session 主设计](../01-会话记忆GaussDB/README.md)维护 Session 基础表、单条追加时间线、审计和并发规则；[Agent 元数据主设计](../02-Agent元数据GaussDB/README.md)维护定义及绑定。这里只解释选择依据，不重复定义产品契约。
 
 ![Agent database reference layers](./agent-database-reference-layers.svg)
 
@@ -43,7 +43,9 @@
 |---|---|
 | [`f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee`](https://github.com/badlogic/pi-mono/tree/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee) | [`packages/agent/src/harness/types.ts`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/agent/src/harness/types.ts#L375-L571) `SessionTreeEntry` / `SessionStorage`；[`packages/agent/src/harness/session/repository.ts`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/agent/src/harness/session/repository.ts#L22-L70) `SessionRepository` / fork selection；[`packages/agent/src/harness/session/session.ts`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/agent/src/harness/session/session.ts#L61-L147) context transform；[`packages/storage/sqlite-node/src/sqlite/migrations/001_initial.sql`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/storage/sqlite-node/src/sqlite/migrations/001_initial.sql#L1-L59) schema；[`packages/storage/sqlite-node/src/sqlite/storage/index.ts`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/storage/sqlite-node/src/sqlite/storage/index.ts#L335-L418) `readHead` / `appendEntry` |
 
-新基线已经包含数据库 Session 存储后端：SQLite 在同一事务中写入 Entry，更新序号、会话汇总、当前路径末端和分支路径缓存。当前 coding-agent 仍使用旧的 `SessionManager` JSONL 运行时，因此 SQLite 只能描述为新 harness 中已实现的存储能力，不能说 coding-agent 已经完成数据库切换。
+该历史基线已经包含数据库 Session 存储后端：SQLite 在同一事务中写入 Entry，更新序号、会话汇总、当前路径末端和分支路径缓存。该提交的 coding-agent 仍使用旧的 `SessionManager` JSONL 运行时，因此 SQLite 只能描述为新 harness 中已实现的存储能力，不能说 coding-agent 已经完成数据库切换。
+
+分支索引专项于 2026-09-22 更新至 pi 默认 `main@1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`，路径改为 `packages/session-backends/sqlite-node/src/sqlite/session/branch-entries.ts`；`appendEntryToBranchIndex/createDivergentBranchForEntry/scanBranchSegments` 在写侧维护成员与共享片段，读侧按序号查询。完整差异及读取证据见 [M04 主设计 §2](../01-会话记忆GaussDB/README.md#2-来源证据与设计边界)。本文其他厂商和 pi 历史比较保留原核验范围，不代表当次最新事实。
 
 ### 2.3 托管服务事实基线
 
@@ -281,12 +283,12 @@ agent_messages(id, session_id, message_data, created_at)
 | 设计问题 | OpenAI SDK | Google ADK | LangGraph | Microsoft AF | AWS / Anthropic | Letta | 当前 SR 选择 |
 |---|---|---|---|---|---|---|---|
 | 顺序会话历史 | 自增 message id | timestamp index | checkpoint id | checkpoint timestamp | event timestamp/id | sequence id | `entry_seq` |
-| 分支关系 | 高级 Session 支持 | Event branch 字段较弱 | checkpoint parent | previous checkpoint | API 公开 branch/thread | Conversation 与消息关系 | `parent_id` 记录父子关系，`active_leaf_id` 指向当前路径末端；只允许编辑最近用户消息 |
+| 分支关系 | 高级 Session 支持 | Event branch 字段较弱 | checkpoint parent | previous checkpoint | API 公开 branch/thread | Conversation 与消息关系 | 只允许尾部追加；`parent_id` 记录前一 Entry，`active_leaf_id` 指向最新 Entry；按序号直接读取 |
 | 原始 payload | JSON text | Event JSON | JSONB + BYTEA | JSON document | API payload/content | 结构列 + 自定义列 | JSONB payload |
 | 执行恢复 | 非主要目标 | Session replay | 完整 checkpointer | Workflow snapshot | 托管恢复 | Run/Step 状态 | 独立后续 SR |
 | 跨会话记忆 | 自定义 backend | Memory Bank | Store + Vector | Provider 扩展 | Memory Store/Record | Block + Archive | 独立后续 SR |
 | 作用域键 | 由应用决定 | app + user + session | thread namespace | workflow partition | actor/workspace namespace | organization/project | 单一 `session_id` |
-| 版本与审计 | 高级 Session usage/branch | schema metadata | migrations/checkpoint history | checkpoint version | Agent/Memory versions | block history | 不可变 Entry + 当前路径 + 内部审计历史 |
+| 版本与审计 | 高级 Session usage/branch | schema metadata | migrations/checkpoint history | checkpoint version | Agent/Memory versions | block history | 不可变 Entry + 单条时间线 + 内部审计历史 |
 | TTL/保留 | backend 决定 | 服务/应用决定 | Store TTL | Cosmos policy可配置 | 明确事件/记忆生命周期 | 应用策略 | 后续 retention SR |
 
 ## 6. 当前 Memory SR 的采纳边界
@@ -297,7 +299,7 @@ agent_messages(id, session_id, message_data, created_at)
 
 ### 6.1 当前必须保留
 
-当前规则见 [Session 主设计 §1—§7](../01-会话记忆GaussDB/README.md#1-职责与设计结论)：不可变 Entry、父链、当前路径、四表、双口径用量及上下文投影。pi 新 harness 的 Entry/SQLite 行为是参考；四表、最近消息编辑、不保存分支路径缓存和预期父记录校验是 CampusClaw 目标选择。Runtime 压缩的后续实现单独见[压缩证据](../01-会话记忆GaussDB/compaction.md#5-固定源码证据与范围)。
+当前规则见 [Session 主设计 §1—§7](../01-会话记忆GaussDB/README.md#1-职责与设计结论)：不可变 Entry、单条追加时间线、基础表、双口径用量及上下文投影。CampusClaw 不提供最近对话编辑或分支操作，直接按 Session/序号读取；pi 的分支索引仅作为支持多路径时的参考。面向新建环境，不设计存量迁移。Runtime 压缩的后续实现单独见[压缩证据](../01-会话记忆GaussDB/compaction.md#5-固定源码证据与范围)。
 
 ### 6.2 采纳理由
 
@@ -305,7 +307,7 @@ agent_messages(id, session_id, message_data, created_at)
 |---|---|---|---|
 | OpenAI SDK / Google ADK | 固定查询列 + 原始 JSON | `t_session_entries` 固定路径列和 JSONB `payload` | Java 实现选择 |
 | pi SQLite | 不可变 Entry + 可变的当前路径末端 | `t_session_entries` + `t_sessions.active_leaf_id` | pi 行为采纳 |
-| CampusClaw 产品 | 只编辑最近用户消息 | 新 Entry 使用原消息的 `parent_id`，并成为新的当前路径末端 | 产品约束 |
+| CampusClaw 产品 | 只追加且不提供对话编辑 | 新 Entry 接在锁内最新 Entry 后，按 Session/序号直接读取 | 产品约束及架构简化 |
 | Anthropic / AWS | 不可变事件 + 可重建汇总 | `activePath` + `lifetimeUsage` | 架构改造 |
 | 集中式 GaussDB | 预期父记录/路径末端校验 | 按固定顺序锁定 Session 主表记录和序号表记录 | 并发强化 |
 | LangGraph | 将 checkpoint 与 memory store 分开 | 当前 SR 明确排除二者，分别后续设计 | 架构边界 |
@@ -316,8 +318,8 @@ agent_messages(id, session_id, message_data, created_at)
 - 不增加 `runtime_checkpoint*` 表，除非 Java Runtime 明确需要恢复工具调用中的执行状态。
 - 不增加 `memory_store*`、`memory_embedding*` 表，除非跨 Session 记忆的抽取和召回需求已确定。
 - 不增加 tenant、actor 或 user 复合键；本专题引用的原 Session SR 只定义 session 作用域。
-- 不复制 SQLite 的 `branch_entries`、`branch_tips` 或 `entry_materialized`；集中式 GaussDB 直接按 `parent_id` 递归回溯当前路径。
-- 不提供 `moveTo`、分支查询、分支选择、任意历史编辑或标签能力。
+- 不复制 pi 的分支成员/片段索引；GaussDB 按 `session_id/entry_seq` 或 `session_id/event_seq` 直接查询，不遍历父链。
+- 不提供 `moveTo`、分支查询、分支选择、最近或任意历史编辑或标签能力。
 - 不把 Agent Definition、Tool Binding、Credential 放入 `t_sessions.metadata`。
 - 不将 session file path、prompt 或 tool result 直接复制到审计日志。
 - 不用完整状态快照取代不可变 Entry 及其 `parent_id` 关系。
@@ -327,7 +329,7 @@ agent_messages(id, session_id, message_data, created_at)
 1. `SR-RUN-001`：Java Agent Run/Step/Checkpoint，先明确可恢复的中断点和工具幂等语义。
 2. `SR-LTM-001`：跨会话长期记忆，定义 owner、scope、source、version、extraction、recall、TTL 和删除。
 3. 扩展现有 `SR-AGENT-DB-001`：补充不可变 Agent Version/Snapshot 与 Session 的关系。
-4. 扩展现有 `SR-ATTACHMENT-001`：补充附件引用与编辑后旧路径的保留和删除边界。
+4. 扩展现有 `SR-ATTACHMENT-001`：补充附件引用与所属会话历史的保留和删除边界。
 
 在对应需求和 Java 运行时实现出现前，上述表只是目标方案的候选模型，不能描述成 pi 的已有行为。
 
@@ -335,6 +337,7 @@ agent_messages(id, session_id, message_data, created_at)
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.4.0` | 2026-09-22 | Session 采纳边界改为只追加与非递归读取，取消最近消息编辑。 |
 | `v0.3.3` | 2026-09-14 | 将产品规则归还所属主设计，保留数据库研究的分层证据与采纳理由。 |
 | `v0.3.2` | 2026-08-11 | 与 SR-MEM-001 v0.14.2 统一中文术语。 |
 | `v0.3.1` | 2026-08-11 | 优化当前 Memory SR 采纳边界图：与 SR-MEM-001 v0.14.1 统一四表颜色语义，将当前逻辑关系与未来主题依赖分别表示为实线和虚线。 |

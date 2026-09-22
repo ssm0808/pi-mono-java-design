@@ -1,6 +1,6 @@
 # AskUserQuestion：结构化提问与原执行续跑
 
-版本：1.5.0；日期：2026-09-18。状态：主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已实现 Runtime 问答、工具装配、逐题展示、工具日志汇聚和两文件提示词装配，见[源码证据 §12](source-evidence.md#12-主线实现状态核验2026-09-18)。Mate 公共接入待实现；业务 SYSTEM 发布与真实模型行为未核验。既有独立测试仍绑定 §2 所列 9f785bea，本次未重跑。
+版本：1.6.0；日期：2026-09-22。状态：主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已实现 Runtime 问答、工具装配、逐题展示、工具日志汇聚和两文件提示词装配，见[源码证据 §12](source-evidence.md#12-主线实现状态核验2026-09-18)。Mate 公共接入待实现；业务 SYSTEM 发布与真实模型行为未核验。既有独立测试仍绑定 §2 所列 9f785bea，本次未重跑。
 
 本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#submitSessionEvent)。模式仅使用 PLAN.md/BUILD.md；必要性、优先一题和简洁结果使用归基础 SYSTEM，工具独占调用与等待规则归本页 description/共享 Schema，不保留独立 ASK_USER 资源。装配与迁移由 [plan-policy.md](plan-policy.md) 维护。
 
@@ -116,7 +116,7 @@ SSE 和 GET 历史的两种新事件完全同形，无 phase/delta。agent.quest
 
 所有引用带 Session 条件及相应外键/完整性约束，删除与保留清理先删除交接引用、再删执行/事件。SQL COMMENT 用中文。首版交付完整安装 SQL；当前没有已发布数据库基线，不增加升级脚本。不修改用户可见 Session Schema，不为内部问题指针或答案单独推进资源版本，真实 mode/state/name 等变化仍按原规则更新 ETag。
 
-接受答案沿用锁顺序 `t_sessions → 当前 t_session_executions → 段/答案行`：先确认 Session 存在和访问范围，再检查停止，随后校验当前分支、根、固定执行、等待类型与精确问题目标；再根据该已提交问题快照核对答案。结构错误 400；当前 Session 无有效对应等待 409；不能通过错误区分另一 Session 存在同 ID。
+接受答案沿用锁顺序 `t_sessions → 当前 t_session_executions → 段/答案行`：先确认 Session 存在和访问范围，再检查停止，随后校验问题事件所属 Session、根、固定执行、等待类型与精确问题目标；再根据该已提交问题快照核对答案。结构错误 400；当前 Session 无有效对应等待 409；不能通过错误区分另一 Session 存在同 ID。
 
 一笔事务追加完整答案回执、插入交接行、创建新段、清除问题指针并恢复内部 RUNNING；mode 与根消息不变。任一写失败全部回滚。接受前完成响应/轮询容量预留、规范化答案回执和事件编码容量检查；锁内对可变权威状态再次检查。提交后回执先入队，原实例再通过本地通知优化或数据库轮询领取决定；只由持有原执行及原凭据的实例续跑，答案请求中的凭据不替换它。
 
@@ -178,6 +178,7 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-09-22 | 回答受理按 Session 线性历史核对问题，保留根与执行准入。 |
 | 1.5.0 | 2026-09-18 | 同步主线结构化问答、逐题卡片和提示词装配，分离实现与验收状态。 |
 | 1.4.1 | 2026-09-17 | 提问职责使用统一的 Main Agent 角色名称。 |
 | 1.4.0 | 2026-09-17 | 提问原则归基础 SYSTEM，工具契约保持，模式装配改为 PLAN.md/BUILD.md。 |

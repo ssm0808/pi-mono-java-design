@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.39.1 |
-| 更新日期 | 2026-09-21 |
+| 文档版本 | 1.40.0 |
+| 更新日期 | 2026-09-22 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -18,6 +18,7 @@
 | 工具发现专项基线 | A11：2026-09-20 fetch OpenCode `dev@ebb7b76eca82342642c78645109e865614533827`、DSH `master@ddefc45fbc7f8e46dd73185e68295696d1297887`；Java `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，只核验 Skill 加载与远端工具适配，默认分支快照不等于稳定发布，其他模块历史证据不变 |
 | Skill 统计专项基线 | A09：Codex d58d0e58 的完整计数链；Java f61906b9 的 Runtime/Read/Child/Cron 骨架，#295/#298 仅作固定对照，不升级其他 M05 结论 |
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
+| 线性历史专项基线 | A12：pi main `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`，2026-09-22 已确认默认分支并隔离 fetch；Java 本地 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；只升级分支索引与 Session 历史读取结论 |
 | 核验范围 | A07 的模式入口、TUI 实施选择、方案/任务/问题分离、Slash 协同与前端接入范围；M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、业务 Agent 设置唯一模型来源及旧全局目录差距；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
 | 验证边界 | A08 已补充固定开发分支的 Runtime/数据库/前端确定性验证；其余条目保留各自静态核验范围，企业接入与真实模型行为不在已验证范围 |
 
@@ -38,7 +39,7 @@
 
 | 基线 | 固定参考点 | 用于哪些问题 | 本文证据状态 |
 |---|---|---|---|
-| pi | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、消息/Tool 生命周期、Session 分支与压缩 | A01 已核对 Loop 和 Agent 类型，A04 已核对配置 RPC，A05 核对 todo 示例的工具结果恢复；A06 的模型配置和 Provider 组合已专项升级到 `16235fd9`；Session 树与完整协议快照仍待专项核验 |
+| pi | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` | Runtime 内核、消息/Tool 生命周期、Session 分支与压缩 | A01 已核对 Loop 和 Agent 类型，A04 已核对配置 RPC，A05 核对 todo 示例的工具结果恢复；A06 的模型配置和 Provider 组合已专项升级到 `16235fd9`；A12 单独核验最新 SQLite 分支索引，完整协议快照仍待专项核验 |
 | Claude Managed Agents | 官方文档，核对日期 `2026-09-14`；无服务端源码 commit | 公共 Session API、preview 与历史对账 | A02/A04/A05 已核对公开流、List Events、Session 更新、配置限制和通用 custom tool 交互；仍为 Beta，只证明公开契约 |
 | Codex harness | `d58d0e5841e0de08e251673db2d5af8cf3a1ad51` | Provider typed event、Turn/Item 客户端生命周期 | A04 已核对配置协议，A05 核对指定模型的 update_plan 指令及 Handler；A07 核对 TUI 方案实施与 plan Item/TODO 分离；A09 核对 Skill 触发/身份/两级去重/指标/上报；Provider 与其余 M07 生命周期仍待专项核验 |
 | OpenCode | `849c2598abc7d2b40261e74b5826bc74ffc78308` | 多客户端、live/durable 分类与 sequence 回放 | A04 已核对 Session 配置/消息/v2 操作，A05 核对 todowrite 描述与模型提示词；事件流仍待专项核验；v2 源码能力不能自动视为稳定公开契约 |
@@ -54,7 +55,7 @@
 | M01 · Runtime 与多 Agent | Loop 扩展能力如何与产品准入分离；父子执行如何隔离和终止 | pi；Codex、DeepSeek 辅助 | [A01](#a01)覆盖 Loop 与消息准入；[A03](#a03)覆盖计划模式接入与 Child 模式传递，其他父子生命周期待补证 |
 | M02 · Model | 如何让业务 Agent 设置成为唯一模型权威；Provider 调用与模型选择如何分层；原始事件在哪层归一化 | 模型目录差异采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、业务 Agent 设置、旧全局目录删除和 SDK 削减；Codex 事件归一化对比及完整取消链仍待专项核验 |
 | M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；[A11](#a11)覆盖远端代理与 Skill 工具按需披露 |
-| M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；其他上下文与存储比较待补证，不默认 token 全量落盘 |
+| M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；[A12](#a12)覆盖单条时间线与非递归读取，其他上下文比较待补证，不默认 token 全量落盘 |
 | M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计参照 Codex/OpenCode | [A09](#a09)覆盖使用信号、根去重、失败隔离与入口范围；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；同步一致性另行设计 |
 | M06 · 事件与服务边界 | 写入与观察是否分离；流绑定谁；断线如何恢复；控制状态谁权威 | Claude；OpenCode，必要时 pi/DeepSeek | [A02](#a02)覆盖 Claw/Mate 分层与流范围；[A03](#a03)补充计划审核所复用的数据库确认交接，完整回放专项待补证；[A04](#a04)覆盖 Session 配置更新；[A05](#a05)覆盖后端显式任务事件 |
 | M07 · 前端体验 | preview 何时被权威内容替换；Turn/Item 与产品 UI 如何映射 | Codex；Claude 辅助 | [A05](#a05)保留旧提交的事件合并与根执行证据；当前计划/TODO/问答前端实现见[A07](#a07)及[A08](#a08)，公共 Mate 接入仍为目标设计 |
@@ -356,6 +357,23 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 <a id="source-evidence"></a>
 
+<a id="a12"></a>
+
+## 6.9 A12 · 单条追加时间线与非递归历史读取
+
+| 维度 | 结论 |
+|---|---|
+| 所属模块与主设计 | M04/M06；[Session 主设计](../../03-数据与存储/01-会话记忆GaussDB/README.md)维护线性不变量、事务和存量准入；[ListEvents](../01-CampusClaw多Agent运行时/chat-events-history-design.md#51-单条追加时间线源码与实施差距)维护公共分页；复用两处目标图 |
+| 架构问题 | 不开放对话编辑或分支操作时，如何消除历史长度对数据库递归深度的依赖，同时保持完整事件和模型恢复？ |
+| pi 已观察行为 | main `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed` 的 `packages/session-backends/sqlite-node/src/sqlite/session/branch-entries.ts`：`appendEntryToBranchIndex` 写分支成员，`createDivergentBranchForEntry` 复制前缀或共享 compaction 片段，`scanBranchSegments` 按序号分页；`storage.ts#applyCommit` 同事务写 Entry 与索引。它没有逐 Entry 递归 CTE，但片段元数据读取和分叉复制仍有代价。 |
+| CampusClaw 已观察实现 | Java `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#appendLocked/findEventPage` 已有锁内追加和单请求一致性；`modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml` 的三个当前路径查询仍递归。Runtime Web 与命令入口未发现最近对话编辑/分支切换。 |
+| CampusClaw 目标与差异分类 | 产品约束：只追加，不提供最近对话编辑、回退或分支。架构简化：按 Session/序号直接读取，不复制 pi 分支索引，也不新增当前路径成员表。并发加固：创建和追加事务维持单链；投影完整性不放宽。面向新建环境，不设计存量迁移。 |
+| 理由、收益与代价 | 产品不产生替代路径，全部合法 Entry 自然属于同一时间线；消除递归上限与路径解析，不增加写侧索引维护。代价是不能在原 Session 改写对话或选择旧分支；深页 OFFSET 与全量校验仍需性能验证。 |
+| 备选与重新评估条件 | 保留多路径时应重新考虑路径索引。未来开放编辑不能只增加修改 active_leaf_id 的入口。 |
+| 实现与验收 | 尾部追加、数字分页和独立公共事件表已实现；三个非递归查询与长历史验收待实现。测试须覆盖超过 200/1000/10000 条 Entry、多事件投影、序号空洞、并发追加、压缩恢复与非法追加拒绝。 |
+| 基线更新范围 | 原 M04 pi 基线 `f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee` 的 `packages/storage/.../branch-cache.ts` 更新为上述 session-backends 路径；七表与 branch_tips 不再代表当前 pi。只升级本条分支索引结论，不覆盖其他模块旧 SHA；上游默认分支不是稳定发布承诺。 |
+| 讲解要点 | pi 为多分支维护读取索引；CampusClaw 明确只追加，直接使用已提交序号读取。线性是写入事务保证的数据不变量，不是靠查询时忽略分支实现。 |
+
 ## 7. 源码证据与更新边界
 
 P01/P02 使用 pi 固定 commit `5cd93f688aaab89dbb6dfa4aca535f21796ae185`；
@@ -410,6 +428,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.40.0 | 2026-09-22 | 增加 pi 分支索引与 CampusClaw 单条追加时间线的范围、代价和实现差距。 |
 | 1.39.1 | 2026-09-21 | A11 采用“关联的业务工具”表述配置关系，架构与权限结论不变。 |
 | 1.39.0 | 2026-09-20 | 增加 Agent 远端代理与 Skill 工具按需披露的 A11 对比，明确 CallTool 及独立同步边界。 |
 | 1.38.0 | 2026-09-19 | 计划标记由后端解析，公共事件采用 delta/completed 并保留审核事务边界。 |

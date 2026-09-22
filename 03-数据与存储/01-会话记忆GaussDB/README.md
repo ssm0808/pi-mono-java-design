@@ -1,121 +1,94 @@
-# CampusClaw Java 四表 GaussDB Session 事件存储 SR 设计
+# CampusClaw Java GaussDB Session 线性事件存储 SR 设计
 
 > 文档编号：SR-MEM-001<br>
-> 版本：v0.17.0<br>
-> 日期：2026-09-16<br>
-> 状态：设计评审稿<br>
-> pi 源码基线：[`f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee`](https://github.com/badlogic/pi-mono/tree/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee)<br>
-> 设计仓库分析基线：`b5b0d1ecc3419c5960cac394b683a635ac9f853e`<br>
-> CampusClaw Java 源码基线：四表方案未核验 Java 实现；本文 Java 接口、GaussDB 存储和发布机制为目标方案，压缩专题单独登记已核验实现<br>
-> 目标数据库：集中式 GaussDB<br>
-> JDBC 约束：openGauss JDBC `6.0.0-htrunks.csi.gaussdb_kernel.opengaussjdbc.r1`
+> 版本：v0.18.0<br>
+> 日期：2026-09-22<br>
+> 状态：单条追加时间线目标已确认；顺序读取改造待实现<br>
+> Java 核验基线：`fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；本地源码快照，不代表最新远端<br>
+> pi 专项基线：默认分支 `main`，2026-09-22 隔离 fetch，`1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`；默认分支快照不等于稳定发布<br>
+> 目标数据库：集中式 GaussDB；JDBC 约束：openGauss JDBC `6.0.0-htrunks.csi.gaussdb_kernel.opengaussjdbc.r1`
 
 ## 1. 职责与设计结论
 
-本模块维护 Session 历史、当前路径、模型上下文恢复和累计用量。四表方案的源码范围见 §2；运行时压缩算法另见[压缩与恢复](./compaction.md)，其实现证据独立登记，不把四表目标等同于最新 Runtime 数据库全貌。公共事件投影由[Session Events](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)维护。
+本模块维护 Session 的追加历史、模型上下文恢复、会话汇总和累计用量。每个 Session 只有一条按提交顺序增长的时间线；不提供最近一条对话编辑、历史消息替换、回退、同 Session 分支创建、切换或恢复。已提交记录不可由对话操作覆盖或截断；Session 删除与部署既有的数据保留策略另行生效，不新增自动清理。
 
-CampusClaw 的 Session 存储由四张表组成：
+正常历史全部保留。停止执行、工具确认、计划修订、问答续跑和压缩都在原时间线继续追加，不把末端移回旧 Entry。计划修订产生新计划事件，不等于修改已保存的用户对话。新的独立 Session 可以记录来源身份；`parent_session_id` 不表示本 Session 内有多条可选择路径。
 
-1. `t_sessions`：保存 Session 基本信息，以及当前路径的最后一条记录。
-2. `t_session_entries`：保存全部不可变的 Entry（历史记录）及其父子关系。
-3. `t_session_sequences`：为每个 Session 分配严格递增的写入序号。
-4. `t_session_materialized`：保存当前路径摘要和 Session 自创建以来的累计用量。
+内部读取以 `session_id + entry_seq` 为边界，公共 ListEvents 以 `session_id + event_seq` 为边界；均不按父链递归、不新增当前路径成员表或分支缓存。`parent_id`、`active_leaf_id` 沿用原字段名，分别表示前一条 Entry 与最新 Entry，供完整性和并发检查使用，不决定查询可见集合。
 
-本设计不创建 `t_branch_entries`、`t_branch_tips` 和 `t_entry_materialized`。在 pi SQLite 中，前两张表只是可以根据 `parent_id` 重建的分支路径缓存。CampusClaw 不提供通用的分支创建、切换、恢复和查询能力，因此读取时直接从 `t_sessions.active_leaf_id` 开始，逐条按 `t_session_entries.parent_id` 向前回溯。标签能力也不在本期范围内，所以不再保存独立的标签汇总数据。
+本专题的四张基础表是 `t_sessions`、`t_session_entries`、`t_session_sequences`、`t_session_materialized`。它们不是当前 Runtime 数据库的完整表清单：已实现的 `t_session_events`、`t_session_event_projection`、内部 Record、统计和执行控制等表继续存在，不因本设计删除。公共事件字段、投影和数字分页由 [ListEvents](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)维护；压缩算法由[压缩与恢复](./compaction.md)维护。
 
-产品只允许编辑当前路径上最近一条用户消息。编辑时不覆盖、不删除旧 Entry，而是在同一位置写入一条新的用户消息，再把 `active_leaf_id` 指向这条新记录。旧消息及其后续记录仍然完整保留，但只能通过内部审计接口查看。普通分页、模型上下文、会话复制（fork）和 UI 都只读取当前路径。
-
-`t_session_materialized.payload` 分离两种口径：
-
-- `activePath`：当前路径的名称、消息数、当前模型和思考级别；编辑后根据新路径重新计算。
-- `lifetimeUsage`：Session 自创建以来，所有已成功保存的模型调用产生的 Token 和费用总和；编辑消息不会减去已经发生的消耗。
-
-集中式 GaussDB 允许多个 AgentService 实例同时连接同一个 Schema，因此不能只依赖 pi SQLite 在单进程内使用的 `SerialOperationQueue`。所有追加和编辑事务都先锁定 `t_sessions`，再锁定 `t_session_sequences`。请求还必须提交预期的父记录或预期的当前路径末端；如果数据库中的 `active_leaf_id` 已经变化，则拒绝该请求，避免旧 Run 或过期页面继续写入。
-
-![CampusClaw 四表 Session 架构](./设计图/memory-architecture.svg)
+![CampusClaw Session 线性存储目标结构](./设计图/memory-architecture.svg)
 
 [原尺寸 SVG](./设计图/memory-architecture.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L6)
 
+应用服务分别调用事务追加、顺序读取和上下文投影。存储层固定 Session 边界与顺序，上下文层解释压缩及失败重试记录；UI 只读取安全公共事件。读取历史不需要创建或保留 Session 执行对象，已有 Spring 单例与请求范围读取事务沿用。图中通用 Memory 接口是目标抽象，不能据此宣称已实现；Runtime 的实际类与差距见 §2.3。
+
 ### 1.1 术语约定
 
-代码标识、数据库字段和固定枚举值保持原名；解释性文字使用下列中文表达：
-
-| 源码或代码中的术语 | 本文用语 | 说明 |
-|---|---|---|
-| Entry | Entry（历史记录） | 保留类型名；表达数据含义时使用“历史记录” |
-| parent chain | 按 `parent_id` 回溯得到的路径 | 用来说明如何从末端向前读取当前路径 |
-| active leaf | 当前路径末端 | 字段名仍为 `active_leaf_id` |
-| active path | 当前路径 | JSON 字段名仍为 `activePath` |
-| append log | 全部历史记录 | 强调按 `entry_seq` 保留的完整写入历史 |
-| expected leaf/parent | 预期的路径末端/父记录 | 对应 `expectedLeafId` 和 `expectedParentEntryId` |
-| fence | 并发校验或写入前置条件 | 按实际并发语义解释，不使用字面翻译 |
-| materialized state / projection | 会话汇总/可重建的派生数据 | 表名仍为 `t_session_materialized` |
+| 术语 | 本设计语义 |
+|---|---|
+| 线性时间线 | 同一 Session 的全部有效 Entry，按严格递增的 `entry_seq` 排列 |
+| `parent_id` | 前一条 Entry 的 ID；第一条为空；不作为日常读取路径 |
+| `active_leaf_id` | 沿用字段名，语义为最新 Entry ID；空 Session 时为空 |
+| `activePath` | 保留既有汇总键名，表示单条时间线的会话摘要，不表示分支功能 |
+| `expectedParentEntryId` | 内部追加的预期末端，用于锁内复核；不新增公共 HTTP 字段 |
+| 公共事件 | `t_session_events` 中已经保存的完整安全投影；一条 Entry 可以对应零条或多条事件 |
 
 ## 2. 来源证据与设计边界
 
 ### 2.1 观察到的 pi 行为
 
-pi 基线使用七张 Session 数据表：`sessions`、`session_entries`、`session_sequences`、`branch_entries`、`branch_tips`、`session_materialized` 和 `entry_materialized`。此外，应用侧的数据库升级机制还会维护 `migrations` 表。
+pi SQLite 保留分支能力，并在写入时维护分支索引。正常追加只写入成员并推进片段末端；从旧节点分叉时，无 compaction 则复制前缀索引，有 compaction 则共享此前片段、复制其后的索引。读取先用 TypeScript 循环解析片段，再按分支和序号范围执行普通 SQL。它避免逐 Entry 的递归 CTE，但片段嵌套仍有元数据读取成本，分叉也会产生索引复制成本。
 
-关键源码事实如下：
+以下路径相对 `badlogic/pi-mono`，均核验于上述 `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`：
 
-- `session_entries.parent_id` 记录 Entry 之间的父子关系；从 `sessions.active_leaf_id` 开始按 `parent_id` 回溯，即可得到当前路径。
-- 追加 Entry 时，pi 会在同一个 SQLite 事务中写入 Entry、更新写入序号、会话汇总、当前路径末端和分支路径缓存。
-- `branch_entries` 和 `branch_tips` 缓存了从会话起点到各分支末端的完整路径；这些数据可以根据 `parent_id` 重新生成。
-- `entry_materialized` 当前只保存从 `label` 设置和清除记录中提取的派生数据。
-- `SerialOperationQueue` 只能保证同一个 SQLite 存储后端实例内的串行执行。
+| 路径 / 符号 | 已观察行为 |
+|---|---|
+| [`packages/session-backends/sqlite-node/src/sqlite/session/branch-entries.ts`](https://github.com/badlogic/pi-mono/blob/1a584a7a56eb5e7b4ff8ccbd46430f1533282eed/packages/session-backends/sqlite-node/src/sqlite/session/branch-entries.ts) · `appendEntryToBranchIndex`、`createDivergentBranchForEntry`、`readBranchSegmentsNewestFirst`、`scanBranchSegments` | 写侧维护 `branch_entries/branch_meta`，读侧解析片段并按序号及 limit 扫描 |
+| [`packages/session-backends/sqlite-node/src/sqlite/storage.ts`](https://github.com/badlogic/pi-mono/blob/1a584a7a56eb5e7b4ff8ccbd46430f1533282eed/packages/session-backends/sqlite-node/src/sqlite/storage.ts) · `applyCommit` | Entry、分支索引、序号等在同一个 SQLite 事务提交 |
+| [`packages/session-backends/sqlite-node/src/sqlite/migrations/001_initial.sql`](https://github.com/badlogic/pi-mono/blob/1a584a7a56eb5e7b4ff8ccbd46430f1533282eed/packages/session-backends/sqlite-node/src/sqlite/migrations/001_initial.sql) · `entries/branch_entries/branch_meta`、`ix_be_seq` | 原始父子关系与有序分支索引分离，索引以 Session、分支、序号开头 |
+| `packages/session-backends/sqlite-node/README.md` · writable owner | Host 保证一个 Session 的单写所有者；不提供跨进程 lease/fence，不能替代集中式数据库锁 |
+| `packages/session-backends/sqlite-node/test/storage.test.ts` · divergent segment / newest compaction 测试 | 测试源码覆盖前缀索引复制与 compaction 片段共享；本次未运行上游测试 |
 
-源码证据：
-
-- [`001_initial.sql`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/storage/sqlite-node/src/sqlite/migrations/001_initial.sql#L1-L59)
-- [`002_branch_tips.sql`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/storage/sqlite-node/src/sqlite/migrations/002_branch_tips.sql#L1-L12)
-- [`SqliteSessionConnection.appendEntry()`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/storage/sqlite-node/src/sqlite/storage/index.ts#L367-L418)
-- [`branch-cache.ts`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/storage/sqlite-node/src/sqlite/storage/branch-cache.ts#L1-L326)
-- [`session-materialized.ts`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/storage/sqlite-node/src/sqlite/storage/session-materialized.ts#L1-L355)
-- [`SerialOperationQueue`](https://github.com/badlogic/pi-mono/blob/f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee/packages/storage/sqlite-node/src/sqlite/repo.ts#L50-L67)
+专项从旧基线 `f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee` 升级：旧路径 `packages/storage/sqlite-node/src/sqlite/storage/branch-cache.ts` 已变为上述 `session-backends/.../session/branch-entries.ts`；旧七表和 `branch_tips` 描述不用于推断新实现。只升级分支索引与读写事务证据，其他专题的压缩、消息和 Provider 历史基线保持。
 
 ### 2.2 CampusClaw 目标决策
 
-| 决策 | 分类 | 设计原因 |
+| 决策 | 分类 | 理由与代价 |
 |---|---|---|
-| 只保留四张 Session 表 | 产品约束 | 产品只展示一条当前路径，不提供通用分支管理 |
-| 保留 `parent_id` 与 `active_leaf_id` | 产品约束 | 最近用户消息编辑仍需保留旧路径并切换当前路径 |
-| 删除分支路径缓存 | 架构变化 | 构建模型上下文时直接按 `parent_id` 回溯，避免额外的缓存写入和修复逻辑 |
-| 删除 `t_entry_materialized` 和标签能力 | 产品约束 | 当前产品没有标签查询和展示需求 |
-| 编辑最近用户消息时写入新 Entry | 安全与审计强化 | 不覆盖旧输入，也不改写已经发生的模型调用和工具调用历史 |
-| 增加预期父记录/路径末端校验 | 并发强化 | 拒绝旧 Run 的迟到写入，以及基于过期页面发起的编辑 |
-| 分开保存当前路径摘要与会话累计用量 | 架构变化 | 切换当前路径不能减去已经发生的 Token 和费用 |
-| 不沿用 pi 的 `migrations` 表 | 架构变化 | 数据库结构统一由 CampusClaw 数据库发布平台升级 |
+| Session 只允许尾部追加，不提供最近对话编辑或分支操作 | 产品约束 | 产品当前没有这些入口；避免为未开放能力维护多路径语义，代价是不支持原地改写后重新生成 |
+| 直接按 Session 与序号查询，不建立分支索引 | 架构变更 | 写侧保证全部 Entry 属于同一时间线，数据库递归限制不再约束历史长度；深页 OFFSET 和完整恢复仍有自身成本 |
+| 保留 `parent_id/active_leaf_id` | 架构选择 | 复用追加事务的末端检查和内部关联；单链读取不依赖父关系遍历 |
+| 按 Session 锁、序号锁顺序追加并复核所属执行 | 并发加固 | 集中式多实例不能依赖本地队列；不因取消分支而放宽运行准入或迟到写入检查 |
+| 会话摘要与累计用量分开 | 架构边界 | 公共列表、模型上下文和实际计费用量口径不同，压缩不回退已发生费用 |
 
-上述决策都是 CampusClaw 的目标方案，不是 pi SQLite 的原有行为。CampusClaw 保留 pi 的 Entry 编码、父子关系、写入序号、压缩裁剪和模型上下文转换规则，但不保留通用分支管理、路径切换和标签能力。
+本设计不引入 Maven 依赖。MyBatis Spring Boot Starter 默认 `3.0.4`，沿用已有 JDK、Spring 和 JDBC；不为读取新增缓存服务、索引表或数据库插件。
 
-### 2.3 范围与非目标
+### 2.3 Java 已实现行为与差距
 
-本期包括：
+2026-09-22 核验 `pi-mono-java@fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`。以下为仓库相对路径；源码检查不等于数据库验收。
 
-- `create`、`open`、`list`、`delete`、`append` 和模型上下文重建。
-- 当前路径分页和内部全历史审计分页。
-- 编辑当前路径上最近一条用户消息。
-- 复制 Session（fork）时只复制当前路径。
-- SQLite/JSONL 到四表结构的导入和受控导出。
-- 集中式 GaussDB 多实例写入的并发校验。
+| 路径 / 符号 | 已观察行为 | 差距 |
+|---|---|---|
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java`、`RuntimeEventController.java`；同模块 `service/command/` | 未发现最近消息编辑、回退及分支切换入口 | 产品范围按本设计固定，不新增这些入口 |
+| 同模块 `persistence/MyBatisRuntimeSessionRepository.java` · `lockSession/appendLocked/appendEventsLocked` | 已在 Session 锁内设置 parent 为当前末端，分配序号、保存 Entry 和公共事件并推进末端 | 已实现尾部追加骨架；预期父记录与执行有效性须按具体调用链验收，不宣称所有并发校验均完成 |
+| `modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · `listCurrentBranchEntries/listCommittedEvents/countUnmappedCurrentBranchEntries` | 三处递归 CTE 均从末端追父链，分页不能限制前置递归深度 | 三处非递归改造待实现；保留投影完整性和未知类型失败语义 |
+| 同 Java 目录 `event/CommittedEventQueryService.java` · `list/pageOf`；上述 Repository · `findEventPage` | 已有普通数字页码、多取一条及 REPEATABLE_READ 单请求边界 | 沿用；只替换存储范围，不增加跨页快照 |
+| 同目录 `event/RuntimeContextHistoryService.java` · `restoreHistory`；`RuntimeCompactionEventProjector.java` · `persistCompaction` | 已有分批恢复，压缩结果走 `appendEntryWithUsage` 追加 | 恢复读取需改为单链范围查询；上下文过滤算法保持 |
+| `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql` | Runtime 还有事件、投影、内部 Record、统计和执行控制等表 | 四表 DDL 只是基础模型；不替代运行数据库安装清单 |
 
-本期不包括：
+### 2.4 范围与非目标
 
-- 通用 `moveTo`、分支列表、分支切换、分支恢复或任意历史消息编辑。
-- 新写入 `leaf`、`branch_summary` 或 `label` Entry。
-- 标签 API 和标签派生数据。
-- Runtime Checkpoint、跨会话长期记忆、全文检索、向量索引、多租户和 RLS。
-- 持久化 Run、工具副作用补偿、operation id、request hash 或数据库幂等结果表。
-- AgentService 启动时执行 DDL 或维护数据库升级记录。
+范围包含创建、打开、列表、删除、追加、内部 Entry 分页、授权审计、模型恢复，以及目标中的独立 Session 复制。复制能力的实现状态未核验，不因其列入目标而开放新公共接口。
 
-已经执行的外部工具操作不会因用户编辑消息而自动撤销。编辑后启动的新 Run 如果再次调用高风险工具，必须重新执行产品既有的确认流程。
+不提供最近或任意历史对话编辑、消息替换、同 Session 回退、分支列表/创建/切换/恢复、`moveTo`、标签 API，以及新写入 `leaf/branch_summary/label`。不新增 Runtime Checkpoint、跨会话长期记忆、全文/向量索引、Run 幂等协议或工具副作用补偿。公司认证、租户和审计规则仍由所属模块维护，本专题不增加 RLS。
 
-## 3. 四表数据模型
+## 3. 四张基础表的数据模型
 
-![CampusClaw 四表 Session 数据模型](./设计图/memory-data-model.svg)
+![CampusClaw Session 线性存储基础数据模型](./设计图/memory-data-model.svg)
 
-[原尺寸 SVG](./设计图/memory-data-model.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L165)
+[原尺寸 SVG](./设计图/memory-data-model.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L155)
 
 ### 3.1 `t_sessions`
 
@@ -124,11 +97,11 @@ pi 基线使用七张 Session 数据表：`sessions`、`session_entries`、`sess
 | `id` | `VARCHAR(128)` | Session 唯一 ID |
 | `created_at` | `TIMESTAMPTZ(3)` | 创建时间 |
 | `cwd` | `VARCHAR(512)` | 受控规范工作目录 |
-| `parent_session_id` | `VARCHAR(128)` | 复制会话（fork）的来源 Session；没有来源时为空 |
-| `metadata` | `JSONB` | 调用方附加元数据；没有时为 SQL `NULL` |
-| `active_leaf_id` | `VARCHAR(128)` | 当前路径的最后一条记录；空 Session 时为空 |
+| `parent_session_id` | `VARCHAR(128)` | 独立复制的来源 Session；无来源为空 |
+| `metadata` | `JSONB` | 附加信息；缺省为 SQL NULL |
+| `active_leaf_id` | `VARCHAR(128)` | 最新 Entry ID；空 Session 时为空 |
 
-`active_leaf_id` 逻辑引用同 Session 的 `t_session_entries.id`。应用在事务内维护该关系；本版本不增加物理外键。
+`active_leaf_id` 逻辑引用同 Session 的 Entry。它只能在追加事务中向新 Entry 推进，不提供指向历史节点的业务操作。基础 DDL 不增加物理外键；Runtime 已有约束不因此移除。
 
 ### 3.2 `t_session_entries`
 
@@ -136,74 +109,40 @@ pi 基线使用七张 Session 数据表：`sessions`、`session_entries`、`sess
 |---|---|---|
 | `session_id` | `VARCHAR(128)` | 所属 Session |
 | `id` | `VARCHAR(128)` | Session 内唯一 Entry ID |
-| `entry_seq` | `BIGINT` | Session 内严格递增的写入序号 |
-| `parent_id` | `VARCHAR(128)` | 同 Session 直接父 Entry；根 Entry 为空 |
-| `type` | `VARCHAR(64)` | Entry 类型标识 |
-| `timestamp` | `TIMESTAMPTZ(3)` | Entry 自带事件时间 |
+| `entry_seq` | `BIGINT` | 严格递增的提交序号，允许间隔 |
+| `parent_id` | `VARCHAR(128)` | 前一条 Entry ID，第一条为空 |
+| `type` | `VARCHAR(64)` | Entry 类型 |
+| `timestamp` | `TIMESTAMPTZ(3)` | Entry 时间，不作排序依据 |
 | `payload` | `JSONB` | 类型相关内容 |
 
-主键为 `(session_id, id)`，唯一索引 `(session_id, entry_seq)` 保证同一 Session 内的写入顺序稳定且不重复。当前路径必须根据 `parent_id` 回溯；`entry_seq` 只表示各条记录的保存先后，不能直接用来渲染聊天记录。
-
-编辑后的用户消息不新增 `replaces_entry_id`。Service 在事务中确认编辑目标确实是当前路径上最近一条用户消息，再将新 Entry 的 `parent_id` 设为旧消息的 `parent_id`。这样会形成两条从同一父记录开始的后续路径，但产品只展示 `active_leaf_id` 指向的那一条。
+主键 `(session_id, id)`，唯一索引 `(session_id, entry_seq)`。写侧维持单链，读侧按序号读取时间线；不依赖序号连续、不使用 `entry_seq - 1` 查父节点。已提交 Entry ID 和已分配序号不回收。新 Entry 的父节点由写侧依据锁内末端确定，调用方不能指定其他历史分叉点。
 
 ### 3.3 `t_session_sequences`
 
-每个 Session 一行：
-
-| 字段 | 类型 | 语义 |
-|---|---|---|
-| `session_id` | `VARCHAR(128)` | 所属 Session |
-| `next_seq` | `BIGINT` | 下一条 Entry 使用的 `entry_seq`；从 1 开始 |
-
-所有写事务都按 `t_sessions` → `t_session_sequences` 的顺序加锁。分配 `entry_seq` 后，必须在同一事务中写入 Entry 并更新 `active_leaf_id`；任一步失败都必须整体回滚。
+每 Session 一行，`session_id VARCHAR(128)` 为主键，`next_seq BIGINT` 为下一可分配序号。新 Session 从 1 开始，写事务先锁 Session 再锁序号；Runtime 的 Entry、公共事件和内部 Record 共享分配器，因此 Entry 与 event 序号都可能有空洞。保留唯一性和提交顺序，不承诺连续。
 
 ### 3.4 `t_session_materialized`
 
-每个 Session 一行：
-
-| 字段 | 类型 | 语义 |
-|---|---|---|
-| `session_id` | `VARCHAR(128)` | 所属 Session |
-| `payload` | `JSONB` | 当前路径摘要和会话累计用量 |
-
-`payload` 的结构固定为：
+每 Session 一行，主键 `session_id VARCHAR(128)`，`payload JSONB` 保存基础汇总目标：
 
 ```json
 {
-  "activePath": {
-    "name": null,
-    "messageCount": 0,
-    "currentModel": null,
-    "currentThinkingLevel": null
-  },
-  "lifetimeUsage": {
-    "cachedTokens": 0,
-    "uncachedTokens": 0,
-    "totalTokens": 0,
-    "costTotal": 0
-  }
+  "activePath": {"name": null, "messageCount": 0, "currentModel": null, "currentThinkingLevel": null},
+  "lifetimeUsage": {"cachedTokens": 0, "uncachedTokens": 0, "totalTokens": 0, "costTotal": 0}
 }
 ```
 
-规则：
+`activePath` 按线性 Entry 派生，追加可增量更新，复制时按来源历史重算。`lifetimeUsage` 累计全部已保存的计费事实，不以 UI 消息数或压缩后模型上下文求和代替。Runtime 已实现的 `t_session_stats` 和 Usage Record 继续作为其既有权威实现，不另设统计权威表。有限非负数与字段约束由 Service校验，不只依赖 JSONB 语法校验。
 
-- `activePath` 按当前路径从起点到末端的顺序计算；编辑或复制会话后整体重算。
-- 沿当前路径正常追加 Entry 时，可以增量更新 `activePath`。
-- `lifetimeUsage` 只累计已成功保存的 `assistant`、`compaction` 等带有 usage 的 Entry；切换当前路径时不减少。
-- 新的模型调用成功保存后，同时更新 `activePath` 和 `lifetimeUsage`。
-- JSON 字段必须完整，数值必须为有限非负数；Service 和导入器负责校验，JSONB 负责 JSON 语法校验。
-- 这两组汇总都可以根据 `t_session_entries` 重新计算；完整历史仍以 `t_session_entries` 为准。
+## 4. 基础 GaussDB DDL
 
-## 4. 最终态 GaussDB DDL
-
-完整初始化语句见 [`schema.sql`](./schema.sql)，字段含义见 §3；SQL 只在该文件维护。
-
-
-最终的 Session 应用 Schema 只包含上述四张表和 17 个字段。数据库发布平台负责初始化新环境，并在已有环境中删除三张不再使用的派生表。AgentService 运行账号只允许执行 DML，不具备 DDL 权限。
+[`schema.sql`](./schema.sql) 唯一维护四张基础表和 17 个字段的初始化示意。Runtime 完整安装结构以上述实现仓 DDL 及各模块目标增量为准；禁止按“四表”删除其他模块已使用的表。数据库发布平台负责 DDL，AgentService 只执行 DML。沿用字段，本次只调整语义说明，不新增数据库结构。
 
 ## 5. Java 接口与错误语义
 
 ### 5.1 应用服务
+
+通用 Memory 应用接口是目标抽象，待实现；已有 Runtime Repository 按 §2.3 渐进调整。
 
 ```java
 interface MemorySessionApplicationService {
@@ -213,269 +152,134 @@ interface MemorySessionApplicationService {
     void deleteSession(String sessionId);
     SessionDTO forkSession(ForkSessionDTO dto);
     AppendResultDTO appendEntry(AppendEntryDTO dto);
-    SessionEntryDTO editLastUserMessage(EditLastUserMessageDTO dto);
     ContextSnapshotDTO loadContext(LoadContextDTO dto);
     EntryPageDTO pageEntries(EntryPageQueryDTO queryDTO);
     EntryPageDTO pageAllEntriesForAudit(AuditEntryPageQueryDTO queryDTO);
 }
 ```
 
-不提供 `moveTo`、`findEntriesOnBranch`、分支选择和标签相关能力。`pageEntries` 只返回当前路径；`pageAllEntriesForAudit` 仅供已授权的内部调用方使用，按 `entry_seq` 返回全部历史记录。
-
-上述对象都是内部 Application Service DTO，不引入 PO、DO 或 Entity。如果通过 Controller 或对外 API 提供编辑和分页能力，请求与响应必须分别使用 `*RequestVO` 和 `*ResponseVO`。请求 VO 使用 Jakarta Bean Validation；Controller 只收发 VO，Service 负责 VO/DTO 转换、最近用户消息校验和事务编排，MyBatis Mapper 只接收或返回 DTO 与标量结果。
+这些接口只接收/返回内部 DTO。HTTP 边界仍为请求/响应分离的 VO，标准 Jakarta 校验放在请求，Service 负责规则和转换，Mapper 只使用 DTO 与标量。不提供编辑 DTO、编辑错误码、分支选择或路径深度配置。审计和模型读取同一时间线，但内容投影、权限与用途不同；审计 payload 不直接返回 UI 或回灌模型。
 
 ### 5.2 写入 DTO
 
-`AppendEntryDTO` 必须包含：
+`AppendEntryDTO` 包含 `sessionId/expectedParentEntryId/entry`。空 Session 首次追加才允许预期父节点为空。执行侧持有的预期末端和具体执行身份必须在事务内复核，不能把读取快照当作最终写入许可。保留现有 Runtime 准入与控制契约；该内部目标不增加公共字段。
 
-```text
-sessionId
-expectedParentEntryId
-entry
-```
+### 5.3 错误语义
 
-`expectedParentEntryId` 可以为空，但仅限于空 Session 首次追加 Entry 的场景。
-
-`EditLastUserMessageDTO` 固定包含：
-
-```text
-sessionId
-targetEntryId
-expectedLeafId
-newUserMessage
-```
-
-`newUserMessage` 必须是合法的用户消息。调用方不提交新 Entry 的 ID、`entry_seq`、`timestamp` 和 `parent_id`；这些值统一由 Service 产生。
-
-### 5.3 稳定错误
-
-| 错误码 | 条件 |
+| 内部错误 | 条件 |
 |---|---|
 | `SESSION_NOT_FOUND` | Session 不存在 |
-| `SESSION_INVALID_ENTRY` | Entry 类型、`payload`、ID 或请求字段非法 |
-| `SESSION_EDIT_TARGET_NOT_LATEST_USER_MESSAGE` | 编辑目标不是当前路径最近用户消息 |
-| `SESSION_STALE_LEAF` | 编辑请求中的 `expectedLeafId` 与当前路径末端不一致 |
-| `SESSION_STALE_PARENT` | 追加请求中的 `expectedParentEntryId` 与当前路径末端不一致 |
-| `SESSION_CORRUPTED_PATH` | 父节点缺失、跨 Session、重复节点或形成环 |
-| `SESSION_PATH_TOO_DEEP` | 当前路径超过部署配置的最大递归深度 |
-| `SESSION_STORAGE_ERROR` | 事务、JDBC 或会话汇总写入失败 |
+| `SESSION_INVALID_ENTRY` | 类型、payload 或字段非法 |
+| `SESSION_STALE_PARENT` | 预期末端与锁内最新 Entry 不一致 |
+| `SESSION_CORRUPTED_PATH` | 末端或父节点所属 Session 非法，追加状态损坏 |
+| `SESSION_STORAGE_ERROR` | 事务、JDBC 或汇总写入失败 |
 
-校验错误不能通过截断、自动选择最新路径或静默丢弃旧 Entry 恢复。
+上述内部目标不新增 HTTP 错误；ListEvents 存储或投影失败仍映射现有 `EVENT_LIST_FAILED`。单链损坏不能通过选择最大序号、截断或跳过记录“修复”。正常历史长度不映射为递归深度错误。
 
 ## 6. 事务与并发协议
 
-![CampusClaw 四表 Session 写事务](./设计图/memory-write-transaction.svg)
+![CampusClaw Session 尾部追加事务](./设计图/memory-write-transaction.svg)
 
 [原尺寸 SVG](./设计图/memory-write-transaction.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L95)
 
 ### 6.1 创建 Session
 
-一个事务按顺序插入：
-
-1. `t_sessions(active_leaf_id = NULL)`。
-2. `t_session_sequences(next_seq = 1)`。
-3. `t_session_materialized` 的初始汇总数据。
+一个事务创建空 Session（末端为空）、序号分配器及基础汇总；Runtime 现有统计等初始化沿用。同一 Session 禁止创建第二个根。
 
 ### 6.2 追加 Entry
 
 ```text
 BEGIN
-  SELECT t_sessions WHERE id = ? FOR UPDATE
-  校验 active_leaf_id IS NOT DISTINCT FROM expectedParentEntryId
-  拒绝新写入的 leaf、branch_summary 和 label Entry
-  SELECT t_session_sequences WHERE session_id = ? FOR UPDATE
-  分配 next_seq
-  INSERT t_session_entries(parent_id = expectedParentEntryId)
-  UPDATE t_session_sequences
-  按 Entry 类型更新 activePath 和 lifetimeUsage
-  UPDATE t_session_materialized
-  UPDATE t_sessions SET active_leaf_id = newEntryId
+  锁定 t_sessions，复核 Session、所属执行及预期末端
+  拒绝 leaf、branch_summary、label 等不接受的新类型
+  锁定 t_session_sequences，分配序号
+  写入 Entry，parent_id = 锁内最新 Entry ID
+  写入对应公共事件、投影完成记录及必要内部 Record
+  更新 next_seq、末端与适用汇总/Usage
 COMMIT
 ```
 
-加锁顺序固定为 Session 主表记录，然后是序号表记录。如果某个实例仍按旧的父记录追加 Entry，则返回 `SESSION_STALE_PARENT`。该请求不写入任何 Entry，也不更改当前路径。
+同批 Entry 逐个推进本事务内末端，公共事件按既有有序提交规则分配独立序号。失败全部回滚。Session 行锁与序号锁顺序固定；M1 准入、确认/中断竞争、旧执行迟到写入拒绝由 Runtime 控制规则继续约束，线性模型不替代这些检查。`expectedParentEntryId` 目标与现有实现差距见 §2.3。
 
-### 6.3 编辑最近用户消息
+### 6.3 压缩与上下文
 
-编辑请求进入数据库事务前，Service 会尝试取消与该 Session 关联的运行中 Run。取消只是尽力而为；最终仍由事务内的 `expectedLeafId` 校验防止旧 Run 继续写入。
-
-```text
-BEGIN
-  SELECT t_sessions WHERE id = ? FOR UPDATE
-  校验 active_leaf_id IS NOT DISTINCT FROM expectedLeafId
-  读取并校验当前路径
-  从路径末端向前查找最近一条用户消息
-  校验 nearestUser.id = targetEntryId
-  SELECT t_session_sequences WHERE session_id = ? FOR UPDATE
-  分配 next_seq
-  INSERT new user message(parent_id = target.parent_id)
-  UPDATE t_session_sequences
-  按新的当前路径重新计算 activePath
-  lifetimeUsage 保持不变
-  UPDATE t_session_materialized
-  UPDATE t_sessions SET active_leaf_id = newUserEntryId
-COMMIT
-```
-
-编辑完成后，旧消息及其后续记录仍然存在。普通 API 不提供恢复旧路径的能力。新 Run 以新用户 Entry 作为 `expectedParentEntryId`；旧 Run 携带的父记录已经过期，因此追加请求会被并发校验拒绝。已经完成的外部工具调用不会自动回滚。
+压缩完成记录继续追加，历史 Entry 不删除，末端不回退。摘要、`retainedTail/firstKeptEntryId` 和失败重试过滤只影响模型上下文投影；具体算法与固定基线见[压缩专题](./compaction.md)。本次不改变在线与重载一致性，也不将压缩改成数据库历史清理。
 
 ### 6.4 复制 Session（fork）
 
-复制 Session 时，只读取来源 Session 的当前路径，并按原顺序写入新 Session。新 Session 设置 `parent_session_id=sourceSessionId`，不允许调用方选择其他起点或分支。复制过程保留 Entry ID 和 `parent_id` 关系，为新 Session 从 1 开始连续分配 `entry_seq`，并重新计算会话汇总。
+目标为独立 Session 的完整线性历史复制，不是同 Session 分支操作，待实现范围另行核验。一次内部读取快照固定来源上界，再按顺序复制；新 Session 记录 `parent_session_id`，保留内部 Entry ID/父关系并重新分配自身序号。副本的公共事件身份与关联须按独立复制契约定义，不修改来源会话的 eventId。来源后续追加不自动进入副本；复制不产生新的 Skill 使用信号。
 
 ### 6.5 删除 Session
 
-一个事务按顺序删除：
+按现有依赖顺序在删除事务中清理事件/执行关联与基础表，不只删四张表；外部资源清理由其既有机制处理。不用本次设计增加 `ON DELETE CASCADE` 或跳过约束。具体 Runtime 删除/保留策略继续有效。
 
-1. `t_session_entries`。
-2. `t_session_materialized`。
-3. `t_session_sequences`。
-4. `t_sessions`。
+[M05 使用统计](../../04-命令与技能/03-Skill加载统计/README.md)接入仍为待实现增量：活跃或等待确认根保留去重事实；独立采集与删除使用同一 Session 生命周期锁，删除先完成则拒绝迟到写入；累计/日表保留。恢复和复制不产生新使用信号，不改变四张基础表 DDL。
 
-不使用 `ON DELETE CASCADE` 代替事务顺序。
+## 7. 顺序读取、分页和模型上下文
 
-接入 [M05 使用统计](../../04-命令与技能/03-Skill加载统计/README.md)时，活跃或等待确认根的使用事实必须保留去重键；删除路径在同一 Session 生命周期锁与删除事务中清理该 Session 事实，累计/日表保留。采集独立事务使用同一生命周期锁，删除先完成则拒绝迟到写入。恢复、fork 和历史导入不产生新信号；仅仍开放准入的根可记录新的实际信号。该增量为 待实现，不改变四张基础表 DDL，完整保留规则和主图由 M05 维护。
+![CampusClaw Session 顺序读取与上下文投影](./设计图/memory-context-rebuild.svg)
 
-## 7. 当前路径、分页和模型上下文
+[原尺寸 SVG](./设计图/memory-context-rebuild.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L250)
 
-![CampusClaw 不依赖路径缓存的模型上下文重建](./设计图/memory-context-rebuild.svg)
+### 7.1 单链不变量
 
-[原尺寸 SVG](./设计图/memory-context-rebuild.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L258)
+从空 Session 建立单链：第一次追加的 `parent_id` 为空；后续追加在 Session 锁内把 `parent_id` 设为原最新 Entry ID，提交时同步推进 `active_leaf_id`。同一追加事务分配严格递增序号并保存投影，失败整体回滚。所有写入口复用此协议，不能指定历史分叉点或把末端回退。由空状态和每次合法追加维持单链，不增加读前全链核验。
 
-### 7.1 读取当前路径
-
-Repository 使用递归 CTE，从 `active_leaf_id` 指向的记录开始，按 `parent_id` 逐条回溯。读取结果必须满足以下条件：
-
-- 每条记录的 `session_id` 都与请求的 Session 一致。
-- `active_leaf_id` 非空时，必须能找到对应 Entry。
-- 每个非空 `parent_id` 都必须指向实际存在的同 Session Entry。
-- 同一条路径中不能重复出现同一个 Entry ID；一旦发现环，立即返回错误。
-- 递归深度不得超过部署配置；默认上限由实现配置，不写入数据库。
-
-校验通过后，再按 `entry_seq ASC` 返回当前路径。不能把同一 Session 的全部 Entry 直接按 `entry_seq` 排序后当作聊天记录，因为其中同时包含编辑前的旧路径。
+已配置历史保留若会移除 Entry，必须由独立保留流程验证恢复边界和引用完整性，不把任意断链当成合法单链；本次不新增截断或自动清理方案。
 
 ### 7.2 普通分页与审计分页
 
-- `pageEntries`：内部读取当前路径，再按路径内 `entry_seq` 分批加载，供 Session 打开和模型恢复使用。公共 UI 经 [ListEvents](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#3-普通数字页码) 读取已过滤的完整事件，并使用普通 `page/nextPage`；内部读取位置不作为公共游标暴露。
-- `pageAllEntriesForAudit`：经过内部授权后，按整个 Session 的 `entry_seq` 分页，同时显示旧路径和当前路径；返回结果不得作为模型上下文。
+内部 Entry 使用 `(session_id, entry_seq)` 范围查询，`entry_seq > afterSeq ORDER BY entry_seq LIMIT batchSize`。同一次模型恢复/复制先固定内部读取上界，后续批次限制在该上界内，防止尾部持续追加改变本次恢复范围；上界不作为公共游标暴露，保留/删除竞争需在读取一致性边界中处理。
+
+公共 [ListEvents](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#3-普通数字页码)直接从 `t_session_events` 按 Session 和 `event_seq` 读取完整事件，再使用既有 `page/nextPage`、多取一条和单请求一致性。不得先分页 Entry 再拆成事件。审计仍按授权读取内部记录，与公共事件保持投影隔离。
+
+三个递归 Mapper 查询均须替换：Entry 读取、公共事件读取、未映射 Entry 检查。完整性检查改为同 Session 的普通连接/聚合，保留类型、投影存在性及实际事件数量核对；不因移除递归而跳过未知类型或缺少投影。全量检查可能仍为线性成本，暂不引入投影水位替代它，后续优化须单独证明同等完整性。
 
 ### 7.3 重建模型上下文
 
 ```text
-leaf = t_sessions.active_leaf_id
-path = validatedParentChain(leaf)
-trimmedPath = trimPathToRootOrCompaction(path)
-state = deriveModelThinkingAndTools(trimmedPath)
-messages = project(defaultContextEntryTransform(trimmedPath))
+upperBound = captureCommittedEntryUpperBound(sessionId)
+entries = readOrderedEntryBatches(sessionId, upperBound)
+messages = projectWithExistingCompactionAndRetryRules(entries)
 ```
 
-删除分支路径缓存不会改变 compaction、`retainedTail`、旧字段 `firstKeptEntryId` 或自定义上下文转换器的处理规则。历史导入的 `leaf`、`branch_summary` 和 `label` Entry 可以保留在审计历史中；新写入接口拒绝这些类型，标签数据也不进入会话汇总。
+Entry 时间线完整不代表每条都进入模型。配置、控制、独立 Usage 和私有恢复信息继续按既有转换规则处理；压缩摘要与失败候选排除保持。取消递归不等于查询为常数时间：公开深页 OFFSET、全量完整性检查及完整模型恢复分别评估执行计划、内存和延迟，不用数据库默认参数宣称容量。
 
-## 8. 数据迁移与发布
+## 8. 初始化与交付范围
 
-### 8.1 SQLite 导入
+面向新建环境交付完整安装 DDL 和统一的只追加读写实现，不考虑存量数据，不设计迁移脚本、兼容分支、上线前存量扫描或旧路径处理。SQLite/JSONL 数据导入不属于本次范围。
 
-1. `sessions` → `t_sessions`，保留最终 `active_leaf_id`。
-2. `session_entries` → `t_session_entries`，保留全部 Entry、`entry_seq` 和 `parent_id` 关系。
-3. `session_sequences` → `t_session_sequences`，并校验 `next_seq > MAX(entry_seq)`。
-4. 不导入 `branch_entries`、`branch_tips`、`entry_materialized` 或 `migrations`。
-5. 根据最终的当前路径重新计算 `activePath`；根据全部已成功保存、带有 usage 的 Entry 重新计算 `lifetimeUsage`。
-6. 历史 `label`、`leaf` 和 `branch_summary` Entry 只作为审计记录保留，不开放对应的写入 API。
+初始化使用 Runtime 完整安装脚本，包含公共事件、投影、执行控制和统计等所属模块的表；本专题四表 DDL 只说明 Session 基础模型。创建空 Session 后，所有写入口按 §6.2 追加；内部恢复、公共历史和映射检查同时使用 §7 的非递归查询。
 
-导入时必须校验字符串长度、时间戳、JSON 结构、主键、`entry_seq` 唯一性、`parent_id` 引用完整性、`active_leaf_id` 和模型上下文结果。如果某个 Session 的当前路径无法完整回溯，则不得只导入其中一部分数据。
+## 9. 实施切片与验收
 
-### 8.2 JSONL 导入
+| 切片 | 实施与验收 |
+|---|---|
+| S1 · 只追加约束 | 从空 Session 开始验证首条与连续追加；拒绝过期预期父节点和跨 Session 引用；并发追加保持单根、无分叉、末端一致，所有业务入口均无回退操作 |
+| S2 · 三处顺序查询 | 同步 Entry、公共事件与投影完整性查询及消费者命名；确认均无递归 CTE，未知类型/数量不匹配仍失败；不存在 Session 不得伪装为空成功 |
+| S3 · 写入与恢复 | 并发追加、配置组合更新、确认续跑、计划修订及压缩始终只追加；旧执行不越权写入；同次恢复使用固定内部上界，在线与重载消息一致 |
+| S4 · 公共分页 | 覆盖 200、201、1000、10000 条以上 Entry，保留数据库默认递归设置；第一页、末页、空页、一 Entry 多事件、尾部追加及序号空洞均正确；数字页码和 GET/SSE 同形保持 |
+| S5 · 数据库与运维 | 指定 JDBC 与真实 GaussDB 验证事务回滚、锁顺序、类型绑定、SQLState、索引与执行计划；运行身份 DDL 被拒绝，凭据与正文不入普通日志 |
 
-JSONL 导入器只写入四张表。它先保存全部 Entry，再确定目标 `active_leaf_id`。如果源数据没有明确记录当前路径末端，只有在能够证明全部历史是单一路径时，才能选择最后一条 Entry；否则必须返回迁移错误，不得猜测当前路径。
-
-### 8.3 已有七表环境
-
-数据库发布平台按以下顺序升级：
-
-1. 部署能够读取旧 payload 并写入新 payload 的兼容应用版本或执行离线转换。
-2. 重建并校验每个 Session 的 `activePath` 与 `lifetimeUsage`。
-3. 停止旧版本写入，并确认已无 Mapper 访问三张待删表。
-4. 删除 `t_entry_materialized`、`t_branch_tips`、`t_branch_entries`。
-5. 抽样校验四张表的行数、键集合、当前路径、模型上下文和会话汇总。
-6. 部署只依赖四表的应用版本。
-
-具体迁移工具、变更历史、校验和以及并发锁由 CampusClaw 数据库发布平台统一管理；相关元数据不放在 Session 应用 Schema 内。
-
-## 9. 测试与验收
-
-### 9.1 数据库结构
-
-- Session 应用 Schema 中的表集合严格等于四张目标表。
-- 四表共 17 个字段，均有中文 `COMMENT ON COLUMN`。
-- 不存在三张删除表及其索引、Mapper 或运行查询。
-- ID 及引用字段、`type`、`cwd`、序号、时间和 JSONB 字段均与本文的类型定义一致。
-
-### 9.2 行为
-
-- `create`、`open`、`list`、`delete` 和连续追加 Entry。
-- 空 Session 首次追加时，`expectedParentEntryId` 为空；此后每次追加都必须与当前路径末端一致。
-- 编辑最近一条用户消息后，新路径出现在普通分页和模型上下文中，旧路径只能通过审计分页查看。
-- 编辑非最近用户消息、提交过期的 `expectedLeafId`、旧 Run 迟到写入和并发编辑都必须返回明确错误。
-- 复制 Session 时只复制当前路径。
-- 新写入的 `leaf`、`branch_summary` 和 `label` Entry 必须被拒绝。
-
-### 9.3 会话汇总与事务
-
-- 编辑后根据新的当前路径重新计算 `activePath`；旧回答不再计入当前消息数和当前模型状态。
-- `lifetimeUsage` 编辑前后不回退，新回答成功持久化后继续增加。
-- 追加、编辑、复制或删除事务中的任一步失败时，整个事务都必须回滚。
-- 多实例针对同一当前路径末端并发追加时，只允许一个请求成功。
-
-### 9.4 路径与迁移
-
-- 父记录缺失、`parent_id` 指向其他 Session、路径成环或超过深度限制时，都必须返回明确错误。
-- 压缩裁剪、`retainedTail` 和旧字段 `firstKeptEntryId` 的处理结果与 pi 基线一致。
-- 导入包含历史分支的 SQLite Session 后，当前路径、审计历史和模型上下文均正确，且目标库中不存在分支路径缓存表。
-- 历史 `label` Entry 可以审计，但不对外提供标签能力。
-
-### 9.5 JDBC 与发布边界
-
-- 使用指定 JDBC JAR 验证 TLS、认证、类型绑定、递归 CTE、`FOR UPDATE`、事务回滚和 SQLState 映射。
-- 使用真实的集中式 GaussDB 验证锁等待、死锁超时、复合索引和最大路径查询计划。
-- AgentService 运行账号执行 DDL 必须失败；数据库发布身份执行目标 DDL 和 17 条注释必须成功。
-- 真实服务端和定制 JDBC 验证完成前，不得宣称生产兼容性已通过。
+上述均为实施验收要求，尚未执行。模型压缩和长历史恢复不得因超过数据库递归次数而失败；应用可按既有产品容量策略限制数据量，但不以链表深度替代容量测量。不新增编辑、回退、分支操作的实现或正向功能测试；原分支可见性测试退出目标验收，改为只追加约束及长历史顺序读取测试。
 
 ## 10. 安全与运维
 
-- JDBC 强制使用 TLS，凭据来自部署 Secret；AgentService 运行身份只具有四张表的 DML 权限。
-- `payload`、`metadata` 和用户消息正文默认不写入普通日志。
-- 全历史审计接口只允许已授权的内部主体调用，返回结果不得暴露给模型或普通用户。
-- 监控预期父记录不一致、预期路径末端不一致、路径数据损坏、路径过深、锁等待、事务失败和会话汇总重算耗时。
-- 限制单条 Entry 的 `payload` 大小、单个 Session 的 Entry 数量和最大递归深度。
-- 编辑消息不会撤销已经执行的外部工具操作；新 Run 如果再次调用高风险工具，必须重新确认。
-- 先完成数据库变更，再切换到依赖四表结构的应用版本，并保留可验证的兼容窗口。
+公司认证、Session 访问边界、审计、保留和凭据策略保持。JDBC 使用 TLS 与部署 Secret，应用身份仅授予实际所需 DML；日志不输出 payload、metadata、凭据或私有上下文。监控追加状态冲突、投影缺失、锁等待、事务失败、读取行数/耗时和恢复内存。不监控或配置业务路径递归深度。工具副作用不会因停止、删除会话或压缩而自动撤销。
 
 ## 11. 设计决策
 
-决策及理由集中在[§2.2](#22-campusclaw-目标决策)。实施引用保留以下编号：TD-MEM-01 四表、02 当前路径、03 无分支缓存、04 最近用户消息编辑、05 不可变新 Entry、06 无标签、07 审计隔离、08 双口径汇总、09 并发校验、10 当前路径复制、11 平台发布、12 MyBatis 3.0.4 与 DTO/VO 分层。它们不另定义一套规则。
+规则唯一维护于 §2.2，其他模块引用本专题。需要重新支持编辑或分支时，必须重新评估历史保留、读取索引和执行取消，不能只增加修改末端的入口。当前不预建分支索引或保存隐藏的替代时间线。
 
 ## 12. 图表生成与验证
 
-图源维护在 [`设计图/diagram.puml`](./设计图/diagram.puml)：
-
-```bash
-cd '03-数据与存储/01-会话记忆GaussDB/设计图'
-plantuml -tsvg diagram.puml
-```
-
-提交前验证：
-
-- Markdown 中不存在 Mermaid fenced block。
-- `.puml` 只包含 ASCII 字符。
-- PlantUML 生成成功，四个 SVG 均为有效 XML，并与图源同步。
-- Markdown 中的 SVG 路径和 PlantUML 源码行锚有效。
-- DDL 只有四张表和 17 个字段注释，不包含三张删除表。
-- `git diff --check` 通过。
+在 `设计图/` 执行 `plantuml -tsvg diagram.puml`，四个稳定命名块继续保留。检查 ASCII、SVG XML、Markdown 图片与源码锚、生成同步、原尺寸与文档宽度可读性及 `git diff --check`。基础 DDL 的 17 个字段均有中文注释；这不表示 Runtime 全库仅有四表。源代码、数据库验收和设计静态校验分别报告。
 
 ## 13. 版本记录
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v0.18.0 | 2026-09-22 | Session 采用单条追加时间线，移除最近消息编辑与递归读取，按新建环境实施。 |
 | v0.17.0 | 2026-09-16 | Skill 使用去重键保留覆盖活跃根，删除阻止迟到入账。 |
 | v0.16.0 | 2026-09-15 | Session 删除与恢复引用 Skill 调用事实的清理和不重计边界。 |
 | v0.15.0 | 2026-09-14 | 集中维护 Session 存储与压缩职责，独立 DDL 并收敛重复说明。 |

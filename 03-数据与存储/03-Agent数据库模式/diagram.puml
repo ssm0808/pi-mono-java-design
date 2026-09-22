@@ -73,7 +73,7 @@ Event --> Memory : extract durable knowledge
 @enduml
 
 @startuml pi-memory-adoption-boundary
-' Current SR adoption boundary updated for SR-MEM-001 v0.14.2 on 2026-08-11.
+' Current SR adoption boundary updated for SR-MEM-001 v0.18.0 on 2026-09-22.
 !pragma layout smetana
 title CampusClaw Memory SR Adoption Boundary
 top to bottom direction
@@ -88,22 +88,22 @@ skinparam PackageBorderColor #7A8699
 skinparam NoteBorderColor #B58B00
 skinparam NoteBackgroundColor #FFF8D9
 
-' Source evidence: badlogic/pi-mono@f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee,
-' packages/agent/src/harness/types.ts: SessionTreeEntry and SessionStorage;
-' packages/agent/src/harness/session/session.ts: defaultContextEntryTransform and moveTo;
-' packages/storage/sqlite-node/src/sqlite/storage/index.ts: readHead and appendEntry.
-' Observed behavior: pi persists seven Session tables, including parent links,
-' an active leaf, branch caches, and entry materialized labels.
-' Pending implementation product constraint: SR-MEM-001 v0.14.2 keeps four tables, exposes one
-' active path, and only allows editing the latest user message on that path.
-' Architecture change: parent links are read directly without branch cache tables.
-' Concurrency hardening: expected path-end and parent checks protect centralized writes.
-' Design reason: align table colors with SR-MEM-001 and route future links one way.
+
+' Source evidence: badlogic/pi-mono@1a584a7a56eb5e7b4ff8ccbd46430f1533282eed,
+' packages/session-backends/sqlite-node/src/sqlite/session/branch-entries.ts:
+' appendEntryToBranchIndex, createDivergentBranchForEntry, scanBranchSegments.
+' Observed behavior: pi maintains branch membership and shared prefix segments.
+' Java source: fb842b1ac6cb4818f6b146f79dd184a5cd88bf12,
+' modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:
+' listCurrentBranchEntries, listCommittedEvents, countUnmappedCurrentBranchEntries.
+' Pending implementation: replace recursive queries with Session/sequence reads.
+' Product constraint: one append-only timeline; no message edit or branch switch.
+' Design reason: preserve write serialization without maintaining branch indices.
 
 package "Current SR Scope" as CurrentScope #F4FAF6 {
-  database "t_sessions\ncurrent path end" as Session #DCEBFF
+  database "t_sessions\nlatest Entry" as Session #DCEBFF
   database "t_session_sequences\nper-session order" as Sequence #FFE9CC
-  database "t_session_entries\nimmutable history + parent_id" as Entry #E4F4E8
+  database "t_session_entries\nordered history + parent_id" as Entry #E4F4E8
   database "t_session_materialized\nactivePath + lifetimeUsage" as Summary #EEE8FF
 
   Session -[hidden]right- Sequence
@@ -124,7 +124,7 @@ package "Separate Future Topics" as FutureScope #F7F9FC {
   RuntimeCheckpoint -[hidden]down- Artifact
 }
 
-Session --> Entry : owns history and selects path end
+Session --> Entry : owns one append-only timeline
 Session --> Sequence : allocates entry_seq
 Session --> Summary : current and lifetime summary
 
@@ -134,9 +134,9 @@ Entry ..> LongMemory : future extraction source
 Entry ..> Artifact : future content reference
 
 legend bottom
-|<#FFFFFF> Solid links | Current relations; active_leaf_id and parent_id define the current path |
+|<#FFFFFF> Solid links | Base relations; Runtime events and control tables are additional |
 |<#FFFFFF> Dashed links | Future boundaries with independent lifecycle and retention design |
-|<#FFF8D9> Product rule | Old paths are audit-only; no branch cache or label table |
+|<#FFF8D9> Product rule | No message edit or branch switch; reads use Session and sequence |
 endlegend
 
 @enduml

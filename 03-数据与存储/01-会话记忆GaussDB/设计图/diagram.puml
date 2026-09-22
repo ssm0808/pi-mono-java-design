@@ -1,11 +1,11 @@
-' Generated for SR-MEM-001 v0.14.2 on 2026-08-11.
+' Generated for SR-MEM-001 v0.18.0 on 2026-09-22.
 ' Run from this directory: plantuml -tsvg diagram.puml
-' Design repository baseline: b5b0d1ecc3419c5960cac394b683a635ac9f853e.
-' Pi source baseline: f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee.
+' Design repository baseline: 879746e59189a07335e32c7df807c7f5048fdc28.
+' Pi source baseline: 1a584a7a56eb5e7b4ff8ccbd46430f1533282eed.
 
 @startuml memory-architecture
 !pragma layout smetana
-title CampusClaw Four-Table Session Architecture
+title CampusClaw Linear Session Target Architecture
 top to bottom direction
 
 skinparam backgroundColor #FFFFFF
@@ -20,20 +20,19 @@ skinparam PackageBorderColor #7A8699
 skinparam NoteBorderColor #B58B00
 skinparam NoteBackgroundColor #FFF8D9
 
-' Source evidence:
-' - badlogic/pi-mono@f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee
-' - packages/agent/src/harness/types.ts: SessionStorage
-' - packages/agent/src/harness/session/repository.ts: SessionRepository
-' - packages/storage/sqlite-node/src/sqlite/repo.ts: SerialOperationQueue
-' - packages/storage/sqlite-node/src/sqlite/storage/index.ts: appendEntry
-' Observed behavior: pi stores parent links, an active leaf, materialized state,
-' branch caches, and entry materialized labels in a local SQLite backend.
-' Pending implementation product constraint: CampusClaw exposes one active path and only
-' allows editing the latest user message on that path.
-' Architecture change: centralized GaussDB keeps four tables and reconstructs
-' the active path from parent_id without branch cache tables.
-' Concurrency hardening: expected path-end and parent checks protect multi-Pod writes.
-' Design reason: group command, query, and release flows into readable layers.
+' Source evidence: pi@1a584a7a56eb5e7b4ff8ccbd46430f1533282eed
+' packages/session-backends/sqlite-node/src/sqlite/session/branch-entries.ts:
+' appendEntryToBranchIndex, readBranchSegmentsNewestFirst, scanBranchSegments.
+' packages/session-backends/sqlite-node/src/sqlite/storage.ts: applyCommit.
+' Source evidence: Java@fb842b1ac6cb4818f6b146f79dd184a5cd88bf12
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/
+' persistence/MyBatisRuntimeSessionRepository.java: appendLocked, findEventPage.
+' modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:
+' listCurrentBranchEntries, listCommittedEvents, countUnmappedCurrentBranchEntries.
+' Observed behavior: Java appends at the locked tail but still reads recursive paths.
+' Design reason: one append-only timeline needs ordered scans, not branch membership.
+' Product constraint: no conversation editing, rewind, or branch switching.
+' Pending implementation: ordered reads under append-only writes.
 
 actor "Agent Runtime" as runtime
 actor "Internal Auditor" as auditor
@@ -42,59 +41,60 @@ actor "Database Release Platform" as release
 runtime -[hidden]right- auditor
 
 package "Java Session Layer" as javaLayer {
-  component "Memory Session\nApplication Service" as app #DCEBFF
-  component "Session Repository\nLifecycle" as repository #EEF3F8
-  component "Session Storage\nChecked commands" as storage #EEF3F8
-  component "Context Projector\nActive path to prompt" as projector #E4F4E8
+  component "Memory Session\nApplication Service\nPending implementation" as app #DCEBFF
+  component "Session Repository\nLifecycle\nPending implementation" as repository #EEF3F8
+  component "Session Storage\nChecked appends\nPending implementation" as storage #EEF3F8
+  component "Context Projector\nOrdered entries to prompt" as projector #E4F4E8
 
   repository -[hidden]right- storage
   storage -[hidden]right- projector
   app --> repository : session lifecycle
-  app --> storage : append and edit
+  app --> storage : append only
   app --> projector : project context
 }
 
 package "GaussDB Persistence Adapter" as adapter {
   component "MyBatis Session\nMappers" as mappers #EEF3F8
   component "Spring Transaction\nManager" as tx #FFE9CC
-  component "Current Path\nReader" as pathReader #E4F4E8
+  component "Ordered Entry\nReader\nPending implementation" as pathReader #E4F4E8
 
   mappers -[hidden]right- tx
   tx -[hidden]right- pathReader
   tx --> mappers : atomic DML
 }
 
-database "Centralized GaussDB\nFour Session tables" as db #E8EEF7
+database "Centralized GaussDB\nFour base tables +\nRuntime event/control tables" as db #E8EEF7
 
-runtime --> app : commands and active reads
+runtime --> app : commands and ordered reads
 auditor --> app : authorized audit page
 repository --> mappers : create open list fork delete
 storage --> tx : checked write transaction
-app --> pathReader : load and validate active path
+app --> pathReader : read one timeline
 mappers --> db : fixed SQL
-pathReader --> db : follow parent_id
+pathReader --> mappers : session + entry_seq
 release --> db : versioned DDL before rollout
 
 note left of app
-One visible active path.
-Only its latest user message is editable.
-Old subtrees remain immutable and audit-only.
+One append-only timeline.
+No message edit, rewind, or branch switch.
+Normal committed history stays immutable.
 end note
 
 note right of db #EAF6ED
-t_sessions: current path end
-t_session_entries: immutable parent links
+t_sessions: latest Entry
+t_session_entries: immutable ordered entries
 t_session_sequences: per-session order
 t_session_materialized: activePath + lifetimeUsage
 
-No branch cache or label tables.
+No branch or current-path index.
+Writes preserve one ordered timeline.
 end note
 
 @enduml
 
 @startuml memory-write-transaction
 !pragma layout smetana
-title Append and Edit Transaction Protocol
+title Append-Only Session Transaction Protocol
 top to bottom direction
 
 skinparam backgroundColor #FFFFFF
@@ -107,50 +107,40 @@ skinparam PackageBorderColor #7A8699
 skinparam NoteBorderColor #B58B00
 skinparam NoteBackgroundColor #FFF8D9
 
-' Source evidence:
-' - badlogic/pi-mono@f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee
-' - packages/storage/sqlite-node/src/sqlite/storage/index.ts: appendEntry
-' - packages/storage/sqlite-node/src/sqlite/storage/session-sequences.ts
-' - packages/storage/sqlite-node/src/sqlite/storage/session-materialized.ts
-' Observed behavior: pi serializes writes in one process and updates seven
-' categories of Session state in one SQLite transaction.
-' Pending implementation edit rule: a new user entry shares the old user entry parent and
-' becomes the new active leaf while the old subtree stays immutable.
-' Architecture change: branch caches and label projection writes are removed.
-' Concurrency hardening: lock session before sequence and require expected leaf.
-' Design reason: show the common state check once and compare divergent mutations.
+' Source evidence: pi@1a584a7a56eb5e7b4ff8ccbd46430f1533282eed
+' packages/session-backends/sqlite-node/src/sqlite/session/branch-entries.ts:
+' appendEntryToBranchIndex, readBranchSegmentsNewestFirst, scanBranchSegments.
+' packages/session-backends/sqlite-node/src/sqlite/storage.ts: applyCommit.
+' Source evidence: Java@fb842b1ac6cb4818f6b146f79dd184a5cd88bf12
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/
+' persistence/MyBatisRuntimeSessionRepository.java: appendLocked, findEventPage.
+' modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:
+' listCurrentBranchEntries, listCommittedEvents, countUnmappedCurrentBranchEntries.
+' Observed behavior: Java appends at the locked tail but still reads recursive paths.
+' Design reason: one append-only timeline needs ordered scans, not branch membership.
+' Product constraint: no conversation editing, rewind, or branch switching.
+' Pending implementation: ordered reads under append-only writes.
 
-rectangle "WRITE REQUEST\nAppendEntryDTO or EditLastUserMessageDTO" as request #DCEBFF
+rectangle "WRITE REQUEST\nAppendEntryDTO" as request #DCEBFF
 
 package "One GaussDB Transaction" as transaction {
-  rectangle "1  CHECK CURRENT STATE\nBEGIN\nLock t_sessions FOR UPDATE\nCheck expectedParentEntryId or expectedLeafId\nReject stale state" as stateCheck #FFE9CC
+  rectangle "1  CHECK CURRENT STATE\nBEGIN\nLock t_sessions FOR UPDATE\nRecheck execution and expected parent\nReject stale state" as stateCheck #FFE9CC
 
   rectangle "2  SEQUENCE ALLOCATION\nLock t_session_sequences FOR UPDATE\nAllocate the next entry_seq" as sequence #FFE9CC
 
-  rectangle "3A  APPEND MUTATION\nReject leaf, branch_summary, and label\nInsert entry with parent = expected parent\nIncrement activePath and usage as applicable" as append #E4F4E8
-
-  rectangle "3B  EDIT MUTATION\nValidate the complete current path\nRequire target = nearest user message\nInsert sibling with parent = target.parent_id\nRebuild activePath; keep lifetimeUsage" as edit #EEE8FF
+  rectangle "3  APPEND MUTATION\nReject leaf, branch_summary, and label\nInsert entry with parent = expected parent\nIncrement activePath and usage as applicable" as append #E4F4E8
 
   rectangle "4  ATOMIC COMMIT\nAdvance next_seq\nPersist materialized payload\nMove active_leaf_id to the new entry\nCOMMIT" as commit #DCEBFF
 
   stateCheck --> sequence
   sequence --> append : append
-  sequence --> edit : edit
   append --> commit
-  edit --> commit
-  append -[hidden]right- edit
 }
 
-rectangle "FAIL CLOSED\nAny validation or DML failure rolls back the entire transaction.\nSequence, summary, and current path end remain unchanged." as rollback #FDE8E7
+rectangle "FAIL CLOSED\nAny validation or DML failure rolls back the entire transaction.\nSequence, summary, and latest Entry remain unchanged." as rollback #FDE8E7
 
 request --> stateCheck
 rollback .up. transaction
-
-note left of edit
-Before BEGIN, edit requests make a
-best-effort cancellation of the old Run.
-The database state check is the final safeguard.
-end note
 
 note right of commit
 Lock order is always:
@@ -164,7 +154,7 @@ end note
 
 @startuml memory-data-model
 !pragma layout smetana
-title CampusClaw Four-Table Session Data Model
+title CampusClaw Linear Session Base Data Model
 top to bottom direction
 
 skinparam backgroundColor #FFFFFF
@@ -179,17 +169,19 @@ skinparam ArrowThickness 1.2
 skinparam NoteBorderColor #B58B00
 skinparam NoteBackgroundColor #FFF8D9
 
-' Source evidence:
-' - badlogic/pi-mono@f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee
-' - packages/storage/sqlite-node/src/sqlite/migrations/001_initial.sql: lines 1-59
-' - packages/storage/sqlite-node/src/sqlite/migrations/002_branch_tips.sql: lines 1-12
-' - packages/storage/sqlite-node/src/sqlite/storage/session-materialized.ts
-' Observed behavior: pi has seven Session tables after its two migrations.
-' Pending implementation product constraint: CampusClaw removes branch cache tables,
-' entry materialized labels, generic moveTo, and arbitrary branch queries.
-' Target adaptation: retain parent_id and active_leaf_id for immutable edits.
-' Type adaptation: bounded VARCHAR, BIGINT, TIMESTAMPTZ(3), and JSONB.
-' Design reason: use a two-by-two table grid instead of a 2331-pixel row.
+' Source evidence: pi@1a584a7a56eb5e7b4ff8ccbd46430f1533282eed
+' packages/session-backends/sqlite-node/src/sqlite/session/branch-entries.ts:
+' appendEntryToBranchIndex, readBranchSegmentsNewestFirst, scanBranchSegments.
+' packages/session-backends/sqlite-node/src/sqlite/storage.ts: applyCommit.
+' Source evidence: Java@fb842b1ac6cb4818f6b146f79dd184a5cd88bf12
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/
+' persistence/MyBatisRuntimeSessionRepository.java: appendLocked, findEventPage.
+' modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:
+' listCurrentBranchEntries, listCommittedEvents, countUnmappedCurrentBranchEntries.
+' Observed behavior: Java appends at the locked tail but still reads recursive paths.
+' Design reason: one append-only timeline needs ordered scans, not branch membership.
+' Product constraint: no conversation editing, rewind, or branch switching.
+' Pending implementation: ordered reads under append-only writes.
 
 entity "t_sessions" as sessions <<session head>> #DCEBFF {
   id : varchar(128) [PK]
@@ -222,7 +214,7 @@ entity "t_session_materialized" as materialized <<rebuildable summary>> #EEE8FF 
   session_id : varchar(128) [PK]
   --
   payload : jsonb
-  activePath : current path summary
+  activePath : timeline summary
   lifetimeUsage : committed usage total
 }
 
@@ -232,20 +224,20 @@ sessions -[hidden]down- entries
 sequences -[hidden]down- materialized
 
 sessions ..> entries : owns immutable entries
-sessions ..> entries : active_leaf_id selects path end
+sessions ..> entries : active_leaf_id tracks latest Entry
 sessions ..> sequences : one allocator
 sessions ..> materialized : one summary
 
 note bottom of entries #EAF6ED
-parent_id defines path membership.
-entry_seq is append order, not path membership.
-An edit inserts a sibling; old descendants stay audit-only.
+parent_id references the preceding Entry.
+entry_seq orders one admitted linear timeline.
+No sibling inserts or tail rewinds.
 end note
 
 note bottom of materialized #F5F0FF
-activePath is rebuilt after edit and fork.
-lifetimeUsage never decreases when the active path changes.
-Both values are rebuildable from committed entries.
+activePath summarizes the linear timeline.
+Compaction does not erase history or billed usage.
+Runtime event and stats tables are maintained separately.
 end note
 
 note bottom of sessions
@@ -257,7 +249,7 @@ end note
 
 @startuml memory-context-rebuild
 !pragma layout smetana
-title Current Path Context Rebuild Without Path Cache
+title Linear Session Reads and Context Projection
 top to bottom direction
 
 skinparam backgroundColor #FFFFFF
@@ -270,66 +262,52 @@ skinparam PackageBorderColor #7A8699
 skinparam NoteBorderColor #B58B00
 skinparam NoteBackgroundColor #FFF8D9
 
-' Source evidence:
-' - badlogic/pi-mono@f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee
-' - packages/storage/sqlite-node/src/sqlite/storage/index.ts:
-'   readPathToRootOrCompaction
-' - packages/storage/sqlite-node/src/sqlite/storage/branch-cache.ts:
-'   rebuildCachedBranch
-' - packages/agent/src/harness/session/session.ts: buildSessionContext
-' Observed behavior: pi prefers validated branch cache rows and repairs them
-' from session_entries.parent_id when missing or invalid.
-' Architecture change: CampusClaw always follows parent_id from active_leaf_id
-' and never stores or repairs a branch cache.
-' Product constraint: ordinary paging and Context use only the active path;
-' all-entry paging is an authorized internal audit operation.
-' Design reason: separate active-path reconstruction from its three consumers.
+' Source evidence: pi@1a584a7a56eb5e7b4ff8ccbd46430f1533282eed
+' packages/session-backends/sqlite-node/src/sqlite/session/branch-entries.ts:
+' appendEntryToBranchIndex, readBranchSegmentsNewestFirst, scanBranchSegments.
+' packages/session-backends/sqlite-node/src/sqlite/storage.ts: applyCommit.
+' Source evidence: Java@fb842b1ac6cb4818f6b146f79dd184a5cd88bf12
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/
+' persistence/MyBatisRuntimeSessionRepository.java: appendLocked, findEventPage.
+' modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:
+' listCurrentBranchEntries, listCommittedEvents, countUnmappedCurrentBranchEntries.
+' Observed behavior: Java appends at the locked tail but still reads recursive paths.
+' Design reason: one append-only timeline needs ordered scans, not branch membership.
+' Product constraint: no conversation editing, rewind, or branch switching.
+' Pending implementation: ordered reads under append-only writes.
 
-database "t_sessions\nactive_leaf_id" as sessions #DCEBFF
-database "t_session_entries\nparent_id + entry_seq" as entries #E4F4E8
+database "t_session_entries\n(session_id, entry_seq)" as entries #E4F4E8
+database "t_session_events\n(session_id, event_seq)" as events #DCEBFF
+entries -[hidden]right- events
 
-sessions -[hidden]right- entries
+rectangle "ORDERED ENTRY READ\nPending implementation\nFixed internal upper bound\nKeyset batches; no recursion" as ordered #EEF3F8
+rectangle "PUBLIC EVENT READ\nPending implementation\nAccess + projection checks\nPage / limit; no recursion" as page #DCEBFF
+entries --> ordered
+entries ..> page : validate mapping
+ events --> page
+ordered -[hidden]right- page
 
-rectangle "RECURSIVE CTE\nFollow parent_id\nleaf to root" as recursive #EEF3F8
-rectangle "PATH INTEGRITY GUARD\nSame session\nComplete parents\nNo repeated IDs or cycles\nConfigured depth limit" as guard #FFE9CC
-artifact "VALIDATED ACTIVE PATH\nroot to leaf" as path #E4F4E8
-
-package "Ordinary Product Reads" as ordinary {
-  rectangle "ACTIVE-PATH PAGE\nComplete events for UI" as page #DCEBFF
-  rectangle "CONTEXT PROJECTOR\nCompaction trim\nModel + thinking + tools\nMessage projection" as projector #EEE8FF
+package "Internal Consumers" as internal {
+  rectangle "CONTEXT PROJECTOR\nExisting compaction and retry rules\nPrivate fields stay internal" as projector #EEE8FF
   rectangle "MODEL CONTEXT" as context #E4F4E8
-
+  rectangle "AUTHORIZED AUDIT / COPY\nOrdered internal entries" as audit #EEF1F5
   projector --> context
-  page -[hidden]right- projector
+  projector -[hidden]right- audit
 }
+rectangle "UI HISTORY\nShared complete-event projection\nExisting ResultBean shape" as ui #DCEBFF
+ordered --> projector
+ordered --> audit
+page --> ui
 
-package "Internal Audit Only" as internal {
-  rectangle "ALL STORED ENTRIES\nORDER BY entry_seq" as allEntries #EEF1F5
-  rectangle "AUTHORIZED AUDIT PAGE" as audit #EEF1F5
-  allEntries --> audit
-}
-
-ordinary -[hidden]right- internal
-
-sessions --> recursive : current leaf
-entries --> recursive : parent lookup
-recursive --> guard : leaf-to-root rows
-guard --> path : reverse after validation
-path --> page
-path --> projector
-entries ..> allEntries : independent query
-
-note bottom of guard
-Missing parent, cross-session link, repeated ID,
-cycle, or excessive depth fails closed.
-There is no fallback to all-entry ordering.
+note bottom of ordered
+Append transactions preserve a single chain.
+New writes append to the locked latest Entry.
+No per-page parent traversal or depth limit.
 end note
 
-note bottom of audit #F3F4F6
-Audit history is never model context
-and is not returned by ordinary UI endpoints.
-Imported leaf, branch_summary, and label
-entries remain audit-only.
+note bottom of page
+One Entry may produce zero or multiple events.
+Validate projections without recursive CTEs.
+Full validation and deep OFFSET still have costs.
 end note
-
 @enduml

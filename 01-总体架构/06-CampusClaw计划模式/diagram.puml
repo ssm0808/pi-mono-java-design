@@ -393,7 +393,7 @@ API -> Service : Accept decision
 Service -> DB : Lock Session and execution;
 note right of DB
   Require the exact pending plan in this Session.
-  Recheck root, branch, current segment and stop
+  Recheck root, Session, current segment and stop
   state.
 end note
 Service -> DB : Append confirmation; create continuation segment;
@@ -793,7 +793,7 @@ group 2. Accept a complete answer
   UI -> API : user.question_answer(targetEventId, answers)
   API -> Service : Reserve response capacity; validate shape
   Service -> DB : Lock Session -> execution -> segment/answer
-  Service -> DB : Recheck pending type, question, branch and stop
+  Service -> DB : Recheck pending type, question, Session and stop
   Service -> DB : Validate answers against committed question snapshot
   Service -> DB : Commit receipt + answer handoff + new segment
   Service --> API : Accepted fixed target; same root and mode

@@ -677,7 +677,7 @@ def validate_history_model(model: dict, post: dict) -> None:
     }, "ordinary pagination is confirmed, without a cross-page snapshot or idle-only restriction")
     proposal = review["historyProposal"]
     require(proposal == {
-        "scope": "current-branch-per-request", "thinkingFilter": "persisted-original-thinking-current-access",
+        "scope": "linear-session-per-request", "thinkingFilter": "persisted-original-thinking-current-access",
         "readToolToken": False,
     }, "keep only the remaining candidates, not cursor keys, bindings or expiry")
     require(review["confirmedChoices"] == {
@@ -711,7 +711,7 @@ def validate_history_model(model: dict, post: dict) -> None:
     require("L10 已确认" in operation["description"] and "L10 已确认" in review["notice"],
             "tool result boolean outcome approval must be visible in history")
     for clause in ("普通分页已确认", "不再固定快照", "跨页保持相同 limit", "不按 createdAt 重排",
-                   "每页读取该次查询可见的当前分支完整事件", "本接口不承诺自动检测跨页变化",
+                   "每页读取该次查询可见的 Session 完整事件", "本接口不承诺自动检测跨页变化",
                    "允许 Session running 时查询", "nextPage=null 仅表示本次查询没有下一页",
                    "省略 limit 时返回最多 50 条，允许 1～200", "result 只含 events 和 nextPage，不返回 total",
                    "L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null",

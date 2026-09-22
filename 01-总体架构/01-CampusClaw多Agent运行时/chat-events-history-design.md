@@ -2,11 +2,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.13.0 |
-| 状态 | L1～L10、B01～B15 语义已确认；精确契约已定稿，可进入实现，待实现 |
-| 更新日期 | 2026-09-18 |
+| 文档版本 | 0.14.0 |
+| 状态 | 数字分页与公共事件读取已实现；单条时间线的非递归读取待实现，其他增量按各节核验范围记录 |
+| 更新日期 | 2026-09-22 |
 | 原文展示与消费修复 | 实现提交 `cad6847d901155cc6388989b984d19e302a4fbe3`，见 [Draft PR #287](https://github.com/superheromeZzh/pi-mono-java/pull/287)；合入前不作为实现仓主线行为 |
-| 实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
+| 线性读取专项基线 | `pi-mono-java@fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，2026-09-22；范围见 §5.1 |
+| 历史实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
 | 原 HTTP 核对基线 | `918005ee8ccc88d179fc31a0de17a92b4a01383b`；下述查询、编码、游标和 Mapper 四个文件无变化 |
 | 官方公共契约核对 | Claude Managed Agents，2026-09-06，Beta；只证明公开行为 |
 
@@ -14,7 +15,7 @@
 
 ## 1. 查询范围与契约入口
 
-ListEvents 按已提交顺序从旧到新返回当前分支的完整事件，使用普通整数 `page/nextPage`。
+ListEvents 按已提交顺序从旧到新返回该 Session 单条追加时间线的完整事件，使用普通整数 `page/nextPage`。
 每页默认 50 条、上限 200 条，合法超范围页返回空成功响应。完整事件与 POST SSE 共用字段定义。
 
 - 当前 [ListEvents 评审页](chat-api-review.html#listSessionEvents)，唯一精确源为
@@ -74,7 +75,7 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 模型能力关闭 thinking 的 modelCapability 不因 Session Events 改名丢失。配置事件不进入模型上下文，
 主动配置更新只在历史展示，计划批准的模式变化另进入其固定续跑段；自动压缩可在对应执行 SSE 展示，手动 compact 保持 JSON。
 压缩摘要和 firstKeptEntryId 等恢复数据留在内部，不把提示词、私有摘要和内部关联直接返回。
-全部旧持久化类型必须逐类映射或明确不公开理由；未知持久化类型报 EVENT_LIST_FAILED，
+全部持久化类型必须逐类映射或明确不公开理由；未知持久化类型报 EVENT_LIST_FAILED，
 不能静默跳过后声称完整。
 
 统一 Session POST 的模式真实变化追加 `session.mode_changed(reason=requested)`，与模型、思考变更同事务保存，顺序固定为模型 → 思考 → 模式；同值或仅改名不产生额外历史。该事件仅用于历史，不创建执行或 SSE。mode 取值、previous/current 及精确字段由共享事件源维护；名称、内部字段和凭据不进入配置历史。计划审核批准产生的 `reason=planApproved` 同样由共享事件源维护，sourceEventId 与 confirmationEventId 绑定原消息和批准回执，完整记录进入确认续跑段 SSE 与历史。
@@ -83,16 +84,16 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 
 历史读取调用事件中已保存的可选 displayName，不重新查询工具目录或按当前 label 取名。普通工具和 CallMateTool 的显示回退与首次快照统一见[调用名称快照](chat-events-design.md#tool-display-snapshot)；同一调用在 SSE、确认卡与历史中使用同一值。
 
-### 2.0 既有事件的完整迁移清单
+### 2.0 内部事件的完整投影清单
 
 源码基线为 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，以下旧名称来自
 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventType.java`
-与同目录 `RuntimeEntryCodec.java` 的各 Entry 工厂及恢复投影。此表描述 待实现 架构变更：
+与同目录 `RuntimeEntryCodec.java` 的各 Entry 工厂及恢复投影。此表保留历史类型与目标投影的对应关系，当前实现状态按专项核验记录：
 内部原始事件先归一，再经共享完整事件投影供历史与 SSE 使用；旧名称不是兼容 wire 别名。
 
 | 既有内部类型或记录 | 公共目标投影 / 不公开理由 |
 |---|---|
-| user.message | 完整 user.message；旧存量迁移时生成一次稳定 eventId，保留有序正文与 file 块；内部执行与根消息关联持久化，不能每次查询重新生成 ID |
+| user.message | 完整 user.message；提交时生成一次稳定 eventId，保留有序正文与 file 块；内部执行与根消息关联持久化，不能每次查询重新生成 ID |
 | assistant.message.started | 不公开；客户端由第一段 delta 或 completed 建立消息 |
 | assistant.message.delta / completed | agent.message + delta/completed；只有 completed 入历史，完整正文和已知 Usage 保存一次 |
 | assistant.thinking.started | 不公开；不需要额外开始记录 |
@@ -105,11 +106,9 @@ Skill 私有正文及路径不进入公开投影。GET 的 Accept-Language 只�
 | session.compaction.completed | 完整 session.compacted；内部摘要、恢复边界和独立 Usage 仍保留供恢复与累计，不进入公共 payload |
 | session.status.idle | 对应 session.status_idle；持久化真实 reason/原消息 sourceEventId，确认等待边界与实际执行终态区分 |
 | stream.end / stream.error | 连接级信号不入历史；正常 EOF 跟随对应 idle，不能把断线编造成业务失败 |
-| 独立 Usage 累计记录、不透明 thinking 签名/Skill 展开上下文、树结构控制记录 | 不作为额外公共事件；分别用于 lifetimeUsage、模型恢复和分支重建，不能重复计费或泄露私有上下文 |
+| 独立 Usage 累计记录、不透明 thinking 签名/Skill 展开上下文、树结构控制记录 | 不作为额外公共事件；分别用于 lifetimeUsage、模型恢复和内部完整性检查，不能重复计费或泄露私有上下文 |
 
-存量未保存的思考文本或精确因果关联不能凭空补造。实现应提供一次可重跑的迁移/兼容读取方案，
-对缺少安全映射的历史显式报错并提示迁移处理；不得逐次分配新 ID 或静默丢弃后声称历史完整。
-旧数据迁移必须通过实现验收，静态契约校验不证明迁移已完成。
+完整事件在提交事务中保存一次稳定身份和公共内容，读取只返回已提交投影。未保存的思考文本或因果关联不能凭空补造；未知类型、投影缺失或数量不匹配仍显式失败。面向新建环境交付，不增加旧类型迁移或兼容读取路径。
 
 ### 2.1 Mate 工具的文本返回与源码边界
 
@@ -193,7 +192,7 @@ Mate 公共 Chat API 和前端，便于用户直接查看模型本次返回的�
   `delta.content` 只含新增文本，`completed.content` 是同一思考块的完整原文。
   completed 保存一次并与 delta 复用 eventId；GET 返回相同的完整记录。
 - `thinking=false` 不产生新的公开 Thinking；后续关闭开关不隐藏已保存原文。
-  历史读取按当前权限、分支和保留策略进行。
+  历史读取按当前权限和保留策略进行。
 - Provider 先将 SSE 转为类型化领域事件，两层 API 分别投影身份和协议。
   没有可读文本时不生成正文；不透明 signature、加密载荷及无文本的 reasoning_details
   保留在模型续传上下文。
@@ -227,7 +226,7 @@ Mate 公共 Chat API 和前端，便于用户直接查看模型本次返回的�
 没有下一页时返回 `null`。不使用加密游标，不额外增加快照标识、密钥、过期时间或
 服务端翻页会话。页码是记录位置，不是 eventId 或内部事件序号。
 
-每页读取该次查询可见的当前分支完整记录，不冻结首次查询的分支或提交上界。
+每页读取该次查询可见的 Session 完整事件，不冻结首次查询的提交上界。Session 只允许尾部追加，不支持最近对话编辑、回退或分支切换。
 查询可在 `idle` 或 `running` 时进行，不抢占消息执行名额，也不要求暂停执行。
 同一轮翻页保持 `limit` 不变；改变大小时从第一页重新读取。
 `limit` 省略时默认 50，显式取值范围为 1～200；默认值由 Service 归一。
@@ -238,14 +237,14 @@ Mate 公共 Chat API 和前端，便于用户直接查看模型本次返回的�
 公开事件，分页必须作用于映射后的稳定完整事件集合，不能先分页 Entry 再随意拆分。
 内部数据类型映射与完整事件身份是先决条件，不能把 delta 算入页大小。
 Service 校验页码、数量及偏移计算边界，拒绝溢出或无法支持的数值，不允许绕回负数。
-每页的分支、可见性和记录读取应来自一致的单次读取边界；这是单请求一致性，不是跨页
+每页的 Session 存在性、可见性和记录读取应来自一致的单次读取边界；这是单请求一致性，不是跨页
 固定快照，不跨 HTTP 请求保留数据库事务、连接或锁。
 
 例如第一页查询时有 70 条，按默认大小取前 50 条；其后尾部追加 5 条，第二页可返回第
-51～75 条。这不是顺序错误，也不需要把新记录排除。稳定位置的前提是分支、过滤、
+51～75 条。这不是顺序错误，也不需要把新记录排除。稳定位置的前提是过滤、
 保留范围和页大小不变，且新增事件只追加到可见顺序尾部；写侧的依赖检查和有序提交继续有效。
 
-分支切换、访问权限改变、记录清理或可见权限变化可能使已有位置移动。调用方
+访问权限改变、记录清理或可见权限变化可能使已有位置移动。调用方
 获知变化后重新从 `page=1` 加载；每页独立复核当前访问边界，不能返回已撤权内容。
 没有跨页身份，本接口不承诺自动发现这些变化，也不承诺跨页完全无重复、无遗漏。
 eventId 去重只能消除重复，不能弥补漏项；重新加载用于重新建立完整的当前列表。
@@ -290,20 +289,35 @@ Java 文件相对根路径为
 | `event/RuntimeEventCursorCodec.java` · `encode/decode` | AES-GCM page 绑定 Session、afterSeq、thinking 和到期时间；无固定分支/上界；未配置 secret 时用进程随机密钥 | 此编码器退出 Session Events ListEvents 读取链路，不为普通页码增加密钥或签名；差距只针对本表固定基线 |
 | `event/RuntimeEntryCodec.java` · `toHistoryEvent/toSseData` | 旧类型、entryId/entrySeq，用户 message/fileIds；工具调用嵌在 Assistant 内容中 | 共用完整事件投影；工具调用身份要持久化或稳定映射，不能每次读取生成新 ID |
 | `vo/EventPageResponseVO.java` | events 为 `List<Map<String,Object>>`，另有 nextPage | 目标使用只读类型化事件 Response VO，DTO 不穿透 HTTP |
-| `campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · `listCurrentBranch` | 每页从当前 active_leaf_id 递归；只按 afterSeq 下界与旧类型白名单查询、按 entry_seq 升序 | 保留每次读取当前分支；以可见完整事件为分页单位，用页码计算偏移；新增控制、工具调用、结束记录的完整投影 |
+| `campusclaw/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · `listCurrentBranch` | 每页从当前 active_leaf_id 递归；只按 afterSeq 下界与旧类型白名单查询、按 entry_seq 升序 | 单条追加时间线改造见 §5.1；以可见完整事件为分页单位，按 event_seq 直接查询，不再递归筛选分支 |
 | `event/RuntimeEventQueryService.java` · `restoreHistory`；`event/RuntimeEntryCodec.java` · `toAgentMessages` | 模型上下文恢复与公开列表已有不同路径 | 保留职责分离，避免把控制历史回灌模型 |
 
 分类：JSON ResultBean、公司上下文、M1 准入是产品约束；凭据不落盘与每页访问复核是
 安全加固；普通数字页码取代不透明游标是用户明确的产品约束，取消跨页固定快照是
 架构简化；默认 50/上限 200 与只返回 events/nextPage 是产品约束；共享完整
-事件投影和新增可恢复记录仍是 待实现 架构变更。
+事件投影在本表历史基线属于待实现差距，当前读取骨架的专项实现状态见 §5.1。
 
 [Claude 官方事件流文档](https://platform.claude.com/docs/en/managed-agents/events-and-streaming)
 区分不持久化的 preview 与权威完整事件，并用历史补齐断线期间的记录；
 [List Events 官方参考](https://platform.claude.com/docs/en/api/beta/sessions/events/list)
-是公开读取契约。本次只借鉴该边界；Beta 文档不能证明其服务端表结构、ID 算法、
+是公开读取契约。上述历史核验只借鉴该边界，本次未重新核验托管服务；Beta 文档不能证明其服务端表结构、ID 算法、
 事务、调度或分页实现。Claw 的 POST 合并、type + phase、thinking 策略及普通页码
 是本项目目标决定，不声称与 Claude 完全相同。
+
+### 5.1 单条追加时间线：源码与实施差距
+
+存储范围与追加约束唯一由 [Session 主设计 §7～§8](../../03-数据与存储/01-会话记忆GaussDB/README.md#7-顺序读取分页和模型上下文)维护。本节只升级历史读取专项，不覆盖前文其他事件字段的历史证据。2026-09-22 核验 Java `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`：
+
+| 仓库相对路径 / 符号 | 已观察行为 | 目标与状态 |
+|---|---|---|
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventQueryService.java` · `list/pageOf` | 已用 page 计算 offset、多取一条并返回 events/nextPage | 沿用已实现分页，不变更 HTTP 字段 |
+| 同模块 `persistence/MyBatisRuntimeSessionRepository.java` · `findEventPage/appendLocked` | 单请求 REPEATABLE_READ；先检查映射再读事件；锁内尾部追加 | 保留事务和失败语义 |
+| `modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · `listCurrentBranchEntries/listCommittedEvents/countUnmappedCurrentBranchEntries` | 三处先递归整个父链，外层分页不能避免数据库递归上限 | 待实现：Entry 按 session_id/entry_seq、公共事件按 session_id/event_seq 读取，映射检查改为同 Session 非递归连接/聚合 |
+| 同 Java 目录 `event/CommittedEventProjection.java` · `project`；`dto/CommittedEventDTO.java` | 已有存储 DTO 到类型化公共 VO 的投影，DTO 为可变传输对象 | 读取保持安全投影，DTO 不直接返回 HTTP |
+
+移除最近对话编辑属于产品约束；直接按 Session 查询属于架构简化。面向新建环境，由创建和追加事务维持单链，不考虑存量迁移或旧路径兼容。此改造不新增当前路径表、分支字段或 Maven 依赖。
+
+完整性检查保留未知类型、投影缺失和数量不匹配失败语义，不用空列表掩盖异常。它仍可能扫描全部 Session Entry；非递归不等于恒定时间。公共深页 OFFSET 和完整恢复各自做执行计划与容量验证，不以提高 max_recursive_times 作为修复。
 
 ## 6. 推荐目标类图与查询时序
 
@@ -319,7 +333,7 @@ Java 文件相对根路径为
 
 ![普通分页与尾部追加](设计图/事件历史查询/target_event_history_paging.svg)
 
-[原尺寸 SVG](设计图/事件历史查询/target_event_history_paging.svg) · [PlantUML 源码：target_event_history_paging](设计图/事件历史查询/diagram.puml#L64)
+[原尺寸 SVG](设计图/事件历史查询/target_event_history_paging.svg) · [PlantUML 源码：target_event_history_paging](设计图/事件历史查询/diagram.puml#L70)
 
 ## 7. 实施切片与验收
 
@@ -331,15 +345,15 @@ Java 文件相对根路径为
 Skill 展开前回执、绑定变更重检、内部上下文恢复与保留策略保持一致。
 
 
-1. 先补完整记录的稳定身份和共享投影骨架。POST 与 GET 同一完整事件逐字段相等；
+1. 沿用已实现的完整记录身份和共享投影骨架，补齐各专题待实现增量。POST 与 GET 同一完整事件逐字段相等；
    保留五种用户回执、工具关联及唯一停止记录，不泄露内部 ID 或凭据。
-2. 再实现页码归一、查询 DTO 与 Mapper。尾部追加不移动已有位置；分支/过滤变化后
+2. 按 §5.1 完成只追加约束与三处非递归 Mapper 改造，保留页码归一与查询边界。尾部追加不移动已有位置；过滤/保留变化后
    重读第一页，不承诺跨页快照。保留写侧已确认的因果依赖与短事务串行规则。
-3. 接入类型化只读 Response VO；请求 Request VO 用标准 Jakarta 校验，默认值在
+3. 沿用已实现的类型化只读 Response VO；请求 Request VO 用标准 Jakarta 校验，默认值在
    Service 归一，内部 Mapper 仅传 DTO。不得把原 Map/存储对象直接交给 Controller。
 4. 验收 page=1/2、默认第一页、limit 省略为 50、显式 1/200 边界、非法整数、limit 越界、偏移溢出、过滤后计数、空页、
    超出范围、页尾、追加后续读和运行中读取；同一数据库可见数据与策略下不同实例结果一致。
-   另外覆盖 thinking/分支变化后重载、删除和保留期清理，不测试已取消的游标期限或密钥。
+   另外覆盖访问策略变化后重载、删除和保留期清理，不测试已取消的游标期限或密钥。
    成功 result 精确包含 events/nextPage，不新增 total，也不触发为 total 服务的 COUNT 查询。
    合法超范围页必须为 200、events=[]、nextPage=null；不得返回 204、null 数组或分页错误，
    也不得把 Session 不存在或存储查询异常当作空页。
@@ -352,6 +366,8 @@ Skill 展开前回执、绑定变更重检、内部上下文恢复与保留策�
    GET 与 POST 不发生二次展开，关联 ID 和业务参数值不变，不公开内部 toolId。
 8. L10 验收每条完整工具结果均带布尔 isError，成功 false、失败 true；缺失、null、
    数字或字符串不符合该字段契约，不能以 status 或错误文本替代。
+
+新增线性读取验收：在默认递归配置下，超过 200、1000、10000 条 Entry 的分页、投影检查和模型恢复均成功；一 Entry 多事件及序号空洞不影响排序。并发写入始终维持单链，压缩保留原历史，最近消息编辑/回退不作为目标能力。
 
 精确报文与码值由操作模型维护；上述验收项仍需实现测试，部署与数据库数值需按实际环境校准。
 
@@ -393,6 +409,7 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.14.0 | 2026-09-22 | 历史查询采用单条追加时间线，移除分支递归并保留追加约束与投影完整性校验。 |
 | 0.13.0 | 2026-09-18 | 工具调用展示名复用已提交快照。 |
 | 0.11.0 | 2026-09-16 | Skill 使用统计独立于权威事件事务，失败不影响主执行。 |
 | 0.10.0 | 2026-09-15 | Skill 调用统计关联权威来源事务，不增加公共事件类型。 |
