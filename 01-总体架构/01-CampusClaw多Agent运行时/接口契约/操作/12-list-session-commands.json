@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}/commands",
     "summary": "列出当前 Session 可调用的 Builtin 和 Skill 命令形态",
-    "description": "Runtime 根据 Session 状态和最新 complete Agent 版本生成严格过滤的命令清单。每一项只描述当前可调用的形态：input 缺失表示当前只允许无参且无附件调用；input.hint 是不参与校验的展示文本，方括号表示可选输入，尖括号表示必填输入；input.acceptsFiles 只在为 true 时输出。响应不含 Slash 前缀、候选模型值、Skill ID、版本、正文或文件路径。该接口只读，不刷新 Agent，也不调用模型。 Builtin 与 Skill Command 由用户统一负责设计、实现和集成。GET 共享清单的字段、排序与状态过滤已确认；Skill 执行联合请求和公共 POST 发布仍待评审，发现示例不代表已经上线。Builtin 按 help、status、name、model、thinking、compact、skills 固定顺序排列，Skill 随后按 name 排序。Help 仅无参介绍 Agent，因此始终不返回 input。无完整 Agent 缓存返回 503 AGENT_NOT_AVAILABLE，不返回残缺的 Builtin 清单；这不改变 POST Help 的既有 422 错误。",
+    "description": "Runtime 根据 Session 状态和最新 complete Agent 版本生成严格过滤的命令清单。每一项只描述当前可调用的形态：input 缺失表示当前只允许无参且无附件调用；input.hint 是不参与校验的展示文本，方括号表示可选输入，尖括号表示必填输入；input.acceptsFiles 只在为 true 时输出。响应不含 Slash 前缀、候选模型值、Skill ID、版本、正文或文件路径。该接口只读，不刷新 Agent，也不调用模型。 Builtin 与 Skill Command 由用户统一负责设计、实现和集成。GET 共享清单的字段、排序与状态过滤已确认；Runtime Skill 执行联合请求已由 B13/B14 确认，Mate 公共 POST 独立评审；发现示例不代表已经上线。Builtin 按 help、status、name、model、thinking、compact、skills 固定顺序排列，Skill 随后按 name 排序。Help 仅无参介绍 Agent，因此始终不返回 input。无完整 Agent 缓存返回 503 AGENT_NOT_AVAILABLE，不返回残缺的 Builtin 清单；这不改变 POST Help 的既有 422 错误。 字段和逐命令调用速查见下表；input 是清单中的输入能力描述，执行请求不发送 input 对象。中文成功示例是展示样例，不证明描述已按 Accept-Language 本地化；语言范围与当前实现差异见下表。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -203,6 +203,201 @@
             "resMsg": "The current Agent runtime is unavailable."
           }
         }
+      }
+    ],
+    "contractSections": [
+      {
+        "title": "命令描述符与 input 字段",
+        "description": "result.commands 是命令数组。下表字段相对单个命令；input 只含 hint 和可选 acceptsFiles，不是执行参数对象或 JSON Schema。",
+        "columns": [
+          "字段",
+          "类型 / 必填",
+          "含义与省略规则"
+        ],
+        "rows": [
+          [
+            "name",
+            "string / 必填",
+            "不带前导 /；Builtin 裸名或 skill:<name>。"
+          ],
+          [
+            "kind",
+            "string / 必填",
+            "仅 builtin 或 skill。"
+          ],
+          [
+            "description",
+            "string / 必填",
+            "非空用途说明；语言边界见下方说明。"
+          ],
+          [
+            "input",
+            "object / 可省略",
+            "缺失表示当前只允许无参数、无附件调用；不返回 null 或空对象。"
+          ],
+          [
+            "input.hint",
+            "string / input 存在时必填",
+            "非空展示文本；[x] 表示可选输入，<x> 表示必填输入；不作为校验规则。"
+          ],
+          [
+            "input.acceptsFiles",
+            "boolean / 可省略",
+            "只在 true 时输出；缺失表示 false。Builtin 一律省略。"
+          ],
+          [
+            "不公开的字段",
+            "不返回",
+            "available、unavailableCode、input.mode、input.available、input.unavailableCode、input.placeholder、input.suggestions；不增加 allowedValues 或 catalogVersion。"
+          ]
+        ]
+      },
+      {
+        "title": "各命令的输入与调用速查",
+        "description": "以下 / 示例用于交互输入；HTTP POST 提交不带 / 的 name 和可选 arguments，Skill 另可提交 fileIds。input 缺失不等于命令不可执行；例如 help 和 compact 都是无参命令。GET 只是当前观察值，POST 仍重新准入。",
+        "columns": [
+          "命令",
+          "idle 的 input",
+          "交互调用例子",
+          "running 的形态"
+        ],
+        "rows": [
+          [
+            "help",
+            "省略",
+            "/help",
+            "保留，无参数。"
+          ],
+          [
+            "status",
+            "省略",
+            "/status",
+            "保留，无参数。"
+          ],
+          [
+            "name",
+            "{\"hint\":\"[displayName]\"}",
+            "/name；/name 园区设备告警排查",
+            "保留，查询和修改均可。"
+          ],
+          [
+            "model",
+            "{\"hint\":\"[modelId]\"}",
+            "/model；/model <实际模型ID>",
+            "保留但省略 input，仅查询；模型 ID 从 model 查询结果选择。"
+          ],
+          [
+            "thinking",
+            "{\"hint\":\"[on|off]\"}",
+            "/thinking；/thinking on；/thinking off",
+            "保留但省略 input，仅查询；on/off 必须小写。"
+          ],
+          [
+            "compact",
+            "省略",
+            "/compact",
+            "整项省略。"
+          ],
+          [
+            "skills",
+            "省略",
+            "/skills",
+            "保留，无参数；只列出绑定技能。"
+          ],
+          [
+            "skill:<name>",
+            "{\"hint\":\"[request]\",\"acceptsFiles\":true}",
+            "/skill:pdf 分析附件中的巡检记录（需已绑定 pdf）",
+            "整项省略；附件通过 fileIds 提交。"
+          ]
+        ]
+      },
+      {
+        "title": "执行请求与响应示例索引",
+        "description": "展开当前页的“执行会话命令”（executeSessionCommand），请求区已有各命令的完整 JSON，响应区按下列标签查看。清单 input 不随 POST 提交：改名用 name=\"name\"、arguments=\"园区设备告警排查\"。所有 Builtin 返回普通 JSON，Skill 返回 SSE。",
+        "columns": [
+          "命令",
+          "POST 参数形态",
+          "响应标签 / 业务结果"
+        ],
+        "rows": [
+          [
+            "help",
+            "name=help；无参数",
+            "200 · help / help 空内容：displayName、description、useCases。"
+          ],
+          [
+            "status",
+            "name=status；无参数",
+            "200 · status：完整 Session 与 ETag。"
+          ],
+          [
+            "name",
+            "name=name；省略 arguments 为查询，带参为修改",
+            "200 · name 查询 / name 修改 / name 同值：完整 Session 与 ETag。"
+          ],
+          [
+            "model",
+            "name=model；省略 arguments 为查询，带 modelId 为修改",
+            "200 · model 查询 / model 无可选项：模型清单，无 ETag；model 修改 / model 同值：完整 Session 与 ETag。"
+          ],
+          [
+            "thinking",
+            "name=thinking；省略 arguments 为查询，带 on/off 为修改",
+            "200 · thinking 查询 / thinking 修改 / thinking 同值：完整 Session 与 ETag。"
+          ],
+          [
+            "compact",
+            "name=compact；无参数",
+            "200 · compact / compact 空历史：compacted=true 或 false。"
+          ],
+          [
+            "skills",
+            "name=skills；无参数",
+            "200 · skills / skills 空绑定：名称、描述清单或空数组。"
+          ],
+          [
+            "skill:<name>",
+            "name=skill:<name>；可选 arguments、fileIds",
+            "200 · Skill SSE：原始调用的 user.message，随后复用 Agent、Tool 与 idle 事件。"
+          ]
+        ]
+      },
+      {
+        "title": "语言范围与当前实现差异",
+        "description": "2026-09-22 核对 pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45 的清单 Controller、Service、描述符组装与 Contributor；源码观察不等于部署验收。中文成功示例与英文实现存在差异，Builtin 描述本地化尚未实现，其契约适用范围仍需明确。",
+        "columns": [
+          "内容",
+          "已确认规则 / 已观察实现",
+          "边界"
+        ],
+        "rows": [
+          [
+            "Accept-Language",
+            "公共说明目前仅约定异常消息语言；支持 zh-CN/en-US，缺失或不支持回退 en-US。",
+            "不设置 Session 或模型回答语言；不能仅凭 Content-Language 推断所有业务文本已翻译。"
+          ],
+          [
+            "Builtin description",
+            "Contributor 保存英文描述；清单链路未传 Locale，组装器原样输出 description。",
+            "当前返回英文，与中文成功示例不一致；描述是否随语言切换的契约范围待明确，代码未修复。"
+          ],
+          [
+            "Skill description",
+            "从绑定 Skill 元数据读取作者描述。",
+            "不以中文示例推定会自动翻译 Skill 元数据。"
+          ],
+          [
+            "hint / 协议值",
+            "当前使用 [displayName]、[modelId]、[on|off]、[request]。",
+            "提示文本不作为字段定义；name、kind、on/off 等协议值保持原值。"
+          ],
+          [
+            "POST Help 内容",
+            "Agent 元数据原文投影，不翻译、不生成介绍。",
+            "Help 返回的介绍与 GET 中 help 命令的 description 是不同内容。"
+          ]
+        ]
       }
     ]
   },

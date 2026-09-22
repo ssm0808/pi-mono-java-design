@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.12.2 |
+| 文档版本 | 1.12.3 |
 | 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -159,6 +159,11 @@ Skill 名称必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，同时单独校验 1～6
 Runtime GET 的精确模型见[当前接口](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#listSessionCommands)；
 Mate GET 同步相同 Descriptor，但公共认证、bridge、错误映射与 POST 发布仍需独立评审。
 
+该接口页直接列出字段类型与省略规则、逐命令调用速查及 POST 响应示例索引。
+`input` 描述当前调用能力，不是执行请求字段；实际提交 `name`、`arguments`，Skill 另可提交 `fileIds`。
+完整请求和返回报文统一见[执行命令示例](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#executeSessionCommand)，
+Help 的缓存与元数据理由仍见[Help 专项](../01-内置命令/Help-Agent使用指南/README.md)。
+
 | 字段 | 必填 | 契约 |
 |---|---|---|
 | name | 是 | 不带前导 /；Builtin 裸名或 `skill:<name>` |
@@ -235,6 +240,31 @@ argumentHint，支持轻量提示的结构参考；它不定义 CampusClaw 的 H
 4. POST 重新准入、Help 无参三个业务字段、Name 无历史、JSON 返回和 Events v2 不回退；
    交互层验证 Slash 未命中保留草稿、无普通消息 fallback。
 5. 文档门禁同时检查两套 JSON、HTML 和负向变异，防止后续 Help/POST 改动重新带回旧 GET。
+
+#### 3.3.1 清单字段与语言专项核对
+
+核对日期为 2026-09-22，源码基线为 `pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45`。
+本节只更新公开字段和描述语言的证据，不替换上文历史发现层或其他模块的实现状态。
+以下路径相对实现仓的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
+
+| 源码 / 符号 | 已观察行为 | 结论与边界 |
+|---|---|---|
+| `vo/CommandListResponseVO.java` · DescriptorResponseVO / InputResponseVO | 公开 input 只有 hint、acceptsFiles；null input 与 false acceptsFiles 分别通过 Jackson 省略 | 两字段公开形态已实现；内部 DTO 其他字段不是 HTTP 契约 |
+| `web/RuntimeCommandCatalogController.java` · list；`service/command/CommandCatalogService.java` · list | Controller 调用 list(sessionId)，设置 Content-Language；清单服务未接收 Locale | 响应 Header 不证明命令描述已本地化 |
+| `service/command/CommandDiscoveryResponseAssembler.java` · descriptor / input | 原样投影 command.description()；hint 使用固定提示常量 | 当前实现不会按 zh-CN 切换 Builtin 描述 |
+| `service/command/contributor/HelpCommandContributor.java` · definition；`service/command/contributor/NameCommandContributor.java` · definition | 描述分别固定为英文 Agent 用途说明和 Session 改名说明 | 与契约中文成功示例不一致；Builtin 描述本地化待实现，契约适用范围待明确 |
+| `service/command/SkillCommandSource.java` · resolved | 读取 skill.description() | 作者元数据不因中文示例自动具有翻译能力 |
+
+公共 Accept-Language 当前只约定异常消息语言，GET 成功示例则使用中文描述；两者不足以构成
+清晰的 Builtin 本地化契约。语言行为必须单独收敛，不能只修改响应 Header，也不能将文档
+中文样例当作已实现证据。POST Help 的 Agent 介绍继续按已确认规则保留原文，与 GET 的
+help 命令用途说明区分。描述语言切换尚未实现，运行验收未完成。
+
+文档校验（2026-09-22）：命令清单、响应、Help、API 页面和文档维护的 60 项检查通过；
+十项接口 DOM 检查通过，包括响应/语言切换及无 JavaScript 回退。Runtime 与 Slash 专题的
+机械校验通过，PlantUML/SVG 无变更。全仓 API 校验仍受范围外的旧 PlantUML 链接阻断，
+追加的用词检查在 Skill 专题已有的资源路径表述处失败，均未作为本专题变更修正。
+浏览器安全策略拒绝打开本地 HTML，桌面与 360px 视觉验收未完成；DOM 检查不证明布局通过。
 
 ### 3.4 Skill 执行链（B13/B14 已确认）
 
@@ -313,6 +343,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.12.3 | 2026-09-22 | 补充命令字段与调用示例入口，并区分中文展示样例和实际描述语言。 |
 | 1.12.2 | 2026-09-22 | 按 53eff85c 更正 Help 缓存、查询、响应与统一 POST 的已实现状态。 |
 | 1.12.1 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，与 Runtime 命令契约保持一致。 |
 | 1.12.0 | 2026-09-18 | Skill 统计查询改为批量 POST，其他命令与采集结论保持原核验范围。 |
