@@ -49,12 +49,12 @@ end note
 @enduml
 
 @startuml command_authoritative_state
-title Pending implementation Command Recovery Boundary
-' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql.
+title Recommended Command Recovery Boundary
+' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionUpdateService.java prepare; Mode command is pending.
 ' Design reason: synchronous JSON results need no generic command lifecycle storage.
 skinparam shadowing false
 rectangle "Name" as Name
-rectangle "Model / Thinking / Compact" as Domain
+rectangle "Model / Thinking / Compact\nMode: Pending implementation" as Domain
 database "Current Session state" as State
 database "Existing domain Entries" as Entries
 rectangle "GET Session / GET Events" as Query

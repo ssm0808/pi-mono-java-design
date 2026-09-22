@@ -20,7 +20,7 @@ RELATIONS = (
     "CommandDefinitionSource ..> CommandDefinition",
     "BuiltinCommandDefinition ..|> CommandDefinition",
     'ResolvedCommandCatalog o-- "0..*" CommandDefinition',
-    'BuiltinCommandSource o-- "7" BuiltinCommandContributor',
+    'BuiltinCommandSource o-- "8" BuiltinCommandContributor',
     "BuiltinContributors ..|> BuiltinCommandContributor",
     "BuiltinContributors --> BuiltinHandlers",
     "BuiltinHandlers ..|> CommandHandler",

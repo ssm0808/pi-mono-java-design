@@ -10,7 +10,7 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-title Recommended Executable Builtin Definition
+title Recommended Executable Builtin Definition - Mode: Pending implementation
 ' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandResponseAssembler.java assemble.
 ' Design reason: each contributor owns metadata, admission, and handler; no central command-name switch.
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java getView.
@@ -29,9 +29,9 @@ class GetSessionResponseVO <<existing immutable>>
 class AvailableModelsResponseVO <<existing immutable>>
 class "AgentHelp / Compaction / BoundSkills\nResponseVOs" as BusinessVOs <<immutable>>
 interface NarrowDomainService
-BuiltinCommandSource o-- "7" BuiltinCommandContributor
+BuiltinCommandSource o-- "8" BuiltinCommandContributor
 BuiltinCommandContributor --> BuiltinCommandDefinition
-BuiltinCommandSource *-- "7" BuiltinCommandDefinition
+BuiltinCommandSource *-- "8" BuiltinCommandDefinition
 BuiltinCommandDefinition *-- CommandHandler
 BuiltinCommandDefinition *-- CommandAdmissionPolicy
 CommandExecutionService --> CommandExecutionContext

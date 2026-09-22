@@ -32,6 +32,20 @@ class CommandResponseContractTest(unittest.TestCase):
     def test_confirmed_response_reuse(self):
         validate_response_reuse(self.models)
 
+    def test_mode_request_and_capability_error_cannot_disappear(self):
+        for remove_error in (False, True):
+            with self.subTest(remove_error=remove_error):
+                models = copy.deepcopy(self.models)
+                operation = self.operation(models)
+                if remove_error:
+                    operation["responses"] = [r for r in operation["responses"]
+                                              if r["id"] != "422-plan-mode-unavailable"]
+                else:
+                    operation["requestBody"]["examples"] = [e for e in operation["requestBody"]["examples"]
+                        if e["value"] != {"name": "mode", "arguments": "build"}]
+                with self.assertRaises(RuntimeError):
+                    validate_response_reuse(models)
+
     def test_retired_fields_rejected_for_every_success(self):
         for identity in self.cases(self.models):
             for field in RETIRED_FIELDS:
@@ -40,7 +54,7 @@ class CommandResponseContractTest(unittest.TestCase):
 
     def test_session_cannot_be_a_command_specific_subset(self):
         for identity in SESSION_CASES:
-            for field in ("sessionId", "agentId", "displayName", "modelId", "state", "thinking",
+            for field in ("sessionId", "agentId", "displayName", "modelId", "state", "thinking", "mode",
                           "lifetimeUsage", "createdAt", "updatedAt"):
                 with self.subTest(identity=identity, field=field):
                     self.reject(lambda cases: self.result(cases[identity]).pop(field))
@@ -78,10 +92,17 @@ class CommandResponseContractTest(unittest.TestCase):
         self.reject(lambda cases: self.result(cases["200-model"]).update({"thinking": True}))
 
     def test_same_value_resource_and_etag_are_stable(self):
-        for identity in ("200-name-unchanged", "200-model-unchanged", "200-thinking-unchanged"):
+        for identity in ("200-name-unchanged", "200-model-unchanged", "200-thinking-unchanged", "200-mode-unchanged"):
             with self.subTest(identity=identity):
                 self.reject(lambda cases: self.result(cases[identity]).update({"updatedAt": "new-timestamp"}))
                 self.reject(lambda cases: cases[identity]["headers"].update({"ETag": '"snp-different"'}))
+
+    def test_mode_query_and_switch_boundaries(self):
+        self.reject(lambda cases: self.result(cases["200-mode-query"]).update({"state": "idle"}))
+        for identity, wrong_mode in (("200-mode-plan", "build"), ("200-mode-build", "plan")):
+            with self.subTest(identity=identity):
+                self.reject(lambda cases: self.result(cases[identity]).update({"mode": wrong_mode}))
+                self.reject(lambda cases: self.result(cases[identity]).update({"state": "running"}))
 
     def test_empty_and_minimal_business_results(self):
         self.reject(lambda cases: self.result(cases["200-model-query-empty"]).update({"models": None}))

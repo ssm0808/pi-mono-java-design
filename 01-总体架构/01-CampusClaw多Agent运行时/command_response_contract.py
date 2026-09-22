@@ -9,6 +9,7 @@ SESSION_CASES = {
     "200-status", "200-name", "200-name-updated", "200-name-unchanged",
     "200-model", "200-model-unchanged", "200-thinking-query",
     "200-thinking", "200-thinking-unchanged",
+    "200-mode-query", "200-mode-plan", "200-mode-build", "200-mode-unchanged",
 }
 MODEL_CASES = {"200-model-query", "200-model-query-empty"}
 BUSINESS_SHAPES = {
@@ -50,6 +51,7 @@ def success(operation):
 
 def validate_response_reuse(models):
     operations = {model["operation"]["operationKey"]: model["operation"] for model in models}
+    validate_mode_examples(operations["ExecuteSessionCommand"])
     session = success(operations["GetSession"])
     model_list = success(operations["ListSessionModels"])
     require(session.get("mode") in {"plan", "build"}, "Session response must include mode")
@@ -90,10 +92,15 @@ def validate_response_reuse(models):
 def validate_scenarios(cases):
     result = lambda identity: cases[identity]["bodies"]["zh-CN"]["result"]
     require(result("200-name")["displayName"] is None, "Missing nullable Session name example")
-    for identity in ("200-status", "200-thinking-query", "200-name-updated"):
+    for identity in ("200-status", "200-thinking-query", "200-mode-query", "200-name-updated"):
         require(result(identity)["state"] == "running", f"Missing running query/name example: {identity}")
-    for identity in ("200-model", "200-thinking"):
+    for identity in ("200-model", "200-thinking", "200-mode-plan", "200-mode-build"):
         require(result(identity)["state"] == "idle", f"Mutation example must be idle: {identity}")
+    require(result("200-mode-plan")["mode"] == "plan" and result("200-mode-build")["mode"] == "build",
+            "Mode switch examples must preserve their target mode")
+    require(result("200-mode-build") == result("200-mode-unchanged") and
+            cases["200-mode-build"]["headers"]["ETag"] == cases["200-mode-unchanged"]["headers"]["ETag"],
+            "Same-value mode must preserve resource and ETag")
     require(result("200-model")["thinking"] is False, "Missing model normalization example")
     require(result("200-thinking")["thinking"] is True, "Thinking on example differs")
     for changed in ("200-name-updated", "200-model", "200-thinking"):
@@ -112,3 +119,14 @@ def validate_scenarios(cases):
     for identity in ("200-skills", "200-skills-populated"):
         names = [item["name"] for item in result(identity)["skills"]]
         require(names == sorted(set(names)), "Skills must be unique and name-sorted")
+
+
+def validate_mode_examples(operation):
+    examples = [item["value"] for item in operation["requestBody"]["examples"]
+                if item["value"].get("name") == "mode"]
+    require(examples == [{"name": "mode"}, {"name": "mode", "arguments": "plan"},
+                         {"name": "mode", "arguments": "build"}],
+            "Mode must cover query and both switches without new fields")
+    require(any(response["status"] == "422" and
+                response.get("bodies", {}).get("zh-CN", {}).get("resCode") == "PLAN_MODE_UNAVAILABLE"
+                for response in operation["responses"]), "Mode requires a plan-capability error example")

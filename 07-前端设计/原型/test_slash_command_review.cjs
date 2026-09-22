@@ -52,7 +52,7 @@ function fixture(t, state = "catalog") {
 
 test("compact rows preserve catalog order; prefix filtering and ARIA agree", (t) => {
   const f = fixture(t);
-  assert.deepEqual(f.names(), ["help", "status", "name", "model", "thinking", "compact", "skills", "skill:inspection-plan"]);
+  assert.deepEqual(f.names(), ["help", "status", "name", "model", "thinking", "mode", "compact", "skills", "skill:inspection-plan"]);
   assert.equal(f.document.querySelector(".kind-badge, .palette-head, .mode-line, .slash-icon"), null);
   f.type("/s");
   assert.deepEqual(f.names(), ["status", "skills", "skill:inspection-plan"]);
@@ -179,7 +179,7 @@ test("IME and repeated Enter cannot select or run a command", (t) => {
 
 test("running fixture omits unavailable commands but keeps hints; normal draft cannot submit", (t) => {
   const f = fixture(t, "running");
-  assert.deepEqual(f.names(), ["help", "status", "name", "model", "thinking", "skills"]);
+  assert.deepEqual(f.names(), ["help", "status", "name", "model", "thinking", "mode", "skills"]);
   f.select("model");
   assert.equal(f.input.hidden, true);
   assert.equal(f.get("submit-button").disabled, false);
@@ -266,4 +266,41 @@ test("hints never control parameter editing or running admission", (t) => {
   assert.equal(f.get("command-run").disabled, false);
   assert.equal(f.input.hidden, true);
   assert.equal(f.calls().length, 0);
+});
+
+
+test("mode choice is a draft until explicit execution succeeds", async (t) => {
+  const f = fixture(t); f.select("mode");
+  const choice = f.get("mode-choice");
+  assert.equal(choice.hidden, false); assert.equal(f.input.hidden, true);
+  choice.value = "plan"; choice.dispatchEvent(new f.window.Event("change"));
+  assert.equal(f.calls().length, 0); assert.equal(f.window.eval("sessionMode"), "build");
+  f.click("submit-button"); assert.equal(f.window.eval("sessionMode"), "build");
+  assert.deepEqual(f.calls()[0], {name: "mode", arguments: "plan"});
+  await f.complete(); assert.equal(f.window.eval("sessionMode"), "plan");
+});
+
+test("mode draft is preserved when running begins and clearing is explicit", async (t) => {
+  const f = fixture(t); f.type("/mode build"); f.select("mode");
+  f.window.eval("running = true; catalog = runningCatalog; render()");
+  assert.equal(f.get("mode-choice").value, "build");
+  assert.equal(f.get("command-run").disabled, true);
+  f.get("mode-choice").value = "";
+  f.get("mode-choice").dispatchEvent(new f.window.Event("change"));
+  assert.equal(f.get("command-run").disabled, false);
+  f.click("command-run"); await f.complete();
+  assert.deepEqual(f.calls()[0], {name: "mode", arguments: ""});
+});
+
+test("invalid mode remains editable and cannot execute", (t) => {
+  const f = fixture(t); f.type("/mode PLAN"); f.select("mode");
+  assert.equal(f.input.value, "PLAN"); assert.equal(f.input.hidden, false);
+  assert.equal(f.get("submit-button").disabled, true); assert.equal(f.calls().length, 0);
+});
+
+
+test("complete mode name selects mode despite the model prefix", (t) => {
+  const f = fixture(t); f.type("/mode plan"); f.key("Enter");
+  assert.equal(f.get("selected-command-name").textContent, "mode");
+  assert.equal(f.get("mode-choice").value, "plan"); assert.equal(f.calls().length, 0);
 });

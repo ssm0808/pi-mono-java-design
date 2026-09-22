@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.20.0 |
+| 文档版本 | 1.21.0 |
 | 更新日期 | 2026-09-22 |
 | 变更性质 | 全量接口用途文案与详细规则分离；命令清单仅保留标准请求/响应 |
 | 唯一当前入口 | [当前十项接口](chat-api-review.html) |
@@ -41,7 +41,7 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 |---|---|
 | 命令清单的请求与响应 | [查看会话命令清单](chat-api-review.html#ListSessionCommands) |
 | 描述符字段、状态过滤与交互规则 | [Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#command-state-rules) |
-| 七个 Builtin 与 Skill 的完整请求、成功和失败响应 | [执行会话命令](chat-api-review.html#ExecuteSessionCommand) |
+| 八个 Builtin 与 Skill 的完整请求、成功和失败响应 | [执行会话命令](chat-api-review.html#ExecuteSessionCommand) |
 | zh-CN 仍返回英文描述的源码依据与契约缺口 | [Slash 语言专项核对](../../04-命令与技能/00-Slash-Command通用模块/README.md#331-清单字段与语言专项核对) |
 | Help 的 Agent 元数据、缓存与纯文本展示 | [Help 专项](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) |
 
@@ -127,6 +127,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.21.0 | 2026-09-22 | 命令清单与执行示例增加 mode，HTTP 操作数量保持不变。 |
 | 1.20.0 | 2026-09-22 | 全部当前接口的作用只描述功能，命令清单删除额外说明区块并保留标准示例。 |
 | 1.19.0 | 2026-09-22 | 命令描述符使用 type 与 hints，输入控件、状态和附件规则分别维护。 |
 | 1.18.0 | 2026-09-22 | operationKey 统一大驼峰，接口作用移除评审措辞并补齐命令交互与附件边界。 |

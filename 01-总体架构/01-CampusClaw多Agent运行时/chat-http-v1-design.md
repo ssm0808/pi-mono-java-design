@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.60.1 |
+| 文档版本 | 1.61.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新专项见 §8.1 |
@@ -173,7 +173,7 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。
 | 接口 | 精确模型 | 设计职责 |
 |---|---|---|
 | GET /sessions/{sessionId}/commands | [操作 12](接口契约/操作/12-list-session-commands.json) | [Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)维护描述符、排序、状态过滤、完整缓存与重新准入理由 |
-| POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../../04-命令与技能/01-内置命令/README.md)维护七个命令的业务、窄服务、事务和实施验收 |
+| POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../../04-命令与技能/01-内置命令/README.md)维护八个命令的业务、窄服务、事务和实施验收 |
 
 Controller 只收发 VO，Application 完成授权、归一化、一次 Catalog 解析、准入、执行及 DTO→VO。
 共享 GET 使用完整来源；内部 Builtin 专属解析才过滤来源。GET 不构成执行预约，
@@ -414,6 +414,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.61.0 | 2026-09-22 | Command 增加 mode 查询和 plan/build 切换，复用 Session 响应与模式事件。 |
 | 1.60.1 | 2026-09-22 | 接口作用收敛为功能说明，执行约束移至契约表格，命令清单保留标准请求与响应。 |
 | 1.60.0 | 2026-09-22 | 命令清单采用 type/hints 描述符，执行请求与业务响应保持原契约。 |
 | 1.59.1 | 2026-09-22 | operationKey 使用大驼峰，保留 Session 范围并区分操作标识与源码方法名。 |

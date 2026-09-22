@@ -73,12 +73,12 @@ end note
 
 @startuml authoritative_command_state
 title Recommended Authoritative Command State
-' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql t_sessions.
+' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionUpdateService.java prepare; Mode command is pending.
 ' Architecture change: current name and existing domain entries replace generic command history.
 skinparam shadowing false
 rectangle "Help / Status / Skills" as Read
 rectangle Name
-rectangle "Model / Thinking / Compact" as Domain
+rectangle "Model / Thinking / Compact\nMode: Pending implementation" as Domain
 database "Current Session state" as Session
 database "Existing domain Entries" as Entries
 Read --> Session : observe only
@@ -104,7 +104,7 @@ skinparam ranksep 35
 skinparam linetype ortho
 
 ' Presentation baseline: design repo 06bea56, target_slash_command_global_classes; preserve the complete global skeleton.
-' Revision: preserve the complete skeleton; add confirmed Skill execution and root message SSE.
+' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java updateSession; Mode command shares this transaction after optional-version support.
 ' Source evidence: pi-mono-java@dfb90ca modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java list/resolved.
 ' Source evidence: pi-mono@5cd93f packages/coding-agent/src/core/agent-session.ts _expandSkillCommand.
 ' Observed behavior: at Java 53eff85c, RuntimeCommandController uses SkillCommandExecutionService.executeRequest for Skill HTTP execution.
@@ -165,9 +165,9 @@ package "Command core" {
 }
 
 package "Builtin adapters and service delegation - singleton" {
-  class "7 x Builtin Contributor" as BuiltinContributors
-  class "7 x Builtin Handler" as BuiltinHandlers
-  class "Narrow Domain Services" as DomainServices
+  class "8 x Builtin Contributor\nMode: Pending implementation" as BuiltinContributors
+  class "8 x Builtin Handler\nMode: Pending implementation" as BuiltinHandlers
+  class "Narrow Domain Services\nSessionModeConfigurationService\nPending implementation" as DomainServices
   class AgentHelpQueryService <<application service>> #E3F2E1
 }
 
@@ -195,7 +195,7 @@ CompositeCommandRegistry --> ResolvedCommandCatalog
 ResolvedCommandCatalog o-- "0..*" CommandDefinition
 BuiltinCommandSource ..|> CommandDefinitionSource
 SkillCommandSource ..|> CommandDefinitionSource
-BuiltinCommandSource o-- "7" BuiltinCommandContributor
+BuiltinCommandSource o-- "8" BuiltinCommandContributor
 BuiltinContributors ..|> BuiltinCommandContributor
 BuiltinCommandContributor --> BuiltinCommandDefinition : contributes
 BuiltinCommandDefinition ..|> CommandDefinition
@@ -248,8 +248,8 @@ No model call, implicit refresh, or history write.
 end note
 
 legend bottom left
-Builtin Runtime path exists at 53eff85c; marked Skill integration is Pending implementation.
-Grouped boxes denote multiple collaborators, not new classes.
+Seven Builtins exist at 53eff85c; Mode and marked Skill integration are Pending implementation.
+Grouped boxes denote multiple collaborators; Mode shares Session POST mode rules and the locked update.
 One owner implements Builtin and Skill; no fake Skill Handler is assigned.
 Builtin produces JSON; Skill produces the shared message SSE and durable events.
 Delegation groups are not Java packages; query services belong to the application Service package.

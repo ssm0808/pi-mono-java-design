@@ -140,7 +140,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "先列 Builtin 请求约束，Skill 联合分支见下文；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。If-Match 和 Idempotency-Key 在 Builtin 请求中没有契约语义，出现时按 INVALID_COMMAND_REQUEST 拒绝。 Help 只接受空参数：arguments 缺省/null/空白由 Service 归一为空；非空参数（包括 model 等命令名）按 INVALID_COMMAND_REQUEST 拒绝，不查询命令详情。 Skill 联合分支已确认：name=skill:<name>，前缀后的名称严格匹配 Skill 域正则且长 1..64；arguments 可省略/null，由 Service 归一为空字符串，最多 262144 UTF-16 单元；fileIds 可省略为 []，显式 null 拒绝，最多四个不重复的 32 位十六进制 fileId。不接受其他字段、If-Match 或 Idempotency-Key。回执 text 为 /skill:<name>，非空 arguments 前加一个空格并原样追加，再附 file 块；回执整体大小接受前校验。",
+      "description": "先列 Builtin 请求约束，Skill 联合分支见下文；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。If-Match 和 Idempotency-Key 在 Builtin 请求中没有契约语义，出现时按 INVALID_COMMAND_REQUEST 拒绝。 Help 只接受空参数：arguments 缺省/null/空白由 Service 归一为空；非空参数（包括 model 等命令名）按 INVALID_COMMAND_REQUEST 拒绝，不查询命令详情。 Skill 联合分支已确认：name=skill:<name>，前缀后的名称严格匹配 Skill 域正则且长 1..64；arguments 可省略/null，由 Service 归一为空字符串，最多 262144 UTF-16 单元；fileIds 可省略为 []，显式 null 拒绝，最多四个不重复的 32 位十六进制 fileId。不接受其他字段、If-Match 或 Idempotency-Key。回执 text 为 /skill:<name>，非空 arguments 前加一个空格并原样追加，再附 file 块；回执整体大小接受前校验。 mode 的 arguments 缺省/null/空白归一为空并查询当前模式；非空仅接受精确小写 plan 或 build，不接受别名、额外单词或附件。",
       "example": {
         "name": "model",
         "arguments": "model_011CZq2GkV8aD4NwP7sLmXfS"
@@ -196,6 +196,26 @@
           "value": {
             "name": "thinking",
             "arguments": "on"
+          }
+        },
+        {
+          "label": "Mode：查询当前模式",
+          "value": {
+            "name": "mode"
+          }
+        },
+        {
+          "label": "Mode：切换到计划模式",
+          "value": {
+            "name": "mode",
+            "arguments": "plan"
+          }
+        },
+        {
+          "label": "Mode：切换到实施模式",
+          "value": {
+            "name": "mode",
+            "arguments": "build"
           }
         },
         {
@@ -720,6 +740,182 @@
         }
       },
       {
+        "id": "200-mode-query",
+        "status": "200",
+        "tabLabel": "200 · mode 查询",
+        "label": "OK",
+        "summary": "无参数查询返回完整 Session 与同源 ETag；idle/running 均可读取。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-modeQuery\""
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "running",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:25:09+08:00",
+              "mode": "plan"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-mode-plan",
+        "status": "200",
+        "tabLabel": "200 · mode 切换 plan",
+        "label": "OK",
+        "summary": "空闲时切换为 plan，返回完整 Session 与同源 ETag；真实变化保存 session.mode_changed(reason=requested)，不启动模型。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-modePlan\""
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:25:09+08:00",
+              "mode": "plan"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-mode-build",
+        "status": "200",
+        "tabLabel": "200 · mode 切换 build",
+        "label": "OK",
+        "summary": "空闲时切换为 build，返回完整 Session 与同源 ETag；不批准已有方案，不启动或恢复执行。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-modeBuild\""
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:25:09+08:00",
+              "mode": "build"
+            }
+          }
+        }
+      },
+      {
+        "id": "200-mode-unchanged",
+        "status": "200",
+        "tabLabel": "200 · mode 同值",
+        "label": "OK",
+        "summary": "在 mode 切换 build 示例之后再次提交 build：仍检查 idle，返回相同资源、updatedAt 和 ETag，不追加事件。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "ETag": "\"snp-modeBuild\""
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "sessionId": "session-550e8400e29b41d4a716446655440003",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "displayName": "园区网络故障分析",
+              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
+              "state": "idle",
+              "thinking": true,
+              "lifetimeUsage": {
+                "input": 1280,
+                "output": 320,
+                "cacheRead": 640,
+                "cacheWrite": 96,
+                "totalTokens": 2336,
+                "cost": {
+                  "input": 0.00384,
+                  "output": 0.0048,
+                  "cacheRead": 0.000192,
+                  "cacheWrite": 0.00036,
+                  "total": 0.009192
+                }
+              },
+              "createdAt": "2026-08-15T10:30:00+08:00",
+              "updatedAt": "2026-08-17T14:25:09+08:00",
+              "mode": "build"
+            }
+          }
+        }
+      },
+      {
         "id": "200-compact",
         "status": "200",
         "tabLabel": "200 · compact",
@@ -834,7 +1030,7 @@
         "status": "400",
         "tabLabel": "400 · INVALID_COMMAND_REQUEST",
         "label": "Bad Request",
-        "summary": "命令请求内容不符合约束。 Help 的非空参数（如 model）也使用本错误，而不是 COMMAND_NOT_FOUND。",
+        "summary": "命令请求内容不符合约束。 Help 的非空参数（如 model）也使用本错误，而不是 COMMAND_NOT_FOUND。 mode 参数不是精确小写 plan/build（例如 PLAN、auto 或 plan now）时也使用本错误。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN"
@@ -897,7 +1093,7 @@
         "status": "409",
         "tabLabel": "409 · SESSION_BUSY",
         "label": "Conflict",
-        "summary": "该 Session 正在执行，当前命令暂不可用。",
+        "summary": "该 Session 正在执行，当前命令暂不可用。 mode 的非空参数在 running（含计划、问题或工具确认等待）均拒绝；即使目标值与当前相同也不例外。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN"
@@ -1121,6 +1317,26 @@
             "resMsg": "The Skill could not be prepared; the call was not accepted."
           }
         }
+      },
+      {
+        "id": "422-plan-mode-unavailable",
+        "status": "422",
+        "tabLabel": "422 · PLAN_MODE_UNAVAILABLE",
+        "label": "Unprocessable Content",
+        "summary": "请求切换到 plan，但有效计划提示词或 Runtime profile 的 ExitPlanMode 能力不可用。build 不依赖该能力；不修改 Session。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "PLAN_MODE_UNAVAILABLE",
+            "resMsg": "当前 Session 的计划模式不可用。"
+          },
+          "en-US": {
+            "resCode": "PLAN_MODE_UNAVAILABLE",
+            "resMsg": "Plan mode is unavailable for this Session."
+          }
+        }
       }
     ],
     "contractSections": [
@@ -1135,7 +1351,7 @@
         "rows": [
           [
             "分派",
-            "既有七个精确名称；对应 Handler",
+            "八个精确名称；各自对应 Handler",
             "skill:<name>；独立 SkillCommandDefinition/Handler，共用 Registry 快照"
           ],
           [
@@ -1178,7 +1394,7 @@
         "rows": [
           [
             "调用范围",
-            "执行 Builtin 命令：help、status、name、model、thinking、compact 和 skills。Builtin 和 Skill 共用此入口；Builtin 返回 JSON，Skill 返回与 POST Events 相同的请求级 SSE。"
+            "执行 Builtin 命令：help、status、name、model、thinking、mode、compact 和 skills。Builtin 和 Skill 共用此入口；Builtin 返回 JSON，Skill 返回与 POST Events 相同的请求级 SSE。"
           ],
           [
             "输入归一化",
@@ -1186,7 +1402,7 @@
           ],
           [
             "内置命令结果",
-            "Builtin 成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Compact 复用权威领域 Entry。"
+            "Builtin 成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Mode/Compact 复用权威领域 Entry。"
           ],
           [
             "压缩恢复",
@@ -1211,6 +1427,10 @@
           [
             "凭据适用范围",
             "Header 适用范围：Builtin 调用方无需发送执行凭据；Skill 进入 Agent 执行后可能调用 Mate 工具，因此保留四项可选凭据。此处仅收敛请求契约，不删除现有 Builtin/Compact 内部请求快照及释放逻辑。"
+          ],
+          [
+            "模式切换",
+            "mode 空参只读查询；带参仅在 idle 接受。与统一 Session POST 共用模式能力规则和行锁事务；Command 不接收 If-Match，使用锁内当前版本，只修改 mode。真实变化将 mode、updatedAt、resourceVersion 与 session.mode_changed(reason=requested) 原子提交；同值仍校验状态与 plan 能力但不写事件、不升版本。成功返回同一提交快照的完整 Session 与 ETag。切换不调用模型、不批准计划、不清空上下文；running 的确认等待不允许以 mode=build 绕过审核。结果不确定只读 Session/Events 对账，不自动重放。"
           ]
         ]
       }

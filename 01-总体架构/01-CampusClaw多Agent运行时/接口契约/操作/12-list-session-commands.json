@@ -73,6 +73,14 @@
                   ]
                 },
                 {
+                  "name": "mode",
+                  "type": "builtin",
+                  "description": "查看或切换 plan/build 工作模式",
+                  "hints": [
+                    "plan|build"
+                  ]
+                },
+                {
                   "name": "skills",
                   "type": "builtin",
                   "description": "列出当前 Agent 绑定的 Skill",
@@ -133,6 +141,14 @@
                   "description": "查看或切换深度思考",
                   "hints": [
                     "on|off"
+                  ]
+                },
+                {
+                  "name": "mode",
+                  "type": "builtin",
+                  "description": "查看或切换 plan/build 工作模式",
+                  "hints": [
+                    "plan|build"
                   ]
                 },
                 {

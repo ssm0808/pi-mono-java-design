@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.14.0 |
+| 文档版本 | 1.15.0 |
 | 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -21,7 +21,7 @@
 ## 1. 职责与目标
 
 Builtin 实现切片覆盖 `help`、`status`、`name`、`model`、`thinking`、
-`compact`、`skills` 七个 Builtin。共享 GET 按固定 Builtin 顺序与 Skill 名称顺序返回轻量清单，
+`mode`、`compact`、`skills` 八个 Builtin。共享 GET 按固定 Builtin 顺序与 Skill 名称顺序返回轻量清单，
 POST Command 按类别返回：Builtin 普通 ResultBean JSON，Skill 请求级 SSE。
 
 Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、SSE 和恢复语义已由 B13/B14 确认，精确契约与 Events 已同步。
@@ -41,7 +41,7 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享
 保留 Web、Application、Command Core、Builtin 委派和 Runtime/持久化的完整关系。
 主图完整表达 Help 元数据查询、Builtin 委派、Skill 执行和共享消息接受链。
 主图中 Help 的 Contributor/Handler 委派、AgentHelpQueryService、AgentRuntimeManager 和响应投影关系已实现；
-Builtin 核心、业务响应与 Runtime HTTP 已实现；Skill 统一定义、Handler 与版本快照仍待实现，具体映射见 §1.2。分组仅归并重复实现，不把 Handler、业务服务、Coordinator 和 Repository 合成一个对象。
+原七个 Builtin 核心、业务响应与 Runtime HTTP 已实现；新增 mode 命令待实现；Skill 统一定义、Handler 与版本快照仍待实现，具体映射见 §1.2。分组仅归并重复实现，不把 Handler、业务服务、Coordinator 和 Repository 合成一个对象。
 
 ![Slash Command 完整全局目标类图](设计图/target_slash_command_global_classes.svg)
 
@@ -51,7 +51,7 @@ Builtin 核心、业务响应与 Runtime HTTP 已实现；Skill 统一定义、H
 
 Builtin 直接引用这份主图；Help 专题只补充元数据、缓存与结果投影，不再替代全局视图。
 分组框表达协作关系而非 Java 包：AgentHelpQueryService 和其他窄业务服务仍属于应用 Service 层。
-七个 Contributor/Handler 的精确命令映射见[内置命令服务表](../01-内置命令/README.md#2-全局目标与核心扩展)。
+八个 Contributor/Handler 的精确命令映射见[内置命令服务表](../01-内置命令/README.md#2-全局目标与核心扩展)。
 
 | 主图保留的职责关系 | 不能合并的原因 |
 |---|---|
@@ -86,6 +86,7 @@ Help 的结果精确为 displayName/description/useCases，字段和缓存规则
 | 统一 Session POST | 已实现入口与应用编排 | RuntimeSessionController.update → RuntimeSessionUpdateService.update → Repository.updateSession；不再以旧 Name 提交判断路由不存在 |
 | Skill 严格名称 | 已实现 | ClawConstants.Skill 的统一规则覆盖 Loader、发现、准入与执行；缺名称拒绝且必须与文件夹同名，见[Skill §4.2](../02-技能命令/README.md#42-当前实现剩余增量与测试证据) |
 | Skill Runtime POST / SSE | 已实现 | Controller → SkillCommandExecutionService → RuntimeMessageEventService；同一次准备使用实际 Agent 快照，执行复用普通消息链 |
+| Mode Builtin | 待实现 | Session 模式更新已有实现；新增 mode Contributor、共享模式规则和前端选择控件，见[Builtin §6.1](../01-内置命令/README.md#mode-command) |
 | Skill 内部文本与公开回执 | 已实现文本分离与恢复 | 内部 Entry 保存展开文本，公开事件保存原始调用；恢复读取已保存文本，完整 Skill 版本/元数据快照仍待实现 |
 | Skill 统一扩展结构 | 待实现增量 | Definition → Handler → SkillExecutionService → PreparedSkillInvocationDTO 尚未落地；当前执行可用不等于该目标装配已实现 |
 | Skill 使用统计 | 待实现 | modules/ 与 campusclaw/ 未找到 SkillUsageTracker；显式、模型 Skill 工具与 Read 的统计接入仍待实现，独立开发分支证据不升级为该主线能力 |
@@ -159,6 +160,21 @@ pi 的旧 `5cd93f688aaab89dbb6dfa4aca535f21796ae185` / `4af9d21d3b4d664e4a29fcab
 新核验改用 pi RPC 描述符与 OpenCode 迁移后的实例 HTTP 路由；OpenCode `/api/command` v2 在源码中标为 experimental，
 不与上述 `/command` 契约混用。四字段投影、所有 Skill 附件规则与状态矩阵是 CampusClaw 产品约束，非统一行业协议。
 
+<a id="mode-command-evidence"></a>
+
+### 2.3.2 模式命令增量证据（2026-09-22）
+
+为保持同一会话内先规划再实施的输入习惯，新增 mode Builtin；业务规则由[Builtin 模式切换](../01-内置命令/README.md#mode-command)维护。以下只升级模式入口比较范围，不替换上述历史证据或其他模块基线。
+
+| 基线与核对范围 | 已观察行为 | CampusClaw 决策与代价 |
+|---|---|---|
+| pi 默认 main，隔离 fetch 至 `d192bd6dcae78fb87cf5c1c5e2af2790a0296278`；前次描述符核验为 `d201760ffee16564aa8d9a759e0c85b70db33674`；`packages/coding-agent/src/core/slash-commands.ts#BUILTIN_SLASH_COMMANDS` | Builtin 列表含 model/thinking 与 argumentHint，未含 mode/plan/build；此范围不否定扩展命令存在 | 沿用轻量发现与配置命令入口，新增产品自己的 mode；不宣称为 pi 原生行为 |
+| OpenCode 默认 dev，隔离 fetch 后仍为 `fe3f3a41f79ad292cc3c7c629567385a20ec5130`；`packages/opencode/src/agent/agent.ts#Agent.state` | build/plan 是两个 primary Agent，并有不同权限；Info.mode 的 primary/subagent/all 不是 plan/build | 保留同一绑定 Agent，以 Session.mode 切换模式；不复制双 Agent 权限结构或宣称计划模式为强制只读 |
+| Java 固定 `53eff85c7f41de23eb434e027782f5085a8b8e45`；完整路径见 Builtin §6.1 | Session 更新已有 mode 及 requested 事件，命令 Contributor 和前端命令映射尚无 mode | 新命令及共享规则抽取待实现；新增一个入口的一致性校验，不新增模式存储和 HTTP 路径 |
+
+pi/OpenCode 这里是当日默认分支源码快照，不等于稳定发布。差异分类为产品约束（同会话模式入口、idle 切换、不代替批准）与架构变更（两入口共享模式校验/事务）；收益是复用权威 Session，代价是新增 Contributor、选择控件和并发验收。
+
+
 ## 3. 分层与生命周期
 
 | 层 | 职责 |
@@ -180,7 +196,7 @@ Catalog 用于找到 Help Definition 与执行上下文；Help 内容由 AgentHe
 [PlantUML 源码](设计图/diagram.puml#L43)
 
 - `resolve(context, BUILTIN)` 仅用于内部 Builtin 专属解析，在调用 Source 前过滤类型；共享 GET 使用完整来源解析，不套用此快路径。
-- 七个 Contributor 各自贡献元数据、准入策略和 Handler；启动期重名直接失败。
+- 八个 Contributor 各自贡献元数据、准入策略和 Handler；启动期重名直接失败。
 - 当前发现层的 Skill Definition 只供展示，不安装抛错的伪 Handler；实际 Skill 执行已存在；真实执行定义的统一结构仍纳入实施计划，不强制复用 Builtin 类型。
 - 新增命令不修改中央名称 switch；结果类型分派只能出现在 DTO→VO 组装器。
 - 内部结果使用 DTO，响应使用只读 `@Getter` 与 final 字段的独立 VO。
@@ -215,7 +231,7 @@ Mate GET 同步相同 Descriptor，但公共认证、bridge、错误映射与 PO
 | hints | 否 | 有序字符串数组，各项非空；无提示可省略或返回 `[]`，不返回 null；仅供展示，不作为参数 Schema、枚举、必填规则或权限 |
 
 `hints` 在 idle/running 下保持相同，不以缺失、空数组或提示变化表达禁止输入。
-客户端按 type/name 选择控件：Model 候选取自 `ListSessionModels`，Thinking 当前为开启/关闭选项，
+客户端按 type/name 选择控件：Model 候选取自 `ListSessionModels`，Thinking 当前为开启/关闭选项，Mode 为 plan/build 选项，
 Name 与 Skill 使用文本输入。实际 POST 仍只提交 name、可选 arguments，Skill 另可提交 fileIds；
 不把 type、description、hints 发回执行接口，不新增 acceptsArguments。
 
@@ -228,9 +244,12 @@ Name 与 Skill 使用文本输入。实际 POST 仍只提交 name、可选 argum
 | name | `["displayName"]` | 查询或改名 | 保留，查询或改名 |
 | model | `["modelId"]` | 查询或切换 | 保留，仅无参查询 |
 | thinking | `["on\|off"]` | 查询或修改 | 保留，仅无参查询 |
+| mode | `["plan\|build"]` | 查询或切换模式 | 保留，仅无参查询 |
 | compact | `[]` | 无参压缩 | 整项省略 |
 | skills | `[]` | 无参查询 | 保留，无参查询 |
 | `skill:<name>` | `["request"]` | 可选文本和附件 | 整项省略 |
+
+mode 的业务、事务与实现差距见[Builtin 模式切换](../01-内置命令/README.md#mode-command)。选择 build 不批准计划或启动执行。
 
 此表是唯一维护的命令交互规则；前端集中适配它与已对账的 Session 状态，不在各组件重复分支。
 状态未知、恢复中或清单过期时暂停提交并读取权威 Session/清单；不能从 model 的 hints 推断当前可修改。
@@ -243,7 +262,7 @@ Name 与 Skill 使用文本输入。实际 POST 仍只提交 name、可选 argum
 上传完成后将 fileIds 与文本一并冻结，后端沿用普通消息的附件约束。上传与 Mate 公共文件桥接仍独立验收。
 公开描述符不返回 kind、input、available、unavailableCode、allowedValues 或 catalogVersion；内部 DTO 和准入字段可保留。
 
-Builtin 固定按 help、status、name、model、thinking、compact、skills 排列，再追加按 name
+Builtin 固定按 help、status、name、model、thinking、mode、compact、skills 排列，再追加按 name
 升序排列的 Skill。过滤后保留相对顺序；服务端控制显示顺序，客户端不重新排序。
 同一次 GET 必须先取得完整 Agent 缓存并解析完整来源，即使 running 会隐藏 Skill 也不返回
 残缺的 Builtin 列表；无完整缓存返回 503 AGENT_NOT_AVAILABLE，保留 Retry-After: 3。
@@ -363,12 +382,12 @@ Builtin 名称格式不覆盖 skill:*；公共入口不能据此拒绝 Skill 名
 
 [PlantUML 源码](设计图/diagram.puml#L74)
 
-Help/Status/Skills 不写 Entry；Name 只保存当前名称与版本；Model/Thinking/Compact
+Help/Status/Skills 不写 Entry；Name 只保存当前名称与版本；Model/Thinking/Mode/Compact
 复用现有领域 Entry。同值、查询和空历史压缩不写 Entry。
 成功响应复用既有 Session/Models 资源及对应 ETag，不建立独立 Slash 回执。
 Help/Compact/Skills 无对应独立 API，只保留最小业务结果；所有成功 result 删除 command、changed、sourceEventSeq。
 精确映射、6f52fddc 源码证据与同源快照要求统一见 [Builtin §8](../01-内置命令/README.md#8-json-与错误)。
-全局主图的响应投影边界不变，不增加七个命令 VO 或重排主图。
+全局主图的响应投影边界不变，不按命令增加专属 VO 或重排主图。
 Compact 断线不取消，调用方通过 GET Session/Events 对账，不自动重放不确定的 POST。
 Mate Header 不记录、不持久化、不进入 Prompt；Compact 仅在本次 Active Holder 中保留到本次执行结束。
 独立控制接口退役后本期不接受排队续跑；停止与 Events 的绑定见[内置命令 §7](../01-内置命令/README.md#7-compact-生命周期)，
@@ -386,12 +405,12 @@ Mate Header 不记录、不持久化、不进入 Prompt；Compact 仅在本次 A
 | 实施项 | 完成条件 |
 |---|---|
 | 共享核心 | 两类命令复用来源过滤、不可变解析快照和分层边界；分别定义发现与执行职责 |
-| Builtin | 七项 Runtime 调用链已实现；继续按 §1.2 和 Builtin §8.3 的证据、契约与验收范围跟踪 |
+| Builtin | 原七项 Runtime 调用链已实现；新增 mode 按 Builtin §6.1 实现共享模式规则、事务与查询/修改路径；继续按 §1.2 和 Builtin §8.3 的证据、契约与验收范围跟踪 |
 | Skill Command | Runtime 执行与文本恢复已实现；补齐统一执行定义、完整版本快照及专项验收 |
 | 共享 HTTP 集成 | Runtime GET/POST 与 JSON/SSE 分派已实现；精确错误、恢复及集成验收继续按契约核对，Mate 公共发布独立 |
 
 Skill 的已确认执行语义按[Skill 实施要求](../02-技能命令/README.md#4-统一实施与集成要求)实施；
-操作 12/13 当前保留的七个 Builtin 示例是已确认部分，不能代替两类命令的最终整体验收。
+操作 12/13 提供八个 Builtin 的目标示例，新增 mode 待实现，不能代替两类命令的最终整体验收。
 
 单次开发、提交和 PR 均不设新增代码行数上限，模块与公司镜像不设配套预算。
 按职责、依赖和可独立验证的交付边界划分批次，完整实现与必要测试可以共同交付；不因行数强制拆分。
@@ -414,6 +433,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.15.0 | 2026-09-22 | 增加 mode 命令，复用 Session 模式事务并区分查询、切换与计划审核。 |
 | 1.14.0 | 2026-09-22 | 命令描述符采用 type 与 hints，分离输入提示、会话状态和附件规则。 |
 | 1.13.0 | 2026-09-22 | 明确命令选项交互与 hint 的分工，并统一所有可用 Skill 的附件能力说明。 |
 | 1.12.4 | 2026-09-22 | 按 53eff85c 分列当前 Runtime、Skill、前端实现及结构、版本快照和统计增量。 |

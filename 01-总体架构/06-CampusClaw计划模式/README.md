@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.17.0 |
+| 文档版本 | 1.18.0 |
 | 更新日期 | 2026-09-22 |
 | 状态 | 既有交互工具、模式资源与逐题卡片已实现；正文流式绑定与 Mate 桥接待实现，业务 SYSTEM 发布与真实模型验收未核验 |
 | 计划模式主基线 | 2026-09-17 更新至 DeepSeek `0d1f50007f9bca3f52b06e1c3074fa14d5fb0720`；提示词组织辅以最新 Codex/OpenCode/pi，完整旧新范围见[证据 §10](source-evidence.md#10-两份模式提示词的最新上游核验) |
@@ -250,7 +250,7 @@ Session 是配置权威资源。当前内部契约以统一 POST 更新名称、
 | `POST /campusclaw-service/v1/sessions/{sessionId}/events` | 四输入上增加 `user.question_answer`；问题回答、计划审核复用接受回执和对应续跑 SSE |
 | `GET /campusclaw-service/v1/sessions/{sessionId}/events` | 完整计划、问题、回答、审核、两种原因的模式事件与任务更新均已登记到共享事件源 |
 
-不增加 `/plans` CRUD、单独批准 endpoint、独立 Session 订阅流、公共 Run/Execution ID 或幂等键。本期使用模式按钮调用 Session 更新接口，不同时扩展 `/plan` Slash Command；普通消息接口仍不解析 Slash 文本。
+不增加 `/plans` CRUD、单独批准 endpoint、独立 Session 订阅流、公共 Run/Execution ID 或幂等键。模式按钮调用 Session 更新接口，Slash 使用 [`/mode`](../../04-命令与技能/01-内置命令/README.md#mode-command) 查询或切换 plan/build；两入口共享模式校验与事务，mode 命令待实现，均不代替方案批准；普通消息接口仍不解析 Slash 文本。
 
 ### 5.1 审核事务与事件顺序
 
@@ -367,6 +367,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.18.0 | 2026-09-22 | 模式按钮与 mode 命令共享 Session 模式规则，切换不代替方案批准。 |
 | 1.17.0 | 2026-09-22 | 计划审核按 Session 线性历史核对目标，保留根与执行准入。 |
 | 1.16.0 | 2026-09-19 | 后端解析计划标记并通过 agent.plan delta/completed 展示，审核事务保持独立。 |
 | 1.15.0 | 2026-09-19 | 计划正文复用文本流，空参数退出调用绑定同响应的完整消息后提交审核。 |

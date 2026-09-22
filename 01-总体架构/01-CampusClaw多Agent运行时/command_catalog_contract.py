@@ -2,7 +2,7 @@
 
 import re
 
-BUILTINS = ("help", "status", "name", "model", "thinking", "compact", "skills")
+BUILTINS = ("help", "status", "name", "model", "thinking", "mode", "compact", "skills")
 
 
 def require(condition, message):

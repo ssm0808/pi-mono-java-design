@@ -534,6 +534,7 @@
                     <button id="selected-command-name" type="button" aria-label="更换命令"></button>
                     <button id="remove-command" type="button" aria-label="移除命令">×</button>
                   </div>
+                  <select id="mode-choice" aria-label="工作模式" hidden><option value="">查询当前模式</option><option value="plan">计划（plan）</option><option value="build">实施（build）</option></select>
                   <textarea id="composer-input" rows="2" spellcheck="false" aria-label="输入消息"></textarea>
                 </div>
                 <button id="command-run" type="button" hidden>执行命令</button>
@@ -570,6 +571,7 @@
       { name: "name", type: "builtin", description: "查看或设置会话名称", hints: ["displayName"] },
       { name: "model", type: "builtin", description: "查看或切换模型", hints: ["modelId"] },
       { name: "thinking", type: "builtin", description: "查看或切换思考模式", hints: ["on|off"] },
+      { name: "mode", type: "builtin", description: "查看或切换 plan/build 工作模式", hints: ["plan|build"] },
       { name: "compact", type: "builtin", description: "压缩当前会话上下文", hints: [] },
       { name: "skills", type: "builtin", description: "查看可用技能", hints: [] },
       { name: "skill:inspection-plan", type: "skill", description: "整理园区巡检计划", hints: ["request"] }
@@ -578,7 +580,7 @@
     // Central UI adaptation of the shared command-state contract, not server authorization.
     function canEditArguments(command) {
       return !!command && (command.name === "name" || (!running &&
-        (command.type === "skill" || ["model", "thinking"].includes(command.name))));
+        (command.type === "skill" || ["model", "thinking", "mode"].includes(command.name))));
     }
     const states = {
       catalog: { title: "命令清单", description: "输入 / 后继续输入可过滤，选择后收起为命令标签。" },
@@ -603,7 +605,7 @@
     let selected = null, replacement = null;
     let mode = false, paletteOpen = false, moreOpen = false, composing = false, executing = false;
     let activeIndex = 0, running = false, stopping = false, generation = 0, error = "";
-    let resultFold = null;
+    let resultFold = null, sessionMode = "build";
 
     function parse(raw) {
       const match = /^\/([^\t\n\v\f\r ]*)(?:[\t\n\v\f\r ]+([\s\S]*))?$/u.exec(raw);
@@ -614,17 +616,27 @@
       return parsed ? catalog.filter((item) => item.name.startsWith(parsed.nameToken)) : [];
     }
     function announce(text) { $("#composer-announcement").textContent = text; }
-    function focusEditor() { (selected && !canEditArguments(selected) ? (running ? $("#command-run") : submitButton) : input).focus(); }
+    function focusEditor() { (selected?.name === "mode" ? $("#mode-choice") : selected && !canEditArguments(selected) ? (running ? $("#command-run") : submitButton) : input).focus(); }
     function render() {
       if (paletteOpen && result.classList.contains("visible") && resultFold === null) { resultFold = result.open; result.open = false; }
       else if (!paletteOpen && resultFold !== null) { result.open = resultFold; resultFold = null; }
       const options = matches();
-      const invalidDraft = !!selected && ((!canEditArguments(selected) && !!argumentsText) || !catalog.some((c) => c.name === selected.name));
+      const invalidDraft = !!selected && ((!canEditArguments(selected) && !!argumentsText) || !catalog.some((c) => c.name === selected.name) || (selected.name === "mode" && !["", "plan", "build"].includes(argumentsText)));
       if (invalidDraft) error = "当前调用不可执行，草稿已保留；请清除参数或重新选择命令。";
       activeIndex = Math.max(0, Math.min(activeIndex, options.length - 1));
       palette.hidden = !paletteOpen;
       chip.hidden = !selected;
       input.hidden = !!selected && !canEditArguments(selected) && !argumentsText;
+      const modeChoice = $("#mode-choice");
+      modeChoice.hidden = selected?.name !== "mode";
+      modeChoice.disabled = executing;
+      modeChoice.value = argumentsText;
+      [...modeChoice.options].forEach(option => {
+        option.disabled = running && !!option.value;
+        const labels = { "": "查询当前模式", plan: "计划（plan）", build: "实施（build）" };
+        option.textContent = labels[option.value] + (option.value === sessionMode ? " ✓ 当前" : "");
+      });
+      if (selected?.name === "mode" && ["", "plan", "build"].includes(argumentsText)) input.hidden = true;
       input.disabled = executing;
       $("#more-button").disabled = executing;
       chipName.disabled = executing;
@@ -728,9 +740,11 @@
       else if (!message && input.value.startsWith("/")) {
         savedMessage = message; query = input.value; mode = true; paletteOpen = true; activeIndex = 0;
       } else message = input.value;
+      if (paletteOpen) { const exact = matches().findIndex(c => c.name === parse(query)?.nameToken); if (exact >= 0) activeIndex = exact; }
       render();
     }
     function showBuiltin(invocation) {
+      if (invocation.name === "mode" && invocation.arguments) sessionMode = invocation.arguments;
       result.classList.add("visible");
       result.open = true; resultFold = null;
       $(".result-subtitle").textContent = invocation.name + " · 演示结果";
@@ -744,6 +758,7 @@
           name: invocation.arguments ? "会话名称：" + invocation.arguments : "会话名称：园区巡检",
           model: invocation.arguments ? "当前模型：" + invocation.arguments : "当前模型：默认模型",
           thinking: invocation.arguments ? "思考模式：" + invocation.arguments : "思考模式：关闭",
+          mode: "当前工作模式：" + sessionMode,
           compact: "本次无需压缩上下文。",
           skills: "inspection-plan：整理园区巡检计划"
         };
@@ -764,7 +779,7 @@
         message = ""; running = true; catalog = runningCatalog; $("#agent-status").textContent = "执行中 · 可停止"; render(); input.focus(); return;
       }
       if (!selected) return;
-      if ((!canEditArguments(selected) && argumentsText) || !catalog.some((c) => c.name === selected.name)) {
+      if ((!canEditArguments(selected) && argumentsText) || !catalog.some((c) => c.name === selected.name) || (selected.name === "mode" && !["", "plan", "build"].includes(argumentsText))) {
         error = "当前调用不可执行，草稿已保留"; render(); return;
       }
       if (Array.from(argumentsText).length > 2048) {
@@ -785,6 +800,7 @@
       exitCommand();
       announce(invocation.name + " 演示完成");
     }
+    $("#mode-choice").addEventListener("change", () => { argumentsText = $("#mode-choice").value; error = ""; render(); });
     $("#composer-input").addEventListener("input", updateInput);
     input.addEventListener("compositionstart", () => { composing = true; });
     input.addEventListener("compositionend", () => { composing = false; updateInput(); });

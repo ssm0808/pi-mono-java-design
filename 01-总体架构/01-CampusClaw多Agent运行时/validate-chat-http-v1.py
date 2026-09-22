@@ -373,6 +373,7 @@ def validate_response_contract(
             ("400", "INVALID_COMMAND_REQUEST"), ("404", "COMMAND_NOT_FOUND"),
             ("409", "SESSION_BUSY"), ("422", "AGENT_NOT_AVAILABLE"),
             ("422", "MODEL_NOT_AVAILABLE"), ("422", "THINKING_NOT_SUPPORTED"),
+            ("422", "PLAN_MODE_UNAVAILABLE"),
             ("500", "COMMAND_EXECUTION_FAILED"), ("500", "SESSION_NAME_UPDATE_FAILED"),
             ("503", "MANAGER_UNAVAILABLE"), ("503", "RUNTIME_CAPACITY_EXCEEDED"),
         }:
