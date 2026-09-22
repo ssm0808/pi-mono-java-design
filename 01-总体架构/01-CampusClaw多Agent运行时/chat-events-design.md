@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.20.0 |
-| 状态 | 五输入联合契约与 B01～B15 已确认；本文跨实例执行骨架为 待实现 |
+| 文档版本 | 0.21.0 |
+| 状态 | 五输入联合契约与 B01～B15 已确认；跨实例实现按分项源码证据判断，Redis 恢复增量待实现 |
 | 源码范围 | Java c9d858bc、a8192e04、918005ee、dfb90cac 分项核验；pi 固定 5cd93f68，完整提交和符号见 [源码证据](source-evidence.md#5-session-events-固定源码核验) |
-| 更新日期 | 2026-09-19 |
+| 更新日期 | 2026-09-22 |
 
 结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量已在 Runtime 主线实现（`8c5fda1d`，见[源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)）；Session/元数据不增字段，Mate 公共投影待实现。本文其他历史源码范围不因此升级。
 
@@ -16,6 +16,8 @@ POST `/sessions/{sessionId}/events` 在同一响应中返回本次用户事件�
 请求与观察共用响应是 CampusClaw 的架构选择，便于内部调用方关联输入和输出。[Mate 公共 API](../../02-服务与接口/07-mate-service通用对话API/README.md) 独立采用提交与读取分离，由 bridge 消费 Runtime POST 后安全投影。
 
 本文唯一维护接受、有序追加、单消息准入及跨实例控制；[流设计](chat-events-stream-design.md) 维护回执、响应绑定和关闭；[历史设计](chat-events-history-design.md) 维护完整事件投影、分页和对账。
+
+浏览器重开及跨副本连续预览采用[Redis 流式恢复推荐设计](redis-stream-recovery.md)：在 Projector 到可丢弃 HTTP 队列之间建立共享快照与短期 Stream，新增独立只读观察；数据库继续管理准入、控制与完整历史。新增读取操作/快照事件为 proposed，待整合精确契约，能力待实现；下文既有请求级 SSE 不被静默改变。新目标的完整类图、源码专项、依赖及验收由该专题维护。
 
 ![Session Events 目标资源模型](设计图/事件接口重设计/target_session_events_resource_model.svg)
 
@@ -199,7 +201,7 @@ Java 918005ee 已有 POST SSE、单 subscriber 和断线不 abort；该基线只
 
 该基线活跃执行保存在每实例 registry 的内存 Map。消息在 A 执行，中断请求可能到 B；数据库中的 running 状态不能让 B 获得 A 的 Java 对象。此结论来自 [固定源码](source-evidence.md#53-进程内执行定位)，不是已验证部署性能。
 
-目标用数据库交接控制决定和权威结果，执行仍由持有原对象的实例完成。它属于架构变更，不增加实例转发或 Redis，不改变 Agent 内核取消语义，也不承诺撤销远端工具副作用。
+控制决定仍用数据库交接，执行由持有原对象的实例完成；该控制路径不增加实例转发或 Redis 锁，不改变 Agent 内核取消语义，也不承诺撤销远端工具副作用。新增 Redis 只负责[输出观察恢复](redis-stream-recovery.md)，不接管执行、不取代控制事务。
 
 ### 4.4 数据库停止请求与实例批量检查
 
@@ -290,8 +292,7 @@ B08/B09 已确认控制竞争和根消息关联，以下是落实语义所需的
 3. 接收实例由 ConfirmationResultPollingService 按固定内部续跑段读取提交后的完整事件，
    使用共享 CommittedEventProjection 转只读 VO；回执先入队，遇到该段第一条 idle 后关闭。
    先登记再补读覆盖快速完成，内部读游标不进入 HTTP，不能用“最新执行”或公开页码作内部总线。
-4. 临时 delta 不持久化；本机响应可接收 preview，跨实例响应仅保证完整事件。公共契约本来将
-   preview 定义为 best-effort；这不降低完整事件的历史可恢复要求，不引入 Redis 或实例间转发。
+4. 既有请求级响应的临时 delta 不进入数据库历史；本机响应可接收 preview，跨实例请求响应仅保证完整事件。新增可恢复观察另由 [Redis 专题](redis-stream-recovery.md)提供，不把现有结果轮询声明为 token 恢复，也不降低完整事件的历史可恢复要求。
 5. 确认等待只有一个 pending toolCallId；进入 confirming 前完成该段权威记录，后续工具调度
    由下一次确认推进。中断同样可作用于等待确认的原消息，实际停止才释放 running。
 
@@ -359,6 +360,7 @@ HTTP 路径使用 `/campusclaw-service/v1`。内部开发阶段编号不作为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.21.0 | 2026-09-22 | 增加事件源侧 Redis 观察恢复目标，保留数据库控制事务和原请求级响应边界。 |
 | 0.20.0 | 2026-09-19 | 计划正文通过专用 delta/completed 事件流展示并复用原审核事务。 |
 | 0.19.0 | 2026-09-19 | 计划正文复用文本流，完整审核事件以来源消息引用绑定正文。 |
 | 0.18.0 | 2026-09-19 | 调用事件从已加载元数据保存展示名称，取名不触发发现或绑定执行 ID。 |

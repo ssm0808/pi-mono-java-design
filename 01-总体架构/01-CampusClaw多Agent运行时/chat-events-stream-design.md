@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.14.0 |
-| 状态 | 已确认目标契约；请求输出绑定与跨实例控制待实现 |
+| 文档版本 | 0.15.0 |
+| 状态 | 已确认请求级目标契约；实现按分项源码证据判断，新增 Redis 读取目标待实现 |
 | 源码基线 | Java 918005ee、dfb90cac，固定提交与路径见 [模块证据](source-evidence.md#52-post-与流生命周期) |
-| 更新日期 | 2026-09-19 |
+| 更新日期 | 2026-09-22 |
 
 结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量已在 Runtime 主线实现（`8c5fda1d`，见[源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)）；Session/元数据不增字段，Mate 公共投影待实现。本文其他历史源码范围不因此升级。
 
@@ -14,6 +14,8 @@
 POST `/campusclaw-service/v1/sessions/{sessionId}/events` 提交一条用户事件，在同一响应读取本次 SSE；GET 同路径独立读取完整历史。精确字段、请求头、示例与错误由 [POST 模型](事件契约/操作/01-submit-session-event.json) 维护并生成 [接口页](chat-api-review.html#submitSessionEvent)。
 
 本文维护响应的帧顺序、归属、关闭和失败处理。[Events 主设计](chat-events-design.md) 维护单消息准入、数据库事务与跨实例控制，[历史设计](chat-events-history-design.md) 维护权威记录及分页。
+
+[Redis 恢复专题](redis-stream-recovery.md)提出事件源侧快照、短期 Stream 及独立只读观察操作，专门恢复浏览器关闭期间的未完成输出。新增 GET/快照事件为 proposed、尚未整合精确契约；本文 POST 不增加游标、不恢复旧响应，保留回执先行及按段关闭。下述“preview 可丢弃/不补发”只限定本条请求响应，不禁止新目标将领域预览短期保存在 Redis。
 
 任务更新已实现并登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java `8c5fda1d` 已具备 TodoUpdate、RuntimeTodoEventMapper 与显式任务事件分支；本次静态核验不等于测试通过。Mate 公共桥接需单独同步后开放。
 
@@ -134,6 +136,7 @@ agent.message、agent.thinking 与 agent.plan 的 delta 是增量，completed �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.15.0 | 2026-09-22 | 将原 POST 响应与 Redis 可恢复读取增量分开，保持写请求不重放。 |
 | 0.14.0 | 2026-09-19 | 计划采用 delta/completed，预览不入历史，审核事务成功后完成。 |
 | 0.13.0 | 2026-09-18 | 工具调用展示名复用已提交快照。 |
 | 0.11.0 | 2026-09-15 | 增加结构化提问与回答的契约、原根续跑及历史恢复入口。 |

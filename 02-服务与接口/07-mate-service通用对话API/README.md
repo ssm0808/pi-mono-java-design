@@ -4,12 +4,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.7.0 |
+| 文档版本 | 1.8.0 |
 | 状态 | 三接口已形成目标契约，尚待实现；数字分页要求待与快照方案整合 |
 | Java 源码基线 | 7e54b47f2539982f8f1855a0b6bb38b6ab8742ae，范围见 §9 |
 | pi 固定基线 | 5cd93f688aaab89dbb6dfa4aca535f21796ae185 |
 | 公开契约证据日期 | Claude Managed Agents / OpenAI 2026-09-02；只作为该日公开契约记录 |
-| 更新日期 | 2026-09-17 |
+| 更新日期 | 2026-09-22 |
 
 ## 1. 接口与权威来源
 
@@ -24,6 +24,8 @@ Mate 对外使用 Chat/chatId/chat.*，Runtime 内部使用 Session/sessionId/se
 基础路径为 `/mate-service/v1`。operation JSON 驱动 [HTML](chat-events-v1-review.html)，[OpenAPI 3.1](chat-events-v1.openapi.yaml) 是同步机器投影；字段、示例与错误只在精确契约中维护，修改须同步生成与校验。
 
 [待决事项 C-001](协作/README.md#c-001) 已记录一基数字页码要求，但数字页码与固定快照的完整字段尚未定稿。现有模型仍是 opaque cursor，不能标成已完成数字分页，也不能在整理文案时擅自删除快照保证。
+
+浏览器重开后恢复未完成正文的推荐目标见[Redis 流式恢复](../../01-总体架构/01-CampusClaw多Agent运行时/redis-stream-recovery.md)。Redis 位于 Claw 事件源侧，Mate 通过受保护读取 API 获取快照与后续事件，再安全投影；不直接连接 Redis。新增公共首帧 `chat.preview_snapshot` 为 proposed，尚未并入 operation JSON，接入门禁见 [C-008](协作/README.md#c-008)。以下五类实时事件和 data-only 规则描述现有精确契约，不表示其已具备草稿恢复。
 
 ## 2. 资源与责任边界
 
@@ -152,6 +154,8 @@ Header 前的认证、授权、资源或容量错误使用 JSON；Header 后编�
 
 ## 7. 断线恢复
 
+目标增强为[先恢复当前完整预览，再接续增量](../../01-总体架构/01-CampusClaw多Agent运行时/redis-stream-recovery.md#4-从关闭浏览器到重新看到输出)；其全局目标类图及两跳时序由 Redis 专题唯一维护。它解决下面现有契约只能对账完整历史、不能补回半截正文的问题。精确模型完成 C-008 前，不得对外宣称已支持新恢复行为。
+
 ![实时流与固定历史对账](设计图/public_chat_event_recovery.svg)
 
 [原尺寸 SVG](设计图/public_chat_event_recovery.svg) · [PlantUML 源码](设计图/diagram.puml#L45)
@@ -264,6 +268,7 @@ PlantUML ASCII、SVG XML 与同步、Markdown 图路径/行锚、全仓 Mermaid 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.8.0 | 2026-09-22 | 登记 Redis 快照接续目标及公共首帧增量的精确契约门禁。 |
 | 1.7.0 | 2026-09-17 | 公共工具调用增加可选 displayName，实时与历史复用授权投影的调用快照。 |
 | 1.6.1 | 2026-09-15 | 登记后端显式任务事件的公共桥接与根消息关联增量。 |
 | 1.6.0 | 2026-09-14 | 主文聚焦公共边界与恢复，移除重复报文并显式登记未整合设计要求。 |

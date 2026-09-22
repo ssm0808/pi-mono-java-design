@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 / 日期 | 1.9.0 / 2026-09-17 |
+| 版本 / 日期 | 1.10.0 / 2026-09-22 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
 | 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 仅作历史迁移证据；当前 Runtime 前端见[实现状态](../source-evidence.md#current-implementation) |
 | 性质 | Mate 公共接入为 待实现；内部 Runtime 前端已有实现，公司认证及 Chat/Session 边界保持 |
@@ -149,6 +149,8 @@ Assistant `content` 保留 rawMarkdown 并使用现有安全渲染骨架；User/
 
 ## 6. 历史与断线恢复
 
+新的[Redis 恢复目标](../../01-总体架构/01-CampusClaw多Agent运行时/redis-stream-recovery.md)将提供首帧完整预览快照；其公共类型目前为 proposed，须完成 [C-008](../../02-服务与接口/07-mate-service通用对话API/协作/README.md#c-008) 后才装配。接入时沿用 ConversationCoordinator / HistoryRecovery / EventReducer 的职责链，不另建第二份 Store：每条新连接递增 generation；快照只替换未完成预览，completed 不被覆盖；收到快照后读取历史；旧连接迟到 delta 丢弃。unavailable 显示实时恢复降级，不解释为任务结束。以下步骤仍是现有精确契约的读取规则，不代表已能恢复未完成正文。
+
 1. 先建立公共 Chat 读流，再读取历史/提交消息；读取器校验 data-only JSON，忽略 ping 注释，不期待 event/id 或 stream.end。
 2. 三个来源共用 EventReducer；以 Chat + eventId 合并完整事件，toolCallId 只作工具关联，不作事件身份。
 3. 公共首页按契约选择 limit/types/createdAtGte；续页只传原样 page，不再同时传 limit。省略 nextPage 才是公共末页。
@@ -201,6 +203,7 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.10.0 | 2026-09-22 | 增加 Redis 首帧快照接入、连接代次隔离与不可用降级的目标门禁。 |
 | 1.9.0 | 2026-09-17 | 公共和内部工具活动统一消费 displayName，并明确可选字段的接入规则。 |
 | 1.8.0 | 2026-09-17 | 工具展示优先使用 displayName，明确内部传递与公共映射的接入前置。 |
 | 1.7.0 | 2026-09-17 | 引用具体工具标题规则，保持内部包装与公共名称的接入边界。 |

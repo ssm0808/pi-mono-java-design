@@ -1,0 +1,131 @@
+@startuml redis_recovery_classes
+allowmixing
+' Source evidence: pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java emitMessageDelta/persistAssistant
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventStream.java emitBestEffort/detachInternal
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java commitTerminal
+' Observed behavior: request queues may drop previews; complete events are committed first.
+' Design reason: shared previews must originate before disposable HTTP queues.
+' Architecture change: all new classes and connections below are pending implementation.
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 28
+skinparam ranksep 40
+hide empty members
+top to bottom direction
+title Redis Recovery - Global Target Structure\nNew classes and all connections: Pending implementation
+class "Browser EventReducer\nPer Chat / connection generation" as UI
+package "Mate public boundary (Pending implementation)" {
+  class "ChatStreamController\nSingleton / VO boundary" as MC
+  class "ChatObservationService\nSingleton" as MS
+  class "AuthorizedPublicProjector\nSingleton / immutable caller context" as MP
+  class "ClawObservationClient\nSingleton / protected internal API" as Client
+  class "PublicHistoryRepository\nStable event identity mapping" as MH
+}
+package "Claw application and core" {
+  class "SessionObservationController\nPending implementation / VO" as CC
+  class "SessionObservationService\nPending implementation / singleton" as CS
+  class "ObservationSubscription\nPending implementation / per connection\ncursor + bounded buffer" as Sub
+  class "RuntimeEventProjector\nExisting extension point\nPer execution" as Runtime
+  class "ExecutionPreviewAccumulator\nPending implementation / per execution" as Acc
+  class "HotEventPublisher\nPending implementation / singleton" as Pub
+  class "CommittedEventCatchUpService\nPending implementation / singleton" as Repair
+  interface "HotEventStore\nPending implementation" as Store
+  class "RedisHotEventStore\nPending implementation / singleton" as Adapter
+  class "RuntimeSessionRepository\nExisting; incremental read extension pending" as Repo
+}
+database "Redis primary\nSnapshot + bounded Stream\nPending implementation" as Redis
+database "GaussDB\nAuthoritative events and execution state" as DB
+UI --> MC : authorized read / reconnect
+MC --> MS : request VO
+MS --> Client : private Session mapping
+MS --> MP : project snapshot and events
+MP --> MH : resolve stable public IDs
+Client -down-> CC : independent read-only SSE
+CC --> CS : authorized observation
+CS "1" *-- "0..*" Sub : owns readers
+Sub --> Store : snapshot at C; read after C
+CS --> Repair : reconcile committed records
+Runtime "1" *-- "1" Acc : accumulates before HTTP queue
+Runtime --> Repo : commit complete events
+Acc --> Pub : immutable preview batch
+Runtime --> Pub : after database commit
+Repair --> Repo : bounded committed-event read
+Repair --> Pub : idempotent full-event repair
+Pub --> Store : publish / checkpoint
+Adapter ..|> Store
+Adapter --> Redis : scripts + XREAD
+Repo --> DB : short transactions
+MH --> DB : public projection ownership
+note bottom of Runtime
+Existing database control polling is retained.
+Disconnect does not cancel execution.
+Redis does not restore a failed Java execution.
+end note
+note bottom of Store
+Immutable DTOs only; no raw credentials.
+New API models are proposed, not yet integrated.
+Snapshot + cursor share one atomic read boundary.
+end note
+@enduml
+
+@startuml redis_recovery_sequence
+' Source evidence: OpenCode@fe3f3a41f79ad292cc3c7c629567385a20ec5130
+' packages/protocol/src/groups/session.ts makeSessionGroup: experimental durable replay.
+' packages/schema/src/session-event.ts Text.Delta and DurableDefinitions: live-only deltas.
+' Design reason: a snapshot and its cursor prevent the snapshot-to-follow gap.
+' Java divergence: source-side Redis preview recovery is pending implementation, not observed upstream behavior.
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam maxMessageSize 160
+skinparam sequenceMessageAlign left
+hide footbox
+title Browser Reopen - Target Recovery\nPending implementation
+actor Browser
+participant "Mate replica B" as Mate
+participant "Claw reader C" as Reader
+database "Shared Redis" as Redis
+participant "Claw executor A" as Exec
+database "Authoritative DB" as DB
+== Execution survives browser disconnect ==
+Browser -> Browser : close page
+note over Mate,Reader : Read subscriptions close; executor is not canceled.
+Exec -> Exec : accumulate projected text
+Exec -> Redis : atomic batch + full preview + cursor
+== Reopen on any authorized replica ==
+Browser -> Mate : GET public Chat stream
+Mate -> Mate : authenticate / authorize / map Chat
+Mate -> Reader : independent internal GET stream
+Reader -> Redis : atomic snapshot read
+Redis --> Reader : preview + cursor C
+Exec -> Redis : append batch C+1
+Reader --> Mate : initial snapshot
+Mate --> Browser : public preview snapshot
+Browser -> Browser : replace incomplete previews only
+Reader -> Redis : XREAD after C
+Redis --> Reader : batch C+1 (not lost)
+Reader --> Mate : normalized delta
+Mate --> Browser : public delta
+Browser -> Mate : GET complete history
+Mate -> DB : authorized public projection / reconciliation
+DB --> Mate : complete events
+Mate --> Browser : complete history
+Browser -> Browser : deduplicate; completed wins
+== Finish or continue ==
+Exec -> DB : commit complete message
+Exec -> Redis : publish completed; remove preview
+Redis --> Reader : completed notification
+Reader --> Mate : complete event
+Mate --> Browser : same public eventId / completed
+note over Browser,DB
+No automatic POST replay. No sticky sessions for readers.
+Redis failure uses history fallback, not a zero-loss promise.
+Executor failure requires a separate recovery design.
+end note
+@enduml

@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.40.0 |
+| 文档版本 | 1.41.0 |
 | 更新日期 | 2026-09-22 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -19,6 +19,7 @@
 | Skill 统计专项基线 | A09：Codex d58d0e58 的完整计数链；Java f61906b9 的 Runtime/Read/Child/Cron 骨架，#295/#298 仅作固定对照，不升级其他 M05 结论 |
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
 | 线性历史专项基线 | A12：pi main `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`，2026-09-22 已确认默认分支并隔离 fetch；Java 本地 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；只升级分支索引与 Session 历史读取结论 |
+| Redis 观察专项基线 | A13：2026-09-22 确认并隔离 fetch OpenCode dev `fe3f3a41f79ad292cc3c7c629567385a20ec5130`，仅事件协议、live/durable 定义与实例监听；Java 本地 `53eff85c7f41de23eb434e027782f5085a8b8e45` 的投影/流/控制/终态/依赖范围；新能力待实现，v2 仍为 experimental |
 | 核验范围 | A07 的模式入口、TUI 实施选择、方案/任务/问题分离、Slash 协同与前端接入范围；M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、业务 Agent 设置唯一模型来源及旧全局目录差距；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
 | 验证边界 | A08 已补充固定开发分支的 Runtime/数据库/前端确定性验证；其余条目保留各自静态核验范围，企业接入与真实模型行为不在已验证范围 |
 
@@ -57,7 +58,7 @@
 | M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；[A11](#a11)覆盖远端代理与 Skill 工具按需披露 |
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；[A12](#a12)覆盖单条时间线与非递归读取，其他上下文比较待补证，不默认 token 全量落盘 |
 | M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计参照 Codex/OpenCode | [A09](#a09)覆盖使用信号、根去重、失败隔离与入口范围；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；同步一致性另行设计 |
-| M06 · 事件与服务边界 | 写入与观察是否分离；流绑定谁；断线如何恢复；控制状态谁权威 | Claude；OpenCode，必要时 pi/DeepSeek | [A02](#a02)覆盖 Claw/Mate 分层与流范围；[A03](#a03)补充计划审核所复用的数据库确认交接，完整回放专项待补证；[A04](#a04)覆盖 Session 配置更新；[A05](#a05)覆盖后端显式任务事件 |
+| M06 · 事件与服务边界 | 写入与观察是否分离；流绑定谁；断线如何恢复；控制状态谁权威 | Claude；OpenCode，必要时 pi/DeepSeek | [A02](#a02)覆盖既有 Claw/Mate 流范围；[A13](#a13)覆盖 Redis 快照与短期增量恢复；[A03](#a03)维护数据库确认交接；[A04](#a04)覆盖 Session 配置更新；[A05](#a05)覆盖后端显式任务事件 |
 | M07 · 前端体验 | preview 何时被权威内容替换；Turn/Item 与产品 UI 如何映射 | Codex；Claude 辅助 | [A05](#a05)保留旧提交的事件合并与根执行证据；当前计划/TODO/问答前端实现见[A07](#a07)及[A08](#a08)，公共 Mate 接入仍为目标设计 |
 | M08 · 元数据与配置 | 定义、发布快照和运行对象如何分离；刷新如何影响活动执行 | pi；托管产品仅对照公开资源 | Agent.mode 专项已核对 Mate 956b547f / Runtime 09b32d8e；默认值链为 待实现，见 A03 和元数据主设计；元数据组合查询顺序另在 Mate `9dd5d85e` 核对，见 J06；发布事务一致性仍待补证 |
 | M09 · 附件与文件 | 文件服务与 Agent 工作区是什么关系；何时解析与授权 | pi；托管产品公开文件契约按需核对 | 待补证；明确企业产品约束 |
@@ -97,6 +98,8 @@
 所属模块为 M06，并关联 M07。主设计为 [Claw 请求级 SSE](../01-CampusClaw多Agent运行时/chat-events-stream-design.md)
 和 [Mate 通用对话 API](../../02-服务与接口/07-mate-service通用对话API/README.md)。
 它们各自维护内部与公共契约，不能相互覆盖。
+
+本节保留既有精确契约的比较；新的浏览器草稿恢复推荐目标由 [A13](#a13)补充。新增独立读取与快照首帧仍为 proposed，不能把下表“重开流并查历史”当作已具备未完成正文恢复。
 
 | 比较维度 | Claude Managed Agents 公开契约 | CampusClaw 内部目标 | Mate 公共 Chat 目标 |
 |---|---|---|---|
@@ -374,6 +377,26 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 基线更新范围 | 原 M04 pi 基线 `f0deb8dd8e9611e89b5bc4145ca92c03ae6ed4ee` 的 `packages/storage/.../branch-cache.ts` 更新为上述 session-backends 路径；七表与 branch_tips 不再代表当前 pi。只升级本条分支索引结论，不覆盖其他模块旧 SHA；上游默认分支不是稳定发布承诺。 |
 | 讲解要点 | pi 为多分支维护读取索引；CampusClaw 明确只追加，直接使用已提交序号读取。线性是写入事务保证的数据不变量，不是靠查询时忽略分支实现。 |
 
+<a id="a13"></a>
+
+## 6.10 A13 · Redis 快照与短期增量恢复
+
+| 维度 | 结论 |
+|---|---|
+| 模块与主设计 | M06，关联 M01/M04/M07；[Redis 主设计](../01-CampusClaw多Agent运行时/redis-stream-recovery.md)维护完整目标类图、数据结构、两跳恢复、依赖和验收，本节不复制图 |
+| 架构问题 | 浏览器关闭后落到另一副本，如何恢复尚未 completed 的完整前缀并接着流式输出，而不重新执行用户消息？ |
+| OpenCode 已观察范围 | dev `fe3f3a41f79ad292cc3c7c629567385a20ec5130`：`packages/protocol/src/groups/session.ts#makeSessionGroup` 定义按 after 读取和回放 durable 的 experimental v2；`packages/schema/src/session-event.ts#Text.Delta/Reasoning.Delta/DurableDefinitions` 将 delta 排除在 durable 外；`packages/opencode/src/server/routes/instance/httpapi/handlers/event.ts#eventResponse` 先监听后发送 connected。该范围不证明使用 Redis或持久化全部 token。 |
+| Java 已观察范围 | `53eff85c7f41de23eb434e027782f5085a8b8e45` 的 `RuntimeEventProjector` 经 emitBestEffort 发 preview，`RuntimeEventStream` 可拒绝/淘汰预览，`RuntimeResultBackedEventOutput` 只用数据库补读完整结果；控制轮询和先提交终态已有代码。完整仓库相对路径与符号见主设计 §10，不将旧差距扩展为当前未实现结论。 |
+| CampusClaw 目标 | 在可丢弃 HTTP 队列之前写 Redis Hash 快照和有界 Stream；任何授权读取副本先取得快照 C，再读 C 之后的数据。Mate 通过内部只读 API 安全投影，公共 ID 稳定，完整历史优先。 |
+| 差异分类与理由 | 架构变更：增加生成中内容的短期共享恢复，而非仅 completed 对账；产品约束：浏览器重开不重跑写入，企业 Chat/Session 边界不变；安全加固：缓存不保存凭据，读取须重新授权，不按订阅次数启动执行。 |
+| 收益与代价 | 正常浏览器断线可恢复前缀并继续输出，读取不需粘性会话；代价为 Redis HA/内存/连接、快照原子边界、两跳新契约、缓存失效与降级处理。不宣称降低整体生成耗时或任意故障零丢失。 |
+| 替代方案 | 仅数据库完整历史不能恢复半截正文；仅 Pub/Sub 不能补读；全量 token 永久日志超过本需求。数据库控制事务继续保留，Redis 不取代执行状态或自动接管 Java 对象。 |
+| 状态与验收 | 推荐设计已形成；Redis 和新读取骨架待实现，HTTP 增量 proposed、精确契约待整合，Mate 实现未核验。R1～R6 覆盖跨副本浏览器重开、快照/增量竞争、重复/裁剪、库成功缓存失败、主从回退与执行 Pod 丢失；本次只有设计验证。 |
+
+基线更新只从登记点 `849c2598abc7d2b40261e74b5826bc74ffc78308` 升级上述 OpenCode 三处事件范围，不更换 A04/A05 等历史证据，也不称默认分支快照为稳定版本。Redis 的命令与失败语义来自当日官方文档，来源集中在主设计 §10。
+
+讲解要点：数据库负责正式结果，Redis 快照负责恢复当前草稿，Stream 负责接着读；恢复的是观察，不是重新执行。最重要的代价是明确缓存丢失时如何退回完整历史，而不是承诺“用了 Redis 就永不丢字”。
+
 ## 7. 源码证据与更新边界
 
 P01/P02 使用 pi 固定 commit `5cd93f688aaab89dbb6dfa4aca535f21796ae185`；
@@ -428,6 +451,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.41.0 | 2026-09-22 | 增加 Redis 草稿恢复与 OpenCode live/durable 事件边界的 A13 对比。 |
 | 1.40.0 | 2026-09-22 | 增加 pi 分支索引与 CampusClaw 单条追加时间线的范围、代价和实现差距。 |
 | 1.39.1 | 2026-09-21 | A11 采用“关联的业务工具”表述配置关系，架构与权限结论不变。 |
 | 1.39.0 | 2026-09-20 | 增加 Agent 远端代理与 Skill 工具按需披露的 A11 对比，明确 CallTool 及独立同步边界。 |
