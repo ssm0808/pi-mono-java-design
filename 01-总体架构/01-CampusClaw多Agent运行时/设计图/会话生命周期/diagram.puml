@@ -230,7 +230,7 @@ title CampusClaw HTTP Session Logical Deletion Confirmed Design
 ' Observed behavior: tombstone insertion, cleanup task insertion, and session deletion commit atomically.
 ' Architecture change: logical deletion and a durable cleanup work item replace local JSONL deletion.
 ' Architecture change: the target HTTP path variable is sessionId; database column names remain snake_case.
-' Product constraint: DELETE may carry optional integration-context headers without local validation.
+' Product constraint: DELETE declares optional Accept-Language, not execution credentials.
 ' Design reason: the API becomes idempotent immediately without exposing cleanup-job state.
 
 
@@ -240,8 +240,8 @@ database "Runtime Session\nStore" as Store
 participant "Cleanup\nWorker" as Worker
 
 == Commit logical deletion ==
-Caller -> API : DELETE /sessions/{sessionId}\ncontext headers and no body
-API -> API : do not validate integration credentials
+Caller -> API : DELETE /sessions/{sessionId}\noptional Accept-Language and no body
+API -> API : resolve error locale; no execution credentials
 API -> API : validate sessionId
 API -> Store : beginLogicalDelete(sessionId)
 

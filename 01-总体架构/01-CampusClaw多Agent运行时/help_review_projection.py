@@ -15,6 +15,9 @@ def project_help_model(runtime_model):
     model = deepcopy(runtime_model)
     operation = model["operation"]
     require(operation["operationKey"] == "executeSessionCommand", "Help needs the Command operation")
+    headers = [mode for mode in operation["requestHeaderExamples"] if mode["id"] == "builtin"]
+    require(len(headers) == 1, "Expected exactly one canonical Builtin Header example")
+    operation["requestHeaderExamples"] = headers
     examples = [example for example in operation["requestBody"].get("examples", [])
                 if example.get("value") == {"name": "help"}]
     require(len(examples) == 1, "Expected exactly one canonical Help request example")

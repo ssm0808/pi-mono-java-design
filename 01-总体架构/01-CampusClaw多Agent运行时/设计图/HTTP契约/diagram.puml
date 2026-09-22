@@ -89,6 +89,11 @@ title CampusClaw Optional Credential Forwarding (Pending implementation)
 ' Observed behavior: four headers are captured; RuntimeEventService.requireCredentials still rejects incomplete values.
 ' Pending implementation: remove local checks in the entry, CallMateTool.execute, and HttpMateToolClient.invokeTool.
 ' Product constraint: context headers are optional; POST Events and Command may include access-token.
+' Header scope evidence (pi-mono-java 53eff85c7f41de23eb434e027782f5085a8b8e45):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java: submit.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandExecutionService.java: executeBuiltin.
+' Observed behavior: only user.message consumes new event credentials; Builtin retains its internal invocation lifetime.
+' Design reason: callers provide execution credentials only for new messages and Skill, not control/read/configuration calls.
 ' Security hardening: keep received values only in one execution snapshot and never persist or log them.
 ' Security boundary: discovery, model, and other calls are credential-free; only Mate execute forwards
 ' the received X-HW-ID, Authorization, X-HW-APPKEY, and access-token values without renaming.
@@ -101,12 +106,15 @@ participant "Model Manager" as Model
 participant "Mate Tool API" as Mate
 
 == Freeze operation context ==
-alt POST Events or Command
+alt POST Events user.message or Skill Command
   Caller -> Controller : optional context headers\nand optional access-token
   Controller -> Controller : bind inputs and create immutable snapshot\nempty or partial values are allowed
+else interrupt, confirmation, or answer
+  Caller -> Controller : JSON body and SSE Accept\noptional Accept-Language; no new credentials
+  Controller -> Controller : use original execution snapshot\ndo not replace it from this request
 else any other Runtime operation
-  Caller -> Controller : operation-specific headers\ncreateSession: optional Accept-Language only
-  Controller -> Controller : bind operation inputs\nwithout credential validation
+  Caller -> Controller : optional Accept-Language; no execution credentials\nJSON Content-Type when body exists; If-Match only for update
+  Controller -> Controller : bind operation inputs\nBuiltin internal snapshot lifetime stays unchanged
 end
 == Route downstream calls ==
 Controller -> Service : execute operation with scoped context

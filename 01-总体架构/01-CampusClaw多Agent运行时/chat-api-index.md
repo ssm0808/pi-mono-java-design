@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.16.0 |
-| 更新日期 | 2026-09-19 |
-| 变更性质 | Runtime 凭据 Header 均为可选；Claw 只透传已提供值，凭据判断由 Mate 工具接口完成 |
+| 文档版本 | 1.17.0 |
+| 更新日期 | 2026-09-22 |
+| 变更性质 | 十项接口按实际消费保留请求头；仅事件与命令执行入口声明可选执行凭据 |
 | 唯一当前入口 | [当前十项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
 
@@ -25,6 +25,8 @@
 - 七项 Session/Command 普通契约和一项 Skill 批量统计查询复用 `接口契约/common.json`；两个 Events 使用 `事件契约/common.json`。统计源位于 `统计契约/操作`，查询精确字段只在该处维护。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
 - `review` 与 `reviewState` 继续记录原有确认决定；清单中的说明只解释其适用边界，不替代或自动提升确认状态。B01～B15 已实际提交确认；两个 Events 目标契约已定稿，question 列表清空，数值校准另列。
 - Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；公共命令与普通对话各自维护状态。
+
+共享 Header 默认只保留可选 Accept-Language；有 JSON 请求体、SSE 或版本条件的操作显式覆盖。执行凭据仅用于新消息与 Skill 场景，控制事件和 Builtin 各有无凭据示例；Help 仅投影 Builtin。十项 Header 决定记录在各 operation 的 review.headerReview，不覆盖原有语义评审状态；适用范围和源码依据见 [HTTP §7.1](chat-http-v1-design.md#71-凭据读取与透传) 与 §8.2。
 
 已确认的 eventId、无公共 entrySeq、data-only SSE、五输入、普通分页等不回退。
 thinking、配置与 Skill 映射已联动更新，Builtin JSON 保持；公共 Mate 边界独立管理。
@@ -94,6 +96,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.17.0 | 2026-09-22 | 按实际用途收敛十项接口请求头，并同步执行分支示例与 Help 投影。 |
 | 1.16.0 | 2026-09-19 | 明确 Claw 不检查凭据最低完整性，凭据 Header 由 Mate execute 判断。 |
 | 1.15.0 | 2026-09-19 | 统一契约允许缺少凭据 Header，工具执行阶段再返回凭据不完整错误。 |
 | 1.14.0 | 2026-09-18 | F19 对齐批量 POST，排名和趋势暂缓，接口清单调整为十项。 |

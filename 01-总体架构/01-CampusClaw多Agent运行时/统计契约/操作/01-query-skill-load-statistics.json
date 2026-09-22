@@ -174,10 +174,42 @@
           ]
         ]
       }
+    ],
+    "requestHeaderExamples": [
+      {
+        "id": "json",
+        "label": "请求 Header 示例",
+        "preferred": true,
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json",
+            "required": true,
+            "description": "请求体使用 JSON。"
+          },
+          {
+            "name": "Accept-Language",
+            "value": "zh-CN",
+            "required": false,
+            "description": "错误消息语言；缺失或不支持时回退 en-US；不设置 Session 或模型回答语言"
+          },
+          {
+            "name": "Accept",
+            "value": "application/json",
+            "required": false,
+            "description": "可选；接收普通 JSON 响应。"
+          }
+        ]
+      }
     ]
   },
   "review": {
-    "questions": []
+    "questions": [],
+    "headerReview": {
+      "status": "confirmed",
+      "confirmedAt": "2026-09-22",
+      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输、版本条件 Header；不改变上游授权，不拒绝额外收到的 Header。"
+    }
   },
   "designStatus": "implemented-in-pr"
 }

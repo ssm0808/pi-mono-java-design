@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+from request_header_contract import validate_request_headers as check_request_headers
+from render_chat_http_v1 import resolve_entry
+
 import copy
 import importlib.util
 import json
@@ -114,6 +117,15 @@ def validate_public_payload(value: object) -> None:
             validate_public_payload(child)
 
 
+def validate_request_headers(operation: dict) -> None:
+    common = json.loads(COMMON_PATH.read_text(encoding="utf-8"))
+    resolved = dict(operation, parameters=[resolve_entry(common, item) for item in operation["parameters"]])
+    try:
+        check_request_headers(resolved)
+    except RuntimeError as error:
+        raise ValueError(str(error)) from error
+
+
 def validate_access_token_rule(operation: dict) -> None:
     policy = operation.get("credentialPolicy", {})
     require(policy.get("requestHeadersRequired") is False,
@@ -128,10 +140,12 @@ def validate_access_token_rule(operation: dict) -> None:
             "POST Events must defer missing credential failure to tool execute")
     modes = operation["requestHeaderExamples"]
     require(
-        len(modes) == 2 and {mode["id"] for mode in modes} == {"jwt", "appkey"},
+        len(modes) == 3 and {mode["id"] for mode in modes} == {"jwt", "appkey", "control"},
         "POST Events must retain both Header modes",
     )
     for mode in modes:
+        if mode["id"] == "control":
+            continue
         tokens = [header for header in mode["headers"] if header["name"] == "access-token"]
         require(len(tokens) == 1, f"{mode['id']} must contain exactly one access-token Header")
         token = tokens[0]
@@ -337,25 +351,7 @@ def parse_stream(stream: str) -> list[dict]:
 
 def validate_headers(operation: dict) -> None:
     validate_access_token_rule(operation)
-    expected_ids = {"jwt": "credential-jwt", "appkey": "credential-appkey"}
-    for mode in operation["requestHeaderExamples"]:
-        headers = {item["name"]: item for item in mode["headers"]}
-        require(len(headers) == len(mode["headers"]), "duplicate Header")
-        require(headers["Accept"]["value"] == "text/event-stream", "POST must request SSE")
-        require(headers["Content-Type"]["value"] == "application/json", "POST body remains JSON")
-        require(headers["Accept"].get("required") is True and headers["Content-Type"].get("required") is True,
-                "POST transport Headers must remain required")
-        require(all(item.get("required") is False for name, item in headers.items()
-                    if name not in {"Accept", "Content-Type"}),
-                "POST credential Headers must be optional")
-        require(headers["X-HW-ID"]["value"] == expected_ids[mode["id"]], "credential ID example changed")
-        require("用户凭据 ID" in headers["X-HW-ID"]["description"]
-                and "不是公司、服务或应用标识" in headers["X-HW-ID"]["description"], "credential ID meaning changed")
-        credential_name = "Authorization" if mode["id"] == "jwt" else "X-HW-APPKEY"
-        require(headers[credential_name]["value"] == ("Bearer opaque-token" if mode["id"] == "jwt" else "opaque-appkey"),
-                "confirmed credential example changed")
-        require(all("<" not in item["value"] and ">" not in item["value"] for item in headers.values()),
-                "use concrete non-production examples")
+    validate_request_headers(operation)
 
 
 def validate_model(model: dict) -> None:
@@ -644,20 +640,7 @@ def validate_history_model(model: dict, post: dict) -> None:
     require(operation["requestBody"]["contentType"] is None
             and not operation["requestBody"]["required"]
             and operation["requestBody"]["example"] is None, "GET history has no request body")
-    modes = operation["requestHeaderExamples"]
-    require(len(modes) == 2 and {m["id"] for m in modes} == {"jwt", "appkey"}, "preserve both read modes")
-    for mode in modes:
-        headers = {h["name"]: h for h in mode["headers"]}
-        require(len(headers) == len(mode["headers"]), "duplicate read Header")
-        require("access-token" not in headers, "history must not ask for a tool token")
-        require(all(headers[name].get("required") is False for name in headers),
-                "history credential and transport Headers must remain optional")
-        require(headers["X-HW-ID"]["value"] == f"credential-{mode['id']}", "read credential example drift")
-        require("用户凭据 ID" in headers["X-HW-ID"]["description"], "credential ID is not a company ID")
-        name = "Authorization" if mode["id"] == "jwt" else "X-HW-APPKEY"
-        require(headers[name]["value"] == ("Bearer opaque-token" if name == "Authorization" else "opaque-appkey"),
-                "read credential value drift")
-        require(headers["Accept"]["value"] == "application/json", "history requests JSON")
+    validate_request_headers(operation)
     require([p["name"] for p in operation["parameters"] if p.get("in") == "query"] == ["limit", "page"],
             "do not introduce unreviewed query parameters")
     parameters = {p["name"]: p for p in operation["parameters"] if p.get("in") == "query"}

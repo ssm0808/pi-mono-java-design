@@ -19,6 +19,7 @@ from render_chat_http_v1 import build_operation_html, load_contract
 from command_catalog_contract import validate_catalog_examples
 from command_response_contract import validate_response_reuse
 from help_review_projection import load_help_model
+from request_header_contract import validate_request_headers
 
 
 ROOT = Path(__file__).resolve().parent
@@ -43,18 +44,8 @@ EXPECTED_OPERATIONS = {
     ("GET", "/sessions/{sessionId}/commands"),
     ("POST", "/sessions/{sessionId}/command"),
 }
-EXPECTED_CONTEXT_HEADERS = {"X-HW-ID", "Authorization", "X-HW-APPKEY"}
 POST_EVENTS = ("POST", "/sessions/{sessionId}/events")
 POST_COMMAND = ("POST", "/sessions/{sessionId}/command")
-POST_EVENTS_CONTEXT_HEADERS = EXPECTED_CONTEXT_HEADERS | {"access-token"}
-EXPECTED_SHARED_HEADER_VALUES = {
-    "jwt": {"X-HW-ID": "credential-jwt", "Authorization": "Bearer opaque-token"},
-    "appkey": {"X-HW-ID": "credential-appkey", "X-HW-APPKEY": "opaque-appkey"},
-}
-EXPECTED_EXECUTION_HEADER_VALUES = {
-    mode: values | {"access-token": "opaque-access-token"}
-    for mode, values in EXPECTED_SHARED_HEADER_VALUES.items()
-}
 EXPECTED_PARAMETER_HEADERS = {"Accept-Language", "If-Match"}
 LOWER_CAMEL_FIELD = re.compile(r"^[a-z][A-Za-z0-9]*$")
 
@@ -110,37 +101,6 @@ def run(command: list[str], cwd: Path = ROOT) -> None:
     subprocess.run(command, cwd=cwd, check=True)
 
 
-def validate_header_examples(
-    examples: list[dict[str, Any]], expected_values: dict[str, dict[str, str]], context: str
-) -> None:
-    require({example.get("id") for example in examples} == set(expected_values),
-            f"{context} request Header modes are incomplete")
-    for example in examples:
-        headers = {header["name"]: header for header in example["headers"]}
-        actual_values = {name: header.get("value") for name, header in headers.items()}
-        require(actual_values == expected_values[example["id"]],
-                f"{context} request Header values differ: {example['id']}")
-        required_headers = {name for name, header in headers.items() if header.get("required") is True}
-        require(required_headers <= {"Content-Type", "Accept"},
-                f"{context} credential Header must remain optional: {example['id']}")
-        require(all(header.get("required") is False for name, header in headers.items()
-                    if name not in {"Content-Type", "Accept"}),
-                f"{context} credential Header requiredness differs: {example['id']}")
-        x_hw_id_description = headers["X-HW-ID"].get("description", "")
-        require("用户凭据 ID" in x_hw_id_description and "不是公司、服务或应用标识" in x_hw_id_description,
-                f"{context} must define X-HW-ID as the user credential ID")
-        serialized = json.dumps(example, ensure_ascii=False)
-        for forbidden in ("公司调用方标识", "瞬态", "瞬时", "<CALLER_ID>", "<JWT>", "<APPKEY>",
-                          "<ACCESS_TOKEN>"):
-            require(forbidden not in serialized, f"{context} contains obsolete Header wording: {forbidden}")
-        if "access-token" in headers:
-            for header in headers.values():
-                description = header.get("description", "")
-                for phrase in ("只在内存中保留到本次", "Mate tool execute", "不写入 Session、事件或日志"):
-                    require(phrase in description,
-                            f"{context} execution Header description is incomplete: {phrase}")
-
-
 def read_design_version() -> str:
     content = DESIGN_PATH.read_text(encoding="utf-8")
     match = re.search(r"\| 文档版本 \| ([0-9]+\.[0-9]+\.[0-9]+) \|", content)
@@ -192,19 +152,12 @@ def validate_common_contract(common: dict[str, Any]) -> None:
         session_parameter["schema"] == {"$ref": "resourceIdPatterns.session"},
         "Session path parameter must reference the single Session ID rule",
     )
-    header_examples = common.get("requestHeaderExamples", [])
-    require(len(header_examples) == 2, "Shared request header examples are incomplete")
-    header_names = {
-        header["name"]
-        for example in header_examples
-        for header in example["headers"]
-    }
-    require(header_names == EXPECTED_CONTEXT_HEADERS, "Shared HTTP Header names changed unexpectedly")
-    validate_header_examples(header_examples, EXPECTED_SHARED_HEADER_VALUES, "Shared")
-    require(all(header.get("required") is False for example in header_examples for header in example["headers"]),
-            "Shared credential Headers must be optional")
-    require("可与 Authorization 同时提供" in json.dumps(header_examples, ensure_ascii=False),
-            "Request header contract must state that both credential modes may be provided")
+    examples = common.get("requestHeaderExamples", [])
+    require(len(examples) == 1 and examples[0]["id"] == "language",
+            "Shared Header examples must be language-only")
+    headers = examples[0]["headers"]
+    require(len(headers) == 1 and headers[0]["name"] == "Accept-Language"
+            and headers[0]["required"] is False, "Shared defaults must not include credentials")
 
 
 def parse_generated_models(parser: ContractHtmlParser) -> tuple[list[dict[str, Any]], list[str]]:
@@ -279,24 +232,7 @@ def values_for_key(value: Any, key: str):
 
 
 def validate_operation_header_examples(operation: dict[str, Any]) -> None:
-    key = (operation["method"], operation["path"])
-    examples = operation["requestHeaderExamples"]
-    if operation["operationKey"] == "createSession":
-        require(len(examples) == 1 and examples[0]["id"] == "language",
-                "Create Session must show only the language Header example")
-        headers = examples[0]["headers"]
-        require(len(headers) == 1 and headers[0]["name"] == "Accept-Language"
-                and headers[0]["required"] is False and headers[0]["value"] == "zh-CN",
-                "Create Session must retain only optional Accept-Language, without credentials")
-        language = [item for item in operation["parameters"] if item["in"] == "header"]
-        require(len(language) == 1 and language[0]["name"] == "Accept-Language"
-                and language[0]["required"] is False,
-                "Create Session parameters must retain optional Accept-Language only")
-        return
-    expected_values = (EXPECTED_EXECUTION_HEADER_VALUES if key in {POST_EVENTS, POST_COMMAND}
-                       else EXPECTED_SHARED_HEADER_VALUES)
-    require(len(examples) == 2, f"Request header examples are incomplete: {key}")
-    validate_header_examples(examples, expected_values, str(key))
+    validate_request_headers(operation)
 
 
 def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
@@ -559,7 +495,8 @@ def validate_help_projection(model: dict[str, Any], operation: dict[str, Any]) -
     require(read_design_version() in model["api"]["version"], "Help projection Runtime version is stale")
     view = model["operation"]
     require("authModes" not in view, "Help must not retain a second, unused Header example source")
-    require(view["requestHeaderExamples"] == operation["requestHeaderExamples"],
+    require(view["requestHeaderExamples"] == [mode for mode in operation["requestHeaderExamples"]
+                                                   if mode["id"] == "builtin"],
             "Help request Header examples and descriptions must match Runtime")
     require((view["method"], view["path"]) == POST_COMMAND, "Help must reuse the Runtime Command path")
     require(view["parameters"] == operation["parameters"], "Help parameters must come from Runtime")
@@ -599,7 +536,7 @@ def validate_help_artifacts(models: list[dict[str, Any]]) -> None:
         if attrs.get("type") != "application/json":
             validate_executable_script(source)
     visible = " ".join(parser.visible_text)
-    for example in operation["requestHeaderExamples"]:
+    for example in model["operation"]["requestHeaderExamples"]:
         for header in example["headers"]:
             require(header["value"] in visible and header["description"] in visible,
                     "Help visible Header values or descriptions differ from Runtime")
@@ -631,27 +568,11 @@ def validate_source_deduplication() -> None:
     for operation_path in sorted((CONTRACT_ROOT / "操作").glob("*.json")):
         source = json.loads(operation_path.read_text(encoding="utf-8"))
         operation = source["operation"]
-        if operation.get("operationKey") == "createSession":
-            require("requestHeaderExamples" in operation,
-                    "Create Session must override shared credential examples")
-        elif operation.get("operationKey") in {"submitUserMessage", "executeSessionCommand"}:
-            examples = operation.get("requestHeaderExamples", [])
-            header_names = {
-                header["name"]
-                for example in examples
-                for header in example.get("headers", [])
-            }
-            require(len(examples) == 2 and header_names == POST_EVENTS_CONTEXT_HEADERS,
-                    "Execution POST must override shared Header examples only to add access-token")
-            require(operation.get("credentialPolicy", {}).get("requestHeadersRequired") is False,
-                    "Execution POST credential Headers must be optional")
-            require(operation["credentialPolicy"].get("clawChecksCredentialCompleteness") is False,
-                    "Execution POST must not check credential completeness in Claw")
-            require(operation["credentialPolicy"].get("mateDecidesCredentialFailure") is True,
-                    "Execution POST Mate must decide credential failure")
+        if operation.get("operationKey") in {"updateSession", "executeSessionCommand"}:
+            require("requestHeaderExamples" in operation, "Body POST needs scoped Header examples")
         else:
             require("requestHeaderExamples" not in operation,
-                    f"Shared request headers duplicated in {operation_path.name}")
+                    f"Shared language Header duplicated in {operation_path.name}")
         references = [item.get("$ref") for item in operation["responses"] if isinstance(item, dict)]
         require("responses.unauthenticated" not in references,
                 f"Runtime-local authentication error found in {operation_path.name}")

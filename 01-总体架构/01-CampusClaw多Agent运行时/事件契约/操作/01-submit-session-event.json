@@ -5,18 +5,22 @@
     "method": "POST",
     "path": "/sessions/{sessionId}/events",
     "summary": "一次 POST 提交用户事件，在同一响应中接收 SSE",
-    "description": "已确认合并方向：POST 同时承担事件提交和对应推送，不再提供独立 GET /events/stream；GET /events 的 ListEvents 历史查询仍保留。每次提交 user.message、user.interrupt、user.tool_confirmation、user.plan_confirmation、user.question_answer 中的一条，响应为 200 text/event-stream，而不是独立 ResultBean JSON。凭据 Header 均为可选；缺失或不完整的凭据不在事件入口拒绝，Claw 只透传已提供 Header，由 Mate tool execute 判断并返回对应结果。event 包装、content[]、eventId、不公开 entryId/entrySeq/runId/executionId、Header 示例与安全边界继续有效。五个基础类型名及 S1 data-only、S2 type + phase 继续有效。已确认首个业务帧返回本次提交的完整 user.* 事件（含 eventId），仅一次；后续才推送对应的 Agent/Session 事件。这明确调整原 S3，不广播其他用户输入，也不额外包装 ResultBean。已确认采用请求范围 SSE，输出只绑定本次消息、确认续跑或中断目标，不跨后续无关执行；结束规则已确认：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭；之后通过新的 user.tool_confirmation POST 接收续跑结果。等待确认不是任务成功，不相关的 Session idle 不能结束本次响应。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。单消息准入已确认：同一 Session 的 M1 未执行完成前，不接受任何调用方提交的下一条 user.message M2，也不将 M2 排队或写入已接受事件历史。接受 user.message 时，在同一数据库短事务中锁定 Session、复核 state=idle、写入消息和内部执行身份，并将 state 改为 running；提交成功后才启动执行并返回完整回执。该约束按 Session 生效，覆盖不同用户和服务实例。M1 等待工具确认、正在停止或仅响应断开时仍未完成，Session 保持 running；等待确认的 session.status_idle 只结束本次 SSE，不能据此开放下一条消息。M1 真正完成或实际停止且结束状态提交后，Session 才恢复 idle。user.interrupt 和 user.tool_confirmation 按各自控制条件接受，不受新消息的 idle 前置条件阻挡。中断查询优化已确认：同实例在停止请求提交成功后立即通知对应执行，跨实例继续批量检查，数据库轮询兜底保留；固定内部执行身份是等待结果的去重键，同一目标只查一次，再分别通知本机仍连接的响应。先登记等待再补读已提交终态，避免登记前后完成导致漏发；本地通知和补读共用每条响应的终态去重，完整回执先行，同一终态每条响应最多投递一次，慢连接互不阻塞。最后一个等待者离开只清理本机登记，不删除停止请求或终态。查询索引按实际 GaussDB 版本、执行计划与 100 并发压测选择，不预先冻结具体索引、500 毫秒周期、批次上限或工具/中断等待超时。执行标识不公开；旧停止请求不能作用于下一轮执行，回执、超时或实例失联不代表已停止。B07～B11 已确定 reason、并发竞争和故障处理；数据库字段、检查周期与容量数值进入实施校准。断线不取消已接受的执行、不自动重发 POST，通过 ListEvents 对账。已确认目标契约，CampusClaw 实现仍待落地；Mate 公共契约由独立专题维护。独立 abort、steers、follow-ups 接口已退役。停止执行通过 user.interrupt 完成；调整方向为确认实际停止后新提交 user.message，不提供原生运行中 Steer。本期不支持 FollowUp 排队，未来数据库交接方案仅记录在专题设计中，启用另行评审；不新增当前输入类型、字段或排队回执。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。 中断必填 targetEventId 并在同一事务匹配原消息；agent.* 与 session.status_idle 必填 sourceEventId，均引用该原 user.message.eventId。确认和停止同一事务内竞争：停止先提交拒绝确认；确认先提交仍可中断续跑。重复确认或重复停止均返回 409。自然完成胜出时返回真实 done/failed，不伪造 terminated。每次只有一个待确认工具。跨实例确认通过数据库交接决定和完整事件，本机可发送 preview，远端 preview 不保证提供。 执行进度已实现并登记为 agent.todo_updated：后端从 TodoUpdate 最终成功结果生成完整 todos，与工具结果同事务保存；前端直接消费任务事件，SSE 与历史同形。plan 不记录调研 TODO。 计划审核已登记：user.plan_confirmation.targetEventId 精确引用待审核 agent.plan；approve/revise 正常续跑结果均 isError=false。批准同事务保存 mode=build 与 reason=planApproved 模式事件，回执先于模式事件及原执行后续输出；修订保持 plan 并生成新计划 eventId。Session 仍按 state=idle/running 表示忙闲；审核等待只结束当前 SSE。 AskUserQuestion 已在 Runtime 主线实现：新增 agent.question 与 user.question_answer，复用原根续跑、confirming 和持久化历史；不改变 Session mode，不替代计划批准或工具授权。精确问题和答案约束由共享 questionContract 维护。 工具调用增加可选 displayName，来源、无值省略、首次调用快照和实时/历史一致性统一由共享事件源维护；POST SSE 与 GET 同形，属于已确认 待实现 增量。 计划流式已确认（待实现）：后端解析唯一 proposed_plan 块，agent.plan 只用 phase=delta/completed；第一条非空 delta 建卡，无 started，预览不入历史。审核事务成功后发送同 ID 完整 completed 与 confirming；普通 agent.message 只保留前置说明，不重复计划，sourceMessageEventId 不进入新契约。完整响应原 Entry 与唯一 ExitPlanMode({}) 在后端绑定；旧无 phase 完整计划可读，新写必有 phase。",
+    "description": "已确认合并方向：POST 同时承担事件提交和对应推送，不再提供独立 GET /events/stream；GET /events 的 ListEvents 历史查询仍保留。每次提交 user.message、user.interrupt、user.tool_confirmation、user.plan_confirmation、user.question_answer 中的一条，响应为 200 text/event-stream，而不是独立 ResultBean JSON。凭据 Header 均为可选；缺失或不完整的凭据不在事件入口拒绝，Claw 只透传已提供 Header，由 Mate tool execute 判断并返回对应结果。event 包装、content[]、eventId、不公开 entryId/entrySeq/runId/executionId、Header 示例与安全边界继续有效。五个基础类型名及 S1 data-only、S2 type + phase 继续有效。已确认首个业务帧返回本次提交的完整 user.* 事件（含 eventId），仅一次；后续才推送对应的 Agent/Session 事件。这明确调整原 S3，不广播其他用户输入，也不额外包装 ResultBean。已确认采用请求范围 SSE，输出只绑定本次消息、确认续跑或中断目标，不跨后续无关执行；结束规则已确认：收到本次对应的 session.status_idle 后关闭响应，等待工具确认时也关闭；之后通过新的 user.tool_confirmation POST 接收续跑结果。等待确认不是任务成功，不相关的 Session idle 不能结束本次响应。中断推送分工已确认：原 user.message 响应继续承载原执行输出；新 user.interrupt 响应首帧返回完整中断回执，之后只等待目标实际停止的 session.status_idle，不复制正文、思考或工具输出。仍连接的两条响应接收同一条 idle，复用同一 eventId，随后各自关闭。回执表示已接受中断，idle 才表示目标实际停止。数据库中断机制已确认：接收实例在同一短事务中绑定具体内部执行、保存 user.interrupt 事件和停止请求，提交后先返回完整回执；各实例独立于模型和工具调用，批量检查本机活动执行的停止请求并执行本地取消。执行实际退出后保存唯一的对应 idle；原响应与中断响应读取同一条权威结束事件，复用 eventId 后分别关闭。中断响应仍不复制 Agent 输出。当前仅依赖数据库，不依赖粘性路由、实例间转发或 Redis；Redis 仅在后续有必要时评估为通知加速，数据库记录与检查兜底保留。单消息准入已确认：同一 Session 的 M1 未执行完成前，不接受任何调用方提交的下一条 user.message M2，也不将 M2 排队或写入已接受事件历史。接受 user.message 时，在同一数据库短事务中锁定 Session、复核 state=idle、写入消息和内部执行身份，并将 state 改为 running；提交成功后才启动执行并返回完整回执。该约束按 Session 生效，覆盖不同用户和服务实例。M1 等待工具确认、正在停止或仅响应断开时仍未完成，Session 保持 running；等待确认的 session.status_idle 只结束本次 SSE，不能据此开放下一条消息。M1 真正完成或实际停止且结束状态提交后，Session 才恢复 idle。user.interrupt 和 user.tool_confirmation 按各自控制条件接受，不受新消息的 idle 前置条件阻挡。中断查询优化已确认：同实例在停止请求提交成功后立即通知对应执行，跨实例继续批量检查，数据库轮询兜底保留；固定内部执行身份是等待结果的去重键，同一目标只查一次，再分别通知本机仍连接的响应。先登记等待再补读已提交终态，避免登记前后完成导致漏发；本地通知和补读共用每条响应的终态去重，完整回执先行，同一终态每条响应最多投递一次，慢连接互不阻塞。最后一个等待者离开只清理本机登记，不删除停止请求或终态。查询索引按实际 GaussDB 版本、执行计划与 100 并发压测选择，不预先冻结具体索引、500 毫秒周期、批次上限或工具/中断等待超时。执行标识不公开；旧停止请求不能作用于下一轮执行，回执、超时或实例失联不代表已停止。B07～B11 已确定 reason、并发竞争和故障处理；数据库字段、检查周期与容量数值进入实施校准。断线不取消已接受的执行、不自动重发 POST，通过 ListEvents 对账。已确认目标契约，CampusClaw 实现仍待落地；Mate 公共契约由独立专题维护。独立 abort、steers、follow-ups 接口已退役。停止执行通过 user.interrupt 完成；调整方向为确认实际停止后新提交 user.message，不提供原生运行中 Steer。本期不支持 FollowUp 排队，未来数据库交接方案仅记录在专题设计中，启用另行评审；不新增当前输入类型、字段或排队回执。 L5 已确认：agent.message 在 phase=completed 时的 content 使用完整正文字符串；GET 历史与 POST SSE completed 帧保持同形。 L6 已确认：agent.tool_call.arguments 使用 JSON 对象；GET 历史与 POST SSE 的完整工具调用事件保持同形。 L7 已确认：agent.tool_result.content 使用内容块数组；GET 历史与 POST SSE 的完整工具结果保持同形。 L8 已确认：当前工具只返回文本，agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块；Mate 结果也作为文本承接，不增加 JSON 块或图片块。 L9 已确认：Mate 调用保留 toolName=CallMateTool，arguments 保留 {tool,args}；业务工具名位于 arguments.tool，业务参数位于 arguments.args，GET 历史与 POST SSE 同形。 L10 已确认：每条 agent.tool_result 都返回 isError 布尔值，成功为 false，失败为 true；GET 历史与 POST SSE 的完整工具结果保持同形。 中断必填 targetEventId 并在同一事务匹配原消息；agent.* 与 session.status_idle 必填 sourceEventId，均引用该原 user.message.eventId。确认和停止同一事务内竞争：停止先提交拒绝确认；确认先提交仍可中断续跑。重复确认或重复停止均返回 409。自然完成胜出时返回真实 done/failed，不伪造 terminated。每次只有一个待确认工具。跨实例确认通过数据库交接决定和完整事件，本机可发送 preview，远端 preview 不保证提供。 执行进度已实现并登记为 agent.todo_updated：后端从 TodoUpdate 最终成功结果生成完整 todos，与工具结果同事务保存；前端直接消费任务事件，SSE 与历史同形。plan 不记录调研 TODO。 计划审核已登记：user.plan_confirmation.targetEventId 精确引用待审核 agent.plan；approve/revise 正常续跑结果均 isError=false。批准同事务保存 mode=build 与 reason=planApproved 模式事件，回执先于模式事件及原执行后续输出；修订保持 plan 并生成新计划 eventId。Session 仍按 state=idle/running 表示忙闲；审核等待只结束当前 SSE。 AskUserQuestion 已在 Runtime 主线实现：新增 agent.question 与 user.question_answer，复用原根续跑、confirming 和持久化历史；不改变 Session mode，不替代计划批准或工具授权。精确问题和答案约束由共享 questionContract 维护。 工具调用增加可选 displayName，来源、无值省略、首次调用快照和实时/历史一致性统一由共享事件源维护；POST SSE 与 GET 同形，属于已确认 待实现 增量。 计划流式已确认（待实现）：后端解析唯一 proposed_plan 块，agent.plan 只用 phase=delta/completed；第一条非空 delta 建卡，无 started，预览不入历史。审核事务成功后发送同 ID 完整 completed 与 confirming；普通 agent.message 只保留前置说明，不重复计划，sourceMessageEventId 不进入新契约。完整响应原 Entry 与唯一 ExitPlanMode({}) 在后端绑定；旧无 phase 完整计划可读，新写必有 phase。 Header 适用范围：仅 user.message 捕获本请求凭据；user.interrupt、user.tool_confirmation、user.plan_confirmation 和 user.question_answer 不需要重传凭据，也不覆盖原执行快照。",
     "credentialPolicy": {
       "requestHeadersRequired": false,
       "entryRejectsMissingCredentials": false,
       "clawChecksCredentialCompleteness": false,
       "mateDecidesCredentialFailure": true,
-      "toolExecuteFailure": "Claw forwards provided non-empty credential Headers without completeness checks; Mate tool execute decides validity; Claw maps failures to the existing tool result with isError=true"
+      "toolExecuteFailure": "Claw forwards provided non-empty credential Headers without completeness checks; Mate tool execute decides validity; Claw maps failures to the existing tool result with isError=true",
+      "captureEventTypes": [
+        "user.message"
+      ],
+      "controlEventsReuseOriginalCredentials": true
     },
     "requestHeaderExamples": [
       {
         "id": "jwt",
-        "label": "JWT Header 示例",
+        "label": "user.message · JWT Header 示例",
         "preferred": true,
         "headers": [
           {
@@ -48,12 +52,18 @@
             "value": "text/event-stream",
             "required": true,
             "description": "接收本次 POST 的流式响应；服务端 HTTP 客户端或 fetch 持续读取，不使用原生 EventSource 发送 POST。"
+          },
+          {
+            "name": "Accept-Language",
+            "value": "zh-CN",
+            "required": false,
+            "description": "错误消息语言；缺失或不支持时回退 en-US；不设置 Session 或模型回答语言"
           }
         ]
       },
       {
         "id": "appkey",
-        "label": "APPKEY Header 示例",
+        "label": "user.message · APPKEY Header 示例",
         "preferred": false,
         "headers": [
           {
@@ -85,6 +95,37 @@
             "value": "text/event-stream",
             "required": true,
             "description": "接收本次 POST 的流式响应；服务端 HTTP 客户端或 fetch 持续读取，不使用原生 EventSource 发送 POST。"
+          },
+          {
+            "name": "Accept-Language",
+            "value": "zh-CN",
+            "required": false,
+            "description": "错误消息语言；缺失或不支持时回退 en-US；不设置 Session 或模型回答语言"
+          }
+        ]
+      },
+      {
+        "id": "control",
+        "label": "中断、确认与回答（复用原执行凭据）",
+        "preferred": false,
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json",
+            "required": true,
+            "description": "请求体是包含一条 event 的 JSON。"
+          },
+          {
+            "name": "Accept",
+            "value": "text/event-stream",
+            "required": true,
+            "description": "接收本次 POST 的流式响应；服务端 HTTP 客户端或 fetch 持续读取，不使用原生 EventSource 发送 POST。"
+          },
+          {
+            "name": "Accept-Language",
+            "value": "zh-CN",
+            "required": false,
+            "description": "错误消息语言；缺失或不支持时回退 en-US；不设置 Session 或模型回答语言"
           }
         ]
       }
@@ -951,6 +992,11 @@
     "deliveryState": "implementation-ready",
     "implementationCalibration": [
       "数据库字段、约束、实测索引、检查周期、超时数值与容量上限按实现验证；保留策略沿用现有部署，无策略时不新增自动清理。"
-    ]
+    ],
+    "headerReview": {
+      "status": "confirmed",
+      "confirmedAt": "2026-09-22",
+      "decision": "仅 user.message 捕获本请求凭据；user.interrupt、user.tool_confirmation、user.plan_confirmation 和 user.question_answer 不需要重传凭据，也不覆盖原执行快照。四项凭据均可选，保持上游认证授权和仅 Mate tool execute 透传边界。"
+    }
   }
 }

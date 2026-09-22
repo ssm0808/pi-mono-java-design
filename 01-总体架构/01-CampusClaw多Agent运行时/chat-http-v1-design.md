@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.58.2 |
+| 文档版本 | 1.59.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新专项见 §8.1 |
@@ -110,7 +110,7 @@ Session 的名称、默认模型、深度思考和工作模式统一由 `POST /s
 
 名称规则沿用 /name：去除首尾空白、保留内部空白，拒绝空值、CR/LF、C0/C1、Unicode 双向覆盖/隔离字符及超过 80 UTF-8 字节。modelId 沿用 ClawConstants.RuntimeApi.MODEL_ID_REGEX。thinking 仍为 boolean，false 映射 off，true 使用受管非 off 强度；关闭不隐藏既有思考原文。mode 仅为小写 plan/build，与 state=idle/running 分离。
 
-请求沿用可选的调用上下文 Header，不新增 access-token 或 Idempotency-Key。唯一必填的请求头是单个强 If-Match；缺少返回 428，合法但过期返回 412；非法形状按 INVALID_SESSION_UPDATE_REQUEST 拒绝。上游继续负责凭据真实性与动作授权，Runtime 不增加本地认证。
+请求不声明执行凭据 Header 或 Idempotency-Key；JSON 请求体使用必填 Content-Type: application/json，并必填单个强 If-Match；If-Match 缺少返回 428，合法但过期返回 412，非法形状按 INVALID_SESSION_UPDATE_REQUEST 拒绝。Accept-Language 可选。上游继续负责凭据真实性与动作授权，Runtime 不增加本地认证。
 
 #### 2.4.3 原子性与内部接口
 
@@ -307,7 +307,18 @@ Runtime 接收调用上下文，不检查 JWT/APPKEY 的组合、格式或真实
 
 ### 7.1 凭据读取与透传
 
-四项凭据 Header 为 `X-HW-ID`、`Authorization`、`X-HW-APPKEY` 和 `access-token`，其中 `access-token` 适用于 POST Events/Command。它们均为可选；HTTP 入口、工具装配、`CallMateTool` 和 Mate HTTP 客户端均不检查必填、最低完整性或 JWT/APPKEY 组合。两种认证 Header 同时提供时一并透传，不由 Claw 选择或回退认证模式。
+仅 `submitSessionEvent` 与 `executeSessionCommand` 声明四项可选执行凭据：`X-HW-ID`、`Authorization`、`X-HW-APPKEY` 和 `access-token`。其他八项操作不声明这些 Header，也不展示 JWT/APPKEY 示例；这不表示拒绝收到的额外 Header，更不取消上游鉴权。HTTP 入口、工具装配、`CallMateTool` 和 Mate HTTP 客户端均不检查凭据必填、最低完整性或 JWT/APPKEY 组合。两种认证 Header 同时提供时一并透传，不由 Claw 选择或回退认证模式。
+
+| 操作 | 实际保留的请求 Header 与适用范围 |
+|---|---|
+| createSession、getSession、deleteSession、listSessionModels、listSessionCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
+| listSessionEvents | 可选 Accept-Language、Accept: application/json；只读历史不创建执行凭据 |
+| updateSession | Content-Type: application/json、强 If-Match 必填；Accept-Language 与 JSON Accept 可选 |
+| querySkillLoadStatistics | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选；管理调用方授权仍由上游/部署边界保证 |
+| submitSessionEvent | Content-Type: application/json、Accept: text/event-stream 必填；Accept-Language 可选；仅 user.message 使用本请求可选凭据，其他四类控制事件复用原执行快照 |
+| executeSessionCommand | Content-Type: application/json 必填，Accept-Language 可选；Builtin 使用 JSON，无需调用方提供执行凭据；Skill 使用 SSE，可携带执行凭据；Accept 按对应响应类型可选 |
+
+所有操作的 Accept-Language 都只用于接口语言处理，不设置 Session 或模型回答语言，缺失或不支持时回退 en-US。普通 JSON Accept 可省略。If-Match 只适用于 updateSession；Command 继续拒绝 If-Match 和 Idempotency-Key。Builtin 的精简示例不移除现有内部快照或 Compact 释放链路。精确值及分支示例由操作 JSON 唯一维护，Help 从 Builtin 示例派生。
 
 新执行只捕获本次请求的四项值，复用不可变 `MateCredentials`；全部缺失时使用空快照，不把空快照等同于缺少 Host 执行上下文。凭据不完整不能使已配置的 `CallMateTool` 被隐藏或返回 unavailable。资源不存在、执行上下文缺失、工具无法解析、取消和权限确认等既有失败仍由所属层处理，不为了让 Mate 判断凭据而跳过这些条件。
 
@@ -367,9 +378,9 @@ Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行�
 
 Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/beta/sessions/update)、[Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations)。各基线 API 组织与本次取舍集中见[架构对比 A04](../07-Agent架构对比/README.md#a04)。未运行 Java 集成测试；设计确认与实现/部署状态分开记录。
 
-### 8.2 创建会话请求 Header 核验
+### 8.2 十项接口请求 Header 核验
 
-核对日期为 2026-09-22，本地源码快照为 `pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45`，不声明为最新上游或部署版本。以下仅核验创建请求 Header 与语言消费，不升级其他功能的历史实现结论。源码前缀 R = `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
+核对日期为 2026-09-22，本地源码快照为 `pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45`，不声明为最新上游或部署版本。以下仅核验请求 Header 的消费范围，不升级其他功能的历史实现结论。相对上次同一提交的创建/语言核验，扩大到普通读取、统一更新、事件分派和命令入口；未更换外部 Agent 基线。源码前缀 R = `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
 
 | 路径与符号 | 已观察行为 |
 |---|---|
@@ -379,13 +390,21 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 | R/web/RuntimeExceptionHandler.java · response | 按请求 Locale 调用 MessageSource，返回本地化 resMsg 和 Content-Language |
 | R/result/StandaloneResultBeanAdapter.java · normal | 成功 resMsg 固定为 success，不按请求语言翻译 |
 | modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionRoutesTest.java · managerUnavailableAddsRetryAfterAndLocalizesError | 已有测试断言创建失败时 zh-CN 对应中文消息；本次读取测试，未重新运行 Java 测试 |
+| R/web/RuntimeSessionController.java · get/update/delete | 读取/删除不提取执行凭据；统一更新消费 If-Match 和请求体，语言用于响应边界 |
+| R/web/RuntimeSessionConfigurationController.java · listModels；R/web/RuntimeCommandCatalogController.java · list | 模型和命令清单不传入执行凭据；请求语言用于响应 Header |
+| R/web/RuntimeEventController.java · submit/list；R/event/RuntimeEventService.java · submit | POST 边界读取凭据，但分派仅把快照传给 user.message；四类控制事件不消费新快照；GET 历史不提取凭据 |
+| R/web/RuntimeCommandController.java；R/service/command/CommandExecutionService.java · executeBuiltin | Builtin 与 Skill 入口均可读取快照；Builtin 保留请求对象与 Compact 生命周期，不据此要求调用方发送凭据 |
+| R/service/command/skill/SkillCommandExecutionService.java · executeRequest/execute | Skill 进入消息执行，凭据沿执行链传递给可能发生的 Mate 工具调用 |
 
-这是既有产品凭据边界的契约表达收敛：创建所需语言读取已实现，移除无用途的凭据示例不改变业务调用链或认证职责。设计验收要求唯一 JSON、生成页面和创建时序图不再声明创建凭据，保留语言头与现有响应；其余接口的 Header 确认状态独立维护。Agent 架构对比结论与模块导航无变化，不引入外部基线比较。
+统计查询在该本地提交的 `modules` / `campusclaw` Java 源码范围未找到对应入口，Header 实现状态为未核验；目标契约根据已确认的纯统计查询职责不声明执行凭据，管理授权仍保留。本次不修改实现代码，也未运行 Java 测试。
+
+这是既有产品凭据边界的契约表达收敛，不改变认证职责或执行快照生命周期。设计验收要求十项 JSON 与生成页面按 §7.1 分组，事件控制与 Builtin 示例无凭据，Help 只投影 Builtin；负向测试拒绝无用途凭据回流、凭据变必填及 If-Match/SSE 传输规则漂移。Agent 架构对比结论与模块导航无变化，不引入外部基线比较。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.59.0 | 2026-09-22 | 十项接口按消费范围收敛请求头，仅新消息与 Skill 执行示例保留可选凭据。 |
 | 1.58.2 | 2026-09-22 | 创建会话移除凭据 Header 示例，保留可选错误消息语言并对齐源码消费范围。 |
 | 1.58.1 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，同步 Runtime 精确契约与生成页面。 |
 | 1.58.0 | 2026-09-19 | 统一空凭据快照、Mate 失败投影与实现验收，并区分前端刷新门禁。 |

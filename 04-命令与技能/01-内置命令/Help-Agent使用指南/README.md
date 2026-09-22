@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.2.3 |
+| 设计版本 | 1.2.4 |
 | 日期 | 2026-09-22 |
 | 状态 | Help 无参查询、三个业务字段、缓存往返、Agent 级锁、DTO→VO 投影与统一 Command POST 已实现；元数据更新通过显式刷新完成 |
 | 设计仓核验基线 | `2c0b0693e57d7949c9b37757b9256f87617b00bf` |
@@ -133,7 +133,7 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 | 完整缓存但 description/useCases 未填写 | 200，缺失数组为 []；与运行时不可用区分 |
 | 仅 Session 正在运行 | 不返回 SESSION_BUSY，不获取执行容量或写状态 |
 
-不改变既有授权、请求 Header 或 ResultBean 规则。Help 没有模型、Tool 调用，也不将凭据发送到远端。
+Help 使用 Runtime Command 的 Builtin 请求头示例：JSON Content-Type 必填，JSON Accept 与 Accept-Language 可选，不要求执行凭据。既有上游授权与 ResultBean 规则不变；Help 没有模型、Tool 调用，也不将凭据发送到远端。
 不写 Session Entry、通用命令历史或模型上下文；前端展示临时说明卡片，不伪装成持久化 Assistant 消息。
 失败时保留草稿。使用场景不会点击即发送；如后续增加“填入输入框”，必须保留用户确认发送步骤。
 
@@ -180,7 +180,7 @@ Runtime 元数据、Builtin 只读查询、DTO→VO 组装和 Runtime HTTP 切�
 
 ## 7. 评审与同步范围
 
-Help 的精确请求、字段与错误由 Runtime [操作 12](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-session-commands.json)与[操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)维护。专项 HTML 只筛选 Help 场景，直接继承 Runtime 的 Header、参数、约束、结果与错误，不保留第二份 JSON。Slash 与 Builtin 引用同一张全局主图，本专题只维护元数据下钻图。
+Help 的精确请求、字段与错误由 Runtime [操作 12](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-session-commands.json)与[操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)维护。专项 HTML 只筛选 Help 场景，直接继承 Runtime 的 Builtin Header 示例、参数、约束、结果与错误，不保留第二份 JSON。Slash 与 Builtin 引用同一张全局主图，本专题只维护元数据下钻图。
 
 mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 GET 投影及公共边界待决。
 不能将本稿直接当作新公共接口；公共认证、bridge 和执行协议仍待重审，不新增公共路径或跨仓实现。
@@ -195,6 +195,7 @@ mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.4 | 2026-09-22 | Help 请求头仅投影 Builtin 场景，不展示 Skill 工具执行凭据。 |
 | 1.2.3 | 2026-09-22 | 按 53eff85c 更正 Help 缓存、Agent 级锁、查询与响应链的已实现状态。 |
 | 1.2.2 | 2026-09-22 | 将 Agent 使用场景字段统一为 `useCases`，同步缓存、响应和契约投影。 |
 | 1.2.1 | 2026-09-14 | 集中说明 Help 元数据、缓存和契约投影职责。 |

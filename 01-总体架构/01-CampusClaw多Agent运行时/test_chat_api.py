@@ -99,8 +99,7 @@ class CreationHeaderContractTest(unittest.TestCase):
                               if model["operation"]["operationKey"] == "createSession")
 
     def test_shared_credentials_cannot_return(self):
-        common = current.shared.read_json(current.ROOT / "接口契约/common.json")
-        self.operation["requestHeaderExamples"] = common["requestHeaderExamples"]
+        self.operation["requestHeaderExamples"][0]["id"] = "jwt"
         with self.assertRaisesRegex(RuntimeError, "only the language"):
             http_gate.validate_operation_header_examples(self.operation)
 
@@ -114,6 +113,64 @@ class CreationHeaderContractTest(unittest.TestCase):
         self.operation["parameters"] = [item for item in self.operation["parameters"] if item["in"] != "header"]
         with self.assertRaisesRegex(RuntimeError, "parameters must retain"):
             http_gate.validate_operation_header_examples(self.operation)
+
+
+class AllHeaderContractTest(unittest.TestCase):
+    def setUp(self):
+        from request_header_contract import validate_request_headers
+        self.check = validate_request_headers
+        _, models = current.load_catalog()
+        self.operations = {m["operation"]["operationKey"]: m["operation"] for m in models}
+
+    def test_current_headers_cover_all_ten_operations(self):
+        self.assertEqual(len(self.operations), 10)
+        for operation in self.operations.values():
+            self.check(operation)
+
+    def test_each_nonexecution_example_rejects_each_credential(self):
+        from request_header_contract import CREDENTIALS
+        for operation in self.operations.values():
+            for index, mode in enumerate(operation["requestHeaderExamples"]):
+                if mode["id"] in {"jwt", "appkey"}:
+                    continue
+                for name in CREDENTIALS:
+                    candidate = copy.deepcopy(operation)
+                    candidate["requestHeaderExamples"][index]["headers"].append(
+                        {"name": name, "value": "opaque", "required": False, "description": "test"})
+                    with self.subTest(key=operation["operationKey"], mode=mode["id"], name=name):
+                        with self.assertRaises(RuntimeError):
+                            self.check(candidate)
+
+    def test_requiredness_cannot_drift_for_any_header(self):
+        for operation in self.operations.values():
+            for index, mode in enumerate(operation["requestHeaderExamples"]):
+                for position, header in enumerate(mode["headers"]):
+                    candidate = copy.deepcopy(operation)
+                    candidate["requestHeaderExamples"][index]["headers"][position]["required"] = not header["required"]
+                    with self.subTest(key=operation["operationKey"], mode=mode["id"], name=header["name"]):
+                        with self.assertRaises(RuntimeError):
+                            self.check(candidate)
+
+    def test_control_events_cannot_capture_new_credentials(self):
+        operation = self.operations["submitSessionEvent"]
+        operation["credentialPolicy"]["captureEventTypes"].append("user.tool_confirmation")
+        with self.assertRaisesRegex(RuntimeError, "Only user.message"):
+            self.check(operation)
+
+    def test_builtin_cannot_require_credentials(self):
+        operation = self.operations["executeSessionCommand"]
+        operation["credentialPolicy"]["builtinRequiresCredentials"] = True
+        with self.assertRaisesRegex(RuntimeError, "Builtin callers"):
+            self.check(operation)
+
+    def test_request_body_transport_cannot_disappear(self):
+        from request_header_contract import JSON_BODY
+        for key in JSON_BODY:
+            operation = copy.deepcopy(self.operations[key])
+            operation["requestHeaderExamples"][0]["headers"] = [
+                h for h in operation["requestHeaderExamples"][0]["headers"] if h["name"] != "Content-Type"]
+            with self.subTest(key=key), self.assertRaises(RuntimeError):
+                self.check(operation)
 
 
 class CatalogTest(unittest.TestCase):

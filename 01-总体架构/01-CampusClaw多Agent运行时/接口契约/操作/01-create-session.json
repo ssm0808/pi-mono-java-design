@@ -6,21 +6,6 @@
     "path": "/agents/{agentId}/sessions",
     "summary": "创建 Runtime Session",
     "description": "根据 agentId 创建一个全新的 Runtime Session。CampusClaw 生成 sessionId，直接从受控 agent/{agentId}/.campusclaw/ 目录读取 settings.json、SYSTEM.md 和 skills/，从同一目录快照解析并校验默认模型和 mode，然后完成 Session 持久化；AgentSession 在首次执行时惰性初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session，默认 thinking=true，lifetimeUsage 的 Token 与 USD Cost 明细全部为零。 mode 是必填的 plan/build 工作模式，与 state 独立；创建时复制已发布 Agent.mode，旧元数据缺少 mode 时兼容 build；已有 Session 不因 Agent 更新或刷新改变模式，创建请求不接受 mode；修改使用统一 POST Session。Agent.mode=plan 时创建前检查有效 Runtime profile 的 ExitPlanMode 能力，缺失返回 PLAN_MODE_UNAVAILABLE；不创建 Agent 执行对象。",
-    "requestHeaderExamples": [
-      {
-        "id": "language",
-        "label": "语言 Header 示例",
-        "preferred": true,
-        "headers": [
-          {
-            "name": "Accept-Language",
-            "value": "zh-CN",
-            "required": false,
-            "description": "错误消息语言；缺失或不支持时回退 en-US；不设置 Session 或模型回答语言"
-          }
-        ]
-      }
-    ],
     "parameters": [
       {
         "$ref": "parameters.agentId"
@@ -216,7 +201,7 @@
     "headerReview": {
       "status": "confirmed",
       "confirmedAt": "2026-09-22",
-      "decision": "创建会话不声明或展示 X-HW-ID、Authorization、X-HW-APPKEY；保留可选 Accept-Language，不增加凭据拒绝规则。"
+      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输、版本条件 Header；不改变上游授权，不拒绝额外收到的 Header。"
     }
   }
 }

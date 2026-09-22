@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.60.0",
+    "version": "1.61.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -21,40 +21,15 @@
   },
   "requestHeaderExamples": [
     {
-      "id": "jwt",
-      "label": "JWT Header 示例",
+      "id": "language",
+      "label": "语言 Header 示例",
       "preferred": true,
       "headers": [
         {
-          "name": "X-HW-ID",
-          "value": "credential-jwt",
+          "name": "Accept-Language",
+          "value": "zh-CN",
           "required": false,
-          "description": "可选的用户凭据 ID；不是公司、服务或应用标识。Claw 只捕获已提供值，不在 HTTP 入口校验"
-        },
-        {
-          "name": "Authorization",
-          "value": "Bearer opaque-token",
-          "required": false,
-          "description": "可选的 Bearer JWT；Claw 只捕获已提供值，不在 HTTP 入口校验"
-        }
-      ]
-    },
-    {
-      "id": "appkey",
-      "label": "APPKEY Header 示例",
-      "preferred": false,
-      "headers": [
-        {
-          "name": "X-HW-ID",
-          "value": "credential-appkey",
-          "required": false,
-          "description": "可选的用户凭据 ID；不是公司、服务或应用标识。Claw 只捕获已提供值，不在 HTTP 入口校验"
-        },
-        {
-          "name": "X-HW-APPKEY",
-          "value": "opaque-appkey",
-          "required": false,
-          "description": "可选的 AppKey 凭据；Claw 只捕获已提供值，不在 HTTP 入口校验；可与 Authorization 同时出现"
+          "description": "错误消息语言；缺失或不支持时回退 en-US；不设置 Session 或模型回答语言"
         }
       ]
     }

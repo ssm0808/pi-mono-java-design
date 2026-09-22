@@ -28,14 +28,15 @@ class DocumentMaintenanceTest(unittest.TestCase):
         source = copy.deepcopy(self.runtime)
         source["api"]["version"] = "test-version"
         operation = source["operation"]
-        operation["requestHeaderExamples"][0]["headers"][0]["description"] = "测试源说明"
+        builtin = next(mode for mode in operation["requestHeaderExamples"] if mode["id"] == "builtin")
+        builtin["headers"][0]["description"] = "测试源说明"
         operation["parameters"][0]["description"] = "测试路径说明"
         operation["requestBody"]["description"] = "测试请求说明"
         operation["responses"][0]["bodies"]["zh-CN"]["result"]["description"] = ["测试介绍"]
         projected = project_help_model(source)
         self.assertEqual(projected["api"]["version"], "test-version")
-        for field in ("parameters", "requestHeaderExamples"):
-            self.assertEqual(projected["operation"][field], operation[field])
+        self.assertEqual(projected["operation"]["parameters"], operation["parameters"])
+        self.assertEqual(projected["operation"]["requestHeaderExamples"], [builtin])
         self.assertEqual(projected["operation"]["requestBody"]["description"], "测试请求说明")
         self.assertEqual(projected["operation"]["responses"][0], operation["responses"][0])
 
@@ -54,6 +55,11 @@ class DocumentMaintenanceTest(unittest.TestCase):
         self.assertEqual(len(view["requestBody"]["examples"]), 1)
 
     def test_missing_canonical_help_data_fails_closed(self):
+        source = copy.deepcopy(self.runtime)
+        source["operation"]["requestHeaderExamples"] = [
+            mode for mode in source["operation"]["requestHeaderExamples"] if mode["id"] != "builtin"]
+        with self.assertRaisesRegex(ValueError, "Builtin Header"):
+            project_help_model(source)
         for identity in {"200-help", "200-help-empty"} | HELP_ERROR_IDS:
             source = copy.deepcopy(self.runtime)
             source["operation"]["responses"] = [r for r in source["operation"]["responses"]

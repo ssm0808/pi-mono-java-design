@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 import render_chat_api as current
+from request_header_contract import validate_request_headers
 
 ROOT = Path(__file__).resolve().parent
 RETIRED_ARTIFACTS = (
@@ -49,6 +50,8 @@ def validate_catalog():
     require(manifest["output"] == "chat-api-review.html" and "legacyPages" not in manifest,
             "Publish only the current catalog; no legacy aliases")
     require(len(models) == 10, "Current catalog must contain exactly ten operations")
+    for model in models:
+        validate_request_headers(model["operation"])
     require({model["operation"]["operationKey"] for model in models} == {
         "createSession", "getSession", "deleteSession", "submitSessionEvent", "listSessionEvents",
         "listSessionModels", "updateSession",

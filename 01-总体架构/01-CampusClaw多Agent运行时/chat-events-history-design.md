@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.14.0 |
+| 文档版本 | 0.14.1 |
 | 状态 | 数字分页与公共事件读取已实现；单条时间线的非递归读取待实现，其他增量按各节核验范围记录 |
 | 更新日期 | 2026-09-22 |
 | 原文展示与消费修复 | 实现提交 `cad6847d901155cc6388989b984d19e302a4fbe3`，见 [Draft PR #287](https://github.com/superheromeZzh/pi-mono-java/pull/287)；合入前不作为实现仓主线行为 |
@@ -28,14 +28,13 @@ ListEvents 按已提交顺序从旧到新返回该 Session 单条追加时间线
 ```http
 GET /campusclaw-service/v1/sessions/{sessionId}/events?page=1&limit=2
 Accept: application/json
-X-HW-ID: credential-jwt
-Authorization: Bearer opaque-token
+Accept-Language: zh-CN
 ```
 
 GET 返回普通 JSON。结果使用
 `ResultBean {resCode,resMsg,result:{events,nextPage}}`；失败不带 `result`。
-两种 Header 模式保留用户凭据 ID 的含义及具体非生产值。不要求 `access-token`，
-不创建执行凭据、不调用 Mate 工具，不把任何凭据写进事件或日志。
+请求只声明可选 JSON Accept 和 Accept-Language，不声明四项执行凭据。
+不创建执行凭据、不调用 Mate 工具，不把任何凭据写进事件或日志；Header 源码核验见 [HTTP §8.2](chat-http-v1-design.md#82-十项接口请求-header-核验)。
 上游认证、授权和隔离边界仍有效，Claw 不新增 JWT/APPKEY 解析或互斥校验。
 
 任务更新已实现并登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java `8c5fda1d` 已具备 TodoUpdate、RuntimeTodoEventMapper 与显式任务事件分支；本次静态核验不等于测试通过。Mate 公共桥接需单独同步后开放。
@@ -409,6 +408,7 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.14.1 | 2026-09-22 | 历史查询移除无用途凭据请求头，保留可选响应类型和错误语言。 |
 | 0.14.0 | 2026-09-22 | 历史查询采用单条追加时间线，移除分支递归并保留追加约束与投影完整性校验。 |
 | 0.13.0 | 2026-09-18 | 工具调用展示名复用已提交快照。 |
 | 0.11.0 | 2026-09-16 | Skill 使用统计独立于权威事件事务，失败不影响主执行。 |
