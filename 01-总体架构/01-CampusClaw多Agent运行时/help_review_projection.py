@@ -14,7 +14,7 @@ HELP_ERROR_IDS = {
 def project_help_model(runtime_model):
     model = deepcopy(runtime_model)
     operation = model["operation"]
-    require(operation["operationKey"] == "executeSessionCommand", "Help needs the Command operation")
+    require(operation["operationKey"] == "ExecuteSessionCommand", "Help needs the Command operation")
     headers = [mode for mode in operation["requestHeaderExamples"] if mode["id"] == "builtin"]
     require(len(headers) == 1, "Expected exactly one canonical Builtin Header example")
     operation["requestHeaderExamples"] = headers
@@ -41,5 +41,5 @@ def project_help_model(runtime_model):
 def load_help_model():
     _, models = load_contract()
     runtime = next(model for model in models
-                   if model["operation"]["operationKey"] == "executeSessionCommand")
+                   if model["operation"]["operationKey"] == "ExecuteSessionCommand")
     return project_help_model(runtime)

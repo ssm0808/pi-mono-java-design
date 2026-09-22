@@ -5,12 +5,20 @@ from __future__ import annotations
 
 import argparse
 import html
+import re
 from pathlib import Path
 
 import render_chat_http_v1 as shared
 
 ROOT = Path(__file__).resolve().parent
 MANIFEST = ROOT / "接口契约/catalog.json"
+
+
+def validate_operation_presentation(operation: dict) -> None:
+    shared.require(re.fullmatch(r"[A-Z][A-Za-z0-9]*", operation["operationKey"]),
+                   "operationKey must use PascalCase")
+    shared.require(not re.search(r"已确认|已评审|已定稿|待实现|评审|已在.*实现", operation["description"]),
+                   "Operation purpose must describe behavior, not review or delivery status")
 
 
 def load_catalog() -> tuple[dict, list[dict]]:
@@ -22,6 +30,7 @@ def load_catalog() -> tuple[dict, list[dict]]:
         model = shared.expand_model(common, shared.read_json(source))
         operation = model["operation"]
         key = operation["operationKey"]
+        validate_operation_presentation(operation)
         identity = (operation["method"], operation["path"])
         shared.require(key == item["key"] and key not in keys, "Duplicate or mismatched catalog key")
         shared.require(identity not in identities, "Duplicate HTTP operation in current catalog")

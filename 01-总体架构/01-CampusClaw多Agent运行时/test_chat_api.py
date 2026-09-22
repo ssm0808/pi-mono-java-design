@@ -27,7 +27,7 @@ class SessionUpdateContractTest(unittest.TestCase):
     def setUp(self):
         _, self.models = current.load_catalog()
         self.operation = next(model["operation"] for model in self.models
-                              if model["operation"]["operationKey"] == "updateSession")
+                              if model["operation"]["operationKey"] == "UpdateSession")
 
     def check(self):
         http_gate.validate_session_update(self.operation, http_gate.response_codes(self.operation))
@@ -74,7 +74,7 @@ class SessionUpdateContractTest(unittest.TestCase):
 
     def test_creation_requires_build_mode(self):
         from command_response_contract import validate_response_reuse
-        create = next(model["operation"] for model in self.models if model["operation"]["operationKey"] == "createSession")
+        create = next(model["operation"] for model in self.models if model["operation"]["operationKey"] == "CreateSession")
         response = next(item for item in create["responses"] if item["status"] == "201")
         next(iter(response["bodies"].values()))["result"].pop("mode")
         with self.assertRaisesRegex(RuntimeError, "default to build"):
@@ -96,7 +96,7 @@ class CreationHeaderContractTest(unittest.TestCase):
     def setUp(self):
         _, models = current.load_catalog()
         self.operation = next(model["operation"] for model in models
-                              if model["operation"]["operationKey"] == "createSession")
+                              if model["operation"]["operationKey"] == "CreateSession")
 
     def test_shared_credentials_cannot_return(self):
         self.operation["requestHeaderExamples"][0]["id"] = "jwt"
@@ -152,13 +152,13 @@ class AllHeaderContractTest(unittest.TestCase):
                             self.check(candidate)
 
     def test_control_events_cannot_capture_new_credentials(self):
-        operation = self.operations["submitSessionEvent"]
+        operation = self.operations["SubmitSessionEvent"]
         operation["credentialPolicy"]["captureEventTypes"].append("user.tool_confirmation")
         with self.assertRaisesRegex(RuntimeError, "Only user.message"):
             self.check(operation)
 
     def test_builtin_cannot_require_credentials(self):
-        operation = self.operations["executeSessionCommand"]
+        operation = self.operations["ExecuteSessionCommand"]
         operation["credentialPolicy"]["builtinRequiresCredentials"] = True
         with self.assertRaisesRegex(RuntimeError, "Builtin callers"):
             self.check(operation)
@@ -205,7 +205,7 @@ class CatalogTest(unittest.TestCase):
             self.assertEqual(original["operation"], model["operation"])
             self.assertEqual(original["review"], model["review"])
         state = self.read_json(current.ROOT / "事件契约/common.json")["reviewState"]
-        self.assertEqual({"currentOperation": "listSessionEvents", "confirmedOperations": ["submitSessionEvent", "listSessionEvents"], "reviewMode": "completed", "semanticBatch": "2026-09-08.1-confirmed"}, state)
+        self.assertEqual({"currentOperation": "ListSessionEvents", "confirmedOperations": ["SubmitSessionEvent", "ListSessionEvents"], "reviewMode": "completed", "semanticBatch": "2026-09-08.1-confirmed"}, state)
 
     def test_duplicate_operation_is_rejected(self):
         self.manifest["operations"].append(copy.deepcopy(self.manifest["operations"][0]))
@@ -253,6 +253,21 @@ class CatalogTest(unittest.TestCase):
                 (root / "README.md").write_text(source, encoding="utf-8")
                 with self.assertRaisesRegex(ValueError, "Retired artifact link"):
                     gate.validate_retired_artifacts(root, root)
+
+
+class OperationPresentationTest(unittest.TestCase):
+    def test_lower_camel_case_operation_key_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "PascalCase"):
+            current.validate_operation_presentation({"operationKey": "listCommands", "description": "查询命令。"})
+
+    def test_review_status_cannot_return_to_operation_purpose(self):
+        for text in ("已确认的接口。", "本轮评审完成。", "目标待实现。"):
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "purpose"):
+                current.validate_operation_presentation({"operationKey": "ListSessionCommands", "description": text})
+
+    def test_business_confirmation_is_still_valid_prose(self):
+        current.validate_operation_presentation({"operationKey": "SubmitSessionEvent",
+                                                 "description": "提交工具确认，确认实际停止后可发送新消息。"})
 
 
 if __name__ == "__main__":

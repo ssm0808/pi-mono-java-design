@@ -239,7 +239,7 @@ TodoUpdateTool 不访问数据库或 HTTP，也不维护第二份可变 TODO 状
 
 ## 5. HTTP 与事件接口增量
 
-统一 Session 更新及 requested 模式事件由[当前契约](../01-CampusClaw多Agent运行时/chat-api-review.html#updateSession)维护；计划审核报文同样由共享 JSON 维护，[接口集成边界](interface-delta.md)说明原因与发布联动。本节只说明接入关系。
+统一 Session 更新及 requested 模式事件由[当前契约](../01-CampusClaw多Agent运行时/chat-api-review.html#UpdateSession)维护；计划审核报文同样由共享 JSON 维护，[接口集成边界](interface-delta.md)说明原因与发布联动。本节只说明接入关系。
 
 Session 是配置权威资源。当前内部契约以统一 POST 更新名称、模型、思考和模式，入口为 `RuntimeSessionController`，应用编排复用 `RuntimeSessionConfigurationService`。三个交互工具及内部事件已在 main 实现，当前源码范围见 §12；Mate 接入及部署验收分别记录，不能由内部实现推断。
 

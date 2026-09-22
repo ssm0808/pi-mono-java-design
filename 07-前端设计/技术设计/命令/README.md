@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.7.2 |
+| 文档版本 | 1.8.0 |
 | 更新日期 | 2026-09-22 |
 | 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
 | Runtime 命令契约基线 | `879746e59189a07335e32c7df807c7f5048fdc28`；B13 已确认 Skill SSE，Builtin JSON 不变 |
@@ -15,8 +15,8 @@
 ## 1. 设计结论
 
 Slash Command 使用同一 Composer，内部独立保存消息与命令草稿。空草稿首字符输入 `/` 打开紧贴输入框上方的清单；清单只显示不带前导 `/` 的规范名称和一句说明，
-保持服务端顺序做前缀过滤。选中后关闭清单，在输入框内显示可删除的命令标签；有 input 时只编辑参数，
-无 input 时隐藏参数输入。空闲时圆形上箭头提交，清单浏览时禁用；运行时右下角保留停止方块，命令区显示独立“执行命令”。
+保持服务端顺序做前缀过滤。选中后关闭清单，在输入框内显示可删除的命令标签；有 input 时按命令选择文本或选项控件，
+无 input 时隐藏可修改的参数区。空闲时圆形上箭头提交，清单浏览时禁用；运行时右下角保留停止方块，命令区显示独立“执行命令”。
 选择后必须再次明确执行，不由选中动作自动提交。`+` 只负责添加附件/上下文。界面不再显示独立 `/` 按钮、“命令模式”栏或常驻操作说明。
 
 Builtin 命令结果不是 Assistant 消息，不进入 ConversationTimeline、Session Event 或持久化历史。
@@ -76,8 +76,8 @@ parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立�
 | 约束 | 前端必须如何处理 |
 |---|---|
 | GET Descriptor 只有 `name`、`kind`、`description` 和可选 `input` | 展示层不推断未返回的可用性、建议值或参数枚举 |
-| `input` 缺失代表无参数、无附件；`acceptsFiles` 仅在 true 时返回 | 无 input 时不显示参数区；不允许或静默丢弃附件 |
-| `input.hint` 中 `[]`/`<>` 只是展示提示 | 不把 hint 当 Schema、正则或客户端最终校验 |
+| `input` 缺失代表无参数、无附件；所有返回的 Skill 均有 `acceptsFiles=true` | 无 input 时不显示修改控件；附件入口读取该标记与上传接入状态，不静默丢弃草稿 |
+| `input.hint` 中 `[]`/`<>` 只是展示提示 | 不把 hint 当 Schema、控件类型、枚举或客户端最终校验；Model/Thinking 使用专用选项 |
 | 服务端返回固定 Builtin 顺序并追加 Skill | 客户端只做稳定前缀过滤，不重新排序或模糊重排 |
 | running 状态会过滤命令或省略部分 input | 前端信任新清单，不复制硬编码状态矩阵 |
 | Builtin POST 返回普通 JSON，无 commandId 和通用生命周期 | 不画虚构进度条，不建立轮询或通用命令历史 |
@@ -100,6 +100,7 @@ Mate 侧当前只确认 Descriptor 字段投影；路径、权限、错误映射
 | 未匹配 Slash 不自动回退为普通消息 | 安全加固 | 避免命令意图和内容在普通 Events 通道中被意外提交 |
 | 浏览器只经 Mate Gateway | 产品约束 | 保持公司认证、租户隔离和凭据边界，不把 Runtime 暴露给产品端 |
 | Catalog 仅保存在当前页面内存 | 架构选择 | 清单随 Session 状态变化，持久缓存会制造过期入口 |
+| 模型/思考使用选择控件，hint 仅作提示 | 产品约束 | 用户无需记忆模型 ID 或 on/off；候选数据复用现有接口，避免把提示字符串变成协议 |
 | 前缀过滤但不模糊重排 | 产品约束 | 保留服务端产品排序，结果稳定、可预测、便于键盘记忆 |
 | 调用快照同时决定解码与展示 | 安全加固 | `model` 同名多形响应不能依赖可变草稿或 JSON 特征；未匹配预期 Schema 时必须拒绝更新状态 |
 
@@ -194,11 +195,43 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 - 上下方向键移动活动项，Home/End 跳到首尾；Enter 选择活动项，鼠标或触摸点击语义相同。
 - 点击或 Enter 只选择并关闭清单；上箭头在浏览中禁用，不承担“填入”动作。
 - 选中无 input 的命令显示标签、隐藏参数 textarea，焦点进入当前命令执行按钮（空闲为上箭头，运行中为独立按钮）；再次明确 Enter 或点击才提交。
-- 有 input 时标签与参数编辑器同处输入区，光标进入参数；`input.hint` 作为参数占位提示并通过无障碍描述关联，不再单列常驻说明。
+- 有 input 时标签与输入控件同处 Composer；name/Skill 使用文本框和 hint，model/thinking 打开下述选项列表。选中选项只更新参数草稿，后续明确执行才提交。
 - 空闲上箭头可访问名称为“运行 <name>”或“发送消息”。运行时右下角固定为“停止生成”，命令区独立显示“执行命令”，可访问名称为“运行 <name>”；无 input 时焦点进入该命令按钮，有 input 时 Enter 执行命令，Shift+Enter 换行。普通消息 textarea 的 Enter 不停止也不发送。
 - 点击停止只走共享对话协调器，命令查询不能遮挡或禁用可用的停止动作；停止请求到真实终态的状态见[工作台专项](../runtime-workbench-alignment.md#4-composer-的发送与停止)。
 - IME composition、`isComposing`、keyCode 229 及按键长按 repeat 不触发选择或执行；选择那次 Enter 不得再次触发提交。
 - running 状态下普通消息仍遵循 Events 设计的限制，但服务端清单中保留的查询命令仍可运行。
+
+<a id="command-input-controls"></a>
+
+### 4.4 参数控件与后端能力
+
+用户应从可用选项完成配置，不必手工记住模型 ID。Slash 选中 `model` 后，Composer 上方切换到候选列表，
+当前值打勾，选中值进入命令草稿；执行按钮提交选择，取消恢复原草稿。该目标交互待实现；现有原型的通用参数框不作为此项完成证据。
+
+| 命令 | 控件与数据来源 | 正常调用 | 失败与状态变化 |
+|---|---|---|---|
+| model | 单选列表；Runtime 适配读取 ListSessionModels 的 currentModelId/models，显示名从调用方模型信息取得，缺名称时可展示返回的 ID | 用户选择真实候选，冻结 arguments=modelId 后显式执行；带参响应按 Session 处理 | 加载失败可重试 GET，空列表禁用修改；迟到响应不得跨 Chat 应用；POST 拒绝或不确定时保留草稿，不自动重放 |
+| thinking | 当前 Session 值打勾，选项为开启/关闭 | 选择后映射 on/off，显式执行；以响应中的最终 thinking 为准 | 无 input 时仅查看；不支持时展示服务端错误并刷新权威状态，不能用 hint 推测模型能力 |
+| name | 文本框，hint 作占位 | 输入名称或空参查询 | 保留服务端校验错误与原草稿 |
+| skill:<name> | 请求文本与可选附件；所有返回 Skill 均带 acceptsFiles=true | 上传成功取得 fileIds，与 arguments 一起冻结，执行共享 SSE | 上传未完成不提交；失败保留文本/附件；文件拒绝不能静默去掉附件后重发 |
+
+选项列表复用清单的 listbox/option、键盘和触摸规则；勾选表示当前值，键盘活动项单独显示。
+Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不再次提交。不从 `[modelId]`、`[on|off]` 解析控件或候选。
+按已知命令选控件是客户端展示职责；清单是否有 input、候选是否仍可用和 POST 最终准入仍由后端决定。
+当 running 清单移除 input 时关闭修改列表并保留已选草稿，用户可清空参数后显式查询。
+
+图片中的轻度/中/高/极高属于思考强度，当前 CampusClaw 只有 boolean thinking。
+本设计只采用选择交互，不把四档映射为同一个 true；支持多档须另行定义强度枚举、模型支持范围和 Provider 映射。
+选项控件复用既有 Composer、草稿和 Gateway 职责，不增加远端调用边界或新的 Descriptor 字段，目标类图结构不变。
+
+源码核对固定为 `pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45`（2026-09-22）：
+`frontend/src/composables/useCommandComposer.ts` 的 choose/placeholder 对所有 input 进入参数框；
+`frontend/src/components/ComposerBox.vue` 的 template 已有底部模型 select 和思考按钮，但 Slash 选择未接入它们。
+同文件附件菜单仍为 disabled；`frontend/src/runtime/commands.ts` 的 freezeCommandArguments 仅组装 name/arguments，
+尚未把 fileIds 纳入调用快照。后端 `CommandDiscoveryResponseAssembler.input` 已统一返回 Skill 附件标记，
+`SkillCommandRequestVO` 与 `SkillCommandExecutionService.execute` 已接收并传递 fileIds，路径见[共享能力证据](../../../04-命令与技能/00-Slash-Command通用模块/README.md#32-get-轻量清单已确认)。
+因此选项交互和当前内部附件接线的主要缺口在前端；真实文件授权及 Mate 公共映射仍按所属接口验收。
+本次只核验源码，未运行 Java/前端产品测试。
 
 ## 5. 清单读取与缓存
 
@@ -236,7 +269,7 @@ Status/Name/Thinking 是 `session`，Model 空参是 `models`、带参是 `sessi
 Skills 是 `skills`。未知名称或无法确定的形态 fail closed；Skill 的公共执行未确认时同样关闭。响应体与预期 Schema
 不匹配时转换为稳定的 `INVALID_RESPONSE` 前端错误，不写入 Session/Model Store，不展示“执行成功”。
 
-附件只有在 `input.acceptsFiles === true` 时才能加入请求；否则附件按钮禁用并提供原因。
+所有返回的 Skill 都允许附件，但前端仍以 `input.acceptsFiles === true` 和上传能力已接入为共同条件；否则附件按钮禁用并说明原因。附件能力不等于任意类型可处理，不按 Skill 名称硬编码白名单。
 从文本为空但带附件的草稿通过首字符 `/` 进入命令状态时，附件单独暂存，不得静默丢弃或带入不接收附件的命令。
 因为公共 Skill 文件引用契约未确认，生产 Mate Gateway 在该能力确认前必须拒绝真实附件命令并给出明确说明。
 
@@ -398,7 +431,9 @@ interface CommandGateway {
 ### 11.2 组件与可访问性
 
 - IME composing 时 Enter 不选中、不执行；键盘、触摸和鼠标得到同一规范命令。
-- 选择后清单关闭、显示可删除标签；无 input 隐藏参数，有 input 只编辑参数；菜单行没有前导 Slash、kind 或 hint。
+- 选择后显示可删除标签；无 input 隐藏修改控件，model/thinking 展示选项，name/Skill 编辑文本；菜单行没有前导 Slash、kind 或 hint。
+- model 列表覆盖加载、空值、当前值不在候选、迟到响应和状态变为 running；不得要求用户猜 ID。Thinking 只展示真实开关，不伪造强度档位。
+- 所有 Skill fixture 均支持附件标记；fileIds 与文本同次冻结，上传失败、服务端文件拒绝与断流不丢草稿、不自动重放。
 - + 菜单不含命令，打开和关闭不破坏草稿；首字符 / 发现、取消/成功恢复附件；运行中选择无参数命令后焦点不得误落停止按钮，更换后 Escape 恢复原选择及参数。
 - 第一次 Escape 关闭清单，第二次退出；空参数 Backspace 与 × 退出；未匹配不发送。
 - 选择命令不执行，第二个明确动作才执行；长按 Enter 不提交，重复点击运行只能产生一次在途请求。
@@ -464,6 +499,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.8.0 | 2026-09-22 | 模型和思考使用选项控件，明确 hint 仅作提示及所有 Skill 的附件接入边界。 |
 | 1.7.2 | 2026-09-22 | 按 53eff85c 复核 Slash 现有交互与 API 分路，区分目标组件拆分和公共接入。 |
 | 1.7.1 | 2026-09-22 | Help 结果与 Runtime 契约统一使用 `useCases`，前端解码与展示保持纯文本。 |
 | 1.7.0 | 2026-09-15 | 同步 Claw 命令与计划问答的实现状态及 Dock 协同验收。 |

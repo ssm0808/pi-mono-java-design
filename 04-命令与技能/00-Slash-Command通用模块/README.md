@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.12.4 |
+| 文档版本 | 1.13.0 |
 | 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -181,12 +181,12 @@ Skill 名称必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，同时单独校验 1～6
 
 ### 3.2 GET 轻量清单（已确认）
 
-Runtime GET 的精确模型见[当前接口](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#listSessionCommands)；
+Runtime GET 的精确模型见[当前接口](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#ListSessionCommands)；
 Mate GET 同步相同 Descriptor，但公共认证、bridge、错误映射与 POST 发布仍需独立评审。
 
 该接口页直接列出字段类型与省略规则、逐命令调用速查及 POST 响应示例索引。
 `input` 描述当前调用能力，不是执行请求字段；实际提交 `name`、`arguments`，Skill 另可提交 `fileIds`。
-完整请求和返回报文统一见[执行命令示例](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#executeSessionCommand)，
+完整请求和返回报文统一见[执行命令示例](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#ExecuteSessionCommand)，
 Help 的缓存与元数据理由仍见[Help 专项](../01-内置命令/Help-Agent使用指南/README.md)。
 
 | 字段 | 必填 | 契约 |
@@ -196,7 +196,19 @@ Help 的缓存与元数据理由仍见[Help 专项](../01-内置命令/Help-Agen
 | description | 是 | 命令用途的非空说明 |
 | input | 否 | 缺失表示当前仅允许无参数、无附件调用；不返回 null 或空对象 |
 | input.hint | input 存在时必填 | 非空展示文本；`[x]` 为可选输入、`<x>` 为必填输入，不参与参数校验 |
-| input.acceptsFiles | 否 | 只在 true 时输出，缺失为 false；Builtin 一律省略 |
+| input.acceptsFiles | 否 | 所有返回的 Skill 固定输出 true；Builtin 一律省略，缺失为 false；不按 Skill 名称或正文决定是否允许附件 |
+
+`hint` 不要求客户端渲染为文本框，也不供客户端解析出枚举。Model 候选取自 `ListSessionModels`，
+前端选择后组装 modelId；Thinking 当前用开启/关闭选项映射 on/off。名称和 Skill 请求仍可自由输入。
+前端可以按规范命令选择已知控件，但不能硬编码可用模型或第二份状态准入矩阵；完整交互与失败处理见
+[输入控件](../../07-前端设计/技术设计/命令/README.md#command-input-controls)。轻量清单不新增 choices、options 或 input.type。
+
+所有可用 Skill 允许附带可选文件引用，不要求每个 Skill 单独声明文件能力；running 时整个 Skill 隐藏。
+`acceptsFiles=true` 表示输入通道接受附件，不能推断 Skill 能处理任意 MIME 类型、模型具备视觉能力或文件已获授权。
+POST 仍按普通消息附件约束检查，前端上传完成后提交 fileIds。`53eff85c` 的
+`runtimeapi/service/command/CommandDiscoveryResponseAssembler.input` 已对所有 Skill 返回 true，
+`runtimeapi/service/command/skill/SkillCommandExecutionService.execute/normalize` 已转交并检查 fileIds；
+上述路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`，不代表前端上传和 Mate 桥接已完成。
 
 删除的七项为 available、unavailableCode、input.mode、input.available、input.unavailableCode、
 input.placeholder、input.suggestions；不以 allowedValues、catalogVersion 或其他候选值字段替代。
@@ -369,6 +381,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.13.0 | 2026-09-22 | 明确命令选项交互与 hint 的分工，并统一所有可用 Skill 的附件能力说明。 |
 | 1.12.4 | 2026-09-22 | 按 53eff85c 分列当前 Runtime、Skill、前端实现及结构、版本快照和统计增量。 |
 | 1.12.3 | 2026-09-22 | 补充命令字段与调用示例入口，并区分中文展示样例和实际描述语言。 |
 | 1.12.2 | 2026-09-22 | 按 53eff85c 更正 Help 缓存、查询、响应与统一 POST 的已实现状态。 |

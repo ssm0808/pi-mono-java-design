@@ -50,19 +50,19 @@ def success(operation):
 
 def validate_response_reuse(models):
     operations = {model["operation"]["operationKey"]: model["operation"] for model in models}
-    session = success(operations["getSession"])
-    model_list = success(operations["listSessionModels"])
+    session = success(operations["GetSession"])
+    model_list = success(operations["ListSessionModels"])
     require(session.get("mode") in {"plan", "build"}, "Session response must include mode")
-    for response in operations["updateSession"]["responses"]:
+    for response in operations["UpdateSession"]["responses"]:
         if response["status"] == "200":
             for body in response["bodies"].values():
                 same_shape(body["result"], session, nullable_name=True)
                 require(body["result"]["mode"] in {"plan", "build"}, "Invalid Session mode")
-    for response in operations["createSession"]["responses"]:
+    for response in operations["CreateSession"]["responses"]:
         if response["status"] == "201":
             for body in response["bodies"].values():
                 require(body["result"].get("mode") == "build", "Created Session must default to build")
-    responses = [item for item in operations["executeSessionCommand"]["responses"] if item["status"] == "200" and item["id"] != "200-skill-message"]
+    responses = [item for item in operations["ExecuteSessionCommand"]["responses"] if item["status"] == "200" and item["id"] != "200-skill-message"]
     cases = {item["id"]: item for item in responses}
     require(len(cases) == len(responses) and set(cases) == SESSION_CASES | MODEL_CASES | set(BUSINESS_SHAPES),
             "Command query, mutation, unchanged and empty response cases differ")

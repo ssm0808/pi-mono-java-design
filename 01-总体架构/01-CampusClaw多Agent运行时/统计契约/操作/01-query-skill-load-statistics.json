@@ -1,11 +1,11 @@
 {
   "operation": {
     "shortName": "批量查询 Skill 激活统计",
-    "operationKey": "querySkillLoadStatistics",
+    "operationKey": "QuerySkillLoadStatistics",
     "method": "POST",
     "path": "/internal/skills/load-statistics/query",
     "summary": "按指定 Skill ID 查询累计或精确时间范围内的激活次数",
-    "description": "F19 对齐 PR #295 c8cbda49。排名、日趋势暂缓；接口不返回 scope，采集入口与 F20 范围由专题单独维护。统计允许漏计，不代表模型遵循指令或业务成功。",
+    "description": "按指定 skillIds 批量查询激活次数；可选 from/to 限定时间范围，不返回排名、趋势或 scope。统计允许漏计，不代表模型遵循指令或业务成功。",
     "parameters": [
       {
         "$ref": "parameters.acceptLanguage"

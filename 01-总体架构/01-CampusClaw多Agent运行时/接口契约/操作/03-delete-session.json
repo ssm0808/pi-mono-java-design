@@ -1,7 +1,7 @@
 {
   "operation": {
     "shortName": "删除会话",
-    "operationKey": "deleteSession",
+    "operationKey": "DeleteSession",
     "method": "DELETE",
     "path": "/sessions/{sessionId}",
     "summary": "删除 Runtime Session",

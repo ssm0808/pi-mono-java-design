@@ -1,7 +1,7 @@
 {
   "operation": {
     "shortName": "更新会话",
-    "operationKey": "updateSession",
+    "operationKey": "UpdateSession",
     "method": "POST",
     "path": "/sessions/{sessionId}",
     "summary": "统一更新 Session 名称、模型、思考和工作模式",
@@ -501,7 +501,7 @@
         "rows": [
           [
             "前端调用与契约能力",
-            "当前前端每次仅提交被操作的一个字段，共用 updateSession；接口接受非空字段子集，允许多字段组合，不设置只能提交一项的限制。按返回的完整 Session 和 ETag 更新界面，包括模型变化导致的 thinking 自动归一。"
+            "当前前端每次仅提交被操作的一个字段，共用 UpdateSession；接口接受非空字段子集，允许多字段组合，不设置只能提交一项的限制。按返回的完整 Session 和 ETag 更新界面，包括模型变化导致的 thinking 自动归一。"
           ],
           [
             "displayName",

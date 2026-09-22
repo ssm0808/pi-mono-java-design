@@ -120,13 +120,13 @@ const create = (markup, runScripts) => {
 
   // A retained deep link opens the exact current operation.
   const linked = create(source, 'dangerously');
-  linked.dom.window.location.hash = '#submitSessionEvent';
+  linked.dom.window.location.hash = '#SubmitSessionEvent';
   await pause();
-  assert.equal(linked.document.querySelector('.catalog-item[open]').id, 'submitSessionEvent');
+  assert.equal(linked.document.querySelector('.catalog-item[open]').id, 'SubmitSessionEvent');
   assert.equal(linked.document.querySelectorAll('[data-mounted]').length, 1);
-  linked.dom.window.location.hash = '#listSessionEvents';
+  linked.dom.window.location.hash = '#ListSessionEvents';
   await pause();
-  assert.equal(linked.document.querySelector('.catalog-item[open]').id, 'listSessionEvents');
+  assert.equal(linked.document.querySelector('.catalog-item[open]').id, 'ListSessionEvents');
   assert.equal(linked.errors.length, 0);
   linked.dom.window.close();
 

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.59.0 |
+| 文档版本 | 1.59.1 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新专项见 §8.1 |
@@ -26,7 +26,7 @@ Path、Query、JSON 与 SSE data 的字段统一 lowerCamelCase；HTTP Header、
 
 ### 2.1 Session 生命周期
 
-创建、查询和删除的精确契约分别见 [创建](chat-api-review.html#createSession)、[查询](chat-api-review.html#getSession)、[删除](chat-api-review.html#deleteSession)。HTTP 请求独立定位 Session；恢复连接不需要 connect/resume。
+创建、查询和删除的精确契约分别见 [创建](chat-api-review.html#CreateSession)、[查询](chat-api-review.html#GetSession)、[删除](chat-api-review.html#DeleteSession)。HTTP 请求独立定位 Session；恢复连接不需要 connect/resume。
 
 创建不带请求体。Runtime 根据不可变 agentId 解析受控 `.campusclaw` 目录，验证目录包含关系、已发布模型绑定、默认模型与 Agent 默认 mode；再生成不复用的 sessionId，持久化 idle Session。默认 thinking=true，mode 复制同一次读取的 Agent 配置；plan 的能力检查和旧元数据缺省规则由 [Agent.mode](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode) 维护。
 
@@ -88,7 +88,7 @@ POST 接受 user.message、user.interrupt、user.tool_confirmation 三类输入�
 
 ### 2.4 模型目录与统一 Session 更新
 
-Session 的名称、默认模型、深度思考和工作模式统一由 `POST /sessions/{sessionId}` 修改，operationKey 为 `updateSession`。采用 Claude Managed Agents 的资源级 POST 与可选属性更新方式；当前前端每次只提交所操作的一个字段，接口同时允许多字段组合，未提交属性保留，不要求提交完整 GET 资源。精确字段、单项/组合示例、错误和 Header 唯一维护在[操作 07](接口契约/操作/07-update-session.json)。
+Session 的名称、默认模型、深度思考和工作模式统一由 `POST /sessions/{sessionId}` 修改，operationKey 为 `UpdateSession`。采用 Claude Managed Agents 的资源级 POST 与可选属性更新方式；当前前端每次只提交所操作的一个字段，接口同时允许多字段组合，未提交属性保留，不要求提交完整 GET 资源。精确字段、单项/组合示例、错误和 Header 唯一维护在[操作 07](接口契约/操作/07-update-session.json)。
 
 `GET /sessions/{sessionId}/models` 继续提供 Session scope 的可选模型清单。统一操作属于 API 架构变更：四类操作共用资源更新与冲突对账流程，不将当前页面的一次单项操作固化为服务端只能修改一项的限制。多字段请求按同一资源版本和事务校验提交；当前前端无需增加批量编辑或保存流程。保留原有名称与执行配置不同的准入规则；不照搬 Claude 的会话模型不可变约束，也不改变 Agent/Tool/Skill 元数据。
 
@@ -315,18 +315,18 @@ Runtime 接收调用上下文，不检查 JWT/APPKEY 的组合、格式或真实
 
 ### 7.1 凭据读取与透传
 
-仅 `submitSessionEvent` 与 `executeSessionCommand` 声明四项可选执行凭据：`X-HW-ID`、`Authorization`、`X-HW-APPKEY` 和 `access-token`。其他八项操作不声明这些 Header，也不展示 JWT/APPKEY 示例；这不表示拒绝收到的额外 Header，更不取消上游鉴权。HTTP 入口、工具装配、`CallMateTool` 和 Mate HTTP 客户端均不检查凭据必填、最低完整性或 JWT/APPKEY 组合。两种认证 Header 同时提供时一并透传，不由 Claw 选择或回退认证模式。
+仅 `SubmitSessionEvent` 与 `ExecuteSessionCommand` 声明四项可选执行凭据：`X-HW-ID`、`Authorization`、`X-HW-APPKEY` 和 `access-token`。其他八项操作不声明这些 Header，也不展示 JWT/APPKEY 示例；这不表示拒绝收到的额外 Header，更不取消上游鉴权。HTTP 入口、工具装配、`CallMateTool` 和 Mate HTTP 客户端均不检查凭据必填、最低完整性或 JWT/APPKEY 组合。两种认证 Header 同时提供时一并透传，不由 Claw 选择或回退认证模式。
 
 | 操作 | 实际保留的请求 Header 与适用范围 |
 |---|---|
-| createSession、getSession、deleteSession、listSessionModels、listSessionCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
-| listSessionEvents | 可选 Accept-Language、Accept: application/json；只读历史不创建执行凭据 |
-| updateSession | Content-Type: application/json、强 If-Match 必填；Accept-Language 与 JSON Accept 可选 |
-| querySkillLoadStatistics | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选；管理调用方授权仍由上游/部署边界保证 |
-| submitSessionEvent | Content-Type: application/json、Accept: text/event-stream 必填；Accept-Language 可选；仅 user.message 使用本请求可选凭据，其他四类控制事件复用原执行快照 |
-| executeSessionCommand | Content-Type: application/json 必填，Accept-Language 可选；Builtin 使用 JSON，无需调用方提供执行凭据；Skill 使用 SSE，可携带执行凭据；Accept 按对应响应类型可选 |
+| CreateSession、GetSession、DeleteSession、ListSessionModels、ListSessionCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
+| ListSessionEvents | 可选 Accept-Language、Accept: application/json；只读历史不创建执行凭据 |
+| UpdateSession | Content-Type: application/json、强 If-Match 必填；Accept-Language 与 JSON Accept 可选 |
+| QuerySkillLoadStatistics | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选；管理调用方授权仍由上游/部署边界保证 |
+| SubmitSessionEvent | Content-Type: application/json、Accept: text/event-stream 必填；Accept-Language 可选；仅 user.message 使用本请求可选凭据，其他四类控制事件复用原执行快照 |
+| ExecuteSessionCommand | Content-Type: application/json 必填，Accept-Language 可选；Builtin 使用 JSON，无需调用方提供执行凭据；Skill 使用 SSE，可携带执行凭据；Accept 按对应响应类型可选 |
 
-所有操作的 Accept-Language 都只用于接口语言处理，不设置 Session 或模型回答语言，缺失或不支持时回退 en-US。普通 JSON Accept 可省略。If-Match 只适用于 updateSession；Command 继续拒绝 If-Match 和 Idempotency-Key。Builtin 的精简示例不移除现有内部快照或 Compact 释放链路。精确值及分支示例由操作 JSON 唯一维护，Help 从 Builtin 示例派生。
+所有操作的 Accept-Language 都只用于接口语言处理，不设置 Session 或模型回答语言，缺失或不支持时回退 en-US。普通 JSON Accept 可省略。If-Match 只适用于 UpdateSession；Command 继续拒绝 If-Match 和 Idempotency-Key。Builtin 的精简示例不移除现有内部快照或 Compact 释放链路。精确值及分支示例由操作 JSON 唯一维护，Help 从 Builtin 示例派生。
 
 新执行只捕获本次请求的四项值，复用不可变 `MateCredentials`；全部缺失时使用空快照，不把空快照等同于缺少 Host 执行上下文。凭据不完整不能使已配置的 `CallMateTool` 被隐藏或返回 unavailable。资源不存在、执行上下文缺失、工具无法解析、取消和权限确认等既有失败仍由所属层处理，不为了让 Mate 判断凭据而跳过这些条件。
 
@@ -376,7 +376,7 @@ Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行�
 
 | 路径与符号 | 已观察行为 | 目标差距与分类 |
 |---|---|---|
-| R/web/RuntimeSessionController.java · create/get/delete | Session 资源没有统一修改入口 | API 架构变更：新增 POST updateSession |
+| R/web/RuntimeSessionController.java · create/get/delete | Session 资源没有统一修改入口 | API 架构变更：新增 POST UpdateSession |
 | R/web/RuntimeSessionConfigurationController.java · changeModel/changeThinking/listModels | 属性 PUT 和模型目录 GET | 移除两条写路由，保留模型目录；不是现有实现行为 |
 | R/session/RuntimeSessionConfigurationService.java · requireMutableSession/requireUpdated | ETag、idle、结果状态映射及统一响应组装 | 扩展为按提交字段准入和一次组合提交 |
 | R/service/command/SessionNamingService.java · normalizeName/execute | 名称规则与单独 updateName | 提取可复用准备职责，HTTP 不调用会独立提交的 execute |
@@ -414,6 +414,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.59.1 | 2026-09-22 | operationKey 使用大驼峰，保留 Session 范围并区分操作标识与源码方法名。 |
 | 1.59.0 | 2026-09-22 | 十项接口按消费范围收敛请求头，仅新消息与 Skill 执行示例保留可选凭据。 |
 | 1.58.2 | 2026-09-22 | 创建会话移除凭据 Header 示例，保留可选错误消息语言并对齐源码消费范围。 |
 | 1.58.1 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，同步 Runtime 精确契约与生成页面。 |

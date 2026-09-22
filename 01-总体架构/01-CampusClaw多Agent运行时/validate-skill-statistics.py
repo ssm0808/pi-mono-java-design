@@ -45,7 +45,7 @@ def main():
     by_key = {model['operation']['operationKey']: model for model in models}
     require('listSkillUsageStatistics' not in by_key and 'getSkillUsageDailyStatistics' not in by_key,
             'Deferred ranking/trend operations must not remain active')
-    operation = by_key['querySkillLoadStatistics']['operation']
+    operation = by_key['QuerySkillLoadStatistics']['operation']
     require((operation['method'], operation['path']) ==
             ('POST', '/internal/skills/load-statistics/query'), 'Batch query route changed')
     require(operation['requestBody']['required'], 'Batch query requires a JSON body')
@@ -71,7 +71,7 @@ def main():
     errors = {next(iter(r['bodies'].values()))['resCode'] for r in operation['responses'] if r['status'] != '200'}
     require(errors == {'INVALID_SKILL_LOAD_STATISTICS_QUERY', 'SKILL_LOAD_STATISTICS_QUERY_FAILED',
                        'SKILL_LOAD_STATISTICS_HISTORY_UNAVAILABLE'}, 'Error codes differ from implementation')
-    require(sum(entry['key'] == 'querySkillLoadStatistics' for entry in manifest['operations']) == 1,
+    require(sum(entry['key'] == 'QuerySkillLoadStatistics' for entry in manifest['operations']) == 1,
             'Register one batch query')
     print('Skill statistics: batch POST, selected IDs, activationCount, zero items and errors valid; ranking/trend deferred.')
 

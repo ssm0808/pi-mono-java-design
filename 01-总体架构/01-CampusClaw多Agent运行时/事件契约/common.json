@@ -8,10 +8,10 @@
     "headerNaming": "保留原名"
   },
   "reviewState": {
-    "currentOperation": "listSessionEvents",
+    "currentOperation": "ListSessionEvents",
     "confirmedOperations": [
-      "submitSessionEvent",
-      "listSessionEvents"
+      "SubmitSessionEvent",
+      "ListSessionEvents"
     ],
     "reviewMode": "completed",
     "semanticBatch": "2026-09-08.1-confirmed"

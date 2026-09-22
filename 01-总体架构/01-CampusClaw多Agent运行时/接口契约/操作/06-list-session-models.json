@@ -1,7 +1,7 @@
 {
   "operation": {
     "shortName": "查询可用模型",
-    "operationKey": "listSessionModels",
+    "operationKey": "ListSessionModels",
     "method": "GET",
     "path": "/sessions/{sessionId}/models",
     "summary": "列出 Session 当前可选模型",

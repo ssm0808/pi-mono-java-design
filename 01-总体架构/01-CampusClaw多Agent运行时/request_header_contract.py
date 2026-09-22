@@ -1,9 +1,9 @@
 """Validate operation-specific request headers across the ten-operation catalog."""
 
 CREDENTIALS = {"X-HW-ID", "Authorization", "X-HW-APPKEY", "access-token"}
-EXECUTION = {"submitSessionEvent", "executeSessionCommand"}
-JSON_BODY = EXECUTION | {"updateSession", "querySkillLoadStatistics"}
-JSON_MODE = {"updateSession", "querySkillLoadStatistics", "listSessionEvents"}
+EXECUTION = {"SubmitSessionEvent", "ExecuteSessionCommand"}
+JSON_BODY = EXECUTION | {"UpdateSession", "QuerySkillLoadStatistics"}
+JSON_MODE = {"UpdateSession", "QuerySkillLoadStatistics", "ListSessionEvents"}
 
 
 def require(condition, message):
@@ -14,8 +14,8 @@ def require(condition, message):
 def validate_request_headers(operation):
     key = operation["operationKey"]
     examples = operation["requestHeaderExamples"]
-    expected_modes = ({"jwt", "appkey", "control"} if key == "submitSessionEvent" else
-                      {"jwt", "appkey", "builtin"} if key == "executeSessionCommand" else
+    expected_modes = ({"jwt", "appkey", "control"} if key == "SubmitSessionEvent" else
+                      {"jwt", "appkey", "builtin"} if key == "ExecuteSessionCommand" else
                       {"json"} if key in JSON_MODE else {"language"})
     require(len(examples) == len(expected_modes)
             and {mode["id"] for mode in examples} == expected_modes,
@@ -25,21 +25,21 @@ def validate_request_headers(operation):
     for mode in examples:
         validate_mode(key, mode)
     parameters = {p["name"]: p for p in operation["parameters"] if p["in"] == "header"}
-    require(set(parameters) == ({"Accept-Language", "If-Match"} if key == "updateSession"
+    require(set(parameters) == ({"Accept-Language", "If-Match"} if key == "UpdateSession"
                                 else {"Accept-Language"}),
             f"{key}: parameters must retain only language and applicable If-Match")
     require(parameters["Accept-Language"]["required"] is False,
             f"{key}: language must remain optional")
-    if key == "updateSession":
-        require(parameters["If-Match"]["required"] is True, "updateSession must require If-Match")
+    if key == "UpdateSession":
+        require(parameters["If-Match"]["required"] is True, "UpdateSession must require If-Match")
     require(operation["requestBody"]["contentType"] == ("application/json" if key in JSON_BODY else None),
             f"{key}: request body content type differs")
     policy = operation.get("credentialPolicy", {})
-    if key == "submitSessionEvent":
+    if key == "SubmitSessionEvent":
         require(policy.get("captureEventTypes") == ["user.message"]
                 and policy.get("controlEventsReuseOriginalCredentials") is True,
                 "Only user.message captures credentials; control events reuse original credentials")
-    if key == "executeSessionCommand":
+    if key == "ExecuteSessionCommand":
         require(policy.get("callerCredentialScope") == "skill"
                 and policy.get("builtinRequiresCredentials") is False,
                 "Builtin callers must not require execution credentials")
@@ -52,9 +52,9 @@ def validate_mode(key, mode):
     if key in JSON_BODY:
         expected["Content-Type"] = ("application/json", True)
     if key in JSON_MODE or key in EXECUTION:
-        sse = key == "submitSessionEvent" or (key == "executeSessionCommand" and mode["id"] != "builtin")
-        expected["Accept"] = ("text/event-stream" if sse else "application/json", key == "submitSessionEvent")
-    if key == "updateSession":
+        sse = key == "SubmitSessionEvent" or (key == "ExecuteSessionCommand" and mode["id"] != "builtin")
+        expected["Accept"] = ("text/event-stream" if sse else "application/json", key == "SubmitSessionEvent")
+    if key == "UpdateSession":
         expected["If-Match"] = ('"snp-zQfM5yN8x2"', True)
     if key in EXECUTION and mode["id"] in {"jwt", "appkey"}:
         jwt = mode["id"] == "jwt"
@@ -71,7 +71,7 @@ def validate_mode(key, mode):
             description = header["description"]
             for phrase in ("内存", "Mate tool execute"):
                 require(phrase in description, f"{key}: credential lifetime/forwarding rule missing")
-            if key == "executeSessionCommand":
+            if key == "ExecuteSessionCommand":
                 require("不写入 Session、事件或日志" in description,
                         f"{key}: credential persistence prohibition missing")
         for forbidden in ("公司调用方标识", "瞬态", "瞬时", "<CALLER_ID>", "<JWT>", "<APPKEY>", "<ACCESS_TOKEN>"):

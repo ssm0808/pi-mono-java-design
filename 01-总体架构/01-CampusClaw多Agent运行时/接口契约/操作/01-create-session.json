@@ -1,7 +1,7 @@
 {
   "operation": {
     "shortName": "创建会话",
-    "operationKey": "createSession",
+    "operationKey": "CreateSession",
     "method": "POST",
     "path": "/agents/{agentId}/sessions",
     "summary": "创建 Runtime Session",

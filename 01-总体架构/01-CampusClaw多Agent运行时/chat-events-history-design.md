@@ -18,9 +18,9 @@
 ListEvents 按已提交顺序从旧到新返回该 Session 单条追加时间线的完整事件，使用普通整数 `page/nextPage`。
 每页默认 50 条、上限 200 条，合法超范围页返回空成功响应。完整事件与 POST SSE 共用字段定义。
 
-- 当前 [ListEvents 评审页](chat-api-review.html#listSessionEvents)，唯一精确源为
+- 当前 [ListEvents 评审页](chat-api-review.html#ListSessionEvents)，唯一精确源为
   [02-list-session-events.json](事件契约/操作/02-list-session-events.json)。
-- [POST 保留评审页](chat-api-review.html#submitSessionEvent) 与
+- [POST 保留评审页](chat-api-review.html#SubmitSessionEvent) 与
   [请求级 SSE 设计](chat-events-stream-design.md) 继续有效。
 - 当前内部接口由统一清单管理。Thinking 展示规则由 Runtime、Mate 公共 API 与前端
   共用；内部 `sessionId` 不直接暴露给浏览器。

@@ -1,6 +1,6 @@
 # Skill 使用统计设计
 
-[命令与技能](../README.md) · [M05 主设计](../00-Slash-Command通用模块/README.md) · [Codex 机制详解](codex-skill-counting.md) · [统一接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#querySkillLoadStatistics)
+[命令与技能](../README.md) · [M05 主设计](../00-Slash-Command通用模块/README.md) · [Codex 机制详解](codex-skill-counting.md) · [统一接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#QuerySkillLoadStatistics)
 
 | 属性 | 值 |
 |---|---|
@@ -177,7 +177,7 @@ Session 生命周期锁不会让统计与 Runtime 主事务成为同一个事务
 ## 6. 查询接口
 
 当前提供一个只读批量查询：`POST /campusclaw-service/v1/internal/skills/load-statistics/query`。
-操作标识为 `querySkillLoadStatistics`，成功使用 ResultBean；精确模型和示例见[统一接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#querySkillLoadStatistics)。
+操作标识为 `QuerySkillLoadStatistics`，成功使用 ResultBean；精确模型和示例见[统一接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#QuerySkillLoadStatistics)。
 实现证据为 PR #295 `c8cbda4946403d5e51b95ceaf0d7485166c54395` 的 Controller、Request/Response VO、Service 和 Mapper，详见[查询证据](source-evidence.md#f19-query)。
 
 ### 6.1 请求与时间边界

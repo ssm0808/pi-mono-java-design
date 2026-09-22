@@ -1,11 +1,11 @@
 {
-  "version": "1.9.0",
+  "version": "1.10.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
   "operations": [
     {
-      "key": "createSession",
+      "key": "CreateSession",
       "source": "接口契约/操作/01-create-session.json",
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 联动已同步",
@@ -13,7 +13,7 @@
       "design": "chat-http-v1-design.md#21-session-生命周期"
     },
     {
-      "key": "getSession",
+      "key": "GetSession",
       "source": "接口契约/操作/02-get-session.json",
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 联动已同步",
@@ -21,7 +21,7 @@
       "design": "chat-http-v1-design.md#211-读取-session"
     },
     {
-      "key": "deleteSession",
+      "key": "DeleteSession",
       "source": "接口契约/操作/03-delete-session.json",
       "common": "接口契约/common.json",
       "status": "已确认 · 停止指引已同步",
@@ -29,7 +29,7 @@
       "design": "chat-http-v1-design.md#212-删除-session"
     },
     {
-      "key": "submitSessionEvent",
+      "key": "SubmitSessionEvent",
       "source": "事件契约/操作/01-submit-session-event.json",
       "common": "事件契约/common.json",
       "status": "已确认目标契约 · 待实现",
@@ -37,7 +37,7 @@
       "design": "chat-events-stream-design.md"
     },
     {
-      "key": "listSessionEvents",
+      "key": "ListSessionEvents",
       "source": "事件契约/操作/02-list-session-events.json",
       "common": "事件契约/common.json",
       "status": "已确认目标契约 · 待实现",
@@ -45,7 +45,7 @@
       "design": "chat-events-history-design.md"
     },
     {
-      "key": "listSessionModels",
+      "key": "ListSessionModels",
       "source": "接口契约/操作/06-list-session-models.json",
       "common": "接口契约/common.json",
       "status": "原契约已确认",
@@ -53,7 +53,7 @@
       "design": "chat-http-v1-design.md#241-get-session-models"
     },
     {
-      "key": "updateSession",
+      "key": "UpdateSession",
       "source": "接口契约/操作/07-update-session.json",
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 待实现",
@@ -61,7 +61,7 @@
       "design": "chat-http-v1-design.md#242-post-session-统一更新"
     },
     {
-      "key": "listSessionCommands",
+      "key": "ListSessionCommands",
       "source": "接口契约/操作/12-list-session-commands.json",
       "common": "接口契约/common.json",
       "status": "GET 轻量清单已确认",
@@ -69,7 +69,7 @@
       "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"
     },
     {
-      "key": "executeSessionCommand",
+      "key": "ExecuteSessionCommand",
       "source": "接口契约/操作/13-execute-session-command.json",
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 待实现",
@@ -77,7 +77,7 @@
       "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"
     },
     {
-      "key": "querySkillLoadStatistics",
+      "key": "QuerySkillLoadStatistics",
       "source": "统计契约/操作/01-query-skill-load-statistics.json",
       "common": "接口契约/common.json",
       "status": "F19 查询契约已对齐 PR #295",

@@ -53,10 +53,10 @@ def validate_catalog():
     for model in models:
         validate_request_headers(model["operation"])
     require({model["operation"]["operationKey"] for model in models} == {
-        "createSession", "getSession", "deleteSession", "submitSessionEvent", "listSessionEvents",
-        "listSessionModels", "updateSession",
-        "listSessionCommands", "executeSessionCommand",
-        "querySkillLoadStatistics",
+        "CreateSession", "GetSession", "DeleteSession", "SubmitSessionEvent", "ListSessionEvents",
+        "ListSessionModels", "UpdateSession",
+        "ListSessionCommands", "ExecuteSessionCommand",
+        "QuerySkillLoadStatistics",
     }, "Current catalog identities differ")
     spec = importlib.util.spec_from_file_location("retained_gate", ROOT / "validate-chat-http-v1.py")
     gate = importlib.util.module_from_spec(spec)

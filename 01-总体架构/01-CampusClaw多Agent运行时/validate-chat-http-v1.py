@@ -346,7 +346,7 @@ def validate_response_contract(
     elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
     elif key == ("GET", "/sessions/{sessionId}/commands"):
-        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in operation["description"],
+        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in (ROOT.parents[1] / "04-命令与技能/00-Slash-Command通用模块/README.md").read_text(encoding="utf-8"),
                 "Command catalog must reflect unified Builtin and Skill ownership")
         validate_catalog_examples(operation)
         require(("503", "AGENT_NOT_AVAILABLE") in codes,
@@ -358,7 +358,7 @@ def validate_response_contract(
                 commands = response["bodies"]["zh-CN"]["result"]["commands"]
                 validate_help_descriptor(next(command for command in commands if command["name"] == "help"))
     elif key == ("POST", "/sessions/{sessionId}/command"):
-        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in operation["description"],
+        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in (ROOT.parents[1] / "04-命令与技能/00-Slash-Command通用模块/README.md").read_text(encoding="utf-8"),
                 "Command execution must reflect unified Builtin and Skill ownership")
         for phrase in ("只在内存中保留到本次命令处理", "Mate tool execute",
                        "不写入 Session、事件或日志", "工具发现", "Active Holder"):
@@ -524,7 +524,7 @@ def validate_help_artifacts(models: list[dict[str, Any]]) -> None:
     require(not (HELP_ROOT / "help-review.json").exists(), "Help must not keep a second JSON source")
     model = load_help_model()
     operation = next(model["operation"] for model in models
-                     if model["operation"]["operationKey"] == "executeSessionCommand")
+                     if model["operation"]["operationKey"] == "ExecuteSessionCommand")
     validate_help_projection(model, operation)
     parser = ContractHtmlParser()
     html_source = (HELP_ROOT / "help-review.html").read_text(encoding="utf-8")
@@ -568,7 +568,7 @@ def validate_source_deduplication() -> None:
     for operation_path in sorted((CONTRACT_ROOT / "操作").glob("*.json")):
         source = json.loads(operation_path.read_text(encoding="utf-8"))
         operation = source["operation"]
-        if operation.get("operationKey") in {"updateSession", "executeSessionCommand"}:
+        if operation.get("operationKey") in {"UpdateSession", "ExecuteSessionCommand"}:
             require("requestHeaderExamples" in operation, "Body POST needs scoped Header examples")
         else:
             require("requestHeaderExamples" not in operation,

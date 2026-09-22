@@ -2,7 +2,7 @@
 
 版本：1.6.0；日期：2026-09-22。状态：主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已实现 Runtime 问答、工具装配、逐题展示、工具日志汇聚和两文件提示词装配，见[源码证据 §12](source-evidence.md#12-主线实现状态核验2026-09-18)。Mate 公共接入待实现；业务 SYSTEM 发布与真实模型行为未核验。既有独立测试仍绑定 §2 所列 9f785bea，本次未重跑。
 
-本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#submitSessionEvent)。模式仅使用 PLAN.md/BUILD.md；必要性、优先一题和简洁结果使用归基础 SYSTEM，工具独占调用与等待规则归本页 description/共享 Schema，不保留独立 ASK_USER 资源。装配与迁移由 [plan-policy.md](plan-policy.md) 维护。
+本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#SubmitSessionEvent)。模式仅使用 PLAN.md/BUILD.md；必要性、优先一题和简洁结果使用归基础 SYSTEM，工具独占调用与等待规则归本页 description/共享 Schema，不保留独立 ASK_USER 资源。装配与迁移由 [plan-policy.md](plan-policy.md) 维护。
 
 ## 1. 目标与边界
 

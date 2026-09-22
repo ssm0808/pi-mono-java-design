@@ -22,7 +22,7 @@ SPEC.loader.exec_module(MATE)
 class DocumentMaintenanceTest(unittest.TestCase):
     def setUp(self):
         _, models = load_contract()
-        self.runtime = next(m for m in models if m["operation"]["operationKey"] == "executeSessionCommand")
+        self.runtime = next(m for m in models if m["operation"]["operationKey"] == "ExecuteSessionCommand")
 
     def test_help_follows_canonical_values_and_parameters(self):
         source = copy.deepcopy(self.runtime)

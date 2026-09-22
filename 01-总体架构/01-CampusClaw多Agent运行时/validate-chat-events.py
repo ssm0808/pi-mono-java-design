@@ -368,7 +368,7 @@ def validate_model(model: dict) -> None:
             "Superseded credential requirements must not remain in current review fields")
     require(operation["method"] == "POST" and operation["path"] == "/sessions/{sessionId}/events",
             "merged operation must be POST /events")
-    require(operation["operationKey"] == "submitSessionEvent", "review operation identity changed")
+    require(operation["operationKey"] == "SubmitSessionEvent", "review operation identity changed")
     validate_headers(operation)
     validate_event_ordering_rule(review)
     require(review.get("interruptOptimization") == INTERRUPT_OPTIMIZATION,
@@ -444,17 +444,17 @@ def validate_model(model: dict) -> None:
     require(receipt_types == USER_EVENT_TYPES and all_types == STREAM_TYPES, "missing receipt or basic output examples")
     require(review.get("confirmedChoices") == CONFIRMED_CHOICES,
             "preserve exact confirmed transport/receipt/closing/S1/S2/L5/L6/L7/L8/L9/L10")
-    require("L5 已确认" in operation["description"] and "L5 已确认" in review["notice"],
+    require("agent.message 在 phase=completed 时的 content 使用完整正文字符串" in operation["description"] and "L5 已确认" in review["notice"],
             "completed content approval must be visible in POST")
-    require("L6 已确认" in operation["description"] and "L6 已确认" in review["notice"],
+    require("agent.tool_call.arguments 使用 JSON 对象" in operation["description"] and "L6 已确认" in review["notice"],
             "tool arguments approval must be visible in POST")
-    require("L7 已确认" in operation["description"] and "L7 已确认" in review["notice"],
+    require("agent.tool_result.content 使用内容块数组" in operation["description"] and "L7 已确认" in review["notice"],
             "tool result array approval must be visible in POST")
-    require("L8 已确认" in operation["description"] and "L8 已确认" in review["notice"],
+    require("agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块" in operation["description"] and "L8 已确认" in review["notice"],
             "text-only tool result approval must be visible in POST")
-    require("L9 已确认" in operation["description"] and "L9 已确认" in review["notice"],
+    require("Mate 调用保留 toolName=CallMateTool" in operation["description"] and "L9 已确认" in review["notice"],
             "Mate Runtime wrapper approval must be visible in POST")
-    require("L10 已确认" in operation["description"] and "L10 已确认" in review["notice"],
+    require("每条 agent.tool_result 都返回 isError 布尔值" in operation["description"] and "L10 已确认" in review["notice"],
             "tool result boolean outcome approval must be visible in POST")
     require(set(review["confirmedEventTypes"]) == STREAM_TYPES, "confirmed output type names changed")
     require(review["questions"] == [], "do not reopen confirmed choices")
@@ -636,7 +636,7 @@ def complete_streams(post: dict) -> dict:
 def validate_history_model(model: dict, post: dict) -> None:
     operation, review = model["operation"], model["review"]
     require((operation["method"], operation["path"], operation["operationKey"]) ==
-            ("GET", "/sessions/{sessionId}/events", "listSessionEvents"), "history is GET events, not a stream")
+            ("GET", "/sessions/{sessionId}/events", "ListSessionEvents"), "history is GET events, not a stream")
     require(operation["requestBody"]["contentType"] is None
             and not operation["requestBody"]["required"]
             and operation["requestBody"]["example"] is None, "GET history has no request body")
@@ -681,26 +681,26 @@ def validate_history_model(model: dict, post: dict) -> None:
     batch = review["batchReview"]
     require(batch["status"] == "confirmed" and batch["version"] == "2026-09-08.1" and batch.get("confirmedBy"), "record actual batch approval")
     require([item["id"] for item in batch["items"]] == [f"B{i:02}" for i in range(1, 16)], "retain all fifteen semantic decisions")
-    require("L5 已确认" in operation["description"] and "L5 已确认" in review["notice"],
+    require("agent.message 在 phase=completed 时的 content 使用完整正文字符串" in operation["description"] and "L5 已确认" in review["notice"],
             "completed content approval must be visible in history")
-    require("L6 已确认" in operation["description"] and "L6 已确认" in review["notice"],
+    require("agent.tool_call.arguments 使用 JSON 对象" in operation["description"] and "L6 已确认" in review["notice"],
             "tool arguments approval must be visible in history")
-    require("L7 已确认" in operation["description"] and "L7 已确认" in review["notice"],
+    require("agent.tool_result.content 使用内容块数组" in operation["description"] and "L7 已确认" in review["notice"],
             "tool result array approval must be visible in history")
-    require("L8 已确认" in operation["description"] and "L8 已确认" in review["notice"],
+    require("agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块" in operation["description"] and "L8 已确认" in review["notice"],
             "text-only tool result approval must be visible in history")
-    require("L9 已确认" in operation["description"] and "L9 已确认" in review["notice"],
+    require("Mate 调用保留 toolName=CallMateTool" in operation["description"] and "L9 已确认" in review["notice"],
             "Mate Runtime wrapper approval must be visible in history")
-    require("L10 已确认" in operation["description"] and "L10 已确认" in review["notice"],
+    require("每条 agent.tool_result 都返回 isError 布尔值" in operation["description"] and "L10 已确认" in review["notice"],
             "tool result boolean outcome approval must be visible in history")
-    for clause in ("普通分页已确认", "不再固定快照", "跨页保持相同 limit", "不按 createdAt 重排",
+    for clause in ("普通分页：page 从 1 开始", "不再固定快照", "跨页保持相同 limit", "不按 createdAt 重排",
                    "每页读取该次查询可见的 Session 完整事件", "本接口不承诺自动检测跨页变化",
                    "允许 Session running 时查询", "nextPage=null 仅表示本次查询没有下一页",
                    "省略 limit 时返回最多 50 条，允许 1～200", "result 只含 events 和 nextPage，不返回 total",
-                   "L4 已确认：页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null",
+                   "页码合法但超出当前记录范围时返回 200，events=[]、nextPage=null",
                    "不掩盖非法参数或读取失败",
                    "不能用某条历史 idle 判定现在可提交 M2",
-                   "每页重新检查访问边界", "配置变更、压缩、Usage", "B01～B15 已确认"):
+                   "每页重新检查访问边界", "配置变更、压缩、Usage"):
         require(clause in operation["description"], f"missing visible history boundary: {clause}")
     complete = complete_streams(post)
     expected = {
@@ -845,12 +845,12 @@ def validate_review_pages(post: dict) -> None:
     histories, history_scripts = validator.parse_generated_models(history_parser)
     require(len(histories) == history_parser.static_review_count == 10 and len(history_scripts) == 1,
             "show one unified catalog")
-    history = next(model for model in histories if model["operation"]["operationKey"] == "listSessionEvents")
+    history = next(model for model in histories if model["operation"]["operationKey"] == "ListSessionEvents")
     validate_history_model(history, post)
     validator.validate_executable_script(history_scripts[0])
     visible_history = " ".join(history_parser.visible_text)
     for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "普通分页", "下一页", "确认与续跑历史",
-                 "中断历史", "已确认目标契约", "默认 50、上限 200 已确认", "不返回 total", "L4 已确认"):
+                 "中断历史", "text/event-stream", "允许 1～200", "不返回 total", "events=[]、nextPage=null"):
         require(text in visible_history, f"no-JavaScript history page missing {text}")
     require(all(f'data-question-id="{key}"' not in history_source
                 for key in ("L1-page-direction", "L2-page-size", "L3-page-metadata", "L4-out-of-range-page",
@@ -864,13 +864,13 @@ def validate_review_pages(post: dict) -> None:
     parser.feed(source)
     models, scripts = validator.parse_generated_models(parser)
     require(len(models) == parser.static_review_count == 10 and len(scripts) == 1, "show one unified catalog")
-    merged = next(model for model in models if model["operation"]["operationKey"] == "submitSessionEvent")
+    merged = next(model for model in models if model["operation"]["operationKey"] == "SubmitSessionEvent")
     validate_model(merged)
     validator.validate_executable_script(scripts[0])
     visible = " ".join(parser.visible_text)
-    for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "已确认目标契约",
-                 "结束规则已确认", "等待工具确认时也关闭", "中断推送分工已确认", "数据库中断机制已确认",
-                 "中断查询优化已确认", "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次"):
+    for text in ("作用", "调用上下文 Header", "参数与请求体", "响应", "首个业务帧", "text/event-stream",
+                 "结束规则：", "等待工具确认时也关闭", "中断推送分工：", "数据库中断机制：",
+                 "中断查询优化：", "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次"):
         require(text in visible, f"no-JavaScript page is missing {text}")
     require('data-question-id="' not in source, "confirmed decisions must not leave another approval form")
     require("data-label" in source and "max-width: 680px" in source, "responsive rules missing")
@@ -1205,7 +1205,7 @@ def main() -> int:
         common = json.loads(COMMON_PATH.read_text(encoding="utf-8"))
         model = json.loads(MODEL_PATH.read_text(encoding="utf-8"))
         history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-        require(common["reviewState"] == {"currentOperation": "listSessionEvents", "confirmedOperations": ["submitSessionEvent", "listSessionEvents"], "reviewMode": "completed", "semanticBatch": "2026-09-08.1-confirmed"}, "target contracts ready after confirmed batch")
+        require(common["reviewState"] == {"currentOperation": "ListSessionEvents", "confirmedOperations": ["SubmitSessionEvent", "ListSessionEvents"], "reviewMode": "completed", "semanticBatch": "2026-09-08.1-confirmed"}, "target contracts ready after confirmed batch")
         require(common["eventContract"]["detailStatus"] == "implementation-ready", "no extra review gate")
         require(common["eventContract"].get("planStreaming") == {
             "phases": ["delta", "completed"], "previewPersisted": False,

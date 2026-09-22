@@ -13,7 +13,7 @@ class CommandResponseContractTest(unittest.TestCase):
         _, self.models = load_contract()
 
     @staticmethod
-    def operation(models, key="executeSessionCommand"):
+    def operation(models, key="ExecuteSessionCommand"):
         return next(model["operation"] for model in models if model["operation"]["operationKey"] == key)
 
     def cases(self, models):
@@ -53,7 +53,7 @@ class CommandResponseContractTest(unittest.TestCase):
         self.reject(lambda cases: self.result(cases["200-status"])["lifetimeUsage"].update({"input": True}))
 
     def test_cross_operation_source_shape_is_authoritative(self):
-        for key in ("getSession", "listSessionModels"):
+        for key in ("GetSession", "ListSessionModels"):
             with self.subTest(key=key):
                 models = copy.deepcopy(self.models)
                 response = next(item for item in self.operation(models, key)["responses"] if item["status"] == "200")

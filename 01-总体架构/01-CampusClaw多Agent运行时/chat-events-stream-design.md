@@ -11,7 +11,7 @@
 
 ## 1. 当前操作与已确认范围
 
-POST `/campusclaw-service/v1/sessions/{sessionId}/events` 提交一条用户事件，在同一响应读取本次 SSE；GET 同路径独立读取完整历史。精确字段、请求头、示例与错误由 [POST 模型](事件契约/操作/01-submit-session-event.json) 维护并生成 [接口页](chat-api-review.html#submitSessionEvent)。
+POST `/campusclaw-service/v1/sessions/{sessionId}/events` 提交一条用户事件，在同一响应读取本次 SSE；GET 同路径独立读取完整历史。精确字段、请求头、示例与错误由 [POST 模型](事件契约/操作/01-submit-session-event.json) 维护并生成 [接口页](chat-api-review.html#SubmitSessionEvent)。
 
 本文维护响应的帧顺序、归属、关闭和失败处理。[Events 主设计](chat-events-design.md) 维护单消息准入、数据库事务与跨实例控制，[历史设计](chat-events-history-design.md) 维护权威记录及分页。
 
