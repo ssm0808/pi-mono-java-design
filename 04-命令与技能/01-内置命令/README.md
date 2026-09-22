@@ -3,15 +3,15 @@
 [返回导航](../README.md) · [通用模块](../00-Slash-Command通用模块/README.md)
 
 > Slash 只是业务能力的调用入口：响应复用既有 Session/模型清单，不再提供命令专属回执。
-> `/help` 无参介绍当前 Agent，结果只有 displayName/description/userCases；[Help 专项设计](Help-Agent使用指南/README.md)维护缓存与展示语义。
+> `/help` 无参介绍当前 Agent，结果只有 displayName/description/useCases；[Help 专项设计](Help-Agent使用指南/README.md)维护缓存与展示语义。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.11.2 |
-| 更新日期 | 2026-09-14 |
+| 文档版本 | 2.11.3 |
+| 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
-| Help 专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；已有核心 SPI，Help Handler/查询与缓存补齐仍为 待实现 |
+| Help 专项源码基线 | `d1cdb708e3e124cae009b10b985f5832b6dbde01`；已有核心 SPI，Help Handler/查询与缓存补齐仍为 待实现 |
 | 响应复用源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`；既有 Session/Models API，Command 响应投影仍为 待实现 |
 | Name 最新复核基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；已有命名服务和持久化，统一 Session POST 仍为 待实现 |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
@@ -86,7 +86,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 | 顺序 | 分支 | 职责与发布边界 |
 |---:|---|---|
 | 1 | codex/builtin-command-core | 来源过滤、可执行定义、准入/Handler/Context、Contributor、快照与查重；实现设计、PlantUML/SVG、未占用序号 ADR；无 HTTP |
-| 2 | codex/builtin-command-readonly | Help/Status/Skills 服务、Contributor、Handler、DTO；Help 前置补齐 userCases 保存/重载、显式刷新旧缓存与读取/发布互斥；无 HTTP |
+| 2 | codex/builtin-command-readonly | Help/Status/Skills 服务、Contributor、Handler、DTO；Help 前置补齐 useCases 保存/重载、显式刷新旧缓存与读取/发布互斥；无 HTTP |
 | 3 | codex/builtin-command-name | display_name、Mapper/Repository/DTO 与 GET Session；无 Command 路由 |
 | 4 | codex/builtin-command-model | Model 窄服务与可选 expectedVersion；统一 Session POST 复用条件更新规则 |
 | 5 | codex/builtin-command-thinking | Thinking 窄服务与同一事务入口 |
@@ -166,7 +166,7 @@ Builtin 请求拒绝 fileIds、未知字段、If-Match 和 Idempotency-Key。该
 
 | 命令与操作 | 成功 result / 响应 VO | 复用基线 / ETag |
 |---|---|---|
-| help | displayName、description[]、userCases[] / AgentHelpResponseVO（待实现） | 无独立 API，保留最小业务结果；无 ETag |
+| help | displayName、description[]、useCases[] / AgentHelpResponseVO（待实现） | 无独立 API，保留最小业务结果；无 ETag |
 | status；name/thinking 空参查询 | 完整 Session / GetSessionResponseVO | [GET Session](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/02-get-session.json)，包含 ETag |
 | name 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)；响应含 ETag，Command 不要求 If-Match |
 | model 空参查询 | currentModelId、models[] / AvailableModelsResponseVO | [GET Models](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/06-list-session-models.json)；无 ETag |
@@ -229,7 +229,7 @@ sync-campusclaw 和 diff --check；最终 HTTP PR 执行完整 mvnw verify。
 - 缺失/类型错误/未知字段/Slash/非法或未知名称/超长参数。
 - 跨接口比较 Session/Models 的完整字段与类型、查询/修改/同值场景、Session 与 ETag 同源；所有成功结果无 command/changed/sourceEventSeq，不泄漏内部 DTO。
 - Help 无参、空白归一、拒绝非空参数与附件；idle/running 均无副作用；显示名回退与空数组。
-- Help 的 userCases 远端 → 保存 → 重载 → 重启往返不丢失；旧缓存显式刷新、刷新失败保留旧值、单次完整快照与并发发布一致性。
+- Help 的 useCases 远端 → 保存 → 重载 → 重启往返不丢失；旧缓存显式刷新、刷新失败保留旧值、单次完整快照与并发发布一致性。
 - Name Unicode/UTF-8 字节边界、并发、幂等、重启和 GET Session。
 - 仅名称的 Session POST 必须 If-Match，缺失 428、冲突 412；running 可改名且不返回 SESSION_BUSY；与 `/name` 运行同一组 Unicode/字节边界反例。
 - Model/Thinking 忙状态、能力、自动关闭、事件序号和 统一 POST ETag/If-Match 回归。
@@ -247,6 +247,7 @@ PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。图形还需检查�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.11.3 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，同步命令结果和缓存验收。 |
 | 2.11.2 | 2026-09-14 | 统一引用 Skill 契约状态并重排命名与压缩流程，精确命令行为保持不变。 |
 | 2.11.1 | 2026-09-14 | 实施按职责与验收边界组织，不设新增行数预算。 |
 | 2.11.0 | 2026-09-14 | 名称、模型、思考和模式统一由 Session POST 更新，Command 保留原入口与准入规则。 |

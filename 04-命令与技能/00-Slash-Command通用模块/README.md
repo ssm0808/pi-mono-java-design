@@ -4,11 +4,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.12.0 |
-| 更新日期 | 2026-09-18 |
+| 文档版本 | 1.12.1 |
+| 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
-| Help 专项源码基线 | `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`；字段/缓存/SPI 证据见 Help 专项，不替换其他行为的历史证据点 |
+| Help 专项源码基线 | `d1cdb708e3e124cae009b10b985f5832b6dbde01`；字段/缓存/SPI 证据见 Help 专项，不替换其他行为的历史证据点 |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
 | 发现层前置证据 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`；已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
 | Command GET 候选 | `7759481a1722422395d46564129827c6ee6df204`（未发布） |
@@ -64,7 +64,7 @@ Builtin 直接引用这份主图；Help 专题只补充元数据、缓存与结�
 `execution/CommandExecutionContext.java` 均位于 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/` 下，
 分别证明发现抽象、Handler/Admission 组合、请求定义索引和共享 Session 快照已经存在；公开完整装配仍是目标设计。
 
-Help 的结果精确为 displayName/description/userCases，字段和缓存规则见
+Help 的结果精确为 displayName/description/useCases，字段和缓存规则见
 [Help 专项设计](../01-内置命令/Help-Agent使用指南/README.md)。其他命令不变。
 
 ![补充分层视图](设计图/target_slash_command_boundaries.svg)
@@ -95,7 +95,7 @@ Help 的结果精确为 displayName/description/userCases，字段和缓存规�
 
 上述结论限于旧证据点。Help 专项在 `d8e22562` 复核到 `command.builtin` 的
 BuiltinCommandContributor/BuiltinCommandDefinition 和 `command.execution` 的 CommandHandler/CommandExecutionContext 已存在；
-Help Handler、AgentHelpQueryService 及 userCases 缓存往返仍未实现。具体路径、符号和差距见
+Help Handler、AgentHelpQueryService 及 useCases 缓存往返仍未实现。具体路径、符号和差距见
 [Help 源码证据](../01-内置命令/Help-Agent使用指南/README.md#5-源码证据与设计理由)。
 
 ### 外部基线
@@ -298,7 +298,7 @@ Skill 的已确认执行语义按[Skill 实施要求](../02-技能命令/README.
 该调整仅涉及交付规模，不改变本专题的命令架构、运行时语义或 Agent 架构对比结论。
 
 测试覆盖来源过滤、稳定排序、重名启动失败、单次解析、无 DTO 泄漏、并发准入和无通用命令历史。
-Help 额外覆盖无参描述符、三个业务字段、空数组、显示名回退、userCases 缓存往返与显式刷新旧缓存；
+Help 额外覆盖无参描述符、三个业务字段、空数组、显示名回退、useCases 缓存往返与显式刷新旧缓存；
 GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照检查。
 
 图的提交验收额外运行 `python3 validate-global-class-view.py`，检查全局主图入口和不可折叠的职责关系；
@@ -308,6 +308,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.12.1 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，与 Runtime 命令契约保持一致。 |
 | 1.12.0 | 2026-09-18 | Skill 统计查询改为批量 POST，其他命令与采集结论保持原核验范围。 |
 | 1.11.0 | 2026-09-16 | 显式与 Read 共用根执行使用统计，受理后独立记录。 |
 | 1.10.0 | 2026-09-15 | Skill 调用事实通过共享受理与结果追加事务接入统计。 |

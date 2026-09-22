@@ -4,10 +4,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.7.0 |
-| 更新日期 | 2026-09-15 |
+| 文档版本 | 1.7.1 |
+| 更新日期 | 2026-09-22 |
 | 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
-| Runtime 命令契约基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd`；B13 已确认 Skill SSE，Builtin JSON 不变 |
+| Runtime 命令契约基线 | `879746e59189a07335e32c7df807c7f5048fdc28`；B13 已确认 Skill SSE，Builtin JSON 不变 |
 | pi-mono-java 交互源码基线 | 当前 PR #301 提交见[实现状态](../../source-evidence.md#current-implementation)；早期结构证据保留在 §2.1 |
 | 适用端 | CampusClaw Web 产品前端；内部 Runtime 调试台只作为源码证据和受控联调入口 |
 | 状态 | 用户已确认的目标交互；问答/审核协同原型已同步，Vue 源码范围见 §2.1；公共执行边界沿用原契约门禁 |
@@ -74,7 +74,7 @@ Builtin 命令结果不是 Assistant 消息，不进入 ConversationTimeline、S
 | running 状态会过滤命令或省略部分 input | 前端信任新清单，不复制硬编码状态矩阵 |
 | Builtin POST 返回普通 JSON，无 commandId 和通用生命周期 | 不画虚构进度条，不建立轮询或通用命令历史 |
 | 成功结果无统一判别字段；`model` 空参返回 Models，带参返回 Session | 提交前从调用形态冻结 `expectedResultKind`，Gateway 按它校验响应，禁止只按命令名或 JSON 形状猜测 |
-| Help 返回 `displayName/description/userCases` | 用纯文本临时卡片展示，不渲染 HTML、Markdown 或远程图片 |
+| Help 返回 `displayName/description/useCases` | 用纯文本临时卡片展示，不渲染 HTML、Markdown 或远程图片 |
 | 普通 Events API 不解析 Slash | Slash 不得误发到普通消息接口；显式转消息也必须由用户确认 |
 | POST 被拒后刷新清单，不自动重放 | 刷新只执行 GET；副作用请求始终需要新的用户动作 |
 
@@ -265,7 +265,7 @@ expectedResultKind。必须校验所选协议的 Content-Type 与完整 Schema�
 
 | 已提交调用形态 | 期望结果 | 展示与状态更新 |
 |---|---|---|
-| `help` 空参 | `agentGuide` | 显示 displayName；description 和 userCases 都按纯文本逐条展示。空数组用明确空态；不解析 Markdown/HTML，不加载远程图片，场景条目不可点击即发送 |
+| `help` 空参 | `agentGuide` | 显示 displayName；description 和 useCases 都按纯文本逐条展示。空数组用明确空态；不解析 Markdown/HTML，不加载远程图片，场景条目不可点击即发送 |
 | `status` 空参 | `session` | 应用返回的完整 Session 与版本响应头，再展示权威状态摘要；不能依据请求意图写“修改成功” |
 | `name` 空参/带参 | `session` | 查询或修改都应用完整 Session 与版本响应头；展示服务端最终 displayName |
 | `model` 空参 | `models` | 更新 ModelStore 并展示 currentModelId 和 models；该响应没有 ETag |
@@ -278,7 +278,7 @@ expectedResultKind。必须校验所选协议的 Content-Type 与完整 Schema�
 Runtime 的 Session 结果带 ETag，Gateway/状态适配器必须与 Session 快照一起原子应用；
 产品组件和临时结果卡不显示 ETag。Mate 公共协议如何映射版本信息仍属门禁项，未确认前不假设浏览器可见字段。
 
-Help `userCases` 未来若增加“填入输入框”，也只能把纯文本放入消息草稿，并要求用户再次确认发送；
+Help `useCases` 未来若增加“填入输入框”，也只能把纯文本放入消息草稿，并要求用户再次确认发送；
 本期不提供点击场景即执行。
 
 ## 8. 错误呈现与恢复
@@ -454,6 +454,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.1 | 2026-09-22 | Help 结果与 Runtime 契约统一使用 `useCases`，前端解码与展示保持纯文本。 |
 | 1.7.0 | 2026-09-15 | 同步 Claw 命令与计划问答的实现状态及 Dock 协同验收。 |
 | 1.6.0 | 2026-09-15 | 对齐 Codex 就地命令交互，补齐计划问答等待、共享准入与轻量结果展示。 |
 | 1.5.1 | 2026-09-14 | 精简视觉决策叙述并重排命令组件与提交结果流程。 |

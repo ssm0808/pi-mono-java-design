@@ -32,7 +32,7 @@ SLASH_DESIGN_PATHS = (
     REPOSITORY_ROOT / "04-命令与技能/02-技能命令/README.md",
 )
 HELP_ROOT = REPOSITORY_ROOT / "04-命令与技能/01-内置命令/Help-Agent使用指南"
-HELP_RESULT_FIELDS = {"displayName", "description", "userCases"}
+HELP_RESULT_FIELDS = {"displayName", "description", "useCases"}
 EXPECTED_OPERATION_COUNT = 7
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
@@ -518,7 +518,7 @@ def validate_help_body(body: dict[str, Any]) -> None:
             "Help must expose exactly three business fields, never commands or internal metadata")
     require(isinstance(result["displayName"], str) and bool(result["displayName"].strip()),
             "Help displayName must be a non-blank Agent name")
-    for field in ("description", "userCases"):
+    for field in ("description", "useCases"):
         require(isinstance(result[field], list), f"Help {field} must be a non-null array")
         require(all(isinstance(item, str) and bool(item.strip()) and item == item.strip()
                     for item in result[field]), f"Help {field} items must be normalized non-blank strings")
@@ -537,9 +537,9 @@ def validate_help_operation(operation: dict[str, Any]) -> None:
         for body in response["bodies"].values():
             validate_help_body(body)
     empty = successes["200-help-empty"]["bodies"]["zh-CN"]["result"]
-    require(empty["description"] == [] and empty["userCases"] == [], "Help empty response differs")
+    require(empty["description"] == [] and empty["useCases"] == [], "Help empty response differs")
     populated = successes["200-help"]["bodies"]["zh-CN"]["result"]
-    require(bool(populated["description"]) and bool(populated["userCases"]), "Missing populated Help example")
+    require(bool(populated["description"]) and bool(populated["useCases"]), "Missing populated Help example")
     examples = operation["requestBody"].get("examples", [])
     require(any(example.get("value") == {"name": "help"} for example in examples),
             "POST Command must show the no-argument Help request")
@@ -601,7 +601,7 @@ def validate_help_artifacts(models: list[dict[str, Any]]) -> None:
                     "Help visible Header values or descriptions differ from Runtime")
     for placeholder in ("<JWT>", "<APPKEY>", "<ACCESS_TOKEN>"):
         require(placeholder not in visible, "Help visible HTML still contains obsolete Header placeholders")
-    for phrase in ("作用", "name", "help", "description", "userCases", "AGENT_NOT_AVAILABLE", "已确认"):
+    for phrase in ("作用", "name", "help", "description", "useCases", "AGENT_NOT_AVAILABLE", "已确认"):
         require(phrase in visible, f"Help no-script surface is missing {phrase}")
     guide = (HELP_ROOT / "README.md").read_text(encoding="utf-8")
     for phrase in ("显式刷新", "toIdentity", "toRuntime", "进程重启", "schemaVersion", "Agent 级锁"):

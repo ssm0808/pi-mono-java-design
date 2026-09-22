@@ -40,7 +40,7 @@ class HelpContractTest(unittest.TestCase):
 
     def test_result_rejects_legacy_and_private_fields(self):
         for field in ("command", "changed", "commands", "systemPrompt", "agentId", "version", "path",
-                      "bindingSkills", "bindingTools", "useCases", "sourceEventSeq"):
+                      "bindingSkills", "bindingTools", "userCases", "sourceEventSeq"):
             with self.subTest(field=field):
                 body = copy.deepcopy(self.body)
                 body["result"][field] = "not-public"
@@ -56,7 +56,7 @@ class HelpContractTest(unittest.TestCase):
                     GATE.validate_help_body(body)
 
     def test_arrays_are_strings_not_null_or_objects(self):
-        for field in ("description", "userCases"):
+        for field in ("description", "useCases"):
             for value in (None, "text", {}, [None], [7], ["  "], [" text "], [{"text": "scene"}]):
                 with self.subTest(field=field, value=value):
                     body = copy.deepcopy(self.body)
@@ -65,7 +65,7 @@ class HelpContractTest(unittest.TestCase):
                         GATE.validate_help_body(body)
 
     def test_empty_sections_remain_valid(self):
-        for field in ("description", "userCases"):
+        for field in ("description", "useCases"):
             body = copy.deepcopy(self.body)
             body["result"][field] = []
             GATE.validate_help_body(body)
@@ -104,7 +104,7 @@ class HelpContractTest(unittest.TestCase):
 
     def test_projection_cannot_drift_or_reopen_decisions(self):
         projection = copy.deepcopy(self.projection)
-        projection["operation"]["responses"][0]["bodies"]["zh-CN"]["result"]["userCases"] = []
+        projection["operation"]["responses"][0]["bodies"]["zh-CN"]["result"]["useCases"] = []
         with self.assertRaises(RuntimeError):
             GATE.validate_help_projection(projection, self.operation)
         projection = copy.deepcopy(self.projection)

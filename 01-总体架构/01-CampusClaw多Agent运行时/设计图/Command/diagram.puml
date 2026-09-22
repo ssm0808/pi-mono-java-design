@@ -44,7 +44,7 @@ else POST Builtin
     Handler -> Service : query Agent help\nusing Session agentId
     Service -> Service : prepareCached once\nunder Agent publication lock
     note over Handler, Service
-      Project displayName, description, userCases.
+      Project displayName, description, useCases.
       No model, refresh, Session write, or capacity lease.
       No complete cache: existing 422 error.
     end note

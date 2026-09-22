@@ -12,8 +12,8 @@ SESSION_CASES = {
 }
 MODEL_CASES = {"200-model-query", "200-model-query-empty"}
 BUSINESS_SHAPES = {
-    "200-help": {"displayName": "Agent", "description": ["text"], "userCases": ["text"]},
-    "200-help-empty": {"displayName": "Agent", "description": ["text"], "userCases": ["text"]},
+    "200-help": {"displayName": "Agent", "description": ["text"], "useCases": ["text"]},
+    "200-help-empty": {"displayName": "Agent", "description": ["text"], "useCases": ["text"]},
     "200-compact": {"compacted": True},
     "200-compact-empty": {"compacted": False},
     "200-skills": {"skills": [{"name": "pdf", "description": "text"}]},

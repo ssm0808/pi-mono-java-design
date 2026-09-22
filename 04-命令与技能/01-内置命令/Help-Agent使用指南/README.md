@@ -4,11 +4,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.2.1 |
-| 日期 | 2026-09-14 |
+| 设计版本 | 1.2.2 |
+| 日期 | 2026-09-22 |
 | 状态 | 已确认无参、三个业务字段、空数组、缓存往返与显式刷新旧缓存；统一响应设计删除 command 回显，待实现 |
-| 设计仓基线 | `372fb2cbec6e8a525d30d2310ef68e3da18e33f7` |
-| 已核验源码基线 | pi-mono-java `d8e22562e22ac41ef4bb5cc6b36b576139417bd9` |
+| 设计仓基线 | `879746e59189a07335e32c7df807c7f5048fdc28` |
+| 已核验源码基线 | pi-mono-java `d1cdb708e3e124cae009b10b985f5832b6dbde01` |
 | 专项评审页 | [Help HTTP 评审](help-review.html)，直接从 Runtime 操作 13 提取生成 |
 
 ## 1. 职责：介绍当前 Agent
@@ -19,7 +19,7 @@
 | 入口 | 用户问题 | 数据来源 |
 |---|---|---|
 | `/` | 有哪些命令、如何填写参数？ | Command 清单与命令描述符 |
-| `/help` | 当前 Agent 能帮我做什么、适合什么场景？ | Agent 的 displayName/name、description、userCases |
+| `/help` | 当前 Agent 能帮我做什么、适合什么场景？ | Agent 的 displayName/name、description、useCases |
 | `/skills` | 绑定了哪些 Skill？ | 已验证的直接绑定 Skill 名称和描述 |
 | `/status` | 当前 Session 是什么状态？ | Session 状态、模型和 Thinking |
 
@@ -70,15 +70,15 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 
 ## 3. 元数据映射与精确结果
 
-直接复用 AgentRuntime 已有字段。Agent 字段实际拼写是 `userCases`，不是 Skill 的 `useCases`；本次不顺带重命名。
+直接复用 AgentRuntime 的 `useCases` 字段。Agent 与 Skill 的线缆字段均使用 `useCases`；Agent Runtime 是字符串数组，Skill 查询结果仍是单个字符串。
 
 | 响应字段 | 元数据来源 | 已确认规则 |
 |---|---|---|
 | displayName | displayName；空白时回退 name | 必填、非空；它是 Agent 名称，不是 `/name` 设置的 Session 名称 |
 | description | description[] | 必填数组；保留作者顺序和内部换行，去除条目两端空白及空白条目 |
-| userCases | userCases[] | 必填数组；同上，不排序、不扩写，不当作自动执行的提示词 |
+| useCases | useCases[] | 必填数组；同上，不排序、不扩写，不当作自动执行的提示词 |
 
-`description` 和 `userCases` 缺失或 null 时按现有元数据语义归一为 `[]`。
+`description` 和 `useCases` 缺失或 null 时按现有元数据语义归一为 `[]`。
 列表中的 null/非字符串属于无效元数据，不作为可展示条目宽松接收；不绕过缓存完整性校验。
 两组文案都为空仍返回 200，前端显示“维护者尚未填写 Agent 介绍和使用场景”。
 只缺一组时只对该区域显示空状态，不生成看似真实的占位能力描述。
@@ -111,12 +111,12 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 
 | 环节 | 已观察行为 | 目标调整 |
 |---|---|---|
-| MateServiceClient.AgentRuntime | 已接收 userCases[] | 不改远端字段，不新增接口 |
-| AgentRuntimeManager.toIdentity / AgentIdentity | 保存 name/displayName/description，不保存 userCases | 在现有 `agent.json` 身份记录中加 userCases[]；列表归一在拥有转换职责的 Service 完成 |
-| AgentRuntimeManager.toRuntime | userCases 固定填 List.of() | 从同一身份记录恢复 userCases，不能静默丢失 |
+| MateServiceClient.AgentRuntime | 已接收 useCases[] | 不改远端字段，不新增接口 |
+| AgentRuntimeManager.toIdentity / AgentIdentity | 保存 name/displayName/description，不保存 useCases | 在现有 `agent.json` 身份记录中加 useCases[]；列表归一在拥有转换职责的 Service 完成 |
+| AgentRuntimeManager.toRuntime | useCases 固定填 List.of() | 从同一身份记录恢复 useCases，不能静默丢失 |
 | PreparedAgentRuntime.metadata | 完整快照的运行时元数据 | 查询 Service 仅复制三个公开介绍字段，不返回完整 metadata |
 
-已确认采用新增可选字段的缓存演进方式：保留现有 schemaVersion，旧缓存缺 userCases 时读为 []，不把“缺场景说明”解释成运行时损坏。
+已确认采用新增可选字段的缓存演进方式：保留现有 schemaVersion，旧缓存缺 useCases 时读为 []，不把“缺场景说明”解释成运行时损坏。
 部署新实现后，通过现有显式刷新流程为需要展示场景的 Agent 重建缓存；刷新失败保留旧缓存，不由 `/help` 偷偷联网补齐。
 因此旧缓存刷新前可能只展示名称/介绍，这一限制必须在发布检查中说明并覆盖测试。
 
@@ -129,7 +129,7 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 | 非空 arguments（如 model）或附件 | 400 INVALID_COMMAND_REQUEST；不回到旧的命令详情分支 |
 | Session 不存在/已删除 | 沿用 404 SESSION_NOT_FOUND；先校验 Session 访问范围 |
 | 无完整 Agent 缓存或元数据不可用 | 沿用当前 Runtime 操作 13 的 422 AGENT_NOT_AVAILABLE，不返回伪造介绍 |
-| 完整缓存但 description/userCases 未填写 | 200，缺失数组为 []；与运行时不可用区分 |
+| 完整缓存但 description/useCases 未填写 | 200，缺失数组为 []；与运行时不可用区分 |
 | 仅 Session 正在运行 | 不返回 SESSION_BUSY，不获取执行容量或写状态 |
 
 不改变既有授权、请求 Header 或 ResultBean 规则。Help 没有模型、Tool 调用，也不将凭据发送到远端。
@@ -138,26 +138,26 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 
 ## 5. 源码证据与设计理由
 
-以下路径相对 pi-mono-java，全部使用本次固定 commit `d8e22562e22ac41ef4bb5cc6b36b576139417bd9`。
+以下路径相对 pi-mono-java，全部使用本次固定 commit `d1cdb708e3e124cae009b10b985f5832b6dbde01`。
 上一份 Builtin 设计的 `d84dd3d6` / `9d0d76f4` 是旧证据点；本次不据它们宣称新核心 SPI 尚未实现。
 
 | 路径与符号 | 源码观察 | 对本设计的影响 |
 |---|---|---|
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java`，AgentRuntime | 已有 displayName/name、description、userCases；也含 systemPrompt 和绑定信息 | 只选公开介绍白名单，不新增远端元数据字段，不直接序列化 AgentRuntime |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java`，AgentRuntime | 已有 displayName/name、description、useCases；也含 systemPrompt 和绑定信息 | 只选公开介绍白名单，不新增远端元数据字段，不直接序列化 AgentRuntime |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java`，prepareCached / loadSnapshot / withAgentLock | 缓存读取不访问 Mate；完整加载包含 system.md 和 Skill 校验；prepareCached 未与 refresh 共用锁 | 不调用模型或刷新；补齐读取/发布互斥，不作“完全不读 prompt 文件”的虚假保证 |
-| 同上，toIdentity:630、toRuntime:646、AgentIdentity:717 | userCases 未落盘，恢复时固定空列表 | 缓存字段往返是 Help 开发的前置验收，而不是只写一个展示 Handler |
+| 同上，toIdentity:630、toRuntime:646、AgentIdentity:717 | useCases 未落盘，恢复时固定空列表 | 缓存字段往返是 Help 开发的前置验收，而不是只写一个展示 Handler |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java`，metadata | 既有不可变快照持有 AgentRuntime | 单次读取后复制白名单字段，避免请求内重复取数 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/execution/CommandExecutionContext.java`，session / catalog | Session 来自同一次 Catalog；注释仍描述 Help 清单 | 保留共享执行上下文，移除 Help 内容对清单的依赖并修订过时注释 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/builtin/BuiltinCommandContributor.java`、`BuiltinCommandDefinition.java`；`command/execution/CommandHandler.java` | 核心 SPI 已存在；该基线未出现 Help Handler/Query Service | 复用 SPI，Help 实现和新响应仍是 待实现 |
 
 - **产品决策**：用户明确将 Help 从命令目录改为当前 Agent 的介绍；不需要引用其他 Harness 的 Help 来证明这一产品选择。
-- **架构变更**：Help 从 Catalog Formatter 改为元数据查询；补齐已有 userCases 的缓存往返和读取/发布互斥，不新增独立存储。
+- **架构变更**：Help 从 Catalog Formatter 改为元数据查询；补齐已有 useCases 的缓存往返和读取/发布互斥，不新增独立存储。
 - **安全加固**：只显示白名单文案，不泄露 Prompt/凭据/绑定细节；元数据按不可信文本渲染，不执行其中指令。
 - **设计理由**：复用作者维护的资料，输出确定、可测试，也不会将未验证的 Tool/Skill 组合宣传成 Agent 已具备的能力。
 
 ## 6. 落地与验收
 
-1. Runtime 元数据切片：保存并恢复 userCases，测试远端元数据 → 发布 → 缓存读取 → 进程重启的完整往返；覆盖旧缓存、空数组、刷新失败。
+1. Runtime 元数据切片：保存并恢复 useCases，测试远端元数据 → 发布 → 缓存读取 → 进程重启的完整往返；覆盖旧缓存、空数组、刷新失败。
 2. Builtin 只读切片：实现 HelpContributor、HelpHandler、AgentHelpQueryService 和 DTO；不依赖 CatalogFormatter，不增加中央名称 switch。
 3. 应用/HTTP 切片：组装 AgentHelpResponseVO，精确断言三个业务字段且无 command/changed/sourceEventSeq；Help 非空参数拒绝；idle/running 内容一致且无副作用。
 4. 展示切片：用途/场景分区，纯文本安全渲染、空状态、错误保留草稿；不创建可恢复消息或自动提交示例。
@@ -165,8 +165,8 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 专项测试至少证明：
 
 - Agent 显示名与 Session 名称不同；displayName 空白回退 name。
-- description/userCases 顺序不变，空白项移除；缺失数组始终 []。
-- 缓存已有非空 userCases 时，重启后 Help 不能变成 []。
+- description/useCases 顺序不变，空白项移除；缺失数组始终 []。
+- 缓存已有非空 useCases 时，重启后 Help 不能变成 []。
 - 一次 Help 查询只取一个完整缓存快照；与并发发布共用 Agent 级锁，不能拼接新旧版本；不调用 refresh、prepare、远端 Mate、模型或工具。
 - 无完整缓存返回现有 422；只有介绍未填写返回 200。
 - 返回不包含 commands、systemPrompt、Agent/Skill ID、版本、路径、绑定信息或凭据。
@@ -189,10 +189,11 @@ mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.2 | 2026-09-22 | 将 Agent 使用场景字段统一为 `useCases`，同步缓存、响应和契约投影。 |
 | 1.2.1 | 2026-09-14 | 集中说明 Help 元数据、缓存和契约投影职责。 |
 | 1.2.0 | 2026-09-07 | Help 返回 AgentHelpResponseVO 的三个业务字段。 |
 | 1.1.3 | 2026-09-07 | 页面直接投影 Runtime 契约，正文保留映射与验收。 |
 | 1.1.2 | 2026-09-07 | Help 描述符不带 input，专项页面与 Runtime 契约同步。 |
 | 1.1.1 | 2026-09-07 | Help 类图只补充元数据与结果投影，整体结构复用 Slash 主图。 |
 | 1.1.0 | 2026-09-04 | Help 支持无参查询、空数组和完整元数据缓存。 |
-| 1.0.0 | 2026-09-04 | 基于 description 与 userCases 定义 Agent 使用指南。 |
+| 1.0.0 | 2026-09-04 | 基于 description 与 useCases 定义 Agent 使用指南。 |
