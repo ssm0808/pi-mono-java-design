@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.15.0 |
-| 状态 | 当前目标；Skill / CallTool、Agent 代理和共用执行适配已在开发提交 c9a2340 实现；参数恢复反馈与可恢复展示待实现，其余能力按源码证据分项判断 |
+| 文档版本 | 2.16.0 |
+| 状态 | 当前目标；Skill / CallTool、Agent 代理和共用执行适配已在开发提交 c9a2340 实现；CallTool 业务参数前置校验、参数恢复反馈与可恢复展示待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-09-22 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [11 个框架工具与业务代理契约](built-in-tool-contracts.md) |
@@ -136,7 +136,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 架构变更 | 框架 profile 与受管业务代理分开装配 | 业务工具共用一个适配实现，不恢复任意 Extension 或运行中热注册 |
 | 架构变更 | Skill 正文与具体工具定义分层披露 | 借鉴 OpenCode 的 Skill 加载，逐工具通过 Read 查看定义，避免一次性展开所有 Skill Schema |
 | 架构改造 | 逐工具并发模式与串行 barrier | 只读工具并行且有副作用工具不跨越顺序边界 |
-| 安全加固 | 注册 Schema 在 hook 前校验；框架外层拒绝未知字段，业务参数遵守业务 Schema | CallTool 外层校验与远端调用前的业务校验分层，复用既有确认生命周期 |
+| 安全加固 | 注册 Schema 与动态业务参数均在交互确认前校验；框架外层拒绝未知字段，业务参数遵守业务 Schema | 明显无效的调用不打扰用户，确认通过后执行同一份已校验快照 |
 | 安全加固 | 每个 Session 固化 Agent 工作区边界 | 阻止本地工具读取兄弟 Agent 或外部路径 |
 | 安全加固 | Find/Grep 不在调用期下载二进制且不回退到 shell | TOB Runtime 的可执行依赖必须在部署和启动期受控 |
 | 安全加固 | 受管树在同级临时目录完整校验后发布 | Session 不读取半成品，refresh 失败保留旧树 |
@@ -252,7 +252,7 @@ public interface BuiltInToolFactory {
 
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L630)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L644)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -281,7 +281,7 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 
 入口选择、消息恢复、事件订阅和最终关闭由 Host 负责。具体创建顺序见[执行细节：Session 创建](execution-details.md#session-creation)；工具集合遵守 §4 的 profile 与绑定规则。
 
-通用业务扩展 hook 可为空；Host 权限与确认 hook 按入口安装。已注册模型工具的输入 Schema 在 before hook 前校验，CallTool 的内部业务参数在请求 Mate 前另行校验。单次调用内按固定列表顺序执行；并行调用可以同时进入同一 handler，因此 handler 必须线程安全。
+通用业务扩展 hook 可为空；Host 权限与确认 hook 按入口安装。已注册模型工具的输入 Schema 先校验；动态入口随后只在当前 Session 的可信绑定范围内解析目标、校验业务参数并形成不可变的 `PreparedToolInvocation`。两类校验都成功后才进入 before hook。确认通过后执行同一份准备结果，不重新解析目标或替换参数。单次调用内按固定列表顺序执行；并行调用可以同时进入同一 handler，因此 handler 必须线程安全。
 
 | Host | 创建时机 | Host 持有 | 关闭时机 |
 |---|---|---|---|
@@ -305,7 +305,7 @@ default ToolExecutionMode executionMode() {
 
 Pipeline 管理单次调用的校验、执行、结果与事件，Host hook 承担权限与必要确认。已解析工具实例的调用顺序、正常返回与提前退出见[执行细节：单次调用](execution-details.md#tool-invocation)；各入口的 hook 接线状态见源码证据。
 
-代理在 Pipeline 校验完整业务 Schema；CallTool 此处只校验固定外层 `{tool,args?}`，内部业务参数在 §9.2 的执行器中校验。Schema 失败在 before hook 前返回，before hook 拒绝或出错在工具执行前返回；这两种情况均不进入 after hook。普通工具执行错误归一化后仍进入 after hook。
+代理在 Pipeline 校验完整业务 Schema；CallTool 先校验固定外层 `{tool,args?}`，再由 §9.2 的准备阶段按可信业务 Schema 校验内部 `args`。任一参数校验失败都在 before hook 前返回，不触发用户确认；before hook 拒绝或出错在业务执行前返回。普通工具执行错误归一化后仍进入 after hook。
 
 Schema、可用性、hook 和工具异常都转换为文本结果及 `isError=true`，不因单个工具失败
 终止完整 Agent loop。取消终止当前 execution，并由 Session/Host 投影统一终态。
@@ -340,7 +340,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 ![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
 
-[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L252)
+[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L258)
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
@@ -355,7 +355,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L893)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L907)
 
 ## 9. 工具注册与发现
 
@@ -381,7 +381,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 `CallTool` 保留 `{tool,args?}`；`args` 省略时使用空对象。当前只解析当前 Agent 直接绑定 Skill 的业务工具，未知名称或同名不同 ID 明确失败；不接收 agentId、skillId、toolId、任意 URL，也不转发框架工具。直接 Agent 工具由其代理调用；同一工具同时来自两个范围时保留两种来源，不能因入口不同绕过权限。
 
-`MateToolAdapter` 和 `CallTool` 共用 `MateToolExecutor`，由可信绑定解析执行目标和业务 Schema，使用现有校验能力检查业务参数并请求 Mate。权限与确认仍由 Host 的既有 before hook 承担，两入口共用可信绑定和权限策略，不把确认生命周期迁入执行器。代理的完整 Schema 进入模型请求；`CallTool` 的固定外层 Schema 不替代业务参数校验。定义文件只是模型说明，不作为执行目标或权限的权威来源。
+`MateToolAdapter` 和 `CallTool` 共用 `MateToolExecutor`。执行分成准备和提交两段：准备段只在当前 Session 的可信绑定范围内解析目标和业务 Schema，校验参数并生成不可变的 `PreparedToolInvocation`；提交段只在 Host before hook 放行后，使用其中固定的工具 ID、定义版本和参数请求 Mate。权限与确认仍由 Host 承担，不迁入执行器。代理的完整 Schema 进入模型请求；`CallTool` 的固定外层 Schema 不替代业务参数校验。定义文件只是模型说明，不作为执行目标或权限的权威来源。
 
 代理传入 Agent 直接关联的业务工具范围，CallTool 传入直接 Skill 关联的业务工具范围；两者经各自的参数转换后委托同一个执行器。目标解析、参数校验、Mate 请求和结果返回见[执行细节：业务执行](execution-details.md#business-execution)。
 
@@ -394,10 +394,11 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 | `MateToolsetFactory` | 共享工厂；按本次执行的 Agent 直接绑定创建代理及执行协作者 |
 | `MateToolAdapter` | 每个 Agent 直接工具一个 Session 实例；提供业务 Schema，委托执行 |
 | `SkillTool` | Session 实例；加载 Skill 内容与抽样资源路径，不注册业务工具 |
-| `CallTool` | Session 实例；受限的名称调用入口，不维护第二套业务执行逻辑 |
-| `MateToolExecutor` | 本次执行内共享；使用可信绑定完成统一业务校验和 Mate 调用 |
+| `CallTool` | Session 实例；受限的名称调用入口，在 hook 前请求准备业务调用，不维护第二套执行逻辑 |
+| `PreparedToolInvocation` | 单次调用不可变快照；固定可信目标、实际校验定义和参数；待实现 |
+| `MateToolExecutor` | 本次执行内共享；准备可信业务调用，并在放行后执行同一快照 |
 
-两类调用都复用原有取消、权限确认、工具结果和凭据规则；框架 Pipeline 在 before hook 前校验框架或代理的参数；CallTool 的业务 args 由共享执行层在远端请求前校验。执行层不重复确认。未知权限或冲突按拒绝处理。内部定义存放、准备和刷新时机不在此冻结。
+两类调用都复用原有取消、权限确认、工具结果和凭据规则。Pipeline 在 before hook 前完成注册 Schema 校验和必要的动态业务准备；执行层不重复确认。准备只允许读取当前可信绑定和无执行凭据的元数据，不产生 Mate execute 请求。未知目标、绑定冲突、无效 Schema 或参数错误直接返回；未知权限按拒绝处理。确认等待期间不得重新解析或修改准备快照。定义文件的生成、同步和刷新时机仍另行设计。
 
 <a id="mate-credential-forwarding"></a>
 
@@ -460,14 +461,16 @@ Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-templat
 
 ### 9.6 参数校验失败的恢复反馈
 
-**状态：待实现。** 本地校验已能在业务请求发出前拒绝错误参数，但当前模型反馈不含工具定义，前端把失败调用统一显示为展开的错误卡片。开发提交 `c9a2340f87bda6dff6bbd352f6995f8551206bb5` 的源码范围、pi 错误结果循环对照及验收边界见[恢复证据](source-evidence.md#argument-recovery-evidence)。
+**状态：待实现。** 本地校验已能在业务请求发出前拒绝错误参数，但 CallTool 的业务参数当前在 Host 确认之后才校验；模型反馈不含工具定义，前端也把失败调用统一显示为展开的错误卡片。开发提交 `c9a2340f87bda6dff6bbd352f6995f8551206bb5`、pi 与 DeepSeek Harness 的实际顺序及验收边界见[校验链路证据](source-evidence.md#tool-validation-order-evidence)。
+
+以园区告警查询为例：模型选择已经关联的 `query-device-alarm`，但漏传 `deviceId`。系统先在可信 Skill 绑定内找到该工具并校验参数；因为参数无效，直接把字段错误和同次工具定义返回模型，不弹出确认，也不请求 Mate。模型补全 `deviceId` 后发起新调用；参数有效时才按绑定权限放行或询问用户，用户同意后执行刚才准备的同一份调用快照。
 
 首次本地参数校验失败时，模型收到字段错误及本次校验使用的完整输入定义，明确业务操作尚未执行。修正后的参数由模型发起一次新的调用；运行时不自行改参数、补业务值或重放请求。成功结果不重复附带定义，也不要求每次调用前重新发现工具。该恢复机制不依赖定义来自文件还是搜索结果，不增加模型工具集合或已加载工具状态。
 
 | 校验位置 | 给模型的修正依据 | 业务执行边界 |
 |---|---|---|
 | Pipeline 校验 `CallTool` 外层参数 | 已注册的 `CallTool` 固定输入定义及字段错误 | 尚未进入 Host hook；不因模型填写的目标名称读取未授权业务定义 |
-| `MateToolExecutor` 校验业务 `args` | 同一个可信 `ResolvedTool` 的名称、说明、完整 `inputSchema` 及字段错误 | 已按原流程通过 Host 检查，但尚未调用 Mate execute |
+| 准备阶段校验 `CallTool` 业务 `args` | 同一个可信 `ResolvedTool` 的名称、说明、完整 `inputSchema` 及字段错误 | 尚未进入 Host hook；不触发确认，也不调用 Mate execute |
 | Agent 直接代理在 Pipeline 校验参数 | 本次已注册的代理输入定义及字段错误 | 同样保留参数失败分类，不另建远端执行链 |
 
 恢复信息进入模型可见的 `ToolResultMessage.content`，不能只放在 `details`；Pipeline 的异常归一化和 after hook 不能丢失它或将失败改记为成功。内部 `details.errorCode` 保留既有 `TOOL_ARGUMENTS_INVALID`，`isError=true`。具体模型结果格式由[工具契约 §4.2.1](built-in-tool-contracts.md#call-tool-recovery-result)维护。宿主使用既有 JSON/Schema 能力实现，不新增 Maven 依赖。
@@ -476,13 +479,13 @@ Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-templat
 
 Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `agent.tool_result`、`isError` 和稳定 `errorCode`；精确公共契约仍由 [M06](../01-CampusClaw多Agent运行时/事件契约/common.json)维护，不向公共错误正文复制模型恢复定义。前端仅对有明确 `TOOL_ARGUMENTS_INVALID` 分类的本地失败采用[可恢复展示](../../07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)：同根仍在处理时弱化中间失败，详细记录可展开；根终态不继续显示“正在调整”，也不按后续同名工具成功覆盖旧调用。
 
-该架构变更保留工具错误进入模型循环的语义，让修正信息在第一次失败时就可用；前端展示属于产品约束。代价是失败结果增加定义文本和一次模型修正调用；不能据此承诺首次调用正确、完全无等待感知或量化成功率。验收分别覆盖模型反馈、零业务执行和前端状态，不把隐藏失败样式当作调用质量提升。
+该架构变更以 pi 的“准备与校验先于 before hook”为主基线；DeepSeek Harness 当前 alpha 实现把 policy/ask 放在工具包装器参数校验之前，说明这不是所有 Agent 的统一固定顺序。CampusClaw 选择前置业务校验，是减少无效确认的 ToB 产品约束，同时用不可变准备快照避免确认前后目标或参数漂移。代价是 Pipeline 增加准备阶段，失败结果增加定义文本和一次模型修正调用；不能据此承诺首次调用正确、完全无等待感知或量化成功率。
 
 ## 10. Child Agent Execution
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L419)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L425)
 
 模型只使用：
 
@@ -558,7 +561,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L705)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L719)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
@@ -580,7 +583,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L761)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L775)
 
 压缩由公共 ManagedAgentSession 管理，Runtime、Child 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
 
@@ -633,6 +636,8 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - Child 缺省无 `Agent`，Cron 缺省无 `Cron`；
 - 同一入口连续创建两个 Session，工具实例不同且应用协作者可安全共享；
 - Schema 在 before hook 前校验，hook 顺序固定；
+- CallTool 在 before hook 前完成可信目标准备和业务参数校验；参数错误不创建确认记录，Mate execute 请求数为零；
+- before hook 和实际执行使用同一个不可变准备快照；确认等待期间目标、定义和参数不得重新解析或替换；
 - `P,P,S,P,P` 形成两个并行段和一个 barrier，结果保持原始顺序；
 - Schema、hook、工具异常成为文本结果和 `isError=true`。
 
@@ -661,7 +666,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - Skill 初始目录只披露元数据；`Skill` 输出正文、基础目录和最多 10 条抽样路径，不展开文件或增加工具；
 - 普通 `Read` 可读取单个定义，正文无需逐文件引用；工具定义遗忘后仍可定位并重读；
 - `CallTool` 仅解析 Skill 范围，拒绝未知、冲突和框架工具目标；同名同 ID 去重；
-- 两个入口业务 Schema 校验与 ALLOW/ASK/DENY 一致，失败不产生 Mate 执行请求；
+- 两个入口业务 Schema 校验与 ALLOW/ASK/DENY 一致；参数失败不进入 ASK/DENY 交互，也不产生 Mate 执行请求；
 - 首次参数校验失败即带可用的字段错误和同次输入定义，经过 Pipeline、持久化恢复及 Provider 映射后仍对模型可见；校验失败的 Mate execute 请求数为零；
 - 外层格式错误只返回固定入口定义；越权、未知名称、Schema 无效、远端失败与结果未知不误归为可恢复参数错误；超大定义明确标记不完整；
 - 前端按稳定错误码区分纠参过程，保留每个 callId 的真实失败记录；终态、断线与刷新后不残留虚假的“正在调整”，实际执行错误仍可见；
@@ -707,6 +712,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.16.0 | 2026-09-22 | CallTool 在交互确认前准备并校验业务调用，确认后执行同一不可变快照。 |
 | 2.15.0 | 2026-09-22 | 首次参数校验失败向模型提供同次工具定义，前端区分可恢复纠参与真实执行失败。 |
 | 2.14.6 | 2026-09-21 | Skill 关联工具调用改为中性占位名称的四步说明，删除课程查询时序图。 |
 | 2.14.5 | 2026-09-21 | 使用“关联的业务工具”描述配置关系，明确关联不等于执行授权。 |

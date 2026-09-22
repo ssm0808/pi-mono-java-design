@@ -7,11 +7,13 @@
 ' Incremental source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java: execute
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolExecutor.java: executeAgent, executeSkill, validateArguments
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java: beforeToolCall
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/skill/SkillTool.java: execute
+' Baseline evidence (pi 95fbc04997eaee961eb673fa7923e9220609ebd5):
+' packages/agent/src/agent-loop.ts: prepareToolCall, executePreparedToolCall
 ' Observed behavior: framework assembly, direct Agent adapters, Skill loading and shared Mate execution exist.
-' Design reason: one remote executor supports direct Agent adapters and progressive Skill calls.
-' Permission and confirmation remain in Host hooks; execution does not duplicate them.
-' Pending implementation: definition feedback for invalid arguments and recoverable client presentation.
+' Design reason: validate and freeze a trusted invocation before Host confirmation, then execute the same snapshot.
+' Pending implementation: PreparedToolInvocation, pre-confirmation business validation, recovery feedback and client presentation.
 title Tool System - Complete Target Structure
 top to bottom direction
 skinparam backgroundColor white
@@ -44,6 +46,7 @@ package "Execution - new objects per Session" {
   class "PreparedAgentRuntime" as Runtime <<immutable>>
   class "Ordered hook chain" as Hooks <<immutable>>
   class "ToolExecutionPipeline" as Pipeline
+  class "PreparedToolInvocation\n(Pending implementation)" as Prepared <<immutable>>
   class "SessionCompactor" as Compactor
 }
 package "Model tools - per Session" {
@@ -88,6 +91,9 @@ Session *-- "1" Hooks
 Session *-- "0..*" Tool
 Pipeline --> Hooks
 Pipeline --> Tool
+Pipeline *-- "0..1 per call" Prepared
+Tool .[#346DA5].> Prepared : prepares
+Prepared -[#346DA5]-> Executor : executes frozen call
 ToolFactory ..> Tool
 Local ..|> Tool
 Skill .[#346DA5].|> Tool
@@ -122,7 +128,7 @@ CallTool uses Skill bindings; adapters use direct Agent bindings.
 Runtime: eleven framework tools plus direct Agent adapters.
 Cron and Child exclude the three interaction tools.
 Blue relations highlight shared business execution at Java c9a2340f.
-Argument recovery feedback and client presentation: Pending implementation.
+Prepared invocation, argument recovery and client presentation: Pending implementation.
 Metadata synchronization is designed separately.
 Interaction tools are implemented at Java 8c5fda1d; details in the Plan Mode topic.
 endlegend
@@ -361,57 +367,57 @@ autonumber
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolAdapter.java: execute
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolExecutor.java: executeAgent, executeSkill, execute, validateArguments
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java: callTool
-' Observed behavior: both entry types share trusted resolution, business argument validation and one Mate request; failures currently omit the definition.
-' Design reason: return the definition used by this validation only to the model; keep Host hooks and remote failure categories unchanged.
-' Pending implementation: first-failure recovery content and TOOL_ARGUMENTS_INVALID preservation through normalization and after hooks.
+' Baseline evidence (pi 95fbc04997eaee961eb673fa7923e9220609ebd5):
+' packages/agent/src/agent-loop.ts: prepareToolCall, executePreparedToolCall
+' Auxiliary evidence (DSH c36a83ff6bb95e3f82cf79f9be7c724270a8aa61, alpha):
+' packages/core/tools/src/index.ts: prepareExecution, dispatchToolBody
+' packages/core/tools/src/schema.ts: defineTool
+' Observed behavior: CallTool business validation currently runs inside execute after Host hooks.
+' Design reason: reject invalid business args before confirmation and execute the exact prepared snapshot after approval.
+' Pending implementation: PreparedToolInvocation, pre-confirmation validation, recovery content and stable error preservation.
 ' Stable block identity retained for existing document links.
-title Shared Business Execution and Argument Recovery
+title Shared Business Call Preparation and Execution
 
 participant "Invocation pipeline\nToolExecutionPipeline" as Pipeline
-participant "Business tool instance\ntool : AgentTool" as Tool
 participant "Shared executor\nMateToolExecutor" as Executor
+participant "Host-provided\nhook chain" as Hooks
 participant "Mate client\nMateToolClient" as Client
 participant "Mate service" as Mate
 
-Pipeline -> Tool ++ : execute(callId, args, ...)
-alt tool is MateToolAdapter
-  Tool -> Tool : Use the bound business name\nand direct arguments
-else tool is CallTool
-  Tool -> Tool : Read tool / args;\ndefault omitted args to an empty object
-end
-Tool -> Executor ++ : business name, args, entry binding scope
-Executor -> Executor : Resolve trusted target and input schema
-alt target resolution fails
-  Executor --> Tool : target error; no execute request
-else target resolves
-  Executor -> Executor : Validate business args using ResolvedTool
-  alt arguments fail validation
-    Executor --> Tool : argument error with recovery content [P]
-    note right of Executor
-      Pending implementation [P]: on the first failure,
-      return field errors and the same trusted
-      name, description and complete inputSchema.
-      State that business execution did not occur.
-      Definition goes only to model-visible content.
-    end note
-  else schema is invalid
-    Executor --> Tool : schema error; no recovery definition
-  else arguments are valid
+note over Pipeline, Executor
+  Agent adapter: direct bound target and business args.
+  CallTool: Skill-scoped name and args after outer validation.
+end note
+Pipeline -> Executor ++ : prepare trusted business call [P]
+Executor -> Executor : Resolve target and validate business args
+alt preparation fails
+  Executor --> Pipeline -- : isError=true; no confirmation or execute
+  note over Pipeline, Executor
+    Parameter errors include the same trusted definition [P].
+    Unknown target and invalid schema keep separate errors.
+  end note
+else preparation succeeds
+  Executor --> Pipeline -- : immutable PreparedToolInvocation [P]
+  Pipeline -> Hooks ++ : authorize prepared target; confirm if ASK
+  Hooks --> Pipeline -- : allow, deny or hook error
+  alt denied, cancelled or hook failed
+    Pipeline -> Pipeline : Return error; do not execute
+  else allowed
+    Pipeline -> Executor ++ : executePrepared(same target and args) [P]
     Executor -> Client ++ : callTool(ID, args, credentials)
     Client -> Mate ++ : one execute request
     Mate --> Client -- : business result or service error
     Client --> Executor -- : result or call error
-    Executor --> Tool : business result or execution error
+    Executor --> Pipeline -- : business result or execution error
   end
 end
-deactivate Executor
-Tool --> Pipeline -- : result or execution exception
 
-note over Pipeline, Tool
-  Expands execute in execution details, section 3.
-  Registered-schema validation and before hooks passed.
+note over Pipeline, Hooks
+  Registered outer-schema validation already passed.
+  Preparation is side-effect free and uses no execution credentials.
+  Confirmation and execution share one immutable snapshot [P].
   Recovery content and isError=true survive normalization
-  and after hooks [P]. Public errors omit the definition.
+  [P]. Public errors omit the definition.
   The model corrects args in a new call; no automatic replay.
 end note
 @enduml
@@ -516,15 +522,18 @@ autonumber
 ' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: resolveToolCallsSafe, runToolPhase
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: execute, validate, applyBeforeHook, invokeTool, applyAfterHook
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java: beforeToolCall
-' Observed behavior: schema validation precedes before hooks; blocked calls return before execution and after hooks.
-' Design reason: keep common lifecycle separate from business delegation; cancellation propagates to the execution scope.
-' Pending implementation: return the registered input definition and field errors on argument failure; preserve recovery content and error classification through after hooks.
-title One Tool Call: Validation, Host Hooks and Execution
+' Baseline evidence (pi 95fbc04997eaee961eb673fa7923e9220609ebd5):
+' packages/agent/src/agent-loop.ts: prepareToolCall, executePreparedToolCall
+' Observed behavior: registered schema validation precedes before hooks; CallTool inner validation currently does not.
+' Design reason: every invalid argument path returns before user confirmation; approval executes one immutable prepared call.
+' Pending implementation: tool preparation, CallTool pre-confirmation validation and recovery content preservation.
+title One Tool Call: Validation, Preparation, Host Hooks and Execution
 
 participant "Agent loop\nAgentLoop" as Loop
 participant "Invocation pipeline\nToolExecutionPipeline" as Pipeline
-participant "Host-provided\nhook chain" as Hooks
 participant "Resolved tool instance\ntool : AgentTool" as Tool
+participant "Host-provided\nhook chain" as Hooks
+participant "Prepared invocation\nPreparedToolInvocation" as Prepared
 
 Loop -> Pipeline ++ : execute(tool, call, args, ...)
 Pipeline -> Pipeline : Validate args against tool.parameters
@@ -534,18 +543,23 @@ end
 break input schema is invalid
   Pipeline --> Loop : error ToolResultMessage; no recovery definition
 end
-Pipeline -> Hooks ++ : Run ordered before hooks
-Hooks -> Hooks : Check permission; request confirmation if needed
+Pipeline -> Tool ++ : prepare(callId, validated args) [P]
+Tool --> Pipeline -- : prepared invocation or preparation error [P]
+break trusted resolution or business validation fails
+  Pipeline --> Loop : isError=true; no confirmation;\nno business execution [P]
+end
+Pipeline -> Hooks ++ : Run ordered before hooks for prepared target
+Hooks -> Hooks : Check permission; request confirmation if ASK
 Hooks --> Pipeline -- : allow, deny or hook error
 break denied or before hook failed
   Pipeline --> Loop : error ToolResultMessage
 end
 Pipeline -> Pipeline : Publish tool execution start
-Pipeline -> Tool ++ : execute(callId, args, ...)
-ref over Tool
+Pipeline -> Prepared ++ : execute()
+ref over Prepared
   Business execution (execution details, section 4)
 end ref
-Tool --> Pipeline -- : tool result or execution exception
+Prepared --> Pipeline -- : tool result or execution exception
 Pipeline -> Pipeline : Normalize result and isError
 Pipeline -> Hooks ++ : Run ordered after hooks
 Hooks --> Pipeline -- : retained or adjusted result

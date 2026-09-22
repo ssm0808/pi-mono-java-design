@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.1.0 |
-| 状态 | 目标设计；Skill、CallTool 与 Agent 直接工具代理已在 c9a2340 开发提交实现；参数恢复反馈待实现，其余状态见源码证据 |
+| 文档版本 | 3.2.0 |
+| 状态 | 目标设计；Skill、CallTool 与 Agent 直接工具代理已在 c9a2340 开发提交实现；CallTool 业务参数前置校验与参数恢复反馈待实现，其余状态见源码证据 |
 | 更新日期 | 2026-09-22 |
 | CampusClaw 注册与发现核验基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
@@ -36,7 +36,7 @@
 
 框架工具输入 Schema 均为 JSON Schema 2020-12 对象 Schema，并显式设置
 `additionalProperties: false`。默认值由工具或 Service 统一归一化，不在 Schema 中写
-`default`。Pipeline 先校验当前模型工具的输入 Schema，再进入 before hook、执行、after hook 和事件投影：Agent 代理校验完整业务 Schema，`CallTool` 在此只校验 `tool/args` 外层 Schema。
+`default`。Pipeline 先校验当前模型工具的输入 Schema；动态入口再完成可信目标准备和业务参数校验，之后才进入 before hook、执行、after hook 和事件投影。Agent 代理的注册 Schema 已是完整业务 Schema；`CallTool` 还必须在 hook 前校验所选业务工具的 `args`。
 
 所有工具最终统一产生 `ToolResultMessage`：
 
@@ -244,12 +244,12 @@ Skill、CallTool 与代理的基本调用已在开发提交 `c9a2340` 实现；�
 # Skill: course
 Skill instructions...
 
-Base directory for this skill: /.../.campusclaw/skills/course
+Base directory for this skill: /.../.campusclaw/skills/facility-operations
 Relative resource paths are relative to this base directory.
 Note: file list is sampled.
 
 <skill_files>
-<file>/.../.campusclaw/skills/course/references/query-course.json</file>
+<file>/.../.campusclaw/skills/facility-operations/references/query-device-alarm.json</file>
 </skill_files>
 </skill_content>
 ```
@@ -260,12 +260,12 @@ Skill 业务工具定义以单文件 `references/<toolName>.json` 提供：
 
 ```json
 {
-  "name": "query-course",
-  "description": "查询课程",
+  "name": "query-device-alarm",
+  "description": "查询园区设备告警",
   "inputSchema": {
     "type": "object",
-    "properties": {"courseName": {"type": "string"}},
-    "required": ["courseName"],
+    "properties": {"deviceId": {"type": "string"}},
+    "required": ["deviceId"],
     "additionalProperties": false
   }
 }
@@ -291,7 +291,9 @@ Skill 业务工具定义以单文件 `references/<toolName>.json` 提供：
 
 `args` 缺省时归一化为空对象。宿主按可信绑定解析当前 Agent 直接绑定 Skill 的工具；模型不传 Skill、scope、tool ID 或 URL。不解析仅与 Agent 直接关联的业务工具，不转发 `Read`、`Skill`、`Agent` 等框架工具；同一工具同时属于 Agent 和 Skill 时仍须满足 Skill 关联的业务工具范围。
 
-权限与确认继续由 Host before hook 执行；两种入口使用同一可信绑定解析和 `RuntimeToolPermissionPolicy`。`MateToolExecutor` 负责可信解析、业务 Schema 校验和 Mate 调用；`CallTool.args` 的业务校验在 execute 内完成，只要求发生在实际 HTTP 调用前，不改变确认生命周期。未知名称、歧义名称、未绑定、拒绝或参数错误均返回 `isError=true`；不能依据模型传入的定义文件内容扩展可调用范围。是否已读取 Skill 或定义文件不作为授权条件。
+权限与确认继续由 Host before hook 执行；两种入口使用同一可信绑定和 `RuntimeToolPermissionPolicy`。`CallTool` 在进入 hook 前调用共享执行层完成可信解析和业务 Schema 校验，生成不可变的准备快照；hook 只对该快照中的目标作出决定，放行后 `MateToolExecutor` 使用同一工具 ID、定义版本和参数调用 Mate。未知名称、歧义名称、未绑定、无效 Schema 或参数错误均返回 `isError=true`，且不触发用户确认或 Mate execute；权限拒绝发生在参数有效之后。不能依据模型传入的定义文件内容扩展可调用范围。是否已读取 Skill 或定义文件不作为授权条件。
+
+准备阶段只能读取当前 Session 已加载的直接 Skill 绑定及无执行凭据的可信元数据。它不能接受模型提供的 ID、URL 或 Schema，不能调用业务 execute，也不能在确认等待后重新解析目标。该阶段及 `PreparedToolInvocation` 为待实现；开发提交 `c9a2340` 的现状仍是在 Host hook 之后由 `CallTool.execute` 校验业务参数。
 
 实际 Mate execute 只发出一次；超时、断线或业务失败不自动重放。可用条件：当前受管 Agent、可信直接 Skill 工具绑定、共享 Mate 执行能力及当前 Host execution 上下文。
 
@@ -304,17 +306,17 @@ Skill 业务工具定义以单文件 `references/<toolName>.json` 提供：
 ```json
 {
   "code": "TOOL_ARGUMENTS_INVALID",
-  "tool": "query-course",
+  "tool": "query-device-alarm",
   "execution": "not_started",
-  "errors": [{"path": "/courseName", "message": "缺少必填的课程名称"}],
+  "errors": [{"path": "/deviceId", "message": "缺少必填的设备标识"}],
   "definitionComplete": true,
   "definition": {
-    "name": "query-course",
-    "description": "查询课程",
+    "name": "query-device-alarm",
+    "description": "查询园区设备告警",
     "inputSchema": {
       "type": "object",
-      "properties": {"courseName": {"type": "string", "description": "待查询的课程名称"}},
-      "required": ["courseName"],
+      "properties": {"deviceId": {"type": "string", "description": "园区设备唯一标识"}},
+      "required": ["deviceId"],
       "additionalProperties": false
     }
   }
@@ -333,7 +335,7 @@ Skill 业务工具定义以单文件 `references/<toolName>.json` 提供：
 
 宿主通过 `MateToolsetFactory` 对 Agent 直接关联的每个业务工具实例化同一种 `MateToolAdapter implements AgentTool`，以实际 `name`、`description`、`inputSchema` 加入模型工具集合。业务 Schema 保留原义，不套用 `CallTool` 的 `tool/args` 外壳，也不为每个业务工具新增 Java 类或本地业务实现。
 
-代理与 `CallTool` 共享 `MateToolExecutor` 的可信解析、业务 Schema 校验和 Mate 调用；权限与确认仍接入 Host before hook，默认串行执行。框架名称保留，同名同 ID 的业务工具可去重，同名不同 ID 或与框架重名必须明确失败，不能静默覆盖或自动改名。仅由 Skill 关联的业务工具不创建模型代理；读取 Skill 或定义文件不触发注册。
+代理与 `CallTool` 共享 `MateToolExecutor` 的可信解析、业务 Schema 校验和 Mate 调用；两者都在参数有效后接入 Host before hook，默认串行执行。框架名称保留，同名同 ID 的业务工具可去重，同名不同 ID 或与框架重名必须明确失败，不能静默覆盖或自动改名。仅由 Skill 关联的业务工具不创建模型代理；读取 Skill 或定义文件不触发注册。
 
 ### 4.4 凭据边界
 
@@ -415,6 +417,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.2.0 | 2026-09-22 | CallTool 业务参数校验前移到交互确认之前，并以不可变准备快照衔接授权与执行。 |
 | 3.1.0 | 2026-09-22 | 定义本地参数校验失败的模型恢复结果，保留公共错误分类与业务未执行边界。 |
 | 3.0.2 | 2026-09-21 | 业务工具关系统一表述为关联，执行权限规则保持独立。 |
 | 3.0.1 | 2026-09-21 | 明确显式空配置完全不提供模型工具，配置项缺失采用默认值。 |

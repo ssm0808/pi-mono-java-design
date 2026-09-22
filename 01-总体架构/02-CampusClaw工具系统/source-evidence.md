@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.7.0；整理日期：2026-09-22。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `12244d49576d17239e21c6e75e542fd61c69b826`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的专项核验见 §8，文档组织与图形选择见 §10，参数纠正与用户展示的最新专项核验见 §11。
+版本：1.8.0；整理日期：2026-09-22。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `9f83dc1771500ace26360c0982cb1954e2f37de4`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的专项核验见 §8，文档组织与图形选择见 §10，参数纠正与用户展示见 §11，参数校验、确认与执行的顺序见 §12。
 
 | 基线 | 提交 |
 |---|---|
@@ -306,3 +306,39 @@ Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codinga
 完整定义反馈属于 **CampusClaw 架构变更**：在 pi 的“错误作为工具结果进入后续模型上下文”基础上，减少模型再次查找定义的步骤。可恢复过程展示属于**产品约束**，减少用户阅读中间失败的负担；可信绑定、权限保持原有产品约束及安全边界。每次补回定义会增加上下文和等待成本，准确率、减少轮次数及用户体验改善仍需实际验收，不能作为已证明效果。
 
 实现状态：本地业务参数拒绝、Pipeline 外层稳定参数错误码、工具错误入上下文与后续 Loop 已在本分支实现；完整定义反馈、业务内层参数错误的稳定分类及对应实时/历史前端展示均为 **待实现**。本次仅静态源码核验和设计证据补充，未运行 pi、Java、真实模型或 Mate 联调测试。后续验收至少覆盖首次失败即回传同次完整定义、业务执行次数为零、模型下一次请求收到恢复正文、修正后沿原权限链执行、失败记录与成功记录均保留、重新读取历史保持相同分类，以及最终未修复和真实失败不会被隐藏。
+
+<a id="tool-validation-order-evidence"></a>
+
+## 12. 参数校验、确认与执行顺序（2026-09-22）
+
+本节只核验工具调用从参数进入到业务执行的先后关系。2026-09-22 重新确认 pi 默认分支为 `main`，隔离 fetch 后读取 `95fbc04997eaee961eb673fa7923e9220609ebd5`，`packages/agent/package.json` 版本为 `0.87.0`；该提交与 §11 相同，本次重新读取相关符号。DeepSeek Harness 默认分支为 `master`，隔离 fetch 后读取 `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`，`packages/core/tools/package.json` 版本为 `0.1.7-alpha.1`。两者均为当日默认分支源码快照，不等于稳定发布。
+
+CampusClaw 继续读取开发提交 `c9a2340f87bda6dff6bbd352f6995f8551206bb5`，不把开发分支行为表述为 main 已实现。Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`；其余路径相对 `pi-mono-java`。
+
+### 12.1 已观察顺序
+
+| 基线与源码符号 | 已观察顺序 | 设计含义 |
+|---|---|---|
+| pi `packages/agent/src/agent-loop.ts` · `prepareToolCallArguments`、`prepareToolCall`、`executePreparedToolCall`；`packages/ai/src/utils/validation.ts` · `validateToolArguments` | 可选参数准备 → 注册 Schema 校验与转换 → `beforeToolCall` → `tool.execute` → `afterToolCall`；校验异常直接形成 `isError=true` 结果，不进入 before hook | pi 明确提供“参数有效后再执行 hook”的主基线；其 `prepareArguments` 只返回参数，未解决 CampusClaw 动态代理需要固定业务目标的问题 |
+| DeepSeek Harness `packages/core/tools/src/index.ts` · `ToolRuntime.prepareExecution`、`dispatchToolBody`；`packages/core/tools/src/schema.ts` · `defineTool` | 创建执行快照 → `tools/pre-execute` policy/ask → dispatch → `defineTool.execute` 包装器校验参数 → 用户业务实现；参数无效时用户业务实现不运行，但 ask 已可能发生 | 当前 alpha 实现证明基线间没有统一固定顺序；其注册表、policy 与工具包装器边界不能直接作为 CampusClaw 的强制规范 |
+| CampusClaw `modules/agent-core/.../ToolExecutionPipeline.java` · `execute`、`validate`、`applyBeforeHook` | 注册工具 Schema 校验 → before hook → `tool.execute` → after hook | Agent 直接代理的完整业务 Schema 在确认前校验，符合目标主顺序 |
+| CampusClaw R `runtimeapi/runtime/RuntimeActiveExecution.java` · `beforeToolCall`；`RuntimeToolPermissionPolicy.java` · `decide` | before hook 按 `CallTool.arguments.tool` 得到 ALLOW/ASK/DENY；ASK 会进入确认处理 | hook 只检查可信绑定与权限，不校验 `args` 的业务 Schema |
+| CampusClaw R `tool/mate/CallTool.java` · `execute`；`MateToolExecutor.java` · `executeSkill`、`execute`、`validateArguments` | `CallTool` 外层 Schema 校验 → Host 权限/确认 → `CallTool.execute` → 可信解析与业务参数校验 → Mate execute | 业务参数虽然在远端请求前拒绝，但无效调用可能先产生用户确认；这与本次目标顺序存在明确实现差距 |
+
+### 12.2 CampusClaw 目标与原因
+
+CampusClaw 选择 pi 的前置校验顺序作为 Runtime 主基线，并增加适合动态业务代理的不可变准备结果：
+
+1. Pipeline 校验已注册工具的外层或完整 Schema；
+2. 工具准备本次调用。`CallTool` 只在当前 Session 的直接 Skill 绑定内解析业务目标，使用可信 Schema 校验 `args`，生成包含目标 ID、定义版本和参数的不可变 `PreparedToolInvocation`；
+3. 参数失败直接向模型返回 `isError=true`、字段错误及同次可信定义，不创建用户确认，不发送 Mate execute；
+4. 参数有效后，Host 依据准备结果中的可信目标执行 ALLOW/ASK/DENY；
+5. 放行后执行同一个准备结果，结果进入既有 after hook、模型上下文和持久化投影。
+
+该顺序不是声称所有 Agent 都如此，而是 **pi 主基线 + CampusClaw ToB 产品约束 + 安全加固**。业务参数明显无效时不应打扰园区运维人员；确认前后复用同一不可变目标和参数，避免等待期间重新解析造成身份、Schema 或参数漂移。准备阶段不得携带执行凭据、调用 Mate execute、接受模型提供的 ID/URL/Schema，未知或不可见名称也不得借错误反馈泄露定义。
+
+### 12.3 实现差距与验收
+
+`AgentTool` 当前只有 `execute`，`ToolExecutionPipeline` 也没有工具准备阶段；`MateToolExecutor` 把解析、校验和远端执行放在同一个私有 `execute` 中。因此 `PreparedToolInvocation`、准备失败结果、prepared target 向 before hook 的只读传递，以及确认后执行同一快照均为 **待实现**。现有外层 Pipeline 校验、权限策略、用户确认、业务参数拒绝和 Mate 调用分别已实现，不能因目标增量把它们整体标为待实现。
+
+实现验收至少覆盖：外层错误不解析业务目标；业务缺必填、类型或枚举错误不创建确认记录且 Mate execute 为零；合法 ASK 只确认一次；批准后只执行准备时固定的工具 ID 和参数；确认等待期间刷新或元数据变化不替换本次快照；拒绝和取消不执行；参数错误的模型反馈保留 `isError=true` 与同次定义；未知目标、无效 Schema、权限拒绝和远端失败保持各自分类。本节为静态源码核验，未运行 pi、DSH、Java、真实模型或 Mate 联调测试。
