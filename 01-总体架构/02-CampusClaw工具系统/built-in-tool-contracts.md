@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.0.2 |
-| 状态 | 目标设计；Skill、CallTool 与 Agent 直接工具代理待实现，其余状态见源码证据 |
-| 更新日期 | 2026-09-21 |
+| 文档版本 | 3.1.0 |
+| 状态 | 目标设计；Skill、CallTool 与 Agent 直接工具代理已在 c9a2340 开发提交实现；参数恢复反馈待实现，其余状态见源码证据 |
+| 更新日期 | 2026-09-22 |
 | CampusClaw 注册与发现核验基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
@@ -15,7 +15,7 @@
 | OpenCode 对照基线 | `849c2598abc7d2b40261e74b5826bc74ffc78308` |
 | 上位设计 | [工具系统主设计](README.md) |
 
-目标框架工具共 11 项，Agent 直接关联的业务工具代理不计入此数量。`Skill` 替代发现入口 `ListMateTools`，`CallTool` 替代 `CallMateTool`；二者及代理装配均待实现。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
+目标框架工具共 11 项，Agent 直接关联的业务工具代理不计入此数量。`Skill` 替代发现入口 `ListMateTools`，`CallTool` 替代 `CallMateTool`；二者及代理装配已在开发提交 `c9a2340` 实现，定义文件生成与同步仍待实现。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
 
 提问工具的精确 Schema、问题/答案与等待边界见 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)。Runtime 默认在 ExitPlanMode、TodoUpdate 后追加它；Child/Cron 不装配，两模式工具定义相同。
 
@@ -220,7 +220,7 @@ Cron Host 独立设计；当前 JSON 存储、进程内 scheduler 和 OS CLI 调
 
 ## 4. Skill 与受管业务工具
 
-本节为待实现契约。工具定义如何生成、同步、刷新及维持版本一致性留后续设计；不改变 `skill.json` 的位置，不在这里指定缓存、single-flight 或自动刷新策略。
+Skill、CallTool 与代理的基本调用已在开发提交 `c9a2340` 实现；§4.2.1 的恢复反馈待实现。工具定义如何生成、同步、刷新及维持版本一致性留后续设计；不改变 `skill.json` 的位置，不在这里指定缓存、single-flight 或自动刷新策略。
 
 ### 4.1 `Skill`
 
@@ -295,6 +295,40 @@ Skill 业务工具定义以单文件 `references/<toolName>.json` 提供：
 
 实际 Mate execute 只发出一次；超时、断线或业务失败不自动重放。可用条件：当前受管 Agent、可信直接 Skill 工具绑定、共享 Mate 执行能力及当前 Host execution 上下文。
 
+<a id="call-tool-recovery-result"></a>
+
+#### 4.2.1 参数错误的模型反馈
+
+本节为待实现增量。首次本地参数校验失败返回 `isError=true`，模型可见的文本 `content` 包含以下 JSON；它是工具反馈，不是公共 HTTP ResultBean 或 `agent.tool_result` 的新增字段：
+
+```json
+{
+  "code": "TOOL_ARGUMENTS_INVALID",
+  "tool": "query-course",
+  "execution": "not_started",
+  "errors": [{"path": "/courseName", "message": "缺少必填的课程名称"}],
+  "definitionComplete": true,
+  "definition": {
+    "name": "query-course",
+    "description": "查询课程",
+    "inputSchema": {
+      "type": "object",
+      "properties": {"courseName": {"type": "string", "description": "待查询的课程名称"}},
+      "required": ["courseName"],
+      "additionalProperties": false
+    }
+  }
+}
+```
+
+`errors[].path` 使用相对当前被校验参数对象的 JSON Pointer，根路径为空字符串；错误文案保留字段与约束，不复制原始敏感参数值。`definition` 必须来自本次校验使用的已注册定义或可信业务解析结果，不能重新查询另一版本。业务 `args` 失败使用业务名称和 Schema；`CallTool` 外层失败使用 `tool="CallTool"` 及固定外层定义，不解析未经准入的业务目标。
+
+完整定义包含必要的字段说明和引用依赖。若超出既有工具输出预算，省略 `definition`，令 `definitionComplete=false` 并附非空 `message` 指引按准确工具名重新读取完整定义；不能截断 Schema 或用不完整片段标记为完整。成功结果不回传定义，名称不存在、权限拒绝、Schema 自身无效和远端调用失败不返回本格式。
+
+`details.errorCode` 同时保留既有 `TOOL_ARGUMENTS_INVALID`，用于 Runtime 公开错误分类；恢复 JSON 必须进入模型可见的 `content`。公开流与历史仍按既有安全规则生成本地化错误正文，不复制本段 JSON。保存和恢复模型历史应保留这些修正依据。框架统一异常路径须保留错误状态与恢复内容，不能只输出错误码或把携带定义的返回当作成功。
+
+宿主调用说明要求模型根据反馈重新构造参数，不猜测字段、不原样重试；定义未完整提供时先重新读取。自动反馈不触发自动执行，不新增发现凭证、help 模式或调用字段；完整执行及展示规则见[主设计 §9.6](README.md#tool-argument-recovery)。
+
 ### 4.3 Agent 直接工具代理
 
 宿主通过 `MateToolsetFactory` 对 Agent 直接关联的每个业务工具实例化同一种 `MateToolAdapter implements AgentTool`，以实际 `name`、`description`、`inputSchema` 加入模型工具集合。业务 Schema 保留原义，不套用 `CallTool` 的 `tool/args` 外壳，也不为每个业务工具新增 Java 类或本地业务实现。
@@ -348,7 +382,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 ## 6. 缺省 profile
 
-配置项缺失时使用下表默认值；显式 `[]` 时完全不向模型提供工具，模型请求的 `tools=[]`；非空数组完全替换框架工具缺省值，并在装配开关与绑定约束允许时追加当前 Agent 直接关联的业务工具代理，代理追加行为待实现。完整配置规则见[主设计 §4.2](README.md#42-工具配置)。
+配置项缺失时使用下表默认值；显式 `[]` 时完全不向模型提供工具，模型请求的 `tools=[]`；非空数组完全替换框架工具缺省值，并在装配开关与绑定约束允许时追加当前 Agent 直接关联的业务工具代理，该装配已在开发提交 `c9a2340` 实现。完整配置规则见[主设计 §4.2](README.md#42-工具配置)。
 
 | 工具 | Runtime | Cron | Child Agent |
 |---|:---:|:---:|:---:|
@@ -381,6 +415,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.1.0 | 2026-09-22 | 定义本地参数校验失败的模型恢复结果，保留公共错误分类与业务未执行边界。 |
 | 3.0.2 | 2026-09-21 | 业务工具关系统一表述为关联，执行权限规则保持独立。 |
 | 3.0.1 | 2026-09-21 | 明确显式空配置完全不提供模型工具，配置项缺失采用默认值。 |
 | 3.0.0 | 2026-09-20 | Agent 直接工具采用元数据代理，Skill 工具经 Skill、Read 与 CallTool 按需发现调用。 |

@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.2 |
-| 更新日期 | 2026-09-21 |
+| 文档版本 | 1.1.0 |
+| 更新日期 | 2026-09-22 |
 | 主设计 | [CampusClaw 工具系统设计](README.md) |
-| 源码基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，具体路径与符号见[源码证据 §9](source-evidence.md#sequence-evidence) |
-| 实现状态 | 公共 Session 工厂、Pipeline 与分段调度已有实现；Skill / CallTool、Agent 业务代理及共用执行适配待实现 |
+| 源码基线 | `c9a2340f87bda6dff6bbd352f6995f8551206bb5` 开发提交；本页重核验 Session 创建、工具装配、Pipeline、业务执行及分段调度，具体路径与符号见[源码证据 §9](source-evidence.md#sequence-evidence)和[恢复证据](source-evidence.md#argument-recovery-evidence) |
+| 实现状态 | 公共 Session 工厂、工具装配、Skill / CallTool、Agent 业务代理、共用执行及分段调度已在核验开发提交实现；首次参数失败的定义反馈与可恢复展示待实现 |
 
 本页展开主设计的执行顺序，依次说明 Session 创建、工具装配、单次调用、业务执行与批次调度。图中待实现部分均有标记；工具配置、权限、凭据、工作区和名称解析规则仍由主设计及[精确契约](built-in-tool-contracts.md)维护。
 
@@ -20,9 +20,9 @@
 
 ![公共 Session 创建](agent_session_assembly.svg)
 
-[PlantUML 源码：`agent_session_assembly`](diagram.puml#L140) · [原尺寸 SVG](agent_session_assembly.svg)
+[PlantUML 源码：`agent_session_assembly`](diagram.puml#L144) · [原尺寸 SVG](agent_session_assembly.svg)
 
-`AgentSessionFactory.create` 先调用 `AgentRuntimeManager.prepare(agentId)`，取得受管运行时快照，再校验运行条件、解析可用模型并准备工作区与工具装配上下文。工具列表由下节的装配过程返回；Factory 随后配置 Agent 的模型、工具、SYSTEM 和 hook，创建独立的 `ManagedAgentSession` 并交还 Host。
+`AgentSessionFactory.create` 先调用 `AgentRuntimeManager.prepare(agentId)`，取得受管运行时快照，再校验运行条件、解析可用模型，准备工作区、可用时的 Session 级 Mate 状态及工具装配上下文。工具列表由下节的装配过程返回；Factory 随后配置 Agent 的模型、工具、SYSTEM 和 hook，创建独立的 `ManagedAgentSession` 并交还 Host。
 
 工具装配或运行条件校验失败时，创建失败并返回 Host，不继续发起模型请求。创建成功后，消息恢复、事件订阅和最终关闭仍由 Host 接续；各入口的职责边界见[主设计 §6](README.md#6-公共轻量-agentsession)。
 
@@ -34,11 +34,11 @@
 
 ![初始工具集合装配](tool_set_assembly.svg)
 
-[PlantUML 源码：`tool_set_assembly`](diagram.puml#L195) · [原尺寸 SVG](tool_set_assembly.svg)
+[PlantUML 源码：`tool_set_assembly`](diagram.puml#L196) · [原尺寸 SVG](tool_set_assembly.svg)
 
-装配器读取入口 profile。显式 `[]` 直接返回空集合，完全不向模型提供工具；配置项缺失时先采用默认值。有效配置非空时先检查目标名称冲突，再经 `BuiltInToolFactory` 创建框架工具，并按当前 Agent 直接绑定调用 `MateToolsetFactory` 创建业务代理。冲突使装配失败，不返回部分列表。框架工厂仍可通过上下文中的 Host 工厂回调创建宿主相关工具。
+装配器读取入口 profile。显式 `[]` 直接返回空集合，完全不向模型提供工具；配置项缺失时先采用默认值。有效配置非空时先经 `BuiltInToolFactory` 创建框架工具，再通过上下文中的 `MateToolSessionState` 创建当前 Agent 直接绑定的业务代理；该状态及共享执行器由 `MateToolsetFactory` 在本次 Session 创建时准备。完整列表形成后校验重名和框架保留名冲突；冲突使装配失败，不返回部分列表。框架工厂仍可通过上下文中的 Host 工厂回调创建宿主相关工具。
 
-返回的列表用于配置 Agent 并提供给模型。仅由 Skill 关联的业务工具不在这里展开 Schema 或创建代理；同时与 Agent 直接关联的业务工具按直接关联路径装配。读取 Skill 正文或定义文件不触发本图再次装配。业务代理及新增框架入口的装配接线待实现，具体 profile 与冲突规则见[主设计 §4](README.md#4-关闭的公共接口与配置)。
+返回的列表用于配置 Agent 并提供给模型。仅由 Skill 关联的业务工具不在这里展开 Schema 或创建代理；同时与 Agent 直接关联的业务工具按直接关联路径装配。读取 Skill 正文或定义文件不触发本图再次装配。业务代理及 Skill / CallTool 的装配接线已在核验开发提交实现，具体 profile 与冲突规则见[主设计 §4](README.md#4-工具集合与入口配置)。
 
 <a id="tool-invocation"></a>
 
@@ -48,11 +48,13 @@
 
 ![单次工具调用生命周期](tool_invocation_pipeline.svg)
 
-[PlantUML 源码：`tool_invocation_pipeline`](diagram.puml#L480) · [原尺寸 SVG](tool_invocation_pipeline.svg)
+[PlantUML 源码：`tool_invocation_pipeline`](diagram.puml#L496) · [原尺寸 SVG](tool_invocation_pipeline.svg)
 
 Pipeline 先校验已注册工具的输入 Schema，再调用 before hook；允许执行后才发出执行开始事件并调用 `tool.execute`。工具返回结果或抛出普通执行异常后，Pipeline 归一化结果，进入 after hook，最后发出结束事件并返回结果。
 
-Schema 校验失败在 before hook 前返回；before hook 拒绝或出错在工具执行前返回。这两条提前返回路径均不进入 after hook。普通工具执行错误仍进入 after hook；取消向上终止当前 execution，不作为普通工具失败继续处理。
+参数校验失败或输入 Schema 本身无效均在 before hook 前返回；before hook 拒绝或出错在工具执行前返回。这两条提前返回路径均不进入 after hook。普通工具执行错误仍进入 after hook；取消向上终止当前 execution，不作为普通工具失败继续处理。
+
+首次参数校验失败的目标行为是：在模型可见的结果正文中返回字段错误及本次注册定义，明确业务未执行，并保留 `isError=true` 和 `TOOL_ARGUMENTS_INVALID`；这项反馈增量待实现。输入 Schema 本身无效沿用配置错误分类，不混入参数恢复。定义仅用于模型修正，不复制到公共错误正文。
 
 Agent 业务代理的注册 Schema 包含完整业务参数；`CallTool` 在此只校验固定外层参数，其内部业务参数在下一节的执行器中校验。后者只保证发生在远端请求之前，不改变 Host 的确认顺序；规则见[主设计 §7](README.md#7-pipelinehook-与批量调度)。
 
@@ -64,11 +66,13 @@ Agent 业务代理的注册 Schema 包含完整业务参数；`CallTool` 在此�
 
 ![业务工具共用远端执行](call_mate_tool_sequence.svg)
 
-[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L341) · [原尺寸 SVG](call_mate_tool_sequence.svg)
+[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L340) · [原尺寸 SVG](call_mate_tool_sequence.svg)
 
 代理使用已绑定的业务名称和直接参数；`CallTool` 解析外层名称与参数。两者分别携带 Agent 直接关联的业务工具范围、直接 Skill 关联的业务工具范围，委托同一个 `MateToolExecutor` 完成可信目标解析、业务 Schema 校验和 Mate 调用。解析或校验失败时返回错误，不进入 HTTP 执行；成功时由 Mate client 发出请求并返回结果。
 
-该共用执行适配待实现。执行器不接管 Host 的权限与确认，不把模型读到的定义文件作为执行目标或权限依据。精确调用范围、参数、失败处理和[凭据](README.md#mate-credential-forwarding)由[主设计 §9.2](README.md#92-calltool-与-agent-代理)及工具契约维护。
+共用执行适配已在核验开发提交实现，恢复反馈仍待实现。目标是在首次业务参数校验失败时，使用同一个可信 `ResolvedTool` 返回字段错误及完整名称、说明和 `inputSchema`，明确本次业务请求尚未发出。该内容通过 Pipeline 归一化和 after hook 后仍进入模型上下文，错误标记与分类不得被改成成功；模型自行修正参数并发起新的调用。目标解析失败、无效 Schema 与远端错误保持各自分类；请求发出后不自动重放，也不能宣称业务未执行。精确反馈和截断边界见[主设计 §9.6](README.md#tool-argument-recovery)。
+
+执行器不接管 Host 的权限与确认，不把模型读到的定义文件作为执行目标或权限依据。精确调用范围、参数、失败处理和[凭据](README.md#mate-credential-forwarding)由[主设计 §9.2](README.md#92-calltool-与-agent-代理)及工具契约维护。
 
 <a id="batch-scheduling"></a>
 
@@ -78,8 +82,8 @@ Agent 业务代理的注册 Schema 包含完整业务参数；`CallTool` 在此�
 
 ![批次并行与串行屏障](tool_batch_scheduling.svg)
 
-[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L538) · [原尺寸 SVG](tool_batch_scheduling.svg)
+[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L563) · [原尺寸 SVG](tool_batch_scheduling.svg)
 
 调度器把连续 `PARALLEL` 调用组成并行段，等待整段完成后再执行后续调用；每个 `SEQUENTIAL` 调用构成屏障。因此前两个调用可并行，`CallTool` 等待它们完成后执行，最后两个调用再组成新的并行段。工具模式的权威清单见[主设计 §7](README.md#7-pipelinehook-与批量调度)。
 
-图中异步任务及其 Future 合并表示：任务 #2 可以先于 #1 完成并保存结果，但调度器先等待 Future #1，再读取 Future #2 的已完成结果。第二段同理；任务完成顺序不会改变返回结果的输入顺序。分段调度已在核验提交实现，`CallTool` 等新入口的接入待实现。
+图中异步任务及其 Future 合并表示：任务 #2 可以先于 #1 完成并保存结果，但调度器先等待 Future #1，再读取 Future #2 的已完成结果。第二段同理；任务完成顺序不会改变返回结果的输入顺序。分段调度与 `CallTool` 的串行入口均已在核验开发提交实现。

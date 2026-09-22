@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.14.6 |
-| 状态 | 当前目标；Skill / CallTool、Agent 工具代理及共用执行适配待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-09-21 |
+| 文档版本 | 2.15.0 |
+| 状态 | 当前目标；Skill / CallTool、Agent 代理和共用执行适配已在开发提交 c9a2340 实现；参数恢复反馈与可恢复展示待实现，其余能力按源码证据分项判断 |
+| 更新日期 | 2026-09-22 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [11 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -45,7 +45,7 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 
 [PlantUML 源码：`tool_system_architecture`](diagram.puml#L1) · [原尺寸 SVG](tool_system_architecture.svg)
 
-主图保留 Host、公共 Session、工具接口和外部执行边界。新增 `MateToolAdapter` 与 `CallTool` 共用 `MateToolExecutor`，不同的是模型定义的披露方式；`SkillTool` 与只读文件工具共用工作区边界，读取不承担工具注册。标记 `[P]` 的节点及蓝色关系待实现。
+主图保留 Host、公共 Session、工具接口和外部执行边界。`MateToolAdapter` 与 `CallTool` 共用 `MateToolExecutor`，不同的是模型定义的披露方式；`SkillTool` 与只读文件工具共用工作区边界，读取不承担工具注册。源码状态按专项核验范围标注；参数恢复反馈是执行路径的待实现增量，不增加新的执行入口。
 
 <a id="initial-model-tools"></a>
 
@@ -244,7 +244,7 @@ public interface BuiltInToolFactory {
 `SubagentExecutionService` 等应用协作者可以共享，但每个 `AgentTool` 实例必须按 Session
 新建。任何工具不得把 agentId、工作区、凭据或绑定写入 Spring 单例。
 
-`ConfiguredToolAssembler` 先装配框架工具，再委托 `MateToolsetFactory` 按 Agent 直接绑定创建 `MateToolAdapter`；每个绑定一个实例，不为每个业务能力编写 Java 类。装配前检查工具名与框架名冲突、同名不同 ID 冲突，禁止覆盖。不同入口只使用自己的受管 Agent 绑定。新增装配待实现，不新增 Maven 依赖。
+`ConfiguredToolAssembler` 先装配框架工具，再委托 `MateToolsetFactory` 按 Agent 直接绑定创建 `MateToolAdapter`；每个绑定一个实例，不为每个业务能力编写 Java 类。返回候选列表前检查工具名与框架名冲突、同名不同 ID 冲突，禁止覆盖；失败不向模型提供部分列表。不同入口只使用自己的受管 Agent 绑定。该装配已在开发提交 `c9a2340` 实现，不新增 Maven 依赖。
 
 `assemble` 输入已准备的入口与上下文，输出本 Session 的工具实例列表；失败不返回部分列表。框架工厂可通过上下文中的 Host 工厂回调创建宿主相关工具。完整对象交互见[执行细节：工具装配](execution-details.md#tool-assembly)。
 
@@ -252,7 +252,7 @@ public interface BuiltInToolFactory {
 
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L606)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L630)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -310,7 +310,7 @@ Pipeline 管理单次调用的校验、执行、结果与事件，Host hook 承�
 Schema、可用性、hook 和工具异常都转换为文本结果及 `isError=true`，不因单个工具失败
 终止完整 Agent loop。取消终止当前 execution，并由 Session/Host 投影统一终态。
 
-连续 `PARALLEL` 调用组成并行段，等待整段完成后才能执行下一个串行调用或并行段；每个 `SEQUENTIAL` 调用是 barrier。每个调用仍执行完整 Pipeline，结果按输入顺序汇总。具体并行与等待过程见[执行细节：批次调度](execution-details.md#batch-scheduling)。分段调度已在核验提交实现，CallTool 等新入口接入待实现。
+连续 `PARALLEL` 调用组成并行段，等待整段完成后才能执行下一个串行调用或并行段；每个 `SEQUENTIAL` 调用是 barrier。每个调用仍执行完整 Pipeline，结果按输入顺序汇总。具体并行与等待过程见[执行细节：批次调度](execution-details.md#batch-scheduling)。分段调度已有实现；开发提交 `c9a2340` 的 CallTool 使用同一 Pipeline。
 
 ## 8. 统一受管目录与刷新
 
@@ -340,7 +340,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 ![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
 
-[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L253)
+[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L252)
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
@@ -355,7 +355,7 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L869)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L893)
 
 ## 9. 工具注册与发现
 
@@ -385,9 +385,9 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 代理传入 Agent 直接关联的业务工具范围，CallTool 传入直接 Skill 关联的业务工具范围；两者经各自的参数转换后委托同一个执行器。目标解析、参数校验、Mate 请求和结果返回见[执行细节：业务执行](execution-details.md#business-execution)。
 
-逐工具读取减少无关定义并提供重读入口，不保证模型永不遗忘。定义不可读或参数校验失败应返回明确错误；模型按错误补充读取、修正参数。读取 Skill/JSON 不是授权状态，不增加已加载工具集合。实际执行请求一经发出，超时、断连和 Mate 错误均不自动重放。
+逐工具读取减少无关定义并提供重读入口，不保证模型永不遗忘。首次本地参数校验失败即按 [§9.6](#tool-argument-recovery)返回修正依据，模型据此重新构造参数；定义不可读时仍返回明确错误。读取 Skill/JSON 不是授权状态，不增加已加载工具集合。实际执行请求一经发出，超时、断连和 Mate 错误均不自动重放。
 
-注册与发现的最小结构如下，新增类与接线均待实现：
+注册与发现的最小结构如下；Skill、CallTool、代理及共用执行适配已在开发提交 `c9a2340` 实现，定义文件生成与同步仍待实现：
 
 | 组件 | 职责与生命周期 |
 |---|---|
@@ -456,11 +456,33 @@ Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-templat
 
 `CallTool` 是后端中立的模型入口名；`MateToolClient` 保留 Mate 适配职责。更名不改变远端 HTTP endpoint 或凭据约定。
 
+<a id="tool-argument-recovery"></a>
+
+### 9.6 参数校验失败的恢复反馈
+
+**状态：待实现。** 本地校验已能在业务请求发出前拒绝错误参数，但当前模型反馈不含工具定义，前端把失败调用统一显示为展开的错误卡片。开发提交 `c9a2340f87bda6dff6bbd352f6995f8551206bb5` 的源码范围、pi 错误结果循环对照及验收边界见[恢复证据](source-evidence.md#argument-recovery-evidence)。
+
+首次本地参数校验失败时，模型收到字段错误及本次校验使用的完整输入定义，明确业务操作尚未执行。修正后的参数由模型发起一次新的调用；运行时不自行改参数、补业务值或重放请求。成功结果不重复附带定义，也不要求每次调用前重新发现工具。该恢复机制不依赖定义来自文件还是搜索结果，不增加模型工具集合或已加载工具状态。
+
+| 校验位置 | 给模型的修正依据 | 业务执行边界 |
+|---|---|---|
+| Pipeline 校验 `CallTool` 外层参数 | 已注册的 `CallTool` 固定输入定义及字段错误 | 尚未进入 Host hook；不因模型填写的目标名称读取未授权业务定义 |
+| `MateToolExecutor` 校验业务 `args` | 同一个可信 `ResolvedTool` 的名称、说明、完整 `inputSchema` 及字段错误 | 已按原流程通过 Host 检查，但尚未调用 Mate execute |
+| Agent 直接代理在 Pipeline 校验参数 | 本次已注册的代理输入定义及字段错误 | 同样保留参数失败分类，不另建远端执行链 |
+
+恢复信息进入模型可见的 `ToolResultMessage.content`，不能只放在 `details`；Pipeline 的异常归一化和 after hook 不能丢失它或将失败改记为成功。内部 `details.errorCode` 保留既有 `TOOL_ARGUMENTS_INVALID`，`isError=true`。具体模型结果格式由[工具契约 §4.2.1](built-in-tool-contracts.md#call-tool-recovery-result)维护。宿主使用既有 JSON/Schema 能力实现，不新增 Maven 依赖。
+
+定义来自本次可信解析或已注册工具，不能回显模型传入的 Schema、凭据、内部 ID、原始异常栈或不可见工具信息。正常大小的定义完整返回，保留字段说明和引用依赖；输出预算不足时明确说明定义未完整提供并指引重新读取，不能把截断 JSON 当作完整定义。仅参数校验失败适用本规则；名称不可用、权限拒绝、无效工具 Schema、远端业务错误及结果未知各自保留原分类。请求已发出后的超时不标记为未执行。
+
+Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `agent.tool_result`、`isError` 和稳定 `errorCode`；精确公共契约仍由 [M06](../01-CampusClaw多Agent运行时/事件契约/common.json)维护，不向公共错误正文复制模型恢复定义。前端仅对有明确 `TOOL_ARGUMENTS_INVALID` 分类的本地失败采用[可恢复展示](../../07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)：同根仍在处理时弱化中间失败，详细记录可展开；根终态不继续显示“正在调整”，也不按后续同名工具成功覆盖旧调用。
+
+该架构变更保留工具错误进入模型循环的语义，让修正信息在第一次失败时就可用；前端展示属于产品约束。代价是失败结果增加定义文本和一次模型修正调用；不能据此承诺首次调用正确、完全无等待感知或量化成功率。验收分别覆盖模型反馈、零业务执行和前端状态，不把隐藏失败样式当作调用质量提升。
+
 ## 10. Child Agent Execution
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L403)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L419)
 
 模型只使用：
 
@@ -536,7 +558,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L681)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L705)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
@@ -558,7 +580,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L737)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L761)
 
 压缩由公共 ManagedAgentSession 管理，Runtime、Child 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
 
@@ -640,6 +662,10 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - 普通 `Read` 可读取单个定义，正文无需逐文件引用；工具定义遗忘后仍可定位并重读；
 - `CallTool` 仅解析 Skill 范围，拒绝未知、冲突和框架工具目标；同名同 ID 去重；
 - 两个入口业务 Schema 校验与 ALLOW/ASK/DENY 一致，失败不产生 Mate 执行请求；
+- 首次参数校验失败即带可用的字段错误和同次输入定义，经过 Pipeline、持久化恢复及 Provider 映射后仍对模型可见；校验失败的 Mate execute 请求数为零；
+- 外层格式错误只返回固定入口定义；越权、未知名称、Schema 无效、远端失败与结果未知不误归为可恢复参数错误；超大定义明确标记不完整；
+- 前端按稳定错误码区分纠参过程，保留每个 callId 的真实失败记录；终态、断线与刷新后不残留虚假的“正在调整”，实际执行错误仍可见；
+- 用缺必填项、类型、枚举、嵌套结构等错误验证第一次反馈足以修正，记录首次失败后的调用次数、重复错误比例及额外 token；效果尚未经真实模型验证；
 - Agent、Skill 和 Tool metadata 发现请求精确不含四项执行凭据 Header；
 - MateToolExecutor 与 Model Manager、受管 Runtime 共用 CampusMate scheme/host/port；
 - 顶层 `mate`、`mate.endpoints.*`、`mate.tool.enabled` 与 `MATE_*` 应用变量已删除；
@@ -662,6 +688,8 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ## 14. 实施顺序
 
+参数恢复增量按执行器生成反馈 → Pipeline/Provider 保留模型内容与稳定分类 → Runtime 保存和安全投影 → 前端分类展示的顺序实施；模型修正仍走普通工具循环。此增量不依赖工具定义文件生成或未来发现入口的实施。
+
 1. 更新框架清单、`Skill` / `CallTool` 契约及宿主提示词，保留三入口空 profile 语义；
 2. 实现工作区边界、只读工具和受管树链接校验；
 3. 完成逐工具 batch planner、严格 Schema 和 hook 顺序；
@@ -679,6 +707,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.15.0 | 2026-09-22 | 首次参数校验失败向模型提供同次工具定义，前端区分可恢复纠参与真实执行失败。 |
 | 2.14.6 | 2026-09-21 | Skill 关联工具调用改为中性占位名称的四步说明，删除课程查询时序图。 |
 | 2.14.5 | 2026-09-21 | 使用“关联的业务工具”描述配置关系，明确关联不等于执行授权。 |
 | 2.14.4 | 2026-09-21 | 明确显式空配置完全不提供模型工具，并区分配置缺失时的默认值。 |

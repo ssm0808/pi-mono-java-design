@@ -4,11 +4,14 @@
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: executeAll
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java: create
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolsetFactory.java: createSession
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute
-' Observed behavior: closed framework assembly and generic Mate calls already exist.
+' Incremental source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java: execute
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolExecutor.java: executeAgent, executeSkill, validateArguments
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/skill/SkillTool.java: execute
+' Observed behavior: framework assembly, direct Agent adapters, Skill loading and shared Mate execution exist.
 ' Design reason: one remote executor supports direct Agent adapters and progressive Skill calls.
 ' Permission and confirmation remain in Host hooks; execution does not duplicate them.
-' Pending implementation: SkillTool, CallTool, MateToolAdapter, MateToolExecutor and their marked wiring.
+' Pending implementation: definition feedback for invalid arguments and recoverable client presentation.
 title Tool System - Complete Target Structure
 top to bottom direction
 skinparam backgroundColor white
@@ -37,7 +40,7 @@ package "Execution - new objects per Session" {
   class "ManagedAgentSession" as Session
   class "ToolAssemblyContext" as Context <<immutable>>
   class "AgentWorkspaceBoundary" as Workspace <<immutable>>
-  class "MateToolExecutor [P]" as Executor
+  class "MateToolExecutor" as Executor
   class "PreparedAgentRuntime" as Runtime <<immutable>>
   class "Ordered hook chain" as Hooks <<immutable>>
   class "ToolExecutionPipeline" as Pipeline
@@ -47,9 +50,9 @@ package "Model tools - per Session" {
   interface "AgentTool" as Tool
   class "ExitPlanMode / TodoUpdate /\nAskUserQuestion" as InteractionTools <<3 implementations>>
   class "Read / Find / Grep / Ls" as Local <<4 implementations>>
-  class "SkillTool [P]" as Skill
-  class "CallTool [P]" as Call
-  class "MateToolAdapter [P]" as Adapter <<one per direct binding>>
+  class "SkillTool" as Skill
+  class "CallTool" as Call
+  class "MateToolAdapter" as Adapter <<one per direct binding>>
   class Cron
   class "Agent" as ChildTool
 }
@@ -111,14 +114,15 @@ Session -[hidden]down-> Local
 legend bottom left
 All nodes and relations describe target assembly.
 Hosts own persistence, output and close policy.
-Model tools = framework profile + direct Agent adapters [P].
-Skill loading never registers its business tools [P].
+Model tools = framework profile + direct Agent adapters.
+Skill loading never registers its business tools.
 Commands use their own HTTP boundary and never enter the model list.
-Skill resources disclose one business definition at a time [P].
-CallTool uses Skill bindings; adapters use direct Agent bindings [P].
-Runtime: eleven framework tools plus direct Agent adapters [P].
+Skill resources disclose one business definition at a time.
+CallTool uses Skill bindings; adapters use direct Agent bindings.
+Runtime: eleven framework tools plus direct Agent adapters.
 Cron and Child exclude the three interaction tools.
-[P] nodes and blue relations = Pending implementation.
+Blue relations highlight shared business execution at Java c9a2340f.
+Argument recovery feedback and client presentation: Pending implementation.
 Metadata synchronization is designed separately.
 Interaction tools are implemented at Java 8c5fda1d; details in the Plan Mode topic.
 endlegend
@@ -139,7 +143,7 @@ Slash -[hidden]down-> SlashHandlers
 
 @startuml agent_session_assembly
 skinparam backgroundColor white
-skinparam defaultFontName "PingFang SC"
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
@@ -156,45 +160,42 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
-
+' Source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java: create, configureAgent, applyPrompt
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java: prepare
-' Observed behavior: the common factory prepares the runtime, configures an Agent, then creates its ManagedAgentSession.
+' Observed behavior: the common factory prepares runtime and per-session Mate state, configures an Agent, then creates its ManagedAgentSession.
 ' Design reason: show the common creation boundary; entry-specific admission and lifecycle are outside this interaction.
-' Pending implementation: new Skill/CallTool entries and direct business adapters, expanded in tool_set_assembly.
-' Chinese labels are explicitly requested for these sequence diagrams on 2026-09-21.
-title 创建一次执行的 Session
+title Create One Execution Session
 
-participant "入口宿主\nHost" as Host
-participant "Session 工厂\nAgentSessionFactory" as Factory
-participant "受管运行时\nAgentRuntimeManager" as Manager
-participant "工具装配器\nConfiguredToolAssembler" as Tools
+participant "Entry Host" as Host
+participant "Session factory\nAgentSessionFactory" as Factory
+participant "Managed runtime\nAgentRuntimeManager" as Manager
+participant "Tool assembler\nConfiguredToolAssembler" as Tools
 
-Host -> Factory ++ : create(request)\n入口、Agent 与本次执行上下文
+Host -> Factory ++ : create(request)\nEntry, Agent and execution context
 Factory -> Manager ++ : prepare(agentId)
-Manager --> Factory -- : 已验证的运行时快照
-Factory -> Factory : 校验运行条件，解析模型\n构造工作区边界与工具上下文
+Manager --> Factory -- : validated runtime snapshot
+Factory -> Factory : Validate execution and resolve model;\ncreate workspace, Mate state and tool context
 Factory -> Tools ++ : assemble(entryPoint, context)
 ref over Factory, Tools
-  工具集合装配（实现说明 §2）
+  Tool set assembly (execution details, section 2)
 end ref
-Tools --> Factory -- : 本 Session 的工具实例列表
-Factory -> Factory : 创建 Agent，安装模型、工具、\n有序钩子与 SYSTEM 提示词
-create participant "本次执行的 Session\nManagedAgentSession" as Session
+Tools --> Factory -- : tool instances for this Session
+Factory -> Factory : Create Agent; install model, tools,\nordered hooks and SYSTEM prompt
+create participant "Execution Session\nManagedAgentSession" as Session
 Factory -> Session ++ : new(runtime, agent, tools, ...)
-Session --> Factory -- : 创建完成
-Factory --> Host -- : 新的 Session 实例
+Session --> Factory -- : created
+Factory --> Host -- : new Session instance
 
 note over Host, Factory
-  成功路径；宿主已选定入口。
-  创建失败直接返回宿主，不进入模型执行。
+  Success path; the Host has chosen the entry point.
+  Creation errors return to the Host before inference.
 end note
 @enduml
 
 @startuml tool_set_assembly
 skinparam backgroundColor white
-skinparam defaultFontName "PingFang SC"
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
@@ -211,42 +212,40 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
-
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultConfiguredToolAssembler.java: assemble
+' Source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultConfiguredToolAssembler.java: assemble, validateNames
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultBuiltInToolFactory.java: create, contextualTool
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolsetFactory.java: createSession
-' Observed behavior: the assembler currently maps framework profiles only; contextual tools use Host-provided factories.
-' Design reason: separate framework construction from direct Agent adapters, retaining the explicit empty profile.
-' Pending implementation: name-conflict checks, Skill/CallTool entries, and direct Agent adapter construction.
-title 装配初始工具集合（含待实现增量）
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionState.java: createAgentToolAdapters
+' Observed behavior: framework tools and direct Agent adapters are created before name validation; an explicit empty profile returns immediately.
+' Design reason: validate the complete list before exposing it, while Skill-only schemas stay outside initial assembly.
+title Assemble the Initial Tool Set
 
-participant "Session 工厂\nAgentSessionFactory" as Factory
-participant "工具装配器\nConfiguredToolAssembler" as Assembler
-participant "框架工具工厂\nBuiltInToolFactory" as BuiltIn
-participant "业务工具工厂\nMateToolsetFactory" as MateFactory
+participant "Session factory\nAgentSessionFactory" as Factory
+participant "Tool assembler\nConfiguredToolAssembler" as Assembler
+participant "Framework factory\nBuiltInToolFactory" as BuiltIn
+participant "Per-session Mate state\nMateToolSessionState" as MateFactory
 
 Factory -> Assembler ++ : assemble(entryPoint, context)
-Assembler -> Assembler : 读取入口 profile
-alt profile 显式为空
-  Assembler --> Factory : 空列表（不追加业务代理）
-else profile 非空
-  Assembler -> Assembler : 检查框架名与业务绑定名冲突\n【待实现】
-  loop profile 中的每个框架名称
+Assembler -> Assembler : Read entry profile
+alt profile is explicitly empty
+  Assembler --> Factory : empty list; no business adapters
+else profile is non-empty
+  loop each framework name in profile
     Assembler -> BuiltIn ++ : create(name, context)
-    BuiltIn --> Assembler -- : 本 Session 的框架工具实例
+    BuiltIn --> Assembler -- : per-session framework tool
   end
-  opt Mate 装配已启用且存在 Agent 直接绑定
-    Assembler -> MateFactory ++ : 按 Agent 直接绑定创建代理\n【待实现】
-    MateFactory --> Assembler -- : 每个绑定一个 MateToolAdapter
+  opt Mate session state is available
+    Assembler -> MateFactory ++ : createAgentToolAdapters()
+    MateFactory --> Assembler -- : one adapter per direct Agent binding
   end
-  Assembler --> Factory : 框架实例与业务代理的有序列表
+  Assembler -> Assembler : Validate duplicate names and\nreserved framework name conflicts
+  Assembler --> Factory : ordered framework tools and adapters
 end
 deactivate Assembler
 
 note over Assembler, MateFactory
-  仅由 Skill 绑定的工具，其业务 Schema 不进入此列表。
-  Skill / CallTool 框架入口接线及业务代理待实现。
+  Skill-only business schemas never enter this list.
+  A name conflict fails assembly; no partial list is exposed.
 end note
 @enduml
 
@@ -340,7 +339,7 @@ end note
 
 @startuml call_mate_tool_sequence
 skinparam backgroundColor white
-skinparam defaultFontName "PingFang SC"
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
@@ -357,46 +356,63 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
-
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallMateTool.java: execute
+' Source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java: execute
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolAdapter.java: execute
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolExecutor.java: executeAgent, executeSkill, execute, validateArguments
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java: callTool
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeToolPermissionPolicy.java: decide
-' Observed behavior: a single CallMateTool wrapper currently resolves names and calls Mate.
-' Design reason: business entry instances use one executor; registered-schema validation and Host hooks belong to the parent interaction.
-' Pending implementation: MateToolAdapter, CallTool, MateToolExecutor and their permission wiring.
+' Observed behavior: both entry types share trusted resolution, business argument validation and one Mate request; failures currently omit the definition.
+' Design reason: return the definition used by this validation only to the model; keep Host hooks and remote failure categories unchanged.
+' Pending implementation: first-failure recovery content and TOOL_ARGUMENTS_INVALID preservation through normalization and after hooks.
 ' Stable block identity retained for existing document links.
-title 两类业务工具共用远端执行（待实现）
+title Shared Business Execution and Argument Recovery
 
-participant "调用流水线\nToolExecutionPipeline" as Pipeline
-participant "本次业务工具实例\ntool : AgentTool" as Tool
-participant "共享业务执行器\nMateToolExecutor" as Executor
-participant "Mate 客户端\nMateToolClient" as Client
-participant "Mate 服务" as Mate
+participant "Invocation pipeline\nToolExecutionPipeline" as Pipeline
+participant "Business tool instance\ntool : AgentTool" as Tool
+participant "Shared executor\nMateToolExecutor" as Executor
+participant "Mate client\nMateToolClient" as Client
+participant "Mate service" as Mate
 
 Pipeline -> Tool ++ : execute(callId, args, ...)
-alt tool 是 MateToolAdapter
-  Tool -> Tool : 采用代理绑定的业务名称\n参数为直接调用参数
-else tool 是 CallTool
-  Tool -> Tool : 读取 tool / args\nargs 省略时使用空对象
+alt tool is MateToolAdapter
+  Tool -> Tool : Use the bound business name\nand direct arguments
+else tool is CallTool
+  Tool -> Tool : Read tool / args;\ndefault omitted args to an empty object
 end
-Tool -> Executor ++ : 业务名称、参数、入口绑定范围
-Executor -> Executor : 解析可信 ID 与业务 Schema\n校验业务参数
-alt 目标解析或业务参数校验失败
-  Executor --> Tool : 明确的执行错误
-else 目标与参数有效
-  Executor -> Client ++ : callTool(ID, args, credentials)
-  Client -> Mate ++ : 发出一次 execute 请求
-  Mate --> Client -- : 执行结果或服务错误
-  Client --> Executor -- : 结果或调用错误
-  Executor --> Tool : 业务结果或执行错误
+Tool -> Executor ++ : business name, args, entry binding scope
+Executor -> Executor : Resolve trusted target and input schema
+alt target resolution fails
+  Executor --> Tool : target error; no execute request
+else target resolves
+  Executor -> Executor : Validate business args using ResolvedTool
+  alt arguments fail validation
+    Executor --> Tool : argument error with recovery content [P]
+    note right of Executor
+      Pending implementation [P]: on the first failure,
+      return field errors and the same trusted
+      name, description and complete inputSchema.
+      State that business execution did not occur.
+      Definition goes only to model-visible content.
+    end note
+  else schema is invalid
+    Executor --> Tool : schema error; no recovery definition
+  else arguments are valid
+    Executor -> Client ++ : callTool(ID, args, credentials)
+    Client -> Mate ++ : one execute request
+    Mate --> Client -- : business result or service error
+    Client --> Executor -- : result or call error
+    Executor --> Tool : business result or execution error
+  end
 end
 deactivate Executor
-Tool --> Pipeline -- : 结果或普通执行异常
+Tool --> Pipeline -- : result or execution exception
 
 note over Pipeline, Tool
-  本图展开实现说明 §3 的 execute 调用。
-  注册 Schema 校验与 before hooks 已通过。
+  Expands execute in execution details, section 3.
+  Registered-schema validation and before hooks passed.
+  Recovery content and isError=true survive normalization
+  and after hooks [P]. Public errors omit the definition.
+  The model corrects args in a new call; no automatic replay.
 end note
 @enduml
 
@@ -479,7 +495,7 @@ end note
 
 @startuml tool_invocation_pipeline
 skinparam backgroundColor white
-skinparam defaultFontName "PingFang SC"
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
@@ -496,48 +512,57 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
-
+' Source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
 ' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: resolveToolCallsSafe, runToolPhase
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: execute, validate, applyBeforeHook, invokeTool, applyAfterHook
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java: beforeToolCall
 ' Observed behavior: schema validation precedes before hooks; blocked calls return before execution and after hooks.
-' Design reason: keep common lifecycle separate from business delegation; cancellation is propagated to the upper execution scope.
-' Pending implementation: new business entry permissions must be wired into the existing Host policy.
-title 单次工具调用：校验、宿主钩子与执行
+' Design reason: keep common lifecycle separate from business delegation; cancellation propagates to the execution scope.
+' Pending implementation: return the registered input definition and field errors on argument failure; preserve recovery content and error classification through after hooks.
+title One Tool Call: Validation, Host Hooks and Execution
 
-participant "Agent 循环\nAgentLoop" as Loop
-participant "调用流水线\nToolExecutionPipeline" as Pipeline
-participant "宿主提供的钩子链\nHost hooks" as Hooks
-participant "已解析的工具实例\ntool : AgentTool" as Tool
+participant "Agent loop\nAgentLoop" as Loop
+participant "Invocation pipeline\nToolExecutionPipeline" as Pipeline
+participant "Host-provided\nhook chain" as Hooks
+participant "Resolved tool instance\ntool : AgentTool" as Tool
 
 Loop -> Pipeline ++ : execute(tool, call, args, ...)
-Pipeline -> Pipeline : 按 tool.parameters 校验参数
-break Schema 无效
-  Pipeline --> Loop : 错误 ToolResultMessage
+Pipeline -> Pipeline : Validate args against tool.parameters
+break argument validation fails
+  Pipeline --> Loop : isError=true; no execution;\nfield errors + registered definition [P]
 end
-Pipeline -> Hooks ++ : 执行有序 before hooks
-Hooks -> Hooks : 权限判断；需要时进入确认流程
-Hooks --> Pipeline -- : 允许、拒绝或钩子错误
-break 被拒绝或 before hook 出错
-  Pipeline --> Loop : 错误 ToolResultMessage
+break input schema is invalid
+  Pipeline --> Loop : error ToolResultMessage; no recovery definition
 end
-Pipeline -> Pipeline : 发布工具执行开始事件
+Pipeline -> Hooks ++ : Run ordered before hooks
+Hooks -> Hooks : Check permission; request confirmation if needed
+Hooks --> Pipeline -- : allow, deny or hook error
+break denied or before hook failed
+  Pipeline --> Loop : error ToolResultMessage
+end
+Pipeline -> Pipeline : Publish tool execution start
 Pipeline -> Tool ++ : execute(callId, args, ...)
 ref over Tool
-  业务工具内部执行（实现说明 §4）
+  Business execution (execution details, section 4)
 end ref
-Tool --> Pipeline -- : 工具结果或普通执行异常
-Pipeline -> Pipeline : 归一化结果与 isError
-Pipeline -> Hooks ++ : 执行有序 after hooks
-Hooks --> Pipeline -- : 保留或调整后的结果
-Pipeline -> Pipeline : 发布工具执行结束事件
+Tool --> Pipeline -- : tool result or execution exception
+Pipeline -> Pipeline : Normalize result and isError
+Pipeline -> Hooks ++ : Run ordered after hooks
+Hooks --> Pipeline -- : retained or adjusted result
+Pipeline -> Pipeline : Preserve recovery content and isError=true [P]
+Pipeline -> Pipeline : Publish tool execution end
 Pipeline --> Loop -- : ToolResultMessage
+
+note over Loop, Pipeline
+  [P] = Pending implementation.
+  Recovery content reaches the model on the first failure.
+  TOOL_ARGUMENTS_INVALID remains an error.
+end note
 @enduml
 
 @startuml tool_batch_scheduling
 skinparam backgroundColor white
-skinparam defaultFontName "PingFang SC"
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
@@ -554,52 +579,51 @@ skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-' Source evidence (CampusClaw fb842b1ac6cb4818f6b146f79dd184a5cd88bf12, checked 2026-09-21):
-
+' Source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: executePlanned, executeInParallel, findParallelSegmentEnd
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: executionMode
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java: executionMode
 ' Observed behavior: consecutive parallel calls run in virtual-thread tasks; futures are collected in input order before the next segment.
-' Design reason: asynchronous arrows and overlapping activations show concurrency, while the sequential call separates both segments.
-' Pending implementation: CallTool replaces the existing business wrapper; the adjacent-segment scheduling itself is implemented.
-title 批次执行：并行读取与串行屏障
+' Design reason: asynchronous arrows and overlapping activations show concurrency; the sequential CallTool separates both segments.
+title Batch Execution: Parallel Reads and Sequential Barriers
 
-participant "批次调度\nToolExecutionPipeline" as Pipeline
-participant "Read 任务\nFuture #1" as Read
-participant "Grep 任务\nFuture #2" as Grep
-participant "CallTool\n调用 #3（待实现）" as Call
-participant "Find 任务\nFuture #4" as Find
-participant "Ls 任务\nFuture #5" as Ls
+participant "Batch scheduler\nToolExecutionPipeline" as Pipeline
+participant "Read task\nFuture #1" as Read
+participant "Grep task\nFuture #2" as Grep
+participant "CallTool\nCall #3" as Call
+participant "Find task\nFuture #4" as Find
+participant "Ls task\nFuture #5" as Ls
 
 note over Pipeline, Call
-  输入顺序：Read、Grep、CallTool、Find、Ls。
-  每个调用仍经过实现说明 §3 的完整调用流程。
+  Input order: Read, Grep, CallTool, Find, Ls.
+  Each call uses the complete lifecycle in execution details, section 3.
 end note
 activate Pipeline
-group 并行段一
-  Pipeline ->> Read ++ : 提交 #1
-  Pipeline ->> Grep ++ : 提交 #2
-  Pipeline -> Read : 等待 Future #1
-  Grep -> Grep : 先完成，保存结果 #2
+group Parallel segment one
+  Pipeline ->> Read ++ : submit #1
+  Pipeline ->> Grep ++ : submit #2
+  Pipeline -> Read : await Future #1
+  Grep -> Grep : finish first; store result #2
   deactivate Grep
-  Read --> Pipeline -- : 结果 #1
-  Pipeline -> Grep ++ : 读取 Future #2（已完成）
-  Grep --> Pipeline -- : 结果 #2
+  Read --> Pipeline -- : result #1
+  Pipeline -> Grep ++ : read completed Future #2
+  Grep --> Pipeline -- : result #2
 end
-group 串行屏障
-  Pipeline -> Call ++ : 执行 #3
-  Call --> Pipeline -- : 结果 #3
+group Sequential barrier
+  Pipeline -> Call ++ : execute #3
+  Call --> Pipeline -- : result #3
 end
-group 并行段二
-  Pipeline ->> Find ++ : 提交 #4
-  Pipeline ->> Ls ++ : 提交 #5
-  Pipeline -> Find : 等待 Future #4
-  Ls -> Ls : 先完成，保存结果 #5
+group Parallel segment two
+  Pipeline ->> Find ++ : submit #4
+  Pipeline ->> Ls ++ : submit #5
+  Pipeline -> Find : await Future #4
+  Ls -> Ls : finish first; store result #5
   deactivate Ls
-  Find --> Pipeline -- : 结果 #4
-  Pipeline -> Ls ++ : 读取 Future #5（已完成）
-  Ls --> Pipeline -- : 结果 #5
+  Find --> Pipeline -- : result #4
+  Pipeline -> Ls ++ : read completed Future #5
+  Ls --> Pipeline -- : result #5
 end
-Pipeline -> Pipeline : 汇总结果 #1、#2、#3、#4、#5
+Pipeline -> Pipeline : Collect results #1, #2, #3, #4, #5
 deactivate Pipeline
 @enduml
 

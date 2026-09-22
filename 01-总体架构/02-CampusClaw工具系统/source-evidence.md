@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.6.3；整理日期：2026-09-21。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `12244d49576d17239e21c6e75e542fd61c69b826`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的专项核验见 §8，文档组织与图形选择见 §10。
+版本：1.7.0；整理日期：2026-09-22。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `12244d49576d17239e21c6e75e542fd61c69b826`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的专项核验见 §8，文档组织与图形选择见 §10，参数纠正与用户展示的最新专项核验见 §11。
 
 | 基线 | 提交 |
 |---|---|
@@ -262,3 +262,47 @@ Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codinga
 | pi [Agent Event Flow](https://github.com/badlogic/pi-mono/blob/890f920884f6d21fc7617d236ef9e1cc5d7a0ef8/packages/agent/README.md#event-flow) | 普通 prompt 与带工具调用分别用文本事件树，配事件表和并发顺序说明；`packages/agent/src/agent-loop.ts:162` · `runLoop`、`:829` · `emitToolExecutionEnd` 对应事件发出点。 | 关注可观察事件顺序时，事件列举比展开内部对象更直接；不把事件树推导成所有内部调用的同步关系。 |
 
 本模块据此选择职责清单、调用示例和少量具体场景图，图中只保留解释该场景所需的参与者；分支和顺序以当前源码证据及目标契约为准。上游使用的图形语法不构成格式要求，本仓仍使用 PlantUML。此次仅调整文档组织与图形表达，不改变工具注册、Skill 渐进式披露、CallTool、权限或同步方案，也不新增运行时机制。
+
+<a id="argument-recovery-evidence"></a>
+
+## 11. 本地参数纠正与用户展示（2026-09-22）
+
+本节设计仓起点为 `dd834ecf6ec91657b30fb7df64fa2b6de128388c`。CampusClaw 读取开发工作树 `/private/tmp/pi-mono-java-tool-progressive` 的固定提交 `c9a2340f87bda6dff6bbd352f6995f8551206bb5`；以下文件与该提交一致，不将其表述为最新主线或已合入版本。§8 的 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` 保留原观察，本节只更新已实际读取的 CallTool、代理、业务校验、结果回传和展示链路。
+
+pi 上游 `https://github.com/badlogic/pi-mono.git` 于 2026-09-22 通过 `git ls-remote --symref ... HEAD` 确认默认分支 `main`，在隔离 bare 仓库 fetch 后读取 `95fbc04997eaee961eb673fa7923e9220609ebd5`。`packages/agent/package.json` 版本为 `0.87.0`；这是当次默认分支源码快照，不是稳定发布保证。相对 §10 的 `890f920884f6d21fc7617d236ef9e1cc5d7a0ef8`，本次仅比较以下三个恢复相关路径：`validation.ts` 无差异；`agent-loop.ts` 增加请求准备及 `finishTurn` 结束/继续决策，校验失败转结果的路径不变；`agent-session.ts` 的消息持久化仍覆盖 `toolResult`，新增 Entry ID 追踪等其他 Session 变化不在本节升级范围。§1—§10 其他 SHA、版本及验收结论保持原归属。
+
+### 11.1 CampusClaw 已观察行为
+
+Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`；其余路径相对 `pi-mono-java`。行号均属于上述 `c9a2340f`。
+
+| 路径 / 关键符号 | 已观察行为 | 对参数纠正的影响 |
+|---|---|---|
+| R `tool/skill/SkillTool.java:93` · execute、`:156` · format；`skill/SkillPromptFormatter.java` · format | Skill 按直接可见名称读取 SKILL.md 并返回正文及最多 10 个资源路径；初始提示只列名称、描述与读取规则；不展开资源内容 | Skill 基本加载已在本开发提交实现；模型可用 Read 访问已有工具定义文件，但新定义文件生成与同步不在已实现范围 |
+| R `tool/mate/CallTool.java:54` · parameters、`:78` · execute；`MateToolAdapter.java:38` · 构造器、`:68` · parameters | CallTool 只向模型声明外层 tool/args；Agent 代理直接声明业务 Schema；两者调用同一 MateToolExecutor | §8 中的新执行入口已在本分支实现，不能把整个渐进披露方案继续记为待实现；错误回传的增量单独记录 |
+| R `tool/mate/MateToolResolver.java:68` · resolveSkill、`:125` · findMetadata、`:139` · resolved | 先按直接 Skill 的可信绑定查找，再按 ID/name 匹配元数据，返回绑定与定义组成的 ResolvedTool；缺失 Schema 拒绝解析 | 回传定义有可信来源，可以使用本次实际参与校验的定义，不需要让模型重读文件后决定权限或执行 ID |
+| R `tool/mate/MateToolExecutor.java:67` · execute、`:80` · validateArguments；`MateToolExecutionException.java` | 业务参数校验在 client.callTool 前完成；失败文本含字段错误，但没有完整 Schema；参数错误、无效 Schema 和远端业务错误使用同一异常类型 | 参数错误时尚未请求 Mate 业务执行；当前异常不能直接区分可修复参数错误与其他失败，完整定义回传为待实现 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:49` · execute、`:250` · validateArguments、`:291` · failureResult；同目录 `ToolArgumentsInvalidException.java` | 外层 Schema 校验先于 before hook；执行异常转 isError=true；StableErrorCode 异常仅输出稳定错误码 content，其他异常输出消息文本 | 框架外层错误和业务内层错误必须保留区别；仅把新增恢复异常实现为 StableErrorCode 会使模型只看到错误码，须明确保留恢复正文 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java:112` · runTurns、`:146` · runToolPhase；`modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatRequestMapper.java:118` · appendToolResult | 工具结果加入上下文，随后继续模型请求；Mate Chat 将工具结果 content 写成 role=tool，不发送 details | 模型继续纠正的 Loop 已实现；Schema 与字段错误必须进入模型可见 content，仅写 details 不足以完成恢复 |
+| R `runtimeapi/event/RuntimeEntryCodec.java:197` · toolResultEntry、`:545` · toolResultMessage；`RuntimeCommittedEventFactory.java:152` · agentToolResult、`:283` · appendToolContent、`:299` · toolErrorCode | 工具 Entry 保存 content、is_error 和可选 error_code；不通用保存 details。公共失败内容替换成稳定错误码对应的本地化文案，未知错误码回退 TOOL_EXECUTION_FAILED | 模型结果正文和公共展示原本已有不同投影；新增失败分类须贯穿持久化与历史恢复，不能只放在不会重载的内存 details 中 |
+| `frontend/src/projectors/runtimeEventProjector.ts:23` · projectRuntimeEvents、`:118` · matchingToolResult；`frontend/src/components/ToolActivity.vue:9` · statusLabel、`:50` · details | 结果按 sourceEventId＋toolCallId 匹配，isError 一律投影为 error；错误显示“执行失败”，默认展开；后续不同调用的成功不会覆盖前次失败 | 可恢复中间过程的低干扰展示尚未实现；不能只增加后端 Schema 回传就宣称用户已无失败感知 |
+
+### 11.2 pi 的恢复语义与采用边界
+
+下列路径相对 pi，行号属于 `95fbc04997eaee961eb673fa7923e9220609ebd5`。
+
+| 路径 / 关键符号 | 已观察行为 | CampusClaw 采用边界 |
+|---|---|---|
+| `packages/ai/src/utils/validation.ts:317` · validateToolArguments、`:282` · formatValidationPath | 根据实际工具 parameters 校验；异常正文含字段路径、错误说明和收到的参数，没有附回完整 Schema | 采用明确字段错误；完整目标定义回传是 CampusClaw 为 CallTool 渐进披露补充的设计，不描述为 pi 既有能力 |
+| `packages/agent/src/agent-loop.ts:703` · prepareToolCall、`:773` · executePreparedToolCall、`:863` · createErrorToolResult | 校验失败返回 immediate、isError=true 的文本结果，不进入 tool.execute；普通错误结果不设置 terminate | 保留“参数拒绝尚未执行业务”和真实错误结果，不通过改成成功来降低 UI 噪音 |
+| 同文件 `:527` · executeToolCallsSequential、`:583` · executeToolCallsParallel、`:880` · createToolResultMessage、`:162` · runLoop | 两种调度均生成工具结果；runLoop 将结果写入上下文，通常继续下一次模型请求。批次 terminate、finishTurn 结束决策及取消等仍可结束执行 | 延续工具失败可由模型纠正的 Loop 语义，不新增服务端自行猜参数重试或忽略终止条件的循环 |
+| `packages/coding-agent/src/core/agent-session.ts:894` · _handleAgentEvent | message_end 分支将 toolResult 与其他普通模型消息交给 SessionManager.appendMessage | 历史保留失败尝试与下一次调用；前端折叠是展示选择，不删除或篡改原记录。本节未核验 pi UI，不据此断言 pi 默认隐藏失败 |
+
+### 11.3 目标决策、实现差距与验收
+
+当前目标由[工具系统主设计](README.md)统一维护：CallTool 在首次业务参数本地校验失败时，即把本次可信完整目标定义、字段错误和“业务尚未执行”的说明返回模型，供下一次调用纠正；定义来自同次解析及校验使用的元数据，不以文件内容、模型猜测或另一次发现替代。若错误位于 CallTool 外层，只能提供外层参数修正信息，不为无法可信解析的目标伪造业务定义。授权、业务失败、无效 Schema 和网络等失败不自动归类为参数纠正。
+
+前端将可恢复参数纠正作为低干扰过程保留，默认折叠详情；失败记录仍保持真实 isError 语义，后续成功保留自身独立结果。最终未能完成和真实业务失败必须明确展示，不能让未解决的纠正状态永久表现为仍在执行。公共展示不靠解析模型正文识别类别，恢复正文及持久化投影按各自边界处理。
+
+完整定义反馈属于 **CampusClaw 架构变更**：在 pi 的“错误作为工具结果进入后续模型上下文”基础上，减少模型再次查找定义的步骤。可恢复过程展示属于**产品约束**，减少用户阅读中间失败的负担；可信绑定、权限保持原有产品约束及安全边界。每次补回定义会增加上下文和等待成本，准确率、减少轮次数及用户体验改善仍需实际验收，不能作为已证明效果。
+
+实现状态：本地业务参数拒绝、Pipeline 外层稳定参数错误码、工具错误入上下文与后续 Loop 已在本分支实现；完整定义反馈、业务内层参数错误的稳定分类及对应实时/历史前端展示均为 **待实现**。本次仅静态源码核验和设计证据补充，未运行 pi、Java、真实模型或 Mate 联调测试。后续验收至少覆盖首次失败即回传同次完整定义、业务执行次数为零、模型下一次请求收到恢复正文、修正后沿原权限链执行、失败记录与成功记录均保留、重新读取历史保持相同分类，以及最终未修复和真实失败不会被隐藏。
