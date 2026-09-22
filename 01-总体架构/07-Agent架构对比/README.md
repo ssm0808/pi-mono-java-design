@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.44.1 |
+| 文档版本 | 1.45.0 |
 | 更新日期 | 2026-09-22 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -15,8 +15,8 @@
 | 历史计划模式专项基线 | A03/A05 的提示词专项于 2026-09-17 更新至 Codex `b0659c53`、OpenCode `88c6c7ab`、DeepSeek `0d1f5000`、pi `e4c75a73`；业务覆盖再次确认四个上游 HEAD 不变，Java 装配/发布读取本地 `21c3f59b`，完整 SHA、路径及差距见[§11](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖) |
 | 前端专项基线 | A07：Java `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4` 的体验差距见[新核验](../../07-前端设计/source-evidence.md#experience-evidence)，前次验证见[实现证据](../../07-前端设计/source-evidence.md#current-implementation)；Codex 固定 `d58d0e58`，既有官方核对日期为 2026-09-15 |
 | 历史提问专项基线 | A08：问答闭环验证为 Java 9f785bea3ffff8f6566cd1b2727285af46a2aead；新增交互核验为 Java 1d08f98e、Codex d58d0e58 与 OpenCode 849c2598，见[逐题交互证据 §9](../06-CampusClaw计划模式/source-evidence.md#9-buildplan-与逐题交互核验)；DeepSeek 0a53fb55、pi 5cd93f68、Claude 官方文档 2026-09-15 的原范围不变 |
-| 工具发现专项基线 | A11：2026-09-20 fetch OpenCode `dev@ebb7b76eca82342642c78645109e865614533827`、DSH `master@ddefc45fbc7f8e46dd73185e68295696d1297887`；Java `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，只核验 Skill 加载与远端工具适配，默认分支快照不等于稳定发布，其他模块历史证据不变 |
-| 参数恢复专项基线 | A11：2026-09-22 确认 pi `main@95fbc04997eaee961eb673fa7923e9220609ebd5`、DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61` 并隔离 fetch，仅核验参数校验、权限确认和工具执行顺序；CampusClaw 开发提交 `c9a2340f87bda6dff6bbd352f6995f8551206bb5`，仅核验工具入口、校验反馈及 Runtime/前端错误投影，见[M03 校验链路证据](../02-CampusClaw工具系统/source-evidence.md#tool-validation-order-evidence) |
+| 工具发现专项基线 | A11：2026-09-22 fetch OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`、Codex `main@ac7634b9f73ec1bf96466be7a5869f0949d20b30`；沿用 DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`。仅升级 Skill、固定搜索、延迟工具暴露与远端工具适配结论；默认分支快照不等于稳定发布，其他模块历史证据不变 |
+| 参数恢复专项基线 | A11：2026-09-22 确认 pi `main@95fbc04997eaee961eb673fa7923e9220609ebd5`、DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`；CampusClaw PR #323 开发提交从 `c9a2340f87bda6dff6bbd352f6995f8551206bb5` 更新到 `ae6645caaade3b9520220a34af940210850ef36a`，只升级确认前准备、模型恢复反馈和 SearchTools 差距，见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#search-tools-evidence) |
 | Command 状态专项基线 | M05：用户指定 Java `53eff85c7f41de23eb434e027782f5085a8b8e45`；只复核 Runtime 命令、严格名称、展开文本恢复与 Slash 交互，见[当前实现](../../04-命令与技能/00-Slash-Command通用模块/README.md#current-runtime-status)；不升级外部基线或统计结论 |
 | Skill 统计专项基线 | A09：Codex d58d0e58 的完整计数链；Java f61906b9 的 Runtime/Read/Child/Cron 骨架，#295/#298 仅作固定对照，不升级其他 M05 结论 |
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
@@ -341,7 +341,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 架构问题 | 已不装配的 Bash/Edit/Write 是否仍作为备用实现保留在发布源码和镜像中？ |
 | pi 已观察行为 | 2026-09-18 更新默认 main 到 `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；`packages/coding-agent/src/core/tools/index.ts` 的 createCodingTools 组合 read/bash/edit/write，createReadOnlyTools 组合 read/grep/find/ls，createTool 仍提供三个写/执行工具；不是上游废弃。只升级该范围，默认分支不等于稳定发布。 |
 | CampusClaw 已观察实现 | Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 的 BuiltInToolName/Factory 已排除三工具，但 tool/bash、tool/edit、tool/write 及专属 operations/队列仍存在；精确路径和有效消费者见[源码证据 §5](../02-CampusClaw工具系统/source-evidence.md#5-basheditwrite-源码删除边界2026-09-18) |
-| 已确认目标 | 完全删除三工具、专属支撑和生成镜像副本；不保留兼容、隐藏开关或独立执行器。11 项活动工具及 Agent 子代理保持；仍有消费者的只读/截断/路径/目录发布能力保留 |
+| 已确认目标 | 完全删除三工具、专属支撑和生成镜像副本；不保留兼容、隐藏开关或独立执行器。保留其他既有活动工具及 Agent 子代理；A11 另行增加 SearchTools。仍有消费者的只读/截断/路径/目录发布能力保留 |
 | 分类、理由与代价 | 产品约束：企业 Runtime 不提供通用本机命令或文件写入模型工具；安全加固：减少重新接入面与无产品用途的维护负担。代价是放弃三工具实现复用；删除不意味着 Mate/Cron 无副作用，也不替代各自权限控制 |
 | 备选与重新评估 | 仅禁用或不注册不满足源码删除目标；若未来重新需要本地写入/命令执行，须独立设计授权、工作区和取消/审计边界，不恢复旧代码作为开关 |
 | 实现状态与验收 | 活动 profile 排除已实现；开发分支 `1b35422c61d471e11b9e1c126b57a82ef808ced2` 已删除源码，[Draft PR #315](https://github.com/superheromeZzh/pi-mono-java/pull/315) 待合入。2009 项测试、退役类缺席与三入口拒绝检查通过；公司编译因 NativeParent 不可解析未验证，完整范围见[证据 §5](../02-CampusClaw工具系统/source-evidence.md#5-basheditwrite-源码删除边界2026-09-18)，不把分支完成写成主线完成 |
@@ -356,20 +356,21 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 |---|---|
 | 模块与主设计 | M03/M05；[工具注册与发现](../02-CampusClaw工具系统/README.md#9-工具注册与发现)维护契约、全局目标类图及验收；本条只解释基线与差异。 |
 | 架构问题 | 远端业务工具如何复用执行能力，同时让 Agent 常规工具直接可用、Skill 工具定义按实际步骤披露？ |
-| OpenCode 观察 | `SkillTool` 仅接收 name，返回正文、基础目录和最多 10 个抽样文件路径，后续资源由普通 read 获取；`convertTool` 把 MCP 名称对应的描述、inputSchema 和 client.callTool 包装成通用工具，普通工具路径将其提供给模型，实验性 Code Mode 另行处理。Skill 加载与 MCP 工具注册分离，不等同于本设计的 Skill 绑定 JSON 调用机制。 |
+| OpenCode 观察 | 最新 `dev@fe3f3a4` 的普通 `SkillTool` 仍只返回正文、基础目录和最多 10 个抽样资源路径，后续资源由 read 获取。独立 Code Mode package 的 `prepare/makeSearchTool/searchIndex` 使用固定 `tools.$codemode.search`：预算只影响内联签名，搜索返回完整 path/description/signature，底层工具树不因搜索改变。它不是普通 Skill 的默认工具发现协议。 |
+| Codex 观察 | 最新 `main@ac7634b9` 的 `ToolSearchHandler` 对 deferred 工具建立 BM25 搜索，搜索结果形成可加载 ToolSpec，并按说明暴露给下一次模型调用；缓存按 registry source 变化重建。其 Provider/模型能力和配置条件不构成所有 Agent 的统一规范，CampusClaw 不采用搜索后的动态 tools 暴露。 |
 | DSH 观察 | `apply` 注册 skill(name)，`renderSkillContent` 返回正文与资源基础位置，不枚举文件；`syncTools/createMcpToolDefinition` 将 MCP 定义注册为工具并统一远端调用。校验顺序专项的 `0.1.7-alpha.1` 中，`ToolRuntime.prepareExecution` 先运行 policy/ask，`defineTool.execute` 包装器在 dispatch 后校验参数再进入用户实现。它仍是开发预览；这里只采纳职责分离并作为顺序差异证据，不迁入 Cordis 或 MCP 协议。 |
-| CampusClaw 已观察实现 | 开发提交 `c9a2340` 已实现 Skill 正文及抽样路径加载、Agent 元数据代理、CallTool 与共用 MateToolExecutor；模型可按需 Read 已有定义文件。Agent 代理的完整 Schema 在 before hook 前校验；CallTool 只在 hook 前校验外层，业务参数在确认后的 execute 内校验。参数失败没有回传完整目标定义，前端统一显示错误；定义文件生成与同步仍待实现。旧 `fb842b1` 的 ListMateTools 全量发现只保留为[历史证据](../02-CampusClaw工具系统/source-evidence.md#skill-tool-discovery-evidence)，新核验范围见[校验链路证据](../02-CampusClaw工具系统/source-evidence.md#tool-validation-order-evidence)。 |
-| 已确认目标 | Agent 直接关联的业务工具以通用代理提供模型 Schema；Skill 采用 OpenCode 的正文与资源路径入口，具体定义由 Read 按需读取，再经 CallTool 执行。CallTool 在交互确认前按可信绑定解析并校验业务参数，确认后执行同一不可变准备快照。读取 Skill 或资源不增加模型工具或权限；ListMateTools 退出模型工具列表。具体参数、可用范围与命名规则由主设计唯一维护。 |
-| 差异分类 | 产品约束：不引入 Bash 或可执行脚本，Skill 工具要求逐工具披露，无效业务参数不触发园区用户确认；架构变更：按工具关联来源区分模型暴露方式，以 `PreparedToolInvocation` 衔接动态校验、授权和执行。安全加固：确认前后固定可信目标与参数。这是 CampusClaw 的选择，不是基线 Skill 规范的强制要求。 |
-| 收益与代价 | 常规工具直接调用，Skill 工具无需整组 Schema 常驻；不维护 Skill 加载后的工具注入状态。代价是两种模型调用形式、首次读取定义的额外步骤，普通读取结果仍可能被压缩；重读和业务参数校验不能等同于模型永不遗忘，也无已验证的性能提升。 |
-| 范围与重评 | 数据同步、刷新及版本一致性另行设计。SearchTools 可替代工具定义文件的发现步骤，其精确查询契约另行细化；本条参数恢复同时适用于现有 Read 与搜索发现，不以动态注入工具作为前提。 |
-| 状态与验收 | Skill、CallTool、Agent 代理和共用执行已有上述开发提交实现，不能据此声称主线或端到端验收完成；定义文件生成、同步、CallTool 前置准备及参数恢复增量待实现。验收应证明读取不改工具集合、参数失败不确认不执行、确认后使用同一快照、两类入口共用授权校验及下述恢复边界；文档校验不代表产品验收。 |
+| CampusClaw 已观察实现 | PR #323 head `ae6645ca` 已实现 Skill 正文及抽样路径、Agent 元数据代理、CallTool、共用 MateToolExecutor、确认前可信准备和模型参数恢复反馈；GitHub build 成功。当前无 SearchTools，CallTool 文案仍指向 Read；MateToolResolver 按名称延迟读取并缓存远端定义，没有按 Skill 可搜索且与执行共用的不可变定义快照。前端低干扰展示仍待实现。完整路径见[SearchTools 专项证据](../02-CampusClaw工具系统/source-evidence.md#search-tools-evidence)。 |
+| 已确认目标 | Agent 直接关联的业务工具以通用代理提供模型 Schema；Skill 继续加载正文和普通资源。业务步骤需要工具时，由固定 SearchTools 在指定直接 Skill 内返回少量完整定义，再经 CallTool 执行。SearchTools 只返回数据，不动态注册业务工具；SearchTools、Agent 代理和 CallTool 共用不可变 Session 定义快照。CallTool 继续在确认前校验，确认后执行同一准备快照。 |
+| 差异分类 | 产品约束：不引入 Bash 或可执行脚本，Skill 工具按需披露，无效业务参数不触发园区用户确认。架构变更：采用 OpenCode Code Mode 的固定搜索入口思路，但保留独立 CallTool；不采用 Codex 搜索后向下一次请求暴露匹配工具的语义。安全加固：搜索和执行共用可信快照，确认前后固定目标与参数。 |
+| 收益与代价 | 初始工具集合保持“框架工具＋Agent 直接代理”，多轮搜索不会累积代理；定义发现不依赖 Skill 目录生成文件，并可按业务意图或精确名称重搜。代价是增加一个固定框架工具、搜索索引与快照生命周期；首次使用仍多一次模型工具调用，搜索结果仍会被上下文压缩，没有已验证的时延或准确率收益。 |
+| 范围与重评 | 数据同步、刷新及版本一致性另行设计。若未来 Provider 原生延迟工具暴露具有明确的工具上限、替换语义和跨轮回收保证，再评估 Codex 式动态暴露；当前不把搜索结果加入模型 tools。 |
+| 状态与验收 | Skill、CallTool、Agent 代理、确认前准备和模型参数反馈已在上述 Draft PR 实现，不能据此声称主线或端到端验收完成；SearchTools、共享定义快照、profile/提示词和前端展示待实现。验收应证明多轮搜索不改工具集合、搜索与调用定义一致、参数失败不确认不执行、确认后使用同一准备快照，以及两类执行入口共用授权规则；文档校验不代表产品验收。 |
 
-**讲解要点。** 参考 OpenCode 的 Skill 资源入口和 OpenCode/DSH 的通用远端适配，CampusClaw 将执行复用与定义披露分开：Agent 直接工具进入模型工具集合，Skill 工具在需要时读取定义后通过固定入口执行。它保留逐工具披露且不引入动态注入状态，代价是额外读取与双入口；同步设计和实现验收仍待完成。
+**讲解要点。** CampusClaw 保留 OpenCode 普通 Skill 的正文加载方式，并借鉴 Code Mode 的固定搜索入口：Agent 直接工具进入模型工具集合，Skill 工具在业务步骤需要时搜索定义，再通过固定 CallTool 执行。它避免搜索后的动态注入和工具累计，代价是新增搜索与快照职责；同步设计和实现验收仍待完成。
 
 **参数恢复专项。** pi 最新默认 main `95fbc04997eaee961eb673fa7923e9220609ebd5` 的 `prepareToolCall` 先准备和校验参数，再进入 `beforeToolCall`；校验错误作为 `isError=true` 的工具结果加入上下文，通常继续模型循环。DSH 最新默认 master `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61` 则先运行 policy/ask，再由 `defineTool` 包装器校验后进入用户实现，表明不存在一条所有基线共同采用的固定顺序。两者都阻止无效参数进入实际业务实现，但只有 pi 的顺序满足 CampusClaw“无效参数不触发交互确认”的目标。完整证据见[M03 证据 §12](../02-CampusClaw工具系统/source-evidence.md#tool-validation-order-evidence)。
 
-CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可变准备快照；这是 Runtime 架构变更和 ToB 产品约束。随后在同一错误循环上增加[首次失败的定义反馈](../02-CampusClaw工具系统/README.md#tool-argument-recovery)，前端将明确未执行业务的参数错误[中性折叠展示](../../07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)。保留失败事实、独立调用身份和后续正常权限检查，不自动改参数重试。代价是 Pipeline 新增准备阶段、额外定义文本、模型轮次与展示分类；均待实现，准确率和时延收益未实测。
+CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可变准备快照；这是 Runtime 架构变更和 ToB 产品约束。PR #323 已实现准备阶段和[首次失败的定义反馈](../02-CampusClaw工具系统/README.md#tool-argument-recovery)；前端将明确未执行业务的参数错误[中性折叠展示](../../07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)，该展示仍待实现。保留失败事实、独立调用身份和后续正常权限检查，不自动改参数重试。代价是额外定义文本、模型轮次与展示分类；准确率和时延收益未实测。
 
 <a id="source-evidence"></a>
 
@@ -522,6 +523,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.45.0 | 2026-09-22 | A11 采用固定 SearchTools 返回定义数据，并与 CallTool 共用不可变 Session 定义快照。 |
 | 1.44.1 | 2026-09-22 | M05 按 53eff85c 更新命令实现状态，保留结构、版本快照、统计与公共桥接差距。 |
 | 1.44.0 | 2026-09-22 | 增加 A14 调度基线对比，区分托管 Cron、Session 内提醒、持久化 Task 和外部 Workflow。 |
 | 1.43.0 | 2026-09-22 | 对比 pi 与 DSH 的校验顺序，固定 CallTool 确认前准备、确认后执行同一快照。 |

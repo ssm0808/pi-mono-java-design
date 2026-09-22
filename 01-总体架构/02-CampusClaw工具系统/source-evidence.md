@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.8.0；整理日期：2026-09-22。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `9f83dc1771500ace26360c0982cb1954e2f37de4`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的专项核验见 §8，文档组织与图形选择见 §10，参数纠正与用户展示见 §11，参数校验、确认与执行的顺序见 §12。
+版本：1.9.0；整理日期：2026-09-22。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `9f83dc1771500ace26360c0982cb1954e2f37de4`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的历史专项见 §8，文档组织与图形选择见 §10，参数纠正与用户展示见 §11，参数校验、确认与执行的顺序见 §12，SearchTools 最新基线和 PR #323 进度见 §13。
 
 | 基线 | 提交 |
 |---|---|
@@ -196,7 +196,7 @@ Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codinga
 | R `tool/mate/ListMateToolsTool.java` · execute/stableJson；`CallMateTool.java` · parameters/execute | List 返回一个来源的全部 name/description/inputSchema 文本；Call 接收 tool/args 并请求 Mate | 业务 Schema 当前不是模型独立工具声明；移除 List 模型入口、Call 改为 CallTool 并限制 Skill 来源为待实现 |
 | R `tool/mate/MateToolDiscovery.java` · resolveToolId/loadAllSources；`MateToolSessionCache.java` · CacheState/toNameIndex | 缓存仅存来源及名称到 ID；miss 可在后端完整发现 Agent 和直接 Skill，但不会把定义重新返回模型 | 后端能解析 ID 不等于模型知道参数；Skill 单工具文件提供按需重读入口 |
 | R `runtime/MateServiceClient.java` · BoundTool；`common/client/mate/MateToolMeta.java`；`HttpMateToolClient.java` · queryToolMetaByIds | 可信绑定已有 ID/name/displayName/permission 等信息，但不含 inputSchema；独立工具元数据已有 inputSchema | 代理与文件内容均需要完整元数据；本节不决定同步、生成及刷新流程 |
-| R `runtime/AgentRuntimeManager.java` · writeSkills/writeResources/loadSkill/containsForbiddenEntry | 写入 SKILL.md、skill.json、references 和 templates；拒绝聚合 tools.json；未从绑定生成单工具定义文件 | 单工具 JSON 资源与资源清单为待实现；不移动 skill.json，不把已有普通资源写入能力称为工具定义生成已实现 |
+| R `runtime/AgentRuntimeManager.java` · writeSkills/writeResources/loadSkill/containsForbiddenEntry | 写入 SKILL.md、skill.json、references 和 templates；拒绝聚合 tools.json；未从绑定生成单工具定义文件 | 证明普通 Skill 资源能力与工具定义没有既有生成链；当前目标改为 §13 的 SearchTools，不再补单工具 JSON |
 | `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java` · validateArguments；R `runtimeapi/runtime/RuntimeToolPermissionPolicy.java` · from/decide | Pipeline 按 AgentTool.parameters 校验；权限策略合并可信绑定，但只特殊识别 CallMateTool，其他工具名直接 ALLOW | 代理须进入同一权限判断，CallTool 须校验内部业务参数；仅改名称或增加实例不足以完成接入 |
 | R `session/compaction/CompactionPromptBuilder.java` · appendMessage/TOOL_RESULT_MAX_CHARS | 提交摘要的单条工具结果最多保留 2,000 字符 | 一次 List 或 Read 不能保证定义长期在场；文件按需披露提供重读能力，不保证模型永不遗忘 |
 
@@ -216,11 +216,11 @@ Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codinga
 
 ### 8.3 目标决策与验收边界
 
-当前有效方案为：Agent 直接关联的业务工具以 `MateToolAdapter` 实例进入模型工具集合；Skill 关联的业务工具经 `Skill → Read references/<tool-name>.json → CallTool` 按需使用，读取操作不增加代理或权限；`ListMateTools` 退出模型工具列表。单工具文件仅提供 name/description/inputSchema，工具身份与权限由可信绑定决定；两种入口共用业务执行、参数校验与授权规则。精确契约由[主设计](README.md)维护。
+当前有效方案为：Agent 直接关联的业务工具以 `MateToolAdapter` 实例进入模型工具集合；Skill 关联的业务工具经 `Skill → SearchTools → CallTool` 按需使用。SearchTools 返回少量完整定义数据，不增加代理、权限或后续模型请求中的工具；`ListMateTools` 退出模型工具列表。SearchTools 与 CallTool 共用不可变 Session 定义快照，工具身份与权限仍由可信绑定决定；两种执行入口共用业务执行、参数校验与授权规则。精确契约由[主设计](README.md)维护。
 
-这是 **CampusClaw 架构变更**：借鉴 OpenCode 的 Skill 加载入口和基线的远端代理结构，但 Skill 关联的业务工具通过固定 CallTool 执行、Schema 留在资源文件中，是为逐工具披露作出的产品选择，并非上游标准 Skill/MCP 行为。代价是普通读取结果可能被压缩，需要按需重读；不能声称该方案已证明比动态注入更快。无 Bash、受管边界与可信权限属于产品约束及安全加固。
+这是 **CampusClaw 架构变更**：借鉴 OpenCode 的 Skill 加载入口、OpenCode Code Mode 的固定搜索入口和基线的远端代理结构，但 Skill 关联的业务工具仍通过固定 CallTool 执行，搜索结果不成为动态模型工具。该选择保留逐工具披露，并避免跨轮维护已注入工具集合；定义结果仍可能被压缩，需要按需重搜，不能声称已证明比文件读取或动态注入更快。无 Bash、受管边界与可信权限属于产品约束及安全加固。
 
-实现状态：新入口、代理装配及对应权限接入均为 **待实现**；本次仅静态核验源码，未运行 Java、真实模型或 Mate 联调。验收重点为初始集合仅含框架工具与 Agent 直接业务代理、Skill/Read 无注册副作用、资源清单不展开定义、CallTool 只解析 Skill 关联的业务工具，以及两入口的 ALLOW/ASK/DENY 和参数错误一致。元数据同步、文件生成与刷新、执行版本一致性另行设计，本节不冻结其策略。
+实现状态：本节的 `fb842b1` 旧快照尚无新入口；PR #323 最新进度由 §13 单独核验。SearchTools、共享定义快照和相应 profile 接线为 **待实现**。验收重点为初始集合仅含框架工具与 Agent 直接业务代理、Skill/SearchTools 无注册副作用、搜索不展开整个 Skill、CallTool 只解析 Skill 关联的业务工具，以及两入口的 ALLOW/ASK/DENY 和参数错误一致。元数据同步、刷新与版本一致性另行设计，本节不冻结其策略。
 
 <a id="sequence-evidence"></a>
 
@@ -277,7 +277,7 @@ Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codinga
 
 | 路径 / 关键符号 | 已观察行为 | 对参数纠正的影响 |
 |---|---|---|
-| R `tool/skill/SkillTool.java:93` · execute、`:156` · format；`skill/SkillPromptFormatter.java` · format | Skill 按直接可见名称读取 SKILL.md 并返回正文及最多 10 个资源路径；初始提示只列名称、描述与读取规则；不展开资源内容 | Skill 基本加载已在本开发提交实现；模型可用 Read 访问已有工具定义文件，但新定义文件生成与同步不在已实现范围 |
+| R `tool/skill/SkillTool.java:93` · execute、`:156` · format；`skill/SkillPromptFormatter.java` · format | Skill 按直接可见名称读取 SKILL.md 并返回正文及最多 10 个资源路径；初始提示只列名称、描述与读取规则；不展开资源内容 | Skill 基本加载已在本开发提交实现；本节当时采用 Read 定义文件，当前目标已由 §13 的 SearchTools 替代 |
 | R `tool/mate/CallTool.java:54` · parameters、`:78` · execute；`MateToolAdapter.java:38` · 构造器、`:68` · parameters | CallTool 只向模型声明外层 tool/args；Agent 代理直接声明业务 Schema；两者调用同一 MateToolExecutor | §8 中的新执行入口已在本分支实现，不能把整个渐进披露方案继续记为待实现；错误回传的增量单独记录 |
 | R `tool/mate/MateToolResolver.java:68` · resolveSkill、`:125` · findMetadata、`:139` · resolved | 先按直接 Skill 的可信绑定查找，再按 ID/name 匹配元数据，返回绑定与定义组成的 ResolvedTool；缺失 Schema 拒绝解析 | 回传定义有可信来源，可以使用本次实际参与校验的定义，不需要让模型重读文件后决定权限或执行 ID |
 | R `tool/mate/MateToolExecutor.java:67` · execute、`:80` · validateArguments；`MateToolExecutionException.java` | 业务参数校验在 client.callTool 前完成；失败文本含字段错误，但没有完整 Schema；参数错误、无效 Schema 和远端业务错误使用同一异常类型 | 参数错误时尚未请求 Mate 业务执行；当前异常不能直接区分可修复参数错误与其他失败，完整定义回传为待实现 |
@@ -305,7 +305,7 @@ Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codinga
 
 完整定义反馈属于 **CampusClaw 架构变更**：在 pi 的“错误作为工具结果进入后续模型上下文”基础上，减少模型再次查找定义的步骤。可恢复过程展示属于**产品约束**，减少用户阅读中间失败的负担；可信绑定、权限保持原有产品约束及安全边界。每次补回定义会增加上下文和等待成本，准确率、减少轮次数及用户体验改善仍需实际验收，不能作为已证明效果。
 
-实现状态：本地业务参数拒绝、Pipeline 外层稳定参数错误码、工具错误入上下文与后续 Loop 已在本分支实现；完整定义反馈、业务内层参数错误的稳定分类及对应实时/历史前端展示均为 **待实现**。本次仅静态源码核验和设计证据补充，未运行 pi、Java、真实模型或 Mate 联调测试。后续验收至少覆盖首次失败即回传同次完整定义、业务执行次数为零、模型下一次请求收到恢复正文、修正后沿原权限链执行、失败记录与成功记录均保留、重新读取历史保持相同分类，以及最终未修复和真实失败不会被隐藏。
+实现状态：在本节核验的 `c9a2340f` 上，本地业务参数拒绝、Pipeline 外层稳定参数错误码、工具错误入上下文与后续 Loop 已实现，完整定义反馈等增量尚未实现；PR #323 后续提交的进度由 §13 更新。实时/历史前端低干扰展示仍为 **待实现**。本节仅静态源码核验和设计证据补充，未运行 pi、Java、真实模型或 Mate 联调测试。后续验收至少覆盖首次失败即回传同次完整定义、业务执行次数为零、模型下一次请求收到恢复正文、修正后沿原权限链执行、失败记录与成功记录均保留、重新读取历史保持相同分类，以及最终未修复和真实失败不会被隐藏。
 
 <a id="tool-validation-order-evidence"></a>
 
@@ -339,6 +339,38 @@ CampusClaw 选择 pi 的前置校验顺序作为 Runtime 主基线，并增加�
 
 ### 12.3 实现差距与验收
 
-`AgentTool` 当前只有 `execute`，`ToolExecutionPipeline` 也没有工具准备阶段；`MateToolExecutor` 把解析、校验和远端执行放在同一个私有 `execute` 中。因此 `PreparedToolInvocation`、准备失败结果、prepared target 向 before hook 的只读传递，以及确认后执行同一快照均为 **待实现**。现有外层 Pipeline 校验、权限策略、用户确认、业务参数拒绝和 Mate 调用分别已实现，不能因目标增量把它们整体标为待实现。
+在本节核验的 `c9a2340f` 上，`AgentTool` 只有 `execute`，`ToolExecutionPipeline` 没有工具准备阶段，`MateToolExecutor` 把解析、校验和远端执行放在同一个私有 `execute` 中；因此这些能力在该快照上属于实现差距。PR #323 后续提交已补齐的范围由 §13 更新，不能继续用本节旧快照判断当前开发分支状态。
 
 实现验收至少覆盖：外层错误不解析业务目标；业务缺必填、类型或枚举错误不创建确认记录且 Mate execute 为零；合法 ASK 只确认一次；批准后只执行准备时固定的工具 ID 和参数；确认等待期间刷新或元数据变化不替换本次快照；拒绝和取消不执行；参数错误的模型反馈保留 `isError=true` 与同次定义；未知目标、无效 Schema、权限拒绝和远端失败保持各自分类。本节为静态源码核验，未运行 pi、DSH、Java、真实模型或 Mate 联调测试。
+
+<a id="search-tools-evidence"></a>
+
+## 13. SearchTools 目标与当前开发分支（2026-09-22）
+
+本节只更新 Skill 工具发现方式和 PR #323 的实现进度。OpenCode 上游 `https://github.com/anomalyco/opencode.git` 通过 `git ls-remote --symref` 确认默认分支为 `dev`，隔离 fetch 后读取 `fe3f3a41f79ad292cc3c7c629567385a20ec5130`；Codex 上游 `https://github.com/openai/codex.git` 的默认分支为 `main`，隔离 fetch 后读取 `ac7634b9f73ec1bf96466be7a5869f0949d20b30`。两者都是当日默认分支源码快照，不等于稳定发布保证。OpenCode Code Mode 是独立 package，Codex tool_search 的可用性受 Provider、模型能力和配置约束，不能将二者写成所有 Agent 的统一机制。
+
+### 13.1 基线观察
+
+| 基线 / 路径与符号 | 已观察行为 | 对 CampusClaw 的边界 |
+|---|---|---|
+| OpenCode `packages/codemode/src/tool-runtime.ts` · `prepare`、`makeSearchTool`、`searchIndex`；`packages/codemode/README.md` · Discovery | Code Mode 以预算内联部分完整签名，固定注册 `tools.$codemode.search`；搜索返回 path、description 和完整 signature，底层工具树不因搜索而改变。精确路径命中只返回一个，普通查询确定性加权并分页。 | 借鉴固定搜索入口、完整结果和确定性排序；CampusClaw 不引入 Code Mode 解释器，返回 JSON Schema，并继续通过 CallTool 执行。 |
+| OpenCode `packages/opencode/src/tool/skill.ts` · `SkillTool` | 普通 Skill 仍只加载正文、基础目录和最多 10 个抽样资源路径，普通资源由 read 读取。 | 保留 Skill 正文与普通资源行为；SearchTools 是 CampusClaw 宿主扩展，不写入标准 Skill 包。 |
+| Codex `codex-rs/core/src/tools/handlers/tool_search.rs` · `ToolSearchHandler/get_or_build/search`；`tool_search_spec.rs` · `create_tool_search_tool`；`tools/registry.rs` · `ToolExposure` | 对 deferred 工具建立 BM25 搜索，结果是可加载 ToolSpec；工具说明明确匹配定义会暴露给下一次模型调用。Handler 缓存按 registry source 变化重建。 | 证明延迟工具搜索可以由专用入口实现；CampusClaw 不采用“搜索后把业务工具加入下一次模型 tools”的语义，以避免模型工具集合随会话变化。 |
+
+### 13.2 CampusClaw PR #323 已观察实现
+
+实现仓工作树 `/private/tmp/pi-mono-java-tool-progressive` 的 PR #323 head 为 `ae6645caaade3b9520220a34af940210850ef36a`，base 为 `1d66e52d1ce6cfc40cd6e37f5341e06dd23b50b0`。该 PR 为 Draft；GitHub `build` 检查在 2026-09-22 成功。本次只做静态源码核验与远端检查读取，没有重跑本地 Java、前端、真实模型或 Mate 联调。
+
+| 路径 / 关键符号 | 已观察实现 | 与当前目标的差距 |
+|---|---|---|
+| `modules/agent-core/.../AgentTool.java` · `prepare`；`PreparedToolInvocation.java`；`ToolExecutionPipeline.java` · `prepare/failureResult/recoveryContent` | Pipeline 在 before hook 前建立不可变调用；参数失败保留 `isError=true`、稳定错误码和模型可见的同次定义。 | 确认前准备与模型恢复反馈已经实现，不再标为待实现。 |
+| `modules/coding-agent-cli/.../tool/mate/CallTool.java` · `prepare`；`MateToolExecutor.java` · `prepareSkill/executePrepared`；`RuntimeToolPermissionPolicy.java` · `decide` | CallTool 在确认前解析和校验，Host 按 prepared target 决策，放行后执行同一目标和参数。 | 执行顺序已与目标一致；仍需改为从共享定义快照解析。 |
+| 同模块 `tool/mate/MateToolResolver.java` · `resolveAgentTools/resolveSkill/loadSkillTool`；`MateToolsetFactory.java` · `createSession` | Resolver 按 Agent 或扁平 Skill 工具名称延迟请求元数据并缓存；没有按 Skill 名称可搜索的不可变完整目录。 | 需要引入 Session `ToolDefinitionSnapshot`，让代理、SearchTools 和 CallTool 读取同一版本。 |
+| 同模块 `tool/builtin/BuiltInToolName.java`、`DefaultBuiltInToolFactory.java`、`BuiltInToolProperties.java` | 当前框架清单无 SearchTools。 | 新工具枚举、工厂、默认 Runtime/Cron/Child profile、严格名称测试和公司镜像均待实现。 |
+| 同模块 `tool/skill/SkillTool.java`、`skill/SkillPromptFormatter.java`；`CallTool.java` · `description/parameters` | Skill 返回正文和普通资源路径；CallTool 文案仍指引读取定义文件。 | 宿主提示和 CallTool 文案需改为按需调用 SearchTools，且不得要求 Skill 正文引用平台工具文件。 |
+
+### 13.3 当前目标与验收边界
+
+CampusClaw 采用 `Skill → SearchTools → CallTool`：SearchTools 是固定的并行框架工具，只把指定直接 Skill 范围内的少量完整定义作为结果数据返回；它不动态注册业务工具，也不改变后续模型请求的 `tools`。Agent 直接关联工具仍以代理常驻。SearchTools 与 CallTool 必须共享一个不可变 Session 定义快照，模型不传快照 ID、工具 ID、权限或版本。
+
+这是相对 PR #323 的 **待实现架构变更**。正常流程应证明：加载 Skill 后按业务意图搜索，返回完整定义，CallTool 从同一快照校验并在授权后执行。失败流程应证明：不可见 Skill、无效定义和超大定义明确失败；空匹配成功；参数失败不确认、不执行并带同次定义；搜索结果永远不成为授权凭证。多轮搜索后模型工具集合、数量和名称必须与 Session 初始装配一致。工具定义的数据同步、跨节点缓存和发布版本切换仍由后续专题设计。
