@@ -11,17 +11,20 @@ skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
 title Help Metadata Detail - Supplement to the Global Command Diagram
-' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/execution/CommandExecutionContext.java session and catalog.
-' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached, toIdentity:630, toRuntime:646, AgentIdentity:717.
-' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java metadata.
-' Observed behavior: the identity cache omits useCases; reload currently returns an empty list.
-' Design reason: move cache and response detail out of the global diagram without hiding the global responsibility chain.
-' Pending implementation: Help adapters, query service, DTOs, response projection and cache completion are confirmed targets.
+' Source evidence: pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/contributor/HelpCommandContributor.java definition.
+' Source evidence: pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/readonly/AgentHelpQueryService.java query and visibleText.
+' Source evidence: pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached, withAgentLock, toIdentity, toRuntime and AgentIdentity.
+' Source evidence: pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandResponseAssembler.java help.
+' Historical evidence: pi-mono-java@d1cdb708e3e124cae009b10b985f5832b6dbde01 had the same chain with the field named userCases.
+' Observed behavior: Help reads one locked complete snapshot, projects authored metadata and returns an immutable three-field response.
+' Design reason: keep cache and response detail out of the global diagram without hiding the implemented responsibility chain.
 
 class CommandExecutionContext <<request snapshot>>
-class HelpCommandHandler <<singleton>>
+class HelpCommandContributor <<singleton>> {
+  +definition(): BuiltinCommandDefinition
+}
 class AgentHelpQueryService <<application service>> #E3F2E1 {
-  +query(agentId): AgentHelpDTO
+  +query(session, arguments): HelpCommandResultDTO
 }
 class AgentRuntimeManager <<singleton>> {
   +prepareCached(agentId)
@@ -32,16 +35,16 @@ class "AgentIdentity / agent.json" as AgentIdentity <<stored metadata>> {
   description[]
   useCases[]
 }
-class "AgentHelpDTO / HelpResultDTO" as HelpData <<immutable request data>> #E3F2E1
+class "HelpCommandResultDTO" as HelpData <<immutable request data>> #E3F2E1
 class CommandResponseAssembler <<singleton>>
-class AgentHelpResponseVO <<pending implementation immutable response>> #E3F2E1 {
+class AgentHelpResponseVO <<immutable response>> #E3F2E1 {
   displayName
   description[]
   useCases[]
 }
 
-HelpCommandHandler ..> CommandExecutionContext : authorized Session binding
-HelpCommandHandler --> AgentHelpQueryService : agentId
+HelpCommandContributor ..> CommandExecutionContext : handler lambda reads Session
+HelpCommandContributor --> AgentHelpQueryService : delegates query
 AgentHelpQueryService --> AgentRuntimeManager : one cached read
 AgentRuntimeManager --> PreparedAgentRuntime : complete snapshot
 AgentRuntimeManager --> AgentIdentity : publish / reload
@@ -50,8 +53,8 @@ CommandResponseAssembler ..> HelpData : result DTO
 CommandResponseAssembler ..> AgentHelpResponseVO : business VO
 
 note bottom of AgentIdentity
-Keep useCases on save and reload.
-Old cache: explicit refresh outside Help.
+Save and reload useCases in agent.json.
+Refresh metadata explicitly outside Help.
 Read and publication share the Agent lock.
 end note
 
@@ -67,5 +70,6 @@ Help uses authored Agent metadata, not the command catalog.
 No model/tool call, implicit refresh, Session Entry or execution lease.
 CommandExecutionContext retains the common request catalog.
 DTOs belong to runtimeapi.dto.command; VOs to runtimeapi.vo.
+All shown Help classes and relations are implemented at the source baseline.
 endlegend
 @enduml

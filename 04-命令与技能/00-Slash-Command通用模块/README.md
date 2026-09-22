@@ -4,15 +4,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.12.1 |
+| 文档版本 | 1.12.2 |
 | 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
-| Help 专项源码基线 | `d1cdb708e3e124cae009b10b985f5832b6dbde01`；字段/缓存/SPI 证据见 Help 专项，不替换其他行为的历史证据点 |
+| Help 专项源码基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；Help 缓存、Agent 级锁、查询、响应与统一 POST 已实现，不替换其他行为的历史证据点 |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
 | 发现层前置证据 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`；已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
 | Command GET 候选 | `7759481a1722422395d46564129827c6ee6df204`（未发布） |
-| 状态 | 用户确认的目标设计；公开实现为 待实现 |
+| 状态 | 用户确认的目标设计；Help 公开实现已落地，其他范围按本文各自证据状态跟踪 |
 
 前端 Composer、命令清单、独立草稿、临时结果和错误恢复由
 [Slash Command 前端专项](../../07-前端设计/技术设计/命令/README.md)统一维护；本文件继续维护共享 Command 核心与 HTTP 语义，
@@ -40,7 +40,8 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享
 主图以设计仓 `06bea56c7a725bb749cffb6682bcf98a8f51884a` 的完整版为结构与排版基线，
 保留 Web、Application、Command Core、Builtin 委派和 Runtime/持久化的完整关系。
 主图完整表达 Help 元数据查询、Builtin 委派、Skill 执行和共享消息接受链。
-所有装配关系均为 待实现；分组仅归并重复实现，不把 Handler、业务服务、Coordinator 和 Repository 合成一个对象。
+主图中 Help 的 Contributor/Handler 委派、AgentHelpQueryService、AgentRuntimeManager 和响应投影关系已实现；
+其他装配关系的状态仍按各专题源码证据确定。分组仅归并重复实现，不把 Handler、业务服务、Coordinator 和 Repository 合成一个对象。
 
 ![Slash Command 完整全局目标类图](设计图/target_slash_command_global_classes.svg)
 
@@ -57,12 +58,12 @@ Builtin 直接引用这份主图；Help 专题只补充元数据、缓存与结�
 | CommandDefinition → BuiltinCommandDefinition；Catalog → Definition | 通用发现抽象和可执行 Builtin 不是同一职责；请求内固定 Definition 身份 |
 | Contributor → Handler → 窄业务服务 | 分别负责装配、命令适配和业务约束；新增命令不修改中央名称 switch |
 | 窄业务服务 → Coordinator → Holder/Session/Projector → Repository | 区分执行协调、执行范围对象与持久化；最终准入仍在所属锁内完成 |
-| Help Handler → AgentHelpQueryService → AgentRuntimeManager | Help 消费同一完整 Agent 元数据快照，不反向依赖命令清单 |
+| Help Contributor 内 Handler lambda → AgentHelpQueryService → AgentRuntimeManager | Help 消费同一完整 Agent 元数据快照，不反向依赖命令清单 |
 
-补充源码复核仍使用 pi-mono-java `d8e22562`：`definition/CommandDefinition.java`、
-`builtin/BuiltinCommandDefinition.java`、`catalog/ResolvedCommandCatalog.java` 和
-`execution/CommandExecutionContext.java` 均位于 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/` 下，
-分别证明发现抽象、Handler/Admission 组合、请求定义索引和共享 Session 快照已经存在；公开完整装配仍是目标设计。
+通用命令抽象的历史证据仍保留 pi-mono-java `d8e22562`。Help 专项已在
+`53eff85c7f41de23eb434e027782f5085a8b8e45` 复核 `HelpCommandContributor.definition`、
+`AgentHelpQueryService.query`、`AgentRuntimeManager.prepareCached/toIdentity/toRuntime/withAgentLock`、
+`CommandResponseAssembler.help` 和 `RuntimeCommandController.execute`；这些符号证明 Help 完整装配已存在。
 
 Help 的结果精确为 displayName/description/useCases，字段和缓存规则见
 [Help 专项设计](../01-内置命令/Help-Agent使用指南/README.md)。其他命令不变。
@@ -93,9 +94,9 @@ Help 的结果精确为 displayName/description/useCases，字段和缓存规则
 其中加载宽松、发现严格的策略分裂是必须整改的差距，不是已确认的存量兼容要求。
 来源过滤、可执行 Builtin 定义和七个 Contributor 仍属于后续核心 PR，不因前置发现层存在而视为已实现。
 
-上述结论限于旧证据点。Help 专项在 `d8e22562` 复核到 `command.builtin` 的
-BuiltinCommandContributor/BuiltinCommandDefinition 和 `command.execution` 的 CommandHandler/CommandExecutionContext 已存在；
-Help Handler、AgentHelpQueryService 及 useCases 缓存往返仍未实现。具体路径、符号和差距见
+上述结论限于旧证据点，不再用于判断 Help 当前实现状态。
+Help 在 `d1cdb708e3e124cae009b10b985f5832b6dbde01` 已实现同一链路，但场景字段当时误名为 `userCases`；
+`53eff85c7f41de23eb434e027782f5085a8b8e45` 已将该字段在缓存、DTO、VO 和调用方统一为 `useCases`。具体路径、符号和验收边界见
 [Help 源码证据](../01-内置命令/Help-Agent使用指南/README.md#5-源码证据与设计理由)。
 
 ### 外部基线
@@ -212,6 +213,10 @@ GET 需按 operation 映射 503，不能全局修改同名错误的 422 映射�
 | modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/BuiltinCommandSource.java · definitions/list | Contributor 来源已装配，内部按名称排序 | 在 Application 投影固定显示顺序；不集中按名称执行 |
 | modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/ | 该固定 commit 无 RuntimeCommandController | GET 轻量 HTTP 尚为 待实现，不宣称设计合入即已上线 |
 
+本表仅保留 `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5` 的发现层历史快照。
+对 Help 而言，`53eff85c7f41de23eb434e027782f5085a8b8e45` 已有 RuntimeCommandCatalogController、RuntimeCommandController
+及三字段响应投影，不能继续用上表的“无 Controller”快照推导 Help 尚未实现。
+
 pi 固定基线仍用 `5cd93f688aaab89dbb6dfa4aca535f21796ae185`：
 `packages/coding-agent/src/core/slash-commands.ts` 的 BuiltinSlashCommand 为 name/description/可选
 argumentHint，支持轻量提示的结构参考；它不定义 CampusClaw 的 HTTP、状态过滤或缓存 503。
@@ -280,7 +285,7 @@ Mate Header 不记录、不持久化、不进入 Prompt；Compact 仅在本次 A
 | 实施项 | 完成条件 |
 |---|---|
 | 共享核心 | 两类命令复用来源过滤、不可变解析快照和分层边界；分别定义发现与执行职责 |
-| Builtin | 按 Builtin 分批计划完成七个命令，包括已确认的 Help 元数据指南 |
+| Builtin | 按各命令证据跟踪实施；Help 元数据指南已实现，不代表其他 Builtin 自动验收 |
 | Skill Command | 补齐执行契约、真实执行定义、快照与绑定重检、失败恢复及专项验收 |
 | 共享 HTTP 集成 | 统一对齐两类命令的命名、清单、请求类型、结果与错误，完成发现到执行的集成验收后发布 |
 
@@ -308,6 +313,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.12.2 | 2026-09-22 | 按 53eff85c 更正 Help 缓存、查询、响应与统一 POST 的已实现状态。 |
 | 1.12.1 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，与 Runtime 命令契约保持一致。 |
 | 1.12.0 | 2026-09-18 | Skill 统计查询改为批量 POST，其他命令与采集结论保持原核验范围。 |
 | 1.11.0 | 2026-09-16 | 显式与 Read 共用根执行使用统计，受理后独立记录。 |

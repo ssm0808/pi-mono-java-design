@@ -7,16 +7,16 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.11.3 |
+| 文档版本 | 2.11.4 |
 | 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
-| Help 专项源码基线 | `d1cdb708e3e124cae009b10b985f5832b6dbde01`；已有核心 SPI，Help Handler/查询与缓存补齐仍为 待实现 |
+| Help 专项源码基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；Help 查询、useCases 缓存往返、Agent 级锁、响应投影与 Command POST 已实现 |
 | 响应复用源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`；既有 Session/Models API，Command 响应投影仍为 待实现 |
 | Name 最新复核基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；已有命名服务和持久化，统一 Session POST 仍为 待实现 |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
 | 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
-| 状态 | 七个 Builtin 目标已由用户确认；公开执行为 待实现 |
+| 状态 | 七个 Builtin 目标已由用户确认；Help 已实现，其他命令状态仍以各自源码证据为准 |
 
 本期不支持排队续跑；Compact 复用 Runtime 已有执行与可靠清理边界。
 [FollowUp 未来专题](../../01-总体架构/01-CampusClaw多Agent运行时/chat-follow-up-future-design.md)
@@ -86,7 +86,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 | 顺序 | 分支 | 职责与发布边界 |
 |---:|---|---|
 | 1 | codex/builtin-command-core | 来源过滤、可执行定义、准入/Handler/Context、Contributor、快照与查重；实现设计、PlantUML/SVG、未占用序号 ADR；无 HTTP |
-| 2 | codex/builtin-command-readonly | Help/Status/Skills 服务、Contributor、Handler、DTO；Help 前置补齐 useCases 保存/重载、显式刷新旧缓存与读取/发布互斥；无 HTTP |
+| 2 | codex/builtin-command-readonly | Help 的 Service、Contributor、Definition 内 Handler、DTO、useCases 保存/重载及读取/发布互斥已实现，元数据更新通过显式刷新完成；Status/Skills 按各自证据跟踪 |
 | 3 | codex/builtin-command-name | display_name、Mapper/Repository/DTO 与 GET Session；无 Command 路由 |
 | 4 | codex/builtin-command-model | Model 窄服务与可选 expectedVersion；统一 Session POST 复用条件更新规则 |
 | 5 | codex/builtin-command-thinking | Thinking 窄服务与同一事务入口 |
@@ -166,7 +166,7 @@ Builtin 请求拒绝 fileIds、未知字段、If-Match 和 Idempotency-Key。该
 
 | 命令与操作 | 成功 result / 响应 VO | 复用基线 / ETag |
 |---|---|---|
-| help | displayName、description[]、useCases[] / AgentHelpResponseVO（待实现） | 无独立 API，保留最小业务结果；无 ETag |
+| help | displayName、description[]、useCases[] / AgentHelpResponseVO（已实现） | 无独立 API，保留最小业务结果；无 ETag |
 | status；name/thinking 空参查询 | 完整 Session / GetSessionResponseVO | [GET Session](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/02-get-session.json)，包含 ETag |
 | name 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)；响应含 ETag，Command 不要求 If-Match |
 | model 空参查询 | currentModelId、models[] / AvailableModelsResponseVO | [GET Models](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/06-list-session-models.json)；无 ETag |
@@ -241,12 +241,14 @@ sync-campusclaw 和 diff --check；最终 HTTP PR 执行完整 mvnw verify。
 直接比较各操作的资源形状，不另存 Session 字段清单。门禁同时检查仅名称的 Session POST
 的 `If-Match`、错误码、running 准入、同值结果和命名边界，并覆盖 JSON/HTML 字节同步、
 PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。图形还需检查原尺寸与文档缩放视图。
-以上不证明 Java 的事务快照、缓存往返、并发或端到端执行已经实现，仍按上述实施切片验收。
+以上文档门禁不单独证明 Java 行为。Help 的缓存往返、Agent 级互斥、查询、响应投影和端到端路由结论已由
+`53eff85c7f41de23eb434e027782f5085a8b8e45` 源码与定向测试确认；已执行测试和真实 Mate、OpenGauss 集成测试的验收边界见 [Help 实现与验收状态](Help-Agent使用指南/README.md#6-实现与验收状态)。
 
 ## 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.11.4 | 2026-09-22 | 按 53eff85c 将 Help 缓存、查询、响应投影和公开执行更新为已实现。 |
 | 2.11.3 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，同步命令结果和缓存验收。 |
 | 2.11.2 | 2026-09-14 | 统一引用 Skill 契约状态并重排命名与压缩流程，精确命令行为保持不变。 |
 | 2.11.1 | 2026-09-14 | 实施按职责与验收边界组织，不设新增行数预算。 |
