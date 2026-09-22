@@ -87,76 +87,76 @@ endlegend
 ' Observed behavior: one Agent execution is protected by a lock and runs asynchronously.
 ' Architecture change: add transactional acceptance and deployment-level capacity leases.
 ' Design reason: acceptance must survive an HTTP disconnect without exposing an execution resource.
-title Pending implementation Admission and Execution Lifecycle
-autonumber
-hide footbox
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontSize 13
-skinparam maxMessageSize 190
-skinparam BoxPadding 10
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F1F5F9
-}
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-actor "mate-service" as Client
-boundary "Session Event API" as API
-control "Session Coordinator" as Session
-participant "Capacity Manager\nand bounded admission" as Capacity
-database "RuntimeSessionStore" as Store
-participant "Execution task\nvirtual thread" as Task
-participant "SSE Writer" as SSE
-
-== 1. Reserve capacity ==
-Client -> API : Submit Session event
-API -> API : Validate request and attachments
-API -> Session : Reserve idle Session
-break Session already running
-  Session --> API : Conflict
-  API --> Client : ResultBean error
+title Admit and Finish One Execution - Pending implementation
+participant Caller
+participant "Execution admission" as Admission
+participant "Capacity manager" as Capacity
+database "Session store" as Store
+participant "Execution task" as Task
+participant "Response writer" as Response
+Caller -> Admission : Submit Session event
+Admission -> Admission : Validate input and reserve idle Session
+Admission -> Capacity : Acquire bounded count and byte lease
+Capacity --> Admission : Lease or rejection
+break No admission lease
+  Admission --> Caller : Reject without a database acceptance
 end
-Session -> Capacity : Acquire count and byte lease
-Capacity --> Session : Lease or admission timeout
-break No lease before deadline
-  Session --> API : Admission rejected
-  API --> Client : ResultBean error
+Admission -> Store : Commit user entry, running state and fence
+alt Acceptance committed
+  Store --> Admission : Fixed accepted execution
+  Admission -> Response : Enqueue committed receipt
+  Admission -> Task : Start immutable execution context
+  Task -> Store : Commit output and actual terminal
+  Task -> Capacity : Release lease once
+  Task -> Response : Output and terminal
+  Response -->> Caller : Project available events
+else Commit failed
+  Admission -> Capacity : Release any acquired lease once
+  Admission --> Caller : Reject before execution starts
 end
-
-== 2. Commit acceptance ==
-Session -> Store : Commit User Entry, running state and fence
-break Commit failed
-  Store --> Session : Rolled back
-  Session -> Capacity : Close lease once
-  Session --> API : Rejected before acceptance
-  API --> Client : ResultBean error
-end
-  Store --> Session : Committed Entry
-  Session --> API : Accepted
-  API --> Client : 200 text/event-stream
-  API -> SSE : Publish accepted user.message
-Session -> Task : Submit immutable execution context
-
-== 3. Execute and release ==
-Task -> Task : Model / Tool / File phases\nEach owns its resource lease
-Task -> Store : Commit completed Entries
-Store --> Task : Committed
-Task -> SSE : Publish live and completed events
-Task -> Store : Set idle; clear fence
-Task -> Capacity : Close execution lease once
-Task -> SSE : Idle and stream end
-SSE -->> Client : Project available events
-
-legend bottom left
-This diagram belongs to the retained pending implementation capacity proposal.
-An accepted execution survives disconnect; only SSE projection closes.
-Admission groups two collaborators; it does not introduce a combined class.
-endlegend
+note over Admission,Task
+  This is the retained capacity proposal, not a verified implementation.
+  Disconnect closes observation; accepted execution survives.
+end note
 @enduml
+' Keep this historical block at line 160 for the unchanged archived document link.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @startuml bounded_sse_and_downstream
 top to bottom direction
 skinparam nodesep 25

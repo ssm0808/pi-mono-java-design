@@ -104,80 +104,59 @@ endlegend
 @enduml
 
 @startuml http_session_update
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 190
-skinparam sequenceArrowColor #526777
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: rejectConfigurationUpdate, appendConfigurationEntries.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java :: getView.
 ' Observed behavior: existing configuration writes use row locks and durable events.
 ' Design reason: resolve a combined target before a single version-checked transaction.
 ' Java divergence: unified POST and atomic four-property update are pending implementation.
-title Unified Session POST - Target Transaction
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+
+title Update One Session Configuration - Target
 actor Caller
-participant "RuntimeSessionController" as API
-participant "Configuration application\nand shared validation" as App
-participant "Model Manager" as Models
-participant "Session Repository" as Repo
-database GaussDB as DB
-participant "Response assembler\nand ETag factory" as Response
-== Prepare one combined candidate ==
-Caller -> API : POST /sessions/{sessionId}\nIf-Match + submitted fields
-API -> API : Strict VO binding\nReject null, unknown, duplicate or readonly keys
-API -> App : updateSession(sessionId, ifMatch, requestVO)
-App -> Repo : read current Session
-Repo --> App : current values and resource version
-App -> App : Precheck version and field-based admission\nNormalize name; derive final model first
-opt modelId submitted or thinking=true
+participant "Session API" as API
+participant "Configuration service" as App
+participant "Model service" as Models
+database "Session repository" as Repo
+Caller -> API : Submit configuration with expected version
+API -> App : Strictly validated request
+App -> Repo : Read current configuration
+Repo --> App : Session snapshot
+opt Model change or thinking enablement requires resolution
   App -> Models : Resolve required model and capabilities
-  Models --> App : Validated model snapshot, or failure
+  Models --> App : Validated candidate information
 end
-App -> App : Validate final thinking and plan availability\nBuild immutable candidate with expectedVersion
-App -> Repo : updateConfiguration(candidate)
-== Recheck and commit atomically ==
-group One transaction
-  Repo -> DB : SELECT Session FOR UPDATE
-  DB --> Repo : authoritative current Session
-  Repo -> Repo : Recheck existence, version and field-based idle
-  alt validation fails or version/state changed
-    Repo --> App : Reject entire update; no fields/events committed
-  else all final values equal
-    Repo --> App : UNCHANGED; original Session and version
-  else real changes
-    Repo -> DB : Update all changed properties\nAdvance updated_at/resource_version once
-    Repo -> DB : Append changed model, thinking, mode events in order\nNo name event
-    DB --> Repo : Commit all, or roll back all
-    Repo --> App : UPDATED; committed Session DTO
-  end
+App -> App : Normalize and prepare combined candidate
+App -> Repo : Lock; recheck version, state and final values
+alt Accepted
+  Repo -> Repo : Commit all changes and ordered events, or keep unchanged
+  Repo --> App : Authoritative Session and version
+  App --> API : Response from the same committed snapshot
+  API --> Caller : Complete Session and matching ETag
+else Rejected
+  Repo --> App : No partial changes
+  App --> API : Controlled rejection
+  API --> Caller : Error
 end
-== Project the committed snapshot ==
-alt accepted
-  App -> Response : getView(committed DTO)
-  Response --> App : Session response VO + same-snapshot ETag
-  App --> API : RuntimeSessionView
-  API --> Caller : 200 ResultBean<Session>\nETag + no-store
-else rejected
-  App --> API : mapped rejection
-  API --> Caller : HTTP error + resCode/resMsg\nNo partial-success fields
-end
-note over Caller,DB
-  Name-only updates may run during execution. An
-  execution field requires idle, even when unchanged.
-  This POST never starts inference or approves a plan.
-  On an uncertain response, GET before deciding to
-  retry.
+note over App,Repo
+  Name-only changes may run during execution.
+  Execution fields require idle even if unchanged.
+  This operation never starts inference.
 end note
 @enduml

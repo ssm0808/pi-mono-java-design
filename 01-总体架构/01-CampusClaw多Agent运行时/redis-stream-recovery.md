@@ -67,6 +67,8 @@
 
 ## 4. 从关闭浏览器到重新看到输出
 
+本图聚焦浏览器重开时的快照与游标衔接；Mate 读边界、Claw 跨副本读取、执行端、短期 Redis 和权威历史分列，不能为减少生命线而合并。执行端完成后先提交数据库，再发布 completed 并移除预览；Redis 故障回退完整历史。断线不取消执行、不自动重放写入，执行端失效恢复属于其他设计。
+
 ![浏览器重开恢复时序](设计图/Redis流式恢复/redis_recovery_sequence.svg)
 
 [原尺寸 SVG](设计图/Redis流式恢复/redis_recovery_sequence.svg) · [PlantUML 源码](设计图/Redis流式恢复/diagram.puml#L76)

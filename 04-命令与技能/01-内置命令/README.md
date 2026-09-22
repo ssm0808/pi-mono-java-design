@@ -120,6 +120,8 @@ Skills 不触发刷新：无完整快照返回 AGENT_NOT_AVAILABLE；完整空�
 
 ## 5. Name 当前状态
 
+本图比较两个改名入口如何复用同一套校验，分支本身就是图要回答的问题。HTTP 合并其他配置字段并检查 If-Match，Slash 不要求 expectedVersion；同名不写入，真实改名更新名称、时间与版本。名称不创建 Entry，不改变活动执行；仅改名可在运行中进行，携带执行字段仍要求 idle。
+
 ![Name 行锁更新](设计图/session_name_update.svg)
 
 [PlantUML 源码](设计图/diagram.puml#L61)
@@ -144,9 +146,11 @@ Manager 不可用为 MANAGER_UNAVAILABLE。Model 切换到不支持 Thinking 的
 
 ## 7. Compact 生命周期
 
+本图只展示手工压缩的准入、JSON 终结结果与资源释放。Accepted execution 对应持有租约、凭据及非取消等待句柄的执行对象；它作为生命线保留，是为了明确响应完成可能早于最后清理。空历史不创建租约、执行状态或 Entry；中断接线和失败契约仍由命令专题维护。
+
 ![Compact 独立终态与清理](设计图/compact_command_execution.svg)
 
-[PlantUML 源码](设计图/diagram.puml#L119)
+[PlantUML 源码](设计图/diagram.puml#L110)
 
 只接受 idle Session 和空参数。空历史观察无副作用：不占容量、不改状态、不写 Entry，返回 compacted=false。
 真实压缩与 POST Events 共用操作锁、全局容量、Active Holder、Event Projector 和 30 分钟超时。

@@ -48,52 +48,44 @@ end note
 ' Source evidence: pi@5cd93f68 packages/server/src/sessions.ts handleRuntimeEvent/broadcastSnapshot
 ' Design reason: deltas are disposable preview while completed history is authoritative.
 ' Architecture change: public eventId replaces exposure of internal sequence for reconciliation.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-hide footbox
-skinparam BoxPadding 10
-skinparam maxMessageSize 190
 skinparam sequenceMessageAlign left
-skinparam sequence {
-  ParticipantBackgroundColor #F5F5F5
-  ParticipantBorderColor #555555
-  LifeLineBorderColor #A0A0A0
-  ArrowColor #444444
-}
-title Public Chat - Live Stream and History Recovery (pending implementation)
-actor Client
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+
+title Recover One Public Chat View - Pending implementation
+participant Client
 participant "Mate Chat API" as Mate
 participant "Runtime bridge" as Bridge
 database "Public history" as History
-== 1. Submit and observe ==
-Client -> Mate : open Chat SSE
-Client -> Mate : POST user.message
-Mate -> Bridge : submit through private Session mapping
-Bridge --> Mate : accepted user event
-Mate --> Client : JSON complete receipt
-Bridge -> Mate : normalized output
-Mate --> Client : delta, then completed\nsame eventId
+Client -> Mate : Open public stream; submit message once
+Mate -> Bridge : Submit using private Session mapping
+Bridge --> Mate : Accepted user event
+Mate --> Client : Complete JSON receipt
+Bridge -->> Mate : Normalized output
+Mate -->> Client : Preview and same-ID complete events
+... Observation disconnects ...
+Client -> Mate : Reopen stream and request history
+Mate -> History : Read complete pages from fixed snapshot
+History --> Mate : Authoritative events
+Mate --> Client : Complete history pages
+Client -> Client : Deduplicate; replace matching preview
 note over Client,Mate
-The Chat stream stays open across idle and later executions.
-User events appear in POST receipts and history only.
-end note
-== 2. Recover after disconnect ==
-Client -> Mate : reopen Chat SSE
-Client -> Mate : GET history with filters
-Mate -> History : capture fixed snapshot
-History --> Mate : first complete page
-Mate --> Client : authoritative events
-Client -> Client : deduplicate; replace preview
-loop Current snapshot has nextPage
-  Client -> Mate : GET opaque page only
-  Mate -> History : read same snapshot
-  History --> Mate : next page
-  Mate --> Client : complete events
-end
-note over Client,History
-No automatic POST replay and no cancellation on disconnect.
-Digital page requirement is pending snapshot contract integration.
+  Public stream stays open across idle and later executions.
+  User events appear in receipts and history, not the live stream.
+  Numeric paging integration remains pending.
 end note
 @enduml

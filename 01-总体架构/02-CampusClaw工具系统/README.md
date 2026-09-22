@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.16.0 |
+| 文档版本 | 2.16.1 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理和共用执行适配已在开发提交 c9a2340 实现；CallTool 业务参数前置校验、参数恢复反馈与可恢复展示待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-09-22 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
@@ -118,7 +118,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 
 先通过全局目标类图了解职责与依赖，再看 [§1.1](#initial-model-tools) 的初始模型请求和 [§1.2](#skill-call-scenario) 的完整调用步骤。[执行细节](execution-details.md)按需展开 Session 创建、工具装配、单次调用、业务执行和批次调度；本页其余章节维护规则，精确参数见工具契约。
 
-工具集合用表格说明，简单调用流程用文字步骤说明。需要展开内部协作时，图中使用对象或职责实例，图前说明前提和起止。实线箭头表示调用或请求，虚线表示返回；批次图的开放箭头表示异步提交。完整交互按场景拆分，失败边界在对应规则与实现图中展开。
+工具集合用表格说明，简单调用流程用文字步骤说明。时序图优先使用职责级参与者，一图聚焦一个场景，图前说明前提和起止；具体对象和字段由正文、源码证据及目标类图承接。实线箭头表示调用或请求，虚线表示返回；批次图的开放箭头表示异步提交。完整交互按场景拆分，失败边界在对应规则与实现图中展开。
 
 该组织方式参考了基线的场景示例、契约示例和实现下钻，证据与适用边界见[文档风格核验](source-evidence.md#documentation-style-evidence)。已有公共装配与 Pipeline、新增待实现入口分别标注；运行时事实仍以[时序源码核验](source-evidence.md#sequence-evidence)为准。
 
@@ -250,9 +250,11 @@ public interface BuiltInToolFactory {
 
 ## 5. Agent 工作区边界
 
+本图聚焦本地工具的路径边界校验与内容读取；Workspace boundary 对应固定 AgentWorkspaceBoundary 与 WorkspacePathResolver。词法归一化、逐分量符号链接检查、真实路径及文件类型检查保留在下方顺序表；目录元信息检查与内容读取不同，失败不泄漏其他 Agent 标识或物理路径。
+
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L644)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L501)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -303,7 +305,7 @@ default ToolExecutionMode executionMode() {
 `Read`、`Find`、`Grep`、`Ls`、`Skill` 为 `PARALLEL`；`Cron`、
 `CallTool`、Agent 业务代理、`Agent`、`ExitPlanMode`、`TodoUpdate`、`AskUserQuestion` 为 `SEQUENTIAL`。业务工具首版保持串行，不因改成代理而提升并发。
 
-Pipeline 管理单次调用的校验、执行、结果与事件，Host hook 承担权限与必要确认。已解析工具实例的调用顺序、正常返回与提前退出见[执行细节：单次调用](execution-details.md#tool-invocation)；各入口的 hook 接线状态见源码证据。
+Pipeline 管理单次调用的校验、执行、结果与事件，Host hook 承担权限与必要确认。从模型请求到结果回传的顺序、正常返回与提前退出见[执行细节：单次调用](execution-details.md#tool-invocation)；各入口的 hook 接线状态见源码证据。
 
 代理在 Pipeline 校验完整业务 Schema；CallTool 先校验固定外层 `{tool,args?}`，再由 §9.2 的准备阶段按可信业务 Schema 校验内部 `args`。任一参数校验失败都在 before hook 前返回，不触发用户确认；before hook 拒绝或出错在业务执行前返回。普通工具执行错误归一化后仍进入 after hook。
 
@@ -338,9 +340,11 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 
 该布局属于待实现的发现契约；文件生成、缓存有效性、新旧版本切换和与可信元数据的同步由后续数据同步设计确定。本次不移动 `skill.json`，不把下述既有目录刷新流程视为已解决新增定义文件的一致性。
 
+本图聚焦一次需要构建候选目录的发布过程；prepare 的完整缓存命中直接返回，锁内重查发现已发布也直接返回，refresh 则强制构建。锁作为 Runtime manager 的动作，候选目录与已发布目录分列以保留原子切换边界；所有成功或失败路径均释放锁。新增工具定义文件的同步仍另行设计，不属于本图已解决范围。
+
 ![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
 
-[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L258)
+[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L240)
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
@@ -353,9 +357,11 @@ Skill 工具定义放在所属 Skill 的 `references/{toolName}.json`，与其�
 事件先于 `user.message` 投影。没有可用 default 时拒绝本次执行且不接受用户 Entry。
 工具配置不参与 refresh。首版不提供 TTL、后台刷新、版本比较或 Child 版本不匹配时的隐式自愈。
 
+本图从管理面已完成目录发布开始，只展示下一次空闲执行的模型校准。当前模型仍可调用时保留；失效才尝试新默认模型；无可用模型则不接纳 user.message。模型及必要 thinking 变更原子持久化后先投影，再接纳消息；刷新发布过程由前一张图说明。
+
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L907)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L678)
 
 ## 9. 工具注册与发现
 
@@ -483,9 +489,11 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 
 ## 10. Child Agent Execution
 
+本图只回答父执行如何调用一个直接绑定的 Child 并取得结果。绑定解析、Child 运行准备和进度投影由 Child execution service 编排；公共 Factory 创建独立 Session。身份、版本、深度、ancestry 和可用模型校验在运行前完成，失败不启动 Child；具体校验顺序、模型回退条件与隔离对象见本节正文。
+
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L425)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L349)
 
 模型只使用：
 
@@ -561,7 +569,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L719)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L553)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
@@ -581,9 +589,11 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ### 12.3 公共 Session 压缩
 
+本图只说明“选安全窗口—生成摘要—提交后替换上下文”的主流程。阈值、成功后超窗、失败后溢出及恢复前预处理的触发矩阵仍归 Session 压缩主设计；无安全窗口不发压缩生命周期事件。只有可恢复的失败调用允许一次重试；成功答案不重放。摘要失败或取消保留旧上下文，历史以追加方式保存；Read 路径、被排除 Entry 身份及重载过滤不因省略生命线而取消。
+
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L775)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L609)
 
 压缩由公共 ManagedAgentSession 管理，Runtime、Child 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
 
@@ -712,6 +722,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.16.1 | 2026-09-22 | 时序图按职责和单一场景表达，细节由正文与专项设计承接。 |
 | 2.16.0 | 2026-09-22 | CallTool 在交互确认前准备并校验业务调用，确认后执行同一不可变快照。 |
 | 2.15.0 | 2026-09-22 | 首次参数校验失败向模型提供同次工具定义，前端区分可恢复纠参与真实执行失败。 |
 | 2.14.6 | 2026-09-21 | Skill 关联工具调用改为中性占位名称的四步说明，删除课程查询时序图。 |

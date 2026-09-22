@@ -7,58 +7,45 @@
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/model/MateRuntimeModelManager.java :: resolveModel.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: projectMessageUpdate, persistAssistant.
 ' Observed behavior: provider deltas become typed AI events and then Agent events; Runtime persists completed messages.
-hide footbox
-skinparam backgroundColor #FFFFFF
-skinparam defaultFontName Arial
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam ArrowColor #334155
-skinparam ParticipantBorderColor #64748B
-skinparam ParticipantBackgroundColor #EEF4FB
-skinparam ParticipantFontColor #0F172A
-skinparam NoteBackgroundColor #FFF8E8
-skinparam NoteBorderColor #D6BB74
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 120
-title Model call / observed CampusMate path
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
 autonumber
-participant "AgentLoop" as Loop
-participant "CampusClaw\nAiService" as AI
-participant "CampusMate\nProvider" as Provider
-participant "CampusMate\nHTTP service" as Mate
-participant "MateChat\nSseParser" as Parser
-participant "RuntimeEvent\nProjector" as Projector
 
-Loop -> Loop: invokeModel()\nContext(system, messages, tool schemas)
-Loop -> AI: streamSimple(model, context, options)
-AI -> Provider: resolve provider "campusmate"\nstreamSimple(...)
-Provider -> Provider: MateChatRequestMapper.map()\nmessages + tools + stream options
-Provider -> Parser: create parser for this response
-Provider -> Mate: POST /mate-service/v1/LLM/chat\nstream=true, include_usage=true
-note over AI, Provider
-Fallback ApiProvider routing exists.
-This diagram follows the default CampusMate model.
-end note
-loop Response chunks
-  Mate -->> Parser: SSE data via WebClient subscription
-  Parser -->> Loop: AssistantMessageEventStream\ntext / thinking / tool-call deltas
-  Loop -> Projector: MessageUpdateEvent\nvia Agent listener
-  Projector -> Projector: best-effort text / thinking preview\nvia RuntimeEventOutput
-end
-Mate -->> Parser: [DONE]
-Parser -> Parser: finalize content and tool arguments\nusage + stop reason
-Parser -->> Loop: DoneEvent(AssistantMessage)
-Loop -> Loop: append AssistantMessage to context
-Loop -> Projector: MessageEndEvent
-Projector -> Projector: persist Assistant + usage + public event\nthen emit completed frame
-alt ToolCalls present and response not ERROR / ABORTED
-  Loop -> Loop: runToolPhase()\nappend tool results; invoke model again
-else No ToolCalls or terminal response
-  Loop -> Loop: finish / inspect queued controls
-end
-note over Loop, Projector
-ThinkingEnd persists reasoning when enabled; Coordinator finalizes execution.
-CampusMate server internals are outside this source scope.
+title One Model Call - Historical Implementation
+participant AgentLoop as Loop
+participant "Provider routing" as Routing
+participant "Mate adapter" as Provider
+participant "Mate HTTP service" as Mate
+participant "Runtime projection" as Projector
+Loop -> Routing : Stream current context and tool definitions
+Routing -> Provider : Select configured CampusMate provider
+Provider -> Mate : Send one Chat request
+Mate -->> Provider : SSE chunks
+Provider -->> Loop : Typed Assistant deltas
+Loop -->> Projector : Internal message updates
+Projector -> Projector : Best-effort public preview
+Mate --> Provider : DONE
+Provider --> Loop : Complete Assistant and usage
+Loop -> Loop : Append complete Assistant to context
+Loop -> Projector : Message end
+Projector -> Projector : Persist complete output, then publish
+note over Loop,Projector
+  Tool calls continue through the tool pipeline.
+  Server internals are outside the historical source scope.
 end note
 @enduml
 
@@ -137,68 +124,49 @@ endlegend
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/common/client/HttpMateToolClient.java :: listAgentTools, listSkillTools, invokeTool.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeToolCallSnapshotResolver.java :: resolveDisplayName.
 ' Observed behavior: discovery supplies a name-to-id index; execute uses an invocation credential snapshot.
-hide footbox
-skinparam backgroundColor #FFFFFF
-skinparam defaultFontName Arial
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam ArrowColor #334155
-skinparam ParticipantBorderColor #64748B
-skinparam ParticipantBackgroundColor #EEF4FB
-skinparam ParticipantFontColor #0F172A
-skinparam NoteBackgroundColor #FFF8E8
-skinparam NoteBorderColor #D6BB74
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 160
-title Mate tools / discovery and execution
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
 autonumber
-participant "ToolExecution\nPipeline" as Pipeline
-participant "ListMateTools /\nCallMateTool" as Tool
-participant "MateToolDiscovery\n+ SessionCache" as Discovery
-participant "HttpMateToolClient" as Client
-participant "CampusMate" as Mate
 
-opt Model requests ListMateTools
-  Pipeline -> Tool: execute({skillName?})
-  Tool -> Discovery: listAgentTools() / listSkillTools(name)
-  Discovery -> Client: query bound tools for one source
-  Client -> Mate: GET Agent or Skill bindings
-  Mate --> Client: bound tool IDs
-  Client -> Mate: POST /runtime/tools/query\n{"toolIds": [...]}
-  Mate --> Client: tool metadata
-  Client --> Discovery: ordered metadata
-  Discovery -> Discovery: update this source's name-to-id index
-  Discovery --> Tool: metadata
-  Tool --> Pipeline: scope + name + description + inputSchema
-end
-
-Pipeline -> Tool: execute CallMateTool({tool, args?})\nafter Runtime permission hook
-Tool -> Tool: capture optional execution credentials
-Tool -> Discovery: resolveToolId(tool)
-alt Name present in Session cache
-  Discovery --> Tool: toolId
+title One Mate Tool Call - Historical Implementation
+participant ToolPipeline as Pipeline
+participant "CallMateTool" as Tool
+participant "Trusted discovery" as Discovery
+participant Mate
+Pipeline -> Tool : Execute after Runtime permission hook
+Tool -> Discovery : Resolve business name
+alt Cached binding exists
+  Discovery --> Tool : Tool identity
 else Cache miss
-  Discovery -> Client: load Agent + ALL directly bound Skills\nunder refresh lock
-  Client -> Mate: binding queries + metadata queries
-  Mate --> Client: metadata for all sources
-  Client --> Discovery: complete source snapshots
-  Discovery -> Discovery: reject conflicting names;\npublish complete index atomically
-  Discovery --> Tool: toolId or unresolved/error
+  Discovery -> Mate : Query Agent and directly bound Skill metadata
+  Mate --> Discovery : Complete source metadata
+  Discovery -> Discovery : Reject conflicts; publish complete index
+  Discovery --> Tool : Identity or discovery error
 end
-alt Name resolved
-  Tool -> Client: callTool(toolId, args, credentials)
-  Client -> Mate: POST /runtime/tools/{toolId}/execute\n{"arguments": {...}} + credential headers
-  Mate --> Client: ResultBean result
-  Client --> Tool: ToolResult(content, metadata, isError)
-  Tool --> Pipeline: AgentToolResult or exception
-else Unresolved or discovery failed
-  Tool --> Pipeline: exception -> error ToolResultMessage
+break Unresolved name or discovery error
+  Tool --> Pipeline : Controlled failure; no execute
 end
-note over Client, Mate
-Paths in this diagram share prefix /mate-service/v1.
-Discovery carries no execution credential headers.
-Execution forwards only non-empty credential values; Claw does not require a complete combination.
-The execution method has no automatic replay loop.
+Tool -> Mate : Execute resolved target with scoped credentials
+Mate --> Tool : Business result
+Tool --> Pipeline : Tool result or controlled failure
+note over Tool,Discovery
+  Unresolved names return without execute.
+  Discovery sends no execution credentials.
+  Historical order differs from the current CallTool target.
 end note
 @enduml
 
@@ -210,53 +178,46 @@ end note
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/session/AgentSessionFactory.java :: create, request.runtimeValidator().accept.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeMessageEventService.java :: accept, startAccepted.
 ' Observed behavior: expansion runs against the actual prepared runtime before user-message acceptance.
-hide footbox
-skinparam backgroundColor #FFFFFF
-skinparam defaultFontName Arial
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam ArrowColor #334155
-skinparam ParticipantBorderColor #64748B
-skinparam ParticipantBackgroundColor #EEF4FB
-skinparam ParticipantFontColor #0F172A
-skinparam NoteBackgroundColor #FFF8E8
-skinparam NoteBorderColor #D6BB74
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 140
-title Explicit Skill command / observed execution
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
 autonumber
-actor "HTTP caller" as User
-participant "SkillCommand\nExecutionService" as Skill
-participant "RuntimeMessage\nEventService" as Messages
-participant "Session preparation\nContextFactory / Registry /\nAgentSessionFactory" as Prep
-database "Runtime persistence" as DB
-participant "Agent execution\nCoordinator / Session / Loop" as Run
 
-User -> Skill: POST /sessions/{id}/command\nname="skill:example", arguments="..."\nvia RuntimeCommandController
-Skill -> Skill: normalize input;\npublic text="/skill:example ..."
-Skill -> Messages: submitPreparedMessage(publicText,\nexpansion callback, fileIds)
-Messages -> Messages: Session lock; require idle;\nreconcile model
-Messages -> Prep: createPreparedMessage()\nrestore history and prepare Session
-Prep -> Prep: AgentRuntimeManager.prepare(agentId)
-Prep -> Skill: runtimeValidator callback\nexpand(agentId, actualRuntime, input)
-Skill -> Skill: require directly bound Skill;\ncontent + optional arguments;\nvalidate expanded size
-Skill --> Prep: expanded Skill Markdown
-Prep -> Prep: create UserMessage in callback;\nbuild tools + prompt; register holder
-Prep --> Messages: context with expanded input
-Messages -> DB: acceptMessage() transaction
-note over Messages, DB
-Internal Entry: expanded Skill Markdown.
-Public user.message: /skill:example ...
-Execution identity and result segment are registered.
-end note
-DB --> Messages: accepted execution target
-Messages -> Messages: queue public receipt
-Messages -> Run: start(holder, execution, expanded UserMessage)
-Run -> Run: start asynchronous\nmodel / tool loop
-Messages --> User: RuntimeEventStream -> SSE emitter
-note over User, Run
-No separate Skill executor and no independent Skill tool.
-The command reuses ordinary message execution and SSE.
+title One Explicit Skill Command - Historical Implementation
+participant Caller
+participant "Skill command" as Skill
+participant "Message admission" as Admission
+participant "Session preparation" as Prep
+database "Runtime persistence" as DB
+participant "Agent execution" as Run
+Caller -> Skill : Submit explicit Skill command
+Skill -> Admission : Original invocation and expansion callback
+Admission -> Admission : Lock Session; require idle and reconcile model
+Admission -> Prep : Restore context and prepare execution
+Prep -> Skill : Expand against actual trusted runtime
+Skill --> Prep : Validated Skill body and arguments
+Prep --> Admission : Prepared execution and expanded input
+Admission -> DB : Commit acceptance and execution identity
+DB --> Admission : Accepted root
+Admission -> Admission : Queue public receipt
+Admission -> Run : Start shared model and tool loop
+Admission --> Caller : Existing response stream
+note over Admission,DB
+  Internal context stores expansion; public receipt stores invocation.
+  Preparation failure never starts execution.
 end note
 @enduml
 
@@ -268,50 +229,43 @@ end note
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/read/ReadTool.java :: execute.
 ' Source: campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/workspace/WorkspacePathResolver.java :: resolveFile.
 ' Observed behavior: on this path, metadata points to SKILL.md and a model-issued Read loads instructions into conversation.
-hide footbox
-skinparam backgroundColor #FFFFFF
-skinparam defaultFontName Arial
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam ArrowColor #334155
-skinparam ParticipantBorderColor #64748B
-skinparam ParticipantBackgroundColor #EEF4FB
-skinparam ParticipantFontColor #0F172A
-skinparam NoteBackgroundColor #FFF8E8
-skinparam NoteBorderColor #D6BB74
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 240
-title Model-selected Skill / metadata then Read
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
 autonumber
-participant "Session setup\nManager / Factory /\nPromptLoader" as Setup
-collections "Managed Agent\nworkspace" as Files
-participant "AgentLoop" as Loop
-participant "Model\nvia CampusMate" as Model
-participant "Tool Pipeline\n+ ReadTool" as Read
 
-Setup -> Files: prepare runtime cache\nfetch and publish if incomplete
-Setup -> Files: load SYSTEM.md and Skill metadata
-Files --> Setup: name, description, SKILL.md location
-Setup -> Setup: filter disable-model-invocation;\nformat available_skills + policy prompt
-Setup -> Loop: configure Agent system prompt and tools
-Loop -> Model: ordinary message + system prompt\n+ built-in tool schemas
-opt Model chooses a visible Skill
-  Model --> Loop: ToolCall Read({path: SKILL.md})
-  Loop -> Read: resolve tool; validate schema; before hook
-  Read -> Files: validate Agent workspace boundary;\nread UTF-8 file
-  Files --> Read: Skill file bytes
-  Read --> Loop: text ToolResultMessage\nwith output limits / truncation details
-  Loop -> Model: next request contains Skill text\nas tool result
-  opt Skill instructions need a Mate business tool
-    Model --> Loop: ListMateTools({skillName: ...})\nthen CallMateTool({tool: ..., args: ...})
-    ref over Loop, Read
-      Reuse the tool pipeline and Mate discovery / execute path.
-    end ref
-  end
-end
-note over Loop, Model
-Model choice is not guaranteed by source code.
-No activate_skill tool is registered.
-Read may require further offset/limit requests for long files.
+title Read One Model-selected Skill - Historical Implementation
+participant "Session setup" as Setup
+participant AgentLoop as Loop
+participant Model
+participant "Read pipeline" as Read
+database "Agent workspace" as Files
+Setup -> Files : Read published Skill metadata
+Files --> Setup : Visible names, descriptions and file locations
+Setup -> Loop : Install prompt and tool set
+Loop -> Model : Request with visible Skill metadata
+Model --> Loop : Select a Skill file to Read
+Loop -> Read : Validate registered call and run before hook
+Read -> Files : Validate workspace boundary; read content
+Files --> Read : File text
+Read --> Loop : Bounded ToolResult
+Loop -> Model : Continue with Skill text
+note over Loop,Model
+  Model selection is optional, not guaranteed.
+  Further reads and business calls are separate tool invocations.
+  Historical baseline has no activate_skill tool.
 end note
 @enduml

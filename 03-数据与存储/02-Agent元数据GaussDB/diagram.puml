@@ -186,72 +186,53 @@ endlegend
 ' Security hardening: a missing, disabled, or unmatched dependency fails closed.
 ' Product constraint: no partial Runtime Agent response is returned.
 ' Data-model constraint: t_agent_definition stores only the current Agent version.
-title Runtime Agent: Resolve a Complete Definition
 ' Source correction at mate-service@9dd5d85e2ed6561ad654b11f817ef572cc8bac7c:
 ' src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java
 ' getRuntimeAgent calls four binding Mappers sequentially, not in parallel.
-autonumber
-hide footbox
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontSize 13
-skinparam maxMessageSize 190
-skinparam BoxPadding 10
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F1F5F9
-}
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-actor Consumer
-boundary "Agent Definition\nController" as Controller
-control "Agent Definition\nService" as Service
-participant "Agent Definition\nMapper" as Definition
-participant "Four Binding Mappers\nModel / Tool / Skill / Agent" as Bindings
-participant "Tool Definition\nMapper" as Tools
-
-== 1. Root and bindings ==
-Consumer -> Controller : GET Agent runtime
-Controller -> Controller : Validate agentId
-Controller -> Service : getRuntimeAgent(agentId)
-activate Service
-Service -> Definition : selectById(agentId)
-Definition --> Service : Root definition
-break Root missing, disabled, or invalid
-  Service -> Service : Log safe root context
-  Service --> Controller : Specific error code
-  Controller --> Consumer : Error response
+title Resolve One Complete Agent Definition
+participant Consumer
+participant "Agent definition service" as Service
+participant "Definition repository" as Definition
+participant "Binding repository" as Bindings
+participant "Tool repository" as Tools
+Consumer -> Service : Query Agent runtime definition
+Service -> Definition : Load root definition
+Definition --> Service : Root metadata
+break Root missing, disabled or invalid
+  Service --> Consumer : Specific controlled error
 end
-Service -> Bindings : selectByAgentId(agentId)\nfor each binding type
-Bindings --> Service : Four binding collections
-Service -> Service : Validate IDs and order rows
-
-== 2. Batch resolution ==
-Service -> Tools : selectByBindings(Tool ID/version)
+Service -> Bindings : Load and order four binding collections
+Bindings --> Service : Model, tool, Skill and Agent bindings
+Service -> Tools : Resolve bound tool versions in batch
 Tools --> Service : Tool definitions
-Service -> Definition : selectByBindings(Agent ID/version)
-Definition --> Service : Matching current Agent definitions
-break Dependency invalid or unavailable
-  Service -> Service : Log root, dependency and version
-  Service --> Controller : Specific error code
-  Controller --> Consumer : Error response
+Service -> Definition : Resolve direct bound Agent versions in batch
+Definition --> Service : Flat Agent definitions
+alt Root and dependencies valid
+  Service -> Service : Compose complete response
+  Service --> Consumer : Runtime definition
+else Missing, disabled or invalid definition
+  Service --> Consumer : Specific controlled error
 end
-
-== 3. Complete response ==
-Service -> Service : Compose prompts and flat definitions
-note right of Service
-Pending implementation: validate and expose mode.
+note over Service,Tools
+  One REPEATABLE_READ transaction; no recursive Agent expansion.
+  Pending implementation: validate and expose mode.
 end note
-Service --> Controller : RuntimeAgentResponseVO
-Controller --> Consumer : Success envelope
- deactivate Service
-
-legend bottom left
-One REPEATABLE_READ transaction; grouped Mappers are separate collaborators.
-Null version means current/latest; no recursive Agent expansion.
-Tool SQL remains owned by the Tool module at the cited baseline.
-endlegend
 @enduml

@@ -326,6 +326,8 @@ UpdateAgentRequestVO 增加 String mode，以 Jakarta `@Pattern(regexp="^(build|
 
 `GET /mate-service/v1/agents/{agentId}/runtime` 返回运行时所需的 Agent 定义视图，不表示正在运行的 Session 或进程状态。路径参数复用 `getAgent` 的 Agent ID 校验；成功结果继续使用 `ApiSuccessResponseVO<RuntimeAgentResponseVO>` 包装。
 
+本图聚焦一次完整 Agent 定义查询；HTTP 绑定与响应封装归 Agent definition service 边界，数据定义、四类绑定和 Tool 数据仍为不同仓储职责，具体 Mapper 保留于源码表。根对象先验证，根无效立即返回、不继续查绑定；依赖缺失或版本无效也不返回部分定义。分组仓储不代表合并现有模块或类。
+
 ![Runtime Agent 查询流程](./runtime_agent_query_flow.svg)
 
 [原尺寸 SVG](./runtime_agent_query_flow.svg) · PlantUML：[查看源码](./diagram.puml#L148)

@@ -76,61 +76,47 @@ endlegend
 ' Pending implementation: direct Session reads without resolving active_leaf_id.
 ' Design reason: user approved ordinary pages without cross-request snapshots.
 ' Existing integer page shape is retained: default 50, max 200, events/nextPage.
-autonumber
-hide footbox
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontSize 13
-skinparam maxMessageSize 190
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F1F5F9
-}
-title Pending implementation Event History: Read, Append, Read Again
-actor "Internal caller" as C
-control "History service" as Q
-database "Session / Event store" as D
-participant "Execution appender" as A
-== 1. Read the first page ==
-C -> Q : List events: page 1, limit 50
-Q -> Q : Normalize and validate page / limit / offset
-break Invalid query
-  Q --> C : INVALID_EVENT_LIST_QUERY
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+
+title Read Two Pages of an Append-only Timeline - Target
+participant Caller
+participant "History service" as Service
+database "Session events" as DB
+participant "Execution writer" as Writer
+Caller -> Service : Request page 1 and limit
+Service -> Service : Validate page, limit and offset
+Service -> DB : Consistent read: authorize and query complete events
+DB --> Service : Ordered records plus one lookahead
+Service --> Caller : Events and nextPage
+Writer -> DB : Append new complete events
+DB --> Writer : Committed tail
+Caller -> Service : Request next page with the same limit
+Service -> DB : New consistent read; recheck authorization
+alt Read remains authorized and valid
+  DB --> Service : Ordered page, including any visible newer tail
+  Service --> Caller : Events and nextPage
+else Access revoked or projection invalid
+  DB --> Service : Read failure
+  Service --> Caller : Controlled error
 end
-group One consistent read
-  Q -> D : Check Session access and projection integrity
-  break Session missing or access revoked
-    D --> Q : Not readable
-    Q --> C : Error; no stale access reuse
-  end
-  Q -> D : Read complete events by session_id / event_seq\nOffset 0, limit + 1
-  D --> Q : Ordered records
-end
-Q -> Q : Build shared complete projection\nSet nextPage from extra record
-Q --> C : ResultBean(events, nextPage)
-== 2. Append without a cross-page snapshot ==
-A -> D : Commit new complete events at the tail
-D --> A : Committed
-== 3. Recheck and read the next page ==
-C -> Q : List events: page 2, same limit
-Q -> Q : Validate page / limit / offset
-group New consistent read
-  Q -> D : Recheck Session access and projection integrity
-  break Session missing or access revoked
-    D --> Q : Not readable
-    Q --> C : Error; no stale access reuse
-  end
-  Q -> D : Read complete events by session_id / event_seq\nOffset 50, limit + 1
-  D --> Q : Ordered records, including newer tail
-end
-Q --> C : ResultBean(events, nextPage)
-legend bottom left
-Valid empty page: events=[], nextPage=null. Null is not execution completion.
-Rebuild from page 1 after access, retention, or page-size changes.
-No automatic change detection or POST replay. sourceEventId is not a cursor.
-endlegend
+note over Caller,DB
+  No cross-page snapshot; no delta history.
+  nextPage=null does not mean execution has completed.
+end note
 @enduml

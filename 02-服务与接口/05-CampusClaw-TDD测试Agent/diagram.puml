@@ -82,65 +82,47 @@ endlegend
 ' Observed behavior: design versions and implementation tests evolve independently and exact requirement-to-test binding is incomplete.
 ' Design reason: mature requirements must create executable red tests before product implementation, while proposals must not block delivery.
 ' Pending implementation: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
-
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName Arial
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
-skinparam ArrowColor #475569
-hide footbox
-skinparam maxMessageSize 210
+skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam sequence {
-  ParticipantBackgroundColor #F8FAFC
-  ParticipantBorderColor #64748B
-  LifeLineBorderColor #94A3B8
-  GroupBorderColor #CBD5E1
-  GroupBackgroundColor #F8FAFC
-}
-title Design-to-Test - Mature Requirement to Evidence
-actor "Designer / Developer" as Author
-participant "Quality Engineer" as Agent
-database "Capability Registry" as Registry
-participant "Maturity / Coverage Checks" as Gate
-participant "Isolated Test Worktree" as Worktree
-participant "Deterministic Runner" as Runner
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-== 1. Classify the changed requirement ==
-Author -> Agent : Design or code change
-Agent -> Registry : Refresh commits, hashes and source evidence
-Registry --> Agent : Updated inventory
-Agent -> Gate : Classify requirement maturity
-alt research or proposed
-  Gate --> Agent : Advisory only
-  Agent -> Registry : Record target / open question
-  Registry --> Agent : Advisory saved
-  Agent --> Author : Non-blocking analysis
-else accepted, frozen or implemented
-  Gate --> Agent : Enforceable requirement
-
-  == 2. Bind or create exact coverage ==
-  Agent -> Gate : Resolve case and test selector
-  alt Executable coverage exists
-    Gate --> Agent : Selected tests
-  else Coverage missing or stale
-    Gate --> Agent : Coverage gap
-    Agent -> Worktree : Add tests and fixtures
-    Worktree --> Agent : Test patch and selector
-  end
-
-  == 3. Execute before reporting ==
-  Agent -> Runner : Run selected mandatory suites
-  Runner --> Agent : Results, logs and seed\nRed evidence for new behavior
-  Agent -> Registry : Bind requirement / case / selector / run
-  Registry --> Agent : Evidence reference saved
-  Agent --> Author : Report + test-only Draft PR when needed
+title Verify One Mature Requirement - Target
+participant "Designer / developer" as Author
+participant "Quality workflow" as Agent
+database "Evidence registry" as Registry
+participant "Isolated test worktree" as Worktree
+participant "Deterministic runner" as Runner
+Author -> Agent : Submit design or code change
+Agent -> Registry : Refresh source baseline and requirement maturity
+Registry --> Agent : Evidence and maturity
+break Requirement is research or proposed
+  Agent --> Author : Advisory analysis; no blocking acceptance claim
 end
-
+Agent -> Agent : Resolve exact coverage or identify a gap
+Agent -> Worktree : Prepare required tests and fixtures when missing
+Worktree --> Agent : Test selector and patch when needed
+Agent -> Runner : Execute selected mandatory suites
+Runner --> Agent : Results, logs, seeds and required red evidence
+Agent -> Registry : Bind requirement, case, selector and run
+Agent --> Author : Evidence report and test-only proposal when needed
 note over Agent,Runner
-Accepted P0 without exact coverage fails the coverage gate.
-Environment failure remains blocked; skip never becomes pass.
-Test proposals require human review before merge.
+  Missing accepted P0 coverage fails the gate.
+  Environment failure is blocked, never a pass.
+  Human review is required before merging test proposals.
 end note
 @enduml
 

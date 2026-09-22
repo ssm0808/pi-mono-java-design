@@ -71,9 +71,11 @@ Track implementation progress in build mode; do not call this tool during plan-m
 
 ## 3. 事件与执行顺序
 
+本图只说明一次 TodoUpdate 如何形成权威任务列表。调用事件不等于任务进度，最终成功结果通过映射后与工具结果在同一事务提交；失败不生成任务事件。重载通过现有历史接口读取同一完整快照，不增加 TODO 接口或改变 Session 模式。
+
 ![TodoUpdate 后端任务事件流程](todo_update_sequence.svg)
 
-[原尺寸 SVG](todo_update_sequence.svg) · [PlantUML 源码：`todo_update_sequence`](diagram.puml#L493)
+[原尺寸 SVG](todo_update_sequence.svg) · [PlantUML 源码：`todo_update_sequence`](diagram.puml#L447)
 
 1. 模型生成 TodoUpdate ToolCall；Projector 按原路径保存和发送 `agent.tool_call`，`requiresConfirmation=false`。调用参数不提交进度。
 2. Pipeline 校验参数并执行工具，工具返回规范化完整列表，不直接写数据库或发 SSE。

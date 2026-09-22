@@ -179,72 +179,46 @@ endlegend
 ' Observed behavior: POST /mate-service/v1/LLM/chat exists in the analyzed mate-service baseline.
 ' Product constraint: cancellation closes the foreground request and has no separate cancel operation.
 ' Architecture change: successful Chat SSE is returned without ResultBean or payload rewriting.
-
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName Arial
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
-skinparam ArrowColor #475569
-title CampusMate Chat - One Invocation
-hide footbox
-skinparam maxMessageSize 210
+skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam sequence {
-  ParticipantBackgroundColor #F8FAFC
-  ParticipantBorderColor #64748B
-  LifeLineBorderColor #94A3B8
-  GroupBorderColor #CBD5E1
-  GroupBackgroundColor #F8FAFC
-}
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+
+title Invoke One Model Through Mate - Target
 participant AgentLoop as Loop
-participant "AI service / provider registry" as AI
-participant CampusMateProvider as Provider
-participant "Mate Chat\nvia internal gateway" as Mate
-
-== 1. Select and prepare ==
-Loop -> AI : stream(model, context, options)
-AI -> AI : Resolve Provider identity
-AI -> Provider : streamSimple(model, context, options)
-Provider -> Provider : Validate and map text context\nOmit every output token limit [P]
-Provider --> AI : Per-call event stream
-AI --> Loop : Event stream
-
-== 2. Create foreground request ==
-Provider -> Mate : POST /mate-service/v1/LLM/chat\nProtocol headers only
-alt Rejected before SSE
-  Mate --> Provider : HTTP error + ResultBean
-  Provider --> Loop : ERROR (one terminal)
-else SSE established
-  Mate --> Provider : 200 text/event-stream
-  loop While invocation is active
-    Mate --> Provider : Original Chat chunk
-    Provider -> Provider : Parse content, tools and usage
-    Provider --> Loop : AssistantMessageEvent
-  end
-
-  == 3. End the invocation ==
-  alt Normal completion
-    Mate --> Provider : data: [DONE]
-    Provider --> Loop : Final AssistantMessage
-  else Caller cancels
-    Loop -> Provider : Cancel stream
-    Provider -> Mate : Close request and body
-    Mate -> Mate : Stop upstream invocation
-    Provider --> Loop : ABORTED (one terminal)
-  else Stream fails
-    Mate --> Provider : event:error; then close\nNo [DONE]
-    Provider --> Loop : ERROR (one terminal)
-  end
+participant "Provider routing" as Routing
+participant "Mate provider" as Provider
+participant "Mate Chat" as Mate
+Loop -> Routing : Stream with model, context and options
+Routing -> Provider : Select provider by model identity
+Provider -> Provider : Validate and map input; omit output limits [P]
+Provider -> Mate : Create one foreground Chat request
+Mate -->> Provider : Stream chunks
+Provider -->> Loop : Typed Assistant events
+alt Normal completion
+  Mate --> Provider : DONE with complete response
+  Provider --> Loop : Final Assistant
+else Rejected, failed or cancelled
+  Provider -> Mate : Close active request when necessary
+  Provider --> Loop : One error or aborted terminal
 end
-
 note over Loop,Provider
-Tool execution remains in AgentLoop.
-A completed, failed or cancelled call emits one terminal.
-end note
-note over Provider,Mate
-No application credentials; no create replay after unknown outcome.
-Mate owns upstream routing, output limits and cancellation propagation.
-Execution preparation supplies the captured context window [P].
+  Tool execution belongs to AgentLoop.
+  No automatic create replay after an uncertain outcome.
+  [P] = Pending implementation increment.
 end note
 @enduml
 

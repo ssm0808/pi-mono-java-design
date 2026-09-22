@@ -148,132 +148,96 @@ Slash -[hidden]down-> SlashHandlers
 @enduml
 
 @startuml agent_session_assembly
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 14
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 210
-skinparam sequenceArrowColor #425B70
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F1F5F9
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #FAFBFC
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam sequenceReferenceBackgroundColor #EEF4FA
-skinparam sequenceReferenceBorderColor #8496A4
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
 ' Source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java: create, configureAgent, applyPrompt
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java: prepare
 ' Observed behavior: the common factory prepares runtime and per-session Mate state, configures an Agent, then creates its ManagedAgentSession.
 ' Design reason: show the common creation boundary; entry-specific admission and lifecycle are outside this interaction.
-title Create One Execution Session
-
-participant "Entry Host" as Host
-participant "Session factory\nAgentSessionFactory" as Factory
-participant "Managed runtime\nAgentRuntimeManager" as Manager
-participant "Tool assembler\nConfiguredToolAssembler" as Tools
-
-Host -> Factory ++ : create(request)\nEntry, Agent and execution context
-Factory -> Manager ++ : prepare(agentId)
-Manager --> Factory -- : validated runtime snapshot
-Factory -> Factory : Validate execution and resolve model;\ncreate workspace, Mate state and tool context
-Factory -> Tools ++ : assemble(entryPoint, context)
-ref over Factory, Tools
-  Tool set assembly (execution details, section 2)
-end ref
-Tools --> Factory -- : tool instances for this Session
-Factory -> Factory : Create Agent; install model, tools,\nordered hooks and SYSTEM prompt
-create participant "Execution Session\nManagedAgentSession" as Session
-Factory -> Session ++ : new(runtime, agent, tools, ...)
-Session --> Factory -- : created
-Factory --> Host -- : new Session instance
-
-note over Host, Factory
-  Success path; the Host has chosen the entry point.
-  Creation errors return to the Host before inference.
-end note
-@enduml
-
-@startuml tool_set_assembly
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 210
+skinparam maxMessageSize 180
 skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
 skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
 skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
-skinparam sequenceReferenceBackgroundColor #EEF4FA
-skinparam sequenceReferenceBorderColor #8496A4
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
+
+title Create One Execution Session
+participant Host
+participant "Session assembly" as Factory
+participant "Managed runtime" as Runtime
+participant "Tool assembly" as Tools
+Host -> Factory : Create Session for the chosen entry and Agent
+Factory -> Runtime : Prepare trusted runtime
+Runtime --> Factory : Validated runtime snapshot
+Factory -> Factory : Resolve model and execution context
+Factory -> Tools : Assemble this Session's tools
+Tools --> Factory : Validated tool set
+Factory -> Factory : Create independent Session; install prompt and hooks
+Factory --> Host : Ready Session
+note over Host,Factory
+  Preparation or assembly failure returns before inference.
+  Host owns history restoration, observation and close.
+end note
+@enduml
+
+@startuml tool_set_assembly
 ' Source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultConfiguredToolAssembler.java: assemble, validateNames
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultBuiltInToolFactory.java: create, contextualTool
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolSessionState.java: createAgentToolAdapters
 ' Observed behavior: framework tools and direct Agent adapters are created before name validation; an explicit empty profile returns immediately.
 ' Design reason: validate the complete list before exposing it, while Skill-only schemas stay outside initial assembly.
-title Assemble the Initial Tool Set
-
-participant "Session factory\nAgentSessionFactory" as Factory
-participant "Tool assembler\nConfiguredToolAssembler" as Assembler
-participant "Framework factory\nBuiltInToolFactory" as BuiltIn
-participant "Per-session Mate state\nMateToolSessionState" as MateFactory
-
-Factory -> Assembler ++ : assemble(entryPoint, context)
-Assembler -> Assembler : Read entry profile
-alt profile is explicitly empty
-  Assembler --> Factory : empty list; no business adapters
-else profile is non-empty
-  loop each framework name in profile
-    Assembler -> BuiltIn ++ : create(name, context)
-    BuiltIn --> Assembler -- : per-session framework tool
-  end
-  opt Mate session state is available
-    Assembler -> MateFactory ++ : createAgentToolAdapters()
-    MateFactory --> Assembler -- : one adapter per direct Agent binding
-  end
-  Assembler -> Assembler : Validate duplicate names and\nreserved framework name conflicts
-  Assembler --> Factory : ordered framework tools and adapters
-end
-deactivate Assembler
-
-note over Assembler, MateFactory
-  Skill-only business schemas never enter this list.
-  A name conflict fails assembly; no partial list is exposed.
-end note
-@enduml
-
-@startuml managed_runtime_refresh
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
+skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title Managed Runtime Prepare and Explicit Refresh
 
+title Assemble One Session's Tool Set
+participant "Session assembly" as Factory
+participant "Tool assembly" as Assembler
+participant "Framework tools" as BuiltIn
+participant "Direct business bindings" as Business
+Factory -> Assembler : Assemble for entry profile
+Assembler -> Assembler : Read configured profile or default
+break Explicit empty profile
+  Assembler --> Factory : Empty tool set
+end
+Assembler -> BuiltIn : Create configured framework tools
+BuiltIn --> Assembler : Per-session instances
+Assembler -> Business : Create available directly bound adapters
+Business --> Assembler : Per-session business tools
+Assembler -> Assembler : Reject duplicate and reserved names
+Assembler --> Factory : Complete validated tool set
+note over Assembler,Business
+  Skill-only definitions are disclosed later.
+  Any conflict fails assembly; no partial set.
+end note
+@enduml
+
+@startuml managed_runtime_refresh
 ' Source evidence (CampusClaw d649866):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java:
 ' prepare, materialize, isRuntimeComplete
@@ -281,87 +245,51 @@ title Managed Runtime Prepare and Explicit Refresh
 ' generates references/tools.json.
 ' Design reason: candidate-tree publication prevents partial reads; explicit
 ' management refresh changes only future sessions and never tool configuration.
-
-actor "Session Host" as Host
-actor "Management workflow" as Admin
-participant "Agent Runtime\nManager" as Manager
-participant "Per-agent lock" as Lock
-participant "Mate directory client" as Mate
-participant "Sibling candidate tree" as Candidate
-database "Published agent/{agentId}" as Published
-
-group prepare(agentId)
-  Host -> Manager : prepare(agentId)
-  Manager -> Published : validate complete tree
-  alt cache is complete
-    Published --> Manager : PreparedAgentRuntime
-    Manager --> Host : immutable runtime snapshot
-  else missing or incomplete
-    Manager -> Lock : acquire(agentId)
-    Manager -> Published : validate again
-    alt another caller published a valid tree
-      Published --> Manager : PreparedAgentRuntime
-    else still invalid
-      Manager -> Mate : fetch agent, settings, SYSTEM,\nskills, and direct children
-      Mate --> Manager : source data
-      Manager -> Candidate : write complete candidate
-      Manager -> Candidate : validate names, IDs, versions,\nmodels, paths, and no symlinks
-      alt candidate is valid
-        Manager -> Published : atomic publish
-      else build or validation failed
-        Manager -> Candidate : discard candidate
-        note right
-  Keep the old published tree.
-        end note
-      end
-    end
-    Manager -> Lock : release
-    Manager --> Host : runtime or explicit error
-  end
-end
-
-group refresh(agentId)
-  Admin -> Manager : refresh(agentId)
-  Manager -> Lock : acquire(agentId)
-  Manager -> Mate : force fetch complete directory source
-  Mate --> Manager : source data
-  Manager -> Candidate : build and validate
-  alt valid
-    Manager -> Published : atomic replace
-    Manager --> Admin : refreshed runtime
-  else failed
-    Manager -> Candidate : discard candidate
-    Manager --> Admin : error; old tree retained
-  end
-  Manager -> Lock : release
-end
-
-note over Published
-  Existing sessions retain their runtime metadata snapshots.
-  New per-tool document synchronization is designed separately.
-  New sessions use the published tree.
-end note
-@enduml
-
-@startuml call_mate_tool_sequence
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 210
+skinparam maxMessageSize 180
 skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
 skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
 skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
-skinparam sequenceReferenceBackgroundColor #EEF4FA
-skinparam sequenceReferenceBorderColor #8496A4
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
+
+title Publish One Validated Agent Directory - Target
+participant "Host / management" as Caller
+participant "Runtime manager" as Manager
+participant Mate
+participant "Candidate directory" as Candidate
+database "Published directory" as Published
+Caller -> Manager : Prepare missing runtime or explicitly refresh
+Manager -> Manager : Acquire Agent lock; recheck cached tree
+Manager -> Mate : Fetch required directory source
+Mate --> Manager : Source data
+Manager -> Candidate : Build and validate complete tree
+alt Candidate valid
+  Manager -> Published : Atomically publish candidate
+  Published --> Manager : Published runtime
+else Build or validation failed
+  Manager -> Candidate : Discard candidate
+end
+Manager -> Manager : Release Agent lock on every path
+Manager --> Caller : Snapshot or error; failure keeps previous tree
+note over Manager,Published
+  Complete prepare-cache hits return without fetching.
+  Explicit refresh forces a new candidate.
+  Active executions retain their snapshots.
+end note
+@enduml
+
+@startuml call_mate_tool_sequence
 ' Source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java: execute
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolAdapter.java: execute
@@ -376,71 +304,49 @@ autonumber
 ' Design reason: reject invalid business args before confirmation and execute the exact prepared snapshot after approval.
 ' Pending implementation: PreparedToolInvocation, pre-confirmation validation, recovery content and stable error preservation.
 ' Stable block identity retained for existing document links.
-title Shared Business Call Preparation and Execution
-
-participant "Invocation pipeline\nToolExecutionPipeline" as Pipeline
-participant "Shared executor\nMateToolExecutor" as Executor
-participant "Host-provided\nhook chain" as Hooks
-participant "Mate client\nMateToolClient" as Client
-participant "Mate service" as Mate
-
-note over Pipeline, Executor
-  Agent adapter: direct bound target and business args.
-  CallTool: Skill-scoped name and args after outer validation.
-end note
-Pipeline -> Executor ++ : prepare trusted business call [P]
-Executor -> Executor : Resolve target and validate business args
-alt preparation fails
-  Executor --> Pipeline -- : isError=true; no confirmation or execute
-  note over Pipeline, Executor
-    Parameter errors include the same trusted definition [P].
-    Unknown target and invalid schema keep separate errors.
-  end note
-else preparation succeeds
-  Executor --> Pipeline -- : immutable PreparedToolInvocation [P]
-  Pipeline -> Hooks ++ : authorize prepared target; confirm if ASK
-  Hooks --> Pipeline -- : allow, deny or hook error
-  alt denied, cancelled or hook failed
-    Pipeline -> Pipeline : Return error; do not execute
-  else allowed
-    Pipeline -> Executor ++ : executePrepared(same target and args) [P]
-    Executor -> Client ++ : callTool(ID, args, credentials)
-    Client -> Mate ++ : one execute request
-    Mate --> Client -- : business result or service error
-    Client --> Executor -- : result or call error
-    Executor --> Pipeline -- : business result or execution error
-  end
-end
-
-note over Pipeline, Hooks
-  Registered outer-schema validation already passed.
-  Preparation is side-effect free and uses no execution credentials.
-  Confirmation and execution share one immutable snapshot [P].
-  Recovery content and isError=true survive normalization
-  [P]. Public errors omit the definition.
-  The model corrects args in a new call; no automatic replay.
-end note
-@enduml
-
-@startuml subagent_execution_sequence
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
+skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title Direct Child Agent Execution Through Common SessionFactory
 
+title Execute One Prepared Business Call - Target Detail
+participant ToolPipeline as Pipeline
+participant "Business execution" as Execution
+participant Host
+participant Mate
+Pipeline -> Execution : Prepare call in its trusted binding scope [P]
+Execution -> Execution : Resolve target; validate business args
+Execution --> Pipeline : Immutable prepared call [P]
+Pipeline -> Host : Authorize the prepared call; confirm if needed
+Host --> Pipeline : Allow or deny
+break Denied or cancelled
+  Pipeline -> Pipeline : End without a business request
+end
+Pipeline -> Execution : Execute the same prepared call [P]
+Execution -> Mate : One execute request with scoped credentials
+Mate --> Execution : Result or service error
+Execution --> Pipeline : Normalized business result
+note over Pipeline,Execution
+  Input: registered outer-schema validation has passed.
+  Preparation errors return before Host interaction.
+  [P] = Pending implementation increment.
+end note
+@enduml
+
+@startuml subagent_execution_sequence
 ' Source evidence (CampusClaw d649866):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/subagent/tool/SpawnAgentTool.java
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/delegation/InvokeAgentTool.java
@@ -451,73 +357,52 @@ title Direct Child Agent Execution Through Common SessionFactory
 ' session after-hook special case.
 ' Design reason: one Agent tool resolves direct bindings and delegates creation
 ' to the common AgentSessionFactory. Execution location is not a tool contract.
-
-actor "Parent model" as Model
-participant "Agent tool" as Agent
-participant "BoundAgentResolver" as Resolver
-participant "Subagent Execution\nService" as Service
-participant "Agent Runtime\nManager" as Manager
-participant "Agent Session\nFactory" as Factory
-participant "Child AgentSession" as Child
-participant "Progress sink" as Progress
-
-== Validate direct binding ==
-Model -> Agent : {agentName, task}
-Agent -> Resolver : resolve direct binding
-Resolver -> Resolver : validate exact name, self, enabled,\nversion, depth=1, and ancestry
-Resolver --> Agent : BoundAgent or error
-== Create an independent Child ==
-Agent -> Service : execute(boundAgent, task, parentContext)
-Service -> Manager : prepare(childAgentId)
-Manager --> Service : PreparedAgentRuntime
-Service -> Service : validate fixed version and child model
-Service -> Factory : create(CHILD_AGENT, childAgentId, context)
-Factory --> Service : independent AgentSession instance
-== Run and project progress ==
-Service -> Child ++ : run(task), empty messages
-loop high-level progress only
-  Child -> Service : target, tool start/end, completion
-  Service -> Progress : project progress
-end
-alt parent cancellation
-  Agent -> Service : cancel
-  Service -> Child : cancel child scope
-  Child --> Service : cancelled
-  Service --> Agent : cancellation error
-else child completes
-  Child --> Service : final non-empty Assistant text
-  deactivate Child
-  Service --> Agent : final text
-end
-Agent --> Model : ToolResultMessage
-
-note over Factory,Child
-  Same AgentSession type and pipeline as the
-  parent.
-  Separate messages, workspace, SYSTEM, tools,
-  cache, hooks, state, and cancellation scope.
-end note
-@enduml
-
-@startuml tool_invocation_pipeline
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 210
+skinparam maxMessageSize 180
 skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
 skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
 skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
-skinparam sequenceReferenceBackgroundColor #EEF4FA
-skinparam sequenceReferenceBorderColor #8496A4
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
+
+title Run One Direct Child Agent - Target
+participant "Parent execution" as Parent
+participant "Child execution service" as Service
+participant "Session assembly" as Factory
+participant "Child Session" as Child
+Parent -> Service : Invoke Agent with bound name and task
+Service -> Service : Validate direct binding, version and depth
+Service -> Factory : Prepare runtime and create independent Child
+Factory --> Service : Child Session with separate context
+Service -> Child : Run task
+Child -->> Service : High-level progress
+Service -->> Parent : Project permitted progress
+alt Child completes
+  Child --> Service : Last nonempty Assistant text
+  Service --> Parent : ToolResult with final text
+else Parent cancelled
+  Parent -> Service : Cancel
+  Service -> Child : Cancel child scope
+  Child --> Service : Cancellation outcome
+  Service --> Parent : Propagate cancellation
+end
+note over Factory,Child
+  Same Session type and pipeline; separate state.
+  No child reasoning or complete history is projected.
+end note
+@enduml
+
+@startuml tool_invocation_pipeline
 ' Source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
 ' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java: resolveToolCallsSafe, runToolPhase
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: execute, validate, applyBeforeHook, invokeTool, applyAfterHook
@@ -527,139 +412,93 @@ autonumber
 ' Observed behavior: registered schema validation precedes before hooks; CallTool inner validation currently does not.
 ' Design reason: every invalid argument path returns before user confirmation; approval executes one immutable prepared call.
 ' Pending implementation: tool preparation, CallTool pre-confirmation validation and recovery content preservation.
-title One Tool Call: Validation, Preparation, Host Hooks and Execution
-
-participant "Agent loop\nAgentLoop" as Loop
-participant "Invocation pipeline\nToolExecutionPipeline" as Pipeline
-participant "Resolved tool instance\ntool : AgentTool" as Tool
-participant "Host-provided\nhook chain" as Hooks
-participant "Prepared invocation\nPreparedToolInvocation" as Prepared
-
-Loop -> Pipeline ++ : execute(tool, call, args, ...)
-Pipeline -> Pipeline : Validate args against tool.parameters
-break argument validation fails
-  Pipeline --> Loop : isError=true; no execution;\nfield errors + registered definition [P]
-end
-break input schema is invalid
-  Pipeline --> Loop : error ToolResultMessage; no recovery definition
-end
-Pipeline -> Tool ++ : prepare(callId, validated args) [P]
-Tool --> Pipeline -- : prepared invocation or preparation error [P]
-break trusted resolution or business validation fails
-  Pipeline --> Loop : isError=true; no confirmation;\nno business execution [P]
-end
-Pipeline -> Hooks ++ : Run ordered before hooks for prepared target
-Hooks -> Hooks : Check permission; request confirmation if ASK
-Hooks --> Pipeline -- : allow, deny or hook error
-break denied or before hook failed
-  Pipeline --> Loop : error ToolResultMessage
-end
-Pipeline -> Pipeline : Publish tool execution start
-Pipeline -> Prepared ++ : execute()
-ref over Prepared
-  Business execution (execution details, section 4)
-end ref
-Prepared --> Pipeline -- : tool result or execution exception
-Pipeline -> Pipeline : Normalize result and isError
-Pipeline -> Hooks ++ : Run ordered after hooks
-Hooks --> Pipeline -- : retained or adjusted result
-Pipeline -> Pipeline : Preserve recovery content and isError=true [P]
-Pipeline -> Pipeline : Publish tool execution end
-Pipeline --> Loop -- : ToolResultMessage
-
-note over Loop, Pipeline
-  [P] = Pending implementation.
-  Recovery content reaches the model on the first failure.
-  TOOL_ARGUMENTS_INVALID remains an error.
-end note
-@enduml
-
-@startuml tool_batch_scheduling
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 210
+skinparam maxMessageSize 180
 skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
 skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
 skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
-skinparam sequenceReferenceBackgroundColor #EEF4FA
-skinparam sequenceReferenceBorderColor #8496A4
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
+
+title One Business Tool Call - Target Overview
+participant Model
+participant AgentLoop as Loop
+participant ToolPipeline as Pipeline
+participant Host
+participant Mate
+Model --> Loop : Request a business tool
+Loop -> Pipeline : Run CallTool or a bound tool
+Pipeline -> Pipeline : Resolve trusted target and validate args [P]
+break Invalid arguments
+  Pipeline --> Loop : isError=true; field errors\nand same trusted definition [P]
+  Loop -> Model : Return failure; no confirmation or execution
+end
+Pipeline -> Host : Check permission; confirm if required
+Host --> Pipeline : Allow prepared target and args
+Pipeline -> Mate : Execute the same prepared call [P]
+Mate --> Pipeline : Business result or execution error
+Pipeline --> Loop : ToolResult
+Loop -> Model : Continue with the tool result
+note over Pipeline,Host
+  [P] = Pending implementation increment.
+  Denial or cancellation never reaches Mate.
+end note
+@enduml
+
+@startuml tool_batch_scheduling
 ' Source evidence (CampusClaw c9a2340f87bda6dff6bbd352f6995f8551206bb5, checked 2026-09-22):
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java: executePlanned, executeInParallel, findParallelSegmentEnd
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentTool.java: executionMode
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java: executionMode
 ' Observed behavior: consecutive parallel calls run in virtual-thread tasks; futures are collected in input order before the next segment.
-' Design reason: asynchronous arrows and overlapping activations show concurrency; the sequential CallTool separates both segments.
-title Batch Execution: Parallel Reads and Sequential Barriers
-
-participant "Batch scheduler\nToolExecutionPipeline" as Pipeline
-participant "Read task\nFuture #1" as Read
-participant "Grep task\nFuture #2" as Grep
-participant "CallTool\nCall #3" as Call
-participant "Find task\nFuture #4" as Find
-participant "Ls task\nFuture #5" as Ls
-
-note over Pipeline, Call
-  Input order: Read, Grep, CallTool, Find, Ls.
-  Each call uses the complete lifecycle in execution details, section 3.
-end note
-activate Pipeline
-group Parallel segment one
-  Pipeline ->> Read ++ : submit #1
-  Pipeline ->> Grep ++ : submit #2
-  Pipeline -> Read : await Future #1
-  Grep -> Grep : finish first; store result #2
-  deactivate Grep
-  Read --> Pipeline -- : result #1
-  Pipeline -> Grep ++ : read completed Future #2
-  Grep --> Pipeline -- : result #2
-end
-group Sequential barrier
-  Pipeline -> Call ++ : execute #3
-  Call --> Pipeline -- : result #3
-end
-group Parallel segment two
-  Pipeline ->> Find ++ : submit #4
-  Pipeline ->> Ls ++ : submit #5
-  Pipeline -> Find : await Future #4
-  Ls -> Ls : finish first; store result #5
-  deactivate Ls
-  Find --> Pipeline -- : result #4
-  Pipeline -> Ls ++ : read completed Future #5
-  Ls --> Pipeline -- : result #5
-end
-Pipeline -> Pipeline : Collect results #1, #2, #3, #4, #5
-deactivate Pipeline
-@enduml
-
-@startuml read_agent_workspace_isolation
+' Design reason: segment completion is a barrier; sequential CallTool separates concurrent read-only segments.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
+skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title Agent Workspace Boundary for Local Read-only Tools
 
+title Schedule One Batch - Parallel Segments and Barrier
+participant "Batch scheduler" as Scheduler
+participant "Read-only calls" as Reads
+participant "Sequential call" as Business
+Scheduler ->> Reads : Start Read and Grep concurrently
+Reads -->> Scheduler : Complete both; retain input positions
+Scheduler -> Scheduler : Wait for the whole segment
+Scheduler -> Business : Execute CallTool
+Business --> Scheduler : ToolResult
+Scheduler ->> Reads : Start Find and Ls concurrently
+Reads -->> Scheduler : Complete both; retain input positions
+Scheduler -> Scheduler : Return results in original input order
+note over Scheduler,Reads
+  Each call still uses the complete tool pipeline.
+  Completion order may differ from result order.
+end note
+@enduml
+
+@startuml read_agent_workspace_isolation
 ' Source evidence (CampusClaw d649866):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/read/ReadTool.java
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/util/PathUtils.java
@@ -669,50 +508,45 @@ title Agent Workspace Boundary for Local Read-only Tools
 ' tools do not share one session-bound Agent root. Bash cwd is not a sandbox.
 ' Design reason: every local tool uses the same immutable root and rejects
 ' symlink or realpath escape. Command and write tools are never assembled.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-actor Model
-participant "Read / Find / Grep / Ls" as Tool
-participant "Workspace Path\nResolver" as Resolver
-participant "Agent Workspace\nBoundary" as Boundary
-participant "Read-only operations" as Operations
-database "agent/{agentId}" as Root
-
-Model -> Tool : path or search path
-Tool -> Resolver : resolve and validate(requestPath)
-Resolver -> Boundary : root + realRoot
-Boundary --> Resolver : immutable current Agent root
-Resolver -> Resolver : reject NUL and invalid path
-Resolver -> Resolver : resolve relative path against root
-Resolver -> Resolver : normalize lexical path
-alt lexical path escapes root
-  Resolver --> Tool : sanitized boundary error
-  Tool --> Model : isError=true
-else lexical path is inside root
-  Resolver -> Root : inspect each existing component
-  alt any component is a symlink
-    Root --> Resolver : symlink
-    Resolver --> Tool : sanitized boundary error
-    Tool --> Model : isError=true
-  else no symlink
-    Root --> Resolver : realpath and file type
-    alt realpath escapes or target type is invalid
-      Resolver --> Tool : sanitized boundary error
-      Tool --> Model : isError=true
-    else valid target inside current Agent root
-      Resolver --> Tool : ValidatedWorkspacePath
-      Tool -> Operations : read, find, grep, or list
-      Operations -> Root : access validated target
-      Root --> Operations : data
-      Operations --> Tool : bounded result
-      Tool --> Model : ToolResultMessage
-    end
-  end
+title Read Within One Agent Workspace - Target
+participant "AgentLoop" as Loop
+participant "Read-only tool" as Tool
+participant "Workspace boundary" as Boundary
+database "Current Agent files" as Files
+Loop -> Tool : Read, find, grep or list
+Tool -> Boundary : Validate requested path against fixed Agent root
+Boundary -> Files : Inspect components, real path and target type
+Files --> Boundary : Filesystem facts
+alt Path is valid and contained
+  Boundary --> Tool : Validated path
+  Tool -> Files : Perform bounded read-only operation
+  Files --> Tool : Data
+  Tool --> Loop : ToolResult
+else Invalid, symlink or outside root
+  Boundary --> Tool : Sanitized boundary error
+  Tool --> Loop : isError=true; no content read
 end
-
-note over Resolver,Root
-  Reject sibling Agent and external paths.
-  Errors never reveal their IDs or physical
-  locations.
+note over Tool,Boundary
+  Child uses its own root, never the parent's root.
+  Filesystem inspection is not a content read.
 end note
 @enduml
 
@@ -773,24 +607,6 @@ end note
 @enduml
 
 @startuml managed_session_compaction
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
-title Common Session Compaction and Overflow Recovery
-
 ' Source evidence (pi 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
 ' packages/coding-agent/src/core/agent-session.ts: _checkCompaction, _runAutoCompaction
 ' packages/coding-agent/src/core/compaction/compaction.ts: estimateContextTokens,
@@ -808,163 +624,104 @@ title Common Session Compaction and Overflow Recovery
 ' Architecture change: validate input budgets and summary gain; remove output-limit recovery heuristics.
 ' Design reason: Runtime, Cron, and Child require one failure-safe context policy.
 ' Java divergence: append-only Entries use an internal discarded Entry ID; only Read paths are tracked.
-
-actor Host
-participant "ManagedAgentSession" as Session
-participant "Agent loop" as Agent
-participant "SessionCompactor" as Compactor
-participant "FileOperationTracker" as Tracker
-participant "Model Manager" as Model
-database "Append-only history" as History
-
-== Prepare with the captured execution window [P] ==
-Host -> Session : prompt(message, captured model)
-Session -> Compactor : check new input and window before inference [P]
-Session -> Compactor : decide restored context before prompt
-opt stale ERROR or LENGTH overflow is recoverable
-  Session -> Compactor : prepare without failed Assistant
-  Compactor --> Session : prepared window or none
-  opt prepared window exists
-    Session -> Model : summarize before accepting prompt
-    Model --> Session : summary and Usage
-    Session -> Session : publish compacted context
-  end
-end
-== Execute and choose compaction policy ==
-Session -> Agent : execute without output token limits [P]
-Agent --> Session : Assistant with stop reason and Usage
-Session -> Compactor : decide by same model, boundary,\noverflow, Usage, and fallback estimate
-alt ERROR or LENGTH overflow and no prior recovery
-  Session -> Session : remove failed Assistant from retry context
-  Session -> Compactor : prepare compactable context
-  Compactor -> Tracker : collect Read paths only
-  alt no safe compactable window
-    Compactor --> Session : none; emit no lifecycle event
-  else window prepared
-    Session --> Host : compaction.started\nreason=overflow, willRetry=true
-    Compactor -> Model : summarize history and optional turn prefix
-    alt summary succeeds
-      Model --> Compactor : full summary and combined Usage
-      Compactor --> Session : summary, retained messages, boundary
-      Session -> History : append compaction completed\nwith internal discarded Entry ID
-      Session -> Agent : retry original model call once
-      Agent --> Session : final Assistant
-      Session -> History : append final Assistant
-      opt Host reloads the Session
-        Host -> History : load current branch
-        History --> Session : summary, retained, discarded, retry
-        Session -> Session : exclude exact discarded Entry ID
-      end
-      opt second response still overflows
-        Session --> Host : compaction.failed\nwillRetry=false
-      end
-    else summary fails or is cancelled
-      Model --> Compactor : error or abort
-      Compactor --> Session : failed
-      Session -> Session : retain old context
-      Session --> Host : compaction.failed with aborted flag
-    end
-  end
-else STOP succeeds but Usage is already over context window
-  Session -> Compactor : prepare full context including Assistant
-  alt window prepared
-    Session --> Host : compaction.started\nreason=overflow, willRetry=false
-    Compactor -> Model : summarize successful context
-    Model --> Compactor : full summary and Usage
-    Compactor --> Session : summary, retained messages, boundary
-    Session -> History : append compaction completed
-  end
-  Session --> Host : return original successful answer; no replay
-else valid Usage or fallback estimate exceeds threshold
-  Session -> Compactor : prepare(reason=threshold)
-  opt window prepared
-    Session --> Host : compaction.started\nwillRetry=false
-    Compactor -> Model : summarize structured context
-    Model --> Compactor : full summary and Usage
-    Compactor --> Session : summary and retained messages
-    Session -> History : append compaction completed
-  end
-end
-Session --> Host : execution result
-
-note over Session,Compactor
-  Use safe User / Assistant boundaries.
-  Retain the last Assistant and sorted Read paths.
-  LENGTH alone is not overflow evidence [P].
-  No comparison with model output limits [P].
-end note
-
-note over Compactor,Model
-  No tools or cache in summary requests.
-  No output token cap; Mate owns it [P].
-  Check input fit and summary gain [P].
-  Invalid summaries never replace the old context.
-  History remains append-only; discard IDs stay
-  internal.
-end note
-@enduml
-
-@startuml refresh_next_execution
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
+skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-title Refresh Affects the Next Idle Session Execution
 
+title Compact Context Safely - Target Overview
+participant "Execution Host" as Host
+participant "Managed Session" as Session
+participant "Compaction policy" as Policy
+participant Model
+database "Append-only history" as History
+Host -> Session : Continue execution with captured model window [P]
+Session -> Policy : Evaluate input and context; prepare safe cut
+Policy --> Session : Window and recovery policy
+break No safe compactable window
+  Session --> Host : Continue or fail under the existing execution policy
+end
+Session -> Model : Summarize prepared context
+Model --> Session : Summary or failure
+alt Valid summary with useful reduction
+  Session -> History : Append summary and retained boundary\nplus discarded identity when recovering
+  History --> Session : Committed compaction
+  Session -> Session : Install new context
+  opt Failed overflow call is eligible for its first recovery
+    Session -> Model : Retry original model call once
+    Model --> Session : Final Assistant outcome
+  end
+else Invalid, failed or cancelled summary
+  Session -> Session : Keep previous context
+end
+Session --> Host : Execution outcome
+note over Session,Policy
+  No safe window: do not start compaction.
+  Successful answers are never replayed.
+  [P] = Pending implementation increment.
+end note
+@enduml
+
+@startuml refresh_next_execution
 ' Source evidence (CampusClaw PR 167 f60cc3e): AgentRuntimeManager refresh and Runtime Session store.
 ' Pending implementation Java design: RuntimeSessionModelReconciler runs before accepting user.message.
 ' Architecture change: refresh does not mutate an active execution snapshot.
 ' Design reason: make directory publication atomic while preserving execution consistency.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-actor Admin
-actor Caller
-participant "Runtime Session\nModel Reconciler" as Reconciler
-participant "Agent Runtime\nManager" as Runtime
+title Prepare the Next Execution After Refresh - Target
+participant Caller
+participant "Execution admission" as Admission
 database "Published Agent directory" as Directory
-participant "Model Manager" as Models
-database "Session and Entry store" as Store
+participant "Model service" as Models
+database "Session history" as Store
 participant "Execution Host" as Host
-
-== Publish directory ==
-Admin -> Runtime : refresh(agentId)
-Runtime -> Directory : atomically publish validated tree
-Runtime --> Admin : success
-note over Host
-  Any active execution keeps its existing
-  snapshot.
-end note
-
-== Resolve the next idle execution ==
-Caller -> Reconciler : POST next user event
-Reconciler -> Directory : load latest bindingModels and default
-Reconciler -> Models : resolve current model with credentials
-alt current model remains callable
-  Models --> Reconciler : current model
-else current model is invalid
-  Reconciler -> Models : resolve new default with credentials
-  alt default is callable
-    Models --> Reconciler : fallback model
-    Reconciler -> Store : atomically update model and optional thinking
-    Reconciler -> Store : append model and thinking changed entries
-    Store --> Caller : project configuration events first
-  else no callable default
-    Models --> Reconciler : unavailable
-    Reconciler --> Caller : reject before user.message
-  end
+Caller -> Admission : Submit the next message to an idle Session
+Admission -> Directory : Read published bindings and default
+Directory --> Admission : Latest validated runtime metadata
+Admission -> Models : Resolve current model or allowed default
+Models --> Admission : Callable model or unavailable
+break No callable model
+  Admission --> Caller : Reject before accepting user.message
 end
-== Accept only with a callable model ==
-Reconciler -> Store : accept user.message; mark running
-Reconciler -> Host : start with reconciled immutable snapshot
+opt Model reconciliation changes configuration
+  Admission -> Store : Commit model and required thinking changes
+  Store --> Admission : Authoritative configuration events
+  Admission --> Caller : Configuration events before message receipt
+end
+Admission -> Store : Accept user.message and mark running
+Admission -> Host : Start with reconciled immutable snapshot
+note over Admission,Host
+  Pending implementation: next-execution reconciliation.
+  Active executions keep their existing snapshot.
+end note
 @enduml

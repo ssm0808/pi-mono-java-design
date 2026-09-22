@@ -38,6 +38,8 @@ HTTP 目录文件为 `settings.json`、`SYSTEM.md` 和 `skills/`，不把 CLI �
 
 创建接口的请求头仅声明可选 `Accept-Language`，用于错误消息国际化；不声明或展示用户凭据 Header。创建链路不使用 Mate 执行凭据，也不将语言保存为 Session 或模型回答语言。上游认证授权仍由所属入口负责，Runtime 不因收到额外凭据 Header 而新增拒绝行为；源码与验收范围见 §8.2。
 
+本图只说明创建空闲数据库 Session；Controller 的参数绑定与响应封装归 Session service 的 HTTP 边界，运行时 AgentSession 延迟到首次接纳执行才装配。初始 thinking、mode、版本、Usage、ID 规则及其分项实现状态继续由本节定义。每次成功 POST 都创建新 Session，回执不确定时重复提交可能产生另一资源。
+
 ![HTTP Session 创建](设计图/会话生命周期/http_session_creation.svg)
 
 [原尺寸 SVG](设计图/会话生命周期/http_session_creation.svg) · [PlantUML 源码](设计图/会话生命周期/diagram.puml#L1)
@@ -52,7 +54,7 @@ Usage 沿用模型返回的 Token 与 USD cost 口径，Assistant 和 Compaction
 
 ![Session 资源职责](设计图/会话生命周期/http_get_session_response.svg)
 
-[原尺寸 SVG](设计图/会话生命周期/http_get_session_response.svg) · [PlantUML 源码](设计图/会话生命周期/diagram.puml#L91)
+[原尺寸 SVG](设计图/会话生命周期/http_get_session_response.svg) · [PlantUML 源码](设计图/会话生命周期/diagram.puml#L67)
 
 #### 2.1.2 删除 Session
 
@@ -62,9 +64,11 @@ Usage 沿用模型返回的 Token 与 USD cost 口径，Assistant 和 Compaction
 
 清理范围为 Runtime Entry、执行状态与内存对象；mate-service Chat 业务元数据和文件对象由各自所属服务管理。删除后的 Session 不能因清理失败重新可见。
 
+本图只展示逻辑删除与其后的内部清理。空闲 Session 的墓碑、清理工作项和资源删除同事务提交；不存在或已删除返回 204，运行中返回 409，原子提交失败返回受控错误。204 表示逻辑删除完成，物理清理可重试；永久墓碑只含 session_id 和 deleted_at，不能混入重试状态。
+
 ![HTTP Session 逻辑删除](设计图/会话生命周期/http_delete_session.svg)
 
-[原尺寸 SVG](设计图/会话生命周期/http_delete_session.svg) · [PlantUML 源码](设计图/会话生命周期/diagram.puml#L197)
+[原尺寸 SVG](设计图/会话生命周期/http_delete_session.svg) · [PlantUML 源码](设计图/会话生命周期/diagram.puml#L173)
 
 ### 2.2 消息与 Session Event
 
@@ -132,6 +136,8 @@ Repository 扩展一次性的 `updateConfiguration(sessionId, expectedVersion, c
 
 [原尺寸 SVG](设计图/会话配置/http_session_update_classes.svg) · [PlantUML 源码](设计图/会话配置/diagram.puml#L1)
 
+本图下钻一次组合配置更新，从严格绑定到同快照响应；配置应用与仓储事务分开，Mapper、DTO、响应组装器不单列。仅 modelId 提交或 thinking=true 时需要相应模型查询；其他输入校验失败也在提交前返回。事务内重查版本和状态，无变化保持原版本，真实变化一次推进版本并按模型、thinking、mode 顺序写事件；不确定回执先 GET 对账。
+
 ![统一 Session 更新事务](设计图/会话配置/http_session_update.svg)
 
 [原尺寸 SVG](设计图/会话配置/http_session_update.svg) · [PlantUML 源码](设计图/会话配置/diagram.puml#L106)
@@ -173,6 +179,8 @@ Controller 只收发 VO，Application 完成授权、归一化、一次 Catalog 
 共享 GET 使用完整来源；内部 Builtin 专属解析才过滤来源。GET 不构成执行预约，
 POST 重新解析，并在所属锁或事务内检查可变状态；共同结构只在 Slash 全局主图维护。
 
+本图聚焦一次 POST 命令，不再同时展开 GET 清单和每个 Builtin。Command application 保留解析与分发，Selected handler 与 Domain service 分列以明确 handler 不直接承担数据库业务规则；GET 的来源聚合、排序和轻量 VO，Help 缓存锁与失败条件，以及 Skill 公共接入门禁见对应章节。
+
 ![Command HTTP 接口与应用服务](设计图/Command/command_http_flow.svg)
 
 [PlantUML 源码：`command_http_flow`](设计图/Command/diagram.puml#L1) · [原尺寸 SVG](设计图/Command/command_http_flow.svg)
@@ -202,7 +210,7 @@ Command 保留原有入口；统一 Session POST 复用其校验规则与底层�
 
 ![命令与权威 Session 状态](设计图/Command/command_authoritative_state.svg)
 
-[PlantUML 源码：`command_authoritative_state`](设计图/Command/diagram.puml#L74)
+[PlantUML 源码：`command_authoritative_state`](设计图/Command/diagram.puml#L51)
 
 #### 2.6.4 Compact 的执行生命周期
 
@@ -351,6 +359,8 @@ Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行�
 ### 7.4 附件与其他边界
 
 标识大小写敏感且不透明，精确格式归共享契约。Runtime 不下载附件；从 `event.content[]` 的 file 块按顺序提取 `fileId`，内部传递 `fileIds` 并编码为固定 `[File IDs]` 提示块；文件的访问与生命周期由 [附件服务](../../02-服务与接口/01-CampusMate附件服务/README.md) 维护。Thinking 的生成与历史可见性由 [历史设计](chat-events-history-design.md#thinking-original-text) 维护。
+
+本图聚焦一份执行凭据的寿命：新消息或 Skill Command 捕获，模型与发现不携带，仅实际工具执行透传，执行结束丢弃。Model service、Mate metadata 和 Mate execution 表示同一服务可能承担的不同操作边界，并非新增部署服务。中断、确认和答案沿用原执行快照，其他操作与 Builtin 的原有上下文规则见本节 Header 表；空凭据不等于缺失 Host 上下文。
 
 ![调用上下文 Header 边界](设计图/HTTP契约/http_dual_authentication.svg)
 

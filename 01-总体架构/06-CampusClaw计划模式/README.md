@@ -97,15 +97,17 @@
 
 ![计划模式状态与准入](plan_mode_state.svg)
 
-[原尺寸 SVG](plan_mode_state.svg) · [PlantUML 源码：`plan_mode_state`](diagram.puml#L439)
+[原尺寸 SVG](plan_mode_state.svg) · [PlantUML 源码：`plan_mode_state`](diagram.puml#L393)
 
 新建 Session 的初始模式来自 Agent.mode；已是 plan 时直接发消息，无需再切换。创建接口仍无请求体，不自动调用模型或生成任务清单；普通 Session POST 只更新该 Session，不写回 Agent。
 
 ### 2.3 从进入计划到实施完成的整体交互
 
+本图以已处于 plan 模式的 Session 为前提，从提交园区需求到批准后执行或反馈后继续规划。Session 创建与模式选择、逐题澄清、计划标记解析、TODO 完整快照、跨实例决定领取分别由所属专题下钻；这里保留同根继续、精确审核目标及批准后才进入 build 的边界。断线只触发历史与 Session 对账，不重放写入。
+
 ![计划模式完整交互](plan_mode_end_to_end.svg)
 
-[原尺寸 SVG](plan_mode_end_to_end.svg) · [PlantUML 源码：`plan_mode_end_to_end`](diagram.puml#L580)
+[原尺寸 SVG](plan_mode_end_to_end.svg) · [PlantUML 源码：`plan_mode_end_to_end`](diagram.puml#L504)
 
 | 阶段 | 用户与 Agent 交互 | 模式 / 进度与权威 |
 |---|---|---|
@@ -251,6 +253,8 @@ Session 是配置权威资源。当前内部契约以统一 POST 更新名称、
 不增加 `/plans` CRUD、单独批准 endpoint、独立 Session 订阅流、公共 Run/Execution ID 或幂等键。本期使用模式按钮调用 Session 更新接口，不同时扩展 `/plan` Slash Command；普通消息接口仍不解析 Slash 文本。
 
 ### 5.1 审核事务与事件顺序
+
+本图聚焦完整方案进入等待后的一次决定接纳与消费。Review service 包含审核应用及其 HTTP 边界，Control delivery 保留独立领取职责；本地通知只是提示，数据库轮询为交付后备。接纳事务重查 Session、根执行、分段、精确待审核目标和停止状态；批准同时提交 build 模式，执行端更新捕获提示词后完成原等待工具。
 
 ![计划提交、审核与原执行续跑](plan_mode_review_sequence.svg)
 

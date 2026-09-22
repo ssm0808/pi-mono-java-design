@@ -1,20 +1,4 @@
 @startuml http_session_creation
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 190
-skinparam sequenceArrowColor #526777
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
 ' Source: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2, modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java :: create/newSession; modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare/refresh.
 ' Pending implementation: Agent mode is published through settings and copied on creation, never on recovery.
 ' Current scoped evidence: pi-mono-java f61906b9136246ca60f333704b6fc92b5420d0ec.
@@ -22,8 +6,6 @@ autonumber
 ' campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/web/RuntimeSessionController.java :: create.
 ' Observed behavior at f61906b9: configuration and prompt availability are validated; idle thinking=true is persisted without AgentSession assembly.
 ' Pending implementation differences retained: copied Agent.mode and required plan capability follow the Plan Mode design.
-title Session Creation - Validate and Persist, Assemble on First Execution
-
 ' Source evidence (pi-mono-java PR 167 f60cc3e78bb8b700527ac082c7c8e10524ede095):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java, create.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java, resolve.
@@ -42,49 +24,43 @@ title Session Creation - Validate and Persist, Assemble on First Execution
 ' Observed behavior: creation persists an idle Session and does not initialize AgentSession or invoke a model.
 ' Architecture change: the materialized Session starts with zero lifetime Usage.
 ' Design reason: defer expensive runtime initialization until the first accepted user event.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-
-actor "mate-service bridge" as Mate
-participant "Session Controller" as API
-participant "Session Service" as Service
-participant "Agent directory resolver" as Resolver
-participant "Model Manager" as Models
-database "Session Repository" as Store
-
-== Validate the published configuration ==
-Mate -> API : POST /agents/{agentId}/sessions\noptional Accept-Language; no body
-API -> API : validate typed agentId
-API -> Service : create(agentId)
-Service -> Resolver : resolve(agentId)
-Resolver -> Resolver : validate controlled directory\nand published settings
-Resolver --> Service : immutable configuration snapshot
-Service -> Service : validate prompt availability\nand initial mode capability
-Service -> Models : resolveDefaultModel(snapshot)
-Models --> Service : validated default model
-
-== Commit an idle resource ==
-Service -> Service : allocate sessionId; build Session DTO
-Service -> Store : create(idle, thinking=true, mode,\nversion=1, zero lifetimeUsage)
-Store --> Service : committed Session
-Service --> API : response VO from committed snapshot
-API -> API : wrap with ResultBeanAdapter
-API --> Mate : 201 + Location\nResultBean with Session resource
-
+title Create One Idle Session - Target
+participant "Mate bridge" as Caller
+participant "Session service" as Service
+participant "Agent directory" as Directory
+participant "Model service" as Models
+database "Session repository" as Store
+Caller -> Service : Create Session for Agent
+Service -> Directory : Resolve validated published configuration
+Directory --> Service : Immutable configuration snapshot
+Service -> Service : Validate prompt and initial mode capability
+Service -> Models : Resolve allowed default model
+Models --> Service : Validated model
+Service -> Store : Commit idle Session with initial configuration
+Store --> Service : Committed Session
+Service --> Caller : Created resource and Location
 note over Service,Store
-  Agent.mode initializes Session.mode; missing legacy mode is build.
-  Failure before commit exposes no Session ID.
-  No MessageEntry, AgentSession or model inference is created.
-  The first execution assembles Agent, SYSTEM, Skills and tools.
-end note
-note over Mate,API
-  No If-Match or Idempotency-Key. Each successful POST creates a Session.
-  Repeating an uncertain request may create another Session.
-  Background cleanup handles unbound orphan Sessions.
-end note
-note over Resolver,Store
-  Target IDs use agent- or session- plus 32 hexadecimal UUID characters.
-  Database agent_id must support 38 characters; migrate VARCHAR(30) to 64.
-  No execution credentials are consumed; upstream performs authentication.
+  No model inference or execution Session is created.
+  Failure before commit exposes no Session identity.
+  Initial mode follows the scoped status in the document.
 end note
 @enduml
 
@@ -195,24 +171,6 @@ end note
 @enduml
 
 @startuml http_delete_session
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 190
-skinparam sequenceArrowColor #526777
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
-title CampusClaw HTTP Session Logical Deletion Confirmed Design
-
 ' Source evidence (pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185):
 ' packages/coding-agent/src/core/agent-session.ts, AgentSession.dispose, lines 789-805
 ' packages/coding-agent/src/modes/interactive/components/session-selector.ts,
@@ -232,51 +190,42 @@ title CampusClaw HTTP Session Logical Deletion Confirmed Design
 ' Architecture change: the target HTTP path variable is sessionId; database column names remain snake_case.
 ' Product constraint: DELETE declares optional Accept-Language, not execution credentials.
 ' Design reason: the API becomes idempotent immediately without exposing cleanup-job state.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-
+title Delete One Idle Session - Target
 actor Caller
-participant "DeleteSession\nAPI" as API
-database "Runtime Session\nStore" as Store
-participant "Cleanup\nWorker" as Worker
-
-== Commit logical deletion ==
-Caller -> API : DELETE /sessions/{sessionId}\noptional Accept-Language and no body
-API -> API : resolve error locale; no execution credentials
-API -> API : validate sessionId
-API -> Store : beginLogicalDelete(sessionId)
-
-alt existing idle Session
-  Store -> Store : transaction: insert tombstone, enqueue cleanup,\ndelete session row
-  Store --> API : DELETED
+participant "Session API" as API
+database "Session store" as Store
+participant "Cleanup worker" as Worker
+Caller -> API : Delete Session
+API -> Store : Check state and commit logical deletion
+alt Existing idle Session or already absent
+  Store --> API : Deleted atomically, or already absent
   API --> Caller : 204 No Content
-  == Internal retryable cleanup ==
-  Worker -> Store : claim cleanup work item
-  Worker -> Store : complete remaining cleanup
-  Worker -> Store : complete and delete cleanup work item
-else existing running Session
-  Store --> API : BUSY
-  API --> Caller : 409 SESSION_BUSY\nResultBean error without result
-else missing or deleted
-  Store --> API : NOT_FOUND
-  API --> Caller : 204 No Content
-else atomic commit failed
-  Store --> API : failure, no partial deletion
-  API --> Caller : 500 SESSION_DELETE_FAILED\nResultBean error without result
+  Worker -> Store : Claim remaining cleanup work if present
+  Worker -> Store : Retry cleanup; remove completed work item
+else Running or commit failed
+  Store --> API : Busy or atomic failure
+  API --> Caller : Controlled error; no partial deletion
 end
-
-note over API,Store
-  Logical deletion is complete at 204. Physical
-  cleanup remains retryable and internal.
-end note
-
 note over Store,Worker
-  mate-service Chat metadata and file objects are
-  outside this operation boundary.
-end note
-
-note right of Store
-  The permanent tombstone has exactly two fields:
-  session_id and deleted_at. Cleanup state, retries,
-  errors, and owner data stay out.
+  Tombstone and cleanup state have separate ownership.
+  Mate Chat metadata and file objects are outside this operation.
 end note
 @enduml

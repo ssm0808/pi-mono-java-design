@@ -271,11 +271,13 @@ M7 补充核对 `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238`，
 
 ![数据库中断局部目标类图](设计图/事件接口重设计/target_database_interrupt_classes.svg)
 
-[PlantUML 源码：`target_database_interrupt_classes`](设计图/事件接口重设计/diagram.puml#L326)
+[PlantUML 源码：`target_database_interrupt_classes`](设计图/事件接口重设计/diagram.puml#L280)
+
+本图保留接纳实例、原执行实例和共享数据库三个权威边界；原实例中的控制轮询与执行取消是不同协作者，归入同一实例生命线仅表达跨实例交付。批量轮询不等待慢取消；本地提交后提示与轮询共用入口。等待者先注册再读取补齐快速完成窗口，两条响应各自持有队列和语言，终态必须来自实际退出后的唯一记录。
 
 ![数据库中断交接目标时序](设计图/事件接口重设计/target_database_interrupt_delivery.svg)
 
-[PlantUML 源码：`target_database_interrupt_delivery`](设计图/事件接口重设计/diagram.puml#L245)
+[PlantUML 源码：`target_database_interrupt_delivery`](设计图/事件接口重设计/diagram.puml#L220)
 
 ### 4.5 确认续跑的跨实例交接（待实现 实施骨架）
 
@@ -313,7 +315,7 @@ B08/B09 已确认控制竞争和根消息关联，以下是落实语义所需的
 
 ![已接受决定的消费状态](设计图/事件接口重设计/target_decision_consumption_state.svg)
 
-[原尺寸 SVG](设计图/事件接口重设计/target_decision_consumption_state.svg) · [PlantUML 源码：`target_decision_consumption_state`](设计图/事件接口重设计/diagram.puml#L409)
+[原尺寸 SVG](设计图/事件接口重设计/target_decision_consumption_state.svg) · [PlantUML 源码：`target_decision_consumption_state`](设计图/事件接口重设计/diagram.puml#L363)
 
 1. 成功接受决定时写入 `PENDING`；原执行按既有固定 Session、根执行、旧段、目标和停止条件领取，正常路径为 `PENDING → CLAIMED → COMPLETED`。领取与终态提交共用 Session、执行行锁顺序，竞争结果取决于先成功提交的一方。
 2. 根执行成功进入 `TERMINAL` 的同一事务内，将该 `session_id + execution_id` 下三类表的全部 `PENDING` 行改为 `CANCELED`。不依赖已被清空的等待指针，也不只处理当前段。`done/failed/terminated` 均执行收尾；确认等待的段结束不是真实根执行终态。

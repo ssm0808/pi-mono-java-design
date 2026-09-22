@@ -67,6 +67,8 @@ Provider 身份与协议路由分开，避免按厂商堆叠中央分支。内�
 
 一次 POST 对应一次前台调用，不支持 `Idempotency-Key`，结果未知时不得重放。成功 SSE 原样返回 Chat chunks，以 `[DONE]` 结束；流建立前错误使用真实 HTTP 状态，建立后发送 `event:error` 并关流，不再发送 `[DONE]`。取消关闭请求和 body，沿连接传播到上游；Provider 的正常完成、`ABORTED` 和 `ERROR` 竞争时只能产生一个终态。
 
+本图只展示一次模型调用，Provider routing 保留路由选择，Mate provider 合并请求映射和流解析协作。HTTP 建流前拒绝不进入增量阶段；正常 [DONE]、流失败和调用方取消各自产生一次终结结果，取消关闭请求并由 Mate 传播至上游。输出限制省略为图示待实现增量，底层 Provider 事件不直接等同公共事件。
+
 ![Chat 调用时序](chat-sequence.svg)
 
 [PlantUML 源码](diagram.puml#L168) · [原尺寸 SVG](chat-sequence.svg)

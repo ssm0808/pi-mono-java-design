@@ -330,6 +330,8 @@ Java 文件相对根路径为
 偏移等内部参数；没有跨页快照对象或游标编解码器。执行侧的 `SessionEventProjector` 仍是每执行对象，负责归一化
 与追加，不能与这个无状态投影器混为同一职责。
 
+本图只解释跨两次数字分页请求的可见性：每页独立一致读，后续追加可在后续页出现，访问权限每页重查。非法 page/limit/offset 在查询前拒绝，投影缺失也显式失败；合法空页仍成功。保留策略、访问或 page-size 变化需从首页重建，sourceEventId 不是分页游标。
+
 ![普通分页与尾部追加](设计图/事件历史查询/target_event_history_paging.svg)
 
 [原尺寸 SVG](设计图/事件历史查询/target_event_history_paging.svg) · [PlantUML 源码：target_event_history_paging](设计图/事件历史查询/diagram.puml#L70)

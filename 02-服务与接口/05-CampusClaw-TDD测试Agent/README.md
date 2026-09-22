@@ -144,6 +144,8 @@ CC-CAP-003/011 的[CampusMate 改名与 AI 产品范围](../03-Model/README.md#i
 
 ## 7. 设计到测试的 TDD 闭环
 
+本图聚焦一项成熟需求如何形成可追踪测试证据。成熟度与覆盖检查属于 Quality workflow 的判断动作，不单列多个检查器；隔离工作树与确定性执行器分列，已有有效覆盖时直接执行，无需制造测试修改。research/proposed 仅建议，强制覆盖缺口和环境失败不能记为通过。
+
 ![设计到测试维护闭环](design_to_test_maintenance.svg)
 
 [PlantUML 源码：`design_to_test_maintenance`](diagram.puml#L77) · [原尺寸 SVG](design_to_test_maintenance.svg)
@@ -214,7 +216,7 @@ HTTP 执行器接入 `adapters/runtime_http`。只有完成当前契约迁移及
 
 ![实时与定期检测](realtime_and_scheduled_detection.svg)
 
-[PlantUML 源码：`realtime_and_scheduled_detection`](diagram.puml#L147) · [原尺寸 SVG](realtime_and_scheduled_detection.svg)
+[PlantUML 源码：`realtime_and_scheduled_detection`](diagram.puml#L129) · [原尺寸 SVG](realtime_and_scheduled_detection.svg)
 
 | 触发 | 执行者 | 时延目标 | 内容 | 结果用途 |
 |---|---|---:|---|---|

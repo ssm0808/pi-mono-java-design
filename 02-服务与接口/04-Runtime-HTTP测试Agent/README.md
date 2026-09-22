@@ -226,6 +226,8 @@ Spring MVC 默认可能忽略它们。测试目录将其标记为 `proposed`，�
 
 ## 10. 自动拉起与执行流程
 
+本图从固定候选基线到包含清理结果的最终测试结论；基线缺失或歧义在环境创建前阻断，依赖不可用则收集诊断并清理已创建资源。基础门禁未通过不继续后续套件，覆盖缺口、跳过和环境失败均单独记录；测试计划维护与补丁提议由下文承接。
+
 ![HTTP 测试 Agent 执行时序](http_test_execution_sequence.svg)
 
 [PlantUML 源码：`http_test_execution_sequence`](diagram.puml#L80) · [原尺寸 SVG](http_test_execution_sequence.svg)
@@ -303,7 +305,7 @@ review required` 分类。环境失败不计为产品通过；允许单独重跑
 
 ![HTTP 用例维护生命周期](http_test_case_maintenance.svg)
 
-[PlantUML 源码：`http_test_case_maintenance`](diagram.puml#L147) · [原尺寸 SVG](http_test_case_maintenance.svg)
+[PlantUML 源码：`http_test_case_maintenance`](diagram.puml#L134) · [原尺寸 SVG](http_test_case_maintenance.svg)
 
 ### 12.1 自动维护规则
 

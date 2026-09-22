@@ -51,6 +51,8 @@
 
 ## 3. 模型调用链
 
+本图保留 fb842b1 的历史实现范围，只讲一次正常模型调用。Mate adapter 对应 CampusMateProvider、请求 Mapper 和 SSE Parser；Runtime projection 仍独立，临时预览与持久化完整消息不能合并。Provider fallback、ThinkingEnd、工具后的下一次请求及错误终态由下文源码表承接，不把该历史路径升级为当前默认状态。
+
 ![模型调用时序](model_call.svg)
 
 [原尺寸 SVG](model_call.svg) · [PlantUML 源码](diagram.puml#L1)
@@ -81,7 +83,7 @@
 
 ![工具执行活动图](tool_execution.svg)
 
-[原尺寸 SVG](tool_execution.svg) · [PlantUML 源码](diagram.puml#L65)
+[原尺寸 SVG](tool_execution.svg) · [PlantUML 源码](diagram.puml#L52)
 
 核心代码：[AgentLoop.runToolPhase / resolveToolCallsSafe](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/agent/loop/AgentLoop.java)、[ToolExecutionPipeline.executeAll / executePlanned / execute](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/agent/tool/ToolExecutionPipeline.java)。
 
@@ -121,9 +123,11 @@
 
 ### 4.4 Mate 业务工具：发现与执行是两件事
 
+本图仅表达 fb842b1 历史 CallMateTool 调用，保留当时 Runtime 权限 hook 先于业务发现的顺序；不可当作当前 CallTool 前置校验目标。ListMateTools 是单独可选发现调用，不是每次执行的必经步骤；缓存未命中时在刷新锁内加载 Agent 与全部直接 Skill，完整索引校验后原子发布，未知或冲突名称不执行。HTTP Client 的报文和凭据规则仍见下文。
+
 ![Mate 工具发现与执行](mate_tool_call.svg)
 
-[原尺寸 SVG](mate_tool_call.svg) · [PlantUML 源码](diagram.puml#L131)
+[原尺寸 SVG](mate_tool_call.svg) · [PlantUML 源码](diagram.puml#L118)
 
 | 动作 | 当前客户端请求（公共前缀 `/mate-service/v1`） | 作用 |
 |---|---|---|
@@ -154,9 +158,11 @@ Skill 是指令和资源载体，不是 Java 方法注册机制；绑定工具�
 
 ### 5.2 用户显式执行 Skill 命令
 
+本图保留 fb842b1 历史显式 Skill 命令的准备回调与接纳顺序。Session preparation 汇总上下文工厂、引擎注册表和公共 Session 工厂，Agent execution 汇总执行协调与 Session/Loop；两者为不同职责阶段。内部 Entry 保存展开文本，公共回执保存原命令，复用普通执行与 SSE，无独立 Skill 引擎。
+
 ![显式 Skill 命令](skill_command.svg)
 
-[原尺寸 SVG](skill_command.svg) · [PlantUML 源码](diagram.puml#L205)
+[原尺寸 SVG](skill_command.svg) · [PlantUML 源码](diagram.puml#L173)
 
 入口是 `POST /campusclaw-service/v1/sessions/{sessionId}/command`，例如：
 
@@ -183,9 +189,11 @@ Skill 是指令和资源载体，不是 Java 方法注册机制；绑定工具�
 
 ### 5.3 模型自主选择 Skill：摘要 → Read → 后续执行
 
+本图选择模型决定读取 Skill 的历史成功场景；可见性过滤、目录缓存准备和长文件分页保留在正文。Read pipeline 汇总原工具 Pipeline 与 ReadTool，不因此将文件系统误当作权限决策者。后续业务工具沿历史 ListMateTools/CallMateTool 路径；该历史图不替代现行 Skill/CallTool 目标。
+
 ![模型自主读取 Skill](skill_model_read.svg)
 
-[原尺寸 SVG](skill_model_read.svg) · [PlantUML 源码](diagram.puml#L263)
+[原尺寸 SVG](skill_model_read.svg) · [PlantUML 源码](diagram.puml#L224)
 
 1. [RuntimeAgentPromptLoader.load / loadSkills](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/agent/RuntimeAgentPromptLoader.java) 读取 `SYSTEM.md` 并扫描技能元数据；过滤 `disable-model-invocation` 的 Skill。
 2. [SkillPromptFormatter.format](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/skill/SkillPromptFormatter.java) 将 name、description、location 放入 `<available_skills>`，提示模型在任务匹配时用 `Read` 读取对应文件。初始提示词不是直接拼入所有 Skill 全文。

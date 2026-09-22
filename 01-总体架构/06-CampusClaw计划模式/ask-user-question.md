@@ -72,9 +72,11 @@ Ask the user one to three concise questions when required information or a user-
 
 ## 4. 整体交互与事件
 
+本图从一批已校验问题的发布到完整答案接续原执行；客户端逐题导航只改本地草稿，最终一次提交完整答案。问题形状、锁顺序、精确快照校验与控制容量仍由下文维护。断线后从完整问题/答案和 Session 状态恢复；目标或停止状态变化则拒绝或终止消费，不启动新根、不自动重放答案。
+
 ![结构化提问与原执行续跑](ask_user_question_sequence.svg)
 
-[原尺寸 SVG](ask_user_question_sequence.svg) · [PlantUML 源码](diagram.puml#L740)
+[原尺寸 SVG](ask_user_question_sequence.svg) · [PlantUML 源码](diagram.puml#L570)
 
 1. Agent 形成完整 `AskUserQuestion` ToolCall；该 Assistant 响应只能包含这一项 ToolCall，普通说明文本可同时存在。框架先校验 Schema，Runtime 再从最终调用解析一个不可变问题快照；before hook、等待对象、持久化事件和工具端口共享该快照，不从普通回复提取问题，也不再次各自解析不同版本。
 2. 既有路径保存唯一 `agent.tool_call`，`requiresConfirmation=false`。随后在同一短事务保存 `agent.question`、`session.status_idle(reason=confirming)`，登记内部等待目标并关闭旧段；提交后推送并关闭本次 SSE。`confirming` 统一表示本段等待用户处理，具体是提问、计划审核还是授权由对应完整事件确定；它不是执行成功或 Session idle。

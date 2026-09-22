@@ -82,62 +82,45 @@ endlegend
 ' Observed behavior: a session stores a resolved agent snapshot, provisions an isolated sandbox, starts idle when initial_events is omitted or empty, and begins work after a user event is accepted.
 ' Logical inference: component boundaries and the exact preparation order below are explanatory architecture, not claims about Anthropic internal implementation.
 ' Design reason: separate immutable agent version resolution from session-local overrides and runtime resource preparation so the resulting session is traceable.
-title Managed Agents: Create, Then Start Work
 ' Public contract checked 2026-09-14: sessions, create Session, and events-and-streaming.
 ' Observed update: a non-empty initial_events list starts the Session as running.
 ' Logical inference: API self-actions summarize public effects, not internal service order.
-autonumber
-hide footbox
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontSize 13
-skinparam maxMessageSize 190
-skinparam BoxPadding 10
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F1F5F9
-}
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-actor Client
-boundary "Managed Agents\nSession API" as API
-participant "Claude Model" as Model
-
-== 1. Resolve the Session ==
-Client -> API : Create Session\nAgent and Environment references
-API -> API : Resolve latest or pinned Agent version
-API -> API : Apply complete-field overrides
-break Invalid effective configuration
-  API --> Client : Validation error; no Session
-end
-API -> API : Prepare isolated sandbox and resources
-API -> API : Capture resolved Agent configuration
-
-== 2. Select the start boundary ==
-alt initial_events omitted or empty
-  API --> Client : Session: idle
-  ... Client starts a task later ...
-  Client -> API : Send user.message
+title Create a Managed Session - Recorded Beta Contract
+participant Client
+participant "Managed Agents API" as API
+Client -> API : Create Session with Agent and Environment references
+API -> API : Validate effective configuration and initial events
+alt Empty initial events
+  API --> Client : Idle Session
+  Client -> API : Submit task later
   API --> Client : Accepted event
-else Non-empty initial_events
-  API -> API : Validate and persist initial events
-  API --> Client : Session: running
+else Initial work supplied
+  API --> Client : Running Session
 end
-
-== 3. Observe work ==
-API -> Model : Run with resolved context and tools
-Model --> API : Message or tool request
 Client -> API : Open event stream
-API -->> Client : Session and Agent events
-
-legend bottom left
-Beta public contract; internal preparation order is not published.
-Session overrides do not create a new Agent version.
-initial_events: user.message / user.define_outcome only; at most 50.
-endlegend
+API -->> Client : Agent output and Session status
+note over Client,API
+  Recorded public Beta contract; server internals are not inferred.
+  Session overrides do not create an Agent version.
+end note
 @enduml
 
 @startuml managed_agent_configuration_model
@@ -283,72 +266,46 @@ endlegend
 ' Observed behavior: built-in tools run in the session sandbox, MCP tools run on the declared remote server, and custom tools run in the client application.
 ' Observed behavior: always_ask pauses the session for user.tool_confirmation; custom calls pause for user.custom_tool_result.
 ' Design reason: the sequence separates declaration from runtime ownership and does not imply a shared executable format.
-title Managed Agents: Who Executes Each Tool?
 ' Public contract checked 2026-09-14: tools and events-and-streaming.
 ' Design reason: each branch exposes only the public API and the actual executor.
-autonumber
-hide footbox
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontSize 13
-skinparam maxMessageSize 190
-skinparam BoxPadding 10
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F1F5F9
-}
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-actor "Client application" as Client
-boundary "Managed Agents API" as API
-participant "Session sandbox" as Sandbox
-participant "Remote MCP server" as MCP
-
-Client -> API : Send user.message
-API --> Client : Accepted event
-
-== Server-executed tools ==
-alt Built-in tool selected
-  API -->> Client : agent.tool_use
-  opt permission_policy = always_ask
-    API -->> Client : Idle: requires_action
-    Client -> API : user.tool_confirmation
-  end
-  alt Allowed
-    API -> Sandbox : Execute built-in tool
-    Sandbox --> API : Tool result
-  else Denied
-    API -> API : Continue without executing the tool
-  end
-else MCP tool selected
-  API -->> Client : agent.mcp_tool_use
-  opt permission_policy = always_ask
-    API -->> Client : Idle: requires_action
-    Client -> API : user.tool_confirmation
-  end
-  alt Allowed
-    API -> MCP : tools/call\nSession Vault credential
-    MCP --> API : Tool result
-  else Denied
-    API -> API : Continue without executing the tool
-  end
+title Execute One Managed Tool - Recorded Beta Contract
+participant "Client application" as Client
+participant "Managed Agents API" as API
+participant "Managed tool environment" as Managed
+alt Server-executed built-in or MCP tool
+  API -->> Client : Tool request; request permission when policy requires
+  Client -> API : Confirmation when required
+  API -> Managed : Execute only if allowed
+  Managed --> API : Tool result
+else Application-executed custom tool
+  API -->> Client : Custom tool request; requires action
+  Client -> Client : Execute application code
+  Client -> API : Custom tool result
 end
-
-== Application-executed tool ==
-API -->> Client : agent.custom_tool_use\nIdle: requires_action
-Client -> Client : Execute application code
-Client -> API : user.custom_tool_result
-API -> API : Resume when blocking calls resolve
-API -->> Client : agent.message and Session status
-
-legend bottom left
-Illustrative tool paths; not a requirement to call all three tool types.
-Custom tools are controlled by the application, outside permission_policy.
-Credentials belong to Session bindings, not reusable Agent definitions.
-endlegend
+API -->> Client : Continued message and Session status
+note over API,Managed
+  Managed means Session sandbox or remote MCP server.
+  They are alternative executors, not sequential stages.
+  Custom tools are outside permission_policy.
+end note
 @enduml
 
 @startuml managed_agents_session_history_recovery
@@ -364,65 +321,44 @@ endlegend
 ' Observed behavior: multiagent child histories and live previews are thread-scoped.
 ' Design reason: the client rebuilds display state from persisted events, opens the live stream,
 ' and replaces temporary previews when the authoritative buffered event arrives.
-title Managed Agents: Restore History and Reconcile Preview
 ' Public contract checked 2026-09-14: events-and-streaming.
 ' Design reason: one API participant represents public endpoints; the reducer is a client responsibility.
-autonumber
-hide footbox
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontSize 13
-skinparam maxMessageSize 190
-skinparam BoxPadding 10
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F1F5F9
-}
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-actor User
-boundary "Client UI" as Client
-control "Conversation\nprojection" as View
-boundary "Managed Agents\nPublic APIs" as API
-
-== 1. Restore authoritative history ==
+title Restore a Managed Session View - Recorded Beta Contract
+participant User
+participant "Client view" as Client
+participant "Managed Agents APIs" as API
 User -> Client : Open Session
-Client -> API : Retrieve Session
-API --> Client : Resource and current status
-loop Until next_page is null
-  Client -> API : List events: order=asc, page
-  API --> Client : Persisted event page
-  Client -> View : Apply complete events in order
-end
-opt Multiagent Session
-  Client -> API : List Threads and visible Thread history
-  API --> Client : Thread resources and event pages
-  Client -> View : Build each Thread timeline
-end
-View --> Client : Restored display
-
-== 2. Reconcile live preview ==
-Client -> API : Open stream with agent.message deltas
-API -->> Client : event_start / event_delta
-Client -> View : Accumulate by event ID and content index
-API -->> Client : Complete agent.message
-Client -> View : Replace matching preview
-View --> Client : Authoritative message
-
-== 3. Recover after disconnect ==
-... Connection lost ...
-Client -> API : Reopen event stream
-Client -> API : Query persisted history again
+Client -> API : Read Session and complete history pages
+API --> Client : Resource, status and persisted events
+Client -> Client : Build visible timelines
+Client -> API : Open live stream
+API -->> Client : Temporary preview deltas
+API --> Client : Complete message
+Client -> Client : Replace matching preview with complete event
+... Observation disconnects ...
+Client -> API : Reopen stream and query history again
 API --> Client : Complete events missed offline
-Client -> View : Deduplicate IDs and reconcile
-View --> Client : Recovered display
-
-legend bottom left
-Preview is best-effort, never persisted or replayed.
-The complete event is authoritative; child previews stay Thread-scoped.
-Endpoint paths and paging fields are listed in the accompanying document.
-endlegend
+Client -> Client : Deduplicate and reconcile
+note over Client,API
+  Preview is best-effort; it is not persisted or replayed.
+  Child Thread history and preview remain scoped to that Thread.
+end note
 @enduml

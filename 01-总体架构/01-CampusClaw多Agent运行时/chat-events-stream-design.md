@@ -106,6 +106,8 @@ agent.message、agent.thinking 与 agent.plan 的 delta 是增量，completed �
 分页大小、结果元数据与空页规则只在历史专题维护；Claw 执行关联按 sourceEventId 实施；Mate 公共投影仍需独立对齐。
 时间允许回退，不用最后 createdAt 作下界，也不自行构造内部序号。
 
+本图只说明一条已绑定响应段如何开始和关闭。回执先入队再启动执行，预览与完整记录各走既有投影；实际终态与 confirming 边界都可关闭响应，但只有实际退出才能将执行记为结束。确认新建续跑响应，中断独立响应与跨实例交付由专图维护；断流不能制造成功终态，不重放 POST。
+
 ![请求级 SSE 生命周期](设计图/事件接口重设计/target_session_live_stream_lifecycle.svg)
 
 [PlantUML 源码：`target_session_live_stream_lifecycle`](设计图/事件接口重设计/diagram.puml#L158)

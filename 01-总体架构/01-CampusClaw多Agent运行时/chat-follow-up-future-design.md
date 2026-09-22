@@ -66,6 +66,8 @@ pi 路径相对 `pi-mono`。行号针对上表固定 commit，不代表未来实
 数据库共享的是消息和执行交接状态，不是 Java 对象。接收实例失败后的重新授权、
 执行接管及观察恢复是另外的故障协议，不能由正常流程推导为已自动支持。
 
+本图保留禁用的 FollowUp 候选，不把它画成已开放 API。Queue owner B 内部批量调度器负责轮询、重查和领取，仍不是每个请求一个持续扫描器；M1、M2 保留独立响应和凭据。恢复读取内部上下文，不用公共 ListEvents 代替；owner/凭据丢失和公共排队契约仍需单独设计。
+
 ![未来 FollowUp 跨实例接续：方案方向已确认，本期不启用](设计图/后续消息扩展/target_follow_up_handoff.svg)
 
 [原尺寸 SVG](设计图/后续消息扩展/target_follow_up_handoff.svg) · [PlantUML 源码：`target_follow_up_handoff`](设计图/后续消息扩展/diagram.puml#L1)
@@ -76,13 +78,13 @@ pi 路径相对 `pi-mono`。行号针对上表固定 commit，不代表未来实
 
 ![未来 FollowUp 应用层与运行时边界](设计图/后续消息扩展/target_follow_up_classes.svg)
 
-[原尺寸 SVG](设计图/后续消息扩展/target_follow_up_classes.svg) · [PlantUML 源码：`target_follow_up_classes`](设计图/后续消息扩展/diagram.puml#L65)
+[原尺寸 SVG](设计图/后续消息扩展/target_follow_up_classes.svg) · [PlantUML 源码：`target_follow_up_classes`](设计图/后续消息扩展/diagram.puml#L52)
 
 全局图包含准入、数据库权威和执行输出端口；下图补充本机凭据与缓冲的生命周期：
 
 ![未来 FollowUp 本机对象生命周期](设计图/后续消息扩展/target_follow_up_local_lifecycle.svg)
 
-[原尺寸 SVG](设计图/后续消息扩展/target_follow_up_local_lifecycle.svg) · [PlantUML 源码：`target_follow_up_local_lifecycle`](设计图/后续消息扩展/diagram.puml#L131)
+[原尺寸 SVG](设计图/后续消息扩展/target_follow_up_local_lifecycle.svg) · [PlantUML 源码：`target_follow_up_local_lifecycle`](设计图/后续消息扩展/diagram.puml#L118)
 
 | 目标职责 | 生命周期与边界 |
 |---|---|

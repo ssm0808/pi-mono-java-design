@@ -99,49 +99,43 @@ endlegend
 ' Observed behavior: hook failures can become tool failures; Codex analytics can drop signals.
 ' Design reason: catch outside the statistics transaction and retain one fact per root and Skill.
 ' Java divergence: bounded synchronous recording is pending implementation, not the Codex queue pipeline.
-title Skill Usage Recording and Failure Isolation - Pending implementation
-skinparam shadowing false
-skinparam backgroundColor #FFFFFF
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
 skinparam defaultFontName SansSerif
-skinparam sequenceMessageAlign center
-participant "Runtime input / final hook" as R
-participant "Root SkillUsageTracker" as T
-participant "SkillUsageService proxy" as S
-database "GaussDB" as DB
-note over R, T
-  Explicit: input already committed, target bound, model not started.
-  Read / Skill: final successful body verified against the Skill snapshot.
-  No active Runtime database transaction at either entry.
-end note
-R -> T : qualified signal + real root + source
-alt same Skill already attempted in this Tracker
-  T --> R : unchanged result
-else first qualified signal
-  T -> T : atomically retain candidate; release memory lock
-  T -> S : record(candidate)
-  S -> DB : begin independent TX; Session lifecycle lock
-  S -> DB : check admission and existing root / Skill fact
-  alt admission closed or fact already present
-    S -> DB : finish without increments
-    S --> T : skipped / already recorded
-  else new fact
-    S -> DB : INSERT t_skill_usage
-    S -> DB : increment total, then daily
-    alt all statistics writes and commit succeed
-      S -> DB : commit three tables
-      S --> T : recorded
-    else write / unique key / commit error
-      S -> DB : rollback statistics when possible
-      S --> T : exception after TX boundary
-      T -> T : classify duplicate or failure; controlled diagnostic
-    end
-  end
-  T --> R : unchanged result; no automatic retry
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+
+title Record One Qualified Skill Use - Pending implementation
+participant "Runtime" as Runtime
+participant "Root usage tracker" as Tracker
+participant "Statistics service" as Service
+database GaussDB as DB
+Runtime -> Tracker : Qualified Skill signal for the real root
+Tracker -> Tracker : Deduplicate attempted Skill; release memory lock
+Tracker -> Service : Record first qualified candidate
+Service -> DB : Independent transaction; lock and recheck admission
+alt New admissible usage fact
+  Service -> DB : Insert fact; increment total and daily count
+  DB --> Service : Commit all three tables or raise failure
+else Closed admission or existing fact
+  DB --> Service : No increments
 end
-R -> R : continue main execution
-note over T, DB
-  Commit acknowledgement may be uncertain; never rerun the tool.
-  Persistent PK prevents another increment after restoration.
-  Missing observations are accepted; this is not an audit ledger.
+Service --> Tracker : Recorded, skipped or failed
+Tracker --> Runtime : Unchanged main result; no automatic retry
+note over Tracker,DB
+  Statistics failure never replays a tool.
+  Persistent uniqueness prevents double counting after restore.
 end note
 @enduml

@@ -545,91 +545,50 @@ endlegend
 ' Internal review is implemented; plan preview and public transport are pending implementation. View states are not HTTP enums.
 ' Streaming source: Java fb842b1ac6cb4818f6b146f79dd184a5cd88bf12; runtimeapi/event/RuntimeEventProjector.java :: projectMessageUpdate, beginPlanReview.
 ' Design reason: backend classifies plan deltas; the frontend never parses model markers or authorizes previews.
-title Plan interaction - authority and UI
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
-skinparam shadowing false
 skinparam defaultFontName SansSerif
-skinparam sequenceMessageAlign center
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+
+title Review One Plan in the Client
 actor User
-participant "Composer / PlanCard / QuestionCard" as UI
-participant "Coordinators / Projection" as State
-participant "Gateway / Server authority" as API
-User -> UI : Select plan while idle
-UI -> State : Request mode change
-State -> API : Update mode with current version
-API --> State : Complete configuration + new version
-State --> UI : Show committed plan mode
-User -> UI : Send request
-UI -> State : Freeze request
-State -> API : Submit once; retain original root
-API --> State : Research activities
-opt Question batch during planning
-  API --> State : Complete question + confirming
-  State --> UI : One question card; Session still running
-  loop Browse questions locally [pending implementation UI]
-    User -> UI : Answer current question; next or back
-    UI -> UI : Validate current answer; preserve all drafts
-  end
-  User -> UI : Submit answers on final question
-  UI -> State : Freeze exact question target and answers
-  State -> API : Submit answer; shared control lock
-  API --> State : Accepted complete answer receipt
-  State --> UI : Compact answer summary; retain mode and TODO
-  note over UI, State
-    Question card absorbs matching tool activity.
-    Raw tool results remain in model history.
-  end note
-  API --> State : Original root continues
+participant "Plan card" as UI
+participant "Conversation state" as State
+participant "Server authority" as API
+API -->> State : Plan preview deltas [P]
+State --> UI : Read-only preview
+API --> State : Complete plan and confirming boundary [P]
+State -> State : Reconcile exact pending target
+State --> UI : Enable review for verified complete plan
+User -> UI : Approve or request revision
+UI -> State : Freeze exact decision; lock controls
+State -> API : Submit decision once
+alt Committed receipt received
+  API --> State : Accepted decision and applicable mode change
+  State --> UI : Make reviewed proposal read-only
+  API --> State : Original execution continues
+  State --> UI : Updated proposal or implementation output
+else Receipt uncertain or observation lost
+  State -> API : Read history and Session state
+  API --> State : Authoritative review and execution facts
+  State --> UI : Restore verified actions only
 end
-opt Plan preview [Pending implementation]
-  API --> State : Nonempty agent.plan delta, stable plan eventId
-  State --> UI : First delta creates plan card; later deltas append
-  note over State, API
-    No started event. No marker parsing in the frontend.
-    Preview never authorizes approval and is not replayed.
-  end note
-end
-API --> State : Complete proposal + confirming [completed phase pending]
-State --> UI : Replace same-ID preview, or create complete card; reconcile before enabling
-note over UI, State
-  Questions do not approve a proposal or grant tool permission.
-  Ordinary messages are a no-tool fallback only.
-  Waiting uses running Slash descriptors; no new messages.
+note over State,API
+  [P] = Pending implementation: plan streaming increment.
+  Never replay a write to recover observation.
+  Question, TODO and mode-selection flows are separate.
 end note
-opt Revise the current proposal
-  User -> UI : Open feedback; submit revision decision
-  UI -> State : Freeze exact plan target; lock controls
-  State -> API : Submit revise once
-  API --> State : Accepted decision; original execution resumes
-  State --> UI : Old proposal read-only; keep plan mode
-  API --> State : New complete proposal with a new event ID
-  State --> UI : Enable the new target after reconciliation
-end
-User -> UI : Approve and implement
-UI -> State : Freeze exact plan target; lock controls
-State -> API : Submit approve once, without feedback
-API --> State : Accepted decision + committed build mode
-State --> UI : Collapse accepted proposal; show build mode
-note over State, API
-  Server rechecks mutable authority in its transaction.
-  Tool permission remains a separate interaction.
-end note
-loop Explicit TODO snapshots during implementation
-  API --> State : Ordered full snapshot for original root
-  State --> UI : Replace task list; preserve user fold choice
-end
-note over UI, State
-  Build questions reuse the same batch-answer path,
-  retaining build mode and the current TODO snapshot.
-  No TODO event: no invented task list.
-  All tasks completed does not imply execution completion.
-end note
-group Any uncertain write receipt or lost read connection
-  State --> UI : Keep known content; disable review actions
-  State -> API : Read-only history and state reconciliation
-  API --> State : Current proposal, decision and execution facts
-  State --> UI : Restore only verified actions; never replay writes
-end
-API --> State : Actual completion, failure or stop
-State --> UI : Show terminal; retain last task snapshot
 @enduml

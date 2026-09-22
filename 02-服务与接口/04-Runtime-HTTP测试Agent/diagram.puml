@@ -84,64 +84,51 @@ endlegend
 ' Observed behavior: integration tests require explicit JAR and OpenGauss properties and can skip when prerequisites are absent.
 ' Design reason: required gates must provision dependencies and fail closed instead of silently skipping.
 ' Pending implementation: recommended test-platform assembly; implementation evidence remains scoped to the baseline.
-
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName Arial
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
-skinparam ArrowColor #475569
-hide footbox
-skinparam maxMessageSize 210
+skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam sequence {
-  ParticipantBackgroundColor #F8FAFC
-  ParticipantBorderColor #64748B
-  LifeLineBorderColor #94A3B8
-  GroupBorderColor #CBD5E1
-  GroupBackgroundColor #F8FAFC
-}
-title HTTP Regression - Plan, Run, Verify
-actor "CI / Developer" as Caller
-participant "HTTP Adapter" as Agent
-participant "Git / Contract" as Source
-participant "Environment" as Env
-participant "Runner / Oracle" as Runner
-database "Evidence Store" as Store
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-== 1. Freeze baseline and plan ==
-Caller -> Agent : test(candidate, mergeBase, mode)
-Agent -> Source : Resolve commits / contract hash
-Source --> Agent : Immutable baseline or error
+title Verify One HTTP Candidate - Target
+participant "CI / developer" as Caller
+participant "Test coordination" as Agent
+participant "Source and contract" as Source
+participant "Isolated environment" as Env
+participant "Runner and oracle" as Runner
+database "Evidence store" as Store
+Caller -> Agent : Test candidate against merge base
+Agent -> Source : Resolve immutable baseline and required coverage
+Source --> Agent : Baseline and plan, or explicit gap
 break Baseline missing or ambiguous
   Agent --> Caller : BLOCKED_BASELINE
 end
-Agent -> Source : Extract operations / changed symbols
-Source --> Agent : Contract snapshot and diff
-Agent -> Agent : Plan required cases\nUnknown or large impact selects all
-
-== 2. Provision and run ==
-Agent -> Env : Create isolated resources
-Env --> Agent : Readiness evidence
-alt Required dependency unavailable
-  Agent -> Env : Collect diagnostics / clean up
-  Env --> Agent : Cleanup result
+Agent -> Env : Provision isolated resources and check readiness
+Env --> Agent : Ready or environment failure
+break Environment unavailable
+  Agent -> Env : Collect diagnostics and clean up created resources
   Agent --> Caller : FAIL_ENVIRONMENT
-else Ready
-  Agent -> Runner : Execute L0 and fast contracts
-  Runner -> Runner : Check foundation gate
-  opt Foundation passed
-    Runner -> Runner : Run required state, DB and process tests
-  end
-  Runner -> Store : Manifest, results, logs and seeds
-  Store --> Runner : Evidence stored
-
-  == 3. Clean up and report ==
-  Agent -> Env : Clean up / check resource leaks
-  Env --> Agent : Cleanup evidence
-  Agent -> Runner : Finalize verdict with cleanup result
-  Runner --> Agent : Deterministic verdict / gaps
-  Agent --> Caller : Report + maintenance proposal
 end
+Agent -> Runner : Run foundation, then required gated suites
+Runner -> Store : Save manifest, results, logs and seeds
+Runner --> Agent : Test outcome
+Agent -> Env : Clean up; inspect resource leaks
+Env --> Agent : Cleanup evidence
+Agent -> Runner : Include cleanup in final verdict
+Runner --> Agent : Deterministic verdict and gaps
+Agent --> Caller : Evidence report
 @enduml
 
 @startuml http_test_case_maintenance

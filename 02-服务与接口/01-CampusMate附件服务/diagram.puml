@@ -13,85 +13,54 @@
 ' Observed behavior: both baselines accept inline image content but have no generic upload and scan API.
 ' Architecture change: mate-service streams files to private OBS and stores metadata in openGauss.
 ' Security hardening: uploaded scripts remain untrusted bytes and are never executed.
-
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName Arial
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
-skinparam maxMessageSize 210
+skinparam shadowing false
 skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
 hide footbox
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #CBD5E1
-  GroupBackgroundColor #F8FAFC
-}
-title File Upload - Store, Scan, Respond
-actor Client
-participant "File API" as API
-database "Chat Store" as Chats
-database openGauss as DB
-participant "Private OBS" as OBS
-participant "Scan Worker" as Worker
+autonumber
+
+title Upload One File and Scan It - Target
+participant Client
+participant "File service" as API
+database "File state" as DB
+participant "Private object storage" as OBS
+participant "Scan worker" as Worker
 participant Scanner
-
-== 1. Authorize and allocate ==
-Client -> API : Upload file\nJWT, X-File-Size, Prefer
-API -> Chats : Authorize Chat / resolve Session
-Chats --> API : session_id
-API -> API : Normalize name / validate size
-API -> DB : Insert identity + active detail
-DB --> API : Commit file_id
-
-== 2. Store immutable bytes ==
-API -> OBS : Create-only PUT(file_id)\nCount bytes and calculate SHA-256
-alt Object key already exists
-  OBS --> API : Conflict
-  API -> DB : FAILED + OBJECT_KEY_CONFLICT
-  DB --> API : Quarantine committed
-  API --> Client : Storage error
-else Object stored
-  OBS --> API : PUT complete
-  API -> API : Check declared length and EOF
-  API -> DB : Set PROCESSING + digest
-  DB --> API : Commit
-
-  == 3. Respond and scan independently ==
-  par HTTP response policy
-    alt No wait preference
-      API --> Client : 202 PROCESSING
-    else Prefer wait=N (at most 10 seconds)
-      API -> DB : Observe committed scan state
-      DB --> API : State within wait window
-      alt READY
-        API --> Client : 201 READY
-      else BLOCKED
-        API --> Client : 422 FILE_BLOCKED
-      else Wait expires
-        API --> Client : 202 PROCESSING
-      end
-    end
-  else Scan work
-    Worker -> DB : Claim short lease
-    DB --> Worker : Lease committed
-    Worker -> OBS : Stream GET(file_id)
-    OBS --> Worker : Bounded byte stream
-    Worker -> Scanner : Detect MIME / scan bytes
-    Scanner --> Worker : Safe, blocked or failure
-    Worker -> DB : Conditional state / retry update
-    DB --> Worker : Commit
-  end
+Client -> API : Upload declared file
+API -> API : Authorize Chat; validate name and size
+API -> DB : Commit allocated file identity
+API -> OBS : Create-only streamed PUT; count and hash bytes
+OBS --> API : Stored object or conflict
+break Object conflict or invalid upload
+  API -> DB : Record controlled failure
+  API --> Client : Upload error
 end
-
-note over API,OBS
-file_id is the OBS Object Key.
-No local file or complete byte array.
-end note
-note over DB,Worker
-Release the database transaction before external I/O.
+API -> DB : Commit PROCESSING\nand digest
+par Response policy
+  API --> Client : State after optional bounded wait
+else Independent scan
+Worker -> DB : Claim and commit scan lease
+Worker -> OBS : Stream stored bytes outside transaction
+OBS --> Worker : Bounded stream
+Worker -> Scanner : Detect type and scan
+Scanner --> Worker : Safe, blocked or failure
+Worker -> DB : Conditionally commit state or retry policy
+end
+note over API,Worker
+  Response and scan proceed independently.
+  Default response is PROCESSING; bounded wait may observe final state.
 end note
 @enduml
 
@@ -156,65 +125,49 @@ endlegend
 ' Observed behavior: neither baseline has a generic file reference or cross-service content resolver.
 ' Architecture change: CampusClaw resolves ordered file_ids and streams verified content through mate-service.
 ' Security hardening: CampusClaw receives no OBS location or credential and validates length and digest.
-
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName Arial
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
-skinparam maxMessageSize 210
+skinparam shadowing false
 skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
 hide footbox
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #CBD5E1
-  GroupBackgroundColor #F8FAFC
-}
-title File Resolution - Atomic Batch, Verified Content
-participant CampusClaw as Runtime
-participant "File API" as API
-database openGauss as DB
-participant "Private OBS" as OBS
-participant "Model Input Adapter" as Model
+autonumber
 
-== 1. Resolve the complete batch ==
-Runtime -> API : POST files:resolve\nsessionId + ordered fileIds
-API -> API : Verify one service credential mode
-API -> DB : Lock all IDs in stable order
-DB --> API : Current rows
-API -> API : Check Session, READY and expiry
-alt Any file is invalid
-  API -> DB : Roll back
-  DB --> API : No references changed
-  API --> Runtime : INVALID_FILE or FILE_NOT_READY
-else All files are valid
-  API -> DB : Set first reference / clear expiry
-  DB --> API : Commit trusted snapshots
-  API --> Runtime : ResultBean in request order
-
-  == 2. Read each accepted file ==
-  loop Each resolved file
-    Runtime -> API : GET content\nSession, file_id, expected SHA-256
-    API -> DB : Recheck READY, reference and digest
-    DB --> API : Size / digest / trusted MIME
-    API -> OBS : Stream GET(file_id)
-    OBS --> API : Original bytes
-    API -> API : Verify length and digest
-    API --> Runtime : Bounded binary stream
-    Runtime -> Runtime : Verify length and digest
-    Runtime -> Model : Untrusted user content
-  end
+title Resolve and Read an Authorized File Batch - Target
+participant Runtime
+participant "File service" as API
+database "File state" as DB
+participant "Private object storage" as OBS
+participant "Model input" as Model
+Runtime -> API : Resolve ordered file IDs for Session
+API -> DB : Lock and validate the complete batch
+break Any file is invalid
+  API -> DB : Roll back all reference changes
+  API --> Runtime : Controlled batch error
 end
-
-note over Runtime,API
-Persist only the trusted metadata snapshot with User Entry.
-A failed batch never starts content reads.
-end note
+API -> DB : Commit references and trusted snapshots
+DB --> API : Committed metadata
+API --> Runtime : Snapshots in request order
+Runtime -> API : Read each file with expected digest
+API -> DB : Recheck current reference, readiness and digest
+API -> OBS : Stream bytes
+OBS --> API : Bounded byte stream
+API --> Runtime : Verified content
+Runtime -> Runtime : Verify length and digest
+Runtime -> Model : Deliver as untrusted user content
 note over API,OBS
-Backpressure and cancellation propagate through the stream.
-No local file or complete in-memory object.
+  Stream failures never become verified complete input.
+  Cancellation and backpressure propagate.
 end note
 @enduml
 
@@ -224,70 +177,51 @@ end note
 ' Observed behavior: the baseline has no generic file tombstone, lease, or reconciliation flow.
 ' Architecture change: conditional database state, short leases, and idempotent OBS operations replace XA.
 ' Product constraint: referenced files are retained until Chat and Runtime Session cleanup.
-
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName Arial
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
-skinparam maxMessageSize 210
+skinparam shadowing false
 skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
 hide footbox
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #CBD5E1
-  GroupBackgroundColor #F8FAFC
-}
-title File Deletion - Eligibility and Cleanup
-actor Client
-participant "File API" as API
-participant "Chat / Session cleanup" as Cleanup
-database openGauss as DB
-participant "Delete Worker" as Worker
-participant "Private OBS" as OBS
+autonumber
 
-== 1. Establish deletion eligibility ==
-alt Delete one file
-  Client -> API : DELETE attachment
-  API -> Cleanup : Authorize Chat / resolve Session
-  Cleanup --> API : session_id
-  API -> DB : Check reference / conditional update
-  alt Referenced
-    DB --> API : referenced_at is set
-    API --> Client : 409 FILE_REFERENCED
-  else Object-key quarantine
-    DB --> API : Retain FAILED detail
-    API --> Client : Bounded 503 error
-  else Unreferenced or already deleting
-    DB --> API : DELETING
-    API --> Client : 202 ResultBean
-  end
-else Delete Chat and Session
-  Client -> Cleanup : Delete Chat
-  Cleanup -> Cleanup : Authorize / hide Runtime Session\nStop execution and reads
-  Cleanup -> DB : Mark normal Session files DELETING
-  DB --> Cleanup : Cleanup committed
+title Delete One Eligible File - Target
+participant Client
+participant "File service" as API
+database "File state" as DB
+participant "Delete worker" as Worker
+participant "Private object storage" as OBS
+Client -> API : Request file deletion
+API -> API : Authorize Chat and resolve Session
+API -> DB : Check eligibility; mark DELETING
+DB --> API : Accepted or controlled rejection
+break Deletion not eligible
+  API --> Client : Controlled rejection; no delete work
 end
-
-== 2. Delete bytes outside a transaction ==
+API --> Client : Deletion receipt
 Worker -> DB : Claim eligible DELETING lease
-DB --> Worker : Committed file_id / row_version
-Worker -> OBS : Idempotent DELETE(file_id)
-alt Deleted or NotFound
+DB --> Worker : Committed identity and row version
+Worker -> OBS : Idempotent delete outside transaction
+alt Deleted or already absent
   OBS --> Worker : Success
-  Worker -> DB : Remove detail / write DELETED
-  DB --> Worker : Tombstone committed
+  Worker -> DB : Remove detail;\nretain tombstone
 else Temporary failure
-  OBS --> Worker : Retryable failure
-  Worker -> DB : Release lease / schedule retry
-  DB --> Worker : Retry state committed
+  OBS --> Worker : Retryable error
+  Worker -> DB : Release lease and schedule retry
 end
-
-note over DB,OBS
-Only audited reconciliation may resolve object-key quarantine.
-DELETED retains five identity fields; file_id is never reused.
+note over API,DB
+  Referenced files cannot use individual deletion.
+  Object-key quarantine requires audited reconciliation.
 end note
 @enduml
 
@@ -297,42 +231,41 @@ end note
 ' Source evidence: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSession.java: abort.
 ' Pending implementation architecture: no generic file cleanup in that baseline.
 ' Design reason: ownership evidence is required before deleting a conflicting OBS object.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName Arial
+skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
-skinparam maxMessageSize 210
+skinparam shadowing false
 skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
 hide footbox
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #CBD5E1
-  GroupBackgroundColor #F8FAFC
-}
-title File Reconciliation - Prove Object Ownership
-participant "Audited Reconciler" as Worker
-database openGauss as DB
-participant "Private OBS" as OBS
+autonumber
 
-== 1. Compare recorded state and object ==
-Worker -> DB : Read stale / quarantined candidates
-DB --> Worker : file_id + recorded metadata
-Worker -> OBS : Stat(file_id)
-OBS --> Worker : Object metadata or NotFound
-
-== 2. Reconcile only with evidence ==
-alt Owned valid object
-  Worker -> Worker : Verify ownership
-  Worker -> DB : Recover processing or allow safe deletion
-  DB --> Worker : Conditional update committed
-else NotFound
-  Worker -> DB : Remove detail / set DELETED
-  DB --> Worker : Tombstone committed
-else Ownership remains unknown
+title Reconcile One Quarantined Object - Target
+participant "Audited reconciler" as Worker
+database "File state" as DB
+participant "Private object storage" as OBS
+Worker -> DB : Read stale or quarantined candidate
+DB --> Worker : Identity and recorded metadata
+Worker -> OBS : Inspect object metadata
+OBS --> Worker : Object facts or NotFound
+alt Ownership proven or object absent
+  Worker -> DB : Conditionally recover state or confirm safe deletion
+  DB --> Worker : Committed recovery or tombstone
+else Ownership unknown
   Worker -> DB : Retain quarantine
   DB --> Worker : No deletion authorized
 end
+note over Worker,OBS
+  Existence alone does not prove ownership.
+  Ordinary cleanup cannot resolve object-key quarantine.
+end note
 @enduml

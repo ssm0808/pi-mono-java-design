@@ -6,60 +6,47 @@
 ' Source: pi-mono@5cd93f688aaab89dbb6dfa4aca535f21796ae185
 ' packages/agent/src/agent-loop.ts: runLoop. Observed behavior: follow-up continues the same loop.
 ' Design reason: durable application handoff avoids sticky routing and live output relay.
-autonumber
-hide footbox
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontSize 13
-skinparam maxMessageSize 190
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F1F5F9
-}
-title Future FollowUp: Cross-instance Handoff (Disabled)
-actor "Caller via Mate" as C
-participant "Instance A\nM1 execution" as A
-participant "Instance B\nM2 application" as B
-control "B batch dispatcher" as W
-database "Shared database\nqueue / execution authority" as D
-== 1. Accept into separate response scopes ==
-C -> A : Submit M1
-A -> D : Accept M1 and claim execution
-D --> A : Committed
-A --> C : M1 receipt and output
-C -> B : Future queue submission M2
-B -> D : Short transaction: accept ordered M2
-D --> B : Committed association
-B --> C : M2 receipt; retain its own SSE
-B -> W : Register pending M2, then recheck
-== 2. Publish real predecessor completion ==
-A -> D : Commit context, terminal, and release
-D --> A : Committed
-A --> C : M1 terminal; close M1 SSE
-loop Bounded instance-level batches
-  W -> D : Read predecessor and queue head
-  D --> W : Committed state
-end
-== 3. Claim, restore, and run M2 ==
-W -> B : Candidate eligible for recheck
-B -> D : Short transaction: recheck and claim M2
-D --> B : One winning execution identity
-B -> D : Restore internal model context
-D --> B : Recoverable M1 result
-B -> B : Start M2 with its own credentials
-B --> C : M2 output on M2 SSE
-B -> D : Commit M2 real completion
-B --> C : M2 terminal; close M2 SSE
-legend bottom left
-Pending implementation and disabled. Public queue fields and failure policy need a separate design.
-M2 credentials stay only in B memory. Restore from internal context, never ListEvents.
-No object or token relay. Lost owner / credentials require separate recovery.
-Lease expiry does not prove remote side effects stopped.
-endlegend
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+
+title Hand Off One Queued FollowUp - Disabled Proposal
+participant Caller
+participant "Execution owner A" as A
+participant "Queue owner B" as B
+database "Shared execution authority" as DB
+Caller -> A : Submit first message
+A -> DB : Accept and claim first execution
+Caller -> B : Submit future queued message
+B -> DB : Commit ordered queue association
+B --> Caller : Receipt on its own response
+A -> DB : Commit actual terminal and release execution
+A --> Caller : First terminal on original response
+B -> DB : Poll predecessor; recheck and claim queue head
+DB --> B : Winning execution identity
+B -> DB : Restore internal model context
+DB --> B : Recoverable predecessor result
+B -> B : Execute with its own in-memory credentials
+B -> DB : Commit actual completion
+B --> Caller : Output and terminal on queued response
+note over A,B
+  Pending implementation and disabled.
+  No object or credential relay; no takeover on lease expiry.
+end note
 @enduml
 
 @startuml target_follow_up_classes

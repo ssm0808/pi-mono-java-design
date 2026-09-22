@@ -1,74 +1,51 @@
 @startuml command_http_flow
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 190
-skinparam sequenceArrowColor #526777
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
-title Pending implementation Shared GET and Typed Command POST
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java getSession.
 ' Architecture change: Builtin routes return JSON; B13/B14 Skill reuses the message SSE boundary.
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CompositeCommandRegistry.java resolve.
 ' Product decision: GET uses full sources and state-filtered name/kind/description/input; POST keeps locked admission.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached and toRuntime.
 ' Product decision: Help uses authored Agent metadata; it does not format the command catalog.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+
+title Execute One Resolved Command - Pending implementation
 actor Caller
-participant Controller
-participant Application
-participant Registry
-participant Handler
-participant "Narrow service" as Service
-== Bind the request ==
-Caller -> Controller : GET commands\nor POST command
-Controller -> Application : validated VO\nlocale + headers
-== Resolve once and dispatch ==
-alt GET shared catalog
-  Application -> Registry : resolve all sources\ncomplete Agent cache
-  Registry --> Application : immutable catalog or target 503
-  Application --> Controller : filter state, order\nlightweight VO
-else POST Builtin
-  Application -> Registry : resolve once with BUILTIN filter
-  Registry --> Application : immutable catalog
-  Application -> Handler : selected definition\nsame catalog
-  alt Help
-    Handler -> Service : query Agent help\nusing Session agentId
-    Service -> Service : prepareCached once\nunder Agent publication lock
-    note over Handler, Service
-      Project displayName, description, useCases.
-      No model, refresh, Session write, or capacity lease.
-      No complete cache: existing 422 error.
-    end note
-  else Other Builtins
-    Handler -> Service : command-specific admission\nand locking
-  end
-  Service --> Handler : command-specific DTO
-  Handler --> Application : command result
-  Application --> Controller : immutable response VO
-else POST Skill (pending implementation B13/B14)
-  Application -> Registry : resolve full sources once
-  Registry --> Application : real Skill definition and snapshot
-  Application -> Handler : immutable invocation
-  Handler -> Service : shared message admission and execution
-  Service --> Handler : typed message stream result
-  Handler --> Application : stream result
-  Application --> Controller : stream response
-end
-== Return the selected protocol ==
-alt Builtin or GET
-  Controller --> Caller : ResultBean application/json
+participant "Command application" as App
+participant "Command catalog" as Catalog
+participant "Selected handler" as Handler
+participant "Domain service" as Service
+Caller -> App : Submit command and arguments
+App -> Catalog : Resolve once with required source scope
+Catalog --> App : Real definition and immutable catalog
+App -> Handler : Dispatch selected definition and snapshot
+Handler -> Service : Apply command-specific admission and action
+Service --> Handler : Typed outcome
+Handler --> App : Command result
+alt Builtin
+  App --> Caller : Command-specific JSON
 else Skill
-  Controller --> Caller : user.message receipt first\nshared Agent events and matching idle
+  App --> Caller : User receipt, shared events and matching idle
 end
+note over App,Service
+  GET catalog is a separate read-only operation.
+  Help uses cached Agent metadata; no model execution.
+  Skill reuses ordinary message admission.
+end note
 @enduml
 
 @startuml command_authoritative_state

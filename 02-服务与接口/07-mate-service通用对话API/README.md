@@ -156,6 +156,8 @@ Header 前的认证、授权、资源或容量错误使用 JSON；Header 后编�
 
 目标增强为[先恢复当前完整预览，再接续增量](../../01-总体架构/01-CampusClaw多Agent运行时/redis-stream-recovery.md#4-从关闭浏览器到重新看到输出)；其全局目标类图及两跳时序由 Redis 专题唯一维护。它解决下面现有契约只能对账完整历史、不能补回半截正文的问题。精确模型完成 C-008 前，不得对外宣称已支持新恢复行为。
 
+本图只展示公共 Chat 的提交、独立观察与断线对账，不混入内部请求级 SSE 的关闭规则。公开历史继续按本专题固定快照契约逐页读取，数字分页整合仍待决；浏览器只重开读流和读取历史，不取消原执行或重放 POST，完整记录覆盖同 ID 预览。
+
 ![实时流与固定历史对账](设计图/public_chat_event_recovery.svg)
 
 [原尺寸 SVG](设计图/public_chat_event_recovery.svg) · [PlantUML 源码](设计图/diagram.puml#L45)

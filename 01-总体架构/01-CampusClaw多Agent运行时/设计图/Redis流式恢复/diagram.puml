@@ -79,53 +79,50 @@ end note
 ' packages/schema/src/session-event.ts Text.Delta and DurableDefinitions: live-only deltas.
 ' Design reason: a snapshot and its cursor prevent the snapshot-to-follow gap.
 ' Java divergence: source-side Redis preview recovery is pending implementation, not observed upstream behavior.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-skinparam maxMessageSize 160
 skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
 hide footbox
-title Browser Reopen - Target Recovery\nPending implementation
-actor Browser
-participant "Mate replica B" as Mate
-participant "Claw reader C" as Reader
-database "Shared Redis" as Redis
-participant "Claw executor A" as Exec
-database "Authoritative DB" as DB
-== Execution survives browser disconnect ==
-Browser -> Browser : close page
-note over Mate,Reader : Read subscriptions close; executor is not canceled.
-Exec -> Exec : accumulate projected text
-Exec -> Redis : atomic batch + full preview + cursor
-== Reopen on any authorized replica ==
-Browser -> Mate : GET public Chat stream
-Mate -> Mate : authenticate / authorize / map Chat
-Mate -> Reader : independent internal GET stream
-Reader -> Redis : atomic snapshot read
-Redis --> Reader : preview + cursor C
-Exec -> Redis : append batch C+1
-Reader --> Mate : initial snapshot
-Mate --> Browser : public preview snapshot
-Browser -> Browser : replace incomplete previews only
-Reader -> Redis : XREAD after C
-Redis --> Reader : batch C+1 (not lost)
-Reader --> Mate : normalized delta
-Mate --> Browser : public delta
-Browser -> Mate : GET complete history
-Mate -> DB : authorized public projection / reconciliation
-DB --> Mate : complete events
-Mate --> Browser : complete history
-Browser -> Browser : deduplicate; completed wins
-== Finish or continue ==
-Exec -> DB : commit complete message
-Exec -> Redis : publish completed; remove preview
-Redis --> Reader : completed notification
-Reader --> Mate : complete event
-Mate --> Browser : same public eventId / completed
-note over Browser,DB
-No automatic POST replay. No sticky sessions for readers.
-Redis failure uses history fallback, not a zero-loss promise.
-Executor failure requires a separate recovery design.
+autonumber
+
+title Reopen One Browser View - Pending implementation
+participant Browser
+participant "Mate reader" as Mate
+participant "Claw reader" as Reader
+database Redis
+participant "Claw executor" as Exec
+database "Authoritative history" as DB
+Exec -> Redis : Atomically publish preview snapshot and cursor
+Browser -> Mate : Reopen authorized Chat stream
+Mate -> Reader : Map Chat; open independent internal read stream
+Reader -> Redis : Read snapshot and cursor C atomically
+Redis --> Reader : Preview and cursor C
+Reader --> Mate : Initial snapshot
+Mate --> Browser : Replace incomplete previews
+Exec -> Redis : Append batch after C
+Reader -> Redis : Read batches after C
+Redis --> Reader : Ordered incremental batch
+Reader --> Mate : Normalized update
+Mate --> Browser : Public preview update
+Browser -> Mate : Read complete history
+Mate -> DB : Authorized public history projection
+DB --> Mate : Complete events
+Mate --> Browser : Reconcile; completed events win
+note over Reader,Exec
+  Reader disconnect never cancels the executor.
+  Completion commits to DB before preview removal.
+  Redis failure uses history fallback, not a zero-loss guarantee.
 end note
 @enduml

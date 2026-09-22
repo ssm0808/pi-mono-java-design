@@ -67,6 +67,8 @@ JSON 使用 Jackson 默认 lowerCamelCase。路径参数和 SQL 列继续使用 
 
 ## 3. 上传与扫描
 
+本图以一次已声明大小的上传为范围，展示文件身份、不可变字节和异步扫描三个阶段。File service 保留 Chat 授权，Scanner 与租约 Worker 独立；HTTP 返回不等待扫描启动或完成，默认 202，Prefer 有界等待后的 READY/BLOCKED/超时分别按正文返回。对象键冲突需隔离，传输与 EOF 校验失败走各自失败规则，所有外部 I/O 均在数据库事务外。
+
 ![文件上传与异步扫描](file_upload_and_scan_flow.svg)
 
 [PlantUML 源码：`file_upload_and_scan_flow`](diagram.puml#L8) · [原尺寸 SVG](file_upload_and_scan_flow.svg)
@@ -94,7 +96,7 @@ OBS PUT 必须 create-only。若理论上的同名对象已存在，不覆盖或
 
 ![OBS 与 openGauss 责任分离](file_obs_opengauss_storage_split.svg)
 
-[PlantUML 源码：`file_obs_opengauss_storage_split`](diagram.puml#L98) · [原尺寸 SVG](file_obs_opengauss_storage_split.svg)
+[PlantUML 源码：`file_obs_opengauss_storage_split`](diagram.puml#L67) · [原尺寸 SVG](file_obs_opengauss_storage_split.svg)
 
 ### 4.1 `t_file`
 
@@ -128,9 +130,11 @@ lease 并提交，之后才进行 OBS 或扫描 I/O；外部 I/O 期间不持有
 
 ## 5. Runtime 解析与内容流
 
+本图从完整批次解析到成功批次的内容读取；任何文件无效都回滚整个批次且不进入读取阶段。读取时再次校验 READY、引用及摘要，服务端与 Runtime 各自核对字节长度和 digest；快照仅固定已确认元数据，不能替代后续可变状态检查。无本地落盘或完整字节数组，截断流不作为已验证输入。
+
 ![跨 Pod 文件解析和正文流](file_cross_pod_resolution_flow.svg)
 
-[PlantUML 源码：`file_cross_pod_resolution_flow`](diagram.puml#L152) · [原尺寸 SVG](file_cross_pod_resolution_flow.svg)
+[PlantUML 源码：`file_cross_pod_resolution_flow`](diagram.puml#L121) · [原尺寸 SVG](file_cross_pod_resolution_flow.svg)
 
 CampusClaw 接受 User Event 后调用：
 
@@ -168,9 +172,11 @@ Runtime 只把可信元数据快照随 User Entry 保存：
 
 ## 6. 删除与对账
 
+本图仅展开单文件删除成功接纳后的异步清理。引用中的文件返回 409，对象键隔离返回受控错误；被拒绝的请求不使 Worker 获得删除资格。Chat/Session 整体删除先隐藏会话、停止执行和读取，再将普通文件标记 DELETING，其独立入口保留在正文。DELETED 身份不复用，外部删除失败只按清理策略重试。
+
 ![文件删除和对账](file_deletion_and_reconciliation.svg)
 
-[PlantUML 源码：`file_deletion_and_reconciliation`](diagram.puml#L221) · [原尺寸 SVG](file_deletion_and_reconciliation.svg)
+[PlantUML 源码：`file_deletion_and_reconciliation`](diagram.puml#L174) · [原尺寸 SVG](file_deletion_and_reconciliation.svg)
 
 - 未引用文件可被公共 DELETE 条件更新为 `DELETING`，重复调用幂等返回 `202`；
 - `referenced_at` 非空的文件不能单独删除，返回 `409 FILE_REFERENCED`；
@@ -182,9 +188,11 @@ Runtime 只把可信元数据快照随 User Entry 保存：
 
 OBS 与 openGauss 之间不使用 XA。数据库决定处理资格，OBS 决定原始字节是否存在；短 lease、条件更新和幂等操作用于故障恢复。对象归属不明时保留隔离，由受审计的对账流程处理。
 
+本图只说明有审计依据的对象对账。归属已证明且对象有效时可恢复处理或允许安全删除；对象不存在时删除活动明细并保留 DELETED 身份；归属未知保持隔离。数据库条件更新与对象检查分开，不能因简化为一个成功分支而将“对象存在”当作归属证据。
+
 ![受审计的对象对账](file_audited_reconciliation.svg)
 
-[PlantUML 源码：`file_audited_reconciliation`](diagram.puml#L295) · [原尺寸 SVG](file_audited_reconciliation.svg)
+[PlantUML 源码：`file_audited_reconciliation`](diagram.puml#L229) · [原尺寸 SVG](file_audited_reconciliation.svg)
 
 ## 7. 错误目录
 

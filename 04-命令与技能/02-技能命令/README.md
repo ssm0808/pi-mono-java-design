@@ -101,6 +101,8 @@ sourceEventId 和 targetEventId 支撑确认、中断与历史归属。
 不维护一张割裂的 Skill 总图。SkillCommandDefinition 显式组合准入策略和真实 Handler；
 Handler 委派 SkillExecutionService，后者使用普通消息接受/执行应用服务，不越层调用 Controller。
 
+本图展示用户显式 Skill 命令如何接入普通消息执行。快照作为 Skill command 的准备产物，不单列生命线；Message admission 与 Agent execution 分开，数据库保留私有展开上下文与公开原始输入的差别。历史查询复用消息应用的读边界，完整 Skill 原文不进入公共历史；权限、绑定、空闲和容量在所属事务内重新检查。
+
 ![Skill 快照与执行下钻](设计图/target_skill_execution.svg)
 
 [PlantUML 源码](设计图/diagram.puml#L71) · [原尺寸 SVG](设计图/target_skill_execution.svg)

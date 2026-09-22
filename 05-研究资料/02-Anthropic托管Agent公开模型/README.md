@@ -102,6 +102,8 @@ Session 通常先创建为 `idle`，再由 `user.message` 启动工作。2026-09
 
 #### 4.2.1 Session 基于 Agent 配置的创建顺序
 
+本图保留原研究核对日期的 Beta 公开契约，仅展示客户端可观察的创建与启动边界；不再将 sandbox 准备或模型内部调用画成已公开的服务端顺序。有效配置无效时创建失败，initial_events 为空先返回 idle，非空的类型与数量限制仍见正文；研究结论不自动成为 CampusClaw 目标。
+
 ![Session 基于版本化 Agent 配置的创建顺序](./session_agent_creation_sequence.svg)
 
 [原尺寸 SVG](./session_agent_creation_sequence.svg) · PlantUML：[查看源码](./diagram.puml#L74)
@@ -148,9 +150,11 @@ Anthropic 明确规定：`event_start/event_delta` 不持久化、不支持断�
 “持久化事件重放 + 临时 preview 对账”，而不是获取一个带 transcript 的
 SessionSnapshot。
 
+本图保留原 Beta 研究快照，只表达完整历史恢复与临时预览对账。Client view 包含 UI 和本地投影，不改变 API 权威边界；多 Agent 时另读可见 Thread 及其历史，分页直到结束。完整事件为权威，增量不持久化或回放，不能据公开契约推断内部存储实现。
+
 ![Anthropic Managed Agents Session 历史与恢复展示](./managed_agents_session_history_recovery.svg)
 
-[原尺寸 SVG](./managed_agents_session_history_recovery.svg) · PlantUML：[查看源码](./diagram.puml#L354)
+[原尺寸 SVG](./managed_agents_session_history_recovery.svg) · PlantUML：[查看源码](./diagram.puml#L311)
 
 该图的“Conversation reducer”是根据官方 Event History 和 preview 对账要求得出的
 客户端责任推断；Anthropic 没有公开其 Console 内部前端类名或 reducer 实现。
@@ -223,7 +227,7 @@ Anthropic 的模型 ID 约定。
 
 ![Anthropic Managed Agent 公开配置模型](./managed_agent_configuration_model.svg)
 
-[原尺寸 SVG](./managed_agent_configuration_model.svg) · PlantUML：[查看源码](./diagram.puml#L143)
+[原尺寸 SVG](./managed_agent_configuration_model.svg) · PlantUML：[查看源码](./diagram.puml#L126)
 
 ### 6.1 `agent_toolset_20260401`
 
@@ -274,9 +278,11 @@ MCP 配置被拆成两个互相校验的部分：
 
 ### 6.4 三类 Tool 的执行所有权
 
+本图比较一次工具调用的执行责任，三个工具种类不是同一调用必须经历的步骤。Managed tool environment 按工具类型指 Session sandbox 或远程 MCP server；拒绝则不执行，MCP 使用 Session Vault 绑定凭据。custom tool 由客户端执行并回填结果，不适用同一 permission_policy；保持原 Beta 文档核对范围。
+
 ![Anthropic Managed Agents Tool 执行边界](./managed_agents_tool_execution_model.svg)
 
-[原尺寸 SVG](./managed_agents_tool_execution_model.svg) · PlantUML：[查看源码](./diagram.puml#L277)
+[原尺寸 SVG](./managed_agents_tool_execution_model.svg) · PlantUML：[查看源码](./diagram.puml#L260)
 
 | Tool 类型 | 定义在哪里 | 真正执行者 | 结果如何回到 Agent |
 |---|---|---|---|

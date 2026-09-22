@@ -232,6 +232,8 @@ F19 可以暂不实施，等管理面明确需要排名、趋势时再增加。�
 
 专题路径和类图文件名保留稳定链接；图中是当前使用统计目标，新增 Skill 入口及证据接入标为待实现。执行持有 Tracker，Read/Skill 提供读取证据，Resolver 负责 Skill 归因，统计 Service 负责独立事务。Factory 只装配，Controller 不访问 Mapper，任何统计依赖都不进入 agent-core。
 
+本图聚焦一个通过资格校验的 Skill 信号。Tracker 只为首次候选调用统计服务，调用前释放内存锁；服务通过独立事务和 Session 生命周期锁复核准入。三表全成或回滚，唯一冲突、写入或提交异常在事务边界外分类诊断；提交回执不确定也不重试工具，统计允许漏记而非审计账本。
+
 ![Skill 使用记录与失败隔离](skill_usage_record.svg)
 
 [PlantUML 源码](diagram.puml#L95) · [原尺寸 SVG](skill_usage_record.svg)

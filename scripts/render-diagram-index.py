@@ -12,7 +12,10 @@ OUTPUT = ROOT / '设计图索引.html'
 
 def collect_diagrams():
     captions = {}
-    documents = sorted(ROOT.rglob('*.md'), key=lambda path: (path.name != 'README.md', str(path)))
+    documents = sorted(
+        (path for path in ROOT.rglob('*.md') if '学习' not in path.relative_to(ROOT).parts),
+        key=lambda path: (path.name != 'README.md', str(path)),
+    )
     for document in documents:
         prose = re.sub(r'```.*?```', '', document.read_text(), flags=re.S)
         for caption, target in re.findall(r'!\[([^]\n]+)\]\(([^)\n]+\.svg)\)', prose):
@@ -22,6 +25,8 @@ def collect_diagrams():
     diagrams = []
     for source in sorted(ROOT.rglob('diagram.puml')):
         relative = source.relative_to(ROOT)
+        if '学习' in relative.parts:
+            continue
         for match in re.finditer(r'^@startuml\s+(\S+)', source.read_text(), re.M):
             name = match.group(1)
             svg = source.with_name(name + '.svg')

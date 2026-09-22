@@ -334,22 +334,6 @@ RuntimeManager -[hidden]down-> AgentSource
 @enduml
 
 @startuml plan_mode_review_sequence
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeControlEventService.java :: accept.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java :: markConfirming, acceptConfirmation, claimConfirmation.
@@ -357,82 +341,52 @@ autonumber
 ' Observed behavior: tool confirmation closes one response and resumes through a new fixed segment.
 ' Design reason: plan review reuses this transport and durable handoff.
 ' Java divergence: immutable plan event identity is the approval target; tool permissions remain separate.
-title CampusClaw Plan Review - Target Sequence
-actor User
-participant "Runtime client" as UI
-participant "POST Events\naccepting instance" as API
-participant "Plan review service\nand persistence" as Service
-database GaussDB as DB
-participant "Control dispatcher\noriginal instance" as Dispatcher
-participant "Original execution\nExitPlanMode / Agent" as Agent
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-group 1. Publish a plan in the active root
-  Agent --> UI : Backend-classified agent.plan delta (pending change)
-  UI -> UI : First nonempty delta creates read-only plan card
-  Agent -> Agent : Same response: one ExitPlanMode({}) call after text
-  Agent -> Service : Final parse; commit raw Assistant, ordinary projection and call
-  Agent -> Service : beginReview(proposalSnapshotDTO)
-  Service -> DB : Lock Session and execution; validate active plan mode
-  Service -> DB : Append agent.plan completed + confirming idle;
-  note right of DB
-  Same transaction records the internal pending
-  plan
-  and closes the current segment.
-  Session remains running.
-  end note
-  DB --> Service : Commit
-  Service --> UI : Same-ID plan completed, confirming idle; close
-  Agent -> Agent : Await plan decision; keep tools and current prompt
-end
-
-== 2. Accept one review decision ==
-User -> UI : Approve or revise
-UI -> API : POST user.plan_confirmation(targetEventId, result)
-API -> API : Reserve response / result wait capacity
-API -> Service : Accept decision
-Service -> DB : Lock Session and execution;
-note right of DB
-  Require the exact pending plan in this Session.
-  Recheck root, Session, current segment and stop
-  state.
-end note
-Service -> DB : Append confirmation; create continuation segment;
-note right of DB
-  Approve: update mode=build and append mode
-  event.
-  Revise: keep mode=plan and persist feedback.
-  Clear pending plan. Keep Session running.
-end note
-DB --> Service : Commit fixed continuation target
-Service --> API : Accepted confirmation
-API --> UI : First SSE frame: full committed confirmation
-API -> Dispatcher : Local notify if original execution is local
-note over DB,Dispatcher
-  Existing database control polling is the
-  fallback.
-  The accepting instance does not reconstruct
-  credentials.
-end note
-== 3. Resume the original execution ==
-Dispatcher -> DB : Claim decision for fixed target
-DB --> Dispatcher : Committed decision, once
-Dispatcher -> Agent : Bind new segment output; complete pending Future
+title Accept One Plan Decision and Resume Its Execution
+participant Client
+participant "Review service" as Review
+database "Session and controls" as DB
+participant "Control delivery" as Dispatch
+participant "Original execution" as Agent
+Agent -> Review : Publish complete bound proposal [P]
+Review -> DB : Commit plan, pending target and confirming boundary
+Review --> Client : Complete plan; close current response
+Client -> Review : Approve or revise exact plan
+Review -> DB : Recheck authority; commit decision and continuation
+DB --> Review : Fixed continuation target
+Review --> Client : Committed decision receipt first
+Dispatch -> DB : Claim the exact committed decision once
+DB --> Dispatch : Decision
+Dispatch -> Agent : Deliver decision and bind continuation
 alt Approved
-  Agent -> Agent : Recompose captured BASE + Main Agent role + BUILD
-  Agent -> Service : Persist ExitPlanMode result approved=true
-  Agent -> Agent : Next step: TODOs and implementation
-else Revision requested
-  Agent -> Service : Persist normal result approved=false and feedback
-  Agent -> Agent : Continue plan; use new plan eventId
+  Agent -> Agent : Apply captured build prompt
+else Revise
+  Agent -> Agent : Keep plan prompt and feedback
 end
-Service --> UI : New SSE: committed mode/result/output via local or DB path
-note over UI,Agent
-  Every agent event keeps the original message
-  sourceEventId.
-  A new confirming or actual terminal idle closes
-  this response.
-  Disconnect closes observation only; it never
-  grants approval.
+Agent -> Agent : Complete the waiting tool call
+Agent -> Review : Persist normal tool result and continued output
+Review --> Client : Output on the new response segment
+note over Review,Agent
+  Approval commits build mode in the acceptance transaction.
+  [P] = Pending implementation: final proposal binding increment.
+  No credential reconstruction or new root execution.
 end note
 @enduml
 
@@ -491,22 +445,6 @@ end note
 
 
 @startuml todo_update_sequence
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Source: modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentToolResult.java :: content, details.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: project, persistToolResults.
@@ -517,83 +455,53 @@ autonumber
 ' Observed behavior: Java commits generic results at the existing TurnEndEvent boundary.
 ' Design reason: commit explicit task snapshots with the successful tool result.
 ' Java status at 8c5fda1d: TodoUpdateTool, RuntimeTodoEventMapper and executionTodos are implemented; not Claude built-ins.
-title CampusClaw TodoUpdate - Build Implementation Progress
-participant "AgentLoop / Pipeline" as Loop
-participant "TodoUpdateTool\n(implemented)" as Todo
-participant "Runtime Event\nProjector + TODO mapper" as Projector
-database "Existing entries / events" as DB
-participant "Client event store\n+ executionTodos" as UI
-participant "Existing history API" as History
-
-note over Loop,Todo
-  Build-mode implementation only.
-  Plan-mode prompts forbid research TODOs.
-end note
-== 1. Record the call ==
-Loop -> Projector : Finalized TodoUpdate call
-Projector -> DB : Commit generic tool_call
-Projector --> UI : agent.tool_call
-note right of UI
-  Ordinary tool card only.
-  No task progress derived from calls.
-end note
-== 2. Execute and commit the result ==
-Loop -> Todo : Validate; execute(args)
-alt Valid complete list
-  Todo --> Loop : AgentToolResult with one JSON text block
-  Loop -> Projector : Existing TurnEndEvent with tool results
-  Projector -> Projector : Validate final success; map full TODO snapshot
-  Projector -> Projector : Build both events; validate payloads and sizes
-  Projector -> DB : One transaction: ToolResult Entry +\nagent.tool_result + agent.todo_updated
-  DB --> Projector : Committed
-  Projector --> UI : agent.tool_result (isError=false)
-  Projector --> UI : agent.todo_updated (full todos)
-  UI -> UI : Replace todos for sourceEventId
-  note right of UI
-  No tool-name matching or result JSON parsing.
-  Each public event has a distinct eventId.
-  end note
-else Invalid or failed
-  Todo --> Loop : Existing tool error path
-  Loop -> Projector : Existing TurnEndEvent with failed result
-  Projector -> DB : Commit failed generic result
-  Projector --> UI : agent.tool_result (isError=true)
-  note right of UI : No task event; keep previous list
-end
-note over Loop,UI
-  Ordinary thinking, messages and business tools
-  continue.
-  No confirmation idle, new segment, mode update
-  or TODO endpoint.
-  Each later update replaces the list; actual
-  execution terminal stays independent.
-end note
-== 3. Rebuild the same projection ==
-UI -> History : GET Events
-History -> DB : Read stored events including task snapshots
-DB --> History : Ordered stored events
-History --> UI : Existing history response
-UI -> UI : Reconcile event order; apply explicit task snapshots
-@enduml
-
-
-@startuml plan_mode_end_to_end
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
+skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
+skinparam sequenceGroupBackgroundColor #FAFBFC
 skinparam sequenceGroupBorderColor #BAC4CC
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
+
+title Publish One Explicit Implementation Task Snapshot
+participant "AgentLoop" as Loop
+participant "TodoUpdate" as Todo
+participant "Event projection" as Projector
+database "Session history" as DB
+participant Client
+Loop -> Projector : Finalized TodoUpdate call
+Projector -> DB : Commit ordinary tool call
+Loop -> Todo : Validate and execute complete task list
+Todo --> Loop : Tool result
+Loop -> Projector : Final tool result at turn end
+alt Valid successful task result
+  Projector -> DB : Atomically commit result and full task snapshot
+  DB --> Projector : Committed events
+  Projector --> Client : Tool result and explicit task snapshot
+  Client -> Client : Replace tasks for the original root
+else Invalid or failed result
+  Projector -> DB : Commit failed ordinary tool result
+  Projector --> Client : Error result; retain prior task list
+end
+note over Projector,Client
+  Build implementation only; no inferred tasks from text or calls.
+  History restores the same explicit snapshots.
+  Task completion is independent of execution completion.
+end note
+@enduml
+
+
+@startuml plan_mode_end_to_end
 ' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java :: create, configureAgent.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java :: prepare, accept, startAccepted.
@@ -606,150 +514,60 @@ autonumber
 ' Observed behavior: generic tool results are committed before stream output at batch end.
 ' Design reason: separate plan review from build progress and reuse existing public tool events.
 ' Observed at 8c5fda1d: per-Agent mode overrides and execution snapshots are implemented; see source-evidence.md section 12.
-title CampusClaw Plan Mode - Complete Target Interaction
-actor User
-participant "Client" as UI
-participant "Session / Events API" as API
-participant "Runtime\nServices + original Agent" as Runtime
-participant "Model tools" as Tools
-database "Sessions / Events\nExecution controls" as DB
-
-group 1. Create a Session
-  User -> UI : Start a Session for an Agent
-  UI -> API : POST /agents/{agentId}/sessions; no body
-  API -> Runtime : Resolve published Agent settings snapshot
-  Runtime --> API : Validated initial mode and plan capability
-  API -> DB : Insert idle Session with copied mode
-  API --> UI : Created Session; no model execution
-end
-
-opt Select plan when the new Session starts in build
-  User -> UI : Select plan
-  UI -> API : POST Session {mode: plan} + If-Match
-  API -> DB : Check idle and ETag; commit mode + history
-  API --> UI : Full Session + matching ETag
-end
-
-group 2. Research and clarify
-  User -> UI : Describe the work
-  UI -> API : POST Events: user.message
-  API -> Runtime : Prepare prompt snapshot (Agent files or defaults) and stable tools
-  API -> DB : Accept root execution with current mode snapshot
-  API -> Runtime : Apply captured BASE + Main Agent role + PLAN before start
-  API --> UI : First SSE frame: committed user.message
-  API -> Runtime : Start the accepted execution
-  loop Inspect facts and develop proposal
-    Runtime -> Tools : Queries / read-only analysis
-    Tools --> Runtime : Normal tool results
-    Runtime -> DB : Commit ordinary messages and tool events
-    Runtime --> UI : Thinking / messages / generic tool events
-  end
-  opt User-owned choice requires clarification
-    Runtime -> Tools : AskUserQuestion only
-    Runtime -> DB : Commit question + confirming + pending target
-    Runtime --> UI : agent.question + confirming; close response
-    User -> UI : Answer all questions
-    UI -> API : POST user.question_answer(targetEventId, answers)
-    API -> DB : Accept answers + new segment; keep mode and root
-    API --> UI : First SSE frame: full answer receipt
-    DB --> Runtime : Original instance claims accepted answers
-    Runtime --> Tools : Resume waiting call with answers
-    Tools --> Runtime : Normal tool result; continue the same plan root
-  end
-end
-
-group 3. Review the complete proposal
-  loop Review attempts; exit on approval
-    Runtime --> UI : Parse markers; stream agent.plan delta (pending change)
-    Runtime -> Runtime : Finalize sole ExitPlanMode({}) after text; commit call
-    Runtime -> Runtime : Bind final parse snapshot, raw Assistant Entry and current call
-    Runtime -> DB : Commit agent.plan completed + confirming idle + pending review
-    Runtime --> UI : Same-ID completed replaces preview; confirming enables reconciliation
-    Runtime -> Tools : Execute ExitPlanMode({}); await the bound review
-    note over Runtime,DB
-  Session state remains running; mode remains
-  plan.
-  The review tool waits. No business execution or
-  TODO calls.
-    end note
-    User -> UI : Approve or request revision
-    UI -> API : POST user.plan_confirmation(targetEventId, result)
-    API -> DB : Lock exact review; accept decision and continuation
-    API --> UI : First new SSE frame: committed confirmation
-    DB --> Runtime : Original instance claims the decision once
-    alt Revise
-      Runtime --> Tools : Resume review with approved=false and feedback
-      Tools --> Runtime : Normal review result
-      Runtime --> UI : Tool result; continued research and new proposal
-    else Approve
-      note over API,DB
-  Approval transaction also commits mode=build and
-  mode event.
-      end note
-      Runtime -> Runtime : Recompose captured BASE + Main Agent role + BUILD
-      Runtime --> Tools : Resume review with approved=true
-      Tools --> Runtime : Normal review result
-      Runtime --> UI : Committed mode change and review result
-    end
-  end
-end
-
-group 4. Implement after approval
-  Runtime -> DB : Commit TodoUpdate tool call
-  Runtime --> UI : agent.tool_call (toolName=TodoUpdate)
-  Runtime -> Tools : TodoUpdate: full implementation list, first item in_progress
-  Tools --> Runtime : Validated full JSON snapshot
-  Runtime -> DB : At batch end, atomically commit result + task event
-  Runtime --> UI : agent.tool_result (isError=false)
-  Runtime --> UI : agent.todo_updated (full todos)
-  UI -> UI : Display explicit task snapshot
-  loop Each implementation task
-    Runtime -> Tools : Business work and required verification
-    Tools --> Runtime : Actual results
-    Runtime --> UI : Normal thinking / tool events / messages
-    Runtime -> DB : Commit next TodoUpdate tool call
-    Runtime --> UI : agent.tool_call (toolName=TodoUpdate)
-    Runtime -> Tools : TodoUpdate after verified completion
-    note right of Tools
-  Full list: completed previous item,
-  next item in_progress when starting it.
-  Failure does not claim completion.
-    end note
-    Tools --> Runtime : Validated full JSON snapshot
-    Runtime -> DB : At batch end, atomically commit result + task event
-    Runtime --> UI : Successful agent.tool_result
-    Runtime --> UI : agent.todo_updated (full todos)
-    UI -> UI : Replace implementation progress
-  end
-  Runtime -> DB : Commit final answer and actual terminal; state=idle
-  Runtime --> UI : Final answer + terminal idle; close response
-end
-
-note over UI,DB
-  Disconnect: GET Events + GET Session for
-  reconciliation; never replay accepted POST.
-  Interrupt: existing user.interrupt targets the
-  current root and stops the execution.
-  Structured answers and approval resume the original root.
-  Only the no-tool message fallback starts a new root.
-  Business-tool permission confirmation remains
-  independent.
-end note
-@enduml
-
-@startuml ask_user_question_sequence
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
-skinparam shadowing false
 skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
+skinparam defaultFontSize 14
+skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 160
-skinparam sequenceParticipantBackgroundColor #F5F7FA
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
 skinparam noteBackgroundColor #FFFBEF
 skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
+
+title Plan Mode - From Request to Approved Work
+actor User
+participant Client
+participant "Runtime" as Runtime
+participant "Model and tools" as Agent
+database "Session history" as DB
+User -> Client : Describe work in a plan-mode Session
+Client -> Runtime : Submit request once
+Runtime -> DB : Accept root with captured plan configuration
+Runtime -> Agent : Research with the captured plan prompt
+Agent -->> Runtime : Proposal text deltas [P]
+Runtime -->> Client : Read-only plan preview [P]
+Agent --> Runtime : Complete proposal and review request
+Runtime -> DB : Commit complete proposal and pending review
+Runtime --> Client : Actionable complete plan [P]
+User -> Client : Approve or request revision
+Client -> Runtime : Submit decision for the exact plan
+Runtime -> DB : Recheck pending target; commit decision and continuation
+alt Approved
+  Runtime -> Agent : Apply build prompt; resume original execution
+  Agent --> Runtime : Business results and explicit TODO updates
+  Runtime -> DB : Commit results and actual terminal
+  Runtime --> Client : Progress, final answer and terminal
+else Revision requested
+  Runtime -> Agent : Resume planning with feedback
+  Agent --> Runtime : New proposal with a new identity
+  Runtime --> Client : Present new plan after committed review preparation
+end
+note over Runtime,DB
+  Waiting keeps the Session running.
+  Approval does not grant business-tool permission.
+  [P] = Pending implementation: plan streaming increment.
+end note
+@enduml
+
+@startuml ask_user_question_sequence
 ' Java UI baseline: 8c5fda1dde51675859bc9c07e145dbe253656dea, checked 2026-09-18.
 ' Previous baseline: 699f929f6826b595ed1d0162f6def66e2f84760b.
 ' Source: frontend/src/components/QuestionCard.vue :: currentIndex, displayedQuestions, submit.
@@ -762,88 +580,50 @@ autonumber
 ' DeepSeek 0a53fb55bea101816fa226bb964ae2bed71c343b (alpha): packages/interaction/tool-ask-user/src/index.ts :: execute; packages/interaction/user-questions/src/index.ts :: ask.
 ' Observed behavior: tools await decisions and continue through original execution segments.
 ' Design reason: local navigation reduces density; one answer batch preserves existing control authority.
-title AskUserQuestion - Target Interaction and Recovery
-actor User
-participant "Question card" as UI
-participant "POST / GET Events" as API
-participant "Question service /\nexisting control service" as Service
-database GaussDB as DB
-participant "Original execution /\ncontrol dispatcher" as Runtime
-participant "AgentLoop /\nAskUserQuestion" as Tool
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-group 1. Publish and wait (plan or build)
-  Tool -> Runtime : Finalized sole tool call; before hook
-  Runtime -> Service : Parse once; bind immutable snapshot
-  Service -> DB : Require committed tool_call; lock fixed target
-  Service -> DB : Commit question + confirming + pending pointer
-  Service --> UI : agent.question; confirming; close original SSE
-  Tool -> Runtime : UserQuestionPort.await(callId, cancellation)
-  note over DB,Tool
-    Session stays running; mode stays unchanged.
-    One pending interaction: permission, plan or question.
-    Plan: no research TODOs. Build: preserve progress.
-  end note
-end
-group 2. Accept a complete answer
-  loop Local question navigation [implemented UI]
-    User -> UI : Answer current question; next or back
-    UI -> UI : Validate one question; keep all drafts; no request
-  end
-  User -> UI : Final question: submit complete answer batch
-  UI -> API : user.question_answer(targetEventId, answers)
-  API -> Service : Reserve response capacity; validate shape
-  Service -> DB : Lock Session -> execution -> segment/answer
-  Service -> DB : Recheck pending type, question, Session and stop
-  Service -> DB : Validate answers against committed question snapshot
-  Service -> DB : Commit receipt + answer handoff + new segment
-  Service --> API : Accepted fixed target; same root and mode
-  API --> UI : First SSE frame: full user.question_answer
-end
-group 3. Resume the original call
-  Runtime -> DB : Claim exact accepted answer once
-  DB --> Runtime : Original committed answer record
-  Runtime -> Runtime : Bind current segment; recheck stop
-  Runtime --> Tool : Complete waiting call with answers
-  Tool -> Runtime : Normal ToolResult; next model request
-  Runtime -> DB : Persist result and subsequent output
-  API -> DB : Read committed continuation events
-  API --> UI : tool_result, thinking, tools, message
-  UI -> UI : Merge matching question tool into answer summary
-  note right of UI
-    No duplicate raw question or answer JSON.
-    Preserve model ToolCall and ToolResult.
-    Missing question or failed call stays visible.
-  end note
-  note over UI,Tool
-    Every agent event keeps the original sourceEventId.
-    Answering never approves a plan or tool permission.
-    A new wait or actual terminal closes this response.
-  end note
-end
-group 4. Reconcile after a browser disconnect
-  UI -> API : GET history pages and GET Session
-  API -> DB : Read committed records
-  API --> UI : Same complete question / answer events
-  UI -> UI : Rebuild card; no automatic POST replay
-  note over UI,Runtime
-    Missing pages or uncertain execution: read-only recovery.
-    Stop targets the root message; races are checked in DB.
-    Process-loss takeover is outside this feature.
-  end note
-end
+title Answer One Question Batch and Resume the Same Root
+actor User
+participant Client
+participant "Question service" as Service
+database "Session and controls" as DB
+participant "Original execution" as Runtime
+Runtime -> Service : Publish one validated question batch
+Service -> DB : Commit question, pending target and confirming boundary
+Service --> Client : Complete question; close response
+User -> Client : Answer locally; submit the complete batch
+Client -> Service : Answer the exact question target
+Service -> DB : Recheck target and answers; commit continuation
+DB --> Service : Accepted complete answer
+Service --> Client : Committed answer receipt first
+Runtime -> DB : Claim exact answer once; recheck stop
+DB --> Runtime : Accepted answers
+Runtime -> Runtime : Resume AskUserQuestion and model loop
+Runtime -> DB : Commit tool result and subsequent output
+Service --> Client : Continued output for the original root
+note over Service,Runtime
+  Session remains running; mode and TODO state are retained.
+  Answers never approve a plan or business-tool permission.
+end note
 @enduml
 
 @startuml plan_streaming_sequence
-skinparam backgroundColor white
-skinparam shadowing false
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 14
-skinparam maxMessageSize 115
-skinparam sequenceMessageAlign left
-skinparam sequenceParticipantBackgroundColor #F5F7FA
-skinparam sequenceParticipantBorderColor #8496A4
-hide footbox
-autonumber
 ' Source baseline: pi-mono-java fb842b1ac6cb4818f6b146f79dd184a5cd88bf12.
 ' Source: modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java :: runTurns.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: persistAssistant, beforeToolCall, beginPlanReview.
@@ -853,65 +633,47 @@ autonumber
 ' Codex: 78245b47af2a7aafcabe025828ceecca69db4df1; codex-rs/utils/stream-parser/src/proposed_plan.rs :: ProposedPlanParser.
 ' Codex: codex-rs/core/src/session/turn.rs :: handle_plan_segments, maybe_complete_plan_item_from_message.
 ' Pending implementation: marker parser, empty arguments, immutable source binding and same-ID plan card.
-title Plan Text Streaming and Review Binding - Target (Pending implementation)
-actor User
-participant "Client" as UI
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+
+title Stream One Proposal and Bind Its Review - Pending implementation
 participant "Model / AgentLoop" as Loop
-participant "Runtime Projector\nand proposal binder" as Runtime
-database "Persistence" as DB
-participant "ExitPlanMode" as Tool
-
-group 1. Generate once in a single model response
-  Loop -> Runtime : Optional ordinary introduction
-  Runtime --> UI : agent.message delta (ordinary text only)
-  Loop -> Runtime : Opening proposed_plan marker, possibly split across chunks
-  Runtime -> Runtime : Enter plan parsing; allocate plan eventId; emit no start event
-  loop Text chunks
-    Loop -> Runtime : TextDelta
-    Runtime --> UI : Nonempty agent.plan delta, same eventId
-    UI -> UI : First delta creates plan card; append without approval actions
-  end
-  Loop -> Runtime : Closing marker; no extra completion event yet
-  Loop -> Loop : Emit sole ExitPlanMode({}) after text
-  Loop -> Runtime : Complete Assistant response (text + call)
-  Runtime -> Runtime : Reparse full response into shared immutable final snapshot
-  Runtime -> DB : Commit raw Assistant Entry and ordinary completed message
-  DB --> Runtime : Immutable committed Entry identity
-  Runtime --> UI : Ordinary agent.message completed; retain usage, hide empty bubble
-  Runtime -> DB : Commit complete tool_call with arguments={}
-  Runtime -> Runtime : Bind final snapshot + committed Entry + sole call
+participant "Plan projection" as Runtime
+database "Session history" as DB
+participant Client
+Loop -> Runtime : Stream response text
+Runtime -> Runtime : Parse markers; assign one plan identity
+Runtime -->> Client : Nonempty plan preview deltas
+Loop -> Runtime : Complete response and sole ExitPlanMode call
+Runtime -> Runtime : Reparse into one immutable final snapshot
+Runtime -> DB : Commit raw Assistant and complete tool call
+DB --> Runtime : Committed source identity
+Runtime -> DB : Recheck binding; commit plan and pending review
+alt Review binding succeeds
+  DB --> Runtime : Authoritative complete plan and confirming boundary
+  Runtime --> Client : Replace preview with same-ID complete plan
+  Loop -> Runtime : Wait for exact plan decision
+else Binding fails
+  Runtime --> Client : Seal preview read-only; no actionable review
 end
-
-group 2. Submit a complete proposal, not a tool-result stream
-  Loop -> Runtime : beforeToolCall(current Assistant, call)
-  Runtime -> DB : Lock and recheck target, source, text, mode and stop
-  Runtime -> DB : Commit plan completed + pending target + confirming; close segment
-  DB --> Runtime : Committed review
-  Runtime --> UI : Same-ID agent.plan completed with full content, confirming
-  UI -> UI : Replace plan preview; enable review only after reconciliation
-  Loop -> Tool : execute({})
-  Tool -> Runtime : Await exact pending call decision
-  note over UI,Tool
-    Session remains running / plan. Closing SSE is not approval.
-    Failed binding never creates an actionable plan.
-    Trusted segment end seals uncommitted previews as read-only.
-  end note
-end
-
-group 3. Decide and resume the original execution
-  User -> UI : Approve or revise exact plan eventId
-  UI -> Runtime : Existing user.plan_confirmation
-  Runtime -> DB : Accept once; new segment; approve changes mode to build
-  DB --> Runtime : Committed receipt and fixed continuation target
-  Runtime --> UI : Committed receipt and applicable mode change
-  Runtime -> DB : Original execution claims exact committed decision
-  DB --> Runtime : Claimed once; recheck stop and current target
-  Runtime --> Tool : Decision; update captured prompt first
-  Tool --> Loop : Complete approved / feedback result, no repeated plan
-  Loop -> Loop : Next model request retains source plan and call/result pair
-  note over UI,Loop
-    Revise: new complete text and new message/plan IDs; mode stays plan.
-    Disconnect: read history and Session; never replay an accepted POST.
-  end note
-end
+note over Runtime,Client
+  Ordinary text keeps its own message projection.
+  Only a committed complete plan can enable review.
+  Decision acceptance is detailed in the plan review sequence.
+end note
 @enduml

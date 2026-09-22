@@ -226,24 +226,6 @@ end note
 @enduml
 
 @startuml slash_command_execution_flow
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 13
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 165
-skinparam sequenceArrowColor #526777
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F5F7FA
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #F5F7FA
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
-title Slash Command Discovery and Execution Flow
-
 ' Source baseline: pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts, requestRaw and return surface
 ' Contract evidence: Runtime operations listSessionCommands and executeSessionCommand
@@ -254,79 +236,46 @@ title Slash Command Discovery and Execution Flow
 ' Observed behavior: current command submission already freezes an invocation and decodes by expected result kind.
 ' Pending implementation design: the browser workflow and production Mate gateway are proposed.
 ' Design reason: decode from an immutable invocation, never replay an uncertain mutation, and reconcile through authoritative resources.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-
+title Execute One Selected Slash Command - Target
 actor User
-participant "Composer" as Composer
-participant "useSlashCommands\n[target]" as Slash
-participant "CommandGateway\n[target]" as Gateway
-participant "Command API" as Api
-participant "ConversationCoordinator\n[target, gated]" as Conversation
-participant "Session and model state" as State
-participant "CommandResultRegion\n[target]" as Result
-
-== Discover and select ==
-User -> Composer : first-character slash
-Composer -> Slash : open(activeChatId)
-Slash -> Gateway : listCommands(activeChatId)
-Gateway -> Api : GET command descriptors
-Api --> Gateway : server-ordered descriptors
-Gateway --> Slash : descriptors
-Slash --> Composer : render plain name and description listbox
-
-User -> Composer : select command
-Composer -> Slash : select(name)
-Slash --> Composer : close list; selected chip and optional argument editor
-== Freeze and submit ==
-User -> Composer : explicit execution
-Composer -> Slash : execute(name, arguments, files)
-Slash -> Conversation : check shared submission and recovery admission
-Slash -> Slash : validate latest descriptor; freeze invocation and result kind
-Slash -> Gateway : executeCommand(invocation)
-Gateway -> Api : POST command
-
-== Project the typed outcome ==
-alt Builtin success
-  Api --> Gateway : command-specific JSON
-  Gateway -> Gateway : validate against expected result kind
-  Gateway --> Slash : typed result plus invocation
-  Slash -> State : apply authoritative Session or Models when present
-  note over Conversation,State
-  Command results never answer questions or approve plans.
-  Current pending target is reconciled from complete events.
-  end note
-  Slash -> Result : render by expected result kind
-  Slash -> Slash : mark catalog stale
-else Skill accepted - public integration confirmed
-  Api --> Gateway : ordinary user receipt and event stream
-  Gateway --> Conversation : validate selected protocol and reduce events
-  Conversation -> State : shared execution and recovery state
-  Slash --> Composer : clear acknowledged Skill draft only
-else 404 or 409
-  Api --> Gateway : structured error
-  Gateway --> Slash : failure
-  Slash -> Slash : preserve draft and mark catalog stale
-  Slash -> Gateway : refresh descriptors
-  note over Slash,Gateway
-  Refresh is read-only.
-  The command POST is never replayed
-  automatically.
-  end note
-else network outcome unknown
-  Api x-- Gateway : connection lost
-  Gateway --> Slash : uncertain outcome
-  Slash -> State : reconcile Session, Models, or Events as applicable
-  Slash --> Composer : preserve draft and require explicit action
+participant Composer
+participant "Command coordination" as Commands
+participant "Command API" as API
+participant "Conversation state" as State
+User -> Composer : Select a listed command and arguments
+Composer -> Commands : Execute explicitly
+Commands -> State : Check shared submission and recovery admission
+Commands -> Commands : Validate descriptor; freeze invocation and result kind
+Commands -> API : Submit command once
+alt Confirmed result
+  API --> Commands : Typed Builtin result or accepted Skill stream
+  Commands -> State : Apply authoritative result or ordinary event flow
+  Commands --> Composer : Acknowledge matching draft; render result
+else Rejected or uncertain result
+  API --> Commands : Structured error or connection loss
+  Commands -> State : Read-only reconciliation when needed
+  Commands --> Composer : Preserve draft; require explicit action
 end
-
-note over Gateway,Api
-  Production Mate execution remains disabled
-  until its public execute contract is confirmed.
-end note
-
-note over Slash,Gateway
-  The model command is polymorphic:
-  empty arguments expect Models;
-  non-empty arguments expect Session.
+note over Commands,API
+  Production execution stays gated by its public contract.
+  Catalog refresh is read-only; never replay command POST.
 end note
 @enduml

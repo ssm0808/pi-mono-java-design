@@ -33,9 +33,11 @@ Main Agent 在同一 Assistant 响应中输出一个 `<proposed_plan>` 块，再
 
 ### 2.2 目标顺序
 
+本图下钻单次模型响应从文本增量到完整计划审核绑定的过程，全部为计划流式增量的目标流程。普通文本、原始 Assistant、工具调用与计划投影仍分层保存；分块标记、同响应唯一 ExitPlanMode、空参数与精确来源检查保留在正文。审核决定及后续继续复用计划审核图，不在此重画。
+
 ![计划流式生成与审核绑定](plan_streaming_sequence.svg)
 
-[原尺寸 SVG](plan_streaming_sequence.svg) · [PlantUML 源码：plan_streaming_sequence](diagram.puml#L836)
+[原尺寸 SVG](plan_streaming_sequence.svg) · [PlantUML 源码：plan_streaming_sequence](diagram.puml#L626)
 
 1. 模型文本增量经过 Provider → Agent MessageUpdate → Runtime 计划解析器；普通说明走 agent.message，计划正文走 agent.plan delta，开始标签本身不发事件。
 2. 响应完整后用相同语法重解析原始 Assistant，形成不可变解析结果。先保存原始 Assistant Entry、仅前置普通正文的 agent.message completed 和一次 usage，再保存唯一完整 tool_call。

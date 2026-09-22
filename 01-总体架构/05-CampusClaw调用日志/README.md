@@ -77,6 +77,8 @@ CampusClaw 采用一个简单且可执行的异常边界：
 
 ## 4. 核心架构
 
+本图只展示一次运行期失败从责任方到公共边界的路径；同步 Runtime 异常和 Mate 流式错误分别使用既有载体，不能复用原始错误文本。启动失败是独立入口，仍记录 STARTUP_FAILED 与原始原因。日志禁止请求体、凭据、Header、上游 resMsg 和原始 SSE；确定性拒绝不制造异常栈。
+
 ![CampusClaw 简化失败边界](campusclaw_failure_boundary.svg)
 
 [原尺寸 SVG](campusclaw_failure_boundary.svg) · [PlantUML 源码：`campusclaw_failure_boundary`](diagram.puml#L18)

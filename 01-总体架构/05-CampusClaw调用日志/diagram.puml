@@ -17,56 +17,40 @@
 
 @startuml campusclaw_failure_boundary
 
-title Failure Logging: Record Cause, Return Stable Code
-autonumber
-hide footbox
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontSize 13
-skinparam maxMessageSize 190
-skinparam BoxPadding 10
-skinparam sequence {
-  ArrowColor #475569
-  LifeLineBorderColor #94A3B8
-  ParticipantBorderColor #64748B
-  ParticipantBackgroundColor #F8FAFC
-  GroupBorderColor #94A3B8
-  GroupBackgroundColor #F1F5F9
-}
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-actor Caller
-boundary "Public boundary\nHTTP / SSE" as Public
-control "Failure source" as Source
-database "Service log\nSLF4J / ECS" as Log
-
-== 1. Identify failure at its source ==
+title Return One Controlled Failure - Target
+participant Caller
+participant "Public boundary" as Public
+participant "Failure owner" as Source
+database "Service log" as Log
 Caller -> Public : Invoke operation
 Public -> Source : Execute
-alt Original Throwable exists
-  Source -> Log : Own Logger: code, safe context, cause
-else Deterministic validation or state rejection
-  Source -> Source : Choose stable code\nNo synthetic exception log
+alt Original exception exists
+  Source -> Log : Record safe context and original cause once
+else Deterministic rejection
+  Source -> Source : Select stable code; no synthetic exception
 end
-
-== 2. Cross the boundary with a code-only carrier ==
-alt Synchronous Runtime failure
-  Source --> Public : RuntimeApiException(errorCode)
-  Public --> Caller : HTTP status + controlled response
-else Mate streaming failure
-  Source --> Public : AssistantMessage(errorCode)\nerrorMessage = null
-  Public --> Caller : Existing stream.error
-end
-
-== 3. Process-level failures ==
-opt Startup failure (separate entry point)
-  Source -> Log : STARTUP_FAILED and original cause
-  Source --> Caller : StartupException(errorCode)
-end
-
-legend bottom left
-Source constructs the code-only carrier after logging.
-Exception cause is null; writable stack trace is disabled.
-No payloads, credentials, headers, upstream resMsg, or raw SSE in logs.
-Public boundaries do not log the same code-only business failure again.
-endlegend
+Source --> Public : Code-only failure carrier
+Public --> Caller : Controlled HTTP or stream error
+note over Source,Public
+  Public projection never includes raw upstream details.
+  Do not log the same code-only failure again.
+end note
 @enduml

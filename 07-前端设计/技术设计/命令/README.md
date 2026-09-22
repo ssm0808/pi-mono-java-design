@@ -211,6 +211,8 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 
 ## 6. 执行与不确定结果
 
+本图从用户已在清单中选择命令开始，重点是冻结调用、按预期结果类型消费以及失败恢复。Composer、命令协调、Command API 与会话状态保留独立职责；Gateway 校验和结果区域由协调层调用，具体组件见目标类图。首次输入斜杠触发 GET 清单，404/409 标记清单过期并只读刷新；model 命令的多态结果及公共执行门禁规则仍见正文。
+
 ![Slash Command 执行时序](slash_command_execution_flow.svg)
 
 [PlantUML 源码](diagram.puml#L228) · [展开原尺寸 SVG](slash_command_execution_flow.svg)

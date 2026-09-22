@@ -170,75 +170,50 @@ endlegend
 ' Batch 2026-09-08.1 confirms root references, control races and failure semantics.
 ' Source evidence: pi-mono-java dfb90ca RuntimeEntryCodec; current projection still exposes Entry IDs.
 ' Pending implementation: DB confirmation handoff; preview remains local and best-effort.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-hide footbox
-skinparam BoxPadding 10
-skinparam maxMessageSize 190
 skinparam sequenceMessageAlign left
-skinparam sequence {
-  ParticipantBackgroundColor #F5F5F5
-  ParticipantBorderColor #555555
-  LifeLineBorderColor #A0A0A0
-  ArrowColor #444444
-}
-title POST SSE - Input, Output and Closing (pending implementation)
-actor "mate-service" as Client
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
+
+title Observe One Accepted Response Segment - Target
+participant "Mate caller" as Client
 participant "Events application" as API
-participant "Bound execution" as Run
-participant "Request response" as Response
-database "Session / Events" as DB
-
-== 1. Accept a message ==
-Client -> API : POST user.message
-API -> Response : reserve and bind
-API -> DB : atomic admission + receipt
-DB --> API : accepted event / fixed target
-API -> Response : enqueue complete receipt
-API -> Run : start after commit
-Response --> Client : user.message
-Run -> Response : matching preview / full events
-Response --> Client : agent.*
-
-== 2. Close the bound segment ==
-alt Actual finish
-  Run -> DB : commit terminal + Session idle
-  DB --> Run : authoritative idle
-  Run -> Response : matching idle
-  Response --> Client : idle, then EOF
-else Wait for tool confirmation
-  Run -> DB : commit Tool Call + confirming\nSession stays running
-  Run -> Response : Tool Call + confirming idle
-  Response --> Client : complete events, then EOF
-  Client -> API : new confirmation POST
-  API -> DB : claim pending tool + resume segment
-  DB --> API : committed confirmation
-  API -> Response : new bound response; receipt first
-  API -> Run : consume committed decision once
-  Run -> DB : persist resume output
-  API -> DB : read fixed segment if remote
-  DB --> API : complete events
-  API -> Response : matching output and idle
-  Response --> Client : confirmation, output, idle, EOF
+participant "Bound response" as Response
+participant "Original execution" as Run
+database "Session history" as DB
+Client -> API : Submit user.message
+API -> Response : Reserve and bind response
+API -> DB : Commit admission and receipt
+DB --> API : Fixed accepted target
+API -> Response : Enqueue complete receipt first
+API -> Run : Start after commit
+Response --> Client : Accepted user.message
+Run -->> Response : Matching preview and committed events
+Response -->> Client : Project output
+alt Execution actually finishes
+  Run -> DB : Commit terminal and idle Session
+  Run -> Response : Matching terminal
+else Execution waits for confirmation
+  Run -> DB : Commit pending call and confirming boundary
+  Run -> Response : Confirming boundary; Session remains running
 end
-
-== 3. Independent interrupt response ==
-ref over Client,DB
-Interrupt uses a separate response bound to the original message.
-See Database Interrupt Delivery for cross-instance handoff.
-Original output stays on its original response.
-end ref
-
-== 4. Transport loss ==
-Client -> API : GET Events for reconciliation
-API -> DB : committed complete history
-DB --> API : ordered page
-API --> Client : ResultBean history
+Response --> Client : Matching boundary and EOF
 note over Client,Response
-No terminal received means uncertain, not successful.
-Detach only the failed response; do not replay POST.
+  Confirmation opens a new bound response for the same root.
+  Disconnect only detaches observation; reconcile from history.
 end note
 @enduml
 
@@ -257,69 +232,48 @@ end note
 ' Design reason: accept on any instance without sticky routing or remote Java references.
 ' Confirmed pending implementation: reject stale root, duplicate stop and conflicting confirmation.
 ' Schema, interval and capacity numbers require implementation calibration.
+' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam defaultFontName Arial
-skinparam defaultFontSize 13
-hide footbox
-skinparam BoxPadding 10
-skinparam maxMessageSize 190
 skinparam sequenceMessageAlign left
-skinparam sequence {
-  ParticipantBackgroundColor #F5F5F5
-  ParticipantBorderColor #555555
-  LifeLineBorderColor #A0A0A0
-  ArrowColor #444444
-}
-title Database Interrupt - Cross-instance Handoff (pending implementation)
-actor "mate-service" as Client
-participant "Instance B\nInterrupt handler / result reader" as B
-database "Shared control / events" as DB
-participant "Instance A\nControl poller" as Poller
-participant "Instance A\nActive execution / original response" as A
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceGroupBackgroundColor #FAFBFC
+skinparam sequenceGroupBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide footbox
+autonumber
 
-== 1. Accept and bind ==
-Client -> B : POST interrupt(targetEventId)
-B -> B : reserve independent response
-B -> DB : match root; commit receipt + stop intent
-DB --> B : committed receipt / fixed target
-B -> B : enqueue receipt; register waiter
-B --> Client : complete user.interrupt
-B -> DB : read terminal after registration
-DB --> B : pending, or committed result
-note over B,DB
-Register then read closes the fast-completion gap.
-A terminal already present uses the same delivery gate.
-end note
-
-== 2. Deliver the stop decision ==
-Poller -> DB : batch local active targets
-DB --> Poller : committed stop intents
-Poller -> A : recheck identity; request cancellation
-opt Same-instance accept
-  B -> A : post-commit local hint
-end
-A -> A : actual exit and cleanup
-note over Poller,A
-Hints and polling use the same cancellation entry.
-No waiting for a slow cancellation in the batch loop.
-end note
-
-== 3. Publish the real outcome ==
-A -> DB : commit unique idle + target link\nand matching Session state
-DB --> A : authoritative terminal
-A --> Client : original response: idle + EOF
-B -> DB : batch unique waiting targets
-DB --> B : same committed idle
-opt Same-instance terminal
-  A -> B : post-commit hint
-end
-B -> B : receipt-gated terminal, at most once
-B --> Client : interrupt response: same idle + EOF
+title Deliver One Interrupt Across Instances - Target
+participant "Mate caller" as Client
+participant "Accepting instance B" as B
+database "Controls and events" as DB
+participant "Original instance A" as A
+Client -> B : Interrupt exact root
+B -> DB : Commit receipt and stop intent
+DB --> B : Fixed accepted target
+B --> Client : Complete interrupt receipt
+B -> B : Register local waiter
+B -> DB : Read committed terminal after registration
+A -> DB : Poll committed controls for active targets
+DB --> A : Stop intent
+A -> A : Recheck identity; request cancellation
+A -> A : Wait for actual exit and cleanup
+A -> DB : Commit unique terminal and Session state
+DB --> A : Authoritative terminal
+A --> Client : Terminal on original response
+B -> DB : Read terminal for registered target
+DB --> B : Same committed terminal
+B --> Client : Receipt-gated terminal on interrupt response
 note over B,A
-Each response keeps its own queue and locale.
-Timeout or owner loss cannot manufacture successful termination.
-No automatic takeover; retain durable records for reconciliation.
+  Post-commit local hints only accelerate the same path.
+  Timeout or owner loss cannot prove successful termination.
 end note
 @enduml
 
