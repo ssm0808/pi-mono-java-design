@@ -278,6 +278,27 @@ def values_for_key(value: Any, key: str):
             yield from values_for_key(item, key)
 
 
+def validate_operation_header_examples(operation: dict[str, Any]) -> None:
+    key = (operation["method"], operation["path"])
+    examples = operation["requestHeaderExamples"]
+    if operation["operationKey"] == "createSession":
+        require(len(examples) == 1 and examples[0]["id"] == "language",
+                "Create Session must show only the language Header example")
+        headers = examples[0]["headers"]
+        require(len(headers) == 1 and headers[0]["name"] == "Accept-Language"
+                and headers[0]["required"] is False and headers[0]["value"] == "zh-CN",
+                "Create Session must retain only optional Accept-Language, without credentials")
+        language = [item for item in operation["parameters"] if item["in"] == "header"]
+        require(len(language) == 1 and language[0]["name"] == "Accept-Language"
+                and language[0]["required"] is False,
+                "Create Session parameters must retain optional Accept-Language only")
+        return
+    expected_values = (EXPECTED_EXECUTION_HEADER_VALUES if key in {POST_EVENTS, POST_COMMAND}
+                       else EXPECTED_SHARED_HEADER_VALUES)
+    require(len(examples) == 2, f"Request header examples are incomplete: {key}")
+    validate_header_examples(examples, expected_values, str(key))
+
+
 def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
     expected_version = read_design_version()
     patterns = common["resourceIdPatterns"]
@@ -291,24 +312,7 @@ def validate_review_models(common: dict[str, Any], models: list[dict[str, Any]])
         require(key not in operations, f"Duplicate operation: {key}")
         operations.add(key)
         require("已确认" in model["api"]["visibility"], f"Operation is not confirmed: {key}")
-        require(len(operation["requestHeaderExamples"]) == 2, f"Request header examples are incomplete: {key}")
-        header_names = {
-            header["name"]
-            for example in operation["requestHeaderExamples"]
-            for header in example["headers"]
-        }
-        expected_headers = (
-            POST_EVENTS_CONTEXT_HEADERS
-            if key in {POST_EVENTS, POST_COMMAND}
-            else EXPECTED_CONTEXT_HEADERS
-        )
-        require(header_names == expected_headers, f"Integration request Header names changed: {key}")
-        expected_values = (
-            EXPECTED_EXECUTION_HEADER_VALUES
-            if key in {POST_EVENTS, POST_COMMAND}
-            else EXPECTED_SHARED_HEADER_VALUES
-        )
-        validate_header_examples(operation["requestHeaderExamples"], expected_values, str(key))
+        validate_operation_header_examples(operation)
         if key in {POST_EVENTS, POST_COMMAND}:
             policy = operation.get("credentialPolicy", {})
             require(policy.get("requestHeadersRequired") is False,
@@ -627,7 +631,10 @@ def validate_source_deduplication() -> None:
     for operation_path in sorted((CONTRACT_ROOT / "操作").glob("*.json")):
         source = json.loads(operation_path.read_text(encoding="utf-8"))
         operation = source["operation"]
-        if operation.get("operationKey") in {"submitUserMessage", "executeSessionCommand"}:
+        if operation.get("operationKey") == "createSession":
+            require("requestHeaderExamples" in operation,
+                    "Create Session must override shared credential examples")
+        elif operation.get("operationKey") in {"submitUserMessage", "executeSessionCommand"}:
             examples = operation.get("requestHeaderExamples", [])
             header_names = {
                 header["name"]

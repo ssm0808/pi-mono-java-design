@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.58.1 |
+| 文档版本 | 1.58.2 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新专项见 §8.1 |
@@ -22,7 +22,7 @@ Runtime HTTP 面向 mate-service bridge 和获授权的内部 SDK，以 Session�
 
 Path、Query、JSON 与 SSE data 的字段统一 lowerCamelCase；HTTP Header、固定枚举、错误码和类型化 ID 值保持契约原名。不接收 snake_case 别名，避免双写和未知字段判断不一致。源码与 SQL 保留其原生标识，不作为 wire field。
 
-全部 operation 均可携带调用上下文 Header；Runtime 不在 HTTP 入口校验凭据是否完整。Header 的精确适用范围由共享模型与各 operation 定义，凭据的使用和保留边界见 §7。
+请求 Header 按各 operation 的实际用途声明；共享调用上下文示例不构成所有接口的凭据要求。Runtime 不在 HTTP 入口校验凭据是否完整，凭据的使用和保留边界见 §7。
 
 ### 2.1 Session 生命周期
 
@@ -35,6 +35,8 @@ Path、Query、JSON 与 SSE data 的字段统一 lowerCamelCase；HTTP Header、
 HTTP 目录文件为 `settings.json`、`SYSTEM.md` 和 `skills/`，不把 CLI 异名文件当作别名；发布方须保证完整快照。Model Manager 对有效模型绑定与调用具有最终权威，目录快照不替代实际执行时的可用性检查。
 
 创建不要求 Idempotency-Key 或 If-Match，每次成功 POST 都产生新 Session。响应丢失后无条件重试可能产生孤立 Session；由后台超时清理未绑定记录，不能把网络重试描述为幂等创建。
+
+创建接口的请求头仅声明可选 `Accept-Language`，用于错误消息国际化；不声明或展示用户凭据 Header。创建链路不使用 Mate 执行凭据，也不将语言保存为 Session 或模型回答语言。上游认证授权仍由所属入口负责，Runtime 不因收到额外凭据 Header 而新增拒绝行为；源码与验收范围见 §8.2。
 
 ![HTTP Session 创建](设计图/会话生命周期/http_session_creation.svg)
 
@@ -365,10 +367,26 @@ Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行�
 
 Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/beta/sessions/update)、[Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations)。各基线 API 组织与本次取舍集中见[架构对比 A04](../07-Agent架构对比/README.md#a04)。未运行 Java 集成测试；设计确认与实现/部署状态分开记录。
 
+### 8.2 创建会话请求 Header 核验
+
+核对日期为 2026-09-22，本地源码快照为 `pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45`，不声明为最新上游或部署版本。以下仅核验创建请求 Header 与语言消费，不升级其他功能的历史实现结论。源码前缀 R = `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
+
+| 路径与符号 | 已观察行为 |
+|---|---|
+| R/web/RuntimeSessionController.java · create | 只向 Service 传 agentId；language(request) 用于 Content-Language，不提取 MateCredentials |
+| R/session/RuntimeSessionService.java · create/newSession | 读取目录、解析模型并保存 Session，不接收请求凭据或语言 |
+| R/web/RuntimeRequestContext.java · locale/language | 从 Accept-Language 选择 zh-CN/en-US，缺失、不支持或解析失败回退 en-US |
+| R/web/RuntimeExceptionHandler.java · response | 按请求 Locale 调用 MessageSource，返回本地化 resMsg 和 Content-Language |
+| R/result/StandaloneResultBeanAdapter.java · normal | 成功 resMsg 固定为 success，不按请求语言翻译 |
+| modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionRoutesTest.java · managerUnavailableAddsRetryAfterAndLocalizesError | 已有测试断言创建失败时 zh-CN 对应中文消息；本次读取测试，未重新运行 Java 测试 |
+
+这是既有产品凭据边界的契约表达收敛：创建所需语言读取已实现，移除无用途的凭据示例不改变业务调用链或认证职责。设计验收要求唯一 JSON、生成页面和创建时序图不再声明创建凭据，保留语言头与现有响应；其余接口的 Header 确认状态独立维护。Agent 架构对比结论与模块导航无变化，不引入外部基线比较。
+
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.58.2 | 2026-09-22 | 创建会话移除凭据 Header 示例，保留可选错误消息语言并对齐源码消费范围。 |
 | 1.58.1 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，同步 Runtime 精确契约与生成页面。 |
 | 1.58.0 | 2026-09-19 | 统一空凭据快照、Mate 失败投影与实现验收，并区分前端刷新门禁。 |
 | 1.57.0 | 2026-09-19 | 取消 Claw 对凭据最低完整性的本地校验，将凭据判断交给 Mate execute。 |

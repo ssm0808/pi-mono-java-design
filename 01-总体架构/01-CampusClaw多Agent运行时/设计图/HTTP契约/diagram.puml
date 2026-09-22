@@ -105,7 +105,7 @@ alt POST Events or Command
   Caller -> Controller : optional context headers\nand optional access-token
   Controller -> Controller : bind inputs and create immutable snapshot\nempty or partial values are allowed
 else any other Runtime operation
-  Caller -> Controller : optional X-HW-ID, Authorization, X-HW-APPKEY
+  Caller -> Controller : operation-specific headers\ncreateSession: optional Accept-Language only
   Controller -> Controller : bind operation inputs\nwithout credential validation
 end
 == Route downstream calls ==

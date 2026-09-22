@@ -38,7 +38,7 @@ title Session Creation - Validate and Persist, Assemble on First Execution
 ' Architecture change: target Agent and Session IDs use a type prefix plus 32 hex UUID characters.
 ' Architecture change: target HTTP path and payload fields use lowerCamelCase while header names stay unchanged.
 ' Product constraint: successful target creation persists thinking true.
-' Product constraint: all Runtime operations carry integration-context headers without local validation.
+' Header evidence: pi-mono-java 53eff85c7f41de23eb434e027782f5085a8b8e45, modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java :: create; only request language is used.
 ' Observed behavior: creation persists an idle Session and does not initialize AgentSession or invoke a model.
 ' Architecture change: the materialized Session starts with zero lifetime Usage.
 ' Design reason: defer expensive runtime initialization until the first accepted user event.
@@ -52,7 +52,7 @@ participant "Model Manager" as Models
 database "Session Repository" as Store
 
 == Validate the published configuration ==
-Mate -> API : POST /agents/{agentId}/sessions\ncontext headers; no body
+Mate -> API : POST /agents/{agentId}/sessions\noptional Accept-Language; no body
 API -> API : validate typed agentId
 API -> Service : create(agentId)
 Service -> Resolver : resolve(agentId)
@@ -84,7 +84,7 @@ end note
 note over Resolver,Store
   Target IDs use agent- or session- plus 32 hexadecimal UUID characters.
   Database agent_id must support 38 characters; migrate VARCHAR(30) to 64.
-  Context headers are opaque; upstream performs authentication.
+  No execution credentials are consumed; upstream performs authentication.
 end note
 @enduml
 
@@ -230,7 +230,7 @@ title CampusClaw HTTP Session Logical Deletion Confirmed Design
 ' Observed behavior: tombstone insertion, cleanup task insertion, and session deletion commit atomically.
 ' Architecture change: logical deletion and a durable cleanup work item replace local JSONL deletion.
 ' Architecture change: the target HTTP path variable is sessionId; database column names remain snake_case.
-' Product constraint: all Runtime operations carry integration-context headers without local validation.
+' Product constraint: DELETE may carry optional integration-context headers without local validation.
 ' Design reason: the API becomes idempotent immediately without exposing cleanup-job state.
 
 

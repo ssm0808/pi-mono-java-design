@@ -92,6 +92,30 @@ class SessionUpdateContractTest(unittest.TestCase):
                 event_gate.validate_frame({**event, **fields}, history=True)
 
 
+class CreationHeaderContractTest(unittest.TestCase):
+    def setUp(self):
+        _, models = current.load_catalog()
+        self.operation = next(model["operation"] for model in models
+                              if model["operation"]["operationKey"] == "createSession")
+
+    def test_shared_credentials_cannot_return(self):
+        common = current.shared.read_json(current.ROOT / "接口契约/common.json")
+        self.operation["requestHeaderExamples"] = common["requestHeaderExamples"]
+        with self.assertRaisesRegex(RuntimeError, "only the language"):
+            http_gate.validate_operation_header_examples(self.operation)
+
+    def test_execution_credential_cannot_be_added_to_language_example(self):
+        self.operation["requestHeaderExamples"][0]["headers"].append(
+            {"name": "access-token", "value": "opaque-access-token", "required": False})
+        with self.assertRaisesRegex(RuntimeError, "without credentials"):
+            http_gate.validate_operation_header_examples(self.operation)
+
+    def test_optional_language_parameter_cannot_be_removed(self):
+        self.operation["parameters"] = [item for item in self.operation["parameters"] if item["in"] != "header"]
+        with self.assertRaisesRegex(RuntimeError, "parameters must retain"):
+            http_gate.validate_operation_header_examples(self.operation)
+
+
 class CatalogTest(unittest.TestCase):
     def test_business_invalid_tool_arguments_remain_readable_events(self):
         event = {"type": "agent.tool_call", "eventId": "call-event", "sourceEventId": "root-message",
