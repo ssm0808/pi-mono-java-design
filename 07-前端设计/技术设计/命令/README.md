@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.7.1 |
+| 文档版本 | 1.7.2 |
 | 更新日期 | 2026-09-22 |
 | 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
 | Runtime 命令契约基线 | `879746e59189a07335e32c7df807c7f5048fdc28`；B13 已确认 Skill SSE，Builtin JSON 不变 |
@@ -32,6 +32,14 @@ Builtin 命令结果不是 Assistant 消息，不进入 ConversationTimeline、S
 ## 2. 事实、决策与理由
 
 ### 2.1 已观察源码行为
+
+**当前 Slash 行为专项（2026-09-22）**：按用户指定 `pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45`
+复核 `frontend/src/components/ComposerBox.vue`、`frontend/src/composables/useCommandComposer.ts`、
+`frontend/src/composables/useRuntimeApi.ts` 的 listCommands/executeCommand，以及 `frontend/src/runtime/commands.ts` 的
+parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立参数、运行中命令与停止并存、
+清单读取、冻结调用和 Builtin JSON/Skill SSE 分路均已有实现；09b2e0b1 为已包含的早期交互提交。
+独立 Store/Registry/Gateway 仍是推荐结构拆分，不能将类名尚未完全对应解释为 Slash 行为未实现。
+本项未重跑前端测试，不升级旧交互测试的验收范围；Mate 公共入口和附件集成继续独立跟踪。
 
 **早期迁移证据（历史基线，不代表当前实现）**：下表路径均相对 `pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`。
 
@@ -456,6 +464,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.2 | 2026-09-22 | 按 53eff85c 复核 Slash 现有交互与 API 分路，区分目标组件拆分和公共接入。 |
 | 1.7.1 | 2026-09-22 | Help 结果与 Runtime 契约统一使用 `useCases`，前端解码与展示保持纯文本。 |
 | 1.7.0 | 2026-09-15 | 同步 Claw 命令与计划问答的实现状态及 Dock 协同验收。 |
 | 1.6.0 | 2026-09-15 | 对齐 Codex 就地命令交互，补齐计划问答等待、共享准入与轻量结果展示。 |

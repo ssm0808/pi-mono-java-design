@@ -10,7 +10,7 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-title Pending implementation Shared GET and Internal Source Selection
+title Recommended Shared GET and Internal Source Selection
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java list.
 ' Product decision: shared GET requires complete Agent cache; internal BUILTIN selection skips Skill sources.
 class CompositeCommandRegistry
@@ -26,7 +26,7 @@ CompositeCommandRegistry --> SkillCommandSource : shared GET / Skill POST; compl
 SkillCommandSource --> SkillCommandDefinition : same definition identity
 note right of SkillCommandDefinition
 Target requires a real Handler.
-Current Java only proves discovery.
+53eff85c executes via SkillCommandExecutionService.
 The user owns Builtin and Skill implementation.
 GET hides Skill while running; idle uses lightweight input.
 end note
@@ -37,19 +37,19 @@ title Target Strict Skill Name Validation
 skinparam shadowing false
 skinparam componentStyle rectangle
 
-' Source evidence: pi-mono-java@0300541f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillNamePatterns.java:15-49
-' Source evidence: pi-mono-java@0300541f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillLoader.java:138-150
-' Source evidence: pi-mono-java@0300541f modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java resolved
+' Source evidence: pi-mono-java@53eff85c modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java Skill.isValidName.
+' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillLoader.java requireDeclaredName/validateName.
+' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/skill/SkillCommandAdmission.java; SkillCommandExecutionService.java normalize.
 ' Source evidence: pi-mono@4af9d21d packages/coding-agent/src/core/skills.ts loadSkillFromFile:320-344
-' Observed behavior: Java loading uses LEGACY while command discovery uses STRICT; pi warns but still loads invalid names.
-' Pending implementation design: all consumers use one strict Skill-domain rule; remove LEGACY loading.
+' Observed behavior: Java Loader, discovery, admission and execution share the strict rule; the cited pi snapshot remains historical.
+' Observed behavior: missing names are rejected, exact folder-name equality is required, and LEGACY fallback is absent.
 ' Design reason: invalid names must not enter loaded Skills, model discovery, command catalogs, or execution.
 ' Product constraint and security hardening: invalid existing names require correction before loading.
 
 component "SkillLoader\nload-time rejection" as Loader
 component "SkillCommandSource\ncommand discovery" as Discovery
 component "Skill command execution\nvalidate before acceptance" as Execution
-component "SkillNamePatterns\nSkill domain\nOne regex, Pattern, and length limit" as Rules
+component "ClawConstants.Skill\nShared name rule\nOne regex, Pattern, and length limit" as Rules
 
 Loader --> Rules : shared strict rule
 Discovery --> Rules : shared strict rule
@@ -69,12 +69,12 @@ end note
 @enduml
 
 @startuml target_skill_execution
-' Source: pi-mono-java dfb90cac4e233e09a0b8f047f7e9f4682f5ad238.
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java list/resolved.
+' Source: pi-mono-java 53eff85c7f41de23eb434e027782f5085a8b8e45.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java submitPreparedMessage/accept.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java userEntry/toAgentMessages.
 ' Source: pi-mono 5cd93f688aaab89dbb6dfa4aca535f21796ae185 packages/coding-agent/src/core/agent-session.ts _expandSkillCommand.
-' Observed behavior: Java discovery captures metadata; pi expands Skill body into model input.
-' Pending implementation architecture: preserve original public input and a private recoverable expansion.
+' Observed behavior: Java persists expanded internal text and exposes original public invocation; recovery reads persisted expansion.
+' Pending implementation: durable Skill version/metadata snapshots and unified Definition/Handler assembly; text recovery already exists.
 ' Design reason: reuse one message admission and event projection; do not reinterpret new Skill versions on recovery.
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white

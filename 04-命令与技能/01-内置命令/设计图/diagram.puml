@@ -10,8 +10,8 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-title Pending implementation Executable Builtin Definition
-' Source evidence: pi-mono-java@0bb794f2 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java.
+title Recommended Executable Builtin Definition
+' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandResponseAssembler.java assemble.
 ' Design reason: each contributor owns metadata, admission, and handler; no central command-name switch.
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java getView.
 ' Architecture change: project business resources, never serialize the internal command receipt.
@@ -27,7 +27,7 @@ class CommandResultDTO
 class RuntimeSessionResponseAssembler <<existing singleton>>
 class GetSessionResponseVO <<existing immutable>>
 class AvailableModelsResponseVO <<existing immutable>>
-class "AgentHelp / Compaction / BoundSkills\nResponseVOs" as BusinessVOs <<pending implementation immutable>>
+class "AgentHelp / Compaction / BoundSkills\nResponseVOs" as BusinessVOs <<immutable>>
 interface NarrowDomainService
 BuiltinCommandSource o-- "7" BuiltinCommandContributor
 BuiltinCommandContributor --> BuiltinCommandDefinition
@@ -64,7 +64,7 @@ CommandExecutionContext -[hidden]down-> CommandExecutionService
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java :: requireMutableSession.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeSessionRepository.java :: updateName.
 ' Observed behavior: slash name owns an independent row-locked update with no expected version.
-' Pending implementation architecture: Session POST reuses normalization and commits a combined candidate.
+' Observed behavior at 53eff85c: runtimeapi/session/RuntimeSessionUpdateService.java update and normalizeName share ClawConstants.Session rules and commit a combined candidate.
 ' Design reason: shared name rules do not require HTTP to call a separately committing command.
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
@@ -109,7 +109,7 @@ end note
 
 @startuml compact_command_execution
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java.
-' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionHolder.java.
+' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/compaction/RuntimeCompactionService.java start; Runtime Command compaction is connected.
 ' Architecture change: compact terminal Future is independent of Holder lifetime and request transport.
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
@@ -129,7 +129,7 @@ skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
 
-title Finish One Manual Compaction - Pending implementation
+title Finish One Manual Compaction - Target, Runtime Path Implemented
 participant "HTTP request" as Http
 participant "Compaction admission" as Service
 participant "Accepted execution" as Execution

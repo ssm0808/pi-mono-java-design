@@ -7,16 +7,16 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.11.4 |
+| 文档版本 | 2.11.5 |
 | 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；Help 查询、useCases 缓存往返、Agent 级锁、响应投影与 Command POST 已实现 |
-| 响应复用源码基线 | `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`；既有 Session/Models API，Command 响应投影仍为 待实现 |
-| Name 最新复核基线 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20`；已有命名服务和持久化，统一 Session POST 仍为 待实现 |
+| 当前 Runtime 核验基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；七个 Builtin 的 Contributor、业务服务、JSON 投影与共享 POST 已实现；验收范围见 §8.3 |
+| Name 历史复核基线 | `510d882ca45541e0086586dab89c429c5a18cf20`；仅保留当时命名服务证据，统一 Session POST 已在当前核验基线实现 |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
 | 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
-| 状态 | 七个 Builtin 目标已由用户确认；Help 已实现，其他命令状态仍以各自源码证据为准 |
+| 状态 | 七个 Builtin 的 Runtime 调用链已实现；不等于全部目标契约、Mate 公共接入或部署验收完成 |
 
 本期不支持排队续跑；Compact 复用 Runtime 已有执行与可靠清理边界。
 [FollowUp 未来专题](../../01-总体架构/01-CampusClaw多Agent运行时/chat-follow-up-future-design.md)
@@ -36,11 +36,11 @@ d84dd3d6 的 `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/ses
 中 t_sessions 没有 display_name；配置服务已存在 Model/Thinking 的领域更新。
 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java`
 的 compact 已提供共享压缩能力，但没有独立于请求 SSE 的 Runtime 压缩通道。
-这些差距是本次 Java 架构变更，不是 pi 已有 HTTP 行为。
+上述是 d84dd3d6 的历史差距；当前名称存储与独立压缩链已实现，见 §8.3。它们是 Java 架构变更，不是 pi 已有 HTTP 行为。
 
 Skill 名称统一使用 Skill 域的严格规则，加载、命令发现和执行不能保留存量兼容例外。
-`0300541fbbe3db8b05ffa1ac953f15f01df74b3e` 名称专项复核仍观察到 LEGACY/STRICT 分裂，
-属于必须整改的差距。源码路径、符号、统一规则和验收见 [Skill 设计](../02-技能命令/README.md#2-源码证据)。
+`0300541fbbe3db8b05ffa1ac953f15f01df74b3e` 的历史名称专项曾观察到 LEGACY/STRICT 分裂；
+当前核验基线已通过 ClawConstants.Skill 统一严格校验。源码路径、符号、统一规则和验收见 [Skill 设计](../02-技能命令/README.md#2-源码证据)。
 Builtin 的来源过滤与 Skill 名称校验是不同职责，不能以过滤 Skill Source 代替加载时拒绝非法名称。
 
 ## 2. 全局目标与核心扩展
@@ -62,7 +62,7 @@ Slash 与 Builtin 共用这一份图源；[Help 元数据补充图](Help-Agent�
 [PlantUML 源码](设计图/diagram.puml#L1) · [展开原尺寸 SVG](设计图/target_command_core_classes.svg)
 
 BuiltinCommandSource 聚合七个 Contributor 并在 Spring 启动期查重。
-可执行 Builtin Definition 持有 Handler/Admission；现有 Skill 发现定义不安装伪 Handler，真实 Skill 执行由用户统一实现。
+可执行 Builtin Definition 持有 Handler/Admission；Skill 发现定义不安装伪 Handler；当前 Skill 已由独立执行服务接入，统一 Definition/Handler 结构仍待实现。
 CommandExecutionContext 固定只读 Session、Locale 和同一 Catalog View。
 Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个完整 Agent 缓存；不消费命令清单、不反向注入 Registry。
 响应组装器才允许按结果类型分派，不允许中央按命令名称 switch。
@@ -79,14 +79,14 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 
 ## 3. 串行 PR 与交付边界
 
-下表保留 Builtin 的分批实施顺序；Skill 执行与共享 HTTP 集成同时纳入[统一实施计划](../00-Slash-Command通用模块/README.md#5-实施与验收)。
-设计先修 PR #4 和前置实现 PR #210 已合并；每个后续 Builtin PR 必须等前一 Builtin PR 合并，
+下表保留 Builtin 的实施切片与依赖顺序，不代表这些切片当前仍未实现；当前能力状态见 §8.3。Skill 执行与共享 HTTP 集成同时纳入[统一实施计划](../00-Slash-Command通用模块/README.md#5-实施与验收)。
+后续增量 PR 必须等前一相关 PR 合并，
 再从最新 origin/main 建立独立 worktree 和 codex/* 分支，不使用堆叠分支。
 
 | 顺序 | 分支 | 职责与发布边界 |
 |---:|---|---|
 | 1 | codex/builtin-command-core | 来源过滤、可执行定义、准入/Handler/Context、Contributor、快照与查重；实现设计、PlantUML/SVG、未占用序号 ADR；无 HTTP |
-| 2 | codex/builtin-command-readonly | Help 的 Service、Contributor、Definition 内 Handler、DTO、useCases 保存/重载及读取/发布互斥已实现，元数据更新通过显式刷新完成；Status/Skills 按各自证据跟踪 |
+| 2 | codex/builtin-command-readonly | Help 的 Service、Contributor、Definition 内 Handler、DTO、useCases 保存/重载及读取/发布互斥已实现，元数据更新通过显式刷新完成；Status/Skills 查询与响应已实现，见 §8.3 |
 | 3 | codex/builtin-command-name | display_name、Mapper/Repository/DTO 与 GET Session；无 Command 路由 |
 | 4 | codex/builtin-command-model | Model 窄服务与可选 expectedVersion；统一 Session POST 复用条件更新规则 |
 | 5 | codex/builtin-command-thinking | Thinking 窄服务与同一事务入口 |
@@ -131,10 +131,12 @@ Skills 不触发刷新：无完整快照返回 AGENT_NOT_AVAILABLE；完整空�
 命名规则和 Repository 更新只保留一份。目标统一 `POST /sessions/{sessionId}` 的仅名称更新传入必填 expectedVersion，行锁内与 `If-Match` 复核；`/name` Command 不接收 ETag，保留锁内 last-commit-wins。同一归一值不升版本，running 允许两条入口修改。
 不写 `session.name.changed` 或通用命令事件，不修改 active leaf；重启只恢复当前名称。
 
-当前 `SessionNamingService` 只由 `NameCommandContributor` 进入，Controller 尚无统一更新路由。实施时由 Session 应用服务将
-`UpdateSessionRequestVO` 和 `If-Match` 转换为命名服务参数；请求 VO 负责必填与类型/未知字段边界，名称字节和 Unicode 规则由共享 Service 负责。无新增 Maven 依赖或数据库字段。
+`53eff85c` 已有 `RuntimeSessionController.update` 和 `RuntimeSessionUpdateService.update`：统一 POST 接收
+`UpdateSessionRequestVO` 与 `If-Match`，准备候选后调用 Repository.updateSession；Slash 仍由
+`NameCommandContributor` 委派 `SessionNamingService`。两入口共享名称约束常量，当前统一 POST
+有自己的 normalizeName，不能据此宣称已复用同一个命名 Service。无新增 Maven 依赖或数据库字段。
 
-统一 POST 的组合字段准备复用本节名称规则，最终一次事务提交；不调用会自行提交的 execute，再拼接模型/思考更新。完整规则由[HTTP §2.4](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-update)维护。
+统一 POST 已准备组合字段并调用统一 Repository 更新；目标要求名称规则一致、最终一次事务提交；不调用会自行提交的 execute，再拼接模型/思考更新。完整规则由[HTTP §2.4](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-update)维护。
 
 ## 6. Model / Thinking
 
@@ -166,7 +168,7 @@ Projector 不依赖请求 SSE 仍持久化权威领域 Entry。
 
 POST 请求只有 name 和 arguments；name 必填，1～64，匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`。
 arguments 缺省/null 在 Service 归一为 ""，最大 262144 UTF-16 代码单元。
-Builtin 请求拒绝 fileIds、未知字段、If-Match 和 Idempotency-Key。该规则不是 Skill 请求的全局限制；最终共享入口需整合 Skill 命名与请求类型。
+Builtin 请求拒绝 fileIds、未知字段、If-Match 和 Idempotency-Key。该规则不是 Skill 请求的全局限制；共享入口已按 Builtin/Skill 请求类型分派。
 
 | 命令与操作 | 成功 result / 响应 VO | 复用基线 / ETag |
 |---|---|---|
@@ -176,8 +178,8 @@ Builtin 请求拒绝 fileIds、未知字段、If-Match 和 Idempotency-Key。该
 | model 空参查询 | currentModelId、models[] / AvailableModelsResponseVO | [GET Models](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/06-list-session-models.json)；无 ETag |
 | model 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)，包含 ETag |
 | thinking 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)，包含 ETag |
-| compact | compacted:boolean / CompactionResponseVO（待实现） | 无独立 API，保留压缩有无变化；无 ETag |
-| skills | skills[{name, description}] / BoundSkillsResponseVO（待实现） | 无独立 API，保留最小列表；无 ETag |
+| compact | compacted:boolean / CompactionResponseVO（已实现） | 无独立 API，保留压缩有无变化；无 ETag |
+| skills | skills[{name, description}] / BoundSkillsResponseVO（已实现） | 无独立 API，保留最小列表；无 ETag |
 
 完整 Session 的字段、空值和类型只由 GET Session 维护，不能裁剪成 Status/Name/Thinking 的子集；
 这包含既有目标 lifetimeUsage，而非新增上下文用量估算。模型修改只返回 Session，不再重复带候选模型；
@@ -207,7 +209,7 @@ Command 请求仍拒绝 If-Match，统一 Session POST 强制 If-Match；复用�
 
 ### 8.2 源码证据、差距与理由
 
-响应复用以既有 CampusClaw API 为依据。实现核对固定在
+响应复用以既有 CampusClaw API 为依据。以下是历史证据，当前实现状态见 §8.3；历史核对固定在
 `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`，设计基线为 `bb3bd26d5cc52efede08645dfe266af0b31e3490`。
 以下路径均相对于 pi-mono-java；既有 pi 命令/Session 行为基线不变。
 
@@ -217,10 +219,30 @@ Command 请求仍拒绝 If-Match，统一 Session POST 强制 If-Match；复用�
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java` · getView | 从同一 RuntimeSessionDTO 生成资源及 ETag | 复用投影且保留同一权威快照，避免资源与版本不一致（架构变更） |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java`、`AvailableModelsResponseVO.java` | 已有 Session、currentModelId/models 响应；前者尚无 lifetimeUsage | 复用这些 VO，并补齐既有 Session 目标差距；不能以源码缺字段为由缩减已确认契约 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java` · listModels、changeModel、changeThinking、requireUpdated | 基线 PUT 共享窄服务，UPDATED/UNCHANGED 均投影 Session；要求条件版本 | 仅共享成功结果，不削弱统一 POST 的 If-Match 和错误语义（产品约束） |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionModelConfigurationService.java` · query、execute、change、modelChangeEntries | execute 仍返回含 changed/sourceEventSeq 的内部 Model DTO；change 保留 Session 更新结果 | Command HTTP 投影尚待实现；让修改结果带权威 Session 数据，不透传内部 DTO（架构变更） |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionModelConfigurationService.java` · query、execute、change、modelChangeEntries | execute 仍返回含 changed/sourceEventSeq 的内部 Model DTO；change 保留 Session 更新结果 | 该历史提交的 Command HTTP 投影尚待实现；当前投影已在 §8.3 核对，让修改结果带权威 Session 数据，不透传内部 DTO（架构变更） |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/dto/SessionConfigurationUpdateDTO.java` | sourceEventSeq 是内部最后 Entry 序号 | 内部信息不必成为公共响应；不新增命令回执或公共路径（架构变更） |
 
 不新增 Maven 依赖；使用已有 VO、ResultBean、Assembler 与序列化设施。
+
+### 8.3 当前 Runtime 实现与验收边界
+
+2026-09-22 按用户指定的 `pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45` 核对。下表路径相对
+`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
+
+| 能力 | 源码与符号 | 当前状态 |
+|---|---|---|
+| 七个 Builtin 装配 | `service/command/contributor/` 的七个 definition；`service/command/CommandExecutionService.java` · executeBuiltin | 已实现元数据、准入、Handler 委派与结果组装 |
+| Session / Models / Help / Skills / Compact 响应 | `service/command/CommandResponseAssembler.java` · assemble/session/models/help/skills | 已实现按内部结果类型投影业务 VO；Session 委派同源资源与 ETag 组装 |
+| 共享 HTTP | `web/RuntimeCommandController.java` · execute；`web/RuntimeCommandCatalogController.java` · list | 已实现清单 GET、Builtin JSON 与 Skill SSE 分派；不按七个命令名称分支 |
+| 名称与统一配置入口 | `web/RuntimeSessionController.java` · update；`session/RuntimeSessionUpdateService.java` · update/prepare；`service/command/SessionNamingService.java` · execute | 两入口已存在；统一 POST 校验 If-Match 后调用 Repository.updateSession，Slash 保留独立命名入口 |
+| Compact | `service/command/SessionCompactionApplicationService.java` · execute；`compaction/RuntimeCompactionService.java` · start/prepare/acceptAndStart；`vo/CompactionResponseVO.java` | 已实现压缩准备、准入、共享执行资源接入与 JSON 结果；不能再把响应标为待实现 |
+| Skills | `service/command/readonly/BoundSkillQueryService.java` · query；`vo/BoundSkillsResponseVO.java` | 已实现完整缓存读取、排序、名称/描述投影与空列表 |
+
+旧 `6f52fddc` 的响应缺口、`510d882c` 的无统一 Session POST 结论不再代表该基线。
+`425354eb` 的 Builtin 应用与响应、`ca4b79f4` 的共享入口已包含在核验提交中。
+这证明实现存在，不证明所有错误码、并发、真实压缩和企业集成都已验收。未重跑 Java 测试；
+既有 Help 专项测试结果保持原归属。清单英文描述差距见[语言专项](../00-Slash-Command通用模块/README.md#331-清单字段与语言专项核对)，
+Mate 公共接入仍见其独立设计；不能笼统表述为“Builtin 全部目标已经完成”。
 
 ## 9. 测试与交付
 
@@ -252,6 +274,7 @@ PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。图形还需检查�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.11.5 | 2026-09-22 | 按 53eff85c 更新七个 Builtin、业务响应和统一 Session POST 的已实现状态。 |
 | 2.11.4 | 2026-09-22 | 按 53eff85c 将 Help 缓存、查询、响应投影和公开执行更新为已实现。 |
 | 2.11.3 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，同步命令结果和缓存验收。 |
 | 2.11.2 | 2026-09-14 | 统一引用 Skill 契约状态并重排命名与压缩流程，精确命令行为保持不变。 |

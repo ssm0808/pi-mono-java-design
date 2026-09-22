@@ -10,4 +10,7 @@
 | Skill 使用统计 | Codex 机制、根执行去重与累计/日统计、按指定 ID 批量查询；排名与趋势暂缓 | [使用统计设计](./03-Skill加载统计/README.md) · [Codex 详解](./03-Skill加载统计/codex-skill-counting.md) |
 | 技能命令 | Skill 名称、调用快照、执行与恢复 | [Skill 设计](./02-技能命令/README.md) |
 
+当前实现入口：[Runtime 与剩余增量状态表](00-Slash-Command通用模块/README.md#current-runtime-status)，
+固定核验 pi-mono-java@53eff85c；Builtin、Skill 执行、严格名称与前端行为已实现，测试验收与公共接入分别记录。
+
 `03-历史Word文档/` 仅保存本机历史导出，Markdown 才是 Git 中的可维护源。

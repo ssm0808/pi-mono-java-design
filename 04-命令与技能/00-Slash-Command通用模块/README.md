@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.12.3 |
+| 文档版本 | 1.12.4 |
 | 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -12,7 +12,7 @@
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
 | 发现层前置证据 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`；已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
 | Command GET 候选 | `7759481a1722422395d46564129827c6ee6df204`（未发布） |
-| 状态 | 用户确认的目标设计；Help 公开实现已落地，其他范围按本文各自证据状态跟踪 |
+| 状态 | Runtime 命令清单、七个 Builtin、Skill 执行与前端 Slash 已有实现；当前状态与待实现增量分列于 §1.2 |
 
 前端 Composer、命令清单、独立草稿、临时结果和错误恢复由
 [Slash Command 前端专项](../../07-前端设计/技术设计/命令/README.md)统一维护；本文件继续维护共享 Command 核心与 HTTP 语义，
@@ -41,7 +41,7 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享
 保留 Web、Application、Command Core、Builtin 委派和 Runtime/持久化的完整关系。
 主图完整表达 Help 元数据查询、Builtin 委派、Skill 执行和共享消息接受链。
 主图中 Help 的 Contributor/Handler 委派、AgentHelpQueryService、AgentRuntimeManager 和响应投影关系已实现；
-其他装配关系的状态仍按各专题源码证据确定。分组仅归并重复实现，不把 Handler、业务服务、Coordinator 和 Repository 合成一个对象。
+Builtin 核心、业务响应与 Runtime HTTP 已实现；Skill 统一定义、Handler 与版本快照仍待实现，具体映射见 §1.2。分组仅归并重复实现，不把 Handler、业务服务、Coordinator 和 Repository 合成一个对象。
 
 ![Slash Command 完整全局目标类图](设计图/target_slash_command_global_classes.svg)
 
@@ -72,9 +72,34 @@ Help 的结果精确为 displayName/description/useCases，字段和缓存规则
 
 [PlantUML 源码](设计图/diagram.puml#L1)
 
+<a id="current-runtime-status"></a>
+
+### 1.2 当前实现状态与剩余增量
+
+核对日期 2026-09-22，按用户指定 `pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45` 读取源码；
+该固定快照不代表最新上游，未重跑 Java、数据库或前端测试。以下将实现存在、剩余目标与验收分别记录。
+
+| 能力 | 当前实现状态 | 证据与剩余边界 |
+|---|---|---|
+| 共享命令清单 | 已实现 | RuntimeCommandCatalogController → CommandCatalogService → resolveComplete → CommandDiscoveryResponseAssembler；旧 6f52fddc 的“无 Controller”仅是历史快照；描述语言差距见 §3.3.1 |
+| 七个 Builtin 与业务响应 | 已实现 Runtime 调用链 | Contributor/Handler、CommandExecutionService、CommandResponseAssembler 和共享 POST 已接通；[Builtin §8.3](../01-内置命令/README.md#83-当前-runtime-实现与验收边界)列精确路径，不等于全部契约验收完成 |
+| 统一 Session POST | 已实现入口与应用编排 | RuntimeSessionController.update → RuntimeSessionUpdateService.update → Repository.updateSession；不再以旧 Name 提交判断路由不存在 |
+| Skill 严格名称 | 已实现 | ClawConstants.Skill 的统一规则覆盖 Loader、发现、准入与执行；缺名称拒绝且必须与文件夹同名，见[Skill §4.2](../02-技能命令/README.md#42-当前实现剩余增量与测试证据) |
+| Skill Runtime POST / SSE | 已实现 | Controller → SkillCommandExecutionService → RuntimeMessageEventService；同一次准备使用实际 Agent 快照，执行复用普通消息链 |
+| Skill 内部文本与公开回执 | 已实现文本分离与恢复 | 内部 Entry 保存展开文本，公开事件保存原始调用；恢复读取已保存文本，完整 Skill 版本/元数据快照仍待实现 |
+| Skill 统一扩展结构 | 待实现增量 | Definition → Handler → SkillExecutionService → PreparedSkillInvocationDTO 尚未落地；当前执行可用不等于该目标装配已实现 |
+| Skill 使用统计 | 待实现 | modules/ 与 campusclaw/ 未找到 SkillUsageTracker；显式、模型 Skill 工具与 Read 的统计接入仍待实现，独立开发分支证据不升级为该主线能力 |
+| Claw 前端 Slash | 已实现行为 | ComposerBox、useCommandComposer、useRuntimeApi 和 runtime/commands.ts 已接入；独立 Store/Registry/Gateway 是结构目标，见[前端专项](../../07-前端设计/技术设计/命令/README.md#21-已观察源码行为) |
+| Mate 公共 Chat Command | 公共协议待确认、桥接待实现 | 字段投影确认不等于公共执行开放；Chat/Session 映射、认证、错误、附件和 POST 由[Mate 专题](../../02-服务与接口/06-mate-service聊天命令API/README.md)维护 |
+
+前端证据路径相对实现仓：`frontend/src/components/ComposerBox.vue` 的 command-run/停止按钮，
+`frontend/src/composables/useCommandComposer.ts` 的选择与 execute，`frontend/src/composables/useRuntimeApi.ts`
+的 listCommands/executeCommand，以及 `frontend/src/runtime/commands.ts` 的 parseCommand/freezeCommandArguments/decodeCommandResult。
+`09b2e0b1` 的交互提交已包含在核验基线；功能存在不证明附件、Mate 接入或全部体验目标验收通过。
+
 ## 2. 源码证据与差距
 
-下表路径均相对 pi-mono-java 仓库；只把候选 PR 中已存在的符号标成候选行为，不当作 main 已实现。
+下表是按所列提交保留的历史快照，路径均相对 pi-mono-java；当前状态见 §1.2，不把旧候选或缺口当作当前实现。
 
 | 基线与路径 | 观察行为 | 目标差距 |
 |---|---|---|
@@ -91,10 +116,10 @@ Help 的结果精确为 displayName/description/useCases，字段和缓存规则
 与同包 `SkillCommandSnapshotDTO.java`，并由 InputDTO 复制 suggestions、Catalog 复制外层列表。
 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillNamePatterns.java`
 已集中兼容/严格正则字符串、编译模式和长度上限；SkillNameValidator 与旧展示 DTO 已删除。
-其中加载宽松、发现严格的策略分裂是必须整改的差距，不是已确认的存量兼容要求。
-来源过滤、可执行 Builtin 定义和七个 Contributor 仍属于后续核心 PR，不因前置发现层存在而视为已实现。
+该快照中加载宽松、发现严格的策略分裂是当时需整改的差距；当前已统一严格校验，见 §1.2。
+在该前置快照中，来源过滤、可执行 Builtin 定义和七个 Contributor 尚待后续核心实现；当前已实现，见 §1.2。
 
-上述结论限于旧证据点，不再用于判断 Help 当前实现状态。
+上述结论限于旧证据点，不再用于判断当前 Command 实现状态。
 Help 在 `d1cdb708e3e124cae009b10b985f5832b6dbde01` 已实现同一链路，但场景字段当时误名为 `userCases`；
 `53eff85c7f41de23eb434e027782f5085a8b8e45` 已将该字段在缓存、DTO、VO 和调用方统一为 `useCases`。具体路径、符号和验收边界见
 [Help 源码证据](../01-内置命令/Help-Agent使用指南/README.md#5-源码证据与设计理由)。
@@ -136,7 +161,7 @@ Catalog 用于找到 Help Definition 与执行上下文；Help 内容由 AgentHe
 
 - `resolve(context, BUILTIN)` 仅用于内部 Builtin 专属解析，在调用 Source 前过滤类型；共享 GET 使用完整来源解析，不套用此快路径。
 - 七个 Contributor 各自贡献元数据、准入策略和 Handler；启动期重名直接失败。
-- 当前发现层的 Skill Definition 只供展示，不安装抛错的伪 Handler；真实执行定义纳入统一实施计划，不强制复用 Builtin 类型。
+- 当前发现层的 Skill Definition 只供展示，不安装抛错的伪 Handler；实际 Skill 执行已存在；真实执行定义的统一结构仍纳入实施计划，不强制复用 Builtin 类型。
 - 新增命令不修改中央名称 switch；结果类型分派只能出现在 DTO→VO 组装器。
 - 内部结果使用 DTO，响应使用只读 `@Getter` 与 final 字段的独立 VO。
 - 参数缺省只在 Service 归一；标准输入约束放在请求 VO/API 参数并实际触发 Jakarta 校验。
@@ -144,7 +169,7 @@ Catalog 用于找到 Help Definition 与执行上下文；Help 内容由 AgentHe
 ### 3.1 Skill 名称统一规则
 
 Skill 名称必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，同时单独校验 1～64 字符长度。
-`SkillNamePatterns` 只保留一份严格正则字符串、编译后的 Pattern 和长度上限；加载、
+`ClawConstants.Skill` 维护同一严格名称表达式、编译后的 Pattern 和长度上限；加载、
 命令发现和执行全部引用，不保留 LEGACY 分支，也不在 HTTP/Command 包中另设名称 Validator。
 非法名称在加载时就拒绝，不能进入已加载集合、模型发现提示词或命令清单；执行不得绕过。
 `SKILL.md` 的 `name` 必须是非空字符串且与文件夹同名，不能通过回退、裁剪或自动改名接受。
@@ -219,8 +244,8 @@ GET 需按 operation 映射 503，不能全局修改同名错误的 422 映射�
 | modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/ | 该固定 commit 无 RuntimeCommandController | GET 轻量 HTTP 尚为 待实现，不宣称设计合入即已上线 |
 
 本表仅保留 `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5` 的发现层历史快照。
-对 Help 而言，`53eff85c7f41de23eb434e027782f5085a8b8e45` 已有 RuntimeCommandCatalogController、RuntimeCommandController
-及三字段响应投影，不能继续用上表的“无 Controller”快照推导 Help 尚未实现。
+当前 `53eff85c7f41de23eb434e027782f5085a8b8e45` 已有清单 GET、共享 Command POST 和全部 Builtin 响应投影；
+Skill Runtime 执行也已接入。上表“无 Controller”的历史状态不再用于描述当前能力，见 §1.2。
 
 pi 固定基线仍用 `5cd93f688aaab89dbb6dfa4aca535f21796ae185`：
 `packages/coding-agent/src/core/slash-commands.ts` 的 BuiltinSlashCommand 为 name/description/可选
@@ -231,7 +256,7 @@ argumentHint，支持轻量提示的结构参考；它不定义 CampusClaw 的 H
 投影属于架构变更；不返回内部路径、正文和凭据属于安全边界。
 原因是让前端只解释当前调用形态，同时让执行的权威校验留在后端。
 
-实施先后及验收：
+实施依赖与持续验收（其中清单、Builtin 与 HTTP 基础已实现，不能把本表整体视为待办）：
 
 1. 保留全局主图骨架与 Definition 身份；实现共享完整缓存解析和独立 Builtin 专属解析。
 2. 增加只读轻量 Response VO 与投影，覆盖 idle/running、完整空 Skill、无完整缓存 503，
@@ -268,7 +293,8 @@ help 命令用途说明区分。描述语言切换尚未实现，运行验收未
 
 ### 3.4 Skill 执行链（B13/B14 已确认）
 
-共享 Registry 解析的 SkillCommandDefinition 组合 CommandAdmissionPolicy 与真实 SkillCommandHandler；
+以下是待实现的统一结构增量；当前功能通过独立 SkillCommandExecutionService 已存在。
+目标共享 Registry 解析的 SkillCommandDefinition 组合 CommandAdmissionPolicy 与真实 SkillCommandHandler；
 Handler 委派 SkillExecutionService，再经 SessionEventApplicationService 复用普通消息的接受、
 凭据和运行生命周期。PreparedSkillInvocationDTO 固定正文、元数据和版本；同一请求的发现与
 执行用同一 Definition 身份，绑定/权限/容量仍在所属事务或锁内重检。不能把 DTO 穿透 Controller。
@@ -315,9 +341,9 @@ Mate Header 不记录、不持久化、不进入 Prompt；Compact 仅在本次 A
 | 实施项 | 完成条件 |
 |---|---|
 | 共享核心 | 两类命令复用来源过滤、不可变解析快照和分层边界；分别定义发现与执行职责 |
-| Builtin | 按各命令证据跟踪实施；Help 元数据指南已实现，不代表其他 Builtin 自动验收 |
-| Skill Command | 补齐执行契约、真实执行定义、快照与绑定重检、失败恢复及专项验收 |
-| 共享 HTTP 集成 | 统一对齐两类命令的命名、清单、请求类型、结果与错误，完成发现到执行的集成验收后发布 |
+| Builtin | 七项 Runtime 调用链已实现；继续按 §1.2 和 Builtin §8.3 的证据、契约与验收范围跟踪 |
+| Skill Command | Runtime 执行与文本恢复已实现；补齐统一执行定义、完整版本快照及专项验收 |
+| 共享 HTTP 集成 | Runtime GET/POST 与 JSON/SSE 分派已实现；精确错误、恢复及集成验收继续按契约核对，Mate 公共发布独立 |
 
 Skill 的已确认执行语义按[Skill 实施要求](../02-技能命令/README.md#4-统一实施与集成要求)实施；
 操作 12/13 当前保留的七个 Builtin 示例是已确认部分，不能代替两类命令的最终整体验收。
@@ -343,6 +369,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.12.4 | 2026-09-22 | 按 53eff85c 分列当前 Runtime、Skill、前端实现及结构、版本快照和统计增量。 |
 | 1.12.3 | 2026-09-22 | 补充命令字段与调用示例入口，并区分中文展示样例和实际描述语言。 |
 | 1.12.2 | 2026-09-22 | 按 53eff85c 更正 Help 缓存、查询、响应与统一 POST 的已实现状态。 |
 | 1.12.1 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，与 Runtime 命令契约保持一致。 |
