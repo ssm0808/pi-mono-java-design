@@ -1,6 +1,6 @@
 # CampusClaw 设计仓库
 
-导航版本 3.32.0 · 2026-09-22
+导航版本 3.33.0 · 2026-09-22
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
@@ -8,7 +8,7 @@
 
 [Agent 架构对比](01-总体架构/07-Agent架构对比/README.md) · [全部设计图](设计图索引.html) · [工作指引](AGENTS.md)
 
-M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.md#9-工具注册与发现)区分 Agent 直接工具代理与 Skill 渐进披露：Skill 工具按 `Skill → SearchTools → CallTool` 使用，搜索只返回定义数据，不动态增加模型工具。`Skill`、`CallTool`、代理、[确认前准备和参数恢复反馈](01-总体架构/02-CampusClaw工具系统/source-evidence.md#search-tools-evidence)已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools、共享定义快照与[前端可恢复展示](07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)待实现。工具数据同步另行设计。
+M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.md#9-工具注册与发现)区分 Agent 直接工具代理与 Skill 渐进披露：Skill 工具按 `Skill → SearchTools → CallTool` 使用，按唯一工具名精确返回单个定义，不动态增加模型工具。`Skill`、`CallTool`、代理、[确认前准备和参数恢复反馈](01-总体架构/02-CampusClaw工具系统/source-evidence.md#search-tools-evidence)已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools、发现与校验的一致性接线及[前端可恢复展示](07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)待实现。工具数据同步另行设计。
 
 <a id="module-index"></a>
 
@@ -57,6 +57,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.33.0 | 2026-09-22 | M03 的 SearchTools 收敛为精确名称发现，加载与数据同步留给后续专题。 |
 | 3.32.0 | 2026-09-22 | M03 的 Skill 工具改用固定 SearchTools 渐进发现并保持模型工具集合不变。 |
 | 3.31.1 | 2026-09-22 | M05 增加固定基线下的当前实现与剩余增量状态入口。 |
 | 3.31.0 | 2026-09-22 | 时序图规范增加 DSH 角色协作参考、职责映射与适用边界。 |

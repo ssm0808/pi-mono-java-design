@@ -6,6 +6,7 @@
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolsetFactory.java: createSession
 ' Incremental source evidence (CampusClaw ae6645caaade3b9520220a34af940210850ef36a, checked 2026-09-22):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java: prepare
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolResolver.java: resolveSkill, merge, validateCrossScopeNames
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolExecutor.java: prepareSkill, prepare, executePrepared
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java: beforeToolCall
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/skill/SkillTool.java: execute
@@ -14,8 +15,8 @@
 ' Baseline evidence (pi 95fbc04997eaee961eb673fa7923e9220609ebd5):
 ' packages/agent/src/agent-loop.ts: prepareToolCall, executePreparedToolCall
 ' Observed behavior: framework assembly, direct Agent adapters, Skill loading, prepared invocation and shared Mate execution exist.
-' Design reason: SearchTools and CallTool share one immutable definition snapshot without changing the model tool set.
-' Pending implementation: SearchTools, ToolDefinitionSnapshot integration and client recovery presentation.
+' Design reason: Exact-name discovery and execution share trusted resolution without changing the model tool set.
+' Pending implementation: SearchTools, discovery consistency integration and client recovery presentation.
 title Tool System - Complete Target Structure
 top to bottom direction
 skinparam backgroundColor white
@@ -49,7 +50,7 @@ package "Execution - new objects per Session" {
   class "Ordered hook chain" as Hooks <<immutable>>
   class "ToolExecutionPipeline" as Pipeline
   class "PreparedToolInvocation" as Prepared <<immutable>>
-  class "ToolDefinitionSnapshot\n(Pending implementation)" as Definitions <<immutable>>
+  class "MateToolResolver" as Definitions <<trusted resolution>>
   class "SessionCompactor" as Compactor
 }
 package "Model tools - per Session" {
@@ -78,14 +79,14 @@ Hosts --> Factory
 Factory --> Manager
 Manager --> Runtime
 Context --> Runtime
-Executor -[#346DA5]-> Runtime : trusted bindings
+Definitions -[#346DA5]-> Runtime : trusted bindings
 Factory --> Assembler
 Configured ..|> Assembler
 Configured --> ToolFactory
 Configured -[#346DA5]-> MateFactory : direct bindings
 MateFactory .[#346DA5].> Adapter : creates
 MateFactory .[#346DA5].> Executor : creates
-MateFactory .[#346DA5].> Definitions : creates trusted snapshot
+MateFactory .[#346DA5].> Definitions : creates resolver
 Factory ..> Context
 Context *-- "1" Workspace
 Factory ..> Session
@@ -114,11 +115,10 @@ Resolver --> Workspace
 Skill -[#346DA5]-> Resolver
 Skill -[#346DA5]-> Resources
 Local --> Resources : read
-Search -[#346DA5]-> Definitions : find safe definitions
+Search -[#346DA5]-> Definitions : exact name [P]
 Adapter -[#346DA5]-> Executor
 Adapter -[#346DA5]-> Definitions : direct definition
 Call -[#346DA5]-> Executor
-Call -[#346DA5]-> Definitions : resolve and validate
 Executor -[#346DA5]-> Definitions : trusted target
 Executor -[#346DA5]-> Mate : execute once
 Cron --> CronService
@@ -134,14 +134,14 @@ Hosts own persistence, output and close policy.
 Model tools = framework profile + direct Agent adapters.
 Skill loading never registers its business tools.
 Commands use their own HTTP boundary and never enter the model list.
-SearchTools discloses bounded complete definitions as data.
+SearchTools returns one complete definition by exact unique name.
 CallTool uses Skill bindings; adapters use direct Agent bindings.
 Runtime: twelve framework tools plus direct Agent adapters.
 Cron and Child exclude the three interaction tools.
 Blue relations show the business-tool target structure.
 Prepared execution exists at Java ae6645ca.
-SearchTools, shared snapshot and client recovery presentation: Pending implementation.
-Metadata synchronization is designed separately.
+[P] = Pending implementation: discovery and definition consistency integration.
+Data loading, caching and version synchronization: pending separate design.
 Interaction tools are implemented at Java 8c5fda1d; details in the Plan Mode topic.
 endlegend
 Factory -[hidden]down-> Assembler
@@ -253,15 +253,15 @@ end note
 ' Source evidence (CampusClaw ae6645caaade3b9520220a34af940210850ef36a, checked 2026-09-22):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/skill/SkillTool.java: execute
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java: prepare
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolResolver.java: resolveSkill
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolResolver.java: resolveSkill, merge, validateCrossScopeNames
 ' Baseline evidence (OpenCode fe3f3a41f79ad292cc3c7c629567385a20ec5130):
 ' packages/codemode/src/tool-runtime.ts: makeSearchTool, prepare, searchIndex
-' Baseline evidence (Codex ac7634b9f73ec1bf96466be7a5869f0949d20b30):
+' Baseline evidence (Codex 89a7298aff55db29f9cb2ad2430e3efe02b7a454):
 ' codex-rs/core/src/tools/handlers/tool_search.rs: ToolSearchHandler
 ' codex-rs/core/src/tools/handlers/tool_search_spec.rs: create_tool_search_tool
-' Observed behavior: Skill and CallTool exist, but SearchTools and a shared immutable definition snapshot do not.
+' Observed behavior: Skill, CallTool and name-based MateToolResolver exist; SearchTools does not.
 ' Design reason: reveal only relevant definitions while keeping the model tool set fixed across turns.
-' Pending implementation: SearchTools and ToolDefinitionSnapshot integration.
+' Pending implementation: SearchTools and discovery consistency integration.
 ' Presentation: one responsibility-level scenario; execution and authorization are outside this interaction.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -284,18 +284,18 @@ title Discover One Skill Tool Without Registering It - Target
 participant Model
 participant AgentLoop as Loop
 participant "Skill content" as Skill
-participant "Definition snapshot" as Catalog
+participant "Tool definitions" as Catalog
 Model -> Loop : Load Skill by exact name
 Loop -> Skill : Read trusted instructions
-Skill --> Loop : Body and ordinary resource paths
+Skill --> Loop : Body with tool names; resource paths
 Loop --> Model : Skill content
-Model -> Loop : SearchTools(skillName, business intent)
-Loop -> Catalog : Search within that Skill only [P]
-Catalog --> Loop : Bounded complete definitions [P]
+Model -> Loop : SearchTools(tool: exact name)
+Loop -> Catalog : Resolve within trusted Skill bindings [P]
+Catalog --> Loop : One complete trusted definition [P]
 Loop --> Model : Definition data; tool set unchanged [P]
 note over Loop,Catalog
   Search does not authorize, activate or execute.
-  CallTool later resolves from this same snapshot.
+  CallTool validates against the same disclosed definition.
   [P] = Pending implementation increment.
 end note
 @enduml
@@ -355,6 +355,7 @@ end note
 @startuml call_mate_tool_sequence
 ' Source evidence (CampusClaw ae6645caaade3b9520220a34af940210850ef36a, checked 2026-09-22):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java: prepare
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolResolver.java: resolveSkill, merge, validateCrossScopeNames
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolAdapter.java: prepare
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolExecutor.java: prepareSkill, prepareAgent, executePrepared
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java: callTool
@@ -364,8 +365,8 @@ end note
 ' packages/core/tools/src/index.ts: prepareExecution, dispatchToolBody
 ' packages/core/tools/src/schema.ts: defineTool
 ' Observed behavior: CallTool business validation runs during preparation before Host hooks, and approval executes the prepared invocation.
-' Design reason: SearchTools and execution must resolve one immutable Session definition snapshot.
-' Pending implementation: ToolDefinitionSnapshot integration and SearchTools.
+' Design reason: Discovery and validation must agree on the definition; data loading is designed separately.
+' Pending implementation: SearchTools and discovery consistency integration.
 ' Stable block identity retained for existing document links.
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
@@ -405,7 +406,7 @@ Execution --> Pipeline : Normalized business result
 note over Pipeline,Execution
   Input: registered outer-schema validation has passed.
   Preparation errors return before Host interaction.
-  Shared SearchTools definition snapshot: Pending implementation.
+  SearchTools consistency integration: Pending implementation.
 end note
 @enduml
 

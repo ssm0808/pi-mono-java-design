@@ -2,13 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.17.0 |
-| 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、共享定义快照与前端可恢复展示待实现，其余能力按源码证据分项判断 |
+| 文档版本 | 2.18.0 |
+| 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-09-22 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
-本设计区分框架工具、Agent 直接关联的业务工具与 Skill 关联的业务工具。“关联”表示 Agent 或 Skill 与业务工具的配置关系，不代表执行授权；实际调用仍须通过权限检查。注册和发现增量见 [§9](#9-工具注册与发现)，当前源码及基线对照见[专项证据](source-evidence.md#skill-tool-discovery-evidence)。工具定义的数据来源接入、同步、缓存刷新与版本一致性另行设计；本页只固定模型发现契约与 Session 内一致性要求。
+本设计区分框架工具、Agent 直接关联的业务工具与 Skill 关联的业务工具。“关联”表示 Agent 或 Skill 与业务工具的配置关系，不代表执行授权；实际调用仍须通过权限检查。注册和发现增量见 [§9](#9-工具注册与发现)，当前源码及基线对照见[专项证据](source-evidence.md#skill-tool-discovery-evidence)。工具定义的数据来源接入、同步、缓存刷新与版本一致性另行设计；本页只固定模型发现契约与单工具定义一致性要求。
 
 `ExitPlanMode`、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md) 和 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 已在 Runtime 主线实现，plan/build 共用定义；具体交互及实现范围由[计划专题](../06-CampusClaw计划模式/README.md)维护。Mate 公共桥接状态独立判断。
 
@@ -46,7 +46,7 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 
 [PlantUML 源码：`tool_system_architecture`](diagram.puml#L1) · [原尺寸 SVG](tool_system_architecture.svg)
 
-主图保留 Host、公共 Session、工具接口和外部执行边界。`MateToolAdapter`、`SearchTools` 与 `CallTool` 共用同一份 Session 工具定义快照；代理直接向模型提供定义，搜索只返回匹配定义，调用入口负责可信准备和执行。`SkillTool` 与只读文件工具继续共用工作区边界，普通资源读取不承担工具发现。源码状态按专项核验范围标注。
+主图保留 Host、公共 Session、工具接口和外部执行边界。`MateToolAdapter`、`SearchTools` 与 `CallTool` 复用可信工具解析职责：代理直接提供定义，SearchTools 按唯一名称返回定义，调用入口负责可信准备和执行。既有 `MateToolResolver` 承担该解析职责，发现接线待实现；本图不规定其底层加载、缓存或版本同步方式。`SkillTool` 与只读文件工具继续共用工作区边界。
 
 <a id="initial-model-tools"></a>
 
@@ -58,7 +58,7 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 |---|---|---|
 | 框架工具，如 `Skill`、`SearchTools`、`CallTool` | 按入口配置（profile）把完整工具定义放入 `tools` | 按框架工具名称直接调用 |
 | 当前 Agent 直接关联的业务工具 | 把完整业务工具定义放入 `tools` | 按业务工具名称直接调用 |
-| 可见 Skill 及其关联的业务工具 | 提示词只列出 Skill 名称、描述和使用规则；仅由 Skill 关联的业务工具定义不放入 `tools` | 通过 `Skill` 加载正文；工作流需要业务能力时用 `SearchTools` 取得少量完整定义，再经 `CallTool` 执行 |
+| 可见 Skill 及其关联的业务工具 | 提示词只列出 Skill 名称、描述和使用规则；仅由 Skill 关联的业务工具定义不放入 `tools` | 通过 `Skill` 加载正文；工作流需要业务能力时用 `SearchTools` 按正文中的工具名取得单个完整定义，再经 `CallTool` 执行 |
 
 **加载 Skill 或搜索业务工具定义只补充模型上下文，不扩充 `tools` 集合。** `SearchTools` 的返回值是数据，不会把匹配的业务工具动态注册到下一次或后续模型请求。完整调用示例见 [§1.2](#skill-call-scenario)。
 
@@ -71,11 +71,11 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 以下说明首次使用一个 Skill 关联工具的成功流程，前提是当前入口已提供 `Skill`、`SearchTools` 和 `CallTool`。`facility-operations` 和 `query-device-alarm` 是园区场景示例。
 
 1. **加载 Skill。** 模型根据提示词中的名称和描述选择 Skill，调用 `Skill({name: "facility-operations"})`。运行时返回 Skill 正文、基础目录和抽样资源路径。
-2. **搜索当前步骤需要的工具。** 当正文要求查询设备告警时，模型调用 `SearchTools({skillName: "facility-operations", query: "查询设备告警"})`。运行时只在该直接绑定 Skill 的范围内返回少量完整定义。
-3. **调用关联工具。** 模型调用 `CallTool`，将 `tool` 设为 `query-device-alarm`，并按搜索结果填写 `args`。运行时从与搜索相同的 Session 定义快照解析目标，先完成业务参数校验，再进入权限判断和必要确认；放行后调用 Mate，并将结果返回模型。
+2. **按名称获取工具定义。** 正文明确“使用 `query-device-alarm` 查询设备告警”，模型调用 `SearchTools({tool: "query-device-alarm"})`。运行时在当前 Agent 的可信 Skill 工具绑定范围内精确解析名称，返回该工具的完整定义。
+3. **调用关联工具。** 模型调用 `CallTool`，将 `tool` 设为 `query-device-alarm`，并按搜索结果填写 `args`。运行时按可信绑定解析目标，使用与已披露定义一致的业务 Schema，先完成业务参数校验，再进入权限判断和必要确认；放行后调用 Mate，并将结果返回模型。
 4. **生成回答。** 运行时把工具结果放入下一次模型请求，模型根据结果回答用户。
 
-每次工具结果都会进入后续模型上下文，所有模型请求沿用同一份已装配 `tools`；搜索多少次都不会累积业务代理。已有完整定义时可复用，定义不足或遗忘时可按 Skill 名称和更精确的查询再次搜索。搜索或调用失败时，模型根据错误决定下一步；运行时不会自动继续、猜参或重放业务请求。精确规则见 [§9](#9-工具注册与发现)，内部执行边界见[渐进发现](execution-details.md#skill-tool-discovery)、[单次调用](execution-details.md#tool-invocation)和[业务执行](execution-details.md#business-execution)。
+每次工具结果都会进入后续模型上下文，所有模型请求沿用同一份已装配 `tools`；搜索多少次都不会累积业务代理。已有完整定义时可复用，定义不足或遗忘时可按相同的准确工具名重新获取。搜索或调用失败时，模型根据错误决定下一步；运行时不会自动继续、猜参或重放业务请求。精确规则见 [§9](#9-工具注册与发现)，内部执行边界见[渐进发现](execution-details.md#skill-tool-discovery)、[单次调用](execution-details.md#tool-invocation)和[业务执行](execution-details.md#business-execution)。
 
 ## 2. 范围与权威边界
 
@@ -135,7 +135,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 架构改造 | Runtime 使用 append-only 数据库 Entry 保存摘要与边界 | 替代 pi JSONL compaction entry，同时保持历史不可变和模型恢复边界独立 |
 | 架构改造 | 用独立 HTTP Command 模块替换旧 Slash 原型 | Slash Command 不是模型工具，也不进入工具目录 |
 | 架构变更 | 框架 profile 与受管业务代理分开装配 | 业务工具共用一个适配实现，不恢复任意 Extension 或运行中热注册 |
-| 架构变更 | Skill 正文与具体工具定义分层披露 | 借鉴 OpenCode Code Mode 的固定搜索入口，以有界搜索返回完整定义；不把 Skill 全部 Schema 放入正文或模型工具集合 |
+| 架构变更 | Skill 正文与具体工具定义分层披露 | 借鉴 OpenCode Code Mode 的固定搜索入口，以精确名称返回单个完整定义；不把 Skill 全部 Schema 放入正文或模型工具集合 |
 | 架构改造 | 逐工具并发模式与串行 barrier | 只读工具并行且有副作用工具不跨越顺序边界 |
 | 安全加固 | 注册 Schema 与动态业务参数均在交互确认前校验；框架外层拒绝未知字段，业务参数遵守业务 Schema | 明显无效的调用不打扰用户，确认通过后执行同一份已校验快照 |
 | 安全加固 | 每个 Session 固化 Agent 工作区边界 | 阻止本地工具读取兄弟 Agent 或外部路径 |
@@ -259,7 +259,7 @@ public interface BuiltInToolFactory {
 
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L562)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L563)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -340,9 +340,9 @@ agent/{agentId}/.campusclaw/
 一致，所属索引内唯一。扫描结果形成不可变的 `skillName -> skillId` 和
 `agentName -> BoundAgent` 索引。
 
-`references/` 只保存 Skill 作者提供的普通参考资料，不生成业务工具定义文件。业务工具定义进入本次 Session 的不可变 `ToolDefinitionSnapshot`，由固定 `SearchTools` 按需返回；模型不通过文件路径发现工具。快照的数据来源、物化、同步和新旧版本切换由后续数据同步设计确定。本次不移动 `skill.json`，也不把下述目录刷新流程视为已经解决工具定义快照的一致性。
+`references/` 只保存 Skill 作者提供的普通参考资料，不生成业务工具定义文件。模型通过固定 `SearchTools` 按名称获取完整定义；正文只需在业务步骤中引用唯一工具名，不包含内部 ID、参数 Schema 或平台调用协议。工具定义的加载、缓存、刷新、跨节点同步和版本切换由后续数据同步设计确定，本版不指定全量加载或按需加载。本次不移动 `skill.json`，下述目录刷新流程也不代表已经解决工具定义的数据一致性。
 
-本图聚焦一次需要构建候选目录的发布过程；prepare 的完整缓存命中直接返回，锁内重查发现已发布也直接返回，refresh 则强制构建。锁作为 Runtime manager 的动作，候选目录与已发布目录分列以保留原子切换边界；所有成功或失败路径均释放锁。工具定义快照的同步仍另行设计，不属于本图已解决范围。
+本图聚焦一次需要构建候选目录的发布过程；prepare 的完整缓存命中直接返回，锁内重查发现已发布也直接返回，refresh 则强制构建。锁作为 Runtime manager 的动作，候选目录与已发布目录分列以保留原子切换边界；所有成功或失败路径均释放锁。工具定义的数据同步仍另行设计，不属于本图已解决范围。
 
 ![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
 
@@ -363,7 +363,7 @@ agent/{agentId}/.campusclaw/
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L739)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L740)
 
 ## 9. 工具注册与发现
 
@@ -373,46 +373,56 @@ agent/{agentId}/.campusclaw/
 |---|---|---|
 | 框架工具 | 入口 profile | 按框架名称直接调用 |
 | Agent 直接关联的业务工具 | 装配 `MateToolAdapter`，提供完整 name / description / inputSchema | 按业务工具名称直接调用 |
-| 直接 Skill 关联的业务工具 | `Skill({name})` 加载正文；需要业务能力时以 `SearchTools({skillName,query,limit?})` 查询少量完整定义 | `CallTool({tool,args?})` |
+| 直接 Skill 关联的业务工具 | `Skill({name})` 加载正文；需要业务能力时以 `SearchTools({tool})` 按正文中的唯一工具名取得完整定义 | `CallTool({tool,args?})` |
 
-初始模型工具集合是框架工具加 Agent 直接业务代理；仅由 Skill 关联的业务工具 Schema 不提前加入，也不在 Skill 加载或搜索后整组或逐个注入。`SearchTools` 始终是一个固定框架工具，结果只是进入上下文的定义数据，因此多轮搜索不会扩大后续请求的 `tools`。宿主保留工具的关联来源；代理名称和模型可读定义都不能代替执行授权。`ListMateTools` 退出模型工具列表，底层元数据能力由宿主构建定义快照时使用。
+初始模型工具集合是框架工具加 Agent 直接业务代理；仅由 Skill 关联的业务工具 Schema 不提前加入，也不在 Skill 加载或搜索后整组或逐个注入。`SearchTools` 始终是一个固定框架工具，结果只是进入上下文的定义数据，因此多轮搜索不会扩大后续请求的 `tools`。宿主保留工具的关联来源；代理名称和模型可读定义都不能代替执行授权。`ListMateTools` 退出模型工具列表，底层元数据能力由宿主可信解析层复用。
 
 `Skill` 只接收 `name`，按当前 Agent 可见的直接 Skill 精确解析，返回正文、基础目录和除 `SKILL.md` 外最多 10 个资源文件的绝对路径，明确清单为抽样。文件内容不随清单展开，路径遵守 §5 的工作区边界；遗漏文件通过 `Ls/Find/Grep` 定位，具体文件继续由普通 `Read` 读取。不提供 `resource` 参数或在每个业务步骤中强制引用文件；也不强制每次调用前重复读取已在上下文中的完整定义。
 
 完整调用步骤见 [§1.2](#skill-call-scenario)：每次模型返回工具调用后，运行时执行工具并把结果放入下一次模型请求，直至模型生成用户答案。
 
-正文或完整定义已在上下文中时可跳过对应调用。需要的定义不明确、已被压缩或参数恢复结果标记定义不完整时，再以更准确的业务意图或精确工具名调用 `SearchTools`。搜索失败向模型返回明确错误，由模型决定细化查询或停止；运行时不会自动推进到业务调用。`Read` 继续读取普通 Skill 资源，不再承担工具定义发现协议。
+正文或完整定义已在上下文中时可复用。正文以 `query-device-alarm` 等稳定工具名说明当前步骤使用哪项能力；模型识别该名称，宿主只负责精确匹配，不新增自动解析正文并猜测工具名的程序。定义缺失或已被压缩时按准确名称调用 `SearchTools`。名称不可用时返回错误，模型核对正文或停止，不自动选择相似工具。`Read` 继续读取普通 Skill 资源。
 
 `Skill` 是模型工具，HTTP Skill Command 是用户命令，两者共用可信 Skill 名称与绑定解析，但模型可见性与用户显式调用资格分别判断；`disableModelInvocation` 不因此关闭用户命令入口。两者不互相注册或改变各自协议。宿主提示词列出 Skill 名称、描述和 `Skill` 使用规则；正文已显式加载时按需继续读取资源，避免只为调用形式再次读取正文。
 
-`SearchTools` 要求传入当前 Agent 直接绑定且对模型可见的精确 `skillName`，并在该 Skill 的关联工具内搜索。查询为空、Skill 不可见或定义快照不可用时返回 `isError=true`；没有匹配项是成功空结果。精确名称命中只返回该工具；一般查询对名称、说明以及输入字段名和字段说明做确定性排序，结果默认 3 项、最多 5 项，并用 `truncated` 指示是否还有匹配。每个结果必须包含完整的 `name`、`description` 和 `inputSchema`；单个完整定义超过输出预算时该定义不可披露并返回明确错误，不能发送截断 Schema。
+`SearchTools` 只接收一个 `tool`，与 `CallTool.tool` 使用相同的技术名，按原名精确匹配，不做大小写归一化、模糊匹配、排序或分页。工具名称唯一，不需要模型传入 `skillName` 消歧；宿主仍检查可信 Skill 绑定范围和定义可披露性。成功只返回该工具完整的 `name`、`description` 和 `inputSchema`。名称不存在、未绑定、不可披露、定义无效或不可取得时返回 `isError=true`，不枚举其他工具；定义超出结果预算时明确失败，不截断 Schema。精确错误与预算规则见[工具契约 §4.2](built-in-tool-contracts.md#42-searchtools)。
 
-搜索结果不包含工具 ID、Skill ID、定义版本、权限、凭据或快照 ID，也不产生“已加载工具”状态。`SearchTools` 与 `CallTool` 必须读取同一份 Session `ToolDefinitionSnapshot`；搜索到的名称和 Schema 仅用于模型构造参数，`CallTool` 仍独立完成可信解析、校验和授权。该职责级交互见[执行细节：渐进发现](execution-details.md#skill-tool-discovery)。
+返回定义不包含工具 ID、Skill ID、版本、权限、凭据或快照 ID，也不产生模型工具激活状态。名称唯一解决定位，可信绑定确定范围，Host 决定执行授权；正文提及工具并不新增绑定。当前 Agent 的工具绑定中同名同 ID 可合并来源，同名不同 ID 必须拒绝，不能覆盖或靠模糊匹配消歧。定义只供模型构造参数，不能作为权限凭证。职责级交互见[执行细节：渐进发现](execution-details.md#skill-tool-discovery)。
 
 ### 9.2 CallTool 与 Agent 代理
 
 `CallTool` 保留 `{tool,args?}`；`args` 省略时使用空对象。当前只解析当前 Agent 直接绑定 Skill 的业务工具，未知名称或同名不同 ID 明确失败；不接收 agentId、skillId、toolId、任意 URL，也不转发框架工具。直接 Agent 工具由其代理调用；同一工具同时来自两个范围时保留两种来源，不能因入口不同绕过权限。
 
-`MateToolAdapter` 和 `CallTool` 共用 `MateToolExecutor`。执行分成准备和提交两段：准备段只在当前 Session 的 `ToolDefinitionSnapshot` 和可信绑定范围内解析目标及业务 Schema，校验参数并生成不可变的 `PreparedToolInvocation`；提交段只在 Host before hook 放行后，使用其中固定的工具 ID、定义版本和参数请求 Mate。权限与确认仍由 Host 承担，不迁入执行器。代理的完整 Schema 进入模型请求；`CallTool` 的固定外层 Schema 不替代业务参数校验。搜索结果只是模型说明，不作为执行目标或权限的权威来源。
+`MateToolAdapter` 和 `CallTool` 共用 `MateToolExecutor`。执行分成准备和提交两段：准备段通过可信解析层在当前 Agent 的 Skill 或直接工具绑定范围内解析目标及业务 Schema，校验参数并生成不可变的 `PreparedToolInvocation`；提交段只在 Host before hook 放行后，使用其中固定的工具 ID、定义版本和参数请求 Mate。权限与确认仍由 Host 承担，不迁入执行器。代理的完整 Schema 进入模型请求；`CallTool` 的固定外层 Schema 不替代业务参数校验。搜索结果只是模型说明，不作为执行目标或权限的权威来源。
 
 代理传入 Agent 直接关联的业务工具范围，CallTool 传入直接 Skill 关联的业务工具范围；两者经各自的参数转换后委托同一个执行器。目标解析、参数校验、Mate 请求和结果返回见[执行细节：业务执行](execution-details.md#business-execution)。
 
-有界搜索减少无关定义并提供重新发现入口，不保证模型永不遗忘。首次本地参数校验失败即按 [§9.6](#tool-argument-recovery)返回修正依据，模型据此重新构造参数；定义未完整返回时按精确工具名重新搜索。加载 Skill 和搜索定义都不是授权状态，也不增加已加载工具集合。实际执行请求一经发出，超时、断连和 Mate 错误均不自动重放。
+按名称获取单个定义减少无关内容，但不保证模型永不遗忘。首次本地参数校验失败即按 [§9.6](#tool-argument-recovery)返回修正依据，由模型重新构造参数。加载 Skill 和获取定义都不是授权状态，也不增加模型工具。实际执行请求一经发出，超时、断连和 Mate 错误均不自动重放。
 
-注册与发现的最小结构如下；Skill、CallTool、代理、共用执行适配、确认前准备和参数恢复反馈已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools 和共享定义快照待实现：
+注册与发现的最小结构如下；Skill、CallTool、代理、共用执行适配、确认前准备和参数恢复反馈已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools 和发现与校验的一致性接线待实现：
 
 | 组件 | 职责与生命周期 |
 |---|---|
-| `MateToolsetFactory` | 共享工厂；为本次 Session 创建定义快照、搜索入口、代理及执行协作者；共享快照增量待实现 |
-| `ToolDefinitionSnapshot` | Session 内不可变定义目录；保留 Agent/Skill 来源、可信身份、版本和完整 Schema；只向模型投影安全字段；待实现 |
+| `MateToolsetFactory` | 共享工厂；为本次执行 Session 装配可信解析协作者、工具入口及代理；SearchTools 接线待实现 |
+| `MateToolResolver` | 既有可信解析职责；按名称核对绑定并取得定义，供代理、SearchTools 和执行准备共用；发现与校验的一致性接线待实现，数据加载与同步机制待设计 |
 | `MateToolAdapter` | 每个 Agent 直接工具一个 Session 实例；提供业务 Schema，委托执行 |
 | `SkillTool` | Session 实例；加载 Skill 内容与抽样资源路径，不注册业务工具 |
-| `SearchTools` | Session 实例；在一个直接 Skill 的快照范围内搜索并返回少量完整定义，不注册代理；待实现 |
+| `SearchTools` | Session 实例；在可信 Skill 工具绑定范围内按唯一名称返回单个完整定义，不注册代理；待实现 |
 | `CallTool` | Session 实例；受限的名称调用入口，在 hook 前请求准备业务调用，不维护第二套执行逻辑 |
 | `PreparedToolInvocation` | 单次调用不可变快照；固定可信目标、实际校验定义和参数；PR #323 已实现 |
 | `MateToolExecutor` | 本次执行内共享；准备可信业务调用，并在放行后执行同一快照 |
 
-两类调用都复用原有取消、权限确认、工具结果和凭据规则。Pipeline 在 before hook 前完成注册 Schema 校验和必要的动态业务准备；执行层不重复确认。准备只允许读取当前 Session 快照，不产生 Mate execute 请求。未知目标、绑定冲突、无效 Schema 或参数错误直接返回；未知权限按拒绝处理。确认等待期间不得重新解析或修改准备快照。定义快照的数据同步和刷新时机仍另行设计。
+两类调用都复用原有取消、权限确认、工具结果和凭据规则。Pipeline 在 before hook 前完成注册 Schema 校验和必要的动态业务准备；执行层不重复确认。准备阶段不产生 Mate execute 请求。未知目标、绑定冲突、无效 Schema 或参数错误直接返回；未知权限按拒绝处理。确认等待期间不得重新解析或修改准备快照。
+
+<a id="tool-definition-consistency"></a>
+
+### 9.2.1 定义一致性与数据同步边界
+
+本版固定三项调用约束：同一工具已向模型披露的定义与本次参数校验定义一致；确认与业务执行共用同一份 `PreparedToolInvocation`；参数错误反馈来自同次校验使用的可信定义。Agent 代理的模型 Schema 与其执行校验也遵循这些约束。定义无法可信取得时应明确失败，不以模型提供的 Schema 代替。
+
+这些约束不要求创建执行实例时全量拉取工具定义，也不指定按需加载、缓存或完整 Session 定义快照。本专题中的执行 Session 是 `ManagedAgentSession` 实例，不意味着长期数据库对话的所有工具永久固定同一发布版本。定义来源接入、生成或物化、加载时机、缓存与失效、刷新、跨节点同步、版本切换，以及 Skill 正文与工具改名的发布协调，均为后续数据同步专题的待设计依赖。
+
+本版的契约与执行链可独立实现和测试；元数据变化、进程恢复或发布切换下如何维持上述约束，须待同步设计和联调验收补齐。不能把现有解析缓存或单次准备结果描述为已经实现完整的跨版本一致性。
 
 <a id="mate-credential-forwarding"></a>
 
@@ -479,7 +489,7 @@ Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-templat
 
 以园区告警查询为例：模型选择已经关联的 `query-device-alarm`，但漏传 `deviceId`。系统先在可信 Skill 绑定内找到该工具并校验参数；因为参数无效，直接把字段错误和同次工具定义返回模型，不弹出确认，也不请求 Mate。模型补全 `deviceId` 后发起新调用；参数有效时才按绑定权限放行或询问用户，用户同意后执行刚才准备的同一份调用快照。
 
-首次本地参数校验失败时，模型收到字段错误及本次校验使用的完整输入定义，明确业务操作尚未执行。修正后的参数由模型发起一次新的调用；运行时不自行改参数、补业务值或重放请求。成功结果不重复附带定义，也不要求每次调用前重新发现工具。该恢复机制使用本次准备所依据的 Session 定义快照，不依赖之前是否调用过 SearchTools，也不增加模型工具集合或已加载工具状态。
+首次本地参数校验失败时，模型收到字段错误及本次校验使用的完整输入定义，明确业务操作尚未执行。修正后的参数由模型发起一次新的调用；运行时不自行改参数、补业务值或重放请求。成功结果不重复附带定义，也不要求每次调用前重新发现工具。该恢复机制使用本次校验所依据的可信定义，不依赖之前是否调用过 SearchTools，也不增加模型工具集合或已加载工具状态。
 
 | 校验位置 | 给模型的修正依据 | 业务执行边界 |
 |---|---|---|
@@ -489,7 +499,7 @@ Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-templat
 
 恢复信息进入模型可见的 `ToolResultMessage.content`，不能只放在 `details`；Pipeline 的异常归一化和 after hook 不能丢失它或将失败改记为成功。内部 `details.errorCode` 保留既有 `TOOL_ARGUMENTS_INVALID`，`isError=true`。具体模型结果格式由[工具契约 §4.3.1](built-in-tool-contracts.md#call-tool-recovery-result)维护。宿主使用既有 JSON/Schema 能力实现，不新增 Maven 依赖。
 
-定义来自本次可信解析或已注册工具，不能回显模型传入的 Schema、凭据、内部 ID、原始异常栈或不可见工具信息。正常大小的定义完整返回，保留字段说明和引用依赖；输出预算不足时明确说明定义未完整提供并指引按精确名称调用 SearchTools，不能把截断 JSON 当作完整定义。仅参数校验失败适用本规则；名称不可用、权限拒绝、无效工具 Schema、远端业务错误及结果未知各自保留原分类。请求已发出后的超时不标记为未执行。
+定义来自本次可信解析或已注册工具，不能回显模型传入的 Schema、凭据、内部 ID、原始异常栈或不可见工具信息。正常大小的定义完整返回，保留字段说明和引用依赖；输出预算不足时明确说明定义未完整提供；仅在 SearchTools 能完整披露该 Skill 工具定义时指引按精确名称重新获取，否则说明定义不可完整提供并停止盲目重试，不能把截断 JSON 当作完整定义。仅参数校验失败适用本规则；名称不可用、权限拒绝、无效工具 Schema、远端业务错误及结果未知各自保留原分类。请求已发出后的超时不标记为未执行。
 
 Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `agent.tool_result`、`isError` 和稳定 `errorCode`；精确公共契约仍由 [M06](../01-CampusClaw多Agent运行时/事件契约/common.json)维护，不向公共错误正文复制模型恢复定义。前端仅对有明确 `TOOL_ARGUMENTS_INVALID` 分类的本地失败采用[可恢复展示](../../07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)：同根仍在处理时弱化中间失败，详细记录可展开；根终态不继续显示“正在调整”，也不按后续同名工具成功覆盖旧调用。
 
@@ -501,7 +511,7 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
-[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L412)
+[PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L413)
 
 模型只使用：
 
@@ -577,7 +587,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L614)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L615)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
@@ -601,7 +611,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L670)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L671)
 
 压缩由公共 ManagedAgentSession 管理，Runtime、Child 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
 
@@ -615,12 +625,12 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 | `LoopTool`、`LoopManager` 和所有 Loop Host 接线 | 完全删除 |
 | 任意动态 `ToolCatalog`、`DefaultToolCatalog`、`ToolSelection` | 框架 profile 与受管 Agent 代理装配 |
 | Java Extension 工具、manifest tools/commands、PackageManager | 完全删除；Skill 只扫描受管目录 |
-| `activate_skill`、`ListMateTools` | `Skill` 加载指引，`SearchTools` 按需返回少量完整工具定义 |
+| `activate_skill`、`ListMateTools` | `Skill` 加载指引，`SearchTools` 按唯一名称返回单个完整工具定义 |
 | `CallMateTool` | `CallTool`，保留 `{tool,args?}` 并限定 Skill 关联的业务工具范围 |
 | `EditDiff` | 无；写工具首版硬禁用 |
 | `spawn_agent`、`invoke_agent` 和 Session delegation after-hook | `Agent` + `SubagentExecutionService` |
 | ACP/HTTP/A2A SubAgent backend、registry、approval placeholder | 不进入首版 Child Agent Execution |
-| 聚合 `references/tools.json` 和生成的单工具定义文件 | `SearchTools` 查询 Session 定义快照；定义同步另行设计 |
+| 聚合 `references/tools.json` 和生成的单工具定义文件 | `SearchTools` 按名称取得可信定义；加载与同步另行设计 |
 | 顶层 `mate.*` / `MATE_*` 应用变量 | 删除；地址、endpoint 与 Tool 开关分别迁入 `campusmate.base-url`、`campusmate.endpoints`、`campusmate.tool` |
 | 重复 Skill path 配置 | 删除；Runtime 与 Tool 共读 `campusmate.endpoints.skill-info-path-template` |
 | `FileAgentDirectoryResolver` 独立文件契约 | `AgentRuntimeManager.prepare` |
@@ -682,9 +692,9 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 - Agent 直接工具由同一适配类创建独立实例；名称、描述和 Schema 正确进入每步模型请求；
 - Skill 初始目录只披露元数据；`Skill` 输出正文、基础目录和最多 10 条抽样资源路径，不展开工具定义或增加工具；
-- `SearchTools` 只搜索指定直接 Skill，默认 3 项、最多 5 项，精确名称只返回一个完整定义；空匹配成功，超大定义明确失败；
+- `SearchTools({tool})` 按原名精确返回单个完整定义；拒绝空白、未知、未绑定、不可披露和冲突名称，不回退到相似名称；不接受 query、skillName 或 limit；超大定义明确失败且不建议重复同一查询；
 - 任意次数的 Skill 加载和 SearchTools 搜索都不改变下一次模型请求的工具集合；定义遗忘后可按精确名称重新搜索；
-- SearchTools 与 CallTool 使用同一份不可变 Session 定义快照；搜索后刷新或远端变化不改变本次 Session 的解析结果；
+- SearchTools 披露定义与 CallTool 校验定义一致；Agent 代理同样一致；确认后执行同一准备结果；元数据刷新、发布切换和恢复场景由后续同步设计补充验收，不以本版测试宣称完整同步已实现；
 - `CallTool` 仅解析 Skill 范围，拒绝未知、冲突和框架工具目标；同名同 ID 去重；
 - 两个入口业务 Schema 校验与 ALLOW/ASK/DENY 一致；参数失败不进入 ASK/DENY 交互，也不产生 Mate 执行请求；
 - 首次参数校验失败即带可用的字段错误和同次输入定义，经过 Pipeline、持久化恢复及 Provider 映射后仍对模型可见；校验失败的 Mate execute 请求数为零；
@@ -713,7 +723,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ## 14. 实施顺序
 
-SearchTools 增量按定义快照 → 有界检索 → 三入口装配与宿主提示 → 与 CallTool 共用解析的顺序实施。参数恢复后端已落在 PR #323，前端仍按 Runtime 安全投影 → 分类展示的顺序补齐；模型修正继续走普通工具循环。
+SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装配与宿主提示 → 发现和调用一致性验收的顺序实施；生产数据加载与同步另行设计后接入。参数恢复后端已落在 PR #323，前端仍按 Runtime 安全投影 → 分类展示的顺序补齐；模型修正继续走普通工具循环。
 
 1. 更新框架清单、`Skill` / `SearchTools` / `CallTool` 契约及宿主提示词，保留三入口空 profile 语义；
 2. 实现工作区边界、只读工具和受管树链接校验；
@@ -721,7 +731,7 @@ SearchTools 增量按定义快照 → 有界检索 → 三入口装配与宿主�
 4. 实现工厂、不可变上下文和公共 Session；
 5. 迁移 Runtime Host 并删除 CLI 产品入口；
 6. 统一目录 prepare/refresh、Skill/Child 索引和模型解析；
-7. 以同一 `ToolDefinitionSnapshot` 实现 MateToolAdapter、SearchTools 和 CallTool，接入权限、确认与展示；工具数据同步另行设计后接入；
+7. 复用 MateToolResolver 实现 SearchTools 的精确名称披露，并保持代理、发现与 CallTool 的定义一致性及权限边界；数据加载、缓存与同步由后续专题设计后接入；
 8. 迁移 Child Execution 与 Cron 工具；
 9. 删除 Bash/Edit/Write 及专属死代码、任意动态注册、Extension、Loop、旧 delegation 和退役模型入口；
 10. 同步生成镜像并完成全量回归。
@@ -732,6 +742,7 @@ SearchTools 增量按定义快照 → 有界检索 → 三入口装配与宿主�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.18.0 | 2026-09-22 | SearchTools 按唯一工具名精确返回定义，定义一致性作为约束，数据加载与同步另行设计。 |
 | 2.17.0 | 2026-09-22 | Skill 工具改由固定 SearchTools 有界发现，并与 CallTool 共用不可变 Session 定义快照。 |
 | 2.16.1 | 2026-09-22 | 时序图按职责和单一场景表达，细节由正文与专项设计承接。 |
 | 2.16.0 | 2026-09-22 | CallTool 在交互确认前准备并校验业务调用，确认后执行同一不可变快照。 |

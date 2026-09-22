@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.3.0 |
-| 状态 | 目标设计；Skill、CallTool、Agent 代理、确认前可信准备与模型参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、共享定义快照与前端可恢复展示待实现，其余状态见源码证据 |
+| 文档版本 | 3.4.0 |
+| 状态 | 目标设计；Skill、CallTool、Agent 代理、确认前可信准备与模型参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余状态见源码证据 |
 | 更新日期 | 2026-09-22 |
 | CampusClaw 注册与发现核验基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
@@ -13,10 +13,10 @@
 | CampusClaw 压缩修订前基线 | `a7f78fed345a289833970cd7b78399f0e8e51d32` |
 | pi 对照基线 | `5cd93f688aaab89dbb6dfa4aca535f21796ae185` |
 | OpenCode 对照基线 | `fe3f3a41f79ad292cc3c7c629567385a20ec5130`（`dev`，2026-09-22） |
-| Codex 对照基线 | `ac7634b9f73ec1bf96466be7a5869f0949d20b30`（`main`，2026-09-22） |
+| Codex 对照基线 | `89a7298aff55db29f9cb2ad2430e3efe02b7a454`（`main`，2026-09-22） |
 | 上位设计 | [工具系统主设计](README.md) |
 
-目标框架工具共 12 项，Agent 直接关联的业务工具代理不计入此数量。`Skill` 负责加载工作流，`SearchTools` 取代 `ListMateTools` 的模型发现职责，`CallTool` 替代 `CallMateTool` 执行业务操作。Skill、CallTool、代理装配与后端参数恢复已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools 与共享定义快照待实现。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
+目标框架工具共 12 项，Agent 直接关联的业务工具代理不计入此数量。`Skill` 负责加载工作流，`SearchTools` 取代 `ListMateTools` 的模型发现职责，`CallTool` 替代 `CallMateTool` 执行业务操作。Skill、CallTool、代理装配与后端参数恢复已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools 与发现和校验的一致性接线待实现。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
 
 提问工具的精确 Schema、问题/答案与等待边界见 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)。Runtime 默认在 ExitPlanMode、TodoUpdate 后追加它；Child/Cron 不装配，两模式工具定义相同。
 
@@ -32,7 +32,7 @@
 | `Ls` | `List directory contents.` | `PARALLEL` | 排序后的目录项文本 |
 | `Cron` | `Manage scheduled tasks bound to the current managed Agent.` | `SEQUENTIAL` | Job 或 Run 摘要文本 |
 | `Skill` | `Load instructions and resource paths for an available Skill by name.` | `PARALLEL` | 正文、基础目录、抽样资源绝对路径 |
-| `SearchTools` | `Search business tool definitions available through one directly bound Skill. Results do not register tools.` | `PARALLEL` | 少量完整业务工具定义 |
+| `SearchTools` | `Get one complete business tool definition by its exact unique name within the current Agent's trusted Skill bindings. This does not register or execute the tool.` | `PARALLEL` | 单个完整业务工具定义 |
 | `CallTool` | `Call a managed business tool available through a directly bound Skill. Use SearchTools when its definition is needed.` | `SEQUENTIAL` | 业务工具执行结果文本 |
 | `Agent` | `Run one directly bound child Agent and return its final answer.` | `SEQUENTIAL` | Child 最终 Assistant 文本 |
 
@@ -222,7 +222,7 @@ Cron Host 独立设计；当前 JSON 存储、进程内 scheduler 和 OS CLI 调
 
 ## 4. Skill 与受管业务工具
 
-Skill、CallTool、代理、确认前准备与模型参数恢复已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools 与共享 `ToolDefinitionSnapshot` 待实现。工具定义如何同步、刷新及维持跨发布版本一致性留后续设计；不改变 `skill.json` 的位置，不在这里指定远端拉取、single-flight 或自动刷新策略。
+Skill、CallTool、代理、确认前准备与模型参数恢复已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools 及其共用解析接线待实现。定义一致性是调用约束；全量或按需加载、缓存、刷新、版本切换与跨节点同步为后续待设计依赖，见[主设计 §9.2.1](README.md#tool-definition-consistency)。
 
 ### 4.1 `Skill`
 
@@ -258,7 +258,7 @@ Note: file list is sampled.
 
 资源清单只列 Skill 目录内的普通资源文件绝对路径，排除 `SKILL.md`，最多 10 条并明确提示 sampled；不生成用途简介。扫描沿用工作区边界且不跟随符号链接。清单不完整时模型可以使用 `Ls`、`Find`、`Grep` 定位其余普通资源，再用 `Read` 读取。受管目录不生成工具定义 JSON；工具发现统一由 `SearchTools` 承担。
 
-`Skill`、`Read` 都不建立“已激活”状态，也不修改模型 `tools`。Skill 正文描述业务步骤和何时需要某类能力，不需要硬编码每个工具定义或平台内部 ID；宿主提示要求模型先理解正文，在步骤确实需要业务操作时再调用 `SearchTools`。
+`Skill`、`Read` 都不建立“已激活”状态，也不修改模型 `tools`。Skill 正文在对应业务步骤中引用唯一工具名，例如“使用 `query-device-alarm` 查询设备告警”；不需要写入参数 Schema、内部 ID 或 SearchTools/CallTool 的平台协议。模型识别正文中的名称，宿主提示指导模型在需要完整参数定义时调用 `SearchTools`；宿主不新增从正文猜测名称的解析器。
 
 未知名称、不可见或非直接绑定、目录或文件不可读返回 `isError=true`；没有资源文件仍是成功结果。可用条件：当前受管 Agent、可见的直接 Skill 索引、工作区边界和取消域。
 
@@ -268,57 +268,39 @@ Note: file list is sampled.
 {
   "type": "object",
   "properties": {
-    "skillName": {
+    "tool": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 128,
-      "description": "Exact name of one available Skill directly bound to the current Agent."
-    },
-    "query": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 200,
-      "description": "Business capability or exact business tool name to find."
-    },
-    "limit": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 5,
-      "description": "Maximum number of complete definitions to return; omitted means 3."
+      "description": "Exact unique business tool name referenced by the Skill instructions."
     }
   },
-  "required": ["skillName", "query"],
+  "required": ["tool"],
   "additionalProperties": false
 }
 ```
 
-宿主只在 `skillName` 指定的、当前 Agent 直接绑定且对模型可见的 Skill 范围内检索。精确工具名命中时只返回该工具；一般查询使用确定性排序，匹配工具名称、说明、输入字段名和字段说明，分数相同时按工具名称排序。首版不引入向量索引、模型重排或跨 Skill 模糊发现。
+`tool` 与 `CallTool.tool` 使用相同的业务技术名。宿主在当前 Agent 直接绑定 Skill 的可信工具范围内核对名称和可披露性，按原名精确匹配；拒绝纯空白名称，不改写大小写、不模糊匹配、不自动选择相似名称。工具名称唯一，同名同 ID 合并来源，同名不同 ID 明确失败。输入不接受 skillName、query、limit、内部 ID 或 URL。
 
-成功结果是模型可见的 JSON 文本：
+成功结果是一个模型可见的 JSON 文本对象，不增加 matches 数组或分页字段：
 
 ```json
 {
-  "matches": [
-    {
-      "name": "query-device-alarm",
-      "description": "查询园区设备告警",
-      "inputSchema": {
-        "type": "object",
-        "properties": {"deviceId": {"type": "string", "description": "园区设备唯一标识"}},
-        "required": ["deviceId"],
-        "additionalProperties": false
-      }
-    }
-  ],
-  "truncated": false
+  "name": "query-device-alarm",
+  "description": "查询园区设备告警",
+  "inputSchema": {
+    "type": "object",
+    "properties": {"deviceId": {"type": "string", "description": "园区设备唯一标识"}},
+    "required": ["deviceId"],
+    "additionalProperties": false
+  }
 }
 ```
 
-每个匹配项必须包含完整的 `name`、`description` 和 `inputSchema`，不包含工具 ID、Skill ID、版本、权限、凭据或快照 ID。无匹配返回 `matches=[]` 且 `truncated=false`；命中数超过 `limit` 时返回前 `limit` 项并令 `truncated=true`。单个完整定义超过工具结果预算时返回 `isError=true` 的 `TOOL_DEFINITION_TOO_LARGE`，不得返回截断 Schema。
+输出包含完整的 `name`、`description` 和 `inputSchema`（包括所需引用依赖），不包含工具 ID、Skill ID、版本、权限、凭据或快照 ID。该定义只进入模型上下文，不注册代理、不改变后续 `tools`，也不建立激活或授权状态。上下文已有完整定义时可以直接调用；定义遗忘后可以按同一精确名称重新取得。
 
-`SearchTools` 和 `CallTool` 使用同一份不可变 Session `ToolDefinitionSnapshot`。搜索结果只作为上下文数据，不注册业务代理，不改变后续模型请求的 `tools`，也不产生可供授权使用的“已激活”状态。定义已在上下文中时无需重复搜索；定义被压缩或参数反馈标记不完整时，可以精确工具名再次搜索。
+名称未知、未绑定或不可披露均返回安全的名称不可用错误与 `isError=true`，不泄露其他工具清单；冲突、元数据不可取得和 Schema 无效也明确失败。单个完整定义超过工具结果预算时返回 `TOOL_DEFINITION_TOO_LARGE` 与 `isError=true`，不得截断 Schema 或引导模型反复查询同一超大定义。
 
-未知或不可见 Skill、快照不可用、冲突定义和无效 Schema 返回 `isError=true`；空结果不是错误。可用条件：当前受管 Agent、可见直接 Skill 索引、完整 Session 定义快照和取消域。
+SearchTools 与 CallTool 复用可信解析职责，保证已披露定义与本次校验定义一致；具体数据加载、缓存、失效和版本同步机制由后续设计确定，本版不要求完整 Session 目录或全量预加载。可用条件：当前受管 Agent、可信 Skill 工具绑定、定义解析能力和取消域。
 
 ### 4.3 `CallTool`
 
@@ -326,7 +308,7 @@ Note: file list is sampled.
 {
   "type": "object",
   "properties": {
-    "tool": {"type": "string", "description": "Exact business tool name returned by SearchTools for a directly bound Skill."},
+    "tool": {"type": "string", "description": "Exact unique business tool name available through a directly bound Skill."},
     "args": {"type": "object", "description": "Arguments for the selected business tool; omitted means an empty object."}
   },
   "required": ["tool"],
@@ -336,9 +318,9 @@ Note: file list is sampled.
 
 `args` 缺省时归一化为空对象。宿主按可信绑定解析当前 Agent 直接绑定 Skill 的工具；模型不传 Skill、scope、tool ID 或 URL。不解析仅与 Agent 直接关联的业务工具，不转发 `Read`、`Skill`、`Agent` 等框架工具；同一工具同时属于 Agent 和 Skill 时仍须满足 Skill 关联的业务工具范围。
 
-权限与确认继续由 Host before hook 执行；两种入口使用同一可信绑定和 `RuntimeToolPermissionPolicy`。`CallTool` 在进入 hook 前从与 `SearchTools` 相同的 `ToolDefinitionSnapshot` 完成可信解析和业务 Schema 校验，生成不可变的准备快照；hook 只对该快照中的目标作出决定，放行后 `MateToolExecutor` 使用同一工具 ID、定义版本和参数调用 Mate。未知名称、歧义名称、未绑定、无效 Schema 或参数错误均返回 `isError=true`，且不触发用户确认或 Mate execute；权限拒绝发生在参数有效之后。不能依据模型传入的搜索结果扩展可调用范围。是否已加载 Skill 或搜索定义不作为授权条件。
+权限与确认继续由 Host before hook 执行；两种入口使用同一可信绑定和 `RuntimeToolPermissionPolicy`。`CallTool` 在进入 hook 前复用可信解析层完成目标解析，使用与已披露定义一致的业务 Schema 校验参数，生成不可变的准备快照；hook 只对该快照中的目标作出决定，放行后 `MateToolExecutor` 使用同一工具 ID、定义版本和参数调用 Mate。未知名称、歧义名称、未绑定、无效 Schema 或参数错误均返回 `isError=true`，且不触发用户确认或 Mate execute；权限拒绝发生在参数有效之后。不能依据模型传入的搜索结果扩展可调用范围。是否已加载 Skill 或搜索定义不作为授权条件。
 
-准备阶段只能读取当前 Session 的直接 Skill 绑定和定义快照。它不能接受模型提供的 ID、URL 或 Schema，不能调用业务 execute，也不能在确认等待后重新解析目标。该阶段及 `PreparedToolInvocation` 已在 PR #323 开发提交 `ae6645ca` 实现；当前实现仍由 `MateToolResolver` 按需读取和缓存远端定义，尚未收敛为 SearchTools 与 CallTool 共用的不可变快照。
+准备阶段只能在当前 Agent 的可信绑定内解析工具定义。它不能接受模型提供的 ID、URL 或 Schema，不能调用业务 execute，也不能在确认等待后重新解析目标。该阶段及 `PreparedToolInvocation` 已在 PR #323 开发提交 `ae6645ca` 实现；`MateToolResolver` 已有按名称解析及缓存能力，SearchTools 复用接线待实现，当前缓存不代表完整同步与版本一致性已经解决。
 
 实际 Mate execute 只发出一次；超时、断线或业务失败不自动重放。可用条件：当前受管 Agent、可信直接 Skill 工具绑定、共享 Mate 执行能力及当前 Host execution 上下文。
 
@@ -370,11 +352,11 @@ Note: file list is sampled.
 
 `errors[].path` 使用相对当前被校验参数对象的 JSON Pointer，根路径为空字符串；错误文案保留字段与约束，不复制原始敏感参数值。`definition` 必须来自本次校验使用的已注册定义或可信业务解析结果，不能重新查询另一版本。业务 `args` 失败使用业务名称和 Schema；`CallTool` 外层失败使用 `tool="CallTool"` 及固定外层定义，不解析未经准入的业务目标。
 
-完整定义包含必要的字段说明和引用依赖。若超出既有工具输出预算，省略 `definition`，令 `definitionComplete=false` 并附非空 `message` 指引按准确工具名调用 `SearchTools`；不能截断 Schema 或用不完整片段标记为完整。成功结果不回传定义，名称不存在、权限拒绝、Schema 自身无效和远端调用失败不返回本格式。
+完整定义包含必要的字段说明和引用依赖。若错误反馈超出工具输出预算，省略 `definition`，令 `definitionComplete=false` 并附非空 `message`。仅在所选业务工具属于 SearchTools 可披露范围且单独定义能完整返回时，指引按精确工具名调用 SearchTools；框架工具、仅由 Agent 直接绑定的工具或单独定义也超限时，不指引走不可用的发现入口，明确说明限制并停止盲目重试。不能截断 Schema 或将片段标记为完整。成功结果不回传定义，名称不存在、权限拒绝、Schema 自身无效和远端调用失败不返回本格式。
 
 `details.errorCode` 同时保留既有 `TOOL_ARGUMENTS_INVALID`，用于 Runtime 公开错误分类；恢复 JSON 必须进入模型可见的 `content`。公开流与历史仍按既有安全规则生成本地化错误正文，不复制本段 JSON。保存和恢复模型历史应保留这些修正依据。框架统一异常路径须保留错误状态与恢复内容，不能只输出错误码或把携带定义的返回当作成功。
 
-宿主调用说明要求模型根据反馈重新构造参数，不猜测字段、不原样重试；定义未完整提供时按精确工具名调用 `SearchTools`。自动反馈不触发自动执行，不新增发现凭证、help 模式或调用字段；完整执行及展示规则见[主设计 §9.6](README.md#tool-argument-recovery)。
+宿主调用说明要求模型根据反馈重新构造参数，不猜测字段、不原样重试；定义未完整提供时按反馈中的可用恢复路径处理。自动反馈不触发自动执行，不新增发现凭证、help 模式或调用字段；完整执行及展示规则见[主设计 §9.6](README.md#tool-argument-recovery)。
 
 ### 4.4 Agent 直接工具代理
 
@@ -463,6 +445,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.4.0 | 2026-09-22 | SearchTools 仅接收 tool 并返回单个完整定义，移除模糊搜索与全量快照前提。 |
 | 3.3.0 | 2026-09-22 | 增加固定 SearchTools 契约，以同一 Session 定义快照支持有界发现和 CallTool 执行。 |
 | 3.2.0 | 2026-09-22 | CallTool 业务参数校验前移到交互确认之前，并以不可变准备快照衔接授权与执行。 |
 | 3.1.0 | 2026-09-22 | 定义本地参数校验失败的模型恢复结果，保留公共错误分类与业务未执行边界。 |

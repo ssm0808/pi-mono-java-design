@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.45.0 |
+| 文档版本 | 1.46.0 |
 | 更新日期 | 2026-09-22 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -357,18 +357,18 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 模块与主设计 | M03/M05；[工具注册与发现](../02-CampusClaw工具系统/README.md#9-工具注册与发现)维护契约、全局目标类图及验收；本条只解释基线与差异。 |
 | 架构问题 | 远端业务工具如何复用执行能力，同时让 Agent 常规工具直接可用、Skill 工具定义按实际步骤披露？ |
 | OpenCode 观察 | 最新 `dev@fe3f3a4` 的普通 `SkillTool` 仍只返回正文、基础目录和最多 10 个抽样资源路径，后续资源由 read 获取。独立 Code Mode package 的 `prepare/makeSearchTool/searchIndex` 使用固定 `tools.$codemode.search`：预算只影响内联签名，搜索返回完整 path/description/signature，底层工具树不因搜索改变。它不是普通 Skill 的默认工具发现协议。 |
-| Codex 观察 | 最新 `main@ac7634b9` 的 `ToolSearchHandler` 对 deferred 工具建立 BM25 搜索，搜索结果形成可加载 ToolSpec，并按说明暴露给下一次模型调用；缓存按 registry source 变化重建。其 Provider/模型能力和配置条件不构成所有 Agent 的统一规范，CampusClaw 不采用搜索后的动态 tools 暴露。 |
+| Codex 观察 | 2026-09-22 核验 `main@89a7298a` 的 `ToolSearchHandler` 对 deferred 工具建立 BM25 搜索，搜索结果形成可加载 ToolSpec，并按说明暴露给下一次模型调用；缓存按 registry source 变化重建。其 Provider/模型能力和配置条件不构成所有 Agent 的统一规范，CampusClaw 不采用搜索后的动态 tools 暴露。 |
 | DSH 观察 | `apply` 注册 skill(name)，`renderSkillContent` 返回正文与资源基础位置，不枚举文件；`syncTools/createMcpToolDefinition` 将 MCP 定义注册为工具并统一远端调用。校验顺序专项的 `0.1.7-alpha.1` 中，`ToolRuntime.prepareExecution` 先运行 policy/ask，`defineTool.execute` 包装器在 dispatch 后校验参数再进入用户实现。它仍是开发预览；这里只采纳职责分离并作为顺序差异证据，不迁入 Cordis 或 MCP 协议。 |
-| CampusClaw 已观察实现 | PR #323 head `ae6645ca` 已实现 Skill 正文及抽样路径、Agent 元数据代理、CallTool、共用 MateToolExecutor、确认前可信准备和模型参数恢复反馈；GitHub build 成功。当前无 SearchTools，CallTool 文案仍指向 Read；MateToolResolver 按名称延迟读取并缓存远端定义，没有按 Skill 可搜索且与执行共用的不可变定义快照。前端低干扰展示仍待实现。完整路径见[SearchTools 专项证据](../02-CampusClaw工具系统/source-evidence.md#search-tools-evidence)。 |
-| 已确认目标 | Agent 直接关联的业务工具以通用代理提供模型 Schema；Skill 继续加载正文和普通资源。业务步骤需要工具时，由固定 SearchTools 在指定直接 Skill 内返回少量完整定义，再经 CallTool 执行。SearchTools 只返回数据，不动态注册业务工具；SearchTools、Agent 代理和 CallTool 共用不可变 Session 定义快照。CallTool 继续在确认前校验，确认后执行同一准备快照。 |
-| 差异分类 | 产品约束：不引入 Bash 或可执行脚本，Skill 工具按需披露，无效业务参数不触发园区用户确认。架构变更：采用 OpenCode Code Mode 的固定搜索入口思路，但保留独立 CallTool；不采用 Codex 搜索后向下一次请求暴露匹配工具的语义。安全加固：搜索和执行共用可信快照，确认前后固定目标与参数。 |
-| 收益与代价 | 初始工具集合保持“框架工具＋Agent 直接代理”，多轮搜索不会累积代理；定义发现不依赖 Skill 目录生成文件，并可按业务意图或精确名称重搜。代价是增加一个固定框架工具、搜索索引与快照生命周期；首次使用仍多一次模型工具调用，搜索结果仍会被上下文压缩，没有已验证的时延或准确率收益。 |
+| CampusClaw 已观察实现 | PR #323 head `ae6645ca` 已实现 Skill 正文及抽样路径、Agent 元数据代理、CallTool、共用 MateToolExecutor、确认前可信准备和模型参数恢复反馈；GitHub build 成功。当前无 SearchTools，CallTool 文案仍指向 Read；MateToolResolver 按可信名称解析和缓存，已有重名冲突检查，尚未接入 SearchTools 的定义披露。前端低干扰展示仍待实现。完整路径见[SearchTools 专项证据](../02-CampusClaw工具系统/source-evidence.md#search-tools-evidence)。 |
+| 已确认目标 | Agent 直接工具以代理提供模型 Schema；Skill 正文引用唯一业务工具名。需要定义时用 SearchTools({tool}) 精确取得单个完整定义，再由 CallTool 执行。发现只返回数据、不注册工具；复用可信解析，保证披露与校验定义一致，确认后执行同一准备结果。全量或按需加载、缓存与版本同步不在本版指定。 |
+| 差异分类 | 产品约束：不引入 Bash 或可执行脚本，Skill 工具按需披露，无效业务参数不触发园区用户确认。架构变更：采用 OpenCode Code Mode 的固定搜索入口思路，但保留独立 CallTool；不采用 Codex 搜索后向下一次请求暴露匹配工具的语义。安全加固：发现和执行按可信绑定解析，校验定义与披露一致，确认前后固定目标与参数。名称精确匹配属于 CampusClaw 产品约束，不照搬基线的模糊搜索。 |
+| 收益与代价 | 初始工具集合保持“框架工具＋Agent 直接代理”，多次发现不会累积代理，也不依赖工具定义文件。唯一名称可复用已有解析能力；代价是 Skill 正文需准确引用工具名，定义首次获取仍增加一次模型工具调用，结果仍可能被压缩，加载与同步还需独立设计。没有已验证的时延或准确率收益。 |
 | 范围与重评 | 数据同步、刷新及版本一致性另行设计。若未来 Provider 原生延迟工具暴露具有明确的工具上限、替换语义和跨轮回收保证，再评估 Codex 式动态暴露；当前不把搜索结果加入模型 tools。 |
-| 状态与验收 | Skill、CallTool、Agent 代理、确认前准备和模型参数反馈已在上述 Draft PR 实现，不能据此声称主线或端到端验收完成；SearchTools、共享定义快照、profile/提示词和前端展示待实现。验收应证明多轮搜索不改工具集合、搜索与调用定义一致、参数失败不确认不执行、确认后使用同一准备快照，以及两类执行入口共用授权规则；文档校验不代表产品验收。 |
+| 状态与验收 | Skill、CallTool、Agent 代理、确认前准备和模型参数反馈已在上述 Draft PR 实现，不能据此声称主线或端到端验收完成；SearchTools、定义一致性接线、profile/提示词和前端展示待实现。验收应证明多轮搜索不改工具集合、搜索与调用定义一致、参数失败不确认不执行、确认后使用同一准备快照，以及两类执行入口共用授权规则；文档校验不代表产品验收。 |
 
-**讲解要点。** CampusClaw 保留 OpenCode 普通 Skill 的正文加载方式，并借鉴 Code Mode 的固定搜索入口：Agent 直接工具进入模型工具集合，Skill 工具在业务步骤需要时搜索定义，再通过固定 CallTool 执行。它避免搜索后的动态注入和工具累计，代价是新增搜索与快照职责；同步设计和实现验收仍待完成。
+**讲解要点。** CampusClaw 保留 Skill 正文加载与工具定义披露的分工。正文说明准确工具名，需要时通过固定 SearchTools 取得单个定义，再通过 CallTool 执行。它借鉴固定发现入口，但采用自身的唯一名称约束，无需模糊搜索或动态注入；数据同步另行设计，不能把共享解析等同于全量快照。
 
-**参数恢复专项。** pi 最新默认 main `95fbc04997eaee961eb673fa7923e9220609ebd5` 的 `prepareToolCall` 先准备和校验参数，再进入 `beforeToolCall`；校验错误作为 `isError=true` 的工具结果加入上下文，通常继续模型循环。DSH 最新默认 master `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61` 则先运行 policy/ask，再由 `defineTool` 包装器校验后进入用户实现，表明不存在一条所有基线共同采用的固定顺序。两者都阻止无效参数进入实际业务实现，但只有 pi 的顺序满足 CampusClaw“无效参数不触发交互确认”的目标。完整证据见[M03 证据 §12](../02-CampusClaw工具系统/source-evidence.md#tool-validation-order-evidence)。
+**参数恢复专项。** pi 在 §12 核验的默认 main `95fbc04997eaee961eb673fa7923e9220609ebd5` 的 `prepareToolCall` 先准备和校验参数，再进入 `beforeToolCall`；校验错误作为 `isError=true` 的工具结果加入上下文，通常继续模型循环。DSH 在 §12 核验的默认 master `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61` 则先运行 policy/ask，再由 `defineTool` 包装器校验后进入用户实现，表明不存在一条所有基线共同采用的固定顺序。两者都阻止无效参数进入实际业务实现，但只有 pi 的顺序满足 CampusClaw“无效参数不触发交互确认”的目标。完整证据见[M03 证据 §12](../02-CampusClaw工具系统/source-evidence.md#tool-validation-order-evidence)。
 
 CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可变准备快照；这是 Runtime 架构变更和 ToB 产品约束。PR #323 已实现准备阶段和[首次失败的定义反馈](../02-CampusClaw工具系统/README.md#tool-argument-recovery)；前端将明确未执行业务的参数错误[中性折叠展示](../../07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)，该展示仍待实现。保留失败事实、独立调用身份和后续正常权限检查，不自动改参数重试。代价是额外定义文本、模型轮次与展示分类；准确率和时延收益未实测。
 
@@ -523,6 +523,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.46.0 | 2026-09-22 | A11 收敛为唯一工具名精确披露，保留调用一致性约束并将加载和同步机制留给后续设计。 |
 | 1.45.0 | 2026-09-22 | A11 采用固定 SearchTools 返回定义数据，并与 CallTool 共用不可变 Session 定义快照。 |
 | 1.44.1 | 2026-09-22 | M05 按 53eff85c 更新命令实现状态，保留结构、版本快照、统计与公共桥接差距。 |
 | 1.44.0 | 2026-09-22 | 增加 A14 调度基线对比，区分托管 Cron、Session 内提醒、持久化 Task 和外部 Workflow。 |
