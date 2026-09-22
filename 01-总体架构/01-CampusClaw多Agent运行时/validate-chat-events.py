@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from request_header_contract import validate_request_headers as check_request_headers
-from render_chat_http_v1 import resolve_entry
+from render_chat_http_v1 import resolve_entry, contract_text, replace_contract_text
 
 import copy
 import importlib.util
@@ -377,7 +377,7 @@ def validate_model(model: dict) -> None:
     for clause in ("停止请求提交成功后", "数据库轮询兜底保留", "固定内部执行身份是等待结果的去重键",
                    "先登记等待再补读已提交终态", "同一终态每条响应最多投递一次",
                    "慢连接互不阻塞", "不删除停止请求或终态", "不预先冻结具体索引"):
-        require(clause in operation["description"] and clause in review["notice"],
+        require(clause in contract_text(operation) and clause in review["notice"],
                 f"missing visible M7 consistency rule: {clause}")
     body = operation["requestBody"]
     require(body["required"] and body["contentType"] == "application/json", "union request must remain JSON")
@@ -444,17 +444,17 @@ def validate_model(model: dict) -> None:
     require(receipt_types == USER_EVENT_TYPES and all_types == STREAM_TYPES, "missing receipt or basic output examples")
     require(review.get("confirmedChoices") == CONFIRMED_CHOICES,
             "preserve exact confirmed transport/receipt/closing/S1/S2/L5/L6/L7/L8/L9/L10")
-    require("agent.message 在 phase=completed 时的 content 使用完整正文字符串" in operation["description"] and "L5 已确认" in review["notice"],
+    require("agent.message 在 phase=completed 时的 content 使用完整正文字符串" in contract_text(operation) and "L5 已确认" in review["notice"],
             "completed content approval must be visible in POST")
-    require("agent.tool_call.arguments 使用 JSON 对象" in operation["description"] and "L6 已确认" in review["notice"],
+    require("agent.tool_call.arguments 使用 JSON 对象" in contract_text(operation) and "L6 已确认" in review["notice"],
             "tool arguments approval must be visible in POST")
-    require("agent.tool_result.content 使用内容块数组" in operation["description"] and "L7 已确认" in review["notice"],
+    require("agent.tool_result.content 使用内容块数组" in contract_text(operation) and "L7 已确认" in review["notice"],
             "tool result array approval must be visible in POST")
-    require("agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块" in operation["description"] and "L8 已确认" in review["notice"],
+    require("agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块" in contract_text(operation) and "L8 已确认" in review["notice"],
             "text-only tool result approval must be visible in POST")
-    require("Mate 调用保留 toolName=CallMateTool" in operation["description"] and "L9 已确认" in review["notice"],
+    require("Mate 调用保留 toolName=CallMateTool" in contract_text(operation) and "L9 已确认" in review["notice"],
             "Mate Runtime wrapper approval must be visible in POST")
-    require("每条 agent.tool_result 都返回 isError 布尔值" in operation["description"] and "L10 已确认" in review["notice"],
+    require("每条 agent.tool_result 都返回 isError 布尔值" in contract_text(operation) and "L10 已确认" in review["notice"],
             "tool result boolean outcome approval must be visible in POST")
     require(set(review["confirmedEventTypes"]) == STREAM_TYPES, "confirmed output type names changed")
     require(review["questions"] == [], "do not reopen confirmed choices")
@@ -466,9 +466,9 @@ def validate_model(model: dict) -> None:
     require("数据库中断机制已确认" in review["status"], "database interruption approval must be visible")
     for clause in ("同一短事务中绑定具体内部执行", "批量检查本机活动执行的停止请求",
                    "同一条权威结束事件", "当前仅依赖数据库", "Redis 仅在后续有必要时评估"):
-        require(clause in operation["description"], f"missing database interruption constraint: {clause}")
+        require(clause in contract_text(operation), f"missing database interruption constraint: {clause}")
     require("检查周期" in " ".join(review["implementationCalibration"]), "polling interval needs implementation calibration")
-    require("等待工具确认时也关闭" in operation["description"], "confirmation wait must also close the response")
+    require("等待工具确认时也关闭" in contract_text(operation), "confirmation wait must also close the response")
     require(operation.get("credentialPolicy", {}).get("requestHeadersRequired") is False,
             "credential Header policy must remain optional")
     require(operation["credentialPolicy"].get("clawChecksCredentialCompleteness") is False,
@@ -504,10 +504,8 @@ def validate_negative_regressions(model: dict) -> int:
     changed("stale required notice", lambda m: m["review"].update(notice=m["review"]["notice"] + " 五种用户事件均必须携带 access-token"))
     changed("reopened receipt", lambda m: m["review"].update(questions=[{"id": "M2-receipt"}]))
     changed("reopened product gate", lambda m: m["review"].update(pendingReview=["whole approval"]))
-    changed("missing database decision", lambda m: m["operation"].update(
-        description=m["operation"]["description"].replace("当前仅依赖数据库", "当前依赖 Redis")))
-    changed("missing fixed target", lambda m: m["operation"].update(
-        description=m["operation"]["description"].replace("同一短事务中绑定具体内部执行", "按最新执行绑定")))
+    changed("missing database decision", lambda m: replace_contract_text(m["operation"], "当前仅依赖数据库", "当前依赖 Redis"))
+    changed("missing fixed target", lambda m: replace_contract_text(m["operation"], "同一短事务中绑定具体内部执行", "按最新执行绑定"))
     changed("missing M7 status", lambda m: m["review"].update(
         status=m["review"]["status"].replace("中断查询优化已确认", "待定")))
     changed("missing M7 model", lambda m: m["review"].pop("interruptOptimization"))
@@ -515,10 +513,10 @@ def validate_negative_regressions(model: dict) -> int:
         changed(f"changed M7 {field}", lambda m, key=field, original=value:
                 m["review"]["interruptOptimization"].update({key: 500 if original is None else "unconfirmed"}))
         changed(f"missing M7 {field}", lambda m, key=field: m["review"]["interruptOptimization"].pop(key))
-    for field in ("description", "notice"):
-        section = "operation" if field == "description" else "review"
-        changed(f"missing visible M7 in {field}", lambda m, key=field, area=section: m[area].update(
-            {key: m[area][key].replace("先登记等待再补读已提交终态", "只等待通知")}))
+    changed("missing M7 detail", lambda m: replace_contract_text(
+        m["operation"], "先登记等待再补读已提交终态", "只等待通知"))
+    changed("missing M7 review record", lambda m: m["review"].update(
+        notice=m["review"]["notice"].replace("先登记等待再补读已提交终态", "只等待通知")))
     for choice in CONFIRMED_CHOICES:
         changed(choice, lambda m, key=choice: m["review"]["confirmedChoices"].update({key: "unconfirmed"}))
     original = model["operation"]["responses"][0]["bodies"]["default"]
@@ -681,19 +679,19 @@ def validate_history_model(model: dict, post: dict) -> None:
     batch = review["batchReview"]
     require(batch["status"] == "confirmed" and batch["version"] == "2026-09-08.1" and batch.get("confirmedBy"), "record actual batch approval")
     require([item["id"] for item in batch["items"]] == [f"B{i:02}" for i in range(1, 16)], "retain all fifteen semantic decisions")
-    require("agent.message 在 phase=completed 时的 content 使用完整正文字符串" in operation["description"] and "L5 已确认" in review["notice"],
+    require("agent.message 在 phase=completed 时的 content 使用完整正文字符串" in contract_text(operation) and "L5 已确认" in review["notice"],
             "completed content approval must be visible in history")
-    require("agent.tool_call.arguments 使用 JSON 对象" in operation["description"] and "L6 已确认" in review["notice"],
+    require("agent.tool_call.arguments 使用 JSON 对象" in contract_text(operation) and "L6 已确认" in review["notice"],
             "tool arguments approval must be visible in history")
-    require("agent.tool_result.content 使用内容块数组" in operation["description"] and "L7 已确认" in review["notice"],
+    require("agent.tool_result.content 使用内容块数组" in contract_text(operation) and "L7 已确认" in review["notice"],
             "tool result array approval must be visible in history")
-    require("agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块" in operation["description"] and "L8 已确认" in review["notice"],
+    require("agent.tool_result.content[] 仅包含 type=text、text 字符串的内容块" in contract_text(operation) and "L8 已确认" in review["notice"],
             "text-only tool result approval must be visible in history")
-    require("Mate 调用保留 toolName=CallMateTool" in operation["description"] and "L9 已确认" in review["notice"],
+    require("Mate 调用保留 toolName=CallMateTool" in contract_text(operation) and "L9 已确认" in review["notice"],
             "Mate Runtime wrapper approval must be visible in history")
-    require("每条 agent.tool_result 都返回 isError 布尔值" in operation["description"] and "L10 已确认" in review["notice"],
+    require("每条 agent.tool_result 都返回 isError 布尔值" in contract_text(operation) and "L10 已确认" in review["notice"],
             "tool result boolean outcome approval must be visible in history")
-    for clause in ("普通分页：page 从 1 开始", "不再固定快照", "跨页保持相同 limit", "不按 createdAt 重排",
+    for clause in ("普通分页：page 从 1 开始", "不固定快照", "跨页保持相同 limit", "不按 createdAt 重排",
                    "每页读取该次查询可见的 Session 完整事件", "本接口不承诺自动检测跨页变化",
                    "允许 Session running 时查询", "nextPage=null 仅表示本次查询没有下一页",
                    "省略 limit 时返回最多 50 条，允许 1～200", "result 只含 events 和 nextPage，不返回 total",
@@ -701,7 +699,7 @@ def validate_history_model(model: dict, post: dict) -> None:
                    "不掩盖非法参数或读取失败",
                    "不能用某条历史 idle 判定现在可提交 M2",
                    "每页重新检查访问边界", "配置变更、压缩、Usage"):
-        require(clause in operation["description"], f"missing visible history boundary: {clause}")
+        require(clause in contract_text(operation), f"missing visible history boundary: {clause}")
     complete = complete_streams(post)
     expected = {
         "200-first-page": complete["200-message"][:2],
@@ -821,8 +819,8 @@ def validate_history_regressions(model: dict, post: dict) -> int:
         lambda m: m["operation"]["responses"][3]["bodies"]["default"]["result"]["events"].append(
             m["operation"]["responses"][3]["bodies"]["default"]["result"]["events"][-1]),
         lambda m: m["operation"]["responses"][-1]["bodies"]["zh-CN"].update(result=None),
-        lambda m: m["operation"].update(description=m["operation"]["description"].replace(
-            "不能用某条历史 idle 判定现在可提交 M2", "历史 idle 允许新消息")),
+        lambda m: replace_contract_text(m["operation"],
+            "不能用某条历史 idle 判定现在可提交 M2", "历史 idle 允许新消息"),
     ]
     for index, edit in enumerate(edits):
         candidate = copy.deepcopy(model)

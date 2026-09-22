@@ -15,7 +15,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from render_chat_http_v1 import build_operation_html, load_contract
+from render_chat_http_v1 import build_operation_html, load_contract, contract_text
 from command_catalog_contract import validate_catalog_examples
 from command_response_contract import validate_response_reuse
 from help_review_projection import load_help_model
@@ -362,7 +362,7 @@ def validate_response_contract(
                 "Command execution must reflect unified Builtin and Skill ownership")
         for phrase in ("只在内存中保留到本次命令处理", "Mate tool execute",
                        "不写入 Session、事件或日志", "工具发现", "Active Holder"):
-            require(phrase in operation["description"], f"Missing credential boundary: {phrase}")
+            require(phrase in contract_text(operation), f"Missing credential boundary: {phrase}")
         require(set(operation["requestBody"]["example"]) == {"name", "arguments"},
                 "POST Command request must contain only name and arguments")
         for phrase in ("262144", "fileIds", "If-Match", "Idempotency-Key"):

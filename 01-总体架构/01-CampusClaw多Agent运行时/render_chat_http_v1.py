@@ -264,6 +264,18 @@ def render_static(model: dict[str, Any], *, expand_details: bool = False) -> str
     )
 
 
+def contract_text(operation: dict) -> str:
+    """Read detailed rules without coupling them to the purpose paragraph."""
+    return json.dumps(operation.get("contractSections", []), ensure_ascii=False)
+
+
+def replace_contract_text(operation: dict, old: str, new: str) -> None:
+    """Mutate detailed rules for negative contract checks."""
+    encoded = contract_text(operation)
+    require(old in encoded, f"Missing contract regression fixture: {old}")
+    operation["contractSections"] = json.loads(encoded.replace(old, new))
+
+
 def encode_models(models: list[dict[str, Any]]) -> str:
     encoded = json.dumps(models, ensure_ascii=False, separators=(",", ":"))
     return encoded.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")

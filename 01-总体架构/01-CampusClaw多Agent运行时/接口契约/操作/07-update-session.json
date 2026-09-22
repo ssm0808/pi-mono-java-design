@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/sessions/{sessionId}",
     "summary": "统一更新 Session 名称、模型、思考和工作模式",
-    "description": "按明确提交的 displayName、modelId、thinking、mode 部分更新同一 Session，允许单字段或多字段组合。当前前端每次选择器或重命名操作仅提交对应一个字段，接口不限制为只能提交一项。所有字段先校验、再在同一行锁事务中提交；任何字段失败整笔回滚，禁止依次调用旧修改接口。仅 displayName 请求在 idle/running 均可用；只要携带 modelId、thinking 或 mode，即使值相同也要求 idle，否则 SESSION_BUSY。请求使用 If-Match 保护同一资源版本；真实变化只增加一次 resourceVersion 并更新一次 updatedAt。模型、思考、模式实际变化按顺序追加 session.model_changed、session.thinking_changed、session.mode_changed；名称不写入 Session Entry。全部无变化返回原 Session 和 ETag。成功不启动模型、不批准计划，也不排队；既有思考原文不因关闭 thinking 而隐藏。",
+    "description": "部分更新指定会话的名称、模型、思考开关或工作模式，返回更新后的完整会话与 ETag。支持一次提交多个字段并原子生效；仅修改名称时允许运行中调用，修改执行配置要求会话空闲。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -546,7 +546,7 @@
           ],
           [
             "历史",
-            "按 model → thinking → mode 顺序只追加实际变化。显式 thinking 的 reason=requested；省略后自动关闭为 modelCapability。直接模式更新 reason=requested；不产生名称事件。"
+            "按 model → thinking → mode 顺序只追加实际变化。显式 thinking 的 reason=requested；省略后自动关闭为 modelCapability。直接模式更新 reason=requested；名称不写入 Session Entry。"
           ],
           [
             "响应",

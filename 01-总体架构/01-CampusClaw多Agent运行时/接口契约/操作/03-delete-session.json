@@ -5,7 +5,7 @@
     "method": "DELETE",
     "path": "/sessions/{sessionId}",
     "summary": "删除 Runtime Session",
-    "description": "幂等逻辑删除 idle Session，并在同一事务中写入只含数据库列 session_id、deleted_at 的永久 tombstone 和短期异步清理任务。Session 存在 active execution 时不自动中止，而是返回 409 SESSION_BUSY；调用方应通过 POST Events 提交 user.interrupt，确认目标实际停止后再重试删除；中断回执、等待确认的 idle 或连接关闭均不代表停止成功。删除事务仍需复核 Session 空闲。成功返回 204，重复删除同样返回 204。",
+    "description": "删除已空闲的会话。运行中的会话返回冲突，实际停止后可以重试；重复删除同一会话返回 204。",
     "parameters": [
       {
         "$ref": "parameters.sessionId",

@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}",
     "summary": "读取 Session 当前资源",
-    "description": "按 sessionId 只读获取已存在 Session 的当前默认配置、粗粒度运行状态和从创建至今原子累计的 lifetimeUsage。Token 字段为 input/output/cacheRead/cacheWrite/totalTokens，USD Cost 字段为 input/output/cacheRead/cacheWrite/total。该接口不创建或恢复 Session，不调用模型，也不实时校验 Model Manager。state 仅表达 Session 当前是 idle 还是 running；thinking 是是否对后续用户消息启用深度思考的布尔开关。历史中的 agent.thinking 可见性以 Session Events 契约为准，不由本接口定义另一套历史事件。 既有思考原文按当前访问权限读取，不因后续 thinking 开关隐藏；模型/思考真实变更写入 Session Events 的完整配置事件。同值无事件的规则不变。 mode 是必填的 plan/build 工作模式，与 state 独立；创建时复制已发布 Agent.mode，旧元数据缺少 mode 时兼容 build；已有 Session 不因 Agent 更新或刷新改变模式，创建请求不接受 mode；修改使用统一 POST Session。",
+    "description": "查询指定会话的当前配置、运行状态和累计用量，供客户端展示会话信息和核对状态。",
     "parameters": [
       {
         "$ref": "parameters.sessionId",

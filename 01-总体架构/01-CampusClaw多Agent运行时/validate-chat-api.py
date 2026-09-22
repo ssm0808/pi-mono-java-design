@@ -94,6 +94,7 @@ def main():
     parser.add_argument("--full", action="store_true")
     args = parser.parse_args()
     for command in (
+        ["../../scripts/check-api-purposes.py"],
         ["render_chat_api.py", "--check"],
         ["validate-chat-http-v1.py", *(["--full"] if args.full else [])],
         ["validate-chat-events.py"],

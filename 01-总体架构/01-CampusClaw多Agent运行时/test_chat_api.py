@@ -265,6 +265,17 @@ class OperationPresentationTest(unittest.TestCase):
             with self.subTest(text=text), self.assertRaisesRegex(ValueError, "purpose"):
                 current.validate_operation_presentation({"operationKey": "ListSessionCommands", "description": text})
 
+    def test_all_current_interface_purposes_follow_the_same_rule(self):
+        spec = importlib.util.spec_from_file_location(
+            "all_api_purposes", current.ROOT.parents[1] / "scripts/check-api-purposes.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.validate(), 23)
+        for text in ("已确认的接口", "本轮修改说明", "PR #295 中实现"):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                module.check_purpose({"description": text}, "fixture")
+        module.check_purpose({"description": "提交工具确认并返回确认结果。"}, "fixture")
+
     def test_business_confirmation_is_still_valid_prose(self):
         current.validate_operation_presentation({"operationKey": "SubmitSessionEvent",
                                                  "description": "提交工具确认，确认实际停止后可发送新消息。"})

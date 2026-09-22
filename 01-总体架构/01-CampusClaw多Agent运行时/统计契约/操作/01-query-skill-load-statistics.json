@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/internal/skills/load-statistics/query",
     "summary": "按指定 Skill ID 查询累计或精确时间范围内的激活次数",
-    "description": "按指定 skillIds 批量查询激活次数；可选 from/to 限定时间范围，不返回排名、趋势或 scope。统计允许漏计，不代表模型遵循指令或业务成功。",
+    "description": "按 Skill 标识批量查询激活次数和最近激活时间，支持按时间范围筛选。统计反映 Skill 加载情况，不表示业务执行成功。",
     "parameters": [
       {
         "$ref": "parameters.acceptLanguage"

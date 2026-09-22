@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.19.0 |
+| 文档版本 | 1.20.0 |
 | 更新日期 | 2026-09-22 |
-| 变更性质 | 命令描述符使用 type/hints；输入控件、状态与附件规则分开 |
+| 变更性质 | 全量接口用途文案与详细规则分离；命令清单仅保留标准请求/响应 |
 | 唯一当前入口 | [当前十项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
 
@@ -39,8 +39,9 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 
 | 要查的内容 | 入口 |
 |---|---|
-| 描述符 type/hints 字段、各命令 idle/running 形态、交互调用例子 | [查看会话命令清单](chat-api-review.html#ListSessionCommands)的字段表与调用速查 |
-| 七个 Builtin 与 Skill 的完整请求、成功和失败响应 | [执行会话命令](chat-api-review.html#ExecuteSessionCommand)；清单页的示例索引列出对应响应标签 |
+| 命令清单的请求与响应 | [查看会话命令清单](chat-api-review.html#ListSessionCommands) |
+| 描述符字段、状态过滤与交互规则 | [Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#command-state-rules) |
+| 七个 Builtin 与 Skill 的完整请求、成功和失败响应 | [执行会话命令](chat-api-review.html#ExecuteSessionCommand) |
 | zh-CN 仍返回英文描述的源码依据与契约缺口 | [Slash 语言专项核对](../../04-命令与技能/00-Slash-Command通用模块/README.md#331-清单字段与语言专项核对) |
 | Help 的 Agent 元数据、缓存与纯文本展示 | [Help 专项](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) |
 
@@ -58,7 +59,11 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 
 `operation.summary` 简述操作，`operation.description` 描述用途、输入结果及调用边界，
 不写“已确认”“已评审”、PR 过程或实施进度。确认状态留在 review/catalog 元数据，源码和实现差距留在 Markdown。
-参数细节、示例和能力表继续放在 operation 的对应栏目。该规则不删除“工具确认”“确认停止”等业务动作。
+参数细节与示例放在对应栏目，执行和恢复约束放在契约表格或所属设计。该规则不删除“工具确认”“确认停止”等业务动作。
+
+同一文案规则覆盖 Runtime、Mate 公共命令、Mate 公共 Events、模型代理和附件接口，以及其 OpenAPI/Help 投影；不只检查当前正在修改的一项。命令清单页不展示额外字段说明、调用速查、控件规则、响应索引或实现状态区块；字段与交互规则链接 Slash 主设计，标准请求/响应继续直接展示。
+
+此次文案核对基线为设计仓 `cb6a2854dc3483814efffe0c10db4f04e51b509f`，范围为全部 20 个当前 HTTP 操作（15 份 JSON 与 8 份 OpenAPI 操作投影，其中 3 项重复投影）。Java/Agent 基线、业务 Schema、评审状态和实现状态没有随文案更新；沿用各专题已注明的证据。
 
 ### 2.2 单一维护职责
 
@@ -84,6 +89,7 @@ Mate 公共 Events 和 FollowUp 未来专题各有独立职责，本次不退役
 修改精确模型或增删已获批准的接口后，统一执行：
 
 ```bash
+python3 ../../scripts/check-api-purposes.py
 python3 render_chat_api.py
 python3 ../../04-命令与技能/01-内置命令/Help-Agent使用指南/render_help_review.py
 python3 validate-chat-api.py --full
@@ -100,6 +106,8 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 页面沿用既有视觉语言：只在主动展开时挂载一个接口，滚动不触发渲染，关闭再打开保留选项；
 接口内部的请求头、参数、请求示例、契约说明和响应直接显示，无需逐栏展开；响应状态、语言和调用上下文继续使用标签切换。
 禁用 JavaScript 或渲染失败时，原生接口内部的 details 默认展开。锚点直接定位对应操作。
+
+本次展示整理验证：全量用途检查覆盖 23 份操作展示，66 项回归、Events 负向校验、Mate 两个专题校验和 Runtime 十项 DOM 交互通过；14 份修改操作模型的请求、响应、Header、错误及 review 与整理前逐字段一致。全仓链接校验仍受 `学习/` 中既有失效 PlantUML 链接阻塞；未修改该目录。旧措辞校验还会把源码证据中的“同目录”误判为禁止的“命令目录”，该既有校验问题未扩大到本次修改。未完成浏览器桌面及 360px 视觉验收，DOM 检查不代表视觉验收。此次不修改 PlantUML 或 SVG，架构对比结论不变。
 
 ## 4. 源码边界
 
@@ -119,6 +127,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.20.0 | 2026-09-22 | 全部当前接口的作用只描述功能，命令清单删除额外说明区块并保留标准示例。 |
 | 1.19.0 | 2026-09-22 | 命令描述符使用 type 与 hints，输入控件、状态和附件规则分别维护。 |
 | 1.18.0 | 2026-09-22 | operationKey 统一大驼峰，接口作用移除评审措辞并补齐命令交互与附件边界。 |
 | 1.17.1 | 2026-09-22 | 命令清单直接展示字段、调用和响应示例索引，并标明描述语言差异。 |

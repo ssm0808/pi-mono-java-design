@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service General Chat Events API",
-    "version": "1.6.0",
+    "version": "1.6.1",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 已确认 · 待实现"
   },
@@ -9,7 +9,7 @@
     "method": "POST",
     "path": "/chats/{chatId}/events",
     "summary": "提交一条用户事件",
-    "description": "向指定 Chat 提交一项用户操作：发送消息、中断当前执行，或回复工具调用确认。服务端接收并保存事件后，在 result.event 中返回与历史记录一致的完整用户事件；Agent 的后续输出仍从实时流或历史查询获取。一次请求只接受一个事件；提交 interrupt 后，必须等待 chat.status_idle(reason=terminated) 再发送新消息。POST 响应丢失时应查询权威历史，禁止盲目重放。",
+    "description": "向指定 Chat 提交消息、中断或工具确认，返回已保存的完整用户事件。Agent 的后续输出通过实时流或历史查询获取。",
     "authModes": [
       {
         "id": "jwt",

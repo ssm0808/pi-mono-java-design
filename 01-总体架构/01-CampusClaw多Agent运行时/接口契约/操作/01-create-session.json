@@ -5,7 +5,7 @@
     "method": "POST",
     "path": "/agents/{agentId}/sessions",
     "summary": "创建 Runtime Session",
-    "description": "根据 agentId 创建一个全新的 Runtime Session。CampusClaw 生成 sessionId，直接从受控 agent/{agentId}/.campusclaw/ 目录读取 settings.json、SYSTEM.md 和 skills/，从同一目录快照解析并校验默认模型和 mode，然后完成 Session 持久化；AgentSession 在首次执行时惰性初始化。该操作无请求体，不调用模型、不启动执行，也不消耗 token；每次成功 POST 都创建新 Session，默认 thinking=true，lifetimeUsage 的 Token 与 USD Cost 明细全部为零。 mode 是必填的 plan/build 工作模式，与 state 独立；创建时复制已发布 Agent.mode，旧元数据缺少 mode 时兼容 build；已有 Session 不因 Agent 更新或刷新改变模式，创建请求不接受 mode；修改使用统一 POST Session。Agent.mode=plan 时创建前检查有效 Runtime profile 的 ExitPlanMode 能力，缺失返回 PLAN_MODE_UNAVAILABLE；不创建 Agent 执行对象。",
+    "description": "为指定 Agent 创建并保存一个新会话，返回会话标识、初始配置和用量。创建时不调用模型，首次提交消息后开始执行。",
     "parameters": [
       {
         "$ref": "parameters.agentId"

@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/chats/{chatId}/commands",
     "summary": "列出当前 Chat 的命令",
-    "description": "返回当前 Chat 对应会话的命令名称、类别、用途与参数提示，供前端展示 Slash 清单。描述符与 Runtime 保持同形；按固定 Builtin 顺序及 Skill 名称排序，并根据会话状态过滤命令。hints 仅供展示，不代表修改权限或附件能力。",
+    "description": "查询指定 Chat 的可用命令，返回名称、类别、用途和参数提示，供客户端展示 Slash 命令列表。",
     "parameters": [
       {
         "$ref": "parameters.chatId"
@@ -251,44 +251,6 @@
             "resMsg": "The command catalog is temporarily unavailable."
           }
         }
-      }
-    ],
-    "contractSections": [
-      {
-        "title": "命令描述符字段",
-        "description": "result.commands 为命令数组。描述符用于发现和展示；实际执行参数由 ExecuteSessionCommand 定义。",
-        "columns": [
-          "字段",
-          "类型 / 必填",
-          "含义与省略规则"
-        ],
-        "rows": [
-          [
-            "name",
-            "string / 必填",
-            "不带前导 /；Builtin 裸名或 skill:<name>，用于精确标识命令。"
-          ],
-          [
-            "type",
-            "string / 必填",
-            "命令类别，仅 builtin 或 skill；不表示控件类型或业务响应类型，必须与 name 的命名空间一致。"
-          ],
-          [
-            "description",
-            "string / 必填",
-            "非空的命令用途说明；描述语言与当前实现差异见下表。"
-          ],
-          [
-            "hints",
-            "string[] / 可省略",
-            "有序参数提示列表，各项为非空文本；无提示可省略或返回 []，不返回 null。仅供展示，不解析成 Schema、枚举、必填规则或权限；idle/running 下相同命令的提示保持一致。"
-          ],
-          [
-            "不公开的字段",
-            "不返回",
-            "kind、input、acceptsFiles、acceptsArguments、available、unavailableCode、allowedValues、catalogVersion；内部准入 DTO 不直接序列化。"
-          ]
-        ]
       }
     ]
   },
