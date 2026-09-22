@@ -1,11 +1,11 @@
 {
   "operation": {
     "shortName": "查看聊天命令清单",
-    "operationKey": "listChatCommands",
+    "operationKey": "ListChatCommands",
     "method": "GET",
     "path": "/chats/{chatId}/commands",
-    "summary": "查看轻量命令清单（字段投影已确认，公共边界待重审）",
-    "description": "GET Descriptor 字段投影已确认，按当前 Runtime 轻量清单同步：必填 name/kind/description，可选 input.hint 与仅为 true 时输出的 input.acceptsFiles；running 隐藏 Compact/Skill，Model/Thinking 仅无参；Help 无参且无 input。固定 Builtin 顺序后追加按 name 排序的 Skill。公共认证、Chat→Session bridge 和错误映射仍为 待实现 design，尚未整体确认，不得作为实现依据；旧公共 POST SSE 已废止，不能由本次 GET 投影恢复。",
+    "summary": "列出当前 Chat 的命令",
+    "description": "返回当前 Chat 对应会话的命令名称、类别、用途与参数提示，供前端展示 Slash 清单。描述符与 Runtime 保持同形；按固定 Builtin 顺序及 Skill 名称排序，并根据会话状态过滤命令。hints 仅供展示，不代表修改权限或附件能力。",
     "parameters": [
       {
         "$ref": "parameters.chatId"
@@ -38,36 +38,45 @@
               "commands": [
                 {
                   "name": "help",
-                  "kind": "builtin",
-                  "description": "介绍当前 Agent 的用途和使用场景"
+                  "type": "builtin",
+                  "description": "介绍当前 Agent 的用途和使用场景",
+                  "hints": []
                 },
                 {
                   "name": "status",
-                  "kind": "builtin",
-                  "description": "查看 Session 状态、模型和深度思考"
+                  "type": "builtin",
+                  "description": "查看 Session 状态、模型和深度思考",
+                  "hints": []
                 },
                 {
                   "name": "name",
-                  "kind": "builtin",
+                  "type": "builtin",
                   "description": "查看或修改 Session 名称",
-                  "input": {
-                    "hint": "[displayName]"
-                  }
+                  "hints": [
+                    "displayName"
+                  ]
                 },
                 {
                   "name": "model",
-                  "kind": "builtin",
-                  "description": "查看或切换模型"
+                  "type": "builtin",
+                  "description": "查看或切换模型",
+                  "hints": [
+                    "modelId"
+                  ]
                 },
                 {
                   "name": "thinking",
-                  "kind": "builtin",
-                  "description": "查看或切换深度思考"
+                  "type": "builtin",
+                  "description": "查看或切换深度思考",
+                  "hints": [
+                    "on|off"
+                  ]
                 },
                 {
                   "name": "skills",
-                  "kind": "builtin",
-                  "description": "列出当前 Agent 绑定的 Skill"
+                  "type": "builtin",
+                  "description": "列出当前 Agent 绑定的 Skill",
+                  "hints": []
                 }
               ]
             }
@@ -92,56 +101,59 @@
               "commands": [
                 {
                   "name": "help",
-                  "kind": "builtin",
-                  "description": "介绍当前 Agent 的用途和使用场景"
+                  "type": "builtin",
+                  "description": "介绍当前 Agent 的用途和使用场景",
+                  "hints": []
                 },
                 {
                   "name": "status",
-                  "kind": "builtin",
-                  "description": "查看 Session 状态、模型和深度思考"
+                  "type": "builtin",
+                  "description": "查看 Session 状态、模型和深度思考",
+                  "hints": []
                 },
                 {
                   "name": "name",
-                  "kind": "builtin",
+                  "type": "builtin",
                   "description": "查看或修改 Session 名称",
-                  "input": {
-                    "hint": "[displayName]"
-                  }
+                  "hints": [
+                    "displayName"
+                  ]
                 },
                 {
                   "name": "model",
-                  "kind": "builtin",
+                  "type": "builtin",
                   "description": "查看或切换模型",
-                  "input": {
-                    "hint": "[modelId]"
-                  }
+                  "hints": [
+                    "modelId"
+                  ]
                 },
                 {
                   "name": "thinking",
-                  "kind": "builtin",
+                  "type": "builtin",
                   "description": "查看或切换深度思考",
-                  "input": {
-                    "hint": "[on|off]"
-                  }
+                  "hints": [
+                    "on|off"
+                  ]
                 },
                 {
                   "name": "compact",
-                  "kind": "builtin",
-                  "description": "压缩当前上下文"
+                  "type": "builtin",
+                  "description": "压缩当前上下文",
+                  "hints": []
                 },
                 {
                   "name": "skills",
-                  "kind": "builtin",
-                  "description": "列出当前 Agent 绑定的 Skill"
+                  "type": "builtin",
+                  "description": "列出当前 Agent 绑定的 Skill",
+                  "hints": []
                 },
                 {
                   "name": "skill:pdf",
-                  "kind": "skill",
+                  "type": "skill",
                   "description": "分析和生成 PDF 文档",
-                  "input": {
-                    "hint": "[request]",
-                    "acceptsFiles": true
-                  }
+                  "hints": [
+                    "request"
+                  ]
                 }
               ]
             }
@@ -240,11 +252,49 @@
           }
         }
       }
+    ],
+    "contractSections": [
+      {
+        "title": "命令描述符字段",
+        "description": "result.commands 为命令数组。描述符用于发现和展示；实际执行参数由 ExecuteSessionCommand 定义。",
+        "columns": [
+          "字段",
+          "类型 / 必填",
+          "含义与省略规则"
+        ],
+        "rows": [
+          [
+            "name",
+            "string / 必填",
+            "不带前导 /；Builtin 裸名或 skill:<name>，用于精确标识命令。"
+          ],
+          [
+            "type",
+            "string / 必填",
+            "命令类别，仅 builtin 或 skill；不表示控件类型或业务响应类型，必须与 name 的命名空间一致。"
+          ],
+          [
+            "description",
+            "string / 必填",
+            "非空的命令用途说明；描述语言与当前实现差异见下表。"
+          ],
+          [
+            "hints",
+            "string[] / 可省略",
+            "有序参数提示列表，各项为非空文本；无提示可省略或返回 []，不返回 null。仅供展示，不解析成 Schema、枚举、必填规则或权限；idle/running 下相同命令的提示保持一致。"
+          ],
+          [
+            "不公开的字段",
+            "不返回",
+            "kind、input、acceptsFiles、acceptsArguments、available、unavailableCode、allowedValues、catalogVersion；内部准入 DTO 不直接序列化。"
+          ]
+        ]
+      }
     ]
   },
   "review": {
     "businessView": {
-      "summary": "GET 字段精简已同步；公共边界仍待重审。清单只展示当前可调用形态，不展示置灰命令或内部准入原因。",
+      "summary": "展示当前 Chat 可发现的命令，参数控件与状态限制由前端依据命令规则和权威会话状态处理。公共路径、认证、bridge 与错误映射待评审、待实现，不得作为已发布接口的依据。",
       "flow": [
         {
           "actor": "前端",
@@ -258,15 +308,16 @@
         },
         {
           "actor": "前端",
-          "action": "按 input 是否存在展示参数输入",
+          "action": "按 type/name 选择控件，hints 仅作参数提示",
           "outcome": "命令无匹配时保留草稿，不回退普通消息"
         }
       ],
       "notes": [
-        "input 缺失表示当前只允许无参数、无附件调用；hint 仅供展示，不参与参数校验。",
+        "描述符仅包含 name、type、description 和可选 hints。hints 缺失不代表禁止参数；所有 Skill 允许附件，Builtin 不允许；运行中的 model/thinking 只允许无参查询。",
         "无完整 Agent 快照时，目标清单失败，不返回残缺 Builtin；公共错误映射保留待重审状态。",
         "GET 是观察结果，不保证随后 POST 一定成功；POST 仍需独立解析并在所属事务或锁内复核。",
-        "Skill 发现不等于 Skill 执行协议已发布。旧公共 POST SSE 已废止，不属于本次 GET 恢复范围。"
+        "Skill 发现不等于 Skill 执行协议已发布。旧公共 POST SSE 已废止，不属于本次 GET 恢复范围。",
+        "状态未知、恢复中或清单过期时暂停提交并读取权威状态；状态变化不能清空参数后自动改成查询。"
       ]
     },
     "questions": []

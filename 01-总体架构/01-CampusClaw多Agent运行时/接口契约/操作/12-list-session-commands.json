@@ -4,8 +4,8 @@
     "operationKey": "ListSessionCommands",
     "method": "GET",
     "path": "/sessions/{sessionId}/commands",
-    "summary": "列出当前 Session 可调用的 Builtin 和 Skill 命令形态",
-    "description": "返回指定 Session 当前可调用的 Builtin 和 Skill 命令，供客户端展示 Slash 清单。结果依据会话状态和绑定 Agent 的完整快照过滤，Builtin 按固定顺序排列，Skill 按名称排序。input 表达当前输入能力；hint 仅作展示提示，所有返回的 Skill 均带 acceptsFiles=true，Builtin 不接收附件。接口只读，不刷新 Agent、不调用模型；缺少完整 Agent 缓存时返回 503 AGENT_NOT_AVAILABLE。模型候选由 ListSessionModels 提供，详细字段、调用示例和语言范围见下表。",
+    "summary": "列出当前 Session 的 Builtin 和 Skill 命令",
+    "description": "返回指定 Session 的命令名称、类别、用途和参数提示，供客户端展示 Slash 清单。根据会话状态和绑定 Agent 的完整快照过滤命令，Builtin 按固定顺序排列，Skill 按名称排序。hints 仅供展示，不定义输入控件、参数校验或修改权限。所有 Skill 允许携带可选文件引用，Builtin 不接收附件。接口只读，不刷新 Agent、不调用模型；缺少完整 Agent 缓存时返回 503 AGENT_NOT_AVAILABLE。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -38,36 +38,45 @@
               "commands": [
                 {
                   "name": "help",
-                  "kind": "builtin",
-                  "description": "介绍当前 Agent 的用途和使用场景"
+                  "type": "builtin",
+                  "description": "介绍当前 Agent 的用途和使用场景",
+                  "hints": []
                 },
                 {
                   "name": "status",
-                  "kind": "builtin",
-                  "description": "查看 Session 状态、模型和深度思考"
+                  "type": "builtin",
+                  "description": "查看 Session 状态、模型和深度思考",
+                  "hints": []
                 },
                 {
                   "name": "name",
-                  "kind": "builtin",
+                  "type": "builtin",
                   "description": "查看或修改 Session 名称",
-                  "input": {
-                    "hint": "[displayName]"
-                  }
+                  "hints": [
+                    "displayName"
+                  ]
                 },
                 {
                   "name": "model",
-                  "kind": "builtin",
-                  "description": "查看或切换模型"
+                  "type": "builtin",
+                  "description": "查看或切换模型",
+                  "hints": [
+                    "modelId"
+                  ]
                 },
                 {
                   "name": "thinking",
-                  "kind": "builtin",
-                  "description": "查看或切换深度思考"
+                  "type": "builtin",
+                  "description": "查看或切换深度思考",
+                  "hints": [
+                    "on|off"
+                  ]
                 },
                 {
                   "name": "skills",
-                  "kind": "builtin",
-                  "description": "列出当前 Agent 绑定的 Skill"
+                  "type": "builtin",
+                  "description": "列出当前 Agent 绑定的 Skill",
+                  "hints": []
                 }
               ]
             }
@@ -92,56 +101,59 @@
               "commands": [
                 {
                   "name": "help",
-                  "kind": "builtin",
-                  "description": "介绍当前 Agent 的用途和使用场景"
+                  "type": "builtin",
+                  "description": "介绍当前 Agent 的用途和使用场景",
+                  "hints": []
                 },
                 {
                   "name": "status",
-                  "kind": "builtin",
-                  "description": "查看 Session 状态、模型和深度思考"
+                  "type": "builtin",
+                  "description": "查看 Session 状态、模型和深度思考",
+                  "hints": []
                 },
                 {
                   "name": "name",
-                  "kind": "builtin",
+                  "type": "builtin",
                   "description": "查看或修改 Session 名称",
-                  "input": {
-                    "hint": "[displayName]"
-                  }
+                  "hints": [
+                    "displayName"
+                  ]
                 },
                 {
                   "name": "model",
-                  "kind": "builtin",
+                  "type": "builtin",
                   "description": "查看或切换模型",
-                  "input": {
-                    "hint": "[modelId]"
-                  }
+                  "hints": [
+                    "modelId"
+                  ]
                 },
                 {
                   "name": "thinking",
-                  "kind": "builtin",
+                  "type": "builtin",
                   "description": "查看或切换深度思考",
-                  "input": {
-                    "hint": "[on|off]"
-                  }
+                  "hints": [
+                    "on|off"
+                  ]
                 },
                 {
                   "name": "compact",
-                  "kind": "builtin",
-                  "description": "压缩当前上下文"
+                  "type": "builtin",
+                  "description": "压缩当前上下文",
+                  "hints": []
                 },
                 {
                   "name": "skills",
-                  "kind": "builtin",
-                  "description": "列出当前 Agent 绑定的 Skill"
+                  "type": "builtin",
+                  "description": "列出当前 Agent 绑定的 Skill",
+                  "hints": []
                 },
                 {
                   "name": "skill:pdf",
-                  "kind": "skill",
+                  "type": "skill",
                   "description": "分析和生成 PDF 文档",
-                  "input": {
-                    "hint": "[request]",
-                    "acceptsFiles": true
-                  }
+                  "hints": [
+                    "request"
+                  ]
                 }
               ]
             }
@@ -207,8 +219,8 @@
     ],
     "contractSections": [
       {
-        "title": "命令描述符与 input 字段",
-        "description": "result.commands 是命令数组。下表字段相对单个命令；input 只含 hint 和可选 acceptsFiles，不是执行参数对象或 JSON Schema。",
+        "title": "命令描述符字段",
+        "description": "result.commands 为命令数组。描述符用于发现和展示；实际执行参数由 ExecuteSessionCommand 定义。",
         "columns": [
           "字段",
           "类型 / 必填",
@@ -218,103 +230,93 @@
           [
             "name",
             "string / 必填",
-            "不带前导 /；Builtin 裸名或 skill:<name>。"
+            "不带前导 /；Builtin 裸名或 skill:<name>，用于精确标识命令。"
           ],
           [
-            "kind",
+            "type",
             "string / 必填",
-            "仅 builtin 或 skill。"
+            "命令类别，仅 builtin 或 skill；不表示控件类型或业务响应类型，必须与 name 的命名空间一致。"
           ],
           [
             "description",
             "string / 必填",
-            "非空用途说明；语言边界见下方说明。"
+            "非空的命令用途说明；描述语言与当前实现差异见下表。"
           ],
           [
-            "input",
-            "object / 可省略",
-            "缺失表示当前只允许无参数、无附件调用；不返回 null 或空对象。"
-          ],
-          [
-            "input.hint",
-            "string / input 存在时必填",
-            "非空展示文本；[x] 表示可选输入，<x> 表示必填输入；不作为校验规则。"
-          ],
-          [
-            "input.acceptsFiles",
-            "boolean / 可省略",
-            "所有返回的 Skill 固定输出 true，不按名称或 Skill 内容分类；Builtin 一律省略。缺失按 false 处理。表示允许随调用附带文件引用，不保证任意文件类型均可处理。"
+            "hints",
+            "string[] / 可省略",
+            "有序参数提示列表，各项为非空文本；无提示可省略或返回 []，不返回 null。仅供展示，不解析成 Schema、枚举、必填规则或权限；idle/running 下相同命令的提示保持一致。"
           ],
           [
             "不公开的字段",
             "不返回",
-            "available、unavailableCode、input.mode、input.available、input.unavailableCode、input.placeholder、input.suggestions；不增加 allowedValues 或 catalogVersion。"
+            "kind、input、acceptsFiles、acceptsArguments、available、unavailableCode、allowedValues、catalogVersion；内部准入 DTO 不直接序列化。"
           ]
         ]
       },
       {
         "title": "各命令的输入与调用速查",
-        "description": "下列文本是调用语义速查，不要求用户手工输入协议值。model/thinking 使用选项交互；HTTP POST 提交不带 / 的 name 和可选 arguments，Skill 可提交 fileIds。input 缺失仍可无参执行；GET 只表示当前观察值，POST 重新准入。",
+        "description": "以下为调用语义速查。model/thinking 使用选项交互；POST 提交不带 / 的 name 和可选 arguments，Skill 可提交 fileIds。hints 缺失或为空不表示禁止参数或附件。前端根据已对账的会话状态与命令规则限制操作，POST 重新准入。",
         "columns": [
           "命令",
-          "idle 的 input",
+          "hints（idle/running 不变）",
           "交互调用例子",
           "running 的形态"
         ],
         "rows": [
           [
             "help",
-            "省略",
+            "[]",
             "/help",
             "保留，无参数。"
           ],
           [
             "status",
-            "省略",
+            "[]",
             "/status",
             "保留，无参数。"
           ],
           [
             "name",
-            "{\"hint\":\"[displayName]\"}",
+            "[\"displayName\"]",
             "/name；/name 园区设备告警排查",
             "保留，查询和修改均可。"
           ],
           [
             "model",
-            "{\"hint\":\"[modelId]\"}",
+            "[\"modelId\"]",
             "选择 /model → 展示实时模型列表 → 选择一项 → 执行；组装 arguments=modelId。",
-            "保留但省略 input，仅查询；模型 ID 从 model 查询结果选择。"
+            "保留且 hints 不变；running 仅查询，禁止带参切换。"
           ],
           [
             "thinking",
-            "{\"hint\":\"[on|off]\"}",
+            "[\"on|off\"]",
             "选择 /thinking → 展示开启/关闭 → 选择一项 → 执行；组装 arguments=on/off。",
-            "保留但省略 input，仅查询；on/off 必须小写。"
+            "保留且 hints 不变；running 仅查询，禁止带参修改。"
           ],
           [
             "compact",
-            "省略",
+            "[]",
             "/compact",
             "整项省略。"
           ],
           [
             "skills",
-            "省略",
+            "[]",
             "/skills",
             "保留，无参数；只列出绑定技能。"
           ],
           [
             "skill:<name>",
-            "{\"hint\":\"[request]\",\"acceptsFiles\":true}",
+            "[\"request\"]",
             "/skill:pdf 分析附件中的巡检记录（需已绑定 pdf）",
             "整项省略；附件通过 fileIds 提交。"
           ]
         ]
       },
       {
-        "title": "输入能力与交互控件",
-        "description": "hint 不决定控件类型，也不携带枚举或模型列表；客户端按已知命令语义选择控件，后端决定当前是否允许修改。",
+        "title": "控件、附件与状态规则",
+        "description": "前端按 type/name 选择控件，候选模型由 ListSessionModels 提供；使用已对账的 Session 状态进行交互限制。状态未知、恢复中或清单过期时暂停提交并读取权威状态；服务端执行时在所属锁/事务内重新检查，状态竞争返回既有错误，保留草稿且不自动重放。",
         "columns": [
           "命令",
           "交互与数据来源",
@@ -329,18 +331,18 @@
           [
             "thinking",
             "当前协议只有布尔开关，展示开启/关闭；不支持轻度/中/高/极高等强度档位。",
-            "选择后映射为 on/off；清单无 input 时仅展示当前值，不提供修改。多档强度需要另行扩展后端模型能力和契约。"
+            "选择后映射为 on/off；running 只允许无参查询。多档强度需要另行扩展后端模型能力和契约。"
           ],
           [
             "name / skill:<name>",
-            "自由文本输入使用 hint 作提示；Skill 还提供可选附件入口。",
-            "所有返回 Skill 的 acceptsFiles=true；先获得文件引用，再将 fileIds 与 arguments 一起冻结；Builtin 不接收文件。"
+            "自由文本可展示 hints 提示；type=skill 提供可选附件入口，不从 hints 推导输入能力。",
+            "所有 Skill 允许附件；取得文件引用后将 fileIds 与 arguments 一起冻结；Builtin 不接收文件，附件仍按普通消息规则校验。"
           ]
         ]
       },
       {
         "title": "执行请求与响应示例索引",
-        "description": "展开当前页的“执行会话命令”（ExecuteSessionCommand），请求区已有各命令的完整 JSON，响应区按下列标签查看。清单 input 不随 POST 提交：改名用 name=\"name\"、arguments=\"园区设备告警排查\"。所有 Builtin 返回普通 JSON，Skill 返回 SSE。",
+        "description": "展开当前页的“执行会话命令”（ExecuteSessionCommand），请求区已有各命令的完整 JSON，响应区按下列标签查看。描述符的 type、description、hints 不随 POST 提交：改名用 name=\"name\"、arguments=\"园区设备告警排查\"。所有 Builtin 返回普通 JSON，Skill 返回 SSE。",
         "columns": [
           "命令",
           "POST 参数形态",
@@ -390,14 +392,19 @@
         ]
       },
       {
-        "title": "语言范围与当前实现差异",
-        "description": "2026-09-22 核对 pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45 的清单 Controller、Service、描述符组装与 Contributor；源码观察不等于部署验收。中文成功示例与英文实现存在差异，Builtin 描述本地化尚未实现，其契约适用范围仍需明确。",
+        "title": "当前实现与语言边界",
+        "description": "2026-09-22 核对 pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45。描述符字段迁移待实现；源码观察不等于部署验收。Builtin 描述语言沿用单独记录的差距，不以中文示例推定已支持翻译。",
         "columns": [
           "内容",
           "已确认规则 / 已观察实现",
           "边界"
         ],
         "rows": [
+          [
+            "描述符迁移",
+            "CommandListResponseVO / CommandDiscoveryResponseAssembler 仍输出 kind 与可选 input；前端 runtime/commands.ts 也依赖旧形态。",
+            "待实现 type/hints 投影和前端迁移；不双写旧字段。内部 CommandKind/InputDTO 可保留。"
+          ],
           [
             "Accept-Language",
             "公共说明目前仅约定异常消息语言；支持 zh-CN/en-US，缺失或不支持回退 en-US。",
@@ -414,9 +421,9 @@
             "不以中文示例推定会自动翻译 Skill 元数据。"
           ],
           [
-            "hint / 协议值",
-            "当前使用 [displayName]、[modelId]、[on|off]、[request]。",
-            "提示文本不作为字段定义；name、kind、on/off 等协议值保持原值。"
+            "hints / 协议值",
+            "目标示例为 displayName、modelId、on/off 提示与 request；提示是字符串数组。",
+            "name、type 与 on/off 等协议值不翻译；hints 不是实际执行参数。"
           ],
           [
             "POST Help 内容",

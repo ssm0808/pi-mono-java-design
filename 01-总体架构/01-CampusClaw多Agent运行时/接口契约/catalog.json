@@ -1,5 +1,5 @@
 {
-  "version": "1.10.0",
+  "version": "1.11.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -65,7 +65,7 @@
       "source": "接口契约/操作/12-list-session-commands.json",
       "common": "接口契约/common.json",
       "status": "GET 轻量清单已确认",
-      "note": "合入已确认字段精简：必填 name/kind/description，可选 input；按状态过滤，Help 无参。Skill 执行按 B13/B14 使用共享事件 SSE；Mate 公共 POST 独立管理。",
+      "note": "描述符使用 name/type/description 与可选 hints；hints 不承载权限，前端依据会话状态限制修改，POST 最终准入。字段迁移待实现；Mate 同形投影不开放公共 POST。",
       "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"
     },
     {

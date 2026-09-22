@@ -445,9 +445,12 @@ def validate_session_update(operation: dict[str, Any], codes: set[tuple[str, str
 
 
 def validate_help_descriptor(descriptor: dict[str, Any]) -> None:
-    require(descriptor == {
-        "name": "help", "kind": "builtin", "description": "介绍当前 Agent 的用途和使用场景",
-    }, "Help descriptor must advertise only the no-argument Agent guide")
+    from command_catalog_contract import validate_descriptor
+    validate_descriptor(descriptor)
+    require(descriptor["name"] == "help" and descriptor["type"] == "builtin"
+            and descriptor["description"] == "介绍当前 Agent 的用途和使用场景"
+            and descriptor.get("hints", []) == [],
+            "Help descriptor must advertise only the no-argument Agent guide")
 
 
 def validate_help_body(body: dict[str, Any]) -> None:

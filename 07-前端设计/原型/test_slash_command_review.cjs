@@ -94,7 +94,7 @@ test("parameters remain separate and preserve text, slash and line breaks", asyn
   f.key("Enter");
   assert.equal(f.input.value, "夜间 /巡检\n  第二行");
   assert.equal(f.input.getAttribute("role"), null);
-  assert.equal(f.input.placeholder, "[displayName]");
+  assert.equal(f.input.placeholder, "displayName");
   assert.equal(f.get("submit-button").getAttribute("aria-label"), "运行 name");
   f.key("Enter", { shiftKey: true });
   assert.equal(f.calls().length, 0);
@@ -138,7 +138,7 @@ test("replacement selection changes name; empty Backspace restores ordinary draf
   f.select("model");
   assert.equal(f.get("selected-command-name").textContent, "model");
   assert.equal(f.input.value, "");
-  assert.equal(f.input.placeholder, "[modelId]");
+  assert.equal(f.input.placeholder, "modelId");
   f.key("Backspace");
   assert.equal(f.get("command-chip").hidden, true);
   assert.equal(f.input.value, "");
@@ -177,7 +177,7 @@ test("IME and repeated Enter cannot select or run a command", (t) => {
   assert.equal(f.calls().length, 0);
 });
 
-test("running fixture omits unavailable commands and input; normal draft cannot submit", (t) => {
+test("running fixture omits unavailable commands but keeps hints; normal draft cannot submit", (t) => {
   const f = fixture(t, "running");
   assert.deepEqual(f.names(), ["help", "status", "name", "model", "thinking", "skills"]);
   f.select("model");
@@ -247,4 +247,23 @@ test("palette temporarily collapses the result and restores its disclosure choic
   result.open = false;
   f.type("/"); f.key("Escape");
   assert.equal(result.open, false);
+});
+
+
+test("hints never control parameter editing or running admission", (t) => {
+  const f = fixture(t);
+  f.window.eval('delete idleCatalog.find(c => c.name === "name").hints');
+  f.select("name");
+  assert.equal(f.input.hidden, false);
+  assert.equal(f.input.placeholder, "");
+  f.click("remove-command");
+  f.type("/model"); f.select("model"); f.type("chosen-model");
+  f.window.eval('running = true; catalog = runningCatalog; render()');
+  assert.equal(f.input.value, "chosen-model");
+  assert.equal(f.get("command-run").disabled, true);
+  assert.equal(f.window.eval('selected.hints[0]'), "modelId");
+  f.type("");
+  assert.equal(f.get("command-run").disabled, false);
+  assert.equal(f.input.hidden, true);
+  assert.equal(f.calls().length, 0);
 });

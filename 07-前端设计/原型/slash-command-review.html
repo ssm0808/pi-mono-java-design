@@ -562,30 +562,28 @@
 
   <script>
 
-    // Local review fixtures only. Catalog order and omitted input belong to the fixture,
-    // not a production client-side availability matrix. No HTTP calls are made.
+    // Local review fixtures only. No HTTP calls are made.
+    // Descriptor hints are display text, never an input-capability flag.
     const idleCatalog = [
-      { name: "help", kind: "builtin", description: "了解助手的用途与使用场景" },
-      { name: "status", kind: "builtin", description: "查看当前会话状态" },
-      { name: "name", kind: "builtin", description: "查看或设置会话名称", input: { hint: "[displayName]" } },
-      { name: "model", kind: "builtin", description: "查看或切换模型", input: { hint: "[modelId]" } },
-      { name: "thinking", kind: "builtin", description: "查看或切换思考模式", input: { hint: "[on|off]" } },
-      { name: "compact", kind: "builtin", description: "压缩当前会话上下文" },
-      { name: "skills", kind: "builtin", description: "查看可用技能" },
-      { name: "skill:inspection-plan", kind: "skill", description: "整理园区巡检计划", input: { hint: "[request]", acceptsFiles: true } }
+      { name: "help", type: "builtin", description: "了解助手的用途与使用场景", hints: [] },
+      { name: "status", type: "builtin", description: "查看当前会话状态", hints: [] },
+      { name: "name", type: "builtin", description: "查看或设置会话名称", hints: ["displayName"] },
+      { name: "model", type: "builtin", description: "查看或切换模型", hints: ["modelId"] },
+      { name: "thinking", type: "builtin", description: "查看或切换思考模式", hints: ["on|off"] },
+      { name: "compact", type: "builtin", description: "压缩当前会话上下文", hints: [] },
+      { name: "skills", type: "builtin", description: "查看可用技能", hints: [] },
+      { name: "skill:inspection-plan", type: "skill", description: "整理园区巡检计划", hints: ["request"] }
     ];
-    const runningCatalog = [
-      { name: "help", kind: "builtin", description: "了解助手的用途与使用场景" },
-      { name: "status", kind: "builtin", description: "查看当前会话状态" },
-      { name: "name", kind: "builtin", description: "查看或设置会话名称", input: { hint: "[displayName]" } },
-      { name: "model", kind: "builtin", description: "查看当前模型" },
-      { name: "thinking", kind: "builtin", description: "查看当前思考模式" },
-      { name: "skills", kind: "builtin", description: "查看可用技能" }
-    ];
+    const runningCatalog = idleCatalog.filter((command) => command.type === "builtin" && command.name !== "compact");
+    // Central UI adaptation of the shared command-state contract, not server authorization.
+    function canEditArguments(command) {
+      return !!command && (command.name === "name" || (!running &&
+        (command.type === "skill" || ["model", "thinking"].includes(command.name))));
+    }
     const states = {
       catalog: { title: "命令清单", description: "输入 / 后继续输入可过滤，选择后收起为命令标签。" },
       argument: { title: "参数编辑", description: "命令名称与参数分开编辑，点击名称可更换，× 可退出。" },
-      running: { title: "运行中清单", description: "按服务端返回的清单与 input 展示；当前示例中的 model 只允许查询。" },
+      running: { title: "运行中清单", description: "按命令规则与会话状态展示；model 的 hints 不变，运行中只允许查询。" },
       help: { title: "Help 临时结果", description: "内置命令结果独立呈现，取消或完成后恢复普通消息草稿。" },
       unmatched: { title: "未匹配命令", description: "保留原文，继续修改或按 Esc 退出。" }
     };
@@ -616,21 +614,23 @@
       return parsed ? catalog.filter((item) => item.name.startsWith(parsed.nameToken)) : [];
     }
     function announce(text) { $("#composer-announcement").textContent = text; }
-    function focusEditor() { (selected && !selected.input ? (running ? $("#command-run") : submitButton) : input).focus(); }
+    function focusEditor() { (selected && !canEditArguments(selected) ? (running ? $("#command-run") : submitButton) : input).focus(); }
     function render() {
       if (paletteOpen && result.classList.contains("visible") && resultFold === null) { resultFold = result.open; result.open = false; }
       else if (!paletteOpen && resultFold !== null) { result.open = resultFold; resultFold = null; }
       const options = matches();
+      const invalidDraft = !!selected && ((!canEditArguments(selected) && !!argumentsText) || !catalog.some((c) => c.name === selected.name));
+      if (invalidDraft) error = "当前调用不可执行，草稿已保留；请清除参数或重新选择命令。";
       activeIndex = Math.max(0, Math.min(activeIndex, options.length - 1));
       palette.hidden = !paletteOpen;
       chip.hidden = !selected;
-      input.hidden = !!selected && !selected.input;
+      input.hidden = !!selected && !canEditArguments(selected) && !argumentsText;
       input.disabled = executing;
       $("#more-button").disabled = executing;
       chipName.disabled = executing;
       $("#remove-command").disabled = executing;
       input.value = selected ? argumentsText : mode ? query : message;
-      input.placeholder = selected ? selected.input?.hint || "" : running && !mode ? "任务结束后可发送，草稿可继续编辑" : "输入消息，或输入 / 选择命令";
+      input.placeholder = selected ? (selected.hints || []).join("、") : running && !mode ? "任务结束后可发送，草稿可继续编辑" : "输入消息，或输入 / 选择命令";
       input.setAttribute("aria-label", selected ? "编辑 " + selected.name + " 的参数" : mode ? "查找命令" : "输入消息");
       ["role", "aria-autocomplete", "aria-expanded", "aria-controls", "aria-activedescendant", "aria-describedby"].forEach((key) => input.removeAttribute(key));
       if (mode && !selected) {
@@ -644,8 +644,8 @@
         chipName.textContent = selected.name;
         chipName.setAttribute("aria-label", "更换命令 " + selected.name);
         $("#remove-command").setAttribute("aria-label", "移除命令 " + selected.name);
-        if (selected.input) {
-          $("#parameter-hint").textContent = selected.input.hint;
+        if (selected.hints?.length) {
+          $("#parameter-hint").textContent = selected.hints.join("、");
           input.setAttribute("aria-describedby", "parameter-hint");
         }
       }
@@ -678,9 +678,9 @@
       submitButton.setAttribute("aria-label", running ? "停止生成" : selected ? "运行 " + selected.name : "发送消息");
       submitButton.title = stopping ? "正在停止" : submitButton.getAttribute("aria-label");
       submitButton.innerHTML = running ? '<span aria-hidden="true">■</span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>';
-      submitButton.disabled = running ? stopping : executing || paletteOpen || (mode ? !selected : !message.trim());
+      submitButton.disabled = running ? stopping : executing || invalidDraft || paletteOpen || (mode ? !selected : !message.trim());
       $("#command-run").hidden = !running || !selected;
-      $("#command-run").disabled = executing || stopping || paletteOpen;
+      $("#command-run").disabled = executing || stopping || invalidDraft || paletteOpen;
       $("#command-run").setAttribute("aria-label", selected ? "运行 " + selected.name : "执行命令");
       $("#simulate-stop-terminal").hidden = !stopping;
       if (paletteOpen) announce(options.length + " 条匹配命令");
@@ -702,7 +702,7 @@
     function choose(command) {
       if (!paletteOpen || executing || composing) return;
       const parsedArguments = parse(query)?.argumentsText || "";
-      if (!command.input && parsedArguments) {
+      if (!canEditArguments(command) && parsedArguments) {
         error = "此命令不接收参数"; render(); input.focus(); return;
       }
       argumentsText = replacement?.selected.name === command.name && !parsedArguments
@@ -764,10 +764,13 @@
         message = ""; running = true; catalog = runningCatalog; $("#agent-status").textContent = "执行中 · 可停止"; render(); input.focus(); return;
       }
       if (!selected) return;
+      if ((!canEditArguments(selected) && argumentsText) || !catalog.some((c) => c.name === selected.name)) {
+        error = "当前调用不可执行，草稿已保留"; render(); return;
+      }
       if (Array.from(argumentsText).length > 2048) {
         error = "参数最多 2048 个字符"; render(); focusEditor(); return;
       }
-      if (selected.kind === "skill") {
+      if (selected.type === "skill") {
         error = "当前暂不支持运行该命令"; render(); focusEditor(); return;
       }
       const invocation = Object.freeze({ name: selected.name, arguments: argumentsText });

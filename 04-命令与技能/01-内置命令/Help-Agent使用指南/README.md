@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.2.4 |
+| 设计版本 | 1.3.0 |
 | 日期 | 2026-09-22 |
 | 状态 | Help 无参查询、三个业务字段、缓存往返、Agent 级锁、DTO→VO 投影与统一 Command POST 已实现；元数据更新通过显式刷新完成 |
 | 设计仓核验基线 | `2c0b0693e57d7949c9b37757b9256f87617b00bf` |
@@ -96,8 +96,8 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
 这里的 `description` 是返回的 Agent 用途介绍；GET 描述符自身的 description 改为“介绍当前 Agent 的用途和使用场景”，二者含义不同。
 
-Runtime 操作 12 的 Help 只返回 name/kind/description，
-不带 input。idle/running 均保留 Help；共享 GET 无完整缓存整体 503，但 POST Help 仍独立检查缓存并保持既有 422。
+Runtime 操作 12 的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []）；
+Help 是否无参由命令契约定义，不由 hints 决定。idle/running 均保留 Help；共享 GET 无完整缓存整体 503，但 POST Help 仍独立检查缓存并保持既有 422。
 两跳清单的字段、排序与过滤见[共享 GET 契约](../../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
 
 ## 4. 缓存与缺失行为
@@ -195,6 +195,7 @@ mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-09-22 | Help 描述符使用 type/hints，无参行为仍由命令契约定义。 |
 | 1.2.4 | 2026-09-22 | Help 请求头仅投影 Builtin 场景，不展示 Skill 工具执行凭据。 |
 | 1.2.3 | 2026-09-22 | 按 53eff85c 更正 Help 缓存、Agent 级锁、查询与响应链的已实现状态。 |
 | 1.2.2 | 2026-09-22 | 将 Agent 使用场景字段统一为 `useCases`，同步缓存、响应和契约投影。 |

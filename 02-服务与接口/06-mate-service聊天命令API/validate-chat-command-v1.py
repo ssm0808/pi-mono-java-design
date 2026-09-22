@@ -108,7 +108,7 @@ def values_for_key(value: Any, key: str):
 
 
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.3.0", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.4.0", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
     require("GET 字段已确认" in common["api"]["visibility"] and "公共边界待评审" in common["api"]["visibility"],
             "GET confirmation must not approve the public boundary")
@@ -131,8 +131,11 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
                 "Human review summary is required")
         require(isinstance(business_view.get("flow"), list) and business_view["flow"],
                 "Human review flow is required")
-        require("待实现 design" in operation["description"] and "不得作为实现依据" in operation["description"],
+        require("待评审、待实现" in business_view["summary"] and "不得作为已发布接口的依据" in business_view["summary"],
                 "Operation must state the pending 待实现 public boundary")
+        require(operation["operationKey"] == "ListChatCommands", "Operation key must use PascalCase")
+        require(not re.search(r"已确认|已评审|待实现|待评审", operation["description"]),
+                "Purpose must describe behavior rather than review status")
         placeholders = re.findall(r"{([^}]+)}", operation["path"])
         require(all(LOWER_CAMEL.fullmatch(item) for item in placeholders), "Path fields must be lowerCamelCase")
         for response in operation["responses"]:
@@ -143,7 +146,7 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
 
 
 def validate_catalog(models: list[dict[str, Any]]) -> None:
-    operation = next(model["operation"] for model in models if model["operation"]["operationKey"] == "listChatCommands")
+    operation = next(model["operation"] for model in models if model["operation"]["operationKey"] == "ListChatCommands")
     validate_catalog_examples(operation)
     runtime = json.loads((RUNTIME_ROOT / "接口契约/操作/12-list-session-commands.json").read_text(encoding="utf-8"))
     validate_projection_pair(runtime["operation"], operation)

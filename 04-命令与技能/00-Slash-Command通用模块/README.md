@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.13.0 |
+| 文档版本 | 1.14.0 |
 | 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -81,7 +81,7 @@ Help 的结果精确为 displayName/description/useCases，字段和缓存规则
 
 | 能力 | 当前实现状态 | 证据与剩余边界 |
 |---|---|---|
-| 共享命令清单 | 已实现 | RuntimeCommandCatalogController → CommandCatalogService → resolveComplete → CommandDiscoveryResponseAssembler；旧 6f52fddc 的“无 Controller”仅是历史快照；描述语言差距见 §3.3.1 |
+| 共享命令清单 | GET 已实现，新描述符投影待实现 | RuntimeCommandCatalogController → CommandCatalogService → resolveComplete → CommandDiscoveryResponseAssembler；旧 6f52fddc 的“无 Controller”仅是历史快照；描述语言差距见 §3.3.1 |
 | 七个 Builtin 与业务响应 | 已实现 Runtime 调用链 | Contributor/Handler、CommandExecutionService、CommandResponseAssembler 和共享 POST 已接通；[Builtin §8.3](../01-内置命令/README.md#83-当前-runtime-实现与验收边界)列精确路径，不等于全部契约验收完成 |
 | 统一 Session POST | 已实现入口与应用编排 | RuntimeSessionController.update → RuntimeSessionUpdateService.update → Repository.updateSession；不再以旧 Name 提交判断路由不存在 |
 | Skill 严格名称 | 已实现 | ClawConstants.Skill 的统一规则覆盖 Loader、发现、准入与执行；缺名称拒绝且必须与文件夹同名，见[Skill §4.2](../02-技能命令/README.md#42-当前实现剩余增量与测试证据) |
@@ -139,6 +139,26 @@ Help 在 `d1cdb708e3e124cae009b10b985f5832b6dbde01` 已实现同一链路，但�
 `0a53fb55bea101816fa226bb964ae2bed71c343b` 保留为历史参考点，本次只使用表中明确标注的新快照；
 DeepSeek 仍是 alpha 对照，不视为行业稳定契约。
 
+<a id="command-descriptor-baseline"></a>
+
+### 命令描述符专项基线（2026-09-22）
+
+已确认默认分支并隔离 fetch：pi `main@d201760ffee16564aa8d9a759e0c85b70db33674`，
+OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`。这是当次源码快照，不等于稳定发布；
+仅更新命令发现、请求形态和展示边界，不升级上表历史执行/恢复结论。
+
+| 基线与相对路径 / 符号 | 已观察实现 | CampusClaw 取舍 |
+|---|---|---|
+| pi · `packages/coding-agent/src/modes/rpc/rpc-types.ts` · RpcSlashCommand / RpcCommand；同目录 `rpc-mode.ts` · get_commands | 描述符为 name、description、source、sourceInfo，无 input；Skill 通过 prompt.message 与可选 images 调用；模型/思考使用独立类型化请求 | 借鉴发现与执行分工；不公开来源路径，不复制 JSONL RPC。type 是本产品分类字段 |
+| pi · `packages/coding-agent/src/core/agent-session.ts` · prompt / _expandSkillCommand | Skill 正文展开后与消息参数、图片进入处理链；未知 Skill 可以保留原文 | CampusClaw 保持显式命令精确匹配失败就拒绝，不回退普通消息（安全加固） |
+| OpenCode · `packages/opencode/src/command/index.ts` · Info / hints | 现行实例命令描述含 source、template、hints；hints 提取参数占位符，Skill 可为 [] | 保留轻量提示概念，不公开模板；空 hints 不代表不允许参数 |
+| OpenCode · `packages/opencode/src/session/prompt.ts` · CommandInput / command；`packages/opencode/src/server/routes/instance/httpapi/groups/session.ts` · CommandPayload | HTTP 命令请求为 command、arguments 与可选 parts/agent/model/variant/messageID；sessionID 来自路径 | CampusClaw 继续使用 name/arguments/fileIds 与既有 JSON/SSE，不复制附件 URL 或全部配置字段 |
+
+pi 的旧 `5cd93f688aaab89dbb6dfa4aca535f21796ae185` / `4af9d21d3b4d664e4a29fcabfec85171077248e3`
+和 OpenCode 的旧 `849c2598abc7d2b40261e74b5826bc74ffc78308` 保留原证据范围。
+新核验改用 pi RPC 描述符与 OpenCode 迁移后的实例 HTTP 路由；OpenCode `/api/command` v2 在源码中标为 experimental，
+不与上述 `/command` 契约混用。四字段投影、所有 Skill 附件规则与状态矩阵是 CampusClaw 产品约束，非统一行业协议。
+
 ## 3. 分层与生命周期
 
 | 层 | 职责 |
@@ -184,45 +204,44 @@ Skill 名称必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，同时单独校验 1～6
 Runtime GET 的精确模型见[当前接口](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#ListSessionCommands)；
 Mate GET 同步相同 Descriptor，但公共认证、bridge、错误映射与 POST 发布仍需独立评审。
 
-该接口页直接列出字段类型与省略规则、逐命令调用速查及 POST 响应示例索引。
-`input` 描述当前调用能力，不是执行请求字段；实际提交 `name`、`arguments`，Skill 另可提交 `fileIds`。
-完整请求和返回报文统一见[执行命令示例](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#ExecuteSessionCommand)，
-Help 的缓存与元数据理由仍见[Help 专项](../01-内置命令/Help-Agent使用指南/README.md)。
+用户选择命令后，前端按命令类别和名称提供合适控件，再提交实际参数。清单只负责发现和展示，
+不定义整个表单，也不充当执行授权。完整报文见[执行命令示例](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#ExecuteSessionCommand)。
 
 | 字段 | 必填 | 契约 |
 |---|---|---|
-| name | 是 | 不带前导 /；Builtin 裸名或 `skill:<name>` |
-| kind | 是 | builtin 或 skill |
-| description | 是 | 命令用途的非空说明 |
-| input | 否 | 缺失表示当前仅允许无参数、无附件调用；不返回 null 或空对象 |
-| input.hint | input 存在时必填 | 非空展示文本；`[x]` 为可选输入、`<x>` 为必填输入，不参与参数校验 |
-| input.acceptsFiles | 否 | 所有返回的 Skill 固定输出 true；Builtin 一律省略，缺失为 false；不按 Skill 名称或正文决定是否允许附件 |
+| name | 是 | 不带前导 /；Builtin 裸名或 `skill:<name>`，稳定标识命令 |
+| type | 是 | `builtin` 或 `skill`；命令类别，必须与 name 的命名空间一致；不表示控件或业务响应类型 |
+| description | 是 | 命令用途的非空说明；语言边界见 §3.3.1 |
+| hints | 否 | 有序字符串数组，各项非空；无提示可省略或返回 `[]`，不返回 null；仅供展示，不作为参数 Schema、枚举、必填规则或权限 |
 
-`hint` 不要求客户端渲染为文本框，也不供客户端解析出枚举。Model 候选取自 `ListSessionModels`，
-前端选择后组装 modelId；Thinking 当前用开启/关闭选项映射 on/off。名称和 Skill 请求仍可自由输入。
-前端可以按规范命令选择已知控件，但不能硬编码可用模型或第二份状态准入矩阵；完整交互与失败处理见
-[输入控件](../../07-前端设计/技术设计/命令/README.md#command-input-controls)。轻量清单不新增 choices、options 或 input.type。
+`hints` 在 idle/running 下保持相同，不以缺失、空数组或提示变化表达禁止输入。
+客户端按 type/name 选择控件：Model 候选取自 `ListSessionModels`，Thinking 当前为开启/关闭选项，
+Name 与 Skill 使用文本输入。实际 POST 仍只提交 name、可选 arguments，Skill 另可提交 fileIds；
+不把 type、description、hints 发回执行接口，不新增 acceptsArguments。
 
-所有可用 Skill 允许附带可选文件引用，不要求每个 Skill 单独声明文件能力；running 时整个 Skill 隐藏。
-`acceptsFiles=true` 表示输入通道接受附件，不能推断 Skill 能处理任意 MIME 类型、模型具备视觉能力或文件已获授权。
-POST 仍按普通消息附件约束检查，前端上传完成后提交 fileIds。`53eff85c` 的
-`runtimeapi/service/command/CommandDiscoveryResponseAssembler.input` 已对所有 Skill 返回 true，
-`runtimeapi/service/command/skill/SkillCommandExecutionService.execute/normalize` 已转交并检查 fileIds；
-上述路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`，不代表前端上传和 Mate 桥接已完成。
+<a id="command-state-rules"></a>
 
-删除的七项为 available、unavailableCode、input.mode、input.available、input.unavailableCode、
-input.placeholder、input.suggestions；不以 allowedValues、catalogVersion 或其他候选值字段替代。
+| 命令 | hints 示例（与运行状态无关） | idle | running |
+|---|---|---|---|
+| help | `[]` | 无参查询 | 保留，无参查询 |
+| status | `[]` | 无参查询 | 保留，无参查询 |
+| name | `["displayName"]` | 查询或改名 | 保留，查询或改名 |
+| model | `["modelId"]` | 查询或切换 | 保留，仅无参查询 |
+| thinking | `["on\|off"]` | 查询或修改 | 保留，仅无参查询 |
+| compact | `[]` | 无参压缩 | 整项省略 |
+| skills | `[]` | 无参查询 | 保留，无参查询 |
+| `skill:<name>` | `["request"]` | 可选文本和附件 | 整项省略 |
 
-| 命令 | idle 的 input | running 的 input / 可见性 |
-|---|---|---|
-| help | 无 | 无，保留；不恢复 [command] |
-| status | 无 | 无，保留 |
-| name | hint=[displayName] | 不变 |
-| model | hint=[modelId] | 省略 input，仅查询 |
-| thinking | hint=[on\|off] | 省略 input，仅查询 |
-| compact | 无 | 整项省略 |
-| skills | 无 | 无，保留 |
-| `skill:<name>` | hint=[request]，acceptsFiles=true | 整项省略 |
+此表是唯一维护的命令交互规则；前端集中适配它与已对账的 Session 状态，不在各组件重复分支。
+状态未知、恢复中或清单过期时暂停提交并读取权威 Session/清单；不能从 model 的 hints 推断当前可修改。
+状态由 idle 变为 running 时保留参数草稿并禁用修改提交；用户明确清空后才可执行无参查询。
+清单与状态不是跨请求原子快照，POST 在所属事务或锁内最终准入；409 后刷新只读状态与清单，
+保留草稿，不自动重放或悄悄降为查询。完整控件规则见[前端专项](../../07-前端设计/技术设计/命令/README.md#command-input-controls)。
+
+所有 `type=skill` 的命令允许可选附件，Builtin 均不接收附件；不返回 acceptsFiles，
+不按 Skill 名称或正文建立附件白名单。允许附件不保证任意 MIME 均可处理、模型具备视觉能力或文件已获授权。
+上传完成后将 fileIds 与文本一并冻结，后端沿用普通消息的附件约束。上传与 Mate 公共文件桥接仍独立验收。
+公开描述符不返回 kind、input、available、unavailableCode、allowedValues 或 catalogVersion；内部 DTO 和准入字段可保留。
 
 Builtin 固定按 help、status、name、model、thinking、compact、skills 排列，再追加按 name
 升序排列的 Skill。过滤后保留相对顺序；服务端控制显示顺序，客户端不重新排序。
@@ -231,7 +250,7 @@ Builtin 固定按 help、status、name、model、thinking、compact、skills 排
 不得自动刷新、远程补拉或调用模型。完整缓存中的空 Skill 绑定是成功，不等于缓存缺失。
 
 这是展示投影，不是执行授权凭据或预约。保留内部 Admission Policy/DTO 的状态字段供服务端使用，
-DTO→VO 时执行过滤与省略规则；不能把内部 DTO 直接序列化。
+DTO→VO 时执行命令过滤与轻量字段投影；不能把内部 DTO 直接序列化。
 每个 POST 重新解析独立 Catalog，在所属事务或锁内复核可变状态、绑定与参数。
 Builtin POST 的 400/404/409/422/500/503 和普通 JSON 保持后续已确认契约，特别是 Help 无缓存仍为 422；
 GET 需按 operation 映射 503，不能全局修改同名错误的 422 映射。Skill POST 以 B13/B14 的明确确认生效，不能由 GET 示例自动确认。
@@ -266,7 +285,7 @@ argumentHint，支持轻量提示的结构参考；它不定义 CampusClaw 的 H
 
 差异分类：字段减法、固定顺序和 Help 无参属于产品约束；共享 GET 完整性前置与 DTO→VO
 投影属于架构变更；不返回内部路径、正文和凭据属于安全边界。
-原因是让前端只解释当前调用形态，同时让执行的权威校验留在后端。
+原因是将发现信息与交互规则分开，执行的权威校验仍留在后端；代价是前后端需共同维护并验证命令状态规则。
 
 实施依赖与持续验收（其中清单、Builtin 与 HTTP 基础已实现，不能把本表整体视为待办）：
 
@@ -286,7 +305,7 @@ argumentHint，支持轻量提示的结构参考；它不定义 CampusClaw 的 H
 
 | 源码 / 符号 | 已观察行为 | 结论与边界 |
 |---|---|---|
-| `vo/CommandListResponseVO.java` · DescriptorResponseVO / InputResponseVO | 公开 input 只有 hint、acceptsFiles；null input 与 false acceptsFiles 分别通过 Jackson 省略 | 两字段公开形态已实现；内部 DTO 其他字段不是 HTTP 契约 |
+| `vo/CommandListResponseVO.java` · DescriptorResponseVO / InputResponseVO | 公开 input 只有 hint、acceptsFiles；null input 与 false acceptsFiles 分别通过 Jackson 省略 | 当前仍为 kind/input 旧形态；目标 type/hints 投影待实现，内部 DTO 不直接公开 |
 | `web/RuntimeCommandCatalogController.java` · list；`service/command/CommandCatalogService.java` · list | Controller 调用 list(sessionId)，设置 Content-Language；清单服务未接收 Locale | 响应 Header 不证明命令描述已本地化 |
 | `service/command/CommandDiscoveryResponseAssembler.java` · descriptor / input | 原样投影 command.description()；hint 使用固定提示常量 | 当前实现不会按 zh-CN 切换 Builtin 描述 |
 | `service/command/contributor/HelpCommandContributor.java` · definition；`service/command/contributor/NameCommandContributor.java` · definition | 描述分别固定为英文 Agent 用途说明和 Session 改名说明 | 与契约中文成功示例不一致；Builtin 描述本地化待实现，契约适用范围待明确 |
@@ -297,11 +316,25 @@ argumentHint，支持轻量提示的结构参考；它不定义 CampusClaw 的 H
 中文样例当作已实现证据。POST Help 的 Agent 介绍继续按已确认规则保留原文，与 GET 的
 help 命令用途说明区分。描述语言切换尚未实现，运行验收未完成。
 
-文档校验（2026-09-22）：命令清单、响应、Help、API 页面和文档维护的 60 项检查通过；
-十项接口 DOM 检查通过，包括响应/语言切换及无 JavaScript 回退。Runtime 与 Slash 专题的
-机械校验通过，PlantUML/SVG 无变更。全仓 API 校验仍受范围外的旧 PlantUML 链接阻断，
-追加的用词检查在 Skill 专题已有的资源路径表述处失败，均未作为本专题变更修正。
-浏览器安全策略拒绝打开本地 HTML，桌面与 360px 视觉验收未完成；DOM 检查不证明布局通过。
+#### 3.3.2 type/hints 迁移与验收
+
+该字段调整属于产品约束与接口架构变更，待实现。Java `53eff85c` 的
+`CommandListResponseVO.DescriptorResponseVO`、`CommandDiscoveryResponseAssembler.descriptor/input`
+仍输出 kind/input；`frontend/src/runtime/commands.ts` 的 decodeCatalog/freezeCommandArguments
+仍据 kind 分派并据 input 判断参数能力。需要一起迁移投影、解码、提交快照及状态交互，
+不双写旧字段，不提供隐式兼容回退。内部 CommandKind、ResolvedCommandDTO.InputDTO 无需因公开字段改名而删除。
+
+设计验收覆盖两跳等值、type/name 一致、hints 缺失/空数组/非法类型、相同命令跨状态提示不变、
+模型带参草稿在状态变化后保留、Skill 附件不依赖 hints、Builtin 附件拒绝及 POST 状态竞争。
+设计门禁不证明 Runtime 或产品前端已经完成迁移；POST 请求、业务响应和 JSON/SSE 传输保持既有契约。
+
+2026-09-22 设计验证：65 项契约/文档回归、6 项全局类图结构检查、15 项 Slash 原型与 40 项工作台原型检查通过；
+十项接口 DOM 检查、Mate 两跳等值与生成同步通过。Runtime、Mate 和前端专题机械检查通过，
+两张受影响 SVG 已检查原尺寸与文档宽度；状态图缩略图用于整体定位，细节使用原尺寸链接。
+全仓图检查最终通过（35 专题、128 块、50 张时序图、0 错误）。受管压缩图的一项复杂度提示保留：
+三个条件分别为无安全窗口退出、摘要是否有效和首次溢出恢复，职责与恢复边界不同，不为数量阈值合并。
+全量 API 检查仍受范围外学习资料的既有 PlantUML 坏链接阻断。
+浏览器安全策略此前拒绝本地 HTML，未绕过限制；本次未完成桌面与 360px 的浏览器视觉验收，DOM 测试不证明布局。
 
 ### 3.4 Skill 执行链（B13/B14 已确认）
 
@@ -381,6 +414,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.14.0 | 2026-09-22 | 命令描述符采用 type 与 hints，分离输入提示、会话状态和附件规则。 |
 | 1.13.0 | 2026-09-22 | 明确命令选项交互与 hint 的分工，并统一所有可用 Skill 的附件能力说明。 |
 | 1.12.4 | 2026-09-22 | 按 53eff85c 分列当前 Runtime、Skill、前端实现及结构、版本快照和统计增量。 |
 | 1.12.3 | 2026-09-22 | 补充命令字段与调用示例入口，并区分中文展示样例和实际描述语言。 |

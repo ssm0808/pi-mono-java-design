@@ -152,9 +152,8 @@ def render_business_flow(flow: list[dict[str, str]]) -> str:
 
 
 def command_state(command: dict[str, Any]) -> list[str]:
-    command_input = command.get("input")
-    hint = command_input["hint"] if command_input else "无参数"
-    files = "允许附件" if command_input and command_input.get("acceptsFiles") else "无附件"
+    hint = "、".join(command.get("hints", [])) or "无提示"
+    files = "允许附件" if command["type"] == "skill" else "无附件"
     return [f'/{command["name"]}', command["description"], hint, files]
 
 
@@ -168,6 +167,7 @@ def render_command_example(operation: dict[str, Any]) -> str:
         sections.append(
             '<section class="business-section">'
             f'<h3>{html.escape(response["tabLabel"])}</h3>'
+            f'<p>{html.escape(response["summary"])}</p>'
             f'{SHARED.static_table(["命令", "用途", "输入提示", "附件"], rows)}</section>'
         )
     return ''.join(sections)
@@ -208,7 +208,7 @@ def render_business_review(model: dict[str, Any]) -> str:
         render_business_flow(view["flow"]),
         '</section>',
     ]
-    if operation["operationKey"] == "listChatCommands":
+    if operation["operationKey"] == "ListChatCommands":
         sections.append(render_command_example(operation))
     sections.append(render_error_summary(operation))
     for note in view.get("notes", []):

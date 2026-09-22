@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 4.3.2 |
+| 文档版本 | 4.4.0 |
 | 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | Skill 发现候选 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`（PR #210，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并） |
@@ -89,12 +89,12 @@ pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 ## 4. 统一实施与集成要求
 
 共享 GET 的 Skill 名称为 `skill:<name>`，idle 时排在固定 Builtin 顺序之后并按 name 排序；
-running 时整项省略。仅返回 name/kind/description 与
-`input: {"hint":"[request]","acceptsFiles":true}`，不输出 Skill ID、版本、正文、路径或建议值。
-所有可用 Skill 都返回 acceptsFiles=true，不要求按 pdf、图片或其他 Skill 分类开启；它表示附件输入通道，
-不承诺任意文件格式都能被处理。参数可空、附件可省略；文件数量、标识、所有权与可用性沿用普通消息边界，
-不能把清单标记当作最终授权。Runtime 的 InputResponseVO 投影和 fileIds 执行传递已存在；
-当前前端 freezeCommandArguments 尚未组装 fileIds，上传按钮仍禁用，前端与 Mate 公共桥接分别验收。
+running 时整项省略。返回 name、type=skill、description 和可选 hints（示例 `["request"]`），
+不输出 Skill ID、版本、正文、路径或建议值。hints 缺失或为空不禁止参数或附件。
+所有 Skill 均允许可选文件引用，不要求逐个 Skill 声明接受附件；不返回 acceptsFiles，
+也不承诺任意文件格式都能被处理。文件数量、标识、所有权与可用性沿用普通消息边界。
+Java 53eff85c 的 InputResponseVO 仍输出旧附件标记，type/hints 投影待实现；fileIds 执行传递已存在。
+前端 freezeCommandArguments 尚未组装 fileIds，上传按钮仍禁用，前端与 Mate 公共桥接分别验收。
 完整规则与最新源码差距见[共享 GET 契约](../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
 发现与执行分别核验：当前 Runtime Skill POST 已实现；Mate 公共执行是否开放仍由独立契约决定。
 
@@ -187,6 +187,7 @@ skills Builtin 只展示最新完整绑定快照中的名称/描述，不等于�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 4.4.0 | 2026-09-22 | Skill 描述符改用 type/hints，附件作为所有 Skill 的统一规则。 |
 | 4.3.2 | 2026-09-22 | 明确所有可用 Skill 允许附件引用，区分附件通道、内容能力和前端接入状态。 |
 | 4.3.1 | 2026-09-22 | 按 53eff85c 区分已实现的执行、严格名称与文本恢复及待实现的结构和版本快照。 |
 | 4.3.0 | 2026-09-20 | 区分用户 Skill Command 与模型 Skill 加载工具，统一引用既有根执行统计口径。 |

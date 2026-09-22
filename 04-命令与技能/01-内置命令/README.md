@@ -7,7 +7,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.11.5 |
+| 文档版本 | 2.12.0 |
 | 更新日期 | 2026-09-22 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
@@ -112,7 +112,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 
 空参数是 Service 归一后的空字符串。全空白 Name 修改在去除两端空白后为空时拒绝，不视为清空。
 Help 的 arguments 缺省/null/空白归一为空；非空参数（包括 model）为 INVALID_COMMAND_REQUEST，不进入命令详情或 COMMAND_NOT_FOUND 分支。
-GET 的 Help 描述符只有 name/kind/description，不返回 input；共享清单按[轻量契约](../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)过滤并排序。
+GET 的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []），不允许执行参数；共享清单按[轻量契约](../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)过滤并排序。
 Help 不刷新：读取最近成功发布的完整 Agent 缓存；无快照为 422 AGENT_NOT_AVAILABLE，只有文案缺失则返回 200 空数组。
 displayName 取 Agent 显示名，空白回退 Agent name；不是 `/name` 的 Session 名称。文案按纯文本展示，不调用模型、不写历史或模型上下文。
 共享 GET 不暴露内部准入原因；无完整 Agent 缓存时为 503 AGENT_NOT_AVAILABLE，不改变上述 POST Help 的 422。
@@ -274,6 +274,7 @@ PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。图形还需检查�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.12.0 | 2026-09-22 | Builtin 描述符统一 type/hints，Help 继续保持无参语义。 |
 | 2.11.5 | 2026-09-22 | 按 53eff85c 更新七个 Builtin、业务响应和统一 Session POST 的已实现状态。 |
 | 2.11.4 | 2026-09-22 | 按 53eff85c 将 Help 缓存、查询、响应投影和公开执行更新为已实现。 |
 | 2.11.3 | 2026-09-22 | 将 Help Agent 使用场景字段统一为 `useCases`，同步命令结果和缓存验收。 |

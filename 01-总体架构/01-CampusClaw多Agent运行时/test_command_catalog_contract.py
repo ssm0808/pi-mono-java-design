@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 
-from command_catalog_contract import validate_catalog_examples, validate_commands, validate_projection_pair
+from command_catalog_contract import validate_catalog_examples, validate_commands, validate_descriptor, validate_projection_pair
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT.parents[1] / "02-服务与接口/06-mate-service聊天命令API"
@@ -21,58 +21,60 @@ class CommandCatalogContractTest(unittest.TestCase):
     def test_both_projections_and_examples(self):
         validate_projection_pair(self.runtime, self.public)
 
-    def test_all_legacy_and_replacement_fields_are_rejected(self):
-        for field in ("available", "unavailableCode", "allowedValues", "catalogVersion", "snapshot"):
+    def test_retired_fields_are_rejected(self):
+        for field in ("kind", "input", "acceptsFiles", "acceptsArguments", "available",
+                      "unavailableCode", "allowedValues", "catalogVersion", "snapshot"):
             with self.subTest(field=field):
-                commands = copy.deepcopy(self.idle)
-                commands[0][field] = True
+                command = copy.deepcopy(self.idle[0])
+                command[field] = True
                 with self.assertRaises(RuntimeError):
-                    validate_commands(commands, "idle")
-        for field in ("mode", "available", "unavailableCode", "placeholder", "suggestions", "allowedValues"):
-            with self.subTest(field=field):
-                commands = copy.deepcopy(self.idle)
-                commands[2]["input"][field] = []
-                with self.assertRaises(RuntimeError):
-                    validate_commands(commands, "idle")
+                    validate_descriptor(command)
 
     def test_required_fields_and_types(self):
-        for field in ("name", "kind", "description"):
+        for field in ("name", "type", "description"):
             for value in (None, "", [], 1):
                 with self.subTest(field=field, value=value):
-                    commands = copy.deepcopy(self.idle)
-                    commands[0][field] = value
+                    command = copy.deepcopy(self.idle[0])
+                    command[field] = value
                     with self.assertRaises(RuntimeError):
-                        validate_commands(commands, "idle")
-            commands = copy.deepcopy(self.idle)
-            del commands[0][field]
+                        validate_descriptor(command)
+            command = copy.deepcopy(self.idle[0])
+            del command[field]
             with self.assertRaises(RuntimeError):
-                validate_commands(commands, "idle")
+                validate_descriptor(command)
+        for command in ({"name": "model", "type": "skill", "description": "x"},
+                        {"name": "skill:pdf", "type": "builtin", "description": "x"}):
+            with self.assertRaises(RuntimeError):
+                validate_descriptor(command)
 
-    def test_input_omission_and_true_only(self):
-        for value in (None, {}, {"hint": ""}, {"hint": "  "}, {"hint": 1},
-                      {"hint": "[request]", "acceptsFiles": False},
-                      {"hint": "[request]", "acceptsFiles": 1}):
+    def test_hints_are_optional_display_text_not_capabilities(self):
+        for original in (self.idle[2], self.idle[-1]):
+            for hints in ([], ["request"], ["显示提示", "任意展示文字"]):
+                command = copy.deepcopy(original)
+                command["hints"] = hints
+                validate_descriptor(command)
+            del command["hints"]
+            validate_descriptor(command)
+        for value in (None, {}, "modelId", [None], [1], [""], ["  "], [{"value": "x"}]):
             with self.subTest(value=value):
-                commands = copy.deepcopy(self.idle)
-                commands[-1]["input"] = value
+                command = copy.deepcopy(self.idle[-1])
+                command["hints"] = value
                 with self.assertRaises(RuntimeError):
-                    validate_commands(commands, "idle")
-        for name in ("help", "status", "compact", "skills"):
-            commands = copy.deepcopy(self.idle)
-            next(command for command in commands if command["name"] == name)["input"] = {"hint": "[command]"}
-            with self.assertRaises(RuntimeError):
-                validate_commands(commands, "idle")
+                    validate_descriptor(command)
 
-    def test_running_filter_and_query_only(self):
+    def test_running_filters_commands_but_keeps_metadata(self):
         for name in ("compact", "skill:pdf"):
             commands = self.running + [next(command for command in self.idle if command["name"] == name)]
             with self.assertRaises(RuntimeError):
                 validate_commands(commands, "running")
         for name in ("model", "thinking"):
-            commands = copy.deepcopy(self.running)
-            next(command for command in commands if command["name"] == name)["input"] = {"hint": "[value]"}
-            with self.assertRaises(RuntimeError):
-                validate_commands(commands, "running")
+            running = next(command for command in self.running if command["name"] == name)
+            idle = next(command for command in self.idle if command["name"] == name)
+            self.assertEqual(running, idle)
+        commands = self.runtime["responses"][0]["bodies"]["zh-CN"]["result"]["commands"]
+        next(command for command in commands if command["name"] == "model")["hints"] = []
+        with self.assertRaises(RuntimeError):
+            validate_catalog_examples(self.runtime)
 
     def test_order_duplicates_and_complete_empty_skills(self):
         validate_commands(self.idle[:-1], "idle")

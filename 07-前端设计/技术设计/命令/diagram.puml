@@ -176,7 +176,7 @@ QueryDraft --> MessageDraft : Escape; restore message
 
 state SelectedCommand
 SelectedCommand : Removable canonical name chip
-SelectedCommand : Edit arguments only when input exists
+SelectedCommand : Edit arguments when command and Session rules allow
 SelectedCommand --> Executing : explicit action; current descriptor and shared gate
 SelectedCommand --> MessageDraft : remove, Escape, or empty Backspace
 SelectedCommand --> ChangingCommand : click chip name; suspend selection
@@ -207,9 +207,9 @@ note right of SelectedCommand
   Question, review and permission waits remain running.
   Submission or recovery blocks command execution.
   A stale argument draft is preserved, never auto-cleared.
-  hint is display-only.
-  Files are admitted only when acceptsFiles is true.
-  No-input selection focuses the command action.
+  hints are display-only, independent of Session state.
+  Files are admitted for type=skill when upload is ready.
+  Query-only selection focuses the command action.
   While running, Stop keeps its primary position.
   Repeated Enter does not execute.
 end note

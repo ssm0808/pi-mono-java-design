@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.18.0 |
+| 文档版本 | 1.19.0 |
 | 更新日期 | 2026-09-22 |
-| 变更性质 | operationKey 使用大驼峰；作用描述接口职责；命令选项交互与附件能力分层 |
+| 变更性质 | 命令描述符使用 type/hints；输入控件、状态与附件规则分开 |
 | 唯一当前入口 | [当前十项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
 
@@ -39,7 +39,7 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 
 | 要查的内容 | 入口 |
 |---|---|
-| input 字段、各命令 idle/running 形态、交互调用例子 | [查看会话命令清单](chat-api-review.html#ListSessionCommands)的字段表与调用速查 |
+| 描述符 type/hints 字段、各命令 idle/running 形态、交互调用例子 | [查看会话命令清单](chat-api-review.html#ListSessionCommands)的字段表与调用速查 |
 | 七个 Builtin 与 Skill 的完整请求、成功和失败响应 | [执行会话命令](chat-api-review.html#ExecuteSessionCommand)；清单页的示例索引列出对应响应标签 |
 | zh-CN 仍返回英文描述的源码依据与契约缺口 | [Slash 语言专项核对](../../04-命令与技能/00-Slash-Command通用模块/README.md#331-清单字段与语言专项核对) |
 | Help 的 Agent 元数据、缓存与纯文本展示 | [Help 专项](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) |
@@ -119,6 +119,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.19.0 | 2026-09-22 | 命令描述符使用 type 与 hints，输入控件、状态和附件规则分别维护。 |
 | 1.18.0 | 2026-09-22 | operationKey 统一大驼峰，接口作用移除评审措辞并补齐命令交互与附件边界。 |
 | 1.17.1 | 2026-09-22 | 命令清单直接展示字段、调用和响应示例索引，并标明描述语言差异。 |
 | 1.17.0 | 2026-09-22 | 按实际用途收敛十项接口请求头，并同步执行分支示例与 Help 投影。 |
