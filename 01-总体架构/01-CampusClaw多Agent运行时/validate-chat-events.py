@@ -987,9 +987,9 @@ def validate_plan_commit(frames: list, plan: dict) -> None:
     calls = [e for e in frames if e.get("type") == "agent.tool_call"
              and e["toolCallId"] == plan["toolCallId"]]
     require(len(calls) == 1 and calls[0].get("toolName") == "ExitPlanMode"
-            and calls[0]["arguments"] == {} and calls[0]["requiresConfirmation"] is False
+            and calls[0]["arguments"] == {"plan": plan["content"]} and calls[0]["requiresConfirmation"] is False
             and calls[0]["sourceEventId"] == plan["sourceEventId"],
-            "plan requires its exact empty-argument exit call")
+            "plan requires its exact exit call with the same complete plan argument")
     require(frames.index(calls[0]) < frames.index(plan), "call commit must precede proposal")
     require(any(e["type"] == "session.status_idle" and e.get("reason") == "confirming"
                 and e["sourceEventId"] == plan["sourceEventId"] for e in frames[frames.index(plan) + 1:]),
@@ -1164,13 +1164,15 @@ def validate_plan_regressions(post: dict) -> int:
         except ValueError:
             continue
         raise ValueError("invalid plan review causal link accepted")
-    # Empty parameters and commit ordering are new-write invariants, not legacy-read requirements.
-    for mutation in ("arguments", "order"):
+    # Full parameters and commit ordering constrain successful new commits, not generic history reads.
+    argument_mutations = ({}, {"plan": None}, {"plan": 42}, {"plan": ""},
+                          {"plan": "# A different plan"}, {"plan": plan["content"], "extra": True})
+    for mutation in (*argument_mutations, "order"):
         frames = copy.deepcopy(streams["200-plan-review"])
         candidate = next(e for e in frames if e["type"] == "agent.plan")
         call = next(e for e in frames if e.get("toolName") == "ExitPlanMode")
-        if mutation == "arguments":
-            call["arguments"] = {"plan": candidate["content"]}
+        if isinstance(mutation, dict):
+            call["arguments"] = mutation
         else:
             frames.remove(call)
             frames.append(call)
@@ -1179,6 +1181,17 @@ def validate_plan_regressions(post: dict) -> int:
         except ValueError:
             continue
         raise ValueError("invalid plan source order or arguments accepted")
+    # Legacy empty arguments and malformed field values remain readable as generic calls.
+    legacy_call = copy.deepcopy(next(e for e in streams["200-plan-review"]
+                                     if e.get("toolName") == "ExitPlanMode"))
+    for arguments in ({}, {"plan": None}, {"plan": ""}):
+        validate_frame(dict(legacy_call, arguments=arguments), history=True)
+    try:
+        validate_frame(dict(legacy_call, phase="delta"))
+    except ValueError:
+        pass
+    else:
+        raise ValueError("generic tool-call delta must not be introduced by plan previews")
     legacy = copy.deepcopy(plan)
     legacy.pop("phase")
     validate_frame(legacy, history=True)
@@ -1194,7 +1207,7 @@ def validate_plan_regressions(post: dict) -> int:
     try:
         validate_plan_confirmation(malformed_request)
     except ValueError:
-        return len(cases) + len(flow_cases) + 3
+        return len(cases) + len(flow_cases) + len(argument_mutations) + 3
     raise ValueError("approve request accepted feedback")
 
 
@@ -1209,7 +1222,8 @@ def main() -> int:
             "phases": ["delta", "completed"], "previewPersisted": False,
             "identity": "same-eventId-for-preview-and-completed",
             "completion": "after-review-transaction-commit",
-            "legacyRead": "missing-phase-is-completed", "status": "confirmed-pending-implementation",
+            "legacyRead": "missing-phase-is-completed", "status": "implemented",
+            "argumentPreviewStatus": "pending-implementation",
         }, "shared plan lifecycle must match the two-phase contract")
         require(sorted(MODEL_PATH.parent.glob("*.json")) == [MODEL_PATH, HISTORY_PATH],
                 "only POST and GET history remain active, not the retired stream")

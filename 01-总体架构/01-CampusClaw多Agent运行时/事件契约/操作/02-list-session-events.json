@@ -823,7 +823,9 @@
                   "toolCallId": "call_plan_01",
                   "toolName": "ExitPlanMode",
                   "displayName": "ExitPlanMode",
-                  "arguments": {},
+                  "arguments": {
+                    "plan": "# 园区巡检报告制作计划\n\n## 实施步骤\n1. 根据巡检记录生成异常告警报告。\n2. 校验报告数据并整理处理建议。\n\n## 验收标准\n报告覆盖附件中的异常记录，建议与核验结果一致。\n"
+                  },
                   "requiresConfirmation": false
                 },
                 {
@@ -1153,7 +1155,9 @@
                   "toolCallId": "call_plan_01",
                   "toolName": "ExitPlanMode",
                   "displayName": "ExitPlanMode",
-                  "arguments": {},
+                  "arguments": {
+                    "plan": "# 园区巡检报告制作计划\n\n## 实施步骤\n1. 根据巡检记录生成异常告警报告。\n2. 校验报告数据并整理处理建议。\n\n## 验收标准\n报告覆盖附件中的异常记录，建议与核验结果一致。\n"
+                  },
                   "requiresConfirmation": false
                 },
                 {
@@ -1210,7 +1214,9 @@
                   "toolCallId": "call_plan_02",
                   "toolName": "ExitPlanMode",
                   "displayName": "ExitPlanMode",
-                  "arguments": {},
+                  "arguments": {
+                    "plan": "# 园区巡检报告制作计划\n\n## 实施步骤\n1. 根据巡检记录生成异常告警报告。\n2. 校验报告数据并整理处理建议。\n\n## 验收标准\n报告覆盖附件中的异常记录，建议与核验结果一致。\n\n## 数据校验\n逐项核对告警、设备与统计汇总；发现不一致时修正后重新校验。\n"
+                  },
                   "requiresConfirmation": false
                 },
                 {
@@ -1373,7 +1379,9 @@
                   "toolCallId": "call_plan_after_question",
                   "toolName": "ExitPlanMode",
                   "displayName": "ExitPlanMode",
-                  "arguments": {},
+                  "arguments": {
+                    "plan": "# 园区巡检报告制作计划\n\n## 实施步骤\n1. 根据巡检记录生成异常告警报告。\n2. 校验报告数据并整理处理建议。\n\n## 验收标准\n报告覆盖附件中的异常记录，建议与核验结果一致。\n"
+                  },
                   "requiresConfirmation": false
                 },
                 {
@@ -1597,7 +1605,7 @@
           ],
           [
             "计划记录",
-            "计划制作、批准执行与修订的完整事件，与 POST SSE 共用同形记录。agent.plan 正文来自同一 Assistant 响应的唯一闭合 proposed_plan 块，后端绑定原 Entry 和空参数退出调用；新完整记录为 phase=completed，SSE delta 不入历史，无 started；旧无 phase 记录保持可读。确认以 targetEventId 绑定当前完整方案；planApproved 模式事件同时引用原根与批准回执。"
+            "计划制作、批准执行与修订的完整事件，与 POST SSE 共用同形记录。agent.plan 正文来自同次 ExitPlanMode 的 preparedInvocation 经可信定义校验的最终 plan 快照，后端绑定原 ToolCall/Entry 身份；原始 Assistant/ToolCall 先于 prepare 保存；成功审核时 arguments.plan 与同次最终快照及 completed.content 一致。新完整记录为 phase=completed，参数文本 preview 使用既有 SSE delta 且不入历史，无 started；旧无 phase 计划及原调用参数记录保持可读。确认以 targetEventId 绑定当前完整方案；planApproved 模式事件同时引用原根与批准回执。"
           ],
           [
             "问题回答",
@@ -1638,7 +1646,7 @@
   },
   "review": {
     "status": "L1～L10 与 B01～B15 已确认 · 可进入实现 · 待实现",
-    "notice": "L5 已确认正文字符串；L6 已确认参数对象；L7 已确认内容块数组；L8 已确认仅文本；L9 已确认 CallMateTool/{tool,args}；L10 已确认 isError。B01～B15 已确认，四组选择不再显示。GET/POST Events 与 Skill 精确契约已定稿；已确认的产品语义不重开，实现数值校准不作为逐字段问题。 用户已一次提交四组 A-recommended，并要求无新增问题则完成后通知实现任务；B01～B15 语义已确认，精确字段和码值据此补齐，无新增产品确认门槛。 AskUserQuestion 已在 Runtime 主线实现：新增 agent.question 与 user.question_answer，复用原根续跑、confirming 和持久化历史；不改变 Session mode，不替代计划批准或工具授权。精确问题和答案约束由共享 questionContract 维护。 计划流式已确认（待实现）：后端解析唯一 proposed_plan 块，agent.plan 只用 phase=delta/completed；第一条非空 delta 建卡，无 started，预览不入历史。审核事务成功后发送同 ID 完整 completed 与 confirming；普通 agent.message 只保留前置说明，不重复计划，sourceMessageEventId 不进入新契约。完整响应原 Entry 与唯一 ExitPlanMode({}) 在后端绑定；旧无 phase 完整计划可读，新写必有 phase。",
+    "notice": "L5 已确认正文字符串；L6 已确认参数对象；L7 已确认内容块数组；L8 已确认仅文本；L9 已确认 CallMateTool/{tool,args}；L10 已确认 isError。B01～B15 已确认，四组选择不再显示。GET/POST Events 与 Skill 精确契约已定稿；已确认的产品语义不重开，实现数值校准不作为逐字段问题。 用户已一次提交四组 A-recommended，并要求无新增问题则完成后通知实现任务；B01～B15 语义已确认，精确字段和码值据此补齐，无新增产品确认门槛。 AskUserQuestion 已在 Runtime 主线实现：新增 agent.question 与 user.question_answer，复用原根续跑、confirming 和持久化历史；不改变 Session mode，不替代计划批准或工具授权。精确问题和答案约束由共享 questionContract 维护。 计划 delta/completed 与前端消费已实现；参数流式来源待实现：后端仅对 ExitPlanMode.plan 参数 JSON 做安全增量字符串解码，复用 agent.plan 的 delta/completed；第一条非空 delta 建卡，无 started，预览不入历史，不暴露 raw partialJSON，不新增通用 tool_call delta。同次 preparedInvocation 的最终 plan 经可信定义校验、审核事务成功后发送同 ID completed 与 confirming；普通 agent.message 不重复参数正文，sourceMessageEventId 不进入契约。完整计划绑定原 ToolCall/Entry 身份与唯一 ExitPlanMode({plan}) 的 preparedInvocation 最终快照；原始 Assistant/ToolCall 先于 prepare 保存；成功审核时 arguments.plan 与同次最终快照及 completed.content 一致；旧无 phase 完整计划和原调用记录仍可读，新写必有 phase。",
     "questions": [],
     "confirmedChoices": {
       "L1-page-direction": "A-oldest-first",

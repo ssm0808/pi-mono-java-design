@@ -1,10 +1,10 @@
 # CampusClaw 设计仓库
 
-导航版本 3.33.0 · 2026-09-22
+导航版本 3.34.0 · 2026-09-28
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
-实现状态统一使用“已实现”“待实现”“未核验”，测试验收另列。`ExitPlanMode`、`TodoUpdate`、`AskUserQuestion` 已在 Runtime 主线实现，最新核验范围见[工具与计划模式证据](01-总体架构/06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)；Mate 公共桥接与未核验范围分别记录。
+实现状态统一使用“已实现”“待实现”“未核验”，测试验收另列。`ExitPlanMode`、`TodoUpdate`、`AskUserQuestion` 已在 Runtime 主线实现，计划生成、参数流与客户端的最新范围见[计划模式证据 §15](01-总体架构/06-CampusClaw计划模式/source-evidence.md#plan-argument-streaming-evidence)，其他工具保留各自核验归属；Mate 公共桥接与未核验范围分别记录。
 
 [Agent 架构对比](01-总体架构/07-Agent架构对比/README.md) · [全部设计图](设计图索引.html) · [工作指引](AGENTS.md)
 
@@ -35,7 +35,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 | 目的 | 入口与维护边界 |
 |---|---|
 | 了解架构取舍 | [Agent 架构对比](01-总体架构/07-Agent架构对比/README.md)：基线做法、差异原因、代价和实现状态，复用模块主图 |
-| 计划流式生成与审核 | M01 [计划流式输出](01-总体架构/06-CampusClaw计划模式/plan-streaming.md)：后端计划标记解析、同身份 delta/completed、同响应审核绑定、M06 契约与 M07 卡片；增量待实现 |
+| 计划流式生成与审核 | M01 [计划流式输出](01-总体架构/06-CampusClaw计划模式/plan-streaming.md)：完整 plan 参数、专用参数增量与审核绑定；调整待实现；复用已实现的 M06 两 phase 与 M07 卡片，不新增通用工具参数公开流 |
 | 核对 Runtime HTTP 报文 | [统一接口页](01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html)；[catalog](01-总体架构/01-CampusClaw多Agent运行时/接口契约/catalog.json) 指定唯一精确源 |
 | 核对公共 Chat 契约 | [Mate Chat](02-服务与接口/07-mate-service通用对话API/README.md)：公共流与历史独立维护；未整合要求见其待决事项 |
 | 浏览器重开后继续流式输出 | M06 [Redis 流式恢复](01-总体架构/01-CampusClaw多Agent运行时/redis-stream-recovery.md)：事件源侧快照与短期 Stream、跨副本读取、故障边界及入门解释；接口增量为 proposed，能力待实现 |
@@ -57,6 +57,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.34.0 | 2026-09-28 | 计划模式采用完整工具参数与专用流式预览，保持审核接口和其他工具公共边界。 |
 | 3.33.0 | 2026-09-22 | M03 的 SearchTools 收敛为精确名称发现，加载与数据同步留给后续专题。 |
 | 3.32.0 | 2026-09-22 | M03 的 Skill 工具改用固定 SearchTools 渐进发现并保持模型工具集合不变。 |
 | 3.31.1 | 2026-09-22 | M05 增加固定基线下的当前实现与剩余增量状态入口。 |

@@ -2,13 +2,15 @@
 
 [前端主设计](../README.md) · [可操作工作台](../原型/plan-workbench.html) · [计划模式主设计](../../01-总体架构/06-CampusClaw计划模式/README.md)
 
-版本：1.8.0；日期：2026-09-22。性质：既有计划、问答、审核、任务投影及日志合并已实现；标记解析、计划专用流式事件与同 ID 卡片合并增量待实现，见[最新局部核验](../../01-总体架构/06-CampusClaw计划模式/source-evidence.md#plan-marker-evidence)。其他体验保留原范围；Mate 公共接入待实现，原型不代表部署验证。
+版本：1.9.0；日期：2026-09-28。性质：计划、问答、审核、任务投影以及计划 delta/completed 与同 ID 卡片合并已实现；ExitPlanMode({plan}) 参数增量预览的后端生产待实现，前端继续复用既有事件，见[参数流式证据](../../01-总体架构/06-CampusClaw计划模式/source-evidence.md#plan-argument-streaming-evidence)。其他体验保留原范围；Mate 公共接入待实现，原型不代表部署验证。
 
 本页维护 M07 的模式入口、方案阅读、审核和进度展示。模式、审核事务与恢复权威归 M01 的计划模式专题；精确字段归 Runtime 共享契约和审核增量，企业接入归 Mate 公共契约。本页不增加 HTTP API、Slash Command 或后端状态。
 
 ## 1. 源码与交互依据
 
-当前设计起点为 `pi-mono-java-design@e179513`，本次源码核验为 `pi-mono-java@1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，沿用计划模式与 AskUserQuestion 的已确认契约。内部前端实现起点为 `pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead`，前次交互验证提交为 `fcae53829c2884ea1d3cc522c183f5a125a67f45`；完整提交、增量实现和验证范围统一见[当前实现证据](../source-evidence.md#current-implementation)。此前 `699f929f` 和未提交问答工作树的记录保留在[历史证据](../source-evidence.md#question-slash-evidence)，不用于判断当前是否已有问答能力。
+本次局部源码核验为 `pi-mono-java@553dcd5e2ff682f9684810a043b442b37a02e54a`：`frontend/src/runtime/protocol.ts#decodeEvent`、`eventStore.ts#mergeEvent/executionState`、`projectors/runtimeEventProjector.ts#projectRuntimeEvents/matchingPlan` 与 `composables/useRuntimeApi.ts#confirmPlan/recover` 已消费计划 delta/completed，不解析标记或工具参数生成计划卡。模式、审核请求、原根关联与历史恢复协议保持既有设计。
+
+早期交互设计起点为 `pi-mono-java-design@e179513`，对应 Java 核验为 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`；其他交互继续保留各自的历史核验范围。内部前端实现起点为 `pi-mono-java@9f785bea3ffff8f6566cd1b2727285af46a2aead`，前次交互验证提交为 `fcae53829c2884ea1d3cc522c183f5a125a67f45`；完整提交、增量实现和验证范围统一见[当前实现证据](../source-evidence.md#current-implementation)。此前 `699f929f` 和未提交问答工作树的记录保留在[历史证据](../source-evidence.md#question-slash-evidence)，不用于判断当前是否已有问答能力。
 
 | 证据 | 已观察事实与适用边界 |
 |---|---|
@@ -53,7 +55,7 @@
 |---|---|---|
 | `planIdle` | 计划模式标识、普通 Composer | 发消息；仅无问答工具的普通澄清才使用消息输入，手动退出计划只更新模式。 |
 | `planResearch` | “规划中”，连续活动流 | 停止、编辑草稿；无审核按钮、无调研进度百分比。 |
-| 正文生成中（沿用 planResearch） | 首条非空 agent.plan delta 创建“计划生成中”卡片，后续同 ID 追加 | 停止与阅读，不得审核；completed 全量覆盖，不解析模型标记，无 started 或空卡。 |
+| 正文生成中（沿用 planResearch） | 首条非空 agent.plan delta 创建“计划生成中”卡片，后续同 ID 追加 | 停止与阅读，不得审核；completed 全量覆盖，不解析模型标记或工具参数，无 started 或空卡。 |
 | `planClarifying` | 结构化问题卡、计划模式仍激活 | 保持 running；提交全部答案后原根继续，不自动批准。缺工具降级才按普通消息规则结束。 |
 | `planReview` | 完整方案、“待审核”、“执行计划 / 修改计划” | 绑定已恢复且当前有效的方案 eventId；没有隐式肯定词识别。 |
 | `planDecisionPending` | “提交中” | 两个审核动作与停止共享提交锁，暂时禁用；不标记已批准、不清草稿。 |
@@ -72,12 +74,14 @@
 
 ## 4. 方案卡与审核反馈
 
-1. 后端解析计划标记，前端只消费 agent.plan delta/completed；第一条非空 delta 建卡，不新增 started。普通前置说明仍显示为 agent.message，不重复计划正文。completed-only 也可直接建卡；只有完整方案、对应 confirming 和当前根/状态对账通过才开放审核，详见[流式设计](../../01-总体架构/06-CampusClaw计划模式/plan-streaming.md#4-公共事件与页面恢复)。
+1. 后端从 ExitPlanMode.plan 参数流提取安全文本并发布计划事件，前端只消费 agent.plan delta/completed，不接收 raw partialJSON、不解析模型标记或工具参数；第一条非空 delta 建卡，不新增 started。普通前置说明仍显示为 agent.message，不重复计划正文。completed-only 也可直接建卡；只有完整方案、对应 confirming 和当前根/状态对账通过才开放审核，详见[流式设计](../../01-总体架构/06-CampusClaw计划模式/plan-streaming.md#4-公共事件与页面恢复)。
 2. 卡片使用方案 content 的受限 Markdown，沿用前端安全 AST、代码复制、表格自身滚动和外链策略。方案是新增的受限富文本内容面，User、Thinking、Tool 和错误仍按原边界显示。复制得到原始 Markdown；纯显示预算不截断权威正文。
 3. 计划 preview 与 completed 按同一个 eventId 原位合并，不依赖 sourceMessageEventId，也不把普通消息转换成计划卡。完整卡吸收精确关联的退出调用/结果，保留原事件与一次 usage。已 completed 后忽略迟到 delta；单纯断网显示待核对，该段可信结束后未提交预览只读、停止生成提示，不误审。旧无 phase 完整计划按 completed 处理，保持滚动、复制和焦点。
 4. “修改计划”就地展开反馈 textarea；“提交修改意见”提交 revise，“取消”只收起编辑区。反馈草稿按会话与方案身份隔离，普通消息草稿保持不变。内部按既有 4096 UTF-16 单元校验，可不填；空白但非空或超长时行内报错。公共限制必须由 Mate 精确模型确认，不自动继承内部长度。
 5. approve 不带 feedback，revise 不提交修改后的方案正文。点击冻结会话、generation、当前方案身份和决定；双击只创建一次请求。回执到达才标记决定已接受，批准的 mode 以关联 mode_changed/资源对账更新；后续失败或停止不撤销已保存的批准事实。
 6. 409 表示该目标不再待审核：禁用旧卡片并补读，不自动批准新方案。关闭/折叠、Esc、超时、模型肯定文本、EOF 均不表示批准。等待审核时要结束任务使用原停止动作，真实终态后才能切模式。
+
+通用工具日志继续兼容 JSON 对象 arguments，ExitPlanMode 从空对象改为携带完整 plan 正文不会因字段白名单被拒绝；这不代表通用调用报文内容未变化。只有完整 agent.plan 到达且 sourceEventId/toolCallId 精确匹配后，计划卡才吸收对应调用与结果。若定稿调用先于完整计划到达，现有投影可能短暂同时显示参数活动卡与计划 preview；目标验收要求该窗口不重复呈现完整计划正文，关联缺失或调用失败时主对话显示简短状态，原始参数仅在诊断视图按需查看。不能为了隐藏重复按工具名吞掉失败；当前兼容基础不代表这些展示验收已通过。前端不新增通用 tool_call delta，也不对其他工具参数套用计划预览规则。
 
 焦点规则：打开反馈聚焦 textarea，取消回到“修改计划”；提交后焦点移到可聚焦状态摘要，防止 disabled 按钮吞掉焦点。新方案到达只通知“方案已就绪”，不抢走正在编辑草稿的焦点。审核按钮不绑定全局 Enter；IME 和长按按原 Composer 规则处理。
 
@@ -130,7 +134,7 @@
 | 切片 | 组件责任与先后依赖 | 验收重点 |
 |---|---|---|
 | PF1 配置入口 | ModeControl 与模型/思考共享 ConfigurationCoordinator/Store；先接统一 Session 部分更新，再移动配置控件 | idle 允许、running/审核/恢复禁用；单字段提交；完整资源/ETag 同步；412、未知模式、默认 mode 与新会话隔离。 |
-| PF2 方案投影 | PublicEventReducer → PlanReviewStore → PlanCard；计划正文复用 ContentViews 安全渲染 | 首条非空 delta 建卡、completed-only 建卡、同 ID 全量覆盖、旧无 phase 可读；只有完整有效方案可审；ExitPlanMode 不重复正文；历史旧卡只读；原始 Markdown 复制、安全降级和长文。 |
+| PF2 方案投影 | PublicEventReducer → PlanReviewStore → PlanCard；计划正文复用 ContentViews 安全渲染 | 首条非空 delta 建卡、completed-only 建卡、同 ID 全量覆盖、旧无 phase 可读；只有完整有效方案可审；完整计划吸收关联 ExitPlanMode；验收参数对象可读、诊断原文、失败简短状态及到齐前不重复呈现完整正文；历史旧卡只读；原始 Markdown 复制、安全降级和长文。 |
 | PF3 审核编排 | PlanCard → ConversationCoordinator → Gateway，复用控制锁；ReviewDraftStore 与消息草稿独立 | 精确 target；approve 无反馈；revise 可选反馈；双击/IME/取消/停止竞争；回执与实际实施分开。 |
 | PF4 进度 | PublicEventReducer → ExecutionProgressStore → ProgressDisclosure；全部输入为显式完整事件 | 无事件/空列表/失败区分；新根隔离；全完成不当终态；旧页与 live 交错、重复事件、长列表可读。 |
 | PF6 问答卡片 | QuestionCard / QuestionInteractionStore → 原控制提交入口；实时/历史共用投影 | 一次显示一题、前后导航保存草稿、末题全批校验与一次提交、关联工具不重复展示、原根续跑、缺页禁答、回执丢失与重复提交；见 Q1～Q5。 |
@@ -156,6 +160,7 @@ Slash 的 `/mode` 使用[命令选择控件](命令/README.md#command-input-cont
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.9.0 | 2026-09-28 | 计划卡复用参数来源的 delta/completed，保持审核恢复协议并补齐工具日志兼容验收。 |
 | 1.8.0 | 2026-09-22 | 模式按钮和 mode 命令分别使用既有更新入口，共享结果与审核边界。 |
 | 1.7.0 | 2026-09-19 | 第一条计划 delta 建卡，同 ID completed 覆盖，审核就绪仍以完整记录对账为准。 |
 | 1.6.0 | 2026-09-19 | 计划正文先流式显示，再按来源消息身份合并为完整审核卡。 |

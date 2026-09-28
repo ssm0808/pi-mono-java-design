@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.21.1 |
+| 文档版本 | 0.22.0 |
 | 状态 | 五输入联合契约与 B01～B15 已确认；跨实例实现按分项源码证据判断，Redis 恢复增量待实现 |
 | 源码范围 | Java c9d858bc、a8192e04、918005ee、dfb90cac 分项核验；pi 固定 5cd93f68，完整提交和符号见 [源码证据](source-evidence.md#5-session-events-固定源码核验) |
-| 更新日期 | 2026-09-22 |
+| 更新日期 | 2026-09-28 |
 
 结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量已在 Runtime 主线实现（`8c5fda1d`，见[源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)）；Session/元数据不增字段，Mate 公共投影待实现。本文其他历史源码范围不因此升级。
 
@@ -49,7 +49,7 @@ Skill 复用消息执行语义，Builtin 保持 JSON，具体由 [Slash 模块](
 
 [计划审核](../06-CampusClaw计划模式/README.md)沿用根消息、固定续跑段与对应 SSE，在批准事务更新 Session.mode；精确输入和事件已进入共享契约，具体运行时实现仍须验收。计划子域的审核状态和工具边界由该模块唯一维护。
 
-计划正文由 Runtime 解析 proposed_plan 标记后发布 agent.plan delta/completed；不新增 started 或连接模型，第一条非空 delta 建卡。完整响应解析与原 Entry/唯一退出调用绑定，审核事务成功后才发 completed。该增量待实现，来源、兼容和恢复统一见[计划流式输出](../06-CampusClaw计划模式/plan-streaming.md)，精确字段由共享 JSON 维护；预览可见不放宽确认锁边界。
+计划审核、标记解析与 agent.plan delta/completed 已在 Java `553dcd5e` 实现；恢复 ExitPlanMode({plan}) 并从参数 JSON 安全增量解码正文的生产端调整待实现，局部源码范围见[参数流式证据](../06-CampusClaw计划模式/source-evidence.md#plan-argument-streaming-evidence)。目标使用既有计划事件：首个非空 delta 建卡，无 started；完整计划取同次 preparedInvocation 经可信定义校验的最终 plan 快照，并绑定原 ToolCall/Entry 身份，审核事务成功后才发同 ID completed。原根 sourceEventId、confirming、审核输入、批准后 build 与历史恢复保持原契约；preview 不放宽确认锁边界。来源、兼容和恢复统一见[计划流式输出](../06-CampusClaw计划模式/plan-streaming.md)，精确字段仍由共享 JSON 维护。
 
 <a id="tool-display-snapshot"></a>
 
@@ -362,6 +362,7 @@ HTTP 路径使用 `/campusclaw-service/v1`。内部开发阶段编号不作为�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.22.0 | 2026-09-28 | 计划参数安全增量复用既有两阶段事件，完整计划绑定同次校验后的调用快照。 |
 | 0.21.1 | 2026-09-22 | 新消息保留可选执行凭据，控制事件复用原快照，历史查询移除凭据示例。 |
 | 0.21.0 | 2026-09-22 | 增加事件源侧 Redis 观察恢复目标，保留数据库控制事务和原请求级响应边界。 |
 | 0.20.0 | 2026-09-19 | 计划正文通过专用 delta/completed 事件流展示并复用原审核事务。 |

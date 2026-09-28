@@ -1,6 +1,6 @@
 # 计划模式接口增量
 
-版本：1.13.0；日期：2026-09-22；状态：**既有交互工具与事件已实现；标记解析与 agent.plan delta/completed 增量待实现，当前范围见[§14](source-evidence.md#plan-marker-evidence)；Mate 公共桥接待实现，部署与模型验收分别记录**。
+版本：1.14.0；日期：2026-09-28；状态：**计划审核、标记解析与 agent.plan delta/completed 已实现；ExitPlanMode({plan}) 与参数增量预览待实现；Java 核验基线为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，范围见[参数流式证据](source-evidence.md#plan-argument-streaming-evidence)；Mate 公共桥接待实现，部署与模型验收分别记录**。
 
 本文件维护计划接口的集成边界与理由。精确请求、完整事件、条件字段、错误码及示例由 [共享事件契约](../01-CampusClaw多Agent运行时/事件契约/common.json)、[POST 操作](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 与 [GET 操作](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[统一接口页](../01-CampusClaw多Agent运行时/chat-api-review.html)。登记不代表 Java 或 Mate 已实现。
 
@@ -38,9 +38,11 @@ POST 精确模型提供批准与修订两个请求示例，以及制作计划、
 
 ### 3.1 `agent.plan`
 
-`agent.plan` 使用 phase=delta/completed；delta 只含计划 eventId、type、sourceEventId、phase 和非空新增 content，不带 createdAt、toolCallId 或 usage。开始标记只分配内部候选 ID，不发送 started 或空 delta；第一条 delta 建卡。completed 保存完整块正文及 toolCallId/createdAt，沿用相同 eventId；审核目标仍是计划 eventId，sourceEventId 仍为原用户根。精确字段由共享事件源维护。
+`agent.plan` 使用 phase=delta/completed；delta 只含计划 eventId、type、sourceEventId、phase 和非空新增 content，不带 createdAt、toolCallId 或 usage。后端识别本次 ExitPlanMode 调用并分配内部候选 ID，不发送 started 或空 delta；首个可安全解码的非空 plan 文本增量建卡。completed 保存完整 plan 正文及 toolCallId/createdAt，沿用相同 eventId；审核目标仍是计划 eventId，sourceEventId 仍为原用户根。精确字段由共享事件源维护。
 
-后端在 Plan Main Agent 范围解析唯一 proposed_plan 块，前置普通说明继续 agent.message，原始 Assistant 与空参数 ToolCall 保留在模型历史。完整响应解析结果供普通消息投影和审核绑定共享；来源 Entry 在后端校验，不使用 sourceMessageEventId 转卡。审核事务成功才发 completed，旧无 phase 完整计划仍可读取；SSE 与 GET 的完整记录保持同形，详见[流式设计](plan-streaming.md#4-公共事件与页面恢复)。
+后端仅为 Plan Main Agent 的 ExitPlanMode 调用增量解码参数 JSON 中的 plan 字符串；正确处理转义与跨片段字符，不把 raw partialJSON 发给前端。普通说明继续使用 agent.message，不将参数正文再投影为普通回答。完整计划取同次 preparedInvocation 经可信定义校验的最终 plan 快照，并与原 ToolCall/Entry 身份绑定后才进入审核事务；preview 不是校验或审核成功凭证。审核事务成功才发 completed，旧无 phase 完整计划仍可读取；SSE 与 GET 的完整记录保持同形，详见[流式设计](plan-streaming.md#4-公共事件与页面恢复)。
+
+该架构变更只更换计划正文的后端生产来源，保留计划卡与审核输入。不得新增通用 agent.tool_call delta，不对其他工具自动流式透传参数，也不要求前端解析模型标记或参数 JSON。参数增量不可用时直接使用 completed-only；已经形成调用的 plan 字段错误保留 isError=true 并向模型返回字段错误及同次可信定义，原始 JSON 格式故障沿 Provider 失败语义处理，不编造工具结果。
 
 ### 3.2 `user.plan_confirmation`
 
@@ -54,7 +56,7 @@ reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史�
 
 ### 3.4 既有事件的使用
 
-- ExitPlanMode 的 `agent.tool_call` 保持原结构，`toolName=ExitPlanMode`、`arguments={}`、`requiresConfirmation=false`；只在同响应原始 Entry 保存且唯一闭合块解析绑定后提交审核，不能同时生成工具权限审核。
+- ExitPlanMode 的 `agent.tool_call` 保持原事件结构，`toolName=ExitPlanMode`、`arguments={plan: 完整正文}`、`requiresConfirmation=false`；原始 Assistant/ToolCall 先于 prepare 保存；成功审核时，原始调用的 plan 与同次 preparedInvocation 中经可信定义校验的最终快照一致，completed 使用该快照；绑定原 ToolCall/Entry 身份且满足独占审核条件后提交审核，不能同时生成工具权限审核。通用调用记录的 arguments 内容发生变化，不能把兼容性表述成所有报文字节不变。
 - 进入审核等待仍使用 `session.status_idle(reason=confirming)`；它不释放 Session running。
 - 批准/修订后的 `agent.tool_result` 保持 `toolCallId/content/isError`；正常批准与正常修订均 `isError=false`，无 errorCode。
 - 原始 user.message、问题回答后的续跑、修订后生成的计划、后续业务工具及最终回答均按同一个根消息的 sourceEventId 关联，直到原执行真实结束；普通澄清后新发 user.message 则形成新的根执行。
@@ -74,10 +76,10 @@ TODO 仅在 build 实施阶段记录进度。`agent.todo_updated` 已登记到�
 | 维护位置 | 同批需要完成的增量 |
 |---|---|
 | Runtime catalog / operation JSON | 已登记五输入、计划审核和批准模式事件；完整 Session 响应不增加待审核字段 |
-| Runtime eventContract / DTO / VO / 编码器 | 实现已登记的 agent.todo_updated、审核类型、条件字段和错误码；保留原三种输入、原失败码及分页/凭据边界 |
+| Runtime eventContract / DTO / VO / 编码器 | 保留已实现的五类输入、计划 delta/completed、审核与任务事件；仅将计划 preview 生产切到 ExitPlanMode.plan 参数解码，成功审核的完整调用/计划/历史正文一致 |
 | 主接口 HTML 与校验器 | 从统一 JSON 生成；接口数量、完整类型集合、首帧样例和流/历史同形检查同步，不能通过删除既有检查适配新功能 |
-| 内置工具契约 | 登记 ExitPlanMode、TodoUpdate、AskUserQuestion 和 Runtime 默认 profile；原八项工具 Schema 与 Tool/Skill 元数据保持原值；Agent 新增 mode 的定义及发布链路见元数据主设计 |
-| Runtime 调试前端 | Session mode 类型与更新；基于事件的审核卡片、确认发送及历史恢复，恢复未完成时禁用审核；TODO 直接消费 agent.todo_updated，失败不更新 |
+| 内置工具契约 | ExitPlanMode 必填 plan 正文与参数校验、模型提示词同步；TodoUpdate、AskUserQuestion、其他工具 Schema 与 Runtime profile 不因预览来源调整而改变 |
+| Runtime 调试前端 | 复用现有计划 delta/completed、审核及恢复；验收 arguments={plan} 的解码兼容、原始诊断、失败调用和完整计划到达前的瞬时重复展示；TODO 消费保持不变 |
 | Mate 产品集成 | 公共 Chat 模式配置、确认输入、计划审核与任务更新事件投影和双跳 ID 映射单独落到 Mate 契约，接通后才能向企业浏览器开放 |
 
 所有新增失败码同时维护 Java 枚举、resCode 和 MessageSource 同名 key，保持 zh-CN/en-US 键集合一致。新增请求 VO 使用标准 Jakarta 校验，模式/目标/竞争检查放在 Service 与数据库事务，不新增自定义元数据校验注解。

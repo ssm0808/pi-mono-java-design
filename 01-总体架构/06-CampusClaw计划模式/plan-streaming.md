@@ -1,52 +1,58 @@
-# 计划正文流式生成与审核绑定
+# 计划参数流式生成与审核绑定
 
-版本：1.1.0；日期：2026-09-19。状态：**目标设计，待实现**。普通文本流、完整计划审核和批准续跑已实现；标记解析、计划 delta、空参数退出及前端预览为待实现增量。[主设计](README.md)维护模式与审核事务，[源码证据 §14](source-evidence.md#plan-marker-evidence)维护本次源码范围。
+版本：1.2.0；日期：2026-09-28。状态：**参数来源调整待实现**。Java main `553dcd5e2ff682f9684810a043b442b37a02e54a` 已实现正文标记解析、`agent.plan delta/completed`、审核及前端预览；本目标恢复 `ExitPlanMode({plan})`，通过参数增量继续提供计划预览。模型可靠性与端到端时延仍待实测。[主设计](README.md)维护模式与审核事务，[源码证据 §15](source-evidence.md#plan-argument-streaming-evidence)维护本次源码范围。
 
-## 1. 当前流程与等待来源
+## 1. 当前流程与问题
 
-实现核验为 pi-mono-java main `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，未覆盖本地旧工作树。当前模型把完整正文放入 `ExitPlanMode({plan})` 参数；Provider 虽可产生参数增量，Runtime 公共投影只处理普通文本/思考增量。响应结束后先保存 Assistant 和完整调用，beforeToolCall 才取出 plan、保存计划与 confirming、关闭该段 SSE。工具本身不生成正文，而是等待用户决定；批准后原执行切换 Build 并继续。
+设施巡检方案应在生成时可读，完成后准确进入审核。当前 Java 要求模型在正文中生成精确的计划标记，再在同一 Assistant 中调用唯一的空参数 ExitPlanMode；任一标记、顺序或绑定条件不满足，便不能形成可审核计划。未调用工具时，普通回答会自然结束，并不会由 Runtime 自动补一次审核。该实现已落地，不能继续把正文流式整体标为待实现。
 
-这使计划首字不可见时间包含整份参数生成时间。没有生产计时证据，不能推断模型、数据库、网关分别占用的时间，也不能宣称流式降低了整体任务耗时。
+此前 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` 通过 `ExitPlanMode({plan})` 提交完整计划，参数生成期间没有公共预览。用户观察该方式提交准确；这是实际使用反馈，不是成功率统计。本目标将生成和提交收敛为一次有 Schema 的工具调用，再从同一调用参数提取展示增量，减少必须依赖正文标记的条件。仍需模型正确调用工具，不能保证任何模型都必然提交。
 
-## 2. 目标：标记识别与计划专用增量
+当前 Mate Provider 已产生 `ToolCallDeltaEvent`，但工具名称和 ID 在完成前未同步进 partial ToolCall，Runtime 也未将参数增量投影为计划。本目标必须补齐身份和增量投影接线；不能只恢复参数 Schema 就宣称流式已完成。Codex 当前公开源码采用正文计划与独立 Plan item，不能从其产品体验推断本项目不同模型、Prompt 和 Provider 组合也有相同可靠性；对照及版本边界见 §15。
 
-Main Agent 在同一 Assistant 响应中输出一个 `<proposed_plan>` 块，再调用唯一的 `ExitPlanMode({})`。标记属于模型输出约定，由后端解析，不是前端协议。标记外的前置说明投影为 `agent.message`，标记内正文投影为 `agent.plan`；Thinking 不参与正文解析。前端不识别标签、标题或工具参数，也不把普通消息事后改装为计划卡。
+## 2. 目标：完整参数提交与计划专用增量
 
-`agent.plan` 只使用 `phase=delta/completed`，与其他文本事件保持一致。识别开始标记时只在内部预分配不透明 plan eventId；第一段非空正文才发送 delta，前端以此创建“计划生成中”卡片。不新增 started、空 delta、百分比或独立开始事件。同一计划的所有 delta 与最终 completed 使用相同 eventId；修订或新的模型响应使用新 ID，预分配不等于保存成功。
+Main Agent 直接调用 `ExitPlanMode({"plan":"# 设施巡检方案\n\n..."})`。模型只生成一份完整 Markdown，不再要求正文控制标记，也不要求先输出正文再调用空参数工具。后端从该调用的参数增量中解码 plan 字符串，继续发送既有 `agent.plan delta`；完整参数通过最终校验与审核事务后，发送同 ID 的 completed。前端继续渲染计划事件，不解析模型参数或猜测文本类型。
+
+`agent.plan` 保持 `phase=delta/completed`，不增加 started、百分比或独立开始事件。后端确认可信内置工具身份后分配计划 eventId，第一段非空已解码正文才发送 delta；同一计划的 delta 与 completed 使用相同 eventId。修订或新的模型响应使用新 ID，预分配不等于保存成功。无预览也可直接提交完整计划。
 
 ### 2.1 模型输出与工具契约
 
 | 项目 | 规则 |
 |---|---|
-| 标记 | 精确英文 `<proposed_plan>` / `</proposed_plan>`，各独占一行，不翻译、不包在外层代码围栏中；标记行是保留控制行，正文举例需转义，不能嵌套或出现第二个块 |
-| 解析作用域 | 仅 Runtime Main Agent 的 Plan 响应正文；普通 Build、Thinking、工具结果和 Subagent 返回不启动计划卡解析 |
-| 正文 | TextContent 按原顺序直接拼接，解析器状态跨 chunk/文本块；去除两条标记行及其行结束符，其余正文原样保留，不 trim、不补换行、不重写 Markdown；支持 LF/CRLF 和最终无换行的结束标记 |
-| 顺序 | 可有前置普通说明；计划块结束后只允许空白，然后唯一 ExitPlanMode 调用；调用后不允许非空正文。前置说明保持在计划卡之前，不将后置普通文本拼回旧消息造成时序倒置 |
-| 调用 | `ExitPlanMode({})`，Schema 为空对象且 additionalProperties=false；正文只生成一次，不放回参数，也不要求额外一轮模型请求 |
-| 绑定 | 后端以当前 Assistant、已保存原始 Entry、固定执行/段和唯一调用建立不可变快照；不接受模型提供的 eventId，不查找“最近一条答案” |
-| 大小 | 计划最多 262144 UTF-16 单元，首个非空行以 `# ` 开始，同时满足原 Assistant、计划完整帧及现有缓冲容量；超限不截断为可审核正文 |
-| 缺失或错误 | 缺块、缺结束标记、空正文、多个/嵌套块、非法顺序、混合工具、ERROR/ABORTED/LENGTH 均不得提交审核；有退出调用时走既有 PLAN_REVIEW_UNAVAILABLE，参数非法为 TOOL_ARGUMENTS_INVALID，容量异常沿用 EVENT_PAYLOAD_TOO_LARGE |
-| 仅正文无调用 | 不创建待交互，也不自动补工具或开启下一轮；既有 Loop 自然结束后预览标为“未提交审核” |
-| 返回 | 工具只返回完整 approved/feedback 结果，失败不批准；批准后才切 Build，修订重新生成完整块 |
+| 调用 | `ExitPlanMode({plan})`；parameters 为 object，required=[plan]，additionalProperties=false；plan 为 string，minLength=1，maxLength=262144；应用层同时校验 UTF-16 单元数与首个非空行以 `# ` 开始 |
+| 作用域 | 仅 Runtime Main Agent 当前 plan 响应中的可信内置 ExitPlanMode；Build、Subagent、Thinking、普通文本、工具结果及其他工具不启动计划预览 |
+| 正文 | 参数完整解码后的 Markdown；保留换行、空格及 Unicode，不 trim、不重写；计划正文只出现在参数中一次，不要求控制标记 |
+| 绑定 | 完整 Assistant 正常以 TOOL_USE 结束且只有该 ToolCall；绑定已保存原始 Entry、固定执行/段、当前响应、调用和一次准备快照，不查找最近答案，不接受模型提供的 eventId |
+| 大小 | 完整 plan 最多 262144 UTF-16 单元，并满足原 Assistant、完整调用、计划编码帧及既有缓冲上限；JSON 转义后的原始字节预算与解码正文预算分别限制，超限不能截断成可审计划 |
+| 参数错误 | 完整合法 JSON 中缺参、错型、额外字段、标题或长度不合法：真实 isError=true，向模型返回字段错误与同次校验使用的可信定义；不确认、不执行、不猜参、不自动重放，下一轮由模型修正 |
+| 原始流错误 | 非法/未闭合 JSON、重复键、尾随垃圾、ERROR/ABORTED/LENGTH 不提交审核；沿 Provider/响应错误路径处理，未形成合法调用时不伪造 ToolResult；容量错误沿用 EVENT_PAYLOAD_TOO_LARGE |
+| 绑定错误 | 非当前调用、身份冲突、混合工具或来源不完整：不提交审核，沿用 PLAN_REVIEW_UNAVAILABLE 等既有失败分类；不复用旧候选或改变模式 |
+| 未调用工具 | 普通解释不创建待交互；不由后端生成计划或补调用，不因模型说“已完成”而退出模式 |
+| 返回 | 工具等待真实 approved/feedback；批准后才应用 build 并继续，修订保持 plan 并重新提交完整参数；失败不授予权限 |
 
-解析器只暂存可能构成控制行的前缀；一旦排除标记立即释放普通正文，不等待整行或整份方案。前缀有界，正文受累计长度预算限制。遇到确定的结构错误即停止该候选后续 preview，最终再次验证完整响应；不得将已发出的计划增量当作最终内容或审核依据。完整响应中的计划正文可以校准 preview，不能强制要求最终正文等于客户端收到的全部增量。
+增量提取不能用正则裁剪 JSON 或直接拼接原始 arguments。必须以 JSON 词法状态解码目标字符串，处理引号、反斜线、换行、跨片 `\uXXXX` 和代理项；只发布已确定且 Unicode 完整的前缀，半个转义或代理项继续保留；最终 plan 中的孤立代理项或未完成转义必须拒绝，不替换非法字符形成可审计划。重复键、未知字段、非字符串、尾随内容等在最终严格解析与参数校验中拒绝，不采用宽松解析的“最后一个值获胜”。预览尚未看到的字段也可能令最终调用无效，故预览永远不是合法性证明。
+
+内部流身份至少包含当前响应与 contentIndex，并与固定执行/段隔离。Mate 保留现有 ToolCallDeltaEvent 结构，在每次新建的 partial 快照中及时提供截至该片已确定的工具名称/ID；身份尚未齐全时，Runtime 先有界缓存，不改写已发出的快照。预览和最终结果都必须匹配已装配的可信内置工具及完整 ToolCall。不能把任意名为 plan 的参数转成计划，也不能仅凭 Provider index 跨响应关联。中途身份变化应废弃候选；达到缓存预算时停止该候选 preview，仍可在完整响应合法且容量允许时提交。解析按新增输入推进，避免每片重扫累计文本造成平方级开销。
 
 ### 2.2 目标顺序
 
-本图下钻单次模型响应从文本增量到完整计划审核绑定的过程，全部为计划流式增量的目标流程。普通文本、原始 Assistant、工具调用与计划投影仍分层保存；分块标记、同响应唯一 ExitPlanMode、空参数与精确来源检查保留在正文。审核决定及后续继续复用计划审核图，不在此重画。
+场景是模型为设施巡检生成一份可审核方案。起点是当前响应出现退出工具参数增量，终点是完整计划与审核等待提交；批准续跑引用主设计审核图。本图为待实现的参数流接线，沿用已实现的公共事件和事务，不表示新增远程边界。
 
 ![计划流式生成与审核绑定](plan_streaming_sequence.svg)
 
-[原尺寸 SVG](plan_streaming_sequence.svg) · [PlantUML 源码：plan_streaming_sequence](diagram.puml#L626)
+[原尺寸 SVG](plan_streaming_sequence.svg) · [PlantUML 源码：plan_streaming_sequence](diagram.puml#L655)
 
-1. 模型文本增量经过 Provider → Agent MessageUpdate → Runtime 计划解析器；普通说明走 agent.message，计划正文走 agent.plan delta，开始标签本身不发事件。
-2. 响应完整后用相同语法重解析原始 Assistant，形成不可变解析结果。先保存原始 Assistant Entry、仅前置普通正文的 agent.message completed 和一次 usage，再保存唯一完整 tool_call。
-3. Binder 绑定已保存 Entry、解析结果、预分配计划 ID、原根与唯一退出调用；没有预览时也可从完整响应分配 ID，不以 delta 成功投递为前提。
-4. beforeToolCall 的审核事务锁内重查固定执行/段/分支、原 Entry/调用、mode=plan、未停止、无其他待交互；保存 agent.plan completed、待审指针和 confirming。
-5. 提交成功后发送 completed 和 confirming，关闭本段 SSE。completed 全量替换同 ID 预览；只有与 confirming、Session/后续记录对账通过后可审。Session 仍 running/plan，工具仍未返回。
-6. approve/revise 沿用原接受、领取和续跑事务；批准目标仍为计划 eventId，不是 Assistant ID、toolCallId 或预览文字。
+1. Provider 将原始流归一化为内部工具参数事件；Runtime 在可信身份确定后提取 plan 字符串，发送非空 agent.plan delta。普通说明继续走 agent.message，Thinking 不参与计划解析。
+2. 完整响应到达，Provider 严格解析最终参数，Runtime 保存原始 Assistant 与完整 ToolCall。原始记录保存不代表参数通过业务校验，也不表示审核就绪。
+3. 运行时从当前已装配工具集中解析可信目标，再由 ToolPipeline 校验完整参数；`ExitPlanModeTool.prepare` 校验标题等语义，建立不可变 `PlanArgumentSnapshotDTO`。`BeforeToolCallContext.preparedInvocation` 将同一次准备结果交给 Host，避免展示与审核分别取值。
+4. Binder 将该快照绑定到当前完整响应、已保存 Entry、唯一退出调用及预分配计划 ID；Host 在审核事务中重查固定执行/段、当前模式、停止状态和单交互条件，保存 agent.plan completed、待审指针与 confirming。
+5. 提交成功后发送 completed 与 confirming，结束本段 SSE。completed 全量替换同 ID 预览；与等待记录及 Session 对账后才可审。Session 仍 running/plan，工具仍等待真实决定。
+6. approve/revise 复用原接受、领取与续跑事务；批准目标仍是计划 eventId。批准后工具返回，后续业务调用继续独立执行可信目标解析、参数校验、权限判断/必要确认、业务执行和结果回传，不因计划批准跳过工具授权。
 
-闭合标记只表明文本块结束，不发送 completed、不切换模式、不表示审核已经成功。权威 completed 的产生时点仍是审核事务成功，而非模型流刚结束。
+最终完整参数是唯一计划内容来源，不要求它等于客户端实际收到的所有 delta。流中丢片、没有 preview 或停止投递 preview 都不改变最终权威来源；最终参数无效则不能以预览兜底。参数闭合与模型结束均不直接发送 completed 或切换模式。
+
+图中 AgentLoop 覆盖模型请求与 Provider 归一化的事件交付；ToolPipeline 是工具执行职责，包含现有 Loop 分派时的已装配工具查找和 ToolExecutionPipeline 的 validate/prepare/hook/execute，不声称现有 Pipeline 类独自解析工具注册表。Host 对应 Projector、Binder 与审核应用编排，Session authority 对应既有事务/Repository 权威，Client 为事件 reducer 和计划卡；这些角色不表示新进程或远程调用。
 
 ## 3. 权威对象与内部职责
 
@@ -54,65 +60,78 @@ Main Agent 在同一 Assistant 响应中输出一个 `<proposed_plan>` 块，再
 
 | 对象 / 接入点 | 生命周期与职责 |
 |---|---|
-| RuntimeEventProjector | 每执行；MessageStart 创建当前响应解析状态，路由普通/计划增量，保存完成后的原 Entry 身份；不可依赖 persistAssistant 后已清空的 assistantEntryId |
-| PlanTextParser（待实现） | 每 Assistant 响应一实例；由 Projector 持有，处理跨 chunk 保留标记和正文，生成普通/计划片段；完整消息重解析也使用同一语法实现，不属于通用 Provider 层 |
-| PlanTextSnapshotDTO（待实现） | 完整响应解析后不可变；包含普通正文、计划正文与结构有效性；公共消息投影与审核绑定共享一次最终解析结果，不分别裁剪正文 |
-| PlanProposalBinder（待实现） | 无状态；绑定当前响应、已保存原始 Entry、PlanTextSnapshotDTO、唯一退出调用和预分配 ID，校验来源及顺序 |
-| PlanProposalSnapshotDTO（待实现） | 每候选至审核收尾；不可变字段为固定执行目标、assistantEntryId（内部）、planEventId、sourceEventId、toolCallId、content；来源身份不暴露给客户端 |
-| PlanReviewPort / RuntimePendingInteraction | 提交携带共享快照；工具 await(toolCallId, cancellation) 只等待已绑定调用，不再传入第二份正文 |
-| Persistence / Repository / EventFactory | 事务内重新校验可变状态，沿用原 Entry 和事件关联保存 plan completed；GET 读保存值，不重解析模型历史，不持久化每个 delta |
-| Client reducer / PlanCard | 按 Session + eventId 维护计划 preview/完整记录，并检查 sourceEventId 一致；第一条 delta 建卡，completed 覆盖；普通消息与计划有不同 ID |
+| Mate Provider / ToolCallDeltaEvent | 传输中立的调用增量与身份；当前已产生参数 delta，身份在 partial 中及时可见的接线待实现；不认识计划业务或直接输出公共事件 |
+| RuntimeEventProjector | 每执行；按当前响应/调用持有预览状态，保存原 Entry 身份并衔接完整记录，不依赖已清空字段找回来源 |
+| PlanArgumentPreviewParser（待实现） | 每响应/调用一实例；有界解码参数中的 plan 字符串，只生成临时展示，不负责最终权威校验、不触发执行 |
+| ExitPlanModeTool.prepare / PlanArgumentSnapshotDTO（调整/新增待实现） | 由 Pipeline 在 Host 交互之前准备；完整参数及语义校验后生成不可变 plan 快照，与本次 PreparedToolInvocation 关联，供审核绑定与工具执行共享 |
+| PlanProposalBinder / PlanProposalSnapshotDTO（现有类型已实现，参数来源调整待实现） | Binder 绑定已保存 Entry、上述准备快照和唯一调用；Proposal 固定执行目标、assistantEntryId（内部）、planEventId、sourceEventId、toolCallId 与 content，事务内另查可变状态 |
+| PlanReviewPort / RuntimePendingInteraction | `review(toolCallId, cancellation)` 仅等待已绑定审核；不在等待接口再传另一份正文；单交互、取消和续跑边界保持 |
+| Persistence / Repository / EventFactory | 事务校验与完整计划保存；GET 读取权威记录，不重解析模型历史、不持久化每片参数 |
+| Client reducer / PlanCard | 按 Session + eventId 维护预览和完整记录，检查 sourceEventId；第一条 delta 建卡，completed 替换，普通消息与计划各有 ID |
 
-模型上下文保留原始带标记 Assistant、空参数调用及配对 ToolResult。公共 agent.message 只含标记外前置说明，不重复计划；无普通正文时保留 content="" 的完整消息及一次 usage，前端不绘制空消息。计划不重复 usage，也不再次注入模型历史。审批后首次模型请求必须保留原始获批块及调用/结果，压缩不得以摘要替代并声称等价。
+模型上下文保留原始 Assistant、携带完整 plan 的 ToolCall 和配对 ToolResult；公共 agent.plan 是同一内容的展示投影，不重复注入模型历史。普通消息只展示模型实际普通正文；无正文时沿用完整消息/usage 的既有记录规则，不绘制空消息、不重复 usage。批准后首次模型请求必须保留本次调用的完整 plan 与结果配对，压缩不得仅留下摘要并声称等价；来源调整后须重新验收该路径。
 
-解析状态与候选按当前 Assistant、执行和段隔离；新响应、终态、取消和清理释放旧缓冲。即使 toolCallId 重复也不得跨响应取旧计划。沿用原内存凭据/等待对象边界，不增加进程崩溃自动接管能力。
+解析与候选按当前响应、调用、执行和段隔离；新响应、终态、取消和清理释放旧缓冲。同名工具或重复 toolCallId 不得跨响应取旧计划。沿用原内存凭据和等待对象边界，不增加进程崩溃自动接管。
 
 ## 4. 公共事件与页面恢复
 
-精确字段和 POST/GET 示例唯一维护在[共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json)与其操作 JSON，本页只解释生命周期。
+精确字段和 POST/GET 示例唯一维护在[共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json)与操作 JSON，本页只解释生命周期。
 
 | 阶段 | 字段与行为 |
 |---|---|
-| agent.plan delta | eventId/type/sourceEventId/phase/content；content 为非空新增文本；不带 createdAt、toolCallId、usage、sourceMessageEventId；不入历史 |
-| agent.plan completed | eventId/type/sourceEventId/phase/content/createdAt/toolCallId；content 为完整计划，无标记；与历史同名同形，后续不得再发同 ID delta |
-| user.plan_confirmation | 保持 targetEventId/result/条件 feedback；只允许引用当前待审核完整计划，不因预览 ID 已分配而接受批准 |
-| 旧完整计划 | 既有无 phase 的记录按完整计划解码，不重写存量；新写明确 completed；旧记录不补造来源关联 |
+| agent.plan delta | eventId/type/sourceEventId/phase/content；content 是非空新增已解码文本；不带 createdAt、toolCallId、usage、sourceMessageEventId；不入历史 |
+| agent.plan completed | eventId/type/sourceEventId/phase/content/createdAt/toolCallId；content 为完整 plan；与历史同名同形，之后不发同 ID delta |
+| agent.tool_call | 既有完整调用事件形状不变；ExitPlanMode.arguments 从 {} 改为 {plan}；其他工具参数仍按各自契约，不增加通用 delta phase |
+| user.plan_confirmation | 保持 targetEventId/result/条件 feedback；只能引用当前待审核完整计划，预分配 ID 不可批准 |
+| 旧记录 | 旧无 phase 的完整计划仍可读；旧空参数调用与已保存计划按原事件关系展示，不用新工具 Schema 重验历史，也不重新推断旧正文 |
 
-新事件不引入 planId/version，也不使用 sourceMessageEventId 做卡片合并；来源 Assistant 的约束保留在后端。完整事件在 SSE/GET 保持一致，旧无 phase 形状仅用于已有数据兼容；旧的完整记录在实时补读中同样可识别。
+因此前端计划事件与审核接口不必增加字段、URL 或版本；公开完整 tool_call 的参数内容会改变，严格工具专属校验、调试展示、示例和契约门禁需要同步。当前前端 generic arguments 接受对象，具备兼容基础，但不能据此免除回归：completed 到达前、最终参数失败或绑定失败时，不应把整段原始 JSON 重复当作用户答案。完整计划继续按 root + toolCallId 吸收关联调用/结果，缺少完整计划时显示简短失败状态，诊断视图按既有规则查看原始数据。
 
-没有 delta 时，completed 直接建卡。只有 delta 而未收到 completed 的卡片始终不可审：该段可信 done/failed/terminated/confirming 到达后停止生成提示并标为“未提交审核”；若其他完整计划出现，只将其对应卡片设为已提交，不把旧预览升级为它。单纯 EOF/断网显示“待核对”，补读历史和 Session；缺页、旧根、冲突或未知状态禁审，不重放 POST。
+没有 delta 时 completed 直接建卡。只有 preview 时不可审：可信 done/failed/terminated/confirming 后停止生成提示并标为“未提交审核”；单纯 EOF/断网显示“待核对”，补读历史和 Session。缺页、旧根、冲突或未知状态禁审，不重放 POST；别的计划 completed 不升级当前预览。模式控件须在批准与恢复时读取服务端权威状态，不能一直显示旧 plan。
 
-preview 是 best-effort；丢弃一个计划 ID 的增量后，该连接停止该 ID 后续 delta，等待完整内容覆盖。增量内容不按文本去重（重复文本可能合法）；completed 按 eventId 幂等合并，已完成后迟到 delta 忽略。内部与跨实例响应只保证完整事件可恢复，不承诺丢失增量续传。没有 completed 的中止草稿可仅保留本页只读展示，刷新不承诺恢复。
+preview 是 best-effort；连接丢弃某计划增量后停止该 ID 的后续 delta，等待 completed 覆盖。增量不按文本去重；completed 按 eventId 幂等合并，迟到 delta 忽略。补读历史与本地预览合并后仍须执行终态收尾，不把旧预览移到终态之后恢复“生成中”。中止草稿可只在当前页只读保留，刷新不承诺恢复。受限 Markdown、复制、滚动、键盘焦点和不逐 token 播报规则保持。
 
-前端只对正文使用受限 Markdown；标签不进入显示或复制结果，开始标签无正文时不画空卡。保留滚动、复制和焦点，状态通知不逐 token 播报，不显示虚构百分比。原型没有本增量，不能以既有原型通过代替真实流式验收。
+Mate 公共桥接仍待实现；公共两跳保持各自 ID 映射、认证和历史契约，不暴露内部 sessionId。preview 与 completed 映射为同一公共计划 ID，不能每片重建 ID；本次不扩大为通用工具参数公开流或重做所有 Mate 接口。
 
-Mate 公共桥接待实现；公共 POST JSON、GET 长连接和历史分页保持各自契约。桥接须统一映射原根、计划 ID 与工具身份，预览和 completed 使用同一公共计划 ID，不能每片新生成 ID或透传内部 sessionId。公共计划/确认/模式模型需同步确认并实现后再开放企业入口；本专题不扩大为重做所有 Mate 接口。
+### 4.1 其他工具是否同步流式输出
+
+| 层次 | 本次范围 |
+|---|---|
+| 模型/Provider 参数生成 | 支持该能力的 Provider 可对多种工具产生内部参数 delta；当前 Mate 已有此事件，实际网关是否及时输出需实测 |
+| Runtime 业务投影 | 仅可信 ExitPlanMode.plan 解码为 agent.plan；工具名相同字符串或其他工具 plan 字段不触发 |
+| 浏览器公共参数预览 | 不新增通用 agent.tool_call delta，不默认展示其他工具的半成品参数、内部 Schema 或敏感字段 |
+| 工具执行 | 完整调用经可信绑定、完整参数校验、权限/必要用户确认后才执行业务并回传结果；增量到达不提前执行或确认 |
+
+其他工具若以后需要实时展示，应单独定义适合业务的安全展示字段、身份、失败/取消与历史恢复语义；内部 delta 存在不等于公共协议已开放。
 
 ## 5. 取舍、兼容与性能验证
 
-采用后端标记解析与专用计划 delta 是架构变更：让前端在生成中直接知道内容类型，不承担模型语法解析，也不需要事后换卡；代价是增量解析、最终解析、候选身份及接口联合类型同步。仅两种 phase 是与现有文本事件保持一致的产品决定；不引入 started，第一字之前仍显示既有规划活动状态。
+选择完整参数加专用流式投影属于架构变更：用一次有明确字段的调用表达生成与提交，去掉额外正文标记条件，同时复用计划卡和审核事务。代价是 JSON 字符串增量解码、流身份与最终校验的协调，以及长参数转义开销；不能把某基线模型的效果推广为所有 Provider 的可靠性保证。
 
-完整审核事务、单交互和原根续跑是产品约束。要求完整闭合、唯一块、固定来源与锁内复核是一致性/安全约束；Codex parser 的 finish 可收束未闭合块，不作为本产品允许截断方案进入审核的依据。保留正文为工具参数会继续等待整份参数或增加 JSON 增量解析；普通消息事后转卡不能满足生成期间识别计划的目标。
+固定来源、完整校验、单交互与审核事务属于一致性和安全约束。预览只有展示价值，不是审核承诺或授权依据。Schema 约束也不能替代服务端校验；错误保持真实 isError 并给模型修正依据，不由后端猜参或重试业务。
 
-不新增 Maven/npm 直接依赖、数据库表或独立资源。复用 JDK 的字符状态机、现有 Jackson、Spring/MyBatis/Bean Validation、Vue 与 Markdown renderer。发布前停止新 Plan 接受并排空/中断旧活动执行，再同步工具 {} Schema、预制/业务 PLAN/BUILD、解析/编解码/历史及前端。先升级读取端兼容旧无 phase 完整计划和新两 phase，再启用新写；不能把合法旧工具参数当成新协议混用，不在执行中途切换提示词快照。
+不新增 Maven/npm 直接依赖、数据表或独立资源。复用 JDK 的有界字符状态机、现有 Jackson 最终解析与既有 Spring/MyBatis/Vue。实现前须验证现有 Jackson 配置是否拒绝重复键、尾随输入；不能假定异步 Jackson 会逐字符产出未闭合字符串，若选它承担增量读取须先验证。没有新增直接依赖，因而没有本次新增传递依赖；后续引库仍须另行披露依赖图与取舍。
 
-计时点为请求开始、首个 TextDelta、首个计划正文 delta、模型完成、Assistant 保存、审核事务成功、浏览器首字与审核可用。比较相同模型/任务/上下文的首字和可审总耗时；检查代理缓冲、SSE flush、渲染批处理和正文规模，不承诺未经实测的百分比收益。计时日志不记录正文、推理或凭据。
+发布前停止新 Plan 接受并排空/中断旧活动执行，再同步工具 Schema、description、内置及业务 PLAN/BUILD、Provider 身份、解析和审核绑定。业务模式文件是完整覆盖，不能只改内置资源便认为生效。公共 phase 不迁移，读取端保留旧无 phase 完整计划和旧空参数历史；活动执行不得混用新旧工具 Schema/提示词。回滚同样排空活动 Plan，并验证已有新记录可读，不能重新解释历史。
+
+计时点包括请求开始、首个工具参数 delta、首个计划正文 delta、模型完成、Assistant 保存、审核提交、浏览器首字和审核可用。使用相同模型版本、任务与上下文比较提交成功率及首字/可审耗时，并记录缺调用、参数错误、绑定失败等原因；工具定义及 Prompt 生效另验。若 Provider 只一次性返回完整参数，仍可正确审核但没有首字改善；检查网关缓冲、flush 和前端批处理，不承诺未经实测的收益。日志不记录正文、敏感参数、推理或凭据。
 
 ## 6. 实施切片与验收
 
 | 切片 | 范围 | 必须验证 |
 |---|---|---|
-| PS1 | PLAN/BUILD、业务覆盖及工具 {} Schema | 同响应单块后唯一调用；正文只生成一次；无额外模型轮次；Build/Subagent/普通解释不误建卡 |
-| PS2 | Parser、最终解析 DTO、Projector、Binder | 标签每个字符切分、跨 TextContent、LF/CRLF、结束无换行；不等待整行；只有标签不发空 delta；多块/嵌套/缺闭合/顺序/错误/截断拒审；原始上下文与普通投影分别正确；同响应和不同根隔离 |
-| PS3 | 两 phase 编解码与审核事务 | delta 不带保存时间/调用/usage；不支持 started；同 ID 最终覆盖、未发 preview 也能提交；保存先于 completed；调用和原 Entry 精确绑定；停止竞争不误审；旧无 phase 可读、新写必 completed；首次批准模型调用保留获批块及配对 |
-| PS4 | 前端卡片、历史及失败恢复 | 首非空 delta 建卡、completed-only 建卡、前置说明不重复计划、usage 一次；部分增量丢失/最终校准/迟到/断网/中止/缺页/修订/409 不误审；普通根不串用；390 px、键盘焦点和滚动保持 |
-| PS5 | Provider/Mate/发布与性能 | 实际模型生成标记正文后工具；网关及时输出；跨实例仅完整输出可用；公共两跳同一计划身份不泄露；业务覆盖迁移；记录首字/可审核耗时，失败与回滚可读旧历史 |
+| PS1 | ExitPlanMode Schema/prepare、内置和业务 PLAN/BUILD、description | required plan、类型/字段/标题/UTF-16/编码容量校验；只生成一份参数、无额外模型往返；错误含字段与可信定义且 isError=true；未调用时不伪造审核；Build/Subagent 不误提交 |
+| PS2 | 中立 Provider 流身份、有界预览解析与 Projector | 每个字符处分片、转义/引号/CRLF/Unicode/代理项、多个调用交错、名称/ID 延迟与变化、重复键/尾随输入；只认可信内置 ExitPlanMode；无空 delta、无普通工具参数泄露、无平方级扫描；上游一次性参数仍能完成 |
+| PS3 | 不可变准备快照、Binder 与审核事务 | 最终校验在交互之前；同次快照共享、原 Entry 和唯一调用精确关联；completed 在事务之后，未发预览也可提交；混合工具/取消/截断不误审；approve/revise/interrupt 竞争；首次批准模型请求保留完整 plan 与结果 |
+| PS4 | 现有公共契约和客户端回归 | delta/completed 字段不变；新完整参数、旧历史均可读；final 覆盖部分增量，completed-only、失败/取消/断网/分页/迟到/修订与模式切换；终态后 preview 不再生成；调用日志不重复展示正文；390 px、滚动及键盘焦点 |
+| PS5 | 实际 Provider、Mate、发布与回滚 | 本次参数 Schema 与业务覆盖确实生效；记录模型样本成功率与首字/审核耗时；两跳身份与安全投影；其他工具不产生公共参数 delta且执行准入顺序不变；排空与新旧历史回滚可读 |
 
-契约样例与校验器只能证明设计数据一致，不能证明 Java 标记解析、数据库、浏览器或真实模型性能。这些实施验收均待执行。
+设计契约样例、校验器和生成图只证明文档一致性，不证明待实现的 Java 参数解析、浏览器集成或真实模型可靠性。实现与模型验收分别记录，不把已有标记解析测试当作参数流验收。
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-09-28 | 以 ExitPlanMode 完整 plan 参数提交审核，专用参数增量复用计划事件并保持其他工具公共协议。 |
 | 1.1.0 | 2026-09-19 | 后端解析计划标记，使用同一计划身份的 delta/completed 流式展示并在审核提交后完成。 |
 | 1.0.0 | 2026-09-19 | 定义同响应正文生成、空参数退出调用与审核绑定。 |

@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.61.1",
+    "version": "1.62.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -53,7 +53,7 @@
     }
   },
   "eventContract": {
-    "version": "2026-09-19.2",
+    "version": "2026-09-28.1",
     "semanticStatus": "confirmed",
     "detailStatus": "implementation-ready",
     "toolErrorCodes": {
@@ -143,7 +143,8 @@
       "identity": "same-eventId-for-preview-and-completed",
       "completion": "after-review-transaction-commit",
       "legacyRead": "missing-phase-is-completed",
-      "status": "confirmed-pending-implementation"
+      "status": "implemented",
+      "argumentPreviewStatus": "pending-implementation"
     }
   },
   "contractSections": {
@@ -215,7 +216,7 @@
           "agent.tool_call",
           "toolCallId/toolName/arguments/requiresConfirmation",
           "全部必填",
-          "toolCallId/toolName 非空字符串；arguments JSON 对象；requiresConfirmation 布尔值。CallMateTool 保留 tool/args，省略的 args 归一为 {}。模型参数不符合工具 Schema 时仍保留调用事件，由执行层返回失败结果；读取不以 tool/args 的业务格式拒绝整个 SSE 或历史。"
+          "toolCallId/toolName 非空字符串；arguments JSON 对象；requiresConfirmation 布尔值。CallMateTool 保留 tool/args，省略的 args 归一为 {}。模型参数不符合工具 Schema 时仍保留调用事件，由执行层返回失败结果；读取不以 tool/args 的业务格式拒绝整个 SSE 或历史。 ExitPlanMode 原始调用先于 prepare 保存；成功提交计划时 arguments={plan:完整 Markdown}，其 plan 与同次 preparedInvocation 中经可信定义校验的最终快照一致，completed.content 取该快照；这改变通用调用记录的参数内容，不新增调用事件字段或 phase。失败参数仍按 JSON 对象展示，不能用成功形状拒绝失败调用或旧历史。"
         ],
         [
           "agent.tool_call",
@@ -233,19 +234,19 @@
           "agent.plan delta",
           "eventId/type/sourceEventId/phase/content",
           "五项必填",
-          "phase=delta；content 为非空新增字符串，允许片段尚无标题，不带 createdAt/toolCallId/usage/sourceMessageEventId。后端识别 proposed_plan 开始标记时仅分配计划 ID，第一条非空正文 delta 建卡，无 started 或空 delta。计划块不再作为 agent.message 正文重复发送。增量不保存、不重放，与 completed 共用同一 eventId 和原用户根 sourceEventId。"
+          "phase=delta；content 为非空新增字符串，允许片段尚无标题，不带 createdAt/toolCallId/usage/sourceMessageEventId。后端仅对 Plan Main Agent 的 ExitPlanMode.plan 参数 JSON 做增量字符串解码，识别调用时分配计划 ID，首个安全非空文本增量建卡，无 started 或空 delta。不得直接发送 raw partialJSON，不新增通用 agent.tool_call delta，不自动透传其他工具参数；普通说明仍为 agent.message，不重复参数正文。增量不保存、不重放，与 completed 共用同一 eventId 和原用户根 sourceEventId。"
         ],
         [
           "agent.plan completed",
           "eventId/type/sourceEventId/phase/content/createdAt/toolCallId",
           "七项必填；旧完整记录可无 phase",
-          "新写 phase=completed；仅在审核事务成功后发送，与 confirming 同事务保存。content 为去除标记行后的完整 Markdown，首个非空行以 # 开始（# 后必须空格），最多 262144 UTF-16 单元且满足完整帧容量；toolCallId 非空。完整内容覆盖同 ID preview，不要求等于已收到 delta 的拼接；无 delta 也可直接建卡。sourceEventId 仍为原始用户根，targetEventId 审核目标仍为计划 eventId。不新增 sourceMessageEventId、planId/version、usage；后端绑定同响应原 Entry 和唯一 ExitPlanMode({})。修订使用新计划 ID。旧无 phase 完整记录按 completed 解码，无需重写历史。标记解析、两 phase 和空参数绑定待实现。"
+          "新写 phase=completed；仅在审核事务成功后发送，与 confirming 同事务保存。content 为同次 preparedInvocation 经可信定义校验的最终 plan Markdown 快照，首个非空行以 # 开始（# 后必须空格），最多 262144 UTF-16 单元且满足完整帧容量；toolCallId 非空。完整内容覆盖同 ID preview，不要求等于已收到 delta 的拼接；无 delta 也可直接建卡。sourceEventId 仍为原始用户根，targetEventId 审核目标仍为计划 eventId。不新增 sourceMessageEventId、planId/version、usage；后端绑定原 ToolCall/Entry 身份与唯一 ExitPlanMode({plan}) 的 preparedInvocation 最终快照。修订使用新计划 ID。旧无 phase 完整记录按 completed 解码，无需重写历史。计划两 phase 与前端消费已实现，参数增量来源待实现，范围见计划专题源码证据。"
         ],
         [
           "agent.plan 生命周期",
           "预览与审核",
           "无新增开始事件",
-          "仅 delta/completed；开始/结束标记都不是审核授权。completed 后该 ID 不再发送 delta；客户端忽略迟到 delta。只有完整计划和对应 confirming、当前状态对账通过后可审。未完成预览在该段可信结束后标为未提交审核；EOF/断线显示待核对，补读历史及 Session，不重放 POST。旧无 phase 兼容不允许新生产端省略 phase。"
+          "仅 delta/completed；参数预览与完整参数生成都不是审核授权。completed 后该 ID 不再发送 delta；客户端忽略迟到 delta。只有完整计划和对应 confirming、当前状态对账通过后可审。未完成预览在该段可信结束后标为未提交审核；EOF/断线显示待核对，补读历史及 Session，不重放 POST。旧无 phase 兼容不允许新生产端省略 phase。"
         ],
         [
           "agent.todo_updated",
