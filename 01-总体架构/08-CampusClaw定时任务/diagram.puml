@@ -1,0 +1,127 @@
+@startuml scheduled_run_sequence
+' Baseline: Claude scheduled-deployments, checked 2026-09-29, Beta.
+' Source: modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java executeAndReschedule.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventOutput.java persistenceOnly.
+' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a.
+' Design reason: durable occurrence and atomic acceptance precede external work.
+' Architecture change: scheduled acceptance and persistent Cron sessions are Pending implementation.
+title Daily alarm summary - new session (Pending implementation)
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+participant Scheduler
+participant Host
+database Store
+participant Runtime
+participant AgentLoop
+Scheduler -> Store : Claim occurrence and task slot\nInsert Run, advance cursor; commit
+Store --> Scheduler : Run identity and claim epoch
+Scheduler -> Host : Prepare Agent snapshot\nand current authorization
+Host --> Scheduler : Prepared run or rejection
+alt Preparation rejected
+  Scheduler -> Store : Record failure and release own slot\nPause task if required
+  Store --> Scheduler : Durable failure
+else Preparation ready
+  Scheduler -> Runtime : Accept Run with prepared snapshot
+  Runtime -> Store : Recheck task, time, claim and capacity\nCreate Session, message, root execution\nand Run link in one transaction
+  Store --> Runtime : Committed acceptance
+  Runtime --> Scheduler : Accepted identity (not completion)
+  Runtime -> Store : CAS READY to STARTING for live owner
+  Store --> Runtime : Single start grant
+  Runtime ->> AgentLoop : Start through shared Session factory
+  note right of AgentLoop
+    Target -> arguments -> permission
+    -> business execution -> result.
+    No unattended approval.
+  end note
+  AgentLoop -> Runtime : Content and actual root outcome
+  Runtime -> Store : Persist events and root terminal state
+  Store --> Runtime : Durable outcome
+  Scheduler -> Store : Reconcile fixed root execution\nUpdate summary and release own slot
+  Store --> Scheduler : Run history linked to Session
+end
+note over Scheduler, Runtime
+  Acceptance rejection records failure without starting.
+  Duplicate acceptance returns the existing link only.
+  Pause after acceptance does not cancel the Run.
+  Lost owner requires reconciliation, not replay.
+end note
+@enduml
+
+@startuml scheduled_task_architecture
+' Baseline: Claude Deployment / Run / Session, checked 2026-09-29, Beta.
+' Source: modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob and triggerJob.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start and commitTerminal.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java create.
+' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a.
+' Design reason: preserve API, service, policy, adapter, runtime and durable boundaries.
+' Architecture change: every P node and every connector is Pending implementation.
+title Scheduled tasks - global target
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 45
+hide empty members
+class "MateScheduleFacade" as Mate <<API / P>>
+class "ScheduleController" as Api <<API / P>>
+class "CronToolAdapter" as Tool <<Adapter / P>>
+class "ScheduleApplication\nService" as App <<Service / P>>
+class "ScheduleDispatcher" as Dispatch <<Service / P>>
+interface "ScheduleAuthorization\nPort" as Auth <<Port / P>>
+class "ScheduleTimePolicy" as Time <<Policy / P>>
+class "PreparedSchedule\nRunDTO" as Snapshot <<Immutable / P>>
+interface "ScheduleRepository" as Repo <<Port / P>>
+class "MyBatisSchedule\nRepository" as RepoImpl <<Adapter / P>>
+interface "ScheduleMapper" as Mapper <<DTO boundary / P>>
+class "GaussDB\nSchedule / Run / Gap\nSession / Execution" as Db <<Durable authority>>
+class "ScheduledRunAcceptance\nService" as Accept <<Service / P>>
+interface "ScheduleExecutionTarget" as Target <<Strategy / P>>
+class "NewSessionTarget" as New <<Phase 1 / P>>
+class "ExistingSessionTarget" as Existing <<Phase 2 / P>>
+class "Runtime session and\nexecution persistence" as Persist <<Existing>>
+class "RuntimeExecution\nCoordinator" as Coordinator <<Existing>>
+class "AgentSessionFactory" as Factory <<Existing>>
+class "ManagedAgentSession" as Session <<Per execution>>
+class "Host hooks +\nToolExecutionPipeline" as Pipeline <<Per execution>>
+Mate -down-> Api : trusted context + VO
+Api -down-> App : VO boundary
+Tool -left-> App : bound scope
+App -down[hidden]-> Dispatch
+Time -down[hidden]-> Auth
+Auth -down[hidden]-> Snapshot
+App -left-> Time : validate / preview
+App -right-> Repo : manage via DTO
+App -[norank]-> Auth
+Dispatch -down-> Accept : accept run
+Dispatch -left-> Auth : current grant
+Dispatch -[norank]-> Time
+Dispatch -[norank]-> Repo
+Dispatch -[norank]-> Snapshot : prepare
+Accept -left-> Snapshot : fixed input
+Accept -[norank]-> Repo
+Repo <|.. RepoImpl
+RepoImpl -down-> Mapper
+Mapper -down-> Db
+Accept o-left-> "1" Target
+Target <|.. New
+Target <|.. Existing
+New -down-> Persist : create / accept
+Existing -down-> Persist : lock / append
+Persist -[norank]-> Db : same transaction
+Accept -down-> Coordinator : after commit
+Coordinator -[norank]-> Persist : events / terminal
+Coordinator -down-> Factory
+Factory -down-> "0..*" Session : creates
+Session *-down-> "1" Pipeline
+legend bottom
+  P = Pending implementation; all new connectors are pending.
+  Existing services need scheduled-entry integration.
+  Services are singletons; snapshots and sessions are per Run.
+  Mate owns company authorization and private Chat mapping.
+  Run + message + execution commit before model or tool I/O.
+endlegend
+@enduml

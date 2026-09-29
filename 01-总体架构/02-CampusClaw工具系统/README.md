@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.18.0 |
+| 文档版本 | 2.18.1 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-09-22 |
+| 更新日期 | 2026-09-29 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -107,7 +107,7 @@ Runtime HTTP 的资源、ResultBean、SSE、Entry 和数据库契约仍由
 - Cron 持久化、集群调度、misfire、租约和保留策略的具体技术方案；
 - 旧 Cron payload、旧 Extension manifest 或旧工具执行器兼容。
 
-Cron 的数据库与集群调度属于 Cron Host 的独立专题。本设计只冻结模型工具契约、Agent
+Cron 的数据库与集群调度由 [M10 定时任务主设计](../08-CampusClaw定时任务/README.md)维护。本设计只冻结模型工具契约、Agent
 隔离和触发时的 Session 装配；当前 JSON/JSONL、进程内 scheduler、`--cron-tick` 和
 launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 
@@ -545,10 +545,12 @@ Child 消息历史或完整事件流。父取消必须传播；成功结果只�
 
 ## 11. Cron 与模型策略
 
+平台任务、Run、持久受理与恢复由 [M10](../08-CampusClaw定时任务/README.md)维护：每次独立会话优先，已有会话接入为第二阶段。当前进程内 Cron 已实现，新后台受理链待实现；[专项证据](../08-CampusClaw定时任务/source-evidence.md)不升级其他工具的核验范围。本节继续维护新会话 Cron 的装配规则，精确模型工具参数保持原契约；新管理入口和旧工具的统一适配按 M10 迁移切片推进。
+
 `Cron` 保留 `create/list/delete/trigger/status/runs`，删除 `model`、`system_prompt` 和
 `tools`。Job 自动保存当前受管 `agentId + prompt` 及调度元数据，所有管理动作按当前
 Agent 过滤。触发时重新 `prepare(agentId)`，使用该 Agent 当时的 SYSTEM、Skills、
-default model 和 `cron` profile，不使用创建时的模型或工具快照。
+default model 和 `cron` profile，不使用创建时的模型或工具快照。这里的“当时”指 prepare 实际取得的已发布目录；缓存命中不会自动刷新 Mate 数据库最新版本。
 
 模型可用集合统一为：
 
@@ -742,6 +744,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.18.1 | 2026-09-29 | 将 Cron 调度权威链接到 M10，并明确触发时已发布快照与后台受理增量。 |
 | 2.18.0 | 2026-09-22 | SearchTools 按唯一工具名精确返回定义，定义一致性作为约束，数据加载与同步另行设计。 |
 | 2.17.0 | 2026-09-22 | Skill 工具改由固定 SearchTools 有界发现，并与 CallTool 共用不可变 Session 定义快照。 |
 | 2.16.1 | 2026-09-22 | 时序图按职责和单一场景表达，细节由正文与专项设计承接。 |

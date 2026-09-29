@@ -215,7 +215,7 @@ HTTP 和执行规则见 [Slash Command 通用模块](../../04-命令与技能/00
 profile，不采用创建时的模型或工具快照。
 
 `Cron` 只出现在 Runtime profile。Job 持久化、集群调度、租约、misfire 和保留策略由
-Cron Host 独立设计；当前 JSON 存储、进程内 scheduler 和 OS CLI 调度是遗留源码观察，
+[M10 定时任务](../08-CampusClaw定时任务/README.md)维护；当前 JSON 存储、进程内 scheduler 和 OS CLI 调度是遗留源码观察，
 不属于本契约。
 
 可用条件：Runtime Session 具有受管 Agent 身份和 Agent 隔离的 Cron 管理上下文。
