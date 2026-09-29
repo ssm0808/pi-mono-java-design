@@ -66,6 +66,7 @@ skinparam classAttributeIconSize 0
 skinparam nodesep 30
 skinparam ranksep 45
 hide empty members
+class "Schedule page +\nMateScheduleApi" as Browser <<UI / P>>
 class "MateScheduleFacade" as Mate <<API / P>>
 class "ScheduleController" as Api <<API / P>>
 class "CronToolAdapter" as Tool <<Adapter / P>>
@@ -77,7 +78,7 @@ class "PreparedSchedule\nRunDTO" as Snapshot <<Immutable / P>>
 interface "ScheduleRepository" as Repo <<Port / P>>
 class "MyBatisSchedule\nRepository" as RepoImpl <<Adapter / P>>
 interface "ScheduleMapper" as Mapper <<DTO boundary / P>>
-class "GaussDB\nSchedule / Run / Gap\nSession / Execution" as Db <<Durable authority>>
+class "GaussDB\nSchedule / Config requests\nRun / Gap / Session / Execution" as Db <<Durable authority>>
 class "ScheduledRunAcceptance\nService" as Accept <<Service / P>>
 interface "ScheduleExecutionTarget" as Target <<Strategy / P>>
 class "NewSessionTarget" as New <<Phase 1 / P>>
@@ -87,6 +88,7 @@ class "RuntimeExecution\nCoordinator" as Coordinator <<Existing>>
 class "AgentSessionFactory" as Factory <<Existing>>
 class "ManagedAgentSession" as Session <<Per execution>>
 class "Host hooks +\nToolExecutionPipeline" as Pipeline <<Per execution>>
+Browser -down-> Mate : public VO + request key / ETag
 Mate -down-> Api : trusted context + VO
 Api -down-> App : VO boundary
 Tool -left-> App : bound scope
@@ -122,6 +124,45 @@ legend bottom
   Existing services need scheduled-entry integration.
   Services are singletons; snapshots and sessions are per Run.
   Mate owns company authorization and private Chat mapping.
+  Configuration saves never call prepare or start a Session.
+  Agent choices are authorized Mate projections.
+  Execution recovery policies require separate refinement.
   Run + message + execution commit before model or tool I/O.
 endlegend
+@enduml
+
+@startuml schedule_configuration_save
+' Target: Pending implementation; only configuration save, no scheduled execution.
+' Evidence: pi-mono-java 553dcd5e2ff682f9684810a043b442b37a02e54a
+' modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob
+' modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java saveUnsafe
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare
+' mate-service 4b957a3a846659f5b7569c9d6133abc070cd2e3c
+' src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java
+' Design reason: one config authority, durable reply, no model-mediated creation.
+title Save an alarm summary schedule - Pending implementation
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+hide footbox
+actor Browser
+participant Mate
+participant Schedule
+database Store
+Browser -> Mate : Save form + request key\nIf-Match when editing
+Mate -> Mate : Authenticate; authorize scope\nResolve Agent binding
+break Caller or binding rejected
+  Mate --> Browser : Public error; keep draft
+end
+Mate -> Schedule : Trusted scope + configuration\nSame request identity
+Schedule -> Schedule : Validate; resolve replay\nPrepare complete config change
+opt Valid new write
+  Schedule -> Store : Commit config + request result atomically\nCheck unique key and expected revision
+  Store --> Schedule : Committed resource or rollback
+end
+Schedule --> Mate : Saved config + ETag, or typed failure
+Mate --> Browser : Public resource + ETag / Location\nor safe error
+note over Browser, Store
+  No Session, model, tool, or runtime directory publication.
+  Lost response: query the original request key, then read config.
+end note
 @enduml

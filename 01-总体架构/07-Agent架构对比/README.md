@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.50.0 |
+| 文档版本 | 1.51.0 |
 | 更新日期 | 2026-09-29 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -431,10 +431,10 @@ CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可�
 |---|---|
 | 所属模块与主设计 | M10 [定时任务主设计](../08-CampusClaw定时任务/README.md)，关联 M01/M03/M04/M06/M08；本文维护基线差异与理由，具体规则、全局目标类图、实施切片和验收由主设计唯一维护 |
 | 架构问题 | 到期时间由谁拥有，定时器只是唤醒还是执行权威；到期后是回到同一 Session、创建新的 Agent Run，还是由外部平台重新启动进程；重启、空闲、暂停和失败如何对账？ |
-| CampusClaw 目标 | 采用 Schedule → Run → Session 分层，优先落地每次触发独立 Session，已有 Session 调度作为第二阶段；每个 Run 分开记录受理结果与根执行结果。GaussDB 保存调度与 Run 权威，同库内部事务关联受理，单任务不重叠；暂停不取消在途，恢复不全量补跑，已受理且结果未知时不接管重放。执行身份策略仍待确定，不宣称已具备服务凭据或固定 Agent 历史版本能力。 |
+| CampusClaw 目标 | 优先完成[配置闭环](../08-CampusClaw定时任务/configuration.md)：Mate 认证/授权与安全 Agent 摘要，Claw 单一配置存储，保存不运行；预览、创建、详情、部分更新、幂等回执和配置 ETag 形成页面闭环。两种执行目标均在范围内，独立 Session 优先；到期重叠、补跑和接管仍待细化，不能据配置设计冻结运行策略。 |
 | CampusClaw 实现 | Java 默认 `main@553dcd5e2ff682f9684810a043b442b37a02e54a` 已核验既有 Cron 与 Runtime 受理骨架；数据库调度、Run 与 Session 原子关联及两类目标的实施增量为待实现，精确范围见[M10 源码证据](../08-CampusClaw定时任务/source-evidence.md)。源码观察不等于 GaussDB、多实例或真实业务验收。 |
 | 基线分工 | Claude Managed Agents 是平台调度主基线，触发独立 Deployment Run 和新 Session；DeepSeek Harness、pi Pico v3、OpenCode、Codex 分别保留 Session 内提醒、通用 Task、外部 Workflow 和宿主调度的历史对照。没有统一的“Agent Cron 实现”，不以这些基线的多数行为代替产品决定。 |
-| 成熟度边界 | pi Pico v3 文档明确标为 design under discussion，DeepSeek Harness `dsh-0.1.7-alpha.1` 仍为 alpha，OpenCode 当前核对的是 `dev` 分支，Claude Managed Agents 仍要求 beta header；Codex Scheduled Tasks 以官方产品文档为公开契约，未取得服务端实现源码。 |
+| 成熟度边界 | pi Pico v3 的所引文档标为 design under discussion（不等同于无实验源码），DeepSeek Harness `dsh-0.1.7-alpha.1` 仍为 alpha，OpenCode 当前核对的是 `dev` 分支，Claude Managed Agents 仍要求 beta header；Codex Scheduled Tasks 以官方产品文档为公开契约，未取得服务端实现源码。 |
 
 Claude 的调度公开契约于 2026-09-29 重新读取；下面其他四基线仍是 2026-09-22 的固定证据。它们用于说明职责边界，不表示本次重新核验了上游现状。
 
@@ -450,7 +450,7 @@ Claude 的调度公开契约于 2026-09-29 重新读取；下面其他四基线�
 
 ### 2. 正常调用与失败处理的主流程
 
-这些基线的共同点只有“到期后要进入 Agent 执行”，并不存在统一的权威层。按职责还原主流程如下：
+这些基线处理的对象包含 Agent 会话、提醒与外部进程，不能把它们合并为同一种定时执行；下面保留各自注明日期的历史流程。按职责还原主流程如下：
 
 1. **托管平台 Cron（Claude）**：创建 Deployment，绑定 Agent、Environment、initial event 和 Cron → 到期尝试创建新 Session 并投递 initial event → 通过 Run 查看创建结果，通过 Session event stream/webhook 观察 Agent 执行。该流程描述公开资源关系，不断言内部持久化先后。一般创建失败有 Run；主 Agent 归档或删除是无 Run 的例外。限流等到下一次 occurrence，不可恢复错误可使 Deployment pause。
 2. **Session 内提醒（DeepSeek）**：工具校验规则和时间 → 等待持久化 flush → append `schedule/change:create` → 再次 flush 后确认 → runtime timer 唤醒并重新 fold → idle maintenance claim → `followup` 入队 → append dispatch → flush。任一步持久化不确定都不能返回“已成功”；运行中的 Agent 不被打断。
@@ -459,6 +459,10 @@ Claude 的调度公开契约于 2026-09-29 重新读取；下面其他四基线�
 5. **宿主调度（Codex）**：Scheduled task 服务/桌面 app 按规则创建 standalone 或既有 chat run → 将 prompt、项目/worktree 和权限上下文交给 harness → harness 只处理普通 turn，并记录 `turn_trigger`。服务端的持久化、去重、抢占与失败重试未公开，必须标为未核验。
 
 ### 3. CampusClaw 的采纳与差异
+
+当前先落实配置边界：[配置专题](../08-CampusClaw定时任务/configuration.md)将 Claude 的 Deployment 配置资源映射为现有 Agent + 纯文本任务 + 执行目标 + 可选时间；省略保持、嵌套整体替换、null 清除适用于新增配置更新。当前系统没有 Environment 选择和历史 Agent pin，页面不虚构对应字段。Mate 管公开授权和投影，Claw 保存唯一配置；这是企业产品约束与架构扩展，代价是新增安全目录、内部可信调用、配置持久化与幂等恢复。保存不调用 prepare，是因为缓存命中不核验最新元数据、缓存缺失又会发布目录；具体证据见[配置核验](../08-CampusClaw定时任务/source-evidence.md#configuration-evidence)。
+
+下述到期执行、同库受理与恢复取舍为待细化候选，不作为配置切片已冻结的实施约束；它们仍需结合业务场景和相应基线单独论证。
 
 园区每日设备告警汇总、设施巡检和能耗报表首先需要独立的执行与结果记录，因此主线参考 Claude 的平台调度资源分层。正常流程由 Schedule 到期产生 Run，经可信绑定和规则校验、执行授权与 Runtime 准入后创建独立 Session；Run 保留受理结果，再依据该根执行的权威终态更新执行结果。失败时先区分未受理、明确失败与已受理但结果未知，避免把 Session 创建成功当成业务完成，或因观察失败重复产生业务请求。
 
@@ -479,7 +483,7 @@ Claude 的调度公开契约于 2026-09-29 重新读取；下面其他四基线�
 
 | 基线 | 本条核验提交或官方日期 | 仓库相对路径、关键符号与证据范围 |
 |---|---|---|
-| pi | `main@95fbc04997eaee961eb673fa7923e9220609ebd5`，2026-09-22 | [`packages/agent/src/harness/pico3/scheduler.ts`](https://github.com/badlogic/pi-mono/blob/95fbc04997eaee961eb673fa7923e9220609ebd5/packages/agent/src/harness/pico3/scheduler.ts#L84-L197) 的 `Scheduler#resume/drive/drain/reserveEligible`；[`packages/agent/src/harness/pico3/kinds/job.ts`](https://github.com/badlogic/pi-mono/blob/95fbc04997eaee961eb673fa7923e9220609ebd5/packages/agent/src/harness/pico3/kinds/job.ts#L4-L187) 的 `JobInput`、`initial`、`waiting`、`poll`；[`packages/agent/docs/pico-v3.md`](https://github.com/badlogic/pi-mono/blob/95fbc04997eaee961eb673fa7923e9220609ebd5/packages/agent/docs/pico-v3.md#L964-L1020) 的 timing/permit/drive 约束。文档和源码均属于 Pico v3 讨论稿，不是已发布 package export。 |
+| pi | `main@95fbc04997eaee961eb673fa7923e9220609ebd5`，2026-09-22 | [`packages/agent/src/harness/pico3/scheduler.ts`](https://github.com/badlogic/pi-mono/blob/95fbc04997eaee961eb673fa7923e9220609ebd5/packages/agent/src/harness/pico3/scheduler.ts#L84-L197) 的 `Scheduler#resume/drive/drain/reserveEligible`；[`packages/agent/src/harness/pico3/kinds/job.ts`](https://github.com/badlogic/pi-mono/blob/95fbc04997eaee961eb673fa7923e9220609ebd5/packages/agent/src/harness/pico3/kinds/job.ts#L4-L187) 的 `JobInput`、`initial`、`waiting`、`poll`；[`packages/agent/docs/pico-v3.md`](https://github.com/badlogic/pi-mono/blob/95fbc04997eaee961eb673fa7923e9220609ebd5/packages/agent/docs/pico-v3.md#L964-L1020) 的 timing/permit/drive 约束。该历史条目未核验 package export，不能以讨论稿标签否定实验源码存在；产品入口和实验能力须分别核验。 |
 | Codex harness | `main@a1f40f3f1326eff7c81b860a4f4e27c1be186e10`，2026-09-22 | [`codex-rs/app-server-protocol/src/protocol/v2/plugin.rs`](https://github.com/openai/codex/blob/a1f40f3f1326eff7c81b860a4f4e27c1be186e10/codex-rs/app-server-protocol/src/protocol/v2/plugin.rs#L773-L822) 的 `ScheduledTaskSummary/ScheduledTaskSchedule` 仅为 PluginDetail 元数据；[`codex-rs/core/src/session/turn_input.rs`](https://github.com/openai/codex/blob/a1f40f3f1326eff7c81b860a4f4e27c1be186e10/codex-rs/core/src/session/turn_input.rs#L131-L176) 的 `TurnStartOptions.turn_trigger` 只记录触发来源；[`codex-rs/state/migrations/0042_drop_agent_jobs.sql`](https://github.com/openai/codex/blob/a1f40f3f1326eff7c81b860a4f4e27c1be186e10/codex-rs/state/migrations/0042_drop_agent_jobs.sql) 删除旧批处理 Agent Job 表。Codex Scheduled Tasks 的宿主契约核对[官方文档](https://learn.chatgpt.com/docs/automations)，日期 2026-09-22；服务端实现未公开。 |
 | OpenCode | `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`，2026-09-22 | [`packages/core/src/background-job.ts`](https://github.com/anomalyco/opencode/blob/fe3f3a41f79ad292cc3c7c629567385a20ec5130/packages/core/src/background-job.ts#L113-L188) 明确 registry 是 process-local、非 durable；`BackgroundJob.start/extend/wait/cancel` 在同一进程作用域内工作；[`packages/opencode/src/background/job.ts`](https://github.com/anomalyco/opencode/blob/fe3f3a41f79ad292cc3c7c629567385a20ec5130/packages/opencode/src/background/job.ts#L17-L35) 按 InstanceState 装配。已检查 `packages/opencode/src`、`packages/core/src`、`packages/protocol/src`，未发现 Cron/Schedule 模块。官方 GitHub 调度入口见[OpenCode GitHub 文档](https://dev.opencode.ai/docs/github)，核对日期 2026-09-22。 |
 | DeepSeek Harness | `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`，`dsh-0.1.7-alpha.1`，2026-09-22 | [`packages/schedule/schedule/src/types.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/c36a83ff6bb95e3f82cf79f9be7c724270a8aa61/packages/schedule/schedule/src/types.ts#L40-L120) 的 durable record/dispatch/view；[`src/runtime.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/c36a83ff6bb95e3f82cf79f9be7c724270a8aa61/packages/schedule/schedule/src/runtime.ts#L83-L338) 的 `ScheduleRuntime#driveOnce`；[`src/index.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/c36a83ff6bb95e3f82cf79f9be7c724270a8aa61/packages/schedule/schedule/src/index.ts#L41-L147) 的插件装配与 root Agent 生命周期；[`packages/schedule/schedule/README.md`](https://github.com/deepseek-ai/deepseek-harness/blob/c36a83ff6bb95e3f82cf79f9be7c724270a8aa61/packages/schedule/schedule/README.md#L76-L125) 的事件权威、flush barrier、idle delivery 和 latest-only catch-up。 |
@@ -542,6 +546,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.51.0 | 2026-09-29 | 增加 Claude 配置资源与现有 Mate/Claw 前后端边界的映射，运行策略保留待细化状态。 |
 | 1.50.0 | 2026-09-29 | M10 以 Claude 为主基线明确独立会话优先、两阶段调度及受理与执行结果分离，并更新调度公开契约和 Java 证据范围。 |
 | 1.49.0 | 2026-09-28 | 采用完整 plan 参数与计划专用预览，更新审核基线并区分已实现 marker 与待实现参数增量。 |
 | 1.48.0 | 2026-09-22 | 比较 mode 命令与 pi 配置命令、OpenCode primary Agent 的模式边界。 |

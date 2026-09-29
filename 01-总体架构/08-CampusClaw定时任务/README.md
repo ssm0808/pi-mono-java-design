@@ -4,15 +4,17 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.0 |
+| 文档版本 | 0.2.0 |
 | 更新日期 | 2026-09-29 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 支持每次创建独立会话和唤醒已有会话；优先交付独立会话 |
-| 设计状态 | 本文为推荐目标；后台受理、数据库调度和已有会话接入待实现；无人值守业务身份待确定 |
+| 设计状态 | 配置闭环形成推荐目标，待实现；到期执行、重叠、补跑和故障恢复部分为待细化候选，不作为已冻结实施规则；无人值守身份待确定 |
 | 已观察实现 | Java main `553dcd5e2ff682f9684810a043b442b37a02e54a` 已有进程内 Cron、JSON Job/JSONL Run 和公共 Session 工厂；不等于已具备企业调度能力 |
 | 主基线 | Claude Managed Agents Scheduled deployments，2026-09-29 核对，Beta；仅引用公开契约，无服务端源码 commit |
 
 ## 1. 要解决什么问题
+
+优先设计[配置端到端闭环](configuration.md)：从页面选择 Agent、任务内容与时间，到 Mate 校验、Claw 单一配置存储，再到详情回显、编辑冲突和断网恢复。该专题是配置页面与新增接口的唯一规则源。本文 §5～§7、§9～§12 的到期运行结构和恢复策略需在执行专题继续论证；配置交付不据此冻结忙时跳过、同库受理或失联不接管策略。
 
 园区运营人员配置“每天 08:00 汇总设备告警、检查未关闭工单”，保存后由服务端按时发起 Agent 工作，无需浏览器保持打开。用户能看见下一次计划时间、每次是否成功启动、执行结果和失败原因，并能暂停后续运行。
 
@@ -41,6 +43,8 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 
 ## 3. 使用与管理
 
+配置动作的当前推荐设计、字段与接口以[配置专题](configuration.md)为准：首期新建独立会话任务配置，保存为 PAUSED；不调用模型、prepare 或旧 Cron create；Mate 鉴权与安全投影，Claw 原子保存配置和请求回执。旧前端与 Cron 已有能力不能被直接标为新配置管理已实现。
+
 任务列表展示名称、Agent、执行目标、状态、规则与时区、下一计划时间、最近一次触发和执行摘要。任务详情提供运行列表；每条记录明确区分“未启动、已受理、执行中、执行结束、需要处理”。模型自然结束不等于设施巡检或工单操作业务成功，业务结论来自对应 Session 的输出与工具证据。
 
 | 管理动作 | 有效行为 |
@@ -57,9 +61,11 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 
 首版新管理入口先保存为 PAUSED，再由显式启用动作发布。现有 Cron 工具契约保持原参数面；其适配、创建是否立即启用、delete 到归档的映射和 trigger 回执须在迁移切片中一并对齐，未接线前不宣称新页面与旧工具已共用存储。每个写入动作使用带配置 revision 的可信快照，确认后在事务中重新检查可变状态；修改冲突不覆盖另一人的更新。
 
-精确 HTTP 路由、请求/响应 VO、错误码、权限条目和公共 Run 标识由后续 M06 契约切片维护；本文不把概念字段当成已发布 API，也不直接给现有 Chat 事件增加内部 runId。公共写请求继续遵守公司 `ResultBean` 和 Mate 认证规范。
+配置的 proposed HTTP 路由、VO、错误码和回执由[配置专题 §5～§7](configuration.md#5-公共与内部接口)维护，不是已发布 API。启停、Run 和执行结果契约另行设计，不直接给现有 Chat 事件增加内部 runId。公共写请求继续遵守公司 `ResultBean` 和 Mate 认证规范。
 
 ## 4. 时间规则
+
+配置的输入、空值、预览与回显以[配置专题 §5.2](configuration.md#52-时间联合类型与预览)为准。本节涉及的 maxLateness、补跑窗口、gap 与到期游标属于运行候选，尚不作为创建配置的必填字段或已确定策略。
 
 | 类型 | 规则 |
 |---|---|
@@ -177,15 +183,18 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 | 层次 | 责任与生命周期 |
 |---|---|
 | 公共边界与入口 Adapter | `MateScheduleFacade` 校验公司身份、租户和 Chat 访问；`ScheduleController` 接受可信内部上下文和 RequestVO、返回 ResponseVO；`CronToolAdapter` 传入 Host 已绑定作用域，不能绕过授权 |
+| 配置页面 | `MateScheduleApi` 只访问 Mate 公共接口；表单草稿与服务器快照分离，通过独立时间预览、请求回执和配置版本恢复；不复用内部调试客户端 |
 | 应用编排 | `ScheduleApplicationService` 负责管理规则与 VO/DTO 转换；`ScheduleDispatcher` 负责到期领取与准备，均为 Spring 单例 |
 | 策略与准备 | `ScheduleTimePolicy` 统一预览/计算；`ScheduleAuthorizationPort` 对接 Mate；`PreparedScheduleRunDTO` 每次准备创建不可变快照，不代替事务内可变状态检查 |
 | 持久化 | `ScheduleRepository` 实现委托 `ScheduleMapper`，Mapper 只收发 DTO；Schedule/Run/gap 是持久化权威，不引入 PO/DO/Entity 类型 |
 | 执行目标 | `ScheduleExecutionTarget` 明确新建与已有 Session 两种策略，避免 Controller/中央 switch 混合会话职责 |
 | Runtime 适配 | `ScheduledRunAcceptanceService` 组织同库短事务与既有 Session/执行存储；`RuntimeExecutionCoordinator` 事务后启动、投影与关闭；每次独立 `ManagedAgentSession` 由公共工厂创建 |
 
-先落内部受理服务与持久化关联，再做扫描器和页面。否则容易得到“定时器可运行但重启后无法知道是否已执行”的半成品。Controller 不直接调用 Mapper 或模型，执行协调器不兼任 Schedule Repository，模型与外部 I/O 不进入数据库事务。
+优先完成配置专题的页面、公共接口与唯一持久化闭环，再独立设计启用、到期触发和执行恢复。配置服务不调用 Session 工厂或执行协调器；全局图中的后续运行关系为待细化的结构方向。Controller 不直接调用 Mapper 或模型，模型与外部 I/O 不进入配置数据库事务。
 
 ## 11. 实施切片与验收
+
+当前实施入口为[配置专题 §8](configuration.md#8-实施与验收)。下表是后续完整运行能力的候选拆分，不能将其受理原子性、跳过和接管策略当作本次配置设计已确认的前提。
 
 | 切片 | 交付与通过条件 |
 |---|---|
@@ -212,4 +221,5 @@ S1～S4 优先交付，S5 为明确产品范围中的后续切片；S6 的时机
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.0 | 2026-09-29 | 优先建立配置页面至 Mate/Claw 持久化的完整闭环，执行与恢复策略保留待细化边界。 |
 | 0.1.0 | 2026-09-29 | 建立以 Claude Scheduled deployments 为主基线的两类定时执行目标，优先设计独立会话与持久受理。 |

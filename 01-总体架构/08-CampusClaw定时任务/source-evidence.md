@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.0 |
+| 文档版本 | 0.2.0 |
 | 核验日期 | 2026-09-29 |
 | 产品范围 | 新建独立会话优先；绑定已有会话为第二阶段，均属于目标范围 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与两类目标的调度接线待实现；企业身份系统未核验 |
@@ -113,14 +113,44 @@ NEW_SESSION 第一阶段需把新 Session、首消息、根执行和 Run 绑定�
 
 公开 API 的自动生成示例可能同时填入 session_id/error 等占位值，不能用此覆盖字段约束。主设计依据字段文字与指南，并明确区分 CampusClaw 的额外状态与可靠性目标。
 
-## 8. 文档验收
+<a id="configuration-evidence"></a>
 
-2026-09-29 执行 `plantuml -tsvg diagram.puml`、`python3 scripts/check-diagrams.py --render` 与 `git diff --check`。仓库级检查覆盖 36 个专题、130 个块、51 张时序图，0 错误；包括 Mermaid 禁用、ASCII、SVG XML、图源/SVG 同步、SVG 路径与 PlantUML 行锚点。唯一复杂度提示来自既有 managed_session_compaction 的三分支，职责说明见[时序图规范 §3](../../时序图规范.md#3-从总览下钻)，本专题未改该图。
+## 8. 配置页面与两跳 API 的源码核验
 
-新增两图均实际查看原尺寸与 840px 文档宽度，核对参与者、完整职责链、文字、箭头、分支退出与返回路径。图索引由脚本在 HEAD 加本任务文件的隔离快照生成，避免将既有未提交文档删除带入本任务；新增本地文档链接和锚点检查通过。这些只证明文档交付质量，不替代前述实现测试和上线验收。
+2026-09-29 再次确认 Claw 上游默认 main 并 fetch，仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`；本节读取该提交的前端、Cron、目录准备与配置更新模式。另读取本地 `/Users/z/mate-service` 干净工作树 `4b957a3a846659f5b7569c9d6133abc070cd2e3c`，未把它称为当日最新上游或完整生产部署；README 将其定义为待集成的可运行示例。相对历史 Mate `956b547f5ca12ca89e68f73012f92a4406b0c9fa`，只重新确认下列接口及字段，不延伸其他模块结论。
 
-## 9. 版本历史
+| 编号 | 仓库相对路径与符号 | 已观察实现与配置设计影响 |
+|---|---|---|
+| C01 | Claw `frontend/README.md`；`frontend/src/App.vue` · configuredAgentId；`frontend/src/components/AppSidebar.vue` | 前端是内部 Runtime 工作台，Agent 从环境变量/开发设置取得；Agent 中心禁用，无定时任务页。新增正式配置客户端不能复用内部直连作为后备路径。 |
+| C02 | Claw `frontend/src/composables/useRuntimeApi.ts` · API_PATH/request/createSession/changeSetting | 固定 `/campusclaw-service/v1`；使用 ResultBean 形状、ETag/If-Match 与 no-store。能参考交互模式，不能证明已有 Mate 公共接入。 |
+| C03 | Claw `frontend/src/composables/useWorkbenchSessions.ts`；`frontend/package.json` | 会话索引按后端/Agent/caller 本地隔离，草稿留内存；无定时配置列表、请求幂等恢复、vue-router 或表单库。新页面需服务端列表和待确认请求恢复。 |
+| C04 | Mate `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java` · listAgents/getAgent/getRuntimeAgent/updateAgent | 已有 `/mate-service/v1/agents` 及详情/runtime/更新；未观察 Schedule 或公共 Chat Controller。只有这些接口存在，不证明完整权限链。 |
+| C05 | Mate 同包 `vo/ListAgentRequestVO.java`、`vo/ListAgentResponseVO.java`；`service/impl/AgentDefinitionServiceImpl.java` · listAgents；`src/main/resources/mapper/AgentDefinitionMapper.xml` | 列表 pageIndex 默认1、pageSize默认20上限100；data/total/pageIndex；按 name/displayName/enabled/version 过滤。没有可信操作者/租户范围过滤，不能把 enabled=true 当授权。 |
+| C06 | Mate 同包 `vo/AgentInfoResponseVO.java`；`service/impl/AgentDefinitionServiceImpl.java` · buildAgentInfo | 管理聚合含 SYSTEM、permission 和全部绑定。普通候选需授权后安全摘要，不能让浏览器收到管理聚合再隐藏。 |
+| C07 | Mate 同包 `vo/ApiSuccessResponseVO.java`、`vo/ApiErrorResponseVO.java`；`controller/ApiExceptionHandler.java` | 示例模拟 ResultBean，更新空 result 被省略；错误是稳定码与文案，无 fieldErrors。Agent 异常未设置 Content-Language。新配置完整资源回显与语言 Header 是新增契约。 |
+| C08 | Claw `modules/cron/src/main/java/com/campusclaw/cron/CronService.java` · createJob；`store/CronStore.java` · saveUnsafe/updateJob | create 存储后立即 schedule；文件保存异常仅日志，无配置版本及数据库事务。不能直接包装此方法声称配置 API 已可靠提交。 |
+| C09 | Claw `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java` · prepare/rebuild/publish | 完整缓存命中不拉取 Mate，缺失则拉 Agent/Skill、写 staging 并发布目录。配置保存不调用 prepare；元数据校验与目录发布分离。 |
+| C10 | Claw 同 codingagent 根 `runtimeapi/agent/AgentDirectorySnapshotDTO.java`、`AgentDirectorySnapshots.java`；`runtime/MateServiceClient.java` | 当前装配快照不含 Agent 版本；Mate 查询按 agentId，未提供 pin 历史版本或 Environment 选择接口。不能伪造这两种前端配置。 |
+| C11 | Claw 同根 `runtimeapi/web/RuntimeSessionController.java`；`session/RuntimeSessionUpdateService.java`；`persistence/MyBatisRuntimeSessionRepository.java` · updateSession | 既有 Session 更新使用 ETag/If-Match、428/412 与数据库锁内版本重验。Schedule 借鉴该模式；Mate Agent 更新仍为锁行后最后写入生效，不宣称全系统已经统一。 |
+| C12 | Claw `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java` · RuntimeApi.MAX_MESSAGE_CHARACTERS；同 codingagent 根 `runtimeapi/vo/UserMessageContentRequestVO.java` | 普通文本上限262144，严格文本类型与未知字段检查；配置 prompt 复用该边界。配置更新另须保留省略/null差异。 |
+
+在 Mate 示例的 Controller/Service/Mapper、`src/main/java`、resources 与 POM 检索范围，未观察公司认证适配、租户范围、Chat 映射或调度配置服务。这是该源码样例的核验边界，不是对其他 Mate 部署作缺失判断。[配置设计](configuration.md) 将这些能力列为待实现/待公司集成核验。
+
+配置主基线只采用当日重新读取的 Claude [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create) 与 [Update Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/update)：资源保存 Agent、初始任务、环境和可选时间；更新省略保持，schedule:null清除，嵌套规则整体替换。Claw 选择纯文本任务、六字段现有解析、Mate公开入口和单一配置存储，不复制不存在的环境与历史版本资源；身份和凭据仍按企业边界实现。
+
+本节没有运行前后端产品测试、数据库或身份联调；测试要求见配置文档。现有 Spring/MyBatis/Jackson 可支撑该配置切片，无新增直接依赖；完整传递依赖图未重跑。
+
+## 9. 文档验收
+
+2026-09-29 执行 `plantuml -tsvg diagram.puml`、API 技能的 `validate_api_design.py`、`python3 scripts/check-diagrams.py --render` 与 `git diff --check`。仓库级检查覆盖36个专题、131个块、52张时序图，0错误；包括 Mermaid 禁用、ASCII、SVG XML、图源/SVG同步、SVG路径和 PlantUML 行锚点。唯一复杂度提示来自既有 managed_session_compaction 的三分支，职责说明见[时序图规范 §3](../../时序图规范.md#3-从总览下钻)。配置专题没有新增 OpenAPI/HTML 契约，相关检查为不适用，不能据此声称机器契约已交付。
+
+新增配置保存时序图为938×660，更新的全局类图为1302×1329；均实际查看原尺寸和840px文档宽度，核对职责链、文字、箭头、分支与返回路径。图索引由 `render-diagram-index.py` 在 HEAD 加本任务文件的隔离快照生成，避免带入既有未提交文档删除。三个 JSON 报文示例解析通过，配置文档本地链接存在；两次独立设计校对修正了时间往返、Agent定点回显、状态反馈和刷新恢复边界。
+
+这些检查证明文档与图源交付质量，不替代前端产品、GaussDB、公司认证或调度执行验收；本次没有修改实现代码或运行上述产品测试。
+
+## 10. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.0 | 2026-09-29 | 核对前端调试边界、Mate Agent 配置样例和 Claw 保存行为，补充独立配置 API 的证据与差距。 |
 | 0.1.0 | 2026-09-29 | 核对 Claude 调度公开契约、当前 Cron 与持久化 Runtime 基础，明确两类执行目标及实现差距。 |
