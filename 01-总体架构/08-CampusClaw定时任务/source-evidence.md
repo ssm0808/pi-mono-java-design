@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.7.0 |
+| 文档版本 | 0.8.0 |
 | 核验日期 | 2026-09-30；各节保留实际核验日期与范围 |
 | 产品范围 | 新建独立会话与绑定已有会话均需支持，优先支持独立会话；不据此预设已有会话的拒绝契约或交付阶段 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与两类目标的调度接线待实现；企业身份系统未核验 |
@@ -153,7 +153,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 | 来源与版本 | 已观察事实与适用边界 |
 |---|---|
 | Java 同提交的 [CronEngine.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java#L62)；`start`（62）、`scheduleJob`（121）、`executeAndReschedule`（185）、`computeNextDelay`（301） | `start` 建立 JDK 单线程 ScheduledExecutorService；`scheduleJob` 取消旧 Future、算出下一次延迟后注册一次回调；定时回调同步执行并重装下一次；`computeNextDelay` 用 Spring CronExpression.parse/next 与 ZonedDateTime 算时间。当前实现是 JDK 调度加 Spring 时间计算，没有使用 @Scheduled 或 TaskScheduler 注册每条 Job。 |
-| Java 同提交的 [CronSchedule.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronSchedule.java#L26)；`CronExpr`；[modules/cron/pom.xml](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/pom.xml#L35)；`spring-context` | 既有 CronExpr 保存 expression 与可空 timezone，模块已直接依赖 spring-context。目标继续使用其六字段语法，并要求新配置显式时区；这不把旧节点默认时区行为变成目标规则，也不需要新增 Maven 依赖。 |
+| Java 同提交的 [CronSchedule.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronSchedule.java#L26)；`CronExpr`；[modules/cron/pom.xml](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/pom.xml#L35)；`spring-context` | 既有 CronExpr 保存 expression 与可空 timezone，模块已直接依赖 spring-context。目标继续使用其六字段语法；推荐先确定并保存具体时区，请求必填性与默认值由配置契约继续确认，不把旧节点默认时区传播为目标规则，也不需要新增 Maven 依赖。 |
 | [Spring Task Execution and Scheduling](https://docs.spring.io/spring-framework/reference/integration/scheduling.html)，2026-09-30 读取时页面为 7.0.9 | 官方分别提供 @Scheduled 方法声明与 TaskScheduler/Trigger 编程式注册；前者适合应用预定义的固定任务，后者适合按运行期配置装配任务，CronTrigger 可承载 Cron 规则。此处是框架能力与场景选型依据，不证明 CampusClaw 已采用这些入口。滚动 7.x 文档不能冒充本地 6.2.6 的完整行为核验。 |
 | [CronExpression 6.2.x Javadoc](https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/scheduling/support/CronExpression.html)，读取时为 6.2.19；`parse`、`next` | 定义秒、分、时、日、月、星期六字段及 0/7 为周日；说明名称、范围、步长、日/星期扩展和宏。它是 6.2 分支公开契约，不是本地 6.2.6 二进制；产品开放范围由配置契约明确，不因解析器能接受就自动扩展输入。 |
 | [JDK 21 ScheduledThreadPoolExecutor](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ScheduledThreadPoolExecutor.html) | 延迟任务到期后才有执行资格，但不保证何时实际开始。六字段提供秒级表达能力，不保证模型或业务在目标秒精确启动；线程占用、负载与执行准入仍影响开始时间。 |
@@ -208,9 +208,34 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 **Claude Managed Agents：只声明 Cron，独立手动运行。** 同日重读[创建接口](https://platform.claude.com/docs/en/api/http/beta/deployments/create)、[资源模型](https://platform.claude.com/docs/en/api/http/beta/deployments)及[Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)：schedule 为可空的 cron/expression/timezone，无 every/startAt；创建响应提供 upcoming_runs_at 供查看计划时刻，执行可能稍晚；显式 run 才用于即时试运行。它能支持“保存配置与试运行分开”的产品选择，不能支持 every 首次时间的结论。
 
-对 Claw 的影响：every 固定时间表、可选 startAt 及创建时省略默认等待一个完整间隔均已确认，具体规则由[配置契约 §3.2](configuration.md#32-三种类型的边界与待定细节)维护。DSH 提供了相同首次等待行为的参照，但它没有显式 startAt，且创建计时点早于落盘；Claw 的可选首次时间是产品扩展。由服务端确定、持久化并回显补全值仍是候选，精确取时点、更新重置、重叠或补跑策略仍待确定。pi 是首次立即与固定延迟的反例，不能据多个系统都称 every 推断统一语义。
+对 Claw 的影响：every 固定时间表、整数秒 intervalSeconds、可选 startAt、创建缺省先等一个间隔及固定起点保存/回显均已确认；更新省略起点重新起算，新设起点必须未来，回传当前保存的旧起点允许，具体规则由[配置契约 §3.2](configuration.md#32-三种类型的边界与待定细节)维护。DSH 的首次等待可作参照，但它没有显式 every 起点；pi 的首次立即与固定延迟也不能被当作同一语义。Claw 的取时点、重叠和补跑仍待确定，不能把产品选择归为基线统一规则。
 
 本节为静态源码与公开文档核验。示例时间是按源码公式推导，未执行这些基线的产品任务或测试，未修改实现仓；完整运行、停机与企业调度验收仍需独立证明。
+
+<a id="timezone-evidence"></a>
+
+### 8.3 时区输入与默认来源的基线核验
+
+2026-09-30 当次重新确认默认分支并隔离 fetch，读取以下明确提交；这次只升级时间字段、时区解析与宿主边界，不改写 §8.2 及其他模块的历史 SHA。默认分支快照不等于稳定发布，DSH Schedule 与 pi Pico v3 仍为实验能力。
+
+| 基线 | 前次提交 → 本次提交 | 核验范围与变化 |
+|---|---|---|
+| DSH | master `639ed015397290b3745d163aafe02ffee4aa3f84`，未变 | `0.2.0-rc.2`；Schedule 默认关闭，读取工具 Schema、时间解析、记录与更新。 |
+| pi | main `1b347794e2a630e4359f2584f4eea388145d0ddf` → `ee602414c703be8da722ec56de7f2399e62581ac` | 本次核验的 experimental/pico3 无 diff；只证明进程 Job 不接收日历时区，未发现更直接的内置 Cron 用户契约。 |
+| OpenCode | dev `2fa3363c924c5c3e367b84a87ae478296a0ed59b`，未变 | 官方 GitHub 定时入口与 handler；时区由 GitHub Actions 决定。 |
+| Codex harness | main `bcd6d9ab6b9f26f85d76d0c680b3f88b367bffa0` → `d42056091aded7feb1d88ac7e83972108b2aa478` | 插件计划摘要与投影等核验文件无变化；不能据其推断宿主时区默认值。 |
+
+**DSH 显式区分日历与绝对时间。** Cron 创建与替换均要求完整 expression/time_zone，无默认时区，不回退主机时区。time_zone 接受 UTC 或合法 IANA Area/Location，经 Intl 校验并规范化；保存、回显规范化 timeZone 与 UTC scheduledAt。at 字符串必须自带 Z 或数值偏移；另有 `{date,time,time_zone}` 本地时间对象形式，三项必填，解析后只保存 UTC scheduledAt，不保留原 offset/时区。every_seconds 无 timezone、无调用方提供的 startAt，保存间隔与 UTC scheduledAt。
+
+证据：同一提交的 [tools.ts:370](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/tools.ts#L370) 的 Cron/at Schema；[domain.ts:332](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/domain.ts#L332) 的 parseOffsetInstant、370 起 canonicalizeTimeZone；[domain.ts:1292](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/domain.ts#L1292) 的 createAtScheduleRecord、1355 起 every、1483 起 Cron 记录；[domain.ts:1829](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/domain.ts#L1829) 的 parseCronInput；[update.ts:122](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/update.ts#L122) 复用相同解析器。旧值往返的辅助证据是同文件 changedRecord：at/after 原时间未变可跳过未来校验，新设过去时间拒绝；这不等于 DSH 支持 Claw 的 every 过去起点契约。
+
+**pi 不解析日历时区。** [JobInput](https://github.com/badlogic/pi-mono/blob/ee602414c703be8da722ec56de7f2399e62581ac/packages/agent/src/harness/pico3/kinds/job.ts#L4) 时间相关字段为 notBefore/every 数值，无 timezone；[harness.ts:150](https://github.com/badlogic/pi-mono/blob/ee602414c703be8da722ec56de7f2399e62581ac/packages/agent/src/harness/pico3/harness.ts#L150) 默认时钟为 Date.now，227 起按 untilMs 与 Date.now 的差等待；job.ts 的 initial/poll 使用该毫秒时钟。notBefore 是 epoch 毫秒，every 是毫秒时长，不能将“没有时区字段”表述成“日历时区默认 UTC/上海/系统时区”。
+
+**OpenCode 使用外部调度时区。** [github.mdx:124](https://github.com/anomalyco/opencode/blob/2fa3363c924c5c3e367b84a87ae478296a0ed59b/packages/web/src/content/docs/github.mdx#L124) 的官方例子注明 UTC；[github.handler.ts:401](https://github.com/anomalyco/opencode/blob/2fa3363c924c5c3e367b84a87ae478296a0ed59b/packages/opencode/src/cli/cmd/github.handler.ts#L401) 消费 schedule 事件，handler 与 action.yml 没有独立时区参数。同日重新核对 [GitHub Actions schedule 文档](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)：默认 UTC，也允许可选 IANA timezone。该默认值归属 GitHub，不是 OpenCode Runtime 的时区契约。
+
+**Codex 的公开资料不足以确定默认来源。** [plugin.rs:777](https://github.com/openai/codex/blob/d42056091aded7feb1d88ac7e83972108b2aa478/codex-rs/app-server-protocol/src/protocol/v2/plugin.rs#L777) 的 ScheduledTaskSummary/ScheduledTaskSchedule 未声明 timezone；同次检查 core-plugins/src、app-server/src/request_processors/plugins.rs、history/src/heartbeat.rs，所见为元数据与来源投影，未见时区解析。OpenAI Docs 的 [Scheduled tasks](https://learn.chatgpt.com/docs/automations) 同日重新搜索并读取，公开自定义计划和 RRULE，但未规定 timezone 字段是否必填或默认来源，不能用未公开细节支持 Claw 默认上海或节点时区。
+
+这些证据支持按时间类型决定是否需要时区，不支持统一行业默认值。Claw 主要使用 Asia/Shanghai，推荐 Cron 可选并在保存时补全上海、at/every 不额外保留 timezone；该候选及带 offset 输入、UTC 输出仍需确认，精确规则只由[配置契约 §3.4](configuration.md#34-时区选择与确认边界)维护。本节仅静态读取源码和官方契约，未执行产品任务或时区测试。
 
 ## 9. 文档验收
 
@@ -228,6 +253,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.8.0 | 2026-09-30 | 核验四个辅助基线的时区字段及默认来源，同步已确认的整数秒与固定起点行为。 |
 | 0.7.0 | 2026-09-30 | 明确 Claw 创建 every 时缺省首次等待一个间隔，保持精确取时与基线实现的证据边界。 |
 | 0.6.0 | 2026-09-30 | 区分 Claw 已确定的可选 startAt 与尚待确定的首次时间默认方案，保留原基线核验范围。 |
 | 0.5.0 | 2026-09-30 | 核对五个基线的首次触发与间隔基准，明确 DSH 固定时间表、pi 固定延迟及托管调度的公开证据边界。 |

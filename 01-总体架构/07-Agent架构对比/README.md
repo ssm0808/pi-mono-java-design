@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.58.0 |
+| 文档版本 | 1.59.0 |
 | 更新日期 | 2026-09-30 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -448,7 +448,18 @@ CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可�
 | OpenCode 官方 GitHub 入口 | GitHub Actions 根据 Cron 触发；OpenCode 消费 schedule 事件 | 外部五字段 Cron，非 Runtime 的 every 计算 | 不提供可直接对齐的 every/startAt 用户任务契约 |
 | Codex 宿主 Scheduled tasks | 官方支持 RRULE 和聊天内分钟间隔；没有公开与 Claw 同形的首次默认公式 | 本次文档与开源元数据不足以证明具体间隔推进算法 | 不把插件计划摘要或 turn_trigger 标记当作调度器实现 |
 
-完整提交、源码符号、单位与返回形状见[M10 首次触发证据](../08-CampusClaw定时任务/source-evidence.md#first-fire-evidence)。这些基线没有统一的首次执行默认值；Claw 已确认固定时间表及可选 startAt，创建时省略默认等待一个完整间隔，精确取时、回显与更新规则仍由[配置契约](../08-CampusClaw定时任务/configuration.md#32-三种类型的边界与待定细节)细化。下文历史表中“当前”均只指对应固定快照，不能覆盖本专项。
+完整提交、源码符号、单位与返回形状见[M10 首次触发证据](../08-CampusClaw定时任务/source-evidence.md#first-fire-evidence)。这些基线没有统一的首次执行默认值；Claw 已确认固定时间表及可选 startAt，创建时省略默认等待一个完整间隔，整数秒、起点保存/回显和更新缺省重算已确认，精确取时与运行恢复仍由[配置契约](../08-CampusClaw定时任务/configuration.md#32-三种类型的边界与待定细节)细化。下文历史表中“当前”均只指对应固定快照，不能覆盖本专项。
+
+### 时区字段与默认来源（2026-09-30 专项）
+
+| 基线 | 时区规则 | Claw 取舍 |
+|---|---|---|
+| DSH experimental Schedule | Cron 的 time_zone 必填，无默认；at 字符串自带 offset，本地对象则要求 time_zone；every 无时区字段 | 日历周期需要解释时区，绝对时刻与固定间隔不必机械增加 timezone |
+| pi experimental/pico3 | notBefore 是 epoch 毫秒，every 是毫秒时长，没有日历时区字段 | 不能据此认定默认 UTC、上海或系统时区 |
+| OpenCode GitHub 入口 | GitHub Actions 默认 UTC，允许可选 IANA timezone；Runtime 只消费事件 | 可以参考显式默认值，但不能把它归为 OpenCode 自有调度器行为 |
+| Codex | 所查开源摘要无 timezone，OpenAI Docs 未规定时区默认来源 | 本次未能核验默认值，不作为 Claw 默认时区的依据 |
+
+本专项重新确认默认分支并 fetch：DSH master `639ed015397290b3745d163aafe02ffee4aa3f84`、pi main `ee602414c703be8da722ec56de7f2399e62581ac`、OpenCode dev `2fa3363c924c5c3e367b84a87ae478296a0ed59b`、Codex main `d42056091aded7feb1d88ac7e83972108b2aa478`。pi/Codex 相对前项的所查文件无变化；完整路径、符号、旧新范围及官方文档见[M10 时区证据](../08-CampusClaw定时任务/source-evidence.md#timezone-evidence)，不升级其余历史表。Claude 的 Cron 必填 IANA 时区已由配置契约记录；Claw 默认上海属于产品约束候选，尚未确认。
 
 ### 1. 调度职责和权威状态
 
@@ -485,7 +496,7 @@ CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可�
 | GaussDB 作为 Schedule/Run 权威，同库内部事务关联 Runtime 受理；单任务不重叠 | 架构变更、安全加固 | 多实例或进程重启时不能仅靠内存 timer；现有非幂等 HTTP 创建/提交不能反复重试来代替原子受理。代价是新增数据库锁、唯一约束与事务集成，跨任务容量仍由运行时治理 |
 | 已受理且结果未知时不接管重放；pause 不取消在途；恢复不全量补跑 | 安全加固、产品约束 | 保持既有 Runtime 失联与工具副作用边界，避免停机恢复集中补发或执行重复；代价是未知结果需要对账，暂停也不等于在途工作已停止 |
 | 每次触发使用 `prepare(agentId)` 的已发布快照、build 与 cron profile | 产品约束 | 沿用三入口装配和无人交互边界；缓存命中不保证 Mate 数据库最新，不固定不存在的 Agent 历史版本。代价是配置刷新可见性仍依赖受管发布，需保存实际执行版本证据 |
-| 支持 Spring 六字段 Cron、at 与固定时间表 every，startAt 可选且创建时省略默认先等一个完整间隔；精确取时与执行恢复仍待细化 | 产品约束（方言选择）、产品扩展、间隔基准语义变更 | Cron 无法完整替代单次指定时刻或任意起点间隔，at/every 扩展 Claude 仅 Cron 的范围；every 的未来计划不随执行耗时漂移。复用既有 spring-context，不新增解析库；代价是需定义取时、回显、更新与耗尽规则，并验收旧完成时间基准到固定时间表的迁移；动态管理不由 @Scheduled 自动提供 |
+| 支持 Spring 六字段 Cron、at 与固定时间表 every，startAt 可选且创建时省略默认先等一个完整间隔，保存/回显固定起点；更新省略重算、新起点须未来、原值回传允许，精确取时与执行恢复仍待细化 | 产品约束（方言选择）、产品扩展、间隔基准语义变更 | Cron 无法完整替代单次指定时刻或任意起点间隔，at/every 扩展 Claude 仅 Cron 的范围；every 的未来计划不随执行耗时漂移。复用既有 spring-context，不新增解析库；代价是需区分整数秒 HTTP 与旧毫秒工具、定义精确取时及耗尽规则，并验收旧完成时间基准到固定时间表的迁移；动态管理不由 @Scheduled 自动提供 |
 
 执行身份策略仍待确定，不能据此推导已有长期服务凭据、凭据持久化或固定 Agent 历史版本。租户隔离、工具绑定、可信参数校验与权限检查继续适用，身份决定及必要的安全边界变更以[M10 主设计](../08-CampusClaw定时任务/README.md)为准。
 
@@ -558,6 +569,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.59.0 | 2026-09-30 | A14 增加时区字段与默认来源对比，同步固定起点和整数秒的已定契约。 |
 | 1.58.0 | 2026-09-30 | A14 明确 Claw 创建 every 时缺省先等待一个完整间隔，精确取时与更新仍待细化。 |
 | 1.57.0 | 2026-09-30 | A14 明确 Claw 的 startAt 可选，省略后的首次时间保持待定。 |
 | 1.56.0 | 2026-09-30 | A14 增加五基线首次触发专项对比，区分固定时间表、固定延迟和托管调度未公开细节，并校正 pi 时间单位。 |
