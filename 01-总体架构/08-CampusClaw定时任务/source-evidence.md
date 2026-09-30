@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.8.0 |
+| 文档版本 | 0.9.0 |
 | 核验日期 | 2026-09-30；各节保留实际核验日期与范围 |
 | 产品范围 | 新建独立会话与绑定已有会话均需支持，优先支持独立会话；不据此预设已有会话的拒绝契约或交付阶段 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与两类目标的调度接线待实现；企业身份系统未核验 |
@@ -153,7 +153,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 | 来源与版本 | 已观察事实与适用边界 |
 |---|---|
 | Java 同提交的 [CronEngine.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java#L62)；`start`（62）、`scheduleJob`（121）、`executeAndReschedule`（185）、`computeNextDelay`（301） | `start` 建立 JDK 单线程 ScheduledExecutorService；`scheduleJob` 取消旧 Future、算出下一次延迟后注册一次回调；定时回调同步执行并重装下一次；`computeNextDelay` 用 Spring CronExpression.parse/next 与 ZonedDateTime 算时间。当前实现是 JDK 调度加 Spring 时间计算，没有使用 @Scheduled 或 TaskScheduler 注册每条 Job。 |
-| Java 同提交的 [CronSchedule.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronSchedule.java#L26)；`CronExpr`；[modules/cron/pom.xml](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/pom.xml#L35)；`spring-context` | 既有 CronExpr 保存 expression 与可空 timezone，模块已直接依赖 spring-context。目标继续使用其六字段语法；推荐先确定并保存具体时区，请求必填性与默认值由配置契约继续确认，不把旧节点默认时区传播为目标规则，也不需要新增 Maven 依赖。 |
+| Java 同提交的 [CronSchedule.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronSchedule.java#L26)；`CronExpr`；[modules/cron/pom.xml](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/pom.xml#L35)；`spring-context` | 既有 CronExpr 保存 expression 与可空 timezone，模块已直接依赖 spring-context。目标继续使用其六字段语法；新 HTTP 的 timezone 可省略并默认 Asia/Shanghai，保存、回显有效值，规则由配置契约维护；旧节点默认时区不传播为目标规则，旧工具迁移另定，不需要新增 Maven 依赖。 |
 | [Spring Task Execution and Scheduling](https://docs.spring.io/spring-framework/reference/integration/scheduling.html)，2026-09-30 读取时页面为 7.0.9 | 官方分别提供 @Scheduled 方法声明与 TaskScheduler/Trigger 编程式注册；前者适合应用预定义的固定任务，后者适合按运行期配置装配任务，CronTrigger 可承载 Cron 规则。此处是框架能力与场景选型依据，不证明 CampusClaw 已采用这些入口。滚动 7.x 文档不能冒充本地 6.2.6 的完整行为核验。 |
 | [CronExpression 6.2.x Javadoc](https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/scheduling/support/CronExpression.html)，读取时为 6.2.19；`parse`、`next` | 定义秒、分、时、日、月、星期六字段及 0/7 为周日；说明名称、范围、步长、日/星期扩展和宏。它是 6.2 分支公开契约，不是本地 6.2.6 二进制；产品开放范围由配置契约明确，不因解析器能接受就自动扩展输入。 |
 | [JDK 21 ScheduledThreadPoolExecutor](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ScheduledThreadPoolExecutor.html) | 延迟任务到期后才有执行资格，但不保证何时实际开始。六字段提供秒级表达能力，不保证模型或业务在目标秒精确启动；线程占用、负载与执行准入仍影响开始时间。 |
@@ -235,7 +235,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 **Codex 的公开资料不足以确定默认来源。** [plugin.rs:777](https://github.com/openai/codex/blob/d42056091aded7feb1d88ac7e83972108b2aa478/codex-rs/app-server-protocol/src/protocol/v2/plugin.rs#L777) 的 ScheduledTaskSummary/ScheduledTaskSchedule 未声明 timezone；同次检查 core-plugins/src、app-server/src/request_processors/plugins.rs、history/src/heartbeat.rs，所见为元数据与来源投影，未见时区解析。OpenAI Docs 的 [Scheduled tasks](https://learn.chatgpt.com/docs/automations) 同日重新搜索并读取，公开自定义计划和 RRULE，但未规定 timezone 字段是否必填或默认来源，不能用未公开细节支持 Claw 默认上海或节点时区。
 
-这些证据支持按时间类型决定是否需要时区，不支持统一行业默认值。Claw 主要使用 Asia/Shanghai，推荐 Cron 可选并在保存时补全上海、at/every 不额外保留 timezone；该候选及带 offset 输入、UTC 输出仍需确认，精确规则只由[配置契约 §3.4](configuration.md#34-时区选择与确认边界)维护。本节仅静态读取源码和官方契约，未执行产品任务或时区测试。
+这些证据支持按时间类型决定是否需要时区，不支持统一行业默认值。Claw 已确认 Cron 时区可省略并默认保存、回显 Asia/Shanghai，at/startAt 须携带 Z 或数值偏移，at/every 不另设 timezone；这是面向主要园区场景的产品约束。UTC 输出与小数秒精度仍待确认，精确规则只由[配置契约 §3.4](configuration.md#34-时区选择与确认边界)维护。本节仅静态读取源码和官方契约，未执行产品任务或时区测试。
 
 ## 9. 文档验收
 
@@ -253,6 +253,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.9.0 | 2026-09-30 | 同步已确认的 Cron 默认上海及绝对时间输入规则，保留旧实现和基线时区证据。 |
 | 0.8.0 | 2026-09-30 | 核验四个辅助基线的时区字段及默认来源，同步已确认的整数秒与固定起点行为。 |
 | 0.7.0 | 2026-09-30 | 明确 Claw 创建 every 时缺省首次等待一个间隔，保持精确取时与基线实现的证据边界。 |
 | 0.6.0 | 2026-09-30 | 区分 Claw 已确定的可选 startAt 与尚待确定的首次时间默认方案，保留原基线核验范围。 |

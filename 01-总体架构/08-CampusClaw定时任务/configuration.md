@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.8.0 · 2026-09-30 |
+| 版本 | 0.9.0 · 2026-09-30 |
 | 状态 | 已确认能力与 proposed 接口形状分开记录；新接口待实现、尚未发布，整项操作尚未完成确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、时间预览；不定义 Mate 接口或页面实现 |
 | 产品范围 | 支持新建独立 Session 与继续已有 Session，独立 Session 优先；具体交付批次待确定 |
@@ -17,7 +17,7 @@
 
 已确认的创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 路径、返回与运行细节待设计。每次执行输入为一条 `user.message`，新建 Session 时作为首条任务消息，已有 Session 时作为新增消息；Cron 沿用 Spring 六字段。
 
-时间规则已确认支持 `cron`、`at`、`every`：分别覆盖日历周期、指定时刻单次执行和间隔重复任务。every 使用整数秒字段 intervalSeconds，按固定时间表触发；startAt 可选，创建时省略则等待一个完整间隔，最终起点保存并在创建响应和详情回显。更新省略起点时重算，新起点必须是未来时间，原样回传已保存旧起点允许保留；精确规则见 §3.2。服务端取时点、时区默认值、at 的过期处理及执行后状态仍需细化。
+时间规则已确认支持 `cron`、`at`、`every`：分别覆盖日历周期、指定时刻单次执行和间隔重复任务。every 使用整数秒字段 intervalSeconds，按固定时间表触发；startAt 可选，创建时省略则等待一个完整间隔，最终起点保存并在创建响应和详情回显。更新省略起点时重算，新起点必须是未来时间，原样回传已保存旧起点允许保留；精确规则见 §3.2。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；at/startAt 必须携带明确偏移量，at/every 不另设 timezone，见 §3.4。服务端取时点、时间输出规范、at 的过期处理及执行后状态仍需细化。
 
 除明确标记已确认的字段外，下文状态模型、其余字段名、路径和错误码仍为 proposed。候选新建状态为 `ACTIVE`，创建处理器不直接调用模型或创建 Session；自动执行由后续调度触发。暂停、恢复、显式试运行、归档和运行记录的精确契约另行设计，不能把下列五个配置接口当作完整产品接口清单。
 
@@ -55,13 +55,13 @@ Claw 必须在服务认证边界取得可信调用者和管理作用域，再按
 | schedule | 可选；创建省略默认 null，更新省略保持；非空为下表的联合类型，更新时整体替换 |
 | status/revision/id/createdAt/updatedAt | 全部只读；新建 ACTIVE、revision=1，时间为 UTC ISO 8601；status 为 ACTIVE/PAUSED/ARCHIVED，ARCHIVED 不可修改 |
 
-以下为候选请求形状；类型范围、Spring 六字段、every 固定时间表、整数秒 intervalSeconds 及 §3.2 的 startAt 行为已确认；时区、绝对时间格式及其他约束仍为 proposed。
+以下为候选请求形状；类型范围、Spring 六字段、every 固定时间表、整数秒 intervalSeconds、§3.2 的 startAt 行为及 §3.4 的时区与输入偏移量规则已确认；时间输出规范、小数秒精度及其他未明确确认的约束仍为 proposed。
 
 | schedule.type | 候选完整输入 | 语义与确认边界 |
 |---|---|---|
-| cron | type、expression、timezone | Spring 六字段 `second minute hour day-of-month month day-of-week`；timezone 使用 IANA 名称，必填性及默认值见 §3.4 待定方案；拒绝五字段，不自动补秒 |
-| at | type、at、timezone | 已确认指定时刻单次执行；建议以带明确 offset 的 ISO 8601 输入并输出 UTC，创建/替换时拒绝过去时刻；timezone 仅供展示，是否保留另定 |
-| every | type、intervalSeconds、startAt（可选）、timezone（是否保留待定） | 已确认 intervalSeconds 为整数秒，按固定时间表重复，startAt 可选；保存、回显与更新规则见 §3.2。间隔必须为正；最小/最大间隔、绝对时间格式、精确取时点与 timezone 待确定 |
+| cron | type、expression、timezone（可选） | Spring 六字段 `second minute hour day-of-month month day-of-week`；timezone 使用 IANA 名称，省略默认 Asia/Shanghai，保存并回显有效值；拒绝五字段，不自动补秒 |
+| at | type、at | 已确认指定时刻单次执行，ISO 8601 输入必须携带 Z 或数值偏移，不另设 timezone；统一 UTC 输出、创建/替换时拒绝过去时刻仍为候选 |
+| every | type、intervalSeconds、startAt（可选） | 已确认 intervalSeconds 为整数秒，按固定时间表重复，startAt 可选且显式输入须带 Z 或数值偏移，不另设 timezone；保存、回显与更新规则见 §3.2。间隔必须为正；最小/最大间隔、小数秒精度、输出规范与精确取时点待确定 |
 
 <a id="spring-cron-contract"></a>
 
@@ -84,7 +84,7 @@ Claw 必须在服务认证边界取得可信调用者和管理作用域，再按
 | `30 0 8 * * *` | 每天 08:00:30 |
 | `*/10 * * * * *` | 每分钟第 0、10、20、30、40、50 秒；仅说明表达式含义，不代表产品已允许该频率 |
 
-各字段支持 Spring 的列表、范围、步长及其日期扩展，具体匹配以项目使用的 Spring `CronExpression` 为准；宏快捷写法是否开放另行确定，不能仅因解析器接受就纳入本 API。月内日期与星期同时受限时要求同时匹配：`0 0 8 1 * MON` 表示“每月 1 日且为周一的 08:00”，不能按 POSIX 常见的日期或星期匹配方式解读。时区单独传入 timezone，避免运行节点配置改变计划含义。[官方语法](https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/scheduling/support/CronExpression.html)
+各字段支持 Spring 的列表、范围、步长及其日期扩展，具体匹配以项目使用的 Spring `CronExpression` 为准；宏快捷写法是否开放另行确定，不能仅因解析器接受就纳入本 API。月内日期与星期同时受限时要求同时匹配：`0 0 8 1 * MON` 表示“每月 1 日且为周一的 08:00”，不能按 POSIX 常见的日期或星期匹配方式解读。时区由显式 timezone 或 §3.4 的服务端默认值确定并保存，避免运行节点配置改变计划含义。[官方语法](https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/scheduling/support/CronExpression.html)
 
 ### 3.2. 三种类型的边界与待定细节
 
@@ -100,7 +100,7 @@ every 按固定时间表触发。首次计划时刻为 T、固定间隔为 Δ �
 
 同一幂等键的原请求重试返回原结果，不重算起点。以新键提交省略 startAt 的 every 规则会应用新的更新基准；即使间隔相同，也不能仅据输入间隔相同就当作无变化。规范化后的完整规则相同才按未修改处理。这里只冻结起点行为，不代表更新操作的完整 HTTP 契约已确认。
 
-其余候选规则：at/every 接受带 Z 或数值偏移的 ISO 8601 输入，规范化 UTC 输出可原样回传；小数秒精度仍待明确。timezone 不改变绝对时刻或固定秒间隔，是否保留见 §3.4。已有规则只修改名称等字段时，不因其起点已过去而拒绝或重设起点。旧 CronTool 的 every 字符串值及内部 intervalMs 使用毫秒，新 HTTP 的 intervalSeconds 使用秒；不自动将两套报文互认或迁移，旧毫秒间隔可能无法无损表示为整数秒。旧 CronEngine 使用完成时间基准；目标固定时间表属于需独立验收的语义变更，不能称为原样复用。
+at/startAt 的 ISO 8601 输入必须携带 Z 或数值偏移，at/every 不另设 timezone，见 §3.4。规范化 UTC 输出和小数秒精度仍待明确；无论输出采用哪种偏移形式，回传同一绝对时刻均按同一原值判断。已有规则只修改名称等字段时，不因其起点已过去而拒绝或重设起点。旧 CronTool 的 every 字符串值及内部 intervalMs 使用毫秒，新 HTTP 的 intervalSeconds 使用秒；不自动将两套报文互认或迁移，旧毫秒间隔可能无法无损表示为整数秒。旧 CronEngine 使用完成时间基准；目标固定时间表属于需独立验收的语义变更，不能称为原样复用。
 
 ### 3.3. 预览与运行时间响应候选
 
@@ -114,11 +114,23 @@ every 按固定时间表触发。首次计划时刻为 T、固定间隔为 Δ �
 
 ### 3.4. 时区选择与确认边界
 
-CampusClaw 的主要业务时区为 Asia/Shanghai。推荐 Cron 的 timezone 可省略，服务端补全为 Asia/Shanghai，并将确定的时区保存、回显后用于计算；也可选择严格对齐 Claude，将 timezone 设为必填。该选择尚未确认，不能将“主要使用上海时区”自动等同于“接口只能使用上海时区”或已接受缺省值。两种方案均不依赖运行节点的默认时区。
+Cron 的 timezone 可省略，服务端默认使用 Asia/Shanghai；显式提供时允许其他合法 IANA 时区。保存前确定具体时区并随规则持久化，创建、详情和更新响应均回显有效值；计划计算使用已保存值，不取运行节点默认时区。创建和整体替换 Cron 规则使用同一默认处理；更新省略整个 schedule 则保留原规则及其时区。默认处理位于 Service，显式 null、空字符串和时区别名的处理仍待确定。
 
-推荐 at/startAt 的输入字符串携带明确偏移量、响应统一 UTC，at/every 不再另设 timezone；调用方按所需时区展示。这仍为候选，不因 intervalSeconds 已确认就一并冻结。带 offset 的单次时刻与固定秒间隔不需要日历解释时区；若额外保存 timezone 供展示，则必须再定义其与输入偏移量的关系。
+例如，调用方省略时区的 schedule 片段为：
 
-[基线时区证据](source-evidence.md#timezone-evidence)区分 DSH Cron 必填时区、GitHub Actions 可选时区且默认 UTC、pi 无日历时区字段及 Codex 尚未核实的默认来源；不能据此宣称存在统一行业默认值。默认上海是 CampusClaw 的产品约束候选。
+```json
+{ "type": "cron", "expression": "0 0 8 * * MON-FRI" }
+```
+
+保存并回显的 schedule 片段为：
+
+```json
+{ "type": "cron", "expression": "0 0 8 * * MON-FRI", "timezone": "Asia/Shanghai" }
+```
+
+at/startAt 的输入字符串必须携带 Z 或数值偏移，例如 `2026-10-01T08:00:00+08:00`；不接受没有偏移量的本地时间。at/every 不设置独立 timezone 字段：单次时刻与间隔起点已由输入确定，every 后续按固定秒数计算，不按日历时区推进。响应是否统一 UTC 以及小数秒精度仍为候选，调用方的展示时区不改变计划含义。
+
+[基线时区证据](source-evidence.md#timezone-evidence)区分 DSH Cron 必填时区、GitHub Actions 可选时区且默认 UTC、pi 无日历时区字段及 Codex 尚未核实的默认来源；不存在据此可推导的统一行业默认值。默认上海是 CampusClaw 已确认的产品约束，方便主要园区场景配置；代价是调用方省略字段时采用了产品预设，必须通过保存和回显使该选择可见。
 
 ## 4. 创建、读取与更新报文
 
@@ -188,7 +200,7 @@ GET 详情返回同形资源及当前 ETag。列表允许 pageIndex/pageSize/nam
 }
 ```
 
-成功返回完整资源及新 ETag。更新至少提供 name/description/agentId/target/message/schedule 中一个字段；省略保持，description/schedule 显式 null 清除，其他 null 拒绝。target/message/schedule 整体替换，`{"schedule":{"timezone":"UTC"}}` 不合法。先与已保存配置合并，再校验最终整体，任一错误则全部不改。拒绝未知字段、错误 JSON 类型和只读字段；同值更新不增 revision，但记录请求结果。
+成功返回完整资源及新 ETag。更新至少提供 name/description/agentId/target/message/schedule 中一个字段；省略保持，description/schedule 显式 null 清除，其他所列顶层字段的 null 拒绝。嵌套 timezone/startAt 的 null 语义仍待确定。target/message/schedule 整体替换，`{"schedule":{"timezone":"UTC"}}` 不合法。先与已保存配置合并，再校验最终整体，任一错误则全部不改。拒绝未知字段、错误 JSON 类型和只读字段；同值更新不增 revision，但记录请求结果。
 
 更新保持 ACTIVE/PAUSED 状态；清除 schedule 只移除未来自动计划，不取消在途 Session。变更后的 revision 供后续受理使用，不修改已接受输入；仅改 message 等字段不重置时间规则。更新与到期受理须有明确的事务先后关系，具体 worker 机制不在此定义。
 
@@ -245,6 +257,7 @@ If-Match 用于防止覆盖别人修改，Idempotency-Key 用于重放同一次�
 | 运行环境 | 显式 environment_id | 不提供空壳 environmentId，沿现有 Host/Agent 目录装配；减少资源模型，但失去独立环境选择与复用 | 架构范围 |
 | 初始输入 | initial_events 支持多事件及受约束事件类型 | 一条 user.message，复用既有文本与文件引用格式；不开放多初始事件、system.message 或 user.define_outcome。旧 CronPayload 只有纯文本，调度消息接线与附件长期访问仍待实现/细化 | 产品范围、实现差距 |
 | 时间表达 | 五字段 POSIX Cron，IANA 时区 | 采用 Spring 六字段，复用现有解析器且不新增 Maven 依赖；代价是 Claude 表达式不能直接复制，日/周组合语义也不同。[固定与动态调度场景](README.md#spring-scheduling)说明框架能力和执行边界 | 产品约束（方言选择）、实现成本取舍 |
+| Cron 时区 | timezone 必填，使用 IANA 名称 | timezone 可省略，默认 Asia/Shanghai，保存并回显有效值；适配主要园区场景，代价是调用方需了解省略时采用的产品预设，不能继承运行节点默认值 | 产品约束 |
 | 单次与间隔 | 上述 schedule 模型只声明 cron | 已确认支持 at/every；every 使用整数秒 intervalSeconds 与可选固定 startAt，创建缺省先等一个间隔，保存并回显起点，更新缺省重算；具体见 §3.2。精确取时与运行恢复待定，需验收旧完成时间基准的迁移差异 | 产品扩展、间隔基准语义变更 |
 | 更新 | 省略保持、schedule:null 清除、初始事件/规则整体替换 | 推荐沿用；Claw 的 message/target/schedule 整体替换，不引入通用深层合并；更新操作仍待整体确认 | 参考基线 |
 | 并发与重试 | 本次公开操作页未给出与本方案相同的版本/幂等契约 | 明确 ETag/If-Match 和 Idempotency-Key，借鉴现有 Session 更新模式；增加请求记录与冲突处理成本，不能据此声称 Claude 内部没有保护 | Claw 可靠性设计 |
@@ -262,12 +275,15 @@ If-Match 用于防止覆盖别人修改，Idempotency-Key 用于重放同一次�
 
 every 另须验收：intervalSeconds 按整数秒解释；创建缺省先等一个间隔，显式 startAt 不额外加间隔；保存的固定起点在创建/详情回显，重试及重启不重算。更新省略整个 schedule 保持，提交 every 但省略 startAt 重算；新设过去或等于当前的起点拒绝，回传当前已保存旧起点允许且可同时改间隔。同键重试不重算；新键省略起点的更新按完整规范规则判断变化。两种输入的后续计划均不随任务耗时漂移；精确取时、时间格式及范围确定后补充对应边界验收。
 
+时区另须验收：创建或整体替换 Cron 时省略 timezone 均保存为 Asia/Shanghai，显式其他合法 IANA 时区按输入生效；响应回显保存值，节点时区变化不改变规则，更新省略整个 schedule 不重置时区。at/startAt 接受 Z 或数值偏移并拒绝无偏移量输入，at/every 不接收独立 timezone；不同偏移量表示的同一时刻保持一致。UTC 输出、小数秒精度、显式 null 与空字符串策略确定后再补充相应边界。
+
 不新增直接 Maven 依赖：复用 JDK、Spring CronExpression/Jackson、宿主 MyBatis 3.0.4 与数据库驱动。完整传递依赖图未重跑。公司身份适配、无人值守身份及实际调度是上线依赖，不在本次扩写其接口。当前没有产品代码、数据库或集群测试证据。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.9.0 | 2026-09-30 | Cron 时区可省略并默认保存、回显上海时区，at/startAt 必须携带偏移量且 at/every 不另设时区。 |
 | 0.8.0 | 2026-09-30 | 明确整数秒间隔、固定起点回显及更新校验，补充上海时区候选与各基线时区边界。 |
 | 0.7.0 | 2026-09-30 | 创建 every 时省略 startAt 默认等待一个完整间隔后首次触发，继续沿固定时间表推进。 |
 | 0.6.0 | 2026-09-30 | every.startAt 为可选字段，省略后的默认首次时间、显式 null 与更新语义继续待定。 |

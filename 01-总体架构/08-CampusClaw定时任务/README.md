@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.9.0 |
+| 文档版本 | 0.10.0 |
 | 更新日期 | 2026-09-30 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 支持每次创建独立会话和唤醒已有会话；优先交付独立会话 |
@@ -35,7 +35,7 @@ M10 拥有时间规则、任务生命周期、触发身份、到期领取、受�
 | 定义、触发、执行分离 | Schedule 保存长期规则，Run 保存一次触发/受理，Session 保存内容与根执行；避免“启动成功”被当成业务完成 | 采用 Deployment / DeploymentRun / Session 的职责分离；公开 Run 本身只表示 Session 创建结果 |
 | 执行目标 | 两种目标均支持，`NEW_SESSION` 优先 | 前者参考 Scheduled deployments；后者是 CampusClaw 产品扩展，非 Claude Deployment 的已观察能力 |
 | Agent 选择 | 新会话每次 `prepare(agentId)`，固定这次实际取得的已发布目录快照；不会自动刷新 Mate 最新定义 | 保留现有产品约束；Claude 在创建/显式更新 Deployment 时固定 Agent 版本 |
-| 时间表达 | 已确认支持 `at/every/cron`；Cron 沿用 Spring 六字段，every 使用整数秒 intervalSeconds 和可选固定 startAt，创建缺省先等一个间隔，保存/回显起点，更新省略起点重算；精确取时与时区候选待确定 | Claude 只声明五字段 POSIX Cron；at/every 属于产品扩展，不把日历匹配当作单次或任意间隔的完整替代 |
+| 时间表达 | 已确认支持 `at/every/cron`；Cron 沿用 Spring 六字段，every 使用整数秒 intervalSeconds 和可选固定 startAt，创建缺省先等一个间隔，保存/回显起点，更新省略起点重算；Cron 时区可省略并默认保存、回显 Asia/Shanghai，at/startAt 须带偏移量且 at/every 不另设时区；精确取时仍待确定 | Claude 只声明五字段 POSIX Cron；at/every 属于产品扩展，不把日历匹配当作单次或任意间隔的完整替代 |
 | 重叠与恢复 | 同一任务仅一条未完成受理链；过期窗口跳过，结果未知保持占用；不自动重放已接受输入 | 产品约束和安全加固；Claude 公开资料未给出完整重叠/故障接管策略 |
 | 部署与存储 | GaussDB 是调度权威，定时器只唤醒扫描；与 Runtime 受理使用同库事务 | CampusClaw 架构变更；不推断 Claude 的表、锁、队列或部署拓扑 |
 
@@ -64,13 +64,13 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 
 ## 4. 时间规则
 
-配置的输入、空值、预览与回显以[配置专题 §3](configuration.md#3-配置字段与时间规则)为准。cron、at、every 三种能力、every 固定时间表及可选 startAt 均已确认；创建 every 时省略 startAt 默认等待一个完整间隔后首次触发。整数秒 intervalSeconds、固定起点保存/回显、更新缺省重算及新旧起点校验已确认；精确取时、时区默认值、at 时间校验及重启恢复处理仍待确定。Cron 不能完整表达“某个指定日期只执行一次”或“从任意起点连续每隔 7 分钟”；具体边界与固定时间表公式见[配置专题 §3.2](configuration.md#32-三种类型的边界与待定细节)。本节涉及的 maxLateness、补跑窗口、gap 与到期游标属于运行候选，尚不作为创建配置的必填字段或已确定策略。
+配置的输入、空值、预览与回显以[配置专题 §3](configuration.md#3-配置字段与时间规则)为准。cron、at、every 三种能力、every 固定时间表及可选 startAt 均已确认；创建 every 时省略 startAt 默认等待一个完整间隔后首次触发。整数秒 intervalSeconds、固定起点保存/回显、更新缺省重算及新旧起点校验已确认；时区与输入偏移量规则已确认，见配置专题 §3.4；精确取时、时间输出规范、at 时间校验及重启恢复处理仍待确定。Cron 不能完整表达“某个指定日期只执行一次”或“从任意起点连续每隔 7 分钟”；具体边界与固定时间表公式见[配置专题 §3.2](configuration.md#32-三种类型的边界与待定细节)。本节涉及的 maxLateness、补跑窗口、gap 与到期游标属于运行候选，尚不作为创建配置的必填字段或已确定策略。
 
 | 类型 | 规则 |
 |---|---|
-| `at` | 已确认指定时刻单次执行；带偏移量的 ISO 输入、UTC 保存和过期拒绝仍为候选，见[配置 §3](configuration.md#3-配置字段与时间规则) |
+| `at` | 已确认指定时刻单次执行，ISO 输入必须带 Z 或数值偏移且不另设 timezone；UTC 输出和过期拒绝仍为候选，见[配置 §3](configuration.md#3-配置字段与时间规则) |
 | `every` | 按固定时间表计算 occurrence，后续计划不随实际开始或完成时间移动；intervalSeconds 为整数秒，startAt 可选且固定保存/回显，创建缺省先等一个间隔，更新缺省重算；新设起点须未来，原样回传已保存起点允许；精确取时、停机和重叠处理待确认 |
-| `cron` | Spring 六字段 `second minute hour day-of-month month day-of-week`，使用已有 `CronExpression`；采用 IANA 时区，不使用服务器默认时区；请求必填性与默认上海候选见[配置 §3.4](configuration.md#34-时区选择与确认边界) |
+| `cron` | Spring 六字段 `second minute hour day-of-month month day-of-week`，使用已有 `CronExpression`；timezone 可省略，默认 Asia/Shanghai 并保存、回显有效值，不使用服务器默认时区；精确规则见[配置 §3.4](configuration.md#34-时区选择与确认边界) |
 
 ### 4.1. 六字段表达什么
 
@@ -260,6 +260,7 @@ S1～S4 是独立会话优先的候选拆分；S5 同属已确认需求，是否
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.10.0 | 2026-09-30 | 明确 Cron 默认上海时区及 at/startAt 的输入偏移量，区分已定字段与待定输出规范。 |
 | 0.9.0 | 2026-09-30 | 明确整数秒及固定起点的保存、更新与校验，时区默认值保持候选并补充基线入口。 |
 | 0.8.0 | 2026-09-30 | 创建 every 时省略 startAt 默认先等待一个完整间隔，精确取时与更新规则继续细化。 |
 | 0.7.0 | 2026-09-30 | every.startAt 可选，默认首次时间与更新规则由配置契约继续细化。 |
