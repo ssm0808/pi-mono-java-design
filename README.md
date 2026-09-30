@@ -1,6 +1,6 @@
 # CampusClaw 设计仓库
 
-导航版本 3.44.0 · 2026-09-30
+导航版本 3.45.0 · 2026-09-30
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
@@ -27,7 +27,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 | M07 · 前端体验 | [前端设计](07-前端设计/README.md) | [八个场景与高低保真原型](07-前端设计/原型/index.html)、[公共规范](07-前端设计/公共规范.md)、[技术设计与全局类图](07-前端设计/技术设计/README.md)、[源码证据](07-前端设计/source-evidence.md)、[发送前自动获取 Token](07-前端设计/技术设计/runtime-workbench-alignment.md#61-页面流程)；用户行为按场景维护，服务契约引用 M06 |
 | M08 · Agent 元数据与配置 | [Agent 元数据 GaussDB](./03-数据与存储/02-Agent元数据GaussDB/README.md) | 身份、版本、Agent 默认 mode 及模型/Tool/Skill 绑定；[数据库模式研究](./03-数据与存储/03-Agent数据库模式/README.md)和[元数据草案](./06-元数据草案/README.md)不自动成为已实现契约 |
 | M09 · 附件与文件服务 | [CampusMate 附件服务](./02-服务与接口/01-CampusMate附件服务/README.md) | 文件上传、扫描、访问与删除；Runtime 文件引用边界由 M01/M06 引用 |
-| M10 · 调度与并发治理 | [定时任务](./01-总体架构/08-CampusClaw定时任务/README.md) | [Claw 配置接口与 Claude 取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md)维护创建、列表、详情、更新、预览，支持 cron/at/every；every 按固定时间表触发，startAt 可选且创建时省略默认先等一个完整间隔；[Spring 六字段与固定/动态任务](./01-总体架构/08-CampusClaw定时任务/README.md#spring-scheduling)解释解析和调度边界，[时区基线](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#timezone-evidence)对比必填、默认与绝对时间，Claw 的 Cron 默认上海，at/startAt 自带偏移量；独立 Session 优先，精确取时、试运行契约及执行恢复待细化，[证据](./01-总体架构/08-CampusClaw定时任务/source-evidence.md)区分已有 Cron；Runtime 准入归 M06，[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量结构 |
+| M10 · 调度与并发治理 | [定时任务](./01-总体架构/08-CampusClaw定时任务/README.md) | [Claw 配置接口与 Claude 取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md)维护创建、列表、详情、更新、预览，支持 cron/at/every；every 按固定时间表触发，startAt 可选且创建时省略默认先等一个完整间隔；[Spring 六字段与固定/动态任务](./01-总体架构/08-CampusClaw定时任务/README.md#spring-scheduling)解释解析和调度边界，[时区基线](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#timezone-evidence)对比必填、默认与绝对时间，Claw 的 Cron 默认上海，at/startAt 自带偏移量，绝对时刻响应统一 UTC 并固定三位毫秒；独立 Session 优先，精确取时、试运行契约及执行恢复待细化，[证据](./01-总体架构/08-CampusClaw定时任务/source-evidence.md)区分已有 Cron；Runtime 准入归 M06，[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量结构 |
 | M11 · 可观测性与测试 | [TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | [调用日志](./01-总体架构/05-CampusClaw调用日志/README.md)、[Runtime HTTP 测试](./02-服务与接口/04-Runtime-HTTP测试Agent/README.md)；区分验收要求、已有测试与实测结果 |
 
 ## 2. 按阅读目的下钻
@@ -57,6 +57,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.45.0 | 2026-09-30 | M10 导航明确绝对时刻响应统一 UTC 并固定三位毫秒。 |
 | 3.44.0 | 2026-09-30 | M10 导航明确 Cron 默认上海和绝对时间自带偏移量。 |
 | 3.43.0 | 2026-09-30 | M10 增加时区字段与默认来源的基线入口。 |
 | 3.42.0 | 2026-09-30 | M10 导航明确创建 every 时省略 startAt 默认先等待一个完整间隔。 |
