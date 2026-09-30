@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.3.0 · 2026-09-30 |
+| 版本 | 0.4.0 · 2026-09-30 |
 | 状态 | 已确认能力与 proposed 接口形状分开记录；新接口待实现、尚未发布，整项操作尚未完成确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、时间预览；不定义 Mate 接口或页面实现 |
 | 产品范围 | 支持新建独立 Session 与继续已有 Session，独立 Session 优先；具体交付批次待确定 |
@@ -16,6 +16,8 @@
 调用方配置“工作日 08:00 汇总园区设备告警”，向 Claw 提交 Agent、任务内容、执行目标和时间规则。Claw 验证当前调用范围、绑定和规则，持久化后返回任务 ID、完整配置及版本。之后可读取、修改该配置，不依赖调用方在线。
 
 已确认的创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 路径、返回与运行细节待设计。每次执行输入为一条 `user.message`，新建 Session 时作为首条任务消息，已有 Session 时作为新增消息；Cron 沿用 Spring 六字段。
+
+时间规则已确认支持 `cron`、`at`、`every`：分别覆盖日历周期、指定时刻单次执行和间隔重复任务。三种类型的支持范围不等于其所有字段、默认值和运行策略已确认；every 的间隔基准与首次触发、at 的过期处理及执行后状态仍需细化。
 
 下文状态模型、字段名、路径和错误码仍为 proposed。候选新建状态为 `ACTIVE`，创建处理器不直接调用模型或创建 Session；自动执行由后续调度触发。暂停、恢复、显式试运行、归档和运行记录的精确契约另行设计，不能把下列五个配置接口当作完整产品接口清单。
 
@@ -53,11 +55,13 @@ Claw 必须在服务认证边界取得可信调用者和管理作用域，再按
 | schedule | 可选；创建省略默认 null，更新省略保持；非空为下表的联合类型，更新时整体替换 |
 | status/revision/id/createdAt/updatedAt | 全部只读；新建 ACTIVE、revision=1，时间为 UTC ISO 8601；status 为 ACTIVE/PAUSED/ARCHIVED，ARCHIVED 不可修改 |
 
-| schedule.type | 完整输入 | 确定语义 |
+以下为候选请求形状；类型范围和 Spring 六字段已确认，at/every 的字段名、必填项与详细规则仍为 proposed。
+
+| schedule.type | 候选完整输入 | 语义与确认边界 |
 |---|---|---|
 | cron | type、expression、timezone | Spring 六字段 `second minute hour day-of-month month day-of-week`；timezone 必须为 IANA 名称；拒绝五字段，不自动补秒 |
-| at | type、at、timezone | 带明确 offset 的 ISO 8601 绝对时刻，输出规范化 UTC；timezone 仅供本地展示；创建/替换新规则时必须仍在未来 |
-| every | type、intervalSeconds、startAt、timezone | 正整数秒间隔和明确带 offset 的起点；startAt 输出为 UTC；从固定起点递增，不按上次执行结束时间漂移；创建/替换新规则时起点必须在未来 |
+| at | type、at、timezone | 已确认指定时刻单次执行；建议以带明确 offset 的 ISO 8601 输入并输出 UTC，创建/替换时拒绝过去时刻；timezone 仅供展示，是否保留另定 |
+| every | type、intervalSeconds、startAt、timezone | 已确认间隔重复任务；建议以正整数秒间隔和固定起点计算，startAt 输出 UTC；间隔基准、startAt 是否必填及默认首次时间、timezone 是否保留均待确认 |
 
 <a id="spring-cron-contract"></a>
 
@@ -82,11 +86,19 @@ Claw 必须在服务认证边界取得可信调用者和管理作用域，再按
 
 各字段支持 Spring 的列表、范围、步长及其日期扩展，具体匹配以项目使用的 Spring `CronExpression` 为准；宏快捷写法是否开放另行确定，不能仅因解析器接受就纳入本 API。月内日期与星期同时受限时要求同时匹配：`0 0 8 1 * MON` 表示“每月 1 日且为周一的 08:00”，不能按 POSIX 常见的日期或星期匹配方式解读。时区单独传入 timezone，避免运行节点配置改变计划含义。[官方语法](https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/scheduling/support/CronExpression.html)
 
-### 3.2. 其他时间规则与预览
+### 3.2. 三种类型的边界与待定细节
 
-at/every 接受规范化 UTC 输出原样回传；timezone 不改变绝对时刻或固定秒间隔的含义。已有规则只修改名称等字段时，不因其起点已过去而拒绝。相同规范规则按未修改处理。every 的固定起点是目标语义，旧 CronEngine 使用完成时间基准，迁移需独立验收，不能称为原样复用。
+Cron 不能完整替代 at/every。`0 0 8 1 10 *` 表示每年 10 月 1 日 08:00，不表达某一年的单次执行；`0 */7 * * * *` 在每个小时内匹配 0、7、14、21、28、35、42、49、56 分，跨小时最后一段只有 4 分钟，不等于从任意起点连续每隔 7 分钟。三种类型对应不同业务语义，不将单次计划或任意间隔强行转换成 Cron。
 
-预览输入仅为 `{ "schedule": { ... } }`，schedule 必须非空；返回 result `{schedule, computedAt, upcomingRunsAt}`。computedAt 由服务端采样；upcomingRunsAt 是严格晚于它、按升序排列的最多五个 UTC 时刻，at 最多一个。every 可用过去的起点预览未来；已过期 at 或无未来匹配的 Cron 返回 `SCHEDULE_RULE_INVALID`，不改动已保存资源。
+every 推荐固定时间表：若第一次计划为 10:00、间隔 10 分钟，后续计划为 10:10、10:20，与本次执行耗时无关。另一种可选语义是完成后等待：若每次执行耗时 3 分钟，后续开始约为 10:13、10:26。固定时间表便于稳定预览，但需独立确定重叠、迟到与补跑；完成后等待无法在未知执行耗时下预报全部未来时间。此选择尚未确认，不能混用。
+
+其余候选规则：at/every 接受规范化 UTC 输出原样回传；timezone 不改变绝对时刻或固定秒间隔，是否作为展示字段保留待定。startAt 是否必填、省略后首次触发的计算方式也待定，不因保存成功默认立即执行。已有规则只修改名称等字段时，不因其起点已过去而拒绝。相同规范规则按未修改处理。旧 CronEngine 使用完成时间基准；若采用固定起点，属于需独立验收的语义变更，不能称为原样复用。
+
+### 3.3. 预览与运行时间响应候选
+
+按 every 固定时间表的推荐方案，预览输入为 `{ "schedule": { ... } }`，schedule 必须非空；返回 result `{schedule, computedAt, upcomingRunsAt}`。computedAt 由服务端采样；upcomingRunsAt 是严格晚于它、按升序排列的最多五个 UTC 时刻，at 最多一个。every 可用过去的起点预览未来；已过期 at 或无未来匹配的 Cron 返回 `SCHEDULE_RULE_INVALID`，不改动已保存资源。若 every 选择完成后等待，必须同步修改其预览契约，不能虚构未来开始时间。
+
+创建、详情、更新是否直接返回只读 upcomingRunsAt/lastRunAt、字段放置与 lastRunAt 的事件含义仍待确认；增加动态字段时需同步修正配置版本与完整响应 ETag 的关系。下文报文暂保留配置表示，不将这一候选结构当成已完成的 Claude 响应对齐。
 
 预览与写入复用同一时间策略，保存重新校验，不把预览当作准入凭证。预览是规则计算值，不是实际开始时间保证，也不是当前调度游标。频率、间隔与配额由部署策略约束；超过范围返回稳定的策略错误，策略本身未配置则服务不可用，不能默许无限频率。DST 与解析库版本边界必须验收，本接口不复制 Claude 的 jitter 承诺。
 
@@ -217,7 +229,7 @@ If-Match 用于防止覆盖别人修改，Idempotency-Key 用于重放同一次�
 | 运行环境 | 显式 environment_id | 不提供空壳 environmentId，沿现有 Host/Agent 目录装配；减少资源模型，但失去独立环境选择与复用 | 架构范围 |
 | 初始输入 | initial_events 支持多事件及受约束事件类型 | 一条 user.message，复用既有文本与文件引用格式；不开放多初始事件、system.message 或 user.define_outcome。旧 CronPayload 只有纯文本，调度消息接线与附件长期访问仍待实现/细化 | 产品范围、实现差距 |
 | 时间表达 | 五字段 POSIX Cron，IANA 时区 | 采用 Spring 六字段，复用现有解析器且不新增 Maven 依赖；代价是 Claude 表达式不能直接复制，日/周组合语义也不同。[固定与动态调度场景](README.md#spring-scheduling)说明框架能力和执行边界 | 产品约束（方言选择）、实现成本取舍 |
-| 单次与间隔 | 上述 schedule 模型只声明 cron | 保留 Claw 已有 at/every 类型，every 改为固定起点；覆盖到点/间隔任务，代价是新增锚点与迁移验收 | 产品扩展、语义变更 |
+| 单次与间隔 | 上述 schedule 模型只声明 cron | 已确认支持 at/every，满足指定时刻单次执行和间隔重复；Cron 无法完整替代。every 的间隔基准、首次触发及精确字段待确认；固定起点方案若采用，需验收与旧完成时间基准的迁移差异 | 产品扩展；间隔基准变更尚待确认 |
 | 更新 | 省略保持、schedule:null 清除、初始事件/规则整体替换 | 推荐沿用；Claw 的 message/target/schedule 整体替换，不引入通用深层合并；更新操作仍待整体确认 | 参考基线 |
 | 并发与重试 | 本次公开操作页未给出与本方案相同的版本/幂等契约 | 明确 ETag/If-Match 和 Idempotency-Key，借鉴现有 Session 更新模式；增加请求记录与冲突处理成本，不能据此声称 Claude 内部没有保护 | Claw 可靠性设计 |
 | 返回与预览 | Deployment 表示内返回 upcoming_runs_at | ResultBean + 配置 ETag；时间预览独立读取，避免时间变化使配置版本失效；代价是多一次预览调用 | 公司契约、架构取舍 |
@@ -238,6 +250,7 @@ If-Match 用于防止覆盖别人修改，Idempotency-Key 用于重放同一次�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.4.0 | 2026-09-30 | 明确 cron、at、every 的支持范围与语义边界，保留间隔基准、首次触发及动态响应的待定项。 |
 | 0.3.0 | 2026-09-30 | 明确 Spring 六字段、单条 user.message 和可选计划的创建行为，区分已定能力与待确认接口形状。 |
 | 0.2.0 | 2026-09-29 | 将配置契约限定为五个 Claw 接口，明确创建登记计划及与 Claude 的能力、成本取舍。 |
 | 0.1.0 | 2026-09-29 | 建立 Mate 公共入口到 Claw 单一配置存储的加载、预览、保存、回显与并发编辑闭环。 |
