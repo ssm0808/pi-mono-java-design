@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.4.0 |
+| 文档版本 | 0.5.0 |
 | 核验日期 | 2026-09-30；各节保留实际核验日期与范围 |
 | 产品范围 | 新建独立会话与绑定已有会话均需支持，优先支持独立会话；不据此预设已有会话的拒绝契约或交付阶段 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与两类目标的调度接线待实现；企业身份系统未核验 |
@@ -172,6 +172,46 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 临时片段未保存为仓库测试，以上不是完整方言兼容、DST、实际定时精度或产品集群验收。已确认的是沿用 Spring 六字段；@Scheduled 固定任务与 TaskScheduler 动态任务是可用的框架方式，当前源码仍采用 JDK 调度器。后续多实例领取、持久游标、重叠与恢复机制尚未冻结，不能从时间解析器的选择推导这些运行策略。
 
+<a id="first-fire-evidence"></a>
+
+### 8.2 首次触发与周期推进的基线核验
+
+2026-09-30 重新确认以下四个开源上游的默认分支并隔离 fetch，读取明确提交，不修改其用户工作树。托管产品同日重新读取官方文档。本节仅升级首次时间、周期基准和入口归属的证据；不把旧版完整生命周期、权限或恢复结论一并升级。默认分支快照不是稳定发布保证。
+
+| 基线 | A14 历史提交 → 本节核验提交 | 范围与变化 |
+|---|---|---|
+| DeepSeek Harness | master `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61` → `639ed015397290b3745d163aafe02ffee4aa3f84` | `0.1.7-alpha.1` → `0.2.0-rc.2`；Schedule 仍为默认关闭的 experimental bundle。every 首次等待间隔、后续固定时间表的原则未变；最小间隔由历史 300 秒变为 60 秒。 |
+| pi | main `95fbc04997eaee961eb673fa7923e9220609ebd5` → `1b347794e2a630e4359f2584f4eea388145d0ddf` | 只核验 experimental/pico3 的进程 Job，不等于通用 Agent 定时 HTTP 产品；首次与后续间隔分别计算。旧、新提交的 job.ts 均将 every 直接加到毫秒时钟，历史“秒数”表述不成立。 |
+| OpenCode | dev `fe3f3a41f79ad292cc3c7c629567385a20ec5130` → `2fa3363c924c5c3e367b84a87ae478296a0ed59b` | 官方 GitHub 定时入口继续消费 GitHub Actions schedule 事件；不能把外部 Cron 的首次与周期计算归给 Runtime。 |
+| Codex harness | main `a1f40f3f1326eff7c81b860a4f4e27c1be186e10` → `bcd6d9ab6b9f26f85d76d0c680b3f88b367bffa0` | 只核验计划插件元数据、事件来源归类及相关入口；本次范围未发现可据以判断首次触发或固定间隔推进的执行实现。 |
+
+**DSH：首次等一个间隔，后续保持固定时间表。** `every_seconds` 为整数且至少 60 秒，没有 startAt/anchorAt；工具额外字段白名单不允许调用方自带起点。`ScheduleService.create` 在进入串行队列前取 t0，`createEveryScheduleRecord` 计算首次为 `t0 + every_seconds × 1000`。这不是“持久化完成后再等一个间隔”：排队过久时保存完成可能已经到期。下一次已保存时刻为 s、间隔为 I 时，`resolveEveryOccurrence` 取 `s + floor((now-s)/I) × I` 作为最新到期项，再推进一个间隔；不读取 Agent 的完成时间。
+
+同间隔或只改内容保留原计划；改间隔按更新进入队列槽位时的新基准重算。记录返回 everySeconds 与规范化 UTC scheduledAt，后者是会推进的计划游标，不是独立且不可变的首次 startAt。工具视图另有 scheduled/overdue 状态和 host 投递模式，不能当作 Claw 的字段契约直接复制。
+
+| DSH 路径与符号（均固定上述新提交） | 证明范围 |
+|---|---|
+| [packages/schedule/schedule/src/types.ts:363](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/types.ts#L363)、[tools.ts:222](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/tools.ts#L222) | 创建输入与额外字段限制。 |
+| [src/index.ts:249](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/index.ts#L249) · create；[src/domain.ts:1355](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/domain.ts#L1355) · createEveryScheduleRecord | 创建时钟取样点与首次计划计算。 |
+| [src/domain.ts:789](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/domain.ts#L789) · resolveEveryOccurrence；[src/update.ts:86](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/update.ts#L86) · changedRecord；[src/index.ts:370](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/index.ts#L370) · update | 固定相位、最新到期项及修改间隔的起点处理。 |
+| [src/types.ts:47](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/types.ts#L47) · EveryScheduleRecord；[src/domain.ts:1850](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/schedule/schedule/src/domain.ts#L1850) · scheduleView | 持久记录与工具视图，不声明 Claw 响应兼容。 |
+
+**pi：首次默认不等待，后续结束后再计时。** `JobInput` 的 notBefore 为 Unix 毫秒时间戳，every 为毫秒间隔。`initial` 使用 `notBefore ?? now`，首次不读取 every：调度器已激活、依赖与执行资格满足且存在 ProcessHost 时，省略 notBefore 即开始；未来 notBefore 先等待，过去值不增加等待。`poll` 观察到进程结束并记录输出后，以 `runtime.now() + every` 设置下次等待，因此是固定延迟。ProcessStatus 没有真实结束时间戳，不能把“观察结束后的当前时间”误写成精确的进程退出时刻。
+
+源码为 [packages/agent/src/harness/pico3/kinds/job.ts:4](https://github.com/badlogic/pi-mono/blob/1b347794e2a630e4359f2584f4eea388145d0ddf/packages/agent/src/harness/pico3/kinds/job.ts#L4) 的 JobInput，`initial`（64）、`poll`（131，下一次计算在166）；[harness.ts:150](https://github.com/badlogic/pi-mono/blob/1b347794e2a630e4359f2584f4eea388145d0ddf/packages/agent/src/harness/pico3/harness.ts#L150) 的 Date.now 默认时钟和227附近的毫秒 sleep；[types.ts:935](https://github.com/badlogic/pi-mono/blob/1b347794e2a630e4359f2584f4eea388145d0ddf/packages/agent/src/harness/pico3/types.ts#L935) 的 ProcessStatus；[index.ts:1](https://github.com/badlogic/pi-mono/blob/1b347794e2a630e4359f2584f4eea388145d0ddf/packages/agent/src/harness/pico3/index.ts#L1) 的 experimental 声明。JobResult 返回退出码、次数及输出，内部 untilMs checkpoint 不是面向用户的 Schedule 资源。
+
+**OpenCode：由 GitHub Actions 决定 Cron 时间。** [packages/web/src/content/docs/github.mdx:124](https://github.com/anomalyco/opencode/blob/2fa3363c924c5c3e367b84a87ae478296a0ed59b/packages/web/src/content/docs/github.mdx#L124) 配置 schedule Cron 与 prompt；[packages/opencode/src/cli/cmd/github.handler.ts:391](https://github.com/anomalyco/opencode/blob/2fa3363c924c5c3e367b84a87ae478296a0ed59b/packages/opencode/src/cli/cmd/github.handler.ts#L391) 读取外部 eventName，501附近新建 Session。所查 server/core/schema/protocol 范围未发现用户任务的 cron/startAt/intervalSeconds/notBefore 字段；内部清理、刷新和重试使用的 Effect Schedule 不构成用户定时任务证据。[GitHub 官方 schedule 文档](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)声明五字段 POSIX、默认 UTC/可选 IANA timezone、最短五分钟和可能延迟；不据此定义 Claw 的 every 默认起点。
+
+**Codex：产品有计划，所查开源元数据不决定首次行为。** [codex-rs/app-server-protocol/src/protocol/v2/plugin.rs:777](https://github.com/openai/codex/blob/bcd6d9ab6b9f26f85d76d0c680b3f88b367bffa0/codex-rs/app-server-protocol/src/protocol/v2/plugin.rs#L777) 的 ScheduledTaskSummary/ScheduledTaskSchedule 声明 hourly/daily/weekdays/weekly，只是插件摘要；core-plugins/src/remote.rs 的648/1525附近与 app-server/src/request_processors/plugins.rs:2310接收和投影元数据。[codex-rs/history/src/heartbeat.rs:23](https://github.com/openai/codex/blob/bcd6d9ab6b9f26f85d76d0c680b3f88b367bffa0/codex-rs/history/src/heartbeat.rs#L23) 的 from_turn_trigger 只归类宿主触发来源。本范围未发现 first-fire、RRULE 下一次计算或固定间隔推进，不能推断开源内核负责调度。
+
+同日重新读取的[OpenAI Scheduled tasks 官方文档](https://learn.chatgpt.com/docs/automations)公开 RRULE、自定义周期及聊天内分钟间隔任务；每次可新建聊天或继续原聊天。文档没有精确定义省略首次时间后的计算公式，也未建立与 Claw intervalSeconds/startAt 同形的 HTTP 契约；不把产品支持 RRULE 推断为特定默认锚点或 fixed-delay 算法。
+
+**Claude Managed Agents：只声明 Cron，独立手动运行。** 同日重读[创建接口](https://platform.claude.com/docs/en/api/http/beta/deployments/create)、[资源模型](https://platform.claude.com/docs/en/api/http/beta/deployments)及[Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)：schedule 为可空的 cron/expression/timezone，无 every/startAt；创建响应提供 upcoming_runs_at 供查看计划时刻，执行可能稍晚；显式 run 才用于即时试运行。它能支持“保存配置与试运行分开”的产品选择，不能支持 every 首次时间的结论。
+
+对 Claw 的影响：every 固定时间表已确认，仍按[配置契约 §3.2](configuration.md#32-三种类型的边界与待定细节)实施设计。DSH 为“缺省先等一个间隔”提供具体参照，但它没有显式 startAt，且创建计时点早于落盘；Claw 的可选首次时间与服务端确定、持久化、回显是本产品的候选选择。pi 是首次立即与固定延迟的反例，不能据多个系统都称 every 推断统一语义。此次不确认 startAt 的默认值、更新重置、重叠或补跑策略。
+
+本节为静态源码与公开文档核验。示例时间是按源码公式推导，未执行这些基线的产品任务或测试，未修改实现仓；完整运行、停机与企业调度验收仍需独立证明。
+
 ## 9. 文档验收
 
 2026-09-30 的 0.4.0 文档校验已执行：PlantUML 生成、API 技能校验、仓库级 `check-diagrams.py --render` 与 `git diff --check` 通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示仍为既有 managed_session_compaction 的三个条件组，职责解释沿用[时序图规范](../../时序图规范.md#3-从总览下钻)。三个 JSON 示例解析通过，Spring 示例与拒绝边界见 §8.1；未运行产品 Maven 测试或集群验收。当前无 OpenAPI/HTML 精确契约，相关校验不适用。
@@ -188,6 +228,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.5.0 | 2026-09-30 | 核对五个基线的首次触发与间隔基准，明确 DSH 固定时间表、pi 固定延迟及托管调度的公开证据边界。 |
 | 0.4.0 | 2026-09-30 | 明确 Spring 六字段及固定、动态调度证据边界，同步单条消息输入与两种 Session 目标。 |
 | 0.3.0 | 2026-09-29 | 重核 Claw 配置边界及 Claude 创建语义，区分历史版本能力缺口、文本范围和 Cron 成本选择。 |
 | 0.2.0 | 2026-09-29 | 核对前端调试边界、Mate Agent 配置样例和 Claw 保存行为，补充独立配置 API 的证据与差距。 |

@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.55.0 |
+| 文档版本 | 1.56.0 |
 | 更新日期 | 2026-09-30 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -23,7 +23,7 @@
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
 | 线性历史专项基线 | A12：pi main `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`，2026-09-22 已确认默认分支并隔离 fetch；Java 本地 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；只升级分支索引与 Session 历史读取结论 |
 | Redis 观察专项基线 | A13：2026-09-22 确认并隔离 fetch OpenCode dev `fe3f3a41f79ad292cc3c7c629567385a20ec5130`，仅事件协议、live/durable 定义与实例监听；Java 本地 `53eff85c7f41de23eb434e027782f5085a8b8e45` 的投影/流/控制/终态/依赖范围；新能力待实现，v2 仍为 experimental |
-| 调度专项基线 | A14：2026-09-29 重新核对 Claude Managed Agents Scheduled deployments Beta 官方文档，并确认 Java 默认分支、fetch `main@553dcd5e2ff682f9684810a043b442b37a02e54a`，范围见[M10 证据](../08-CampusClaw定时任务/source-evidence.md)。pi `main@95fbc04997eaee961eb673fa7923e9220609ebd5`、Codex `main@a1f40f3f1326eff7c81b860a4f4e27c1be186e10`、OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`、DeepSeek Harness `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61` 和 Codex scheduled tasks 文档保留 2026-09-22 核验范围；不升级其他基线结论 |
+| 调度专项基线 | A14 完整职责表保留2026-09-22开源证据及2026-09-29 Claude/Java范围；首次时间与周期推进于2026-09-30单独核验 DSH master `639ed015397290b3745d163aafe02ffee4aa3f84`、pi main `1b347794e2a630e4359f2584f4eea388145d0ddf`、OpenCode dev `2fa3363c924c5c3e367b84a87ae478296a0ed59b`、Codex main `bcd6d9ab6b9f26f85d76d0c680b3f88b367bffa0`，并重读 Claude/OpenAI 官方调度文档；旧新提交、路径及证据边界见[M10 首次触发专项](../08-CampusClaw定时任务/source-evidence.md#first-fire-evidence)，不批量升级其余模块结论 |
 | 核验范围 | A07 的模式入口、TUI 实施选择、方案/任务/问题分离、Slash 协同与前端接入范围；M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、业务 Agent 设置唯一模型来源及旧全局目录差距；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
 | 验证边界 | A08 已补充固定开发分支的 Runtime/数据库/前端确定性验证；其余条目保留各自静态核验范围，企业接入与真实模型行为不在已验证范围 |
 
@@ -436,13 +436,25 @@ CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可�
 | 基线分工 | Claude Managed Agents 是平台调度主基线，触发独立 Deployment Run 和新 Session；DeepSeek Harness、pi Pico v3、OpenCode、Codex 分别保留 Session 内提醒、通用 Task、外部 Workflow 和宿主调度的历史对照。没有统一的“Agent Cron 实现”，不以这些基线的多数行为代替产品决定。 |
 | 成熟度边界 | pi Pico v3 的所引文档标为 design under discussion（不等同于无实验源码），DeepSeek Harness `dsh-0.1.7-alpha.1` 仍为 alpha，OpenCode 当前核对的是 `dev` 分支，Claude Managed Agents 仍要求 beta header；Codex Scheduled Tasks 以官方产品文档为公开契约，未取得服务端实现源码。 |
 
-Claude 的调度公开契约于 2026-09-29 重新读取，创建输入与 Cron 方言于 2026-09-30 再次核对；下面其他四基线仍是 2026-09-22 的固定证据。它们用于说明职责边界，不表示本次重新核验了上游现状。
+首次触发与周期推进采用2026-09-30重新获取的源码和官方资料，见下表；其余完整调度职责表保留各行的历史快照，不把这次有界核验外推为所有运行、权限和恢复结论已更新。
+
+### 首次触发与周期推进（2026-09-30 专项）
+
+| 基线与适用范围 | 首次时间 | 后续周期 | 对 Claw 的参考边界 |
+|---|---|---|---|
+| DSH 0.2.0-rc.2；默认关闭的实验 Schedule | every_seconds 从创建调用取样时间加一个完整间隔，没有 startAt/anchorAt；取样早于串行队列与持久化完成 | 固定时间表；晚到取最新到期项，耗时不改变相位 | 支持“缺省等待一个间隔”的参考，但显式 startAt 及保存计时点仍是 Claw 产品选择 |
+| pi experimental/pico3 进程 Job | notBefore 可选；省略时在激活与准入满足后立即执行，即使提供 every 也不先等待间隔 | 观察进程退出并记录后，以当前时间加 every，属于固定延迟；两个时间值均为毫秒 | 与 Claw 已定固定时间表不同，不能照搬缺省值后宣称同一语义 |
+| Claude Managed Agents Beta Deployment | Cron 规则给出未来计划，资源返回 upcoming_runs_at；没有 every/startAt | 五字段日历匹配，实际开始存在 jitter；即时运行通过显式 run | 可参考配置/试运行分离，不能用它确定 every 默认首次时间 |
+| OpenCode 官方 GitHub 入口 | GitHub Actions 根据 Cron 触发；OpenCode 消费 schedule 事件 | 外部五字段 Cron，非 Runtime 的 every 计算 | 不提供可直接对齐的 every/startAt 用户任务契约 |
+| Codex 宿主 Scheduled tasks | 官方支持 RRULE 和聊天内分钟间隔；没有公开与 Claw 同形的首次默认公式 | 本次文档与开源元数据不足以证明具体间隔推进算法 | 不把插件计划摘要或 turn_trigger 标记当作调度器实现 |
+
+完整提交、源码符号、单位与返回形状见[M10 首次触发证据](../08-CampusClaw定时任务/source-evidence.md#first-fire-evidence)。这些基线没有统一的首次执行默认值；Claw 已确认固定时间表，startAt 是否可选及省略后的首次时刻仍由[配置契约](../08-CampusClaw定时任务/configuration.md#32-三种类型的边界与待定细节)单独确定。下文历史表中“当前”均只指对应固定快照，不能覆盖本专项。
 
 ### 1. 调度职责和权威状态
 
 | 基线 | 调度入口与时间模型 | 权威状态与唤醒方式 | 到期后的执行边界 | 失败、重启与暂停 |
 |---|---|---|---|---|
-| pi Pico v3 | `Task.notBefore` 是最早执行时间；`Scheduler` 通过 `drive`/`resume` 检查依赖、时间、permit、取消和执行占用。`pi.job` 还支持 `notBefore` 与固定 `every` 秒数；未发现 Cron 表达式解析或用户级 Cron 管理入口。 | Task 记录持久化在 Session；`Scheduler` 的 `invocations`、AbortController 和 waiter 是进程内执行投影。未来时间可等待，外部事件或 permit 可使 drive 暂停。 | Scheduler 只保留通用生命周期，不理解 Prompt 或业务参数；Job 的 handler 负责等待、启动进程、轮询、重复和结果通知。 | 重启保留 pending/running checkpoint，重新 `drive` 后由任务定义决定 retry/adopt/interrupted；关闭不写取消。文档明确打开 Session 不自动启动任务，不能把恢复误解成自动 Cron。 |
+| pi Pico v3 | `Task.notBefore` 是最早执行时间；`Scheduler` 通过 `drive`/`resume` 检查依赖、时间、permit、取消和执行占用。`pi.job` 还支持 `notBefore` 与 `every` 毫秒间隔；未发现 Cron 表达式解析或用户级 Cron 管理入口。 | Task 记录持久化在 Session；`Scheduler` 的 `invocations`、AbortController 和 waiter 是进程内执行投影。未来时间可等待，外部事件或 permit 可使 drive 暂停。 | Scheduler 只保留通用生命周期，不理解 Prompt 或业务参数；Job 的 handler 负责等待、启动进程、轮询、重复和结果通知。 | 重启保留 pending/running checkpoint，重新 `drive` 后由任务定义决定 retry/adopt/interrupted；关闭不写取消。文档明确打开 Session 不自动启动任务，不能把恢复误解成自动 Cron。 |
 | DeepSeek Harness | `schedule_create` 支持 `after`、绝对 `at` 和至少 300 秒的固定 `every`；明确不支持 Calendar/Cron。每个 record 保存 UTC `scheduledAt`，固定间隔保持创建时锚点。 | `schedule/change` Session 事件日志是唯一持久化权威；Projection 只是 active 视图；`ScheduleRuntime` 从 Session fold 重新计算并用有界 `setTimeout` 分段唤醒。 | 只对 live root Agent 生效；先等待 Agent idle，取得 maintenance claim，再向同一会话 `followup`，最后追加 dispatch 事件。正在运行的 turn 不被打断；一次性提醒优先，多个固定间隔提醒批量投递。 | Session 冷却时只保留 overdue；恢复 live root 后重新计算，固定间隔只投递最新到期 occurrence，不补发 backlog。创建/删除/dispatch 都有 persistence barrier；barrier 失败返回 `persistence_uncertain` 或让 runtime 停止，不能把内存 timer 当成功凭证。 |
 | Claude Managed Agents | Deployment 的 `schedule` 是 5 字段 POSIX Cron + 必填 IANA timezone，粒度到分钟；服务返回 `upcoming_runs_at`。jitter 窗口为调度间隔的 15%，最少 5 秒、最多 9 分钟。 | Deployment 及 Deployment Run 由托管 API 管理；Run 记录 Session 创建尝试的结果。公开文档没有说明内部落库顺序、timer、分布式锁或数据库实现，不能推断必须先落 Run 再创建 Session。 | 每次调度创建新 Session，并发送 Deployment 配置的 initial_events；成功 Run 关联 `session_id`，只表示 Session 创建结果，Agent 执行结果另查 Session 事件。 | 一般创建失败记录 Run；主 Agent 被归档或删除时存在不落 Run 的例外。限流错误不重试、等下次 occurrence；不可恢复错误可自动 pause。pause 不取消在途 Session，unpause 从下一次 occurrence 继续且不补发；archive 终止调度。DST 按本地墙上时间匹配，春跳不存在的时间不触发，秋回重复时间触发两次。 |
 | OpenCode | 当前 `dev` Runtime 没有 Cron/Schedule 模块；`BackgroundJob` 是 `Effect` 作用域内的进程内 job registry，不是日期调度器。官方 GitHub 集成把 `on.schedule` 的 Cron 交给 GitHub Actions。 | Runtime 的 BackgroundJob 只存 `SynchronizedRef<Map>`；官方 GitHub Actions、Runner 和仓库事件是外部权威，OpenCode 本身不保存 Schedule record。 | GitHub Actions runner checkout 后调用 `anomalyco/opencode/github@latest`；scheduled event 必须提供 prompt，输出进入日志/PR。它不是同一常驻 Session 的内部提醒。 | BackgroundJob 注释明确进程重启或 owner scope 关闭会丢失状态并中断工作；GitHub Actions 的重试、并发和失败结果由外部平台承担，当前 OpenCode Runtime 没有对应恢复协议。 |
@@ -546,6 +558,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.56.0 | 2026-09-30 | A14 增加五基线首次触发专项对比，区分固定时间表、固定延迟和托管调度未公开细节，并校正 pi 时间单位。 |
 | 1.55.0 | 2026-09-30 | A14 明确 every 使用固定时间表及相对旧完成时间基准的迁移差异。 |
 | 1.54.0 | 2026-09-30 | A14 明确 at/every 是已定产品范围，间隔基准和字段细节仍待确定，并统一两种会话目标的交付边界。 |
 | 1.53.0 | 2026-09-30 | A14 明确 Spring 六字段与动态调度边界，并同步单条用户消息和可选计划的创建语义。 |
