@@ -4,17 +4,17 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.0 |
-| 更新日期 | 2026-09-29 |
+| 文档版本 | 0.4.0 |
+| 更新日期 | 2026-09-30 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 支持每次创建独立会话和唤醒已有会话；优先交付独立会话 |
-| 设计状态 | 配置闭环形成推荐目标，待实现；到期执行、重叠、补跑和故障恢复部分为待细化候选，不作为已冻结实施规则；无人值守身份待确定 |
+| 设计状态 | 五个 Claw 配置接口形成推荐目标，待实现；不定义 Mate 接口或页面；到期执行、重叠、补跑和故障恢复部分为待细化候选，不作为已冻结实施规则；无人值守身份待确定 |
 | 已观察实现 | Java main `553dcd5e2ff682f9684810a043b442b37a02e54a` 已有进程内 Cron、JSON Job/JSONL Run 和公共 Session 工厂；不等于已具备企业调度能力 |
 | 主基线 | Claude Managed Agents Scheduled deployments，2026-09-29 核对，Beta；仅引用公开契约，无服务端源码 commit |
 
 ## 1. 要解决什么问题
 
-优先设计[配置端到端闭环](configuration.md)：从页面选择 Agent、任务内容与时间，到 Mate 校验、Claw 单一配置存储，再到详情回显、编辑冲突和断网恢复。该专题是配置页面与新增接口的唯一规则源。本文 §5～§7、§9～§12 的到期运行结构和恢复策略需在执行专题继续论证；配置交付不据此冻结忙时跳过、同库受理或失联不接管策略。
+优先定义[Claw 配置接口](configuration.md)：创建、列表、详情、部分更新和时间预览，明确请求、持久化成功、版本冲突和同键重试；该专题是新增 Claw 配置接口的唯一规则源，不定义 Mate 路由或页面实现。[与 Claude 的取舍](configuration.md#claude-tradeoffs)区分能力缺口、产品扩展和实现成本。本文 §5～§7、§9～§12 的到期运行结构和恢复策略需在执行专题继续论证；配置交付不据此冻结忙时跳过、同库受理或失联不接管策略。
 
 园区运营人员配置“每天 08:00 汇总设备告警、检查未关闭工单”，保存后由服务端按时发起 Agent 工作，无需浏览器保持打开。用户能看见下一次计划时间、每次是否成功启动、执行结果和失败原因，并能暂停后续运行。
 
@@ -22,7 +22,7 @@
 
 失败时先区分发生在哪一层：规则无效则不保存；未受理则记录原因；受理后执行失败则保留原 Session 和根执行；结果未知则对账，不重新发起业务写入。暂停只阻止未来受理，停止已运行任务使用既有定向取消机制。
 
-另一种需求是“每天在这个能耗分析会话里继续检查异常”。它绑定已有会话，届时提交一条新的普通消息，复用已有上下文。该能力放在第二实施阶段，不能用创建新会话伪装完成。
+另一种需求是“每天在这个能耗分析会话里继续检查异常”。它绑定已有会话，届时提交一条新的普通消息，复用已有上下文。两种能力均属于需求范围，独立会话优先，具体交付批次待确定，不能用创建新会话伪装完成已有会话能力。
 
 ## 2. 职责、边界与基线取舍
 
@@ -33,7 +33,7 @@ M10 拥有时间规则、任务生命周期、触发身份、到期领取、受�
 | 决策 | CampusClaw 目标与理由 | 与 Claude 的关系 |
 |---|---|---|
 | 定义、触发、执行分离 | Schedule 保存长期规则，Run 保存一次触发/受理，Session 保存内容与根执行；避免“启动成功”被当成业务完成 | 采用 Deployment / DeploymentRun / Session 的职责分离；公开 Run 本身只表示 Session 创建结果 |
-| 执行目标 | `NEW_SESSION` 优先；`EXISTING_SESSION` 第二阶段 | 前者参考 Scheduled deployments；后者是 CampusClaw 产品扩展，非 Claude Deployment 的已观察能力 |
+| 执行目标 | 两种目标均支持，`NEW_SESSION` 优先 | 前者参考 Scheduled deployments；后者是 CampusClaw 产品扩展，非 Claude Deployment 的已观察能力 |
 | Agent 选择 | 新会话每次 `prepare(agentId)`，固定这次实际取得的已发布目录快照；不会自动刷新 Mate 最新定义 | 保留现有产品约束；Claude 在创建/显式更新 Deployment 时固定 Agent 版本 |
 | 时间表达 | 复用既有 `at/every/cron`；Cron 使用明确标识的 Spring 六字段语法 | Claude 是五字段 POSIX；不把两种方言直接互换，也不通过补秒宣称全部等价 |
 | 重叠与恢复 | 同一任务仅一条未完成受理链；过期窗口跳过，结果未知保持占用；不自动重放已接受输入 | 产品约束和安全加固；Claude 公开资料未给出完整重叠/故障接管策略 |
@@ -43,14 +43,13 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 
 ## 3. 使用与管理
 
-配置动作的当前推荐设计、字段与接口以[配置专题](configuration.md)为准：首期新建独立会话任务配置，保存为 PAUSED；不调用模型、prepare 或旧 Cron create；Mate 鉴权与安全投影，Claw 原子保存配置和请求回执。旧前端与 Cron 已有能力不能被直接标为新配置管理已实现。
+配置动作的当前推荐设计、字段与接口以[配置专题](configuration.md)为准。已确认 schedule 可省略，省略时只保存、不立即执行；填写有效规则后保存即参与自动调度，无需显式启用；试运行是独立的显式操作。输入为一条 `user.message`，内容复用现有文本和文件引用格式；附件长期保留与执行时访问规则待确定。状态枚举、字段名及整项操作仍为 proposed。创建处理器不调用模型、prepare 或旧 Cron create。Claw 校验可信范围与绑定，原子保存配置和幂等结果。运行未接线不能对外发布可自动运行的成功承诺；旧 Cron 已有能力不能被直接标为新配置管理已实现。
 
 任务列表展示名称、Agent、执行目标、状态、规则与时区、下一计划时间、最近一次触发和执行摘要。任务详情提供运行列表；每条记录明确区分“未启动、已受理、执行中、执行结束、需要处理”。模型自然结束不等于设施巡检或工单操作业务成功，业务结论来自对应 Session 的输出与工具证据。
 
 | 管理动作 | 有效行为 |
 |---|---|
 | 创建、修改 | 校验可信 Agent/目标会话绑定、时间规则和提示内容，展示规范化规则及未来时间预览；保存不可变的配置 revision；不在保存时执行模型 |
-| 启用 | 再次检查执行资格、权限与部署容量；从未来 occurrence 开始 |
 | 暂停 | 阻止尚未完成受理的自动触发；已受理 Run 继续；允许有权限的显式手动运行 |
 | 恢复 | 重新检查资格并计算严格晚于恢复时刻的下一次运行；不补暂停期间任务 |
 | 手动运行 | 产生新的 manual Run，使用相同授权、互斥、受理和审计；不移动正常计划游标 |
@@ -59,13 +58,13 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 
 配置采用 `ACTIVE / PAUSED / ARCHIVED`；一次性任务已触发后 `nextFireAt` 为空，标注“计划已耗尽”，不假装仍有下次运行。归档是 CampusClaw 的终态枚举；Claude 的 `archived_at` 与 active/paused 表达方式不同。
 
-首版新管理入口先保存为 PAUSED，再由显式启用动作发布。现有 Cron 工具契约保持原参数面；其适配、创建是否立即启用、delete 到归档的映射和 trigger 回执须在迁移切片中一并对齐，未接线前不宣称新页面与旧工具已共用存储。每个写入动作使用带配置 revision 的可信快照，确认后在事务中重新检查可变状态；修改冲突不覆盖另一人的更新。
+创建 ACTIVE 资源不要求额外启用动作；后续暂停/恢复是独立生命周期操作。现有 Cron 工具契约保持原参数面；其适配、delete 到归档的映射和 trigger 回执须在迁移切片中一并对齐，未接线前不宣称新 API 与旧工具已共用存储。每个写入动作使用带配置 revision 的可信快照，在事务中重新检查可变状态；修改冲突不覆盖另一人的更新。
 
-配置的 proposed HTTP 路由、VO、错误码和回执由[配置专题 §5～§7](configuration.md#5-公共与内部接口)维护，不是已发布 API。启停、Run 和执行结果契约另行设计，不直接给现有 Chat 事件增加内部 runId。公共写请求继续遵守公司 `ResultBean` 和 Mate 认证规范。
+配置的 proposed HTTP 路由、VO、错误码和幂等规则由[Claw 配置专题](configuration.md#2-claw-接口清单)维护，不是已发布 API。显式试运行能力已确定，其路径与回执、启停、Run 和执行结果契约另行设计。响应继续遵守公司 `ResultBean`，服务边界须验证可信调用范围；不在此扩写 Mate 公共契约。
 
 ## 4. 时间规则
 
-配置的输入、空值、预览与回显以[配置专题 §5.2](configuration.md#52-时间联合类型与预览)为准。本节涉及的 maxLateness、补跑窗口、gap 与到期游标属于运行候选，尚不作为创建配置的必填字段或已确定策略。
+配置的输入、空值、预览与回显以[配置专题 §3](configuration.md#3-配置字段与时间规则)为准。本节涉及的 maxLateness、补跑窗口、gap 与到期游标属于运行候选，尚不作为创建配置的必填字段或已确定策略。
 
 | 类型 | 规则 |
 |---|---|
@@ -73,9 +72,49 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 | `every` | 固定间隔与固定起点共同定义 occurrence；按起点递增，不按上次执行完成时间漂移；重启不能重新设起点 |
 | `cron` | Spring 六字段 `second minute hour day-of-month month day-of-week`，使用已有 `CronExpression`；新管理入口要求 IANA 时区，不使用服务器默认时区 |
 
-例如每日北京时间 08:00 使用 `0 0 8 * * *`、`Asia/Shanghai`。界面优先提供日/周时间选择并显示自然语言预览；高级表达式明确标识方言，五字段输入返回校验错误。现有 Cron 工具的可选 timezone 在迁移时必须归一化成明确存储值，具体默认来源随工具契约切片确定，不静默采用运行节点时区。
+### 4.1. 六字段表达什么
 
-计算与预览共用 `ScheduleTimePolicy` 和同一规则快照、时区、时区库版本；实际准入仍需事务检查。使用数据库时间决定到期和租约，存储 `scheduledAt`、`acceptedAt`、`startedAt`，不把预览时间当实际启动保证。每任务保存明确的 `maxLateness`，首版管理配置必须给出值；超过窗口记 `SKIPPED_MISFIRE`。运行时间长不会改变后续 occurrence。
+CampusClaw 沿用 Spring 六字段 Cron，顺序为“秒、分、时、日、月、星期”。例如 `0 0 8 * * MON-FRI` 配合 `Asia/Shanghai`，表示周一至周五 08:00:00；它不自动识别法定节假日。完整字段范围、秒位示例和匹配规则由[配置契约](configuration.md#spring-cron-contract)唯一维护。
+
+“支持秒字段”表示能配置计划时间的秒位，不表示普通 Java 应用保证在该秒准时开始，更不表示 Agent 必须在一秒内完成。线程排队、系统负载和 JVM 暂停都可能带来延迟；JDK 调度器明确不提供硬实时启动保证。表达式能力与产品允许的最小执行频率分别确定。[JDK 调度说明](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ScheduledThreadPoolExecutor.html)
+
+界面可在后续设计中提供日/周时间选择与自然语言预览，高级表达式应明确标识 Spring 六字段。现有 Cron 工具的可选 timezone 在迁移时必须归一化成明确存储值，具体默认来源随工具契约切片确定，不静默采用运行节点时区。
+
+<a id="spring-scheduling"></a>
+
+### 4.2. 固定任务与用户动态任务如何使用 Spring
+
+园区告警汇总可以有两种配置来源：开发人员预先为系统定义统一任务，或运营人员通过页面持续新增、修改、暂停自己的任务。两者都可以使用 Spring 六字段，区别在于任务如何注册和管理；Spring 的 Cron 解析器、触发器及调度注解均由已有 `spring-context` 提供，无需为六字段另加 Maven 依赖。
+
+| 场景 | 常用方式 | 适用边界 |
+|---|---|---|
+| 应用预先定义的固定任务 | `@EnableScheduling` + Spring Bean 上的 `@Scheduled` | 适合固定的统计、清理或轮询方法；Cron 可来自配置属性，但普通注解绑定不等于提供用户任务的运行期增删改 |
+| 用户运行期创建、修改、取消任务 | 编程式 `TaskScheduler` + `CronTrigger` | 服务读取已保存配置，动态注册任务，保存本地句柄用于取消或重建；`ThreadPoolTaskScheduler` 底层使用 JDK 调度线程池 |
+| 不依赖 Spring 的延迟或周期任务 | JDK `ScheduledExecutorService` | 支持延迟一次、固定频率和固定延迟，不直接解析 Cron；日历表达式需由其他组件计算 |
+| 只校验规则或预览未来时刻 | Spring `CronExpression.parse(...).next(...)` | 只负责计算，不注册线程、不持久化配置，也不调用业务方法 |
+
+固定任务示例：配置类开启 `@EnableScheduling`，在 Spring 管理的 Bean 中定义以下方法。这里的 `alarmService` 是业务服务示意，不是 CampusClaw 新增接口。
+
+```java
+@Scheduled(cron = "0 0 8 * * MON-FRI", zone = "Asia/Shanghai")
+public void summarizeAlarms() {
+    alarmService.summarizeLast24Hours();
+}
+```
+
+固定间隔也可通过注解表达：`fixedRate = 10000` 以每 10 秒一次为目标频率；`fixedDelay = 10000` 则在上一次方法完成后再等 10 秒。若方法耗时 3 秒，后者两次开始约隔 13 秒。固定频率不保证任务在过载时仍能准点执行，也不能由此推断同一任务会自动并发。[Spring 调度文档](https://docs.spring.io/spring-framework/reference/integration/scheduling.html)
+
+动态任务的正常流程是“保存并校验配置 → 调度服务读取规则 → 注册或重新计算下一次时间 → 到期执行业务入口”；修改或暂停时调整对应注册或调度游标。规则不合法应在保存时返回字段错误；服务重启后需要从持久化配置恢复，取消本地定时句柄不能代替任务状态、运行记录或停止在途执行。
+
+### 4.3. CampusClaw 当前实现与目标边界
+
+已观察的 `CronEngine` 采用 **Spring 算时间、JDK 安排执行**：`computeNextDelay` 使用 `CronExpression`，`scheduleJob` 使用 `ScheduledExecutorService.schedule`，`executeAndReschedule` 执行后重新安装计划。它没有使用 `TaskScheduler + CronTrigger`；上节展示的是可用的 Spring 编程方式，不是已经完成的项目重构。[源码与框架证据](source-evidence.md#spring-scheduling-evidence)
+
+用户配置通过统一应用服务和持久化规则管理，不为每条任务新增一个带 `@Scheduled` 的方法。固定注解可以用于应用自己的周期扫描，但不会自动解决多实例重复触发、持久化、漏跑、权限或执行结果对账。本节确定六字段及动态管理边界；是否复用当前逐任务定时器、改为扫描唤醒、如何领取和恢复，继续在执行专题确定。
+
+### 4.4. 到期与恢复候选
+
+计算与预览共用 `ScheduleTimePolicy` 和同一规则快照、时区、时区库版本；实际准入仍需事务检查。候选方案使用数据库时间决定到期和租约，存储 `scheduledAt`、`acceptedAt`、`startedAt`，不把预览时间当实际启动保证。`maxLateness` 的来源、上限及是否进入管理配置待确定；候选规则为超过窗口记 `SKIPPED_MISFIRE`。运行时间长不会改变后续 occurrence。
 
 夏令时目标按钟面匹配：不存在的本地时刻跳过，重复时刻对应两个不同 UTC occurrence。该目标须通过当前 JDK/Spring 版本的边界测试后验收；并非已验证结论。时间库升级需比较下一次预览，保留已分配 occurrence 的 UTC 身份，不重算历史。
 
@@ -128,9 +167,9 @@ READY 仅表示尚无人取得启动权，首版只允许持有原准备快照�
 
 ## 7. 两种执行目标
 
-| 边界 | NEW_SESSION（第一阶段） | EXISTING_SESSION（第二阶段） |
+| 边界 | NEW_SESSION（优先） | EXISTING_SESSION |
 |---|---|---|
-| 配置绑定 | Agent、prompt、规则 | 同上，加 Mate 授权后的目标 Chat/内部 Session 绑定 |
+| 配置绑定 | Agent、单条 user.message、规则 | 同上，加 Claw 可访问的 target.sessionId；不在本接口引入 chatId |
 | 消息上下文 | 新建空历史，再接受初始消息 | 读取目标 Session 的权威线性历史，追加新 user.message |
 | 模型与模式 | 当前已发布 Agent default，thinking=OFF，CRON profile，build 入口 | 保持目标 Session 当前合法模型与 thinking；仅 build 且 idle 时准入，不隐式切 mode |
 | 受理事务 | 新建 Session、消息、execution、Run 关联 | 锁定现有 Session、检查 Agent/授权绑定和 busy 状态，再追加消息、execution 和 Run 关联 |
@@ -141,7 +180,7 @@ READY 仅表示尚无人取得启动权，首版只允许持有原准备快照�
 
 Cron 的 build 表示非计划执行模式；首版继续使用该入口的 basePrompt，不因后台持久化而自动追加交互 BUILD 提示词，当前实现依据见[证据 J10](source-evidence.md#java-evidence)。不能直接复用现有 HTTP 创建默认 thinking=true 的入口覆盖上述策略。
 
-两者复用受理与观察机制，差异集中在 `ScheduleExecutionTarget` 的两个实现。绑定已有会话不意味着可以使用其历史 Token；每次仍需验证当前执行资格。第二阶段在现有 Session 用 CRON 的受限能力执行该次调度消息，之后人工消息继续使用自己的 Runtime profile，不永久修改 Session 的工具集合或权限。
+两者复用受理与观察机制，差异集中在 `ScheduleExecutionTarget` 的两个实现。绑定已有会话不意味着可以使用其历史 Token；每次仍需验证当前执行资格。已有 Session 的候选方案使用 CRON 的受限能力执行该次调度消息，之后人工消息继续使用自己的 Runtime profile，不永久修改 Session 的工具集合或权限。
 
 ## 8. 身份、授权与公共投影
 
@@ -161,7 +200,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 | 权威对象 | 关键数据及约束 |
 |---|---|
-| `t_schedule` | id、可信 scope、agent_id、target_type/target_session_id、prompt、rule/timezone/anchor、status、revision、next_fire_at、max_lateness、active_run_id、授权引用、创建/修改审计；修改/受理在行锁内复核 |
+| `t_schedule` | id、可信 scope、agent_id、target_type/target_session_id、单条 user.message 配置、rule/timezone/anchor、status、revision、next_fire_at、候选 max_lateness、active_run_id、授权引用、创建/修改审计；消息存储形状及文件引用生命周期待定，修改/受理在行锁内复核 |
 | `t_schedule_run` | id、schedule_id、配置 revision 与安全配置快照、trigger_type、scheduled_at/manual_request_key、dispatch/execution 摘要、claim_owner/claim_epoch/lease_until、session_id/root_execution_id、实际 Agent 发布版本/摘要、关键时间和安全错误；不存完整消息与凭据 |
 | `t_schedule_gap` | schedule_id、revision、from/to、reason、可选准确数量及记录时间；只说明未创建执行的跳过范围，不合并已接受 Run |
 | 既有 Session/执行表 | 消息、工具结果、根执行/segment、等待和终态的权威；复用 M04/M06，不重建相同数据 |
@@ -174,7 +213,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ## 10. 全局目标类图与依赖
 
-本图是 M10 完整目标骨架：从公共管理/模型工具入口到应用服务、时间与授权策略、数据库、两类执行目标，再到既有 Runtime 和 Session 工厂。所有新增节点和连线均为待实现；标识为既有的 Runtime 类仍需后台入口扩展。
+本图是 M10 的 Claw 完整目标骨架：从 Claw HTTP/模型工具入口到应用服务、时间与授权策略、数据库、两类执行目标，再到既有 Runtime 和 Session 工厂。所有新增节点和连线均为待实现；标识为既有的 Runtime 类仍需后台入口扩展。上游页面与 Mate 内部设计不在图中定义。
 
 ![定时任务全局目标类图](scheduled_task_architecture.svg)
 
@@ -182,15 +221,15 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 | 层次 | 责任与生命周期 |
 |---|---|
-| 公共边界与入口 Adapter | `MateScheduleFacade` 校验公司身份、租户和 Chat 访问；`ScheduleController` 接受可信内部上下文和 RequestVO、返回 ResponseVO；`CronToolAdapter` 传入 Host 已绑定作用域，不能绕过授权 |
-| 配置页面 | `MateScheduleApi` 只访问 Mate 公共接口；表单草稿与服务器快照分离，通过独立时间预览、请求回执和配置版本恢复；不复用内部调试客户端 |
+| Claw 边界与入口 Adapter | `ScheduleController` 接受可信上下文和 RequestVO、返回 ResponseVO；`CronToolAdapter` 传入 Host 已绑定作用域，不能绕过授权；不规定上游页面和 Mate 路由 |
+| 绑定解析 | `ScheduleBindingResolver` 只读检查 Agent/目标，管理调用不发布运行目录；端口及公司身份适配待实现 |
 | 应用编排 | `ScheduleApplicationService` 负责管理规则与 VO/DTO 转换；`ScheduleDispatcher` 负责到期领取与准备，均为 Spring 单例 |
 | 策略与准备 | `ScheduleTimePolicy` 统一预览/计算；`ScheduleAuthorizationPort` 对接 Mate；`PreparedScheduleRunDTO` 每次准备创建不可变快照，不代替事务内可变状态检查 |
 | 持久化 | `ScheduleRepository` 实现委托 `ScheduleMapper`，Mapper 只收发 DTO；Schedule/Run/gap 是持久化权威，不引入 PO/DO/Entity 类型 |
 | 执行目标 | `ScheduleExecutionTarget` 明确新建与已有 Session 两种策略，避免 Controller/中央 switch 混合会话职责 |
 | Runtime 适配 | `ScheduledRunAcceptanceService` 组织同库短事务与既有 Session/执行存储；`RuntimeExecutionCoordinator` 事务后启动、投影与关闭；每次独立 `ManagedAgentSession` 由公共工厂创建 |
 
-优先完成配置专题的页面、公共接口与唯一持久化闭环，再独立设计启用、到期触发和执行恢复。配置服务不调用 Session 工厂或执行协调器；全局图中的后续运行关系为待细化的结构方向。Controller 不直接调用 Mapper 或模型，模型与外部 I/O 不进入配置数据库事务。
+优先定义五个 Claw 配置接口与唯一持久化边界，再独立设计生命周期、到期触发和执行恢复。配置服务不调用 Session 工厂或执行协调器；全局图中的后续运行关系为待细化的结构方向。Controller 不直接调用 Mapper 或模型，模型与外部 I/O 不进入配置数据库事务。
 
 ## 11. 实施切片与验收
 
@@ -205,13 +244,13 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 | S5：已有会话 | 绑定/撤销授权、busy/plan 拒绝、会话删除、多任务竞争、追加历史和后续人工消息隔离均通过；不能用新会话替代验收 |
 | S6：旧 Cron 入口迁移 | 按可信 scope 迁移 Job，缺租户、时区或授权信息的记录保持禁用等待补全；切换时确保旧扫描器停用且旧在途任务已核对，不能双写双执行；Run 历史保留来源 |
 
-S1～S4 优先交付，S5 为明确产品范围中的后续切片；S6 的时机取决于是否需要保留既有模型管理入口。已有进程内 Cron 能力不能等价为上述切片已完成。没有业务执行身份、可靠受理或结果对账时，不验收需要凭据的园区无人值守任务。
+S1～S4 是独立会话优先的候选拆分；S5 同属已确认需求，是否分批交付尚待确定；S6 的时机取决于是否需要保留既有模型管理入口。已有进程内 Cron 能力不能等价为上述切片已完成。没有业务执行身份、可靠受理或结果对账时，不验收需要凭据的园区无人值守任务。
 
 验收还须覆盖五阶段工具顺序、无效参数不确认/不执行业务、ASK 不被自动放行、租户篡改、旧 claimEpoch 拒绝、手动触发与自动互斥、单次根执行摘要不受后续聊天覆盖、运行取消与真实结束区别、日志/历史中无凭据。单元测试存在、确定性测试通过、真实 GaussDB/多副本/企业身份联调分别记录，本文未运行实现测试或压测。
 
 ## 12. 依赖与待定事项
 
-本方案暂不新增外部 Maven 依赖：复用 JDK 时间 API、项目已有 Spring `CronExpression`、Jackson、MyBatis/GaussDB 和 Runtime 事件持久化。Spring 六字段语法见[官方调度文档](https://docs.spring.io/spring-framework/reference/integration/scheduling.html)。`modules/cron` 目前没有 MyBatis 依赖，数据库 Adapter 放在已有持久化宿主层，通过端口接入；若实施时迁移制品边界，先列出新增直接依赖及其传递图。
+本方案不因 Cron 方言新增外部 Maven 依赖：复用 JDK 时间 API、项目已有 `spring-context` 中的 `CronExpression`；固定与动态使用场景见[§4.2](#spring-scheduling)，六字段契约见[配置规则](configuration.md#spring-cron-contract)。其他基础能力复用 Jackson、MyBatis/GaussDB 和 Runtime 事件持久化。`modules/cron` 目前没有 MyBatis 依赖，数据库 Adapter 放在已有持久化宿主层，通过端口接入；若实施时迁移制品边界，先列出新增直接依赖及其传递图。
 
 当前不引入 Quartz、XXL-JOB、Redis 分布式锁或新的 Cron 解析库。已有依赖足以表达推荐的扫描与同库事务方案，代价是本项目必须实现并验证领取、去重和状态对账；未来需要统一外部调度平台或跨库部署时重新评估。未重跑完整 Maven dependency tree，不声称已完成传递依赖审计。
 
@@ -221,5 +260,7 @@ S1～S4 优先交付，S5 为明确产品范围中的后续切片；S6 的时机
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.4.0 | 2026-09-30 | 明确 Spring 六字段、秒级计划边界及固定注解与动态编程式调度的适用场景，同步已定输入和创建行为。 |
+| 0.3.0 | 2026-09-29 | 配置设计收敛到 Claw 接口及 Claude 取舍，创建登记自动计划，已有目标使用 Session 标识。 |
 | 0.2.0 | 2026-09-29 | 优先建立配置页面至 Mate/Claw 持久化的完整闭环，执行与恢复策略保留待细化边界。 |
 | 0.1.0 | 2026-09-29 | 建立以 Claude Scheduled deployments 为主基线的两类定时执行目标，优先设计独立会话与持久受理。 |
