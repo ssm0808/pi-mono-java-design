@@ -181,12 +181,12 @@ skinparam NoteBackgroundColor #FFF8D9
 ' Observed behavior: Java appends at the locked tail but still reads recursive paths.
 ' Design reason: one append-only timeline needs ordered scans, not branch membership.
 ' Product constraint: no conversation editing, rewind, or branch switching.
-' Pending implementation: ordered reads under append-only writes.
+' Pending implementation: ordered reads and second-precision timestamps; sequence ordering.
 
 entity "t_sessions" as sessions <<session head>> #DCEBFF {
   id : varchar(128) [PK]
   --
-  created_at : timestamptz(3)
+  created_at : timestamptz(0)
   cwd : varchar(512)
   parent_session_id : varchar(128) [nullable]
   metadata : jsonb [nullable]
@@ -206,7 +206,7 @@ entity "t_session_entries" as entries <<immutable log>> #E4F4E8 {
   entry_seq : bigint [UQ with session_id]
   parent_id : varchar(128) [nullable]
   type : varchar(64)
-  timestamp : timestamptz(3)
+  timestamp : timestamptz(0)
   payload : jsonb
 }
 

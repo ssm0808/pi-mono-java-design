@@ -333,8 +333,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-16T09:15:21+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-16T01:15:21Z",
               "mode": "build"
             }
           }
@@ -377,8 +377,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-16T09:15:21+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-16T01:15:21Z",
               "mode": "build"
             }
           }
@@ -421,8 +421,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:15:00+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:15:00Z",
               "mode": "build"
             }
           }
@@ -465,8 +465,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:15:00+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:15:00Z",
               "mode": "build"
             }
           }
@@ -556,8 +556,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:20:31+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:20:31Z",
               "mode": "build"
             }
           }
@@ -600,8 +600,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:20:31+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:20:31Z",
               "mode": "build"
             }
           }
@@ -644,8 +644,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-16T09:15:21+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-16T01:15:21Z",
               "mode": "build"
             }
           }
@@ -688,8 +688,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:25:09+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:25:09Z",
               "mode": "build"
             }
           }
@@ -732,8 +732,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:25:09+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:25:09Z",
               "mode": "build"
             }
           }
@@ -776,8 +776,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:25:09+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:25:09Z",
               "mode": "plan"
             }
           }
@@ -820,8 +820,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:25:09+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:25:09Z",
               "mode": "plan"
             }
           }
@@ -864,8 +864,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:25:09+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:25:09Z",
               "mode": "build"
             }
           }
@@ -908,8 +908,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:25:09+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:25:09Z",
               "mode": "build"
             }
           }
@@ -1270,7 +1270,7 @@
           "Content-Language": "zh-CN"
         },
         "bodies": {
-          "default": "data: {\"eventId\":\"c0000000000000000000000000000001\",\"type\":\"user.message\",\"createdAt\":\"2026-09-08T02:30:00.000Z\",\"content\":[{\"type\":\"text\",\"text\":\"/skill:pdf 分析附件中的巡检记录\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"c0000000000000000000000000000002\",\"type\":\"agent.message\",\"phase\":\"delta\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"content\":\"正在整理巡检信息。\"}\n\ndata: {\"eventId\":\"c0000000000000000000000000000002\",\"type\":\"agent.message\",\"phase\":\"completed\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"createdAt\":\"2026-09-08T02:30:04.000Z\",\"content\":\"已整理巡检信息，建议先核查上联链路。\"}\n\ndata: {\"eventId\":\"c0000000000000000000000000000003\",\"type\":\"session.status_idle\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"createdAt\":\"2026-09-08T02:30:05.000Z\",\"reason\":\"done\"}\n\n"
+          "default": "data: {\"eventId\":\"c0000000000000000000000000000001\",\"type\":\"user.message\",\"createdAt\":\"2026-09-08T02:30:00Z\",\"content\":[{\"type\":\"text\",\"text\":\"/skill:pdf 分析附件中的巡检记录\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"c0000000000000000000000000000002\",\"type\":\"agent.message\",\"phase\":\"delta\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"content\":\"正在整理巡检信息。\"}\n\ndata: {\"eventId\":\"c0000000000000000000000000000002\",\"type\":\"agent.message\",\"phase\":\"completed\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"createdAt\":\"2026-09-08T02:30:04Z\",\"content\":\"已整理巡检信息，建议先核查上联链路。\"}\n\ndata: {\"eventId\":\"c0000000000000000000000000000003\",\"type\":\"session.status_idle\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"createdAt\":\"2026-09-08T02:30:05Z\",\"reason\":\"done\"}\n\n"
         }
       },
       {
@@ -1433,6 +1433,9 @@
             "mode 空参只读查询；带参仅在 idle 接受。与统一 Session POST 共用模式能力规则和行锁事务；Command 不接收 If-Match，使用锁内当前版本，只修改 mode。真实变化将 mode、updatedAt、resourceVersion 与 session.mode_changed(reason=requested) 原子提交；同值仍校验状态与 plan 能力但不写事件、不升版本。成功返回同一提交快照的完整 Session 与 ETag。切换不调用模型、不批准计划、不清空上下文；running 的确认等待不允许以 mode=build 绕过审核。结果不确定只读 Session/Events 对账，不自动重放。"
           ]
         ]
+      },
+      {
+        "$ref": "contractSections.sessionTime"
       }
     ]
   },
@@ -1451,6 +1454,11 @@
       "status": "confirmed",
       "confirmedAt": "2026-09-22",
       "decision": "Builtin 调用方无需发送执行凭据；Skill 进入 Agent 执行后可能调用 Mate 工具，因此保留四项可选凭据。此处仅收敛请求契约，不删除现有 Builtin/Compact 内部请求快照及释放逻辑。四项凭据均可选，保持上游认证授权和仅 Mate tool execute 透传边界。"
+    },
+    "timePrecisionReview": {
+      "date": "2026-10-02",
+      "status": "confirmed",
+      "decision": "Session 与完整事件、定时任务统一秒级 UTC 时间，持久化与响应同值；实现调整待实现。"
     }
   }
 }

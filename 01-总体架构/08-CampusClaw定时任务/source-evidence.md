@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.10.0 |
-| 核验日期 | 2026-09-30；各节保留实际核验日期与范围 |
+| 文档版本 | 0.11.0 |
+| 核验日期 | 2026-10-02；各节保留实际核验日期与范围 |
 | 产品范围 | 新建独立会话与绑定已有会话均需支持，优先支持独立会话；不据此预设已有会话的拒绝契约或交付阶段 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与两类目标的调度接线待实现；企业身份系统未核验 |
 
@@ -235,7 +235,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 **Codex 的公开资料不足以确定默认来源。** [plugin.rs:777](https://github.com/openai/codex/blob/d42056091aded7feb1d88ac7e83972108b2aa478/codex-rs/app-server-protocol/src/protocol/v2/plugin.rs#L777) 的 ScheduledTaskSummary/ScheduledTaskSchedule 未声明 timezone；同次检查 core-plugins/src、app-server/src/request_processors/plugins.rs、history/src/heartbeat.rs，所见为元数据与来源投影，未见时区解析。OpenAI Docs 的 [Scheduled tasks](https://learn.chatgpt.com/docs/automations) 同日重新搜索并读取，公开自定义计划和 RRULE，但未规定 timezone 字段是否必填或默认来源，不能用未公开细节支持 Claw 默认上海或节点时区。
 
-这些证据支持按时间类型决定是否需要时区，不支持统一行业默认值。Claw 已确认 Cron 时区可省略并默认保存、回显 Asia/Shanghai，at/startAt 须携带 Z 或数值偏移，at/every 不另设 timezone；这是面向主要园区场景的产品约束。绝对时刻响应统一 UTC 且固定三位毫秒已确认，输入精度仍待确认，精确规则只由[配置契约 §3.4](configuration.md#34-时区选择与确认边界)维护。本节仅静态读取源码和官方契约，未执行产品任务或时区测试。
+这些证据支持按时间类型决定是否需要时区，不支持统一行业默认值。Claw 已确认 Cron 时区可省略并默认保存、回显 Asia/Shanghai，at/startAt 须携带 Z 或数值偏移，at/every 不另设 timezone；这是面向主要园区场景的产品约束。绝对时刻输入与响应采用秒级，响应统一 UTC，精确规则只由[配置契约 §3.4](configuration.md#34-时区选择与确认边界)维护。本节仅静态读取源码和官方契约，未执行产品任务或时区测试。
 
 <a id="runtime-time-format-evidence"></a>
 
@@ -246,10 +246,16 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 | 范围 | 已观察事实 | 路径与关键符号 |
 |---|---|---|
 | Session 创建 | 字段为 createdAt，服务端以 UTC 生成，VO 使用 OffsetDateTime 并按字符串序列化；所查创建链路未固定三位小数 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java` · newSession（117）、now（138）；同 runtimeapi 根 `session/RuntimeSessionResponseAssembler.java` · createView（30）、`vo/CreateSessionResponseVO.java` · createdAt（37） |
-| 创建契约 | 示例为 `2026-08-15T11:30:00Z`，表示 UTC；该例不证明禁止小数秒，也不证明固定毫秒 | [01-create-session.json](../01-CampusClaw多Agent运行时/接口契约/操作/01-create-session.json) · result.createdAt（58）；[Session 接口展示](../01-CampusClaw多Agent运行时/chat-api-review.html) |
-| 完整公共事件 | createdAt 明确为 UTC、固定三位毫秒；实现通过 appendInstant(3) 格式化绝对时刻 | [事件共享契约](../01-CampusClaw多Agent运行时/事件契约/common.json) · 时间规则；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventProjection.java` · EVENT_TIME_FORMATTER（68）、project（91） |
+| 2026-09-30 创建契约 | 示例为 `2026-08-15T11:30:00Z`，表示 UTC；该例不证明禁止小数秒，也不证明固定毫秒 | [01-create-session.json](../01-CampusClaw多Agent运行时/接口契约/操作/01-create-session.json) · result.createdAt（58）；[Session 接口展示](../01-CampusClaw多Agent运行时/chat-api-review.html) |
+| 固定快照的完整公共事件实现 | 实现通过 appendInstant(3) 输出 UTC 三位毫秒；当前目标契约已改为秒级 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventProjection.java` · EVENT_TIME_FORMATTER（68）、project（91） |
 
-定时任务已确认沿用 Session 创建接口的 UTC 时间响应，并参考完整事件格式固定输出三位毫秒；表示方式不会改变 Cron 按保存时区计算的计划。固定三位毫秒是新增调度接口的目标约束，不能反推现有 Session 创建契约已规定同样精度；输入可接受精度及超出精度时的处理另定。精确规则由[配置契约 §3.4](configuration.md#34-时区选择与确认边界)维护，调度实现仍待实现。
+Claw 的目标已统一为秒级：包含 Session createdAt/updatedAt、完整事件 createdAt 和定时任务时间。源码中的毫秒规范化与输出仍需调整；共同的写入、回读和存储边界由[秒级时间一致性](../01-CampusClaw多Agent运行时/time-contract.md)维护，不能把本节历史源码观察改写为已实现目标。
+
+<a id="claude-time-precision-evidence"></a>
+
+### 8.5 Claude 时间格式的公开证据
+
+2026-10-02 重新读取公开 Beta [Create Session](https://platform.claude.com/docs/en/api/http/beta/sessions/create) 与 [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create)。两者 created_at/updated_at 示例均使用 `2026-03-15T10:00:00Z`，未给出固定毫秒位数或只支持秒级的保证。没有调用实际 API，也没有公开服务端源码或数据库精度证据。CampusClaw 借鉴整秒表示并明确秒级限制，属于产品约束；不得据示例断言 Claude 的内部存储也是秒级。
 
 ## 9. 文档验收
 
@@ -267,6 +273,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.11.0 | 2026-10-02 | 核对 Claude 时间示例边界，区分既有毫秒实现与 Claw 统一秒级目标。 |
 | 0.10.0 | 2026-09-30 | 补充既有 Session 与完整事件时间证据，明确调度响应采用 UTC 并固定三位毫秒。 |
 | 0.9.0 | 2026-09-30 | 同步已确认的 Cron 默认上海及绝对时间输入规则，保留旧实现和基线时区证据。 |
 | 0.8.0 | 2026-09-30 | 核验四个辅助基线的时区字段及默认来源，同步已确认的整数秒与固定起点行为。 |

@@ -82,7 +82,7 @@ class SessionUpdateContractTest(unittest.TestCase):
 
     def test_requested_mode_event_is_history_only_and_records_change(self):
         event = {"type": "session.mode_changed", "eventId": "mode-event",
-                 "createdAt": "2026-09-14T00:00:00.000Z", "previousMode": "build",
+                 "createdAt": "2026-09-14T00:00:00Z", "previousMode": "build",
                  "mode": "plan", "reason": "requested"}
         event_gate.validate_frame(event, history=True)
         with self.assertRaisesRegex(ValueError, "allowed scope"):
@@ -176,7 +176,7 @@ class AllHeaderContractTest(unittest.TestCase):
 class CatalogTest(unittest.TestCase):
     def test_business_invalid_tool_arguments_remain_readable_events(self):
         event = {"type": "agent.tool_call", "eventId": "call-event", "sourceEventId": "root-message",
-                 "createdAt": "2026-09-09T00:00:00.000Z", "toolCallId": "provider-call",
+                 "createdAt": "2026-09-09T00:00:00Z", "toolCallId": "provider-call",
                  "toolName": "CallMateTool", "requiresConfirmation": False}
         for arguments in ({}, {"args": {}}, {"tool": 1, "args": {}}, {"tool": "query", "args": "bad"}):
             with self.subTest(arguments=arguments):

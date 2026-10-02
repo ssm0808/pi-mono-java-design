@@ -133,8 +133,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-09-10T10:15:00+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-09-10T02:15:00Z",
               "mode": "build"
             }
           }
@@ -176,8 +176,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-09-14T10:15:00+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-09-14T02:15:00Z",
               "mode": "plan"
             }
           }
@@ -219,8 +219,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-09-14T10:15:00+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-09-14T02:15:00Z",
               "mode": "plan"
             }
           }
@@ -260,8 +260,8 @@
                   "total": 0.009192
                 }
               },
-              "createdAt": "2026-08-15T10:30:00+08:00",
-              "updatedAt": "2026-08-17T14:20:31+08:00",
+              "createdAt": "2026-08-15T02:30:00Z",
+              "updatedAt": "2026-08-17T06:20:31Z",
               "mode": "build"
             }
           }
@@ -561,6 +561,9 @@
             "主动设置 mode=build 只影响之后的消息，不启动执行或确认计划；等待计划审核时只有仅名称更新可走此接口。"
           ]
         ]
+      },
+      {
+        "$ref": "contractSections.sessionTime"
       }
     ],
     "requestHeaderExamples": [
@@ -603,6 +606,11 @@
       "status": "confirmed",
       "confirmedAt": "2026-09-22",
       "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输、版本条件 Header；不改变上游授权，不拒绝额外收到的 Header。"
+    },
+    "timePrecisionReview": {
+      "date": "2026-10-02",
+      "status": "confirmed",
+      "decision": "Session 与完整事件、定时任务统一秒级 UTC 时间，持久化与响应同值；实现调整待实现。"
     }
   }
 }

@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.61.0 |
-| 更新日期 | 2026-09-30 |
+| 文档版本 | 1.62.0 |
+| 更新日期 | 2026-10-02 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -26,6 +26,8 @@
 | 调度专项基线 | A14 完整职责表保留2026-09-22开源证据及2026-09-29 Claude/Java范围；首次时间与周期推进于2026-09-30单独核验 DSH master `639ed015397290b3745d163aafe02ffee4aa3f84`、pi main `1b347794e2a630e4359f2584f4eea388145d0ddf`、OpenCode dev `2fa3363c924c5c3e367b84a87ae478296a0ed59b`、Codex main `bcd6d9ab6b9f26f85d76d0c680b3f88b367bffa0`，并重读 Claude/OpenAI 官方调度文档；旧新提交、路径及证据边界见[M10 首次触发专项](../08-CampusClaw定时任务/source-evidence.md#first-fire-evidence)，不批量升级其余模块结论 |
 | 核验范围 | A07 的模式入口、TUI 实施选择、方案/任务/问题分离、Slash 协同与前端接入范围；M01 的 Loop/控制消息扩展点、M06 的 Controller/分派/回执/流缓冲与配置更新源码；A04 的五基线接口边界；Claude 公共 Session/Agent/流与历史文档；A03 的计划文件/正文载体；A05 的三基线显式任务事件、Java 多事件事务与客户端消费接入点；A03/A05 的计划与实施提示词；A06 的 M02 Provider 身份、业务 Agent 设置唯一模型来源及旧全局目录差距；M08 的 Agent 默认 mode、目录快照、Session 初始化与元数据组合查询顺序 |
 | 验证边界 | A08 已补充固定开发分支的 Runtime/数据库/前端确定性验证；其余条目保留各自静态核验范围，企业接入与真实模型行为不在已验证范围 |
+
+Claw Session、完整事件与定时任务的[统一秒级目标](../01-CampusClaw多Agent运行时/time-contract.md)属于产品约束，尚待实现；Claude 2026-10-02 的公开示例为整秒，但不构成其内部精度保证。其他基线的历史证据保持原归属。
 
 ## 1. 阅读方式与权威边界
 
@@ -459,7 +461,7 @@ CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可�
 | OpenCode GitHub 入口 | GitHub Actions 默认 UTC，允许可选 IANA timezone；Runtime 只消费事件 | 可以参考显式默认值，但不能把它归为 OpenCode 自有调度器行为 |
 | Codex | 所查开源摘要无 timezone，OpenAI Docs 未规定时区默认来源 | 本次未能核验默认值，不作为 Claw 默认时区的依据 |
 
-本专项重新确认默认分支并 fetch：DSH master `639ed015397290b3745d163aafe02ffee4aa3f84`、pi main `ee602414c703be8da722ec56de7f2399e62581ac`、OpenCode dev `2fa3363c924c5c3e367b84a87ae478296a0ed59b`、Codex main `d42056091aded7feb1d88ac7e83972108b2aa478`。pi/Codex 相对前项的所查文件无变化；完整路径、符号、旧新范围及官方文档见[M10 时区证据](../08-CampusClaw定时任务/source-evidence.md#timezone-evidence)，不升级其余历史表。Claude 的 Cron 必填 IANA 时区已由配置契约记录；Claw 已确认 timezone 可省略并默认保存、回显 Asia/Shanghai，属于面向主要园区场景的产品约束。at/startAt 输入须带 Z 或数值偏移，at/every 不另设 timezone；绝对时刻响应沿用 Session 创建接口的 UTC 表示，并对齐完整事件固定三位毫秒；输入精度仍待确定，精确规则见[配置契约 §3.4](../08-CampusClaw定时任务/configuration.md#34-时区选择与确认边界)。
+本专项重新确认默认分支并 fetch：DSH master `639ed015397290b3745d163aafe02ffee4aa3f84`、pi main `ee602414c703be8da722ec56de7f2399e62581ac`、OpenCode dev `2fa3363c924c5c3e367b84a87ae478296a0ed59b`、Codex main `d42056091aded7feb1d88ac7e83972108b2aa478`。pi/Codex 相对前项的所查文件无变化；完整路径、符号、旧新范围及官方文档见[M10 时区证据](../08-CampusClaw定时任务/source-evidence.md#timezone-evidence)，不升级其余历史表。Claude 的 Cron 必填 IANA 时区已由配置契约记录；Claw 已确认 timezone 可省略并默认保存、回显 Asia/Shanghai，属于面向主要园区场景的产品约束。at/startAt 输入须带 Z 或数值偏移，at/every 不另设 timezone；绝对时刻输入与响应统一秒级，响应为 UTC 且无小数秒，Session 与完整事件同步采用这一目标，精确规则见[配置契约 §3.4](../08-CampusClaw定时任务/configuration.md#34-时区选择与确认边界)。
 
 ### 1. 调度职责和权威状态
 
@@ -569,6 +571,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.62.0 | 2026-10-02 | Claw 时间统一秒级，区分 Claude 公开示例、现有毫秒实现与产品目标。 |
 | 1.61.0 | 2026-09-30 | A14 同步调度绝对时刻响应采用 UTC 并固定三位毫秒的产品约束。 |
 | 1.60.0 | 2026-09-30 | A14 明确 Cron 默认上海的产品取舍及 at/every 不另设时区的边界。 |
 | 1.59.0 | 2026-09-30 | A14 增加时区字段与默认来源对比，同步固定起点和整数秒的已定契约。 |

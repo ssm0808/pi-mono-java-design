@@ -1,8 +1,8 @@
 # CampusClaw Java GaussDB Session 线性事件存储 SR 设计
 
 > 文档编号：SR-MEM-001<br>
-> 版本：v0.18.0<br>
-> 日期：2026-09-22<br>
+> 版本：v0.19.0<br>
+> 日期：2026-10-02<br>
 > 状态：单条追加时间线目标已确认；顺序读取改造待实现<br>
 > Java 核验基线：`fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；本地源码快照，不代表最新远端<br>
 > pi 专项基线：默认分支 `main`，2026-09-22 隔离 fetch，`1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`；默认分支快照不等于稳定发布<br>
@@ -95,7 +95,7 @@ pi SQLite 保留分支能力，并在写入时维护分支索引。正常追加�
 | 字段 | 类型 | 语义 |
 |---|---|---|
 | `id` | `VARCHAR(128)` | Session 唯一 ID |
-| `created_at` | `TIMESTAMPTZ(3)` | 创建时间 |
+| `created_at` | `TIMESTAMPTZ(0)` | 创建时间 |
 | `cwd` | `VARCHAR(512)` | 受控规范工作目录 |
 | `parent_session_id` | `VARCHAR(128)` | 独立复制的来源 Session；无来源为空 |
 | `metadata` | `JSONB` | 附加信息；缺省为 SQL NULL |
@@ -112,7 +112,7 @@ pi SQLite 保留分支能力，并在写入时维护分支索引。正常追加�
 | `entry_seq` | `BIGINT` | 严格递增的提交序号，允许间隔 |
 | `parent_id` | `VARCHAR(128)` | 前一条 Entry ID，第一条为空 |
 | `type` | `VARCHAR(64)` | Entry 类型 |
-| `timestamp` | `TIMESTAMPTZ(3)` | Entry 时间，不作排序依据 |
+| `timestamp` | `TIMESTAMPTZ(0)` | Entry 时间，不作排序依据 |
 | `payload` | `JSONB` | 类型相关内容 |
 
 主键 `(session_id, id)`，唯一索引 `(session_id, entry_seq)`。写侧维持单链，读侧按序号读取时间线；不依赖序号连续、不使用 `entry_seq - 1` 查父节点。已提交 Entry ID 和已分配序号不回收。新 Entry 的父节点由写侧依据锁内末端确定，调用方不能指定其他历史分叉点。
@@ -121,7 +121,15 @@ pi SQLite 保留分支能力，并在写入时维护分支索引。正常追加�
 
 每 Session 一行，`session_id VARCHAR(128)` 为主键，`next_seq BIGINT` 为下一可分配序号。新 Session 从 1 开始，写事务先锁 Session 再锁序号；Runtime 的 Entry、公共事件和内部 Record 共享分配器，因此 Entry 与 event 序号都可能有空洞。保留唯一性和提交顺序，不承诺连续。
 
-### 3.4 `t_session_materialized`
+<a id="second-precision-storage"></a>
+
+### 3.4 秒级时间存储
+
+Session 与完整事件采用[秒级时间一致性](../../01-总体架构/01-CampusClaw多Agent运行时/time-contract.md)。目标列为 `t_sessions.created_at/updated_at`、`t_session_entries.timestamp`、`t_session_records.timestamp`、`t_session_events.created_at`，使用 `TIMESTAMPTZ(0)`。应用先截断记录时间再写入，不能依赖数据库隐式舍入；公共事件排序继续依赖 event_seq。Provider 原始 payload 中的时间及内部期限/租约不自动改变。
+
+固定 Java `553dcd5e2ff682f9684810a043b442b37a02e54a` 安装 DDL 中上述列仍为 `(3)`，完整事件仍使用毫秒规范化与输出；秒级调整待实现，证据见共同专题。基础 schema.sql 与下图仅列基础两列；完整安装脚本及公司安装镜像须同批调整，不将本示意当作可直接覆盖 Runtime 的安装文件。沿用 §8 的新建环境范围，不新增存量迁移脚本。
+
+### 3.5 `t_session_materialized`
 
 每 Session 一行，主键 `session_id VARCHAR(128)`，`payload JSONB` 保存基础汇总目标：
 
@@ -136,7 +144,7 @@ pi SQLite 保留分支能力，并在写入时维护分支索引。正常追加�
 
 ## 4. 基础 GaussDB DDL
 
-[`schema.sql`](./schema.sql) 唯一维护四张基础表和 17 个字段的初始化示意。Runtime 完整安装结构以上述实现仓 DDL 及各模块目标增量为准；禁止按“四表”删除其他模块已使用的表。数据库发布平台负责 DDL，AgentService 只执行 DML。沿用字段，本次只调整语义说明，不新增数据库结构。
+[`schema.sql`](./schema.sql) 唯一维护四张基础表和 17 个字段的初始化示意。Runtime 完整安装结构以上述实现仓 DDL 及各模块目标增量为准；禁止按“四表”删除其他模块已使用的表。数据库发布平台负责 DDL，AgentService 只执行 DML。沿用字段，秒级目标同步调整时间列精度，完整安装结构的实现仍待更新。
 
 ## 5. Java 接口与错误语义
 
@@ -279,6 +287,7 @@ Entry 时间线完整不代表每条都进入模型。配置、控制、独立 U
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v0.19.0 | 2026-10-02 | Session 与事件目标时间列统一到秒，保持提交序号排序和新建环境交付范围。 |
 | v0.18.0 | 2026-09-22 | Session 采用单条追加时间线，移除最近消息编辑与递归读取，按新建环境实施。 |
 | v0.17.0 | 2026-09-16 | Skill 使用去重键保留覆盖活跃根，删除阻止迟到入账。 |
 | v0.16.0 | 2026-09-15 | Session 删除与恢复引用 Skill 调用事实的清理和不重计边界。 |

@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.14.1 |
+| 文档版本 | 0.15.0 |
 | 状态 | 数字分页与公共事件读取已实现；单条时间线的非递归读取待实现，其他增量按各节核验范围记录 |
-| 更新日期 | 2026-09-22 |
+| 更新日期 | 2026-10-02 |
 | 原文展示与消费修复 | 实现提交 `cad6847d901155cc6388989b984d19e302a4fbe3`，见 [Draft PR #287](https://github.com/superheromeZzh/pi-mono-java/pull/287)；合入前不作为实现仓主线行为 |
 | 线性读取专项基线 | `pi-mono-java@fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`，2026-09-22；范围见 §5.1 |
 | 历史实现核对基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` |
@@ -12,6 +12,8 @@
 | 官方公共契约核对 | Claude Managed Agents，2026-09-06，Beta；只证明公开行为 |
 
 结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量已在 Runtime 主线实现（`8c5fda1d`，见[源码证据 §12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)）；Session/元数据不增字段，Mate 公共投影待实现。本文其他历史源码范围不因此升级。
+
+Session 与完整事件的时间采用[统一秒级目标](time-contract.md)：UTC、无小数秒，写入和回显一致；此精度调整待实现，其他功能状态仍按各节证据。
 
 ## 1. 查询范围与契约入口
 
@@ -49,7 +51,7 @@ GET 返回普通 JSON。结果使用
 
 历史读取五类已接受 user.*、完整 agent.message/thinking/tool_call/tool_result/plan/todo_updated、
 session.status_idle，以及模型、thinking、mode 配置和压缩完整记录。delta、心跳、连接标记不入历史。
-每条完整记录有服务端 eventId 与保存一次的 UTC 毫秒 createdAt；按内部已提交顺序展示，
+每条完整记录有服务端 eventId 与保存一次的 UTC 整秒 createdAt；按内部已提交顺序展示，
 不按时间戳排序。agent.* 和 idle 的 sourceEventId 始终引用原始 user.message.eventId，
 确认续跑不换根消息；中断用 targetEventId 指向它。共享终态只保留一条。
 
@@ -383,7 +385,7 @@ B09 的事件关联与 B13 Skill SSE 属于架构变更，B01 错误投影与 B1
 | B01 | 失败错误码 | 失败时必有稳定 errorCode，成功时省略；区分用户拒绝、参数错误、工具不存在、超时和执行失败。文案放在 text，使用脱敏可展示信息；不透传 Mate 原始错误码、异常栈或凭据。 |
 | B02 | 空文本与大小 | 工具结果至少一个 text 块，允许 text=""，不强制只有一块；没有正文时不伪造 Agent 回答。沿用工具自身的有说明截断；HTTP 不静默截断完整事件。大小上限由实现校准，超限必须明确失败或断流并可查历史。 |
 | B03 | Mate 文本归一 | CallMateTool 缺省 args 在公开事件中补 {}；Mate result 为字符串时直接作为文本，对象/数组变为 JSON 文本，null 为 ""。适配差距见 §2.1。 |
-| B04 | 时间与增量 | 完整事件 createdAt 使用 Claw 形成该权威记录时的 UTC 毫秒时间，保存一次，GET/POST 复用；delta 使用 content 字符串，只含新增文本，沿用同一 eventId，不带 createdAt。completed 覆盖预览，之后忽略迟到 delta。 |
+| B04 | 时间与增量 | 完整事件 createdAt 使用 Claw 形成该权威记录时的 UTC 整秒时间，保存一次，GET/POST 复用；delta 使用 content 字符串，只含新增文本，沿用同一 eventId，不带 createdAt。completed 覆盖预览，之后忽略迟到 delta。 |
 | B05 | Thinking 展示 | 展示模型返回的原始推理。thinking 控制后续执行，关闭不隐藏已保存原文；读取受当前权限约束，完整规则见 §2.3。 |
 | B06 | 工具确认标记 | 每个完整 agent.tool_call 都带 requiresConfirmation 布尔值；本期顺序发出需确认调用，同一执行一次只挂起一个待确认 toolCallId。允许/拒绝后分别续跑，拒绝产生 isError=true 的工具结果。 |
 | B07 | 结束原因 | session.status_idle.reason 固定 done、failed、terminated、confirming；confirming 只结束当前 SSE，Session 继续 running。failed 携带稳定 errorCode 和可展示 message；工具失败可由 Agent 继续处理，不自动等同于整轮 failed。 |
@@ -410,6 +412,7 @@ B09 不能代替尚不存在的请求幂等机制。B13 将 Skill 视为触发�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.15.0 | 2026-10-02 | Session 与完整事件采用秒级 UTC 时间，明确写入、回显和存储一致性边界。 |
 | 0.14.1 | 2026-09-22 | 历史查询移除无用途凭据请求头，保留可选响应类型和错误语言。 |
 | 0.14.0 | 2026-09-22 | 历史查询采用单条追加时间线，移除分支递归并保留追加约束与投影完整性校验。 |
 | 0.13.0 | 2026-09-18 | 工具调用展示名复用已提交快照。 |

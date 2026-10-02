@@ -230,7 +230,7 @@ def validate_frame(event: dict, receipt: bool = False, history: bool = False) ->
         require(not history, "history never contains preview deltas")
         require("createdAt" not in event and bool(event["content"]), "delta must omit createdAt and be nonempty")
     else:
-        require(isinstance(event.get("createdAt"), str) and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", event["createdAt"]) is not None, "complete event requires createdAt")
+        require(isinstance(event.get("createdAt"), str) and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", event["createdAt"]) is not None, "complete event requires createdAt")
     if event["type"] in {"agent.tool_call", "agent.tool_result"}:
         require(bool(event.get("toolCallId")), "toolCallId is required")
     if event["type"] == "agent.tool_call":
@@ -909,7 +909,7 @@ def validate_batch_field_regressions(post: dict, history: dict) -> int:
         (call, lambda e: e.pop("sourceEventId")),
         (call, lambda e: e.pop("requiresConfirmation")),
         (call, lambda e: e.update(requiresConfirmation="false")),
-        (call, lambda e: e.update(createdAt="2026-09-08T00:00:00Z")),
+        (call, lambda e: e.update(createdAt="2026-09-08T00:00:00.000Z")),
         (failure, lambda e: e.pop("errorCode")),
         (failure, lambda e: e.update(errorCode="RAW_MATE_ERROR")),
         (success, lambda e: e.update(errorCode="TOOL_EXECUTION_FAILED")),

@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Service API",
-    "version": "1.61.0",
+    "version": "1.62.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认",
     "fieldNaming": "lowerCamelCase",
@@ -60,6 +60,22 @@
       "required": false,
       "schema": "zh-CN | en-US",
       "description": "异常消息语言；缺失或不支持时回退 en-US"
+    }
+  },
+  "contractSections": {
+    "sessionTime": {
+      "title": "Session 时间",
+      "description": "创建、读取、更新及 Command 返回的 Session 投影遵循相同时间格式。",
+      "columns": [
+        "字段",
+        "规则"
+      ],
+      "rows": [
+        [
+          "createdAt / updatedAt（返回时）",
+          "UTC ISO 8601 整秒字符串，格式 YYYY-MM-DDTHH:mm:ssZ，不含小数秒。服务端首次写入前截断到秒，响应与持久化值一致；时间不作唯一键或资源版本。同秒更新仍使用 ETag 和版本控制。"
+        ]
+      ]
     }
   }
 }
