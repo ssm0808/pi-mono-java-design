@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.16.0 |
+| 文档版本 | 0.17.0 |
 | 更新日期 | 2026-10-04 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -184,7 +184,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 `ScheduleAuthorizationPort` 是待实现的宿主能力：创建/修改时校验管理资格，启用和每次受理前校验执行资格、撤销状态及范围。授权断言绑定 tenant、schedule、revision、Agent 与有效期，通过受信内部通道传递。新建 Session 的归属由本次可信任务范围确定；数据库记录 scope 不是认证凭据。授权服务不可用时不受理。
 
-支持任务绑定可用凭据已确认，功能待实现。[Claude 凭据参考与方案边界](configuration.md#credential-reference-proposal)采用“独立保管、任务只存授权引用、运行时由可信 Adapter 使用”的候选方向；推荐以 credentialIds 直接引用独立逻辑凭据；如采用集合资源则使用 vaultIds，资源层级与名称尚待选定，权威服务待确定。公开 metadata 只是标签，不是凭据存储或授权来源；任务配置不保存原始 secret。已有普通消息捕获当前执行 Header、Cron 使用空凭据、内部模型 Provider 无模型 API Key 的核验见[本次证据](source-evidence.md#creation-metadata-credentials-evidence)。
+支持任务绑定可用凭据已确认，功能待实现。[Claude 凭据参考与方案边界](configuration.md#credential-reference-proposal)采用“独立保管、任务只存授权引用、运行时由可信 Adapter 使用”的候选方向；采用 credentialIds 直接引用独立逻辑凭据，名称和资源层级已确认；首版不增加 Vault 集合，权威服务与目标匹配仍待确定。公开 metadata 只是标签，不是凭据存储或授权来源；任务配置不保存原始 secret。已有普通消息捕获当前执行 Header、Cron 使用空凭据、内部模型 Provider 无模型 API Key 的核验见[本次证据](source-evidence.md#creation-metadata-credentials-evidence)。
 
 **无人值守业务身份待确定。** 可选专门服务身份或创建人长期委托、执行前换取短期凭据；推荐服务身份并限制租户、Agent、业务工具范围。该推荐尚不构成已确认的凭据来源，更不是当前实现。公司身份系统的签发、刷新、撤销与审计契约需要在启用依赖凭据的园区任务前明确。
 
@@ -198,7 +198,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 | 权威对象 | 关键数据及约束 |
 |---|---|
-| `t_schedule` | id、可信 scope、agent_id、单条 user.message 配置、cron_expression/timezone、status、内部 revision、metadata、last_run_at、next_fire_at、候选 max_lateness、active_run_id、授权引用、创建/修改审计；消息存储形状及文件引用生命周期待定，修改/受理在行锁内复核 |
+| `t_schedule` | id、可信 scope、agent_id、单条 user.message 配置、cron_expression/timezone、status、内部 revision、metadata、credential_ids、last_run_at、next_fire_at、候选 max_lateness、active_run_id、授权引用、创建/修改审计；消息存储形状及文件引用生命周期待定，修改/受理在行锁内复核 |
 | `t_schedule_run` | id、schedule_id、配置 revision 与安全配置快照、trigger_type、scheduled_at/manual_request_key、dispatch/execution 摘要、claim_owner/claim_epoch/lease_until、session_id/root_execution_id、实际 Agent 发布版本/摘要、关键时间和安全错误；不存完整消息与凭据 |
 | `t_schedule_gap` | schedule_id、revision、from/to、reason、可选准确数量及记录时间；只说明未创建执行的跳过范围，不合并已接受 Run |
 | 既有 Session/执行表 | 消息、工具结果、根执行/segment、等待和终态的权威；复用 M04/M06，不重建相同数据 |
@@ -258,6 +258,7 @@ S1～S4 是每次新建会话能力的候选拆分；S5 的时机取决于是否
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.17.0 | 2026-10-04 | 定时任务通过 credentialIds 直接绑定独立凭据，集合管理不进入首版范围。 |
 | 0.16.0 | 2026-10-04 | 明确凭据绑定属于产品范围，并区分独立凭据和集合引用的命名候选。 |
 | 0.15.0 | 2026-10-04 | 配置响应采用小写状态、时间摘要和 metadata，内部版本不外露，并明确凭据引用的待定边界。 |
 | 0.14.0 | 2026-10-04 | 每次运行固定新建独立 Session，移除已有会话目标和策略分支，并补充创建响应审阅入口。 |
