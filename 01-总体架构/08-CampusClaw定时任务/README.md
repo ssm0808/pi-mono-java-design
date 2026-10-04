@@ -4,13 +4,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.12.0 |
-| 更新日期 | 2026-10-02 |
+| 文档版本 | 0.13.0 |
+| 更新日期 | 2026-10-04 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 支持每次创建独立会话和唤醒已有会话；优先交付独立会话 |
 | 设计状态 | 五个 Claw 配置接口形成推荐目标，待实现；不定义 Mate 接口或页面；到期执行、重叠、补跑和故障恢复部分为待细化候选，不作为已冻结实施规则；无人值守身份待确定 |
 | 已观察实现 | Java main `553dcd5e2ff682f9684810a043b442b37a02e54a` 已有进程内 Cron、JSON Job/JSONL Run 和公共 Session 工厂；不等于已具备企业调度能力 |
-| 主基线 | Claude Managed Agents Scheduled deployments，2026-09-29 核对，Beta；仅引用公开契约，无服务端源码 commit |
+| 主基线 | Claude Managed Agents Scheduled deployments，2026-10-04 重核名称、Cron 与执行目标，Beta；仅引用公开契约，无服务端源码 commit |
 
 ## 1. 要解决什么问题
 
@@ -35,7 +35,7 @@ M10 拥有时间规则、任务生命周期、触发身份、到期领取、受�
 | 定义、触发、执行分离 | Schedule 保存长期规则，Run 保存一次触发/受理，Session 保存内容与根执行；避免“启动成功”被当成业务完成 | 采用 Deployment / DeploymentRun / Session 的职责分离；公开 Run 本身只表示 Session 创建结果 |
 | 执行目标 | 两种目标均支持，`NEW_SESSION` 优先 | 前者参考 Scheduled deployments；后者是 CampusClaw 产品扩展，非 Claude Deployment 的已观察能力 |
 | Agent 选择 | 新会话每次 `prepare(agentId)`，固定这次实际取得的已发布目录快照；不会自动刷新 Mate 最新定义 | 保留现有产品约束；Claude 在创建/显式更新 Deployment 时固定 Agent 版本 |
-| 时间表达 | 已确认支持 `at/every/cron`；Cron 沿用 Spring 六字段，every 使用整数秒 intervalSeconds 和可选固定 startAt，创建缺省先等一个间隔，保存/回显起点，更新省略起点重算；Cron 时区可省略并默认保存、回显 Asia/Shanghai，at/startAt 须带偏移量且 at/every 不另设时区；精确取时仍待确定 | Claude 只声明五字段 POSIX Cron；at/every 属于产品扩展，不把日历匹配当作单次或任意间隔的完整替代 |
+| 时间表达 | 仅支持 cron，沿用 Spring 六字段；timezone 可省略，默认保存并回显 Asia/Shanghai；不提供绝对单次或任意起点间隔 | 采用 Claude 的仅 Cron 范围取舍；方言与时区默认值为 CampusClaw 产品约束 |
 | 重叠与恢复 | 同一任务仅一条未完成受理链；过期窗口跳过，结果未知保持占用；不自动重放已接受输入 | 产品约束和安全加固；Claude 公开资料未给出完整重叠/故障接管策略 |
 | 部署与存储 | GaussDB 是调度权威，定时器只唤醒扫描；与 Runtime 受理使用同库事务 | CampusClaw 架构变更；不推断 Claude 的表、锁、队列或部署拓扑 |
 
@@ -56,7 +56,7 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 | 归档 | 终止未来计划，不再允许修改、恢复或手动运行；保留 Run 与历史引用；不隐含停止已受理执行 |
 | 停止一次执行 | 固定 Run 绑定的 Session 和根 execution，提交取消请求；收到真实终态前保持“停止中” |
 
-配置采用 `ACTIVE / PAUSED / ARCHIVED`；一次性任务已触发后 `nextFireAt` 为空，标注“计划已耗尽”，不假装仍有下次运行。归档是 CampusClaw 的终态枚举；Claude 的 `archived_at` 与 active/paused 表达方式不同。
+配置采用 `ACTIVE / PAUSED / ARCHIVED`；没有自动计划或没有未来匹配时 `nextFireAt` 为空，不假装仍有下次运行。归档是 CampusClaw 的终态枚举；Claude 的 `archived_at` 与 active/paused 表达方式不同。
 
 创建 ACTIVE 资源不要求额外启用动作；后续暂停/恢复是独立生命周期操作。现有 Cron 工具契约保持原参数面；其适配、delete 到归档的映射和 trigger 回执须在迁移切片中一并对齐，未接线前不宣称新 API 与旧工具已共用存储。每个写入动作使用带配置 revision 的可信快照，在事务中重新检查可变状态；修改冲突不覆盖另一人的更新。
 
@@ -64,13 +64,9 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 
 ## 4. 时间规则
 
-配置的输入、空值、预览与回显以[配置专题 §3](configuration.md#3-配置字段与时间规则)为准。cron、at、every 三种能力、every 固定时间表及可选 startAt 均已确认；创建 every 时省略 startAt 默认等待一个完整间隔后首次触发。整数秒 intervalSeconds、固定起点保存/回显、更新缺省重算及新旧起点校验已确认；时区、输入偏移量及绝对时刻响应统一 UTC 且不含小数秒已确认，见配置专题 §3.4；精确取时、at 时间校验及重启恢复处理仍待确定。Cron 不能完整表达“某个指定日期只执行一次”或“从任意起点连续每隔 7 分钟”；具体边界与固定时间表公式见[配置专题 §3.2](configuration.md#32-三种类型的边界与待定细节)。本节涉及的 maxLateness、补跑窗口、gap 与到期游标属于运行候选，尚不作为创建配置的必填字段或已确定策略。
+配置的输入、空值、预览与回显以[配置专题 §3](configuration.md#3-配置字段与时间规则)为准。非空 schedule 仅支持 cron，采用 Spring 六字段；timezone 可省略，默认保存并回显 Asia/Shanghai。省略 schedule 只保存配置，显式手动运行仍独立提供；新 HTTP 不接收 at/every/intervalSeconds/startAt。仅 Cron 的能力代价与旧工具边界见[配置专题 §3.2](configuration.md#32-仅-cron-的范围与代价)。
 
-| 类型 | 规则 |
-|---|---|
-| `at` | 已确认指定时刻单次执行，ISO 输入必须带 Z 或数值偏移且不另设 timezone，响应统一 UTC、不含小数秒；只接收整秒，过期拒绝仍待确定，见[配置 §3](configuration.md#3-配置字段与时间规则) |
-| `every` | 按固定时间表计算 occurrence，后续计划不随实际开始或完成时间移动；intervalSeconds 为整数秒，startAt 可选且固定保存/回显，创建缺省先等一个间隔，更新缺省重算；新设起点须未来，原样回传已保存起点允许；精确取时、停机和重叠处理待确认 |
-| `cron` | Spring 六字段 `second minute hour day-of-month month day-of-week`，使用已有 `CronExpression`；timezone 可省略，默认 Asia/Shanghai 并保存、回显有效值，不使用服务器默认时区；精确规则见[配置 §3.4](configuration.md#34-时区选择与确认边界) |
+时间响应统一 UTC 且不含小数秒；本节涉及的 maxLateness、补跑窗口、gap 与到期游标属于运行候选，不作为创建配置的必填字段或已确定策略。
 
 ### 4.1. 六字段表达什么
 
@@ -200,7 +196,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 | 权威对象 | 关键数据及约束 |
 |---|---|
-| `t_schedule` | id、可信 scope、agent_id、target_type/target_session_id、单条 user.message 配置、rule/timezone/anchor、status、revision、next_fire_at、候选 max_lateness、active_run_id、授权引用、创建/修改审计；消息存储形状及文件引用生命周期待定，修改/受理在行锁内复核 |
+| `t_schedule` | id、可信 scope、agent_id、target_type/target_session_id、单条 user.message 配置、cron_expression/timezone、status、revision、next_fire_at、候选 max_lateness、active_run_id、授权引用、创建/修改审计；消息存储形状及文件引用生命周期待定，修改/受理在行锁内复核 |
 | `t_schedule_run` | id、schedule_id、配置 revision 与安全配置快照、trigger_type、scheduled_at/manual_request_key、dispatch/execution 摘要、claim_owner/claim_epoch/lease_until、session_id/root_execution_id、实际 Agent 发布版本/摘要、关键时间和安全错误；不存完整消息与凭据 |
 | `t_schedule_gap` | schedule_id、revision、from/to、reason、可选准确数量及记录时间；只说明未创建执行的跳过范围，不合并已接受 Run |
 | 既有 Session/执行表 | 消息、工具结果、根执行/segment、等待和终态的权威；复用 M04/M06，不重建相同数据 |
@@ -241,7 +237,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 |---|---|
 | S1：独立任务管理 | 固定 M06 管理/Run 契约、DTO/VO、DDL和授权范围；规则预览、revision 冲突、暂停/恢复/归档及审计可验证；用户能确认时区和实际执行目标 |
 | S2：后台原子受理 | 新 Session/首消息/根执行/Run 同事务；故障注入覆盖提交前、提交后和回执丢失；重复 Run 键只返回原关联；明确 build/CRON、工具权限与 persistenceOnly 接线 |
-| S3：持久调度与恢复 | 两副本竞争仅一条受理；暂停/修改竞态可线性判定；崩溃恢复不重放 STARTING；时钟、DST、every 起点、漏跑 gap、重叠及限流有确定性验证 |
+| S3：持久调度与恢复 | 两副本竞争仅一条受理；暂停/修改竞态可线性判定；崩溃恢复不重放 STARTING；时钟、DST、Cron 未来匹配、漏跑 gap、重叠及限流有确定性验证 |
 | S4：结果与运营 | 后台完整 Session 历史可读、公共 Chat 映射可重试对账、取消指向原根、未知不显示成功；控制台能定位授权和执行失败 |
 | S5：已有会话 | 绑定/撤销授权、busy/plan 拒绝、会话删除、多任务竞争、追加历史和后续人工消息隔离均通过；不能用新会话替代验收 |
 | S6：旧 Cron 入口迁移 | 按可信 scope 迁移 Job，缺租户、时区或授权信息的记录保持禁用等待补全；切换时确保旧扫描器停用且旧在途任务已核对，不能双写双执行；Run 历史保留来源 |
@@ -262,6 +258,7 @@ S1～S4 是独立会话优先的候选拆分；S5 同属已确认需求，是否
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.13.0 | 2026-10-04 | 配置仅支持 Cron，名称上限对齐 256，并澄清附件和会话目标的能力边界。 |
 | 0.12.0 | 2026-10-02 | 定时任务时间统一秒级，并引用 Session 与完整事件共用的时间一致性规则。 |
 | 0.11.0 | 2026-09-30 | 绝对时刻响应统一 UTC 并固定三位毫秒，输入精度继续由配置契约细化。 |
 | 0.10.0 | 2026-09-30 | 明确 Cron 默认上海时区及 at/startAt 的输入偏移量，区分已定字段与待定输出规范。 |

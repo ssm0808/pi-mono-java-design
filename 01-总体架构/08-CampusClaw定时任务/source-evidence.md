@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.11.0 |
-| 核验日期 | 2026-10-02；各节保留实际核验日期与范围 |
+| 文档版本 | 0.12.0 |
+| 核验日期 | 2026-10-04；各节保留实际核验日期与范围 |
 | 产品范围 | 新建独立会话与绑定已有会话均需支持，优先支持独立会话；不据此预设已有会话的拒绝契约或交付阶段 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与两类目标的调度接线待实现；企业身份系统未核验 |
 
@@ -135,7 +135,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 | C10 | Claw 同 codingagent 根 `runtimeapi/agent/AgentDirectorySnapshotDTO.java`、`AgentDirectorySnapshots.java`；`runtime/MateServiceClient.java` · getAgentRuntime/AgentRuntime；`runtime/AgentRuntimeManager.java` · AgentIdentity | Runtime 元数据及目录身份有 version，但当前装配快照不含版本选择；远端查询仅按 agentId，无历史版本解析或 Environment 选择契约。缺的是可执行历史绑定，不是整个系统没有版本字段。 |
 | C11 | Claw 同根 `runtimeapi/web/RuntimeSessionController.java`；`session/RuntimeSessionUpdateService.java`；`persistence/MyBatisRuntimeSessionRepository.java` · updateSession | 既有 Session 更新使用 ETag/If-Match、428/412 与数据库锁内版本重验。Schedule 借鉴该模式；Mate Agent 更新仍为锁行后最后写入生效，不宣称全系统已经统一。 |
 | C12 | Claw `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java` · RuntimeApi.MAX_MESSAGE_CHARACTERS；同 codingagent 根 `runtimeapi/vo/UserMessageContentRequestVO.java` · TextRequestVO/FileRequestVO；`modules/cron/src/main/java/com/campusclaw/cron/model/CronPayload.java` · AgentPrompt | 普通文本上限262144，Runtime 已有文本和文件引用块，严格类型与未知字段检查。已确认配置输入为单条 user.message，可包含文本和现有文件引用；不扩成多初始事件或 system.message。旧 CronPayload 仍只有 agentId/prompt，输入保存与运行接线须迁移，不能直接宣称已支持调度附件。配置更新另须保留省略/null差异。 |
-| C13 | Claw `modules/cron/src/main/java/com/campusclaw/cron/model/CronSchedule.java` · At/Every/CronExpr；`engine/CronEngine.java` · computeNextDelay | 三类型已有，Cron 采用 Spring CronExpression；已确认继续使用 Spring 六字段，精确规则见[配置契约](configuration.md#spring-cron-contract)。原 every 按完成/创建时间计算，固定 startAt 仍是目标改动。六字段复用既有依赖，但不表示可以直接接收 Claude 五字段，亦不构成硬实时保证。 |
+| C13 | Claw `modules/cron/src/main/java/com/campusclaw/cron/model/CronSchedule.java` · At/Every/CronExpr；`engine/CronEngine.java` · computeNextDelay | 三类型已有，Cron 采用 Spring CronExpression；已确认继续使用 Spring 六字段，精确规则见[配置契约](configuration.md#spring-cron-contract)。旧 every 按完成/创建时间计算；新配置 HTTP 仅接受 Cron，不暴露或自动迁移旧 At/Every。六字段复用既有依赖，但不表示可以直接接收 Claude 五字段，亦不构成硬实时保证。 |
 | C14 | Claw 同 codingagent 根 `runtimeapi/web/RuntimeSessionController.java` · get/update/create | Claw 资源使用 sessionId；已有会话目标对应 existingSession/sessionId，不引入 Mate 的 chatId。两种目标均需支持，独立会话优先；现有 Session 201/Location 与 ETag/If-Match 可作接口风格依据。 |
 
 此前在 Mate 示例 Controller/Service/Mapper、`src/main/java`、resources 与 POM 范围，未观察公司认证适配、租户范围、Chat 映射或调度配置服务；这是历史样例边界，不推断其他部署。当前 [Claw 配置设计](configuration.md) 只要求其自身取得可信调用范围并校验绑定，具体适配待接线，不用读取 Header 代替认证证据。
@@ -208,7 +208,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 **Claude Managed Agents：只声明 Cron，独立手动运行。** 同日重读[创建接口](https://platform.claude.com/docs/en/api/http/beta/deployments/create)、[资源模型](https://platform.claude.com/docs/en/api/http/beta/deployments)及[Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)：schedule 为可空的 cron/expression/timezone，无 every/startAt；创建响应提供 upcoming_runs_at 供查看计划时刻，执行可能稍晚；显式 run 才用于即时试运行。它能支持“保存配置与试运行分开”的产品选择，不能支持 every 首次时间的结论。
 
-对 Claw 的影响：every 固定时间表、整数秒 intervalSeconds、可选 startAt、创建缺省先等一个间隔及固定起点保存/回显均已确认；更新省略起点重新起算，新设起点必须未来，回传当前保存的旧起点允许，具体规则由[配置契约 §3.2](configuration.md#32-三种类型的边界与待定细节)维护。DSH 的首次等待可作参照，但它没有显式 every 起点；pi 的首次立即与固定延迟也不能被当作同一语义。Claw 的取时点、重叠和补跑仍待确定，不能把产品选择归为基线统一规则。
+当前 Claw 配置仅支持 Cron；本节保留基线首次时间与间隔推进的历史源码事实，不将 every/startAt 作为现行 Claw 字段。基线间首次执行默认值不同，不能把任何一种默认值当作统一行业规则。
 
 本节为静态源码与公开文档核验。示例时间是按源码公式推导，未执行这些基线的产品任务或测试，未修改实现仓；完整运行、停机与企业调度验收仍需独立证明。
 
@@ -235,7 +235,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 **Codex 的公开资料不足以确定默认来源。** [plugin.rs:777](https://github.com/openai/codex/blob/d42056091aded7feb1d88ac7e83972108b2aa478/codex-rs/app-server-protocol/src/protocol/v2/plugin.rs#L777) 的 ScheduledTaskSummary/ScheduledTaskSchedule 未声明 timezone；同次检查 core-plugins/src、app-server/src/request_processors/plugins.rs、history/src/heartbeat.rs，所见为元数据与来源投影，未见时区解析。OpenAI Docs 的 [Scheduled tasks](https://learn.chatgpt.com/docs/automations) 同日重新搜索并读取，公开自定义计划和 RRULE，但未规定 timezone 字段是否必填或默认来源，不能用未公开细节支持 Claw 默认上海或节点时区。
 
-这些证据支持按时间类型决定是否需要时区，不支持统一行业默认值。Claw 已确认 Cron 时区可省略并默认保存、回显 Asia/Shanghai，at/startAt 须携带 Z 或数值偏移，at/every 不另设 timezone；这是面向主要园区场景的产品约束。绝对时刻输入与响应采用秒级，响应统一 UTC，精确规则只由[配置契约 §3.4](configuration.md#34-时区选择与确认边界)维护。本节仅静态读取源码和官方契约，未执行产品任务或时区测试。
+这些证据说明不存在统一行业默认时区。当前 Claw 仅支持 Cron，timezone 可省略并默认保存、回显 Asia/Shanghai；绝对时刻响应统一 UTC、秒级，精确规则由[配置契约 §3.4](configuration.md#34-时区选择与确认边界)维护。其他基线的 at/every 字段保留历史证据归属，不进入 Claw 当前契约。本节仅静态读取源码和官方契约，未执行产品任务或时区测试。
 
 <a id="runtime-time-format-evidence"></a>
 
@@ -257,7 +257,50 @@ Claw 的目标已统一为秒级：包含 Session createdAt/updatedAt、完整�
 
 2026-10-02 重新读取公开 Beta [Create Session](https://platform.claude.com/docs/en/api/http/beta/sessions/create) 与 [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create)。两者 created_at/updated_at 示例均使用 `2026-03-15T10:00:00Z`，未给出固定毫秒位数或只支持秒级的保证。没有调用实际 API，也没有公开服务端源码或数据库精度证据。CampusClaw 借鉴整秒表示并明确秒级限制，属于产品约束；不得据示例断言 Claude 的内部存储也是秒级。
 
+<a id="target-file-evidence"></a>
+
+### 8.6 名称、Cron 范围、文件与执行目标（2026-10-04）
+
+本节仅升级名称/时间类型、定时 Session 目标和 Claw 文件链路。开源仓均当日确认默认分支并隔离 fetch/按明确 commit 读取；托管产品重新读取官方文档，不推断内部实现。其他小节的提交与路径保留历史归属。本次静态核验未运行产品任务或上传端到端测试。
+
+| 基线 | 前次相关证据 → 本次基线 | 核验范围与变化 |
+|---|---|---|
+| Claw | main `553dcd5e2ff682f9684810a043b442b37a02e54a` → 同提交 | 当日重新 fetch；只升级文件引用、上传入口检索、前端附件、Read 与旧 CronPayload 的证据日期；其余 Cron/Runtime 观察仍属原小节 |
+| pi | main `ee602414c703be8da722ec56de7f2399e62581ac` → `200387122ca450d6387f033949423114a270b96c` | 旧 pico3/kinds/job.ts 已不存在；本次读取 agent-session-runtime.ts、agent-session.ts 与 packages/durable。不能替换旧链接 SHA 后继续宣称旧 Job 为现行实现 |
+| DeepSeek Harness | master `639ed015397290b3745d163aafe02ffee4aa3f84` → `5badb15009ae1756c3afe0ae0cef1faafc290ccc` | 版本 `0.2.1-alpha.1`；工具入口拆分为 packages/schedule/tool-schedule/src/index.ts；核验原 Session 绑定及冷 Session 恢复投递，不升级其他恢复策略 |
+| OpenCode | dev `2fa3363c924c5c3e367b84a87ae478296a0ed59b` → `907b3bc518fa48e90e8ec24dd327d13eee71c36c` | GitHub 文档、Action inputs、handler、Session 协议四条路径无 diff；默认 dev 快照不等于稳定发布 |
+| Claude Managed Agents | 官方文档 2026-10-04；Beta | [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create)、[Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)、[Upload File](https://platform.claude.com/docs/en/api/http/beta/files/upload)：name maxLength=256；可空 schedule 只声明 cron；每次新 Session；POST /v1/files 独立上传，Deployment 文件资源引用 file_id |
+| OpenAI 宿主 Scheduled tasks | [官方文档](https://learn.chatgpt.com/docs/automations)，2026-10-04 | 明确独立任务每次新聊天、聊天内计划使用原上下文；支持从 Codex 聊天配置。证明宿主产品两种模式，不证明开源 harness 有同形 HTTP target 或自有调度器；本节未更新 Codex 开源证据 |
+
+**定时目标不是统一的二选一契约。**
+
+| 来源、路径与符号 | 已观察行为及参考边界 |
+|---|---|
+| DSH [tool-schedule/src/index.ts:475](https://github.com/deepseek-ai/deepseek-harness/blob/5badb15009ae1756c3afe0ae0cef1faafc290ccc/packages/schedule/tool-schedule/src/index.ts#L475)；[schedule/src/index.ts:228](https://github.com/deepseek-ai/deepseek-harness/blob/5badb15009ae1756c3afe0ae0cef1faafc290ccc/packages/schedule/schedule/src/index.ts#L228) · ScheduleService.create（256 写 sessionId） | 工具把 agent.session.id 作为可信目标传入，模型请求不能另选一个 Session |
+| DSH [runtime.ts:101](https://github.com/deepseek-ai/deepseek-harness/blob/5badb15009ae1756c3afe0ae0cef1faafc290ccc/packages/schedule/schedule/src/runtime.ts#L101) · resolveAgent/followup/flush；[README:157](https://github.com/deepseek-ai/deepseek-harness/blob/5badb15009ae1756c3afe0ae0cef1faafc290ccc/packages/schedule/schedule/README.md#L157) | 到期解析/恢复 task.sessionId，将 reminder 投递到原 Session；明确不支持跨 Session 投递或每次新建。持久 inbox 投递不表示业务完成；alpha 不能当作稳定企业调度规范 |
+| OpenCode [github.handler.ts:501](https://github.com/anomalyco/opencode/blob/907b3bc518fa48e90e8ec24dd327d13eee71c36c/packages/opencode/src/cli/cmd/github.handler.ts#L501) · githubRun/sessionSvc.create；[github/action.yml:7](https://github.com/anomalyco/opencode/blob/907b3bc518fa48e90e8ec24dd327d13eee71c36c/github/action.yml#L7) | GitHub schedule 每次创建新 Session 再 chat；Action 输入没有目标 Session 字段 |
+| OpenCode [groups/session.ts:129](https://github.com/anomalyco/opencode/blob/907b3bc518fa48e90e8ec24dd327d13eee71c36c/packages/protocol/src/groups/session.ts#L129) · makeSessionGroup（205 为 prompt） | 普通会话创建和指定 Session prompt 是即时能力，不是定时 target；已查 server/session/tool/schema/protocol 范围未发现同形用户定时配置，v2 仍按源码范围陈述 |
+| pi [agent-session-runtime.ts:196](https://github.com/badlogic/pi-mono/blob/200387122ca450d6387f033949423114a270b96c/packages/coding-agent/src/core/agent-session-runtime.ts#L196) · switchSession/newSession（226）；[agent-session.ts:2180](https://github.com/badlogic/pi-mono/blob/200387122ca450d6387f033949423114a270b96c/packages/coding-agent/src/core/agent-session.ts#L2180) · followUp | 普通会话新建、恢复与后续输入机制；不等于 Cron target 二选一 |
+| pi [durable/src/harness/scheduler.ts:160](https://github.com/badlogic/pi-mono/blob/200387122ca450d6387f033949423114a270b96c/packages/durable/src/harness/scheduler.ts#L160) | Harness 内持久任务推进器；所查 core、experimental、durable 与调度相关路径未发现 CampusClaw 式 Cron 配置资源与目标联合类型 |
+
+**Claw fileId 引用不等于文件上传或内容读取。** 以下路径均为 Java `553dcd5e2ff682f9684810a043b442b37a02e54a`；R 表示 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 相对路径与符号 | 已观察能力或缺口 |
+|---|---|
+| R/runtimeapi/vo/UserMessageContentRequestVO.java · FileRequestVO（71）；UserMessageEventRequestVO.java（35）；modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java（122） | 已有 type=file/fileId 引用，32 位十六进制，最多四个、不重复；文本如有须第一块 |
+| R/runtimeapi/event/RuntimeEntryCodec.java · userEntry/toUserMessage/toAgentPrompt（377）、文件 ID 文本拼接（421）；RuntimeCommittedEventFactory.java · userMessage（50） | 保存 file_ids 并回显引用；模型输入仅是包含 [File IDs] 的 TextContent，没有下载、解析、文件存在性或长期权限检查 |
+| frontend/src/components/ComposerBox.vue（138） | 附件按钮 disabled，提示“暂未接入附件上传” |
+| modules、campusclaw、frontend；Runtime/ControlPlane Controller 路由 | MultipartFile、RequestPart、multipart/form-data、upload 检索及控制器映射未发现 Claw 专用上传 HTTP 接口；不推断外部公司文件服务能力 |
+| R/tool/read/ReadTool.java · execute（107） | 受管工作区 path 的 UTF-8 文件读取，非 fileId 下载/上传服务 |
+| modules/cron/src/main/java/com/campusclaw/cron/model/CronPayload.java · AgentPrompt（21） | 旧 Cron 输入仅 agentId/prompt；新定时消息及附件读取链路待实现 |
+
+同时读取 [M09 附件设计 3.1.0](../../02-服务与接口/01-CampusMate附件服务/README.md)全文及 attachment-api.openapi.yaml 的文件 ID/解析约束：目标上传归属 mate-service，文件不可变绑定单个 Session，跨 Session resolve 拒绝，设计 ID 为 file_<26 alnum>。它标记待实现，外部服务当前实现未核验；与现行 Runtime ID 格式、新建 Session 反复引用同一文件存在未解决的接入差距。本次只记录差距，不修改附件权威契约。
+
+CampusClaw 的目标是保留两种 Session 选择、单条 user.message 及文件引用形状；复用 M09 既有上传职责，定时跨 Session 访问、受权解析/读取和生命周期衔接另行设计。名称上限 256、仅 Cron 是当前产品约束；Spring 六字段和默认上海时区继续有效，不声称已与 Claude 完全兼容。统一 target 及显式选择已有 Session 是产品扩展，现有文件引用则只是可复用基础，不是完整附件能力。
+
 ## 9. 文档验收
+
+2026-10-04 在 HEAD 加本任务六份 Markdown 的隔离快照执行 `check-diagrams.py --render`、API 技能校验和图索引生成：36 个专题、131 个块、52 张时序图，0 错误；唯一复杂度提示仍为既有 managed_session_compaction，沿用下述职责解释。五个 JSON 示例及变更文档的本地路径、标题锚点检查通过，实际工作树 `git diff --check` 通过。图源和三个 SVG 均未变更，已重新查看原尺寸与 840px 宽度，未见文字、箭头或分支遮挡；图索引生成结果与 HEAD 相同，未覆盖工作树中的无关修改。当前没有 OpenAPI/HTML 精确契约，相关检查不适用；未运行产品实现测试，本次不新增 Maven 依赖。
 
 2026-09-30 的 0.4.0 文档校验已执行：PlantUML 生成、API 技能校验、仓库级 `check-diagrams.py --render` 与 `git diff --check` 通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示仍为既有 managed_session_compaction 的三个条件组，职责解释沿用[时序图规范](../../时序图规范.md#3-从总览下钻)。三个 JSON 示例解析通过，Spring 示例与拒绝边界见 §8.1；未运行产品 Maven 测试或集群验收。当前无 OpenAPI/HTML 精确契约，相关校验不适用。
 
@@ -273,6 +316,7 @@ Claw 的目标已统一为秒级：包含 Session createdAt/updatedAt、完整�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.12.0 | 2026-10-04 | 重核名称与仅 Cron 契约，补充文件上传边界及五个基线的定时会话目标证据。 |
 | 0.11.0 | 2026-10-02 | 核对 Claude 时间示例边界，区分既有毫秒实现与 Claw 统一秒级目标。 |
 | 0.10.0 | 2026-09-30 | 补充既有 Session 与完整事件时间证据，明确调度响应采用 UTC 并固定三位毫秒。 |
 | 0.9.0 | 2026-09-30 | 同步已确认的 Cron 默认上海及绝对时间输入规则，保留旧实现和基线时区证据。 |

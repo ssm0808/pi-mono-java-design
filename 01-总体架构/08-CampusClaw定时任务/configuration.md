@@ -4,12 +4,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.11.0 · 2026-10-02 |
+| 版本 | 0.12.0 · 2026-10-04 |
 | 状态 | 已确认能力与 proposed 接口形状分开记录；新接口待实现、尚未发布，整项操作尚未完成确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、时间预览；不定义 Mate 接口或页面实现 |
 | 产品范围 | 支持新建独立 Session 与继续已有 Session，独立 Session 优先；具体交付批次待确定 |
-| 源码基线 | Claw main `553dcd5e2ff682f9684810a043b442b37a02e54a`；2026-09-29 确认并 fetch，2026-09-30 重读该提交的调度范围 |
-| 对照 | Claude Managed Agents 公开 Beta HTTP API；2026-09-29 核对调度文档，2026-09-30 核对创建输入与 Cron 方言，2026-10-02 核对时间示例与精度边界 |
+| 源码基线 | Claw main `553dcd5e2ff682f9684810a043b442b37a02e54a`；2026-09-29 确认并 fetch，2026-09-30 重读该提交的调度范围；2026-10-04 重新 fetch 同提交并核验文件链路 |
+| 对照 | Claude Managed Agents 公开 Beta HTTP API；2026-09-29 核对调度文档，2026-09-30 核对创建输入与 Cron 方言，2026-10-02 核对时间示例与精度边界；2026-10-04 重核名称、Cron 范围、执行目标及 Files API |
 
 ## 1. 业务结果与接口边界
 
@@ -17,7 +17,7 @@
 
 已确认的创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 路径、返回与运行细节待设计。每次执行输入为一条 `user.message`，新建 Session 时作为首条任务消息，已有 Session 时作为新增消息；Cron 沿用 Spring 六字段。
 
-时间规则已确认支持 `cron`、`at`、`every`：分别覆盖日历周期、指定时刻单次执行和间隔重复任务。every 使用整数秒字段 intervalSeconds，按固定时间表触发；startAt 可选，创建时省略则等待一个完整间隔，最终起点保存并在创建响应和详情回显。更新省略起点时重算，新起点必须是未来时间，原样回传已保存旧起点允许保留；精确规则见 §3.2。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；at/startAt 必须携带明确偏移量，at/every 不另设 timezone，见 §3.4。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。服务端取时点、at 的过期处理及执行后状态仍需细化。
+时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 已确认约束。
 
 除明确标记已确认的字段外，下文状态模型、其余字段名、路径和错误码仍为 proposed。候选新建状态为 `ACTIVE`，创建处理器不直接调用模型或创建 Session；自动执行由后续调度触发。暂停、恢复、显式试运行、归档和运行记录的精确契约另行设计，不能把下列五个配置接口当作完整产品接口清单。
 
@@ -47,21 +47,21 @@ Claw 必须在服务认证边界取得可信调用者和管理作用域，再按
 
 | 字段 | 创建与更新约束 |
 |---|---|
-| name | 创建必填；去首尾空白后 1～128 个 Java 字符；允许重名，不作为身份 |
+| name | 创建必填；去首尾空白后 1～256 个 Java 字符；允许重名，不作为身份 |
 | description | 可选，最多 2048 个 Java 字符；创建省略默认 null，更新省略保持，空白或显式 null 清除；不附加到模型输入 |
 | agentId | 创建必填；复用 `ClawConstants.Agent.ID_REGEX`，验证存在、可用和当前调用者的配置资格；只绑定 Agent 身份，不保证固定历史版本 |
 | target | 创建必填；`{ "type": "newSession" }` 或绑定已有 Session；两种目标均属于需求范围 |
-| message | 创建必填；一条 `type:"user.message"`，content 复用现有文本与文件引用格式；外层字段名 message 为候选，附件长期保留与到期访问规则待确定；不开放 system.message 或 user.define_outcome |
-| schedule | 可选；创建省略默认 null，更新省略保持；非空为下表的联合类型，更新时整体替换 |
+| message | 创建必填；一条 `type:"user.message"`，content 复用现有文本与 fileId 引用格式；引用不等于上传或文件内容可读，见 §3.6；外层字段名 message 为候选，附件长期保留与到期访问规则待确定；不开放 system.message 或 user.define_outcome |
+| schedule | 可选；创建省略默认 null，更新省略保持；非空时只允许下表的 cron 对象，更新时整体替换 |
 | status/revision/id/createdAt/updatedAt | 全部只读；新建 ACTIVE、revision=1，时间为 UTC ISO 8601，秒级且无小数；status 为 ACTIVE/PAUSED/ARCHIVED，ARCHIVED 不可修改 |
 
-以下为候选请求形状；类型范围、Spring 六字段、every 固定时间表、整数秒 intervalSeconds、§3.2 的 startAt 行为及 §3.4 的时区、输入偏移量及 秒级输入与 UTC 响应规则已确认；其他未明确确认的约束仍为 proposed。
+以下为候选请求形状；名称上限 256、仅 Cron、Spring 六字段、默认上海时区和秒级 UTC 响应规则已确认；其他未明确确认的约束仍为 proposed。
 
-| schedule.type | 候选完整输入 | 语义与确认边界 |
+| schedule.type | 完整输入 | 语义与确认边界 |
 |---|---|---|
-| cron | type、expression、timezone（可选） | Spring 六字段 `second minute hour day-of-month month day-of-week`；timezone 使用 IANA 名称，省略默认 Asia/Shanghai，保存并回显有效值；拒绝五字段，不自动补秒 |
-| at | type、at | 已确认指定时刻单次执行，ISO 8601 输入必须携带 Z 或数值偏移，不另设 timezone，响应统一 UTC、秒级且无小数；创建/替换时拒绝过去时刻仍为候选 |
-| every | type、intervalSeconds、startAt（可选） | 已确认 intervalSeconds 为整数秒，按固定时间表重复，startAt 可选且显式输入须带 Z 或数值偏移，不另设 timezone，响应中的 startAt 统一 UTC、秒级且无小数；保存、回显与更新规则见 §3.2。间隔必须为正；最小/最大间隔与精确取时点待确定 |
+| cron | type、expression、timezone（可选） | type 固定为 cron；Spring 六字段 `second minute hour day-of-month month day-of-week`；timezone 使用 IANA 名称，省略默认 Asia/Shanghai，保存并回显有效值；拒绝五字段，不自动补秒 |
+
+名称允许重名，不承载资源身份。256 的上限与 Claude 的 maxLength 对齐；不另设缺少业务依据的 128 限制。当前长度校验沿用 Java 字符计数；本次未验证两端对补充 Unicode 字符的计数是否完全一致。
 
 <a id="spring-cron-contract"></a>
 
@@ -86,31 +86,21 @@ Claw 必须在服务认证边界取得可信调用者和管理作用域，再按
 
 各字段支持 Spring 的列表、范围、步长及其日期扩展，具体匹配以项目使用的 Spring `CronExpression` 为准；宏快捷写法是否开放另行确定，不能仅因解析器接受就纳入本 API。月内日期与星期同时受限时要求同时匹配：`0 0 8 1 * MON` 表示“每月 1 日且为周一的 08:00”，不能按 POSIX 常见的日期或星期匹配方式解读。时区由显式 timezone 或 §3.4 的服务端默认值确定并保存，避免运行节点配置改变计划含义。[官方语法](https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/scheduling/support/CronExpression.html)
 
-### 3.2. 三种类型的边界与待定细节
+### 3.2. 仅 Cron 的范围与代价
 
-Cron 不能完整替代 at/every。`0 0 8 1 10 *` 表示每年 10 月 1 日 08:00，不表达某一年的单次执行；`0 */7 * * * *` 在每个小时内匹配 0、7、14、21、28、35、42、49、56 分，跨小时最后一段只有 4 分钟，不等于从任意起点连续每隔 7 分钟。三种类型对应不同业务语义，不将单次计划或任意间隔强行转换成 Cron。
+非空 schedule 只接受 `type:"cron"`。创建、更新和预览使用同一限制；其他类型及 at、intervalSeconds、startAt 等额外字段均拒绝，不尝试转换成 Cron。仅手动运行继续用 schedule 省略或 null 表达，即时测试通过独立运行操作完成。
 
-every 按固定时间表触发。首次计划时刻为 T、固定间隔为 Δ 时，第 n 次计划为 `T + n × Δ`（n 从 0 开始），不根据实际开始或完成时间重设后续计划。例如首次为 10:00、间隔 10 分钟，即使本次耗时 3 分钟，后续计划仍为 10:10、10:20。该规则便于稳定预览，不保证实际准点开始，也不决定上一轮尚未结束、停机或迟到时采用跳过、排队还是补跑；这些执行策略另行确定。
+这一范围与 Claude Deployment 的仅 Cron 取舍一致，减少一次性任务耗尽、间隔起点和更新重置等契约。代价是本接口不支持未来指定时刻只执行一次，也不支持从任意起点连续按固定秒数重复。`0 0 8 1 10 *` 会每年匹配 10 月 1 日，不是指定某年的一次性任务；`0 */7 * * * *` 每小时重新匹配，不能冒充严格每隔 7 分钟。
 
-`every.startAt` 可选，显式值表示第一次计划时间 T。创建时省略则等待一个完整间隔后首次触发：设创建采样时间为 B、间隔为 Δ，则首次计划时间 T = ceilToSecond(B + Δ)；整秒采样时等于 B + Δ，后续为 T + n × Δ。例如 B 为 10:00、间隔 10 分钟，计划时间为 10:10、10:20、10:30。此默认行为不适用于完全省略 schedule 的配置；后者只保存，不登记自动计划。可选仅表示允许省略，显式 null 是否接受仍待确定。
-
-服务端保存最终确定的 startAt，创建响应与详情均返回该固定起点；重试、读取和重启复用已保存值，不能按当前时间重新计算，startAt 也不随每次触发向后推进。向上取整只用于默认计划起点，保证等待不少于一个完整间隔；记录时间仍按 §3.4 截断。创建基准 B 的精确取时点及预览默认值与保存值的关系仍待确定。
-
-更新省略整个 schedule 时保留原计划；提交 every 规则但省略 startAt 时重新起算，首次计划为更新基准加本次 intervalSeconds 后向上取整到秒。显式传回已保存起点则保留它，可同时修改间隔。新设 startAt 必须严格晚于校验基准；更新为与当前已保存 every 起点相同的时刻时，即使它已过去也允许保留，这一例外不要求间隔也不变。原值比较应按同一绝对时刻，不能只比较时间字符串。已有任务的停机、重叠、补跑策略不由此推定。
-
-同一幂等键的原请求重试返回原结果，不重算起点。以新键提交省略 startAt 的 every 规则会应用新的更新基准；即使间隔相同，也不能仅据输入间隔相同就当作无变化。规范化后的完整规则相同才按未修改处理。这里只冻结起点行为，不代表更新操作的完整 HTTP 契约已确认。
-
-at/startAt 的 ISO 8601 输入必须携带 Z 或数值偏移，at/every 不另设 timezone，见 §3.4。响应统一规范化为 UTC、以 Z 结尾且不含小数秒，输入只接受整秒；调用方以其他合法偏移量回传同一绝对时刻时，仍按同一原值判断。已有规则只修改名称等字段时，不因其起点已过去而拒绝或重设起点。旧 CronTool 的 every 字符串值及内部 intervalMs 使用毫秒，新 HTTP 的 intervalSeconds 使用秒；不自动将两套报文互认或迁移，旧毫秒间隔可能无法无损表示为整数秒。旧 CronEngine 使用完成时间基准；目标固定时间表属于需独立验收的语义变更，不能称为原样复用。
+旧 CronTool/CronSchedule 中 At/Every 的实现保留为既有源码事实；新配置 HTTP 不暴露这些类型。旧任务不自动迁移成 Cron，也不直接删除旧类型及其调用方；旧入口的兼容与迁移由独立切片处理。收敛时间类型不改变 Spring 六字段、默认上海时区、两种 Session 目标或显式试运行的既有决定。
 
 ### 3.3. 预览与运行时间响应候选
 
-候选预览输入为 `{ "schedule": { ... } }`，schedule 必须非空；返回 result `{schedule, computedAt, upcomingRunsAt}`。computedAt 由服务端采样；upcomingRunsAt 是严格晚于它、按升序排列的最多五个 UTC 计划时刻，at 最多一个。every 根据固定时间表计算，可用过去的起点预览未来；已过期 at 或无未来匹配的 Cron 返回 `SCHEDULE_RULE_INVALID`，不改动已保存资源。
+候选预览输入为 `{ "schedule": { ... } }`，schedule 必须非空；返回 result `{schedule, computedAt, upcomingRunsAt}`。computedAt 由服务端采样；upcomingRunsAt 是严格晚于它、按升序排列的最多五个 UTC 计划时刻；无未来匹配的 Cron 返回 `SCHEDULE_RULE_INVALID`，不改动已保存资源。
 
 创建、详情、更新是否直接返回只读 upcomingRunsAt/lastRunAt、字段放置与 lastRunAt 的事件含义仍待确认；增加动态字段时需同步修正配置版本与完整响应 ETag 的关系。下文报文暂保留配置表示，不将这一候选结构当成已完成的 Claude 响应对齐。
 
-预览与写入复用同一时间策略，保存重新校验，不把预览当作准入凭证。预览是规则计算值，不是实际开始时间保证，也不是当前调度游标。频率、间隔与配额由部署策略约束；超过范围返回稳定的策略错误，策略本身未配置则服务不可用，不能默许无限频率。DST 与解析库版本边界必须验收，本接口不复制 Claude 的 jitter 承诺。
-
-已有会话使用候选 `target={type:"existingSession",sessionId:"..."}`，沿用 Claw 已有 Session ID，不引入 chatId。要求目标存在、可访问、未删除且归属于同一 agentId；更新 agentId/target 后对最终组合整体校验。保存不要求此刻 idle，实际投递准入另定；目标失效不能回退新建。独立会话优先不等于已决定首版拒绝已有会话。
+预览与写入复用同一时间策略，保存重新校验，不把预览当作准入凭证。预览是规则计算值，不是实际开始时间保证，也不是当前调度游标。频率与配额由部署策略约束；超过范围返回稳定的策略错误，策略本身未配置则服务不可用，不能默许无限频率。DST 与解析库版本边界必须验收，本接口不复制 Claude 的 jitter 承诺。
 
 ### 3.4. 时区选择与确认边界
 
@@ -128,20 +118,36 @@ Cron 的 timezone 可省略，服务端默认使用 Asia/Shanghai；显式提供
 { "type": "cron", "expression": "0 0 8 * * MON-FRI", "timezone": "Asia/Shanghai" }
 ```
 
-at/startAt 的输入字符串必须携带 Z 或数值偏移，例如 `2026-10-01T08:00:00+08:00`；不接受没有偏移量的本地时间。at/every 不设置独立 timezone 字段：单次时刻与间隔起点已由输入确定，every 后续按固定秒数计算，不按日历时区推进。调用方的展示时区不改变计划含义。
+定时任务绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，适用于 createdAt/updatedAt 及后续明确的预览、运行时间字段。Session 与完整事件同步采用这一目标；[秒级时间一致性](../01-CampusClaw多Agent运行时/time-contract.md)维护写入规范化、存储与回显要求。Cron 的 timezone 仍回显已保存的 IANA 名称。当前创建/更新请求不接收绝对计划时间字段；此格式规则不确认预览或运行字段本身的新增范围。
 
-定时任务绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，适用于 schedule.at、schedule.startAt、createdAt/updatedAt 及后续明确的预览、运行时间字段。Session 与完整事件同步采用这一目标；[秒级时间一致性](../01-CampusClaw多Agent运行时/time-contract.md)维护写入规范化、存储与回显要求。Cron 的 timezone 仍回显已保存的 IANA 名称。此格式规则不确认预览或运行字段本身的新增范围。
+服务端生成记录时间先转 UTC 并截断到秒再保存和响应，Cron 计算得到的计划时间按秒表示。秒级表示不承诺准时启动。[既有实现证据](source-evidence.md#runtime-time-format-evidence)保留当前毫秒实现与目标差距，不能把目标规则表述为现状。
 
-| 输入 | 处理 |
-|---|---|
-| `2026-10-01T08:00:00+08:00` | 保存并回显 `2026-10-01T00:00:00Z` |
-| `2026-10-01T00:00:00Z` | 保存并回显同值 |
-| `2026-10-01T08:00:00.123+08:00` | 拒绝小数秒，不截断后执行 |
-| `2026-10-01T00:00:00.000Z` | 同样拒绝小数秒 |
+[2026-09-30 时区专项的历史证据](source-evidence.md#timezone-evidence)区分 DSH Cron 必填时区、GitHub Actions 可选时区且默认 UTC、pi 无日历时区字段及 Codex 尚未核实的默认来源；不存在据此可推导的统一行业默认值。默认上海是 CampusClaw 已确认的产品约束，方便主要园区场景配置；代价是调用方省略字段时采用了产品预设，必须通过保存和回显使该选择可见。
 
-服务端生成记录时间先转 UTC 并截断到秒再保存和响应；计划输入必须是整秒，不能静默丢失计划精度。失败返回候选 SCHEDULE_RULE_INVALID 且不写入。秒级表示不承诺准时启动。[既有实现证据](source-evidence.md#runtime-time-format-evidence)保留当前毫秒实现与目标差距，不能把目标规则表述为现状。
+### 3.5. target：本次输入进入哪个会话
 
-[基线时区证据](source-evidence.md#timezone-evidence)区分 DSH Cron 必填时区、GitHub Actions 可选时区且默认 UTC、pi 无日历时区字段及 Codex 尚未核实的默认来源；不存在据此可推导的统一行业默认值。默认上海是 CampusClaw 已确认的产品约束，方便主要园区场景配置；代价是调用方省略字段时采用了产品预设，必须通过保存和回显使该选择可见。
+两种目标能力均属于已确认需求，新建独立 Session 优先；外层字段、枚举和下表校验仍是候选接口形状，不因基线比较直接确认整项操作。
+
+| 目标 | 候选完整输入 | 正常执行与上下文 | 失败与边界 |
+|---|---|---|---|
+| newSession | `{"type":"newSession"}`，不接收 sessionId | 每次触发创建不同 Session，把同一配置的 user.message 作为首条输入；不自动复制此前 Run 的聊天历史，Agent 配置和受管资源按既有装配规则提供 | 新建/受理失败记录本次原因；每次新 Session 不保证外部业务无重复，也不意味着自动清空共享文件或业务状态 |
+| existingSession | `{"type":"existingSession","sessionId":"..."}` | 绑定指定已有 Session，每次追加 user.message，按既有历史恢复/压缩规则延续上下文；多次 Run 可以关联同一个 Session | 保存校验目标存在、可访问、未删除且归属同一 agentId；执行时重新准入。失效不回退新建，忙碌/plan 状态的跳过或等待策略尚待确定 |
+
+例如“每天独立生成设备告警日报”适用 newSession；“每天继续分析这个能耗异常会话并跟进昨日结论”适用 existingSession。target 选择 Session 容器，schedule 选择何时触发，两者独立；仅 Cron 不要求删除已有 Session 目标。
+
+更新 agentId/target 后对最终组合整体校验；保存不要求目标此刻 idle，不能把保存时状态当作未来准入保证。existingSession 使用 Claw sessionId，不引入 Mate chatId，不借用会话历史 Token。每个 Run 应绑定本次消息和根执行，后续人工聊天不能改写该 Run 的结论；精确回执由运行接口继续定义。
+
+[2026-10-04 基线核验](source-evidence.md#target-file-evidence)表明：Claude Deployment 每次新建；DSH alpha 提醒绑定原 Session；OpenCode 官方 GitHub schedule 每次创建 Session；OpenAI 宿主 Scheduled tasks 提供独立新聊天和原聊天两种模式。pi 普通会话的新建/恢复不等于定时 target 契约。统一 target 并允许管理入口显式绑定一个已有 Session 是 CampusClaw 的产品扩展，不能称为行业统一 Schema。
+
+### 3.6. 文件引用与上传边界
+
+当前 Claw 已实现的普通 Session 消息块是 `{"type":"file","fileId":"0123456789abcdef0123456789abcdef"}`：ID 为 32 位十六进制，最多四个、不重复；文本块如有必须位于第一项。它能保存引用并在完整事件中回显，不接收 multipart 文件字节。
+
+2026-10-04 在 Java main `553dcd5e2ff682f9684810a043b442b37a02e54a` 的 modules、campusclaw、frontend 及 Runtime/ControlPlane Controller 范围未发现 Claw 上传路由；前端附件按钮明确禁用。RuntimeEntryCodec 仅把 fileId 转成 `[File IDs]` 文本交给模型，未下载、解析或验证文件可读性；Read 工具按工作区 path 读取文件，不能自动充当 fileId 解析器。精确路径见[文件证据](source-evidence.md#target-file-evidence)。
+
+既有 [M09 附件设计](../../02-服务与接口/01-CampusMate附件服务/README.md)把上传、扫描与文件存储归于 mate-service，把 Claw 定位为引用及内容消费者；该设计标记待实现，不能当作当前上传实现。其附件不可变绑定单个 Session、内部 resolve 拒绝跨 Session，且文件 ID 格式仍为 file_<26 alnum>，与当前 Runtime 的 32 位十六进制引用未对齐。
+
+定时消息复用 fileId 形状是待实现目标；旧 CronPayload 只有纯文本。“每次新建 Session 且重复使用同一巡检标准附件”无法直接套用上述 Session 绑定，需在 M09/M10 衔接时明确授权引用或复制机制、ID 契约、保存期限、执行时读取及删除后的失败行为；此处不擅自选择其中一种。外部 Mate/附件服务实现本次未核验。Claude 的独立 Files API 和 Deployment resources 文件挂载是对照能力，不能视作 Claw 已有接口。
 
 ## 4. 创建、读取与更新报文
 
@@ -211,7 +217,7 @@ GET 详情返回同形资源及当前 ETag。列表允许 pageIndex/pageSize/nam
 }
 ```
 
-成功返回完整资源及新 ETag。更新至少提供 name/description/agentId/target/message/schedule 中一个字段；省略保持，description/schedule 显式 null 清除，其他所列顶层字段的 null 拒绝。嵌套 timezone/startAt 的 null 语义仍待确定。target/message/schedule 整体替换，`{"schedule":{"timezone":"UTC"}}` 不合法。先与已保存配置合并，再校验最终整体，任一错误则全部不改。拒绝未知字段、错误 JSON 类型和只读字段；同值更新不增 revision，但记录请求结果。
+成功返回完整资源及新 ETag。更新至少提供 name/description/agentId/target/message/schedule 中一个字段；省略保持，description/schedule 显式 null 清除，其他所列顶层字段的 null 拒绝。嵌套 timezone 的 null 语义仍待确定。target/message/schedule 整体替换，`{"schedule":{"timezone":"UTC"}}` 不合法。先与已保存配置合并，再校验最终整体，任一错误则全部不改。拒绝未知字段、错误 JSON 类型和只读字段；同值更新不增 revision，但记录请求结果。
 
 更新保持 ACTIVE/PAUSED 状态；清除 schedule 只移除未来自动计划，不取消在途 Session。变更后的 revision 供后续受理使用，不修改已接受输入；仅改 message 等字段不重置时间规则。更新与到期受理须有明确的事务先后关系，具体 worker 机制不在此定义。
 
@@ -248,7 +254,7 @@ If-Match 用于防止覆盖别人修改，Idempotency-Key 用于重放同一次�
 | 409 `SCHEDULE_AGENT_DISABLED` / `SCHEDULE_ARCHIVED` / `SCHEDULE_TARGET_CONFLICT` | Agent 禁用、配置已归档或目标与 Agent 绑定不符 |
 | 409 `SCHEDULE_REQUEST_CONFLICT` / `SCHEDULE_REQUEST_IN_PROGRESS` / `SCHEDULE_REQUEST_RESULT_EXPIRED` | 请求键冲突、原请求进行中或原响应过期；不得换键自动重发 |
 | 428 `SCHEDULE_VERSION_REQUIRED`；412 `SCHEDULE_VERSION_CONFLICT` | 缺少 If-Match；或版本已变化 |
-| 422 `SCHEDULE_POLICY_REJECTED` | 规则超出部署频率/间隔/配额策略 |
+| 422 `SCHEDULE_POLICY_REJECTED` | 规则超出部署频率/配额策略 |
 | 503 `SCHEDULE_SERVICE_UNAVAILABLE` | 目录、持久化、准入策略或所需运行依赖不可用 |
 
 错误体固定只有 resCode/resMsg；按稳定错误码分支，不解析文案。字段错误按 name、description、agentId、target、message、schedule 的固定顺序返回首个错误；每个 Java enum、resCode、MessageSource key 同名。错误不泄露凭据、内部堆栈或用户消息；响应丢失不能据503或断网推断原请求未提交。
@@ -261,6 +267,7 @@ If-Match 用于防止覆盖别人修改，Idempotency-Key 用于重放同一次�
 
 | 决策 | Claude 公开契约 | Claw 推荐目标、理由与代价 | 分类 |
 |---|---|---|---|
+| 名称长度 | name 的 maxLength 为 256 | 名称上限同为 256，不增加缺少业务依据的限制；Java 字符计数不声明为已验证的跨语言 Unicode 等价 | 参考基线 |
 | 配置资源 | Deployment 绑定 Agent、环境、初始事件和可选规则 | Schedule 绑定 Agent、目标、单条用户消息和可选规则；保留配置与 Session 执行分离，范围聚焦现有调度领域，不建设完整部署平台 | 架构范围 |
 | 创建即登记计划 | 提供 schedule 后自动触发，新建示例为 active | 同样登记自动计划；创建处理器不直接运行。不能因为先开发配置就永久默认 PAUSED；运行未接线应限制发布 | 参考基线，无额外启用流程 |
 | 执行目标 | 每次触发创建新 Session | 两种目标均需支持，newSession 优先；existingSession 增加目标授权、上下文和并发准入责任，交付批次另定 | 产品扩展 |
@@ -270,7 +277,7 @@ If-Match 用于防止覆盖别人修改，Idempotency-Key 用于重放同一次�
 | 时间表达 | 五字段 POSIX Cron，IANA 时区 | 采用 Spring 六字段，复用现有解析器且不新增 Maven 依赖；代价是 Claude 表达式不能直接复制，日/周组合语义也不同。[固定与动态调度场景](README.md#spring-scheduling)说明框架能力和执行边界 | 产品约束（方言选择）、实现成本取舍 |
 | 时间精度 | 创建 Session/Deployment 示例为整秒 UTC；公开文档未保证只支持秒级或披露数据库精度 | Claw 明确仅支持秒级，Session、完整事件与定时任务一致；降低展示和存储差异，代价是放弃这些字段的亚秒时间差。见[时间证据](source-evidence.md#claude-time-precision-evidence) | 产品约束 |
 | Cron 时区 | timezone 必填，使用 IANA 名称 | timezone 可省略，默认 Asia/Shanghai，保存并回显有效值；适配主要园区场景，代价是调用方需了解省略时采用的产品预设，不能继承运行节点默认值 | 产品约束 |
-| 单次与间隔 | 上述 schedule 模型只声明 cron | 已确认支持 at/every；every 使用整数秒 intervalSeconds 与可选固定 startAt，创建缺省先等一个间隔，保存并回显起点，更新缺省重算；具体见 §3.2。精确取时与运行恢复待定，需验收旧完成时间基准的迁移差异 | 产品扩展、间隔基准语义变更 |
+| 时间类型范围 | schedule 模型只声明 cron | 同样只接受 cron；不提供单次计划和任意起点间隔，减少起点、耗尽与更新规则；Spring 六字段与默认上海时区继续保留 | 产品约束（范围收敛） |
 | 更新 | 省略保持、schedule:null 清除、初始事件/规则整体替换 | 推荐沿用；Claw 的 message/target/schedule 整体替换，不引入通用深层合并；更新操作仍待整体确认 | 参考基线 |
 | 并发与重试 | 本次公开操作页未给出与本方案相同的版本/幂等契约 | 明确 ETag/If-Match 和 Idempotency-Key，借鉴现有 Session 更新模式；增加请求记录与冲突处理成本，不能据此声称 Claude 内部没有保护 | Claw 可靠性设计 |
 | 返回与预览 | Deployment 表示内返回 upcoming_runs_at | ResultBean + 配置 ETag；时间预览独立读取，避免时间变化使配置版本失效；代价是多一次预览调用 | 公司契约、架构取舍 |
@@ -283,11 +290,9 @@ If-Match 用于防止覆盖别人修改，Idempotency-Key 用于重放同一次�
 
 全局结构引用[目标类图](README.md#10-全局目标类图与依赖)。配置服务、解析策略和持久化 Adapter 是 Spring 单例，请求上下文/写入快照按请求隔离；配置服务不依赖执行协调器或 Session 工厂。只读绑定端口与可信范围解析待实现，不能直接拿 prepare 替代。
 
-验收至少覆盖：五个配置接口的成功/错误报文；当前范围过滤；预览与保存一致；六字段秒位、拒绝五字段/年字段、日与星期同时受限、IANA/DST、UTC 往返、every 旧锚点；两种 target 的绑定校验；单条 user.message 的文本与文件格式及非法事件类型；未知字段/null/整体替换；同键并发只落一份；写失败回滚；丢失回包以原键恢复；同一 ETag 的两个并发且实际改变配置的更新仅一份成功；重放不重做过期时间及 Agent enabled 校验；省略 schedule 只保存、有效 schedule 保存即自动调度；显式试运行独立触发，清除规则不取消在途执行。运行与附件访问仍需独立接线验收，不能由配置单测替代。
+验收至少覆盖：五个配置接口的成功/错误报文；当前范围过滤；预览与保存一致；六字段秒位、拒绝五字段/年字段、日与星期同时受限、IANA/DST、UTC 输出；名称 256/257 边界；创建/更新/预览均拒绝 at/every 与额外起点字段；两种 target 的绑定校验；单条 user.message 的文本与文件格式及非法事件类型；未知字段/null/整体替换；同键并发只落一份；写失败回滚；丢失回包以原键恢复；同一 ETag 的两个并发且实际改变配置的更新仅一份成功；已成功请求重放不重做 Agent enabled 等可变业务校验；省略 schedule 只保存、有效 schedule 保存即自动调度；显式试运行独立触发，清除规则不取消在途执行。运行与附件访问仍需独立接线验收，不能由配置单测替代。
 
-every 另须验收：intervalSeconds 按整数秒解释；创建缺省先等一个间隔，显式 startAt 不额外加间隔；保存的固定起点在创建/详情回显，重试及重启不重算。更新省略整个 schedule 保持，提交 every 但省略 startAt 重算；新设过去或等于当前的起点拒绝，回传当前已保存旧起点允许且可同时改间隔。同键重试不重算；新键省略起点的更新按完整规范规则判断变化。两种输入的后续计划均不随任务耗时漂移；精确取时及范围确定后补充对应边界验收。
-
-时区另须验收：创建或整体替换 Cron 时省略 timezone 均保存为 Asia/Shanghai，显式其他合法 IANA 时区按输入生效；响应回显保存值，节点时区变化不改变规则，更新省略整个 schedule 不重置时区。at/startAt 接受 Z 或数值偏移并拒绝无偏移量输入，at/every 不接收独立 timezone；不同偏移量表示的同一时刻保持一致。绝对时刻响应统一为 Z 结尾的 UTC，秒级且无小数，拒绝任何小数秒（包括 `.000`），覆盖输入带正/负偏移、跨日换算及回传同一旧起点，Cron 的 timezone 仍保留有效值。显式 null 与空字符串策略确定后再补充相应边界。
+时区另须验收：创建或整体替换 Cron 时省略 timezone 均保存为 Asia/Shanghai，显式其他合法 IANA 时区按输入生效；响应回显保存值，节点时区变化不改变规则，更新省略整个 schedule 不重置时区。绝对时刻响应统一为 Z 结尾的 UTC，秒级且无小数；Cron 的 timezone 仍保留有效值。显式 null 与空字符串策略确定后再补充相应边界。旧 At/Every 不得经新 HTTP 绕过仅 Cron 校验，旧 Job 迁移不得静默改变时间语义。
 
 不新增直接 Maven 依赖：复用 JDK、Spring CronExpression/Jackson、宿主 MyBatis 3.0.4 与数据库驱动。完整传递依赖图未重跑。公司身份适配、无人值守身份及实际调度是上线依赖，不在本次扩写其接口。当前没有产品代码、数据库或集群测试证据。
 
@@ -295,6 +300,7 @@ every 另须验收：intervalSeconds 按整数秒解释；创建缺省先等一�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.12.0 | 2026-10-04 | 名称上限对齐 256，时间规则仅支持 Cron，并区分文件引用、上传能力与两种会话目标的证据。 |
 | 0.11.0 | 2026-10-02 | 定时任务统一秒级输入、存储与 UTC 响应，默认间隔起点向上取整以保留完整等待。 |
 | 0.10.0 | 2026-09-30 | 绝对时刻响应沿用 UTC 并固定三位毫秒，输入精度及超出精度的处理继续待定。 |
 | 0.9.0 | 2026-09-30 | Cron 时区可省略并默认保存、回显上海时区，at/startAt 必须携带偏移量且 at/every 不另设时区。 |
