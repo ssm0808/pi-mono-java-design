@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.14.0 |
+| 文档版本 | 0.15.0 |
 | 更新日期 | 2026-10-04 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -43,22 +43,22 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 
 ## 3. 使用与管理
 
-配置动作的当前推荐设计、字段与接口以[配置专题](configuration.md)为准。已确认 schedule 可省略，省略时只保存、不立即执行；填写有效规则后保存即参与自动调度，无需显式启用；试运行是独立的显式操作。输入为一条 `user.message`，内容复用现有文本和文件引用格式；附件长期保留与执行时访问规则待确定。状态枚举、尚未确认的字段名及整项操作仍为 proposed。创建处理器不调用模型、prepare 或旧 Cron create。Claw 校验可信范围与绑定，原子保存配置和幂等结果。运行未接线不能对外发布可自动运行的成功承诺；旧 Cron 已有能力不能被直接标为新配置管理已实现。
+配置动作的当前推荐设计、字段与接口以[配置专题](configuration.md)为准。已确认 schedule 可省略，省略时只保存、不立即执行；填写有效规则后保存即参与自动调度，无需显式启用；试运行是独立的显式操作。输入为一条 `user.message`，内容复用现有文本和文件引用格式；附件长期保留与执行时访问规则待确定。已确认响应 status 小写、新建 active、非空 schedule 内返回 lastRunAt/upcomingRunsAt、移除公开 revision，并加入 metadata；完整生命周期、其余字段和整项操作仍为 proposed。创建处理器不调用模型、prepare 或旧 Cron create。Claw 校验可信范围与绑定，原子保存配置和幂等结果。运行未接线不能对外发布可自动运行的成功承诺；旧 Cron 已有能力不能被直接标为新配置管理已实现。
 
 任务列表展示名称、Agent、状态、规则与时区、下一计划时间、最近一次触发和执行摘要。任务详情提供运行列表；每条记录明确区分“未启动、已受理、执行中、执行结束、需要处理”。模型自然结束不等于设施巡检或工单操作业务成功，业务结论来自对应 Session 的输出与工具证据。
 
 | 管理动作 | 有效行为 |
 |---|---|
-| 创建、修改 | 校验可信 Agent 绑定、时间规则和提示内容，展示规范化规则及未来时间预览；保存不可变的配置 revision；不在保存时执行模型 |
+| 创建、修改 | 校验可信 Agent 绑定、时间规则和提示内容，展示规范化规则及未来时间预览；保存内部配置代次（不进入公共 JSON）；不在保存时执行模型 |
 | 暂停 | 阻止尚未完成受理的自动触发；已受理 Run 继续；允许有权限的显式手动运行 |
 | 恢复 | 重新检查资格并计算严格晚于恢复时刻的下一次运行；不补暂停期间任务 |
 | 手动运行 | 产生新的 manual Run，使用相同授权、互斥、受理和审计；不移动正常计划游标 |
 | 归档 | 终止未来计划，不再允许修改、恢复或手动运行；保留 Run 与历史引用；不隐含停止已受理执行 |
 | 停止一次执行 | 固定 Run 绑定的 Session 和根 execution，提交取消请求；收到真实终态前保持“停止中” |
 
-配置采用 `ACTIVE / PAUSED / ARCHIVED`；没有自动计划或没有未来匹配时 `nextFireAt` 为空，不假装仍有下次运行。归档是 CampusClaw 的终态枚举；Claude 的 `archived_at` 与 active/paused 表达方式不同。
+配置候选状态为 `active / paused / archived`；没有自动计划或没有未来匹配时 `nextFireAt` 为空，不假装仍有下次运行。归档终态枚举尚待生命周期审阅；Claude 的 `archived_at` 与 active/paused 表达方式不同。
 
-创建 ACTIVE 资源不要求额外启用动作；后续暂停/恢复是独立生命周期操作。现有 Cron 工具契约保持原参数面；其适配、delete 到归档的映射和 trigger 回执须在迁移切片中一并对齐，未接线前不宣称新 API 与旧工具已共用存储。每个写入动作使用带配置 revision 的可信快照，在事务中重新检查可变状态；修改冲突不覆盖另一人的更新。
+创建 active 资源不要求额外启用动作；后续暂停/恢复是独立生命周期操作。现有 Cron 工具契约保持原参数面；其适配、delete 到归档的映射和 trigger 回执须在迁移切片中一并对齐，未接线前不宣称新 API 与旧工具已共用存储。每个写入动作使用带配置 revision 的可信快照，在事务中重新检查可变状态；修改冲突不覆盖另一人的更新。
 
 配置的 proposed HTTP 路由、VO、错误码和幂等规则由[Claw 配置专题](configuration.md#2-claw-接口清单)维护，不是已发布 API。显式试运行能力已确定，其路径与回执、启停、Run 和执行结果契约另行设计。响应继续遵守公司 `ResultBean`，服务边界须验证可信调用范围；不在此扩写 Mate 公共契约。
 
@@ -126,7 +126,7 @@ public void summarizeAlarms() {
 
 [原尺寸 SVG](scheduled_run_sequence.svg) · [PlantUML 源码](diagram.puml#L1)
 
-1. **分配 occurrence。** 扫描器按租户有界轮转批次，任务按 nextFireAt/id 稳定扫描，使用短事务，锁定 Schedule，复核 ACTIVE、revision、到期时间和 activeRunId；插入唯一 Run，推进下一次游标，同时占用本任务。重叠触发记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/归档操作与领取竞争同一行锁。
+1. **分配 occurrence。** 扫描器按租户有界轮转批次，任务按 nextFireAt/id 稳定扫描，使用短事务，锁定 Schedule，复核 active、revision、到期时间和 activeRunId；插入唯一 Run，推进下一次游标，同时占用本任务。重叠触发记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/归档操作与领取竞争同一行锁。
 2. **可信准备。** 事务外解析 Agent 已发布目录、模型、CRON profile、工作区及执行资格，固定一次 `PreparedScheduleRunDTO`。准备可以失败，但不调用模型或执行业务工具。远端授权检查不能持有数据库行锁。
 3. **原子受理。** 新增 `ScheduledRunAcceptanceService` 在同一事务复核 Schedule 状态/revision、Run 领取 owner/代次及 lease_until、授权断言有效期与容量；自动触发还用数据库当前时间复核 maxLateness；创建新 Session、首条 user.message、根 execution/segment，并写回 Run 的唯一关联。任一步失败整体回滚。已有配置更新或暂停先提交时，旧自动 Run 结束为跳过；受理先提交时，在途沿用原快照。
 4. **事务后启动。** 受理不等待 Agent 完成。持有本次完整准备快照的原 Runtime 实例，以持久化的单次启动 CAS 标记由 READY 转为 STARTING 后启动公共执行链，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件。后台执行不需要伪造浏览器 SSE 连接。
@@ -134,7 +134,7 @@ public void summarizeAlarms() {
 
 第一阶段限定 Schedule、Run 与 Runtime 受理记录位于同一事务资源。现有 HTTP 创建 Session 和提交消息不提供此受理原子性，不能串联它们并在断连后重复 POST。跨数据库或独立外部调度服务的受理协议不在此实现切片内，需另行设计受理键和只读对账能力。
 
-自动受理要求 ACTIVE；手动受理允许 ACTIVE/PAUSED，拒绝 ARCHIVED，不移动计划游标、不应用自动 occurrence 的迟到窗口。未受理 Run 的失败/跳过必须在收尾事务中按 scheduleId、runId、claimEpoch 条件释放自己的 activeRunId；重叠跳过不得覆盖或释放另一条活动 Run。
+自动受理要求 active；手动受理允许 active/paused，拒绝 archived，不移动计划游标、不应用自动 occurrence 的迟到窗口。未受理 Run 的失败/跳过必须在收尾事务中按 scheduleId、runId、claimEpoch 条件释放自己的 activeRunId；重叠跳过不得覆盖或释放另一条活动 Run。
 
 同一任务 activeRunId 的检查、占用和释放都受行锁保护；唯一 Run 键防重复分配，启动 CAS 防重复调用入口。租约仅允许接替“尚未受理”的领取者；旧领取者提交时必须匹配 owner 与递增 claimEpoch。不能把这些边界宣传为外部业务 exactly-once：工具副作用仍受下游业务幂等和已执行结果对账约束。
 
@@ -184,6 +184,8 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 `ScheduleAuthorizationPort` 是待实现的宿主能力：创建/修改时校验管理资格，启用和每次受理前校验执行资格、撤销状态及范围。授权断言绑定 tenant、schedule、revision、Agent 与有效期，通过受信内部通道传递。新建 Session 的归属由本次可信任务范围确定；数据库记录 scope 不是认证凭据。授权服务不可用时不受理。
 
+[Claude 凭据参考与方案边界](configuration.md#credential-reference-proposal)采用“独立保管、任务只存授权引用、运行时由可信 Adapter 使用”的候选方向；凭据引用字段及其权威服务尚待确定。公开 metadata 只是标签，不是凭据存储或授权来源；任务配置不保存原始 secret。已有普通消息捕获当前执行 Header、Cron 使用空凭据、内部模型 Provider 无模型 API Key 的核验见[本次证据](source-evidence.md#creation-metadata-credentials-evidence)。
+
 **无人值守业务身份待确定。** 可选专门服务身份或创建人长期委托、执行前换取短期凭据；推荐服务身份并限制租户、Agent、业务工具范围。该推荐尚不构成已确认的凭据来源，更不是当前实现。公司身份系统的签发、刷新、撤销与审计契约需要在启用依赖凭据的园区任务前明确。
 
 在身份方案确定前，继续遵守 [HTTP 凭据规则](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)：Cron 不从创建会话保存、恢复或借用 Header；无 Host 凭据时使用空快照，业务权限由 Mate 判断，不宣称可完成需要登录身份的工具调用。新增凭据来源必须同步 M03/M06 权威规则；本版不存 Token、JWT、APPKEY 原文，不把凭据写入提示词、Run、历史或日志。
@@ -196,12 +198,12 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 | 权威对象 | 关键数据及约束 |
 |---|---|
-| `t_schedule` | id、可信 scope、agent_id、单条 user.message 配置、cron_expression/timezone、status、revision、next_fire_at、候选 max_lateness、active_run_id、授权引用、创建/修改审计；消息存储形状及文件引用生命周期待定，修改/受理在行锁内复核 |
+| `t_schedule` | id、可信 scope、agent_id、单条 user.message 配置、cron_expression/timezone、status、内部 revision、metadata、last_run_at、next_fire_at、候选 max_lateness、active_run_id、授权引用、创建/修改审计；消息存储形状及文件引用生命周期待定，修改/受理在行锁内复核 |
 | `t_schedule_run` | id、schedule_id、配置 revision 与安全配置快照、trigger_type、scheduled_at/manual_request_key、dispatch/execution 摘要、claim_owner/claim_epoch/lease_until、session_id/root_execution_id、实际 Agent 发布版本/摘要、关键时间和安全错误；不存完整消息与凭据 |
 | `t_schedule_gap` | schedule_id、revision、from/to、reason、可选准确数量及记录时间；只说明未创建执行的跳过范围，不合并已接受 Run |
 | 既有 Session/执行表 | 消息、工具结果、根执行/segment、等待和终态的权威；复用 M04/M06，不重建相同数据 |
 
-自动触发唯一约束为 `(schedule_id, scheduled_at)`，UTC instant 区分夏令时重复钟面；配置修改不能让同一 occurrence 再次自动执行。manual 采用 `(schedule_id, manual_request_key)` 唯一约束，相同键仅返回原 Run，内容不一致报冲突。管理创建/更新也需调用方请求键与 revision 去重，精确外部形状随 API 定义；不把现有 HTTP 描述成已有幂等能力。
+自动触发唯一约束为 `(schedule_id, scheduled_at)`，UTC instant 区分夏令时重复钟面；配置修改不能让同一 occurrence 再次自动执行。manual 采用 `(schedule_id, manual_request_key)` 唯一约束，相同键仅返回原 Run，内容不一致报冲突。管理创建/更新以调用方请求键去重；内部配置代次服务于调度竞态，完整表示 ETag 服务于条件更新，精确规则由配置契约维护；不把现有 HTTP 描述成已有幂等能力。
 
 定时器、执行线程、扫描缓存和本地租约计时都可丢弃；数据库游标、Run 关联与根执行不可被它们覆盖。Spring 单例服务只保存线程安全基础设施，不保存可变租户上下文；准备快照、凭据和执行对象按每次 Run 隔离。
 
@@ -234,7 +236,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 | 切片 | 交付与通过条件 |
 |---|---|
-| S1：独立任务管理 | 固定 M06 管理/Run 契约、DTO/VO、DDL和授权范围；规则预览、revision 冲突、暂停/恢复/归档及审计可验证；用户能确认时区与每次新建会话的行为 |
+| S1：独立任务管理 | 固定 M06 管理/Run 契约、DTO/VO、DDL和授权范围；规则预览、完整表示条件冲突、暂停/恢复/归档及审计可验证；用户能确认时区与每次新建会话的行为 |
 | S2：后台原子受理 | 新 Session/首消息/根执行/Run 同事务；故障注入覆盖提交前、提交后和回执丢失；重复 Run 键只返回原关联；明确 build/CRON、工具权限与 persistenceOnly 接线 |
 | S3：持久调度与恢复 | 两副本竞争仅一条受理；暂停/修改竞态可线性判定；崩溃恢复不重放 STARTING；时钟、DST、Cron 未来匹配、漏跑 gap、重叠及限流有确定性验证 |
 | S4：结果与运营 | 后台完整 Session 历史可读、公共 Chat 映射可重试对账、取消指向原根、未知不显示成功；控制台能定位授权和执行失败 |
@@ -256,6 +258,7 @@ S1～S4 是每次新建会话能力的候选拆分；S5 的时机取决于是否
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.15.0 | 2026-10-04 | 配置响应采用小写状态、时间摘要和 metadata，内部版本不外露，并明确凭据引用的待定边界。 |
 | 0.14.0 | 2026-10-04 | 每次运行固定新建独立 Session，移除已有会话目标和策略分支，并补充创建响应审阅入口。 |
 | 0.13.0 | 2026-10-04 | 配置仅支持 Cron，名称上限对齐 256，并澄清附件和会话目标的能力边界。 |
 | 0.12.0 | 2026-10-02 | 定时任务时间统一秒级，并引用 Session 与完整事件共用的时间一致性规则。 |

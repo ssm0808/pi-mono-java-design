@@ -155,7 +155,7 @@ else New write
   break Binding or rule rejected
     Schedule --> Caller : Safe typed error; no write
   end
-  Schedule -> Store : Commit ACTIVE config + request result\nRecheck unique key; one transaction
+  Schedule -> Store : Commit active config + response snapshot\nRecheck unique key; one transaction
   Store --> Schedule : Committed resource or rollback
   Schedule --> Caller : Saved resource + ETag / Location\nor safe typed failure
 end

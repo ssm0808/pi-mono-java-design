@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.13.0 |
+| 文档版本 | 0.14.0 |
 | 核验日期 | 2026-10-04；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
@@ -133,14 +133,14 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 | C08 | Claw `modules/cron/src/main/java/com/campusclaw/cron/CronService.java` · createJob；`store/CronStore.java` · saveUnsafe/updateJob | create 存储后立即 schedule；文件保存异常仅日志，无配置版本及数据库事务。不能直接包装此方法声称配置 API 已可靠提交。 |
 | C09 | Claw `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java` · prepare/rebuild/publish | 完整缓存命中不拉取 Mate，缺失则拉 Agent/Skill、写 staging 并发布目录。配置保存不调用 prepare；元数据校验与目录发布分离。 |
 | C10 | Claw 同 codingagent 根 `runtimeapi/agent/AgentDirectorySnapshotDTO.java`、`AgentDirectorySnapshots.java`；`runtime/MateServiceClient.java` · getAgentRuntime/AgentRuntime；`runtime/AgentRuntimeManager.java` · AgentIdentity | Runtime 元数据及目录身份有 version，但当前装配快照不含版本选择；远端查询仅按 agentId，无历史版本解析或 Environment 选择契约。缺的是可执行历史绑定，不是整个系统没有版本字段。 |
-| C11 | Claw 同根 `runtimeapi/web/RuntimeSessionController.java`；`session/RuntimeSessionUpdateService.java`；`persistence/MyBatisRuntimeSessionRepository.java` · updateSession | 既有 Session 更新使用 ETag/If-Match、428/412 与数据库锁内版本重验。Schedule 借鉴该模式；Mate Agent 更新仍为锁行后最后写入生效，不宣称全系统已经统一。 |
+| C11 | Claw 同根 `runtimeapi/web/RuntimeSessionController.java`；`session/RuntimeSessionUpdateService.java`；`persistence/MyBatisRuntimeSessionRepository.java` · updateSession | 既有 Session 更新使用 ETag/If-Match、428/412 与数据库锁内版本重验。该事实不要求 Schedule 暴露版本；其当前并发契约由配置文档维护。Mate Agent 更新仍为锁行后最后写入生效，不宣称全系统已经统一。 |
 | C12 | Claw `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java` · RuntimeApi.MAX_MESSAGE_CHARACTERS；同 codingagent 根 `runtimeapi/vo/UserMessageContentRequestVO.java` · TextRequestVO/FileRequestVO；`modules/cron/src/main/java/com/campusclaw/cron/model/CronPayload.java` · AgentPrompt | 普通文本上限262144，Runtime 已有文本和文件引用块，严格类型与未知字段检查。已确认配置输入为单条 user.message，可包含文本和现有文件引用；不扩成多初始事件或 system.message。旧 CronPayload 仍只有 agentId/prompt，输入保存与运行接线须迁移，不能直接宣称已支持调度附件。配置更新另须保留省略/null差异。 |
 | C13 | Claw `modules/cron/src/main/java/com/campusclaw/cron/model/CronSchedule.java` · At/Every/CronExpr；`engine/CronEngine.java` · computeNextDelay | 三类型已有，Cron 采用 Spring CronExpression；已确认继续使用 Spring 六字段，精确规则见[配置契约](configuration.md#spring-cron-contract)。旧 every 按完成/创建时间计算；新配置 HTTP 仅接受 Cron，不暴露或自动迁移旧 At/Every。六字段复用既有依赖，但不表示可以直接接收 Claude 五字段，亦不构成硬实时保证。 |
-| C14 | Claw 同 codingagent 根 `runtimeapi/web/RuntimeSessionController.java` · get/update/create | Claw Session 资源使用 sessionId。创建返回 201/Location，GET/更新采用 ETag/If-Match；新配置创建额外返回 ETag 是目标设计，非现有 Session create 行为，见 §8.7。Schedule 创建尚无 Session 关联，不返回 sessionId。 |
+| C14 | Claw 同 codingagent 根 `runtimeapi/web/RuntimeSessionController.java` · get/update/create | Claw Session 资源使用 sessionId。创建返回 201/Location，GET/更新采用 ETag/If-Match；这些是 Session 事实，Schedule 当前响应见 §8.8，不据此要求创建返回 ETag。Schedule 创建尚无 Session 关联，不返回 sessionId。 |
 
 此前在 Mate 示例 Controller/Service/Mapper、`src/main/java`、resources 与 POM 范围，未观察公司认证适配、租户范围、Chat 映射或调度配置服务；这是历史样例边界，不推断其他部署。当前 [Claw 配置设计](configuration.md) 只要求其自身取得可信调用范围并校验绑定，具体适配待接线，不用读取 Header 代替认证证据。
 
-配置主基线采用 2026-09-29 重读的 Claude [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create)、[Update Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/update)及 [Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)。当前已确认目标是：schedule 可省略，省略时只保存配置；提供 schedule 后创建即登记自动计划；运行由显式试运行或后续定时触发发起，保存本身不执行。输入为单条 user.message，内容支持文本和现有文件引用；Cron 采用 Spring 六字段。省略保持、schedule:null 清除与嵌套整体替换沿用配置规则；缺少环境选择及历史版本 pin 仍是能力差距。ACTIVE 的自动运行承诺需以运行链路可用为发布前提。幂等/ETag 是本产品的候选可靠性契约，不从公开文档缺少描述推断 Claude 内部没有保护。
+配置主基线采用 2026-09-29 重读的 Claude [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create)、[Update Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/update)及 [Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)。当前已确认目标是：schedule 可省略，省略时只保存配置；提供 schedule 后创建即登记自动计划；运行由显式试运行或后续定时触发发起，保存本身不执行。输入为单条 user.message，内容支持文本和现有文件引用；Cron 采用 Spring 六字段。省略保持、schedule:null 清除与嵌套整体替换沿用配置规则；缺少环境选择及历史版本 pin 仍是能力差距。active 的自动运行承诺需以运行链路可用为发布前提。当前响应及并发字段以[创建响应对齐](configuration.md#creation-response-review)为准，不从公开文档缺少描述推断 Claude 内部没有保护。
 
 本节没有运行前后端产品测试、数据库或身份联调；测试要求见配置文档。现有 Spring/MyBatis/Jackson 可支撑该配置切片，无新增直接依赖；完整传递依赖图未重跑。
 
@@ -311,7 +311,7 @@ CampusClaw 每次运行固定新建 Session，复用 Agent 定义、单条 user.
 | R/runtimeapi/web/RuntimeSessionController.java · create（56–65）、get（68–77）、update（80–91） | create 返回 201、Location、Content-Language 和 ResultBean；未把内部 View 的 ETag 写入 Header，只有 GET/更新对外返回 ETag |
 | R/runtimeapi/session/RuntimeSessionResponseAssembler.java · createView（30–41）；SessionEtagFactory.java（22–27） | 内部创建 View 已生成不透明 ETag，但不能据此宣称客户端创建响应含该 Header；原样携带 ETag 与自行拼接版本值不同 |
 | R/runtimeapi/session/RuntimeSessionService.java · create（64–72）、newSession（117–129）、now（138–139） | 使用既有 agentId，生成新 Session ID、内部 resourceVersion=1；创建/更新时间相同，保存后返回内存快照；当前取时未截秒，秒级仍为目标差距 |
-| R/runtimeapi/vo/CreateSessionResponseVO.java（20–38）；SuccessResponseVO.java（19–32）；result/StandaloneResultBeanAdapter.java（17–18） | 创建 Session 返回自身资源和公司包装，没有对外 version。Schedule 的显式 revision 和创建 ETag 是候选扩展，不能称完全复刻既有 Session |
+| R/runtimeapi/vo/CreateSessionResponseVO.java（20–38）；SuccessResponseVO.java（19–32）；result/StandaloneResultBeanAdapter.java（17–18） | 创建 Session 返回自身资源和公司包装，没有对外 version。Schedule 当前响应不含 revision；Session 内部版本不构成新增公共字段的依据，见 §8.8 |
 
 同日重新读取 Claude Beta [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create)、[Deployment 模型](https://platform.claude.com/docs/en/api/http/beta/deployments)和[Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)：
 
@@ -320,28 +320,55 @@ CampusClaw 每次运行固定新建 Session，复用 Agent 定义、单条 user.
 - last_run_at 文本称最近一次定时运行实际开始时间，手动运行不更新；同段还写“Null until one completes”，公开文本未在此明确该完成点的内部写入机制，不能推导为业务成功时间。自动生成创建示例中的非空历史时间或 paused_reason 不代表新资源必须具有运行历史。
 - status 为 active/paused，归档由 archived_at 区分；普通响应不采用公司 ResultBean。没有据此推断 Claude 服务端是否使用内部版本或幂等机制。
 
-当前 Claw 固定新会话是已确认的产品范围；移除 target 及其策略类/配置列，运行后生成的 sessionId 仍保留在 Run。创建响应保持 201 + ResultBean + 规范配置的候选，字段说明和待决时间摘要见[创建响应对齐](configuration.md#creation-response-review)。创建配置不创建 Session，不返回运行关联；未确认的动态时间字段不自动写入精确响应。未执行产品 API 或端到端测试。
+当前 Claw 固定新会话是已确认的产品范围；移除 target 及其策略类/配置列，运行后生成的 sessionId 仍保留在 Run。创建响应及时间摘要以[创建响应对齐](configuration.md#creation-response-review)为准，公开基线补充见 §8.8。创建配置不创建 Session，不返回运行关联；本节未执行产品 API 或端到端测试。
+
+<a id="creation-metadata-credentials-evidence"></a>
+
+### 8.8 创建摘要、元数据与凭据（2026-10-04）
+
+本节当次重新读取下列 Claude Managed Agents 公开 Beta 文档，并重核下述 Claw 凭据链路；只升级响应、metadata 与凭据引用的证据，也不推断服务端表结构、内部版本、加密存储、缓存或代理拓扑。未调用实际 API、保存凭据或执行产品测试。
+
+| 官方来源 | 已核实的公开契约与边界 |
+|---|---|
+| [Deployment 模型](https://platform.claude.com/docs/en/api/http/beta/deployments) · BetaManagedAgentsCronSchedule、BetaManagedAgentsDeploymentStatus | 响应 schedule 含只读 last_run_at、upcoming_runs_at。前者指最近定时运行实际开始时间，手动运行不更新，归档后保留；其“Null until one completes”用语不能推导为 Agent 业务完成。后者最多五个计划时刻，暂停时仍展示假设恢复后的匹配，归档后为空；不保证准点执行。status 仅 active/paused，归档仍可返回 active，由 archived_at 区分。 |
+| [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create) | metadata 为可选字符串键值映射，最多16组、键最长64、值最长512；示例缺省为 {}。vault_ids 可选、最多50个，绑定新建 Session 可用的已存凭据；不要求创建 Deployment 时重传 secret。公开响应未声明 revision，不证明服务端没有内部并发控制。 |
+| [Update Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/update) | metadata 按 key patch：字符串更新、null 删除 key、省略字段保留；vault_ids 整体替换，省略保留，[]/null 清空。文档没有明确 Deployment 改换引用列表是否影响已经创建的 Session，不能与凭据本身轮转混为同一更新语义。 |
+| [Create Vault](https://platform.claude.com/docs/en/api/http/beta/vaults/create)、[Create Credential](https://platform.claude.com/docs/en/api/http/beta/vaults/credentials/create)、[Get Credential](https://platform.claude.com/docs/en/api/http/beta/vaults/credentials/retrieve) | Vault 与 Credential 独立管理；auth 支持 mcp_oauth、static_bearer、environment_variable。token/access_token/refresh_token/client_secret/secret_value 为敏感写入值，不在读取响应返回；创建记录不等于已验证下游认证成功。 |
+| [Authenticate with vaults](https://platform.claude.com/docs/en/managed-agents/vaults) | workspace 作用域，不等于业务用户隔离；MCP 按 mcp_server_url 匹配并注入。环境变量在沙箱内为不透明占位符，出站时替换真实 secret，当前不支持 self-hosted sandbox。凭据周期重新解析，轮转/归档/删除传播到运行中 Session，无需重启，但未承诺即时撤销或延迟上界。OAuth 配置 refresh 后可刷新，失败有事件。Vault 归档保留审计记录、清除 secret，未来引用失败；现有 Session 继续运行不表示后续仍永久拥有原凭据。 |
+| [Credential 模型](https://platform.claude.com/docs/en/api/http/beta/vaults/credentials)、[Update Credential](https://platform.claude.com/docs/en/api/http/beta/vaults/credentials/update) | 环境变量可限制 allowed_hosts 及 header/body 注入位置；unrestricted 仍受 Environment 网络策略约束。secret 可轮转，凭据类型及 MCP URL/secret name 等结构绑定不能任意修改。 |
+| [Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments) | 不可恢复的 Session 创建错误，例如归档 Vault，记录失败 Run 并自动暂停；这与 Session 内下游认证失败不同，不能把保存凭据成功或 Deployment 创建成功当作业务授权验证。 |
+
+**Claw 凭据链路重新核验。** 2026-10-04 以 `ls-remote --symref origin HEAD` 确认默认分支 main，隔离 fetch 后完整 commit 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`；旧新提交相同，只重核下表及所列目录，未运行产品测试。R 表示 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 仓库相对路径与符号 | 已观察行为 |
+|---|---|
+| R/runtimeapi/web/RuntimeRequestContext.java:45 · mateCredentials；R/common/client/mate/MateCredentials.java:7；R/runtimeapi/event/RuntimeEventService.java:58 · submit | user.message 捕获本次四 Header 的不可变快照；不验证真实性，确认/中断等不替换原执行凭据；空快照和安全 toString 已有 |
+| R/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:205 · createSession；R/tool/mate/MateRemoteToolHandler.java:40 · execute | 凭据进入本次 Session/Child 快照，只在实际工具调用时传给 MateToolClient |
+| R/common/client/HttpMateToolClient.java:307、356 · invokeTool/toHeaderInfo；R/common/util/MateRestUtil.java:111 · newRequestBuilder | execute 映射原四 Header；仅发送非空值，不补值、不解析 JWT；发现不带本次业务凭据，最终业务认证由 Mate 决定 |
+| R/tool/cron/ManagedCronSessionRunner.java:53 · execute | Cron 与其 Child 明确 MateCredentials.empty()，未保存或借用创建时凭据 |
+| modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java:105、143 · auth/eventFlux；R/runtimeapi/model/MateRuntimeModelManager.java:31 · resolveModel；docs/decisions/0109-use-campusmate-only-provider.md | 当前仅内部 CampusMate Provider，ProviderAuth.none()；模型请求不透传业务凭据，上游厂商认证归 CampusMate |
+
+在 `modules/coding-agent-cli/src/main/java` 和 `modules/cron/src/main/java` 未发现 credentialRef、vaultId 或受管 Vault 链路；外部 Mate 凭据能力未核验。既有 [M03 凭据规则](../02-CampusClaw工具系统/README.md#mate-credential-forwarding)与 [M06 凭据规则](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)要求凭据仅在本次 Host execution 使用，不持久化，不混入发现和模型链路；无人值守凭据来源需要另行确认并同步这些权威规则。
+
+完整响应强 ETag 的依据为本次重新读取的 [RFC 9110 §8.8.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.8.1)与[§13.1.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-13.1.1)：表示变化须改变强验证器，If-Match 使用强比较。动态 schedule 不能继续复用仅配置版本标签；本产品的候选及代价由配置专题 §5 维护，不据此推出 Claude 的内部机制。
+
+CampusClaw 当前目标（待实现）：schedule 响应加入 lastRunAt/upcomingRunsAt，只读字段不进入创建输入；status 使用小写；响应不再提供 revision。metadata 字段保留，字符串映射及16/64/512边界仍为借鉴 Claude 的候选参数，精确规则由[配置契约](configuration.md#creation-response-review)维护。Vault 架构、字段名称、凭据保管归属及授权模型尚未确定，不将 vaultIds 直接升级为已确认请求字段。
+
+可借鉴的架构原则是任务仅持凭据引用，由可信调用边界按授权主体和目标解析、注入，避免把 secret 写进任务消息、metadata 或响应；这是 CampusClaw 的候选架构变更与企业安全约束。已有请求凭据与 Cron 空凭据事实见 §4/J20 和 §2/J08，不证明已有长期委托、刷新或 Vault。创建时校验引用可用与执行时重新校验可变授权需分别设计；不能直接把创建当天的短期登录 Token 当作长期调度凭据。
 
 ## 9. 文档验收
 
-0.13.0 新 Session 范围的设计验收（2026-10-04）：在 HEAD 加本任务文件的隔离快照执行 PlantUML 生成、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成；36 个专题、131 个块、52 张时序图，0 错误，唯一既有复杂度提示沿用下述解释。六份变更 Markdown 的六个 JSON 示例、本地路径和标题/图源锚点检查通过，`git diff --check` 通过；新目标类图已查看 1028×1188 原尺寸与 840px 文档宽度，职责链、文字及箭头可辨。图索引只更新本专题卡片，保留无关工作树变更；没有新增 OpenAPI/HTML 精确接口，未运行产品测试或新增依赖。
+2026-10-04 的 0.14.0 文档验收在 HEAD 加本任务文件的隔离快照完成：`plantuml -tsvg diagram.puml`、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示为既有 managed_session_compaction 的三个条件组，沿用[时序图规范](../../时序图规范.md#3-从总览下钻)中的边界解释。本次不改该图。
 
-0.12.0 的历史验收：2026-10-04 在 HEAD 加当时任务六份 Markdown 的隔离快照执行 `check-diagrams.py --render`、API 技能校验和图索引生成：36 个专题、131 个块、52 张时序图，0 错误；唯一复杂度提示仍为既有 managed_session_compaction，沿用下述职责解释。五个 JSON 示例及变更文档的本地路径、标题锚点检查通过，实际工作树 `git diff --check` 通过。图源和三个 SVG 均未变更，已重新查看原尺寸与 840px 宽度，未见文字、箭头或分支遮挡；图索引生成结果与 HEAD 相同，未覆盖工作树中的无关修改。当前没有 OpenAPI/HTML 精确契约，相关检查不适用；未运行产品实现测试，本次不新增 Maven 依赖。
+五份变更 Markdown 的五个 JSON 示例、本地路径、标题与图源锚点检查通过；实际工作树 `git diff --check` 通过。校验包括无 Mermaid、PlantUML ASCII、生成成功、SVG XML、图源同步与 SVG 路径。本次保存图只调整小写 active 和响应快照文字，已查看 726×737 原尺寸和 840px 文档宽度，角色、文字、箭头和分支可辨；全局类图及运行图结构未变。图索引通过隔离快照生成，保留无关工作树变更。
 
-2026-09-30 的 0.4.0 文档校验已执行：PlantUML 生成、API 技能校验、仓库级 `check-diagrams.py --render` 与 `git diff --check` 通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示仍为既有 managed_session_compaction 的三个条件组，职责解释沿用[时序图规范](../../时序图规范.md#3-从总览下钻)。三个 JSON 示例解析通过，Spring 示例与拒绝边界见 §8.1；未运行产品 Maven 测试或集群验收。当前无 OpenAPI/HTML 精确契约，相关校验不适用。
-
-2026-09-30 的历史图索引通过当时 HEAD 加任务文件的隔离快照生成，未带入无关工作树变更。当时配置保存图为 726×737、全局目标类图为 1302×1205；实际查看原尺寸及 840px 文档宽度，确认角色、分支、文字、箭头与返回路径。该历史图结构延续 Claw 配置边界，图例说明无规则只保存；当时两目标范围不代表当前产品决定。以下保留 2026-09-29 的历史验收范围，不混用当时的尺寸与本轮结果。
-
-2026-09-29 执行 `plantuml -tsvg diagram.puml`、API 技能的 `validate_api_design.py`、`python3 scripts/check-diagrams.py --render` 与 `git diff --check`。仓库级检查覆盖36个专题、131个块、52张时序图，0错误；包括 Mermaid 禁用、ASCII、SVG XML、图源/SVG同步、SVG路径和 PlantUML 行锚点。唯一复杂度提示来自既有 managed_session_compaction 的三分支，职责说明见[时序图规范 §3](../../时序图规范.md#3-从总览下钻)。配置专题没有新增 OpenAPI/HTML 契约，相关检查为不适用，不能据此声称机器契约已交付。
-
-新增配置保存时序图为938×660，更新的全局类图为1302×1329；均实际查看原尺寸和840px文档宽度，核对职责链、文字、箭头、分支与返回路径。图索引由 `render-diagram-index.py` 在 HEAD 加本任务文件的隔离快照生成，避免带入既有未提交文档删除。三个 JSON 报文示例解析通过，配置文档本地链接存在；两次独立设计校对修正了时间往返、Agent定点回显、状态反馈和刷新恢复边界。
-
-这些检查证明文档与图源交付质量，不替代前端产品、GaussDB、公司认证或调度执行验收；本次没有修改实现代码或运行上述产品测试。
+没有新增 OpenAPI/HTML 精确接口，相关检查不适用；没有产品代码修改、产品测试或新增 Maven 依赖。上述验收证明文档与图源一致性，不替代数据库、公司身份、真实凭据轮转或无人值守调度验收。
 
 ## 10. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.14.0 | 2026-10-04 | 补充创建时间摘要、小写状态、元数据边界与 Vault 凭据引用的公开证据。 |
 | 0.13.0 | 2026-10-04 | 核验新 Session 与 Agent 定义边界，并补充 Claw 和 Claude 创建响应的准确差异。 |
 | 0.12.0 | 2026-10-04 | 重核名称与仅 Cron 契约，补充文件上传边界及五个基线的定时会话目标证据。 |
 | 0.11.0 | 2026-10-02 | 核对 Claude 时间示例边界，区分既有毫秒实现与 Claw 统一秒级目标。 |
