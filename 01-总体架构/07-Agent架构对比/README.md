@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.67.0 |
+| 文档版本 | 1.68.0 |
 | 更新日期 | 2026-10-04 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -485,6 +485,14 @@ Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读�
 
 公开契约、源码路径与限制见[M10 响应与凭据证据](../08-CampusClaw定时任务/source-evidence.md#creation-metadata-credentials-evidence)，精确创建报文和待决项仍由[配置接口](../08-CampusClaw定时任务/configuration.md#creation-response-review)维护；不扩写其他模块的历史 SHA 或声称已有长期执行凭据。
 
+### 配置读取与运行观察（2026-10-04 专项）
+
+Claude Beta 的 Deployment 详情和列表元素均返回完整配置，列表采用不透明 page 游标与 data/next_page；公开页未声明默认排序、ETag 或固定分页快照。CampusClaw 已确认列表元素与详情同形，包含任务消息及凭据引用；采用同一完整资源降低客户端模型差异，代价是分页传输全部任务内容。分页参考既有 ListEvents 的整数 page/nextPage、无 total 方式，建议沿用默认50/最多200；与 Claude 不透明游标同名但不同义，统一 Claw 客户端风格且无需总数查询。任务可变而事件在尾部追加，不能复制事件顺序及稳定位置前提；深页和并发编辑带来的重复/遗漏仍是代价。
+
+Claw 读取以当前可信可见范围为准，不以 Agent/凭据当前可执行性阻止查看故障配置，不换取或回显 secret，也不创建 Session；这是企业产品约束与安全边界。2026-10-04 重新 fetch Java 默认 main 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`：Cron get/list 是本地 JSON 与文本工具输出，没有新 Schedule HTTP；Runtime Session 已有单条 GET、ResultBean/no-store/ETag，但没有集合分页，也未在所查读取链观察到可信租户授权。新接口与相关接线待实现，不能把旧 Cron 读失败返回空值作为企业读取契约。
+
+双方均区分配置与 Run 观察；Claude Run 只表示 Session 创建结果，Claw 的后续根执行结果仍由运行专题确定。精确字段、筛选和读取错误由[读取接口](../08-CampusClaw定时任务/configuration.md#get-schedule-review)维护；最新路径、符号和官方链接见[读取证据](../08-CampusClaw定时任务/source-evidence.md#schedule-read-evidence)。其他基线的历史结论不因该专项升级。
+
 ### 1. 调度职责和权威状态
 
 | 基线 | 调度入口与时间模型 | 权威状态与唤醒方式 | 到期后的执行边界 | 失败、重启与暂停 |
@@ -593,6 +601,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.68.0 | 2026-10-04 | A14 对齐完整配置读取，补充分页取舍、读取授权和独立 Run 观察的证据边界。 |
 | 1.67.0 | 2026-10-04 | A14 明确 credentialIds 直接凭据引用，相比 Claude 不增加 Vault 集合层。 |
 | 1.66.0 | 2026-10-04 | A14 明确 Claw 支持凭据绑定，区分直接凭据与 Claude Vault 集合的引用层级。 |
 | 1.65.0 | 2026-10-04 | A14 对齐创建响应时间摘要、小写状态及 metadata，并说明凭据引用和可信注入的收益与缺口。 |

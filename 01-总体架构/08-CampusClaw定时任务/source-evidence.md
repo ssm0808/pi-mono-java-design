@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.16.0 |
+| 文档版本 | 0.17.0 |
 | 核验日期 | 2026-10-04；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
@@ -358,11 +358,52 @@ CampusClaw 当前目标（待实现）：schedule 响应加入 lastRunAt/upcomin
 
 可借鉴的架构原则是任务仅持凭据引用，由可信调用边界按授权主体和目标解析、注入，避免把 secret 写进任务消息、metadata 或响应；这是 CampusClaw 的候选架构变更与企业安全约束。已有请求凭据与 Cron 空凭据事实见 §4/J20 和 §2/J08，不证明已有长期委托、刷新或 Vault。创建时校验引用可用与执行时重新校验可变授权需分别设计；不能直接把创建当天的短期登录 Token 当作长期调度凭据。
 
+<a id="schedule-read-evidence"></a>
+
+### 8.9 Schedule 详情、列表与 Run 读取边界（2026-10-04）
+
+本次以 `git ls-remote --symref origin HEAD` 重新确认 Claw 默认分支为 main，并隔离 fetch 到 `refs/codex-evidence/schedule-read-20261004`，完整 commit 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`。旧新提交相同；只重核 Cron get/list、Runtime Session get、ListEvents、相关 Controller/VO/Mapper 与错误投影，不改变其他模块的证据日期。未修改实现工作树或运行产品测试。以下 R 表示 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 仓库相对路径与符号 | 已观察实现及读取契约的差距 |
+|---|---|
+| [modules/cron/src/main/java/com/campusclaw/cron/CronService.java:72](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/CronService.java#L72) · listJobs/getJob；[store/CronStore.java:54](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java#L54) · load/getJob（108） | Service 读取本 Host 的 jobs.json，get 全量加载后按 ID 查找；没有分页、条件排序、HTTP 状态或 ETag。文件不存在与读取失败均可得到空列表；新 HTTP 不能据此把存储故障包装成空结果或 404。 |
+| [modules/cron/src/main/java/com/campusclaw/cron/tool/CronTool.java:193](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/tool/CronTool.java#L193) · list/status（218）/requireOwnedJob（238）/ownedByCurrentAgent（246）；R/tool/cron/AgentScopedCronToolFactory.java · create（28） | list 仅按绑定 agentId 过滤，输出 id/name/enabled 文本；status 输出 enabled/totalRuns/nextRunAtMs。不限制为 enabled，不提供页码、total、名称筛选或显式排序；其他 Agent 的 Job 与不存在均报相同工具错误。该过滤不证明租户、用户或园区权限。 |
+| [modules/cron/src/main/java/com/campusclaw/cron/model/CronJob.java:17](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronJob.java#L17)；model/CronJobState.java（15） | Job 使用 enabled、createdAtMs 及毫秒运行状态；没有新目标的 metadata、credentialIds、UTC 时间字符串或 upcomingRunsAt。既有模型不是新 Schedule 公共响应 VO。 |
+| [R/runtimeapi/web/RuntimeSessionController.java:68](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java#L68) · get；R/runtimeapi/vo/GetSessionResponseVO.java（20） | 已有 GET /campusclaw-service/v1/sessions/{sessionId}，校验标识后返回 200、ResultBean、no-store、ETag 和 Content-Language。VO 含 sessionId/agentId/displayName/modelId/state/thinking/mode/lifetimeUsage/createdAt/updatedAt，不返回内部版本。 |
+| [R/runtimeapi/session/RuntimeSessionService.java:89](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java#L89) · get；R/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java · find（70）、beginDeletion（452）；[modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:41](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml#L41) · findSession | 按 ID 只读查询 t_sessions 与 t_session_stats，不要求 idle 或当前 Agent enabled，也不触发目录 prepare。SQL 没有租户/owner 谓词，不证明上游已授权；已删除主行不再可读。详情查询不依赖启动执行资格，可作为职责边界参考。 |
+| [R/runtimeapi/session/RuntimeSessionResponseAssembler.java:44](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java#L44) · getView；R/runtimeapi/session/SessionEtagFactory.java · create（22） | 既有 Session 标签根据 sessionId/resourceVersion 生成，内部版本不透出。Schedule 含随时间推进的摘要，不能直接借用仅配置代次标签冒充完整表示强 ETag；精确条件读取/更新规则仍由配置专题确定。 |
+| [R/runtimeapi/web/RuntimeExceptionHandler.java:51](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java#L51) · handleRuntimeError/handleUnexpectedError（108）/response（124）/identifierErrorCode（224）；R/runtimeapi/error/RuntimeErrorCode.java（19、23、58）；R/runtimeapi/web/RuntimeRequestContext.java · locale | Session 无效 ID 为 400，缺失为 404，未处理异常为 500；错误保持稳定码和真实 HTTP 状态。该 GET 链未实现租户鉴权；错误响应未统一设置 no-store，现有语言缺省为 en-US，均不能当作 Schedule 候选规则已落地。 |
+| modules 中 Controller 路由检索；[R/controlplane/api/RuntimeController.java:56](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/controlplane/api/RuntimeController.java#L56) · schedule；R/controlplane/api/ScheduleRuntimeResponseVO.java（18）；R/runtimeapi/mapper/RuntimeSessionMapper.java | 所查范围无 Schedule 配置详情/列表 HTTP，也无 Session 集合列表方法。已有 /api/v1/runtimes/schedule 选择执行节点并返回 nodeId/host/port/reason，不是定时配置。下述 ListEvents 是某 Session 的事件集合，不证明已有 Session 集合列表。 |
+
+**既有 ListEvents 分页依据。** 同一源码快照的 GET /campusclaw-service/v1/sessions/{sessionId}/events 已采用整数页码；可借鉴分页请求和响应形式，不能把事件排序、Session 存在性或内部历史游标直接移作 Schedule 规则。
+
+| 仓库相对路径与符号 | 已观察实现及复用边界 |
+|---|---|
+| [R/runtimeapi/web/RuntimeEventController.java:80](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java#L80) · list；[modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java:158](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java#L158) · DEFAULT_EVENT_PAGE_LIMIT/MAX_EVENT_PAGE_LIMIT | Query 只有本方法声明的可选 limit（Integer）与 page（Long）；page 默认1且至少1，limit 默认50、范围1～200。没有公开 after 或不透明游标参数。成功返回 200、ResultBean、no-store、Content-Language，不生成列表 ETag。 |
+| [R/runtimeapi/vo/ListSessionEventsResponseVO.java:18](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/ListSessionEventsResponseVO.java#L18)；[R/runtimeapi/vo/SessionEventResponseVO.java:28](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/SessionEventResponseVO.java#L28) | result 仅含 events 数组及 nextPage（Long，可为 null），没有 total、page、limit 或快照字段。事件元素为 eventId/type/createdAt 加按类型平铺的业务字段，Java details 使用 JsonUnwrapped，不对外套 details/payload；这不是 Schedule 元素模型。 |
+| [R/runtimeapi/event/CommittedEventQueryService.java:40](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventQueryService.java#L40) · list/pageOf（57）、normalizeLimit（65）、normalizePage（73）、calculateOffset（81）、nextPage（99） | 计算 offset=(page−1)×limit，多取 limit+1 条；只投影前 limit 条，有额外记录时 nextPage=page+1，否则为 null。不存在 Session 为404；存在 Session 的空集或越界页成功返回 events=[]、nextPage=null；范围错误及整数溢出为400 INVALID_EVENT_LIST_QUERY。分页不依赖 total 查询。 |
+| [R/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:268](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#L268) · findEventPage；[R/runtimeapi/mapper/RuntimeSessionMapper.java:79](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/mapper/RuntimeSessionMapper.java#L79) · listCommittedEvents；[modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:191](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml#L191) · listCommittedEvents | 单次读取使用只读 REPEATABLE_READ 事务，先查 Session、检查事件投影完整性，再按 session_id 查询 t_session_events，ORDER BY event_seq 升序、OFFSET/LIMIT。完整性计数不是分页 total；SQL 不含调用者可见范围谓词，也没有跨 HTTP 请求快照。相邻 listTimelineEntries 的 afterSeq/upperBound 属于内部历史读取，不是公开 ListEvents 参数。 |
+| [R/runtimeapi/event/CommittedEventProjection.java:91](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventProjection.java#L91) · project；R/runtimeapi/web/RuntimeExceptionHandler.java · handleInvalidParameterType（89）、isEventListRequest（205）；R/runtimeapi/error/RuntimeErrorCode.java（35～36） | 事件经过类型化公共投影；未知类型、映射不完整或读取/投影异常不降为空列表，而返回500 EVENT_LIST_FAILED。查询类型转换或数值范围错误返回400。现有事件 createdAt 仍用 appendInstant(3) 输出毫秒，不能据分页复用把历史实现误写为统一秒级目标已落地。 |
+
+静态读取 [CommittedEventQueryServiceTest.java:65](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventQueryServiceTest.java#L65) 的下一页、越界空页、缺失 Session、非法范围和算术溢出断言；本次未运行这些测试。Schedule 候选采用 page/limit 与 result.schedules/nextPage，保留相同的默认50、上限200与 limit+1 判断方式，无需 total；Schedule 的可见范围、筛选和排序仍由配置专题单独确定。
+
+**Claude 公开读取契约。** 下列官方条目本次于 2026-10-04 重新读取；均为 Managed Agents HTTP Beta 文档，没有服务端源码 commit。只记录公开请求和响应，不推断表结构、租户实现、内部排序算法或缓存机制。
+
+| 官方来源 | 公开行为与未声明边界 |
+|---|---|
+| [Get Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/retrieve) | GET /v1/deployments/{deployment_id} 返回完整 Deployment，包含任务配置、状态及 schedule 摘要；不是一次运行结果。该操作页未声明 ETag/304 或归档后详情读取的具体行为，不据此断言支持或不支持。 |
+| [List Deployments](https://platform.claude.com/docs/en/api/http/beta/deployments/list) | GET /v1/deployments；参数为 agent_id、created_at[gte/lte]、include_archived（默认 false）、status（active/paused）、limit（默认20、上限100）及不透明 page。status 不能与 include_archived 组合。响应 data 中每项是完整 Deployment，并返回 next_page；无 total，也未给出默认排序及跨页快照保证。 |
+| [List Deployment Runs](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/list)、[Get Deployment Run](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/retrieve) | GET /v1/deployment_runs 与 /v1/deployment_runs/{deployment_run_id} 独立观察 Run。Run 表达 Session 创建结果，不能把它当作 Agent 业务完成状态；配置详情和列表不取代后续 Session 结果读取。 |
+
+**CampusClaw 已确认完整资源，其他读取契约仍为候选。** Schedule 详情与列表每个元素均完整返回同一资源模型，包含 message、metadata、credentialIds 及 schedule 摘要。可以复用 HTTP 包装、只读 DTO/VO 投影及异常框架，但可信访问范围、过滤后的分页与下一页判断、确定性排序、归档可见性、动态摘要一致性和完整表示标签均需新增接线及验收。既有 Agent 过滤不是鉴权，Claw 或 Claude 的已有接口均不能替本产品确认这些选择。读取已保存配置不应启动模型、调用业务工具或换取执行凭据；credentialIds 只投影引用，不回读秘密，执行资格失效与读取资格分开判断。新读取形状由[配置专题](configuration.md)维护，本节不把未确认方案升级为已发布契约。
+
+Run 读取仅作边界记录：现有 CronService.getRecentRuns 与 [CronRunLog.java:70](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/store/CronRunLog.java#L70) 读取本地 JSONL 尾部并反转，读取失败返回空列表；CronTool.runs（225）默认 limit=10、允许1～100并输出文本。这不是新 Run HTTP 的分页、结果关联或可靠性证明；本节不扩写 Run 精确接口。以上为静态源码与官方契约证据，未执行 HTTP、数据库或权限联调测试。
+
 ## 9. 文档验收
 
-2026-10-04 的 0.16.0 文档验收在 HEAD 加本任务文件的隔离快照完成：`plantuml -tsvg diagram.puml`、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示为既有 managed_session_compaction 的三个条件组，沿用[时序图规范](../../时序图规范.md#3-从总览下钻)中的边界解释。本次不改该图。
+2026-10-04 的 0.17.0 文档验收在 HEAD 加本任务文件的隔离快照完成：`plantuml -tsvg diagram.puml`、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示为既有 managed_session_compaction 的三个条件组，沿用[时序图规范](../../时序图规范.md#3-从总览下钻)中的边界解释。本次不改该图。
 
-五份变更 Markdown 的六个 JSON 示例、本地路径、标题与图源锚点检查通过；实际工作树 `git diff --check` 通过。校验包括无 Mermaid、PlantUML ASCII、生成成功、SVG XML、图源同步与 SVG 路径。本次补齐 credentialIds 请求、响应与资源取舍，未改变结构图、时序图或 SVG；前次保存图的 726×737 原尺寸和 840px 文档宽度视觉核验继续适用。隔离生成的图索引与 HEAD 一致，未覆盖无关工作树修改。
+五份变更 Markdown 的八个 JSON 示例、本地路径、标题与图源锚点检查通过；实际工作树 `git diff --check` 通过。校验包括无 Mermaid、PlantUML ASCII、生成成功、SVG XML、图源同步与 SVG 路径。创建资源与列表元素逐字段比较一致。本次展开读取接口、完整元素及 ListEvents 分页复用，未改变结构图、时序图或 SVG；前次保存图的 726×737 原尺寸和 840px 文档宽度视觉核验继续适用。隔离生成的图索引与 HEAD 一致，未覆盖无关工作树修改。
 
 没有新增 OpenAPI/HTML 精确接口，相关检查不适用；没有产品代码修改、产品测试或新增 Maven 依赖。上述验收证明文档与图源一致性，不替代数据库、公司身份、真实凭据轮转或无人值守调度验收。
 
@@ -370,6 +411,7 @@ CampusClaw 当前目标（待实现）：schedule 响应加入 lastRunAt/upcomin
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.17.0 | 2026-10-04 | 核验 Cron、Session 与 ListEvents 读取基础及 Claude Deployment 契约，区分已确认完整资源与候选分页和 Run 观察边界。 |
 | 0.16.0 | 2026-10-04 | 记录 credentialIds 直接引用的已确认目标，凭据权威和多目标匹配仍为实现缺口。 |
 | 0.15.0 | 2026-10-04 | 重核 Vault 与 Credential 的资源层级，区分已确认凭据能力与待定引用字段。 |
 | 0.14.0 | 2026-10-04 | 补充创建时间摘要、小写状态、元数据边界与 Vault 凭据引用的公开证据。 |
