@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.65.0 |
+| 文档版本 | 1.66.0 |
 | 更新日期 | 2026-10-04 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -481,7 +481,7 @@ Claw 同日重核 Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`：fileId 
 
 Claude 官方 Beta Deployment 的 schedule 提供 last_run_at/upcoming_runs_at，status 使用 active/paused，归档以 archived_at 表达；metadata 为受限字符串 map。CampusClaw 响应采用对应 lowerCamelCase 时间摘要、小写状态并去除公开 revision，支持可选 metadata。计划时间只是估计，不等于业务完成；内部调度代次继续存在。完整表示 ETag 作为候选覆盖动态摘要，代价是运行或时间推进也可能触发编辑冲突；归档模型尚待审阅。
 
-Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读，运行时按 MCP 目标或受控出站规则使用。CampusClaw 建议借鉴引用与可信注入边界，结合企业租户/业务主体授权；不直接把 workspace 级 Vault 当作园区业务权限。Java main 同日重新 fetch 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，普通消息转发本次执行凭据，Cron 明确使用空凭据；无人值守签发/刷新及 Vault 能力待实现，来源和字段待确定。收益是避免在任务和提示中保存登录 Token，代价是需要独立凭据权威及轮转/撤销接线；首版受控工具无需复制整个 sandbox 出站替换体系。
+Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读，运行时按 MCP 目标或受控出站规则使用。CampusClaw 已确认支持任务凭据绑定，建议借鉴引用与可信注入边界，结合企业租户/业务主体授权；推荐 credentialIds 直接引用独立凭据，vaultIds 则需要真实的 Vault 集合资源，名称和资源层级尚待选定；不直接把 workspace 级 Vault 当作园区业务权限。Java main 同日重新 fetch 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，普通消息转发本次执行凭据，Cron 明确使用空凭据；无人值守签发/刷新及 Vault 能力待实现，来源和字段待确定。收益是避免在任务和提示中保存登录 Token，代价是需要独立凭据权威及轮转/撤销接线；首版受控工具无需复制整个 sandbox 出站替换体系。
 
 公开契约、源码路径与限制见[M10 响应与凭据证据](../08-CampusClaw定时任务/source-evidence.md#creation-metadata-credentials-evidence)，精确创建报文和待决项仍由[配置接口](../08-CampusClaw定时任务/configuration.md#creation-response-review)维护；不扩写其他模块的历史 SHA 或声称已有长期执行凭据。
 
@@ -593,6 +593,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.66.0 | 2026-10-04 | A14 明确 Claw 支持凭据绑定，区分直接凭据与 Claude Vault 集合的引用层级。 |
 | 1.65.0 | 2026-10-04 | A14 对齐创建响应时间摘要、小写状态及 metadata，并说明凭据引用和可信注入的收益与缺口。 |
 | 1.64.0 | 2026-10-04 | A14 固定每次新建 Session，说明 Agent 定义复用与已有会话能力的范围取舍，并链接创建响应对齐。 |
 | 1.63.0 | 2026-10-04 | A14 收敛名称与 Cron 范围，补充会话目标及文件引用和上传的能力差异。 |

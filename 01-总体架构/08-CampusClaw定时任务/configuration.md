@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.14.0 · 2026-10-04 |
+| 版本 | 0.15.0 · 2026-10-04 |
 | 状态 | 已确认能力与 proposed 接口形状分开记录；新接口待实现、尚未发布，整项操作尚未完成确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、时间预览；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已绑定 Agent；不提供已有 Session 目标 |
@@ -17,7 +17,7 @@
 
 已确认的创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 路径、返回与运行细节待设计。每次运行均新建独立 Session，将配置中的一条 `user.message` 作为首条任务消息；绑定的 Agent 定义继续复用；Cron 沿用 Spring 六字段。
 
-时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，JSON 不提供 revision，并支持可选 metadata；精确语义见下文。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 已确认约束。
+时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，JSON 不提供 revision，并支持可选 metadata；精确语义见下文。Claw 支持为定时任务绑定可用凭据的能力已确认，引用资源层级与字段名继续按 §4.2 确定。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 已确认约束。
 
 除明确标记已确认的字段外，下文状态模型、其余字段名、路径和错误码仍为 proposed。已确认新建状态为 `active`，创建处理器不直接调用模型或创建 Session；自动执行由后续调度触发。暂停、恢复、显式试运行、归档和运行记录的精确契约另行设计，不能把下列五个配置接口当作完整产品接口清单。
 
@@ -39,7 +39,7 @@
 
 本切片不增加 options、Agent 目录或请求回执查询接口。能力和字段由本契约定义；同键写请求重放承担丢失响应的恢复。调用方须保存请求键、原请求正文和原 If-Match 才能重试，具体客户端存储方式不属于 Claw 契约。
 
-Claw 必须在服务认证边界取得可信调用者和管理作用域，再按资源及 Agent 授权。scope、owner、授权结果与凭据不进入请求 JSON；不能信任任意 Header 中的声明。相关公司适配器和可信范围解析尚未接线，是明确的实施缺口；本设计不因“内部 API”而省略鉴权，也不新增或推断 Mate 认证协议。到期业务执行身份与配置管理身份分别处理，不能保存请求 Token 供将来运行。
+Claw 必须在服务认证边界取得可信调用者和管理作用域，再按资源及 Agent 授权。scope、owner、授权结果与原始凭据不进入请求 JSON；可选凭据引用单独校验，不能把引用当作已授权结论；不能信任任意 Header 中的声明。相关公司适配器和可信范围解析尚未接线，是明确的实施缺口；本设计不因“内部 API”而省略鉴权，也不新增或推断 Mate 认证协议。到期业务执行身份与配置管理身份分别处理，不能保存请求 Token 供将来运行。
 
 所有普通成功使用 `resCode/resMsg/result`；失败仅返回 `resCode/resMsg`，保留真实 HTTP 状态。JSON 为 lowerCamelCase。配置响应为 `Cache-Control: no-store`；语言支持 zh-CN/en-US，缺省或不支持时回退 zh-CN，返回 Content-Language。scheduleId 由服务端生成、大小写敏感且不复用；示例中的 UUID 后缀不构成客户端可构造 ID 的许可。
 
@@ -53,6 +53,7 @@ Claw 必须在服务认证边界取得可信调用者和管理作用域，再按
 | message | 创建必填；一条 `type:"user.message"`，content 复用现有文本与 fileId 引用格式；引用不等于上传或文件内容可读，见 §3.6；外层字段名 message 为候选，附件长期保留与到期访问规则待确定；不开放 system.message 或 user.define_outcome |
 | schedule | 可选；创建省略默认 null，更新省略保持；非空时只允许下表的 cron 对象，更新时整体替换 |
 | metadata | 可选字符串键值对象；创建省略为 {}；建议沿用 Claude 最多 16 对、键最多 64、值最多 512 个字符；不传给模型、不作为授权依据，详见 §3.7 |
+| 凭据引用（字段待定） | 支持任务绑定凭据已确认；推荐 credentialIds 引用独立受管凭据，或在采用 Vault 集合后使用 vaultIds；两者不同时开放，详见 §4.2；原始秘密不进入配置请求 |
 | status/id/createdAt/updatedAt | 全部只读；新建 active；时间为 UTC ISO 8601，秒级且无小数；status 候选集合为 active/paused/archived，archived 不可修改；小写及新建 active 已确认，归档模型尚待生命周期审阅 |
 | schedule.lastRunAt / schedule.upcomingRunsAt | 仅响应使用；最近自动运行实际开始时间及最多五个未来计划时刻，见 §3.3；创建、更新和预览请求传入时拒绝 |
 | revision | 不属于公共请求或响应字段；内部配置代次只用于持久化和调度竞态检查，不透出 JSON |
@@ -163,7 +164,7 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
 
 ## 4. 创建、读取与更新报文
 
-创建 `POST /campusclaw-service/v1/schedules`，携带 `Idempotency-Key: 0ca92847-fb58-4a9a-900f-8a7b26a71496`：
+以下展示已对齐的创建主体；可选凭据字段的条件候选见 §4.2，尚未据此冻结整个请求。创建 `POST /campusclaw-service/v1/schedules`，携带 `Idempotency-Key: 0ca92847-fb58-4a9a-900f-8a7b26a71496`：
 
 ```json
 {
@@ -284,13 +285,31 @@ revision 不进入创建、详情、列表或更新响应。它是内部实现�
 
 <a id="credential-reference-proposal"></a>
 
-### 4.2. 凭据如何借鉴 Claude（方案待确定）
+### 4.2. 凭据绑定：能力已确认，字段待定
 
 业务问题是“每天 08:00 自动读取园区告警时，凭什么身份调用业务服务”。创建任务的登录凭据可能早已过期；管理任务的权限也不自动等于调用告警、门禁或工单接口的权限。模型服务认证是第三个独立边界。
 
 Claude 的 Deployment 可选 vault_ids 引用已有 Vault（最多 50）；Vault 的 Credential 由独立接口创建和更新。敏感 token/secret 只写不回读。MCP 凭据按 mcp_server_url 匹配注入；环境变量凭据在 sandbox 中表现为不透明占位符，在受控出站边界替换。Vault 是 workspace 范围，不自动提供企业用户/园区级业务授权。公开事实、轮转和自托管限制见[凭据证据](source-evidence.md#creation-metadata-credentials-evidence)。
 
-建议借鉴“独立保管、任务只存引用、运行时重新授权并注入”的职责划分，先复用企业凭据服务及可信 Host/工具 Adapter。采用 Vault 资源后可使用 lowerCamelCase 的 vaultIds；若企业只提供授权引用，则按真实权威模型另定字段。当前不把 vaultIds 或虚构的 Vault API 加进已确认创建契约，也不接受无后端支持的占位字段。
+Claw 支持凭据绑定是已确认产品范围，待实现；尚待选择的是所引用的资源层级及字段名称。建议借鉴“独立保管、任务只存引用、运行时重新授权并注入”的职责划分，并优先复用企业凭据服务及可信 Host/工具 Adapter。
+
+| 条件候选 | 一项引用什么 | 适用理由与代价 |
+|---|---|---|
+| credentialIds：string[]（推荐） | 一份独立受管的逻辑凭据，例如园区告警服务访问身份；内部可包含认证所需的多个值，不是一项对应一个 Header | 调用方明确选择本任务可用的凭据，不新增集合成员管理；代价是多个任务共用一批凭据时需分别维护引用列表 |
+| vaultIds：string[] | 一个包含多份 Credential 的 Vault 集合 | 与 Claude 的资源层级一致，适合统一管理某用户或服务主体的一组连接；代价是新增集合、成员变化和授权范围传播规则 |
+| credentialRefs | 带权威来源或类型的复合引用 | 只有需要跨多套凭据系统定位时才有明确收益；当前没有这种已确认要求，不为单纯字符串 ID 使用更抽象的名称 |
+
+推荐先直接引用独立凭据，字段名采用 credentialIds。若选择 Vault 集合，则改为 vaultIds；这是资源模型选择，不是两个可互换别名。两者不同时加入请求，不因参考 Claude 自动引入不存在的 Vault 管理接口。凭据保管方、主体授权、ID 格式和冲突策略仍待确定；正文中的名称候选不代表已发布字段。
+
+在直接绑定方案下，创建请求与 result 响应使用同名字段，条件片段如下；示例 ID 仅用于说明引用，不定义最终 ID 格式：
+
+```json
+{ "credentialIds": ["credential-example"] }
+```
+
+建议该字段可选、创建省略归一化为 []，响应只回显引用 ID，不回显 secret；一份逻辑凭据的轮转通过原 ID 解析当前有效值。[] 表示没有显式绑定业务凭据，不表示借用创建请求的 Token。更新省略保持、[] 清空、非空数组整体替换为候选语义；重复 ID、同目标多凭据冲突、数量限制及在途运行影响需随资源选择继续确定。创建和执行均需校验当前引用资格，保存成功不等于下游业务已经认证成功。
+
+现有一次执行只有一份 MateCredentials 快照，不能把多 ID 列表直接转换为 Header 合并或最后一个覆盖。若选择多凭据引用，需要按受信业务目标匹配凭据，并定义同目标冲突规则；这属于待实现增量，不由数组字段自动提供。普通 Session 是否同时增加同名字段，另按其接口范围确定。
 
 正常流程建议为：管理方在独立凭据系统完成授权 → 保存任务时校验其可引用资格，仅存引用 → 到期时宿主复核主体、租户、Agent 和业务目标，取得当次可用凭据 → 每次新 Session 使用当次凭据快照 → 工具完成可信目标解析、参数校验及权限判断后，由可信执行 Adapter 注入并调用业务服务 → 只返回安全业务结果。secret 不进入模型提示、metadata、Schedule/Run 记录或公共响应，准备和换取凭据不提前执行业务。
 
@@ -364,7 +383,7 @@ If-Match 用于条件更新，Idempotency-Key 用于重放同一次操作，内�
 | 返回与预览 | schedule 内有 last_run_at/upcoming_runs_at | 同样返回最近自动开始与最多五次计划；ResultBean、lowerCamelCase、UTC 秒级是公司/产品规则；动态摘要使完整表示 ETag 也随之变化 | 参考基线、公司契约 |
 | 状态与版本 | active/paused，另有 archived_at；未声明 revision | 新建 active、响应无 revision；内部配置代次不外露，归档模型另审 | 参考基线、边界明确 |
 | metadata | 最多 16 对字符串，键最多 64、值最多 512 | 支持可选 map，建议同样限制；不进模型，不作身份、权限或凭据依据 | 参考基线、产品约束 |
-| 凭据 | vault_ids 引用 workspace 范围 Vault，运行时使用其中凭据 | 建议独立保管与可信 Adapter 注入；不保存登录 Token，租户/业务主体授权独立校验。字段、凭据来源和管理接口尚待确定 | 企业产品约束、安全加固 |
+| 凭据 | vault_ids 引用 workspace 范围 Vault，运行时使用其中凭据 | 支持绑定凭据已确认；推荐 credentialIds 直接引用独立凭据，采用 Vault 分组时才用 vaultIds。名称和资源模型尚待选定，企业授权独立校验，来源和管理接口待确定 | 企业产品约束、安全加固 |
 
 固定 Agent 版本是最显著的能力差距，不应包装成单纯“字段简化”。未来若要求长期告警策略可重复审计，需要先建设可解析的历史定义与资源绑定，再开放 agentVersion；只保存一个 version 数字不能兑现版本固定。Spring 六字段是本产品已选定的方言，其理由是复用 Java 现有能力与降低维护成本，不是企业园区业务天然要求秒级执行。
 
@@ -384,6 +403,7 @@ If-Match 用于条件更新，Idempotency-Key 用于重放同一次操作，内�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.15.0 | 2026-10-04 | 明确支持凭据绑定，比较独立凭据与 Vault 集合并推荐 credentialIds 条件候选。 |
 | 0.14.0 | 2026-10-04 | 响应补齐计划时间摘要、状态改小写并移除 revision，加入 metadata 与凭据引用取舍。 |
 | 0.13.0 | 2026-10-04 | 每次运行固定新建 Session，移除 target，并展开创建响应及时间摘要的确认边界。 |
 | 0.12.0 | 2026-10-04 | 名称上限对齐 256，时间规则仅支持 Cron，并区分文件引用、上传能力与两种会话目标的证据。 |

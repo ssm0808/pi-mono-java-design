@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.14.0 |
+| 文档版本 | 0.15.0 |
 | 核验日期 | 2026-10-04；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
@@ -350,17 +350,19 @@ CampusClaw 每次运行固定新建 Session，复用 Agent 定义、单条 user.
 
 在 `modules/coding-agent-cli/src/main/java` 和 `modules/cron/src/main/java` 未发现 credentialRef、vaultId 或受管 Vault 链路；外部 Mate 凭据能力未核验。既有 [M03 凭据规则](../02-CampusClaw工具系统/README.md#mate-credential-forwarding)与 [M06 凭据规则](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)要求凭据仅在本次 Host execution 使用，不持久化，不混入发现和模型链路；无人值守凭据来源需要另行确认并同步这些权威规则。
 
+字段命名专项同日再次重新读取 [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create)与 [Vaults](https://platform.claude.com/docs/en/managed-agents/vaults)：vault_ids 一项是 Vault ID，Vault 内包含多份 Credential，并非直接 Credential ID 的别名。Java 再次确认默认 main 并隔离 fetch，仍为上述完整提交；相关 modules 范围没有受管凭据资源。credentialIds 推荐属于 Claw 的候选架构简化，收益是精确选择独立凭据，代价是尚无集合成员批量管理；是否采用仍待用户选择。
+
 完整响应强 ETag 的依据为本次重新读取的 [RFC 9110 §8.8.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.8.1)与[§13.1.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-13.1.1)：表示变化须改变强验证器，If-Match 使用强比较。动态 schedule 不能继续复用仅配置版本标签；本产品的候选及代价由配置专题 §5 维护，不据此推出 Claude 的内部机制。
 
-CampusClaw 当前目标（待实现）：schedule 响应加入 lastRunAt/upcomingRunsAt，只读字段不进入创建输入；status 使用小写；响应不再提供 revision。metadata 字段保留，字符串映射及16/64/512边界仍为借鉴 Claude 的候选参数，精确规则由[配置契约](configuration.md#creation-response-review)维护。Vault 架构、字段名称、凭据保管归属及授权模型尚未确定，不将 vaultIds 直接升级为已确认请求字段。
+CampusClaw 当前目标（待实现）：schedule 响应加入 lastRunAt/upcomingRunsAt，只读字段不进入创建输入；status 使用小写；响应不再提供 revision。metadata 字段保留，字符串映射及16/64/512边界仍为借鉴 Claude 的候选参数，精确规则由[配置契约](configuration.md#creation-response-review)维护。Claw 支持任务绑定凭据已确认；引用层级、字段名称、凭据保管归属及授权模型尚未确定。推荐 credentialIds 直接引用独立凭据，vaultIds 只用于真实集合资源；不将任一名称直接升级为已确认请求字段。
 
 可借鉴的架构原则是任务仅持凭据引用，由可信调用边界按授权主体和目标解析、注入，避免把 secret 写进任务消息、metadata 或响应；这是 CampusClaw 的候选架构变更与企业安全约束。已有请求凭据与 Cron 空凭据事实见 §4/J20 和 §2/J08，不证明已有长期委托、刷新或 Vault。创建时校验引用可用与执行时重新校验可变授权需分别设计；不能直接把创建当天的短期登录 Token 当作长期调度凭据。
 
 ## 9. 文档验收
 
-2026-10-04 的 0.14.0 文档验收在 HEAD 加本任务文件的隔离快照完成：`plantuml -tsvg diagram.puml`、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示为既有 managed_session_compaction 的三个条件组，沿用[时序图规范](../../时序图规范.md#3-从总览下钻)中的边界解释。本次不改该图。
+2026-10-04 的 0.15.0 文档验收在 HEAD 加本任务文件的隔离快照完成：`plantuml -tsvg diagram.puml`、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示为既有 managed_session_compaction 的三个条件组，沿用[时序图规范](../../时序图规范.md#3-从总览下钻)中的边界解释。本次不改该图。
 
-五份变更 Markdown 的五个 JSON 示例、本地路径、标题与图源锚点检查通过；实际工作树 `git diff --check` 通过。校验包括无 Mermaid、PlantUML ASCII、生成成功、SVG XML、图源同步与 SVG 路径。本次保存图只调整小写 active 和响应快照文字，已查看 726×737 原尺寸和 840px 文档宽度，角色、文字、箭头和分支可辨；全局类图及运行图结构未变。图索引通过隔离快照生成，保留无关工作树变更。
+四份变更 Markdown 的六个 JSON 示例、本地路径、标题与图源锚点检查通过；实际工作树 `git diff --check` 通过。校验包括无 Mermaid、PlantUML ASCII、生成成功、SVG XML、图源同步与 SVG 路径。本次仅补充凭据能力与命名候选，未改变结构图、时序图或 SVG；前次保存图的 726×737 原尺寸和 840px 文档宽度视觉核验继续适用。隔离生成的图索引与 HEAD 一致，未覆盖无关工作树修改。
 
 没有新增 OpenAPI/HTML 精确接口，相关检查不适用；没有产品代码修改、产品测试或新增 Maven 依赖。上述验收证明文档与图源一致性，不替代数据库、公司身份、真实凭据轮转或无人值守调度验收。
 
@@ -368,6 +370,7 @@ CampusClaw 当前目标（待实现）：schedule 响应加入 lastRunAt/upcomin
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.15.0 | 2026-10-04 | 重核 Vault 与 Credential 的资源层级，区分已确认凭据能力与待定引用字段。 |
 | 0.14.0 | 2026-10-04 | 补充创建时间摘要、小写状态、元数据边界与 Vault 凭据引用的公开证据。 |
 | 0.13.0 | 2026-10-04 | 核验新 Session 与 Agent 定义边界，并补充 Claw 和 Claude 创建响应的准确差异。 |
 | 0.12.0 | 2026-10-04 | 重核名称与仅 Cron 契约，补充文件上传边界及五个基线的定时会话目标证据。 |
