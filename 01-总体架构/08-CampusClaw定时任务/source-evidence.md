@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.21.0 |
+| 文档版本 | 0.22.0 |
 | 核验日期 | 2026-10-04；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
@@ -105,8 +105,8 @@
 | [Update Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/update) | 再提交 Agent 字符串重新固定最新版本，省略保持；initial_events 整体替换；schedule:null 取消自动计划。更新作用于未来启动，不修改在途 Session。 |
 | [List Deployment Runs](https://platform.claude.com/docs/en/api/beta/deployment_runs/list) | Run 是 Session 创建结果，session_id 与 error 二选一；同一 deployment_id/scheduled_at 最多一个 Run，scheduled_at 是 jitter 前 UTC 时间。不表示外部业务恰好执行一次，也不表示任务已完成。 |
 | [Run Deployment Now](https://platform.claude.com/docs/en/api/beta/deployments/run) | 手动运行创建 Session，并以 manual 触发记录关联结果；不能以创建成功替代 Session 后续终态。 |
-| [Pause](https://platform.claude.com/docs/en/api/http/beta/deployments/pause)、[Unpause](https://platform.claude.com/docs/en/api/http/beta/deployments/unpause)、[Archive](https://platform.claude.com/docs/en/api/http/beta/deployments/archive) | 生命周期各自为管理操作；暂停仍可手动运行，归档不可恢复。指南没有明确说明归档是否终止在途，因此主设计“归档不取消”为 CampusClaw 自己的目标选择。 |
-| [Deployment 模型](https://platform.claude.com/docs/en/api/http/beta/deployments) | 状态是 active/paused，归档另由 archived_at 表达；预览最多五项，暂停时可保留假设恢复后的预览。不能把 CampusClaw 的 ARCHIVED 枚举说成照搬原 Schema。 |
+| [Pause](https://platform.claude.com/docs/en/api/http/beta/deployments/pause)、[Unpause](https://platform.claude.com/docs/en/api/http/beta/deployments/unpause)、[Archive](https://platform.claude.com/docs/en/api/http/beta/deployments/archive) | 生命周期各自为管理操作；暂停仍可手动运行，归档不可恢复。指南没有明确说明归档是否终止在途；CampusClaw 当前采用直接删除，其在途边界仍为候选，见 §8.13。 |
+| [Deployment 模型](https://platform.claude.com/docs/en/api/http/beta/deployments) | 状态是 active/paused，归档另由 archived_at 表达；预览最多五项，暂停时可保留假设恢复后的预览。CampusClaw 仅采用 active/paused，不提供归档状态或字段，删除后不再返回该配置资源。 |
 | [Authenticate with vaults](https://platform.claude.com/docs/en/managed-agents/vaults) | Vault/凭据以 workspace 为作用域，Deployment 通过引用关联；运行期解析与更新。公开 workspace 访问模型不证明 CampusClaw 的公司租户/用户隔离或委托授权，不能直接存聊天 Token 替代它。 |
 
 相对 A14 的 2026-09-22 证据，本次只更新 Claude 调度范围：将旧“最多 10 秒 jitter”校正为当前比例窗口；明确 Run 的创建结果含义、主 Agent 归档/删除不落 Run 的例外及固定版本语义。未重核的 Claude Session/preview/工具文档仍保留各专题原日期；其他四个开源 Agent 基线保留 A14 原 SHA 与成熟度。
@@ -395,7 +395,7 @@ CampusClaw 当前目标（待实现）：schedule 响应加入 lastRunAt/upcomin
 | [List Deployments](https://platform.claude.com/docs/en/api/http/beta/deployments/list) | GET /v1/deployments；参数为 agent_id、created_at[gte/lte]、include_archived（默认 false）、status（active/paused）、limit（默认20、上限100）及不透明 page。status 不能与 include_archived 组合。响应 data 中每项是完整 Deployment，并返回 next_page；无 total，也未给出默认排序及跨页快照保证。 |
 | [List Deployment Runs](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/list)、[Get Deployment Run](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/retrieve) | GET /v1/deployment_runs 与 /v1/deployment_runs/{deployment_run_id} 独立观察 Run。Run 表达 Session 创建结果，不能把它当作 Agent 业务完成状态；配置详情和列表不取代后续 Session 结果读取。 |
 
-**CampusClaw 已确认完整资源，其他读取契约仍为候选。** Schedule 详情与列表每个元素均完整返回同一资源模型，包含 message、metadata、credentialIds 及 schedule 摘要。可以复用 HTTP 包装、只读 DTO/VO 投影及异常框架，但可信访问范围、过滤后的分页与下一页判断、确定性排序、归档可见性、动态摘要一致性均需新增接线及验收；当前接口不提供 ETag 或条件读取。既有 Agent 过滤不是鉴权，Claw 或 Claude 的已有接口均不能替本产品确认这些选择。读取已保存配置不应启动模型、调用业务工具或换取执行凭据；credentialIds 只投影引用，不回读秘密，执行资格失效与读取资格分开判断。新读取形状由[配置专题](configuration.md)维护，本节不把未确认方案升级为已发布契约。
+**CampusClaw 已确认完整资源与直接删除，其他读取细节仍按配置契约区分候选。** Schedule 详情与列表每个元素均完整返回同一资源模型，包含 message、metadata、credentialIds 及 schedule 摘要；删除后详情为404，列表排除，不提供 archivedAt 或 includeArchived。可以复用 HTTP 包装、只读 DTO/VO 投影及异常框架，但可信访问范围、过滤后的分页与下一页判断、确定性排序、删除与读取一致性、动态摘要一致性均需新增接线及验收；当前接口不提供 ETag 或条件读取。既有 Agent 过滤不是鉴权，Claw 或 Claude 的已有接口均不能替本产品确认其余选择。读取已保存配置不应启动模型、调用业务工具或换取执行凭据；credentialIds 只投影引用，不回读秘密，执行资格失效与读取资格分开判断。新读取形状由[配置专题](configuration.md)维护，本节不把未确认方案升级为已发布契约。
 
 Run 读取仅作边界记录：现有 CronService.getRecentRuns 与 [CronRunLog.java:70](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/store/CronRunLog.java#L70) 读取本地 JSONL 尾部并反转，读取失败返回空列表；CronTool.runs（225）默认 limit=10、允许1～100并输出文本。这不是新 Run HTTP 的分页、结果关联或可靠性证明；本节不扩写 Run 精确接口。以上为静态源码与官方契约证据，未执行 HTTP、数据库或权限联调测试。
 
@@ -420,7 +420,7 @@ Run 读取仅作边界记录：现有 CronService.getRecentRuns 与 [CronRunLog.
 
 **CampusClaw 已确认目标（待实现）。** 创建、详情、列表元素和更新使用同一完整资源，顶层增加只读 type，固定值为 schedule；增加只读 pausedReason。新建 active 时 pausedReason=null，手动暂停为 manual 判别对象，错误自动暂停为 error 判别对象并包含安全 error 对象，恢复 active 后清空原因。请求不能写入这两个资源只读字段；message.type 和 schedule.type 的原有输入语义不变。
 
-type 属于资源表达的产品约束，便于脱离请求路径识别资源，不表示增加调度种类。pausedReason 补齐暂停原因的可观察性，是状态模型的架构增量：应随当前暂停状态保存并投影，不以普通 GET 临时拼接最后一次 Run 错误，也不返回原始异常、凭据或敏感业务参数。精确响应由[配置专题](configuration.md#creation-response-review)维护；自动暂停错误枚举、与 Run 错误的映射及归档后的原因处理仍需 Run/生命周期契约对齐，本次不冻结这些候选。
+type 属于资源表达的产品约束，便于脱离请求路径识别资源，不表示增加调度种类。pausedReason 补齐暂停原因的可观察性，是状态模型的架构增量：应随当前暂停状态保存并投影，不以普通 GET 临时拼接最后一次 Run 错误，也不返回原始异常、凭据或敏感业务参数。精确响应由[配置专题](configuration.md#creation-response-review)维护；自动暂停错误枚举与 Run 错误的映射仍需对齐，本次不冻结这些候选。Schedule 直接删除后不再返回资源或暂停原因，不另设归档原因模型。
 
 <a id="schedule-update-evidence"></a>
 
@@ -447,7 +447,7 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 ### 8.12 无客户端条件令牌与数据库更新边界（2026-10-04）
 
-**CampusClaw 已确认的产品约束（待实现）。** 所有 Schedule 接口均不要求或提供 If-Match、Idempotency-Key 及配套 ETag，不在 body/query 中换名提供 version、revision、requestId 等承担相同职责的客户端令牌。该取消范围覆盖创建、详情、列表、更新及后续暂停、恢复、归档、手动运行和 Run 读取；真实资源关联 ID 与内部运行去重键不属于被取消的客户端请求令牌。同一产品约束也适用于其他 Claw 接口，既有 Session 源码中的条件更新应作为迁移差距记录，不能因本节更新而声称代码已完成迁移。
+**CampusClaw 已确认的产品约束（待实现）。** 所有 Schedule 接口均不要求或提供 If-Match、Idempotency-Key 及配套 ETag，不在 body/query 中换名提供 version、revision、requestId 等承担相同职责的客户端令牌。该取消范围覆盖创建、详情、列表、更新及后续暂停、恢复、删除、手动运行和 Run 读取；真实资源关联 ID 与内部运行去重键不属于被取消的客户端请求令牌。同一产品约束也适用于其他 Claw 接口，既有 Session 源码中的条件更新应作为迁移差距记录，不能因本节更新而声称代码已完成迁移。
 
 正常修改以数据库记录为权威：在可信调用范围内开启短事务，锁定当前任务，重新检查其可变状态，只合并本次实际提交的字段并校验完整结果，然后原子写入配置、内部代次与必要的调度状态。未提交字段保留事务取得的最新值；同一字段由数据库串行化后较晚成功提交的更新生效。此规则不拒绝“用户页面打开后别人改过”的请求，也不允许把事务外读取的旧对象整行覆盖回去。暂停、恢复与到期受理仍须在同一权威记录上协调，不能把取消 HTTP 前置条件误解为取消状态准入、事务或数据完整性约束。
 
@@ -470,9 +470,9 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 <a id="schedule-deletion-evidence"></a>
 
-### 8.13 删除与归档的生命周期边界（2026-10-04）
+### 8.13 直接删除与 Claude 归档的生命周期差异（2026-10-04）
 
-**公开 Beta 契约。** 当日重新读取 Claude [操作目录及模型](https://platform.claude.com/docs/en/api/http/beta/deployments)、[Archive](https://platform.claude.com/docs/en/api/http/beta/deployments/archive)、[List](https://platform.claude.com/docs/en/api/http/beta/deployments/list)、[Get](https://platform.claude.com/docs/en/api/http/beta/deployments/retrieve)及[生命周期指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)。操作目录提供 archive，没有列出 DELETE/unarchive；Archive 为 POST、无业务正文、200 完整 Deployment。归档不可修改和恢复，archived_at 表示终态，模型明确归档对象也报告 status:active；upcoming_runs_at 为空，last_run_at 保留。include_archived 默认 false，不能与 status 组合。
+**公开 Beta 契约。** 本次于2026-10-04重新读取 Claude [操作目录及模型](https://platform.claude.com/docs/en/api/http/beta/deployments)、[Archive](https://platform.claude.com/docs/en/api/http/beta/deployments/archive)、[List](https://platform.claude.com/docs/en/api/http/beta/deployments/list)、[Get](https://platform.claude.com/docs/en/api/http/beta/deployments/retrieve)及[生命周期指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)。操作目录提供 archive，没有列出 DELETE/unarchive；Archive 为 `POST /v1/deployments/{deployment_id}/archive`，无业务正文，成功200返回完整 Deployment。归档是不可恢复终态，计划终止且配置不可修改；archived_at 表示归档，模型明确归档对象也报告 status:active；upcoming_runs_at 为空，last_run_at 保留。include_archived 默认 false，不能与 status 组合。
 
 公开页面未明确归档 ID 的 GET 状态、重复归档行为、归档后在途 Session/Run 的处理和保留期限；指南只对暂停明确不停止在途 Session。Archive 的自动生成200示例仍含 archived_at:null、非空 upcoming_runs_at，以及 active 与 manual 暂停原因并存，不能以这些占位值覆盖模型/指南约束。本次未调用实际 API、无服务端源码，不能推断其数据库、锁或删除清理方式。
 
@@ -489,9 +489,17 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 所查 modules/cron、Runtime Controller/Service/Repository/Mapper/SQL 范围未提供 Schedule HTTP、Schedule/Run 数据表或关联删除契约，新增能力仍为待实现。已阅读现有 Cron 删除成功/不存在/跨 Agent 拒绝及 Session 204/busy409 的测试材料，未运行测试；没有发现能证明 Cron 删除与到期执行无竞争的验收证据。
 
-**设计选择与代价。** [配置专题 §4.6](configuration.md#delete-schedule-review)保留归档和删除两个互斥候选，推荐归档以保留园区任务配置和执行依据，尚待确认。归档后可读取、重复调用、Run 独立授权、停用与受理串行化均需由 Claw 明确并实现；不能用现有 JSON 文件移除或 Claude 未声明行为补齐。这是生命周期架构选择，不修改已经确认的无客户端条件/请求键契约，也不引入新 Maven 依赖。
+**CampusClaw 已确认目标（待实现）。** Schedule 采用直接删除，不提供归档资源、归档操作、archivedAt、includeArchived 或 archived 状态；存在的资源仍为 active/paused，删除后 GET 返回404、列表排除该配置。删除不是先转为 paused，也不保留可通过配置接口恢复的归档对象。精确操作由[配置专题 §4.6](configuration.md#delete-schedule-review)维护，不能把生命周期方向确认当成全部删除细节已确认。
+
+**推荐候选。** `DELETE /campusclaw-service/v1/schedules/{scheduleId}` 无请求正文，成功204空体；先检查删除功能权限，再在当前删除授权范围查询，重复、范围内不存在或不可见均按无操作204处理。缺少功能权限为403，权限或存储依赖真实故障为503，不能伪装成不存在。保留独立 Run/Session，不隐式取消已受理 Run。上述方法/返回码及运行边界仍待操作审阅；删除与新受理的串行化、历史读取独立授权、必要配置快照和保留期限也须明确并验收。不能用当前 Cron 的文件删除或 Session 的 busy409 直接补齐这些规则，也不能把 Claude 未声明的行为写成其保证。
+
+**差异分类与代价。** 直接删除是产品约束及生命周期架构选择：减少归档字段、筛选和终态资源管理，代价是删除后无法回读原配置。若按候选保留园区历史 Run/Session，其关联、必要配置快照及可信访问范围须独立保存，不能依赖已删除 Schedule 仍可读取或绕过授权；物理清理与历史保留不能由“删除”一词推导。已确认的无客户端条件/请求键规则保持不变，不引入新 Maven 依赖。
 
 ## 9. 文档验收
+
+2026-10-04 的 0.22.0 将当前目标统一为直接删除，清理配置、主设计和架构对比中的归档候选并同步根导航。隔离快照通过本专题 API 技能校验、仓库 `check-diagrams.py --render`（36专题、131块、52时序图、0错误）、图索引生成；既有 managed_session_compaction 的三个条件组提示保持原边界解释。五份修改 Markdown 的13个 JSON 示例、300个本地链接及锚点校验通过；创建、列表元素和更新资源字段集合一致，无新增归档/删除响应字段；错误体仍为两字段，DELETE候选204无正文。全仓检索未发现仍生效的归档候选枚举、错误码或恢复入口，Claude公开事实、历史版本记录及无关专题的归档用语保留。
+
+本次只修改既有 scheduled_run_sequence 的删除准入检查与候选在途说明，PlantUML ASCII、生成同步和 SVG XML 通过，原尺寸1214×998及840px文档宽度的文字、箭头和返回路径已实际检查；未重构全局类图，稳定块锚点仍为1/53/130。图索引只合入本图尺寸变化，保留无关修改；实际工作树 `git diff --check` 通过。没有新增依赖、产品代码或产品测试；校验不代表删除整项操作已确认，也不证明数据库竞态、权限或历史清理已实现。
 
 2026-10-04 的 0.21.0 删除/归档候选只修改四份 Markdown，未变更公共接口实现、图源或 SVG。HEAD 加本任务文件的隔离快照通过仓库 `check-diagrams.py --render`（36专题、131块、52时序图、0错误），本专题 API 技能校验（3份 Markdown、3份 SVG）及图索引再生成；索引与既有生成物一致。保留既有 managed_session_compaction 的三个条件组提示及其边界解释，未新增复杂度或重新视觉验收未改图形。四份文档的12个 JSON 示例、184个本地链接目标及新增锚点检查通过，实际工作树 `git diff --check` 通过；没有 OpenAPI、产品测试或新增 Maven 依赖。此结果只验证候选记录与证据引用，不代表生命周期选择已确认或新能力已实现。
 
@@ -509,6 +517,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.22.0 | 2026-10-04 | 明确 Schedule 直接删除的已确认范围及与 Claude 归档的差异，保留精确删除响应和历史运行处理为候选。 |
 | 0.21.0 | 2026-10-04 | 核验 Claude 归档公开契约及未知边界，对照 Cron 删除竞争、历史读取和 Session 墓碑机制。 |
 | 0.20.0 | 2026-10-04 | 明确所有 Schedule 接口取消客户端条件及幂等请求头，保留数据库更新与内部运行去重并记录 Session 迁移差距。 |
 | 0.19.0 | 2026-10-04 | 核验 Session 条件更新与 Cron 存储边界，补充 Claude 更新规则及 Schedule 更新候选的复用限制。 |

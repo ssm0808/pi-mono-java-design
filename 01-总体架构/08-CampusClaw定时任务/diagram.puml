@@ -4,7 +4,7 @@
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventOutput.java persistenceOnly.
 ' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a.
-' Design reason: durable occurrence and atomic acceptance precede external work.
+' Design reason: durable occurrence and atomic acceptance, guarded against deletion, precede external work.
 ' Architecture change: scheduled acceptance and persistent Cron sessions are Pending implementation.
 title Daily alarm summary - new session (Pending implementation)
 hide footbox
@@ -25,7 +25,7 @@ alt Preparation rejected
   Store --> Scheduler : Durable failure
 else Preparation ready
   Scheduler -> Runtime : Accept Run with prepared snapshot
-  Runtime -> Store : Recheck task, time, claim and capacity\nCreate Session, message, root execution\nand Run link in one transaction
+  Runtime -> Store : Require existing, non-deleted task\nRecheck state, time, claim and capacity\nCreate Session, message, root execution\nand Run link in one transaction
   Store --> Runtime : Committed acceptance
   Runtime --> Scheduler : Accepted identity (not completion)
   Runtime -> Store : CAS READY to STARTING for live owner
@@ -45,7 +45,7 @@ end
 note over Scheduler, Runtime
   Acceptance rejection records failure without starting.
   Duplicate acceptance returns the existing link only.
-  Pause after acceptance does not cancel the Run.
+  Candidate: pause or delete after acceptance does not cancel the Run.
   Lost owner requires reconciliation, not replay.
 end note
 @enduml
