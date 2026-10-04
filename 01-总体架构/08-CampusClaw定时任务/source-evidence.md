@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.25.0 |
+| 文档版本 | 0.26.0 |
 | 核验日期 | 2026-10-05；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
@@ -567,7 +567,57 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 **归档后显示的核验限制。** 同日进一步读取[Deployment列表](https://platform.claude.com/docs/en/api/http/beta/deployments/list)、[Build in Console](https://platform.claude.com/docs/en/managed-agents/onboarding)及[官方发布说明](https://claude.com/blog/whats-new-in-claude-managed-agents)。include_archived=true明确支持列表包含归档配置；Run模型的persistent/append-only和独立查询是另一层契约。上述资料未明确归档后控制台Run/Session列表的显示规则，也未给出保留时长。本次未登录控制台或执行归档实验，不能把API结构推测当作界面实测；不声称归档后所有执行必然持续可见。
 
+<a id="schedule-delete-baselines"></a>
+
+### 8.16 其他基线的任务删除、运行历史与会话关系（2026-10-05）
+
+本专项分别确认上游默认分支，并在临时目录隔离 shallow fetch 后读取固定提交；没有覆盖用户工作树。下表只升级定时删除与关联历史的核验范围，不升级此前工具、执行恢复或其他模块的历史结论。默认分支最新源码不等于最新稳定发布；Claude 和 Codex 宿主只能按当日官方公开文档判断，不能推断未公开的数据库或控制台行为。
+
+| 基线 | 前次相关快照 → 本次默认分支完整提交 | 本次范围与成熟度 |
+|---|---|---|
+| OpenClaw | 本专题新增辅助基线；main `6636dd6709bdbace1b6b72c3a86ff664bbdec244` | package.json版本2026.9.8；读取当前删除、SQLite运行历史、会话清理及测试，不把旧JSONL实现当现行行为，也不宣称该HEAD就是已发布稳定版 |
+| DeepSeek Harness | master `5badb15009ae1756c3afe0ae0cef1faafc290ccc` → 同提交 | 0.2.1-alpha.1；新增读取delete/history、投递与删除串行化、删除历史测试 |
+| pi | main `200387122ca450d6387f033949423114a270b96c` → 同提交 | 当前包目录、内置工具、coding-agent/server/protocol/durable相关入口；pi-durable明确Experimental |
+| OpenCode | dev `907b3bc518fa48e90e8ec24dd327d13eee71c36c` → 同提交 | 开发分支；GitHub schedule入口、Session API与存储，未观察到同形原生Schedule/Run管理资源 |
+| Codex harness | 前次调度专项main `d42056091aded7feb1d88ac7e83972108b2aa478` → `afb436df8b70bb5bc57b86d9a3e829968988cd21` | 当前插件任务模板、heartbeat输入来源与独立Thread删除；未取得桌面Automation删除实现，不将新增元数据当完整调度服务 |
+
+**可直接比较的两种删除模型。** Run、投递回执和模型执行结果不是同一资源，必须先说明各自含义。
+
+| 基线 | 删除配置后任务侧历史 | 对会话的影响 | 对已在途执行的影响 |
+|---|---|---|---|
+| OpenClaw | 保留独立运行历史，之后受保留清理策略约束；物理保留不保证所有调用者仍可查 | 删除任务专用的复用base session；不会因这次删除批量删除每次运行的`:run:<id>`会话，也不删除共享main会话 | 操作者删除请求取消活动运行；已受理任务自行删除自己的配置是例外。活动运行结束后才做延后清理，返回取消请求不等于执行已停止 |
+| DSH alpha Schedule | 任务行内的deliveryHistory随配置行一起删除，history返回schedule_not_found | 保留原Session、已有事件和已入队消息；本身向原会话投递，不是每次新建Session | delete不调用Agent.cancel，不撤回已入队消息；投递与删除共用FIFO，先进入的投递可能在删除提交前完成 |
+
+**OpenClaw源码与可见性。** [官方CLI文档](https://docs.openclaw.ai/cli/cron)明确说明运行历史保留、操作者删除请求取消和任务自删例外。对应源码为下列固定快照，不能把删除基础会话误写为清空全部运行对话。
+
+| 仓库相对路径与符号 | 已观察行为 |
+|---|---|
+| [src/cron/service/ops-mutations.ts:421](https://github.com/openclaw/openclaw/blob/6636dd6709bdbace1b6b72c3a86ff664bbdec244/src/cron/service/ops-mutations.ts#L421) · remove | 持久移除配置并停止后续调度；提交后处理活动运行，isolated/current目标登记base session清理；有活动运行则返回sessionCleanup:pending，待inactive再清理 |
+| [src/cron/store/row-codec.ts:623](https://github.com/openclaw/openclaw/blob/6636dd6709bdbace1b6b72c3a86ff664bbdec244/src/cron/store/row-codec.ts#L623) · deleteCronJobRowInDatabase；[active-jobs.ts:350](https://github.com/openclaw/openclaw/blob/6636dd6709bdbace1b6b72c3a86ff664bbdec244/src/cron/active-jobs.ts#L350) · noteActiveCronJobRemoval | 删除Job及scratch、撤销该Job授权，不删task_runs；活动运行标记保留至真实结束，操作者取消与任务自删分支明确分开 |
+| [src/cron/service.remove-session-cleanup.test.ts:164](https://github.com/openclaw/openclaw/blob/6636dd6709bdbace1b6b72c3a86ff664bbdec244/src/cron/service.remove-session-cleanup.test.ts#L164) · removes only the deleted isolated job's base session | 测试明确断言base会话删除、同任务run会话保留、其他任务会话保留；这是已读断言，本次未执行 |
+| [src/cron/session-reaper.ts:68](https://github.com/openclaw/openclaw/blob/6636dd6709bdbace1b6b72c3a86ff664bbdec244/src/cron/session-reaper.ts#L68) · removeCronJobBaseSession；resolveRetentionMs（40）、reaper（115） | base清理与过期每run会话清理是不同入口；每run默认按updatedAt超过24小时判定，可配置或禁用，不从删除Job时刻倒计时。清理有忙执行保护与节流，移除会话登记并归档transcript，其物理内容清理另有策略，不是24小时必然抹除全部内容 |
+| [src/cron/store/run-history.kernel.ts:19](https://github.com/openclaw/openclaw/blob/6636dd6709bdbace1b6b72c3a86ff664bbdec244/src/cron/store/run-history.kernel.ts#L19) · retention常量与历史读取 | 当前运行历史采用独立存储；终态通常7天、lost类24小时，每Job/历史类别另有2000条上限。清理还有未终结协调记录等保护，不把常量解释为到秒准时删除保证 |
+| [src/gateway/server-methods/cron-runs.ts:137](https://github.com/openclaw/openclaw/blob/6636dd6709bdbace1b6b72c3a86ff664bbdec244/src/gateway/server-methods/cron-runs.ts#L137) · cronRunsHandler；[cron-history.ts:55](https://github.com/openclaw/openclaw/blob/6636dd6709bdbace1b6b72c3a86ff664bbdec244/src/gateway/server-methods/cron-history.ts#L55) · assertAllowed | 无调用范围/会话可见性限制的操作者可读已删Job历史；受限调用者仍检查存续Job，Job内查询额外传agentId也要求匹配存续Job。物理保留不等于原来所有调用者都可见，不能直接复制成Claw独立租户授权；对应测试cron.runs.test.ts:648已读未执行 |
+| [ui/src/pages/cron/cron-page.ts:555](https://github.com/openclaw/openclaw/blob/6636dd6709bdbace1b6b72c3a86ff664bbdec244/ui/src/pages/cron/cron-page.ts#L555) · 删除后的运行筛选刷新 | 删除当前选中Job后切换总运行历史并重新读取；最终可见性仍依赖API权限及保留结果。本次仅核对UI源码，未启动界面实测 |
+
+**DSH源码与测试。** [ScheduleService.history/delete](https://github.com/deepseek-ai/deepseek-harness/blob/5badb15009ae1756c3afe0ae0cef1faafc290ccc/packages/schedule/schedule/src/index.ts#L295)方法分别在303、326行；delete校验原Session绑定后执行tasks.delete。任务[存储模型](https://github.com/deepseek-ai/deepseek-harness/blob/5badb15009ae1756c3afe0ae0cef1faafc290ccc/packages/schedule/schedule/src/storage.ts#L36)把deliveryHistory与配置放在同一行，因此它们同删。history先查该行，删除后不存在；没有从Session日志重建任务侧历史。
+
+[delivery-history.spec.ts:189](https://github.com/deepseek-ai/deepseek-harness/blob/5badb15009ae1756c3afe0ae0cef1faafc290ccc/packages/schedule/schedule/tests/delivery-history.spec.ts#L189)断言删除后任务、history、list/catalog均不存在，但原Session对象仍在，snapshotEvents完全不变；214行的重启测试继续断言任务与历史不恢复、后续不再投递。已读测试，未运行。[runtime.ts:101](https://github.com/deepseek-ai/deepseek-harness/blob/5badb15009ae1756c3afe0ae0cef1faafc290ccc/packages/schedule/schedule/src/runtime.ts#L101)的followup/flush证明其历史是持久收件回执，不证明模型完成。index.ts:155的runtime事务与delete共用serialize；runtime.ts:54的drive若先进入，删除要等它退出，即使此前尚在恢复Session。该先后关系来自源码推演，未做真实并发实验。
+
+**不能强行填成保留或级联删除的基线。**
+
+| 基线 | 实际核验范围与证据边界 |
+|---|---|
+| pi | [README:74](https://github.com/badlogic/pi-mono/blob/200387122ca450d6387f033949423114a270b96c/README.md#L74)当前包目录无mom，聊天自动化指向外部pi-chat，本次未核验该外部仓；[TaskScheduler:159](https://github.com/badlogic/pi-mono/blob/200387122ca450d6387f033949423114a270b96c/packages/durable/src/harness/scheduler.ts#L159)是实验持久任务执行器。所读内置工具、coding-agent/server/protocol/durable入口没有可等同Schedule→Run→Session的删除契约；不能外推整个pi生态没有定时能力 |
+| OpenCode | [github.handler.ts:149](https://github.com/anomalyco/opencode/blob/907b3bc518fa48e90e8ec24dd327d13eee71c36c/packages/opencode/src/cli/cmd/github.handler.ts#L149)消费GitHub Actions schedule事件，501行创建Session，finally不显式删除Session；删除workflow的历史策略属于外部平台，临时runner存储也不能假设永久保留。本次检索opencode/core/protocol/schema并读取独立[Session.remove:606](https://github.com/anomalyco/opencode/blob/907b3bc518fa48e90e8ec24dd327d13eee71c36c/packages/opencode/src/session/session.ts#L606)，后者不是删除定时任务的语义 |
+| Codex | [plugin.rs:757](https://github.com/openai/codex/blob/afb436df8b70bb5bc57b86d9a3e829968988cd21/codex-rs/app-server-protocol/src/protocol/v2/plugin.rs#L757)有scheduled_tasks模板， [history/heartbeat.rs:24](https://github.com/openai/codex/blob/afb436df8b70bb5bc57b86d9a3e829968988cd21/codex-rs/history/src/heartbeat.rs#L24)识别宿主定时输入；所查app-server/protocol/state及Rust定时入口未找到完整Automation删除服务。[官方Scheduled tasks](https://learn.chatgpt.com/docs/automations)说明两类会话模式和独立归档运行，没有明确删除配置后的级联规则；不能拿[thread_delete_response](https://github.com/openai/codex/blob/afb436df8b70bb5bc57b86d9a3e829968988cd21/codex-rs/app-server/src/request_processors/thread_delete.rs#L31)替代该证据 |
+| Claude Managed Agents Beta | 当日重读[调度指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)和Run模型。归档是停止未来触发的终态，Run为独立追加记录；所读页面仍未明确归档后的Run/Session清理与控制台显示规则，沿用§8.15的未核验边界 |
+
+**对Claw的设计含义。** 新增OpenClaw作为删除生命周期的辅助基线，不改变Claude作为公共调度API主基线。保留独立运行历史与删除任务侧历史均有具体实现参照；DSH证明删历史不必删对话，OpenClaw证明保留历史仍可同时请求取消当前执行。数据删除、历史可见性、在途取消必须分别选择，不能用多数实现或“删除”字样代替产品决定。Claw每次新Session的既定范围保持；Run历史保留与在途策略仍待确认，取舍属于产品约束及生命周期架构选择。源码阅读不等于产品实测，本次未运行上游测试、创建或删除任何真实定时任务。
+
 ## 9. 文档验收
+
+2026-10-05 的 0.26.0 只补充五份Markdown中的删除基线证据与取舍，不改变已确认接口或把历史候选改为正式规则。HEAD加任务文件的隔离快照通过API技能检查（3份Markdown、4份SVG）、仓库图示检查（36专题、132块、53时序图、0错误）和图索引生成；保留既有managed_session_compaction三个条件组的范围提示。19个JSON示例、290个本地文件链接及20个新增GitHub提交/路径/行号目标核对通过，新增锚点存在；四份SVG与图索引再生成均等于HEAD，无图源和布局修改、无新增视觉验收。实际工作树git diff --check通过。基线测试仅阅读断言，没有运行产品测试或实际删除实验；未引入产品代码、API字段或Maven依赖。
 
 2026-10-05 的 0.25.0 只更新五份 Markdown，登记两个Run读取条件入口及删除历史范围，未把未确认的保留方案写成正式能力。HEAD加本任务文件的隔离快照通过API技能校验（3份Markdown、4份SVG）、仓库图示检查（36专题、132块、53时序图、0错误）及图索引生成；既有managed_session_compaction的三个条件组提示沿用原边界解释。19个JSON示例、285个本地文件链接及新锚点检查通过；图源未改，四份SVG和图索引再生成与HEAD一致，没有新增布局或视觉验收。实际工作树git diff --check通过；没有产品代码、产品测试或新增Maven依赖。独立历史是否保留仍待决定，两个GET的参数、错误和完整响应尚未冻结。
 
@@ -597,6 +647,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.26.0 | 2026-10-05 | 核验OpenClaw与DSH不同删除关系，区分历史保留、会话清理和在途取消及其他基线证据边界。 |
 | 0.25.0 | 2026-10-05 | 核验Claude Run列表/详情与既有数字分页，明确删除后日志残留不等于独立历史读取能力。 |
 | 0.24.0 | 2026-10-05 | 核验Claude三个动作与Run模型，并对照旧Cron同步触发、启停竞争及Runtime受理查询缺口。 |
 | 0.23.0 | 2026-10-04 | 核验 Claude 两种成功响应并采用 Deployment 完整资源形状，明确删除回执及重试语义边界。 |
