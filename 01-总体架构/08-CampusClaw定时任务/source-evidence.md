@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.23.0 |
-| 核验日期 | 2026-10-04；各节保留实际核验日期与范围 |
+| 文档版本 | 0.24.0 |
+| 核验日期 | 2026-10-05；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
 
@@ -497,7 +497,45 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 **差异分类与代价。** 直接删除是产品约束及生命周期架构选择：减少归档字段、筛选和终态资源管理，代价是删除后无法回读原配置。若按候选保留园区历史 Run/Session，其关联、必要配置快照及可信访问范围须独立保存，不能依赖已删除 Schedule 仍可读取或绕过授权；物理清理与历史保留不能由“删除”一词推导。已确认的无客户端条件/请求键规则保持不变，不引入新 Maven 依赖。
 
+<a id="schedule-actions-evidence"></a>
+
+### 8.14 立即运行、暂停与取消暂停（2026-10-05）
+
+**公开Beta契约。** 当日重新读取[Run](https://platform.claude.com/docs/en/api/http/beta/deployments/run)、[Pause](https://platform.claude.com/docs/en/api/http/beta/deployments/pause)、[Unpause](https://platform.claude.com/docs/en/api/http/beta/deployments/unpause)、[Deployment模型](https://platform.claude.com/docs/en/api/http/beta/deployments)、[Run模型](https://platform.claude.com/docs/en/api/beta/deployment_runs)、[Run列表](https://platform.claude.com/docs/en/api/beta/deployment_runs/list)和[调度指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)。三操作均POST /v1/deployments/{deployment_id}/{run|pause|unpause}，无业务Body/Query参数，成功200；run返回DeploymentRun，pause/unpause返回完整Deployment。未实际调用服务，没有服务端源码commit；未声明Body不等于证明服务端拒绝{}。
+
+| 公开事实 | 本次参考范围与未说明项 |
+|---|---|
+| Run顶层为type/id/agent/created_at/deployment_id/error/session_id/trigger_context；error与session_id恰好一个非空 | 持久记录Session创建结果，不含queued/running/completed生命周期；成功Run不等于Agent工作完成。agent为已解析版本快照，Claw只有agentId不能伪造版本固定能力 |
+| 手动run的trigger_context为{type:manual}；有规则或manual-only均可运行 | 创建独立Session并提交初始事件，不需要先启用计划；手动运行不更新schedule.last_run_at；并发/去重/全部失败HTTP映射未完整说明 |
+| pause抑制后续自动触发，既有Session继续，手动运行仍允许 | status为paused、paused_reason为manual；Cron预览可保持非空，反映假设恢复后的计划；不推断内部调度锁或取消实现 |
+| unpause从下一次计划继续，不补漏触发，清空paused_reason | status恢复active；重复调用的状态/时间效果、是否覆盖自动暂停原因及恢复资格检查未逐项声明 |
+| Run.error为{type,message}，有16个公开错误分支；自动暂停原因中的error仅含type | 不能混用两个嵌套Schema，也不将手动失败必然自动暂停视作基线；Claw错误集合及精确映射另审，不照搬不存在的Environment/Vault资源 |
+
+官方自动生成示例仍有冲突：run同时填入非空error/session_id且使用schedule触发分支，pause/unpause同时填active与manual原因；应以字段约束和指南为准。Run页面的毫秒占位示例也不改变Claw已确认的秒级规则。暂停期间手动运行及取消暂停不补跑有明确公开依据；重复pause/unpause、精确更新时间和手动重叠策略仍属未公开边界。
+
+**Java当次快照。** 2026-10-05用git ls-remote --symref确认默认分支main，临时bare仓库隔离fetch得到`553dcd5e2ff682f9684810a043b442b37a02e54a`，与2026-10-04旧快照相同；只重核下表范围，不升级其他模块或Agent历史证据。C代表modules/cron/src/main/java/com/campusclaw/cron/，R代表modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/。
+
+| 路径、符号及行号 | 已观察实现及差距 |
+|---|---|
+| [C/CronService.java:80](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/CronService.java#L80) · enableJob、disableJob（90）、triggerJob（97） | enable整体保存true后重排，重复调用无no-op分支；disable取消本地句柄后整体保存false；不存在时两者无操作；未提供结构化HTTP回执或暂停原因 |
+| [C/engine/CronEngine.java:163](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java#L163) · unscheduleJob、triggerJob（177）、executeAndReschedule（185）、executeJob（216） | cancel(false)不终止在途；手动直接执行、不检查enabled、tickLock或runningAt。自动才检查运行标记，手动和自动可能竞争；不能宣称已有Schedule级busy准入 |
+| [C/engine/CronEngine.java:239](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java#L239) · recordJobOutcome、recordJobException（272）、computeNextDelay（301） | 结果更新lastRunAt、次数和错误数并清nextRunAt；手动不满足新目标“自动时间摘要不变”。Cron恢复按当前时刻next，无未来值时没有明确恢复失败回执；旧At/Every不外推为新Cron行为 |
+| [C/store/CronStore.java:112](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java#L112) · updateJob、saveUnsafe（141） | 本地锁内整条替换，读取/判断/写入不在同一锁内；保存吞IOException。结合recordJobOutcome可推导：运行持有enabled=true旧对象→disable保存false→运行收尾覆写true→自动重排；此为源码推导，未运行复现测试 |
+| [C/tool/CronTool.java:42](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/tool/CronTool.java#L42) · INPUT_SCHEMA、create（181）、trigger（212）、requireOwnedJob（238） | action仅create/list/delete/trigger/status/runs，无pause/unpause；创建要求规则，不能因trigger不读schedule而声称已支持null规则；仅Agent过滤不足以证明企业授权 |
+| [C/engine/CronJobExecutor.java:39](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/engine/CronJobExecutor.java#L39) · execute；[ManagedCronSessionRunner.java:53](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java#L53) · execute/prompt.join（70） | 同步等模型完成、提取文本并关闭内存Session；RUNNING/终态为JSONL两行，同runId尚未归并，无持久HTTP Session关联 |
+| [R/session/RuntimeSessionService.java:64](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java#L64) · create/get；[R/persistence/RuntimeExecutionPersistenceService.java:70](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java#L70) · acceptMessage | 创建空Session与受理消息是分离入口；后者可原子建首消息/根执行/segment，但未与新Session、ScheduleRun一并协调 |
+| [R/event/RuntimeMessageEventService.java:131](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java#L131) · submitLocked/startAccepted（190）；[R/event/RuntimeExecutionCoordinator.java:91](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java#L91) · start；[R/event/RuntimeEventOutput.java:35](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventOutput.java#L35) · persistenceOnly | 普通路径prepare→accept→start，Coordinator异步推进；无浏览器输出抽象可复用，但旧Cron未接线，不能用串联两次HTTP代替同库受理 |
+| [R/event/CommittedEventQueryService.java:40](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventQueryService.java#L40) · list；[R/persistence/MyBatisRuntimeSessionRepository.java:268](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#L268) · findEventPage | Session完整事件可分页查询；未提供ScheduleRun详情/列表、无响应Run的超时核对或企业作用域接线 |
+
+**目标与原因。** Claw已确认立即运行采用200 Run记录受理结果，已记录的失败在error，请求/权威失败仍用4xx或5xx；其余精确字段与错误映射、pause/unpause完整资源、同值行为、恢复资格及占用规则是推荐候选。新Run只说明是否可靠受理新Session及首消息，不追踪业务完成，避免复用旧SUCCESS把触发与业务结果混为一体。数据库最新行状态修改、暂停与最终自动受理协调以及收尾不覆盖人工状态，是架构增量；企业调用资格、执行身份和安全错误投影是产品约束/安全边界。代价是新增持久Run、受理接线和独立历史查询，而非简单包装三个旧Service方法。
+
+只读检查了相关CronService/Engine/Tool测试材料，未运行Maven、GaussDB、多实例或身份联调；没有验证暂停竞争、手动busy、原子Session关联或新HTTP成功/错误体。没有新增Maven依赖；继续复用已有Spring/Jackson/MyBatis及Runtime，传递图未重跑。
+
 ## 9. 文档验收
+
+2026-10-05 的 0.24.0 校验采用 HEAD 加本任务文件的隔离快照，保留无关工作树修改。本专题 API 技能校验通过（3份 Markdown、4份 SVG）；仓库 `check-diagrams.py --render` 通过（36专题、132块、53时序图、0错误），图索引已重新生成。既有 managed_session_compaction 的三个条件组提示沿用原边界解释。配置专题19个 JSON 示例可解析，六个完整 Schedule 示例字段集合一致，两个 Run 示例字段集合一致且 sessionId/error 恰好一个非空；暂停和取消暂停的状态、原因及五次计划预览通过检查。
+
+PlantUML ASCII、SVG XML、图源生成同步、Markdown图路径及源码锚点检查通过，稳定块起始行为1/53/131/165。新增立即运行图1133×823及调整后的全局目标类图1192×1188均已实际查看原尺寸和840px文档宽度，检查职责链、文字、箭头、分支与返回路径；配置保存图仅随前序块变化更新源行元数据。实际工作树 `git diff --check` 通过。没有新增 OpenAPI、Maven 依赖或产品代码，未运行产品测试；校验仅证明设计材料一致，不代表候选语义已确认或运行、暂停竞态已实现。
 
 2026-10-04 的 0.23.0 同步删除成功200完整 Schedule 回执及其候选取值、重复删除404，与创建/读取/更新复用字段形状。HEAD 加五份任务 Markdown 的隔离快照通过 API 技能校验（3份 Markdown、3份 SVG）、仓库 `check-diagrams.py --render`（36专题、131块、52时序图、0错误）及图索引再生成；14个 JSON 示例可解析，创建、列表元素、更新和删除的四个完整资源示例字段集合一致，删除回执计划数组为空且无新增删除字段。保留既有 managed_session_compaction 的三个条件组提示及其边界解释。图源未修改，三份 SVG 与图索引再生成后均与 HEAD 一致，无新增视觉布局；工作树 `git diff --check` 通过。只校验设计材料，没有产品实现或运行测试，候选细节不因此变为已确认。
 
@@ -521,6 +559,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.24.0 | 2026-10-05 | 核验Claude三个动作与Run模型，并对照旧Cron同步触发、启停竞争及Runtime受理查询缺口。 |
 | 0.23.0 | 2026-10-04 | 核验 Claude 两种成功响应并采用 Deployment 完整资源形状，明确删除回执及重试语义边界。 |
 | 0.22.0 | 2026-10-04 | 明确 Schedule 直接删除的已确认范围及与 Claude 归档的差异，保留精确删除响应和历史运行处理为候选。 |
 | 0.21.0 | 2026-10-04 | 核验 Claude 归档公开契约及未知边界，对照 Cron 删除竞争、历史读取和 Session 墓碑机制。 |

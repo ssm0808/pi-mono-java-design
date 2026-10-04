@@ -51,7 +51,7 @@ end note
 @enduml
 
 @startuml scheduled_task_architecture
-' Baseline: Claude Deployment / Run / Session, checked 2026-10-04, Beta.
+' Baseline: Claude Deployment / Run / Session and run/pause/unpause, checked 2026-10-05, Beta.
 ' Source: modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob and triggerJob.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start and commitTerminal.
@@ -89,6 +89,7 @@ class "ManagedAgentSession" as Session <<Per execution>>
 class "Host hooks +\nToolExecutionPipeline" as Pipeline <<Per execution>>
 Caller -down-> Api : Claw VO
 Api -down-> App : VO boundary
+Api -[norank]-> Dispatch : manual Run VO
 Tool -left-> App : bound scope
 App -down[hidden]-> Dispatch
 Time -down[hidden]-> Auth
@@ -158,5 +159,52 @@ note over Caller, Store
   A rule registers automatic work; no rule only saves.
   Each successful create allocates a new configuration ID.
   Lost response: inspect saved resources before another write.
+end note
+@enduml
+
+@startuml schedule_manual_run
+' Target: Pending implementation; manual alarm summary from request to Run response.
+' Baseline: Claude deployments/run and deployment_runs, checked 2026-10-05, Beta.
+' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a, main, fetched 2026-10-05.
+' Source: modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java triggerJob.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage.
+' Design reason: return a durable acceptance outcome without waiting for model completion.
+' Architecture change: manual and automatic entries share admission, not legacy prompt.join().
+title Manual alarm summary - Run receipt (Pending implementation)
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor Caller
+participant Schedule
+participant Host
+database Store
+participant Runtime
+Caller -> Schedule : Run saved configuration
+Schedule -> Schedule : Authenticate and validate request\nAuthorize current task scope
+Schedule -> Store : Read authorized configuration snapshot
+Store --> Schedule : Saved task and internal generation
+Schedule -> Host : Prepare current Agent and execution grant\nNo model or business tool work
+Host --> Schedule : Prepared snapshot or known rejection
+alt Preparation rejected
+  Schedule -> Store : Recheck scope and current task\nCommit failed Run only
+  Store --> Schedule : Run with safe error
+else Preparation ready
+  Schedule -> Runtime : Accept manual Run using prepared snapshot
+  Runtime -> Store : Recheck task, generation, grant and slot\nCommit Session + first message + root + Run\nor a known rejected Run
+  Store --> Runtime : Durable acceptance outcome
+  Runtime --> Schedule : Run with Session ID or safe error
+end
+Schedule --> Caller : 200 + Run (Session ID XOR error)
+note over Store, Runtime
+  Only committed acceptance permits background model/tool work.
+  Execution continues through the shared Runtime lifecycle.
+  Run receipt does not track business completion.
+end note
+note over Caller, Schedule
+  Request, authorization or unreliable storage errors: 4xx/5xx.
+  No request key; separate calls create separate attempts.
+  Lost response: reconcile before another POST.
 end note
 @enduml
