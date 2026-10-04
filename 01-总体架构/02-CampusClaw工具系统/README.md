@@ -2,13 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.18.2 |
+| 文档版本 | 2.19.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-04 |
+| 更新日期 | 2026-10-05 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
-本设计区分框架工具、Agent 直接关联的业务工具与 Skill 关联的业务工具。“关联”表示 Agent 或 Skill 与业务工具的配置关系，不代表执行授权；实际调用仍须通过权限检查。注册和发现增量见 [§9](#9-工具注册与发现)，当前源码及基线对照见[专项证据](source-evidence.md#skill-tool-discovery-evidence)。工具定义的数据来源接入、同步、缓存刷新与版本一致性另行设计；本页只固定模型发现契约与单工具定义一致性要求。
+本设计区分框架工具、Agent 直接关联的业务工具与 Skill 关联的业务工具。“关联”表示 Agent 或 Skill 与业务工具的配置关系，不代表执行授权；实际调用仍须通过权限检查。注册和发现增量见 [§9](#9-工具注册与发现)，当前源码及基线对照见[专项证据](source-evidence.md#skill-tool-discovery-evidence)。定时执行所需的可信接口定义与凭据解析由 [Mate 内部能力](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)提供，待实现；工具定义的同步、缓存刷新与版本一致性继续由所属专题细化，本页固定模型发现契约与单工具定义一致性要求。
 
 `ExitPlanMode`、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md) 和 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 已在 Runtime 主线实现，plan/build 共用定义；具体交互及实现范围由[计划专题](../06-CampusClaw计划模式/README.md)维护。Mate 公共桥接状态独立判断。
 
@@ -142,7 +142,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 安全加固 | Find/Grep 不在调用期下载二进制且不回退到 shell | TOB Runtime 的可执行依赖必须在部署和启动期受控 |
 | 安全加固 | 受管树在同级临时目录完整校验后发布 | Session 不读取半成品，refresh 失败保留旧树 |
 | 安全加固 | Mate Agent/Skill/metadata 发现请求不携带执行凭据 | 凭据只向真正执行并产生副作用的端点暴露 |
-| 安全加固 | 仅 Mate execute 原名透传 POST Events 的四项执行快照 | 限定凭据寿命与可见面，防止进入模型、日志、事件或持久化 |
+| 安全加固 | 普通交互保留请求凭据，定时执行由 Mate 解析 credentialIds，业务凭据仅用于实际 execute | 限定凭据来源、寿命与可见面，防止进入模型、日志、事件或持久化 |
 | 安全加固 | 拒绝空摘要、摘要 ToolCall、失败或取消摘要 | 不允许无效摘要覆盖可恢复的旧上下文 |
 | 架构变更 | Agent 代理与 CallTool 共用 Mate 执行适配 | 两种披露方式使用一致的业务参数校验、权限与凭据规则 |
 | 产品约束 | Skill 加载和 SearchTools 不激活工具或授予权限 | 搜索结果只提供模型调用说明，执行身份由宿主可信绑定确定 |
@@ -229,7 +229,7 @@ campusclaw:
 7. 非空配置下，业务代理受 Mate 工具装配开关、当前 Agent 绑定与权限约束。
 
 `Cron` 只在 Runtime profile 中出现，防止 Cron execution 管理或递归创建 Job。首版最大
-Child 深度为 1，因此 Child profile 不暴露必然不可执行的 `Agent`。
+Child 深度为 1，因此 Child profile 不暴露必然不可执行的 `Agent`。定时入口首版不提供人工交互；默认不装配提问或审核工具之外，还须按 [M10 非交互执行约束](../08-CampusClaw定时任务/execution.md#noninteractive)处理业务权限 ASK、自定义问题与误配的交互工具。
 
 ### 4.3 工具装配接口
 
@@ -315,7 +315,7 @@ Pipeline 管理单次调用的校验、执行、结果与事件，Host hook 承�
 代理在 Pipeline 校验完整业务 Schema；CallTool 先校验固定外层 `{tool,args?}`，再由 §9.2 的准备阶段按可信业务 Schema 校验内部 `args`。任一参数校验失败都在 before hook 前返回，不触发用户确认；before hook 拒绝或出错在业务执行前返回。普通工具执行错误归一化后仍进入 after hook。
 
 Schema、可用性、hook 和工具异常都转换为文本结果及 `isError=true`，不因单个工具失败
-终止完整 Agent loop。取消终止当前 execution，并由 Session/Host 投影统一终态。
+终止完整 Agent loop。取消终止当前 execution，并由 Session/Host 投影统一终态。定时入口遇到人工交互时，由 Host 记录原因并结束本次根执行，不能只抛出会被 Pipeline 转成普通工具结果的异常后继续模型；具体终止与可靠收尾见 [M10](../08-CampusClaw定时任务/execution.md#noninteractive)。这一入口约束不改变参数错误先于权限判断、向模型返回同次可信定义及 `isError=true` 的修正规则，也不允许自动猜参、默认批准或重放业务请求。
 
 连续 `PARALLEL` 调用组成并行段，等待整段完成后才能执行下一个串行调用或并行段；每个 `SEQUENTIAL` 调用是 barrier。每个调用仍执行完整 Pipeline，结果按输入顺序汇总。具体并行与等待过程见[执行细节：批次调度](execution-details.md#batch-scheduling)。分段调度已有实现；开发提交 `c9a2340` 的 CallTool 使用同一 Pipeline。
 
@@ -428,19 +428,20 @@ agent/{agentId}/.campusclaw/
 
 ### 9.3 执行凭据
 
-Agent、Skill 与工具元数据查询不携带执行凭据。`MateCredentials` 只来自本次 Host execution，不从 Session 或历史记录恢复；Agent 代理和 `CallTool` 使用同一规则。
+Agent、Skill 与工具元数据查询不读取或复制业务执行凭据。`MateCredentials` 只属于本次 Host execution，不从 Session 或历史记录恢复；Agent 代理和 `CallTool` 使用同一规则。普通交互执行从本次 HTTP 请求捕获快照，定时执行通过 [Mate 内部能力](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)解析 `credentialIds`，两种来源均不得借用其他执行的值。Mate 提供定时执行所需的可信接口定义和凭据解析，具体接线待实现；Claw 仍按可信绑定解析工具、校验参数和判断权限。
 
-实际 execute 请求只透传快照中已提供的 `X-HW-ID`、`Authorization`、
+普通交互的实际 execute 请求只透传快照中已提供的 `X-HW-ID`、`Authorization`、
 `X-HW-APPKEY` 与 `access-token`，不改名、不生成缺失值。该快照可随同一次 Runtime
 execution 的 Child execution 以只读方式传递，但不存入 Child Session。
-当前 Host execution 上下文及工具协作者必须存在，但凭据快照可为空或只含部分 Header。
+普通 HTTP 的 Host execution 上下文及工具协作者必须存在，但凭据快照可为空或只含部分 Header。
 所有本地层均不以凭据完整性决定工具装配或可用性；工具名成功解析且满足确认、取消等原有条件后，
 即使四项全缺失，也向 Mate execute 发出请求，由 Mate 校验并返回结果。缺少受管 Agent、
 执行上下文或必要协作者时仍按通用可用性规则失败，不能把这类缺失与空凭据混淆。
-Cron 不新增凭据来源，也不从历史恢复或借用其他执行的值；Host 未提供 Header 时使用空快照，
-其余执行条件满足后同样交由 Mate 判断。精确读取、省略、失败投影与跨请求隔离由
-[HTTP §7](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)唯一维护；
-对应现有源码检查和待实现切片见[凭据证据](source-evidence.md#credential-forwarding-evidence)。
+普通 HTTP 执行未提供 Header 时使用空快照，其余执行条件满足后同样交由 Mate 判断。精确读取、省略、失败投影与跨请求隔离由 [HTTP §7](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)唯一维护；对应现有源码检查和待实现切片见[凭据证据](source-evidence.md#credential-forwarding-evidence)。
+
+定时执行的配置只保存 `credentialIds` 等授权引用，Mate 负责解析其可用性、授权范围和本次可用凭据，Claw 不复制凭据认证规则。工具通过可信解析、参数校验和权限判断后，才按目标解析secret；返回值只保存在本次执行的受限内存快照中，仅实际业务execute可以使用；不进入 Schedule、Run、Session、Prompt、日志或公开结果，执行结束后释放。创建、读取或修改 Schedule 不借机执行业务或保存原始 secret。该来源为待实现增量，不将当前 Cron 空凭据实现描述为已支持长期授权。
+
+Claw 调用 Mate 定义查询或凭据解析接口所用的服务间认证，和随后业务 execute 使用的执行凭据分别配置、授权与审计；服务间身份不等于最终业务主体，也不自动授予业务工具权限。发现请求可以使用其受信服务身份，但不得复制执行凭据快照。可信接口定义、解析输入及凭据失败语义由 [Mate 契约](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)维护；定时业务调用仍遵守同一次准备快照和 [非交互执行约束](../08-CampusClaw定时任务/execution.md#noninteractive)。
 
 <a id="tool-display-name"></a>
 
@@ -703,13 +704,15 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - 外层格式错误只返回固定入口定义；越权、未知名称、Schema 无效、远端失败与结果未知不误归为可恢复参数错误；超大定义明确标记不完整；
 - 前端按稳定错误码区分纠参过程，保留每个 callId 的真实失败记录；终态、断线与刷新后不残留虚假的“正在调整”，实际执行错误仍可见；
 - 用缺必填项、类型、枚举、嵌套结构等错误验证第一次反馈足以修正，记录首次失败后的调用次数、重复错误比例及额外 token；效果尚未经真实模型验证；
-- Agent、Skill 和 Tool metadata 发现请求精确不含四项执行凭据 Header；
+- Agent、Skill 和 Tool metadata 发现请求不读取或复制四项业务执行凭据；服务间认证单独核验，不把服务身份当作业务授权；
 - MateToolExecutor 与 Model Manager、受管 Runtime 共用 CampusMate scheme/host/port；
 - 顶层 `mate`、`mate.endpoints.*`、`mate.tool.enabled` 与 `MATE_*` 应用变量已删除；
 - Tool path 只从 `campusmate.endpoints` 读取，Skill path 与 Runtime 共用唯一配置键；
 - 代理和 CallTool 不向模型暴露 ID 或凭据；实际执行不自动重放，执行上下文不跨 Session 泄漏；
-- POST Events/Skill Command 快照中已提供的四项 Header 只在 Tool execute 中原名透传；模型、日志、事件、持久化和其他出站请求均不包含；
-- 四项全缺失、任意部分组合与 JWT/APPKEY 同时提供均不触发本地完整性拒绝；解析/确认成功后执行请求恰好一次，Mate 失败映射为 isError=true；
+- POST Events/Skill Command 快照中已提供的四项 Header 只在 Tool execute 中原名透传；模型、日志、事件、持久化和其他出站请求均不包含这些业务凭据；
+- 定时执行仅持久化 credentialIds 等授权引用；Mate 解析失败时不借用请求或历史凭据，secret 只在本次内存和真实 execute 中使用；
+- 定时入口覆盖业务权限 ASK、自定义问题及误配交互工具，无默认答案/批准、无等待记录，可靠结束本根；参数失败仍先返回同次可信定义供模型修正，无自动猜参或业务重放；
+- 普通 HTTP 执行四项全缺失、任意部分组合与 JWT/APPKEY 同时提供均不触发本地完整性拒绝；解析/确认成功后执行请求恰好一次，Mate 失败映射为 isError=true；
 - 空快照不触发 unavailable；缺 Host 上下文、发现失败、取消和确认拒绝仍保持原有处理；完整验收矩阵见 HTTP §7.3；
 - Agent 校验直接绑定、固定版本、深度、循环、父取消和模型白名单；
 - 父与 Child Session 实例隔离但使用相同 Factory/执行语义；
@@ -744,6 +747,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.19.0 | 2026-10-05 | 定时执行由 Mate 解析可信接口与凭据引用，保留普通交互快照并统一非交互入口约束。 |
 | 2.18.2 | 2026-10-04 | Cron 平台任务引用对齐 M10，每次运行新建 Session 并复用已绑定的 Agent 定义。 |
 | 2.18.1 | 2026-09-29 | 将 Cron 调度权威链接到 M10，并明确触发时已发布快照与后台受理增量。 |
 | 2.18.0 | 2026-09-22 | SearchTools 按唯一工具名精确返回定义，定义一致性作为约束，数据加载与同步另行设计。 |

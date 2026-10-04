@@ -6,6 +6,8 @@
 ' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a.
 ' Design reason: durable occurrence and atomic acceptance, guarded against deletion, precede external work.
 ' Architecture change: scheduled acceptance and persistent Cron sessions are Pending implementation.
+' Product constraints: no catch-up, skip when busy, no replay after failure or lost ownership.
+' Product constraints: Mate supplies trusted definitions and credentials; no interactive scheduled work.
 title Daily alarm summary - new session (Pending implementation)
 hide footbox
 skinparam backgroundColor white
@@ -16,12 +18,12 @@ participant Host
 database Store
 participant Runtime
 participant AgentLoop
-Scheduler -> Store : Claim occurrence and task slot\nInsert Run, advance cursor; commit
+Scheduler -> Store : Claim current occurrence and task slot\nInsert Run, advance future cursor; commit
 Store --> Scheduler : Run identity and claim epoch
-Scheduler -> Host : Prepare Agent snapshot\nand current authorization
+Scheduler -> Host : Prepare Agent snapshot\nResolve Mate definitions, grant and credential references
 Host --> Scheduler : Prepared run or rejection
 alt Preparation rejected
-  Scheduler -> Store : Record failure only for existing task / Run\nRelease own slot; pause existing task if required
+  Scheduler -> Store : Record failure only for existing task / Run\nRelease own slot; no retry
   Store --> Scheduler : Durable failure or deletion preserved
 else Preparation ready
   Scheduler -> Runtime : Accept Run with prepared snapshot
@@ -33,8 +35,9 @@ else Preparation ready
   Runtime ->> AgentLoop : Start through shared Session factory
   note right of AgentLoop
     Target -> arguments -> permission
-    -> business execution -> result.
-    No unattended approval.
+    -> credentials -> business execution -> result.
+    ASK ends this root through the Host.
+    No automatic approval or durable wait.
   end note
   AgentLoop -> Runtime : Content and actual root outcome
   Runtime -> Store : Persist events and root terminal state
@@ -46,11 +49,13 @@ note over Scheduler, Runtime
   Rejection records failure only while task / Run exist.
   Duplicate acceptance returns the existing link only.
   Pause after acceptance does not cancel the Run.
-  Whether deletion requests cancellation is not yet decided.
+  Deletion does not cancel an already accepted Session.
   Deletion removes Schedule and Run; Session remains independent.
   Late completion never recreates deleted Schedule or Run.
   Internal coordination remains until safe cleanup.
   Lost owner requires reconciliation, not replay.
+  No catch-up after restart; busy occurrences are skipped.
+  Unknown outcomes remain unknown and keep the task busy.
 end note
 @enduml
 
@@ -63,59 +68,75 @@ end note
 ' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a.
 ' Design reason: preserve API, service, policy, adapter, runtime and durable boundaries.
 ' Product constraint: every Run creates a new Session using the bound Agent definition.
+' Architecture change: Cron merges into coding-agent-cli; no independent cron artifact.
+' Source: pom.xml modules; scripts/sync-campusclaw.sh MODULES.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java createSession.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/AgentScopedCronToolFactory.java create.
+' Design reason: thin admission has no dependency on the dispatcher or execution registry.
 ' Architecture change: one acceptance path; no existing-session target strategy.
 ' Architecture change: every P node and every connector is Pending implementation.
 title Scheduled tasks - global target
 skinparam backgroundColor white
 skinparam defaultFontSize 14
 skinparam classAttributeIconSize 0
-skinparam nodesep 30
-skinparam ranksep 45
+skinparam nodesep 25
+skinparam ranksep 55
 hide empty members
 class "Calling service" as Caller <<External>>
 class "ScheduleController" as Api <<API / P>>
 class "CronToolAdapter" as Tool <<Adapter / P>>
-class "ScheduleApplication\nService" as App <<Service / P>>
+class "ScheduleApplication\nService" as App <<Management / P>>
 class "ScheduleDispatcher" as Dispatch <<Service / P>>
 interface "ScheduleAuthorization\nPort" as Auth <<Port / P>>
-interface "ScheduleBindingResolver" as Binding <<Read-only port / P>>
-class "ScheduleTimePolicy" as Time <<Policy / P>>
+interface "ScheduleCredential\nPort" as Credential <<Port / P>>
+class "MateSchedule\nAdapter" as MateAdapter <<Adapter / P>>
+class "Mate service" as Mate <<External>>
+interface "ScheduleBinding\nResolver" as Binding <<Read-only port / P>>
+class "ScheduleTime\nPolicy" as Time <<Policy / P>>
+class "ScheduleRun\nPreparation" as Prepare <<Service / P>>
 class "PreparedSchedule\nRunDTO" as Snapshot <<Immutable / P>>
 interface "ScheduleRepository" as Repo <<Port / P>>
 class "MyBatisSchedule\nRepository" as RepoImpl <<Adapter / P>>
 interface "ScheduleMapper" as Mapper <<DTO boundary / P>>
-class "GaussDB\nSchedule / Run / Gap\nSession / Execution" as Db <<Durable authority>>
+class "GaussDB\nSchedule / Run / Dispatch state\nSession / Execution" as Db <<Durable authority>>
 class "ScheduledRunAcceptance\nService" as Accept <<Service / P>>
 class "Runtime session and\nexecution persistence" as Persist <<Existing>>
 class "RuntimeExecution\nCoordinator" as Coordinator <<Existing>>
-class "AgentSessionFactory" as Factory <<Existing>>
+class "AgentSession\nFactory" as Factory <<Existing>>
 class "ManagedAgentSession" as Session <<Per execution>>
 class "Host hooks +\nToolExecutionPipeline" as Pipeline <<Per execution>>
 Caller -down-> Api : Claw VO
 Api -down-> App : VO boundary
-Api -[norank]-> Dispatch : manual Run VO
-Tool -left-> App : bound scope
+App -down-> Prepare : manual
+App -[norank]-> Accept : manual admit
+Tool -down-> App : bound scope
 App -down[hidden]-> Dispatch
-Time -down[hidden]-> Auth
-Auth -down[hidden]-> Snapshot
+Binding -down[hidden]-> Auth
+Auth -down[hidden]-> Credential
 App -left-> Time : validate / preview
-App -right-> Repo : manage via DTO\nlock latest row for update
+App -right-> Repo : lock latest row\nwrite DTO
 App -[norank]-> Auth
-App -up-> Binding : validate references
+App -left-> Binding : validate references
 Dispatch -down-> Accept : accept run
-Dispatch -left-> Auth : current grant
+Dispatch -left-> Prepare : automatic
 Dispatch -[norank]-> Time
 Dispatch -[norank]-> Repo
-Dispatch -[norank]-> Snapshot : prepare
+Prepare -left-> Auth : authorize
+Pipeline -left-> Credential : resolve after permission
+Prepare -down-> Snapshot
+MateAdapter .right.|> Auth
+MateAdapter .right.|> Binding
+MateAdapter .right.|> Credential
+MateAdapter -down-> Mate : definitions / grants\nand credentials
 Accept -left-> Snapshot : fixed input
 Accept -[norank]-> Repo
 Repo <|.. RepoImpl
 RepoImpl -down-> Mapper
 Mapper -down-> Db
-Accept -down-> Persist : create Session / accept
-Persist -[norank]-> Db : same transaction
-Accept -down-> Coordinator : after commit
-Coordinator -[norank]-> Persist : events / terminal
+Accept -down-> Persist : create / accept
+Persist -right-> Db : same transaction
+Dispatch -down-> Coordinator : start once\nafter commit
+Coordinator -right-> Persist : events / terminal
 Coordinator -down-> Factory
 Factory -down-> "0..*" Session : creates
 Session *-down-> "1" Pipeline
@@ -123,14 +144,21 @@ legend bottom
   P = Pending implementation; all new connectors are pending.
   Existing services need scheduled-entry integration.
   Services are singletons; snapshots and sessions are per Run.
-  Only the Claw HTTP boundary is defined here.
+  All Claw target services live in coding-agent-cli.
+  HTTP: runtimeapi; scheduling: schedule; tool adapter: tool.cron.
+  Mate APIs supply trusted bindings, authorization and credentials.
   Configuration handlers never call prepare or start a Session.
   A rule registers automatic work; no rule only saves.
   Each Run creates a Session, not an Agent definition.
-  Execution recovery policies require separate refinement.
+  No catch-up or execution replay; busy occurrences are skipped.
+  ASK ends the root; no durable interaction wait.
+  Unknown execution is reconciled, never reported as a known failure.
   Run + message + execution commit before model or tool I/O.
   Schedule deletion removes Run and public run history.
-  Sessions have an independent lifecycle.
+  Deletion does not cancel accepted Sessions.
+  Session deletion keeps the original Run admission receipt.
+  No separate cron module or second legacy scheduler.
+  Thin admission never depends on Dispatcher or Runtime Registry.
   Internal in-flight coordination remains only until safe cleanup.
 endlegend
 @enduml
@@ -141,19 +169,20 @@ endlegend
 ' modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob
 ' modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java saveUnsafe
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare
-' Design reason: durable independent creation and read-only binding checks.
+' Design reason: durable independent creation and read-only Mate binding checks.
+' Product constraint: text-only initial message; credentials remain references at rest.
 title Claw schedule configuration - Pending implementation
 skinparam backgroundColor white
 skinparam defaultFontSize 14
 hide footbox
 actor Caller
 participant Schedule
-participant Directory
+participant Mate
 database Store
 Caller -> Schedule : Create configuration
 Schedule -> Schedule : Authenticate; authorize scope\nValidate request shape
-Schedule -> Directory : Read Agent binding and current grant
-Directory --> Schedule : Binding or typed rejection
+Schedule -> Mate : Read trusted Agent and credential bindings\nand current management grant
+Mate --> Schedule : Binding or typed rejection
 Schedule -> Schedule : Validate complete configuration and rule
 break Binding or rule rejected
   Schedule --> Caller : Safe typed error; no write
@@ -162,7 +191,9 @@ Schedule -> Store : Insert active configuration with new ID\nCommit one transact
 Store --> Schedule : Committed resource or rollback
 Schedule --> Caller : 201 resource + Location\nor safe typed failure
 note over Caller, Store
+  Text-only initial message; no attachment acceptance.
   No Session, model, tool, or directory publication in this request.
+  Store credential references only; resolve secrets at execution.
   A rule registers automatic work; no rule only saves.
   Each successful create allocates a new configuration ID.
   Lost response: inspect saved resources before another write.
@@ -192,7 +223,7 @@ Caller -> Schedule : Run saved configuration
 Schedule -> Schedule : Authenticate and validate request\nAuthorize current task scope
 Schedule -> Store : Read authorized configuration snapshot
 Store --> Schedule : Saved task and internal generation
-Schedule -> Host : Prepare current Agent and execution grant\nNo model or business tool work
+Schedule -> Host : Prepare Agent, Mate definitions and current grant\nCheck credential references; no model or business tool work
 Host --> Schedule : Prepared snapshot or known rejection
 alt Preparation rejected
   Schedule -> Store : Recheck scope and current task\nCommit failed Run only
@@ -207,6 +238,9 @@ Schedule --> Caller : 200 + Run (Session ID XOR error)
 note over Store, Runtime
   Only committed acceptance permits background model/tool work.
   Execution continues through the shared Runtime lifecycle.
+  Failure and lost ownership do not replay this attempt.
+  ASK ends the root through the Host; no durable wait.
+  Schedule deletion does not cancel an accepted Session.
   Run receipt does not track business completion.
   Late completion cannot recreate deleted Schedule or Run.
 end note

@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.78.0 |
+| 文档版本 | 1.79.0 |
 | 更新日期 | 2026-10-05 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -431,9 +431,9 @@ CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可�
 
 | 维度 | 结论 |
 |---|---|
-| 所属模块与主设计 | M10 [定时任务主设计](../08-CampusClaw定时任务/README.md)，关联 M01/M03/M04/M06/M08；本文维护基线差异与理由，具体规则、全局目标类图、实施切片和验收由主设计唯一维护 |
+| 所属模块与主设计 | M10 [定时任务主设计](../08-CampusClaw定时任务/README.md)，关联 M01/M03/M04/M06/M08 及 [Mate 执行上下文](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)；本文维护基线差异与理由，具体规则、全局目标类图、实施切片和验收由主设计唯一维护 |
 | 架构问题 | 到期时间由谁拥有，定时器只是唤醒还是执行权威；到期后是回到同一 Session、创建新的 Agent Run，还是由外部平台重新启动进程；重启、空闲、暂停和失败如何对账？ |
-| CampusClaw 目标 | 配置范围由[Claw 配置接口](../08-CampusClaw定时任务/configuration.md)维护：创建、列表、详情、部分更新、直接删除、时间预览、立即运行、暂停与取消暂停；提供有效 schedule 时创建即登记自动计划，省略时只保存，试运行独立显式触发；不定义 Mate 或页面。每次自动或手动运行均新建独立 Session，不新建 Agent 定义资源；直接删除与200完整 Schedule 回执已确认，回执取值和运行处理仍为候选；到期重叠、补跑和接管仍待细化，不能据配置设计冻结运行策略。 |
+| CampusClaw 目标 | [配置契约](../08-CampusClaw定时任务/configuration.md)维护完整接口，[执行专题](../08-CampusClaw定时任务/execution.md)维护受理与恢复：有 schedule 保存即登记自动计划，省略时只保存，试运行显式触发；每次运行新建 Session 并复用 Agent。首版仅文本、无人工交互，不补跑、遇忙跳过、本次失败/故障不重跑；删除 Schedule/Run 不自动取消已受理执行，Session 独立管理。定时实现合并 coding-agent；失败是否自动暂停整个 Schedule 仍待确认。 |
 | CampusClaw 实现 | Java 默认 `main@553dcd5e2ff682f9684810a043b442b37a02e54a` 已核验既有 Cron 与 Runtime 受理骨架；数据库调度、Run 与新 Session 原子关联的实施增量为待实现，精确范围见[M10 源码证据](../08-CampusClaw定时任务/source-evidence.md)。源码观察不等于 GaussDB、多实例或真实业务验收。 |
 | 基线分工 | Claude Managed Agents 是平台调度主基线，触发独立 Deployment Run 和新 Session；DeepSeek Harness、pi Pico v3、OpenCode、Codex 分别保留 Session 内提醒、通用 Task、外部 Workflow 和宿主调度的历史对照。没有统一的“Agent Cron 实现”，不以这些基线的多数行为代替产品决定。 |
 | 成熟度边界 | pi Pico v3 的所引文档标为 design under discussion（不等同于无实验源码），DeepSeek Harness `dsh-0.1.7-alpha.1` 仍为 alpha，OpenCode 当前核对的是 `dev` 分支，Claude Managed Agents 仍要求 beta header；Codex Scheduled Tasks 以官方产品文档为公开契约，未取得服务端实现源码。 |
@@ -475,17 +475,17 @@ CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可�
 
 完整默认分支、旧新 SHA、路径和符号由[M10 目标与文件证据](../08-CampusClaw定时任务/source-evidence.md#target-file-evidence)维护。CampusClaw 采用 Claude 每次新建 Session 的范围，复用任务绑定的 Agent 定义，创建和更新不提供 target/sessionId 选择。收益是每次作业的历史与结果独立，减少既有 Session 绑定、忙闲和上下文竞争规则；代价是定时任务不能延续某个已有聊天。精确字段与运行行为由配置/执行专题维护，创建响应逐字段对比见[响应审阅](../08-CampusClaw定时任务/configuration.md#creation-response-review)。
 
-Claw 同日重核 Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`：fileId 引用已可保存、回显，但模型输入只有 ID 文本；所查 Claw/前端范围无上传链路，附件按钮禁用。M09 目标由 Mate 提供上传，但其单 Session 文件绑定及 ID 格式仍需与 Runtime/新建会话调度对齐；定时消息附件、受权解析/读取与长期保留待实现/待确定；Claude Files API 的上传及资源挂载不能作为 Claw 已支持文件内容的证据。名称上限对齐 256、仅 Cron 的范围收敛不引入新依赖；六字段和默认上海时区保留。
+Claw 同日重核 Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`：fileId 引用已可保存、回显，但模型输入只有 ID 文本；所查 Claw/前端范围无上传链路，附件按钮禁用。首版定时输入仅文本，明确拒绝附件，不因能保存引用而宣称能读取内容；普通 Session 的文件引用不受此产品范围限制。M09 目标由 Mate 提供上传，其单 Session 绑定与长期授权仍须单独衔接；Claude Files API 的上传及资源挂载不能证明 Claw 已具备这些能力。名称上限256、仅 Cron 不引入新依赖；六字段和默认上海时区保留。
 
 ### 创建响应与凭据引用（2026-10-04 专项）
 
 Claude 官方 Beta Deployment 的 schedule 提供 last_run_at/upcoming_runs_at，status 使用 active/paused，归档以 archived_at 表达；metadata 为受限字符串 map。CampusClaw 响应采用对应 lowerCamelCase 时间摘要、小写状态并去除公开 revision，支持可选 metadata。计划时间只是估计，不等于业务完成；内部调度代次继续存在。动态时间摘要仅供展示，不构成更新前置条件；Claw 采用直接删除，资源不增加归档字段或状态。
 
-Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读，运行时按 MCP 目标或受控出站规则使用。CampusClaw 已确认支持任务凭据绑定，建议借鉴引用与可信注入边界，结合企业租户/业务主体授权；采用 credentialIds 直接引用独立凭据，名称和资源层级已确认；相比 Claude 少一层 Vault 集合，代价是共用凭据列表需逐任务维护；不直接把 workspace 级 Vault 当作园区业务权限。Java main 同日重新 fetch 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，普通消息转发本次执行凭据，Cron 明确使用空凭据；无人值守凭据签发/刷新与按目标选择待实现，权威来源待确定，首版不增加 Vault 集合。收益是避免在任务和提示中保存登录 Token，代价是需要独立凭据权威及轮转/撤销接线；首版受控工具无需复制整个 sandbox 出站替换体系。
+Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读，运行时按 MCP 目标或受控出站规则使用。CampusClaw 使用 credentialIds 直接引用独立凭据，由 Mate 负责保管、当前授权和按可信工具目标解析，Claw 只保存引用。相比 Claude 少一层 Vault 集合，收益是精确绑定独立凭据，代价是共用列表需逐任务维护，并新增企业身份、轮转与撤销接线；不把 workspace 级 Vault 等同园区业务权限。普通 Session 继续使用本次请求 Header 快照，定时执行秘密仅在本次内存供实际 execute 使用，发现不带业务凭据，服务身份不冒充业务凭据。现有 Java Cron 仍使用空凭据，Mate 示例也未实现凭据接口；生产能力未核验。[Mate 配套草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)与接线均待实现，首版不引入 Vault 集合或完整 sandbox 出站替换体系。
 
 公开契约、源码路径与限制见[M10 响应与凭据证据](../08-CampusClaw定时任务/source-evidence.md#creation-metadata-credentials-evidence)，精确创建报文和待决项仍由[配置接口](../08-CampusClaw定时任务/configuration.md#creation-response-review)维护；不扩写其他模块的历史 SHA 或声称已有长期执行凭据。
 
-CampusClaw 已确认完整 Schedule 响应增加只读 type:schedule 与 pausedReason。前者对齐 Claude type:deployment 的资源识别职责，以一个恒定字段换取脱离路径仍可辨认资源；后者对齐 paused_reason 的人工/错误暂停及恢复清空语义，使运营人员能判断任务为何停止自动执行。当前原因需要随状态持久化，不能由最后一个 Run 错误推断；具体自动错误模型仍与 Run 契约一起确定。现有 Session 响应不因此扩展字段；当前 Cron 的 enabled 也不能提供等价原因。已确认目标与源码差距见[M10 专项证据](../08-CampusClaw定时任务/source-evidence.md#schedule-type-pause-reason-evidence)，字段精确定义由[配置契约](../08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)唯一维护；删除成功的完整回执保留最后状态与原因，随后不再提供 Schedule 读取。
+CampusClaw 已确认完整 Schedule 响应增加只读 type:schedule 与 pausedReason。前者对齐 Claude type:deployment 的资源识别职责，以一个恒定字段换取脱离路径仍可辨认资源；后者对齐 paused_reason 的人工/错误暂停及恢复清空语义，使运营人员能判断任务为何停止自动执行。当前原因需要随状态持久化，不能由最后一个 Run 错误推断；是否由运行失败自动暂停整个 Schedule 仍待确认，响应中的 error 形状不代表所有失败均触发暂停；不继承旧 Cron 连续失败3次禁用。现有 Session 响应不因此扩展字段；当前 Cron 的 enabled 也不能提供等价原因。已确认目标与源码差距见[M10 专项证据](../08-CampusClaw定时任务/source-evidence.md#schedule-type-pause-reason-evidence)，字段精确定义由[配置契约](../08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)唯一维护；删除成功的完整回执保留最后状态与原因，随后不再提供 Schedule 读取。
 
 ### 配置停用后的可读取性（2026-10-04 专项）
 
@@ -493,7 +493,7 @@ CampusClaw 已确认完整 Schedule 响应增加只读 type:schedule 与 pausedR
 
 CampusClaw 已确认删除 Schedule 及其所有 Run，保留已经生成的 Session；不提供归档操作、archivedAt、includeArchived 或 archived 状态。存在的 Schedule 仍为 active/paused；删除生效后的新读取中，Schedule 和关联 Run 详情返回404，各自列表排除这些记录。这属于产品约束及生命周期架构选择，减少任务侧历史维护，代价是原配置、触发来源及没有 Session 的受理失败记录不再可查。Session 按自身当前权限读取和删除，授权不依赖已经删除的 Schedule 或 Run。
 
-[删除审阅](../08-CampusClaw定时任务/configuration.md#delete-schedule-review)已确认 DELETE 成功200、ResultBean包装完整 Schedule，借鉴 Deployment archive 的完整资源形状；一次删除回执不构成删除后的配置读取入口。回执保留最后状态/暂停原因、清空后续计划和采用删除事务记录时间，以及重复/不存在/记录级不可见404，仍为候选细节。功能拒绝403、权限或存储依赖故障503及是否请求取消在途执行，也须按操作范围继续审阅。删除与到期受理的串行化及物理清理机制仍需细化；临时内部协调证据不能变成长期保留完整 Schedule/Run 的隐藏归档，执行收尾不得恢复已删记录或计划。
+[删除契约](../08-CampusClaw定时任务/configuration.md#delete-schedule-review)采用 DELETE200 与 ResultBean 完整 Schedule 回执，借鉴 Deployment archive 的返回形状；回执不构成删除后的读取入口。删除与最终受理共享数据库权威：删除先提交则不能受理，受理先提交则原 Session 继续由 Runtime 管理。删除不自动取消已受理执行，停止由 Session 入口单独发起；反向删除 Session 保留存续 Schedule 下的 Run 受理事实。必要内部协调归根执行生命周期，不能变成长久完整配置/Run 归档，晚到收尾不得恢复已删资源。
 
 同日确认并隔离 fetch Java 默认 main，仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`；当前 Cron 取消本地定时器后删 jobs.json，保留 Run 日志却不能通过旧工具读取已删任务历史，也缺少删除与运行受理的统一事务。现有 Runtime Session DELETE 的墓碑/后台清理可作为机制参考，但其拒绝忙会话不能直接复制给仅拥有配置的 Schedule。源码路径、符号、公开资料及未验收项见[M10 删除证据](../08-CampusClaw定时任务/source-evidence.md#schedule-deletion-evidence)；本段不升级其他基线历史结论。
 
@@ -501,7 +501,7 @@ CampusClaw 已确认删除 Schedule 及其所有 Run，保留已经生成的 Ses
 
 重新核对Claude Beta的[Run](https://platform.claude.com/docs/en/api/http/beta/deployments/run)、[Pause](https://platform.claude.com/docs/en/api/http/beta/deployments/pause)、[Unpause](https://platform.claude.com/docs/en/api/http/beta/deployments/unpause)及Run模型：三个操作均POST、无业务正文、200；run返回Session创建结果记录，pause/unpause返回完整Deployment。暂停不终止在途Session并允许手动运行，取消暂停从下一次计划继续且不补跑。重复启停、精确更新时间、手动重叠及各失败HTTP映射未完整公开；自动生成示例中的manual/schedule和状态/原因冲突不能替代字段约束。
 
-CampusClaw的[三个动作](../08-CampusClaw定时任务/configuration.md#run-schedule-review)沿用这些职责与入口；已确认可靠记录的受理结果采用200 Run，已记录失败在error，请求认证/范围/存储故障仍用4xx或5xx。暂停/取消暂停采用200完整Schedule；保留秒级UTC、ResultBean、agentId和无客户端请求键。Run与业务执行分离，避免把“新会话已建立”误报成园区工单处理完成；代价是调用方须检查Run.error并继续观察Session。单任务不重叠、重复启停不重置时间/游标和恢复前检查资格已确认；首消息/根执行受理关联、错误全集与可信身份接线仍需细化并实施。
+CampusClaw的[三个动作](../08-CampusClaw定时任务/configuration.md#run-schedule-review)沿用这些职责与入口；已确认可靠记录的受理结果采用200 Run，已记录失败在error，请求认证/范围/存储故障仍用4xx或5xx。暂停/取消暂停采用200完整Schedule；保留秒级UTC、ResultBean、agentId和无客户端请求键。Run与业务执行分离，避免把“新会话已建立”误报成园区工单处理完成；代价是调用方须检查Run.error并继续观察Session。单任务不重叠、重复启停不重置时间/游标和恢复前检查资格已确认；首消息/根执行的同库受理、错误投影与 Mate 可信身份接线由[执行专题](../08-CampusClaw定时任务/execution.md)维护，均待实现。
 
 当日确认默认main并隔离fetch，Java仍为`553dcd5e2ff682f9684810a043b442b37a02e54a`。旧trigger同步等待模型完成，绕过手动busy检查；disable取消本地句柄后整体保存旧对象，运行收尾可能覆盖暂停；enable重复调用会重排。新HTTP、持久化Run/Session关联及数据库状态屏障待实现，不能包装旧方法直接兑现新契约。具体路径、符号、源码推导与未验收项见[动作证据](../08-CampusClaw定时任务/source-evidence.md#schedule-actions-evidence)。本次只升级该范围，未重新核验其他Agent基线。
 
@@ -509,7 +509,7 @@ CampusClaw的[三个动作](../08-CampusClaw定时任务/configuration.md#run-sc
 
 Claude Beta的[Run列表](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/list)与[详情](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/retrieve)使用独立资源，复用八字段会话创建结果；列表deployment_id可省略，默认limit20、最多1000，page为不透明游标。Claw建议使用独立Run列表/详情并复用已确认的受理模型，分页沿ListEvents整数风格；这属于客户端一致性的产品取舍，不能复制事件尾部追加的稳定位置前提。
 
-Claw已确认删除Schedule及其所有Run，Session独立保留，配置和Run不可回读或恢复。删除生效后的Run读取不再包含这些记录；独立或嵌套路径、scheduleId筛选及其错误处理仍为候选。是否请求取消在途执行尚待确定，不能把DELETE200等同于停止业务或业务回滚；Run404或空列表也不能证明此前没有受理执行。Claude公开归档资料未声明对应保留期限或级联行为，不是这一选择的事实依据。有效生命周期与候选读取接口由[M10读取边界](../08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)维护。
+Claw 删除 Schedule 及其所有 Run，Session 独立保留；删除后的 Run 读取不包含这些记录。配置删除不自动取消已受理执行，因此 DELETE200、Run404 或空列表不能证明业务已停止或此前未受理；停止与观察归 Session 入口。反向删除 Session 不删除仍存续 Schedule 下的 Run，保留历史受理事实，但不承诺原会话仍可读。Claude 公开归档资料未声明对应保留期限或级联关系，不能作为该取舍的保证；精确读取契约由[M10 读取边界](../08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)维护。
 
 当日隔离fetch Java默认main仍为`553dcd5e2ff682f9684810a043b442b37a02e54a`：旧Cron按JSONL行读最近记录，缺Run详情和持久Session关联；删除Job后工具入口不能读取残留日志。Runtime ListEvents已实现默认50/最多200、limit+1和单请求一致分页，可参考协议；新Run与独立授权读取待实现。源码路径、符号及未运行的测试见[Run读取证据](../08-CampusClaw定时任务/source-evidence.md#schedule-run-read-evidence)，不升级其他Agent历史快照。
 
@@ -523,7 +523,7 @@ OpenClaw为本专题新增的删除生命周期辅助基线，Claude仍是公共
 | DSH 0.2.1-alpha.1 | 物理删除任务及其内嵌投递历史，保留原Session及已入队消息；history随后not found | 删除不主动取消对话；投递与删除共用FIFO。它投递原Session，history是收件回执，不是新Session受理Run |
 | Codex、OpenCode、pi | 本次所查源码或公开文档不足以确定同形定时配置的级联关系 | 分别涉及宿主定时产品、GitHub外部Workflow、实验持久任务执行器；普通Thread/Session删除不等于定时配置删除 |
 
-Claw采用删除配置及所有Run、保留Session的已确认方案，降低任务侧历史维护成本，代价是失去无Session的失败记录及任务侧来源查询。该数据关系可参考DSH，但Claw的Run记录新Session受理，DSH的history记录向原会话投递，两者不能等同；OpenClaw提供了保留任务侧历史的不同取舍。Session继续按独立生命周期和当前权限管理，在途是否请求取消仍待确定，精确规则由[配置生命周期](../08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)维护。
+Claw采用删除配置及所有Run、保留Session的已确认方案，降低任务侧历史维护成本，代价是失去无Session的失败记录及任务侧来源查询。该数据关系可参考DSH，但Claw的Run记录新Session受理，DSH的history记录向原会话投递，两者不能等同；OpenClaw提供了保留任务侧历史的不同取舍。Session 继续按独立生命周期和当前权限管理，Claw 不因删除配置自动请求取消；反向删除 Session 保留原 Run 的受理事实，精确规则由[配置生命周期](../08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)维护。
 
 ### 配置读取与运行观察（2026-10-04 专项）
 
@@ -531,13 +531,13 @@ Claude Beta 的 Deployment 详情和列表元素均返回完整配置，列表�
 
 Claw 读取以当前可信可见范围为准，不以 Agent/凭据当前可执行性阻止查看故障配置，不换取或回显 secret，也不创建 Session；这是企业产品约束与安全边界。2026-10-04 重新 fetch Java 默认 main 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`：Cron get/list 是本地 JSON 与文本工具输出，没有新 Schedule HTTP；Runtime Session 已有单条 GET、ResultBean/no-store/ETag，但没有集合分页，也未在所查读取链观察到可信租户授权。新接口与相关接线待实现，不能把旧 Cron 读失败返回空值作为企业读取契约。
 
-双方均区分配置与 Run 观察；Claude Run 只表示 Session 创建结果，Claw 的后续根执行结果仍由运行专题确定。精确字段、筛选和读取错误由[读取接口](../08-CampusClaw定时任务/configuration.md#get-schedule-review)维护；最新路径、符号和官方链接见[读取证据](../08-CampusClaw定时任务/source-evidence.md#schedule-read-evidence)。其他基线的历史结论不因该专项升级。
+双方均区分配置与 Run 观察；Claude Run 只表示 Session 创建结果，Claw 的根执行结果由原 Session/根 execution 维护，内部对账只关联该根，不用后续新对话改写结果。精确字段、筛选和读取错误由[读取接口](../08-CampusClaw定时任务/configuration.md#get-schedule-review)维护；最新路径、符号和官方链接见[读取证据](../08-CampusClaw定时任务/source-evidence.md#schedule-read-evidence)。其他基线的历史结论不因该专项升级。
 
 ### 部分配置更新（2026-10-04 专项）
 
 Claude Deployment 的 POST 更新区分省略保持与显式清空，事件/规则整体替换，metadata 按 key 修改，200 返回完整资源；agent 字符串还会重新固定最新版本。Claw 推荐沿用部分更新和完整响应，以既定七个可写字段限定范围：消息为单条 user.message，凭据为 credentialIds 数组，Agent 只绑定身份；不将修改配置隐含为恢复、立即执行或修改历史运行。metadata 逐 key patch 是特例，不对消息和规则做任意深层合并。直接凭据推荐 [] 清空、null 拒绝，相比 Claude vault_ids 的两种清空值，保留单一数组清空形状；这是产品约束。
 
-Claw 全部接口采用无客户端条件及请求键的产品约束，不返回配套 ETag，也不在请求体或查询参数中换名设置令牌。服务端在短事务内锁定最新记录、合并本次提交字段并校验；不同字段相互保留，同一字段由较晚成功提交的更新生效。收益是降低客户端协议和回执存储复杂度，代价是不能拒绝旧页面上的同字段覆盖，创建或手动运行重试也可能产生新资源。内部配置代次、自动触发唯一约束和 Run 受理去重继续保留。Claude 创建/更新公开页未声明这两个请求头，不据此推断其内部事务或去重。Java main 同日重新 fetch 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，Session 实际仍有 If-Match/ETag 及前端依赖，需同步迁移，Cron 没有公开部分更新。精确接口由[M10 更新契约](../08-CampusClaw定时任务/configuration.md#update-schedule-review)维护，证据及重试边界见[无客户端令牌专项](../08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)；无令牌范围已确认，其他更新细节仍按操作审阅。
+Claw 全部接口采用无客户端条件及请求键的产品约束，不返回配套 ETag，也不在请求体或查询参数中换名设置令牌。服务端在短事务内锁定最新记录、合并本次提交字段并校验；不同字段相互保留，同一字段由较晚成功提交的更新生效。收益是降低客户端协议和回执存储复杂度，代价是不能拒绝旧页面上的同字段覆盖，创建或手动运行重试也可能产生新资源。内部配置代次、自动触发唯一约束和 Run 受理去重继续保留。Claude 创建/更新公开页未声明这两个请求头，不据此推断其内部事务或去重。Java main 同日重新 fetch 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，Session 实际仍有 If-Match/ETag 及前端依赖，需同步迁移，Cron 没有公开部分更新。精确接口由[M10 更新契约](../08-CampusClaw定时任务/configuration.md#update-schedule-review)维护，证据及重试边界见[无客户端令牌专项](../08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)；具体可写字段和错误由配置专题唯一维护，不在对比中复制接口。
 
 ### 1. 调度职责和权威状态
 
@@ -561,24 +561,37 @@ Claw 全部接口采用无客户端条件及请求键的产品约束，不返回
 
 ### 3. CampusClaw 的采纳与差异
 
-当前只定义 Claw 配置边界：[配置专题](../08-CampusClaw定时任务/configuration.md#claude-tradeoffs)明确创建可省略 schedule，此时只保存；有效 schedule 保存即登记自动计划，试运行通过独立显式操作。每次输入一条 user.message，复用文本与现有文件引用格式；附件长期访问和具体接口形状仍待细化，不开放多初始事件、system.message 或 user.define_outcome。名称上限为 256，非空 schedule 只接受 cron；Cron 已选定 Spring 六字段，复用现有解析能力且不新增 Maven 依赖，代价是与 Claude 五字段及日/周组合语义不兼容。[固定注解与动态编程式调度](../08-CampusClaw定时任务/README.md#spring-scheduling)分别适用于应用预定义方法和用户运行期任务；表达式秒粒度不等于准时启动保证。每次运行固定新建 Session；Claw 不提供 target/sessionId/chatId 输入，也不创建新的 Agent 定义。当前没有可选 Environment 资源与历史 Agent 执行绑定；已有元数据 version 不等于可以 pin，prepare 缓存也不等于每次远端最新，目录刷新可改变未来行为。Claw 依靠数据库最新记录合并更新，客户端不提供条件令牌或请求键；该选择不构成 Claude 内部实现结论。保存不调用 prepare，是因为它可能发布目录；完整证据见[配置核验](../08-CampusClaw定时任务/source-evidence.md#configuration-evidence)。
+[配置专题](../08-CampusClaw定时任务/configuration.md#claude-tradeoffs)定义可省略 schedule、有规则保存即启用和独立试运行；每次输入单条文本 user.message，首版不支持附件、多初始事件、system.message 或 user.define_outcome。名称上限256、仅 Cron 借鉴 Claude；Spring 六字段和默认上海时区复用现有能力，不新增外部依赖，代价是与 Claude 五字段及日/周组合语义不兼容。[固定注解与动态调度](../08-CampusClaw定时任务/README.md#spring-scheduling)各有适用场景，表达式秒粒度不保证准时开始。每次固定新建 Session，不提供 target/sessionId/chatId，也不新建 Agent 定义。Claw 没有可选 Environment 或可执行历史 Agent pin，已有元数据 version 不等于历史执行绑定；prepare 使用已发布快照，不保证每次远端最新。保存不调用可能发布目录的 prepare；执行策略与 Mate 配套契约另由所属专题维护。
 
-下述到期执行、同库受理与恢复取舍为待细化候选，不作为配置切片已冻结的实施约束；它们仍需结合业务场景和相应基线单独论证。
+下述执行与工程目标由[执行专题](../08-CampusClaw定时任务/execution.md)维护，均待实现；失败是否自动暂停整个 Schedule 仍是一个待决策略，不把未答复解释为自动暂停或永不自动暂停。
 
-园区每日设备告警汇总、设施巡检和能耗报表首先需要独立的执行与结果记录，因此主线参考 Claude 的平台调度资源分层。正常流程由 Schedule 到期产生 Run，经可信绑定和规则校验、执行授权与 Runtime 准入后创建独立 Session；Run 保留受理结果，再依据该根执行的权威终态更新执行结果。失败时先区分未受理、明确失败与已受理但结果未知，避免把 Session 创建成功当成业务完成，或因观察失败重复产生业务请求。
+园区每日设备告警汇总、设施巡检和能耗报表首先需要独立的执行与结果记录，因此主线参考 Claude 的平台调度资源分层。正常流程由 Schedule 到期产生 Run，经可信绑定和规则校验、执行授权与 Runtime 准入后创建独立 Session；Run 保留受理结果，业务终态以原 Session/根执行为准，内部对账只更新协调摘要并释放所属占用。失败时先区分未受理、明确失败与已受理但结果未知，避免把 Session 创建成功当成业务完成，或因观察失败重复产生业务请求。
 
 | CampusClaw 目标 | 差异分类 | 理由与代价 |
 |---|---|---|
 | 每次自动或手动运行固定新建 Session，复用任务绑定的 Agent 定义 | 参考 Claude、产品约束 | 独立会话便于隔离每日作业上下文与结果，并减少目标绑定和忙闲规则；代价是不能直接延续已有聊天，跨次结论需要通过任务输入或业务记录提供 |
-| Run 分开记录受理结果和根执行结果 | 架构变更 | Claude Run 主要表达 Session 创建结果；CampusClaw 运维需要继续区分任务执行终态，代价是关联、对账与保留规则增加，完整消息历史仍由 Session 维护 |
+| Run 表达受理结果，Session/根执行表达业务终态 | 参考 Claude、架构变更 | 受理成功不等于园区业务完成；内部对账关联原根执行并释放占用，代价是新增关联与对账，公开 Run 不复制完整消息或伪装业务结果 |
 | GaussDB 作为 Schedule/Run 权威，同库内部事务关联 Runtime 受理；单任务不重叠 | 架构变更、安全加固 | 多实例或进程重启时不能仅靠内存 timer；现有非幂等 HTTP 创建/提交不能反复重试来代替原子受理。代价是新增数据库锁、唯一约束与事务集成，跨任务容量仍由运行时治理 |
-| 已受理且结果未知时不接管重放；pause 不取消在途；恢复不全量补跑 | 安全加固、产品约束 | 保持既有 Runtime 失联与工具副作用边界，避免停机恢复集中补发或执行重复；代价是未知结果需要对账，暂停也不等于在途工作已停止 |
-| 每次触发使用 `prepare(agentId)` 的已发布快照、build 与 cron profile | 产品约束 | 沿用三入口装配和无人交互边界；缓存命中不保证 Mate 数据库最新，不固定不存在的 Agent 历史版本。代价是配置刷新可见性仍依赖受管发布，需保存实际执行版本证据 |
+| 不补漏跑、遇忙跳过、本次失败及故障不重跑，未知保持占用 | 安全加固、产品约束 | 防止重复创建 Session、重发首消息或重复可能已执行业务；下一自然计划是新触发。代价是故障可能漏执行，未知需对账或独立人工处置，可靠终态写入重试不等于重跑业务 |
+| 每次触发使用已发布 Agent 快照、build 与 cron profile；首版非交互 | 产品约束、安全加固 | 缓存命中不保证 Mate 数据库最新；真实 ASK、自定义问题和审核必须由 Host 结束本根，不能只移除工具名或默认批准。代价是需要人工决定的任务不适用；参数校验错误仍可由模型修正，不自动重放 |
 | 仅支持 Spring 六字段 Cron，名称最长 256；Cron 默认上海时区 | 产品约束（范围与方言选择） | 采用 Claude 的名称上限与仅 Cron 范围，减少单次耗尽、间隔起点及其更新规则；代价是不能表达未来指定时刻单次执行或任意起点固定间隔。复用已有 spring-context；旧 Cron At/Every 的调用者仍需迁移核验，不因新 HTTP 收敛而直接删实现 |
 
-执行身份策略仍待确定，不能据此推导已有长期服务凭据、凭据持久化或固定 Agent 历史版本。租户隔离、工具绑定、可信参数校验与权限检查继续适用，身份决定及必要的安全边界变更以[M10 主设计](../08-CampusClaw定时任务/README.md)为准。
+Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配套接口](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)仍是待实现草案，生产公司服务身份与授权接线未核验。Claw 保存 credentialIds 等非秘密引用，普通 Session 的本次 Header 规则保持；不能据此推导已有长期凭据、完整租户隔离或固定 Agent 历史版本。
 
-上述新增调度能力为**待实现**。实施与验收集中于[M10 主设计](../08-CampusClaw定时任务/README.md)，重点包括多实例重复触发、受理事务故障、暂停竞争、失联结果对账、单任务不重叠、时区/DST 和每次运行的新 Session 关联；本条没有运行产品或 GaussDB 测试。现有代码与目标增量分别见[M10 源码证据](../08-CampusClaw定时任务/source-evidence.md)，不以主设计完成代替实现验收。
+上述新增调度能力为**待实现**。实施与验收集中于[M10 主设计](../08-CampusClaw定时任务/README.md)，重点包括多实例重复触发、受理事务故障、暂停/删除竞争、未知不重放、忙跳过、时区/DST、新 Session 关联及 ASK/自定义提问终止；本条没有运行产品或 GaussDB 测试。现有代码与目标增量分别见[M10 源码证据](../08-CampusClaw定时任务/source-evidence.md)，不以主设计完成代替实现验收。
+
+### 执行策略与 coding-agent 合并（2026-10-05 工程核验）
+
+这次增量只重核 Java 默认 `main@553dcd5e2ff682f9684810a043b442b37a02e54a` 和 Mate 示例默认 `main@4b957a3a846659f5b7569c9d6133abc070cd2e3c`，与各自前次 SHA 相同；完整路径、符号与范围见[M10 工程证据](../08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)。Claude 等外部基线保留前述历史日期，不以本次工程设计冒充重新核验的上游事实。
+
+| CampusClaw 取舍 | 分类、收益与代价 | 已观察差距 |
+|---|---|---|
+| Mate 提供可信接口、执行授权与 credentialIds 解析 | 架构变更、安全加固；避免持久化浏览器登录凭据或由模型选择秘密，代价是新增内部授权/凭据接线；服务间身份与业务凭据分开 | Mate 示例已有 Agent 目录/runtime Controller，未观察凭据或 `/runtime/tools` 服务端；Claw 客户端已有地址不证明 Mate 已实现它们，生产工程未核验 |
+| 首版仅文本、无需人工交互 | 产品约束；无需持久等待/跨进程交互恢复，代价是需确认或附件的作业不适用；意外 ASK、提问、审核结束本根，不默认批准 | Cron profile 已不含 AskUserQuestion/ExitPlanMode，但权限 ASK、自定义问题和普通工具错误仍需 Host 专门处理，不能仅靠工具清单或 isError |
+| 停机不补跑、忙跳过、失败故障不重跑 | 产品约束、安全加固；避免积压和副作用重放，代价是可能漏执行、未知结果持续占用；自动暂停整项任务的政策待确认 | 旧 Cron 的本地 timer、失败退避、3次失败禁用和2小时 running 清理不能兑现该目标，数据库扫描代次、原子受理和对账待实现 |
+| 定时代码合并 coding-agent，保留设计职责边界 | 架构变更；共用 Runtime 与同库受理，减少独立 Maven 制品，代价是宿主职责增多；管理/受理和 Dispatcher 分离以避免 Registry 构造环 | 旧 cron 独立模块及15个生产类/7个测试、两处工具 Schema、POM、同步脚本、CODEOWNERS 均需迁移；不新增外部依赖，不把无消费者 JobRunr 占位当成现有运行库 |
+
+精确执行、故障与上线初值见[执行专题](../08-CampusClaw定时任务/execution.md)，Mate 路径和字段见[内部契约草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)。模块合并、同库受理与凭据链均待实现；本次没有运行产品、GaussDB 或多实例测试，也不据部署默认数值宣称容量。
 
 ### 4. 源码与官方契约证据
 
@@ -591,7 +604,7 @@ Claw 全部接口采用无客户端条件及请求键的产品约束，不返回
 | Claude Managed Agents | 官方文档核对日期由 2026-09-22 更新为 2026-09-29；Beta，暂无服务端源码 commit | [Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments) 的 Cron、timezone、jitter、Deployment Run、pause/unpause、failure 和 manual run；[Create Deployment API](https://platform.claude.com/docs/en/api/http/beta/deployments/create) 的 `BetaManagedAgentsScheduleParams`。更新 jitter 窗口、Run 创建结果含义及主 Agent 归档/删除的无 Run 例外；只证明公开托管契约，不推断内部落库顺序、scheduler、锁或数据库。 |
 | CampusClaw Java | 2026-09-29 确认默认分支并 fetch `main@553dcd5e2ff682f9684810a043b442b37a02e54a` | 本次新增 M10 的 Cron 时间解析、存储/调度、Host 装配及 Runtime 受理源码核验；完整仓库相对路径、关键符号、旧新范围和实现差距统一见[M10 源码证据](../08-CampusClaw定时任务/source-evidence.md)，不将该 SHA 批量替换其他模块的历史证据。 |
 
-**讲解要点。** 园区定时作业采用 Claude 的平台调度分层，每次创建独立 Session；每次触发既看是否受理，也看对应根执行是否结束。CampusClaw 用 GaussDB 与既有 Runtime 准入约束重复执行，保留发布快照和无人交互规则，因此要承担事务集成与结果对账的成本。Agent 定义保持任务绑定，运行身份策略待确定，新增能力待实现；其余基线只提供各自职责层次的历史参照。
+**讲解要点。** 园区定时作业采用 Claude 的平台调度分层，每次创建独立 Session；每次触发既看是否受理，也看对应根执行是否结束。CampusClaw 用 GaussDB 与既有 Runtime 准入约束重复执行，保留发布快照和无人交互规则，因此要承担事务集成与结果对账的成本。Agent 定义保持任务绑定，Mate 提供可信执行身份与凭据，定时首版只接受无需交互的文本工作，新增能力待实现；其余基线只提供各自职责层次的历史参照。
 
 ## 7. 源码证据与更新边界
 
@@ -647,6 +660,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.79.0 | 2026-10-05 | A14同步非交互、不补跑、不重跑与独立Session生命周期，补充Mate凭据权威和coding-agent合并取舍。 |
 | 1.78.0 | 2026-10-05 | A14采用删除Schedule及关联Run、保留Session的生命周期，明确读取影响与在途取消待定。 |
 | 1.77.0 | 2026-10-05 | A14比较OpenClaw保留运行历史与DSH删除投递历史，明确会话保留及在途取消差异。 |
 | 1.76.0 | 2026-10-05 | A14区分Run独立查询、页码取舍与配置删除后的历史生命周期，不把归档契约推定为保留保证。 |
