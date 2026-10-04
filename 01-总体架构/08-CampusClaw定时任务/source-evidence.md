@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.26.0 |
+| 文档版本 | 0.27.0 |
 | 核验日期 | 2026-10-05；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
@@ -491,11 +491,11 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 所查 modules/cron、Runtime Controller/Service/Repository/Mapper/SQL 范围未提供 Schedule HTTP、Schedule/Run 数据表或关联删除契约，新增能力仍为待实现。已阅读现有 Cron 删除成功/不存在/跨 Agent 拒绝及 Session 204/busy409 的测试材料，未运行测试；没有发现能证明 Cron 删除与到期执行无竞争的验收证据。
 
-**CampusClaw 已确认目标（待实现）。** Schedule 采用直接删除，不提供归档资源、归档操作、archivedAt、includeArchived 或 archived 状态；存在的资源仍为 active/paused，删除成功200、ResultBean.result 返回完整 Schedule，随后 GET 返回404、列表排除该配置。删除不是先转为 paused，也不保留可通过配置接口恢复的归档对象。精确操作由[配置专题 §4.6](configuration.md#delete-schedule-review)维护，不能把生命周期方向确认当成全部删除细节已确认。
+**CampusClaw 已确认目标（待实现）。** 删除 Schedule 及其所有 Run，保留已经生成的 Session；不提供归档资源、归档操作、archivedAt、includeArchived 或 archived 状态。存在的 Schedule 仍为 active/paused，删除成功200、ResultBean.result 返回完整 Schedule；删除生效后的新读取中，Schedule 和关联 Run 详情返回404，各自列表排除这些记录。删除不是先转为 paused，也不保留可恢复的配置或Run归档；Session按自身生命周期和当前权限独立管理，不依赖已删除的Schedule/Run授权。精确操作由[配置专题 §4.6](configuration.md#delete-schedule-review)维护，不能把数据生命周期确认当成全部删除细节已确认。
 
-**推荐候选。** `DELETE /campusclaw-service/v1/schedules/{scheduleId}` 无请求正文；完整回执来自删除事务锁定的最后安全快照，保留状态/暂停原因与 createdAt、lastRunAt，Cron 的 upcomingRunsAt 清空、schedule:null 保持，updatedAt 使用删除事务记录并随提交生效的时间。先检查删除功能权限，再在当前可读取并删除范围查询；重复、不存在或不可见统一404，不伪造完整资源，也不长期保存完整 HTTP 回执用于重放。缺少功能权限为403，权限或存储依赖真实故障为503，不能伪装成不存在。保留独立 Run/Session，不隐式取消已受理 Run。200完整资源形状已确认，上述字段取值、其他返回码及运行边界仍待操作审阅；删除与新受理的串行化、历史读取独立授权、必要配置快照和保留期限也须明确并验收。不能用当前 Cron 的文件删除或 Session 的 busy409 直接补齐这些规则，也不能把 Claude 未声明的行为写成其保证。
+**推荐候选。** `DELETE /campusclaw-service/v1/schedules/{scheduleId}` 无请求正文；完整回执来自删除事务锁定的最后安全快照，保留状态/暂停原因与 createdAt、lastRunAt，Cron 的 upcomingRunsAt 清空、schedule:null 保持，updatedAt 使用删除事务记录并随提交生效的时间。先检查删除功能权限，再在当前可读取并删除范围查询；重复、不存在或不可见统一404，不伪造完整资源，也不长期保存完整 HTTP 回执用于重放。缺少功能权限为403，权限或存储依赖真实故障为503，不能伪装成不存在。200完整资源形状及Schedule/Run删除、Session保留已确认；上述字段取值、其他返回码及是否请求取消在途执行仍待操作审阅。删除与新受理的串行化、Session独立授权和物理清理机制须明确并验收；进行中或结果未知执行所需的最小内部协调证据只能临时保留，不得借此长期保留完整配置/Run或重新开放历史查询。不能用当前 Cron 的文件删除或 Session 的 busy409 直接补齐这些规则，也不能把 Claude 未声明的行为写成其保证。
 
-**差异分类与代价。** 直接删除是产品约束及生命周期架构选择：减少归档字段、筛选和终态资源管理，代价是删除后无法回读原配置。若按候选保留园区历史 Run/Session，其关联、必要配置快照及可信访问范围须独立保存，不能依赖已删除 Schedule 仍可读取或绕过授权；物理清理与历史保留不能由“删除”一词推导。已确认的无客户端条件/请求键规则保持不变，不引入新 Maven 依赖。
+**差异分类与代价。** 删除Schedule及关联Run、保留Session是产品约束及生命周期架构选择：减少归档字段、筛选和任务侧历史管理，代价是原配置、触发来源及没有Session的失败Run不再可查。已生成对话不因任务删除而丢失，读取与删除继续按Session自身当前权限执行；数据保留不代表在途执行必然继续，是否请求取消仍待确定。执行收尾只能完成Runtime及必要的内部协调，不得复活已删Schedule、Run或计划。已确认的完整Schedule回执及无客户端条件/请求键规则保持不变，不引入新 Maven 依赖。
 
 <a id="schedule-actions-evidence"></a>
 
@@ -563,7 +563,7 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 源码链接基址为 [pi-mono-java 固定快照](https://github.com/superheromeZzh/pi-mono-java/tree/553dcd5e2ff682f9684810a043b442b37a02e54a)。只读取源码及有关测试材料，未运行 Maven、数据库、多实例或公司身份联调。无新增 Maven 依赖；旧 Cron 日志与新 Run 的语义不等价，不能通过 DTO 包装宣称已实现。
 
-**Claw 的待决生命周期。** 直接删除 Schedule 已确认，不提供归档查询或恢复。推荐删除配置后保留已生成 Run/Session、已受理执行继续，运行历史按当前权限及独立保留策略查询；也可选择清理Run但保留Session，或三类资源一并清理，不能把运行摘要与对话内容捆绑成只能全留/全删。Run保留有利于追溯来源及没有Session的启动失败，不是技术必需或永久保留要求。历史若保留，可信归属须随Run保存，Session后续删除不改写成功受理结果，其404也不能区分删除与失权。具体生命周期仍待确认，两个GET入口为条件候选，见[运行读取边界](configuration.md#schedule-run-read-lifecycle)。
+**Claw 的已确认生命周期（待实现）。** 删除Schedule及其所有Run，保留已生成Session，不提供归档查询或恢复。删除生效后的Run详情返回404，列表排除相关记录；代价是没有Session的启动失败和任务侧触发来源不再可查。Session凭自身可信归属及当前调用权限独立读取和删除，不依赖Schedule/Run仍存在。是否请求取消在途执行、删除与受理的具体事务及物理清理机制仍待确定，不能把内部协调所需的临时证据变成完整配置或Run的永久软归档。两个GET的路径、筛选和分页等精确契约仍为候选，Run404或空列表不证明此前没有成功受理，见[运行读取边界](configuration.md#schedule-run-read-lifecycle)。
 
 **归档后显示的核验限制。** 同日进一步读取[Deployment列表](https://platform.claude.com/docs/en/api/http/beta/deployments/list)、[Build in Console](https://platform.claude.com/docs/en/managed-agents/onboarding)及[官方发布说明](https://claude.com/blog/whats-new-in-claude-managed-agents)。include_archived=true明确支持列表包含归档配置；Run模型的persistent/append-only和独立查询是另一层契约。上述资料未明确归档后控制台Run/Session列表的显示规则，也未给出保留时长。本次未登录控制台或执行归档实验，不能把API结构推测当作界面实测；不声称归档后所有执行必然持续可见。
 
@@ -613,9 +613,13 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 | Codex | [plugin.rs:757](https://github.com/openai/codex/blob/afb436df8b70bb5bc57b86d9a3e829968988cd21/codex-rs/app-server-protocol/src/protocol/v2/plugin.rs#L757)有scheduled_tasks模板， [history/heartbeat.rs:24](https://github.com/openai/codex/blob/afb436df8b70bb5bc57b86d9a3e829968988cd21/codex-rs/history/src/heartbeat.rs#L24)识别宿主定时输入；所查app-server/protocol/state及Rust定时入口未找到完整Automation删除服务。[官方Scheduled tasks](https://learn.chatgpt.com/docs/automations)说明两类会话模式和独立归档运行，没有明确删除配置后的级联规则；不能拿[thread_delete_response](https://github.com/openai/codex/blob/afb436df8b70bb5bc57b86d9a3e829968988cd21/codex-rs/app-server/src/request_processors/thread_delete.rs#L31)替代该证据 |
 | Claude Managed Agents Beta | 当日重读[调度指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)和Run模型。归档是停止未来触发的终态，Run为独立追加记录；所读页面仍未明确归档后的Run/Session清理与控制台显示规则，沿用§8.15的未核验边界 |
 
-**对Claw的设计含义。** 新增OpenClaw作为删除生命周期的辅助基线，不改变Claude作为公共调度API主基线。保留独立运行历史与删除任务侧历史均有具体实现参照；DSH证明删历史不必删对话，OpenClaw证明保留历史仍可同时请求取消当前执行。数据删除、历史可见性、在途取消必须分别选择，不能用多数实现或“删除”字样代替产品决定。Claw每次新Session的既定范围保持；Run历史保留与在途策略仍待确认，取舍属于产品约束及生命周期架构选择。源码阅读不等于产品实测，本次未运行上游测试、创建或删除任何真实定时任务。
+**对Claw的设计含义。** OpenClaw作为删除生命周期的辅助基线，Claude继续作为公共调度API主基线。保留独立运行历史与删除任务侧历史均有具体实现参照；DSH证明删历史不必删对话，OpenClaw证明保留历史仍可同时请求取消当前执行。Claw已确认删除Schedule及所有对应Run、保留已生成Session；这是产品约束及生命周期架构选择，参考DSH的资源关系但不等同其投递回执语义。Session继续独立授权和管理，在途取消仍待确定，不能用基线行为推定该选项已确认。所列基线事实保持原核验范围；源码阅读不等于产品实测，未运行上游测试、创建或删除任何真实定时任务。
 
 ## 9. 文档验收
+
+2026-10-05 的 0.27.0 同步删除Schedule及全部关联Run、保留Session的目标，两个读取接口和在途取消仍按各自确认范围维护。沿用当日§8.15～§8.16已核验的源码与公开文档，不新增基线实现结论。HEAD加任务文件的隔离快照通过API技能检查（3份Markdown、4份SVG）、仓库图示检查（36专题、132块、53时序图、0错误）和图索引生成；既有managed_session_compaction三个条件组的范围提示沿用原解释。19个JSON示例、290个本地文件目标及图源块锚点检查通过，实际工作树git diff --check通过；隔离快照不是Git工作树，该项在实际仓库补检。
+
+四份SVG已重新生成，ASCII、XML和生成同步通过，稳定块起始行为1/57/138/172。逐图查看原尺寸和840px文档宽度：自动运行图1289×1064、全局目标类图1192×1238、配置保存图630×609、立即运行图1133×839；新增文字与返回路径无裁切，完整职责链及既有类图布局保持。840px自动运行图及类图文字较密，保留原尺寸入口。图索引仅合入本专题尺寸与图源锚点变化，保留无关修改。没有产品代码、数据库或实际删除实验，未新增Maven依赖；文档校验不代表删除、授权或并发规则已实现。
 
 2026-10-05 的 0.26.0 只补充五份Markdown中的删除基线证据与取舍，不改变已确认接口或把历史候选改为正式规则。HEAD加任务文件的隔离快照通过API技能检查（3份Markdown、4份SVG）、仓库图示检查（36专题、132块、53时序图、0错误）和图索引生成；保留既有managed_session_compaction三个条件组的范围提示。19个JSON示例、290个本地文件链接及20个新增GitHub提交/路径/行号目标核对通过，新增锚点存在；四份SVG与图索引再生成均等于HEAD，无图源和布局修改、无新增视觉验收。实际工作树git diff --check通过。基线测试仅阅读断言，没有运行产品测试或实际删除实验；未引入产品代码、API字段或Maven依赖。
 
@@ -647,6 +651,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.27.0 | 2026-10-05 | 明确删除Schedule及关联Run、保留Session的目标，区分独立授权、临时协调与在途取消待定。 |
 | 0.26.0 | 2026-10-05 | 核验OpenClaw与DSH不同删除关系，区分历史保留、会话清理和在途取消及其他基线证据边界。 |
 | 0.25.0 | 2026-10-05 | 核验Claude Run列表/详情与既有数字分页，明确删除后日志残留不等于独立历史读取能力。 |
 | 0.24.0 | 2026-10-05 | 核验Claude三个动作与Run模型，并对照旧Cron同步触发、启停竞争及Runtime受理查询缺口。 |

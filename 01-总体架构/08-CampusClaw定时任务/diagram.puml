@@ -21,8 +21,8 @@ Store --> Scheduler : Run identity and claim epoch
 Scheduler -> Host : Prepare Agent snapshot\nand current authorization
 Host --> Scheduler : Prepared run or rejection
 alt Preparation rejected
-  Scheduler -> Store : Record failure and release own slot\nPause task if required
-  Store --> Scheduler : Durable failure
+  Scheduler -> Store : Record failure only for existing task / Run\nRelease own slot; pause existing task if required
+  Store --> Scheduler : Durable failure or deletion preserved
 else Preparation ready
   Scheduler -> Runtime : Accept Run with prepared snapshot
   Runtime -> Store : Require existing, non-deleted task\nRecheck state, time, claim and capacity\nCreate Session, message, root execution\nand Run link in one transaction
@@ -39,13 +39,17 @@ else Preparation ready
   AgentLoop -> Runtime : Content and actual root outcome
   Runtime -> Store : Persist events and root terminal state
   Store --> Runtime : Durable outcome
-  Scheduler -> Store : Reconcile fixed root execution\nUpdate summary and release own slot
-  Store --> Scheduler : Run history linked to Session
+  Scheduler -> Store : Reconcile fixed root execution\nUpdate existing task / Run only; release own slot
+  Store --> Scheduler : Existing history updated or cleanup only
 end
 note over Scheduler, Runtime
-  Acceptance rejection records failure without starting.
+  Rejection records failure only while task / Run exist.
   Duplicate acceptance returns the existing link only.
-  Candidate: pause or delete after acceptance does not cancel the Run.
+  Pause after acceptance does not cancel the Run.
+  Whether deletion requests cancellation is not yet decided.
+  Deletion removes Schedule and Run; Session remains independent.
+  Late completion never recreates deleted Schedule or Run.
+  Internal coordination remains until safe cleanup.
   Lost owner requires reconciliation, not replay.
 end note
 @enduml
@@ -125,6 +129,9 @@ legend bottom
   Each Run creates a Session, not an Agent definition.
   Execution recovery policies require separate refinement.
   Run + message + execution commit before model or tool I/O.
+  Schedule deletion removes Run and public run history.
+  Sessions have an independent lifecycle.
+  Internal in-flight coordination remains only until safe cleanup.
 endlegend
 @enduml
 
@@ -201,6 +208,7 @@ note over Store, Runtime
   Only committed acceptance permits background model/tool work.
   Execution continues through the shared Runtime lifecycle.
   Run receipt does not track business completion.
+  Late completion cannot recreate deleted Schedule or Run.
 end note
 note over Caller, Schedule
   Request, authorization or unreliable storage errors: 4xx/5xx.

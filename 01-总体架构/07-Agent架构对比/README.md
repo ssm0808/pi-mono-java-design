@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.77.0 |
+| 文档版本 | 1.78.0 |
 | 更新日期 | 2026-10-05 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -491,9 +491,9 @@ CampusClaw 已确认完整 Schedule 响应增加只读 type:schedule 与 pausedR
 
 2026-10-04 当次重新读取 Claude Managed Agents Beta [操作目录](https://platform.claude.com/docs/en/api/http/beta/deployments)与 [Archive](https://platform.claude.com/docs/en/api/http/beta/deployments/archive)：其公开归档使用 POST、无业务正文、200 完整 Deployment，以 archived_at 表示不可恢复的终态；公开目录未列出 DELETE，列表可通过 include_archived 包含归档资源。公开资料未明确重复归档、归档 GET 或在途 Session/Run 处理，不能将 Claw 的选择写成 Claude 保证，也不能推断其内部存储。
 
-CampusClaw 已确认直接删除，不提供归档操作、archivedAt、includeArchived 或 archived 状态；存在的 Schedule 仍为 active/paused，删除后 GET 返回404，列表排除。这属于产品约束及生命周期架构选择，减少归档字段、筛选和终态资源管理，代价是原配置无法再读取。若保留历史 Run/Session，必要配置快照及历史读取授权必须独立维护，不能依赖已删除配置或丢失其权限依据。
+CampusClaw 已确认删除 Schedule 及其所有 Run，保留已经生成的 Session；不提供归档操作、archivedAt、includeArchived 或 archived 状态。存在的 Schedule 仍为 active/paused；删除生效后的新读取中，Schedule 和关联 Run 详情返回404，各自列表排除这些记录。这属于产品约束及生命周期架构选择，减少任务侧历史维护，代价是原配置、触发来源及没有 Session 的受理失败记录不再可查。Session 按自身当前权限读取和删除，授权不依赖已经删除的 Schedule 或 Run。
 
-[删除审阅](../08-CampusClaw定时任务/configuration.md#delete-schedule-review)已确认 DELETE 成功200、ResultBean包装完整 Schedule，借鉴 Deployment archive 的完整资源形状；一次删除回执不构成删除后的配置读取入口。回执保留最后状态/暂停原因、清空后续计划和采用删除事务记录时间，以及重复/不存在/记录级不可见404，仍为候选细节。功能拒绝403、权限或存储依赖故障503，保留独立 Run/Session 且不隐式取消已受理 Run，也须按操作范围继续审阅。删除与到期受理的串行化、快照内容和保留期限仍需在所属契约细化。
+[删除审阅](../08-CampusClaw定时任务/configuration.md#delete-schedule-review)已确认 DELETE 成功200、ResultBean包装完整 Schedule，借鉴 Deployment archive 的完整资源形状；一次删除回执不构成删除后的配置读取入口。回执保留最后状态/暂停原因、清空后续计划和采用删除事务记录时间，以及重复/不存在/记录级不可见404，仍为候选细节。功能拒绝403、权限或存储依赖故障503及是否请求取消在途执行，也须按操作范围继续审阅。删除与到期受理的串行化及物理清理机制仍需细化；临时内部协调证据不能变成长期保留完整 Schedule/Run 的隐藏归档，执行收尾不得恢复已删记录或计划。
 
 同日确认并隔离 fetch Java 默认 main，仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`；当前 Cron 取消本地定时器后删 jobs.json，保留 Run 日志却不能通过旧工具读取已删任务历史，也缺少删除与运行受理的统一事务。现有 Runtime Session DELETE 的墓碑/后台清理可作为机制参考，但其拒绝忙会话不能直接复制给仅拥有配置的 Schedule。源码路径、符号、公开资料及未验收项见[M10 删除证据](../08-CampusClaw定时任务/source-evidence.md#schedule-deletion-evidence)；本段不升级其他基线历史结论。
 
@@ -509,7 +509,7 @@ CampusClaw的[三个动作](../08-CampusClaw定时任务/configuration.md#run-sc
 
 Claude Beta的[Run列表](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/list)与[详情](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/retrieve)使用独立资源，复用八字段会话创建结果；列表deployment_id可省略，默认limit20、最多1000，page为不透明游标。Claw建议使用独立Run列表/详情并复用已确认的受理模型，分页沿ListEvents整数风格；这属于客户端一致性的产品取舍，不能复制事件尾部追加的稳定位置前提。
 
-Claw已确认直接删除Schedule，Run/Session是否连带清理仍须独立决定。推荐保留已有历史、让已受理执行继续，配置不可回读或恢复；代价是历史授权和保留清理必须脱离存续配置。若选择连带删除，应设计真实取消完成与跨资源清理，不能把DELETE200等同于停止业务或业务回滚。Claude公开归档资料未声明对应保留期限或级联行为，不是这一选择的事实依据。生命周期比较与条件接口由[M10读取边界](../08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)维护。
+Claw已确认删除Schedule及其所有Run，Session独立保留，配置和Run不可回读或恢复。删除生效后的Run读取不再包含这些记录；独立或嵌套路径、scheduleId筛选及其错误处理仍为候选。是否请求取消在途执行尚待确定，不能把DELETE200等同于停止业务或业务回滚；Run404或空列表也不能证明此前没有受理执行。Claude公开归档资料未声明对应保留期限或级联行为，不是这一选择的事实依据。有效生命周期与候选读取接口由[M10读取边界](../08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)维护。
 
 当日隔离fetch Java默认main仍为`553dcd5e2ff682f9684810a043b442b37a02e54a`：旧Cron按JSONL行读最近记录，缺Run详情和持久Session关联；删除Job后工具入口不能读取残留日志。Runtime ListEvents已实现默认50/最多200、limit+1和单请求一致分页，可参考协议；新Run与独立授权读取待实现。源码路径、符号及未运行的测试见[Run读取证据](../08-CampusClaw定时任务/source-evidence.md#schedule-run-read-evidence)，不升级其他Agent历史快照。
 
@@ -523,7 +523,7 @@ OpenClaw为本专题新增的删除生命周期辅助基线，Claude仍是公共
 | DSH 0.2.1-alpha.1 | 物理删除任务及其内嵌投递历史，保留原Session及已入队消息；history随后not found | 删除不主动取消对话；投递与删除共用FIFO。它投递原Session，history是收件回执，不是新Session受理Run |
 | Codex、OpenCode、pi | 本次所查源码或公开文档不足以确定同形定时配置的级联关系 | 分别涉及宿主定时产品、GitHub外部Workflow、实验持久任务执行器；普通Thread/Session删除不等于定时配置删除 |
 
-Claw若保留独立Run，可追溯已删任务的受理失败与来源，代价是独立授权和保留清理；若删除配置及Run、保留Session，则降低任务侧历史维护成本，但失去无Session失败记录。两者均有可参考的资源分离方式，没有统一行业规则。既定每次新Session与直接删除配置保持；历史保留、会话清理及在途取消仍由[配置生命周期](../08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)逐项决定，不能把辅助基线的行为写成已确认产品规则。
+Claw采用删除配置及所有Run、保留Session的已确认方案，降低任务侧历史维护成本，代价是失去无Session的失败记录及任务侧来源查询。该数据关系可参考DSH，但Claw的Run记录新Session受理，DSH的history记录向原会话投递，两者不能等同；OpenClaw提供了保留任务侧历史的不同取舍。Session继续按独立生命周期和当前权限管理，在途是否请求取消仍待确定，精确规则由[配置生命周期](../08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)维护。
 
 ### 配置读取与运行观察（2026-10-04 专项）
 
@@ -647,6 +647,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.78.0 | 2026-10-05 | A14采用删除Schedule及关联Run、保留Session的生命周期，明确读取影响与在途取消待定。 |
 | 1.77.0 | 2026-10-05 | A14比较OpenClaw保留运行历史与DSH删除投递历史，明确会话保留及在途取消差异。 |
 | 1.76.0 | 2026-10-05 | A14区分Run独立查询、页码取舍与配置删除后的历史生命周期，不把归档契约推定为保留保证。 |
 | 1.75.0 | 2026-10-05 | A14 增加三个运行管理动作对照，区分Run受理结果、配置启停与既有Cron的同步执行及状态竞争。 |
