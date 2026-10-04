@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.75.0 |
+| 文档版本 | 1.76.0 |
 | 更新日期 | 2026-10-05 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -501,9 +501,17 @@ CampusClaw 已确认直接删除，不提供归档操作、archivedAt、includeA
 
 重新核对Claude Beta的[Run](https://platform.claude.com/docs/en/api/http/beta/deployments/run)、[Pause](https://platform.claude.com/docs/en/api/http/beta/deployments/pause)、[Unpause](https://platform.claude.com/docs/en/api/http/beta/deployments/unpause)及Run模型：三个操作均POST、无业务正文、200；run返回Session创建结果记录，pause/unpause返回完整Deployment。暂停不终止在途Session并允许手动运行，取消暂停从下一次计划继续且不补跑。重复启停、精确更新时间、手动重叠及各失败HTTP映射未完整公开；自动生成示例中的manual/schedule和状态/原因冲突不能替代字段约束。
 
-CampusClaw的[三个动作](../08-CampusClaw定时任务/configuration.md#run-schedule-review)沿用这些职责与入口；已确认可靠记录的受理结果采用200 Run，已记录失败在error，请求认证/范围/存储故障仍用4xx或5xx。暂停/取消暂停推荐200完整Schedule；保留秒级UTC、ResultBean、agentId和无客户端请求键。Run与业务执行分离，避免把“新会话已建立”误报成园区工单处理完成；代价是调用方须检查Run.error并继续观察Session。Claw的首消息/根执行受理关联、单任务占用、重复启停不重置时间/游标和恢复资格检查仍为待确认的产品与架构增量。
+CampusClaw的[三个动作](../08-CampusClaw定时任务/configuration.md#run-schedule-review)沿用这些职责与入口；已确认可靠记录的受理结果采用200 Run，已记录失败在error，请求认证/范围/存储故障仍用4xx或5xx。暂停/取消暂停采用200完整Schedule；保留秒级UTC、ResultBean、agentId和无客户端请求键。Run与业务执行分离，避免把“新会话已建立”误报成园区工单处理完成；代价是调用方须检查Run.error并继续观察Session。单任务不重叠、重复启停不重置时间/游标和恢复前检查资格已确认；首消息/根执行受理关联、错误全集与可信身份接线仍需细化并实施。
 
 当日确认默认main并隔离fetch，Java仍为`553dcd5e2ff682f9684810a043b442b37a02e54a`。旧trigger同步等待模型完成，绕过手动busy检查；disable取消本地句柄后整体保存旧对象，运行收尾可能覆盖暂停；enable重复调用会重排。新HTTP、持久化Run/Session关联及数据库状态屏障待实现，不能包装旧方法直接兑现新契约。具体路径、符号、源码推导与未验收项见[动作证据](../08-CampusClaw定时任务/source-evidence.md#schedule-actions-evidence)。本次只升级该范围，未重新核验其他Agent基线。
+
+### Run读取与删除历史范围（2026-10-05 专项）
+
+Claude Beta的[Run列表](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/list)与[详情](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/retrieve)使用独立资源，复用八字段会话创建结果；列表deployment_id可省略，默认limit20、最多1000，page为不透明游标。Claw建议使用独立Run列表/详情并复用已确认的受理模型，分页沿ListEvents整数风格；这属于客户端一致性的产品取舍，不能复制事件尾部追加的稳定位置前提。
+
+Claw已确认直接删除Schedule，Run/Session是否连带清理仍须独立决定。推荐保留已有历史、让已受理执行继续，配置不可回读或恢复；代价是历史授权和保留清理必须脱离存续配置。若选择连带删除，应设计真实取消完成与跨资源清理，不能把DELETE200等同于停止业务或业务回滚。Claude公开归档资料未声明对应保留期限或级联行为，不是这一选择的事实依据。生命周期比较与条件接口由[M10读取边界](../08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)维护。
+
+当日隔离fetch Java默认main仍为`553dcd5e2ff682f9684810a043b442b37a02e54a`：旧Cron按JSONL行读最近记录，缺Run详情和持久Session关联；删除Job后工具入口不能读取残留日志。Runtime ListEvents已实现默认50/最多200、limit+1和单请求一致分页，可参考协议；新Run与独立授权读取待实现。源码路径、符号及未运行的测试见[Run读取证据](../08-CampusClaw定时任务/source-evidence.md#schedule-run-read-evidence)，不升级其他Agent历史快照。
 
 ### 配置读取与运行观察（2026-10-04 专项）
 
@@ -627,6 +635,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.76.0 | 2026-10-05 | A14区分Run独立查询、页码取舍与配置删除后的历史生命周期，不把归档契约推定为保留保证。 |
 | 1.75.0 | 2026-10-05 | A14 增加三个运行管理动作对照，区分Run受理结果、配置启停与既有Cron的同步执行及状态竞争。 |
 | 1.74.0 | 2026-10-04 | A14 对齐删除成功200完整资源回执，区分 Claude 返回形状与 Claw 删除生命周期。 |
 | 1.73.0 | 2026-10-04 | A14 明确直接删除的生命周期选择及配置不可回读的代价，区分已确认范围与删除响应和历史运行候选。 |

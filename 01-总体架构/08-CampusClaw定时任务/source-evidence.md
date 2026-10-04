@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.24.0 |
+| 文档版本 | 0.25.0 |
 | 核验日期 | 2026-10-05；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
@@ -527,11 +527,49 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 | [R/event/RuntimeMessageEventService.java:131](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java#L131) · submitLocked/startAccepted（190）；[R/event/RuntimeExecutionCoordinator.java:91](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java#L91) · start；[R/event/RuntimeEventOutput.java:35](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventOutput.java#L35) · persistenceOnly | 普通路径prepare→accept→start，Coordinator异步推进；无浏览器输出抽象可复用，但旧Cron未接线，不能用串联两次HTTP代替同库受理 |
 | [R/event/CommittedEventQueryService.java:40](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventQueryService.java#L40) · list；[R/persistence/MyBatisRuntimeSessionRepository.java:268](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#L268) · findEventPage | Session完整事件可分页查询；未提供ScheduleRun详情/列表、无响应Run的超时核对或企业作用域接线 |
 
-**目标与原因。** Claw已确认立即运行采用200 Run记录受理结果，已记录的失败在error，请求/权威失败仍用4xx或5xx；其余精确字段与错误映射、pause/unpause完整资源、同值行为、恢复资格及占用规则是推荐候选。新Run只说明是否可靠受理新Session及首消息，不追踪业务完成，避免复用旧SUCCESS把触发与业务结果混为一体。数据库最新行状态修改、暂停与最终自动受理协调以及收尾不覆盖人工状态，是架构增量；企业调用资格、执行身份和安全错误投影是产品约束/安全边界。代价是新增持久Run、受理接线和独立历史查询，而非简单包装三个旧Service方法。
+**目标与原因。** Claw已确认立即运行采用200 Run记录受理结果，已记录的失败在error，请求/权威失败仍用4xx或5xx；八字段Run、pause/unpause完整资源、同值操作不改时间/游标、恢复前资格检查及同一任务不重叠已确认；精确错误全集、人工覆盖错误暂停原因和受理实现仍为候选。新Run只说明是否可靠受理新Session及首消息，不追踪业务完成，避免复用旧SUCCESS把触发与业务结果混为一体。数据库最新行状态修改、暂停与最终自动受理协调以及收尾不覆盖人工状态，是架构增量；企业调用资格、执行身份和安全错误投影是产品约束/安全边界。代价是新增持久Run、受理接线和独立历史查询，而非简单包装三个旧Service方法。
 
 只读检查了相关CronService/Engine/Tool测试材料，未运行Maven、GaussDB、多实例或身份联调；没有验证暂停竞争、手动busy、原子Session关联或新HTTP成功/错误体。没有新增Maven依赖；继续复用已有Spring/Jackson/MyBatis及Runtime，传递图未重跑。
 
+<a id="schedule-run-read-evidence"></a>
+
+### 8.15 Run 查询与配置删除后的历史边界（2026-10-05）
+
+**公开 Beta 契约。** 当日重新核对 [List Deployment Runs](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/list)、[Get Deployment Run](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/retrieve)、[Run 模型](https://platform.claude.com/docs/en/api/beta/deployment_runs)、[调度指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)和 [Archive](https://platform.claude.com/docs/en/api/http/beta/deployments/archive)。没有服务端源码或实测请求，不据公开字段推断内部表、锁或清理实现。
+
+| 公开契约 | 参考范围与未说明项 |
+|---|---|
+| GET /v1/deployment_runs；deployment_id 可选，省略查询工作区全部，不存在的筛选 ID 返回200空 data | Run 是独立查询资源，不以父 Deployment 路径嵌套；不能由此证明归档后永久可读 |
+| has_error、trigger_type，以及 created_at[gt/gte/lt/lte] 可选 | true/false 对应 error/session_id 非空；manual/schedule 是触发来源；不是模型或业务执行成败筛选 |
+| limit 默认20、最多1000；page 为不透明游标，无效或过期400；返回 data/next_page | 与 Deployment 配置列表的最多100不同；未声明默认排序、同秒排序键、跨页快照或游标有效期 |
+| GET /v1/deployment_runs/{deployment_run_id}，无业务 Query/Body，200完整 Run | 官方 Get 链接为 retrieve；具体不存在/越权错误条件没有逐项声明 |
+| 两个读取与 run 动作复用八字段 Run；session_id/error 恰好一个非空 | Run 为追加式会话创建结果；不追踪 Session 生命周期；示例同时填非空 error/session_id 与明确约束冲突，不能照抄 |
+| 手动 trigger_context 只有 type:manual；自动为 type:schedule 和 scheduled_at | scheduled_at 为 Cron 命中的 UTC 时刻、抖动前，同 Deployment/计划时刻至多一条；created_at 为记录持久化时间，两者不同 |
+| Deployment 终态操作是归档；主要 Agent 失效的自动归档分支可能不生成 Run | 所读页面没有声明 Run 保留期限、物理清理级联或 Session 删除后的 Run 字段处理；Claw 的直接删除与历史保留必须独立决定 |
+
+**Java 当次快照。** 2026-10-05 重新确认上游默认分支 main，并在临时 bare 仓库隔离 fetch；完整提交仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，与 §8.14 相同。仅增量核验下表范围，不把其他模块历史结论升级。C 代表 modules/cron/src/main/java/com/campusclaw/cron/，R 代表 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/，X 代表 modules/coding-agent-cli/src/main/resources/mapper/session/。
+
+| 仓库相对路径、符号与行号 | 已观察实现及差距 |
+|---|---|
+| C/tool/CronTool.java:225 · runs、requireOwnedJob（238）；C/CronService.java:101 · getRecentRuns | 工具仅接受 job_id/limit，默认10、最大100，返回文本；必须先找到现存 Job 并检查当前 Agent；无独立 Run HTTP 详情或企业历史授权 |
+| C/store/CronRunLog.java:70 · getRecentRuns；C/engine/CronJobExecutor.java:39 · execute | 读整个 JSONL，取最近 limit 行并逆序，同 runId 的 RUNNING 和终态各占一行；坏行跳过、I/O失败变空列表，不能作为新列表的完整性或故障语义 |
+| C/model/CronRunRecord.java:17；C/store/CronRunLog.java:55 · appendRun | 执行日志含 startedAtMs/status/output 等，无 sessionId/agentId/triggerContext；写失败仅记日志，不能包装成新八字段、可靠持久化 Run |
+| R/web/RuntimeEventController.java:80 · list；modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java:158 | ListEvents 的整数 page 可选且>=1，limit默认50、最大200；成功200、ResultBean、no-store及语言响应 |
+| R/event/CommittedEventQueryService.java:40 · list/pageOf、calculateOffset（81）、nextPage（99）；R/vo/ListSessionEventsResponseVO.java:18 | 默认 page=1，offset=(page-1)*limit，多取一条，nextPage=page+1或null，无total；long乘加溢出显式拒绝，不是游标协议 |
+| R/persistence/MyBatisRuntimeSessionRepository.java:266 · findEventPage；X/RuntimeSessionMapper.xml:191 · listCommittedEvents | 单请求只读 REPEATABLE_READ，先查Session及投影完整性，按 event_seq ASC分页；无跨HTTP页快照，不证明最新在前Run列表也有稳定位置 |
+| C/CronService.java:67 · deleteJob；C/store/CronStore.java:94 · removeJob；C/tool/CronTool.java:238 | 删除配置未删除Run日志，但工具历史入口依赖仍存在的Job；日志残留不证明删除后历史可授权读取 |
+| R/session/RuntimeSessionService.java:89 · get、delete（96）；R/persistence/MyBatisRuntimeSessionRepository.java:450 · beginDeletion、completeCleanup（477） | Session删除主记录并保存墓碑/清理任务，后续详情及事件查询404；残留事件不继续公开，Run若保留关联不能据Session404改写原受理结果 |
+| R/dto/RuntimeSessionDTO.java:18；X/RuntimeSessionMapper.xml:41；runtimeapi/web 与所查 QueryService/Repository 范围 | 未观察到ScheduleRun路由、独立Run数据或可信租户/园区读过滤；源码只按Session ID查询，执行凭据提取不构成历史读取授权 |
+
+源码链接基址为 [pi-mono-java 固定快照](https://github.com/superheromeZzh/pi-mono-java/tree/553dcd5e2ff682f9684810a043b442b37a02e54a)。只读取源码及有关测试材料，未运行 Maven、数据库、多实例或公司身份联调。无新增 Maven 依赖；旧 Cron 日志与新 Run 的语义不等价，不能通过 DTO 包装宣称已实现。
+
+**Claw 的待决生命周期。** 直接删除 Schedule 已确认，不提供归档查询或恢复。推荐删除配置后保留已生成 Run/Session、已受理执行继续，运行历史按当前权限及独立保留策略查询；也可选择清理Run但保留Session，或三类资源一并清理，不能把运行摘要与对话内容捆绑成只能全留/全删。Run保留有利于追溯来源及没有Session的启动失败，不是技术必需或永久保留要求。历史若保留，可信归属须随Run保存，Session后续删除不改写成功受理结果，其404也不能区分删除与失权。具体生命周期仍待确认，两个GET入口为条件候选，见[运行读取边界](configuration.md#schedule-run-read-lifecycle)。
+
+**归档后显示的核验限制。** 同日进一步读取[Deployment列表](https://platform.claude.com/docs/en/api/http/beta/deployments/list)、[Build in Console](https://platform.claude.com/docs/en/managed-agents/onboarding)及[官方发布说明](https://claude.com/blog/whats-new-in-claude-managed-agents)。include_archived=true明确支持列表包含归档配置；Run模型的persistent/append-only和独立查询是另一层契约。上述资料未明确归档后控制台Run/Session列表的显示规则，也未给出保留时长。本次未登录控制台或执行归档实验，不能把API结构推测当作界面实测；不声称归档后所有执行必然持续可见。
+
 ## 9. 文档验收
+
+2026-10-05 的 0.25.0 只更新五份 Markdown，登记两个Run读取条件入口及删除历史范围，未把未确认的保留方案写成正式能力。HEAD加本任务文件的隔离快照通过API技能校验（3份Markdown、4份SVG）、仓库图示检查（36专题、132块、53时序图、0错误）及图索引生成；既有managed_session_compaction的三个条件组提示沿用原边界解释。19个JSON示例、285个本地文件链接及新锚点检查通过；图源未改，四份SVG和图索引再生成与HEAD一致，没有新增布局或视觉验收。实际工作树git diff --check通过；没有产品代码、产品测试或新增Maven依赖。独立历史是否保留仍待决定，两个GET的参数、错误和完整响应尚未冻结。
 
 2026-10-05 的 0.24.0 校验采用 HEAD 加本任务文件的隔离快照，保留无关工作树修改。本专题 API 技能校验通过（3份 Markdown、4份 SVG）；仓库 `check-diagrams.py --render` 通过（36专题、132块、53时序图、0错误），图索引已重新生成。既有 managed_session_compaction 的三个条件组提示沿用原边界解释。配置专题19个 JSON 示例可解析，六个完整 Schedule 示例字段集合一致，两个 Run 示例字段集合一致且 sessionId/error 恰好一个非空；暂停和取消暂停的状态、原因及五次计划预览通过检查。
 
@@ -559,6 +597,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.25.0 | 2026-10-05 | 核验Claude Run列表/详情与既有数字分页，明确删除后日志残留不等于独立历史读取能力。 |
 | 0.24.0 | 2026-10-05 | 核验Claude三个动作与Run模型，并对照旧Cron同步触发、启停竞争及Runtime受理查询缺口。 |
 | 0.23.0 | 2026-10-04 | 核验 Claude 两种成功响应并采用 Deployment 完整资源形状，明确删除回执及重试语义边界。 |
 | 0.22.0 | 2026-10-04 | 明确 Schedule 直接删除的已确认范围及与 Claude 归档的差异，保留精确删除响应和历史运行处理为候选。 |

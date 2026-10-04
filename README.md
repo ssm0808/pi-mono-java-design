@@ -1,6 +1,6 @@
 # CampusClaw 设计仓库
 
-导航版本 3.57.0 · 2026-10-05
+导航版本 3.58.0 · 2026-10-05
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
@@ -29,7 +29,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 | M07 · 前端体验 | [前端设计](07-前端设计/README.md) | [八个场景与高低保真原型](07-前端设计/原型/index.html)、[公共规范](07-前端设计/公共规范.md)、[技术设计与全局类图](07-前端设计/技术设计/README.md)、[源码证据](07-前端设计/source-evidence.md)、[发送前自动获取 Token](07-前端设计/技术设计/runtime-workbench-alignment.md#61-页面流程)；用户行为按场景维护，服务契约引用 M06 |
 | M08 · Agent 元数据与配置 | [Agent 元数据 GaussDB](./03-数据与存储/02-Agent元数据GaussDB/README.md) | 身份、版本、Agent 默认 mode 及模型/Tool/Skill 绑定；[数据库模式研究](./03-数据与存储/03-Agent数据库模式/README.md)和[元数据草案](./06-元数据草案/README.md)不自动成为已实现契约 |
 | M09 · 附件与文件服务 | [CampusMate 附件服务](./02-服务与接口/01-CampusMate附件服务/README.md) | 文件上传、扫描、访问与删除；Runtime 文件引用边界由 M01/M06 引用 |
-| M10 · 调度与并发治理 | [定时任务](./01-总体架构/08-CampusClaw定时任务/README.md) | [Claw 配置接口与 Claude 取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md)维护创建、列表、详情、更新、预览和删除；名称上限 256，时间规则仅支持 cron；[Spring 六字段与固定/动态任务](./01-总体架构/08-CampusClaw定时任务/README.md#spring-scheduling)解释解析和调度边界，Cron 默认上海，绝对时刻响应统一 UTC 且无小数秒；[执行目标与文件证据](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#target-file-evidence)区分基线会话策略、文件引用与上传；每次运行固定新建 Session，复用 Agent 定义；[创建响应审阅](./01-总体架构/08-CampusClaw定时任务/configuration.md#creation-response-review)对齐计划时间、小写状态和 metadata，内部版本不外露；[资源类型与暂停原因](./01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)统一 type:schedule 与只读 pausedReason；[凭据引用取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md#credential-reference-proposal)明确 credentialIds 直接绑定独立凭据，并区分已有 Header 转发与待定的无人值守身份，[详情与列表读取](./01-总体架构/08-CampusClaw定时任务/configuration.md#get-schedule-review)返回同形完整资源，分页参考既有 ListEvents 的整数 page/nextPage；[更新接口](./01-总体架构/08-CampusClaw定时任务/configuration.md#update-schedule-review)明确七字段部分修改、完整响应、状态保持及数据库事务合并更新；[删除接口](./01-总体架构/08-CampusClaw定时任务/configuration.md#delete-schedule-review)采用直接删除及200完整配置回执，随后详情404与列表排除；回执取值、重复删除和在途运行处理为候选；[立即运行、暂停与取消暂停](./01-总体架构/08-CampusClaw定时任务/configuration.md#run-schedule-review)区分200 Run受理结果与完整配置响应；Run查询及执行恢复待细化；Runtime 准入归 M06，[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量结构 |
+| M10 · 调度与并发治理 | [定时任务](./01-总体架构/08-CampusClaw定时任务/README.md) | [Claw 配置接口与 Claude 取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md)维护创建、列表、详情、更新、预览和删除；名称上限 256，时间规则仅支持 cron；[Spring 六字段与固定/动态任务](./01-总体架构/08-CampusClaw定时任务/README.md#spring-scheduling)解释解析和调度边界，Cron 默认上海，绝对时刻响应统一 UTC 且无小数秒；[执行目标与文件证据](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#target-file-evidence)区分基线会话策略、文件引用与上传；每次运行固定新建 Session，复用 Agent 定义；[创建响应审阅](./01-总体架构/08-CampusClaw定时任务/configuration.md#creation-response-review)对齐计划时间、小写状态和 metadata，内部版本不外露；[资源类型与暂停原因](./01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)统一 type:schedule 与只读 pausedReason；[凭据引用取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md#credential-reference-proposal)明确 credentialIds 直接绑定独立凭据，并区分已有 Header 转发与待定的无人值守身份，[详情与列表读取](./01-总体架构/08-CampusClaw定时任务/configuration.md#get-schedule-review)返回同形完整资源，分页参考既有 ListEvents 的整数 page/nextPage；[更新接口](./01-总体架构/08-CampusClaw定时任务/configuration.md#update-schedule-review)明确七字段部分修改、完整响应、状态保持及数据库事务合并更新；[删除接口](./01-总体架构/08-CampusClaw定时任务/configuration.md#delete-schedule-review)采用直接删除及200完整配置回执，随后详情404与列表排除；回执取值、重复删除和在途运行处理为候选；[立即运行、暂停与取消暂停](./01-总体架构/08-CampusClaw定时任务/configuration.md#run-schedule-review)区分200 Run受理结果与完整配置响应；[Run查询与删除历史边界](./01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)比较独立保留与连带清理，并登记两个读取条件入口；执行恢复待细化；Runtime 准入归 M06，[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量结构 |
 | M11 · 可观测性与测试 | [TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | [调用日志](./01-总体架构/05-CampusClaw调用日志/README.md)、[Runtime HTTP 测试](./02-服务与接口/04-Runtime-HTTP测试Agent/README.md)；区分验收要求、已有测试与实测结果 |
 
 ## 2. 按阅读目的下钻
@@ -59,6 +59,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.58.0 | 2026-10-05 | M10增加Run读取和删除历史范围的审阅入口，区分配置删除与运行数据清理。 |
 | 3.57.0 | 2026-10-05 | M10 增加立即运行、暂停与取消暂停入口，并登记Run结果与配置生命周期的响应边界。 |
 | 3.56.0 | 2026-10-04 | M10 删除成功对齐200完整配置回执，保留删除后不可读取及精确重试候选边界。 |
 | 3.55.0 | 2026-10-04 | M10 增加直接删除接口，区分已确认资源生命周期与删除响应和运行边界候选。 |

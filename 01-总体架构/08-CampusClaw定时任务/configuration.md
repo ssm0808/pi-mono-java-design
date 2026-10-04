@@ -4,22 +4,22 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.24.0 · 2026-10-05 |
+| 版本 | 0.25.0 · 2026-10-05 |
 | 状态 | 已确认能力与 proposed 接口形状分开记录；新接口待实现、尚未发布，整项操作尚未完成确认 |
-| 本文权威范围 | Claw 的创建、列表、详情、部分更新、时间预览、删除、立即运行、暂停及取消暂停；不定义 Mate 接口或页面实现 |
+| 本文权威范围 | Claw 的创建、列表、详情、部分更新、时间预览、删除、立即运行、暂停及取消暂停，以及Run读取的生命周期候选；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已绑定 Agent；不提供已有 Session 目标 |
-| 源码基线 | Claw main `553dcd5e2ff682f9684810a043b442b37a02e54a`；2026-09-29 确认并 fetch，2026-09-30 重读该提交的调度范围；2026-10-04 重新 fetch 同提交并核验文件、Session 创建与凭据/模型链路、Cron、Session、ListEvents 读取、暂停状态及删除链路；2026-10-05 隔离 fetch 同提交并核验 trigger/enable/disable、状态竞争和 Runtime 受理；详见源码证据 §8.6～§8.14 |
-| 对照 | Claude Managed Agents 公开 Beta HTTP API；2026-09-29 核对调度文档，2026-09-30 核对创建输入与 Cron 方言，2026-10-02 核对时间示例与精度边界；2026-10-04 重核名称、Cron 范围、执行目标、Files API、创建响应、metadata、Vault/凭据模型，以及 Deployment 详情/列表、资源类型、暂停原因、部分更新、删除/归档差异和 Run 读取边界；2026-10-05 重核 run/pause/unpause、Run 模型和生命周期指南 |
+| 源码基线 | Claw main `553dcd5e2ff682f9684810a043b442b37a02e54a`；2026-09-29 确认并 fetch，2026-09-30 重读该提交的调度范围；2026-10-04 重新 fetch 同提交并核验文件、Session 创建与凭据/模型链路、Cron、Session、ListEvents 读取、暂停状态及删除链路；2026-10-05 隔离 fetch 同提交并核验 trigger/enable/disable、状态竞争和 Runtime 受理；并重核Run日志、ListEvents数字分页及Session删除后读取；详见源码证据 §8.6～§8.15 |
+| 对照 | Claude Managed Agents 公开 Beta HTTP API；2026-09-29 核对调度文档，2026-09-30 核对创建输入与 Cron 方言，2026-10-02 核对时间示例与精度边界；2026-10-04 重核名称、Cron 范围、执行目标、Files API、创建响应、metadata、Vault/凭据模型，以及 Deployment 详情/列表、资源类型、暂停原因、部分更新、删除/归档差异和 Run 读取边界；2026-10-05 重核 run/pause/unpause、Run模型、Run列表/详情和生命周期指南 |
 
 ## 1. 业务结果与接口边界
 
 调用方配置“工作日 08:00 汇总园区设备告警”，向 Claw 提交 Agent、任务内容和时间规则。Claw 验证当前调用范围、绑定和规则，持久化后返回任务 ID、完整配置及计划时间摘要。之后可读取、修改该配置，不依赖调用方在线。
 
-已确认的创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 候选见 §4.7，采用已记录受理结果的200 Run回执，具体字段和运行边界仍待审阅。每次运行均新建独立 Session，将配置中的一条 `user.message` 作为首条任务消息；绑定的 Agent 定义继续复用；Cron 沿用 Spring 六字段。
+已确认的创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 契约见 §4.7，采用已记录受理结果的200 Run回执，八字段返回模型、同一任务不重叠及手动失败不改暂停状态已确认，精确错误映射和受理实现仍待细化。每次运行均新建独立 Session，将配置中的一条 `user.message` 作为首条任务消息；绑定的 Agent 定义继续复用；Cron 沿用 Spring 六字段。
 
 时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，JSON 不提供 revision，并支持可选 metadata；顶层只读 type 固定为 schedule，pausedReason 返回当前暂停原因或 null，见 [§4.1.1](#schedule-type-paused-reason)。Claw 通过 credentialIds 直接绑定一份或多份独立凭据，能力、引用层级与字段名已确认，详见 §4.2。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 已确认约束。
 
-除明确标记已确认的字段外，下文状态模型、其余字段名、路径和错误码仍为 proposed。已确认新建状态为 `active`，创建处理器不直接调用模型或创建 Session；自动执行由后续调度触发。直接删除任务配置已确认，删除后详情404、列表不返回；精确 DELETE 候选见 §4.6。立即运行、暂停与取消暂停候选见 §4.7～§4.10；Run独立查询与停止一次执行仍待设计，不能把下列九个接口当作完整产品接口清单。
+除明确标记已确认的字段外，下文状态模型、其余字段名、路径和错误码仍为 proposed。已确认新建状态为 `active`，创建处理器不直接调用模型或创建 Session；自动执行由后续调度触发。直接删除任务配置已确认，删除后详情404、列表不返回；精确 DELETE 候选见 §4.6。立即运行、暂停与取消暂停及待细化项见 §4.7～§4.10；Run独立查询的删除历史边界与两个条件候选入口见 §4.11；停止一次执行仍待设计，不能把下列接口当作完整产品接口清单。
 
 上述已确认创建语义不能被解释为“后端暂未接线也返回 active”。配置服务可以先开发和测试，但调度接线、执行身份及准入尚未交付时，不发布可自动运行的创建承诺；未满足依赖的请求返回服务不可用。保存成功也不保证后续业务一定成功，执行时仍须检查当前 Agent、授权和容量。
 
@@ -37,9 +37,11 @@
 | 部分更新 | POST `/campusclaw-service/v1/schedules/{scheduleId}` | 200；完整资源 |
 | 时间预览 | POST `/campusclaw-service/v1/schedules/preview` | 200；规范规则、计算基准与最多五次未来计划时间；不保存 |
 | 删除配置 | DELETE `/campusclaw-service/v1/schedules/{scheduleId}` | 200；ResultBean 包装完整 Schedule 删除回执；直接删除与成功形状已确认，其余细节见 §4.6 |
-| 立即运行 | POST `/campusclaw-service/v1/schedules/{scheduleId}/run` | 200；本次已记录的Run受理结果，sessionId/error二选一；返回分层已确认，其余细节见 §4.7 |
-| 暂停 | POST `/campusclaw-service/v1/schedules/{scheduleId}/pause` | 建议200；完整 Schedule，paused/manual，见 §4.8 |
-| 取消暂停 | POST `/campusclaw-service/v1/schedules/{scheduleId}/unpause` | 建议200；完整 Schedule，active/null，见 §4.9 |
+| 立即运行 | POST `/campusclaw-service/v1/schedules/{scheduleId}/run` | 200；本次已记录的Run受理结果，sessionId/error二选一；返回模型与不重叠规则已确认，其余细节见 §4.7 |
+| 暂停 | POST `/campusclaw-service/v1/schedules/{scheduleId}/pause` | 200；完整 Schedule，paused/manual，见 §4.8 |
+| 取消暂停 | POST `/campusclaw-service/v1/schedules/{scheduleId}/unpause` | 200；完整 Schedule，active/null，见 §4.9 |
+| 运行列表（条件候选） | GET `/campusclaw-service/v1/schedule-runs` | 建议200；runs/nextPage；独立历史范围待确认，见 §4.11 |
+| 运行详情（条件候选） | GET `/campusclaw-service/v1/schedule-runs/{runId}` | 建议200；同形完整 Run；删除历史范围待确认，见 §4.11 |
 
 定时任务全部接口不采用 If-Match 或 Idempotency-Key，不返回配套 ETag；额外传入这两个 Header 时按普通未知 Header 忽略，不赋予并发或去重语义，也不专门因此报错。不把版本或请求键改放请求体、查询参数或其他自定义 Header；创建、读取、更新、预览、删除，以及后续试运行、暂停、恢复和 Run 读取均沿用这一接口约束。数据库内部配置代次、Run 身份和自动触发唯一约束继续保留。同一约束适用于已有 Session 等其他 Claw 接口；现有源码迁移差距见[专项证据](source-evidence.md#schedule-header-free-contract)。此范围已确认，其他候选细节仍按各节审阅。
 
@@ -285,7 +287,7 @@ revision 不进入创建、详情、列表或更新响应。它是内部实现�
 
 省略 schedule 的创建响应仍含 `type:"schedule"`、`schedule:null`、`status:"active"`、`pausedReason:null`：可以手动运行，但没有自动计划，不隐含立即试跑。提供有效 schedule 后无需再显式启用；状态与时间摘要是服务端保存的响应快照，不是客户端收包时的实况。需要当前计划、状态和运行时间时 GET；重复创建作为新的请求处理。
 
-小写和直接删除已确认；存续资源使用 active/paused，不提供 archived/deleted 状态、archivedAt、deletedAt 或 includeArchived。Claude 则以 archived_at 表达归档，归档后的 status 仍可为 active。此处是明确的产品与生命周期差异，删除成功返回完整 Schedule 作为一次回执，随后不再提供读取；暂停/恢复的完整操作仍待审阅。environment_id/resources/budget 仍不引入；凭据引用单独按 §4.2 讨论，不能把 metadata 当成凭据或权限入口。
+小写和直接删除已确认；存续资源使用 active/paused，不提供 archived/deleted 状态、archivedAt、deletedAt 或 includeArchived。Claude 则以 archived_at 表达归档，归档后的 status 仍可为 active。此处是明确的产品与生命周期差异，删除成功返回完整 Schedule 作为一次回执，随后不再提供读取；暂停/恢复的主要行为及待细化项见 §4.8～§4.10。environment_id/resources/budget 仍不引入；凭据引用单独按 §4.2 讨论，不能把 metadata 当成凭据或权限入口。
 
 <a id="schedule-type-paused-reason"></a>
 
@@ -481,7 +483,7 @@ Accept-Language: zh-CN
 
 官方证据为 2026-10-04 重读的[列表参考页](https://platform.claude.com/docs/en/api/http/beta/deployments/list)。Claude page 必须原样传回，不能把它当成数字页码；Claw 的 page 则明确是可按规则构造的正整数，nextPage 为整数或 null，两者同名但类型和语义不同。不依据 Claude 未声明内容推断其内部 SQL、索引或分页快照。
 
-配置读取与运行读取分开：Claude 另有 `GET /v1/deployment_runs` 和 `GET /v1/deployment_runs/{deployment_run_id}`，记录 Session 创建结果；Agent 后续业务结果需要 Session 观察。Claw 同样保留独立 Run 读取边界，路径、过滤、状态与响应另审；任务详情页面可以组合配置详情与 Run 列表，但配置 GET 不因此内嵌运行历史。
+配置读取与运行读取分开：Claude 另有 `GET /v1/deployment_runs` 和 `GET /v1/deployment_runs/{deployment_run_id}`，记录 Session 创建结果；Agent 后续业务结果需要 Session 观察。Claw 的独立 Run 读取候选及删除历史边界见 §4.11，精确过滤与错误另审；任务详情页面可以组合配置详情与 Run 列表，但配置 GET 不因此内嵌运行历史。
 
 <a id="update-schedule-review"></a>
 
@@ -772,7 +774,7 @@ Service 在锁内复核当前资格、读取最后配置并构造不可变安全
 
 <a id="run-schedule-review"></a>
 
-### 4.7. 立即运行定时任务（Run返回分层已确认，其余候选，待实现）
+### 4.7. 立即运行定时任务（返回模型与不重叠已确认，待实现）
 
 运营人员保存“工作日园区告警汇总”后，希望现在验证消息和凭据是否能正常工作，不必等到明早。立即运行使用已保存的配置，独立新建一次 Session 并提交原 user.message；这是实际执行，会遵守正常工具权限并可能产生业务副作用，不是仅解析配置的 dry-run。
 
@@ -791,7 +793,7 @@ Accept-Language: zh-CN
 
 **返回模型建议对齐 Claude Run。** POST不等待模型或业务工具完成，也不返回完整 Schedule；建议200与 ResultBean 包装本次 ScheduleRun，Content-Type:application/json、Cache-Control:no-store、Content-Language 沿 §2。返回的是一次会话受理结果，不是任务执行完成结果；本设计不新增202排队回执或在这个请求上输出 SSE。
 
-**已确认的返回分层。** 本次尝试已可靠记录且受理结果确定时返回200：受理成功带 sessionId，已记录的受理失败带 error；请求本身未获授权、目标不存在、格式错误或无法可靠形成回执仍返回真实4xx/5xx。这一分层已确认；Run字段、错误类型与各失败归类仍为候选。Claude公开模型证明 Run 可表达两类结果，但没有逐项说明每种手动错误都必定返回200。
+**已确认的返回分层。** 本次尝试已可靠记录且受理结果确定时返回200：受理成功带 sessionId，已记录的受理失败带 error；请求本身未获授权、目标不存在、格式错误或无法可靠形成回执仍返回真实4xx/5xx。这一分层和下述八字段模型已确认；具体错误类型及各失败归类仍为候选，同一任务占用时采用schedule_busy_error。Claude公开模型证明 Run 可表达两类结果，但没有逐项说明每种手动错误都必定返回200。
 
 受理成功示例：
 
@@ -860,7 +862,7 @@ Run不增加 status、updatedAt、revision、模型回答或完整 Schedule；�
 
 错误集合仍需与运行专题确认，不能复制 Claude 的 Environment/Vault 等本产品不存在的资源类型；也不把“事务提交结果未知”归为 unknown_error，否则可能误导再次执行。认证权威不可用或无法确定当前访问范围属于HTTP503，不能降级为可向任意调用者披露的Run错误。明确失败必须确认没有Session/首消息残留；业务执行已经发生后的错误属于原Session。
 
-**配置影响与重叠候选。** 手动运行保持status/pausedReason、配置updatedAt、自动nextFireAt及schedule.lastRunAt，不因手动失败自动暂停配置；lastRunAt继续只跟踪自动运行实际开始。每次运行使用保存的输入与当前可信执行准备；不借用调用者临时Header模拟未来定时任务身份。任务已暂停或没有Cron也能测试同一套后台权限。手动与自动共享同一任务占用，推荐已有在途/未知Run时拒绝本次并记录schedule_busy_error，不能复用别次Run充当本次成功；此重叠选择仍待确认。
+**配置影响与不重叠规则。** 手动运行保持status/pausedReason、配置updatedAt、自动nextFireAt及schedule.lastRunAt，不因手动失败自动暂停配置；lastRunAt继续只跟踪自动运行实际开始。每次运行使用保存的输入与当前可信执行准备；不借用调用者临时Header模拟未来定时任务身份。任务已暂停或没有Cron也能测试同一套后台权限。手动与自动共享同一任务占用，已有在途/未知Run时拒绝本次并记录schedule_busy_error，不能复用别次Run充当本次成功；此不重叠选择已确认，自动跳过的精确投影与恢复协议仍待细化。
 
 **正常受理与失败边界候选。** 先校验身份、请求和资源范围，再取可信配置快照；事务外完成绑定/执行资格校验与Runtime准备，不调用模型或业务工具。最后在同一受理边界复核最新配置、未删除、当前资格及占用；配置被修改时有界重新准备，不混用旧消息和新凭据。受理成功原子提交Run、新Session、首条user.message和根执行关联，然后通过既有执行协调器后台启动。准备/准入明确失败则持久化失败Run、sessionId:null，并释放本次取得的占用；忙时不得释放其他Run的占用。只有成功提交对应记录后才返回200，不沿用旧trigger同步等待prompt.join()的实现。
 
@@ -874,13 +876,13 @@ Run不增加 status、updatedAt、revision、模型回答或完整 Schedule；�
 
 图中200必须以结果记录成功提交为前提；请求/授权/权威故障走HTTP错误。准备结果只固定本次输入，最终受理仍检查最新状态；收到Run只说明受理结果，不等待模型结束。
 
-**重复与超时。** 独立POST调用均是新的运行尝试，没有客户端请求键。用户连点可能生成多条Run；共享占用最多限制同时执行，不能保证去重，前一Run快速完成后重试仍会再次执行。因此调用方应防重复点击，网络超时后先查运行历史，不自动重发POST。已知sessionId可沿现有Session事件查看结果；Run详情/列表和删除后历史独立授权是上线依赖，精确路径/分页下一步对齐，未交付前不声称已具备完整超时核对能力。客户端断开不取消已经受理的执行。
+**重复与超时。** 独立POST调用均是新的运行尝试，没有客户端请求键。用户连点可能生成多条Run；共享占用最多限制同时执行，不能保证去重，前一Run快速完成后重试仍会再次执行。因此调用方应防重复点击，网络超时后先查运行历史，不自动重发POST。已知sessionId可沿现有Session事件查看结果；Run详情/列表和删除后历史独立授权是上线依赖，条件入口与删除范围见 §4.11，未交付前不声称已具备完整超时核对能力。客户端断开不取消已经受理的执行。
 
-**与 Claude 的取舍。** 借鉴其POST run、无业务正文、200返回Run及Session结果分离；lowerCamelCase、ResultBean、秒级时间和agentId沿Claw现有取舍。运行记录定义为会话受理结果，Claw额外要求首消息、根执行和Run关联可靠提交；已记录结果与HTTP失败的分层已确认；同一任务互斥及执行身份是产品/架构候选，不推断Claude内部锁或重叠策略。[官方 Run](https://platform.claude.com/docs/en/api/http/beta/deployments/run)与[Run 模型](https://platform.claude.com/docs/en/api/beta/deployment_runs)
+**与 Claude 的取舍。** 借鉴其POST run、无业务正文、200返回Run及Session结果分离；lowerCamelCase、ResultBean、秒级时间和agentId沿Claw现有取舍。运行记录定义为会话受理结果，Claw额外要求首消息、根执行和Run关联可靠提交；已记录结果与HTTP失败的分层已确认；同一任务不重叠已确认，执行身份与可靠受理接线仍为产品/架构候选，不推断Claude内部锁或重叠策略。[官方 Run](https://platform.claude.com/docs/en/api/http/beta/deployments/run)与[Run 模型](https://platform.claude.com/docs/en/api/beta/deployment_runs)
 
 <a id="pause-schedule-review"></a>
 
-### 4.8. 暂停定时任务（推荐契约，待确认、待实现）
+### 4.8. 暂停定时任务（主要行为已确认，待实现）
 
 场景是园区运营人员临时停止工作日告警汇总的自动触发，同时保留配置和运行历史。暂停成功表示后续自动受理已关闭，不表示正在汇总告警的 Session 已被取消；有权限者仍可显式立即运行。
 
@@ -956,11 +958,11 @@ Accept-Language: zh-CN
 
 **失败与重试。** 使用 §4.10 的共同错误表；存储/授权失败不能返回 paused 假成功。重复 pause 在当前状态上执行赋值；若期间发生 unpause，重试会再次暂停，因此应先 GET 核对，不能把再次调用视作原回执恢复。对已经 error-paused 的任务执行 pause，建议变为 manual，而不是无变化却伪造人工原因；这项语义仍待确认。HTTP 200只证明返回快照对应的事务成功，不保证它在响应到达时未被后续 unpause 改变。
 
-与 Claude 对齐的部分为 POST pause、无业务正文、200完整资源、人工原因以及“仅暂停未来自动触发”。Claw 的事务受理屏障、相同状态不改时间与 error→manual 的精确处理属于产品候选，公开文档没有逐项承诺这些细节。[官方 Pause](https://platform.claude.com/docs/en/api/http/beta/deployments/pause)
+与 Claude 对齐的部分为 POST pause、无业务正文、200完整资源、人工原因以及“仅暂停未来自动触发”。Claw相同状态不改时间已确认；事务受理屏障实现与error→manual的精确处理仍为产品候选，公开文档没有逐项承诺这些细节。[官方 Pause](https://platform.claude.com/docs/en/api/http/beta/deployments/pause)
 
 <a id="unpause-schedule-review"></a>
 
-### 4.9. 取消暂停定时任务（推荐契约，待确认、待实现）
+### 4.9. 取消暂停定时任务（主要行为已确认，待实现）
 
 运营人员修复凭据或完成临时维护后，恢复告警汇总的自动计划。取消暂停后，从下一次未来 Cron 时刻开始；不立刻执行、不补暂停期间漏掉的汇总。需要立即验证效果时再显式调用 run。
 
@@ -1034,7 +1036,7 @@ Accept-Language: zh-CN
 
 已经 active 时只验证身份、管理范围和资源可读，直接返回当前完整资源，不重新登记游标或把其他依赖的故障包装成新的状态转换；并不承诺所有后续运行都能成功。取消暂停与更新/删除/自动受理在事务内协调，不能使用旧配置覆盖新修改。若旧自动 Run 在暂停前已领取但未受理，随后快速 pause→unpause 也不能使其重新有效，须比较服务端内部配置代次。
 
-**失败与重试。** 使用 §4.10；失败保持原状态。重复 unpause 为同值成功；若期间被人工或系统再次暂停，重试会尝试恢复当前暂停，因此先 GET 核对最新原因。任务有已受理 Run 时允许取消暂停，不隐含终止该 Run；下一次自动触发仍遵守待确认的重叠准入规则。
+**失败与重试。** 使用 §4.10；失败保持原状态。重复 unpause 为同值成功；若期间被人工或系统再次暂停，重试会尝试恢复当前暂停，因此先 GET 核对最新原因。任务有已受理 Run 时允许取消暂停，不隐含终止该 Run；下一次自动触发仍遵守同一任务不重叠的规则，具体跳过记录与恢复实现另审。
 
 与 Claude 对齐的部分为 POST unpause、无业务正文、200完整资源、清空暂停原因和“下一次计划继续、不补跑”。恢复前只读资格检查、重复调用和事务竞态是 Claw 推荐边界；不将它们声称为 Claude 内部实现。[官方 Unpause](https://platform.claude.com/docs/en/api/http/beta/deployments/unpause)与[生命周期指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)
 
@@ -1064,7 +1066,43 @@ Accept-Language: zh-CN
 }
 ```
 
-三项操作是本专题新增推荐契约，当前尚未整体确认。已确认的每次新建 Session、只读 type/pausedReason、秒级时间、完整 Schedule 及无客户端条件/请求键规则继续生效；立即运行采用已记录结果200 Run、请求/权威故障4xx或5xx的分层已确认；Run字段与错误归类、重叠准入、暂停重复行为与取消暂停校验范围仍按对应候选审阅。Run 的独立读取/分页、精确错误类型及无人值守身份是运行能力上线依赖；不借本次接口草案宣称这些能力已实现。
+三项操作的POST入口、无业务正文及返回模型已确认：立即运行采用八字段Run，同一任务不重叠，已记录受理结果200、请求/权威故障4xx或5xx；暂停和取消暂停返回完整Schedule，仅改变未来自动触发，保留在途执行，同值操作不刷新时间或调度游标；恢复前校验执行资格。每次新建Session、秒级时间、无客户端条件/请求键规则继续生效。精确错误全集、error暂停被人工pause时的原因转换、具体受理事务和执行身份仍为候选；删除历史范围和两个运行读取入口见 §4.11，不能由上述确认推断级联删除或历史保留已决定。
+
+<a id="schedule-run-read-lifecycle"></a>
+
+### 4.11. Run 查询与删除后的历史（生命周期待确认）
+
+运营人员删除“工作日园区告警汇总”后，不再需要明天自动运行，但可能仍需核对昨天处理过的设备告警、工单和本次执行结果。这里有三个不同对象：Schedule 是可修改的任务配置，Run 是一次受理结果记录，Session 是该次任务的消息和工具执行历史。直接删除配置不提供归档查询或恢复；是否连带删除另两类对象，属于独立产品决定，不能由“删除”二字自动推导。
+
+| 边界 | 推荐：删除配置，历史独立管理 | 替代：删除配置及Run，保留Session | 替代：配置、Run与Session一并清理 |
+|---|---|---|---|
+| Schedule | 删除后详情404、列表排除、不可恢复；不能新触发 | 同左 | 同左 |
+| 已有 Run | 保留原受理结果、原scheduleId和可信归属，按当前读取权限及保留期查询 | 退出公共查询，进行中/未知执行所需的内部关联待协调结束后清理 | 退出公共查询，清理时同样保留尚需使用的内部协调证据 |
+| 已生成 Session | 独立保留，可从对话入口按Session生命周期删除 | 独立保留；删除任务不连带删除其生成的对话 | 关联消息、工具结果及执行历史均进入清理范围，需明确是否包含后续人工聊天 |
+| 已受理但未完成的执行 | 继续完成；单次停止另行操作 | 可继续完成，不能因隐藏Run而提前释放占用或丢失结果关联 | 先请求取消并核实真实结束，再清理；删除回包不能伪装成执行已停止 |
+| 只领取/准备、尚未受理 | 删除生效后禁止新建Session或提交初始消息，内部记录按结论收尾 | 同左 | 同左 |
+| 代价 | 需独立历史权限与保留清理；运行记录不必永久保存 | 删除后无法再从任务侧核对启动失败或触发来源，尤其是没有Session的失败Run | 失去执行内容，删除变为跨调度、执行与历史的复合流程，故障与完成回执需重新设计 |
+
+推荐方案没有保留可读或可恢复的旧 Schedule，也不要求保留整份原配置；历史资源不是归档任务。数据库的历史关联须允许配置清理后仍存在：Run 保存原 scheduleId 作为历史引用和必要可信归属，不依赖成功 GET Schedule，也不能仅凭客户端提交的旧 ID 放行。若采用内部删除标记协调在途事务，它不能成为隐藏的归档查询或恢复入口；物理清理不得丢失在途/未知运行的受理证据。
+
+正常查询建议只读取 Run 自身的受理结果，不重新 prepare、不读取凭据秘密、不启动或停止 Session。读取资格使用当前调用者与 Run 保存的可信租户/园区范围，不能永久冻结创建人的权限。配置中的 Agent、消息或凭据以后修改，也不改写过去 Run 的结果。Session 后续被删除时，Run 仍保留原 sessionId 和 error:null；Session 查询独立返回404，客户端只能据此显示“结果不可访问或已删除”，不能把原受理成功改成失败，也不能仅凭404断言一定已删除。
+
+保留历史不是永久保存。保留周期、个人数据清理和正在执行/结果未知记录的清理条件须由公司策略明确；本设计不擅自设置30天或90天。删除配置不吊销共用凭据、不删除 Agent，也不撤销已经产生的工单、告警处置等业务结果。替代方案同样不能通过删除数据回滚外部业务。
+
+**Run是否必须保留。** Run不是第二份对话：成功记录用于说明哪个任务、何时、何种方式创建了哪个Session；失败记录解释为什么没有Session，例如容量或凭据不可用。删除任务后仍有故障排查、来源追溯需求时，独立保留有价值；如果产品只需保留已生成对话，不再提供已删任务的运行历史，则可选择同时清理Run而保留Session，不能把保留Run说成技术必需。推荐Run由保留策略自动清理，用户需要删除对话内容时操作Session，不要求日常逐条清理两份内容。删除Session是否还应隐藏对应Run属于该生命周期选择，不由读取接口暗中决定。
+
+**两个读取接口的条件候选。** 若采用独立保留方案，建议如下；当前先确认删除后的资源生命周期，再固定请求参数、成功/失败响应及保留细节。
+
+| 操作 | 条件候选入口 | 读取内容 |
+|---|---|---|
+| 列出定时运行 | GET /campusclaw-service/v1/schedule-runs | scheduleId 可选；省略时查询当前有权读取的全部 Run，包含手动与自动来源；返回 result.runs/nextPage，元素复用 §4.7 的完整 Run |
+| 获取定时运行 | GET /campusclaw-service/v1/schedule-runs/{runId} | 直接按 Run ID 读取同一完整对象，不要求父 Schedule 仍存在 |
+
+列表建议沿用 ListEvents 的整数 page/limit，默认50、最多200、无total；与 Claude 的不透明游标、默认20/最多1000不同。hasError 仅筛选会话受理结果，不筛选模型或业务完成结果。自动 triggerContext 需补齐 type:schedule 与 scheduledAt，手动保持 type:manual；Run内部准备中/受理未决如何读取、同秒排序、跨页集合变化和历史清理边界随两个具体操作继续审阅。不能把内部双null记录当作已确定Run返回，也不能因列表为空便认定此前超时的run请求没有提交。
+
+**与 Claude 的边界。** Claude 提供独立 DeploymentRun 列表/详情和相同的八字段受理结果模型；其 Deployment 是归档资源，而 Claw 已确认直接删除配置。所读官方资料没有承诺归档后的 Run 保留时长、级联删除或 Session 删除后的字段行为，因此这里的独立历史与在途处理是 Claw 推荐产品规则，不能声称照搬其内部实现。[官方列表](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/list)、[官方详情](https://platform.claude.com/docs/en/api/http/beta/deployment_runs/retrieve)与[源码核验](source-evidence.md#schedule-run-read-evidence)
+
+Claude的Deployment列表允许include_archived=true，这证明归档配置仍可被列表读取；它不是Run的过滤项。Run被定义为持久、追加式记录，并有独立GET，但“归档后控制台是否继续显示每条Run、Session”和准确保留期限没有在所查公开页面中明确说明，本次也未进行登录控制台或真实归档验证。不能把归档配置可查推导为所有执行记录永久显示。[Deployment列表](https://platform.claude.com/docs/en/api/http/beta/deployments/list)、[Console指南](https://platform.claude.com/docs/en/managed-agents/onboarding)
 
 ## 5. 可靠写入与保存流程
 
@@ -1145,7 +1183,7 @@ Accept-Language: zh-CN
 
 ## 8. 实施与验收
 
-本专题描述上述九个 Claw 配置与生命周期接口；立即运行的Run返回分层已确认，Run独立查询继续设计。Controller 使用 RequestVO/ResponseVO 和 ResultBean；Service 处理默认值、完整更新合并与 VO/DTO 转换；Repository/Mapper 只收发 DTO。请求格式校验使用 Jakarta，业务状态和绑定校验在 Service，最终唯一性与版本检查由数据库保障。更新使用独立 UpdateScheduleRequestVO，反序列化区分省略/null 并拒绝重复 JSON 字段；不可直接复用创建必填校验或为省略字段预设默认值，Service 合并后统一验证。
+本专题维护九个配置与生命周期操作，并登记两个Run读取的条件候选；先确定 §4.11 的删除历史范围，再完成两个读取操作的精确审阅。Controller 使用 RequestVO/ResponseVO 和 ResultBean；Service 处理默认值、完整更新合并与 VO/DTO 转换；Repository/Mapper 只收发 DTO。请求格式校验使用 Jakarta，业务状态和绑定校验在 Service，最终唯一性与版本检查由数据库保障。更新使用独立 UpdateScheduleRequestVO，反序列化区分省略/null 并拒绝重复 JSON 字段；不可直接复用创建必填校验或为省略字段预设默认值，Service 合并后统一验证。
 
 全局结构引用[目标类图](README.md#10-全局目标类图与依赖)。配置服务、解析策略和持久化 Adapter 是 Spring 单例，请求上下文/写入快照按请求隔离；配置管理路径不依赖执行协调器或 Session 工厂，立即运行通过独立运行服务职责接入共享受理链。只读绑定端口与可信范围解析待实现，不能直接拿 prepare 替代。
 
@@ -1161,7 +1199,7 @@ Accept-Language: zh-CN
 
 删除验收须覆盖：active/paused、有无Cron均可删除；200/ResultBean完整资源且字段集合与创建/详情/更新一致；原schedule:null保持、Cron后续计划为空、状态/暂停原因保留最后值、创建时间保留且修改时间采用删除事务记录时间；删除回执不触发客户端恢复记录；非法请求400、认证401、功能403、资源404、内部500和依赖503；重复/不存在及记录级不可见均404且不泄露存在性，不为未知ID建墓碑；依赖故障不伪装成不存在；删除后GET404、列表及limit+1查询排除、旧更新/启停/新受理拒绝且不复活；双删除、删除与更新/受理两种事务顺序；已受理Run继续、仅准备不受理、终态回写不重排；不级联删除历史/Agent/凭据/附件；超时有界重试、无请求键；内部标记不进入JSON，ID不复用及清理后独立历史授权。上述为目标验收清单，未执行产品测试。
 
-动作验收须覆盖：run/pause/unpause无正文且禁止配置覆盖；200 Run的sessionId/error恰好一个非空、类型为schedule_run且不跟踪业务完成；同一Run受理成功后执行失败不重写创建结果；有无Cron、active/paused均可手动尝试，手动不改status/pausedReason/自动游标/lastRunAt；受理失败可靠落Run与无法可靠记录的HTTP错误区分；重复调用不合并、响应丢失不自动重发；新Session/首消息/根执行/Run关联整体提交或回滚。候选重叠策略须覆盖自动/手动竞争、失败不释放别次占用、未知执行保持占用；Run查询与可信执行身份接线是上线依赖。
+动作验收须覆盖：run/pause/unpause无正文且禁止配置覆盖；200 Run的sessionId/error恰好一个非空、类型为schedule_run且不跟踪业务完成；同一Run受理成功后执行失败不重写创建结果；有无Cron、active/paused均可手动尝试，手动不改status/pausedReason/自动游标/lastRunAt；受理失败可靠落Run与无法可靠记录的HTTP错误区分；重复调用不合并、响应丢失不自动重发；新Session/首消息/根执行/Run关联整体提交或回滚。已确认不重叠规则的实现验收须覆盖自动/手动竞争、失败不释放别次占用、未知执行保持占用；Run查询与可信执行身份接线是上线依赖。
 
 暂停/取消暂停验收须覆盖：200完整字段与创建/详情一致；暂停保留假设恢复后的Cron预览；schedule:null不伪造计划；manual/error原因转换、同值操作不更新时间；取消暂停只从未来匹配继续、不立即运行、不补跑；重复unpause不推迟现有游标；恢复校验明确失败保留原状态/原因，依赖未知503；pause与最终自动受理两种顺序、pause→unpause不放行旧代次、在途收尾不覆盖人工状态；消息/凭据并发更新不被旧快照覆盖；本文候选不构成产品测试通过。
 
@@ -1171,6 +1209,7 @@ Accept-Language: zh-CN
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.25.0 | 2026-10-05 | 登记Run列表与详情的条件入口，区分配置删除、独立历史保留及在途执行的生命周期选择。 |
 | 0.24.0 | 2026-10-05 | 增加立即运行、暂停与取消暂停契约，区分Run受理回执和完整配置响应及生命周期边界。 |
 | 0.23.0 | 2026-10-04 | 删除成功返回200及完整 Schedule，明确一次回执与后续不可读取、重复删除404的候选边界。 |
 | 0.22.0 | 2026-10-04 | 采用直接删除并移除归档模型，展开204响应、重复调用、授权及在途运行候选边界。 |
