@@ -4,13 +4,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.19.0 |
+| 文档版本 | 0.20.0 |
 | 更新日期 | 2026-10-04 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
 | 设计状态 | 五个 Claw 配置接口形成推荐目标，待实现；不定义 Mate 接口或页面；到期执行、重叠、补跑和故障恢复部分为待细化候选，不作为已冻结实施规则；无人值守身份待确定 |
 | 已观察实现 | Java main `553dcd5e2ff682f9684810a043b442b37a02e54a` 已有进程内 Cron、JSON Job/JSONL Run 和公共 Session 工厂；不等于已具备企业调度能力 |
-| 主基线 | Claude Managed Agents Scheduled deployments，2026-10-04 重核名称、Cron、执行目标、Deployment 读取契约及资源类型/暂停原因，Beta；仅引用公开契约，无服务端源码 commit |
+| 主基线 | Claude Managed Agents Scheduled deployments，2026-10-04 重核名称、Cron、执行目标、Deployment 读取契约及资源类型/暂停原因、部分更新契约，Beta；仅引用公开契约，无服务端源码 commit |
 
 ## 1. 要解决什么问题
 
@@ -46,6 +46,8 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 配置动作的当前推荐设计、字段与接口以[配置专题](configuration.md)为准。已确认 schedule 可省略，省略时只保存、不立即执行；填写有效规则后保存即参与自动调度，无需显式启用；试运行是独立的显式操作。输入为一条 `user.message`，内容复用现有文本和文件引用格式；附件长期保留与执行时访问规则待确定。已确认响应 status 小写、新建 active、非空 schedule 内返回 lastRunAt/upcomingRunsAt、移除公开 revision，并加入 metadata、只读 type:schedule 和 pausedReason；两字段的统一响应与状态规则由[配置专题](configuration.md#schedule-type-paused-reason)维护；完整生命周期、其余字段和整项操作仍为 proposed。创建处理器不调用模型、prepare 或旧 Cron create。Claw 校验可信范围与绑定，原子保存配置和幂等结果。运行未接线不能对外发布可自动运行的成功承诺；旧 Cron 已有能力不能被直接标为新配置管理已实现。
 
 配置[列表与详情读取](configuration.md#get-schedule-review)返回相同的完整任务资源，包括消息、时间摘要、metadata 和凭据引用；这一元素形状已确认。分页参考既有 ListEvents 的普通整数 page/nextPage，具体映射与其余读取契约仍为候选。读取校验当前可见范围，不换取业务凭据、不启动任务；Agent 或凭据失效不妨碍有权限者查看已保存配置并修复。当前 Cron 本地文件读取不能替代企业权限和存储故障契约，精确差距见[读取证据](source-evidence.md#schedule-read-evidence)。
+
+[部分更新接口](configuration.md#update-schedule-review)沿用创建的七个可写字段，省略保持，按字段清空/替换或 metadata 按键合并，返回相同的完整资源；保存不触发执行，不改变当前暂停状态或原因。If-Match 防止覆盖当前表示，Idempotency-Key 恢复同一次丢失的成功回包，精确语义仍为候选。现有 Session 更新可参考省略标记、条件更新和事务重查，不能直接复用其全部拒绝 null 或按版本生成完整资源标签的规则；[更新证据](source-evidence.md#schedule-update-evidence)维护实现边界。
 
 任务页面可以组合配置读取与独立 Run 读取，展示每次触发和执行摘要；配置 GET 本身不内嵌运行历史。Run 记录明确区分“未启动、已受理、执行中、执行结束、需要处理”，精确读取契约另审。模型自然结束不等于设施巡检或工单操作业务成功，业务结论来自对应 Session 的输出与工具证据。
 
@@ -262,6 +264,7 @@ S1～S4 是每次新建会话能力的候选拆分；S5 的时机取决于是否
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.20.0 | 2026-10-04 | 明确部分配置更新入口、状态保持和完整响应，区分既有 Session 更新基础与新增能力。 |
 | 0.19.0 | 2026-10-04 | 完整任务资源增加类型与当前暂停原因，明确状态原子更新及持久化归属。 |
 | 0.18.0 | 2026-10-04 | 配置列表与详情返回完整任务资源，明确读取权限、故障处理与独立 Run 观察边界。 |
 | 0.17.0 | 2026-10-04 | 定时任务通过 credentialIds 直接绑定独立凭据，集合管理不进入首版范围。 |

@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.18.0 |
+| 文档版本 | 0.19.0 |
 | 核验日期 | 2026-10-04；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
@@ -422,11 +422,32 @@ Run 读取仅作边界记录：现有 CronService.getRecentRuns 与 [CronRunLog.
 
 type 属于资源表达的产品约束，便于脱离请求路径识别资源，不表示增加调度种类。pausedReason 补齐暂停原因的可观察性，是状态模型的架构增量：应随当前暂停状态保存并投影，不以普通 GET 临时拼接最后一次 Run 错误，也不返回原始异常、凭据或敏感业务参数。精确响应由[配置专题](configuration.md#creation-response-review)维护；自动暂停错误枚举、与 Run 错误的映射及归档后的原因处理仍需 Run/生命周期契约对齐，本次不冻结这些候选。
 
+<a id="schedule-update-evidence"></a>
+
+### 8.11 配置更新、省略与条件写入（2026-10-04）
+
+本次通过 `git ls-remote --symref origin HEAD` 重新确认 Java 默认分支 main，隔离 fetch 到 `refs/codex-evidence/schedule-update-20261004`，完整 commit 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`。旧新提交相同；只核验下列 Session 更新、Cron 存储与相关路由，不改变其他范围的证据日期。未覆盖工作树、修改实现或运行测试。R 表示 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 仓库相对路径与符号 | 已观察实现及 Schedule 复用边界 |
+|---|---|
+| [R/runtimeapi/web/RuntimeSessionController.java:80](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java#L80) · update；R/runtimeapi/session/RuntimeSessionResponseAssembler.java · getView（44） | POST /campusclaw-service/v1/sessions/{sessionId} 接收 If-Match 与 UpdateSessionRequestVO；成功为200，返回完整 GetSessionResponseVO、ETag、no-store、Content-Language 和 ResultBean。此链没有 Idempotency-Key 结果保存或重放机制。 |
+| [R/runtimeapi/vo/UpdateSessionRequestVO.java:26](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/UpdateSessionRequestVO.java#L26) · readDisplayName/readModelId/readThinking/readMode、rejectUnknownField（85）、isNonEmptyUpdate（91） | 仅接收 displayName/modelId/thinking/mode；Submitted 标记区分省略，拒绝显式 null、类型错误、重复/未知字段与空请求。可复用字段出现性识别；Schedule 的 description/schedule 清空、metadata 按键删除和数组替换需单独实现。 |
+| [R/runtimeapi/session/RuntimeSessionUpdateService.java:98](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionUpdateService.java#L98) · update/prepare（117）、requireStrongEtag（190）、requireObservedVersion（207）；R/runtimeapi/error/RuntimeErrorCode.java（23～46） | 先检查请求、单个强 If-Match、资源存在与当前标签，再准备配置；缺标签428、格式错误400、不匹配412、资源缺失404。拒绝弱标签、标签列表与 * 覆盖。业务/未知失败保持真实 HTTP 状态；本链不是 Schedule 的鉴权或幂等实现。 |
+| [R/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:341](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#L341) · updateSession/rejectUnifiedUpdate（368）、mergeUpdate（382）、markConfigurationUpdated（645）；[modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:63](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml#L63) · lockSessionForUpdate、updateSessionConfiguration（284） | 事务内 FOR UPDATE 后重查版本并合并；实际变化一次更新配置、版本和时间并追加配置事件。同值返回 UNCHANGED，不改版本/时间。提交执行配置要求 Session idle，仅改名称没有该限制；不能据此规定 Schedule 有在途 Run 就不允许改配置。 |
+| [R/runtimeapi/session/SessionEtagFactory.java:22](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/SessionEtagFactory.java#L22) · create | 既有标签基于 sessionId/resourceVersion，不公开内部版本数字；不能直接复制为含动态 upcomingRunsAt 的 Schedule 完整表示强 ETag。标签比较与成功请求重放是两个不同责任。 |
+| [modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java:112](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java#L112) · updateJob/saveUnsafe（141）；modules/cron/src/main/java/com/campusclaw/cron/tool/CronTool.java · INPUT_SCHEMA（42）；modules/cron/src/main/java/com/campusclaw/cron/CronService.java（58～101） | Store 按 ID 整条替换 CronJob 并重写文件，不是公共部分更新，不定义省略/null、版本冲突或找不到回执；写入 IOException 仅记录。CronTool 没有 update action，Service 的 enable/disable 不构成配置更新契约。 |
+
+在 `modules/coding-agent-cli/src/main/java` 与 `modules/cron/src/main/java` 所查路由中仍无新 Schedule HTTP。R/controlplane/api/RuntimeController.java 的 schedule（56）是 /api/v1/runtimes/schedule 执行节点选择，不是定时配置更新。
+
+**Claude 公开更新契约。** 2026-10-04 重新读取 [Update Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/update)：POST /v1/deployments/{deployment_id} 省略字段保留，成功200返回完整 Deployment。agent 字符串重新绑定当时最新版本，不能为 null；description 空值/null 清除；initial_events 与 schedule 整体替换，schedule:null 移除自动计划。metadata 按 key patch，但其顶层类型虽然允许 null，正文没有明确 null 的效果，不把它解释为清空所有键；vault_ids 用 [] 或 null 清空。该 Beta 页面未声明与 Claw 候选相同的并发或幂等 Header；这不证明其内部没有保护。响应示例中的 active/manual 组合与模型条件冲突，沿用 §8.10 的证据边界，不照搬该组合；不推断服务端事务或表结构。
+
+**CampusClaw 更新契约仍为候选（待实现）。** [配置专题 §4.5](configuration.md#update-schedule-review)沿用已确认完整资源及只读字段，推荐七个可写字段、省略保持、明确清除与替换、metadata 逐 key 修改、事务内全量校验及同值成功；条件更新、成功请求重放和调度竞态分别处理。上述 Session 能力只提供局部基础；Schedule 权限、动态标签、持久幂等记录及与暂停/到期受理的协调需新增接线，不能把本次源码比较当作整项更新接口已确认或已实现。
+
 ## 9. 文档验收
 
-2026-10-04 的 0.18.0 文档验收在 HEAD 加本任务文件的隔离快照完成：`plantuml -tsvg diagram.puml`、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示为既有 managed_session_compaction 的三个条件组，沿用[时序图规范](../../时序图规范.md#3-从总览下钻)中的边界解释。本次不改该图。
+2026-10-04 的 0.19.0 文档验收在 HEAD 加本任务文件的隔离快照完成：`plantuml -tsvg diagram.puml`、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示为既有 managed_session_compaction 的三个条件组，沿用[时序图规范](../../时序图规范.md#3-从总览下钻)中的边界解释。本次不改该图。
 
-五份变更 Markdown 的九个 JSON 示例、本地路径、标题与图源锚点检查通过；实际工作树 `git diff --check` 通过。校验包括无 Mermaid、PlantUML ASCII、生成成功、SVG XML、图源同步与 SVG 路径。创建资源与列表元素逐字段比较一致，均包含 type:schedule 和 pausedReason:null；创建请求不含这两个顶层只读字段，嵌套消息与规则 type 保持合法。本次补充资源类型与当前暂停原因，未改变结构图、时序图或 SVG；前次保存图的 726×737 原尺寸和 840px 文档宽度视觉核验继续适用。隔离生成的图索引与 HEAD 一致，未覆盖无关工作树修改。
+五份变更 Markdown 的十二个 JSON 示例、本地路径、标题与图源锚点检查通过；实际工作树 `git diff --check` 通过。校验包括无 Mermaid、PlantUML ASCII、生成成功、SVG XML、图源同步与 SVG 路径。创建资源与列表元素逐字段一致，更新响应与两者字段集合一致；更新示例仅改变提交的 description/schedule/metadata 及 updatedAt，未提交元数据、状态、凭据和原始时间保持，09:00 上海时间正确投影为 01:00Z。错误示例保持两字段。本次展开部分更新契约，未改变结构图、时序图或 SVG；前次保存图的 726×737 原尺寸和 840px 文档宽度视觉核验继续适用。隔离生成的图索引与 HEAD 一致，未覆盖无关工作树修改。
 
 没有新增 OpenAPI/HTML 精确接口，相关检查不适用；没有产品代码修改、产品测试或新增 Maven 依赖。上述验收证明文档与图源一致性，不替代数据库、公司身份、真实凭据轮转或无人值守调度验收。
 
@@ -434,6 +455,7 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.19.0 | 2026-10-04 | 核验 Session 条件更新与 Cron 存储边界，补充 Claude 更新规则及 Schedule 更新候选的复用限制。 |
 | 0.18.0 | 2026-10-04 | 补充 Schedule 类型与暂停原因的已确认目标、Java 实现差距及 Claude 创建示例的语义冲突。 |
 | 0.17.0 | 2026-10-04 | 核验 Cron、Session 与 ListEvents 读取基础及 Claude Deployment 契约，区分已确认完整资源与候选分页和 Run 观察边界。 |
 | 0.16.0 | 2026-10-04 | 记录 credentialIds 直接引用的已确认目标，凭据权威和多目标匹配仍为实现缺口。 |
