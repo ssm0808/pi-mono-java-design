@@ -4,9 +4,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.20.0 · 2026-10-04 |
+| 版本 | 0.21.0 · 2026-10-04 |
 | 状态 | 已确认能力与 proposed 接口形状分开记录；新接口待实现、尚未发布，整项操作尚未完成确认 |
-| 本文权威范围 | Claw 的创建、列表、详情、部分更新、时间预览；不定义 Mate 接口或页面实现 |
+| 本文权威范围 | Claw 的创建、列表、详情、部分更新、时间预览及删除/归档生命周期候选；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已绑定 Agent；不提供已有 Session 目标 |
 | 源码基线 | Claw main `553dcd5e2ff682f9684810a043b442b37a02e54a`；2026-09-29 确认并 fetch，2026-09-30 重读该提交的调度范围；2026-10-04 重新 fetch 同提交并核验文件、Session 创建与凭据/模型链路、Cron、Session、ListEvents 读取及暂停状态；详见源码证据 §8.6～§8.12 |
 | 对照 | Claude Managed Agents 公开 Beta HTTP API；2026-09-29 核对调度文档，2026-09-30 核对创建输入与 Cron 方言，2026-10-02 核对时间示例与精度边界；2026-10-04 重核名称、Cron 范围、执行目标、Files API、创建响应、metadata、Vault/凭据模型，以及 Deployment 详情/列表、资源类型、暂停原因、部分更新和 Run 读取边界 |
@@ -628,6 +628,32 @@ en-US 使用相同 resCode，文案为 `Invalid schedule rule. Use a valid Sprin
 
 **与 Claude 的对应。** Claude 更新也是 POST，省略保持，初始事件/计划整体替换，schedule:null 清除，metadata 按 key patch，并返回完整 Deployment。其 agent 字符串会重新绑定最新版本，vault_ids 可用 [] 或 null 清空；Claw 只有 agentId 身份绑定，credentialIds 推荐统一用 [] 清空。Claw 的单条消息、Spring 六字段、默认上海时区、公司包装是自身取舍；客户端不承担版本或请求键协议，数据库负责当前状态上的原子更新。metadata 顶层 null 在 Claude 类型声明中出现，但正文未明确其效果，不能据此宣称为清空全部元数据。依据为 2026-10-04 重读的[官方更新接口](https://platform.claude.com/docs/en/api/http/beta/deployments/update)；精确源码差距见[更新证据](source-evidence.md#schedule-update-evidence)。
 
+<a id="delete-schedule-review"></a>
+
+### 4.6. 删除与归档的生命周期选择（候选，待实现）
+
+园区不再需要“工作日园区告警汇总”时，需要永久停止该配置产生新的运行，并能解释过去执行过什么。当前操作首先确定停止使用后配置是否仍可读取；已确认的配置字段、完整资源形状和无客户端条件/请求键规则保持，不把此前操作整体标为已确认。下表为互斥的生命周期候选，不同时引入两个入口，也不把用户要求审阅删除等同于确认归档。
+
+| 调用方行为 | A：归档，推荐 | B：删除配置 |
+|---|---|---|
+| 条件候选接口 | POST `/campusclaw-service/v1/schedules/{scheduleId}/archive`，无业务请求体 | DELETE `/campusclaw-service/v1/schedules/{scheduleId}`，无业务请求体 |
+| 条件候选成功响应 | 200，ResultBean 包装完整 Schedule，与其他配置响应同形 | 204，无响应体，不包装 ResultBean |
+| 后续配置读取 | 有权限者仍可 GET；列表默认隐藏，可显式包含归档任务 | 配置 GET 返回404；普通列表不返回已删除任务 |
+| 资源表达 | 对齐 Claude：status 保持 active/paused，另增只读 archivedAt；归档时 active、pausedReason:null，以非空 archivedAt 判断终态 | 对外资源消失，不通过 status:archived 表示；内部墓碑与审计单独维护 |
+| 再次使用 | 归档不可恢复、不可编辑、不可再运行；要重新使用则创建新配置 | 不恢复原 ID；要重新使用则创建新配置 |
+| 历史核对 | 保留配置、Run 及 Session 关联便于核对，保留期限另定 | Run 与 Session 可独立保留，但需要脱离已删除配置的查询、授权及必要快照 |
+| 成本 | 增加 archivedAt 和归档筛选规则，需统一所有完整资源响应与准入判断 | 需明确历史查询入口、配置快照和清理策略；204 不等于相关数据已物理擦除 |
+
+推荐 A，因为当前任务需要查看历史告警汇总与工单处理依据，而且主基线是 Claude Deployment。此选择属于生命周期架构决策，尚待确认。不能一边采用 archive 路径，一边让配置 GET 消失而仍声称与 Claude 的归档资源模型相同。方案 B 同样可以用逻辑删除实现，HTTP DELETE 不强制立即物理擦除数据。
+
+**Claude 公开事实。** 2026-10-04 重读的 Beta 操作目录列出 archive，未列出 Deployment DELETE 或 unarchive。Archive 是 POST、无业务请求体，200 返回完整 Deployment。终态由 archived_at 表达，status 枚举仍为 active/paused，模型明确归档资源也报告 active；schedule.upcoming_runs_at 变空、last_run_at 保留。列表 include_archived 默认 false，不能与 status 筛选组合。上述事实来自[Archive](https://platform.claude.com/docs/en/api/http/beta/deployments/archive)、[模型](https://platform.claude.com/docs/en/api/http/beta/deployments)及[列表](https://platform.claude.com/docs/en/api/http/beta/deployments/list)；公开文档没有明确归档 ID 的 GET 结果、重复归档回执和在途执行处理。A 的详情保留及以下执行边界是 Claw 的候选约束，不冒充基线保证。
+
+**两方案共用的候选执行边界。** 停用配置不级联删除 Agent、凭据、附件、Run 或 Session，也不隐式取消已受理的执行；需要停止一次执行时走其独立取消入口。数据库事务复核管理范围与最新状态，并与新 Run 的最终受理使用相同的权威配置边界：停用先提交则禁止后续受理；运行已先受理则允许继续，不能声称归档响应后所有模型/业务请求已经停止。仅领取或准备但尚未受理的工作须在最终受理时复核。临时定时句柄的取消不是成功依据。
+
+正常调用在终态提交后返回；失败不得返回已停用的成功回执。响应丢失时先读取配置核对；B 的404不能单独证明原删除调用成功，也可能表示不存在或不可见。重复调用的状态码、时间字段稳定性、错误码及完整报文在生命周期选择后逐项定稿，不由 POST/DELETE 方法名推断，也不加入已排除的客户端请求键。
+
+采用 A 时必须同步创建/列表/详情/更新响应的 archivedAt（UTC 秒级），移除候选 status:archived，并审阅 includeArchived 与 status 的组合规则；采用 B 时须移除配置资源的 archived 候选并补齐历史入口。当前这两组调整均未生效。下一步只确认 A/B，再展开所选操作的精确请求、成功响应、失败与重试契约。实现与公开契约边界见[删除专项证据](source-evidence.md#schedule-deletion-evidence)。
+
 ## 5. 可靠写入与保存流程
 
 场景为保存园区告警汇总配置，从调用 Claw 到返回持久化结果结束。前提为可信调用身份已可验证；图为待实现目标。Caller 为合规调用方，Schedule 是 Claw 应用编排，Directory 是只读 Agent 绑定解析能力，Store 为配置的唯一持久化权威；不规定上游产品或部署拓扑。
@@ -720,6 +746,7 @@ en-US 使用相同 resCode，文案为 `Invalid schedule rule. Use a valid Sprin
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.21.0 | 2026-10-04 | 比较归档保留配置与删除后不可读取两种生命周期，明确条件候选接口及关联执行边界。 |
 | 0.20.0 | 2026-10-04 | 所有定时任务接口移除客户端版本和请求键协议，改由数据库事务合并更新并明确重复创建与超时核对边界。 |
 | 0.19.0 | 2026-10-04 | 展开部分更新的七字段语义、完整响应、状态保持及并发重试和失败边界。 |
 | 0.18.0 | 2026-10-04 | 完整资源增加只读 type 与 pausedReason，明确新建、暂停、恢复及当前原因的一致性边界。 |

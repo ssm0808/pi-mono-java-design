@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.20.0 |
+| 文档版本 | 0.21.0 |
 | 核验日期 | 2026-10-04；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
@@ -468,7 +468,32 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 取舍为降低客户端协议与服务端请求回执存储的复杂度，同时明确接受同字段后一次成功修改生效及创建/手动运行重试可能产生新资源。数据库事务、内部配置代次和运行受理去重仍承担各自一致性责任；精确接口以[配置专题](configuration.md#update-schedule-review)为准。
 
+<a id="schedule-deletion-evidence"></a>
+
+### 8.13 删除与归档的生命周期边界（2026-10-04）
+
+**公开 Beta 契约。** 当日重新读取 Claude [操作目录及模型](https://platform.claude.com/docs/en/api/http/beta/deployments)、[Archive](https://platform.claude.com/docs/en/api/http/beta/deployments/archive)、[List](https://platform.claude.com/docs/en/api/http/beta/deployments/list)、[Get](https://platform.claude.com/docs/en/api/http/beta/deployments/retrieve)及[生命周期指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)。操作目录提供 archive，没有列出 DELETE/unarchive；Archive 为 POST、无业务正文、200 完整 Deployment。归档不可修改和恢复，archived_at 表示终态，模型明确归档对象也报告 status:active；upcoming_runs_at 为空，last_run_at 保留。include_archived 默认 false，不能与 status 组合。
+
+公开页面未明确归档 ID 的 GET 状态、重复归档行为、归档后在途 Session/Run 的处理和保留期限；指南只对暂停明确不停止在途 Session。Archive 的自动生成200示例仍含 archived_at:null、非空 upcoming_runs_at，以及 active 与 manual 暂停原因并存，不能以这些占位值覆盖模型/指南约束。本次未调用实际 API、无服务端源码，不能推断其数据库、锁或删除清理方式。
+
+**Java 当次快照。** 2026-10-04 用 `git ls-remote --symref` 确认上游默认 main，并在临时 bare 仓库隔离 fetch；完整 commit 为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，与 §8.12 相同。下表仅升级实际读取的删除链路。C 表示 `modules/cron/src/main/java/com/campusclaw/cron/`，R 表示 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
+
+| 仓库相对路径与关键符号 | 已观察行为及参考边界 |
+|---|---|
+| [C/CronService.java:67](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/CronService.java#L67) · deleteJob；[C/engine/CronEngine.java:163](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java#L163) · unscheduleJob、executeAndReschedule（185）、executeJob（216） | 先 cancel(false) 本地 ScheduledFuture，再移除 Job，不主动中断已开始执行。回调已取得 Job 时，删除返回后仍可能开始执行；结束后重读不到则不重排。不能作为删除提交后禁止新受理的保证。 |
+| [C/store/CronStore.java:94](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java#L94) · removeJob、updateJob（112）、saveUnsafe（141） | 本地写锁保护 jobs.json 元素移除，找不到返回 false；保存吞 IOException，true 不严格证明持久删除。后续 updateJob 只替换既有元素，不复活删除的 Job。 |
+| [C/tool/CronTool.java:207](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/tool/CronTool.java#L207) · delete、runs、requireOwnedJob（238）；[C/store/CronRunLog.java:55](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/store/CronRunLog.java#L55) · appendRun/getRecentRuns | 删除保留 jobId.jsonl，Service 可按 ID 读取，工具却先要求 Job 存在且匹配当前 Agent，因此无法读取已删 Job 历史。Agent 过滤不证明企业租户授权。 |
+| [C/model/CronRunRecord.java:17](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronRunRecord.java#L17)；[modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java:53](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java#L53) · execute | Run 无 sessionId，Runner 创建并关闭内存 ManagedAgentSession，不走 Runtime Session Repository；现有 Cron 不提供 Schedule→Run→可查询 HTTP Session 关联。 |
+| [R/web/RuntimeSessionController.java:95](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java#L95) · delete；[R/session/RuntimeSessionService.java:96](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java#L96) · delete | DELETE 无正文，204/空体/no-store；不存在及重复删除同样204，BUSY 为409，不隐式停止执行。这是 Session 行为，不能直接推导 Schedule 应拒绝在途 Run。 |
+| [R/persistence/MyBatisRuntimeSessionRepository.java:452](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#L452) · beginDeletion、completeCleanup（479）、create（59）；[modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:305](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml#L305) | 事务锁行，非 idle 拒绝；原子写墓碑/清理任务并删 Session 主记录，后台重试清理且保留墓碑，禁止复用已删除 ID。未知 ID 的无操作删除不新建墓碑。 |
+
+所查 modules/cron、Runtime Controller/Service/Repository/Mapper/SQL 范围未提供 Schedule HTTP、Schedule/Run 数据表或关联删除契约，新增能力仍为待实现。已阅读现有 Cron 删除成功/不存在/跨 Agent 拒绝及 Session 204/busy409 的测试材料，未运行测试；没有发现能证明 Cron 删除与到期执行无竞争的验收证据。
+
+**设计选择与代价。** [配置专题 §4.6](configuration.md#delete-schedule-review)保留归档和删除两个互斥候选，推荐归档以保留园区任务配置和执行依据，尚待确认。归档后可读取、重复调用、Run 独立授权、停用与受理串行化均需由 Claw 明确并实现；不能用现有 JSON 文件移除或 Claude 未声明行为补齐。这是生命周期架构选择，不修改已经确认的无客户端条件/请求键契约，也不引入新 Maven 依赖。
+
 ## 9. 文档验收
+
+2026-10-04 的 0.21.0 删除/归档候选只修改四份 Markdown，未变更公共接口实现、图源或 SVG。HEAD 加本任务文件的隔离快照通过仓库 `check-diagrams.py --render`（36专题、131块、52时序图、0错误），本专题 API 技能校验（3份 Markdown、3份 SVG）及图索引再生成；索引与既有生成物一致。保留既有 managed_session_compaction 的三个条件组提示及其边界解释，未新增复杂度或重新视觉验收未改图形。四份文档的12个 JSON 示例、184个本地链接目标及新增锚点检查通过，实际工作树 `git diff --check` 通过；没有 OpenAPI、产品测试或新增 Maven 依赖。此结果只验证候选记录与证据引用，不代表生命周期选择已确认或新能力已实现。
 
 2026-10-04 的 0.20.0 验收在 HEAD 加本任务文件的隔离快照完成，保留无关工作树修改。所有 Claw 接口取消客户端条件与请求键协议的变更同步到 Runtime catalog、配置契约、命令、计划模式、前端及 Mate 协作说明；历史实现与冻结 HTTP 1.37 测试资料保留其版本归属，附件对象存储 ETag 不属于本次移除对象。
 
@@ -484,6 +509,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.21.0 | 2026-10-04 | 核验 Claude 归档公开契约及未知边界，对照 Cron 删除竞争、历史读取和 Session 墓碑机制。 |
 | 0.20.0 | 2026-10-04 | 明确所有 Schedule 接口取消客户端条件及幂等请求头，保留数据库更新与内部运行去重并记录 Session 迁移差距。 |
 | 0.19.0 | 2026-10-04 | 核验 Session 条件更新与 Cron 存储边界，补充 Claude 更新规则及 Schedule 更新候选的复用限制。 |
 | 0.18.0 | 2026-10-04 | 补充 Schedule 类型与暂停原因的已确认目标、Java 实现差距及 Claude 创建示例的语义冲突。 |

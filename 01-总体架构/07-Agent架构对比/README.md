@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.71.0 |
+| 文档版本 | 1.72.0 |
 | 更新日期 | 2026-10-04 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -487,6 +487,12 @@ Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读�
 
 CampusClaw 已确认完整 Schedule 响应增加只读 type:schedule 与 pausedReason。前者对齐 Claude type:deployment 的资源识别职责，以一个恒定字段换取脱离路径仍可辨认资源；后者对齐 paused_reason 的人工/错误暂停及恢复清空语义，使运营人员能判断任务为何停止自动执行。当前原因需要随状态持久化，不能由最后一个 Run 错误推断；具体自动错误模型仍与 Run 契约一起确定。现有 Session 响应不因此扩展字段；当前 Cron 的 enabled 也不能提供等价原因。已确认目标与源码差距见[M10 专项证据](../08-CampusClaw定时任务/source-evidence.md#schedule-type-pause-reason-evidence)，字段精确定义由[配置契约](../08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)唯一维护，归档模型仍另审。
 
+### 配置停用后的可读取性（2026-10-04 专项）
+
+Claude Managed Agents Beta 提供 POST archive、200 完整 Deployment，以 archived_at 表示不可恢复的终态；公开操作目录未列出 DELETE，列表可通过 include_archived 包含归档资源。CampusClaw 的[删除审阅](../08-CampusClaw定时任务/configuration.md#delete-schedule-review)比较“归档并保留可读取配置”和“删除后配置不可读取”两种架构，推荐归档以支持园区历史作业核对，但生命周期尚待确认；前者增加归档字段与筛选，后者增加历史独立查询和快照管理。公开资料未明确重复归档、归档 GET 或在途执行处理，不能将 Claw 候选约束写成 Claude 保证。
+
+同日确认并隔离 fetch Java 默认 main，仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`；当前 Cron 取消本地定时器后删 jobs.json，保留 Run 日志却不能通过旧工具读取已删任务历史，也缺少删除与运行受理的统一事务。现有 Runtime Session DELETE 的墓碑/后台清理可作为机制参考，但其拒绝忙会话不能直接复制给仅拥有配置的 Schedule。源码路径、符号、公开资料及未验收项见[M10 删除证据](../08-CampusClaw定时任务/source-evidence.md#schedule-deletion-evidence)；本段不升级其他基线历史结论。
+
 ### 配置读取与运行观察（2026-10-04 专项）
 
 Claude Beta 的 Deployment 详情和列表元素均返回完整配置，列表采用不透明 page 游标与 data/next_page；公开页未声明默认排序、ETag 或固定分页快照。CampusClaw 已确认列表元素与详情同形，包含任务消息及凭据引用；采用同一完整资源降低客户端模型差异，代价是分页传输全部任务内容。分页参考既有 ListEvents 的整数 page/nextPage、无 total 方式，建议沿用默认50/最多200；与 Claude 不透明游标同名但不同义，统一 Claw 客户端风格且无需总数查询。任务可变而事件在尾部追加，不能复制事件顺序及稳定位置前提；深页和并发编辑带来的重复/遗漏仍是代价。
@@ -609,6 +615,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.72.0 | 2026-10-04 | A14 比较配置归档与删除的可读取性和历史成本，核实 Claude 公开范围与现有 Cron 删除差距。 |
 | 1.71.0 | 2026-10-04 | A04/A14 统一无客户端条件及请求键协议，明确数据库合并更新、重试代价和现有 Session 迁移差距。 |
 | 1.70.0 | 2026-10-04 | A14 比较部分更新、凭据清空与 Agent 版本语义，并明确条件更新和幂等回执的成本。 |
 | 1.69.0 | 2026-10-04 | A14 补充资源类型与暂停原因的基线对应、状态归属及实现差距。 |
