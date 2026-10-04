@@ -55,14 +55,26 @@ class SessionUpdateContractTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "combined four-field request"):
             self.check()
 
-    def test_update_cannot_make_if_match_optional(self):
-        next(item for item in self.operation["parameters"] if item["name"] == "If-Match")["required"] = False
-        with self.assertRaisesRegex(RuntimeError, "require If-Match"):
+    def test_update_cannot_reintroduce_if_match(self):
+        self.operation["parameters"].append(
+            {"in": "header", "name": "If-Match", "required": False, "schema": "string"})
+        with self.assertRaisesRegex(RuntimeError, "retired client token Header"):
             self.check()
 
-    def test_unchanged_cannot_advance_version(self):
-        next(item for item in self.operation["responses"] if item["id"] == "200-unchanged")["headers"]["ETag"] = '"new"'
-        with self.assertRaisesRegex(RuntimeError, "preserve resource and ETag"):
+    def test_unchanged_cannot_advance_updated_at(self):
+        response = next(item for item in self.operation["responses"] if item["id"] == "200-unchanged")
+        response["bodies"]["zh-CN"]["result"]["updatedAt"] = "2026-10-04T01:00:00Z"
+        with self.assertRaisesRegex(RuntimeError, "preserve resource and updatedAt"):
+            self.check()
+
+    def test_busy_rejection_must_remain(self):
+        self.operation["responses"] = [r for r in self.operation["responses"] if r["status"] != "409"]
+        with self.assertRaisesRegex(RuntimeError, "SESSION_BUSY"):
+            self.check()
+
+    def test_body_must_not_replace_retired_headers_with_tokens(self):
+        self.operation["requestBody"]["schema"]["properties"]["expectedVersion"] = {"type": "integer"}
+        with self.assertRaisesRegex(RuntimeError, "body must not replace"):
             self.check()
 
     def test_alternate_success_must_keep_complete_session_shape(self):
@@ -156,6 +168,42 @@ class AllHeaderContractTest(unittest.TestCase):
         operation["credentialPolicy"]["captureEventTypes"].append("user.tool_confirmation")
         with self.assertRaisesRegex(RuntimeError, "Only user.message"):
             self.check(operation)
+
+    def test_retired_header_declarations_cannot_return_on_any_operation(self):
+        for operation in self.operations.values():
+            for name in ("If-Match", "if-match", "Idempotency-Key"):
+                candidate = copy.deepcopy(operation)
+                candidate["parameters"].append({"in": "header", "name": name, "required": False})
+                with self.subTest(key=operation["operationKey"], name=name):
+                    with self.assertRaisesRegex(RuntimeError, "retired client token Header"):
+                        self.check(candidate)
+
+    def test_retired_headers_cannot_return_in_examples_or_responses(self):
+        for operation in self.operations.values():
+            for location in ("request", "response"):
+                candidate = copy.deepcopy(operation)
+                if location == "request":
+                    candidate["requestHeaderExamples"][0]["headers"].append(
+                        {"name": "Idempotency-Key", "value": "opaque", "required": False})
+                else:
+                    candidate["responses"][0].setdefault("headers", {})["ETag"] = '"old"'
+                with self.subTest(key=operation["operationKey"], location=location):
+                    with self.assertRaisesRegex(RuntimeError, "retired client token"):
+                        self.check(candidate)
+
+    def test_query_tokens_and_precondition_errors_cannot_replace_headers(self):
+        for operation in self.operations.values():
+            for status in ("412", "428"):
+                candidate = copy.deepcopy(operation)
+                candidate["responses"].append({"status": status, "headers": {}, "bodies": {}})
+                with self.subTest(key=operation["operationKey"], status=status):
+                    with self.assertRaisesRegex(RuntimeError, "retired client precondition"):
+                        self.check(candidate)
+            candidate = copy.deepcopy(operation)
+            candidate["parameters"].append({"in": "query", "name": "expectedVersion", "required": False})
+            with self.subTest(key=operation["operationKey"]):
+                with self.assertRaisesRegex(RuntimeError, "query must not replace"):
+                    self.check(candidate)
 
     def test_builtin_cannot_require_credentials(self):
         operation = self.operations["ExecuteSessionCommand"]

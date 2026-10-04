@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.27.0 |
-| 更新日期 | 2026-10-02 |
+| 文档版本 | 3.28.0 |
+| 更新日期 | 2026-10-04 |
 | 职责 | M01：Agent 执行装配、入口协作与父子执行生命周期 |
 | 设计状态 | 当前目标；实现状态按专项源码证据分别判断 |
 | 源码证据 | [固定提交、路径、符号与差距](source-evidence.md) |
@@ -52,7 +52,7 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 
 ## 4. 当前目标 HTTP 接口清单
 
-[统一接口页](chat-api-review.html)提供完整清单，按 Session 资源、Events、模型目录与 Command 阅读。Session 的名称、模型、思考和模式共用部分更新入口；配置、锁与版本校验见 [HTTP 设计](chat-http-v1-design.md#24-模型目录与统一-session-更新)。
+[统一接口页](chat-api-review.html)提供完整清单，按 Session 资源、Events、模型目录与 Command 阅读。Session 的名称、模型、思考和模式共用部分更新入口，在最新行锁内合并本次字段、校验完整组合并原子提交；内部 resourceVersion 不外露。所有接口不声明或消费 If-Match/Idempotency-Key，额外传入按未知 Header 忽略，也不返回配套 ETag，不增加 body/query 替代字段。准入、能力归一、同值无变化及结果不确定时的对账见 [HTTP 设计](chat-http-v1-design.md#24-模型目录与统一-session-更新)。
 
 | 序号 | 方法 | 路径 | 职责 |
 |---|---|---|---|
@@ -122,7 +122,7 @@ Session 存储维护配置、单条追加时间线和内部执行状态；[会�
 
 ## 8. 源码证据与目标差异
 
-[源码证据表](source-evidence.md)保存已分析的 commit、相对路径和符号。其 §4 对 Java `f61906b9` 的 Session 创建与 HTTP 入口做了局部复核，其他模块保留各自的证据范围；这些静态观察不能证明全部目标已经实现。
+[源码证据表](source-evidence.md)保存已分析的 commit、相对路径和符号。Java `553dcd5e2ff682f9684810a043b442b37a02e54a` 已有统一 Session POST、组合事务与 mode，但 Controller/Service/Mapper/前端仍依赖 If-Match/ETag；取消条件 Header 的迁移待实现，见 [HTTP §8.3](chat-http-v1-design.md#session-header-free-migration)。其他模块保留各自证据范围，这些静态观察不能证明全部目标已经实现。
 
 Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边界适配服务端产品。具体差异分类、收益与代价集中在 [Agent 架构对比](../07-Agent架构对比/README.md)。
 
@@ -137,6 +137,7 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.28.0 | 2026-10-04 | Runtime 接口取消条件与请求去重 Header 及配套 ETag，Session 更新采用最新行合并并明确实现迁移差距。 |
 | 3.27.0 | 2026-10-02 | Session 与完整事件采用秒级 UTC 时间，明确写入、回显和存储一致性边界。 |
 | 3.26.0 | 2026-09-22 | Session 恢复与历史读取引用只追加的单条时间线设计。 |
 | 3.25.0 | 2026-09-19 | Claw 只透传已提供凭据 Header，凭据完整性与失败结果由 Mate execute 决定。 |

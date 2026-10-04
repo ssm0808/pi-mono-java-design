@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Service API",
-    "version": "1.62.0",
+    "version": "1.63.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认",
     "fieldNaming": "lowerCamelCase",
@@ -73,7 +73,7 @@
       "rows": [
         [
           "createdAt / updatedAt（返回时）",
-          "UTC ISO 8601 整秒字符串，格式 YYYY-MM-DDTHH:mm:ssZ，不含小数秒。服务端首次写入前截断到秒，响应与持久化值一致；时间不作唯一键或资源版本。同秒更新仍使用 ETag 和版本控制。"
+          "UTC ISO 8601 整秒字符串，格式 YYYY-MM-DDTHH:mm:ssZ，不含小数秒。服务端首次写入前截断到秒，响应与持久化值一致；时间不作唯一键或客户端更新条件。同秒更新由数据库事务、行锁和内部版本保护，不向调用方暴露版本令牌。"
         ]
       ]
     }

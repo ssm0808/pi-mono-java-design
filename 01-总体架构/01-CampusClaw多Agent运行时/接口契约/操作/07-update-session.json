@@ -5,17 +5,10 @@
     "method": "POST",
     "path": "/sessions/{sessionId}",
     "summary": "统一更新 Session 名称、模型、思考和工作模式",
-    "description": "部分更新指定会话的名称、模型、思考开关或工作模式，返回更新后的完整会话与 ETag。支持一次提交多个字段并原子生效；仅修改名称时允许运行中调用，修改执行配置要求会话空闲。",
+    "description": "部分更新指定会话的名称、模型、思考开关或工作模式，返回更新后的完整会话。支持一次提交多个字段并原子生效；仅修改名称时允许运行中调用，修改执行配置要求会话空闲。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
-      },
-      {
-        "in": "header",
-        "name": "If-Match",
-        "required": true,
-        "schema": "strong ETag",
-        "description": "最近一次 GET Session 或成功 Session 更新返回的单个强 ETag；必填，缺失 428，不匹配 412。禁止弱标签、通配符和标签列表。"
       },
       {
         "$ref": "parameters.acceptLanguage"
@@ -24,16 +17,16 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "仅接受 displayName、modelId、thinking、mode，四项均可省略但至少提交一项；未提交字段保留（仅切换模型时可按能力自动关闭未提交的 thinking）。显式 null、空对象、类型强转、重复 JSON 键、未知字段和只读字段均拒绝。displayName 去除首尾空白后非空，保留内部空白，禁止 CR/LF、C0/C1 控制字符与双向文本覆盖/隔离字符，UTF-8 最多 80 字节。thinking 是 boolean，不接收 level/reasoningEffort；mode 只接受 plan/build。ID、state、usage 和时间戳不可写，不接收 provider、凭据或 Idempotency-Key；不在请求 VO 设置默认值。",
+      "description": "仅接受 displayName、modelId、thinking、mode，四项均可省略但至少提交一项；未提交字段保留（仅切换模型时可按能力自动关闭未提交的 thinking）。显式 null、空对象、类型强转、重复 JSON 键、未知字段和只读字段均拒绝。displayName 去除首尾空白后非空，保留内部空白，禁止 CR/LF、C0/C1 控制字符与双向文本覆盖/隔离字符，UTF-8 最多 80 字节。thinking 是 boolean，不接收 level/reasoningEffort；mode 只接受 plan/build。ID、state、usage 和时间戳不可写，不接收 provider、凭据、客户端版本或请求键；不在请求 VO 设置默认值。",
       "example": {
-        "displayName": "园区网络故障分析"
+        "displayName": "园区网络排障"
       },
       "examples": [
         {
           "label": "仅修改名称",
           "description": "running 也可提交；不会修改执行配置。",
           "value": {
-            "displayName": "教学楼网络排障"
+            "displayName": "园区网络排障"
           }
         },
         {
@@ -104,7 +97,6 @@
         "label": "OK",
         "summary": "仅提交 displayName；执行快照不变，running 期间也允许。",
         "headers": {
-          "ETag": "\"snp-N8mQ2vK5xR4\"",
           "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
         },
@@ -115,7 +107,7 @@
             "result": {
               "sessionId": "session-550e8400e29b41d4a716446655440003",
               "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
+              "displayName": "园区网络排障",
               "modelId": "claude-sonnet-4-5",
               "state": "running",
               "thinking": true,
@@ -145,9 +137,8 @@
         "status": "200",
         "tabLabel": "200 · 多字段更新",
         "label": "OK",
-        "summary": "示例同时修改四项；目标模型支持思考且计划能力可用，返回同一提交的完整 Session 与 ETag。",
+        "summary": "示例同时修改四项；目标模型支持思考且计划能力可用，返回同一提交的完整 Session。",
         "headers": {
-          "ETag": "\"snp-U8kR4mN6vT2\"",
           "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
         },
@@ -188,9 +179,8 @@
         "status": "200",
         "tabLabel": "200 · 配置未变",
         "label": "OK",
-        "summary": "以最新 ETag 重复相同目标且校验通过，返回原 Session、原 ETag 和原 updatedAt。",
+        "summary": "提交的目标值与锁内最新配置一致且校验通过，返回原 Session 和原 updatedAt。",
         "headers": {
-          "ETag": "\"snp-U8kR4mN6vT2\"",
           "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
         },
@@ -231,7 +221,6 @@
         "label": "OK",
         "summary": "仅切换到不支持思考的模型且省略 thinking，原 thinking=true 自动关闭；该归一与模型更新原子提交。",
         "headers": {
-          "ETag": "\"snp-H7vK3mQ8cN2\"",
           "Cache-Control": "no-store",
           "Content-Language": "en-US"
         },
@@ -294,7 +283,7 @@
         "status": "400",
         "tabLabel": "400 · INVALID_SESSION_UPDATE_REQUEST",
         "label": "Bad Request",
-        "summary": "非法 JSON、重复键、空更新、null、错误类型、非法字段值、名称规范化失败、未知/只读字段或非法 If-Match 形状。",
+        "summary": "非法 JSON、重复键、空更新、null、错误类型、非法字段值、名称规范化失败或未知/只读字段。",
         "headers": {
           "Content-Language": "zh-CN"
         },
@@ -346,26 +335,6 @@
           "en-US": {
             "resCode": "SESSION_BUSY",
             "resMsg": "The Session is processing another user message."
-          }
-        }
-      },
-      {
-        "id": "412-session-version-mismatch",
-        "status": "412",
-        "tabLabel": "412 · SESSION_VERSION_MISMATCH",
-        "label": "Precondition Failed",
-        "summary": "If-Match 与锁内当前版本不一致；先 GET 对账，不自动重放。",
-        "headers": {
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "SESSION_VERSION_MISMATCH",
-            "resMsg": "Session 已发生变化，请刷新后重试。"
-          },
-          "en-US": {
-            "resCode": "SESSION_VERSION_MISMATCH",
-            "resMsg": "The Session has changed. Refresh it before retrying."
           }
         }
       },
@@ -430,26 +399,6 @@
         }
       },
       {
-        "id": "428-if-match-required",
-        "status": "428",
-        "tabLabel": "428 · IF_MATCH_REQUIRED",
-        "label": "Precondition Required",
-        "summary": "缺少 If-Match。",
-        "headers": {
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "IF_MATCH_REQUIRED",
-            "resMsg": "修改 Session 配置必须携带 If-Match。"
-          },
-          "en-US": {
-            "resCode": "IF_MATCH_REQUIRED",
-            "resMsg": "If-Match is required to modify Session configuration."
-          }
-        }
-      },
-      {
         "id": "500-session-update-failed",
         "status": "500",
         "tabLabel": "500 · SESSION_UPDATE_FAILED",
@@ -501,7 +450,7 @@
         "rows": [
           [
             "前端调用与契约能力",
-            "当前前端每次仅提交被操作的一个字段，共用 UpdateSession；接口接受非空字段子集，允许多字段组合，不设置只能提交一项的限制。按返回的完整 Session 和 ETag 更新界面，包括模型变化导致的 thinking 自动归一。"
+            "当前前端每次仅提交被操作的一个字段，共用 UpdateSession；接口接受非空字段子集，允许多字段组合，不设置只能提交一项的限制。按返回的完整 Session 更新界面，包括模型变化导致的 thinking 自动归一。"
           ],
           [
             "displayName",
@@ -521,7 +470,7 @@
           ],
           [
             "多字段请求",
-            "先形成候选最终配置，再执行一次事务；资源版本不匹配、busy、模型不可用、思考或模式不支持都不得部分写入名称。"
+            "事务外准备所需依赖，锁内基于最新记录只合并本次提交的字段，重新校验依赖适用性和最终配置后一次提交；busy、模型不可用、思考或模式不支持都使整笔失败，不得部分写入名称。"
           ],
           [
             "省略与 null",
@@ -529,7 +478,7 @@
           ],
           [
             "同值请求",
-            "仍执行适用的版本、状态、模型/计划能力检查；规范化后的最终配置无变化才返回原 ETag，不更新 updatedAt、不追加历史。"
+            "仍执行适用的状态、权限与模型/计划能力检查；规范化后的最终配置无变化时返回锁内当前 Session，不更新 updatedAt 或内部资源版本，不追加历史。"
           ]
         ]
       },
@@ -542,7 +491,15 @@
         "rows": [
           [
             "事务",
-            "锁定 t_sessions 后复核存在、expectedVersion 和按提交字段决定的 idle 条件；一次更新全部配置与 updated_at/resource_version，领域事件同事务保存。"
+            "锁定 t_sessions 后读取最新记录，复核存在、权限和按提交字段决定的 idle 条件；只合并已提交字段，同一字段按后一次成功提交生效，未提交字段保留锁内最新值，模型变化导致思考自动关闭的既有归一规则除外。一次更新配置与 updated_at/内部 resource_version，领域事件同事务保存。"
+          ],
+          [
+            "依赖准备与竞争",
+            "事务外准备模型等外部依赖，锁内复核准备依据是否仍适用于合并后的最终配置。依据变化时释放锁并在内部有界重新读取和准备，不执行业务副作用，不在锁内调用远端；不能把旧整行候选写回，也不要求客户端提供版本。内部重试耗尽时整笔返回 SESSION_UPDATE_FAILED，不产生部分配置或事件。"
+          ],
+          [
+            "调用条件",
+            "不要求客户端版本或请求标识，不新增等价的 body/query 字段。数据库事务负责原子性；同值保存只是当前配置的无变化处理，不承诺跨并发修改的请求去重。"
           ],
           [
             "历史",
@@ -550,11 +507,11 @@
           ],
           [
             "响应",
-            "200 ResultBean<GetSessionResponseVO> 与同一提交快照生成的 ETag，Cache-Control: no-store；失败只有 resCode/resMsg。"
+            "200 ResultBean<GetSessionResponseVO> 返回同一提交快照的完整资源，Cache-Control: no-store；失败只有 resCode/resMsg。内部资源版本不进入响应。"
           ],
           [
             "结果不确定",
-            "先 GET Session 对账，不自动使用新 ETag 重放旧意图；If-Match 是并发前置条件，不是执行幂等键。"
+            "先 GET Session 对账并保留用户草稿，不自动重放旧修改；当前资源只能用于核对，不能证明某个历史请求是否已提交，不提供按请求键找回原成功回执的保证。"
           ],
           [
             "状态边界",
@@ -589,12 +546,6 @@
             "value": "application/json",
             "required": false,
             "description": "可选；接收普通 JSON 响应。"
-          },
-          {
-            "name": "If-Match",
-            "value": "\"snp-zQfM5yN8x2\"",
-            "required": true,
-            "description": "必填；原样传入读取 Session 获得的强 ETag，防止覆盖并发修改。"
           }
         ]
       }
@@ -604,13 +555,18 @@
     "questions": [],
     "headerReview": {
       "status": "confirmed",
-      "confirmedAt": "2026-09-22",
-      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输、版本条件 Header；不改变上游授权，不拒绝额外收到的 Header。"
+      "confirmedAt": "2026-10-04",
+      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输 Header；不改变上游授权，不拒绝额外收到的 Header。"
     },
     "timePrecisionReview": {
       "date": "2026-10-02",
       "status": "confirmed",
       "decision": "Session 与完整事件、定时任务统一秒级 UTC 时间，持久化与响应同值；实现调整待实现。"
+    },
+    "clientConcurrencyReview": {
+      "date": "2026-10-04",
+      "status": "confirmed",
+      "decision": "所有接口不声明或消费 If-Match、Idempotency-Key，不返回配套资源 ETag，不用 body/query 版本或请求键替代；额外收到这些 Header 不触发专门拒绝。更新基于数据库最新记录按提交字段原子合并，同字段按后一次成功提交生效；业务状态和权限校验保留。已观察 Java 与前端仍有相关 Header 依赖，移除待实现。"
     }
   }
 }

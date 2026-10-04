@@ -1,8 +1,7 @@
 """Cross-operation design checks; these do not execute the Java implementation."""
 
-import re
-
 from command_catalog_contract import require
+from request_header_contract import validate_no_client_tokens
 
 
 SESSION_CASES = {
@@ -20,7 +19,8 @@ BUSINESS_SHAPES = {
     "200-skills": {"skills": [{"name": "pdf", "description": "text"}]},
     "200-skills-populated": {"skills": [{"name": "pdf", "description": "text"}]},
 }
-RETIRED_FIELDS = {"command", "changed", "sourceEventSeq", "commandId", "entryId", "entrySeq", "eventId"}
+RETIRED_FIELDS = {"command", "changed", "sourceEventSeq", "commandId", "entryId", "entrySeq", "eventId",
+                  "resourceVersion", "revision", "etag"}
 
 
 def same_shape(value, baseline, path="result", nullable_name=False):
@@ -51,6 +51,8 @@ def success(operation):
 
 def validate_response_reuse(models):
     operations = {model["operation"]["operationKey"]: model["operation"] for model in models}
+    for operation in operations.values():
+        validate_no_client_tokens(operation)
     validate_mode_examples(operations["ExecuteSessionCommand"])
     session = success(operations["GetSession"])
     model_list = success(operations["ListSessionModels"])
@@ -73,13 +75,10 @@ def validate_response_reuse(models):
             model_list if identity in MODEL_CASES else BUSINESS_SHAPES[identity])
         headers = response["headers"]
         required = {"Content-Type", "Cache-Control", "Content-Language"}
-        require(set(headers) == required | ({"ETag"} if identity in SESSION_CASES else set()),
+        require(set(headers) == required,
                 f"Response headers differ: {identity}")
         require(headers["Content-Type"] == "application/json" and headers["Cache-Control"] == "no-store",
                 f"Command must return noncached ordinary JSON: {identity}")
-        if identity in SESSION_CASES:
-            require(isinstance(headers["ETag"], str) and re.fullmatch(r'"snp-[A-Za-z0-9_-]+"', headers["ETag"]),
-                    f"Session ETag must use the existing opaque format: {identity}")
         require(bool(response["bodies"]), f"Missing response bodies: {identity}")
         for locale, body in response["bodies"].items():
             require(headers["Content-Language"] == locale, f"Response locale differs: {identity}")
@@ -98,16 +97,13 @@ def validate_scenarios(cases):
         require(result(identity)["state"] == "idle", f"Mutation example must be idle: {identity}")
     require(result("200-mode-plan")["mode"] == "plan" and result("200-mode-build")["mode"] == "build",
             "Mode switch examples must preserve their target mode")
-    require(result("200-mode-build") == result("200-mode-unchanged") and
-            cases["200-mode-build"]["headers"]["ETag"] == cases["200-mode-unchanged"]["headers"]["ETag"],
-            "Same-value mode must preserve resource and ETag")
+    require(result("200-mode-build") == result("200-mode-unchanged"),
+            "Same-value mode must preserve resource and updatedAt")
     require(result("200-model")["thinking"] is False, "Missing model normalization example")
     require(result("200-thinking")["thinking"] is True, "Thinking on example differs")
     for changed in ("200-name-updated", "200-model", "200-thinking"):
         unchanged = "200-name-unchanged" if changed == "200-name-updated" else changed + "-unchanged"
         require(result(changed) == result(unchanged), f"Same-value resource differs: {unchanged}")
-        require(cases[changed]["headers"]["ETag"] == cases[unchanged]["headers"]["ETag"],
-                f"Same-value ETag differs: {unchanged}")
     require(result("200-model-query-empty")["models"] == [] and
             result("200-model-query-empty")["currentModelId"] == result("200-model-query")["currentModelId"],
             "Empty models must retain the current model outside candidates")

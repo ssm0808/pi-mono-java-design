@@ -104,7 +104,7 @@ skinparam ranksep 35
 skinparam linetype ortho
 
 ' Presentation baseline: design repo 06bea56, target_slash_command_global_classes; preserve the complete global skeleton.
-' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java updateSession; Mode command shares this transaction after optional-version support.
+' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java updateSession; Mode command shares this transaction; client conditional-header removal is pending.
 ' Source evidence: pi-mono-java@dfb90ca modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SkillCommandSource.java list/resolved.
 ' Source evidence: pi-mono@5cd93f packages/coding-agent/src/core/agent-session.ts _expandSkillCommand.
 ' Observed behavior: at Java 53eff85c, RuntimeCommandController uses SkillCommandExecutionService.executeRequest for Skill HTTP execution.

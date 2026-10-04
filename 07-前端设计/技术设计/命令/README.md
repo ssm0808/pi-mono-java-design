@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.10.0 |
-| 更新日期 | 2026-09-22 |
+| 文档版本 | 1.11.0 |
+| 更新日期 | 2026-10-04 |
 | 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
 | Runtime 命令契约基线 | `879746e59189a07335e32c7df807c7f5048fdc28`；B13 已确认 Skill SSE，Builtin JSON 不变 |
 | pi-mono-java 交互源码基线 | 当前 PR #301 提交见[实现状态](../../source-evidence.md#current-implementation)；早期结构证据保留在 §2.1 |
@@ -145,7 +145,7 @@ Chat Workspace
 | idle，mode 为 plan 或 build | 模式不决定命令目录；按最新完整 Descriptor 展示 Builtin 和 Skill，选择后再执行。公共 Skill 未接入时保留明确禁用理由。 |
 | 等待回答、方案审核、工具授权 | Session 仍 running，使用 running Descriptor；原问题/方案留在时间线，右下角仍为停止。可编辑消息草稿，也可单独执行清单允许的 Builtin；命令不会回答问题或批准方案。 |
 | 提交回答/审核/授权/停止，或状态未对账 | 浏览与草稿保留，命令执行暂时禁用。前端协调器用同一提交/恢复准入检查，避免操作期间使用旧状态；不能仅因清单可见就允许执行。 |
-| 命令返回 Session/Models | 按既有完整快照/版本规则更新配置，不推断该任务已结束或问题已回答；待交互仍由原根的完整事件与历史核对。 |
+| 命令返回 Session/Models | 按既有完整快照规则更新配置，不推断该任务已结束或问题已回答；待交互仍由原根的完整事件与历史核对。 |
 | 权威会话状态更新后参数权限收窄 | 保留命令与参数，并提示“当前只可查询，请先清除参数”；用户明确清空后才允许运行，不能自动删参数并悄悄执行查询。命令消失则保留禁用标签。 |
 
 命令身份以服务端清单为准；输入交互集中遵循[共享状态规则](../../../04-命令与技能/00-Slash-Command通用模块/README.md#command-state-rules)，不在组件重复维护。running 下 model/thinking/mode 的 hints 保持不变但只允许无参查询；状态未知或恢复中暂停提交，POST 最终准入。计划模式不新增 `/plan`、`/approve`、`/answer` 或 `/todo`；也不因新增 Skill 统计而增加热度排序或次数徽标。
@@ -215,7 +215,7 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 |---|---|---|---|
 | model | 单选列表；Runtime 适配读取 ListSessionModels 的 currentModelId/models，显示名从调用方模型信息取得，缺名称时可展示返回的 ID | 用户选择真实候选，冻结 arguments=modelId 后显式执行；带参响应按 Session 处理 | 加载失败可重试 GET，空列表禁用修改；迟到响应不得跨 Chat 应用；POST 拒绝或不确定时保留草稿，不自动重放 |
 | thinking | 当前 Session 值打勾，选项为开启/关闭 | 选择后映射 on/off，显式执行；以响应中的最终 thinking 为准 | running 时仅查看；不支持时展示服务端错误并刷新权威状态，不能用 hint 推测模型能力 |
-| mode | 单选列表：计划（plan）/实施（build），当前 Session.mode 打勾；枚举由命令规则定义，提供清空选择以查询当前模式 | 选择只更新草稿，显式执行提交 arguments=plan/build；空参和带参均冻结 expectedResultKind=session，成功用完整 Session/ETag 更新模式指示器 | running（含所有交互等待）仅无参查询；非法值保留并报错，不能降为查询；422 显示计划能力不足；409 或网络不确定只读对账、不重放、不批准计划 |
+| mode | 单选列表：计划（plan）/实施（build），当前 Session.mode 打勾；枚举由命令规则定义，提供清空选择以查询当前模式 | 选择只更新草稿，显式执行提交 arguments=plan/build；空参和带参均冻结 expectedResultKind=session，成功用完整 Session 更新模式指示器 | running（含所有交互等待）仅无参查询；非法值保留并报错，不能降为查询；422 显示计划能力不足；409 或网络不确定只读对账、不重放、不批准计划 |
 | name | 文本框，hints 可作提示 | 输入名称或空参查询 | 保留服务端校验错误与原草稿 |
 | skill:<name> | 请求文本与可选附件；按 type=skill 准入附件 | 上传成功取得 fileIds，与 arguments 一起冻结，执行共享 SSE | 上传未完成不提交；失败保留文本/附件；文件拒绝不能静默去掉附件后重发 |
 
@@ -313,17 +313,16 @@ expectedResultKind。必须校验所选协议的 Content-Type 与完整 Schema�
 | 已提交调用形态 | 期望结果 | 展示与状态更新 |
 |---|---|---|
 | `help` 空参 | `agentGuide` | 显示 displayName；description 和 useCases 都按纯文本逐条展示。空数组用明确空态；不解析 Markdown/HTML，不加载远程图片，场景条目不可点击即发送 |
-| `status` 空参 | `session` | 应用返回的完整 Session 与版本响应头，再展示权威状态摘要；不能依据请求意图写“修改成功” |
-| `name` 空参/带参 | `session` | 查询或修改都应用完整 Session 与版本响应头；展示服务端最终 displayName |
-| `model` 空参 | `models` | 更新 ModelStore 并展示 currentModelId 和 models；该响应没有 ETag |
-| `model` 带参 | `session` | 应用完整 Session 与版本响应头，包括模型能力导致的 thinking 最终值；不沿用查询 Renderer |
-| `thinking` 空参/带参 | `session` | 应用完整 Session 与版本响应头，展示服务端最终开关值 |
+| `status` 空参 | `session` | 应用返回的完整 Session，再展示权威状态摘要；不能依据请求意图写“修改成功” |
+| `name` 空参/带参 | `session` | 查询或修改都应用完整 Session；展示服务端最终 displayName |
+| `model` 空参 | `models` | 更新 ModelStore 并展示 currentModelId 和 models |
+| `model` 带参 | `session` | 应用完整 Session，包括模型能力导致的 thinking 最终值；不沿用查询 Renderer |
+| `thinking` 空参/带参 | `session` | 应用完整 Session，展示服务端最终开关值 |
 | `compact` 空参 | `compaction` | `compacted=true` 显示已完成；false 显示本次无需压缩，不包装成 Assistant 消息 |
 | `skills` 空参 | `skills` | 只按纯文本显示 Skill 名称和描述，不读取本地路径、正文或远程资源 |
 | `skill:<name>` | 内部 skillEvents 已确认，公共映射待确认 | 不进入 CommandResultRegion；公共接入后复用消息时间线、工具确认和恢复，当前生产执行仍关闭 |
 
-Runtime 的 Session 结果带 ETag，Gateway/状态适配器必须与 Session 快照一起原子应用；
-产品组件和临时结果卡不显示 ETag。Mate 公共协议如何映射版本信息仍属门禁项，未确认前不假设浏览器可见字段。
+Gateway/状态适配器原子应用完整 Session 快照，不发送 If-Match/Idempotency-Key，不要求 ETag，也不改用同用途的 body/query 令牌。Mate 公共配置仍需确认自身路径、字段与准入，不增加版本映射门禁。旧 Runtime 条件更新实现的迁移仍待完成。
 
 Help `useCases` 未来若增加“填入输入框”，也只能把纯文本放入消息草稿，并要求用户再次确认发送；
 本期不提供点击场景即执行。
@@ -449,8 +448,8 @@ interface CommandGateway {
 
 - 用契约 fixture 验证 idle/running 的实际服务端顺序、type/hints 字段和完整空 Skill 清单；额外验证 hints 不变但 running 禁止模型/思考修改。
 - 400/404/409/422/503 与网络断开都保留草稿；404/409 只刷新 GET，不重放 POST。
-- Session/Model 类结果必须应用服务端完整响应和 ETag；断网后通过权威资源对账。
-- 使用同一 `model` 命令名的查询与修改 fixture 必须走不同解码分支；Schema/ETag 与预期不符时不更新 Store。
+- Session/Model 类结果必须应用服务端完整响应，不依赖 ETag；断网后通过权威资源对账。
+- 使用同一 `model` 命令名的查询与修改 fixture 必须走不同解码分支；Schema 与预期不符时不更新 Store。
 - 产品构建中不存在 Runtime base URL、Runtime 凭据表单或 `RuntimeCommandGateway` 装配。
 - Mate 执行协议未确认前，端到端测试必须证明生产执行入口 fail closed，而不是落到普通 Events。
 - Builtin JSON 与 Skill SSE fixture 不能互相解码；Skill 完整回执进入共享事件 Store，结果不进入 Builtin 临时区；断流不重发、私有 Skill 正文不公开。
@@ -494,7 +493,7 @@ interface CommandGateway {
 |---|---|
 | Mate 命令 GET 最终路径、认证和错误映射 | 只允许 Mock/契约评审；不得猜测 URL |
 | Mate Builtin 执行 operation 与响应判别 | 生产运行按钮 fail closed，不回退到 Runtime 或普通 Events |
-| 变更命令的并发控制与 ETag 使用方式 | 不做乐观修改；结果未知时只读对账 |
+| 变更命令的公共状态准入与事务边界 | 不使用客户端条件或幂等令牌、不要求 ETag；不做乐观修改，结果未知时只读对账 |
 | Mate 公共 Skill request/result 映射 | 内部 B13 不自动升级公共状态；不开放生产 Skill，不显示虚构通用成功卡 |
 | Skill 附件引用、所有权和有效期 | type=skill 允许展示附件入口；公共接入前生产附件提交保持关闭 |
 | 公共 requestId/错误码稳定集合 | 未确认前由 Gateway 保留兼容层，组件不绑定服务端文案 |
@@ -503,6 +502,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.11.0 | 2026-10-04 | 命令结果消费取消版本响应头与 ETag 依赖，保留完整资源和不确定结果对账。 |
 | 1.10.0 | 2026-09-22 | 增加 mode 选择控件、Session 结果映射与审核等待下的只读查询边界。 |
 | 1.9.0 | 2026-09-22 | 使用 type/hints 描述符，依据会话状态控制参数并按 Skill 类别处理附件。 |
 | 1.8.0 | 2026-09-22 | 模型和思考使用选项控件，明确 hint 仅作提示及所有 Skill 的附件接入边界。 |

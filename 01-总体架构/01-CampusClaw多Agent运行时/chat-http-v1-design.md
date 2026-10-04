@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.62.0 |
+| 文档版本 | 1.63.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
-| 源码范围 | [源码证据](source-evidence.md)；统一更新专项见 §8.1 |
-| 更新日期 | 2026-10-02 |
+| 源码范围 | [源码证据](source-evidence.md)；统一更新最新迁移差距见 §8.3，历史核验保留在 §8.1/§8.2 |
+| 更新日期 | 2026-10-04 |
 
 Session 与完整事件的时间采用[统一秒级目标](time-contract.md)：UTC、无小数秒，写入和回显一致；此精度调整待实现，其他功能状态仍按各节证据。
 
@@ -25,6 +25,8 @@ Runtime HTTP 面向 mate-service bridge 和获授权的内部 SDK，以 Session�
 Path、Query、JSON 与 SSE data 的字段统一 lowerCamelCase；HTTP Header、固定枚举、错误码和类型化 ID 值保持契约原名。不接收 snake_case 别名，避免双写和未知字段判断不一致。源码与 SQL 保留其原生标识，不作为 wire field。
 
 请求 Header 按各 operation 的实际用途声明；共享调用上下文示例不构成所有接口的凭据要求。Runtime 不在 HTTP 入口校验凭据是否完整，凭据的使用和保留边界见 §7。
+
+所有当前接口不声明、不消费 `If-Match` 或 `Idempotency-Key`，额外传入时按普通未知 Header 忽略，不专门报错；资源响应不生成配套 `ETag`。不把版本条件或请求去重键迁移到 body/query。上游认证授权、事务准入与内部去重继续按各自职责执行；创建每次成功产生新资源，重复提交不恢复原请求回执。
 
 ### 2.1 Session 生命周期
 
@@ -52,7 +54,7 @@ HTTP 目录文件为 `settings.json`、`SYSTEM.md` 和 `skills/`，不把 CLI �
 
 Usage 沿用模型返回的 Token 与 USD cost 口径，Assistant 和 Compaction 各保存本次值并原子累计 lifetimeUsage；不得用字符数或估算 Token 替代实际用量。thinking 控制后续执行，关闭后不隐藏已保存的推理原文，规则见 [Thinking 展示](chat-events-history-design.md#thinking-original-text)。pi 的多级 thinkingLevel 在此收窄为 boolean，是产品约束：false 映射 off，true 使用模型与 Agent 配置的受管非 off 强度。
 
-成功返回 ETag 与 `Cache-Control: no-store`；ETag 只用于更新的 If-Match，不增加 If-None-Match/304 分支。不存在与已删除均返回 SESSION_NOT_FOUND，避免泄露历史状态。
+成功返回完整 Session 与 `Cache-Control: no-store`，不返回 ETag，也不增加 If-None-Match/304 分支。不存在与已删除均返回 SESSION_NOT_FOUND，避免泄露历史状态。
 
 ![Session 资源职责](设计图/会话生命周期/http_get_session_response.svg)
 
@@ -92,7 +94,7 @@ POST 接受 user.message、user.interrupt、user.tool_confirmation 三类输入�
 
 Session 的名称、默认模型、深度思考和工作模式统一由 `POST /sessions/{sessionId}` 修改，operationKey 为 `UpdateSession`。采用 Claude Managed Agents 的资源级 POST 与可选属性更新方式；当前前端每次只提交所操作的一个字段，接口同时允许多字段组合，未提交属性保留，不要求提交完整 GET 资源。精确字段、单项/组合示例、错误和 Header 唯一维护在[操作 07](接口契约/操作/07-update-session.json)。
 
-`GET /sessions/{sessionId}/models` 继续提供 Session scope 的可选模型清单。统一操作属于 API 架构变更：四类操作共用资源更新与冲突对账流程，不将当前页面的一次单项操作固化为服务端只能修改一项的限制。多字段请求按同一资源版本和事务校验提交；当前前端无需增加批量编辑或保存流程。保留原有名称与执行配置不同的准入规则；不照搬 Claude 的会话模型不可变约束，也不改变 Agent/Tool/Skill 元数据。
+`GET /sessions/{sessionId}/models` 继续提供 Session scope 的可选模型清单。统一操作属于 API 架构变更：四类操作共用资源更新与结果对账流程，不将当前页面的一次单项操作固化为服务端只能修改一项的限制。多字段请求在同一事务内读取最新行并合并校验；当前前端无需增加批量编辑或保存流程。保留原有名称与执行配置不同的准入规则；不照搬 Claude 的会话模型不可变约束，也不改变 Agent/Tool/Skill 元数据。
 
 #### 2.4.1 GET Session Models
 
@@ -116,35 +118,37 @@ Session 的名称、默认模型、深度思考和工作模式统一由 `POST /s
 
 名称规则沿用 /name：去除首尾空白、保留内部空白，拒绝空值、CR/LF、C0/C1、Unicode 双向覆盖/隔离字符及超过 80 UTF-8 字节。modelId 沿用 ClawConstants.RuntimeApi.MODEL_ID_REGEX。thinking 仍为 boolean，false 映射 off，true 使用受管非 off 强度；关闭不隐藏既有思考原文。mode 仅为小写 plan/build，与 state=idle/running 分离。
 
-请求不声明执行凭据 Header 或 Idempotency-Key；JSON 请求体使用必填 Content-Type: application/json，并必填单个强 If-Match；If-Match 缺少返回 428，合法但过期返回 412，非法形状按 INVALID_SESSION_UPDATE_REQUEST 拒绝。Accept-Language 可选。上游继续负责凭据真实性与动作授权，Runtime 不增加本地认证。
+请求不声明执行凭据 Header；JSON 请求体使用必填 Content-Type: application/json，Accept-Language 可选。沿用 §2 的统一 Header 边界，不要求客户端先读版本，不因缺少或携带旧版本条件返回 428/412。上游继续负责凭据真实性与动作授权，Runtime 不增加本地认证。
 
 #### 2.4.3 原子性与内部接口
 
-Controller 的目标方法为 `updateSession(sessionId, ifMatch, UpdateSessionRequestVO)`，调用既有 RuntimeSessionConfigurationService；Service 返回 `RuntimeSessionView<GetSessionResponseVO>`，Controller 才包装 ResultBean。既有 ConfigurationController 保留 GET Models，移除模型/思考写路由。名称不再新增属性专用 Controller。
+Controller 的目标方法为 `updateSession(sessionId, UpdateSessionRequestVO)`，调用既有 RuntimeSessionUpdateService；Service 组装 GetSessionResponseVO，Controller 才包装 ResultBean。ConfigurationController 只保留 GET Models；名称不再新增属性专用 Controller。
 
 请求 VO 不设置默认值。沿用 Jackson 的严格字段读取来区分省略与显式 null，拒绝非字符串/非布尔值和未知字段，并开启本请求重复键检测；Java 内部只用 DTO，不引入 PO/DO/Entity。可选标识使用标准 @Pattern 与公共正则常量，已出现的空白值及名称字节/Unicode 规则由共享规范化校验；至少一项和跨字段规则由 Service 检查。
 
-应用服务先读取 Session 和版本，按提交字段做预检查；仅提交 modelId 或显式开启思考需要模型解析。计划能力从既有 BuiltInToolProperties.toolsFor(RUNTIME) 的启动期固定 profile 与计划专题 PlanPolicyPromptComposer 读取；更新只校验能力，不创建活动工具实例。名称规范化、模型选择和思考能力判断复用现有窄服务的纯校验/准备职责，不能串行调用会分别提交事务的 changeModel/changeThinking/execute。
+应用服务按提交字段做预检查；提交 modelId 或显式开启思考时，在事务外解析所需模型。计划能力从既有 BuiltInToolProperties.toolsFor(RUNTIME) 的启动期固定 profile 与计划专题 PlanPolicyPromptComposer 读取；更新只校验能力，不创建活动工具实例。名称规范化、模型选择和思考能力判断复用现有窄服务的纯校验/准备职责，不能串行调用会分别提交事务的 changeModel/changeThinking/execute。
 
-`SessionUpdateCandidateDTO` 是目标新增的请求范围不可变候选，保存 expectedVersion、已提交字段集合、合并后配置和经解析的模型能力。它不包含凭据，不复用为 Controller VO，不发布给其他请求。
+`SessionUpdateSpecificationDTO` 作为请求范围准备结果，保存已提交字段集合、规范化后的提交值、所解析模型的标识与能力。该快照不包含客户端版本、凭据或未提交属性的旧值，不复用为 Controller VO，不发布给其他请求；进入提交阶段后不再修改。
 
-Repository 扩展一次性的 `updateConfiguration(sessionId, expectedVersion, candidateDTO)` 事务入口。行锁内重读 t_sessions，按“存在 → 版本 → 按提交字段决定的 busy → 最终状态转换”顺序复核；只有版本相同才能使用之前的合并候选，否则整体返回 VERSION_MISMATCH，禁止重新套用旧候选。目录解析仅固定本次读取的配置/能力，不保证外部 Manager 永不变化；后续消息接受仍执行既有最新模型可用性检查，不把外部 I/O 放进行锁事务。
+Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定最新 t_sessions，按“存在 → 按提交字段决定的 busy → 合并提交字段 → 最终组合与能力校验”顺序处理。未提交属性从锁内最新行取得，同一字段以后一次成功提交的值为准；不将早先读取的完整 Session 覆盖回数据库。调用方不再获得防止旧页面覆盖同字段新值的版本冲突保护，这是简化交互的产品取舍。
 
-同事务更新 display_name/model_id/thinking/mode、一次 updated_at/resource_version，并按 model → thinking → mode 顺序追加实际变化的 Entry 与公共事件。名称不写 Entry。复用 SessionConfigurationUpdateDTO 的 UPDATED/UNCHANGED/NOT_FOUND/BUSY/VERSION_MISMATCH；任一步失败全部回滚，不返回部分成功或字段级执行回执。
+模型准备必须适用于最终合并的模型。例如只提交 thinking=true 时，其他请求可能已切换 modelId；发现已解析模型与锁内最终模型不一致，应在任何写入前退出事务，在内部有限重试预算内重新准备后再进入事务校验，预算耗尽返回 500 SESSION_UPDATE_FAILED，不能用旧能力放行，也不能持有行锁访问外部 Manager。内部 resourceVersion 可辅助识别准备失效，但不作为公开条件或映射成 412。目录解析不保证外部 Manager 永不变化，后续消息接受仍执行既有模型可用性检查。
 
-全部无变化时，完成适用的版本、状态和能力校验后返回原 Session、原 updatedAt 和原 ETag，不写历史。真实变化的响应与 ETag 必须来自同一个提交快照，不在事务后分别重新读取拼装。网络结果不确定时 GET 对账；412 后保留用户草稿，不自动使用新 ETag 重放旧意图。
+同事务更新 display_name/model_id/thinking/mode、一次 updated_at/resource_version，并按 model → thinking → mode 顺序追加实际变化的 Entry 与公共事件。名称不写 Entry。结果区分 UPDATED/UNCHANGED/NOT_FOUND/BUSY；任一步失败全部回滚，不返回部分成功或字段级执行回执。resourceVersion 仅用于内部一致性，不进入公共 Session、Header 或请求。
+
+全部无变化时，完成适用的状态和能力校验后返回锁内当前 Session，保持 updatedAt/resourceVersion，不写历史。真实变化的完整响应来自同一个提交快照，不在事务后分别重新读取拼装。网络结果不确定时 GET 对账并保留用户草稿，不自动重放写入。无并发干扰时重复赋相同值可以无变化成功；存在并发编辑时再次提交可能覆盖同字段的新值，不能把它当成原请求回执重放。
 
 ![统一 Session 更新目标类图](设计图/会话配置/http_session_update_classes.svg)
 
 [原尺寸 SVG](设计图/会话配置/http_session_update_classes.svg) · [PlantUML 源码](设计图/会话配置/diagram.puml#L1)
 
-本图下钻一次组合配置更新，从严格绑定到同快照响应；配置应用与仓储事务分开，Mapper、DTO、响应组装器不单列。仅 modelId 提交或 thinking=true 时需要相应模型查询；其他输入校验失败也在提交前返回。事务内重查版本和状态，无变化保持原版本，真实变化一次推进版本并按模型、thinking、mode 顺序写事件；不确定回执先 GET 对账。
+本图下钻一次组合配置更新，从严格绑定到同快照响应，目标中的 Header 移除与最新行合并尚待实现；配置应用与仓储事务分开，Mapper、DTO、响应组装器不单列。仅 modelId 提交或 thinking=true 时需要相应模型查询；事务内锁定最新行、合并本次字段、复核状态及能力，无变化保持内部版本，真实变化一次推进内部版本并按模型、thinking、mode 顺序写事件；不确定回执先 GET 对账。
 
 ![统一 Session 更新事务](设计图/会话配置/http_session_update.svg)
 
-[原尺寸 SVG](设计图/会话配置/http_session_update.svg) · [PlantUML 源码](设计图/会话配置/diagram.puml#L106)
+[原尺寸 SVG](设计图/会话配置/http_session_update.svg) · [PlantUML 源码](设计图/会话配置/diagram.puml#L104)
 
-主图以既有配置应用服务为编排边界，保留业务校验与 Repository 的职责分离。候选快照解决组合字段相互依赖，锁内版本与状态复核解决并发；统一入口不意味着把多次独立提交拼成一个 HTTP 响应。计划审核的全局执行结构仍由[计划模式主图](../06-CampusClaw计划模式/README.md#3-推荐全局目标类图)维护。
+主图以既有更新应用服务为编排边界，保留业务准备与 Repository 的职责分离。准备快照固定已提交值和解析能力，锁内最新行合并与状态复核保证组合更新的原子性；统一入口不意味着把多次独立提交拼成一个 HTTP 响应。计划审核的全局执行结构仍由[计划模式主图](../06-CampusClaw计划模式/README.md#3-推荐全局目标类图)维护。
 
 #### 2.4.4 实施切片与验收
 
@@ -152,14 +156,15 @@ Repository 扩展一次性的 `updateConfiguration(sessionId, expectedVersion, c
 |---|---|
 | 请求与入口 | UpdateSessionRequestVO、POST 路由、统一错误映射；每个单字段与四字段组合均可表达；拒绝空/null/重复键/未知/只读字段；false 不被忽略 |
 | 业务准备 | 复用名称规则，目标模型先于思考校验；显式 true 不兼容整笔拒绝，省略才允许自动关闭；无关字段不触发 Manager I/O |
-| 原子持久化 | 两实例同 ETag 只成功一次；锁内 busy/版本失败时所有字段不变；多字段只升一次版本；领域事件插入失败时全部回滚 |
-| 响应与消费者 | GET/Create/Command 的 Session 投影包含 mode；统一更新复用 GET 结构与同源 ETag；前端每个选择器或重命名操作只发送对应一个字段，以返回 Session 同步派生的 thinking，冲突/断网先对账 |
+| 原子持久化 | 两实例分别改名与修改模式时保留各自结果；同字段后成功提交生效；省略字段以最新值合并，模型/thinking 仍按能力归一及整体验证；锁内 busy/能力失败时所有字段不变；多字段只升一次内部版本；领域事件插入失败时全部回滚；thinking-only 与并发模型切换不能使用旧能力放行 |
+| 响应与消费者 | GET/Create/Command 的 Session 投影包含 mode；统一更新复用 GET 结构且无 ETag；前端不生成、保存或发送版本条件与请求键，每个选择器只提交对应字段，以返回 Session 同步派生的 thinking，结果不确定先只读对账 |
+| Header 与无变化 | 无这两个请求头可调用；额外传入按未知 Header 忽略，不产生专门 400/412/428；同值仍检查 busy/能力，成功不改变 updatedAt/resourceVersion、不新增历史 |
 | 路由替换 | 移除属性专用 PUT 及其请求 VO/调用点（确认无其他消费者后删除）；不保留 PATCH 或兼容写别名；/name、/model、/thinking 命令仍保留既有入口 |
 | 模式接入 | 按计划专题实现模式持久化、Prompt 与能力检查后再开放 plan；不以接口契约已确认声称计划执行已实现 |
 
 计划审核保持独立的事件交互边界，Session 响应不增加待审核目标字段；客户端恢复与服务端执行内校验见[计划模式 §6.2](../06-CampusClaw计划模式/README.md#62-恢复与结果不确定)。
 
-这是 待实现 增量。沿用 Spring/Jackson/MyBatis 现有依赖，无新增 Maven 依赖。mode 的数据库列与迁移归[计划模式](../06-CampusClaw计划模式/README.md#6-持久化与恢复)；本接口不新增通用 metadata 字段或独立配置表。
+统一 POST、严格省略标记、组合事务与 mode 已在 §8.3 所列 Java 基线观察到；移除条件 Header/ETag、按最新行合并及相应前端迁移为**待实现**，不能把既有实现整体标成待实现。沿用 Spring/Jackson/MyBatis 现有依赖，无新增 Maven 依赖。mode 的数据库列与迁移归[计划模式](../06-CampusClaw计划模式/README.md#6-持久化与恢复)；本接口不新增通用 metadata 字段或独立配置表。
 
 管理面 refresh(agentId) 仍只发布新目录，不改 active execution 快照。下一次消息接受时如需模型校准，按既有 model_changed、可选 thinking_changed、user.message 顺序提交；本次 SSE 首帧仍为 user.message。没有有效默认模型时，在 SSE 建立前拒绝且不接受消息。
 
@@ -190,7 +195,7 @@ POST 重新解析，并在所属锁或事务内检查可变状态；共同结构
 #### 2.6.1 普通 JSON 与权威领域事件
 
 Builtin Handler 完成后返回普通 ResultBean JSON，不建立命令 SSE。
-请求、结果与错误由操作 13 维护；与既有 Session/Models 资源复用的映射及 ETag 规则统一见
+请求、结果与错误由操作 13 维护；与既有 Session/Models 资源复用的映射规则统一见
 [Builtin §8](../../04-命令与技能/01-内置命令/README.md#8-json-与错误)。
 不产生通用命令生命周期或 Name 历史；这不改变 POST Events 的独立 SSE 契约。
 所有成功结果移除 command、changed、sourceEventSeq；内部领域 Entry 不变。
@@ -207,8 +212,8 @@ Help 通过普通 POST Command 提供无参 Agent 使用指南，不新增 HTTP 
 #### 2.6.3 Name 与配置更新
 
 Name 的共享业务规则见 [Builtin §5](../../04-命令与技能/01-内置命令/README.md#5-name-当前状态)，
-Model/Thinking 的事务和版本规则见 [Builtin §6](../../04-命令与技能/01-内置命令/README.md#6-model--thinking)。
-Command 保留原有入口；统一 Session POST 复用其校验规则与底层写入职责，并独立要求 If-Match。
+Model/Thinking 的事务和内部版本规则见 [Builtin §6](../../04-命令与技能/01-内置命令/README.md#6-model--thinking)。
+Command 保留原有入口；统一 Session POST 复用其校验规则与底层写入职责，两者均不要求版本条件或请求去重 Header。
 
 ![命令与权威 Session 状态](设计图/Command/command_authoritative_state.svg)
 
@@ -313,7 +318,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 ## 7. 安全与附件边界
 
-Runtime 接收调用上下文，不检查 JWT/APPKEY 的组合、格式或真实性，也不建立 Session owner；认证与动作授权由上游负责。X-HW-ID 表示用户凭据 ID。每次请求仍校验所属的资源、标识、版本和业务状态，不能把“不认证凭据”解释为跳过业务校验。
+Runtime 接收调用上下文，不检查 JWT/APPKEY 的组合、格式或真实性，也不建立 Session owner；认证与动作授权由上游负责。X-HW-ID 表示用户凭据 ID。每次请求仍校验所属资源、标识和业务状态，内部版本按所属事务使用，不能把“不认证凭据”解释为跳过业务校验。
 
 ### 7.1 凭据读取与透传
 
@@ -323,12 +328,12 @@ Runtime 接收调用上下文，不检查 JWT/APPKEY 的组合、格式或真实
 |---|---|
 | CreateSession、GetSession、DeleteSession、ListSessionModels、ListSessionCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
 | ListSessionEvents | 可选 Accept-Language、Accept: application/json；只读历史不创建执行凭据 |
-| UpdateSession | Content-Type: application/json、强 If-Match 必填；Accept-Language 与 JSON Accept 可选 |
+| UpdateSession | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选 |
 | QuerySkillLoadStatistics | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选；管理调用方授权仍由上游/部署边界保证 |
 | SubmitSessionEvent | Content-Type: application/json、Accept: text/event-stream 必填；Accept-Language 可选；仅 user.message 使用本请求可选凭据，其他四类控制事件复用原执行快照 |
 | ExecuteSessionCommand | Content-Type: application/json 必填，Accept-Language 可选；Builtin 使用 JSON，无需调用方提供执行凭据；Skill 使用 SSE，可携带执行凭据；Accept 按对应响应类型可选 |
 
-所有操作的 Accept-Language 都只用于接口语言处理，不设置 Session 或模型回答语言，缺失或不支持时回退 en-US。普通 JSON Accept 可省略。If-Match 只适用于 UpdateSession；Command 继续拒绝 If-Match 和 Idempotency-Key。Builtin 的精简示例不移除现有内部快照或 Compact 释放链路。精确值及分支示例由操作 JSON 唯一维护，Help 从 Builtin 示例派生。
+所有操作的 Accept-Language 都只用于接口语言处理，不设置 Session 或模型回答语言，缺失或不支持时回退 en-US。普通 JSON Accept 可省略。所有操作均按 §2 忽略额外传入的 If-Match/Idempotency-Key，不生成配套 ETag。Builtin 的精简示例不移除现有内部快照或 Compact 释放链路。精确值及分支示例由操作 JSON 唯一维护，Help 从 Builtin 示例派生。
 
 新执行只捕获本次请求的四项值，复用不可变 `MateCredentials`；全部缺失时使用空快照，不把空快照等同于缺少 Host 执行上下文。凭据不完整不能使已配置的 `CallMateTool` 被隐藏或返回 unavailable。资源不存在、执行上下文缺失、工具无法解析、取消和权限确认等既有失败仍由所属层处理，不为了让 Mate 判断凭据而跳过这些条件。
 
@@ -370,11 +375,11 @@ Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行�
 
 ## 8. 源码证据与差异分类
 
-[模块源码证据](source-evidence.md) 集中记录固定提交、相对路径、符号和已观察行为；历史差距只适用于对应提交。本文的统一更新仍为 待实现，专项证据如下。公司响应格式与凭据边界是产品约束，原子配置更新是架构变更，版本冲突保护属于安全加固。
+[模块源码证据](source-evidence.md) 集中记录固定提交、相对路径、符号和已观察行为；历史差距只适用于对应提交。统一 POST 与原子配置更新已在 §8.3 的新基线观察到，取消条件 Header/ETag 的迁移仍为待实现。公司响应格式、凭据边界及不要求客户端版本条件属于产品约束，原子配置更新属于架构变更。
 
 ### 8.1 统一 Session 更新源码核对
 
-实际分析 Java `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`；相对原 Name 基线 `510d882ca45541e0086586dab89c429c5a18cf20`，本次所列配置/名称路径内容相同，基线变更不表示出现新的统一接口。源码前缀 R = `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
+本节保留历史分析 Java `09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`；相对原 Name 基线 `510d882ca45541e0086586dab89c429c5a18cf20`，当时所列配置/名称路径内容相同。下表差距只说明该提交，不覆盖 §8.3 的新事实；当前事务目标以 §2.4 为准。源码前缀 R = `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
 
 | 路径与符号 | 已观察行为 | 目标差距与分类 |
 |---|---|---|
@@ -383,10 +388,10 @@ Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行�
 | R/session/RuntimeSessionConfigurationService.java · requireMutableSession/requireUpdated | ETag、idle、结果状态映射及统一响应组装 | 扩展为按提交字段准入和一次组合提交 |
 | R/service/command/SessionNamingService.java · normalizeName/execute | 名称规则与单独 updateName | 提取可复用准备职责，HTTP 不调用会独立提交的 execute |
 | R/persistence/RuntimeSessionRepository.java · updateModel/updateThinking/updateName | 不同属性有独立事务 API，名称尚无 expectedVersion | 扩展组合事务并复用已有领域写入，不能顺序调用三个旧更新 |
-| R/persistence/MyBatisRuntimeSessionRepository.java · updateModelLocked/updateThinkingLocked/updateName | 行锁、版本/busy、同值判断、Entry 与资源更新 | 候选以锁内版本绑定；统一提交和 mode 为 待实现 |
+| R/persistence/MyBatisRuntimeSessionRepository.java · updateModelLocked/updateThinkingLocked/updateName | 行锁、版本/busy、同值判断、Entry 与资源更新 | 该提交尚无统一提交和 mode；当前最新行合并目标见 §2.4 |
 | modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java · MODEL_ID_REGEX | 首字符为字母/数字，后续允许字母/数字及 ._:/-，总长 1～128 | 标识格式不变；不因接口合并扩大输入 |
 | pi `5cd93f688aaab89dbb6dfa4aca535f21796ae185` / packages/coding-agent/src/core/agent-session.ts · setModel/setThinkingLevel | 模型变化会按能力收敛推理等级 | 保留省略 thinking 时的归一规则；显式组合校验是 CampusClaw API 设计 |
-| Claude Managed Agents 官方 Update Session / Session operations，2026-09-14 核对，Beta | POST 更新 Session；title、metadata、budget、agent 均为可选属性，公开契约未列出单字段互斥限制，主示例只提交 title；已有会话不可修改模型配置 | 参考资源 POST、可选字段部分更新及单字段主示例；CampusClaw 的可写字段、null 规则、If-Match 与原子提交由本设计定义，不能据公开契约推断 Claude 服务端事务 |
+| Claude Managed Agents 官方 Update Session / Session operations，2026-09-14 核对，Beta | POST 更新 Session；title、metadata、budget、agent 均为可选属性，公开契约未列出单字段互斥限制，主示例只提交 title；已有会话不可修改模型配置 | 参考资源 POST、可选字段部分更新及单字段主示例；CampusClaw 的可写字段、null 规则与原子提交由本设计定义，不能据公开契约推断 Claude 服务端事务 |
 
 Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/beta/sessions/update)、[Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations)。各基线 API 组织与本次取舍集中见[架构对比 A04](../07-Agent架构对比/README.md#a04)。未运行 Java 集成测试；设计确认与实现/部署状态分开记录。
 
@@ -410,12 +415,30 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 统计查询在该本地提交的 `modules` / `campusclaw` Java 源码范围未找到对应入口，Header 实现状态为未核验；目标契约根据已确认的纯统计查询职责不声明执行凭据，管理授权仍保留。本次不修改实现代码，也未运行 Java 测试。
 
-这是既有产品凭据边界的契约表达收敛，不改变认证职责或执行快照生命周期。设计验收要求十项 JSON 与生成页面按 §7.1 分组，事件控制与 Builtin 示例无凭据，Help 只投影 Builtin；负向测试拒绝无用途凭据回流、凭据变必填及 If-Match/SSE 传输规则漂移。Agent 架构对比结论与模块导航无变化，不引入外部基线比较。
+该日核验聚焦既有产品凭据边界，不改变认证职责或执行快照生命周期。凭据验收要求十项 JSON 与生成页面按 §7.1 分组，事件控制与 Builtin 示例无凭据，Help 只投影 Builtin；负向测试拒绝无用途凭据回流、凭据变必填及 SSE 传输规则漂移。条件 Header 的当前迁移另见 §8.3，不能沿用历史验收证明其已实现。
+
+<a id="session-header-free-migration"></a>
+
+### 8.3 无条件 Header 的更新迁移（2026-10-04）
+
+当次确认上游默认分支 main 并隔离 fetch，读取 `pi-mono-java@553dcd5e2ff682f9684810a043b442b37a02e54a`；最新指当次源码快照，不代表部署版本。以下路径中 R 沿用 §8.1 的 runtimeapi 前缀。相较 `09b32d8e`，统一更新服务、VO 与组合事务已存在；这里只升级 Session 更新及其 Header 消费链的观察范围。
+
+| 路径与符号 | 已观察实现 | 待实现迁移 |
+|---|---|---|
+| R/web/RuntimeSessionController.java · get/update | GET 与 POST 返回 ETag/no-store，POST 把 If-Match 传入服务 | 移除 Header 绑定与 ETag，保留完整响应、语言与 no-store |
+| R/vo/UpdateSessionRequestVO.java · setters/isNonEmptyUpdate/hasExecutionConfiguration | 四字段及各自 submitted 标记；拒绝 null/重复键/未知字段 | 复用省略与准入分类，不引入客户端版本字段 |
+| R/session/RuntimeSessionUpdateService.java · update/prepare/requireStrongEtag/requireObservedVersion；R/session/SessionEtagFactory.java · create | 校验强 ETag，缺少 428、过期 412；准备 expectedVersion 与模型能力；以资源版本生成 ETag | 删除公开条件链；仅准备提交值和对应能力，失效准备在有限预算内重新解析 |
+| R/persistence/MyBatisRuntimeSessionRepository.java · updateSession/rejectUnifiedUpdate/mergeUpdate/mergedThinking/markConfigurationUpdated；modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml · lockSessionForUpdate/updateSessionConfiguration | FOR UPDATE 后仍要求 expectedVersion 一致，再合并字段，检查 busy；同值无写入，真实变化原子写资源/事件并递增 resourceVersion | 复用行锁、部分合并、能力归一、无变化与原子提交，移除调用方版本准入；保留内部 resourceVersion |
+| frontend/src/composables/useRuntimeApi.ts · applySession/changeSetting/readDetachedSession/renameSession | 强制读取并保存 ETag；POST 发送 If-Match，412 后只读刷新 | 客户端不保存、生成或发送 ETag/请求键；继续保留响应代际隔离、用户草稿和不确定结果对账 |
+| R/web/RuntimeCommandController.java · execute | 对 If-Match/Idempotency-Key 有专门拒绝分支 | 按普通未知 Header 忽略，不专门报错；命令业务准入与执行边界不变 |
+
+上表是源码观察；本次只修改设计，没有运行 Java 或前端产品测试。当前目标无条件 Header，不承诺重复创建或执行的请求级幂等；数据库事务与执行内部去重继续存在。Claude 官方公开 Beta 的 Header 核验及统一边界见 [专项证据](../08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)，不从公开契约推断服务端事务或内部数据结构。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.63.0 | 2026-10-04 | 所有接口取消条件与请求去重 Header 及配套 ETag，Session 更新在最新行锁内合并提交字段并保留原子准入。 |
 | 1.62.0 | 2026-10-02 | Session 与完整事件采用秒级 UTC 时间，明确写入、回显和存储一致性边界。 |
 | 1.61.0 | 2026-09-22 | Command 增加 mode 查询和 plan/build 切换，复用 Session 响应与模式事件。 |
 | 1.60.1 | 2026-09-22 | 接口作用收敛为功能说明，执行约束移至契约表格，命令清单保留标准请求与响应。 |

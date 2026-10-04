@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.70.0 |
+| 文档版本 | 1.71.0 |
 | 更新日期 | 2026-10-04 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -216,26 +216,26 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 |---|---|
 | 所属模块与主设计 | M06/M02，关联 M01/M07；[HTTP 主设计 §2.4](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#24-模型目录与统一-session-更新)维护契约理由、唯一目标类图与组合事务验收 |
 | 架构问题 | 名称、模型、思考和工作模式同属 Session 时，如何通过一个入口更新且保留不同的生效约束？ |
-| CampusClaw 目标 | 统一 Session POST；字段可选、支持单字段或组合修改，一笔事务、一个资源版本。当前前端每次操作仅提交对应一个字段。名称单独修改允许 running，执行配置要求 idle；元数据字段保持稳定。精确模型只由 Runtime catalog 维护。 |
-| CampusClaw 已观察实现 | Java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2 的 RuntimeSessionController 没有 update；ConfigurationController 暴露独立模型/思考 PUT；SessionNamingService 经 Command 更新名称。Repository 分别提供 updateModel/updateThinking/updateName，尚无组合原子更新与 mode。路径与符号见[专项证据](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#81-统一-session-更新源码核对)。 |
-| 差异分类 | API 架构变更：合并写入入口及事务；产品约束：可变 Session 模型、boolean 思考、plan/build、名称 running 可改、执行配置 idle、稳定元数据；并发安全：锁内复核 ETag/状态，不按页面快照直接写入。 |
+| CampusClaw 目标 | 统一 Session POST；字段可选、支持单字段或组合修改，一笔事务、一个内部资源版本。当前前端每次操作仅提交对应一个字段。名称单独修改允许 running，执行配置要求 idle；元数据字段保持稳定。精确模型只由 Runtime catalog 维护。 |
+| CampusClaw 已观察实现 | 2026-10-04 重新核验 Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`：统一 POST、字段省略识别、锁内合并、状态检查与同值处理已存在；Controller/Service 仍要求 If-Match 并返回 ETag，前端仍保存及发送标签。取消客户端令牌及对应消费者迁移待实现；路径、符号与取回范围见[专项证据](../08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)。 |
+| 差异分类 | API 架构变更：合并写入入口及事务；产品约束：可变 Session 模型、boolean 思考、plan/build、名称 running 可改、执行配置 idle、稳定元数据；并发安全：锁内读取最新记录、复核状态并合并提交字段，不按页面快照整行覆盖。 |
 | 具体理由 | 当前四个控件共享一种资源更新与对账流程；前端单项调用不构成服务端字段互斥的理由。接口接收字段组合时，按最终目标模型校验思考并整笔提交；不要求页面提供批量保存，也不新增通用属性更新框架。 |
-| 收益与代价 | 调用方共享一种更新与对账流程；需要明确省略/null、字段组合、最终模型能力及整笔失败，并改造现有单属性提交代码，不能只换路由注解。 |
+| 收益与代价 | 调用方共享业务字段更新流程，无需保存标签或请求键；仍需处理字段组合、模型能力与整笔失败。接受同字段后一次成功提交生效，数据库行锁不检测旧页面编辑意图；不同字段基于最新值合并，模型与 thinking 仍遵守能力归一及完整校验。 |
 | 备选边界 | 基线有独立命令不等于 HTTP 必须分拆；Claude 有 Session POST 也不等于其允许当前会话切换模型。若未来允许运行中改配置，应另定生效快照边界，不能从统一入口自动推导。 |
-| 设计 / 实现状态 | 四类统一 POST 为已确认目标；组合事务、mode 与消费者迁移均为 待实现。静态核对未代替 Java/数据库/跨实例测试。 |
-| 验收重点 | 单字段与组合请求；目标模型不支持显式 thinking=true 时全不变；省略 thinking 的自动归一；running 名称例外；同值不升版本；ETag 竞争、插入历史失败回滚；旧目标写入口不回流。 |
+| 设计 / 实现状态 | 四类统一 POST 已实现；取消 HTTP 条件及配套 ETag 为已确认目标，服务端与消费者迁移待实现。静态核对未代替 Java/数据库/跨实例测试。 |
+| 验收重点 | 单字段与组合请求；目标模型不支持显式 thinking=true 时全不变；省略 thinking 的自动归一；running 名称例外；同值不升版本；不同字段并发合并、同字段提交顺序、插入历史失败回滚；旧目标写入口不回流。 |
 
 同层 API 组织的证据如下，不能按“多数基线如此”投票决定接口：
 
 | 基线与实际核对点 | 已观察接口组织 | 采纳范围与边界 |
 |---|---|---|
-| Claude Managed Agents，官方 Beta 文档，2026-09-14 | [Update Session](https://platform.claude.com/docs/en/api/beta/sessions/update) 使用资源 POST；title/metadata/budget/agent 可选，公开契约未列出单字段互斥限制，主示例只提交 title；模型/effort 在可版本化 Agent 配置中，已有 Session 不能中途修改模型配置，见[Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations) | 参考资源级部分更新及单字段主示例；字段集合、null、If-Match 与原子性由 CampusClaw 定义，不迁入 Agent 版本快照与会话模型不可变约束；无服务端源码，不能推断其数据库事务 |
+| Claude Managed Agents，官方 Beta 文档，2026-09-14 | [Update Session](https://platform.claude.com/docs/en/api/beta/sessions/update) 使用资源 POST；title/metadata/budget/agent 可选，公开契约未列出单字段互斥限制，主示例只提交 title；模型/effort 在可版本化 Agent 配置中，已有 Session 不能中途修改模型配置，见[Session operations](https://platform.claude.com/docs/en/managed-agents/session-operations) | 参考资源级部分更新及单字段主示例；字段集合、null 与原子性由 CampusClaw 定义，不迁入 Agent 版本快照与会话模型不可变约束；无服务端源码，不能推断其数据库事务 |
 | DeepSeek Harness 0a53fb55bea101816fa226bb964ae2bed71c343b，alpha | [packages/api/session-controller/src/commands.ts](https://github.com/deepseek-ai/deepseek-harness/blob/0a53fb55bea101816fa226bb964ae2bed71c343b/packages/api/session-controller/src/commands.ts) 的 selectModel 合并模型与 reasoningEffort，rename 独立；[packages/plan/plan-mode/src/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/0a53fb55bea101816fa226bb964ae2bed71c343b/packages/plan/plan-mode/src/index.ts) 注册 plan 命令 | 借鉴模型与能力关联、计划机制；其 Remote RPC 及后续 step 切换时机不决定 CampusClaw HTTP 形状 |
 | pi 5cd93f688aaab89dbb6dfa4aca535f21796ae185 | [packages/coding-agent/src/modes/rpc/rpc-types.ts](https://github.com/badlogic/pi-mono/blob/5cd93f688aaab89dbb6dfa4aca535f21796ae185/packages/coding-agent/src/modes/rpc/rpc-types.ts) 的 set_model/set_thinking_level/set_session_name 是独立 JSONL 命令；[core/agent-session.ts](https://github.com/badlogic/pi-mono/blob/5cd93f688aaab89dbb6dfa4aca535f21796ae185/packages/coding-agent/src/core/agent-session.ts) 的 setModel/setThinkingLevel 提供能力归一 | 参考 Runtime 行为；进程命令无 PUT/POST 含义，不能直接推出公共 API 需要属性专用端点 |
 | Codex d58d0e5841e0de08e251673db2d5af8cf3a1ad51 | [codex-rs/app-server-protocol/src/protocol/v2/thread.rs](https://github.com/openai/codex/blob/d58d0e5841e0de08e251673db2d5af8cf3a1ad51/codex-rs/app-server-protocol/src/protocol/v2/thread.rs) 的 ThreadSettingsUpdateParams 合并后续 Turn 配置；[app-server/README.md](https://github.com/openai/codex/blob/d58d0e5841e0de08e251673db2d5af8cf3a1ad51/codex-rs/app-server/README.md) 区分 thread/name/set 与当前 Turn 的 settings/update | 参考合并配置与生效范围分离；两种 settings/update 为 experimental，不照搬 JSON-RPC 或运行中切换功能 |
 | OpenCode 849c2598abc7d2b40261e74b5826bc74ffc78308 | [packages/opencode/src/server/routes/instance/httpapi/groups/session.ts](https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/server/routes/instance/httpapi/groups/session.ts) 的 UpdatePayload 包含 title 等属性；[packages/opencode/src/session/prompt.ts](https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/opencode/src/session/prompt.ts) 的 PromptInput 随消息选择 model/agent/variant；[packages/protocol/src/groups/session.ts](https://github.com/anomalyco/opencode/blob/849c2598abc7d2b40261e74b5826bc74ffc78308/packages/protocol/src/groups/session.ts) 的 switchModel/switchAgent 又提供独立 v2 操作 | v2 明确为 experimental，不能混成一套稳定公开契约；CampusClaw 使用独立于发送消息的 Session 更新 |
 
-**讲解要点。** CampusClaw 将用户编辑会话属性的动作统一为一次资源更新，借鉴 Claude 的资源组织和其他基线的配置边界，同时保留自己的运行约束。难点在组合状态而非 HTTP 方法：目标模型决定思考是否有效，行锁与 ETag 决定整笔更新能否提交；名称更新不触碰执行快照。已有窄服务可复用，组合事务和模式能力仍需实现与验证。
+**讲解要点。** CampusClaw 将用户编辑会话属性的动作统一为一次资源更新，借鉴 Claude 的资源组织和其他基线的配置边界，同时保留自己的运行约束。难点在组合状态而非 HTTP 方法：目标模型决定思考是否有效，数据库行锁下的最新状态和完整业务校验决定整笔更新能否提交；名称更新不触碰执行快照。同字段并发修改依提交顺序生效，超时后只读核对不等于找回某次请求回执。统一更新骨架已存在，HTTP 令牌及前端标签依赖仍需迁移。
 
 <a id="a05"></a>
 
@@ -479,7 +479,7 @@ Claw 同日重核 Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`：fileId 
 
 ### 创建响应与凭据引用（2026-10-04 专项）
 
-Claude 官方 Beta Deployment 的 schedule 提供 last_run_at/upcoming_runs_at，status 使用 active/paused，归档以 archived_at 表达；metadata 为受限字符串 map。CampusClaw 响应采用对应 lowerCamelCase 时间摘要、小写状态并去除公开 revision，支持可选 metadata。计划时间只是估计，不等于业务完成；内部调度代次继续存在。完整表示 ETag 作为候选覆盖动态摘要，代价是运行或时间推进也可能触发编辑冲突；归档模型尚待审阅。
+Claude 官方 Beta Deployment 的 schedule 提供 last_run_at/upcoming_runs_at，status 使用 active/paused，归档以 archived_at 表达；metadata 为受限字符串 map。CampusClaw 响应采用对应 lowerCamelCase 时间摘要、小写状态并去除公开 revision，支持可选 metadata。计划时间只是估计，不等于业务完成；内部调度代次继续存在。动态时间摘要仅供展示，不构成更新前置条件；归档模型尚待审阅。
 
 Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读，运行时按 MCP 目标或受控出站规则使用。CampusClaw 已确认支持任务凭据绑定，建议借鉴引用与可信注入边界，结合企业租户/业务主体授权；采用 credentialIds 直接引用独立凭据，名称和资源层级已确认；相比 Claude 少一层 Vault 集合，代价是共用凭据列表需逐任务维护；不直接把 workspace 级 Vault 当作园区业务权限。Java main 同日重新 fetch 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，普通消息转发本次执行凭据，Cron 明确使用空凭据；无人值守凭据签发/刷新与按目标选择待实现，权威来源待确定，首版不增加 Vault 集合。收益是避免在任务和提示中保存登录 Token，代价是需要独立凭据权威及轮转/撤销接线；首版受控工具无需复制整个 sandbox 出站替换体系。
 
@@ -499,7 +499,7 @@ Claw 读取以当前可信可见范围为准，不以 Agent/凭据当前可执�
 
 Claude Deployment 的 POST 更新区分省略保持与显式清空，事件/规则整体替换，metadata 按 key 修改，200 返回完整资源；agent 字符串还会重新固定最新版本。Claw 推荐沿用部分更新和完整响应，以既定七个可写字段限定范围：消息为单条 user.message，凭据为 credentialIds 数组，Agent 只绑定身份；不将修改配置隐含为恢复、立即执行或修改历史运行。metadata 逐 key patch 是特例，不对消息和规则做任意深层合并。直接凭据推荐 [] 清空、null 拒绝，相比 Claude vault_ids 的两种清空值，保留单一数组清空形状；这是产品约束。
 
-Claw 增加 If-Match 与持久 Idempotency-Key 候选，分别防并发覆盖和恢复原提交结果；公开 Claude 更新页未声明相同协议，不能推断其内部没有保护。代价是请求结果存储与调用方冲突处理，且动态时间摘要会使完整表示标签失效。Java main 同日重新 fetch 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，Session 已有省略标记、单个强标签、行锁重查及无修改处理，但没有此幂等回执，Cron 也没有公开部分更新。精确接口由[M10 更新契约](../08-CampusClaw定时任务/configuration.md#update-schedule-review)维护，公开文档与路径符号见[更新证据](../08-CampusClaw定时任务/source-evidence.md#schedule-update-evidence)；新增契约待实现，整项操作仍为候选。
+Claw 全部接口采用无客户端条件及请求键的产品约束，不返回配套 ETag，也不在请求体或查询参数中换名设置令牌。服务端在短事务内锁定最新记录、合并本次提交字段并校验；不同字段相互保留，同一字段由较晚成功提交的更新生效。收益是降低客户端协议和回执存储复杂度，代价是不能拒绝旧页面上的同字段覆盖，创建或手动运行重试也可能产生新资源。内部配置代次、自动触发唯一约束和 Run 受理去重继续保留。Claude 创建/更新公开页未声明这两个请求头，不据此推断其内部事务或去重。Java main 同日重新 fetch 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，Session 实际仍有 If-Match/ETag 及前端依赖，需同步迁移，Cron 没有公开部分更新。精确接口由[M10 更新契约](../08-CampusClaw定时任务/configuration.md#update-schedule-review)维护，证据及重试边界见[无客户端令牌专项](../08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)；无令牌范围已确认，其他更新细节仍按操作审阅。
 
 ### 1. 调度职责和权威状态
 
@@ -523,7 +523,7 @@ Claw 增加 If-Match 与持久 Idempotency-Key 候选，分别防并发覆盖和
 
 ### 3. CampusClaw 的采纳与差异
 
-当前只定义 Claw 配置边界：[配置专题](../08-CampusClaw定时任务/configuration.md#claude-tradeoffs)明确创建可省略 schedule，此时只保存；有效 schedule 保存即登记自动计划，试运行通过独立显式操作。每次输入一条 user.message，复用文本与现有文件引用格式；附件长期访问和具体接口形状仍待细化，不开放多初始事件、system.message 或 user.define_outcome。名称上限为 256，非空 schedule 只接受 cron；Cron 已选定 Spring 六字段，复用现有解析能力且不新增 Maven 依赖，代价是与 Claude 五字段及日/周组合语义不兼容。[固定注解与动态编程式调度](../08-CampusClaw定时任务/README.md#spring-scheduling)分别适用于应用预定义方法和用户运行期任务；表达式秒粒度不等于准时启动保证。每次运行固定新建 Session；Claw 不提供 target/sessionId/chatId 输入，也不创建新的 Agent 定义。当前没有可选 Environment 资源与历史 Agent 执行绑定；已有元数据 version 不等于可以 pin，prepare 缓存也不等于每次远端最新，目录刷新可改变未来行为。ETag/幂等属于 Claw 自己的 proposed 可靠性契约，不据此否定 Claude 内部保护。保存不调用 prepare，是因为它可能发布目录；完整证据见[配置核验](../08-CampusClaw定时任务/source-evidence.md#configuration-evidence)。
+当前只定义 Claw 配置边界：[配置专题](../08-CampusClaw定时任务/configuration.md#claude-tradeoffs)明确创建可省略 schedule，此时只保存；有效 schedule 保存即登记自动计划，试运行通过独立显式操作。每次输入一条 user.message，复用文本与现有文件引用格式；附件长期访问和具体接口形状仍待细化，不开放多初始事件、system.message 或 user.define_outcome。名称上限为 256，非空 schedule 只接受 cron；Cron 已选定 Spring 六字段，复用现有解析能力且不新增 Maven 依赖，代价是与 Claude 五字段及日/周组合语义不兼容。[固定注解与动态编程式调度](../08-CampusClaw定时任务/README.md#spring-scheduling)分别适用于应用预定义方法和用户运行期任务；表达式秒粒度不等于准时启动保证。每次运行固定新建 Session；Claw 不提供 target/sessionId/chatId 输入，也不创建新的 Agent 定义。当前没有可选 Environment 资源与历史 Agent 执行绑定；已有元数据 version 不等于可以 pin，prepare 缓存也不等于每次远端最新，目录刷新可改变未来行为。Claw 依靠数据库最新记录合并更新，客户端不提供条件令牌或请求键；该选择不构成 Claude 内部实现结论。保存不调用 prepare，是因为它可能发布目录；完整证据见[配置核验](../08-CampusClaw定时任务/source-evidence.md#configuration-evidence)。
 
 下述到期执行、同库受理与恢复取舍为待细化候选，不作为配置切片已冻结的实施约束；它们仍需结合业务场景和相应基线单独论证。
 
@@ -609,6 +609,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.71.0 | 2026-10-04 | A04/A14 统一无客户端条件及请求键协议，明确数据库合并更新、重试代价和现有 Session 迁移差距。 |
 | 1.70.0 | 2026-10-04 | A14 比较部分更新、凭据清空与 Agent 版本语义，并明确条件更新和幂等回执的成本。 |
 | 1.69.0 | 2026-10-04 | A14 补充资源类型与暂停原因的基线对应、状态归属及实现差距。 |
 | 1.68.0 | 2026-10-04 | A14 对齐完整配置读取，补充分页取舍、读取授权和独立 Run 观察的证据边界。 |

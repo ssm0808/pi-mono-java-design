@@ -1,12 +1,14 @@
 # 计划模式源码证据与实现差距
 
-版本：2.5.0；核对日期：2026-09-28。当前参数承载、计划专用预览和实现差距见[§15](#plan-argument-streaming-evidence)；§12～§14 保留各自提交的历史证据。Java `553dcd5e` 已实现正文标记和空参数审核；恢复必填 `plan` 参数并从参数生成预览是待实现增量，不能混写这两个状态。
+版本：2.5.1；维护日期：2026-10-04；各节保留实际核对日期。当前参数承载、计划专用预览和实现差距见[§15](#plan-argument-streaming-evidence)；§12～§14 保留各自提交的历史证据。Java `553dcd5e` 已实现正文标记和空参数审核；恢复必填 `plan` 参数并从参数生成预览是待实现增量，不能混写这两个状态。
 
 提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 待实现 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
 
 Build/Plan 与提问展示的历史静态核验绑定 `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4`，当时实现与目标由[§9](#9-buildplan-与逐题交互核验)维护。下方历史接入表继续保留各自固定提交范围，不能据其 待实现 标记判断当前尚无模式、审核、TODO 或结构化提问。
 
 业务 Agent 模式文件覆盖的历史差距见 [§11](#11-业务-agent-模式提示词覆盖)，主线进度由 §12 独立核验。两文件提示词分工的证据保留在[§10](#10-两份模式提示词的最新上游核验)，当前计划提交与预览采用 §15；其余章节不代表最新上游或当前 Java 的完整实现状态。
+
+Session 更新的当前目标不定义客户端条件请求或请求幂等令牌及配套 ETag；服务端在事务中锁定最新记录并合并提交字段，模式准入继续保留。2026-10-04 重新核验 Java `553dcd5e`，条件头和 ETag 的实现迁移仍待实现，详见[专门证据](../08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)；下列旧接入表保留各自提交的事实，不代表当前公共接口目标。
 
 ## 1. 固定提交
 
@@ -71,7 +73,7 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 |---|---|---|
 | `web/RuntimeSessionController.java` | create、get、delete | 目前只有创建、查询和删除；目标在 Session 资源路径增加四字段 updateSession，尚不存在通用 POST 更新方法 |
 | `web/RuntimeSessionConfigurationController.java` | listModels、changeModel、changeThinking | 既有 model/thinking 使用属性路径；它们的存在不能推导应为每个新 Session 属性再建 endpoint |
-| `session/RuntimeSessionConfigurationService.java` | requireMutableSession、requireUpdated、changeModel、changeThinking | 已有 ETag、idle、原子更新结果映射及统一响应装配；扩展 updateSession 复用这一应用边界，不新增模式专用 Service |
+| `session/RuntimeSessionConfigurationService.java` | requireMutableSession、requireUpdated、changeModel、changeThinking | 已有 ETag、idle、原子更新结果映射及统一响应装配；应用边界继续复用，当前目标移除客户端条件头及配套 ETag，不新增模式专用 Service |
 | `dto/SessionConfigurationUpdateDTO.java` | Status | 已区分 UPDATED、UNCHANGED、NOT_FOUND、BUSY、VERSION_MISMATCH；统一四字段更新复用该结果模型 |
 | `event/RuntimeEventService.java` | `submit`、`submitConfirmation` | 已分派三类 user.*；不存在计划确认输入，目标增加第四分支 |
 | `event/RuntimeMessageEventService.java` | `prepare`、`accept`、`startAccepted` | 先准备未启动的执行再接受消息；目标由接受事务返回最新模式快照，在启动前应用，不能把工厂 I/O 移入锁内 |
@@ -83,7 +85,7 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 | `persistence/MyBatisRuntimeExecutionControlRepository.java` | `markConfirming`、`acceptConfirmation`、`claimConfirmation`、`persistConfirmation` | 锁 Session/执行、登记续跑段、保存决定、原执行至多领取一次；不是自动接管失联执行 |
 | `event/RuntimeExecutionCoordinator.java` | `scheduleTimeout`、`timeout`、`commitAndRelease` | maxDuration 覆盖整个执行，取消 pending confirmation；可靠终态提交后释放资源，失败保留执行并重试终态 |
 | `runtime/RuntimeSessionEngineRegistry.java` | `register`、`createSession`、`complete` | 仅保存活动执行，idle 不缓存 Agent；新执行必须重新读取持久化模式 |
-| `session/RuntimeSessionResponseAssembler.java` | `getView`、`createView` | Session DTO 统一转换 VO 与 ETag；目标只补 mode，不投影执行内部待审核目标 |
+| `session/RuntimeSessionResponseAssembler.java` | `getView`、`createView` | Session DTO 统一转换 VO 与 ETag；当前目标补 mode 并移除配套 ETag，不投影执行内部待审核目标 |
 | `vo/GetSessionResponseVO.java` | 字段集合 | 当前无 mode，也不暴露待确认工具；本专题仅补工作模式，不增加待审核目标字段 |
 | `event/RuntimeEntryCodec.java` | `effectiveContextEntries`、模型消息转换 | 历史与模型上下文分离；新增计划展示事件不能重复变成模型消息 |
 

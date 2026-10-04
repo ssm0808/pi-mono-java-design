@@ -84,7 +84,7 @@ skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
 
-title Rename One Session - Two Successful Entry Paths
+title Rename One Session - Target, Header Migration Pending
 participant "HTTP configuration" as API
 participant "Name command" as Command
 participant "Naming rules" as Rules
@@ -92,8 +92,8 @@ database "Session repository" as Repo
 alt HTTP configuration update
   API -> Rules : Normalize submitted name
   Rules --> API : Validated name
-  API -> Repo : Commit combined candidate with expected version
-  Repo --> API : Authoritative Session and same-snapshot version
+  API -> Repo : Lock latest Session, merge fields and commit
+  Repo --> API : Authoritative Session from committed snapshot
 else Slash name command
   Command -> Rules : Normalize command argument
   Rules --> Command : Validated name
@@ -102,8 +102,8 @@ else Slash name command
 end
 note over API,Repo
   Invalid names return before mutation.
-  HTTP checks expected version even for unchanged values.
-  Slash uses last-commit-wins under the row lock.
+  Both paths validate the latest locked Session.
+  Later committed writes to the same field win.
 end note
 @enduml
 

@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.15.0 |
-| 更新日期 | 2026-09-22 |
+| 文档版本 | 1.16.0 |
+| 更新日期 | 2026-10-04 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；Help 缓存、Agent 级锁、查询、响应与统一 POST 已实现，不替换其他行为的历史证据点 |
@@ -109,7 +109,7 @@ Help 的结果精确为 displayName/description/useCases，字段和缓存规则
 | 0bb794f2：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/CommandDefinition.java` | 只有发现元数据，没有 Handler | Skill 仅展示；Builtin 携带准入与 Handler |
 | 0bb794f2：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/command/ResolvedCommandCatalog.java` | 固定请求内 list/find 视图 | 清单、准入、执行共用 Definition 身份；Help 内容不来自清单 |
 | 7759481a：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java` | 未发布 GET 候选依赖 Catalog Service | GET/POST 在最终 PR 同时发布 |
-| d84dd3d6：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java` | Model/Thinking 与 HTTP If-Match 绑定 | 提取可选 expectedVersion 的窄服务 |
+| d84dd3d6：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java` | Model/Thinking 与 HTTP If-Match 绑定 | 提取锁内读取最新配置的窄服务；旧客户端条件机制迁移待实现 |
 | d84dd3d6：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java`；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionHolder.java` | 活动执行、控制队列与清理已存在 | Compact 复用生命周期，单独完成 JSON Future |
 
 已合并的前置实现 `9d0d76f4`（main 合并点 `a8192e04`）已将发现数据改为
@@ -150,7 +150,7 @@ OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`。这是当次源码快�
 
 | 基线与相对路径 / 符号 | 已观察实现 | CampusClaw 取舍 |
 |---|---|---|
-| pi · `packages/coding-agent/src/modes/rpc/rpc-types.ts` · RpcSlashCommand / RpcCommand；同目录 `rpc-mode.ts` · get_commands | 描述符为 name、description、source、sourceInfo，无 input；Skill 通过 prompt.message 与可选 images 调用；模型/思考使用独立类型化请求 | 借鉴发现与执行分工；不公开来源路径，不复制 JSONL RPC。type 是本产品分类字段 |
+| pi · `packages/coding-agent/src/modes/rpc/rpc-types.ts` · RpcSlashCommand / RpcCommand；`packages/coding-agent/src/modes/rpc/rpc-mode.ts` · get_commands | 描述符为 name、description、source、sourceInfo，无 input；Skill 通过 prompt.message 与可选 images 调用；模型/思考使用独立类型化请求 | 借鉴发现与执行分工；不公开来源路径，不复制 JSONL RPC。type 是本产品分类字段 |
 | pi · `packages/coding-agent/src/core/agent-session.ts` · prompt / _expandSkillCommand | Skill 正文展开后与消息参数、图片进入处理链；未知 Skill 可以保留原文 | CampusClaw 保持显式命令精确匹配失败就拒绝，不回退普通消息（安全加固） |
 | OpenCode · `packages/opencode/src/command/index.ts` · Info / hints | 现行实例命令描述含 source、template、hints；hints 提取参数占位符，Skill 可为 [] | 保留轻量提示概念，不公开模板；空 hints 不代表不允许参数 |
 | OpenCode · `packages/opencode/src/session/prompt.ts` · CommandInput / command；`packages/opencode/src/server/routes/instance/httpapi/groups/session.ts` · CommandPayload | HTTP 命令请求为 command、arguments 与可选 parts/agent/model/variant/messageID；sessionID 来自路径 | CampusClaw 继续使用 name/arguments/fileIds 与既有 JSON/SSE，不复制附件 URL 或全部配置字段 |
@@ -384,7 +384,7 @@ Builtin 名称格式不覆盖 skill:*；公共入口不能据此拒绝 Skill 名
 
 Help/Status/Skills 不写 Entry；Name 只保存当前名称与版本；Model/Thinking/Mode/Compact
 复用现有领域 Entry。同值、查询和空历史压缩不写 Entry。
-成功响应复用既有 Session/Models 资源及对应 ETag，不建立独立 Slash 回执。
+成功响应复用完整 Session/Models 资源，不返回 ETag，不建立独立 Slash 回执。全部 Claw 接口不使用客户端条件或请求幂等令牌；写入在数据库锁内校验并合并本次提交字段，内部一致性与状态准入仍保留。
 Help/Compact/Skills 无对应独立 API，只保留最小业务结果；所有成功 result 删除 command、changed、sourceEventSeq。
 精确映射、6f52fddc 源码证据与同源快照要求统一见 [Builtin §8](../01-内置命令/README.md#8-json-与错误)。
 全局主图的响应投影边界不变，不按命令增加专属 VO 或重排主图。
@@ -433,6 +433,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.16.0 | 2026-10-04 | Slash 响应取消 ETag，配置写入复用数据库锁内最新记录与原子提交。 |
 | 1.15.0 | 2026-09-22 | 增加 mode 命令，复用 Session 模式事务并区分查询、切换与计划审核。 |
 | 1.14.0 | 2026-09-22 | 命令描述符采用 type 与 hints，分离输入提示、会话状态和附件规则。 |
 | 1.13.0 | 2026-09-22 | 明确命令选项交互与 hint 的分工，并统一所有可用 Skill 的附件能力说明。 |

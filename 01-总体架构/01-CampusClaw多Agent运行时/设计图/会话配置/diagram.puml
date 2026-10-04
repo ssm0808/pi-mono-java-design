@@ -1,13 +1,13 @@
 @startuml http_session_update_classes
-' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java :: create, get, delete.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java :: requireMutableSession, requireUpdated.
+' Source baseline: pi-mono-java 553dcd5e2ff682f9684810a043b442b37a02e54a.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java :: create, get, update, delete.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionUpdateService.java :: update, prepare, requireStrongEtag, requireObservedVersion.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java :: normalizeName, execute.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: updateModelLocked, updateThinkingLocked, updateName.
-' Observed behavior: existing services commit individual properties; there is no combined update.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: updateSession, rejectUnifiedUpdate, mergeUpdate, mergedThinking.
+' Observed behavior: unified POST and atomic updates exist; public ETag and expectedVersion still gate writes.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java :: toolsFor, afterPropertiesSet.
-' Design reason: one candidate and one transaction prevent partial multi-field writes.
-' Java divergence: POST, preparation methods, candidate DTO and combined commit are pending implementation.
+' Design reason: merge submitted fields into the latest locked row; keep busy and capability admission atomic.
+' Java divergence: removing public condition headers and ETag is Pending implementation; internal versions remain.
 title Unified Session Update - Complete Target Class View
 top to bottom direction
 allowmixing
@@ -26,36 +26,33 @@ hide empty members
 
 package "Web boundary" as WebLayer {
   class "RuntimeSessionController" as API <<extended>> #FFF7DD
-  class "UpdateSessionRequestVO" as Request <<pending implementation>> #EAF2FF {
+  class "UpdateSessionRequestVO" as Request <<existing>> #ECFDF5 {
     displayName / modelId
     thinking / mode
   }
   class "ResultBeanAdapter" as Result <<existing>> #ECFDF5
 }
 package "Application - Spring singletons" as AppLayer {
-  class "RuntimeSession\nConfigurationService" as App <<extended>> #FFF7DD {
-    +updateSession(sessionId, ifMatch, requestVO)
+  class "RuntimeSession\nUpdateService" as App <<extended>> #FFF7DD {
+    +updateSession(sessionId, requestVO)
   }
   class "SessionNamingService" as Name <<extended>> #FFF7DD
   class "SessionModel\nConfigurationService" as Model <<extended>> #FFF7DD
   class "SessionThinking\nConfigurationService" as Thinking <<extended>> #FFF7DD
   class "RuntimeSession\nResponseAssembler" as Assembler <<extended>> #FFF7DD
-  class "SessionEtagFactory" as Etag <<existing>> #ECFDF5
-  class "PlanPolicyPromptComposer" as Policy <<pending implementation>> #EAF2FF
+  class "PlanPolicyPromptComposer" as Policy <<existing>> #ECFDF5
   class "BuiltInToolProperties" as Profile <<extended>> #FFF7DD
 }
 package "Request snapshot" as RequestLayer {
-  class "SessionUpdate\nCandidateDTO" as Candidate <<pending implementation, immutable>> #EAF2FF {
-    expectedVersion / submittedFields
-    final values / resolved capabilities
+  class "SessionUpdate\nSpecificationDTO" as Candidate <<extended>> #FFF7DD {
+    submitted fields / normalized values
+    prepared model identity / capabilities
   }
-  class "RuntimeSessionView" as Response <<extended>> #FFF7DD {
-    GetSessionResponseVO / ETag
-  }
+  class "GetSessionResponseVO" as Response <<existing, immutable>> #ECFDF5
 }
 package "Persistence / adapters" as PersistenceLayer {
   interface "RuntimeSessionRepository" as Repo <<extended>> #FFF7DD {
-    +updateConfiguration(...)
+    +updateSession(sessionId, specificationDTO)
   }
   class "MyBatisRuntime\nSessionRepository" as Impl <<extended>> #FFF7DD
   interface "RuntimeSessionMapper" as Mapper <<extended>> #FFF7DD
@@ -82,34 +79,35 @@ Repo <|.. Impl
 Impl --> Mapper
 Mapper --> DB
 App --> Assembler
-Assembler --> Etag
 Assembler ..> Response
 API ..> Response
 note bottom of Candidate
   No credentials and no mutable Agent.
   Snapshot is not final admission.
-  Recheck version and state under the row lock.
+  Merge into the latest locked row.
+  Recheck state and prepared model identity.
 end note
 note bottom of Repo
   Name-only: idle or running.
   Any execution field: idle, even for equal values.
-  One version increment; all fields/events or none.
+  One internal version increment; all fields/events or none.
+  Same submitted field: later successful commit wins.
 end note
 legend bottom left
-  Green: existing. Amber: extended. Blue: new pending implementation.
-  Blue arrows: new pending implementation calls.
+  Green: existing. Amber: extension Pending implementation.
+  Blue arrows: target preparation and atomic commit responsibilities.
   Preparation methods must not independently commit.
   All nonempty subsets of the four fields are accepted atomically.
 endlegend
 @enduml
 
 @startuml http_session_update
-' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: rejectConfigurationUpdate, appendConfigurationEntries.
+' Source baseline: pi-mono-java 553dcd5e2ff682f9684810a043b442b37a02e54a.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java :: updateSession, rejectUnifiedUpdate, mergeUpdate, mergedThinking.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java :: getView.
-' Observed behavior: existing configuration writes use row locks and durable events.
-' Design reason: resolve a combined target before a single version-checked transaction.
-' Java divergence: unified POST and atomic four-property update are pending implementation.
+' Observed behavior: combined writes use row locks and durable events, but still require expectedVersion.
+' Design reason: prepare external capabilities, then merge fields into the latest row in one transaction.
+' Java divergence: header-free updates and latest-row capability rechecks are Pending implementation.
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -134,7 +132,7 @@ participant "Session API" as API
 participant "Configuration service" as App
 participant "Model service" as Models
 database "Session repository" as Repo
-Caller -> API : Submit configuration with expected version
+Caller -> API : Submit one or more configuration fields
 API -> App : Strictly validated request
 App -> Repo : Read current configuration
 Repo --> App : Session snapshot
@@ -142,13 +140,13 @@ opt Model change or thinking enablement requires resolution
   App -> Models : Resolve required model and capabilities
   Models --> App : Validated candidate information
 end
-App -> App : Normalize and prepare combined candidate
-App -> Repo : Lock; recheck version, state and final values
+App -> App : Normalize submitted values and prepare capabilities
+App -> Repo : Lock latest row; merge fields; validate state and capabilities
 alt Accepted
   Repo -> Repo : Commit all changes and ordered events, or keep unchanged
-  Repo --> App : Authoritative Session and version
+  Repo --> App : Authoritative Session snapshot
   App --> API : Response from the same committed snapshot
-  API --> Caller : Complete Session and matching ETag
+  API --> Caller : Complete Session
 else Rejected
   Repo --> App : No partial changes
   App --> API : Controlled rejection
@@ -157,6 +155,9 @@ end
 note over App,Repo
   Name-only changes may run during execution.
   Execution fields require idle even if unchanged.
-  This operation never starts inference.
+  If prepared model differs from the merged target, release
+  the lock and prepare again within a bounded retry budget.
+  Exhaustion: SESSION_UPDATE_FAILED; no partial write.
+  No external I/O under the lock; no inference starts.
 end note
 @enduml

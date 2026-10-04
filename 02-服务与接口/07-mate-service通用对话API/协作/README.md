@@ -2,7 +2,7 @@
 
 [返回主设计](../README.md)
 
-版本 0.4.0 · 2026-09-22
+版本 0.5.0 · 2026-10-04
 
 本页维护尚未进入公共契约的要求与跨模块差距。当前字段、报文和机器评审状态归 operation JSON；已整合的决定不在此重复维护。目录保留原路径，具体任务分工和交接过程通过 Git 历史追溯。
 
@@ -31,7 +31,7 @@
 
 modelId 和思考设置属于 Chat/Session 配置，不进入 user.message；消息被接受时固定执行配置，运行中配置变化不追溯已有执行。公共创建/配置接口的具体形状仍待确定。
 
-[Runtime Session 更新](../../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-update) 已确认用 POST 原子更新 displayName/modelId/thinking/mode，按字段决定 busy 准入并要求 If-Match。原先“只能拆成两次 PUT 或增加原子操作”的目标选择已经解决；实际组合事务仍为 待实现，不能让 Mate 顺序调用旧 PUT 假装原子成功。
+[Runtime Session 更新](../../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-update) 已确认用 POST 原子更新 displayName/modelId/thinking/mode，按字段决定 busy 准入；配置更新在数据库事务内锁定最新记录，合并提交字段，同字段后一次成功提交生效。所有 Claw 接口不使用 If-Match、Idempotency-Key 或配套 ETag，Mate 不增加等价版本令牌映射。旧 Session 条件更新实现的移除待实现，事实与目标差距见[2026-10-04 核验](../../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)；不能让 Mate 顺序调用多个更新模拟一次原子成功。
 
 原冲突的实际源码基线为 Java c9d858bc8261bf07f5585f545b53495bf2226a56：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/` 下 `web/RuntimeSessionConfigurationController.java#changeModel/changeThinking`、`session/RuntimeSessionConfigurationService.java#changeModel/changeThinking` 和 `persistence/MyBatisRuntimeSessionRepository.java#updateModel/updateThinking` 分别提供独立更新与事务。新的专项证据由 Runtime 主设计 §8.1 维护，未将旧差距延伸为最新实现审计。
 
@@ -86,6 +86,7 @@ HTTP 增量尚未进入 operation JSON/OpenAPI/HTML，不能标记已确认或�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.5.0 | 2026-10-04 | Chat 配置桥接沿用无客户端条件令牌的 Claw 目标，保留锁内原子更新与实现差距。 |
 | 0.4.0 | 2026-09-22 | 登记 Redis 快照恢复的两跳只读接口、身份映射及精确模型接入门禁。 |
 | 0.3.0 | 2026-09-15 | 登记显式任务快照与公共原消息关联的桥接要求。 |
 | 0.2.0 | 2026-09-14 | 集中维护未整合要求和桥接差距，更新 Runtime 原子配置目标状态。 |

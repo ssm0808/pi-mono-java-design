@@ -1,15 +1,16 @@
 # Runtime 源码证据与实现差距
 
-版本：1.3.0；整理日期：2026-09-19。
+版本：1.4.0；整理日期：2026-10-04。
 
 本文集中保存 Runtime / HTTP 主设计使用的源码观察。**每项结论仅适用于所标提交和路径**；旧实现的差距不自动延伸到当前实现。目标契约见 [HTTP 设计](chat-http-v1-design.md)，Events、Command、工具和计划模式的专项证据由所属专题维护。
 
-本次文档整理基于设计仓 `6026ba48e58449e6d64e6e91688b04a2fdd562e2`。除 §4 所列三个文件外，本次沿用已有源码分析，不将整个 Runtime 标为重新核验。`modules/` 与 `campusclaw/` 按各条证据原路径引用，不推断二者在某一提交必然互斥；省略路径的早期记录保留其证据局限，不能作为最新源码定位。
+早期文档整理基于设计仓 `6026ba48e58449e6d64e6e91688b04a2fdd562e2`。本次仅增加 Session 更新 Header 的 2026-10-04 专项指针，不将整个 Runtime 标为重新核验。`modules/` 与 `campusclaw/` 按各条证据原路径引用，不推断二者在某一提交必然互斥；省略路径的早期记录保留其证据局限，不能作为最新源码定位。
 
 ## 1. 已分析基线
 
 | 分析范围 | 固定提交或边界 |
 |---|---|
+| Session 更新 Header 迁移核对 | 2026-10-04 确认默认 main 并隔离 fetch `553dcd5e2ff682f9684810a043b442b37a02e54a`；Controller/Service/Mapper/前端的观察与待实现差距集中于 [HTTP §8.3](chat-http-v1-design.md#session-header-free-migration) |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 早期专项核对头 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | pi-mono Slash 对比基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
@@ -102,7 +103,7 @@
 | 已实现行为 | PR 167 基线的 PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功返回完整 SessionResource 和 ETag，相同值按无变化成功返回 |
 | 基线 Java 行为 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java`规范化并校验名称，`service/command/contributor/NameCommandContributor.java`将 `/name` 声明为 idle/running 均可用；`persistence/RuntimeSessionRepository.java#updateName` 和 `persistence/MyBatisRuntimeSessionRepository.java#updateName` 在行锁内更新名称与版本 |
 | 基线实现差距 | Java 09b32d8e 的 RuntimeSessionController 仅 create/get/delete；ConfigurationController 仍提供独立模型与思考 PUT。统一 POST、组合事务和 mode 尚待实现，详见下表专项证据。 |
-| 目标设计与理由 | 统一 Session POST 复用 `/name` 的名称规范化，但组合持久化由配置应用服务协调；HTTP 适配器要求 expectedVersion；这是避免两套命名规则的架构变更及保护浏览器并发编辑的安全加固，不宣称为已实现行为 |
+| 当前目标与理由 | 统一 Session POST 复用 `/name` 的名称规范化，由应用服务协调最新行锁内的字段合并和组合提交；不要求客户端版本或请求键，内部 resourceVersion 保留。产品取舍、并发覆盖代价与最新实现差距见 [HTTP §2.4](chat-http-v1-design.md#session-update)及 [§8.3](chat-http-v1-design.md#session-header-free-migration) |
 
 
 ## 3. Runtime 装配的补充证据
@@ -116,7 +117,7 @@ Session Entry、生命周期、HTTP 入口、凭据和字段命名的事实已�
 | 路径与符号 | 已观察行为 | 设计边界 |
 |---|---|---|
 | `runtimeapi/session/RuntimeSessionService.java` · create/newSession/get/delete | create 校验目录和默认模型后持久化 idle Session；不创建 Agent 执行对象，thinking 初始为 true；get 查询持久化资源；delete 调用 beginDeletion | 创建与执行装配分开；Agent.mode 复制仍按元数据与计划专题标记 待实现 |
-| `runtimeapi/web/RuntimeSessionController.java` · create/get/delete | Controller 包装 ResultBean；GET 返回同源 ETag，DELETE 返回 204；没有统一更新路由 | 统一 Session POST 的目标与差距见 [HTTP §8.1](chat-http-v1-design.md#81-统一-session-更新源码核对) |
+| `runtimeapi/web/RuntimeSessionController.java` · create/get/delete | Controller 包装 ResultBean；GET 返回同源 ETag，DELETE 返回 204；没有统一更新路由 | 仅为该提交事实；统一 POST 的最新实现与 Header 移除差距见 [HTTP §8.3](chat-http-v1-design.md#session-header-free-migration) |
 | `runtimeapi/web/RuntimeEventController.java` · submit/list | POST 绑定独立 SseEmitter，完成/超时/错误调用 detach；GET 接受 limit/page | 只证明入口与绑定结构，不能证明全部事件语义、数据库并发与恢复已验收 |
 
 未运行产品集成测试。文档、精确契约和图形整理不改变运行时代码。

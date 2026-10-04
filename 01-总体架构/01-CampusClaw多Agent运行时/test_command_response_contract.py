@@ -78,8 +78,7 @@ class CommandResponseContractTest(unittest.TestCase):
     def test_headers_match_resource_kind(self):
         for identity in SESSION_CASES:
             with self.subTest(identity=identity):
-                self.reject(lambda cases: cases[identity]["headers"].pop("ETag"))
-        self.reject(lambda cases: cases["200-status"]["headers"].update({"ETag": "12"}))
+                self.reject(lambda cases: cases[identity]["headers"].update({"ETag": '"retired"'}))
         self.reject(lambda cases: cases["200-model-query"]["headers"].update({"ETag": '"snp-extra"'}))
         self.reject(lambda cases: cases["200-status"]["headers"].update({"Content-Language": "en-US"}))
         self.reject(lambda cases: cases["200-status"]["headers"].update({"Cache-Control": "public"}))
@@ -91,11 +90,10 @@ class CommandResponseContractTest(unittest.TestCase):
         self.reject(lambda cases: self.result(cases["200-thinking-query"]).update({"state": "idle"}))
         self.reject(lambda cases: self.result(cases["200-model"]).update({"thinking": True}))
 
-    def test_same_value_resource_and_etag_are_stable(self):
+    def test_same_value_resource_and_updated_at_are_stable(self):
         for identity in ("200-name-unchanged", "200-model-unchanged", "200-thinking-unchanged", "200-mode-unchanged"):
             with self.subTest(identity=identity):
                 self.reject(lambda cases: self.result(cases[identity]).update({"updatedAt": "new-timestamp"}))
-                self.reject(lambda cases: cases[identity]["headers"].update({"ETag": '"snp-different"'}))
 
     def test_mode_query_and_switch_boundaries(self):
         self.reject(lambda cases: self.result(cases["200-mode-query"]).update({"state": "idle"}))

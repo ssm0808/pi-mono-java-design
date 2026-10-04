@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 1.1.0 · 2026-10-04 |
+| 版本 | 1.2.0 · 2026-10-04 |
 | 状态 | 秒级目标已确认；实现调整待实现 |
 | 范围 | Claw Session、完整公共事件、定时任务的绝对时间及对应存储；不改变 Provider 原始时间、耗时、超时或内部计时单位 |
 | 精确 HTTP 契约 | Session/Command 的接口契约、Events 共享契约及定时任务配置专题分别维护；本文维护共同的一致性理由和实施边界 |
@@ -11,7 +11,7 @@
 
 园区告警任务的创建、计划执行时刻和会话历史统一显示到秒。创建后立刻查询、收到完整 SSE 后再查历史，返回同一个已保存时刻，不因直接返回内存对象还是回读数据库而改变值或格式。
 
-绝对时刻响应统一使用 UTC、以 `Z` 结尾、不含小数秒，例如 `2026-10-01T00:00:00Z`。Session 的 createdAt/updatedAt、完整事件 createdAt，以及定时任务已定义的绝对时间均适用。相同一秒可以有多个事件、多次更新；事件按提交序号排序，以 eventId 去重，资源并发控制使用版本和 ETag，不使用时间戳代替。
+绝对时刻响应统一使用 UTC、以 `Z` 结尾、不含小数秒，例如 `2026-10-01T00:00:00Z`。Session 的 createdAt/updatedAt、完整事件 createdAt，以及定时任务已定义的绝对时间均适用。相同一秒可以有多个事件、多次更新；事件按提交序号排序，以 eventId 去重。配置更新在最新行锁内合并提交字段，内部版本用于执行一致性，不提供公共 ETag 或版本条件，也不使用时间戳代替，详见 [Session 更新](chat-http-v1-design.md#session-update)。
 
 ## 2. 正常处理与失败边界
 
@@ -40,7 +40,7 @@ Mate 是独立公共协议：目前其事件时间及 createdAtGte 过滤约定�
 | R/event/CommittedEventProjection.java · EVENT_TIME_FORMATTER/project | appendInstant(3) 固定三位毫秒 | 秒级 UTC 输出，GET 与 SSE 共用 |
 | modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql · 上述四表 | 相关时间列均为 TIMESTAMPTZ(3) | 新建环境改为 TIMESTAMPTZ(0)，应用先规范化；同步公司安装镜像 |
 
-2026-10-02 重新核对 Claude Managed Agents 公开 Beta [Create Session](https://platform.claude.com/docs/en/api/http/beta/sessions/create) 与 [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create)：created_at/updated_at 示例使用 `2026-03-15T10:00:00Z`。这些公开示例支持借鉴整秒表示，未承诺只支持秒级，也不能证明服务端数据库精度。CampusClaw 秒级限制属于产品约束：满足当前业务展示、计划和对账需求，代价是不能用这些字段分析同一秒内的时间差；顺序与并发由序号、标识和版本保证。
+2026-10-02 重新核对 Claude Managed Agents 公开 Beta [Create Session](https://platform.claude.com/docs/en/api/http/beta/sessions/create) 与 [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create)：created_at/updated_at 示例使用 `2026-03-15T10:00:00Z`。这些公开示例支持借鉴整秒表示，未承诺只支持秒级，也不能证明服务端数据库精度。CampusClaw 秒级限制属于产品约束：满足当前业务展示、计划和对账需求，代价是不能用这些字段分析同一秒内的时间差；顺序与并发由序号、标识、行锁事务和内部版本保证。
 
 ## 5. 验收要求
 

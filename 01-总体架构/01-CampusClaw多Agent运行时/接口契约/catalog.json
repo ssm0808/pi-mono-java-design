@@ -1,5 +1,5 @@
 {
-  "version": "1.12.0",
+  "version": "1.13.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -17,7 +17,7 @@
       "source": "接口契约/操作/02-get-session.json",
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 联动已同步",
-      "note": "Session.mode 在创建时复制已发布 Agent.mode，旧元数据缺省 build；已有会话保持自己的当前模式。该目标链路尚待实现。",
+      "note": "Session.mode 在创建时复制已发布 Agent.mode，旧元数据缺省 build；已有会话保持自己的当前模式。该目标链路尚待实现。 Session 资源不返回配套 ETag，既有实现与前端依赖移除待实现。",
       "design": "chat-http-v1-design.md#211-读取-session"
     },
     {
@@ -57,7 +57,7 @@
       "source": "接口契约/操作/07-update-session.json",
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 待实现",
-      "note": "统一 POST 部分更新名称、模型、思考和模式；当前前端每次提交一个字段，接口允许组合提交、同事务生效并复用 Session ETag。仅名称允许运行中更新，执行配置要求 idle。",
+      "note": "统一 POST 部分更新名称、模型、思考和模式；接口允许组合提交，基于数据库最新记录按已提交字段合并并原子生效，不要求客户端版本或请求键。仅名称允许运行中更新，执行配置要求 idle；既有 Header/前端依赖移除待实现。",
       "design": "chat-http-v1-design.md#242-post-session-统一更新"
     },
     {
@@ -73,7 +73,7 @@
       "source": "接口契约/操作/13-execute-session-command.json",
       "common": "接口契约/common.json",
       "status": "已确认目标契约 · 待实现",
-      "note": "B01～B15 四组全部按推荐确认；字段、错误码、事件关联和恢复边界已统一，可进入实现。数据库和容量数值按压测校准。Builtin JSON 保持，Skill 使用共享事件 SSE；Mate 公共协议独立管理。 mode 查询与 plan/build 切换为待实现增量，复用 Session 配置与领域事件。",
+      "note": "B01～B15 四组全部按推荐确认；字段、错误码、事件关联和恢复边界已统一，可进入实现。数据库和容量数值按压测校准。Builtin JSON 保持，Skill 使用共享事件 SSE；Mate 公共协议独立管理。 mode 查询与 plan/build 切换为待实现增量，复用 Session 配置与领域事件。 Session 资源不返回配套 ETag，既有实现与前端依赖移除待实现。",
       "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"
     },
     {

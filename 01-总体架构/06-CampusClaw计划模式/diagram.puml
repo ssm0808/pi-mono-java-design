@@ -88,7 +88,7 @@ package "Application and assembly" as Application {
     +create(agentId)
   }
   class "RuntimeSession\nConfigurationService" as ModeService <<extended>> #FFF7DD {
-    +updateSession(requestVO, ifMatch)
+    +updateSession(requestVO)
   }
   class "RuntimeEventService" as EventService <<extended>> #FFF7DD
   class "RuntimeMessageEvent\nService" as MessageService <<extended>> #FFF7DD
@@ -441,8 +441,8 @@ state "Awaiting answers / Build\nstate=running, mode=build" as AskingBuild
 
 [*] --> Normal : create with Agent.mode=build or legacy omission
 [*] --> PlanIdle : create with Agent.mode=plan and review capability
-Normal --> PlanIdle : POST Session mode=plan + valid ETag
-PlanIdle --> Normal : POST Session mode=build + valid ETag
+Normal --> PlanIdle : POST Session mode=plan + locked admission
+PlanIdle --> Normal : POST Session mode=build + locked admission
 PlanIdle --> Planning : accept user.message
 Planning --> AskingPlan : AskUserQuestion; commit question + confirming
 AskingPlan --> Planning : accept answers; same root and mode

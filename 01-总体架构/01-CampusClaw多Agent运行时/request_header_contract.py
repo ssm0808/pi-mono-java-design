@@ -4,6 +4,10 @@ CREDENTIALS = {"X-HW-ID", "Authorization", "X-HW-APPKEY", "access-token"}
 EXECUTION = {"SubmitSessionEvent", "ExecuteSessionCommand"}
 JSON_BODY = EXECUTION | {"UpdateSession", "QuerySkillLoadStatistics"}
 JSON_MODE = {"UpdateSession", "QuerySkillLoadStatistics", "ListSessionEvents"}
+RETIRED_HEADERS = {"if-match", "idempotency-key", "etag"}
+RETIRED_INPUTS = {"ifMatch", "etag", "expectedVersion", "resourceVersion", "revision",
+                  "version", "clientVersion", "idempotencyKey", "requestKey", "requestId"}
+RETIRED_ERRORS = {"IF_MATCH_REQUIRED", "SESSION_VERSION_MISMATCH"}
 
 
 def require(condition, message):
@@ -12,6 +16,7 @@ def require(condition, message):
 
 
 def validate_request_headers(operation):
+    validate_no_client_tokens(operation)
     key = operation["operationKey"]
     examples = operation["requestHeaderExamples"]
     expected_modes = ({"jwt", "appkey", "control"} if key == "SubmitSessionEvent" else
@@ -25,13 +30,10 @@ def validate_request_headers(operation):
     for mode in examples:
         validate_mode(key, mode)
     parameters = {p["name"]: p for p in operation["parameters"] if p["in"] == "header"}
-    require(set(parameters) == ({"Accept-Language", "If-Match"} if key == "UpdateSession"
-                                else {"Accept-Language"}),
-            f"{key}: parameters must retain only language and applicable If-Match")
+    require(set(parameters) == {"Accept-Language"},
+            f"{key}: parameters must retain only language")
     require(parameters["Accept-Language"]["required"] is False,
             f"{key}: language must remain optional")
-    if key == "UpdateSession":
-        require(parameters["If-Match"]["required"] is True, "UpdateSession must require If-Match")
     require(operation["requestBody"]["contentType"] == ("application/json" if key in JSON_BODY else None),
             f"{key}: request body content type differs")
     policy = operation.get("credentialPolicy", {})
@@ -45,6 +47,34 @@ def validate_request_headers(operation):
                 "Builtin callers must not require execution credentials")
 
 
+def validate_no_client_tokens(operation):
+    """Reject retired contract declarations; this does not reject extra inbound headers."""
+    key = operation["operationKey"]
+    for parameter in operation["parameters"]:
+        require(not (parameter["in"] == "header" and parameter["name"].lower() in RETIRED_HEADERS),
+                f"{key}: retired client token Header must not return")
+        require(not (parameter["in"] == "query" and parameter["name"] in RETIRED_INPUTS),
+                f"{key}: query must not replace retired client tokens")
+    for mode in operation.get("requestHeaderExamples", []):
+        require(not any(header["name"].lower() in RETIRED_HEADERS for header in mode["headers"]),
+                f"{key}: retired client token Header example must not return")
+    for response in operation["responses"]:
+        require(not any(name.lower() in RETIRED_HEADERS for name in response.get("headers", {})),
+                f"{key}: retired client token response Header must not return")
+        require(response["status"] not in {"412", "428"},
+                f"{key}: retired client precondition status must not return")
+        for body in response.get("bodies", {}).values():
+            if isinstance(body, dict):
+                require(body.get("resCode") not in RETIRED_ERRORS,
+                        f"{key}: retired client precondition error must not return")
+    request = operation["requestBody"]
+    require(not (set(request.get("schema", {}).get("properties", {})) & RETIRED_INPUTS),
+            f"{key}: body must not replace retired client tokens")
+    examples = [request.get("example"), *(item["value"] for item in request.get("examples", []))]
+    require(not any(isinstance(example, dict) and set(example) & RETIRED_INPUTS for example in examples),
+            f"{key}: body example must not replace retired client tokens")
+
+
 def validate_mode(key, mode):
     headers = {h["name"]: h for h in mode["headers"]}
     require(len(headers) == len(mode["headers"]), f"{key}: duplicate Header")
@@ -54,8 +84,6 @@ def validate_mode(key, mode):
     if key in JSON_MODE or key in EXECUTION:
         sse = key == "SubmitSessionEvent" or (key == "ExecuteSessionCommand" and mode["id"] != "builtin")
         expected["Accept"] = ("text/event-stream" if sse else "application/json", key == "SubmitSessionEvent")
-    if key == "UpdateSession":
-        expected["If-Match"] = ('"snp-zQfM5yN8x2"', True)
     if key in EXECUTION and mode["id"] in {"jwt", "appkey"}:
         jwt = mode["id"] == "jwt"
         expected.update({"X-HW-ID": ("credential-jwt" if jwt else "credential-appkey", False),

@@ -397,7 +397,7 @@
         ],
         [
           "任务快照（Runtime 已实现）",
-          "TodoUpdate 仅用于 build 实施，plan 调研不记录清单。工具结果与 agent.todo_updated 用独立 eventId，同一 ToolResult Entry/事务按顺序保存，提交后依次发送；SSE 与 GET 同形。任务事件不更新 mode/ETag、不表示执行终态；按原 sourceEventId 隔离，新根重新开始。完整事件缺页时先对账，不自动重发写请求。读取端新增类型支持后再启用工具生产；Mate 公共投影需独立同步。"
+          "TodoUpdate 仅用于 build 实施，plan 调研不记录清单。工具结果与 agent.todo_updated 用独立 eventId，同一 ToolResult Entry/事务按顺序保存，提交后依次发送；SSE 与 GET 同形。任务事件不更新 mode 或会话配置、不表示执行终态；按原 sourceEventId 隔离，新根重新开始。完整事件缺页时先对账，不自动重发写请求。读取端新增类型支持后再启用工具生产；Mate 公共投影需独立同步。"
         ],
         [
           "空文本与超限",

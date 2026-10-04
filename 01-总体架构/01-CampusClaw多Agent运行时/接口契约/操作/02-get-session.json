@@ -28,7 +28,6 @@
         "label": "OK",
         "summary": "返回当前 Session 资源、粗粒度 state 和深度思考开关。",
         "headers": {
-          "ETag": "\"snp-zQfM5yN8x2\"",
           "Cache-Control": "no-store",
           "Content-Language": "en-US"
         },
@@ -111,13 +110,18 @@
     "questions": [],
     "headerReview": {
       "status": "confirmed",
-      "confirmedAt": "2026-09-22",
-      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输、版本条件 Header；不改变上游授权，不拒绝额外收到的 Header。"
+      "confirmedAt": "2026-10-04",
+      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输 Header；不改变上游授权，不拒绝额外收到的 Header。"
     },
     "timePrecisionReview": {
       "date": "2026-10-02",
       "status": "confirmed",
       "decision": "Session 与完整事件、定时任务统一秒级 UTC 时间，持久化与响应同值；实现调整待实现。"
+    },
+    "clientConcurrencyReview": {
+      "date": "2026-10-04",
+      "status": "confirmed",
+      "decision": "所有接口不声明或消费 If-Match、Idempotency-Key，不返回配套资源 ETag，不用 body/query 版本或请求键替代；额外收到这些 Header 不触发专门拒绝。更新基于数据库最新记录按提交字段原子合并，同字段按后一次成功提交生效；业务状态和权限校验保留。已观察 Java 与前端仍有相关 Header 依赖，移除待实现。"
     }
   }
 }

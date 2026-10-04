@@ -1,6 +1,6 @@
 # 计划模式接口增量
 
-版本：1.14.0；日期：2026-09-28；状态：**计划审核、标记解析与 agent.plan delta/completed 已实现；ExitPlanMode({plan}) 与参数增量预览待实现；Java 核验基线为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，范围见[参数流式证据](source-evidence.md#plan-argument-streaming-evidence)；Mate 公共桥接待实现，部署与模型验收分别记录**。
+版本：1.15.0；日期：2026-10-04；状态：**计划审核、标记解析与 agent.plan delta/completed 已实现；ExitPlanMode({plan}) 与参数增量预览待实现；Java 核验基线为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，范围见[参数流式证据](source-evidence.md#plan-argument-streaming-evidence)；Mate 公共桥接待实现，部署与模型验收分别记录**。
 
 本文件维护计划接口的集成边界与理由。精确请求、完整事件、条件字段、错误码及示例由 [共享事件契约](../01-CampusClaw多Agent运行时/事件契约/common.json)、[POST 操作](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 与 [GET 操作](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[统一接口页](../01-CampusClaw多Agent运行时/chat-api-review.html)。登记不代表 Java 或 Mate 已实现。
 
@@ -8,11 +8,11 @@
 
 名称、模型、思考和模式已统一登记到 `POST /campusclaw-service/v1/sessions/{sessionId}`（updateSession）。精确请求、单字段与组合示例、原子性、错误和 Header 只由[操作 07](../01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)维护；设计理由见[HTTP 主设计 §2.4](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#24-模型目录与统一-session-更新)。本文件不再维护模式更新报文副本。
 
-mode 已是共享 Session 响应必填字段，创建复制 Agent.mode，旧元数据缺省 build，已有 Session 不跟随 Agent 更新；state 仍为 idle/running。仅名称请求可在 running 更新；直接 Session POST 只要携带 mode/modelId/thinking，均需 idle、If-Match 与一次原子提交。主动设置 build 不批准计划、不启动模型。
+mode 已是共享 Session 响应必填字段，创建复制 Agent.mode，旧元数据缺省 build，已有 Session 不跟随 Agent 更新；state 仍为 idle/running。仅名称请求可在 running 更新；直接 Session POST 只要携带 mode/modelId/thinking，均需 idle 与一次数据库原子提交。主动设置 build 不批准计划、不启动模型。
 
-[`/mode`](../../04-命令与技能/01-内置命令/README.md#mode-command) 使用共享 Command POST，空参查询、plan/build 参数切换；复用相同模式能力、行锁、原子更新及完整 Session 响应，命令沿用不接收 If-Match 的锁内当前版本语义。该入口待实现；HTTP 条件更新约束不因命令入口而放宽。
+[`/mode`](../../04-命令与技能/01-内置命令/README.md#mode-command) 使用共享 Command POST，空参查询、plan/build 参数切换；复用相同模式能力、行锁、原子更新及完整 Session 响应，两入口均在数据库锁内读取最新状态、按提交字段更新，同字段后成功提交生效。mode 命令待实现；移除旧 HTTP 条件更新机制也待实现。
 
-GET、创建、更新及复用 Session 的 Command 响应保持同一种 Session 结构，不增加待审核目标字段。计划及审核决定通过 Events 传递，卡片按[主设计 §6.2](README.md#62-恢复与结果不确定)从完整事件恢复。当前待审核目标仅保存在服务端执行控制记录中，确认接受时锁内校验；不新增状态查询接口或可写审核字段。
+所有 Claw 接口不使用 If-Match、Idempotency-Key 或配套 ETag，也不增加同用途的 body/query 令牌。GET、创建、更新及复用 Session 的 Command 响应保持同一种 Session 结构，不增加待审核目标字段。计划及审核决定通过 Events 传递，卡片按[主设计 §6.2](README.md#62-恢复与结果不确定)从完整事件恢复。当前待审核目标仅保存在服务端执行控制记录中，确认接受时锁内校验；不新增状态查询接口或可写审核字段。
 
 ## 2. 提交审核决定
 

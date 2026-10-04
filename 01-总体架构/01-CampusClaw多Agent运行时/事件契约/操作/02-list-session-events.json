@@ -1883,7 +1883,7 @@
     "headerReview": {
       "status": "confirmed",
       "confirmedAt": "2026-09-22",
-      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输、版本条件 Header；不改变上游授权，不拒绝额外收到的 Header。"
+      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输 Header；不改变上游授权，不拒绝额外收到的 Header。"
     },
     "timePrecisionReview": {
       "date": "2026-10-02",

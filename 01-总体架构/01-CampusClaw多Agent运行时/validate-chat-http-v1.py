@@ -19,7 +19,7 @@ from render_chat_http_v1 import build_operation_html, load_contract, contract_te
 from command_catalog_contract import validate_catalog_examples
 from command_response_contract import validate_response_reuse
 from help_review_projection import load_help_model
-from request_header_contract import validate_request_headers
+from request_header_contract import validate_request_headers, validate_no_client_tokens
 
 
 ROOT = Path(__file__).resolve().parent
@@ -46,7 +46,7 @@ EXPECTED_OPERATIONS = {
 }
 POST_EVENTS = ("POST", "/sessions/{sessionId}/events")
 POST_COMMAND = ("POST", "/sessions/{sessionId}/command")
-EXPECTED_PARAMETER_HEADERS = {"Accept-Language", "If-Match"}
+EXPECTED_PARAMETER_HEADERS = {"Accept-Language"}
 LOWER_CAMEL_FIELD = re.compile(r"^[a-z][A-Za-z0-9]*$")
 
 
@@ -365,7 +365,7 @@ def validate_response_contract(
             require(phrase in contract_text(operation), f"Missing credential boundary: {phrase}")
         require(set(operation["requestBody"]["example"]) == {"name", "arguments"},
                 "POST Command request must contain only name and arguments")
-        for phrase in ("262144", "fileIds", "If-Match", "Idempotency-Key"):
+        for phrase in ("262144", "fileIds"):
             require(phrase in operation["requestBody"]["description"],
                     f"POST Command request contract is incomplete: {phrase}")
         codes = response_codes(operation)
@@ -393,6 +393,7 @@ def validate_response_contract(
 
 
 def validate_session_update(operation: dict[str, Any], codes: set[tuple[str, str]]) -> None:
+    validate_no_client_tokens(operation)
     fields = {"displayName", "modelId", "thinking", "mode"}
     request = operation["requestBody"]
     require(len(request["example"]) == 1 and set(request["example"]) <= fields,
@@ -415,34 +416,32 @@ def validate_session_update(operation: dict[str, Any], codes: set[tuple[str, str
             and any(set(case) == fields for case in examples),
             "Partial-update examples must cover the combined four-field request")
     require({"thinking": False} in examples, "Explicit false must not be treated as omission")
-    require(any(item.get("name") == "If-Match" and item.get("required") is True
-                for item in operation["parameters"]), "Session POST must require If-Match")
     for expected in {
         ("400", "INVALID_SESSION_UPDATE_REQUEST"), ("404", "SESSION_NOT_FOUND"),
-        ("409", "SESSION_BUSY"), ("412", "SESSION_VERSION_MISMATCH"),
+        ("409", "SESSION_BUSY"),
         ("422", "MODEL_NOT_AVAILABLE"), ("422", "THINKING_NOT_SUPPORTED"),
-        ("422", "PLAN_MODE_UNAVAILABLE"), ("428", "IF_MATCH_REQUIRED"),
+        ("422", "PLAN_MODE_UNAVAILABLE"),
         ("500", "SESSION_UPDATE_FAILED"), ("503", "MANAGER_UNAVAILABLE"),
     }:
         require(expected in codes, f"Session POST is missing {expected}")
     serialized = json.dumps(operation, ensure_ascii=False)
     for phrase in ("UTF-8", "80", "idle/running", "/name", "名称不写入 Session Entry",
-                   "整笔", "显式 null", "重复", "目标模型", "不启动", "未提交"):
+                   "整笔", "显式 null", "重复", "目标模型", "不启动", "未提交",
+                   "最新记录", "后一次成功提交", "不自动重放"):
         require(phrase in serialized, f"Session update contract is incomplete: {phrase}")
     cases = {case["id"]: case for case in operation["responses"] if case["status"] == "200"}
     require(set(cases) == {"200-updated", "200-unchanged", "200-name-running", "200-model-normalized"},
             "Session update must cover combined, unchanged, running-name and normalization cases")
     result = lambda identity: next(iter(cases[identity]["bodies"].values()))["result"]
-    require(result("200-updated") == result("200-unchanged")
-            and cases["200-updated"]["headers"]["ETag"] == cases["200-unchanged"]["headers"]["ETag"],
-            "Unchanged update must preserve resource and ETag")
+    require(result("200-updated") == result("200-unchanged"),
+            "Unchanged update must preserve resource and updatedAt")
     require(result("200-name-running")["state"] == "running", "Name-only update remains available while running")
     require(result("200-updated")["state"] == "idle" and result("200-updated")["mode"] == "plan",
             "Combined execution settings require idle")
     require(result("200-model-normalized")["thinking"] is False, "Preserve omitted-thinking normalization")
     for case in cases.values():
-        require(case["headers"].get("Cache-Control") == "no-store" and "ETag" in case["headers"],
-                "Session update response must carry a noncached resource and ETag")
+        require(case["headers"].get("Cache-Control") == "no-store",
+                "Session update response must carry a noncached resource")
 
 
 def validate_help_descriptor(descriptor: dict[str, Any]) -> None:

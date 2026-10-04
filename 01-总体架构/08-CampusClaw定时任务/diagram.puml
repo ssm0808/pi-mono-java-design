@@ -80,21 +80,21 @@ class "PreparedSchedule\nRunDTO" as Snapshot <<Immutable / P>>
 interface "ScheduleRepository" as Repo <<Port / P>>
 class "MyBatisSchedule\nRepository" as RepoImpl <<Adapter / P>>
 interface "ScheduleMapper" as Mapper <<DTO boundary / P>>
-class "GaussDB\nSchedule / Config requests\nRun / Gap / Session / Execution" as Db <<Durable authority>>
+class "GaussDB\nSchedule / Run / Gap\nSession / Execution" as Db <<Durable authority>>
 class "ScheduledRunAcceptance\nService" as Accept <<Service / P>>
 class "Runtime session and\nexecution persistence" as Persist <<Existing>>
 class "RuntimeExecution\nCoordinator" as Coordinator <<Existing>>
 class "AgentSessionFactory" as Factory <<Existing>>
 class "ManagedAgentSession" as Session <<Per execution>>
 class "Host hooks +\nToolExecutionPipeline" as Pipeline <<Per execution>>
-Caller -down-> Api : Claw VO + request key / ETag
+Caller -down-> Api : Claw VO
 Api -down-> App : VO boundary
 Tool -left-> App : bound scope
 App -down[hidden]-> Dispatch
 Time -down[hidden]-> Auth
 Auth -down[hidden]-> Snapshot
 App -left-> Time : validate / preview
-App -right-> Repo : manage via DTO
+App -right-> Repo : manage via DTO\nlock latest row for update
 App -[norank]-> Auth
 App -up-> Binding : validate references
 Dispatch -down-> Accept : accept run
@@ -133,7 +133,7 @@ endlegend
 ' modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob
 ' modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java saveUnsafe
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare
-' Design reason: one Claw contract, durable replay, read-only binding checks.
+' Design reason: durable independent creation and read-only binding checks.
 title Claw schedule configuration - Pending implementation
 skinparam backgroundColor white
 skinparam defaultFontSize 14
@@ -142,26 +142,21 @@ actor Caller
 participant Schedule
 participant Directory
 database Store
-Caller -> Schedule : Create config + request key
+Caller -> Schedule : Create configuration
 Schedule -> Schedule : Authenticate; authorize scope\nValidate request shape
-Schedule -> Store : Look up original request result
-Store --> Schedule : Committed result or new request
-alt Same request already committed
-  Schedule --> Caller : Original resource + ETag / Location
-else New write
-  Schedule -> Directory : Read Agent binding and current grant
-  Directory --> Schedule : Binding or typed rejection
-  Schedule -> Schedule : Validate complete configuration and rule
-  break Binding or rule rejected
-    Schedule --> Caller : Safe typed error; no write
-  end
-  Schedule -> Store : Commit active config + response snapshot\nRecheck unique key; one transaction
-  Store --> Schedule : Committed resource or rollback
-  Schedule --> Caller : Saved resource + ETag / Location\nor safe typed failure
+Schedule -> Directory : Read Agent binding and current grant
+Directory --> Schedule : Binding or typed rejection
+Schedule -> Schedule : Validate complete configuration and rule
+break Binding or rule rejected
+  Schedule --> Caller : Safe typed error; no write
 end
+Schedule -> Store : Insert active configuration with new ID\nCommit one transaction
+Store --> Schedule : Committed resource or rollback
+Schedule --> Caller : 201 resource + Location\nor safe typed failure
 note over Caller, Store
   No Session, model, tool, or directory publication in this request.
   A rule registers automatic work; no rule only saves.
-  Lost response: replay the same key and original request.
+  Each successful create allocates a new configuration ID.
+  Lost response: inspect saved resources before another write.
 end note
 @enduml

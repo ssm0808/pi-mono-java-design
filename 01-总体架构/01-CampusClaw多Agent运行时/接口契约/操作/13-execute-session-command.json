@@ -140,7 +140,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "先列 Builtin 请求约束，Skill 联合分支见下文；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。If-Match 和 Idempotency-Key 在 Builtin 请求中没有契约语义，出现时按 INVALID_COMMAND_REQUEST 拒绝。 Help 只接受空参数：arguments 缺省/null/空白由 Service 归一为空；非空参数（包括 model 等命令名）按 INVALID_COMMAND_REQUEST 拒绝，不查询命令详情。 Skill 联合分支已确认：name=skill:<name>，前缀后的名称严格匹配 Skill 域正则且长 1..64；arguments 可省略/null，由 Service 归一为空字符串，最多 262144 UTF-16 单元；fileIds 可省略为 []，显式 null 拒绝，最多四个不重复的 32 位十六进制 fileId。不接受其他字段、If-Match 或 Idempotency-Key。回执 text 为 /skill:<name>，非空 arguments 前加一个空格并原样追加，再附 file 块；回执整体大小接受前校验。 mode 的 arguments 缺省/null/空白归一为空并查询当前模式；非空仅接受精确小写 plan 或 build，不接受别名、额外单词或附件。",
+      "description": "先列 Builtin 请求约束，Skill 联合分支见下文；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。Help 只接受空参数：arguments 缺省/null/空白由 Service 归一为空；非空参数（包括 model 等命令名）按 INVALID_COMMAND_REQUEST 拒绝，不查询命令详情。 Skill 联合分支已确认：name=skill:<name>，前缀后的名称严格匹配 Skill 域正则且长 1..64；arguments 可省略/null，由 Service 归一为空字符串，最多 262144 UTF-16 单元；fileIds 可省略为 []，显式 null 拒绝，最多四个不重复的 32 位十六进制 fileId。不接受其他字段。回执 text 为 /skill:<name>，非空 arguments 前加一个空格并原样追加，再附 file 块；回执整体大小接受前校验。 mode 的 arguments 缺省/null/空白归一为空并查询当前模式；非空仅接受精确小写 plan 或 build，不接受别名、额外单词或附件。",
       "example": {
         "name": "model",
         "arguments": "model_011CZq2GkV8aD4NwP7sLmXfS"
@@ -301,12 +301,11 @@
         "status": "200",
         "tabLabel": "200 · status",
         "label": "OK",
-        "summary": "与 GET Session 相同的完整资源和 ETag；包含既有 lifetimeUsage，不增加上下文用量估算。示例为 running。",
+        "summary": "与 GET Session 相同的完整资源；包含既有 lifetimeUsage，不增加上下文用量估算。示例为 running。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-zQfM5yN8x2\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -349,8 +348,7 @@
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-zQfM5yN8x2\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -389,12 +387,11 @@
         "status": "200",
         "tabLabel": "200 · name 修改",
         "label": "OK",
-        "summary": "更新后返回完整 Session 与对应 ETag；running 仍允许改名，不写 Name Entry。",
+        "summary": "更新后返回完整 Session；running 仍允许改名，不写 Name Entry。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-N8mQ2vK5xR4\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -433,12 +430,11 @@
         "status": "200",
         "tabLabel": "200 · name 同值",
         "label": "OK",
-        "summary": "在 name 修改示例后再次提交同一名称：资源、updatedAt、ETag 均保持不变；不返回 changed。",
+        "summary": "在 name 修改示例后再次提交同一名称：资源、updatedAt 均保持不变；不返回 changed。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-N8mQ2vK5xR4\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -477,7 +473,7 @@
         "status": "200",
         "tabLabel": "200 · model 查询",
         "label": "OK",
-        "summary": "空参数与 GET Session Models 完全相同，idle/running 均可查询；models 实时过滤并保持 Agent 绑定顺序，名称展示使用既有模型信息来源。不返回 ETag。",
+        "summary": "空参数与 GET Session Models 完全相同，idle/running 均可查询；models 实时过滤并保持 Agent 绑定顺序，名称展示使用既有模型信息来源。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -524,12 +520,11 @@
         "status": "200",
         "tabLabel": "200 · model 修改",
         "label": "OK",
-        "summary": "非空参数与 PUT Model 成功响应相同：完整 Session 和 ETag，不再重复返回模型候选。本例切换到不支持 Thinking 的模型，thinking 自动关闭。Command 不接收 If-Match；PUT 的条件更新要求不变。",
+        "summary": "非空参数与 Session POST 成功响应相同：完整 Session，不再重复返回模型候选。本例切换到不支持 Thinking 的模型，thinking 自动关闭。按锁内最新配置合并本次修改。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-H7vK3mQ8cN2\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -568,12 +563,11 @@
         "status": "200",
         "tabLabel": "200 · model 同值",
         "label": "OK",
-        "summary": "在 model 修改示例后再次选择同一模型：与 PUT 的无变化成功一致，返回原资源与 ETag，不追加 Entry。",
+        "summary": "在 model 修改示例后再次选择同一模型：与 Session POST 的无变化成功一致，返回原资源，不追加 Entry。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-H7vK3mQ8cN2\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -612,12 +606,11 @@
         "status": "200",
         "tabLabel": "200 · thinking 查询",
         "label": "OK",
-        "summary": "空参数返回 GET Session 的完整资源与 ETag，前端读取 thinking；本例 running 可查询。",
+        "summary": "空参数返回 GET Session 的完整资源，前端读取 thinking；本例 running 可查询。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-zQfM5yN8x2\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -656,12 +649,11 @@
         "status": "200",
         "tabLabel": "200 · thinking 修改",
         "label": "OK",
-        "summary": "小写 on/off 修改后与 PUT Thinking 成功响应相同，返回完整 Session 与 ETag；本例为 on。",
+        "summary": "小写 on/off 修改后与 Session POST 成功响应相同，返回完整 Session；本例为 on。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-P4tR8vL2xC6\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -700,12 +692,11 @@
         "status": "200",
         "tabLabel": "200 · thinking 同值",
         "label": "OK",
-        "summary": "在 thinking 修改示例后再次提交 on：返回原资源与 ETag，不修改 updatedAt，不追加 Entry。",
+        "summary": "在 thinking 修改示例后再次提交 on：返回原资源，不修改 updatedAt，不追加 Entry。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-P4tR8vL2xC6\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -744,12 +735,11 @@
         "status": "200",
         "tabLabel": "200 · mode 查询",
         "label": "OK",
-        "summary": "无参数查询返回完整 Session 与同源 ETag；idle/running 均可读取。",
+        "summary": "无参数查询返回完整 Session；idle/running 均可读取。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-modeQuery\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -788,12 +778,11 @@
         "status": "200",
         "tabLabel": "200 · mode 切换 plan",
         "label": "OK",
-        "summary": "空闲时切换为 plan，返回完整 Session 与同源 ETag；真实变化保存 session.mode_changed(reason=requested)，不启动模型。",
+        "summary": "空闲时切换为 plan，返回完整 Session；真实变化保存 session.mode_changed(reason=requested)，不启动模型。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-modePlan\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -832,12 +821,11 @@
         "status": "200",
         "tabLabel": "200 · mode 切换 build",
         "label": "OK",
-        "summary": "空闲时切换为 build，返回完整 Session 与同源 ETag；不批准已有方案，不启动或恢复执行。",
+        "summary": "空闲时切换为 build，返回完整 Session；不批准已有方案，不启动或恢复执行。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-modeBuild\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -876,12 +864,11 @@
         "status": "200",
         "tabLabel": "200 · mode 同值",
         "label": "OK",
-        "summary": "在 mode 切换 build 示例之后再次提交 build：仍检查 idle，返回相同资源、updatedAt 和 ETag，不追加事件。",
+        "summary": "在 mode 切换 build 示例之后再次提交 build：仍检查 idle，返回相同资源、updatedAt，不追加事件。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "ETag": "\"snp-modeBuild\""
+          "Content-Language": "zh-CN"
         },
         "bodies": {
           "zh-CN": {
@@ -1356,7 +1343,7 @@
           ],
           [
             "响应",
-            "普通 ResultBean JSON，既有资源/ETag 不变",
+            "普通 ResultBean JSON，继续返回相同形状的业务资源",
             "200 text/event-stream；首帧 user.message，后续 Agent/Tool/idle 与 Events 完整事件同形"
           ],
           [
@@ -1417,8 +1404,8 @@
             "Help 返回 Agent 使用指南：只取 Session 绑定 Agent 最近成功发布的一份完整本地缓存，不消费命令清单，不调用 prepare、refresh、远端 Mate、模型或 Tool，不写历史或模型上下文、不占执行容量。AgentRuntime 的 useCases 必须完成保存与重载往返；旧缓存显式刷新前缺场景返回 []。三个介绍字段同取一份 PreparedAgentRuntime，读取与发布复用 Agent 级锁，不取 Session 执行锁。元数据仅作不可信纯文本展示，不执行 HTML、脚本或自动加载远程图片。"
           ],
           [
-            "响应与资源版本",
-            "响应对齐既有 API：status/name/thinking 查询及 name/model/thinking 修改统一返回 GET Session 的完整资源与 ETag；model 查询返回 GET Models 的 currentModelId/models。仅复用业务响应 VO 和投影，不调用其他 Controller；Session 资源与 ETag 同取权威查询快照或锁内更新结果，不从旧命令清单拼接。Help、Compact、Skills 无对应独立 API，保留最小业务结果，不新增公共路径。所有成功结果删除 command、changed、sourceEventSeq，不新增类型判别或命令回执包装；调用方依据自身请求区分响应。配置同值成功保留原 updatedAt/ETag，不写领域 Entry。"
+            "响应与权威快照",
+            "status/name/thinking/mode 查询及 name/model/thinking/mode 修改统一返回 GET Session 的完整资源；model 查询返回 GET Models 的 currentModelId/models。仅复用业务响应 VO 和投影，不调用其他 Controller；Session 同取权威查询快照或锁内更新结果，不从旧命令清单拼接。Help、Compact、Skills 无对应独立 API，保留最小业务结果，不新增公共路径。所有成功结果删除 command、changed、sourceEventSeq，不新增类型判别或命令回执包装；调用方依据自身请求区分响应。配置同值成功保留原 updatedAt 与内部版本，不写领域 Entry。"
           ],
           [
             "Skill 执行",
@@ -1430,7 +1417,7 @@
           ],
           [
             "模式切换",
-            "mode 空参只读查询；带参仅在 idle 接受。与统一 Session POST 共用模式能力规则和行锁事务；Command 不接收 If-Match，使用锁内当前版本，只修改 mode。真实变化将 mode、updatedAt、resourceVersion 与 session.mode_changed(reason=requested) 原子提交；同值仍校验状态与 plan 能力但不写事件、不升版本。成功返回同一提交快照的完整 Session 与 ETag。切换不调用模型、不批准计划、不清空上下文；running 的确认等待不允许以 mode=build 绕过审核。结果不确定只读 Session/Events 对账，不自动重放。"
+            "mode 空参只读查询；带参仅在 idle 接受。与统一 Session POST 共用模式能力规则和行锁事务，基于锁内最新记录只修改 mode，同字段按后一次成功提交生效。真实变化将 mode、updatedAt、内部 resourceVersion 与 session.mode_changed(reason=requested) 原子提交；同值仍校验状态与 plan 能力但不写事件、不升版本。成功返回同一提交快照的完整 Session，不暴露内部版本。切换不调用模型、不批准计划、不清空上下文；running 的确认等待不允许以 mode=build 绕过审核。结果不确定只读 Session/Events 对账，不自动重放。"
           ]
         ]
       },
@@ -1459,6 +1446,11 @@
       "date": "2026-10-02",
       "status": "confirmed",
       "decision": "Session 与完整事件、定时任务统一秒级 UTC 时间，持久化与响应同值；实现调整待实现。"
+    },
+    "clientConcurrencyReview": {
+      "date": "2026-10-04",
+      "status": "confirmed",
+      "decision": "所有接口不声明或消费 If-Match、Idempotency-Key，不返回配套资源 ETag，不用 body/query 版本或请求键替代；额外收到这些 Header 不触发专门拒绝。更新基于数据库最新记录按提交字段原子合并，同字段按后一次成功提交生效；业务状态和权限校验保留。已观察 Java 与前端仍有相关 Header 依赖，移除待实现。"
     }
   }
 }

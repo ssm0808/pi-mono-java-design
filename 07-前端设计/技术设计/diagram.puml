@@ -439,7 +439,7 @@ package "Browser page [target responsibilities]" {
   class WorkbenchCoordinator <<page lifecycle>> {
     selectSession(id)
     setPinned(id, pinned)
-    renameSession(id, displayName, etag)
+    renameSession(id, displayName)
     restoreIndex()
     submit(snapshot)
     stop(target)
