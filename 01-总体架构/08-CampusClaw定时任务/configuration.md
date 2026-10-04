@@ -4,12 +4,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.17.0 · 2026-10-04 |
+| 版本 | 0.18.0 · 2026-10-04 |
 | 状态 | 已确认能力与 proposed 接口形状分开记录；新接口待实现、尚未发布，整项操作尚未完成确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、时间预览；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已绑定 Agent；不提供已有 Session 目标 |
-| 源码基线 | Claw main `553dcd5e2ff682f9684810a043b442b37a02e54a`；2026-09-29 确认并 fetch，2026-09-30 重读该提交的调度范围；2026-10-04 重新 fetch 同提交并核验文件、Session 创建与凭据/模型链路、Cron、Session 与 ListEvents 读取；详见源码证据 §8.6～§8.9 |
-| 对照 | Claude Managed Agents 公开 Beta HTTP API；2026-09-29 核对调度文档，2026-09-30 核对创建输入与 Cron 方言，2026-10-02 核对时间示例与精度边界；2026-10-04 重核名称、Cron 范围、执行目标、Files API、创建响应、metadata、Vault/凭据模型，以及 Deployment 详情/列表和 Run 读取边界 |
+| 源码基线 | Claw main `553dcd5e2ff682f9684810a043b442b37a02e54a`；2026-09-29 确认并 fetch，2026-09-30 重读该提交的调度范围；2026-10-04 重新 fetch 同提交并核验文件、Session 创建与凭据/模型链路、Cron、Session、ListEvents 读取及暂停状态；详见源码证据 §8.6～§8.10 |
+| 对照 | Claude Managed Agents 公开 Beta HTTP API；2026-09-29 核对调度文档，2026-09-30 核对创建输入与 Cron 方言，2026-10-02 核对时间示例与精度边界；2026-10-04 重核名称、Cron 范围、执行目标、Files API、创建响应、metadata、Vault/凭据模型，以及 Deployment 详情/列表、资源类型、暂停原因和 Run 读取边界 |
 
 ## 1. 业务结果与接口边界
 
@@ -17,7 +17,7 @@
 
 已确认的创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 路径、返回与运行细节待设计。每次运行均新建独立 Session，将配置中的一条 `user.message` 作为首条任务消息；绑定的 Agent 定义继续复用；Cron 沿用 Spring 六字段。
 
-时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，JSON 不提供 revision，并支持可选 metadata；精确语义见下文。Claw 通过 credentialIds 直接绑定一份或多份独立凭据，能力、引用层级与字段名已确认，详见 §4.2。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 已确认约束。
+时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，JSON 不提供 revision，并支持可选 metadata；顶层只读 type 固定为 schedule，pausedReason 返回当前暂停原因或 null，见 [§4.1.1](#schedule-type-paused-reason)。Claw 通过 credentialIds 直接绑定一份或多份独立凭据，能力、引用层级与字段名已确认，详见 §4.2。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 已确认约束。
 
 除明确标记已确认的字段外，下文状态模型、其余字段名、路径和错误码仍为 proposed。已确认新建状态为 `active`，创建处理器不直接调用模型或创建 Session；自动执行由后续调度触发。暂停、恢复、显式试运行、归档和运行记录的精确契约另行设计，不能把下列五个配置接口当作完整产品接口清单。
 
@@ -54,6 +54,8 @@ Claw 必须在服务认证边界取得可信调用者和管理作用域，再按
 | schedule | 可选；创建省略默认 null，更新省略保持；非空时只允许下表的 cron 对象，更新时整体替换 |
 | metadata | 可选字符串键值对象；创建省略为 {}；建议沿用 Claude 最多 16 对、键最多 64、值最多 512 个字符；不传给模型、不作为授权依据，详见 §3.7 |
 | credentialIds | 已确认 string[]，直接绑定独立受管凭据；建议可选、创建省略为 []，响应同名回显；更新省略保持、数组整体替换、[] 清空；原始秘密不进入配置请求；数量、ID 格式及冲突策略待定，见 §4.2 |
+| type | 资源顶层只读字段，固定为 schedule；创建、详情、列表元素和更新响应均返回；区别于 schedule.type 和 message.type，见 §4.1.1 |
+| pausedReason | 只读的当前暂停原因，始终返回 object 或 null；创建为 null，人工暂停为 manual，错误自动暂停为 error，恢复后清空；精确边界见 §4.1.1 |
 | status/id/createdAt/updatedAt | 全部只读；新建 active；时间为 UTC ISO 8601，秒级且无小数；status 候选集合为 active/paused/archived，archived 不可修改；小写及新建 active 已确认，归档模型尚待生命周期审阅 |
 | schedule.lastRunAt / schedule.upcomingRunsAt | 仅响应使用；最近自动运行实际开始时间及最多五个未来计划时刻，见 §3.3；创建、更新和预览请求传入时拒绝 |
 | revision | 不属于公共请求或响应字段；内部配置代次只用于持久化和调度竞态检查，不透出 JSON |
@@ -202,6 +204,7 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
   "resCode": "0",
   "resMsg": "success",
   "result": {
+    "type": "schedule",
     "id": "schedule-927e03d2a4784f90a6238e790539c6e4",
     "name": "工作日园区告警汇总",
     "description": null,
@@ -229,6 +232,7 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
       ]
     },
     "status": "active",
+    "pausedReason": null,
     "createdAt": "2026-10-04T02:00:00Z",
     "updatedAt": "2026-10-04T02:00:00Z",
     "metadata": {
@@ -259,15 +263,15 @@ GET 详情返回同形完整资源及当前 ETag；列表每项同样返回完�
 
 成功返回完整资源及新 ETag。更新至少提供 name/description/agentId/message/schedule/metadata/credentialIds 中一个字段；省略保持，description/schedule 显式 null 清除，其他所列顶层字段的 null 拒绝。嵌套 timezone 的 null 语义仍待确定。message/schedule/credentialIds 整体替换，metadata 依 §3.7 逐 key 更新，`{"schedule":{"timezone":"UTC"}}` 不合法。先与已保存配置合并，再校验最终整体，任一错误则全部不改。拒绝未知字段、错误 JSON 类型和只读字段；同值更新不增内部配置代次、不改 updatedAt，但记录请求结果；只读时间摘要仍按本次快照生成。
 
-更新保持 active/paused 状态；清除 schedule 只移除未来自动计划，不取消在途 Session。变更后的内部配置代次供后续受理使用，不修改已接受输入；仅改 message 等字段不重置时间规则。更新与到期受理须有明确的事务先后关系，具体 worker 机制不在此定义。
+更新保持 active/paused 状态及当前 pausedReason；修复消息或凭据引用不隐含恢复，恢复由独立生命周期操作完成。清除 schedule 只移除未来自动计划，不取消在途 Session。变更后的内部配置代次供后续受理使用，不修改已接受输入；仅改 message 等字段不重置时间规则。更新与到期受理须有明确的事务先后关系，具体 worker 机制不在此定义。
 
-详情包含 §3.3 的只读时间摘要，不返回内部 nextFireAt 调度游标、配置 revision 或目录展示信息。ETag 对应完整资源表示，包括动态时间摘要；不能只按内部配置代次生成。updatedAt 表示配置最近修改时间，运行摘要变化及重新计算预览不改该时间。内部配置代次仍随配置或生命周期修改递增，供调度竞态检查使用；运行进展不递增它。
+详情包含 §3.3 的只读时间摘要，不返回内部 nextFireAt 调度游标、配置 revision 或目录展示信息。ETag 对应完整资源表示，包括动态时间摘要与暂停原因；不能只按内部配置代次生成。updatedAt 表示配置或生命周期最近修改时间，普通运行摘要变化及重新计算预览不改该时间。内部配置代次仍随配置或生命周期修改递增，供调度竞态检查使用；普通运行进展不递增它。
 
 <a id="creation-response-review"></a>
 
 ### 4.1. 创建成功响应逐项对齐（候选）
 
-创建 `POST /campusclaw-service/v1/schedules` 解决的是保存可运行配置。上述 JSON 包含已确认的只读时间字段、小写 active、不提供 revision、可选 metadata 和直接凭据引用 credentialIds；201、精确响应其余字段、metadata 限制与整项操作仍待确认。新接口待实现。
+创建 `POST /campusclaw-service/v1/schedules` 解决的是保存可运行配置。上述 JSON 包含已确认的资源 type、pausedReason、只读时间字段、小写 active、不提供 revision、可选 metadata 和直接凭据引用 credentialIds；201、精确响应其余字段、metadata 限制与整项操作仍待确认。新接口待实现。
 
 | 项目 | 创建时的值及含义 | 与 Claude 的对应或差异 |
 |---|---|---|
@@ -275,6 +279,7 @@ GET 详情返回同形完整资源及当前 ETag；列表每项同样返回完�
 | ETag | 服务端生成的不透明强标签，调用方原样用于 If-Match；示例不是可推导的版本号 | Claw 候选并发规则，既有 Session create 未提供此 Header；动态摘要变化也可使其失效 |
 | resCode/resMsg/result | 成功有三字段；resCode 为字符串 0，result 为完整资源 | 公司 ResultBean；Claude 直接返回资源 |
 | id | 定时任务配置 ID | 对应 Deployment id，不是 agentId/sessionId/runId |
+| type | 固定为 schedule，标识返回的是任务配置资源 | 对应 Claude 的 type:deployment；采用 Claw 自身资源名称 |
 | name/description | 规范化名称；未提供 description 返回 null | 对应同名字段；description 不参与模型输入 |
 | agentId | 绑定的 Agent ID | Claude 返回 id/version/type 对象；Claw 无历史版本绑定，不伪造 agentVersion |
 | message | 保存的一条 user.message | Claude initial_events 为数组；Claw 仅一条用户消息 |
@@ -282,15 +287,50 @@ GET 详情返回同形完整资源及当前 ETag；列表每项同样返回完�
 | schedule.lastRunAt | 创建为 null；建议表示最近自动运行的实际开始 | 对应 last_run_at；手动试跑不更新，不当作业务成功 |
 | schedule.upcomingRunsAt | 最多五个未来计划时刻 | 对应 upcoming_runs_at；计划值不保证实际启动 |
 | status | 创建 active；active 且 schedule 非空才有自动计划 | 与 Claude active 拼写一致；归档模型仍是待审阅的独立差异 |
+| pausedReason | 创建为 null；表示当前暂停原因，不是最近运行错误 | 对应 paused_reason，采用 lowerCamelCase；manual/error 与恢复清空语义对齐 |
 | metadata | 原样保存的字符串对象；省略默认 {} | 对应同名字段；建议沿用 16/64/512 限制，不传模型 |
 | credentialIds | 引用独立凭据的 ID 数组，响应不含秘密；建议省略时回显 [] | Claude vault_ids 引用集合；Claw 直接选择独立凭据，不新增 Vault 分组层 |
 | createdAt/updatedAt | 新建相等；UTC 秒级无小数 | 对应 created_at/updated_at；Claw 精度是产品规则 |
 
 revision 不进入创建、详情、列表或更新响应。它是内部实现可用的配置代次，与用户任务内容、Agent 版本、执行次数均无关，不需要调用方感知。创建也不返回 sessionId、runId、executionId、模型答案或业务完成状态。
 
-省略 schedule 的创建响应仍含 `schedule:null`、`status:"active"`：可以手动运行，但没有自动计划，不隐含立即试跑。提供有效 schedule 后无需再显式启用；状态与时间摘要是服务端保存的响应快照，不是客户端收包时的实况。幂等重放返回原成功快照，需要当前计划与运行时间时再 GET。
+省略 schedule 的创建响应仍含 `type:"schedule"`、`schedule:null`、`status:"active"`、`pausedReason:null`：可以手动运行，但没有自动计划，不隐含立即试跑。提供有效 schedule 后无需再显式启用；状态与时间摘要是服务端保存的响应快照，不是客户端收包时的实况。幂等重放返回原成功快照，需要当前计划、状态和运行时间时再 GET。
 
-小写已确认；完整生命周期尚未确认。当前保留候选 active/paused/archived，Claude 则为 active/paused 加 archived_at，归档后的 status 仍可为 active。不能把改为小写说成归档模型已完全对齐。environment_id/resources/budget/type 仍不引入；凭据引用单独按 §4.2 讨论，不能把 metadata 当成凭据或权限入口。
+小写已确认；完整生命周期尚未确认。当前保留候选 active/paused/archived，Claude 则为 active/paused 加 archived_at，归档后的 status 仍可为 active。不能把改为小写说成归档模型已完全对齐。environment_id/resources/budget 仍不引入；凭据引用单独按 §4.2 讨论，不能把 metadata 当成凭据或权限入口。
+
+<a id="schedule-type-paused-reason"></a>
+
+### 4.1.1. 资源类型与当前暂停原因
+
+园区运营人员发现告警汇总没有继续执行，需要区分人工暂停与错误导致的自动暂停。pausedReason 随完整资源返回当前原因，历史运行错误继续由 Run 记录。顶层 type 则使调用方脱离请求路径仍能辨认这是 Schedule 配置。两字段已确认，待实现。
+
+type 始终为字符串 schedule，创建、详情、列表元素和更新使用同一规则；无 Cron 计划时也不改变。它与 schedule.type 的 cron、message.type 的 user.message 分属不同层，不增加时间规则或消息类型。
+
+| 当前状态或动作 | pausedReason 的响应语义 |
+|---|---|
+| 新建或处于 active | null；字段不能省略 |
+| 人工暂停 | 非空对象，type 为 manual |
+| 错误导致自动暂停 | 非空对象，type 为 error，包含安全 error 对象；其精确 Schema、错误类型及与 Run 的映射另行对齐 |
+| 恢复为 active | 清空为 null；不删除历史 Run 或暂停审计 |
+| 修改已暂停配置 | 保持当前原因；修复配置后仍需显式恢复 |
+
+人工暂停后的**资源片段**如下，其余字段继续按完整资源返回：
+
+```json
+{
+  "type": "schedule",
+  "status": "paused",
+  "pausedReason": { "type": "manual" }
+}
+```
+
+在 active/paused 范围内，pausedReason 非空当且仅当 status 为 paused；不能返回 active 与 manual/error 原因的组合。归档模型及归档后的原因处理仍待生命周期审阅，增加这两个字段不代表整个生命周期已确认。自动暂停的触发条件也由运行契约确定，不把每次失败、限流或业务失败都等价为暂停；Claw 尚无对应 Environment/Vault 资源，不照搬 Claude 的相关错误枚举。
+
+两个字段由服务端生成；创建和配置更新若传入顶层 type 或 pausedReason，即使值看似正确，也按只读字段返回 400 `SCHEDULE_REQUEST_INVALID`。合法的 message.type 和 schedule.type 仍是原有输入。暂停/恢复操作负责生成原因，调用方不能通过配置更新伪造或清空它。
+
+status 与 pausedReason 在同一持久化边界原子修改，并按生命周期变更更新 updatedAt 和内部配置代次；读取只能观察一致组合。原因属于 Schedule 当前状态，不能由 GET 临时推断最近一个 Run 的错误。错误投影不暴露原始异常、堆栈、凭据或敏感业务参数。强 ETag 覆盖原因；写请求幂等重放仍返回原状态与原因快照，需要当前值时 GET。
+
+Claude 的资源 type 固定为 deployment，Claw 改为 schedule 以匹配自身领域；paused_reason 对应 pausedReason，保留 manual/error 和恢复清空的语义。依据为 2026-10-04 重读的[Deployment 模型](https://platform.claude.com/docs/en/api/http/beta/deployments)与[调度指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)。创建参考页的 active 配 manual 示例与模型约束冲突，不作为本设计依据。公开证据及现有 Session VO/Cron 状态差距见[专项核验](source-evidence.md#schedule-type-pause-reason-evidence)。
 
 <a id="credential-reference-proposal"></a>
 
@@ -346,9 +386,9 @@ Accept-Language: zh-CN
 | Accept-Language | 可选；支持及回退规则见 §2 |
 | 写入控制 Header | 不要求 Idempotency-Key 或 If-Match；读取可安全重试，不触发任务 |
 
-成功为 HTTP 200，返回 `Content-Type: application/json`、`Cache-Control: no-store`、`Content-Language` 与当前 `ETag`。result 与 §4 创建成功的完整资源同形，固定包含 id、name、description、agentId、message、schedule、status、metadata、credentialIds、createdAt、updatedAt；无计划时 schedule 为 null，空元数据/凭据分别为 {} 和 []。不返回凭据秘密、文件内容、Agent 完整定义、内部调度游标、revision 或尚未关联的 Session/Run ID。
+成功为 HTTP 200，返回 `Content-Type: application/json`、`Cache-Control: no-store`、`Content-Language` 与当前 `ETag`。result 与 §4 创建成功的完整资源同形，固定包含 type、id、name、description、agentId、message、schedule、status、pausedReason、metadata、credentialIds、createdAt、updatedAt；无计划时 schedule 为 null，空元数据/凭据分别为 {} 和 []。不返回凭据秘密、文件内容、Agent 完整定义、内部调度游标、revision 或尚未关联的 Session/Run ID。
 
-读取返回当前持久化配置及按 §3.3 生成的时间摘要，不返回创建时的幂等响应快照。一次读取使用一致的配置/lastRunAt 快照，并取一次权威计算时刻生成 upcomingRunsAt；配置最近修改时间 updatedAt 不因 GET 或时间数组滚动而变化。ETag 覆盖本次完整表示，其动态变化与条件更新代价由 §5 维护；客户端不得把它解析成版本数，也不依赖尚未定义的 304 缓存协商流程。
+读取返回当前持久化配置及按 §3.3 生成的时间摘要，不返回创建时的幂等响应快照。一次读取使用一致的配置/lastRunAt 快照，并取一次权威计算时刻生成 upcomingRunsAt；配置或生命周期最近修改时间 updatedAt 不因 GET 或时间数组滚动而变化。ETag 覆盖本次完整表示，其动态变化与条件更新代价由 §5 维护；客户端不得把它解析成版本数，也不依赖尚未定义的 304 缓存协商流程。
 
 正常调用只进行身份与范围校验、持久化读取、时间计算和安全投影。Agent 停用、已绑定凭据失效或无人值守执行依赖不可用，不妨碍有读取权限的用户查看已保存任务并修复；不在 GET 中重新 prepare、换取业务凭据、刷新 token、读取 secret、验证下游登录或创建 Session。读取资格本身被撤销仍应拒绝。凭据引用按保存值返回，不因引用暂时不可用而静默删掉或替换它，也不附加未经验证的 credentialStatus。
 
@@ -397,6 +437,7 @@ Accept-Language: zh-CN
   "result": {
     "schedules": [
       {
+        "type": "schedule",
         "id": "schedule-927e03d2a4784f90a6238e790539c6e4",
         "name": "工作日园区告警汇总",
         "description": null,
@@ -421,6 +462,7 @@ Accept-Language: zh-CN
           ]
         },
         "status": "active",
+        "pausedReason": null,
         "metadata": {"parkCode": "park-east", "purpose": "alarm-summary"},
         "credentialIds": ["credential-alarm-example", "credential-workorder-example"],
         "createdAt": "2026-10-04T02:00:00Z",
@@ -517,6 +559,8 @@ If-Match 用于条件更新，Idempotency-Key 用于重放同一次操作，内�
 | 并发与重试 | 本次公开操作页未给出与本方案相同的版本/幂等契约 | 明确 ETag/If-Match 和 Idempotency-Key，借鉴现有 Session 更新模式；增加请求记录与冲突处理成本，不能据此声称 Claude 内部没有保护 | Claw 可靠性设计 |
 | 返回与预览 | schedule 内有 last_run_at/upcoming_runs_at | 同样返回最近自动开始与最多五次计划；ResultBean、lowerCamelCase、UTC 秒级是公司/产品规则；动态摘要使完整表示 ETag 也随之变化 | 参考基线、公司契约 |
 | 状态与版本 | active/paused，另有 archived_at；未声明 revision | 新建 active、响应无 revision；内部配置代次不外露，归档模型另审 | 参考基线、边界明确 |
+| 资源类型 | 顶层 type 固定为 deployment | 顶层 type 固定为 schedule，完整响应统一返回；便于识别资源，代价是增加一个恒定字段，不扩展现有 Session 契约 | 产品约束 |
+| 暂停原因 | paused_reason 为 null 或 manual/error 原因对象，恢复后清空 | pausedReason 保留相同职责，随状态持久化并安全投影；增加当前原因维护成本，不能用最后一个 Run 错误替代，精确自动错误类型另审 | 参考基线、架构增量 |
 | metadata | 最多 16 对字符串，键最多 64、值最多 512 | 支持可选 map，建议同样限制；不进模型，不作身份、权限或凭据依据 | 参考基线、产品约束 |
 | 凭据 | vault_ids 引用 workspace 范围 Vault，运行时使用其中凭据 | 已确认 credentialIds 直接引用独立凭据，不增加 Vault 集合层；企业授权独立校验，凭据来源和管理接口待确定 | 企业产品约束、安全加固 |
 
@@ -534,12 +578,15 @@ If-Match 用于条件更新，Idempotency-Key 用于重放同一次操作，内�
 
 读取验收须覆盖：列表元素与详情字段和类型一致，包括 message/description；401/403/资源不可见404、读取损坏500与暂不可用503区分；权限过滤先于分页；page/limit 默认与边界、偏移溢出、limit+1 判断；空页与超末页为 schedules:[]/nextPage:null；result 仅 schedules/nextPage、无 total/COUNT；同次读取与排序；列表共用计划计算时刻；GET 不改 updatedAt、不推进调度、不换取凭据、不创建 Session；Agent 停用或引用凭据失效时仍可按读取资格查看；动态摘要参与详情 ETag；错误禁用缓存。归档枚举和筛选/排序确认后补齐对应最终用例，当前不把候选当作已通过实现测试。
 
+资源类型与暂停原因验收须覆盖：创建、详情、列表元素和更新响应均含 type:schedule 与 pausedReason；有无 Cron 的新建资源均为 active/null；人工暂停为 manual，自动暂停为 error 且只含安全错误；恢复清空原因但保留历史，配置修改不隐含恢复；status/pausedReason 原子一致；拒绝顶层只读字段写入而保留嵌套消息/规则 type；幂等重放返回原状态与原因、GET 返回当前快照，原因变化参与 ETag。自动错误 Schema、类型及归档规则确定后补齐最终用例。
+
 不新增直接 Maven 依赖：复用 JDK、Spring CronExpression/Jackson、宿主 MyBatis 3.0.4 与数据库驱动。完整传递依赖图未重跑。公司身份适配、无人值守身份及实际调度是上线依赖，不在本次扩写其接口。当前没有产品代码、数据库或集群测试证据。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.18.0 | 2026-10-04 | 完整资源增加只读 type 与 pausedReason，明确新建、暂停、恢复及当前原因的一致性边界。 |
 | 0.17.0 | 2026-10-04 | 列表元素与详情统一完整资源，分页参考 ListEvents 的整数 page/nextPage，并明确读取授权与故障边界。 |
 | 0.16.0 | 2026-10-04 | 创建、详情与更新采用 credentialIds 直接绑定独立凭据，请求和响应同名回显。 |
 | 0.15.0 | 2026-10-04 | 明确支持凭据绑定，比较独立凭据与 Vault 集合并推荐 credentialIds 条件候选。 |

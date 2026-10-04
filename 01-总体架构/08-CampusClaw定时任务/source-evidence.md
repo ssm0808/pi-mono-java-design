@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.17.0 |
+| 文档版本 | 0.18.0 |
 | 核验日期 | 2026-10-04；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
@@ -399,11 +399,34 @@ CampusClaw 当前目标（待实现）：schedule 响应加入 lastRunAt/upcomin
 
 Run 读取仅作边界记录：现有 CronService.getRecentRuns 与 [CronRunLog.java:70](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/store/CronRunLog.java#L70) 读取本地 JSONL 尾部并反转，读取失败返回空列表；CronTool.runs（225）默认 limit=10、允许1～100并输出文本。这不是新 Run HTTP 的分页、结果关联或可靠性证明；本节不扩写 Run 精确接口。以上为静态源码与官方契约证据，未执行 HTTP、数据库或权限联调测试。
 
+<a id="schedule-type-pause-reason-evidence"></a>
+
+### 8.10 资源类型与暂停原因（2026-10-04）
+
+本次通过 `git ls-remote --symref origin HEAD` 重新确认 Java 默认分支为 main，隔离 fetch 到 `refs/codex-evidence/schedule-type-pause-reason-20261004`，完整 commit 为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，与上次相同。仅复核下列 Session VO 与 Cron 状态；未覆盖工作树、修改实现或运行测试。R 表示 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 仓库相对路径与符号 | 已观察实现及目标差距 |
+|---|---|
+| [R/runtimeapi/vo/CreateSessionResponseVO.java:20](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/CreateSessionResponseVO.java#L20)；[R/runtimeapi/vo/GetSessionResponseVO.java:20](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/vo/GetSessionResponseVO.java#L20) | 现有 Session 创建与详情 VO 无顶层 type；这是既有资源风格，不禁止新的 Schedule 资源显式标识类型。本次仅补 Schedule 字段，不改写 Session 已发布形状。 |
+| [modules/cron/src/main/java/com/campusclaw/cron/model/CronJob.java:17](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronJob.java#L17)；[model/CronJobState.java:15](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronJobState.java#L15) | Job 使用 enabled，状态包含运行时间、lastRunStatus、consecutiveErrors 和 totalRuns；没有独立暂停原因，也没有新 Schedule 公共资源 type。 |
+| [modules/cron/src/main/java/com/campusclaw/cron/CronService.java:80](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/CronService.java#L80) · enableJob/disableJob（90）；[engine/CronEngine.java:239](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java#L239) · recordJobOutcome | 手动禁用与连续错误自动禁用均最终写 enabled=false，没有持久区分人工暂停和错误暂停。不能通过 enabled 或当前错误次数可靠还原任务为何处于暂停状态。 |
+| [modules/cron/src/main/java/com/campusclaw/cron/model/CronRunRecord.java:17](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronRunRecord.java#L17) | errorCode/errorMessage 归属单次运行；它们不等价于任务当前暂停原因，不能把最后一个 Run 的错误直接冒充 pausedReason。 |
+
+**Claude 公开契约。** 2026-10-04 重新核验 [Deployment 模型](https://platform.claude.com/docs/en/api/http/beta/deployments)、[创建参考页](https://platform.claude.com/docs/en/api/http/beta/deployments/create)及[调度指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)。这些是 Managed Agents HTTP Beta 官方文档，没有服务端源码 commit，不证明内部存储或暂停事务实现。
+
+- Deployment 顶层 type 固定为 deployment，是资源类型标识，与 schedule.type 的 cron 及初始事件 type 的 user.message 分属不同层。
+- 模型说明 paused_reason 仅在 status 为 paused 时非 null；原因分 manual 和 error，自动暂停的 error 对象表达导致暂停的错误，其类型对应 Deployment Run 的 error.type。恢复会清空 paused_reason；这不表示历史 Run 错误也被清除。
+- 创建参考页包含 status=active 却同时给出 manual 暂停原因的示例，与模型条件和调度指南的恢复语义冲突。该示例不能作为 active 时返回非空暂停原因的设计依据；也不能据此断言真实服务会返回这个组合。
+
+**CampusClaw 已确认目标（待实现）。** 创建、详情、列表元素和更新使用同一完整资源，顶层增加只读 type，固定值为 schedule；增加只读 pausedReason。新建 active 时 pausedReason=null，手动暂停为 manual 判别对象，错误自动暂停为 error 判别对象并包含安全 error 对象，恢复 active 后清空原因。请求不能写入这两个资源只读字段；message.type 和 schedule.type 的原有输入语义不变。
+
+type 属于资源表达的产品约束，便于脱离请求路径识别资源，不表示增加调度种类。pausedReason 补齐暂停原因的可观察性，是状态模型的架构增量：应随当前暂停状态保存并投影，不以普通 GET 临时拼接最后一次 Run 错误，也不返回原始异常、凭据或敏感业务参数。精确响应由[配置专题](configuration.md#creation-response-review)维护；自动暂停错误枚举、与 Run 错误的映射及归档后的原因处理仍需 Run/生命周期契约对齐，本次不冻结这些候选。
+
 ## 9. 文档验收
 
-2026-10-04 的 0.17.0 文档验收在 HEAD 加本任务文件的隔离快照完成：`plantuml -tsvg diagram.puml`、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示为既有 managed_session_compaction 的三个条件组，沿用[时序图规范](../../时序图规范.md#3-从总览下钻)中的边界解释。本次不改该图。
+2026-10-04 的 0.18.0 文档验收在 HEAD 加本任务文件的隔离快照完成：`plantuml -tsvg diagram.puml`、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示为既有 managed_session_compaction 的三个条件组，沿用[时序图规范](../../时序图规范.md#3-从总览下钻)中的边界解释。本次不改该图。
 
-五份变更 Markdown 的八个 JSON 示例、本地路径、标题与图源锚点检查通过；实际工作树 `git diff --check` 通过。校验包括无 Mermaid、PlantUML ASCII、生成成功、SVG XML、图源同步与 SVG 路径。创建资源与列表元素逐字段比较一致。本次展开读取接口、完整元素及 ListEvents 分页复用，未改变结构图、时序图或 SVG；前次保存图的 726×737 原尺寸和 840px 文档宽度视觉核验继续适用。隔离生成的图索引与 HEAD 一致，未覆盖无关工作树修改。
+五份变更 Markdown 的九个 JSON 示例、本地路径、标题与图源锚点检查通过；实际工作树 `git diff --check` 通过。校验包括无 Mermaid、PlantUML ASCII、生成成功、SVG XML、图源同步与 SVG 路径。创建资源与列表元素逐字段比较一致，均包含 type:schedule 和 pausedReason:null；创建请求不含这两个顶层只读字段，嵌套消息与规则 type 保持合法。本次补充资源类型与当前暂停原因，未改变结构图、时序图或 SVG；前次保存图的 726×737 原尺寸和 840px 文档宽度视觉核验继续适用。隔离生成的图索引与 HEAD 一致，未覆盖无关工作树修改。
 
 没有新增 OpenAPI/HTML 精确接口，相关检查不适用；没有产品代码修改、产品测试或新增 Maven 依赖。上述验收证明文档与图源一致性，不替代数据库、公司身份、真实凭据轮转或无人值守调度验收。
 
@@ -411,6 +434,7 @@ Run 读取仅作边界记录：现有 CronService.getRecentRuns 与 [CronRunLog.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.18.0 | 2026-10-04 | 补充 Schedule 类型与暂停原因的已确认目标、Java 实现差距及 Claude 创建示例的语义冲突。 |
 | 0.17.0 | 2026-10-04 | 核验 Cron、Session 与 ListEvents 读取基础及 Claude Deployment 契约，区分已确认完整资源与候选分页和 Run 观察边界。 |
 | 0.16.0 | 2026-10-04 | 记录 credentialIds 直接引用的已确认目标，凭据权威和多目标匹配仍为实现缺口。 |
 | 0.15.0 | 2026-10-04 | 重核 Vault 与 Credential 的资源层级，区分已确认凭据能力与待定引用字段。 |

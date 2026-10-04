@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.68.0 |
+| 文档版本 | 1.69.0 |
 | 更新日期 | 2026-10-04 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -485,6 +485,8 @@ Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读�
 
 公开契约、源码路径与限制见[M10 响应与凭据证据](../08-CampusClaw定时任务/source-evidence.md#creation-metadata-credentials-evidence)，精确创建报文和待决项仍由[配置接口](../08-CampusClaw定时任务/configuration.md#creation-response-review)维护；不扩写其他模块的历史 SHA 或声称已有长期执行凭据。
 
+CampusClaw 已确认完整 Schedule 响应增加只读 type:schedule 与 pausedReason。前者对齐 Claude type:deployment 的资源识别职责，以一个恒定字段换取脱离路径仍可辨认资源；后者对齐 paused_reason 的人工/错误暂停及恢复清空语义，使运营人员能判断任务为何停止自动执行。当前原因需要随状态持久化，不能由最后一个 Run 错误推断；具体自动错误模型仍与 Run 契约一起确定。现有 Session 响应不因此扩展字段；当前 Cron 的 enabled 也不能提供等价原因。已确认目标与源码差距见[M10 专项证据](../08-CampusClaw定时任务/source-evidence.md#schedule-type-pause-reason-evidence)，字段精确定义由[配置契约](../08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)唯一维护，归档模型仍另审。
+
 ### 配置读取与运行观察（2026-10-04 专项）
 
 Claude Beta 的 Deployment 详情和列表元素均返回完整配置，列表采用不透明 page 游标与 data/next_page；公开页未声明默认排序、ETag 或固定分页快照。CampusClaw 已确认列表元素与详情同形，包含任务消息及凭据引用；采用同一完整资源降低客户端模型差异，代价是分页传输全部任务内容。分页参考既有 ListEvents 的整数 page/nextPage、无 total 方式，建议沿用默认50/最多200；与 Claude 不透明游标同名但不同义，统一 Claw 客户端风格且无需总数查询。任务可变而事件在尾部追加，不能复制事件顺序及稳定位置前提；深页和并发编辑带来的重复/遗漏仍是代价。
@@ -601,6 +603,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.69.0 | 2026-10-04 | A14 补充资源类型与暂停原因的基线对应、状态归属及实现差距。 |
 | 1.68.0 | 2026-10-04 | A14 对齐完整配置读取，补充分页取舍、读取授权和独立 Run 观察的证据边界。 |
 | 1.67.0 | 2026-10-04 | A14 明确 credentialIds 直接凭据引用，相比 Claude 不增加 Vault 集合层。 |
 | 1.66.0 | 2026-10-04 | A14 明确 Claw 支持凭据绑定，区分直接凭据与 Claude Vault 集合的引用层级。 |

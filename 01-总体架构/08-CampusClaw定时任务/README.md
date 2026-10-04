@@ -4,13 +4,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.18.0 |
+| 文档版本 | 0.19.0 |
 | 更新日期 | 2026-10-04 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
 | 设计状态 | 五个 Claw 配置接口形成推荐目标，待实现；不定义 Mate 接口或页面；到期执行、重叠、补跑和故障恢复部分为待细化候选，不作为已冻结实施规则；无人值守身份待确定 |
 | 已观察实现 | Java main `553dcd5e2ff682f9684810a043b442b37a02e54a` 已有进程内 Cron、JSON Job/JSONL Run 和公共 Session 工厂；不等于已具备企业调度能力 |
-| 主基线 | Claude Managed Agents Scheduled deployments，2026-10-04 重核名称、Cron、执行目标及 Deployment 读取契约，Beta；仅引用公开契约，无服务端源码 commit |
+| 主基线 | Claude Managed Agents Scheduled deployments，2026-10-04 重核名称、Cron、执行目标、Deployment 读取契约及资源类型/暂停原因，Beta；仅引用公开契约，无服务端源码 commit |
 
 ## 1. 要解决什么问题
 
@@ -43,7 +43,7 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 
 ## 3. 使用与管理
 
-配置动作的当前推荐设计、字段与接口以[配置专题](configuration.md)为准。已确认 schedule 可省略，省略时只保存、不立即执行；填写有效规则后保存即参与自动调度，无需显式启用；试运行是独立的显式操作。输入为一条 `user.message`，内容复用现有文本和文件引用格式；附件长期保留与执行时访问规则待确定。已确认响应 status 小写、新建 active、非空 schedule 内返回 lastRunAt/upcomingRunsAt、移除公开 revision，并加入 metadata；完整生命周期、其余字段和整项操作仍为 proposed。创建处理器不调用模型、prepare 或旧 Cron create。Claw 校验可信范围与绑定，原子保存配置和幂等结果。运行未接线不能对外发布可自动运行的成功承诺；旧 Cron 已有能力不能被直接标为新配置管理已实现。
+配置动作的当前推荐设计、字段与接口以[配置专题](configuration.md)为准。已确认 schedule 可省略，省略时只保存、不立即执行；填写有效规则后保存即参与自动调度，无需显式启用；试运行是独立的显式操作。输入为一条 `user.message`，内容复用现有文本和文件引用格式；附件长期保留与执行时访问规则待确定。已确认响应 status 小写、新建 active、非空 schedule 内返回 lastRunAt/upcomingRunsAt、移除公开 revision，并加入 metadata、只读 type:schedule 和 pausedReason；两字段的统一响应与状态规则由[配置专题](configuration.md#schedule-type-paused-reason)维护；完整生命周期、其余字段和整项操作仍为 proposed。创建处理器不调用模型、prepare 或旧 Cron create。Claw 校验可信范围与绑定，原子保存配置和幂等结果。运行未接线不能对外发布可自动运行的成功承诺；旧 Cron 已有能力不能被直接标为新配置管理已实现。
 
 配置[列表与详情读取](configuration.md#get-schedule-review)返回相同的完整任务资源，包括消息、时间摘要、metadata 和凭据引用；这一元素形状已确认。分页参考既有 ListEvents 的普通整数 page/nextPage，具体映射与其余读取契约仍为候选。读取校验当前可见范围，不换取业务凭据、不启动任务；Agent 或凭据失效不妨碍有权限者查看已保存配置并修复。当前 Cron 本地文件读取不能替代企业权限和存储故障契约，精确差距见[读取证据](source-evidence.md#schedule-read-evidence)。
 
@@ -52,8 +52,8 @@ Claude 公开契约、最新变化与未说明项见[证据](source-evidence.md#
 | 管理动作 | 有效行为 |
 |---|---|
 | 创建、修改 | 校验可信 Agent 绑定、时间规则和提示内容，展示规范化规则及未来时间预览；保存内部配置代次（不进入公共 JSON）；不在保存时执行模型 |
-| 暂停 | 阻止尚未完成受理的自动触发；已受理 Run 继续；允许有权限的显式手动运行 |
-| 恢复 | 重新检查资格并计算严格晚于恢复时刻的下一次运行；不补暂停期间任务 |
+| 暂停 | 阻止尚未完成受理的自动触发并保存当前暂停原因；已受理 Run 继续；允许有权限的显式手动运行 |
+| 恢复 | 重新检查资格，恢复 active 并清空当前暂停原因，计算严格晚于恢复时刻的下一次运行；不补暂停期间任务 |
 | 手动运行 | 产生新的 manual Run，使用相同授权、互斥、受理和审计；不移动正常计划游标 |
 | 归档 | 终止未来计划，不再允许修改、恢复或手动运行；保留 Run 与历史引用；不隐含停止已受理执行 |
 | 停止一次执行 | 固定 Run 绑定的 Session 和根 execution，提交取消请求；收到真实终态前保持“停止中” |
@@ -200,10 +200,12 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 | 权威对象 | 关键数据及约束 |
 |---|---|
-| `t_schedule` | id、可信 scope、agent_id、单条 user.message 配置、cron_expression/timezone、status、内部 revision、metadata、credential_ids、last_run_at、next_fire_at、候选 max_lateness、active_run_id、授权引用、创建/修改审计；消息存储形状及文件引用生命周期待定，修改/受理在行锁内复核 |
+| `t_schedule` | id、可信 scope、agent_id、单条 user.message 配置、cron_expression/timezone、status、paused_reason、内部 revision、metadata、credential_ids、last_run_at、next_fire_at、候选 max_lateness、active_run_id、授权引用、创建/修改审计；消息存储形状及文件引用生命周期待定，修改/受理在行锁内复核 |
 | `t_schedule_run` | id、schedule_id、配置 revision 与安全配置快照、trigger_type、scheduled_at/manual_request_key、dispatch/execution 摘要、claim_owner/claim_epoch/lease_until、session_id/root_execution_id、实际 Agent 发布版本/摘要、关键时间和安全错误；不存完整消息与凭据 |
 | `t_schedule_gap` | schedule_id、revision、from/to、reason、可选准确数量及记录时间；只说明未创建执行的跳过范围，不合并已接受 Run |
 | 既有 Session/执行表 | 消息、工具结果、根执行/segment、等待和终态的权威；复用 M04/M06，不重建相同数据 |
+
+paused_reason 保存当前暂停原因，与 status 在同一事务内修改；精确字段、清空条件和安全投影由[配置契约](configuration.md#schedule-type-paused-reason)维护。历史 Run 错误和暂停审计不代替当前原因，也不随恢复删除。资源 type 是 ResponseVO 的固定值，不需要因此增加数据库类型列。
 
 自动触发唯一约束为 `(schedule_id, scheduled_at)`，UTC instant 区分夏令时重复钟面；配置修改不能让同一 occurrence 再次自动执行。manual 采用 `(schedule_id, manual_request_key)` 唯一约束，相同键仅返回原 Run，内容不一致报冲突。管理创建/更新以调用方请求键去重；内部配置代次服务于调度竞态，完整表示 ETag 服务于条件更新，精确规则由配置契约维护；不把现有 HTTP 描述成已有幂等能力。
 
@@ -260,6 +262,7 @@ S1～S4 是每次新建会话能力的候选拆分；S5 的时机取决于是否
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.19.0 | 2026-10-04 | 完整任务资源增加类型与当前暂停原因，明确状态原子更新及持久化归属。 |
 | 0.18.0 | 2026-10-04 | 配置列表与详情返回完整任务资源，明确读取权限、故障处理与独立 Run 观察边界。 |
 | 0.17.0 | 2026-10-04 | 定时任务通过 credentialIds 直接绑定独立凭据，集合管理不进入首版范围。 |
 | 0.16.0 | 2026-10-04 | 明确凭据绑定属于产品范围，并区分独立凭据和集合引用的命名候选。 |
