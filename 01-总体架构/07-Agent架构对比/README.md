@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.73.0 |
+| 文档版本 | 1.74.0 |
 | 更新日期 | 2026-10-04 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -433,7 +433,7 @@ CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可�
 |---|---|
 | 所属模块与主设计 | M10 [定时任务主设计](../08-CampusClaw定时任务/README.md)，关联 M01/M03/M04/M06/M08；本文维护基线差异与理由，具体规则、全局目标类图、实施切片和验收由主设计唯一维护 |
 | 架构问题 | 到期时间由谁拥有，定时器只是唤醒还是执行权威；到期后是回到同一 Session、创建新的 Agent Run，还是由外部平台重新启动进程；重启、空闲、暂停和失败如何对账？ |
-| CampusClaw 目标 | 配置范围由[Claw 配置接口](../08-CampusClaw定时任务/configuration.md)维护：创建、列表、详情、部分更新、直接删除与时间预览；提供有效 schedule 时创建即登记自动计划，省略时只保存，试运行独立显式触发；不定义 Mate 或页面。每次自动或手动运行均新建独立 Session，不新建 Agent 定义资源；直接删除方向已确认，精确删除响应与运行处理仍为候选；到期重叠、补跑和接管仍待细化，不能据配置设计冻结运行策略。 |
+| CampusClaw 目标 | 配置范围由[Claw 配置接口](../08-CampusClaw定时任务/configuration.md)维护：创建、列表、详情、部分更新、直接删除与时间预览；提供有效 schedule 时创建即登记自动计划，省略时只保存，试运行独立显式触发；不定义 Mate 或页面。每次自动或手动运行均新建独立 Session，不新建 Agent 定义资源；直接删除与200完整 Schedule 回执已确认，回执取值和运行处理仍为候选；到期重叠、补跑和接管仍待细化，不能据配置设计冻结运行策略。 |
 | CampusClaw 实现 | Java 默认 `main@553dcd5e2ff682f9684810a043b442b37a02e54a` 已核验既有 Cron 与 Runtime 受理骨架；数据库调度、Run 与新 Session 原子关联的实施增量为待实现，精确范围见[M10 源码证据](../08-CampusClaw定时任务/source-evidence.md)。源码观察不等于 GaussDB、多实例或真实业务验收。 |
 | 基线分工 | Claude Managed Agents 是平台调度主基线，触发独立 Deployment Run 和新 Session；DeepSeek Harness、pi Pico v3、OpenCode、Codex 分别保留 Session 内提醒、通用 Task、外部 Workflow 和宿主调度的历史对照。没有统一的“Agent Cron 实现”，不以这些基线的多数行为代替产品决定。 |
 | 成熟度边界 | pi Pico v3 的所引文档标为 design under discussion（不等同于无实验源码），DeepSeek Harness `dsh-0.1.7-alpha.1` 仍为 alpha，OpenCode 当前核对的是 `dev` 分支，Claude Managed Agents 仍要求 beta header；Codex Scheduled Tasks 以官方产品文档为公开契约，未取得服务端实现源码。 |
@@ -485,7 +485,7 @@ Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读�
 
 公开契约、源码路径与限制见[M10 响应与凭据证据](../08-CampusClaw定时任务/source-evidence.md#creation-metadata-credentials-evidence)，精确创建报文和待决项仍由[配置接口](../08-CampusClaw定时任务/configuration.md#creation-response-review)维护；不扩写其他模块的历史 SHA 或声称已有长期执行凭据。
 
-CampusClaw 已确认完整 Schedule 响应增加只读 type:schedule 与 pausedReason。前者对齐 Claude type:deployment 的资源识别职责，以一个恒定字段换取脱离路径仍可辨认资源；后者对齐 paused_reason 的人工/错误暂停及恢复清空语义，使运营人员能判断任务为何停止自动执行。当前原因需要随状态持久化，不能由最后一个 Run 错误推断；具体自动错误模型仍与 Run 契约一起确定。现有 Session 响应不因此扩展字段；当前 Cron 的 enabled 也不能提供等价原因。已确认目标与源码差距见[M10 专项证据](../08-CampusClaw定时任务/source-evidence.md#schedule-type-pause-reason-evidence)，字段精确定义由[配置契约](../08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)唯一维护；删除后不再返回 Schedule 资源或暂停原因。
+CampusClaw 已确认完整 Schedule 响应增加只读 type:schedule 与 pausedReason。前者对齐 Claude type:deployment 的资源识别职责，以一个恒定字段换取脱离路径仍可辨认资源；后者对齐 paused_reason 的人工/错误暂停及恢复清空语义，使运营人员能判断任务为何停止自动执行。当前原因需要随状态持久化，不能由最后一个 Run 错误推断；具体自动错误模型仍与 Run 契约一起确定。现有 Session 响应不因此扩展字段；当前 Cron 的 enabled 也不能提供等价原因。已确认目标与源码差距见[M10 专项证据](../08-CampusClaw定时任务/source-evidence.md#schedule-type-pause-reason-evidence)，字段精确定义由[配置契约](../08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)唯一维护；删除成功的完整回执保留最后状态与原因，随后不再提供 Schedule 读取。
 
 ### 配置停用后的可读取性（2026-10-04 专项）
 
@@ -493,7 +493,7 @@ CampusClaw 已确认完整 Schedule 响应增加只读 type:schedule 与 pausedR
 
 CampusClaw 已确认直接删除，不提供归档操作、archivedAt、includeArchived 或 archived 状态；存在的 Schedule 仍为 active/paused，删除后 GET 返回404，列表排除。这属于产品约束及生命周期架构选择，减少归档字段、筛选和终态资源管理，代价是原配置无法再读取。若保留历史 Run/Session，必要配置快照及历史读取授权必须独立维护，不能依赖已删除配置或丢失其权限依据。
 
-[删除审阅](../08-CampusClaw定时任务/configuration.md#delete-schedule-review)推荐 DELETE 成功204空体，删除功能已获授权时对当前删除范围内不存在、重复或不可见资源统一无操作204；功能拒绝403、权限或存储依赖故障503，保留独立 Run/Session 且不隐式取消已受理 Run。这些精确接口及运行边界仍为候选，不能按直接删除的方向确认一并定稿。删除与到期受理的串行化、快照内容和保留期限仍需在所属契约细化。
+[删除审阅](../08-CampusClaw定时任务/configuration.md#delete-schedule-review)已确认 DELETE 成功200、ResultBean包装完整 Schedule，借鉴 Deployment archive 的完整资源形状；一次删除回执不构成删除后的配置读取入口。回执保留最后状态/暂停原因、清空后续计划和采用删除事务记录时间，以及重复/不存在/记录级不可见404，仍为候选细节。功能拒绝403、权限或存储依赖故障503，保留独立 Run/Session 且不隐式取消已受理 Run，也须按操作范围继续审阅。删除与到期受理的串行化、快照内容和保留期限仍需在所属契约细化。
 
 同日确认并隔离 fetch Java 默认 main，仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`；当前 Cron 取消本地定时器后删 jobs.json，保留 Run 日志却不能通过旧工具读取已删任务历史，也缺少删除与运行受理的统一事务。现有 Runtime Session DELETE 的墓碑/后台清理可作为机制参考，但其拒绝忙会话不能直接复制给仅拥有配置的 Schedule。源码路径、符号、公开资料及未验收项见[M10 删除证据](../08-CampusClaw定时任务/source-evidence.md#schedule-deletion-evidence)；本段不升级其他基线历史结论。
 
@@ -619,6 +619,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.74.0 | 2026-10-04 | A14 对齐删除成功200完整资源回执，区分 Claude 返回形状与 Claw 删除生命周期。 |
 | 1.73.0 | 2026-10-04 | A14 明确直接删除的生命周期选择及配置不可回读的代价，区分已确认范围与删除响应和历史运行候选。 |
 | 1.72.0 | 2026-10-04 | A14 比较配置归档与删除的可读取性和历史成本，核实 Claude 公开范围与现有 Cron 删除差距。 |
 | 1.71.0 | 2026-10-04 | A04/A14 统一无客户端条件及请求键协议，明确数据库合并更新、重试代价和现有 Session 迁移差距。 |

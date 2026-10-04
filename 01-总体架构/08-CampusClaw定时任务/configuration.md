@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.22.0 · 2026-10-04 |
+| 版本 | 0.23.0 · 2026-10-04 |
 | 状态 | 已确认能力与 proposed 接口形状分开记录；新接口待实现、尚未发布，整项操作尚未完成确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、时间预览及删除；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已绑定 Agent；不提供已有 Session 目标 |
@@ -36,7 +36,7 @@
 | 详情 | GET `/campusclaw-service/v1/schedules/{scheduleId}` | 200；完整资源 |
 | 部分更新 | POST `/campusclaw-service/v1/schedules/{scheduleId}` | 200；完整资源 |
 | 时间预览 | POST `/campusclaw-service/v1/schedules/preview` | 200；规范规则、计算基准与最多五次未来计划时间；不保存 |
-| 删除配置 | DELETE `/campusclaw-service/v1/schedules/{scheduleId}` | 建议204、无响应体；直接删除已确认，精确操作仍为候选，见 §4.6 |
+| 删除配置 | DELETE `/campusclaw-service/v1/schedules/{scheduleId}` | 200；ResultBean 包装完整 Schedule 删除回执；直接删除与成功形状已确认，其余细节见 §4.6 |
 
 定时任务全部接口不采用 If-Match 或 Idempotency-Key，不返回配套 ETag；额外传入这两个 Header 时按普通未知 Header 忽略，不赋予并发或去重语义，也不专门因此报错。不把版本或请求键改放请求体、查询参数或其他自定义 Header；创建、读取、更新、预览、删除，以及后续试运行、暂停、恢复和 Run 读取均沿用这一接口约束。数据库内部配置代次、Run 身份和自动触发唯一约束继续保留。同一约束适用于已有 Session 等其他 Claw 接口；现有源码迁移差距见[专项证据](source-evidence.md#schedule-header-free-contract)。此范围已确认，其他候选细节仍按各节审阅。
 
@@ -44,7 +44,7 @@
 
 Claw 必须在服务认证边界取得可信调用者和管理作用域，再按资源及 Agent 授权。scope、owner、授权结果与原始凭据不进入请求 JSON；可选凭据引用单独校验，不能把引用当作已授权结论；不能信任任意 Header 中的声明。相关公司适配器和可信范围解析尚未接线，是明确的实施缺口；本设计不因“内部 API”而省略鉴权，也不新增或推断 Mate 认证协议。到期业务执行身份与配置管理身份分别处理，不能保存请求 Token 供将来运行。
 
-普通 JSON 成功使用 `resCode/resMsg/result`；删除候选204无响应体、不包装 ResultBean；失败仅返回 `resCode/resMsg`，保留真实 HTTP 状态。JSON 为 lowerCamelCase。配置响应为 `Cache-Control: no-store`；语言支持 zh-CN/en-US，缺省或不支持时回退 zh-CN，JSON 响应返回 Content-Language；204仅返回无缓存响应头，无内容语言或媒体类型。scheduleId 由服务端生成、大小写敏感且不复用；示例中的 UUID 后缀不构成客户端可构造 ID 的许可。
+普通 JSON 成功使用 `resCode/resMsg/result`，包括删除成功的完整 Schedule 回执；失败仅返回 `resCode/resMsg`，保留真实 HTTP 状态。JSON 为 lowerCamelCase。配置响应为 `Cache-Control: no-store`；语言支持 zh-CN/en-US，缺省或不支持时回退 zh-CN，JSON 响应返回 Content-Language。scheduleId 由服务端生成、大小写敏感且不复用；示例中的 UUID 后缀不构成客户端可构造 ID 的许可。
 
 ## 3. 配置字段与时间规则
 
@@ -57,9 +57,9 @@ Claw 必须在服务认证边界取得可信调用者和管理作用域，再按
 | schedule | 可选；创建省略默认 null，更新省略保持；非空时只允许下表的 cron 对象，更新时整体替换 |
 | metadata | 可选字符串键值对象；创建省略为 {}；建议沿用 Claude 最多 16 对、键最多 64、值最多 512 个字符；不传给模型、不作为授权依据，详见 §3.7 |
 | credentialIds | 已确认 string[]，直接绑定独立受管凭据；建议可选、创建省略为 []，响应同名回显；更新省略保持、数组整体替换、[] 清空；原始秘密不进入配置请求；数量、ID 格式及冲突策略待定，见 §4.2 |
-| type | 资源顶层只读字段，固定为 schedule；创建、详情、列表元素和更新响应均返回；区别于 schedule.type 和 message.type，见 §4.1.1 |
+| type | 资源顶层只读字段，固定为 schedule；创建、详情、列表元素、更新及删除回执均返回；区别于 schedule.type 和 message.type，见 §4.1.1 |
 | pausedReason | 只读的当前暂停原因，始终返回 object 或 null；创建为 null，人工暂停为 manual，错误自动暂停为 error，恢复后清空；精确边界见 §4.1.1 |
-| status/id/createdAt/updatedAt | 全部只读；新建 active；时间为 UTC ISO 8601，秒级且无小数；status 为 active/paused；已确认直接删除，无 archived/deleted 公共状态；删除后不返回资源 |
+| status/id/createdAt/updatedAt | 全部只读；新建 active；时间为 UTC ISO 8601，秒级且无小数；status 为 active/paused；已确认直接删除，无 archived/deleted 公共状态；删除成功返回完整回执，随后读取404 |
 | schedule.lastRunAt / schedule.upcomingRunsAt | 仅响应使用；最近自动运行实际开始时间及最多五个未来计划时刻，见 §3.3；创建、更新和预览请求传入时拒绝 |
 | revision | 不属于公共请求或响应字段；内部配置代次只用于持久化和调度竞态检查，不透出 JSON |
 
@@ -109,7 +109,7 @@ Claw 必须在服务认证边界取得可信调用者和管理作用域，再按
 | 响应字段 | 建议语义 |
 |---|---|
 | lastRunAt | 最近一次自动运行的实际开始时间，首次创建为 null；未启动的失败/跳过不更新，手动试跑不更新。不是计划时刻、结束时间或成功标志；自动运行开始后再失败仍保留该开始时间 |
-| upcomingRunsAt | 响应计算时刻之后、按升序排列的最多五个 Cron 计划时刻；active/paused 均按规则计算，paused 的值仅表示恢复运行时对应规则的计划，不代表已经登记触发；已删除资源不再返回计划摘要 |
+| upcomingRunsAt | 响应计算时刻之后、按升序排列的最多五个 Cron 计划时刻；active/paused 均按规则计算，paused 的值仅表示恢复运行时对应规则的计划，不代表已经登记触发；删除成功回执的数组为空，随后不再通过读取接口返回已删资源 |
 
 创建取一次服务端计算时刻完成规则校验，并以已保存配置组装 upcomingRunsAt、lastRunAt:null。详情/更新在各自一致读写快照中重新计算，数组按时间推进；不持久化用于客户端重试的原成功响应。所有时刻为 UTC 秒级 Z 格式。实际受理/启动可能晚于计划时刻，跳过和失败通过 Run 记录说明，不以数组保证执行。
 
@@ -272,7 +272,7 @@ GET 详情返回同形完整资源；列表每项同样返回完整资源，此�
 | schedule | 规则及 lastRunAt/upcomingRunsAt；未配置则 null | 对应 Claude schedule；Claw 六字段且默认上海时区 |
 | schedule.lastRunAt | 创建为 null；建议表示最近自动运行的实际开始 | 对应 last_run_at；手动试跑不更新，不当作业务成功 |
 | schedule.upcomingRunsAt | 最多五个未来计划时刻 | 对应 upcoming_runs_at；计划值不保证实际启动 |
-| status | 创建 active；active 且 schedule 非空才有自动计划 | 与 Claude active 拼写一致；Claw 直接删除，不采用归档资源模型 |
+| status | 创建 active；存续资源 active 且 schedule 非空才有自动计划；删除回执保留最后状态，见 §4.6 | 与 Claude active 拼写一致；Claw 直接删除，不采用归档资源模型 |
 | pausedReason | 创建为 null；表示当前暂停原因，不是最近运行错误 | 对应 paused_reason，采用 lowerCamelCase；manual/error 与恢复清空语义对齐 |
 | metadata | 原样保存的字符串对象；省略默认 {} | 对应同名字段；建议沿用 16/64/512 限制，不传模型 |
 | credentialIds | 引用独立凭据的 ID 数组，响应不含秘密；建议省略时回显 [] | Claude vault_ids 引用集合；Claw 直接选择独立凭据，不新增 Vault 分组层 |
@@ -282,7 +282,7 @@ revision 不进入创建、详情、列表或更新响应。它是内部实现�
 
 省略 schedule 的创建响应仍含 `type:"schedule"`、`schedule:null`、`status:"active"`、`pausedReason:null`：可以手动运行，但没有自动计划，不隐含立即试跑。提供有效 schedule 后无需再显式启用；状态与时间摘要是服务端保存的响应快照，不是客户端收包时的实况。需要当前计划、状态和运行时间时 GET；重复创建作为新的请求处理。
 
-小写和直接删除已确认；存续资源使用 active/paused，不提供 archived/deleted 状态、archivedAt、deletedAt 或 includeArchived。Claude 则以 archived_at 表达归档，归档后的 status 仍可为 active。此处是明确的产品与生命周期差异，删除成功不返回资源；暂停/恢复的完整操作仍待审阅。environment_id/resources/budget 仍不引入；凭据引用单独按 §4.2 讨论，不能把 metadata 当成凭据或权限入口。
+小写和直接删除已确认；存续资源使用 active/paused，不提供 archived/deleted 状态、archivedAt、deletedAt 或 includeArchived。Claude 则以 archived_at 表达归档，归档后的 status 仍可为 active。此处是明确的产品与生命周期差异，删除成功返回完整 Schedule 作为一次回执，随后不再提供读取；暂停/恢复的完整操作仍待审阅。environment_id/resources/budget 仍不引入；凭据引用单独按 §4.2 讨论，不能把 metadata 当成凭据或权限入口。
 
 <a id="schedule-type-paused-reason"></a>
 
@@ -310,7 +310,7 @@ type 始终为字符串 schedule，创建、详情、列表元素和更新使用
 }
 ```
 
-在 active/paused 范围内，pausedReason 非空当且仅当 status 为 paused；不能返回 active 与 manual/error 原因的组合。任务删除后不再返回资源及其 pausedReason，不产生额外的删除原因响应对象。自动暂停的触发条件也由运行契约确定，不把每次失败、限流或业务失败都等价为暂停；Claw 尚无对应 Environment/Vault 资源，不照搬 Claude 的相关错误枚举。
+在 active/paused 范围内，pausedReason 非空当且仅当 status 为 paused；不能返回 active 与 manual/error 原因的组合。任务删除成功的完整回执保留最后 status/pausedReason，随后不再提供读取；不产生额外的删除原因响应对象。自动暂停的触发条件也由运行契约确定，不把每次失败、限流或业务失败都等价为暂停；Claw 尚无对应 Environment/Vault 资源，不照搬 Claude 的相关错误枚举。
 
 两个字段由服务端生成；创建和配置更新若传入顶层 type 或 pausedReason，即使值看似正确，也按只读字段返回 400 `SCHEDULE_REQUEST_INVALID`。合法的 message.type 和 schedule.type 仍是原有输入。暂停/恢复操作负责生成原因，调用方不能通过配置更新伪造或清空它。
 
@@ -631,11 +631,11 @@ en-US 使用相同 resCode，文案为 `Invalid schedule rule. Use a valid Sprin
 
 <a id="delete-schedule-review"></a>
 
-### 4.6. 删除任务配置（直接删除已确认，精确契约候选，待实现）
+### 4.6. 删除任务配置（直接删除与成功形状已确认，其余细节候选，待实现）
 
 园区不再需要“工作日园区告警汇总”时，删除这份任务配置，使它不再产生新的运行。正常调用在删除状态和调度停止条件原子提交后返回；此后详情404、列表不返回该任务。处理失败不得返回成功。任务配置、一次 Run 和结果 Session 分别拥有生命周期，删除的关联影响按下文候选执行边界处理。
 
-**已确认范围。** 采用直接删除，不提供归档、恢复已删除配置或查询已删除配置的入口；创建、详情、列表元素和更新响应保持原完整资源形状，无 archivedAt/deletedAt，status 只保留 active/paused，不新增 archived/deleted；列表不提供 includeArchived/includeDeleted。HTTP 204、重复调用、关联历史及在途运行的以下细节为推荐候选，不把这次生命周期选择等同于整项操作已确认。
+**已确认范围。** 采用直接删除，不提供归档、恢复已删除配置或查询已删除配置的入口；创建、详情、列表元素和更新响应保持原完整资源形状，无 archivedAt/deletedAt，status 只保留 active/paused，不新增 archived/deleted；列表不提供 includeArchived/includeDeleted。成功使用 HTTP 200，ResultBean.result 返回与创建、详情和更新同形的完整 Schedule，借鉴 Claude Deployment 归档的完整资源返回方式。回执字段取值、重复调用、错误、关联历史及在途运行的以下细节仍为推荐候选，不把成功形状确认等同于整项操作已确认。
 
 | 请求项 | 推荐契约 |
 |---|---|
@@ -645,28 +645,84 @@ en-US 使用相同 resCode，文案为 `Invalid schedule rule. Use a valid Sprin
 | body | 无请求体；非空正文建议400，不接受 `{}` 作为删除选项 |
 | 身份与授权 | 沿 §2 的可信调用者及当前管理范围；先认证和检查管理功能资格，再在当前可管理范围内查找并删除；不接受客户端 scope/owner |
 | Content-Type | 无请求体，不要求；不会因省略而返回415 |
-| Accept-Language | 可选，zh-CN/en-US，缺省或不支持回退 zh-CN；仅用于错误文案 |
+| Accept-Language | 可选，zh-CN/en-US，缺省或不支持回退 zh-CN；JSON 响应返回实际 Content-Language，错误文案按该语言选择 |
 | 条件与请求键 | 不采用 If-Match、Idempotency-Key 或配套 ETag，不通过其他字段替代；按 §2 处理额外 Header |
 
-公司认证模式与适配器仍以 §2 为边界，不新增认证 Header。删除管理权限不要求被引用 Agent 可运行，也不要求凭据仍有效；不得在删除过程中调用 prepare、换取业务凭据、访问模型或执行下游业务。身份/管理范围权威不可用必须失败，不能降级成无权限限制的删除。
+公司认证模式与适配器仍以 §2 为边界，不新增认证 Header。删除授权须覆盖完整配置的读取与删除，不能借成功回执泄露消息、metadata 或 credentialIds；记录级资格不足统一按下文404处理。删除管理权限不要求被引用 Agent 可运行，也不要求凭据仍有效；不得在删除过程中调用 prepare、换取业务凭据、访问模型或执行下游业务。身份/管理范围权威不可用必须失败，不能降级成无权限限制的删除。
 
 ```http
 DELETE /campusclaw-service/v1/schedules/schedule-927e03d2a4784f90a6238e790539c6e4
 Accept-Language: zh-CN
 ```
 
-**成功响应候选。**
+**成功响应。** HTTP 200 与完整 Schedule 形状已确认；下列删除快照取值规则为推荐候选。
 
 ```http
-HTTP/1.1 204 No Content
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Language: zh-CN
 Cache-Control: no-store
 ```
 
-无响应体、Content-Type 或 Content-Language，不返回 ResultBean、`{}`、`null`、deleted:true、任务对象或新的 Run/Session ID。对当前可管理范围内找到的配置，204表示删除已生效、新运行受理已被禁止；对下述无操作分支仅表示已完成当前删除范围的核对，不保证范围外资源已删除或停止运行。204不表示历史数据已物理擦除、已经受理的运行终止或业务回滚。内部存储/清理形式不成为公共归档模型。
+```json
+{
+  "resCode": "0",
+  "resMsg": "success",
+  "result": {
+    "type": "schedule",
+    "id": "schedule-927e03d2a4784f90a6238e790539c6e4",
+    "name": "工作日园区告警汇总",
+    "description": null,
+    "agentId": "agent-550e8400e29b41d4a716446655440000",
+    "message": {
+      "type": "user.message",
+      "content": [
+        {
+          "type": "text",
+          "text": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。"
+        }
+      ]
+    },
+    "schedule": {
+      "type": "cron",
+      "expression": "0 0 8 * * MON-FRI",
+      "timezone": "Asia/Shanghai",
+      "lastRunAt": null,
+      "upcomingRunsAt": []
+    },
+    "status": "active",
+    "pausedReason": null,
+    "createdAt": "2026-10-04T02:00:00Z",
+    "updatedAt": "2026-10-04T03:00:00Z",
+    "metadata": {
+      "parkCode": "park-east",
+      "purpose": "alarm-summary"
+    },
+    "credentialIds": [
+      "credential-alarm-example",
+      "credential-workorder-example"
+    ]
+  }
+}
+```
 
-**重复调用与不存在。** 在认证、功能资格及 ID/请求格式校验通过后，首次删除成功、已经删除、有效 ID 在当前可管理范围内不存在，均建议返回204。范围外的 ID 使用同样无操作响应，不能据此访问、修改或为其他范围写墓碑；若记录可读但无管理资格，也视为当前删除范围内不存在。该结果只说明请求已在当前管理范围完成，不证明资源此前存在或任意租户中均不存在。未知 ID 不生成新资源、墓碑或清理任务。可信权限/数据库查询失败不属于“不存在”，须返回真实错误。
+result 的字段、类型和可空性复用完整 Schedule，不新增 deleted:true、archivedAt、deletedAt 或 schedule_deleted 类型。只有删除事务提交成功后才能返回200；该对象是删除完成时的一次配置回执，此后 GET404、列表排除，客户端应移除该任务，不能将回执重新作为存续配置加入列表。200不表示历史数据已物理擦除、已受理运行终止或业务回滚。
 
-自然幂等来自“同一可管理配置最终处于已删除状态”，无操作分支保持不修改范围外资源，不依赖客户端请求键，也不保存原 HTTP 回执；服务端必须保证 ID 不复用。响应丢失后可以有界重试同一 DELETE，每次重新检查当前资格；不得自动重新创建任务。GET404可用于确认当前不可读，不能证明是哪次删除成功，或区别不存在、已删除与不可见。断开连接不撤销已提交删除。
+| 字段 | 删除回执的推荐取值 |
+|---|---|
+| type/id/name/description/agentId/message/metadata/credentialIds | 返回删除事务锁定的最后配置，沿用完整资源的安全投影；credentialIds 仅含引用，不含秘密 |
+| status/pausedReason | 保留删除前最后状态及匹配原因，不制造一次暂停；active/paused 在此描述最后配置，不表示删除后仍能运行 |
+| schedule | 原为 null 则仍为 null；原有 Cron 则保留 type/expression/timezone，不伪造清空规则操作 |
+| schedule.lastRunAt | 保留事务快照中已有值；回执不随已受理 Run 后续变化而更新 |
+| schedule.upcomingRunsAt | 原有 Cron 时固定为空数组，表示后续计划已终止，不再按 active/paused 的普通读取规则计算 |
+| createdAt | 保留原创建时间 |
+| updatedAt | 使用删除事务记录、随提交生效的时间，UTC 秒级；不承诺精确 commit 瞬间，可能与原值同秒 |
+
+Service 在锁内复核当前资格、读取最后配置并构造不可变安全响应快照，原子提交删除状态和调度停止条件后返回；不能提交后调用 GET 回读已不存在的配置来拼回执。投影所需校验须在提交前完成；提交后响应发送失败属于结果未知，不把连接断开视为删除回滚。不为回执重放长期保存完整 HTTP 响应；内部协调墓碑、审计和 Run 必要历史快照各自遵循其职责。
+
+**重复调用与不存在候选。** 在认证、功能资格及 ID/请求格式校验通过后，首次真正删除返回200及完整回执；已经删除、有效 ID 不存在或不在当前可读取并删除的范围内，统一建议返回404 / SCHEDULE_NOT_FOUND。不伪造完整资源、不返回空 result 冒充同形成功，也不暴露范围外资源的内容或存在性。未知 ID 不生成资源、墓碑或清理任务；可信权限/数据库查询失败不属于“不存在”，须返回真实错误。
+
+自然幂等指重复调用不会再次删除或改变已删状态，不要求每次 HTTP 响应一致，也不依赖客户端请求键；服务端必须保证 ID 不复用。响应丢失后可以有界重试同一 DELETE，每次重新检查当前资格；再次404只表示当前范围内不可用，不能恢复完整回执、证明是哪次删除成功，或区别不存在、已删除与不可见。GET404具有相同的核对限制，不得自动重新创建任务。断开连接不撤销已提交删除。
 
 **失败响应候选。** 失败返回 `Content-Type: application/json`、`Cache-Control: no-store` 和实际 `Content-Language`，正文仅有 resCode/resMsg。
 
@@ -675,10 +731,11 @@ Cache-Control: no-store
 | 400 / SCHEDULE_REQUEST_INVALID | 非法 ID、业务查询参数或非空正文 | 定时任务请求无效。 / Invalid schedule request. |
 | 401 / SCHEDULE_AUTH_REQUIRED | 未通过可信认证 | 请先完成身份认证。 / Authentication is required. |
 | 403 / SCHEDULE_MANAGE_FORBIDDEN | 无任务管理功能资格，尚未查找目标 | 无定时任务管理权限。 / Schedule management is not permitted. |
+| 404 / SCHEDULE_NOT_FOUND | 已删除、不存在或不在当前可读取并删除的范围内 | 定时任务不存在。 / Schedule not found. |
 | 500 / SCHEDULE_DELETE_FAILED | 删除事务内部处理失败 | 删除定时任务失败，请稍后重试。 / Failed to delete the schedule. Please try again later. |
 | 503 / SCHEDULE_SERVICE_UNAVAILABLE | 当前身份、授权或存储权威暂不可用，或有界事务竞争无法完成 | 定时任务服务暂不可用，请稍后重试。 / The schedule service is temporarily unavailable. Please try again later. |
 
-本操作不为不存在返回404，不因任务 paused 或存在已受理 Run 返回409；不引入412/428。成功和失败状态保持真实 HTTP 语义，错误不包含任务消息、凭据引用、秘密、原始异常或范围外的存在性信息。例如中文删除失败：
+本操作建议将已删除、不存在或记录级不可见统一为404，不因任务 paused 或存在已受理 Run 返回409；不引入412/428。成功和失败状态保持真实 HTTP 语义，错误不包含任务消息、凭据引用、秘密、原始异常或范围外的存在性信息。例如中文删除失败：
 
 ```json
 {
@@ -699,16 +756,16 @@ Cache-Control: no-store
 | 最终受理先于删除提交 | 原 Run/Session 继续；即使模型启动发生在删除回包之后，也属于先前已受理执行 |
 | 更新先于删除提交 | 更新可以成功，随后配置被删除；更新响应不是持续存在的保证 |
 | 删除先于更新或暂停/恢复 | 后续操作返回404，不复活配置；基于事务外旧快照的写入必须再次检查删除标记 |
-| 两次删除并发 | 同一可管理配置最多发生一次真实删除状态变更，两次均可204；重复调用不更新时间、不重复登记清理任务 |
+| 两次删除并发 | 同一可管理配置最多发生一次真实删除状态变更；提交成功的一次返回200完整回执，另一次404；重复调用不更新时间、不重复登记清理任务 |
 | 已受理 Run 完成回写 | 继续写自己的终态和关联结果；配置不存在或已删除时不恢复配置、不重新安装计划 |
 
 上述删除检查限制新的受理；内部重复投递一个已经受理的 Run 时，只核对并返回原受理关联，不再新建 Session、提交消息或安装计划。
 
 取消进程内定时句柄可在提交后做清理，不作为成功依据；取消失败或旧回调被唤醒仍必须在数据库最终受理处被拦截。内部记录物理清理须等待其进行中/未知 Run 不再需要协调，并保留 ID 不复用与去重所需最小证据；清理不影响已删除配置的404。具体 DDL/清理策略是实施切片，不将当前 Cron 的本地 JSON 移除包装为已有数据库保证。
 
-**与 Claude 的取舍。** Claude 公开 Beta 目录提供 POST archive，200返回完整 Deployment，使用 archived_at 和 include_archived 表达保留资源。Claw 已选择直接删除；建议204空体、重复调用204，读接口不再返回已删配置。收益是无需向调用方维护归档状态与筛选，代价是无法回读原配置，历史需独立 Run 授权和必要快照。这是产品约束和生命周期架构选择；不宣称与 Claude 删除协议一致。公开文档未明确重复归档、归档 ID 的 GET 或在途处理，Claw 的候选不得冒充基线保证。[官方 Archive](https://platform.claude.com/docs/en/api/http/beta/deployments/archive)及[删除专项证据](source-evidence.md#schedule-deletion-evidence)记录事实边界。
+**与 Claude 的取舍。** Claude 公开 Beta 目录提供 POST archive，200返回完整 Deployment，使用 archived_at 和 include_archived 表达保留资源。Claw 已选择直接删除，成功同样为200完整资源，并保留 ResultBean；回执借鉴 Deployment archive，生命周期仍为删除。回执保留最后状态、清空后续计划等具体取值为 Claw 候选，不能照搬 Claude 的 archived_at/status 组合。重复或不存在建议404，读接口不再返回已删配置。收益是无需向调用方维护归档状态与筛选，代价是无法回读原配置，历史需独立 Run 授权和必要快照。这是产品约束和生命周期架构选择；不宣称与 Claude 删除协议一致。公开文档未明确重复归档、归档 ID 的 GET 或在途处理，Claw 的候选不得冒充基线保证。[官方 Archive](https://platform.claude.com/docs/en/api/http/beta/deployments/archive)及[删除专项证据](source-evidence.md#schedule-deletion-evidence)记录事实边界。
 
-当前待审阅的是204空响应、重复/不存在204、错误契约及关联运行/历史处理；直接删除本身不再作为待选方案。公司认证接线、ID正则和Run精确契约仍是校准项。当前操作未整体确认，不自动进入暂停/恢复或手动运行接口。
+直接删除与200完整 Schedule 成功形状已确认；当前待审阅的是删除快照取值、重复/不存在404、错误契约及关联运行/历史处理。公司认证接线、ID正则和Run精确契约仍是校准项。当前操作未整体确认，不自动进入暂停/恢复或手动运行接口。
 
 ## 5. 可靠写入与保存流程
 
@@ -741,7 +798,7 @@ Cache-Control: no-store
 | 401 `SCHEDULE_AUTH_REQUIRED` | 未通过 Claw 认证边界 |
 | 403 `SCHEDULE_MANAGE_FORBIDDEN` | 无任务管理功能权限 |
 | 403 `SCHEDULE_READ_FORBIDDEN` | 无任务读取功能权限；资源级不可见统一用 404 |
-| 404 `SCHEDULE_NOT_FOUND` / `SCHEDULE_AGENT_NOT_FOUND` | 读取/更新等操作的资源不存在、已删除或不可见；DELETE 的不存在分支依 §4.6 建议返回204 |
+| 404 `SCHEDULE_NOT_FOUND` / `SCHEDULE_AGENT_NOT_FOUND` | 读取/更新等操作的资源不存在、已删除或不可见；DELETE 同样建议返回 SCHEDULE_NOT_FOUND，见 §4.6 |
 | 409 `SCHEDULE_AGENT_DISABLED` | 创建/更新等操作的 Agent 禁用；不用于 DELETE |
 | 422 `SCHEDULE_POLICY_REJECTED` | 规则超出部署频率/配额策略 |
 | 500 `SCHEDULE_UPDATE_FAILED` | 更新内部处理失败，不返回部分成功；结果未知时读取当前状态核对 |
@@ -773,8 +830,8 @@ Cache-Control: no-store
 | 更新 | 省略保持、schedule:null 清除、初始事件/规则整体替换 | 推荐沿用；Claw 的 message/schedule/credentialIds 整体替换，metadata 依 §3.7 逐 key 更新，不引入通用深层合并；更新操作仍待整体确认 | 参考基线 |
 | 并发与重试 | 官方配置操作未声明客户端版本或请求键协议，内部实现未公开 | 不引入此类公共协议；数据库锁最新记录、合并部分字段并原子写入。简化调用和存储，代价是允许同字段后写生效、创建重提可能生成重复资源，且不提供原回执恢复 | 产品约束、数据库一致性设计 |
 | 返回与预览 | schedule 内有 last_run_at/upcoming_runs_at | 同样返回最近自动开始与最多五次计划；ResultBean、lowerCamelCase、UTC 秒级是公司/产品规则；动态摘要只用于显示，不参与客户端更新准入 | 参考基线、公司契约 |
-| 状态与版本 | active/paused，另有 archived_at；未声明 revision | 新建 active、存续资源 active/paused、响应无 revision；内部配置代次不外露；直接删除后不返回配置，无归档时间字段 | 参考基线、边界明确 |
-| 删除配置 | POST archive，200完整资源，以 archived_at 表示不可恢复终态 | 已确认直接删除、删除后GET404且列表排除；建议204空体、重复删除204。简化可见资源模型，代价是历史核对需要独立Run授权与必要快照 | 产品约束、生命周期架构选择 |
+| 状态与版本 | active/paused，另有 archived_at；未声明 revision | 新建 active、存续资源 active/paused、响应无 revision；内部配置代次不外露；删除成功返回最后配置回执，随后读取404，无归档时间字段 | 参考基线、边界明确 |
+| 删除配置 | POST archive，200完整资源，以 archived_at 表示不可恢复终态 | 已确认直接删除及200完整 Schedule 回执、随后GET404且列表排除；建议重复删除404。简化可见资源模型，代价是历史核对需要独立Run授权与必要快照 | 产品约束、生命周期架构选择 |
 | 资源类型 | 顶层 type 固定为 deployment | 顶层 type 固定为 schedule，完整响应统一返回；便于识别资源，代价是增加一个恒定字段，不扩展现有 Session 契约 | 产品约束 |
 | 暂停原因 | paused_reason 为 null 或 manual/error 原因对象，恢复后清空 | pausedReason 保留相同职责，随状态持久化并安全投影；增加当前原因维护成本，不能用最后一个 Run 错误替代，精确自动错误类型另审 | 参考基线、架构增量 |
 | metadata | 最多 16 对字符串，键最多 64、值最多 512 | 支持可选 map，建议同样限制；不进模型，不作身份、权限或凭据依据 | 参考基线、产品约束 |
@@ -798,7 +855,7 @@ Cache-Control: no-store
 
 更新验收须覆盖：七个可写字段的省略/null/空值和替换语义、metadata 删除/无修改/合并后超限、凭据列表清空、完整消息替换不保留旧附件；默认值仅用于新提交的规则、不覆盖省略字段；拒绝整份详情回传的只读字段；成功为 200 且与创建/读取资源同形；id/createdAt/lastRunAt 保持、同秒更新不依赖时间戳并发；暂停任务修改不恢复、active 补充计划不另启用、清空规则不取消在途；事务失败不部分写入；无客户端条件标签或请求键依赖、无原回执重放；网络异常后读取核对再决定修改。精确请求/响应与错误由 §4.5 维护，候选不等于已通过实现测试。
 
-删除验收须覆盖：active/paused、有无Cron均可删除；204无正文及无JSON媒体类型；非法请求400、认证401、功能403、内部500和依赖503；同范围重复/不存在与范围外ID均无操作204且不泄露存在性，不为未知ID建墓碑；依赖故障不伪装成不存在；删除后GET404、列表及limit+1查询排除、旧更新/启停/新受理拒绝且不复活；双删除、删除与更新/受理两种事务顺序；已受理Run继续、仅准备不受理、终态回写不重排；不级联删除历史/Agent/凭据/附件；超时有界重试、无请求键；内部标记不进入JSON，ID不复用及清理后独立历史授权。上述为目标验收清单，未执行产品测试。
+删除验收须覆盖：active/paused、有无Cron均可删除；200/ResultBean完整资源且字段集合与创建/详情/更新一致；原schedule:null保持、Cron后续计划为空、状态/暂停原因保留最后值、创建时间保留且修改时间采用删除事务记录时间；删除回执不触发客户端恢复记录；非法请求400、认证401、功能403、资源404、内部500和依赖503；重复/不存在及记录级不可见均404且不泄露存在性，不为未知ID建墓碑；依赖故障不伪装成不存在；删除后GET404、列表及limit+1查询排除、旧更新/启停/新受理拒绝且不复活；双删除、删除与更新/受理两种事务顺序；已受理Run继续、仅准备不受理、终态回写不重排；不级联删除历史/Agent/凭据/附件；超时有界重试、无请求键；内部标记不进入JSON，ID不复用及清理后独立历史授权。上述为目标验收清单，未执行产品测试。
 
 不新增直接 Maven 依赖：复用 JDK、Spring CronExpression/Jackson、宿主 MyBatis 3.0.4 与数据库驱动。完整传递依赖图未重跑。公司身份适配、无人值守身份及实际调度是上线依赖，不在本次扩写其接口。当前没有产品代码、数据库或集群测试证据。
 
@@ -806,6 +863,7 @@ Cache-Control: no-store
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.23.0 | 2026-10-04 | 删除成功返回200及完整 Schedule，明确一次回执与后续不可读取、重复删除404的候选边界。 |
 | 0.22.0 | 2026-10-04 | 采用直接删除并移除归档模型，展开204响应、重复调用、授权及在途运行候选边界。 |
 | 0.21.0 | 2026-10-04 | 比较归档保留配置与删除后不可读取两种生命周期，明确条件候选接口及关联执行边界。 |
 | 0.20.0 | 2026-10-04 | 所有定时任务接口移除客户端版本和请求键协议，改由数据库事务合并更新并明确重复创建与超时核对边界。 |
