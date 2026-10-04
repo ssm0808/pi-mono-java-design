@@ -4,10 +4,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.12.0 |
+| 文档版本 | 0.13.0 |
 | 核验日期 | 2026-10-04；各节保留实际核验日期与范围 |
-| 产品范围 | 新建独立会话与绑定已有会话均需支持，优先支持独立会话；不据此预设已有会话的拒绝契约或交付阶段 |
-| 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与两类目标的调度接线待实现；企业身份系统未核验 |
+| 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
+| 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理与新 Session 的调度接线待实现；企业身份系统未核验 |
 
 <a id="java-evidence"></a>
 
@@ -46,15 +46,15 @@
 | J12 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java#L96)；`submit`、`prepare`（149）、`accept`（174）、`startAccepted`（190） | 本地 Session 操作锁内准备执行，检查 idle，持久化受理后先入队回执再启动；服务返回 RuntimeEventStream，仍与请求 SSE 上下文连接。没有 scheduleId/runId 受理键。 |
 | J13 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionContextFactory.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionContextFactory.java#L57)；`create`、`createPreparedMessage`；[modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java#L97)；`register`、`createHolder`（169）、`createSession`（205） | 恢复历史、创建流、注册活动执行；Registry 有 Semaphore 容量、Session 本地锁、权限策略和工具快照；createSession 固定 RUNTIME profile。后台 CRON profile 与无输出上下文仍需新增接线。 |
 | J14 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java#L69)；`acceptMessage`、`commitTerminal`（290） | @Transactional 原子受理 user.message、创建 execution/初始 segment 并关联公共事件；终态固定到原执行目标。可作为后台受理事务的基础，但当前没有把 Schedule/Run 与新 Session 一并受理的服务。 |
-| J15 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#L116)；`acceptUserEventLocked`；[modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml#L63)；`lockSessionForUpdate` | 数据库行锁内重新检查 Session idle、plan 可用性，再追加消息并置 running。本地检查不代替数据库准入；这可复用于已有会话竞争，但不证明已有会话调度绑定已实现。 |
+| J15 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#L116)；`acceptUserEventLocked`；[modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml#L63)；`lockSessionForUpdate` | 数据库行锁内重新检查 Session idle、plan 可用性，再追加消息并置 running。本地检查不代替数据库准入；这是普通 Session 并发基础，不构成定时任务需要提供已有会话目标的理由。 |
 | J16 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventOutput.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventOutput.java#L35)；`persistenceOnly`；[modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/PersistenceOnlyRuntimeEventOutput.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/PersistenceOnlyRuntimeEventOutput.java#L20) | 已有无响应流输出策略；Projector 先持久化，该策略丢弃事件工厂，不构造 SSE、不持有连接/缓冲，也不拥有执行取消权。可用于后台执行，当前 Cron runner 尚未使用。 |
 | J17 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java#L91)；`start`、`scheduleTimeout`（154）、`commitTerminal`（271）、`retryTerminal`（341） | 订阅投影、安装确认处理器、启动 Agent、处理超时并提交唯一终态；终态写入失败保留执行并重试。可复用生命周期；不等于已有跨进程模型执行接管、启动 CAS 或 Run 对账。 |
-| J18 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeContextHistoryService.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeContextHistoryService.java#L34)；`restoreHistory`；[modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventQueryService.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventQueryService.java#L40)；`list` | 按权威线性历史恢复模型上下文，按公共事件分页读取。两种调度目标都可沿用消息权威；不需再在 Run 保存一份完整聊天文本。 |
+| J18 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeContextHistoryService.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeContextHistoryService.java#L34)；`restoreHistory`；[modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventQueryService.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/CommittedEventQueryService.java#L40)；`list` | 按权威线性历史恢复模型上下文，按公共事件分页读取。定时运行结果可沿用消息权威；不需再在 Run 保存一份完整聊天文本。 |
 | J19 | [modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql#L26)；`t_sessions`（26）、`t_session_executions`（81）、活动执行唯一索引（118）、segments（146）、entries（363）、events（426） | 已有 Session、根执行、段、内部历史和公共事件存储；Session 同时只能存在一条非终态根执行。当前 DDL 无 schedule/run/claim 表，Session 状态只有 idle/running；不能用它表示调度领取或未知运行状态。 |
 
 推荐复用既有存储与投影，新增 `ScheduledRunAcceptanceService` 组织同库短事务，并把后台 profile、persistenceOnly 输出和 Run 关联接入公共执行链。该服务、启动权持久 CAS、Run 终态对账均为待实现。不能通过依次调用“创建 Session HTTP + POST 消息 HTTP”宣称获得原子受理，不能在回执丢失时再次创建会话重发 prompt。
 
-两种执行目标均属于已确认产品范围，独立会话优先。候选受理结构分别为：NEW_SESSION 关联新 Session、首消息、根执行与 Run；EXISTING_SESSION 检查原 Session 的可信绑定、授权与运行状态，再追加消息并关联 Run。具体事务、忙时准入与恢复策略仍需运行专题论证；已有 Session 的行锁、历史恢复、公共事件查询是基础能力，不等于两种调度目标已经实现，也不构成首版必须拒绝已有会话的依据。
+当前产品范围固定为每次运行新建 Session。候选受理结构关联新 Session、首消息、根执行与 Run；同一 Run 重复受理复用原关联。具体事务、容量准入与恢复策略仍需运行专题论证；普通 Session 的行锁、历史恢复和查询继续作为已有基础，不能将它们写成定时新会话接线已经完成。
 
 ## 4. 身份、权限与交互证据
 
@@ -80,7 +80,7 @@
 | ManagedCronSessionRunner | 从 ModelCatalogService 查找切为 RuntimeModelManager.resolveDefaultModel，读取已发布 defaultModelId | 以新模型解析路径解释触发时配置；保持 Cron 创建内存 Session 的边界，不外推为已有后台持久受理 |
 | AgentSessionFactory | 加入 PlanPolicyPromptComposer、准备结果检查、基于同次 runtime 的 Mate 工具装配与业务确认绑定 | 新设计需保持同次准备快照，并单独说明 CRON 的 basePrompt 行为 |
 | RuntimeSessionEngineRegistry | 绑定 Agent、权限和工具调用快照，追加 mode 与用户提问/计划审核接线 | 后台复用应保留这些可信准备能力，新增 CRON 策略而非绕过 Host |
-| RuntimeMessageEventService | 受理时传入计划审核工具可用性，启动时应用已接受模式 | 既有会话调度必须遵守权威 mode，不能默默把 plan 改 build |
+| RuntimeMessageEventService | 受理时传入计划审核工具可用性，启动时应用已接受模式 | 普通消息受理遵守权威 mode；本产品定时任务不向已有会话追加输入 |
 | CronTool 与其他旧结论 | 已读取当前 Schema/Agent 绑定实现；旧表未核验的基线与模块保持原证据归属 | 只更新本专题证据，不批量替换 M01～M09 的历史 SHA，也不以旧缺口推断当前 main |
 
 ## 6. 测试证据与未执行项
@@ -90,7 +90,7 @@
 - [modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunnerTest.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunnerTest.java#L71)：`preparesAgentAndUsesCronProfileAtTriggerTime` 断言 CRON、Agent、空凭据及模型解析；`usesPublishedDefaultWhenItIsNotFirstBinding` 断言使用明确 default model，不取第一条 binding。测试 mock 公共工厂，不能据此证明真实集群、持久化或身份链路。
 - [modules/cron/src/test/java/com/campusclaw/cron/engine/CronJobExecutorTest.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/test/java/com/campusclaw/cron/engine/CronJobExecutorTest.java#L36)：`failureRecordCarriesStableErrorCodeInsteadOfDiagnosticText`、`uncodedFailureUsesGenericStableCodeWithoutDiagnosticText` 断言稳定错误码与不泄露诊断文本。
 
-另定位了 `CronEngineTest`、`CronStoreTest`、`CronRunLogTest`、`CronToolTest`、`CronScheduleTest`，其存在仅说明已有测试材料。2026-09-29 的源码核验没有运行 Maven 测试、编译、真实 GaussDB、多副本故障注入、DST 边界测试、企业身份联调或压测。主设计新增原子受理、唯一触发、租约代次、启动 CAS、未知执行对账、已有会话调度与无人值守权限均仍需实施与验收，不能因静态证据或旧测试存在而写成已通过。2026-09-30 的表达式边界小验证单独记录在[Spring 与 JDK 证据](#spring-scheduling-evidence)。
+另定位了 `CronEngineTest`、`CronStoreTest`、`CronRunLogTest`、`CronToolTest`、`CronScheduleTest`，其存在仅说明已有测试材料。2026-09-29 的源码核验没有运行 Maven 测试、编译、真实 GaussDB、多副本故障注入、DST 边界测试、企业身份联调或压测。主设计新增原子受理、唯一触发、租约代次、启动 CAS、未知执行对账与无人值守权限均仍需实施与验收，不能因静态证据或旧测试存在而写成已通过。2026-09-30 的表达式边界小验证单独记录在[Spring 与 JDK 证据](#spring-scheduling-evidence)。
 
 <a id="claude-evidence"></a>
 
@@ -117,7 +117,7 @@
 
 ## 8. Claw 配置接口的源码核验
 
-2026-09-29 收敛接口时再次确认 Claw 上游默认 main 并 fetch，仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`；重读 CronSchedule/CronPayload、CronService/CronEngine、AgentRuntimeManager/MateServiceClient、RuntimeSessionController、AgentDirectorySnapshotDTO 与 UserMessageContentRequestVO。旧新提交未变。下表实现观察保留该快照；目标解释按当前已确认的单条 user.message、可选 schedule 和两种 Session 目标更新，不把目标决定写成已有实现。
+2026-09-29 收敛接口时再次确认 Claw 上游默认 main 并 fetch，仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`；重读 CronSchedule/CronPayload、CronService/CronEngine、AgentRuntimeManager/MateServiceClient、RuntimeSessionController、AgentDirectorySnapshotDTO 与 UserMessageContentRequestVO。旧新提交未变。下表实现观察保留该快照；目标解释按当前已确认的单条 user.message、可选 schedule 和每次新建 Session 更新，不把目标决定写成已有实现。
 
 C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成本版待实现接口清单。Mate 当时读取的是本地 `4b957a3a846659f5b7569c9d6133abc070cd2e3c`，不是当日最新上游或完整生产部署；其 README 定位为待集成的可运行示例。历史 `956b547f5ca12ca89e68f73012f92a4406b0c9fa` 的其他结论不随此升级。本次不新增 Mate 路由、页面、公共 Chat 映射或 Agent 目录契约。
 
@@ -136,7 +136,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 | C11 | Claw 同根 `runtimeapi/web/RuntimeSessionController.java`；`session/RuntimeSessionUpdateService.java`；`persistence/MyBatisRuntimeSessionRepository.java` · updateSession | 既有 Session 更新使用 ETag/If-Match、428/412 与数据库锁内版本重验。Schedule 借鉴该模式；Mate Agent 更新仍为锁行后最后写入生效，不宣称全系统已经统一。 |
 | C12 | Claw `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java` · RuntimeApi.MAX_MESSAGE_CHARACTERS；同 codingagent 根 `runtimeapi/vo/UserMessageContentRequestVO.java` · TextRequestVO/FileRequestVO；`modules/cron/src/main/java/com/campusclaw/cron/model/CronPayload.java` · AgentPrompt | 普通文本上限262144，Runtime 已有文本和文件引用块，严格类型与未知字段检查。已确认配置输入为单条 user.message，可包含文本和现有文件引用；不扩成多初始事件或 system.message。旧 CronPayload 仍只有 agentId/prompt，输入保存与运行接线须迁移，不能直接宣称已支持调度附件。配置更新另须保留省略/null差异。 |
 | C13 | Claw `modules/cron/src/main/java/com/campusclaw/cron/model/CronSchedule.java` · At/Every/CronExpr；`engine/CronEngine.java` · computeNextDelay | 三类型已有，Cron 采用 Spring CronExpression；已确认继续使用 Spring 六字段，精确规则见[配置契约](configuration.md#spring-cron-contract)。旧 every 按完成/创建时间计算；新配置 HTTP 仅接受 Cron，不暴露或自动迁移旧 At/Every。六字段复用既有依赖，但不表示可以直接接收 Claude 五字段，亦不构成硬实时保证。 |
-| C14 | Claw 同 codingagent 根 `runtimeapi/web/RuntimeSessionController.java` · get/update/create | Claw 资源使用 sessionId；已有会话目标对应 existingSession/sessionId，不引入 Mate 的 chatId。两种目标均需支持，独立会话优先；现有 Session 201/Location 与 ETag/If-Match 可作接口风格依据。 |
+| C14 | Claw 同 codingagent 根 `runtimeapi/web/RuntimeSessionController.java` · get/update/create | Claw Session 资源使用 sessionId。创建返回 201/Location，GET/更新采用 ETag/If-Match；新配置创建额外返回 ETag 是目标设计，非现有 Session create 行为，见 §8.7。Schedule 创建尚无 Session 关联，不返回 sessionId。 |
 
 此前在 Mate 示例 Controller/Service/Mapper、`src/main/java`、resources 与 POM 范围，未观察公司认证适配、租户范围、Chat 映射或调度配置服务；这是历史样例边界，不推断其他部署。当前 [Claw 配置设计](configuration.md) 只要求其自身取得可信调用范围并校验绑定，具体适配待接线，不用读取 Header 代替认证证据。
 
@@ -296,15 +296,41 @@ Claw 的目标已统一为秒级：包含 Session createdAt/updatedAt、完整�
 
 同时读取 [M09 附件设计 3.1.0](../../02-服务与接口/01-CampusMate附件服务/README.md)全文及 attachment-api.openapi.yaml 的文件 ID/解析约束：目标上传归属 mate-service，文件不可变绑定单个 Session，跨 Session resolve 拒绝，设计 ID 为 file_<26 alnum>。它标记待实现，外部服务当前实现未核验；与现行 Runtime ID 格式、新建 Session 反复引用同一文件存在未解决的接入差距。本次只记录差距，不修改附件权威契约。
 
-CampusClaw 的目标是保留两种 Session 选择、单条 user.message 及文件引用形状；复用 M09 既有上传职责，定时跨 Session 访问、受权解析/读取和生命周期衔接另行设计。名称上限 256、仅 Cron 是当前产品约束；Spring 六字段和默认上海时区继续有效，不声称已与 Claude 完全兼容。统一 target 及显式选择已有 Session 是产品扩展，现有文件引用则只是可复用基础，不是完整附件能力。
+CampusClaw 每次运行固定新建 Session，复用 Agent 定义、单条 user.message 及文件引用形状；不再提供 target。M09 既有上传职责保持，定时跨 Session 文件访问、受权解析/读取和生命周期衔接另行设计。名称上限 256、仅 Cron 是当前产品约束；Spring 六字段和默认上海时区继续有效，不声称已与 Claude 完全兼容。其他基线的目标差异仅作有日期的事实对照，不改变本产品范围。
+
+<a id="creation-response-evidence"></a>
+
+### 8.7 固定新 Session 与创建响应（2026-10-04）
+
+再次确认 Java 上游默认 main 并隔离 fetch 至 refs/codex-evidence/schedule-response-20261004，提交仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`。以下只重核 Session 工厂和 HTTP 创建返回，不升级其他模块的历史实现状态。R 为 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/。
+
+| 路径与关键符号 | 已观察实现及目标含义 |
+|---|---|
+| R/session/AgentSessionFactory.java · create（69–104）、configureAgent（107–120） | prepare 已有 request.agentId，每次创建独立 Agent 执行对象和 ManagedAgentSession；不是创建 Agent 定义资源 |
+| R/tool/cron/ManagedCronSessionRunner.java · execute（53–72） | 每次由 Session 工厂创建并关闭内存会话；未在该链生成可查询 Runtime Session/Run 关联，新配置调度接线待实现 |
+| R/runtimeapi/web/RuntimeSessionController.java · create（56–65）、get（68–77）、update（80–91） | create 返回 201、Location、Content-Language 和 ResultBean；未把内部 View 的 ETag 写入 Header，只有 GET/更新对外返回 ETag |
+| R/runtimeapi/session/RuntimeSessionResponseAssembler.java · createView（30–41）；SessionEtagFactory.java（22–27） | 内部创建 View 已生成不透明 ETag，但不能据此宣称客户端创建响应含该 Header；原样携带 ETag 与自行拼接版本值不同 |
+| R/runtimeapi/session/RuntimeSessionService.java · create（64–72）、newSession（117–129）、now（138–139） | 使用既有 agentId，生成新 Session ID、内部 resourceVersion=1；创建/更新时间相同，保存后返回内存快照；当前取时未截秒，秒级仍为目标差距 |
+| R/runtimeapi/vo/CreateSessionResponseVO.java（20–38）；SuccessResponseVO.java（19–32）；result/StandaloneResultBeanAdapter.java（17–18） | 创建 Session 返回自身资源和公司包装，没有对外 version。Schedule 的显式 revision 和创建 ETag 是候选扩展，不能称完全复刻既有 Session |
+
+同日重新读取 Claude Beta [Create Deployment](https://platform.claude.com/docs/en/api/http/beta/deployments/create)、[Deployment 模型](https://platform.claude.com/docs/en/api/http/beta/deployments)和[Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)：
+
+- 创建参考页成功码为 200，返回 Deployment；Agent 引用包含 id/type/version。配置可复用，每次运行创建新的 Session。不能将资源 agent 字段理解为每次新增一个 Agent 定义。
+- schedule 响应模型除 type/expression/timezone 外还声明可选 last_run_at、upcoming_runs_at；后者最多五个计划时刻，暂停时仍可表示假设恢复后的匹配，归档为空，不是准点启动承诺。
+- last_run_at 文本称最近一次定时运行实际开始时间，手动运行不更新；同段还写“Null until one completes”，公开文本未在此明确该完成点的内部写入机制，不能推导为业务成功时间。自动生成创建示例中的非空历史时间或 paused_reason 不代表新资源必须具有运行历史。
+- status 为 active/paused，归档由 archived_at 区分；普通响应不采用公司 ResultBean。没有据此推断 Claude 服务端是否使用内部版本或幂等机制。
+
+当前 Claw 固定新会话是已确认的产品范围；移除 target 及其策略类/配置列，运行后生成的 sessionId 仍保留在 Run。创建响应保持 201 + ResultBean + 规范配置的候选，字段说明和待决时间摘要见[创建响应对齐](configuration.md#creation-response-review)。创建配置不创建 Session，不返回运行关联；未确认的动态时间字段不自动写入精确响应。未执行产品 API 或端到端测试。
 
 ## 9. 文档验收
 
-2026-10-04 在 HEAD 加本任务六份 Markdown 的隔离快照执行 `check-diagrams.py --render`、API 技能校验和图索引生成：36 个专题、131 个块、52 张时序图，0 错误；唯一复杂度提示仍为既有 managed_session_compaction，沿用下述职责解释。五个 JSON 示例及变更文档的本地路径、标题锚点检查通过，实际工作树 `git diff --check` 通过。图源和三个 SVG 均未变更，已重新查看原尺寸与 840px 宽度，未见文字、箭头或分支遮挡；图索引生成结果与 HEAD 相同，未覆盖工作树中的无关修改。当前没有 OpenAPI/HTML 精确契约，相关检查不适用；未运行产品实现测试，本次不新增 Maven 依赖。
+0.13.0 新 Session 范围的设计验收（2026-10-04）：在 HEAD 加本任务文件的隔离快照执行 PlantUML 生成、仓库级 `check-diagrams.py --render`、API 技能校验及图索引生成；36 个专题、131 个块、52 张时序图，0 错误，唯一既有复杂度提示沿用下述解释。六份变更 Markdown 的六个 JSON 示例、本地路径和标题/图源锚点检查通过，`git diff --check` 通过；新目标类图已查看 1028×1188 原尺寸与 840px 文档宽度，职责链、文字及箭头可辨。图索引只更新本专题卡片，保留无关工作树变更；没有新增 OpenAPI/HTML 精确接口，未运行产品测试或新增依赖。
+
+0.12.0 的历史验收：2026-10-04 在 HEAD 加当时任务六份 Markdown 的隔离快照执行 `check-diagrams.py --render`、API 技能校验和图索引生成：36 个专题、131 个块、52 张时序图，0 错误；唯一复杂度提示仍为既有 managed_session_compaction，沿用下述职责解释。五个 JSON 示例及变更文档的本地路径、标题锚点检查通过，实际工作树 `git diff --check` 通过。图源和三个 SVG 均未变更，已重新查看原尺寸与 840px 宽度，未见文字、箭头或分支遮挡；图索引生成结果与 HEAD 相同，未覆盖工作树中的无关修改。当前没有 OpenAPI/HTML 精确契约，相关检查不适用；未运行产品实现测试，本次不新增 Maven 依赖。
 
 2026-09-30 的 0.4.0 文档校验已执行：PlantUML 生成、API 技能校验、仓库级 `check-diagrams.py --render` 与 `git diff --check` 通过；36 个专题、131 个块、52 张时序图，0 错误。唯一复杂度提示仍为既有 managed_session_compaction 的三个条件组，职责解释沿用[时序图规范](../../时序图规范.md#3-从总览下钻)。三个 JSON 示例解析通过，Spring 示例与拒绝边界见 §8.1；未运行产品 Maven 测试或集群验收。当前无 OpenAPI/HTML 精确契约，相关校验不适用。
 
-图索引通过 HEAD 加本任务文件的隔离快照生成，未带入无关工作树变更。当前配置保存图为 726×737、全局目标类图为 1302×1205；实际查看原尺寸及 840px 文档宽度，确认角色、分支、文字、箭头与返回路径。图结构延续 Claw 配置边界，图例说明无规则只保存，两个 Session 目标不再预定交付阶段。以下保留 2026-09-29 的历史验收范围，不混用当时的尺寸与本轮结果。
+2026-09-30 的历史图索引通过当时 HEAD 加任务文件的隔离快照生成，未带入无关工作树变更。当时配置保存图为 726×737、全局目标类图为 1302×1205；实际查看原尺寸及 840px 文档宽度，确认角色、分支、文字、箭头与返回路径。该历史图结构延续 Claw 配置边界，图例说明无规则只保存；当时两目标范围不代表当前产品决定。以下保留 2026-09-29 的历史验收范围，不混用当时的尺寸与本轮结果。
 
 2026-09-29 执行 `plantuml -tsvg diagram.puml`、API 技能的 `validate_api_design.py`、`python3 scripts/check-diagrams.py --render` 与 `git diff --check`。仓库级检查覆盖36个专题、131个块、52张时序图，0错误；包括 Mermaid 禁用、ASCII、SVG XML、图源/SVG同步、SVG路径和 PlantUML 行锚点。唯一复杂度提示来自既有 managed_session_compaction 的三分支，职责说明见[时序图规范 §3](../../时序图规范.md#3-从总览下钻)。配置专题没有新增 OpenAPI/HTML 契约，相关检查为不适用，不能据此声称机器契约已交付。
 
@@ -316,6 +342,7 @@ CampusClaw 的目标是保留两种 Session 选择、单条 user.message 及文�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.13.0 | 2026-10-04 | 核验新 Session 与 Agent 定义边界，并补充 Claw 和 Claude 创建响应的准确差异。 |
 | 0.12.0 | 2026-10-04 | 重核名称与仅 Cron 契约，补充文件上传边界及五个基线的定时会话目标证据。 |
 | 0.11.0 | 2026-10-02 | 核对 Claude 时间示例边界，区分既有毫秒实现与 Claw 统一秒级目标。 |
 | 0.10.0 | 2026-09-30 | 补充既有 Session 与完整事件时间证据，明确调度响应采用 UTC 并固定三位毫秒。 |

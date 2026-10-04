@@ -51,13 +51,15 @@ end note
 @enduml
 
 @startuml scheduled_task_architecture
-' Baseline: Claude Deployment / Run / Session, checked 2026-09-29, Beta.
+' Baseline: Claude Deployment / Run / Session, checked 2026-10-04, Beta.
 ' Source: modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob and triggerJob.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start and commitTerminal.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java create.
 ' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a.
 ' Design reason: preserve API, service, policy, adapter, runtime and durable boundaries.
+' Product constraint: every Run creates a new Session using the bound Agent definition.
+' Architecture change: one acceptance path; no existing-session target strategy.
 ' Architecture change: every P node and every connector is Pending implementation.
 title Scheduled tasks - global target
 skinparam backgroundColor white
@@ -80,9 +82,6 @@ class "MyBatisSchedule\nRepository" as RepoImpl <<Adapter / P>>
 interface "ScheduleMapper" as Mapper <<DTO boundary / P>>
 class "GaussDB\nSchedule / Config requests\nRun / Gap / Session / Execution" as Db <<Durable authority>>
 class "ScheduledRunAcceptance\nService" as Accept <<Service / P>>
-interface "ScheduleExecutionTarget" as Target <<Strategy / P>>
-class "NewSessionTarget" as New <<Priority / P>>
-class "ExistingSessionTarget" as Existing <<Target / P>>
 class "Runtime session and\nexecution persistence" as Persist <<Existing>>
 class "RuntimeExecution\nCoordinator" as Coordinator <<Existing>>
 class "AgentSessionFactory" as Factory <<Existing>>
@@ -108,11 +107,7 @@ Accept -[norank]-> Repo
 Repo <|.. RepoImpl
 RepoImpl -down-> Mapper
 Mapper -down-> Db
-Accept o-left-> "1" Target
-Target <|.. New
-Target <|.. Existing
-New -down-> Persist : create / accept
-Existing -down-> Persist : lock / append
+Accept -down-> Persist : create Session / accept
 Persist -[norank]-> Db : same transaction
 Accept -down-> Coordinator : after commit
 Coordinator -[norank]-> Persist : events / terminal
@@ -126,6 +121,7 @@ legend bottom
   Only the Claw HTTP boundary is defined here.
   Configuration handlers never call prepare or start a Session.
   A rule registers automatic work; no rule only saves.
+  Each Run creates a Session, not an Agent definition.
   Execution recovery policies require separate refinement.
   Run + message + execution commit before model or tool I/O.
 endlegend
