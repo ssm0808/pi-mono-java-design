@@ -1,6 +1,6 @@
 # CampusClaw 前端设计
 
-版本：2.5.0 · 2026-09-29 · 模块 M07
+版本：2.5.1 · 2026-10-05 · 模块 M07
 
 [仓库导航](../README.md) · [打开场景原型](原型/index.html) · [公共规范](公共规范.md) · [技术设计与全局类图](技术设计/README.md)
 
@@ -25,7 +25,13 @@
 
 工具活动与授权界面的名称只显示在标题中，展开后查看参数和结果；长标题在展开状态完整换行，规则见[内容渲染 §9.7](技术设计/内容渲染.md#mate-tool-display)。
 
-定时任务目前仅定义 [Claw 配置接口](../01-总体架构/08-CampusClaw定时任务/configuration.md)。页面和 Mate 接入不在该专题范围，暂无相应页面设计或原型；不能从内部 Runtime 工作台推导生产接入方案。
+定时任务的精确契约见 [Claw 配置接口](../01-总体架构/08-CampusClaw定时任务/configuration.md)，内部工作台页面见
+[定时任务前端设计](https://github.com/superheromeZzh/pi-mono-java/blob/2b93cbea90b3e876f5a87a8905c816f0e33b8f47/docs/designs/frontend-schedules.md)。
+源码核验基线为 `pi-mono-java@2b93cbea90b3e876f5a87a8905c816f0e33b8f47`：
+`frontend/src/components/schedules/ScheduleWorkspace.vue`、`ScheduleForm.vue`、`ScheduleDetails.vue`、
+`ScheduleRunDetails.vue` 与 `schedulePresentation.ts` 已实现列表、任务指令编辑、可读计划、近期运行与会话入口，
+技术字段按需展开。前端 430 项测试及生产构建通过，浏览器交互和视觉验收未执行；该源码在功能分支交付，
+不代表生产 Mate 前端或企业联调完成。当前八个场景原型未包含定时任务，不能将现有会话原型当作定时任务高低保真。
 
 ## 阅读与维护
 
@@ -54,6 +60,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.5.1 | 2026-10-05 | 补充已实现定时任务工作台的设计入口、源码基线与测试及视觉验收边界。 |
 | 2.5.0 | 2026-09-29 | 明确定时任务专题仅定义 Claw 接口，页面与 Mate 接入另行设计。 |
 | 2.4.0 | 2026-09-29 | 增加定时任务配置闭环入口，区分正式 Mate 接入与已有内部调试工作台。 |
 | 2.3.0 | 2026-09-19 | 工具名称只显示在活动与确认标题中，展开详情直接呈现参数和结果。 |
