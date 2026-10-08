@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project Claw schedule and Mate execution Markdown separately through the repository's existing API renderer."""
+"""Project Claw schedule Markdown through the repository's existing API renderer."""
 import argparse
 import copy
 import hashlib
@@ -12,9 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TOPIC = ROOT / '01-总体架构/08-CampusClaw定时任务'
 RUNTIME = ROOT / '01-总体架构/01-CampusClaw多Agent运行时'
-MATE = ROOT / '02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md'
 OUTPUT = TOPIC / 'schedule-api-review.html'
-MATE_OUTPUT = MATE.parent / 'execution-api-review.html'
 spec = importlib.util.spec_from_file_location('schedule_shared_renderer', RUNTIME / 'render_chat_http_v1.py')
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
@@ -113,18 +111,18 @@ def bilingual_errors(section, allowed=None):
     return result
 
 
-def model(key, method, route, name, purpose, params, body, responses, details, *, mate=False):
-    language = 'en-US' if mate else 'zh-CN'
+def model(key, method, route, name, purpose, params, body, responses, details):
+    language = 'zh-CN'
     headers = [{'name': 'Accept-Language', 'value': language, 'required': False,
                 'description': f'支持 zh-CN/en-US；缺省或不支持时回退 {language}；返回实际 Content-Language。'}]
     if body.get('required'):
         headers.insert(0, {'name': 'Content-Type', 'value': 'application/json',
                           'required': True, 'description': 'JSON 请求体。'})
     item = {
-        'api': {'title': 'Mate 执行上下文与凭据 API' if mate else 'CampusClaw 定时任务 API',
-                'version': '0.1.0' if mate else '0.28.0',
-                'basePath': '/mate-service/v1' if mate else '/campusclaw-service/v1',
-                'visibility': 'Internal · 接口草案 · 待实现' if mate else 'Internal · 目标契约 · 待实现',
+        'api': {'title': 'CampusClaw 定时任务 API',
+                'version': '0.28.0',
+                'basePath': '/campusclaw-service/v1',
+                'visibility': 'Internal · 目标契约 · 待实现',
                 'fieldNaming': 'lowerCamelCase', 'headerNaming': '保留原名'},
         'operation': {'operationKey': key, 'shortName': name, 'method': method, 'path': route,
                       'summary': name, 'description': purpose,
@@ -239,34 +237,12 @@ def build_models(claw):
     return models
 
 
-def build_mate_models(mate):
-    internal = sections(mate)
-    models = []
-    for key, route, name, number, purpose in [
-        ('QueryScheduleContext', '/runtime/schedule-contexts/query', '查询执行上下文', '3.',
-         '保存及触发时核验当前 Agent、凭据引用和执行授权；只读查询，不调用模型或业务工具，不返回秘密。'),
-        ('ResolveExecutionCredential', '/runtime/credentials/resolve', '解析执行凭据', '4.',
-         '可信执行适配器按已准备的业务目标解析本次受限凭据；参数或权限未通过时不得调用。'),
-    ]:
-        request, result = examples(internal[number])
-        body = {'required': True, 'contentType': 'application/json', 'description': '内部服务JSON请求；可信主体来自已验证调用上下文。', 'example': request}
-        success = response(200, '将原文 ResultBean.result 示例按公司成功信封展示；值为占位示例。',
-                           {'resCode': '0', 'resMsg': 'success', 'result': result})
-        success['bodies'] = {'en-US': success['bodies']['zh-CN']}
-        models.append(model(key, 'POST', route, name, purpose, [], body,
-                            [success] + bilingual_errors(internal['5.']),
-                            contract_sections(internal, ['1.', number, '5.']), mate=True))
-    return models
-
-
 def render_item(index, model):
     operation = model['operation']
     key = html.escape(operation['operationKey'])
-    mate = model['api']['basePath'].startswith('/mate-service/')
-    source = 'scheduled-execution.md' if mate else 'configuration.md'
-    status = '接口草案 · 待实现' if mate else '目标契约 · 待实现'
-    note = ('路径与字段为配套草案，实际公司认证与凭据系统需接线校准。' if mate else
-            '展示原维护契约，尚未发布。身份适配与持久化接线待实现；源码证据日期沿用原文。')
+    source = 'configuration.md'
+    status = '目标契约 · 待实现'
+    note = '展示原维护契约，尚未发布。身份适配与持久化接线待实现；源码证据日期沿用原文。'
     return (
         f'<details class="catalog-item" id="{key}" data-catalog-key="{key}">'
         f'<summary><span class="catalog-line"><span>{index + 1:02d}</span>'
@@ -275,27 +251,24 @@ def render_item(index, model):
         f'<code class="catalog-path">{html.escape(operation["path"])}</code></summary>'
         f'<p class="catalog-caveat">{note}</p>'
         f'<p class="catalog-links"><a href="{source}">契约原文</a> · '
-        f'<a href="{"source-evidence.md" if not mate else source}">设计依据与实施边界</a> · '
+        f'<a href="source-evidence.md">设计依据与实施边界</a> · '
         f'<a href="#{key}">此接口链接</a></p>'
         f'<section class="company-api-review" data-operation-review="{key}" data-operation-index="{index}">'
         f'<div class="api-shell" data-api-shell>{shared.render_static(model, expand_details=True)}</div></section></details>'
     )
 
 
-def build_html(mate=False):
-    source_path = MATE if mate else TOPIC / 'configuration.md'
+def build_html():
+    source_path = TOPIC / 'configuration.md'
     text = source_path.read_text()
-    models = build_mate_models(text) if mate else build_models(text)
-    title = 'Mate 执行上下文与凭据接口' if mate else 'CampusClaw 定时任务接口'
-    base = '/mate-service/v1' if mate else '/campusclaw-service/v1'
-    status = ('路径与字段为内部草案，待实现；实际公司认证与凭据系统需接线校准。' if mate else
-              'Claw 目标契约待实现；各项证据日期与范围以源码证据文档为准。')
-    links = ('<a href="README.md">共享连接目录</a> · <a href="scheduled-execution.md">Mate契约原文</a>' if mate else
-             '<a href="README.md">模块主设计</a> · <a href="configuration.md">Claw契约原文</a> · '
-             '<a href="../../02-服务与接口/02-CampusMate共享客户端配置/execution-api-review.html">Mate依赖接口</a> · '
+    models = build_models(text)
+    title = 'CampusClaw 定时任务接口'
+    base = '/campusclaw-service/v1'
+    status = 'Claw 目标契约待实现；各项证据日期与范围以源码证据文档为准。'
+    links = ('<a href="README.md">模块主设计</a> · <a href="configuration.md">Claw契约原文</a> · '
              '<a href="execution.md">执行与工程落地</a>')
     identities = set()
-    version_pattern = r'版本：([\d.]+)' if mate else r'\| 版本 \| ([\d.]+)'
+    version_pattern = r'\| 版本 \| ([\d.]+)'
     version = re.search(version_pattern, text)[1]
     for item in models:
         operation = item['operation']
@@ -324,9 +297,9 @@ def build_html(mate=False):
 <!-- Generated by scripts/render-schedule-api.py. Do not edit directly.
 {manifest}
 -->
-<main id="{"mate-execution-api-catalog" if mate else "schedule-api-catalog"}">
+<main id="schedule-api-catalog">
 <header class="catalog-header"><h1>{title} · {len(models)} 项</h1>
-<p>{len(models)} 个{" Mate 内部草案" if mate else " Claw 操作"}：<code>{base}</code>。</p>
+<p>{len(models)} 个 Claw 操作：<code>{base}</code>。</p>
 <p>沿用仓库现有接口页的展示与交互。展开一个接口即可查看调用上下文、参数、请求示例、规则和响应；响应状态与语言使用标签切换。</p>
 <p>{status} Markdown继续作为维护源。</p>
 <p>{links}</p>
@@ -342,10 +315,9 @@ def build_html(mate=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
-    parser.add_argument('--mate', action='store_true', help='Generate the separate Mate execution page')
     args = parser.parse_args()
-    output = MATE_OUTPUT if args.mate else OUTPUT
-    content = build_html(mate=args.mate)
+    output = OUTPUT
+    content = build_html()
     if args.check:
         shared.require(output.read_text() == content, 'API HTML is stale; regenerate it')
     else:

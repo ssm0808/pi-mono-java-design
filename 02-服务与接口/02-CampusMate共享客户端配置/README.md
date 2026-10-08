@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.7.1 |
+| 文档版本 | 2.7.2 |
 | 状态 | 原有统一连接配置已实现；模型能力查询与定时执行增量待实现，具体范围见 §2 |
 | 更新日期 | 2026-10-08 |
 | pi-mono-java 源码基线 | 历史 `320d790726a70aada6100052952d5494d2a378ac`；本次局部核验 `553dcd5e2ff682f9684810a043b442b37a02e54a` |
@@ -11,7 +11,7 @@
 
 ## 1. 职责与目标配置
 
-本专题维护 CampusClaw 调用 CampusMate 的连接配置：唯一服务地址、唯一 operation 路径目录，以及各客户端独立的传输参数。模型调用、Runtime 发现与 Tool 执行的业务契约分别由所属模块维护。[执行上下文与凭据 HTML](execution-api-review.html)独立展示查询上下文和解析凭据两个操作，沿用仓库现有接口样式；[定时执行上下文与凭据](scheduled-execution.md)维护现有Mate接口草案；Mate作为可信接口定义、授权和凭据来源及Schedule使用credentialIds已确认，新增路径与报文字段仍是待实现的配套设计。
+本专题维护 CampusClaw 调用 CampusMate 的连接配置：唯一服务地址、唯一 operation 路径目录，以及各客户端独立的传输参数。模型调用、Runtime 发现与 Tool 执行的业务契约分别由所属模块维护。[定时执行上下文与凭据](scheduled-execution.md)维护现有Mate接口草案；Mate作为可信接口定义、授权和凭据来源及Schedule使用credentialIds已确认，新增路径与报文字段仍是待实现的配套设计。
 
 Mate 与 CampusMate 是同一个服务，所有连接与路径使用以下 `campusmate` 目标配置树。原有7项目标路径增加2项定时接口，共9项；当前源码已实现其中6项配置绑定，模型能力查询及新增2项尚待实现，不能把目标目录等同于已发布服务。
 
@@ -226,21 +226,11 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 - [定时执行上下文与凭据](scheduled-execution.md)：两个Mate新增接口草案、调用身份、按目标resolve及安全边界。
 - [源码证据](source-evidence.md)：客户端路径归属、历史重复项和服务端核验范围；[定时工程核验](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)记录本次实际读取范围。
 
-## 12. HTML 展示页维护
-
-执行上下文与凭据展示从 `scheduled-execution.md` 生成，保留草案路径、字段和待实现状态。页面位置不改变接口契约或当前定时执行适配关系；架构对比结论及源码基线保持不变。与Claw页面共用生成器及Runtime渲染资源，不复制样式或另建JSON契约源：
-
-```bash
-python3 scripts/render-schedule-api.py --mate
-python3 scripts/render-schedule-api.py --mate --check
-```
-
-在仓库根运行。Mate页面只读取本专题契约；Claw定时任务页面独立生成，不包含这两个Mate操作。
-
-## 13. 版本历史
+## 12. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.7.2 | 2026-10-08 | 移除执行上下文与凭据HTML展示及生成入口，保留Markdown接口草案。 |
 | 2.7.1 | 2026-10-08 | 上下文查询与凭据解析新增独立HTML展示及同步检查入口。 |
 | 2.7.0 | 2026-10-05 | 目标目录增加定时上下文查询与凭据解析两项，并区分普通请求快照、服务认证和Mate执行授权。 |
 | 2.6.0 | 2026-09-19 | 模型窗口按新执行读取，输出额度归 Mate，配置迁移与 Chat 字段退役协同发布。 |
