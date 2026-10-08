@@ -1,13 +1,13 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.19.1`<br>
-> 日期：`2026-09-14`<br>
+> 版本：`v0.19.2`<br>
+> 日期：`2026-10-08`<br>
 > 状态：既有行为以所列旧基线为准；Agent.mode 与 Session 默认值链路为 待实现<br>
 > 设计仓库分析基线：`c892946d867ab1ee81f2684229b0343ce9733cc0`<br>
 > Java 实现分析基线：`mate-service@9dd5d85e2ed6561ad654b11f817ef572cc8bac7c`<br>
-> Agent JSON 工作区 SHA-256：`2639da6e9b5566afcc5ca8d1ff15c83570c73faeda13d3d38b20e4f3f012f62c`<br>
-> Tool JSON 工作区 SHA-256：`3f4d88b30f4f22ef28e5356df0e5927adf43e34551384cec0883a895fcaa0746`
+> 历史 Agent 字段说明 JSON SHA-256：`2639da6e9b5566afcc5ca8d1ff15c83570c73faeda13d3d38b20e4f3f012f62c`<br>
+> 历史 Tool 字段说明 JSON SHA-256：`3f4d88b30f4f22ef28e5356df0e5927adf43e34551384cec0883a895fcaa0746`
 
 > mode 专项设计基线：`40a159d361f2f3e9da04594f791607dac85fd192`；实现核对：`mate-service@956b547f5ca12ca89e68f73012f92a4406b0c9fa`、`pi-mono-java@09b32d8ea4a4b43b34be302d8b2745bdc417c9a2`，范围见 §2.3。
 
@@ -15,7 +15,7 @@
 
 本模块维护 Agent 定义、绑定与运行依赖查询；Session 当前模式、执行状态和历史由 Session 模块维护。
 
-基于当前 [`AGENT元数据设计.json`](../../06-元数据草案/AGENT元数据设计.json)，Agent 当前元数据使用 5 张表：
+基于当前 [`AGENT元数据设计.json`](../../06-元数据设计/AGENT元数据设计.json)，Agent 当前元数据使用 5 张表：
 
 1. `t_agent_definition`：标量字段、System Prompt 展开字段和 `use_cases`。
 2. `t_agent_binding_models`：`binding_models[]`，保留数组顺序。
@@ -37,11 +37,11 @@ Runtime 查询按资源 ID 与可空版本批量解析直接绑定，任一依�
 
 ### 2.1 输入元数据
 
-- 基本字段、状态和名称：[`AGENT元数据设计.json` 第 2–10 行](../../06-元数据草案/AGENT元数据设计.json#L2)。
-- 默认模式、模型绑定和 System Prompt：[`第 11 行起`](../../06-元数据草案/AGENT元数据设计.json#L11)。
-- Use Cases、Tool、Skill、Agent 绑定及权限：[`第 23 行起`](../../06-元数据草案/AGENT元数据设计.json#L23)。
-- Tool 并行安全标志：[`TOOL元数据设计.json` 第 8 行](../../06-元数据草案/TOOL元数据设计.json#L8)。
-- Tool 输入输出 Schema：[`TOOL元数据设计.json` 第 14–23 行](../../06-元数据草案/TOOL元数据设计.json#L14)；该字段属于 Tool 元数据，但不进入 Runtime Agent 响应。
+当前元数据设计与三个完整样例由[元数据设计](../../06-元数据设计/README.md)维护。样例使用设备告警场景，字段类型和相互引用可直接核对；样例数据不对应已部署资源，也不改变本文的实现与接口边界。页首 JSON 哈希保留历史字段说明证据，不代表当前样例文件。
+
+- Agent 身份、mode、模型、System Prompt、Use Cases 与各类绑定：[`AGENT元数据设计.json`](../../06-元数据设计/AGENT元数据设计.json)。
+- Tool 并行安全标志、权限与输入输出 Schema：[`TOOL元数据设计.json`](../../06-元数据设计/TOOL元数据设计.json)；Schema 不进入 Runtime Agent 响应。
+- Skill 场景、工具引用及权限：[`SKILL元数据设计.json`](../../06-元数据设计/SKILL元数据设计.json)。
 
 ### 2.2 Java 基线
 
@@ -493,6 +493,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.19.2` | 2026-10-08 | 对齐正式元数据设计和园区告警样例，保留原源码与实现状态边界。 |
 | `v0.19.1` | 2026-09-14 | 收敛重复契约说明，按固定源码校正绑定读取顺序并重排表图与查询流程。 |
 | `v0.19.0` | 2026-09-14 | Agent 增加字符串 mode，初始化新交互 Session 的默认模式并贯通存储、发布和读取。 |
 | `v0.18.9` | 2026-08-12 | 根 Runtime Agent 删除 `createdAt` 和 `updatedAt`。 |

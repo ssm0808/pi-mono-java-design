@@ -1,0 +1,29 @@
+{
+    "id": "skill-550e8400e29b41d4a716446655440003",
+    "type": "skill",
+    "version": 1,
+    "created_at": "2026-10-08T02:00:00Z",
+    "updated_at": "2026-10-08T02:00:00Z",
+    "enabled": true,
+    "name": "device-alarm-triage",
+    "display_name": "设备告警排查",
+    "description": "按确认设备、查询告警、归纳影响和提出核查建议的步骤辅助园区运维人员排查告警。",
+    "use_cases": [
+        "排查设备当前告警",
+        "整理设备告警核查建议"
+    ],
+    "binding_tools": [
+        {
+            "tool_id": "tool-550e8400e29b41d4a716446655440002",
+            "version": 1
+        }
+    ],
+    "binding_skills": [],
+    "permission": {
+        "deny": [],
+        "ask": [],
+        "allow": [
+            "tool-550e8400e29b41d4a716446655440002"
+        ]
+    }
+}
