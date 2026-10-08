@@ -2,7 +2,7 @@
 
 版本：0.1.0；日期：2026-10-05；状态：接口草案，待实现。Mate作为可信接口定义、执行身份和凭据来源已确认；以下新增Mate路径及字段是配套设计，不冒充已发布接口。
 
-[共享连接目录](README.md) · [HTML 展示](../../01-总体架构/08-CampusClaw定时任务/schedule-api-review.html#mate) · [定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [执行与工程落地](../../01-总体架构/08-CampusClaw定时任务/execution.md) · [核验依据](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)
+[共享连接目录](README.md) · [HTML 展示](../../01-总体架构/08-CampusClaw定时任务/schedule-api-review.html#QueryScheduleContext) · [定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [执行与工程落地](../../01-总体架构/08-CampusClaw定时任务/execution.md) · [核验依据](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)
 
 ## 1. 业务问题与边界
 

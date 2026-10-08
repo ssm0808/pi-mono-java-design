@@ -1,6 +1,6 @@
 # Claw 定时任务配置与生命周期接口
 
-[模块主设计](README.md) · [HTML 展示](schedule-api-review.html#claw) · [源码证据](source-evidence.md#configuration-evidence) · [与 Claude 的取舍](#claude-tradeoffs)
+[模块主设计](README.md) · [HTML 展示](schedule-api-review.html#CreateSchedule) · [源码证据](source-evidence.md#configuration-evidence) · [与 Claude 的取舍](#claude-tradeoffs)
 
 | 属性 | 值 |
 |---|---|

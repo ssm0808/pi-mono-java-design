@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.29.1 |
+| 文档版本 | 0.29.2 |
 | 更新日期 | 2026-10-08 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -16,7 +16,7 @@
 
 接口规则由[Claw 配置专题](configuration.md)维护；运行策略、物理模块合并、持久化边界和上线初始值由[执行专题](execution.md)维护。Mate负责可信接口定义、执行资格和凭据解析，新增内部契约见[Mate执行上下文草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)。本文保留整体职责、主流程与全局目标类图。所有新增能力均待实现，不把旧进程内Cron当成新接口已交付。
 
-[接口 HTML 展示](schedule-api-review.html)从上述 Claw 契约和 Mate 草案完整生成，提供 11 个 Claw 操作、2 个 Mate 草案的定位目录、目录筛选和示例复制；原有实现状态与证据日期保持不变。时间预览定位到原文接口清单，未另补缺少依据的独立报文。Markdown 继续作为维护源，HTML 可离线阅读，不发起业务调用。生成与同步检查见[展示页维护](#html-maintenance)。本入口不改变架构对比 A14 的结论。
+[接口 HTML 展示](schedule-api-review.html)从上述 Claw 契约和 Mate 草案生成，复用 Runtime 接口页的共享渲染器、样式和按操作展开交互，展示 11 个 Claw 操作、2 个 Mate 草案的调用上下文、参数、请求示例、规则与响应状态/语言标签；原有实现状态与证据日期保持不变。时间预览的完整报文仍未在原文展开，页面明确保留该缺口。Markdown 继续作为维护源，HTML 可离线阅读，不发起业务调用。生成与同步检查见[展示页维护](#html-maintenance)。本入口不改变架构对比 A14 的结论。
 
 园区运营人员配置“每天 08:00 汇总设备告警、检查未关闭工单”，保存后由服务端按时发起 Agent 工作，无需浏览器保持打开。用户能看见下一次计划时间、每次是否成功启动、执行结果和失败原因，并能暂停后续运行。
 
@@ -254,19 +254,20 @@ Cron并入现有modules/coding-agent-cli和campusclaw-coding-agent制品，包�
 
 ### HTML 展示页维护
 
-修改 `configuration.md` 或 Mate 的 `scheduled-execution.md` 后，使用现有环境的 `marked` 重新生成页面；不手工修改生成的 HTML，不新增应用或 Maven 依赖。脚本默认解析当前 Node 环境的 `marked`，也可通过 `--marked-module` 指定既有模块的绝对路径：
+修改 `configuration.md` 或 Mate 的 `scheduled-execution.md` 后，使用 Python 标准库与仓库既有 `render_chat_http_v1.py` 重新生成页面；不手工修改生成的 HTML，不新增应用或 Maven 依赖。CSS、响应切换及按操作延迟挂载直接复用 Runtime 的页面资源，不另维护一套样式或交互：
 
 ```bash
-node scripts/render-schedule-api.mjs --marked-module /absolute/path/to/marked/lib/marked.esm.js
-node scripts/render-schedule-api.mjs --marked-module /absolute/path/to/marked/lib/marked.esm.js --check
+python3 scripts/render-schedule-api.py
+python3 scripts/render-schedule-api.py --check
 ```
 
-在仓库根运行；`--check` 对比完整生成内容，检查 Markdown 与 HTML 同步。页面的本地文档链接、片段定位、示例、窄屏表格和 JavaScript 禁用后的可读性仍须检查，生成同步不等于接口已实施验收。
+在仓库根运行；`--check` 对比完整生成内容，检查 Markdown、共享渲染资源与 HTML 同步。生成器从原文取表格、规则和报文，按操作组装临时展示模型，不增加独立JSON契约源。详情复用原文同形资源，Run列表及Mate成功体仅按原文明确的结构包装已有示例；未给出报文的预览不补造。页面链接、按操作展开与关闭后状态保留、响应/语言切换、窄屏表格和JavaScript禁用后的可读性仍须检查，生成同步不等于接口已实施验收。
 
 ## 13. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.29.2 | 2026-10-08 | 定时接口HTML复用仓库现有接口渲染器、操作折叠和响应状态/语言切换。 |
 | 0.29.1 | 2026-10-08 | 增加从现有Claw契约和Mate草案生成的HTML展示入口及同步检查。 |
 | 0.29.0 | 2026-10-05 | 确定非交互、无补跑和不重跑策略，明确Mate权威、删除不取消与coding-agent模块合并。 |
 | 0.28.0 | 2026-10-05 | 删除Schedule及对应Run并保留Session，明确删除后的读取与收尾边界。 |
