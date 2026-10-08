@@ -1,62 +1,45 @@
 @startuml scheduled_run_sequence
-' Baseline: Claude scheduled-deployments, checked 2026-09-29, Beta.
+' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a; main fetched 2026-10-08 (unchanged).
 ' Source: modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java executeAndReschedule.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventOutput.java persistenceOnly.
-' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a.
-' Design reason: durable occurrence and atomic acceptance, guarded against deletion, precede external work.
-' Architecture change: scheduled acceptance and persistent Cron sessions are Pending implementation.
-' Product constraints: no catch-up, skip when busy, no replay after failure or lost ownership.
-' Product constraints: Mate supplies trusted definitions and credentials; no interactive scheduled work.
-title Daily alarm summary - new session (Pending implementation)
+' Presentation: Scheduler owns dispatch and reconciliation; Schedule owns preparation and admission.
+' Design reason: separate durable admission from Runtime execution and its actual outcome.
+' Target: Pending implementation; no catch-up, no replay, unknown outcomes keep the task busy.
+title Automatic alarm summary - dispatch to outcome\n(Pending implementation)
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 participant Scheduler
-participant Host
-database Store
+participant Schedule
 participant Runtime
-participant AgentLoop
-Scheduler -> Store : Claim current occurrence and task slot\nInsert Run, advance future cursor; commit
-Store --> Scheduler : Run identity and claim epoch
-Scheduler -> Host : Prepare Agent snapshot\nResolve Mate definitions, grant and credential references
-Host --> Scheduler : Prepared run or rejection
-alt Preparation rejected
-  Scheduler -> Store : Record failure only for existing task / Run\nRelease own slot; no retry
-  Store --> Scheduler : Durable failure or deletion preserved
-else Preparation ready
-  Scheduler -> Runtime : Accept Run with prepared snapshot
-  Runtime -> Store : Require existing, non-deleted task\nRecheck state, time, claim and capacity\nCreate Session, message, root execution\nand Run link in one transaction
-  Store --> Runtime : Committed acceptance
-  Runtime --> Scheduler : Accepted identity (not completion)
-  Runtime -> Store : CAS READY to STARTING for live owner
-  Store --> Runtime : Single start grant
-  Runtime ->> AgentLoop : Start through shared Session factory
-  note right of AgentLoop
-    Target -> arguments -> permission
-    -> credentials -> business execution -> result.
-    ASK ends this root through the Host.
-    No automatic approval or durable wait.
-  end note
-  AgentLoop -> Runtime : Content and actual root outcome
-  Runtime -> Store : Persist events and root terminal state
-  Store --> Runtime : Durable outcome
-  Scheduler -> Store : Reconcile fixed root execution\nUpdate existing task / Run only; release own slot
-  Store --> Scheduler : Existing history updated or cleanup only
+database Store
+== Allocate this occurrence ==
+Scheduler -> Schedule : Dispatch a due alarm-summary task
+Schedule -> Store : Claim due Run and task slot\nAdvance the plan only if eligible; commit
+Store --> Schedule : Claimed Run or skip
+break Task ineligible or already busy
+  Schedule --> Scheduler : Skip this occurrence; do not queue
 end
-note over Scheduler, Runtime
-  Rejection records failure only while task / Run exist.
-  Duplicate acceptance returns the existing link only.
-  Pause after acceptance does not cancel the Run.
-  Deletion does not cancel an already accepted Session.
-  Deletion removes Schedule and Run; Session remains independent.
-  Late completion never recreates deleted Schedule or Run.
-  Internal coordination remains until safe cleanup.
-  Lost owner requires reconciliation, not replay.
-  No catch-up after restart; busy occurrences are skipped.
-  Unknown outcomes remain unknown and keep the task busy.
-end note
+== Prepare and accept ==
+ref over Schedule, Store
+  Shared Run admission
+  Mate grant -> Runtime preparation -> atomic acceptance
+  See schedule_run_admission
+end ref
+Schedule --> Scheduler : Committed admission result\nand prepared context when accepted
+break Run not accepted
+  Scheduler -> Scheduler : Finish this attempt; no replay
+end
+== Execute the accepted Run ==
+Scheduler ->> Runtime : Start once with the same prepared context
+Runtime -> Runtime : Guard start ownership\nRun Agent with noninteractive Host policy
+Runtime -> Store : Persist messages and tool results\nPersist root terminal state when confirmed
+Store --> Runtime : Durable execution records
+== Reconcile the original root ==
+Scheduler -> Store : Read fixed root outcome; update existing summary\nRelease own task slot only after confirmed termination
+Store --> Scheduler : Terminal reflected, or unknown still occupied
 @enduml
 
 @startuml scheduled_task_architecture
@@ -164,89 +147,115 @@ endlegend
 @enduml
 
 @startuml schedule_configuration_save
-' Target: Pending implementation; Claw configuration request, no in-request execution.
-' Evidence: pi-mono-java 553dcd5e2ff682f9684810a043b442b37a02e54a
-' modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob
-' modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java saveUnsafe
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare
-' Design reason: durable independent creation and read-only Mate binding checks.
-' Product constraint: text-only initial message; credentials remain references at rest.
-title Claw schedule configuration - Pending implementation
-skinparam backgroundColor white
-skinparam defaultFontSize 14
-hide footbox
-actor Caller
-participant Schedule
-participant Mate
-database Store
-Caller -> Schedule : Create configuration
-Schedule -> Schedule : Authenticate; authorize scope\nValidate request shape
-Schedule -> Mate : Read trusted Agent and credential bindings\nand current management grant
-Mate --> Schedule : Binding or typed rejection
-Schedule -> Schedule : Validate complete configuration and rule
-break Binding or rule rejected
-  Schedule --> Caller : Safe typed error; no write
-end
-Schedule -> Store : Insert active configuration with new ID\nCommit one transaction
-Store --> Schedule : Committed resource or rollback
-Schedule --> Caller : 201 resource + Location\nor safe typed failure
-note over Caller, Store
-  Text-only initial message; no attachment acceptance.
-  No Session, model, tool, or directory publication in this request.
-  Store credential references only; resolve secrets at execution.
-  A rule registers automatic work; no rule only saves.
-  Each successful create allocates a new configuration ID.
-  Lost response: inspect saved resources before another write.
-end note
-@enduml
-
-@startuml schedule_manual_run
-' Target: Pending implementation; manual alarm summary from request to Run response.
-' Baseline: Claude deployments/run and deployment_runs, checked 2026-10-05, Beta.
-' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a, main, fetched 2026-10-05.
-' Source: modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java triggerJob.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage.
-' Design reason: return a durable acceptance outcome without waiting for model completion.
-' Architecture change: manual and automatic entries share admission, not legacy prompt.join().
-title Manual alarm summary - Run receipt (Pending implementation)
+' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a; main fetched 2026-10-08 (unchanged).
+' Source: modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java saveUnsafe (legacy file persistence).
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare (not a read-only management check).
+' Presentation: Caller requests; Schedule validates and saves; Mate authorizes; Store commits.
+' Design reason: management checks do not prepare or execute an Agent Session.
+' Target: Pending implementation; text-only input and credential references at rest.
+title Create an alarm-summary schedule\n(Pending implementation)
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor Caller
 participant Schedule
-participant Host
+participant Mate
 database Store
-participant Runtime
-Caller -> Schedule : Run saved configuration
-Schedule -> Schedule : Authenticate and validate request\nAuthorize current task scope
-Schedule -> Store : Read authorized configuration snapshot
-Store --> Schedule : Saved task and internal generation
-Schedule -> Host : Prepare Agent, Mate definitions and current grant\nCheck credential references; no model or business tool work
-Host --> Schedule : Prepared snapshot or known rejection
-alt Preparation rejected
-  Schedule -> Store : Recheck scope and current task\nCommit failed Run only
-  Store --> Schedule : Run with safe error
-else Preparation ready
-  Schedule -> Runtime : Accept manual Run using prepared snapshot
-  Runtime -> Store : Recheck task, generation, grant and slot\nCommit Session + first message + root + Run\nor a known rejected Run
-  Store --> Runtime : Durable acceptance outcome
-  Runtime --> Schedule : Run with Session ID or safe error
+Caller -> Schedule : Create task with Agent, message and optional rule
+Schedule -> Schedule : Validate identity, scope, input and time rule
+break Request rejected
+  Schedule --> Caller : Request error; no configuration written
 end
-Schedule --> Caller : 200 + Run (Session ID XOR error)
-note over Store, Runtime
-  Only committed acceptance permits background model/tool work.
-  Execution continues through the shared Runtime lifecycle.
-  Failure and lost ownership do not replay this attempt.
-  ASK ends the root through the Host; no durable wait.
-  Schedule deletion does not cancel an accepted Session.
-  Run receipt does not track business completion.
-  Late completion cannot recreate deleted Schedule or Run.
+Schedule -> Mate : Check Agent and credential bindings\nand current management grant
+Mate --> Schedule : Trusted bindings or rejection
+break Binding or grant rejected
+  Schedule --> Caller : Safe error; no configuration written
+end
+Schedule -> Store : Commit new active configuration\nwith credential references and next planned time
+Store --> Schedule : Committed configuration
+Schedule --> Caller : 201 + saved configuration\nand future planned times
+note over Schedule, Store
+  This request saves a task; it creates no Session.
+  Model and business tools run only after a later admission.
 end note
-note over Caller, Schedule
-  Request, authorization or unreliable storage errors: 4xx/5xx.
-  No request key; separate calls create separate attempts.
-  Lost response: reconcile before another POST.
+@enduml
+
+@startuml schedule_manual_run
+' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a; main fetched 2026-10-08 (unchanged).
+' Source: modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java triggerJob.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute (legacy synchronous prompt.join).
+' Presentation: Schedule owns admission; the response is not a Runtime completion callback.
+' Design reason: manual and automatic entries share admission and task exclusion.
+' Target: Pending implementation; manual runs never move the automatic plan.
+title Run an alarm summary now - admission receipt\n(Pending implementation)
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor Caller
+participant Schedule
+database Store
+Caller -> Schedule : Run the saved task now
+Schedule -> Schedule : Authenticate and authorize this request
+Schedule -> Store : Read current task and reserve a manual Run\nCheck the shared task slot; keep the automatic plan
+Store --> Schedule : Reserved Run or recorded busy rejection
+alt Task slot reserved
+  ref over Schedule, Store
+    Shared Run admission
+    Mate grant -> Runtime preparation -> atomic acceptance
+    See schedule_run_admission
+  end ref
+else Task already busy
+  Schedule -> Schedule : Use this attempt's committed rejection\nDo not prepare or start another Session
+end
+Schedule --> Caller : 200 + Run\nSession ID or admission error
+note over Caller, Store
+  Only a committed, known admission result is a 200 Run.
+  Request / authority / storage errors use HTTP errors.
+  Accepted execution continues independently of this response.
+end note
+@enduml
+
+@startuml schedule_run_admission
+' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a; main fetched 2026-10-08 (unchanged).
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java create.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java submitLocked.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage.
+' Presentation: Schedule coordinates the transaction; Runtime provides preparation and persistence capabilities.
+' Design reason: remote grant checks finish before the short acceptance transaction.
+' Target: Pending implementation; a reserved Run enters, a known admission result leaves; no execution here.
+title Shared Run admission - prepare, then commit\n(Pending implementation)
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+participant Schedule
+participant Mate
+participant Runtime
+database Store
+== Check current execution authority ==
+Schedule -> Mate : Resolve trusted definitions, current grant\nand credential references for this Run
+Mate --> Schedule : Execution context or rejection
+break Execution context unavailable or rejected
+  Schedule -> Store : Record failure only if task / Run still exist\nRelease only this Run's slot
+  Store --> Schedule : Failure committed or deletion preserved
+end
+== Prepare without executing ==
+Schedule -> Runtime : Prepare Agent, model and CRON context\nNo model request or business tool call
+Runtime --> Schedule : Fixed preparation snapshot or failure
+alt Preparation succeeded
+  group One short database transaction, coordinated by Schedule
+    Schedule -> Store : Recheck task, claim, grant, time and capacity\nCreate Session + first message + root + Run link
+    Store --> Schedule : Committed acceptance or known rejection
+  end
+else Preparation failed
+  Schedule -> Store : Record failure only if task / Run still exist\nRelease only this Run's slot
+  Store --> Schedule : Failure committed or deletion preserved
+end
+note over Schedule, Store
+  Admission uses Runtime persistence inside the same transaction.
+  An accepted Run keeps its prepared context for dispatch.
+  No model or tool execution occurs in this sequence.
 end note
 @enduml

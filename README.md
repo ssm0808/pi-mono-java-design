@@ -1,6 +1,6 @@
 # CampusClaw 设计仓库
 
-导航版本 3.63.1 · 2026-10-08
+导航版本 3.63.2 · 2026-10-08
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
@@ -39,6 +39,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 | 了解架构取舍 | [Agent 架构对比](01-总体架构/07-Agent架构对比/README.md)：基线做法、差异原因、代价和实现状态，复用模块主图 |
 | 计划流式生成与审核 | M01 [计划流式输出](01-总体架构/06-CampusClaw计划模式/plan-streaming.md)：完整 plan 参数、专用参数增量与审核绑定；调整待实现；复用已实现的 M06 两 phase 与 M07 卡片，不新增通用工具参数公开流 |
 | 核对 Runtime HTTP 报文 | [统一接口页](01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html)；[catalog](01-总体架构/01-CampusClaw多Agent运行时/接口契约/catalog.json) 指定唯一精确源 |
+| 理解定时任务协作 | [参与者与职责映射](01-总体架构/08-CampusClaw定时任务/README.md#sequence-roles)统一配置、自动触发和手动运行的角色；[共用受理下钻](01-总体架构/08-CampusClaw定时任务/README.md#run-admission-sequence)区分Mate授权、Runtime准备与Schedule事务编排 |
 | 核对定时任务接口 | [HTML 展示](01-总体架构/08-CampusClaw定时任务/schedule-api-review.html)按仓库现有接口风格展示10个Claw操作；Markdown继续作为维护源，保留待实现状态和原证据日期 |
 | 核对公共 Chat 契约 | [Mate Chat](02-服务与接口/07-mate-service通用对话API/README.md)：公共流与历史独立维护；未整合要求见其待决事项 |
 | 浏览器重开后继续流式输出 | M06 [Redis 流式恢复](01-总体架构/01-CampusClaw多Agent运行时/redis-stream-recovery.md)：事件源侧快照与短期 Stream、跨副本读取、故障边界及入门解释；接口增量为 proposed，能力待实现 |
@@ -60,6 +61,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.63.2 | 2026-10-08 | 增加定时任务职责映射与共用受理时序的阅读入口。 |
 | 3.63.1 | 2026-10-08 | M08 元数据资源关系统一称为“关联”。 |
 | 3.63.0 | 2026-10-08 | 元数据专题明确为正式设计，提供 Agent、Tool、Skill 告警样例并同步导航。 |
 | 3.62.2 | 2026-10-08 | 移除Mate独立HTML展示及导航入口，保留Markdown接口草案。 |

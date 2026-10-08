@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.30.2 |
+| 文档版本 | 0.30.3 |
 | 更新日期 | 2026-10-08 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -127,23 +127,62 @@ public void summarizeAlarms() {
 
 ## 5. 正常触发与受理事务
 
-场景是“每天 08:00 创建新的设备告警汇总会话”。从一次到期扫描开始，到新 Session 的根执行终态入库结束；前提是任务已启用且身份策略可用。以下为推荐目标，新增后台受理链待实现。图中 Store 表示同一 GaussDB 事务边界，Host 表示可信执行准备与授权；Scheduler 映射到 ScheduleDispatcher，Runtime 映射到受理服务及执行协调器，AgentLoop 由公共 Session 推进。它们是职责映射，不暗示独立进程或远程调用。
+场景是“每天 08:00 创建新的设备告警汇总会话”。从扫描器派发一个到期任务开始，到原根执行的结果持久化并被对账结束；前提是当前实例具有有效扫描资格，任务已保存且身份策略可用。以下为待实现目标。先看自动触发总览，再沿图中的 Shared Run admission 下钻准备与原子受理；模型与工具循环由 Runtime 承接，不在调度图中重复展开。
+
+<a id="sequence-roles"></a>
+
+### 5.1. 参与者与调用归属
+
+同一角色在配置创建、自动触发、手动运行和受理下钻中保持相同含义。角色表示职责，不代表独立进程；Schedule 和 Runtime 各包含若干实现协作者，Store 明确表示数据库权威边界。Scheduler→Schedule 表示从扫描/推进职责进入任务状态规则，同一 Dispatcher 可以承担两侧的一部分逻辑，不据此新增远程调用或强制拆成两个服务。
+
+| 角色 | 负责的交互 | 实现映射与状态 |
+|---|---|---|
+| Caller | 发起 Claw 管理或立即运行请求，接收资源或受理回执 | 已授权调用方；不假定为浏览器，不拥有任务调度权 |
+| Scheduler | 发起到期派发、提交后启动及原根执行结果对账 | `ScheduleDispatcher`，待实现；执行推进独立于管理服务，保留扫描资格、运行代次和启动约束 |
+| Schedule | 管理配置；领取/占用 Run，协调可信准备和原子受理 | `ScheduleApplicationService`、`ScheduleRunPreparation`、`ScheduledRunAcceptanceService` 等 M10 应用职责，待实现；图中统一为模块应用边界，不要求实现为一个大 Service；领取逻辑可由 Dispatcher 调用 Repository 承担，仍归 Schedule 的状态规则 |
+| Mate | 提供可信绑定、当前管理/执行授权及凭据引用资格 | `MateScheduleAdapter` 对接外部 Mate 权威，定时接线待实现；准备阶段不返回业务秘密，执行时的凭据解析另见 Mate 专项 |
+| Runtime | 提供 Agent/模型/工具上下文准备；受理后推进模型与工具，保存实际根执行结果 | 既有 `AgentSessionFactory.create`、`RuntimeExecutionCoordinator.start` 和运行时持久化能力；后台准备、受理接线及非交互 Host 策略待实现 |
+| Store | 原子保存任务、Run、Session/首消息/根执行，以及执行事件与终态 | 同一 GaussDB 事务资源；通过 Schedule Repository 与 Runtime 持久化协作者访问，不表示 Controller 直接调用 Mapper |
+
+**受理归属。** 新 Session、首消息、根执行和 Run 关联的事务由 Schedule 中的 `ScheduledRunAcceptanceService` 协调，并调用既有 Runtime 持久化能力参与同一事务；Runtime 执行器不拥有 Schedule 的生命周期判断。图中 Schedule→Store 汇总这个事务内的数据库操作，具体依赖仍由[全局目标类图](#10-全局目标类图与依赖)完整表达。
+
+**准备与执行。** Schedule→Runtime 的 prepare 只调用准备能力，不启动模型；Scheduler→Runtime 才表示提交后的执行推进。Runtime 在两阶段分别映射到准备协作者与执行协调器，不要求 Schedule 管理服务依赖 `RuntimeSessionEngineRegistry` 或 Dispatcher，不新增构造依赖环。Host 的工具权限判断留在 Runtime 内，Mate 的外部授权单独画出；两者不能互相替代。
+
+### 5.2. 自动触发总览
 
 ![独立会话定时运行](scheduled_run_sequence.svg)
 
 [原尺寸 SVG](scheduled_run_sequence.svg) · [PlantUML 源码](diagram.puml#L1)
 
-1. **分配 occurrence。** 扫描器按租户有界轮转批次，任务按 nextFireAt/id 稳定扫描，使用短事务，锁定 Schedule，复核未删除、active、revision、到期时间和 activeRunId；插入唯一 Run，推进下一次游标，同时占用本任务。重叠触发记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/删除操作与领取竞争同一行锁。
-2. **可信准备。** 事务外解析 Agent 已发布目录、模型、CRON profile、工作区及执行资格，固定一次 `PreparedScheduleRunDTO`。准备可以失败，但不调用模型或执行业务工具。远端授权检查不能持有数据库行锁。
-3. **原子受理。** 新增 `ScheduledRunAcceptanceService` 在同一事务复核 Schedule 存在且未删除、状态/revision、Run 领取 owner/代次及 lease_until、授权断言有效期与容量；自动触发还用数据库当前时间复核派发期限；创建新 Session、首条 user.message、根 execution/segment，并写回 Run 的唯一关联。任一步失败整体回滚。已有配置更新或暂停先提交时，旧自动 Run 结束为跳过；删除与最终受理共享同一数据库权威，删除先提交则不再受理，受理先提交则保留已生成Session并将Run纳入删除，已受理执行继续由原Session管理，停止由Session入口单独发起。同库受理是待实现目标，不能由旧Cron的本地取消句柄推导已经具备该保证。
-4. **事务后启动。** 受理不等待 Agent 完成。持有本次完整准备快照的原 Runtime 实例，以持久化的单次启动 CAS 标记由 READY 转为 STARTING 后启动公共执行链，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件。后台执行不需要伪造浏览器 SSE 连接。
-5. **结果对账。** 按受理时固定的根execution读取权威终态，仅在Schedule/Run仍存续时幂等更新其摘要和释放activeRunId；删除后只完成原Session、根执行及必要内部协调，不重新插入Run或配置。既有根执行是终态权威，仍存续任务的摘要可通过重读根execution修复；后续人工对话不会改写该次运行的结论。
+1. **分配 occurrence（Schedule）。** Scheduler 按租户有界轮转批次，任务按 nextFireAt/id 稳定扫描；Schedule 的领取职责使用短事务，锁定 Schedule，复核未删除、active、revision、到期时间和 activeRunId；插入唯一 Run，推进下一次游标，同时占用本任务。重叠触发记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/删除操作与领取竞争同一行锁。
+2. **可信准备（Schedule 协调 Mate 与 Runtime）。** 事务外解析 Agent 已发布目录、模型、CRON profile、工作区及执行资格，固定一次 `PreparedScheduleRunDTO`。准备可以失败，但不调用模型或执行业务工具。远端授权检查不能持有数据库行锁。
+3. **原子受理（Schedule 协调 Store）。** 新增 `ScheduledRunAcceptanceService` 在同一事务复核 Schedule 存在且未删除、状态/revision、Run 领取 owner/代次及 lease_until、授权断言有效期与容量；自动触发还用数据库当前时间复核派发期限；创建新 Session、首条 user.message、根 execution/segment，并写回 Run 的唯一关联。任一步失败整体回滚。已有配置更新或暂停先提交时，旧自动 Run 结束为跳过；删除与最终受理共享同一数据库权威，删除先提交则不再受理，受理先提交则保留已生成Session并将Run纳入删除，已受理执行继续由原Session管理，停止由Session入口单独发起。同库受理是待实现目标，不能由旧Cron的本地取消句柄推导已经具备该保证。
+4. **事务后启动（Scheduler 推进 Runtime）。** 受理不等待 Agent 完成。持有本次完整准备快照的原 Runtime 实例，以持久化的单次启动 CAS 标记由 READY 转为 STARTING 后启动公共执行链，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件。后台执行不需要伪造浏览器 SSE 连接。
+5. **结果对账（Scheduler 读取 Store）。** 按受理时固定的根execution读取权威终态，仅在Schedule/Run仍存续时幂等更新其摘要和释放activeRunId；删除后只完成原Session、根执行及必要内部协调，不重新插入Run或配置。既有根执行是终态权威，仍存续任务的摘要可通过重读根execution修复；后续人工对话不会改写该次运行的结论。
 
 第一阶段限定 Schedule、Run 与 Runtime 受理记录位于同一事务资源。现有 HTTP 创建 Session 和提交消息不提供此受理原子性，不能串联它们并在断连后重复 POST。跨数据库或独立外部调度服务的受理协议不在此实现切片内，需另行设计内部 Run 身份关联和只读对账能力，不据此要求调用方提交请求键。
 
 自动和手动受理均要求配置存在且未删除；自动受理要求 active，手动受理允许 active/paused，不移动计划游标、不应用自动 occurrence 的迟到窗口。未受理 Run 的失败/跳过必须在收尾事务中按 scheduleId、runId、claimEpoch 条件释放自己的 activeRunId；重叠跳过不得覆盖或释放另一条活动 Run。准备失败或运行完成的收尾不得恢复已删配置、重新插入已删Run或安装计划；删除后只完成必要内部协调，不补写可查询的失败Run。
 
 同一任务 activeRunId 的检查、占用和释放都受行锁保护；自动 occurrence 的唯一约束防重复分配，同一内部 runId 的受理复用原关联，启动 CAS 防重复调用入口。旧领取者提交必须匹配owner与claimEpoch；失效后只结束本次未受理结果，不由新节点重新准备执行。这些内部机制不合并不同手动调用，也不能被宣传为外部业务 exactly-once：工具副作用仍受下游业务幂等和已执行结果对账约束。
+
+<a id="run-admission-sequence"></a>
+
+### 5.3. 共用准备与原子受理
+
+本图只展开总览中的 Shared Run admission。场景是“一次告警汇总 Run 已分配并占用自己的任务槽，能否受理为新 Session”；起点为本次执行授权查询，终点为确定的受理结果或权威故障，不包含模型执行。自动和手动入口共用此流程；自动还检查 active 与派发期限，手动允许 paused 且不推进自动游标。均为待实现目标。
+
+![定时运行共用准备与原子受理](schedule_run_admission.svg)
+
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L220)
+
+Mate 的授权和 Runtime 准备都发生在数据库受理事务之前。准备成功只固定本次上下文；Schedule 在最终事务中复核最新配置、领取资格、授权期限与容量，不能拿准备结果替代可变状态校验。图中的 Runtime 准备与既有 `AgentSessionFactory.create` 的内存对象装配有关，不等于已创建公共持久 Session，也不等于已经发送模型请求。
+
+Store 返回“确定拒绝”须以未受理及可靠失败记录为依据；失败只释放自己的占用。任务已删除则只清理内部状态，不补造 Run。提交结果未知或存储不可用不伪造确定回执，不执行、不重放；调用方按既有 HTTP 错误或后台对账规则处理。图中的成功返回也不触发模型，原实例保留同次准备上下文，提交后由 Scheduler/执行推进职责取得单次启动权再进入 Runtime。
+
+**总览省略项的归属。** 扫描运行代次、启动 CAS 与失效拥有者隔离见[执行专题](execution.md#no-catch-up)；Runtime 内部按“可信目标解析→参数校验→权限判断/必要确认→业务执行→结果回传”执行，ASK、参数错误、凭据解析和 Child 传播见[非交互范围](execution.md#noninteractive)。主图中“Guard start ownership”包含持久化启动检查，检查未通过不进入模型；对账只有取得原根执行真实终态才释放占用，未知保持占用。暂停、删除、取消及晚到回调继续按下节和§9处理。
+
+**源码核验边界。** 2026-10-08 确认并隔离 fetch Java 默认分支 main，旧、新提交均为 `553dcd5e2ff682f9684810a043b442b37a02e54a`。本次重读 `modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java` 的 `executeAndReschedule`、`store/CronStore.java` 的 `saveUnsafe`（同一 cron 包根），以及 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/` 下 `session/AgentSessionFactory.java#create`、`tool/cron/ManagedCronSessionRunner.java#execute`、`runtimeapi/event/RuntimeMessageEventService.java#submitLocked`、`RuntimeExecutionCoordinator.java#start`、`RuntimeEventOutput.java#persistenceOnly`（后二者同一 event 目录）和 `runtimeapi/persistence/RuntimeExecutionPersistenceService.java#acceptMessage`。源码证明公共准备、受理与推进已有分层基础，不证明上述 M10 数据库链路已实现；本次只校正职责表达，不改变产品策略、全局结构或 Agent 基线比较结论，外部基线保留原核验日期。
 
 ## 6. 失败、交互与恢复
 
@@ -213,7 +252,7 @@ paused_reason 保存当前暂停原因，与 status 在同一事务内修改；�
 
 ![定时任务全局目标类图](scheduled_task_architecture.svg)
 
-[原尺寸 SVG](scheduled_task_architecture.svg) · [PlantUML 源码](diagram.puml#L62)
+[原尺寸 SVG](scheduled_task_architecture.svg) · [PlantUML 源码](diagram.puml#L45)
 
 | 层次 | 责任与生命周期 |
 |---|---|
@@ -267,6 +306,7 @@ python3 scripts/render-schedule-api.py --check
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.30.3 | 2026-10-08 | 统一定时图的职责与调用归属，分离触发、共用受理及Runtime执行。 |
 | 0.30.2 | 2026-10-08 | 清理Mate独立展示链接，定时任务HTML继续仅展示Claw操作。 |
 | 0.30.1 | 2026-10-08 | 定时任务HTML仅展示Claw操作，Mate上下文与凭据接口移至独立页面。 |
 | 0.30.0 | 2026-10-08 | 移除独立时间预览，同步接口展示、目标类图及保存后计划时间摘要的验收。 |
