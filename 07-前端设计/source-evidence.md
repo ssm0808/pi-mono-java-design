@@ -4,7 +4,7 @@
 
 [返回前端主设计](README.md) · [认证与发送链路最新核验](#token-refresh-evidence)
 
-版本：1.9.0；更新日期：2026-09-19。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§9](#tool-title-layout-evidence)，§7 保留名称字段引入前的历史证据，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
+版本：1.10.0；更新日期：2026-10-08。初次整理基线为设计仓 `6026ba48`，计划前端增补基线为 `42243077`。本文件保存按日期和源码版本隔离的核验资料，结论只适用于标明的 commit 或安装包；具体工具标题核验见[§9](#tool-title-layout-evidence)，§7 保留名称字段引入前的历史证据，其他体验核验见[§6](#experience-evidence)，前次实现验证见[§5](#current-implementation)，前四节是历史证据，不将旧缺口延伸为当前缺陷。
 
 | 证据 | 基线 |
 |---|---|
@@ -256,3 +256,28 @@ OpenCode [Agents](https://opencode.ai/docs/agents/) 于 2026-09-15 实际核对�
 验证：`structuredActivity.test.ts` 的 5 项组件测试通过，`npm run typecheck` 与 `npm run build` 通过。使用实际 Vue 组件和合成数据，在 390×844 与 1440×1000 视口查看标题、参数、结果及确认区；名称卡片数量为 0，展开标题无横向溢出，允许/拒绝点击均发出预期组件事件。此处只证明组件布局与交互，不代表真实 Mate、Java HTTP 或数据库联调；未重跑后端测试。
 
 设计检查：前端技术专题的 8 张 PlantUML SVG 重新生成后无差异；全局目标组件图按原尺寸与 840 px 文档宽度查看，结构与现有图一致。本次不改变架构对比结论或全局图的职责关系。Markdown 无 Mermaid、PUML ASCII、SVG XML、图源链接及行锚点与 diff 检查通过。
+
+<a id="schedule-console-evidence"></a>
+
+## 10. 定时任务 Console 与实现范围核验（2026-10-08）
+
+### 观察、公开契约与目标分别记录
+
+通过本机 Chrome 实际查看 [Claude 创建 Deployment](https://platform.claude.com/workspaces/default/deployments/new)，没有提交创建或运行：General 展示名称、Agent、Environment、Initial message、可选 Budget；Trigger 提供 Manual / Schedule；Schedule 展示 Frequency、Timezone、At、Cron 与 Edit cron、Next 5 runs。Frequency 菜单实际有 Every minute、Every hour、Daily、Weekdays、Weekly、Custom cron；选择 Custom cron 后改为五字段文本编辑。Resources 展示 Credential vaults 与 Session resources。视觉观察为左侧标题/说明、右侧表单、轻分隔与底部创建操作，窄屏 Claude 布局本次未核验。页面默认 Manual；观察到的浏览器时区为 America/Los_Angeles，不能推断为统一服务端默认值。
+
+同日重新读取官方 [Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)：公开 Beta、五字段 POSIX、IANA 时区、响应 upcoming_runs_at、手动运行生成 Run/Session，暂停不阻止手动运行。页面上的触发选择与界面布局是 UI 观察，文档只证明公开契约；没有 Claude 服务端源码 commit，不推断其内部调度实现。
+
+### CampusClaw 源码快照
+
+通过隔离 bare clone 重新取得远端默认 main，完整 SHA 为 `769e86592285f4a25b0febaf551eddea6bc7212c`；只读取前端入口及定时组件存在性，未修改实现工作树。另 fetch 并读取已有设计指定的历史功能提交 `2b93cbea90b3e876f5a87a8905c816f0e33b8f47`，不以其代替最新默认主线。
+
+| 提交 / 仓库相对路径 / 符号 | 实际结论 |
+|---|---|
+| main `769e86592285f4a25b0febaf551eddea6bc7212c` · `frontend/src/App.vue`；import/工作区模板，`frontend/src/components/` 树 | 本次读取的主线入口没有 Schedule 工作区；`components/schedules/ScheduleForm.vue` 不存在。不外推其他开发分支、部署或服务端能力。 |
+| 功能提交 `2b93cbea90b3e876f5a87a8905c816f0e33b8f47` · `frontend/src/components/schedules/ScheduleForm.vue`；draft.enabled、scheduleMode、requestPreview、submit | 已有自动/仅手动单选、daily/workdays/weekly/custom、时区、任务指令、凭据和 metadata；Agent 在高级设置，仍调用独立 preview。新增任务默认方式需读 draft 构造器才可断言，本次不推断。 |
+| 同一功能提交 · `docs/designs/frontend-schedules.md`；页面职责、参照与验收边界 | 旧设计采用内容优先和保存前预览；其430项测试是历史记录，未在本次执行；旧报告未做浏览器视觉验收，不能宣称已验证 Console 布局。 |
+| 设计仓最新 main `9060ead0ef24ebe2603dffd81f402264945fe921` · M10 `configuration.md` §3.3 / §8.18 | schedule:null 与独立run已在契约中；独立预览已移除，仅保存/读取后的响应提供权威计划时间。 |
+
+仅升级 M07/M10 触发方式与页面映射结论，其他历史实现范围保持原提交。目标采用[场景09](场景/09-配置与管理定时任务/README.md)的分区、显式模式、可见Agent和保存后时间；不新增后端枚举、资源或预览操作。此项为产品交互约束，页面增量待实现；复用既有全局组件图和 M10 图，本次依赖关系无变化。浏览器验证与设计校验结果单列，不替代产品、数据库或企业认证测试。
+
+设计验收（2026-10-08）：现有场景入口DOM回归通过9场景/33状态，保真度切换保留草稿与待处理决定；新增定时原型5组回归覆盖默认Manual、五字段拒绝、复杂Cron与草稿无损、暂停编辑、未知写不重复和旧时间失效。实际IAB浏览器检查1440px分区、Manual/Schedule切换、Cron编辑、保存后五次时间及暂停后编辑保持状态；390px详情全页可读，scrollWidth等于clientWidth。前端设计脚本检查链接、锚点与既有图生成同步通过；定时API生成检查及diff检查通过。没有修改PUML/SVG或架构依赖，图形对比无变化；未执行产品、数据库、模型或企业身份测试。测试依赖jsdom26.1.0仅安装到临时目录，没有机器级安装或配置变更。

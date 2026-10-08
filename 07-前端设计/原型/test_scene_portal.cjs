@@ -54,6 +54,6 @@ consoleSink.on('jsdomError', error => errors.push(error.message));
     fw.document.getElementById('receipt').click();
     assert.equal(fw.planDemo.snapshot.phase, 'executing');
     assert.deepEqual(errors, []);
-    console.log(`8 scenes / ${states} entry states passed; fidelity preserves drafts and pending decisions. DOM checks only.`);
+    console.log(`${w.frontendScenes.length} scenes / ${states} entry states passed; fidelity preserves drafts and pending decisions. DOM checks only.`);
   } finally {dom.window.close();}
 })().catch(error => {console.error(error);process.exitCode=1;});

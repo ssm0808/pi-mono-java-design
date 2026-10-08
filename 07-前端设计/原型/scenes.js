@@ -235,5 +235,33 @@ window.frontendScenes = [
     "coverage": "Header 编辑与手动获取沿用现有原型；自动刷新演示含配置面板、关闭不取消发送、保存配置取消准备。均为本地合成数据，不证明真实认证或完整设置持久化。",
     "directory": "08-开发者设置",
     "doc": "../场景/08-开发者设置/README.md"
-  }
+  },
+{
+  "id": "schedules",
+  "title": "配置与管理定时任务",
+  "goal": "保存手动任务或自动计划，核对每次运行与会话结果。",
+  "frame": "schedule-review.html",
+  "view": "schedule",
+  "states": [
+    {
+      "id": "manual",
+      "label": "新建手动任务"
+    },
+    {
+      "id": "schedule",
+      "label": "配置自动计划"
+    },
+    {
+      "id": "custom",
+      "label": "自定义 Cron"
+    },
+    {
+      "id": "paused",
+      "label": "编辑暂停任务"
+    }
+  ],
+  "coverage": "本地示例演示显式触发方式、频率/时区/六字段Cron、保存后时间、未知结果和暂停；不请求真实接口或实现调度。",
+  "directory": "09-配置与管理定时任务",
+  "doc": "../场景/09-配置与管理定时任务/README.md"
+}
 ];

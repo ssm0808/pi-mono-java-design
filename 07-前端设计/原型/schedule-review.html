@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN" data-view="schedule" data-fidelity="high">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CampusClaw · 定时任务配置</title><link rel="stylesheet" href="schedule-review.css"><link rel="stylesheet" href="fidelity.css"></head>
+<body>
+<aside class="rail"><a class="brand" href="index.html#scene=schedules"><img src="../资源/campusclaw-mark-o1.png" alt=""> CampusClaw</a><p class="workspace">园区运营工作台</p><nav><a href="index.html#scene=sessions">会话</a><a class="current" href="#">定时任务</a></nav><p class="demo-note">本地交互原型 · 示例数据</p></aside>
+<main>
+<div class="breadcrumb"><a href="index.html#scene=schedules">定时任务</a><span>/</span><span id="crumb">创建任务</span></div>
+<header><h1 id="title">创建任务</h1><p>配置 Agent 的任务内容和触发方式，每次运行的结果保存在独立会话中。</p></header>
+<div id="feedback" role="status" tabindex="-1" hidden></div>
+<form id="task-form">
+<section class="form-section"><div class="section-heading"><h2>基本信息</h2><p>这项任务做什么，由谁执行。</p></div><div class="fields">
+<label>任务名称<input id="task-name" required maxlength="256" placeholder="例如：园区设备告警汇总"></label>
+<label>执行 Agent<select id="agent" disabled><option value="operations">园区运营 Agent（当前工作区）</option></select><small>沿用当前工作区绑定的 Agent。</small></label>
+<label>任务指令<textarea id="instructions" required rows="6" placeholder="汇总最近 24 小时的设备告警，按设施和严重程度整理，并列出需要跟进的工单。"></textarea><small>每次运行以此指令开始。安排可自主完成的文本任务；遇到人工确认或提问，本次执行将停止并记录原因。</small></label>
+<details><summary>添加任务描述</summary><label>描述（选填）<textarea id="description" rows="2" maxlength="2048" placeholder="帮助团队了解任务用途"></textarea><small>描述用于管理，不发送给模型。</small></label></details>
+</div></section>
+<section class="form-section"><div class="section-heading"><h2>触发方式</h2><p>按需手动运行，或按计划自动运行。</p></div><div class="fields">
+<fieldset class="segmented"><legend class="sr-only">触发方式</legend><label><input type="radio" name="trigger" value="manual" checked> 手动 · Manual</label><label><input type="radio" name="trigger" value="schedule"> 定时 · Schedule</label></fieldset>
+<p id="manual-note" class="hint">保存后不会自动执行。需要时，在任务详情点击“立即运行”。</p>
+<div id="schedule-fields" hidden>
+<div class="two-col"><label>重复频率<select id="frequency"><option value="weekdays">周一至周五</option><option value="daily">每天</option><option value="weekly">每周</option><option value="custom">自定义 Cron</option></select></label><label>时区<input id="timezone" value="Asia/Shanghai" list="timezones" autocomplete="off" spellcheck="false"><datalist id="timezones"><option value="Asia/Shanghai"><option value="UTC"><option value="America/Los_Angeles"><option value="Europe/London"></datalist><small>IANA 时区 · 默认 Asia/Shanghai</small></label></div>
+<div id="preset-fields" class="two-col"><label id="weekday-field" hidden>星期<select id="weekday"><option value="MON">星期一</option><option value="TUE">星期二</option><option value="WED">星期三</option><option value="THU">星期四</option><option value="FRI">星期五</option><option value="SAT">星期六</option><option value="SUN">星期日</option></select></label><label>执行时间<input id="at" type="time" value="08:00"><small>24 小时制 · 周一至周五不自动排除法定节假日。</small></label></div>
+<div id="custom-field" hidden><label>Cron 表达式<input id="expression" value="0 0 8 * * MON-FRI" spellcheck="false"><small>Spring 六字段：秒 · 分 · 时 · 日 · 月 · 周。五字段表达式需修改后保存。</small></label><button id="use-preset" class="text-button" type="button">使用周一至周五预设</button></div>
+<div id="rule-summary" class="rule-summary"><code id="rule"></code><button id="edit-cron" class="text-button" type="button">编辑 Cron</button></div>
+<div id="future" class="future"><h3>未来五次计划时间</h3><p id="future-note">保存后根据服务端结果显示。修改中的规则尚未保存。</p><ol id="future-times" hidden></ol></div>
+</div>
+<p id="paused-note" class="hint" hidden>任务已暂停。保存修改保持暂停，恢复操作独立完成。</p>
+</div></section>
+<section class="form-section"><div class="section-heading"><h2>执行凭据</h2><p>使用已授权的受管凭据引用。</p></div><div class="fields"><label>凭据引用（选填）<textarea id="credentials" rows="2" placeholder="每行一个凭据 ID"></textarea><small>仅保存引用，最多 16 个；执行时仍检查当前权限。</small></label><details><summary>高级配置</summary><label>元数据（选填）<textarea id="metadata" rows="3" placeholder='{"campus":"north"}' spellcheck="false"></textarea><small>用于管理标签，键值均为字符串，不作为授权依据。</small></label></details></div></section>
+<footer><p id="save-note">保存为手动任务，不会立即执行。</p><div><button id="cancel" type="button">返回配置</button><button class="primary" id="save" type="submit">创建任务</button></div></footer>
+</form>
+<section id="saved-panel" hidden><div class="detail-head"><h2>任务概览</h2><span id="lifecycle"></span></div><dl><dt>触发方式</dt><dd id="saved-trigger"></dd><dt>执行 Agent</dt><dd>园区运营 Agent</dd><dt>任务指令</dt><dd id="saved-instructions"></dd></dl><div id="saved-future"></div><div class="actions"><button id="run" class="primary">立即运行</button><button id="edit">编辑任务</button><button id="pause">暂停自动运行</button></div><div id="run-result" role="status" hidden></div><p class="hint">“已受理”表示本次运行已建立会话，业务完成状态由该会话展示。</p></section>
+<details class="demo-panel"><summary>演示控制</summary><p>所有保存、回执与时间均为本地样例，不请求真实服务。</p><label><input id="unknown-save" type="checkbox"> 模拟保存回执丢失</label><button id="check" type="button">只读核对示例记录</button></details>
+</main><script src="schedule-review.js"></script></body></html>

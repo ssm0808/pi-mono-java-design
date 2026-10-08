@@ -1,6 +1,6 @@
 # CampusClaw 前端设计
 
-版本：2.5.1 · 2026-10-05 · 模块 M07
+版本：2.6.0 · 2026-10-08 · 模块 M07
 
 [仓库导航](../README.md) · [打开场景原型](原型/index.html) · [公共规范](公共规范.md) · [技术设计与全局类图](技术设计/README.md)
 
@@ -18,6 +18,7 @@
 | 06 | [审核与修改计划](场景/06-审核与修改计划/README.md) | 检查实施范围、步骤、验证和回退方式，再批准实施或提出修改。 | [高](原型/index.html#scene=plan&fidelity=high) · [低](原型/index.html#scene=plan&fidelity=low) |
 | 07 | [命令与技能](场景/07-命令与技能/README.md) | 在当前会话快速发现命令、填写参数，并理解命令结果如何影响任务。 | [高](原型/index.html#scene=commands&fidelity=high) · [低](原型/index.html#scene=commands&fidelity=low) |
 | 08 | [开发者设置](场景/08-开发者设置/README.md) | 在开发环境配置连接、认证和请求头，理解配置何时生效。 | [高](原型/index.html#scene=settings&fidelity=high) · [低](原型/index.html#scene=settings&fidelity=low) |
+| 09 | [配置与管理定时任务](场景/09-配置与管理定时任务/README.md) | 保存手动任务或自动计划，核对每次运行与会话结果。 | [高](原型/index.html#scene=schedules&fidelity=high) · [低](原型/index.html#scene=schedules&fidelity=low) |
 
 [自动刷新交互原型](原型/index.html#scene=message&fidelity=high&state=token-ready)只展示发送进度、失败保留草稿及重试；技术演示选项默认收起，可切换高低保真。
 
@@ -25,13 +26,9 @@
 
 工具活动与授权界面的名称只显示在标题中，展开后查看参数和结果；长标题在展开状态完整换行，规则见[内容渲染 §9.7](技术设计/内容渲染.md#mate-tool-display)。
 
-定时任务的精确契约见 [Claw 配置接口](../01-总体架构/08-CampusClaw定时任务/configuration.md)，内部工作台页面见
-[定时任务前端设计](https://github.com/superheromeZzh/pi-mono-java/blob/2b93cbea90b3e876f5a87a8905c816f0e33b8f47/docs/designs/frontend-schedules.md)。
-源码核验基线为 `pi-mono-java@2b93cbea90b3e876f5a87a8905c816f0e33b8f47`：
-`frontend/src/components/schedules/ScheduleWorkspace.vue`、`ScheduleForm.vue`、`ScheduleDetails.vue`、
-`ScheduleRunDetails.vue` 与 `schedulePresentation.ts` 已实现列表、任务指令编辑、可读计划、近期运行与会话入口，
-技术字段按需展开。前端 430 项测试及生产构建通过，浏览器交互和视觉验收未执行；该源码在功能分支交付，
-不代表生产 Mate 前端或企业联调完成。当前八个场景原型未包含定时任务，不能将现有会话原型当作定时任务高低保真。
+定时任务的精确契约见 [Claw 配置接口](../01-总体架构/08-CampusClaw定时任务/configuration.md)，用户流程与 Claude Console 参考见[场景09](场景/09-配置与管理定时任务/README.md)，[原型](原型/index.html#scene=schedules&fidelity=high)覆盖 Manual / Schedule 及保存后的计划时间。
+
+旧功能提交 `pi-mono-java@2b93cbea90b3e876f5a87a8905c816f0e33b8f47` 的 `ScheduleForm.vue` 已有“自动运行 / 仅手动”及频率配置；该页面的保存前独立预览已不符合当前契约。2026-10-08 新获取的默认 `main@769e86592285f4a25b0febaf551eddea6bc7212c` 在 `frontend/src/App.vue` 与组件树范围尚无这组定时工作区组件，不用旧分支证明当前主线或生产部署。新分区与映射增量待实现，源码和真实 Console 的核验范围见[证据](source-evidence.md#schedule-console-evidence)；历史430项测试仅属于旧分支记录，不视为本次产品验收。
 
 ## 阅读与维护
 
@@ -54,12 +51,20 @@
 
 在仓库根目录运行 `python3 -m http.server 8765 --bind 127.0.0.1`，打开 `/07-前端设计/原型/index.html`。原型入口也可直接打开；跨文件框架访问受浏览器本地文件策略限制时使用本地服务。
 
-原型的四个交互回归脚本及场景入口回归脚本位于 `原型/`，使用 Node.js 与 jsdom；运行方法和当前迁移结果见[迁移校验](迁移校验.md)。图纸在 `技术设计/` 与 `技术设计/命令/` 分别执行 `plantuml -tsvg diagram.puml`，然后更新仓库图索引。
+原型的交互回归脚本及场景入口回归脚本位于 `原型/`，使用 Node.js 与 jsdom；运行方法和当前迁移结果见[迁移校验](迁移校验.md)。图纸在 `技术设计/` 与 `技术设计/命令/` 分别执行 `plantuml -tsvg diagram.puml`，然后更新仓库图索引。
+
+定时任务原型回归复用 Node.js 与 jsdom 26.x，可通过 `JSDOM_MODULE` 指定已有库；只安装到项目开发或临时目录，不要求机器级配置：
+
+```bash
+npm install --prefix /tmp/campusclaw-design-check jsdom@26.1.0 --no-audit --no-fund
+JSDOM_MODULE=/tmp/campusclaw-design-check/node_modules/jsdom node 07-前端设计/原型/test_schedule_review.cjs
+```
 
 ## 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.0 | 2026-10-08 | 增加定时任务场景与分区原型，显式映射Manual/Schedule并采用保存后的权威计划时间。 |
 | 2.5.1 | 2026-10-05 | 补充已实现定时任务工作台的设计入口、源码基线与测试及视觉验收边界。 |
 | 2.5.0 | 2026-09-29 | 明确定时任务专题仅定义 Claw 接口，页面与 Mate 接入另行设计。 |
 | 2.4.0 | 2026-09-29 | 增加定时任务配置闭环入口，区分正式 Mate 接入与已有内部调试工作台。 |

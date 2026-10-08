@@ -4,13 +4,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.30.3 |
+| 文档版本 | 0.31.0 |
 | 更新日期 | 2026-10-08 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
 | 设计状态 | Claw配置、生命周期与Run读取接口已收口为目标，待实现；执行采用不补漏跑、遇忙跳过、失败与故障不重跑、非交互任务范围；删除不取消已受理执行。Mate接口及工程接线见专项；是否自动暂停整个Schedule仍待明确 |
 | 已观察实现 | Java main `553dcd5e2ff682f9684810a043b442b37a02e54a` 已有进程内 Cron、JSON Job/JSONL Run 和公共 Session 工厂；不等于已具备企业调度能力 |
 | 主基线 | Claude Managed Agents Scheduled deployments，2026-10-04 重核名称、Cron、执行目标、Deployment 读取契约及资源类型/暂停原因、部分更新及删除差异；2026-10-05 重核run/pause/unpause、Run模型及列表/详情；2026-10-08 仅重核公开操作目录与计划时间摘要，Beta；仅引用公开契约，无服务端源码 commit |
+
+页面行为与原型见[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md)：Manual映射schedule:null，Schedule映射完整Cron；触发方式、active/paused和单次Run结果分别展示，保存后读取权威计划时间。2026-10-08重核Claude Console与官方Beta文档的范围见[专项证据](source-evidence.md#schedule-console-evidence)，不新增前端专用后端字段或独立预览。
 
 ## 1. 要解决什么问题
 
@@ -306,6 +308,7 @@ python3 scripts/render-schedule-api.py --check
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.31.0 | 2026-10-08 | 引用定时任务前端场景与Console核验，明确触发方式和生命周期的独立映射。 |
 | 0.30.3 | 2026-10-08 | 统一定时图的职责与调用归属，分离触发、共用受理及Runtime执行。 |
 | 0.30.2 | 2026-10-08 | 清理Mate独立展示链接，定时任务HTML继续仅展示Claw操作。 |
 | 0.30.1 | 2026-10-08 | 定时任务HTML仅展示Claw操作，Mate上下文与凭据接口移至独立页面。 |
