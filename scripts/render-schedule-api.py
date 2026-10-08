@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project schedule Markdown through the repository's existing API renderer."""
+"""Project Claw schedule and Mate execution Markdown separately through the repository's existing API renderer."""
 import argparse
 import copy
 import hashlib
@@ -14,6 +14,7 @@ TOPIC = ROOT / '01-总体架构/08-CampusClaw定时任务'
 RUNTIME = ROOT / '01-总体架构/01-CampusClaw多Agent运行时'
 MATE = ROOT / '02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md'
 OUTPUT = TOPIC / 'schedule-api-review.html'
+MATE_OUTPUT = MATE.parent / 'execution-api-review.html'
 spec = importlib.util.spec_from_file_location('schedule_shared_renderer', RUNTIME / 'render_chat_http_v1.py')
 shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
@@ -120,7 +121,7 @@ def model(key, method, route, name, purpose, params, body, responses, details, *
         headers.insert(0, {'name': 'Content-Type', 'value': 'application/json',
                           'required': True, 'description': 'JSON 请求体。'})
     item = {
-        'api': {'title': 'Mate 定时执行接口' if mate else 'CampusClaw 定时任务 API',
+        'api': {'title': 'Mate 执行上下文与凭据 API' if mate else 'CampusClaw 定时任务 API',
                 'version': '0.1.0' if mate else '0.28.0',
                 'basePath': '/mate-service/v1' if mate else '/campusclaw-service/v1',
                 'visibility': 'Internal · 接口草案 · 待实现' if mate else 'Internal · 目标契约 · 待实现',
@@ -138,9 +139,8 @@ def model(key, method, route, name, purpose, params, body, responses, details, *
     return item
 
 
-def build_models(claw, mate):
+def build_models(claw):
     source = sections(claw)
-    internal = sections(mate)
     create, schedule = examples(source['4.'])
     update, updated, clear, invalid_rule = examples(source['4.5.'])
     deleted, delete_error = examples(source['4.6.'])
@@ -236,6 +236,12 @@ def build_models(claw, mate):
         add(key, 'GET', route, name, '读取已确定的运行受理结果；Run与Session各自执行当前授权，查询不启动或取消执行。',
             params, {'required': False, 'description': '无请求体；列表支持所列筛选，详情不接收业务query。'},
             [response(200, note, value)], ['4.11.'], errors)
+    return models
+
+
+def build_mate_models(mate):
+    internal = sections(mate)
+    models = []
     for key, route, name, number, purpose in [
         ('QueryScheduleContext', '/runtime/schedule-contexts/query', '查询执行上下文', '3.',
          '保存及触发时核验当前 Agent、凭据引用和执行授权；只读查询，不调用模型或业务工具，不返回秘密。'),
@@ -257,7 +263,7 @@ def render_item(index, model):
     operation = model['operation']
     key = html.escape(operation['operationKey'])
     mate = model['api']['basePath'].startswith('/mate-service/')
-    source = '../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md' if mate else 'configuration.md'
+    source = 'scheduled-execution.md' if mate else 'configuration.md'
     status = '接口草案 · 待实现' if mate else '目标契约 · 待实现'
     note = ('路径与字段为配套草案，实际公司认证与凭据系统需接线校准。' if mate else
             '展示原维护契约，尚未发布。身份适配与持久化接线待实现；源码证据日期沿用原文。')
@@ -276,48 +282,54 @@ def render_item(index, model):
     )
 
 
-def build_html():
-    claw = (TOPIC / 'configuration.md').read_text()
-    mate = MATE.read_text()
-    models = build_models(claw, mate)
+def build_html(mate=False):
+    source_path = MATE if mate else TOPIC / 'configuration.md'
+    text = source_path.read_text()
+    models = build_mate_models(text) if mate else build_models(text)
+    title = 'Mate 执行上下文与凭据接口' if mate else 'CampusClaw 定时任务接口'
+    base = '/mate-service/v1' if mate else '/campusclaw-service/v1'
+    status = ('路径与字段为内部草案，待实现；实际公司认证与凭据系统需接线校准。' if mate else
+              'Claw 目标契约待实现；各项证据日期与范围以源码证据文档为准。')
+    links = ('<a href="README.md">共享连接目录</a> · <a href="scheduled-execution.md">Mate契约原文</a>' if mate else
+             '<a href="README.md">模块主设计</a> · <a href="configuration.md">Claw契约原文</a> · '
+             '<a href="../../02-服务与接口/02-CampusMate共享客户端配置/execution-api-review.html">Mate依赖接口</a> · '
+             '<a href="execution.md">执行与工程落地</a>')
     identities = set()
+    version_pattern = r'版本：([\d.]+)' if mate else r'\| 版本 \| ([\d.]+)'
+    version = re.search(version_pattern, text)[1]
     for item in models:
         operation = item['operation']
-        full_path = item['api']['basePath'] + operation['path']
+        shared.require(item['api']['basePath'] == base, 'Operation belongs to another service')
+        full_path = base + operation['path']
         identity = (operation['method'], full_path)
-        shared.require(identity not in identities, 'Duplicate schedule operation')
+        shared.require(identity not in identities, 'Duplicate operation')
         identities.add(identity)
-        text = mate if full_path.startswith('/mate-service/') else claw
         shared.require(f'{operation["method"]} {full_path}' in text
                        or f'{operation["method"]} `{full_path}`' in text,
                        f'Operation not found in maintained source: {identity}')
-    versions = [re.search(r'\| 版本 \| ([\d.]+)', claw)[1],
-                re.search(r'版本：([\d.]+)', mate)[1]]
-    for item in models:
-        item['api']['version'] = versions[item['api']['basePath'].startswith('/mate-service/')]
+        item['api']['version'] = version
     css = shared.CSS_PATH.read_text() + (RUNTIME / '接口契约/页面资源/catalog.css').read_text()
     script = shared.JS_PATH.read_text()
     eager = '  roots.forEach((root, index) => {\n    if (models[index]) renderOperation(root, models[index]);\n  });'
     shared.require(script.count(eager) == 1, 'Shared initialization changed; inspect lazy adapter')
     script = script.replace(eager, (RUNTIME / '接口契约/页面资源/catalog.js').read_text().rstrip())
-    manifest = '\n'.join(f'{path.relative_to(ROOT)} sha256:{hashlib.sha256(text.encode()).hexdigest()}'
-                         for path, text in [(TOPIC / 'configuration.md', claw), (MATE, mate)])
+    manifest = f'{source_path.relative_to(ROOT)} sha256:{hashlib.sha256(text.encode()).hexdigest()}'
     cards = '\n'.join(render_item(index, item) for index, item in enumerate(models))
     return f'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>CampusClaw 定时任务接口</title>
+<title>{title}</title>
 <style>{css}</style></head><body>
 <!-- Generated by scripts/render-schedule-api.py. Do not edit directly.
 {manifest}
 -->
-<main id="schedule-api-catalog">
-<header class="catalog-header"><h1>CampusClaw 定时任务接口 · {len(models)} 项</h1>
-<p>{sum(item["api"]["basePath"].startswith("/campusclaw-service/") for item in models)} 个 Claw 操作：<code>/campusclaw-service/v1</code>；{sum(item["api"]["basePath"].startswith("/mate-service/") for item in models)} 个 Mate 内部草案：<code>/mate-service/v1</code>。</p>
+<main id="{"mate-execution-api-catalog" if mate else "schedule-api-catalog"}">
+<header class="catalog-header"><h1>{title} · {len(models)} 项</h1>
+<p>{len(models)} 个{" Mate 内部草案" if mate else " Claw 操作"}：<code>{base}</code>。</p>
 <p>沿用仓库现有接口页的展示与交互。展开一个接口即可查看调用上下文、参数、请求示例、规则和响应；响应状态与语言使用标签切换。</p>
-<p>Claw 目标契约待实现；Mate路径和字段为草案。Markdown继续作为维护源，各项证据日期与范围以源码证据文档为准。</p>
-<p><a href="README.md">模块主设计</a> · <a href="configuration.md">Claw契约原文</a> · <a href="../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md">Mate草案原文</a> · <a href="execution.md">执行与工程落地</a></p>
+<p>{status} Markdown继续作为维护源。</p>
+<p>{links}</p>
 </header>
 {cards}
 </main>
@@ -330,13 +342,15 @@ def build_html():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
+    parser.add_argument('--mate', action='store_true', help='Generate the separate Mate execution page')
     args = parser.parse_args()
-    content = build_html()
+    output = MATE_OUTPUT if args.mate else OUTPUT
+    content = build_html(mate=args.mate)
     if args.check:
-        shared.require(OUTPUT.read_text() == content, 'Schedule HTML is stale; regenerate it')
+        shared.require(output.read_text() == content, 'API HTML is stale; regenerate it')
     else:
-        shared.write_output(OUTPUT, content)
-    print(f'{OUTPUT}: synchronized through the existing API renderer')
+        shared.write_output(output, content)
+    print(f'{output}: synchronized through the existing API renderer')
 
 
 if __name__ == '__main__':
