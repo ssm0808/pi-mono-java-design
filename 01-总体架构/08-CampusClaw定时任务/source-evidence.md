@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.28.0 |
-| 核验日期 | 2026-10-05；各节保留实际核验日期与范围 |
+| 文档版本 | 0.29.0 |
+| 核验日期 | 2026-10-08（仅 §8.18 公开契约）；各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 进程内 Cron 已实现；数据库调度、持久化后台受理、Mate 凭据解析与模块合并待实现；Mate 示例已核验，生产公司身份系统未核验 |
 
@@ -646,7 +646,22 @@ Mate 拥有可信接口定义、执行授权和 credentialIds 解析，Claw 只�
 
 本节只读核验源码与既有测试材料，没有运行 Maven、GaussDB、多副本、凭据轮转或无人值守业务测试。实施验收至少覆盖 ASK/自定义问题不得执行业务、参数错误可修正、不默认批准、正常迟到与恢复不补跑区别、故障不重放、未知不释放占用、删除/受理竞争及反向 Session 删除保留 Run；上线初值与容量验证见[执行专题](execution.md#deployment-defaults)，默认数值不是性能结论。
 
+<a id="schedule-time-summary-evidence"></a>
+
+### 8.18 计划时间摘要与接口范围（2026-10-08）
+
+本节仅重新核对 Claude Managed Agents 公开 Beta [Deployment 操作目录及模型](https://platform.claude.com/docs/en/api/beta/deployments)和[定时 Deployment 指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)，不升级 Java 或其他 Agent 的历史源码快照。
+
+| 已读取公开契约 | 证据边界 |
+|---|---|
+| Deployment 操作目录 | 列出 create/list/get/update/archive/run/pause/unpause，未列出接受未保存规则的独立时间预览操作；仅证明当前公开目录，不能据此断言 Console 内部没有校验能力 |
+| schedule.upcoming_runs_at | 最多五个未来 Cron 时刻，active/paused 均可返回，paused 表示假设恢复后的计划；指南以保存后的 Deployment 响应确认配置时间，不等于独立预览接口 |
+
+CampusClaw 当前目标不提供未保存规则的独立预览。创建、更新在保存时校验规则，完整 Schedule 响应继续包含 upcomingRunsAt；详情、列表及启停响应沿既有规则计算计划摘要。该范围选择属于产品约束：减少额外接口及保存前后两条交互路径，代价是调用方必须保存后才能取得服务端计算的计划时间；有效计划保存即参与自动调度，不新增试保存、预览 token 或默认暂停流程。规则失败不保存，现有 lastRunAt、时区和暂停语义保持。目标接口仍待实现；本次修改设计、生成器和展示，不作为产品代码删除或执行验收证据。
+
 ## 9. 文档验收
+
+2026-10-08 的接口范围检查通过：配置清单与HTML一致为10个Claw操作、2个Mate草案，全仓无独立预览路径或操作标识残留，原有JSON示例保持一致。API技能检查通过4份Markdown、4份SVG及HTML脚本；仓库图检查通过36专题、132块、53时序图、0错误，managed_session_compaction的既有3条件组范围提示不变，图索引重新生成后无差异。浏览器检查覆盖共享样式、操作归属及版本、折叠状态、响应/语言切换、360px和无JavaScript回退；类图已查看1282×1382原尺寸与840px文档宽度，职责链保持。生成同步和git diff --check通过；未执行产品或数据库测试。
 
 2026-10-05 的0.28.0在HEAD加本任务文件的隔离快照完成校验，保留无关工作树修改。M10与Mate共享配置两个专题的API技能检查通过（共7份Markdown、5份SVG，无OpenAPI/HTML适用项）；仓库check-diagrams.py --render通过（36专题、132块、53时序图、0错误），图索引重新生成。既有managed_session_compaction三个条件组的范围提示沿用原解释，本次未修改该图。24个JSON示例、489个本地文件目标与图源块锚点通过；6个完整Schedule示例字段集合、纯文本输入和状态/原因一致，2个Run示例保持八字段及sessionId/error互斥。实际仓库git diff --check通过，补足隔离快照不是Git仓库而跳过的检查。
 
@@ -686,6 +701,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.29.0 | 2026-10-08 | 重核Claude公开操作目录与计划时间摘要，记录无独立预览的当前产品范围及代价。 |
 | 0.28.0 | 2026-10-05 | 核验 Mate 示例和 coding-agent 合并边界，确定非交互、不补跑、不重跑及独立 Session 生命周期的实施差距。 |
 | 0.27.0 | 2026-10-05 | 明确删除Schedule及关联Run、保留Session的目标，区分独立授权、临时协调与在途取消待定。 |
 | 0.26.0 | 2026-10-05 | 核验OpenClaw与DSH不同删除关系，区分历史保留、会话清理和在途取消及其他基线证据边界。 |

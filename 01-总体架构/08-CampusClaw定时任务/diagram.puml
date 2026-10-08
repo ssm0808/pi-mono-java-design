@@ -113,7 +113,7 @@ Tool -down-> App : bound scope
 App -down[hidden]-> Dispatch
 Binding -down[hidden]-> Auth
 Auth -down[hidden]-> Credential
-App -left-> Time : validate / preview
+App -left-> Time : validate / compute
 App -right-> Repo : lock latest row\nwrite DTO
 App -[norank]-> Auth
 App -left-> Binding : validate references

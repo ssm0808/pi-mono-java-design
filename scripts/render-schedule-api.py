@@ -194,12 +194,6 @@ def build_models(claw, mate):
                     'example': update, 'examples': [{'label': '清除自动计划', 'description': '只清除规则，不暂停任务、不运行、不取消在途。', 'value': clear}]},
         [response(200, '原子更新后返回完整配置。', updated)], ['4.5.'],
         [response(400, '字段校验失败；不部分保存。', invalid_rule, 'SCHEDULE_RULE_INVALID', 'Bad Request')])
-    add('PreviewSchedule', 'POST', '/schedules/preview', '预览计划时间',
-        '规范化时间规则并计算最多五次未来计划时刻；不保存配置，不启动任务。',
-        [], {'required': True, 'contentType': 'application/json',
-             'description': '输入 {schedule}；schedule 必须非空且只含可写时间规则。完整 JSON 报文示例尚未在原文展开。'},
-        [response(200, 'result 包含 schedule、computedAt、upcomingRunsAt：规范规则、服务端计算基准与最多五次未来计划时间；不含 lastRunAt。完整 JSON 报文示例尚未在原文展开。')],
-        ['3.', '3.1.', '3.3.', '3.4.'])
     add('DeleteSchedule', 'DELETE', '/schedules/{scheduleId}', '删除任务配置',
         '删除任务及其全部 Run，停止未来受理，返回最后配置的一次回执；已生成 Session 保留并独立管理。',
         [path_id], {'required': False, 'description': '无业务查询、无请求体；非空正文（含 {}）返回400。'},
@@ -262,7 +256,7 @@ def build_models(claw, mate):
 def render_item(index, model):
     operation = model['operation']
     key = html.escape(operation['operationKey'])
-    mate = index >= 11
+    mate = model['api']['basePath'].startswith('/mate-service/')
     source = '../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md' if mate else 'configuration.md'
     status = '接口草案 · 待实现' if mate else '目标契约 · 待实现'
     note = ('路径与字段为配套草案，实际公司认证与凭据系统需接线校准。' if mate else
@@ -299,8 +293,8 @@ def build_html():
                        f'Operation not found in maintained source: {identity}')
     versions = [re.search(r'\| 版本 \| ([\d.]+)', claw)[1],
                 re.search(r'版本：([\d.]+)', mate)[1]]
-    for index, item in enumerate(models):
-        item['api']['version'] = versions[index >= 11]
+    for item in models:
+        item['api']['version'] = versions[item['api']['basePath'].startswith('/mate-service/')]
     css = shared.CSS_PATH.read_text() + (RUNTIME / '接口契约/页面资源/catalog.css').read_text()
     script = shared.JS_PATH.read_text()
     eager = '  roots.forEach((root, index) => {\n    if (models[index]) renderOperation(root, models[index]);\n  });'
@@ -319,10 +313,10 @@ def build_html():
 {manifest}
 -->
 <main id="schedule-api-catalog">
-<header class="catalog-header"><h1>CampusClaw 定时任务接口 · 13 项</h1>
-<p>11 个 Claw 操作：<code>/campusclaw-service/v1</code>；2 个 Mate 内部草案：<code>/mate-service/v1</code>。</p>
+<header class="catalog-header"><h1>CampusClaw 定时任务接口 · {len(models)} 项</h1>
+<p>{sum(item["api"]["basePath"].startswith("/campusclaw-service/") for item in models)} 个 Claw 操作：<code>/campusclaw-service/v1</code>；{sum(item["api"]["basePath"].startswith("/mate-service/") for item in models)} 个 Mate 内部草案：<code>/mate-service/v1</code>。</p>
 <p>沿用仓库现有接口页的展示与交互。展开一个接口即可查看调用上下文、参数、请求示例、规则和响应；响应状态与语言使用标签切换。</p>
-<p>Claw 目标契约待实现；Mate路径和字段为草案。Markdown继续作为维护源，原证据日期未升级。时间预览尚缺完整报文，本页明确保留该缺口。</p>
+<p>Claw 目标契约待实现；Mate路径和字段为草案。Markdown继续作为维护源，各项证据日期与范围以源码证据文档为准。</p>
 <p><a href="README.md">模块主设计</a> · <a href="configuration.md">Claw契约原文</a> · <a href="../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md">Mate草案原文</a> · <a href="execution.md">执行与工程落地</a></p>
 </header>
 {cards}

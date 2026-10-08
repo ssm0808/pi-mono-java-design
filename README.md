@@ -1,6 +1,6 @@
 # CampusClaw 设计仓库
 
-导航版本 3.61.2 · 2026-10-08
+导航版本 3.62.0 · 2026-10-08
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
@@ -29,7 +29,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 | M07 · 前端体验 | [前端设计](07-前端设计/README.md) | [八个场景与高低保真原型](07-前端设计/原型/index.html)、[公共规范](07-前端设计/公共规范.md)、[技术设计与全局类图](07-前端设计/技术设计/README.md)、[源码证据](07-前端设计/source-evidence.md)、[发送前自动获取 Token](07-前端设计/技术设计/runtime-workbench-alignment.md#61-页面流程)；用户行为按场景维护，服务契约引用 M06 |
 | M08 · Agent 元数据与配置 | [Agent 元数据 GaussDB](./03-数据与存储/02-Agent元数据GaussDB/README.md) | 身份、版本、Agent 默认 mode 及模型/Tool/Skill 绑定；[数据库模式研究](./03-数据与存储/03-Agent数据库模式/README.md)和[元数据草案](./06-元数据草案/README.md)不自动成为已实现契约 |
 | M09 · 附件与文件服务 | [CampusMate 附件服务](./02-服务与接口/01-CampusMate附件服务/README.md) | 文件上传、扫描、访问与删除；Runtime 文件引用边界由 M01/M06 引用 |
-| M10 · 调度与并发治理 | [定时任务](./01-总体架构/08-CampusClaw定时任务/README.md) | [Claw 配置接口与 Claude 取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md)维护创建、列表、详情、更新、预览和删除；名称上限 256，时间规则仅支持 cron；[Spring 六字段与固定/动态任务](./01-总体架构/08-CampusClaw定时任务/README.md#spring-scheduling)解释解析和调度边界，Cron 默认上海，绝对时刻响应统一 UTC 且无小数秒；[执行目标与文件证据](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#target-file-evidence)区分基线会话策略、文件引用与上传；每次运行固定新建 Session，复用 Agent 定义；[创建响应审阅](./01-总体架构/08-CampusClaw定时任务/configuration.md#creation-response-review)对齐计划时间、小写状态和 metadata，内部版本不外露；[资源类型与暂停原因](./01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)统一 type:schedule 与只读 pausedReason；[凭据引用取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md#credential-reference-proposal)明确 credentialIds 直接绑定独立凭据；[Mate上下文与凭据接口草案](./02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)明确Mate提供可信接口定义和执行授权，保存引用、执行时按目标解析凭据；[详情与列表读取](./01-总体架构/08-CampusClaw定时任务/configuration.md#get-schedule-review)返回同形完整资源，分页参考既有 ListEvents 的整数 page/nextPage；[更新接口](./01-总体架构/08-CampusClaw定时任务/configuration.md#update-schedule-review)明确七字段部分修改、完整响应、状态保持及数据库事务合并更新；[删除接口](./01-总体架构/08-CampusClaw定时任务/configuration.md#delete-schedule-review)删除Schedule及所有对应Run、保留已生成Session，成功200完整配置回执不变；删除生效后配置和关联Run详情404、列表排除；删除不取消已受理Session，单独删除Session保留原Run受理记录；[立即运行、暂停与取消暂停](./01-总体架构/08-CampusClaw定时任务/configuration.md#run-schedule-review)区分200 Run受理结果与完整配置响应；[Run查询与删除历史边界](./01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)明确Session独立授权及临时清理协调，具体读取请求与过滤规则由该契约统一维护；[其他基线删除关系](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-delete-baselines)区分Run、会话和在途执行的处理；[执行与工程落地](./01-总体架构/08-CampusClaw定时任务/execution.md)维护不补漏跑、遇忙跳过、失败不重跑、未知结果对账及初始部署配额；首版不支持附件或需要交互的任务，不增加持久等待；Runtime准入归M06，[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量结构 |
+| M10 · 调度与并发治理 | [定时任务](./01-总体架构/08-CampusClaw定时任务/README.md) | [Claw 配置接口与 Claude 取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md)维护创建、列表、详情、更新和删除；名称上限 256，时间规则仅支持 cron；[Spring 六字段与固定/动态任务](./01-总体架构/08-CampusClaw定时任务/README.md#spring-scheduling)解释解析和调度边界，Cron 默认上海，绝对时刻响应统一 UTC 且无小数秒；[执行目标与文件证据](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#target-file-evidence)区分基线会话策略、文件引用与上传；每次运行固定新建 Session，复用 Agent 定义；[创建响应审阅](./01-总体架构/08-CampusClaw定时任务/configuration.md#creation-response-review)对齐计划时间、小写状态和 metadata，内部版本不外露；[资源类型与暂停原因](./01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)统一 type:schedule 与只读 pausedReason；[凭据引用取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md#credential-reference-proposal)明确 credentialIds 直接绑定独立凭据；[Mate上下文与凭据接口草案](./02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)明确Mate提供可信接口定义和执行授权，保存引用、执行时按目标解析凭据；[详情与列表读取](./01-总体架构/08-CampusClaw定时任务/configuration.md#get-schedule-review)返回同形完整资源，分页参考既有 ListEvents 的整数 page/nextPage；[更新接口](./01-总体架构/08-CampusClaw定时任务/configuration.md#update-schedule-review)明确七字段部分修改、完整响应、状态保持及数据库事务合并更新；[删除接口](./01-总体架构/08-CampusClaw定时任务/configuration.md#delete-schedule-review)删除Schedule及所有对应Run、保留已生成Session，成功200完整配置回执不变；删除生效后配置和关联Run详情404、列表排除；删除不取消已受理Session，单独删除Session保留原Run受理记录；[立即运行、暂停与取消暂停](./01-总体架构/08-CampusClaw定时任务/configuration.md#run-schedule-review)区分200 Run受理结果与完整配置响应；[Run查询与删除历史边界](./01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)明确Session独立授权及临时清理协调，具体读取请求与过滤规则由该契约统一维护；[其他基线删除关系](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-delete-baselines)区分Run、会话和在途执行的处理；[执行与工程落地](./01-总体架构/08-CampusClaw定时任务/execution.md)维护不补漏跑、遇忙跳过、失败不重跑、未知结果对账及初始部署配额；首版不支持附件或需要交互的任务，不增加持久等待；Runtime准入归M06，[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量结构 |
 | M11 · 可观测性与测试 | [TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | [调用日志](./01-总体架构/05-CampusClaw调用日志/README.md)、[Runtime HTTP 测试](./02-服务与接口/04-Runtime-HTTP测试Agent/README.md)；区分验收要求、已有测试与实测结果 |
 
 ## 2. 按阅读目的下钻
@@ -60,6 +60,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.62.0 | 2026-10-08 | 定时任务移除独立时间预览接口，保留完整配置响应中的未来计划时间摘要。 |
 | 3.61.2 | 2026-10-08 | 定时任务展示统一复用现有接口页的操作折叠与响应标签风格。 |
 | 3.61.1 | 2026-10-08 | 增加定时任务接口HTML展示和Markdown同步维护入口。 |
 | 3.61.0 | 2026-10-05 | M10增加执行策略、Mate授权凭据接口草案及Cron并入coding-agent的工程落地入口。 |
