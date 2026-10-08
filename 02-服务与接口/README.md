@@ -10,7 +10,7 @@
 | Runtime HTTP 测试 Agent | 如何根据已确认契约维护分层回归测试 | [设计](./04-Runtime-HTTP测试Agent/README.md) |
 | CampusClaw TDD 测试 Agent | 如何以版本化能力注册表驱动全产品测试与质量门禁 | [设计](./05-CampusClaw-TDD测试Agent/README.md) |
 | mate-service 聊天命令 API | GET 轻量清单；公共边界与执行协议待独立重审 | [设计与契约](./06-mate-service聊天命令API/README.md) |
-| Claw 定时任务配置 API | 创建、列表、详情、部分更新与时间预览；proposed、待实现 | [Claw 接口与 Claude 取舍](../01-总体架构/08-CampusClaw定时任务/configuration.md) |
+| Claw 定时任务配置 API | 配置、生命周期与Run读取；目标契约待实现，Mate执行接口为草案 | [HTML 展示](../01-总体架构/08-CampusClaw定时任务/schedule-api-review.html) · [Claw 接口与 Claude 取舍](../01-总体架构/08-CampusClaw定时任务/configuration.md) |
 | mate-service 通用对话 Events API | 公共 Chat 提交、live SSE、历史对账及未整合分页要求 | [三接口设计、HTML 与 OpenAPI](./07-mate-service通用对话API/README.md) |
 
 精确 Runtime HTTP 契约位于
