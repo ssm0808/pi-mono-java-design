@@ -2,9 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.4.0 |
+| 文档版本 | 3.4.1 |
 | 状态 | 目标设计；Skill、CallTool、Agent 代理、确认前可信准备与模型参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余状态见源码证据 |
-| 更新日期 | 2026-09-22 |
+| 更新日期 | 2026-10-08 |
+| CampusClaw Read 专项核验基线 | `553dcd5e2ff682f9684810a043b442b37a02e54a`（本地固定提交，仅核验文本读取边界） |
 | CampusClaw 注册与发现核验基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
 | CampusClaw PR 167 基线 | `f60cc3e78bb8b700527ac082c7c8e10524ede095` |
@@ -26,7 +27,7 @@
 
 | Name | Description | 执行模式 | 成功输出 |
 |---|---|---|---|
-| `Read` | `Read the contents of a file. Supports text files and images.` | `PARALLEL` | 原始文本或图片 ContentBlock |
+| `Read` | `Read the contents of a UTF-8 text file.` | `PARALLEL` | UTF-8 文件文本 `TextContent`，必要时附截断提示 |
 | `Find` | `Search for files by glob pattern.` | `PARALLEL` | 相对搜索目录的匹配路径文本 |
 | `Grep` | `Search file contents for a pattern.` | `PARALLEL` | 带路径和行号的匹配文本 |
 | `Ls` | `List directory contents.` | `PARALLEL` | 排序后的目录项文本 |
@@ -80,6 +81,9 @@ HTTP 和执行规则见 [Slash Command 通用模块](../../04-命令与技能/00
 
 ### 2.2 `Read`
 
+`Read` 读取当前 Agent 工作区内的 UTF-8 文本文件，不支持图片解码、缩放或返回
+`ImageContent`。文本读取已实现，源码范围与验收边界见[Read 专项证据](source-evidence.md#read-text-only-evidence)。
+
 ```json
 {
   "type": "object",
@@ -93,14 +97,14 @@ HTTP 和执行规则见 [Slash Command 通用模块](../../04-命令与技能/00
 }
 ```
 
-对齐 pi `read` 的主体语义：文本默认最多返回 2,000 行或 50 KB，以先达到者为准；模型
+文本默认最多返回 2,000 行或 50 KB，以先达到者为准；模型
 可用 `offset` 和 `limit` 继续读取。文本 ContentBlock 返回文件原文，不增加行号前缀，
 换行与截断提示不伪装成文件内容。若首行本身超过 50 KB，返回该行可容纳的头部并明确
 标记首行截断，不建议或调用 `Bash` 绕过限制。
 
-支持 jpg、png、gif、webp、bmp 图片。图片读取为 ImageContent，默认按 pi 的处理规则将
-尺寸缩放到最长边不超过 2,000 像素；模型不支持图片时附加说明。二进制但非受支持图片
-返回错误。
+读取字节后按 UTF-8 严格解码；发现空字节或无效 UTF-8 时，以
+`Unsupported binary file` 拒绝读取，按统一工具错误路径回传。图片格式识别与处理不属于
+当前契约，不能从通用消息类型支持 `ImageContent` 推断本工具具备图片能力。
 
 可用条件：Session 具有 `AgentWorkspaceBoundary`、`ReadOperations` 和取消域。
 
@@ -445,6 +449,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.4.1 | 2026-10-08 | Read 契约明确仅支持 UTF-8 文本，移除图片读取和缩放描述并补充源码证据。 |
 | 3.4.0 | 2026-09-22 | SearchTools 仅接收 tool 并返回单个完整定义，移除模糊搜索与全量快照前提。 |
 | 3.3.0 | 2026-09-22 | 增加固定 SearchTools 契约，以同一 Session 定义快照支持有界发现和 CallTool 执行。 |
 | 3.2.0 | 2026-09-22 | CallTool 业务参数校验前移到交互确认之前，并以不可变准备快照衔接授权与执行。 |

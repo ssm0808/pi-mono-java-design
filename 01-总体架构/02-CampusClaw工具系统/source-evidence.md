@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.10.0；整理日期：2026-09-22。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `9f83dc1771500ace26360c0982cb1954e2f37de4`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的历史专项见 §8，文档组织与图形选择见 §10，参数纠正与用户展示见 §11，参数校验、确认与执行的顺序见 §12，SearchTools 最新基线和 PR #323 进度见 §13。
+版本：1.10.1；整理日期：2026-10-08。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `9f83dc1771500ace26360c0982cb1954e2f37de4`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的历史专项见 §8，文档组织与图形选择见 §10，参数纠正与用户展示见 §11，参数校验、确认与执行的顺序见 §12，SearchTools 最新基线和 PR #323 进度见 §13；Read 文本读取边界见 §14。
 
 | 基线 | 提交 |
 |---|---|
@@ -382,3 +382,20 @@ CampusClaw 采用 `Skill → SearchTools → CallTool`：Skill 正文引用唯�
 产品约束为工具名称唯一、Skill 正文引用业务工具名；架构变更为固定 SearchTools 精确披露，发现和执行共用可信解析。数据加载及同步策略为待设计依赖；名称索引和调用准备已存在，不代表同步已解决。此次设计制品校验不包含 Java、远端 Mate、真实模型或跨版本联调验收。
 
 外部基线于 2026-09-22 再次确认默认分支并隔离 fetch：OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130` 未变，重读 `packages/opencode/src/tool/skill.ts#SkillTool` 与 `packages/codemode/src/tool-runtime.ts#prepare/makeSearchTool/make`；精确路径命中返回单个定义的分支保持。Codex 从 §13.1 的 `ac7634b9f73ec1bf96466be7a5869f0949d20b30` 更新至 `main@89a7298aff55db29f9cb2ad2430e3efe02b7a454`，重读 `codex-rs/core/src/tools/handlers/tool_search.rs#ToolSearchHandler/ToolSearchHandlerCache::get_or_build/search`、`tool_search_spec.rs#create_tool_search_tool` 和 `tools/registry.rs#CoreToolRuntime/ToolExposure`（重导出）；上述路径与 BM25、可加载定义、缓存来源比较的结论保持。默认分支源码快照不等于稳定发布；本次只升级工具发现证据，pi/DSH 的参数顺序仍引用 §12 的历史核验。
+
+<a id="read-text-only-evidence"></a>
+
+## 14. Read 文本读取边界（2026-10-08）
+
+本节读取 pi-mono-java 本地固定提交 `553dcd5e2ff682f9684810a043b442b37a02e54a`，以下文件与该提交一致；不声明为最新远端版本。本次只核验 Read 的描述、字节读取、文本解码与输出，不升级其他工具、Provider 或外部 Agent 基线。当前契约仅包含已实现的 UTF-8 文本读取，不包含图片读取与缩放。
+
+下列路径相对 `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/`：
+
+| 路径 / 符号 | 已观察实现 |
+|---|---|
+| `tool/read/ReadTool.java` · `description/execute/readText` | 描述明确为 UTF-8 文本；读取字节后直接调用 readText，仅构造 TextContent，没有图片识别、解码、缩放或 ImageContent 输出分支。 |
+| `tool/read/ReadTool.java` · `decodeText` | 空字节或严格 UTF-8 解码失败时抛出 WorkspaceAccessException，消息为 Unsupported binary file。 |
+| `tool/ops/ReadOperations.java` · `readFile`；`tool/ops/LocalReadOperations.java` · `readFile` | 接口返回 byte[]，本地实现调用 Files.readAllBytes；字节读取不代表支持图片内容块。 |
+| `tool/builtin/BuiltInToolContracts.java` · `description` | READ 的统一描述也是 Read the contents of a UTF-8 text file.，与实际工具一致。 |
+
+这是契约描述与已观察实现的对齐，不新增图片能力，也不将图片处理列为已确认的待实现增量。工具分层、调用顺序和 Agent 架构对比结论不变，既有 PlantUML 与 SVG 无需修改。验证限于源码静态核验和文档检查，未运行 Java 测试或真实模型调用。
