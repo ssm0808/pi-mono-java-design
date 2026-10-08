@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.81.0 |
+| 文档版本 | 1.81.1 |
 | 更新日期 | 2026-10-08 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -386,7 +386,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可变准备快照；这是 Runtime 架构变更和 ToB 产品约束。PR #323 已实现准备阶段和[首次失败的定义反馈](../02-CampusClaw工具系统/README.md#tool-argument-recovery)；前端将明确未执行业务的参数错误[中性折叠展示](../../07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)，该展示仍待实现。保留失败事实、独立调用身份和后续正常权限检查，不自动改参数重试。代价是额外定义文本、模型轮次与展示分类；准确率和时延收益未实测。
 
-**用户确认分派专项。** M03/M08 采用可信 `metadata.is_confirmation_tool` 标记选择本地用户确认适配器，避免工具改名依赖固定分派常量；权限仍由宿主检查，标记不等于授权。此为 CampusClaw 架构变更，代价是定义加载链需传递、验证标记，发布前需补齐既有确认工具数据。2026-10-08 读取本地 Java `553dcd5e2ff682f9684810a043b442b37a02e54a` 的 `BusinessToolDispatcher#assembled/#select`、`MateToolExecutor#prepare`、`MateToolMeta`、`BusinessConfirmationAdapter` 与 `RuntimeActiveExecution#authorizePreparedQuestion`：当前按 confirm_with_user 名称分派，本地适配与 allow 准入已观察到；字段驱动接入待实现，未重跑产品验收。具体路径、旧行为、目标及验收由[工具主设计](../02-CampusClaw工具系统/README.md#confirmation-tool-metadata)维护；只升级这一局部核验范围，A11 的外部基线和其他工具状态保留原历史归属，不推断外部 Agent 具有同一标记。
+**用户确认分派专项。** M03/M08 采用可信 `metadata.is_confirmation_tool` 标记选择本地用户确认适配器，避免 Tool 改名依赖固定分派常量；权限仍由宿主检查，标记不等于授权。此为 CampusClaw 架构变更，代价是定义加载链需传递、验证标记，发布前需补齐既有确认 Tool 数据。2026-10-08 读取本地 Java `553dcd5e2ff682f9684810a043b442b37a02e54a` 的 `BusinessToolDispatcher#assembled/#select`、`MateToolExecutor#prepare`、`MateToolMeta`、`BusinessConfirmationAdapter` 与 `RuntimeActiveExecution#authorizePreparedQuestion`：当前按 confirm_with_user 名称分派，本地适配与 allow 准入已观察到；字段驱动接入待实现，未重跑产品验收。具体路径、旧行为、目标及验收由[Tool 主设计](../02-CampusClaw工具系统/README.md#confirmation-tool-metadata)维护；只升级这一局部核验范围，A11 的外部基线和其他 Tool 状态保留原历史归属，不推断外部 Agent 具有同一标记。
 
 <a id="source-evidence"></a>
 
@@ -668,6 +668,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.81.1 | 2026-10-08 | A11用户确认元数据说明统一使用 Tool。 |
 | 1.81.0 | 2026-10-08 | A11增加用户确认工具的元数据分派取舍及固定名称实现差距。 |
 | 1.80.0 | 2026-10-08 | A14采用保存后的计划时间摘要，记录无独立预览的接口范围及交互代价。 |
 | 1.79.0 | 2026-10-05 | A14同步非交互、不补跑、不重跑与独立Session生命周期，补充Mate凭据权威和coding-agent合并取舍。 |
