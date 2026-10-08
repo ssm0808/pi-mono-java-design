@@ -1,6 +1,6 @@
 # CampusClaw 元数据设计
 
-版本：2.1.5；日期：2026-10-08。设计状态：当前元数据设计；实现与验收状态按所属模块分别维护。
+版本：2.2.0；日期：2026-10-08。设计状态：当前元数据设计；实现与验收状态按所属模块分别维护。
 
 [返回仓库首页](../README.md)
 
@@ -15,8 +15,9 @@
 | Agent | [AGENT元数据设计.json](./AGENT元数据设计.json) | 设备告警助手：关联模型、告警查询工具与排查技能 |
 | 技能 | [SKILL元数据设计.json](./SKILL元数据设计.json) | device-alarm-triage：组织设备告警排查步骤 |
 | 工具 | [TOOL元数据设计.json](./TOOL元数据设计.json) | query-device-alarm：按设备标识查询当前告警 |
+| 用户确认工具 | [TOOL用户确认元数据设计.json](./TOOL用户确认元数据设计.json) | confirm_with_user：询问现场情况并返回用户回答 |
 
-三个文件均使用真实 JSON 类型：version 为整数，enabled 与 is_concurrency_safe 为布尔值，关联列表为数组，Schema 为对象。资源名称、ID、时间和业务数据为虚构样例，不对应已部署资源；模型 ID 是外部模型目录的示例引用，实际使用前必须配置可用模型。工具的业务参数、告警级别和结果结构用于演示元数据，不作为已有园区接口事实。
+样例均使用真实 JSON 类型：version 为整数，enabled 与 is_concurrency_safe 为布尔值，关联列表为数组，Schema 为对象。资源名称、ID、时间和业务数据为虚构样例，不对应已部署资源；模型 ID 是外部模型目录的示例引用，实际使用前必须配置可用模型。工具的业务参数、告警级别和结果结构用于演示元数据，不作为已有园区接口事实。
 
 样例使用固定版本 1；Agent 与技能引用同一个工具 ID，Agent 引用本目录的技能 ID。`Agent.binding_agents` 与 `Skill.binding_skills` 均为空，表示本场景不需要委派或组合技能，不暗示递归加载能力。Agent 与技能均关联该工具，用于展示两种关联来源；宿主保留来源，不因重复关联获得额外权限。
 
@@ -100,9 +101,20 @@ binding_skills 保留既有元数据字段，不由本样例定义递归展开�
 | description | 工具的用途与适用场景 | string |
 | is_concurrency_safe | 工具是否支持安全并行调用 | boolean；true 表示支持，false 表示不支持；数据源缺失时按 false 处理，实际调度仍遵守工具系统规则 |
 | permission | 工具自身的权限配置 | string；仅 ask / allow / deny，分别表示需要确认、允许、禁止；Agent 关联未配置权限时继承工具权限 |
+| metadata | 工具的扩展配置 | object；可省略；包含下表字段 |
 | source | 工具来源 | string；仅 builtin-toolset / mcp-toolset |
 | input_schema | 工具输入参数的结构与约束 | object；使用 JSON Schema 描述参数，运行时在权限确认前校验业务参数 |
 | output_schema | 预期成功业务结果的结构与约束 | object；使用 JSON Schema 描述结果，不据此宣称已实现统一的运行时输出校验 |
+
+| metadata 字段 | 含义 | 规则 |
+|---|---|---|
+| is_confirmation_tool | 是否为用户确认工具 | boolean；true 表示由本地用户确认适配器处理，false 表示普通业务工具；省略时按 false 处理 |
+
+`metadata.is_confirmation_tool` 标记工具本身是否用于询问用户并返回回答。普通业务工具执行前是否需要授权确认，仍由 permission 决定；两者不互相替代。metadata 或该字段省略时按普通业务工具处理；显式 null、非对象 metadata 和非布尔标记按无效定义拒绝，不把错误值转换为 false。
+
+标记从可信工具定义读取，在准备阶段固定本次处理器，不接受模型参数、技能正文或搜索结果覆盖。标记为 true 的工具遵循用户确认的 label/context 输入和 content 输出约定，执行流程及限制见[用户确认工具分派](../01-总体架构/02-CampusClaw工具系统/README.md#confirmation-tool-metadata)。该字段的读取、校验和分派接入待实现。
+
+告警查询样例配置 `metadata.is_confirmation_tool=false`。独立的用户确认工具样例配置 true，使用设备现场情况作为输入示例；它未自动加入本目录 Agent 或技能的关联列表。
 
 时间样例：`2026-08-03T00:00:00Z`，适用于工具元数据的 created_at、updated_at；业务输入、输出时间字段仍由其业务 Schema 定义。工具名称与展示规则见 [工具系统](../01-总体架构/02-CampusClaw工具系统/README.md#9-工具注册与发现)。
 
@@ -146,20 +158,22 @@ input_schema 与 output_schema 内部的属性名属于具体业务工具。本�
 
 ## 6. 权威来源与实现边界
 
-本样例按设计仓提交 `5293e79cd4f2244faa1290602832f8833d963df4` 的既有字段与模块约束整理；日期为 2026-10-08。仅将字段说明实例化并将专题明确为元数据设计，不改变架构结论、数据库结构、HTTP 契约或模型工具集合；[Agent 架构对比](../01-总体架构/07-Agent架构对比/README.md)的结论与源码核验范围不变。
+既有样例按设计仓提交 `5293e79cd4f2244faa1290602832f8833d963df4` 的字段与模块约束整理。用户确认标记于 2026-10-08 核对本地 Java 提交 `553dcd5e2ff682f9684810a043b442b37a02e54a`：当前按 `confirm_with_user` 固定名称选择适配器，尚未读取 metadata 标记；具体路径和符号见[工具主设计专项证据](../01-总体架构/02-CampusClaw工具系统/README.md#confirmation-tool-metadata)。字段驱动分派属于架构变更，待实现；[Agent 架构对比 A11](../01-总体架构/07-Agent架构对比/README.md#a11)同步记录差异，不升级其他模块或外部基线。
 
 | 范围 | 权威文档与状态 |
 |---|---|
 | Agent 聚合、版本、权限、存储与管理接口 | [Agent 主设计 v0.19.4](../03-数据与存储/02-Agent元数据GaussDB/README.md)；既有实现证据保留 Mate 9dd5d85e，mode 专项保留 Mate 956b547f / Runtime 09b32d8e，不视为本次最新源码核验 |
 | Agent 默认 mode 传播 | [主设计 §4.4](../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)仍标记待实现；样例值不改变实现状态 |
-| 技能、业务代理、CallTool 和确认前准备 | [工具主设计 v2.19.0](../01-总体架构/02-CampusClaw工具系统/README.md)及其证据记录开发提交 ae6645ca 已实现，未据此宣称全部主线交付 |
+| 技能、业务代理、CallTool 和确认前准备 | [工具主设计 v2.20.0](../01-总体架构/02-CampusClaw工具系统/README.md)及其证据记录开发提交 ae6645ca 已实现，未据此宣称全部主线交付 |
 | SearchTools 与发现、校验的一致性接线 | 工具主设计标记待实现；缓存、刷新、跨节点同步和版本切换机制待设计 |
+| 用户确认工具标记 | metadata 字段、严格校验及字段驱动分派待实现；固定名称适配器已在上述本地 Java 提交观察到，产品验收未重跑 |
 | 工具和技能的完整存储、历史版本及统一输出 Schema 校验 | 本目录不补造数据库表或运行时实现；实现状态未核验 |
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.2.0 | 2026-10-08 | 工具新增 metadata.is_confirmation_tool，区分用户确认工具与授权确认，并提供独立样例。 |
 | 2.1.5 | 2026-10-08 | 中文说明统一使用“技能”和“工具”，名称及用途描述采用直接易懂的表述。 |
 | 2.1.4 | 2026-10-08 | Tool name 与 display_name 分别说明模型调用名称和用户展示名称。 |
 | 2.1.3 | 2026-10-08 | Tool name 字段规则简化为区分大小写。 |

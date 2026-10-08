@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.19.0 |
+| 文档版本 | 2.20.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-05 |
+| 更新日期 | 2026-10-08 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -393,7 +393,7 @@ agent/{agentId}/.campusclaw/
 
 `CallTool` 保留 `{tool,args?}`；`args` 省略时使用空对象。当前只解析当前 Agent 直接绑定 Skill 的业务工具，未知名称或同名不同 ID 明确失败；不接收 agentId、skillId、toolId、任意 URL，也不转发框架工具。直接 Agent 工具由其代理调用；同一工具同时来自两个范围时保留两种来源，不能因入口不同绕过权限。
 
-`MateToolAdapter` 和 `CallTool` 共用 `MateToolExecutor`。执行分成准备和提交两段：准备段通过可信解析层在当前 Agent 的 Skill 或直接工具绑定范围内解析目标及业务 Schema，校验参数并生成不可变的 `PreparedToolInvocation`；提交段只在 Host before hook 放行后，使用其中固定的工具 ID、定义版本和参数请求 Mate。权限与确认仍由 Host 承担，不迁入执行器。代理的完整 Schema 进入模型请求；`CallTool` 的固定外层 Schema 不替代业务参数校验。搜索结果只是模型说明，不作为执行目标或权限的权威来源。
+`MateToolAdapter` 和 `CallTool` 共用 `MateToolExecutor`。执行分成准备和提交两段：准备段通过可信解析层在当前 Agent 的 Skill 或直接工具绑定范围内解析目标及业务 Schema，校验参数并生成不可变的 `PreparedToolInvocation`；提交段只在 Host before hook 放行后，使用固定的处理器、工具 ID、定义版本和参数执行业务；普通业务工具请求 Mate，用户确认工具在本地等待回答。权限与确认仍由 Host 承担，不迁入执行器。代理的完整 Schema 进入模型请求；`CallTool` 的固定外层 Schema 不替代业务参数校验。搜索结果只是模型说明，不作为执行目标或权限的权威来源。
 
 代理传入 Agent 直接关联的业务工具范围，CallTool 传入直接 Skill 关联的业务工具范围；两者经各自的参数转换后委托同一个执行器。目标解析、参数校验、Mate 请求和结果返回见[执行细节：业务执行](execution-details.md#business-execution)。
 
@@ -423,6 +423,30 @@ agent/{agentId}/.campusclaw/
 这些约束不要求创建执行实例时全量拉取工具定义，也不指定按需加载、缓存或完整 Session 定义快照。本专题中的执行 Session 是 `ManagedAgentSession` 实例，不意味着长期数据库对话的所有工具永久固定同一发布版本。定义来源接入、生成或物化、加载时机、缓存与失效、刷新、跨节点同步、版本切换，以及 Skill 正文与工具改名的发布协调，均为后续数据同步专题的待设计依赖。
 
 本版的契约与执行链可独立实现和测试；元数据变化、进程恢复或发布切换下如何维持上述约束，须待同步设计和联调验收补齐。不能把现有解析缓存或单次准备结果描述为已经实现完整的跨版本一致性。
+
+<a id="confirmation-tool-metadata"></a>
+
+### 9.2.2 用户确认工具的元数据分派
+
+园区告警排查需要值班人员补充现场情况时，Agent 调用已关联的用户确认工具。用户确认工具通过 `metadata.is_confirmation_tool=true` 标记，工具名仍用于模型调用和可信关联定位；分派器根据标记选择本地适配器，不再根据 `confirm_with_user` 固定名称决定处理方式。字段的类型、默认值与样例由[工具元数据设计](../../06-元数据设计/README.md#4-tool-元数据)唯一维护。字段驱动分派待实现。
+
+正常流程保持：可信目标解析 → 参数校验与准备 → 宿主权限和交互准入 → 本地等待用户回答 → 结果回传。Agent 直接代理与技能的 CallTool 共用分派。准备阶段从同一可信定义读取标记、固定处理器及问题快照；宿主放行后执行同一准备结果。用户回答是本次工具结果，不授权后续业务操作。普通业务工具继续交给 Mate 远端处理器。
+
+用户确认工具要求 label 为字符串，context 可省略或为对象，保留原始值与结构；回答以 `{"content":"..."}` 返回。仅 Runtime 根执行支持等待，实际入口权限必须为 allow；ask/deny、Child/Cron、端口缺失、取消或本地适配失败均明确失败，不回退远端执行。参数错误保持 isError=true，向模型返回字段错误和同次可信定义，不创建确认、不执行、不自动猜参或重放；公共事件继续隐藏内部 Schema 和敏感参数。
+
+本地问答与 `permission=ask` 的执行授权确认是两个职责。用户确认工具不是“任意业务工具先弹卡再远调”；不能只改普通工具的标记而保留其任意业务参数和执行含义。标记不得由模型或技能正文提供，也不改变模型工具集合、可信关联或权限规则。
+
+**源码与差距。** 2026-10-08 静态读取本地 `pi-mono-java@553dcd5e2ff682f9684810a043b442b37a02e54a`，不作为最新上游或运行验收声明。以下路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`：
+
+| 源码与符号 | 已观察行为与目标差距 |
+|---|---|
+| `tool/mate/BusinessToolDispatcher#assembled/#select`、仓根 `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java#RuntimeApi.BUSINESS_CONFIRMATION_TOOL_NAME` | 当前按固定名称 confirm_with_user 选择本地处理器；目标改为读取可信标记，待实现 |
+| `tool/mate/MateToolExecutor#prepare`、`BusinessToolHandler.InvocationDTO` | 校验后按可信名称分派，返回同次准备结果；标记传递与处理器选择接入待实现 |
+| `common/client/mate/MateToolMeta`、`common/client/HttpMateToolClient#toMeta`、`common/dto/ToolInfo` | 工具元数据接入链当前未承接确认标记；字段解析与严格校验待实现 |
+| `tool/question/BusinessConfirmationAdapter#prepare/#toQuestionRequest/#execute` | 已有 label/context 转换、本地回答和失败不回退远端行为；适配输入输出约定保持 |
+| `runtimeapi/runtime/RuntimeActiveExecution#beforeToolCall/#authorizePreparedQuestion` | 依据 PreparedQuestionInvocation 执行交互准入；业务确认仅 allow 放行，ask/deny 拒绝，宿主无需识别业务工具名称 |
+
+**设计理由与实施验收。** 字段驱动分派属于架构变更：业务工具改名无需修改分派常量，代价是可信元数据加载链必须传递并验证标记。实施先补齐元数据读取和校验，再按标记选择并固定处理器；发布前为现有用户确认工具补齐 true 标记，再移除名称判断，避免旧定义被送往远端。验收覆盖任意可信名称的 true 工具本地问答且零远调、普通工具的 false/省略分派、非法字段拒绝、两种入口一致、权限及入口拒绝、本地失败不回退、确认等待期间定义变化不改变已准备处理器。源码内现有测试仅作为已读证据，本次未运行产品测试；HTTP 模型和持久化接入按所属契约实施，本设计不新增接口或数据库表。
 
 <a id="mate-credential-forwarding"></a>
 
@@ -747,6 +771,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.20.0 | 2026-10-08 | 用户确认工具按可信元数据标记分派，保留权限、准备快照及本地失败不回退约束。 |
 | 2.19.0 | 2026-10-05 | 定时执行由 Mate 解析可信接口与凭据引用，保留普通交互快照并统一非交互入口约束。 |
 | 2.18.2 | 2026-10-04 | Cron 平台任务引用对齐 M10，每次运行新建 Session 并复用已绑定的 Agent 定义。 |
 | 2.18.1 | 2026-09-29 | 将 Cron 调度权威链接到 M10，并明确触发时已发布快照与后台受理增量。 |

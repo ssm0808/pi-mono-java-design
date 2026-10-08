@@ -1,0 +1,47 @@
+{
+    "id": "tool-550e8400e29b41d4a716446655440004",
+    "type": "tool",
+    "version": 1,
+    "created_at": "2026-10-08T02:00:00Z",
+    "updated_at": "2026-10-08T02:00:00Z",
+    "enabled": true,
+    "is_concurrency_safe": false,
+    "permission": "allow",
+    "name": "confirm_with_user",
+    "display_name": "用户确认",
+    "description": "询问值班人员设备现场情况，等待用户回答并将回答返回 Agent。",
+    "source": "builtin-toolset",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "label": {
+                "type": "string",
+                "description": "向用户展示的问题，例如请确认 AHU-001 的现场运行情况。"
+            },
+            "context": {
+                "type": "object",
+                "description": "可选的现场信息，保留原始 JSON 结构。"
+            }
+        },
+        "required": [
+            "label"
+        ],
+        "additionalProperties": false
+    },
+    "output_schema": {
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": "用户提交的回答。"
+            }
+        },
+        "required": [
+            "content"
+        ],
+        "additionalProperties": false
+    },
+    "metadata": {
+        "is_confirmation_tool": true
+    }
+}

@@ -77,5 +77,8 @@
             "alarms"
         ],
         "additionalProperties": false
+    },
+    "metadata": {
+        "is_confirmation_tool": false
     }
 }
