@@ -197,8 +197,8 @@ def build_models(claw, mate):
     add('PreviewSchedule', 'POST', '/schedules/preview', '预览计划时间',
         '规范化时间规则并计算最多五次未来计划时刻；不保存配置，不启动任务。',
         [], {'required': True, 'contentType': 'application/json',
-             'description': '原文只列出操作及共用校验，尚未定义完整请求字段与报文示例；本页不补造。'},
-        [response(200, '规范规则、计算基准与最多五次未来计划时间。完整响应字段及示例尚未在原文展开。')],
+             'description': '输入 {schedule}；schedule 必须非空且只含可写时间规则。完整 JSON 报文示例尚未在原文展开。'},
+        [response(200, 'result 包含 schedule、computedAt、upcomingRunsAt：规范规则、服务端计算基准与最多五次未来计划时间；不含 lastRunAt。完整 JSON 报文示例尚未在原文展开。')],
         ['3.', '3.1.', '3.3.', '3.4.'])
     add('DeleteSchedule', 'DELETE', '/schedules/{scheduleId}', '删除任务配置',
         '删除任务及其全部 Run，停止未来受理，返回最后配置的一次回执；已生成 Session 保留并独立管理。',
