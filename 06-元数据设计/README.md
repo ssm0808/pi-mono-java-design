@@ -1,6 +1,6 @@
 # CampusClaw 元数据设计
 
-版本：2.1.3；日期：2026-10-08。设计状态：当前元数据设计；实现与验收状态按所属模块分别维护。
+版本：2.1.4；日期：2026-10-08。设计状态：当前元数据设计；实现与验收状态按所属模块分别维护。
 
 [返回仓库首页](../README.md)
 
@@ -91,8 +91,8 @@ binding_skills 保留既有元数据字段，不由本样例定义递归展开�
 | created_at | Tool 定义的创建时间 | string；UTC 时间，精确到秒，格式为 `YYYY-MM-DDTHH:mm:ssZ`，以大写 Z 结尾，不含小数秒 |
 | updated_at | Tool 定义的最后更新时间 | string；时间格式与 created_at 相同，定义修改时更新 |
 | enabled | Tool 是否启用 | boolean；true 表示启用，false 表示禁用；启用不能替代执行权限检查 |
-| name | 工具技术名称，用于资源定位 | string；区分大小写 |
-| display_name | 面向用户展示的工具名称 | string；只用于展示，不参与工具定位、去重或权限判断；展示名缺失时回退到 name |
+| name | 工具名称，供模型识别和调用 | string；区分大小写 |
+| display_name | 工具展示名称，供用户阅读 | string |
 | description | 工具的用途与适用条件 | string；描述工具提供的能力及适用场景 |
 | is_concurrency_safe | 工具是否支持安全并行调用 | boolean；true 表示支持，false 表示不支持；数据源缺失时按 false 处理，实际调度仍遵守工具系统规则 |
 | permission | 工具自身的权限配置 | string；仅 ask / allow / deny，分别表示需要确认、允许、禁止；Agent 关联未配置权限时继承 Tool 权限 |
@@ -156,6 +156,7 @@ input_schema 与 output_schema 内部的属性名属于具体业务工具。本�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.4 | 2026-10-08 | Tool name 与 display_name 分别说明模型调用名称和用户展示名称。 |
 | 2.1.3 | 2026-10-08 | Tool name 字段规则简化为区分大小写。 |
 | 2.1.2 | 2026-10-08 | 将元数据资源关系统一称为“关联”，并明确关联项引用目标资源 ID。 |
 | 2.1.1 | 2026-10-08 | Agent、Skill、Tool 分别列出完整字段的含义和规则，取消公共字段章节。 |
