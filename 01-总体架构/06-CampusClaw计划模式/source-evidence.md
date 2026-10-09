@@ -530,3 +530,44 @@ Java 路径前缀 R 沿用 §13.1；Codex 路径相对其仓库。
 - 本次 4 个变更测试文件质量脚本报告 errors=0，17 项为命名风格 warnings，人工检查真实断言；变更 Java 方法非空物理行无超过 50，格式和 Checkstyle 通过。
 - 公司镜像已按 `sync-campusclaw.sh --no-verify` 同步；默认构建无法解析 `com.huawei.hicampus:NativeParent:26.0.0-SNAPSHOT`，未进入公司源码编译。确定性测试不证明真实模型遵循、首字改善或生产 GaussDB 兼容；Mate 公共桥接待实现，业务覆盖文件发布仍须部署侧验收。
 - 设计仓 `check-diagrams.py --render`：36 个专题、133 图、54 个时序图，0 errors；图索引已更新。唯一复杂度提示来自未修改的 managed_session_compaction：安全窗口、摘要有效性及首次 overflow 恢复资格三个条件属于同一次压缩的独立准入与恢复边界，保留原图范围。已检查本次计划/Model 全局图、参数流及审核图的原尺寸和文档宽度；全局计划图在文档宽度用于结构总览，细节保留原尺寸入口，不拆断完整职责链。ASCII、SVG XML、图源同步、链接/锚点及 git diff --check 通过。
+
+
+<a id="plan-length-baseline"></a>
+
+## 17. 计划正文无独立最大字符数（2026-10-09）
+
+长设施巡检方案在正文有效且符合既有事件容量时应能完整进入审核。计划工具不设置专属 maxLength，预览和历史读取遵循相同规则；保留必填、字符串类型、唯一字段、首非空行标题和完整 Unicode 校验。可信目标解析、完整参数校验/prepare、Host 权限或必要确认、业务执行、结果回传的先后保持。参数错误继续 isError=true，模型收到字段错误及同次可信定义，不猜参或重放。
+
+### 17.1 源码核验与范围
+
+| 来源 | 最新快照与核验路径 / 符号 |
+|---|---|
+| pi | 2026-10-09 确认默认 main 并隔离 fetch `f1b2e77f5b13b2a199b1052cb79c235451afe7d7`，与 §16 相同；`packages/ai/src/utils/json-parse.ts#parseStreamingJson` 没有通用参数字符数上限；不把模型 token 限制等同 plan maxLength，不推断各 Provider 无限输入 |
+| DeepSeek Harness | 当日确认默认 master 并隔离 fetch `5badb15009ae1756c3afe0ae0cef1faafc290ccc`；`packages/plan/plan-mode/src/index.ts#PlanModeController` 的 ExitPlanMode 注册和 execute 对完整 plan 检查标题但不设最大长度；`packages/plan/plan-mode/package.json` 为 0.2.1-alpha.1，非稳定发布。相对 §15 的 `4878cdabd87d4041bdaff61d04c966883b9fd07a` 只升级该长度范围，其他模式生命周期证据保留 |
+| Java | 修改前 `5e00d2121e5f3c08e79707d873387d3e2f1c1d7b`；长度移除提交 `ad289648be09474465d20548cdfaab85b8a6d368`，[Draft PR #336](https://github.com/superheromeZzh/pi-mono-java/pull/336)，未合入 main |
+| 设计 | 修改前 `fba22eba53857cda0582960a4b195cdb75c66eb2`；主设计 v1.22、流式专题 v1.4、架构对比 v1.84；§16 保留对应提交的历史实现与测试，不将旧长度校验作为当前目标 |
+
+### 17.2 实现和理由
+
+Java 路径相对仓库根：
+
+| 路径 / 符号 | 行为 |
+|---|---|
+| `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java#RuntimeApi` | 删除 MAX_PLAN_CHARACTERS；其他输入和反馈限制属于各自契约，保持原值 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/plan/ExitPlanModeTool.java#createInputSchema/#validatePlan` | 不再输出 maxLength 或检查 UTF-16 数量；保留非空、标题、Unicode 与结构校验 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/PlanArgumentPreview.java#accept`、同目录 `RuntimeEventProjector.java#projectMessageStart` | 取消 Runtime decodedLimit；可信身份与单调前缀检查保持，长计划仍可预览 |
+| 同目录 `CommittedEventProjection.java#projectPlan` | completed 和旧无 phase 历史不再因计划字符数被拒绝，保留标题和事件形状检查 |
+| 同目录 `RuntimeEventProjector.java#requireCommittedFrame` | 完整事件沿用编码帧容量规则，超出返回原 EVENT_PAYLOAD_TOO_LARGE，不截断或提交待审；AI 预览预算仍只停预览 |
+
+这是取消没有基线依据的产品长度差异；没有引入新的长度值或配置替代它。计划正文、AI 通用预览资源预算、编码后的事件容量属于不同层次，不能据此宣称无限容量。长输入的内存与快照复制成本仍存在，未做生产容量或性能承诺。类关系、工具执行顺序和事务结构不变，PlantUML 与 SVG 不需要修改。
+
+### 17.3 验证
+
+JDK 21 `clean verify spotless:check`：327 类、2198 项，失败、错误、跳过均为 0。`ExitPlanModeToolTest`、`PlanArgumentPreviewTest`、`RuntimeEventProjectorTest`、`CommittedEventProjectionTest` 覆盖超过旧 262144 字符上限的完整执行、单调预览、审核绑定和新旧历史回读，均验证全文无截断；既有错误参数和编码容量门禁继续通过。质量脚本 errors=0，19 个命名 warnings 经人工核对；修改类方法非空物理行不超过 50。没有新增依赖。
+
+公司镜像同步完成；公司父 POM 不可用，镜像源码编译仍未验收。数据库、前端和 Provider 没有修改，真实 JAR/openGauss 及前端测试保留 §16 的固定版本证据，本次没有重跑，真实模型与生产容量仍未验收。
+
+
+设计校验：`check-diagrams.py --render` 覆盖 36 专题、133 图、54 时序图，0 errors；唯一提示仍为未改动的 managed_session_compaction 三个独立准入/恢复分支，理由沿用 §16。图索引再生成无差异，图源和 SVG 均未修改。事件专项校验通过（114 POST、57 历史、15 批量字段、15 任务快照、60 计划审核、31 提问负向用例）；API 技能校验通过 Runtime 专题的图、XML、Markdown 链接/锚点及 HTML 脚本语法。生成页在 1440px 与 360px 下人工查看计划规则，无横向溢出；十项接口 DOM 交互及 36 项生成器回归通过。
+
+统一 `validate-chat-api.py --full` 仍受既有版本不一致阻塞：修改前 `fba22eb` 的 `接口契约/common.json` 为 1.63.0，而 `chat-http-v1-design.md` 为 1.64.0；失败发生于普通接口的 `validate_review_models`，本次未修改这两个文件。事件契约专项通过不等于该全仓门禁通过；无关版本修复不混入本任务。

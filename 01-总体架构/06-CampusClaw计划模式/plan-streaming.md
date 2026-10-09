@@ -1,6 +1,6 @@
 # 计划参数流式生成与审核绑定
 
-版本：1.3.0；日期：2026-10-09。状态：**参数流式与 AI 通用部分 JSON 解析已在 [PR #336](https://github.com/superheromeZzh/pi-mono-java/pull/336) 实现，尚未合入 main**。实现基线 `a1e6450427abeabaa1af04d5964f371dbbf4cf68`；pi main `f1b2e77f5b13b2a199b1052cb79c235451afe7d7`。企业 Mate 桥接待实现，真实模型可靠性与时延未验收。[主设计](README.md)维护模式与审核事务，[源码证据 §16](source-evidence.md#plan-generic-json-evidence)记录本次范围。
+版本：1.4.0；日期：2026-10-09。状态：**参数流式与 AI 通用部分 JSON 解析已在 [PR #336](https://github.com/superheromeZzh/pi-mono-java/pull/336) 实现，尚未合入 main**。实现基线 `ad289648be09474465d20548cdfaab85b8a6d368`；pi main `f1b2e77f5b13b2a199b1052cb79c235451afe7d7`。企业 Mate 桥接待实现，真实模型可靠性与时延未验收。[主设计](README.md)维护模式与审核事务，[源码证据 §16](source-evidence.md#plan-generic-json-evidence)记录通用解析范围，[§17](source-evidence.md#plan-length-baseline)记录取消计划长度限制。
 
 ## 1. 业务问题与分层
 
@@ -20,12 +20,12 @@ Main Agent 直接调用 `ExitPlanMode({"plan":"# 设施巡检方案\n\n..."})`�
 
 | 项目 | 规则 |
 |---|---|
-| 调用 | `ExitPlanMode({plan})`；parameters 为 object，required=[plan]，additionalProperties=false；plan 为 string，minLength=1，maxLength=262144；应用层同时校验 UTF-16 单元数与首个非空行以 `# ` 开始 |
+| 调用 | `ExitPlanMode({plan})`；parameters 为 object，required=[plan]，additionalProperties=false；plan 为 string，minLength=1，不设 maxLength；应用层校验完整 Unicode 与首个非空行以 `# ` 开始 |
 | 作用域 | 仅 Runtime Main Agent 当前 plan 响应中的可信内置 ExitPlanMode；Build、Subagent、Thinking、普通文本、工具结果及其他工具不启动计划预览 |
 | 正文 | 参数完整解码后的 Markdown；保留换行、空格及 Unicode，不 trim、不重写；计划正文只出现在参数中一次，不要求控制标记 |
 | 绑定 | 完整 Assistant 正常以 TOOL_USE 结束且只有该 ToolCall；绑定已保存原始 Entry、固定执行/段、当前响应、调用和一次准备快照，不查找最近答案，不接受模型提供的 eventId |
-| 大小 | 完整 plan 最多 262144 UTF-16 单元，并满足原 Assistant、完整调用、计划编码帧及既有缓冲上限；AI 每调用预览预算为 1048576 个原始 UTF-16 单元、最大嵌套深度 64；超限仅停预览，完整计划/事件容量错误仍拒绝审核，不截断正文 |
-| 参数错误 | 完整合法 JSON 中缺参、错型、额外字段、标题或长度不合法：真实 isError=true，向模型返回字段错误与同次校验使用的可信定义；不确认、不执行、不猜参、不自动重放，下一轮由模型修正 |
+| 大小 | 计划正文不设置独立字符数上限；完整内容仍须满足原 Assistant、完整调用、计划编码帧及既有缓冲上限；AI 每调用预览预算为 1048576 个原始 UTF-16 单元、最大嵌套深度 64；超限仅停预览，完整计划/事件容量错误仍拒绝审核，不截断正文 |
+| 参数错误 | 完整合法 JSON 中缺参、错型、额外字段、标题或 Unicode 不合法：真实 isError=true，向模型返回字段错误与同次校验使用的可信定义；不确认、不执行、不猜参、不自动重放，下一轮由模型修正 |
 | 原始流错误 | 非法/未闭合 JSON 仍沿 Provider 错误路径结束；ERROR/ABORTED/LENGTH 不审核。普通工具完整解析保留既有接受行为；重复键或尾随内容由内部诊断标记 INVALID，计划绑定以 PLAN_REVIEW_UNAVAILABLE 拒绝，不新增全局 Provider 容量错误 |
 | 绑定错误 | 非当前调用、身份冲突、混合工具或来源不完整：不提交审核，沿用 PLAN_REVIEW_UNAVAILABLE 等既有失败分类；不复用旧候选或改变模式 |
 | 未调用工具 | 普通解释不创建待交互；不由后端生成计划或补调用，不因模型说“已完成”而退出模式 |
@@ -125,18 +125,19 @@ Mate 公共桥接仍待实现；公共两跳保持各自 ID 映射、认证和�
 
 | 切片 | 范围 | 必须验证 |
 |---|---|---|
-| PS1（已实现） | ExitPlanMode Schema/prepare、内置和业务 PLAN/BUILD、description | required plan、类型/字段/标题/UTF-16/编码容量校验；只生成一份参数、无额外模型往返；错误含字段与可信定义且 isError=true；未调用时不伪造审核；Build/Subagent 不误提交 |
+| PS1（已实现） | ExitPlanMode Schema/prepare、内置和业务 PLAN/BUILD、description | required plan、类型/字段/标题/完整 Unicode/编码容量校验；超过旧 262144 单元的合法计划可完整预览、提交和回读；只生成一份参数、无额外模型往返；错误含字段与可信定义且 isError=true；未调用时不伪造审核；Build/Subagent 不误提交 |
 | PS2（已实现） | AI 通用部分 JSON、Provider 身份/诊断与 Runtime 计划投影 | 每个字符处分片、转义/引号/CRLF/Unicode/代理项、多个调用交错、名称/ID 延迟与变化、重复键/尾随输入；只认可信内置 ExitPlanMode；无空 delta、无普通工具参数泄露、按新增字符扫描，深快照复制成本独立评估；上游一次性参数仍能完成 |
 | PS3（已实现） | 不可变准备快照、Binder 与审核事务 | 最终校验在交互之前；同次快照共享、原 Entry 和唯一调用精确关联；completed 在事务之后，未发预览也可提交；混合工具/取消/截断不误审；approve/revise/interrupt 竞争；首次批准模型请求保留完整 plan 与结果 |
 | PS4（客户端已实现） | 现有公共契约和客户端回归 | delta/completed 字段不变；新完整参数、旧历史均可读；final 覆盖部分增量，completed-only、失败/取消/断网/分页/迟到/修订与模式切换；终态后 preview 不再生成；调用日志不重复展示正文；390 px、滚动及键盘焦点 |
 | PS5（外部待验收） | 实际 Provider、Mate、发布与回滚 | 本次参数 Schema 与业务覆盖确实生效；记录模型样本成功率与首字/审核耗时；两跳身份与安全投影；其他工具不产生公共参数 delta且执行准入顺序不变；排空与新旧历史回滚可读 |
 
-确定性验证结果见[源码证据 §16](source-evidence.md#plan-generic-json-evidence)。单元测试、真实 JAR/openGauss 与前端验证分别记录；生成图只证明文档一致性，受控响应不能证明真实模型可靠性或首字改善。企业 Mate 公共桥接待实现，真实网关时延与生产 GaussDB 验收未完成。
+确定性验证结果见[源码证据 §16](source-evidence.md#plan-generic-json-evidence)及[计划长度专项 §17](source-evidence.md#plan-length-baseline)。单元测试、真实 JAR/openGauss 与前端验证分别记录；生成图只证明文档一致性，受控响应不能证明真实模型可靠性或首字改善。企业 Mate 公共桥接待实现，真实网关时延与生产 GaussDB 验收未完成。
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-10-09 | 计划正文不设独立字符数上限，统一工具校验、预览与历史读取语义。 |
 | 1.3.0 | 2026-10-09 | AI 层提供通用部分参数快照，计划层消费安全预览与内部诊断，保留普通工具完整解析语义。 |
 | 1.2.0 | 2026-09-28 | 以 ExitPlanMode 完整 plan 参数提交审核，专用参数增量复用计划事件并保持其他工具公共协议。 |
 | 1.1.0 | 2026-09-19 | 后端解析计划标记，使用同一计划身份的 delta/completed 流式展示并在审核提交后完成。 |

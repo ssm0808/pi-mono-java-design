@@ -1,10 +1,10 @@
 # CampusClaw 设计仓库
 
-导航版本 3.65.0 · 2026-10-09
+导航版本 3.66.0 · 2026-10-09
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
-实现状态统一使用“已实现”“待实现”“未核验”，测试验收另列。`ExitPlanMode`、`TodoUpdate`、`AskUserQuestion` 已在 Runtime 主线实现，计划生成、参数流与客户端的最新范围见[计划模式证据 §16](01-总体架构/06-CampusClaw计划模式/source-evidence.md#plan-generic-json-evidence)，其他工具保留各自核验归属；Mate 公共桥接与未核验范围分别记录。
+实现状态统一使用“已实现”“待实现”“未核验”，测试验收另列。`ExitPlanMode`、`TodoUpdate`、`AskUserQuestion` 已在 Runtime 主线实现，计划生成、参数流与客户端的最新范围见[计划模式证据 §16](01-总体架构/06-CampusClaw计划模式/source-evidence.md#plan-generic-json-evidence)，[计划长度专项](01-总体架构/06-CampusClaw计划模式/source-evidence.md#plan-length-baseline)取消独立字符上限，其他工具保留各自核验归属；Mate 公共桥接与未核验范围分别记录。
 
 Claw 各接口统一取消客户端条件更新与请求幂等令牌，更新按数据库最新记录合并实际提交字段；[HTTP 设计](01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)与[调度边界](01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)维护规则及现有实现迁移差距。
 
@@ -61,6 +61,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.66.0 | 2026-10-09 | 计划正文取消独立字符数上限，同步计划设计、共享事件契约与基线比较。 |
 | 3.65.0 | 2026-10-09 | 登记 Model 通用参数预览与计划投影的 PR 实现、基线证据和验收边界。 |
 | 3.64.0 | 2026-10-08 | 增加定时任务配置场景与Manual/Schedule原型导航。 |
 | 3.63.5 | 2026-10-08 | 元数据导航统一使用 Skill 和 Tool。 |

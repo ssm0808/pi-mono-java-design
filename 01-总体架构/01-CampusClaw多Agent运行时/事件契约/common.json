@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.63.0",
+    "version": "1.64.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -240,7 +240,7 @@
           "agent.plan completed",
           "eventId/type/sourceEventId/phase/content/createdAt/toolCallId",
           "七项必填；旧完整记录可无 phase",
-          "新写 phase=completed；仅在审核事务成功后发送，与 confirming 同事务保存。content 为同次 preparedInvocation 经可信定义校验的最终 plan Markdown 快照，首个非空行以 # 开始（# 后必须空格），最多 262144 UTF-16 单元且满足完整帧容量；toolCallId 非空。完整内容覆盖同 ID preview，不要求等于已收到 delta 的拼接；无 delta 也可直接建卡。sourceEventId 仍为原始用户根，targetEventId 审核目标仍为计划 eventId。不新增 sourceMessageEventId、planId/version、usage；后端绑定原 ToolCall/Entry 身份与唯一 ExitPlanMode({plan}) 的 preparedInvocation 最终快照。修订使用新计划 ID。旧无 phase 完整记录按 completed 解码，无需重写历史。计划两 phase 与前端消费已实现，参数增量来源待实现，范围见计划专题源码证据。"
+          "新写 phase=completed；仅在审核事务成功后发送，与 confirming 同事务保存。content 为同次 preparedInvocation 经可信定义校验的最终 plan Markdown 快照，首个非空行以 # 开始（# 后必须空格），不设置计划专属字符数上限，仍须满足完整帧容量；toolCallId 非空。完整内容覆盖同 ID preview，不要求等于已收到 delta 的拼接；无 delta 也可直接建卡。sourceEventId 仍为原始用户根，targetEventId 审核目标仍为计划 eventId。不新增 sourceMessageEventId、planId/version、usage；后端绑定原 ToolCall/Entry 身份与唯一 ExitPlanMode({plan}) 的 preparedInvocation 最终快照。修订使用新计划 ID。旧无 phase 完整记录按 completed 解码，无需重写历史。计划两 phase、前端消费及参数增量来源已在 PR #336 实现，未合入 main；取消计划字符上限的实现及验证范围见计划专题源码证据 §17。"
         ],
         [
           "agent.plan 生命周期",

@@ -2,13 +2,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.21.0 |
+| 文档版本 | 1.22.0 |
 | 更新日期 | 2026-10-09 |
 | 状态 | 完整 plan 参数、AI 通用部分 JSON 与计划两 phase 投影已在 PR #336 实现，未合入 main；Mate 桥接待实现，真实模型验收未完成 |
+| 计划长度专项基线 | 2026-10-09 fetch DeepSeek master `5badb15009ae1756c3afe0ae0cef1faafc290ccc`（plan-mode 0.2.1-alpha.1）及 pi main；仅升级长度核验，见[证据 §17](source-evidence.md#plan-length-baseline) |
 | 计划模式主基线 | 2026-09-28 fetch DeepSeek master `4878cdabd87d4041bdaff61d04c966883b9fd07a`（plan-mode 0.2.0-rc.1），参数退出与调用流对照 Codex/pi；旧新提交、路径及范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence) |
 | TODO 公共交互基线 | DeepSeek / OpenCode / Codex 显式清单事件；Claude Managed Agents Beta 的历史与对账，2026-09-15 核对 |
 | Runtime 语义基线 | 2026-10-09 fetch pi main `f1b2e77f5b13b2a199b1052cb79c235451afe7d7`，仅核验 AI 部分 JSON、OpenAI 适配、事件与工具循环收尾；其他历史范围不升级 |
-| CampusClaw 实现基线 | main `769e86592285f4a25b0febaf551eddea6bc7212c`；参数流实现 `a1e6450427abeabaa1af04d5964f371dbbf4cf68`（PR #336），范围见[§16](source-evidence.md#plan-generic-json-evidence)；未重核验范围保留历史归属 |
+| CampusClaw 实现基线 | main `769e86592285f4a25b0febaf551eddea6bc7212c`；参数流实现 `ad289648be09474465d20548cdfaab85b8a6d368`（PR #336），范围见[§16](source-evidence.md#plan-generic-json-evidence)与[§17](source-evidence.md#plan-length-baseline)；未重核验范围保留历史归属 |
 | 设计仓变更前基线 | `77163754da2d04beb72cc6f28bb1d98c27add9e4` |
 | 源码依据 | [基线、符号与差距](source-evidence.md) |
 
@@ -222,9 +223,9 @@ TODO 的精确名称、Schema、返回文本、profile 可用性和边界集中�
 | 项目 | 目标 |
 |---|---|
 | 名称 | `ExitPlanMode`，遵循现有 PascalCase |
-| 参数 | 必需的字符串 plan，禁止额外字段；完整 Markdown 首个非空行以 `# ` 开始，Schema minLength=1/maxLength=262144，应用层另按 UTF-16 校验；不再要求正文控制标记；参数恢复及通用部分 JSON 接线在 PR #336 已实现 |
+| 参数 | 必需的字符串 plan，禁止额外字段；完整 Markdown 首个非空行以 `# ` 开始，Schema minLength=1，不设 maxLength，应用层校验完整 Unicode；不再要求正文控制标记；参数恢复及通用部分 JSON 接线在 PR #336 已实现 |
 | description / 结果引导 | 固定文本见[提示词 §7](plan-policy.md#7-工具描述与结果引导)，两种模式同一工具定义 |
-| 大小 | 正文最多 262144 个 UTF-16 单元，超限不建立审核、不截断正文；准确失败分类见[流式约束](plan-streaming.md#21-模型输出与工具契约) |
+| 大小 | 正文不设置独立字符数上限；仍受完整事件编码容量约束，不截断正文；准确失败分类见[流式约束](plan-streaming.md#21-模型输出与工具契约) |
 | 使用条件 | Runtime 根执行、当前计划模式、响应正常以 TOOL_USE 完成且只有该 ToolCall、原 Entry/调用已保存、最终参数已校验并按同次准备快照绑定、无其他待交互；禁止从历史或预览猜测正文 |
 | 批准结果 | `AgentToolResult` 文本块包含 JSON `{"approved":true}` 及明确续跑指令；公共结果仍沿用 text 块数组 |
 | 修订结果 | 正常结果文本包含 `{"approved":false,"feedback":"..."}`，说明继续规划；不把用户修订作为工具执行故障 |
@@ -232,7 +233,7 @@ TODO 的精确名称、Schema、返回文本、profile 可用性和边界集中�
 
 相对 DeepSeek，修订采用正常的 `approved=false` 结果，是产品展示上的差异，避免将正常的审核反馈显示为工具故障。新增模式/审核失败码集中在接口增量中定义，不通过解析异常文本推断。
 
-正文长度是逻辑上限，完整事件还必须满足部署的 SSE 编码字节上限。提交审核前按现有编码器验证 `agent.plan` 帧大小；超出时按既有 `EVENT_PAYLOAD_TOO_LARGE` 路径可靠结束，不建立待审指针或截断正文。来源 Assistant 或调用若先触发现有大小限制，同样不能继续产生可批准计划。
+计划正文不设置独立字符数上限，完整事件仍须满足部署的 SSE 编码字节上限。提交审核前按现有编码器验证 `agent.plan` 帧大小；超出时按既有 `EVENT_PAYLOAD_TOO_LARGE` 路径可靠结束，不建立待审指针或截断正文。来源 Assistant 或调用若先触发现有大小限制，同样不能继续产生可批准计划。
 
 ### 4.4 TodoUpdate 与显式任务事件
 
@@ -370,6 +371,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.22.0 | 2026-10-09 | 取消计划正文最大字符数，保留内容有效性、审核绑定与完整事件容量约束。 |
 | 1.21.0 | 2026-10-09 | 计划预览消费 AI 通用部分参数快照与内部诊断，同步 PR 实现及兼容性边界。 |
 | 1.20.0 | 2026-10-04 | 模式配置取消客户端条件令牌和 ETag，保留数据库原子更新与审核准入。 |
 | 1.19.0 | 2026-09-28 | 恢复完整 plan 工具参数，以参数增量复用计划预览并保持审核与其他工具协议边界。 |
