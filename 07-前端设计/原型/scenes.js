@@ -3,7 +3,7 @@ window.frontendScenes = [
   {
     "id": "sessions",
     "title": "创建与管理会话",
-    "goal": "进入合适的 Agent 会话，并能快速找到、整理已有任务。",
+    "goal": "进入合适的 智能体会话，并能快速找到、整理已有任务。",
     "frame": "frontend-review.html",
     "view": "chat",
     "states": [
@@ -18,7 +18,7 @@ window.frontendScenes = [
         "view": "plan"
       }
     ],
-    "coverage": "演示新会话空态、选择、置顶与原位改名。搜索、删除、Agent 目录及刷新恢复按设计验收，尚未在该原型完整模拟。",
+    "coverage": "演示新会话空态、选择、置顶与原位改名。搜索、删除、智能体目录及刷新恢复按设计验收，尚未在该原型完整模拟。",
     "directory": "01-创建与管理会话",
     "doc": "../场景/01-创建与管理会话/README.md"
   },

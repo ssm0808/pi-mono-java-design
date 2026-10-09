@@ -957,10 +957,10 @@
             ? `已提交 ${submission.files.length} 个示例附件` : ''].filter(Boolean).join('\n');
           if (draft.value === submission.text) draft.value = '';
           files = files.filter((file) => !submission.files.includes(file));
-          renderFiles(); submission = null; setPhase('running', '完整消息回执已确认；正在等待 Agent 输出。');
+          renderFiles(); submission = null; setPhase('running', '完整消息回执已确认；正在等待智能体回复。');
         } else if (phase === 'confirmingSubmit') {
           setPhase('running', decision?.result === 'deny'
-            ? '拒绝决定已接受；等待未执行记录及 Agent 后续回复。' : '允许决定已接受；等待工具结果，尚未完成。');
+            ? '拒绝决定已接受；等待未执行记录及 智能体后续回复。' : '允许决定已接受；等待工具结果，尚未完成。');
         } else if (phase === 'stopRequested') setPhase('stopAccepted');
       });
       byId('simulate-terminal').addEventListener('click', () => {
@@ -968,7 +968,7 @@
         toolResultText = phase === 'stopAccepted' ? '' : decision?.result === 'deny'
           ? '工具未执行：用户拒绝本次调用。' : '示例完整结果：端口隔离已完成。';
         terminalText = phase === 'stopAccepted' ? '已收到目标的实际停止记录；没有伪造工具结果。'
-          : decision?.result === 'deny' ? '本次工具未执行；Agent 已提供替代建议，任务已完成。'
+          : decision?.result === 'deny' ? '本次工具未执行；智能体已提供替代建议，任务已完成。'
           : '已收到完整结果与本次真实完成记录。';
         setPhase('ready', terminalText);
       });

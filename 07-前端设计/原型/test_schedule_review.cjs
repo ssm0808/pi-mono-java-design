@@ -30,14 +30,14 @@ check('custom',f=>{
   assert.equal(f.$('instructions').value,'草稿内容');assert.equal(f.$('expression').value,'30 17 8 * * MON-FRI');
   f.input('expression','0 8 * * 1-5');f.$('save').click();
   assert.equal(f.snapshot.writeCount,0,'Five-field Cron must not be silently accepted');
-  assert.match(f.$('feedback').textContent,/六字段/);
+  assert.match(f.$('feedback').textContent,/6 项/);
 });
 check('paused',f=>{
   f.mode('manual');f.$('save').click();assert.equal(f.snapshot.saved.schedule,null);
   assert.equal(f.snapshot.saved.status,'paused','Trigger changes must not unpause the task');
   assert.equal(f.$('pause').hidden,true);assert.equal(f.$('run').disabled,false);
   f.$('run').click();f.$('run').click();assert.equal(f.snapshot.writeCount,2,'Repeated run clicks while pending must not dispatch twice');
-  assert.match(f.$('run-result').textContent,/已受理/);
+  assert.match(f.$('run-result').textContent,/运行请求已提交/);
 });
 check('schedule',f=>{
   f.$('unknown-save').checked=true;f.$('save').click();
@@ -51,6 +51,6 @@ check('schedule',f=>{
   f.$('save').click();assert.equal(f.$('saved-future').querySelectorAll('time').length,5);
   f.$('edit').click();f.input('at','09:00');assert.equal(f.$('future-times').hidden,true);
   f.$('save').click();assert.equal(f.$('saved-future').querySelectorAll('time').length,0,'A changed rule must not reuse stale fixture times');
-  assert.match(f.$('saved-future').textContent,/未提供/);
+  assert.match(f.$('saved-future').textContent,/暂无/);
 });
 console.log(`${count} schedule fixture scenarios passed: explicit mode, lossless drafts, paused edits, unknown writes and stale times.`);

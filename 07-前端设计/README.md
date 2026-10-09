@@ -1,6 +1,6 @@
 # CampusClaw 前端设计
 
-版本：2.6.0 · 2026-10-08 · 模块 M07
+版本：2.6.1 · 2026-10-08 · 模块 M07
 
 [仓库导航](../README.md) · [打开场景原型](原型/index.html) · [公共规范](公共规范.md) · [技术设计与全局类图](技术设计/README.md)
 
@@ -10,7 +10,7 @@
 
 | 编号 | 场景设计 | 用户目标 | 原型 |
 |---|---|---|---|
-| 01 | [创建与管理会话](场景/01-创建与管理会话/README.md) | 进入合适的 Agent 会话，并能快速找到、整理已有任务。 | [高](原型/index.html#scene=sessions&fidelity=high) · [低](原型/index.html#scene=sessions&fidelity=low) |
+| 01 | [创建与管理会话](场景/01-创建与管理会话/README.md) | 进入合适的 智能体会话，并能快速找到、整理已有任务。 | [高](原型/index.html#scene=sessions&fidelity=high) · [低](原型/index.html#scene=sessions&fidelity=low) |
 | 02 | [发送消息与附件](场景/02-发送消息与附件/README.md) | 提交目标与材料，确认请求是否被接收，并继续编辑后续草稿。 | [高](原型/index.html#scene=message&fidelity=high) · [低](原型/index.html#scene=message&fidelity=low) |
 | 03 | [查看执行与停止](场景/03-查看执行与停止/README.md) | 理解当前进展、查看真实工具结果，并在需要时停止任务。 | [高](原型/index.html#scene=execution&fidelity=high) · [低](原型/index.html#scene=execution&fidelity=low) |
 | 04 | [工具授权](场景/04-工具授权/README.md) | 在操作执行前理解影响范围，明确允许或拒绝本次工具调用。 | [高](原型/index.html#scene=permission&fidelity=high) · [低](原型/index.html#scene=permission&fidelity=low) |
@@ -64,6 +64,7 @@ JSDOM_MODULE=/tmp/campusclaw-design-check/node_modules/jsdom node 07-前端设�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.1 | 2026-10-08 | 统一智能体、手动与计划安排等中文界面文案，并简化定时配置与运行反馈。 |
 | 2.6.0 | 2026-10-08 | 增加定时任务场景与分区原型，显式映射Manual/Schedule并采用保存后的权威计划时间。 |
 | 2.5.1 | 2026-10-05 | 补充已实现定时任务工作台的设计入口、源码基线与测试及视觉验收边界。 |
 | 2.5.0 | 2026-09-29 | 明确定时任务专题仅定义 Claw 接口，页面与 Mate 接入另行设计。 |
