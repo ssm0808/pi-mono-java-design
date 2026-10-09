@@ -481,3 +481,52 @@ Java 路径前缀 R 沿用 §13.1；Codex 路径相对其仓库。
 | 其余 API 门禁 | 单独运行 control retirement、chat API、Help、Command catalog、Command response、document maintenance 共 68 项测试通过；Skill statistics、retained contract 退役检查与 10 项接口目录检查通过。 |
 | 全量 API 门禁限制 | `validate-chat-api.py --full` 未通过：`validate-chat-http-v1.py:676` 禁止 Slash 文档出现“目录”，被 `04-命令与技能/00-Slash-Command通用模块/README.md:153` 的“同目录”触发。两个文件与变更前 `77163754da2d04beb72cc6f28bb1d98c27add9e4` 一致，已确认基线具有同一失败；本次未改规则或该无关文档，后续检查分别运行。 |
 | Git 与实现边界 | `git diff --check` 通过；产品代码未修改，Provider 参数生成节奏、解析实现、真实浏览器集成、模型成功率和时延仍按 PS1～PS5 待验收。 |
+
+
+<a id="plan-generic-json-evidence"></a>
+
+## 16. AI 通用部分 JSON 与计划投影（2026-10-09）
+
+本节只升级 AI 参数解析、内部事件和计划预览/审核接线。其他模式、工具及外部基线仍保留原核验归属。
+
+| 来源 | 分支、完整提交与范围 |
+|---|---|
+| pi 上游 | 2026-10-09 确认默认分支 main，隔离 fetch 到 `f1b2e77f5b13b2a199b1052cb79c235451afe7d7`；仓库 https://github.com/badlogic/pi-mono.git；这是当次默认分支源码快照，不能等同最新稳定发布，ai package 标记 1.1.0 |
+| pi 旧证据 | §15 的 `c1449660c83fd00a7c71d5f7e1bd29fafd400550` 保留历史；本次讨论前一快照 `6fb2e7815167e6b19006fc526d1a5d0f5f998787` 的相关 AI/Loop 文件与新 HEAD 比较无差异，结论不变；OpenAI 路径在当前源码为 `src/api/openai-completions.ts` |
+| Java | 主线修改基线 `769e86592285f4a25b0febaf551eddea6bc7212c`；参数专用实现 `a76e6aaf7e221f9f39418f566778737af491b734`；通用实现 `a1e6450427abeabaa1af04d5964f371dbbf4cf68`，分支 codex/plan-argument-streaming，[Draft PR #336](https://github.com/superheromeZzh/pi-mono-java/pull/336)，尚未合入 main |
+| 设计 | 本次修改前设计 main `0396327cb933b8ebb15b39c7259e77706ceecf85`；通用机制归 Model v2.11，计划投影归 plan-streaming v1.3，整体审核归主设计 v1.21；其他基线没有重新 fetch，不作为本次最新结论 |
+
+### 16.1 已观察 pi 行为
+
+| 仓库相对路径 / 符号 | 观察 |
+|---|---|
+| `packages/ai/src/utils/json-parse.ts#parseStreamingJson`、`parseJsonWithRepair` | 通用部分 JSON；依次尝试完整解析/修复、partial-json、修复后 partial-json；支持嵌套结构，修复非法转义和控制字符 |
+| `packages/ai/src/api/openai-completions.ts` 工具 delta 分支、`finishBlock` | partialArgs 累积原始字符串，及时更新 id/name，再更新部分 arguments；结束时仍调用 parseStreamingJson，最终路径是容错解析 |
+| `packages/ai/src/types.ts#AssistantMessageEvent` | partial 是持续更新的可变消息对象，并非每片不可变历史快照 |
+| `packages/agent/src/agent-loop.ts#streamAssistantResponse`、工具循环收尾 | 最终消息决定后续执行，LENGTH 不继续执行工具；不能由参数片段推断工具已执行或审核可用 |
+
+### 16.2 Java 接线与差异
+
+| 仓库相对路径 / 符号 | 当前实现与目的 |
+|---|---|
+| `modules/ai/src/main/java/com/campusclaw/ai/util/StreamingJsonParser.java#accept/#arguments`、`JsonStringPreview.java` | 通用增量词法状态机，生成深度只读参数快照；每调用 1048576 原始 UTF-16 单元及深度 64 的预算只控制预览；无新依赖 |
+| `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java#appendToolCall/#partial/#parseArguments/#inspectArgumentJson/#finishTools` | 即时身份和部分参数；完整原始参数独立按既有 Jackson 规则解析；额外诊断重复键/尾随内容，既有普通工具接受行为保持，删除此前全响应 4 MiB 拒绝规则 |
+| `modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java#ToolCallEndEvent`、`ToolArgumentJsonStatus.java` | 内存 VALID/INVALID/UNKNOWN，JsonIgnore 不序列化诊断；三参构造及无诊断反序列化保留 UNKNOWN。生产 Mate 发 VALID/INVALID，不把 UNKNOWN 解释为原始 JSON 校验成功 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/PlanArgumentPreview.java#accept/#finish/#requireFinalIdentity` | 只读取 partial.arguments.plan；身份绑定、前缀增量与冻结、最终 INVALID 拒绝；删除 PlanArgumentPreviewParser，不缓存 raw arguments |
+| 同目录 `RuntimeEventProjector.java#projectMessageUpdate/#bindPlanProposal`、`PlanProposalBinder.java#bind` | 透传内部诊断到候选，完整参数经 Pipeline prepare 后绑定已保存 Assistant、唯一调用与审核；public completed 仍在事务成功之后 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/plan/ExitPlanModeTool.java#prepare`、`PlanArgumentSnapshotDTO.java` | required plan、唯一字段、首非空行标题、UTF-16 与 Unicode 校验，共享同次不可变快照；错误真实 isError，模型收到字段错误与可信定义 |
+| `modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeExecutionControlMapper.xml#countPlanReviewSource` | 事务内核对来源、唯一调用、活动叶子及参数正文完全一致；预览不是审核权威 |
+
+架构差异：参考 pi 的 AI 通用能力，但保留 Java 不可变事件快照、独立完整解析和现有普通工具接受行为，不将修复预览用于执行。安全加固：原始歧义诊断只阻止计划审核，参数错误不自动猜参或重放。产品约束：只有可信计划正文进入公共 preview，不暴露其他半成品参数、内部 Schema 或诊断。
+
+可信目标解析 → 完整参数校验/prepare → Host 权限或必要确认 → 业务执行 → 结果回传的原有顺序保持。计划退出工具在审核提交后等待真实决定，批准后才应用 build；后续业务工具仍独立授权。该顺序是 CampusClaw 目标与实现边界，不宣称所有基线统一如此。
+
+### 16.3 验证与未完成边界
+
+- JDK 21 `./mvnw -q clean verify spotless:check` 通过：327 个测试类、2195 项测试，0 失败、错误、跳过；clean 排除了已删除专用解析器的旧 class。
+- 通用解析测试覆盖每个分片点、嵌套对象/数组、标量、跨片转义/代理项、只读与旧快照隔离；Provider 覆盖身份延迟、多调用交错、歧义 JSON 兼容、超过原 4 MiB 参数仍正常完成；Runtime 验证 INVALID 不能创建审核事务。序列化测试确认诊断不进入事件 JSON。
+- 专用 openGauss 7.0.0-RC3 上 RuntimePlanReviewOpenGaussIT 9 项及 RuntimePlanModeOpenGaussIT 2 项真实 JAR/HTTP 测试通过（共 11 项，0 失败/错误/跳过）。覆盖参数与待审正文精确一致、批准/修订/停止竞争、两段 delta 与 completed 同 ID、批准后模型请求保留完整 plan；受控模型不能替代真实模型验收。
+- 前端本增量没有修改；`a76e6aa` 已通过 36 文件、336 项测试及生产构建，作为该客户端修改的历史证据，不冒充本次重新执行。
+- 本次 4 个变更测试文件质量脚本报告 errors=0，17 项为命名风格 warnings，人工检查真实断言；变更 Java 方法非空物理行无超过 50，格式和 Checkstyle 通过。
+- 公司镜像已按 `sync-campusclaw.sh --no-verify` 同步；默认构建无法解析 `com.huawei.hicampus:NativeParent:26.0.0-SNAPSHOT`，未进入公司源码编译。确定性测试不证明真实模型遵循、首字改善或生产 GaussDB 兼容；Mate 公共桥接待实现，业务覆盖文件发布仍须部署侧验收。
+- 设计仓 `check-diagrams.py --render`：36 个专题、133 图、54 个时序图，0 errors；图索引已更新。唯一复杂度提示来自未修改的 managed_session_compaction：安全窗口、摘要有效性及首次 overflow 恢复资格三个条件属于同一次压缩的独立准入与恢复边界，保留原图范围。已检查本次计划/Model 全局图、参数流及审核图的原尺寸和文档宽度；全局计划图在文档宽度用于结构总览，细节保留原尺寸入口，不拆断完整职责链。ASCII、SVG XML、图源同步、链接/锚点及 git diff --check 通过。

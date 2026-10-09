@@ -1,6 +1,6 @@
 # Model
 
-版本：2.10.0 · 2026-09-19 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置决定模型绑定；每个新执行查询 Mate 窗口，输出额度由 Mate 控制；查询与输出策略迁移、旧全局目录删除待实现。
+版本：2.11.0 · 2026-10-09 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置决定模型绑定；每个新执行查询 Mate 窗口，输出额度由 Mate 控制；查询与输出策略迁移、旧全局目录删除待实现。
 
 | 内容 | 维护位置 |
 |---|---|
@@ -71,7 +71,7 @@ Provider 身份与协议路由分开，避免按厂商堆叠中央分支。内�
 
 ![Chat 调用时序](chat-sequence.svg)
 
-[PlantUML 源码](diagram.puml#L168) · [原尺寸 SVG](chat-sequence.svg)
+[PlantUML 源码](diagram.puml#L187) · [原尺寸 SVG](chat-sequence.svg)
 
 ### 请求映射
 
@@ -109,6 +109,22 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 
 调用须配置连接、首字节、流空闲、总执行时间与缓冲上限，数值由部署管理。不记录完整 SSE、prompt、Tool 参数或 thinking；错误不得暴露 endpoint、credential、私有路由、stack trace 或推理正文。
 
+<a id="streaming-json"></a>
+
+### 通用工具参数预览
+
+设备巡检工具的参数逐步到达时，上层需要提前展示有用信息；工具执行仍必须等待完整调用。AI 提供通用部分参数对象，Runtime 再按业务和权限选择展示字段。此能力在 `a1e6450427abeabaa1af04d5964f371dbbf4cf68`（[PR #336](https://github.com/superheromeZzh/pi-mono-java/pull/336)）已实现，尚未合入 main；不改变本文其他待实现项。
+
+`MateChatSseParser` 为每个工具调用保留原始参数缓冲和独立 `StreamingJsonParser`。后者按新增字符解析对象、数组、嵌套值、字符串、数值、布尔与 null；未闭合字符串只暴露完整 Unicode 前缀，数值/字面量等到词法边界才发布。`ToolCallDeltaEvent.partial` 及时携带已知 ID/name 和深度只读参数快照，空参数 delta 也可传播刚到达的身份，旧快照不随新输入变化。
+
+每调用预览限制为 1048576 个原始 UTF-16 单元和嵌套深度 64。语法错误、重复键或预算超限永久停用该预览；这是展示降级，不使完整调用失败。词法扫描按新增输入推进，快照仍有深复制成本；预算不限制原有完整参数缓冲，不能把它解释为整体内存或吞吐保证。
+
+结束时从原始缓冲独立执行既有 Jackson Map 解析，不用补全对象代替最终参数，不把预览送入执行或权威错误消息。普通工具完整解析的既有重复键末值、尾随内容接受语义保持。额外严格扫描产生 `ToolArgumentJsonStatus`（VALID/INVALID/UNKNOWN），只存在内存中的 `ToolCallEndEvent`，不改变其 JSON 序列化、ToolCall、模型历史或公共事件。生产 Mate 始终提供 VALID/INVALID；兼容结构化事件构造器和反序列化缺省为 UNKNOWN，不能把 UNKNOWN 当作原始输入通过严格验证。
+
+原始 JSON 非法或截断仍使 Provider 失败。业务参数校验、权限/必要确认和执行仍由 Agent/Runtime 在完整调用之后负责；AI 不依赖计划工具。Runtime 只把可信 ExitPlanMode 的 plan 前缀投影成公共计划事件，并在内部诊断为 INVALID 时拒绝审核；精确身份、冻结预览和审核规则归[计划流式专题](../../01-总体架构/06-CampusClaw计划模式/plan-streaming.md)。其他工具的半成品参数不自动公开。
+
+本次以 2026-10-09 隔离 fetch 的 pi main `f1b2e77f5b13b2a199b1052cb79c235451afe7d7` 为 AI 主基线，核验 `packages/ai/src/utils/json-parse.ts#parseStreamingJson`、`packages/ai/src/api/openai-completions.ts` 的累积/结束路径以及 `types.ts` 的 partial 语义。pi 的修复解析、最终容错和可变 partial 不直接照搬：Java 保留事件快照与完整解析边界；这是架构适配。完整新旧提交、源码符号、验收和安全差异见[专项证据 §16](../../01-总体架构/06-CampusClaw计划模式/source-evidence.md#plan-generic-json-evidence)。仅使用现有 JDK/Jackson，无新增直接或传递依赖。
+
 <a id="implementation"></a>
 
 ## 5. 实施与验收
@@ -121,6 +137,7 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 | S1 · 模型选择 | 固定 §2 的设置加载与快照链 | 覆盖缺失、空白、重复、默认值不在列表、Agent 隔离，以及默认/切换/压缩/Child/Cron 同源；禁止回退 |
 | S2 · 全局目录清理 | 删除 `ModelRegistry`、两处 JSON 探测、`ModelCatalogService`、`CatalogRuntimeModelManager` 及专用环境凭据解析；迁移 SSE 仍使用的成本计算 | Spring 不再装配上述目录 Bean；启动无外部模型文件探测及加载日志；无消费者的能力辅助方法删除 |
 | S3 · 调用与依赖清理 | 移除 AI Service 的目录依赖；删除 Anthropic、OpenAI Completions、OpenAI Responses、Mistral 具体适配器及专属测试，按下表清理 SDK 并同步公司镜像 | 只内置 CampusMate，空 API 注册表可启动；新旧身份遵守 §3；公共消息、流、枚举与有消费者的工具不误删 |
+| S5 · 参数预览（PR 已实现） | 通用增量解析、身份快照、内部诊断及独立完整解析 | 每字符分片、嵌套数组/对象、Unicode、身份延迟/多工具交错、快照只读与隔离；预览超限不拒绝完整调用；重复键/尾随输入兼容；诊断不序列化 |
 | S4 · 回归 | 验证 §4 映射与流生命周期、用量事务及[配置验收](../02-CampusMate共享客户端配置/README.md#10-验收标准) | 覆盖非文本本地拒绝、未知/可选字段、usage 缺失、流前/流后错误、并发隔离、取消与唯一终态；canonical 构建/测试和公司镜像编译通过 |
 
 测试名称和能力注册表 selector 只在对应测试真实存在并执行后更新。受阻项按实际结果记录，不把设计确认记成实现通过。
@@ -140,6 +157,7 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.11.0 | 2026-10-09 | AI 提供通用只读参数预览与内部原始 JSON 诊断，保持完整解析和执行边界。 |
 | 2.10.0 | 2026-09-19 | Mate 控制全部输出额度，Claw 每个新执行读取模型窗口并在执行内复用。 |
 | 2.9.0 | 2026-09-19 | 按模型查询 Mate 能力并发布到 Agent 快照，窗口必填、输出上限可选，删除统一 token 默认值。 |
 | 2.8.2 | 2026-09-17 | 模块统一命名为 Model，更新目录、图名与引用。 |

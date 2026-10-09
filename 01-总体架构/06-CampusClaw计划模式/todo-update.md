@@ -75,7 +75,7 @@ Track implementation progress in build mode; do not call this tool during plan-m
 
 ![TodoUpdate 后端任务事件流程](todo_update_sequence.svg)
 
-[原尺寸 SVG](todo_update_sequence.svg) · [PlantUML 源码：`todo_update_sequence`](diagram.puml#L471)
+[原尺寸 SVG](todo_update_sequence.svg) · [PlantUML 源码：`todo_update_sequence`](diagram.puml#L476)
 
 1. 模型生成 TodoUpdate ToolCall；Projector 按原路径保存和发送 `agent.tool_call`，`requiresConfirmation=false`。调用参数不提交进度。
 2. Pipeline 校验参数并执行工具，工具返回规范化完整列表，不直接写数据库或发 SSE。

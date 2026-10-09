@@ -47,24 +47,26 @@ hide empty members
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java :: prepare, rebuild, writeRuntimeTree, publish.
 ' Observed at 8c5fda1d: optional mode files, refresh preservation and immutable prompt snapshots are implemented.
 ' Design reason: resolve files under the publication lock once; approval reuses the original snapshot.
-' Plan streaming scope checked 2026-09-28: Java 553dcd5e2ff682f9684810a043b442b37a02e54a.
+' Plan streaming scope checked 2026-10-09: Java a1e6450427abeabaa1af04d5964f371dbbf4cf68 (PR 336).
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: projectMessageUpdate, persistAssistant, beginPlanReview.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/PlanTextParser.java :: parse; PlanProposalBinder.java :: bind.
-' Observed behavior: text marker parsing, empty ExitPlanMode arguments and shared proposal snapshots are implemented.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/PlanArgumentPreview.java :: accept, finish; PlanProposalBinder.java :: bind.
+' Observed behavior: complete plan arguments, generic AI previews and shared proposal snapshots are implemented in PR 336.
 ' Source: modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java :: ToolCallDeltaEvent.
 ' Source: modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java :: appendToolCall, startTool, finishTools.
-' Observed behavior: raw argument deltas exist; Mate partial ToolCall identity remains empty until finishTools.
+' Source: modules/ai/src/main/java/com/campusclaw/ai/util/StreamingJsonParser.java :: accept, arguments.
+' Observed behavior: Mate publishes current identity, immutable partial arguments and internal final JSON diagnostics.
 ' Source: modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java :: validate, prepare, applyBeforeHook.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/plan/ExitPlanModeTool.java :: parameters, execute.
 ' Design reason: restore required plan arguments, preview only that field, and share one validated immutable snapshot with review.
-' Pending implementation: argument preview parser, final argument snapshot, required plan schema and Mate partial identity.
+' AI baseline: pi main f1b2e77f5b13b2a199b1052cb79c235451afe7d7, packages/ai/src/utils/json-parse.ts :: parseStreamingJson.
+' Java divergence: preview never replaces independent complete parsing; ordinary tool acceptance is preserved.
 ' Historical DeepSeek and prompt baselines above retain their original scope; no upstream refresh is claimed here.
 title CampusClaw Plan and User Interaction - Complete Target Class View
 allowmixing
 
 legend bottom left
   Green: implemented structure     Amber: recommended extension
-  Blue: pending extraction or explicitly marked streaming additions
+  Blue: pending extraction; streaming additions implemented in PR 336
   Blue connectors: recommended responsibility links, not missing features
   [P] = Pending implementation
   Controllers, services, factories, repositories, TODO mapper: Spring singletons
@@ -100,7 +102,7 @@ package "Application and assembly" as Application {
   }
   class "PlanProposalBinder" as ProposalBinder <<extended>> #FFF7DD {
     +bind(argumentSnapshot, source, call): SnapshotDTO
-    argument source: Pending implementation
+    argument source: implemented in PR 336
   }
   class "RuntimeUserQuestionService" as QuestionService <<implemented>> #ECFDF5 {
     +beginQuestion(finalCall, targetDTO)
@@ -165,11 +167,12 @@ package "Execution ownership" as ExecutionScope {
     immutable target, assistantEntryId, planEventId
     immutable sourceEventId, toolCallId, content
   }
-  class "PlanArgumentPreviewParser" as ArgumentParser <<Pending implementation>> #EAF2FF {
-    one per Assistant response and tool call
-    +push(rawJsonDelta): decoded plan fragment
+  class "PlanArgumentPreview" as ArgumentParser <<implemented>> #ECFDF5 {
+    one candidate per Assistant response
+    +accept(partial): plan prefix delta
+    +finish(status): record final diagnostic
   }
-  class "PlanArgumentSnapshotDTO" as ArgumentSnapshot <<Pending implementation>> #EAF2FF {
+  class "PlanArgumentSnapshotDTO" as ArgumentSnapshot <<implemented>> #ECFDF5 {
     immutable validated plan and invocation identity
     final complete arguments only
   }
@@ -183,12 +186,13 @@ package "Core and model tools" as ToolScope {
   class "ToolExecutionPipeline" as Pipeline <<existing>> #ECFDF5
   class "Provider stream adapters" as ProviderAdapters <<extended>> #FFF7DD {
     typed raw argument deltas: implemented
-    Mate partial identity: Pending implementation
+    immutable partial arguments and identity
+    internal final JSON diagnostic
   }
   interface "AgentTool" as Tool <<existing>> #ECFDF5
   class "ExitPlanModeTool" as ExitTool <<extended>> #FFF7DD {
     required plan: Markdown string
-    argument contract: Pending implementation
+    argument contract: implemented in PR 336
     +prepare(finalArgs): prepared invocation
   }
   class "TodoUpdateTool" as TodoTool <<implemented>> #ECFDF5 {
@@ -233,7 +237,7 @@ UI *-[#2563EB]- "1" QuestionUI
 QuestionUI -[#2563EB]-> EventStore
 EventService -[#2563EB]-> QuestionService
 QuestionService -[#2563EB]-> QuestionParser
-QuestionParser ..[#2563EB]> QuestionSnapshot : creates
+QuestionParser ..[#2563EB]> QuestionSnapshot
 QuestionService -[#2563EB,norank]-> Persistence
 Projector -[#2563EB,norank]-> QuestionService : finalized question call
 Pending o-[#2563EB]- "0..1" QuestionSnapshot
@@ -304,9 +308,9 @@ Repos --> Mappers
 Mappers --> DB
 Projector --> Persistence
 Projector -[#2563EB,norank]-> ProposalBinder : bind validated invocation
-Projector *-[#2563EB,norank]- "0..*" ArgumentParser : Pending implementation
-ExitTool .[#2563EB,norank].> ArgumentSnapshot : prepares [P]
-ProposalBinder -[#2563EB,norank]-> ArgumentSnapshot : same snapshot [P]
+Projector *-[#2563EB,norank]- "0..1" ArgumentParser : partial arguments and status
+ExitTool .[#2563EB,norank].> ArgumentSnapshot : prepares
+ProposalBinder -[#2563EB,norank]-> ArgumentSnapshot : same snapshot
 ProposalBinder .[norank].> ProposalSnapshot : immutable bound source
 Pending o-[#2563EB]- "0..1" ProposalSnapshot
 Loop -[norank]-> ProviderAdapters : model stream
@@ -326,8 +330,9 @@ note bottom of Pending
   rechecked under database locks before claim.
 end note
 note bottom of ArgumentParser
-  Pending implementation: trusted ExitPlanMode only.
-  Decode the plan field from raw JSON deltas.
+  Trusted ExitPlanMode only; no raw JSON parsing.
+  AI owns generic partial JSON; see Model global view.
+  Final INVALID diagnostics prevent review.
   Preview is neither execution nor review admission.
   Same plan eventId for delta and committed completed.
   No generic public tool-argument stream.
@@ -388,7 +393,7 @@ participant "Review service" as Review
 database "Session and controls" as DB
 participant "Control delivery" as Dispatch
 participant "Original execution" as Agent
-Agent -> Review : Publish validated plan-argument proposal [P]
+Agent -> Review : Publish validated plan-argument proposal
 Review -> DB : Commit plan, pending target and confirming boundary
 Review --> Client : Complete plan; close current response
 Client -> Review : Approve or revise exact plan
@@ -408,7 +413,7 @@ Agent -> Review : Persist normal tool result and continued output
 Review --> Client : Output on the new response segment
 note over Review,Agent
   Approval commits build mode in the acceptance transaction.
-  [P] = Pending implementation: bind the validated plan argument.
+  Validated plan-argument binding is implemented in PR 336.
   Full argument validation precedes the review transaction.
   No credential reconstruction or new root execution.
 end note
@@ -569,10 +574,10 @@ User -> Client : Describe work in a plan-mode Session
 Client -> Runtime : Submit request once
 Runtime -> DB : Accept root with captured plan configuration
 Runtime -> Agent : Research with the captured plan prompt
-Agent -->> Runtime : ExitPlanMode argument deltas [P]
-Runtime -->> Client : Read-only agent.plan preview [P]
-Agent --> Runtime : Complete sole ExitPlanMode({plan}) call [P]
-Runtime -> Runtime : Validate plan and bind original call [P]
+Agent -->> Runtime : ExitPlanMode partial arguments
+Runtime -->> Client : Read-only agent.plan preview
+Agent --> Runtime : Complete sole ExitPlanMode({plan}) call
+Runtime -> Runtime : Validate plan and bind original call
 Runtime -> DB : Commit complete proposal and pending review
 Runtime --> Client : Committed complete plan and confirming
 User -> Client : Approve or request revision
@@ -591,7 +596,7 @@ end
 note over Runtime,DB
   Waiting keeps the Session running.
   Approval does not grant business-tool permission.
-  [P] = Pending implementation: argument source and preview.
+  Argument source and preview are implemented in PR 336.
   Existing plan cards and review transactions are reused.
 end note
 @enduml
@@ -653,17 +658,18 @@ end note
 @enduml
 
 @startuml plan_streaming_sequence
-' Source baseline checked 2026-09-28: pi-mono-java 553dcd5e2ff682f9684810a043b442b37a02e54a.
+' Source baseline checked 2026-10-09: pi-mono-java a1e6450427abeabaa1af04d5964f371dbbf4cf68 (PR 336).
 ' Source: modules/ai/src/main/java/com/campusclaw/ai/stream/AssistantMessageEvent.java :: ToolCallDeltaEvent.
 ' Source: modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java :: appendToolCall, startTool, finishTools.
-' Observed behavior: Provider raw argument deltas are implemented; Mate partial id/name need a pending identity fix.
+' Observed behavior: Provider publishes immutable generic partial arguments, current identity and final JSON diagnostics.
 ' Source: modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java :: runTurns, runToolPhase.
 ' Source: modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java :: validate, prepare, applyBeforeHook.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: projectMessageUpdate, persistAssistant, beginPlanReview.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/PlanProposalBinder.java :: bind.
-' Observed behavior: the current Java reads text markers and accepts empty ExitPlanMode arguments.
+' Source: modules/ai/src/main/java/com/campusclaw/ai/util/StreamingJsonParser.java :: accept, arguments.
+' Observed behavior: full arguments are parsed independently; preview cannot become execution input.
 ' Design reason: preview decoded plan arguments while full validation and durable review stay separate.
-' Pending implementation: required plan schema, PlanArgumentPreviewParser, PlanArgumentSnapshotDTO and argument binding.
+' Observed behavior: required plan, PlanArgumentSnapshotDTO and argument binding are implemented in PR 336.
 ' Presentation: one response from Provider deltas to review admission; approval is a separate sequence.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -688,14 +694,15 @@ participant ToolPipeline as Pipeline
 participant Host
 database "Session authority" as Session
 participant Client
-Loop -> Host : Raw argument deltas and current call identity [P]
-Host -> Host : Select ExitPlanMode; decode only plan fragments [P]
+Loop -> Loop : Provider builds generic partial argument snapshot
+Loop -> Host : Partial arguments and current call identity
+Host -> Host : Select trusted ExitPlanMode; project plan prefix
 Host -->> Client : agent.plan delta; read-only preview
-Loop -> Host : Final original Assistant and complete ToolCall
+Loop -> Host : Final JSON diagnostic, Assistant and complete ToolCall
 Host -> Session : Persist original Assistant, usage and tool call
 Session --> Host : Committed source identity
 Loop -> Pipeline : Execute the finalized ExitPlanMode call
-Pipeline -> Pipeline : Resolve trusted tool; validate complete plan [P]
+Pipeline -> Pipeline : Resolve trusted tool; validate complete plan
 break Invalid complete arguments
   Pipeline --> Loop : isError=true; field errors and trusted definition
   note over Host,Client
@@ -703,8 +710,8 @@ break Invalid complete arguments
     Preview remains unsubmitted; no automatic repair or replay.
   end note
 end
-Pipeline -> Host : Prepared invocation with the same argument snapshot [P]
-  Host -> Host : Bind sole call, original Assistant and plan root [P]
+Pipeline -> Host : Prepared invocation with the same argument snapshot
+  Host -> Host : Reject INVALID status; bind sole call, source and plan root
   Host -> Session : Recheck root, mode and pending state; commit review
   Session --> Host : Committed plan and confirming, or failure
   alt Review transaction committed
@@ -716,7 +723,7 @@ Pipeline -> Host : Prepared invocation with the same argument snapshot [P]
     Pipeline --> Loop : isError=true; no business execution
   end
 note over Host,Client
-  [P] = Pending implementation; existing two-phase plan events are reused.
+  Implemented in PR 336; existing two-phase plan events are reused.
   Preview is not execution, validation or review admission.
   Binding failure stops before the transaction.
   Only the review transaction makes a plan actionable.
