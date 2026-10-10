@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.84.0 |
-| 更新日期 | 2026-10-09 |
+| 文档版本 | 1.85.0 |
+| 更新日期 | 2026-10-10 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -19,7 +19,7 @@
 | 工具发现专项基线 | A11：2026-09-22 fetch OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`、Codex `main@ac7634b9f73ec1bf96466be7a5869f0949d20b30`；沿用 DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`。仅升级 Skill、固定搜索、延迟工具暴露与远端工具适配结论；默认分支快照不等于稳定发布，其他模块历史证据不变 |
 | 参数恢复专项基线 | A11：2026-09-22 确认 pi `main@95fbc04997eaee961eb673fa7923e9220609ebd5`、DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`；CampusClaw PR #323 开发提交从 `c9a2340f87bda6dff6bbd352f6995f8551206bb5` 更新到 `ae6645caaade3b9520220a34af940210850ef36a`，只升级确认前准备、模型恢复反馈和 SearchTools 差距，见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#search-tools-evidence) |
 | Command 状态专项基线 | M05：用户指定 Java `53eff85c7f41de23eb434e027782f5085a8b8e45`；只复核 Runtime 命令、严格名称、展开文本恢复与 Slash 交互，见[当前实现](../../04-命令与技能/00-Slash-Command通用模块/README.md#current-runtime-status)；不升级外部基线或统计结论 |
-| Skill 统计专项基线 | A09：Codex d58d0e58 的完整计数链；Java f61906b9 的 Runtime/Read/Child/Cron 骨架，#295/#298 仅作固定对照，不升级其他 M05 结论 |
+| Skill 统计专项基线 | A09：2026-10-10 核验 #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 的工具、三入口、采集及事务；隔离 fetch pi `main@42a3497d03ad17e308a2299fa824727894f2c0ec` 只更新 Start/End、后置 hook 与订阅结论，Codex/OpenCode 保留历史研究 |
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
 | 线性历史专项基线 | A12：pi main `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`，2026-09-22 已确认默认分支并隔离 fetch；Java 本地 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；只升级分支索引与 Session 历史读取结论 |
 | Redis 观察专项基线 | A13：2026-09-22 确认并隔离 fetch OpenCode dev `fe3f3a41f79ad292cc3c7c629567385a20ec5130`，仅事件协议、live/durable 定义与实例监听；Java 本地 `53eff85c7f41de23eb434e027782f5085a8b8e45` 的投影/流/控制/终态/依赖范围；新能力待实现，v2 仍为 experimental |
@@ -63,7 +63,7 @@ Claw Session、完整事件与定时任务的[统一秒级目标](../01-CampusCl
 | M02 · Model | 如何让业务 Agent 设置成为唯一模型权威；Provider 调用与模型选择如何分层；原始事件在哪层归一化 | 模型目录差异采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、业务 Agent 设置、旧全局目录删除和 SDK 削减；Codex 事件归一化对比及完整取消链仍待专项核验 |
 | M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；[A11](#a11)覆盖远端代理与 Skill 工具按需披露 |
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；[A12](#a12)覆盖单条时间线与非递归读取，其他上下文比较待补证，不默认 token 全量落盘 |
-| M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计参照 Codex/OpenCode | [A09](#a09)覆盖使用信号、根去重、失败隔离与入口范围；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；[当前 Command 状态](../../04-命令与技能/00-Slash-Command通用模块/README.md#current-runtime-status)区分 Runtime 已实现与版本快照、统计、Mate 增量 |
+| M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计接入参照 pi 事件，Codex/OpenCode 保留历史研究 | [A09](#a09)覆盖 Skill 成功调用次数、公共观察、有界写入与 #335 差距；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；[当前 Command 状态](../../04-命令与技能/00-Slash-Command通用模块/README.md#current-runtime-status)区分 Runtime 已实现与版本快照、统计、Mate 增量 |
 | M06 · 事件与服务边界 | 写入与观察是否分离；流绑定谁；断线如何恢复；控制状态谁权威 | Claude；OpenCode，必要时 pi/DeepSeek | [A02](#a02)覆盖既有 Claw/Mate 流范围；[A13](#a13)覆盖 Redis 快照与短期增量恢复；[A03](#a03)维护数据库确认交接；[A04](#a04)覆盖 Session 配置更新；[A05](#a05)覆盖后端显式任务事件 |
 | M07 · 前端体验 | preview 何时被权威内容替换；Turn/Item 与产品 UI 如何映射 | Codex；Claude 辅助 | [A05](#a05)保留旧提交的事件合并与根执行证据；当前计划/TODO/问答前端实现见[A07](#a07)及[A08](#a08)，公共 Mate 接入仍为目标设计 |
 | M08 · 元数据与配置 | 定义、发布快照和运行对象如何分离；刷新如何影响活动执行 | pi；托管产品仅对照公开资源 | Agent.mode 专项已核对 Mate 956b547f / Runtime 09b32d8e；默认值链为 待实现，见 A03 和元数据主设计；元数据组合查询顺序另在 Mate `9dd5d85e` 核对，见 J06；发布事务一致性仍待补证 |
@@ -328,24 +328,24 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 <a id="a09"></a>
 
-## 6.6 A09 · Skill 使用信号、根执行去重与失败隔离
+## 6.6 A09 · Skill 成功调用次数与公共事件观察
 
 | 维度 | 结论 |
 |---|---|
-| 模块与主设计 | M05，协作 M06/M04；[使用统计](../../04-命令与技能/03-Skill加载统计/README.md)维护口径、三表、事务、API 和验收，复用其全局目标类图及提交时序。 |
-| 架构问题 | 如何统计哪些根执行接触过 Skill，避免分页和续跑放大次数，同时不让观测故障改变主执行结果？ |
-| Codex 观察 | 固定 d58d0e58 有 codex.skill.injected 和 skill_invocation；Host 显式指标包含失败、Shell 执行前识别、资源首屏计数，计数器与分析事件去重位置不同。队列 256 且可能丢弃。身份、字段和路径见[Codex 详解](../../04-命令与技能/03-Skill加载统计/codex-skill-counting.md)。 |
-| pi / OpenCode 对照 | pi 固定 5cd93f68 的 Skill 展开和工具生命周期可作归因入口；OpenCode 固定 849c2598 提供显式 Skill 工具记录。它们不能证明已有企业三表或管理统计 API。 |
-| CampusClaw 已观察实现 | Java f61906b9 已有 Runtime 根消息、工具调用/结果和短事务；Read details 尚无完整归因证据；Child 为内存执行/进度，Cron runner 未传 job/run。#295 ee2f4dd/#298 3dfd990 仅作全文候选实现对照，未提升为新主线统计。完整路径与符号见[证据](../../04-命令与技能/03-Skill加载统计/source-evidence.md)。 |
-| CampusClaw 已确认目标 | 同一 sessionId/rootEventId/skillId 至多计 1；显式受理与最终成功 Skill/Read 共用 Tracker，部分正文即可。三张统计表独立短事务，仅新事实加数；失败不阻断主执行，允许漏计。F19 查询改为 POST + skillIds，返回 activationCount/lastLoadedAt，排名与趋势暂缓；F20 的 Runtime 范围与当前三入口实现仍待单独对齐。 |
-| 差异分类 | 产品约束：根执行使用频度、Runtime 首版、既有 Skill 身份；架构变更：统一跨入口去重，独立同步统计替代 Codex 的异步遥测输出；安全加固：可信快照、管理授权与删除准入。 |
-| 理由与代价 | 减少分页和重复 Read 对排名的影响；以失败隔离保持受理和工具语义。代价是失去逐次调用明细、允许漏计，仍有同步等待与热门 Skill 行锁；lastUsedAt 仅反映已计使用。 |
-| 备选与重评 | 只有累计/日表不能去重，纯 Trace 可能缺失，仅事实表使累计扫描增长。若同步等待实测不达标，再设计有界异步投递、关闭及失败策略；不提前增加 MQ/OTel。 |
-| 范围与生命周期 | 确认、问答、审核保持原根，普通新消息换根；活跃根去重键不清理。Child/Cron 先补真实身份与关联再定义去重域；部分事实不能重建累计，三表一致恢复。 |
-| 设计状态 / 实现状态 | 目标方案已确认；新增 Tracker/Resolver、独立统计事务、三表及 GET 为 待实现，所查 Java 骨架不证明实现完成，未跑 GaussDB。 |
-| 验收 | S1～S4：显式加多次 Read 共 1、新根再计、跨日续跑、部分正文/失败/改写、独立事务回滚与主流程成功、并发首写、删除竞争、查询窗口、权限和端到端等待。 |
+| 模块与主设计 | M05；[成功调用统计](../../04-命令与技能/03-Skill加载统计/README.md)维护口径、最小持久化、异步边界、查询待核实项及验收，复用其中全局目标类图与时序。 |
+| 架构问题 | 同一 Skill 成功调用三次应计三次，如何覆盖 Runtime/Cron/Child 而不依赖执行追溯或 Session 生命周期？ |
+| 主基线与核验 | pi 默认 main `42a3497d03ad17e308a2299fa824727894f2c0ec`，2026-10-10 隔离 fetch；`packages/agent/src/types.ts` 的工具事件、`agent-loop.ts` 的 prepare/finalize/emitToolExecutionEnd、`agent.ts` 的 subscribe/监听器等待已读取。该快照不是发布验证。 |
+| pi 观察与边界 | Start 有 args，End 有最终 result/isError，后置 hook 先于 End；订阅回调会被等待。pi 在 prepare 前发 Start，Java 在校验/prepare/before 后发 Start，不能把 Start 当成功。所查路径不提供本设计的 Skill 报表或数据库。 |
+| 历史研究 | [Codex](../../04-命令与技能/03-Skill加载统计/codex-skill-counting.md)与[其他基线](../../04-命令与技能/03-Skill加载统计/trace-baselines.md)保留原提交；本次不升级其上报、去重或后台存储结论，不把旧根任务口径延续为当前产品要求。 |
+| CampusClaw 已观察实现 | #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 已按 Skill 成功 End 采集，但还要求正文/hash/规范来源和执行身份；三 Host attach、Cron/Child JSONL、Session 锁和删除准入仍存在；Factory 已去除具体 Tracker 参数。 |
+| CampusClaw 目标 | 每次最终成功 Skill 调用加一；公共 Factory 只装配 Observer，Start/End 关联仅保存在统计器内部，可信 skillId 来自绑定。后台有界队列写最小事实与累计，不传父子/根/Session 身份。 |
+| 差异分类 | 产品约束：成功调用次数，覆盖三入口，Read/显式注入不计，允许统计故障漏计；架构变更：公共观察＋应用级有界后台写入，去掉执行追溯前提；保留安全边界：原可信解析、参数、权限和受管路径校验不变。 |
+| 理由与代价 | 计数规则不需要知道由谁启动任务；最终结果观察避免提前计数。技术幂等键保留同记录防重，不伪装业务 ID。代价是每调用仍一条最小事实、查询最终一致、队列满/进程退出可丢失，需要单例执行器关闭和资源验证。 |
+| 生命周期 | Observer 每 Agent 一份，AgentEnd 清理未完成关联；已入队记录不持有 Session，关闭/删除 Session 不撤销已成功调用。共享 Recorder 只随应用关闭；数据保留独立管理。 |
+| 查询边界 | #335 已删 from/to 与日表，用户要求待核实。本方案不修改精确 API，不把采集简化当成批准删除；如保留日表，作为同一事务第三投影逐调用加一。 |
+| 状态与验收 | 现有统计已实现；上述解耦增量待实现。验证三次调用、重复/并发 End、后置改写、入口覆盖、队列满不 CallerRuns、慢库不占工具线程、事务回滚、Session 删除后在途入账及真实消费者。 |
 
-**讲解要点。** 借鉴 Codex 在运行时产生结构化使用信号与观测失败隔离。CampusClaw 将显式和 Read 统一到根执行/Skill 去重，使用可信快照和真实根身份，部分正文即可；三张统计表独立事务并允许漏计。它衡量已记录使用信号的根执行数，不证明模型采用，也不是原样复制 Codex 的 Turn 去重或异步队列。
+**设计表达。** 统计消费工具已经完成的事实。入口负责执行，Observer 负责识别，Recorder 负责有界投递，统计事务负责唯一记录与原子累加；执行日志和 Session 状态不再是调用次数的前置条件。基线仅支持选择已有工具事件，不替 CampusClaw 决定表结构、投递可靠性或查询范围。
 
 <a id="a10"></a>
 
@@ -680,6 +680,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.85.0 | 2026-10-10 | A09 按 Skill 成功调用计数，补充公共观察、有界写入与 #335 对比及最新 pi 事件证据。 |
 | 1.84.0 | 2026-10-09 | 依据最新 pi 与 DeepSeek 长度核验取消计划字符上限，区分正文规则和传输容量。 |
 | 1.83.0 | 2026-10-09 | 以最新 pi AI 部分 JSON 为基线，说明通用预览、独立完整解析与计划审核的边界和兼容代价。 |
 | 1.82.0 | 2026-10-08 | 补充Claude Console触发方式与M07页面投影的理由、代价和源码范围。 |

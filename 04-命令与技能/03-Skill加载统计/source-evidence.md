@@ -1,78 +1,70 @@
-# Skill 使用统计源码证据与实现差距
+# Skill 成功调用统计：源码与实现差距
 
-版本 3.1.0 · 2026-09-18。[主设计](README.md)维护已确认目标；[Codex 专项](codex-skill-counting.md)维护其详细生产调用链。本页只把实际读取范围作为事实，不以 PR 结构决定产品需求。
+版本 4.0.0 · 2026-10-10。[主设计](README.md)给出目标；本页只记录实际读取的固定源码。运行测试与设计制品验收见[validation.md](validation.md)。
 
-## 1. 固定基线
+## 1. 查询基线
 
-| 仓库 | 实际分析提交 | 范围 |
+| 对象 | 查询结果与范围 |
+|---|---|
+| #335 | 当日 GitHub 查询确认 OPEN，head `dad4433d38fcb4104bd8d093f844ea2afc9612ee`，base `769e86592285f4a25b0febaf551eddea6bc7212c`；已读取 diff、采集/三 Host/工具/Pipeline/事务与测试 |
+| 设计主线 | 创建隔离工作树前 fetch `origin/main@da81fed06ed9e8964b0dfd0bc0ed612c5be1e543`；不改原目录未提交内容 |
+| pi | 2026-10-10 先 `ls-remote --symref` 确认 main，再隔离 depth=1 fetch；`42a3497d03ad17e308a2299fa824727894f2c0ec` |
+
+pi 的本专题旧证据为 `5cd93f688aaab89dbb6dfa4aca535f21796ae185`，只将工具事件与订阅结论升级至新 SHA。新源码 `packages/agent/package.json` 标记版本 1.1.0；这是默认分支快照，不等同发布验证。Codex/OpenCode 专项保留历史证据，本次不升级或宣称其为最新。
+
+## 2. Java 已观察行为与目标差距
+
+除完整 modules/ 路径外，以下路径前缀为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`；所有行号以 #335 head 为准。
+
+| 路径、符号、行号 | 已观察行为 | 本方案调整（待实现） |
 |---|---|---|
-| pi-mono-java-design | e1795131f627f50a09d7bb5142a479576b4a1762 | M05 快照与命令、M06 完整事件/B09/B14/B15、M03 通用 Read、元数据身份、既有 HTTP catalog |
-| Codex | d58d0e5841e0de08e251673db2d5af8cf3a1ad51 | 三类入口、计数器、分析事实、Reducer、Skill 身份、队列、发送、Turn 指标；详见专项逐项固定源码链接 |
-| pi-mono-java | f61906b9136246ca60f333704b6fc92b5420d0ec | Runtime 受理/结果持久化、最终工具结果、Read、Skill 快照、Child/Cron 入口 |
-| pi-mono | 5cd93f688aaab89dbb6dfa4aca535f21796ae185 | Skill 展开与工具执行生命周期，沿用既有固定源码核验 |
-| pi-mono-java PR #295 | ee2f4dd44b30a272f13fce057c61e8490418332c | 所查 PR 的全文事件及查询，不等于当前主线 |
-| pi-mono-java PR #298 | 3dfd990a982f610a97c7ecb45e07bde73f45ecb3 | 所查 PR 的 Host 全文覆盖和显式命令采集，不等于当前主线 |
+| `session/AgentSessionFactory.java:create/configureAgent`，69–117 | 三入口共用创建；before/after hooks；当前无统计接线 | 一个窄观察器装配点，保持 create(request) 与受理顺序，不传追溯上下文 |
+| `runtime/PreparedAgentRuntime.java:skillIdsByName`，88–95 | 按绑定名称给出可信 ID 映射 | Observer 使用此只读数据，不存全文快照 |
+| `tool/builtin/DefaultBuiltInToolFactory.java:create` | 三入口的 SKILL 均构造相同 SkillTool | 保持工具选择和执行能力 |
+| `tool/skill/SkillTool.java:execute`，97–124 | 返回正文与 SkillToolDetails(name, hash, signal) | 统计不再需要 details 或摘要；复查消费者后删除专用凭据，保留路径、安全和取消逻辑 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/event/ToolExecutionStartEvent.java` / `ToolExecutionEndEvent.java` | Start 有参数；End 有 result/isError，无参数 | Observer 私有暂存正在执行的 Skill 关联；不改通用事件 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute`，66–88 | 校验/prepare/before → Start → 执行 → 后置 hook → End → ToolResult | 消费最终 End；不提前在 SkillTool 返回前计数 |
+| `session/AgentSessionHookChain.java:executeAfter`，47–63 | 每个 hook 收到原 context，再合并覆盖值 | 不把新 observer 塞到 afterHooks 末尾并误称可见前面所有最终改写 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java:subscribe/emit`，227–231、294–305 | 同步遍历监听器，异常隔离 | 事件回调不做 JDBC，使用有界入队 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java:runInternal`，85–110 | finally 发 AgentEnd | 清理仅在 Observer 内的未完成关联，不再按 Host 管理 Tracker 关闭 |
+| `skill/usage/SkillUsageTracker.java:skill/record`，101–148 | 正文/hash/source/identity 条件，13 字段 DTO | 改为按最终成功生成 3 字段计数 DTO |
+| `runtimeapi/runtime/RuntimeActiveExecution.java`，50、88–93；`runtimeapi/event/RuntimeEventProjector.java`，437–449、522–538 | Projector 已有映射，另写 ActiveExecution 来源映射 | 删除额外映射及 remember 调用，保留 Projector 自己的持久化映射和业务事件 |
+| `runtimeapi/runtime/RuntimeSessionEngineRegistry.java`，205–209、259–271 | attach/保存/关闭统计观察器并提供延迟身份 | 移除这组统计专用托管；普通 Session 生命周期保持 |
+| `tool/agent/SubagentExecutionContext.java`，39–40；`SubagentExecutionService.java`，119–139 | 父身份、来源函数、Child 身份推导及日志/统计装配 | 删除统计所需参数与装配，保留授权、深度、模型、凭据和进度 |
+| `tool/cron/ManagedCronSessionRunner.java`，74–111；`session/ExecutionIdentity.java` | 基于实际 Cron run 推导统计身份，日志先于统计 | 计数不接收 run，不删除 Cron 自己的真实运行记录；重载按独立消费者复查 |
+| `session/ManagedExecutionLog.java:observe`，77–105 | 每个 Tool Start 同步写 JSONL，再登记规范来源；失败则无来源 | 不为计数创建日志；执行审计若有独立要求由其所属模块维护 |
+| `runtimeapi/service/SkillLoadTransaction.java:record`，28–40；`SkillLoadService.java:record`，69–96 | REQUIRES_NEW，同步等待，Session 行锁/root 校验，事实与总数同事务 | 保留事务原子性，在后台执行；移除 Session 准入，仅访问统计表 |
+| `runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:beginDeletion`，452–463 | Session 删除调用 deleteSkillUsage | 移除此统计联动；已成功调用可以晚于 Session 关闭入账 |
+| `modules/coding-agent-cli/src/main/resources/mapper/session/SkillLoadMapper.xml` | 13 列事实、累计原子 UPSERT、按 skillIds 累计查询 | 3 列事实；沿用累计原子更新，范围查询继续待核实 |
 
-Java 增加 f61906b9 的集成骨架核验，没有将旧 PR 的计数器结论延伸为该主线行为。其他 Command/Session/计划模块仍保留自己的核验点。PR 提交仅作为固定历史证据，不将其状态推断为最新主线。
+生产代码检索 `SkillToolDetails`、`ExecutionIdentity`、`ManagedExecutionLog`、`rememberToolCallEventId` 和来源函数的消费者，当前所查额外追溯链服务于此统计及其配套日志。不能把“日志不 import Tracker”作为独立产品需求的证明，也不能据此删除真正的 Runtime/Cron 历史记录。实施时必须按最新消费者再次确认。
 
-## 2. Java 集成骨架与 待实现 改造
+## 3. 可以直接复核的测试证据
 
-以下路径相对 pi-mono-java；完整 modules/ 开头的路径直接相对仓库，其余以 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/ 为前缀。
+同提交已有 `SkillUsageTrackerTest`：86–98 三次成功三次、重复事件一次；112–141 正文移除或摘要变化时最终仍成功但零计数；180–199 Cron 日志失败、工具成功、统计服务零调用。这证明新方案与旧方案存在有意语义差异，不能只做方法挪动后声称等价。
 
-| 编号 | 路径与符号 | 已观察源码行为 | 已确认目标及差距 |
-|---|---|---|---|
-| J01 | runtimeapi/service/command/skill/SkillCommandExecutionService.java · execute/expand；SkillCommandAdmission.java · requireBoundSkill | 用 PreparedAgentRuntime 解析实际绑定并展开 content，submitPreparedMessage 接受字符串输入 | 使用内部候选传递已解析 Skill，acceptMessage 提交、target 绑定后交给 Tracker；不在主事务中计数，不在返回 SSE 后另造执行 ID |
-| J02 | runtimeapi/persistence/RuntimeExecutionPersistenceService.java · acceptMessage/appendEntry | @Transactional 中接受根消息、登记固定执行及段；工具记录和公共事件经同一追加服务保存 | 原事务保持；统计在调用方的事务外通过独立 SkillUsageService 写入，失败不改变原受理/追加结果 |
-| J03 | runtimeapi/event/RuntimeEventProjector.java · persistToolCall/persistToolResults（约 330/358 行） | 保存规范调用事件；TurnEnd 的结果逐项编码并保存，成功后 emit；toolCallEntryIds 保存调用映射 | 将规范工具调用 ID 以执行范围只读映射提供给 Tracker；Read 最终 hook 形成信号，不等待 TurnEnd，不声称结果已持久化 |
-| J04 | runtimeapi/dto/RuntimeEntryDTO.java；runtimeapi/persistence/RuntimeSessionRepository.java · appendEntry | 已有 Entry ID、Session、序号、payload 与普通/带公共投影追加 | 复用真实身份；统计 DTO 不穿透 Controller；去重为 session/root/Skill，来源只用于追溯 |
-| J05 | tool/read/ReadTool.java · execute/readText/selectLines；ReadToolDetails.java | 规范路径读取文件字节，UTF-8/offset/limit/预算截断；details 目前仅 truncation | 增加通用路径/摘要/实际正文证据；Resolver 归因，局部正文即可，无行覆盖聚合 |
-| J06 | session/AgentSessionFactory.java · create/configureAgent | Runtime/Cron/Child 共用工厂，配置 before/after hooks，实例不共享消息与工具 | Factory 仅装配，Runtime 执行持有 Tracker 和快照；末尾观察 hook 保持最终结果，不给 Child/Cron 自动生成统计身份 |
-| J07 | tool/agent/SubagentExecutionContext.java；SubagentExecutionService.java · runChild/projectProgress | 保存深度/祖先/模型/凭据，创建 Child，订阅开始/结束进度，没有此范围内的权威子事件存储 | Child 先明确执行身份、父调用关联和结果保存；首版统计明确不覆盖 |
-| J08 | tool/cron/ManagedCronSessionRunner.java · execute；modules/cron/src/main/java/com/campusclaw/cron/engine/CronJobExecutor.java · execute | Executor 创建短 runId 和运行日志，但只向 runner 传 agentId/prompt；runner 执行内存 Session | Cron 先传递真实 job/run 身份并确定持久化边界，不能把 jobId 或随机统计 ID 当单次运行 |
-| J09 | modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java · execute/applyAfterResult/toToolResultMessage | 工具执行后取消检查、after hook、最终结果事件；hook 可以改写正文/details | 复用最终 after hook 观察；统计异常在事务外捕获，避免被 applyAfterHook 转为工具失败；无需新增 agent-core 回调 |
-| J10 | modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql · t_session_executions/t_session_execution_segments | 固定 root_event_id、执行/段和规范事件持久化结构 | 新增三表的主键使用 root_event_id；独立统计事务借 Session 生命周期锁防止删除后迟到写，不加入来源事务 |
-| J11 | runtimeapi/dto/ExecutionTargetDTO.java；runtimeapi/runtime/RuntimeActiveExecution.java · bindTarget/target | 真实 sessionId/executionId/rootEventId/segmentId；target 在受理后绑定，确认续跑继续关联原根 | Tracker 每根一份；绑定真实 target，禁止按 HTTP 段或随机 UUID 建去重域 |
-| J12 | runtimeapi/runtime/RuntimeSessionEngineRegistry.java · createSession；session/ManagedAgentSessionRequest.java | Runtime 请求带 beforeHooks/afterHooks，after 当前为空；请求没有统计根或 Tracker 参数 | Host 装配末尾观察入口，显式信号与 Read 共享执行持有者；快照及目标绑定扩展为 待实现 |
-| J13 | runtimeapi/event/RuntimeMessageEventService.java · submitLocked/accept/startAccepted | accept 调用事务服务后返回真实 target；startAccepted 绑定并启动模型；当前 submitPreparedMessage 只返回事件流 | 在受理提交与模型启动之间转交显式候选；不能从返回的流反推根身份 |
-| J14 | runtimeapi/event/RuntimeEntryCodec.java · toolResultEntry；RuntimeCommittedEventFactory.java · agentToolResult | 工具结果按字段构造，成功分支不复制 details；错误仅从 details 取稳定错误码 | Read 证据保持内部观测用途，沿用字段白名单，不新增公共/持久化路径与摘要 |
+本会话同 head 的 16 类 156 项聚焦测试已通过；这是旧实现验证，不能当作新 Observer、异步写入或新 DDL 已通过。#335 文档所列真实数据库等待数据来自作者报告，本任务未独立复跑。
 
-当前方案的三表、Resolver/Tracker、根执行去重、独立事务及失败隔离和两个 GET 尚未完成实现验收。上述静态证据不证明所有领域恢复和跨实例竞争都已解决；实施 S1～S4 必须验证。
+## 4. pi 的事件依据与差异
 
-## 3. pi 与 PR 对照
+固定新 SHA 的仓库相对路径及符号：
 
-pi 固定基线 packages/coding-agent/src/core/agent-session.ts 的 _expandSkillCommand（约 1320 行）读取主文档并展开；packages/coding-agent/src/core/tools/read.ts 提供 offset/limit 截断。packages/agent/src/types.ts 的 AgentEvent 提供工具生命周期及 toolCallId/result/isError。所查函数没有企业 Skill 统计写入；本设计的事实表、HTTP 与事务是 CampusClaw 架构扩展，不声称整个 pi 没有遥测。
+- `packages/agent/src/types.ts:AgentEvent`，529–539：Start 有 args，End 有 result/isError；`AfterToolCall` 注释 328–337 说明后置处理在 End 之前。
+- `packages/agent/src/agent-loop.ts:executeToolCallsSequential/Parallel`，530–648；`prepareToolCall`，707–781；`finalizeExecutedToolCall`，859–909；`emitToolExecutionEnd`，919–927：最终结果由后置处理归一，再发布 End。
+- `packages/agent/src/agent.ts:subscribe`，266–269；事件发射尾部遍历并 await listener：订阅回调本身可以拖延推进，订阅不自动意味着异步隔离。
 
-PR #298（依赖 #295）中的以下行为仅作为对照：
+重要差异：最新 pi 在 prepare/校验之前发 Start，并且截断输出的失败调用也有 Start；Java 当前在校验、prepare、before hook 后发 Start。两者都不能用 Start 当成功依据。本方案沿用 Java 的已有顺序，以最终 End 决定计数；不宣称存在统一行业校验顺序。CampusClaw 的可信解析/校验先于交互确认是本产品目标。
 
-| 路径 | 固定 PR 观察 | 对本设计的意义 |
-|---|---|---|
-| modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql · t_skill_load_events | 每次全文加载事件、独立 invocation/execution UUID | 本方案使用真实根/Skill 键；事实存在的理由是幂等/追溯，不是照搬原事件字段 |
-| modules/coding-agent-cli/src/main/resources/mapper/session/SkillLoadMapper.xml；runtimeapi/service/SkillLoadService.java | 根据调用方 IDs 做 COUNT/MAX；写失败只 WARN | 历史对照；F19 当前使用批量 ID 查询，三表事务与采集边界仍由各自实现证据维护 |
-| session/AgentSessionFactory.java · recordSkillLoad；skill/usage/SkillReadCoverage.java | Host 按版本/摘要合并完整行覆盖 | 本方案统计根执行的使用信号，首次部分正文即可，同根反复 Read 不增加次数 |
-| runtimeapi/web/SkillLoadStatisticsController.java；modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java | POST /internal/skills/load-statistics/query，必传 skillIds | 历史提交观察；2026-09-18 F19 已采用此批量 POST，最新字段及时间语义见下方专项核验 |
-
-本节缩写的 runtimeapi/session/skill 前缀同 §2，完整路径来自上述固定 PR 树。没有修改实现仓或向 PR 提交评审评论。
-
-## 4. SQL 依据与验证边界
-
-2026-09-15 核对 [openGauss 5.0 INSERT 官方文档](https://docs.opengauss.org/en/docs/5.0.0/docs/SQLReference/insert.html)：ON DUPLICATE KEY UPDATE 处理唯一键冲突，EXCLUDED 表示待插入值；该语法不与 WITH/RETURNING 组合。本专题只在各有一个主键的汇总表使用它，事实先查同根/Skill，普通 INSERT 成功后才增量，主键冲突回滚统计事务，禁止依赖受影响行数猜测插入还是更新。
-
-这是语法参考，不证明公司 GaussDB 版本完全一致。未连接目标数据库执行新 DDL/事务、并发冲突、索引计划或保留策略。验证记录将设计制品检查与运行验收分开；未测结果不得标为通过。
+所查 pi 路径提供事件能力，不提供本文的 Skill 幂等表、应用级队列或管理 API；这些是 CampusClaw 的架构选择。无需为比较统计重新解读其他 pi 模块、企业数据表或私有遥测。
 
 <a id="f19-query"></a>
 
-## F19 查询专项核验
+## 5. 查询未决范围
 
-2026-09-18 读取 pi-mono-java PR #295 `c8cbda4946403d5e51b95ceaf0d7485166c54395`。本次只更新查询契约，不重新核验上游框架，也不将历史 Child/Cron 差距当作当前实现结论。
+设计仓起点的 README §6 与现有 operation JSON 仍保留 from/to；#335 仅累计且拒绝这两个字段。用户答复为“暂时不确定，先标为待核实”。本任务只调整成功调用采集和持久化职责，不改精确 HTTP 模型、不静默批准删除。历史 PR #295 查询证据仍可按提交 `c8cbda4946403d5e51b95ceaf0d7485166c54395` 追溯，不作为 #335 现状。
 
-以下 Java 路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`：
+## 6. SQL 与依赖依据
 
-| 路径与符号 | 已核实行为 |
-|---|---|
-| runtimeapi/web/SkillLoadStatisticsController.java#query | POST 内部查询、ResultBean、no-store 与错误映射 |
-| runtimeapi/vo/SkillLoadStatisticsRequestVO.java#Deserializer | skillIds 1～100、严格字符串及时间、未知字段拒绝 |
-| runtimeapi/service/SkillLoadService.java#query | 精确去重、保持顺序、有效范围校验、历史不完整返回 503 |
-| runtimeapi/vo/SkillLoadStatisticsResponseVO.java；SkillLoadStatisticsItemResponseVO.java | queriedAt/from/to/items 与 activationCount/lastLoadedAt；无 scope/metric/version |
-| modules/coding-agent-cli/src/main/resources/mapper/session/SkillLoadMapper.xml#query（仓库根相对路径） | 无时间条件读累计表，有时间条件读事实；同语句快照、零值补齐、清理范围检查 |
+目标 SQL 沿用 #335 `SkillLoadMapper.xml:incrementTotal` 的 `ON DUPLICATE KEY UPDATE` 和 EXCLUDED 方言，事实普通 INSERT 后才累加。新 DDL、主键冲突识别、公司 GaussDB 方言、共享数据源故障和异步关闭仍需真实集成验收，不以设计 SQL 代替执行证明。
 
-F19 需求决定为保留当前查询、暂缓排名及趋势；无需为未来接口预先改表。F20、写入表目标与采集时序的其他差异不在本次修订中宣称解决。
+`pom.xml` 已声明 MyBatis Starter 3.0.4；`modules/coding-agent-cli/pom.xml` 已有 Spring Boot、JDBC、Validation、MyBatis。本方案的 JDK 执行器/UUID/并发容器不引入 Maven 依赖，不新增传递依赖树。

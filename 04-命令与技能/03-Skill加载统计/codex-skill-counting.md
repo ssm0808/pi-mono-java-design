@@ -1,5 +1,8 @@
 # Codex 基线的 Skill 计数机制
 
+> 历史基线研究：本页保留所列固定提交的观察，不作为当前产品计数规则。2026-10-10 的 Skill 成功调用目标及源码核验见[主设计](README.md)和[源码证据](source-evidence.md)；文中旧根执行去重、入口范围及采集方案不继续作为当前目标。
+
+
 [统计主设计](README.md) · [Agent 基线概览](trace-baselines.md) · [CampusClaw 源码差距](source-evidence.md)
 
 | 属性 | 值 |

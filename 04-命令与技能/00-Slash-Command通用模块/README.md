@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.16.0 |
-| 更新日期 | 2026-10-04 |
+| 文档版本 | 1.17.0 |
+| 更新日期 | 2026-10-10 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；Help 缓存、Agent 级锁、查询、响应与统一 POST 已实现，不替换其他行为的历史证据点 |
@@ -32,7 +32,7 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享
 
 ### Skill 统计职责
 
-[Skill 使用统计](../03-Skill加载统计/README.md)维护 M05 的使用信号、根执行/Skill 去重、累计/日表及批量 POST 查询（F19 已对齐 PR #295，排名、趋势暂缓）；[Codex 专项](../03-Skill加载统计/codex-skill-counting.md)维护固定源码机制。显式输入受理提交后与通用 Read 最终成功观察共用执行级 Tracker，三张统计表独立事务且失败不影响主执行。首版 Runtime，目标已确认、待实现；精确口径、权限、失败和 Child/Cron 接入前提由该专题维护。
+[Skill 成功调用统计](../03-Skill加载统计/README.md)维护 M05 的调用计数、公共事件观察、最小持久化和查询边界。每次 Skill 工具最终成功按 skillId 加一，三入口共用计数规则；普通 Read 与显式正文注入不计。#335 已有统计实现；去除正文/执行来源前提、统一 Observer 与有界后台入账为待实现增量。查询 from/to 和日表是否删除仍待核实，精确规则与 Simon 当前实现的差距由该专题唯一维护。
 
 ### 1.1 全局目标类图
 
@@ -89,7 +89,7 @@ Help 的结果精确为 displayName/description/useCases，字段和缓存规则
 | Mode Builtin | 待实现 | Session 模式更新已有实现；新增 mode Contributor、共享模式规则和前端选择控件，见[Builtin §6.1](../01-内置命令/README.md#mode-command) |
 | Skill 内部文本与公开回执 | 已实现文本分离与恢复 | 内部 Entry 保存展开文本，公开事件保存原始调用；恢复读取已保存文本，完整 Skill 版本/元数据快照仍待实现 |
 | Skill 统一扩展结构 | 待实现增量 | Definition → Handler → SkillExecutionService → PreparedSkillInvocationDTO 尚未落地；当前执行可用不等于该目标装配已实现 |
-| Skill 使用统计 | 待实现 | modules/ 与 campusclaw/ 未找到 SkillUsageTracker；显式、模型 Skill 工具与 Read 的统计接入仍待实现，独立开发分支证据不升级为该主线能力 |
+| Skill 使用统计 | #335 已实现；简化设计待实现 | 2026-10-10 专项核验 `dad4433d`：三入口采集和累计查询已存在；成功调用公共观察、移除执行追溯前提与有界写入待实现，详见[统计源码证据](../03-Skill加载统计/source-evidence.md)；不升级本表其他历史能力 |
 | Claw 前端 Slash | 已实现行为 | ComposerBox、useCommandComposer、useRuntimeApi 和 runtime/commands.ts 已接入；独立 Store/Registry/Gateway 是结构目标，见[前端专项](../../07-前端设计/技术设计/命令/README.md#21-已观察源码行为) |
 | Mate 公共 Chat Command | 公共协议待确认、桥接待实现 | 字段投影确认不等于公共执行开放；Chat/Session 映射、认证、错误、附件和 POST 由[Mate 专题](../../02-服务与接口/06-mate-service聊天命令API/README.md)维护 |
 
@@ -433,6 +433,7 @@ GET 只表达空参入口可用，不能据此绕过 POST 的 Agent 完整快照
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.17.0 | 2026-10-10 | Skill 统计按最终成功调用计数，登记 #335 实现及公共观察改造边界。 |
 | 1.16.0 | 2026-10-04 | Slash 响应取消 ETag，配置写入复用数据库锁内最新记录与原子提交。 |
 | 1.15.0 | 2026-09-22 | 增加 mode 命令，复用 Session 模式事务并区分查询、切换与计划审核。 |
 | 1.14.0 | 2026-09-22 | 命令描述符采用 type 与 hints，分离输入提示、会话状态和附件规则。 |

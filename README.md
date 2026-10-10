@@ -1,6 +1,6 @@
 # CampusClaw 设计仓库
 
-导航版本 3.66.0 · 2026-10-09
+导航版本 3.67.0 · 2026-10-10
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
@@ -24,7 +24,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 | M02 · Model | [Model](./02-服务与接口/03-Model/README.md) | Provider 身份、业务 Agent 绑定、[Mate 模型信息与执行快照](./02-服务与接口/03-Model/model-capabilities.md)及[通用参数预览](./02-服务与接口/03-Model/README.md#streaming-json)；[共享客户端配置](./02-服务与接口/02-CampusMate共享客户端配置/README.md)维护服务连接配置 |
 | M03 · Tool 与受管执行环境 | [工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md)、[注册与渐进发现](./01-总体架构/02-CampusClaw工具系统/README.md#9-工具注册与发现)、[校验与确认顺序](./01-总体架构/02-CampusClaw工具系统/source-evidence.md#tool-validation-order-evidence)、[参数恢复反馈](./01-总体架构/02-CampusClaw工具系统/README.md#tool-argument-recovery)、[工具执行细节](./01-总体架构/02-CampusClaw工具系统/execution-details.md)、[展示名称映射](./01-总体架构/02-CampusClaw工具系统/README.md#tool-display-name)、[凭据透传与工具可用条件](./01-总体架构/02-CampusClaw工具系统/README.md#mate-credential-forwarding)、执行权限与 Session 隔离；AskUserQuestion 的等待生命周期归 M01 |
 | M04 · Session 上下文与持久化 | [会话记忆 GaussDB](./03-数据与存储/01-会话记忆GaussDB/README.md) | 单条追加时间线、压缩、恢复与存储，不提供最近对话编辑或同 Session 分支；[pi 上下文研究](./05-研究资料/03-pi会话上下文/README.md)是证据入口，客户端事件历史归 M06 |
-| M05 · Command 与 Skill | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [当前实现与剩余增量](./04-命令与技能/00-Slash-Command通用模块/README.md#current-runtime-status)；[Builtin](./04-命令与技能/01-内置命令/README.md)、[Skill Command](./04-命令与技能/02-技能命令/README.md)、[使用统计与 Codex 研究](./04-命令与技能/03-Skill加载统计/README.md)与[Help](./04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)分别维护行为 |
+| M05 · Command 与 Skill | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [当前实现与剩余增量](./04-命令与技能/00-Slash-Command通用模块/README.md#current-runtime-status)；[Builtin](./04-命令与技能/01-内置命令/README.md)、[Skill Command](./04-命令与技能/02-技能命令/README.md)、[Skill 成功调用统计与实现对比](./04-命令与技能/03-Skill加载统计/README.md)与[Help](./04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)分别维护行为 |
 | M06 · 事件契约与服务边界 | [Session Events](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md) | 内部[请求级 SSE](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-stream-design.md)、[历史](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)、[调用名称快照](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)与[三类决定消费终态](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)；[Mate 公共 Chat](./02-服务与接口/07-mate-service通用对话API/README.md)单独维护公共权威契约 |
 | M07 · 前端体验 | [前端设计](07-前端设计/README.md) | [九个场景与高低保真原型](07-前端设计/原型/index.html)、[公共规范](07-前端设计/公共规范.md)、[技术设计与全局类图](07-前端设计/技术设计/README.md)、[源码证据](07-前端设计/source-evidence.md)、[发送前自动获取 Token](07-前端设计/技术设计/runtime-workbench-alignment.md#61-页面流程)；用户行为按场景维护；[定时任务配置场景](07-前端设计/场景/09-配置与管理定时任务/README.md)提供Manual/Schedule，服务契约引用M06/M10 |
 | M08 · Agent 元数据与配置 | [Agent 元数据 GaussDB](./03-数据与存储/02-Agent元数据GaussDB/README.md) | 身份、版本、Agent 默认 mode 及模型、Tool、Skill 关联；[元数据设计与样例](./06-元数据设计/README.md)维护 Agent、Skill、Tool 字段及园区告警样例，包含[用户确认 Tool 标记](./01-总体架构/02-CampusClaw工具系统/README.md#confirmation-tool-metadata)；[数据库模式研究](./03-数据与存储/03-Agent数据库模式/README.md)保留研究边界 |
@@ -61,6 +61,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.67.0 | 2026-10-10 | M05 统计改为 Skill 成功调用次数，登记公共观察、有界入账与 #335 差距及查询待核实项。 |
 | 3.66.0 | 2026-10-09 | 计划正文取消独立字符数上限，同步计划设计、共享事件契约与基线比较。 |
 | 3.65.0 | 2026-10-09 | 登记 Model 通用参数预览与计划投影的 PR 实现、基线证据和验收边界。 |
 | 3.64.0 | 2026-10-08 | 增加定时任务配置场景与Manual/Schedule原型导航。 |
