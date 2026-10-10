@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.20.1 |
+| 文档版本 | 2.21.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-08 |
+| 更新日期 | 2026-10-10 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -259,7 +259,7 @@ public interface BuiltInToolFactory {
 
 ![Agent 工作区隔离](read_agent_workspace_isolation.svg)
 
-[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L563)
+[PlantUML 源码：`read_agent_workspace_isolation`](diagram.puml#L556)
 
 ```java
 public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {}
@@ -363,7 +363,7 @@ agent/{agentId}/.campusclaw/
 
 ![refresh 后下一次执行懒解析](refresh_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L740)
+[PlantUML 源码：`refresh_next_execution`](diagram.puml#L733)
 
 ## 9. 工具注册与发现
 
@@ -532,7 +532,7 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 
 ## 10. Child Agent Execution
 
-本图只回答父执行如何调用一个直接绑定的 Child 并取得结果。绑定解析、Child 运行准备和进度投影由 Child execution service 编排；公共 Factory 创建独立 Session。身份、版本、深度、ancestry 和可用模型校验在运行前完成，失败不启动 Child；具体校验顺序、模型回退条件与隔离对象见本节正文。
+本图只回答父执行如何调用一个直接绑定的 Child 并取得结果。绑定解析、Child 运行准备和进度投影由 Child execution service 编排；公共 Factory 装配运行对象，ChildRunAcceptanceService 创建独立持久 Session，再由公共 Runtime 执行。身份、版本、深度、ancestry 和可用模型校验在运行前完成，失败不启动 Child；具体校验顺序、模型回退条件与隔离对象见本节正文。
 
 ![Child Agent Execution](subagent_execution_sequence.svg)
 
@@ -556,7 +556,7 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 | `BoundAgentTool` | 实现模型工具 `Agent`，完成参数、进度和结果投影 |
 | `BoundAgentResolver` | 按名称解析直接绑定并校验身份、版本、深度和 ancestry |
 | `SubagentExecutionContext` | 固化父子 ID、深度、ancestry、父模型、thinking、取消和进度 sink |
-| `SubagentExecutionService` | 准备 Child runtime，通过公共 Factory 创建并执行 Child Session |
+| `SubagentExecutionService` | 准备 Child runtime，委派持久受理与 Runtime Coordinator；不直接 prompt 绕过历史 |
 | `AgentSessionFactory` | 使用 `CHILD_AGENT` profile 创建独立 Child Session 实例 |
 
 Child 消息从空集合开始，工作区指向自己的 `agent/{childAgentId}`，SYSTEM、Skill 和工具
@@ -567,6 +567,8 @@ Child 消息从空集合开始，工作区指向自己的 `agent/{childAgentId}`
 不能只依赖深度。父侧只接收目标、工具开始/结束和完成等高层进度，不接收 reasoning、
 Child 消息历史或完整事件流。父取消必须传播；成功结果只返回最后一条非空 Assistant
 文本。Child 内部可以执行多个 LLM/tool turn。
+
+父侧不接收完整历史仅是投影边界：Child 自己必须保存完整消息、调用、最终结果和终态。独立授权、父调用唯一关联、逐工具提交、取消与删除规则唯一见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)，新增链路待实现。Factory 本身不负责创建数据库资源。
 
 ## 11. Cron 与模型策略
 
@@ -614,7 +616,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 
 ![TUI 能力迁移边界](tui_capability_migration.svg)
 
-[PlantUML 源码：`tui_capability_migration`](diagram.puml#L615)
+[PlantUML 源码：`tui_capability_migration`](diagram.puml#L608)
 
 | 原责任 | 处理 | 目标边界 |
 |---|---|---|
@@ -638,7 +640,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ![公共 Session 压缩与溢出恢复](managed_session_compaction.svg)
 
-[PlantUML 源码：`managed_session_compaction`](diagram.puml#L671)
+[PlantUML 源码：`managed_session_compaction`](diagram.puml#L664)
 
 压缩由公共 ManagedAgentSession 管理，Runtime、Child 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
 
@@ -771,6 +773,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.21.0 | 2026-10-10 | Child 保存独立完整历史并复用持久 Runtime，父侧继续只接收进度与摘要。 |
 | 2.20.1 | 2026-10-08 | 用户确认元数据分派说明统一使用 Skill 和 Tool。 |
 | 2.20.0 | 2026-10-08 | 用户确认工具按可信元数据标记分派，保留权限、准备快照及本地失败不回退约束。 |
 | 2.19.0 | 2026-10-05 | 定时执行由 Mate 解析可信接口与凭据引用，保留普通交互快照并统一非交互入口约束。 |

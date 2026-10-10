@@ -1,0 +1,186 @@
+@startuml unified_execution_history_classes
+' Source evidence: Java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/
+' runtimeapi/event/RuntimeExecutionCoordinator.java:start
+' runtimeapi/event/RuntimeEventProjector.java:project,persistToolResults
+' session/AgentSessionFactory.java:create
+' tool/agent/SubagentExecutionService.java:runChild
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
+' Observed behavior: Runtime persists; direct Child/Cron factory calls do not share its appender.
+' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #425B70
+skinparam classBackgroundColor #F1F5F9
+skinparam classBorderColor #8496A4
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 175
+skinparam noteBackgroundColor #FFFBEF
+hide empty members
+title Unified Execution History - Target\nPending implementation: new admission links and result commit port
+together {
+  class "SessionEventController" as Web <<Web>>
+  class "ScheduledRun\nAcceptanceService" as Cron <<Singleton>>
+  class "ChildRunAcceptanceService" as Child <<Singleton>>
+}
+class "SessionExecutionAdmission" as Admission <<Singleton>>
+class "RuntimeExecutionCoordinator" as Coordinator <<Singleton>>
+class "AgentSessionFactory" as Factory <<Singleton>>
+class "ExecutionTargetDTO" as Target <<Immutable>>
+class "ManagedAgentSession" as Session <<Per execution>>
+class "RuntimeEventProjector" as Projector <<Per execution>>
+class "ToolOutcomeCommitDTO" as Result <<Immutable>>
+class "ToolExecutionPipeline" as Pipeline <<Agent core>>
+interface "ToolHistoryCommitPort" as Port <<Pending implementation>>
+class "SessionEventAppender" as Appender <<Singleton / transaction>>
+class "RuntimeSessionRepository" as Repo <<Mapper boundary>>
+class "SkillUsageProjection" as Stats <<M05 / same transaction>>
+class "CommittedEventProjection" as Public <<Public safety boundary>>
+class "GaussDB\nSessions / executions / links\nEntries / public events / Skill stats" as DB <<Database>>
+Web --> Admission
+Cron --> Admission
+Child --> Admission
+Admission --> Coordinator : start after admission commit
+Admission -right-> Target : fixes identity
+Admission ..> Repo : atomic admission
+Coordinator -right-> Factory : assemble
+Coordinator "1" *-- "0..*" Session
+Coordinator "1" *-- "0..*" Projector
+Factory ..> Session : creates
+Session *-- Pipeline
+Pipeline -right-> Port : must complete
+Projector ..|> Port : host adapter
+Projector -right-> Result : fixes outcome
+Projector --> Appender
+Appender --> Repo : append once
+Appender --> Stats : LIVE Skill success
+Appender --> Public : safe payload
+Repo --> DB
+Stats --> DB : same transaction
+note bottom of DB
+  Pending implementation: shared admission and per-result commit.
+  Existing runtime classes are reused; Factory performs no DB writes.
+end note
+@enduml
+
+@startuml unified_child_history
+' Source evidence: Java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/
+' runtimeapi/event/RuntimeExecutionCoordinator.java:start
+' runtimeapi/event/RuntimeEventProjector.java:project,persistToolResults
+' session/AgentSessionFactory.java:create
+' tool/agent/SubagentExecutionService.java:runChild
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
+' Observed behavior: Runtime persists; direct Child/Cron factory calls do not share its appender.
+' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #425B70
+skinparam classBackgroundColor #F1F5F9
+skinparam classBorderColor #8496A4
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 175
+skinparam noteBackgroundColor #FFFBEF
+hide empty members
+hide footbox
+autonumber
+title One Child Diagnosis - Target / Pending implementation
+participant "Parent" as Parent
+participant "Host" as Host
+participant "Session" as Store
+participant "Child Runtime" as Child
+Parent -> Host : Invoke validated and permitted Agent call
+Host -> Store : Atomically admit child and parent-call link
+Store --> Host : Fixed child Session and execution
+Host -> Child : Start once after commit
+Child -> Store : Append own messages and tool results
+Child -->> Parent : Permitted high-level progress
+alt Child completes
+  Child -> Store : Commit final message and terminal
+  Store --> Child : Committed
+  Child --> Host : Final summary
+  Host -> Store : Commit parent Agent tool result
+  Store --> Host : Committed
+  Host --> Parent : Return summary
+else Parent requests stop
+  Parent -> Host : Stop original child execution
+  Host -> Child : Propagate cancellation
+  Child -> Store : Persist actual outcome when known
+  Child --> Host : Actual outcome or unresolved state
+  Host --> Parent : No fabricated success / no replay
+end
+note over Parent,Store
+  Independent histories; parent retains summary only.
+  An unresolved child keeps its execution occupancy.
+end note
+@enduml
+
+@startuml unified_tool_commit
+' Source evidence: Java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/
+' runtimeapi/event/RuntimeExecutionCoordinator.java:start
+' runtimeapi/event/RuntimeEventProjector.java:project,persistToolResults
+' session/AgentSessionFactory.java:create
+' tool/agent/SubagentExecutionService.java:runChild
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
+' Observed behavior: Runtime persists; direct Child/Cron factory calls do not share its appender.
+' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #425B70
+skinparam classBackgroundColor #F1F5F9
+skinparam classBorderColor #8496A4
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 175
+skinparam noteBackgroundColor #FFFBEF
+hide empty members
+hide footbox
+autonumber
+title One Business Tool Call - Target / Pending implementation
+participant "Model" as Model
+participant "ToolPipeline" as Pipeline
+participant "Host" as Host
+participant "Mate" as Mate
+participant "Session" as Session
+Model -> Pipeline : Tool call
+Pipeline -> Pipeline : Resolve trusted target and validate arguments
+Pipeline -> Session : Commit call identity before confirmation or execution
+Session --> Pipeline : Committed call
+alt Invalid arguments
+  Pipeline -> Session : Commit real error with safe public projection
+  Session --> Pipeline : Committed
+  Pipeline --> Model : isError=true; field errors and trusted definition
+else Valid arguments
+  Pipeline -> Host : Check permission / obtain required confirmation
+  Host --> Pipeline : Decision for same prepared snapshot
+  alt Allowed
+    Pipeline -> Mate : Execute prepared business call
+    Mate --> Pipeline : Result or business failure
+    Pipeline -> Pipeline : Apply after hooks; fix final outcome
+  else Denied
+    Pipeline -> Pipeline : Fix denied error; no business request
+  end
+  Pipeline -> Session : Commit outcome and optional Skill count atomically
+  Session --> Pipeline : Committed outcome
+  Pipeline --> Model : Return final result
+end
+note over Pipeline,Session
+  Commit failure stops further advancement and requires reconciliation.
+  Never replay the business call to repair missing history.
+end note
+@enduml

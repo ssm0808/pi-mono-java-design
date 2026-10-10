@@ -1,151 +1,105 @@
 @startuml skill_load_statistics_classes
-allowmixing
-' Source evidence: Java dad4433d38fcb4104bd8d093f844ea2afc9612ee
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java create/configureAgent
-' modules/agent-core/src/main/java/com/campusclaw/agent/Agent.java subscribe/emit
-' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java execute
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java skillIdsByName
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/SkillLoadTransaction.java record
-' Observed behavior: all three entry points share factory and final tool events; current writes require execution sources.
-' Design reason: observation is local to each Agent; only immutable count data crosses the bounded worker boundary.
-' Java divergence: observer, bounded recorder and minimal receipt persistence are Pending implementation.
-title Skill Success Count - Target Structure
+' Source evidence: Java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/
+' runtimeapi/event/RuntimeExecutionCoordinator.java:start
+' runtimeapi/event/RuntimeEventProjector.java:project,persistToolResults
+' session/AgentSessionFactory.java:create
+' tool/agent/SubagentExecutionService.java:runChild
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
+' Observed behavior: Runtime persists; direct Child/Cron factory calls do not share its appender.
+' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
 skinparam backgroundColor white
-skinparam shadowing false
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
+skinparam shadowing false
 skinparam classAttributeIconSize 0
-skinparam packageStyle rectangle
-skinparam linetype polyline
-skinparam nodesep 35
-skinparam ranksep 40
-top to bottom direction
-package "Shared Agent assembly" {
-  class "AgentSessionFactory" as Factory <<existing>>
-  class Agent <<existing>>
-  interface "AgentEventListener" as Listener <<existing>>
+skinparam ArrowColor #425B70
+skinparam classBackgroundColor #F1F5F9
+skinparam classBorderColor #8496A4
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 175
+skinparam noteBackgroundColor #FFFBEF
+hide empty members
+title Skill Result Projection - Target / Pending implementation
+package "Query boundary" {
+  class "SkillLoadController" as Controller <<Web / VO>>
+  class "SkillLoadQueryService" as Query <<Singleton>>
 }
-package "Skill observation" {
-  class "SkillUsageObserver" as Observer <<Pending implementation>> {
-    per Agent
-    trusted name-to-id map
-    pending Skill calls only
-    onStart / onEnd / onAgentEnd
-  }
-  class "SkillCallCountDTO" as Count <<Pending implementation>> {
-    immutable
-    observationId
-    skillId
-    completedAt
-  }
+package "Shared history transaction" {
+  class "SessionEventAppender" as Appender <<M06 singleton>>
+  class "ToolOutcomeCommitDTO" as Outcome <<Immutable>>
+  class "RuntimeSessionRepository" as History <<M04>>
+  class "SkillUsageProjection" as Projection <<M05 singleton>>
 }
-package "Statistics application" {
-  class "SkillUsageRecorder" as Recorder <<Pending implementation>> {
-    application singleton
-    one worker / bounded queue
-    submit(count): accepted or dropped
-  }
-  class "SkillUsageTransaction" as Transaction <<Pending implementation>> {
-    application singleton
-    record(count): independent transaction
-  }
-}
-package "Management query" {
-  class "SkillLoadStatisticsController" as Controller <<existing>>
-  class "SkillLoadService" as Query <<existing query, adaptation pending>>
-}
-package "Database adapter" {
-  interface "SkillLoadMapper" as Mapper <<existing, adaptation pending>>
-  database "GaussDB statistics" {
-    entity "t_skill_usage" as Receipt <<Pending implementation>> {
-      observation_id : PK
-      skill_id
-      loaded_at
-    }
-    entity "t_skill_usage_stats" as Total <<existing>> {
-      skill_id : PK
-      activation_count
-      last_loaded_at
-    }
-  }
-}
-Factory --> Agent : creates
-Factory ..> Observer : installs once [P]
-Agent "1" o-- "0..*" Listener : owns subscriptions
-Observer ..|> Listener
-Observer --> Count : produces [P]
-Observer --> Recorder : submit [P]
-Recorder "1" o-- "0..capacity" Count : queued [P]
-Recorder --> Transaction : worker calls proxy [P]
-Controller --> Query : request / response VO
-Query --> Mapper : query DTO
-Transaction --> Mapper : count DTO [P]
-Mapper --> Receipt : unique insert [P]
-Mapper --> Total : atomic increment [P]
-Agent -[hidden]right-> Controller
-Receipt -[hidden]right-> Total
-note bottom of Receipt
-  One statistics transaction covers receipt and total.
-  No Session rows, execution lineage or source logs.
+class "SkillLoadMapper" as Mapper <<DTO / SQL>>
+class "GaussDB\nt_session_entries\nt_session_events\nt_skill_usage_stats" as DB <<Database>>
+Controller --> Query : Request VO\nResponse VO
+Query --> Mapper : cumulative query
+Appender --> Outcome : fixed trusted result
+Appender --> History : insert canonical result once
+Appender --> Projection : only new LIVE Skill success
+Projection --> Mapper : atomic increment
+History --> DB : same transaction
+Mapper --> DB
+note bottom of Projection
+  No observer, private queue, observation ID or separate fact table.
+  Failure rolls back the shared result transaction.
 end note
-legend bottom left
-  [P] = Pending implementation
-  Runtime, Cron and Child use the same Factory.
-  HTTP range-query decisions remain pending.
-endlegend
 @enduml
 
 @startuml skill_usage_record
-' Source evidence: Java dad4433d38fcb4104bd8d093f844ea2afc9612ee
-' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java execute
-' modules/agent-core/src/main/java/com/campusclaw/agent/loop/AgentLoop.java runInternal
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/usage/SkillUsageTracker.java skill/record
-' Source evidence: pi main 42a3497d03ad17e308a2299fa824727894f2c0ec packages/agent/src/agent-loop.ts finalizeExecutedToolCall/emitToolExecutionEnd
-' Observed behavior: final End follows after-hook processing; Java emits listeners synchronously.
-' Design reason: final success selects a count, bounded delivery separates tool completion from JDBC completion.
-' Presentation: execution and observation stage only; trusted resolution, validation and authorization have already completed.
-' Java divergence: bounded recorder and independent minimal receipt are Pending implementation.
-title Count One Successful Skill Call - Pending implementation
+' Source evidence: Java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/
+' runtimeapi/event/RuntimeExecutionCoordinator.java:start
+' runtimeapi/event/RuntimeEventProjector.java:project,persistToolResults
+' session/AgentSessionFactory.java:create
+' tool/agent/SubagentExecutionService.java:runChild
+' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
+' Observed behavior: Runtime persists; direct Child/Cron factory calls do not share its appender.
+' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
 skinparam backgroundColor white
-skinparam shadowing false
 skinparam defaultFontName SansSerif
-skinparam defaultFontSize 15
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 190
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #425B70
+skinparam classBackgroundColor #F1F5F9
+skinparam classBorderColor #8496A4
 skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceArrowColor #425B70
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 175
+skinparam noteBackgroundColor #FFFBEF
+hide empty members
 hide footbox
 autonumber
-participant ToolPipeline as Pipeline
-participant Tools
-participant Observer
-participant Recorder
-database Database as DB
-Pipeline -> Observer : Skill Start: call ID and validated name
-Observer -> Observer : Resolve trusted skill ID; remember local pair
-Observer --> Pipeline : Continue original execution
-Pipeline -> Tools : Execute Skill
-Tools --> Pipeline : Tool outcome
-Pipeline -> Pipeline : Apply after hooks
-Pipeline -> Observer : Final Skill End: call ID and isError
-Observer -> Observer : Remove matching pending call
-alt Matched final success
-  Observer -> Recorder : Offer immutable count without waiting
-  Recorder --> Observer : Queued or dropped
-else Failed or unmatched call
-  Observer -> Observer : No count
+title Commit One Final Skill Result - Target / Pending implementation
+participant "ToolPipeline" as Pipeline
+participant "Session" as Session
+participant "Skill projection" as Stats
+database "GaussDB" as DB
+Pipeline -> Session : Final outcome after all hooks
+Session -> DB : Begin; lock execution/Session; look up call result
+DB --> Session : Existing result or absent
+alt Already committed
+  Session -> Session : Verify immutable identity and payload
+  Session -> DB : End transaction without new writes
+  DB --> Session : Locks released
+  Session --> Pipeline : Existing committed result; no increment
+else New result
+  Session -> DB : Insert Entry and safe public event
+  Session -> Stats : Apply new result if LIVE Skill success
+  Stats -> DB : Atomic count +1 and max completion time
+  DB --> Stats : Updated
+  Stats --> Session : Projection applied or not applicable
+  Session -> DB : Commit all writes
+  DB --> Session : Committed
+  Session --> Pipeline : Allow result delivery and advancement
 end
-Observer --> Pipeline : Leave tool outcome unchanged
-Pipeline -> Pipeline : Return final result to AgentLoop
-... Application worker; tool return does not await this phase ...
-opt Count was queued
-  Recorder -> DB : Independent TX: insert receipt and increment total
-  DB --> Recorder : Commit or roll back
-end
-note over Recorder,DB
-  Queue rejection or write failure may lose a count.
-  Duplicate receipt never increments the total.
-  No Session lock or execution-state check.
+note over Session,DB
+  Any SQL failure rolls back all writes and stops advancement.
+  Unknown commit is reconciled by fixed call/result identity.
 end note
 @enduml

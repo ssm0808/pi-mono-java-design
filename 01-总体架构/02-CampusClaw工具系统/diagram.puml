@@ -411,17 +411,11 @@ end note
 @enduml
 
 @startuml subagent_execution_sequence
-' Source evidence (CampusClaw d649866):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/subagent/tool/SpawnAgentTool.java
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/delegation/InvokeAgentTool.java
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/TransientAgentRunner.java
-' pi packages/coding-agent/examples/extensions/subagent/index.ts
-' OpenCode packages/opencode/src/tool/task.ts
-' Observed behavior: current code has separate spawn and invoke paths plus a
-' session after-hook special case.
-' Design reason: one Agent tool resolves direct bindings and delegates creation
-' to the common AgentSessionFactory. Execution location is not a tool contract.
-' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+' Source evidence: Java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java:runChild
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java:start
+' Observed behavior: Child directly creates an in-memory runtime and returns final text.
+' Design reason: preserve independent durable child history and project only summary to parent.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
@@ -429,40 +423,39 @@ skinparam shadowing false
 skinparam sequenceMessageAlign left
 skinparam maxMessageSize 180
 skinparam sequenceArrowColor #425B70
-skinparam sequenceLifeLineBorderColor #BAC4CC
 skinparam sequenceParticipantBackgroundColor #F1F5F9
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #FAFBFC
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
-
-title Run One Direct Child Agent - Target
+title One Bound Child - Target / Pending implementation
 participant "Parent execution" as Parent
-participant "Child execution service" as Service
-participant "Session assembly" as Factory
-participant "Child Session" as Child
-Parent -> Service : Invoke Agent with bound name and task
-Service -> Service : Validate direct binding, version and depth
-Service -> Factory : Prepare runtime and create independent Child
-Factory --> Service : Child Session with separate context
-Service -> Child : Run task
-Child -->> Service : High-level progress
-Service -->> Parent : Project permitted progress
+participant "Host" as Host
+participant "Session" as Store
+participant "Child Runtime" as Child
+Parent -> Host : Agent call with trusted binding and valid parameters
+Host -> Host : Check permission, version, depth and model
+Host -> Store : Admit child Session, execution and parent-call link
+Store --> Host : Committed identity
+Host -> Child : Start once through common Coordinator
+Child -> Store : Commit own messages and tool results
+Child -->> Parent : Permitted high-level progress
 alt Child completes
-  Child --> Service : Last nonempty Assistant text
-  Service --> Parent : ToolResult with final text
+  Child -> Store : Commit final message and terminal
+  Store --> Child : Committed
+  Child --> Host : Last nonempty Assistant text
+  Host -> Store : Commit parent Agent tool result
+  Store --> Host : Committed
+  Host --> Parent : Final text
 else Parent cancelled
-  Parent -> Service : Cancel
-  Service -> Child : Cancel child scope
-  Child --> Service : Cancellation outcome
-  Service --> Parent : Propagate cancellation
+  Parent -> Host : Stop original child execution
+  Host -> Child : Request cancellation
+  Child -> Store : Persist actual outcome when known
+  Child --> Host : Actual outcome or unresolved state
+  Host --> Parent : No fabricated success or replay
 end
-note over Factory,Child
-  Same Session type and pipeline; separate state.
-  No child reasoning or complete history is projected.
+note over Store,Child
+  Independent durable history and authorization.
+  Parent receives summary, not child reasoning or history.
+  Factory assembles runtime objects; admission owns DB creation.
 end note
 @enduml
 

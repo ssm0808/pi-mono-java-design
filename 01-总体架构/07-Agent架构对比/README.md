@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.85.0 |
+| 文档版本 | 1.86.0 |
 | 更新日期 | 2026-10-10 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -19,7 +19,8 @@
 | 工具发现专项基线 | A11：2026-09-22 fetch OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`、Codex `main@ac7634b9f73ec1bf96466be7a5869f0949d20b30`；沿用 DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`。仅升级 Skill、固定搜索、延迟工具暴露与远端工具适配结论；默认分支快照不等于稳定发布，其他模块历史证据不变 |
 | 参数恢复专项基线 | A11：2026-09-22 确认 pi `main@95fbc04997eaee961eb673fa7923e9220609ebd5`、DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`；CampusClaw PR #323 开发提交从 `c9a2340f87bda6dff6bbd352f6995f8551206bb5` 更新到 `ae6645caaade3b9520220a34af940210850ef36a`，只升级确认前准备、模型恢复反馈和 SearchTools 差距，见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#search-tools-evidence) |
 | Command 状态专项基线 | M05：用户指定 Java `53eff85c7f41de23eb434e027782f5085a8b8e45`；只复核 Runtime 命令、严格名称、展开文本恢复与 Slash 交互，见[当前实现](../../04-命令与技能/00-Slash-Command通用模块/README.md#current-runtime-status)；不升级外部基线或统计结论 |
-| Skill 统计专项基线 | A09：2026-10-10 核验 #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 的工具、三入口、采集及事务；隔离 fetch pi `main@42a3497d03ad17e308a2299fa824727894f2c0ec` 只更新 Start/End、后置 hook 与订阅结论，Codex/OpenCode 保留历史研究 |
+| 统一历史专项基线 | A09/A15：2026-10-10 核验四仓最新默认分支，完整 SHA 与范围见[统一证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)；只升级三入口历史与计数投影，不升级其他专题历史结论 |
+| Skill 统计历史基线 | A09：2026-10-10 核验 #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 的工具、三入口、采集及事务；隔离 fetch pi `main@42a3497d03ad17e308a2299fa824727894f2c0ec` 只更新 Start/End、后置 hook 与订阅结论，Codex/OpenCode 保留历史研究 |
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
 | 线性历史专项基线 | A12：pi main `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`，2026-09-22 已确认默认分支并隔离 fetch；Java 本地 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；只升级分支索引与 Session 历史读取结论 |
 | Redis 观察专项基线 | A13：2026-09-22 确认并隔离 fetch OpenCode dev `fe3f3a41f79ad292cc3c7c629567385a20ec5130`，仅事件协议、live/durable 定义与实例监听；Java 本地 `53eff85c7f41de23eb434e027782f5085a8b8e45` 的投影/流/控制/终态/依赖范围；新能力待实现，v2 仍为 experimental |
@@ -328,24 +329,20 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 <a id="a09"></a>
 
-## 6.6 A09 · Skill 成功调用次数与公共事件观察
+## 6.6 A09 · Skill 计数复用统一结果
 
 | 维度 | 结论 |
 |---|---|
-| 模块与主设计 | M05；[成功调用统计](../../04-命令与技能/03-Skill加载统计/README.md)维护口径、最小持久化、异步边界、查询待核实项及验收，复用其中全局目标类图与时序。 |
-| 架构问题 | 同一 Skill 成功调用三次应计三次，如何覆盖 Runtime/Cron/Child 而不依赖执行追溯或 Session 生命周期？ |
-| 主基线与核验 | pi 默认 main `42a3497d03ad17e308a2299fa824727894f2c0ec`，2026-10-10 隔离 fetch；`packages/agent/src/types.ts` 的工具事件、`agent-loop.ts` 的 prepare/finalize/emitToolExecutionEnd、`agent.ts` 的 subscribe/监听器等待已读取。该快照不是发布验证。 |
-| pi 观察与边界 | Start 有 args，End 有最终 result/isError，后置 hook 先于 End；订阅回调会被等待。pi 在 prepare 前发 Start，Java 在校验/prepare/before 后发 Start，不能把 Start 当成功。所查路径不提供本设计的 Skill 报表或数据库。 |
-| 历史研究 | [Codex](../../04-命令与技能/03-Skill加载统计/codex-skill-counting.md)与[其他基线](../../04-命令与技能/03-Skill加载统计/trace-baselines.md)保留原提交；本次不升级其上报、去重或后台存储结论，不把旧根任务口径延续为当前产品要求。 |
-| CampusClaw 已观察实现 | #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 已按 Skill 成功 End 采集，但还要求正文/hash/规范来源和执行身份；三 Host attach、Cron/Child JSONL、Session 锁和删除准入仍存在；Factory 已去除具体 Tracker 参数。 |
-| CampusClaw 目标 | 每次最终成功 Skill 调用加一；公共 Factory 只装配 Observer，Start/End 关联仅保存在统计器内部，可信 skillId 来自绑定。后台有界队列写最小事实与累计，不传父子/根/Session 身份。 |
-| 差异分类 | 产品约束：成功调用次数，覆盖三入口，Read/显式注入不计，允许统计故障漏计；架构变更：公共观察＋应用级有界后台写入，去掉执行追溯前提；保留安全边界：原可信解析、参数、权限和受管路径校验不变。 |
-| 理由与代价 | 计数规则不需要知道由谁启动任务；最终结果观察避免提前计数。技术幂等键保留同记录防重，不伪装业务 ID。代价是每调用仍一条最小事实、查询最终一致、队列满/进程退出可丢失，需要单例执行器关闭和资源验证。 |
-| 生命周期 | Observer 每 Agent 一份，AgentEnd 清理未完成关联；已入队记录不持有 Session，关闭/删除 Session 不撤销已成功调用。共享 Recorder 只随应用关闭；数据保留独立管理。 |
-| 查询边界 | #335 已删 from/to 与日表，用户要求待核实。本方案不修改精确 API，不把采集简化当成批准删除；如保留日表，作为同一事务第三投影逐调用加一。 |
-| 状态与验收 | 现有统计已实现；上述解耦增量待实现。验证三次调用、重复/并发 End、后置改写、入口覆盖、队列满不 CallerRuns、慢库不占工具线程、事务回滚、Session 删除后在途入账及真实消费者。 |
+| 所属模块 | M05 [成功调用统计](../../04-命令与技能/03-Skill加载统计/README.md)，共用 [A15](#a15) 的执行与持久化链 |
+| 问题 | 三入口已有真实工具结果，是否还需要第二套统计事件、日志和投递？ |
+| 基线 | pi main 42a3497d 的最终工具结果与后置处理支持成功判定，但没有本产品累计表；本次新核验见[证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md) |
+| 已观察实现 | Java main 与 #335 分别记录在[M05 证据](../../04-命令与技能/03-Skill加载统计/source-evidence.md)；#335 仍有正文/hash/来源及独立统计链，不等于已落地统一历史 |
+| 目标 | 新 LIVE 成功 Skill 工具结果首次写入时，同事务加一；结果唯一关联负责防重，不增加独立统计流水、Observer 或队列 |
+| 理由与代价 | 直接复用权威事实避免双写对账；一张累计表保留删除后的 lifetime。代价是累计写入影响结果事务，热点及故障必须验收；不能再承诺统计故障不阻断推进 |
+| 产品边界 | 每次调用计数，失败/Read/正文注入/恢复/复制不计；删除不扣累计；精确范围和日表仍待核实 |
+| 状态与验收 | 统一结果及投影待实现；三入口、并发重复、回滚、清理、缺口、Provider ID 复用和真实 GaussDB 验收见主设计 |
 
-**设计表达。** 统计消费工具已经完成的事实。入口负责执行，Observer 负责识别，Recorder 负责有界投递，统计事务负责唯一记录与原子累加；执行日志和 Session 状态不再是调用次数的前置条件。基线仅支持选择已有工具事件，不替 CampusClaw 决定表结构、投递可靠性或查询范围。
+**设计表达。** 工具历史就是统计事实，累计只是同事务投影；基线帮助确定结果语义，企业保留和统计一致性由 CampusClaw 自己选择。
 
 <a id="a10"></a>
 
@@ -471,7 +468,7 @@ CampusClaw 同样仅通过完整 Schedule 响应提供未来计划时间，创�
 | OpenCode GitHub 入口 | GitHub Actions 默认 UTC，允许可选 IANA timezone；Runtime 只消费事件 | 可以参考显式默认值，但不能把它归为 OpenCode 自有调度器行为 |
 | Codex | 所查开源摘要无 timezone，OpenAI Docs 未规定时区默认来源 | 本次未能核验默认值，不作为 Claw 默认时区的依据 |
 
-本专项重新确认默认分支并 fetch：DSH master `639ed015397290b3745d163aafe02ffee4aa3f84`、pi main `ee602414c703be8da722ec56de7f2399e62581ac`、OpenCode dev `2fa3363c924c5c3e367b84a87ae478296a0ed59b`、Codex main `d42056091aded7feb1d88ac7e83972108b2aa478`。pi/Codex 相对前项的所查文件无变化；完整路径、符号、旧新范围及官方文档见[M10 时区证据](../08-CampusClaw定时任务/source-evidence.md#timezone-evidence)，不升级其余历史表。Claude 的 Cron 必填 IANA 时区已由配置契约记录；Claw 已确认 timezone 可省略并默认保存、回显 Asia/Shanghai，属于面向主要园区场景的产品约束。当前 Claw 不提供 at/startAt 输入，绝对时刻响应为 UTC 秒级且无小数秒，Session 与完整事件同步采用这一目标，精确规则见[配置契约 §3.4](../08-CampusClaw定时任务/configuration.md#34-时区选择与确认边界)。
+本专项重新确认默认分支并 fetch：DSH master `639ed015397290b3745d163aafe02ffee4aa3f84`、pi main `ee602414c703be8da722ec56de7f2399e62581ac`、OpenCode dev `2fa3363c924c5c3e367b84a87ae478296a0ed59b`、Codex main `d42056091aded7feb1d88ac7e83972108b2aa478`。pi/Codex 相对前项的所查文件无变化；完整路径、符号、旧新范围及官方文档见[M10 时区证据](../08-CampusClaw定时任务/source-evidence.md#timezone-evidence)，不升级其余历史表。Claude 的 Cron 必填 IANA 时区已由配置契约记录；Claw 已确认 timezone 可省略并默认保存、回显 Asia/Shanghai，属于面向主要园区场景的产品约束。当前 Claw 不提供 at/startAt 输入，绝对时刻响应为 UTC 秒级且无小数秒，Session 与完整事件同步采用这一目标，精确规则见[配置契约 §3.4](../08-CampusClaw定时任务/configuration.md#34-时区选择与校验)。
 
 ### 定时执行目标与文件能力（2026-10-04 专项）
 
@@ -626,6 +623,25 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 | 实现状态 | 旧功能提交2b93cbea已有自动/仅手动及预设，仍依赖preview；最新默认main769e8659的App.vue/组件树范围无该工作区。新增页面目标待实现；不以旧分支、原型或历史430项测试证明部署。其他后端历史范围不升级。 |
 | 验收 | 显式null清除旧计划、暂停状态保持、复杂Cron无损、修改规则时旧时间失效、未知写不重放、高低保真保留草稿和窄屏可操作；权威契约与原型职责分别由M10/M07维护，现有全局图依赖关系无变化。 |
 
+<a id="a15"></a>
+
+## 6.12 A15 · 三入口统一历史与独立子会话
+
+| 维度 | 结论 |
+|---|---|
+| 模块与主设计 | M01/M03/M04/M06/M10；[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)唯一维护受理、父子关系、完整记录、逐工具提交和失败边界，复用其完整目标类图 |
+| 问题 | 定时巡检调用子诊断 Agent，如何让主/子过程均可追溯，同时避免为统计再造执行历史？ |
+| 最新基线 | 2026-10-10 隔离 fetch：pi main 42a3497d、Codex main 322bbf4d、OpenCode dev 055d95bb、Java main 769e8659；完整 SHA、旧新范围及路径符号见[证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md) |
+| pi | 普通示例 --no-session，消息放回工具 details；experimental durable 另建 conversation。不能将两者合并成“子 Agent 不留历史” |
+| Codex / OpenCode | 非 ephemeral child thread 的独立 rollout；Task 的子 Session 与消息/Part 持久化。父侧摘要与子完整历史并不冲突；不借此推断所有 delta 都持久化 |
+| CampusClaw 已观察 | Runtime Coordinator 有数据库 Projector；Cron/Child 直接 Factory+prompt，缺共同持久受理；TurnEnd 才写结果有故障窗口 |
+| CampusClaw 目标 | Cron 每 Run、Child 每调用均独立 Session；共用受理、Coordinator、逐工具提交；父只保存摘要。Entry/公共投影/Skill 累计同事务，模型推进等待提交 |
+| 差异类别 | 架构变更：统一持久宿主和结果提交端口；产品约束：子历史独立授权、取消定向、Cron 非交互和未知不重放；安全加固：内部恢复记录与公共安全投影分开 |
+| 理由与代价 | 完整排障和复用统计来源；增加子会话存储、关联/保留协调及提交延迟，仍无法使外部副作用和本库 exactly-once |
+| 状态与验收 | 待实现；按 U1–U5 验收三入口、防重/取消/清理竞争、失败窗口和数据库故障，不宣称已经支持浏览器子历史展开 |
+
+**设计表达。** SubAgent 是独立的持久会话，父调用保存关系与摘要。Cron 只改变发起方式，历史写入不随入口另造实现；Skill 次数从这些已提交结果派生。
+
 ## 7. 源码证据与更新边界
 
 P01/P02 使用 pi 固定 commit `5cd93f688aaab89dbb6dfa4aca535f21796ae185`；
@@ -680,6 +696,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.86.0 | 2026-10-10 | 对比最新子 Agent 持久化基线，统一三入口历史并由结果同事务维护 Skill 累计。 |
 | 1.85.0 | 2026-10-10 | A09 按 Skill 成功调用计数，补充公共观察、有界写入与 #335 对比及最新 pi 事件证据。 |
 | 1.84.0 | 2026-10-09 | 依据最新 pi 与 DeepSeek 长度核验取消计划字符上限，区分正文规则和传输容量。 |
 | 1.83.0 | 2026-10-09 | 以最新 pi AI 部分 JSON 为基线，说明通用预览、独立完整解析与计划审核的边界和兼容代价。 |

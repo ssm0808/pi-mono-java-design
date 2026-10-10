@@ -1,215 +1,107 @@
 # Skill 成功调用次数统计设计
 
-[命令与技能](../README.md) · [M05 主设计](../00-Slash-Command通用模块/README.md) · [源码与差距](source-evidence.md) · [验证](validation.md)
+[命令与技能](../README.md) · [M05 主设计](../00-Slash-Command通用模块/README.md) · [统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) · [源码与差距](source-evidence.md) · [验证](validation.md)
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 4.0.0 |
+| 文档版本 | 5.0.0 |
 | 更新日期 | 2026-10-10 |
-| 业务目标 | Skill 工具最终成功一次，对应 skillId 使用次数加一；同一任务三次成功调用计三次 |
-| 职责 | M05 消费已有工具事件并维护统计；M03 继续决定工具执行结果；M04/M06 不承担统计身份、来源补齐或删除准入 |
-| 设计状态 | 成功调用口径由用户指定；本文给出推荐落地方案，有界异步写入和简化持久化待实现 |
-| 实现状态 | #335 已实现三入口事件采集及累计查询；本文公共装配、去除追溯前提、有界写入等调整待实现，不把整项功能标为不存在 |
-| Java 对照基线 | PR #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee`；base `769e86592285f4a25b0febaf551eddea6bc7212c` |
-| 设计仓起点 | `da81fed06ed9e8964b0dfd0bc0ed612c5be1e543` |
-| pi 事件基线 | 2026-10-10 确认默认分支并隔离 fetch：`main@42a3497d03ad17e308a2299fa824727894f2c0ec`；只核验工具生命周期与订阅，不声称 pi 提供此统计 |
+| 业务目标 | 每次真实 Skill 工具最终成功，对应 skillId 加一；同任务三次成功计三次 |
+| 职责 | M05 定义计数及查询；M06 统一结果提交事务调用 M05 投影；M04 保存结果与处理清理；M03 决定真实工具结果 |
+| 状态 | 已有 Skill 统计实现；统一结果记录、去掉独立采集链及同事务累计增量待实现 |
+| 源码 | Java main 769e8659、PR #335 dad4433d，完整 SHA 与基线范围见源码证据；设计制品校验不等于实现验收 |
 
 ## 1. 业务问题、正常处理与失败
 
-园区设备告警处理中，Agent 成功调用“设备告警处置”Skill 两次，子 Agent 又成功调用一次，管理端看到该 skillId 新增三次使用。人工会话、定时任务或子 Agent 只影响任务如何启动，不改变计数规则。
+园区巡检中，主 Agent 成功调用告警处置 Skill 两次，子 Agent 又成功调用一次，总数增加三次。Cron、Child、交互会话都已经需要保存工具结果，统计直接消费同一记录，不再为统计另造一套调用历史。
 
-一次调用沿已有工具 Pipeline 完成可信目标解析、参数校验、Host 权限判断及必要确认、工具执行、后置处理与结果回传。CampusClaw 的通用目标是可信绑定解析与参数校验先于交互确认；本统计不调整这些阶段。现有 Java Pipeline 在 schema 校验及 prepare 后执行 before hook，随后发 Start，执行工具、后置 hook，最后发 End。Skill 的受管文件读取由 SkillTool 完成，不经过 Mate。无效调用保持真实错误，由原工具链向模型反馈；统计不猜参、不重放。
+可信目标解析、参数校验、权限或必要确认、业务执行、后置处理依次完成后，Runtime 提交完整 tool.result。首次插入真实成功 Skill 结果的同一事务，更新一行累计；Entry、公共投影和累计一起提交，再允许模型继续。准备/权限错误、后置 hook 改为失败、未知结果都不计数；内容被改写但最终成功仍计，统计不再验证正文/hash 来另定成功。
 
-统计观察器在 Start 时从本次可信绑定识别 skillId，在 End 且 `isError=false` 时形成一个调用计数记录。记录放入应用级有界队列后，原工具结果立即继续回传；后台独立事务插入幂等记录并原子累加总数。入队不代表已经入账，查询只返回已提交的累计值。
+数据库失败会令本次历史及累计一起回滚，停止后续推进并对账；不将真实工具成功改成 isError=true，也不重跑工具。外部副作用与数据库仍不是分布式原子事务，崩溃后无可靠最终记录的调用不计，不能宣称所有现实成功都无损入账。
 
-工具失败不计数。统计队列满、写库失败或进程退出允许漏计，诊断计数反映这些丢失，工具仍按原结果返回。本功能是运营统计，沿用已有 best-effort 边界，不承诺无损审计、计费或证明模型遵循了 Skill。
+## 2. 唯一计数来源
 
-## 2. 唯一计数规则
-
-计数对象是**当前进程真实执行、发出最终成功结束事件的受管 Skill 工具调用**。每次调用权重为一；工具名必须为框架 `Skill`，skillId 必须来自创建该 Agent 时固定的可信绑定。
-
-- 成功以 Pipeline 发布的最终 `ToolExecutionEndEvent.isError=false` 为准，观察器不重新判定工具成功。
-- 每次真正的新调用都计数；同一任务、同一 Skill、同一版本均不去重。重复投递同一个 End 不重复入队，同一统计记录重复提交不重复加数。
-- 内容改写、正文为空、文件摘要变化，只要工具最终仍报告成功，就按成功调用计数。若产品认为这些是工具失败，由 SkillTool/Pipeline 的功能规则处理，不把失败规则藏进统计器。
-- 取消导致没有成功 End 或 End 为错误时不计；成功 End 已发布后发生的取消、Session 结束、后续模型失败不撤销计数。不会在后台写库时再读取变化中的 CancellationToken 或执行状态。
-- 仅 Read、显式 `/skill:name` 注入、SearchTools、CallTool、准备/刷新、历史读取、恢复已有消息、SSE 重连不计。显式命令之后模型真的调用 Skill，按该次工具结果计数。
-- 不按 Runtime/Cron/Child、Agent、根任务、Skill 版本拆分或去重；部署管理授权保持，不能从凭据 ID 推导租户。
-
-| 行为 | 应提交增量（假定统计可用） |
-|---|---:|
-| 同一任务三次成功调用 A | A +3 |
-| 一次调用失败，模型修正后新调用成功 | A +1 |
-| 主执行调用 A 两次，Child 调用 A 一次 | A +3 |
-| 两个 Agent 的 Provider call ID 相同，各自成功调用 A | A +2 |
-| 后置 hook 保留成功状态，但替换正文或 details | A +1 |
-| 后置 hook 改为 `isError=true` | +0 |
-| 原 End 重复投递、重复提交同一统计 DTO | 同次调用合计 +1 |
-| 同一 Agent 前一次调用结束后，下一次真实调用复用 Provider ID | 新 Start/End 再计 +1 |
-| 已入队的成功调用随后 Session 结束或删除 | 后台可入账，不扣减 |
-
-## 3. 公共接入与局部状态
-
-### 3.1 一个装配点
-
-在 `AgentSessionFactory.create` 已得到本次 runtime 和 Agent、首次 prompt 之前，通过现有 `Agent.subscribe` 安装一份 `SkillUsageObserver`。Factory 只构造和连接观察器，不解析正文、不生成执行血缘、不访问数据库。`create(request)` 的签名、请求参数、受理和身份绑定顺序不变；不恢复 `create(request, tracker)`。
-
-Observer 从 `PreparedAgentRuntime.skillIdsByName()` 复制只读映射，依赖应用级 `SkillUsageRecorder` 与 Clock。订阅安装失败要隔离并诊断，不能令 Session 创建失败。一个 Agent 只装一份，确认续跑和多次 prompt 不重装。观察器由 Agent 的监听器集合持有，没有外部按 Session 保存的 registry，不拥有文件、连接或线程；Agent 释放后一起释放。
-
-Runtime、Cron、Child 已经共用此 Factory。验收须分别验证三个入口确实覆盖，但观察器不接受入口类型、Session ID、Cron runId 或父执行身份。无需新增通用事件总线、生命周期 SPI、公共 SSE 字段或 `agent-core` 的统计接口。
-
-推荐包边界如下，不新增 Maven 模块：
-
-| 代码归属 | 内容 |
+| 条件 | 规则 |
 |---|---|
-| `codingagent.skill.usage` | Observer、Recorder、事务写服务；成功计数规则只在这里维护 |
-| `codingagent.skill.usage.dto` / `mapper` | 内部观察/计数/查询 DTO 与 SkillLoadMapper；统计写侧不反向依赖 HTTP 包 |
-| `codingagent.runtimeapi.web` / `vo` / `service` | 保留查询 Controller、请求/响应 VO 和查询 Service 的转换职责；由 Service 调用统计 Mapper |
-| `codingagent.session.AgentSessionFactory` | 仅创建每 Agent 的 Observer 并订阅，不持有统计状态 |
+| 唯一事实 | 内部 t_session_entries 的 tool.result；公共 t_session_events 只是安全投影，不重复计数 |
+| 成功判定 | 工具最终 is_error=false、tool_name=Skill、origin=LIVE；所有后置处理已经结束 |
+| Skill 身份 | 同次可信绑定的 skillId，固定到不可变结果 DTO；不是模型自报 ID、正文解析、hash 或当前目录二次解析 |
+| 调用身份 | session_id + tool_call_entry_id；由 Runtime 服务端调用身份产生，与 Provider callId 分开 |
+| 重复 | 同结果重试读取并核对原记录，不再次累加；同任务下一次真实调用另计 |
+| 非调用 | Read、SearchTools、CallTool、显式 /skill 正文注入、恢复、复制、分页和 SSE 重连不计 |
+| 后续失败 | 已提交成功之后的取消、模型失败或 Session 删除不撤销累计 |
 
-现有 Mapper/内部 DTO 迁入统计所属包时同步 imports 与 XML namespace，公开 VO/接口名称保持。Mapper SQL 资源路径可以沿用，不为路径整齐改动无关资源；不借此搬迁其他 Runtime 持久化类型。
+同一个 Provider callId 在不同消息、不同 Agent 中复用不影响计数。校验失败可以没有 Start/End，因此不使用 Start/End 私有 Map 决定是否入账。成功 Skill 缺可信 ID 时拒绝该不完整提交并诊断，不静默漏计，不猜参。
 
-### 3.2 为什么仍需要一个很小的 Map
+## 3. 一条事务，不再另建采集链
 
-已有 Start 含 `args`，End 含 `result/isError`，End 不含 Skill 参数。为了不改公共事件和工具执行协议，Observer 在自己的私有 `ConcurrentHashMap` 中暂存：
+M06 的 SessionEventAppender 复用既有 Repository 事务：重检固定 execution 与 Session → 查同调用已有结果 → 插入新结果/公共事件 → 若满足成功条件调用 M05 `SkillUsageProjection.applyNewResult` → 提交。M05 投影只接收可信结果 DTO 并调用 Mapper，不创建新事务，不启动线程，不依赖 HTTP Controller，不回调 Runtime。一个工具结果至多更新一个 skillId。
 
-| 键/值 | 用途 | 生存期 |
+去除统计专用 Observer、observationId、Start/End Map、有界队列、独立 t_skill_usage 事实、REQUIRES_NEW 和统计需要的来源 JSONL。保留真实 Runtime execution、Cron Run、父子关系、授权、深度与工具安全校验。`ExecutionIdentity`、`ManagedExecutionLog`、SkillToolDetails 等只能在重新检索独立消费者后删除专用部分，不能因名称相似删除真正的审计或执行记录。
+
+这是一项有意的架构变更：统计更新与结果提交共享失败边界，会增加历史事务锁等待；不再承诺“统计库故障不影响执行推进”。数据库无法记录历史本身也必须停止后续动作。换来的收益是没有第二套投递、防重、丢弃和对账。热点 Skill 更新争用需实测；新方案不提供已验证吞吐量。
+
+## 4. 为什么保留一张累计表
+
+| 方案 | 能回答什么 | 选择 |
 |---|---|---|
-| `toolCallId` | 在同一 Agent 活动事件流中配对 Start/End | 该次调用结束即移除 |
-| `skillId` | 从可信 name → id 绑定解析的统计对象 | 同上 |
-| `observationId` | JDK UUID，一次 Start 只分配一次，作为统计幂等键 | 同上，成功后复制到统计 DTO |
+| 直接 COUNT 成功结果 | 当前保留历史中的次数；可按结果时间筛选 | 用于完整范围内核对/候选区间查询，不能替代删除后的 lifetime |
+| 同事务 t_skill_usage_stats | 从统一采集切换点开始已提交的累计次数，Session 删除不减 | 当前目标；唯一一张统计表，没有独立统计流水 |
+| 异步消费/日表/独立分析库 | 大数据量、趋势或统计故障隔离 | 没有已确认必要性，首版不额外建设；已有接口/日表去留仍待核实 |
 
-这不是保存事件：不保存工具参数、正文、规范业务事件 ID、Session 或父子树。它位于统计消费者内部，不在 RuntimeActiveExecution，也不等待日志落盘。名字建议 `pendingSkillCalls`，不使用“Cron 家族”等不能表达职责的术语。
+[schema.sql](schema.sql)定义 skill_id、activation_count、last_loaded_at，以及 pruned_from/pruned_to。后两项只标记已删除成功历史的最小/最大事件时间，不是日统计；COUNT 范围与这个保守缺口相交时，不能声称结果完整。多个不连续删除区间可以合并成一个外包范围，宁可拒绝部分仍完整的查询，不返回错误低值。
 
-观察规则：
+累计更新与结果首次插入同事务，采用原子加一和 MAX 时间；普通 INSERT/唯一约束及重复核对由统一追加负责，不能“无条件忽略冲突后继续加一”。Mapper 片段见[record-usage.sql](record-usage.sql)。真实 GaussDB 的 UPSERT、唯一冲突、JSONB 与事务行为必须集成验证。
 
-1. Skill Start：读取经过现有 Pipeline 处理的 `args.name`，精确匹配可信绑定；未命中只诊断。保存 `SkillCallObservationDTO(observationId, skillId)`。其他工具完全忽略。
-2. Skill End：原子 `remove(toolCallId)`；没有匹配项不补造调用。移除成功且最终成功时，固定 UTC 毫秒 `completedAt`，提交 `SkillCallCountDTO(observationId, skillId, completedAt)`。失败 End 只清理。
-3. 相同 End 的并行或重复回调只有一个能移除成功。已结束后的新 Start 可复用 Provider ID，并生成新的 observationId；不同 Agent 的 Map 隔离。
-4. `AgentEndEvent` 清理没有 End 的残留调用；异常和取消路径已有 finally 发布 AgentEnd。已提交的 DTO 与 Observer 不再相互持有，不因 Agent 关闭撤销。
+## 5. 删除、恢复与重建
 
-只消费原生 live 事件：依赖同次调用 Start 先于 End、同一 Agent 并行活动调用 ID 可区分。未结束的同 ID Start 属于无法区分重复投递与调用 ID 冲突的观测异常，应把该活动键标为不可计数并诊断，不覆盖成新的调用、不影响工具。这里不建设乱序、历史重放或跨进程事件投递协议；需要这类能力时必须重新确定稳定调用身份，不能宣称此 Map 能解决任意重放。
+Session 清理与追加争用相同 Session/执行锁。先禁止活跃或未知执行被清除，再对即将删除的 LIVE 成功 Skill 结果按 skillId 排序更新 pruned_from/to，最后删除历史；全部同事务，不扣 activation_count。结果先提交则入账保留；删除先提交则迟到结果拒绝，不复活任何记录。累计表不设 Session 级联外键。
 
-**observationId 是统计记录的技术键，不是 executionId、traceId 或规范业务事件 ID。** 不向模型、公共 SSE 或用户暴露，也不伪称它能够追溯到 Runtime/Cron/Child 的权威记录。
+恢复上下文、复制历史、补读事件不调用累计投影。数据库提交回执丢失时按固定结果 ID/调用关联读取，不重新执行模型或工具。全量历史尚在且口径一致时，可以离线核对 COUNT；发生清理后不能用剩余事件覆盖累计。事件、累计及缺口标记必须同一备份恢复一致点；累计丢失且来源已删除时无法精确重建，应明确指标不可恢复，不能造数。
 
-## 4. 持久化和失败隔离
-
-### 4.1 只保留必要字段
-
-核心模型使用两张表；[schema.sql](schema.sql)是待实现的新建环境设计片段，不是对现有数据库的删除或迁移操作。
-
-| 表 | 字段 | 不变量 |
-|---|---|---|
-| `t_skill_usage` | `observation_id`、`skill_id`、`loaded_at` | observation_id 唯一；同一次记录重复提交只入账一次；loaded_at 为成功 End 的固定时间 |
-| `t_skill_usage_stats` | `skill_id`、`activation_count`、`last_loaded_at` | 数据库原子加一，最近时间取 MAX；合法零值在查询时补齐 |
-
-沿用当前累计表和 HTTP 字段名，避免把内部简化顺带变成未评估的客户端重命名；内部新类型用 call/count/observation 表达含义。`activationCount` 在此表示成功调用数，不表示根任务数。
-
-不存 owner、execution、parent、session、root、source event、entry point、版本、摘要或固定 `signal_type=SKILL`。不与 Session 或远端 Skill 表建立外键；SQL 使用绑定参数。可信 Skill 身份不能由随机 UUID 代替。
-
-保留幂等事实表是为了数据库防重复，并保留有时间的最小事实以等待范围查询决定；不是为了执行审计。只有累计表加一无法在提交回执不确定、同 DTO 重复送达时提供数据库级防重。它的代价是每次成功调用仍写一行；本方案不把“解耦”宣传成零存储成本。
-
-当前统计字段仍沿用现有毫秒精度，时间在 End 固定，不在后台执行时重取。Session/公共事件/定时任务的[秒级规则](../../01-总体架构/01-CampusClaw多Agent运行时/time-contract.md)不在本任务中扩展到统计查询，精确统计时间格式随查询契约核实，不能静默改接口。
-
-### 4.2 数据库事务
-
-`SkillUsageTransaction.record(dto)` 是独立 Spring Bean 的事务入口，在后台工作线程调用。顺序固定为普通 INSERT 幂等事实 → 原子增加累计 → 提交；[record-usage.sql](record-usage.sql)给出 SQL。普通 INSERT 的唯一键冲突使整笔事务回滚，后面的累计更新不得执行；事务代理外只把明确 `pk_skill_usage` 冲突认作重复，其他错误记失败。不能在事务内 catch 后继续累加。
-
-正常提交时一笔记录增加一次；并发不同调用通过数据库原子累加避免丢更新。同 observationId 的合法重复保持原时间与 skillId；不同载荷复用键属于内部缺陷，验收须覆盖且诊断，不通过更新事实纠正。Skill 元数据删除或解除绑定不追溯扣减过去已经成功的调用。
-
-不访问 `t_sessions` 或 `t_session_executions`，不检查根 RUNNING，不获取 Session 行锁。Session 删除不删除统计事实，后台已接受的成功调用仍可入账。统计的备份、保留和治理按自身数据职责维护：没有确认保留策略前不自动清理，不能宣称有限保留的事实可以重建无限累计。未来清理幂等记录必须同时约束最大排队/重投递寿命；不添加一个未经确认的 90 天默认值。
-
-### 4.3 应用级有界写入
-
-推荐一个应用级 `SkillUsageRecorder`，内部使用已有 Spring/JDK 执行器：单工作线程、有界容量初值 256、拒绝策略 `AbortPolicy`。容量可配置并做正数校验；256 是初始工程参数，不是容量或性能结论。Observer 提交的任务只捕获三字段 DTO，不持有 Agent、Session、结果正文或凭据。
-
-- 工具线程只执行关联、取时、非阻塞入队；队列满/关闭时拒绝，捕获拒绝并计入 dropped。禁止 CallerRunsPolicy，不能在过载时退回工具线程写库；不使用默认无界线程池。
-- 后台每条执行一次事务。失败增加 failed 并输出受控、限流诊断，不自动重试、不重放工具。提交结果不确定不宣称一定漏计；同技术键的再次提交仍由数据库防重。
-- Agent/Session 关闭不关闭共享 Recorder，也不等待队列。应用关闭先停止接受、最多等待 5 秒排空，随后丢弃未开始的任务并申请中断工作线程；中断不等于 JDBC 已终止，连接、语句和网络超时须独立配置和故障验证。5 秒是关闭等待配置，不是 DB 调用总超时承诺。
-- 单工作线程最多占一个统计事务连接，复用现有 DataSource；不擅改全局连接池参数影响业务。慢库仍可能占用一个共享连接并使队列丢失，故这是工具线程等待隔离，不是与全进程资源完全隔离。统计专属连接池只有在实测需要时另行评估。
-- 监控至少区分 accepted、recorded、duplicate、dropped、failed 和队列积压；不把入队数作为使用次数。按现有日志/监控设施接入，不新增遥测依赖，不记录正文、完整参数或凭据。
-
-此处异步是明确的架构选择：避免已经核实的同步 JDBC 等待拖住工具返回。代价是查询最终一致、满队列/崩溃会漏记，增加一个进程级有界执行器。相比加 MQ、持久化任务队列或业务事件回放，它只解决这一个性能边界。
+新建环境使用新模型。若已有部署，必须先核实旧累计口径、数据是否保留和切换时点；不把旧根/Skill 去重次数冒充逐次调用数，也不在缺少全部来源时声称可以准确回填。新旧采集只能有一个向同一指标写入。统一历史链完成前，不提前删除现有统计路径造成三个入口漏覆盖。
 
 <a id="6-查询接口"></a>
 
-## 5. 查询范围与未决项
+## 6. 查询接口
 
-采集口径不决定查询接口必须删什么。现有批量 POST、skillIds 校验、ResultBean、管理授权、零值和错误隔离沿用现行边界；本任务不修改 Runtime catalog、公开 JSON 模型或查询 operation ID。
+保留已有管理鉴权、批量 skillIds 查询及 activationCount 语义，不引入公共统计事件或内部调用 ID。精确 HTTP 字段由既有事件契约 F19 维护，本设计不修改 operation JSON，也不自动批准删除 from/to 或日表。
 
-| 项目 | 已观察实现 / 决策状态 |
-|---|---|
-| #335 查询 | 只接收 skillIds，返回 queriedAt/items；累计包含已入账历史 |
-| 设计仓原查询 | 包含 from/to 精确区间及相应返回字段；见[统一接口页](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#QuerySkillLoadStatistics) |
-| 是否删除 from/to 与日汇总 | 用户已要求“暂时不确定，先标为待核实”；本方案不记作批准，也不声称两边契约已一致 |
-| 本方案异步影响 | 工具成功与查询可见存在延迟；queriedAt 仅为数据库查询时刻，不是所有工具事件已消费的水位 |
+用户对 from/to、日汇总及保留策略的答复仍是“暂时不确定，先标为待核实”。技术上可以直接查询保留的 LIVE 成功结果：以最终结果固定时间过滤，不能按入库/查询时间重算。只有区间完全位于统一采集覆盖期内、且与清理缺口不相交时，COUNT 才可声明完整。否则需要明确不完整/不可提供；具体错误或完整性响应模型留待该接口决策，不擅自加字段或返回误导性的 0。
 
-若保留精确 `[from,to)` 查询，可以按最小事实的 loaded_at 聚合，不需要执行树；保留范围、清理后错误、时间精度与实际消费者仍须一起验收。若需要独立日表，可作为同事务的第三投影按每次调用加一，不改变 Observer 或 Host；是否继续维护日表待核实。核心两表 SQL 不能直接替代尚未核实的完整发布材料，不在本任务执行 DROP 或现有数据迁移。
+因此当前可直接落地的查询是累计；若必须支持任意历史精确区间或长期趋势，需要再确定来源保留或日投影。当前一张累计表不是对这些未决需求的完整交付。
 
-## 6. 与 Simon 当前实现的区别
+## 7. 推荐目标类图与提交时序
 
-以下“Simon 当前实现”专指 #335 固定 head，包含 #295/#298 遗留能力；不是将所有问题认定为 #335 新引入。
+全局执行、Host、Factory 和持久化结构见[统一历史全局图](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#全局目标类图)。下图只展开 M05 投影与查询，跨模块主链通过引用复用。
 
-| 方面 | Simon 当前实现 | 本方案（待实现） | 理由 / 代价 |
-|---|---|---|---|
-| 成功口径 | 最终成功＋绑定摘要一致＋非空完整正文仍在 | 最终成功的 Skill 调用 | 直接回答调用次数，放弃“绑定正文完整交付”指标 |
-| 基本事件入口 | 已消费 ToolExecutionEnd | 复用同一结束事件，Start 只用于关联 skillId | 保留正确的公共事件机制，不另造总线 |
-| 安装位置 | Runtime/Cron/Child 三个 Host 分别 attach | 公共 Factory 创建 Agent 时装配一次 | 入口自然覆盖；Factory 只承担接线 |
-| Factory 协议 | 当前已恢复 create(request) | 保持 create(request)，增加窄装配语句 | 不恢复 Tracker 参数或改变受理逻辑 |
-| Runtime 状态 | ActiveExecution 保存规范调用 ID 映射 | 删除统计专用映射及记忆调用 | Observer 私有 Map 仅保存活动 Skill 的两项标量 |
-| 子执行 | 传入父身份和来源查询函数，推导 Child 身份 | 不传统计身份、来源函数 | 子 Agent 自己的成功 Skill 调用自然被观察 |
-| Cron 日志 | ManagedExecutionLog 保存所有工具开始事实，作为来源前提 | 计数不依赖或补建执行日志 | 日志故障不再额外抑制计数；执行审计另行设计 |
-| 幂等身份 | owner/execution/source/skill 组合 | 单次 observationId | 保留防重，不赋予它业务执行含义 |
-| 数据 | 调用事实 13 字段及累计表 | 最小事实 3 字段及累计表 | 保留数据库防重和原子累加，降低关联成本 |
-| Session 生命周期 | 写入锁 Session、检查根状态；删除清事实 | 统计不读锁 Session，也不随 Session 删除 | 历史计数独立，保留政策需自己管理 |
-| 失败隔离 | 同步写库、捕获异常；仍等待 DB | 应用级有界异步写入，满则丢弃 | 工具不等待 JDBC，代价是最终一致与队列生命周期 |
-| Read / 命令 | 已不计数 | 保持不计数 | 不扩大采集范围 |
-| HTTP / 日表 | 已删除 from/to 和日表 | 删除决定仍待核实 | 不用采集简化替代需求确认 |
+![Skill 结果投影与查询](skill_load_statistics_classes.svg)
 
-旧设计确实提出过真实根、规范来源与 Session 准入，因此本方案是**产品口径收敛与架构调整**，不是只移动几个类的保行为重构。可信身份、参数校验、权限确认、普通工具日志及结果持久化属于原业务职责，不能随统计简化一并删除。
+[原尺寸](skill_load_statistics_classes.svg) · [PlantUML 源码](diagram.puml#L1)
 
-## 7. 目标结构与关键时序
+场景：Skill 已完成可信解析、校验、Host 放行、执行及全部后置处理；从固定最终结果到提交回执，不另画业务调用总览。Session 代表统一事务，Stats 是同库投影，图中没有异步消息边界；新增链路待实现。
 
-下图只表达本统计模块及其接入、查询边界。已有 Agent/Pipeline 不因新设计改成待实现；标记 Pending implementation 的是统计改造或接线。类名给出推荐职责，实施可以沿用已有 Service/Mapper 名称以减少无意义重命名。
+![成功结果与累计同事务](skill_usage_record.svg)
 
-![成功调用统计目标类图](skill_load_statistics_classes.svg)
+[原尺寸](skill_usage_record.svg) · [PlantUML 源码](diagram.puml#L52)
 
-[PlantUML 源码](diagram.puml#L1) · [原尺寸 SVG](skill_load_statistics_classes.svg)
+## 8. 实施与验收
 
-观察器每 Agent 一份，Recorder 和事务服务是应用单例；不可变 DTO 跨后台线程。Controller 只经查询 Service 到 Mapper。统计代码不反向进入 agent-core，Mapper 不访问 Session 表。图中的类型与职责映射见 §3/§4，核心依赖均对应下节实施切片。
+1. 先完成统一受理、三入口持久化及逐工具提交端口；验证校验错误、拒绝、后置处理、取消及并行结果覆盖。
+2. 增加内部可信 skillId 与结果唯一关联；接入同事务投影及累计查询，更新完整安装 DDL 与公司镜像。
+3. 覆盖同任务三次成功加三、主/Cron/Child 均计、不同真实调用复用 Provider ID、同结果并发重试只加一、冲突载荷拒绝、后置失败不计和后续任务失败不减。
+4. 注入 Entry/公共事件/累计/提交失败，检查全部回滚、无自动业务重放；慢库和热点锁测试历史推进延迟，不能以单元测试宣称容量。
+5. 验证删除与追加竞争、缺口登记、复制/压缩/恢复不计、同备份点恢复；未决精确范围在实现前收敛。
+6. 切换后删除无独立消费者的专用采集链，防止双重累计；源码读取和新实现验收分开报告。
 
-场景是设备告警处置 Skill 已通过原工具链的解析、校验及权限阶段，从开始执行到统计提交结束；前置流程由 §1 和 M03 定义，不在此重画整个工具系统。正常返回与异步统计是独立完成边界；图为待实现方案。
-
-![Skill 成功结束与统计提交](skill_usage_record.svg)
-
-[PlantUML 源码](diagram.puml#L98) · [原尺寸 SVG](skill_usage_record.svg)
-
-图中 ToolPipeline 映射现有 ToolExecutionPipeline 及 Agent 的事件分发，Tools 映射 SkillTool；Observer 映射 SkillUsageObserver，Recorder 映射进程级有界写入与独立事务服务，Database 仅为统计表。Recorder 内部执行器是实际异步边界，入队返回不代表提交成功；工具失败或投递拒绝都不会改写原工具结果。
-
-## 8. 实施切片与验收
-
-| 切片 | 改动范围 | 必须通过的验收 |
-|---|---|---|
-| S1 · 独立计数存储 | 最小 DTO、两表及事务、现有查询适配 | 同键并发只加一；不同键同 Skill 不丢更新；累计更新或提交失败事实也回滚；MAX 时间正确；无 Session SQL |
-| S2 · 公共事件观察 | SkillUsageObserver、Factory 窄装配 | A 调三次计三次；错误不计；并行重复 End 一次；两个 Agent 同 callId 分别计；连续真实调用复用 callId 分别计；未知绑定不伪造 skillId |
-| S3 · 有界投递 | 单例 Recorder 与配置、应用关闭 | 慢库时工具线程不执行 JDBC；满队列绝不 CallerRuns；工作线程/任务数有界；关闭不等同 JDBC 已停；记录失败不改变工具结果 |
-| S4 · 移除专用侵入 | Tracker、证据、三 Host 接线、来源日志/身份的专用消费者 | Runtime/Cron/Child 都覆盖；确认续跑只订阅一次；没有规范来源、日志不可写仍计；Session 删除不抑制已完成调用；普通执行与日志语义不变 |
-| S5 · 查询及发布核实 | 实际管理调用方、时间范围、日表、保留、完整安装及镜像 | pending 需求先收敛；查询最终一致可接受；不把旧根任务累计冒充新口径；公司数据库与部署验证 |
-
-具体删除清单及源码定位见[source-evidence.md](source-evidence.md)。应删除统计专用代码，而非给其改成更宽泛名称继续保留。`ExecutionIdentity`、`ManagedExecutionLog` 和 Cron 传 run 重载在当前核验范围内服务这套追溯；实施前复查最新独立消费者，只删除统计所需链路。真实 CronRunRecord、Runtime 的 ExecutionTargetDTO、Agent 授权/深度/祖先控制及 RuntimeEventProjector 自身持久化映射保留。
-
-新旧采集不可同时向同一累计表写入；按发布开关一次切换，验收防双订阅。统计此前是否已部署仍须核实：未部署可更新全量安装；已有数据不能把旧口径累计静默混入新指标，需另行确认历史保留或重建。本任务只交付设计，没有改产品代码或执行数据库操作。
-
-## 9. 依赖与验收边界
-
-不新增 Maven 直接依赖及其传递依赖；复用 JDK UUID/ConcurrentHashMap/执行器/时间、现有 Spring 事务/生命周期、MyBatis Starter 3.0.4、数据源和 SLF4J。无 MQ、OTel 或新的存储组件。若删除摘要工具类，只移除其独占代码；JDK 摘要不构成一个可删 Maven 依赖。
-
-Java 参考实现、pi 事件证据、制品校验和待实现运行测试分开记录于[source-evidence.md](source-evidence.md)和[validation.md](validation.md)。设计图和 SQL 片段通过静态校验不表示 Java、数据库事务、故障或性能验收通过。
+无新增 Maven 依赖；复用现有 Spring 事务、MyBatis Starter 3.0.4、Jackson、JDK 时间和驱动，无新增传递依赖。当前交付为设计，SQL 未在公司数据库执行。
 
 ## 版本历史
 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 5.0.0 | 2026-10-10 | Skill 计数复用统一工具结果，同事务维护累计并移除独立采集、队列和统计流水。 |
 | 4.0.0 | 2026-10-10 | 按 Skill 最终成功调用计数，统一事件观察与有界异步入账，移除执行追溯前提并对比 #335。 |
 | 3.2.1 | 2026-09-22 | 明确 SearchTools 只发现定义，不增加 Skill 使用统计信号。 |
 | 3.2.0 | 2026-09-20 | 模型 Skill 成功正文读取纳入既有 READ 信号及根去重，不增加表或查询协议。 |

@@ -70,7 +70,7 @@
 
 ![单次工具调用生命周期](tool_invocation_pipeline.svg)
 
-[PlantUML 源码：`tool_invocation_pipeline`](diagram.puml#L469) · [原尺寸 SVG](tool_invocation_pipeline.svg)
+[PlantUML 源码：`tool_invocation_pipeline`](diagram.puml#L462) · [原尺寸 SVG](tool_invocation_pipeline.svg)
 
 Pipeline 先校验已注册工具的输入 Schema，再让工具准备本次调用。普通静态工具只固定已校验参数；`CallTool` 还要在当前 Session 的可信 Skill 绑定内解析业务目标、校验业务参数并形成不可变的 `PreparedToolInvocation`。准备成功后才调用 before hook；允许执行后发出执行开始事件并执行该准备结果。工具返回结果或抛出普通执行异常后，Pipeline 归一化结果，进入 after hook，最后发出结束事件并返回结果。
 
@@ -108,7 +108,7 @@ Agent 业务代理的注册 Schema 包含完整业务参数；`CallTool` 先校�
 
 ![批次并行与串行屏障](tool_batch_scheduling.svg)
 
-[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L520) · [原尺寸 SVG](tool_batch_scheduling.svg)
+[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L513) · [原尺寸 SVG](tool_batch_scheduling.svg)
 
 调度器把连续 `PARALLEL` 调用组成并行段，等待整段完成后再执行后续调用；每个 `SEQUENTIAL` 调用构成屏障。因此前两个调用可并行，`CallTool` 等待它们完成后执行，最后两个调用再组成新的并行段。工具模式的权威清单见[主设计 §7](README.md#7-pipelinehook-与批量调度)。
 

@@ -1,10 +1,12 @@
 # 定时任务执行与工程落地
 
-版本：0.1.0；日期：2026-10-05；状态：待实现。
+版本：0.2.0；日期：2026-10-10；状态：待实现。
 
 [模块主设计](README.md) · [Claw接口](configuration.md) · [Mate执行上下文](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md) · [源码证据](source-evidence.md#schedule-engineering-evidence)
 
 本页维护定时执行策略、coding-agent模块合并、数据库受理与上线初始配置。接口范围已收口；本次不修改产品代码。Claw源码核验为main `553dcd5e2ff682f9684810a043b442b37a02e54a`，2026-10-05隔离fetch，与前次相同。部署数值由设计给出，不代表压测容量。是否由运行失败自动暂停整个Schedule仍待当前问题答复，不能据旧Cron连续三次失败逻辑默认实现。
+
+[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)进一步规定 Runtime、Cron、Child 共用受理原语与 Coordinator；ScheduledRunAcceptanceService 在原 Run 事务内创建 Session/首消息/execution 并关联，后台仅选择 persistenceOnly 输出。Cron 启动的 Child 也保存独立历史并继承非交互限制；Skill 累计消费同事务成功结果，不再由 Cron 另写统计来源日志。新主线源码复核见[统一证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)，本页其他调度/官方历史证据不升级。
 
 ## 业务主流程与异常边界
 
@@ -148,4 +150,5 @@ Claude公开API仍是配置、Run与Session职责划分的历史主基线，事�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.0 | 2026-10-10 | 复用统一执行受理和逐工具提交，保留现有调度及独立 Session 生命周期。 |
 | 0.1.0 | 2026-10-05 | 确定无补跑、忙跳过、不重跑与非交互执行，定义coding-agent合并和首版部署配置。 |
