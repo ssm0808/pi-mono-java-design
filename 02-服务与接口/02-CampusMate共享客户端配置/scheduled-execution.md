@@ -1,6 +1,6 @@
 # Mate 定时执行上下文与凭据接口
 
-版本：0.1.0；日期：2026-10-05；状态：接口草案，待实现。Mate作为可信接口定义、执行身份和凭据来源已确认；以下新增Mate路径及字段是配套设计，不冒充已发布接口。
+版本：0.2.0；日期：2026-10-10；状态：接口草案，待实现。Mate作为可信接口定义、执行身份和凭据来源已确认；以下新增Mate路径及字段是配套设计，不冒充已发布接口。
 
 [共享连接目录](README.md) · [定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [执行与工程落地](../../01-总体架构/08-CampusClaw定时任务/execution.md) · [核验依据](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)
 
@@ -28,7 +28,7 @@
 
 推荐新增 `POST /mate-service/v1/runtime/schedule-contexts/query`，用于保存时校验和每次触发时重新授权。该操作只读取当前配置/授权，不执行模型或业务；查询不新建委托、不扩大权限，也不返回秘密。
 
-请求使用Schedule既有agentId及credentialIds，可信主体来自经过校验的调用上下文。管理校验使用当次操作者；后台准备额外提交此前由Mate返回的authorizationRef，由Mate结合服务身份重新校验委托，不能仅凭Claw服务账号扩大权限。下面展示管理查询；后台查询可增加同名authorizationRef字符串，不能靠省略它回退到服务管理员身份：
+请求使用Schedule既有agentId及credentialIds，用户主体仅在 Mate 内解析和使用。管理校验由 Mate 在向 Claw 发起请求前完成；后台准备额外提交此前由Mate返回的authorizationRef，由Mate结合服务身份重新校验委托，不能仅凭Claw服务账号扩大权限。下面展示管理查询；后台查询可增加同名authorizationRef字符串，不能靠省略它回退到服务管理员身份：
 
 ```json
 {
@@ -43,7 +43,6 @@ HTTP200，ResultBean.result形状：
 {
   "agentId": "agent-550e8400e29b41d4a716446655440000",
   "authorizationRef": "grant-alarm-summary-example",
-  "sessionOwnerRef": "owner-park-east-example",
   "credentialBindings": [
     {
       "credentialId": "credential-alarm-example",
@@ -54,9 +53,26 @@ HTTP200，ResultBean.result形状：
 }
 ```
 
-authorizationRef、sessionOwnerRef由Mate生成并校验；后台只能引用已保存且与可信范围匹配的原值，不能自选授权或改写归属；示例不是最终ID正则。前者关联Mate当前授权政策，后者为新Session独立归属的可信依据。Claw可以持久化这些非秘密引用和可信scope，不能把短期validUntil当成永久执行授权。后续Session的读取/停止/删除仍检查当前权限，Schedule删除不撤销已生成Session的归属。
+authorizationRef 由 Mate 生成，Claw 仅用作查询当前授权的不透明关联引用，不解析、不自选，也不作为访问令牌。响应不返回用户范围、操作者或会话 owner，Claw 不持久化这些信息。validUntil 只限定同次准备结果有效期，不是永久授权；用户、资源归属与当前权限全部在 Mate 维护，见[全库职责边界](../../03-数据与存储/Claw数据库设计.md#mate-ownership)。
 
 Mate必须验证当前调用者、Agent绑定、凭据引用及目标范围；对credentialIds检查原ID的唯一性，重复输入拒绝，最多16个，[]合法且不借用登录凭据。多个引用映射到同一工具且没有Mate明确的唯一选择时，返回409/CREDENTIAL_BINDING_CONFLICT，Claw不得按数组顺序覆盖Header。查询结果中的toolIds只限制凭据适用范围，不为Agent增加新的工具绑定。
+
+<a id="session-ownership"></a>
+
+### 3.1 会话归属登记与当前权限（待实现）
+
+Mate 独立维护 Session ID 到用户、组织/管理范围及授权政策的关联；Schedule/Run 的管理归属也由 Mate 维护。Claw 不建对应身份表或列。下述是必须实现的交接顺序，具体登记/核对操作的路径与 VO 待实现时细化；现有 `schedule-contexts/query` 保持只读，不偷偷承担登记写入。
+
+1. Claw 为同次 Run 固定拟建 Session ID；该 ID 由 Runtime 生成，后续准备和事务受理复用，不能在 `newSession` 再生成另一个 ID。
+2. 数据库事务外，Claw 用服务身份、固定 Session/Run/Schedule/Agent ID 及原 authorizationRef 请求 Mate 登记。Mate 查询自己的授权记录、检查当前资格并持久保存会话归属；不接收 Claw 自报用户、租户或 owner。记录在 Claw 确认存在前仅为待核对关联，不对外承诺会话可访问。重复登记相同技术身份不得改绑归属。
+3. 确认 Mate 登记成功且准备未过期后，Claw 在原同库事务创建 Session、首消息、根执行和 Run 关联，提交后才能启动；Mate 记录不加入该数据库事务，不引入跨库事务。关联或准备失败不启动模型、不执行业务。
+4. Mate 登记响应未知时，按固定技术 ID 只读核对；仍未知则本次不受理，不重新分配 ID 或自动重放业务。Mate 已登记、Claw 回滚时，由对账确认会话从未提交后清理关联；提交结果未知时保留待核对，不能凭超时删除。Claw 已受理但回执丢失时，读取现有 Session/Run/根执行，不再次创建。
+5. 用户读取、继续对话、停止和删除会话时，Mate 依据当前主体及会话关联逐次授权，再以可信服务请求调用 Claw。Claw 校验服务来源和获准操作/目标，执行自身状态检查；浏览器、模型提供的资源 ID 不是授权依据。列表先取 Mate 判定的可见集合再分页，空集合禁止退化为全库。
+6. 删除 Schedule/Run 不删除已经建立的 Session 归属或撤销已受理执行的独立关联；后续凭据资格仍由 Mate 按当前政策检查。Session 删除确认后 Mate 关闭相应访问映射，未知结果先核对；公共 Chat 映射可以异步补齐，但不能替代上述归属登记。
+
+Claw 的 Cron 工具只携带当前执行/Session、Agent 和目标资源 ID 向 Mate 请求操作授权，不捕获浏览器用户主体，不让 `sessionOwnerRef` 冒充 `operatorRef`，也不在通用 Runtime 中引入 ScheduleSubjectDTO。服务认证、授权结果的传递绑定与防越权检查仍须真实联调；缺失时拒绝，不能为了移除身份列而开放内部接口。Mate 用户审计独立记录，Claw 技术日志只关联资源与执行身份。
+
+核验：PR #332 `e9d31e8888a81b7fe95071e705482bb16fa10476` 的 `schedule/mate/MateScheduleContextClient.query/resolveCredentials`、`runtimeapi/schedule/ScheduledRuntimeAdmissionService.newSession/encodeContext` 尚传递并保存归属；源码根为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。本节职责修正、归属登记及服务授权接线均**待实现**；未读取 Mate 当前生产实现，不指定其物理表名，不宣称已有上述接口。
 
 ## 4. 解析本次工具执行凭据
 
@@ -73,7 +89,7 @@ Mate必须验证当前调用者、Agent绑定、凭据引用及目标范围；�
 }
 ```
 
-scheduleId/runId只用于关联及审计，不能充当授权证明；Mate根据服务身份、authorizationRef、Agent和目标重新校验当前资格。执行开始后的Schedule/Run可以被删除，因此授权不能以它们仍可读取为前提；原根执行保留必要的非秘密引用和范围。操作不可被模型直接调用，不提供给浏览器或写入Schedule公开响应。
+scheduleId/runId只用于关联及审计，不能充当授权证明；Mate根据服务身份、authorizationRef、Agent和目标重新校验当前资格。执行开始后的Schedule/Run可以被删除，因此授权不能以它们仍可读取为前提；原根执行仅保留必要的资源关联与不透明授权引用；Mate 按独立执行/会话关联校验，Claw 不重建用户主体。操作不可被模型直接调用，不提供给浏览器或写入Schedule公开响应。
 
 HTTP200，ResultBean.result形状：
 
@@ -127,4 +143,5 @@ Controller使用ScheduleContextQueryRequestVO/ResponseVO、ExecutionCredentialRe
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.0 | 2026-10-10 | 身份、资源归属和权限统一由 Mate 维护，明确会话登记与受理失败的交接边界。 |
 | 0.1.0 | 2026-10-05 | 定义Mate上下文查询与按目标解析凭据草案，复用现有工具定义入口并区分服务认证与业务凭据。 |

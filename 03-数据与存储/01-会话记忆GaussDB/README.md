@@ -1,14 +1,14 @@
 # CampusClaw Java GaussDB Session 线性事件存储 SR 设计
 
 > 文档编号：SR-MEM-001<br>
-> 版本：v0.21.0<br>
+> 版本：v0.22.0<br>
 > 日期：2026-10-10<br>
 > 状态：单条追加时间线已确认；主线顺序 Mapper 已核验，统一历史增量待实现<br>
 > Java 核验基线：`fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；本地源码快照，不代表最新远端<br>
 > pi 专项基线：默认分支 `main`，2026-09-22 隔离 fetch，`1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`；默认分支快照不等于稳定发布<br>
 > 目标数据库：集中式 GaussDB；JDBC 约束：openGauss JDBC `6.0.0-htrunks.csi.gaussdb_kernel.opengaussjdbc.r1`
 
-[Claw 数据库设计](../Claw数据库设计.md)唯一维护全库结构；本文维护 Session 语义、追加/恢复流程和相关验收。
+[Claw 数据库设计](../Claw数据库设计.md)唯一维护全库结构；本文维护 Session 语义、追加/恢复流程和相关验收。用户与会话的归属及当前权限由 Mate 独立维护，Claw 不增加用户范围或 owner 列；跨服务创建与删除按[身份边界](../Claw数据库设计.md#mate-ownership)执行，PR #332 的相应扩展待撤销。
 
 ## 1. 职责与设计结论
 
@@ -98,7 +98,7 @@ pi SQLite 保留分支能力，并在写入时维护分支索引。正常追加�
 
 ### 3.1 `t_sessions`
 
-见[会话主表](../Claw数据库设计.md#t_sessions)：当前配置、末端、来源与归属增量。
+见[会话主表](../Claw数据库设计.md#t_sessions)：当前配置、末端与来源；用户归属不进入 Claw 会话表。
 
 ### 3.2 `t_session_entries`
 

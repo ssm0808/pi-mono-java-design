@@ -8,7 +8,7 @@
 
 Claw 各接口统一取消客户端条件更新与请求幂等令牌，更新按数据库最新记录合并实际提交字段；[HTTP 设计](01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md)与[调度边界](01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)维护规则及现有实现迁移差距。
 
-[Claw 全库数据库设计](03-数据与存储/Claw数据库设计.md) · [Claw 秒级时间规则](01-总体架构/01-CampusClaw多Agent运行时/time-contract.md) · [Agent 架构对比](01-总体架构/07-Agent架构对比/README.md) · [全部设计图](设计图索引.html) · [工作指引](AGENTS.md)
+[Claw 全库数据库设计](03-数据与存储/Claw数据库设计.md) · [Mate 与 Claw 归属边界](03-数据与存储/Claw数据库设计.md#mate-ownership) · [Claw 秒级时间规则](01-总体架构/01-CampusClaw多Agent运行时/time-contract.md) · [Agent 架构对比](01-总体架构/07-Agent架构对比/README.md) · [全部设计图](设计图索引.html) · [工作指引](AGENTS.md)
 
 M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.md#9-工具注册与发现)区分 Agent 直接工具代理与 Skill 渐进披露：Skill 工具按 `Skill → SearchTools → CallTool` 使用，按唯一工具名精确返回单个定义，不动态增加模型工具。`Skill`、`CallTool`、代理、[确认前准备和参数恢复反馈](01-总体架构/02-CampusClaw工具系统/source-evidence.md#search-tools-evidence)已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools、发现与校验的一致性接线及[前端可恢复展示](07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)待实现。工具数据同步另行设计。
 

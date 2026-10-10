@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.32.0 |
+| 文档版本 | 0.33.0 |
 | 核验日期 | 数据库专项为 2026-10-10，见[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#source-baseline)；其余各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 历史主线范围见各节；PR #332 三张调度表、Mapper、同库受理与启动控制已实现、未合并，差距及数据库验收见[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#gaps)；生产公司身份系统未核验 |
@@ -743,3 +743,30 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 | 0.3.0 | 2026-09-29 | 重核 Claw 配置边界及 Claude 创建语义，区分历史版本能力缺口、文本范围和 Cron 成本选择。 |
 | 0.2.0 | 2026-09-29 | 核对前端调试边界、Mate Agent 配置样例和 Claw 保存行为，补充独立配置 API 的证据与差距。 |
 | 0.1.0 | 2026-09-29 | 核对 Claude 调度公开契约、当前 Cron 与持久化 Runtime 基础，明确两类执行目标及实现差距。 |
+
+<a id="mate-boundary-review"></a>
+
+## 9. Mate / Claw 身份职责专项（2026-10-10）
+
+范围：按用户明确的职责划分检查 PR #332 中用户、范围、会话归属、权限与配额的传播及其必要消费者；不是该 PR 全部 434 个变更文件的完整质量审查。设计起点为 `pi-mono-java-design@6ec8fd2b43a209b582b1a8b726f23757a2dafab2`；当日重新 fetch `main` 和 PR，head 为 `e9d31e8888a81b7fe95071e705482bb16fa10476`，base 与实际 merge-base 均为 `769e86592285f4a25b0febaf551eddea6bc7212c`。没有修改实现工作树。外部 Agent 及 Mate 服务端未重核，不更新历史基线结论。
+
+当前有效规则由[数据库身份边界](../../03-数据与存储/Claw数据库设计.md#mate-ownership)和[Mate 归属交接](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)维护。下面的偏差针对当前职责修正；旧设计也曾要求 Claw 保存范围和 owner，不能把设计失当全部归责于实现作者。各项为待修改的架构偏差，不据此声称已发生生产越权。
+
+实现源码公共根 `J = modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`，资源根 `R = modules/coding-agent-cli/src/main/resources/`；下表路径均相对 `pi-mono-java`，均绑定上述 head。
+
+| 编号 | 已观察源码与触发路径 | 当前影响与修正落点 |
+|---|---|---|
+| B1：持久化身份副本 | `R/db/gaussdb/install/session_schema.sql:37–38,618–631,657,696–697`；`J/runtimeapi/schedule/ScheduledRuntimeAdmissionService.newSession/encodeContext` 将范围及会话 owner 写入 Session 与 execution JSON；`ScheduleApplicationService.applyBinding/createLocked` 保存 Schedule 的范围、操作者和 owner | 删 Session 两列不足以消除身份副本。同步撤销 Schedule 的三项身份列、Run 的 scope、DTO/Mapper/安装注释及执行 JSON；用户归属在 Mate 按技术资源 ID 维护。公司 SQL 由 canonical 同步生成，不能只改单边。两条 Session COMMENT 已存在，位置在调度表后，不是缺注释。 |
+| B2：Claw 本地资源权限与用户配额 | `J/schedule/application/ScheduleAccessPolicy.java:32–49` 按 subject 与本地 scope 判断可见；`ScheduleRunService.getRun/listRuns` 延续同样规则；`R/mapper/schedule/ScheduleMapper.xml:16,39–48,74` 按 scope 计数、过滤与分组；`ScheduleApplicationService.requireQuota/page` 读取范围配额、写查询范围 | Mate 维护当前用户权限、资源集合、审计和范围配额；Claw 校验服务授权结果，只按获准资源 ID 查询且先过滤再分页。删除 scope 后须同时改查询、索引、配额及公平轮转，不能去掉 WHERE 后直接查询全库。实例容量、任务互斥和数据库领取仍留 Claw。 |
+| B3：通用执行对象承载 Cron 用户主体 | `J/runtimeapi/runtime/RuntimeActiveExecution.java:68,94–100` 保存 `ScheduleSubjectDTO`；`RuntimeExecutionContextFactory.java:85,102` 捕获主体；`HttpRuntimeScheduleSubjectProvider.currentSubject` 从 Servlet 认证桥读取；`RuntimeSessionEngineRegistry.java:232` 交给 `AgentScopedCronToolFactory.create` 和 CronTool | 为 Cron 将用户权限主体传播到普通 Runtime。移除该具体主体与捕获链；Cron 适配器只传当前 Session/执行、Agent、目标资源及操作，向 Mate 请求授权，不由通用 Runtime 保存用户归属。保留 Host 工具 allow/deny/ask、参数校验及非交互约束，它们不是用户目录。 |
+| B4：会话 owner 被当成操作者 | `J/schedule/mate/MateScheduleAuthorizationAdapter.refresh:60–65` 从持久 scope/operator 重建主体并比较 owner；`MateScheduleContextClient.query:90` 接收 owner，`resolveCredentials:97` 将 owner 放进 `ScheduleSubjectDTO.operatorRef`；`ScheduledRuntimeAdmissionService.prepare:129` 也做该转换 | 会话归属、配置操作者和后台授权主体被 Claw 自行拼装，Mate 无法独占其政策。查询只携带服务身份、固定资源/执行和不透明 authorizationRef，由 Mate 解析并检查当前授权；响应不返回 owner/scope。增加 Mate 独立 Session 归属登记与未知结果核对，不能只删赋值后让空主体通过。 |
+
+**保留项及反例。** `claim_owner`、dispatch.owner 和 `schedule_start_owner` 是实例领取权，不是用户；revision、epoch、lease、Session/execution 父子关系和实际开始时间是运行一致性数据。`authorizationRef` 可作为 Mate 记录定位引用，`credentialIds` 可作为资源引用，但均不代表持有即授权。对 Mate 响应的类型、有效期及可信 toolId 校验可保留；这些协议与执行校验不等于 Claw 维护用户权限系统。
+
+**最小实施顺序。** 先实现 Mate 的资源关联、管理授权与 Session 登记/核对能力，定义获准集合和操作结果如何绑定可信服务请求；再移除 Claw 身份字段、SQL/DTO/Mapper 与 Runtime 主体链，同步重写 Schedule 查询和配额；最后生成公司镜像并修改对应测试。首版仅维护完整安装 DDL，不引入假设的存量迁移。
+
+**验收。** 覆盖管理用户与会话归属主体不同、Mate 中权限变更后不更新 Claw 行仍按当前权限判断、资源 ID 篡改、授权为空/过期/服务不可用、空获准集合、权限过滤先于分页、后台无浏览器主体、Cron 不借用 owner 作为操作者；覆盖 Mate 登记失败/响应未知、登记成功而 Claw 回滚、Claw 提交成功但回执丢失、删除 Schedule 后 Session 仍能独立授权及停止。均不得新建重复会话或重放任务。
+
+**验证范围。** 本次执行静态源码与文档核验、相关 XML 解析和 diff 检查；Mate 客户端既有测试仍断言返回 owner/scope，只能证明旧契约，不能证明修正后的边界。未运行 Java/数据库/真实 Mate 联调，不将 PR 作者报告的测试结果当作本次验证。其余规范及无关功能保留未核验。
+
+**显式坏味道检查。** 重复职责为 B1/B2（归属存储和本地范围判断）；大类/职责边界为 B3（不以文件行数判定，具体问题是 Runtime 依赖 Cron 主体）；基本类型语义混用为 B4（owner 与 operator 被互换，而非仅因使用 String）；Java 方法长度未做全 PR AST 计数，标为未核验，不宣称代码规范全面通过。各项集中按上述根因修正，不另报重复严重性。

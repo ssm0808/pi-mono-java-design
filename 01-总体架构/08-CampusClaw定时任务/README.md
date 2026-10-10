@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.34.0 |
+| 文档版本 | 0.35.0 |
 | 更新日期 | 2026-10-10 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -189,8 +189,8 @@ public void summarizeAlarms() {
 
 [原尺寸 SVG](scheduled_run_sequence.svg) · [PlantUML 源码](diagram.puml#L1)
 
-1. **分配 occurrence（Schedule）。** Scheduler 按租户有界轮转批次，任务按 nextFireAt/id 稳定扫描；Schedule 的领取职责使用短事务，锁定 Schedule，复核未删除、active、revision、到期时间和 activeRunId；插入唯一 Run，推进下一次游标，同时占用本任务。重叠触发记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/删除操作与领取竞争同一行锁。
-2. **可信准备（Schedule 协调 Mate 与 Runtime）。** 事务外解析 Agent 已发布目录、模型、CRON profile、工作区及执行资格，固定一次 `PreparedScheduleRunDTO`。准备可以失败，但不调用模型或执行业务工具。远端授权检查不能持有数据库行锁。
+1. **分配 occurrence（Schedule）。** Scheduler 按 nextFireAt/id 执行有界批次，任务按 nextFireAt/id 稳定扫描；Schedule 的领取职责使用短事务，锁定 Schedule，复核未删除、active、revision、到期时间和 activeRunId；插入唯一 Run，推进下一次游标，同时占用本任务。重叠触发记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/删除操作与领取竞争同一行锁。
+2. **可信准备（Schedule 协调 Mate 与 Runtime）。** 事务外解析 Agent 已发布目录、模型、CRON profile、工作区及执行资格，固定一次 `PreparedScheduleRunDTO`。准备还须固定拟建 Session ID 并取得 Mate 归属登记确认；可以失败，但不调用模型或执行业务工具。远端授权检查不能持有数据库行锁。
 3. **原子受理（Schedule 协调 Store）。** 新增 `ScheduledRunAcceptanceService` 在同一事务复核 Schedule 存在且未删除、状态/revision、Run 领取 owner/代次及 lease_until、授权断言有效期与容量；自动触发还用数据库当前时间复核派发期限；创建新 Session、首条 user.message、根 execution/segment，并写回 Run 的唯一关联。任一步失败整体回滚。已有配置更新或暂停先提交时，旧自动 Run 结束为跳过；删除与最终受理共享同一数据库权威，删除先提交则不再受理，受理先提交则保留已生成Session并将Run纳入删除，已受理执行继续由原Session管理，停止由Session入口单独发起。同库受理是待实现目标，不能由旧Cron的本地取消句柄推导已经具备该保证。
 4. **事务后启动（Scheduler 推进 Runtime）。** 受理不等待 Agent 完成。持有本次完整准备快照的原 Runtime 实例，以持久化的单次启动 CAS 标记由 READY 转为 STARTING 后启动公共执行链，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件。后台执行不需要伪造浏览器 SSE 连接。
 5. **结果对账（Scheduler 读取 Store）。** 按受理时固定的根execution读取权威终态，仅在Schedule/Run仍存续时幂等更新其摘要和释放activeRunId；删除后只完成原Session、根执行及必要内部协调，不重新插入Run或配置。既有根执行是终态权威，仍存续任务的摘要可通过重读根execution修复；后续人工对话不会改写该次运行的结论。
@@ -209,7 +209,9 @@ public void summarizeAlarms() {
 
 ![定时运行共用准备与原子受理](schedule_run_admission.svg)
 
-[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L220)
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L222)
+
+本图保留三个关键分支：执行资格拒绝、Mate 归属登记未确认、Runtime 准备失败。前两者分别属于只读授权和跨服务持久登记，失败后的核对责任不同，因此不合并；图仍只描述同次 Run 受理，不展开模型执行。
 
 Mate 的授权和 Runtime 准备都发生在数据库受理事务之前。准备成功只固定本次上下文；Schedule 在最终事务中复核最新配置、领取资格、授权期限与容量，不能拿准备结果替代可变状态校验。图中的 Runtime 准备与既有 `AgentSessionFactory.create` 的内存对象装配有关，不等于已创建公共持久 Session，也不等于已经发送模型请求。
 
@@ -246,15 +248,17 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ## 8. 身份、授权与公共投影
 
-公司身份和租户授权由 Mate 权威确认，任务管理权限与业务执行权限分别判断。Schedule 保存可信租户/管理作用域、Agent 绑定和授权引用；这些值不能从模型 prompt 或任意客户端字段推导。已有源码只做 Agent 范围过滤，不证明已实现租户隔离。
+用户、组织、租户、资源归属和权限由 Mate 维护；Claw 保存任务、会话与执行数据，不保存用户范围、owner 或操作者副本。权威边界与字段清单见[Claw 数据库设计 §3.1](../../03-数据与存储/Claw数据库设计.md#mate-ownership)。这是产品约束与架构修正，不由独立 Session 的生命周期推导 Claw 必须保存用户归属。
 
-`ScheduleAuthorizationPort` 是待实现的宿主能力：创建/修改时校验管理资格，启用和每次受理前校验执行资格、撤销状态及范围。授权断言绑定 tenant、schedule、revision、Agent 与有效期，通过受信内部通道传递。新建 Session 的归属由本次可信任务范围确定；数据库记录 scope 不是认证凭据。授权服务不可用时不受理。
+管理入口由 Mate 完成当前用户的功能与资源授权，再通过可信服务调用 Claw；列表获准集合也由 Mate 决定，并在分页前约束读取。Claw 校验服务来源、具体操作和目标资源，检查任务与执行状态，不在本地按 scope 比较权限。授权结果缺失、过期或服务不可用时拒绝，不能仅因请求来自内网放行。
 
-Schedule通过credentialIds直接引用独立凭据，不增加Vault集合层。Mate提供接口定义、引用资格、可信Session归属和执行时凭据，Claw只持久化非秘密引用，不保存Token/JWT/APPKEY。服务身份或用户委托的实际授权政策由Mate权威确认，不能由Claw自行选择管理员或借用浏览器身份。新增Mate操作见[内部接口草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)；服务认证的企业适配仍需联调。
+`ScheduleAuthorizationPort` 是调用 Mate 权威的端口，不是 Claw 用户权限策略。后台通过资源 ID 与不透明 authorizationRef 查询当前执行资格；引用不能当令牌、不能解码出用户，也不能用配置操作者替代后台执行主体。credentialIds 继续引用独立凭据；Token/JWT/APPKEY 不落库。
+
+新 Session 的归属由 Mate 独立登记，正常和失败交接见[Mate 会话归属](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)：Claw 固定同次拟建 Session ID → 事务外由 Mate 确认并登记归属 → Claw 同库受理 → 提交后启动。登记失败或未知时不启动；跨库结果只读核对，不能重建会话或重放任务。登记和核对契约待实现，PR 当前 `newSession` 内才生成 ID 的实现须调整。
 
 保存与准备阶段只查询定义及授权引用；工具完成可信解析、参数校验和权限判断后，执行Adapter按可信目标向Mate解析当前凭据并执行业务。权限ASK时不换取secret；元数据发现不复制业务凭据。普通HTTP消息仍沿用[M06当次Header快照规则](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)，定时来源作为新增入口接入，不改变普通Session契约。所有秘密只在受限执行内存中使用，不进入模型、metadata、Schedule/Run、事件或日志。
 
-下述为未来Mate公共展示边界，不是本次Claw内部响应约束：公共任务详情使用公共任务/Run 标识与 Chat 链接，Mate 异步幂等建立新 Session 的私有 Chat 映射；映射未完成显示“结果入口准备中”，不能重复触发任务。映射失败不更改已接受执行。Run 可记录内部 sessionId、executionId 供后台对账，Mate公共安全投影不直接暴露它们；Claw的Run回执可向已授权调用者返回sessionId，本次不定义Mate映射接口。独立任务结果归属和可见人群跟随已确定的任务授权范围；跨租户访问拒绝。
+下述为未来Mate公共展示边界，不是本次Claw内部响应约束：公共任务详情使用公共任务/Run 标识与 Chat 链接，Mate 异步幂等建立新 Session 的私有 Chat 映射；映射未完成显示“结果入口准备中”，不能重复触发任务。映射失败不更改已接受执行。Run 可记录内部 sessionId、executionId 供后台对账，Mate公共安全投影不直接暴露它们；Claw的Run回执可向已授权调用者返回sessionId，本次不定义Mate映射接口。独立会话的用户归属与可见人群由 Mate 自身关联决定，删除任务不删除该关联；公共 Chat 映射仅用于展示，不替代受理前登记。
 
 ## 9. 持久化与生命周期
 
@@ -272,7 +276,7 @@ Schedule通过credentialIds直接引用独立凭据，不增加Vault集合层。
 
 | 层次 | 责任与生命周期 |
 |---|---|
-| Claw 边界与入口 Adapter | `ScheduleController` 接受可信上下文和 RequestVO、返回 ResponseVO；`CronToolAdapter` 传入 Host 已绑定作用域，不能绕过授权；不规定上游页面和 Mate 路由 |
+| Claw 边界与入口 Adapter | `ScheduleController` 接受可信上下文和 RequestVO、返回 ResponseVO；`CronToolAdapter` 传入 Host 已绑定的 Session/执行和目标资源，不能绕过授权；不规定上游页面和 Mate 路由 |
 | 绑定解析 | `ScheduleBindingResolver` 只读检查 Agent 绑定，管理调用不发布运行目录；MateAdapter接权威定义、执行资格与凭据端口，均待实现 |
 | 应用编排 | `ScheduleApplicationService` 负责管理规则与 VO/DTO 转换；`ScheduleRunPreparation`与受理服务承接共享入口；`ScheduleDispatcher`独立推进已受理执行，均为Spring单例 |
 | 策略与准备 | `ScheduleTimePolicy` 统一规则校验与计划时间计算；`ScheduleAuthorizationPort` 对接 Mate；`PreparedScheduleRunDTO` 每次准备创建不可变快照，不代替事务内可变状态检查 |
@@ -291,7 +295,7 @@ Schedule通过credentialIds直接引用独立凭据，不增加Vault集合层。
 | S2：后台原子受理 | 新 Session/首消息/根执行/Run 同事务；故障注入覆盖提交前、提交后和回执丢失；同一内部 runId 只返回原关联，不合并不同手动调用；明确 build/CRON、工具权限与 persistenceOnly 接线 |
 | S3：持久调度与恢复 | 两副本竞争仅一条受理；暂停/修改/删除与最终受理竞态可线性判定；删除先提交阻止受理，已受理执行按原Session/根执行收尾且不复活配置或Run，删除不请求取消；崩溃恢复不重放 STARTING；时钟、DST、Cron 未来匹配、无补跑、重叠及限流有确定性验证 |
 | S4：结果与运营 | 后台完整 Session 历史可读、公共 Chat 映射可重试对账、取消指向原根、未知不显示成功；控制台能定位授权和执行失败 |
-| S5：旧 Cron 入口迁移 | 按可信 scope 迁移 Job，缺租户、时区或授权信息的记录保持禁用等待补全；切换时确保旧扫描器停用且旧在途任务已核对，不能双写双执行；Run 历史保留来源 |
+| S5：旧 Cron 入口迁移 | 由 Mate 建立任务授权关联，缺时区或 Mate 授权的配置保持禁用等待补全；切换时确保旧扫描器停用且旧在途任务已核对，不能双写双执行；Run 历史保留来源 |
 
 S1～S5均待实现；物理模块合并与旧入口迁移按[合并计划](execution.md#module-merge)同步完成，旧JSON调度不得与新SQL调度并行。已有进程内 Cron 能力不能等价为上述切片已完成。没有业务执行身份、可靠受理或结果对账时，不验收需要凭据的园区无人值守任务。
 
@@ -303,7 +307,7 @@ Cron并入现有modules/coding-agent-cli和campusclaw-coding-agent制品，包�
 
 不新增外部Maven依赖；复用JDK、Spring CronExpression、Jackson、MyBatis3.0.4及现有数据库驱动，不引入Quartz、XXL-JOB、Redis锁或另一Cron解析器。完整Maven依赖树及corporate NativeParent尚未核验，不把局部POM读取称为依赖审计完成。
 
-剩余决策是是否自动暂停整个Schedule。Mate新增接口路径/VO仍为内部草案，实际企业身份适配、凭据保管系统、可信scope和授权TTL需联调校准；DDL及真正的原子受理、启动fencing、取消终态和多副本故障测试必须在实现阶段验证。部署初始值已给出，不能把这些验证工作再表述为用户尚未决定产品范围。
+剩余决策是是否自动暂停整个Schedule。Mate新增接口路径/VO仍为内部草案，实际企业身份适配、凭据保管系统、Mate 归属登记与授权TTL需联调校准；DDL及真正的原子受理、启动fencing、取消终态和多副本故障测试必须在实现阶段验证。部署初始值已给出，不能把这些验证工作再表述为用户尚未决定产品范围。
 
 <a id="html-maintenance"></a>
 
@@ -322,6 +326,7 @@ python3 scripts/render-schedule-api.py --check
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.35.0 | 2026-10-10 | 用户归属与权限回归 Mate，Claw 仅维护调度及运行数据并补齐会话登记边界。 |
 | 0.34.0 | 2026-10-10 | 定时表及 Session 扩展归入 Claw 全库数据库设计，原文件仅保留导航。 |
 | 0.33.0 | 2026-10-10 | 数据库设计独立维护字段、约束、索引和事务，登记 PR #332 的局部实现状态。 |
 | 0.32.0 | 2026-10-10 | Cron 与 Child 统一持久 Runtime 链路，Skill 统计复用完整工具结果。 |

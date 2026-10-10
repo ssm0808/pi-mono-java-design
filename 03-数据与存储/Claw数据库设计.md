@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.0.0 · 日期：2026-10-10 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.1.0 · 日期：2026-10-10 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -20,7 +20,7 @@
 |---|---|
 | 当前主线 M | pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`；完整安装 DDL 19 张表，§4 为该快照的字段字典 |
 | 定时任务 PR S | #332 / `codex/scheduled-task-backend@e9d31e8888a81b7fe95071e705482bb16fa10476`，Draft、未合并；base 与实际 merge-base 均为 `769e86592285f4a25b0febaf551eddea6bc7212c`；新增 3 表及既有表扩展，见 §5 |
-| 设计整理起点 | pi-mono-java-design `main@492313e1cacbcf32df63dc562ceb59173e8a6eae` |
+| 设计整理起点 | pi-mono-java-design `main@6ec8fd2b43a209b582b1a8b726f23757a2dafab2` |
 | 待实现 D | 本仓统一历史、Skill 累计与秒级时间目标；按 §3、§6 独立标识，不冒充 main 或 PR 的已实现结构 |
 
 核验“当前”是上述源码快照，不表示已经安装到生产数据库；数据库验收另列。外部 Agent 基线和 Mate 源码未重新核验，保留关联文档自己的日期与状态。
@@ -82,9 +82,27 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 | 标识与并发 | 内部 resource_version/revision 用于数据库一致性；不据此生成公共 If-Match、ETag 或请求幂等令牌 | PR 修正 Session 版本注释，主线旧注释不是有效公共接口要求；具体 HTTP 由契约文件维护 |
 | 历史 | Session 线性追加，按提交序号读取；parent_id/active_leaf_id 用于完整性；内部完整结果与公共安全投影分开 | M2 的三个时间线/事件/完整性查询已非递归；无损坏自动截断或跳过保证 |
 | JSON | payload 保存类型相关内容，结构校验由受控写入与恢复端负责；数据库 JSONB 校验不能替代权限和业务校验 | Schedule 在 PR 使用 TEXT JSON，不能把二者的类型支持混写 |
-| 权限与秘密 | 数据库保存可信 scope/归属/非秘密引用，不保存浏览器凭据和业务 secret；每次业务读取重新授权 | PR 扩展 Session 归属；企业认证与部署联调未验收 |
+| 权限与秘密 | Mate 独立维护用户、资源归属和权限；Claw 只存运行数据及允许的资源引用，不存身份副本和业务 secret，见 §3.1 | PR 的归属列及本地权限链路须撤销；Mate 接线待实现 |
 | 事务资源 | Run/Child 受理须与新 Session、首消息、根执行同库提交；网络授权准备及模型/工具执行在事务外 | Schedule 见 §5；统一 Child 与逐工具统计事务仍待实现 |
 | 删除与恢复 | 清理按所属对象生命周期执行，停止请求不等于真实终态；不得因历史清理重置累计、复活配置或重放业务 | 具体既有表和待实现差距分别在 §4～§7；没有全库统一 ON DELETE CASCADE 策略 |
+
+<a id="mate-ownership"></a>
+
+### 3.1 Mate 与 Claw 的身份边界
+
+**当前目标：用户、组织、租户、资源归属与权限由 Mate 维护，Claw 不保存这些信息或其引用副本。** Claw 保存 Schedule、Run、Session 和 execution 的技术标识、内容及执行状态；Mate 保存这些资源标识与用户、管理范围、授权政策的关联。资源独立存续不要求 Claw 复制用户归属。
+
+- Claw 的 Session、Schedule、Run、DTO、Mapper、执行上下文及通用 Runtime 均不保存 `scope_ref` / `scopeRef`、`session_owner_ref` / `sessionOwnerRef`；Schedule 的 `operator_ref` / `operatorRef` 同步移出。不能改名为 tenant、owner、subject 或藏入 JSON 延续相同职责。
+- Mate 对会话读取、继续对话、停止、删除以及任务管理执行当前权限检查。Claw 校验可信服务来源、具体操作和资源约束，再检查自己的业务状态；缺少或失效的 Mate 授权结果时拒绝，不退化为任意内部调用均可访问。单个资源授权不能扩展到其他资源。
+- 任务/Run 列表的可见集合由 Mate 决定，Claw 可按获准资源 ID 集合执行查询，但不得自己推导用户可见范围。权限过滤必须先于排序分页；空获准集合返回空，不能表示全量。内部集合传递和批量读取契约待实现，不把逐页查全库再过滤当成满足此要求。
+- `authorization_ref` 只是不透明的 Mate 授权记录定位引用；Claw 可以保留它用于后台向 Mate 查询，不能解析为用户信息、与本地归属比较或持有即放行。`credential_ids` 是凭据资源引用。用户审计与租户配额在 Mate；Claw 保留技术执行审计、实例容量和任务互斥。
+- `claim_owner`、扫描 `owner`、`schedule_start_owner` 表示执行实例，不是用户，继续保留。`agent_id`、父子 Session/execution 关系同样是运行关联，不代替用户授权。
+
+正常定时受理先固定同次 Run 的拟建 Session ID，由 Mate 确认并持久登记该 ID 的归属，再执行 Claw 的同库受理；未确认归属不得启动模型或业务。Mate 关联失败或结果未知时不受理，先按固定 ID 只读核对，不另建会话或重放任务。Mate 已登记而 Claw 事务失败时，该关联不代表会话已存在，须按 Claw 权威状态核对后清理；未知提交不能直接清理。具体交接及生命周期由 [Mate 专项](../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)维护，接线**待实现**，不宣称跨库原子提交。
+
+删除 Schedule/Run 不删除 Mate 中已经建立的 Session 归属；Session 后续操作只依赖其自身关联和当前权限。删除 Session 成功后 Mate 才关闭其访问映射；响应丢失先核对。公共 Chat 映射可以稍后补齐，不能用它的异步完成代替受理前归属登记。
+
+此划分是 CampusClaw 的产品约束与架构修正；PR #332 的身份副本和本地权限链路是待修改实现，证据见 [职责专项](../01-总体架构/08-CampusClaw定时任务/source-evidence.md#mate-boundary-review)。Mate 实际表名、现有认证 SDK 和服务端实现本次未核验，不在 Claw 数据库中为其新增占位表。
 
 <a id="current-schema"></a>
 
@@ -130,7 +148,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 - `CONSTRAINT ck_t_sessions_resource_version CHECK (resource_version > 0)`
 - `CONSTRAINT ck_t_sessions_display_name CHECK (display_name IS NULL OR octet_length(display_name) BETWEEN 1 AND 80)`
 
-目标边界：目标中 resource_version 仅作内部一致性版本，不暴露 ETag 或客户端条件更新；主线 SQL 注释仍含旧 ETag 用途，不作为有效接口规则。created_at/updated_at 的秒级目标及 PR 归属见 §3；可信范围与归属扩展见 §5.5。
+目标边界：目标中 resource_version 仅作内部一致性版本，不暴露 ETag 或客户端条件更新；主线 SQL 注释仍含旧 ETag 用途，不作为有效接口规则。created_at/updated_at 的秒级目标及 PR 归属见 §3；不增加用户范围或归属列，PR 偏差见 §5.5。
 
 <a id="t_session_entries"></a>
 
@@ -619,7 +637,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 ## 5. 定时任务 PR 增量
 
-以下仅属于 S 快照，不并入 §4 的主线已实现表数；配置删除与 Session 删除的边界沿用已确认目标。
+以下保留 S 快照的实现证据，不并入 §4 的主线表数。有效目标排除 §3.1 所列身份字段；下文标为“撤销”的列和索引仅用于定位 PR 待修改处，不是推荐结构。
 
 ### 5.1 表职责与关联
 
@@ -628,7 +646,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | `t_schedule` | 当前任务配置、自动计划游标、同任务唯一占用 | 一条配置对应多条 Run；删除时与其 Run 同事务退出 |
 | `t_schedule_run` | 一次触发是否受理，以及受理时固定的 Session/根执行身份 | `schedule_id` 外键指向配置并级联删除；Session/根执行为逻辑引用 |
 | `t_schedule_dispatch_state` | 自动扫描领跑者、代次、租约和恢复边界 | 全局一条约定协调记录，不是 Run 队列或漏跑历史 |
-| `t_sessions` | 会话及其独立归属 | 不受 Schedule/Run 删除级联；后续对话不会改变原 Run 的关联 |
+| `t_sessions` | 会话运行数据；用户归属在 Mate | 不受 Schedule/Run 删除级联；后续对话不会改变原 Run 的关联 |
 | `t_session_executions` | 原根执行控制、实际开始时间和一次启动权 | 按 `(session_id, execution_id)` 定位；删除配置后仍能处理已受理执行 |
 
 业务上的一对一受理关联由同库事务与状态检查维持，PR 没有为 Run 的 `session_id` 或 `execution_id` 建立唯一约束或外键。`active_run_id` 也没有反向外键；占用、释放和清理由事务规则维护，避免与配置级联删除形成循环依赖。
@@ -644,8 +662,8 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | 字段 | SQL 类型 | 可空 | 含义 |
 |---|---|---|---|
 | id | VARCHAR(41) | 否，主键 | `schedule-` 加 32 位 UUID 十六进制 |
-| scope_ref | TEXT | 否 | 企业认证桥确认的管理范围引用 |
-| operator_ref | TEXT | 否 | 最近配置操作的可信主体 |
+| scope_ref | TEXT | 否 | **PR 偏差，目标撤销**：管理范围应在 Mate |
+| operator_ref | TEXT | 否 | **PR 偏差，目标撤销**：用户操作者及其审计在 Mate |
 | agent_id | VARCHAR(38) | 否 | 已绑定 Agent 身份 |
 | name | VARCHAR(256) | 否 | 任务名称 |
 | description | VARCHAR(2048) | 是 | 任务描述 |
@@ -657,7 +675,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | metadata | TEXT | 否 | 附加元数据的 JSON 对象，无值时应用写入 `{}` |
 | credential_ids | TEXT | 否 | 凭据引用的 JSON 数组，无值时应用写入 `[]`，不保存秘密 |
 | authorization_ref | TEXT | 否 | Mate 提供的非秘密授权引用，不是访问令牌 |
-| session_owner_ref | TEXT | 否 | 新 Session 的可信独立归属引用 |
+| session_owner_ref | TEXT | 否 | **PR 偏差，目标撤销**：Session 归属在 Mate |
 | revision | BIGINT | 否 | 内部配置代次，创建时为 1；不作为公共条件更新字段 |
 | active_run_id | VARCHAR(36) | 是 | 唯一进行中或待对账 Run；为空才可新占用 |
 | last_run_at | TIMESTAMPTZ(0) | 是 | 最近自动运行的实际开始时刻；手动、准备失败和跳过不更新 |
@@ -681,7 +699,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 |---|---|---|---|
 | id | VARCHAR(36) | 否，主键 | `run-` 加 32 位 UUID 十六进制 |
 | schedule_id | VARCHAR(41) | 否 | 所属配置；外键 `ON DELETE CASCADE` |
-| scope_ref | TEXT | 否 | 领取时的可信范围 |
+| scope_ref | TEXT | 否 | **PR 偏差，目标撤销**：Run 不保存用户范围 |
 | agent_id | VARCHAR(38) | 否 | 本次绑定的 Agent 身份 |
 | revision | BIGINT | 否 | 领取使用的配置代次，最终受理时复查 |
 | trigger_type | VARCHAR(16) | 否 | `manual` / `schedule` |
@@ -703,7 +721,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 - `UNIQUE(schedule_id, scheduled_at)` 防止重复分配自动 occurrence；UTC instant 区分夏令时重复钟面。手动 `scheduled_at=NULL`，每次单独分配 ID；目标数据库对唯一约束中 NULL 的行为须纳入集成验收。
 - trigger CHECK 要求 manual 的 scheduled_at 为空、schedule 的 scheduled_at 非空。
 - `CHECK(session_id IS NULL OR error_type IS NULL)` 只保证两者不能同时非空；PREPARING 阶段允许两者都空。它不保证“必有一个结果”，最终公共受理结果由应用和查询投影保证。
-- 其余关联字段成组完整、scope 与父配置一致、Run 与 active_run_id 对应，依靠事务内应用校验；PR DDL 未建立相应复合外键或 CHECK。
+- 其余关联字段成组完整、Run 与 active_run_id 对应，依靠事务内应用校验；PR DDL 未建立相应复合外键或 CHECK。
 
 PR 当前正常状态写入为 `PREPARING → READY → FINISHED`，未受理失败从 PREPARING 结束；SQL 虽允许 Run.STARTING，当前领取启动权写入的是根执行的 `schedule_start_state`，不能混为同一状态机。实际业务状态和错误从原 Session/根执行读取。
 
@@ -730,19 +748,19 @@ PR 当前正常状态写入为 `PREPARING → READY → FINISHED`，未受理失
 
 #### Session 与根执行扩展
 
-下列列在 PR DDL 中均可空、无数据库 DEFAULT，以允许普通交互入口不携带定时上下文；定时受理时必须由可信服务写入必要值。
+下列列在 PR DDL 中均可空、无数据库 DEFAULT，以允许普通交互入口不携带定时上下文；仅保留的技术控制字段由定时受理写入；下列两项身份扩展必须撤销。
 
 | 表与字段 | SQL 类型 | 用途 |
 |---|---|---|
-| t_sessions.scope_ref | TEXT | Session 自己的可见范围，不依赖任务仍然存在 |
-| t_sessions.session_owner_ref | TEXT | Mate 确认的 Session 归属 |
+| t_sessions.scope_ref | TEXT | **PR 偏差，目标撤销**；不进入有效 Session 结构 |
+| t_sessions.session_owner_ref | TEXT | **PR 偏差，目标撤销**；由 Mate 按 sessionId 维护归属 |
 | t_session_executions.started_at | TIMESTAMPTZ(3) | 原根执行持久化的实际开始时间；不能从启动权推断 |
 | t_session_executions.execution_context_json | TEXT | 最小非秘密调度来源和授权引用 |
 | t_session_executions.schedule_start_state | VARCHAR(16) | 应用使用 `READY`、`STARTING`、`FENCED`，DDL 未设枚举 CHECK |
 | t_session_executions.schedule_start_owner | VARCHAR(64) | 持有同次准备快照的原实例 |
 | t_session_executions.schedule_start_deadline | TIMESTAMPTZ(3) | 数据库受理时设置的一次启动截止时间 |
 
-`execution_context_json` 当前编码 `scheduleId`、`runId`、`agentId`、`scopeRef`、`sessionOwnerRef`、`authorizationRef`、`credentialIds`。不保存完整任务配置、浏览器 Header 或业务秘密；它不是重新创建任务或重放业务的材料。安全收尾后的临时上下文清理是目标要求，当前差距见 §5.7。
+`execution_context_json` 当前编码 `scheduleId`、`runId`、`agentId`、`scopeRef`、`sessionOwnerRef`、`authorizationRef`、`credentialIds`。**目标删除其中 scopeRef、sessionOwnerRef**，保留 scheduleId、runId、agentId、authorizationRef、credentialIds 等运行关联与不透明引用；不以 JSON 规避删列。不保存完整任务配置、浏览器 Header 或业务秘密；它不是重新创建任务或重放业务的材料。安全收尾后的临时上下文清理是目标要求，当前差距见 §5.7。
 
 定时业务时间遵守[统一秒级规则](../01-总体架构/01-CampusClaw多Agent运行时/time-contract.md)，应用先规范化再写入；内部租约、根执行控制及启动期限保留毫秒精度。不能笼统把所有 TIMESTAMPTZ 列都改成秒级。根执行实际开始时间投影到 `last_run_at` 时按公共秒级约定处理。
 
@@ -753,12 +771,14 @@ PR 当前正常状态写入为 `PREPARING → READY → FINISHED`，未受理失
 | 索引 | 列 / 条件 | 支持的访问 |
 |---|---|---|
 | idx_schedule_due | t_schedule `(status, next_fire_at, id)` | active 到期扫描及恢复推进 |
-| idx_schedule_scope_list | t_schedule `(scope_ref, updated_at DESC, id)` | 范围内配置列表 |
-| idx_schedule_run_list | t_schedule_run `(scope_ref, created_at DESC, id DESC)` | Run 范围与时间排序访问的候选索引 |
+| idx_schedule_scope_list | PR：t_schedule `(scope_ref, updated_at DESC, id)` | **目标撤销**，由 Mate 确定获准资源集合 |
+| idx_schedule_run_list | PR：t_schedule_run `(scope_ref, created_at DESC, id DESC)` | **目标改为按任务关联与时间查询**，移除 scope 前缀 |
 | idx_schedule_run_retention | t_schedule_run `(state, finished_at, id)` | FINISHED 且超过保留期的批量清理 |
 | idx_t_session_executions_schedule_start | t_session_executions `(session_id, execution_id, schedule_start_deadline)`；仅 `schedule_start_state='READY' AND started_at IS NULL AND state IN ('RUNNING','STOPPING')` | 独立扫描过期且未启动根执行，包括任务已删除的情形 |
 
-`listRuns` 实际按父配置 `s.scope_ref` 过滤并 JOIN 配置，不能仅凭 `idx_schedule_run_list` 存在就宣称该查询有效使用它。名称子串查询、跨范围轮转窗口、Run 过滤和清理均须在真实 GaussDB 数据规模下查看执行计划；尚无此性能验收结论。
+目标索引采用 `idx_schedule_list(updated_at DESC,id)` 与 `idx_schedule_run_list(schedule_id,created_at DESC,id DESC)`；全局到期扫描继续使用 `idx_schedule_due`。具体获准 ID 集合的批量查询与跨任务分页须由 Mate/Claw 联调及 GaussDB 执行计划验证，不宣称这些索引已满足所有读取场景。
+
+PR 的 `listRuns` 实际按父配置 `s.scope_ref` 过滤并 JOIN 配置，不能仅凭 `idx_schedule_run_list` 存在就宣称该查询有效使用它。名称子串查询、跨范围轮转窗口、Run 过滤和清理均须在真实 GaussDB 数据规模下查看执行计划；尚无此性能验收结论。
 
 <a id="transactions"></a>
 
@@ -788,6 +808,7 @@ Run 保留时长、清理频率和批量由[部署初始值](../01-总体架构/
 
 | 项目 | 状态与边界 |
 |---|---|
+| 用户归属及权限职责 | **待修改**：撤销 Session/Schedule/Run 身份列、相关索引/查询及执行上下文副本；Mate 维护关联和授权，Claw 校验服务来源与具体获准操作，见 §3.1 |
 | 三张调度表、Mapper 与受理/启动控制 | **PR #332 已实现、未合入 main**；本次为指定源码范围的静态核验，不代表已安装或企业部署完成 |
 | 安全配置快照、实际 Agent 发布版本/摘要 | 原主设计包含这些目标；PR Run 表没有对应列，最小根上下文也未保存发布版本。**待实现**，具体载体与字段需进一步设计；本文不为填齐目标擅自增列，也不把 revision 当作完整快照 |
 | 根执行内部上下文清理 | 目标要求安全收尾后清理必要临时协调；已核验启动与围栏 SQL，未见所列字段的独立清理动作。该清理接线**待实现**，Session 自身最终删除不等同于已实现收尾清理 |
@@ -908,10 +929,11 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 验收分三层：文档检查覆盖全表/全列、类型可空性、约束索引与链接；实现检查覆盖 Mapper 消费、原子提交与错误处理；数据库和企业部署另验收 NULL 唯一性、外键清理顺序、部分索引、UPSERT、行锁竞争、恢复与权限。本文只完成源码和文档核对，不声称真实 GaussDB、多副本及企业身份联调通过。
 
-文档校验已核对 main 的 19 表 155 列、PR 新增 3 表 45 列及其类型与可空性，主线命名约束/索引均已覆盖；模块与 SQL 链接逐项检查。仓库图源生成检查通过（37 专题、136 图块、0 错误），图源/SVG 未修改，图索引再生成无差异；保留既有压缩图复杂度说明，不新增视觉验收结论。
+物理快照核对覆盖 main 的 19 表 155 列、PR 新增 3 表 45 列及其类型与可空性；这些计数保留 PR 现状证据，不表示被撤销的身份列仍属目标。职责修正已检查受影响 Markdown 的本地文件链接、相关 Mapper XML、接口页面生成同步及 git diff --check。仓库图源检查为 37 专题、136 图块、0 错误；M10 五张图已重新生成并在原尺寸及文档宽度检查，图索引同步。受理图三个分支分别表示授权、归属登记和 Runtime 准备失败，保留原因见主设计；既有压缩图提示不受本次修改影响。
 
 ## 9. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-10-10 | 会话归属与权限由 Mate 维护，撤销 Claw 身份副本并明确跨服务受理及失败边界。 |
 | 1.0.0 | 2026-10-10 | 统一维护 Claw 全库表、字段、约束索引、PR 与目标增量，并双向关联各模块及 SQL 文件。 |

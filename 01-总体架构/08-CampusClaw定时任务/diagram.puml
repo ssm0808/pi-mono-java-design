@@ -25,7 +25,7 @@ end
 == Prepare and accept ==
 ref over Schedule, Store
   Shared Run admission
-  Mate grant -> Runtime preparation -> atomic acceptance
+  Mate grant + Session binding -> Runtime preparation -> atomic acceptance
   See schedule_run_admission
 end ref
 Schedule --> Scheduler : Committed admission result\nand prepared context when accepted
@@ -65,7 +65,7 @@ skinparam classAttributeIconSize 0
 skinparam nodesep 25
 skinparam ranksep 55
 hide empty members
-class "Calling service" as Caller <<External>>
+class "Mate API / trusted host" as Caller <<External>>
 class "ScheduleController" as Api <<API / P>>
 class "CronToolAdapter" as Tool <<Adapter / P>>
 class "ScheduleApplication\nService" as App <<Management / P>>
@@ -73,7 +73,7 @@ class "ScheduleDispatcher" as Dispatch <<Service / P>>
 interface "ScheduleAuthorization\nPort" as Auth <<Port / P>>
 interface "ScheduleCredential\nPort" as Credential <<Port / P>>
 class "MateSchedule\nAdapter" as MateAdapter <<Adapter / P>>
-class "Mate service" as Mate <<External>>
+class "Mate service\nUsers / resource ownership / permissions" as Mate <<External>>
 interface "ScheduleBinding\nResolver" as Binding <<Read-only port / P>>
 class "ScheduleTime\nPolicy" as Time <<Policy / P>>
 class "ScheduleRun\nPreparation" as Prepare <<Service / P>>
@@ -92,7 +92,7 @@ Caller -down-> Api : Claw VO
 Api -down-> App : VO boundary
 App -down-> Prepare : manual
 App -[norank]-> Accept : manual admit
-Tool -down-> App : bound scope
+Tool -down-> App : Session / execution IDs
 App -down[hidden]-> Dispatch
 Binding -down[hidden]-> Auth
 Auth -down[hidden]-> Credential
@@ -104,13 +104,13 @@ Dispatch -down-> Accept : accept run
 Dispatch -left-> Prepare : automatic
 Dispatch -[norank]-> Time
 Dispatch -[norank]-> Repo
-Prepare -left-> Auth : authorize
+Prepare -left-> Auth : check grant / register Session
 Pipeline -left-> Credential : resolve after permission
 Prepare -down-> Snapshot
 MateAdapter .right.|> Auth
 MateAdapter .right.|> Binding
 MateAdapter .right.|> Credential
-MateAdapter -down-> Mate : definitions / grants\nand credentials
+MateAdapter -down-> Mate : grants / Session binding\nand credentials
 Accept -left-> Snapshot : fixed input
 Accept -[norank]-> Repo
 Repo <|.. RepoImpl
@@ -129,7 +129,9 @@ legend bottom
   Services are singletons; snapshots and sessions are per Run.
   All Claw target services live in coding-agent-cli.
   HTTP: runtimeapi; scheduling: schedule; tool adapter: tool.cron.
-  Mate APIs supply trusted bindings, authorization and credentials.
+  Mate owns users, resource ownership, permissions and user quotas.
+  Claw stores runtime data, never user scope or owner references.
+  Session ownership registration is required before Claw admission.
   Configuration handlers never call prepare or start a Session.
   A rule registers automatic work; no rule only saves.
   Each Run creates a Session, not an Agent definition.
@@ -163,7 +165,7 @@ participant Schedule
 participant Mate
 database Store
 Caller -> Schedule : Create task with Agent, message and optional rule
-Schedule -> Schedule : Validate identity, scope, input and time rule
+Schedule -> Schedule : Verify service / granted target\nValidate input and time rule
 break Request rejected
   Schedule --> Caller : Request error; no configuration written
 end
@@ -197,13 +199,13 @@ actor Caller
 participant Schedule
 database Store
 Caller -> Schedule : Run the saved task now
-Schedule -> Schedule : Authenticate and authorize this request
+Schedule -> Schedule : Verify Mate service / granted operation and target
 Schedule -> Store : Read current task and reserve a manual Run\nCheck the shared task slot; keep the automatic plan
 Store --> Schedule : Reserved Run or recorded busy rejection
 alt Task slot reserved
   ref over Schedule, Store
     Shared Run admission
-    Mate grant -> Runtime preparation -> atomic acceptance
+    Mate grant + Session binding -> Runtime preparation -> atomic acceptance
     See schedule_run_admission
   end ref
 else Task already busy
@@ -224,6 +226,9 @@ end note
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage.
 ' Presentation: Schedule coordinates the transaction; Runtime provides preparation and persistence capabilities.
 ' Design reason: remote grant checks finish before the short acceptance transaction.
+' PR evidence: e9d31e8888a81b7fe95071e705482bb16fa10476, fetched 2026-10-10.
+' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/schedule/ScheduledRuntimeAdmissionService.java newSession and encodeContext.
+' Java divergence: remove Claw user references; Mate ownership registration is Pending implementation.
 ' Target: Pending implementation; a reserved Run enters, a known admission result leaves; no execution here.
 title Shared Run admission - prepare, then commit\n(Pending implementation)
 hide footbox
@@ -241,8 +246,15 @@ break Execution context unavailable or rejected
   Schedule -> Store : Record failure only if task / Run still exist\nRelease only this Run's slot
   Store --> Schedule : Failure committed or deletion preserved
 end
+== Register independent ownership ==
+Schedule -> Schedule : Fix the proposed Session ID for this Run
+Schedule -> Mate : Register Session ownership by resource IDs and grant\nNo user / tenant / owner supplied by Claw
+Mate --> Schedule : Durable binding confirmed, rejected or unknown
+break Binding not confirmed
+  Schedule -> Schedule : Stop admission; reconcile by fixed IDs\nDo not create another Session or replay business
+end
 == Prepare without executing ==
-Schedule -> Runtime : Prepare Agent, model and CRON context\nNo model request or business tool call
+Schedule -> Runtime : Prepare Agent, model and CRON context\nReuse fixed Session ID; no business execution
 Runtime --> Schedule : Fixed preparation snapshot or failure
 alt Preparation succeeded
   group One short database transaction, coordinated by Schedule
@@ -254,6 +266,8 @@ else Preparation failed
   Store --> Schedule : Failure committed or deletion preserved
 end
 note over Schedule, Store
+  Mate binding is independent; there is no cross-database transaction.
+  A failed Claw transaction leaves a binding to reconcile, not a Session.
   Admission uses Runtime persistence inside the same transaction.
   An accepted Run keeps its prepared context for dispatch.
   No model or tool execution occurs in this sequence.
