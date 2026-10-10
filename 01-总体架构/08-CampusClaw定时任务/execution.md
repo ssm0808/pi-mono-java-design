@@ -1,10 +1,10 @@
 # 定时任务执行与工程落地
 
-版本：0.2.0；日期：2026-10-10；状态：待实现。
+版本：0.3.0；日期：2026-10-10；状态：目标设计；数据库链路已在 PR #332 实现，范围与验收另列。
 
-[模块主设计](README.md) · [Claw接口](configuration.md) · [Mate执行上下文](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md) · [源码证据](source-evidence.md#schedule-engineering-evidence)
+[模块主设计](README.md) · [数据库设计](database.md) · [Claw接口](configuration.md) · [Mate执行上下文](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md) · [源码证据](source-evidence.md#schedule-engineering-evidence)
 
-本页维护定时执行策略、coding-agent模块合并、数据库受理与上线初始配置。接口范围已收口；本次不修改产品代码。Claw源码核验为main `553dcd5e2ff682f9684810a043b442b37a02e54a`，2026-10-05隔离fetch，与前次相同。部署数值由设计给出，不代表压测容量。是否由运行失败自动暂停整个Schedule仍待当前问题答复，不能据旧Cron连续三次失败逻辑默认实现。
+本页维护定时执行策略、coding-agent模块合并、受理流程与上线初始配置；数据库结构单独维护。接口范围已收口；本次不修改产品代码。本页原工程说明的历史 Claw源码核验为main `553dcd5e2ff682f9684810a043b442b37a02e54a`，2026-10-05隔离fetch，与前次相同。部署数值由设计给出，不代表压测容量。是否由运行失败自动暂停整个Schedule仍待当前问题答复，不能据旧Cron连续三次失败逻辑默认实现。
 
 [统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)进一步规定 Runtime、Cron、Child 共用受理原语与 Coordinator；ScheduledRunAcceptanceService 在原 Run 事务内创建 Session/首消息/execution 并关联，后台仅选择 persistenceOnly 输出。Cron 启动的 Child 也保存独立历史并继承非交互限制；Skill 累计消费同事务成功结果，不再由 Cron 另写统计来源日志。新主线源码复核见[统一证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)，本页其他调度/官方历史证据不升级。
 
@@ -50,22 +50,11 @@
 
 本方案不新增外部依赖：复用 JDK21、Spring CronExpression、Jackson、MyBatis Spring Boot Starter3.0.4、既有数据库驱动。coding-agent 已直接依赖 agent-core、Jackson 和测试 Starter；Spring context 已经由既有依赖提供。如按“直接使用直接声明”原则补充 spring-context 声明，只调整已有依赖归属。根 POM 的 JobRunr7.3.1 目前只是无消费者的版本/管理占位，可在实施全仓复查后清理；不能据此宣称当前运行包体减少。完整依赖树及 corporate NativeParent 仍需实施时验证。
 
-## 最小持久化模型
+<a id="最小持久化模型"></a>
 
-表名采用 `t_`，SQL COMMENT 使用中文；公开业务时间统一 UTC 秒级，内部租约和扫描计时允许采用必要的更高精度。精确 DDL 与 Mapper 仍需实施验证，下列只定义权威关系及必须的约束。
+## 数据库设计入口
 
-| 逻辑表 | 关键内容与约束 |
-|---|---|
-| `t_schedule` | id、可信 scope、agent_id、单条文本 user.message、可空 Cron/timezone、status/paused_reason、metadata、credential_ids、内部配置代次、last_run_at、next_fire_at、active_run_id、创建/修改审计；扫描索引覆盖 active 与 next_fire_at/id，修改和受理复核同一行 |
-| `t_schedule_run` | id、schedule_id、scope、内部配置代次、manual/schedule 触发来源及 scheduled_at、受理状态、Session/根 execution 关联、领取代次/owner、稳定错误和必要时间；自动触发唯一约束 `(schedule_id, scheduled_at)`，manual 的 scheduled_at 为空且每次独立分配 runId |
-| `t_schedule_dispatch_state` | 一条逻辑自动扫描协调记录：leader、epoch、lease_until、上次完整扫描游标；用于区分连续运行与恢复后的新运行代次，不保存每个漏跑时刻、Run历史或补跑队列 |
-| 既有 Session/执行相关表 | 首条消息、根执行/segment、完整事件和执行终态的权威；保留最小调度来源及根关联用于配置删除后的内部收尾，不依赖已删 Schedule/Run 才能鉴权或完成执行 |
-
-不增加 `t_schedule_gap`；停机漏跑只推进游标，并输出非敏感运营指标/日志，不为离线期间每一个时刻补造 Run。活动期间已经观察并作出“忙跳过”决策的 occurrence 可以保存一条未受理 Run，其错误说明跳过原因；不能将尚未观察到的离线触发伪装成执行失败。
-
-Run的session_id是历史受理标识的逻辑引用，不设置阻止Session独立删除的强外键，也不因Session删除而级联删Run或把其session_id置空；会话详情可404，但已受理事实保持。
-
-配置删除在一个事务内删除 Schedule 和对应 Run，不以 Session 外键级联删除对话。晚到回调只做条件更新，影响行数为零即表示公开资源已经不存在；不得使用 upsert 恢复它们。必要内部协调归根执行生命周期，安全收尾后清理，不保留可恢复完整配置或隐藏 Run 归档。
+表职责、字段、约束、索引、删除与保留的数据库边界由 [database.md](database.md)唯一维护。三张调度表及 Session/根执行扩展已在 PR #332 实现、未合并；完整源码基线、物理结构与目标差距见[数据库核验](database.md#source-baseline)。本文继续维护业务受理顺序、恢复策略和部署参数，不复制字段字典或安装 SQL。
 
 ## 原子受理与同任务互斥
 
@@ -150,5 +139,6 @@ Claude公开API仍是配置、Run与Session职责划分的历史主基线，事�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.3.0 | 2026-10-10 | 表模型移至独立数据库设计，保留受理流程与部署参数并区分 PR 实现状态。 |
 | 0.2.0 | 2026-10-10 | 复用统一执行受理和逐工具提交，保留现有调度及独立 Session 生命周期。 |
 | 0.1.0 | 2026-10-05 | 确定无补跑、忙跳过、不重跑与非交互执行，定义coding-agent合并和首版部署配置。 |
