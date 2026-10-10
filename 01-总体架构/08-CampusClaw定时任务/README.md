@@ -1,15 +1,15 @@
 # CampusClaw 定时任务设计
 
-[模块索引](../../README.md#module-index) · [数据库设计](database.md) · [接口 HTML 展示](schedule-api-review.html) · [架构对比 A14](../07-Agent架构对比/README.md#a14) · [源码与官方证据](source-evidence.md)
+[模块索引](../../README.md#module-index) · [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule) · [接口 HTML 展示](schedule-api-review.html) · [架构对比 A14](../07-Agent架构对比/README.md#a14) · [源码与官方证据](source-evidence.md)
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.33.0 |
+| 文档版本 | 0.34.0 |
 | 更新日期 | 2026-10-10 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
 | 设计状态 | Claw配置、生命周期与Run读取接口已收口为目标，待实现；执行采用不补漏跑、遇忙跳过、失败与故障不重跑、非交互任务范围；删除不取消已受理执行。Mate接口及工程接线见专项；是否自动暂停整个Schedule仍待明确 |
-| 已观察实现 | 历史 main `553dcd5e2ff682f9684810a043b442b37a02e54a` 为 JSON Cron；2026-10-10 已核验 PR #332 `e9d31e8888a81b7fe95071e705482bb16fa10476` 的三张调度表、Mapper、同库受理与启动控制，已实现但未合并，范围与差距见[数据库设计](database.md#source-baseline)；不代表部署验收 |
+| 已观察实现 | 历史 main `553dcd5e2ff682f9684810a043b442b37a02e54a` 为 JSON Cron；2026-10-10 已核验 PR #332 `e9d31e8888a81b7fe95071e705482bb16fa10476` 的三张调度表、Mapper、同库受理与启动控制，已实现但未合并，范围与差距见[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#source-baseline)；不代表部署验收 |
 | 主基线 | Claude Managed Agents Scheduled deployments，2026-10-04 重核名称、Cron、执行目标、Deployment 读取契约及资源类型/暂停原因、部分更新及删除差异；2026-10-05 重核run/pause/unpause、Run模型及列表/详情；2026-10-08 仅重核公开操作目录与计划时间摘要，Beta；仅引用公开契约，无服务端源码 commit |
 
 页面行为与原型见[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md)：Manual映射schedule:null，Schedule映射完整Cron；触发方式、active/paused和单次Run结果分别展示，保存后读取权威计划时间。2026-10-08重核Claude Console与官方Beta文档的范围见[专项证据](source-evidence.md#schedule-console-evidence)，不新增前端专用后端字段或独立预览。
@@ -18,7 +18,7 @@
 
 ## 1. 要解决什么问题
 
-接口规则由[Claw 配置专题](configuration.md)维护；运行策略、物理模块合并和上线初始值由[执行专题](execution.md)维护；表结构、约束、索引与数据库事务由[数据库设计](database.md)维护。Mate负责可信接口定义、执行资格和凭据解析，新增内部契约见[Mate执行上下文草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)。本文保留整体职责、主流程与全局目标类图。本文流程和类图继续表达目标；其中数据库链路已在 PR #332 实现，不能将历史“待实现”标签外推为当前 PR 无实现，也不据局部核验认定整个模块已验收。
+接口规则由[Claw 配置专题](configuration.md)维护；运行策略、物理模块合并和上线初始值由[执行专题](execution.md)维护；表结构、约束、索引与数据库事务由[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule)维护。Mate负责可信接口定义、执行资格和凭据解析，新增内部契约见[Mate执行上下文草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)。本文保留整体职责、主流程与全局目标类图。本文流程和类图继续表达目标；其中数据库链路已在 PR #332 实现，不能将历史“待实现”标签外推为当前 PR 无实现，也不据局部核验认定整个模块已验收。
 
 [接口 HTML 展示](schedule-api-review.html)从上述 Claw 契约生成，复用 Runtime 接口页的共享渲染器、样式和按操作展开交互，展示 10 个 Claw 操作的调用上下文、参数、请求示例、规则与响应状态/语言标签；实现状态与证据日期按各自核验范围记录。Markdown 继续作为维护源，HTML 可离线阅读，不发起业务调用。生成与同步检查见[展示页维护](#html-maintenance)。
 
@@ -258,9 +258,9 @@ Schedule通过credentialIds直接引用独立凭据，不增加Vault集合层。
 
 ## 9. 持久化与生命周期
 
-数据库设计集中在 [database.md](database.md)，统一维护三张调度表、Session/根执行扩展、字段、约束、索引、事务及清理边界。本文不再维护另一份表模型。独立文件已对齐 PR #332 的安装 SQL 与持久化源码，明确哪些结构已在 PR 实现、哪些目标仍有差距，以及真实 GaussDB 尚未验收的范围。
+数据库设计集中在 [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule)，统一维护三张调度表、Session/根执行扩展、字段、约束、索引、事务及清理边界。本文不再维护另一份表模型。独立文件已对齐 PR #332 的安装 SQL 与持久化源码，明确哪些结构已在 PR 实现、哪些目标仍有差距，以及真实 GaussDB 尚未验收的范围。
 
-业务生命周期保持：Schedule 保存长期配置，Run 保存一次受理事实，Session/原根执行保存实际执行结果。删除 Schedule 同时删除 Run，保留已受理 Session 且不自动取消；单独删除 Session 不改写历史 Run 的受理事实。具体数据库关联与竞争顺序见[事务和删除约束](database.md#transactions)，对外读取与删除回执见[配置契约](configuration.md#schedule-run-read-lifecycle)。
+业务生命周期保持：Schedule 保存长期配置，Run 保存一次受理事实，Session/原根执行保存实际执行结果。删除 Schedule 同时删除 Run，保留已受理 Session 且不自动取消；单独删除 Session 不改写历史 Run 的受理事实。具体数据库关联与竞争顺序见[事务和删除约束](../../03-数据与存储/Claw数据库设计.md#transactions)，对外读取与删除回执见[配置契约](configuration.md#schedule-run-read-lifecycle)。
 
 ## 10. 全局目标类图与依赖
 
@@ -322,6 +322,7 @@ python3 scripts/render-schedule-api.py --check
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.34.0 | 2026-10-10 | 定时表及 Session 扩展归入 Claw 全库数据库设计，原文件仅保留导航。 |
 | 0.33.0 | 2026-10-10 | 数据库设计独立维护字段、约束、索引和事务，登记 PR #332 的局部实现状态。 |
 | 0.32.0 | 2026-10-10 | Cron 与 Child 统一持久 Runtime 链路，Skill 统计复用完整工具结果。 |
 | 0.31.2 | 2026-10-09 | 用本次定时运行的执行记录解释根执行，明确会话后续追问不改变任务结果。 |

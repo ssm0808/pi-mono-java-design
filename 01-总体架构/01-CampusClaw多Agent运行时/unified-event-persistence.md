@@ -1,8 +1,8 @@
 # 统一执行历史与事件持久化
 
-版本：1.0.0 · 2026-10-10 · 状态：统一受理、Child 持久化、逐工具提交及统计投影均待实现。
+版本：1.1.0 · 2026-10-10 · 状态：统一受理、Child 持久化、逐工具提交及统计投影均待实现。
 
-[Runtime 主设计](README.md) · [源码证据](unified-event-persistence-evidence.md) · [Cron 执行](../08-CampusClaw定时任务/execution.md) · [Skill 统计](../../04-命令与技能/03-Skill加载统计/README.md) · [Session 存储](../../03-数据与存储/01-会话记忆GaussDB/README.md)
+[Runtime 主设计](README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#pending-changes) · [源码证据](unified-event-persistence-evidence.md) · [Cron 执行](../08-CampusClaw定时任务/execution.md) · [Skill 统计](../../04-命令与技能/03-Skill加载统计/README.md) · [Session 存储](../../03-数据与存储/01-会话记忆GaussDB/README.md)
 
 ## 1. 要解决的业务问题
 
@@ -52,7 +52,7 @@
 
 每次实际 Agent 调用分配一个服务端 `tool_call_entry_id`，由已提交 Assistant Entry 与内容位置绑定；Provider toolCallId 只用于该消息内模型协议关联，不作为全局幂等键。确认续跑和同次持久化重试复用原身份；模型下一次发出新调用，即使 Provider ID 相同，也获得新身份。
 
-新增内部关系 `t_session_execution_links`：`parent_session_id`、`parent_execution_id`、`parent_tool_call_entry_id`、`child_session_id`、`child_execution_id`、`created_at`。唯一约束 `(parent_session_id,parent_tool_call_entry_id)`，一条父调用至多受理一个 Child；`child_session_id` 主键。**不复用 t_sessions.parent_session_id**：该已有字段表示复制历史来源，与执行委派不同。关系不保存第二份正文、工具结果或运行终态。
+内部父子关系 `t_session_execution_links` 的字段、主键、唯一约束与清理由 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#child-links)维护，目标待实现。一条父调用至多受理一个 Child；不复用表示历史复制来源的 t_sessions.parent_session_id，也不复制正文、工具结果或运行终态。
 
 受理前，Agent Pipeline 先做可信绑定解析与参数校验，再由 Host 校验权限/必要确认。然后事务内复核父 execution 固定身份、未停止、父调用存在与未完成、子任务容量以及授权快照有效性；受理和父停止争用同一父 execution 权威锁。Child 自己保存可信访问范围与非秘密来源，读取时重新授权；不是持有父 ID 就能读 Child。业务凭据只传本次内存执行，不进入关系、Session 元数据或消息。
 
@@ -108,7 +108,7 @@
 
 此样例省略已有 entry_seq/parent_id；它们由追加器维护。公共投影省略 execution_id、origin、skill_id 等内部字段，并按既有 Skill 安全规则隐藏私有正文；统计从内部可信结果读取。
 
-`tool_call_entry_id` 是 t_session_entries 的可空索引列，仅 tool.result 必填，唯一 `(session_id,tool_call_entry_id)`；事务校验被引用的同 Session 调用存在、属于固定 execution、工具身份与准备绑定一致。同次结果重试沿用固定 resultEntryId、时间和全部载荷；已有结果在执行结束后仍可授权只读对账，新追加才要求固定 owner/代次及可收尾状态。先查既有结果，内容一致返回既有提交，内容不同报一致性冲突，不能覆盖或再次计数。结果去重不依赖已删除的统计流水。
+工具结果关联列、唯一索引与受控 payload 增量集中于[数据库目标](../../03-数据与存储/Claw数据库设计.md#tool-result)，当前待实现；事务校验被引用的同 Session 调用存在、属于固定 execution、工具身份与准备绑定一致。同次结果重试沿用固定 resultEntryId、时间和全部载荷；已有结果在执行结束后仍可授权只读对账，新追加才要求固定 owner/代次及可收尾状态。先查既有结果，内容一致返回既有提交，内容不同报一致性冲突，不能覆盖或再次计数。结果去重不依赖已删除的统计流水。
 
 `origin=LIVE` 表示当前真实执行，`COPY` 表示会话复制的既有历史；恢复、重放读取、压缩和复制都不生成新的 LIVE 结果，也不增加统计。复制保留原事件时间与语义；按现有 M04 复制设计保留内部 Entry ID，新 session_id 隔离身份，调用关联只能引用副本内对应调用；复制走独立受控复制事务、不经过 LIVE 结果提交端口；普通持久化重试只查询原记录。调用 Entry 的现有内部名 tool.execution.started 不能作为实际执行成功或已产生副作用的证据，它可能在模型调用定稿时产生。
 
@@ -162,4 +162,5 @@ STOP_REQUESTED 不拒绝同一原执行已在途调用的真实结果；实际�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-10-10 | 父子关联与工具结果结构归入 Claw 数据库设计，执行和提交流程继续独立维护。 |
 | 1.0.0 | 2026-10-10 | Runtime、Cron、Child 统一保存独立完整历史，逐工具原子提交并复用成功结果维护 Skill 累计。 |

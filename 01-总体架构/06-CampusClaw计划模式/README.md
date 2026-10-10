@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.22.0 |
-| 更新日期 | 2026-10-09 |
+| 文档版本 | 1.22.1 |
+| 更新日期 | 2026-10-10 |
 | 状态 | 完整 plan 参数、AI 通用部分 JSON 与计划两 phase 投影已在 PR #336 实现，未合入 main；Mate 桥接待实现，真实模型验收未完成 |
 | 计划长度专项基线 | 2026-10-09 fetch DeepSeek master `5badb15009ae1756c3afe0ae0cef1faafc290ccc`（plan-mode 0.2.1-alpha.1）及 pi main；仅升级长度核验，见[证据 §17](source-evidence.md#plan-length-baseline) |
 | 计划模式主基线 | 2026-09-28 fetch DeepSeek master `4878cdabd87d4041bdaff61d04c966883b9fd07a`（plan-mode 0.2.0-rc.1），参数退出与调用流对照 Codex/pi；旧新提交、路径及范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence) |
@@ -24,6 +24,8 @@
 | 结构化提问、答案事件与原执行续跑 | [AskUserQuestion](ask-user-question.md) |
 | 已登记接口的集成边界 | [接口增量](interface-delta.md) |
 | 固定源码提交、符号与实现差距 | [源码证据](source-evidence.md) |
+
+计划审核决定的表结构、约束和索引统一见 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#t_session_plan_confirmations)；本文维护交互与执行规则，不另定义物理表。
 
 ## 1. 设计结论
 
@@ -371,6 +373,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.22.1 | 2026-10-10 | 关联 Claw 数据库设计中的计划审核决定表，保持业务与接口规则。 |
 | 1.22.0 | 2026-10-09 | 取消计划正文最大字符数，保留内容有效性、审核绑定与完整事件容量约束。 |
 | 1.21.0 | 2026-10-09 | 计划预览消费 AI 通用部分参数快照与内部诊断，同步 PR 实现及兼容性边界。 |
 | 1.20.0 | 2026-10-04 | 模式配置取消客户端条件令牌和 ETag，保留数据库原子更新与审核准入。 |

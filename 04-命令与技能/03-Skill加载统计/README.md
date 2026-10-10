@@ -1,10 +1,10 @@
 # Skill 成功调用次数统计设计
 
-[命令与技能](../README.md) · [M05 主设计](../00-Slash-Command通用模块/README.md) · [统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) · [源码与差距](source-evidence.md) · [验证](validation.md)
+[命令与技能](../README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#skill-target) · [M05 主设计](../00-Slash-Command通用模块/README.md) · [统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) · [源码与差距](source-evidence.md) · [验证](validation.md)
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 5.0.0 |
+| 文档版本 | 5.1.0 |
 | 更新日期 | 2026-10-10 |
 | 业务目标 | 每次真实 Skill 工具最终成功，对应 skillId 加一；同任务三次成功计三次 |
 | 职责 | M05 定义计数及查询；M06 统一结果提交事务调用 M05 投影；M04 保存结果与处理清理；M03 决定真实工具结果 |
@@ -49,7 +49,7 @@ M06 的 SessionEventAppender 复用既有 Repository 事务：重检固定 execu
 | 同事务 t_skill_usage_stats | 从统一采集切换点开始已提交的累计次数，Session 删除不减 | 当前目标；唯一一张统计表，没有独立统计流水 |
 | 异步消费/日表/独立分析库 | 大数据量、趋势或统计故障隔离 | 没有已确认必要性，首版不额外建设；已有接口/日表去留仍待核实 |
 
-[schema.sql](schema.sql)定义 skill_id、activation_count、last_loaded_at，以及 pruned_from/pruned_to。后两项只标记已删除成功历史的最小/最大事件时间，不是日统计；COUNT 范围与这个保守缺口相交时，不能声称结果完整。多个不连续删除区间可以合并成一个外包范围，宁可拒绝部分仍完整的查询，不返回错误低值。
+表字段、时间精度、约束及历史缺口由[统一数据库设计](../../03-数据与存储/Claw数据库设计.md#skill-target)维护，[schema.sql](schema.sql)是与其关联的待实现片段。COUNT 范围与保守缺口相交时不能声称完整；本文继续维护计数口径和查询决策。
 
 累计更新与结果首次插入同事务，采用原子加一和 MAX 时间；普通 INSERT/唯一约束及重复核对由统一追加负责，不能“无条件忽略冲突后继续加一”。Mapper 片段见[record-usage.sql](record-usage.sql)。真实 GaussDB 的 UPSERT、唯一冲突、JSONB 与事务行为必须集成验证。
 
@@ -101,6 +101,7 @@ Session 清理与追加争用相同 Session/执行锁。先禁止活跃或未知
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 5.1.0 | 2026-10-10 | 统计表结构与目标增量归入 Claw 数据库设计，保留计数及查询规则。 |
 | 5.0.0 | 2026-10-10 | Skill 计数复用统一工具结果，同事务维护累计并移除独立采集、队列和统计流水。 |
 | 4.0.0 | 2026-10-10 | 按 Skill 最终成功调用计数，统一事件观察与有界异步入账，移除执行追溯前提并对比 #335。 |
 | 3.2.1 | 2026-09-22 | 明确 SearchTools 只发现定义，不增加 Skill 使用统计信号。 |

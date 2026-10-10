@@ -1,12 +1,14 @@
 # CampusClaw Java GaussDB Session 线性事件存储 SR 设计
 
 > 文档编号：SR-MEM-001<br>
-> 版本：v0.20.0<br>
+> 版本：v0.21.0<br>
 > 日期：2026-10-10<br>
-> 状态：单条追加时间线目标已确认；顺序读取改造待实现<br>
+> 状态：单条追加时间线已确认；主线顺序 Mapper 已核验，统一历史增量待实现<br>
 > Java 核验基线：`fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；本地源码快照，不代表最新远端<br>
 > pi 专项基线：默认分支 `main`，2026-09-22 隔离 fetch，`1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`；默认分支快照不等于稳定发布<br>
 > 目标数据库：集中式 GaussDB；JDBC 约束：openGauss JDBC `6.0.0-htrunks.csi.gaussdb_kernel.opengaussjdbc.r1`
+
+[Claw 数据库设计](../Claw数据库设计.md)唯一维护全库结构；本文维护 Session 语义、追加/恢复流程和相关验收。
 
 ## 1. 职责与设计结论
 
@@ -78,6 +80,8 @@ pi SQLite 保留分支能力，并在写入时维护分支索引。正常追加�
 | 同目录 `event/RuntimeContextHistoryService.java` · `restoreHistory`；`RuntimeCompactionEventProjector.java` · `persistCompaction` | 已有分批恢复，压缩结果走 `appendEntryWithUsage` 追加 | 恢复读取需改为单链范围查询；上下文过滤算法保持 |
 | `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql` | Runtime 还有事件、投影、内部 Record、统计和执行控制等表 | 四表 DDL 只是基础模型；不替代运行数据库安装清单 |
 
+2026-10-10 已隔离 fetch 主线 `769e86592285f4a25b0febaf551eddea6bc7212c`，重核 `RuntimeSessionMapper.xml` 的 `listTimelineEntries/listCommittedEvents/countUnmappedTimelineEntries`：三处查询已按 Session 与序号非递归读取，字段、索引及证据集中于[数据库设计](../Claw数据库设计.md#current-schema)。上表保留历史观察，不作为这些查询当前仍待实现的依据；未运行数据库验收，也不升级其他历史能力结论。
+
 ### 2.4 范围与非目标
 
 范围包含创建、打开、列表、删除、追加、内部 Entry 分页、授权审计、模型恢复，以及目标中的独立 Session 复制。复制能力的实现状态未核验，不因其列入目标而开放新公共接口。
@@ -90,61 +94,33 @@ pi SQLite 保留分支能力，并在写入时维护分支索引。正常追加�
 
 [原尺寸 SVG](./设计图/memory-data-model.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L155)
 
+表结构统一由 [Claw 数据库设计](../Claw数据库设计.md#current-schema)维护，本图仍说明 Session 基础关系，不代表全库只有四张表。以下保留原章节入口，避免旧链接失效。
+
 ### 3.1 `t_sessions`
 
-| 字段 | 类型 | 语义 |
-|---|---|---|
-| `id` | `VARCHAR(128)` | Session 唯一 ID |
-| `created_at` | `TIMESTAMPTZ(0)` | 创建时间 |
-| `cwd` | `VARCHAR(512)` | 受控规范工作目录 |
-| `parent_session_id` | `VARCHAR(128)` | 独立复制的来源 Session；无来源为空 |
-| `metadata` | `JSONB` | 附加信息；缺省为 SQL NULL |
-| `active_leaf_id` | `VARCHAR(128)` | 最新 Entry ID；空 Session 时为空 |
-
-`active_leaf_id` 逻辑引用同 Session 的 Entry。它只能在追加事务中向新 Entry 推进，不提供指向历史节点的业务操作。基础 DDL 不增加物理外键；Runtime 已有约束不因此移除。
+见[会话主表](../Claw数据库设计.md#t_sessions)：当前配置、末端、来源与归属增量。
 
 ### 3.2 `t_session_entries`
 
-| 字段 | 类型 | 语义 |
-|---|---|---|
-| `session_id` | `VARCHAR(128)` | 所属 Session |
-| `id` | `VARCHAR(128)` | Session 内唯一 Entry ID |
-| `entry_seq` | `BIGINT` | 严格递增的提交序号，允许间隔 |
-| `parent_id` | `VARCHAR(128)` | 前一条 Entry ID，第一条为空 |
-| `type` | `VARCHAR(64)` | Entry 类型 |
-| `timestamp` | `TIMESTAMPTZ(0)` | Entry 时间，不作排序依据 |
-| `payload` | `JSONB` | 类型相关内容 |
-
-主键 `(session_id, id)`，唯一索引 `(session_id, entry_seq)`。写侧维持单链，读侧按序号读取时间线；不依赖序号连续、不使用 `entry_seq - 1` 查父节点。已提交 Entry ID 和已分配序号不回收。新 Entry 的父节点由写侧依据锁内末端确定，调用方不能指定其他历史分叉点。
+见[内部完整历史](../Claw数据库设计.md#t_session_entries)：字段、提交序号、索引及工具结果目标增量。
 
 ### 3.3 `t_session_sequences`
 
-每 Session 一行，`session_id VARCHAR(128)` 为主键，`next_seq BIGINT` 为下一可分配序号。新 Session 从 1 开始，写事务先锁 Session 再锁序号；Runtime 的 Entry、公共事件和内部 Record 共享分配器，因此 Entry 与 event 序号都可能有空洞。保留唯一性和提交顺序，不承诺连续。
+见[共享序号分配器](../Claw数据库设计.md#t_session_sequences)：Entry、Record 和公共事件的有序分配，不承诺连续。
 
 <a id="second-precision-storage"></a>
 
 ### 3.4 秒级时间存储
 
-Session 与完整事件采用[秒级时间一致性](../../01-总体架构/01-CampusClaw多Agent运行时/time-contract.md)。目标列为 `t_sessions.created_at/updated_at`、`t_session_entries.timestamp`、`t_session_records.timestamp`、`t_session_events.created_at`，使用 `TIMESTAMPTZ(0)`。应用先截断记录时间再写入，不能依赖数据库隐式舍入；公共事件排序继续依赖 event_seq。Provider 原始 payload 中的时间及内部期限/租约不自动改变。
-
-固定 Java `553dcd5e2ff682f9684810a043b442b37a02e54a` 安装 DDL 中上述列仍为 `(3)`，完整事件仍使用毫秒规范化与输出；秒级调整待实现，证据见共同专题。基础 schema.sql 与下图仅列基础两列；完整安装脚本及公司安装镜像须同批调整，不将本示意当作可直接覆盖 Runtime 的安装文件。沿用 §8 的新建环境范围，不新增存量迁移脚本。
+列范围、主线与 PR 精度差异见[数据库全局规则](../Claw数据库设计.md#global-rules)；公共表示由[时间契约](../../01-总体架构/01-CampusClaw多Agent运行时/time-contract.md)维护，不把内部租约统一改成秒。
 
 ### 3.5 `t_session_materialized`
 
-每 Session 一行，主键 `session_id VARCHAR(128)`，`payload JSONB` 保存基础汇总目标：
+见[可重建汇总](../Claw数据库设计.md#t_session_materialized)及[Usage 累计](../Claw数据库设计.md#t_session_stats)，不维护第二份用量权威。
 
-```json
-{
-  "activePath": {"name": null, "messageCount": 0, "currentModel": null, "currentThinkingLevel": null},
-  "lifetimeUsage": {"cachedTokens": 0, "uncachedTokens": 0, "totalTokens": 0, "costTotal": 0}
-}
-```
+## 4. GaussDB 设计与 SQL 入口
 
-`activePath` 按线性 Entry 派生，追加可增量更新，复制时按来源历史重算。`lifetimeUsage` 累计全部已保存的计费事实，不以 UI 消息数或压缩后模型上下文求和代替。Runtime 已实现的 `t_session_stats` 和 Usage Record 继续作为其既有权威实现，不另设统计权威表。有限非负数与字段约束由 Service校验，不只依赖 JSONB 语法校验。
-
-## 4. 基础 GaussDB DDL
-
-[`schema.sql`](./schema.sql) 唯一维护四张基础表和 17 个字段的初始化示意。Runtime 完整安装结构以上述实现仓 DDL 及各模块目标增量为准；禁止按“四表”删除其他模块已使用的表。数据库发布平台负责 DDL，AgentService 只执行 DML。沿用字段，秒级目标同步调整时间列精度，完整安装结构的实现仍待更新。
+[Claw 数据库设计](../Claw数据库设计.md)集中维护完整表模型。[schema.sql](schema.sql)保留为历史四表基础示意，[统一历史 SQL](unified-event-persistence.sql)为待实现增量；其适用范围及完整安装脚本见[SQL 材料](../Claw数据库设计.md#sql-files)。数据库发布平台负责 DDL，应用仅使用相应 DML，不能用基础示意覆盖 Runtime 全库。
 
 ## 5. Java 接口与错误语义
 
@@ -241,7 +217,7 @@ COMMIT
 
 公共 [ListEvents](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md#3-普通数字页码)直接从 `t_session_events` 按 Session 和 `event_seq` 读取完整事件，再使用既有 `page/nextPage`、多取一条和单请求一致性。不得先分页 Entry 再拆成事件。审计仍按授权读取内部记录，与公共事件保持投影隔离。
 
-三个递归 Mapper 查询均须替换：Entry 读取、公共事件读取、未映射 Entry 检查。完整性检查改为同 Session 的普通连接/聚合，保留类型、投影存在性及实际事件数量核对；不因移除递归而跳过未知类型或缺少投影。全量检查可能仍为线性成本，暂不引入投影水位替代它，后续优化须单独证明同等完整性。
+当前主线已完成 Entry 读取、公共事件读取、未映射 Entry 检查的非递归 Mapper，核验范围见 §2.3。完整性检查改为同 Session 的普通连接/聚合，保留类型、投影存在性及实际事件数量核对；不因移除递归而跳过未知类型或缺少投影。全量检查可能仍为线性成本，暂不引入投影水位替代它，后续优化须单独证明同等完整性。
 
 ### 7.3 重建模型上下文
 
@@ -257,7 +233,7 @@ Entry 时间线完整不代表每条都进入模型。配置、控制、独立 U
 
 面向新建环境交付完整安装 DDL 和统一的只追加读写实现，不考虑存量数据，不设计迁移脚本、兼容分支、上线前存量扫描或旧路径处理。SQLite/JSONL 数据导入不属于本次范围。
 
-初始化使用 Runtime 完整安装脚本，包含公共事件、投影、执行控制和统计等所属模块的表；本专题四表 DDL 只说明 Session 基础模型。创建空 Session 后，所有写入口按 §6.2 追加；内部恢复、公共历史和映射检查同时使用 §7 的非递归查询。
+初始化使用[数据库设计关联的完整安装脚本](../Claw数据库设计.md#sql-files)，包含公共事件、投影、执行控制和统计等表；本专题四表 SQL 是历史基础示意。创建空 Session 后，所有写入口按 §6.2 追加；内部恢复、公共历史和映射检查同时使用 §7 的非递归查询。
 
 ## 9. 实施切片与验收
 
@@ -287,6 +263,7 @@ Entry 时间线完整不代表每条都进入模型。配置、控制、独立 U
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v0.21.0 | 2026-10-10 | 表字段集中到 Claw 数据库设计，关联全库 SQL 并更新主线非递归查询核验。 |
 | v0.20.0 | 2026-10-10 | 补充唯一工具结果和父子执行关联，清理保留 Skill 累计并登记历史缺口。 |
 | v0.19.0 | 2026-10-02 | Session 与事件目标时间列统一到秒，保持提交序号排序和新建环境交付范围。 |
 | v0.18.0 | 2026-09-22 | Session 采用单条追加时间线，移除最近消息编辑与递归读取，按新建环境实施。 |
