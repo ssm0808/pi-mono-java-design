@@ -7,6 +7,7 @@
 ' 设计原因：把持久受理与 Runtime 执行及其实际结果分开。
 ' 目标：待实现；不补跑、不重放，结果未知时保持任务占用。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
 title 到点自动运行：从分发到结果对账（待实现）
 hide footbox
 skinparam backgroundColor white
@@ -16,25 +17,29 @@ participant "调度器" as Scheduler
 participant "定时任务管理" as Schedule
 participant "Session 运行时" as Runtime
 database "存储" as Store
+autonumber
 == 分配本次触发 ==
-Scheduler -> Schedule : 分发一个到期的巡逻检查任务
-Schedule -> Store : 认领到期 Run 和任务槽位\n推进计划游标；提交
-Store --> Schedule : 已认领的 Run
+[-> Scheduler ++ : 到达计划时间
+Scheduler -> Schedule ++ : 分发一个到期的巡逻检查任务
+Schedule -> Store ++ : 认领到期 Run 和任务槽位\n推进计划游标；提交
+return 已认领的 Run
 == 准备并受理 ==
 ref over Schedule, Store
   共用受理流程
   Mate 授权 + Session 归属登记 -> Runtime 准备 -> 原子受理
   见 schedule_run_admission
 end ref
-Schedule --> Scheduler : 已提交的受理结果\n和同次准备的上下文
+return 已提交的受理结果\n和同次准备的上下文
 == 执行已受理的 Run ==
-Scheduler ->> Runtime : 用同一准备上下文启动一次
+Scheduler ->> Runtime ++ : 用同一准备上下文启动一次
 Runtime -> Runtime : 确认启动归属\n按非交互 Host 策略运行 Agent
-Runtime -> Store : 持久化消息和工具结果\n确认后持久化根执行终态
-Store --> Runtime : 已持久化的执行记录
+Runtime -> Store ++ : 持久化消息和工具结果\n确认后持久化根执行终态
+return 已持久化的执行记录
+deactivate Runtime
 == 对账原根执行 ==
-Scheduler -> Store : 读取固定根执行的结果并更新 Run 摘要\n确认终止后释放自己的任务槽位
-Store --> Scheduler : 终态已反映到 Run
+Scheduler -> Store ++ : 读取固定根执行的结果并更新 Run 摘要\n确认终止后释放自己的任务槽位
+return 终态已反映到 Run
+deactivate Scheduler
 @enduml
 
 @startuml scheduled_task_architecture
@@ -147,26 +152,29 @@ endlegend
 ' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a；2026-10-08 拉取 main（未变化）。
 ' 源码：modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java saveUnsafe（旧文件持久化）。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare（不是只读管理检查）。
-' 表达方式：Mate 发起请求；定时任务管理校验并保存；Mate 提供授权；存储提交。
+' 表达方式：Mate 发起请求并提供授权；定时任务管理校验并保存；存储提交。
 ' 设计原因：管理检查不准备也不执行 Agent Session。
 ' 目标：待实现；只支持文本输入，存储时只保留凭据引用。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
 title 保存视频巡逻检查定时任务（待实现）
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
-participant "Mate 管理入口" as Caller
-participant "定时任务管理" as Schedule
 participant "Mate" as Mate
+participant "定时任务管理" as Schedule
 database "存储" as Store
-Caller -> Schedule : 创建任务：Agent、消息和可选规则
+autonumber
+activate Mate
+Mate -> Schedule ++ : 创建任务：Agent、消息和可选规则
 Schedule -> Schedule : 核验服务来源和获准目标\n校验输入和时间规则
-Schedule -> Mate : 检查 Agent 和凭据绑定\n以及当前管理授权
-Mate --> Schedule : 可信绑定
-Schedule -> Store : 提交新的启用配置\n含凭据引用和下次计划时间
-Store --> Schedule : 已提交的配置
-Schedule --> Caller : 201 + 已保存的配置\n及未来计划时间
+Schedule -> Mate ++ : 检查 Agent 和凭据绑定\n以及当前管理授权
+return 可信绑定
+Schedule -> Store ++ : 提交新的启用配置\n含凭据引用和下次计划时间
+return 已提交的配置
+return 201 + 已保存的配置\n及未来计划时间
+deactivate Mate
 note over Schedule, Store
   本请求只保存任务，不创建 Session。
   模型和业务工具只在之后受理成功时运行。
@@ -181,25 +189,29 @@ end note
 ' 设计原因：手动和自动入口共用受理流程和任务互斥。
 ' 目标：待实现；手动运行不移动自动计划。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
 title 立即试跑：返回受理回执（待实现）
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
-participant "Mate 管理入口" as Caller
+participant "Mate" as Mate
 participant "定时任务管理" as Schedule
 database "存储" as Store
-Caller -> Schedule : 立即运行已保存的任务
+autonumber
+activate Mate
+Mate -> Schedule ++ : 立即运行已保存的任务
 Schedule -> Schedule : 核验 Mate 服务、获准操作和目标
-Schedule -> Store : 读取当前任务并预留一个手动 Run\n检查共用任务槽位；不改自动计划
-Store --> Schedule : 已预留的 Run
+Schedule -> Store ++ : 读取当前任务并预留一个手动 Run\n检查共用任务槽位；不改自动计划
+return 已预留的 Run
 ref over Schedule, Store
   共用受理流程
   Mate 授权 + Session 归属登记 -> Runtime 准备 -> 原子受理
   见 schedule_run_admission
 end ref
-Schedule --> Caller : 200 + Run（含 Session ID）
-note over Caller, Store
+return 200 + Run（含 Session ID）
+deactivate Mate
+note over Mate, Store
   只有已提交、结果确定的受理才返回 200 Run。
   已受理的执行独立于本次响应继续运行。
 end note
@@ -217,6 +229,7 @@ end note
 ' Java 差异：移除 Claw 的用户引用；Mate 归属登记待实现。
 ' 目标：待实现；已预留的 Run 进入，确定的受理结果离开；本图不执行。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
 title 共用受理流程：先准备，再提交（待实现）
 hide footbox
 skinparam backgroundColor white
@@ -226,20 +239,23 @@ participant "定时任务管理" as Schedule
 participant "Mate" as Mate
 participant "Session 运行时" as Runtime
 database "存储" as Store
+autonumber
+[-> Schedule ++ : 受理一个已预留的 Run
 == 核验当前执行授权 ==
-Schedule -> Mate : 为本次 Run 解析可信定义、当前授权\n和凭据引用
-Mate --> Schedule : 执行上下文
+Schedule -> Mate ++ : 为本次 Run 解析可信定义、当前授权\n和凭据引用
+return 执行上下文
 == 登记独立归属 ==
 Schedule -> Schedule : 固定本次 Run 拟建的 Session ID
-Schedule -> Mate : 按资源 ID 和授权登记 Session 归属\nClaw 不提供用户、租户或 owner
-Mate --> Schedule : 归属已持久登记
+Schedule -> Mate ++ : 按资源 ID 和授权登记 Session 归属\nClaw 不提供用户、租户或 owner
+return 归属已持久登记
 == 只准备、不执行 ==
-Schedule -> Runtime : 准备 Agent、模型和 CRON 上下文\n沿用固定的 Session ID；不执行业务
-Runtime --> Schedule : 固定的准备快照
+Schedule -> Runtime ++ : 准备 Agent、模型和 CRON 上下文\n沿用固定的 Session ID；不执行业务
+return 固定的准备快照
 group 一个短数据库事务，由定时任务管理协调
-  Schedule -> Store : 复核任务、认领、授权、时间和容量\n创建 Session + 首条消息 + 根执行 + Run 关联
-  Store --> Schedule : 受理已提交
+  Schedule -> Store ++ : 复核任务、认领、授权、时间和容量\n创建 Session + 首条消息 + 根执行 + Run 关联
+  return 受理已提交
 end
+[<-- Schedule -- : 确定的受理结果
 note over Schedule, Store
   Mate 归属登记独立完成，不存在跨库事务。
   受理在同一事务内使用 Runtime 持久化能力。
@@ -259,7 +275,7 @@ end note
 ' 粒度：参与者统一为服务级。Claw = coding-agent 服务，含定时任务管理、到期分发、受理协调和既有 Session 运行时；GaussDB = 调度与 Session 存储。
 ' 粒度：Claw 内部组件之间的协作只在详细时序图中展开。
 ' 设计原因：在服务层面讲清一个业务故事；各阶段细节见详细时序图。
-' 表示法：同步调用用实线实心箭头并配返回，定时触发画为来自图外的发现消息，激活条表示处理期间。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，定时触发画为来自图外的发现消息。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
 title 每天视频巡逻检查：业务总览（待实现）
 hide footbox
@@ -273,6 +289,7 @@ database "GaussDB" as Store
 autonumber
 == 配置定时任务 ==
 Operator -> Mate ++ : 配置“每天 22:00 视频巡逻检查”
+activate Operator
 note right of Mate : Mate 内部处理待定（评审 Todo T8）
 Mate -> Claw ++ : 请求创建定时任务
 Claw -> Mate ++ : 确认该 Agent 可以这样配置
@@ -281,6 +298,7 @@ Claw -> Store ++ : 保存定时任务
 return 已保存
 return 创建成功，附接下来的运行时间
 return 任务已生效，显示下次运行时间
+deactivate Operator
 == 每天 22:00 自动运行 ==
 [-> Claw ++ : 到达 22:00
 Claw -> Store ++ : 记下本次运行
@@ -297,9 +315,11 @@ return 已保存
 deactivate Claw
 == 查看巡逻结果 ==
 Operator -> Mate ++ : 查看巡逻结果
+activate Operator
 Mate -> Claw ++ : 查询运行记录和对应会话
 Claw -> Store ++ : 读取运行记录和会话
 return 运行记录和会话内容
 return 运行记录、巡逻结论和工具证据
 return 显示每次运行的巡逻结论和证据
+deactivate Operator
 @enduml

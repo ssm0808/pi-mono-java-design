@@ -875,7 +875,7 @@ Run不增加 status、updatedAt、revision、模型回答或完整 Schedule；�
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
-[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L176)
+[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L184)
 
 图中200必须以结果记录成功提交为前提；请求/授权/权威故障走HTTP错误。已占用时保存本次busy拒绝，不释放另一Run的槽位；取得槽位后才进入共用准备与受理。准备结果只固定本次输入，最终受理仍检查最新状态。受理后的执行推进复用[自动总览](README.md#52-自动触发总览)的启动及对账阶段，不要求HTTP响应送达后才开始，也不等待模型结束；手动入口不移动自动计划。
 
@@ -1134,7 +1134,7 @@ Accept-Language: zh-CN
 
 ![Claw 配置保存](schedule_configuration_save.svg)
 
-[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L146)
+[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L151)
 
 1. Mate 验证用户身份及管理资格；Claw 验证服务来源、获准操作/资源和请求形状。创建生成新的任务 ID；更新只接受提交字段，省略与 null 分开处理，不要求客户端携带版本或请求身份。
 2. 在数据库事务外只读解析 Agent、凭据绑定及配置资格，固定当次校验依据。不能用会发布运行目录的 prepare 充当纯校验，也不能持数据库锁跨远程目录或授权 I/O；权威依赖暂不可用返回503。

@@ -104,7 +104,7 @@
 
 ![定时任务整体时序](scheduled_task_overview.svg)
 
-[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L251)
+[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L267)
 
 | 阶段 | 下钻 |
 |---|---|
@@ -165,7 +165,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ![定时任务全局目标类图](scheduled_task_architecture.svg)
 
-[原尺寸 SVG](scheduled_task_architecture.svg) · [PlantUML 源码](diagram.puml#L40)
+[原尺寸 SVG](scheduled_task_architecture.svg) · [PlantUML 源码](diagram.puml#L45)
 
 | 层次 | 责任 |
 |---|---|
@@ -184,7 +184,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ![Claw 配置保存](schedule_configuration_save.svg)
 
-[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L146)
+[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L151)
 
 **正常调用如何完成：** Mate 管理入口以可信服务调用 Claw（Mate 内部处理待定，见 T8）→ Claw 核验服务来源、获准操作与目标资源，校验请求形状 → 事务外向 Mate 只读检查 Agent、凭据绑定与管理授权 → 事务内插入（创建）或锁定最新行合并提交字段（更新），校验合并结果 → 一次写入并提交 → 按已保存结果返回完整资源与计划时间摘要。
 
@@ -196,7 +196,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
-[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L176)
+[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L184)
 
 **正常调用如何完成：** 核验 Mate 服务、获准操作和目标 → 短事务读取当前任务，预留一个手动 Run 并占用共用任务槽，不改自动计划 → 进入[共用受理流程](#run-admission-sequence) → 返回 200 和带 sessionId 的 Run，不等待业务完成。
 
@@ -228,7 +228,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ![共用受理流程](schedule_run_admission.svg)
 
-[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L208)
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L220)
 
 **正常调用如何完成：** 向 Mate 核验本次 Run 的执行授权并解析定义与凭据引用 → 固定拟建 Session ID，由 Mate 按资源 ID 和授权登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、认领、授权、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
 

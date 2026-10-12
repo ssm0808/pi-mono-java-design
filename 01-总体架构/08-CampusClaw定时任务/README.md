@@ -213,7 +213,7 @@ public void summarizeAlarms() {
 
 ![定时运行共用准备与原子受理](schedule_run_admission.svg)
 
-[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L208)
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L220)
 
 本图只画正常受理。执行资格被拒、Mate 归属登记未确认和 Runtime 准备失败三类失败分别属于只读授权、跨服务持久登记和本地准备，核对责任不同，处理规则见[失败处理与恢复](design-restructured.md#failure-recovery)；图仍只描述同次 Run 受理，不展开模型执行。
 
@@ -280,7 +280,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ![定时任务全局目标类图](scheduled_task_architecture.svg)
 
-[原尺寸 SVG](scheduled_task_architecture.svg) · [PlantUML 源码](diagram.puml#L40)
+[原尺寸 SVG](scheduled_task_architecture.svg) · [PlantUML 源码](diagram.puml#L45)
 
 | 层次 | 责任与生命周期 |
 |---|---|
