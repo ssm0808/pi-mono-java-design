@@ -72,7 +72,7 @@ skinparam sequenceMessageAlign left
 skinparam maxMessageSize 190
 hide footbox
 autonumber
-title 读取轮次（UC2，目标设计，待实现）
+title 读取轮次（UC2）
 participant "事件接口" as Web
 participant "轮次查询" as Svc
 database "GaussDB" as DB
@@ -118,7 +118,7 @@ skinparam ArrowColor #425B70
 skinparam classBackgroundColor #F1F5F9
 skinparam classBorderColor #8496A4
 hide empty members
-title Agent 用户事件与事件轮次：目标类图\n除标注“已实现”外均为待实现
+title Agent 用户事件与事件轮次的类图
 class "AgentUserEventController" as AgentWeb <<Web / 单例>>
 class "RuntimeEventController" as SessionWeb <<已实现 / Web>> {
   +list()
