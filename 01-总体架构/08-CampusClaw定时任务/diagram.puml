@@ -270,30 +270,31 @@ participant "Mate" as Mate
 participant "Claw" as Claw
 participant "Session 运行时" as Runtime
 database "存储" as Store
-== 保存定时任务 ==
-Operator -> Mate : 保存定时任务\nAgent、消息、Cron 规则
-Mate -> Claw : Mate 处理后\n调用 Claw 创建任务
+== 配置定时任务 ==
+Operator -> Mate : 配置“每天 22:00 视频巡逻检查”
+Mate -> Claw : 请求创建定时任务
 note over Operator, Mate : Mate 内部处理待定（评审 Todo T8）
-Claw -> Mate : 检查 Agent 绑定和管理授权
-Mate --> Claw : 可信绑定
-Claw -> Store : 保存启用的定时任务
-Claw --> Mate : 定时任务及接下来的运行时间
-Mate --> Operator : 定时任务及接下来的运行时间
-== 到点自动运行 ==
-Claw -> Store : 认领到期触发并记录 Run
-Claw -> Mate : 核验执行授权，解析定义和凭据引用
-Claw -> Mate : 登记本次新 Session 的归属
-Claw -> Runtime : 受理 Run
-Runtime -> Store : 新建 Session、首条消息、\n根执行和 Run 关联
-Runtime -> Runtime : 在新 Session 中\n运行 Agent 及其工具
-Runtime -> Store : 持久化事件和根执行结果
-Claw -> Store : 更新 Run 摘要
-== 查看结果 ==
+Claw -> Mate : 确认该 Agent 可以被这样配置
+Mate --> Claw : 确认可以
+Claw -> Store : 保存定时任务
+Claw --> Mate : 创建成功，附接下来的运行时间
+Mate --> Operator : 显示任务已生效及下次运行时间
+== 每天 22:00 自动运行 ==
+Claw -> Store : 到点，记下本次运行
+Claw -> Mate : 确认本次可以执行
+Claw -> Mate : 登记本次新会话归谁所有
+Claw -> Runtime : 开始本次运行
+Runtime -> Store : 创建新会话
+Runtime -> Runtime : 绑定的 Agent 执行视频巡逻检查
+Runtime -> Store : 保存检查过程和结论
+Claw -> Store : 记下本次运行的结果
+== 查看巡逻结果 ==
 Operator -> Mate : 查看该任务的运行记录
-Mate -> Claw : Mate 处理后\n调用 Claw 查询 Run
-Claw --> Mate : 带 Session ID 的运行列表
-Operator -> Mate : 打开某次运行的会话
-Mate -> Runtime : 调用 Claw 读取该 Session
-Runtime --> Mate : 巡逻结果和工具证据
-Mate --> Operator : 巡逻结果和工具证据
+Mate -> Claw : 查询该任务的运行记录
+Claw --> Mate : 运行记录，每条带会话入口
+Mate --> Operator : 显示运行记录
+Operator -> Mate : 打开某次运行
+Mate -> Runtime : 读取该次运行的会话
+Runtime --> Mate : 巡逻结论和工具证据
+Mate --> Operator : 显示巡逻结论和证据
 @enduml

@@ -93,7 +93,7 @@
 
 ### 2.2 整体时序
 
-场景：运营人员配置“每天 22:00 执行一次园区视频巡逻检查”，从保存任务开始，经过一次到点执行，到查看该次运行结果结束。覆盖 BU1、BU3、BU6；状态：目标设计，待实现。图只画正常流程，每个阶段的内部细节见对应的详细时序。
+场景：运营人员配置“每天 22:00 执行一次园区视频巡逻检查”，从配置任务开始，经过一次 22:00 自动运行，到查看该次巡逻结果结束。覆盖 BU1、BU3、BU6；状态：目标设计，待实现。图只画正常流程，每个阶段的内部细节见对应的详细时序。
 
 | 参与者 | 职责 | 映射 |
 |---|---|---|
@@ -109,9 +109,9 @@
 
 | 阶段 | 下钻 |
 |---|---|
-| 保存任务 | [§3.3 保存任务配置](#save-sequence) |
-| 到点执行 | [§3.5 自动触发](#scheduled-run-sequence)，其中受理阶段见 [§3.6 共用受理](#run-admission-sequence) |
-| 查看结果 | Run 读取为单次查询，规则见[配置 §4.11](configuration.md#schedule-run-read-lifecycle)；Session 读取沿用 M06 既有接口 |
+| 配置定时任务 | [§3.3 保存任务配置](#save-sequence) |
+| 每天 22:00 自动运行 | [§3.5 自动触发](#scheduled-run-sequence)，其中受理阶段见 [§3.6 共用受理](#run-admission-sequence) |
+| 查看巡逻结果 | Run 读取为单次查询，规则见[配置 §4.11](configuration.md#schedule-run-read-lifecycle)；Session 读取沿用 M06 既有接口 |
 
 <a id="key-decisions"></a>
 
@@ -181,7 +181,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ### 3.3 保存任务配置的详细时序（UC1、UC4）
 
-展开整体时序的“保存任务”阶段。场景：保存视频巡逻检查任务，从调用 Claw 到返回持久化结果。状态：待实现。
+展开整体时序的“配置定时任务”阶段。场景：保存视频巡逻检查任务，从调用 Claw 到返回持久化结果。状态：待实现。
 
 ![Claw 配置保存](schedule_configuration_save.svg)
 
@@ -193,7 +193,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ### 3.4 立即运行的详细时序（BU4、UC6）
 
-独立对应业务用例，不展开整体时序的阶段：它与“到点执行”共用受理路径，只是触发方式不同。场景：手动触发一次视频巡逻检查，从请求到返回 Run 回执。状态：待实现。
+独立对应业务用例，不展开整体时序的阶段：它与“每天 22:00 自动运行”共用受理路径，只是触发方式不同。场景：手动触发一次视频巡逻检查，从请求到返回 Run 回执。状态：待实现。
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
@@ -205,7 +205,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ### 3.5 自动触发与原子受理的详细时序（UC11、UC12）
 
-展开整体时序的“到点执行”阶段。场景：每天 22:00 为“视频巡逻检查”创建一个新 Session，从一次到期扫描开始，到新 Session 根执行终态入库结束；前提是任务为 active 且身份策略可用。状态：目标设计，待实现。
+展开整体时序的“每天 22:00 自动运行”阶段。场景：每天 22:00 为“视频巡逻检查”创建一个新 Session，从一次到期扫描开始，到新 Session 根执行终态入库结束；前提是任务为 active 且身份策略可用。状态：目标设计，待实现。
 
 图中调度器映射 `ScheduleDispatcher`，负责分发、启动和对账；定时任务管理映射 M10 应用服务，负责认领、准备与受理；Session 运行时映射执行协调器与公共 Session；存储是同一 GaussDB 事务边界。它们是职责映射，不表示独立进程或远程调用。“准备并受理”阶段在 [§3.6](#run-admission-sequence) 展开。
 
