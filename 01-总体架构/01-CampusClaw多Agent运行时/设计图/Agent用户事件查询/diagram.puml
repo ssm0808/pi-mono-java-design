@@ -19,7 +19,7 @@ skinparam sequenceMessageAlign left
 skinparam maxMessageSize 190
 hide footbox
 autonumber
-title Trace 读取用户请求与轮次的整体时序（目标设计，待实现）
+title Trace 读取用户请求与轮次的整体时序
 participant "Mate" as Mate
 participant "Claw" as Claw
 database "GaussDB" as DB
