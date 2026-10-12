@@ -6,7 +6,7 @@
 ' event/CommittedEventProjection.java:project
 ' persistence/MyBatisRuntimeExecutionControlRepository.java:linkCommittedEvent
 ' 已观察行为：事件只能按单个 Session 读取；轮次以根执行和结果段关联的形式存在。
-' 设计原因：Mate 先按 Agent 回看用户输入，再按需展开其中一轮。
+' 设计原因：Trace 先按 Agent 列出用户请求，再按需展开其中一轮的执行轨迹。
 ' 待实现：两个读取接口和事件表 agent_id 索引。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -19,26 +19,26 @@ skinparam sequenceMessageAlign left
 skinparam maxMessageSize 190
 hide footbox
 autonumber
-title 回看一个 Agent 的用户输入（目标设计，待实现）
-actor "运营人员" as Operator
+title 在 Trace 中查看一个 Agent 的用户请求（目标设计，待实现）
+actor "开发运维人员" as Operator
 participant "Mate" as Mate
 participant "事件查询" as Query
 database "事件存储" as Store
-Operator -> Mate : 选择一个 Agent 和要回看的时间段
-Mate -> Mate : 确认该运营人员可以查看这个 Agent
-Mate -> Query : 请求这个 Agent 在该时间段内收到的用户输入
+Operator -> Mate : 在 Trace 中选择一个 Agent 和时间段
+Mate -> Mate : 确认该用户可以查看这个 Agent
+Mate -> Query : 请求这个 Agent 在该时间段内收到的用户请求
 Query -> Query : 检查请求是否合法
-Query -> Store : 按时间顺序读取该 Agent 各会话的用户输入
-Store --> Query : 用户输入及其所属会话
-Query --> Mate : 一页用户输入和继续读取的位置
-Mate --> Operator : 按时间顺序展示用户输入
-Operator -> Mate : 点开其中一条输入
-Mate -> Query : 请求这条输入所在的那一轮
-Query -> Store : 找到这条输入所属的那一轮
+Query -> Store : 按时间顺序读取该 Agent 各会话的用户请求
+Store --> Query : 用户请求及其所属会话
+Query --> Mate : 一页用户请求和继续读取的位置
+Mate --> Operator : 按时间顺序展示用户请求
+Operator -> Mate : 点开其中一条请求
+Mate -> Query : 请求这条事件所在的那一轮
+Query -> Store : 找到这条事件所属的那一轮
 Query -> Store : 按发生顺序读取这一轮的全部事件
 Store --> Query : 这一轮的事件和是否已结束
 Query --> Mate : 这一轮的完整过程和是否已结束
-Mate --> Operator : 展示这一轮 Agent 做了什么
+Mate --> Operator : 展示这一轮的执行轨迹
 @enduml
 
 @startuml event_turn_resolution
