@@ -49,7 +49,7 @@ def render_source(source):
         if result.returncode:
             return [f'{source.relative_to(ROOT)}: PlantUML failed: {result.stdout}{result.stderr}']
         errors = []
-        for match in BLOCK.finditer(source.read_text()):
+        for match in BLOCK.finditer(source.read_text(encoding='utf-8')):
             name = match.group(1)
             generated, tracked = copy.with_name(name + '.svg'), source.with_name(name + '.svg')
             if not generated.is_file() or not tracked.is_file():
@@ -64,10 +64,12 @@ def check(render=False):
     sources = files('diagram.puml')
     block_count = 0
     for source in files('*.puml'):
-        if not source.read_text().isascii():
-            errors.append(f'{source.relative_to(ROOT)}: non-ASCII PlantUML')
+        try:
+            source.read_bytes().decode('utf-8')
+        except UnicodeDecodeError:
+            errors.append(f'{source.relative_to(ROOT)}: PlantUML is not UTF-8')
     for source in sources:
-        text = source.read_text()
+        text = source.read_text(encoding='utf-8')
         names = set()
         preamble = text.split("@startuml", 1)[0]
         for match in BLOCK.finditer(text):
@@ -88,9 +90,9 @@ def check(render=False):
             if participants > 6 or messages > 25 or branches > 2:
                 warnings.append(f'{name}: {participants} participants, {messages} messages, '
                                 f'{branches} conditional groups; inspect scope and justify boundaries')
-            if not re.search(r"^'.*(?:Source|Baseline|source|baseline|Evidence)", preamble + block, re.M):
+            if not re.search(r"^'.*(?:Source|Baseline|source|baseline|Evidence|源码|基线|证据)", preamble + block, re.M):
                 errors.append(f'{name}: missing source-evidence comment')
-            if not re.search(r"^'.*(?:Observed behavior|Design reason|Architecture change|Presentation)", block, re.M):
+            if not re.search(r"^'.*(?:Observed behavior|Design reason|Architecture change|Presentation|已观察行为|设计原因|架构变更|表达方式)", block, re.M):
                 errors.append(f'{name}: missing design-reason comment')
     for svg in files('*.svg'):
         try:
@@ -98,7 +100,7 @@ def check(render=False):
         except ET.ParseError as error:
             errors.append(f'{svg.relative_to(ROOT)}: invalid XML: {error}')
     for document in files('*.md'):
-        text = document.read_text()
+        text = document.read_text(encoding='utf-8')
         if re.search(r'^\s*```\s*mermaid\b', text, re.M | re.I):
             errors.append(f'{document.relative_to(ROOT)}: Mermaid fence')
         prose = re.sub(r'```.*?```', '', text, flags=re.S)
@@ -114,7 +116,7 @@ def check(render=False):
                 continue
             if path.suffix == '.puml' and fragment:
                 number = re.fullmatch(r'L(\d+)', fragment)
-                lines = path.read_text().splitlines()
+                lines = path.read_text(encoding='utf-8').splitlines()
                 if not number or not (1 <= int(number[1]) <= len(lines)):
                     errors.append(f'{document.relative_to(ROOT)}: invalid anchor {link.group(1)}')
                 elif not lines[int(number[1]) - 1].startswith('@startuml '):
