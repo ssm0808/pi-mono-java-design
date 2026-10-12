@@ -6,7 +6,7 @@
 ' event/CommittedEventProjection.java:project
 ' persistence/MyBatisRuntimeExecutionControlRepository.java:linkCommittedEvent
 ' 已观察行为：事件只能按单个 Session 读取；轮次以根执行和结果段关联的形式存在。
-' 设计原因：只画 Mate 调用后 Claw 内部的交互；Mate 的认证与权限判断不在本图范围。
+' 设计原因：服务级视图，只画 Mate、Claw 与 GaussDB 之间的交互；Claw 内部分层见详细时序与类图。
 ' 待实现：两个读取接口和事件表 agent_id 索引。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -19,52 +19,36 @@ skinparam sequenceMessageAlign left
 skinparam maxMessageSize 190
 hide footbox
 autonumber
-title Trace 的两次读取在 Claw 内部的交互（目标设计，待实现）
+title Trace 读取用户请求与轮次的整体时序（目标设计，待实现）
 participant "Mate" as Mate
-participant "接口层" as Web
-participant "查询服务" as Svc
-participant "事件投影" as Proj
-database "存储" as Store
+participant "Claw" as Claw
+database "GaussDB" as DB
 == 列出用户请求 ==
-Mate -> Web : 查询某个 Agent 在时间段内收到的用户请求
-activate Web
-Web -> Web : 校验 Agent、时间段和游标
-Web -> Svc : 按 Agent 和时间段查询
-activate Svc
-Svc -> Store : 按时间顺序读取未删除会话中的用户请求
-activate Store
-Store --> Svc : 一页用户请求及其所属会话
-deactivate Store
-Svc -> Proj : 转成公共事件
-activate Proj
-Proj --> Svc : 公共事件
-deactivate Proj
-Svc --> Web : 一页用户请求和继续读取的位置
-deactivate Svc
-Web --> Mate : 按时间顺序的用户请求
-deactivate Web
+Mate -> Claw : 查询某个 Agent 在时间段内收到的用户请求
+activate Claw
+Claw -> Claw : 校验 Agent、时间段和游标
+Claw -> DB : 按时间顺序读取该 Agent 未删除会话中的用户请求
+activate DB
+DB --> Claw : 一页用户请求及其所属会话
+deactivate DB
+Claw -> Claw : 转成与 ListEvents 相同的公共事件
+Claw --> Mate : 按时间顺序的用户请求和继续读取的位置
+deactivate Claw
 == 展开其中一轮 ==
-Mate -> Web : 读取某条事件所在的那一轮
-activate Web
-Web -> Web : 校验会话、事件和游标
-Web -> Svc : 按事件查询所在轮次
-activate Svc
-Svc -> Store : 找到这条事件所属的那一轮
-activate Store
-Store --> Svc : 这一轮的根执行和是否已结束
-deactivate Store
-Svc -> Store : 按发生顺序读取这一轮的事件
-activate Store
-Store --> Svc : 这一轮的一页事件
-deactivate Store
-Svc -> Proj : 转成公共事件
-activate Proj
-Proj --> Svc : 公共事件
-deactivate Proj
-Svc --> Web : 这一轮的事件、是否已结束和继续读取的位置
-deactivate Svc
-Web --> Mate : 这一轮的完整过程
-deactivate Web
+Mate -> Claw : 读取某条事件所在的那一轮
+activate Claw
+Claw -> Claw : 校验会话、事件和游标
+Claw -> DB : 找到这条事件所属的根执行
+activate DB
+DB --> Claw : 根执行和是否已结束
+deactivate DB
+Claw -> DB : 按发生顺序读取这一轮的事件
+activate DB
+DB --> Claw : 这一轮的一页事件
+deactivate DB
+Claw -> Claw : 转成公共事件
+Claw --> Mate : 这一轮的事件、是否已结束和继续读取的位置
+deactivate Claw
 @enduml
 
 @startuml event_turn_resolution
@@ -89,27 +73,35 @@ skinparam maxMessageSize 190
 hide footbox
 autonumber
 title 解析并读取一个轮次（UC2，目标设计，待实现）
-participant "Mate" as Mate
-participant "查询服务" as Query
-database "事件表" as Events
-database "执行表" as Exec
-Mate -> Query : GET sessionId + eventId 所在轮次\nlimit、afterEventId
-activate Query
-Query -> Events : 按 (sessionId, eventId) 读取事件
-activate Events
-Events --> Query : 事件类型和 payload
-deactivate Events
-Query -> Exec : 按结果段关联或停止请求的目标定位执行
-activate Exec
-Exec --> Query : executionId、rootEventId、state
-deactivate Exec
-Query -> Events : 按 eventSeq 读取游标之后的关联事件\n和停止事件，取 limit + 1 条
-activate Events
-Events --> Query : 一页已提交事件
-deactivate Events
-Query -> Query : 用共享的 CommittedEventProjection 投影
-Query --> Mate : rootEventId、finished、events、nextCursor
-deactivate Query
+participant "RuntimeEventController" as Web
+participant "EventTurnQueryService" as Svc
+participant "RuntimeEventReadRepository" as Repo
+participant "CommittedEventProjection" as Proj
+[-> Web : GET sessionId + eventId 所在轮次\nlimit、afterEventId
+activate Web
+Web -> Web : 校验 sessionId、eventId、limit 和游标
+Web -> Svc : 查询事件所在轮次
+activate Svc
+Svc -> Repo : 按 (sessionId, eventId) 读取起点事件
+activate Repo
+Repo --> Svc : 事件类型和 payload
+deactivate Repo
+Svc -> Repo : 按结果段关联或停止请求的目标定位根执行
+activate Repo
+Repo --> Svc : executionId、rootEventId、state
+deactivate Repo
+Svc -> Repo : 按 eventSeq 读取游标之后的关联事件\n和停止事件，取 limit + 1 条
+activate Repo
+Repo --> Svc : 一页已提交事件
+deactivate Repo
+Svc -> Proj : 逐条投影为公共事件
+activate Proj
+Proj --> Svc : 公共事件
+deactivate Proj
+Svc --> Web : rootEventId、finished、events、nextCursor
+deactivate Svc
+[<-- Web : ResultBean
+deactivate Web
 @enduml
 
 @startuml agent_user_events_classes
