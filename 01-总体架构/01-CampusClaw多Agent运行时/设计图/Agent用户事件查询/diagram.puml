@@ -32,7 +32,7 @@ activate DB
 DB --> Claw : 用户请求及所属会话
 deactivate DB
 Claw -> Claw : 转换为公共事件
-Claw --> Mate : 返回一页用户请求及下一页位置
+Claw --> Mate : 返回一页用户请求及下一页页码
 deactivate Claw
 Mate -> Claw : 查询某条用户请求所在的轮次
 activate Claw
@@ -46,7 +46,7 @@ activate DB
 DB --> Claw : 该轮次的事件
 deactivate DB
 Claw -> Claw : 转换为公共事件
-Claw --> Mate : 返回该轮次的事件、结束状态及下一页位置
+Claw --> Mate : 返回该轮次的事件、结束状态及下一页页码
 deactivate Claw
 deactivate Mate
 @enduml
@@ -89,12 +89,12 @@ Svc -> DB : 经结果段关联或停止请求的目标定位轮次
 activate DB
 DB --> Svc : 轮次及其结束状态
 deactivate DB
-Svc -> DB : 按发生顺序读取该轮次在游标之后的事件
+Svc -> DB : 按发生顺序读取该轮次的一页事件
 activate DB
 DB --> Svc : 该轮次的一页事件
 deactivate DB
 Svc -> Svc : 转换为公共事件
-Svc --> Web : 该轮次的事件、结束状态及下一页位置
+Svc --> Web : 该轮次的事件、结束状态及下一页页码
 deactivate Svc
 [<-- Web : 返回该轮次的事件
 deactivate Web

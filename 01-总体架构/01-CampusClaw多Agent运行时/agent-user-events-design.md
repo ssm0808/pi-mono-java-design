@@ -13,14 +13,14 @@
 
 ### 评审结论
 
-2026-10-12，Lotus 确认四项方向：返回全部五种用户事件；权限由 Mate 判断；分页使用透明游标；定时任务与子 Agent 会话按同一规则返回。精确契约尚未生成，整体评审结论待契约评审后补充。
+2026-10-12，Lotus 确认四项方向：返回全部五种用户事件；权限由 Mate 判断；分页使用透明游标（后于同日评审改为与 ListEvents 一致的整数页码）；定时任务与子 Agent 会话按同一规则返回。精确契约尚未生成，整体评审结论待契约评审后补充。
 
 ### 评审 Todo
 
 | # | 事项 | 负责人 | 来源 |
 |---|---|---|---|
 | T2 | Mate 侧哪些角色可读整个 Agent 的用户输入，以及用户审计方式 | Mate | [D2](#d2) |
-| T4 | 校准时间范围上限 31 天、页大小 200 与游标完整性安全间隔 | 实施 | [§5.2.2](#capacity) |
+| T4 | 校准时间范围上限 31 天、页大小 200 与偏移上限 10000 | 实施 | [§5.2.2](#capacity) |
 | T6 | 生成两个操作的 operation JSON 与 HTML 评审页 | 实施 | [§4](#api) |
 
 ### 需求信息
@@ -50,7 +50,7 @@
 | R4 | 用户、归属与权限由 Mate 维护，Claw 不保存身份副本、不推导用户可见范围 | 安全 | [Claw 数据库设计 §3.1](../../03-数据与存储/Claw数据库设计.md#mate-ownership) |
 | R5 | 已删除的会话不再出现在任一接口结果中 | 安全 | 推导自 [Session 删除](../../03-数据与存储/01-会话记忆GaussDB/README.md#delete-session)，需确认 |
 | R6 | 查询有界：时间范围与页大小有上限，读取不阻塞执行 | 稳定性 | 推导自 [历史查询 §3](chat-events-history-design.md#integer-pagination)，需确认 |
-| R7 | 分页使用透明游标：游标由上一条事件的公开字段组成，调用方可读、可自行构造 | 约束 | Lotus 2026-10-12 评审 |
+| R7 | 分页使用与 ListEvents 一致的整数页码 page/nextPage，不使用游标 | 约束 | Lotus 2026-10-12 评审 |
 | R8 | 按 Agent 读取时按事件类别筛选，类别分为用户事件、Agent 事件和会话事件 | 功能 | Lotus 2026-10-12 评审 |
 
 ## 2. 整体方案
@@ -99,8 +99,8 @@
 
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
-| UC1 ListAgentEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话中指定类别（用户事件、Agent 事件或会话事件）的事件，按 createdAt、sessionId、eventSeq 升序，附 nextCursor | category 必填，取 user、agent 或 session；from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
-| UC2 GetEventTurn | BU2 | Mate | Mate 已完成该会话的鉴权 | 返回事件所在轮次的 rootEventId、finished、按 eventSeq 升序的完整事件页与 nextCursor | 事件身份为 sessionId + eventId；会话级配置变更与手动压缩不属于任何轮次 |
+| UC1 ListAgentEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话中指定类别（用户事件、Agent 事件或会话事件）的事件，按 createdAt、sessionId、eventSeq 升序，附 nextPage | category 必填，取 user、agent 或 session；from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
+| UC2 GetEventTurn | BU2 | Mate | Mate 已完成该会话的鉴权 | 返回事件所在轮次的 rootEventId、finished、按 eventSeq 升序的完整事件页与 nextPage | 事件身份为 sessionId + eventId；会话级配置变更与手动压缩不属于任何轮次 |
 
 <a id="data-model"></a>
 
@@ -156,23 +156,13 @@ JOIN t_sessions s ON s.id = e.session_id
 WHERE e.agent_id = #{agentId}
   AND e.type IN (该类别的全部类型)  -- user、agent、session 各对应 type 前缀，各自命中一个部分索引
   AND e.created_at >= #{from} AND e.created_at < #{to}
-  -- 带游标时追加：
-  AND (e.created_at, e.session_id, e.event_seq) > (#{afterCreatedAt}, #{afterSessionId}, #{afterEventSeq})
 ORDER BY e.created_at, e.session_id, e.event_seq
-LIMIT #{limit + 1}
+LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 ```
 
-步骤为：校验 agentId（`ClawConstants.Agent.ID_REGEX`）、category、from/to、limit 与游标；Service 归一 limit 默认 50；有游标时按 `(sessionId, eventId)` 主键取该事件的 event_seq，再执行上述读取；多取一条判断是否还有下一页，有则以本页最后一条生成 nextCursor；逐条用 `CommittedEventProjection` 投影并包上 sessionId。事件只读一次，不另查总数。
+步骤为：校验 agentId（`ClawConstants.Agent.ID_REGEX`）、category、from/to、page 与 limit；Service 归一 page 默认 1、limit 默认 50，并拒绝偏移 `(page-1)*limit` 超过 10000；执行上述读取，多取一条判断是否还有下一页，有则返回 `nextPage=page+1`；逐条用 `CommittedEventProjection` 投影并包上 sessionId。事件只读一次，不另查总数。
 
-游标解析规则：
-
-| 情况 | 处理 |
-|---|---|
-| 游标事件存在，且 createdAt 与该事件一致、类型属于本次 category、属于本 Agent、位于 `[from, to)` | 用 `(createdAt, sessionId, eventSeq)` 作为起点 |
-| 游标事件所在会话已删除 | 该会话的事件都不会再返回，用 `(createdAt, sessionId, +∞)` 作为起点，不报错 |
-| 会话存在但没有该事件，或字段与该事件不一致、不在本次范围内 | 400 `INVALID_AGENT_EVENT_QUERY` |
-
-eventSeq 只在服务端用于比较，不进入游标或响应。
+每页独立读取，不冻结快照。翻页期间如有会话被删除，或有新事件提交到已读过的位置之前，后续页会整体移动，可能重复或漏读，见 F6。eventSeq 只在服务端用于排序，不进入响应。
 
 排序说明：createdAt 是形成记录时保存一次的 UTC 整秒时间，同一秒内按 sessionId、eventSeq 稳定排序。不同会话之间没有因果顺序，这个顺序只是时间顺序。同一会话内，跨实例时钟偏差可能让 createdAt 与提交顺序不一致；需要会话内因果顺序时用 UC2 或 ListEvents（按 eventSeq）。
 
@@ -200,7 +190,7 @@ eventSeq 只在服务端用于比较，不进入游标或响应。
 | user.interrupt | payload.targetEventId 即根消息 eventId，经唯一索引 `(session_id, root_event_id)` 得到执行 | `acceptInterrupt` 只追加事件、不关联结果段；B09 保证 targetEventId 指向原 user.message |
 | 用户主动改模型/思考/模式、手动压缩 | 不属于任何轮次，返回 `EVENT_TURN_NOT_FOUND` | 这些事件在执行之外提交 |
 
-整轮事件 = 该执行所有结果段关联的事件 ∪ `stop_event_id` 指向的停止事件，按 eventSeq 升序分页。游标是上一页最后一条的 eventId，服务端取其 event_seq 后读取更大的事件；游标事件必须属于同一轮次，否则返回 400 `INVALID_EVENT_TURN_QUERY`。finished 取 `state='TERMINAL'`；未结束的轮次返回目前已提交的事件，之后还会追加。
+整轮事件 = 该执行所有结果段关联的事件 ∪ `stop_event_id` 指向的停止事件，按 eventSeq 升序，用 page/limit 分页，规则同 ListEvents。轮次内事件只在尾部追加，翻页不会移动已读位置。finished 取 `state='TERMINAL'`；未结束的轮次返回目前已提交的事件，之后还会追加。
 
 已观察差距：执行中自动压缩经 `RuntimeCompactionEventProjector#persistCompaction` 直接追加，未调用 `linkCommittedEvent`，因此当前 session.compacted 不在结果段中。本设计目标是把执行内压缩也关联到当前段（待实现），在此之前 UC2 返回的轮次不含自动压缩事件，且该事件作为起点会返回 `EVENT_TURN_NOT_FOUND`。
 
@@ -212,10 +202,10 @@ eventSeq 只在服务端用于比较，不进入游标或响应。
 
 | 操作 | 方法与路径 | 成功结果 | 详细契约 |
 |---|---|---|---|
-| ListAgentEvents | `GET /agents/{agentId}/events?category=&from=&to=&limit=&afterCreatedAt=&afterSessionId=&afterEventId=` | `{events:[{sessionId, event}], nextCursor}` | 本节，待生成 |
-| GetEventTurn | `GET /sessions/{sessionId}/events/{eventId}/turn?limit=&afterEventId=` | `{rootEventId, finished, events, nextCursor}` | 本节，待生成 |
+| ListAgentEvents | `GET /agents/{agentId}/events?category=&from=&to=&page=&limit=` | `{events:[{sessionId, event}], nextPage}` | 本节，待生成 |
+| GetEventTurn | `GET /sessions/{sessionId}/events/{eventId}/turn?page=&limit=` | `{rootEventId, finished, events, nextPage}` | 本节，待生成 |
 
-**参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。category 必填，只能传一个值：`user` 返回五种 user.*，`agent` 返回七种 agent.*，`session` 返回五种 session.*（空闲、模型/思考/模式变更、压缩）；其他值返回 400。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
+**参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。category 必填，只能传一个值：`user` 返回五种 user.*，`agent` 返回七种 agent.*，`session` 返回五种 session.*（空闲、模型/思考/模式变更、压缩）；其他值返回 400。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。page 默认 1、为正整数；limit 默认 50、范围 1～200，与 ListEvents 相同；UC1 的偏移 `(page-1)*limit` 不超过 10000，超过时缩小时间范围分段查询。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
 
 <a id="interface-conventions"></a>
 
@@ -226,18 +216,11 @@ eventSeq 只在服务端用于比较，不进入游标或响应。
 - 跨会话顺序：按 createdAt 升序，同秒以 sessionId、eventSeq 稳定排序，不引入全局序号。不同会话之间没有因果顺序，会话内的因果顺序以 UC2 或 ListEvents 为准。
 - 时间参数：沿用 Claw 的 UTC 整秒契约，Mate 需把毫秒时间转换后传入；超过 31 天要分段查询。
 
-<a id="transparent-cursor"></a>
+<a id="integer-page"></a>
 
-**透明游标。** 游标是上一页最后一条事件的位置，用公开字段表达，调用方可以读取，也可以用已知事件自行构造。省略游标表示从头读取。
+**分页。** 两个接口都使用与 [ListEvents](chat-events-history-design.md#integer-pagination) 一致的整数页码：请求 `page`，有下一页时响应 `nextPage=page+1`，否则为 null；不返回 total。选择页码而不是游标，是为了与 ListEvents 一致、调用方用法最简单。代价有两点：深页要跳过前面的行，越翻越慢，所以 UC1 限制偏移不超过 10000；翻页期间的删除或晚提交会让后续页移动，跨页不保证无重复、无遗漏（F6）。需要完整结果时，Mate 用已结束的时间段查询，并按 sessionId + eventId 去重。
 
-| 接口 | 请求参数 | 响应 `nextCursor` | 规则 |
-|---|---|---|---|
-| UC1 | `afterCreatedAt`、`afterSessionId`、`afterEventId` | `{createdAt, sessionId, eventId}` 或 null | 三个参数同时出现或同时省略；格式同 createdAt、sessionId、eventId；解析规则见 [§3.3](#uc1-detail) |
-| UC2 | `afterEventId` | `{eventId}` 或 null | 必须是同一轮次中的事件 |
-
-游标字段因此成为公开契约，排序键不能随意更换，服务端要校验调用方构造的游标。不用整数页码，是因为跨会话深页 OFFSET 成本高，且删除会移动后续位置。
-
-nextCursor 为 null 只表示本次读取已无下一条，不表示以后不会追加；轮次未结束或 `to` 晚于当前时间时，之后可用最后一条构造游标继续读取。
+nextPage 为 null 只表示本次读取已无下一页，不表示以后不会追加。
 
 **响应示例。** UC1 的 `event` 与 UC2 的 `events[i]` 都是共享的完整事件，字段不变；UC1 只在外层加 sessionId，Mate 用它映射公共 Chat 并调用 UC2。
 
@@ -257,16 +240,12 @@ nextCursor 为 null 只表示本次读取已无下一条，不表示以后不会
         }
       }
     ],
-    "nextCursor": {
-      "createdAt": "2026-10-11T01:20:05Z",
-      "sessionId": "session-0123456789abcdef0123456789abcdef",
-      "eventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D"
-    }
+    "nextPage": 2
   }
 }
 ```
 
-示例按 `limit=1` 请求，所以只返回一条并给出 nextCursor。下一页请求为 `GET /agents/{agentId}/events?category=user&from=…&to=…&limit=1&afterCreatedAt=2026-10-11T01:20:05Z&afterSessionId=session-0123…&afterEventId=entry_7K3M…`。
+示例按 `page=1&limit=1` 请求，所以只返回一条并给出 nextPage。下一页请求为 `GET /agents/{agentId}/events?category=user&from=…&to=…&page=2&limit=1`。
 
 ```json
 {
@@ -276,7 +255,7 @@ nextCursor 为 null 只表示本次读取已无下一条，不表示以后不会
     "rootEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
     "finished": true,
     "events": ["user.message、agent.thinking、agent.tool_call、agent.tool_result、agent.message、session.status_idle 等完整事件，按 eventSeq"],
-    "nextCursor": null
+    "nextPage": null
   }
 }
 ```
@@ -286,16 +265,16 @@ nextCursor 为 null 只表示本次读取已无下一条，不表示以后不会
 | HTTP | resCode | 适用 | 说明 |
 |---|---|---|---|
 | 400 | `INVALID_AGENT_ID` | UC1 | 复用已有码 |
-| 400 | `INVALID_AGENT_EVENT_QUERY` | UC1 | 新增；category 缺失或取值不是 user、agent，from/to 缺失、格式、顺序、跨度，limit 或游标不合法 |
+| 400 | `INVALID_AGENT_EVENT_QUERY` | UC1 | 新增；category 缺失或取值不是 user、agent、session，from/to 缺失、格式、顺序、跨度，page、limit 不合法或偏移超过 10000 |
 | 400 | `INVALID_SESSION_ID` | UC2 | 复用已有码 |
-| 400 | `INVALID_EVENT_TURN_QUERY` | UC2 | 新增；eventId、limit 或游标不合法，包括游标不属于同一轮次 |
+| 400 | `INVALID_EVENT_TURN_QUERY` | UC2 | 新增；eventId、page 或 limit 不合法 |
 | 404 | `SESSION_NOT_FOUND` | UC2 | 复用；会话不存在或已删除 |
 | 404 | `EVENT_NOT_FOUND` | UC2 | 新增；会话中没有该事件 |
 | 404 | `EVENT_TURN_NOT_FOUND` | UC2 | 新增；事件存在但不属于任何轮次 |
 | 500 | `EVENT_LIST_FAILED` | 两者 | 复用；读取或投影失败，包括未知持久化类型 |
 | 503 | `EVENT_SERVICE_UNAVAILABLE` | 两者 | 复用；数据库暂不可用 |
 
-UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只回答“该 Agent 名下有哪些已保存事件”，结果为空列表。游标之后没有事件时返回 200、`events=[]`、`nextCursor=null`。
+UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只回答“该 Agent 名下有哪些已保存事件”，结果为空列表。合法但超出范围的页码返回 200、`events=[]`、`nextPage=null`。
 
 ## 5. 架构指标
 
@@ -326,7 +305,7 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 | F3 | 事件不属于轮次 | 轮次解析 | 未发生 | Claw | 404 `EVENT_TURN_NOT_FOUND` | Mate 不展示“展开轮次”，或改用 ListEvents | 执行内自动压缩在 §3.4 差距修复前也落入此类 |
 | F4 | 未知事件类型或投影缺失 | 投影 | 未发生 | Claw | 500 `EVENT_LIST_FAILED`，记录技术日志 | Mate 提示读取失败，稍后重试 | 不跳过异常事件返回部分结果 |
 | F5 | 数据库不可用或超时 | 读取 | 未发生 | Claw | 503 或 500 | Mate 可退避重试，GET 可安全重试 | — |
-| F6 | 翻页期间有新事件或会话被删除 | 跨页 | 未发生 | Mate | 每页独立读取，不冻结快照；游标按排序键定位，删除不会移动后续位置，游标所在会话被删除时继续读下一位置 | 不会重复；需要完整结果时让 `to` 早于当前时间一个安全间隔（T4） | `to` 接近当前时间时，跨实例时钟偏差或晚提交的事件若 createdAt 早于游标会被漏读 |
+| F6 | 翻页期间有新事件或会话被删除 | 跨页 | 未发生 | Mate | 每页独立读取，不冻结快照；按页码偏移定位 | 后续页可能移动；需要完整结果时用已结束的时间段查询，并按 sessionId + eventId 去重 | 删除会让后续事件前移而漏读；晚提交且 createdAt 较早的事件会让后续事件后移而重复，或落在已读页中被漏读 |
 | F7 | 轮次未结束 | 读取 | 未发生 | Mate | finished=false，返回已提交部分 | 稍后再查或跟随 SSE | 不承诺该轮最终结束 |
 
 <a id="capacity"></a>
@@ -334,14 +313,14 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 #### 5.2.2 容量与限流
 
 - 配额：时间跨度不超过 31 天，每页不超过 200 条（T4）。这两个值是有界查询的初始值，不是容量承诺。
-- 瓶颈：UC1 每页从游标位置在 `idx_t_session_events_agent_user_time` 上范围扫描 limit+1 条，成本不随页深增长；需验证 GaussDB 对行值比较能否走该索引。UC2 一轮的事件数通常为几十到几百条，读取走主键与唯一索引。
-- 压测计划：【缺口】需要按真实 GaussDB 和代表性 Agent（会话数、每日用户事件数）验证 `idx_t_session_events_agent_user_time` 的执行计划、游标翻页耗时和写入开销。
+- 瓶颈：UC1 每页在对应类别的部分索引上跳过 `(page-1)*limit` 条再读 limit+1 条，成本随页深线性增长，偏移上限 10000 把单页最坏成本限定在约一万个索引项。UC2 一轮的事件数通常为几十到几百条，读取走主键与唯一索引。
+- 压测计划：【缺口】需要按真实 GaussDB 和代表性 Agent（会话数、每日用户事件数）验证三个部分索引的执行计划、深页耗时和写入开销。
 
 #### 5.2.3 监控告警
 
 | 指标 | 为什么需要 | 告警条件 |
 |---|---|---|
-| UC1 请求耗时与游标解析失败次数 | [透明游标](#transparent-cursor)让调用方可以自行构造游标，需要发现错误用法 | 【缺口】阈值待压测后确定 |
+| UC1 请求耗时与深页请求比例 | 深页成本随页码增长，需要发现长时间段大量翻页的用法 | 【缺口】阈值待压测后确定 |
 | UC2 `EVENT_TURN_NOT_FOUND` 次数 | 发现应属轮次却未关联的事件（如自动压缩差距） | 持续出现 agent.* 起点的此错误 |
 | `EVENT_LIST_FAILED` 次数 | 投影缺失或未知类型 | 任意出现 |
 
@@ -365,8 +344,8 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 
 ### 6.3 自动化测试
 
-- UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；游标三参数只给部分、事件不存在、字段不一致、越出范围返回 400，游标会话已删除时继续读取，同秒多会话翻页不重不漏；category=user 只返回五种 user.*，category=agent 只返回七种 agent.*，category=session 只返回五种 session.*；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表。
-- UC2：以 user.message、确认、审核、回答、停止、agent.tool_result、终态 idle 为起点返回同一轮；确认续跑后的多段按 eventSeq 合并；配置事件返回 `EVENT_TURN_NOT_FOUND`；未结束轮次 finished=false；同 Session 两轮互不混入；以其他轮次事件作游标返回 400。
+- UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；page 非正整数、偏移超过 10000 返回 400，超出范围的页码返回 200 空列表，同秒多会话按页翻读顺序稳定；category=user 只返回五种 user.*，category=agent 只返回七种 agent.*，category=session 只返回五种 session.*；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表。
+- UC2：以 user.message、确认、审核、回答、停止、agent.tool_result、终态 idle 为起点返回同一轮；确认续跑后的多段按 eventSeq 合并；配置事件返回 `EVENT_TURN_NOT_FOUND`；未结束轮次 finished=false；同 Session 两轮互不混入；page 与 limit 边界同 ListEvents。
 - 两者：返回事件与 ListEvents 同一事件逐字段相等；未知持久化类型返回 `EVENT_LIST_FAILED`；GaussDB 执行计划使用新增索引。
 
 ### 6.4 QA 流程
@@ -402,7 +381,7 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 | 路径与符号 | 已观察行为 | 本设计的用法 |
 |---|---|---|
 | R/web/RuntimeEventController.java · `list` | GET 历史，标量参数校验、no-store、ResultBean | UC2 加在同一 Controller，沿用校验与响应方式 |
-| R/event/CommittedEventQueryService.java · `list/pageOf/normalizeLimit/calculateOffset` | 默认 50、上限 200、多取一条、整数页码 | 两个 Service 复用 limit 归一与多取一条；不使用页码偏移 |
+| R/event/CommittedEventQueryService.java · `list/pageOf/normalizeLimit/calculateOffset` | 默认 50、上限 200、多取一条、整数页码 | 两个 Service 复用 page/limit 归一、偏移计算与多取一条 |
 | R/event/CommittedEventProjection.java · `project` | 已提交 DTO 到类型化公共 VO 的唯一投影 | 两个接口复用，保证与 ListEvents 一致 |
 | R/event/CommittedEventType.java | 五种 user.* 与其他 12 种公共类型 | 用户事件的范围 |
 | R/persistence/RuntimeExecutionPersistenceService.java · `acceptMessage/acceptInterrupt/appendEntry` | 消息受理关联初始段；停止请求只追加事件；执行内追加经结果段 | 轮次解析规则 |
@@ -418,13 +397,13 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 
 - 定时任务（[M10](../08-CampusClaw定时任务/README.md)）每次 Run 新建会话，首条消息由任务配置生成；Child（[统一历史](unified-event-persistence.md)）为子任务新建会话，首条消息由父 Agent 生成。按已确认规则，它们与普通会话一样按事件类型返回，不区分来源，也不新增来源标记。两项持久化当前均待实现，实现后自动纳入。
 - category 只有 user、agent、session 三个值，与公共事件类型前缀一一对应；以后新增前缀时再增加类别值（兼容变更）。
-- ListEvents 仍使用已确认的整数页码，本设计不修改它。
+- ListEvents 的整数页码不变，本设计的两个接口沿用同一套规则。
 
 ### 8.4 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级；关键设计决策收敛为轮次、权限边界和存储三条，接口形状的约定移到 §4；UC1 改为 `GET /agents/{agentId}/events` 的 ListAgentEvents，用必填的 category（user、agent 或 session）筛选事件类别。 |
+| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级；关键设计决策收敛为轮次、权限边界和存储三条，接口形状的约定移到 §4；UC1 改为 `GET /agents/{agentId}/events` 的 ListAgentEvents，用必填的 category（user、agent 或 session）筛选事件类别；两个接口的分页由透明游标改为与 ListEvents 一致的整数页码。 |
 | 0.3.0 | 2026-10-12 | 按最新设计文档模板去掉标题中的必选标记，整体时序和关键设计决策顺延为 2.2、2.3，设计图改用中文，跨文档链接改用显式锚点。 |
 | 0.2.0 | 2026-10-12 | 两个接口改用透明 keyset 游标，并按评审确认用户事件范围、权限归属及定时与子会话处理。 |
 | 0.1.0 | 2026-10-12 | 新增按 Agent 时间范围查询用户事件与按事件读取所在轮次的目标设计。 |
