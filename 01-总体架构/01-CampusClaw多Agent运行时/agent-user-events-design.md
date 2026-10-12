@@ -65,23 +65,24 @@
 
 ### 2.2 整体时序
 
-场景：开发运维人员在 Mate 的 Trace 中选择设备告警 Agent 和最近 7 天，浏览用户请求后展开其中一轮的执行轨迹。起点是选择 Agent，终点是看到完整轮次。前提是 Mate 已完成公司认证和 Agent 级权限判断。状态：目标设计，待实现。
+场景：Mate 为 Trace 先查询设备告警 Agent 最近 7 天的用户请求，再读取其中一条所在的那一轮。起点是 Claw 收到 Mate 的请求，终点是 Claw 返回结果。Mate 的认证、权限判断和展示不在本图范围。状态：目标设计，待实现。
 
 | 参与者 | 职责 | 映射 |
 |---|---|---|
-| 开发运维人员 | 选择 Agent 与时间范围，浏览用户请求并展开轮次 | Mate Trace 的使用者 |
-| Mate | 公司认证、Agent 级授权、sessionId 到公共 Chat 的映射与展示 | mate-service |
-| 事件查询 | 参数校验、按 Agent 时间查询、轮次解析、共享投影 | `AgentUserEventQueryService`、`EventTurnQueryService`、`CommittedEventProjection` |
-| 事件存储 | 保存已提交的公共事件、会话与根执行 | `t_session_events`、`t_sessions`、`t_session_executions`、`t_session_execution_segment_events` |
+| Mate | 调用方，按 Trace 需要发起两次读取 | mate-service |
+| 接口层 | 校验参数，返回 ResultBean | `AgentUserEventController`、`RuntimeEventController#getTurn` |
+| 查询服务 | 按 Agent 和时间段查询、解析事件所在轮次、生成继续读取的位置 | `AgentUserEventQueryService`、`EventTurnQueryService` |
+| 事件投影 | 把已提交事件转成与 ListEvents 相同的公共事件 | `CommittedEventProjection`（已实现） |
+| 存储 | 保存已提交的事件、会话与根执行 | `t_session_events`、`t_sessions`、`t_session_executions`、`t_session_execution_segment_events` |
 
-![在 Trace 中按 Agent 查看用户请求并展开轮次](设计图/Agent用户事件查询/agent_user_events_overview.svg)
+![Trace 的两次读取在 Claw 内部的交互](设计图/Agent用户事件查询/agent_user_events_overview.svg)
 
 [原尺寸 SVG](设计图/Agent用户事件查询/agent_user_events_overview.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L1)
 
 | 阶段 | 下钻 |
 |---|---|
-| 步骤 3～7：按 Agent 时间查询 | [§3.3](#uc1-detail) |
-| 步骤 10～15：解析并读取轮次 | [§3.4](#uc2-detail) |
+| 步骤 1～9：按 Agent 和时间段查询 | [§3.3](#uc1-detail) |
+| 步骤 10～20：解析并读取轮次 | [§3.4](#uc2-detail) |
 
 <a id="decisions"></a>
 
@@ -135,13 +136,13 @@ CREATE INDEX idx_t_session_events_agent_user_time
 
 ![两个读取接口的目标类](设计图/Agent用户事件查询/agent_user_events_classes.svg)
 
-[原尺寸 SVG](设计图/Agent用户事件查询/agent_user_events_classes.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L104)
+[原尺寸 SVG](设计图/Agent用户事件查询/agent_user_events_classes.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L115)
 
 <a id="uc1-detail"></a>
 
 ### 3.3 按 Agent 时间查询的详细时序（UC1）
 
-展开整体时序步骤 3～7。查询只读一个 SQL，权限过滤先于排序分页（R4）：
+展开整体时序步骤 1～9。查询只读一个 SQL，权限过滤先于排序分页（R4）：
 
 ```sql
 SELECT e.session_id, e.event_id, e.event_seq, e.anchor_entry_id,
@@ -175,11 +176,11 @@ eventSeq 只在服务端用于比较，不进入游标或响应。
 
 ### 3.4 解析并读取轮次的详细时序（UC2）
 
-展开整体时序步骤 10～15。
+展开整体时序步骤 10～20。
 
 ![解析并读取一个轮次](设计图/Agent用户事件查询/event_turn_resolution.svg)
 
-[原尺寸 SVG](设计图/Agent用户事件查询/event_turn_resolution.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L59)
+[原尺寸 SVG](设计图/Agent用户事件查询/event_turn_resolution.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L70)
 
 事件到轮次的解析规则：
 
@@ -398,7 +399,7 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace 的开发运维人员排查 Agent 行为。 |
+| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序只画 Mate 调用后 Claw 内部的交互。 |
 | 0.3.0 | 2026-10-12 | 按最新设计文档模板去掉标题中的必选标记，整体时序和关键设计决策顺延为 2.2、2.3，设计图改用中文，跨文档链接改用显式锚点。 |
 | 0.2.0 | 2026-10-12 | 两个接口改用透明 keyset 游标，并按评审确认用户事件范围、权限归属及定时与子会话处理。 |
 | 0.1.0 | 2026-10-12 | 新增按 Agent 时间范围查询用户事件与按事件读取所在轮次的目标设计。 |
