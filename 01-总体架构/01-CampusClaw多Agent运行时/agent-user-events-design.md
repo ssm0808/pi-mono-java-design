@@ -19,7 +19,7 @@
 
 | # | 事项 | 负责人 | 来源 |
 |---|---|---|---|
-| T2 | Mate 侧哪些角色可读整个 Agent 的用户输入，以及用户审计方式 | Mate | [D6](#d6) |
+| T2 | Mate 侧哪些角色可读整个 Agent 的用户输入，以及用户审计方式 | Mate | [D2](#d2) |
 | T4 | 校准时间范围上限 31 天、页大小 200 与游标完整性安全间隔 | 实施 | [§5.2.2](#capacity) |
 | T6 | 生成两个操作的 operation JSON 与 HTML 评审页 | 实施 | [§4](#api) |
 
@@ -88,14 +88,9 @@
 
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
-| <a id="d1"></a>D1 | “用户类型事件”包含哪些 | Claude Managed Agents 的 user.* 包括消息、中断、工具确认等，List Events 用 `types[]` 过滤；DeepSeek Harness 另有 approval/* 类型 | Claw 已有五种 user.*，都由用户（或 Mate 代用户）提交 | 返回全部五种 user.*，不加类型过滤参数；每条结果都能作为 UC2 起点；定时任务与子 Agent 会话中保存为 user.* 的事件同样返回 | 只想看消息的 Mate 需自行过滤，页内条数会少于 limit |
-| <a id="d2"></a>D2 | 用什么标识一个事件 | Claude Managed Agents、OpenCode 的事件/消息都挂在会话路径下；Codex 查轮次需要 thread_id + turn_id；DeepSeek 用 (sessionId, seq) | eventId 只在会话内由主键保证唯一；Mate 已持有 sessionId 映射 | 用 sessionId + eventId，路径 `/sessions/{sessionId}/events/{eventId}/turn` | Mate 必须保存 UC1 返回的 sessionId；放弃“只给 eventId”需要的全局 event_id 索引 |
-| <a id="d3"></a>D3 | 轮次如何界定 | Codex 有显式 turn id 和状态；OpenCode、Claude Managed Agents 以 idle 标记切分；pi 的 turn 只是一次模型回复加工具结果 | Claw 已有根执行：一条 user.message 受理生成一次执行，续跑段和终态都挂在它下面 | 复用根执行作为轮次，根消息 eventId 为轮次身份；不新增轮次表，不按“到下一条 user.message 为止”推导 | 用户主动配置变更与手动压缩不属于任何轮次；停止请求需按 targetEventId 特殊定位；自动压缩关联差距需先修复 |
-| <a id="d4"></a>D4 | 跨会话如何“按时间顺序” | 无基线提供跨会话事件列表；Claude Managed Agents 只能先按 agent_id 列会话、再逐会话按 created_at 查 | 不同会话之间没有因果顺序 | 按 createdAt 升序，同秒以 sessionId、eventSeq 稳定排序；不引入全局序号 | 跨实例时钟偏差可能让会话内顺序与提交顺序不一致，会话内因果顺序要用 UC2 或 ListEvents |
-| <a id="d5"></a>D5 | 分页方式 | Claude Managed Agents、OpenCode、Codex、DeepSeek 都用不透明游标；Codex rollout 游标内部是时间戳加线程 ID 的 keyset | 用户要求透明游标；ListEvents 已取消加密游标；eventSeq 不是公开字段 | keyset 透明游标：UC1 用上一条的 `createdAt + sessionId + eventId`，UC2 用上一条的 `eventId`；响应给出 `nextCursor`，调用方原样或自行构造后传回；默认 50、上限 200 | 游标字段成为公开契约，排序键不能随意更换；服务端要校验调用方构造的游标；开放 `to` 时晚提交的早时间事件可能漏读（F6）。放弃整数页码，是因为跨会话深页 OFFSET 成本高且删除会移动后续位置；放弃不透明游标，是因为用户要求游标可读、可调试 |
-| <a id="d6"></a>D6 | Agent 级读取的权限边界 | Claude Managed Agents 按 API Key 所属工作区授权，可按 agent_id 列会话；其他基线为单用户本地工具，无可对照实现 | 用户与权限由 Mate 维护，Claw 不推导用户可见范围；Agent 下会话数可能很大 | Mate 判定调用者有该 Agent 的读取权限后调用；Claw 返回该 Agent 全部未删除会话的用户事件，不按用户过滤 | 一次调用可读到多个用户的输入，Mate 必须限制角色并做用户审计；放弃让 Mate 传入获准会话 ID 集合（集合可能很大） |
-| <a id="d7"></a>D7 | 如何高效按 Agent 和时间读取 | OpenCode 在消息表上有全局 time_created 索引但无 API 使用；其他无可对照实现 | agent_id 在会话上不可变；删除时会话行立即删除、事件行稍后清理 | 在 t_session_events 冗余写入 agent_id，建 `(agent_id, created_at, session_id, event_seq)` 部分索引，查询时连接 t_sessions 排除已删除会话 | 多一列冗余数据和一个索引的写入开销；需要同步安装 DDL；部分索引在 GaussDB 的支持待核验 |
-| <a id="d8"></a>D8 | 时间参数的格式与范围 | Claude Managed Agents 用 `created_at[gte/lt]` 可选过滤 | Claw 时间契约为 UTC 整秒 | from、to 必填，半开区间，UTC 整秒 `Z`，跨度不超过 31 天；小数秒和其他偏移直接拒绝 | Mate 需按 Claw 格式转换其毫秒时间；超过 31 天要分段查询 |
+| <a id="d1"></a>D1 | 轮次如何界定 | Codex 有显式 turn id 和状态；OpenCode、Claude Managed Agents 以 idle 标记切分；pi 的 turn 只是一次模型回复加工具结果 | Claw 已有根执行：一条 user.message 受理生成一次执行，续跑段和终态都挂在它下面 | 复用根执行作为轮次，根消息 eventId 为轮次身份；不新增轮次表，不按“到下一条 user.message 为止”推导 | 用户主动配置变更与手动压缩不属于任何轮次；停止请求需按 targetEventId 特殊定位；自动压缩关联差距需先修复 |
+| <a id="d2"></a>D2 | Agent 级读取的权限边界 | Claude Managed Agents 按 API Key 所属工作区授权，可按 agent_id 列会话；其他基线为单用户本地工具，无可对照实现 | 用户与权限由 Mate 维护，Claw 不推导用户可见范围；Agent 下会话数可能很大 | Mate 判定调用者有该 Agent 的读取权限后调用；Claw 返回该 Agent 全部未删除会话的用户事件，不按用户过滤 | 一次调用可读到多个用户的输入，Mate 必须限制角色并做用户审计；放弃让 Mate 传入获准会话 ID 集合（集合可能很大） |
+| <a id="d3"></a>D3 | 如何高效按 Agent 和时间读取 | OpenCode 在消息表上有全局 time_created 索引但无 API 使用；其他无可对照实现 | agent_id 在会话上不可变；删除时会话行立即删除、事件行稍后清理 | 在 t_session_events 冗余写入 agent_id，建 `(agent_id, created_at, session_id, event_seq)` 部分索引，查询时连接 t_sessions 排除已删除会话 | 多一列冗余数据和一个索引的写入开销；需要同步安装 DDL；部分索引在 GaussDB 的支持待核验 |
 
 ## 3. 详细设计
 
@@ -213,12 +208,25 @@ eventSeq 只在服务端用于比较，不进入游标或响应。
 
 **参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
 
+<a id="interface-conventions"></a>
+
+**接口约定。** 以下约定只影响接口形状，不涉及架构选型，各基线做法见 [§8.1](#baseline-comparison)。
+
+- 用户事件范围：返回全部五种 user.*，不提供类型过滤，与 Claude Managed Agents 的 user.* 范围一致；定时任务与子 Agent 会话中保存为 user.* 的事件同样返回。只看消息时由 Mate 自行过滤，页内条数会少于 limit。
+- 事件标识：用 sessionId + eventId。eventId 只在会话内由主键保证唯一，Mate 必须保存 UC1 返回的 sessionId。
+- 跨会话顺序：按 createdAt 升序，同秒以 sessionId、eventSeq 稳定排序，不引入全局序号。不同会话之间没有因果顺序，会话内的因果顺序以 UC2 或 ListEvents 为准。
+- 时间参数：沿用 Claw 的 UTC 整秒契约，Mate 需把毫秒时间转换后传入；超过 31 天要分段查询。
+
+<a id="transparent-cursor"></a>
+
 **透明游标。** 游标是上一页最后一条事件的位置，用公开字段表达，调用方可以读取，也可以用已知事件自行构造。省略游标表示从头读取。
 
 | 接口 | 请求参数 | 响应 `nextCursor` | 规则 |
 |---|---|---|---|
 | UC1 | `afterCreatedAt`、`afterSessionId`、`afterEventId` | `{createdAt, sessionId, eventId}` 或 null | 三个参数同时出现或同时省略；格式同 createdAt、sessionId、eventId；解析规则见 [§3.3](#uc1-detail) |
 | UC2 | `afterEventId` | `{eventId}` 或 null | 必须是同一轮次中的事件 |
+
+游标字段因此成为公开契约，排序键不能随意更换，服务端要校验调用方构造的游标。不用整数页码，是因为跨会话深页 OFFSET 成本高，且删除会移动后续位置。
 
 nextCursor 为 null 只表示本次读取已无下一条，不表示以后不会追加；轮次未结束或 `to` 晚于当前时间时，之后可用最后一条构造游标继续读取。
 
@@ -324,7 +332,7 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 
 | 指标 | 为什么需要 | 告警条件 |
 |---|---|---|
-| UC1 请求耗时与游标解析失败次数 | D5 让调用方可以自行构造游标，需要发现错误用法 | 【缺口】阈值待压测后确定 |
+| UC1 请求耗时与游标解析失败次数 | [透明游标](#transparent-cursor)让调用方可以自行构造游标，需要发现错误用法 | 【缺口】阈值待压测后确定 |
 | UC2 `EVENT_TURN_NOT_FOUND` 次数 | 发现应属轮次却未关联的事件（如自动压缩差距） | 持续出现 agent.* 起点的此错误 |
 | `EVENT_LIST_FAILED` 次数 | 投影缺失或未知类型 | 任意出现 |
 
@@ -362,6 +370,8 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 
 ## 8. 其他补充
 
+<a id="baseline-comparison"></a>
+
 ### 8.1 基线对照
 
 | 基线 | 版本与核对 | 轮次 | 跨会话 / 按时间查询 | 用户事件与确认 |
@@ -389,7 +399,7 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 | R/persistence/RuntimeExecutionPersistenceService.java · `acceptMessage/acceptInterrupt/appendEntry` | 消息受理关联初始段；停止请求只追加事件；执行内追加经结果段 | 轮次解析规则 |
 | R/persistence/MyBatisRuntimeExecutionControlRepository.java · `linkCommittedEvent/appendToSegment/markTerminal` | 确认、审核、回答续跑与终态都关联到段 | 轮次范围 |
 | R/event/RuntimeCompactionEventProjector.java · `persistCompaction` | 执行内自动压缩直接追加，未关联段 | §3.4 差距 |
-| R/event/RandomRuntimeEntryIdGenerator.java · `nextId` | eventId 为 `entry_` 加 26 位随机字符 | 实际全局不重复，但数据库只保证会话内唯一，见 D2 |
+| R/event/RandomRuntimeEntryIdGenerator.java · `nextId` | eventId 为 `entry_` 加 26 位随机字符 | 实际全局不重复，但数据库只保证会话内唯一，见 [§4 接口约定](#interface-conventions) |
 | `modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml` · `listCommittedEvents/deleteSession/insertTombstone` | 按会话 event_seq 读取；删除时立即删除会话行，事件稍后清理 | UC1 必须连接 t_sessions |
 | `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java` · `Agent.ID_REGEX/Session.ID_REGEX/DEFAULT_EVENT_PAGE_LIMIT/MAX_EVENT_PAGE_LIMIT` | 标识格式与页大小 | 参数校验 |
 
@@ -405,7 +415,7 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级。 |
+| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级；关键设计决策收敛为轮次、权限边界和存储三条，接口形状的约定移到 §4。 |
 | 0.3.0 | 2026-10-12 | 按最新设计文档模板去掉标题中的必选标记，整体时序和关键设计决策顺延为 2.2、2.3，设计图改用中文，跨文档链接改用显式锚点。 |
 | 0.2.0 | 2026-10-12 | 两个接口改用透明 keyset 游标，并按评审确认用户事件范围、权限归属及定时与子会话处理。 |
 | 0.1.0 | 2026-10-12 | 新增按 Agent 时间范围查询用户事件与按事件读取所在轮次的目标设计。 |
