@@ -99,7 +99,7 @@
 
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
-| UC1 ListAgentEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话中指定类别的事件（第一版只有用户事件），按 createdAt、sessionId、eventSeq 升序，附 nextPage | category 必填，第一版只接受 user；from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
+| UC1 ListAgentEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话中指定类别的事件（第一版只有用户事件），按 createdAt、sessionId、eventSeq 升序，附 nextPage | type 必填，第一版只接受 user；from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
 | UC2 GetEventTurn | BU2 | Mate | Mate 已完成该会话的鉴权 | 返回事件所在轮次的 rootEventId、finished、按 eventSeq 升序的完整事件页与 nextPage | 事件身份为 sessionId + eventId；会话级配置变更与手动压缩不属于任何轮次 |
 
 <a id="data-model"></a>
@@ -152,7 +152,7 @@ ORDER BY e.created_at, e.session_id, e.event_seq
 LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 ```
 
-步骤为：校验 agentId（`ClawConstants.Agent.ID_REGEX`）、category、from/to、page 与 limit；Service 归一 page 默认 1、limit 默认 50，只校验偏移计算不溢出；执行上述读取，多取一条判断是否还有下一页，有则返回 `nextPage=page+1`；逐条用 `CommittedEventProjection` 投影并包上 sessionId。事件只读一次，不另查总数。
+步骤为：校验 agentId（`ClawConstants.Agent.ID_REGEX`）、type、from/to、page 与 limit；Service 归一 page 默认 1、limit 默认 50，只校验偏移计算不溢出；执行上述读取，多取一条判断是否还有下一页，有则返回 `nextPage=page+1`；逐条用 `CommittedEventProjection` 投影并包上 sessionId。事件只读一次，不另查总数。
 
 每页独立读取，不冻结快照。翻页期间如有会话被删除，或有新事件提交到已读过的位置之前，后续页会整体移动，可能重复或漏读，见 F6。eventSeq 只在服务端用于排序，不进入响应。
 
@@ -194,16 +194,16 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 
 | 操作 | 方法与路径 | 成功结果 | 详细契约 |
 |---|---|---|---|
-| ListAgentEvents | `GET /agents/{agentId}/events?category=&from=&to=&page=&limit=` | `{events:[{sessionId, event}], nextPage}` | 本节，待生成 |
+| ListAgentEvents | `GET /agents/{agentId}/events?type=&from=&to=&page=&limit=` | `{events:[{sessionId, event}], nextPage}` | 本节，待生成 |
 | GetEventTurn | `GET /sessions/{sessionId}/events/{eventId}/turn?page=&limit=` | `{rootEventId, finished, events, nextPage}` | 本节，待生成 |
 
-**参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。category 必填，只能传一个值：第一版只接受 `user`，返回五种 user.*；其他值返回 400。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。page 默认 1、为正整数；limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
+**参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。type 必填，只能传一个值：第一版只接受 `user`，返回五种 user.*；其他值返回 400。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。page 默认 1、为正整数；limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
 
 <a id="interface-conventions"></a>
 
 **接口约定。** 以下约定只影响接口形状，不涉及架构选型，各基线做法见 [§8.1](#baseline-comparison)。
 
-- 事件类别筛选：资源是 Agent 下的 events，类别只是筛选条件，接口形状保持通用。按 Lotus 评审，第一版 category 只接受 user，因为 Trace 目前只需要用户请求。agent（七种 agent.*）和 session（五种 session.*）是预留的后续取值，按事件 type 前缀划分；需要时再为该类别加部分索引并放开取值，对调用方是兼容变更。暂不放开的原因：agent 类事件密集，会让几乎每次追加都多写一个索引项；其中的思考与工具结果可能含敏感数据，跨会话批量读取需要 Mate 更严格的权限与审计。参数名用 category 而不是 type，因为每条事件已有 `type` 字段（如 `user.message`），`type=user` 容易被误读为精确匹配。定时任务与子 Agent 会话中的用户事件同样返回。
+- 事件类别筛选：资源是 Agent 下的 events，类别只是筛选条件，接口形状保持通用。按 Lotus 评审，第一版 type 只接受 user，因为 Trace 目前只需要用户请求。agent（七种 agent.*）和 session（五种 session.*）是预留的后续取值，按事件 type 前缀划分；需要时再为该类别加部分索引并放开取值，对调用方是兼容变更。暂不放开的原因：agent 类事件密集，会让几乎每次追加都多写一个索引项；其中的思考与工具结果可能含敏感数据，跨会话批量读取需要 Mate 更严格的权限与审计。参数名用 type，取值是事件 type 的前缀：`type=user` 匹配全部 user.*，不是精确匹配某一种类型。定时任务与子 Agent 会话中的用户事件同样返回。
 - 事件标识：用 sessionId + eventId。eventId 只在会话内由主键保证唯一，Mate 必须保存 UC1 返回的 sessionId。
 - 跨会话顺序：按 createdAt 升序，同秒以 sessionId、eventSeq 稳定排序，不引入全局序号。不同会话之间没有因果顺序，会话内的因果顺序以 UC2 或 ListEvents 为准。
 - 时间参数：沿用 Claw 的 UTC 整秒契约，Mate 需把毫秒时间转换后传入；超过 31 天要分段查询。
@@ -237,7 +237,7 @@ nextPage 为 null 只表示本次读取已无下一页，不表示以后不会�
 }
 ```
 
-示例按 `page=1&limit=1` 请求，所以只返回一条并给出 nextPage。下一页请求为 `GET /agents/{agentId}/events?category=user&from=…&to=…&page=2&limit=1`。
+示例按 `page=1&limit=1` 请求，所以只返回一条并给出 nextPage。下一页请求为 `GET /agents/{agentId}/events?type=user&from=…&to=…&page=2&limit=1`。
 
 ```json
 {
@@ -257,7 +257,7 @@ nextPage 为 null 只表示本次读取已无下一页，不表示以后不会�
 | HTTP | resCode | 适用 | 说明 |
 |---|---|---|---|
 | 400 | `INVALID_AGENT_ID` | UC1 | 复用已有码 |
-| 400 | `INVALID_AGENT_EVENT_QUERY` | UC1 | 新增；category 缺失或取值不是 user，from/to 缺失、格式、顺序、跨度，page、limit 不合法 |
+| 400 | `INVALID_AGENT_EVENT_QUERY` | UC1 | 新增；type 缺失或取值不是 user，from/to 缺失、格式、顺序、跨度，page、limit 不合法 |
 | 400 | `INVALID_SESSION_ID` | UC2 | 复用已有码 |
 | 400 | `INVALID_EVENT_TURN_QUERY` | UC2 | 新增；eventId、page 或 limit 不合法 |
 | 404 | `SESSION_NOT_FOUND` | UC2 | 复用；会话不存在或已删除 |
@@ -336,7 +336,7 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 
 ### 6.3 自动化测试
 
-- UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；page 非正整数返回 400，超出范围的页码返回 200 空列表，同秒多会话按页翻读顺序稳定；category=user 只返回五种 user.*，agent、session 等其他取值返回 400；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表。
+- UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；page 非正整数返回 400，超出范围的页码返回 200 空列表，同秒多会话按页翻读顺序稳定；type=user 只返回五种 user.*，agent、session 等其他取值返回 400；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表。
 - UC2：以 user.message、确认、审核、回答、停止、agent.tool_result、终态 idle 为起点返回同一轮；确认续跑后的多段按 eventSeq 合并；配置事件返回 `EVENT_TURN_NOT_FOUND`；未结束轮次 finished=false；同 Session 两轮互不混入；page 与 limit 边界同 ListEvents。
 - 两者：返回事件与 ListEvents 同一事件逐字段相等；未知持久化类型返回 `EVENT_LIST_FAILED`；GaussDB 执行计划使用新增索引。
 
@@ -388,14 +388,14 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 ### 8.3 范围说明
 
 - 定时任务（[M10](../08-CampusClaw定时任务/README.md)）每次 Run 新建会话，首条消息由任务配置生成；Child（[统一历史](unified-event-persistence.md)）为子任务新建会话，首条消息由父 Agent 生成。按已确认规则，它们与普通会话一样按事件类型返回，不区分来源，也不新增来源标记。两项持久化当前均待实现，实现后自动纳入。
-- 第一版 category 只接受 user；agent、session 按需扩展，扩展前先补对应部分索引并评估权限与审计。
+- 第一版 type 只接受 user；agent、session 按需扩展，扩展前先补对应部分索引并评估权限与审计。
 - ListEvents 的整数页码不变，本设计的两个接口沿用同一套规则。
 
 ### 8.4 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级；关键设计决策收敛为轮次、权限边界和存储三条，接口形状的约定移到 §4；UC1 改为 `GET /agents/{agentId}/events` 的 ListAgentEvents，用必填的 category 筛选事件类别，第一版只支持 user；两个接口的分页由透明游标改为与 ListEvents 一致的整数页码。 |
+| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级；关键设计决策收敛为轮次、权限边界和存储三条，接口形状的约定移到 §4；UC1 改为 `GET /agents/{agentId}/events` 的 ListAgentEvents，用必填的 type 筛选事件类别，第一版只支持 user；两个接口的分页由透明游标改为与 ListEvents 一致的整数页码。 |
 | 0.3.0 | 2026-10-12 | 按最新设计文档模板去掉标题中的必选标记，整体时序和关键设计决策顺延为 2.2、2.3，设计图改用中文，跨文档链接改用显式锚点。 |
 | 0.2.0 | 2026-10-12 | 两个接口改用透明 keyset 游标，并按评审确认用户事件范围、权限归属及定时与子会话处理。 |
 | 0.1.0 | 2026-10-12 | 新增按 Agent 时间范围查询用户事件与按事件读取所在轮次的目标设计。 |
