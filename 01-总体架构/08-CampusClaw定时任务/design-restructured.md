@@ -30,6 +30,7 @@
 | T3 | 数据库链路已在 PR #332 实现但未合并，与目标设计仍有差距（含本地身份链路） | | [数据库实现差距](../../03-数据与存储/Claw数据库设计.md#gaps) |
 | T4 | 原子受理、启动 fencing、取消终态与多副本故障测试须在实现阶段验证 | | [README §12](README.md#implementation-calibration) |
 | T5 | 完整 Maven 依赖树与 corporate NativeParent 未核验 | | [执行专题](execution.md#module-merge) |
+| T8 | Mate 管理入口在调用 Claw 前后的处理逻辑（权限、配额、任务与用户关联等）尚未确定；Claw 侧逻辑已确认 | | 本次评审 |
 | T7 | Mate 获准集合传递、任务配额准入和 Session 归属登记的内部契约待实现 | | [配置 身份与权限边界](configuration.md#mate-access-boundary) |
 | T6 | 每实例 8 个活动执行上限在多副本下会放大总并发，部署阶段需按实例数与下游配额核对 | | [部署初始值](execution.md#deployment-defaults) |
 
@@ -97,7 +98,7 @@
 | 参与者 | 职责 | 映射 |
 |---|---|---|
 | 运营人员 | 园区运营人员 | 通过 Mate 管理入口操作 |
-| Mate | 管理入口；用户权限、资源归属、执行授权与凭据 | 外部服务，以可信服务调用 Claw；授权、归属与凭据的最终决定方 |
+| Mate | 管理入口；用户权限、资源归属、执行授权与凭据 | 外部服务，以可信服务调用 Claw；授权、归属与凭据的最终决定方；管理入口的内部处理待定（T8） |
 | Claw | 定时任务管理、到期扫描与受理协调 | `codingagent.schedule`，见 §3.3～§3.6 |
 | Session 运行时 | 既有 Session 运行时：创建 Session、推进 Agent 与工具 | 与 Claw 同进程，不暗示远程调用 |
 | 存储 | GaussDB 调度与 Session 存储，调度状态的最终决定方 | 同库事务资源 |
@@ -137,7 +138,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ### 3.1 系统用例
 
-前 10 项为 HTTP 操作，由 Mate 管理入口在校验用户权限后以可信服务调用发起；后 3 项为后台作业。BU6 还需读取 M06 既有 Session 接口，不在本模块新增。
+前 10 项为 HTTP 操作，由 Mate 管理入口以可信服务调用发起（Mate 内部处理待定，见 T8）；后 3 项为后台作业。BU6 还需读取 M06 既有 Session 接口，不在本模块新增。
 
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
@@ -186,7 +187,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 [原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L146)
 
-**正常调用如何完成：** Mate 管理入口校验用户权限后以可信服务调用 Claw → Claw 核验服务来源、获准操作与目标资源，校验请求形状 → 事务外向 Mate 只读检查 Agent、凭据绑定与管理授权 → 事务内插入（创建）或锁定最新行合并提交字段（更新），校验合并结果 → 一次写入并提交 → 按已保存结果返回完整资源与计划时间摘要。
+**正常调用如何完成：** Mate 管理入口以可信服务调用 Claw（Mate 内部处理待定，见 T8）→ Claw 核验服务来源、获准操作与目标资源，校验请求形状 → 事务外向 Mate 只读检查 Agent、凭据绑定与管理授权 → 事务内插入（创建）或锁定最新行合并提交字段（更新），校验合并结果 → 一次写入并提交 → 按已保存结果返回完整资源与计划时间摘要。
 
 完整规则见[配置 §5](configuration.md#reliable-write-flow)。
 

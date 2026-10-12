@@ -254,7 +254,8 @@ end note
 ' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a，main，拉取日期 2026-10-05。
 ' 源码：modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage。
-' 映射：Mate 同时是运营人员的管理入口，以及授权、归属和凭据的最终决定方。
+' 映射：Mate 同时是运营人员的管理入口，以及授权、归属和凭据的最终决定方；Mate 内部处理待定。
+' 已确认：Claw 侧逻辑经评审人 2026-10-12 确认。
 ' 映射：Claw = 定时任务管理、到期分发和受理协调；Session 运行时 = 既有 Session 运行时。
 ' 映射：Claw 和 Session 运行时在同一个 coding-agent 进程内，图中不表示二者之间有远程调用。
 ' 设计原因：在职责层面讲清一个业务故事；各阶段细节见详细时序图。
@@ -271,7 +272,8 @@ participant "Session 运行时" as Runtime
 database "存储" as Store
 == 保存定时任务 ==
 Operator -> Mate : 保存定时任务\nAgent、消息、Cron 规则
-Mate -> Claw : 校验用户权限后\n以可信服务调用创建任务
+Mate -> Claw : Mate 处理后\n调用 Claw 创建任务
+note over Operator, Mate : Mate 内部处理待定（评审 Todo T8）
 Claw -> Mate : 检查 Agent 绑定和管理授权
 Mate --> Claw : 可信绑定
 Claw -> Store : 保存启用的定时任务
@@ -288,10 +290,10 @@ Runtime -> Store : 持久化事件和根执行结果
 Claw -> Store : 更新 Run 摘要
 == 查看结果 ==
 Operator -> Mate : 查看该任务的运行记录
-Mate -> Claw : 按获准范围查询 Run
+Mate -> Claw : Mate 处理后\n调用 Claw 查询 Run
 Claw --> Mate : 带 Session ID 的运行列表
 Operator -> Mate : 打开某次运行的会话
-Mate -> Runtime : 读取该 Session
+Mate -> Runtime : 调用 Claw 读取该 Session
 Runtime --> Mate : 巡逻结果和工具证据
 Mate --> Operator : 巡逻结果和工具证据
 @enduml
