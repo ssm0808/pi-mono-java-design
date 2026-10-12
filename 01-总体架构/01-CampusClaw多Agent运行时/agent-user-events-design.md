@@ -98,7 +98,7 @@
 
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
-| UC1 ListAgentUserEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话的用户事件，按 createdAt、sessionId、eventSeq 升序，附 nextCursor | from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
+| UC1 ListUserEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话的用户事件，按 createdAt、sessionId、eventSeq 升序，附 nextCursor | from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
 | UC2 GetEventTurn | BU2 | Mate | Mate 已完成该会话的鉴权 | 返回事件所在轮次的 rootEventId、finished、按 eventSeq 升序的完整事件页与 nextCursor | 事件身份为 sessionId + eventId；会话级配置变更与手动压缩不属于任何轮次 |
 
 <a id="data-model"></a>
@@ -203,7 +203,7 @@ eventSeq 只在服务端用于比较，不进入游标或响应。
 
 | 操作 | 方法与路径 | 成功结果 | 详细契约 |
 |---|---|---|---|
-| ListAgentUserEvents | `GET /agents/{agentId}/user-events?from=&to=&limit=&afterCreatedAt=&afterSessionId=&afterEventId=` | `{events:[{sessionId, event}], nextCursor}` | 本节，待生成 |
+| ListUserEvents | `GET /agents/{agentId}/user-events?from=&to=&limit=&afterCreatedAt=&afterSessionId=&afterEventId=` | `{events:[{sessionId, event}], nextCursor}` | 本节，待生成 |
 | GetEventTurn | `GET /sessions/{sessionId}/events/{eventId}/turn?limit=&afterEventId=` | `{rootEventId, finished, events, nextCursor}` | 本节，待生成 |
 
 **参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。

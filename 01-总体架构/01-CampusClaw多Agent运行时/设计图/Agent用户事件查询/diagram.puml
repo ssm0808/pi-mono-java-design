@@ -132,7 +132,7 @@ class "RuntimeEventReadMapper" as Mapper <<MyBatis>>
 class "AgentUserEventQueryDTO" as QueryDTO <<每次请求>>
 class "AgentUserEventDTO" as ItemDTO <<sessionId + CommittedEventDTO>>
 class "EventTurnDTO" as TurnDTO <<每次请求>>
-class "ListAgentUserEventsResponseVO" as ListVO <<不可变>>
+class "ListUserEventsResponseVO" as ListVO <<不可变>>
 class "AgentUserEventResponseVO" as ItemVO <<不可变>>
 class "EventTurnResponseVO" as TurnVO <<不可变>>
 class "SessionEventResponseVO" as EventVO <<已实现 / 不可变>>
