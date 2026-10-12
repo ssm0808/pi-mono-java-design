@@ -119,21 +119,21 @@ skinparam classBackgroundColor #F1F5F9
 skinparam classBorderColor #8496A4
 hide empty members
 title Agent 用户事件与事件轮次的类图
-class "AgentUserEventController" as AgentWeb <<Web / 单例>>
+class "AgentEventController" as AgentWeb <<Web / 单例>>
 class "RuntimeEventController" as SessionWeb <<已实现 / Web>> {
   +list()
   +getTurn() : 待实现
 }
-class "AgentUserEventQueryService" as AgentSvc <<单例>>
+class "AgentEventQueryService" as AgentSvc <<单例>>
 class "EventTurnQueryService" as TurnSvc <<单例>>
 class "CommittedEventProjection" as Projection <<已实现 / 无状态>>
 interface "RuntimeEventReadRepository" as Repo <<Mapper 边界>>
 class "RuntimeEventReadMapper" as Mapper <<MyBatis>>
-class "AgentUserEventQueryDTO" as QueryDTO <<每次请求>>
-class "AgentUserEventDTO" as ItemDTO <<sessionId + CommittedEventDTO>>
+class "AgentEventQueryDTO" as QueryDTO <<每次请求>>
+class "AgentEventDTO" as ItemDTO <<sessionId + CommittedEventDTO>>
 class "EventTurnDTO" as TurnDTO <<每次请求>>
-class "ListUserEventsResponseVO" as ListVO <<不可变>>
-class "AgentUserEventResponseVO" as ItemVO <<不可变>>
+class "ListAgentEventsResponseVO" as ListVO <<不可变>>
+class "AgentEventResponseVO" as ItemVO <<不可变>>
 class "EventTurnResponseVO" as TurnVO <<不可变>>
 class "SessionEventResponseVO" as EventVO <<已实现 / 不可变>>
 AgentWeb --> AgentSvc
