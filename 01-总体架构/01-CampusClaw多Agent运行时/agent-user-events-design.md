@@ -62,7 +62,7 @@
 | 编号 | 参与者 | 业务目标 | 业务结果 |
 |---|---|---|---|
 | BU1 | 开发运维人员 | 在 Trace 中查看某个 Agent 在一段时间内收到的用户请求 | 按时间先后看到该 Agent 各会话中的用户消息、确认、审核、回答和停止请求 |
-| BU2 | 开发运维人员 | 在 Trace 中展开某条用户请求所在那一轮的执行轨迹 | 看到这一轮的用户输入、思考、工具调用与结果、计划与提问、停止请求和结束状态，并知道这一轮是否已经结束 |
+| BU2 | 开发运维人员 | 在 Trace 中展开某条用户请求所在那一轮的执行轨迹 | 看到这一轮的用户输入、思考、工具调用与结果、计划与提问、停止请求和结束事件；还没有结束事件时，表示这一轮仍在进行 |
 
 ### 2.2 整体时序
 
@@ -100,7 +100,7 @@
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
 | UC1 ListAgentEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话中指定类别的事件（第一版只有用户事件），按 createdAt、sessionId、eventSeq 升序，附 nextPage | type 必填，第一版只接受 user；from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
-| UC2 GetEventTurn | BU2 | Mate | Mate 已完成该会话的鉴权 | 返回事件所在轮次的 rootEventId、finished、按 eventSeq 升序的完整事件页与 nextPage | 事件身份为 sessionId + eventId；会话级配置变更与手动压缩不属于任何轮次 |
+| UC2 ListTurnEvents | BU2 | Mate | Mate 已完成该会话的鉴权 | 返回事件所在轮次按 eventSeq 升序的完整事件页与 nextPage | 事件身份为 sessionId + eventId；会话级配置变更与手动压缩不属于任何轮次 |
 
 <a id="data-model"></a>
 
@@ -112,7 +112,7 @@
 |---|---|---|
 | `t_sessions` | id、agent_id（不可变） | 会话存在即未删除：删除事务直接删除此行（`RuntimeSessionMapper.xml#deleteSession`），事件行稍后由清理任务删除，所以 UC1 必须与本表连接 |
 | `t_session_events` | session_id、event_id、event_seq、type、created_at、payload；**新增 agent_id** | UC1 按 agent_id + created_at 读取指定类别的事件；UC2 按主键读取起点事件和整轮事件 |
-| `t_session_executions` | session_id、execution_id、root_event_id、state、stop_event_id | 根执行即轮次；`state='TERMINAL'` 映射 finished=true；唯一索引 `(session_id, root_event_id)` 用于停止请求定位 |
+| `t_session_executions` | session_id、execution_id、root_event_id、state、stop_event_id | 根执行即轮次；唯一索引 `(session_id, root_event_id)` 用于停止请求定位 |
 | `t_session_execution_segment_events` | session_id、execution_id、segment_id、event_id、event_seq | 主键 `(session_id, event_id)` 用于事件找到所属执行 |
 
 新增索引（待实现，DDL 未冻结）：
@@ -170,8 +170,8 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 
 | 参与者 | 映射 |
 |---|---|
-| 事件接口 | `RuntimeEventController#getTurn`（待实现） |
-| 轮次查询 | `EventTurnQueryService`，经 `RuntimeEventReadRepository` 读库，用 `CommittedEventProjection` 投影 |
+| 事件接口 | `RuntimeEventController#listTurnEvents`（待实现） |
+| 轮次查询 | `TurnEventQueryService`，经 `RuntimeEventReadRepository` 读库，用 `CommittedEventProjection` 投影 |
 | GaussDB | `t_session_events`、`t_session_executions`、`t_session_execution_segment_events` |
 
 事件到轮次的解析规则：
@@ -182,7 +182,7 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 | user.interrupt | payload.targetEventId 即根消息 eventId，经唯一索引 `(session_id, root_event_id)` 得到执行 | `acceptInterrupt` 只追加事件、不关联结果段；B09 保证 targetEventId 指向原 user.message |
 | 用户主动改模型/思考/模式、手动压缩 | 不属于任何轮次，返回 `EVENT_TURN_NOT_FOUND` | 这些事件在执行之外提交 |
 
-整轮事件 = 该执行所有结果段关联的事件 ∪ `stop_event_id` 指向的停止事件，按 eventSeq 升序，用 page/limit 分页，规则同 ListEvents。轮次内事件只在尾部追加，翻页不会移动已读位置。finished 取 `state='TERMINAL'`；未结束的轮次返回目前已提交的事件，之后还会追加。
+整轮事件 = 该执行所有结果段关联的事件 ∪ `stop_event_id` 指向的停止事件，按 eventSeq 升序，用 page/limit 分页，规则同 ListEvents。轮次内事件只在尾部追加，翻页不会移动已读位置。响应不单独给轮次身份和结束标志：第一条事件就是这一轮的 user.message，轮次结束时最后一条是 session.status_idle。未结束的轮次返回目前已提交的事件，之后还会追加。
 
 已观察差距：执行中自动压缩经 `RuntimeCompactionEventProjector#persistCompaction` 直接追加，未调用 `linkCommittedEvent`，因此当前 session.compacted 不在结果段中。本设计目标是把执行内压缩也关联到当前段（待实现），在此之前 UC2 返回的轮次不含自动压缩事件，且该事件作为起点会返回 `EVENT_TURN_NOT_FOUND`。
 
@@ -195,7 +195,7 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 | 操作 | 方法与路径 | 成功结果 | 详细契约 |
 |---|---|---|---|
 | ListAgentEvents | `GET /agents/{agentId}/events?type=&from=&to=&page=&limit=` | `{events:[{sessionId, event}], nextPage}` | 本节，待生成 |
-| GetEventTurn | `GET /sessions/{sessionId}/events/{eventId}/turn?page=&limit=` | `{rootEventId, finished, events, nextPage}` | 本节，待生成 |
+| ListTurnEvents | `GET /sessions/{sessionId}/events/{eventId}/turn?page=&limit=` | `{events, nextPage}` | 本节，待生成 |
 
 **参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。type 必填，只能传一个值：第一版只接受 `user`，返回五种 user.*；其他值返回 400。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。page 默认 1、为正整数；limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
 
@@ -244,8 +244,6 @@ nextPage 为 null 只表示本次读取已无下一页，不表示以后不会�
   "resCode": "0",
   "resMsg": "success",
   "result": {
-    "rootEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
-    "finished": true,
     "events": ["user.message、agent.thinking、agent.tool_call、agent.tool_result、agent.message、session.status_idle 等完整事件，按 eventSeq"],
     "nextPage": null
   }
@@ -259,7 +257,7 @@ nextPage 为 null 只表示本次读取已无下一页，不表示以后不会�
 | 400 | `INVALID_AGENT_ID` | UC1 | 复用已有码 |
 | 400 | `INVALID_AGENT_EVENT_QUERY` | UC1 | 新增；type 缺失或取值不是 user，from/to 缺失、格式、顺序、跨度，page、limit 不合法 |
 | 400 | `INVALID_SESSION_ID` | UC2 | 复用已有码 |
-| 400 | `INVALID_EVENT_TURN_QUERY` | UC2 | 新增；eventId、page 或 limit 不合法 |
+| 400 | `INVALID_TURN_EVENT_QUERY` | UC2 | 新增；eventId、page 或 limit 不合法 |
 | 404 | `SESSION_NOT_FOUND` | UC2 | 复用；会话不存在或已删除 |
 | 404 | `EVENT_NOT_FOUND` | UC2 | 新增；会话中没有该事件 |
 | 404 | `EVENT_TURN_NOT_FOUND` | UC2 | 新增；事件存在但不属于任何轮次 |
@@ -298,7 +296,7 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 | F4 | 未知事件类型或投影缺失 | 投影 | 未发生 | Claw | 500 `EVENT_LIST_FAILED`，记录技术日志 | Mate 提示读取失败，稍后重试 | 不跳过异常事件返回部分结果 |
 | F5 | 数据库不可用或超时 | 读取 | 未发生 | Claw | 503 或 500 | Mate 可退避重试，GET 可安全重试 | — |
 | F6 | 翻页期间有新事件或会话被删除 | 跨页 | 未发生 | Mate | 每页独立读取，不冻结快照；按页码偏移定位 | 后续页可能移动；需要完整结果时用已结束的时间段查询，并按 sessionId + eventId 去重 | 删除会让后续事件前移而漏读；晚提交且 createdAt 较早的事件会让后续事件后移而重复，或落在已读页中被漏读 |
-| F7 | 轮次未结束 | 读取 | 未发生 | Mate | finished=false，返回已提交部分 | 稍后再查或跟随 SSE | 不承诺该轮最终结束 |
+| F7 | 轮次未结束 | 读取 | 未发生 | Mate | 返回已提交部分，最后一条不是 session.status_idle | 稍后再查或跟随 SSE | 不承诺该轮最终结束 |
 
 <a id="capacity"></a>
 
@@ -337,7 +335,7 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 ### 6.3 自动化测试
 
 - UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；page 非正整数返回 400，超出范围的页码返回 200 空列表，同秒多会话按页翻读顺序稳定；type=user 只返回五种 user.*，agent、session 等其他取值返回 400；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表。
-- UC2：以 user.message、确认、审核、回答、停止、agent.tool_result、终态 idle 为起点返回同一轮；确认续跑后的多段按 eventSeq 合并；配置事件返回 `EVENT_TURN_NOT_FOUND`；未结束轮次 finished=false；同 Session 两轮互不混入；page 与 limit 边界同 ListEvents。
+- UC2：以 user.message、确认、审核、回答、停止、agent.tool_result、终态 idle 为起点返回同一轮；确认续跑后的多段按 eventSeq 合并；配置事件返回 `EVENT_TURN_NOT_FOUND`；未结束轮次不含 session.status_idle；同 Session 两轮互不混入；page 与 limit 边界同 ListEvents。
 - 两者：返回事件与 ListEvents 同一事件逐字段相等；未知持久化类型返回 `EVENT_LIST_FAILED`；GaussDB 执行计划使用新增索引。
 
 ### 6.4 QA 流程
@@ -395,7 +393,7 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级；关键设计决策收敛为轮次、权限边界和存储三条，接口形状的约定移到 §4；UC1 改为 `GET /agents/{agentId}/events` 的 ListAgentEvents，用必填的 type 筛选事件类别，第一版只支持 user；两个接口的分页由透明游标改为与 ListEvents 一致的整数页码。 |
+| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级；关键设计决策收敛为轮次、权限边界和存储三条，接口形状的约定移到 §4；UC1 改为 `GET /agents/{agentId}/events` 的 ListAgentEvents，用必填的 type 筛选事件类别，第一版只支持 user；两个接口的分页由透明游标改为与 ListEvents 一致的整数页码；UC2 改名为 ListTurnEvents，响应只保留 events 与 nextPage。 |
 | 0.3.0 | 2026-10-12 | 按最新设计文档模板去掉标题中的必选标记，整体时序和关键设计决策顺延为 2.2、2.3，设计图改用中文，跨文档链接改用显式锚点。 |
 | 0.2.0 | 2026-10-12 | 两个接口改用透明 keyset 游标，并按评审确认用户事件范围、权限归属及定时与子会话处理。 |
 | 0.1.0 | 2026-10-12 | 新增按 Agent 时间范围查询用户事件与按事件读取所在轮次的目标设计。 |

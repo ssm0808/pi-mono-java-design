@@ -39,14 +39,14 @@ activate Claw
 Claw -> Claw : 校验查询条件
 Claw -> DB : 定位该请求所属的轮次
 activate DB
-DB --> Claw : 轮次及其结束状态
+DB --> Claw : 所属轮次
 deactivate DB
 Claw -> DB : 按发生顺序读取该轮次的事件
 activate DB
 DB --> Claw : 该轮次的事件
 deactivate DB
 Claw -> Claw : 转换为公共事件
-Claw --> Mate : 返回该轮次的事件、结束状态及下一页页码
+Claw --> Mate : 返回该轮次的事件及下一页页码
 deactivate Claw
 deactivate Mate
 @enduml
@@ -87,14 +87,14 @@ DB --> Svc : 事件类型与内容
 deactivate DB
 Svc -> DB : 经结果段关联或停止请求的目标定位轮次
 activate DB
-DB --> Svc : 轮次及其结束状态
+DB --> Svc : 所属轮次
 deactivate DB
 Svc -> DB : 按发生顺序读取该轮次的一页事件
 activate DB
 DB --> Svc : 该轮次的一页事件
 deactivate DB
 Svc -> Svc : 转换为公共事件
-Svc --> Web : 该轮次的事件、结束状态及下一页页码
+Svc --> Web : 该轮次的事件及下一页页码
 deactivate Svc
 [<-- Web : 返回该轮次的事件
 deactivate Web
@@ -122,19 +122,19 @@ title Agent 用户事件与事件轮次的类图
 class "AgentEventController" as AgentWeb <<Web / 单例>>
 class "RuntimeEventController" as SessionWeb <<已实现 / Web>> {
   +list()
-  +getTurn() : 待实现
+  +listTurnEvents() : 待实现
 }
 class "AgentEventQueryService" as AgentSvc <<单例>>
-class "EventTurnQueryService" as TurnSvc <<单例>>
+class "TurnEventQueryService" as TurnSvc <<单例>>
 class "CommittedEventProjection" as Projection <<已实现 / 无状态>>
 interface "RuntimeEventReadRepository" as Repo <<Mapper 边界>>
 class "RuntimeEventReadMapper" as Mapper <<MyBatis>>
 class "AgentEventQueryDTO" as QueryDTO <<每次请求>>
 class "AgentEventDTO" as ItemDTO <<sessionId + CommittedEventDTO>>
-class "EventTurnDTO" as TurnDTO <<每次请求>>
+class "TurnEventsDTO" as TurnDTO <<每次请求>>
 class "ListAgentEventsResponseVO" as ListVO <<不可变>>
 class "AgentEventResponseVO" as ItemVO <<不可变>>
-class "EventTurnResponseVO" as TurnVO <<不可变>>
+class "ListTurnEventsResponseVO" as TurnVO <<不可变>>
 class "SessionEventResponseVO" as EventVO <<已实现 / 不可变>>
 AgentWeb --> AgentSvc
 SessionWeb --> TurnSvc
