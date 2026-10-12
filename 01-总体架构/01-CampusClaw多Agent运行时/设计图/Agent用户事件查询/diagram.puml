@@ -1,0 +1,133 @@
+@startuml agent_user_events_overview
+' Source evidence: pi-mono-java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/
+' web/RuntimeEventController.java:list
+' event/CommittedEventQueryService.java:list,pageOf
+' event/CommittedEventProjection.java:project
+' persistence/MyBatisRuntimeExecutionControlRepository.java:linkCommittedEvent
+' Observed behavior: events are read per Session only; turns exist as root executions and segment links.
+' Design reason: Mate reviews user input per Agent first, then opens one turn on demand.
+' Pending implementation: both read operations and the agent_id event index.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam ArrowColor #425B70
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 190
+hide footbox
+autonumber
+title Review User Input of One Agent - Target / Pending implementation
+actor "Operator" as Operator
+participant "Mate" as Mate
+participant "EventQuery" as Query
+database "EventStore" as Store
+Operator -> Mate : Choose Agent and time range
+Mate -> Mate : Check Agent-level read permission
+Mate -> Query : List user events of Agent in [from, to)
+Query -> Query : Validate agentId, range and page
+Query -> Store : Read user.* events of live Sessions by time
+Store --> Query : Events with sessionId
+Query --> Mate : Public user events and nextPage
+Mate --> Operator : Show user input in time order
+Operator -> Mate : Open one event
+Mate -> Query : Get turn of sessionId + eventId
+Query -> Store : Resolve root execution of the event
+Query -> Store : Read events of that execution by eventSeq
+Store --> Query : Turn events and execution state
+Query --> Mate : rootEventId, finished, events, nextPage
+Mate --> Operator : Show the full turn
+@enduml
+
+@startuml event_turn_resolution
+' Source evidence: pi-mono-java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/
+' persistence/RuntimeExecutionPersistenceService.java:acceptMessage,acceptInterrupt,appendEntry
+' persistence/MyBatisRuntimeExecutionControlRepository.java:linkCommittedEvent,appendToSegment,markTerminal
+' event/RuntimeCompactionEventProjector.java:persistCompaction
+' modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:findCommittedEvent
+' Observed behavior: user.message, continuations, agent output and idle are linked to segments;
+' user.interrupt is stored with targetEventId only; in-run compaction is not linked yet.
+' Design reason: reuse root execution as the turn identity; no new turn table.
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam ArrowColor #425B70
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 190
+hide footbox
+autonumber
+title Resolve and Read One Turn (UC2) - Target / Pending implementation
+participant "Mate" as Mate
+participant "EventQuery" as Query
+database "Events" as Events
+database "Executions" as Exec
+Mate -> Query : GET turn of sessionId + eventId, page, limit
+Query -> Events : Read event by (sessionId, eventId)
+Events --> Query : Event type and payload
+Query -> Exec : Find execution by segment link or interrupt target
+Exec --> Query : executionId, rootEventId, state
+Query -> Events : Read linked events and stop event by eventSeq, limit + 1
+Events --> Query : One page of committed events
+Query -> Query : Project with shared CommittedEventProjection
+Query --> Mate : rootEventId, finished, events, nextPage
+@enduml
+
+@startuml agent_user_events_classes
+' Source evidence: pi-mono-java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/
+' web/RuntimeEventController.java; event/CommittedEventQueryService.java
+' event/CommittedEventProjection.java; persistence/MyBatisRuntimeSessionRepository.java:findEventPage
+' vo/ListSessionEventsResponseVO.java; vo/SessionEventResponseVO.java
+' Observed behavior: one stateless projection serves GET history and POST SSE frames.
+' Design reason: new reads reuse it; DTOs stay below Service, VOs at Controller.
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #425B70
+skinparam classBackgroundColor #F1F5F9
+skinparam classBorderColor #8496A4
+hide empty members
+title Agent User Events and Event Turn - Target Classes\nPending implementation unless marked Existing
+class "AgentUserEventController" as AgentWeb <<Web / Singleton>>
+class "RuntimeEventController" as SessionWeb <<Existing / Web>> {
+  +list()
+  +getTurn() : Pending
+}
+class "AgentUserEventQueryService" as AgentSvc <<Singleton>>
+class "EventTurnQueryService" as TurnSvc <<Singleton>>
+class "CommittedEventProjection" as Projection <<Existing / Stateless>>
+interface "RuntimeEventReadRepository" as Repo <<Mapper boundary>>
+class "RuntimeEventReadMapper" as Mapper <<MyBatis>>
+class "AgentUserEventQueryDTO" as QueryDTO <<Per request>>
+class "AgentUserEventDTO" as ItemDTO <<sessionId + CommittedEventDTO>>
+class "EventTurnDTO" as TurnDTO <<Per request>>
+class "ListAgentUserEventsResponseVO" as ListVO <<Immutable>>
+class "AgentUserEventResponseVO" as ItemVO <<Immutable>>
+class "EventTurnResponseVO" as TurnVO <<Immutable>>
+class "SessionEventResponseVO" as EventVO <<Existing / Immutable>>
+AgentWeb --> AgentSvc
+SessionWeb --> TurnSvc
+AgentSvc --> Repo
+TurnSvc --> Repo
+AgentSvc --> Projection
+TurnSvc --> Projection
+Repo <|.. Mapper
+AgentSvc ..> QueryDTO : normalizes
+Repo ..> ItemDTO : returns
+Repo ..> TurnDTO : returns
+AgentSvc ..> ListVO : builds
+TurnSvc ..> TurnVO : builds
+ListVO "1" *-- "0..200" ItemVO
+ItemVO "1" *-- "1" EventVO
+TurnVO "1" *-- "0..200" EventVO
+Projection ..> EventVO : creates
+@enduml
