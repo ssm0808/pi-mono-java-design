@@ -259,6 +259,7 @@ end note
 ' 映射：Claw = 定时任务管理、到期分发和受理协调；Session 运行时 = 既有 Session 运行时。
 ' 映射：Claw 和 Session 运行时在同一个 coding-agent 进程内，图中不表示二者之间有远程调用。
 ' 设计原因：在职责层面讲清一个业务故事；各阶段细节见详细时序图。
+' 表示法：同步调用用实线实心箭头并配返回，异步启动用开放箭头，定时触发画为来自图外的发现消息，激活条表示处理期间。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
 title 每天视频巡逻检查：业务总览（待实现）
 hide footbox
@@ -270,31 +271,40 @@ participant "Mate" as Mate
 participant "Claw" as Claw
 participant "Session 运行时" as Runtime
 database "存储" as Store
+autonumber
 == 配置定时任务 ==
-Operator -> Mate : 配置“每天 22:00 视频巡逻检查”
-Mate -> Claw : 请求创建定时任务
-note over Operator, Mate : Mate 内部处理待定（评审 Todo T8）
-Claw -> Mate : 确认该 Agent 可以被这样配置
-Mate --> Claw : 确认可以
-Claw -> Store : 保存定时任务
-Claw --> Mate : 创建成功，附接下来的运行时间
-Mate --> Operator : 显示任务已生效及下次运行时间
+Operator -> Mate ++ : 配置“每天 22:00 视频巡逻检查”
+note right of Mate : Mate 内部处理待定（评审 Todo T8）
+Mate -> Claw ++ : 请求创建定时任务
+Claw -> Mate ++ : 确认该 Agent 可以这样配置
+return 可以配置
+Claw -> Store ++ : 保存定时任务
+return 已保存
+return 创建成功，附接下来的运行时间
+return 任务已生效，显示下次运行时间
 == 每天 22:00 自动运行 ==
-Claw -> Store : 到点，记下本次运行
-Claw -> Mate : 确认本次可以执行
-Claw -> Mate : 登记本次新会话归谁所有
-Claw -> Runtime : 开始本次运行
-Runtime -> Store : 创建新会话
+[-> Claw ++ : 到达 22:00
+Claw -> Store ++ : 记下本次运行
+return 已记下
+Claw -> Mate ++ : 确认本次可以执行
+return 可以执行
+Claw -> Mate ++ : 登记新会话归谁所有
+return 已登记
+Claw -> Runtime ++ : 为本次运行创建新会话
+Runtime -> Store ++ : 保存新会话和任务内容
+return 已保存
+return 新会话已就绪
+Claw ->> Runtime ++ : 开始执行
 Runtime -> Runtime : 绑定的 Agent 执行视频巡逻检查
-Runtime -> Store : 保存检查过程和结论
-Claw -> Store : 记下本次运行的结果
+Runtime -> Store ++ : 保存检查过程和结论
+return 已保存
+Runtime -->> Claw -- : 本次运行结束
+Claw -> Store ++ : 记下本次运行的结果
+return 已记下
+deactivate Claw
 == 查看巡逻结果 ==
-Operator -> Mate : 查看该任务的运行记录
-Mate -> Claw : 查询该任务的运行记录
-Claw --> Mate : 运行记录，每条带会话入口
-Mate --> Operator : 显示运行记录
-Operator -> Mate : 打开某次运行
-Mate -> Runtime : 读取该次运行的会话
-Runtime --> Mate : 巡逻结论和工具证据
-Mate --> Operator : 显示巡逻结论和证据
+Operator -> Mate ++ : 查看巡逻结果
+Mate -> Claw ++ : 查询运行记录和对应会话
+return 运行记录、巡逻结论和工具证据
+return 显示每次运行的巡逻结论和证据
 @enduml
