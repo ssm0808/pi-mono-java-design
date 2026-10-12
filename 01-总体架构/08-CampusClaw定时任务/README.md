@@ -16,6 +16,8 @@
 
 [统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)进一步规定 Runtime、Cron、Child 共用受理原语与 Coordinator；ScheduledRunAcceptanceService 在原 Run 事务内创建 Session/首消息/execution 并关联，后台仅选择 persistenceOnly 输出。Cron 启动的 Child 也保存独立历史并继承非交互限制；Skill 累计消费同事务成功结果，不再由 Cron 另写统计来源日志。新主线源码复核见[统一证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)，本页其他调度/官方历史证据不升级。
 
+<a id="problem"></a>
+
 ## 1. 要解决什么问题
 
 接口规则由[Claw 配置专题](configuration.md)维护；运行策略、物理模块合并和上线初始值由[执行专题](execution.md)维护；表结构、约束、索引与数据库事务由[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule)维护。Mate负责可信接口定义、执行资格和凭据解析，新增内部契约见[Mate执行上下文草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)。本文保留整体职责、主流程与全局目标类图。本文流程和类图继续表达目标；其中数据库链路已在 PR #332 实现，不能将历史“待实现”标签外推为当前 PR 无实现，也不据局部核验认定整个模块已验收。
@@ -160,6 +162,8 @@ public void summarizeAlarms() {
 
 扫描周期、容差、并发、期限和保留初始值见[部署配置](execution.md#deployment-defaults)，均不代表已压测容量。
 
+<a id="normal-acceptance"></a>
+
 ## 5. 正常触发与受理事务
 
 场景是“每天 08:00 创建新的设备告警汇总会话”。从扫描器派发一个到期任务开始，到原根执行的结果持久化并被对账结束；前提是当前实例具有有效扫描资格，任务已保存且身份策略可用。以下为待实现目标。先看自动触发总览，再沿图中的 Shared Run admission 下钻准备与原子受理；模型与工具循环由 Runtime 承接，不在调度图中重复展开。
@@ -209,9 +213,9 @@ public void summarizeAlarms() {
 
 ![定时运行共用准备与原子受理](schedule_run_admission.svg)
 
-[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L222)
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L208)
 
-本图保留三个关键分支：执行资格拒绝、Mate 归属登记未确认、Runtime 准备失败。前两者分别属于只读授权和跨服务持久登记，失败后的核对责任不同，因此不合并；图仍只描述同次 Run 受理，不展开模型执行。
+本图只画正常受理。执行资格被拒、Mate 归属登记未确认和 Runtime 准备失败三类失败分别属于只读授权、跨服务持久登记和本地准备，核对责任不同，处理规则见[失败处理与恢复](design-restructured.md#failure-recovery)；图仍只描述同次 Run 受理，不展开模型执行。
 
 Mate 的授权和 Runtime 准备都发生在数据库受理事务之前。准备成功只固定本次上下文；Schedule 在最终事务中复核最新配置、领取资格、授权期限与容量，不能拿准备结果替代可变状态校验。图中的 Runtime 准备与既有 `AgentSessionFactory.create` 的内存对象装配有关，不等于已创建公共持久 Session，也不等于已经发送模型请求。
 
@@ -220,6 +224,8 @@ Store 返回“确定拒绝”须以未受理及可靠失败记录为依据；�
 **总览省略项的归属。** 扫描运行代次、启动 CAS 与失效拥有者隔离见[执行专题](execution.md#no-catch-up)；Runtime 内部按“可信目标解析→参数校验→权限判断/必要确认→业务执行→结果回传”执行，ASK、参数错误、凭据解析和 Child 传播见[非交互范围](execution.md#noninteractive)。主图中“Guard start ownership”包含持久化启动检查，检查未通过不进入模型；对账只有取得原根执行真实终态才释放占用，未知保持占用。暂停、删除、取消及晚到回调继续按下节和§9处理。
 
 **源码核验边界。** 2026-10-08 确认并隔离 fetch Java 默认分支 main，旧、新提交均为 `553dcd5e2ff682f9684810a043b442b37a02e54a`。本次重读 `modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java` 的 `executeAndReschedule`、`store/CronStore.java` 的 `saveUnsafe`（同一 cron 包根），以及 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/` 下 `session/AgentSessionFactory.java#create`、`tool/cron/ManagedCronSessionRunner.java#execute`、`runtimeapi/event/RuntimeMessageEventService.java#submitLocked`、`RuntimeExecutionCoordinator.java#start`、`RuntimeEventOutput.java#persistenceOnly`（后二者同一 event 目录）和 `runtimeapi/persistence/RuntimeExecutionPersistenceService.java#acceptMessage`。源码证明公共准备、受理与推进已有分层基础，不证明上述 M10 数据库链路已实现；本次只校正职责表达，不改变产品策略、全局结构或 Agent 基线比较结论，外部基线保留原核验日期。
+
+<a id="failure-interaction-recovery"></a>
 
 ## 6. 失败、交互与恢复
 
@@ -260,6 +266,8 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 下述为未来Mate公共展示边界，不是本次Claw内部响应约束：公共任务详情使用公共任务/Run 标识与 Chat 链接，Mate 异步幂等建立新 Session 的私有 Chat 映射；映射未完成显示“结果入口准备中”，不能重复触发任务。映射失败不更改已接受执行。Run 可记录内部 sessionId、executionId 供后台对账，Mate公共安全投影不直接暴露它们；Claw的Run回执可向已授权调用者返回sessionId，本次不定义Mate映射接口。独立会话的用户归属与可见人群由 Mate 自身关联决定，删除任务不删除该关联；公共 Chat 映射仅用于展示，不替代受理前登记。
 
+<a id="persistence-lifecycle"></a>
+
 ## 9. 持久化与生命周期
 
 数据库设计集中在 [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule)，统一维护三张调度表、Session/根执行扩展、字段、约束、索引、事务及清理边界。本文不再维护另一份表模型。独立文件已对齐 PR #332 的安装 SQL 与持久化源码，明确哪些结构已在 PR 实现、哪些目标仍有差距，以及真实 GaussDB 尚未验收的范围。
@@ -272,7 +280,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ![定时任务全局目标类图](scheduled_task_architecture.svg)
 
-[原尺寸 SVG](scheduled_task_architecture.svg) · [PlantUML 源码](diagram.puml#L45)
+[原尺寸 SVG](scheduled_task_architecture.svg) · [PlantUML 源码](diagram.puml#L40)
 
 | 层次 | 责任与生命周期 |
 |---|---|
@@ -284,6 +292,8 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 | Runtime 适配 | `ScheduledRunAcceptanceService` 直接协调既有 Session/执行存储，在同库短事务中新建 Session 并关联首消息和 Run；`RuntimeExecutionCoordinator` 事务后启动、投影与关闭；每次独立 `ManagedAgentSession` 由公共工厂创建 |
 
 十个 Claw 接口由配置专题维护；管理路径不调用 Session 工厂或执行协调器，立即运行入口委托运行服务职责复用准备与受理。Run独立查询的资源删除边界见[§4.11](configuration.md#schedule-run-read-lifecycle)，到期与恢复按执行专题实施；全局图表示待实现目标。Controller 不直接调用 Mapper 或模型，模型与外部 I/O 不进入配置数据库事务。
+
+<a id="implementation-slices"></a>
 
 ## 11. 实施切片与验收
 
@@ -300,6 +310,8 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 S1～S5均待实现；物理模块合并与旧入口迁移按[合并计划](execution.md#module-merge)同步完成，旧JSON调度不得与新SQL调度并行。已有进程内 Cron 能力不能等价为上述切片已完成。没有业务执行身份、可靠受理或结果对账时，不验收需要凭据的园区无人值守任务。
 
 验收还须覆盖不同 Run 关联不同 Session、固定 Agent 身份而非新建定义、五阶段工具顺序、无效参数不确认/不执行业务、ASK 不被自动放行、租户篡改、旧 claimEpoch 拒绝、手动触发与自动互斥、单次根执行摘要不受后续聊天覆盖、运行取消与真实结束区别、日志/历史中无凭据。单元测试存在、确定性测试通过、真实 GaussDB/多副本/企业身份联调分别记录，本文未运行实现测试或压测。
+
+<a id="implementation-calibration"></a>
 
 ## 12. 依赖与实施校准
 

@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.33.0 |
+| 文档版本 | 0.34.0 |
 | 核验日期 | 数据库专项为 2026-10-10，见[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#source-baseline)；其余各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 历史主线范围见各节；PR #332 三张调度表、Mapper、同库受理与启动控制已实现、未合并，差距及数据库验收见[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#gaps)；生产公司身份系统未核验 |
@@ -669,6 +669,21 @@ CampusClaw 当前目标不提供未保存规则的独立预览。创建、更新
 
 目标仍用schedule:null表达仅手动；没有新增trigger配置枚举，active/paused保持独立，Run来源取单次记录。界面采用分区和显式模式；旧前端独立preview须移除，权威时间来自保存/读取后的upcomingRunsAt。原型与页面要求由[M07场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md)唯一维护。
 
+<a id="failure-doc-structure-evidence"></a>
+
+### 8.20 基线设计文档的失败处理写法（2026-10-11）
+
+2026-10-11 在临时目录隔离 clone 各默认分支最新快照，只读设计文档如何组织失败处理，用于[模板重构稿 §5.2.1](design-restructured.md#failure-recovery)；不升级本文其他节的实现结论或历史 SHA。
+
+| 基线 | 默认分支与完整提交 | 仓库相对路径与位置 | 已观察的写法 |
+|---|---|---|---|
+| pi | main `cdaf6c227d4718a72b59ccd02152c9614df44cfc` | `packages/durable/docs/spec.md` §1、§5.2、§10.1、§12 | 规范性文档；先列不变量，§10.1 按错误类型各给一条规则，§5.2 用意图—外部动作—结果三段提交处理结果未知，§12 列 API footguns |
+| DeepSeek Harness | master `d743267388641bc76f17c45ce8b4c231aed1d32c`（alpha） | `.agents/notes/README.md`；`.agents/notes/implemented/architecture/2026-09-16-host-schedule-storage.md`；`.agents/skills/dsh-error-handling/SKILL.md` | Agent Note 固定 Problem / Decision / Alternatives considered / Consequences；失败与非保证写在 Decision 和 Consequences 中；错误处理规范要求写清处理方、影响范围、副作用状态（absent/partial/committed/unknown）、清理责任和可见的下一步 |
+| OpenCode | dev `e31136bdbdb43e934d8bbd81e75a2065a2625699` | `specs/v2/README.md`；`specs/v2/session.md`；`specs/v2/tools.md` | 当前契约以陈述式定律作标题，如 Retry Is Narrow And Observable、Recovery Boundaries Stay Explicit；明确不保证 exactly-once |
+| Codex harness | main `8c0f7011674145da7e10627769fb221c74fbf7a0` | `docs/`、`codex-rs/docs/` | 所查范围只有使用文档，未发现设计文档 |
+
+Claude Managed Agents 本次未核对。
+
 ## 9. 文档验收
 
 2026-10-08 的接口范围检查通过：配置清单与HTML一致为10个Claw操作、2个Mate草案，全仓无独立预览路径或操作标识残留，原有JSON示例保持一致。API技能检查通过4份Markdown、4份SVG及HTML脚本；仓库图检查通过36专题、132块、53时序图、0错误，managed_session_compaction的既有3条件组范围提示不变，图索引重新生成后无差异。浏览器检查覆盖共享样式、操作归属及版本、折叠状态、响应/语言切换、360px和无JavaScript回退；类图已查看1282×1382原尺寸与840px文档宽度，职责链保持。生成同步和git diff --check通过；未执行产品或数据库测试。
@@ -711,6 +726,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.34.0 | 2026-10-12 | 登记四个基线设计文档的失败处理写法，供模板重构稿引用。 |
 | 0.32.0 | 2026-10-10 | 定时表及 Session 扩展归入 Claw 全库数据库设计，原文件仅保留导航。 |
 | 0.31.0 | 2026-10-10 | 登记 PR #332 数据库专项证据入口，保留其他源码与官方契约的历史归属。 |
 | 0.30.0 | 2026-10-08 | 重核Console触发方式并引用M07页面映射及新旧前端源码范围。 |

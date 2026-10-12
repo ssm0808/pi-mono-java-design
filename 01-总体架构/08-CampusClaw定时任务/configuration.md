@@ -875,7 +875,7 @@ Run不增加 status、updatedAt、revision、模型回答或完整 Schedule；�
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
-[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L186)
+[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L176)
 
 图中200必须以结果记录成功提交为前提；请求/授权/权威故障走HTTP错误。已占用时保存本次busy拒绝，不释放另一Run的槽位；取得槽位后才进入共用准备与受理。准备结果只固定本次输入，最终受理仍检查最新状态。受理后的执行推进复用[自动总览](README.md#52-自动触发总览)的启动及对账阶段，不要求HTTP响应送达后才开始，也不等待模型结束；手动入口不移动自动计划。
 
@@ -1126,13 +1126,15 @@ Accept-Language: zh-CN
 
 沿用[当日已核验的基线证据](source-evidence.md#schedule-delete-baselines)：DSH删除任务及投递历史、保留原Session，为生命周期取舍提供参照；它的投递回执不同于Claw的新Session受理Run。OpenClaw保留Run历史且操作者删除请求取消，说明历史保留与在途取消各自独立。Claude仍为公共API主基线，其公开归档资料未明确相关级联规则；Claw采用直接删除并连带删除Run属于自身产品约束，不宣称与Claude内部实现一致。
 
+<a id="reliable-write-flow"></a>
+
 ## 5. 可靠写入与保存流程
 
 场景为创建园区告警汇总配置，从调用 Claw 到返回持久化结果结束。前提为可信调用身份已可验证；图为待实现目标。Caller发起管理请求，Schedule负责输入/时间规则校验与保存编排，Mate提供可信绑定和管理授权，Store提交配置；角色含义沿用[统一职责映射](README.md#sequence-roles)。本图仅画创建路径，更新的最新行合并及重新校验规则由下文维护，不把创建图当作更新时序。
 
 ![Claw 配置保存](schedule_configuration_save.svg)
 
-[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L151)
+[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L146)
 
 1. Mate 验证用户身份及管理资格；Claw 验证服务来源、获准操作/资源和请求形状。创建生成新的任务 ID；更新只接受提交字段，省略与 null 分开处理，不要求客户端携带版本或请求身份。
 2. 在数据库事务外只读解析 Agent、凭据绑定及配置资格，固定当次校验依据。不能用会发布运行目录的 prepare 充当纯校验，也不能持数据库锁跨远程目录或授权 I/O；权威依赖暂不可用返回503。
@@ -1205,6 +1207,8 @@ Accept-Language: zh-CN
 | 凭据 | vault_ids 引用 workspace 范围 Vault，运行时使用其中凭据 | 已确认 credentialIds 直接引用独立凭据，不增加 Vault 集合层；企业授权独立校验，Mate负责可信定义和凭据，上下文查询/执行时resolve的路径字段为待实现草案 | 企业产品约束、安全加固 |
 
 固定 Agent 版本是最显著的能力差距，不应包装成单纯“字段简化”。未来若要求长期告警策略可重复审计，需要先建设可解析的历史定义与资源绑定，再开放 agentVersion；只保存一个 version 数字不能兑现版本固定。Spring 六字段是本产品已选定的方言，其理由是复用 Java 现有能力与降低维护成本，不是企业园区业务天然要求秒级执行。
+
+<a id="implementation-acceptance"></a>
 
 ## 8. 实施与验收
 
