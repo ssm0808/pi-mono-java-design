@@ -29,8 +29,10 @@ def anchors(path):
 for path in files:
     if path.suffix == '.puml':
         counts['plantuml'] += 1
-        if not path.read_bytes().isascii():
-            errors.append(f'Non-ASCII PlantUML: {path.relative_to(ROOT)}')
+        try:
+            path.read_bytes().decode('utf-8')
+        except UnicodeDecodeError:
+            errors.append(f'PlantUML is not UTF-8: {path.relative_to(ROOT)}')
     if path.suffix == '.svg':
         counts['svg'] += 1
         try:
