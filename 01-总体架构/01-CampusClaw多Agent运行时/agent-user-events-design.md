@@ -20,7 +20,7 @@
 | # | 事项 | 负责人 | 来源 |
 |---|---|---|---|
 | T2 | Mate 侧哪些角色可读整个 Agent 的用户输入，以及用户审计方式 | Mate | [D2](#d2) |
-| T4 | 校准时间范围上限 31 天、页大小 200 与偏移上限 10000 | 实施 | [§5.2.2](#capacity) |
+| T4 | 校准时间范围上限 31 天、页大小 200 与深页耗时 | 实施 | [§5.2.2](#capacity) |
 | T6 | 生成两个操作的 operation JSON 与 HTML 评审页 | 实施 | [§4](#api) |
 
 ### 需求信息
@@ -160,7 +160,7 @@ ORDER BY e.created_at, e.session_id, e.event_seq
 LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 ```
 
-步骤为：校验 agentId（`ClawConstants.Agent.ID_REGEX`）、category、from/to、page 与 limit；Service 归一 page 默认 1、limit 默认 50，并拒绝偏移 `(page-1)*limit` 超过 10000；执行上述读取，多取一条判断是否还有下一页，有则返回 `nextPage=page+1`；逐条用 `CommittedEventProjection` 投影并包上 sessionId。事件只读一次，不另查总数。
+步骤为：校验 agentId（`ClawConstants.Agent.ID_REGEX`）、category、from/to、page 与 limit；Service 归一 page 默认 1、limit 默认 50，只校验偏移计算不溢出；执行上述读取，多取一条判断是否还有下一页，有则返回 `nextPage=page+1`；逐条用 `CommittedEventProjection` 投影并包上 sessionId。事件只读一次，不另查总数。
 
 每页独立读取，不冻结快照。翻页期间如有会话被删除，或有新事件提交到已读过的位置之前，后续页会整体移动，可能重复或漏读，见 F6。eventSeq 只在服务端用于排序，不进入响应。
 
@@ -205,7 +205,7 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 | ListAgentEvents | `GET /agents/{agentId}/events?category=&from=&to=&page=&limit=` | `{events:[{sessionId, event}], nextPage}` | 本节，待生成 |
 | GetEventTurn | `GET /sessions/{sessionId}/events/{eventId}/turn?page=&limit=` | `{rootEventId, finished, events, nextPage}` | 本节，待生成 |
 
-**参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。category 必填，只能传一个值：`user` 返回五种 user.*，`agent` 返回七种 agent.*，`session` 返回五种 session.*（空闲、模型/思考/模式变更、压缩）；其他值返回 400。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。page 默认 1、为正整数；limit 默认 50、范围 1～200，与 ListEvents 相同；UC1 的偏移 `(page-1)*limit` 不超过 10000，超过时缩小时间范围分段查询。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
+**参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。category 必填，只能传一个值：`user` 返回五种 user.*，`agent` 返回七种 agent.*，`session` 返回五种 session.*（空闲、模型/思考/模式变更、压缩）；其他值返回 400。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。page 默认 1、为正整数；limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
 
 <a id="interface-conventions"></a>
 
@@ -218,7 +218,7 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 
 <a id="integer-page"></a>
 
-**分页。** 两个接口都使用与 [ListEvents](chat-events-history-design.md#integer-pagination) 一致的整数页码：请求 `page`，有下一页时响应 `nextPage=page+1`，否则为 null；不返回 total。选择页码而不是游标，是为了与 ListEvents 一致、调用方用法最简单。代价有两点：深页要跳过前面的行，越翻越慢，所以 UC1 限制偏移不超过 10000；翻页期间的删除或晚提交会让后续页移动，跨页不保证无重复、无遗漏（F6）。需要完整结果时，Mate 用已结束的时间段查询，并按 sessionId + eventId 去重。
+**分页。** 两个接口都使用与 [ListEvents](chat-events-history-design.md#integer-pagination) 一致的整数页码：请求 `page`，有下一页时响应 `nextPage=page+1`，否则为 null；不返回 total。选择页码而不是游标，是为了与 ListEvents 一致、调用方用法最简单。代价有两点：深页要跳过前面的行，越翻越慢，不设偏移上限：用户事件稀疏，31 天内页数很少；agent 类别事件密集，深页会慢，由时间跨度上限兜底；翻页期间的删除或晚提交会让后续页移动，跨页不保证无重复、无遗漏（F6）。需要完整结果时，Mate 用已结束的时间段查询，并按 sessionId + eventId 去重。
 
 nextPage 为 null 只表示本次读取已无下一页，不表示以后不会追加。
 
@@ -265,7 +265,7 @@ nextPage 为 null 只表示本次读取已无下一页，不表示以后不会�
 | HTTP | resCode | 适用 | 说明 |
 |---|---|---|---|
 | 400 | `INVALID_AGENT_ID` | UC1 | 复用已有码 |
-| 400 | `INVALID_AGENT_EVENT_QUERY` | UC1 | 新增；category 缺失或取值不是 user、agent、session，from/to 缺失、格式、顺序、跨度，page、limit 不合法或偏移超过 10000 |
+| 400 | `INVALID_AGENT_EVENT_QUERY` | UC1 | 新增；category 缺失或取值不是 user、agent、session，from/to 缺失、格式、顺序、跨度，page、limit 不合法 |
 | 400 | `INVALID_SESSION_ID` | UC2 | 复用已有码 |
 | 400 | `INVALID_EVENT_TURN_QUERY` | UC2 | 新增；eventId、page 或 limit 不合法 |
 | 404 | `SESSION_NOT_FOUND` | UC2 | 复用；会话不存在或已删除 |
@@ -313,7 +313,7 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 #### 5.2.2 容量与限流
 
 - 配额：时间跨度不超过 31 天，每页不超过 200 条（T4）。这两个值是有界查询的初始值，不是容量承诺。
-- 瓶颈：UC1 每页在对应类别的部分索引上跳过 `(page-1)*limit` 条再读 limit+1 条，成本随页深线性增长，偏移上限 10000 把单页最坏成本限定在约一万个索引项。UC2 一轮的事件数通常为几十到几百条，读取走主键与唯一索引。
+- 瓶颈：UC1 每页在对应类别的部分索引上跳过 `(page-1)*limit` 条再读 limit+1 条，成本随页深线性增长；用户事件稀疏，影响不大，agent 类别在长时间段深翻时最慢，由 31 天跨度上限兜底，不另设偏移上限。UC2 一轮的事件数通常为几十到几百条，读取走主键与唯一索引。
 - 压测计划：【缺口】需要按真实 GaussDB 和代表性 Agent（会话数、每日用户事件数）验证三个部分索引的执行计划、深页耗时和写入开销。
 
 #### 5.2.3 监控告警
@@ -344,7 +344,7 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 
 ### 6.3 自动化测试
 
-- UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；page 非正整数、偏移超过 10000 返回 400，超出范围的页码返回 200 空列表，同秒多会话按页翻读顺序稳定；category=user 只返回五种 user.*，category=agent 只返回七种 agent.*，category=session 只返回五种 session.*；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表。
+- UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；page 非正整数返回 400，超出范围的页码返回 200 空列表，同秒多会话按页翻读顺序稳定；category=user 只返回五种 user.*，category=agent 只返回七种 agent.*，category=session 只返回五种 session.*；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表。
 - UC2：以 user.message、确认、审核、回答、停止、agent.tool_result、终态 idle 为起点返回同一轮；确认续跑后的多段按 eventSeq 合并；配置事件返回 `EVENT_TURN_NOT_FOUND`；未结束轮次 finished=false；同 Session 两轮互不混入；page 与 limit 边界同 ListEvents。
 - 两者：返回事件与 ListEvents 同一事件逐字段相等；未知持久化类型返回 `EVENT_LIST_FAILED`；GaussDB 执行计划使用新增索引。
 
