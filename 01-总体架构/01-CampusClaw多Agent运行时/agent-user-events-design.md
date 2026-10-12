@@ -36,6 +36,7 @@
 | 术语 | 含义 |
 |---|---|
 | 用户事件 | 类型以 `user.` 开头的已提交公共事件：user.message、user.tool_confirmation、user.plan_confirmation、user.question_answer、user.interrupt（`CommittedEventType`） |
+| 根执行 | Claw 已有的执行记录（`t_session_executions` 的一行）：一条 user.message 被受理时创建，确认、审核、回答后的续跑都挂在同一条记录下，直到执行结束；项目内统一沿用此名 |
 | 轮次 | 一条 user.message 被受理后形成的一次根执行，从该消息开始，包含确认/审核/回答续跑段、Agent 输出、停止请求，到实际终态 session.status_idle 为止；身份为根消息 eventId（`t_session_executions.root_event_id`） |
 | 结果段 | 根执行中的初始段或一次续跑段，已提交事件经 `t_session_execution_segment_events` 关联到段 |
 | 完整事件 | GET 历史与 POST SSE 共用的安全投影（`CommittedEventProjection`），字段由[共享事件源](事件契约/common.json)维护 |
@@ -89,7 +90,7 @@
 
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
-| <a id="d1"></a>D1 | 轮次如何界定 | Codex 有显式 turn id 和状态；OpenCode、Claude Managed Agents 以 idle 标记切分；pi 的 turn 只是一次模型回复加工具结果 | Claw 已有根执行：一条 user.message 受理生成一次执行，续跑段和终态都挂在它下面 | 复用根执行作为轮次，根消息 eventId 为轮次身份；不新增轮次表，不按“到下一条 user.message 为止”推导 | 用户主动配置变更与手动压缩不属于任何轮次；停止请求需按 targetEventId 特殊定位；自动压缩关联差距需先修复 |
+| <a id="d1"></a>D1 | 轮次如何界定 | Codex 有显式 turn id 和状态；OpenCode、Claude Managed Agents 以 idle 标记切分；pi 的 turn 只是一次模型回复加工具结果 | Claw 已有根执行：一条 user.message 受理生成一次执行，续跑段和终态都挂在它下面 | 一轮就是一条用户消息的完整处理，直接沿用已有的根执行记录，根消息 eventId 为轮次身份；不新增轮次表，不按“到下一条 user.message 为止”推导 | 用户主动配置变更与手动压缩不属于任何轮次；停止请求需按 targetEventId 特殊定位；自动压缩关联差距需先修复 |
 | <a id="d2"></a>D2 | Agent 级读取的权限边界 | Claude Managed Agents 按 API Key 所属工作区授权，可按 agent_id 列会话；其他基线为单用户本地工具，无可对照实现 | 用户与权限由 Mate 维护，Claw 不推导用户可见范围；Agent 下会话数可能很大 | Mate 完成该 Agent 的鉴权后再调用；Claw 返回该 Agent 全部未删除会话的用户事件，不按用户过滤 | 一次调用可读到多个用户的输入，Mate 必须限制角色并做用户审计；放弃让 Mate 传入获准会话 ID 集合（集合可能很大） |
 | <a id="d3"></a>D3 | 如何按 Agent 和时间读取 | OpenCode 在消息表上有全局 time_created 索引但无 API 使用；Claude Managed Agents 先按 agent_id 列会话、再逐会话读事件 | agent_id 已在 t_sessions 上且不可变；用户事件稀疏；删除时会话行立即删除、事件行稍后清理 | 不改表结构：先按 t_sessions.agent_id 找到会话，再按 session_id 读这些会话中的用户事件；新增 `t_sessions(agent_id)` 索引和只覆盖 user.* 的 `t_session_events(session_id, created_at, event_seq)` 部分索引 | 跨会话的时间顺序无法由索引直接给出，每页要把该 Agent 在时间范围内的全部用户事件取出排序后再分页；会话很多、用户事件很多的 Agent 会变慢。放弃在事件表冗余 agent_id：它要改写入路径和表结构，且存量数据需要回填 |
 
