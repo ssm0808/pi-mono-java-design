@@ -81,7 +81,7 @@
 | 阶段 | 下钻 |
 |---|---|
 | 步骤 3～7：按 Agent 时间查询 | [§3.3](#uc1-detail) |
-| 步骤 10～14：解析并读取轮次 | [§3.4](#uc2-detail) |
+| 步骤 10～15：解析并读取轮次 | [§3.4](#uc2-detail) |
 
 <a id="decisions"></a>
 
@@ -135,7 +135,7 @@ CREATE INDEX idx_t_session_events_agent_user_time
 
 ![两个读取接口的目标类](设计图/Agent用户事件查询/agent_user_events_classes.svg)
 
-[原尺寸 SVG](设计图/Agent用户事件查询/agent_user_events_classes.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L81)
+[原尺寸 SVG](设计图/Agent用户事件查询/agent_user_events_classes.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L104)
 
 <a id="uc1-detail"></a>
 
@@ -175,11 +175,11 @@ eventSeq 只在服务端用于比较，不进入游标或响应。
 
 ### 3.4 解析并读取轮次的详细时序（UC2）
 
-展开整体时序步骤 10～14。
+展开整体时序步骤 10～15。
 
 ![解析并读取一个轮次](设计图/Agent用户事件查询/event_turn_resolution.svg)
 
-[原尺寸 SVG](设计图/Agent用户事件查询/event_turn_resolution.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L44)
+[原尺寸 SVG](设计图/Agent用户事件查询/event_turn_resolution.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L59)
 
 事件到轮次的解析规则：
 
