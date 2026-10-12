@@ -27,17 +27,17 @@ database "EventStore" as Store
 Operator -> Mate : Choose Agent and time range
 Mate -> Mate : Check Agent-level read permission
 Mate -> Query : List user events of Agent in [from, to)
-Query -> Query : Validate agentId, range and page
-Query -> Store : Read user.* events of live Sessions by time
+Query -> Query : Validate agentId, range and cursor
+Query -> Store : Read user.* events of live Sessions after cursor by time
 Store --> Query : Events with sessionId
-Query --> Mate : Public user events and nextPage
+Query --> Mate : Public user events and nextCursor
 Mate --> Operator : Show user input in time order
 Operator -> Mate : Open one event
 Mate -> Query : Get turn of sessionId + eventId
 Query -> Store : Resolve root execution of the event
 Query -> Store : Read events of that execution by eventSeq
 Store --> Query : Turn events and execution state
-Query --> Mate : rootEventId, finished, events, nextPage
+Query --> Mate : rootEventId, finished, events, nextCursor
 Mate --> Operator : Show the full turn
 @enduml
 
@@ -67,15 +67,15 @@ participant "Mate" as Mate
 participant "EventQuery" as Query
 database "Events" as Events
 database "Executions" as Exec
-Mate -> Query : GET turn of sessionId + eventId, page, limit
+Mate -> Query : GET turn of sessionId + eventId, limit, afterEventId
 Query -> Events : Read event by (sessionId, eventId)
 Events --> Query : Event type and payload
 Query -> Exec : Find execution by segment link or interrupt target
 Exec --> Query : executionId, rootEventId, state
-Query -> Events : Read linked events and stop event by eventSeq, limit + 1
+Query -> Events : Read linked events and stop event after cursor by eventSeq, limit + 1
 Events --> Query : One page of committed events
 Query -> Query : Project with shared CommittedEventProjection
-Query --> Mate : rootEventId, finished, events, nextPage
+Query --> Mate : rootEventId, finished, events, nextCursor
 @enduml
 
 @startuml agent_user_events_classes
