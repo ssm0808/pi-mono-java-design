@@ -23,32 +23,30 @@ title Trace 读取用户请求与轮次的整体时序（目标设计，待实�
 participant "Mate" as Mate
 participant "Claw" as Claw
 database "GaussDB" as DB
-== 列出用户请求 ==
-Mate -> Claw : 查询某个 Agent 在时间段内收到的用户请求
+Mate -> Claw : 查询 Agent 在指定时间段内的用户请求
 activate Mate
 activate Claw
-Claw -> Claw : 校验 Agent、时间段和游标
-Claw -> DB : 按时间顺序读取该 Agent 未删除会话中的用户请求
+Claw -> Claw : 校验查询条件
+Claw -> DB : 按时间顺序读取用户请求（排除已删除会话）
 activate DB
-DB --> Claw : 一页用户请求及其所属会话
+DB --> Claw : 用户请求及所属会话
 deactivate DB
-Claw -> Claw : 转成与历史接口相同的公共事件
-Claw --> Mate : 按时间顺序的用户请求和继续读取的位置
+Claw -> Claw : 转换为公共事件
+Claw --> Mate : 返回一页用户请求及下一页位置
 deactivate Claw
-== 展开其中一轮 ==
-Mate -> Claw : 读取某条事件所在的那一轮
+Mate -> Claw : 查询某条用户请求所在的轮次
 activate Claw
-Claw -> Claw : 校验会话、事件和游标
-Claw -> DB : 找到这条事件所属的那一轮
+Claw -> Claw : 校验查询条件
+Claw -> DB : 定位该请求所属的轮次
 activate DB
-DB --> Claw : 这一轮是否已结束
+DB --> Claw : 轮次及其结束状态
 deactivate DB
-Claw -> DB : 按发生顺序读取这一轮的事件
+Claw -> DB : 按发生顺序读取该轮次的事件
 activate DB
-DB --> Claw : 这一轮的一页事件
+DB --> Claw : 该轮次的事件
 deactivate DB
-Claw -> Claw : 转成公共事件
-Claw --> Mate : 这一轮的事件、是否已结束和继续读取的位置
+Claw -> Claw : 转换为公共事件
+Claw --> Mate : 返回该轮次的事件、结束状态及下一页位置
 deactivate Claw
 deactivate Mate
 @enduml
@@ -78,27 +76,27 @@ title 解析并读取一个轮次（UC2，目标设计，待实现）
 participant "事件接口" as Web
 participant "轮次查询" as Svc
 database "GaussDB" as DB
-[-> Web : 读取某条事件所在的那一轮
+[-> Web : 查询某条事件所在的轮次
 activate Web
-Web -> Web : 校验会话、事件、每页条数和游标
-Web -> Svc : 查询事件所在轮次
+Web -> Web : 校验查询条件
+Web -> Svc : 查询所在轮次
 activate Svc
-Svc -> DB : 读取起点事件
+Svc -> DB : 读取该事件
 activate DB
-DB --> Svc : 事件类型和内容
+DB --> Svc : 事件类型与内容
 deactivate DB
-Svc -> DB : 按结果段关联或停止请求的目标定位根执行
+Svc -> DB : 经结果段关联或停止请求的目标定位轮次
 activate DB
-DB --> Svc : 根执行及其状态
+DB --> Svc : 轮次及其结束状态
 deactivate DB
-Svc -> DB : 按发生顺序读取游标之后的关联事件和停止事件
+Svc -> DB : 按发生顺序读取该轮次在游标之后的事件
 activate DB
-DB --> Svc : 一页已提交事件
+DB --> Svc : 该轮次的一页事件
 deactivate DB
-Svc -> Svc : 逐条转成公共事件
-Svc --> Web : 根消息、是否已结束、事件和继续读取的位置
+Svc -> Svc : 转换为公共事件
+Svc --> Web : 该轮次的事件、结束状态及下一页位置
 deactivate Svc
-[<-- Web : 这一轮的完整过程
+[<-- Web : 返回该轮次的事件
 deactivate Web
 @enduml
 
