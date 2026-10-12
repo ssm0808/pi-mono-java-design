@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.0 |
+| 文档版本 | 0.3.0 |
 | 更新日期 | 2026-10-12 |
 | 模块 | M01 CampusClaw 多 Agent Runtime：事件读取 |
 | 设计状态 | 两个读取接口、事件表 agent_id 列与索引均为待实现；复用的事件表、根执行、结果段关联与公共投影为已实现（见 §8.2） |
@@ -11,7 +11,7 @@
 
 ## 评审记录
 
-### 评审结论（必选）
+### 评审结论
 
 2026-10-12，Lotus 确认四项方向：返回全部五种用户事件；权限由 Mate 判断；分页使用透明游标；定时任务与子 Agent 会话按同一规则返回。精确契约尚未生成，整体评审结论待契约评审后补充。
 
@@ -40,7 +40,7 @@
 | 结果段 | 根执行中的初始段或一次续跑段，已提交事件经 `t_session_execution_segment_events` 关联到段 |
 | 完整事件 | GET 历史与 POST SSE 共用的安全投影（`CommittedEventProjection`），字段由[共享事件源](事件契约/common.json)维护 |
 
-### 1.2 需求整理（必选）
+### 1.2 需求整理
 
 | 编号 | 需求 | 类型 | 来源 |
 |---|---|---|---|
@@ -48,8 +48,8 @@
 | R2 | 给定事件标识，返回该事件所在轮次的全部完整事件 | 功能 | Q1 |
 | R3 | 返回的事件与 ListEvents/POST SSE 的同一事件逐字段相同，不另造事件格式 | 约束 | 推导自 [历史查询 §2](chat-events-history-design.md)，需确认 |
 | R4 | 用户、归属与权限由 Mate 维护，Claw 不保存身份副本、不推导用户可见范围 | 安全 | [Claw 数据库设计 §3.1](../../03-数据与存储/Claw数据库设计.md#mate-ownership) |
-| R5 | 已删除的会话不再出现在任一接口结果中 | 安全 | 推导自 [Session 删除](../../03-数据与存储/01-会话记忆GaussDB/README.md#65-删除-session)，需确认 |
-| R6 | 查询有界：时间范围与页大小有上限，读取不阻塞执行 | 稳定性 | 推导自 [历史查询 §3](chat-events-history-design.md#3-已确认普通数字页码)，需确认 |
+| R5 | 已删除的会话不再出现在任一接口结果中 | 安全 | 推导自 [Session 删除](../../03-数据与存储/01-会话记忆GaussDB/README.md#delete-session)，需确认 |
+| R6 | 查询有界：时间范围与页大小有上限，读取不阻塞执行 | 稳定性 | 推导自 [历史查询 §3](chat-events-history-design.md#integer-pagination)，需确认 |
 | R7 | 分页使用透明游标：游标由上一条事件的公开字段组成，调用方可读、可自行构造 | 约束 | Lotus 2026-10-12 评审 |
 
 ## 2. 整体方案
@@ -60,19 +60,19 @@
 
 | 编号 | 参与者 | 业务目标 | 业务结果 |
 |---|---|---|---|
-| BU1 | 运营人员 | 查看某个 Agent 在一段时间内收到的用户事件 | 按时间先后看到该 Agent 各会话中的用户消息、确认、审核、回答和停止请求，每页最多 200 条 |
+| BU1 | 运营人员 | 查看某个 Agent 在一段时间内收到的用户事件 | 按时间先后看到该 Agent 各会话中的用户消息、确认、审核、回答和停止请求 |
 | BU2 | 运营人员 | 查看某条用户事件所在那一轮的完整过程 | 看到这一轮的用户输入、思考、工具调用与结果、计划与提问、停止请求和结束状态，并知道这一轮是否已经结束 |
 
-### 2.3 整体时序（必选）
+### 2.2 整体时序
 
 场景：运营人员在 Mate 中选择设备告警 Agent 和最近 7 天，浏览用户输入后展开其中一轮。起点是运营人员选择 Agent，终点是看到完整轮次。前提是 Mate 已完成公司认证和 Agent 级权限判断。状态：目标设计，待实现。
 
 | 参与者 | 职责 | 映射 |
 |---|---|---|
-| Operator | 选择 Agent 与时间范围，浏览并展开轮次 | Mate 管理界面用户 |
+| 运营人员 | 选择 Agent 与时间范围，浏览并展开轮次 | Mate 管理界面用户 |
 | Mate | 公司认证、Agent 级授权、sessionId 到公共 Chat 的映射与展示 | mate-service |
-| EventQuery | 参数校验、按 Agent 时间查询、轮次解析、共享投影 | `AgentUserEventQueryService`、`EventTurnQueryService`、`CommittedEventProjection` |
-| EventStore | 已提交公共事件、会话与根执行的权威记录 | `t_session_events`、`t_sessions`、`t_session_executions`、`t_session_execution_segment_events` |
+| 事件查询 | 参数校验、按 Agent 时间查询、轮次解析、共享投影 | `AgentUserEventQueryService`、`EventTurnQueryService`、`CommittedEventProjection` |
+| 事件存储 | 保存已提交的公共事件、会话与根执行 | `t_session_events`、`t_sessions`、`t_session_executions`、`t_session_execution_segment_events` |
 
 ![按 Agent 回看用户输入并展开轮次](设计图/Agent用户事件查询/agent_user_events_overview.svg)
 
@@ -85,7 +85,7 @@
 
 <a id="decisions"></a>
 
-### 2.4 关键设计决策（必选）
+### 2.3 关键设计决策
 
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
@@ -100,14 +100,14 @@
 
 ## 3. 详细设计
 
-### 3.1 系统用例（必选）
+### 3.1 系统用例
 
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
 | UC1 ListAgentUserEvents | BU1 | Mate | Mate 已判定调用者可读该 Agent | 返回 `[from, to)` 内该 Agent 未删除会话的用户事件，按 createdAt、sessionId、eventSeq 升序，附 nextCursor | from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
 | UC2 GetEventTurn | BU2 | Mate | Mate 已判定调用者可读该会话 | 返回事件所在轮次的 rootEventId、finished、按 eventSeq 升序的完整事件页与 nextCursor | 事件身份为 sessionId + eventId；会话级配置变更与手动压缩不属于任何轮次 |
 
-### 3.2 数据模型（必选）
+### 3.2 数据模型
 
 不新增表。复用已实现的四张表，并给 `t_session_events` 增加一个随写入固定的 agent_id 列和部分索引（待实现，归属登记见 [Claw 数据库设计 §6.4](../../03-数据与存储/Claw数据库设计.md#agent-user-events)）。
 
@@ -305,9 +305,9 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 | F6 | 翻页期间有新事件或会话被删除 | 跨页 | 未发生 | Mate | 每页独立读取，不冻结快照；游标按排序键定位，删除不会移动后续位置，游标所在会话被删除时继续读下一位置 | 不会重复；需要完整结果时让 `to` 早于当前时间一个安全间隔（T4） | `to` 接近当前时间时，跨实例时钟偏差或晚提交的事件若 createdAt 早于游标会被漏读 |
 | F7 | 轮次未结束 | 读取 | 未发生 | Mate | finished=false，返回已提交部分 | 稍后再查或跟随 SSE | 不承诺该轮最终结束 |
 
-#### 5.2.2 容量与限流
-
 <a id="capacity"></a>
+
+#### 5.2.2 容量与限流
 
 - 配额：时间跨度不超过 31 天，每页不超过 200 条（T4）。这两个值是有界查询的初始值，不是容量承诺。
 - 瓶颈：UC1 每页从游标位置在 `idx_t_session_events_agent_user_time` 上范围扫描 limit+1 条，成本不随页深增长；需验证 GaussDB 对行值比较能否走该索引。UC2 一轮的事件数通常为几十到几百条，读取走主键与唯一索引。
@@ -398,5 +398,6 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.3.0 | 2026-10-12 | 按最新设计文档模板去掉标题中的必选标记，整体时序和关键设计决策顺延为 2.2、2.3，设计图改用中文，跨文档链接改用显式锚点。 |
 | 0.2.0 | 2026-10-12 | 两个接口改用透明 keyset 游标，并按评审确认用户事件范围、权限归属及定时与子会话处理。 |
 | 0.1.0 | 2026-10-12 | 新增按 Agent 时间范围查询用户事件与按事件读取所在轮次的目标设计。 |

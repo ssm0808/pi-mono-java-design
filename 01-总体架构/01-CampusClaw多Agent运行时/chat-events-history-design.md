@@ -223,6 +223,7 @@ Mate 公共 Chat API 和前端，便于用户直接查看模型本次返回的�
 仅 signature、关闭时不产生新事件、关闭后仍可读取旧原文，以及 HTML 样文本的纯文本展示。
 
 <a id="3-已确认普通数字页码"></a>
+<a id="integer-pagination"></a>
 ## 3. 普通数字页码
 
 `page=1、2、3……`，省略按第一页处理；有后续页时返回整数 `nextPage=page+1`，

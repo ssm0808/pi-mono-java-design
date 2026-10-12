@@ -1,13 +1,13 @@
 @startuml agent_user_events_overview
-' Source evidence: pi-mono-java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' 源码证据：pi-mono-java main 769e86592285f4a25b0febaf551eddea6bc7212c
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/
 ' web/RuntimeEventController.java:list
 ' event/CommittedEventQueryService.java:list,pageOf
 ' event/CommittedEventProjection.java:project
 ' persistence/MyBatisRuntimeExecutionControlRepository.java:linkCommittedEvent
-' Observed behavior: events are read per Session only; turns exist as root executions and segment links.
-' Design reason: Mate reviews user input per Agent first, then opens one turn on demand.
-' Pending implementation: both read operations and the agent_id event index.
+' 已观察行为：事件只能按单个 Session 读取；轮次以根执行和结果段关联的形式存在。
+' 设计原因：Mate 先按 Agent 回看用户输入，再按需展开其中一轮。
+' 待实现：两个读取接口和事件表 agent_id 索引。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
@@ -19,38 +19,38 @@ skinparam sequenceMessageAlign left
 skinparam maxMessageSize 190
 hide footbox
 autonumber
-title Review User Input of One Agent - Target / Pending implementation
-actor "Operator" as Operator
+title 回看一个 Agent 的用户输入（目标设计，待实现）
+actor "运营人员" as Operator
 participant "Mate" as Mate
-participant "EventQuery" as Query
-database "EventStore" as Store
-Operator -> Mate : Choose Agent and time range
-Mate -> Mate : Check Agent-level read permission
-Mate -> Query : List user events of Agent in [from, to)
-Query -> Query : Validate agentId, range and cursor
-Query -> Store : Read user.* events of live Sessions after cursor by time
-Store --> Query : Events with sessionId
-Query --> Mate : Public user events and nextCursor
-Mate --> Operator : Show user input in time order
-Operator -> Mate : Open one event
-Mate -> Query : Get turn of sessionId + eventId
-Query -> Store : Resolve root execution of the event
-Query -> Store : Read events of that execution by eventSeq
-Store --> Query : Turn events and execution state
-Query --> Mate : rootEventId, finished, events, nextCursor
-Mate --> Operator : Show the full turn
+participant "事件查询" as Query
+database "事件存储" as Store
+Operator -> Mate : 选择 Agent 和时间范围
+Mate -> Mate : 判断 Agent 级读取权限
+Mate -> Query : 查询该 Agent 在 [from, to) 内的用户事件
+Query -> Query : 校验 agentId、时间范围和游标
+Query -> Store : 按时间读取未删除 Session 中\n游标之后的 user.* 事件
+Store --> Query : 带 sessionId 的事件
+Query --> Mate : 公共用户事件和 nextCursor
+Mate --> Operator : 按时间顺序展示用户输入
+Operator -> Mate : 展开其中一条事件
+Mate -> Query : 读取 sessionId + eventId 所在轮次
+Query -> Store : 定位该事件所属的根执行
+Query -> Store : 按 eventSeq 读取该执行的事件
+Store --> Query : 轮次事件和执行状态
+Query --> Mate : rootEventId、finished、events、nextCursor
+Mate --> Operator : 展示完整的一轮
 @enduml
 
 @startuml event_turn_resolution
-' Source evidence: pi-mono-java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' 源码证据：pi-mono-java main 769e86592285f4a25b0febaf551eddea6bc7212c
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/
 ' persistence/RuntimeExecutionPersistenceService.java:acceptMessage,acceptInterrupt,appendEntry
 ' persistence/MyBatisRuntimeExecutionControlRepository.java:linkCommittedEvent,appendToSegment,markTerminal
 ' event/RuntimeCompactionEventProjector.java:persistCompaction
 ' modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:findCommittedEvent
-' Observed behavior: user.message, continuations, agent output and idle are linked to segments;
-' user.interrupt is stored with targetEventId only; in-run compaction is not linked yet.
-' Design reason: reuse root execution as the turn identity; no new turn table.
+' 已观察行为：user.message、续跑、Agent 输出和 idle 都关联到结果段；
+' user.interrupt 只保存 targetEventId；执行内自动压缩尚未关联。
+' 设计原因：复用根执行作为轮次身份，不新增轮次表。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
@@ -62,30 +62,30 @@ skinparam sequenceMessageAlign left
 skinparam maxMessageSize 190
 hide footbox
 autonumber
-title Resolve and Read One Turn (UC2) - Target / Pending implementation
+title 解析并读取一个轮次（UC2，目标设计，待实现）
 participant "Mate" as Mate
-participant "EventQuery" as Query
-database "Events" as Events
-database "Executions" as Exec
-Mate -> Query : GET turn of sessionId + eventId, limit, afterEventId
-Query -> Events : Read event by (sessionId, eventId)
-Events --> Query : Event type and payload
-Query -> Exec : Find execution by segment link or interrupt target
-Exec --> Query : executionId, rootEventId, state
-Query -> Events : Read linked events and stop event after cursor by eventSeq, limit + 1
-Events --> Query : One page of committed events
-Query -> Query : Project with shared CommittedEventProjection
-Query --> Mate : rootEventId, finished, events, nextCursor
+participant "事件查询" as Query
+database "事件表" as Events
+database "执行表" as Exec
+Mate -> Query : GET sessionId + eventId 所在轮次\nlimit、afterEventId
+Query -> Events : 按 (sessionId, eventId) 读取事件
+Events --> Query : 事件类型和 payload
+Query -> Exec : 按结果段关联或停止请求的目标定位执行
+Exec --> Query : executionId、rootEventId、state
+Query -> Events : 按 eventSeq 读取游标之后的关联事件\n和停止事件，取 limit + 1 条
+Events --> Query : 一页已提交事件
+Query -> Query : 用共享的 CommittedEventProjection 投影
+Query --> Mate : rootEventId、finished、events、nextCursor
 @enduml
 
 @startuml agent_user_events_classes
-' Source evidence: pi-mono-java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' 源码证据：pi-mono-java main 769e86592285f4a25b0febaf551eddea6bc7212c
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/
 ' web/RuntimeEventController.java; event/CommittedEventQueryService.java
 ' event/CommittedEventProjection.java; persistence/MyBatisRuntimeSessionRepository.java:findEventPage
 ' vo/ListSessionEventsResponseVO.java; vo/SessionEventResponseVO.java
-' Observed behavior: one stateless projection serves GET history and POST SSE frames.
-' Design reason: new reads reuse it; DTOs stay below Service, VOs at Controller.
+' 已观察行为：同一个无状态投影同时服务 GET 历史和 POST SSE 帧。
+' 设计原因：新读取复用该投影；DTO 留在 Service 之下，VO 留在 Controller 层。
 !pragma layout smetana
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -96,24 +96,24 @@ skinparam ArrowColor #425B70
 skinparam classBackgroundColor #F1F5F9
 skinparam classBorderColor #8496A4
 hide empty members
-title Agent User Events and Event Turn - Target Classes\nPending implementation unless marked Existing
-class "AgentUserEventController" as AgentWeb <<Web / Singleton>>
-class "RuntimeEventController" as SessionWeb <<Existing / Web>> {
+title Agent 用户事件与事件轮次：目标类图\n除标注“已实现”外均为待实现
+class "AgentUserEventController" as AgentWeb <<Web / 单例>>
+class "RuntimeEventController" as SessionWeb <<已实现 / Web>> {
   +list()
-  +getTurn() : Pending
+  +getTurn() : 待实现
 }
-class "AgentUserEventQueryService" as AgentSvc <<Singleton>>
-class "EventTurnQueryService" as TurnSvc <<Singleton>>
-class "CommittedEventProjection" as Projection <<Existing / Stateless>>
-interface "RuntimeEventReadRepository" as Repo <<Mapper boundary>>
+class "AgentUserEventQueryService" as AgentSvc <<单例>>
+class "EventTurnQueryService" as TurnSvc <<单例>>
+class "CommittedEventProjection" as Projection <<已实现 / 无状态>>
+interface "RuntimeEventReadRepository" as Repo <<Mapper 边界>>
 class "RuntimeEventReadMapper" as Mapper <<MyBatis>>
-class "AgentUserEventQueryDTO" as QueryDTO <<Per request>>
+class "AgentUserEventQueryDTO" as QueryDTO <<每次请求>>
 class "AgentUserEventDTO" as ItemDTO <<sessionId + CommittedEventDTO>>
-class "EventTurnDTO" as TurnDTO <<Per request>>
-class "ListAgentUserEventsResponseVO" as ListVO <<Immutable>>
-class "AgentUserEventResponseVO" as ItemVO <<Immutable>>
-class "EventTurnResponseVO" as TurnVO <<Immutable>>
-class "SessionEventResponseVO" as EventVO <<Existing / Immutable>>
+class "EventTurnDTO" as TurnDTO <<每次请求>>
+class "ListAgentUserEventsResponseVO" as ListVO <<不可变>>
+class "AgentUserEventResponseVO" as ItemVO <<不可变>>
+class "EventTurnResponseVO" as TurnVO <<不可变>>
+class "SessionEventResponseVO" as EventVO <<已实现 / 不可变>>
 AgentWeb --> AgentSvc
 SessionWeb --> TurnSvc
 AgentSvc --> Repo
@@ -121,13 +121,13 @@ TurnSvc --> Repo
 AgentSvc --> Projection
 TurnSvc --> Projection
 Repo <|.. Mapper
-AgentSvc ..> QueryDTO : normalizes
-Repo ..> ItemDTO : returns
-Repo ..> TurnDTO : returns
-AgentSvc ..> ListVO : builds
-TurnSvc ..> TurnVO : builds
+AgentSvc ..> QueryDTO : 归一化
+Repo ..> ItemDTO : 返回
+Repo ..> TurnDTO : 返回
+AgentSvc ..> ListVO : 组装
+TurnSvc ..> TurnVO : 组装
 ListVO "1" *-- "0..200" ItemVO
 ItemVO "1" *-- "1" EventVO
 TurnVO "1" *-- "0..200" EventVO
-Projection ..> EventVO : creates
+Projection ..> EventVO : 创建
 @enduml
