@@ -136,7 +136,7 @@ CREATE INDEX idx_t_session_events_agent_user_time
 
 ![两个读取接口的目标类](设计图/Agent用户事件查询/agent_user_events_classes.svg)
 
-[原尺寸 SVG](设计图/Agent用户事件查询/agent_user_events_classes.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L109)
+[原尺寸 SVG](设计图/Agent用户事件查询/agent_user_events_classes.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L105)
 
 <a id="uc1-detail"></a>
 
@@ -181,6 +181,12 @@ eventSeq 只在服务端用于比较，不进入游标或响应。
 ![解析并读取一个轮次](设计图/Agent用户事件查询/event_turn_resolution.svg)
 
 [原尺寸 SVG](设计图/Agent用户事件查询/event_turn_resolution.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L56)
+
+| 参与者 | 映射 |
+|---|---|
+| 事件接口 | `RuntimeEventController#getTurn`（待实现） |
+| 轮次查询 | `EventTurnQueryService`，经 `RuntimeEventReadRepository` 读库，用 `CommittedEventProjection` 投影 |
+| GaussDB | `t_session_events`、`t_session_executions`、`t_session_execution_segment_events` |
 
 事件到轮次的解析规则：
 
