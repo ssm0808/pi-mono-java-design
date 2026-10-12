@@ -77,10 +77,10 @@
 
 [原尺寸 SVG](设计图/Agent用户事件查询/agent_user_events_overview.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L1)
 
-| 阶段 | 下钻 |
+| 阶段 | 详细时序 |
 |---|---|
-| 步骤 1～6：按 Agent 和时间段查询 | [§3.3](#uc1-detail) |
-| 步骤 7～14：解析并读取轮次 | [§3.4](#uc2-detail) |
+| 步骤 1～6：查询用户请求 | [§3.3](#uc1-detail) |
+| 步骤 7～14：读取轮次 | [§3.4](#uc2-detail) |
 
 <a id="decisions"></a>
 
@@ -140,7 +140,7 @@ CREATE INDEX idx_t_session_events_agent_user_time
 
 <a id="uc1-detail"></a>
 
-### 3.3 按 Agent 时间查询的详细时序（UC1）
+### 3.3 查询用户请求的详细时序（UC1）
 
 展开整体时序步骤 1～6。查询只读一个 SQL，权限过滤先于排序分页（R4）：
 
@@ -174,11 +174,11 @@ eventSeq 只在服务端用于比较，不进入游标或响应。
 
 <a id="uc2-detail"></a>
 
-### 3.4 解析并读取轮次的详细时序（UC2）
+### 3.4 读取轮次的详细时序（UC2）
 
 展开整体时序步骤 7～14。
 
-![解析并读取一个轮次](设计图/Agent用户事件查询/event_turn_resolution.svg)
+![读取轮次](设计图/Agent用户事件查询/event_turn_resolution.svg)
 
 [原尺寸 SVG](设计图/Agent用户事件查询/event_turn_resolution.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L54)
 
