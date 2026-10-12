@@ -51,7 +51,7 @@
 | R5 | 已删除的会话不再出现在任一接口结果中 | 安全 | 推导自 [Session 删除](../../03-数据与存储/01-会话记忆GaussDB/README.md#delete-session)，需确认 |
 | R6 | 查询有界：时间范围与页大小有上限，读取不阻塞执行 | 稳定性 | 推导自 [历史查询 §3](chat-events-history-design.md#integer-pagination)，需确认 |
 | R7 | 分页使用透明游标：游标由上一条事件的公开字段组成，调用方可读、可自行构造 | 约束 | Lotus 2026-10-12 评审 |
-| R8 | 按 Agent 读取时可按事件类型筛选，参考 Claude Managed Agents List Events 的 types | 功能 | Lotus 2026-10-12 评审 |
+| R8 | 按 Agent 读取时按事件类别筛选，类别分为用户事件和 Agent 事件 | 功能 | Lotus 2026-10-12 评审 |
 
 ## 2. 整体方案
 
@@ -91,7 +91,7 @@
 |---|---|---|---|---|---|
 | <a id="d1"></a>D1 | 轮次如何界定 | Codex 有显式 turn id 和状态；OpenCode、Claude Managed Agents 以 idle 标记切分；pi 的 turn 只是一次模型回复加工具结果 | Claw 已有根执行：一条 user.message 受理生成一次执行，续跑段和终态都挂在它下面 | 复用根执行作为轮次，根消息 eventId 为轮次身份；不新增轮次表，不按“到下一条 user.message 为止”推导 | 用户主动配置变更与手动压缩不属于任何轮次；停止请求需按 targetEventId 特殊定位；自动压缩关联差距需先修复 |
 | <a id="d2"></a>D2 | Agent 级读取的权限边界 | Claude Managed Agents 按 API Key 所属工作区授权，可按 agent_id 列会话；其他基线为单用户本地工具，无可对照实现 | 用户与权限由 Mate 维护，Claw 不推导用户可见范围；Agent 下会话数可能很大 | Mate 完成该 Agent 的鉴权后再调用；Claw 返回该 Agent 全部未删除会话的用户事件，不按用户过滤 | 一次调用可读到多个用户的输入，Mate 必须限制角色并做用户审计；放弃让 Mate 传入获准会话 ID 集合（集合可能很大） |
-| <a id="d3"></a>D3 | 如何高效按 Agent 和时间读取 | OpenCode 在消息表上有全局 time_created 索引但无 API 使用；其他无可对照实现 | agent_id 在会话上不可变；删除时会话行立即删除、事件行稍后清理 | 在 t_session_events 冗余写入 agent_id，建 `(agent_id, created_at, session_id, event_seq)` 部分索引，查询时连接 t_sessions 排除已删除会话 | 多一列冗余数据和一个索引的写入开销；需要同步安装 DDL；部分索引在 GaussDB 的支持待核验 |
+| <a id="d3"></a>D3 | 如何高效按 Agent 和时间读取 | OpenCode 在消息表上有全局 time_created 索引但无 API 使用；其他无可对照实现 | agent_id 在会话上不可变；删除时会话行立即删除、事件行稍后清理 | 在 t_session_events 冗余写入 agent_id，按 user.* 和 agent.* 各建一个 `(agent_id, created_at, session_id, event_seq)` 部分索引，查询时连接 t_sessions 排除已删除会话 | 多一列冗余数据和一个索引的写入开销；需要同步安装 DDL；部分索引在 GaussDB 的支持待核验 |
 
 ## 3. 详细设计
 
@@ -99,19 +99,19 @@
 
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
-| UC1 ListAgentEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话中指定类型的用户事件，按 createdAt、sessionId、eventSeq 升序，附 nextCursor | types 必填，第一版只接受五种 user.*；from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
+| UC1 ListAgentEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话中指定类别（用户事件或 Agent 事件）的事件，按 createdAt、sessionId、eventSeq 升序，附 nextCursor | category 必填，取 user 或 agent；from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
 | UC2 GetEventTurn | BU2 | Mate | Mate 已完成该会话的鉴权 | 返回事件所在轮次的 rootEventId、finished、按 eventSeq 升序的完整事件页与 nextCursor | 事件身份为 sessionId + eventId；会话级配置变更与手动压缩不属于任何轮次 |
 
 <a id="data-model"></a>
 
 ### 3.2 数据模型
 
-不新增表。复用已实现的四张表，并给 `t_session_events` 增加一个随写入固定的 agent_id 列和部分索引（待实现，归属登记见 [Claw 数据库设计 §6.4](../../03-数据与存储/Claw数据库设计.md#agent-user-events)）。
+不新增表。复用已实现的四张表，并给 `t_session_events` 增加一个随写入固定的 agent_id 列和两个部分索引（待实现，归属登记见 [Claw 数据库设计 §6.4](../../03-数据与存储/Claw数据库设计.md#agent-user-events)）。
 
 | 表 | 关键字段 | 本设计中的用途与约束 |
 |---|---|---|
 | `t_sessions` | id、agent_id（不可变） | 会话存在即未删除：删除事务直接删除此行（`RuntimeSessionMapper.xml#deleteSession`），事件行稍后由清理任务删除，所以 UC1 必须与本表连接 |
-| `t_session_events` | session_id、event_id、event_seq、type、created_at、payload；**新增 agent_id** | UC1 按 agent_id + created_at 读取用户事件；UC2 按主键读取起点事件和整轮事件 |
+| `t_session_events` | session_id、event_id、event_seq、type、created_at、payload；**新增 agent_id** | UC1 按 agent_id + created_at 读取指定类别的事件；UC2 按主键读取起点事件和整轮事件 |
 | `t_session_executions` | session_id、execution_id、root_event_id、state、stop_event_id | 根执行即轮次；`state='TERMINAL'` 映射 finished=true；唯一索引 `(session_id, root_event_id)` 用于停止请求定位 |
 | `t_session_execution_segment_events` | session_id、execution_id、segment_id、event_id、event_seq | 主键 `(session_id, event_id)` 用于事件找到所属执行 |
 
@@ -124,9 +124,13 @@ CREATE INDEX idx_t_session_events_agent_user_time
     ON t_session_events (agent_id, created_at, session_id, event_seq)
     WHERE type IN ('user.message', 'user.interrupt', 'user.tool_confirmation',
                    'user.plan_confirmation', 'user.question_answer');
+CREATE INDEX idx_t_session_events_agent_agent_time
+    ON t_session_events (agent_id, created_at, session_id, event_seq)
+    WHERE type IN ('agent.message', 'agent.thinking', 'agent.tool_call',
+                   'agent.tool_result', 'agent.plan', 'agent.question', 'agent.todo_updated');
 ```
 
-追加事务已经持有会话行锁（`lockSessionForUpdate`），agent_id 从同一行取得，不额外查询。面向新建环境交付，不写存量迁移；如已有部署数据，需另定回填方案。GaussDB 对部分索引的支持与执行计划未核验，不支持时退化为不带 WHERE 的同列索引。
+追加事务已经持有会话行锁（`lockSessionForUpdate`），agent_id 从同一行取得，不额外查询。面向新建环境交付，不写存量迁移；如已有部署数据，需另定回填方案。GaussDB 对部分索引的支持与执行计划未核验，不支持时退化为一个不带 WHERE 的同列索引。Agent 事件占事件的大多数，agent 索引让几乎每次事件追加都多写一个索引项，这是放开 agent 类别的主要写入代价。
 
 全局目标类图：Controller 只接收标量参数和返回 VO；Service 归一默认值并组装 VO；Repository 只传 DTO；投影复用已有无状态单例。
 
@@ -146,7 +150,7 @@ SELECT e.session_id, e.event_id, e.event_seq, e.anchor_entry_id,
 FROM t_session_events e
 JOIN t_sessions s ON s.id = e.session_id
 WHERE e.agent_id = #{agentId}
-  AND e.type IN (#{types})  -- 第一版只能是五种 user.* 的子集，命中部分索引
+  AND e.type IN (该类别的全部类型)  -- user 为五种 user.*，agent 为七种 agent.*，各自命中一个部分索引
   AND e.created_at >= #{from} AND e.created_at < #{to}
   -- 带游标时追加：
   AND (e.created_at, e.session_id, e.event_seq) > (#{afterCreatedAt}, #{afterSessionId}, #{afterEventSeq})
@@ -154,13 +158,13 @@ ORDER BY e.created_at, e.session_id, e.event_seq
 LIMIT #{limit + 1}
 ```
 
-步骤为：校验 agentId（`ClawConstants.Agent.ID_REGEX`）、types、from/to、limit 与游标；Service 归一 limit 默认 50；有游标时按 `(sessionId, eventId)` 主键取该事件的 event_seq，再执行上述读取；多取一条判断是否还有下一页，有则以本页最后一条生成 nextCursor；逐条用 `CommittedEventProjection` 投影并包上 sessionId。事件只读一次，不另查总数。
+步骤为：校验 agentId（`ClawConstants.Agent.ID_REGEX`）、category、from/to、limit 与游标；Service 归一 limit 默认 50；有游标时按 `(sessionId, eventId)` 主键取该事件的 event_seq，再执行上述读取；多取一条判断是否还有下一页，有则以本页最后一条生成 nextCursor；逐条用 `CommittedEventProjection` 投影并包上 sessionId。事件只读一次，不另查总数。
 
 游标解析规则：
 
 | 情况 | 处理 |
 |---|---|
-| 游标事件存在，且 createdAt 与该事件一致、类型在本次 types 中、属于本 Agent、位于 `[from, to)` | 用 `(createdAt, sessionId, eventSeq)` 作为起点 |
+| 游标事件存在，且 createdAt 与该事件一致、类型属于本次 category、属于本 Agent、位于 `[from, to)` | 用 `(createdAt, sessionId, eventSeq)` 作为起点 |
 | 游标事件所在会话已删除 | 该会话的事件都不会再返回，用 `(createdAt, sessionId, +∞)` 作为起点，不报错 |
 | 会话存在但没有该事件，或字段与该事件不一致、不在本次范围内 | 400 `INVALID_AGENT_EVENT_QUERY` |
 
@@ -204,16 +208,16 @@ eventSeq 只在服务端用于比较，不进入游标或响应。
 
 | 操作 | 方法与路径 | 成功结果 | 详细契约 |
 |---|---|---|---|
-| ListAgentEvents | `GET /agents/{agentId}/events?types=&from=&to=&limit=&afterCreatedAt=&afterSessionId=&afterEventId=` | `{events:[{sessionId, event}], nextCursor}` | 本节，待生成 |
+| ListAgentEvents | `GET /agents/{agentId}/events?category=&from=&to=&limit=&afterCreatedAt=&afterSessionId=&afterEventId=` | `{events:[{sessionId, event}], nextCursor}` | 本节，待生成 |
 | GetEventTurn | `GET /sessions/{sessionId}/events/{eventId}/turn?limit=&afterEventId=` | `{rootEventId, finished, events, nextCursor}` | 本节，待生成 |
 
-**参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。types 必填，可重复传入（`types=user.message&types=user.interrupt`），值为精确事件类型，第一版只接受五种 user.*，重复值去重。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
+**参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。category 必填，只能传一个值：`user` 返回五种 user.*，`agent` 返回七种 agent.*；其他值返回 400。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
 
 <a id="interface-conventions"></a>
 
 **接口约定。** 以下约定只影响接口形状，不涉及架构选型，各基线做法见 [§8.1](#baseline-comparison)。
 
-- 事件类型筛选：参考 Claude Managed Agents List Events 的 `types`，按精确类型筛选。资源仍是 Agent 下的 events，“用户事件”只是筛选条件。第一版 types 必填且只接受五种 user.*，要全部用户事件时五种都传；定时任务与子 Agent 会话中保存为 user.* 的事件同样返回。以后放开其他类型或改为可选都是兼容变更，但需要先评估索引，因为当前部分索引只覆盖 user.*。
+- 事件类别筛选：资源是 Agent 下的 events，类别只是筛选条件。按 Lotus 评审，类别只分 user 和 agent 两种，取事件 type 的前缀；session.* 状态与配置事件不在任何类别中，需要时用 UC2 或 ListEvents 读取。参数名用 category 而不是 type，因为每条事件已有 `type` 字段（如 `user.message`），`type=user` 容易被误读为精确匹配；Claude Managed Agents 的 `types` 是精确类型列表，语义也不同。一次只取一个类别，两类各有一个部分索引，避免跨索引归并排序。定时任务与子 Agent 会话中的事件同样返回。
 - 事件标识：用 sessionId + eventId。eventId 只在会话内由主键保证唯一，Mate 必须保存 UC1 返回的 sessionId。
 - 跨会话顺序：按 createdAt 升序，同秒以 sessionId、eventSeq 稳定排序，不引入全局序号。不同会话之间没有因果顺序，会话内的因果顺序以 UC2 或 ListEvents 为准。
 - 时间参数：沿用 Claw 的 UTC 整秒契约，Mate 需把毫秒时间转换后传入；超过 31 天要分段查询。
@@ -258,7 +262,7 @@ nextCursor 为 null 只表示本次读取已无下一条，不表示以后不会
 }
 ```
 
-示例按 `limit=1` 请求，所以只返回一条并给出 nextCursor。下一页请求为 `GET /agents/{agentId}/events?types=user.message&types=user.interrupt&types=user.tool_confirmation&types=user.plan_confirmation&types=user.question_answer&from=…&to=…&limit=1&afterCreatedAt=2026-10-11T01:20:05Z&afterSessionId=session-0123…&afterEventId=entry_7K3M…`。
+示例按 `limit=1` 请求，所以只返回一条并给出 nextCursor。下一页请求为 `GET /agents/{agentId}/events?category=user&from=…&to=…&limit=1&afterCreatedAt=2026-10-11T01:20:05Z&afterSessionId=session-0123…&afterEventId=entry_7K3M…`。
 
 ```json
 {
@@ -278,7 +282,7 @@ nextCursor 为 null 只表示本次读取已无下一条，不表示以后不会
 | HTTP | resCode | 适用 | 说明 |
 |---|---|---|---|
 | 400 | `INVALID_AGENT_ID` | UC1 | 复用已有码 |
-| 400 | `INVALID_AGENT_EVENT_QUERY` | UC1 | 新增；types 缺失或含不支持的类型，from/to 缺失、格式、顺序、跨度，limit 或游标不合法 |
+| 400 | `INVALID_AGENT_EVENT_QUERY` | UC1 | 新增；category 缺失或取值不是 user、agent，from/to 缺失、格式、顺序、跨度，limit 或游标不合法 |
 | 400 | `INVALID_SESSION_ID` | UC2 | 复用已有码 |
 | 400 | `INVALID_EVENT_TURN_QUERY` | UC2 | 新增；eventId、limit 或游标不合法，包括游标不属于同一轮次 |
 | 404 | `SESSION_NOT_FOUND` | UC2 | 复用；会话不存在或已删除 |
@@ -357,7 +361,7 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 
 ### 6.3 自动化测试
 
-- UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；游标三参数只给部分、事件不存在、字段不一致、越出范围返回 400，游标会话已删除时继续读取，同秒多会话翻页不重不漏；五种用户事件都返回，agent.*/session.* 不返回；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表。
+- UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；游标三参数只给部分、事件不存在、字段不一致、越出范围返回 400，游标会话已删除时继续读取，同秒多会话翻页不重不漏；category=user 只返回五种 user.*，category=agent 只返回七种 agent.*，session.* 都不返回；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表。
 - UC2：以 user.message、确认、审核、回答、停止、agent.tool_result、终态 idle 为起点返回同一轮；确认续跑后的多段按 eventSeq 合并；配置事件返回 `EVENT_TURN_NOT_FOUND`；未结束轮次 finished=false；同 Session 两轮互不混入；以其他轮次事件作游标返回 400。
 - 两者：返回事件与 ListEvents 同一事件逐字段相等；未知持久化类型返回 `EVENT_LIST_FAILED`；GaussDB 执行计划使用新增索引。
 
@@ -409,14 +413,14 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 ### 8.3 范围说明
 
 - 定时任务（[M10](../08-CampusClaw定时任务/README.md)）每次 Run 新建会话，首条消息由任务配置生成；Child（[统一历史](unified-event-persistence.md)）为子任务新建会话，首条消息由父 Agent 生成。按已确认规则，它们与普通会话一样按事件类型返回，不区分来源，也不新增来源标记。两项持久化当前均待实现，实现后自动纳入。
-- 第一版 types 只接受五种 user.*；读取 Agent 下 agent.*、session.* 等其他事件不在本次范围，需要时再评估索引后放开。
+- category 只有 user 和 agent 两个值；session.* 不按 Agent 跨会话提供，需要时再评估索引后增加类别值（兼容变更）。
 - ListEvents 仍使用已确认的整数页码，本设计不修改它。
 
 ### 8.4 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级；关键设计决策收敛为轮次、权限边界和存储三条，接口形状的约定移到 §4；UC1 改为 `GET /agents/{agentId}/events` 的 ListAgentEvents，用必填的 types 筛选用户事件。 |
+| 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级；关键设计决策收敛为轮次、权限边界和存储三条，接口形状的约定移到 §4；UC1 改为 `GET /agents/{agentId}/events` 的 ListAgentEvents，用必填的 category（user 或 agent）筛选事件类别。 |
 | 0.3.0 | 2026-10-12 | 按最新设计文档模板去掉标题中的必选标记，整体时序和关键设计决策顺延为 2.2、2.3，设计图改用中文，跨文档链接改用显式锚点。 |
 | 0.2.0 | 2026-10-12 | 两个接口改用透明 keyset 游标，并按评审确认用户事件范围、权限归属及定时与子会话处理。 |
 | 0.1.0 | 2026-10-12 | 新增按 Agent 时间范围查询用户事件与按事件读取所在轮次的目标设计。 |
