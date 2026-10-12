@@ -99,9 +99,8 @@
 |---|---|---|
 | 运营人员 | 园区运营人员 | 通过 Mate 管理入口操作 |
 | Mate | 管理入口；用户权限、资源归属、执行授权与凭据 | 外部服务，以可信服务调用 Claw；授权、归属与凭据的最终决定方；管理入口的内部处理待定（T8） |
-| Claw | 定时任务管理、到期扫描与受理协调 | `codingagent.schedule`，见 §3.3～§3.6 |
-| Session 运行时 | 既有 Session 运行时：创建 Session、推进 Agent 与工具 | 与 Claw 同进程，不暗示远程调用 |
-| 存储 | GaussDB 调度与 Session 存储，调度状态的最终决定方 | 同库事务资源 |
+| Claw | coding-agent 服务：定时任务管理、到期扫描、受理协调，以及创建 Session 并推进 Agent 与工具 | `codingagent.schedule` 与既有 Session 运行时，同一进程，见 §3.3～§3.6 |
+| GaussDB | 调度与 Session 存储，调度状态的最终决定方 | 同库事务资源 |
 
 ![定时任务整体时序](scheduled_task_overview.svg)
 
