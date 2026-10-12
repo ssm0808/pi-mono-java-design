@@ -1,6 +1,6 @@
 # 计划模式接口增量
 
-版本：1.15.0；日期：2026-10-04；状态：**计划审核、标记解析与 agent.plan delta/completed 已实现；ExitPlanMode({plan}) 与参数增量预览待实现；Java 核验基线为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，范围见[参数流式证据](source-evidence.md#plan-argument-streaming-evidence)；Mate 公共桥接待实现，部署与模型验收分别记录**。
+版本：1.16.0；日期：2026-10-12；状态：**计划审核、标记解析与 agent.plan delta/completed 已实现；ExitPlanMode({plan}) 与参数增量预览待实现；Java 核验基线为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，范围见[参数流式证据](source-evidence.md#plan-argument-streaming-evidence)；Mate 公共桥接待实现，部署与模型验收分别记录**。
 
 本文件维护计划接口的集成边界与理由。精确请求、完整事件、条件字段、错误码及示例由 [共享事件契约](../01-CampusClaw多Agent运行时/事件契约/common.json)、[POST 操作](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 与 [GET 操作](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[统一接口页](../01-CampusClaw多Agent运行时/chat-api-review.html)。登记不代表 Java 或 Mate 已实现。
 
@@ -61,7 +61,7 @@ reason=requested 时不带 sourceEventId/confirmationEventId，只进入历史�
 - 批准/修订后的 `agent.tool_result` 保持 `toolCallId/content/isError`；正常批准与正常修订均 `isError=false`，无 errorCode。
 - 原始 user.message、问题回答后的续跑、修订后生成的计划、后续业务工具及最终回答均按同一个根消息的 sourceEventId 关联，直到原执行真实结束；普通澄清后新发 user.message 则形成新的根执行。
 
-计划工具新增稳定失败码：`PLAN_MODE_INACTIVE`（当前模式不允许提交计划）、`PLAN_REVIEW_UNAVAILABLE`（不支持审核或当前调用不满足独占审核条件）。按现有工具错误映射保存安全文本；不把用户反馈字符串直接当作 errorCode。
+计划工具新增稳定失败码：`PLAN_MODE_INACTIVE`（当前模式不允许提交计划）、`PLAN_REVIEW_UNAVAILABLE`（不支持审核或当前调用不满足独占审核条件）、`BUILD_MODE_REQUIRED`（plan 模式调用仅限 build 的工具，当前仅 TodoUpdate；待实现）。按现有工具错误映射保存安全文本；不把用户反馈字符串直接当作 errorCode。
 
 ### 3.5 TodoUpdate 显式任务事件
 

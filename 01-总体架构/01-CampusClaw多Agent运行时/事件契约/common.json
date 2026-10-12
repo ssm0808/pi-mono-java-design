@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusClaw Session Events API",
-    "version": "1.64.0",
+    "version": "1.65.0",
     "basePath": "/campusclaw-service/v1",
     "visibility": "Internal · 已确认目标契约 · 待实现",
     "fieldNaming": "lowerCamelCase",
@@ -84,6 +84,10 @@
       "PLAN_REVIEW_UNAVAILABLE": {
         "zh-CN": "当前无法提交计划审核。",
         "en-US": "Plan review is currently unavailable."
+      },
+      "BUILD_MODE_REQUIRED": {
+        "zh-CN": "当前是计划模式，该工具只能在方案批准后的 build 模式调用。",
+        "en-US": "The current mode is plan; this tool is available only in build mode after the proposal is approved."
       },
       "USER_QUESTION_UNAVAILABLE": {
         "zh-CN": "当前无法向用户提问。",
@@ -335,6 +339,11 @@
           "PLAN_REVIEW_UNAVAILABLE",
           "当前无法提交计划审核。",
           "Plan review is currently unavailable."
+        ],
+        [
+          "BUILD_MODE_REQUIRED",
+          "当前是计划模式，该工具只能在方案批准后的 build 模式调用。",
+          "The current mode is plan; this tool is available only in build mode after the proposal is approved."
         ],
         [
           "USER_QUESTION_UNAVAILABLE",

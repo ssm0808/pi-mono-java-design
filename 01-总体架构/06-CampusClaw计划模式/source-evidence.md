@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：2.5.1；维护日期：2026-10-04；各节保留实际核对日期。当前参数承载、计划专用预览和实现差距见[§15](#plan-argument-streaming-evidence)；§12～§14 保留各自提交的历史证据。Java `553dcd5e` 已实现正文标记和空参数审核；恢复必填 `plan` 参数并从参数生成预览是待实现增量，不能混写这两个状态。
+版本：2.6.0；维护日期：2026-10-12；各节保留实际核对日期。当前参数承载、计划专用预览和实现差距见[§15](#plan-argument-streaming-evidence)；§12～§14 保留各自提交的历史证据。Java `553dcd5e` 已实现正文标记和空参数审核；恢复必填 `plan` 参数并从参数生成预览是待实现增量，不能混写这两个状态。
 
 提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 待实现 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
 
@@ -571,3 +571,35 @@ JDK 21 `clean verify spotless:check`：327 类、2198 项，失败、错误、�
 设计校验：`check-diagrams.py --render` 覆盖 36 专题、133 图、54 时序图，0 errors；唯一提示仍为未改动的 managed_session_compaction 三个独立准入/恢复分支，理由沿用 §16。图索引再生成无差异，图源和 SVG 均未修改。事件专项校验通过（114 POST、57 历史、15 批量字段、15 任务快照、60 计划审核、31 提问负向用例）；API 技能校验通过 Runtime 专题的图、XML、Markdown 链接/锚点及 HTML 脚本语法。生成页在 1440px 与 360px 下人工查看计划规则，无横向溢出；十项接口 DOM 交互及 36 项生成器回归通过。
 
 统一 `validate-chat-api.py --full` 仍受既有版本不一致阻塞：修改前 `fba22eb` 的 `接口契约/common.json` 为 1.63.0，而 `chat-http-v1-design.md` 为 1.64.0；失败发生于普通接口的 `validate_review_models`，本次未修改这两个文件。事件契约专项通过不等于该全仓门禁通过；无关版本修复不混入本任务。
+
+<a id="todo-build-mode-gate"></a>
+
+## 18. TodoUpdate 的 plan 模式门禁（2026-10-12）
+
+园区整改方案还在调研时，模型如果调用 TodoUpdate，面板会出现调研 TODO，和“plan 阶段不记录进度”的产品约束冲突。此前只靠工具 description 和 PLAN.md 约束；本节记录执行前拒绝的实现与核验范围。
+
+### 18.1 源码核验与范围
+
+| 来源 | 快照与核验路径 / 符号 |
+|---|---|
+| Java main | 2026-10-12 隔离 clone `769e86592285f4a25b0febaf551eddea6bc7212c`。`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/todo/TodoUpdateTool.java#execute/#normalize`、同仓 `runtimeapi/event/RuntimeTodoEventMapper.java#map`、`runtimeapi/event/RuntimeEventProjector.java#persistToolResults/#toolResultEvents` 与 §6 目标一致；`runtimeapi/runtime/RuntimeActiveExecution.java#beforeToolCall` 没有按模式判断 TodoUpdate，plan 调用会成功并发布任务事件 |
+| Java 前端 | 同提交 `frontend/src/runtime/eventStore.ts#executionTodos` 以最新 user.message 为当前轮次，取该轮次最后一条 agent.todo_updated；没有 `applyTodoUpdated` 增量更新器，§6 表中该名称只代表 `09b32d8e` 时的目标 |
+| Java 实现 | 提交 `codex/todo-update-build-mode` 分支，[Draft PR #338](https://github.com/superheromeZzh/pi-mono-java/pull/338)，未合入 main |
+| Codex | 沿用 §6 固定提交 `d58d0e58`：`codex-rs/core/src/tools/handlers/plan.rs#PlanHandler.handle_call` 在 Plan 模式拒绝 update_plan；本次未重新拉取 Codex 最新源码 |
+
+### 18.2 实现和理由
+
+| 路径 / 符号 | 行为 |
+|---|---|
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java#beforeToolCall/#requireBuildModeForTodoUpdate` | 读取执行的当前模式；plan 时对 TodoUpdate 抛出 `BuildModeRequiredException`，在确认处理和权限判断之前 |
+| 同目录 `BuildModeRequiredException.java` | 实现 StableErrorCode，错误码 `BUILD_MODE_REQUIRED` |
+| `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java#RuntimeApi` | 新增 `BUILD_MODE_REQUIRED_ERROR_CODE` 并加入 `TOOL_ERROR_CODES`，公共工具结果保留该错误码 |
+| `modules/coding-agent-cli/src/main/resources/i18n/messages_{zh_CN,en_US}.properties` | 新增同名文案 |
+
+门禁放在 Host 而不是工具内：执行对象持有权威模式，工具保持无状态，也不用为 TodoUpdate 增加装配工厂；位置与 ExitPlanMode 在 build 模式返回 `PLAN_MODE_INACTIVE` 对称。Pipeline 顺序不变：Schema 校验、prepare、before hook、执行。工具定义在两种模式下不变，避免工具列表随模式变化。代价是新增一个公共工具错误码，读取端需识别该值；旧客户端按通用工具失败展示。
+
+### 18.3 验证
+
+Java：`RuntimeActiveExecutionTest` 新增 plan 拒绝且不进入确认处理器、build 放行两个用例；相关测试类全部通过。`./mvnw verify` 共 1597 项，唯一失败为 `SkillToolTest.shouldReturnPipelineErrorWhenMarkdownCannotBeRead[unreadable]`，原因是容器以 root 运行可读取权限为 000 的文件，与本改动无关。`spotless:check`、`checkstyle:check` 通过。公司镜像已同步，父 POM 不可用，镜像未编译。真实模型行为未验收。
+
+设计：`check-diagrams.py` 0 errors。本容器字体与作者环境不同，未修改的 139 张 SVG 在 `--render` 下全部与重新生成结果不一致，因此只重新生成本次修改的 `todo_update_sequence` 与 `plan_mode_target_classes`，并在原尺寸 PNG 中人工检查文字与箭头；图源与 SVG 的字节同步未能在本环境验证。`validate-chat-events.py` 通过；`validate-chat-http-v1.py` 仍因既有接口契约与设计版本不一致失败，本次未修改相关文件。

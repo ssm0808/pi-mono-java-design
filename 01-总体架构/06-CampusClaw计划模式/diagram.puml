@@ -14,6 +14,7 @@ hide empty members
 ' Tool/prompt status checked 2026-09-18: Java 8c5fda1dde51675859bc9c07e145dbe253656dea; modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/PlanPolicyPromptComposer.java :: compose.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java :: create, configureAgent.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java :: beginToolConfirmation, claimAndResumeToolConfirmation.
+' 待实现：RuntimeActiveExecution.beforeToolCall 在 plan 模式拒绝 TodoUpdate，返回 BUILD_MODE_REQUIRED；pi-mono-java PR #338，基线 main 769e86592285f4a25b0febaf551eddea6bc7212c。
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java :: markToolConfirming, acceptToolConfirmation.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java :: prepare, accept, startAccepted.
 ' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java :: start, commitAndRelease.
@@ -141,7 +142,9 @@ end note
 }
 
 package "Execution ownership" as ExecutionScope {
-  class "RuntimeActiveExecution" as Execution <<extended>> #FFF7DD
+  class "RuntimeActiveExecution" as Execution <<extended>> #FFF7DD {
+    +beforeToolCall(): plan 模式拒绝 TodoUpdate（待实现）
+  }
   class "RuntimePending\nInteraction" as Pending <<implemented>> #ECFDF5 {
     kind: permission / plan / question
     +claimAndResume(decisionDTO)
@@ -340,6 +343,7 @@ note bottom of ArgumentParser
 end note
 note bottom of TodoTool
   Stable tool; progress policy in description.
+  plan 模式调用由 Host 在执行前拒绝（待实现）。
   ToolResult and task event share one commit.
   No TODO table or metadata fields.
 end note
@@ -474,59 +478,56 @@ end note
 
 
 @startuml todo_update_sequence
-' Source baseline: pi-mono-java 09b32d8ea4a4b43b34be302d8b2745bdc417c9a2.
-' Source: modules/agent-core/src/main/java/com/campusclaw/agent/tool/AgentToolResult.java :: content, details.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: project, persistToolResults.
-' Source: frontend/src/runtime/eventStore.ts :: reconcileEvents, executionState.
-' Claude public docs: managed-agents/events-and-streaming, checked 2026-09-15 (beta).
-' Historical DeepSeek baseline: 0a53fb55bea101816fa226bb964ae2bed71c343b (alpha).
-' Source: packages/todo/tool-todo/src/index.ts :: apply, execute; whole-list replacement.
-' Observed behavior: Java commits generic results at the existing TurnEndEvent boundary.
-' Design reason: commit explicit task snapshots with the successful tool result.
-' Java status at 8c5fda1d: TodoUpdateTool, RuntimeTodoEventMapper and executionTodos are implemented; not Claude built-ins.
-' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+' 场景：build 阶段模型提交一次完整任务清单，从模型返回调用到前端刷新任务面板；只画正常流程。
+' 源码基线：pi-mono-java main 769e86592285f4a25b0febaf551eddea6bc7212c（2026-10-12 拉取）。
+' 源码：modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java :: execute、validate、applyBeforeHook。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/todo/TodoUpdateTool.java :: execute、normalize。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java :: persistToolResults、toolResultEvents。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeTodoEventMapper.java :: map。
+' 源码：frontend/src/runtime/eventStore.ts :: executionTodos。
+' 待实现：RuntimeActiveExecution.beforeToolCall 在 plan 模式拒绝 TodoUpdate（BUILD_MODE_REQUIRED），实现见 pi-mono-java PR #338，未合入 main。
+' 已观察行为：工具结果在既有 TurnEndEvent 提交点与任务快照同一事务保存，提交后再推送。
+' 设计原因：前端只消费显式任务快照，不识别工具名、不解析工具结果文本；模式门禁让规划期调用不产生任务事件。
+' 失败处理不进图，见 todo-update.md「失败处理与恢复」。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
 skinparam sequenceMessageAlign left
-skinparam maxMessageSize 180
+skinparam maxMessageSize 320
 skinparam sequenceArrowColor #425B70
 skinparam sequenceLifeLineBorderColor #BAC4CC
 skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #FAFBFC
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
 
-title Publish One Explicit Implementation Task Snapshot
+title 提交一次完整任务清单
 participant "AgentLoop" as Loop
+participant "Host" as Host
 participant "TodoUpdate" as Todo
-participant "Event projection" as Projector
-database "Session history" as DB
-participant Client
-Loop -> Projector : Finalized TodoUpdate call
-Projector -> DB : Commit ordinary tool call
-Loop -> Todo : Validate and execute complete task list
-Todo --> Loop : Tool result
-Loop -> Projector : Final tool result at turn end
-alt Valid successful task result
-  Projector -> DB : Atomically commit result and full task snapshot
-  DB --> Projector : Committed events
-  Projector --> Client : Tool result and explicit task snapshot
-  Client -> Client : Replace tasks for the original root
-else Invalid or failed result
-  Projector -> DB : Commit failed ordinary tool result
-  Projector --> Client : Error result; retain prior task list
-end
-note over Projector,Client
-  Build implementation only; no inferred tasks from text or calls.
-  History restores the same explicit snapshots.
-  Task completion is independent of execution completion.
-end note
+participant "事件投影" as Projector
+database "会话历史" as DB
+participant "前端" as Client
+[-> Loop ++ : 模型返回 TodoUpdate 调用（完整清单）
+Loop -> Projector ++ : 保存定稿的工具调用
+Projector -> DB ++ : 写入工具调用事件
+return 已提交的工具调用事件
+return 工具调用已记录
+Loop -> Loop : 按 Schema 校验参数
+Loop -> Host ++ : 校验当前为 build 模式（待实现）
+return 放行
+Loop -> Todo ++ : 校验并规范化完整清单
+return 规范化的完整清单
+Loop -> Projector ++ : 提交本批工具结果（本批工具执行完毕）
+Projector -> Projector : 将成功结果映射为任务快照
+Projector -> DB ++ : 同一事务保存工具结果与任务快照
+return 已提交的两条事件
+Projector ->> Client : 推送工具结果与任务快照
+return 工具结果已提交
+Client -> Client : 用该快照替换当前轮次的任务面板
+[<-- Loop : 返回工具结果（模型继续执行）
+deactivate Loop
 @enduml
 
 
