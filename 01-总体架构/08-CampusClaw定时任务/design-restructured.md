@@ -106,11 +106,11 @@
 
 [原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L267)
 
-| 阶段 | 下钻 |
+| 阶段 | 详细时序 |
 |---|---|
-| 配置定时任务 | [§3.3 保存任务配置](#save-sequence) |
-| 每天 22:00 自动运行 | [§3.5 自动触发](#scheduled-run-sequence)，其中受理阶段见 [§3.6 共用受理](#run-admission-sequence) |
-| 查看巡逻结果 | Run 读取为单次查询，规则见[配置 §4.11](configuration.md#schedule-run-read-lifecycle)；Session 读取沿用 M06 既有接口 |
+| 步骤 1～8：配置定时任务 | [§3.3 配置定时任务的详细时序](#save-sequence) |
+| 步骤 9～20：运行定时任务 | [§3.5 运行定时任务的详细时序](#scheduled-run-sequence)，其中受理部分见 [§3.6 共用受理的详细时序](#run-admission-sequence) |
+| 步骤 21～26：查看巡逻结果 | 无详细时序：运行记录读取为单次查询，规则见[配置 §4.11](configuration.md#schedule-run-read-lifecycle)；会话读取沿用 M06 既有接口 |
 
 <a id="key-decisions"></a>
 
@@ -178,7 +178,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 <a id="save-sequence"></a>
 
-### 3.3 保存任务配置的详细时序（UC1、UC4）
+### 3.3 配置定时任务的详细时序（UC1、UC4）
 
 展开整体时序的“配置定时任务”阶段。场景：保存视频巡逻检查任务，从调用 Claw 到返回持久化结果。状态：待实现。
 
@@ -192,7 +192,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ### 3.4 立即运行的详细时序（BU4、UC6）
 
-独立对应业务用例，不展开整体时序的阶段：它与“每天 22:00 自动运行”共用受理路径，只是触发方式不同。场景：手动触发一次视频巡逻检查，从请求到返回 Run 回执。状态：待实现。
+独立对应业务用例，不展开整体时序的阶段：它与“运行定时任务”共用受理路径，只是触发方式不同。场景：手动触发一次视频巡逻检查，从请求到返回 Run 回执。状态：待实现。
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
@@ -202,9 +202,9 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 <a id="scheduled-run-sequence"></a>
 
-### 3.5 自动触发与原子受理的详细时序（UC11、UC12）
+### 3.5 运行定时任务的详细时序（UC11、UC12）
 
-展开整体时序的“每天 22:00 自动运行”阶段。场景：每天 22:00 为“视频巡逻检查”创建一个新 Session，从一次到期扫描开始，到新 Session 根执行终态入库结束；前提是任务为 active 且身份策略可用。状态：目标设计，待实现。
+展开整体时序的“运行定时任务”阶段。场景：每天 22:00 为“视频巡逻检查”创建一个新 Session，从一次到期扫描开始，到新 Session 根执行终态入库结束；前提是任务为 active 且身份策略可用。状态：目标设计，待实现。
 
 图中调度器映射 `ScheduleDispatcher`，负责分发、启动和对账；定时任务管理映射 M10 应用服务，负责认领、准备与受理；Session 运行时映射执行协调器与公共 Session；存储是同一 GaussDB 事务边界。它们是职责映射，不表示独立进程或远程调用。“准备并受理”阶段在 [§3.6](#run-admission-sequence) 展开。
 
@@ -236,7 +236,7 @@ Mate 登记与 Claw 受理之间没有跨库事务；准备成功只固定本次
 
 ### 3.7 删除任务配置的详细时序（BU7、UC5）
 
-独立对应业务用例，不展开整体时序的阶段。**【缺口】** 删除没有独立时序图，规则分散在[配置 §4.6、§4.11](configuration.md#schedule-run-read-lifecycle)。删除与最终受理的竞态（删除先提交则不受理；受理先提交则保留 Session 并删除 Run）是本模块最容易出错的交互之一，建议补一张下钻图。
+独立对应业务用例，不展开整体时序的阶段。**【缺口】** 删除没有独立时序图，规则分散在[配置 §4.6、§4.11](configuration.md#schedule-run-read-lifecycle)。删除与最终受理的竞态（删除先提交则不受理；受理先提交则保留 Session 并删除 Run）是本模块最容易出错的交互之一，建议补一张详细时序图。
 
 ## 4. 接口协议
 

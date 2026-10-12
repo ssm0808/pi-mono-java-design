@@ -8,7 +8,7 @@
 ' 目标：待实现；不补跑、不重放，结果未知时保持任务占用。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
 ' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
-title 到点自动运行：从分发到结果对账（待实现）
+title 到点自动运行：从分发到结果对账
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
@@ -157,7 +157,7 @@ endlegend
 ' 目标：待实现；只支持文本输入，存储时只保留凭据引用。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
 ' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
-title 保存视频巡逻检查定时任务（待实现）
+title 保存视频巡逻检查定时任务
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
@@ -190,7 +190,7 @@ end note
 ' 目标：待实现；手动运行不移动自动计划。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
 ' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
-title 立即试跑：返回受理回执（待实现）
+title 立即试跑：返回受理回执
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
@@ -230,7 +230,7 @@ end note
 ' 目标：待实现；已预留的 Run 进入，确定的受理结果离开；本图不执行。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
 ' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
-title 共用受理流程：先准备，再提交（待实现）
+title 共用受理流程：先准备，再提交
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
@@ -277,7 +277,7 @@ end note
 ' 设计原因：在服务层面讲清一个业务故事；各阶段细节见详细时序图。
 ' 表示法：同步调用的发起方和接收方都画激活条并配返回，定时触发画为来自图外的发现消息。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
-title 每天视频巡逻检查：业务总览（待实现）
+title 每天视频巡逻检查：业务总览
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
@@ -288,38 +288,38 @@ participant "Claw" as Claw
 database "GaussDB" as Store
 autonumber
 == 配置定时任务 ==
-Operator -> Mate ++ : 配置“每天 22:00 视频巡逻检查”
+Operator -> Mate ++ : 配置定时任务（每天 22:00 视频巡逻检查）
 activate Operator
 note right of Mate : Mate 内部处理待定（评审 Todo T8）
-Mate -> Claw ++ : 请求创建定时任务
-Claw -> Mate ++ : 确认该 Agent 可以这样配置
-return 可以配置
-Claw -> Store ++ : 保存定时任务
-return 已保存
-return 创建成功，附接下来的运行时间
-return 任务已生效，显示下次运行时间
+Mate -> Claw ++ : 创建该定时任务
+Claw -> Mate ++ : 校验该 Agent 的配置权限
+return 配置授权
+Claw -> Store ++ : 保存该定时任务
+return 已保存的定时任务
+return 定时任务及下次运行时间
+return 返回已生效的定时任务及下次运行时间
 deactivate Operator
-== 每天 22:00 自动运行 ==
-[-> Claw ++ : 到达 22:00
-Claw -> Store ++ : 记下本次运行
-return 已记下
-Claw -> Mate ++ : 确认本次可以执行
-return 可以执行
-Claw -> Mate ++ : 登记新会话归谁所有
-return 已登记
-Claw -> Store ++ : 为本次运行保存新会话和任务内容
-return 已保存
-Claw -> Claw : 绑定的 Agent 执行视频巡逻检查
-Claw -> Store ++ : 保存检查过程和结论，记下本次运行的结果
-return 已保存
+== 运行定时任务 ==
+[-> Claw ++ : 到达计划时间（每天 22:00）
+Claw -> Store ++ : 记录本次运行
+return 运行记录
+Claw -> Mate ++ : 校验本次运行的执行授权
+return 执行授权
+Claw -> Mate ++ : 登记新会话的归属
+return 会话归属
+Claw -> Store ++ : 保存新会话及任务内容
+return 新会话
+Claw -> Claw : 执行视频巡逻检查（由绑定的 Agent）
+Claw -> Store ++ : 保存检查过程、巡逻结论及本次运行结果
+return 已保存的运行结果
 deactivate Claw
 == 查看巡逻结果 ==
 Operator -> Mate ++ : 查看巡逻结果
 activate Operator
-Mate -> Claw ++ : 查询运行记录和对应会话
-Claw -> Store ++ : 读取运行记录和会话
-return 运行记录和会话内容
-return 运行记录、巡逻结论和工具证据
-return 显示每次运行的巡逻结论和证据
+Mate -> Claw ++ : 查询运行记录及对应会话
+Claw -> Store ++ : 读取运行记录及会话
+return 运行记录及会话内容
+return 运行记录、巡逻结论及工具证据
+return 返回每次运行的巡逻结论及工具证据
 deactivate Operator
 @enduml
