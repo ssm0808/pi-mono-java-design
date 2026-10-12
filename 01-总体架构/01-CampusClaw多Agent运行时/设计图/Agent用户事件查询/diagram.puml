@@ -24,6 +24,7 @@ participant "Mate" as Mate
 participant "Claw" as Claw
 database "GaussDB" as DB
 == 列出用户请求 ==
+activate Mate
 Mate -> Claw : 查询某个 Agent 在时间段内收到的用户请求
 activate Claw
 Claw -> Claw : 校验 Agent、时间段和游标
@@ -49,6 +50,7 @@ deactivate DB
 Claw -> Claw : 转成公共事件
 Claw --> Mate : 这一轮的事件、是否已结束和继续读取的位置
 deactivate Claw
+deactivate Mate
 @enduml
 
 @startuml event_turn_resolution
