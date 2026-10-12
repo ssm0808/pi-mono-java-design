@@ -244,11 +244,63 @@ nextPage 为 null 只表示本次读取已无下一页，不表示以后不会�
   "resCode": "0",
   "resMsg": "success",
   "result": {
-    "events": ["user.message、agent.thinking、agent.tool_call、agent.tool_result、agent.message、session.status_idle 等完整事件，按 eventSeq"],
+    "events": [
+      {
+        "eventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+        "type": "user.message",
+        "createdAt": "2026-10-11T01:20:05Z",
+        "content": [{"type": "text", "text": "3 号楼冷机告警，帮我建一张巡检工单"}]
+      },
+      {
+        "eventId": "entry_9B2N4V6C8X1Z3L5K7J9H2G4F6D",
+        "type": "agent.thinking",
+        "phase": "completed",
+        "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+        "createdAt": "2026-10-11T01:20:06Z",
+        "content": "需要先查询 3 号楼冷机的告警详情，再创建巡检工单。"
+      },
+      {
+        "eventId": "entry_3Q5W7E9R1T3Y5U7I9O1P3A5S7D",
+        "type": "agent.tool_call",
+        "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+        "createdAt": "2026-10-11T01:20:07Z",
+        "toolCallId": "call_alarm_01",
+        "toolName": "CallMateTool",
+        "displayName": "创建巡检工单",
+        "arguments": {"tool": "create_inspection_order", "args": {"building": "3 号楼", "device": "冷机"}},
+        "requiresConfirmation": false
+      },
+      {
+        "eventId": "entry_6F8G1H3J5K7L9Z2X4C6V8B1N3M",
+        "type": "agent.tool_result",
+        "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+        "createdAt": "2026-10-11T01:20:09Z",
+        "toolCallId": "call_alarm_01",
+        "content": [{"type": "text", "text": "{\"orderId\":\"WO-20261011-0012\"}"}],
+        "isError": false
+      },
+      {
+        "eventId": "entry_2A4S6D8F1G3H5J7K9L2Z4X6C8V",
+        "type": "agent.message",
+        "phase": "completed",
+        "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+        "createdAt": "2026-10-11T01:20:10Z",
+        "content": "已为 3 号楼冷机创建巡检工单 WO-20261011-0012。"
+      },
+      {
+        "eventId": "entry_8M1N3B5V7C9X2Z4L6K8J1H3G5F",
+        "type": "session.status_idle",
+        "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+        "createdAt": "2026-10-11T01:20:11Z",
+        "reason": "done"
+      }
+    ],
     "nextPage": null
   }
 }
 ```
+
+示例为 `GET /sessions/{sessionId}/events/entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D/turn?page=1&limit=50`，也就是从 ListAgentEvents 返回的那条用户请求展开它所在的一轮。从这一轮中任意一条事件（如 entry_3Q5W…）出发，返回结果相同。第一条是这一轮的 user.message，最后一条 session.status_idle 表示这一轮已结束。
 
 **错误。** 失败只返回 resCode 与 resMsg。
 
