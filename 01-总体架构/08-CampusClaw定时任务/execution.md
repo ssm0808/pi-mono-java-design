@@ -1,6 +1,6 @@
 # 定时任务执行与工程落地
 
-版本：0.6.0；日期：2026-10-13；状态：目标设计；数据库链路已在 PR #332 实现，范围与验收另列。
+版本：0.7.0；日期：2026-10-13；状态：目标设计；数据库链路已在 PR #332 实现，范围与验收另列。
 
 [模块主设计](README.md) · [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule) · [Claw接口](configuration.md) · [Mate执行上下文](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md) · [源码证据](source-evidence.md#schedule-engineering-evidence)
 
@@ -58,11 +58,11 @@
 
 ## 原子受理与同任务互斥
 
-1. 自动扫描在短事务内锁定 Schedule，检查当前运行代次、配置存在/active、计划时刻、配置代次和 active_run_id。忙时插入一次明确的跳过结果并推进下一计划，不占用执行槽、不释放另一条活动 Run。可受理时分配一次 Run，并预占本任务；手动入口走相同互斥检查，但不修改自动游标。
+1. 自动扫描在短事务内锁定 Schedule，检查当前运行代次、配置存在/active、计划时刻，以及该任务是否已有未完成 Run。忙时插入一条已 FINISHED 的跳过结果并推进下一计划，不影响另一条未完成 Run。可受理时分配一次 Run，运行表部分唯一约束 `UNIQUE(schedule_id) WHERE state <> 'FINISHED'` 即本任务的占用；手动入口走相同互斥检查，但不修改自动游标。
 2. 事务外向Mate查询可信接口和授权结果，并准备本次 Agent、模型和工作区快照。Claw 固定同次拟建 Session ID，由 Mate 独立登记归属并确认后才可受理；失败/未知处理见[Mate 会话归属](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)。此阶段不得调用模型或业务工具，不持数据库行锁等待远端响应；附件不在首版输入范围。
-3. 同库短事务内再次检查 Schedule/Run 的存在、配置代次、所有者代次、授权结果有效期、业务容量和自动派发期限；创建新 Session、首条用户消息（prompt）、根 execution/segment，并写 Run 唯一关联。任何一步失败全部回滚，不能出现 Run 显示已受理但 Session/首消息缺失。
+3. 同库短事务内再次检查 Schedule/Run 的存在、状态、Agent 绑定是否与领取时一致、所有者代次、授权结果有效期、业务容量和自动派发期限；创建新 Session、首条用户消息（最新 prompt）、根 execution/segment，并写 Run 唯一关联。任何一步失败全部回滚，不能出现 Run 显示已受理但 Session/首消息缺失。
 4. 提交后由持有本次准备快照的原实例使用一次启动 CAS 取得执行权，再调用 Runtime。受理回执不等待 Agent 完成；后台使用 persistenceOnly 输出路径，不伪造 SSE 浏览器连接。
-5. 根执行是结果权威。Run/配置仍存续时，仅通过已关联的根 execution 幂等投影摘要并释放自己的 active_run_id；不存在则只收尾 Session 和内部状态。后续用户在同一 Session 发起的新对话不能改写原定时执行的结果。
+5. 根执行是结果权威。Run/配置仍存续时，仅通过已关联的根 execution 幂等投影摘要并把自己的 Run 置为 FINISHED 以释放本任务；不存在则只收尾 Session 和内部状态。后续用户在同一 Session 发起的新对话不能改写原定时执行的结果。
 
 自动运行的lastRunAt由原根执行持久化的实际开始时间投影，未开始的准备失败或跳过不更新；READY/STARTING的启动权标记不能单独证明实际开始。投影不修改配置updatedAt，手动运行不更新lastRunAt。
 
@@ -94,7 +94,7 @@
 
 同次失败与故障不重跑已确认。是否自动暂停整个Schedule仍待明确；本页不继承旧Cron连续失败自动禁用的策略，status转换须在该决策明确后实施。不重跑不等于不对账：只读查询已有结果、幂等落地已确认终态、清理已结束资源可以继续重试，它们不调用模型或产生新的园区业务请求。
 
-未知执行不得因为固定租约到期就清除 active_run_id；必须取得根执行终态、可靠未启动证据，或经过独立授权的人工处置才解除占用。若根执行现有枚举不包含“未知”，定时内部协调保存 unknown 并在运营视图明确标注，不能把公开 Run 的 admission error 冒充 Session 业务终态。
+未知执行不得因为固定租约到期就把 Run 置为 FINISHED；必须取得根执行终态、可靠未启动证据，或经过独立授权的人工处置才解除占用。若根执行现有枚举不包含“未知”，定时内部协调保存 unknown 并在运营视图明确标注，不能把公开 Run 的 admission error 冒充 Session 业务终态。
 
 <a id="deployment-defaults"></a>
 
@@ -139,6 +139,7 @@ Claude公开API仍是配置、Run与Session职责划分的历史主基线，事�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.7.0 | 2026-10-13 | 撤销配置版本 revision 与 activeRunId；同任务不并发改由运行表部分唯一约束保证，受理锁内复核状态与 Agent 绑定并使用最新 prompt。 |
 | 0.6.0 | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 0.5.0 | 2026-10-10 | 用户归属、权限及范围配额交由 Mate，补充受理前登记并保留技术调度控制。 |
 | 0.4.0 | 2026-10-10 | 定时表及 Session 扩展归入 Claw 全库数据库设计，原文件仅保留导航。 |
