@@ -2,11 +2,11 @@
 
 [模块索引](../../README.md#module-index) · [原主设计 README](README.md) · [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule) · [Claw 接口专题](configuration.md) · [执行专题](execution.md) · [接口 HTML 展示](schedule-api-review.html) · [源码与官方证据](source-evidence.md)
 
-> 本文是按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”模板重组的草稿，设计内容与 [README 0.40.0](README.md)、[configuration.md 0.36.0](configuration.md)、[execution.md 0.10.0](execution.md) 一致，未新增或改变设计决策。原文件保持不变。标注 **【缺口】** 的位置表示现有材料不足以填写，需要补充，不应由本文推断。
+> 本文是按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”模板重组的草稿，设计内容与 [README 0.41.0](README.md)、[configuration.md 0.37.0](configuration.md)、[execution.md 0.10.0](execution.md) 一致，未新增或改变设计决策。原文件保持不变。标注 **【缺口】** 的位置表示现有材料不足以填写，需要补充，不应由本文推断。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.41.0-restructure（结构重组稿，设计行为同 README 0.40.0） |
+| 文档版本 | 0.42.0-restructure（结构重组稿，设计行为同 README 0.41.0） |
 | 更新日期 | 2026-10-12 |
 | 模块 | M10 · 调度与并发治理 |
 | 设计状态 | 三张调度表、Mapper、同库受理与启动控制已在 Java PR #332 实现，尚未合并，差距见[数据库实现差距](../../03-数据与存储/Claw数据库设计.md#gaps)；Mate 授权与归属登记、调度扫描及其余新增能力待实现；main 上已观察实现仅为进程内 Cron |
@@ -31,8 +31,9 @@
 | T4 | 原子受理、受理后失联、取消终态与多副本故障测试须在实现阶段验证 | | [README §12](README.md#implementation-calibration) |
 | T5 | 完整 Maven 依赖树与 corporate NativeParent 未核验 | | [执行专题](execution.md#module-merge) |
 | T8 | Mate 管理入口在调用 Claw 前后的处理逻辑（权限、配额、任务与用户关联等）尚未确定；Claw 侧逻辑已确认 | | 本次评审 |
-| T7 | Mate 获准集合传递、任务配额准入和 Session 归属登记的内部契约待实现 | | [配置 身份与权限边界](configuration.md#mate-access-boundary) |
+| T7 | Mate 任务配额准入和 Session 归属登记的内部契约待实现（列表首版由 Mate 拉取全部后自行过滤，不传获准集合） | | [配置 身份与权限边界](configuration.md#mate-access-boundary) |
 | T6 | 每实例 8 个活动执行上限在多副本下会放大总并发，部署阶段需按实例数与下游配额核对 | | [部署初始值](execution.md#deployment-defaults) |
+| <a id="todo-t10"></a>T10 | 是否在 Claw 的 t_schedule（及 Run、Session）增加 userId，使列表直接按用户查询；需先确定任务仅创建者可见还是同范围共享，以及与 Mate 归属的同步规则。首版按方法 A 由 Mate 拉取全部后过滤 | | 本次评审（2026-10-13） |
 | <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，定时任务一直被占用、后续计划全部遇忙跳过。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件、结束 Run 并释放任务；② 执行期写入与工具调用前检查执行未终止，防止卡死后恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | | 本次评审（2026-10-13） |
 
 ### 需求信息
@@ -143,14 +144,14 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
 | UC1 创建配置 | BU1 | Mate 管理入口 | Mate 已授权的操作与目标 | 201 完整 Schedule，status=active | 不调用模型或 Session 工厂；未接线运行能力前不发布自动运行承诺 |
-| UC2 列表 | BU6 | Mate 管理入口 | Mate 获准资源集合 | 200 分页完整资源 | 分页前按获准集合约束，空集合返回空；不换取凭据 |
+| UC2 列表 | BU6 | Mate 管理入口 | Mate 已确认用户身份 | 200 分页完整资源 | Claw 返回全部存续任务，Mate 拉取全部页后按用户过滤、排序和分页；不换取凭据 |
 | UC3 详情 | BU6 | Mate 管理入口 | 读取资格 | 200 完整资源 | Agent 或凭据失效不妨碍读取 |
 | UC4 部分更新 | BU2 | Mate 管理入口 | 管理资格 | 200 完整资源 | 锁最新行合并提交字段；不触发执行、不改暂停状态 |
 | UC5 删除 | BU7 | Mate 管理入口 | 管理资格 | 200 完整 Schedule 回执 | 同删 Run，保留 Session，不取消已受理执行 |
 | UC6 立即运行 | BU4 | Mate 管理入口 | 运行资格；active 或 paused | 200 Run（sessionId 与 error 二选一） | 先预留共用任务槽，再走共用受理；不移动计划游标 |
 | UC7 暂停 | BU5 | Mate 管理入口 | 管理资格 | 200 完整 Schedule，paused/manual | 同值操作不改时间与游标 |
 | UC8 取消暂停 | BU5 | Mate 管理入口 | 管理资格、执行资格 | 200 完整 Schedule，active/null | 只从未来匹配继续，不补跑 |
-| UC9 Run 列表 | BU6 | Mate 管理入口 | Mate 获准资源集合 | 200 runs/nextPage | 分页前按获准集合约束；不含已删除任务的 Run |
+| UC9 Run 列表 | BU6 | Mate 管理入口 | Mate 已确认用户身份 | 200 runs/nextPage | 单任务时 Mate 先确认可见再带 scheduleId 查询；跨任务时 Mate 拉取全部后过滤；不含已删除任务的 Run |
 | UC10 Run 详情 | BU6 | Mate 管理入口 | 读取资格 | 200 八字段 Run | 任务或 Run 已删除时 404 |
 | UC11 自动扫描与受理 | BU3 | 调度器 | 任务到期 | 新 Session 受理并启动 | 不补漏跑、遇忙跳过；受理前须完成 Mate 归属登记 |
 | UC12 结果对账 | BU3 | 调度器 | 已受理 Run | 投影摘要并写入 Run.finished_at | 已删除任务只收尾 Session，不复活资源 |
@@ -263,13 +264,13 @@ Mate 侧新增的内部接口见 [Mate 定时执行接口草案](../../02-服务
 ### 5.1 安全性
 
 - 用户、组织、租户、资源归属与权限由 Mate 维护并执行。Claw 不解析或保存用户、scope、owner、operator，收到 Mate 可信服务请求后只校验服务来源、具体操作和目标资源，再检查自己的输入与状态，规则见[配置 身份与权限边界](configuration.md#mate-access-boundary)。
-- 列表在分页前应用 Mate 决定的获准资源集合；空集合返回空，不退化为全部，也不先取全库一页再过滤。
+- 首版列表由 Mate 拉取全部后按用户过滤、排序和分页；代价是读取量随全部任务与 Run 增长，Claw 加 userId 见 T10。
 - 后台通过资源 ID 与不透明 authorizationRef 向 Mate 查询当前执行资格；引用不能当令牌，也不能解码出用户。授权结果缺失、过期或 Mate 不可用时不受理，不因请求来自内网放行。
 - 新 Session 在受理前由 Mate 独立登记归属；登记失败或结果未知时不启动，删除 Schedule/Run 不删除该归属。
 - Claw 不持久化凭据引用或 Token/JWT/APPKEY，业务凭据由 Mate 按 Agent 绑定在执行时解析；秘密只在受限执行内存中使用，不进入模型、metadata、Schedule/Run、事件或日志。
 - metadata 不进入模型输入，不作为身份、权限或凭据依据。
 - 资源级不可见统一返回 404，不泄露存在性。
-- 已知差距：PR #332 仍有本地身份链路，见[职责核验](source-evidence.md#mate-boundary-review)；获准集合传递、配额准入与归属登记的内部契约待实现（T7）。
+- 已知差距：PR #332 仍有本地身份链路，见[职责核验](source-evidence.md#mate-boundary-review)；配额准入与归属登记的内部契约待实现（T7）。
 
 ### 5.2 稳定性
 
@@ -374,7 +375,7 @@ Mate 侧新增的内部接口见 [Mate 定时执行接口草案](../../02-服务
 - 确定性时间测试：可控时钟验证 08:00:01 正常受理、08:00:06 发现 08:00:00 时跳过、超容差跳过、忙时不排队、DST 缺失跳过与重复钟面按不同 UTC occurrence。
 - 故障注入：准备前、提交前、提交后、启动前后、业务调用后，确认无重复 Session、无重复首消息、未知不伪失败、重启不重放。
 - 并发：2 副本竞争仅一次受理；暂停/修改/删除与最终受理竞态可线性判定。
-- 接口：10 个操作的成功与错误报文、字段边界、分页前按 Mate 获准集合约束且空集合返回空，详见[配置 §8](configuration.md#implementation-acceptance)。
+- 接口：10 个操作的成功与错误报文、字段边界、Mate 拉取全部后过滤分页，详见[配置 §8](configuration.md#implementation-acceptance)。
 - 安全：越权目标资源被拒、lease_until 过期后拒绝受理、未登记归属不受理、ASK 不被自动放行、日志与历史中无凭据。
 - 工程：reactor verify、corporate 镜像布局、GaussDB 集成与 2 副本联调。
 
@@ -422,6 +423,7 @@ Claude Managed Agents 本次未核对。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.42.0-restructure | 2026-10-13 | 同 README 0.41.0；新增待定 T10。 |
 | 0.41.0-restructure | 2026-10-13 | 新增待定 T9：实例宕机后执行卡住的自动恢复方案。 |
 | 0.40.0-restructure | 2026-10-13 | 同 README 0.40.0。 |
 | 0.39.0-restructure | 2026-10-13 | 同 README 0.39.0。 |

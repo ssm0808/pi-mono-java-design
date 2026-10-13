@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.36.0 · 2026-10-13 |
+| 版本 | 0.37.0 · 2026-10-13 |
 | 状态 | 当前目标契约，待实现、尚未发布；包含接口收口与授权的工程细化，不表示逐项字段均经单独确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、删除、立即运行、暂停及取消暂停，以及Run读取与删除关系；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已绑定 Agent；不提供已有 Session 目标 |
@@ -32,14 +32,14 @@
 | 操作 | 方法与完整路径 | 成功结果 |
 |---|---|---|
 | 创建配置 | POST `/campusclaw-service/v1/schedules` | 201；完整资源及 Location |
-| 列表 | GET `/campusclaw-service/v1/schedules` | 200；当前可信范围内的分页结果，每项为与详情同形的完整资源 |
+| 列表 | GET `/campusclaw-service/v1/schedules` | 200；全部存续任务的分页结果（首版由 Mate 拉取后按用户过滤），每项为与详情同形的完整资源 |
 | 详情 | GET `/campusclaw-service/v1/schedules/{scheduleId}` | 200；完整资源 |
 | 部分更新 | POST `/campusclaw-service/v1/schedules/{scheduleId}` | 200；完整资源 |
 | 删除配置 | DELETE `/campusclaw-service/v1/schedules/{scheduleId}` | 200；ResultBean 包装完整 Schedule 删除回执；删除Schedule及Run、保留Session，不取消已受理执行，见 §4.6 |
 | 立即运行 | POST `/campusclaw-service/v1/schedules/{scheduleId}/run` | 200；本次已记录的Run受理结果，sessionId/error二选一；不重叠且不等待业务完成，见 §4.7 |
 | 暂停 | POST `/campusclaw-service/v1/schedules/{scheduleId}/pause` | 200；完整 Schedule，paused/manual，见 §4.8 |
 | 取消暂停 | POST `/campusclaw-service/v1/schedules/{scheduleId}/unpause` | 200；完整 Schedule，active/null，见 §4.9 |
-| 运行列表 | GET `/campusclaw-service/v1/schedule-runs` | 200；runs/nextPage；当前可见范围，可选scheduleId/hasError/triggerType/from/to，不包含已删除任务的Run，见 §4.11 |
+| 运行列表 | GET `/campusclaw-service/v1/schedule-runs` | 200；runs/nextPage；全部存续任务的Run（首版由 Mate 拉取后按用户过滤），可选scheduleId/hasError/triggerType/from/to，不包含已删除任务的Run，见 §4.11 |
 | 运行详情 | GET `/campusclaw-service/v1/schedule-runs/{runId}` | 200；同形完整Run；任务或Run已删除时404，见 §4.11 |
 
 定时任务全部接口不采用 If-Match 或 Idempotency-Key，不返回配套 ETag；额外传入这两个 Header 时按普通未知 Header 忽略，不赋予并发或去重语义，也不专门因此报错。不把版本或请求键改放请求体、查询参数或其他自定义 Header；创建、读取、更新、删除，以及后续试运行、暂停、恢复和 Run 读取均沿用这一接口约束。数据库内部的 Run 身份、自动触发唯一约束和同任务未完成 Run 唯一约束继续保留。同一约束适用于已有 Session 等其他 Claw 接口；现有源码迁移差距见[专项证据](source-evidence.md#schedule-header-free-contract)。各操作的具体规则集中在下文。
@@ -50,7 +50,7 @@
 
 **身份与权限边界（当前目标）。** 本文所有“当前调用者、管理范围、可见范围、功能权限”的判断均由 Mate 维护并执行。Claw 不解析或保存用户、scope、owner、operator，不以本地字段比较决定用户权限；收到 Mate 可信服务请求后校验服务来源、具体操作及目标资源，再检查自己的输入、状态和事务条件。浏览器或模型提交的 ID 不能作为授权依据，缺少有效 Mate 授权结果时拒绝。
 
-列表必须在分页前应用 Mate 决定的获准资源集合；Claw 仅执行技术 ID 约束查询，空集合返回空，不退化为全部。集合传递与批量查询的内部契约待实现，不能只删 WHERE scope 条件后放开全库，不能先取全库一页再过滤。403/404 等用户侧语义保持；Mate 的拒绝与不可用分别映射到既有错误，不能把服务故障伪装成空列表。
+**首版列表过滤由 Mate 完成（2026-10-13 评审确定，方法 A）。** Claw 的任务列表与 Run 列表不接收用户或获准 ID 集合，按自身排序与页码返回全部存续记录；Mate 拉取全部页后，按其维护的用户与任务关联过滤，再自行排序、分页返回给浏览器。查看单个任务的 Run 时 Mate 先确认该任务可见，再带 scheduleId 查询。代价：每次列表都要读取全部用户的记录，读取量随任务和 Run 总量增长，Claw 的页码只用于 Mate 分批拉取；Claw 不保存 userId。后续是否在 Claw 增加 userId 以便直接按用户查询列为待定 [T10](design-restructured.md#todo-t10)。403/404 等用户侧语义保持；Mate 的拒绝与不可用分别映射到既有错误，不能把服务故障伪装成空列表。
 
 Claw→Mate 的后台查询只携带资源、执行和不透明 authorizationRef，不传持久化的用户主体；业务凭据与服务认证分开。新 Session 在受理前由 Mate 独立登记归属，Schedule/Run 删除不删除该关联；完整规则见[Mate 专项](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)。本次不新增公共身份字段或自定义 Header。PR #332 当前尚存在本地身份链路，具体源码差距见[职责核验](source-evidence.md#mate-boundary-review)。
 
@@ -419,7 +419,7 @@ Accept-Language: zh-CN
 
 列表每项直接采用详情资源，不增加 agentName、nextRunAt、lastRunStatus 或执行结果。完整元素便于直接消费同一响应模型，也避免调用方为读取每条消息另发详情请求；代价是列表传输全部任务内容，需要限制页大小。result 仅包含 schedules/nextPage，不返回 total、page、limit 或额外 hasMore。读取完整元素不提供凭据或文件字节；列表中的配置是当次读取快照；编辑可重新读取详情确认内容，写入由数据库当前状态决定。
 
-权限范围与业务过滤必须先于分页；禁止先取全局页再过滤。计算 offset=(page-1)*limit，查询前检查整数和乘法边界，溢出或不支持的数值返回 400。读取最多 limit+1 个匹配任务，额外一条仅用于判断下一页；响应最多 limit 条，有后续记录时 nextPage=page+1，否则为 null，不为此接口执行 total 的 COUNT 查询。整页配置及下一页判断来自单次一致读取边界，时间摘要共用本次计算时刻，不跨 HTTP 请求持有事务或快照。
+首版 Claw 不做用户权限过滤，业务筛选先于分页；用户可见范围由 Mate 拉取全部页后自行过滤，见 §2 身份与权限边界。计算 offset=(page-1)*limit，查询前检查整数和乘法边界，溢出或不支持的数值返回 400。读取最多 limit+1 个匹配任务，额外一条仅用于判断下一页；响应最多 limit 条，有后续记录时 nextPage=page+1，否则为 null，不为此接口执行 total 的 COUNT 查询。整页配置及下一页判断来自单次一致读取边界，时间摘要共用本次计算时刻，不跨 HTTP 请求持有事务或快照。
 
 排序为 updatedAt DESC、id ASC，而 ListEvents 按已提交事件顺序从旧到新读取；只复用分页协议，不照搬事件顺序。运行摘要变化不更新 updatedAt，因此不会仅因一次自动启动改变任务排序。但任务配置可被编辑、删除，新任务会进入列表前部，不能借用事件只在尾部追加的稳定位置前提；并发翻页仍可能重复或遗漏，按 id 去重不能补回漏项。同一轮保持 limit 与筛选不变；修改它们或已知列表发生变更时从 page=1 重读，不将此接口作为可靠增量同步协议。
 
@@ -993,7 +993,7 @@ Accept-Language: zh-CN
 
 **Run与Session反向删除不对称。** 单独删除Session保留仍存续任务的Run及原sessionId，不把过去的受理成功改成失败，不清空历史关联。Run读取不要求关联Session当前仍可读取；读取或删除Session始终执行其独立权限检查，404不能证明业务从未执行。
 
-**两个读取接口。** 两者均不接收请求体，使用 §2 的认证、语言及两字段HTTP错误包装，成功为200/ResultBean、Cache-Control:no-store。列表跨任务读取当前有权查看的Run；权限及删除过滤先于分页，不能以scheduleId或sessionId自行授权。
+**两个读取接口。** 两者均不接收请求体，使用 §2 的认证、语言及两字段HTTP错误包装，成功为200/ResultBean、Cache-Control:no-store。列表跨任务返回全部存续任务的Run，删除过滤先于分页；首版由 Mate 拉取后按用户过滤，scheduleId 或 sessionId 不构成授权依据。
 
 | 操作 | 方法与路径 | result |
 |---|---|---|
@@ -1138,6 +1138,7 @@ Accept-Language: zh-CN
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.37.0 | 2026-10-13 | 首版列表由 Mate 拉取全部后自行过滤分页，Claw 不接收获准集合、不保存 userId；Claw 加 userId 列为待定 T10。 |
 | 0.36.0 | 2026-10-13 | lastRunAt 改为自动运行的受理时刻，去掉启动 CAS 说法。 |
 | 0.35.0 | 2026-10-13 | 去掉内部代次说法，暂停与受理竞态改按受理时状态和 lease_until 判定。 |
 | 0.34.0 | 2026-10-13 | Run列表新增triggerType筛选与createdAt时间范围from/to，分页保持页码。 |
