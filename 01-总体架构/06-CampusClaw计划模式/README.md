@@ -58,7 +58,7 @@
 | `exit_plan_mode` 展示完整 Markdown 并请求批准 | `ExitPlanMode` + `agent.plan` + `user.plan_confirmation` | 架构变更；接入已有 HTTP、SSE 和事件身份 |
 | 计划状态以 `plan/mode` 日志恢复 | Session 行保存当前模式，领域 Entry 保存变更；同事务维护 | 架构变更；复用既有 GaussDB 配置和历史模型 |
 | 运行中切换在后续 step 生效 | 用户主动切换只允许 idle；审核批准是唯一运行中退出路径 | 产品约束；与当前配置准入一致，不引入通用运行中模式队列 |
-| standard preset 禁止规划期使用 todo_write，实施进度由工具描述指导 | plan 不调用 TodoUpdate；批准后加载短 BUILD.md，进度调用规则由 TodoUpdate description 维护 | 直接借鉴阶段边界与显式清单事件；公共名称采用 agent.todo_updated |
+| standard preset 禁止规划期使用 todo_write，实施进度由工具描述指导 | plan 不调用 TodoUpdate；批准后加载短 BUILD.md；批准引导与 BUILD.md 只提示多步实施先建清单，其余进度规则由 TodoUpdate description 维护 | 直接借鉴阶段边界与显式清单事件；公共名称采用 agent.todo_updated |
 | 通过独立提问能力澄清需求 | AskUserQuestion + 显式问题/答案事件，原执行等待与续跑 | 架构变更；复用数据库交接和事件恢复，精确问题关联由后端校验；见 [提问设计](ask-user-question.md) |
 | 新 spawn 默认不继承计划模式 | Child 在调用时复制父执行当前模式，并只向父返回结果 | 产品约束；避免把规划任务委派成默认实施任务；仍是提示词约束 |
 | 没有本专题定义的 Agent.mode → 企业 Session 默认值链 | Agent 定义提供默认值，创建后由 Session 独立维护 | 产品约束与架构扩展；支持默认先规划的 Agent，不重置既有会话 |
@@ -192,7 +192,7 @@
 
 内置模式正文在 [PLAN.md](PLAN.md) 与 [BUILD.md](BUILD.md) 维护；业务 Agent 的 `.campusclaw/PLAN.md`、`BUILD.md` 分别优先完整替换，不存在者回退对应内置正文，组合与通用行为归属见[提示词组织](plan-policy.md)。Runtime 根使用基础 SYSTEM + 可信 Main Agent 角色 + 当前模式文件；Child plan 使用自身基础 SYSTEM + 可信 Subagent 角色 + PLAN.md，Child build/Cron 保持既有基础行为。两份内置文件作为 classpath UTF-8 文本随部署提供，启动时校验；业务来源、非法文件失败、快照与刷新保留规则由[提示词组织 §1](plan-policy.md#11-业务文件优先与独立回退)唯一维护，不按 Markdown 标题解析或按工具拼接段落。
 
-通用执行、验证、汇报与必要澄清要求写入现有受管 SYSTEM.md；TodoUpdate 状态细则归工具 description，BUILD.md 只说明模式恢复与获批方案衔接。主线 8c5fda1d 已完成两文件与工具描述迁移；加载器不会自动补通用文本，业务 SYSTEM 的实际发布与模型行为仍须独立验收。
+通用执行、验证、汇报与必要澄清要求写入现有受管 SYSTEM.md；TodoUpdate 状态细则归工具 description，BUILD.md 说明模式恢复、获批方案衔接，以及多步实施先建清单（待实现）。主线 8c5fda1d 已完成两文件与工具描述迁移；加载器不会自动补通用文本，业务 SYSTEM 的实际发布与模型行为仍须独立验收。
 
 执行装配顺序：
 
@@ -373,7 +373,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.23.0 | 2026-10-12 | plan 模式调用 TodoUpdate 在执行前被拒绝，前端清单派生改记为 executionTodos。 |
+| 1.23.0 | 2026-10-13 | plan 模式调用 TodoUpdate 在执行前被拒绝，前端清单派生改记为 executionTodos，批准后多步实施先建清单。 |
 | 1.22.1 | 2026-10-10 | 关联 Claw 数据库设计中的计划审核决定表，保持业务与接口规则。 |
 | 1.22.0 | 2026-10-09 | 取消计划正文最大字符数，保留内容有效性、审核绑定与完整事件容量约束。 |
 | 1.21.0 | 2026-10-09 | 计划预览消费 AI 通用部分参数快照与内部诊断，同步 PR 实现及兼容性边界。 |

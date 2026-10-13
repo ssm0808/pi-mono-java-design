@@ -1,6 +1,6 @@
 # 计划模式源码证据与实现差距
 
-版本：2.6.0；维护日期：2026-10-12；各节保留实际核对日期。当前参数承载、计划专用预览和实现差距见[§15](#plan-argument-streaming-evidence)；§12～§14 保留各自提交的历史证据。Java `553dcd5e` 已实现正文标记和空参数审核；恢复必填 `plan` 参数并从参数生成预览是待实现增量，不能混写这两个状态。
+版本：2.6.0；维护日期：2026-10-13；各节保留实际核对日期。当前参数承载、计划专用预览和实现差距见[§15](#plan-argument-streaming-evidence)；§12～§14 保留各自提交的历史证据。Java `553dcd5e` 已实现正文标记和空参数审核；恢复必填 `plan` 参数并从参数生成预览是待实现增量，不能混写这两个状态。
 
 提问接入核对开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead`：统一 Session 更新、计划审核、TODO 和 AskUserQuestion 已存在，确定性测试及父审查独立验证见[提问证据 §2](ask-user-question.md#2-基线与已观察实现)。相对旧接入点 `699f929f6826b595ed1d0162f6def66e2f84760b` 的变化路径和实际类职责映射同处维护。下文固定 `09b32d8e` 的旧计划表只证明该提交；其中 待实现 和未运行测试的描述不代表当前开发分支状态，企业接入及真实模型仍未验证。
 
@@ -603,3 +603,14 @@ JDK 21 `clean verify spotless:check`：327 类、2198 项，失败、错误、�
 Java：`RuntimeActiveExecutionTest` 新增 plan 拒绝且不进入确认处理器、build 放行两个用例；相关测试类全部通过。`./mvnw verify` 共 1597 项，唯一失败为 `SkillToolTest.shouldReturnPipelineErrorWhenMarkdownCannotBeRead[unreadable]`，原因是容器以 root 运行可读取权限为 000 的文件，与本改动无关。`spotless:check`、`checkstyle:check` 通过。公司镜像已同步，父 POM 不可用，镜像未编译。真实模型行为未验收。
 
 设计：`check-diagrams.py` 0 errors。本容器字体与作者环境不同，未修改的 139 张 SVG 在 `--render` 下全部与重新生成结果不一致，因此只重新生成本次修改的 `todo_update_sequence` 与 `plan_mode_target_classes`，并在原尺寸 PNG 中人工检查文字与箭头；图源与 SVG 的字节同步未能在本环境验证。`validate-chat-events.py` 通过；`validate-chat-http-v1.py` 仍因既有接口契约与设计版本不一致失败，本次未修改相关文件。
+
+<a id="todo-first-call"></a>
+
+### 18.4 首次 TodoUpdate 偏晚（2026-10-13）
+
+用户反馈多步任务有时到第二步才首次调用 TodoUpdate。以下为源码推断，尚未用真实会话核对。
+
+| 来源 | 快照与路径 / 符号 | 结论 |
+|---|---|---|
+| Java main | 2026-10-13 拉取 `7edbcf42d52f6ef412fad74897cc0c7b39d61659`：`tool/plan/ExitPlanModeTool.java#APPROVED_GUIDANCE`（第 52 行）、`resources/prompts/plan/BUILD.md`、`tool/todo/TodoUpdateTool.java#DESCRIPTION`（第 75～86 行） | 批准引导只要求按获批正文继续，BUILD.md 只说“进度维护遵守工具描述”；“Before multi-step implementation, submit the complete task list”只在工具描述中 |
+| Codex | 2026-10-13 拉取 main `12cca49c81c8aa6a37a5cc4e39964ee3b70f9458`：`codex-rs/core/gpt_5_2_prompt.md` 第 38～44 行与第 290～298 行 `## update_plan` | 系统提示词要求动手前建计划、完成一步即更新；工具描述 `codex-rs/core/src/tools/handlers/plan_spec.rs` 只有三行 |
