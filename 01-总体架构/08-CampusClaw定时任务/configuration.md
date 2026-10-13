@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.30.0 · 2026-10-10 |
+| 版本 | 0.31.0 · 2026-10-13 |
 | 状态 | 当前目标契约，待实现、尚未发布；包含接口收口与授权的工程细化，不表示逐项字段均经单独确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、删除、立即运行、暂停及取消暂停，以及Run读取与删除关系；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已绑定 Agent；不提供已有 Session 目标 |
@@ -15,9 +15,9 @@
 
 调用方配置“工作日 08:00 汇总园区设备告警”，向 Claw 提交 Agent、任务内容和时间规则。Mate 验证当前用户权限，Claw 验证服务授权结果、绑定和规则，持久化后返回任务 ID、完整配置及计划时间摘要。之后可读取、修改该配置，不依赖调用方在线。
 
-已确认的创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 契约见 §4.7，采用已记录受理结果的200 Run回执，八字段返回模型、同一任务不重叠及手动失败不改暂停状态已确认，错误映射见 §4.7，原子受理见[执行设计](execution.md)。每次运行均新建独立 Session，将配置中的一条 `user.message` 作为首条任务消息；绑定的 Agent 定义继续复用；Cron 沿用 Spring 六字段。
+已确认的创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 契约见 §4.7，采用已记录受理结果的200 Run回执，八字段返回模型、同一任务不重叠及手动失败不改暂停状态已确认，错误映射见 §4.7，原子受理见[执行设计](execution.md)。每次运行均新建独立 Session，将配置中的 prompt 文本作为首条用户消息；绑定的 Agent 定义继续复用；Cron 沿用 Spring 六字段。
 
-时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，JSON 不提供 revision，并支持可选 metadata；顶层只读 type 固定为 schedule，pausedReason 返回当前暂停原因或 null，见 [§4.1.1](#schedule-type-paused-reason)。Claw 通过 credentialIds 直接绑定一份或多份独立凭据，能力、引用层级与字段名已确认，详见 §4.2。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 已确认约束。
+时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，JSON 不提供 revision，并支持可选 metadata；顶层只读 type 固定为 schedule，pausedReason 返回当前暂停原因或 null，见 [§4.1.1](#schedule-type-paused-reason)。任务内容是纯文本 prompt；配置不保存凭据引用，业务凭据由 Mate 按 Agent 绑定在运行时决定，详见 §4.2。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 已确认约束。
 
 本页维护八个配置及生命周期操作和两个 Run 读取的当前目标契约，均待实现。新建状态为 `active`，创建处理器不调用模型或创建 Session。自动执行不补漏跑、遇忙跳过，失败或故障不重跑同一次执行；首版只支持文本及无需人工交互的任务，遇 ASK 由 Host 阻止待确认调用并结束本次根执行，不建立持久等待，见[执行范围](execution.md#noninteractive)。删除 Schedule 及对应 Run，保留已受理 Session 且不请求取消；单独删除 Session 不改写 Run 的受理事实和 sessionId。是否由运行错误自动暂停整个 Schedule 是唯一尚待明确的生命周期选择，见 §4.1.1；企业身份、ID 格式与持久化接线仍需实施校准。
 
@@ -63,11 +63,10 @@ Claw→Mate 的后台查询只携带资源、执行和不透明 authorizationRef
 | name | 创建必填；去首尾空白后 1～256 个 Java 字符；允许重名，不作为身份 |
 | description | 可选，最多 2048 个 Java 字符；创建省略默认 null，更新省略保持，空白或显式 null 清除；不附加到模型输入 |
 | agentId | 创建必填；复用 `ClawConstants.Agent.ID_REGEX`，验证存在、可用和当前调用者的配置资格；只绑定 Agent 身份，不保证固定历史版本 |
-| message | 创建必填；一条 `type:"user.message"`，content 非空且只接受有效 text 块；file 块返回400/SCHEDULE_MESSAGE_INVALID，见 §3.6；不开放 system.message 或 user.define_outcome |
+| prompt | 创建必填；纯文本字符串，去首尾空白后非空，否则返回400/SCHEDULE_PROMPT_INVALID；每次运行作为新 Session 的首条用户消息提交；首版不支持附件，见 §3.6；不开放多条消息、system.message 或 user.define_outcome |
 | schedule | 可选；创建省略默认 null，更新省略保持；非空时只允许下表的 cron 对象，更新时整体替换 |
 | metadata | 可选字符串键值对象；创建省略为 {}；沿用 Claude 最多 16 对、键最多 64、值最多 512 个字符；不传给模型、不作为授权依据，详见 §3.7 |
-| credentialIds | 可选 string[]，直接绑定 Mate 受管凭据；创建省略为 []，响应同名回显；更新省略保持、数组整体替换、[] 清空，null 拒绝；最多16个、不重复，同目标歧义拒绝；ID 格式按企业标识校准，见 §4.2 |
-| type | 资源顶层只读字段，固定为 schedule；创建、详情、列表元素、更新及删除回执均返回；区别于 schedule.type 和 message.type，见 §4.1.1 |
+| type | 资源顶层只读字段，固定为 schedule；创建、详情、列表元素、更新及删除回执均返回；区别于 schedule.type，见 §4.1.1 |
 | pausedReason | 只读的当前暂停原因，始终返回 object 或 null；创建为 null，人工暂停为 manual，保留 error 形状但其触发策略待定，恢复后清空；精确边界见 §4.1.1 |
 | status/id/createdAt/updatedAt | 全部只读；新建 active；时间为 UTC ISO 8601，秒级且无小数；status 为 active/paused；已确认直接删除，无 archived/deleted 公共状态；删除成功返回完整回执，随后读取404 |
 | schedule.lastRunAt / schedule.upcomingRunsAt | 仅响应使用；最近自动运行实际开始时间及最多五个未来计划时刻，见 §3.3；创建和更新请求传入时拒绝 |
@@ -167,31 +166,23 @@ Cron 的 timezone 可省略，服务端默认使用 Asia/Shanghai；显式提供
 
 既有 [M09 附件设计](../../02-服务与接口/01-CampusMate附件服务/README.md)把上传、扫描与文件存储归于 mate-service，把 Claw 定位为引用及内容消费者；该设计标记待实现，不能当作当前上传实现。其附件不可变绑定单个 Session、内部 resolve 拒绝跨 Session，且文件 ID 格式仍为 file_<26 alnum>，与当前 Runtime 的 32 位十六进制引用未对齐。
 
-首版定时任务不支持附件：创建和更新的 message.content 只接受 text，file 块一律返回400/SCHEDULE_MESSAGE_INVALID，不静默丢弃或保存无法读取的引用。旧 CronPayload 只有纯文本，普通 Session 的现有文件引用事实保持不变。未来若支持重复使用巡检附件，须先在 M09 明确跨 Session 授权、ID、保留及执行时读取规则；不在首版实现。外部 Mate/附件服务实现本次未核验。Claude Files API 和 Deployment resources 文件挂载是对照能力，不代表 Claw 已有接口。
+首版定时任务不支持附件：prompt 是纯文本字符串，无法携带 file 块，也不保存文件引用。旧 CronPayload 只有纯文本，普通 Session 的现有文件引用事实保持不变。未来若支持重复使用巡检附件，须先在 M09 明确跨 Session 授权、ID、保留及执行时读取规则；不在首版实现。外部 Mate/附件服务实现本次未核验。Claude Files API 和 Deployment resources 文件挂载是对照能力，不代表 Claw 已有接口。
 
 ### 3.7. metadata 的用途与范围
 
 metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "purpose": "alarm-summary" }`。支持该字段，沿用 Claude 的字符串 map 与 16/64/512 限制，长度沿用本项目 Java 字符计数，不声称补充 Unicode 字符与 Claude 的计数完全一致。键必须非空，值允许空字符串；创建及保存值拒绝 null、数值、布尔值、数组和嵌套对象，不自动转换成字符串。
 
-创建省略返回 {}。更新沿用 Claude 的逐 key patch：字符串新增或覆盖，key 的值为 null 时删除该 key，省略 key 保留；{} 不做修改，需清空时逐 key 删除。合并后的存储对象仍满足 16/64/512 限制且不含 null；顶层 metadata:null 拒绝。metadata 不进入 user.message、系统提示或工具参数，也不自动继承为 Session 元数据；不得用其中的 tenantId、owner 或凭据引用代替可信授权。不得保存 Token、密码或其他 secret，敏感凭据应采用独立保管与授权引用。首版不承诺按 metadata 过滤或索引。
+创建省略返回 {}。更新沿用 Claude 的逐 key patch：字符串新增或覆盖，key 的值为 null 时删除该 key，省略 key 保留；{} 不做修改，需清空时逐 key 删除。合并后的存储对象仍满足 16/64/512 限制且不含 null；顶层 metadata:null 拒绝。metadata 不进入 prompt、系统提示或工具参数，也不自动继承为 Session 元数据；不得用其中的 tenantId、owner 或凭据标识代替可信授权。不得保存 Token、密码或其他 secret；业务凭据由 Mate 保管，见 §4.2。首版不承诺按 metadata 过滤或索引。
 
 ## 4. 创建、读取、更新与删除报文
 
-以下创建主体包含 credentialIds 字段；默认值和引用校验见 §4.2。创建 `POST /campusclaw-service/v1/schedules`：
+创建 `POST /campusclaw-service/v1/schedules`：
 
 ```json
 {
   "name": "工作日园区告警汇总",
   "agentId": "agent-550e8400e29b41d4a716446655440000",
-  "message": {
-    "type": "user.message",
-    "content": [
-      {
-        "type": "text",
-        "text": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。"
-      }
-    ]
-  },
+  "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
   "schedule": {
     "type": "cron",
     "expression": "0 0 8 * * MON-FRI",
@@ -200,11 +191,7 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
   "metadata": {
     "parkCode": "park-east",
     "purpose": "alarm-summary"
-  },
-  "credentialIds": [
-    "credential-alarm-example",
-    "credential-workorder-example"
-  ]
+  }
 }
 ```
 
@@ -220,15 +207,7 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
     "name": "工作日园区告警汇总",
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
-    "message": {
-      "type": "user.message",
-      "content": [
-        {
-          "type": "text",
-          "text": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。"
-        }
-      ]
-    },
+    "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
       "expression": "0 0 8 * * MON-FRI",
@@ -249,11 +228,7 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
     "metadata": {
       "parkCode": "park-east",
       "purpose": "alarm-summary"
-    },
-    "credentialIds": [
-      "credential-alarm-example",
-      "credential-workorder-example"
-    ]
+    }
   }
 }
 ```
@@ -266,7 +241,7 @@ GET 详情返回同形完整资源；列表每项同样返回完整资源，此�
 
 ### 4.1. 创建成功响应（待实现）
 
-创建 `POST /campusclaw-service/v1/schedules` 解决的是保存可运行配置。上述 JSON 是完整响应模型，包含资源 type、pausedReason、只读时间字段、小写 active、metadata 和 credentialIds，不提供 revision；HTTP201及Location沿用现有Session创建风格。
+创建 `POST /campusclaw-service/v1/schedules` 解决的是保存可运行配置。上述 JSON 是完整响应模型，包含资源 type、pausedReason、只读时间字段、小写 active 和 metadata，不提供 revision；HTTP201及Location沿用现有Session创建风格。
 
 | 项目 | 创建时的值及含义 | 与 Claude 的对应或差异 |
 |---|---|---|
@@ -276,21 +251,20 @@ GET 详情返回同形完整资源；列表每项同样返回完整资源，此�
 | type | 固定为 schedule，标识返回的是任务配置资源 | 对应 Claude 的 type:deployment；采用 Claw 自身资源名称 |
 | name/description | 规范化名称；未提供 description 返回 null | 对应同名字段；description 不参与模型输入 |
 | agentId | 绑定的 Agent ID | Claude 返回 id/version/type 对象；Claw 无历史版本绑定，不伪造 agentVersion |
-| message | 保存的一条 user.message | Claude initial_events 为数组；Claw 仅一条用户消息 |
+| prompt | 保存的纯文本任务内容 | Claude initial_events 为事件数组；Claw 首版只有一段文本，不包装为 user.message |
 | schedule | 规则及 lastRunAt/upcomingRunsAt；未配置则 null | 对应 Claude schedule；Claw 六字段且默认上海时区 |
 | schedule.lastRunAt | 创建为 null；表示最近自动运行的实际开始 | 对应 last_run_at；手动试跑不更新，不当作业务成功 |
 | schedule.upcomingRunsAt | 最多五个未来计划时刻 | 对应 upcoming_runs_at；计划值不保证实际启动 |
 | status | 创建 active；存续资源 active 且 schedule 非空才有自动计划；删除回执保留最后状态，见 §4.6 | 与 Claude active 拼写一致；Claw 直接删除，不采用归档资源模型 |
 | pausedReason | 创建为 null；表示当前暂停原因，不是最近运行错误 | 对应 paused_reason，采用 lowerCamelCase；manual/error 与恢复清空语义对齐 |
 | metadata | 原样保存的字符串对象；省略默认 {} | 对应同名字段；沿用 16/64/512 限制，不传模型 |
-| credentialIds | 引用独立凭据的 ID 数组，响应不含秘密；省略时回显 [] | Claude vault_ids 引用集合；Claw 直接选择独立凭据，不新增 Vault 分组层 |
 | createdAt/updatedAt | 新建相等；UTC 秒级无小数 | 对应 created_at/updated_at；Claw 精度是产品规则 |
 
 revision 不进入创建、详情、列表或更新响应。它是内部实现可用的配置代次，与用户任务内容、Agent 版本、执行次数均无关，不需要调用方感知。创建也不返回 sessionId、runId、executionId、模型答案或业务完成状态。
 
 省略 schedule 的创建响应仍含 `type:"schedule"`、`schedule:null`、`status:"active"`、`pausedReason:null`：可以手动运行，但没有自动计划，不隐含立即试跑。提供有效 schedule 后无需再显式启用；状态与时间摘要是服务端保存的响应快照，不是客户端收包时的实况。需要当前计划、状态和运行时间时 GET；重复创建作为新的请求处理。
 
-小写和直接删除已确认；存续资源使用 active/paused，不提供 archived/deleted 状态、archivedAt、deletedAt 或 includeArchived。Claude 则以 archived_at 表达归档，归档后的 status 仍可为 active。此处是明确的产品与生命周期差异，删除成功返回完整 Schedule 作为一次回执，随后不再提供读取；暂停/恢复规则见 §4.8～§4.10。environment_id/resources/budget 仍不引入；凭据引用见 §4.2，不能把 metadata 当成凭据或权限入口。
+小写和直接删除已确认；存续资源使用 active/paused，不提供 archived/deleted 状态、archivedAt、deletedAt 或 includeArchived。Claude 则以 archived_at 表达归档，归档后的 status 仍可为 active。此处是明确的产品与生命周期差异，删除成功返回完整 Schedule 作为一次回执，随后不再提供读取；暂停/恢复规则见 §4.8～§4.10。environment_id/resources/budget/vault_ids 不引入；业务凭据见 §4.2，不能把 metadata 当成凭据或权限入口。
 
 <a id="schedule-type-paused-reason"></a>
 
@@ -298,7 +272,7 @@ revision 不进入创建、详情、列表或更新响应。它是内部实现�
 
 园区运营人员发现告警汇总没有继续执行，需要知道当前是否暂停以及暂停原因。pausedReason 随完整资源返回当前原因，历史运行错误继续由 Run 记录。顶层 type 则使调用方脱离请求路径仍能辨认这是 Schedule 配置。两字段已确认，待实现。
 
-type 始终为字符串 schedule，创建、详情、列表元素和更新使用同一规则；无 Cron 计划时也不改变。它与 schedule.type 的 cron、message.type 的 user.message 分属不同层，不增加时间规则或消息类型。
+type 始终为字符串 schedule，创建、详情、列表元素和更新使用同一规则；无 Cron 计划时也不改变。它与 schedule.type 的 cron 分属不同层，不增加时间规则类型。
 
 | 当前状态或动作 | pausedReason 的响应语义 |
 |---|---|
@@ -320,7 +294,7 @@ type 始终为字符串 schedule，创建、详情、列表元素和更新使用
 
 在 active/paused 范围内，pausedReason 非空当且仅当 status 为 paused；不能返回 active 与 manual/error 原因的组合。任务删除成功的完整回执保留最后 status/pausedReason，随后不再提供读取；不产生额外的删除原因响应对象。是否自动暂停整个 Schedule 及其触发条件仍待确定；当前不能默认继承旧 Cron 连续三次失败禁用，也不能把每次失败、限流、ASK 或业务失败都等价为暂停。无论该选择如何，本次结果均如实记录且不自动重跑。Claw 无对应 Environment/Vault 资源，不照搬其错误枚举。
 
-两个字段由服务端生成；创建和配置更新若传入顶层 type 或 pausedReason，即使值看似正确，也按只读字段返回 400 `SCHEDULE_REQUEST_INVALID`。合法的 message.type 和 schedule.type 仍是原有输入。暂停/恢复操作负责生成原因，调用方不能通过配置更新伪造或清空它。
+两个字段由服务端生成；创建和配置更新若传入顶层 type 或 pausedReason，即使值看似正确，也按只读字段返回 400 `SCHEDULE_REQUEST_INVALID`。合法的 schedule.type 仍是原有输入。暂停/恢复操作负责生成原因，调用方不能通过配置更新伪造或清空它。
 
 status 与 pausedReason 在同一持久化边界原子修改，并按生命周期变更更新 updatedAt 和内部配置代次；读取只能观察一致组合。原因属于 Schedule 当前状态，不能由 GET 临时推断最近一个 Run 的错误。错误投影不暴露原始异常、堆栈、凭据或敏感业务参数。读取返回当前状态与原因的一致快照，历史变化通过审计/Run 观察，不提供原 HTTP 写请求回执重放。
 
@@ -328,44 +302,26 @@ Claude 的资源 type 固定为 deployment，Claw 改为 schedule 以匹配自�
 
 <a id="credential-reference-proposal"></a>
 
-### 4.2. credentialIds 直接绑定凭据
+### 4.2. 业务凭据由 Mate 按 Agent 绑定决定
 
 业务问题是“每天 08:00 自动读取园区告警时，凭什么身份调用业务服务”。创建任务的登录凭据可能早已过期；管理任务的权限也不自动等于调用告警、门禁或工单接口的权限。模型服务认证是第三个独立边界。
 
-Claude 的 Deployment 可选 vault_ids 引用已有 Vault（最多 50）；Vault 的 Credential 由独立接口创建和更新。敏感 token/secret 只写不回读。MCP 凭据按 mcp_server_url 匹配注入；环境变量凭据在 sandbox 中表现为不透明占位符，在受控出站边界替换。Vault 是 workspace 范围，不自动提供企业用户/园区级业务授权。公开事实、轮转和自托管限制见[凭据证据](source-evidence.md#creation-metadata-credentials-evidence)。
-
-Claw 使用 credentialIds 直接引用一份或多份独立受管凭据；能力、资源层级及字段名已确认，功能待实现。每个 ID 指向完整的逻辑凭据或连接身份，例如园区告警服务访问身份，内部可以包含多个认证值，不是一项对应一个 Header。Mate 是接口定义、授权及凭据的权威；任务只保存引用与经 Mate 确认的非秘密授权依据，真实秘密只在实际工具执行前解析。具体路径及字段为[Mate 接口草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)，待实现并需企业接线校准。
+定时任务配置不保存凭据引用，没有 credentialIds 字段。每次运行时，由 Mate 按该 Agent 的绑定决定本次可用的业务凭据，并在工具实际执行时解析；Claw 只向 Mate 提交 agentId、scheduleId/runId 和不透明 authorizationRef，不保存秘密，也不保存凭据 ID。凭据的保管、授权、轮转和多凭据选择都归 Mate，Claw 不复制这些规则。请求中出现 credentialIds、vaultIds、credentialRefs 或原始 credentials 对象，按未知字段返回 400 `SCHEDULE_REQUEST_INVALID`。
 
 | 产品 | 资源关系 | 收益与代价 |
 |---|---|---|
-| Claude | Deployment → vault_ids → Vault → Credential | 凭据集合便于成组授权及复用，同时需要集合和成员变更规则 |
-| CampusClaw | Schedule → credentialIds → Credential | 任务明确选择可用凭据，首版不增加 Vault 集合层；多个任务共用一组凭据时需分别维护引用列表 |
+| Claude | Deployment → vault_ids → Vault → Credential | 每个部署自选凭据集合，需要维护集合及成员变更规则 |
+| CampusClaw | Schedule → agentId；Mate 按 Agent 绑定决定凭据 | 任务配置更简单，凭据规则只在 Mate 一处维护；代价是同一 Agent 的不同任务不能各自选择凭据 |
 
-创建请求和 result 响应采用同名字段。以下为字段片段；本文 credential-* 示例仅说明引用，不定义最终 ID 格式：
-
-```json
-{ "credentialIds": ["credential-alarm-example", "credential-workorder-example"] }
-```
-
-字段可选、创建省略归一化为 []；响应只回显引用 ID，不回显 secret。[] 表示没有显式绑定业务凭据，不表示借用创建请求的 Token。更新省略保持、[] 清空、非空数组整体替换，显式 null 拒绝。创建和每次执行均需校验当前引用资格；保存成功不等于下游业务已经认证成功。原 ID 下的凭据轮转不要求任务重新保存 secret，具体解析/撤销时效由凭据权威契约确定。
-
-不开放 vaultIds、credentialRefs 或原始 credentials 对象作为别名；这些值按未知字段拒绝。最多16个引用，重复ID拒绝；多个凭据对同一可信目标形成歧义时拒绝，不能采用最后一个覆盖。ID正则须与Mate企业标识校准，credential-*仅为示例。可信身份与授权由Mate查询结果确定，不通过metadata或请求Header自行拼接。普通 Session 是否同时增加同名字段，另按其接口范围确定。
-
-现有一次执行只有一份 MateCredentials 快照，不能把多 ID 列表直接转换为 Header 合并或最后一个覆盖。多凭据引用按Mate返回的可信业务目标绑定匹配，同目标歧义拒绝；这是待实现增量，不由数组字段自动提供。配置修改影响后续运行准备；已受理运行继续固定原配置引用快照，凭据本身的轮转/撤销与配置引用列表更新分别处理。
-
-正常流程为：在 Mate 完成凭据授权 → 保存时通过上下文查询仅验证 Agent 与 credentialIds 引用资格，不领取 secret → 到期准备时重新查询可信接口、授权依据与引用绑定 → 受理一个新 Session → 工具完成可信目标解析、参数校验及权限判断，允许执行后才由 ScheduleCredentialPort 调 Mate resolve 获取必要 secret 并注入业务请求 → 回传安全结果。ASK 时由 Host 结束本次根执行，不 resolve 凭据或发出待确认业务请求。secret 不进入模型、metadata、配置、Run、Session记录或公共响应，仅存于最短执行内存范围。
-
-凭据失效或撤销时记录本次真实结果且不重跑；是否自动暂停整个任务只按 §4.1.1 的待定策略处理，不能静默借用创建者浏览器 Token、管理员身份或另一组凭据。后续轮转通过同一引用生效的范围、刷新失败和运行中撤销时效，需要凭据权威系统明示，不承诺实时传播。
+正常流程为：保存时只校验 Agent 绑定与配置资格，不领取 secret → 到期准备时向 Mate 查询可信接口定义和授权依据 → 受理一个新 Session → 工具完成可信目标解析、参数校验和权限判断后，才由 Mate 解析本次业务凭据并仅用于实际执行。凭据失效或撤销时记录本次真实结果（`credential_unavailable_error`）且不重跑；不能静默借用创建者浏览器 Token、管理员身份或其他凭据。
 
 Claw 已观察行为是：普通消息只捕获本次执行 Header 的不可变 MateCredentials 并在工具执行时转发，Cron 明确使用 empty()，不会恢复旧请求凭据。模型当前使用内部 CampusMateProvider，不能把模型 API Key 与业务凭据合并成一个请求字段。普通交互 Session 的 Header 快照规则保持；定时入口改用 Mate 上下文授权查询和执行时 resolve。服务间认证按企业机制接线，与解析出的下游业务凭据分别处理，不能把两类认证混为一个 Header 快照。
-
-该选择属于企业产品约束与安全加固。首版受控业务工具不必复制 Claude 的整个 sandbox 环境变量出站替换机制；收益是复用现有可信 Adapter，代价是还不能向任意命令提供等价的安全凭据能力。凭据存储和签发/刷新由Mate权威负责，Claw复用共享客户端，不新增Maven依赖或宣称已具备Vault；企业认证SDK及完整传递依赖仍需实施核验。
 
 <a id="get-schedule-review"></a>
 
 ### 4.3. 读取任务详情（待实现）
 
-运营人员打开“工作日园区告警汇总”，需要看到保存的任务内容、Agent、凭据引用、时间规则和当前计划摘要。详情读取返回这一份配置；某次运行的结果另从 Run 和关联 Session 读取，不在配置中嵌入完整执行历史。
+运营人员打开“工作日园区告警汇总”，需要看到保存的任务内容、Agent、时间规则和当前计划摘要。详情读取返回这一份配置；某次运行的结果另从 Run 和关联 Session 读取，不在配置中嵌入完整执行历史。
 
 ```http
 GET /campusclaw-service/v1/schedules/schedule-927e03d2a4784f90a6238e790539c6e4
@@ -376,15 +332,15 @@ Accept-Language: zh-CN
 |---|---|
 | path.scheduleId | 必填，使用创建返回的原 ID；不通过名称查找，不自行构造 |
 | query / body | 无业务查询参数，无请求体 |
-| 认证与授权 | 复用 §2 的可信调用上下文，先认证和检查读取功能资格，再按当前可见范围查找任务；具体公司认证 Header/适配器待接线，不用 credentialIds 充当调用本接口的认证 |
+| 认证与授权 | 复用 §2 的可信调用上下文，先认证和检查读取功能资格，再按当前可见范围查找任务；具体公司认证 Header/适配器待接线 |
 | Accept-Language | 可选；支持及回退规则见 §2 |
 | 重试 | 读取可安全重试，不触发任务 |
 
-成功为 HTTP 200，返回 `Content-Type: application/json`、`Cache-Control: no-store`及 `Content-Language`。result 与 §4 创建成功的完整资源同形，固定包含 type、id、name、description、agentId、message、schedule、status、pausedReason、metadata、credentialIds、createdAt、updatedAt；无计划时 schedule 为 null，空元数据/凭据分别为 {} 和 []。不返回凭据秘密、文件内容、Agent 完整定义、内部调度游标、revision 或尚未关联的 Session/Run ID。
+成功为 HTTP 200，返回 `Content-Type: application/json`、`Cache-Control: no-store`及 `Content-Language`。result 与 §4 创建成功的完整资源同形，固定包含 type、id、name、description、agentId、prompt、schedule、status、pausedReason、metadata、createdAt、updatedAt；无计划时 schedule 为 null，空元数据为 {}。不返回凭据、文件内容、Agent 完整定义、内部调度游标、revision 或尚未关联的 Session/Run ID。
 
 读取返回当前持久化配置及按 §3.3 生成的时间摘要。一次读取使用一致的配置/lastRunAt 快照，并取一次权威计算时刻生成 upcomingRunsAt；配置或生命周期最近修改时间 updatedAt 不因 GET 或时间数组滚动而变化。读取不改变更新准入条件；计划数组自然推进，不产生客户端版本过期错误。当前不提供 304 缓存协商流程。
 
-正常调用只进行身份与范围校验、持久化读取、时间计算和安全投影。Agent 停用、已绑定凭据失效或无人值守执行依赖不可用，不妨碍有读取权限的用户查看已保存任务并修复；不在 GET 中重新 prepare、换取业务凭据、刷新 token、读取 secret、验证下游登录或创建 Session。读取资格本身被撤销仍应拒绝。凭据引用按保存值返回，不因引用暂时不可用而静默删掉或替换它，也不附加未经验证的 credentialStatus。
+正常调用只进行身份与范围校验、持久化读取、时间计算和安全投影。Agent 停用、Mate 侧凭据失效或无人值守执行依赖不可用，不妨碍有读取权限的用户查看已保存任务并修复；不在 GET 中重新 prepare、换取业务凭据、刷新 token、读取 secret、验证下游登录或创建 Session。读取资格本身被撤销仍应拒绝。不附加未经验证的 credentialStatus。
 
 删除提交后开始的详情读取返回404，不提供读取已删除配置或恢复它的入口。已在删除前取得快照的并发 GET 可能先后抵达客户端，读取响应不构成任务仍可运行的保证；所有新受理在数据库内重新检查资源存在性。该任务的 Run 同时删除，保留的历史对话由 Session 独立读取，不能借旧关联重新开放配置或Run详情。
 
@@ -405,7 +361,7 @@ Claude 对应 `GET /v1/deployments/{deployment_id}`，同样返回完整配置�
 
 ### 4.4. 读取任务列表（待实现）
 
-列表用于按名称、Agent 和状态找到任务，并直接取得任务配置。已确认每个列表元素与详情 result 采用相同的完整资源，包含 message、description、metadata 和 credentialIds，不维护单独的摘要字段集合；这与 Claude 的完整 Deployment 元素取舍一致。只返回调用方有权读取的任务，凭据只返回引用。分页按现有 [ListEvents 权威契约](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json)及[数字分页规则](../01-CampusClaw多Agent运行时/chat-events-history-design.md#3-普通数字页码)收敛为普通整数 page/limit 和 nextPage；下文定义具体映射与筛选目标，待实现。
+列表用于按名称、Agent 和状态找到任务，并直接取得任务配置。已确认每个列表元素与详情 result 采用相同的完整资源，包含 prompt、description 和 metadata，不维护单独的摘要字段集合；这与 Claude 的完整 Deployment 元素取舍一致。只返回调用方有权读取的任务。分页按现有 [ListEvents 权威契约](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json)及[数字分页规则](../01-CampusClaw多Agent运行时/chat-events-history-design.md#3-普通数字页码)收敛为普通整数 page/limit 和 nextPage；下文定义具体映射与筛选目标，待实现。
 
 ```http
 GET /campusclaw-service/v1/schedules?page=1&limit=1&status=active
@@ -420,7 +376,7 @@ Accept-Language: zh-CN
 | agentId | 可选；格式复用 Agent ID 规则，按绑定 ID 精确匹配；合法但无可见任务时返回空页，不借查询探测 Agent 存在性 |
 | status | 可选单值精确匹配，小写；只允许 active/paused，省略时均可返回；不接受 archived/deleted |
 
-无请求体；认证、读取功能资格和语言与详情一致，不要求写入控制 Header。筛选条件以 AND 组合，不提供客户端 owner/scope、任意排序、metadata 查询或凭据反查。重复标量、未知查询项及非法格式以 400 `SCHEDULE_REQUEST_INVALID` 拒绝。查询始终排除已删除记录；删除过滤与可信范围过滤均先于分页。没有 includeArchived/includeDeleted 查询入口。
+无请求体；认证、读取功能资格和语言与详情一致，不要求写入控制 Header。筛选条件以 AND 组合，不提供客户端 owner/scope、任意排序、metadata 查询或按凭据查询。重复标量、未知查询项及非法格式以 400 `SCHEDULE_REQUEST_INVALID` 拒绝。查询始终排除已删除记录；删除过滤与可信范围过滤均先于分页。没有 includeArchived/includeDeleted 查询入口。
 
 成功 HTTP 200，普通响应 Header 与详情一致。以下例子请求 page=1、limit=1，当前查询还有后续记录，因此 nextPage=2：
 
@@ -436,12 +392,7 @@ Accept-Language: zh-CN
         "name": "工作日园区告警汇总",
         "description": null,
         "agentId": "agent-550e8400e29b41d4a716446655440000",
-        "message": {
-          "type": "user.message",
-          "content": [
-            {"type": "text", "text": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。"}
-          ]
-        },
+        "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
         "schedule": {
           "type": "cron",
           "expression": "0 0 8 * * MON-FRI",
@@ -458,7 +409,6 @@ Accept-Language: zh-CN
         "status": "active",
         "pausedReason": null,
         "metadata": {"parkCode": "park-east", "purpose": "alarm-summary"},
-        "credentialIds": ["credential-alarm-example", "credential-workorder-example"],
         "createdAt": "2026-10-04T02:00:00Z",
         "updatedAt": "2026-10-04T02:00:00Z"
       }
@@ -468,7 +418,7 @@ Accept-Language: zh-CN
 }
 ```
 
-列表每项直接采用详情资源，不增加 agentName、nextRunAt、lastRunStatus 或执行结果。完整元素便于直接消费同一响应模型，也避免调用方为读取每条消息另发详情请求；代价是列表传输全部任务内容，需要限制页大小。result 仅包含 schedules/nextPage，不返回 total、page、limit 或额外 hasMore。读取完整元素不提供凭据秘密或文件字节；列表中的配置是当次读取快照；编辑可重新读取详情确认内容，写入由数据库当前状态决定。
+列表每项直接采用详情资源，不增加 agentName、nextRunAt、lastRunStatus 或执行结果。完整元素便于直接消费同一响应模型，也避免调用方为读取每条消息另发详情请求；代价是列表传输全部任务内容，需要限制页大小。result 仅包含 schedules/nextPage，不返回 total、page、limit 或额外 hasMore。读取完整元素不提供凭据或文件字节；列表中的配置是当次读取快照；编辑可重新读取详情确认内容，写入由数据库当前状态决定。
 
 权限范围与业务过滤必须先于分页；禁止先取全局页再过滤。计算 offset=(page-1)*limit，查询前检查整数和乘法边界，溢出或不支持的数值返回 400。读取最多 limit+1 个匹配任务，额外一条仅用于判断下一页；响应最多 limit 条，有后续记录时 nextPage=page+1，否则为 null，不为此接口执行 total 的 COUNT 查询。整页配置及下一页判断来自单次一致读取边界，时间摘要共用本次计算时刻，不跨 HTTP 请求持有事务或快照。
 
@@ -494,34 +444,33 @@ Accept-Language: zh-CN
 
 运营人员把“工作日园区告警汇总”从 08:00 改为 09:00，并调整描述与业务标签；任务 ID、历史 Run 和结果 Session 保持原有归属。调用方先读取详情，提交需要修改的字段，服务端验证合并后的配置并原子保存，返回完整资源。任何校验或并发冲突都不留下部分修改；修改不触发试运行。
 
-本操作复用已确定的创建字段范围、完整响应、只读 type/pausedReason 和暂停语义。下表定义七个字段的清空与替换语义；不使用客户端版本或请求键，由数据库权威保证原子修改。
+本操作复用已确定的创建字段范围、完整响应、只读 type/pausedReason 和暂停语义。下表定义六个字段的清空与替换语义；不使用客户端版本或请求键，由数据库权威保证原子修改。
 
 | 请求项 | 目标契约 |
 |---|---|
 | 方法与路径 | POST `/campusclaw-service/v1/schedules/{scheduleId}`；部分更新既有配置，不创建新任务 |
 | path.scheduleId | 创建返回的原 ID，大小写敏感；不通过 name 定位，不允许请求体修改身份 |
 | query | 无业务查询参数 |
-| 身份与授权 | 沿用 §2 的可信调用上下文与管理资格，在当前可管理范围内读取任务；重新验证合并配置的 Agent/凭据引用资格，不信任客户端 scope/owner |
+| 身份与授权 | 沿用 §2 的可信调用上下文与管理资格，在当前可管理范围内读取任务；重新验证合并配置的 Agent 资格，不信任客户端 scope/owner |
 | Content-Type | 必须为 application/json；请求体为非空对象 |
 | Accept-Language | 可选；zh-CN/en-US，缺省或不支持时回退 zh-CN，响应回显实际 Content-Language |
 
-认证适配器与具体公司认证 Header 仍由 §2 的权威边界确定，credentialIds 不充当本接口登录凭据。资源不存在或不在可管理范围内统一 404；不能先回显其状态、Agent 或凭据引用再拒绝授权。
+认证适配器与具体公司认证 Header 仍由 §2 的权威边界确定。资源不存在或不在可管理范围内统一 404；不能先回显其状态或 Agent 再拒绝授权。
 
-**可写字段仅有以下七个，全部可省略，但请求至少包含一个。** 省略一律保持已有值，创建时的默认值不能覆盖省略的顶层字段。
+**可写字段仅有以下六个，全部可省略，但请求至少包含一个。** 省略一律保持已有值，创建时的默认值不能覆盖省略的顶层字段。
 
 | 字段 | 提供非 null 值时 | 显式 null 与空值 |
 |---|---|---|
 | name | 使用新名称，去首尾空白后 1～256 个 Java 字符；允许重名 | null、空字符串或空白拒绝 |
 | description | 替换描述，最长 2048；不进入模型任务 | null、空字符串或空白均清除，保存并返回 null |
 | agentId | 替换后续运行绑定，校验新 Agent 的存在、可用及配置资格；不修改历史 Run/Session | null 或空值拒绝；重复提交同一 ID 不提供版本 re-pin 或目录强制刷新 |
-| message | 整体替换一条 user.message，提交完整 type/content 并沿用创建校验；替换后不保留旧 content 中未提交的文本；file块按首版范围拒绝 | null、空对象及无有效内容的消息拒绝；不追加到已有 Session |
+| prompt | 整体替换任务文本，沿用创建校验 | null、非字符串及空白文本拒绝；不追加到已有 Session |
 | schedule | 整体替换 cron 规则，必含 type/expression；timezone 省略默认保存 Asia/Shanghai，不继承旧规则的时区 | null 清除自动计划；{} 或仅 timezone 的对象拒绝；显式 timezone:null、空时区或无效IANA名称按 §3.4 拒绝 |
 | metadata | 逐 key patch：字符串新增/覆盖，key:null 删除该 key，未列出的 key 保留；合并后再校验大小与类型 | 顶层 null 拒绝；{} 为无修改；删除全部键后响应 {}，不返回含 null 值的 map |
-| credentialIds | 数组整体替换授权引用，使用 [] 清空；省略不变，不能合并原始 Header 或 secret | null 拒绝；最多16个、不重复且拒绝同目标歧义；ID 格式按 §4.2 的企业标识校准 |
 
 重复 JSON 字段拒绝，不采用后一个值覆盖前一个值。顶层 `{}` 拒绝。`{"metadata":{}}` 或字段值与保存值相同的请求可成功，但归一化后的配置未变时不改 updatedAt 或内部配置代次。metadata 删除不存在的 key 也是无修改。当前授权及资源状态仍须检查，响应时间摘要按本次一致快照计算。
 
-以下均为只读或不属于配置输入：顶层 type、id、status、pausedReason、createdAt、updatedAt、revision，以及嵌套 schedule.lastRunAt/upcomingRunsAt；传入即拒绝，不静默忽略。target/sessionId、vaultIds/credentialRefs 也不开放。message.type 与 schedule.type 仍是合法的嵌套输入。调用方不能把详情响应整个回传作为更新请求。
+以下均为只读或不属于配置输入：顶层 type、id、status、pausedReason、createdAt、updatedAt、revision，以及嵌套 schedule.lastRunAt/upcomingRunsAt；传入即拒绝，不静默忽略。target/sessionId、credentialIds、vaultIds/credentialRefs 也不开放。schedule.type 仍是合法的嵌套输入。调用方不能把详情响应整个回传作为更新请求。
 
 下例只修改三个字段，其余保持。metadata 中 parkCode 未提交，继续保留：
 
@@ -557,15 +506,7 @@ Accept-Language: zh-CN
     "name": "工作日园区告警汇总",
     "description": "汇总前一日告警并跟进未关闭工单",
     "agentId": "agent-550e8400e29b41d4a716446655440000",
-    "message": {
-      "type": "user.message",
-      "content": [
-        {
-          "type": "text",
-          "text": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。"
-        }
-      ]
-    },
+    "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
       "expression": "0 0 9 * * MON-FRI",
@@ -586,16 +527,12 @@ Accept-Language: zh-CN
     "metadata": {
       "parkCode": "park-east",
       "purpose": "alarm-follow-up"
-    },
-    "credentialIds": [
-      "credential-alarm-example",
-      "credential-workorder-example"
-    ]
+    }
   }
 }
 ```
 
-id/type/createdAt 保持原值；实际配置变化更新 updatedAt，UTC 秒级无小数。两次真实修改可能发生在同一秒，updatedAt 只用于展示，不作为客户端写入条件。status 与 pausedReason 保持本次更新事务观察到的合法组合；修改已暂停任务返回 paused 和原原因，不因修复消息、Agent 或凭据而清空原因。数据库并发与结果核对规则见 §5。
+id/type/createdAt 保持原值；实际配置变化更新 updatedAt，UTC 秒级无小数。两次真实修改可能发生在同一秒，updatedAt 只用于展示，不作为客户端写入条件。status 与 pausedReason 保持本次更新事务观察到的合法组合；修改已暂停任务返回 paused 和原原因，不因修改任务内容或 Agent 而清空原因。数据库并发与结果核对规则见 §5。
 
 lastRunAt 继续表示该任务最近自动开始时间，修改 Agent、消息或规则不抹掉历史。schedule 非空时重新计算最多五个未来计划时刻；schedule:null 时整个字段为 null，不保留空规则外壳。调用方需要某次运行的实际配置与结果时读取 Run/Session，不能用当前任务配置解释历史执行。
 
@@ -629,13 +566,13 @@ lastRunAt 继续表示该任务最近自动开始时间，修改 Agent、消息�
 }
 ```
 
-en-US 使用相同 resCode，文案为 `Invalid schedule rule. Use a valid Spring six-field Cron expression.`；响应不含 result、原始用户消息、凭据或内部异常。file块使用 SCHEDULE_MESSAGE_INVALID；凭据数组格式使用 SCHEDULE_REQUEST_INVALID，明确不可引用和同目标冲突见 §6；权威不可用不能伪装为引用无效。
+en-US 使用相同 resCode，文案为 `Invalid schedule rule. Use a valid Spring six-field Cron expression.`；响应不含 result、原始用户消息、凭据或内部异常。空白或非字符串 prompt 使用 SCHEDULE_PROMPT_INVALID；权威不可用不能伪装为配置无效。
 
-并发更新按 §5 在事务内锁定最新配置并合并本次字段，不因客户端持有旧页面而返回版本冲突。不同字段更新应同时保留；同一字段以后一次成功提交的值为准。metadata 按 key 合并，因此不同 key 可以保留；message/schedule/credentialIds 是整体替换，同一对象或数组内的不同改动不能自动合并。
+并发更新按 §5 在事务内锁定最新配置并合并本次字段，不因客户端持有旧页面而返回版本冲突。不同字段更新应同时保留；同一字段以后一次成功提交的值为准。metadata 按 key 合并，因此不同 key 可以保留；prompt/schedule 是整体替换，同一字段内的不同改动不能自动合并。
 
 网络超时后先 GET 核对当前资源；读取只说明当前状态，不能证明某个历史请求必然提交或未提交。客户端基于核对结果重新决定是否修改，禁止后台无限盲重放旧正文，否则可能覆盖后续改动。无并发干扰时重复赋值可收敛到同一配置，但不提供同次请求的原成功响应保证。
 
-**与 Claude 的对应。** Claude 更新也是 POST，省略保持，初始事件/计划整体替换，schedule:null 清除，metadata 按 key patch，并返回完整 Deployment。其 agent 字符串会重新绑定最新版本，vault_ids 可用 [] 或 null 清空；Claw 只有 agentId 身份绑定，credentialIds 统一用 [] 清空。Claw 的单条消息、Spring 六字段、默认上海时区、公司包装是自身取舍；客户端不承担版本或请求键协议，数据库负责当前状态上的原子更新。metadata 顶层 null 在 Claude 类型声明中出现，但正文未明确其效果，不能据此宣称为清空全部元数据。依据为 2026-10-04 重读的[官方更新接口](https://platform.claude.com/docs/en/api/http/beta/deployments/update)；精确源码差距见[更新证据](source-evidence.md#schedule-update-evidence)。
+**与 Claude 的对应。** Claude 更新也是 POST，省略保持，初始事件/计划整体替换，schedule:null 清除，metadata 按 key patch，并返回完整 Deployment。其 agent 字符串会重新绑定最新版本，vault_ids 可用 [] 或 null 清空；Claw 只有 agentId 身份绑定，不保存凭据引用。Claw 的纯文本 prompt、Spring 六字段、默认上海时区、公司包装是自身取舍；客户端不承担版本或请求键协议，数据库负责当前状态上的原子更新。metadata 顶层 null 在 Claude 类型声明中出现，但正文未明确其效果，不能据此宣称为清空全部元数据。依据为 2026-10-04 重读的[官方更新接口](https://platform.claude.com/docs/en/api/http/beta/deployments/update)；精确源码差距见[更新证据](source-evidence.md#schedule-update-evidence)。
 
 <a id="delete-schedule-review"></a>
 
@@ -656,7 +593,7 @@ en-US 使用相同 resCode，文案为 `Invalid schedule rule. Use a valid Sprin
 | Accept-Language | 可选，zh-CN/en-US，缺省或不支持回退 zh-CN；JSON 响应返回实际 Content-Language，错误文案按该语言选择 |
 | 条件与请求键 | 不采用 If-Match、Idempotency-Key 或配套 ETag，不通过其他字段替代；按 §2 处理额外 Header |
 
-公司认证模式与适配器仍以 §2 为边界，不新增认证 Header。删除授权须覆盖完整配置的读取与删除，不能借成功回执泄露消息、metadata 或 credentialIds；记录级资格不足统一按下文404处理。删除管理权限不要求被引用 Agent 可运行，也不要求凭据仍有效；不得在删除过程中调用 prepare、换取业务凭据、访问模型或执行下游业务。身份/管理范围权威不可用必须失败，不能降级成无权限限制的删除。
+公司认证模式与适配器仍以 §2 为边界，不新增认证 Header。删除授权须覆盖完整配置的读取与删除，不能借成功回执泄露任务内容或 metadata；记录级资格不足统一按下文404处理。删除管理权限不要求被引用 Agent 可运行，也不要求凭据仍有效；不得在删除过程中调用 prepare、换取业务凭据、访问模型或执行下游业务。身份/管理范围权威不可用必须失败，不能降级成无权限限制的删除。
 
 ```http
 DELETE /campusclaw-service/v1/schedules/schedule-927e03d2a4784f90a6238e790539c6e4
@@ -682,15 +619,7 @@ Cache-Control: no-store
     "name": "工作日园区告警汇总",
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
-    "message": {
-      "type": "user.message",
-      "content": [
-        {
-          "type": "text",
-          "text": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。"
-        }
-      ]
-    },
+    "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
       "expression": "0 0 8 * * MON-FRI",
@@ -705,11 +634,7 @@ Cache-Control: no-store
     "metadata": {
       "parkCode": "park-east",
       "purpose": "alarm-summary"
-    },
-    "credentialIds": [
-      "credential-alarm-example",
-      "credential-workorder-example"
-    ]
+    }
   }
 }
 ```
@@ -718,7 +643,7 @@ result 的字段、类型和可空性复用完整 Schedule，不新增 deleted:t
 
 | 字段 | 删除回执的取值 |
 |---|---|
-| type/id/name/description/agentId/message/metadata/credentialIds | 返回删除事务锁定的最后配置，沿用完整资源的安全投影；credentialIds 仅含引用，不含秘密 |
+| type/id/name/description/agentId/prompt/metadata | 返回删除事务锁定的最后配置，沿用完整资源的安全投影 |
 | status/pausedReason | 保留删除前最后状态及匹配原因，不制造一次暂停；active/paused 在此描述最后配置，不表示删除后仍能运行 |
 | schedule | 原为 null 则仍为 null；原有 Cron 则保留 type/expression/timezone，不伪造清空规则操作 |
 | schedule.lastRunAt | 保留事务快照中已有值；回执不随已受理 Run 后续变化而更新 |
@@ -743,7 +668,7 @@ Service 在锁内复核当前资格、读取最后配置并构造不可变安全
 | 500 / SCHEDULE_DELETE_FAILED | 删除事务内部处理失败 | 删除定时任务失败，请稍后重试。 / Failed to delete the schedule. Please try again later. |
 | 503 / SCHEDULE_SERVICE_UNAVAILABLE | 当前身份、授权或存储权威暂不可用，或有界事务竞争无法完成 | 定时任务服务暂不可用，请稍后重试。 / The schedule service is temporarily unavailable. Please try again later. |
 
-本操作将已删除、不存在或记录级不可见统一为404，不因任务 paused 或存在已受理 Run 返回409；不引入412/428。成功和失败状态保持真实 HTTP 语义，错误不包含任务消息、凭据引用、秘密、原始异常或范围外的存在性信息。例如中文删除失败：
+本操作将已删除、不存在或记录级不可见统一为404，不因任务 paused 或存在已受理 Run 返回409；不引入412/428。成功和失败状态保持真实 HTTP 语义，错误不包含任务内容、凭据、秘密、原始异常或范围外的存在性信息。例如中文删除失败：
 
 ```json
 {
@@ -779,7 +704,7 @@ Service 在锁内复核当前资格、读取最后配置并构造不可变安全
 
 ### 4.7. 立即运行定时任务（待实现）
 
-运营人员保存“工作日园区告警汇总”后，希望现在验证消息和凭据是否能正常工作，不必等到明早。立即运行使用已保存的配置，独立新建一次 Session 并提交原 user.message；这是实际执行，会遵守正常工具权限并可能产生业务副作用，不是仅解析配置的 dry-run。
+运营人员保存“工作日园区告警汇总”后，希望现在验证任务内容和凭据是否能正常工作，不必等到明早。立即运行使用已保存的配置，独立新建一次 Session 并提交已保存的 prompt；这是实际执行，会遵守正常工具权限并可能产生业务副作用，不是仅解析配置的 dry-run。
 
 ```http
 POST /campusclaw-service/v1/schedules/{scheduleId}/run
@@ -789,7 +714,7 @@ Accept-Language: zh-CN
 | 请求项 | 目标契约 |
 |---|---|
 | path.scheduleId | 必填，透传创建返回的服务端 ID；大小写敏感、不复用，精确正则沿统一 ID 契约 |
-| query / body | 无业务查询、无请求体；非空正文（包括 `{}`）返回400；不接收 message、agentId、credentialIds、schedule 或 target 覆盖 |
+| query / body | 无业务查询、无请求体；非空正文（包括 `{}`）返回400；不接收 prompt、agentId、schedule 或 target 覆盖 |
 | 身份与范围 | 沿 §2 可信认证，检查立即运行功能资格、当前任务操作范围及 Run 回执读取资格；执行授权独立校验，不因能编辑配置就永久获得业务执行权 |
 | Header | 可选 Accept-Language；无正文不要求 Content-Type；不采用 If-Match、Idempotency-Key 或 ETag，未知 Header 沿 §2 处理 |
 | 可运行配置 | 存在且未删除；active、paused、有 Cron、schedule:null 均允许尝试运行，不因 paused 而先恢复自动计划 |
@@ -858,7 +783,7 @@ Run不增加 status、updatedAt、revision、模型回答或完整 Schedule；�
 |---|---|---|
 | schedule_busy_error | 同一任务已有占用，包括尚未核对清楚的执行；不排队、不另建Session | 该定时任务仍有进行中或待核对的运行。 / This schedule has an active or unresolved run. |
 | agent_unavailable_error | 已绑定Agent明确不可用于本次执行 | 绑定的Agent暂不可用于执行。 / The bound agent is unavailable for execution. |
-| credential_unavailable_error | 引用凭据或执行授权明确不可用于本次运行 | 执行凭据或授权不可用。 / Execution credentials or authorization are unavailable. |
+| credential_unavailable_error | Mate 明确表示本次运行没有可用的业务凭据或执行授权 | 执行凭据或授权不可用。 / Execution credentials or authorization are unavailable. |
 | session_capacity_exceeded_error | 本次会话准入容量不足 | 当前没有可用的执行容量。 / Execution capacity is unavailable. |
 | session_creation_rejected_error | Session或首消息受理明确拒绝且已回滚 | 本次会话受理被拒绝。 / Session acceptance was rejected. |
 | unknown_error | 已确认未受理、已完成回滚且可记录的其他失败 | 本次运行未能受理。 / The run could not be accepted. |
@@ -867,7 +792,7 @@ Run不增加 status、updatedAt、revision、模型回答或完整 Schedule；�
 
 **配置影响与不重叠规则。** 手动运行保持status/pausedReason、配置updatedAt、自动nextFireAt及schedule.lastRunAt，不因手动失败自动暂停配置；lastRunAt继续只跟踪自动运行实际开始。每次运行使用保存的输入与当前可信执行准备；不借用调用者临时Header模拟未来定时任务身份。任务已暂停或没有Cron也能测试同一套后台权限。手动与自动共享同一任务占用，已有在途/未知Run时拒绝本次并记录schedule_busy_error，不能复用别次Run充当本次成功；此不重叠选择已确认，自动忙跳过也记录schedule_busy_error；停机未观察到的时刻不补造Run，见[无补跑规则](execution.md#no-catch-up)。
 
-**正常受理与失败边界。** 先校验身份、请求和资源范围，在短事务内读取可信配置快照、分配本次Run并检查/预占共享任务槽；忙时记录本次拒绝。取得槽位后，在事务外向Mate查询定义、引用资格和授权依据，并完成Runtime准备；不解析secret，不调用模型或业务工具。最后在同一受理边界复核最新配置、未删除、当前资格及占用；配置已改变时记录本次未受理结果，不重新准备或运行同一Run；后续自然触发采用新配置，不混用旧消息和新引用。受理成功原子提交Run、新Session、首条user.message和根执行关联，然后通过既有执行协调器后台启动。准备/准入明确失败且配置仍存续时持久化失败Run、sessionId:null，并释放本次取得的占用；删除先提交时仅完成内部清理，不新增失败Run；忙时不得释放其他Run的占用。只有成功提交对应记录后才返回200，不沿用旧trigger同步等待prompt.join()的实现。
+**正常受理与失败边界。** 先校验身份、请求和资源范围，在短事务内读取可信配置快照、分配本次Run并检查/预占共享任务槽；忙时记录本次拒绝。取得槽位后，在事务外向Mate查询定义和授权依据，并完成Runtime准备；不解析secret，不调用模型或业务工具。最后在同一受理边界复核最新配置、未删除、当前资格及占用；配置已改变时记录本次未受理结果，不重新准备或运行同一Run；后续自然触发采用新配置，不混用新旧配置。受理成功原子提交Run、新Session、首条用户消息和根执行关联，然后通过既有执行协调器后台启动。准备/准入明确失败且配置仍存续时持久化失败Run、sessionId:null，并释放本次取得的占用；删除先提交时仅完成内部清理，不新增失败Run；忙时不得释放其他Run的占用。只有成功提交对应记录后才返回200，不沿用旧trigger同步等待prompt.join()的实现。
 
 删除先提交时返回404且不得受理；手动运行已受理后再暂停，执行继续；随后删除则清除对应Run、保留Session且不请求取消。人工暂停只限制自动受理，不能仅因paused拒绝手动受理；若本次准备所依据的内部代次已失效，则记录本次未受理结果，不重新准备同一Run。无法可靠提交失败记录、事务结果未知或响应连接丢失时，不伪造成功或再次创建Session，应只读核对；内部同一runId重复投递只复用原关联。
 
@@ -908,15 +833,7 @@ Accept-Language: zh-CN
     "name": "工作日园区告警汇总",
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
-    "message": {
-      "type": "user.message",
-      "content": [
-        {
-          "type": "text",
-          "text": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。"
-        }
-      ]
-    },
+    "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
       "expression": "0 0 8 * * MON-FRI",
@@ -939,11 +856,7 @@ Accept-Language: zh-CN
     "metadata": {
       "parkCode": "park-east",
       "purpose": "alarm-summary"
-    },
-    "credentialIds": [
-      "credential-alarm-example",
-      "credential-workorder-example"
-    ]
+    }
   }
 }
 ```
@@ -957,7 +870,7 @@ Accept-Language: zh-CN
 | updatedAt | 状态或原因实际变化时更新为事务记录时间；已是 paused/manual 时为同值成功，不刷新时间或内部配置代次 |
 | 在途和手动运行 | 已受理 Run 继续；暂停不释放 active_run_id，不取消已创建 Session；显式 run 仍重新检查执行资格和占用 |
 
-**正常流程与竞态。** 先认证、验证 ID 和管理范围，事务内锁定最新 Schedule，复核未删除与当前资格，实际状态或原因变化时设置paused/manual、清空内部自动游标并使旧自动准备代次失效；已是paused/manual时仅返回当前快照，不重复改代次。提交后返回同次完整配置快照。暂停与自动最终受理共享同一权威边界：暂停先提交则旧自动 Run 不再受理，受理先提交则原 Run 继续；不能只取消进程内定时器。暂停不重新保存旧整条配置，也不覆盖同时已提交的消息、规则或凭据修改。
+**正常流程与竞态。** 先认证、验证 ID 和管理范围，事务内锁定最新 Schedule，复核未删除与当前资格，实际状态或原因变化时设置paused/manual、清空内部自动游标并使旧自动准备代次失效；已是paused/manual时仅返回当前快照，不重复改代次。提交后返回同次完整配置快照。暂停与自动最终受理共享同一权威边界：暂停先提交则旧自动 Run 不再受理，受理先提交则原 Run 继续；不能只取消进程内定时器。暂停不重新保存旧整条配置，也不覆盖同时已提交的任务内容或规则修改。
 
 **失败与重试。** 使用 §4.10 的共同错误表；存储/授权失败不能返回 paused 假成功。重复 pause 在当前状态上执行赋值；若期间发生 unpause，重试会再次暂停，因此应先 GET 核对，不能把再次调用视作原回执恢复。若任务已有error原因，人工pause将其改为manual，并保留既有审计及Run结果；此转换规则不决定是否开放自动暂停。HTTP 200只证明返回快照对应的事务成功，不保证它在响应到达时未被后续 unpause 改变。
 
@@ -988,15 +901,7 @@ Accept-Language: zh-CN
     "name": "工作日园区告警汇总",
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
-    "message": {
-      "type": "user.message",
-      "content": [
-        {
-          "type": "text",
-          "text": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。"
-        }
-      ]
-    },
+    "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
       "expression": "0 0 8 * * MON-FRI",
@@ -1017,11 +922,7 @@ Accept-Language: zh-CN
     "metadata": {
       "parkCode": "park-east",
       "purpose": "alarm-summary"
-    },
-    "credentialIds": [
-      "credential-alarm-example",
-      "credential-workorder-example"
-    ]
+    }
   }
 }
 ```
@@ -1035,7 +936,7 @@ Accept-Language: zh-CN
 | lastRunAt / createdAt | 保留原值，不因取消暂停而制造运行时间 |
 | updatedAt | 实际状态变化才更新；已经 active 时同值成功，保持时间、内部配置代次及既有调度游标，不能借重试推迟尚未处理的 occurrence |
 
-**恢复资格。** 从 paused 转为 active 前，只读校验当前 Agent、配置绑定和已选择执行身份/凭据的恢复资格；有 Cron 时还检查其有未来匹配且符合当前计划策略。外部只读检查在事务外完成，绑定到所查配置代次；锁内重新读取最新状态及绑定，校验准备结果仍适用，然后原子改状态、原因和游标。有界重查失败返回503。校验明确失败返回409 SCHEDULE_ACTIVATION_REJECTED，保留原暂停原因，不先清空再异步补回；权威暂不可用返回503，不伪装为配置失效。仅恢复管理状态不调用模型或业务工具，也不领取业务执行凭据；实际每次受理仍需重新检查资格。
+**恢复资格。** 从 paused 转为 active 前，只读校验当前 Agent 和配置绑定的恢复资格；有 Cron 时还检查其有未来匹配且符合当前计划策略。外部只读检查在事务外完成，绑定到所查配置代次；锁内重新读取最新状态及绑定，校验准备结果仍适用，然后原子改状态、原因和游标。有界重查失败返回503。校验明确失败返回409 SCHEDULE_ACTIVATION_REJECTED，保留原暂停原因，不先清空再异步补回；权威暂不可用返回503，不伪装为配置失效。仅恢复管理状态不调用模型或业务工具，也不领取业务执行凭据；实际每次受理仍需重新检查资格。
 
 已经 active 时只验证身份、管理范围和资源可读，直接返回当前完整资源，不重新登记游标或把其他依赖的故障包装成新的状态转换；并不承诺所有后续运行都能成功。取消暂停与更新/删除/自动受理在事务内协调，不能使用旧配置覆盖新修改。若旧自动 Run 在暂停前已领取但未受理，随后快速 pause→unpause 也不能使其重新有效，须比较服务端内部配置代次。
 
@@ -1154,7 +1055,7 @@ Accept-Language: zh-CN
 
 | HTTP / resCode | 含义 |
 |---|---|
-| 400 `SCHEDULE_NAME_INVALID` / `SCHEDULE_MESSAGE_INVALID` / `SCHEDULE_RULE_INVALID` / `SCHEDULE_TIMEZONE_INVALID` | 对应字段不合法 |
+| 400 `SCHEDULE_NAME_INVALID` / `SCHEDULE_PROMPT_INVALID` / `SCHEDULE_RULE_INVALID` / `SCHEDULE_TIMEZONE_INVALID` | 对应字段不合法 |
 | 400 `SCHEDULE_REQUEST_INVALID` | 非法 ID/查询参数；写入非法 JSON、错误类型/字段或空更新；DELETE 携带业务查询或非空正文 |
 | 401 `SCHEDULE_AUTH_REQUIRED` | 未通过 Claw 认证边界 |
 | 403 `SCHEDULE_MANAGE_FORBIDDEN` | 无任务管理功能权限 |
@@ -1164,8 +1065,6 @@ Accept-Language: zh-CN
 | 500 `SCHEDULE_RUN_FAILED` / `SCHEDULE_PAUSE_FAILED` / `SCHEDULE_UNPAUSE_FAILED` | 对应动作内部处理失败；错误文案与暂不可用分层见 §4.10 |
 | 404 `SCHEDULE_NOT_FOUND` / `SCHEDULE_AGENT_NOT_FOUND` | 读取/更新等操作的资源不存在、已删除或不可见；DELETE 同样返回 SCHEDULE_NOT_FOUND，见 §4.6 |
 | 404 `SCHEDULE_RUN_NOT_FOUND` | Run详情不存在、已删除或不可见；列表筛选同类目标返回空页，见 §4.11 |
-| 409 `SCHEDULE_CREDENTIAL_UNAVAILABLE` | Mate明确拒绝当前引用资格；不泄露秘密或范围外凭据信息。文案：执行凭据不可用。 / Execution credentials are unavailable. |
-| 409 `SCHEDULE_CREDENTIAL_BINDING_CONFLICT` | 多个引用对同一可信业务目标形成歧义，不采用覆盖或回退。文案：执行凭据绑定冲突。 / Execution credential bindings conflict. |
 | 409 `SCHEDULE_AGENT_DISABLED` | 创建/更新等操作的 Agent 禁用；不用于 DELETE |
 | 422 `SCHEDULE_POLICY_REJECTED` | 规则超出部署频率/配额策略 |
 | 500 `SCHEDULE_UPDATE_FAILED` | 更新内部处理失败，不返回部分成功；结果未知时读取当前状态核对 |
@@ -1173,7 +1072,7 @@ Accept-Language: zh-CN
 | 500 `SCHEDULE_READ_FAILED` | 配置记录损坏、反序列化或安全投影失败；不得降为空成功 |
 | 503 `SCHEDULE_SERVICE_UNAVAILABLE` | 当前操作所需权威依赖不可用；读取仅依赖可信身份/可见范围、配置存储和本地时间计算，不因 Agent 或业务执行依赖不可用而失败 |
 
-错误体固定只有 resCode/resMsg；按稳定错误码分支，不解析文案。字段错误按 name、description、agentId、message、schedule、metadata、credentialIds 的固定顺序返回首个错误；每个 Java enum、resCode、MessageSource key 同名。错误不泄露凭据、内部堆栈或用户消息；响应丢失不能据503或断网推断原请求未提交。
+错误体固定只有 resCode/resMsg；按稳定错误码分支，不解析文案。字段错误按 name、description、agentId、prompt、schedule、metadata 的固定顺序返回首个错误；每个 Java enum、resCode、MessageSource key 同名。错误不泄露凭据、内部堆栈或用户消息；响应丢失不能据503或断网推断原请求未提交。
 
 <a id="claude-tradeoffs"></a>
 
@@ -1189,12 +1088,12 @@ Accept-Language: zh-CN
 | 执行目标 | 每次触发创建新 Session | 每次运行固定新建 Session，不提供 target；减少已有会话准入规则，代价是不自动延续原会话上下文 | 参考基线、产品范围 |
 | Agent 版本 | 字符串固定当时最新版本，亦可指定历史版本 | 只绑定 agentId，使用执行时实际取得的已发布目录；现有 prepare 可命中缓存，非每次远端最新。目录刷新后未来行为可能变，暂缺固定版本可复现保证 | 现有能力缺口 |
 | 运行环境 | 显式 environment_id | 不提供空壳 environmentId，沿现有 Host/Agent 目录装配；减少资源模型，但失去独立环境选择与复用 | 架构范围 |
-| 初始输入 | initial_events 支持多事件及受约束事件类型 | 一条只含text的user.message；首版file返回400，不开放多初始事件、system.message或user.define_outcome，亦不支持交互等待；普通Session文件引用契约保持 | 产品范围、实现差距 |
+| 初始输入 | initial_events 支持多事件及受约束事件类型 | 一段纯文本 prompt，运行时作为首条用户消息提交；不支持附件、多初始事件、system.message或user.define_outcome，亦不支持交互等待；普通Session文件引用契约保持 | 产品范围、实现差距 |
 | 时间表达 | 五字段 POSIX Cron，IANA 时区 | 采用 Spring 六字段，复用现有解析器且不新增 Maven 依赖；代价是 Claude 表达式不能直接复制，日/周组合语义也不同。[固定与动态调度场景](README.md#spring-scheduling)说明框架能力和执行边界 | 产品约束（方言选择）、实现成本取舍 |
 | 时间精度 | 创建 Session/Deployment 示例为整秒 UTC；公开文档未保证只支持秒级或披露数据库精度 | Claw 明确仅支持秒级，Session、完整事件与定时任务一致；降低展示和存储差异，代价是放弃这些字段的亚秒时间差。见[时间证据](source-evidence.md#claude-time-precision-evidence) | 产品约束 |
 | Cron 时区 | timezone 必填，使用 IANA 名称 | timezone 可省略，默认 Asia/Shanghai，保存并回显有效值；适配主要园区场景，代价是调用方需了解省略时采用的产品预设，不能继承运行节点默认值 | 产品约束 |
 | 时间类型范围 | schedule 模型只声明 cron | 同样只接受 cron；不提供单次计划和任意起点间隔，减少起点、耗尽与更新规则；Spring 六字段与默认上海时区继续保留 | 产品约束（范围收敛） |
-| 更新 | 省略保持、schedule:null 清除、初始事件/规则整体替换 | 沿用；Claw 的 message/schedule/credentialIds 整体替换，metadata 依 §3.7 逐 key 更新，不引入通用深层合并 | 参考基线 |
+| 更新 | 省略保持、schedule:null 清除、初始事件/规则整体替换 | 沿用；Claw 的 prompt/schedule 整体替换，metadata 依 §3.7 逐 key 更新，不引入通用深层合并 | 参考基线 |
 | 立即运行 | POST run，无业务正文，200返回DeploymentRun，记录Session创建结果 | 200返回ScheduleRun，可靠记录的失败在Run.error；新Session与首消息受理分开于业务完成，不等待模型结束；ResultBean和无Agent版本固定沿既有约束 | 参考基线、公司契约与受理架构增量 |
 | 暂停/取消暂停 | POST pause/unpause，200完整资源；暂停允许手动运行，恢复不补跑 | 采用同样入口与完整Schedule；暂停受理屏障、同值调用不改时间/游标和恢复资格校验需新增实现与验收 | 参考基线、企业授权与一致性设计 |
 | 并发与重试 | 官方配置操作未声明客户端版本或请求键协议，内部实现未公开 | 不引入此类公共协议；数据库锁最新记录、合并部分字段并原子写入。简化调用和存储，代价是允许同字段后写生效、创建重提可能生成重复资源，且不提供原回执恢复 | 产品约束、数据库一致性设计 |
@@ -1204,7 +1103,7 @@ Accept-Language: zh-CN
 | 资源类型 | 顶层 type 固定为 deployment | 顶层 type 固定为 schedule，完整响应统一返回；便于识别资源，代价是增加一个恒定字段，不扩展现有 Session 契约 | 产品约束 |
 | 暂停原因 | paused_reason 为 null 或 manual/error 原因对象，恢复后清空 | pausedReason 保留相同职责，随状态持久化并安全投影；增加当前原因维护成本，不能用最后一个 Run 错误替代，error形状保留，是否自动暂停整个Schedule仍待定 | 参考基线、架构增量 |
 | metadata | 最多 16 对字符串，键最多 64、值最多 512 | 支持可选 map，采用同样限制；不进模型，不作身份、权限或凭据依据 | 参考基线、产品约束 |
-| 凭据 | vault_ids 引用 workspace 范围 Vault，运行时使用其中凭据 | 已确认 credentialIds 直接引用独立凭据，不增加 Vault 集合层；企业授权独立校验，Mate负责可信定义和凭据，上下文查询/执行时resolve的路径字段为待实现草案 | 企业产品约束、安全加固 |
+| 凭据 | vault_ids 引用 workspace 范围 Vault，运行时使用其中凭据 | 不保存凭据引用；Mate 按 Agent 绑定在运行时决定并解析业务凭据，企业授权独立校验；上下文查询/执行时resolve的路径字段为待实现草案 | 企业产品约束、安全加固 |
 
 固定 Agent 版本是最显著的能力差距，不应包装成单纯“字段简化”。未来若要求长期告警策略可重复审计，需要先建设可解析的历史定义与资源绑定，再开放 agentVersion；只保存一个 version 数字不能兑现版本固定。Spring 六字段是本产品已选定的方言，其理由是复用 Java 现有能力与降低维护成本，不是企业园区业务天然要求秒级执行。
 
@@ -1216,15 +1115,15 @@ Accept-Language: zh-CN
 
 全局结构引用[目标类图](README.md#10-全局目标类图与依赖)。配置服务、解析策略和持久化 Adapter 是 Spring 单例，请求上下文/写入快照按请求隔离；配置管理路径不依赖执行协调器或 Session 工厂，立即运行通过独立运行服务职责接入共享受理链。只读绑定端口、Mate 授权结果传递及会话归属登记待实现，不能直接拿 prepare 替代。
 
-验收至少覆盖：八个配置动作及两个Run读取的成功/错误报文；当前范围过滤；保存校验与响应计划时间计算一致；六字段秒位、拒绝五字段/年字段、日与星期同时受限、IANA/DST、UTC 输出；名称 256/257 边界；创建/更新均拒绝 at/every 与额外起点字段；Agent 绑定校验、拒绝 target/sessionId、不同 Run 创建不同 Session 且同一 Run 不重复创建；单条user.message仅text，file返回400/SCHEDULE_MESSAGE_INVALID，以及非法事件类型；未知字段/null/整体替换；事务内合并与写失败回滚；重复创建可能生成不同ID、未知结果先核对；credentialIds 直接引用、原样回显且不含 secret，拒绝 vaultIds/credentialRefs 别名，最多16个、重复拒绝、同目标歧义拒绝、Mate保存时只查引用、业务执行前才resolve；响应无 revision、status 为小写、metadata 长度/类型/省略/空对象/key 删除和 patch 后大小限制；只读时间字段拒绝写入；创建 lastRunAt 为 null、手动不更新、开始后失败不清空；paused 的计划数组及已删除资源不可读；每次读取按当前快照计算数组；并发不同字段更新保留、同字段后成功提交生效；每次新请求重新校验当前资格；省略 schedule 只保存、有效 schedule 保存即自动调度；显式试运行独立触发，清除规则不取消在途执行。运行接线仍需独立验收，不能由配置单测替代；遇ASK阻止业务并结束本次根执行，不创建持久等待。
+验收至少覆盖：八个配置动作及两个Run读取的成功/错误报文；当前范围过滤；保存校验与响应计划时间计算一致；六字段秒位、拒绝五字段/年字段、日与星期同时受限、IANA/DST、UTC 输出；名称 256/257 边界；创建/更新均拒绝 at/every 与额外起点字段；Agent 绑定校验、拒绝 target/sessionId、不同 Run 创建不同 Session 且同一 Run 不重复创建；prompt 为非空纯文本，空白或非字符串返回400/SCHEDULE_PROMPT_INVALID；未知字段/null/整体替换；事务内合并与写失败回滚；重复创建可能生成不同ID、未知结果先核对；拒绝 credentialIds/vaultIds/credentialRefs 字段，业务凭据只在执行前由 Mate 按 Agent 绑定解析；响应无 revision、status 为小写、metadata 长度/类型/省略/空对象/key 删除和 patch 后大小限制；只读时间字段拒绝写入；创建 lastRunAt 为 null、手动不更新、开始后失败不清空；paused 的计划数组及已删除资源不可读；每次读取按当前快照计算数组；并发不同字段更新保留、同字段后成功提交生效；每次新请求重新校验当前资格；省略 schedule 只保存、有效 schedule 保存即自动调度；显式试运行独立触发，清除规则不取消在途执行。运行接线仍需独立验收，不能由配置单测替代；遇ASK阻止业务并结束本次根执行，不创建持久等待。
 
 时区另须验收：创建或整体替换 Cron 时省略 timezone 均保存为 Asia/Shanghai，显式其他合法 IANA 时区按输入生效；响应回显保存值，节点时区变化不改变规则，更新省略整个 schedule 不重置时区。绝对时刻响应统一为 Z 结尾的 UTC，秒级且无小数；Cron 的 timezone 仍保留有效值。显式null、空白、裸偏移量与自定义缩写拒绝，合法IANA名称按输入保存回显。旧 At/Every 不得经新 HTTP 绕过仅 Cron 校验，旧 Job 迁移不得静默改变时间语义。
 
-读取验收须覆盖：列表元素与详情字段和类型一致，包括 message/description；401/403/资源不可见404、读取损坏500与暂不可用503区分；权限过滤先于分页；page/limit 默认与边界、偏移溢出、limit+1 判断；空页与超末页为 schedules:[]/nextPage:null；result 仅 schedules/nextPage、无 total/COUNT；同次读取与排序；列表共用计划计算时刻；GET 不改 updatedAt、不推进调度、不换取凭据、不创建 Session；Agent 停用或引用凭据失效时仍可按读取资格查看；动态摘要不成为客户端更新条件；错误禁用缓存。读取必须验证删除后404、列表排除已删除记录和拒绝归档筛选；验证updatedAt DESC/id ASC稳定同秒顺序和并发翻页局限，目标不等于已通过实现测试。
+读取验收须覆盖：列表元素与详情字段和类型一致，包括 prompt/description；401/403/资源不可见404、读取损坏500与暂不可用503区分；权限过滤先于分页；page/limit 默认与边界、偏移溢出、limit+1 判断；空页与超末页为 schedules:[]/nextPage:null；result 仅 schedules/nextPage、无 total/COUNT；同次读取与排序；列表共用计划计算时刻；GET 不改 updatedAt、不推进调度、不换取凭据、不创建 Session；Agent 停用或引用凭据失效时仍可按读取资格查看；动态摘要不成为客户端更新条件；错误禁用缓存。读取必须验证删除后404、列表排除已删除记录和拒绝归档筛选；验证updatedAt DESC/id ASC稳定同秒顺序和并发翻页局限，目标不等于已通过实现测试。
 
 资源类型与暂停原因验收须覆盖：创建、详情、列表元素和更新响应均含 type:schedule 与 pausedReason；有无 Cron 的新建资源均为 active/null；人工暂停为manual，error形状只含安全错误但不预设自动触发策略；恢复清空原因但保留历史，配置修改不隐含恢复；status/pausedReason 原子一致；拒绝顶层只读字段写入而保留嵌套消息/规则 type；GET 返回当前状态与原因快照，配置修改不改变暂停原因。自动暂停策略明确后补充其状态转换用例，不按旧连续三次失败规则验收；删除后的读取不返回 status 或 pausedReason。
 
-更新验收须覆盖：七个可写字段的省略/null/空值和替换语义、metadata 删除/无修改/合并后超限、凭据列表清空、完整文本消息替换且拒绝file；默认值仅用于新提交的规则、不覆盖省略字段；拒绝整份详情回传的只读字段；成功为 200 且与创建/读取资源同形；id/createdAt/lastRunAt 保持、同秒更新不依赖时间戳并发；暂停任务修改不恢复、active 补充计划不另启用、清空规则不取消在途；事务失败不部分写入；无客户端条件标签或请求键依赖、无原回执重放；网络异常后读取核对再决定修改。精确请求/响应与错误由 §4.5 维护，目标不等于已通过实现测试。
+更新验收须覆盖：六个可写字段的省略/null/空值和替换语义、metadata 删除/无修改/合并后超限、prompt 整体替换且拒绝空白文本；默认值仅用于新提交的规则、不覆盖省略字段；拒绝整份详情回传的只读字段；成功为 200 且与创建/读取资源同形；id/createdAt/lastRunAt 保持、同秒更新不依赖时间戳并发；暂停任务修改不恢复、active 补充计划不另启用、清空规则不取消在途；事务失败不部分写入；无客户端条件标签或请求键依赖、无原回执重放；网络异常后读取核对再决定修改。精确请求/响应与错误由 §4.5 维护，目标不等于已通过实现测试。
 
 删除验收须覆盖：active/paused、有无Cron均可删除；200/ResultBean完整资源且字段集合与创建/详情/更新一致；原schedule:null保持、Cron后续计划为空、状态/暂停原因保留最后值、创建时间保留且修改时间采用删除事务记录时间；删除回执不触发客户端恢复记录；非法请求400、认证401、功能403、资源404、内部500和依赖503；重复/不存在及记录级不可见均404且不泄露存在性，不为未知ID建墓碑；依赖故障不伪装成不存在；删除后GET404、列表及limit+1查询排除、旧更新/启停/新受理拒绝且不复活；双删除、删除与更新/受理两种事务顺序；对应全部Run删除且详情404/各列表排除、已生成Session与内容保留并可独立授权访问；仅准备不受理，不新增删除后的失败Run；晚到终态不复活Run/配置、不重排；删除不请求取消已受理Session，单独删除Session保留Run受理事实及sessionId；不级联删除Agent/共用凭据/会话附件；超时有界重试、无请求键；内部协调记录不可作为Run读取且安全收尾后清理；内部标记不进入JSON、ID不复用。上述为目标验收清单，未执行产品测试。
 
@@ -1238,6 +1137,7 @@ Accept-Language: zh-CN
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.31.0 | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 0.30.0 | 2026-10-10 | 用户权限和资源归属由 Mate 维护，列表按获准集合读取并明确受理前会话登记。 |
 | 0.29.1 | 2026-10-08 | 配置与手动运行图统一职责映射，并引用共用准备与原子受理流程。 |
 | 0.29.0 | 2026-10-08 | 移除独立时间预览接口，计划时间继续由保存后的完整任务响应返回。 |

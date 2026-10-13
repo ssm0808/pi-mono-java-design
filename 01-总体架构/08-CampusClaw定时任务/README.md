@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.35.0 |
+| 文档版本 | 0.36.0 |
 | 更新日期 | 2026-10-10 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -43,7 +43,7 @@
 | 定时任务模块（M10） | 管理配置和时间规则，领取到期任务，协调运行准备与受理，维护同任务占用并对账运行结果 | 管理页面与 `Cron` 模型工具委托同一应用服务；自动与手动运行共用准备和受理规则，受理提交后再交给 Runtime 推进 |
 | Runtime 与会话能力（M01/M04/M06） | 准备本次智能体执行上下文，提供容量准入、Session/首消息/根执行持久化，推进模型和工具，保存事件与真实终态，处理停止请求 | M10 协调同库受理事务，将 Run 与新 Session、首消息、根执行一起关联；Runtime 提供既有存储与执行能力，根执行终态用于后续对账 |
 | 工具系统（M03） | 解析可信工具目标，校验参数，执行权限判断并协调业务调用及结果回传 | 定时执行复用既有工具链；任务执行资格通过后，每次工具调用仍须经过自身校验与权限判断 |
-| Mate | 确认公司身份、租户和管理/执行授权，提供可信接口定义、凭据引用资格及执行时凭据；维护公共安全投影 | 保存与准备阶段提供非秘密定义和授权依据；工具通过校验与权限判断后，执行适配器才按可信目标解析凭据 |
+| Mate | 确认公司身份、租户和管理/执行授权，提供可信接口定义，并按 Agent 绑定决定执行时凭据；维护公共安全投影 | 保存与准备阶段提供非秘密定义和授权依据；工具通过校验与权限判断后，执行适配器才按可信目标解析凭据 |
 | 前端（M07） | 编辑任务配置，展示保存结果、计划时间和运行记录，提供会话结果入口及管理操作 | 读取后端权威资源；浏览器关闭不影响后台调度，页面不承担计时、业务执行或授权判定 |
 
 M10 是职责边界，定时能力按[模块合并方案](execution.md#module-merge)并入既有 coding-agent，不因此新增独立服务进程。图中的职责角色与具体实现映射见[§5.1](#sequence-roles)。
@@ -52,7 +52,7 @@ M10 是职责边界，定时能力按[模块合并方案](execution.md#module-me
 
 | 权威对象 | 回答的问题 | 保存的内容与边界 |
 |---|---|---|
-| Schedule（任务配置） | “要做什么、由谁做、何时触发？” | 长期保存智能体绑定、任务内容、可选 Cron、凭据引用和当前配置状态；保存配置不创建会话、不执行模型 |
+| Schedule（任务配置） | “要做什么、由谁做、何时触发？” | 长期保存智能体绑定、任务内容（纯文本 prompt）、可选 Cron 和当前配置状态，不保存凭据引用；保存配置不创建会话、不执行模型 |
 | Run（单次运行记录） | “这一次触发是否被受理，关联哪个会话？” | 记录本次触发来源、受理结果和 Session 关联；成功建立会话不等于隐私检查已完成或没有风险 |
 | Session（会话）与本次定时运行的执行记录 | “检查实际做了什么，结果是什么？” | 保存本次消息、工具结果和真实执行终态；业务结论从会话输出与工具证据读取，不在 Run 中复制一份完整对话 |
 
@@ -83,9 +83,9 @@ Claude Managed Agents 是公共调度资源模型的主参考，所引公开契�
 
 ## 3. 使用与管理
 
-配置动作、字段与接口以[配置专题](configuration.md)为准。schedule可省略，省略时只保存；有效规则保存后即参与自动调度，无需显式启用。试运行是独立显式操作。输入为一条user.message，首版content仅支持文本，拒绝附件。新建资源为active，type固定schedule，pausedReason为null；非空schedule包含lastRunAt/upcomingRunsAt，metadata和credentialIds可选。创建只校验绑定与保存，不调用模型、Session工厂或旧Cron create；尚未接通运行及身份依赖时不能发布可自动运行的成功承诺。
+配置动作、字段与接口以[配置专题](configuration.md)为准。schedule可省略，省略时只保存；有效规则保存后即参与自动调度，无需显式启用。试运行是独立显式操作。任务内容为纯文本prompt，首版不支持附件。新建资源为active，type固定schedule，pausedReason为null；非空schedule包含lastRunAt/upcomingRunsAt，metadata可选；不保存凭据引用，业务凭据由Mate按Agent绑定在运行时决定。创建只校验绑定与保存，不调用模型、Session工厂或旧Cron create；尚未接通运行及身份依赖时不能发布可自动运行的成功承诺。
 
-配置[列表与详情读取](configuration.md#get-schedule-review)返回相同完整资源；分页参考ListEvents的整数page/nextPage。读取按当前可信范围过滤，不换取业务凭据、不启动任务。Agent或凭据失效不妨碍有权限者读取配置并修复，源码差距见[读取证据](source-evidence.md#schedule-read-evidence)。
+配置[列表与详情读取](configuration.md#get-schedule-review)返回相同完整资源；分页参考ListEvents的整数page/nextPage。读取按当前可信范围过滤，不换取业务凭据、不启动任务。Agent停用或Mate侧凭据失效不妨碍有权限者读取配置并修复，源码差距见[读取证据](source-evidence.md#schedule-read-evidence)。
 
 [部分更新接口](configuration.md#update-schedule-review)沿用创建的七个可写字段，省略保持，按字段清空/替换或 metadata 按键合并，返回相同的完整资源；保存不触发执行，不改变当前暂停状态或原因。服务在事务中锁定最新行，只合并本请求提交的字段并校验完整结果；不同字段的并发修改可以保留，同一字段以后一次成功提交的值为准。现有 Session 更新可参考省略标记和事务重查；其条件更新及全部拒绝 null 的行为属于实现证据，不直接作为 Schedule 目标；[更新证据](source-evidence.md#schedule-update-evidence)维护实现边界。
 
@@ -179,7 +179,7 @@ public void summarizeAlarms() {
 | Caller | 发起 Claw 管理或立即运行请求，接收资源或受理回执 | 已授权调用方；不假定为浏览器，不拥有任务调度权 |
 | Scheduler | 发起到期派发、提交后启动及原根执行结果对账 | `ScheduleDispatcher`，待实现；执行推进独立于管理服务，保留扫描资格、运行代次和启动约束 |
 | Schedule | 管理配置；领取/占用 Run，协调可信准备和原子受理 | `ScheduleApplicationService`、`ScheduleRunPreparation`、`ScheduledRunAcceptanceService` 等 M10 应用职责，待实现；图中统一为模块应用边界，不要求实现为一个大 Service；领取逻辑可由 Dispatcher 调用 Repository 承担，仍归 Schedule 的状态规则 |
-| Mate | 提供可信绑定、当前管理/执行授权及凭据引用资格 | `MateScheduleAdapter` 对接外部 Mate 权威，定时接线待实现；准备阶段不返回业务秘密，执行时的凭据解析另见 Mate 专项 |
+| Mate | 提供可信绑定、当前管理/执行授权，并按 Agent 绑定决定执行时凭据 | `MateScheduleAdapter` 对接外部 Mate 权威，定时接线待实现；准备阶段不返回业务秘密，执行时的凭据解析另见 Mate 专项 |
 | Runtime | 提供 Agent/模型/工具上下文准备；受理后推进模型与工具，保存实际根执行结果 | 既有 `AgentSessionFactory.create`、`RuntimeExecutionCoordinator.start` 和运行时持久化能力；后台准备、受理接线及非交互 Host 策略待实现 |
 | Store | 原子保存任务、Run、Session/首消息/根执行，以及执行事件与终态 | 同一 GaussDB 事务资源；通过 Schedule Repository 与 Runtime 持久化协作者访问，不表示 Controller 直接调用 Mapper |
 
@@ -195,7 +195,7 @@ public void summarizeAlarms() {
 
 1. **分配 occurrence（Schedule）。** Scheduler 按 nextFireAt/id 执行有界批次，任务按 nextFireAt/id 稳定扫描；Schedule 的领取职责使用短事务，锁定 Schedule，复核未删除、active、revision、到期时间和 activeRunId；插入唯一 Run，推进下一次游标，同时占用本任务。重叠触发记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/删除操作与领取竞争同一行锁。
 2. **可信准备（Schedule 协调 Mate 与 Runtime）。** 事务外解析 Agent 已发布目录、模型、CRON profile、工作区及执行资格，固定一次 `PreparedScheduleRunDTO`。准备还须固定拟建 Session ID 并取得 Mate 归属登记确认；可以失败，但不调用模型或执行业务工具。远端授权检查不能持有数据库行锁。
-3. **原子受理（Schedule 协调 Store）。** 新增 `ScheduledRunAcceptanceService` 在同一事务复核 Schedule 存在且未删除、状态/revision、Run 领取 owner/代次及 lease_until、授权断言有效期与容量；自动触发还用数据库当前时间复核派发期限；创建新 Session、首条 user.message、根 execution/segment，并写回 Run 的唯一关联。任一步失败整体回滚。已有配置更新或暂停先提交时，旧自动 Run 结束为跳过；删除与最终受理共享同一数据库权威，删除先提交则不再受理，受理先提交则保留已生成Session并将Run纳入删除，已受理执行继续由原Session管理，停止由Session入口单独发起。同库受理是待实现目标，不能由旧Cron的本地取消句柄推导已经具备该保证。
+3. **原子受理（Schedule 协调 Store）。** 新增 `ScheduledRunAcceptanceService` 在同一事务复核 Schedule 存在且未删除、状态/revision、Run 领取 owner/代次及 lease_until、授权断言有效期与容量；自动触发还用数据库当前时间复核派发期限；创建新 Session、首条用户消息（prompt）、根 execution/segment，并写回 Run 的唯一关联。任一步失败整体回滚。已有配置更新或暂停先提交时，旧自动 Run 结束为跳过；删除与最终受理共享同一数据库权威，删除先提交则不再受理，受理先提交则保留已生成Session并将Run纳入删除，已受理执行继续由原Session管理，停止由Session入口单独发起。同库受理是待实现目标，不能由旧Cron的本地取消句柄推导已经具备该保证。
 4. **事务后启动（Scheduler 推进 Runtime）。** 受理不等待 Agent 完成。持有本次完整准备快照的原 Runtime 实例，以持久化的单次启动 CAS 标记由 READY 转为 STARTING 后启动公共执行链，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件。后台执行不需要伪造浏览器 SSE 连接。
 5. **结果对账（Scheduler 读取 Store）。** 按受理时固定的根execution读取权威终态，仅在Schedule/Run仍存续时幂等更新其摘要和释放activeRunId；删除后只完成原Session、根执行及必要内部协调，不重新插入Run或配置。既有根执行是终态权威，仍存续任务的摘要可通过重读根execution修复；后续人工对话不会改写该次运行的结论。
 
@@ -239,9 +239,9 @@ Store 返回“确定拒绝”须以未受理及可靠失败记录为依据；�
 
 | 边界 | 当前目标 |
 |---|---|
-| 配置绑定 | Agent 身份、单条 user.message、可选 Cron 规则；不接收 target、sessionId 或 chatId |
+| 配置绑定 | Agent 身份、纯文本 prompt、可选 Cron 规则；不接收 target、sessionId 或 chatId |
 | Agent 与 Session | 复用已绑定的 Agent 定义，每次自动或手动运行新建独立 Session 与运行实例；不新建 Agent 定义资源 |
-| 消息上下文 | 新建空历史，再接受首条 user.message；不自动复制其他 Run 的聊天历史，共享受管资源和业务状态仍遵守各自边界 |
+| 消息上下文 | 新建空历史，再把 prompt 作为首条用户消息提交；不自动复制其他 Run 的聊天历史，共享受管资源和业务状态仍遵守各自边界 |
 | 模型与模式 | 当前已发布 Agent default，thinking=OFF，CRON profile，build 入口；精确后台准入继续由运行专题定义 |
 | 受理事务 | 新建 Session、首消息、根 execution 和 Run 关联；ScheduledRunAcceptanceService 直接协调既有 Runtime 持久化边界 |
 | 配置刷新 | 使用本次 prepare 的不可变快照，不以新建 Session 承诺 Agent 版本固定或每次远端最新 |
@@ -258,7 +258,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 管理入口由 Mate 完成当前用户的功能与资源授权，再通过可信服务调用 Claw；列表获准集合也由 Mate 决定，并在分页前约束读取。Claw 校验服务来源、具体操作和目标资源，检查任务与执行状态，不在本地按 scope 比较权限。授权结果缺失、过期或服务不可用时拒绝，不能仅因请求来自内网放行。
 
-`ScheduleAuthorizationPort` 是调用 Mate 权威的端口，不是 Claw 用户权限策略。后台通过资源 ID 与不透明 authorizationRef 查询当前执行资格；引用不能当令牌、不能解码出用户，也不能用配置操作者替代后台执行主体。credentialIds 继续引用独立凭据；Token/JWT/APPKEY 不落库。
+`ScheduleAuthorizationPort` 是调用 Mate 权威的端口，不是 Claw 用户权限策略。后台通过资源 ID 与不透明 authorizationRef 查询当前执行资格；引用不能当令牌、不能解码出用户，也不能用配置操作者替代后台执行主体。配置不保存凭据引用，业务凭据由 Mate 按 Agent 绑定在执行时解析；Token/JWT/APPKEY 不落库。
 
 新 Session 的归属由 Mate 独立登记，正常和失败交接见[Mate 会话归属](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)：Claw 固定同次拟建 Session ID → 事务外由 Mate 确认并登记归属 → Claw 同库受理 → 提交后启动。登记失败或未知时不启动；跨库结果只读核对，不能重建会话或重放任务。登记和核对契约待实现，PR 当前 `newSession` 内才生成 ID 的实现须调整。
 
@@ -338,6 +338,7 @@ python3 scripts/render-schedule-api.py --check
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.36.0 | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 0.35.0 | 2026-10-10 | 用户归属与权限回归 Mate，Claw 仅维护调度及运行数据并补齐会话登记边界。 |
 | 0.34.0 | 2026-10-10 | 定时表及 Session 扩展归入 Claw 全库数据库设计，原文件仅保留导航。 |
 | 0.33.0 | 2026-10-10 | 数据库设计独立维护字段、约束、索引和事务，登记 PR #332 的局部实现状态。 |

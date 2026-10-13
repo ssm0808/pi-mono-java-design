@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.2.0 · 日期：2026-10-12 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.3.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -95,7 +95,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 - Claw 的 Session、Schedule、Run、DTO、Mapper、执行上下文及通用 Runtime 均不保存 `scope_ref` / `scopeRef`、`session_owner_ref` / `sessionOwnerRef`；Schedule 的 `operator_ref` / `operatorRef` 同步移出。不能改名为 tenant、owner、subject 或藏入 JSON 延续相同职责。
 - Mate 对会话读取、继续对话、停止、删除以及任务管理执行当前权限检查。Claw 校验可信服务来源、具体操作和资源约束，再检查自己的业务状态；缺少或失效的 Mate 授权结果时拒绝，不退化为任意内部调用均可访问。单个资源授权不能扩展到其他资源。
 - 任务/Run 列表的可见集合由 Mate 决定，Claw 可按获准资源 ID 集合执行查询，但不得自己推导用户可见范围。权限过滤必须先于排序分页；空获准集合返回空，不能表示全量。内部集合传递和批量读取契约待实现，不把逐页查全库再过滤当成满足此要求。
-- `authorization_ref` 只是不透明的 Mate 授权记录定位引用；Claw 可以保留它用于后台向 Mate 查询，不能解析为用户信息、与本地归属比较或持有即放行。`credential_ids` 是凭据资源引用。用户审计与租户配额在 Mate；Claw 保留技术执行审计、实例容量和任务互斥。
+- `authorization_ref` 只是不透明的 Mate 授权记录定位引用；Claw 可以保留它用于后台向 Mate 查询，不能解析为用户信息、与本地归属比较或持有即放行。定时任务不保存凭据引用，业务凭据由 Mate 按 Agent 绑定在运行时决定。用户审计与租户配额在 Mate；Claw 保留技术执行审计、实例容量和任务互斥。
 - `claim_owner`、扫描 `owner`、`schedule_start_owner` 表示执行实例，不是用户，继续保留。`agent_id`、父子 Session/execution 关系同样是运行关联，不代替用户授权。
 
 正常定时受理先固定同次 Run 的拟建 Session ID，由 Mate 确认并持久登记该 ID 的归属，再执行 Claw 的同库受理；未确认归属不得启动模型或业务。Mate 关联失败或结果未知时不受理，先按固定 ID 只读核对，不另建会话或重放任务。Mate 已登记而 Claw 事务失败时，该关联不代表会话已存在，须按 Claw 权威状态核对后清理；未知提交不能直接清理。具体交接及生命周期由 [Mate 专项](../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)维护，接线**待实现**，不宣称跨库原子提交。
@@ -667,13 +667,13 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | agent_id | VARCHAR(38) | 否 | 已绑定 Agent 身份 |
 | name | VARCHAR(256) | 否 | 任务名称 |
 | description | VARCHAR(2048) | 是 | 任务描述 |
-| message | TEXT | 否 | 单条文本 user.message 的 JSON，不是裸提示词列 |
+| message | TEXT | 否 | **PR 偏差，目标改为 `prompt` TEXT**：PR 保存单条 user.message 的 JSON；目标只保存纯文本任务内容，运行时作为首条用户消息提交 |
 | cron_expression | TEXT | 是 | Spring 六字段表达式；仅手动时为空 |
 | timezone | TEXT | 是 | 与 Cron 成对保存的时区；默认值由服务归一化 |
 | status | VARCHAR(16) | 否 | `active` / `paused` |
 | paused_reason | VARCHAR(16) | 是 | 当前暂停原因；有效值及转换由配置契约定义 |
 | metadata | TEXT | 否 | 附加元数据的 JSON 对象，无值时应用写入 `{}` |
-| credential_ids | TEXT | 否 | 凭据引用的 JSON 数组，无值时应用写入 `[]`，不保存秘密 |
+| credential_ids | TEXT | 否 | **PR 偏差，目标撤销**：凭据由 Mate 按 Agent 绑定决定，Claw 不保存凭据引用 |
 | authorization_ref | TEXT | 否 | Mate 提供的非秘密授权引用，不是访问令牌 |
 | session_owner_ref | TEXT | 否 | **PR 偏差，目标撤销**：Session 归属在 Mate |
 | revision | BIGINT | 否 | 内部配置代次，创建时为 1；不作为公共条件更新字段 |
@@ -760,7 +760,7 @@ PR 当前正常状态写入为 `PREPARING → READY → FINISHED`，未受理失
 | t_session_executions.schedule_start_owner | VARCHAR(64) | 持有同次准备快照的原实例 |
 | t_session_executions.schedule_start_deadline | TIMESTAMPTZ(3) | 数据库受理时设置的一次启动截止时间 |
 
-`execution_context_json` 当前编码 `scheduleId`、`runId`、`agentId`、`scopeRef`、`sessionOwnerRef`、`authorizationRef`、`credentialIds`。**目标删除其中 scopeRef、sessionOwnerRef**，保留 scheduleId、runId、agentId、authorizationRef、credentialIds 等运行关联与不透明引用；不以 JSON 规避删列。不保存完整任务配置、浏览器 Header 或业务秘密；它不是重新创建任务或重放业务的材料。安全收尾后的临时上下文清理是目标要求，当前差距见 §5.7。
+`execution_context_json` 当前编码 `scheduleId`、`runId`、`agentId`、`scopeRef`、`sessionOwnerRef`、`authorizationRef`、`credentialIds`。**目标删除其中 scopeRef、sessionOwnerRef、credentialIds**，保留 scheduleId、runId、agentId、authorizationRef 等运行关联与不透明引用；不以 JSON 规避删列。不保存完整任务配置、浏览器 Header 或业务秘密；它不是重新创建任务或重放业务的材料。安全收尾后的临时上下文清理是目标要求，当前差距见 §5.7。
 
 定时业务时间遵守[统一秒级规则](../01-总体架构/01-CampusClaw多Agent运行时/time-contract.md)，应用先规范化再写入；内部租约、根执行控制及启动期限保留毫秒精度。不能笼统把所有 TIMESTAMPTZ 列都改成秒级。根执行实际开始时间投影到 `last_run_at` 时按公共秒级约定处理。
 
@@ -808,6 +808,7 @@ Run 保留时长、清理频率和批量由[部署初始值](../01-总体架构/
 
 | 项目 | 状态与边界 |
 |---|---|
+| 任务内容与凭据字段 | **待修改**：`t_schedule.message` 改为纯文本 `prompt`，撤销 `credential_ids` 及执行上下文中的 credentialIds；JSON 编解码相应简化 |
 | 用户归属及权限职责 | **待修改**：撤销 Session/Schedule/Run 身份列、相关索引/查询及执行上下文副本；Mate 维护关联和授权，Claw 校验服务来源与具体获准操作，见 §3.1 |
 | 三张调度表、Mapper 与受理/启动控制 | **PR #332 已实现、未合入 main**；本次为指定源码范围的静态核验，不代表已安装或企业部署完成 |
 | 安全配置快照、实际 Agent 发布版本/摘要 | 原主设计包含这些目标；PR Run 表没有对应列，最小根上下文也未保存发布版本。**待实现**，具体载体与字段需进一步设计；本文不为填齐目标擅自增列，也不把 revision 当作完整快照 |
@@ -948,6 +949,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-10-13 | 定时任务 message 改为纯文本 prompt，撤销 credential_ids，凭据改由 Mate 按 Agent 绑定决定。 |
 | 1.2.0 | 2026-10-12 | 登记按 Agent 查询用户事件所需的事件表 agent_id 列与部分索引目标。 |
 | 1.1.0 | 2026-10-10 | 会话归属与权限由 Mate 维护，撤销 Claw 身份副本并明确跨服务受理及失败边界。 |
 | 1.0.0 | 2026-10-10 | 统一维护 Claw 全库表、字段、约束索引、PR 与目标增量，并双向关联各模块及 SQL 文件。 |

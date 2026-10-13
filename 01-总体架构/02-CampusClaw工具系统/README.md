@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.21.0 |
+| 文档版本 | 2.22.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-10-10 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
@@ -142,7 +142,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 安全加固 | Find/Grep 不在调用期下载二进制且不回退到 shell | TOB Runtime 的可执行依赖必须在部署和启动期受控 |
 | 安全加固 | 受管树在同级临时目录完整校验后发布 | Session 不读取半成品，refresh 失败保留旧树 |
 | 安全加固 | Mate Agent/Skill/metadata 发现请求不携带执行凭据 | 凭据只向真正执行并产生副作用的端点暴露 |
-| 安全加固 | 普通交互保留请求凭据，定时执行由 Mate 解析 credentialIds，业务凭据仅用于实际 execute | 限定凭据来源、寿命与可见面，防止进入模型、日志、事件或持久化 |
+| 安全加固 | 普通交互保留请求凭据，定时执行由 Mate 按 Agent 绑定决定并解析本次凭据，业务凭据仅用于实际 execute | 限定凭据来源、寿命与可见面，防止进入模型、日志、事件或持久化 |
 | 安全加固 | 拒绝空摘要、摘要 ToolCall、失败或取消摘要 | 不允许无效摘要覆盖可恢复的旧上下文 |
 | 架构变更 | Agent 代理与 CallTool 共用 Mate 执行适配 | 两种披露方式使用一致的业务参数校验、权限与凭据规则 |
 | 产品约束 | Skill 加载和 SearchTools 不激活工具或授予权限 | 搜索结果只提供模型调用说明，执行身份由宿主可信绑定确定 |
@@ -452,7 +452,7 @@ agent/{agentId}/.campusclaw/
 
 ### 9.3 执行凭据
 
-Agent、Skill 与工具元数据查询不读取或复制业务执行凭据。`MateCredentials` 只属于本次 Host execution，不从 Session 或历史记录恢复；Agent 代理和 `CallTool` 使用同一规则。普通交互执行从本次 HTTP 请求捕获快照，定时执行通过 [Mate 内部能力](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)解析 `credentialIds`，两种来源均不得借用其他执行的值。Mate 提供定时执行所需的可信接口定义和凭据解析，具体接线待实现；Claw 仍按可信绑定解析工具、校验参数和判断权限。
+Agent、Skill 与工具元数据查询不读取或复制业务执行凭据。`MateCredentials` 只属于本次 Host execution，不从 Session 或历史记录恢复；Agent 代理和 `CallTool` 使用同一规则。普通交互执行从本次 HTTP 请求捕获快照，定时执行通过 [Mate 内部能力](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)按该 Agent 的绑定决定并解析本次凭据，两种来源均不得借用其他执行的值。Mate 提供定时执行所需的可信接口定义和凭据解析，具体接线待实现；Claw 仍按可信绑定解析工具、校验参数和判断权限。
 
 普通交互的实际 execute 请求只透传快照中已提供的 `X-HW-ID`、`Authorization`、
 `X-HW-APPKEY` 与 `access-token`，不改名、不生成缺失值。该快照可随同一次 Runtime
@@ -463,7 +463,7 @@ execution 的 Child execution 以只读方式传递，但不存入 Child Session
 执行上下文或必要协作者时仍按通用可用性规则失败，不能把这类缺失与空凭据混淆。
 普通 HTTP 执行未提供 Header 时使用空快照，其余执行条件满足后同样交由 Mate 判断。精确读取、省略、失败投影与跨请求隔离由 [HTTP §7](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)唯一维护；对应现有源码检查和待实现切片见[凭据证据](source-evidence.md#credential-forwarding-evidence)。
 
-定时执行的配置只保存 `credentialIds` 等授权引用，Mate 负责解析其可用性、授权范围和本次可用凭据，Claw 不复制凭据认证规则。工具通过可信解析、参数校验和权限判断后，才按目标解析secret；返回值只保存在本次执行的受限内存快照中，仅实际业务execute可以使用；不进入 Schedule、Run、Session、Prompt、日志或公开结果，执行结束后释放。创建、读取或修改 Schedule 不借机执行业务或保存原始 secret。该来源为待实现增量，不将当前 Cron 空凭据实现描述为已支持长期授权。
+定时执行的配置不保存凭据引用（不再有 `credentialIds`）；每次运行由 Mate 按该 Agent 的绑定决定本次可用的业务凭据及其授权范围，Claw 只提交 agentId、资源 ID（scheduleId/runId 等）和不透明 authorizationRef，不保存秘密或凭据 ID，也不复制凭据认证规则。工具通过可信解析、参数校验和权限判断后，才按目标解析secret；返回值只保存在本次执行的受限内存快照中，仅实际业务execute可以使用；不进入 Schedule、Run、Session、Prompt、日志或公开结果，执行结束后释放。创建、读取或修改 Schedule 不借机执行业务或保存原始 secret。该来源为待实现增量，不将当前 Cron 空凭据实现描述为已支持长期授权。
 
 Claw 调用 Mate 定义查询或凭据解析接口所用的服务间认证，和随后业务 execute 使用的执行凭据分别配置、授权与审计；服务间身份不等于最终业务主体，也不自动授予业务工具权限。发现请求可以使用其受信服务身份，但不得复制执行凭据快照。可信接口定义、解析输入及凭据失败语义由 [Mate 契约](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)维护；定时业务调用仍遵守同一次准备快照和 [非交互执行约束](../08-CampusClaw定时任务/execution.md#noninteractive)。
 
@@ -736,7 +736,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - Tool path 只从 `campusmate.endpoints` 读取，Skill path 与 Runtime 共用唯一配置键；
 - 代理和 CallTool 不向模型暴露 ID 或凭据；实际执行不自动重放，执行上下文不跨 Session 泄漏；
 - POST Events/Skill Command 快照中已提供的四项 Header 只在 Tool execute 中原名透传；模型、日志、事件、持久化和其他出站请求均不包含这些业务凭据；
-- 定时执行仅持久化 credentialIds 等授权引用；Mate 解析失败时不借用请求或历史凭据，secret 只在本次内存和真实 execute 中使用；
+- 定时执行不持久化凭据引用或秘密，凭据由 Mate 按 Agent 绑定在运行时决定；Mate 解析失败时不借用请求或历史凭据，secret 只在本次内存和真实 execute 中使用；
 - 定时入口覆盖业务权限 ASK、自定义问题及误配交互工具，无默认答案/批准、无等待记录，可靠结束本根；参数失败仍先返回同次可信定义供模型修正，无自动猜参或业务重放；
 - 普通 HTTP 执行四项全缺失、任意部分组合与 JWT/APPKEY 同时提供均不触发本地完整性拒绝；解析/确认成功后执行请求恰好一次，Mate 失败映射为 isError=true；
 - 空快照不触发 unavailable；缺 Host 上下文、发现失败、取消和确认拒绝仍保持原有处理；完整验收矩阵见 HTTP §7.3；
@@ -773,6 +773,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.22.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 2.21.0 | 2026-10-10 | Child 保存独立完整历史并复用持久 Runtime，父侧继续只接收进度与摘要。 |
 | 2.20.1 | 2026-10-08 | 用户确认元数据分派说明统一使用 Skill 和 Tool。 |
 | 2.20.0 | 2026-10-08 | 用户确认工具按可信元数据标记分派，保留权限、准备快照及本地失败不回退约束。 |

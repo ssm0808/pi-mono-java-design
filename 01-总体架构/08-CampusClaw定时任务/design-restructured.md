@@ -2,11 +2,11 @@
 
 [模块索引](../../README.md#module-index) · [原主设计 README](README.md) · [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule) · [Claw 接口专题](configuration.md) · [执行专题](execution.md) · [接口 HTML 展示](schedule-api-review.html) · [源码与官方证据](source-evidence.md)
 
-> 本文是按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”模板重组的草稿，设计内容与 [README 0.35.0](README.md)、[configuration.md 0.30.0](configuration.md)、[execution.md 0.5.0](execution.md) 一致，未新增或改变设计决策。原文件保持不变。标注 **【缺口】** 的位置表示现有材料不足以填写，需要补充，不应由本文推断。
+> 本文是按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”模板重组的草稿，设计内容与 [README 0.36.0](README.md)、[configuration.md 0.31.0](configuration.md)、[execution.md 0.6.0](execution.md) 一致，未新增或改变设计决策。原文件保持不变。标注 **【缺口】** 的位置表示现有材料不足以填写，需要补充，不应由本文推断。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.35.0-restructure（结构重组稿，设计行为同 README 0.35.0） |
+| 文档版本 | 0.36.0-restructure（结构重组稿，设计行为同 README 0.36.0） |
 | 更新日期 | 2026-10-12 |
 | 模块 | M10 · 调度与并发治理 |
 | 设计状态 | 三张调度表、Mapper、同库受理与启动控制已在 Java PR #332 实现，尚未合并，差距见[数据库实现差距](../../03-数据与存储/Claw数据库设计.md#gaps)；Mate 授权与归属登记、调度扫描及其余新增能力待实现；main 上已观察实现仅为进程内 Cron |
@@ -46,7 +46,7 @@
 |---|---|
 | Claw | CampusClaw Agent 服务，本设计的实现方 |
 | Mate | 用户、组织、租户、资源归属与权限的维护方，也是可信接口定义、执行资格、Session 归属和凭据的最终决定方；运营人员通过 Mate 管理入口操作定时任务 |
-| Schedule | 长期保存的任务配置：Agent 绑定、一条 user.message、可选 Cron 规则、凭据引用 |
+| Schedule | 长期保存的任务配置：Agent 绑定、纯文本 prompt、可选 Cron 规则 |
 | Run | 一次自动或手动触发的受理记录；只表示是否成功创建 Session，不表示业务成败 |
 | Session | 每次 Run 新建的独立会话，承载消息、工具结果与根执行 |
 | 根执行（root execution） | Session 内本次运行的顶层执行，是执行终态的最终决定方 |
@@ -71,7 +71,7 @@
 | R6 | 删除 Schedule 同时删除其 Run，保留已生成的 Session；删除不取消已受理执行 | 功能 | 配置 §4.6、§4.11 |
 | R7 | 不补漏跑、遇忙跳过、失败与故障不重跑 | 约束 | 执行专题 |
 | R8 | 首版只支持文本输入、无需人工交互的任务；ASK 结束本次根执行 | 约束 | 执行专题 noninteractive |
-| R9 | 凭据通过 credentialIds 引用 Mate 受管凭据，Claw 不保存秘密 | 安全 | README §8 |
+| R9 | 业务凭据由 Mate 按 Agent 绑定在运行时决定，Claw 不保存凭据引用或秘密 | 安全 | README §8 |
 | R10 | 多副本部署下同一 occurrence 只受理一次 | 稳定性 | README §5、执行专题 |
 | R11 | 用户、资源归属与权限由 Mate 维护；Claw 不保存用户范围或 owner，新 Session 受理前由 Mate 登记归属 | 安全 | README §8 |
 
@@ -215,8 +215,8 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 五个步骤如下（来源 [README §5](README.md#normal-acceptance)、[执行专题](execution.md)）：
 
 1. **分配 occurrence。** 扫描器按 next_fire_at/id 有界、稳定扫描，不按用户或租户分组；短事务锁定 Schedule，复核未删除、active、revision、到期时间与 activeRunId；插入唯一 Run、推进游标、占用执行槽。忙时记录 `SKIPPED_OVERLAP`，不排队。
-2. **可信准备与归属登记。** 事务外向 Mate 核验执行授权，解析 Agent 已发布目录、模型、CRON profile、工作区与凭据引用，固定 `PreparedScheduleRunDTO`；固定拟建 Session ID，由 Mate 独立登记归属并确认；不持数据库行锁调用远端。
-3. **原子受理。** 同一事务复核存在性、状态/revision、领取 owner/代次与租约、授权有效期、容量与派发期限；创建 Session、首条 user.message、根执行/segment，写 Run 关联。任一步失败整体回滚。
+2. **可信准备与归属登记。** 事务外向 Mate 核验执行授权，解析 Agent 已发布目录、模型、CRON profile、工作区，固定 `PreparedScheduleRunDTO`；固定拟建 Session ID，由 Mate 独立登记归属并确认；不持数据库行锁调用远端。
+3. **原子受理。** 同一事务复核存在性、状态/revision、领取 owner/代次与租约、授权有效期、容量与派发期限；创建 Session、首条用户消息（prompt）、根执行/segment，写 Run 关联。任一步失败整体回滚。
 4. **事务后启动。** 原 Runtime 实例以 READY→STARTING 的启动 CAS 取得执行权，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件，不伪造 SSE 连接。Runtime、Cron 与 Child 共用受理原语与执行协调器，规则见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)。
 5. **结果对账。** 读取固定根执行的终态（以根执行为准）；Schedule/Run 仍存续时幂等更新摘要并释放 activeRunId；已删除时只收尾 Session 与根执行。
 
@@ -230,7 +230,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 [原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L220)
 
-**正常调用如何完成：** 向 Mate 核验本次 Run 的执行授权并解析定义与凭据引用 → 固定拟建 Session ID，由 Mate 按资源 ID 和授权登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、认领、授权、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
+**正常调用如何完成：** 向 Mate 核验本次 Run 的执行授权并解析可信定义 → 固定拟建 Session ID，由 Mate 按资源 ID 和授权登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、认领、授权、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
 
 Mate 登记与 Claw 受理之间没有跨库事务；准备成功只固定本次上下文，最终事务仍复核可变状态。登记被拒或结果未知的处理见 [F14](#failure-recovery)，详细规则见 [Mate 会话归属](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)。
 
@@ -265,7 +265,7 @@ Mate 侧新增的内部接口见 [Mate 定时执行接口草案](../../02-服务
 - 列表在分页前应用 Mate 决定的获准资源集合；空集合返回空，不退化为全部，也不先取全库一页再过滤。
 - 后台通过资源 ID 与不透明 authorizationRef 向 Mate 查询当前执行资格；引用不能当令牌，也不能解码出用户。授权结果缺失、过期或 Mate 不可用时不受理，不因请求来自内网放行。
 - 新 Session 在受理前由 Mate 独立登记归属；登记失败或结果未知时不启动，删除 Schedule/Run 不删除该归属。
-- Claw 只持久化 credentialIds 等非秘密引用，不保存 Token/JWT/APPKEY；秘密只在受限执行内存中使用，不进入模型、metadata、Schedule/Run、事件或日志。
+- Claw 不持久化凭据引用或 Token/JWT/APPKEY，业务凭据由 Mate 按 Agent 绑定在执行时解析；秘密只在受限执行内存中使用，不进入模型、metadata、Schedule/Run、事件或日志。
 - metadata 不进入模型输入，不作为身份、权限或凭据依据。
 - 资源级不可见统一返回 404，不泄露存在性。
 - 已知差距：PR #332 仍有本地身份链路，见[职责核验](source-evidence.md#mate-boundary-review)；获准集合传递、配额准入与归属登记的内部契约待实现（T7）。
@@ -290,7 +290,7 @@ Mate 侧新增的内部接口见 [Mate 定时执行接口草案](../../02-服务
 
 | # | 失败 | 发生阶段 | 副作用状态 | 处理方 | 系统处置 | 用户可见结果与下一步 | 不保证项 |
 |---|---|---|---|---|---|---|---|
-| F1 | 字段或规则无效（含无未来匹配的 Cron、附件块） | 保存 | 未发生 | 配置服务 | 400 字段错误，不写入 | 按错误码改正后重新提交 | — |
+| F1 | 字段或规则无效（含无未来匹配的 Cron、空白 prompt） | 保存 | 未发生 | 配置服务 | 400 字段错误，不写入 | 按错误码改正后重新提交 | — |
 | F2 | 身份、授权或存储等最终决定方不可用 | 保存、运行、暂停/恢复、读取 | 未发生 | 配置服务 | 503，不受理 | 稍后重试 | — |
 | F3 | 保存或删除事务失败、响应丢失 | 保存、删除 | 未知（超时不证明事务失败） | 调用方核对 | 5xx；不保存请求键或原响应 | 先读取详情或列表核对，再决定是否重提 | 重复创建可能生成第二个任务；列表未找到不证明未提交 |
 | F4 | 准备被拒（Agent 禁用、授权、凭据、容量、准备超时） | 受理前 | 未发生，无 Session | 调度器 | 记录 Run.error，释放执行槽，不重试 | Run 显示失败原因；手动运行仍返回 200 Run；自动任务等下一计划 | 是否因此自动暂停 Schedule 待定（T1） |
@@ -422,5 +422,6 @@ Claude Managed Agents 本次未核对。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.36.0-restructure | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 0.35.0-restructure | 2026-10-12 | 合入 README 0.35.0 的 Mate 用户归属与权限、独立数据库设计和共用受理流程，时序图改用中文并只画正常流程。 |
 | 0.30.2-restructure | 2026-10-11 | 按评审模板重组 README 0.30.2 的内容，增加关键设计决策、整体时序与稳定性下的失败处理、容量、监控和预案，并标注缺失章节。 |

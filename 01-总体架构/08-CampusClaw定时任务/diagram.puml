@@ -154,7 +154,7 @@ endlegend
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare（不是只读管理检查）。
 ' 表达方式：Mate 发起请求并提供授权；定时任务管理校验并保存；存储提交。
 ' 设计原因：管理检查不准备也不执行 Agent Session。
-' 目标：待实现；只支持文本输入，存储时只保留凭据引用。
+' 目标：待实现；任务内容为纯文本 prompt，不保存凭据引用。
 ' 表达方式：只画正常流程；失败与恢复规则见 design-restructured.md 第 5.2.1 节。
 ' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
 title 保存视频巡逻检查定时任务
@@ -167,11 +167,11 @@ participant "定时任务管理" as Schedule
 database "存储" as Store
 autonumber
 activate Mate
-Mate -> Schedule ++ : 创建任务：Agent、消息和可选规则
+Mate -> Schedule ++ : 创建任务：Agent、任务内容和可选规则
 Schedule -> Schedule : 核验服务来源和获准目标\n校验输入和时间规则
-Schedule -> Mate ++ : 检查 Agent 和凭据绑定\n以及当前管理授权
+Schedule -> Mate ++ : 检查 Agent 绑定\n以及当前管理授权
 return 可信绑定
-Schedule -> Store ++ : 提交新的启用配置\n含凭据引用和下次计划时间
+Schedule -> Store ++ : 提交新的启用配置\n含下次计划时间
 return 已提交的配置
 return 201 + 已保存的配置\n及未来计划时间
 deactivate Mate
@@ -242,7 +242,7 @@ database "存储" as Store
 autonumber
 [-> Schedule ++ : 受理一个已预留的 Run
 == 核验当前执行授权 ==
-Schedule -> Mate ++ : 为本次 Run 解析可信定义、当前授权\n和凭据引用
+Schedule -> Mate ++ : 为本次 Run 解析可信定义\n和当前授权
 return 执行上下文
 == 登记独立归属 ==
 Schedule -> Schedule : 固定本次 Run 拟建的 Session ID
