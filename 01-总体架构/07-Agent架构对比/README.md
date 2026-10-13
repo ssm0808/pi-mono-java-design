@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.91.0 |
+| 文档版本 | 1.92.0 |
 | 更新日期 | 2026-10-13 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -252,15 +252,15 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 架构问题 | 如何让前端直接获得执行清单，同时保持工具与 Session 元数据稳定、断线后恢复相同进度？ |
 | Claude 公开契约 | 官方 Beta 文档 2026-09-15 核对：通用自定义工具事件与持久化历史；未公开原生 TodoUpdate 或同名更新事件。只借鉴权威历史与对账，不推断内部 TODO 实现。 |
 | DeepSeek 源码 | 固定 0a53fb55 的 tool-todo 追加 todo/write 全量快照，下一 turn/start 清空投影；采用显式快照思路，不照搬 alpha 日志格式。 |
-| OpenCode / Codex 源码 | OpenCode 849c2598 的 SessionTodo.update 替换表后发布 todo.updated（固定 v2 源码）；Codex d58d0e58 的 PlanHandler 发 PlanUpdate，App Server 文档定义 turn/plan/updated。两者证明任务更新可由后端显式发布，不能混称同一公共传输协议。 |
+| OpenCode / Codex 源码 | OpenCode 849c2598 的 SessionTodo.update 替换表后发布 todo.updated（固定 v2 源码）；Codex d58d0e58 的 PlanHandler 发 PlanUpdate，App Server 文档定义 turn/plan/updated。两者证明任务更新可由后端显式发布，不能混称同一公共传输协议。Codex 同提交在 Plan 模式拒绝 update_plan，CampusClaw 采用同样的执行前拒绝。 |
 | pi 源码 | 固定 5cd93f68 的 todo 示例从工具结果 details 恢复；这是另一种客户端派生方案，不作为当前 CampusClaw 进度消费方式。 |
 | CampusClaw 已观察实现 | Java 09b32d8e 的 persistToolResults 已在批次结果边界提交；appendEntry 接收事件列表，仓库记录实际投影数量；该旧提交尚无 TODO 工具与专用事件/面板；后续实现和确定性验证见[问答证据](../06-CampusClaw计划模式/ask-user-question.md#2-基线与已观察实现)，不将旧差距扩展为当前状态。 |
-| CampusClaw 目标 | build 根执行使用 TodoUpdate，plan 不记录调研进度；成功工具结果同事务生成 agent.todo_updated。前端直接消费 todos；新消息隔离清单，审核续跑保持原根。 |
+| CampusClaw 目标 | build 根执行使用 TodoUpdate，plan 阶段调用在执行前被拒绝（`BUILD_MODE_REQUIRED`），不记录调研进度；成功工具结果同事务生成 agent.todo_updated。前端直接消费 todos；新消息隔离清单，审核续跑保持原根。 |
 | 调用时机约束 | TodoUpdate description 集中规定任务实际完成并验证后立即更新，同次可完成上一项并开始下一项；BUILD 仅提示按工具描述跟踪进度，不再复写时机细则。通用验证与诚实交付由 BASE 负责；值校验不证明业务完成，模型仍可能漏调用。最新提示词证据见[§10](../06-CampusClaw计划模式/source-evidence.md#10-两份模式提示词的最新上游核验)。 |
-| 差异分类 | 架构变更：后端负责将最终工具结果映射为公共任务事件，复用现有一 Entry 多事件事务。产品约束：build 实施、单进行中、原根作用域、Agent/Tool/Skill 元数据不因 TODO 扩展。 |
+| 差异分类 | 架构变更：后端负责将最终工具结果映射为公共任务事件，复用现有一 Entry 多事件事务。产品约束：build 实施（工具定义不随模式变化，plan 调用由执行前门禁拒绝）、单进行中、原根作用域、Agent/Tool/Skill 元数据不因 TODO 扩展。 |
 | 理由与代价 | 前端无需识别工具名或解析结果文本，事件历史可直接恢复面板；代价是新增公共类型及每次更新的一份持久化快照，读取端需先升级；仍等待批次结果提交。 |
 | 备选与重新评估条件 | 不新增 TODO CRUD、Session todos 或 TODO 表；如需独立任务身份、多人编辑、调度依赖或工具方法返回即发布，应另评估资源与提交边界。 |
-| 设计 / 实现状态 | Java `8c5fda1d` 已实现 TodoUpdate、显式任务事件及前端消费、工具描述集中维护和两文件迁移，见工具状态专项证据；Mate 桥接待实现，真实模型行为未核验，不将代码存在表述为验收通过。 |
+| 设计 / 实现状态 | Java `8c5fda1d` 已实现 TodoUpdate、显式任务事件及前端消费、工具描述集中维护和两文件迁移，见工具状态专项证据；2026-10-12 在 main `769e8659` 复核，plan 模式门禁待实现（[PR #338](https://github.com/superheromeZzh/pi-mono-java/pull/338)），见[§18](../06-CampusClaw计划模式/source-evidence.md#todo-build-mode-gate)；Mate 桥接待实现，真实模型行为未核验，不将代码存在表述为验收通过。 |
 | 验收与证据 | [T1～T4](../06-CampusClaw计划模式/todo-update.md#6-实施切片与验收)：同源同事务、失败无更新、缺工具记录也可展示、分页/live 对账、跨根与两跳身份；固定路径与符号见[§6](../06-CampusClaw计划模式/source-evidence.md#6-todo-update-基线与接入证据)。 |
 
 **讲解要点。** 方案是待批准的完整设计，TODO 是实施进度。CampusClaw 用后端任务事件让前端直接展示清单，并把该事件与模型工具结果一起提交，避免两次写入不一致。它增加一份事件快照，但不增加元数据字段或任务表；完成状态仍是 Agent 报告，不代替业务验证和执行终态。
@@ -728,6 +728,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.92.0 | 2026-10-13 | A05 增加 plan 模式拒绝 TodoUpdate 的执行前门禁及 Codex 对照。 |
 | 1.91.0 | 2026-10-13 | A08 增加交互工具同批位置对比，提问与用户确认须为末位调用、计划提交须单独调用。 |
 | 1.90.1 | 2026-10-12 | A16 的问题改为 Trace 场景。 |
 | 1.90.0 | 2026-10-12 | 新增 A16，对比按 Agent 跨会话查询用户事件与按事件读取轮次的基线做法。 |

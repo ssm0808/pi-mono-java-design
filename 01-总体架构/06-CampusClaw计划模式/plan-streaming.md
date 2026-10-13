@@ -45,7 +45,7 @@ AI 通用部分 JSON 的类型、词法状态、深快照、预算与独立完�
 
 ![计划流式生成与审核绑定](plan_streaming_sequence.svg)
 
-[原尺寸 SVG](plan_streaming_sequence.svg) · [PlantUML 源码：plan_streaming_sequence](diagram.puml#L660)
+[原尺寸 SVG](plan_streaming_sequence.svg) · [PlantUML 源码：plan_streaming_sequence](diagram.puml#L661)
 
 1. Provider 生成含身份和通用部分参数快照的内部事件；Runtime 在可信身份确定后提取 plan 字符串，发送非空 agent.plan delta。普通说明继续走 agent.message，Thinking 不参与计划解析。
 2. 完整响应到达，Provider 独立解析完整原始参数并发送内部 JSON 诊断，Runtime 保存原始 Assistant 与完整 ToolCall。原始记录保存不代表参数通过业务校验，也不表示审核就绪。

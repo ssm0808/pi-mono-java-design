@@ -1,6 +1,6 @@
 # CampusClaw 模式提示词组织
 
-版本：2.5.1；日期：2026-10-13。状态：两文件迁移、业务覆盖、执行快照和正文标记方案已实现；恢复完整 plan 参数及其流式预览待实现，业务 SYSTEM 发布及模型行为未核验。本次范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence)，其他范围保留[§12](source-evidence.md#12-主线实现状态核验2026-09-18)及[§10](source-evidence.md#10-两份模式提示词的最新上游核验)归属。
+版本：2.6.0；日期：2026-10-13。状态：批准引导与 BUILD.md 的“多步实施先建清单”提示待实现；两文件迁移、业务覆盖、执行快照和正文标记方案已实现；恢复完整 plan 参数及其流式预览待实现，业务 SYSTEM 发布及模型行为未核验。本次范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence)，其他范围保留[§12](source-evidence.md#12-主线实现状态核验2026-09-18)及[§10](source-evidence.md#10-两份模式提示词的最新上游核验)归属。
 
 ## 1. 职责与装配
 
@@ -80,7 +80,7 @@ AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建�
 
 ## 4. BUILD.md 的适用边界
 
-[完整正文](BUILD.md)是短模式策略，不承担完整实施方法论或任务清单细则。直接进入 build 的普通任务按基础 SYSTEM 工作；由审核恢复时读取本次获批 ExitPlanMode 调用的完整 plan 参数。批准不替代工具权限，进度不改变获批范围；重新规划仍使用既有结束执行与模式切换流程。
+[完整正文](BUILD.md)是短模式策略，不承担完整实施方法论或任务清单细则。直接进入 build 的普通任务按基础 SYSTEM 工作；由审核恢复时读取本次获批 ExitPlanMode 调用的完整 plan 参数；获批方案有多个实施步骤时，先用 TodoUpdate 提交完整清单再开始第一步。批准不替代工具权限，进度不改变获批范围；重新规划仍使用既有结束执行与模式切换流程。
 
 ## 5. 基线选择与设计理由
 
@@ -90,9 +90,11 @@ AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建�
 
 当前生成契约选择 DeepSeek 的完整参数提交方式，再补充 CampusClaw 的参数预览和事务绑定；本次重新核验的调用流与成熟度见[§15](source-evidence.md#plan-argument-streaming-evidence)。去掉正文控制标记可减少额外输出条件，但是否提高成功率须用实际模型比较，不能从 Codex 产品体验或 Schema 存在推导保证。
 
+<a id="tool-rule-ownership"></a>
+
 ## 6. 工具规则的归属
 
-[TodoUpdate description](todo-update.md#2-模型工具契约)维护 build 调用范围、完整清单、状态、完成且验证后立即更新及简单任务省略；BUILD.md 不复制这些步骤。取消项不伪装为完成、调用失败不声称同步等细节也由工具描述承载。前端仍消费成功提交的 agent.todo_updated，不因文本简化改变事件作用域或事务。
+[TodoUpdate description](todo-update.md#todo-tool-contract)维护 build 调用范围、完整清单、状态、完成且验证后立即更新及简单任务省略；BUILD.md 与批准引导只保留“多步实施先建清单、再做第一步”这一句入口提示，不复制状态与更新细则。只靠工具描述时，模型在批准后常先实施第一步，到第二步才建清单：批准引导和 BUILD.md 都只要求“继续实施”，离当前动作最近的指令没有建清单这一步。Codex 同样在系统提示词的 `update_plan` 一节要求动手前建计划，而不只依赖工具描述，见[证据 §18.4](source-evidence.md#todo-first-call)。“是否多步”需要语义判断，不能由 Runtime 判定并拒绝。取消项不伪装为完成、调用失败不声称同步等细节也由工具描述承载。前端仍消费成功提交的 agent.todo_updated，不因文本简化改变事件作用域或事务。
 
 [AskUserQuestion description / Schema](ask-user-question.md#3-工具契约)维护问题参数、末位调用、等待真实答案、答案不批准及失败不代表同意；基础 SYSTEM 维护必要性和默认一题。两模式工具定义相同，工具未装配时不生成虚构调用、不补装工具，不按模式复制 description。
 
@@ -108,7 +110,7 @@ Submit a complete Markdown plan for review while the Main Agent is in plan mode.
 
 | 结果 | 模型可见引导 |
 |---|---|
-| approved=true | 方案已批准，Runtime 已切换为 build。按本次获批 ExitPlanMode 调用的完整 plan 参数继续；具体工具权限仍须遵守。 |
+| approved=true | 方案已批准，Runtime 已切换为 build。按本次获批 ExitPlanMode 调用的完整 plan 参数继续；方案有多个实施步骤时，先用 TodoUpdate 提交完整清单再开始第一步；具体工具权限仍须遵守。（建清单一句待实现） |
 | approved=false | 当前仍为 plan。根据 feedback 修订，准备好后重新提交完整方案。 |
 
 引导由工具适配器根据真实决定生成，不从 feedback 拼接系统指令，也不承担服务端模式更新。
@@ -129,7 +131,7 @@ Submit a complete Markdown plan for review while the Main Agent is in plan mode.
 | P08 | 一个实施任务包含多次工具与验证 | 依工具描述创建/更新清单，完成并验证后及时更新；无需独立 EXECUTION_TODOS 资源 |
 | P09 | 业务失败、验证失败、TODO 更新失败 | 不虚报完成或同步，按基础 SYSTEM 和工具结果处理 |
 | P10 | 修订、审核中断、回执丢失 | 保持 plan 或结果不确定，不擅自实施；既有历史对账与不重放规则保持 |
-| P11 | 批准后实施与新 Child | 首次模型调用已使用 BUILD.md 且可见获批方案；多步骤依 TodoUpdate description 建清单；新 Child 复制 build |
+| P11 | 批准后实施与新 Child | 首次模型调用已使用 BUILD.md 且可见获批方案；多步骤在第一个实施工具调用之前提交 TodoUpdate 完整清单；新 Child 复制 build |
 | P12 | 清单完成、范围变化、任务失败 | 最终答复仍报告真实结果；范围扩展不靠 TODO 或普通答案获得批准 |
 | P13 | 压缩与下一条普通消息 | 模式权威不来自摘要；新根按工具描述重新建立所需清单，审核续跑保持原根 |
 | P14 | 多题、关联后续题、工具 JSON | 独立问题才合并；依赖前一答案则分批；最终答复不粘贴原始 JSON |
@@ -149,6 +151,7 @@ Submit a complete Markdown plan for review while the Main Agent is in plan mode.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.0 | 2026-10-13 | 批准引导与 BUILD.md 增加“多步实施先建清单”入口提示，修正首次 TodoUpdate 偏晚。 |
 | 2.5.1 | 2026-10-13 | AskUserQuestion description 改为维护末位调用规则。 |
 | 2.5.0 | 2026-09-28 | 模型用完整 plan 参数提交方案，批准后从同次调用参数恢复执行。 |
 | 2.4.0 | 2026-09-19 | Main Agent 用唯一闭合计划标记输出方案，再以同响应空参数退出调用提交审核。 |
