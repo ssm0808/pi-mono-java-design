@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.9.1 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.9.2 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -765,13 +765,13 @@ PR 的 `execution_context_json` 编码 `scheduleId`、`runId`、`agentId`、`sco
 | 索引 | 列 / 条件 | 支持的访问 |
 |---|---|---|
 | idx_schedule_due | t_schedule `(status, upcoming_run_at, id)` | active 到期扫描及恢复推进 |
-| idx_schedule_scope_list | PR：t_schedule `(scope_ref, updated_at DESC, id)` | **目标撤销**，由 Mate 确定获准资源集合 |
+| idx_schedule_scope_list | PR：t_schedule `(scope_ref, updated_at DESC, id)` | **目标撤销**，不建替代索引：Mate 按用户确定获准任务 ID 集合（每范围至多 100 个），Claw 按主键查出后排序分页 |
 | idx_schedule_run_list | PR：t_schedule_run `(scope_ref, created_at DESC, id DESC)` | **目标改为 `(schedule_id, created_at DESC, id DESC)`**：带 scheduleId 直接使用；不带时按 Mate 获准任务集合逐个使用；from/to 走同一索引的时间段；triggerType、hasError 仅两值，作为过滤条件不单独建索引 |
 | idx_schedule_run_retention | PR：t_schedule_run `(state, finished_at, id)`；**目标改为 `(finished_at, id)`** | 已结束且超过保留期的批量清理 |
 | uk_schedule_run_unfinished | **目标新增**：t_schedule_run `(schedule_id)`；仅 `finished_at IS NULL`，唯一 | 同一任务至多一条未完成 Run，即同任务不并发 |
 | idx_t_session_executions_schedule_start | PR：t_session_executions `(session_id, execution_id, schedule_start_deadline)`；仅 `schedule_start_state='READY' AND started_at IS NULL AND state IN ('RUNNING','STOPPING')` | **目标撤销**，随启动权一并移除 |
 
-目标索引采用 `idx_schedule_list(updated_at DESC,id)` 与 `idx_schedule_run_list(schedule_id,created_at DESC,id DESC)`；全局到期扫描继续使用 `idx_schedule_due`。具体获准 ID 集合的批量查询与跨任务分页须由 Mate/Claw 联调及 GaussDB 执行计划验证，不宣称这些索引已满足所有读取场景。
+任务列表按主键查询获准 ID 集合，不另建列表索引；Run 列表采用 `idx_schedule_run_list(schedule_id,created_at DESC,id DESC)`；全局到期扫描继续使用 `idx_schedule_due`。具体获准 ID 集合的批量查询与跨任务分页须由 Mate/Claw 联调及 GaussDB 执行计划验证，不宣称这些索引已满足所有读取场景。
 
 PR 的 `listRuns` 实际按父配置 `s.scope_ref` 过滤并 JOIN 配置，不能仅凭 `idx_schedule_run_list` 存在就宣称该查询有效使用它。名称子串查询、跨范围轮转窗口、Run 过滤和清理均须在真实 GaussDB 数据规模下查看执行计划；尚无此性能验收结论。
 
@@ -948,6 +948,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.9.2 | 2026-10-13 | 任务列表不建 idx_schedule_list：由 Mate 按用户过滤出获准任务 ID 集合，Claw 不保存 userId。 |
 | 1.9.1 | 2026-10-13 | §5.6 补充 last_run_at 随受理提交、过期准备与保留期清理行。 |
 | 1.9.0 | 2026-10-13 | 撤销 PR 在 t_session_executions 上新增的 started_at、execution_context_json 与 schedule_start_*：受理后由原实例在进程内直接启动；lastRunAt 改为受理时刻；受理后任何时刻失联统一按结果未知处理。 |
 | 1.8.0 | 2026-10-13 | 撤销 t_schedule_dispatch_state：各副本并行扫描，以 Schedule 行锁、游标推进和 occurrence 唯一约束防重；超过派发容差的计划直接推进到下一次。 |
