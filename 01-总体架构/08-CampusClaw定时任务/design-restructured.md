@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.40.0-restructure（结构重组稿，设计行为同 README 0.40.0） |
+| 文档版本 | 0.41.0-restructure（结构重组稿，设计行为同 README 0.40.0） |
 | 更新日期 | 2026-10-12 |
 | 模块 | M10 · 调度与并发治理 |
 | 设计状态 | 三张调度表、Mapper、同库受理与启动控制已在 Java PR #332 实现，尚未合并，差距见[数据库实现差距](../../03-数据与存储/Claw数据库设计.md#gaps)；Mate 授权与归属登记、调度扫描及其余新增能力待实现；main 上已观察实现仅为进程内 Cron |
@@ -28,11 +28,12 @@
 | T1 | 运行失败是否自动暂停整个 Schedule（不能默认继承旧 Cron 连续三次失败自动禁用） | | [README §6](README.md#failure-interaction-recovery)、[配置 §4.1.1](configuration.md#schedule-type-paused-reason) |
 | T2 | Mate 新增上下文查询与凭据解析接口的路径/VO 仍为内部草案，企业身份适配、凭据保管、Mate 归属登记、授权 TTL 需联调 | | [README §12](README.md#implementation-calibration) |
 | T3 | 数据库链路已在 PR #332 实现但未合并，与目标设计仍有差距（含本地身份链路） | | [数据库实现差距](../../03-数据与存储/Claw数据库设计.md#gaps) |
-| T4 | 原子受理、启动 fencing、取消终态与多副本故障测试须在实现阶段验证 | | [README §12](README.md#implementation-calibration) |
+| T4 | 原子受理、受理后失联、取消终态与多副本故障测试须在实现阶段验证 | | [README §12](README.md#implementation-calibration) |
 | T5 | 完整 Maven 依赖树与 corporate NativeParent 未核验 | | [执行专题](execution.md#module-merge) |
 | T8 | Mate 管理入口在调用 Claw 前后的处理逻辑（权限、配额、任务与用户关联等）尚未确定；Claw 侧逻辑已确认 | | 本次评审 |
 | T7 | Mate 获准集合传递、任务配额准入和 Session 归属登记的内部契约待实现 | | [配置 身份与权限边界](configuration.md#mate-access-boundary) |
 | T6 | 每实例 8 个活动执行上限在多副本下会放大总并发，部署阶段需按实例数与下游配额核对 | | [部署初始值](execution.md#deployment-defaults) |
+| <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，定时任务一直被占用、后续计划全部遇忙跳过。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件、结束 Run 并释放任务；② 执行期写入与工具调用前检查执行未终止，防止卡死后恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | | 本次评审（2026-10-13） |
 
 ### 需求信息
 
@@ -421,6 +422,7 @@ Claude Managed Agents 本次未核对。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.41.0-restructure | 2026-10-13 | 新增待定 T9：实例宕机后执行卡住的自动恢复方案。 |
 | 0.40.0-restructure | 2026-10-13 | 同 README 0.40.0。 |
 | 0.39.0-restructure | 2026-10-13 | 同 README 0.39.0。 |
 | 0.38.0-restructure | 2026-10-13 | 同 README 0.38.0。 |
