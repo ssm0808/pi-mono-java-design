@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.7.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.7.1 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -712,7 +712,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | segment_id | VARCHAR(64) | 是 | **PR 偏差，目标撤销**：初始段即 `t_session_execution_segments` 中 `segment_ordinal=1` 的行；PR 自加列 |
 | claim_owner | VARCHAR(64) | 否 | **PR 偏差，目标撤销**：受理与清理都在锁内检查“未结束且 lease_until 未过”，无需比对实例 |
 | claim_epoch | BIGINT | 否 | **PR 偏差，目标撤销**：期限检查已足以防止失效准备者受理 |
-| lease_until | TIMESTAMPTZ(3) | 否 | 准备受理期限，不是已启动执行的强制释放期限 |
+| lease_until | TIMESTAMPTZ(3) | 否 | 受理准备期限，内部使用不公开。领取时按数据库时间写入：手动为领取时刻+受理准备期限；自动取该值与 scheduled_at+派发容差中较早者（初始值 10 秒 / 5 秒，见部署初始值）。受理与清理都在行锁内比较数据库当前时间：过期未受理的 Run 不得受理，由清理写入 finished_at 与错误并释放任务。受理后不再使用，不是已启动执行的强制释放期限 |
 | created_at | TIMESTAMPTZ(0) | 否 | Run 创建时间 |
 | finished_at | TIMESTAMPTZ(0) | 是 | 内部结束时间，不公开；为空表示 Run 未结束、占用任务。忙跳过与准备失败插入或结束时写当前时间；也用于保留期清理 |
 
@@ -955,6 +955,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.1 | 2026-10-13 | 明确 lease_until 的取值与使用规则。 |
 | 1.7.0 | 2026-10-13 | t_schedule_run 撤销 state、claim_owner、claim_epoch；未结束由 finished_at IS NULL 表达并用于同任务不并发约束。 |
 | 1.6.0 | 2026-10-13 | t_schedule_run 按 Run 接口对齐：撤销 root_event_id、segment_id，state 收为 PREPARING/ACCEPTED/FINISHED，列表索引改为 (schedule_id, created_at DESC, id DESC) 并支持 triggerType 与时间范围筛选。 |
 | 1.5.0 | 2026-10-13 | 撤销 t_schedule.revision、active_run_id 及 t_schedule_run.revision；同任务不并发改由运行表部分唯一索引 uk_schedule_run_unfinished 保证，受理比较 Agent 绑定并使用最新 prompt。 |
