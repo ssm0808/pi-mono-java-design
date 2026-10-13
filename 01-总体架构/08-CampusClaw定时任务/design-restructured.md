@@ -1,4 +1,4 @@
-# CampusClaw 定时任务设计（模板重构稿）
+# CampusClaw 定时任务设计
 
 [模块索引](../../README.md#module-index) · [原主设计 README](README.md) · [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule) · [Claw 接口专题](configuration.md) · [执行专题](execution.md) · [接口 HTML 展示](schedule-api-review.html) · [源码与官方证据](source-evidence.md)
 
@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.42.0-restructure（结构重组稿，设计行为同 README 0.41.0） |
+| 文档版本 | 0.42.1-restructure（结构重组稿，设计行为同 README 0.41.0） |
 | 更新日期 | 2026-10-12 |
 | 模块 | M10 · 调度与并发治理 |
 | 设计状态 | 三张调度表、Mapper、同库受理与启动控制已在 Java PR #332 实现，尚未合并，差距见[数据库实现差距](../../03-数据与存储/Claw数据库设计.md#gaps)；Mate 授权与归属登记、调度扫描及其余新增能力待实现；main 上已观察实现仅为进程内 Cron |
@@ -423,6 +423,7 @@ Claude Managed Agents 本次未核对。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.42.1-restructure | 2026-10-13 | 标题改为“CampusClaw 定时任务设计”。 |
 | 0.42.0-restructure | 2026-10-13 | 同 README 0.41.0；新增待定 T10。 |
 | 0.41.0-restructure | 2026-10-13 | 新增待定 T9：实例宕机后执行卡住的自动恢复方案。 |
 | 0.40.0-restructure | 2026-10-13 | 同 README 0.40.0。 |
