@@ -1,0 +1,410 @@
+{
+  "operation": {
+    "shortName": "查询事件所在轮次",
+    "operationKey": "ListTurnEvents",
+    "method": "GET",
+    "path": "/sessions/{sessionId}/events/{eventId}/turn",
+    "summary": "由轮次中任意一条事件读取整轮完整事件",
+    "description": "以会话中的一条事件为起点，定位它所属的轮次，即一条用户消息从受理到结束的完整处理，按保存顺序分页返回这一轮的全部完整事件，包括确认续跑后的多段与停止请求。",
+    "parameters": [
+      {
+        "$ref": "parameters.sessionId"
+      },
+      {
+        "in": "path",
+        "name": "eventId",
+        "required": true,
+        "schema": "string 1..128",
+        "description": "会话内的事件标识，可以是这一轮中的任意一条事件；通常来自 ListAgentEvents 返回的 event.eventId。"
+      },
+      {
+        "in": "query",
+        "name": "page",
+        "required": false,
+        "schema": "integer >= 1; default 1",
+        "description": "普通页码 1、2、3……，省略按第一页处理；有后续页时使用 nextPage。不是 eventId 或内部序号。"
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": "integer 1..200; default 50",
+        "description": "本页最多返回的完整事件条数，规则与 ListSessionEvents 相同。跨页保持相同 limit；改变大小时从 page=1 重新加载。"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体。示例：/sessions/session-0123…/events/entry_7K3M…/turn?page=1&limit=50。",
+      "example": null
+    },
+    "responses": [
+      {
+        "id": "200-turn",
+        "status": "200",
+        "tabLabel": "200 · 完整一轮",
+        "label": "OK",
+        "summary": "?page=1&limit=50，以这一轮的 user.message 为起点：第一条是该 user.message，最后一条 session.status_idle 表示这一轮已结束。从这一轮中任意一条事件出发结果相同。事件与 ListSessionEvents 逐字段相同。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "eventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+                  "type": "user.message",
+                  "createdAt": "2026-10-11T01:20:05Z",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "3 号楼冷机告警，帮我建一张巡检工单"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "entry_9B2N4V6C8X1Z3L5K7J9H2G4F6D",
+                  "type": "agent.thinking",
+                  "phase": "completed",
+                  "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+                  "createdAt": "2026-10-11T01:20:06Z",
+                  "content": "需要先查询 3 号楼冷机的告警详情，再创建巡检工单。"
+                },
+                {
+                  "eventId": "entry_3Q5W7E9R1T3Y5U7I9O1P3A5S7D",
+                  "type": "agent.tool_call",
+                  "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+                  "createdAt": "2026-10-11T01:20:07Z",
+                  "toolCallId": "call_alarm_01",
+                  "toolName": "CallMateTool",
+                  "displayName": "创建巡检工单",
+                  "arguments": {
+                    "tool": "create_inspection_order",
+                    "args": {
+                      "building": "3 号楼",
+                      "device": "冷机"
+                    }
+                  },
+                  "requiresConfirmation": false
+                },
+                {
+                  "eventId": "entry_6F8G1H3J5K7L9Z2X4C6V8B1N3M",
+                  "type": "agent.tool_result",
+                  "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+                  "createdAt": "2026-10-11T01:20:09Z",
+                  "toolCallId": "call_alarm_01",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "{\"orderId\":\"WO-20261011-0012\"}"
+                    }
+                  ],
+                  "isError": false
+                },
+                {
+                  "eventId": "entry_2A4S6D8F1G3H5J7K9L2Z4X6C8V",
+                  "type": "agent.message",
+                  "phase": "completed",
+                  "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+                  "createdAt": "2026-10-11T01:20:10Z",
+                  "content": "已为 3 号楼冷机创建巡检工单 WO-20261011-0012。"
+                },
+                {
+                  "eventId": "entry_8M1N3B5V7C9X2Z4L6K8J1H3G5F",
+                  "type": "session.status_idle",
+                  "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+                  "createdAt": "2026-10-11T01:20:11Z",
+                  "reason": "done"
+                }
+              ],
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "200-running",
+        "status": "200",
+        "tabLabel": "200 · 未结束的轮次",
+        "label": "OK",
+        "summary": "?page=1&limit=50，以工具调用事件为起点：这一轮仍在执行，返回目前已提交的事件，末尾没有 session.status_idle，之后还会追加。nextPage=null 不表示轮次已结束。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "eventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+                  "type": "user.message",
+                  "createdAt": "2026-10-11T01:20:05Z",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "3 号楼冷机告警，帮我建一张巡检工单"
+                    }
+                  ]
+                },
+                {
+                  "eventId": "entry_9B2N4V6C8X1Z3L5K7J9H2G4F6D",
+                  "type": "agent.thinking",
+                  "phase": "completed",
+                  "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+                  "createdAt": "2026-10-11T01:20:06Z",
+                  "content": "需要先查询 3 号楼冷机的告警详情，再创建巡检工单。"
+                },
+                {
+                  "eventId": "entry_3Q5W7E9R1T3Y5U7I9O1P3A5S7D",
+                  "type": "agent.tool_call",
+                  "sourceEventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+                  "createdAt": "2026-10-11T01:20:07Z",
+                  "toolCallId": "call_alarm_01",
+                  "toolName": "CallMateTool",
+                  "displayName": "创建巡检工单",
+                  "arguments": {
+                    "tool": "create_inspection_order",
+                    "args": {
+                      "building": "3 号楼",
+                      "device": "冷机"
+                    }
+                  },
+                  "requiresConfirmation": false
+                }
+              ],
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "400-invalid-session-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_SESSION_ID",
+        "label": "Bad Request",
+        "summary": "sessionId 不符合标识格式。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "sessionId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The sessionId format is invalid."
+          }
+        }
+      },
+      {
+        "id": "400-invalid-turn-event-query",
+        "status": "400",
+        "tabLabel": "400 · INVALID_TURN_EVENT_QUERY",
+        "label": "Bad Request",
+        "summary": "eventId 为空或超过 128 字符，或 page、limit 不合法。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_TURN_EVENT_QUERY",
+            "resMsg": "轮次事件查询参数不符合约束。"
+          },
+          "en-US": {
+            "resCode": "INVALID_TURN_EVENT_QUERY",
+            "resMsg": "The turn event query parameters are invalid."
+          }
+        }
+      },
+      {
+        "id": "404-session-not-found",
+        "status": "404",
+        "tabLabel": "404 · SESSION_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "Session 不存在或已删除。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        }
+      },
+      {
+        "id": "404-event-not-found",
+        "status": "404",
+        "tabLabel": "404 · EVENT_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "会话存在，但其中没有该 eventId。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_NOT_FOUND",
+            "resMsg": "会话中的事件不存在。"
+          },
+          "en-US": {
+            "resCode": "EVENT_NOT_FOUND",
+            "resMsg": "The event does not exist in the Session."
+          }
+        }
+      },
+      {
+        "id": "404-event-turn-not-found",
+        "status": "404",
+        "tabLabel": "404 · EVENT_TURN_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "事件存在但不属于任何轮次，例如用户主动修改模型、思考、模式或手动压缩产生的事件。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_TURN_NOT_FOUND",
+            "resMsg": "该事件不属于任何轮次。"
+          },
+          "en-US": {
+            "resCode": "EVENT_TURN_NOT_FOUND",
+            "resMsg": "The event does not belong to a turn."
+          }
+        }
+      },
+      {
+        "id": "500-event-list-failed",
+        "status": "500",
+        "tabLabel": "500 · EVENT_LIST_FAILED",
+        "label": "Internal Server Error",
+        "summary": "读取或投影持久化事件失败，包括遇到未知持久化事件类型。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_LIST_FAILED",
+            "resMsg": "Session 持久化事件读取失败。"
+          },
+          "en-US": {
+            "resCode": "EVENT_LIST_FAILED",
+            "resMsg": "Failed to list persisted events for the Session."
+          }
+        }
+      },
+      {
+        "id": "503-event-service-unavailable",
+        "status": "503",
+        "tabLabel": "503 · EVENT_SERVICE_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "数据库暂不可用，请稍后重试。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_SERVICE_UNAVAILABLE",
+            "resMsg": "事件服务暂不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "EVENT_SERVICE_UNAVAILABLE",
+            "resMsg": "The event service is temporarily unavailable. Try again later."
+          }
+        }
+      }
+    ],
+    "contractSections": [
+      {
+        "title": "轮次规则",
+        "columns": [
+          "场景",
+          "规则"
+        ],
+        "rows": [
+          [
+            "轮次",
+            "一条 user.message 受理后的完整处理即一轮，包括确认、计划审核、问题回答后的续跑段和终态 session.status_idle；执行内自动压缩属于所在轮次。"
+          ],
+          [
+            "起点",
+            "user.message、确认/审核/回答、agent.*、session.status_idle 及计划批准产生的 session.mode_changed 按所属执行定位；user.interrupt 按 targetEventId 定位被停止的轮次。"
+          ],
+          [
+            "不属于轮次",
+            "用户主动修改模型、思考、模式以及手动压缩在执行之外提交，返回 404 EVENT_TURN_NOT_FOUND。"
+          ],
+          [
+            "顺序与分页",
+            "按会话内保存顺序升序，整数页码规则与 ListSessionEvents 相同。轮次内事件只在尾部追加，翻页不会移动已读位置。"
+          ],
+          [
+            "响应",
+            "只返回 events 与 nextPage，不返回轮次标识或结束标志：第一条即这一轮的 user.message，结束时最后一条是 session.status_idle。"
+          ]
+        ]
+      }
+    ],
+    "requestHeaderExamples": [
+      {
+        "id": "json",
+        "label": "请求 Header 示例",
+        "preferred": true,
+        "headers": [
+          {
+            "name": "Accept-Language",
+            "value": "zh-CN",
+            "required": false,
+            "description": "错误消息语言；缺失或不支持时回退 en-US；不设置 Session 或模型回答语言"
+          },
+          {
+            "name": "Accept",
+            "value": "application/json",
+            "required": false,
+            "description": "可选；接收普通 JSON 响应。"
+          }
+        ]
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "headerReview": {
+      "status": "confirmed",
+      "confirmedAt": "2026-10-12",
+      "decision": "与 ListSessionEvents 相同：只声明可选 Accept 与 Accept-Language，不声明或消费执行凭据 Header；不改变上游授权，不拒绝额外收到的 Header。"
+    }
+  },
+  "designStatus": "implemented-in-pr"
+}

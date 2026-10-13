@@ -21,6 +21,7 @@ def validate(root=ROOT):
     models = sorted(root.glob('**/接口契约/操作/*.json'))
     models += sorted(root.glob('**/事件契约/操作/*.json'))
     models += sorted(root.glob('**/统计契约/操作/*.json'))
+    models += sorted(root.glob('**/查询契约/操作/*.json'))
     models += [root / '02-服务与接口/03-Model/chat-api.json']
     count = 0
     for path in models:

@@ -70,10 +70,12 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 | 8 | `GET` | `/sessions/{sessionId}/commands` | 查看会话命令清单 |
 | 9 | `POST` | `/sessions/{sessionId}/command` | 执行会话命令 |
 | 10 | `POST` | `/internal/skills/load-statistics/query` | 按 skillIds 批量查询累计/精确范围激活统计；排名、趋势暂缓 |
+| 11 | `GET` | `/agents/{agentId}/events` | 按 Agent 与时间范围跨会话列出用户事件，供 Mate Trace 使用 |
+| 12 | `GET` | `/sessions/{sessionId}/events/{eventId}/turn` | 由任意一条事件读取所在轮次的全部事件 |
 
 统计查询由 [M05 使用统计 §6](../../04-命令与技能/03-Skill加载统计/README.md#6-查询接口)维护：F19 采用按指定 skillIds 的累计或精确时间范围查询，返回 activationCount/lastLoadedAt；排名和日趋势暂缓。接口不返回 scope；采集入口、去重和存储目标的其他差异仍由 F20 及专题证据单独对齐，不表示整项验收。
 
-供 Mate Trace 使用的两个只读接口（按 Agent 与时间范围列出用户事件、按事件读取所在轮次）为待评审目标，见 [Agent 用户事件与轮次查询](agent-user-events-design.md)；评审通过并生成精确契约后再列入上表。
+第 11、12 项供 Mate Trace 只读调用，设计见 [Agent 用户事件与轮次查询](agent-user-events-design.md)。
 
 ## 5. 执行主线与恢复
 

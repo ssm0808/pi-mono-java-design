@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.4.1 |
+| 文档版本 | 0.5.0 |
 | 更新日期 | 2026-10-12 |
 | 模块 | M01 CampusClaw 多 Agent Runtime：事件读取 |
 | 设计状态 | 两个读取接口与两个新增索引均为待实现；复用的事件表、根执行、结果段关联与公共投影为已实现（见 §8.2） |
@@ -13,7 +13,7 @@
 
 ### 评审结论
 
-2026-10-12，Lotus 确认四项方向：返回全部五种用户事件；权限由 Mate 判断；分页使用透明游标（后于同日评审改为与 ListEvents 一致的整数页码）；定时任务与子 Agent 会话按同一规则返回。精确契约尚未生成，整体评审结论待契约评审后补充。
+2026-10-12，Lotus 确认四项方向：返回全部五种用户事件；权限由 Mate 判断；分页使用透明游标（后于同日评审改为与 ListEvents 一致的整数页码）；定时任务与子 Agent 会话按同一规则返回。精确契约已生成并列入[统一接口页](chat-api-review.html#ListAgentEvents)。
 
 ### 评审 Todo
 
@@ -21,7 +21,6 @@
 |---|---|---|---|
 | T2 | Mate 侧哪些角色可读整个 Agent 的用户输入，以及用户审计方式 | Mate | [D2](#d2) |
 | T4 | 校准时间范围上限 31 天、页大小 200 与深页耗时 | 实施 | [§5.2.2](#capacity) |
-| T6 | 生成两个操作的 operation JSON 与 HTML 评审页 | 实施 | [§4](#api) |
 
 ### 需求信息
 
@@ -191,12 +190,12 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 
 ## 4. 接口协议
 
-基础路径 `/campusclaw-service/v1`。两个接口都是只读 GET，返回 `ResultBean {resCode,resMsg,result}`，`Cache-Control: no-store`，请求只声明可选 Accept 与 Accept-Language，与 [ListEvents](chat-events-history-design.md) 相同。精确 operation JSON 与 HTML 评审页待生成（T6），在此之前以本节为准。
+基础路径 `/campusclaw-service/v1`。两个接口都是只读 GET，返回 `ResultBean {resCode,resMsg,result}`，`Cache-Control: no-store`，请求只声明可选 Accept 与 Accept-Language，与 [ListEvents](chat-events-history-design.md) 相同。精确契约见[统一接口页](chat-api-review.html#ListAgentEvents)，与本节一致。
 
 | 操作 | 方法与路径 | 成功结果 | 详细契约 |
 |---|---|---|---|
-| ListAgentEvents | `GET /agents/{agentId}/events?type=&from=&to=&page=&limit=` | `{events:[{sessionId, event}], nextPage}` | 本节，待生成 |
-| ListTurnEvents | `GET /sessions/{sessionId}/events/{eventId}/turn?page=&limit=` | `{events, nextPage}` | 本节，待生成 |
+| ListAgentEvents | `GET /agents/{agentId}/events?type=&from=&to=&page=&limit=` | `{events:[{sessionId, event}], nextPage}` | [ListAgentEvents](chat-api-review.html#ListAgentEvents) · [JSON](查询契约/操作/01-list-agent-events.json) |
+| ListTurnEvents | `GET /sessions/{sessionId}/events/{eventId}/turn?page=&limit=` | `{events, nextPage}` | [ListTurnEvents](chat-api-review.html#ListTurnEvents) · [JSON](查询契约/操作/02-list-turn-events.json) |
 
 **参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。type 必填，只能传一个值：第一版只接受 `user`，返回五种 user.*；其他值返回 400。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。page 默认 1、为正整数；limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
 
@@ -447,6 +446,7 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.5.0 | 2026-10-13 | 生成两个操作的精确契约（`查询契约/操作/`）并列入统一接口页，完成 T6。 |
 | 0.4.1 | 2026-10-12 | 按源码更正自动压缩归属：执行内自动压缩已经由 RuntimeEventProjector 关联到当前结果段，属于所在轮次；RuntimeCompactionEventProjector 只用于手动压缩；删除自动压缩差距说明；同步修正 §5.3 与 §6.2 中残留的事件表新增列描述。 |
 | 0.4.0 | 2026-10-12 | 业务用例改为面向 Trace；整体时序改为服务级（Mate、Claw、GaussDB），UC2 详细时序改为组件级；关键设计决策收敛为轮次、权限边界和存储三条，接口形状的约定移到 §4；UC1 改为 `GET /agents/{agentId}/events` 的 ListAgentEvents，用必填的 type 筛选事件类别，第一版只支持 user；两个接口的分页由透明游标改为与 ListEvents 一致的整数页码；UC2 改名为 ListTurnEvents，响应只保留 events 与 nextPage；不再给事件表冗余 agent_id，改为经 t_sessions.agent_id 找会话并新增两个索引。 |
 | 0.3.0 | 2026-10-12 | 按最新设计文档模板去掉标题中的必选标记，整体时序和关键设计决策顺延为 2.2、2.3，设计图改用中文，跨文档链接改用显式锚点。 |

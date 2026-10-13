@@ -1,0 +1,320 @@
+{
+  "operation": {
+    "shortName": "按 Agent 查询用户事件",
+    "operationKey": "ListAgentEvents",
+    "method": "GET",
+    "path": "/agents/{agentId}/events",
+    "summary": "按时间范围跨会话列出 Agent 名下的用户事件",
+    "description": "按 Agent 与 UTC 时间范围，跨该 Agent 全部未删除会话列出指定类别的完整事件，供 Mate Trace 定位用户请求。每条结果附所属 sessionId，可据此展开所在轮次。",
+    "parameters": [
+      {
+        "$ref": "parameters.agentId"
+      },
+      {
+        "in": "query",
+        "name": "type",
+        "required": true,
+        "schema": "user",
+        "description": "事件类别，按事件 type 前缀匹配：user 返回五种 user.*（message、interrupt、tool_confirmation、plan_confirmation、question_answer）。只能传一个值，当前只接受 user；agent、session 为预留取值，传入返回 400。"
+      },
+      {
+        "in": "query",
+        "name": "from",
+        "required": true,
+        "schema": "string YYYY-MM-DDTHH:mm:ssZ",
+        "description": "时间范围起点（含），UTC 整秒，须早于 to。带小数秒或非 Z 偏移返回 400，不截断。"
+      },
+      {
+        "in": "query",
+        "name": "to",
+        "required": true,
+        "schema": "string YYYY-MM-DDTHH:mm:ssZ",
+        "description": "时间范围终点（不含），UTC 整秒；与 from 的跨度不超过 31 天，可以晚于当前时间。"
+      },
+      {
+        "in": "query",
+        "name": "page",
+        "required": false,
+        "schema": "integer >= 1; default 1",
+        "description": "普通页码 1、2、3……，省略按第一页处理；有后续页时使用 nextPage。不是 eventId 或内部序号。"
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": "integer 1..200; default 50",
+        "description": "本页最多返回的完整事件条数，规则与 ListSessionEvents 相同。跨页保持相同 limit；改变大小时从 page=1 重新加载。"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体。第一页：?type=user&from=2026-10-11T00:00:00Z&to=2026-10-12T00:00:00Z&page=1&limit=2；下一页把 page 改为 2，其余参数保持不变。",
+      "example": null
+    },
+    "responses": [
+      {
+        "id": "200-first-page",
+        "status": "200",
+        "tabLabel": "200 · 第一页",
+        "label": "OK",
+        "summary": "?type=user&from=2026-10-11T00:00:00Z&to=2026-10-12T00:00:00Z&page=1&limit=2：两条用户事件来自两个会话，按 createdAt、sessionId、eventSeq 升序；还有后续，nextPage=2。event 与 ListSessionEvents 的完整事件逐字段相同，外层只加 sessionId。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "sessionId": "session-0123456789abcdef0123456789abcdef",
+                  "event": {
+                    "eventId": "entry_7K3M9Q2W8E4R6T1Y5U0P3A2S7D",
+                    "type": "user.message",
+                    "createdAt": "2026-10-11T01:20:05Z",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "3 号楼冷机告警，帮我建一张巡检工单"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "sessionId": "session-fedcba9876543210fedcba9876543210",
+                  "event": {
+                    "eventId": "entry_5T7Y9U1I3O5P7A9S2D4F6G8H1J",
+                    "type": "user.message",
+                    "createdAt": "2026-10-11T02:05:41Z",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "汇总今天东区的门禁异常"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "nextPage": 2
+            }
+          }
+        }
+      },
+      {
+        "id": "200-next-page",
+        "status": "200",
+        "tabLabel": "200 · 下一页",
+        "label": "OK",
+        "summary": "与「第一页」配对，?page=2&limit=2：返回第三条，nextPage=null 只表示本次读取没有下一页，不表示以后不会追加。user.interrupt 等其他用户事件同样返回。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [
+                {
+                  "sessionId": "session-0123456789abcdef0123456789abcdef",
+                  "event": {
+                    "eventId": "entry_4R6T8Y1U3I5O7P9A2S4D6F8G1H",
+                    "type": "user.interrupt",
+                    "createdAt": "2026-10-11T03:12:09Z",
+                    "targetEventId": "entry_1Q3W5E7R9T2Y4U6I8O1P3A5S7D"
+                  }
+                }
+              ],
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "200-empty",
+        "status": "200",
+        "tabLabel": "200 · 空结果",
+        "label": "OK",
+        "summary": "时间范围内没有用户事件、Agent 不存在或已下线，或页码超出范围时都返回 200、events=[]、nextPage=null。Claw 不维护 Agent 目录，不返回 404。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "default": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "events": [],
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "400-invalid-agent-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_AGENT_ID",
+        "label": "Bad Request",
+        "summary": "agentId 不符合资源标识格式。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_AGENT_ID",
+            "resMsg": "agentId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_AGENT_ID",
+            "resMsg": "The agentId format is invalid."
+          }
+        }
+      },
+      {
+        "id": "400-invalid-agent-event-query",
+        "status": "400",
+        "tabLabel": "400 · INVALID_AGENT_EVENT_QUERY",
+        "label": "Bad Request",
+        "summary": "type 缺失或不是 user；from/to 缺失、格式不是 UTC 整秒、from 不早于 to 或跨度超过 31 天；page、limit 不合法。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_AGENT_EVENT_QUERY",
+            "resMsg": "Agent 事件查询参数不符合约束。"
+          },
+          "en-US": {
+            "resCode": "INVALID_AGENT_EVENT_QUERY",
+            "resMsg": "The Agent event query parameters are invalid."
+          }
+        }
+      },
+      {
+        "id": "500-event-list-failed",
+        "status": "500",
+        "tabLabel": "500 · EVENT_LIST_FAILED",
+        "label": "Internal Server Error",
+        "summary": "读取或投影持久化事件失败，包括遇到未知持久化事件类型。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_LIST_FAILED",
+            "resMsg": "Session 持久化事件读取失败。"
+          },
+          "en-US": {
+            "resCode": "EVENT_LIST_FAILED",
+            "resMsg": "Failed to list persisted events for the Session."
+          }
+        }
+      },
+      {
+        "id": "503-event-service-unavailable",
+        "status": "503",
+        "tabLabel": "503 · EVENT_SERVICE_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "数据库暂不可用，请稍后重试。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_SERVICE_UNAVAILABLE",
+            "resMsg": "事件服务暂不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "EVENT_SERVICE_UNAVAILABLE",
+            "resMsg": "The event service is temporarily unavailable. Try again later."
+          }
+        }
+      }
+    ],
+    "contractSections": [
+      {
+        "title": "查询规则",
+        "columns": [
+          "场景",
+          "规则"
+        ],
+        "rows": [
+          [
+            "范围",
+            "只读该 Agent 下未删除会话中的事件；已删除会话的残留事件不返回。定时任务与子 Agent 会话中的用户事件同样返回。"
+          ],
+          [
+            "时间",
+            "半开区间 [from, to)，按事件 createdAt 比较；跨度不超过 31 天，超过需由调用方分段查询。"
+          ],
+          [
+            "排序",
+            "按 createdAt 升序，同一时刻以 sessionId、eventSeq 稳定排序；不同会话之间只有时间顺序，没有因果顺序。会话内因果顺序以 ListSessionEvents 或 ListTurnEvents 为准。"
+          ],
+          [
+            "分页",
+            "整数页码，规则与 ListSessionEvents 相同：默认 page=1、limit=50，limit 不超过 200，不返回 total。不固定快照，翻页期间的删除或晚提交可能让后续页移动；需要完整结果时用已结束的时间段查询，并按 sessionId + eventId 去重。"
+          ],
+          [
+            "标识",
+            "eventId 只在会话内唯一，调用方必须保存 sessionId，再用 ListTurnEvents 展开所在轮次。"
+          ],
+          [
+            "权限",
+            "只接受 Mate 经内部通道调用；结果包含多个用户的输入，用户权限与审计由 Mate 负责。"
+          ]
+        ]
+      }
+    ],
+    "requestHeaderExamples": [
+      {
+        "id": "json",
+        "label": "请求 Header 示例",
+        "preferred": true,
+        "headers": [
+          {
+            "name": "Accept-Language",
+            "value": "zh-CN",
+            "required": false,
+            "description": "错误消息语言；缺失或不支持时回退 en-US；不设置 Session 或模型回答语言"
+          },
+          {
+            "name": "Accept",
+            "value": "application/json",
+            "required": false,
+            "description": "可选；接收普通 JSON 响应。"
+          }
+        ]
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "headerReview": {
+      "status": "confirmed",
+      "confirmedAt": "2026-10-12",
+      "decision": "与 ListSessionEvents 相同：只声明可选 Accept 与 Accept-Language，不声明或消费执行凭据 Header；不改变上游授权，不拒绝额外收到的 Header。"
+    }
+  },
+  "designStatus": "implemented-in-pr"
+}
