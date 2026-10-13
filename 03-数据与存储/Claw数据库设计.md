@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.7.1 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.8.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -66,7 +66,7 @@
 | [t_skill_usage_daily_stats](#t_skill_usage_daily_stats) | 按 Asia/Shanghai 自然日归属的工具成功调用汇总，与事实及累计同事务提交 | M；有 D 增量 | [Skill 统计](../04-命令与技能/03-Skill加载统计/README.md) |
 | [t_schedule](#t_schedule) | 任务配置与同任务占用 | S | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) · [执行](../01-总体架构/08-CampusClaw定时任务/execution.md) |
 | [t_schedule_run](#t_schedule_run) | 单次受理事实及原根执行关联 | S | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) · [执行](../01-总体架构/08-CampusClaw定时任务/execution.md) |
-| [t_schedule_dispatch_state](#t_schedule_dispatch_state) | 扫描代次、租约和恢复边界 | S | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) · [执行](../01-总体架构/08-CampusClaw定时任务/execution.md) |
+| [t_schedule_dispatch_state](#t_schedule_dispatch_state) | **PR 偏差，目标撤销**：PR 的扫描代次、租约和恢复边界 | S | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) · [执行](../01-总体架构/08-CampusClaw定时任务/execution.md) |
 | [t_session_execution_links](#child-links) | 一次父调用与独立子会话首执行关联 | D | [统一执行历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) |
 
 Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存其引用及必要执行快照；[Agent 元数据的五张表](02-Agent元数据GaussDB/README.md)属于 Mate 数据库设计，不在上面 Claw 安装表数中。凭据秘密由 Mate 保管；附件对象及 Chat 映射也各归所属服务，不为统一文档擅自复制到 Claw 库。
@@ -645,7 +645,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 |---|---|---|
 | `t_schedule` | 当前任务配置、自动计划游标 | 一条配置对应多条 Run；删除时与其 Run 同事务退出 |
 | `t_schedule_run` | 一次触发是否受理、受理时固定的 Session/根执行身份，以及同任务唯一未完成 Run | `schedule_id` 外键指向配置并级联删除；Session/根执行为逻辑引用 |
-| `t_schedule_dispatch_state` | 自动扫描领跑者、代次、租约和恢复边界 | 全局一条约定协调记录，不是 Run 队列或漏跑历史 |
+| `t_schedule_dispatch_state` | **PR 偏差，目标撤销**：PR 用于选扫描领跑者、代次、租约和恢复边界 | 目标各副本并行扫描，见 §5.4 |
 | `t_sessions` | 会话运行数据；用户归属在 Mate | 不受 Schedule/Run 删除级联；后续对话不会改变原 Run 的关联 |
 | `t_session_executions` | 原根执行控制、实际开始时间和一次启动权 | 按 `(session_id, execution_id)` 定位；删除配置后仍能处理已受理执行 |
 
@@ -732,20 +732,11 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 <a id="t_schedule_dispatch_state"></a>
 
-### 5.4 t_schedule_dispatch_state：扫描协调
+### 5.4 t_schedule_dispatch_state：目标撤销
 
-| 字段 | SQL 类型 | 可空 | 含义 |
-|---|---|---|---|
-| id | VARCHAR(32) | 否，主键 | 应用约定固定为 `scheduled-dispatch` |
-| owner | VARCHAR(64) | 是 | 当前扫描领跑者 |
-| epoch | BIGINT | 否 | 当前自动调度代次 |
-| lease_until | TIMESTAMPTZ(3) | 是 | 数据库时间确定的协调租约期限 |
-| completed_at | TIMESTAMPTZ(3) | 是 | 上次完整扫描游标 |
-| recovery_boundary | TIMESTAMPTZ(3) | 是 | 新代次跳过未受理历史计划的固定边界 |
+**PR 偏差，目标撤销。** PR 用这张单行表选出唯一的扫描领跑者，字段为 id（固定 `scheduled-dispatch`）、owner、epoch、lease_until、completed_at、recovery_boundary，并在新代次以 recovery_boundary 跳过停机期间的计划。
 
-安装 SQL 插入 `('scheduled-dispatch', 0)`，其余列初始为空；列本身无 DEFAULT。单行由安装及 Mapper 的固定 ID 约定保证，DDL 主键本身不禁止其他 ID。协调行不存在时不能退化为各实例独立扫描。
-
-该记录仅决定未来自动触发的分配权；租约失效不意味着旧 Run 已终止，也不授权新节点重新执行旧会话。恢复与不补漏跑策略引用[执行规则](../01-总体架构/08-CampusClaw定时任务/execution.md#no-catch-up)。
+目标不保存扫描协调状态：所有副本每秒按 `idx_schedule_due` 扫描到期任务，以 `FOR UPDATE SKIP LOCKED` 锁定 Schedule 行，锁内复核游标后推进；其他副本拿不到锁或看到游标已推进即跳过，`UNIQUE(schedule_id, scheduled_at)` 为最终防重。是否运行只比较计划时刻与数据库当前时刻：差值不超过派发容差按正常派发，超过则不运行并推进到下一次计划，无需全局恢复边界。失效准备者由 Run 的 `lease_until` 处理，不需要扫描代次。详见[执行规则](../01-总体架构/08-CampusClaw定时任务/execution.md#no-catch-up)。GaussDB 对 `SKIP LOCKED` 的支持须在实现时验证；不支持时退回 `FOR UPDATE`。
 
 ### 5.5 既有表扩展及索引
 
@@ -790,9 +781,9 @@ PR 的 `listRuns` 实际按父配置 `s.scope_ref` 过滤并 JOIN 配置，不�
 
 | 操作 | 必须原子维持的数据库不变量 | PR 对应证据 |
 |---|---|---|
-| 配置创建/修改/暂停/恢复 | 最新配置与状态/原因、游标一起提交，不保存配置版本；暂停不结束在途 Run；远端授权准备在锁外，锁内重新检查其适用性 | S3；创建还锁协调行后检查范围配额 |
+| 配置创建/修改/暂停/恢复 | 最新配置与状态/原因、游标一起提交，不保存配置版本；暂停不结束在途 Run；远端授权准备在锁外，锁内重新检查其适用性 | S3；PR 创建时锁协调行检查范围配额，目标由 Mate 负责配额 |
 | 领取自动/手动 Run | 锁 Schedule，查该任务有无未完成 Run；无则插入未结束 Run（唯一约束即占用），有则插入带 finished_at 的跳过 Run；自动触发同时推进游标 | S2/S4 |
-| 最终受理 | 自动入口先验证协调 owner/epoch/lease；锁 Schedule、Run，复查配置存在与状态、配置 agent_id 与 Run.agent_id 一致、Run 未结束且 lease_until 未过、授权；首消息使用锁内读到的最新 prompt；Session、首消息、根执行/segment、Run 关联一起提交 | S4/S5；Runtime.accept 要求已有事务 |
+| 最终受理 | 锁 Schedule、Run，复查配置存在与状态、配置 agent_id 与 Run.agent_id 一致、Run 未结束且 lease_until 未过、授权；首消息使用锁内读到的最新 prompt；Session、首消息、根执行/segment、Run 关联一起提交 | S4/S5；Runtime.accept 要求已有事务 |
 | 提交后启动 | 原实例以固定根身份和 owner 做 READY→STARTING CAS，数据库时间未超过 deadline、state=RUNNING、started_at 为空才可取得启动权 | S5/S6；模型及业务执行不进入受理事务 |
 | 未启动过期收尾 | 仅对 READY、started_at 为空且已过期的根执行围栏；与真实终态提交配合，STOPPING 保留取消原因；不接管重跑 | S5/S6；独立根扫描不依赖 Schedule/Run 存在 |
 | 根终态对账 | 固定原 execution，不读取 Session 后续聊天作为本次结果；写入 finished_at 即释放本任务 | S2/S4；未知或 STARTING 失联不因租约到期释放 |
@@ -804,7 +795,7 @@ Run 保留时长、清理频率和批量由[部署初始值](../01-总体架构/
 
 定时器、线程、本地扫描缓存及本地租约计时均不是权威状态，不能覆盖数据库游标、Run 关联或根执行。Spring 单例只持有线程安全基础设施，不共享可变租户上下文；准备快照、凭据与执行对象按本次 Run 隔离。
 
-单扫描协调行便于确定恢复边界，同库受理避免半个会话关联；代价是协调热点、事务耦合及数据库故障时停止准入。此处沿用既有 CampusClaw 架构选择，不新增依赖或跨库协议，也不承诺外部业务 exactly-once。
+同库受理避免半个会话关联；代价是事务耦合及数据库故障时停止准入。各副本并行扫描、不设协调行，代价是查询量随副本数增加。此处沿用既有 CampusClaw 架构选择，不新增依赖或跨库协议，也不承诺外部业务 exactly-once。
 
 <a id="gaps"></a>
 
@@ -813,6 +804,7 @@ Run 保留时长、清理频率和批量由[部署初始值](../01-总体架构/
 | 项目 | 状态与边界 |
 |---|---|
 | Run 冗余列与状态 | **待修改**：撤销 `t_schedule_run.root_event_id`、`segment_id`；撤销 `state`、`claim_owner`、`claim_epoch`，阶段由 finished_at/session_id/error_type 推出，部分唯一索引改为 `WHERE finished_at IS NULL` |
+| 扫描协调 | **待修改**：撤销 `t_schedule_dispatch_state` 及 Mapper 中的领跑者、代次与恢复边界逻辑；改为各副本以行锁加 `SKIP LOCKED` 并行扫描，超过派发容差的计划直接推进 |
 | 配置版本与同任务占用 | **待修改**：撤销 `t_schedule.revision`、`t_schedule.active_run_id` 与 `t_schedule_run.revision`；新增 `t_schedule_run` 部分唯一索引，受理改比较 Agent 绑定 |
 | 任务内容与凭据字段 | **待修改**：`t_schedule.message` 改为纯文本 `prompt`，撤销 `credential_ids` 及执行上下文中的 credentialIds；JSON 编解码相应简化 |
 | 用户归属及权限职责 | **待修改**：撤销 Session/Schedule/Run 身份列、相关索引/查询及执行上下文副本；Mate 维护关联和授权，Claw 校验服务来源与具体获准操作，见 §3.1 |
@@ -955,6 +947,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.8.0 | 2026-10-13 | 撤销 t_schedule_dispatch_state：各副本并行扫描，以 Schedule 行锁、游标推进和 occurrence 唯一约束防重；超过派发容差的计划直接推进到下一次。 |
 | 1.7.1 | 2026-10-13 | 明确 lease_until 的取值与使用规则。 |
 | 1.7.0 | 2026-10-13 | t_schedule_run 撤销 state、claim_owner、claim_epoch；未结束由 finished_at IS NULL 表达并用于同任务不并发约束。 |
 | 1.6.0 | 2026-10-13 | t_schedule_run 按 Run 接口对齐：撤销 root_event_id、segment_id，state 收为 PREPARING/ACCEPTED/FINISHED，列表索引改为 (schedule_id, created_at DESC, id DESC) 并支持 triggerType 与时间范围筛选。 |

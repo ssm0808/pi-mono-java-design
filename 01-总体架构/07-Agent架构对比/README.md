@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.91.0 |
+| 文档版本 | 1.92.0 |
 | 更新日期 | 2026-10-12 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -490,7 +490,7 @@ Claw 同日重核 Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`：fileId 
 
 ### 创建响应与凭据引用（2026-10-04 专项）
 
-Claude 官方 Beta Deployment 的 schedule 提供 last_run_at/upcoming_runs_at，status 使用 active/paused，归档以 archived_at 表达；metadata 为受限字符串 map。CampusClaw 响应采用对应 lowerCamelCase 时间摘要、小写状态并去除公开 revision，支持可选 metadata。计划时间只是估计，不等于业务完成；内部调度代次继续存在。动态时间摘要仅供展示，不构成更新前置条件；Claw 采用直接删除，资源不增加归档字段或状态。
+Claude 官方 Beta Deployment 的 schedule 提供 last_run_at/upcoming_runs_at，status 使用 active/paused，归档以 archived_at 表达；metadata 为受限字符串 map。CampusClaw 响应采用对应 lowerCamelCase 时间摘要、小写状态并去除公开 revision，支持可选 metadata。计划时间只是估计，不等于业务完成；内部调度游标继续存在。动态时间摘要仅供展示，不构成更新前置条件；Claw 采用直接删除，资源不增加归档字段或状态。
 
 Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读，运行时按 MCP 目标或受控出站规则使用。CampusClaw 定时任务不保存凭据引用（不再有 credentialIds）：每次运行由 Mate 按该 Agent 的绑定决定本次可用的业务凭据，并在工具实际执行时按可信目标解析；Claw 只提交 agentId、资源 ID（scheduleId/runId 等）和不透明 authorizationRef，不保存秘密或凭据 ID。相比 Claude 按 Session/任务挑选 Vault，收益是凭据归属集中在 Agent 绑定、任务配置不承载秘密选择，代价是同一 Agent 的不同任务无法使用不同凭据，并新增企业身份、轮转与撤销接线；不把 workspace 级 Vault 等同园区业务权限。普通 Session 继续使用本次请求 Header 快照，定时执行秘密仅在本次内存供实际 execute 使用，发现不带业务凭据，服务身份不冒充业务凭据。现有 Java Cron 仍使用空凭据，Mate 示例也未实现凭据接口；生产能力未核验。[Mate 配套草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)与接线均待实现，首版不引入 Vault 集合或完整 sandbox 出站替换体系。
 
@@ -548,7 +548,7 @@ Claw 读取以当前可信可见范围为准，不以 Agent/凭据当前可执�
 
 Claude Deployment 的 POST 更新区分省略保持与显式清空，事件/规则整体替换，metadata 按 key 修改，200 返回完整资源；agent 字符串还会重新固定最新版本。Claw 推荐沿用部分更新和完整响应，以既定可写字段限定范围：任务内容为纯文本 prompt，运行时作为新 Session 的第一条用户消息，不含凭据字段，Agent 只绑定身份；不将修改配置隐含为恢复、立即执行或修改历史运行。metadata 逐 key patch 是特例，不对规则做任意深层合并。Claude 以 vault_ids 在配置中引用凭据并区分两种清空值；Claw 不在配置中保存凭据，也就无需凭据清空语义，凭据变化随 Agent 绑定在 Mate 生效；这是产品约束。
 
-Claw 全部接口采用无客户端条件及请求键的产品约束，不返回配套 ETag，也不在请求体或查询参数中换名设置令牌。服务端在短事务内锁定最新记录、合并本次提交字段并校验；不同字段相互保留，同一字段由较晚成功提交的更新生效。收益是降低客户端协议和回执存储复杂度，代价是不能拒绝旧页面上的同字段覆盖，创建或手动运行重试也可能产生新资源。内部配置代次、自动触发唯一约束和 Run 受理去重继续保留。Claude 创建/更新公开页未声明这两个请求头，不据此推断其内部事务或去重。Java main 同日重新 fetch 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，Session 实际仍有 If-Match/ETag 及前端依赖，需同步迁移，Cron 没有公开部分更新。精确接口由[M10 更新契约](../08-CampusClaw定时任务/configuration.md#update-schedule-review)维护，证据及重试边界见[无客户端令牌专项](../08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)；具体可写字段和错误由配置专题唯一维护，不在对比中复制接口。
+Claw 全部接口采用无客户端条件及请求键的产品约束，不返回配套 ETag，也不在请求体或查询参数中换名设置令牌。服务端在短事务内锁定最新记录、合并本次提交字段并校验；不同字段相互保留，同一字段由较晚成功提交的更新生效。收益是降低客户端协议和回执存储复杂度，代价是不能拒绝旧页面上的同字段覆盖，创建或手动运行重试也可能产生新资源。自动触发唯一约束和 Run 受理去重继续保留。Claude 创建/更新公开页未声明这两个请求头，不据此推断其内部事务或去重。Java main 同日重新 fetch 仍为 `553dcd5e2ff682f9684810a043b442b37a02e54a`，Session 实际仍有 If-Match/ETag 及前端依赖，需同步迁移，Cron 没有公开部分更新。精确接口由[M10 更新契约](../08-CampusClaw定时任务/configuration.md#update-schedule-review)维护，证据及重试边界见[无客户端令牌专项](../08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)；具体可写字段和错误由配置专题唯一维护，不在对比中复制接口。
 
 ### 1. 调度职责和权威状态
 
@@ -599,7 +599,7 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 |---|---|---|
 | Mate 提供可信接口、执行授权与按 Agent 绑定的凭据解析 | 架构变更、安全加固；避免持久化浏览器登录凭据或由模型选择秘密，代价是新增内部授权/凭据接线；服务间身份与业务凭据分开 | Mate 示例已有 Agent 目录/runtime Controller，未观察凭据或 `/runtime/tools` 服务端；Claw 客户端已有地址不证明 Mate 已实现它们，生产工程未核验 |
 | 首版仅文本、无需人工交互 | 产品约束；无需持久等待/跨进程交互恢复，代价是需确认或附件的作业不适用；意外 ASK、提问、审核结束本根，不默认批准 | Cron profile 已不含 AskUserQuestion/ExitPlanMode，但权限 ASK、自定义问题和普通工具错误仍需 Host 专门处理，不能仅靠工具清单或 isError |
-| 停机不补跑、忙跳过、失败故障不重跑 | 产品约束、安全加固；避免积压和副作用重放，代价是可能漏执行、未知结果持续占用；自动暂停整项任务的政策待确认 | 旧 Cron 的本地 timer、失败退避、3次失败禁用和2小时 running 清理不能兑现该目标，数据库扫描代次、原子受理和对账待实现 |
+| 停机不补跑、忙跳过、失败故障不重跑 | 产品约束、安全加固；避免积压和副作用重放，代价是可能漏执行、未知结果持续占用；自动暂停整项任务的政策待确认 | 旧 Cron 的本地 timer、失败退避、3次失败禁用和2小时 running 清理不能兑现该目标，数据库扫描、原子受理和对账待实现 |
 | 定时代码合并 coding-agent，保留设计职责边界 | 架构变更；共用 Runtime 与同库受理，减少独立 Maven 制品，代价是宿主职责增多；管理/受理和 Dispatcher 分离以避免 Registry 构造环 | 旧 cron 独立模块及15个生产类/7个测试、两处工具 Schema、POM、同步脚本、CODEOWNERS 均需迁移；不新增外部依赖，不把无消费者 JobRunr 占位当成现有运行库 |
 
 精确执行、故障与上线初值见[执行专题](../08-CampusClaw定时任务/execution.md)，Mate 路径和字段见[内部契约草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)。模块合并、同库受理与凭据链均待实现；本次没有运行产品、GaussDB 或多实例测试，也不据部署默认数值宣称容量。
@@ -726,6 +726,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.92.0 | 2026-10-13 | M10 去掉内部配置代次与扫描代次说法，与定时任务撤销 revision 和扫描协调表一致。 |
 | 1.91.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 1.90.0 | 2026-10-12 | 新增 A16，对比按 Agent 跨会话查询用户事件与按事件读取轮次的基线做法。 |
 | 1.89.0 | 2026-10-10 | A14 明确 Mate 独立维护资源归属和权限，记录 PR #332 的身份职责偏差及交接代价。 |

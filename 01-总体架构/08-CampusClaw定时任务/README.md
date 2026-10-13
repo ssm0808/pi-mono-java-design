@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.38.0 |
+| 文档版本 | 0.39.0 |
 | 更新日期 | 2026-10-10 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -156,7 +156,7 @@ public void summarizeAlarms() {
 
 ### 4.4. 到期与恢复规则
 
-调度推进与响应摘要计算共用ScheduleTimePolicy、规则快照与已保存时区；数据库时间决定准入和租约。正常轮询允许有限派发延迟，恢复后不补之前的计划，也不补最近一次。超过容差、繁忙或容量不足时记录本次观察到的结果并前移游标，不排队重试；停机期间未观察到的计划不逐个补造Run。具体运行代次和恢复边界见[不补漏跑](execution.md#no-catch-up)。
+调度推进与响应摘要计算共用ScheduleTimePolicy、规则快照与已保存时区；数据库时间决定准入和受理期限。正常轮询允许有限派发延迟，恢复后不补之前的计划，也不补最近一次。超过容差、繁忙或容量不足时记录本次观察到的结果并前移游标，不排队重试；停机期间未观察到的计划不逐个补造Run。超容差跳过规则见[不补漏跑](execution.md#no-catch-up)。
 
 夏令时目标为缺失钟面跳过、重复钟面对应两个不同UTC occurrence；须以当前JDK/Spring边界测试验收。时间库升级比较未来计划时间，不重算已分配的历史身份。首次无未来匹配拒绝保存，既有规则耗尽清空游标并显示原因。
 
@@ -177,7 +177,7 @@ public void summarizeAlarms() {
 | 角色 | 负责的交互 | 实现映射与状态 |
 |---|---|---|
 | Caller | 发起 Claw 管理或立即运行请求，接收资源或受理回执 | 已授权调用方；不假定为浏览器，不拥有任务调度权 |
-| Scheduler | 发起到期派发、提交后启动及原根执行结果对账 | `ScheduleDispatcher`，待实现；执行推进独立于管理服务，保留扫描资格、运行代次和启动约束 |
+| Scheduler | 发起到期派发、提交后启动及原根执行结果对账 | `ScheduleDispatcher`，待实现；执行推进独立于管理服务，保留启动约束；各副本并行扫描，不选领跑者 |
 | Schedule | 管理配置；领取/占用 Run，协调可信准备和原子受理 | `ScheduleApplicationService`、`ScheduleRunPreparation`、`ScheduledRunAcceptanceService` 等 M10 应用职责，待实现；图中统一为模块应用边界，不要求实现为一个大 Service；领取逻辑可由 Dispatcher 调用 Repository 承担，仍归 Schedule 的状态规则 |
 | Mate | 提供可信绑定、当前管理/执行授权，并按 Agent 绑定决定执行时凭据 | `MateScheduleAdapter` 对接外部 Mate 权威，定时接线待实现；准备阶段不返回业务秘密，执行时的凭据解析另见 Mate 专项 |
 | Runtime | 提供 Agent/模型/工具上下文准备；受理后推进模型与工具，保存实际根执行结果 | 既有 `AgentSessionFactory.create`、`RuntimeExecutionCoordinator.start` 和运行时持久化能力；后台准备、受理接线及非交互 Host 策略待实现 |
@@ -221,7 +221,7 @@ Mate 的授权和 Runtime 准备都发生在数据库受理事务之前。准备
 
 Store 返回“确定拒绝”须以未受理及可靠失败记录为依据；失败只释放自己的占用。任务已删除则只清理内部状态，不补造 Run。提交结果未知或存储不可用不伪造确定回执，不执行、不重放；调用方按既有 HTTP 错误或后台对账规则处理。图中的成功返回也不触发模型，原实例保留同次准备上下文，提交后由 Scheduler/执行推进职责取得单次启动权再进入 Runtime。
 
-**总览省略项的归属。** 扫描运行代次、启动 CAS 与失效拥有者隔离见[执行专题](execution.md#no-catch-up)；Runtime 内部按“可信目标解析→参数校验→权限判断/必要确认→业务执行→结果回传”执行，ASK、参数错误、凭据解析和 Child 传播见[非交互范围](execution.md#noninteractive)。主图中“Guard start ownership”包含持久化启动检查，检查未通过不进入模型；对账只有取得原根执行真实终态才释放占用，未知保持占用。暂停、删除、取消及晚到回调继续按下节和§9处理。
+**总览省略项的归属。** 超容差跳过、启动 CAS 与过期准备的清理见[执行专题](execution.md#no-catch-up)；Runtime 内部按“可信目标解析→参数校验→权限判断/必要确认→业务执行→结果回传”执行，ASK、参数错误、凭据解析和 Child 传播见[非交互范围](execution.md#noninteractive)。主图中“Guard start ownership”包含持久化启动检查，检查未通过不进入模型；对账只有取得原根执行真实终态才释放占用，未知保持占用。暂停、删除、取消及晚到回调继续按下节和§9处理。
 
 **源码核验边界。** 2026-10-08 确认并隔离 fetch Java 默认分支 main，旧、新提交均为 `553dcd5e2ff682f9684810a043b442b37a02e54a`。本次重读 `modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java` 的 `executeAndReschedule`、`store/CronStore.java` 的 `saveUnsafe`（同一 cron 包根），以及 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/` 下 `session/AgentSessionFactory.java#create`、`tool/cron/ManagedCronSessionRunner.java#execute`、`runtimeapi/event/RuntimeMessageEventService.java#submitLocked`、`RuntimeExecutionCoordinator.java#start`、`RuntimeEventOutput.java#persistenceOnly`（后二者同一 event 目录）和 `runtimeapi/persistence/RuntimeExecutionPersistenceService.java#acceptMessage`。源码证明公共准备、受理与推进已有分层基础，不证明上述 M10 数据库链路已实现；本次只校正职责表达，不改变产品策略、全局结构或 Agent 基线比较结论，外部基线保留原核验日期。
 
@@ -270,7 +270,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ## 9. 持久化与生命周期
 
-数据库设计集中在 [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule)，统一维护三张调度表、Session/根执行扩展、字段、约束、索引、事务及清理边界。本文不再维护另一份表模型。独立文件已对齐 PR #332 的安装 SQL 与持久化源码，明确哪些结构已在 PR 实现、哪些目标仍有差距，以及真实 GaussDB 尚未验收的范围。
+数据库设计集中在 [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule)，统一维护两张调度表（PR 中的扫描协调表目标撤销）、Session/根执行扩展、字段、约束、索引、事务及清理边界。本文不再维护另一份表模型。独立文件已对齐 PR #332 的安装 SQL 与持久化源码，明确哪些结构已在 PR 实现、哪些目标仍有差距，以及真实 GaussDB 尚未验收的范围。
 
 业务生命周期保持：Schedule 保存长期配置，Run 保存一次受理事实，Session/原根执行保存实际执行结果。删除 Schedule 同时删除 Run，保留已受理 Session 且不自动取消；单独删除 Session 不改写历史 Run 的受理事实。具体数据库关联与竞争顺序见[事务和删除约束](../../03-数据与存储/Claw数据库设计.md#transactions)，对外读取与删除回执见[配置契约](configuration.md#schedule-run-read-lifecycle)。
 
@@ -338,6 +338,7 @@ python3 scripts/render-schedule-api.py --check
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.39.0 | 2026-10-13 | 撤销扫描协调表与领跑者：各副本并行扫描，行锁与唯一约束防重；超过5秒派发容差的计划直接推进到下一次。 |
 | 0.38.0 | 2026-10-13 | Run 撤销 state 与 claim_owner/claim_epoch，未结束由 finished_at 为空表达，受理以 lease_until 防失效准备者。 |
 | 0.37.0 | 2026-10-13 | 撤销配置版本 revision 与 activeRunId；同任务不并发改由运行表部分唯一约束保证，受理锁内复核状态与 Agent 绑定并使用最新 prompt。 |
 | 0.36.0 | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
