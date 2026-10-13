@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.9.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.9.1 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -783,10 +783,11 @@ PR 的 `listRuns` 实际按父配置 `s.scope_ref` 过滤并 JOIN 配置，不�
 |---|---|---|
 | 配置创建/修改/暂停/恢复 | 最新配置与状态/原因、游标一起提交，不保存配置版本；暂停不结束在途 Run；远端授权准备在锁外，锁内重新检查其适用性 | S3；PR 创建时锁协调行检查范围配额，目标由 Mate 负责配额 |
 | 领取自动/手动 Run | 锁 Schedule，查该任务有无未完成 Run；无则插入未结束 Run（唯一约束即占用），有则插入带 finished_at 的跳过 Run；自动触发同时推进游标 | S2/S4 |
-| 最终受理 | 锁 Schedule、Run，复查配置存在与状态、配置 agent_id 与 Run.agent_id 一致、Run 未结束且 lease_until 未过、授权；首消息使用锁内读到的最新 prompt；Session、首消息、根执行/segment、Run 关联一起提交 | S4/S5；Runtime.accept 要求已有事务 |
+| 最终受理 | 锁 Schedule、Run，复查配置存在与状态、配置 agent_id 与 Run.agent_id 一致、Run 未结束且 lease_until 未过、授权；首消息使用锁内读到的最新 prompt；Session、首消息、根执行/segment、Run 关联与自动运行的 last_run_at 一起提交 | S4/S5；Runtime.accept 要求已有事务 |
 | 提交后启动 | 原实例在进程内直接启动，不写数据库启动权；PR 的 READY→STARTING CAS 目标撤销 | S5/S6；模型及业务执行不进入受理事务 |
 | 未启动过期收尾 | **目标撤销**：受理后失联统一按结果未知处理，不再有独立的未启动围栏扫描 | S5/S6 为 PR 实现 |
-| 根终态对账 | 固定原 execution，不读取 Session 后续聊天作为本次结果；写入 finished_at 即释放本任务 | S2/S4；未知或 STARTING 失联不因租约到期释放 |
+| 根终态对账 | 固定原 execution，不读取 Session 后续聊天作为本次结果；写入 finished_at 即释放本任务 | S2/S4；结果未知不释放，自动恢复见待定 T9 |
+| 过期准备与保留期清理 | 锁 Run，仅对未受理（session_id、error_type 均空）且 lease_until 已过的 Run 写入 finished_at 与错误；另按 `(finished_at, id)` 批量删除超过保留期的已结束 Run，不级联 Session | S2 |
 | 删除配置 | 锁 Schedule，在同一事务删除 Run 和 Schedule；若受理先提交则保留 Session，若删除先提交则拒绝旧准备结果 | S2/S3/S4；外键级联为一致性兜底，应用也显式删除 Run |
 
 删除不请求取消、不回滚已发生的园区业务；已受理会话通过自身权限和停止入口管理。删除后的回调只能条件更新仍存在的记录，影响行数为零时不 upsert、不重新插入。内部协调归原根执行生命周期，不能永久保留完整配置或提供隐藏 Run 历史。
@@ -947,6 +948,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.9.1 | 2026-10-13 | §5.6 补充 last_run_at 随受理提交、过期准备与保留期清理行。 |
 | 1.9.0 | 2026-10-13 | 撤销 PR 在 t_session_executions 上新增的 started_at、execution_context_json 与 schedule_start_*：受理后由原实例在进程内直接启动；lastRunAt 改为受理时刻；受理后任何时刻失联统一按结果未知处理。 |
 | 1.8.0 | 2026-10-13 | 撤销 t_schedule_dispatch_state：各副本并行扫描，以 Schedule 行锁、游标推进和 occurrence 唯一约束防重；超过派发容差的计划直接推进到下一次。 |
 | 1.7.1 | 2026-10-13 | 明确 lease_until 的取值与使用规则。 |
