@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.33.0 · 2026-10-13 |
+| 版本 | 0.34.0 · 2026-10-13 |
 | 状态 | 当前目标契约，待实现、尚未发布；包含接口收口与授权的工程细化，不表示逐项字段均经单独确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、删除、立即运行、暂停及取消暂停，以及Run读取与删除关系；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已绑定 Agent；不提供已有 Session 目标 |
@@ -39,7 +39,7 @@
 | 立即运行 | POST `/campusclaw-service/v1/schedules/{scheduleId}/run` | 200；本次已记录的Run受理结果，sessionId/error二选一；不重叠且不等待业务完成，见 §4.7 |
 | 暂停 | POST `/campusclaw-service/v1/schedules/{scheduleId}/pause` | 200；完整 Schedule，paused/manual，见 §4.8 |
 | 取消暂停 | POST `/campusclaw-service/v1/schedules/{scheduleId}/unpause` | 200；完整 Schedule，active/null，见 §4.9 |
-| 运行列表 | GET `/campusclaw-service/v1/schedule-runs` | 200；runs/nextPage；当前可见范围，可选scheduleId/hasError，不包含已删除任务的Run，见 §4.11 |
+| 运行列表 | GET `/campusclaw-service/v1/schedule-runs` | 200；runs/nextPage；当前可见范围，可选scheduleId/hasError/triggerType/from/to，不包含已删除任务的Run，见 §4.11 |
 | 运行详情 | GET `/campusclaw-service/v1/schedule-runs/{runId}` | 200；同形完整Run；任务或Run已删除时404，见 §4.11 |
 
 定时任务全部接口不采用 If-Match 或 Idempotency-Key，不返回配套 ETag；额外传入这两个 Header 时按普通未知 Header 忽略，不赋予并发或去重语义，也不专门因此报错。不把版本或请求键改放请求体、查询参数或其他自定义 Header；创建、读取、更新、删除，以及后续试运行、暂停、恢复和 Run 读取均沿用这一接口约束。数据库内部的 Run 身份、自动触发唯一约束和同任务未完成 Run 唯一约束继续保留。同一约束适用于已有 Session 等其他 Claw 接口；现有源码迁移差距见[专项证据](source-evidence.md#schedule-header-free-contract)。各操作的具体规则集中在下文。
@@ -1006,6 +1006,8 @@ Accept-Language: zh-CN
 | limit | 正整数，默认50，范围1～200；越界拒绝，不截断 |
 | scheduleId | 可选，服务端原ID精确匹配；省略查询当前可见的所有任务；有效但不存在、已删除或不可见的ID返回空列表，不泄露资源存在性 |
 | hasError | 可选，只接受true/false；true筛选error非空，false筛选sessionId非空；只表示Session受理结果，不是业务成败 |
+| triggerType | 可选，只接受manual/schedule；按触发方式筛选，对应Claude的trigger_type；省略返回两种 |
+| from / to | 可选，按Run的createdAt筛选半开区间 `[from, to)`；UTC秒级Z格式，与[按Agent查询事件](../01-CampusClaw多Agent运行时/agent-user-events-design.md)的from/to写法一致；可只给一端，同时给出时须 from < to，否则400；不设跨度上限，数据量由Run保留期约束。对应Claude的created_at[gte]/[lt]，不提供gt/lte变体 |
 
 重复标量、未知参数、非法ID、非空正文或错误类型返回400/SCHEDULE_REQUEST_INVALID；详情不接受业务查询参数。列表按`createdAt DESC,id DESC`排序，在同一一致性边界过滤并读取limit+1条，额外一条仅判断nextPage；有后续时为page+1，否则null。空页或超末页均为200、runs:[]、nextPage:null。普通OFFSET翻页会因新记录、删除或保留期清理出现重复/遗漏；筛选变化时从page1重读，不能用于可靠增量同步或证明某次运行未发生。
 
@@ -1126,7 +1128,7 @@ Accept-Language: zh-CN
 
 删除验收须覆盖：active/paused、有无Cron均可删除；200/ResultBean完整资源且字段集合与创建/详情/更新一致；原schedule:null保持、Cron后续计划为空、状态/暂停原因保留最后值、创建时间保留且修改时间采用删除事务记录时间；删除回执不触发客户端恢复记录；非法请求400、认证401、功能403、资源404、内部500和依赖503；重复/不存在及记录级不可见均404且不泄露存在性，不为未知ID建墓碑；依赖故障不伪装成不存在；删除后GET404、列表及limit+1查询排除、旧更新/启停/新受理拒绝且不复活；双删除、删除与更新/受理两种事务顺序；对应全部Run删除且详情404/各列表排除、已生成Session与内容保留并可独立授权访问；仅准备不受理，不新增删除后的失败Run；晚到终态不复活Run/配置、不重排；删除不请求取消已受理Session，单独删除Session保留Run受理事实及sessionId；不级联删除Agent/共用凭据/会话附件；超时有界重试、无请求键；内部协调记录不可作为Run读取且安全收尾后清理；内部标记不进入JSON、ID不复用。上述为目标验收清单，未执行产品测试。
 
-动作验收须覆盖：run/pause/unpause无正文且禁止配置覆盖；200 Run的sessionId/error恰好一个非空、类型为schedule_run且不跟踪业务完成；同一Run受理成功后执行失败不重写创建结果；有无Cron、active/paused均可手动尝试，手动不改status/pausedReason/自动游标/lastRunAt；受理失败可靠落Run与无法可靠记录的HTTP错误区分；重复调用不合并、响应丢失不自动重发；新Session/首消息/根执行/Run关联整体提交或回滚。已确认不重叠规则的实现验收须覆盖自动/手动竞争、失败不释放别次占用、未知执行保持占用；Run查询与可信执行身份接线是上线依赖。Run读取还须覆盖scheduleId/hasError组合、createdAt DESC/id DESC同秒顺序、数字页码边界、无total、被删除或不可见任务的列表空/详情404，以及单独删除Session保留sessionId和原受理结果。
+动作验收须覆盖：run/pause/unpause无正文且禁止配置覆盖；200 Run的sessionId/error恰好一个非空、类型为schedule_run且不跟踪业务完成；同一Run受理成功后执行失败不重写创建结果；有无Cron、active/paused均可手动尝试，手动不改status/pausedReason/自动游标/lastRunAt；受理失败可靠落Run与无法可靠记录的HTTP错误区分；重复调用不合并、响应丢失不自动重发；新Session/首消息/根执行/Run关联整体提交或回滚。已确认不重叠规则的实现验收须覆盖自动/手动竞争、失败不释放别次占用、未知执行保持占用；Run查询与可信执行身份接线是上线依赖。Run读取还须覆盖scheduleId/hasError/triggerType/from/to组合、from≥to与非秒级时间拒绝、createdAt DESC/id DESC同秒顺序、数字页码边界、无total、被删除或不可见任务的列表空/详情404，以及单独删除Session保留sessionId和原受理结果。
 
 暂停/取消暂停验收须覆盖：200完整字段与创建/详情一致；暂停保留假设恢复后的Cron计划时间；schedule:null不伪造计划；manual/error原因转换、同值操作不更新时间；取消暂停只从未来匹配继续、不立即运行、不补跑；重复unpause不推迟现有游标；恢复校验明确失败保留原状态/原因，依赖未知503；pause与最终自动受理两种顺序、pause→unpause不放行旧代次、在途收尾不覆盖人工状态；消息/凭据并发更新不被旧快照覆盖；本文目标不构成产品测试通过。
 
@@ -1136,6 +1138,7 @@ Accept-Language: zh-CN
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.34.0 | 2026-10-13 | Run列表新增triggerType筛选与createdAt时间范围from/to，分页保持页码。 |
 | 0.33.0 | 2026-10-13 | 更新接口补充已领取未受理运行读取最新配置的规则，措辞统一为 prompt，去掉并发冲突说法。 |
 | 0.32.0 | 2026-10-13 | 撤销配置版本 revision 与 activeRunId；同任务不并发改由运行表部分唯一约束保证，受理锁内复核状态与 Agent 绑定并使用最新 prompt。 |
 | 0.31.0 | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
