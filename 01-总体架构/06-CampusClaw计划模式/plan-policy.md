@@ -96,7 +96,7 @@ AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建�
 
 [TodoUpdate description](todo-update.md#todo-tool-contract)维护 build 调用范围、完整清单、状态、完成且验证后立即更新及简单任务省略；BUILD.md 与批准引导只保留“多步实施先建清单、再做第一步”这一句入口提示，不复制状态与更新细则。只靠工具描述时，模型在批准后常先实施第一步，到第二步才建清单：批准引导和 BUILD.md 都只要求“继续实施”，离当前动作最近的指令没有建清单这一步。Codex 同样在系统提示词的 `update_plan` 一节要求动手前建计划，而不只依赖工具描述，见[证据 §18.4](source-evidence.md#todo-first-call)。“是否多步”需要语义判断，不能由 Runtime 判定并拒绝。取消项不伪装为完成、调用失败不声称同步等细节也由工具描述承载。前端仍消费成功提交的 agent.todo_updated，不因文本简化改变事件作用域或事务。
 
-[AskUserQuestion description / Schema](ask-user-question.md#3-工具契约)维护问题参数、独占调用、等待真实答案、答案不批准及失败不代表同意；基础 SYSTEM 维护必要性和默认一题。两模式工具定义相同，工具未装配时不生成虚构调用、不补装工具，不按模式复制 description。
+[AskUserQuestion description / Schema](ask-user-question.md#3-工具契约)维护问题参数、末位调用、等待真实答案、答案不批准及失败不代表同意；基础 SYSTEM 维护必要性和默认一题。两模式工具定义相同，工具未装配时不生成虚构调用、不补装工具，不按模式复制 description。
 
 ## 7. 工具描述与结果引导
 
@@ -152,6 +152,7 @@ Submit a complete Markdown plan for review while the Main Agent is in plan mode.
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | 2.6.0 | 2026-10-13 | 批准引导与 BUILD.md 增加“多步实施先建清单”入口提示，修正首次 TodoUpdate 偏晚。 |
+| 2.5.1 | 2026-10-13 | AskUserQuestion description 改为维护末位调用规则。 |
 | 2.5.0 | 2026-09-28 | 模型用完整 plan 参数提交方案，批准后从同次调用参数恢复执行。 |
 | 2.4.0 | 2026-09-19 | Main Agent 用唯一闭合计划标记输出方案，再以同响应空参数退出调用提交审核。 |
 | 2.3.0 | 2026-09-19 | 模型在同响应中先输出完整正文，再以空参数退出调用提交审核。 |

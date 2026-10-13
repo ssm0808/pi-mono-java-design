@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.23.0 |
-| 更新日期 | 2026-10-12 |
+| 文档版本 | 1.24.0 |
+| 更新日期 | 2026-10-13 |
 | 状态 | 完整 plan 参数、AI 通用部分 JSON 与计划两 phase 投影已在 PR #336 实现，未合入 main；Mate 桥接待实现，真实模型验收未完成 |
 | 计划长度专项基线 | 2026-10-09 fetch DeepSeek master `5badb15009ae1756c3afe0ae0cef1faafc290ccc`（plan-mode 0.2.1-alpha.1）及 pi main；仅升级长度核验，见[证据 §17](source-evidence.md#plan-length-baseline) |
 | 计划模式主基线 | 2026-09-28 fetch DeepSeek master `4878cdabd87d4041bdaff61d04c966883b9fd07a`（plan-mode 0.2.0-rc.1），参数退出与调用流对照 Codex/pi；旧新提交、路径及范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence) |
@@ -78,7 +78,7 @@
 
 1. 用户在空闲 Session 通过更新 `mode=plan` 进入计划模式，成功响应返回提交后的完整 Session 资源。
 2. 用户提交普通消息。工厂恢复当前模式并加入计划提示词；Agent 使用已有工具调研。
-3. 仅在存在不能自行查明的关键问题时，Agent 单独调用 AskUserQuestion；后端保存 agent.question 与 confirming，Session 仍 running/plan。前端逐题收集，同一批完整答案一次提交 user.question_answer 后原执行继续；无待决问题直接进入方案阶段，未装配工具时才普通回复提问。
+3. 仅在存在不能自行查明的关键问题时，Agent 以本次响应最后一个工具调用的方式调用 AskUserQuestion；后端保存 agent.question 与 confirming，Session 仍 running/plan。前端逐题收集，同一批完整答案一次提交 user.question_answer 后原执行继续；无待决问题直接进入方案阶段，未装配工具时才普通回复提问。
 4. Agent 直接生成 ExitPlanMode({plan}) 参数，后端对已确认的内置调用发送 agent.plan delta；完整响应的唯一调用经过最终参数校验与准备后提交审核，事务成功才发送同 ID completed 与 confirming 并关闭本段 SSE。参数流接线在 PR #336 已实现，公共事件与审核协议复用既有能力。
 5. “修改计划”提交 `result=revise` 和可选反馈；原执行继续规划，重新提交时产生新的计划 eventId。
 6. “执行计划”提交 `result=approve`；服务端原子接受决定、关闭计划模式并创建续跑段。原执行收到决定后更新提示词，返回工具结果，下一次模型请求创建实施清单并开始实施；逐项完成及验证后调用 TodoUpdate 更新进度。
@@ -184,7 +184,7 @@
 
 开发分支已通过 RuntimeEventService 接收五类输入；user.question_answer 转交应用服务，分派处不实现答案或审核业务规则。
 
-公共 `AgentTool` 接口保持不变。`ExitPlanMode` 使用现有 `SEQUENTIAL`；从 `BeforeToolCallContext.preparedInvocation` 读取同次最终准备快照，并在 `assistantMessage` 中校验该响应只包含一个 ToolCall，防止一张审核卡与同批其他调用共用等待点。该检查只约束审核协议，不用于识别或阻断其他业务工具的副作用。
+公共 `AgentTool` 接口保持不变。`ExitPlanMode` 使用现有 `SEQUENTIAL`；从 `BeforeToolCallContext.preparedInvocation` 读取同次最终准备快照，该响应只包含 ExitPlanMode 这一个 ToolCall 的条件由批次规划在任何调用执行前检查，违规时整批返回 `TOOL_BATCH_INTERACTION_INVALID`（待实现，规则见 [M03 §7.1](../02-CampusClaw工具系统/README.md#interactive-tool-batch)）；计划绑定只校验计划来源与调用身份。保持唯一而非仅要求末位，是因为 plan 模式中排在前面的只能是调研调用，方案应基于模型已看到的调研结果。
 
 ## 4. 提示词与工具装配
 
@@ -282,7 +282,7 @@ Session 是配置权威资源。当前内部契约以统一 POST 更新名称、
 
 - approve、revise、重复确认之间只允许一个事务成功；其余返回 `PLAN_CONFIRMATION_NOT_PENDING`。不因重复请求生成新的执行段。
 - 中断先提交时拒绝确认；确认先提交后中断仍定位同一个根执行，新段按正常停止流程处理。若原执行尚未领取批准就已停止，不继续实施，也不撤销已经保存的用户批准事实；真实根执行终态与未领取决定的 `CANCELED` 收尾在同一事务完成，详见[统一消费状态](../01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)。
-- 计划必须作为该 Assistant 的唯一 ToolCall 提交；校验失败时不建立审核等待，返回工具错误供模型修正。该规则不承诺撤销同批已经执行的其他调用。
+- 计划必须作为该 Assistant 的唯一 ToolCall 提交；与其他调用同批时，批次规划在任何调用执行前整批拒绝并返回 `TOOL_BATCH_INTERACTION_INVALID`，不建立审核等待，模型下一轮单独提交（待实现，见 [M03 §7.1](../02-CampusClaw工具系统/README.md#interactive-tool-batch)）。
 - 问题回答、计划审核与工具授权共用“最多一个待交互”不变量；类型不得互相消费。`user.tool_confirmation` 不能消费计划等待，`user.plan_confirmation` 不能消费工具权限等待。
 - 终态、取消、超时和清理路径必须清除待审核指针并取消等待 Future；先提交可靠终态，再释放资源准入。HTTP 关闭不会触发这些操作。
 
@@ -373,7 +373,8 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.23.0 | 2026-10-13 | plan 模式调用 TodoUpdate 在执行前被拒绝，前端清单派生改记为 executionTodos，批准后多步实施先建清单。 |
+| 1.24.0 | 2026-10-13 | plan 模式调用 TodoUpdate 在执行前被拒绝，前端清单派生改记为 executionTodos，批准后多步实施先建清单。 |
+| 1.23.0 | 2026-10-13 | 计划提交与其他工具同批时在执行前整批拒绝，不再让同批其他调用先行执行。 |
 | 1.22.1 | 2026-10-10 | 关联 Claw 数据库设计中的计划审核决定表，保持业务与接口规则。 |
 | 1.22.0 | 2026-10-09 | 取消计划正文最大字符数，保留内容有效性、审核绑定与完整事件容量约束。 |
 | 1.21.0 | 2026-10-09 | 计划预览消费 AI 通用部分参数快照与内部诊断，同步 PR 实现及兼容性边界。 |

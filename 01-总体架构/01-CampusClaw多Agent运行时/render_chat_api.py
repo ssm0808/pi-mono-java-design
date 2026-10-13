@@ -41,7 +41,7 @@ def load_catalog() -> tuple[dict, list[dict]]:
         keys.add(key)
         identities.add(identity)
         sources.add(source.resolve())
-    active_sources = {path.resolve() for folder in ("接口契约/操作", "事件契约/操作", "统计契约/操作")
+    active_sources = {path.resolve() for folder in ("接口契约/操作", "事件契约/操作", "统计契约/操作", "查询契约/操作")
                       for path in (ROOT / folder).glob("*.json")}
     shared.require(sources == active_sources, "Every active operation must be registered exactly once")
     return manifest, models

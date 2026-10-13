@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.91.0 |
-| 更新日期 | 2026-10-12 |
+| 文档版本 | 1.92.0 |
+| 更新日期 | 2026-10-13 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -328,6 +328,8 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 验收 | Q1～Q5 对应 clean verify 2085 项、独立数据库 140 项及前端 172 项通过；实际 JAR HTTP 继续/竞争/中断、214 契约样例、10 投影场景和浏览器 18 项检查通过。公司 NativeParent 缺失、外部 Mate 与真实模型未验证；完整环境边界见主设计 §2。 |
 
 **讲解要点。** 借鉴 DeepSeek 的工具式提问，将 UI 等待接入 CampusClaw 已有执行段和控制事务。用户回答成为原调用结果，前端消费显式问题；计划批准与工具权限保持独立。获得精确关联和原根续跑的同时，需要维护答案交接与恢复，元数据结构保持稳定。
+
+**同批位置专项（2026-10-13，M03/M01）。** 问题：一次响应里先更新进度、再请求现场确认，能否一起执行？本次 fetch 各默认分支：Codex main `90f00bd89ed3263b4d5993849cccb795f4330449` 的 `codex-rs/core/src/tools/handlers/request_user_input.rs#handle_call` 不检查同批调用，未声明并行时由 `tools/router.rs#tool_supports_parallel` 与 `tools/parallel.rs` 的执行锁串行处理；OpenCode dev `c1615b1db9c2e7a955f2be1024e84bb74c90cc6b` 的 `packages/core/src/tool/plugin/question.ts` description 与执行均无同批约束；DeepSeek Harness master `d743267388641bc76f17c45ce8b4c231aed1d32c`（0.2.1-alpha.2）的 `packages/interaction/tool-ask-user/src/index.ts` 与 `packages/plan/plan-mode/src/index.ts#exit_plan_mode` 同样不限制，调度见 `packages/core/agent-loop/src/tool-calls.ts`。Claude Code 未开源，本次不作证据。三者都把提问当作普通串行调用，排在后面的调用会在拿到答案前执行。CampusClaw 规定提问与用户确认 Tool 必须是本批最后一个调用、每批最多一个，ExitPlanMode 仍须单独调用，违规时在执行前整批拒绝；这是产品约束，避免依赖答案的动作先行，同时放行 TodoUpdate 等前序调用。代价是批次规划前置一次只读交互识别，违规时多一次模型往返。Java main `2b3bad05416c5ef67c6a6e085b210319d1f1b34a` 仍要求唯一调用且在调用自身 before hook 检查，目标待实现；规则、源码差距与验收由 [M03 §7.1](../02-CampusClaw工具系统/README.md#interactive-tool-batch) 维护，只升级本专项范围。
 
 <a id="a09"></a>
 
@@ -726,7 +728,8 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.91.0 | 2026-10-12 | A05 增加 plan 模式拒绝 TodoUpdate 的执行前门禁及 Codex 对照。 |
+| 1.92.0 | 2026-10-13 | A05 增加 plan 模式拒绝 TodoUpdate 的执行前门禁及 Codex 对照。 |
+| 1.91.0 | 2026-10-13 | A08 增加交互工具同批位置对比，提问与用户确认须为末位调用、计划提交须单独调用。 |
 | 1.90.1 | 2026-10-12 | A16 的问题改为 Trace 场景。 |
 | 1.90.0 | 2026-10-12 | 新增 A16，对比按 Agent 跨会话查询用户事件与按事件读取轮次的基线做法。 |
 | 1.89.0 | 2026-10-10 | A14 明确 Mate 独立维护资源归属和权限，记录 PR #332 的身份职责偏差及交接代价。 |

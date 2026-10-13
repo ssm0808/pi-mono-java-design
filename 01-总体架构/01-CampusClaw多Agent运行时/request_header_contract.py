@@ -1,9 +1,10 @@
-"""Validate operation-specific request headers across the ten-operation catalog."""
+"""Validate operation-specific request headers across the current catalog."""
 
 CREDENTIALS = {"X-HW-ID", "Authorization", "X-HW-APPKEY", "access-token"}
 EXECUTION = {"SubmitSessionEvent", "ExecuteSessionCommand"}
 JSON_BODY = EXECUTION | {"UpdateSession", "QuerySkillLoadStatistics"}
-JSON_MODE = {"UpdateSession", "QuerySkillLoadStatistics", "ListSessionEvents"}
+JSON_MODE = {"UpdateSession", "QuerySkillLoadStatistics", "ListSessionEvents",
+             "ListAgentEvents", "ListTurnEvents"}
 RETIRED_HEADERS = {"if-match", "idempotency-key", "etag"}
 RETIRED_INPUTS = {"ifMatch", "etag", "expectedVersion", "resourceVersion", "revision",
                   "version", "clientVersion", "idempotencyKey", "requestKey", "requestId"}

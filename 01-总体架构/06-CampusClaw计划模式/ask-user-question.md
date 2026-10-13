@@ -1,8 +1,8 @@
 # AskUserQuestion：结构化提问与原执行续跑
 
-版本：1.7.1；日期：2026-10-10。状态：主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已实现 Runtime 问答、工具装配、逐题展示、工具日志汇聚和两文件提示词装配，见[源码证据 §12](source-evidence.md#12-主线实现状态核验2026-09-18)。Mate 公共接入待实现；业务 SYSTEM 发布与真实模型行为未核验。既有独立测试仍绑定 §2 所列 9f785bea，本次未重跑。
+版本：1.8.0；日期：2026-10-13。状态：同批位置规则（本页 §3、§6.2）待实现，Java main `2b3bad05` 仍要求唯一调用；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已实现 Runtime 问答、工具装配、逐题展示、工具日志汇聚和两文件提示词装配，见[源码证据 §12](source-evidence.md#12-主线实现状态核验2026-09-18)。Mate 公共接入待实现；业务 SYSTEM 发布与真实模型行为未核验。既有独立测试仍绑定 §2 所列 9f785bea，本次未重跑。
 
-本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#SubmitSessionEvent)。模式仅使用 PLAN.md/BUILD.md；必要性、优先一题和简洁结果使用归基础 SYSTEM，工具独占调用与等待规则归本页 description/共享 Schema，不保留独立 ASK_USER 资源。装配与迁移由 [plan-policy.md](plan-policy.md) 维护。
+本专题归 M01 的人机交互生命周期，关联 M03 工具装配、M06 事件契约和 M07 前端。它维护工具语义、等待与续跑、状态及验收；精确 Schema、事件字段和报文由 [共享事件源](../01-CampusClaw多Agent运行时/事件契约/common.json) 的 `questionContract`、[POST Events](../01-CampusClaw多Agent运行时/事件契约/操作/01-submit-session-event.json) 和 [GET Events](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json) 唯一维护，并生成[当前接口页](../01-CampusClaw多Agent运行时/chat-api-review.html#SubmitSessionEvent)。模式仅使用 PLAN.md/BUILD.md；必要性、优先一题和简洁结果使用归基础 SYSTEM，同批位置规则由 [M03 §7.1](../02-CampusClaw工具系统/README.md#interactive-tool-batch) 维护，本页 description/共享 Schema 向模型表达位置与等待规则，不保留独立 ASK_USER 资源。装配与迁移由 [plan-policy.md](plan-policy.md) 维护。
 
 提问答案交接的表结构、约束和索引统一见 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#t_session_question_answers)；本文维护交互与执行规则，不另定义物理表。
 
@@ -69,7 +69,7 @@ Main Agent 先检查已有信息；只有用户掌握的信息或重要选择仍
 固定 description：
 
 ```text
-Ask the user one to three concise questions when required information or a user-owned choice blocks further work. Use stable question ids, optional choices and optional multiSelect; free text is always supported. Ask only what cannot be established by inspecting available information. This must be the only tool call in the assistant response. Wait for the returned answers before continuing the same task. Answers do not approve a plan, change mode, or replace business-tool permission confirmation. Never invent an answer or treat cancellation, silence or failure as consent.
+Ask the user one to three concise questions when required information or a user-owned choice blocks further work. Use stable question ids, optional choices and optional multiSelect; free text is always supported. Ask only what cannot be established by inspecting available information, including what earlier tool calls in the same response will establish. Make this the last tool call in the assistant response and do not call another user-interaction tool in the same response. Wait for the returned answers before continuing the same task. Answers do not approve a plan, change mode, or replace business-tool permission confirmation. Never invent an answer or treat cancellation, silence or failure as consent.
 ```
 
 ## 4. 整体交互与事件
@@ -80,7 +80,7 @@ Ask the user one to three concise questions when required information or a user-
 
 [原尺寸 SVG](ask_user_question_sequence.svg) · [PlantUML 源码](diagram.puml#L605)
 
-1. Agent 形成完整 `AskUserQuestion` ToolCall；该 Assistant 响应只能包含这一项 ToolCall，普通说明文本可同时存在。框架先校验 Schema，Runtime 再从最终调用解析一个不可变问题快照；before hook、等待对象、持久化事件和工具端口共享该快照，不从普通回复提取问题，也不再次各自解析不同版本。
+1. Agent 形成完整 `AskUserQuestion` ToolCall；它必须是该 Assistant 响应的最后一个 ToolCall，同批不得有其他交互工具，排在前面的调用照常执行，普通说明文本可同时存在。框架先校验 Schema，Runtime 再从最终调用解析一个不可变问题快照；before hook、等待对象、持久化事件和工具端口共享该快照，不从普通回复提取问题，也不再次各自解析不同版本。
 2. 既有路径保存唯一 `agent.tool_call`，`requiresConfirmation=false`。随后在同一短事务保存 `agent.question`、`session.status_idle(reason=confirming)`，登记内部等待目标并关闭旧段；提交后推送并关闭本次 SSE。`confirming` 统一表示本段等待用户处理，具体是提问、计划审核还是授权由对应完整事件确定；它不是执行成功或 Session idle。
 3. 前端直接消费 `agent.question.questions`，显示当前一题及题号；前进、返回和答案编辑只更新本地草稿，末题完整校验后一次提交。问题卡吸收按同一 sourceEventId/toolCallId 关联的调用和结果，主对话不重复显示原始 JSON；无需根据工具名称或工具参数解析问卷。Session 保持 running，mode 不变，Agent 在该工具处等待；不能提交下一条普通消息，也不能手动修改执行配置。
 4. 用户在最后一题点击“提交回答”，沿用 `POST /campusclaw-service/v1/sessions/{sessionId}/events`，事件为 `user.question_answer`。`targetEventId` 精确指向这张 `agent.question.eventId`；不是问题条目的 id、toolCallId 或根消息 id。请求不复制问题、选项或方案。
@@ -128,13 +128,13 @@ SSE 和 GET 历史的两种新事件完全同形，无 phase/delta。agent.quest
 
 - 同一目标只能接受一次完整答案；重复提交及两客户端竞争只有一个成功，其余 `QUESTION_ANSWER_NOT_PENDING`。答案缺题、多题、重复 id、未知选项或违背单选规则返回 `QUESTION_ANSWER_INVALID`，不写部分答案，也不关闭等待。
 - 任何一种等待只能被对应输入消费。权限确认/计划批准不能回答问题，question_answer 不能消费权限或计划等待；生成问题的前置调用必须已提交。只校验当前待交互，不根据“最新一条问题”猜测目标。
-- AskUserQuestion 与其他 ToolCall 同批时，不建立问题等待，返回 `USER_QUESTION_UNAVAILABLE`；该规则不承诺撤销同批已执行的其他工具。参数错误沿用 TOOL_ARGUMENTS_INVALID。
+- AskUserQuestion 之后还有 ToolCall，或同批出现其他交互工具时，批次规划在任何调用执行前整批拒绝，每个调用返回 `TOOL_BATCH_INTERACTION_INVALID`，不建立问题等待，规则见 [M03 §7.1](../02-CampusClaw工具系统/README.md#interactive-tool-batch)。参数错误沿用 TOOL_ARGUMENTS_INVALID。
 - 中断先提交则拒绝答案；答案先提交则停止仍针对同一根执行，并使用数据库当前段可靠收尾。持久化成功的回答事实保留，但不能被解释成一定已续跑；超时回调与重试也必须重新检查当前段，避免旧段终态失败后永久 running。
 - 已接受而未领取的答案随真实根执行终态在同事务变为 `CANCELED`；只进入 STOPPING 不提前取消消费，已经领取的记录保持原状态。时间约束、回滚与幂等要求统一见[Session Events §4.6](../01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)，取消消费不改写答案回执或伪造模型已获得答案。
 - 关闭卡片、切会话、SSE 断开和浏览器退出都不提交答案，也不取消任务。显式停止走 user.interrupt，目标是原 user.message.eventId；等待计入既有执行 maxDuration，不新增客户端自定义超时或无限等待。
 - 取消/超时唤醒等待为失败，模型不能编造答案；有可靠退出事实时提交真实终态，再释放 Session 和执行容量。答案已接受而续跑失败沿用 EXECUTION_RESUME_FAILED；不能回头返回声称未接受的 JSON。
 
-新增 HTTP 错误同时维护枚举/resCode/MessageSource zh-CN、en-US；稳定工具失败码 USER_QUESTION_UNAVAILABLE 与既有参数、超时、执行失败码分工。接口 Header、access-token、ResultBean、无幂等键、data-only SSE 等现有规则保持。
+新增 HTTP 错误同时维护枚举/resCode/MessageSource zh-CN、en-US；稳定工具失败码 USER_QUESTION_UNAVAILABLE 与既有参数、超时、执行失败码及批次位置码 TOOL_BATCH_INTERACTION_INVALID 分工。接口 Header、access-token、ResultBean、无幂等键、data-only SSE 等现有规则保持。
 
 ### 6.3 断线与模型历史
 
@@ -170,7 +170,7 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 
 | 切片 | 实施内容 | 必须验收 |
 |---|---|---|
-| Q1 契约及工具 | 严格 Schema/DTO/VO、Parser、Port/Adapter、枚举/profile、两种新事件及错误 | 单/多/纯文本；UTF-16、strip、重复/未知/null/缺题/选项归属；Runtime 两模式工具定义相同；Child/Cron 拒绝；无元数据和 Session 字段扩展 |
+| Q1 契约及工具 | 严格 Schema/DTO/VO、Parser、Port/Adapter、枚举/profile、两种新事件及错误 | 单/多/纯文本；TodoUpdate 在前、提问在末位时两者成功，提问后仍有调用或同批两个交互工具时整批 TOOL_BATCH_INTERACTION_INVALID 且无调用执行（待实现）；UTF-16、strip、重复/未知/null/缺题/选项归属；Runtime 两模式工具定义相同；Child/Cron 拒绝；无元数据和 Session 字段扩展 |
 | Q2 等待与事务 | 收敛唯一待交互槽；问题/confirming/指针同事务；答案/回执/新段同事务；答案领取与消费 | tool_call 前置；共享不可变快照；错误无卡片；三类不能互相消费；插入失败整笔回滚；在工具 await 前已领取答案仍正常返回；原根与凭据不变 |
 | Q3 控制及恢复 | 跨实例轮询与单次领取、中断/超时、可靠终态、删除和保留清理 | 回答/回答、回答/停止、回答/超时竞争；未领取答案随真实终态取消消费且回执保留；STOPPING/回滚/已领取记录不误改；原段关闭；新段首帧完整回执；不重放写；失联不假装成功或自动接管 |
 | Q4 前端及桥接 | QuestionCard/Store、规范化提交、同 reducer 历史恢复；需要企业入口时同步 Mate 公共契约 | 单/多/文本展示无需工具日志；缺页禁答、重复帧、跨端已回答、回执丢失、切会话草稿、IME/键盘/390px；plan 不建 TODO，build 回答不重置清单；已实现展示的验收要求：当前仅一题可见、翻页不 POST、末题仅一次提交、前后导航保留答案、调用/结果汇聚且失败可见、收起不提交 |
@@ -182,6 +182,7 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.8.0 | 2026-10-13 | 提问必须是本批最后一个工具调用且每批最多一个交互工具，违规时整批拒绝。 |
 | 1.7.1 | 2026-10-10 | 关联 Claw 数据库设计中的提问答案交接表，保持业务与接口规则。 |
 | 1.7.0 | 2026-10-04 | 问答控制保留内部版本与事务边界，取消公共 ETag 依赖。 |
 | 1.6.0 | 2026-09-22 | 回答受理按 Session 线性历史核对问题，保留根与执行准入。 |
