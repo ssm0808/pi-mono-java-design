@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.39.0 |
+| 文档版本 | 0.40.0 |
 | 更新日期 | 2026-10-10 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -196,14 +196,14 @@ public void summarizeAlarms() {
 1. **分配 occurrence（Schedule）。** Scheduler 按 upcomingRunAt/id 执行有界批次，任务按 upcomingRunAt/id 稳定扫描；Schedule 的领取职责使用短事务，锁定 Schedule，复核未删除、active 和到期时间；插入唯一 Run 并推进下一次游标，运行表“同一任务至多一条未完成 Run”的唯一约束即是本任务的占用。已有未完成 Run 时记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/删除操作与领取竞争同一行锁。
 2. **可信准备（Schedule 协调 Mate 与 Runtime）。** 事务外解析 Agent 已发布目录、模型、CRON profile、工作区及执行资格，固定一次 `PreparedScheduleRunDTO`。准备还须固定拟建 Session ID 并取得 Mate 归属登记确认；可以失败，但不调用模型或执行业务工具。远端授权检查不能持有数据库行锁。
 3. **原子受理（Schedule 协调 Store）。** 新增 `ScheduledRunAcceptanceService` 在同一事务复核 Schedule 存在且未删除、状态、Agent 绑定与领取时一致、Run 未结束且 lease_until 未过、授权断言有效期与容量；自动触发还用数据库当前时间复核派发期限；创建新 Session、首条用户消息（使用最新 prompt）、根 execution/segment，并写回 Run 的唯一关联。任一步失败整体回滚。暂停或 Agent 绑定变更先提交时，旧自动 Run 结束为跳过；仅修改 prompt 或时间规则不取消已领取的这次运行；删除与最终受理共享同一数据库权威，删除先提交则不再受理，受理先提交则保留已生成Session并将Run纳入删除，已受理执行继续由原Session管理，停止由Session入口单独发起。同库受理是待实现目标，不能由旧Cron的本地取消句柄推导已经具备该保证。
-4. **事务后启动（Scheduler 推进 Runtime）。** 受理不等待 Agent 完成。持有本次完整准备快照的原 Runtime 实例，以持久化的单次启动 CAS 标记由 READY 转为 STARTING 后启动公共执行链，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件。后台执行不需要伪造浏览器 SSE 连接。
+4. **事务后启动（Scheduler 推进 Runtime）。** 受理不等待 Agent 完成。持有本次完整准备快照的原 Runtime 实例在进程内直接启动公共执行链，调度上下文只在内存中传递，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件。后台执行不需要伪造浏览器 SSE 连接。
 5. **结果对账（Scheduler 读取 Store）。** 按受理时固定的根execution读取权威终态，仅在Schedule/Run仍存续时幂等更新其摘要，并写入 Run.finished_at 以释放本任务；删除后只完成原Session、根执行及必要内部协调，不重新插入Run或配置。既有根执行是终态权威，仍存续任务的摘要可通过重读根execution修复；后续人工对话不会改写该次运行的结论。
 
 第一阶段限定 Schedule、Run 与 Runtime 受理记录位于同一事务资源。现有 HTTP 创建 Session 和提交消息不提供此受理原子性，不能串联它们并在断连后重复 POST。跨数据库或独立外部调度服务的受理协议不在此实现切片内，需另行设计内部 Run 身份关联和只读对账能力，不据此要求调用方提交请求键。
 
 自动和手动受理均要求配置存在且未删除；自动受理要求 active，手动受理允许 active/paused，不移动计划游标、不应用自动 occurrence 的迟到窗口。未受理 Run 的失败/跳过必须在收尾事务中按 runId 且 finished_at 为空的条件写入 finished_at；重叠跳过插入时即带 finished_at，不影响另一条未结束 Run。准备失败或运行完成的收尾不得恢复已删配置、重新插入已删Run或安装计划；删除后只完成必要内部协调，不补写可查询的失败Run。
 
-同一任务的占用由运行表部分唯一约束 `UNIQUE(schedule_id) WHERE finished_at IS NULL` 保证，领取另锁定 Schedule 行；自动 occurrence 的唯一约束防重复分配，同一内部 runId 的受理复用原关联，启动 CAS 防重复调用入口。受理须在锁内确认 Run 未结束且 lease_until 未过；准备者失效后由清理结束本次未受理结果，不由新节点重新准备执行。这些内部机制不合并不同手动调用，也不能被宣传为外部业务 exactly-once：工具副作用仍受下游业务幂等和已执行结果对账约束。
+同一任务的占用由运行表部分唯一约束 `UNIQUE(schedule_id) WHERE finished_at IS NULL` 保证，领取另锁定 Schedule 行；自动 occurrence 的唯一约束防重复分配，同一内部 runId 的受理复用原关联；启动由受理成功的同一线程本地调用一次，没有重复通知。受理须在锁内确认 Run 未结束且 lease_until 未过；准备者失效后由清理结束本次未受理结果，不由新节点重新准备执行。这些内部机制不合并不同手动调用，也不能被宣传为外部业务 exactly-once：工具副作用仍受下游业务幂等和已执行结果对账约束。
 
 <a id="run-admission-sequence"></a>
 
@@ -219,9 +219,9 @@ public void summarizeAlarms() {
 
 Mate 的授权和 Runtime 准备都发生在数据库受理事务之前。准备成功只固定本次上下文；Schedule 在最终事务中复核最新配置、领取资格、授权期限与容量，不能拿准备结果替代可变状态校验。图中的 Runtime 准备与既有 `AgentSessionFactory.create` 的内存对象装配有关，不等于已创建公共持久 Session，也不等于已经发送模型请求。
 
-Store 返回“确定拒绝”须以未受理及可靠失败记录为依据；失败只释放自己的占用。任务已删除则只清理内部状态，不补造 Run。提交结果未知或存储不可用不伪造确定回执，不执行、不重放；调用方按既有 HTTP 错误或后台对账规则处理。图中的成功返回也不触发模型，原实例保留同次准备上下文，提交后由 Scheduler/执行推进职责取得单次启动权再进入 Runtime。
+Store 返回“确定拒绝”须以未受理及可靠失败记录为依据；失败只释放自己的占用。任务已删除则只清理内部状态，不补造 Run。提交结果未知或存储不可用不伪造确定回执，不执行、不重放；调用方按既有 HTTP 错误或后台对账规则处理。图中的成功返回也不触发模型，原实例保留同次准备上下文，提交后由 Scheduler/执行推进职责在本地直接进入 Runtime。
 
-**总览省略项的归属。** 超容差跳过、启动 CAS 与过期准备的清理见[执行专题](execution.md#no-catch-up)；Runtime 内部按“可信目标解析→参数校验→权限判断/必要确认→业务执行→结果回传”执行，ASK、参数错误、凭据解析和 Child 传播见[非交互范围](execution.md#noninteractive)。主图中“Guard start ownership”包含持久化启动检查，检查未通过不进入模型；对账只有取得原根执行真实终态才释放占用，未知保持占用。暂停、删除、取消及晚到回调继续按下节和§9处理。
+**总览省略项的归属。** 超容差跳过与过期准备的清理见[执行专题](execution.md#no-catch-up)；Runtime 内部按“可信目标解析→参数校验→权限判断/必要确认→业务执行→结果回传”执行，ASK、参数错误、凭据解析和 Child 传播见[非交互范围](execution.md#noninteractive)。对账只有取得原根执行真实终态才释放占用，未知保持占用。暂停、删除、取消及晚到回调继续按下节和§9处理。
 
 **源码核验边界。** 2026-10-08 确认并隔离 fetch Java 默认分支 main，旧、新提交均为 `553dcd5e2ff682f9684810a043b442b37a02e54a`。本次重读 `modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java` 的 `executeAndReschedule`、`store/CronStore.java` 的 `saveUnsafe`（同一 cron 包根），以及 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/` 下 `session/AgentSessionFactory.java#create`、`tool/cron/ManagedCronSessionRunner.java#execute`、`runtimeapi/event/RuntimeMessageEventService.java#submitLocked`、`RuntimeExecutionCoordinator.java#start`、`RuntimeEventOutput.java#persistenceOnly`（后二者同一 event 目录）和 `runtimeapi/persistence/RuntimeExecutionPersistenceService.java#acceptMessage`。源码证明公共准备、受理与推进已有分层基础，不证明上述 M10 数据库链路已实现；本次只校正职责表达，不改变产品策略、全局结构或 Agent 基线比较结论，外部基线保留原核验日期。
 
@@ -229,7 +229,7 @@ Store 返回“确定拒绝”须以未受理及可靠失败记录为依据；�
 
 ## 6. 失败、交互与恢复
 
-未受理时的失败保存为Run.error；成功受理后Session的真实终态不回写成受理失败。模型/业务失败不重跑本次，数据库回执丢失先只读对账；结果未知不伪造失败、不重发输入，仍占用该任务，后续触发遇忙跳过。原实例失联后不重新prepare并启动旧Run；可靠未启动证据、真实终态与未知的处理见[执行专题](execution.md)。是否由错误自动暂停整个Schedule仍待明确，不能默认继承旧Cron连续三次失败自动禁用。
+未受理时的失败保存为Run.error；成功受理后Session的真实终态不回写成受理失败。模型/业务失败不重跑本次，数据库回执丢失先只读对账；结果未知不伪造失败、不重发输入，仍占用该任务，后续触发遇忙跳过。原实例失联后不重新prepare并启动旧Run；受理后失联一律按结果未知处理，真实终态与未知的处理见[执行专题](execution.md)。是否由错误自动暂停整个Schedule仍待明确，不能默认继承旧Cron连续三次失败自动禁用。
 
 首版只支持无需人工交互的工作。Host遇到权限ASK、提问或计划审核时，阻止业务调用并结束本次根执行，记录需要人工处理的原因；不创建等待卡、不默认批准、不新增持久等待和交互恢复。业务限制与运行时门禁共同生效，不能只靠提示词或工具名过滤。
 
@@ -338,6 +338,7 @@ python3 scripts/render-schedule-api.py --check
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.40.0 | 2026-10-13 | 撤销 PR 在 t_session_executions 上新增的 started_at、execution_context_json 与 schedule_start_*：受理后由原实例在进程内直接启动；lastRunAt 改为受理时刻；受理后任何时刻失联统一按结果未知处理。 |
 | 0.39.0 | 2026-10-13 | 撤销扫描协调表与领跑者：各副本并行扫描，行锁与唯一约束防重；超过5秒派发容差的计划直接推进到下一次。 |
 | 0.38.0 | 2026-10-13 | Run 撤销 state 与 claim_owner/claim_epoch，未结束由 finished_at 为空表达，受理以 lease_until 防失效准备者。 |
 | 0.37.0 | 2026-10-13 | 撤销配置版本 revision 与 activeRunId；同任务不并发改由运行表部分唯一约束保证，受理锁内复核状态与 Agent 绑定并使用最新 prompt。 |

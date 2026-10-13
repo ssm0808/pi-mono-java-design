@@ -32,7 +32,7 @@ end ref
 return 已提交的受理结果\n和同次准备的上下文
 == 执行已受理的 Run ==
 Scheduler ->> Runtime ++ : 用同一准备上下文启动一次
-Runtime -> Runtime : 确认启动归属\n按非交互 Host 策略运行 Agent
+Runtime -> Runtime : 按非交互 Host 策略运行 Agent
 Runtime -> Store ++ : 持久化消息和工具结果\n确认后持久化根执行终态
 return 已持久化的执行记录
 deactivate Runtime
