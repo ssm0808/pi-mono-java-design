@@ -56,7 +56,7 @@
 
 推荐复用既有存储与投影，新增 `ScheduledRunAcceptanceService` 组织同库短事务，并把后台 profile、persistenceOnly 输出和 Run 关联接入公共执行链。该服务、启动权持久 CAS、Run 终态对账均为待实现。不能通过依次调用“创建 Session HTTP + POST 消息 HTTP”宣称获得原子受理，不能在回执丢失时再次创建会话重发 prompt。
 
-当前产品范围固定为每次运行新建 Session。同库受理关联新 Session、首消息、根执行与 Run；同一 Run 的重复内部通知只读取原关联，不重新创建或启动执行。[执行与工程落地](execution.md)维护事务、容量准入、不补跑和故障对账规则，均待实现；普通 Session 的行锁、历史恢复和查询只是既有基础，不能将它们写成定时新会话接线已经完成。
+当前产品范围固定为每次运行新建 Session。同库受理关联新 Session、首消息、根执行与 Run；同一 Run 的重复内部通知只读取原关联，不重新创建或启动执行。[定时任务受理流程](README.md#normal-acceptance)维护事务、容量准入、不补跑和故障对账规则，均待实现；普通 Session 的行锁、历史恢复和查询只是既有基础，不能将它们写成定时新会话接线已经完成。
 
 ## 4. 身份、权限与交互证据
 
@@ -66,7 +66,7 @@
 | J21 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/question/BusinessConfirmationAdapter.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/question/BusinessConfirmationAdapter.java#L90)；`requireAvailable`；[modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/BusinessToolDispatcher.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/BusinessToolDispatcher.java#L31)；`assembled` | 公共工厂绑定业务确认适配器；适配器只允许 RUNTIME，CRON/CHILD 返回入口不支持，缺问题端口也失败。当前不存在 Cron 无人审批等待队列。 |
 | J22 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/dto/RuntimeSessionDTO.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/dto/RuntimeSessionDTO.java#L19)；Session 字段；[modules/cron/src/main/java/com/campusclaw/cron/model/CronJob.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronJob.java#L19)；Job 字段 | 这两类对象及 J19 DDL 无 tenantId/ownerId/长期授权引用；读取范围内没有证明可信租户 scope 的解析与仓储约束。通用 RequestHeaderInfo 出现 agentTenantId 字段不足以证明当前链路已隔离。Mate 服务端与公司认证集成未核验。 |
 
-目标的 `ScheduleAuthorizationPort`、可信管理作用域及无人值守凭据接线待实现。Mate 是可信接口定义、主体授权和按 Agent 绑定解析业务凭据的权威来源，精确内部草案与生产集成边界见[Mate 定时执行上下文](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)。每次触发仍需可信解析、参数校验、权限判断；任务启用不等于永久批准任意业务工具。首版遇权限 ASK、自定义提问或计划审核时记录原因并结束本次根执行，不进入持久等待；参数错误保留模型修参机会，不自动猜参或重放。普通 Session 继续使用本次请求的 Header 快照，不持久化秘密；工具五阶段与公共安全投影由 M03 唯一维护，定时入口差异见[非交互规则](execution.md#noninteractive)。
+目标的 `ScheduleAuthorizationPort`、可信管理作用域及无人值守凭据接线待实现。Mate 是可信接口定义、主体授权和按 Agent 绑定解析业务凭据的权威来源，精确内部草案与生产集成边界见[Mate 定时执行上下文](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)。每次触发仍需可信解析、参数校验、权限判断；任务启用不等于永久批准任意业务工具。首版遇权限 ASK、自定义提问或计划审核时记录原因并结束本次根执行，不进入持久等待；参数错误保留模型修参机会，不自动猜参或重放。普通 Session 继续使用本次请求的 Header 快照，不持久化秘密；工具五阶段与公共安全投影由 M03 唯一维护，定时入口差异见[非交互规则](README.md#noninteractive)。
 
 ## 5. 依赖与历史基线变化
 
@@ -172,7 +172,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 | Spring `0 8 * * 1-5` 与 `0 0 8 * * * 2026` | `isValidExpression` 均为 false，验证拒绝五字段和额外年字段。 |
 | 本地候选探针 cron-utils 9.2.1 的 UNIX `0 8 1 * 1` | 下一次为 `2026-10-01T08:00+08:00`，与上述 Spring 样例不同；仅用于展示不能直接补秒迁移的反例，不证明 Claude 服务端采用该库。该探针与其 slf4j-api 2.0.17 未加入产品依赖。 |
 
-临时片段未保存为仓库测试，以上不是完整方言兼容、DST、实际定时精度或产品集群验收。已确认的是沿用 Spring 六字段；@Scheduled 固定任务与 TaskScheduler 动态任务是可用的框架方式，当前源码仍采用 JDK 调度器。多实例领取、持久游标、忙跳过和恢复不补跑由[执行专题](execution.md)单独维护，均待实现；不能从时间解析器的选择推导这些运行策略已经存在。
+临时片段未保存为仓库测试，以上不是完整方言兼容、DST、实际定时精度或产品集群验收。已确认的是沿用 Spring 六字段；@Scheduled 固定任务与 TaskScheduler 动态任务是可用的框架方式，当前源码仍采用 JDK 调度器。多实例领取、持久游标、忙跳过和恢复不补跑由[定时任务受理流程](README.md#normal-acceptance)单独维护，均待实现；不能从时间解析器的选择推导这些运行策略已经存在。
 
 <a id="first-fire-evidence"></a>
 
@@ -237,7 +237,7 @@ C01～C07 保留此前对前端和本地 Mate 示例的历史观察，不构成�
 
 **Codex 的公开资料不足以确定默认来源。** [plugin.rs:777](https://github.com/openai/codex/blob/d42056091aded7feb1d88ac7e83972108b2aa478/codex-rs/app-server-protocol/src/protocol/v2/plugin.rs#L777) 的 ScheduledTaskSummary/ScheduledTaskSchedule 未声明 timezone；同次检查 core-plugins/src、app-server/src/request_processors/plugins.rs、history/src/heartbeat.rs，所见为元数据与来源投影，未见时区解析。OpenAI Docs 的 [Scheduled tasks](https://learn.chatgpt.com/docs/automations) 同日重新搜索并读取，公开自定义计划和 RRULE，但未规定 timezone 字段是否必填或默认来源，不能用未公开细节支持 Claw 默认上海或节点时区。
 
-这些证据说明不存在统一行业默认时区。当前 Claw 仅支持 Cron，timezone 可省略并默认保存、回显 Asia/Shanghai；绝对时刻响应统一 UTC、秒级，精确规则由[配置契约 §3.4](configuration.md#34-时区选择与确认边界)维护。其他基线的 at/every 字段保留历史证据归属，不进入 Claw 当前契约。本节仅静态读取源码和官方契约，未执行产品任务或时区测试。
+这些证据说明不存在统一行业默认时区。当前 Claw 仅支持 Cron，timezone 可省略并默认保存、回显 Asia/Shanghai；绝对时刻响应统一 UTC、秒级，精确规则由[配置契约 §3.4](configuration.md#34-时区选择与校验)维护。其他基线的 at/every 字段保留历史证据归属，不进入 Claw 当前契约。本节仅静态读取源码和官方契约，未执行产品任务或时区测试。
 
 <a id="runtime-time-format-evidence"></a>
 
@@ -493,7 +493,7 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 所查 modules/cron、Runtime Controller/Service/Repository/Mapper/SQL 范围未提供 Schedule HTTP、Schedule/Run 数据表或关联删除契约，新增能力仍为待实现。已阅读现有 Cron 删除成功/不存在/跨 Agent 拒绝及 Session 204/busy409 的测试材料，未运行测试；没有发现能证明 Cron 删除与到期执行无竞争的验收证据。
 
-**CampusClaw 已确认目标（待实现）。** 删除 Schedule 及其所有 Run，保留已经生成的 Session；不提供归档资源、归档操作、archivedAt、includeArchived 或 archived 状态。存在的 Schedule 仍为 active/paused，删除成功200、ResultBean.result 返回完整 Schedule；删除生效后的新读取中，Schedule 和关联 Run 详情返回404，各自列表排除这些记录。删除不是先转为 paused，也不保留可恢复的配置或Run归档；Session按自身生命周期和当前权限独立管理，不依赖已删除的Schedule/Run授权。精确操作由[配置专题 §4.6](configuration.md#delete-schedule-review)维护，受理竞态和在途执行规则见[执行专题](execution.md)。
+**CampusClaw 已确认目标（待实现）。** 删除 Schedule 及其所有 Run，保留已经生成的 Session；不提供归档资源、归档操作、archivedAt、includeArchived 或 archived 状态。存在的 Schedule 仍为 active/paused，删除成功200、ResultBean.result 返回完整 Schedule；删除生效后的新读取中，Schedule 和关联 Run 详情返回404，各自列表排除这些记录。删除不是先转为 paused，也不保留可恢复的配置或Run归档；Session按自身生命周期和当前权限独立管理，不依赖已删除的Schedule/Run授权。精确操作由[配置专题 §4.6](configuration.md#delete-schedule-review)维护，受理竞态和在途执行规则见[定时任务受理流程](README.md#normal-acceptance)。
 
 **删除与执行边界（待实现）。** 完整回执与 HTTP 错误由[配置契约](configuration.md#delete-schedule-review)维护。删除与最终受理在同一 Schedule 权威上串行化：删除先提交则不得受理，受理先提交则保留原 Session 并继续由 Runtime 管理；删除本身不自动取消已受理执行，停止由 Session 入口单独发起。晚到结果不得复活 Schedule/Run。进行中或结果未知执行所需的最小内部协调归原根执行生命周期，不能变成完整配置或 Run 的永久归档。单独删除 Session 时，只要 Schedule 仍存续，原 Run 保留真实受理事实；原 sessionId 不构成会话仍可读取的保证。不能用当前 Cron 文件删除或 Session busy409 直接兑现这些规则，也不能把 Claude 未声明的行为写成其保证。
 
@@ -636,7 +636,7 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 | Mate 客户端不等于服务端 | Claw R/common/client/HttpMateToolClient.java:133/153/174/307 · queryToolIdsByAgentId/queryToolIdsBySkillId/queryToolMetaByIds/invokeTool；`modules/coding-agent-cli/src/main/resources/application.yml:109` | 客户端配置已有工具定义查询与 execute 调用，发现不带本次业务凭据，实际执行才映射 Header。客户端端点只证明消费者预期，不证明上述 Mate 示例已实现对应服务端。 |
 | 合并与依赖维护 | Claw `scripts/sync-campusclaw.sh:41` · MODULES；`.github/CODEOWNERS:9`；根 `pom.xml:43/99` · jobrunr.version/dependencyManagement | 同步脚本和所有权仍引用 cron；corporate 是生成镜像，应从 modules 迁移后生成。全仓 POM/生产 import 未见 JobRunr 实际消费者，只有未消费版本占位；删除它不等于降低当前运行包体。 |
 
-**CampusClaw 当前目标（待实现）。** 权威规则由[执行专题](execution.md)维护：不补停机漏跑，活动任务遇忙跳过，不为本次失败或故障重建 Run/Session、重发首消息或重复可能已执行业务；结果未知保持任务占用并只读对账。可靠记录已确定终态的重试不是业务重跑。首版无持久等待：按 M03 五阶段先准备可信目标和校验参数，再判断权限；意外 ASK、提问或计划审核阻止待确认业务、记录原因并结束根执行，不能默认批准。失败是否自动暂停整个 Schedule 仍待确认，不继承旧连续失败3次禁用，也不把未答复写成永不自动暂停。
+**CampusClaw 当前目标（待实现）。** 权威规则由[定时任务受理流程](README.md#normal-acceptance)维护：不补停机漏跑，活动任务遇忙跳过，不为本次失败或故障重建 Run/Session、重发首消息或重复可能已执行业务；结果未知保持任务占用并只读对账。可靠记录已确定终态的重试不是业务重跑。首版无持久等待：按 M03 五阶段先准备可信目标和校验参数，再判断权限；意外 ASK、提问或计划审核阻止待确认业务、记录原因并结束根执行，不能默认批准。失败是否自动暂停整个 Schedule 仍待确认，不继承旧连续失败3次禁用，也不把未答复写成永不自动暂停。
 
 Mate 拥有可信接口定义、执行授权和按 Agent 绑定的凭据解析，Claw 只保存非秘密授权依据；每次触发与实际工具执行重新校验当前资格，秘密仅在本次内存和实际 execute 使用。发现不带业务凭据，服务间认证身份与业务执行凭据分开。普通交互 Session 仍沿用本次 Header 快照；[Mate 配套内部契约](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)是待实现草案，公司服务认证及生产凭据部署未核验。
 
@@ -646,7 +646,7 @@ Mate 拥有可信接口定义、执行授权和按 Agent 绑定的凭据解析�
 
 不新增外部依赖，复用 JDK21、Spring Boot3.4.5/Spring6.2.6、Jackson、MyBatis Starter3.0.4 与既有数据库驱动。已读取本机对应版本的缓存 POM：spring-context 依赖 spring-aop/beans/core/expression、micrometer-observation；Jackson databind 依赖 annotations/core；MyBatis Starter 依赖 Boot/JDBC、autoconfigure、mybatis/mybatis-spring。coding-agent 已有这些运行库，必要时显式声明 spring-context 仅调整依赖归属；完整冲突消解后的 dependency tree 和 corporate NativeParent 未核验，不能声称传递图或公司镜像构建已通过。
 
-本节只读核验源码与既有测试材料，没有运行 Maven、GaussDB、多副本、凭据轮转或无人值守业务测试。实施验收至少覆盖 ASK/自定义问题不得执行业务、参数错误可修正、不默认批准、正常迟到与恢复不补跑区别、故障不重放、未知不释放占用、删除/受理竞争及反向 Session 删除保留 Run；上线初值与容量验证见[执行专题](execution.md#deployment-defaults)，默认数值不是性能结论。
+本节只读核验源码与既有测试材料，没有运行 Maven、GaussDB、多副本、凭据轮转或无人值守业务测试。实施验收至少覆盖 ASK/自定义问题不得执行业务、参数错误可修正、不默认批准、正常迟到与恢复不补跑区别、故障不重放、未知不释放占用、删除/受理竞争及反向 Session 删除保留 Run；上线初值与容量验证见[部署初始值](README.md#deployment-defaults)，默认数值不是性能结论。
 
 <a id="schedule-time-summary-evidence"></a>
 
@@ -673,7 +673,7 @@ CampusClaw 当前目标不提供未保存规则的独立预览。创建、更新
 
 ### 8.20 基线设计文档的失败处理写法（2026-10-11）
 
-2026-10-11 在临时目录隔离 clone 各默认分支最新快照，只读设计文档如何组织失败处理，用于[定时任务设计 §5.2.1](design-restructured.md#failure-recovery)；不升级本文其他节的实现结论或历史 SHA。
+2026-10-11 在临时目录隔离 clone 各默认分支最新快照，只读设计文档如何组织失败处理，用于[定时任务设计 §5.2.1](README.md#failure-recovery)；不升级本文其他节的实现结论或历史 SHA。
 
 | 基线 | 默认分支与完整提交 | 仓库相对路径与位置 | 已观察的写法 |
 |---|---|---|---|

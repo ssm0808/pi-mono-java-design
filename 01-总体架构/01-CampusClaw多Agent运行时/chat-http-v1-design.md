@@ -345,7 +345,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 解析结果中的 secret 仅进入本次执行的内存快照，只有实际业务 execute 可以使用；不写入 Schedule、Run、Session、Prompt、日志、公开事件或普通资源响应，执行结束后释放。工具发现和模型调用不使用业务执行凭据。调用 Mate 定义查询及凭据解析接口的服务间认证另行配置，不能与业务执行凭据混用，也不能把服务身份视为最终业务主体；精确接口与授权关系以 Mate 契约为准。
 
-普通 Session 的四项可选 Header、原名透传和组合规则不变，中断、确认与回答仍不能覆盖原执行快照。定时入口首版只执行无需人工交互的工作；业务权限 ASK、自定义问题或计划审核按 [M10 非交互执行约束](../08-CampusClaw定时任务/execution.md#noninteractive)结束本次并记录原因，不创建持久等待或默认批准。参数校验错误仍先于权限判断，由模型按同次可信定义修正，运行时不自动猜参或重放业务。
+普通 Session 的四项可选 Header、原名透传和组合规则不变，中断、确认与回答仍不能覆盖原执行快照。定时入口首版只执行无需人工交互的工作；业务权限 ASK、自定义问题或计划审核按 [M10 非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)结束本次并记录原因，不创建持久等待或默认批准。参数校验错误仍先于权限判断，由模型按同次可信定义修正，运行时不自动猜参或重放业务。
 
 ### 7.2 生命周期与失败结果
 
@@ -377,7 +377,7 @@ Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行�
 
 标识大小写敏感且不透明，精确格式归共享契约。Runtime 不下载附件；从 `event.content[]` 的 file 块按顺序提取 `fileId`，内部传递 `fileIds` 并编码为固定 `[File IDs]` 提示块；文件的访问与生命周期由 [附件服务](../../02-服务与接口/01-CampusMate附件服务/README.md) 维护。Thinking 的生成与历史可见性由 [历史设计](chat-events-history-design.md#thinking-original-text) 维护。
 
-本图仅适用于普通 HTTP 新消息或 Skill Command 的请求凭据：本次请求捕获，模型与发现不携带，仅实际工具执行透传，执行结束丢弃。定时执行由 Mate 按 Agent 绑定解析凭据的入口及完整依赖另见 [M10 全局目标图](../08-CampusClaw定时任务/README.md#10-全局目标类图与依赖)，不从本图推导其凭据来源。Model service、Mate metadata 和 Mate execution 表示同一服务可能承担的不同操作边界，并非新增部署服务。中断、确认和答案沿用原执行快照，其他操作与 Builtin 的原有上下文规则见本节 Header 表；空凭据不等于缺失 Host 上下文。
+本图仅适用于普通 HTTP 新消息或 Skill Command 的请求凭据：本次请求捕获，模型与发现不携带，仅实际工具执行透传，执行结束丢弃。定时执行由 Mate 按 Agent 绑定解析凭据的入口及完整依赖另见 [M10 全局目标图](../08-CampusClaw定时任务/README.md#class-diagram)，不从本图推导其凭据来源。Model service、Mate metadata 和 Mate execution 表示同一服务可能承担的不同操作边界，并非新增部署服务。中断、确认和答案沿用原执行快照，其他操作与 Builtin 的原有上下文规则见本节 Header 表；空凭据不等于缺失 Host 上下文。
 
 ![调用上下文 Header 边界](设计图/HTTP契约/http_dual_authentication.svg)
 

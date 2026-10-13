@@ -2,7 +2,7 @@
 
 版本：0.3.0；日期：2026-10-13；状态：接口草案，待实现。Mate作为可信接口定义、执行身份和凭据来源已确认；以下新增Mate路径及字段是配套设计，不冒充已发布接口。
 
-[共享连接目录](README.md) · [定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [执行与工程落地](../../01-总体架构/08-CampusClaw定时任务/execution.md) · [核验依据](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)
+[共享连接目录](README.md) · [定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [核验依据](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)
 
 ## 1. 业务问题与边界
 
@@ -133,7 +133,7 @@ Controller使用ScheduleContextQueryRequestVO/ResponseVO、ExecutionCredentialRe
 
 ## 6. 配置、结构与验收
 
-共享端点目录增加schedule-context-query-path和credential-resolve-path，仍只有一个campusmate.base-url。Claw新增MateScheduleContextClient及对应Adapter，实现ScheduleBindingResolver、ScheduleAuthorizationPort和ScheduleCredentialPort；定义与凭据从同一Mate权威取得但生命周期不同。全局结构复用[M10目标类图](../../01-总体架构/08-CampusClaw定时任务/README.md#10-全局目标类图与依赖)，不另建平行调度器。
+共享端点目录增加schedule-context-query-path和credential-resolve-path，仍只有一个campusmate.base-url。Claw新增MateScheduleContextClient及对应Adapter，实现ScheduleBindingResolver、ScheduleAuthorizationPort和ScheduleCredentialPort；定义与凭据从同一Mate权威取得但生命周期不同。全局结构复用[M10目标类图](../../01-总体架构/08-CampusClaw定时任务/README.md#class-diagram)，不另建平行调度器。
 
 验收覆盖：发现不复制业务凭据、保存不换取secret、越权和跨范围失败、Mate侧绑定冲突、当前撤销、TTL过期、按可信toolId匹配、secret不落地、参数无效/ASK不发resolve或execute、execute不重放、删除Schedule后已受理Session仍可独立授权执行。Mate示例现有Controller不代表新增能力已完成；需要真实Mate/Claw联调和公司身份验证。
 

@@ -2,7 +2,7 @@
 
 版本：1.1.0 · 2026-10-10 · 状态：统一受理、Child 持久化、逐工具提交及统计投影均待实现。
 
-[Runtime 主设计](README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#pending-changes) · [源码证据](unified-event-persistence-evidence.md) · [Cron 执行](../08-CampusClaw定时任务/execution.md) · [Skill 统计](../../04-命令与技能/03-Skill加载统计/README.md) · [Session 存储](../../03-数据与存储/01-会话记忆GaussDB/README.md)
+[Runtime 主设计](README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#pending-changes) · [源码证据](unified-event-persistence-evidence.md) · [定时任务](../08-CampusClaw定时任务/README.md#normal-acceptance) · [Skill 统计](../../04-命令与技能/03-Skill加载统计/README.md) · [Session 存储](../../03-数据与存储/01-会话记忆GaussDB/README.md)
 
 ## 1. 要解决的业务问题
 

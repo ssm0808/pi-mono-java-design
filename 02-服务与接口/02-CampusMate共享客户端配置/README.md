@@ -79,7 +79,7 @@ Java 局部复核 `f61906b9` 已证明 Chat Provider 读取统一配置。这个
 
 [PlantUML 源码：`campusmate_shared_base_url_configuration`](diagram.puml#L1) · [原尺寸 SVG](campusmate_shared_base_url_configuration.svg)
 
-上图展示原有Model、Runtime和Tool三个客户端及7项目标路径的配置子图；不包含新增定时上下文/凭据客户端，不能将其视为9项端点的完整结构。新增Mate适配与调度接线复用[M10全局目标类图](../../01-总体架构/08-CampusClaw定时任务/README.md#10-全局目标类图与依赖)。
+上图展示原有Model、Runtime和Tool三个客户端及7项目标路径的配置子图；不包含新增定时上下文/凭据客户端，不能将其视为9项端点的完整结构。新增Mate适配与调度接线复用[M10全局目标类图](../../01-总体架构/08-CampusClaw定时任务/README.md#class-diagram)。
 
 各客户端共享地址和路径定义，分别保留传输实现及DTO。Skill查询只有一个operation、一个配置键，Runtime与Tool从同一响应读取各自所需字段。Agent info与Agent runtime保持两个operation；新增上下文查询和凭据resolve也各自只有一个配置键，不另建Mate origin。
 

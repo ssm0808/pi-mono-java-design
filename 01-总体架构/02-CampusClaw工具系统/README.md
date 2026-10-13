@@ -229,7 +229,7 @@ campusclaw:
 7. 非空配置下，业务代理受 Mate 工具装配开关、当前 Agent 绑定与权限约束。
 
 `Cron` 只在 Runtime profile 中出现，防止 Cron execution 管理或递归创建 Job。首版最大
-Child 深度为 1，因此 Child profile 不暴露必然不可执行的 `Agent`。定时入口首版不提供人工交互；默认不装配提问或审核工具之外，还须按 [M10 非交互执行约束](../08-CampusClaw定时任务/execution.md#noninteractive)处理业务权限 ASK、自定义问题与误配的交互工具。
+Child 深度为 1，因此 Child profile 不暴露必然不可执行的 `Agent`。定时入口首版不提供人工交互；默认不装配提问或审核工具之外，还须按 [M10 非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)处理业务权限 ASK、自定义问题与误配的交互工具。
 
 ### 4.3 工具装配接口
 
@@ -315,7 +315,7 @@ Pipeline 管理单次调用的校验、执行、结果与事件，Host hook 承�
 代理在 Pipeline 校验完整业务 Schema；CallTool 先校验固定外层 `{tool,args?}`，再由 §9.2 的准备阶段按可信业务 Schema 校验内部 `args`。任一参数校验失败都在 before hook 前返回，不触发用户确认；before hook 拒绝或出错在业务执行前返回。普通工具执行错误归一化后仍进入 after hook。
 
 Schema、可用性、hook 和工具异常都转换为文本结果及 `isError=true`，不因单个工具失败
-终止完整 Agent loop。取消终止当前 execution，并由 Session/Host 投影统一终态。定时入口遇到人工交互时，由 Host 记录原因并结束本次根执行，不能只抛出会被 Pipeline 转成普通工具结果的异常后继续模型；具体终止与可靠收尾见 [M10](../08-CampusClaw定时任务/execution.md#noninteractive)。这一入口约束不改变参数错误先于权限判断、向模型返回同次可信定义及 `isError=true` 的修正规则，也不允许自动猜参、默认批准或重放业务请求。
+终止完整 Agent loop。取消终止当前 execution，并由 Session/Host 投影统一终态。定时入口遇到人工交互时，由 Host 记录原因并结束本次根执行，不能只抛出会被 Pipeline 转成普通工具结果的异常后继续模型；具体终止与可靠收尾见 [M10](../08-CampusClaw定时任务/README.md#noninteractive)。这一入口约束不改变参数错误先于权限判断、向模型返回同次可信定义及 `isError=true` 的修正规则，也不允许自动猜参、默认批准或重放业务请求。
 
 连续 `PARALLEL` 调用组成并行段，等待整段完成后才能执行下一个串行调用或并行段；每个 `SEQUENTIAL` 调用是 barrier。每个调用仍执行完整 Pipeline，结果按输入顺序汇总。具体并行与等待过程见[执行细节：批次调度](execution-details.md#batch-scheduling)。分段调度已有实现；开发提交 `c9a2340` 的 CallTool 使用同一 Pipeline。
 
@@ -465,7 +465,7 @@ execution 的 Child execution 以只读方式传递，但不存入 Child Session
 
 定时执行的配置不保存凭据引用（不再有 `credentialIds`）；每次运行由 Mate 按该 Agent 的绑定决定本次可用的业务凭据及其授权范围，Claw 只提交 agentId、资源 ID（scheduleId/runId 等）和不透明 authorizationRef，不保存秘密或凭据 ID，也不复制凭据认证规则。工具通过可信解析、参数校验和权限判断后，才按目标解析secret；返回值只保存在本次执行的受限内存快照中，仅实际业务execute可以使用；不进入 Schedule、Run、Session、Prompt、日志或公开结果，执行结束后释放。创建、读取或修改 Schedule 不借机执行业务或保存原始 secret。该来源为待实现增量，不将当前 Cron 空凭据实现描述为已支持长期授权。
 
-Claw 调用 Mate 定义查询或凭据解析接口所用的服务间认证，和随后业务 execute 使用的执行凭据分别配置、授权与审计；服务间身份不等于最终业务主体，也不自动授予业务工具权限。发现请求可以使用其受信服务身份，但不得复制执行凭据快照。可信接口定义、解析输入及凭据失败语义由 [Mate 契约](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)维护；定时业务调用仍遵守同一次准备快照和 [非交互执行约束](../08-CampusClaw定时任务/execution.md#noninteractive)。
+Claw 调用 Mate 定义查询或凭据解析接口所用的服务间认证，和随后业务 execute 使用的执行凭据分别配置、授权与审计；服务间身份不等于最终业务主体，也不自动授予业务工具权限。发现请求可以使用其受信服务身份，但不得复制执行凭据快照。可信接口定义、解析输入及凭据失败语义由 [Mate 契约](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)维护；定时业务调用仍遵守同一次准备快照和 [非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)。
 
 <a id="tool-display-name"></a>
 
