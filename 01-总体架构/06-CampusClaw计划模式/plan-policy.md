@@ -92,7 +92,7 @@ AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建�
 
 ## 6. 工具规则的归属
 
-[TodoUpdate description](todo-update.md#2-模型工具契约)维护 build 调用范围、完整清单、状态、完成且验证后立即更新及简单任务省略；BUILD.md 不复制这些步骤。取消项不伪装为完成、调用失败不声称同步等细节也由工具描述承载。前端仍消费成功提交的 agent.todo_updated，不因文本简化改变事件作用域或事务。
+[TodoUpdate description](todo-update.md#todo-tool-contract)维护 build 调用范围、完整清单、状态、完成且验证后立即更新及简单任务省略；BUILD.md 不复制这些步骤。取消项不伪装为完成、调用失败不声称同步等细节也由工具描述承载。前端仍消费成功提交的 agent.todo_updated，不因文本简化改变事件作用域或事务。
 
 [AskUserQuestion description / Schema](ask-user-question.md#3-工具契约)维护问题参数、独占调用、等待真实答案、答案不批准及失败不代表同意；基础 SYSTEM 维护必要性和默认一题。两模式工具定义相同，工具未装配时不生成虚构调用、不补装工具，不按模式复制 description。
 

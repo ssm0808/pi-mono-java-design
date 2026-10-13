@@ -218,7 +218,7 @@
 
 Child 继承发生在调用时。不能把根执行创建时的 `plan` 永久捕获在 `BoundAgentTool` 中，否则批准后新建 Child 仍会错误保持规划。传递不可变 `SessionModeSnapshotDTO`，不共享父 `AgentState`、审核 Future 或可变上下文。父取消与最大深度继续按既有实现处理。
 
-TODO 的精确名称、Schema、返回文本、profile 可用性和边界集中见 [TodoUpdate §2](todo-update.md#2-模型工具契约)。不把 TODO 可用性加入计划模式的准入条件。
+TODO 的精确名称、Schema、返回文本、profile 可用性和边界集中见 [TodoUpdate §2](todo-update.md#todo-tool-contract)。不把 TODO 可用性加入计划模式的准入条件。
 
 ### 4.3 ExitPlanMode 模型契约
 
