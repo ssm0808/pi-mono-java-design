@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.39.0 · 2026-10-13 |
+| 版本 | 0.40.0 · 2026-10-13 |
 | 状态 | 当前目标契约，待实现、尚未发布；包含接口收口与授权的工程细化，不表示逐项字段均经单独确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、删除、立即运行、暂停及取消暂停，以及Run读取与删除关系；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已绑定 Agent；不提供已有 Session 目标 |
@@ -17,7 +17,7 @@
 
 已确认的创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 契约见 §4.7，采用已记录受理结果的200 Run回执，八字段返回模型、同一任务不重叠及手动失败不改暂停状态已确认，错误映射见 §4.7，原子受理见[定时任务受理流程](README.md#normal-acceptance)。每次运行均新建独立 Session，将配置中的 prompt 文本作为首条用户消息；绑定的 Agent 定义继续复用；Cron 沿用 Spring 六字段。
 
-时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，并支持可选 metadata；顶层只读 type 固定为 schedule，pausedReason 返回当前暂停原因或 null，见 [§4.1.1](#schedule-type-paused-reason)。任务内容是纯文本 prompt；配置不保存凭据引用，业务凭据由 Mate 按 Agent 绑定在运行时决定，详见 §4.2。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 已确认约束。
+时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，并支持可选 metadata；顶层只读 type 固定为 schedule，pausedReason 返回当前暂停原因或 null，见 [§4.1.1](#schedule-type-paused-reason)。任务内容是纯文本 prompt；配置不保存凭据引用，运行时统一使用 Mate 配置的同一个账号取 access-token，详见 §4.2。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 已确认约束。
 
 本页维护八个配置及生命周期操作和两个 Run 读取的当前目标契约，均待实现。新建状态为 `active`，创建处理器不调用模型或创建 Session。自动执行不补漏跑、遇忙跳过，失败或故障不重跑同一次执行；首版只支持文本及无需人工交互的任务，遇 ASK 由 Host 阻止待确认调用并结束本次根执行，不建立持久等待，见[执行范围](README.md#noninteractive)。删除 Schedule 及对应 Run，保留已受理 Session 且不请求取消；单独删除 Session 不改写 Run 的受理事实和 sessionId。是否由运行错误自动暂停整个 Schedule 是唯一尚待明确的生命周期选择，见 §4.1.1；企业身份、ID 格式与持久化接线仍需实施校准。
 
@@ -301,7 +301,7 @@ Claude 的资源 type 固定为 deployment，Claw 改为 schedule 以匹配自�
 
 <a id="credential-reference-proposal"></a>
 
-### 4.2. 业务凭据由 Mate 按 Agent 绑定决定
+### 4.2. 业务凭据使用 Mate 统一账号
 
 业务问题是“每天 08:00 自动读取园区告警时，凭什么身份调用业务服务”。创建任务的登录凭据可能早已过期；管理任务的权限也不自动等于调用告警、门禁或工单接口的权限。模型服务认证是第三个独立边界。
 
@@ -1110,6 +1110,7 @@ Accept-Language: zh-CN
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.40.0 | 2026-10-13 | §4.2 标题与概述改为统一账号，清理“按 Agent 绑定决定凭据”的旧表述。 |
 | 0.39.0 | 2026-10-13 | 定时执行改为统一账号，每批工具调用前向 Mate 无入参取 access-token；运行时不再查询执行资格，移除 credential_unavailable_error。 |
 | 0.38.0 | 2026-10-13 | Claude 逐项取舍及时间与会话的选择理由移入主设计 §2.4，执行规则链接改指主设计。 |
 | 0.37.0 | 2026-10-13 | 首版列表由 Mate 拉取全部后自行过滤分页，Claw 不接收获准集合、不保存 userId；Claw 加 userId 列为待定 T10。 |

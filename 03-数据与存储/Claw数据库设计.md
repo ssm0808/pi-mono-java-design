@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.12.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.13.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -770,7 +770,7 @@ PR #332 已实现定时任务表，未合入 main。下表列出它与 §5.2–�
 |---|---|---|---|
 | t_schedule.scope_ref、operator_ref | 保存管理范围与操作者 | 撤销 | 范围、操作者与审计在 Mate |
 | t_schedule.session_owner_ref | 保存会话归属 | 撤销 | Session 归属在 Mate |
-| t_schedule.credential_ids | 保存凭据引用 | 撤销 | 凭据由 Mate 按 Agent 绑定决定 |
+| t_schedule.credential_ids | 保存凭据引用 | 撤销 | 运行时统一使用 Mate 账号的 access-token，不落库 |
 | t_schedule.message | 单条 user.message 的 JSON | 改为 `prompt` TEXT | 只保存纯文本任务内容 |
 | t_schedule.revision、t_schedule_run.revision | 配置版本，受理时比较 | 撤销 | 受理改为锁内比较 agent_id |
 | t_schedule.active_run_id | 指向在途 Run，实现同任务占用 | 撤销 | 改用 `uk_schedule_run_unfinished` |
@@ -934,6 +934,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.13.0 | 2026-10-13 | §5.5 credential_ids 撤销原因改为统一账号。 |
 | 1.12.0 | 2026-10-13 | 定时执行改为统一账号：目标 t_schedule 删除 authorization_ref 列（PR #332 无此列，不进 §5.5 差异表）；运行时 access-token 不落库。 |
 | 1.11.0 | 2026-10-13 | §5 改为只列目标结构：两张表按字段、主键、索引、约束分开展示，Run 阶段改为表格；PR #332 待撤销或改名的列、表与索引集中到 §5.5 差异表；执行规则链接改指主设计。 |
 | 1.10.0 | 2026-10-13 | 首版列表由 Mate 拉取全部后自行过滤：Claw 不接收获准集合，恢复 idx_schedule_list(updated_at DESC, id)；Claw 加 userId 列为待定 T10。 |

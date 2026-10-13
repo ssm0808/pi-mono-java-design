@@ -1,6 +1,6 @@
 # Mate 定时执行凭据接口
 
-版本：0.4.0；日期：2026-10-13；状态：接口草案，待实现。以下新增 Mate 路径及字段是配套设计，不冒充已发布接口。
+版本：0.5.0；日期：2026-10-13；状态：接口草案，待实现。以下新增 Mate 路径及字段是配套设计，不冒充已发布接口。
 
 [共享连接目录](README.md) · [定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [核验依据](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)
 
@@ -61,9 +61,9 @@ Token 有效期目前未知。以后若需要减少调用，可由 Mate 同时�
 
 <a id="session-ownership"></a>
 
-## 4. 会话归属登记（待实现，待对齐）
+## 4. 会话归属登记（待实现）
 
-Mate 独立维护 Session ID 到用户、组织/管理范围及授权政策的关联；Schedule/Run 的管理归属也由 Mate 维护。Claw 不建对应身份表或列。下述交接顺序沿用此前设计，是否保留及登记接口的路径与 VO 将在下一步评审对齐。
+Mate 独立维护 Session ID 到用户、组织/管理范围及授权政策的关联；Schedule/Run 的管理归属也由 Mate 维护。Claw 不建对应身份表或列。2026-10-13 评审确定：Session 归属登记保留在 Mate，Claw 不保存用户或归属。下述交接顺序沿用此前设计，登记接口的路径与 VO 仍待定。
 
 1. Claw 为同次 Run 固定拟建 Session ID；该 ID 由 Runtime 生成，后续准备和事务受理复用，不能在 `newSession` 再生成另一个 ID。
 2. 数据库事务外，Claw 用服务身份和固定的 Session/Run/Schedule/Agent ID 请求 Mate 登记。Mate 按自己维护的任务与用户关联持久保存会话归属；不接收 Claw 自报用户、租户或 owner。记录在 Claw 确认存在前仅为待核对关联，不对外承诺会话可访问。重复登记相同技术身份不得改绑归属。
@@ -101,6 +101,7 @@ Claw 新增 `ScheduledAccessTokenClient`，在工具批次执行前取得值并�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.5.0 | 2026-10-13 | 确认 Session 归属登记保留在 Mate，去掉“待对齐”；登记接口路径与 VO 仍待定。 |
 | 0.4.0 | 2026-10-13 | 定时执行改为统一账号：Claw 无入参向 Mate 获取 access-token，模型每批工具调用取一次；撤销执行上下文查询、按目标解析凭据和 authorizationRef。 |
 | 0.3.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 0.2.0 | 2026-10-10 | 身份、资源归属和权限统一由 Mate 维护，明确会话登记与受理失败的交接边界。 |
