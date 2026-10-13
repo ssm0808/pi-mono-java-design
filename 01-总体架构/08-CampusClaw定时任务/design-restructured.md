@@ -2,7 +2,7 @@
 
 [模块索引](../../README.md#module-index) · [原主设计 README](README.md) · [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule) · [Claw 接口专题](configuration.md) · [执行专题](execution.md) · [接口 HTML 展示](schedule-api-review.html) · [源码与官方证据](source-evidence.md)
 
-> 本文是按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”模板重组的草稿，设计内容与 [README 0.37.0](README.md)、[configuration.md 0.32.0](configuration.md)、[execution.md 0.7.0](execution.md) 一致，未新增或改变设计决策。原文件保持不变。标注 **【缺口】** 的位置表示现有材料不足以填写，需要补充，不应由本文推断。
+> 本文是按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”模板重组的草稿，设计内容与 [README 0.37.0](README.md)、[configuration.md 0.33.0](configuration.md)、[execution.md 0.7.0](execution.md) 一致，未新增或改变设计决策。原文件保持不变。标注 **【缺口】** 的位置表示现有材料不足以填写，需要补充，不应由本文推断。
 
 | 属性 | 值 |
 |---|---|
