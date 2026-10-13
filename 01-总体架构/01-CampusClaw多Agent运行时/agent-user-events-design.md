@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.6.0 |
-| 更新日期 | 2026-10-12 |
+| 文档版本 | 0.6.1 |
+| 更新日期 | 2026-10-13 |
 | 模块 | M01 CampusClaw 多 Agent Runtime：事件读取 |
 | 设计状态 | 两个读取接口与两个新增索引均为待实现；复用的事件表、根执行、结果段关联与公共投影为已实现（见 §8.2） |
 | 源码基线 | pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离 fetch 确认仍为 main HEAD；设计仓 `main@7b7b0f9b41ecd71044115edf0436250ab369d954` |
@@ -145,7 +145,7 @@ SELECT e.session_id, e.event_id, e.event_seq, e.anchor_entry_id,
 FROM t_session_events e
 JOIN t_sessions s ON s.id = e.session_id
 WHERE s.agent_id = #{agentId}          -- idx_t_sessions_agent 找到该 Agent 的会话
-  AND e.type = #{type}              -- 第一版只有 user.message，逐会话命中部分索引
+  AND e.type = 'user.message'       -- 写成常量，与部分索引谓词一致；不用绑定参数
   AND e.created_at >= #{from} AND e.created_at < #{to}
 ORDER BY e.created_at, e.session_id, e.event_seq
 LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
@@ -445,6 +445,7 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.6.1 | 2026-10-13 | 按 PR #339 实现对齐 UC1 SQL：type 条件写成常量 `'user.message'`，不用 `#{type}` 绑定参数，否则通用执行计划无法证明满足部分索引谓词 `type = 'user.message'`。 |
 | 0.6.0 | 2026-10-13 | 按 Lotus 评审，ListAgentEvents 只返回开启轮次的 user.message：type 改为精确事件类型，第一版只接受 `type=user.message`；部分索引改为只覆盖 user.message；同步需求、D3、示例、错误说明与测试点；整体时序图注释中残留的自动压缩差距一并删除。 |
 | 0.5.0 | 2026-10-13 | 生成两个操作的精确契约（`查询契约/操作/`）并列入统一接口页，完成 T6。 |
 | 0.4.1 | 2026-10-12 | 按源码更正自动压缩归属：执行内自动压缩已经由 RuntimeEventProjector 关联到当前结果段，属于所在轮次；RuntimeCompactionEventProjector 只用于手动压缩；删除自动压缩差距说明；同步修正 §5.3 与 §6.2 中残留的事件表新增列描述。 |
