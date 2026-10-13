@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.6.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.7.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -96,7 +96,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 - Mate 对会话读取、继续对话、停止、删除以及任务管理执行当前权限检查。Claw 校验可信服务来源、具体操作和资源约束，再检查自己的业务状态；缺少或失效的 Mate 授权结果时拒绝，不退化为任意内部调用均可访问。单个资源授权不能扩展到其他资源。
 - 任务/Run 列表的可见集合由 Mate 决定，Claw 可按获准资源 ID 集合执行查询，但不得自己推导用户可见范围。权限过滤必须先于排序分页；空获准集合返回空，不能表示全量。内部集合传递和批量读取契约待实现，不把逐页查全库再过滤当成满足此要求。
 - `authorization_ref` 只是不透明的 Mate 授权记录定位引用；Claw 可以保留它用于后台向 Mate 查询，不能解析为用户信息、与本地归属比较或持有即放行。定时任务不保存凭据引用，业务凭据由 Mate 按 Agent 绑定在运行时决定。用户审计与租户配额在 Mate；Claw 保留技术执行审计、实例容量和任务互斥。
-- `claim_owner`、扫描 `owner`、`schedule_start_owner` 表示执行实例，不是用户，继续保留。`agent_id`、父子 Session/execution 关系同样是运行关联，不代替用户授权。
+- 扫描 `owner`、`schedule_start_owner` 表示执行实例，不是用户，继续保留。`agent_id`、父子 Session/execution 关系同样是运行关联，不代替用户授权。
 
 正常定时受理先固定同次 Run 的拟建 Session ID，由 Mate 确认并持久登记该 ID 的归属，再执行 Claw 的同库受理；未确认归属不得启动模型或业务。Mate 关联失败或结果未知时不受理，先按固定 ID 只读核对，不另建会话或重放任务。Mate 已登记而 Claw 事务失败时，该关联不代表会话已存在，须按 Claw 权威状态核对后清理；未知提交不能直接清理。具体交接及生命周期由 [Mate 专项](../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)维护，接线**待实现**，不宣称跨库原子提交。
 
@@ -693,7 +693,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 ### 5.3 t_schedule_run：一次受理事实
 
-各列无数据库 DEFAULT。Run 的内部协调状态和 Session 的业务执行状态分开，不把 `FINISHED` 当成园区业务成功。
+各列无数据库 DEFAULT。Run 的内部协调状态和 Session 的业务执行状态分开，不把 Run 已结束当成园区业务成功。
 
 | 字段 | SQL 类型 | 可空 | 含义 |
 |---|---|---|---|
@@ -704,27 +704,27 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | revision | BIGINT | 否 | **PR 偏差，目标撤销**：受理比较本行 agent_id 与配置当前 agent_id |
 | trigger_type | VARCHAR(16) | 否 | `manual` / `schedule`；投影为 triggerContext.type，并支持 Run 列表 triggerType 筛选 |
 | scheduled_at | TIMESTAMPTZ(0) | 是 | 自动触发的 UTC occurrence；手动必须为空 |
-| state | VARCHAR(16) | 否 | 内部协调状态，不公开。**目标** `PREPARING`（准备中）/ `ACCEPTED`（已受理）/ `FINISHED`（已结束）；PR DDL 为 `PREPARING`、`READY`、`STARTING`、`FINISHED`，目标将 READY 改名 ACCEPTED 并删除从不写入的 STARTING |
+| state | VARCHAR(16) | 否 | **PR 偏差，目标撤销**：准备中 / 已受理 / 已结束由 finished_at、session_id、error_type 推出，见下文；PR DDL 为 `PREPARING`、`READY`、`STARTING`、`FINISHED` |
 | error_type | VARCHAR(64) | 是 | 未受理的稳定安全错误，投影为 error.type；error.message 按请求语言生成，不入库；不承载模型或工具业务终态 |
 | session_id | VARCHAR(40) | 是 | 已受理的历史 Session ID，不设会话外键 |
 | execution_id | VARCHAR(64) | 是 | 本次首消息的固定根执行 ID，内部对账使用，不公开 |
 | root_event_id | VARCHAR(64) | 是 | **PR 偏差，目标撤销**：`t_session_executions` 已按 `(session_id, execution_id)` 保存；PR 自加列 |
 | segment_id | VARCHAR(64) | 是 | **PR 偏差，目标撤销**：初始段即 `t_session_execution_segments` 中 `segment_ordinal=1` 的行；PR 自加列 |
-| claim_owner | VARCHAR(64) | 否 | 本次准备所属实例 |
-| claim_epoch | BIGINT | 否 | 自动扫描代次；手动为 0 |
+| claim_owner | VARCHAR(64) | 否 | **PR 偏差，目标撤销**：受理与清理都在锁内检查“未结束且 lease_until 未过”，无需比对实例 |
+| claim_epoch | BIGINT | 否 | **PR 偏差，目标撤销**：期限检查已足以防止失效准备者受理 |
 | lease_until | TIMESTAMPTZ(3) | 否 | 准备受理期限，不是已启动执行的强制释放期限 |
 | created_at | TIMESTAMPTZ(0) | 否 | Run 创建时间 |
-| finished_at | TIMESTAMPTZ(0) | 是 | 内部协调完成时间，用于已结束 Run 清理 |
+| finished_at | TIMESTAMPTZ(0) | 是 | 内部结束时间，不公开；为空表示 Run 未结束、占用任务。忙跳过与准备失败插入或结束时写当前时间；也用于保留期清理 |
 
 数据库已建立以下约束：
 
 - `UNIQUE(schedule_id, scheduled_at)` 防止重复分配自动 occurrence；UTC instant 区分夏令时重复钟面。手动 `scheduled_at=NULL`，每次单独分配 ID；目标数据库对唯一约束中 NULL 的行为须纳入集成验收。
 - trigger CHECK 要求 manual 的 scheduled_at 为空、schedule 的 scheduled_at 非空。
-- `CHECK(session_id IS NULL OR error_type IS NULL)` 只保证两者不能同时非空；PREPARING 阶段允许两者都空。它不保证“必有一个结果”，最终公共受理结果由应用和查询投影保证。
-- **目标新增** `UNIQUE(schedule_id) WHERE state <> 'FINISHED'`（部分唯一索引 `uk_schedule_run_unfinished`）：同一任务至多一条未完成 Run。准备中、已受理待对账以及结果未知的 Run 都不是 FINISHED，持续占用该任务；忙跳过和未受理失败直接以 FINISHED 写入，不占用。PR 用 `t_schedule.active_run_id` 实现，目标撤销；GaussDB 对部分唯一索引的支持须在实现时验证。
+- `CHECK(session_id IS NULL OR error_type IS NULL)` 只保证两者不能同时非空；准备中允许两者都空。它不保证“必有一个结果”，最终公共受理结果由应用和查询投影保证。
+- **目标新增** `UNIQUE(schedule_id) WHERE finished_at IS NULL`（部分唯一索引 `uk_schedule_run_unfinished`）：同一任务至多一条未结束 Run。准备中、已受理待对账以及结果未知的 Run 都未结束，持续占用该任务；忙跳过和未受理失败写入时即带 finished_at，不占用。PR 用 `t_schedule.active_run_id` 实现，目标撤销；GaussDB 对部分唯一索引的支持须在实现时验证。
 - 其余关联字段成组完整依靠事务内应用校验；PR DDL 未建立相应复合外键或 CHECK。
 
-目标状态写入为 `PREPARING → ACCEPTED → FINISHED`；未受理失败从 PREPARING 直接结束，忙跳过以 FINISHED 插入。启动权写在根执行的 `schedule_start_state`（其 READY/STARTING/FENCED 与 Run.state 无关），不能混为同一状态机。实际业务状态和错误从原 Session/根执行读取。
+目标不保存 Run 状态列，阶段由三列推出：`finished_at` 为空且 `session_id`、`error_type` 均空为准备中；`finished_at` 为空且 `session_id` 非空为已受理；`finished_at` 非空为已结束。未受理失败由准备中直接结束，忙跳过插入时即结束。启动权写在根执行的 `schedule_start_state`（READY/STARTING/FENCED），与 Run 无关，不能混为同一状态机。实际业务状态和错误从原 Session/根执行读取。
 
 公开 Run 接口（[§4.7/§4.11](../01-总体架构/08-CampusClaw定时任务/configuration.md#411-run-查询与删除后的历史待实现)）只投影 id、schedule_id、agent_id、trigger_type、scheduled_at、session_id、error_type、created_at，且只返回 session_id 与 error_type 恰好一个非空的记录；准备中和受理结果未知的 Run 不进入列表或详情。列表筛选 scheduleId、triggerType、hasError 与 createdAt 区间 `[from, to)`，按 `created_at DESC, id DESC` 页码分页。
 
@@ -776,8 +776,8 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | idx_schedule_due | t_schedule `(status, upcoming_run_at, id)` | active 到期扫描及恢复推进 |
 | idx_schedule_scope_list | PR：t_schedule `(scope_ref, updated_at DESC, id)` | **目标撤销**，由 Mate 确定获准资源集合 |
 | idx_schedule_run_list | PR：t_schedule_run `(scope_ref, created_at DESC, id DESC)` | **目标改为 `(schedule_id, created_at DESC, id DESC)`**：带 scheduleId 直接使用；不带时按 Mate 获准任务集合逐个使用；from/to 走同一索引的时间段；triggerType、hasError 仅两值，作为过滤条件不单独建索引 |
-| idx_schedule_run_retention | t_schedule_run `(state, finished_at, id)` | FINISHED 且超过保留期的批量清理 |
-| uk_schedule_run_unfinished | **目标新增**：t_schedule_run `(schedule_id)`；仅 `state <> 'FINISHED'`，唯一 | 同一任务至多一条未完成 Run，即同任务不并发 |
+| idx_schedule_run_retention | PR：t_schedule_run `(state, finished_at, id)`；**目标改为 `(finished_at, id)`** | 已结束且超过保留期的批量清理 |
+| uk_schedule_run_unfinished | **目标新增**：t_schedule_run `(schedule_id)`；仅 `finished_at IS NULL`，唯一 | 同一任务至多一条未完成 Run，即同任务不并发 |
 | idx_t_session_executions_schedule_start | t_session_executions `(session_id, execution_id, schedule_start_deadline)`；仅 `schedule_start_state='READY' AND started_at IS NULL AND state IN ('RUNNING','STOPPING')` | 独立扫描过期且未启动根执行，包括任务已删除的情形 |
 
 目标索引采用 `idx_schedule_list(updated_at DESC,id)` 与 `idx_schedule_run_list(schedule_id,created_at DESC,id DESC)`；全局到期扫描继续使用 `idx_schedule_due`。具体获准 ID 集合的批量查询与跨任务分页须由 Mate/Claw 联调及 GaussDB 执行计划验证，不宣称这些索引已满足所有读取场景。
@@ -791,16 +791,16 @@ PR 的 `listRuns` 实际按父配置 `s.scope_ref` 过滤并 JOIN 配置，不�
 | 操作 | 必须原子维持的数据库不变量 | PR 对应证据 |
 |---|---|---|
 | 配置创建/修改/暂停/恢复 | 最新配置与状态/原因、游标一起提交，不保存配置版本；暂停不结束在途 Run；远端授权准备在锁外，锁内重新检查其适用性 | S3；创建还锁协调行后检查范围配额 |
-| 领取自动/手动 Run | 锁 Schedule，查该任务有无未完成 Run；无则插入未完成 Run（唯一约束即占用），有则插入已 FINISHED 的跳过 Run；自动触发同时推进游标 | S2/S4 |
-| 最终受理 | 自动入口先验证协调 owner/epoch/lease；锁 Schedule、Run，复查配置存在与状态、配置 agent_id 与 Run.agent_id 一致、领取身份、期限与授权；首消息使用锁内读到的最新 prompt；Session、首消息、根执行/segment、Run 关联一起提交 | S4/S5；Runtime.accept 要求已有事务 |
+| 领取自动/手动 Run | 锁 Schedule，查该任务有无未完成 Run；无则插入未结束 Run（唯一约束即占用），有则插入带 finished_at 的跳过 Run；自动触发同时推进游标 | S2/S4 |
+| 最终受理 | 自动入口先验证协调 owner/epoch/lease；锁 Schedule、Run，复查配置存在与状态、配置 agent_id 与 Run.agent_id 一致、Run 未结束且 lease_until 未过、授权；首消息使用锁内读到的最新 prompt；Session、首消息、根执行/segment、Run 关联一起提交 | S4/S5；Runtime.accept 要求已有事务 |
 | 提交后启动 | 原实例以固定根身份和 owner 做 READY→STARTING CAS，数据库时间未超过 deadline、state=RUNNING、started_at 为空才可取得启动权 | S5/S6；模型及业务执行不进入受理事务 |
 | 未启动过期收尾 | 仅对 READY、started_at 为空且已过期的根执行围栏；与真实终态提交配合，STOPPING 保留取消原因；不接管重跑 | S5/S6；独立根扫描不依赖 Schedule/Run 存在 |
-| 根终态对账 | 固定原 execution，不读取 Session 后续聊天作为本次结果；Run 更新核对 owner/epoch，置为 FINISHED 即释放本任务 | S2/S4；未知或 STARTING 失联不因租约到期释放 |
+| 根终态对账 | 固定原 execution，不读取 Session 后续聊天作为本次结果；写入 finished_at 即释放本任务 | S2/S4；未知或 STARTING 失联不因租约到期释放 |
 | 删除配置 | 锁 Schedule，在同一事务删除 Run 和 Schedule；若受理先提交则保留 Session，若删除先提交则拒绝旧准备结果 | S2/S3/S4；外键级联为一致性兜底，应用也显式删除 Run |
 
 删除不请求取消、不回滚已发生的园区业务；已受理会话通过自身权限和停止入口管理。删除后的回调只能条件更新仍存在的记录，影响行数为零时不 upsert、不重新插入。内部协调归原根执行生命周期，不能永久保留完整配置或提供隐藏 Run 历史。
 
-Run 保留时长、清理频率和批量由[部署初始值](../01-总体架构/08-CampusClaw定时任务/execution.md#deployment-defaults)唯一维护。清理只删除已明确 FINISHED 且超期的记录，不删除未知占用，不级联 Session；删除 Schedule 则立即删除全部对应 Run，不等待保留期。Session 的保留策略归自身模块。
+Run 保留时长、清理频率和批量由[部署初始值](../01-总体架构/08-CampusClaw定时任务/execution.md#deployment-defaults)唯一维护。清理只删除 finished_at 非空且超期的记录，不删除未知占用，不级联 Session；删除 Schedule 则立即删除全部对应 Run，不等待保留期。Session 的保留策略归自身模块。
 
 定时器、线程、本地扫描缓存及本地租约计时均不是权威状态，不能覆盖数据库游标、Run 关联或根执行。Spring 单例只持有线程安全基础设施，不共享可变租户上下文；准备快照、凭据与执行对象按本次 Run 隔离。
 
@@ -812,7 +812,7 @@ Run 保留时长、清理频率和批量由[部署初始值](../01-总体架构/
 
 | 项目 | 状态与边界 |
 |---|---|
-| Run 冗余列与状态 | **待修改**：撤销 `t_schedule_run.root_event_id`、`segment_id`；state 的 READY 改名 ACCEPTED，删除 STARTING |
+| Run 冗余列与状态 | **待修改**：撤销 `t_schedule_run.root_event_id`、`segment_id`；撤销 `state`、`claim_owner`、`claim_epoch`，阶段由 finished_at/session_id/error_type 推出，部分唯一索引改为 `WHERE finished_at IS NULL` |
 | 配置版本与同任务占用 | **待修改**：撤销 `t_schedule.revision`、`t_schedule.active_run_id` 与 `t_schedule_run.revision`；新增 `t_schedule_run` 部分唯一索引，受理改比较 Agent 绑定 |
 | 任务内容与凭据字段 | **待修改**：`t_schedule.message` 改为纯文本 `prompt`，撤销 `credential_ids` 及执行上下文中的 credentialIds；JSON 编解码相应简化 |
 | 用户归属及权限职责 | **待修改**：撤销 Session/Schedule/Run 身份列、相关索引/查询及执行上下文副本；Mate 维护关联和授权，Claw 校验服务来源与具体获准操作，见 §3.1 |
@@ -955,6 +955,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.0 | 2026-10-13 | t_schedule_run 撤销 state、claim_owner、claim_epoch；未结束由 finished_at IS NULL 表达并用于同任务不并发约束。 |
 | 1.6.0 | 2026-10-13 | t_schedule_run 按 Run 接口对齐：撤销 root_event_id、segment_id，state 收为 PREPARING/ACCEPTED/FINISHED，列表索引改为 (schedule_id, created_at DESC, id DESC) 并支持 triggerType 与时间范围筛选。 |
 | 1.5.0 | 2026-10-13 | 撤销 t_schedule.revision、active_run_id 及 t_schedule_run.revision；同任务不并发改由运行表部分唯一索引 uk_schedule_run_unfinished 保证，受理比较 Agent 绑定并使用最新 prompt。 |
 | 1.4.0 | 2026-10-13 | t_schedule 的下次计划时刻列 next_fire_at 改名为 upcoming_run_at，明确正常为未来时刻、允许派发容差。 |

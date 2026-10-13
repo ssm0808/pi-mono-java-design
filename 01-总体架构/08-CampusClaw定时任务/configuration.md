@@ -1011,7 +1011,7 @@ Accept-Language: zh-CN
 
 重复标量、未知参数、非法ID、非空正文或错误类型返回400/SCHEDULE_REQUEST_INVALID；详情不接受业务查询参数。列表按`createdAt DESC,id DESC`排序，在同一一致性边界过滤并读取limit+1条，额外一条仅判断nextPage；有后续时为page+1，否则null。空页或超末页均为200、runs:[]、nextPage:null。普通OFFSET翻页会因新记录、删除或保留期清理出现重复/遗漏；筛选变化时从page1重读，不能用于可靠增量同步或证明某次运行未发生。
 
-每项沿用type、id、scheduleId、agentId、triggerContext、sessionId、error、createdAt八字段，不增加status或业务执行结果。手动来源为`{type:"manual"}`；自动来源为`{type:"schedule",scheduledAt:"2026-10-05T00:00:00Z"}`，scheduledAt是原计划时刻，createdAt是记录创建时间，均为UTC秒级。自动忙跳过以schedule_busy_error记录；停机时未观察到的计划不逐次补造Run。受理结果已确定的Run才公开，sessionId/error恰好一个非空；内部PREPARING及受理结果未知不进入公共模型。受理成功后业务失联、失败、交互被阻止或Session删除均不改写原受理事实，真实执行结果由Session/根执行管理。
+每项沿用type、id、scheduleId、agentId、triggerContext、sessionId、error、createdAt八字段，不增加status或业务执行结果。手动来源为`{type:"manual"}`；自动来源为`{type:"schedule",scheduledAt:"2026-10-05T00:00:00Z"}`，scheduledAt是原计划时刻，createdAt是记录创建时间，均为UTC秒级。自动忙跳过以schedule_busy_error记录；停机时未观察到的计划不逐次补造Run。受理结果已确定的Run才公开，sessionId/error恰好一个非空；内部准备中及受理结果未知不进入公共模型。受理成功后业务失联、失败、交互被阻止或Session删除均不改写原受理事实，真实执行结果由Session/根执行管理。
 
 | HTTP / resCode | 读取失败规则 |
 |---|---|

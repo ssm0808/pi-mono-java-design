@@ -2,11 +2,11 @@
 
 [模块索引](../../README.md#module-index) · [原主设计 README](README.md) · [Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule) · [Claw 接口专题](configuration.md) · [执行专题](execution.md) · [接口 HTML 展示](schedule-api-review.html) · [源码与官方证据](source-evidence.md)
 
-> 本文是按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”模板重组的草稿，设计内容与 [README 0.37.0](README.md)、[configuration.md 0.34.0](configuration.md)、[execution.md 0.7.0](execution.md) 一致，未新增或改变设计决策。原文件保持不变。标注 **【缺口】** 的位置表示现有材料不足以填写，需要补充，不应由本文推断。
+> 本文是按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”模板重组的草稿，设计内容与 [README 0.38.0](README.md)、[configuration.md 0.34.0](configuration.md)、[execution.md 0.8.0](execution.md) 一致，未新增或改变设计决策。原文件保持不变。标注 **【缺口】** 的位置表示现有材料不足以填写，需要补充，不应由本文推断。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.37.0-restructure（结构重组稿，设计行为同 README 0.37.0） |
+| 文档版本 | 0.38.0-restructure（结构重组稿，设计行为同 README 0.38.0） |
 | 更新日期 | 2026-10-12 |
 | 模块 | M10 · 调度与并发治理 |
 | 设计状态 | 三张调度表、Mapper、同库受理与启动控制已在 Java PR #332 实现，尚未合并，差距见[数据库实现差距](../../03-数据与存储/Claw数据库设计.md#gaps)；Mate 授权与归属登记、调度扫描及其余新增能力待实现；main 上已观察实现仅为进程内 Cron |
@@ -52,8 +52,8 @@
 | 根执行（root execution） | Session 内本次运行的顶层执行，是执行终态的最终决定方 |
 | occurrence | 一个具体的自动计划时刻，以 `(schedule_id, scheduled_at)` 唯一标识 |
 | 受理（acceptance） | 在同一数据库事务内创建 Session、首条消息、根执行并写入 Run 关联 |
-| 未完成 Run | 同一 Schedule 至多一条 state 不为 FINISHED 的 Run，由运行表部分唯一约束保证同任务仅一条活动执行 |
-| claimEpoch / 扫描代次 | 领取者与扫描协调者的代次，用于 fencing 旧领取者和区分恢复边界 |
+| 未结束 Run | 同一 Schedule 至多一条 finished_at 为空的 Run，由运行表部分唯一约束保证同任务仅一条活动执行 |
+| lease_until / 扫描代次 | Run 的受理准备期限，过期后不得受理并由清理结束；扫描代次属于扫描协调，用于区分恢复边界 |
 | pausedReason | 当前暂停原因，`manual` 或保留的 `error` 形状；恢复后清空 |
 | Spring 六字段 Cron | 秒、分、时、日、月、星期；不接受五字段 POSIX 或年字段 |
 
@@ -152,7 +152,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | UC9 Run 列表 | BU6 | Mate 管理入口 | Mate 获准资源集合 | 200 runs/nextPage | 分页前按获准集合约束；不含已删除任务的 Run |
 | UC10 Run 详情 | BU6 | Mate 管理入口 | 读取资格 | 200 八字段 Run | 任务或 Run 已删除时 404 |
 | UC11 自动扫描与受理 | BU3 | 调度器 | 持有扫描租约 | 新 Session 受理并启动 | 不补漏跑、遇忙跳过；受理前须完成 Mate 归属登记 |
-| UC12 结果对账 | BU3 | 调度器 | 已受理 Run | 投影摘要并将 Run 置为 FINISHED | 已删除任务只收尾 Session，不复活资源 |
+| UC12 结果对账 | BU3 | 调度器 | 已受理 Run | 投影摘要并写入 Run.finished_at | 已删除任务只收尾 Session，不复活资源 |
 | UC13 运行超时停止 | BU3 | 调度器 | 单次运行超过 30 分钟 | 向原根执行请求停止 | 停止未确认前保持停止中或未知 |
 
 ### 3.2 数据模型
@@ -216,9 +216,9 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 1. **分配 occurrence。** 扫描器按 upcoming_run_at/id 有界、稳定扫描，不按用户或租户分组；短事务锁定 Schedule，复核未删除、active 与到期时间；插入唯一 Run、推进游标，未完成 Run 唯一约束即占用。忙时记录 `SKIPPED_OVERLAP`，不排队。
 2. **可信准备与归属登记。** 事务外向 Mate 核验执行授权，解析 Agent 已发布目录、模型、CRON profile、工作区，固定 `PreparedScheduleRunDTO`；固定拟建 Session ID，由 Mate 独立登记归属并确认；不持数据库行锁调用远端。
-3. **原子受理。** 同一事务复核存在性、状态、Agent 绑定是否与领取时一致、领取 owner/代次与租约、授权有效期、容量与派发期限；创建 Session、首条用户消息（最新 prompt）、根执行/segment，写 Run 关联。任一步失败整体回滚。
+3. **原子受理。** 同一事务复核存在性、状态、Agent 绑定是否与领取时一致、Run 未结束且 lease_until 未过、授权有效期、容量与派发期限；创建 Session、首条用户消息（最新 prompt）、根执行/segment，写 Run 关联。任一步失败整体回滚。
 4. **事务后启动。** 原 Runtime 实例以 READY→STARTING 的启动 CAS 取得执行权，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件，不伪造 SSE 连接。Runtime、Cron 与 Child 共用受理原语与执行协调器，规则见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)。
-5. **结果对账。** 读取固定根执行的终态（以根执行为准）；Schedule/Run 仍存续时幂等更新摘要并将 Run 置为 FINISHED；已删除时只收尾 Session 与根执行。
+5. **结果对账。** 读取固定根执行的终态（以根执行为准）；Schedule/Run 仍存续时幂等更新摘要并写入 Run.finished_at；已删除时只收尾 Session 与根执行。
 
 <a id="run-admission-sequence"></a>
 
@@ -375,7 +375,7 @@ Mate 侧新增的内部接口见 [Mate 定时执行接口草案](../../02-服务
 - 故障注入：准备前、提交前、提交后、启动 CAS 前后、业务调用后，确认无重复 Session、无重复首消息、未知不伪失败、重启不重放。
 - 并发：2 副本竞争仅一次受理；暂停/修改/删除与最终受理竞态可线性判定。
 - 接口：10 个操作的成功与错误报文、字段边界、分页前按 Mate 获准集合约束且空集合返回空，详见[配置 §8](configuration.md#implementation-acceptance)。
-- 安全：越权目标资源被拒、旧 claimEpoch 拒绝、未登记归属不受理、ASK 不被自动放行、日志与历史中无凭据。
+- 安全：越权目标资源被拒、lease_until 过期后拒绝受理、未登记归属不受理、ASK 不被自动放行、日志与历史中无凭据。
 - 工程：reactor verify、corporate 镜像布局、GaussDB 集成与 2 副本联调。
 
 实施切片（S1 独立任务管理 → S2 后台原子受理 → S3 持久调度与恢复 → S4 结果与运营 → S5 旧 Cron 入口迁移）见 [README §11](README.md#implementation-slices)。
@@ -422,6 +422,7 @@ Claude Managed Agents 本次未核对。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.38.0-restructure | 2026-10-13 | 同 README 0.38.0。 |
 | 0.37.0-restructure | 2026-10-13 | 撤销配置版本 revision 与 activeRunId；同任务不并发改由运行表部分唯一约束保证，受理锁内复核状态与 Agent 绑定并使用最新 prompt。 |
 | 0.36.0-restructure | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 0.35.0-restructure | 2026-10-12 | 合入 README 0.35.0 的 Mate 用户归属与权限、独立数据库设计和共用受理流程，时序图改用中文并只画正常流程。 |

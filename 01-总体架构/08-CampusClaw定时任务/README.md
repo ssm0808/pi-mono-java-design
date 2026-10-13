@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.37.0 |
+| 文档版本 | 0.38.0 |
 | 更新日期 | 2026-10-10 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -195,15 +195,15 @@ public void summarizeAlarms() {
 
 1. **分配 occurrence（Schedule）。** Scheduler 按 upcomingRunAt/id 执行有界批次，任务按 upcomingRunAt/id 稳定扫描；Schedule 的领取职责使用短事务，锁定 Schedule，复核未删除、active 和到期时间；插入唯一 Run 并推进下一次游标，运行表“同一任务至多一条未完成 Run”的唯一约束即是本任务的占用。已有未完成 Run 时记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/删除操作与领取竞争同一行锁。
 2. **可信准备（Schedule 协调 Mate 与 Runtime）。** 事务外解析 Agent 已发布目录、模型、CRON profile、工作区及执行资格，固定一次 `PreparedScheduleRunDTO`。准备还须固定拟建 Session ID 并取得 Mate 归属登记确认；可以失败，但不调用模型或执行业务工具。远端授权检查不能持有数据库行锁。
-3. **原子受理（Schedule 协调 Store）。** 新增 `ScheduledRunAcceptanceService` 在同一事务复核 Schedule 存在且未删除、状态、Agent 绑定与领取时一致、Run 领取 owner/代次及 lease_until、授权断言有效期与容量；自动触发还用数据库当前时间复核派发期限；创建新 Session、首条用户消息（使用最新 prompt）、根 execution/segment，并写回 Run 的唯一关联。任一步失败整体回滚。暂停或 Agent 绑定变更先提交时，旧自动 Run 结束为跳过；仅修改 prompt 或时间规则不取消已领取的这次运行；删除与最终受理共享同一数据库权威，删除先提交则不再受理，受理先提交则保留已生成Session并将Run纳入删除，已受理执行继续由原Session管理，停止由Session入口单独发起。同库受理是待实现目标，不能由旧Cron的本地取消句柄推导已经具备该保证。
+3. **原子受理（Schedule 协调 Store）。** 新增 `ScheduledRunAcceptanceService` 在同一事务复核 Schedule 存在且未删除、状态、Agent 绑定与领取时一致、Run 未结束且 lease_until 未过、授权断言有效期与容量；自动触发还用数据库当前时间复核派发期限；创建新 Session、首条用户消息（使用最新 prompt）、根 execution/segment，并写回 Run 的唯一关联。任一步失败整体回滚。暂停或 Agent 绑定变更先提交时，旧自动 Run 结束为跳过；仅修改 prompt 或时间规则不取消已领取的这次运行；删除与最终受理共享同一数据库权威，删除先提交则不再受理，受理先提交则保留已生成Session并将Run纳入删除，已受理执行继续由原Session管理，停止由Session入口单独发起。同库受理是待实现目标，不能由旧Cron的本地取消句柄推导已经具备该保证。
 4. **事务后启动（Scheduler 推进 Runtime）。** 受理不等待 Agent 完成。持有本次完整准备快照的原 Runtime 实例，以持久化的单次启动 CAS 标记由 READY 转为 STARTING 后启动公共执行链，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件。后台执行不需要伪造浏览器 SSE 连接。
-5. **结果对账（Scheduler 读取 Store）。** 按受理时固定的根execution读取权威终态，仅在Schedule/Run仍存续时幂等更新其摘要，并把 Run 置为 FINISHED 以释放本任务；删除后只完成原Session、根执行及必要内部协调，不重新插入Run或配置。既有根执行是终态权威，仍存续任务的摘要可通过重读根execution修复；后续人工对话不会改写该次运行的结论。
+5. **结果对账（Scheduler 读取 Store）。** 按受理时固定的根execution读取权威终态，仅在Schedule/Run仍存续时幂等更新其摘要，并写入 Run.finished_at 以释放本任务；删除后只完成原Session、根执行及必要内部协调，不重新插入Run或配置。既有根执行是终态权威，仍存续任务的摘要可通过重读根execution修复；后续人工对话不会改写该次运行的结论。
 
 第一阶段限定 Schedule、Run 与 Runtime 受理记录位于同一事务资源。现有 HTTP 创建 Session 和提交消息不提供此受理原子性，不能串联它们并在断连后重复 POST。跨数据库或独立外部调度服务的受理协议不在此实现切片内，需另行设计内部 Run 身份关联和只读对账能力，不据此要求调用方提交请求键。
 
-自动和手动受理均要求配置存在且未删除；自动受理要求 active，手动受理允许 active/paused，不移动计划游标、不应用自动 occurrence 的迟到窗口。未受理 Run 的失败/跳过必须在收尾事务中按 runId、claimEpoch 条件把自己的 Run 置为 FINISHED；重叠跳过直接以 FINISHED 插入，不影响另一条未完成 Run。准备失败或运行完成的收尾不得恢复已删配置、重新插入已删Run或安装计划；删除后只完成必要内部协调，不补写可查询的失败Run。
+自动和手动受理均要求配置存在且未删除；自动受理要求 active，手动受理允许 active/paused，不移动计划游标、不应用自动 occurrence 的迟到窗口。未受理 Run 的失败/跳过必须在收尾事务中按 runId 且 finished_at 为空的条件写入 finished_at；重叠跳过插入时即带 finished_at，不影响另一条未结束 Run。准备失败或运行完成的收尾不得恢复已删配置、重新插入已删Run或安装计划；删除后只完成必要内部协调，不补写可查询的失败Run。
 
-同一任务的占用由运行表部分唯一约束 `UNIQUE(schedule_id) WHERE state <> 'FINISHED'` 保证，领取另锁定 Schedule 行；自动 occurrence 的唯一约束防重复分配，同一内部 runId 的受理复用原关联，启动 CAS 防重复调用入口。旧领取者提交必须匹配owner与claimEpoch；失效后只结束本次未受理结果，不由新节点重新准备执行。这些内部机制不合并不同手动调用，也不能被宣传为外部业务 exactly-once：工具副作用仍受下游业务幂等和已执行结果对账约束。
+同一任务的占用由运行表部分唯一约束 `UNIQUE(schedule_id) WHERE finished_at IS NULL` 保证，领取另锁定 Schedule 行；自动 occurrence 的唯一约束防重复分配，同一内部 runId 的受理复用原关联，启动 CAS 防重复调用入口。受理须在锁内确认 Run 未结束且 lease_until 未过；准备者失效后由清理结束本次未受理结果，不由新节点重新准备执行。这些内部机制不合并不同手动调用，也不能被宣传为外部业务 exactly-once：工具副作用仍受下游业务幂等和已执行结果对账约束。
 
 <a id="run-admission-sequence"></a>
 
@@ -309,7 +309,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 S1～S5均待实现；物理模块合并与旧入口迁移按[合并计划](execution.md#module-merge)同步完成，旧JSON调度不得与新SQL调度并行。已有进程内 Cron 能力不能等价为上述切片已完成。没有业务执行身份、可靠受理或结果对账时，不验收需要凭据的园区无人值守任务。
 
-验收还须覆盖不同 Run 关联不同 Session、固定 Agent 身份而非新建定义、五阶段工具顺序、无效参数不确认/不执行业务、ASK 不被自动放行、租户篡改、旧 claimEpoch 拒绝、手动触发与自动互斥、单次根执行摘要不受后续聊天覆盖、运行取消与真实结束区别、日志/历史中无凭据。单元测试存在、确定性测试通过、真实 GaussDB/多副本/企业身份联调分别记录，本文未运行实现测试或压测。
+验收还须覆盖不同 Run 关联不同 Session、固定 Agent 身份而非新建定义、五阶段工具顺序、无效参数不确认/不执行业务、ASK 不被自动放行、租户篡改、lease_until 过期后拒绝受理、手动触发与自动互斥、单次根执行摘要不受后续聊天覆盖、运行取消与真实结束区别、日志/历史中无凭据。单元测试存在、确定性测试通过、真实 GaussDB/多副本/企业身份联调分别记录，本文未运行实现测试或压测。
 
 <a id="implementation-calibration"></a>
 
@@ -338,6 +338,7 @@ python3 scripts/render-schedule-api.py --check
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.38.0 | 2026-10-13 | Run 撤销 state 与 claim_owner/claim_epoch，未结束由 finished_at 为空表达，受理以 lease_until 防失效准备者。 |
 | 0.37.0 | 2026-10-13 | 撤销配置版本 revision 与 activeRunId；同任务不并发改由运行表部分唯一约束保证，受理锁内复核状态与 Agent 绑定并使用最新 prompt。 |
 | 0.36.0 | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 0.35.0 | 2026-10-10 | 用户归属与权限回归 Mate，Claw 仅维护调度及运行数据并补齐会话登记边界。 |
