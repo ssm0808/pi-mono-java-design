@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.5.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.6.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -699,17 +699,17 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 |---|---|---|---|
 | id | VARCHAR(36) | 否，主键 | `run-` 加 32 位 UUID 十六进制 |
 | schedule_id | VARCHAR(41) | 否 | 所属配置；外键 `ON DELETE CASCADE` |
-| scope_ref | TEXT | 否 | **PR 偏差，目标撤销**：Run 不保存用户范围 |
+| scope_ref | TEXT | 否 | **PR 偏差，目标撤销**：Run 不保存用户范围；PR 自加列，原设计无此列 |
 | agent_id | VARCHAR(38) | 否 | 领取时配置的 Agent；受理时与配置当前值不同则不受理 |
 | revision | BIGINT | 否 | **PR 偏差，目标撤销**：受理比较本行 agent_id 与配置当前 agent_id |
-| trigger_type | VARCHAR(16) | 否 | `manual` / `schedule` |
+| trigger_type | VARCHAR(16) | 否 | `manual` / `schedule`；投影为 triggerContext.type，并支持 Run 列表 triggerType 筛选 |
 | scheduled_at | TIMESTAMPTZ(0) | 是 | 自动触发的 UTC occurrence；手动必须为空 |
-| state | VARCHAR(16) | 否 | DDL 允许 `PREPARING`、`READY`、`STARTING`、`FINISHED` |
-| error_type | VARCHAR(64) | 是 | 未受理的稳定安全错误；不承载模型或工具业务终态 |
+| state | VARCHAR(16) | 否 | 内部协调状态，不公开。**目标** `PREPARING`（准备中）/ `ACCEPTED`（已受理）/ `FINISHED`（已结束）；PR DDL 为 `PREPARING`、`READY`、`STARTING`、`FINISHED`，目标将 READY 改名 ACCEPTED 并删除从不写入的 STARTING |
+| error_type | VARCHAR(64) | 是 | 未受理的稳定安全错误，投影为 error.type；error.message 按请求语言生成，不入库；不承载模型或工具业务终态 |
 | session_id | VARCHAR(40) | 是 | 已受理的历史 Session ID，不设会话外键 |
-| execution_id | VARCHAR(64) | 是 | 本次首消息的固定根执行 ID |
-| root_event_id | VARCHAR(64) | 是 | 原始 user.message 的事件 ID |
-| segment_id | VARCHAR(64) | 是 | 受理创建的执行段 ID |
+| execution_id | VARCHAR(64) | 是 | 本次首消息的固定根执行 ID，内部对账使用，不公开 |
+| root_event_id | VARCHAR(64) | 是 | **PR 偏差，目标撤销**：`t_session_executions` 已按 `(session_id, execution_id)` 保存；PR 自加列 |
+| segment_id | VARCHAR(64) | 是 | **PR 偏差，目标撤销**：初始段即 `t_session_execution_segments` 中 `segment_ordinal=1` 的行；PR 自加列 |
 | claim_owner | VARCHAR(64) | 否 | 本次准备所属实例 |
 | claim_epoch | BIGINT | 否 | 自动扫描代次；手动为 0 |
 | lease_until | TIMESTAMPTZ(3) | 否 | 准备受理期限，不是已启动执行的强制释放期限 |
@@ -724,7 +724,9 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 - **目标新增** `UNIQUE(schedule_id) WHERE state <> 'FINISHED'`（部分唯一索引 `uk_schedule_run_unfinished`）：同一任务至多一条未完成 Run。准备中、已受理待对账以及结果未知的 Run 都不是 FINISHED，持续占用该任务；忙跳过和未受理失败直接以 FINISHED 写入，不占用。PR 用 `t_schedule.active_run_id` 实现，目标撤销；GaussDB 对部分唯一索引的支持须在实现时验证。
 - 其余关联字段成组完整依靠事务内应用校验；PR DDL 未建立相应复合外键或 CHECK。
 
-PR 当前正常状态写入为 `PREPARING → READY → FINISHED`，未受理失败从 PREPARING 结束；SQL 虽允许 Run.STARTING，当前领取启动权写入的是根执行的 `schedule_start_state`，不能混为同一状态机。实际业务状态和错误从原 Session/根执行读取。
+目标状态写入为 `PREPARING → ACCEPTED → FINISHED`；未受理失败从 PREPARING 直接结束，忙跳过以 FINISHED 插入。启动权写在根执行的 `schedule_start_state`（其 READY/STARTING/FENCED 与 Run.state 无关），不能混为同一状态机。实际业务状态和错误从原 Session/根执行读取。
+
+公开 Run 接口（[§4.7/§4.11](../01-总体架构/08-CampusClaw定时任务/configuration.md#411-run-查询与删除后的历史待实现)）只投影 id、schedule_id、agent_id、trigger_type、scheduled_at、session_id、error_type、created_at，且只返回 session_id 与 error_type 恰好一个非空的记录；准备中和受理结果未知的 Run 不进入列表或详情。列表筛选 scheduleId、triggerType、hasError 与 createdAt 区间 `[from, to)`，按 `created_at DESC, id DESC` 页码分页。
 
 单独删除 Session 不清空 Run.session_id、不级联删除 Run，也不把已成功受理改成失败；原会话链接可以返回 404。
 
@@ -773,7 +775,7 @@ PR 当前正常状态写入为 `PREPARING → READY → FINISHED`，未受理失
 |---|---|---|
 | idx_schedule_due | t_schedule `(status, upcoming_run_at, id)` | active 到期扫描及恢复推进 |
 | idx_schedule_scope_list | PR：t_schedule `(scope_ref, updated_at DESC, id)` | **目标撤销**，由 Mate 确定获准资源集合 |
-| idx_schedule_run_list | PR：t_schedule_run `(scope_ref, created_at DESC, id DESC)` | **目标改为按任务关联与时间查询**，移除 scope 前缀 |
+| idx_schedule_run_list | PR：t_schedule_run `(scope_ref, created_at DESC, id DESC)` | **目标改为 `(schedule_id, created_at DESC, id DESC)`**：带 scheduleId 直接使用；不带时按 Mate 获准任务集合逐个使用；from/to 走同一索引的时间段；triggerType、hasError 仅两值，作为过滤条件不单独建索引 |
 | idx_schedule_run_retention | t_schedule_run `(state, finished_at, id)` | FINISHED 且超过保留期的批量清理 |
 | uk_schedule_run_unfinished | **目标新增**：t_schedule_run `(schedule_id)`；仅 `state <> 'FINISHED'`，唯一 | 同一任务至多一条未完成 Run，即同任务不并发 |
 | idx_t_session_executions_schedule_start | t_session_executions `(session_id, execution_id, schedule_start_deadline)`；仅 `schedule_start_state='READY' AND started_at IS NULL AND state IN ('RUNNING','STOPPING')` | 独立扫描过期且未启动根执行，包括任务已删除的情形 |
@@ -810,6 +812,7 @@ Run 保留时长、清理频率和批量由[部署初始值](../01-总体架构/
 
 | 项目 | 状态与边界 |
 |---|---|
+| Run 冗余列与状态 | **待修改**：撤销 `t_schedule_run.root_event_id`、`segment_id`；state 的 READY 改名 ACCEPTED，删除 STARTING |
 | 配置版本与同任务占用 | **待修改**：撤销 `t_schedule.revision`、`t_schedule.active_run_id` 与 `t_schedule_run.revision`；新增 `t_schedule_run` 部分唯一索引，受理改比较 Agent 绑定 |
 | 任务内容与凭据字段 | **待修改**：`t_schedule.message` 改为纯文本 `prompt`，撤销 `credential_ids` 及执行上下文中的 credentialIds；JSON 编解码相应简化 |
 | 用户归属及权限职责 | **待修改**：撤销 Session/Schedule/Run 身份列、相关索引/查询及执行上下文副本；Mate 维护关联和授权，Claw 校验服务来源与具体获准操作，见 §3.1 |
@@ -952,6 +955,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-10-13 | t_schedule_run 按 Run 接口对齐：撤销 root_event_id、segment_id，state 收为 PREPARING/ACCEPTED/FINISHED，列表索引改为 (schedule_id, created_at DESC, id DESC) 并支持 triggerType 与时间范围筛选。 |
 | 1.5.0 | 2026-10-13 | 撤销 t_schedule.revision、active_run_id 及 t_schedule_run.revision；同任务不并发改由运行表部分唯一索引 uk_schedule_run_unfinished 保证，受理比较 Agent 绑定并使用最新 prompt。 |
 | 1.4.0 | 2026-10-13 | t_schedule 的下次计划时刻列 next_fire_at 改名为 upcoming_run_at，明确正常为未来时刻、允许派发容差。 |
 | 1.3.0 | 2026-10-13 | 定时任务 message 改为纯文本 prompt，撤销 credential_ids，凭据改由 Mate 按 Agent 绑定决定。 |
