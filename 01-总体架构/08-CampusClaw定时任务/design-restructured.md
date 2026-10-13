@@ -214,7 +214,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 五个步骤如下（来源 [README §5](README.md#normal-acceptance)、[执行专题](execution.md)）：
 
-1. **分配 occurrence。** 扫描器按 next_fire_at/id 有界、稳定扫描，不按用户或租户分组；短事务锁定 Schedule，复核未删除、active、revision、到期时间与 activeRunId；插入唯一 Run、推进游标、占用执行槽。忙时记录 `SKIPPED_OVERLAP`，不排队。
+1. **分配 occurrence。** 扫描器按 upcoming_run_at/id 有界、稳定扫描，不按用户或租户分组；短事务锁定 Schedule，复核未删除、active、revision、到期时间与 activeRunId；插入唯一 Run、推进游标、占用执行槽。忙时记录 `SKIPPED_OVERLAP`，不排队。
 2. **可信准备与归属登记。** 事务外向 Mate 核验执行授权，解析 Agent 已发布目录、模型、CRON profile、工作区，固定 `PreparedScheduleRunDTO`；固定拟建 Session ID，由 Mate 独立登记归属并确认；不持数据库行锁调用远端。
 3. **原子受理。** 同一事务复核存在性、状态/revision、领取 owner/代次与租约、授权有效期、容量与派发期限；创建 Session、首条用户消息（prompt）、根执行/segment，写 Run 关联。任一步失败整体回滚。
 4. **事务后启动。** 原 Runtime 实例以 READY→STARTING 的启动 CAS 取得执行权，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件，不伪造 SSE 连接。Runtime、Cron 与 Child 共用受理原语与执行协调器，规则见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)。

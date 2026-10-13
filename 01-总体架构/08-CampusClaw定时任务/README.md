@@ -102,7 +102,7 @@ Schedule 各接口不要求或声明 If-Match、Idempotency-Key，也不返回�
 | 删除 | 删除Schedule及对应全部Run，两类详情404、列表排除；保留Session及其内容，不再受理新运行；不取消已受理执行，Session入口独立停止 |
 | 停止一次执行 | 向原Session及其根execution提交取消请求；收到真实终态前保持“停止中”，不能依赖已删除的Schedule/Run授权 |
 
-公开配置状态仅为active/paused。没有计划或没有未来匹配时nextFireAt为空；删除不产生archived/deleted公共状态或恢复入口。删除成功返回200/ResultBean完整Schedule作为一次回执，随后Schedule和Run详情404、列表排除。回执和重复删除规则见[删除契约](configuration.md#delete-schedule-review)。
+公开配置状态仅为active/paused。没有计划或没有未来匹配时upcomingRunAt为空；删除不产生archived/deleted公共状态或恢复入口。删除成功返回200/ResultBean完整Schedule作为一次回执，随后Schedule和Run详情404、列表排除。回执和重复删除规则见[删除契约](configuration.md#delete-schedule-review)。
 
 创建 active 资源不要求额外启用动作；后续暂停/恢复是独立生命周期操作。现有 Cron 工具契约保持原参数面；其适配、delete 与新删除服务的接线及 trigger 回执须在迁移切片中一并对齐，未接线前不宣称新 API 与旧工具已共用存储。写入动作在事务中重新检查最新可变状态；内部 revision 继续供调度准备与受理检查，不参与客户端条件更新。外部绑定与授权检查在事务外准备，锁内校验合并结果和准备结果的适用性，不持有数据库行锁调用远程服务。
 
@@ -193,7 +193,7 @@ public void summarizeAlarms() {
 
 [原尺寸 SVG](scheduled_run_sequence.svg) · [PlantUML 源码](diagram.puml#L1)
 
-1. **分配 occurrence（Schedule）。** Scheduler 按 nextFireAt/id 执行有界批次，任务按 nextFireAt/id 稳定扫描；Schedule 的领取职责使用短事务，锁定 Schedule，复核未删除、active、revision、到期时间和 activeRunId；插入唯一 Run，推进下一次游标，同时占用本任务。重叠触发记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/删除操作与领取竞争同一行锁。
+1. **分配 occurrence（Schedule）。** Scheduler 按 upcomingRunAt/id 执行有界批次，任务按 upcomingRunAt/id 稳定扫描；Schedule 的领取职责使用短事务，锁定 Schedule，复核未删除、active、revision、到期时间和 activeRunId；插入唯一 Run，推进下一次游标，同时占用本任务。重叠触发记录为 `SKIPPED_OVERLAP`，不排无限队列。暂停/删除操作与领取竞争同一行锁。
 2. **可信准备（Schedule 协调 Mate 与 Runtime）。** 事务外解析 Agent 已发布目录、模型、CRON profile、工作区及执行资格，固定一次 `PreparedScheduleRunDTO`。准备还须固定拟建 Session ID 并取得 Mate 归属登记确认；可以失败，但不调用模型或执行业务工具。远端授权检查不能持有数据库行锁。
 3. **原子受理（Schedule 协调 Store）。** 新增 `ScheduledRunAcceptanceService` 在同一事务复核 Schedule 存在且未删除、状态/revision、Run 领取 owner/代次及 lease_until、授权断言有效期与容量；自动触发还用数据库当前时间复核派发期限；创建新 Session、首条用户消息（prompt）、根 execution/segment，并写回 Run 的唯一关联。任一步失败整体回滚。已有配置更新或暂停先提交时，旧自动 Run 结束为跳过；删除与最终受理共享同一数据库权威，删除先提交则不再受理，受理先提交则保留已生成Session并将Run纳入删除，已受理执行继续由原Session管理，停止由Session入口单独发起。同库受理是待实现目标，不能由旧Cron的本地取消句柄推导已经具备该保证。
 4. **事务后启动（Scheduler 推进 Runtime）。** 受理不等待 Agent 完成。持有本次完整准备快照的原 Runtime 实例，以持久化的单次启动 CAS 标记由 READY 转为 STARTING 后启动公共执行链，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件。后台执行不需要伪造浏览器 SSE 连接。

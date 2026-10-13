@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.3.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.4.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -679,7 +679,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | revision | BIGINT | 否 | 内部配置代次，创建时为 1；不作为公共条件更新字段 |
 | active_run_id | VARCHAR(36) | 是 | 唯一进行中或待对账 Run；为空才可新占用 |
 | last_run_at | TIMESTAMPTZ(0) | 是 | 最近自动运行的实际开始时刻；手动、准备失败和跳过不更新 |
-| next_fire_at | TIMESTAMPTZ(0) | 是 | 下一自动计划时刻；仅手动、暂停或规则无后续时刻时为空 |
+| upcoming_run_at | TIMESTAMPTZ(0) | 是 | 下一次自动运行的计划时刻：正常为未来时刻，到期后在派发容差内短暂早于当前时间，领取后推进到下一次；仅手动、暂停或规则无后续时刻时为空。**PR 列名为 `next_fire_at`，目标改名** |
 | created_at | TIMESTAMPTZ(0) | 否 | 创建时间 |
 | updated_at | TIMESTAMPTZ(0) | 否 | 配置更新时间；实际开始时间投影不修改它 |
 
@@ -770,7 +770,7 @@ PR 当前正常状态写入为 `PREPARING → READY → FINISHED`，未受理失
 
 | 索引 | 列 / 条件 | 支持的访问 |
 |---|---|---|
-| idx_schedule_due | t_schedule `(status, next_fire_at, id)` | active 到期扫描及恢复推进 |
+| idx_schedule_due | t_schedule `(status, upcoming_run_at, id)` | active 到期扫描及恢复推进 |
 | idx_schedule_scope_list | PR：t_schedule `(scope_ref, updated_at DESC, id)` | **目标撤销**，由 Mate 确定获准资源集合 |
 | idx_schedule_run_list | PR：t_schedule_run `(scope_ref, created_at DESC, id DESC)` | **目标改为按任务关联与时间查询**，移除 scope 前缀 |
 | idx_schedule_run_retention | t_schedule_run `(state, finished_at, id)` | FINISHED 且超过保留期的批量清理 |
@@ -949,6 +949,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-10-13 | t_schedule 的下次计划时刻列 next_fire_at 改名为 upcoming_run_at，明确正常为未来时刻、允许派发容差。 |
 | 1.3.0 | 2026-10-13 | 定时任务 message 改为纯文本 prompt，撤销 credential_ids，凭据改由 Mate 按 Agent 绑定决定。 |
 | 1.2.0 | 2026-10-12 | 登记按 Agent 查询用户事件所需的事件表 agent_id 列与部分索引目标。 |
 | 1.1.0 | 2026-10-10 | 会话归属与权限由 Mate 维护，撤销 Claw 身份副本并明确跨服务受理及失败边界。 |

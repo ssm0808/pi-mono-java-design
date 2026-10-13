@@ -790,7 +790,7 @@ Run不增加 status、updatedAt、revision、模型回答或完整 Schedule；�
 
 错误集合与[运行专题](execution.md)的受理事实对应，不能复制 Claude 的 Environment/Vault 等本产品不存在的资源类型；也不把“事务提交结果未知”归为 unknown_error，否则可能误导再次执行。认证权威不可用或无法确定当前访问范围属于HTTP503，不能降级为可向任意调用者披露的Run错误。明确失败必须确认没有Session/首消息残留；业务执行已经发生后的错误属于原Session。
 
-**配置影响与不重叠规则。** 手动运行保持status/pausedReason、配置updatedAt、自动nextFireAt及schedule.lastRunAt，不因手动失败自动暂停配置；lastRunAt继续只跟踪自动运行实际开始。每次运行使用保存的输入与当前可信执行准备；不借用调用者临时Header模拟未来定时任务身份。任务已暂停或没有Cron也能测试同一套后台权限。手动与自动共享同一任务占用，已有在途/未知Run时拒绝本次并记录schedule_busy_error，不能复用别次Run充当本次成功；此不重叠选择已确认，自动忙跳过也记录schedule_busy_error；停机未观察到的时刻不补造Run，见[无补跑规则](execution.md#no-catch-up)。
+**配置影响与不重叠规则。** 手动运行保持status/pausedReason、配置updatedAt、自动计划时刻（upcoming_run_at）及schedule.lastRunAt，不因手动失败自动暂停配置；lastRunAt继续只跟踪自动运行实际开始。每次运行使用保存的输入与当前可信执行准备；不借用调用者临时Header模拟未来定时任务身份。任务已暂停或没有Cron也能测试同一套后台权限。手动与自动共享同一任务占用，已有在途/未知Run时拒绝本次并记录schedule_busy_error，不能复用别次Run充当本次成功；此不重叠选择已确认，自动忙跳过也记录schedule_busy_error；停机未观察到的时刻不补造Run，见[无补跑规则](execution.md#no-catch-up)。
 
 **正常受理与失败边界。** 先校验身份、请求和资源范围，在短事务内读取可信配置快照、分配本次Run并检查/预占共享任务槽；忙时记录本次拒绝。取得槽位后，在事务外向Mate查询定义和授权依据，并完成Runtime准备；不解析secret，不调用模型或业务工具。最后在同一受理边界复核最新配置、未删除、当前资格及占用；配置已改变时记录本次未受理结果，不重新准备或运行同一Run；后续自然触发采用新配置，不混用新旧配置。受理成功原子提交Run、新Session、首条用户消息和根执行关联，然后通过既有执行协调器后台启动。准备/准入明确失败且配置仍存续时持久化失败Run、sessionId:null，并释放本次取得的占用；删除先提交时仅完成内部清理，不新增失败Run；忙时不得释放其他Run的占用。只有成功提交对应记录后才返回200，不沿用旧trigger同步等待prompt.join()的实现。
 
