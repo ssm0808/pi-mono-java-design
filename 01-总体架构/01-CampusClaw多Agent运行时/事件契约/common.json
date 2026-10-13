@@ -53,7 +53,7 @@
     }
   },
   "eventContract": {
-    "version": "2026-10-02.1",
+    "version": "2026-10-13.1",
     "semanticStatus": "confirmed",
     "detailStatus": "implementation-ready",
     "toolErrorCodes": {
@@ -88,6 +88,10 @@
       "USER_QUESTION_UNAVAILABLE": {
         "zh-CN": "当前无法向用户提问。",
         "en-US": "User questions are currently unavailable."
+      },
+      "TOOL_BATCH_INTERACTION_INVALID": {
+        "zh-CN": "同批交互工具位置无效，本批工具调用均未执行。",
+        "en-US": "An interactive tool is misplaced in this batch; no tool call in the batch was executed."
       }
     },
     "executionErrorCodes": {
@@ -340,6 +344,11 @@
           "USER_QUESTION_UNAVAILABLE",
           "当前无法向用户提问。",
           "User questions are currently unavailable."
+        ],
+        [
+          "TOOL_BATCH_INTERACTION_INVALID",
+          "同批交互工具位置无效，本批工具调用均未执行。",
+          "An interactive tool is misplaced in this batch; no tool call in the batch was executed."
         ]
       ]
     },
@@ -465,10 +474,10 @@
     }
   },
   "questionContract": {
-    "version": "2026-09-15.1",
+    "version": "2026-10-13.1",
     "status": "Runtime 已实现；Mate 桥接待实现",
     "toolName": "AskUserQuestion",
-    "description": "Ask the user one to three concise questions when required information or a user-owned choice blocks further work. Use stable question ids, optional choices and optional multiSelect; free text is always supported. Ask only what cannot be established by inspecting available information. This must be the only tool call in the assistant response. Wait for the returned answers before continuing the same task. Answers do not approve a plan, change mode, or replace business-tool permission confirmation. Never invent an answer or treat cancellation, silence or failure as consent.",
+    "description": "Ask the user one to three concise questions when required information or a user-owned choice blocks further work. Use stable question ids, optional choices and optional multiSelect; free text is always supported. Ask only what cannot be established by inspecting available information, including what earlier tool calls in the same response will establish. Make this the last tool call in the assistant response and do not call another user-interaction tool in the same response. Wait for the returned answers before continuing the same task. Answers do not approve a plan, change mode, or replace business-tool permission confirmation. Never invent an answer or treat cancellation, silence or failure as consent.",
     "parameters": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",

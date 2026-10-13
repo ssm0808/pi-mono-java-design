@@ -1,6 +1,6 @@
 # CampusClaw 模式提示词组织
 
-版本：2.5.0；日期：2026-09-28。状态：两文件迁移、业务覆盖、执行快照和正文标记方案已实现；恢复完整 plan 参数及其流式预览待实现，业务 SYSTEM 发布及模型行为未核验。本次范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence)，其他范围保留[§12](source-evidence.md#12-主线实现状态核验2026-09-18)及[§10](source-evidence.md#10-两份模式提示词的最新上游核验)归属。
+版本：2.5.1；日期：2026-10-13。状态：两文件迁移、业务覆盖、执行快照和正文标记方案已实现；恢复完整 plan 参数及其流式预览待实现，业务 SYSTEM 发布及模型行为未核验。本次范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence)，其他范围保留[§12](source-evidence.md#12-主线实现状态核验2026-09-18)及[§10](source-evidence.md#10-两份模式提示词的最新上游核验)归属。
 
 ## 1. 职责与装配
 
@@ -94,7 +94,7 @@ AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建�
 
 [TodoUpdate description](todo-update.md#2-模型工具契约)维护 build 调用范围、完整清单、状态、完成且验证后立即更新及简单任务省略；BUILD.md 不复制这些步骤。取消项不伪装为完成、调用失败不声称同步等细节也由工具描述承载。前端仍消费成功提交的 agent.todo_updated，不因文本简化改变事件作用域或事务。
 
-[AskUserQuestion description / Schema](ask-user-question.md#3-工具契约)维护问题参数、独占调用、等待真实答案、答案不批准及失败不代表同意；基础 SYSTEM 维护必要性和默认一题。两模式工具定义相同，工具未装配时不生成虚构调用、不补装工具，不按模式复制 description。
+[AskUserQuestion description / Schema](ask-user-question.md#3-工具契约)维护问题参数、末位调用、等待真实答案、答案不批准及失败不代表同意；基础 SYSTEM 维护必要性和默认一题。两模式工具定义相同，工具未装配时不生成虚构调用、不补装工具，不按模式复制 description。
 
 ## 7. 工具描述与结果引导
 
@@ -149,6 +149,7 @@ Submit a complete Markdown plan for review while the Main Agent is in plan mode.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.5.1 | 2026-10-13 | AskUserQuestion description 改为维护末位调用规则。 |
 | 2.5.0 | 2026-09-28 | 模型用完整 plan 参数提交方案，批准后从同次调用参数恢复执行。 |
 | 2.4.0 | 2026-09-19 | Main Agent 用唯一闭合计划标记输出方案，再以同响应空参数退出调用提交审核。 |
 | 2.3.0 | 2026-09-19 | 模型在同响应中先输出完整正文，再以空参数退出调用提交审核。 |
