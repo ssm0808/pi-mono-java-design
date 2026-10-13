@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.45.0 |
+| 文档版本 | 0.46.0 |
 | 更新日期 | 2026-10-13 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -234,9 +234,9 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 [原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L151)
 
-**正常调用如何完成：** Mate 管理入口以可信服务调用 Claw（Mate 内部处理待定，见 T8）→ Claw 核验服务来源、获准操作与目标资源，校验请求形状 → 事务外向 Mate 只读检查 Agent 绑定与管理授权 → 事务内插入（创建）或锁定最新行合并提交字段（更新），校验合并结果 → 一次写入并提交 → 按已保存结果返回完整资源与计划时间摘要。
+保存步骤、并发语义与结果不确定时的处理见[配置 §5](configuration.md#reliable-write-flow)。
 
-完整规则见[配置 §5](configuration.md#reliable-write-flow)。
+<a id="manual-run-sequence"></a>
 
 ### 3.4 立即运行的详细时序（BU4、UC6）
 
@@ -307,7 +307,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ### 3.8 时间规则与不补跑
 
-配置的输入、空值、校验与回显以[配置 §3](configuration.md#3-配置字段与时间规则)为准：非空 schedule 仅支持 Spring 六字段 Cron，顺序为“秒、分、时、日、月、星期”；timezone 可省略，默认保存并回显 Asia/Shanghai。例如 `0 0 8 * * MON-FRI` 表示周一至周五 08:00:00，不自动识别法定节假日。支持秒位不表示服务在该秒准时开始，线程排队、系统负载和 JVM 暂停都可能带来延迟。
+Cron 字段、timezone 默认值与校验以[配置 §3](configuration.md#3-配置字段与时间规则)为准。支持秒位不表示服务在该秒准时开始，线程排队、系统负载和 JVM 暂停都可能带来延迟。
 
 **是否运行只看计划时刻与数据库当前时刻之差。** 各副本每秒扫描 upcoming_run_at 不晚于数据库当前时刻的 active 任务：
 
@@ -620,6 +620,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.46.0 | 2026-10-13 | 去重：§3.3 删除与配置 §5 重复的步骤摘要；§3.8 的 Cron 字段说明改为链接配置 §3；§3.4 增加锚点供配置文档引用。 |
 | 0.45.0 | 2026-10-13 | 评审确认 Session 归属登记保留在 Mate；登记接口路径与 VO 仍待定。 |
 | 0.44.0 | 2026-10-13 | 定时执行改为统一账号：配置时由 Mate 检查用户权限，运行时每批工具调用前向 Mate 无入参取 access-token；撤销运行时执行资格查询与 authorizationRef。 |
 | 0.43.0 | 2026-10-13 | 按评审模板重组为唯一主设计，并入原执行专题与 Claude 逐项取舍，删除重复的重组稿、执行专题与数据库入口文件。 |
