@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.3.0 · 日期：2026-10-12 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.3.1 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -899,12 +899,12 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ### 6.4 按 Agent 查询用户事件的索引
 
-[Agent 用户事件查询](../01-总体架构/01-CampusClaw多Agent运行时/agent-user-events-design.md)需要按 Agent 和时间范围跨会话读取 user.* 事件。不改表结构：先按 t_sessions.agent_id 找到会话，再按会话读用户事件，为此新增两个索引；状态**待实现**，DDL 未冻结。
+[Agent 用户事件查询](../01-总体架构/01-CampusClaw多Agent运行时/agent-user-events-design.md)需要按 Agent 和时间范围跨会话读取 user.message。不改表结构：先按 t_sessions.agent_id 找到会话，再按会话读用户事件，为此新增两个索引；状态**待实现**，DDL 未冻结。
 
 | 对象 | 目标定义 | 状态 |
 |---|---|---|
 | idx_t_sessions_agent | `t_sessions (agent_id)` | 待实现 |
-| idx_t_session_events_session_user_time | `t_session_events (session_id, created_at, event_seq) WHERE type IN 五种 user.*` | 待实现；GaussDB 部分索引支持与执行计划未验证，不支持时去掉 WHERE |
+| idx_t_session_events_session_user_time | `t_session_events (session_id, created_at, event_seq) WHERE type = 'user.message'` | 待实现；GaussDB 部分索引支持与执行计划未验证，不支持时去掉 WHERE |
 
 查询必须连接 t_sessions：删除事务立即删除会话行，事件行由清理任务稍后删除，连接保证已删除会话不再返回。agent_id 不是用户归属，不参与授权判断（§3.1）。
 
@@ -948,6 +948,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.1 | 2026-10-13 | 按 Agent 查询只读 user.message，部分索引 idx_t_session_events_session_user_time 的条件改为 `type = 'user.message'`。 |
 | 1.3.0 | 2026-10-12 | 按 Agent 查询用户事件改为经 t_sessions.agent_id 找会话，撤销事件表 agent_id 冗余列，改登记两个索引。 |
 | 1.2.0 | 2026-10-12 | 登记按 Agent 查询用户事件所需的事件表 agent_id 列与部分索引目标。 |
 | 1.1.0 | 2026-10-10 | 会话归属与权限由 Mate 维护，撤销 Claw 身份副本并明确跨服务受理及失败边界。 |
