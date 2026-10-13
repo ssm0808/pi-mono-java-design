@@ -7,7 +7,7 @@
 ' persistence/MyBatisRuntimeExecutionControlRepository.java:linkCommittedEvent
 ' 已观察行为：事件只能按单个 Session 读取；轮次以根执行和结果段关联的形式存在。
 ' 设计原因：服务级视图，只画 Mate、Claw 与 GaussDB 之间的交互；Claw 内部分层见详细时序与类图。
-' 待实现：两个读取接口和事件表 agent_id 索引。
+' 待实现：两个读取接口，以及 t_sessions(agent_id) 与只覆盖 user.message 的事件部分索引。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
@@ -59,7 +59,7 @@ deactivate Mate
 ' event/RuntimeCompactionEventProjector.java:persistCompaction
 ' modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml:findCommittedEvent
 ' 已观察行为：user.message、续跑、Agent 输出和 idle 都关联到结果段；
-' user.interrupt 只保存 targetEventId；执行内自动压缩尚未关联。
+' user.interrupt 只保存 targetEventId；执行内自动压缩经 RuntimeEventProjector 关联当前段，手动压缩不关联。
 ' 设计原因：复用根执行作为轮次身份，不新增轮次表。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif

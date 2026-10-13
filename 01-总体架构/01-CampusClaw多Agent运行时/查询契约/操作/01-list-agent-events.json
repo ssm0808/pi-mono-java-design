@@ -1,11 +1,11 @@
 {
   "operation": {
-    "shortName": "按 Agent 查询用户事件",
+    "shortName": "按 Agent 查询用户请求",
     "operationKey": "ListAgentEvents",
     "method": "GET",
     "path": "/agents/{agentId}/events",
-    "summary": "按时间范围跨会话列出 Agent 名下的用户事件",
-    "description": "按 Agent 与 UTC 时间范围，跨该 Agent 全部未删除会话列出指定类别的完整事件，供 Mate Trace 定位用户请求。每条结果附所属 sessionId，可据此展开所在轮次。",
+    "summary": "按时间范围跨会话列出 Agent 名下的用户请求",
+    "description": "按 Agent 与 UTC 时间范围，跨该 Agent 全部未删除会话列出指定类型的完整事件，供 Mate Trace 定位用户请求。每条 user.message 对应一轮，结果附所属 sessionId，可据此展开所在轮次。",
     "parameters": [
       {
         "$ref": "parameters.agentId"
@@ -14,8 +14,8 @@
         "in": "query",
         "name": "type",
         "required": true,
-        "schema": "user",
-        "description": "事件类别，按事件 type 前缀匹配：user 返回五种 user.*（message、interrupt、tool_confirmation、plan_confirmation、question_answer）。只能传一个值，当前只接受 user；agent、session 为预留取值，传入返回 400。"
+        "schema": "user.message",
+        "description": "精确的事件类型，只能传一个值。当前只接受 user.message：轮次以 user.message 切分，每条结果对应一轮；确认、审核、回答和停止事件属于所在轮次，用 ListTurnEvents 展开后可见。其他类型为预留取值，传入返回 400。"
       },
       {
         "in": "query",
@@ -52,7 +52,7 @@
     "requestBody": {
       "required": false,
       "contentType": null,
-      "description": "无请求体。第一页：?type=user&from=2026-10-11T00:00:00Z&to=2026-10-12T00:00:00Z&page=1&limit=2；下一页把 page 改为 2，其余参数保持不变。",
+      "description": "无请求体。第一页：?type=user.message&from=2026-10-11T00:00:00Z&to=2026-10-12T00:00:00Z&page=1&limit=2；下一页把 page 改为 2，其余参数保持不变。",
       "example": null
     },
     "responses": [
@@ -61,7 +61,7 @@
         "status": "200",
         "tabLabel": "200 · 第一页",
         "label": "OK",
-        "summary": "?type=user&from=2026-10-11T00:00:00Z&to=2026-10-12T00:00:00Z&page=1&limit=2：两条用户事件来自两个会话，按 createdAt、sessionId、eventSeq 升序；还有后续，nextPage=2。event 与 ListSessionEvents 的完整事件逐字段相同，外层只加 sessionId。",
+        "summary": "?type=user.message&from=2026-10-11T00:00:00Z&to=2026-10-12T00:00:00Z&page=1&limit=2：两条用户请求来自两个会话，按 createdAt、sessionId、eventSeq 升序；还有后续，nextPage=2。event 与 ListSessionEvents 的完整事件逐字段相同，外层只加 sessionId。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -112,7 +112,7 @@
         "status": "200",
         "tabLabel": "200 · 下一页",
         "label": "OK",
-        "summary": "与「第一页」配对，?page=2&limit=2：返回第三条，nextPage=null 只表示本次读取没有下一页，不表示以后不会追加。user.interrupt 等其他用户事件同样返回。",
+        "summary": "与「第一页」配对，?page=2&limit=2：返回第三条，nextPage=null 只表示本次读取没有下一页，不表示以后不会追加。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -127,10 +127,15 @@
                 {
                   "sessionId": "session-0123456789abcdef0123456789abcdef",
                   "event": {
-                    "eventId": "entry_4R6T8Y1U3I5O7P9A2S4D6F8G1H",
-                    "type": "user.interrupt",
-                    "createdAt": "2026-10-11T03:12:09Z",
-                    "targetEventId": "entry_1Q3W5E7R9T2Y4U6I8O1P3A5S7D"
+                    "eventId": "entry_1Q3W5E7R9T2Y4U6I8O1P3A5S7D",
+                    "type": "user.message",
+                    "createdAt": "2026-10-11T03:10:52Z",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "把刚才的工单改派给二号值班组"
+                      }
+                    ]
                   }
                 }
               ],
@@ -144,7 +149,7 @@
         "status": "200",
         "tabLabel": "200 · 空结果",
         "label": "OK",
-        "summary": "时间范围内没有用户事件、Agent 不存在或已下线，或页码超出范围时都返回 200、events=[]、nextPage=null。Claw 不维护 Agent 目录，不返回 404。",
+        "summary": "时间范围内没有用户请求、Agent 不存在或已下线，或页码超出范围时都返回 200、events=[]、nextPage=null。Claw 不维护 Agent 目录，不返回 404。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -188,7 +193,7 @@
         "status": "400",
         "tabLabel": "400 · INVALID_AGENT_EVENT_QUERY",
         "label": "Bad Request",
-        "summary": "type 缺失或不是 user；from/to 缺失、格式不是 UTC 整秒、from 不早于 to 或跨度超过 31 天；page、limit 不合法。",
+        "summary": "type 缺失或不是 user.message；from/to 缺失、格式不是 UTC 整秒、from 不早于 to 或跨度超过 31 天；page、limit 不合法。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -260,8 +265,12 @@
         ],
         "rows": [
           [
+            "类型",
+            "只返回 user.message，每条对应一轮。user.tool_confirmation、user.plan_confirmation、user.question_answer、user.interrupt 属于所在轮次，不在本接口返回；轮次在范围之前开始、仅确认或停止发生在范围内时，这一轮不列出。"
+          ],
+          [
             "范围",
-            "只读该 Agent 下未删除会话中的事件；已删除会话的残留事件不返回。定时任务与子 Agent 会话中的用户事件同样返回。"
+            "只读该 Agent 下未删除会话中的事件；已删除会话的残留事件不返回。定时任务与子 Agent 会话中的 user.message 同样返回。"
           ],
           [
             "时间",
