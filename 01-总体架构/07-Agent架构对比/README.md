@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.92.0 |
+| 文档版本 | 1.93.0 |
 | 更新日期 | 2026-10-12 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -492,7 +492,7 @@ Claw 同日重核 Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`：fileId 
 
 Claude 官方 Beta Deployment 的 schedule 提供 last_run_at/upcoming_runs_at，status 使用 active/paused，归档以 archived_at 表达；metadata 为受限字符串 map。CampusClaw 响应采用对应 lowerCamelCase 时间摘要、小写状态并去除公开 revision，支持可选 metadata。计划时间只是估计，不等于业务完成；内部调度游标继续存在。动态时间摘要仅供展示，不构成更新前置条件；Claw 采用直接删除，资源不增加归档字段或状态。
 
-Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读，运行时按 MCP 目标或受控出站规则使用。CampusClaw 定时任务不保存凭据引用（不再有 credentialIds）：每次运行由 Mate 按该 Agent 的绑定决定本次可用的业务凭据，并在工具实际执行时按可信目标解析；Claw 只提交 agentId、资源 ID（scheduleId/runId 等）和不透明 authorizationRef，不保存秘密或凭据 ID。相比 Claude 按 Session/任务挑选 Vault，收益是凭据归属集中在 Agent 绑定、任务配置不承载秘密选择，代价是同一 Agent 的不同任务无法使用不同凭据，并新增企业身份、轮转与撤销接线；不把 workspace 级 Vault 等同园区业务权限。普通 Session 继续使用本次请求 Header 快照，定时执行秘密仅在本次内存供实际 execute 使用，发现不带业务凭据，服务身份不冒充业务凭据。现有 Java Cron 仍使用空凭据，Mate 示例也未实现凭据接口；生产能力未核验。[Mate 配套草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)与接线均待实现，首版不引入 Vault 集合或完整 sandbox 出站替换体系。
+Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读，运行时按 MCP 目标或受控出站规则使用。CampusClaw 定时任务不保存凭据引用，所有定时任务统一使用 Mate 配置的同一个账号：模型每批需要凭据的工具调用前，Claw 无入参向 Mate 取一次该账号的 `access-token`。相比 Claude 按部署挑选 Vault，收益是任务配置不承载秘密选择、实现最简单；代价是所有任务权限相同，用户权限只在配置时检查，创建者失去权限后任务仍照常运行。普通 Session 继续使用本次请求 Header 快照，定时执行的 Token 仅在本批内存供实际 execute 使用，发现不带业务凭据，服务身份不冒充业务凭据。现有 Java Cron 仍使用空凭据，Mate 示例也未实现凭据接口；生产能力未核验。[Mate 配套草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)与接线均待实现，首版不引入 Vault 集合或完整 sandbox 出站替换体系。
 
 公开契约、源码路径与限制见[M10 响应与凭据证据](../08-CampusClaw定时任务/source-evidence.md#creation-metadata-credentials-evidence)，精确创建报文和待决项仍由[配置接口](../08-CampusClaw定时任务/configuration.md#creation-response-review)维护；不扩写其他模块的历史 SHA 或声称已有长期执行凭据。
 
@@ -726,6 +726,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.93.0 | 2026-10-13 | M10 定时执行改为统一账号 access-token，更新凭据取舍与代价。 |
 | 1.92.0 | 2026-10-13 | M10 去掉内部配置代次与扫描代次说法，与定时任务撤销 revision 和扫描协调表一致。 |
 | 1.91.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 1.90.0 | 2026-10-12 | 新增 A16，对比按 Agent 跨会话查询用户事件与按事件读取轮次的基线做法。 |

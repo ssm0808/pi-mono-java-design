@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.38.0 · 2026-10-13 |
+| 版本 | 0.39.0 · 2026-10-13 |
 | 状态 | 当前目标契约，待实现、尚未发布；包含接口收口与授权的工程细化，不表示逐项字段均经单独确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、删除、立即运行、暂停及取消暂停，以及Run读取与删除关系；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已绑定 Agent；不提供已有 Session 目标 |
@@ -52,7 +52,7 @@
 
 **首版列表过滤由 Mate 完成（2026-10-13 评审确定，方法 A）。** Claw 的任务列表与 Run 列表不接收用户或获准 ID 集合，按自身排序与页码返回全部存续记录；Mate 拉取全部页后，按其维护的用户与任务关联过滤，再自行排序、分页返回给浏览器。查看单个任务的 Run 时 Mate 先确认该任务可见，再带 scheduleId 查询。代价：每次列表都要读取全部用户的记录，读取量随任务和 Run 总量增长，Claw 的页码只用于 Mate 分批拉取；Claw 不保存 userId。后续是否在 Claw 增加 userId 以便直接按用户查询列为待定 [T10](README.md#todo-t10)。403/404 等用户侧语义保持；Mate 的拒绝与不可用分别映射到既有错误，不能把服务故障伪装成空列表。
 
-Claw→Mate 的后台查询只携带资源、执行和不透明 authorizationRef，不传持久化的用户主体；业务凭据与服务认证分开。新 Session 在受理前由 Mate 独立登记归属，Schedule/Run 删除不删除该关联；完整规则见[Mate 专项](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)。本次不新增公共身份字段或自定义 Header。PR #332 当前尚存在本地身份链路，具体源码差距见[职责核验](source-evidence.md#mate-boundary-review)。
+定时执行时 Claw 不再向 Mate 查询用户执行资格：用户权限只在配置任务时由 Mate 检查，运行时统一使用 Mate 配置的同一个账号取得 `access-token`（见 §4.2）；业务凭据与服务认证分开。新 Session 在受理前由 Mate 独立登记归属，Schedule/Run 删除不删除该关联；完整规则见[Mate 专项](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)。本次不新增公共身份字段或自定义 Header。PR #332 当前尚存在本地身份链路，具体源码差距见[职责核验](source-evidence.md#mate-boundary-review)。
 
 普通 JSON 成功使用 `resCode/resMsg/result`，包括删除成功的完整 Schedule 回执及立即运行的Run记录；Run.error描述已记录的受理结果，不把它混同于HTTP请求失败；失败仅返回 `resCode/resMsg`，保留真实 HTTP 状态。JSON 为 lowerCamelCase。配置响应为 `Cache-Control: no-store`；语言支持 zh-CN/en-US，缺省或不支持时回退 zh-CN，JSON 响应返回 Content-Language。scheduleId 由服务端生成、大小写敏感且不复用；示例中的 UUID 后缀不构成客户端可构造 ID 的许可。
 
@@ -305,16 +305,16 @@ Claude 的资源 type 固定为 deployment，Claw 改为 schedule 以匹配自�
 
 业务问题是“每天 08:00 自动读取园区告警时，凭什么身份调用业务服务”。创建任务的登录凭据可能早已过期；管理任务的权限也不自动等于调用告警、门禁或工单接口的权限。模型服务认证是第三个独立边界。
 
-定时任务配置不保存凭据引用，没有 credentialIds 字段。每次运行时，由 Mate 按该 Agent 的绑定决定本次可用的业务凭据，并在工具实际执行时解析；Claw 只向 Mate 提交 agentId、scheduleId/runId 和不透明 authorizationRef，不保存秘密，也不保存凭据 ID。凭据的保管、授权、轮转和多凭据选择都归 Mate，Claw 不复制这些规则。请求中出现 credentialIds、vaultIds、credentialRefs 或原始 credentials 对象，按未知字段返回 400 `SCHEDULE_REQUEST_INVALID`。
+定时任务配置不保存凭据引用，没有 credentialIds 字段。2026-10-13 评审确定：所有定时任务统一使用 Mate 配置的同一个账号，首版只支持 `access-token`。模型一次返回中有需要凭据的工具调用时，Claw 无入参向 Mate 取一次该账号的 `access-token`，本批共用，作为 `access-token` Header 透传给 Mate execute；不保存秘密、授权引用或凭据 ID。接口见 [Mate 定时执行凭据接口](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)。请求中出现 credentialIds、vaultIds、credentialRefs 或原始 credentials 对象，按未知字段返回 400 `SCHEDULE_REQUEST_INVALID`。
 
 | 产品 | 资源关系 | 收益与代价 |
 |---|---|---|
 | Claude | Deployment → vault_ids → Vault → Credential | 每个部署自选凭据集合，需要维护集合及成员变更规则 |
-| CampusClaw | Schedule → agentId；Mate 按 Agent 绑定决定凭据 | 任务配置更简单，凭据规则只在 Mate 一处维护；代价是同一 Agent 的不同任务不能各自选择凭据 |
+| CampusClaw | Schedule → agentId；运行时统一账号的 access-token | 任务配置最简单，凭据只在 Mate 一处维护；代价是所有定时任务权限相同，用户权限只在配置时检查，创建者失去权限后任务仍照常运行 |
 
-正常流程为：保存时只校验 Agent 绑定与配置资格，不领取 secret → 到期准备时向 Mate 查询可信接口定义和授权依据 → 受理一个新 Session → 工具完成可信目标解析、参数校验和权限判断后，才由 Mate 解析本次业务凭据并仅用于实际执行。凭据失效或撤销时记录本次真实结果（`credential_unavailable_error`）且不重跑；不能静默借用创建者浏览器 Token、管理员身份或其他凭据。
+正常流程为：保存时由 Mate 检查用户权限、Claw 校验 Agent 绑定，不领取 secret → 到期准备 Agent 并受理一个新 Session → 模型返回一批工具调用，逐个完成可信目标解析、参数校验和权限判断 → 本批有需要凭据的工具通过判断时，向 Mate 取一次统一账号的 `access-token` → 实际执行。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型，属于原 Session 的结果，不改写 Run；不能借用创建者浏览器 Token 或其他账号。
 
-Claw 已观察行为是：普通消息只捕获本次执行 Header 的不可变 MateCredentials 并在工具执行时转发，Cron 明确使用 empty()，不会恢复旧请求凭据。模型当前使用内部 CampusMateProvider，不能把模型 API Key 与业务凭据合并成一个请求字段。普通交互 Session 的 Header 快照规则保持；定时入口改用 Mate 上下文授权查询和执行时 resolve。服务间认证按企业机制接线，与解析出的下游业务凭据分别处理，不能把两类认证混为一个 Header 快照。
+Claw 已观察行为是：普通消息只捕获本次执行 Header 的不可变 MateCredentials 并在工具执行时转发，Cron 明确使用 empty()，不会恢复旧请求凭据。模型当前使用内部 CampusMateProvider，不能把模型 API Key 与业务凭据合并成一个请求字段。普通交互 Session 的 Header 快照规则保持；定时入口的快照只含 `access-token`，不做 X-HW-ID + access-token + JWT/APPKEY 的完整性检查。服务间认证按企业机制接线，与业务凭据分别处理。
 
 <a id="get-schedule-review"></a>
 
@@ -782,7 +782,6 @@ Run不增加 status、updatedAt、模型回答或完整 Schedule；后续 Sessio
 |---|---|---|
 | schedule_busy_error | 同一任务已有占用，包括尚未核对清楚的执行；不排队、不另建Session | 该定时任务仍有进行中或待核对的运行。 / This schedule has an active or unresolved run. |
 | agent_unavailable_error | 已绑定Agent明确不可用于本次执行 | 绑定的Agent暂不可用于执行。 / The bound agent is unavailable for execution. |
-| credential_unavailable_error | Mate 明确表示本次运行没有可用的业务凭据或执行授权 | 执行凭据或授权不可用。 / Execution credentials or authorization are unavailable. |
 | session_capacity_exceeded_error | 本次会话准入容量不足 | 当前没有可用的执行容量。 / Execution capacity is unavailable. |
 | session_creation_rejected_error | Session或首消息受理明确拒绝且已回滚 | 本次会话受理被拒绝。 / Session acceptance was rejected. |
 | unknown_error | 已确认未受理、已完成回滚且可记录的其他失败 | 本次运行未能受理。 / The run could not be accepted. |
@@ -791,7 +790,7 @@ Run不增加 status、updatedAt、模型回答或完整 Schedule；后续 Sessio
 
 **配置影响与不重叠规则。** 手动运行保持status/pausedReason、配置updatedAt、自动计划时刻（upcoming_run_at）及schedule.lastRunAt，不因手动失败自动暂停配置；lastRunAt继续只跟踪自动运行的开始。每次运行使用保存的输入与当前可信执行准备；不借用调用者临时Header模拟未来定时任务身份。任务已暂停或没有Cron也能测试同一套后台权限。手动与自动共享同一任务占用，已有在途/未知Run时拒绝本次并记录schedule_busy_error，不能复用别次Run充当本次成功；此不重叠选择已确认，自动忙跳过也记录schedule_busy_error；停机未观察到的时刻不补造Run，见[无补跑规则](README.md#no-catch-up)。
 
-**正常受理与失败边界。** 先校验身份、请求和资源范围，在短事务内读取可信配置快照、分配本次Run并检查/预占共享任务槽；忙时记录本次拒绝。取得槽位后，在事务外向Mate查询定义和授权依据，并完成Runtime准备；不解析secret，不调用模型或业务工具。最后在同一受理边界复核最新配置、未删除、当前资格及占用；配置已改变时记录本次未受理结果，不重新准备或运行同一Run；后续自然触发采用新配置，不混用新旧配置。受理成功原子提交Run、新Session、首条用户消息和根执行关联，然后通过既有执行协调器后台启动。准备/准入明确失败且配置仍存续时持久化失败Run、sessionId:null，并释放本次取得的占用；删除先提交时仅完成内部清理，不新增失败Run；忙时不得释放其他Run的占用。只有成功提交对应记录后才返回200，不沿用旧trigger同步等待prompt.join()的实现。
+**正常受理与失败边界。** 先校验身份、请求和资源范围，在短事务内读取可信配置快照、分配本次Run并检查/预占共享任务槽；忙时记录本次拒绝。取得槽位后，在事务外向Mate取得Agent定义并完成Runtime准备；不取Token，不调用模型或业务工具。最后在同一受理边界复核最新配置、未删除、Agent 绑定及占用；配置已改变时记录本次未受理结果，不重新准备或运行同一Run；后续自然触发采用新配置，不混用新旧配置。受理成功原子提交Run、新Session、首条用户消息和根执行关联，然后通过既有执行协调器后台启动。准备/准入明确失败且配置仍存续时持久化失败Run、sessionId:null，并释放本次取得的占用；删除先提交时仅完成内部清理，不新增失败Run；忙时不得释放其他Run的占用。只有成功提交对应记录后才返回200，不沿用旧trigger同步等待prompt.join()的实现。
 
 删除先提交时返回404且不得受理；手动运行已受理后再暂停，执行继续；随后删除则清除对应Run、保留Session且不请求取消。人工暂停只限制自动受理，不能仅因paused拒绝手动受理；若本次 lease_until 已过，则记录本次未受理结果，不重新准备同一Run。无法可靠提交失败记录、事务结果未知或响应连接丢失时，不伪造成功或再次创建Session，应只读核对；内部同一runId重复投递只复用原关联。
 
@@ -1111,6 +1110,7 @@ Accept-Language: zh-CN
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.39.0 | 2026-10-13 | 定时执行改为统一账号，每批工具调用前向 Mate 无入参取 access-token；运行时不再查询执行资格，移除 credential_unavailable_error。 |
 | 0.38.0 | 2026-10-13 | Claude 逐项取舍及时间与会话的选择理由移入主设计 §2.4，执行规则链接改指主设计。 |
 | 0.37.0 | 2026-10-13 | 首版列表由 Mate 拉取全部后自行过滤分页，Claw 不接收获准集合、不保存 userId；Claw 加 userId 列为待定 T10。 |
 | 0.36.0 | 2026-10-13 | lastRunAt 改为自动运行的受理时刻，去掉启动 CAS 说法。 |

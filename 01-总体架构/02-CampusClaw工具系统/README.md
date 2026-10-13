@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.22.0 |
+| 文档版本 | 2.23.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-10-10 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
@@ -463,9 +463,9 @@ execution 的 Child execution 以只读方式传递，但不存入 Child Session
 执行上下文或必要协作者时仍按通用可用性规则失败，不能把这类缺失与空凭据混淆。
 普通 HTTP 执行未提供 Header 时使用空快照，其余执行条件满足后同样交由 Mate 判断。精确读取、省略、失败投影与跨请求隔离由 [HTTP §7](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)唯一维护；对应现有源码检查和待实现切片见[凭据证据](source-evidence.md#credential-forwarding-evidence)。
 
-定时执行的配置不保存凭据引用（不再有 `credentialIds`）；每次运行由 Mate 按该 Agent 的绑定决定本次可用的业务凭据及其授权范围，Claw 只提交 agentId、资源 ID（scheduleId/runId 等）和不透明 authorizationRef，不保存秘密或凭据 ID，也不复制凭据认证规则。工具通过可信解析、参数校验和权限判断后，才按目标解析secret；返回值只保存在本次执行的受限内存快照中，仅实际业务execute可以使用；不进入 Schedule、Run、Session、Prompt、日志或公开结果，执行结束后释放。创建、读取或修改 Schedule 不借机执行业务或保存原始 secret。该来源为待实现增量，不将当前 Cron 空凭据实现描述为已支持长期授权。
+定时执行的配置不保存凭据引用。2026-10-13 评审确定统一账号：模型一次返回中有需要凭据的工具调用通过可信解析、参数校验和权限判断后，执行 Adapter 无入参向 Mate 取一次统一账号的 `access-token`，本批共用，只透传这一项；值只存在本批内存快照，不进入 Schedule、Run、Session、Prompt、日志或公开结果。该来源为待实现增量，不将当前 Cron 空凭据实现描述为已支持。
 
-Claw 调用 Mate 定义查询或凭据解析接口所用的服务间认证，和随后业务 execute 使用的执行凭据分别配置、授权与审计；服务间身份不等于最终业务主体，也不自动授予业务工具权限。发现请求可以使用其受信服务身份，但不得复制执行凭据快照。可信接口定义、解析输入及凭据失败语义由 [Mate 契约](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)维护；定时业务调用仍遵守同一次准备快照和 [非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)。
+Claw 调用 Mate 定义查询或定时 access-token 接口所用的服务间认证，和随后业务 execute 使用的执行凭据分别配置、授权与审计；服务间身份不等于最终业务主体，也不自动授予业务工具权限。发现请求可以使用其受信服务身份，但不得复制执行凭据快照。接口与失败语义由 [Mate 契约](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)维护；定时业务调用仍遵守同一次准备快照和 [非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)。
 
 <a id="tool-display-name"></a>
 
@@ -773,6 +773,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.23.0 | 2026-10-13 | 定时执行改为统一账号，每批工具调用前向 Mate 取 access-token。 |
 | 2.22.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 2.21.0 | 2026-10-10 | Child 保存独立完整历史并复用持久 Runtime，父侧继续只接收进度与摘要。 |
 | 2.20.1 | 2026-10-08 | 用户确认元数据分派说明统一使用 Skill 和 Tool。 |

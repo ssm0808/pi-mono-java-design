@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.65.0 |
+| 文档版本 | 1.66.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新最新迁移差距见 §8.3，历史核验保留在 §8.1/§8.2 |
@@ -341,9 +341,9 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 #### 7.1.1 定时执行的凭据来源（待实现）
 
-定时任务没有发起本轮执行的用户 HTTP Header，由 [Mate 内部能力](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)提供可信接口定义，并按该 Agent 的绑定决定本次可用的业务凭据。Schedule不保存凭据引用（不再有 `credentialIds`）或秘密，Claw 只向 Mate 提交 agentId、资源 ID（scheduleId/runId 等）和不透明 authorizationRef；运行准备只检查 Agent 绑定资格，工具完成可信解析、参数校验及权限判断后，执行Adapter才按目标取得当前凭据，不从创建请求、Session或历史恢复secret。Mate负责凭据可用性和执行范围判断；不能把普通HTTP的“空Header允许进入工具”规则用于绕过定时凭据的解析失败。
+定时任务没有发起本轮执行的用户 HTTP Header。2026-10-13 评审确定：定时执行统一使用 Mate 配置的同一个账号，Claw 无入参调用 [Mate 定时执行凭据接口](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)取得该账号的 `access-token`。模型一次返回中有需要凭据的工具调用，并且至少一个通过参数校验和权限判断时取一次，这一批工具调用共用；快照只含 `access-token`，不含 X-HW-ID、Authorization、X-HW-APPKEY，定时路径不做凭据完整性检查。用户权限只在配置任务时由 Mate 检查，Claw 不保存凭据、授权引用或用户身份。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型，不回退到空 Header 或其他账号。
 
-解析结果中的 secret 仅进入本次执行的内存快照，只有实际业务 execute 可以使用；不写入 Schedule、Run、Session、Prompt、日志、公开事件或普通资源响应，执行结束后释放。工具发现和模型调用不使用业务执行凭据。调用 Mate 定义查询及凭据解析接口的服务间认证另行配置，不能与业务执行凭据混用，也不能把服务身份视为最终业务主体；精确接口与授权关系以 Mate 契约为准。
+取得的值只进入本批次内存快照，只有实际业务 execute 可以使用；不写入 Schedule、Run、Session、Prompt、日志、公开事件或普通资源响应。工具发现和模型调用不使用该值。Claw 调用 Mate 的服务间认证另行配置，不与业务执行凭据混用。
 
 普通 Session 的四项可选 Header、原名透传和组合规则不变，中断、确认与回答仍不能覆盖原执行快照。定时入口首版只执行无需人工交互的工作；业务权限 ASK、自定义问题或计划审核按 [M10 非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)结束本次并记录原因，不创建持久等待或默认批准。参数校验错误仍先于权限判断，由模型按同次可信定义修正，运行时不自动猜参或重放业务。
 
@@ -448,6 +448,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.66.0 | 2026-10-13 | 定时执行改为统一账号，每批工具调用前向 Mate 无入参取 access-token。 |
 | 1.65.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 1.64.0 | 2026-10-05 | 定时执行通过 Mate 解析凭据引用，普通 HTTP 保留原请求快照并明确非交互入口边界。 |
 | 1.63.0 | 2026-10-04 | 所有接口取消条件与请求去重 Header 及配套 ETag，Session 更新在最新行锁内合并提交字段并保留原子准入。 |

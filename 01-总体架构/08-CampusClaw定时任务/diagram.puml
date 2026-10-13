@@ -26,7 +26,7 @@ return 已认领的 Run
 == 准备并受理 ==
 ref over Schedule, Store
   共用受理流程
-  Mate 授权 + Session 归属登记 -> Runtime 准备 -> 原子受理
+  Session 归属登记 -> Runtime 准备 -> 原子受理
   见 schedule_run_admission
 end ref
 return 已提交的受理结果\n和同次准备的上下文
@@ -71,7 +71,7 @@ class "CronToolAdapter" as Tool <<适配器 / P>>
 class "ScheduleApplication\nService" as App <<管理 / P>>
 class "ScheduleDispatcher" as Dispatch <<服务 / P>>
 interface "ScheduleAuthorization\nPort" as Auth <<端口 / P>>
-interface "ScheduleCredential\nPort" as Credential <<端口 / P>>
+interface "ScheduledAccessToken\nPort" as Credential <<端口 / P>>
 class "MateSchedule\nAdapter" as MateAdapter <<适配器 / P>>
 class "Mate 服务\n用户 / 资源归属 / 权限" as Mate <<外部>>
 interface "ScheduleBinding\nResolver" as Binding <<只读端口 / P>>
@@ -104,13 +104,13 @@ Dispatch -down-> Accept : 受理运行
 Dispatch -left-> Prepare : 自动
 Dispatch -[norank]-> Time
 Dispatch -[norank]-> Repo
-Prepare -left-> Auth : 核验授权 / 登记 Session
-Pipeline -left-> Credential : 权限通过后解析
+Prepare -left-> Auth : 登记 Session 归属
+Pipeline -left-> Credential : 每批工具调用\n获取 access-token
 Prepare -down-> Snapshot
 MateAdapter .right.|> Auth
 MateAdapter .right.|> Binding
 MateAdapter .right.|> Credential
-MateAdapter -down-> Mate : 授权 / Session 归属\n和凭据
+MateAdapter -down-> Mate : Session 归属\n和统一账号 access-token
 Accept -left-> Snapshot : 固定输入
 Accept -[norank]-> Repo
 Repo <|.. RepoImpl
@@ -206,7 +206,7 @@ Schedule -> Store ++ : 读取当前任务并预留一个手动 Run\n检查共用
 return 已预留的 Run
 ref over Schedule, Store
   共用受理流程
-  Mate 授权 + Session 归属登记 -> Runtime 准备 -> 原子受理
+  Session 归属登记 -> Runtime 准备 -> 原子受理
   见 schedule_run_admission
 end ref
 return 200 + Run（含 Session ID）
@@ -223,7 +223,7 @@ end note
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java submitLocked。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage。
 ' 表达方式：定时任务管理协调事务；Session 运行时提供准备和持久化能力。
-' 设计原因：远程授权检查在短受理事务之前完成。
+' 设计原因：远程归属登记在短受理事务之前完成；执行授权只在配置任务时由 Mate 检查。
 ' PR 证据：e9d31e8888a81b7fe95071e705482bb16fa10476，2026-10-10 拉取。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/schedule/ScheduledRuntimeAdmissionService.java newSession 和 encodeContext。
 ' Java 差异：移除 Claw 的用户引用；Mate 归属登记待实现。
@@ -241,18 +241,15 @@ participant "Session 运行时" as Runtime
 database "存储" as Store
 autonumber
 [-> Schedule ++ : 受理一个已预留的 Run
-== 核验当前执行授权 ==
-Schedule -> Mate ++ : 为本次 Run 解析可信定义\n和当前授权
-return 执行上下文
 == 登记独立归属 ==
 Schedule -> Schedule : 固定本次 Run 拟建的 Session ID
-Schedule -> Mate ++ : 按资源 ID 和授权登记 Session 归属\nClaw 不提供用户、租户或 owner
+Schedule -> Mate ++ : 按资源 ID 登记 Session 归属\nClaw 不提供用户、租户或 owner
 return 归属已持久登记
 == 只准备、不执行 ==
 Schedule -> Runtime ++ : 准备 Agent、模型和 CRON 上下文\n沿用固定的 Session ID；不执行业务
 return 固定的准备快照
 group 一个短数据库事务，由定时任务管理协调
-  Schedule -> Store ++ : 复核任务、认领、授权、时间和容量\n创建 Session + 首条消息 + 根执行 + Run 关联
+  Schedule -> Store ++ : 复核任务、认领、时间和容量\n创建 Session + 首条消息 + 根执行 + Run 关联
   return 受理已提交
 end
 [<-- Schedule -- : 确定的受理结果
@@ -270,7 +267,7 @@ end note
 ' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a，main，拉取日期 2026-10-05。
 ' 源码：modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage。
-' 映射：Mate 同时是运营人员的管理入口，以及授权、归属和凭据的最终决定方；Mate 内部处理待定。
+' 映射：Mate 同时是运营人员的管理入口，以及配置授权、会话归属和统一账号 access-token 的提供方；Mate 内部处理待定。
 ' 已确认：Claw 侧逻辑经评审人 2026-10-12 确认。
 ' 粒度：参与者统一为服务级。Claw = coding-agent 服务，含定时任务管理、到期分发、受理协调和既有 Session 运行时；GaussDB = 调度与 Session 存储。
 ' 粒度：Claw 内部组件之间的协作只在详细时序图中展开。
@@ -303,13 +300,13 @@ deactivate Operator
 [-> Claw ++ : 到达计划时间（每天 22:00）
 Claw -> Store ++ : 记录本次运行
 return 运行记录
-Claw -> Mate ++ : 校验本次运行的执行授权
-return 执行授权
 Claw -> Mate ++ : 登记新会话的归属
 return 会话归属
 Claw -> Store ++ : 保存新会话及任务内容
 return 新会话
 Claw -> Claw : 执行视频巡逻检查（由绑定的 Agent）
+Claw -> Mate ++ : 调用工具前获取统一账号 access-token
+return access-token
 Claw -> Store ++ : 保存检查过程、巡逻结论及本次运行结果
 return 已保存的运行结果
 deactivate Claw

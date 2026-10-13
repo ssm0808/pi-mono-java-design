@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.11.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.12.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -95,7 +95,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 - Claw 的 Session、Schedule、Run、DTO、Mapper、执行上下文及通用 Runtime 均不保存 `scope_ref` / `scopeRef`、`session_owner_ref` / `sessionOwnerRef`；Schedule 的 `operator_ref` / `operatorRef` 同步移出。不能改名为 tenant、owner、subject 或藏入 JSON 延续相同职责。
 - Mate 对会话读取、继续对话、停止、删除以及任务管理执行当前权限检查。Claw 校验可信服务来源、具体操作和资源约束，再检查自己的业务状态；缺少或失效的 Mate 授权结果时拒绝，不退化为任意内部调用均可访问。单个资源授权不能扩展到其他资源。
 - 任务/Run 列表的可见范围由 Mate 决定，Claw 不得自己推导。首版（2026-10-13 评审确定）由 Mate 拉取 Claw 的全部存续记录后按用户过滤、排序和分页，Claw 不接收获准集合、不保存 userId；读取量随全部记录增长。Claw 增加 userId 列为待定 T10。
-- `authorization_ref` 只是不透明的 Mate 授权记录定位引用；Claw 可以保留它用于后台向 Mate 查询，不能解析为用户信息、与本地归属比较或持有即放行。定时任务不保存凭据引用，业务凭据由 Mate 按 Agent 绑定在运行时决定。用户审计与租户配额在 Mate；Claw 保留技术执行审计、实例容量和任务互斥。
+- 定时任务不保存授权引用或凭据引用：用户权限只在配置任务时由 Mate 检查，运行时统一账号的 access-token 由 Mate 按批次签发，Claw 不落库。用户审计与租户配额在 Mate；Claw 保留技术执行审计、实例容量和任务互斥。
 - PR 中的扫描 `owner`、`schedule_start_owner` 表示执行实例，不是用户；两者已随扫描协调表和启动权一并目标撤销。`agent_id`、父子 Session/execution 关系同样是运行关联，不代替用户授权。
 
 正常定时受理先固定同次 Run 的拟建 Session ID，由 Mate 确认并持久登记该 ID 的归属，再执行 Claw 的同库受理；未确认归属不得启动模型或业务。Mate 关联失败或结果未知时不受理，先按固定 ID 只读核对，不另建会话或重放任务。Mate 已登记而 Claw 事务失败时，该关联不代表会话已存在，须按 Claw 权威状态核对后清理；未知提交不能直接清理。具体交接及生命周期由 [Mate 专项](../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)维护，接线**待实现**，不宣称跨库原子提交。
@@ -669,7 +669,6 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | status | VARCHAR(16) | 否 | — | `active` / `paused` |
 | paused_reason | VARCHAR(16) | 是 | — | 当前暂停原因：手动暂停，另预留错误暂停；取值与转换见[配置契约](../01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason) |
 | metadata | TEXT | 否 | — | 附加元数据 JSON 对象，无值时写 `{}` |
-| authorization_ref | TEXT | 否 | — | Mate 提供的非秘密授权引用，不是访问令牌 |
 | last_run_at | TIMESTAMPTZ(0) | 是 | — | 最近一次自动运行的受理时刻，在受理事务中写数据库当前时间；手动、准备失败和忙跳过不更新 |
 | upcoming_run_at | TIMESTAMPTZ(0) | 是 | — | 下一次自动运行的计划时刻，即扫描游标；到期领取后推进；仅手动、暂停或规则无后续时刻时为空 |
 | created_at | TIMESTAMPTZ(0) | 否 | — | 创建时间 |
@@ -935,6 +934,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.12.0 | 2026-10-13 | 定时执行改为统一账号：目标 t_schedule 删除 authorization_ref 列（PR #332 无此列，不进 §5.5 差异表）；运行时 access-token 不落库。 |
 | 1.11.0 | 2026-10-13 | §5 改为只列目标结构：两张表按字段、主键、索引、约束分开展示，Run 阶段改为表格；PR #332 待撤销或改名的列、表与索引集中到 §5.5 差异表；执行规则链接改指主设计。 |
 | 1.10.0 | 2026-10-13 | 首版列表由 Mate 拉取全部后自行过滤：Claw 不接收获准集合，恢复 idx_schedule_list(updated_at DESC, id)；Claw 加 userId 列为待定 T10。 |
 | 1.9.2 | 2026-10-13 | 任务列表不建 idx_schedule_list：由 Mate 按用户过滤出获准任务 ID 集合，Claw 不保存 userId。 |
