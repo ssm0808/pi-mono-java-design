@@ -26,7 +26,7 @@
 </div>
 <p id="paused-note" class="hint" hidden>任务已暂停。保存修改保持暂停，恢复操作独立完成。</p>
 </div></section>
-<section class="form-section"><div class="section-heading"><h2>凭据</h2><p>配置智能体运行任务时可使用的凭据。</p></div><div class="fields"><label>凭据标识（选填）<textarea id="credentials" rows="2" placeholder="每行填写一个凭据标识"></textarea><small>最多 16 个。请填写凭据标识，任务运行时会检查权限。</small></label><details><summary>高级配置</summary><label>管理标签（选填）<textarea id="metadata" rows="3" placeholder='{"campus":"north"}' spellcheck="false"></textarea><small>用于分类和查找任务，请以文字填写标签名称和值。</small></label></details></div></section>
+<section class="form-section"><div class="section-heading"><h2>其他设置</h2><p>按需填写的附加信息。</p></div><div class="fields"><details><summary>高级配置</summary><label>管理标签（选填）<textarea id="metadata" rows="3" placeholder='{"campus":"north"}' spellcheck="false"></textarea><small>用于分类和查找任务，请以文字填写标签名称和值。</small></label></details></div></section>
 <footer><p id="save-note">保存为手动任务，不会立即执行。</p><div><button id="cancel" type="button">返回配置</button><button class="primary" id="save" type="submit">创建任务</button></div></footer>
 </form>
 <section id="saved-panel" hidden><div class="detail-head"><h2>任务概览</h2><span id="lifecycle"></span></div><dl><dt>触发方式</dt><dd id="saved-trigger"></dd><dt>智能体</dt><dd>园区运营智能体</dd><dt>任务内容</dt><dd id="saved-instructions"></dd></dl><div id="saved-future"></div><div class="actions"><button id="run" class="primary">立即运行</button><button id="edit">编辑任务</button><button id="pause">暂停自动运行</button></div><div id="run-result" role="status" hidden></div><p class="hint">运行请求提交后，可在对应会话中查看进展和结果。</p></section>

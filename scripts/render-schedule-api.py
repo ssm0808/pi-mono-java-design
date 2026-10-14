@@ -266,7 +266,7 @@ def build_html():
     base = '/campusclaw-service/v1'
     status = 'Claw 目标契约待实现；各项证据日期与范围以源码证据文档为准。'
     links = ('<a href="README.md">模块主设计</a> · <a href="configuration.md">Claw契约原文</a> · '
-             '<a href="execution.md">执行与工程落地</a>')
+             '<a href="README.md#normal-acceptance">定时任务受理流程</a>')
     identities = set()
     version_pattern = r'\| 版本 \| ([\d.]+)'
     version = re.search(version_pattern, text)[1]

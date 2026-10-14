@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id), q = new URLSearchParams(location.search);
   let saved = null, editing = q.get('state') === 'paused', uncertain = false, writeCount = 0, runPending = false;
-  const textFields = ['task-name','instructions','description','credentials','metadata','timezone','expression','at'];
+  const textFields = ['task-name','instructions','description','metadata','timezone','expression','at'];
   const fixtureTimes = ['2026-10-09T00:00:00Z','2026-10-12T00:00:00Z','2026-10-13T00:00:00Z','2026-10-14T00:00:00Z','2026-10-15T00:00:00Z'];
   function trigger() { return document.querySelector('input[name=trigger]:checked').value; }
   function expression() {
@@ -53,8 +53,6 @@
     e.preventDefault(); if (uncertain) return;
     if (!$('task-form').reportValidity()) return;
     if (!$('task-name').value.trim()) { tell('任务名称不可为空白。',true); $('task-name').focus(); return; }
-    const credentialIds=$('credentials').value.split('\n').map(s=>s.trim()).filter(Boolean);
-    if (credentialIds.length>16 || new Set(credentialIds).size !== credentialIds.length) { tell('最多填写 16 个凭据标识，请勿重复。',true);return; }
     try {
       const metadata=JSON.parse($('metadata').value || '{}');
       if (!metadata || Array.isArray(metadata) || typeof metadata!=='object' || Object.entries(metadata).length>16 || Object.entries(metadata).some(([k,v])=>!k||k.length>64||typeof v!=='string'||v.length>512)) throw Error();
@@ -67,7 +65,7 @@
       rule={type:'cron',expression:cron,timezone:zone,upcomingRunsAt:cron==='0 0 8 * * MON-FRI'&&zone==='Asia/Shanghai'?[...fixtureTimes]:[]};
     }
     writeCount++;
-    saved={name:$('task-name').value.trim(),instructions:$('instructions').value, schedule:rule,status:saved?.status || 'active',credentialIds};
+    saved={name:$('task-name').value.trim(),instructions:$('instructions').value, schedule:rule,status:saved?.status || 'active'};
     if ($('unknown-save').checked) {lock(true);tell('暂时无法确认是否保存成功。内容已保留，请先刷新核对，再决定是否重新保存。',true);$('feedback').focus();return;}
     tell('已保存示例配置，尚未立即运行。');details();
   });
