@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.52.0 |
+| 文档版本 | 0.53.0 |
 | 更新日期 | 2026-10-14 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；不选择或追加已有 Session |
@@ -181,7 +181,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | UC5 删除 | BU7 | Mate 管理入口 | 管理资格 | 200 完整 Schedule 回执 | 同删 Run，保留 Session，不取消已受理执行 |
 | UC6 立即运行 | BU4 | Mate 管理入口 | 运行资格；active 或 paused | 200 Run（sessionId 与 error 二选一） | 先占用任务，再走共用受理；不移动计划游标 |
 | UC7 暂停 | BU5 | Mate 管理入口 | 管理资格 | 200 完整 Schedule，paused/manual | 同值操作不改时间与游标 |
-| UC8 取消暂停 | BU5 | Mate 管理入口 | 管理资格、执行资格 | 200 完整 Schedule，active/null | 只从未来匹配继续，不补跑 |
+| UC8 取消暂停 | BU5 | Mate 管理入口 | 管理资格 | 200 完整 Schedule，active/null | 只从未来匹配继续，不补跑 |
 | UC9 Run 列表 | BU6 | Mate 管理入口 | Mate 已确认用户身份 | 200 runs/nextPage | 单任务时 Mate 先确认可见再带 scheduleId 查询；跨任务时 Mate 拉取全部后过滤；不含已删除任务的 Run |
 | UC10 Run 详情 | BU6 | Mate 管理入口 | 读取资格 | 200 八字段 Run | 任务或 Run 已删除时 404 |
 | UC11 自动扫描与受理 | BU3 | 调度器 | 任务到期 | 新 Session 受理并启动 | 不补漏跑、遇忙跳过；受理前须完成 Mate 归属登记 |
@@ -244,7 +244,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ### 3.5 运行定时任务的详细时序（UC11、UC12）
 
-展开整体时序的“运行定时任务”阶段。场景：每天 22:00 为“视频巡逻检查”创建一个新 Session，从一次到期扫描开始，到新 Session 根执行终态入库结束；前提是任务为 active 且身份策略可用。状态：目标设计，待实现。
+展开整体时序的“运行定时任务”阶段。场景：每天 22:00 为“视频巡逻检查”创建一个新 Session，从一次到期扫描开始，到新 Session 根执行终态入库结束；前提是任务为 active。状态：目标设计，待实现。
 
 <a id="sequence-roles"></a>
 
@@ -611,6 +611,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.53.0 | 2026-10-14 | 清理 D10 前遗留的“执行资格”“身份策略”前提。 |
 | 0.52.0 | 2026-10-14 | 评审 Todo 拆到独立的待对齐事项文档。 |
 | 0.51.0 | 2026-10-14 | 新增 D12：自动运行遇 agent_unavailable_error 时自动暂停，其他失败不暂停；关闭 T1。 |
 | 0.50.0 | 2026-10-14 | “绑定”统一改为“关联”（任务与 Agent 的关系）。 |
