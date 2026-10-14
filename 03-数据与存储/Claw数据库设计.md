@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.13.0 · 日期：2026-10-13 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.14.0 · 日期：2026-10-14 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -717,6 +717,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | uk_schedule_run_unfinished | 唯一 `(schedule_id) WHERE finished_at IS NULL` | 同一任务至多一条未结束 Run，即不并发 |
 | idx_schedule_run_list | `(schedule_id, created_at DESC, id DESC)` | 按任务或时间倒序查询 Run，from/to 走同一索引 |
 | idx_schedule_run_retention | `(finished_at, id)` | 批量删除超过保留期的已结束 Run |
+| uk_schedule_run_execution | 唯一 `(execution_id)`，空值不参与 | 根执行终态提交时按 execution_id 结束本次 Run；一个根执行至多对应一条 Run |
 
 数据库约束：
 
@@ -729,7 +730,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 |---|---|---|---|---|
 | 准备中 | 空 | 空 | 空 | 是 |
 | 已受理，执行中或结果未知 | 空 | 非空 | 空 | 是 |
-| 已受理，已对账结束 | 非空 | 非空 | 空 | 否 |
+| 已受理，根执行已结束 | 非空 | 非空 | 空 | 否 |
 | 未受理（准备失败、过期、任务忙） | 非空 | 空 | 非空 | 否 |
 
 忙跳过在插入时即带 finished_at，不占用任务。受理后由原实例在进程内直接启动；之后任何时刻失联都按结果未知处理，Run 保持未结束，自动恢复见[待定 T9](../01-总体架构/08-CampusClaw定时任务/README.md#todo-t9)。
@@ -748,7 +749,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | 领取 Run | 锁 Schedule；任务无未结束 Run 时插入未结束 Run，有则插入带 finished_at 的忙跳过 Run；自动触发同时推进游标 |
 | 受理 | 锁 Schedule 与 Run，复查任务存在且 active、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过、授权有效；首消息用锁内读到的最新 prompt；Session、首消息、根执行、Run 关联与自动运行的 last_run_at 一起提交 |
 | 受理后启动 | 原实例在进程内启动，不写启动权；模型与业务执行不在受理事务内 |
-| 根终态对账 | 只看本次根执行，不把会话后续聊天当作本次结果；写入 finished_at 即释放任务；结果未知不释放 |
+| 根执行终态提交 | Runtime 写根执行终态的同一事务内，按 execution_id 条件更新本次 Run 的 finished_at，释放任务；Run 已删除时更新 0 行；只看本次根执行，会话后续聊天不改写；终态写不进（结果未知）不释放，见 T9 |
 | 清理过期准备 | 锁 Run，只对 session_id、error_type 都为空且 lease_until 已过的 Run 写 finished_at 与错误 |
 | 保留期清理 | 按 `(finished_at, id)` 批量删除超期的已结束 Run，不级联 Session，不删除未结束 Run |
 | 删除任务 | 锁 Schedule，同事务删除 Run 与 Schedule；受理先提交则保留 Session，删除先提交则拒绝旧准备结果；外键级联作兜底 |
@@ -788,6 +789,7 @@ PR #332 已实现定时任务表，未合入 main。下表列出它与 §5.2–�
 | idx_schedule_run_list | `(scope_ref, created_at DESC, id DESC)` | 改为 `(schedule_id, created_at DESC, id DESC)` | 按任务查询 |
 | idx_schedule_run_retention | `(state, finished_at, id)` | 改为 `(finished_at, id)` | state 已撤销 |
 | uk_schedule_run_unfinished | 无 | 新增 | 同任务不并发 |
+| uk_schedule_run_execution | 无 | 新增 | 终态提交时按 execution_id 结束 Run |
 
 <a id="gaps"></a>
 
@@ -934,6 +936,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.14.0 | 2026-10-14 | Run 在根执行终态的同一事务内结束：新增 uk_schedule_run_execution，事务表“根终态对账”改为“根执行终态提交”。 |
 | 1.13.0 | 2026-10-13 | §5.5 credential_ids 撤销原因改为统一账号。 |
 | 1.12.0 | 2026-10-13 | 定时执行改为统一账号：目标 t_schedule 删除 authorization_ref 列（PR #332 无此列，不进 §5.5 差异表）；运行时 access-token 不落库。 |
 | 1.11.0 | 2026-10-13 | §5 改为只列目标结构：两张表按字段、主键、索引、约束分开展示，Run 阶段改为表格；PR #332 待撤销或改名的列、表与索引集中到 §5.5 差异表；执行规则链接改指主设计。 |

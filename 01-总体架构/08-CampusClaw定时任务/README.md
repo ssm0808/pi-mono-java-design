@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.48.0 |
+| 文档版本 | 0.49.0 |
 | 更新日期 | 2026-10-14 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -34,7 +34,7 @@
 | T6 | 每实例 8 个活动执行上限在多副本下会放大总并发，部署阶段需按实例数与下游配额核对 | | [部署初始值](#deployment-defaults) |
 | T7 | Mate 任务配额准入和 Session 归属登记的内部契约待实现（列表首版由 Mate 拉取全部后自行过滤，不传获准集合） | | [配置 身份与权限边界](configuration.md#mate-access-boundary) |
 | T8 | Mate 管理入口在调用 Claw 前后的处理逻辑（权限、配额、任务与用户关联等）尚未确定；Claw 侧逻辑已确认 | | 本次评审 |
-| <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，定时任务一直被占用、后续计划全部遇忙跳过。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件、结束 Run 并释放任务；② 执行期写入与工具调用前检查执行未终止，防止卡死后恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | | 本次评审（2026-10-13） |
+| <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，定时任务一直被占用、后续计划全部遇忙跳过。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件、结束 Run 并释放任务（中断终态走 D11 的同一终态提交，Run 随之结束，无需单独处理）；② 执行期写入与工具调用前检查执行未终止，防止卡死后恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | | 本次评审（2026-10-13） |
 | <a id="todo-t10"></a>T10 | 是否在 Claw 的 t_schedule（及 Run、Session）增加 userId，使列表直接按用户查询；需先确定任务仅创建者可见还是同范围共享，以及与 Mate 归属的同步规则。首版按方法 A 由 Mate 拉取全部后过滤 | | 本次评审（2026-10-13） |
 
 ### 需求信息
@@ -113,7 +113,7 @@
 
 ![定时任务整体时序](scheduled_task_overview.svg)
 
-[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L295)
+[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L305)
 
 | 阶段 | 详细时序 |
 |---|---|
@@ -139,6 +139,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | D8 | 任务运行时使用 Agent 的哪个版本？ | Claude 在创建或显式更新 Deployment 时固定 Agent 版本 | 现有 Agent 目录没有可解析的历史定义，只保存一个版本号兑现不了版本固定 | 只绑定 agentId，每次使用当时已发布的定义 | Agent 发布新版本后，后续运行行为可能改变，无法复现历史运行；这是能力缺口，不是字段简化 |
 | D9 | 首版任务列表和 Run 列表如何按用户过滤？ | Claude 按 workspace 范围列出，无用户级过滤 | 用户与任务的关联在 Mate；Claw 不保存用户范围或 owner | 方法 A：Claw 返回全部记录，Mate 拉取全部页后按用户过滤、排序和分页；单任务的 Run 由 Mate 先确认可见再带 scheduleId 查询 | 读取量随全部任务与 Run 增长，Claw 页码只用于分批拉取；Claw 加 userId 见 T10 |
 | D10 | 定时执行时没有用户请求，Claw 用什么权限调用业务工具？ | Claude 部署引用 workspace 范围的 Vault 凭据；普通对话由用户请求带 Header | 用户登录 Token 会过期，且没有确认过的刷新或代签接口；不能保存用户密码 | 用户权限只在配置时由 Mate 检查；运行时统一使用 Mate 配置的同一个账号，模型每批需要凭据的工具调用前，Claw 无入参向 Mate 取一次 access-token（2026-10-13 评审确定） | 所有任务权限相同；创建者失去权限或离职后任务仍照常运行；每批工具调用多一次 Mate 请求 |
+| D11 | 执行结束后，Run 怎么知道并释放任务？ | 未核验各基线的同类机制 | 同一任务不并发，Run 不结束后续计划就全部遇忙跳过；实例可能在任意时刻失联 | 写根执行终态的同一数据库事务内，经 Runtime 通用终态扩展点结束本次 Run（按 execution_id 条件更新 finished_at）；不用提交后回调，也不轮询（2026-10-14 评审确定） | Runtime 需新增事务内扩展点；Run 需 execution_id 索引；实例宕机写不进终态时仍靠 T9 |
 
 时间、执行目标和删除的多基线对照见 [A14](../07-Agent架构对比/README.md#a14) 和[删除基线证据](source-evidence.md#schedule-delete-baselines)。
 
@@ -196,7 +197,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | UC9 Run 列表 | BU6 | Mate 管理入口 | Mate 已确认用户身份 | 200 runs/nextPage | 单任务时 Mate 先确认可见再带 scheduleId 查询；跨任务时 Mate 拉取全部后过滤；不含已删除任务的 Run |
 | UC10 Run 详情 | BU6 | Mate 管理入口 | 读取资格 | 200 八字段 Run | 任务或 Run 已删除时 404 |
 | UC11 自动扫描与受理 | BU3 | 调度器 | 任务到期 | 新 Session 受理并启动 | 不补漏跑、遇忙跳过；受理前须完成 Mate 归属登记 |
-| UC12 结果对账 | BU3 | 调度器 | 已受理 Run | 写入 Run.finished_at 释放任务 | 已删除任务只收尾 Session，不复活资源 |
+| UC12 Run 结束 | BU3 | Runtime 终态提交 | 已受理 Run 的根执行结束 | 与根执行终态同事务写入 Run.finished_at，释放任务 | 已删除任务更新 0 行，不复活资源 |
 | UC13 运行超时停止 | BU3 | 调度器 | 单次运行超过 30 分钟 | 向原根执行请求停止 | 停止未确认前保持停止中或未知 |
 
 <a id="persistence-lifecycle"></a>
@@ -234,7 +235,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ![Claw 配置保存](schedule_configuration_save.svg)
 
-[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L182)
+[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L192)
 
 保存步骤、并发语义与结果不确定时的处理见[配置 §5](configuration.md#reliable-write-flow)。
 
@@ -246,7 +247,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
-[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L215)
+[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L225)
 
 **正常调用如何完成：** 核验 Mate 服务、获准操作和目标 → 短事务锁定任务，插入一条未结束的手动 Run 占用任务，不改自动计划 → 进入[共用受理流程](#run-admission-sequence) → 返回 200 和带 sessionId 的 Run，不等待业务完成。
 
@@ -263,7 +264,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 | 角色 | 负责的交互 | 实现映射 |
 |---|---|---|
-| 调度器 | 发起到期扫描、提交后启动及原根执行结果对账 | `ScheduleDispatcher`；各副本并行扫描，不选领跑者 |
+| 调度器 | 发起到期扫描、提交后启动 | `ScheduleDispatcher`；各副本并行扫描，不选领跑者 |
 | 定时任务管理 | 管理配置；领取 Run，协调可信准备和原子受理 | `ScheduleApplicationService`、`ScheduleRunPreparation`、`ScheduledRunAcceptanceService` 等 M10 应用职责，不要求实现为一个大 Service |
 | Mate | 提供可信绑定与配置授权，登记 Session 归属，提供统一账号的 access-token | `MateScheduleAdapter` 对接外部 Mate |
 | Session 运行时 | 准备 Agent/模型/工具上下文；受理后推进模型与工具，保存根执行结果 | 既有 `AgentSessionFactory.create`、`RuntimeExecutionCoordinator.start` 和运行时持久化能力；后台准备与非交互 Host 策略待实现 |
@@ -279,7 +280,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 2. **归属登记与准备。** 先固定拟建 Session ID，由 Mate 独立登记归属并确认；再在事务外解析 Agent 已发布目录、模型、CRON profile、工作区，固定 `PreparedScheduleRunDTO`；不持数据库行锁调用远端，不调用模型或业务工具。
 3. **原子受理。** 同一事务锁定 Schedule 与 Run，复核任务存在且状态允许、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过与容量；创建 Session、首条用户消息（使用锁内读到的最新 prompt）、根执行，写 Run 关联，自动运行同时写 last_run_at 为数据库当前时间。任一步失败整体回滚。
 4. **事务后启动。** 受理不等待 Agent 完成。原实例在进程内直接启动一次，调度上下文（scheduleId、runId、agentId 及非交互策略）只在内存中传给 Runtime 和子 Agent，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件，不伪造 SSE 连接。模型每次返回需要凭据的工具调用时，向 Mate 取一次统一账号 access-token，本批工具共用（[D10](#key-decisions)）。Runtime、Cron 与 Child 共用受理原语与执行协调器，规则见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)。
-5. **结果对账。** 读取受理时固定的根执行终态（以根执行为准）；Schedule/Run 仍存续时写入 Run.finished_at 释放任务；已删除时只收尾 Session 与根执行，不重新插入 Run 或配置。用户在同一 Session 后续发起的对话不改写本次结果。
+5. **Run 结束。** Runtime 提交根执行终态时，在同一事务内调用终态扩展点；定时任务的实现按 execution_id 条件更新本次 Run 的 finished_at，释放任务（[D11](#key-decisions)）。终态写入失败由 Runtime 既有重试负责，两者一起成功或一起失败。Run 已随任务删除时更新 0 行，只保留 Session 与根执行终态，不重新插入 Run 或配置。用户在同一 Session 后续发起的对话不产生新的根终态，不改写本次结果。
 
 自动和手动受理均要求配置存在；自动受理要求 active 并检查派发期限，手动受理允许 active/paused，不移动计划游标，也不更新 last_run_at。暂停或 Agent 绑定变更先提交时，已领取的自动 Run 不受理；仅修改 prompt 或时间规则不取消已领取的这次运行，受理使用最新 prompt。删除先提交则不受理；受理先提交则保留 Session 并删除 Run。
 
@@ -293,7 +294,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ![共用受理流程](schedule_run_admission.svg)
 
-[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L251)
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L261)
 
 **正常调用如何完成：** 固定拟建 Session ID，由 Mate 按资源 ID 登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、Run、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
 
@@ -538,7 +539,7 @@ Mate 侧新增的内部接口见 [Mate 定时执行接口草案](../../02-服务
 
 | 位置 | 职责 |
 |---|---|
-| `codingagent.schedule` | Schedule/Run 应用规则、时间计算、受理准备、扫描派发、结果对账及数据库访问；按职责拆分 application、dispatch、persistence、config 子包 |
+| `codingagent.schedule` | Schedule/Run 应用规则、时间计算、受理准备、扫描派发、Run 结束（终态扩展点实现）及数据库访问；按职责拆分 application、dispatch、persistence、config 子包 |
 | `codingagent.tool.cron` | 将模型工具调用和当前 Agent、Session/执行及目标资源 ID 转换为相同应用服务请求，不保存另一份任务或调度状态 |
 | `codingagent.runtimeapi` | HTTP Controller、请求/响应 VO 和既有 Runtime 受理边界；Controller 不直接使用 Mapper、调度线程或模型 |
 | `codingagent.session` 与既有 Runtime | Session 创建、根执行、工具权限、终态与消息持久化；定时模块不重做 AgentLoop |
@@ -622,6 +623,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.49.0 | 2026-10-14 | 新增 D11：根执行终态与 Run 结束同事务提交，取代调度器结果对账；更新运行步骤、角色、类图与时序图。 |
 | 0.48.0 | 2026-10-14 | §3.5 第 2 步改为先登记归属再准备，与受理图一致；第 4 步补每批工具调用取 access-token；术语补计划游标与派发容差。 |
 | 0.47.0 | 2026-10-14 | 全局目标类图按入口、应用、端口与适配器、Runtime 分包，补主要职责，删去与正文重复的业务规则图例，去掉已撤销的分发状态表。 |
 | 0.46.0 | 2026-10-13 | 去重：§3.3 删除与配置 §5 重复的步骤摘要；§3.8 的 Cron 字段说明改为链接配置 §3；§3.4 增加锚点供配置文档引用。 |

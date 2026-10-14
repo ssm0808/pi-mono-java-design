@@ -3,12 +3,12 @@
 ' 源码：modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java executeAndReschedule。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventOutput.java persistenceOnly。
-' 表达方式：调度器负责分发和对账；定时任务管理负责准备和受理。
+' 表达方式：调度器负责分发和启动；定时任务管理负责准备、受理和 Run 结束（D11）。
 ' 设计原因：把持久受理与 Runtime 执行及其实际结果分开。
 ' 目标：待实现；不补跑、不重放，结果未知时保持任务占用。
 ' 表达方式：只画正常流程；失败与恢复规则见 README.md 第 5.2.1 节。
 ' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
-title 到点自动运行：从分发到结果对账
+title 到点自动运行：从分发到 Run 结束
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
@@ -32,14 +32,14 @@ end ref
 return 已提交的受理结果\n和同次准备的上下文
 == 执行已受理的 Run ==
 Scheduler ->> Runtime ++ : 用同一准备上下文启动一次
-Runtime -> Runtime : 按非交互 Host 策略运行 Agent
-Runtime -> Store ++ : 持久化消息和工具结果\n确认后持久化根执行终态
-return 已持久化的执行记录
-deactivate Runtime
-== 对账原根执行 ==
-Scheduler -> Store ++ : 读取固定根执行的结果并更新 Run 摘要\n确认终止后释放自己的任务槽位
-return 终态已反映到 Run
 deactivate Scheduler
+Runtime -> Runtime : 按非交互 Host 策略运行 Agent
+Runtime -> Store ++ : 持久化消息和工具结果
+return 已持久化
+== 根执行结束 ==
+Runtime -> Store ++ : 同一事务提交根执行终态\n并经终态扩展点结束本次 Run（释放任务）
+return 终态与 Run 结束已提交
+deactivate Runtime
 @enduml
 
 @startuml scheduled_task_architecture
@@ -101,6 +101,9 @@ package "定时任务应用层（schedule）" as AppPkg {
   class ScheduledRunAcceptanceService <<单例 / P>> {
     + 同库短事务受理
   }
+  class ScheduleRunTerminalHook <<单例 / P>> {
+    + 按 execution_id 结束 Run
+  }
 }
 
 package "端口与适配器" as PortPkg {
@@ -125,6 +128,9 @@ package "Runtime（已有，需接入定时入口）" as RtPkg {
   class ManagedAgentSession <<每次 Run>>
   class "Host hooks +\nToolExecutionPipeline" as Pipeline <<每次 Run>>
   class "Session 与执行持久化" as Persist <<已有>>
+  interface ExecutionTerminalHook <<终态扩展点 / P>> {
+    + 与根执行终态同事务调用
+  }
 }
 
 class "GaussDB" as Db <<最终决定方>> {
@@ -164,12 +170,16 @@ Persist -down-> Db
 ScheduleDispatcher -down-> RuntimeExecutionCoordinator : 提交后启动一次
 RuntimeExecutionCoordinator -down-> AgentSessionFactory
 RuntimeExecutionCoordinator -right-> Persist : 事件 / 终态
+Persist -down-> ExecutionTerminalHook : 终态事务内
+ScheduleRunTerminalHook .right.|> ExecutionTerminalHook
+ScheduleRunTerminalHook -down-> ScheduleRepository : 结束 Run
 AgentSessionFactory -down-> "0..*" ManagedAgentSession : 创建
 ManagedAgentSession *-down-> "1" Pipeline
 Pipeline -up-> ScheduledAccessTokenPort : 每批工具调用\n取 access-token
 
 PreparedScheduleRunDTO -down[hidden]-> ScheduleAuthorizationPort
 ScheduledRunAcceptanceService -down[hidden]-> ScheduleRepository
+ScheduledRunAcceptanceService -down[hidden]-> ScheduleRunTerminalHook
 ScheduleTimePolicy -right[hidden]-> RuntimeExecutionCoordinator
 
 legend bottom

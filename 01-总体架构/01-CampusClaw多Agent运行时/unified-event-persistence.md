@@ -1,6 +1,6 @@
 # 统一执行历史与事件持久化
 
-版本：1.1.0 · 2026-10-10 · 状态：统一受理、Child 持久化、逐工具提交及统计投影均待实现。
+版本：1.2.0 · 2026-10-14 · 状态：统一受理、Child 持久化、逐工具提交及统计投影均待实现。
 
 [Runtime 主设计](README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#pending-changes) · [源码证据](unified-event-persistence-evidence.md) · [定时任务](../08-CampusClaw定时任务/README.md#normal-acceptance) · [Skill 统计](../../04-命令与技能/03-Skill加载统计/README.md) · [Session 存储](../../03-数据与存储/01-会话记忆GaussDB/README.md)
 
@@ -36,7 +36,7 @@
 
 `AgentSessionFactory` 只装配运行对象、工具与 hooks，不访问数据库。应用层 `SessionExecutionAdmission` 复用受理原语；`ScheduledRunAcceptanceService`、`ChildRunAcceptanceService` 在自己的短事务中组合这些原语，不能用嵌套 REQUIRES_NEW 破坏原子关联。事务内重检可变状态，事务外查询 Mate、准备目录和执行模型/工具。
 
-三入口统一由 `RuntimeExecutionCoordinator` 安装历史写入适配器、压缩与终态处理。交互入口有 SSE 输出，后台入口用 `RuntimeEventOutput.persistenceOnly()`；输出类型不决定是否持久化。Runtime 的通用执行边界接收内部 DTO，不反向依赖 Schedule、HTTP Controller 或 Skill 查询服务。CronTool 只依赖薄管理/受理服务，不能构成 Registry—Dispatcher 构造环。
+三入口统一由 `RuntimeExecutionCoordinator` 安装历史写入适配器、压缩与终态处理。交互入口有 SSE 输出，后台入口用 `RuntimeEventOutput.persistenceOnly()`；输出类型不决定是否持久化。Runtime 的通用执行边界接收内部 DTO，不反向依赖 Schedule、HTTP Controller 或 Skill 查询服务。根执行终态提交提供事务内终态扩展点（待实现）：调用方模块注册实现，与终态同事务提交、同事务回滚，Runtime 不感知具体业务；定时任务借此结束 Run，见 [M10 D11](../08-CampusClaw定时任务/README.md#key-decisions)。CronTool 只依赖薄管理/受理服务，不能构成 Registry—Dispatcher 构造环。
 
 ### 全局目标类图
 
@@ -162,5 +162,6 @@ STOP_REQUESTED 不拒绝同一原执行已在途调用的真实结果；实际�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.0 | 2026-10-14 | 根执行终态提交增加事务内终态扩展点，供定时任务结束 Run。 |
 | 1.1.0 | 2026-10-10 | 父子关联与工具结果结构归入 Claw 数据库设计，执行和提交流程继续独立维护。 |
 | 1.0.0 | 2026-10-10 | Runtime、Cron、Child 统一保存独立完整历史，逐工具原子提交并复用成功结果维护 Skill 累计。 |
