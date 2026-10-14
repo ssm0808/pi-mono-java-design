@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.16.0 · 日期：2026-10-14 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.17.0 · 日期：2026-10-14 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -667,7 +667,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | cron_expression | TEXT | 是 | — | Spring 六字段表达式；仅手动运行的任务为空 |
 | timezone | TEXT | 是 | — | 与 Cron 成对保存的时区，缺省值由服务归一化 |
 | status | VARCHAR(16) | 否 | — | `active` / `paused` |
-| paused_reason | VARCHAR(16) | 是 | — | 当前暂停原因：手动暂停，另预留错误暂停；取值与转换见[配置契约](../01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason) |
+| paused_reason | VARCHAR(64) | 是 | — | 当前暂停原因：人工暂停存 `manual`，自动暂停存触发暂停的 Run 的 error_type（目前仅 `agent_unavailable_error`），投影为 `{type:error,error:{type}}`；规则见[主设计 D12](../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions) |
 | metadata | TEXT | 否 | — | 附加元数据 JSON 对象，无值时写 `{}` |
 | last_run_at | TIMESTAMPTZ(0) | 是 | — | 最近一次自动运行的受理时刻，在受理事务中写数据库当前时间；手动、准备失败和忙跳过不更新 |
 | upcoming_run_at | TIMESTAMPTZ(0) | 是 | — | 下一次自动运行的计划时刻，即扫描游标；到期领取后推进；仅手动、暂停或规则无后续时刻时为空 |
@@ -750,6 +750,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | 受理 | 锁 Schedule 与 Run，复查任务存在且 active、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过、授权有效；首消息用锁内读到的最新 prompt；Session、首消息、根执行、Run 关联与自动运行的 last_run_at 一起提交 |
 | 受理后启动 | 原实例在进程内启动，不写启动权；模型与业务执行不在受理事务内 |
 | 根执行终态提交 | Runtime 写根执行终态的同一事务内，按 execution_id 条件更新本次 Run 的 finished_at，释放任务；Run 已删除时更新 0 行；只看本次根执行，会话后续聊天不改写；终态写不进（结果未知）不释放，见 T9 |
+| 记录未受理 Run | 锁 Run 写 finished_at 与 error_type；自动运行且为 agent_unavailable_error 时同事务锁 Schedule，仍为 active 且 agent_id 等于 Run.agent_id 才改为 paused 并写 paused_reason |
 | 清理过期准备 | 锁 Run，只对 session_id、error_type 都为空且 lease_until 已过的 Run 写 finished_at 与错误 |
 | 保留期清理 | 按 `(finished_at, id)` 批量删除超期的已结束 Run，不级联 Session，不删除未结束 Run |
 | 删除任务 | 锁 Schedule，同事务删除 Run 与 Schedule；受理先提交则保留 Session，删除先提交则拒绝旧准备结果；外键级联作兜底 |
@@ -936,6 +937,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.17.0 | 2026-10-14 | paused_reason 扩为 VARCHAR(64)，自动暂停存错误类型；事务表新增“记录未受理 Run”。 |
 | 1.16.0 | 2026-10-14 | 定时任务两表的 agent_id 说明“绑定”统一改为“关联”（任务与 Agent 的关系）。 |
 | 1.15.0 | 2026-10-14 | t_schedule.agent_id 说明改为“任务绑定的 Agent 标识”，写明用途与修改影响。 |
 | 1.14.0 | 2026-10-14 | Run 在根执行终态的同一事务内结束：新增 uk_schedule_run_execution，事务表“根终态对账”改为“根执行终态提交”。 |

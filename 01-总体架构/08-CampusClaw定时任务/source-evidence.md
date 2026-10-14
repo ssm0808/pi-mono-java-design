@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.35.0 |
+| 文档版本 | 0.36.0 |
 | 核验日期 | 数据库专项为 2026-10-10，见[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#source-baseline)；其余各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 历史主线范围见各节；PR #332 三张调度表、Mapper、同库受理与启动控制已实现、未合并，差距及数据库验收见[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#gaps)；生产公司身份系统未核验 |
@@ -684,6 +684,22 @@ CampusClaw 当前目标不提供未保存规则的独立预览。创建、更新
 
 Claude Managed Agents 本次未核对。
 
+<a id="auto-pause-baseline-evidence"></a>
+
+### 8.21 运行失败是否自动暂停（2026-10-14）
+
+各仓库于 2026-10-14 以 `git ls-remote --symref` 确认默认分支并浅克隆 HEAD，只读 grep/阅读；Claude 重新读取官方文档。结论用于[主设计 D12](README.md#key-decisions)。
+
+| 基线 | 分支与提交 / 文档 | 证据 | 结论 |
+|---|---|---|---|
+| Claude Managed Agents（Beta，managed-agents-2026-04-01） | [Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)、[Deployment 模型](https://platform.claude.com/docs/en/api/http/beta/deployments) | “If a subagent referenced by the agent has been archived, the next trigger records a failed run with `error.type: "agent_archived_error"` and the deployment is automatically paused… Other unrecoverable session-creation errors, such as an archived environment or vault, behave the same way… The deployment's `paused_reason.error.type` mirrors the failed run's `error.type`.”；“Session creation rate-limit responses are recorded immediately as a `session_rate_limited_error` run without retry; the schedule attempts again at the next scheduled occurrence.” | 只对不可恢复的建 Session 错误首次即自动暂停，无连续次数阈值；临时错误只记失败 Run；unpause 后不补跑 |
+| DeepSeek Harness | master `d743267388641bc76f17c45ce8b4c231aed1d32c` | `packages/schedule/schedule/src/runtime.ts:42` `ScheduleRuntime.requestDrive` 注释 “Dispatch failures are logged; refused admission does not retry automatically”；`runtime.ts:143-155` `drive()` 捕获失败并 warn；`packages/schedule/schedule/README.md:153`、`:157` 无自动重试、不支持暂停 | 不暂停，失败只记日志，任务保持 active |
+| pi | main `195120a9156b79b0fab67d3a458b5315bed7a33f` | `packages/agent/CHANGELOG.md:29` 移除实验性 pico3；`packages/durable/src/harness/scheduler.ts:199` `TaskScheduler` 为持久任务编排（Experimental），非时间触发 | 无定时任务功能，不适用 |
+| OpenCode | dev `3a69bae8459b1aa9b122456a55d9535b23125f33` | 仅 `.github/workflows/stats.yml:4-5` 等仓库 CI 使用 GitHub Actions schedule；`packages/schema/src/session-event.ts:569` `RetryScheduled` 为模型重试事件 | 产品内无定时任务，不适用 |
+| Codex harness | main `95273b84fbff40f9df7d71d50f1ca52c6489b25d` | `codex-rs/history/src/heartbeat.rs:26` 识别 automation 触发来源；`codex-rs/app-server-protocol/src/protocol/v2/plugin.rs:778` `ScheduledTaskSummary` 无失败或暂停字段 | 调度器在未开源的 Codex app 侧，失败处理未核验 |
+
+旧 CampusClaw Cron 的“连续三次失败自动禁用”在上述基线中没有对应做法。
+
 ## 9. 文档验收
 
 2026-10-08 的接口范围检查通过：配置清单与HTML一致为10个Claw操作、2个Mate草案，全仓无独立预览路径或操作标识残留，原有JSON示例保持一致。API技能检查通过4份Markdown、4份SVG及HTML脚本；仓库图检查通过36专题、132块、53时序图、0错误，managed_session_compaction的既有3条件组范围提示不变，图索引重新生成后无差异。浏览器检查覆盖共享样式、操作归属及版本、折叠状态、响应/语言切换、360px和无JavaScript回退；类图已查看1282×1382原尺寸与840px文档宽度，职责链保持。生成同步和git diff --check通过；未执行产品或数据库测试。
@@ -726,6 +742,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.36.0 | 2026-10-14 | 登记五个基线对运行失败是否自动暂停的最新证据。 |
 | 0.35.0 | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 0.34.0 | 2026-10-12 | 登记四个基线设计文档的失败处理写法，供模板重构稿引用。 |
 | 0.32.0 | 2026-10-10 | 定时表及 Session 扩展归入 Claw 全库数据库设计，原文件仅保留导航。 |

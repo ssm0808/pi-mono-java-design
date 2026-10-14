@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.42.0 · 2026-10-14 |
+| 版本 | 0.43.0 · 2026-10-14 |
 | 状态 | 当前目标契约，待实现、尚未发布；包含接口收口与授权的工程细化，不表示逐项字段均经单独确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、删除、立即运行、暂停及取消暂停，以及Run读取与删除关系；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已关联 Agent；不提供已有 Session 目标 |
@@ -67,7 +67,7 @@
 | schedule | 可选；创建省略默认 null，更新省略保持；非空时只允许下表的 cron 对象，更新时整体替换 |
 | metadata | 可选字符串键值对象；创建省略为 {}；沿用 Claude 最多 16 对、键最多 64、值最多 512 个字符；不传给模型、不作为授权依据，详见 §3.7 |
 | type | 资源顶层只读字段，固定为 schedule；创建、详情、列表元素、更新及删除回执均返回；区别于 schedule.type，见 §4.1.1 |
-| pausedReason | 只读的当前暂停原因，始终返回 object 或 null；创建为 null，人工暂停为 manual，保留 error 形状但其触发策略待定，恢复后清空；精确边界见 §4.1.1 |
+| pausedReason | 只读的当前暂停原因，始终返回 object 或 null；创建为 null，人工暂停为 manual，自动暂停为 error，恢复后清空；精确边界见 §4.1.1 |
 | status/id/createdAt/updatedAt | 全部只读；新建 active；时间为 UTC ISO 8601，秒级且无小数；status 为 active/paused；已确认直接删除，无 archived/deleted 公共状态；删除成功返回完整回执，随后读取404 |
 | schedule.lastRunAt / schedule.upcomingRunsAt | 仅响应使用；最近一次自动运行的开始时间（受理时刻）及最多五个未来计划时刻，见 §3.3；创建和更新请求传入时拒绝 |
 
@@ -273,7 +273,7 @@ type 始终为字符串 schedule，创建、详情、列表元素和更新使用
 |---|---|
 | 新建或处于 active | null；字段不能省略 |
 | 人工暂停 | 非空对象，type 为 manual |
-| error 形状预留 | `{type:"error",error:{type,message}}`，内层采用 §4.7 的安全错误形状；是否据运行错误自动进入此状态仍待决定，不能仅因一次失败填入该原因 |
+| 自动暂停 | `{type:"error",error:{type,message}}`，内层采用 §4.7 的安全错误形状，type 与触发暂停的 Run 的 error.type 相同。只有**自动运行**记录的 `agent_unavailable_error`（关联的 Agent 已删除或被禁用）会自动暂停任务，见[主设计 D12](README.md#key-decisions) |
 | 恢复为 active | 清空为 null；不删除历史 Run 或暂停审计 |
 | 修改已暂停配置 | 保持当前原因；修复配置后仍需显式恢复 |
 
@@ -287,7 +287,7 @@ type 始终为字符串 schedule，创建、详情、列表元素和更新使用
 }
 ```
 
-在 active/paused 范围内，pausedReason 非空当且仅当 status 为 paused；不能返回 active 与 manual/error 原因的组合。任务删除成功的完整回执保留最后 status/pausedReason，随后不再提供读取；不产生额外的删除原因响应对象。是否自动暂停整个 Schedule 及其触发条件仍待确定；当前不能默认继承旧 Cron 连续三次失败禁用，也不能把每次失败、限流、ASK 或业务失败都等价为暂停。无论该选择如何，本次结果均如实记录且不自动重跑。Claw 无对应 Environment/Vault 资源，不照搬其错误枚举。
+在 active/paused 范围内，pausedReason 非空当且仅当 status 为 paused；不能返回 active 与 manual/error 原因的组合。任务删除成功的完整回执保留最后 status/pausedReason，随后不再提供读取；不产生额外的删除原因响应对象。自动暂停只由自动运行的 agent_unavailable_error 触发：写入该失败 Run 的同一事务锁定任务，仅当任务仍为 active 且 agent_id 等于 Run.agent_id 时改为 paused 并写入原因；已被人工暂停或已换 Agent 则不改。容量、忙、准备超时等临时错误与执行中失败不暂停，手动运行失败也不暂停；不采用旧 Cron 连续三次失败禁用。
 
 两个字段由服务端生成；创建和配置更新若传入顶层 type 或 pausedReason，即使值看似正确，也按只读字段返回 400 `SCHEDULE_REQUEST_INVALID`。合法的 schedule.type 仍是原有输入。暂停/恢复操作负责生成原因，调用方不能通过配置更新伪造或清空它。
 
@@ -777,7 +777,7 @@ Run不增加 status、updatedAt、模型回答或完整 Schedule；后续 Sessio
 | Run.error.type | 已确定且可记录的受理失败 | zh-CN / en-US 安全文案 |
 |---|---|---|
 | schedule_busy_error | 同一任务已有占用，包括尚未核对清楚的执行；不排队、不另建Session | 该定时任务仍有进行中或待核对的运行。 / This schedule has an active or unresolved run. |
-| agent_unavailable_error | 已关联Agent明确不可用于本次执行 | 关联的Agent暂不可用于执行。 / The bound agent is unavailable for execution. |
+| agent_unavailable_error | 关联的 Agent 已删除或被禁用，不改配置必然再次失败；自动运行时同时自动暂停任务（§4.1.1） | 关联的 Agent 已删除或被禁用。 / The associated agent has been deleted or disabled. |
 | session_capacity_exceeded_error | 本次会话准入容量不足 | 当前没有可用的执行容量。 / Execution capacity is unavailable. |
 | session_creation_rejected_error | Session或首消息受理明确拒绝且已回滚 | 本次会话受理被拒绝。 / Session acceptance was rejected. |
 | unknown_error | 已确认未受理、已完成回滚且可记录的其他失败 | 本次运行未能受理。 / The run could not be accepted. |
@@ -1082,7 +1082,7 @@ Accept-Language: zh-CN
 
 读取验收须覆盖：列表元素与详情字段和类型一致，包括 prompt/description；401/403/资源不可见404、读取损坏500与暂不可用503区分；权限过滤先于分页；page/limit 默认与边界、偏移溢出、limit+1 判断；空页与超末页为 schedules:[]/nextPage:null；result 仅 schedules/nextPage、无 total/COUNT；同次读取与排序；列表共用计划计算时刻；GET 不改 updatedAt、不推进调度、不换取凭据、不创建 Session；Agent 停用或引用凭据失效时仍可按读取资格查看；动态摘要不成为客户端更新条件；错误禁用缓存。读取必须验证删除后404、列表排除已删除记录和拒绝归档筛选；验证updatedAt DESC/id ASC稳定同秒顺序和并发翻页局限，目标不等于已通过实现测试。
 
-资源类型与暂停原因验收须覆盖：创建、详情、列表元素和更新响应均含 type:schedule 与 pausedReason；有无 Cron 的新建资源均为 active/null；人工暂停为manual，error形状只含安全错误但不预设自动触发策略；恢复清空原因但保留历史，配置修改不隐含恢复；status/pausedReason 原子一致；拒绝顶层只读字段写入而保留嵌套消息/规则 type；GET 返回当前状态与原因快照，配置修改不改变暂停原因。自动暂停策略明确后补充其状态转换用例，不按旧连续三次失败规则验收；删除后的读取不返回 status 或 pausedReason。
+资源类型与暂停原因验收须覆盖：创建、详情、列表元素和更新响应均含 type:schedule 与 pausedReason；有无 Cron 的新建资源均为 active/null；人工暂停为manual；自动运行记录 agent_unavailable_error 时同事务转为 paused/error 且 error.type 一致，已人工暂停或已换 Agent 时不改，其他错误类型、执行中失败与手动运行失败均不暂停；恢复清空原因但保留历史，配置修改不隐含恢复；status/pausedReason 原子一致；拒绝顶层只读字段写入而保留嵌套消息/规则 type；GET 返回当前状态与原因快照，配置修改不改变暂停原因。不按旧连续三次失败规则验收；删除后的读取不返回 status 或 pausedReason。
 
 更新验收须覆盖：六个可写字段的省略/null/空值和替换语义、metadata 删除/无修改/合并后超限、prompt 整体替换且拒绝空白文本；默认值仅用于新提交的规则、不覆盖省略字段；拒绝整份详情回传的只读字段；成功为 200 且与创建/读取资源同形；id/createdAt/lastRunAt 保持、同秒更新不依赖时间戳并发；暂停任务修改不恢复、active 补充计划不另启用、清空规则不取消在途；事务失败不部分写入；无客户端条件标签或请求键依赖、无原回执重放；网络异常后读取核对再决定修改。精确请求/响应与错误由 §4.5 维护，目标不等于已通过实现测试。
 
@@ -1098,6 +1098,7 @@ Accept-Language: zh-CN
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.43.0 | 2026-10-14 | 自动运行遇 agent_unavailable_error 时自动暂停（error 原因），其他失败不暂停；补状态转换与验收。 |
 | 0.42.0 | 2026-10-14 | “绑定”统一改为“关联”（任务与 Agent 的关系）。§8 残留的按 Agent 解析凭据改为统一账号。 |
 | 0.41.0 | 2026-10-13 | 去重：§4.7、§5 不再重复嵌入主设计已有的时序图，改为链接；§3.5 只保留接口约束，行为与取舍链接主设计 §3.9；§5 删除残留的“凭据绑定”。 |
 | 0.40.0 | 2026-10-13 | §4.2 标题与概述改为统一账号，清理“按 Agent 绑定决定凭据”的旧表述。 |
