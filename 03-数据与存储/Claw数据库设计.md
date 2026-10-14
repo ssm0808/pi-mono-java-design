@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.19.0 · 日期：2026-10-14 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.20.0 · 日期：2026-10-14 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -747,7 +747,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 |---|---|
 | 创建、修改、暂停、恢复任务 | 最新配置、状态与暂停原因、游标一起提交，不保存配置版本；暂停不结束在途 Run；远端授权准备在锁外，锁内复查 |
 | 领取 Run | 锁 Schedule；任务无未结束 Run 时插入未结束 Run，有则插入带 finished_at 的忙跳过 Run；自动触发同时推进游标 |
-| 受理 | 锁 Schedule 与 Run，复查任务存在且 active、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过、授权有效；首消息用锁内读到的最新 prompt；Session、首消息、根执行、Run 关联与自动运行的 last_run_at 一起提交 |
+| 受理 | 锁 Schedule 与 Run，复查任务存在（自动运行要求 active 且未过派发期限，手动运行允许 active 或 paused）、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过；不查询用户执行资格（D10）；首消息用锁内读到的最新 prompt；Session、首消息、根执行、Run 关联与自动运行的 last_run_at 一起提交 |
 | 受理后启动 | 原实例在进程内启动，不写启动权；模型与业务执行不在受理事务内 |
 | 根执行终态提交 | Runtime 写根执行终态的同一事务内，按 execution_id 条件更新本次 Run 的 finished_at，释放任务；Run 已删除时更新 0 行；只看本次根执行，会话后续聊天不改写；终态写不进（结果未知）不释放，见 T9 |
 | 记录未受理 Run | 锁 Run 写 finished_at 与 error_type；自动运行且为 agent_unavailable_error 时同事务锁 Schedule，仍为 active 且 agent_id 等于 Run.agent_id 才改为 paused 并写 paused_reason |
@@ -937,6 +937,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.20.0 | 2026-10-14 | §5.4 受理行与主设计 §3.5、D10 对齐：手动运行允许 paused，删除“授权有效”。 |
 | 1.19.0 | 2026-10-14 | 合入 main：按 Agent 查询只读 user.message，部分索引 idx_t_session_events_session_user_time 的条件改为 `type = 'user.message'`（main 原记为 1.3.1）。 |
 | 1.18.0 | 2026-10-14 | 合入 main：按 Agent 查询用户事件改为经 t_sessions.agent_id 找会话，撤销事件表 agent_id 冗余列，改登记两个索引（main 原记为 1.3.0）。 |
 | 1.17.0 | 2026-10-14 | paused_reason 扩为 VARCHAR(64)，自动暂停存错误类型；事务表新增“记录未受理 Run”。 |
