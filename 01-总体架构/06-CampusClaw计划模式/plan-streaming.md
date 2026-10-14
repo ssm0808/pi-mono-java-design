@@ -1,6 +1,6 @@
 # 计划参数流式生成与审核绑定
 
-版本：1.4.0；日期：2026-10-09。状态：**参数流式与 AI 通用部分 JSON 解析已在 [PR #336](https://github.com/superheromeZzh/pi-mono-java/pull/336) 实现，尚未合入 main**。实现基线 `ad289648be09474465d20548cdfaab85b8a6d368`；pi main `f1b2e77f5b13b2a199b1052cb79c235451afe7d7`。企业 Mate 桥接待实现，真实模型可靠性与时延未验收。[主设计](README.md)维护模式与审核事务，[源码证据 §16](source-evidence.md#plan-generic-json-evidence)记录通用解析范围，[§17](source-evidence.md#plan-length-baseline)记录取消计划长度限制。
+版本：1.4.1；日期：2026-10-13。状态：**参数流式与 AI 通用部分 JSON 解析已在 [PR #336](https://github.com/superheromeZzh/pi-mono-java/pull/336) 实现，尚未合入 main**。实现基线 `ad289648be09474465d20548cdfaab85b8a6d368`；pi main `f1b2e77f5b13b2a199b1052cb79c235451afe7d7`。企业 Mate 桥接待实现，真实模型可靠性与时延未验收。[主设计](README.md)维护模式与审核事务，[源码证据 §16](source-evidence.md#plan-generic-json-evidence)记录通用解析范围，[§17](source-evidence.md#plan-length-baseline)记录取消计划长度限制。
 
 ## 1. 业务问题与分层
 
@@ -27,7 +27,7 @@ Main Agent 直接调用 `ExitPlanMode({"plan":"# 设施巡检方案\n\n..."})`�
 | 大小 | 计划正文不设置独立字符数上限；完整内容仍须满足原 Assistant、完整调用、计划编码帧及既有缓冲上限；AI 每调用预览预算为 1048576 个原始 UTF-16 单元、最大嵌套深度 64；超限仅停预览，完整计划/事件容量错误仍拒绝审核，不截断正文 |
 | 参数错误 | 完整合法 JSON 中缺参、错型、额外字段、标题或 Unicode 不合法：真实 isError=true，向模型返回字段错误与同次校验使用的可信定义；不确认、不执行、不猜参、不自动重放，下一轮由模型修正 |
 | 原始流错误 | 非法/未闭合 JSON 仍沿 Provider 错误路径结束；ERROR/ABORTED/LENGTH 不审核。普通工具完整解析保留既有接受行为；重复键或尾随内容由内部诊断标记 INVALID，计划绑定以 PLAN_REVIEW_UNAVAILABLE 拒绝，不新增全局 Provider 容量错误 |
-| 绑定错误 | 非当前调用、身份冲突、混合工具或来源不完整：不提交审核，沿用 PLAN_REVIEW_UNAVAILABLE 等既有失败分类；不复用旧候选或改变模式 |
+| 绑定错误 | 非当前调用、身份冲突或来源不完整：不提交审核，沿用 PLAN_REVIEW_UNAVAILABLE 等既有失败分类；与其他工具同批由批次规划整批返回 TOOL_BATCH_INTERACTION_INVALID（待实现）；不复用旧候选或改变模式 |
 | 未调用工具 | 普通解释不创建待交互；不由后端生成计划或补调用，不因模型说“已完成”而退出模式 |
 | 返回 | 工具等待真实 approved/feedback；批准后才应用 build 并继续，修订保持 plan 并重新提交完整参数；失败不授予权限 |
 
@@ -45,7 +45,7 @@ AI 通用部分 JSON 的类型、词法状态、深快照、预算与独立完�
 
 ![计划流式生成与审核绑定](plan_streaming_sequence.svg)
 
-[原尺寸 SVG](plan_streaming_sequence.svg) · [PlantUML 源码：plan_streaming_sequence](diagram.puml#L660)
+[原尺寸 SVG](plan_streaming_sequence.svg) · [PlantUML 源码：plan_streaming_sequence](diagram.puml#L661)
 
 1. Provider 生成含身份和通用部分参数快照的内部事件；Runtime 在可信身份确定后提取 plan 字符串，发送非空 agent.plan delta。普通说明继续走 agent.message，Thinking 不参与计划解析。
 2. 完整响应到达，Provider 独立解析完整原始参数并发送内部 JSON 诊断，Runtime 保存原始 Assistant 与完整 ToolCall。原始记录保存不代表参数通过业务校验，也不表示审核就绪。
@@ -137,6 +137,7 @@ Mate 公共桥接仍待实现；公共两跳保持各自 ID 映射、认证和�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.1 | 2026-10-13 | 混合工具调用改由批次规划整批拒绝。 |
 | 1.4.0 | 2026-10-09 | 计划正文不设独立字符数上限，统一工具校验、预览与历史读取语义。 |
 | 1.3.0 | 2026-10-09 | AI 层提供通用部分参数快照，计划层消费安全预览与内部诊断，保留普通工具完整解析语义。 |
 | 1.2.0 | 2026-09-28 | 以 ExitPlanMode 完整 plan 参数提交审核，专用参数增量复用计划事件并保持其他工具公共协议。 |

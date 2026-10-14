@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.0 |
-| 更新日期 | 2026-09-22 |
+| 文档版本 | 1.6.0 |
+| 更新日期 | 2026-10-13 |
 | 主设计 | [CampusClaw 工具系统设计](README.md) |
 | 源码基线 | PR #323 开发提交 `ae6645caaade3b9520220a34af940210850ef36a`；本页重核验 Session 创建、工具装配、Pipeline、业务执行及分段调度，具体路径与符号见[源码证据 §9](source-evidence.md#sequence-evidence)和[恢复证据](source-evidence.md#argument-recovery-evidence) |
 | 实现状态 | 公共 Session 工厂、工具装配、Skill / CallTool、Agent 业务代理、确认前可信准备、模型参数恢复及分段调度已在核验开发提交实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现 |
@@ -110,6 +110,6 @@ Agent 业务代理的注册 Schema 包含完整业务参数；`CallTool` 先校�
 
 [PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L513) · [原尺寸 SVG](tool_batch_scheduling.svg)
 
-调度器把连续 `PARALLEL` 调用组成并行段，等待整段完成后再执行后续调用；每个 `SEQUENTIAL` 调用构成屏障。因此前两个调用可并行，`CallTool` 等待它们完成后执行，最后两个调用再组成新的并行段。工具模式的权威清单见[主设计 §7](README.md#7-pipelinehook-与批量调度)。
+调度器把连续 `PARALLEL` 调用组成并行段，等待整段完成后再执行后续调用；每个 `SEQUENTIAL` 调用构成屏障。因此前两个调用可并行，`CallTool` 等待它们完成后执行，最后两个调用再组成新的并行段。工具模式的权威清单见[主设计 §7](README.md#7-pipelinehook-与批量调度)。批次中有提问、计划提交或用户确认等交互工具时，调度前先检查其位置；位置合法才按本图分段执行，规则与整批拒绝见[主设计 §7.1](README.md#interactive-tool-batch)（待实现）。
 
 实现中任务 #2 可以先于 #1 完成并保存结果，调度器仍按输入顺序读取 Future；第二段同理。图中按职责合并独立读取任务，开放箭头表示并发提交；任务完成顺序不会改变返回结果顺序。分段调度与 `CallTool` 的串行入口均已在核验开发提交实现。

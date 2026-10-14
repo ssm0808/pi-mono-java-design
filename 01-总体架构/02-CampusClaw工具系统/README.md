@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.24.0 |
+| 文档版本 | 2.25.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-10 |
+| 更新日期 | 2026-10-13 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -319,6 +319,43 @@ Schema、可用性、hook 和工具异常都转换为文本结果及 `isError=tr
 
 连续 `PARALLEL` 调用组成并行段，等待整段完成后才能执行下一个串行调用或并行段；每个 `SEQUENTIAL` 调用是 barrier。每个调用仍执行完整 Pipeline，结果按输入顺序汇总。具体并行与等待过程见[执行细节：批次调度](execution-details.md#batch-scheduling)。分段调度已有实现；开发提交 `c9a2340` 的 CallTool 使用同一 Pipeline。
 
+<a id="interactive-tool-batch"></a>
+
+### 7.1 交互工具的批次位置
+
+**要解决的问题。** 值班人员排查设备告警时，Agent 常在同一次响应里先用 `TodoUpdate` 标记进度，再调用用户确认 Tool 询问现场情况。这一组合不依赖用户答案，应当正常完成；而排在提问之后的调用是在拿到答案之前决定的，答案可能使它们失效，不应先于答案执行。
+
+交互工具指执行中会建立用户等待的工具：`AskUserQuestion`、`ExitPlanMode` 和 [§9.2.2](#confirmation-tool-metadata) 的用户确认 Tool。`permission=ask` 的业务 Tool 授权确认属于宿主权限阶段，不是交互工具，仍按本节分段规则同批串行执行。
+
+| 工具 | 同批规则（待实现） |
+|---|---|
+| `AskUserQuestion`、用户确认 Tool | 每批最多一个交互工具，且必须是该 Assistant 响应的最后一个 ToolCall；排在前面的调用按上文分段规则照常执行 |
+| `ExitPlanMode` | 仍须是该响应唯一的 ToolCall；计划专属绑定条件见[计划模式 §5.2](../06-CampusClaw计划模式/README.md#52-并发与取消) |
+
+**正常调用如何完成。** 批次规划先识别每个调用是否为交互工具：内置工具按框架工具名；Agent 业务代理与 `CallTool` 复用 §9.2 的可信目标解析，读取 §9.2.2 的确认标记（标记接入前按现有固定名称）。识别只读，不校验业务参数，不发起业务请求；目标无法解析的调用不算交互工具，在自身 Pipeline 中按原规则失败。位置合法时，前序调用按并行段与屏障执行，最后执行交互工具并等待用户；全部结果按输入顺序回传。
+
+**位置不合法时如何处理。** 在任何调用执行之前整批拒绝：每个 ToolCall 照常保存调用事件，结果统一为 `isError=true`、`errorCode=TOOL_BATCH_INTERACTION_INVALID`，文本说明违规原因与正确做法（交互工具放在最后、每批最多一个、`ExitPlanMode` 单独调用）。整批不准备、不进入 hook、不建立等待、不执行业务，也不自动重排或拆批；模型在下一轮按反馈重新发出。
+
+**模型可见约束。** `AskUserQuestion` 与 `ExitPlanMode` 的固定 description 写明各自位置规则。用户确认 Tool 的 description 来自业务元数据，宿主不改写；位置规则由宿主基础 SYSTEM 统一说明，模式文件 PLAN.md/BUILD.md 不重复。
+
+**理由、放弃的方案与代价。**
+
+- 放弃“交互工具必须唯一”：它拦下 `TodoUpdate` 加用户确认这类无害组合；并且检查位于该调用自身的 before hook，违规时只有提问失败，同批其他调用照常执行，与“明显无效的调用不产生业务请求”相反。
+- 放弃 Codex、OpenCode、DeepSeek Harness 的不限制做法：它们把提问当作普通串行调用，排在后面的调用会在没有答案时执行。
+- 放弃自动重排或拆批：会改变模型给出的调用顺序语义。
+- `ExitPlanMode` 保持唯一：plan 模式中排在前面的只能是调研调用，方案应基于已经看到的调研结果，审核成本也高于一次往返。
+- 代价：批次规划要前置一次只读的交互识别；违规时多一次模型往返；前序调用的结果在提问时模型尚未看到，问题可能已被前序结果回答。`AskUserQuestion` description 提醒不要询问同批前序调用将要查明的内容。
+
+**源码与差距。** 2026-10-13 fetch `pi-mono-java` 默认分支 main `2b3bad05416c5ef67c6a6e085b210319d1f1b34a` 静态读取，未运行产品测试。路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`：
+
+| 源码与符号 | 已观察行为与目标差距 |
+|---|---|
+| R `runtimeapi/event/RuntimeEventProjector.java#beginPreparedQuestion/#requireUniqueFinalizedCall` | `AskUserQuestion` 与用户确认 Tool 共用该检查，ToolCall 数不为 1 即以 `USER_QUESTION_MULTIPLE_TOOL_CALLS` 失败；检查在该调用自身 before hook，同批其他调用不受影响。改为批次规划阶段的位置检查，待实现 |
+| R `runtimeapi/event/PlanProposalBinder.java#requireUniqueOrderedCall` | ExitPlanMode 唯一性在绑定阶段以 `PLAN_REVIEW_UNAVAILABLE` 失败；唯一性判断迁到批次规划，绑定只保留计划来源与身份校验，待实现 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java#executePlanned` | 按 SEQUENTIAL/PARALLEL 分段执行，没有批次级前置检查；增加交互识别与整批拒绝，待实现 |
+| `modules/coding-agent-cli/src/main/resources/prompts/plan/PLAN.md:19`、`BUILD.md:9` | 要求用户确认 Tool 时“本次 Assistant 只发出这一项工具调用”；迁到基础 SYSTEM 的位置规则后删除，待实现 |
+
+
 ## 8. 统一受管目录与刷新
 
 ```text
@@ -432,7 +469,7 @@ agent/{agentId}/.campusclaw/
 
 正常流程保持：可信目标解析 → 参数校验与准备 → 宿主权限和交互准入 → 本地等待用户回答 → 结果回传。Agent 直接代理与 Skill 的 CallTool 共用分派。准备阶段从同一可信定义读取标记、固定处理器及问题快照；宿主放行后执行同一准备结果。用户回答是本次 Tool 结果，不授权后续业务操作。普通业务 Tool 继续交给 Mate 远端处理器。
 
-用户确认 Tool 要求 label 为字符串，context 可省略或为对象，保留原始值与结构；回答以 `{"content":"..."}` 返回。仅 Runtime 根执行支持等待，实际入口权限必须为 allow；ask/deny、Child/Cron、端口缺失、取消或本地适配失败均明确失败，不回退远端执行。参数错误保持 isError=true，向模型返回字段错误和同次可信定义，不创建确认、不执行、不自动猜参或重放；公共事件继续隐藏内部 Schema 和敏感参数。
+用户确认 Tool 要求 label 为字符串，context 可省略或为对象，保留原始值与结构；回答以 `{"content":"..."}` 返回。仅 Runtime 根执行支持等待，实际入口权限必须为 allow；ask/deny、Child/Cron、端口缺失、取消或本地适配失败均明确失败，不回退远端执行。参数错误保持 isError=true，向模型返回字段错误和同次可信定义，不创建确认、不执行、不自动猜参或重放；公共事件继续隐藏内部 Schema 和敏感参数。同批位置按 [§7.1](#interactive-tool-batch) 的交互工具规则检查。
 
 本地问答与 `permission=ask` 的执行授权确认是两个职责。用户确认 Tool 不是“任意业务 Tool 先弹卡再远调”；不能只改普通 Tool 的标记而保留其任意业务参数和执行含义。标记不得由模型或 Skill 正文提供，也不改变模型 Tool 集合、可信关联或权限规则。
 
@@ -696,6 +733,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - CallTool 在 before hook 前完成可信目标准备和业务参数校验；参数错误不创建确认记录，Mate execute 请求数为零；
 - before hook 和实际执行使用同一个不可变准备快照；确认等待期间目标、定义和参数不得重新解析或替换；
 - `P,P,S,P,P` 形成两个并行段和一个 barrier，结果保持原始顺序；
+- `TodoUpdate` 后接 `AskUserQuestion` 或用户确认 Tool 时，前者成功、后者建立等待；交互工具后仍有调用、一批两个交互工具或 `ExitPlanMode` 与其他调用同批时，整批返回 `TOOL_BATCH_INTERACTION_INVALID`，准备、hook、确认与 Mate execute 次数均为零；
 - Schema、hook、工具异常成为文本结果和 `isError=true`。
 
 ### 13.1.1 退役工具删除验收
@@ -773,6 +811,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.25.0 | 2026-10-14 | 合入 main：提问与用户确认 Tool 必须是本批最后一个调用，计划提交仍须单独调用，违规时整批拒绝且不执行任何调用（main 原记为 2.22.0）。 |
 | 2.24.0 | 2026-10-13 | 清理定时执行“按 Agent 绑定决定凭据”的旧表述，改为统一账号。 |
 | 2.23.0 | 2026-10-13 | 定时执行改为统一账号，每批工具调用前向 Mate 取 access-token。 |
 | 2.22.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |

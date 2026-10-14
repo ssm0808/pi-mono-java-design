@@ -5,7 +5,7 @@
 | 文档版本 | 1.22.0 |
 | 更新日期 | 2026-10-04 |
 | 变更性质 | HTTP 1.63.0 统一取消条件与请求去重 Header 及配套 ETag；内部事务与业务准入保留 |
-| 唯一当前入口 | [当前十项接口](chat-api-review.html) |
+| 唯一当前入口 | [当前十二项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
 
 结构化提问新增 agent.question / user.question_answer，复用 confirming 与原执行续跑；两事件、Schema、错误和恢复由 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 及共享事件源维护。该增量为 待实现，Session/元数据不增字段，Mate 公共投影独立集成。

@@ -17,7 +17,7 @@
 | Codex 对照基线 | `89a7298aff55db29f9cb2ad2430e3efe02b7a454`（`main`，2026-09-22） |
 | 上位设计 | [工具系统主设计](README.md) |
 
-目标框架工具共 12 项，Agent 直接关联的业务工具代理不计入此数量。`Skill` 负责加载工作流，`SearchTools` 取代 `ListMateTools` 的模型发现职责，`CallTool` 替代 `CallMateTool` 执行业务操作。Skill、CallTool、代理装配与后端参数恢复已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools 与发现和校验的一致性接线待实现。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#2-模型工具契约) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
+目标框架工具共 12 项，Agent 直接关联的业务工具代理不计入此数量。`Skill` 负责加载工作流，`SearchTools` 取代 `ListMateTools` 的模型发现职责，`CallTool` 替代 `CallMateTool` 执行业务操作。Skill、CallTool、代理装配与后端参数恢复已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools 与发现和校验的一致性接线待实现。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#todo-tool-contract) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
 
 提问工具的精确 Schema、问题/答案与等待边界见 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)。Runtime 默认在 ExitPlanMode、TodoUpdate 后追加它；Child/Cron 不装配，两模式工具定义相同。
 

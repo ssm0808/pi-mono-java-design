@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.96.0 |
-| 更新日期 | 2026-10-12 |
+| 文档版本 | 1.98.0 |
+| 更新日期 | 2026-10-14 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -252,15 +252,15 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 架构问题 | 如何让前端直接获得执行清单，同时保持工具与 Session 元数据稳定、断线后恢复相同进度？ |
 | Claude 公开契约 | 官方 Beta 文档 2026-09-15 核对：通用自定义工具事件与持久化历史；未公开原生 TodoUpdate 或同名更新事件。只借鉴权威历史与对账，不推断内部 TODO 实现。 |
 | DeepSeek 源码 | 固定 0a53fb55 的 tool-todo 追加 todo/write 全量快照，下一 turn/start 清空投影；采用显式快照思路，不照搬 alpha 日志格式。 |
-| OpenCode / Codex 源码 | OpenCode 849c2598 的 SessionTodo.update 替换表后发布 todo.updated（固定 v2 源码）；Codex d58d0e58 的 PlanHandler 发 PlanUpdate，App Server 文档定义 turn/plan/updated。两者证明任务更新可由后端显式发布，不能混称同一公共传输协议。 |
+| OpenCode / Codex 源码 | OpenCode 849c2598 的 SessionTodo.update 替换表后发布 todo.updated（固定 v2 源码）；Codex d58d0e58 的 PlanHandler 发 PlanUpdate，App Server 文档定义 turn/plan/updated。两者证明任务更新可由后端显式发布，不能混称同一公共传输协议。Codex 同提交在 Plan 模式拒绝 update_plan，CampusClaw 采用同样的执行前拒绝。 |
 | pi 源码 | 固定 5cd93f68 的 todo 示例从工具结果 details 恢复；这是另一种客户端派生方案，不作为当前 CampusClaw 进度消费方式。 |
 | CampusClaw 已观察实现 | Java 09b32d8e 的 persistToolResults 已在批次结果边界提交；appendEntry 接收事件列表，仓库记录实际投影数量；该旧提交尚无 TODO 工具与专用事件/面板；后续实现和确定性验证见[问答证据](../06-CampusClaw计划模式/ask-user-question.md#2-基线与已观察实现)，不将旧差距扩展为当前状态。 |
-| CampusClaw 目标 | build 根执行使用 TodoUpdate，plan 不记录调研进度；成功工具结果同事务生成 agent.todo_updated。前端直接消费 todos；新消息隔离清单，审核续跑保持原根。 |
+| CampusClaw 目标 | build 根执行使用 TodoUpdate，plan 阶段调用在执行前被拒绝（`BUILD_MODE_REQUIRED`），不记录调研进度；成功工具结果同事务生成 agent.todo_updated。前端直接消费 todos；新消息隔离清单，审核续跑保持原根。 |
 | 调用时机约束 | TodoUpdate description 集中规定任务实际完成并验证后立即更新，同次可完成上一项并开始下一项；BUILD 仅提示按工具描述跟踪进度，不再复写时机细则。通用验证与诚实交付由 BASE 负责；值校验不证明业务完成，模型仍可能漏调用。最新提示词证据见[§10](../06-CampusClaw计划模式/source-evidence.md#10-两份模式提示词的最新上游核验)。 |
-| 差异分类 | 架构变更：后端负责将最终工具结果映射为公共任务事件，复用现有一 Entry 多事件事务。产品约束：build 实施、单进行中、原根作用域、Agent/Tool/Skill 元数据不因 TODO 扩展。 |
+| 差异分类 | 架构变更：后端负责将最终工具结果映射为公共任务事件，复用现有一 Entry 多事件事务。产品约束：build 实施（工具定义不随模式变化，plan 调用由执行前门禁拒绝）、单进行中、原根作用域、Agent/Tool/Skill 元数据不因 TODO 扩展。 |
 | 理由与代价 | 前端无需识别工具名或解析结果文本，事件历史可直接恢复面板；代价是新增公共类型及每次更新的一份持久化快照，读取端需先升级；仍等待批次结果提交。 |
 | 备选与重新评估条件 | 不新增 TODO CRUD、Session todos 或 TODO 表；如需独立任务身份、多人编辑、调度依赖或工具方法返回即发布，应另评估资源与提交边界。 |
-| 设计 / 实现状态 | Java `8c5fda1d` 已实现 TodoUpdate、显式任务事件及前端消费、工具描述集中维护和两文件迁移，见工具状态专项证据；Mate 桥接待实现，真实模型行为未核验，不将代码存在表述为验收通过。 |
+| 设计 / 实现状态 | Java `8c5fda1d` 已实现 TodoUpdate、显式任务事件及前端消费、工具描述集中维护和两文件迁移，见工具状态专项证据；2026-10-12 在 main `769e8659` 复核，plan 模式门禁待实现（[PR #338](https://github.com/superheromeZzh/pi-mono-java/pull/338)），见[§18](../06-CampusClaw计划模式/source-evidence.md#todo-build-mode-gate)；Mate 桥接待实现，真实模型行为未核验，不将代码存在表述为验收通过。 |
 | 验收与证据 | [T1～T4](../06-CampusClaw计划模式/todo-update.md#6-实施切片与验收)：同源同事务、失败无更新、缺工具记录也可展示、分页/live 对账、跨根与两跳身份；固定路径与符号见[§6](../06-CampusClaw计划模式/source-evidence.md#6-todo-update-基线与接入证据)。 |
 
 **讲解要点。** 方案是待批准的完整设计，TODO 是实施进度。CampusClaw 用后端任务事件让前端直接展示清单，并把该事件与模型工具结果一起提交，避免两次写入不一致。它增加一份事件快照，但不增加元数据字段或任务表；完成状态仍是 Agent 报告，不代替业务验证和执行终态。
@@ -328,6 +328,8 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 验收 | Q1～Q5 对应 clean verify 2085 项、独立数据库 140 项及前端 172 项通过；实际 JAR HTTP 继续/竞争/中断、214 契约样例、10 投影场景和浏览器 18 项检查通过。公司 NativeParent 缺失、外部 Mate 与真实模型未验证；完整环境边界见主设计 §2。 |
 
 **讲解要点。** 借鉴 DeepSeek 的工具式提问，将 UI 等待接入 CampusClaw 已有执行段和控制事务。用户回答成为原调用结果，前端消费显式问题；计划批准与工具权限保持独立。获得精确关联和原根续跑的同时，需要维护答案交接与恢复，元数据结构保持稳定。
+
+**同批位置专项（2026-10-13，M03/M01）。** 问题：一次响应里先更新进度、再请求现场确认，能否一起执行？本次 fetch 各默认分支：Codex main `90f00bd89ed3263b4d5993849cccb795f4330449` 的 `codex-rs/core/src/tools/handlers/request_user_input.rs#handle_call` 不检查同批调用，未声明并行时由 `tools/router.rs#tool_supports_parallel` 与 `tools/parallel.rs` 的执行锁串行处理；OpenCode dev `c1615b1db9c2e7a955f2be1024e84bb74c90cc6b` 的 `packages/core/src/tool/plugin/question.ts` description 与执行均无同批约束；DeepSeek Harness master `d743267388641bc76f17c45ce8b4c231aed1d32c`（0.2.1-alpha.2）的 `packages/interaction/tool-ask-user/src/index.ts` 与 `packages/plan/plan-mode/src/index.ts#exit_plan_mode` 同样不限制，调度见 `packages/core/agent-loop/src/tool-calls.ts`。Claude Code 未开源，本次不作证据。三者都把提问当作普通串行调用，排在后面的调用会在拿到答案前执行。CampusClaw 规定提问与用户确认 Tool 必须是本批最后一个调用、每批最多一个，ExitPlanMode 仍须单独调用，违规时在执行前整批拒绝；这是产品约束，避免依赖答案的动作先行，同时放行 TodoUpdate 等前序调用。代价是批次规划前置一次只读交互识别，违规时多一次模型往返。Java main `2b3bad05416c5ef67c6a6e085b210319d1f1b34a` 仍要求唯一调用且在调用自身 before hook 检查，目标待实现；规则、源码差距与验收由 [M03 §7.1](../02-CampusClaw工具系统/README.md#interactive-tool-batch) 维护，只升级本专项范围。
 
 <a id="a09"></a>
 
@@ -654,12 +656,12 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 
 <a id="a16"></a>
 
-## 6.13 A16 · 按 Agent 回看用户事件与轮次
+## 6.13 A16 · 按 Agent 查看用户事件与轮次
 
 | 维度 | 结论 |
 |---|---|
 | 模块与主设计 | M01/M06；[Agent 用户事件与轮次查询](../01-CampusClaw多Agent运行时/agent-user-events-design.md)唯一维护接口、轮次解析、游标与失败边界 |
-| 问题 | 运营人员要回看设备告警 Agent 一段时间内收到的用户输入，并展开其中一轮看 Agent 做了什么，Claw 应提供怎样的读取边界？ |
+| 问题 | 开发运维人员在 Trace 中要查看某个 Agent 一段时间内收到的用户请求，并展开其中一轮的执行轨迹，Claw 应提供怎样的读取边界？ |
 | 最新基线 | 2026-10-12 隔离 fetch：Codex main 42705224、OpenCode dev 4d9678a7、pi main a9b08151、DeepSeek Harness master d7432673（开发者预览）；Claude Managed Agents 公开 Beta 文档同日重读；Java main 769e8659。完整 SHA、路径与符号见主设计 §8.1、§8.2 |
 | Claude Managed Agents | 事件按会话列出，支持 created_at 区间、types[] 与不透明 page；跨会话只能按 agent_id 列会话，没有跨会话事件列表；轮次以 session.status_idle 结束，无轮次 ID |
 | Codex | Turn 有显式 ID 与状态，`thread/items/list` 用 thread_id + turn_id 取整轮条目；没有跨线程条目查询，也没有从条目 ID 反查轮次 |
@@ -667,10 +669,10 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 | CampusClaw 已观察 | 事件只能按会话读取；根执行与结果段关联已经把一条用户消息及其续跑、输出和终态绑定在一起；停止请求只经 targetEventId 关联；执行内自动压缩未关联结果段 |
 | CampusClaw 目标 | 按 Agent 与时间返回五种 user.* 事件；以 sessionId + eventId 定位并复用根执行作为轮次；两个接口都用由公开字段组成的透明 keyset 游标；事件表冗余 agent_id 并建部分索引 |
 | 差异类别 | 产品约束：跨会话聚合、透明游标、权限由 Mate 判断；架构变更：复用根执行作为轮次身份、事件表冗余 agent_id |
-| 理由与代价 | 复用已有轮次权威不新增表；透明游标可读、可构造且不受深页与删除影响。代价是游标字段成为公开契约、需校验调用方构造的游标、开放时间窗口可能漏读晚提交事件，以及多一列与一个索引的写入开销 |
+| 理由与代价 | 复用已有的根执行记录，不新增轮次表；透明游标可读、可构造且不受深页与删除影响。代价是游标字段成为公开契约、需校验调用方构造的游标、开放时间窗口可能漏读晚提交事件，以及多一列与一个索引的写入开销 |
 | 状态与验收 | 待实现；按主设计 §6.3 验收游标、轮次解析、删除隔离与执行计划 |
 
-**设计表达。** 没有基线直接提供这两个接口。CampusClaw 借 Claude Managed Agents 的事件类型与时间过滤、Codex 的显式轮次分组，用已有根执行表达“一轮”，跨会话聚合与权限分工是企业运营场景的产品约束。
+**设计表达。** 没有基线直接提供这两个接口。CampusClaw 借 Claude Managed Agents 的事件类型与时间过滤、Codex 的显式轮次分组，用已有根执行表达“一轮”，跨会话聚合与权限分工是 Trace 场景的产品约束。
 
 ## 7. 源码证据与更新边界
 
@@ -726,12 +728,15 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.98.0 | 2026-10-14 | 合入 main：A05 增加 plan 模式拒绝 TodoUpdate 的执行前门禁及 Codex 对照（main 原记为 1.92.0）。 |
+| 1.97.0 | 2026-10-14 | 合入 main：A08 增加交互工具同批位置对比，提问与用户确认须为末位调用、计划提交须单独调用（main 原记为 1.91.0）。 |
 | 1.96.0 | 2026-10-14 | A14 补失败自动暂停结论：按错误类型区分，参考 Claude。 |
 | 1.95.0 | 2026-10-14 | M10 Run 改为与根执行终态同事务结束，取代内部对账。 |
 | 1.94.0 | 2026-10-13 | 清理定时执行“按 Agent 绑定解析凭据”的旧表述，改为统一账号。 |
 | 1.93.0 | 2026-10-13 | M10 定时执行改为统一账号 access-token，更新凭据取舍与代价。 |
 | 1.92.0 | 2026-10-13 | M10 去掉内部配置代次与扫描代次说法，与定时任务撤销 revision 和扫描协调表一致。 |
 | 1.91.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
+| 1.90.1 | 2026-10-12 | A16 的问题改为 Trace 场景。 |
 | 1.90.0 | 2026-10-12 | 新增 A16，对比按 Agent 跨会话查询用户事件与按事件读取轮次的基线做法。 |
 | 1.89.0 | 2026-10-10 | A14 明确 Mate 独立维护资源归属和权限，记录 PR #332 的身份职责偏差及交接代价。 |
 | 1.88.0 | 2026-10-10 | 关联 Claw 全库数据库设计，按表区分主线、PR 和待实现增量。 |
