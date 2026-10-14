@@ -57,94 +57,125 @@ deactivate Scheduler
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/AgentScopedCronToolFactory.java create。
 ' 设计原因：轻量受理不依赖分发器或执行注册表。
 ' 架构变更：只有一条受理路径；不支持以已有 Session 为目标。
-' 架构变更：所有 P 节点和所有连线均为待实现。
-title 定时任务：全局目标
+title 定时任务：全局目标类图
 skinparam backgroundColor white
-skinparam defaultFontSize 14
+skinparam defaultFontSize 13
 skinparam classAttributeIconSize 0
-skinparam nodesep 25
-skinparam ranksep 55
+skinparam packageStyle rectangle
+skinparam nodesep 30
+skinparam ranksep 45
 hide empty members
-class "Mate 接口 / 可信宿主" as Caller <<外部>>
-class "ScheduleController" as Api <<API / P>>
-class "CronToolAdapter" as Tool <<适配器 / P>>
-class "ScheduleApplication\nService" as App <<管理 / P>>
-class "ScheduleDispatcher" as Dispatch <<服务 / P>>
-interface "ScheduleAuthorization\nPort" as Auth <<端口 / P>>
-interface "ScheduledAccessToken\nPort" as Credential <<端口 / P>>
-class "MateSchedule\nAdapter" as MateAdapter <<适配器 / P>>
-class "Mate 服务\n用户 / 资源归属 / 权限" as Mate <<外部>>
-interface "ScheduleBinding\nResolver" as Binding <<只读端口 / P>>
-class "ScheduleTime\nPolicy" as Time <<策略 / P>>
-class "ScheduleRun\nPreparation" as Prepare <<服务 / P>>
-class "PreparedSchedule\nRunDTO" as Snapshot <<不可变 / P>>
-interface "ScheduleRepository" as Repo <<端口 / P>>
-class "MyBatisSchedule\nRepository" as RepoImpl <<适配器 / P>>
-interface "ScheduleMapper" as Mapper <<DTO 边界 / P>>
-class "GaussDB\nSchedule / Run / 分发状态\nSession / Execution" as Db <<最终决定方>>
-class "ScheduledRunAcceptance\nService" as Accept <<服务 / P>>
-class "运行时 Session 与\n执行持久化" as Persist <<已有>>
-class "RuntimeExecution\nCoordinator" as Coordinator <<已有>>
-class "AgentSession\nFactory" as Factory <<已有>>
-class "ManagedAgentSession" as Session <<每次执行>>
-class "Host hooks +\nToolExecutionPipeline" as Pipeline <<每次执行>>
-Caller -down-> Api : Claw VO
-Api -down-> App : VO 边界
-App -down-> Prepare : 手动
-App -[norank]-> Accept : 手动受理
-Tool -down-> App : Session / 执行 ID
-App -down[hidden]-> Dispatch
-Binding -down[hidden]-> Auth
-Auth -down[hidden]-> Credential
-App -left-> Time : 校验 / 计算
-App -right-> Repo : 锁定最新行\n写入 DTO
-App -[norank]-> Auth
-App -left-> Binding : 校验引用
-Dispatch -down-> Accept : 受理运行
-Dispatch -left-> Prepare : 自动
-Dispatch -[norank]-> Time
-Dispatch -[norank]-> Repo
-Prepare -left-> Auth : 登记 Session 归属
-Pipeline -left-> Credential : 每批工具调用\n获取 access-token
-Prepare -down-> Snapshot
-MateAdapter .right.|> Auth
-MateAdapter .right.|> Binding
-MateAdapter .right.|> Credential
-MateAdapter -down-> Mate : Session 归属\n和统一账号 access-token
-Accept -left-> Snapshot : 固定输入
-Accept -[norank]-> Repo
-Repo <|.. RepoImpl
-RepoImpl -down-> Mapper
-Mapper -down-> Db
-Accept -down-> Persist : 创建 / 受理
-Persist -right-> Db : 同一事务
-Dispatch -down-> Coordinator : 提交后\n只启动一次
-Coordinator -right-> Persist : 事件 / 终态
-Coordinator -down-> Factory
-Factory -down-> "0..*" Session : 创建
-Session *-down-> "1" Pipeline
+
+class "Mate 管理入口" as Caller <<外部>>
+
+package "入口层（runtimeapi / tool.cron）" as EntryPkg {
+  class ScheduleController <<API / P>> {
+    + 8 个配置操作与 2 个 Run 读取
+  }
+  class CronToolAdapter <<适配器 / P>> {
+    + 带当前 Session / 执行 ID 调用
+  }
+}
+
+package "定时任务应用层（schedule）" as AppPkg {
+  class ScheduleApplicationService <<单例 / P>> {
+    + 创建 / 更新 / 删除
+    + 暂停 / 取消暂停 / 立即运行
+  }
+  class ScheduleDispatcher <<单例 / P>> {
+    + 每秒扫描到期任务
+    + 占用任务并推进游标
+  }
+  class ScheduleTimePolicy <<策略 / P>> {
+    + 校验 Cron 与时区
+    + 计算下次运行时刻
+  }
+  class ScheduleRunPreparation <<单例 / P>> {
+    + 登记归属并准备 Runtime
+  }
+  class PreparedScheduleRunDTO <<每次 Run / 不可变 / P>> {
+    sessionId
+    Agent 目录与模型
+    prompt
+  }
+  class ScheduledRunAcceptanceService <<单例 / P>> {
+    + 同库短事务受理
+  }
+}
+
+package "端口与适配器" as PortPkg {
+  interface ScheduleBindingResolver <<只读端口 / P>>
+  interface ScheduleAuthorizationPort <<端口 / P>>
+  interface ScheduledAccessTokenPort <<端口 / P>>
+  class MateScheduleAdapter <<适配器 / P>>
+  interface ScheduleRepository <<端口 / P>>
+  class MyBatisScheduleRepository <<适配器 / P>>
+  interface ScheduleMapper <<DTO 边界 / P>>
+}
+
+class "Mate 服务" as Mate <<外部>> {
+  用户权限（配置时检查）
+  Session 归属
+  统一账号 access-token
+}
+
+package "Runtime（已有，需接入定时入口）" as RtPkg {
+  class RuntimeExecutionCoordinator <<已有>>
+  class AgentSessionFactory <<已有>>
+  class ManagedAgentSession <<每次 Run>>
+  class "Host hooks +\nToolExecutionPipeline" as Pipeline <<每次 Run>>
+  class "Session 与执行持久化" as Persist <<已有>>
+}
+
+class "GaussDB" as Db <<最终决定方>> {
+  t_schedule / t_schedule_run
+  Session / 根执行
+}
+
+Caller -down-> ScheduleController : 可信服务调用
+ScheduleController -down-> ScheduleApplicationService : VO→DTO
+CronToolAdapter -down-> ScheduleApplicationService
+
+ScheduleApplicationService -down-> ScheduleTimePolicy
+ScheduleDispatcher -down-> ScheduleTimePolicy
+ScheduleApplicationService -down-> ScheduleRunPreparation : 立即运行
+ScheduleDispatcher -down-> ScheduleRunPreparation : 自动运行
+ScheduleRunPreparation -right-> PreparedScheduleRunDTO : 生成
+ScheduleApplicationService -down-> ScheduledRunAcceptanceService
+ScheduleDispatcher -down-> ScheduledRunAcceptanceService
+ScheduledRunAcceptanceService ..> PreparedScheduleRunDTO : 读取
+
+ScheduleApplicationService -down-> ScheduleBindingResolver : 校验 Agent
+ScheduleRunPreparation -down-> ScheduleAuthorizationPort : 登记 Session 归属
+MateScheduleAdapter .up.|> ScheduleBindingResolver
+MateScheduleAdapter .up.|> ScheduleAuthorizationPort
+MateScheduleAdapter .up.|> ScheduledAccessTokenPort
+MateScheduleAdapter -down-> Mate
+
+ScheduleApplicationService -down-> ScheduleRepository : 锁定 / 写入
+ScheduleDispatcher -down-> ScheduleRepository : 领取到期任务
+ScheduledRunAcceptanceService -down-> ScheduleRepository : 写 Run 关联
+MyBatisScheduleRepository .up.|> ScheduleRepository
+MyBatisScheduleRepository -down-> ScheduleMapper
+ScheduleMapper -down-> Db
+
+ScheduledRunAcceptanceService -down-> Persist : 同一事务创建\nSession / 首消息 / 根执行
+Persist -down-> Db
+ScheduleDispatcher -down-> RuntimeExecutionCoordinator : 提交后启动一次
+RuntimeExecutionCoordinator -down-> AgentSessionFactory
+RuntimeExecutionCoordinator -right-> Persist : 事件 / 终态
+AgentSessionFactory -down-> "0..*" ManagedAgentSession : 创建
+ManagedAgentSession *-down-> "1" Pipeline
+Pipeline -up-> ScheduledAccessTokenPort : 每批工具调用\n取 access-token
+
+PreparedScheduleRunDTO -down[hidden]-> ScheduleAuthorizationPort
+ScheduledRunAcceptanceService -down[hidden]-> ScheduleRepository
+ScheduleTimePolicy -right[hidden]-> RuntimeExecutionCoordinator
+
 legend bottom
-  P = 待实现；所有新增连线均为待实现。
-  已有服务需要接入定时入口。
-  服务是单例；快照和 Session 按 Run 创建。
-  Claw 的目标服务都在 coding-agent-cli 内。
-  HTTP：runtimeapi；调度：schedule；工具适配器：tool.cron。
-  Mate 维护用户、资源归属、权限和用户配额。
-  Claw 只保存运行数据，不保存用户范围或 owner 引用。
-  Claw 受理前必须先在 Mate 登记 Session 归属。
-  配置处理不调用 prepare，也不启动 Session。
-  有规则才登记自动运行；没有规则只保存。
-  每次 Run 新建 Session，不新建 Agent 定义。
-  不补跑、不重放执行；忙时跳过本次触发。
-  ASK 结束根执行；不持久等待交互。
-  执行结果未知时对账，不报告为已知失败。
-  Run、消息和执行先提交，再做模型或工具 I/O。
-  删除定时任务会删除 Run 和公开的运行记录。
-  删除不取消已受理的 Session。
-  删除 Session 保留原 Run 的受理回执。
-  不保留独立的 cron 模块或第二套旧调度器。
-  轻量受理从不依赖分发器或运行时注册表。
-  内部在途协调只保留到可以安全清理为止。
+  P = 待实现，新增连线均为待实现；已有 = 已实现，需接入定时入口。
+  单例服务不持有单次 Run 状态；快照、Session 与工具管道按 Run 创建。
+  业务规则（不补跑、遇忙跳过、删除与保留等）见正文 §3，不在图中重复。
 endlegend
 @enduml
 
