@@ -1,12 +1,12 @@
 # CampusClaw 定时任务设计
 
-[模块索引](../../README.md#module-index) · [Claw 数据库设计（定时任务表）](../../03-数据与存储/Claw数据库设计.md#schedule) · [Claw 接口协议](configuration.md) · [接口 HTML 展示](schedule-api-review.html) · [架构对比 A14](../07-Agent架构对比/README.md#a14) · [源码与官方证据](source-evidence.md)
+[模块索引](../../README.md#module-index) · [Claw 数据库设计（定时任务表）](../../03-数据与存储/Claw数据库设计.md#schedule) · [Claw 接口协议](configuration.md) · [接口 HTML 展示](schedule-api-review.html) · [架构对比 A14](../07-Agent架构对比/README.md#a14) · [源码与官方证据](source-evidence.md) · [待对齐事项](pending-alignment.md)
 
 本文是定时任务模块的主设计，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织。接口字段与报文由 [configuration.md](configuration.md) 维护，表结构由 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#schedule) 维护，本文不复制。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.51.0 |
+| 文档版本 | 0.52.0 |
 | 更新日期 | 2026-10-14 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；不选择或追加已有 Session |
@@ -22,20 +22,7 @@
 
 ### 评审 Todo
 
-负责人 **【缺口】**。
-
-| # | 事项 | 负责人 | 来源 |
-|---|---|---|---|
-| T1 | ~~运行失败是否自动暂停整个 Schedule~~ 已定，见 [D12](#key-decisions) | | 2026-10-14 评审 |
-| T2 | Mate 新增的定时 access-token 接口与归属登记仍为内部草案；Claw 与 Mate 的服务认证机制、统一账号的配置与 Token 有效期需联调 | | [实施校准](#implementation-calibration) |
-| T3 | PR #332 已实现但未合并，与目标设计仍有差异（含本地身份链路） | | [数据库 PR #332 差异](../../03-数据与存储/Claw数据库设计.md#schedule-pr-diff) |
-| T4 | 原子受理、受理后失联、取消终态与多副本故障测试须在实现阶段验证 | | [自动化测试](#auto-tests) |
-| T5 | 完整 Maven 依赖树与 corporate NativeParent 未核验 | | [模块与依赖](#module-merge) |
-| T6 | 每实例 8 个活动执行上限在多副本下会放大总并发，部署阶段需按实例数与下游配额核对 | | [部署初始值](#deployment-defaults) |
-| T7 | Mate 任务配额准入和 Session 归属登记的内部契约待实现（列表首版由 Mate 拉取全部后自行过滤，不传获准集合） | | [配置 身份与权限边界](configuration.md#mate-access-boundary) |
-| T8 | Mate 管理入口在调用 Claw 前后的处理逻辑（权限、配额、任务与用户关联等）尚未确定；Claw 侧逻辑已确认 | | 本次评审 |
-| <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，定时任务一直被占用、后续计划全部遇忙跳过。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件、结束 Run 并释放任务（中断终态走 D11 的同一终态提交，Run 随之结束，无需单独处理）；② 执行期写入与工具调用前检查执行未终止，防止卡死后恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | | 本次评审（2026-10-13） |
-| <a id="todo-t10"></a>T10 | 是否在 Claw 的 t_schedule（及 Run、Session）增加 userId，使列表直接按用户查询；需先确定任务仅创建者可见还是同范围共享，以及与 Mate 归属的同步规则。首版按方法 A 由 Mate 拉取全部后过滤 | | 本次评审（2026-10-13） |
+需另开设计确定的问题、实现阶段验证项、文档缺口以及 Claw 首版开发前提，集中在[定时任务待对齐事项](pending-alignment.md)维护；正文中的 T1～T10 编号指向该文档。
 
 ### 需求信息
 
@@ -624,6 +611,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.52.0 | 2026-10-14 | 评审 Todo 拆到独立的待对齐事项文档。 |
 | 0.51.0 | 2026-10-14 | 新增 D12：自动运行遇 agent_unavailable_error 时自动暂停，其他失败不暂停；关闭 T1。 |
 | 0.50.0 | 2026-10-14 | “绑定”统一改为“关联”（任务与 Agent 的关系）。 |
 | 0.49.0 | 2026-10-14 | 新增 D11：根执行终态与 Run 结束同事务提交，取代调度器结果对账；更新运行步骤、角色、类图与时序图。 |

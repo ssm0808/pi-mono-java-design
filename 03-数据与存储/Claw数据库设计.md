@@ -733,7 +733,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | 已受理，根执行已结束 | 非空 | 非空 | 空 | 否 |
 | 未受理（准备失败、过期、任务忙） | 非空 | 空 | 非空 | 否 |
 
-忙跳过在插入时即带 finished_at，不占用任务。受理后由原实例在进程内直接启动；之后任何时刻失联都按结果未知处理，Run 保持未结束，自动恢复见[待定 T9](../01-总体架构/08-CampusClaw定时任务/README.md#todo-t9)。
+忙跳过在插入时即带 finished_at，不占用任务。受理后由原实例在进程内直接启动；之后任何时刻失联都按结果未知处理，Run 保持未结束，自动恢复见[待定 T9](../01-总体架构/08-CampusClaw定时任务/pending-alignment.md#todo-t9)。
 
 公开接口（[Run 查询](../01-总体架构/08-CampusClaw定时任务/configuration.md#411-run-查询与删除后的历史待实现)）只返回 session_id 与 error_type 恰好一个非空的记录，投影 id、schedule_id、agent_id、trigger_type、scheduled_at、session_id、error_type、created_at。列表可按 scheduleId、triggerType、hasError 与 createdAt 区间 `[from, to)` 筛选，按 `created_at DESC, id DESC` 页码分页；triggerType、hasError 只有两个值，不单独建索引。
 
