@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.47.0 |
+| 文档版本 | 0.48.0 |
 | 更新日期 | 2026-10-14 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
@@ -58,6 +58,8 @@
 | Session | 每次 Run 新建的独立会话，承载消息、工具结果与根执行 |
 | 根执行（root execution） | Session 内本次运行的顶层执行，是执行终态的最终决定方 |
 | occurrence | 一个具体的自动计划时刻，以 `(schedule_id, scheduled_at)` 唯一标识 |
+| 计划游标 | `upcoming_run_at`，下一次自动计划时刻；领取或跳过一次后推进到下一次 |
+| 派发容差 | 计划时刻与数据库当前时刻之差的上限，首版 5 秒；超过则不运行、不补跑 |
 | 受理（acceptance） | 在同一数据库事务内创建 Session、首条消息、根执行并写入 Run 关联 |
 | 未结束 Run | finished_at 为空的 Run；同一 Schedule 至多一条，由运行表部分唯一约束保证同任务不并发 |
 | lease_until | Run 的受理准备期限，过期后不得受理并由清理结束 |
@@ -274,9 +276,9 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 [原尺寸 SVG](scheduled_run_sequence.svg) · [PlantUML 源码](diagram.puml#L1)
 
 1. **分配 occurrence。** 各副本每秒按 upcoming_run_at/id 有界扫描，不按用户或租户分组；以 `FOR UPDATE SKIP LOCKED` 锁定到期的 Schedule 行，锁内复核未删除、active 与游标仍是本次计划时刻。任务无未结束 Run 时插入一条未结束 Run（部分唯一约束即占用）并推进游标；已有未结束 Run 时插入一条已结束的忙跳过 Run，不排队。超过 5 秒派发容差的处理见 [§3.8](#no-catch-up)。
-2. **准备与归属登记。** 事务外解析 Agent 已发布目录、模型、CRON profile、工作区，固定 `PreparedScheduleRunDTO`；固定拟建 Session ID，由 Mate 独立登记归属并确认；不持数据库行锁调用远端，不调用模型或业务工具。
+2. **归属登记与准备。** 先固定拟建 Session ID，由 Mate 独立登记归属并确认；再在事务外解析 Agent 已发布目录、模型、CRON profile、工作区，固定 `PreparedScheduleRunDTO`；不持数据库行锁调用远端，不调用模型或业务工具。
 3. **原子受理。** 同一事务锁定 Schedule 与 Run，复核任务存在且状态允许、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过与容量；创建 Session、首条用户消息（使用锁内读到的最新 prompt）、根执行，写 Run 关联，自动运行同时写 last_run_at 为数据库当前时间。任一步失败整体回滚。
-4. **事务后启动。** 受理不等待 Agent 完成。原实例在进程内直接启动一次，调度上下文（scheduleId、runId、agentId 及非交互策略）只在内存中传给 Runtime 和子 Agent，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件，不伪造 SSE 连接。Runtime、Cron 与 Child 共用受理原语与执行协调器，规则见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)。
+4. **事务后启动。** 受理不等待 Agent 完成。原实例在进程内直接启动一次，调度上下文（scheduleId、runId、agentId 及非交互策略）只在内存中传给 Runtime 和子 Agent，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件，不伪造 SSE 连接。模型每次返回需要凭据的工具调用时，向 Mate 取一次统一账号 access-token，本批工具共用（[D10](#key-decisions)）。Runtime、Cron 与 Child 共用受理原语与执行协调器，规则见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)。
 5. **结果对账。** 读取受理时固定的根执行终态（以根执行为准）；Schedule/Run 仍存续时写入 Run.finished_at 释放任务；已删除时只收尾 Session 与根执行，不重新插入 Run 或配置。用户在同一 Session 后续发起的对话不改写本次结果。
 
 自动和手动受理均要求配置存在；自动受理要求 active 并检查派发期限，手动受理允许 active/paused，不移动计划游标，也不更新 last_run_at。暂停或 Agent 绑定变更先提交时，已领取的自动 Run 不受理；仅修改 prompt 或时间规则不取消已领取的这次运行，受理使用最新 prompt。删除先提交则不受理；受理先提交则保留 Session 并删除 Run。
@@ -620,6 +622,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.48.0 | 2026-10-14 | §3.5 第 2 步改为先登记归属再准备，与受理图一致；第 4 步补每批工具调用取 access-token；术语补计划游标与派发容差。 |
 | 0.47.0 | 2026-10-14 | 全局目标类图按入口、应用、端口与适配器、Runtime 分包，补主要职责，删去与正文重复的业务规则图例，去掉已撤销的分发状态表。 |
 | 0.46.0 | 2026-10-13 | 去重：§3.3 删除与配置 §5 重复的步骤摘要；§3.8 的 Cron 字段说明改为链接配置 §3；§3.4 增加锚点供配置文档引用。 |
 | 0.45.0 | 2026-10-13 | 评审确认 Session 归属登记保留在 Mate；登记接口路径与 VO 仍待定。 |
