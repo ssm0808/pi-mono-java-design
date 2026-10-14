@@ -345,9 +345,9 @@ CampusClaw 每次运行固定新建 Session，复用 Agent 定义和单条 user.
 | 仓库相对路径与符号 | 已观察行为 |
 |---|---|
 | R/runtimeapi/web/RuntimeRequestContext.java:45 · mateCredentials；R/common/client/mate/MateCredentials.java:7；R/runtimeapi/event/RuntimeEventService.java:58 · submit | user.message 捕获本次四 Header 的不可变快照；不验证真实性，确认/中断等不替换原执行凭据；空快照和安全 toString 已有 |
-| R/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:205 · createSession；R/tool/mate/MateRemoteToolHandler.java:40 · execute | 凭据进入本次 Session/Child 快照，只在实际工具调用时传给 MateToolClient |
+| R/runtimeapi/runtime/RuntimeSessionEngineRegistry.java:205 · createSession；R/tool/mate/MateRemoteToolHandler.java:40 · execute | 凭据进入本次 Session/Subagent 快照，只在实际工具调用时传给 MateToolClient |
 | R/common/client/HttpMateToolClient.java:307、356 · invokeTool/toHeaderInfo；R/common/util/MateRestUtil.java:111 · newRequestBuilder | execute 映射原四 Header；仅发送非空值，不补值、不解析 JWT；发现不带本次业务凭据，最终业务认证由 Mate 决定 |
-| R/tool/cron/ManagedCronSessionRunner.java:53 · execute | Cron 与其 Child 明确 MateCredentials.empty()，未保存或借用创建时凭据 |
+| R/tool/cron/ManagedCronSessionRunner.java:53 · execute | Cron 与其 Subagent 明确 MateCredentials.empty()，未保存或借用创建时凭据 |
 | modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java:105、143 · auth/eventFlux；R/runtimeapi/model/MateRuntimeModelManager.java:31 · resolveModel；docs/decisions/0109-use-campusmate-only-provider.md | 当前仅内部 CampusMate Provider，ProviderAuth.none()；模型请求不透传业务凭据，上游厂商认证归 CampusMate |
 
 在当次 `modules/coding-agent-cli/src/main/java` 和 `modules/cron/src/main/java` 范围未发现 credentialRef、vaultId 或受管 Vault 链路；2026-10-05 的 Mate 示例补充核验见[§8.17](#schedule-engineering-evidence)，不能外推生产凭据能力。现行 [M03 凭据规则](../02-CampusClaw工具系统/README.md#mate-credential-forwarding)与 [M01 HTTP 凭据规则](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)区分普通请求 Header 快照与 Mate 提供的定时执行凭据：秘密只用于本次实际执行，不持久化、不混入发现或模型链路；Mate 新接口待实现。

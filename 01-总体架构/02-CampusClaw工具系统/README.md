@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.22.0 |
+| 文档版本 | 2.23.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-13 |
+| 更新日期 | 2026-10-14 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -14,7 +14,7 @@
 
 ## 1. 设计结论
 
-CampusClaw 通过 Runtime、Cron 和 Child 三个入口运行 Agent。框架工具采用严格启动 profile；宿主另按当前 Agent 直接关联的业务工具创建远端代理。Skill 关联的业务工具由固定入口 `SearchTools` 按需披露定义，再通过固定入口 `CallTool` 执行。12 个区分大小写的框架工具如下，业务代理不计入该数量：
+CampusClaw 通过 Runtime、Cron 和 Subagent 三个入口运行 Agent。框架工具采用严格启动 profile；宿主另按当前 Agent 直接关联的业务工具创建远端代理。Skill 关联的业务工具由固定入口 `SearchTools` 按需披露定义，再通过固定入口 `CallTool` 执行。12 个区分大小写的框架工具如下，业务代理不计入该数量：
 
 ```text
 Read
@@ -31,10 +31,10 @@ TodoUpdate
 AskUserQuestion
 ```
 
-Runtime、Cron 和 Child Agent 使用同一个轻量 `AgentSession` 类型和同一条
+Runtime、Cron 和 Subagent 使用同一个轻量 `AgentSession` 类型和同一条
 `AgentSessionFactory` 装配链，但每次执行得到不同实例。三个入口一致的是模型约束、
 SYSTEM 解析、工具装配、hook、错误、事件与取消语义；消息持久化、active execution、
-Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Session。
+Cron Job 生命周期、Subagent 进度桥和 Host 关闭策略不进入公共 Session。
 
 所有本地文件工具只能访问当前受管 Agent 的整个 `agent/{agentId}` 目录，包括其中的
 `.campusclaw` 子树；它们不能通过相对路径、绝对路径、符号链接或真实路径访问其他 Agent。
@@ -84,10 +84,10 @@ Cron Job 生命周期、Child 进度桥和 Host 关闭策略不进入公共 Sess
 本专题负责：
 
 - 12 个框架工具的名称、装配、可用条件与并发模式，以及 Agent 业务代理的注册边界；
-- Runtime、Cron、Child Agent 三入口的配置与 Session 装配；
-- 受管 Agent 工作区边界、目录 prepare/refresh 和 Skill/Child 名称索引；
+- Runtime、Cron、Subagent 三入口的配置与 Session 装配；
+- 受管 Agent 工作区边界、目录 prepare/refresh 和 Skill/Subagent 名称索引；
 - Skill 逐工具发现、`CallTool` 名称解析、共用远端执行和共享 CampusMate origin 边界；
-- Child Agent Execution、Cron 工具边界与实现迁移。
+- Subagent Execution、Cron 工具边界与实现迁移。
 - TUI/CLI 删除边界和公共 Session 压缩；Slash 只保留与模型工具的隔离边界。
 
 Runtime HTTP 的资源、ResultBean、SSE、Entry 和数据库契约仍由
@@ -102,7 +102,7 @@ Runtime HTTP 的资源、ResultBean、SSE、Entry 和数据库契约仍由
 - 任意自定义工具、运行中工具热注册、公共 Extension SDK 和 Skill 本地工具激活；
 - 工具定义的数据同步、Schema 更新与运行时版本切换策略；
 - `Bash` 沙箱、`Edit`/`Write` 工作区写入模型和旧工具名兼容；
-- 跨节点 Child 调度、常驻 Child worker、Runtime 租约和分布式取消；
+- 跨节点 Subagent 调度、常驻 Subagent worker、Runtime 租约和分布式取消；
 - 版本驱动、TTL、watcher 或 Mate 推送触发的目录自动刷新；
 - Cron 持久化、集群调度、misfire、租约和保留策略的具体技术方案；
 - 旧 Cron payload、旧 Extension manifest 或旧工具执行器兼容。
@@ -131,7 +131,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 产品约束、安全加固 | 删除 Bash/Edit/Write 及无其他消费者的专属代码 | 本产品不提供通用本机命令和文件写入工具，缩小重新接入面并停止维护无产品用途的实现；不宣称整个 Runtime 无副作用 |
 | 产品约束 | 删除 CLI/TUI 产品入口、Loop、旧名和兼容 payload | 产品没有交互终端生命周期，不承担首版兼容 |
 | 架构改造 | 三入口共用轻量 Session 与工厂 | 防止模型、hook、工具、错误和取消语义漂移 |
-| 架构改造 | 压缩与 Read 文件追踪迁入公共 Session | 入口删除不能让 Runtime、Cron、Child 丢失上下文治理 |
+| 架构改造 | 压缩与 Read 文件追踪迁入公共 Session | 入口删除不能让 Runtime、Cron、Subagent 丢失上下文治理 |
 | 架构改造 | Runtime 使用 append-only 数据库 Entry 保存摘要与边界 | 替代 pi JSONL compaction entry，同时保持历史不可变和模型恢复边界独立 |
 | 架构改造 | 用独立 HTTP Command 模块替换旧 Slash 原型 | Slash Command 不是模型工具，也不进入工具目录 |
 | 架构变更 | 框架 profile 与受管业务代理分开装配 | 业务工具共用一个适配实现，不恢复任意 Extension 或运行中热注册 |
@@ -148,7 +148,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 产品约束 | Skill 加载和 SearchTools 不激活工具或授予权限 | 搜索结果只提供模型调用说明，执行身份由宿主可信绑定确定 |
 | 架构改造 | Model Manager、受管 Runtime 与 Tool 共用单一 `campusmate` 配置树 | Mate 与 CampusMate 是同一个服务，不保留顶层 `mate` |
 | 架构改造 | Runtime 与 Tool 共用 `campusmate.endpoints.skill-info-path-template` | 两个旧键调用完全相同的 Skill HTTP operation |
-| 产品约束 | Child 只按直接绑定名称调用，首版深度 1 | 避免全局枚举、循环和无边界递归 |
+| 产品约束 | Subagent 只按直接绑定名称调用，首版深度 1 | 避免全局枚举、循环和无边界递归 |
 
 ## 4. 工具集合与入口配置
 
@@ -173,7 +173,7 @@ public enum BuiltInToolName {
 public enum ToolEntryPoint {
     RUNTIME,
     CRON,
-    CHILD_AGENT
+    SUBAGENT
 }
 ```
 
@@ -208,7 +208,7 @@ campusclaw:
       - SearchTools
       - CallTool
       - Agent
-    child-agent:
+    subagent:
       - Read
       - Find
       - Grep
@@ -225,11 +225,23 @@ campusclaw:
 3. 非空数组完全替换框架缺省值，不做 merge；宿主另追加当前 Agent 直接业务工具代理；
 4. 未知、重复、旧名或大小写错误阻止应用启动；
 5. 配置只在启动期绑定和验证，目录 `refresh` 不重新读取配置；
-6. 业务绑定不能修改框架 profile；Cron payload、Child 文件和模型输入不能增加任意工具；
+6. 业务绑定不能修改框架 profile；Cron payload、Subagent 文件和模型输入不能增加任意工具；
 7. 非空配置下，业务代理受 Mate 工具装配开关、当前 Agent 绑定与权限约束。
 
+<a id="subagent-naming"></a>被父 Agent 通过 `Agent` 工具委派执行的 Agent 统一称为 Subagent，中英文都不写作“子 Agent”或 Child；拼写与 Claude Code、pi、OpenCode 及 Codex 对外协议的 subagent 一致。委派方仍称父 Agent，因为它不一定是 Main Agent。代码、配置和模型可见文本按下表对齐，待实现：
+
+| 位置 | 当前实现 | 目标 |
+|---|---|---|
+| 入口枚举 | `ToolEntryPoint.CHILD_AGENT` | `ToolEntryPoint.SUBAGENT` |
+| 工具配置键 | `campusclaw.tools.child-agent` | `campusclaw.tools.subagent`，不保留旧键别名 |
+| 运行时字段与方法 | `childAgentsByName`、`childAgentNames`、`ChildManifest`、`MAX_CHILD_DEPTH`、`validateChildRuntime` 等 | 对应改为 `subagents`/`subagent` 词根，如 `subagentsByName`、`subagentNames`、`SubagentManifest`、`MAX_SUBAGENT_DEPTH` |
+| `Agent` 工具 description 与 Schema | `child Agent` | `subagent`，见[内置工具契约 §5](built-in-tool-contracts.md#5-agent) |
+| 已有 Subagent 命名 | `SubagentExecutionService`、`SubagentExecutionContext`、角色文本 `Subagent` | 保持不变 |
+
+放弃保留 `child-agent` 旧键别名：目前只有内置 `application.yml` 使用该键，别名会让两套名称长期并存；代价是部署环境若覆盖了旧键会因未知键阻止启动，发布说明须写明迁移。放弃 `SubAgent` 拼写：与上述基线及现有 `SubagentExecutionService` 不一致。验收：主代码与 `campusclaw/` 镜像中不再出现 `CHILD_AGENT`、`child-agent` 和 Child 词根标识符；旧键配置启动失败并提示未知键；三入口缺省 profile 与严格校验测试按新键通过。
+
 `Cron` 只在 Runtime profile 中出现，防止 Cron execution 管理或递归创建 Job。首版最大
-Child 深度为 1，因此 Child profile 不暴露必然不可执行的 `Agent`。定时入口首版不提供人工交互；默认不装配提问或审核工具之外，还须按 [M10 非交互执行约束](../08-CampusClaw定时任务/execution.md#noninteractive)处理业务权限 ASK、自定义问题与误配的交互工具。
+Subagent 深度为 1，因此 Subagent profile 不暴露必然不可执行的 `Agent`。定时入口首版不提供人工交互；默认不装配提问或审核工具之外，还须按 [M10 非交互执行约束](../08-CampusClaw定时任务/execution.md#noninteractive)处理业务权限 ASK、自定义问题与误配的交互工具。
 
 ### 4.3 工具装配接口
 
@@ -244,7 +256,7 @@ public interface BuiltInToolFactory {
 ```
 
 `ToolAssemblyContext` 是不可变值对象，至少固化入口、`AgentWorkspaceBoundary`、受管 Agent
-身份、Skill/Child 名称索引、Execution 深度与 ancestry、模型快照、取消域、Mate 调用
+身份、Skill/Subagent 名称索引、Execution 深度与 ancestry、模型快照、取消域、Mate 调用
 上下文，以及可选 Cron 上下文。只读 operations、Mate client、Cron service 和
 `SubagentExecutionService` 等应用协作者可以共享，但每个 `AgentTool` 实例必须按 Session
 新建。任何工具不得把 agentId、工作区、凭据或绑定写入 Spring 单例。
@@ -279,7 +291,7 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 6. Read 只接受可读普通文件，Find/Grep/Ls 只遍历边界内普通文件和目录；
 7. 错误统一为脱敏文本和 `isError=true`，不回显其他 Agent ID 或物理路径。
 
-`Read`、`Find`、`Grep`、`Ls` 必须共用该边界。Child Session 必须从 Child 自己的
+`Read`、`Find`、`Grep`、`Ls` 必须共用该边界。Subagent Session 必须从 Subagent 自己的
 `PreparedAgentRuntime.agentRoot()` 构造新边界，不继承父边界或父已验证 Path。
 
 ## 6. 公共轻量 AgentSession
@@ -294,9 +306,9 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 |---|---|---|---|
 | Runtime | 接受一次 active execution 时 | 数据库 Session/Entry、请求级 SSE、确认与中断控制、active execution 注册 | execution 结束或取消后 |
 | Cron | Job 触发时 | Job/Run、调度上下文和当前 Agent ID | 本次 Cron execution 结束 |
-| Child | `Agent` 通过绑定校验后 | `SubagentExecutionContext`、进度投影和父取消桥 | 本次 Child execution 结束 |
+| Subagent | `Agent` 通过绑定校验后 | `SubagentExecutionContext`、进度投影和父取消桥 | 本次 Subagent execution 结束 |
 
-父与 Child 使用不同的 `AgentSession` 实例，但共享同一个 Session 类型、Factory 和执行
+父与 Subagent 使用不同的 `AgentSession` 实例，但共享同一个 Session 类型、Factory 和执行
 语义。执行位置属于 Host/运行时调度实现，不属于 `Agent` 工具契约。
 
 ## 7. Pipeline、hook 与批量调度
@@ -372,7 +384,7 @@ agent/{agentId}/.campusclaw/
 ```
 
 `agent.json` 只保存当前 Agent 身份；`settings.json` 保存 Agent 默认 `mode`、`defaultModel`、
-`bindingModels` 和直接工具绑定 `bindingTools`；`agents/{agentName}.json` 保存一个直接 Child 的身份、描述、enabled 和
+`bindingModels` 和直接工具绑定 `bindingTools`；`agents/{agentName}.json` 保存一个直接 Subagent 的身份、描述、enabled 和
 固定版本；`skill.json` 保存 `schemaVersion=1`、ID、名称、版本和该 Skill 的 `bindingTools`。工具绑定包含技术名、展示名、ID 和权限等可信元数据，供本次执行读取；文件位置不改变 Agent/Skill 归属，也不能代替执行时的启停与权限检查。相关字段已在主线实现，核验范围见[名称来源证据](source-evidence.md#tool-display-binding-evidence)。名称必须与路径逐字符
 一致，所属索引内唯一。扫描结果形成不可变的 `skillName -> skillId` 和
 `agentName -> BoundAgent` 索引。
@@ -394,7 +406,7 @@ agent/{agentId}/.campusclaw/
 下一次接受用户 Entry 前读取刷新后的目录：当前模型仍在新 `bindingModels` 且具备凭据时
 保留；失效时切换到具备凭据的新 default，并原子持久化模型及必要的 thinking 变更事件，
 事件先于 `user.message` 投影。没有可用 default 时拒绝本次执行且不接受用户 Entry。
-工具配置不参与 refresh。首版不提供 TTL、后台刷新、版本比较或 Child 版本不匹配时的隐式自愈。
+工具配置不参与 refresh。首版不提供 TTL、后台刷新、版本比较或 Subagent 版本不匹配时的隐式自愈。
 
 本图从管理面已完成目录发布开始，只展示下一次空闲执行的模型校准。当前模型仍可调用时保留；失效才尝试新默认模型；无可用模型则不接纳 user.message。模型及必要 thinking 变更原子持久化后先投影，再接纳消息；刷新发布过程由前一张图说明。
 
@@ -469,7 +481,7 @@ agent/{agentId}/.campusclaw/
 
 正常流程保持：可信目标解析 → 参数校验与准备 → 宿主权限和交互准入 → 本地等待用户回答 → 结果回传。Agent 直接代理与 Skill 的 CallTool 共用分派。准备阶段从同一可信定义读取标记、固定处理器及问题快照；宿主放行后执行同一准备结果。用户回答是本次 Tool 结果，不授权后续业务操作。普通业务 Tool 继续交给 Mate 远端处理器。
 
-用户确认 Tool 要求 label 为字符串，context 可省略或为对象，保留原始值与结构；回答以 `{"content":"..."}` 返回。仅 Runtime 根执行支持等待，实际入口权限必须为 allow；ask/deny、Child/Cron、端口缺失、取消或本地适配失败均明确失败，不回退远端执行。参数错误保持 isError=true，向模型返回字段错误和同次可信定义，不创建确认、不执行、不自动猜参或重放；公共事件继续隐藏内部 Schema 和敏感参数。同批位置按 [§7.1](#interactive-tool-batch) 的交互工具规则检查。
+用户确认 Tool 要求 label 为字符串，context 可省略或为对象，保留原始值与结构；回答以 `{"content":"..."}` 返回。仅 Runtime 根执行支持等待，实际入口权限必须为 allow；ask/deny、Subagent/Cron、端口缺失、取消或本地适配失败均明确失败，不回退远端执行。参数错误保持 isError=true，向模型返回字段错误和同次可信定义，不创建确认、不执行、不自动猜参或重放；公共事件继续隐藏内部 Schema 和敏感参数。同批位置按 [§7.1](#interactive-tool-batch) 的交互工具规则检查。
 
 本地问答与 `permission=ask` 的执行授权确认是两个职责。用户确认 Tool 不是“任意业务 Tool 先弹卡再远调”；不能只改普通 Tool 的标记而保留其任意业务参数和执行含义。标记不得由模型或 Skill 正文提供，也不改变模型 Tool 集合、可信关联或权限规则。
 
@@ -493,7 +505,7 @@ Agent、Skill 与工具元数据查询不读取或复制业务执行凭据。`Ma
 
 普通交互的实际 execute 请求只透传快照中已提供的 `X-HW-ID`、`Authorization`、
 `X-HW-APPKEY` 与 `access-token`，不改名、不生成缺失值。该快照可随同一次 Runtime
-execution 的 Child execution 以只读方式传递，但不存入 Child Session。
+execution 的 Subagent execution 以只读方式传递，但不存入 Subagent Session。
 普通 HTTP 的 Host execution 上下文及工具协作者必须存在，但凭据快照可为空或只含部分 Header。
 所有本地层均不以凭据完整性决定工具装配或可用性；工具名成功解析且满足确认、取消等原有条件后，
 即使四项全缺失，也向 Mate execute 发出请求，由 Mate 校验并返回结果。缺少受管 Agent、
@@ -567,11 +579,11 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 
 该架构变更以 pi 的“准备与校验先于 before hook”为主基线；DeepSeek Harness 当前 alpha 实现把 policy/ask 放在工具包装器参数校验之前，说明这不是所有 Agent 的统一固定顺序。CampusClaw 选择前置业务校验，是减少无效确认的 ToB 产品约束，同时用不可变准备快照避免确认前后目标或参数漂移。代价是 Pipeline 增加准备阶段，失败结果增加定义文本和一次模型修正调用；不能据此承诺首次调用正确、完全无等待感知或量化成功率。
 
-## 10. Child Agent Execution
+## 10. Subagent Execution
 
-本图只回答父执行如何调用一个直接绑定的 Child 并取得结果。绑定解析、Child 运行准备和进度投影由 Child execution service 编排；公共 Factory 装配运行对象，ChildRunAcceptanceService 创建独立持久 Session，再由公共 Runtime 执行。身份、版本、深度、ancestry 和可用模型校验在运行前完成，失败不启动 Child；具体校验顺序、模型回退条件与隔离对象见本节正文。
+本图只回答父执行如何调用一个直接绑定的 Subagent 并取得结果。绑定解析、Subagent 运行准备和进度投影由 Subagent execution service 编排；公共 Factory 装配运行对象，SubagentRunAcceptanceService 创建独立持久 Session，再由公共 Runtime 执行。身份、版本、深度、ancestry 和可用模型校验在运行前完成，失败不启动 Subagent；具体校验顺序、模型回退条件与隔离对象见本节正文。
 
-![Child Agent Execution](subagent_execution_sequence.svg)
+![Subagent Execution](subagent_execution_sequence.svg)
 
 [PlantUML 源码：`subagent_execution_sequence`](diagram.puml#L413)
 
@@ -585,7 +597,7 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 ```
 
 `agentName` 只能来自当前父 Agent 的 `agents/{agentName}.json`。执行前按顺序校验精确
-直接绑定、自绑定、enabled、固定版本、最大深度、ancestry 循环、Child 目录完整性和
+直接绑定、自绑定、enabled、固定版本、最大深度、ancestry 循环、Subagent 目录完整性和
 模型可用性。版本不匹配是明确错误，不触发隐式 refresh。
 
 | 组件 | 职责 |
@@ -593,19 +605,19 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 | `BoundAgentTool` | 实现模型工具 `Agent`，完成参数、进度和结果投影 |
 | `BoundAgentResolver` | 按名称解析直接绑定并校验身份、版本、深度和 ancestry |
 | `SubagentExecutionContext` | 固化父子 ID、深度、ancestry、父模型、thinking、取消和进度 sink |
-| `SubagentExecutionService` | 准备 Child runtime，委派持久受理与 Runtime Coordinator；不直接 prompt 绕过历史 |
-| `AgentSessionFactory` | 使用 `CHILD_AGENT` profile 创建独立 Child Session 实例 |
+| `SubagentExecutionService` | 准备 Subagent runtime，委派持久受理与 Runtime Coordinator；不直接 prompt 绕过历史 |
+| `AgentSessionFactory` | 使用 `SUBAGENT` profile 创建独立 Subagent Session 实例（命名待实现，见 [§4.2](#subagent-naming)） |
 
-Child 消息从空集合开始，工作区指向自己的 `agent/{childAgentId}`，SYSTEM、Skill 和工具
-来自 Child runtime。Child 有可用 default model 时优先，否则继承父 execution 的 model
-和 thinking；最终模型必须位于 Child `bindingModels` 且当前具备凭据。
+Subagent 消息从空集合开始，工作区指向自己的 `agent/{subagentId}`，SYSTEM、Skill 和工具
+来自 Subagent runtime。Subagent 有可用 default model 时优先，否则继承父 execution 的 model
+和 thinking；最终模型必须位于 Subagent `bindingModels` 且当前具备凭据。
 
-首版最大深度固定为 1，Child profile 因而不暴露 `Agent`。仍保留 ancestry 和自绑定检查，
+首版最大深度固定为 1，Subagent profile 因而不暴露 `Agent`。仍保留 ancestry 和自绑定检查，
 不能只依赖深度。父侧只接收目标、工具开始/结束和完成等高层进度，不接收 reasoning、
-Child 消息历史或完整事件流。父取消必须传播；成功结果只返回最后一条非空 Assistant
-文本。Child 内部可以执行多个 LLM/tool turn。
+Subagent 消息历史或完整事件流。父取消必须传播；成功结果只返回最后一条非空 Assistant
+文本。Subagent 内部可以执行多个 LLM/tool turn。
 
-父侧不接收完整历史仅是投影边界：Child 自己必须保存完整消息、调用、最终结果和终态。独立授权、父调用唯一关联、逐工具提交、取消与删除规则唯一见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)，新增链路待实现。Factory 本身不负责创建数据库资源。
+父侧不接收完整历史仅是投影边界：Subagent 自己必须保存完整消息、调用、最终结果和终态。独立授权、父调用唯一关联、逐工具提交、取消与删除规则唯一见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)，新增链路待实现。Factory 本身不负责创建数据库资源。
 
 ## 11. Cron 与模型策略
 
@@ -626,7 +638,7 @@ usableModels = settings.bindingModels
 
 - Runtime 创建或修改 Session 只能选择 `usableModels`；
 - Cron 每次触发选择 Agent 当时可用的 default；
-- Child 优先自身 default，否则继承父 model/thinking，并再次校验 Child 白名单；
+- Subagent 优先自身 default，否则继承父 model/thinking，并再次校验 Subagent 白名单；
 - 无可用模型时本次 Session/Execution 创建失败，不回退到未绑定模型。
 
 ## 12. 实现迁移
@@ -640,7 +652,7 @@ usableModels = settings.bindingModels
 | 框架与业务代理装配 | `ConfiguredToolAssembler` + `BuiltInToolFactory` + `MateToolsetFactory` |
 | HTTP 数据库恢复、SSE 和 active execution | Runtime Host |
 | Cron Job/Run 与调度入口 | Cron Host |
-| Child 绑定、进度与父取消 | `SubagentExecutionService` |
+| Subagent 绑定、进度与父取消 | `SubagentExecutionService` |
 | 阈值压缩、溢出压缩和一次重试 | 公共 `ManagedAgentSession` + `SessionCompactor` |
 | Read 文件追踪 | 公共压缩核心 `FileOperationTracker` |
 
@@ -679,7 +691,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 [PlantUML 源码：`managed_session_compaction`](diagram.puml#L664)
 
-压缩由公共 ManagedAgentSession 管理，Runtime、Child 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
+压缩由公共 ManagedAgentSession 管理，Runtime、Subagent 与 Cron 共用安全切点、摘要和单次恢复流程。参数、触发、摘要校验、历史一致性及验收唯一维护于[Session 压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。公共事件仍只投影完整 session.compacted，图中的内部生命周期不等于公共事件名。
 
 每个新执行从 Mate 查询当前模型窗口，同一根的 Tool Loop、自动压缩与确认续跑复用结果；独立手工压缩查询一次。普通调用及摘要均由 Mate 控制输出额度，Claw 不传输出上限，也不据此推断 LENGTH 恢复。前置输入检查、窗口变化与失败边界见[Model 专题](../../02-服务与接口/03-Model/model-capabilities.md#4-输出控制与上下文消费)，该增量待实现。成功答案不重放、失败摘要不替换上下文、历史 Entry 不删除。
 
@@ -695,7 +707,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 | `CallMateTool` | `CallTool`，保留 `{tool,args?}` 并限定 Skill 关联的业务工具范围 |
 | `EditDiff` | 无；写工具首版硬禁用 |
 | `spawn_agent`、`invoke_agent` 和 Session delegation after-hook | `Agent` + `SubagentExecutionService` |
-| ACP/HTTP/A2A SubAgent backend、registry、approval placeholder | 不进入首版 Child Agent Execution |
+| ACP/HTTP/A2A SubAgent backend、registry、approval placeholder | 不进入首版 Subagent Execution |
 | 聚合 `references/tools.json` 和生成的单工具定义文件 | `SearchTools` 按名称取得可信定义；加载与同步另行设计 |
 | 顶层 `mate.*` / `MATE_*` 应用变量 | 删除；地址、endpoint 与 Tool 开关分别迁入 `campusmate.base-url`、`campusmate.endpoints`、`campusmate.tool` |
 | 重复 Skill path 配置 | 删除；Runtime 与 Tool 共读 `campusmate.endpoints.skill-info-path-template` |
@@ -727,7 +739,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 - 三入口配置项缺失时使用默认值；显式 `[]` 时，即使存在业务绑定且 Mate 工具装配已启用，模型请求仍为 `tools=[]`；非空配置完全替换框架缺省值；
 - 框架 profile 拒绝未知名、旧名、重复名和大小写错误；业务名来自绑定且不覆盖框架名；
-- Child 缺省无 `Agent`，Cron 缺省无 `Cron`；
+- Subagent 缺省无 `Agent`，Cron 缺省无 `Cron`；
 - 同一入口连续创建两个 Session，工具实例不同且应用协作者可安全共享；
 - Schema 在 before hook 前校验，hook 顺序固定；
 - CallTool 在 before hook 前完成可信目标准备和业务参数校验；参数错误不创建确认记录，Mate execute 请求数为零；
@@ -739,7 +751,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 ### 13.1.1 退役工具删除验收
 
 - 主源码及公司镜像不存在三项工具类、专属 operations/executor 和无消费者的写入队列；干净构建产物不得残留旧 class；
-- 三入口拒绝 `Bash/Edit/Write` 及对应小写旧名；目标框架清单及 Runtime/Cron/Child 缺省集合符合 §4；
+- 三入口拒绝 `Bash/Edit/Write` 及对应小写旧名；目标框架清单及 Runtime/Cron/Subagent 缺省集合符合 §4；
 - 移除旧功能专属测试，补充退役类/包不存在与配置拒绝回归，不能用减少测试数量代替能力删除证明；
 - Read/Find/Grep/Ls、共享截断、目录 prepare/refresh、压缩及 Agent 子代理的相关回归通过；
 - 当前产品文档不再允许保留源码或指导调用；历史源码证据、拒绝配置负例与历史事件中的名称允许保留；
@@ -750,12 +762,12 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - 完整缓存命中不访问 Mate，冷目录通过同级候选树原子发布；
 - refresh 失败保留旧树，活动 Session 继续使用自身 runtime 快照；
 - refresh 后空闲 Session 下一次执行懒校准模型；无可用 default 时不接受用户 Entry；
-- 名称/路径不一致、Skill/Child 重名、固定版本缺失和符号链接使目录无效；
+- 名称/路径不一致、Skill/Subagent 重名、固定版本缺失和符号链接使目录无效；
 - Skill 资源路径不越界；普通参考资料继续可读，受管目录不生成工具定义文件；
-- Read、Find、Grep、Ls 只能访问本 Agent 根，Child 只能访问 Child 根；
+- Read、Find、Grep、Ls 只能访问本 Agent 根，Subagent 只能访问 Subagent 根；
 - 跨 Agent 绝对路径、`..`、符号链接、realpath 越界和非普通文件被脱敏拒绝。
 
-### 13.3 Mate、Child 与 Cron
+### 13.3 Mate、Subagent 与 Cron
 
 - Agent 直接工具由同一适配类创建独立实例；名称、描述和 Schema 正确进入每步模型请求；
 - Skill 初始目录只披露元数据；`Skill` 输出正文、基础目录和最多 10 条抽样资源路径，不展开工具定义或增加工具；
@@ -779,7 +791,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - 普通 HTTP 执行四项全缺失、任意部分组合与 JWT/APPKEY 同时提供均不触发本地完整性拒绝；解析/确认成功后执行请求恰好一次，Mate 失败映射为 isError=true；
 - 空快照不触发 unavailable；缺 Host 上下文、发现失败、取消和确认拒绝仍保持原有处理；完整验收矩阵见 HTTP §7.3；
 - Agent 校验直接绑定、固定版本、深度、循环、父取消和模型白名单；
-- 父与 Child Session 实例隔离但使用相同 Factory/执行语义；
+- 父与 Subagent Session 实例隔离但使用相同 Factory/执行语义；
 - Cron Job 按 Agent 隔离，触发时使用当前配置，不接受旧 payload 字段。
 - Slash Command 与模型工具分开注册和测试，所有命令都不出现在模型工具清单中；
 - Usage/估算阈值、失效边界、显式/静默/Xiaomi/可恢复 length 溢出通过测试；
@@ -799,9 +811,9 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 3. 完成逐工具 batch planner、严格 Schema 和 hook 顺序；
 4. 实现工厂、不可变上下文和公共 Session；
 5. 迁移 Runtime Host 并删除 CLI 产品入口；
-6. 统一目录 prepare/refresh、Skill/Child 索引和模型解析；
+6. 统一目录 prepare/refresh、Skill/Subagent 索引和模型解析；
 7. 复用 MateToolResolver 实现 SearchTools 的精确名称披露，并保持代理、发现与 CallTool 的定义一致性及权限边界；数据加载、缓存与同步由后续专题设计后接入；
-8. 迁移 Child Execution 与 Cron 工具；
+8. 迁移 Subagent Execution 与 Cron 工具；
 9. 删除 Bash/Edit/Write 及专属死代码、任意动态注册、Extension、Loop、旧 delegation 和退役模型入口；
 10. 同步生成镜像并完成全量回归。
 
@@ -811,6 +823,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.23.0 | 2026-10-14 | 被委派的 Agent 统一称为 Subagent，入口枚举、配置键和运行时标识符改用 subagent 词根（待实现）。 |
 | 2.22.0 | 2026-10-13 | 提问与用户确认 Tool 必须是本批最后一个调用，计划提交仍须单独调用，违规时整批拒绝且不执行任何调用。 |
 | 2.21.0 | 2026-10-10 | Child 保存独立完整历史并复用持久 Runtime，父侧继续只接收进度与摘要。 |
 | 2.20.1 | 2026-10-08 | 用户确认元数据分派说明统一使用 Skill 和 Tool。 |

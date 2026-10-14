@@ -22,7 +22,7 @@ PR/push 触发仓库 CI 的变更门禁，夜间独立任务执行深测与测�
 
 ## 2. 与领域适配器的关系
 
-[Runtime HTTP 适配器](../04-Runtime-HTTP测试Agent/README.md)提供 HTTP、数据库和打包进程测试，机器目录仍固定于历史 HTTP 1.37。产品级 TDD Agent 还覆盖模型、Agent Loop、工具、上下文、Child/Cron、控制面、前端和交付，并维护 `capabilityId → requirementId → caseId → testSelector → runEvidence` 追踪链。
+[Runtime HTTP 适配器](../04-Runtime-HTTP测试Agent/README.md)提供 HTTP、数据库和打包进程测试，机器目录仍固定于历史 HTTP 1.37。产品级 TDD Agent 还覆盖模型、Agent Loop、工具、上下文、Subagent/Cron、控制面、前端和交付，并维护 `capabilityId → requirementId → caseId → testSelector → runEvidence` 追踪链。
 
 注册表 `2.1.0` 的全局盘点基线不等于当前目标。Runtime 九项接口和 Events v2、CampusMate 名称与 AI 产品范围等后续目标，需要在 requirement 粒度补齐成熟度、精确 selector 和测试证据，不能仅提高目录版本就宣称覆盖完成。
 
@@ -30,7 +30,7 @@ PR/push 触发仓库 CI 的变更门禁，夜间独立任务执行深测与测�
 
 ### 3.1 已观察实现
 
-固定实现提交为 `ae0ae7c164b031afacd862794e8914243913f113`。当时可观察到模型注册与调用、Agent Loop、Runtime HTTP、持久化和压缩、Agent/Skill、工作区及 Mate Tool、Child/Cron、控制面和前端；测试资产有 139 个 Java 测试源文件、3 个 Vitest 文件，`.github/workflows/ci.yml:4-26` 的 PR/push 门禁仅执行 Spotless 与 Maven verify。
+固定实现提交为 `ae0ae7c164b031afacd862794e8914243913f113`。当时可观察到模型注册与调用、Agent Loop、Runtime HTTP、持久化和压缩、Agent/Skill、工作区及 Mate Tool、Subagent/Cron、控制面和前端；测试资产有 139 个 Java 测试源文件、3 个 Vitest 文件，`.github/workflows/ci.yml:4-26` 的 PR/push 门禁仅执行 Spotless 与 Maven verify。
 
 完整仓库相对路径、符号及 selector 由[能力注册表](capability-registry.json)的 `sourceEvidence/requirements` 保存。`docs/designs/ai.md` 和 `docs/designs/agent-core.md` 是旧代码派生快照，只用来寻找源码，不作为当前行为预期。上述数量和差距不延伸到最新实现；Attachment 公共 bridge 仍为 `proposed`，不进入阻断门禁。
 
@@ -99,7 +99,7 @@ PR 中隐式同步另一个仓库。
 | CC-CAP-006 | 上下文压缩与重载一致性 | P0 | accepted | partial |
 | CC-CAP-007 | 工作区工具与路径隔离 | P0 | implemented | partial |
 | CC-CAP-008 | Mate 工具发现、凭据与调用 | P0 | implemented | partial |
-| CC-CAP-009 | Child Agent | P1 | implemented | partial |
+| CC-CAP-009 | Subagent | P1 | implemented | partial |
 | CC-CAP-010 | Cron Agent | P1 | implemented | partial |
 | CC-CAP-011 | CampusMate 共享客户端与模型管理 | P0 | accepted | partial |
 | CC-CAP-012 | 控制面注册与调度 | P1 | implemented | partial |
@@ -308,7 +308,7 @@ repository dispatch，或将设计差分作为 nightly 的最高优先级检查�
 - 每个生效 P0 requirement 都有稳定 case ID、真实 selector 和最近通过证据；
 - accepted 设计变化能自动形成先失败的 test-only Draft PR，且 Agent 不改产品代码；
 - PR/push 在分钟级返回 change-gate，nightly 完成全量和测试维护；
-- 前端、模型、Agent Core、工具、压缩、Cron/Child、控制面和交付不再被 HTTP 用例代表；
+- 前端、模型、Agent Core、工具、压缩、Cron/Subagent、控制面和交付不再被 HTTP 用例代表；
 - 环境不可用、必选测试 skip、registry 过期和不确定影响不会误报 PASS；
 - 失败报告可在相同提交、fixture、命令和 seed 下复现；
 - 防弱化门禁能识别删除断言、扩大容差、增加 skip 和只保留 happy path；

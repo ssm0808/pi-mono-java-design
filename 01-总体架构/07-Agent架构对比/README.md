@@ -62,7 +62,7 @@ Claw 各模块的数据库结构集中于[全库设计](../../03-数据与存储
 
 | 模块 | 需要解释的架构问题 | 主基线及辅助对照 | 条目与待补证范围 |
 |---|---|---|---|
-| M01 · Runtime 与多 Agent | Loop 扩展能力如何与产品准入分离；父子执行如何隔离和终止 | pi；计划审核采用 DeepSeek，预览对照 Codex | [A01](#a01)覆盖 Loop 与消息准入；[A03](#a03)覆盖模式接入、参数承载计划预览与审核、Child 模式传递，其他父子生命周期待补证 |
+| M01 · Runtime 与多 Agent | Loop 扩展能力如何与产品准入分离；父子执行如何隔离和终止 | pi；计划审核采用 DeepSeek，预览对照 Codex | [A01](#a01)覆盖 Loop 与消息准入；[A03](#a03)覆盖模式接入、参数承载计划预览与审核、Subagent 模式传递，其他父子生命周期待补证 |
 | M02 · Model | 如何让业务 Agent 设置成为唯一模型权威；Provider 调用与模型选择如何分层；原始事件在哪层归一化 | 模型目录差异采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、业务 Agent 设置、旧全局目录删除和 SDK 削减；Codex 事件归一化对比及完整取消链仍待专项核验 |
 | M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；[A11](#a11)覆盖远端代理与 Skill 工具按需披露 |
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；[A12](#a12)覆盖单条时间线与非递归读取，其他上下文比较待补证，不默认 token 全量落盘 |
@@ -180,7 +180,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | DeepSeek 已观察行为 | 最新核验 `4878cdab` 的 PlanModeController 保持稳定退出工具，required plan 直接承载完整 Markdown，审核 detail 使用 args.plan；批准后在下一 accepted in-turn pre-step 提交模式变化。当前 package 为 `0.2.0-rc.1`，不是稳定发布；不据此声称其提供 CampusClaw 参数预览。完整提交、路径与旧 alpha 范围见[专项证据 §15](../06-CampusClaw计划模式/source-evidence.md#plan-argument-streaming-evidence)。 |
 | CampusClaw 已观察实现 | `a1e6450427abeabaa1af04d5964f371dbbf4cf68`（PR #336）已接入完整 plan 参数、AI 通用部分 JSON 快照、及时工具身份和内部最终诊断；Runtime 只投影可信计划前缀，完整调用经校验/prepare 后绑定审核事务。批准后原执行应用 build，再继续模型与工具循环；精确范围见 §16，其他历史核验不升级 |
 | CampusClaw 目标 | Agent 默认 mode 只初始化新 Session，Session 独立维护当前模式；模式更新复用统一 Session POST。完整方案一次写入 ExitPlanMode({plan})，后端从可信调用的参数生成计划预览；完整校验后以事件身份审核，沿用原执行与数据库确认交接，批准后以 build 指令续跑；Tool/Skill 定义跨模式稳定。精确规则归计划与元数据主设计。 |
-| 差异分类 | 产品约束：Agent 默认 mode 与 Session 当前模式分离、Tool/Skill 元数据稳定、当前模式由 Session 更新、只允许 idle 主动切换、Child 调用时继承模式；架构变更：在既有配置服务增加 Session 更新，并将进程内审核接入 HTTP 和已有数据库执行控制；安全加固：精确目标、单次消费、停止竞争和两跳身份校验。 |
+| 差异分类 | 产品约束：Agent 默认 mode 与 Session 当前模式分离、Tool/Skill 元数据稳定、当前模式由 Session 更新、只允许 idle 主动切换、Subagent 调用时继承模式；架构变更：在既有配置服务增加 Session 更新，并将进程内审核接入 HTTP 和已有数据库执行控制；安全加固：精确目标、单次消费、停止竞争和两跳身份校验。 |
 | 提示词依据 | DeepSeek standard preset 明确禁止规划期 todo_write；CampusClaw 同样仅在 build 记录实施进度。模式资源仅 PLAN.md / BUILD.md；Main Agent/Subagent 用一行角色区分 PLAN 内规则的适用范围，批准后重组为短 BUILD。通用执行、验证和交付归基础 SYSTEM，进度细则归工具描述；不能以其他 Agent 的模式文件短推断其总规则少。精确正文、BASE 发布前提和矩阵见[提示词设计](../06-CampusClaw计划模式/plan-policy.md)，最新源码及代价见[专项证据 §10](../06-CampusClaw计划模式/source-evidence.md#10-两份模式提示词的最新上游核验)。 |
 | 业务模式覆盖 | pi 有 SYSTEM 文件优先级，DeepSeek 有部署提供的 plan:policy，Codex 有模式目录/调用文本覆盖；OpenCode agent.prompt 覆盖基础模板但模式提醒仍独立。CampusClaw 按业务 `.campusclaw/PLAN.md`、`BUILD.md` 分别完整替换，缺失回退预制；执行固定快照、Subagent 读自身目录、refresh 保留可选文件。属于架构扩展；代价是目录发布一致性和自定义正文评估，详见[覆盖证据](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖)。 |
 | 具体理由 | 模式已有明确的 Session 资源归属，更新操作复用其身份、版本与事务，统一四类属性入口，并明确组合原子性。混合查询与变更工具不能依靠新增一个静态只读字段准确表达每次调用用途；稳定字段与工具定义让规划规则独立演进。公共审核需要可对账的事件身份，原有工具权限不能表示对整份方案的批准。展示恢复与锁内接受分离，沿用既有工具确认方式，避免 Session 响应随具体交互增加指针。 |
@@ -188,7 +188,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 收益与代价 | 不扩充工具元数据、不增加第二套 Loop 或 Session 待审字段；需要新增模式和审核事件、确认记录及客户端卡片。刷新必须补齐相关事件，缺页或状态矛盾时禁用审核；跨请求读取仍可能过期，确认始终在服务端重新校验。提示词约束不提供服务端强制只读保证；进程失联自动接管不在该功能承诺中。 |
 | 备选与重新评估条件 | 本期不采用副作用白名单、独立 Plan CRUD、Cordis 插件容器或 token 全量日志。若产品要求规划期绝不产生副作用，应单独设计可执行的权限边界，不能将 Prompt 遵循率当作保证。 |
 | 设计 / 实现状态 | 参数流式及通用解析在 PR #336 已实现、未合入 main；确定性回归见 §16。两文件覆盖等其他能力仍保留各自历史证据；BASE 业务发布、企业桥接与真实模型验收不因本次测试而完成 |
-| 验收重点 | 见[主设计 §8](../06-CampusClaw计划模式/README.md#8-实施切片与验收)：模式与消息接受竞争、工具定义稳定、eventId 精确审核、跨实例单次领取、中断与恢复、Child 模式及提示词场景评估。 |
+| 验收重点 | 见[主设计 §8](../06-CampusClaw计划模式/README.md#8-实施切片与验收)：模式与消息接受竞争、工具定义稳定、eventId 精确审核、跨实例单次领取、中断与恢复、Subagent 模式及提示词场景评估。 |
 
 **计划长度（2026-10-09，M02/M03/M06）。** pi main `f1b2e77f5b13b2a199b1052cb79c235451afe7d7` 的 AI 参数解析不设通用字符上限；DeepSeek master `5badb15009ae1756c3afe0ae0cef1faafc290ccc` 的 ExitPlanMode 参数定义和执行检查也不设正文最大长度（plan-mode 0.2.1-alpha.1，非稳定发布）。CampusClaw 取消计划专属 maxLength、UTF-16 数量校验、预览长度门禁与历史读取门禁，保留必填、类型、标题、完整 Unicode、来源绑定和审核事务。这样长巡检方案不会因无基线依据的固定字符数而失败；通用预览预算和编码帧容量仍是独立资源约束，并非承诺无限输入。最新实现与旧新基线的限定升级范围见[证据 §17](../06-CampusClaw计划模式/source-evidence.md#plan-length-baseline)。
 
@@ -323,7 +323,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 已观察实现 | Java 开发分支 `9f785bea3ffff8f6566cd1b2727285af46a2aead` 已实现第十一项 AskUserQuestion、三类互斥等待、五输入及答案事务，调试前端从显式问题/答案恢复卡片。核验路径及符号见[主设计 §2](../06-CampusClaw计划模式/ask-user-question.md#2-基线与已观察实现)；RuntimeActiveExecution 直接实现工具窄端口，RuntimePendingInteraction 管理先绑定输出再唤醒的交接。 |
 | 差异分类 | 架构变更：显式公共事件、GaussDB 答案交接及统一三类待交互槽；产品约束：1～3题、全部作答、仅交互根、独立计划审核；安全加固：闭合字段、目标/选项/分支锁内复核与停止优先。 |
 | 理由与代价 | 问答恢复无需解析消息或工具文本，build 中澄清保留任务归属；代价是两种新事件、控制表及客户端同步发布。保留无工具普通消息降级；不承诺进程崩溃接管或模型必定提问。 |
-| 备选边界 | 不复制 DeepSeek Cordis、plan-review intent 或空答案跳过；不新增问卷 CRUD、Session 指针、元数据字段或通用工作流。逐题翻页不构成部分提交；若需 Child 直接提问/部分提交/持久化草稿，重新确定交互归属与控制边界。 |
+| 备选边界 | 不复制 DeepSeek Cordis、plan-review intent 或空答案跳过；不新增问卷 CRUD、Session 指针、元数据字段或通用工作流。逐题翻页不构成部分提交；若需 Subagent 直接提问/部分提交/持久化草稿，重新确定交互归属与控制边界。 |
 | 设计状态 / 实现状态 | Java `8c5fda1d` 主线已实现问答闭环、逐题导航、整批提交、工具日志汇聚和模式提示词装配；原 PR #301 测试结果仍只证明原提交。Mate 桥接待实现，业务 SYSTEM 发布、优先一题等真实模型遵循未核验，本次未重跑测试。 |
 | 验收 | Q1～Q5 对应 clean verify 2085 项、独立数据库 140 项及前端 172 项通过；实际 JAR HTTP 继续/竞争/中断、214 契约样例、10 投影场景和浏览器 18 项检查通过。公司 NativeParent 缺失、外部 Mate 与真实模型未验证；完整环境边界见主设计 §2。 |
 
@@ -644,10 +644,10 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 | 模块与主设计 | M01/M03/M04/M06/M10；[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)唯一维护受理、父子关系、完整记录、逐工具提交和失败边界，复用其完整目标类图 |
 | 问题 | 定时巡检调用子诊断 Agent，如何让主/子过程均可追溯，同时避免为统计再造执行历史？ |
 | 最新基线 | 2026-10-10 隔离 fetch：pi main 42a3497d、Codex main 322bbf4d、OpenCode dev 055d95bb、Java main 769e8659；完整 SHA、旧新范围及路径符号见[证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md) |
-| pi | 普通示例 --no-session，消息放回工具 details；experimental durable 另建 conversation。不能将两者合并成“子 Agent 不留历史” |
+| pi | 普通示例 --no-session，消息放回工具 details；experimental durable 另建 conversation。不能将两者合并成“Subagent 不留历史” |
 | Codex / OpenCode | 非 ephemeral child thread 的独立 rollout；Task 的子 Session 与消息/Part 持久化。父侧摘要与子完整历史并不冲突；不借此推断所有 delta 都持久化 |
-| CampusClaw 已观察 | Runtime Coordinator 有数据库 Projector；Cron/Child 直接 Factory+prompt，缺共同持久受理；TurnEnd 才写结果有故障窗口 |
-| CampusClaw 目标 | Cron 每 Run、Child 每调用均独立 Session；共用受理、Coordinator、逐工具提交；父只保存摘要。Entry/公共投影/Skill 累计同事务，模型推进等待提交 |
+| CampusClaw 已观察 | Runtime Coordinator 有数据库 Projector；Cron/Subagent 直接 Factory+prompt，缺共同持久受理；TurnEnd 才写结果有故障窗口 |
+| CampusClaw 目标 | Cron 每 Run、Subagent 每调用均独立 Session；共用受理、Coordinator、逐工具提交；父只保存摘要。Entry/公共投影/Skill 累计同事务，模型推进等待提交 |
 | 差异类别 | 架构变更：统一持久宿主和结果提交端口；产品约束：子历史独立授权、取消定向、Cron 非交互和未知不重放；安全加固：内部恢复记录与公共安全投影分开 |
 | 理由与代价 | 完整排障和复用统计来源；增加子会话存储、关联/保留协调及提交延迟，仍无法使外部副作用和本库 exactly-once |
 | 状态与验收 | 待实现；按 U1–U5 验收三入口、防重/取消/清理竞争、失败窗口和数据库故障，不宣称已经支持浏览器子历史展开 |

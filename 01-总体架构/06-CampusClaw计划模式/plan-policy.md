@@ -1,6 +1,6 @@
 # CampusClaw 模式提示词组织
 
-版本：2.6.0；日期：2026-10-13。状态：批准引导与 BUILD.md 的“多步实施先建清单”提示待实现；两文件迁移、业务覆盖、执行快照和正文标记方案已实现；恢复完整 plan 参数及其流式预览待实现，业务 SYSTEM 发布及模型行为未核验。本次范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence)，其他范围保留[§12](source-evidence.md#12-主线实现状态核验2026-09-18)及[§10](source-evidence.md#10-两份模式提示词的最新上游核验)归属。
+版本：2.7.0；日期：2026-10-14。状态：批准引导与 BUILD.md 的“多步实施先建清单”提示待实现；两文件迁移、业务覆盖、执行快照和正文标记方案已实现；恢复完整 plan 参数及其流式预览待实现，业务 SYSTEM 发布及模型行为未核验。本次范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence)，其他范围保留[§12](source-evidence.md#12-主线实现状态核验2026-09-18)及[§10](source-evidence.md#10-两份模式提示词的最新上游核验)归属。
 
 ## 1. 职责与装配
 
@@ -20,16 +20,16 @@ RuntimeAgentPromptLoader 先解析业务文件或预制文件，形成不可变 
 |---|---|
 | Runtime plan | BASE + `当前执行角色：Main Agent。` + PLAN.md |
 | Runtime build | BASE + `当前执行角色：Main Agent。` + BUILD.md |
-| Child plan | BASE + `当前执行角色：Subagent；只向父 Agent 返回结果。` + PLAN.md |
-| Child build / Cron | 保持既有基础提示词与入口行为，不追加模式文件 |
+| Subagent plan | BASE + `当前执行角色：Subagent；只向父 Agent 返回结果。` + PLAN.md |
+| Subagent build / Cron | 保持既有基础提示词与入口行为，不追加模式文件 |
 
-模型角色名统一为 `Main Agent` / `Subagent`，分别对应 Runtime 交互根入口和 Child 入口；入口枚举、profile 名称及根执行/父子关系术语保持不变。“父 Agent”指直接委派者，不一定是 Main Agent。
+模型角色名统一为 `Main Agent` / `Subagent`，分别对应 Runtime 交互根入口和 Subagent 入口；Subagent 入口枚举与 profile 键随之改为 `SUBAGENT` / `subagent`（待实现，见[工具系统 §4.2](../02-CampusClaw工具系统/README.md#subagent-naming)），根执行与父子关系术语保持不变。“父 Agent”指直接委派者，不一定是 Main Agent。
 
-角色说明是 Runtime 固定文本，不接受用户、工具结果或 Skill 提供的角色值；不是第三份模式资源。PLAN.md 中 Main Agent / Subagent 小节明确适用范围，整份加载，不按标题截取；Child profile 继续不装配交互工具，角色文字不替代工具端口校验。代价是 Subagent 能看到标明仅 Main Agent 适用的流程，须通过角色场景评估验证遵循情况。
+角色说明是 Runtime 固定文本，不接受用户、工具结果或 Skill 提供的角色值；不是第三份模式资源。PLAN.md 中 Main Agent / Subagent 小节明确适用范围，整份加载，不按标题截取；Subagent profile 继续不装配交互工具，角色文字不替代工具端口校验。代价是 Subagent 能看到标明仅 Main Agent 适用的流程，须通过角色场景评估验证遵循情况。
 
 矩阵中的 BASE、PLAN.md、BUILD.md 均来自同一次准备的提示词快照。每个执行始终从该快照重组完整文本，重复 apply 不累加；不从上一次 SYSTEM 删除字符串。启动时检查两份内置资源存在且非空，其进程内内容固定；业务覆盖按下述规则解析。模式值继续为 plan/build；消息接受事务的模式快照先提交、再应用、再启动模型，不能使用 prepare 预读值。
 
-批准后原执行在 ExitPlanMode 返回前，用 BASE + Main Agent 角色 + BUILD.md 替换规划组合；修订继续使用 PLAN.md。Child 在调用时复制父模式，并从被调用业务 Agent 的目录获取自己的 BASE 和模式文件，已创建 Child 不被异步改写；压缩不重复追加模式文本，也不从摘要推断批准。工具名称、描述、Schema 和顺序跨模式保持一致，Plan 不提供强制无副作用保证。
+批准后原执行在 ExitPlanMode 返回前，用 BASE + Main Agent 角色 + BUILD.md 替换规划组合；修订继续使用 PLAN.md。Subagent 在调用时复制父模式，并从被调用业务 Agent 的目录获取自己的 BASE 和模式文件，已创建 Subagent 不被异步改写；压缩不重复追加模式文本，也不从摘要推断批准。工具名称、描述、Schema 和顺序跨模式保持一致，Plan 不提供强制无副作用保证。
 
 ### 1.1 业务文件优先与独立回退
 
@@ -40,7 +40,7 @@ RuntimeAgentPromptLoader 先解析业务文件或预制文件，形成不可变 
 | plan | `<agentRoot>/.campusclaw/PLAN.md` | classpath `prompts/plan/PLAN.md` |
 | build | `<agentRoot>/.campusclaw/BUILD.md` | classpath `prompts/plan/BUILD.md` |
 
-两份文件分别选择，允许只覆盖其中一份。业务文件替换整个对应模式正文，不追加预制正文、不合并 Markdown 小节；基础 SYSTEM、Runtime 固定角色和工具 description 继续独立装配。BUILD 文件存在不会改变 Child build/Cron 不追加模式段的既有矩阵。Subagent 读取被调用业务 Agent 的文件，不继承父 Agent 的覆盖文本。
+两份文件分别选择，允许只覆盖其中一份。业务文件替换整个对应模式正文，不追加预制正文、不合并 Markdown 小节；基础 SYSTEM、Runtime 固定角色和工具 description 继续独立装配。BUILD 文件存在不会改变 Subagent build/Cron 不追加模式段的既有矩阵。Subagent 读取被调用业务 Agent 的文件，不继承父 Agent 的覆盖文本。
 
 只有确认文件不存在才回退。存在但为空白、不是普通文件、是符号链接、超出受管真实目录、不是有效 UTF-8、超过既有受管文本上限 1 MiB 或读取失败，均使本次 Agent 准备失败；不能用“空文件”表示关闭模式指令，也不能把错误悄悄改为预制内容。复用 RuntimeAgentPromptLoader 的目录真实性、大小和失败映射，新增文件使用严格 UTF-8 解码；权限/IO 错误不得通过 `Files.exists=false` 冒充不存在。内置资源错误使服务启动失败，业务文件错误沿用 Agent 不可用路径，不新增公共错误码。
 
@@ -121,7 +121,7 @@ Submit a complete Markdown plan for review while the Main Agent is in plan mode.
 
 | 编号 | 场景 | 预期 |
 |---|---|---|
-| P01 | Main Agent plan/build、Subagent plan/build、Cron | 精确遵守 §1 矩阵；仅两份模式资源，无旧 TXT 回退或章节解析；Child/Cron 工具装配边界不变 |
+| P01 | Main Agent plan/build、Subagent plan/build、Cron | 精确遵守 §1 矩阵；仅两份模式资源，无旧 TXT 回退或章节解析；Subagent/Cron 工具装配边界不变 |
 | P02 | 批准、修订、重复 apply、并行两个 Session | 批准后完整替换为 BUILD.md；修订保持 PLAN.md；无段落累加、角色或跨 Session 串扰 |
 | P03 | profile 缺 TodoUpdate / AskUserQuestion | 模式正文不变、不补装工具、不虚构调用；缺 TODO 不影响计划审核；必需澄清按基础 SYSTEM 降级 |
 | P04 | prepare 后、accept 前切换模式 | 使用接受事务模式；两模式的工具名称、描述、Schema、顺序相同 |
@@ -131,7 +131,7 @@ Submit a complete Markdown plan for review while the Main Agent is in plan mode.
 | P08 | 一个实施任务包含多次工具与验证 | 依工具描述创建/更新清单，完成并验证后及时更新；无需独立 EXECUTION_TODOS 资源 |
 | P09 | 业务失败、验证失败、TODO 更新失败 | 不虚报完成或同步，按基础 SYSTEM 和工具结果处理 |
 | P10 | 修订、审核中断、回执丢失 | 保持 plan 或结果不确定，不擅自实施；既有历史对账与不重放规则保持 |
-| P11 | 批准后实施与新 Child | 首次模型调用已使用 BUILD.md 且可见获批方案；多步骤在第一个实施工具调用之前提交 TodoUpdate 完整清单；新 Child 复制 build |
+| P11 | 批准后实施与新 Subagent | 首次模型调用已使用 BUILD.md 且可见获批方案；多步骤在第一个实施工具调用之前提交 TodoUpdate 完整清单；新 Subagent 复制 build |
 | P12 | 清单完成、范围变化、任务失败 | 最终答复仍报告真实结果；范围扩展不靠 TODO 或普通答案获得批准 |
 | P13 | 压缩与下一条普通消息 | 模式权威不来自摘要；新根按工具描述重新建立所需清单，审核续跑保持原根 |
 | P14 | 多题、关联后续题、工具 JSON | 独立问题才合并；依赖前一答案则分批；最终答复不粘贴原始 JSON |
@@ -139,7 +139,7 @@ Submit a complete Markdown plan for review while the Main Agent is in plan mode.
 | P16 | 两业务文件皆无 / 仅 PLAN / 仅 BUILD / 两者都有 | 逐文件精确选择业务或内置正文；自定义与内置不拼接；BASE、角色和工具描述保留 |
 | P17 | 空白、目录、链接、越界、非法 UTF-8、超限、无权限和 IO 错误 | 准备失败且无模型调用；仅不存在回退，失败不重建擦掉错误文件或误报默认生效 |
 | P18 | 首轮后覆盖文件变更/删除，批准续跑与压缩 | 当前执行始终使用原快照；下一新执行读新文件或默认值；批准不重新读盘 |
-| P19 | 两个业务 Agent、父子 Agent、自定义 BUILD 与 Cron | 无跨 Agent 串用；子读取自身文件，保留模式继承和入口适用矩阵 |
+| P19 | 两个业务 Agent、父 Subagent、自定义 BUILD 与 Cron | 无跨 Agent 串用；子读取自身文件，保留模式继承和入口适用矩阵 |
 | P20 | prepare 缓存命中与 refresh 竞争 | 同一目录锁内获取一致快照；不会组合新旧目录文本；读取不进入 Session 数据库锁 |
 | P21 | refresh、覆盖文件删除、staging 校验失败/发布失败 | 普通刷新保留两份合法可选文件，删除不复活；失败保留旧目录与活动执行快照 |
 | P22 | 参数流、业务覆盖、批准首轮压缩 | 唯一 plan 参数生成，无正文标记或额外模型轮次；业务覆盖同步迁移；批准首轮完整参数和调用/结果仍在上下文；Provider 实际增量、工具 Schema 与客户端联合验收 |
@@ -151,6 +151,7 @@ Submit a complete Markdown plan for review while the Main Agent is in plan mode.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.7.0 | 2026-10-14 | Subagent 入口枚举与 profile 键改用 subagent 命名，不再保留 Child 名称。 |
 | 2.6.0 | 2026-10-13 | 批准引导与 BUILD.md 增加“多步实施先建清单”入口提示，修正首次 TodoUpdate 偏晚。 |
 | 2.5.1 | 2026-10-13 | AskUserQuestion description 改为维护末位调用规则。 |
 | 2.5.0 | 2026-09-28 | 模型用完整 plan 参数提交方案，批准后从同次调用参数恢复执行。 |

@@ -99,10 +99,10 @@
 
 | 工具 | 模式 | 主要作用 | 默认入口 |
 |---|---|---|---|
-| `Read`、`Find`、`Grep`、`Ls` | PARALLEL | 受管 Agent 工作区中的文件读取、查找和列表 | Runtime / Cron / Child Agent |
-| `ListMateTools` | PARALLEL | 发现 Agent 或某个直接绑定 Skill 的 Mate 工具元数据 | Runtime / Cron / Child Agent |
-| `CallMateTool` | SEQUENTIAL | 将业务工具名称解析成 ID 并发出执行请求 | Runtime / Cron / Child Agent |
-| `Agent` | SEQUENTIAL | 委派已绑定子 Agent，子 Agent 再运行自己的模型/工具循环 | Runtime / Cron |
+| `Read`、`Find`、`Grep`、`Ls` | PARALLEL | 受管 Agent 工作区中的文件读取、查找和列表 | Runtime / Cron / Subagent |
+| `ListMateTools` | PARALLEL | 发现 Agent 或某个直接绑定 Skill 的 Mate 工具元数据 | Runtime / Cron / Subagent |
+| `CallMateTool` | SEQUENTIAL | 将业务工具名称解析成 ID 并发出执行请求 | Runtime / Cron / Subagent |
+| `Agent` | SEQUENTIAL | 委派已绑定 Subagent，Subagent 再运行自己的模型/工具循环 | Runtime / Cron |
 | `Cron` | SEQUENTIAL | 管理定时任务；任务触发时使用 Cron 入口创建执行 Session | Runtime |
 | `ExitPlanMode`、`AskUserQuestion` | SEQUENTIAL | 计划审批、向用户提问及等待交互结果 | Runtime |
 | `TodoUpdate` | SEQUENTIAL | 更新执行中的 Todo 状态 | Runtime |
@@ -119,7 +119,7 @@
 | ASK | [RuntimeEventProjector.beforeToolCall / beginConfirmation](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/event/RuntimeEventProjector.java) 发出待确认工具事件并等待。当前结果段可结束，但根执行仍处于等待状态；后续 `user.tool_confirmation` 经控制链恢复同一执行，不重新提交原始用户消息 |
 | 计划审批 / 提问 | `ExitPlanMode`、`AskUserQuestion` 使用各自交互端口；不能统称为普通工具审批 |
 
-`agent.tool_call` 表示工具调用记录，**不保证业务工具已经执行成功**；普通已完成 ToolCall 可在执行前被记录，执行结果看 `agent.tool_result`。上表是 HTTP Runtime 的接线，不将相同审批行为未经核对推广到 Cron/子 Agent。
+`agent.tool_call` 表示工具调用记录，**不保证业务工具已经执行成功**；普通已完成 ToolCall 可在执行前被记录，执行结果看 `agent.tool_result`。上表是 HTTP Runtime 的接线，不将相同审批行为未经核对推广到 Cron/Subagent。
 
 ### 4.4 Mate 业务工具：发现与执行是两件事
 

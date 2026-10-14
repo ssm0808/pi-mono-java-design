@@ -6,7 +6,7 @@
 
 本页维护定时执行策略、coding-agent模块合并、受理流程与上线初始配置；数据库结构单独维护。接口范围已收口；本次不修改产品代码。本页原工程说明的历史 Claw源码核验为main `553dcd5e2ff682f9684810a043b442b37a02e54a`，2026-10-05隔离fetch，与前次相同。部署数值由设计给出，不代表压测容量。是否由运行失败自动暂停整个Schedule仍待当前问题答复，不能据旧Cron连续三次失败逻辑默认实现。
 
-[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)进一步规定 Runtime、Cron、Child 共用受理原语与 Coordinator；ScheduledRunAcceptanceService 在原 Run 事务内创建 Session/首消息/execution 并关联，后台仅选择 persistenceOnly 输出。Cron 启动的 Child 也保存独立历史并继承非交互限制；Skill 累计消费同事务成功结果，不再由 Cron 另写统计来源日志。新主线源码复核见[统一证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)，本页其他调度/官方历史证据不升级。
+[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)进一步规定 Runtime、Cron、Subagent 共用受理原语与 Coordinator；ScheduledRunAcceptanceService 在原 Run 事务内创建 Session/首消息/execution 并关联，后台仅选择 persistenceOnly 输出。Cron 启动的 Subagent 也保存独立历史并继承非交互限制；Skill 累计消费同事务成功结果，不再由 Cron 另写统计来源日志。新主线源码复核见[统一证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)，本页其他调度/官方历史证据不升级。
 
 ## 业务主流程与异常边界
 
@@ -22,7 +22,7 @@
 
 首版定时执行仅支持无需人工交互的工作，仍按“可信目标解析→参数校验→权限判断→业务执行→结果回传”推进。框架默认不装配提问和计划审核工具；Host 还须识别业务权限 ASK、自定义问题准备结果及误配的交互工具，不能仅按工具名屏蔽。需要人工处理时，先阻止待确认业务调用，记录真实失败结果与原因，再结束本次根执行；不创建等待卡、不返回默认答案或批准，也不允许模型改名重试绕过。参数错误仍在权限判断前返回同次可信定义与 isError=true，保持既有修参规则。结束执行不回滚此前已发生的业务操作；可靠终态提交后释放任务占用。本次失败不自动重跑；是否改变 Schedule 状态另按配置生命周期规则确定。
 
-非交互限制沿根执行传递到其Child执行，不能通过子会话或工具别名绕过。根执行结束应按既有取消域收尾已启动子任务；未确认终止的调用仍按停止中或未知处理，不把取消请求当成真实终态。
+非交互限制沿根执行传递到其 Subagent 执行，不能通过子会话或工具别名绕过。根执行结束应按既有取消域收尾已启动子任务；未确认终止的调用仍按停止中或未知处理，不把取消请求当成真实终态。
 
 业务配置应只选择输入完整、权限已具备且无需人工决定的任务。这个条件不能仅靠提示词承诺；创建时可发现的明显不支持项应拒绝，运行时仍按可信能力和实际权限兜底。首版不新增持久等待检查点、交互恢复器或无人审批队列，普通交互Session已有确认和问答行为保持。
 

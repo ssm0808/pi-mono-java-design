@@ -17,7 +17,7 @@
 ## 1. 结论
 
 每个已接受的用户事件由一个新的 Java 21 虚拟线程执行。虚拟线程负责顺序编排
-模型、工具、文件和 Store I/O；并行工具与子 Agent 可以创建自己的受控任务。
+模型、工具、文件和 Store I/O；并行工具与 Subagent 可以创建自己的受控任务。
 系统限制的是 active execution 和其占用的下游资源，不池化虚拟线程对象。
 
 `POST /campusclaw-service/v1/sessions/{session_id}/events` 在一个请求内完成准入，
@@ -200,7 +200,7 @@ SSE writer 持有的是响应缓冲预算，不拥有执行生命周期：
 | Store | 写任务进入 mailbox | 快速失败，不能永久占用 ExecutionLease |
 | SSE write | Frame 进入响应 writer | 断开投影；已接受执行继续 |
 
-Abort 取消 Model、Tool 和子 Agent，清空尚未投递的 Steer/FollowUp，并等待 Session
+Abort 取消 Model、Tool 和 Subagent，清空尚未投递的 Steer/FollowUp，并等待 Session
 进入 `idle`。所有 Lease 使用幂等 `close()`，取消、超时、异常和正常路径汇合到同一
 清理函数，避免双释放或容量泄漏。
 

@@ -14,7 +14,7 @@
 
 页面行为与原型见[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md)：Manual映射schedule:null，Schedule映射完整Cron；触发方式、active/paused和单次Run结果分别展示，保存后读取权威计划时间。2026-10-08重核Claude Console与官方Beta文档的范围见[专项证据](source-evidence.md#schedule-console-evidence)，不新增前端专用后端字段或独立预览。
 
-[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)进一步规定 Runtime、Cron、Child 共用受理原语与 Coordinator；ScheduledRunAcceptanceService 在原 Run 事务内创建 Session/首消息/execution 并关联，后台仅选择 persistenceOnly 输出。Cron 启动的 Child 也保存独立历史并继承非交互限制；Skill 累计消费同事务成功结果，不再由 Cron 另写统计来源日志。新主线源码复核见[统一证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)，本页其他调度/官方历史证据不升级。
+[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)进一步规定 Runtime、Cron、Subagent 共用受理原语与 Coordinator；ScheduledRunAcceptanceService 在原 Run 事务内创建 Session/首消息/execution 并关联，后台仅选择 persistenceOnly 输出。Cron 启动的 Subagent 也保存独立历史并继承非交互限制；Skill 累计消费同事务成功结果，不再由 Cron 另写统计来源日志。新主线源码复核见[统一证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)，本页其他调度/官方历史证据不升级。
 
 ## 1. 要解决什么问题
 
@@ -217,7 +217,7 @@ Mate 的授权和 Runtime 准备都发生在数据库受理事务之前。准备
 
 Store 返回“确定拒绝”须以未受理及可靠失败记录为依据；失败只释放自己的占用。任务已删除则只清理内部状态，不补造 Run。提交结果未知或存储不可用不伪造确定回执，不执行、不重放；调用方按既有 HTTP 错误或后台对账规则处理。图中的成功返回也不触发模型，原实例保留同次准备上下文，提交后由 Scheduler/执行推进职责取得单次启动权再进入 Runtime。
 
-**总览省略项的归属。** 扫描运行代次、启动 CAS 与失效拥有者隔离见[执行专题](execution.md#no-catch-up)；Runtime 内部按“可信目标解析→参数校验→权限判断/必要确认→业务执行→结果回传”执行，ASK、参数错误、凭据解析和 Child 传播见[非交互范围](execution.md#noninteractive)。主图中“Guard start ownership”包含持久化启动检查，检查未通过不进入模型；对账只有取得原根执行真实终态才释放占用，未知保持占用。暂停、删除、取消及晚到回调继续按下节和§9处理。
+**总览省略项的归属。** 扫描运行代次、启动 CAS 与失效拥有者隔离见[执行专题](execution.md#no-catch-up)；Runtime 内部按“可信目标解析→参数校验→权限判断/必要确认→业务执行→结果回传”执行，ASK、参数错误、凭据解析和 Subagent 传播见[非交互范围](execution.md#noninteractive)。主图中“Guard start ownership”包含持久化启动检查，检查未通过不进入模型；对账只有取得原根执行真实终态才释放占用，未知保持占用。暂停、删除、取消及晚到回调继续按下节和§9处理。
 
 **源码核验边界。** 2026-10-08 确认并隔离 fetch Java 默认分支 main，旧、新提交均为 `553dcd5e2ff682f9684810a043b442b37a02e54a`。本次重读 `modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java` 的 `executeAndReschedule`、`store/CronStore.java` 的 `saveUnsafe`（同一 cron 包根），以及 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/` 下 `session/AgentSessionFactory.java#create`、`tool/cron/ManagedCronSessionRunner.java#execute`、`runtimeapi/event/RuntimeMessageEventService.java#submitLocked`、`RuntimeExecutionCoordinator.java#start`、`RuntimeEventOutput.java#persistenceOnly`（后二者同一 event 目录）和 `runtimeapi/persistence/RuntimeExecutionPersistenceService.java#acceptMessage`。源码证明公共准备、受理与推进已有分层基础，不证明上述 M10 数据库链路已实现；本次只校正职责表达，不改变产品策略、全局结构或 Agent 基线比较结论，外部基线保留原核验日期。
 

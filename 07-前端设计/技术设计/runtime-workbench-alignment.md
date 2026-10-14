@@ -212,7 +212,7 @@ Vite 官方文档说明环境文件在启动时加载，HMR API 也允许模块�
 
 ### 6.7 能解决的问题与长任务边界
 
-发送前重新获取可以消除“很早手动获取，开始任务时已接近到期”的使用方式。`RuntimeRequestContext.mateCredentials` 捕获请求 Header；`RuntimeSessionEngineRegistry.createSession` 将同一不可变 `MateCredentials` 绑定到工具与子 Agent；`HttpMateToolClient.invokeTool` 使用该快照。前端后来更新 Token 不会替换正在运行的快照。
+发送前重新获取可以消除“很早手动获取，开始任务时已接近到期”的使用方式。`RuntimeRequestContext.mateCredentials` 捕获请求 Header；`RuntimeSessionEngineRegistry.createSession` 将同一不可变 `MateCredentials` 绑定到工具与 Subagent；`HttpMateToolClient.invokeTool` 使用该快照。前端后来更新 Token 不会替换正在运行的快照。
 
 `RuntimeEventService.submit` 仅向新消息分支传递凭据；该核验基线中，五类事件入口仍检查本次凭据完整性，目标要求移除该检查；四类控制动作不把新 Token 注入原根执行。因此回答问题或批准计划前自动刷新，也不代表后续工具已获得新凭据。单次执行（含等待确认时间）超过新 Token 的有效期，仍可能失败；后端运行中续期属于需要另行设计的能力，当前未提供，不能将本变更验收为“长任务不会过期”。
 

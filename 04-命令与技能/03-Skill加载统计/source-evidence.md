@@ -17,7 +17,7 @@
 | `skill/usage/SkillUsageTracker.java:skill/record` | 最终成功 End 之外还要求正文/hash/source/identity，13 字段 DTO | 删除专用观察，使用已提交最终 LIVE 成功结果 |
 | `session/AgentSessionFactory.java:create` | 公共装配，PR 已无具体 Tracker 参数 | 保持装配职责，不再给 Factory 新装统计 Observer |
 | `runtimeapi/runtime/RuntimeSessionEngineRegistry.java` · attach/close；`tool/agent/SubagentExecutionContext.java` / `SubagentExecutionService.java`；`tool/cron/ManagedCronSessionRunner.java` | 三 Host 接统计身份/来源与追踪 | 三入口走统一持久 Runtime；移除统计专用接线 |
-| `session/ExecutionIdentity.java` / `ManagedExecutionLog.java:observe` | Cron/Child 先 JSONL 记来源再统计 | 完整历史进公共 Session 存储；只删除无独立用途的统计日志，不删除真实 Cron Run |
+| `session/ExecutionIdentity.java` / `ManagedExecutionLog.java:observe` | Cron/Subagent 先 JSONL 记来源再统计 | 完整历史进公共 Session 存储；只删除无独立用途的统计日志，不删除真实 Cron Run |
 | `runtimeapi/event/RuntimeEventProjector.java` / `runtimeapi/runtime/RuntimeActiveExecution.java` · rememberToolCallEventId | 来源映射传播给统计 | 通用服务端调用身份归历史，累计消费结果，无统计专用来源解析 |
 | `runtimeapi/service/SkillLoadTransaction.java:record` / `SkillLoadService.java:record` | REQUIRES_NEW，Session/root 准入，事实与总数一起写 | 累计直接加入统一历史事务；不创建独立事实/事务 |
 | `runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:beginDeletion` | deleteSkillUsage | 统一删除协调及缺口标记，不扣累计，无专用事实可删 |

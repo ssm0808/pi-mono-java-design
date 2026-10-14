@@ -8,10 +8,10 @@
 
 | 仓库 | 默认分支 / 完整 SHA | 升级范围与原证据 |
 |---|---|---|
-| [pi](https://github.com/badlogic/pi-mono) | main / `42a3497d03ad17e308a2299fa824727894f2c0ec` | Skill 4.0.0 已使用同 SHA 的工具事件；新增子 Agent 示例、Session 消息落盘与 experimental durable 范围。历史 5cd93f68 的其他专题不升级 |
+| [pi](https://github.com/badlogic/pi-mono) | main / `42a3497d03ad17e308a2299fa824727894f2c0ec` | Skill 4.0.0 已使用同 SHA 的工具事件；新增 Subagent 示例、Session 消息落盘与 experimental durable 范围。历史 5cd93f68 的其他专题不升级 |
 | [Codex](https://github.com/openai/codex) | main / `322bbf4d8486efd7dbbcf49598711a9e3fefc282` | 从登记 d58d0e58 扩展到本次 child spawn、Session rollout、thread-store 与保留策略；不升级旧 Provider/API 结论 |
 | [OpenCode](https://github.com/anomalyco/opencode) | dev / `055d95bb7e278c94baf06235a52cac79dd13ba67` | 从登记 849c2598 扩展到 Task、Session 消息与 Part 数据库投影；dev 快照不代表全部 v2/后台功能稳定发布 |
-| [CampusClaw Java](https://github.com/superheromeZzh/pi-mono-java) | main / `769e86592285f4a25b0febaf551eddea6bc7212c` | 重新核验 Runtime/Child/Cron/工具 Pipeline；Cron 原 553dcd5e 的数据库受理目标仍待实现；Skill PR #335 的 dad4433d 只保留独立开发证据 |
+| [CampusClaw Java](https://github.com/superheromeZzh/pi-mono-java) | main / `769e86592285f4a25b0febaf551eddea6bc7212c` | 重新核验 Runtime/Subagent/Cron/工具 Pipeline；Cron 原 553dcd5e 的数据库受理目标仍待实现；Skill PR #335 的 dad4433d 只保留独立开发证据 |
 
 最新 Cron 设计来源为设计仓起点 `ec05afd28c766a55df26ad324c8ad0240c568b15`：`01-总体架构/08-CampusClaw定时任务/README.md` 0.31.2、`execution.md` 0.1.0，以及配置专题 Run/Session 删除边界。本任务沿用其已选产品规则；没有新增 Claude 托管服务内部实现推断，也不把该专题旧官方核对日期改成今天。
 
@@ -69,4 +69,4 @@ PR #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 的 Skill 追溯、同步统�
 
 ## 6. 尚未验证
 
-通用提交端口、Child 持久准入、关联表、SQL 方言、同事务统计、删除竞争和性能均未实现/运行验收。本设计没有证明外部副作用 exactly-once，没有核验上游所有历史读取/裁剪选项，也没有推断托管产品服务端数据表。
+通用提交端口、Subagent 持久准入、关联表、SQL 方言、同事务统计、删除竞争和性能均未实现/运行验收。本设计没有证明外部副作用 exactly-once，没有核验上游所有历史读取/裁剪选项，也没有推断托管产品服务端数据表。

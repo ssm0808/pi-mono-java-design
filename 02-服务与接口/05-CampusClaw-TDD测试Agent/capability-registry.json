@@ -214,8 +214,8 @@
     },
     {
       "id": "CC-CAP-009",
-      "name": "Child Agent delegation and event projection",
-      "domain": "child-agent",
+      "name": "Subagent delegation and event projection",
+      "domain": "subagent",
       "criticality": "P1",
       "maturity": "implemented",
       "coverageState": "partial",
@@ -226,11 +226,11 @@
       ],
       "requirements": [{
         "id": "CC-REQ-009",
-        "caseIds": ["CHILD-AGENT-BASELINE"],
+        "caseIds": ["SUBAGENT-BASELINE"],
         "testSelectors": ["SubagentExecutionServiceTest", "BoundAgentToolTest"]
       }],
       "adapters": ["java", "model-sse-stub", "concurrency"],
-      "gap": "Depth, cancellation, isolation, and child event projection need reviewed boundary cases."
+      "gap": "Depth, cancellation, isolation, and subagent event projection need reviewed boundary cases."
     },
     {
       "id": "CC-CAP-010",
