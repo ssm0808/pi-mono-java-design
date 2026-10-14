@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.14.0 · 日期：2026-10-14 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.15.0 · 日期：2026-10-14 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -660,7 +660,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
 |---|---|---|---|---|
 | id | VARCHAR(41) | 否 | — | `schedule-` 加 32 位 UUID 十六进制 |
-| agent_id | VARCHAR(38) | 否 | — | 绑定的 Agent |
+| agent_id | VARCHAR(38) | 否 | — | 任务绑定的 Agent 标识；每次运行按它新建 Session，修改后只影响之后的运行 |
 | name | VARCHAR(256) | 否 | — | 任务名称 |
 | description | VARCHAR(2048) | 是 | — | 任务描述 |
 | prompt | TEXT | 否 | — | 纯文本任务内容，受理时作为首条用户消息提交 |
@@ -936,6 +936,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.15.0 | 2026-10-14 | t_schedule.agent_id 说明改为“任务绑定的 Agent 标识”，写明用途与修改影响。 |
 | 1.14.0 | 2026-10-14 | Run 在根执行终态的同一事务内结束：新增 uk_schedule_run_execution，事务表“根终态对账”改为“根执行终态提交”。 |
 | 1.13.0 | 2026-10-13 | §5.5 credential_ids 撤销原因改为统一账号。 |
 | 1.12.0 | 2026-10-13 | 定时执行改为统一账号：目标 t_schedule 删除 authorization_ref 列（PR #332 无此列，不进 §5.5 差异表）；运行时 access-token 不落库。 |
