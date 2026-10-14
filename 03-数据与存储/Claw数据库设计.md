@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.15.0 · 日期：2026-10-14 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.16.0 · 日期：2026-10-14 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -660,7 +660,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
 |---|---|---|---|---|
 | id | VARCHAR(41) | 否 | — | `schedule-` 加 32 位 UUID 十六进制 |
-| agent_id | VARCHAR(38) | 否 | — | 任务绑定的 Agent 标识；每次运行按它新建 Session，修改后只影响之后的运行 |
+| agent_id | VARCHAR(38) | 否 | — | 任务关联的 Agent 标识；每次运行按它新建 Session，修改后只影响之后的运行 |
 | name | VARCHAR(256) | 否 | — | 任务名称 |
 | description | VARCHAR(2048) | 是 | — | 任务描述 |
 | prompt | TEXT | 否 | — | 纯文本任务内容，受理时作为首条用户消息提交 |
@@ -699,7 +699,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 |---|---|---|---|---|
 | id | VARCHAR(36) | 否 | — | `run-` 加 32 位 UUID 十六进制 |
 | schedule_id | VARCHAR(41) | 否 | — | 所属任务；外键 `ON DELETE CASCADE` |
-| agent_id | VARCHAR(38) | 否 | — | 领取时任务绑定的 Agent；受理时与任务当前值不同则不受理 |
+| agent_id | VARCHAR(38) | 否 | — | 领取时任务关联的 Agent；受理时与任务当前值不同则不受理 |
 | trigger_type | VARCHAR(16) | 否 | — | `manual` / `schedule`，投影为 triggerContext.type |
 | scheduled_at | TIMESTAMPTZ(0) | 是 | — | 自动触发的计划时刻（UTC）；手动为空 |
 | error_type | VARCHAR(64) | 是 | — | 未受理原因，投影为 error.type；error.message 按请求语言生成，不落库 |
@@ -936,6 +936,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.16.0 | 2026-10-14 | 定时任务两表的 agent_id 说明“绑定”统一改为“关联”（任务与 Agent 的关系）。 |
 | 1.15.0 | 2026-10-14 | t_schedule.agent_id 说明改为“任务绑定的 Agent 标识”，写明用途与修改影响。 |
 | 1.14.0 | 2026-10-14 | Run 在根执行终态的同一事务内结束：新增 uk_schedule_run_execution，事务表“根终态对账”改为“根执行终态提交”。 |
 | 1.13.0 | 2026-10-13 | §5.5 credential_ids 撤销原因改为统一账号。 |

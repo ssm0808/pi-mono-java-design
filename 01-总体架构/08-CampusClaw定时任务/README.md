@@ -6,10 +6,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.49.0 |
+| 文档版本 | 0.50.0 |
 | 更新日期 | 2026-10-14 |
 | 模块 | M10 · 调度与并发治理 |
-| 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置绑定的 Agent 定义；不选择或追加已有 Session |
+| 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；不选择或追加已有 Session |
 | 设计状态 | 目标设计，待实现。Java PR #332 已实现调度表、Mapper 与同库受理，尚未合并，与目标的差异见[数据库 PR #332 差异](../../03-数据与存储/Claw数据库设计.md#schedule-pr-diff)；Mate 授权与归属登记、调度扫描及其余能力待实现；main 上已观察实现仅为进程内 Cron |
 | 源码基线 | Claw Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`（2026-10-05 隔离 fetch）；PR #332 `e9d31e8888a81b7fe95071e705482bb16fa10476`（2026-10-10 核验，见[数据库源码证据](../../03-数据与存储/Claw数据库设计.md#source-baseline)） |
 | 主基线 | Claude Managed Agents Scheduled deployments 公开 Beta 契约，最近核对 2026-10-08；无服务端源码 |
@@ -53,7 +53,7 @@
 |---|---|
 | Claw | CampusClaw Agent 服务，本设计的实现方 |
 | Mate | 用户、组织、租户、资源归属与权限的维护方，也是可信接口定义、Session 归属和定时执行统一账号凭据的提供方；运营人员通过 Mate 管理入口操作定时任务 |
-| Schedule | 长期保存的任务配置：Agent 绑定、纯文本 prompt、可选 Cron 规则 |
+| Schedule | 长期保存的任务配置：Agent 关联、纯文本 prompt、可选 Cron 规则 |
 | Run | 一次自动或手动触发的受理记录；只表示是否成功创建 Session，不表示业务成败 |
 | Session | 每次 Run 新建的独立会话，承载消息、工具结果与根执行 |
 | 根执行（root execution） | Session 内本次运行的顶层执行，是执行终态的最终决定方 |
@@ -74,7 +74,7 @@
 |---|---|---|---|
 | R1 | 运营人员可创建、查看、修改、删除定时任务配置，浏览器无需保持打开 | 功能 | 配置 §2 |
 | R2 | 时间规则仅支持 Spring 六字段 Cron，timezone 省略时默认 Asia/Shanghai；可省略规则表示仅手动运行 | 功能 | 配置 §3 |
-| R3 | 每次自动或手动运行新建独立 Session，复用绑定的 Agent 定义，不追加到已有会话 | 功能 | [§3.9](#new-session-per-run) |
+| R3 | 每次自动或手动运行新建独立 Session，复用关联的 Agent 定义，不追加到已有会话 | 功能 | [§3.9](#new-session-per-run) |
 | R4 | 支持立即运行、暂停、取消暂停；暂停只阻止未来自动受理 | 功能 | 配置 §4.7～§4.9 |
 | R5 | 用户能看到下一次计划时间、每次是否成功启动、执行结果入口和失败原因 | 功能 | 配置 §3.3、§4.11 |
 | R6 | 删除 Schedule 同时删除其 Run，保留已生成的 Session；删除不取消已受理执行 | 功能 | 配置 §4.6、§4.11 |
@@ -88,7 +88,7 @@
 
 ### 2.1 业务用例
 
-园区里有些 Agent 工作需要在设定时刻反复执行，例如视频巡逻检查，不能依赖有人在线发起；运营人员还要能确认每次是否执行、结果如何、失败原因是什么。定时任务让运营人员保存“时间规则 + 要完成的任务”，由服务端按时交给绑定的 Agent 执行，并保留每次运行的记录和结果入口。
+园区里有些 Agent 工作需要在设定时刻反复执行，例如视频巡逻检查，不能依赖有人在线发起；运营人员还要能确认每次是否执行、结果如何、失败原因是什么。定时任务让运营人员保存“时间规则 + 要完成的任务”，由服务端按时交给关联的 Agent 执行，并保留每次运行的记录和结果入口。
 
 | 编号 | 参与者 | 业务目标 | 业务结果 |
 |---|---|---|---|
@@ -130,13 +130,13 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | # | 要解决的问题 | 基线怎么做 | 园区业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
 | D1 | 怎样让用户分清“任务启动了”和“业务做完了”？ | Claude 把 Deployment（配置）、DeploymentRun（一次触发）、Session（执行内容）分开，Run 只记录 Session 创建结果；现有 CampusClaw CronEngine 是 JSON Job 加 JSONL 运行日志 | 模型自然结束不等于巡检或工单处理成功，业务结论必须来自 Session 里的输出和工具证据 | 采用三类资源分离：Schedule / Run / Session；Run 只回答“是否成功受理” | 多一层资源，看业务结果要从 Run 跳到 Session |
-| D2 | 每次定时运行放进哪个会话？ | Claude 每次新建 Session；OpenCode 的 GitHub schedule 入口每次新建 Session；DSH 的提醒固定投递回创建它的原 Session；OpenAI 宿主 Scheduled tasks 支持新聊天和继续原聊天两种模式 | 同一任务每天产生独立结论，要避免与人工聊天争用同一会话；多一种目标模式就多一套绑定、忙闲和授权规则 | 每次新建独立 Session，复用绑定的 Agent 定义，不提供 target / sessionId | 不能延续聊天上下文，需要昨日结论时必须显式查询业务记录 |
+| D2 | 每次定时运行放进哪个会话？ | Claude 每次新建 Session；OpenCode 的 GitHub schedule 入口每次新建 Session；DSH 的提醒固定投递回创建它的原 Session；OpenAI 宿主 Scheduled tasks 支持新聊天和继续原聊天两种模式 | 同一任务每天产生独立结论，要避免与人工聊天争用同一会话；多一种目标模式就多一套关联、忙闲和授权规则 | 每次新建独立 Session，复用关联的 Agent 定义，不提供 target / sessionId | 不能延续聊天上下文，需要昨日结论时必须显式查询业务记录 |
 | D3 | 谁决定“这次该不该跑”，多副本下如何不重复？ | Claude 未公开内部实现；OpenCode 把计时交给外部 GitHub Actions；DSH 和 pi pico3 都在单进程内计时（DSH 用串行队列处理投递与删除） | 企业部署多副本；Session 创建和首条消息必须与 Run 一起成功或一起失败，崩溃后要能对账 | GaussDB 是调度状态的最终决定方，定时器只负责唤醒扫描；各副本并行扫描，以行锁和唯一约束防重；同库事务内原子受理 Run、Session、首条消息和根执行 | 首版要求 Schedule、Run 与 Runtime 同库；查询量随副本数增加，需要压测 |
 | D4 | 进程崩溃、停机或回执丢失后，这次要不要补跑或重跑？ | Claude 公开资料未给出完整重叠与故障策略；DSH 的固定间隔只取最新到期项，不逐个补历史；pi pico3 在进程结束后按当前时间加间隔推进 | 工单、门禁、告警处置等工具有真实副作用，重复执行比漏执行更危险 | 不补漏跑、遇忙跳过、失败与故障不重跑；结果未知时保持占用并对账 | 故障时可能漏跑一次；结果未知需要对账或人工处置，自动恢复见 T9 |
 | D5 | 用户用什么方式描述“什么时候跑”？ | Claude 只支持五字段 POSIX Cron，时区必填；DSH 支持 Cron（时区必填）、单次与固定间隔；pi pico3 只有毫秒级 notBefore/every，没有日历时区；OpenCode 用 GitHub Actions 的五字段 Cron，默认 UTC | 园区任务以“工作日 08:00”这类日历规则为主，主要在中国时区；Java 工程已有 Spring CronExpression，不希望新增依赖 | 仅支持 Spring 六字段 Cron；timezone 可省略，默认 Asia/Shanghai 并保存回显 | 不支持单次任务和严格固定间隔；Claude 表达式不能直接复制，日与星期组合语义也不同 |
 | D6 | 删除任务时，运行记录、会话和在途执行怎么处理？ | Claude 采用归档；DSH 删除任务及投递历史，保留原 Session，不取消在途；辅助基线 OpenClaw 保留运行历史，操作者删除时请求取消 | 用户不想为了删任务再逐条清理运行记录；已生成的对话和园区业务结果要独立保留；取消在途执行可能留下半完成的业务操作 | 同删 Schedule 和 Run，保留 Session，不取消已受理执行，停止由 Session 入口单独发起 | 删除后无法再查启动失败和触发来源，尤其是没有生成 Session 的失败 |
 | D7 | 无人值守时遇到权限确认或提问怎么办？ | 无可对照实现（已登记基线没有定时场景下的交互处理） | 定时执行时没有人在线回答；默认批准会绕过园区业务权限 | 首版只支持无需人工交互的任务；Host 遇 ASK 时阻止业务调用并结束本次根执行 | 需要人工确认的任务暂时不能定时执行 |
-| D8 | 任务运行时使用 Agent 的哪个版本？ | Claude 在创建或显式更新 Deployment 时固定 Agent 版本 | 现有 Agent 目录没有可解析的历史定义，只保存一个版本号兑现不了版本固定 | 只绑定 agentId，每次使用当时已发布的定义 | Agent 发布新版本后，后续运行行为可能改变，无法复现历史运行；这是能力缺口，不是字段简化 |
+| D8 | 任务运行时使用 Agent 的哪个版本？ | Claude 在创建或显式更新 Deployment 时固定 Agent 版本 | 现有 Agent 目录没有可解析的历史定义，只保存一个版本号兑现不了版本固定 | 只关联 agentId，每次使用当时已发布的定义 | Agent 发布新版本后，后续运行行为可能改变，无法复现历史运行；这是能力缺口，不是字段简化 |
 | D9 | 首版任务列表和 Run 列表如何按用户过滤？ | Claude 按 workspace 范围列出，无用户级过滤 | 用户与任务的关联在 Mate；Claw 不保存用户范围或 owner | 方法 A：Claw 返回全部记录，Mate 拉取全部页后按用户过滤、排序和分页；单任务的 Run 由 Mate 先确认可见再带 scheduleId 查询 | 读取量随全部任务与 Run 增长，Claw 页码只用于分批拉取；Claw 加 userId 见 T10 |
 | D10 | 定时执行时没有用户请求，Claw 用什么权限调用业务工具？ | Claude 部署引用 workspace 范围的 Vault 凭据；普通对话由用户请求带 Header | 用户登录 Token 会过期，且没有确认过的刷新或代签接口；不能保存用户密码 | 用户权限只在配置时由 Mate 检查；运行时统一使用 Mate 配置的同一个账号，模型每批需要凭据的工具调用前，Claw 无入参向 Mate 取一次 access-token（2026-10-13 评审确定） | 所有任务权限相同；创建者失去权限或离职后任务仍照常运行；每批工具调用多一次 Mate 请求 |
 | D11 | 执行结束后，Run 怎么知道并释放任务？ | 未核验各基线的同类机制 | 同一任务不并发，Run 不结束后续计划就全部遇忙跳过；实例可能在任意时刻失联 | 写根执行终态的同一数据库事务内，经 Runtime 通用终态扩展点结束本次 Run（按 execution_id 条件更新 finished_at）；不用提交后回调，也不轮询（2026-10-14 评审确定） | Runtime 需新增事务内扩展点；Run 需 execution_id 索引；实例宕机写不进终态时仍靠 T9 |
@@ -152,10 +152,10 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | 决策 | Claude 公开契约 | Claw 目标、理由与代价 | 分类 |
 |---|---|---|---|
 | 名称长度 | name 的 maxLength 为 256 | 名称上限同为 256，不增加缺少业务依据的限制；Java 字符计数不声明为已验证的跨语言 Unicode 等价 | 参考基线 |
-| 配置资源 | Deployment 绑定 Agent、环境、初始事件和可选规则 | Schedule 绑定 Agent、纯文本 prompt 和可选规则；保留配置与 Session 执行分离，范围聚焦现有调度领域，不建设完整部署平台 | 架构范围 |
+| 配置资源 | Deployment 关联 Agent、环境、初始事件和可选规则 | Schedule 关联 Agent、纯文本 prompt 和可选规则；保留配置与 Session 执行分离，范围聚焦现有调度领域，不建设完整部署平台 | 架构范围 |
 | 创建即登记计划 | 提供 schedule 后自动触发，新建示例为 active | 同样登记自动计划；创建处理器不直接运行。不能因为先开发配置就永久默认 paused；运行未接线应限制发布 | 参考基线，无额外启用流程 |
 | 执行目标 | 每次触发创建新 Session | 每次运行固定新建 Session，不提供 target；减少原会话授权、模式、忙闲状态及多任务竞争的规则，代价是不自动延续原会话上下文 | 参考基线、产品范围 |
-| Agent 版本 | 字符串固定当时最新版本，亦可指定历史版本 | 只绑定 agentId，使用执行时实际取得的已发布目录；现有 prepare 可命中缓存，非每次远端最新。目录刷新后未来行为可能变，暂缺固定版本可复现保证 | 现有能力缺口 |
+| Agent 版本 | 字符串固定当时最新版本，亦可指定历史版本 | 只关联 agentId，使用执行时实际取得的已发布目录；现有 prepare 可命中缓存，非每次远端最新。目录刷新后未来行为可能变，暂缺固定版本可复现保证 | 现有能力缺口 |
 | 运行环境 | 显式 environment_id | 不提供空壳 environmentId，沿现有 Host/Agent 目录装配；减少资源模型，但失去独立环境选择与复用 | 架构范围 |
 | 初始输入 | initial_events 支持多事件及受约束事件类型 | 一段纯文本 prompt，运行时作为首条用户消息提交；不支持附件、多初始事件、system.message 或 user.define_outcome，亦不支持交互等待；普通 Session 文件引用契约保持 | 产品范围、实现差距 |
 | 时间表达 | 五字段 POSIX Cron，IANA 时区 | 采用 Spring 六字段，复用现有解析器且不新增 Maven 依赖；代价是 Claude 表达式不能直接复制，日/周组合语义也不同，见 [Spring 调度背景](#spring-scheduling) | 产品约束（方言选择）、实现成本取舍 |
@@ -174,7 +174,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | metadata | 最多 16 对字符串，键最多 64、值最多 512 | 支持可选 map，采用同样限制；不进模型，不作身份、权限或凭据依据 | 参考基线、产品约束 |
 | 凭据 | vault_ids 引用 workspace 范围 Vault，运行时使用其中凭据 | 不保存凭据引用；所有定时任务统一使用 Mate 配置的同一个账号，每批工具调用前无入参取 access-token（D10）。实现最简单，代价是所有任务权限相同、用户权限只在配置时检查 | 企业产品约束 |
 
-固定 Agent 版本是最显著的能力差距，不应包装成单纯“字段简化”。未来若要求长期告警策略可重复审计，需要先建设可解析的历史定义与资源绑定，再开放 agentVersion；只保存一个 version 数字不能兑现版本固定。Spring 六字段的理由是复用 Java 现有能力与降低维护成本，不是园区业务天然要求秒级执行。
+固定 Agent 版本是最显著的能力差距，不应包装成单纯“字段简化”。未来若要求长期告警策略可重复审计，需要先建设可解析的历史定义与资源关联，再开放 agentVersion；只保存一个 version 数字不能兑现版本固定。Spring 六字段的理由是复用 Java 现有能力与降低维护成本，不是园区业务天然要求秒级执行。
 
 ## 3. 详细设计
 
@@ -219,7 +219,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | 层次 | 责任与生命周期 |
 |---|---|
 | 边界与入口 | `ScheduleController` 收发 RequestVO/ResponseVO；`CronToolAdapter` 传入 Host 已绑定的 Session/执行和目标资源，不能绕过授权 |
-| 绑定解析 | `ScheduleBindingResolver` 只读检查 Agent 绑定，管理调用不发布运行目录；MateAdapter 从 Mate 取得可信定义、Session 归属登记与统一账号 access-token |
+| 关联解析 | `ScheduleBindingResolver` 只读检查 Agent 关联，管理调用不发布运行目录；MateAdapter 从 Mate 取得可信定义、Session 归属登记与统一账号 access-token |
 | 应用编排 | `ScheduleApplicationService` 管理规则与 VO/DTO 转换；`ScheduleRunPreparation` 与受理服务承接共享入口；`ScheduleDispatcher` 推进已受理执行；均为 Spring 单例 |
 | 策略与准备 | `ScheduleTimePolicy` 统一校验与计划计算；`ScheduleAuthorizationPort` 调用 Mate 的归属登记，不是 Claw 的用户权限策略；`ScheduledAccessTokenPort` 在每批工具调用前取 access-token；`PreparedScheduleRunDTO` 每次准备的不可变快照，不代替事务内可变状态检查 |
 | 持久化 | `ScheduleRepository` 委托 `ScheduleMapper`，只收发 DTO，不引入 PO/DO/Entity |
@@ -266,7 +266,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 |---|---|---|
 | 调度器 | 发起到期扫描、提交后启动 | `ScheduleDispatcher`；各副本并行扫描，不选领跑者 |
 | 定时任务管理 | 管理配置；领取 Run，协调可信准备和原子受理 | `ScheduleApplicationService`、`ScheduleRunPreparation`、`ScheduledRunAcceptanceService` 等 M10 应用职责，不要求实现为一个大 Service |
-| Mate | 提供可信绑定与配置授权，登记 Session 归属，提供统一账号的 access-token | `MateScheduleAdapter` 对接外部 Mate |
+| Mate | 提供可信 Agent 定义与配置授权，登记 Session 归属，提供统一账号的 access-token | `MateScheduleAdapter` 对接外部 Mate |
 | Session 运行时 | 准备 Agent/模型/工具上下文；受理后推进模型与工具，保存根执行结果 | 既有 `AgentSessionFactory.create`、`RuntimeExecutionCoordinator.start` 和运行时持久化能力；后台准备与非交互 Host 策略待实现 |
 | 存储 | 原子保存任务、Run、Session/首消息/根执行，以及执行事件与终态 | 同一 GaussDB 事务资源；通过 Repository 与 Runtime 持久化协作者访问 |
 
@@ -282,7 +282,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 4. **事务后启动。** 受理不等待 Agent 完成。原实例在进程内直接启动一次，调度上下文（scheduleId、runId、agentId 及非交互策略）只在内存中传给 Runtime 和子 Agent，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件，不伪造 SSE 连接。模型每次返回需要凭据的工具调用时，向 Mate 取一次统一账号 access-token，本批工具共用（[D10](#key-decisions)）。Runtime、Cron 与 Child 共用受理原语与执行协调器，规则见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)。
 5. **Run 结束。** Runtime 提交根执行终态时，在同一事务内调用终态扩展点；定时任务的实现按 execution_id 条件更新本次 Run 的 finished_at，释放任务（[D11](#key-decisions)）。终态写入失败由 Runtime 既有重试负责，两者一起成功或一起失败。Run 已随任务删除时更新 0 行，只保留 Session 与根执行终态，不重新插入 Run 或配置。用户在同一 Session 后续发起的对话不产生新的根终态，不改写本次结果。
 
-自动和手动受理均要求配置存在；自动受理要求 active 并检查派发期限，手动受理允许 active/paused，不移动计划游标，也不更新 last_run_at。暂停或 Agent 绑定变更先提交时，已领取的自动 Run 不受理；仅修改 prompt 或时间规则不取消已领取的这次运行，受理使用最新 prompt。删除先提交则不受理；受理先提交则保留 Session 并删除 Run。
+自动和手动受理均要求配置存在；自动受理要求 active 并检查派发期限，手动受理允许 active/paused，不移动计划游标，也不更新 last_run_at。暂停或 Agent 关联变更先提交时，已领取的自动 Run 不受理；仅修改 prompt 或时间规则不取消已领取的这次运行，受理使用最新 prompt。删除先提交则不受理；受理先提交则保留 Session 并删除 Run。
 
 首版限定 Schedule、Run 与 Runtime 受理记录位于同一事务资源。现有 HTTP 创建 Session 和提交消息不提供这种原子性，不能串联它们并在断连后重复 POST。自动 occurrence 唯一约束防止重复分配，同一 runId 的受理复用原关联；这些内部机制不合并不同手动调用，也不等于外部业务 exactly-once，工具副作用仍受下游业务幂等和已执行结果对账约束。
 
@@ -330,8 +330,8 @@ Cron 字段、timezone 默认值与校验以[配置 §3](configuration.md#3-配�
 
 | 边界 | 当前目标 |
 |---|---|
-| 配置绑定 | Agent 身份、纯文本 prompt、可选 Cron 规则；不接收 target、sessionId 或 chatId |
-| Agent 与 Session | 复用已绑定的 Agent 定义，每次自动或手动运行新建独立 Session 与运行实例；不新建 Agent 定义资源 |
+| 配置关联 | Agent 身份、纯文本 prompt、可选 Cron 规则；不接收 target、sessionId 或 chatId |
+| Agent 与 Session | 复用已关联的 Agent 定义，每次自动或手动运行新建独立 Session 与运行实例；不新建 Agent 定义资源 |
 | 消息上下文 | 新建空历史，再把 prompt 作为首条用户消息提交；不复制其他 Run 的聊天历史，共享受管资源和业务状态仍遵守各自边界 |
 | 模型与模式 | 当前已发布 Agent default，thinking=OFF，CRON profile，build 入口；不能复用现有 HTTP 创建默认 thinking=true 的入口 |
 | 配置刷新 | 使用本次 prepare 的不可变快照，不承诺 Agent 版本固定或每次远端最新 |
@@ -623,6 +623,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.50.0 | 2026-10-14 | “绑定”统一改为“关联”（任务与 Agent 的关系）。 |
 | 0.49.0 | 2026-10-14 | 新增 D11：根执行终态与 Run 结束同事务提交，取代调度器结果对账；更新运行步骤、角色、类图与时序图。 |
 | 0.48.0 | 2026-10-14 | §3.5 第 2 步改为先登记归属再准备，与受理图一致；第 4 步补每批工具调用取 access-token；术语补计划游标与派发容差。 |
 | 0.47.0 | 2026-10-14 | 全局目标类图按入口、应用、端口与适配器、Runtime 分包，补主要职责，删去与正文重复的业务规则图例，去掉已撤销的分发状态表。 |

@@ -50,7 +50,7 @@ deactivate Runtime
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java create。
 ' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a。
 ' 设计原因：保持 API、服务、策略、适配器、运行时和持久化的边界。
-' 产品约束：每次 Run 使用绑定的 Agent 定义新建 Session。
+' 产品约束：每次 Run 使用关联的 Agent 定义新建 Session。
 ' 架构变更：Cron 合并进 coding-agent-cli，不再有独立的 cron 制品。
 ' 源码：pom.xml modules；scripts/sync-campusclaw.sh MODULES。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java createSession。
@@ -210,8 +210,8 @@ autonumber
 activate Mate
 Mate -> Schedule ++ : 创建任务：Agent、任务内容和可选规则
 Schedule -> Schedule : 核验服务来源和获准目标\n校验输入和时间规则
-Schedule -> Mate ++ : 检查 Agent 绑定\n以及当前管理授权
-return 可信绑定
+Schedule -> Mate ++ : 检查 Agent 关联\n以及当前管理授权
+return Agent 关联校验结果
 Schedule -> Store ++ : 提交新的启用配置\n含下次计划时间
 return 已提交的配置
 return 201 + 已保存的配置\n及未来计划时间
@@ -345,7 +345,7 @@ Claw -> Mate ++ : 登记新会话的归属
 return 会话归属
 Claw -> Store ++ : 保存新会话及任务内容
 return 新会话
-Claw -> Claw : 执行视频巡逻检查（由绑定的 Agent）
+Claw -> Claw : 执行视频巡逻检查（由关联的 Agent）
 Claw -> Mate ++ : 调用工具前获取统一账号 access-token
 return access-token
 Claw -> Store ++ : 保存检查过程、巡逻结论及本次运行结果
