@@ -31,8 +31,12 @@ Claw -> DB : 按时间顺序读取用户请求（排除已删除会话）
 activate DB
 DB --> Claw : 用户请求及所属会话
 deactivate DB
+Claw -> DB : 按相同条件统计用户请求总数
+activate DB
+DB --> Claw : 总数
+deactivate DB
 Claw -> Claw : 转换为公共事件
-Claw --> Mate : 返回一页用户请求及下一页页码
+Claw --> Mate : 返回一页用户请求、下一页页码与总数
 deactivate Claw
 Mate -> Claw : 查询某条用户请求所在的轮次
 activate Claw

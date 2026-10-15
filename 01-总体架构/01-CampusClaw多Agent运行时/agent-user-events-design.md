@@ -2,10 +2,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.6.1 |
-| 更新日期 | 2026-10-13 |
+| 文档版本 | 0.7.0 |
+| 更新日期 | 2026-10-15 |
 | 模块 | M01 CampusClaw 多 Agent Runtime：事件读取 |
-| 设计状态 | 两个读取接口与两个新增索引均为待实现；复用的事件表、根执行、结果段关联与公共投影为已实现（见 §8.2） |
+| 设计状态 | 两个读取接口与两个新增索引已由 pi-mono-java PR #339 合入；ListAgentEvents 的 total（0.7.0）待实现；复用的事件表、根执行、结果段关联与公共投影为已实现（见 §8.2） |
 | 源码基线 | pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离 fetch 确认仍为 main HEAD；设计仓 `main@7b7b0f9b41ecd71044115edf0436250ab369d954` |
 | 主基线 | Claude Managed Agents 公开文档（Beta，`managed-agents-2026-04-01`），2026-10-12 重新核对，只证明公开行为；轮次辅助基线 Codex `main@4270522473e677ddba7b093caa0064a3df51d459`，2026-10-12 |
 
@@ -13,7 +13,7 @@
 
 ### 评审结论
 
-2026-10-12，Lotus 确认四项方向：返回全部五种用户事件（2026-10-13 改为只返回开启轮次的 user.message）；权限由 Mate 判断；分页使用透明游标（后于同日评审改为与 ListEvents 一致的整数页码）；定时任务与 Subagent 会话按同一规则返回。精确契约已生成并列入[统一接口页](chat-api-review.html#ListAgentEvents)。
+2026-10-12，Lotus 确认四项方向：返回全部五种用户事件（2026-10-13 改为只返回开启轮次的 user.message）；权限由 Mate 判断；分页使用透明游标（后于同日评审改为与 ListEvents 一致的整数页码）；定时任务与 Subagent 会话按同一规则返回。2026-10-15 Lotus 确认 ListAgentEvents 响应增加 total。精确契约已生成并列入[统一接口页](chat-api-review.html#ListAgentEvents)。
 
 ### 评审 Todo
 
@@ -52,6 +52,7 @@
 | R6 | 查询有界：时间范围与页大小有上限，读取不阻塞执行 | 稳定性 | 推导自 [历史查询 §3](chat-events-history-design.md#integer-pagination)，需确认 |
 | R7 | 分页使用与 ListEvents 一致的整数页码 page/nextPage，不使用游标 | 约束 | Lotus 2026-10-12 评审 |
 | R8 | 接口按事件类型筛选以保持通用，第一版只支持 user.message，其他类型以后按需扩展 | 功能 | Lotus 2026-10-12、2026-10-13 评审 |
+| R9 | ListAgentEvents 响应返回满足条件的总条数 total，供 Trace 显示总数与页码；ListTurnEvents 不返回 | 功能 | Lotus 2026-10-15 评审 |
 
 ## 2. 整体方案
 
@@ -99,7 +100,7 @@
 
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
-| UC1 ListAgentEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话中指定类型的事件（第一版只有 user.message，每条对应一轮），按 createdAt、sessionId、eventSeq 升序，附 nextPage | type 必填，第一版只接受 user.message；from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
+| UC1 ListAgentEvents | BU1 | Mate | Mate 已完成该 Agent 的鉴权 | 返回 `[from, to)` 内该 Agent 未删除会话中指定类型的事件（第一版只有 user.message，每条对应一轮），按 createdAt、sessionId、eventSeq 升序，附 nextPage 与 total | type 必填，第一版只接受 user.message；from/to 必填、UTC 整秒、跨度不超过 31 天；未知 Agent 返回空列表 |
 | UC2 ListTurnEvents | BU2 | Mate | Mate 已完成该会话的鉴权 | 返回事件所在轮次按 eventSeq 升序的完整事件页与 nextPage | 事件身份为 sessionId + eventId；会话级配置变更与手动压缩不属于任何轮次 |
 
 <a id="data-model"></a>
@@ -131,13 +132,13 @@ CREATE INDEX idx_t_session_events_session_user_time
 
 ![两个读取接口的目标类](设计图/Agent用户事件查询/agent_user_events_classes.svg)
 
-[原尺寸 SVG](设计图/Agent用户事件查询/agent_user_events_classes.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L103)
+[原尺寸 SVG](设计图/Agent用户事件查询/agent_user_events_classes.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L107)
 
 <a id="uc1-detail"></a>
 
 ### 3.3 查询用户请求的详细时序（UC1）
 
-展开整体时序步骤 1～6。查询只读一个 SQL，权限过滤先于排序分页（R4）：
+展开整体时序步骤 1～6。查询在同一个只读事务中执行两个 SQL：先读本页，再按相同条件计数；权限过滤先于排序分页（R4）：
 
 ```sql
 SELECT e.session_id, e.event_id, e.event_seq, e.anchor_entry_id,
@@ -151,9 +152,18 @@ ORDER BY e.created_at, e.session_id, e.event_seq
 LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 ```
 
-步骤为：校验 agentId（`ClawConstants.Agent.ID_REGEX`）、type、from/to、page 与 limit；Service 归一 page 默认 1、limit 默认 50，只校验偏移计算不溢出；执行上述读取，多取一条判断是否还有下一页，有则返回 `nextPage=page+1`；逐条用 `CommittedEventProjection` 投影并包上 sessionId。事件只读一次，不另查总数。
+```sql
+SELECT COUNT(*)
+FROM t_session_events e
+JOIN t_sessions s ON s.id = e.session_id
+WHERE s.agent_id = #{agentId}
+  AND e.type = 'user.message'
+  AND e.created_at >= #{from} AND e.created_at < #{to}
+```
 
-每页独立读取，不冻结快照。翻页期间如有会话被删除，或有新事件提交到已读过的位置之前，后续页会整体移动，可能重复或漏读，见 F6。eventSeq 只在服务端用于排序，不进入响应。
+步骤为：校验 agentId（`ClawConstants.Agent.ID_REGEX`）、type、from/to、page 与 limit；Service 归一 page 默认 1、limit 默认 50，只校验偏移计算不溢出；执行上述读取，多取一条判断是否还有下一页，有则返回 `nextPage=page+1`；逐条用 `CommittedEventProjection` 投影并包上 sessionId；计数结果作为 total 返回。两个 SQL 在同一个只读 REPEATABLE_READ 事务中执行，同一次响应里的 events、nextPage 与 total 来自同一快照；第一页且没有下一页时，total 就是本页条数，可以省去计数。
+
+每页独立读取，不冻结快照。翻页期间如有会话被删除，或有新事件提交到已读过的位置之前，后续页会整体移动，可能重复或漏读，见 F6；每页的 total 也按该次读取重新计算，前后页的 total 可能不同。eventSeq 只在服务端用于排序，不进入响应。
 
 排序说明：createdAt 是形成记录时保存一次的 UTC 整秒时间，同一秒内按 sessionId、eventSeq 稳定排序。不同会话之间没有因果顺序，这个顺序只是时间顺序。同一会话内，跨实例时钟偏差可能让 createdAt 与提交顺序不一致；需要会话内因果顺序时用 UC2 或 ListEvents（按 eventSeq）。
 
@@ -165,7 +175,7 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 
 ![读取轮次](设计图/Agent用户事件查询/event_turn_resolution.svg)
 
-[原尺寸 SVG](设计图/Agent用户事件查询/event_turn_resolution.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L54)
+[原尺寸 SVG](设计图/Agent用户事件查询/event_turn_resolution.svg) · [PlantUML 源码](设计图/Agent用户事件查询/diagram.puml#L58)
 
 | 参与者 | 映射 |
 |---|---|
@@ -193,7 +203,7 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 
 | 操作 | 方法与路径 | 成功结果 | 详细契约 |
 |---|---|---|---|
-| ListAgentEvents | `GET /agents/{agentId}/events?type=&from=&to=&page=&limit=` | `{events:[{sessionId, event}], nextPage}` | [ListAgentEvents](chat-api-review.html#ListAgentEvents) · [JSON](查询契约/操作/01-list-agent-events.json) |
+| ListAgentEvents | `GET /agents/{agentId}/events?type=&from=&to=&page=&limit=` | `{events:[{sessionId, event}], nextPage, total}` | [ListAgentEvents](chat-api-review.html#ListAgentEvents) · [JSON](查询契约/操作/01-list-agent-events.json) |
 | ListTurnEvents | `GET /sessions/{sessionId}/events/{eventId}/turn?page=&limit=` | `{events, nextPage}` | [ListTurnEvents](chat-api-review.html#ListTurnEvents) · [JSON](查询契约/操作/02-list-turn-events.json) |
 
 **参数。** agentId 匹配 `^agent-[0-9a-fA-F]{32}$`；sessionId 匹配 `^session-[0-9a-fA-F]{32}$`；eventId 非空且不超过 128 字符。type 必填，只能传一个精确的事件类型：第一版只接受 `user.message`；其他值返回 400。from、to 必填，格式 `YYYY-MM-DDTHH:mm:ssZ`（[时间契约](time-contract.md)），from < to，跨度不超过 31 天，半开区间 `[from, to)`；to 可以晚于当前时间。page 默认 1、为正整数；limit 默认 50、范围 1～200，与 ListEvents 相同。带小数秒、非 Z 偏移或其他字段格式错误都返回 400，不截断或猜测。
@@ -209,7 +219,7 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 
 <a id="integer-page"></a>
 
-**分页。** 两个接口都使用与 [ListEvents](chat-events-history-design.md#integer-pagination) 一致的整数页码：请求 `page`，有下一页时响应 `nextPage=page+1`，否则为 null；不返回 total。选择页码而不是游标，是为了与 ListEvents 一致、调用方用法最简单。代价有两点：深页要跳过前面的行，越翻越慢，不设偏移上限，因为用户事件稀疏，31 天内页数很少；翻页期间的删除或晚提交会让后续页移动，跨页不保证无重复、无遗漏（F6）。需要完整结果时，Mate 用已结束的时间段查询，并按 sessionId + eventId 去重。
+**分页。** 两个接口都使用与 [ListEvents](chat-events-history-design.md#integer-pagination) 一致的整数页码：请求 `page`，有下一页时响应 `nextPage=page+1`，否则为 null。ListAgentEvents 另返回 total，即本次读取时满足 agentId、type 与时间范围的事件总数，与 page、limit 无关，供 Trace 显示总数与页码；ListTurnEvents 一轮的事件数有限，不返回 total。选择页码而不是游标，是为了与 ListEvents 一致、调用方用法最简单。代价有两点：深页要跳过前面的行，越翻越慢，不设偏移上限，因为用户事件稀疏，31 天内页数很少；翻页期间的删除或晚提交会让后续页移动，跨页不保证无重复、无遗漏（F6）。需要完整结果时，Mate 用已结束的时间段查询，并按 sessionId + eventId 去重。
 
 nextPage 为 null 只表示本次读取已无下一页，不表示以后不会追加。
 
@@ -231,12 +241,13 @@ nextPage 为 null 只表示本次读取已无下一页，不表示以后不会�
         }
       }
     ],
-    "nextPage": 2
+    "nextPage": 2,
+    "total": 3
   }
 }
 ```
 
-示例按 `page=1&limit=1` 请求，所以只返回一条并给出 nextPage。下一页请求为 `GET /agents/{agentId}/events?type=user.message&from=…&to=…&page=2&limit=1`。
+示例按 `page=1&limit=1` 请求，所以只返回一条并给出 nextPage；total=3 表示范围内共有 3 条用户请求。下一页请求为 `GET /agents/{agentId}/events?type=user.message&from=…&to=…&page=2&limit=1`。
 
 ```json
 {
@@ -315,7 +326,7 @@ nextPage 为 null 只表示本次读取已无下一页，不表示以后不会�
 | 500 | `EVENT_LIST_FAILED` | 两者 | 复用；读取或投影失败，包括未知持久化类型 |
 | 503 | `EVENT_SERVICE_UNAVAILABLE` | 两者 | 复用；数据库暂不可用 |
 
-UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只回答“该 Agent 名下有哪些已保存事件”，结果为空列表。合法但超出范围的页码返回 200、`events=[]`、`nextPage=null`。
+UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只回答“该 Agent 名下有哪些已保存事件”，结果为空列表。合法但超出范围的页码返回 200、`events=[]`、`nextPage=null`，total 仍为实际总数；Agent 不存在或范围内没有请求时 total=0。
 
 ## 5. 架构指标
 
@@ -354,7 +365,7 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 #### 5.2.2 容量与限流
 
 - 配额：时间跨度不超过 31 天，每页不超过 200 条（T4）。这两个值是有界查询的初始值，不是容量承诺。
-- 瓶颈：UC1 每页先找到该 Agent 的全部会话，再逐会话按部分索引取出时间范围内的 user.message，合并排序后跳过 `(page-1)*limit` 条。成本与该 Agent 的会话数和范围内的请求总数成正比，而不只是页大小。user.message 稀疏时问题不大；会话数很多（如定时任务每次运行新建会话）时需压测确认，必要时再考虑在事件表冗余 agent_id。UC2 一轮的事件数通常为几十到几百条，读取走主键与唯一索引。
+- 瓶颈：UC1 每页先找到该 Agent 的全部会话，再逐会话按部分索引取出时间范围内的 user.message，合并排序后跳过 `(page-1)*limit` 条；每页还要按相同条件计数一次，读取量约为不计数时的两倍。成本与该 Agent 的会话数和范围内的请求总数成正比，而不只是页大小。user.message 稀疏时问题不大；会话数很多（如定时任务每次运行新建会话）时需压测确认，必要时再考虑在事件表冗余 agent_id。UC2 一轮的事件数通常为几十到几百条，读取走主键与唯一索引。
 - 压测计划：【缺口】需要按真实 GaussDB 和代表性 Agent（会话数、每日用户事件数）验证两个索引的执行计划，以及会话数很多的 Agent 的单页耗时。
 
 #### 5.2.3 监控告警
@@ -385,7 +396,7 @@ UC1 中 Agent 不存在或已下线不报错：Claw 不维护 Agent 目录，只
 
 ### 6.3 自动化测试
 
-- UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；page 非正整数返回 400，超出范围的页码返回 200 空列表，同秒多会话按页翻读顺序稳定；type=user.message 只返回 user.message，不返回其他四种 user.*；user、agent.message 等其他取值返回 400；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表。
+- UC1：参数边界（缺失、小数秒、非 Z、from=to、31 天、31 天加 1 秒、limit 边界）；page 非正整数返回 400，超出范围的页码返回 200 空列表，同秒多会话按页翻读顺序稳定；type=user.message 只返回 user.message，不返回其他四种 user.*；user、agent.message 等其他取值返回 400；同秒多事件排序稳定；已删除会话立即消失；其他 Agent 不混入；空 Agent 返回 200 空列表与 total=0；total 等于范围内 user.message 总数，不随 page、limit 变化，超出范围的页码仍返回实际 total，不计入其他类型、其他 Agent 与已删除会话。
 - UC2：以 user.message、确认、审核、回答、停止、agent.tool_result、终态 idle 为起点返回同一轮；确认续跑后的多段按 eventSeq 合并；执行内自动压缩的 session.compacted 作为起点返回所在轮次，手动压缩与配置事件返回 `EVENT_TURN_NOT_FOUND`；未结束轮次不含 session.status_idle；同 Session 两轮互不混入；page 与 limit 边界同 ListEvents。
 - 两者：返回事件与 ListEvents 同一事件逐字段相等；未知持久化类型返回 `EVENT_LIST_FAILED`；GaussDB 执行计划使用新增索引。
 
@@ -439,12 +450,13 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 
 - 定时任务（[M10](../08-CampusClaw定时任务/README.md)）每次 Run 新建会话，首条消息由任务配置生成；Subagent（[统一历史](unified-event-persistence.md)）为子任务新建会话，首条消息由父 Agent 生成。按已确认规则，它们与普通会话一样按事件类型返回，不区分来源，也不新增来源标记。两项持久化当前均待实现，实现后自动纳入。
 - 第一版 type 只接受 user.message；其他类型按需扩展，扩展前先扩大部分索引并评估权限与审计。
-- ListEvents 的整数页码不变，本设计的两个接口沿用同一套规则。
+- ListEvents 的整数页码不变，本设计的两个接口沿用同一套规则；只有 ListAgentEvents 增加 total，ListEvents 仍不返回 total。
 
 ### 8.4 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.7.0 | 2026-10-15 | 按 Lotus 评审，ListAgentEvents 响应增加 total：新增 R9；UC1 在同一只读事务中按相同条件计数；同步接口形状、分页说明、示例、空结果、容量与测试点。ListTurnEvents 不变。 |
 | 0.6.1 | 2026-10-13 | 按 PR #339 实现对齐 UC1 SQL：type 条件写成常量 `'user.message'`，不用 `#{type}` 绑定参数，否则通用执行计划无法证明满足部分索引谓词 `type = 'user.message'`。 |
 | 0.6.0 | 2026-10-13 | 按 Lotus 评审，ListAgentEvents 只返回开启轮次的 user.message：type 改为精确事件类型，第一版只接受 `type=user.message`；部分索引改为只覆盖 user.message；同步需求、D3、示例、错误说明与测试点；整体时序图注释中残留的自动压缩差距一并删除。 |
 | 0.5.0 | 2026-10-13 | 生成两个操作的精确契约（`查询契约/操作/`）并列入统一接口页，完成 T6。 |
