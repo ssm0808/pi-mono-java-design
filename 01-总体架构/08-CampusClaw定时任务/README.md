@@ -51,6 +51,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 | <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，任务一直被占用，后续计划全部遇忙跳过 | 需人工处置才能恢复 | 不自动恢复。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件，中断终态走 D11 的同一终态提交，Run 随之结束；② 执行期写入与工具调用前检查执行未终止，防止恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | Runtime |
 | <a id="todo-t10"></a>T10 | 是否在 Claw 的 t_schedule（及 Run、Session）增加 userId，使列表直接按用户查询；需先确定任务仅创建者可见还是同范围共享，以及与 Mate 归属的同步规则 | 任务量增长后 Mate 全量拉取的读取量随之增长 | 方法 A：Mate 拉取全部后过滤（[D9](#key-decisions)） | Claw 与 Mate 共同 |
 | <a id="todo-t11"></a>T11 | Agent 删除、启停用与定时任务的数据一致性：保存、受理、取消暂停时是否校验 Agent，Agent 不可用时任务如何处理 | 关联的 Agent 已删除或禁用时，自动运行每次失败在 Runtime 准备阶段，只留下失败 Run | 不校验 Agent 是否存在和启停用，正常受理；准备失败按通用错误记录 Run，不自动暂停（[D12](#key-decisions)） | Agent 管理与 Claw 共同 |
+| <a id="todo-t13"></a>T13 | 会话内创建与管理任务：Cron 工具写操作如何经 Mate 暴露的接口完成授权与 user_id 关联 | 首版模型不能在会话中直接建任务 | Cron 工具只读（[D13](#key-decisions)） | Mate 与 Claw 共同 |
 
 <a id="implementation-verification"></a>
 
@@ -164,7 +165,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 
 ![定时任务整体时序](scheduled_task_overview.svg)
 
-[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L300)
+[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L301)
 
 | 阶段 | 详细时序 |
 |---|---|
@@ -192,6 +193,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | D10 | 定时执行时没有用户请求，Claw 用什么权限调用业务工具？ | Claude 部署引用 workspace 范围的 Vault 凭据；普通对话由用户请求带 Header | 用户登录 Token 会过期，且没有确认过的刷新或代签接口；不能保存用户密码 | 用户权限只在配置时由 Mate 检查；运行时统一使用 Mate 配置的同一个账号，模型每批需要凭据的工具调用前，Claw 无入参向 Mate 取一次 access-token（2026-10-13 评审确定） | 所有任务权限相同；创建者失去权限或离职后任务仍照常运行；每批工具调用多一次 Mate 请求 |
 | D11 | 执行结束后，Run 怎么知道并释放任务？ | 未核验各基线的同类机制 | 同一任务不并发，Run 不结束后续计划就全部遇忙跳过；实例可能在任意时刻失联 | 写根执行终态的同一数据库事务内，经 Runtime 通用终态扩展点结束本次 Run（按 execution_id 条件更新 finished_at）；不用提交后回调，也不轮询（2026-10-14 评审确定） | Runtime 需新增事务内扩展点；Run 需 execution_id 索引；实例宕机写不进终态时仍靠 T9 |
 | D12 | 运行失败要不要自动暂停任务？ | Claude 只对不可恢复的建 Session 错误（如 Agent、环境、Vault 已归档）首次即自动暂停，限流等临时错误只记失败 Run；DSH 投递失败只记日志、任务保持 active；pi、OpenCode 产品内无定时任务，Codex 调度器未开源（2026-10-14 核验，见[证据](source-evidence.md#auto-pause-baseline-evidence)） | 不改配置就必然再次失败的错误，继续每次触发只会产生无意义的失败记录；临时故障不应让任务停下来；业务执行失败的结论在 Session 里 | 首版不自动暂停：任何运行失败都只记录失败 Run，任务保持原状态；暂停只由人工发起，恢复需显式取消暂停，不补跑。Agent 是否存在和启停用暂不校验，正常受理，Agent 不可用时在 Runtime 准备阶段按通用错误失败；Agent 启停用与数据一致性另开设计（T11）（2026-10-15 评审确定，替代 2026-10-14 的 agent_unavailable_error 自动暂停） | 不采用旧 Cron 连续三次失败禁用；Agent 已删除或禁用时，自动运行每次都会失败并累积失败 Run，需要监控发现或人工暂停 |
+| D13 | 模型在会话里能否通过 Cron 工具创建、删除、暂停或立即运行任务？ | Claude 的定时部署由 API 与控制台管理，未提供会话内创建入口；旧 CronTool 支持全部写操作 | 用户授权与任务的 user_id 关联在 Mate（D9）；Cron 工具由模型直接调用，前面没有 Mate 管理入口；Claw 不回调 Mate 授权（[§5.1](#security)） | 首版 Cron 工具只读，只保留 list、status、runs，只返回当前会话所用 Agent 的任务与 Run；create、update、delete、pause、unpause、run 不注册给模型，写操作只走 Mate 管理入口。以后需要会话内创建时，由 Cron 工具调用 Mate 暴露的接口，Mate 完成授权与 user_id 关联后再调用 Claw（T13）（2026-10-15 评审确定） | 用户不能让模型直接建任务，需到 Mate 页面配置；同一 Agent 的任务对使用该 Agent 的会话都可见，不按用户过滤 |
 
 时间、执行目标和删除的多基线对照见 [A14](../07-Agent架构对比/README.md#a14) 和[删除基线证据](source-evidence.md#schedule-delete-baselines)。
 
@@ -457,7 +459,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 层次 | 责任与生命周期 |
 |---|---|
-| 边界与入口 | `ScheduleController` 收发 RequestVO/ResponseVO；`CronToolAdapter` 传入 Host 已绑定的 Session/执行和目标资源，不能绕过授权 |
+| 边界与入口 | `ScheduleController` 收发 RequestVO/ResponseVO；`CronToolAdapter` 首版只读（D13），按当前会话所用 Agent 调用 list、status、runs，不调用写操作，也不向 Mate 请求授权 |
 | Mate 适配 | `MateScheduleAdapter` 只调用 Mate 的 Session 归属登记与统一账号 access-token 两个接口；保存与受理不校验 Agent 是否存在和启停用（T11） |
 | 应用编排 | `ScheduleApplicationService` 管理规则与 VO/DTO 转换；`ScheduleRunPreparation` 与受理服务承接共享入口；`ScheduleDispatcher` 推进已受理执行；均为 Spring 单例 |
 | 策略与准备 | `ScheduleTimePolicy` 统一校验与计划计算；`ScheduleAuthorizationPort` 调用 Mate 的 Session 归属登记，不是 Claw 的用户权限策略；`ScheduledAccessTokenPort` 在每批工具调用前取 access-token；`PreparedScheduleRunDTO` 每次准备的不可变快照，不代替事务内可变状态检查 |
@@ -474,7 +476,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![Claw 配置保存](schedule_configuration_save.svg)
 
-[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L189)
+[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L190)
 
 保存步骤、并发语义与结果不确定时的处理见[§4.5](#reliable-write-flow)。
 
@@ -486,7 +488,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
-[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L220)
+[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L221)
 
 **正常调用如何完成：** 核验 Mate 服务、获准操作和目标 → 短事务锁定任务，插入一条未结束的手动 Run 占用任务，不改自动计划 → 进入[共用受理流程](#run-admission-sequence) → 返回 200 和带 sessionId 的 Run，不等待业务完成。
 
@@ -533,7 +535,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![共用受理流程](schedule_run_admission.svg)
 
-[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L256)
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L257)
 
 **正常调用如何完成：** 固定拟建 Session ID，由 Mate 按资源 ID 登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、Run、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
 
@@ -598,7 +600,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ![定时 Session 中的凭据来源](schedule_session_credentials.svg)
 
-[原尺寸 SVG](schedule_session_credentials.svg) · [PlantUML 源码](diagram.puml#L358)
+[原尺寸 SVG](schedule_session_credentials.svg) · [PlantUML 源码](diagram.puml#L359)
 
 **规则：凭据来源跟随根执行，不跟随 Session。** 每个根执行在受理时按入口确定一次凭据来源，执行期间不变；Session 本身不保存来源标记，先后可以有不同来源的根执行。
 
@@ -621,6 +623,21 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 **谁可以继续对话。** 定时 Session 的归属在受理前由 Mate 登记（F14），Mate 用 user_id 标识该 Session 属于哪个用户（2026-10-15 评审确定）。哪些用户可以读取和继续这个 Session，由 Mate 按该 user_id 判断并在调用 Claw 前完成；Claw 不接收也不保存 user_id，与普通 Session 一样不检查用户。
 
 **审计。** 不需要长期审计（2026-10-15 评审确定），不新增来源字段。Run 存续期间，按 `t_schedule_run.execution_id` 可以看出某一轮由定时触发、使用统一账号；Schedule 删除、Run 随之删除后不再区分。运行时选择凭据以受理时固定的来源对象为准，不在执行中查询 Run。
+
+<a id="cron-tool"></a>
+
+### 3.12 会话内 Cron 工具（首版只读）
+
+模型在会话里调用 Cron 工具时，前面没有 Mate 管理入口：写操作既无法由 Mate 先授权，Mate 也不会为新任务记录 user_id，任务会在 Mate 按用户过滤的列表里永远不可见。因此首版只读（[D13](#key-decisions)）。状态：待实现。
+
+| 动作 | 首版 | 范围与规则 |
+|---|---|---|
+| list | 保留 | 委托列表接口并固定 agentId 为当前会话所用 Agent，只返回该 Agent 的任务 |
+| status | 保留 | 按 scheduleId 读取；任务不属于当前 Agent 时按不存在处理，不泄露存在性 |
+| runs | 保留 | 委托 Run 列表并固定 agentId，可再按 scheduleId 筛选；不返回其他 Agent 的 Run |
+| create、update、delete、pause、unpause、run | 不提供 | 不注册给模型；需要时提示用户到 Mate 页面操作。以后经 Mate 暴露的接口实现（T13） |
+
+工具结果只投影名称、规则、状态、计划时间和 Run 摘要，metadata 不进入模型（[§5.1](#security)）。Cron 工具不调用 Mate，也不取 access-token。
 
 <a id="interface"></a>
 
@@ -1814,7 +1831,7 @@ Accept-Language: zh-CN
 
 - 旧进程内 CronEngine（JSON Job / JSONL Run）在新 SQL 调度器启用前必须停止，两套调度不得并行。
 - 旧 At/Every 任务不静默转换为 Cron；迁移时由 Mate 建立任务授权关联，缺时区或 Mate 授权的旧 Job 迁移后保持禁用等待补全。
-- 现有 CronTool 与 BuiltInToolContracts 各有一份旧 Schema，迁移时同步处理；Cron 工具与 HTTP 委托同一应用服务。现有工具的可选 timezone 在迁移时必须归一化成明确存储值，不静默采用运行节点时区。
+- 现有 CronTool 与 BuiltInToolContracts 各有一份旧 Schema，迁移时同步处理；Cron 工具与 HTTP 委托同一应用服务，首版只迁移只读动作（D13），旧写操作 Schema 不再注册给模型。现有工具的可选 timezone 在迁移时必须归一化成明确存储值，不静默采用运行节点时区。
 - 普通 Session 的消息、文件引用和 Header 快照契约不因定时入口改变。
 - Cron 方言采用 Spring 六字段，与 Claude 五字段 POSIX 不兼容，表达式不能直接复制。
 
@@ -1959,7 +1976,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.57.0 | 2026-10-15 | 定时任务不再校验 Agent 是否存在和启停用、正常受理，首版取消自动暂停，Agent 启停用与数据一致性另开设计（T11）；明确凭据按根执行入口区分，定时会话中继续对话使用用户请求凭据，并在 §3.11 设计凭据切换与定时 Session 中继续对话（T12），会话归属由 Mate 用 user_id 标识，不做长期审计。 |
+| 0.57.0 | 2026-10-15 | 定时任务不再校验 Agent 是否存在和启停用、正常受理，首版取消自动暂停，Agent 启停用与数据一致性另开设计（T11）；明确凭据按根执行入口区分，定时会话中继续对话使用用户请求凭据，并在 §3.11 设计凭据切换与定时 Session 中继续对话（T12），会话归属由 Mate 用 user_id 标识，不做长期审计；新增 D13，Cron 工具首版只读，会话内写操作以后经 Mate 接口实现（T13）。 |
 | 0.56.0 | 2026-10-15 | 并入接口契约、待对齐事项与两张表结构成为单一设计文档，明确 Claw 只调用 Mate 的三个接口且受理先校验 Agent 再登记归属。 |
 | 0.55.0 | 2026-10-15 | D12 明确 agent_unavailable_error 的判定依据：只认 Mate 按 agentId 的存在且启用校验，Runtime 通用准备故障不暂停。 |
 | 0.54.0 | 2026-10-15 | F14 登记结果未知不再保持占用：与过期准备清理统一，lease_until 到期即结束 Run，待核对登记由 Mate 清理。 |

@@ -73,7 +73,8 @@ package "入口层（runtimeapi / tool.cron）" as EntryPkg {
     + 8 个配置操作与 2 个 Run 读取
   }
   class CronToolAdapter <<适配器 / P>> {
-    + 带当前 Session / 执行 ID 调用
+    + 只读：list、status、runs（D13）
+    + 固定当前会话所用 Agent
   }
 }
 
