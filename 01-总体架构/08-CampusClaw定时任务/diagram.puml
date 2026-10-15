@@ -52,7 +52,7 @@ deactivate Runtime
 ' 设计原因：管理入口经事件到达运行协调器，避免 Runtime 装配构造依赖环。
 ' 设计原因：服务直接使用 ScheduleMapper 收发 DTO，不另设仓储端口。
 ' 产品约束：每次 Run 使用关联的 Agent 定义新建 Session；定时执行非交互。
-title 定时任务：全局类图
+title 定时任务：全局目标类图
 skinparam backgroundColor white
 skinparam defaultFontSize 13
 skinparam classAttributeIconSize 0

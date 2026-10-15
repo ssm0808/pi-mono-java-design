@@ -166,7 +166,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 
 ![定时任务整体时序](scheduled_task_overview.svg)
 
-[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L301)
+[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L316)
 
 | 阶段 | 详细时序 |
 |---|---|
@@ -452,9 +452,9 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 <a id="class-diagram"></a>
 
-全局类图（分层、依赖与生命周期）：与 pi-mono-java PR #332 的实现一致（2026-10-15 核对）。Mate 表示外部权威边界，其内部实现不在本图展开。
+全局目标类图（分层、依赖与生命周期）：已由 pi-mono-java PR #332 实现，核对范围见[源码证据 §8.22](source-evidence.md#822-全局类图与-pr-332-实现核对2026-10-15)。Mate 表示外部权威边界，其内部实现不在本图展开。
 
-![定时任务全局类图](scheduled_task_architecture.svg)
+![定时任务全局目标类图](scheduled_task_architecture.svg)
 
 [原尺寸 SVG](scheduled_task_architecture.svg) · [PlantUML 源码](diagram.puml#L45)
 
@@ -478,7 +478,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![Claw 配置保存](schedule_configuration_save.svg)
 
-[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L190)
+[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L205)
 
 保存步骤、并发语义与结果不确定时的处理见[§4.5](#reliable-write-flow)。
 
@@ -490,7 +490,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
-[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L221)
+[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L236)
 
 **正常调用如何完成：** 核验 Mate 服务、获准操作和目标 → 短事务锁定任务，插入一条未结束的手动 Run 占用任务，不改自动计划 → 进入[共用受理流程](#run-admission-sequence) → 返回 200 和带 sessionId 的 Run，不等待业务完成。
 
@@ -537,7 +537,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![共用受理流程](schedule_run_admission.svg)
 
-[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L257)
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L272)
 
 **正常调用如何完成：** 固定拟建 Session ID，由 Mate 按资源 ID 登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、Run、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
 
@@ -607,7 +607,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ![定时 Session 中的凭据来源](schedule_session_credentials.svg)
 
-[原尺寸 SVG](schedule_session_credentials.svg) · [PlantUML 源码](diagram.puml#L359)
+[原尺寸 SVG](schedule_session_credentials.svg) · [PlantUML 源码](diagram.puml#L374)
 
 **规则：凭据来源跟随根执行，不跟随 Session。** 每个根执行在受理时按入口确定一次凭据来源，执行期间不变；Session 本身不保存来源标记，先后可以有不同来源的根执行。
 

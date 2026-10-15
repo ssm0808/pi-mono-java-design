@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.36.0 |
+| 文档版本 | 0.37.0 |
 | 核验日期 | 数据库专项为 2026-10-10，见[定时任务设计 §3.2.7](README.md#source-baseline)；其余各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 历史主线范围见各节；PR #332 三张调度表、Mapper、同库受理与启动控制已实现、未合并，差距及数据库验收见[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#gaps)；生产公司身份系统未核验 |
@@ -700,6 +700,19 @@ Claude Managed Agents 本次未核对。
 
 旧 CampusClaw Cron 的“连续三次失败自动禁用”在上述基线中没有对应做法。
 
+### 8.22 全局类图与 PR #332 实现核对（2026-10-15）
+
+核对 `superheromeZzh/pi-mono-java` 分支 `codex/scheduled-task-backend` 的 `691323a9e2dedd199ad69fd3756e50b3acf1f231`，范围是全局类图中的类、依赖方向与生命周期，不是完整质量审查。路径前缀 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 类图节点 | 源码与符号 | 结论 |
+|---|---|---|
+| Run 编排 | `schedule/dispatch/ScheduleRunCoordinator.java` · `manual/claimAutomatic/admit`；`runtimeapi/schedule/ScheduledRuntimeAdmissionService.java` · `prepare/accept/start/requestStop` | 原图的准备服务与受理服务由这两层承担；启动 Runtime 的是后者，不是调度器 |
+| 立即运行 | `schedule/application/ScheduleRunService.java`；`ScheduleRunGateway.java` · `run`；`ScheduleRunRequestEvent.java` | 经进程内事件到达运行协调器，避免 Runtime 装配构造依赖环 |
+| 持久化 | `schedule/persistence/ScheduleMapper.java`；各服务构造参数 | 无仓储端口，服务直接使用 Mapper 收发 DTO |
+| Mate 适配 | `schedule/mate/MateScheduleAuthorizationAdapter.java`；`schedule/mate/HttpScheduledAccessTokenClient.java` | 归属登记与取 Token 拆为两个适配器 |
+| 执行上下文 | `session/ExecutionSafetyContext.java` · `beforeHook/resolveCredentials`；`runtimeapi/event/RuntimeExecutionCoordinator.java` · `scheduleTimeout/persistScheduledTimeoutStop/terminalOutcome` | 承载调度标识、非交互门禁与取 Token；原图未画 |
+| Cron 工具 | `tool/cron/CronTool.java`；`tool/cron/AgentScopedCronToolFactory.java` | 依赖配置服务与运行服务，只读 |
+
 ## 9. 文档验收
 
 2026-10-08 的接口范围检查通过：配置清单与HTML一致为10个Claw操作、2个Mate草案，全仓无独立预览路径或操作标识残留，原有JSON示例保持一致。API技能检查通过4份Markdown、4份SVG及HTML脚本；仓库图检查通过36专题、132块、53时序图、0错误，managed_session_compaction的既有3条件组范围提示不变，图索引重新生成后无差异。浏览器检查覆盖共享样式、操作归属及版本、折叠状态、响应/语言切换、360px和无JavaScript回退；类图已查看1282×1382原尺寸与840px文档宽度，职责链保持。生成同步和git diff --check通过；未执行产品或数据库测试。
@@ -742,6 +755,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.37.0 | 2026-10-15 | 登记全局类图与 PR #332 实现的核对范围与结论。 |
 | 0.36.0 | 2026-10-14 | 登记五个基线对运行失败是否自动暂停的最新证据。 |
 | 0.35.0 | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 0.34.0 | 2026-10-12 | 登记四个基线设计文档的失败处理写法，供模板重构稿引用。 |
