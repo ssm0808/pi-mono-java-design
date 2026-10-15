@@ -1,275 +1,363 @@
 @startuml scheduled_run_sequence
-' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a; main fetched 2026-10-08 (unchanged).
-' Source: modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java executeAndReschedule.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventOutput.java persistenceOnly.
-' Presentation: Scheduler owns dispatch and reconciliation; Schedule owns preparation and admission.
-' Design reason: separate durable admission from Runtime execution and its actual outcome.
-' Target: Pending implementation; no catch-up, no replay, unknown outcomes keep the task busy.
-title Automatic alarm summary - dispatch to outcome\n(Pending implementation)
+' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a；2026-10-08 拉取 main（未变化）。
+' 源码：modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java executeAndReschedule。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventOutput.java persistenceOnly。
+' 表达方式：调度器负责分发和启动；定时任务管理负责准备、受理和 Run 结束（D11）。
+' 设计原因：把持久受理与 Runtime 执行及其实际结果分开。
+' 目标：待实现；不补跑、不重放，结果未知时保持任务占用。
+' 表达方式：只画正常流程；失败与恢复规则见 README.md 第 5.2.1 节。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
+title 到点自动运行：从分发到 Run 结束
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
-participant Scheduler
-participant Schedule
-participant Runtime
-database Store
-== Allocate this occurrence ==
-Scheduler -> Schedule : Dispatch a due alarm-summary task
-Schedule -> Store : Claim due Run and task slot\nAdvance the plan only if eligible; commit
-Store --> Schedule : Claimed Run or skip
-break Task ineligible or already busy
-  Schedule --> Scheduler : Skip this occurrence; do not queue
-end
-== Prepare and accept ==
+participant "调度器" as Scheduler
+participant "定时任务管理" as Schedule
+participant "Session 运行时" as Runtime
+database "存储" as Store
+autonumber
+== 分配本次触发 ==
+[-> Scheduler ++ : 到达计划时间
+Scheduler -> Schedule ++ : 分发一个到期的巡逻检查任务
+Schedule -> Store ++ : 认领到期 Run 和任务槽位\n推进计划游标；提交
+return 已认领的 Run
+== 准备并受理 ==
 ref over Schedule, Store
-  Shared Run admission
-  Mate grant + Session binding -> Runtime preparation -> atomic acceptance
-  See schedule_run_admission
+  共用受理流程
+  Session 归属登记 -> Runtime 准备 -> 原子受理
+  见 schedule_run_admission
 end ref
-Schedule --> Scheduler : Committed admission result\nand prepared context when accepted
-break Run not accepted
-  Scheduler -> Scheduler : Finish this attempt; no replay
-end
-== Execute the accepted Run ==
-Scheduler ->> Runtime : Start once with the same prepared context
-Runtime -> Runtime : Guard start ownership\nRun Agent with noninteractive Host policy
-Runtime -> Store : Persist messages and tool results\nPersist root terminal state when confirmed
-Store --> Runtime : Durable execution records
-== Reconcile the original root ==
-Scheduler -> Store : Read fixed root outcome; update existing summary\nRelease own task slot only after confirmed termination
-Store --> Scheduler : Terminal reflected, or unknown still occupied
+return 已提交的受理结果\n和同次准备的上下文
+== 执行已受理的 Run ==
+Scheduler ->> Runtime ++ : 用同一准备上下文启动一次
+deactivate Scheduler
+Runtime -> Runtime : 按非交互 Host 策略运行 Agent
+Runtime -> Store ++ : 持久化消息和工具结果
+return 已持久化
+== 根执行结束 ==
+Runtime -> Store ++ : 同一事务提交根执行终态\n并经终态扩展点结束本次 Run（释放任务）
+return 终态与 Run 结束已提交
+deactivate Runtime
 @enduml
 
 @startuml scheduled_task_architecture
-' Baseline: Claude Deployment / Run / Session and run/pause/unpause, checked 2026-10-05, Beta.
-' Source: modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob and triggerJob.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start and commitTerminal.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java create.
-' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a.
-' Design reason: preserve API, service, policy, adapter, runtime and durable boundaries.
-' Product constraint: every Run creates a new Session using the bound Agent definition.
-' Architecture change: Cron merges into coding-agent-cli; no independent cron artifact.
-' Source: pom.xml modules; scripts/sync-campusclaw.sh MODULES.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java createSession.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/AgentScopedCronToolFactory.java create.
-' Design reason: thin admission has no dependency on the dispatcher or execution registry.
-' Architecture change: one acceptance path; no existing-session target strategy.
-' Architecture change: every P node and every connector is Pending implementation.
-title Scheduled tasks - global target
+' 基线：Claude Deployment / Run / Session 及 run/pause/unpause，核对日期 2026-10-05，Beta。
+' 源码：modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob 和 triggerJob。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start 和 commitTerminal。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java create。
+' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a。
+' 设计原因：保持 API、服务、策略、适配器、运行时和持久化的边界。
+' 产品约束：每次 Run 使用关联的 Agent 定义新建 Session。
+' 架构变更：Cron 合并进 coding-agent-cli，不再有独立的 cron 制品。
+' 源码：pom.xml modules；scripts/sync-campusclaw.sh MODULES。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java createSession。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/AgentScopedCronToolFactory.java create。
+' 设计原因：轻量受理不依赖分发器或执行注册表。
+' 架构变更：只有一条受理路径；不支持以已有 Session 为目标。
+title 定时任务：全局目标类图
 skinparam backgroundColor white
-skinparam defaultFontSize 14
+skinparam defaultFontSize 13
 skinparam classAttributeIconSize 0
-skinparam nodesep 25
-skinparam ranksep 55
+skinparam packageStyle rectangle
+skinparam nodesep 30
+skinparam ranksep 45
 hide empty members
-class "Mate API / trusted host" as Caller <<External>>
-class "ScheduleController" as Api <<API / P>>
-class "CronToolAdapter" as Tool <<Adapter / P>>
-class "ScheduleApplication\nService" as App <<Management / P>>
-class "ScheduleDispatcher" as Dispatch <<Service / P>>
-interface "ScheduleAuthorization\nPort" as Auth <<Port / P>>
-interface "ScheduleCredential\nPort" as Credential <<Port / P>>
-class "MateSchedule\nAdapter" as MateAdapter <<Adapter / P>>
-class "Mate service\nUsers / resource ownership / permissions" as Mate <<External>>
-interface "ScheduleBinding\nResolver" as Binding <<Read-only port / P>>
-class "ScheduleTime\nPolicy" as Time <<Policy / P>>
-class "ScheduleRun\nPreparation" as Prepare <<Service / P>>
-class "PreparedSchedule\nRunDTO" as Snapshot <<Immutable / P>>
-interface "ScheduleRepository" as Repo <<Port / P>>
-class "MyBatisSchedule\nRepository" as RepoImpl <<Adapter / P>>
-interface "ScheduleMapper" as Mapper <<DTO boundary / P>>
-class "GaussDB\nSchedule / Run / Dispatch state\nSession / Execution" as Db <<Durable authority>>
-class "ScheduledRunAcceptance\nService" as Accept <<Service / P>>
-class "Runtime session and\nexecution persistence" as Persist <<Existing>>
-class "RuntimeExecution\nCoordinator" as Coordinator <<Existing>>
-class "AgentSession\nFactory" as Factory <<Existing>>
-class "ManagedAgentSession" as Session <<Per execution>>
-class "Host hooks +\nToolExecutionPipeline" as Pipeline <<Per execution>>
-Caller -down-> Api : Claw VO
-Api -down-> App : VO boundary
-App -down-> Prepare : manual
-App -[norank]-> Accept : manual admit
-Tool -down-> App : Session / execution IDs
-App -down[hidden]-> Dispatch
-Binding -down[hidden]-> Auth
-Auth -down[hidden]-> Credential
-App -left-> Time : validate / compute
-App -right-> Repo : lock latest row\nwrite DTO
-App -[norank]-> Auth
-App -left-> Binding : validate references
-Dispatch -down-> Accept : accept run
-Dispatch -left-> Prepare : automatic
-Dispatch -[norank]-> Time
-Dispatch -[norank]-> Repo
-Prepare -left-> Auth : check grant / register Session
-Pipeline -left-> Credential : resolve after permission
-Prepare -down-> Snapshot
-MateAdapter .right.|> Auth
-MateAdapter .right.|> Binding
-MateAdapter .right.|> Credential
-MateAdapter -down-> Mate : grants / Session binding\nand credentials
-Accept -left-> Snapshot : fixed input
-Accept -[norank]-> Repo
-Repo <|.. RepoImpl
-RepoImpl -down-> Mapper
-Mapper -down-> Db
-Accept -down-> Persist : create / accept
-Persist -right-> Db : same transaction
-Dispatch -down-> Coordinator : start once\nafter commit
-Coordinator -right-> Persist : events / terminal
-Coordinator -down-> Factory
-Factory -down-> "0..*" Session : creates
-Session *-down-> "1" Pipeline
+
+class "Mate 管理入口" as Caller <<外部>>
+
+package "入口层（runtimeapi / tool.cron）" as EntryPkg {
+  class ScheduleController <<API / P>> {
+    + 8 个配置操作与 2 个 Run 读取
+  }
+  class CronToolAdapter <<适配器 / P>> {
+    + 带当前 Session / 执行 ID 调用
+  }
+}
+
+package "定时任务应用层（schedule）" as AppPkg {
+  class ScheduleApplicationService <<单例 / P>> {
+    + 创建 / 更新 / 删除
+    + 暂停 / 取消暂停 / 立即运行
+  }
+  class ScheduleDispatcher <<单例 / P>> {
+    + 每秒扫描到期任务
+    + 占用任务并推进游标
+  }
+  class ScheduleTimePolicy <<策略 / P>> {
+    + 校验 Cron 与时区
+    + 计算下次运行时刻
+  }
+  class ScheduleRunPreparation <<单例 / P>> {
+    + 登记归属并准备 Runtime
+  }
+  class PreparedScheduleRunDTO <<每次 Run / 不可变 / P>> {
+    sessionId
+    Agent 目录与模型
+    prompt
+  }
+  class ScheduledRunAcceptanceService <<单例 / P>> {
+    + 同库短事务受理
+  }
+  class ScheduleRunTerminalHook <<单例 / P>> {
+    + 按 execution_id 结束 Run
+  }
+}
+
+package "端口与适配器" as PortPkg {
+  interface ScheduleBindingResolver <<只读端口 / P>>
+  interface ScheduleAuthorizationPort <<端口 / P>>
+  interface ScheduledAccessTokenPort <<端口 / P>>
+  class MateScheduleAdapter <<适配器 / P>>
+  interface ScheduleRepository <<端口 / P>>
+  class MyBatisScheduleRepository <<适配器 / P>>
+  interface ScheduleMapper <<DTO 边界 / P>>
+}
+
+class "Mate 服务" as Mate <<外部>> {
+  用户权限（配置时检查）
+  Session 归属
+  统一账号 access-token
+}
+
+package "Runtime（已有，需接入定时入口）" as RtPkg {
+  class RuntimeExecutionCoordinator <<已有>>
+  class AgentSessionFactory <<已有>>
+  class ManagedAgentSession <<每次 Run>>
+  class "Host hooks +\nToolExecutionPipeline" as Pipeline <<每次 Run>>
+  class "Session 与执行持久化" as Persist <<已有>>
+  interface ExecutionTerminalHook <<终态扩展点 / P>> {
+    + 与根执行终态同事务调用
+  }
+}
+
+class "GaussDB" as Db <<最终决定方>> {
+  t_schedule / t_schedule_run
+  Session / 根执行
+}
+
+Caller -down-> ScheduleController : 可信服务调用
+ScheduleController -down-> ScheduleApplicationService : VO→DTO
+CronToolAdapter -down-> ScheduleApplicationService
+
+ScheduleApplicationService -down-> ScheduleTimePolicy
+ScheduleDispatcher -down-> ScheduleTimePolicy
+ScheduleApplicationService -down-> ScheduleRunPreparation : 立即运行
+ScheduleDispatcher -down-> ScheduleRunPreparation : 自动运行
+ScheduleRunPreparation -right-> PreparedScheduleRunDTO : 生成
+ScheduleApplicationService -down-> ScheduledRunAcceptanceService
+ScheduleDispatcher -down-> ScheduledRunAcceptanceService
+ScheduledRunAcceptanceService ..> PreparedScheduleRunDTO : 读取
+
+ScheduleApplicationService -down-> ScheduleBindingResolver : 校验 Agent
+ScheduleRunPreparation -down-> ScheduleAuthorizationPort : 校验 Agent 启用、登记 Session 归属
+MateScheduleAdapter .up.|> ScheduleBindingResolver
+MateScheduleAdapter .up.|> ScheduleAuthorizationPort
+MateScheduleAdapter .up.|> ScheduledAccessTokenPort
+MateScheduleAdapter -down-> Mate
+
+ScheduleApplicationService -down-> ScheduleRepository : 锁定 / 写入
+ScheduleDispatcher -down-> ScheduleRepository : 领取到期任务
+ScheduledRunAcceptanceService -down-> ScheduleRepository : 写 Run 关联
+MyBatisScheduleRepository .up.|> ScheduleRepository
+MyBatisScheduleRepository -down-> ScheduleMapper
+ScheduleMapper -down-> Db
+
+ScheduledRunAcceptanceService -down-> Persist : 同一事务创建\nSession / 首消息 / 根执行
+Persist -down-> Db
+ScheduleDispatcher -down-> RuntimeExecutionCoordinator : 提交后启动一次
+RuntimeExecutionCoordinator -down-> AgentSessionFactory
+RuntimeExecutionCoordinator -right-> Persist : 事件 / 终态
+Persist -down-> ExecutionTerminalHook : 终态事务内
+ScheduleRunTerminalHook .right.|> ExecutionTerminalHook
+ScheduleRunTerminalHook -down-> ScheduleRepository : 结束 Run
+AgentSessionFactory -down-> "0..*" ManagedAgentSession : 创建
+ManagedAgentSession *-down-> "1" Pipeline
+Pipeline -up-> ScheduledAccessTokenPort : 每批工具调用\n取 access-token
+
+PreparedScheduleRunDTO -down[hidden]-> ScheduleAuthorizationPort
+ScheduledRunAcceptanceService -down[hidden]-> ScheduleRepository
+ScheduledRunAcceptanceService -down[hidden]-> ScheduleRunTerminalHook
+ScheduleTimePolicy -right[hidden]-> RuntimeExecutionCoordinator
+
 legend bottom
-  P = Pending implementation; all new connectors are pending.
-  Existing services need scheduled-entry integration.
-  Services are singletons; snapshots and sessions are per Run.
-  All Claw target services live in coding-agent-cli.
-  HTTP: runtimeapi; scheduling: schedule; tool adapter: tool.cron.
-  Mate owns users, resource ownership, permissions and user quotas.
-  Claw stores runtime data, never user scope or owner references.
-  Session ownership registration is required before Claw admission.
-  Configuration handlers never call prepare or start a Session.
-  A rule registers automatic work; no rule only saves.
-  Each Run creates a Session, not an Agent definition.
-  No catch-up or execution replay; busy occurrences are skipped.
-  ASK ends the root; no durable interaction wait.
-  Unknown execution is reconciled, never reported as a known failure.
-  Run + message + execution commit before model or tool I/O.
-  Schedule deletion removes Run and public run history.
-  Deletion does not cancel accepted Sessions.
-  Session deletion keeps the original Run admission receipt.
-  No separate cron module or second legacy scheduler.
-  Thin admission never depends on Dispatcher or Runtime Registry.
-  Internal in-flight coordination remains only until safe cleanup.
+  P = 待实现，新增连线均为待实现；已有 = 已实现，需接入定时入口。
+  单例服务不持有单次 Run 状态；快照、Session 与工具管道按 Run 创建。
+  业务规则（不补跑、遇忙跳过、删除与保留等）见正文 §3，不在图中重复。
 endlegend
 @enduml
 
 @startuml schedule_configuration_save
-' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a; main fetched 2026-10-08 (unchanged).
-' Source: modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java saveUnsafe (legacy file persistence).
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare (not a read-only management check).
-' Presentation: Caller requests; Schedule validates and saves; Mate authorizes; Store commits.
-' Design reason: management checks do not prepare or execute an Agent Session.
-' Target: Pending implementation; text-only input and credential references at rest.
-title Create an alarm-summary schedule\n(Pending implementation)
+' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a；2026-10-08 拉取 main（未变化）。
+' 源码：modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java saveUnsafe（旧文件持久化）。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare（不是只读管理检查）。
+' 表达方式：Mate 发起请求并提供授权；定时任务管理校验并保存；存储提交。
+' 设计原因：管理检查不准备也不执行 Agent Session。
+' 目标：待实现；任务内容为纯文本 prompt，不保存凭据引用。
+' 表达方式：只画正常流程；失败与恢复规则见 README.md 第 5.2.1 节。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
+title 保存视频巡逻检查定时任务
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
-actor Caller
-participant Schedule
-participant Mate
-database Store
-Caller -> Schedule : Create task with Agent, message and optional rule
-Schedule -> Schedule : Verify service / granted target\nValidate input and time rule
-break Request rejected
-  Schedule --> Caller : Request error; no configuration written
-end
-Schedule -> Mate : Check Agent and credential bindings\nand current management grant
-Mate --> Schedule : Trusted bindings or rejection
-break Binding or grant rejected
-  Schedule --> Caller : Safe error; no configuration written
-end
-Schedule -> Store : Commit new active configuration\nwith credential references and next planned time
-Store --> Schedule : Committed configuration
-Schedule --> Caller : 201 + saved configuration\nand future planned times
+participant "Mate" as Mate
+participant "定时任务管理" as Schedule
+database "存储" as Store
+autonumber
+activate Mate
+Mate -> Schedule ++ : 创建任务：Agent、任务内容和可选规则
+Schedule -> Schedule : 核验服务来源和获准目标\n校验输入和时间规则
+Schedule -> Mate ++ : 检查 Agent 关联\n以及当前管理授权
+return Agent 关联校验结果
+Schedule -> Store ++ : 提交新的启用配置\n含下次计划时间
+return 已提交的配置
+return 201 + 已保存的配置\n及未来计划时间
+deactivate Mate
 note over Schedule, Store
-  This request saves a task; it creates no Session.
-  Model and business tools run only after a later admission.
+  本请求只保存任务，不创建 Session。
+  模型和业务工具只在之后受理成功时运行。
 end note
 @enduml
 
 @startuml schedule_manual_run
-' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a; main fetched 2026-10-08 (unchanged).
-' Source: modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java triggerJob.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute (legacy synchronous prompt.join).
-' Presentation: Schedule owns admission; the response is not a Runtime completion callback.
-' Design reason: manual and automatic entries share admission and task exclusion.
-' Target: Pending implementation; manual runs never move the automatic plan.
-title Run an alarm summary now - admission receipt\n(Pending implementation)
+' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a；2026-10-08 拉取 main（未变化）。
+' 源码：modules/cron/src/main/java/com/campusclaw/cron/engine/CronEngine.java triggerJob。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute（旧的同步 prompt.join）。
+' 表达方式：定时任务管理负责受理；响应不是 Runtime 完成回调。
+' 设计原因：手动和自动入口共用受理流程和任务互斥。
+' 目标：待实现；手动运行不移动自动计划。
+' 表达方式：只画正常流程；失败与恢复规则见 README.md 第 5.2.1 节。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
+title 立即试跑：返回受理回执
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
-actor Caller
-participant Schedule
-database Store
-Caller -> Schedule : Run the saved task now
-Schedule -> Schedule : Verify Mate service / granted operation and target
-Schedule -> Store : Read current task and reserve a manual Run\nCheck the shared task slot; keep the automatic plan
-Store --> Schedule : Reserved Run or recorded busy rejection
-alt Task slot reserved
-  ref over Schedule, Store
-    Shared Run admission
-    Mate grant + Session binding -> Runtime preparation -> atomic acceptance
-    See schedule_run_admission
-  end ref
-else Task already busy
-  Schedule -> Schedule : Use this attempt's committed rejection\nDo not prepare or start another Session
-end
-Schedule --> Caller : 200 + Run\nSession ID or admission error
-note over Caller, Store
-  Only a committed, known admission result is a 200 Run.
-  Request / authority / storage errors use HTTP errors.
-  Accepted execution continues independently of this response.
+participant "Mate" as Mate
+participant "定时任务管理" as Schedule
+database "存储" as Store
+autonumber
+activate Mate
+Mate -> Schedule ++ : 立即运行已保存的任务
+Schedule -> Schedule : 核验 Mate 服务、获准操作和目标
+Schedule -> Store ++ : 读取当前任务并预留一个手动 Run\n检查共用任务槽位；不改自动计划
+return 已预留的 Run
+ref over Schedule, Store
+  共用受理流程
+  Session 归属登记 -> Runtime 准备 -> 原子受理
+  见 schedule_run_admission
+end ref
+return 200 + Run（含 Session ID）
+deactivate Mate
+note over Mate, Store
+  只有已提交、结果确定的受理才返回 200 Run。
+  已受理的执行独立于本次响应继续运行。
 end note
 @enduml
 
 @startuml schedule_run_admission
-' Java baseline: 553dcd5e2ff682f9684810a043b442b37a02e54a; main fetched 2026-10-08 (unchanged).
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java create.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java submitLocked.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage.
-' Presentation: Schedule coordinates the transaction; Runtime provides preparation and persistence capabilities.
-' Design reason: remote grant checks finish before the short acceptance transaction.
-' PR evidence: e9d31e8888a81b7fe95071e705482bb16fa10476, fetched 2026-10-10.
-' Source: modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/schedule/ScheduledRuntimeAdmissionService.java newSession and encodeContext.
-' Java divergence: remove Claw user references; Mate ownership registration is Pending implementation.
-' Target: Pending implementation; a reserved Run enters, a known admission result leaves; no execution here.
-title Shared Run admission - prepare, then commit\n(Pending implementation)
+' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a；2026-10-08 拉取 main（未变化）。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java create。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java submitLocked。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage。
+' 表达方式：定时任务管理协调事务；Session 运行时提供准备和持久化能力。
+' 设计原因：远程归属登记在短受理事务之前完成；执行授权只在配置任务时由 Mate 检查。
+' PR 证据：e9d31e8888a81b7fe95071e705482bb16fa10476，2026-10-10 拉取。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/schedule/ScheduledRuntimeAdmissionService.java newSession 和 encodeContext。
+' Java 差异：移除 Claw 的用户引用；Mate 归属登记待实现。
+' 目标：待实现；已预留的 Run 进入，确定的受理结果离开；本图不执行。
+' 表达方式：只画正常流程；失败与恢复规则见 README.md 第 5.2.1 节。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，异步启动用开放箭头，外部触发画为来自图外的发现消息。
+title 共用受理流程：先准备，再提交
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
-participant Schedule
-participant Mate
-participant Runtime
-database Store
-== Check current execution authority ==
-Schedule -> Mate : Resolve trusted definitions, current grant\nand credential references for this Run
-Mate --> Schedule : Execution context or rejection
-break Execution context unavailable or rejected
-  Schedule -> Store : Record failure only if task / Run still exist\nRelease only this Run's slot
-  Store --> Schedule : Failure committed or deletion preserved
+participant "定时任务管理" as Schedule
+participant "Mate" as Mate
+participant "Session 运行时" as Runtime
+database "存储" as Store
+autonumber
+[-> Schedule ++ : 受理一个已预留的 Run
+== 登记独立归属 ==
+Schedule -> Schedule : 固定本次 Run 拟建的 Session ID
+Schedule -> Mate ++ : 按资源 ID 登记 Session 归属\nClaw 不提供用户、租户或 owner
+return 归属已持久登记
+== 只准备、不执行 ==
+Schedule -> Runtime ++ : 准备 Agent、模型和 CRON 上下文\n沿用固定的 Session ID；不执行业务
+return 固定的准备快照
+group 一个短数据库事务，由定时任务管理协调
+  Schedule -> Store ++ : 复核任务、认领、时间和容量\n创建 Session + 首条消息 + 根执行 + Run 关联
+  return 受理已提交
 end
-== Register independent ownership ==
-Schedule -> Schedule : Fix the proposed Session ID for this Run
-Schedule -> Mate : Register Session ownership by resource IDs and grant\nNo user / tenant / owner supplied by Claw
-Mate --> Schedule : Durable binding confirmed, rejected or unknown
-break Binding not confirmed
-  Schedule -> Schedule : Stop admission; reconcile by fixed IDs\nDo not create another Session or replay business
-end
-== Prepare without executing ==
-Schedule -> Runtime : Prepare Agent, model and CRON context\nReuse fixed Session ID; no business execution
-Runtime --> Schedule : Fixed preparation snapshot or failure
-alt Preparation succeeded
-  group One short database transaction, coordinated by Schedule
-    Schedule -> Store : Recheck task, claim, grant, time and capacity\nCreate Session + first message + root + Run link
-    Store --> Schedule : Committed acceptance or known rejection
-  end
-else Preparation failed
-  Schedule -> Store : Record failure only if task / Run still exist\nRelease only this Run's slot
-  Store --> Schedule : Failure committed or deletion preserved
-end
+[<-- Schedule -- : 确定的受理结果
 note over Schedule, Store
-  Mate binding is independent; there is no cross-database transaction.
-  A failed Claw transaction leaves a binding to reconcile, not a Session.
-  Admission uses Runtime persistence inside the same transaction.
-  An accepted Run keeps its prepared context for dispatch.
-  No model or tool execution occurs in this sequence.
+  Mate 归属登记独立完成，不存在跨库事务。
+  受理在同一事务内使用 Runtime 持久化能力。
+  已受理的 Run 保留准备上下文，供后续分发使用。
+  本流程不调用模型或工具。
 end note
+@enduml
+
+@startuml scheduled_task_overview
+' 目标：待实现；业务总览，从保存定时任务到查看一次运行结果。
+' 基线：Claude Managed Agents scheduled deployments、deployments/run 和 deployment_runs，核对日期 2026-10-05，Beta。
+' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a，main，拉取日期 2026-10-05。
+' 源码：modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage。
+' 映射：Mate 同时是运营人员的管理入口，以及配置授权、会话归属和统一账号 access-token 的提供方；Mate 内部处理待定。
+' 已确认：Claw 侧逻辑经评审人 2026-10-12 确认。
+' 粒度：参与者统一为服务级。Claw = coding-agent 服务，含定时任务管理、到期分发、受理协调和既有 Session 运行时；GaussDB = 调度与 Session 存储。
+' 粒度：Claw 内部组件之间的协作只在详细时序图中展开。
+' 设计原因：在服务层面讲清一个业务故事；各阶段细节见详细时序图。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，定时触发画为来自图外的发现消息。
+' 表达方式：只画正常流程；失败与恢复规则见 README.md 第 5.2.1 节。
+title 每天视频巡逻检查：业务总览
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate" as Mate
+participant "Claw" as Claw
+database "GaussDB" as Store
+autonumber
+== 配置定时任务 ==
+Operator -> Mate ++ : 配置定时任务（每天 22:00 视频巡逻检查）
+activate Operator
+note right of Mate : Mate 内部处理待定（评审 Todo T8）
+Mate -> Claw ++ : 创建该定时任务
+Claw -> Mate ++ : 校验该 Agent 的配置权限
+return 配置授权
+Claw -> Store ++ : 保存该定时任务
+return 已保存的定时任务
+return 定时任务及下次运行时间
+return 返回已生效的定时任务及下次运行时间
+deactivate Operator
+== 运行定时任务 ==
+[-> Claw ++ : 到达计划时间（每天 22:00）
+Claw -> Store ++ : 记录本次运行
+return 运行记录
+Claw -> Mate ++ : 登记新会话的归属
+return 会话归属
+Claw -> Store ++ : 保存新会话及任务内容
+return 新会话
+Claw -> Claw : 执行视频巡逻检查（由关联的 Agent）
+Claw -> Mate ++ : 调用工具前获取统一账号 access-token
+return access-token
+Claw -> Store ++ : 保存检查过程、巡逻结论及本次运行结果
+return 已保存的运行结果
+deactivate Claw
+== 查看巡逻结果 ==
+Operator -> Mate ++ : 查看巡逻结果
+activate Operator
+Mate -> Claw ++ : 查询运行记录及对应会话
+Claw -> Store ++ : 读取运行记录及会话
+return 运行记录及会话内容
+return 运行记录、巡逻结论及工具证据
+return 返回每次运行的巡逻结论及工具证据
+deactivate Operator
 @enduml
