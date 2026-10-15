@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 | 0.44.0 · 2026-10-14 |
+| 版本 | 0.45.0 · 2026-10-15 |
 | 状态 | 当前目标契约，待实现、尚未发布；包含接口收口与授权的工程细化，不表示逐项字段均经单独确认 |
 | 本文权威范围 | Claw 的创建、列表、详情、部分更新、删除、立即运行、暂停及取消暂停，以及Run读取与删除关系；不定义 Mate 接口或页面实现 |
 | 产品范围 | 每次运行创建独立 Session，使用已关联 Agent；不提供已有 Session 目标 |
@@ -777,7 +777,7 @@ Run不增加 status、updatedAt、模型回答或完整 Schedule；后续 Sessio
 | Run.error.type | 已确定且可记录的受理失败 | zh-CN / en-US 安全文案 |
 |---|---|---|
 | schedule_busy_error | 同一任务已有占用，包括尚未核对清楚的执行；不排队、不另建Session | 该定时任务仍有进行中或待核对的运行。 / This schedule has an active or unresolved run. |
-| agent_unavailable_error | 关联的 Agent 已删除或被禁用，不改配置必然再次失败；自动运行时同时自动暂停任务（§4.1.1） | 关联的 Agent 已删除或被禁用。 / The associated agent has been deleted or disabled. |
+| agent_unavailable_error | 关联的 Agent 已删除或被禁用，不改配置必然再次失败；自动运行时同时自动暂停任务（§4.1.1）。只依据 `ScheduleAuthorizationPort` 按 agentId 直接向 Mate 查询“存在且启用”的技术校验（不经本地缓存，不查用户资格），Mate 明确返回已删除或已禁用才记录；Runtime 准备阶段的 Agent 不可用、Agent 未找到、本地路径校验、目录 I/O、Skill 准备等通用故障，以及该校验调用本身失败或超时，都不记此类型、不暂停（这些记其他错误类型，如 unknown_error） | 关联的 Agent 已删除或被禁用。 / The associated agent has been deleted or disabled. |
 | session_capacity_exceeded_error | 本次会话准入容量不足 | 当前没有可用的执行容量。 / Execution capacity is unavailable. |
 | session_creation_rejected_error | Session或首消息受理明确拒绝且已回滚 | 本次会话受理被拒绝。 / Session acceptance was rejected. |
 | unknown_error | 已确认未受理、已完成回滚且可记录的其他失败 | 本次运行未能受理。 / The run could not be accepted. |
@@ -1098,6 +1098,7 @@ Accept-Language: zh-CN
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.45.0 | 2026-10-15 | agent_unavailable_error 只依据 Mate 按 agentId 的存在且启用校验，Runtime 通用准备故障不记此类型。 |
 | 0.44.0 | 2026-10-14 | 清理 D9/D10 前遗留的读取可见范围、权限过滤与执行资格要求，统一以 D9/D10 和主设计 §3.5 为准。 |
 | 0.43.0 | 2026-10-14 | 自动运行遇 agent_unavailable_error 时自动暂停（error 原因），其他失败不暂停；补状态转换与验收。 |
 | 0.42.0 | 2026-10-14 | “绑定”统一改为“关联”（任务与 Agent 的关系）。§8 残留的按 Agent 解析凭据改为统一账号。 |
