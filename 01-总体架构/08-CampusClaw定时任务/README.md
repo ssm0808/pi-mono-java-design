@@ -618,9 +618,9 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 - 定时执行遇到需要人工确认的调用而结束时（[§3.10](#noninteractive)），被阻止的业务调用不自动重放；用户可以在同一 Session 继续对话，用本人凭据让模型重新处理，权限确认按普通交互规则进行。
 - 用户这一轮是普通根执行，不关联任何 Run，不占用任务槽位，也不影响后续定时触发；后续定时触发仍新建 Session（[§3.9](#new-session-per-run)）。
 
-**谁可以继续对话。** 定时 Session 的归属在受理前由 Mate 登记（F14）。哪些用户可以读取和继续这个 Session，由 Mate 按该归属判断并在调用 Claw 前完成；Claw 与普通 Session 一样不检查用户。**【缺口】** Mate 侧“定时 Session 归属于哪些用户”的规则属于 [T8](#todo-t8)。
+**谁可以继续对话。** 定时 Session 的归属在受理前由 Mate 登记（F14），Mate 用 user_id 标识该 Session 属于哪个用户（2026-10-15 评审确定）。哪些用户可以读取和继续这个 Session，由 Mate 按该 user_id 判断并在调用 Claw 前完成；Claw 不接收也不保存 user_id，与普通 Session 一样不检查用户。
 
-**审计。** 不新增字段：工具结果事件已带 execution_id（[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)），某根执行是否为定时来源由 `t_schedule_run.execution_id` 关联确定，Child 沿父执行链追溯。代价是删除 Schedule 会一并删除 Run，此后无法再从 Claw 数据区分该 Session 中哪一轮使用了统一账号。**【缺口】** 如审计要求长期保留这一区分，需要在根执行记录增加非秘密的来源标记，涉及 M06 表结构，待确认。
+**审计。** 不新增字段：工具结果事件已带 execution_id（[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)），按 `t_schedule_run.execution_id` 能找到 Run 的根执行（及沿父执行链追溯到它的 Child）视为使用统一账号；找不到对应 Run 的，视为使用请求中的 access-token（2026-10-15 评审确定）。因此 Schedule 删除、Run 随之删除后，这些轮次按请求凭据归属，不再追溯为统一账号。运行时选择凭据仍以受理时固定的来源对象为准，不在执行中按 Run 是否存在切换，避免执行途中删除任务导致定时那一轮拿不到凭据。
 
 <a id="interface"></a>
 
@@ -1959,7 +1959,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.57.0 | 2026-10-15 | 定时任务不再校验 Agent 是否存在和启停用、正常受理，首版取消自动暂停，Agent 启停用与数据一致性另开设计（T11）；明确凭据按根执行入口区分，定时会话中继续对话使用用户请求凭据，并在 §3.11 设计凭据切换与定时 Session 中继续对话（T12）。 |
+| 0.57.0 | 2026-10-15 | 定时任务不再校验 Agent 是否存在和启停用、正常受理，首版取消自动暂停，Agent 启停用与数据一致性另开设计（T11）；明确凭据按根执行入口区分，定时会话中继续对话使用用户请求凭据，并在 §3.11 设计凭据切换与定时 Session 中继续对话（T12），会话归属由 Mate 用 user_id 标识，找不到 Run 的轮次按请求 access-token 归属。 |
 | 0.56.0 | 2026-10-15 | 并入接口契约、待对齐事项与两张表结构成为单一设计文档，明确 Claw 只调用 Mate 的三个接口且受理先校验 Agent 再登记归属。 |
 | 0.55.0 | 2026-10-15 | D12 明确 agent_unavailable_error 的判定依据：只认 Mate 按 agentId 的存在且启用校验，Runtime 通用准备故障不暂停。 |
 | 0.54.0 | 2026-10-15 | F14 登记结果未知不再保持占用：与过期准备清理统一，lease_until 到期即结束 Run，待核对登记由 Mate 清理。 |
