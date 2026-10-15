@@ -68,9 +68,9 @@ hide circle
 
 package "入口（schedule.web / tool.cron）" as EntryPkg {
   class ScheduleController <<单例>> {
-    + create(grant, request) : ScheduleResponseVO
-    + applyAction(id, run|pause|unpause)
-    + listRuns(grant, filters) : ScheduleRunListResponseVO
+    + create(body, request) : ResponseEntity
+    + applyAction(scheduleId, run|pause|unpause, request)
+    + listRuns(filters, request) : ResponseEntity
   }
   class CronTool <<每个 Session>> {
     + execute(list | status | runs)
@@ -187,7 +187,7 @@ ScheduleTriggerWorker --> ScheduleMapper
 ScheduleRunTerminalHook --> ScheduleMapper
 ScheduleMapper ..> ScheduleDTO
 ScheduleMapper ..> ScheduleRunDTO
-ScheduleDTO "1" o-- "0..*" ScheduleRunDTO
+ScheduleRunDTO "0..*" --> "1" ScheduleDTO : scheduleId
 
 
 legend bottom left
