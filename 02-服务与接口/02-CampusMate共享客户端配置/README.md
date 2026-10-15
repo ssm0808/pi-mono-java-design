@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.9.0 |
+| 文档版本 | 2.10.0 |
 | 状态 | 原有统一连接配置已实现；模型能力查询与定时执行增量待实现，具体范围见 §2 |
 | 更新日期 | 2026-10-08 |
 | pi-mono-java 源码基线 | 历史 `320d790726a70aada6100052952d5494d2a378ac`；本次局部核验 `553dcd5e2ff682f9684810a043b442b37a02e54a` |
@@ -166,7 +166,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 | `MateToolProperties` | 绑定前缀改为 `campusmate.tool`；类名可保留以避免无关 Java API 改名 |
 | `MateRestUtil` | 参数和诊断术语改为 CampusMate base URL；传输行为不变 |
 | canonical YAML 与镜像 properties | 只保留一个 `campusmate` 根和一个 Skill endpoint 键 |
-| `MateScheduleAuthorizationAdapter`与`HttpScheduledAccessTokenClient` | 分别承担 Session 归属登记和统一账号 access-token 获取，不复制业务凭据到发现请求；接口见[定时任务 D10](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions) |
+| `MateScheduleSessionRegistry`与`MateAccessTokenClient` | 分别承担 Session 归属登记和统一账号 access-token 获取，不复制业务凭据到发现请求；接口见[定时任务 D10](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions) |
 | 配置与客户端测试 | 断言6项已有operation、1项模型能力查询及1项定时草案路径共8项，各自唯一，并拒绝旧`mate.*`绑定 |
 
 不同 Maven 模块不必为了共享一个属性对象形成反向依赖；它们可以分别注入相同的
@@ -229,6 +229,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.10.0 | 2026-10-15 | 定时任务 Mate 实现类改名为 `MateScheduleSessionRegistry` 与 `MateAccessTokenClient`。 |
 | 2.9.0 | 2026-10-13 | 定时接口由上下文查询和凭据解析两项改为一项无入参 access-token 接口，目标路径共8项。 |
 | 2.8.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 2.7.2 | 2026-10-08 | 移除执行上下文与凭据HTML展示及生成入口，保留Markdown接口草案。 |
