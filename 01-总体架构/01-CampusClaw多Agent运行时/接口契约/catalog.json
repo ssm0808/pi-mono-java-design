@@ -1,5 +1,5 @@
 {
-  "version": "1.14.0",
+  "version": "1.15.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -88,8 +88,8 @@
       "key": "ListAgentEvents",
       "source": "查询契约/操作/01-list-agent-events.json",
       "common": "接口契约/common.json",
-      "status": "契约已对齐 PR #339",
-      "note": "供 Mate Trace 只读调用；用户权限与审计由 Mate 负责。实现见 pi-mono-java PR #339，未合入不表示已部署。",
+      "status": "已确认目标契约 · total 待 PR #339 实现",
+      "note": "供 Mate Trace 只读调用；用户权限与审计由 Mate 负责。实现见 pi-mono-java PR #339，响应 total 待补，未合入不表示已部署。",
       "design": "agent-user-events-design.md#api"
     },
     {
