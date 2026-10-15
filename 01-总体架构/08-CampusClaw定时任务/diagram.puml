@@ -26,7 +26,7 @@ return 已认领的 Run
 == 准备并受理 ==
 ref over Schedule, Store
   共用受理流程
-  Session 归属登记 -> Runtime 准备 -> 原子受理
+  Agent 校验 -> 归属登记 -> Runtime 准备 -> 原子受理
   见 schedule_run_admission
 end ref
 return 已提交的受理结果\n和同次准备的上下文
@@ -247,7 +247,7 @@ Schedule -> Store ++ : 读取当前任务并预留一个手动 Run\n检查共用
 return 已预留的 Run
 ref over Schedule, Store
   共用受理流程
-  Session 归属登记 -> Runtime 准备 -> 原子受理
+  Agent 校验 -> 归属登记 -> Runtime 准备 -> 原子受理
   见 schedule_run_admission
 end ref
 return 200 + Run（含 Session ID）
@@ -264,7 +264,7 @@ end note
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java submitLocked。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage。
 ' 表达方式：定时任务管理协调事务；Session 运行时提供准备和持久化能力。
-' 设计原因：远程归属登记在短受理事务之前完成；执行授权只在配置任务时由 Mate 检查。
+' 设计原因：Agent 校验在归属登记之前，已删除或禁用时不留待核对登记；远程归属登记在短受理事务之前完成；执行授权只在配置任务时由 Mate 检查。
 ' PR 证据：e9d31e8888a81b7fe95071e705482bb16fa10476，2026-10-10 拉取。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/schedule/ScheduledRuntimeAdmissionService.java newSession 和 encodeContext。
 ' Java 差异：移除 Claw 的用户引用；Mate 归属登记待实现。
@@ -282,6 +282,9 @@ participant "Session 运行时" as Runtime
 database "存储" as Store
 autonumber
 [-> Schedule ++ : 受理一个已预留的 Run
+== 校验 Agent ==
+Schedule -> Mate ++ : 按 agentId 校验 Agent 存在且启用\n不查用户资格
+return 存在且启用
 == 登记独立归属 ==
 Schedule -> Schedule : 固定本次 Run 拟建的 Session ID
 Schedule -> Mate ++ : 按资源 ID 登记 Session 归属\nClaw 不提供用户、租户或 owner
@@ -297,7 +300,7 @@ end
 note over Schedule, Store
   Mate 归属登记独立完成，不存在跨库事务。
   受理在同一事务内使用 Runtime 持久化能力。
-  已受理的 Run 保留准备上下文，供后续分发使用。
+  调度上下文只在内存中传给 Runtime，不落库。
   本流程不调用模型或工具。
 end note
 @enduml

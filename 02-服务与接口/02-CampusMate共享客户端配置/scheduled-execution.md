@@ -97,7 +97,7 @@ Claw 新增 `ScheduledAccessTokenClient`，在工具批次执行前取得值并�
 
 共享端点目录增加 `scheduled-access-token-path`，仍只有一个 `campusmate.base-url`。全局结构复用 [M10 目标类图](../../01-总体架构/08-CampusClaw定时任务/README.md#class-diagram)。
 
-验收覆盖：一批多个需要凭据的工具只取一次；只含无凭据工具、参数错误或 ASK 时不取；两批之间重新取；子 Agent 各自获取；取 Token 失败时本批工具不执行且不重试其他账号；Header 只含 `access-token`；Token 不进日志、事件和数据库；execute 结果未知不重放。需要真实 Mate/Claw 联调和公司认证中心验证。
+验收覆盖：一批多个需要凭据的工具只取一次；只含无凭据工具、参数错误或 ASK 时不取；两批之间重新取；Subagent 各自获取；取 Token 失败时本批工具不执行且不重试其他账号；Header 只含 `access-token`；Token 不进日志、事件和数据库；execute 结果未知不重放。需要真实 Mate/Claw 联调和公司认证中心验证。
 
 ## 版本历史
 

@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.21.0 · 日期：2026-10-14 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.22.0 · 日期：2026-10-15 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -10,7 +10,7 @@
 
 正常调用由应用在短事务内提交输入与固定执行身份，事务外执行模型和园区业务，再将完整结果与公共投影提交；统计只在其所属事务规则下更新。失败时数据库事务回滚，已发生的外部业务不会随之回滚；未知结果先读持久记录对账，不自动重放业务。各模块继续解释流程、接口和权限，本文统一维护其数据库结构。
 
-**本文是 Claw 数据库设计的唯一主文件。** 表清单、字段、主外键、约束、索引、数据生命周期及结构增量集中于此。各业务文档双向链接到对应表或增量章节；SQL 文件作为对应版本的实施材料或待实现片段关联，不能代替全库设计，也不能各自定义另一套有效结构。现有图继续由所属模块维护，本文复用链接，不另画一套实现类图。
+**本文是 Claw 数据库设计的唯一主文件。** 表清单、字段、主外键、约束、索引、数据生命周期及结构增量集中于此；定时任务两张表例外，随定时任务设计单一文档维护，本文 §5 只保留入口。各业务文档双向链接到对应表或增量章节；SQL 文件作为对应版本的实施材料或待实现片段关联，不能代替全库设计，也不能各自定义另一套有效结构。现有图继续由所属模块维护，本文复用链接，不另画一套实现类图。
 
 ### 1.1 核验快照
 
@@ -35,7 +35,7 @@
 | M4 | [modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_privileges.sql](https://github.com/superheromeZzh/pi-mono-java/blob/769e86592285f4a25b0febaf551eddea6bc7212c/modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_privileges.sql)；`GRANT` | 主线 19 表的运行身份 DML 授权 |
 | M5 | [modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_initial_data.sql](https://github.com/superheromeZzh/pi-mono-java/blob/769e86592285f4a25b0febaf551eddea6bc7212c/modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_initial_data.sql)；`BEGIN / COMMIT` | 主线没有静态业务种子，每会话事务初始化自身行 |
 
-定时任务代码证据 S1～S6 见 §5.7。目标 SQL 的适用状态与所属设计见 §8；新环境完整安装脚本与局部示意不能互换。
+定时任务代码证据 S1～S6 见[定时任务设计 §3.2.7](../01-总体架构/08-CampusClaw定时任务/README.md#source-baseline)。目标 SQL 的适用状态与所属设计见 §8；新环境完整安装脚本与局部示意不能互换。
 
 <a id="table-index"></a>
 
@@ -64,9 +64,9 @@
 | [t_skill_usage](#t_skill_usage) | 每次 Skill 工具成功返回正文的调用事实；同一次调用重复投递不更新来源或时间 | M；有 D 增量 | [Skill 统计](../04-命令与技能/03-Skill加载统计/README.md) |
 | [t_skill_usage_stats](#t_skill_usage_stats) | Skill 工具成功调用累计次数；删除执行事实不减计数 | M；有 D 增量 | [Skill 统计](../04-命令与技能/03-Skill加载统计/README.md) |
 | [t_skill_usage_daily_stats](#t_skill_usage_daily_stats) | 按 Asia/Shanghai 自然日归属的工具成功调用汇总，与事实及累计同事务提交 | M；有 D 增量 | [Skill 统计](../04-命令与技能/03-Skill加载统计/README.md) |
-| [t_schedule](#t_schedule) | 任务配置与自动计划游标 | S；有 D 修改 | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) |
-| [t_schedule_run](#t_schedule_run) | 一次触发是否受理及原根执行关联，同任务唯一未结束 Run | S；有 D 修改 | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) |
-| [t_schedule_dispatch_state](#t_schedule_dispatch_state) | PR 的扫描协调表，目标撤销整表 | S；目标撤销 | [PR #332 差异](#schedule-pr-diff) |
+| [t_schedule](../01-总体架构/08-CampusClaw定时任务/README.md#t_schedule) | 任务配置与自动计划游标 | S；有 D 修改 | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) |
+| [t_schedule_run](../01-总体架构/08-CampusClaw定时任务/README.md#t_schedule_run) | 一次触发是否受理及原根执行关联，同任务唯一未结束 Run | S；有 D 修改 | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) |
+| [t_schedule_dispatch_state](#t_schedule_dispatch_state) | PR 的扫描协调表，目标撤销整表 | S；目标撤销 | [PR #332 差异](../01-总体架构/08-CampusClaw定时任务/README.md#schedule-pr-diff) |
 | [t_session_execution_links](#subagent-links) | 一次父调用与独立子会话首执行关联 | D | [统一执行历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) |
 
 Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存其引用及必要执行快照；[Agent 元数据的五张表](02-Agent元数据GaussDB/README.md)属于 Mate 数据库设计，不在上面 Claw 安装表数中。凭据秘密由 Mate 保管；附件对象及 Chat 映射也各归所属服务，不为统一文档擅自复制到 Claw 库。
@@ -637,192 +637,25 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 ## 5. 定时任务表
 
-定时任务只新增 `t_schedule` 与 `t_schedule_run` 两张表，不修改 §4 的 Session 与根执行表，不计入 §4 的主线表数。下文表格只列目标结构；PR #332 中需要撤销或改名的列、表和索引集中在 [§5.5](#schedule-pr-diff)。身份字段遵守 §3.1：用户、范围和 Session 归属由 Mate 维护，Claw 不保存。
-
-### 5.1 表职责与关联
-
-| 表 | 权威职责 | 关联及生命周期 |
-|---|---|---|
-| `t_schedule` | 当前任务配置与自动计划游标 | 一条配置对应多条 Run；删除时与其 Run 同事务删除 |
-| `t_schedule_run` | 一次触发是否受理、受理时的 Session 与根执行身份，以及同任务唯一未结束 Run | `schedule_id` 外键指向配置并级联删除；`session_id`、`execution_id` 为逻辑引用，不设外键 |
-| `t_sessions`、`t_session_executions` | 已受理会话与根执行，结构不变 | 不受 Schedule/Run 删除级联；用户在定时会话中继续对话不改变原 Run 的关联 |
-
-一次受理对应一个 Session 和一个根执行，由同库事务与锁内检查维持，不靠唯一约束或外键。同任务不并发由 `t_schedule_run` 的部分唯一索引表达，`t_schedule` 不保存指向 Run 的列，避免与级联删除形成循环依赖。
-
-不新增 gap 表、请求去重表、扫描协调表、可恢复的墓碑或隐藏归档。停机期间错过的计划只推进游标；任务忙时跳过会形成一条已结束且未受理的 Run。不同手动请求各自分配 runId，内容相同也不合并。
+定时任务只新增 `t_schedule` 与 `t_schedule_run` 两张表，不修改 §4 的 Session 与根执行表，不计入 §4 的主线表数。表结构、约束、索引、事务与 PR #332 差异统一在[定时任务设计 §3.2](../01-总体架构/08-CampusClaw定时任务/README.md#persistence-lifecycle)维护，本文不再复制。
 
 <a id="t_schedule"></a>
-
-### 5.2 t_schedule：任务配置
-
-各列没有数据库 DEFAULT，由应用赋值。表名统一 `t_` 小写蛇形，SQL 对象注释使用中文。
-
-| 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
-|---|---|---|---|---|
-| id | VARCHAR(41) | 否 | — | `schedule-` 加 32 位 UUID 十六进制 |
-| agent_id | VARCHAR(38) | 否 | — | 任务关联的 Agent 标识；每次运行按它新建 Session，修改后只影响之后的运行 |
-| name | VARCHAR(256) | 否 | — | 任务名称 |
-| description | VARCHAR(2048) | 是 | — | 任务描述 |
-| prompt | TEXT | 否 | — | 纯文本任务内容，受理时作为首条用户消息提交 |
-| cron_expression | TEXT | 是 | — | Spring 六字段表达式；仅手动运行的任务为空 |
-| timezone | TEXT | 是 | — | 与 Cron 成对保存的时区，缺省值由服务归一化 |
-| status | VARCHAR(16) | 否 | — | `active` / `paused` |
-| paused_reason | VARCHAR(64) | 是 | — | 当前暂停原因：人工暂停存 `manual`，自动暂停存触发暂停的 Run 的 error_type（目前仅 `agent_unavailable_error`），投影为 `{type:error,error:{type}}`；规则见[主设计 D12](../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions) |
-| metadata | TEXT | 否 | — | 附加元数据 JSON 对象，无值时写 `{}` |
-| last_run_at | TIMESTAMPTZ(0) | 是 | — | 最近一次自动运行的受理时刻，在受理事务中写数据库当前时间；手动、准备失败和忙跳过不更新 |
-| upcoming_run_at | TIMESTAMPTZ(0) | 是 | — | 下一次自动运行的计划时刻，即扫描游标；到期领取后推进；仅手动、暂停或规则无后续时刻时为空 |
-| created_at | TIMESTAMPTZ(0) | 否 | — | 创建时间 |
-| updated_at | TIMESTAMPTZ(0) | 否 | — | 配置更新时间；写 last_run_at 不改它 |
-
-主键：`id`。
-
-| 索引 | 规则 | 支持的访问 |
-|---|---|---|
-| idx_schedule_due | `(status, upcoming_run_at, id)` | 各副本每秒扫描 active 且到期的任务 |
-| idx_schedule_list | `(updated_at DESC, id)` | 按更新时间返回全部任务，由 Mate 分批拉取后按用户过滤 |
-
-数据库约束：
-
-- status 只能是 `active` / `paused`。
-- active 时 paused_reason 为空，paused 时非空。
-- cron_expression 与 timezone 同空或同非空。
-
-暂停原因的具体枚举、Cron 可解析性、JSON 结构与引用资格由应用校验。资源 `type` 是响应常量，不落库；`upcomingRunsAt` 由保存的规则计算，不存多个未来时刻。JSON 以 TEXT 保存，不新增 JSON 查询或索引。
-
 <a id="t_schedule_run"></a>
-
-### 5.3 t_schedule_run：一次触发记录
-
-各列没有数据库 DEFAULT。Run 只记录是否受理，不代表园区业务成功；业务状态和错误从原 Session 与根执行读取。
-
-| 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
-|---|---|---|---|---|
-| id | VARCHAR(36) | 否 | — | `run-` 加 32 位 UUID 十六进制 |
-| schedule_id | VARCHAR(41) | 否 | — | 所属任务；外键 `ON DELETE CASCADE` |
-| agent_id | VARCHAR(38) | 否 | — | 领取时任务关联的 Agent；受理时与任务当前值不同则不受理 |
-| trigger_type | VARCHAR(16) | 否 | — | `manual` / `schedule`，投影为 triggerContext.type |
-| scheduled_at | TIMESTAMPTZ(0) | 是 | — | 自动触发的计划时刻（UTC）；手动为空 |
-| error_type | VARCHAR(64) | 是 | — | 未受理原因，投影为 error.type；error.message 按请求语言生成，不落库 |
-| session_id | VARCHAR(40) | 是 | — | 受理时创建的 Session |
-| execution_id | VARCHAR(64) | 是 | — | 本次首消息的根执行，内部对账用，不公开 |
-| lease_until | TIMESTAMPTZ(3) | 否 | — | 受理准备期限，内部使用。领取时写入：手动为领取时刻加 10 秒；自动取该值与 scheduled_at 加 5 秒中较早者。受理和清理都在行锁内与数据库当前时间比较，过期未受理的 Run 不得受理 |
-| created_at | TIMESTAMPTZ(0) | 否 | — | 创建时间 |
-| finished_at | TIMESTAMPTZ(0) | 是 | — | 结束时间，不公开；为空表示仍占用任务 |
-
-主键：`id`。外键：`schedule_id → t_schedule(id) ON DELETE CASCADE`。
-
-| 索引 | 规则 | 支持的访问 |
-|---|---|---|
-| 自动触发唯一 | 唯一 `(schedule_id, scheduled_at)` | 同一计划时刻只领取一次；UTC 区分夏令时重复钟面 |
-| uk_schedule_run_unfinished | 唯一 `(schedule_id) WHERE finished_at IS NULL` | 同一任务至多一条未结束 Run，即不并发 |
-| idx_schedule_run_list | `(schedule_id, created_at DESC, id DESC)` | 按任务或时间倒序查询 Run，from/to 走同一索引 |
-| idx_schedule_run_retention | `(finished_at, id)` | 批量删除超过保留期的已结束 Run |
-| uk_schedule_run_execution | 唯一 `(execution_id)`，空值不参与 | 根执行终态提交时按 execution_id 结束本次 Run；一个根执行至多对应一条 Run |
-
-数据库约束：
-
-- manual 的 scheduled_at 为空，schedule 的 scheduled_at 非空。
-- session_id 与 error_type 不能同时非空；准备中两者都空。
-
-**阶段由列推出，不保存状态列。**
-
-| 阶段 | finished_at | session_id | error_type | 占用任务 |
-|---|---|---|---|---|
-| 准备中 | 空 | 空 | 空 | 是 |
-| 已受理，执行中或结果未知 | 空 | 非空 | 空 | 是 |
-| 已受理，根执行已结束 | 非空 | 非空 | 空 | 否 |
-| 未受理（准备失败、过期、任务忙） | 非空 | 空 | 非空 | 否 |
-
-忙跳过在插入时即带 finished_at，不占用任务。受理后由原实例在进程内直接启动；之后任何时刻失联都按结果未知处理，Run 保持未结束，自动恢复见[待定 T9](../01-总体架构/08-CampusClaw定时任务/pending-alignment.md#todo-t9)。
-
-公开接口（[Run 查询](../01-总体架构/08-CampusClaw定时任务/configuration.md#411-run-查询与删除后的历史待实现)）只返回 session_id 与 error_type 恰好一个非空的记录，投影 id、schedule_id、agent_id、trigger_type、scheduled_at、session_id、error_type、created_at。列表可按 scheduleId、triggerType、hasError 与 createdAt 区间 `[from, to)` 筛选，按 `created_at DESC, id DESC` 页码分页；triggerType、hasError 只有两个值，不单独建索引。
-
-单独删除 Session 不清空 Run.session_id，不级联删除 Run，也不把已受理改成失败；原会话链接可能返回 404。
-
 <a id="transactions"></a>
-
-### 5.4 事务、删除与保留
-
-| 操作 | 同一事务内维持的不变量 |
-|---|---|
-| 创建、修改、暂停、恢复任务 | 最新配置、状态与暂停原因、游标一起提交，不保存配置版本；暂停不结束在途 Run；远端授权准备在锁外，锁内复查 |
-| 领取 Run | 锁 Schedule；任务无未结束 Run 时插入未结束 Run，有则插入带 finished_at 的忙跳过 Run；自动触发同时推进游标 |
-| 受理 | 锁 Schedule 与 Run，复查任务存在（自动运行要求 active 且未过派发期限，手动运行允许 active 或 paused）、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过；不查询用户执行资格（D10）；首消息用锁内读到的最新 prompt；Session、首消息、根执行、Run 关联与自动运行的 last_run_at 一起提交 |
-| 受理后启动 | 原实例在进程内启动，不写启动权；模型与业务执行不在受理事务内 |
-| 根执行终态提交 | Runtime 写根执行终态的同一事务内，按 execution_id 条件更新本次 Run 的 finished_at，释放任务；Run 已删除时更新 0 行；只看本次根执行，会话后续聊天不改写；终态写不进（结果未知）不释放，见 T9 |
-| 记录未受理 Run | 锁 Run 写 finished_at 与 error_type；自动运行且为 agent_unavailable_error 时同事务锁 Schedule，仍为 active 且 agent_id 等于 Run.agent_id 才改为 paused 并写 paused_reason |
-| 清理过期准备 | 锁 Run，只对 session_id、error_type 都为空且 lease_until 已过的 Run 写 finished_at 与错误 |
-| 保留期清理 | 按 `(finished_at, id)` 批量删除超期的已结束 Run，不级联 Session，不删除未结束 Run |
-| 删除任务 | 锁 Schedule，同事务删除 Run 与 Schedule；受理先提交则保留 Session，删除先提交则拒绝旧准备结果；外键级联作兜底 |
-
-删除不取消、不回滚已发生的园区业务；已受理会话由自身权限与停止入口管理。删除后的回调只条件更新仍存在的记录，影响行数为零时不重新插入。
-
-Run 保留 30 天；清理频率与批量见[部署初始值](../01-总体架构/08-CampusClaw定时任务/README.md#deployment-defaults)。Session 的保留策略归其自身模块。
-
-定时业务时间遵守[统一秒级规则](../01-总体架构/01-CampusClaw多Agent运行时/time-contract.md)；内部的 lease_until 保留毫秒。定时器、线程、本地缓存与本地计时都不是权威状态，不能覆盖数据库游标、Run 关联或根执行。
-
 <a id="schedule-pr-diff"></a>
 <a id="t_schedule_dispatch_state"></a>
-
-### 5.5 PR #332 差异
-
-PR #332 已实现定时任务表，未合入 main。下表列出它与 §5.2–§5.4 目标结构的全部差异，实施时按此修改 PR，不以 PR 结构为准。
-
-| 对象 | PR #332 | 目标 | 原因 |
-|---|---|---|---|
-| t_schedule.scope_ref、operator_ref | 保存管理范围与操作者 | 撤销 | 范围、操作者与审计在 Mate |
-| t_schedule.session_owner_ref | 保存会话归属 | 撤销 | Session 归属在 Mate |
-| t_schedule.credential_ids | 保存凭据引用 | 撤销 | 运行时统一使用 Mate 账号的 access-token，不落库 |
-| t_schedule.message | 单条 user.message 的 JSON | 改为 `prompt` TEXT | 只保存纯文本任务内容 |
-| t_schedule.revision、t_schedule_run.revision | 配置版本，受理时比较 | 撤销 | 受理改为锁内比较 agent_id |
-| t_schedule.active_run_id | 指向在途 Run，实现同任务占用 | 撤销 | 改用 `uk_schedule_run_unfinished` |
-| t_schedule.next_fire_at | 自动计划游标 | 改名 `upcoming_run_at` | 与接口字段一致 |
-| t_schedule_run.scope_ref | Run 范围 | 撤销 | 同 Schedule |
-| t_schedule_run.state | PREPARING / READY / STARTING / FINISHED | 撤销 | 阶段由 finished_at、session_id、error_type 推出 |
-| t_schedule_run.claim_owner、claim_epoch | 领取实例与代次 | 撤销 | 锁内检查 lease_until 已足以阻止失效准备者受理 |
-| t_schedule_run.root_event_id、segment_id | 首消息事件与初始段 | 撤销 | 可由 `t_session_executions` 与初始段按 execution_id 查到 |
-| t_schedule_dispatch_state | 单行表：领跑者、代次、租约、恢复边界 | 撤销整表 | 各副本以 `FOR UPDATE SKIP LOCKED` 并行扫描，锁内复查游标；超过 5 秒的计划直接推进，见[不补跑](../01-总体架构/08-CampusClaw定时任务/README.md#no-catch-up)；GaussDB 不支持 SKIP LOCKED 时退回 FOR UPDATE |
-| t_sessions.scope_ref、session_owner_ref | 会话范围与归属 | 撤销 | 归属在 Mate，按 sessionId 维护 |
-| t_session_executions.started_at | 实际开始时刻 | 撤销 | last_run_at 改为受理时刻 |
-| t_session_executions.execution_context_json | 编码 scheduleId、runId、agentId、范围、归属、授权、凭据 | 撤销 | 调度上下文只在原实例内存中传给 Runtime 与子 Agent；反查用 Run.execution_id |
-| t_session_executions.schedule_start_state、owner、deadline 及 idx_t_session_executions_schedule_start | 一次性启动权：READY→STARTING，过期置 FENCED | 撤销 | 只在受理的原实例上执行；失联按结果未知处理，代价是该窄窗口不能自动释放任务，见 T9 |
-| idx_schedule_scope_list | `(scope_ref, updated_at DESC, id)` | 改为 `idx_schedule_list(updated_at DESC, id)` | 去掉 scope 前缀 |
-| idx_schedule_run_list | `(scope_ref, created_at DESC, id DESC)` | 改为 `(schedule_id, created_at DESC, id DESC)` | 按任务查询 |
-| idx_schedule_run_retention | `(state, finished_at, id)` | 改为 `(finished_at, id)` | state 已撤销 |
-| uk_schedule_run_unfinished | 无 | 新增 | 同任务不并发 |
-| uk_schedule_run_execution | 无 | 新增 | 终态提交时按 execution_id 结束 Run |
-
 <a id="gaps"></a>
-
-### 5.6 实现差距与验收
-
-| 项目 | 状态与边界 |
-|---|---|
-| PR 结构差异 | **待修改**：按 §5.5 修改 DDL、Mapper、受理与扫描逻辑，JSON 编解码相应简化 |
-| 安全配置快照、Agent 发布版本 | 原主设计包含这些目标，PR 与目标表都没有对应列。**待设计**，本文不为此擅自增列；Run.agent_id 只用于受理比较 |
-| 标识长度 | Run.session_id 为 40、execution_id 为 64，既有根表对应列为 128；跨入口 ID 上限须核验，不能默认已对齐 |
-| GaussDB 能力 | **未验收**：NULL 参与唯一约束、部分唯一索引、SKIP LOCKED、时间函数与锁竞争须在真实 GaussDB 上验证；PR 报告的 PostgreSQL 验证不能替代 |
-| 查询性能 | 首版由 Mate 拉取全部任务或 Run 后过滤，全量读取耗时须联调并查看 GaussDB 执行计划；索引存在不等于查询已使用它 |
-| 存量升级 | S1 是会 DROP 并重建的全量安装脚本，不是升级方案；存量迁移不在首版范围 |
-
-实施至少验证：同一自动计划并发只受理一次、手动与自动互斥、更新/暂停/删除与受理竞争、事务中途失败全回滚、重复内部通知不创建第二个 Session、受理后失联保持未知且不释放任务、删除任务后根执行仍可收尾、删除 Session 后 Run 保留受理事实、历史清理不删除会话。真实 GaussDB 执行计划、两副本故障注入和企业身份联调分别记录，文档校验不能替代。
-
 <a id="source-baseline"></a>
 
-### 5.7 定时源码证据
-
-所有实现路径均属于 `pi-mono-java`，链接固定到 PR #332 head；§5.5 中 PR 一列的字段长度、可空性和索引以 S1 为证据。
-
-| 编号 | 仓库相对路径与关键符号 | 证明范围 |
-|---|---|---|
-| S1 | [modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql](https://github.com/superheromeZzh/pi-mono-java/blob/e9d31e8888a81b7fe95071e705482bb16fa10476/modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql#L616)；`t_schedule`、`t_schedule_run`、`t_schedule_dispatch_state`，以及 `t_sessions`、`t_session_executions` | 三张新表、既有表扩展、CHECK、外键与索引；是新环境完整安装脚本 |
-| S2 | [modules/coding-agent-cli/src/main/resources/mapper/schedule/ScheduleMapper.xml](https://github.com/superheromeZzh/pi-mono-java/blob/e9d31e8888a81b7fe95071e705482bb16fa10476/modules/coding-agent-cli/src/main/resources/mapper/schedule/ScheduleMapper.xml)；`lockSchedule`、`lockDispatchState`、`updateRun`、`releaseActiveRun`、`listRuns`、`deleteExpiredRuns` | 行锁、领取身份条件更新、查询与清理；`now` 使用数据库 `clock_timestamp()` |
-| S3 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/application/ScheduleApplicationService.java](https://github.com/superheromeZzh/pi-mono-java/blob/e9d31e8888a81b7fe95071e705482bb16fa10476/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/application/ScheduleApplicationService.java)；`createLocked`、`update`、`delete`、`pause`、`unpause` | 配额协调、最新行合并、配置及 Run 同事务删除 |
-| S4 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/dispatch/ScheduleRunCoordinator.java](https://github.com/superheromeZzh/pi-mono-java/blob/e9d31e8888a81b7fe95071e705482bb16fa10476/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/dispatch/ScheduleRunCoordinator.java)；`claim`、`accept`、`requireAcceptance`、`reconcilePersisted` | 领取、事务外准备、事务内复查与原根执行对账 |
-| S5 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/schedule/ScheduledRuntimeAdmissionService.java](https://github.com/superheromeZzh/pi-mono-java/blob/e9d31e8888a81b7fe95071e705482bb16fa10476/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/schedule/ScheduledRuntimeAdmissionService.java)；`accept`、`start`、`recoverExpiredStarts`、`encodeContext` | 同事务创建会话、提交后启动、配置删除后的独立收尾与最小上下文 |
-| S6 | [modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeExecutionControlMapper.xml](https://github.com/superheromeZzh/pi-mono-java/blob/e9d31e8888a81b7fe95071e705482bb16fa10476/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeExecutionControlMapper.xml#L26)；`saveExecutionContext`、`claimScheduledStart`、`fenceExpiredScheduledStart` | 数据库启动期限、READY→STARTING / FENCED 的条件更新 |
-
-JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/application/ScheduleJsonCodec.java` 的 `write/metadata/credentials` 与同目录 `ScheduleConfigurationMerger.java` 的 `merge/message/metadata/credentials`；同一 PR head。临时上下文清理检索范围为 `modules/coding-agent-cli/src/main` 中上述扩展列的写入及 Mapper 更新。
+| 内容 | 位置 |
+|---|---|
+| 表职责与关联 | [§3.2.1](../01-总体架构/08-CampusClaw定时任务/README.md#schedule) |
+| t_schedule | [§3.2.2](../01-总体架构/08-CampusClaw定时任务/README.md#t_schedule) |
+| t_schedule_run | [§3.2.3](../01-总体架构/08-CampusClaw定时任务/README.md#t_schedule_run) |
+| 事务、删除与保留 | [§3.2.4](../01-总体架构/08-CampusClaw定时任务/README.md#transactions) |
+| PR #332 差异 | [§3.2.5](../01-总体架构/08-CampusClaw定时任务/README.md#schedule-pr-diff) |
+| 实现差距与验收 | [§3.2.6](../01-总体架构/08-CampusClaw定时任务/README.md#gaps) |
+| 定时源码证据 S1～S6 | [§3.2.7](../01-总体架构/08-CampusClaw定时任务/README.md#source-baseline) |
 
 <a id="pending-changes"></a>
 
@@ -907,7 +740,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 | 用户消息、确认、停止 | 根执行、结果段、触发/终止事件关联及决定交接一起维持固定执行身份；一个 Session 只允许一个非 TERMINAL 根执行 | [执行控制](../01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md)；§4 列出实际约束，不能仅凭索引证明所有竞争已验收 |
 | 公共历史与恢复 | Entry 与安全事件各自按序号读；投影记录保存期望数量，零表示显式私有；缺失/数量不符失败，不返回伪造空历史 | [ListEvents](../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)；M2 的非递归实现已核验 |
 | Session 删除 | 当前主线先写不可复用 ID 墓碑与清理任务，记录已清理 Skill 事实范围；关联数据按依赖清理，不假设所有表都有 Session 外键或级联 | [Session 生命周期](01-会话记忆GaussDB/README.md#65-删除-session)；M2 的墓碑/任务/清理 DML 已核验，后台清理重试不是重跑园区业务 |
-| 调度受理与删除 | Schedule/Run 与 Session/根执行同库受理；删 Schedule/Run 保留已受理 Session；晚到回调不复活资源 | [调度数据库事务](#transactions)；S 增量 |
+| 调度受理与删除 | Schedule/Run 与 Session/根执行同库受理；删 Schedule/Run 保留已受理 Session；晚到回调不复活资源 | [调度数据库事务](../01-总体架构/08-CampusClaw定时任务/README.md#transactions)；S 增量 |
 | Subagent 受理与删除 | 父调用关系与子 Session/首消息/根执行同事务；双方独立授权与保留，未知不能冒充终态 | [父子关系](#subagent-links)；D 增量 |
 | Skill 统计与清理 | 当前主线用独立事实及累计/日表；目标改为完整结果与累计同事务，删除登记历史缺口但不扣累计 | [目标及切换](#skill-target)；两条写入路径不可同时累计同一指标 |
 
@@ -937,7 +770,8 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.21.0 | 2026-10-15 | t_skill_usage.entry_point 的 Subagent 来源值改为 SUBAGENT，约束同步改名。 |
+| 1.22.0 | 2026-10-15 | t_skill_usage.entry_point 的 Subagent 来源值改为 SUBAGENT，约束同步改名。 |
+| 1.21.0 | 2026-10-15 | 定时任务两张表的结构移入定时任务设计 §3.2，§5 只保留入口。 |
 | 1.20.0 | 2026-10-14 | §5.4 受理行与主设计 §3.5、D10 对齐：手动运行允许 paused，删除“授权有效”。 |
 | 1.19.0 | 2026-10-14 | 合入 main：按 Agent 查询只读 user.message，部分索引 idx_t_session_events_session_user_time 的条件改为 `type = 'user.message'`（main 原记为 1.3.1）。 |
 | 1.18.0 | 2026-10-14 | 合入 main：按 Agent 查询用户事件改为经 t_sessions.agent_id 找会话，撤销事件表 agent_id 冗余列，改登记两个索引（main 原记为 1.3.0）。 |
