@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.57.0 |
+| 文档版本 | 0.58.0 |
 | 更新日期 | 2026-10-15 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；不选择或追加已有 Session |
@@ -166,7 +166,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 
 ![定时任务整体时序](scheduled_task_overview.svg)
 
-[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L301)
+[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L316)
 
 | 阶段 | 详细时序 |
 |---|---|
@@ -452,7 +452,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 <a id="class-diagram"></a>
 
-全局目标类图（分层、依赖与生命周期）：所有新增节点和连线均为待实现；标识为既有的 Runtime 类仍需后台入口扩展。Mate 表示外部权威边界，其内部实现不在本图展开。
+全局目标类图（分层、依赖与生命周期）：已由 pi-mono-java PR #332 实现，核对范围见[源码证据 §8.22](source-evidence.md#822-全局类图与-pr-332-实现核对2026-10-15)。Mate 表示外部权威边界，其内部实现不在本图展开。
 
 ![定时任务全局目标类图](scheduled_task_architecture.svg)
 
@@ -460,12 +460,13 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 层次 | 责任与生命周期 |
 |---|---|
-| 边界与入口 | `ScheduleController` 收发 RequestVO/ResponseVO；`CronToolAdapter` 首版只读（D13），按当前会话所用 Agent 调用 list、status、runs，不调用写操作，也不向 Mate 请求授权 |
-| Mate 适配 | `MateScheduleAdapter` 只调用 Mate 的 Session 归属登记与统一账号 access-token 两个接口；保存与受理不校验 Agent 是否存在和启停用（T11） |
-| 应用编排 | `ScheduleApplicationService` 管理规则与 VO/DTO 转换；`ScheduleRunPreparation` 与受理服务承接共享入口；`ScheduleDispatcher` 推进已受理执行；均为 Spring 单例 |
-| 策略与准备 | `ScheduleTimePolicy` 统一校验与计划计算；`ScheduleAuthorizationPort` 调用 Mate 的 Session 归属登记，不是 Claw 的用户权限策略；`ScheduledAccessTokenPort` 在每批工具调用前取 access-token；`PreparedScheduleRunDTO` 每次准备的不可变快照，不代替事务内可变状态检查 |
-| 持久化 | `ScheduleRepository` 委托 `ScheduleMapper`，只收发 DTO，不引入 PO/DO/Entity |
-| Runtime 适配 | `ScheduledRunAcceptanceService` 在同库短事务中受理；`RuntimeExecutionCoordinator` 事务后启动、投影与关闭；每次独立 `ManagedAgentSession` 由公共工厂创建 |
+| 边界与入口 | `ScheduleController` 收发 RequestVO/ResponseVO；`CronTool`（由 `AgentScopedCronToolFactory` 按 Agent 创建）首版只读（D13），按当前会话所用 Agent 调用 list、status、runs，不调用写操作，也不向 Mate 请求授权 |
+| 应用编排 | `ScheduleApplicationService` 管理规则与 VO/DTO 转换；`ScheduleRunService` 处理立即运行与 Run 查询，经 `ScheduleRunGateway` 发布进程内 `ScheduleRunRequestEvent`，由 `ScheduleRunCoordinator` 在同一线程处理并回填回执，避免 Runtime 装配构造依赖环；均为 Spring 单例 |
+| 调度与运行 | `ScheduleDispatcher` 每秒扫描并交给 `ScheduleRunCoordinator`；后者领取 Run、推进游标，协调准备与受理，管理实例容量、对账与超时停止；`ScheduleRunTerminalHook` 实现终态扩展点，按 execution_id 结束 Run |
+| 策略 | `ScheduleTimePolicy` 统一校验与计划计算；`ScheduleAuthorizationPort` 调用 Mate 的 Session 归属登记，不是 Claw 的用户权限策略；`ScheduledAccessTokenPort` 在每批工具调用前取 access-token |
+| Mate 适配 | `MateScheduleAuthorizationAdapter` 实现归属登记，`HttpScheduledAccessTokenClient` 实现统一账号 access-token；只调用这两个 Mate 接口，保存与受理不校验 Agent 是否存在和启停用（T11） |
+| 持久化 | 服务直接使用 `ScheduleMapper` 收发 DTO，不另设仓储端口，不引入 PO/DO/Entity |
+| Runtime 适配 | `ScheduledRuntimeAdmissionService` 准备 `PreparedScheduledRuntimeDTO`（每次 Run 的不可变快照，不代替事务内可变状态检查），在同库短事务中受理，提交后调用 `RuntimeExecutionCoordinator` 启动一次；同时创建 `ExecutionSafetyContext` 关联到本次执行（见 [§3.10](#noninteractive)） |
 
 管理路径不调用 Session 工厂或执行协调器，立即运行入口委托运行服务复用准备与受理。Controller 不直接调用 Mapper 或模型，模型与外部 I/O 不进入配置数据库事务。
 
@@ -477,7 +478,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![Claw 配置保存](schedule_configuration_save.svg)
 
-[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L190)
+[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L205)
 
 保存步骤、并发语义与结果不确定时的处理见[§4.5](#reliable-write-flow)。
 
@@ -489,7 +490,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
-[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L221)
+[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L236)
 
 **正常调用如何完成：** 核验 Mate 服务、获准操作和目标 → 短事务锁定任务，插入一条未结束的手动 Run 占用任务，不改自动计划 → 进入[共用受理流程](#run-admission-sequence) → 返回 200 和带 sessionId 的 Run，不等待业务完成。
 
@@ -507,21 +508,21 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 | 角色 | 负责的交互 | 实现映射 |
 |---|---|---|
 | 调度器 | 发起到期扫描、提交后启动 | `ScheduleDispatcher`；各副本并行扫描，不选领跑者 |
-| 定时任务管理 | 管理配置；领取 Run，协调可信准备和原子受理 | `ScheduleApplicationService`、`ScheduleRunPreparation`、`ScheduledRunAcceptanceService` 等 M10 应用职责，不要求实现为一个大 Service |
-| Mate | 登记 Session 归属，提供统一账号的 access-token；不为 Claw 做用户授权，调用边界见 [§5.1](#security) | `MateScheduleAdapter` 对接外部 Mate |
-| Session 运行时 | 准备 Agent/模型/工具上下文；受理后推进模型与工具，保存根执行结果 | 既有 `AgentSessionFactory.create`、`RuntimeExecutionCoordinator.start` 和运行时持久化能力；后台准备与非交互 Host 策略待实现 |
-| 存储 | 原子保存任务、Run、Session/首消息/根执行，以及执行事件与终态 | 同一 GaussDB 事务资源；通过 Repository 与 Runtime 持久化协作者访问 |
+| 定时任务管理 | 管理配置；领取 Run，协调可信准备和原子受理 | `ScheduleApplicationService`、`ScheduleRunService`、`ScheduleRunCoordinator` 与 Runtime 侧的 `ScheduledRuntimeAdmissionService` |
+| Mate | 登记 Session 归属，提供统一账号的 access-token；不为 Claw 做用户授权，调用边界见 [§5.1](#security) | `MateScheduleAuthorizationAdapter`、`HttpScheduledAccessTokenClient` 对接外部 Mate |
+| Session 运行时 | 准备 Agent/模型/工具上下文；受理后推进模型与工具，保存根执行结果 | 既有 `AgentSessionFactory.create`、`RuntimeExecutionCoordinator.start` 和运行时持久化能力；非交互策略由 `ExecutionSafetyContext` 实现 |
+| 存储 | 原子保存任务、Run、Session/首消息/根执行，以及执行事件与终态 | 同一 GaussDB 事务资源；通过 `ScheduleMapper` 与 Runtime 持久化协作者访问 |
 
-受理事务由 `ScheduledRunAcceptanceService` 协调，并调用既有 Runtime 持久化能力参与同一事务；Runtime 执行器不拥有 Schedule 的生命周期判断。准备阶段只调用 Runtime 的准备能力，不启动模型；提交后的执行推进由调度器发起。Host 的工具权限判断留在 Runtime 内，Mate 的外部授权单独画出，两者不能互相替代。
+受理事务由 `ScheduledRuntimeAdmissionService` 协调，并调用既有 Runtime 持久化能力参与同一事务；Runtime 执行器不拥有 Schedule 的生命周期判断。准备阶段只调用 Runtime 的准备能力，不启动模型；提交后的执行推进由调度器发起。Host 的工具权限判断留在 Runtime 内，Mate 的外部授权单独画出，两者不能互相替代。
 
 ![独立会话定时运行](scheduled_run_sequence.svg)
 
 [原尺寸 SVG](scheduled_run_sequence.svg) · [PlantUML 源码](diagram.puml#L1)
 
 1. **分配 occurrence。** 各副本每秒按 upcoming_run_at/id 有界扫描，不按用户或租户分组；以 `FOR UPDATE SKIP LOCKED` 锁定到期的 Schedule 行，锁内复核未删除、active 与游标仍是本次计划时刻。任务无未结束 Run 时插入一条未结束 Run（部分唯一约束即占用）并推进游标；已有未结束 Run 时插入一条已结束的忙跳过 Run，不排队。超过 5 秒派发容差的处理见 [§3.8](#no-catch-up)。
-2. **归属登记与准备。** 不校验 Agent 是否存在和启停用（[T11](#todo-t11)）；先固定拟建 Session ID，由 Mate 独立登记归属并确认；再在事务外解析 Agent 已发布目录、模型、CRON profile、工作区，固定 `PreparedScheduleRunDTO`；不持数据库行锁调用远端，不调用模型或业务工具。
+2. **归属登记与准备。** 不校验 Agent 是否存在和启停用（[T11](#todo-t11)）；先固定拟建 Session ID，由 Mate 独立登记归属并确认；再在事务外解析 Agent 已发布目录、模型、CRON profile、工作区，固定 `PreparedScheduledRuntimeDTO`；不持数据库行锁调用远端，不调用模型或业务工具。
 3. **原子受理。** 同一事务锁定 Schedule 与 Run，复核任务存在且状态允许、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过与容量；创建 Session、首条用户消息（使用锁内读到的最新 prompt）、根执行，写 Run 关联，自动运行同时写 last_run_at 为数据库当前时间。任一步失败整体回滚。
-4. **事务后启动。** 受理不等待 Agent 完成。原实例在进程内直接启动一次，调度上下文（scheduleId、runId、agentId 及非交互策略）只在内存中传给 Runtime 和 Subagent，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件，不伪造 SSE 连接。模型每次返回需要凭据的工具调用时，向 Mate 取一次统一账号 access-token，本批工具共用（[D10](#key-decisions)）。Runtime、Cron 与 Subagent 共用受理原语与执行协调器，规则见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)。
+4. **事务后启动。** 受理不等待 Agent 完成。原实例在进程内直接启动一次，调度上下文（scheduleId、runId、agentId 及非交互策略）由 `ExecutionSafetyContext` 承载，只在内存中关联到本次执行并传给 Subagent，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件，不伪造 SSE 连接。模型每次返回需要凭据的工具调用时，向 Mate 取一次统一账号 access-token，本批工具共用（[D10](#key-decisions)）。Runtime、Cron 与 Subagent 共用受理原语与执行协调器，规则见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)。
 5. **Run 结束。** Runtime 提交根执行终态时，在同一事务内调用终态扩展点；定时任务的实现按 execution_id 条件更新本次 Run 的 finished_at，释放任务（[D11](#key-decisions)）。终态写入失败由 Runtime 既有重试负责，两者一起成功或一起失败。Run 已随任务删除时更新 0 行，只保留 Session 与根执行终态，不重新插入 Run 或配置。用户在同一 Session 后续发起的对话不产生新的根终态，不改写本次结果。
 
 自动和手动受理均要求配置存在；自动受理要求 active 并检查派发期限，手动受理允许 active/paused，不移动计划游标，也不更新 last_run_at。暂停或 Agent 关联变更先提交时，已领取的自动 Run 不受理；仅修改 prompt 或时间规则不取消已领取的这次运行，受理使用最新 prompt。删除先提交则不受理；受理先提交则保留 Session 并删除 Run。
@@ -536,7 +537,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![共用受理流程](schedule_run_admission.svg)
 
-[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L257)
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L272)
 
 **正常调用如何完成：** 固定拟建 Session ID，由 Mate 按资源 ID 登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、Run、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
 
@@ -589,7 +590,12 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 参数错误不属于人工交互：仍在权限判断前返回同次可信定义与 isError=true，保持 [M03](../02-CampusClaw工具系统/README.md#tool-argument-recovery) 的修参规则。结束执行不回滚此前已发生的业务操作；可靠终态提交后释放任务占用，本次失败不自动重跑。
 
-非交互限制沿根执行传递到其 Subagent 执行，不能通过子会话或工具别名绕过。根执行结束按既有取消域收尾已启动子任务；未确认终止的调用仍按停止中或未知处理。业务配置应只选择输入完整、权限已具备且无需人工决定的任务；创建时可发现的明显不支持项应拒绝，运行时仍按可信能力和实际权限兜底。首版不新增持久等待检查点、交互恢复器或无人审批队列。
+非交互限制沿根执行传递到其 Subagent 执行，不能通过子会话或工具别名绕过。
+
+**实现：`ExecutionSafetyContext`。** 受理时为本次定时根执行创建，只在内存中关联到执行，不入库，随 Subagent 传递：
+- **非交互门禁**：作为工具调用前 hook，识别提问工具、计划审核、自定义问题和权限 ASK；命中时记录 `SCHEDULE_INTERACTION_REQUIRED` 并中止根执行，`RuntimeExecutionCoordinator` 据此把终态判为失败。
+- **凭据**：按 [D10](#key-decisions) 每批需要凭据的工具调用经 `ScheduledAccessTokenPort` 取一次 access-token；取不到时本批按工具失败返回模型，不中止执行。
+- **超时**：存在该上下文的执行按 `campusclaw.schedule.execution-timeout` 超时；超时先持久化 `user.interrupt` 再中止，与调度侧超时对账读同一配置。根执行结束按既有取消域收尾已启动子任务；未确认终止的调用仍按停止中或未知处理。业务配置应只选择输入完整、权限已具备且无需人工决定的任务；创建时可发现的明显不支持项应拒绝，运行时仍按可信能力和实际权限兜底。首版不新增持久等待检查点、交互恢复器或无人审批队列。
 
 附件首版不支持：prompt 是纯文本，无法携带文件，也不保存 fileId。普通 Session 既有文件引用契约不受影响；附件长期授权和跨 Session 复用留待 M09 单独设计。
 
@@ -601,7 +607,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ![定时 Session 中的凭据来源](schedule_session_credentials.svg)
 
-[原尺寸 SVG](schedule_session_credentials.svg) · [PlantUML 源码](diagram.puml#L359)
+[原尺寸 SVG](schedule_session_credentials.svg) · [PlantUML 源码](diagram.puml#L374)
 
 **规则：凭据来源跟随根执行，不跟随 Session。** 每个根执行在受理时按入口确定一次凭据来源，执行期间不变；Session 本身不保存来源标记，先后可以有不同来源的根执行。
 
@@ -1977,6 +1983,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.58.0 | 2026-10-15 | 全局类图按 PR #332 实现更新：Run 编排为 `ScheduleRunCoordinator` 与 `ScheduledRuntimeAdmissionService`，立即运行经进程内事件，Mate 适配拆为两个类，删除仓储端口；§3.10 补充 `ExecutionSafetyContext` 的职责。 |
 | 0.57.0 | 2026-10-15 | 定时任务不再校验 Agent 是否存在和启停用、正常受理，首版取消自动暂停，Agent 启停用与数据一致性另开设计（T11）；明确凭据按根执行入口区分，定时会话中继续对话使用用户请求凭据，并在 §3.11 设计凭据切换与定时 Session 中继续对话（T12），会话归属由 Mate 用 user_id 标识，不做长期审计；新增 D13，Cron 工具首版只读，会话内写操作以后经 Mate 接口实现（T13），用户隔离记为 T14。 |
 | 0.56.0 | 2026-10-15 | 并入接口契约、待对齐事项与两张表结构成为单一设计文档，明确 Claw 只调用 Mate 的三个接口且受理先校验 Agent 再登记归属。 |
 | 0.55.0 | 2026-10-15 | D12 明确 agent_unavailable_error 的判定依据：只认 Mate 按 agentId 的存在且启用校验，Runtime 通用准备故障不暂停。 |
