@@ -27,7 +27,7 @@ return 已认领的 Run
 ref over Schedule, Store
   共用受理流程
   归属登记 -> Runtime 准备 -> 原子受理
-  见 schedule_run_admission
+  展开见设计文档 §3.6 共用受理时序图
 end ref
 return 已提交的受理结果\n和同次准备的上下文
 == 执行已受理的 Run ==
@@ -244,7 +244,7 @@ return 已预留的 Run
 ref over Schedule, Store
   共用受理流程
   归属登记 -> Runtime 准备 -> 原子受理
-  见 schedule_run_admission
+  展开见设计文档 §3.6 共用受理时序图
 end ref
 return 200 + Run（含 Session ID）
 deactivate Mate
