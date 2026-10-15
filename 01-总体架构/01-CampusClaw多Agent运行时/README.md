@@ -10,7 +10,7 @@
 
 Session 与完整事件的时间采用[统一秒级目标](time-contract.md)：UTC、无小数秒，写入和回显一致；此精度调整待实现，其他功能状态仍按各节证据。
 
-[统一执行历史](unified-event-persistence.md)维护交互、Cron、Child 的独立持久 Session、逐工具提交、父子关联与 Skill 同事务投影；新增能力待实现，最新源码范围见[专项证据](unified-event-persistence-evidence.md)。
+[统一执行历史](unified-event-persistence.md)维护交互、Cron、Subagent 的独立持久 Session、逐工具提交、父子关联与 Skill 同事务投影；新增能力待实现，最新源码范围见[专项证据](unified-event-persistence-evidence.md)。
 
 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#t_session_executions)统一维护Runtime所用表、字段、约束和索引；本文继续维护行为与契约。
 
@@ -24,9 +24,9 @@ Runtime 采用同一 POST 提交用户事件并接收该请求的 SSE，GET 读�
 
 | 本模块负责 | 所属模块维护的协作边界 |
 |---|---|
-| Runtime、Cron、Child 的执行对象装配与关闭 | [工具系统](../02-CampusClaw工具系统/README.md)维护 profile、工具实例、受管目录与缓存；[M10 定时任务](../08-CampusClaw定时任务/README.md)维护待实现的后台受理与 Run 关联 |
+| Runtime、Cron、Subagent 的执行对象装配与关闭 | [工具系统](../02-CampusClaw工具系统/README.md)维护 profile、工具实例、受管目录与缓存；[M10 定时任务](../08-CampusClaw定时任务/README.md)维护待实现的后台受理与 Run 关联 |
 | 模型与工具循环的入口协作 | [Model](../../02-服务与接口/03-Model/README.md)维护业务 Agent 设置的模型选择与流适配 |
-| 父子执行的独立上下文与生命周期 | [工具系统 Agent 工具](../02-CampusClaw工具系统/built-in-tool-contracts.md)维护委派参数与结果 |
+| 父子执行的独立上下文与生命周期 | [工具系统 Agent 工具](../02-CampusClaw工具系统/built-in-tool-contracts.md)维护调用参数与结果 |
 | Session 运行对象与持久化恢复的衔接 | [会话记忆](../../03-数据与存储/01-会话记忆GaussDB/README.md)维护上下文与存储 |
 | 模式与执行快照的衔接 | [计划模式](../06-CampusClaw计划模式/README.md)维护 plan/build 提示词、审核与续跑 |
 
@@ -98,13 +98,13 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 | 领域与传输 | Runtime 内核不依赖 Controller、SSE 或公共 Chat 类型；Application 组织领域事件到传输的投影 |
 | 对象生命周期 | Manager、应用服务、Registry 为 Spring 单例；Catalog 为请求快照；Session、工具与 Projector 按执行隔离 |
 | 持久化 | 完整消息与已确认领域记录用于恢复；有序追加采用短事务，模型调用、工具执行和网络发送不占用行锁 |
-| 父子执行 | 父子使用相同核心类型，但独立持有消息、工作区、工具和上下文；父执行负责 Child 的等待与取消传播 |
+| 父子执行 | 父子使用相同核心类型，但独立持有消息、工作区、工具和上下文；父执行负责 Subagent 的等待与取消传播 |
 
 ## 7. Manager 与多 Agent Runtime 核心
 
 ### 7.1 Agent 发布目录
 
-`AgentRuntimeManager.prepare(agentId)` 读取完整缓存，缺失时准备并发布受管目录；显式 refresh 通过临时目录校验后原子替换，失败保留旧目录。Runtime、Cron 与 Child 共用准备入口。目录文件、名称/版本校验和缓存语义由 [工具系统](../02-CampusClaw工具系统/README.md)维护；Agent 默认 mode 由 [元数据设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)维护。
+`AgentRuntimeManager.prepare(agentId)` 读取完整缓存，缺失时准备并发布受管目录；显式 refresh 通过临时目录校验后原子替换，失败保留旧目录。Runtime、Cron 与 Subagent 共用准备入口。目录文件、名称/版本校验和缓存语义由 [工具系统](../02-CampusClaw工具系统/README.md)维护；Agent 默认 mode 由 [元数据设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)维护。
 
 ![元数据发布与执行快照](设计图/元数据/metadata_runtime_directory_mapping.svg)
 

@@ -53,7 +53,7 @@ HTTP200，ResultBean.result 形状：
 | 规则 | 内容 |
 |---|---|
 | 调用时机 | 模型一次返回中，至少一个需要凭据的工具通过参数校验和权限判断后、发起 execute 前调用一次；只含无凭据工具、参数错误或权限 ASK 时不调用 |
-| 使用范围 | 同一批工具调用共用这次取得的值；子 Agent 的工具批次各自获取；不跨批次、不跨运行、不跨实例缓存 |
+| 使用范围 | 同一批工具调用共用这次取得的值；Subagent 的工具批次各自获取；不跨批次、不跨运行、不跨实例缓存 |
 | 透传方式 | 作为 `access-token` Header 传给 `tools/{toolId}/execute`，不改名、不补其他 Header |
 | 保密 | 只存在本批次的内存快照；不进日志、异常、模型提示、工具结果、Session 事件、缓存文件和数据库；对象 toString 必须脱敏 |
 | 失败 | 401/403/5xx 或返回空值时，本批需要凭据的工具都不执行，按工具失败返回模型，不换用其他账号或旧值；已发送 execute 后不因刷新 Token 重放 |
@@ -97,7 +97,7 @@ Claw 新增 `ScheduledAccessTokenClient`，在工具批次执行前取得值并�
 
 共享端点目录增加 `scheduled-access-token-path`，仍只有一个 `campusmate.base-url`。全局结构复用 [M10 目标类图](../../01-总体架构/08-CampusClaw定时任务/README.md#class-diagram)。
 
-验收覆盖：一批多个需要凭据的工具只取一次；只含无凭据工具、参数错误或 ASK 时不取；两批之间重新取；子 Agent 各自获取；取 Token 失败时本批工具不执行且不重试其他账号；Header 只含 `access-token`；Token 不进日志、事件和数据库；execute 结果未知不重放。需要真实 Mate/Claw 联调和公司认证中心验证。
+验收覆盖：一批多个需要凭据的工具只取一次；只含无凭据工具、参数错误或 ASK 时不取；两批之间重新取；Subagent 各自获取；取 Token 失败时本批工具不执行且不重试其他账号；Header 只含 `access-token`；Token 不进日志、事件和数据库；execute 结果未知不重放。需要真实 Mate/Claw 联调和公司认证中心验证。
 
 ## 版本历史
 

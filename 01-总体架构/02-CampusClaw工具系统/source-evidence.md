@@ -38,7 +38,7 @@
 | 当前 Tool 客户端从 `mate.innerGWSerive` 读取独立地址，而它的 Agent、Skill、Tool 元数据和执行路径都位于 `/mate-service/...` | `modules/coding-agent-cli/src/main/resources/application.yml:129-140`、`config/MateToolAutoConfiguration.java:31-81`、`common/client/HttpMateToolClient.java:41-83,132-320` |
 | Runtime 与 Tool 客户端分别配置 `campusmate.runtime.skill-info-query-path-template` 和 `mate.endpoints.skill-tools-query-path-prefix`，但两者规范化后都是 `GET /mate-service/v1/skill/query/{skillId}` | `runtime/MateServiceClient.java:43-113`、`common/client/HttpMateToolClient.java:145-166`、`common/dto/SkillInfoResult.java:12-20` |
 | 当前部署脚本只把 Campus 内网服务地址导出为 `MATE_INNERGWSERIVE` | `mate-campusclaw/scripts/install_value.sh:27-38` |
-| 当前 Child 同时存在 `spawn_agent` 与 `invoke_agent` 两条路径，后者通过 Session after-hook 执行 | `subagent/tool/SpawnAgentTool.java`、`tool/delegation/InvokeAgentTool.java`、`session/AgentSession.java` |
+| 当前 Subagent 同时存在 `spawn_agent` 与 `invoke_agent` 两条路径，后者通过 Session after-hook 执行 | `subagent/tool/SpawnAgentTool.java`、`tool/delegation/InvokeAgentTool.java`、`session/AgentSession.java` |
 | 当前 Cron payload 接受 model、system prompt 和 allowed tools，并依赖本地存储与 OS/进程调度 | `modules/cron/src/main/java/com/campusclaw/cron/tool/CronTool.java`、`model/CronPayload.java`、`engine/CronEngine.java` |
 | 当前 `ReadTool` 自行使用 cwd 做路径边界，`BashExecutor` 只设置子进程 cwd | `tool/read/ReadTool.java`、`util/PathUtils.java`、`tool/bash/BashExecutor.java` |
 | PR 167 按 TUI/CLI 包树删除了同时承载入口无关压缩和 Slash Command 的源码 | PR 167 `f60cc3e` 相对 merge base 的 `modules/coding-agent-cli/.../session`、`command`、`modes` 删除差异 |
@@ -99,7 +99,7 @@ Claude Managed Agents 的[工具事件模型](https://platform.claude.com/docs/e
 
 | 路径 / 符号 | 已核验实现 |
 |---|---|
-| `tool/builtin/BuiltInToolName.java`；`BuiltInToolProperties.java` · runtime/cron/childAgent；`DefaultBuiltInToolFactory.java` · create | 共 11 个活动名称；Runtime 默认依次包含八项基础工具、ExitPlanMode、TodoUpdate、AskUserQuestion；Cron/Child 缺省不含后三项。显式 profile 完全替换默认值。 |
+| `tool/builtin/BuiltInToolName.java`；`BuiltInToolProperties.java` · runtime/cron/childAgent；`DefaultBuiltInToolFactory.java` · create | 共 11 个活动名称；Runtime 默认依次包含八项基础工具、ExitPlanMode、TodoUpdate、AskUserQuestion；Cron/Subagent 缺省不含后三项。显式 profile 完全替换默认值。 |
 | `tool/plan/ExitPlanModeTool.java` · execute；`runtimeapi/runtime/RuntimeActiveExecution.java` · await、claimAndResumePlanReview | 校验完整计划、等待审核并返回真实决定；领取批准后应用 build 提示词再完成等待。 |
 | `tool/todo/TodoUpdateTool.java` · execute；`runtimeapi/event/RuntimeTodoEventMapper.java` · map；`RuntimeEventProjector.java` · persistToolResults、toolResultEvents | 校验完整列表，从最终成功结果生成任务快照；ToolResult 与 agent.todo_updated 同一次 appendEntry 提交。 |
 | `tool/question/AskUserQuestionTool.java` · execute；`runtimeapi/event/RuntimeEventProjector.java` · beginQuestion；`runtimeapi/runtime/RuntimeActiveExecution.java` · await、claimAndResumeQuestionAnswer | 发布问题并等待答案，接续同一执行；三个交互类型共享 RuntimePendingInteraction。 |
@@ -366,7 +366,7 @@ CampusClaw 选择 pi 的前置校验顺序作为 Runtime 主基线，并增加�
 | `modules/agent-core/.../AgentTool.java` · `prepare`；`PreparedToolInvocation.java`；`ToolExecutionPipeline.java` · `prepare/failureResult/recoveryContent` | Pipeline 在 before hook 前建立不可变调用；参数失败保留 `isError=true`、稳定错误码和模型可见的同次定义。 | 确认前准备与模型恢复反馈已经实现，不再标为待实现。 |
 | `modules/coding-agent-cli/.../tool/mate/CallTool.java` · `prepare`；`MateToolExecutor.java` · `prepareSkill/executePrepared`；`RuntimeToolPermissionPolicy.java` · `decide` | CallTool 在确认前解析和校验，Host 按 prepared target 决策，放行后执行同一目标和参数。 | 执行顺序已与目标一致；SearchTools 需要复用可信解析并保持披露和校验定义一致。 |
 | 同模块 `tool/mate/MateToolResolver.java` · `resolveAgentTools/resolveSkill/loadSkillTool/merge/validateCrossScopeNames`；`MateToolsetFactory.java` · `createSession` | Resolver 按 Agent 或扁平 Skill 工具名称解析元数据并缓存，已有同名同 ID 合并和同名不同 ID 拒绝；Skill 与 Agent 定义读取分别缓存。 | 可复用既有名称解析建设 SearchTools；需补发现输出与校验定义一致性接线，不能把现有缓存当作跨版本同步方案。 |
-| 同模块 `tool/builtin/BuiltInToolName.java`、`DefaultBuiltInToolFactory.java`、`BuiltInToolProperties.java` | 当前框架清单无 SearchTools。 | 新工具枚举、工厂、默认 Runtime/Cron/Child profile、严格名称测试和公司镜像均待实现。 |
+| 同模块 `tool/builtin/BuiltInToolName.java`、`DefaultBuiltInToolFactory.java`、`BuiltInToolProperties.java` | 当前框架清单无 SearchTools。 | 新工具枚举、工厂、默认 Runtime/Cron/Subagent profile、严格名称测试和公司镜像均待实现。 |
 | 同模块 `tool/skill/SkillTool.java`、`skill/SkillPromptFormatter.java`；`CallTool.java` · `description/parameters` | Skill 返回正文和普通资源路径；CallTool 文案仍指引读取定义文件。 | 宿主提示和 CallTool 文案需改为按需调用 SearchTools，且不得要求 Skill 正文引用平台工具文件。 |
 
 ### 13.3 当前目标与验收边界

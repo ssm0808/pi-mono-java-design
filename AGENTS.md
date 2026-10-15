@@ -13,6 +13,14 @@
 - 对比条目保留可用于设计答辩和面试的简要讲解：解决什么问题、参考了什么、哪里不同、为什么、代价是什么、目前实现到哪里。讲解必须能回到证据和验收，不宣称未经验证的性能、可靠性或产品能力。
 - 模块主设计变更、对比结论变更分别更新所在文档版本。图形沿用下文的 PlantUML 与全局目标类图规则；对比通过链接复用主图，不另建一套当前实现类图。
 
+## CampusClaw 术语
+
+本节版本：1.0.0；用户确认日期：2026-10-14。
+
+- Subagent 是父 Agent 通过 `Agent` 工具调用的 Agent，统一写作 Subagent；代码词根用 `subagent`，常量用 `SUBAGENT`。中英文都不写作“子 Agent”、Child 或 SubAgent，调用方仍称父 Agent。
+- 拼写依据：Claude Code、pi、OpenCode 和 Codex 对外协议均写作 subagent；代码与配置的对齐清单见[工具系统 §4.2](01-总体架构/02-CampusClaw工具系统/README.md#subagent-naming)。
+- 源码证据中引用的实际符号、已有版本历史条目和基线研究资料保留原文，不随术语改写。
+
 ## 一个主题一份设计文档
 
 本节版本：1.0.0；用户确认日期：2026-10-15。
@@ -103,7 +111,7 @@
 - Provider 流式适配和 Agent 领域事件；
 - HTTP、SSE、WebSocket、JSONL、CBOR 等运行时传输契约；
 - mate-service 公共 Chat API、浏览器实时展示和断线对账；
-- 多 Agent 的父子 Session、Thread 或子 Agent 事件投影。
+- 多 Agent 的父子 Session、Thread 或 Subagent 事件投影。
 
 ### 基线使用原则
 

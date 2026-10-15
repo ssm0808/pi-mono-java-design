@@ -163,7 +163,7 @@ GaussDB JSON/JSONB 类型参考：[Huawei Cloud GaussDB JSON/JSONB Types](https:
 | 创建缺省 | 旧元数据/旧目录完全缺少 mode 时兼容为 build；新生成定义和响应必须显式返回 mode。显式 null、空白、大小写变体、未知值和非字符串拒绝，不静默降级为 build |
 | 已有 Session | 创建时复制默认值并持久化；以后只使用 Session.mode。Agent 更新、目录刷新、消息重试、模型调整或压缩均不得覆盖已有 Session |
 | 更新 | 管理面通过既有 Agent POST 修改默认值；不调用 Session POST，不批量更新 Session。Session 手动切换仍走既有统一 POST 与准入规则 |
-| 入口优先级 | 仅新的交互根 Session 使用 Agent 默认；Child 复制调用时父执行模式，Cron 保持原 build 入口规则，不引入无人审核流程；关联 Agent 的 mode 仅是其定义默认值，不覆盖父策略 |
+| 入口优先级 | 仅新的交互根 Session 使用 Agent 默认；Subagent 复制调用时父执行模式，Cron 保持原 build 入口规则，不引入无人审核流程；关联 Agent 的 mode 仅是其定义默认值，不覆盖父策略 |
 | 配置生效 | 数据库提交后，既有 refresh/受管发布流程更新完整目录；后续创建使用实际解析到的已发布快照。prepare 复用缓存，不承诺 Agent POST 后各 Runtime 节点立即看到新默认值 |
 | 非职责 | mode 不嵌入基础 systemPrompt，不重装 Tool，不批准方案，也不创建 TODO；plan 阶段继续禁止 TODO |
 
@@ -180,7 +180,7 @@ Runtime 的传播链为：Mate Runtime 定义 → `AgentRuntime.mode` → `.camp
 | M1：元数据与数据库 | DTO/VO/Mapper 列贯通；默认/约束正确；列表、详情、根 Runtime、关联 Runtime 定义均有 mode；未知值、显式 null、非字符串拒绝 |
 | M2：管理更新与发布 | mode-only、models-only、组合更新；未提交字段保持；事务失败全部回滚；版本一次；新目录写入和重载一致，刷新失败保留旧完整目录 |
 | M3：Session 初始化 | Agent=plan/build、旧目录缺省、无审核 Tool、缓存未刷新、并发刷新；创建响应/DB 同值且无模型调用；已有 Session 不随 Agent 改动，Session 手动切换仍有效 |
-| M4：入口回归 | Child 继承父模式、Cron 保持现有规则；plan 不调用 TODO，批准后 build 正常更新实施进度 |
+| M4：入口回归 | Subagent 继承父模式、Cron 保持现有规则；plan 不调用 TODO，批准后 build 正常更新实施进度 |
 
 以上均为 待实现 验收，当前未执行产品数据库迁移、接口或模型测试。全局类图复用[计划模式主图](../../01-总体架构/06-CampusClaw计划模式/README.md#3-推荐全局目标类图)，本模块保留表图与聚合查询流程。
 

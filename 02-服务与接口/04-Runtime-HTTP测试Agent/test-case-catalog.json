@@ -261,7 +261,7 @@
       "path": "/campusclaw-service/v1/sessions/{session_id}/abort",
       "evidenceRefs": ["CONTRACT", "CONTROL_CONTROLLER", "PROCESS_IT"],
       "cases": [
-        {"id": "HTA-CTRL-ABORT-001", "priority": "P0", "layer": "process", "status": "active", "scenario": "abort a running Session", "oracle": ["model, tool, and sub-Agent cancellation propagates", "undelivered control queues are cleared", "HTTP 204 after idle convergence", "response body is empty"]},
+        {"id": "HTA-CTRL-ABORT-001", "priority": "P0", "layer": "process", "status": "active", "scenario": "abort a running Session", "oracle": ["model, tool, and subagent cancellation propagates", "undelivered control queues are cleared", "HTTP 204 after idle convergence", "response body is empty"]},
         {"id": "HTA-CTRL-ABORT-002", "priority": "P0", "layer": "process", "status": "active", "scenario": "abort an idle Session repeatedly", "oracle": ["every request returns HTTP 204", "Session remains available", "completed Entries remain unchanged"]},
         {"id": "HTA-CTRL-ABORT-003", "priority": "P0", "layer": "service", "status": "active", "scenario": "abort a missing or deleted Session", "oracle": ["HTTP 404 SESSION_NOT_FOUND", "no new Session or tombstone mutation"]},
         {"id": "HTA-CTRL-ABORT-004", "priority": "P0", "layer": "recovery", "status": "active", "scenario": "observe the original event stream after abort", "oracle": ["session.status.idle precedes stream.end", "stream.end reason is aborted", "stream.error is absent for successful abort"]}

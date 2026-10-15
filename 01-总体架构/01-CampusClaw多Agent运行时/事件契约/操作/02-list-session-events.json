@@ -1850,7 +1850,7 @@
         {
           "id": "B12",
           "title": "配置、压缩与用量",
-          "recommendation": "模型/思考配置变更和压缩保留独立完整事件，映射到统一 Session Events；Usage 放在对应完整 Agent 消息，Session 保留累计用量。不新增通用 command 生命周期或子 Agent 公共事件；build 任务进度由 agent.todo_updated 表达；已有内部记录逐类标明公开映射或不公开理由。"
+          "recommendation": "模型/思考配置变更和压缩保留独立完整事件，映射到统一 Session Events；Usage 放在对应完整 Agent 消息，Session 保留累计用量。不新增通用 command 生命周期或 Subagent 公共事件；build 任务进度由 agent.todo_updated 表达；已有内部记录逐类标明公开映射或不公开理由。"
         },
         {
           "id": "B13",

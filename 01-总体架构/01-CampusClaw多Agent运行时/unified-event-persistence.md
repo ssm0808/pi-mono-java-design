@@ -1,14 +1,14 @@
 # 统一执行历史与事件持久化
 
-版本：1.2.0 · 2026-10-14 · 状态：统一受理、Child 持久化、逐工具提交及统计投影均待实现。
+版本：1.3.0 · 2026-10-15 · 状态：统一受理、Subagent 持久化、逐工具提交及统计投影均待实现。
 
 [Runtime 主设计](README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#pending-changes) · [源码证据](unified-event-persistence-evidence.md) · [定时任务](../08-CampusClaw定时任务/README.md#normal-acceptance) · [Skill 统计](../../04-命令与技能/03-Skill加载统计/README.md) · [Session 存储](../../03-数据与存储/01-会话记忆GaussDB/README.md)
 
 ## 1. 要解决的业务问题
 
-每天 08:00，园区巡检 Agent 汇总设备告警，再调用设备诊断 SubAgent。运营人员需要查清子任务收到什么、调用哪些工具、得到什么结果；不能只剩父会话中的一句“诊断完成”。Skill 的成功调用数也应来自这些真实结果，避免另建一套采集、日志和重试链。
+每天 08:00，园区巡检 Agent 汇总设备告警，再调用设备诊断 Subagent。运营人员需要查清子任务收到什么、调用哪些工具、得到什么结果；不能只剩父会话中的一句“诊断完成”。Skill 的成功调用数也应来自这些真实结果，避免另建一套采集、日志和重试链。
 
-正常流程是：Cron 为本次 Run 新建 Session；父 Agent 调用子 Agent 时，再为该次调用新建子 Session。两者都经同一 Runtime 保存消息、工具调用、工具最终结果和终态。子会话提交结果后，父会话保存 Agent 工具的摘要结果。每条真实成功的 Skill 结果在提交时为对应累计数加一。
+正常流程是：Cron 为本次 Run 新建 Session；父 Agent 调用 Subagent 时，再为该次调用新建子 Session。两者都经同一 Runtime 保存消息、工具调用、工具最终结果和终态。子会话提交结果后，父会话保存 Agent 工具的摘要结果。每条真实成功的 Skill 结果在提交时为对应累计数加一。
 
 失败时保留已有历史。参数无效不询问用户、不执行业务；工具真实失败保存错误结果；已发请求但结果未知则保留未知，不伪造成功、失败或自动重跑。数据库提交失败也不能撤销已经发生的业务副作用。恢复先读已提交记录，无法证明的部分继续待对账。
 
@@ -20,9 +20,9 @@
 |---|---|---|
 | Runtime | Java main `769e8659` 的 Coordinator 安装 Projector；Entry 与公共事件同事务；工具结果主要在 TurnEnd 保存 | 保留共享追加骨架，增加每个最终工具结果的可靠提交点 |
 | Cron | main 仍是进程内调度、JSON/JSONL 和直接 Factory + prompt | 最新 Cron 0.31.2 / execution 0.1.0 已规定每 Run 新建 Session、原子受理后进 Runtime；本设计复用这一方向，不改调度策略 |
-| Child | main 直接创建内存 ManagedAgentSession，父侧接收进度与最后文本 | 每次真实 Agent 调用关联独立持久化 Session，统一执行与历史，不把内存对象当数据库资源 |
+| Subagent | main 直接创建内存 ManagedAgentSession，父侧接收进度与最后文本 | 每次真实 Agent 调用关联独立持久化 Session，统一执行与历史，不把内存对象当数据库资源 |
 | pi | 普通示例以 --no-session 运行子进程，但返回 details 含子消息；experimental durable 示例另建 conversation | 借鉴完整消息恢复语义；不把普通示例说成独立持久化子 Session，也不照搬 experimental API |
-| Codex / OpenCode | 非 ephemeral Codex child thread 有独立 rollout；OpenCode Task 创建/复用带 parentID 的 Session，消息与 parts 有数据库投影 | 借鉴独立子历史与父侧摘要分离；CampusClaw 首版每次新调用新建 Child，不照搬跨次 task_id 复用 |
+| Codex / OpenCode | 非 ephemeral Codex child thread 有独立 rollout；OpenCode Task 创建/复用带 parentID 的 Session，消息与 parts 有数据库投影 | 借鉴独立子历史与父侧摘要分离；CampusClaw 首版每次新调用新建 Subagent，不照搬跨次 task_id 复用 |
 
 完整 SHA、默认分支、核对日期、路径和符号见[证据](unified-event-persistence-evidence.md)。本方案属于架构变更；独立授权、安全投影、非交互 Cron 和不重放是产品约束及安全边界。源码快照不是稳定发布或新方案验收。
 
@@ -32,9 +32,9 @@
 |---|---|---|
 | 用户消息 / Skill Command | 现有 HTTP 校验、授权、会话准入和回执 | 接受首消息与 execution → 提交 → Coordinator → ManagedAgentSession → 统一追加 |
 | Cron 自动 / 手动 Run | Schedule 互斥、occurrence、配置代次、Mate 凭据引用、Run 关联 | 同库事务新建 Session、首消息、execution/segment 与 Run 关联；提交后一次启动 |
-| Agent 工具启动 Child | 可信直接绑定、版本/深度/循环、模型、父取消域；关联父工具调用 | 同库事务新建子 Session、首消息、execution/segment 与父子关联；提交后一次启动 |
+| Agent 工具启动 Subagent | 可信直接绑定、版本/深度/循环、模型、父取消域；关联父工具调用 | 同库事务新建子 Session、首消息、execution/segment 与父子关联；提交后一次启动 |
 
-`AgentSessionFactory` 只装配运行对象、工具与 hooks，不访问数据库。应用层 `SessionExecutionAdmission` 复用受理原语；`ScheduledRunAcceptanceService`、`ChildRunAcceptanceService` 在自己的短事务中组合这些原语，不能用嵌套 REQUIRES_NEW 破坏原子关联。事务内重检可变状态，事务外查询 Mate、准备目录和执行模型/工具。
+`AgentSessionFactory` 只装配运行对象、工具与 hooks，不访问数据库。应用层 `SessionExecutionAdmission` 复用受理原语；`ScheduledRunAcceptanceService`、`SubagentRunAcceptanceService` 在自己的短事务中组合这些原语，不能用嵌套 REQUIRES_NEW 破坏原子关联。事务内重检可变状态，事务外查询 Mate、准备目录和执行模型/工具。
 
 三入口统一由 `RuntimeExecutionCoordinator` 安装历史写入适配器、压缩与终态处理。交互入口有 SSE 输出，后台入口用 `RuntimeEventOutput.persistenceOnly()`；输出类型不决定是否持久化。Runtime 的通用执行边界接收内部 DTO，不反向依赖 Schedule、HTTP Controller 或 Skill 查询服务。根执行终态提交提供事务内终态扩展点（待实现）：调用方模块注册实现，与终态同事务提交、同事务回滚，Runtime 不感知具体业务；定时任务借此结束 Run，见 [M10 D11](../08-CampusClaw定时任务/README.md#key-decisions)。CronTool 只依赖薄管理/受理服务，不能构成 Registry—Dispatcher 构造环。
 
@@ -48,15 +48,15 @@
 
 入口 Service 与 Admission/Coordinator/Repository 保持分层。Factory 为应用单例，ManagedAgentSession、Projector、调用关联表为 execution 范围；DTO 为不可变执行/调用快照。持久记录与这些 Java 对象生命周期独立。无新增 Maven 依赖，复用 JDK、Spring 事务、Jackson、MyBatis Starter 3.0.4 和已有驱动；不引入 MQ、独立统计线程或通用插件事件总线。
 
-## 4. Child 的身份、授权与生命周期
+## 4. Subagent 的身份、授权与生命周期
 
 每次实际 Agent 调用分配一个服务端 `tool_call_entry_id`，由已提交 Assistant Entry 与内容位置绑定；Provider toolCallId 只用于该消息内模型协议关联，不作为全局幂等键。确认续跑和同次持久化重试复用原身份；模型下一次发出新调用，即使 Provider ID 相同，也获得新身份。
 
-内部父子关系 `t_session_execution_links` 的字段、主键、唯一约束与清理由 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#child-links)维护，目标待实现。一条父调用至多受理一个 Child；不复用表示历史复制来源的 t_sessions.parent_session_id，也不复制正文、工具结果或运行终态。
+内部父子关系 `t_session_execution_links` 的字段、主键、唯一约束与清理由 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#subagent-links)维护，目标待实现。一条父调用至多受理一个 Subagent；不复用表示历史复制来源的 t_sessions.parent_session_id，也不复制正文、工具结果或运行终态。
 
-受理前，Agent Pipeline 先做可信绑定解析与参数校验，再由 Host 校验权限/必要确认。然后事务内复核父 execution 固定身份、未停止、父调用存在与未完成、子任务容量以及授权快照有效性；受理和父停止争用同一父 execution 权威锁。Child 自己保存可信访问范围与非秘密来源，读取时重新授权；不是持有父 ID 就能读 Child。业务凭据只传本次内存执行，不进入关系、Session 元数据或消息。
+受理前，Agent Pipeline 先做可信绑定解析与参数校验，再由 Host 校验权限/必要确认。然后事务内复核父 execution 固定身份、未停止、父调用存在与未完成、子任务容量以及授权快照有效性；受理和父停止争用同一父 execution 权威锁。Subagent 自己保存可信访问范围与非秘密来源，读取时重新授权；不是持有父 ID 就能读 Subagent。业务凭据只传本次内存执行，不进入关系、Session 元数据或消息。
 
-同父调用的重复内部通知只返回原关联和状态，不再创建、prompt 或重放；未知提交先读库对账。必须先取得一次启动权，再执行。进程失联后的接管只做对账，不自动接管业务执行。Parent 与 Child 都计入 Runtime 的相应容量，父等待期间不持数据库锁；Child 配额需独立预留或直接拒绝，不得让所有父任务占满资源后无限等待子任务槽。
+同父调用的重复内部通知只返回原关联和状态，不再创建、prompt 或重放；未知提交先读库对账。必须先取得一次启动权，再执行。进程失联后的接管只做对账，不自动接管业务执行。Parent 与 Subagent 都计入 Runtime 的相应容量，父等待期间不持数据库锁；Subagent 配额需独立预留或直接拒绝，不得让所有父任务占满资源后无限等待子任务槽。
 
 ### 一个子诊断任务如何完成
 
@@ -68,7 +68,7 @@
 
 子上下文仍从自己的任务消息开始，不继承父完整对话；保留 M03 的模型、工作区、最大深度 1 和禁止循环规则。父只接收许可的进度和最后非空 Assistant 文本；内部关系用于授权查询和排障，不在现有公共工具 JSON 中增加 executionId/childSessionId。管理端子历史入口及 Mate 映射需后续单独对齐精确 API，未完成前不宣称浏览器已能展开。
 
-父取消定向传播到关系中的原 child_execution_id，不能取消子 Session 后续的新对话。停止请求不等于已终止：只在实际退出并保存终态后释放相应占用；失联保留未知。Cron 的非交互限制继续传入 Child，ASK 或问答工具不得通过子任务绕过。子结果/终态先提交，父 Agent ToolResult 后提交；父提交失败不删除或重跑已经完成的 Child。
+父取消定向传播到关系中的原 child_execution_id，不能取消子 Session 后续的新对话。停止请求不等于已终止：只在实际退出并保存终态后释放相应占用；失联保留未知。Cron 的非交互限制继续传入 Subagent，ASK 或问答工具不得通过子任务绕过。子结果/终态先提交，父 Agent ToolResult 后提交；父提交失败不删除或重跑已经完成的 Subagent。
 
 ## 5. 保存哪些记录，如何保持一次提交
 
@@ -140,7 +140,7 @@ STOP_REQUESTED 不拒绝同一原执行已在途调用的真实结果；实际�
 
 ## 7. 保留、删除与失败对账
 
-父/子 Session 是独立授权和保留单元。删除父会话不级联删除 Child，也不撤销业务；活跃或结果未知的受影响 execution 先走既有停止/对账约束，禁止通过删除解除未知占用。关系保存至相关两端历史均可清理且执行明确收尾；可保留仅含 ID 的关联占位，不保留被删除正文。Child 删除后父摘要仍在，关系可指向已删除资源；查询如实返回不存在，不能重建一个 Child。所有后续受理必须先核对父资源和原调用存在，关联清理不使旧调用可再次执行。
+父/子 Session 是独立授权和保留单元。删除父会话不级联删除 Subagent，也不撤销业务；活跃或结果未知的受影响 execution 先走既有停止/对账约束，禁止通过删除解除未知占用。关系保存至相关两端历史均可清理且执行明确收尾；可保留仅含 ID 的关联占位，不保留被删除正文。Subagent 删除后父摘要仍在，关系可指向已删除资源；查询如实返回不存在，不能重建一个 Subagent。所有后续受理必须先核对父资源和原调用存在，关联清理不使旧调用可再次执行。
 
 删除 Schedule/Run 的规则保持：删配置与 Run，保留已生成 Session；Session 必需授权和根执行信息不依赖被删配置。会话删除和结果提交争用同一 Session/执行权威，删除先完成则拒绝迟到写入，不能复活事件或统计；结果先提交则累计保留。无最终成功记录的未完成或未知调用不计数。
 
@@ -152,8 +152,8 @@ STOP_REQUESTED 不拒绝同一原执行已在途调用的真实结果；实际�
 |---|---|---|
 | U1 | 通用受理、执行 DTO 与唯一启动权；Factory 保持装配；新内部关系 | 三入口都使用持久 Coordinator；同父调用不重复创建；事务回滚无孤儿；权限/停止/删除竞争正确 |
 | U2 | 每调用服务端身份、最终结果提交端口、Entry/公共事件原子追加 | 校验拒绝、确认拒绝、后置改写及并行结果均覆盖；重复相同结果不新增；冲突载荷拒绝；Provider ID 复用不误去重 |
-| U3 | Child 独立 Session、授权、取消域与容量；Cron 按现行受理落地 | 父只收摘要、Child 历史可恢复；Cron→Child 非交互；无数据库锁跨模型/Mate；未知不重放；子终态先于父摘要 |
-| U4 | 同事务 Skill 投影与查询适配，移除专用采集链 | 主/Cron/Child 各三次成功计九次；后续失败不撤销；回滚两侧皆无；重连/恢复/复制不计；清理不复活或重计 |
+| U3 | Subagent 独立 Session、授权、取消域与容量；Cron 按现行受理落地 | 父只收摘要、Subagent 历史可恢复；Cron→Subagent 非交互；无数据库锁跨模型/Mate；未知不重放；子终态先于父摘要 |
+| U4 | 同事务 Skill 投影与查询适配，移除专用采集链 | 主/Cron/Subagent 各三次成功计九次；后续失败不撤销；回滚两侧皆无；重连/恢复/复制不计；清理不复活或重计 |
 | U5 | 故障、保留与实际数据库验证 | 在调用前、返回后、提交前后、首帧前后注入故障；确认副作用不自动重试；保留/删除与追加竞争、重启对账、热点锁与多实例授权 |
 
 顺序先打通历史链和通用提交点，再切换统计；新旧统计不能同时写同一指标。实现前重新核对是否已有部署数据，历史口径不能静默混算。新 DDL 是设计片段，必须合入完整安装脚本并在公司 GaussDB 验证；本任务不执行迁移、产品测试或生产 SQL。制品验证记录见[验证页](unified-event-persistence-validation.md)。
@@ -162,6 +162,7 @@ STOP_REQUESTED 不拒绝同一原执行已在途调用的真实结果；实际�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.3.0 | 2026-10-15 | 父 Agent 通过 `Agent` 工具调用的 Agent 统一称为 Subagent。 |
 | 1.2.0 | 2026-10-14 | 根执行终态提交增加事务内终态扩展点，供定时任务结束 Run。 |
 | 1.1.0 | 2026-10-10 | 父子关联与工具结果结构归入 Claw 数据库设计，执行和提交流程继续独立维护。 |
 | 1.0.0 | 2026-10-10 | Runtime、Cron、Child 统一保存独立完整历史，逐工具原子提交并复用成功结果维护 Skill 累计。 |

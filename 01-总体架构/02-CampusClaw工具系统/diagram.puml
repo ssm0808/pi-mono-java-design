@@ -31,7 +31,7 @@ skinparam linetype ortho
 hide empty members
 
 package "Host boundaries" {
-  class "Runtime / Cron / \nChild Hosts" as Hosts <<separate lifecycles>>
+  class "Runtime / Cron / \nSubagent Hosts" as Hosts <<separate lifecycles>>
 }
 package "Assembly - singleton services" {
   class "AgentSessionFactory" as Factory
@@ -62,12 +62,12 @@ package "Model tools - per Session" {
   class "CallTool" as Call
   class "MateToolAdapter" as Adapter <<one per direct binding>>
   class Cron
-  class "Agent" as ChildTool
+  class "Agent" as SubagentTool
 }
 package "Application and external boundaries" {
   interface "MateToolClient" as Mate
   class "Cron Service" as CronService
-  class "SubagentExecutionService" as ChildService
+  class "SubagentExecutionService" as SubagentService
   class "WorkspacePathResolver" as Resolver
   class "SKILL.md / references" as Resources <<managed files>>
 }
@@ -108,7 +108,7 @@ Search .[#346DA5].|> Tool
 Adapter .[#346DA5].|> Tool
 Call .[#346DA5].|> Tool
 Cron ..|> Tool
-ChildTool ..|> Tool
+SubagentTool ..|> Tool
 InteractionTools ..|> Tool
 Local --> Resolver
 Resolver --> Workspace
@@ -122,8 +122,8 @@ Call -[#346DA5]-> Executor
 Executor -[#346DA5]-> Definitions : trusted target
 Executor -[#346DA5]-> Mate : execute once
 Cron --> CronService
-ChildTool --> ChildService
-ChildService -[norank]-> Factory
+SubagentTool --> SubagentService
+SubagentService -[norank]-> Factory
 Slash --> SlashHandlers
 Hosts -[hidden]down-> Factory
 Factory -[hidden]down-> Session
@@ -137,7 +137,7 @@ Commands use their own HTTP boundary and never enter the model list.
 SearchTools returns one complete definition by exact unique name.
 CallTool uses Skill bindings; adapters use direct Agent bindings.
 Runtime: twelve framework tools plus direct Agent adapters.
-Cron and Child exclude the three interaction tools.
+Cron and Subagent exclude the three interaction tools.
 Blue relations show the business-tool target structure.
 Prepared execution exists at Java ae6645ca.
 [P] = Pending implementation: discovery and definition consistency integration.
@@ -154,7 +154,7 @@ Local -[hidden]down-> Resolver
 Skill -[hidden]down-> Resolver
 Call -[hidden]down-> Mate
 Cron -[hidden]down-> CronService
-ChildTool -[hidden]down-> ChildService
+SubagentTool -[hidden]down-> SubagentService
 Slash -[hidden]down-> SlashHandlers
 
 @enduml
@@ -414,7 +414,7 @@ end note
 ' Source evidence: Java main 769e86592285f4a25b0febaf551eddea6bc7212c
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java:runChild
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java:start
-' Observed behavior: Child directly creates an in-memory runtime and returns final text.
+' Observed behavior: Subagent directly creates an in-memory runtime and returns final text.
 ' Design reason: preserve independent durable child history and project only summary to parent.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -426,35 +426,35 @@ skinparam sequenceArrowColor #425B70
 skinparam sequenceParticipantBackgroundColor #F1F5F9
 hide footbox
 autonumber
-title One Bound Child - Target / Pending implementation
+title One Bound Subagent - Target / Pending implementation
 participant "Parent execution" as Parent
 participant "Host" as Host
 participant "Session" as Store
-participant "Child Runtime" as Child
+participant "Subagent Runtime" as Subagent
 Parent -> Host : Agent call with trusted binding and valid parameters
 Host -> Host : Check permission, version, depth and model
-Host -> Store : Admit child Session, execution and parent-call link
+Host -> Store : Admit Subagent Session, execution and parent-call link
 Store --> Host : Committed identity
-Host -> Child : Start once through common Coordinator
-Child -> Store : Commit own messages and tool results
-Child -->> Parent : Permitted high-level progress
-alt Child completes
-  Child -> Store : Commit final message and terminal
-  Store --> Child : Committed
-  Child --> Host : Last nonempty Assistant text
+Host -> Subagent : Start once through common Coordinator
+Subagent -> Store : Commit own messages and tool results
+Subagent -->> Parent : Permitted high-level progress
+alt Subagent completes
+  Subagent -> Store : Commit final message and terminal
+  Store --> Subagent : Committed
+  Subagent --> Host : Last nonempty Assistant text
   Host -> Store : Commit parent Agent tool result
   Store --> Host : Committed
   Host --> Parent : Final text
 else Parent cancelled
-  Parent -> Host : Stop original child execution
-  Host -> Child : Request cancellation
-  Child -> Store : Persist actual outcome when known
-  Child --> Host : Actual outcome or unresolved state
+  Parent -> Host : Stop original Subagent execution
+  Host -> Subagent : Request cancellation
+  Subagent -> Store : Persist actual outcome when known
+  Subagent --> Host : Actual outcome or unresolved state
   Host --> Parent : No fabricated success or replay
 end
-note over Store,Child
+note over Store,Subagent
   Independent durable history and authorization.
-  Parent receives summary, not child reasoning or history.
+  Parent receives summary, not Subagent reasoning or history.
   Factory assembles runtime objects; admission owns DB creation.
 end note
 @enduml
@@ -600,7 +600,7 @@ else Invalid, symlink or outside root
   Tool --> Loop : isError=true; no content read
 end
 note over Tool,Boundary
-  Child uses its own root, never the parent's root.
+  Subagent uses its own root, never the parent's root.
   Filesystem inspection is not a content read.
 end note
 @enduml
@@ -677,7 +677,7 @@ end note
 ' Pending implementation: each new execution queries Mate contextWindow; Mate controls all output limits.
 ' Source evidence at Java 21c3f59b: SessionCompactor.summaryOptions and overflowDecision still use maxTokens.
 ' Architecture change: validate input budgets and summary gain; remove output-limit recovery heuristics.
-' Design reason: Runtime, Cron, and Child require one failure-safe context policy.
+' Design reason: Runtime, Cron, and Subagent require one failure-safe context policy.
 ' Java divergence: append-only Entries use an internal discarded Entry ID; only Read paths are tracked.
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white

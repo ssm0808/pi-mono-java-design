@@ -39,7 +39,7 @@
 
 ## 4. 受管 Agent Runtime 与 Session
 
-负责从 Mate 获取 Agent 配置、Skill、子 Agent，并构建可执行的 Session。
+负责从 Mate 获取 Agent 配置、Skill、Subagent，并构建可执行的 Session。
 
 - Mate 服务客户端：[MateServiceClient.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtime/MateServiceClient.java)
 - Agent Runtime 缓存与原子发布：[AgentRuntimeManager.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtime/AgentRuntimeManager.java)
@@ -179,7 +179,7 @@ t_session_cleanup_task
 
 ### Agent 专用工具
 
-- 子 Agent：[SubagentExecutionService.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/agent/SubagentExecutionService.java)
+- Subagent：[SubagentExecutionService.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/agent/SubagentExecutionService.java)
 - Mate 工具发现与调用：[tool/mate](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/mate)
 - 工具调用展示名快照：[RuntimeToolCallSnapshotResolver.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/runtime/RuntimeToolCallSnapshotResolver.java)
 - Cron 工具：[tool/cron](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/cron)
@@ -200,9 +200,9 @@ t_session_cleanup_task
 
 ## 10. 多 Agent
 
-- 子 Agent 工具：[BoundAgentTool.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/agent/BoundAgentTool.java)
-- 子 Agent 执行：[SubagentExecutionService.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/agent/SubagentExecutionService.java)
-- 子 Agent Session 复用：[AgentSessionFactory.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/session/AgentSessionFactory.java)
+- Subagent 工具：[BoundAgentTool.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/agent/BoundAgentTool.java)
+- Subagent 执行：[SubagentExecutionService.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/tool/agent/SubagentExecutionService.java)
+- Subagent Session 复用：[AgentSessionFactory.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/session/AgentSessionFactory.java)
 - Agent 绑定、版本和模型校验：[AgentRuntimeManager.java](/Users/z/pi-mono-java/campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtime/AgentRuntimeManager.java)
 
 ## 11. Control Plane

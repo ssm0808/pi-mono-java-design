@@ -32,7 +32,7 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享
 
 ### Skill 统计职责
 
-[Skill 成功调用统计](../03-Skill加载统计/README.md)维护 M05 的调用口径与查询：每次真实 Skill 最终成功加一，Read 与显式正文注入不计。统一 Runtime/Cron/Child 历史首次提交成功结果时，同事务维护一张累计表；无需独立 Observer、队列和统计事实。已有统计实现与新链路待实现增量分开记录，from/to 与日表仍待核实。
+[Skill 成功调用统计](../03-Skill加载统计/README.md)维护 M05 的调用口径与查询：每次真实 Skill 最终成功加一，Read 与显式正文注入不计。统一 Runtime/Cron/Subagent 历史首次提交成功结果时，同事务维护一张累计表；无需独立 Observer、队列和统计事实。已有统计实现与新链路待实现增量分开记录，from/to 与日表仍待核实。
 
 ### 1.1 全局目标类图
 

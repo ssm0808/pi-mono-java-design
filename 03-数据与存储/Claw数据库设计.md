@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.21.0 · 日期：2026-10-15 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.22.0 · 日期：2026-10-15 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -67,7 +67,7 @@
 | [t_schedule](../01-总体架构/08-CampusClaw定时任务/README.md#t_schedule) | 任务配置与自动计划游标 | S；有 D 修改 | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) |
 | [t_schedule_run](../01-总体架构/08-CampusClaw定时任务/README.md#t_schedule_run) | 一次触发是否受理及原根执行关联，同任务唯一未结束 Run | S；有 D 修改 | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) |
 | [t_schedule_dispatch_state](#t_schedule_dispatch_state) | PR 的扫描协调表，目标撤销整表 | S；目标撤销 | [PR #332 差异](../01-总体架构/08-CampusClaw定时任务/README.md#schedule-pr-diff) |
-| [t_session_execution_links](#child-links) | 一次父调用与独立子会话首执行关联 | D | [统一执行历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) |
+| [t_session_execution_links](#subagent-links) | 一次父调用与独立子会话首执行关联 | D | [统一执行历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) |
 
 Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存其引用及必要执行快照；[Agent 元数据的五张表](02-Agent元数据GaussDB/README.md)属于 Mate 数据库设计，不在上面 Claw 安装表数中。凭据秘密由 Mate 保管；附件对象及 Chat 映射也各归所属服务，不为统一文档擅自复制到 Claw 库。
 
@@ -83,7 +83,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 | 历史 | Session 线性追加，按提交序号读取；parent_id/active_leaf_id 用于完整性；内部完整结果与公共安全投影分开 | M2 的三个时间线/事件/完整性查询已非递归；无损坏自动截断或跳过保证 |
 | JSON | payload 保存类型相关内容，结构校验由受控写入与恢复端负责；数据库 JSONB 校验不能替代权限和业务校验 | Schedule 在 PR 使用 TEXT JSON，不能把二者的类型支持混写 |
 | 权限与秘密 | Mate 独立维护用户、资源归属和权限；Claw 只存运行数据及允许的资源引用，不存身份副本和业务 secret，见 §3.1 | PR 的归属列及本地权限链路须撤销；Mate 接线待实现 |
-| 事务资源 | Run/Child 受理须与新 Session、首消息、根执行同库提交；网络授权准备及模型/工具执行在事务外 | Schedule 见 §5；统一 Child 与逐工具统计事务仍待实现 |
+| 事务资源 | Run/Subagent 受理须与新 Session、首消息、根执行同库提交；网络授权准备及模型/工具执行在事务外 | Schedule 见 §5；统一 Subagent 与逐工具统计事务仍待实现 |
 | 删除与恢复 | 清理按所属对象生命周期执行，停止请求不等于真实终态；不得因历史清理重置累计、复活配置或重放业务 | 具体既有表和待实现差距分别在 §4～§7；没有全库统一 ON DELETE CASCADE 策略 |
 
 <a id="mate-ownership"></a>
@@ -557,15 +557,15 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 | 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
 |---|---|---|---|---|
 | owner_id | VARCHAR(128) | 否 | — | Runtime 家族使用 Session ID，Cron 家族使用实际 Agent 与 Job 组合标识 |
-| execution_id | VARCHAR(128) | 否 | — | 宿主真实执行标识；Child 使用已保存的父 Agent 工具调用事件标识 |
-| parent_execution_id | VARCHAR(128) | 是 | — | Child 的直接父执行标识；根执行为空 |
+| execution_id | VARCHAR(128) | 否 | — | 宿主真实执行标识；Subagent 使用已保存的父 Agent 工具调用事件标识 |
+| parent_execution_id | VARCHAR(128) | 是 | — | Subagent 的直接父执行标识；根执行为空 |
 | session_id | VARCHAR(128) | 是 | — | Runtime 家族的 Session ID；Cron 家族为空，用于删除和迟到写入准入 |
 | root_execution_id | VARCHAR(128) | 否 | — | Runtime 根执行 ID 或 Cron runId；父子共享关联，各次工具调用独立计数 |
 | source_event_id | VARCHAR(128) | 否 | — | 本次 Skill 工具调用的持久化来源事件标识；不使用提供商原始调用 ID |
 | agent_id | VARCHAR(64) | 否 | — | Agent 标识 |
 | skill_id | VARCHAR(64) | 否 | — | 可信 Skill 标识 |
 | skill_version | TEXT | 否 | — | 实际 Skill 版本 |
-| entry_point | VARCHAR(16) | 否 | — | RUNTIME / CRON / CHILD_AGENT 来源 |
+| entry_point | VARCHAR(16) | 否 | — | RUNTIME / CRON / SUBAGENT 来源 |
 | content_sha256 | CHAR(64) | 否 | — | 当前实现的正文 SHA-256 |
 | signal_type | VARCHAR(16) | 否 | — | 当前固定 SKILL |
 | loaded_at | TIMESTAMPTZ(3) | 否 | — | 工具成功结束时固定的 UTC 毫秒时间，不随数据库等待改变 |
@@ -582,11 +582,11 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 - `CONSTRAINT ck_skill_usage_agent CHECK (agent_id ~ '^agent-[0-9a-fA-F]{32}$')`
 - `CONSTRAINT ck_skill_usage_skill CHECK (skill_id ~ '^skill-[0-9a-fA-F]{32}$')`
 - `CONSTRAINT ck_skill_usage_version CHECK (skill_version ~ '[^[:space:]]')`
-- `CONSTRAINT ck_skill_usage_entry CHECK (entry_point IN ('RUNTIME', 'CRON', 'CHILD_AGENT'))`
+- `CONSTRAINT ck_skill_usage_entry CHECK (entry_point IN ('RUNTIME', 'CRON', 'SUBAGENT'))`
 - `CONSTRAINT ck_skill_usage_signal CHECK (signal_type = 'SKILL')`
 - `CONSTRAINT ck_skill_usage_hash CHECK (content_sha256 ~ '^[0-9a-f]{64}$')`
 - `CONSTRAINT ck_skill_usage_runtime CHECK (entry_point <> 'RUNTIME' OR session_id IS NOT NULL)`
-- `CONSTRAINT ck_skill_usage_child CHECK (entry_point <> 'CHILD_AGENT' OR parent_execution_id IS NOT NULL)`
+- `CONSTRAINT ck_skill_usage_subagent CHECK (entry_point <> 'SUBAGENT' OR parent_execution_id IS NOT NULL)`
 
 目标边界：主线及 PR #332 仍有此独立事实表；统一结果目标改为复用 tool.result，切换与删除条件见 §6.3。本文列出现有结构不表示重新采纳独立统计流水。
 
@@ -678,24 +678,24 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 服务端调用身份与 Provider toolCallId 分开；普通结果重试复用固定结果 ID、时间与载荷，已有内容不同则拒绝，不覆盖、不重复累计。origin 和可信 Skill 身份由写入端生成，不接受客户端或模型自报。以上是现有目标片段的归属登记，不表示新列已经加入实现 DDL；结构调整须同步本文、关联 SQL 和恢复消费者。
 
-<a id="child-links"></a>
+<a id="subagent-links"></a>
 
 ### 6.2 t_session_execution_links：父子执行关联
 
-目标用途是关联一次父 Agent 工具调用与独立子会话首执行；不复用 t_sessions.parent_session_id 的历史复制含义。流程、授权与取消归[统一执行历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#4-child-的身份授权与生命周期)。
+目标用途是关联一次父 Agent 工具调用与独立子会话首执行；不复用 t_sessions.parent_session_id 的历史复制含义。流程、授权与取消归[统一执行历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#4-subagent-的身份授权与生命周期)。
 
 | 字段 | SQL 类型 | 可空 | 用途 |
 |---|---|---|---|
-| child_session_id | VARCHAR(128) | 否，主键 | 本次委派创建的子会话 |
+| child_session_id | VARCHAR(128) | 否，主键 | 本次 Subagent 调用创建的子会话 |
 | child_execution_id | VARCHAR(128) | 否 | 子会话首执行，后续聊天不能替换 |
 | parent_session_id | VARCHAR(128) | 否 | 发出调用的父会话 |
 | parent_execution_id | VARCHAR(128) | 否 | 固定父执行，用于受理与定向取消 |
-| parent_tool_call_entry_id | VARCHAR(128) | 否 | 服务端父调用身份，同次委派复用 |
+| parent_tool_call_entry_id | VARCHAR(128) | 否 | 服务端父调用身份，同次 Subagent 调用复用 |
 | created_at | TIMESTAMPTZ(0) | 否 | 关联创建的 UTC 秒级时间 |
 
 无数据库 DEFAULT。`UNIQUE(parent_session_id,parent_tool_call_entry_id)` 保证同次父调用至多一条关系；`CHECK(parent_session_id <> child_session_id)` 禁止直接自关联；`idx_session_child_parent_execution(parent_session_id,parent_execution_id)` 用于按父执行查找。更深的循环与深度约束由受理流程校验。
 
-不设父子 Session 级联删除，不存正文或秘密。父子独立保留，关系只在两端历史均可清理且实际执行已收尾后删除；任何后续受理仍须证明原父资源和调用存在，不能因关联已清理而重建旧 Child。字段及约束来自同一[待实现 SQL](01-会话记忆GaussDB/unified-event-persistence.sql)。
+不设父子 Session 级联删除，不存正文或秘密。父子独立保留，关系只在两端历史均可清理且实际执行已收尾后删除；任何后续受理仍须证明原父资源和调用存在，不能因关联已清理而重建旧 Subagent。字段及约束来自同一[待实现 SQL](01-会话记忆GaussDB/unified-event-persistence.sql)。
 
 <a id="skill-target"></a>
 
@@ -741,7 +741,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | 公共历史与恢复 | Entry 与安全事件各自按序号读；投影记录保存期望数量，零表示显式私有；缺失/数量不符失败，不返回伪造空历史 | [ListEvents](../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)；M2 的非递归实现已核验 |
 | Session 删除 | 当前主线先写不可复用 ID 墓碑与清理任务，记录已清理 Skill 事实范围；关联数据按依赖清理，不假设所有表都有 Session 外键或级联 | [Session 生命周期](01-会话记忆GaussDB/README.md#65-删除-session)；M2 的墓碑/任务/清理 DML 已核验，后台清理重试不是重跑园区业务 |
 | 调度受理与删除 | Schedule/Run 与 Session/根执行同库受理；删 Schedule/Run 保留已受理 Session；晚到回调不复活资源 | [调度数据库事务](../01-总体架构/08-CampusClaw定时任务/README.md#transactions)；S 增量 |
-| Child 受理与删除 | 父调用关系与子 Session/首消息/根执行同事务；双方独立授权与保留，未知不能冒充终态 | [父子关系](#child-links)；D 增量 |
+| Subagent 受理与删除 | 父调用关系与子 Session/首消息/根执行同事务；双方独立授权与保留，未知不能冒充终态 | [父子关系](#subagent-links)；D 增量 |
 | Skill 统计与清理 | 当前主线用独立事实及累计/日表；目标改为完整结果与累计同事务，删除登记历史缺口但不扣累计 | [目标及切换](#skill-target)；两条写入路径不可同时累计同一指标 |
 
 内部 Entry、公共事件、根执行和各类统计不能互相冒充权威：公共安全投影不足以重建全部模型上下文，Run 受理成功不表示业务成功，Session 汇总不是另一份 Skill 事实。备份与恢复必须覆盖当前启用方案涉及的事件、关系、累计和缺口的同一一致点。
@@ -770,6 +770,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.22.0 | 2026-10-15 | t_skill_usage.entry_point 的 Subagent 来源值改为 SUBAGENT，约束同步改名。 |
 | 1.21.0 | 2026-10-15 | 定时任务两张表的结构移入定时任务设计 §3.2，§5 只保留入口。 |
 | 1.20.0 | 2026-10-14 | §5.4 受理行与主设计 §3.5、D10 对齐：手动运行允许 paused，删除“授权有效”。 |
 | 1.19.0 | 2026-10-14 | 合入 main：按 Agent 查询只读 user.message，部分索引 idx_t_session_events_session_user_time 的条件改为 `type = 'user.message'`（main 原记为 1.3.1）。 |

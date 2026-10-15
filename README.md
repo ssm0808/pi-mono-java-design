@@ -14,7 +14,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 <a id="module-index"></a>
 
-[统一执行历史](01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md)统一 Runtime、Cron 与 SubAgent 的完整历史、逐工具提交和 Skill 计数投影，含最新基线、全局目标图及实施验收；新增链路待实现。
+[统一执行历史](01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md)统一 Runtime、Cron 与 Subagent 的完整历史、逐工具提交和 Skill 计数投影，含最新基线、全局目标图及实施验收；新增链路待实现。
 
 ## 1. 模块索引
 

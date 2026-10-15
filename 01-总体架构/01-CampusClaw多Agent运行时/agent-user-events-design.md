@@ -13,7 +13,7 @@
 
 ### 评审结论
 
-2026-10-12，Lotus 确认四项方向：返回全部五种用户事件（2026-10-13 改为只返回开启轮次的 user.message）；权限由 Mate 判断；分页使用透明游标（后于同日评审改为与 ListEvents 一致的整数页码）；定时任务与子 Agent 会话按同一规则返回。精确契约已生成并列入[统一接口页](chat-api-review.html#ListAgentEvents)。
+2026-10-12，Lotus 确认四项方向：返回全部五种用户事件（2026-10-13 改为只返回开启轮次的 user.message）；权限由 Mate 判断；分页使用透明游标（后于同日评审改为与 ListEvents 一致的整数页码）；定时任务与 Subagent 会话按同一规则返回。精确契约已生成并列入[统一接口页](chat-api-review.html#ListAgentEvents)。
 
 ### 评审 Todo
 
@@ -202,7 +202,7 @@ LIMIT #{limit + 1} OFFSET #{(page - 1) * limit}
 
 **接口约定。** 以下约定只影响接口形状，不涉及架构选型，各基线做法见 [§8.1](#baseline-comparison)。
 
-- 事件类型筛选：资源是 Agent 下的 events，类型只是筛选条件，接口形状保持通用。type 取值是精确的事件类型，与 Claude Managed Agents 的 `types[]` 一致。按 Lotus 评审，第一版只接受 `user.message`：轮次以 user.message 切分，每条结果正好对应一轮，Trace 列出用户请求后用 UC2 展开；确认、审核、回答和停止事件属于所在轮次，展开后可见，不在列表中重复出现。代价是轮次在时间范围之前开始、但确认或停止发生在范围内时，这一轮不会列出；Trace 按请求发起时间查询，可以接受。其他类型是预留取值，需要时再扩大部分索引并放开，对调用方是兼容变更。暂不放开 agent.* 的原因：事件密集，会让几乎每次追加都多写一个索引项；其中的思考与工具结果可能含敏感数据，跨会话批量读取需要 Mate 更严格的权限与审计。定时任务与子 Agent 会话中的 user.message 同样返回。
+- 事件类型筛选：资源是 Agent 下的 events，类型只是筛选条件，接口形状保持通用。type 取值是精确的事件类型，与 Claude Managed Agents 的 `types[]` 一致。按 Lotus 评审，第一版只接受 `user.message`：轮次以 user.message 切分，每条结果正好对应一轮，Trace 列出用户请求后用 UC2 展开；确认、审核、回答和停止事件属于所在轮次，展开后可见，不在列表中重复出现。代价是轮次在时间范围之前开始、但确认或停止发生在范围内时，这一轮不会列出；Trace 按请求发起时间查询，可以接受。其他类型是预留取值，需要时再扩大部分索引并放开，对调用方是兼容变更。暂不放开 agent.* 的原因：事件密集，会让几乎每次追加都多写一个索引项；其中的思考与工具结果可能含敏感数据，跨会话批量读取需要 Mate 更严格的权限与审计。定时任务与 Subagent 会话中的 user.message 同样返回。
 - 事件标识：用 sessionId + eventId。eventId 只在会话内由主键保证唯一，Mate 必须保存 UC1 返回的 sessionId。
 - 跨会话顺序：按 createdAt 升序，同秒以 sessionId、eventSeq 稳定排序，不引入全局序号。不同会话之间没有因果顺序，会话内的因果顺序以 UC2 或 ListEvents 为准。
 - 时间参数：沿用 Claw 的 UTC 整秒契约，Mate 需把毫秒时间转换后传入；超过 31 天要分段查询。
@@ -437,7 +437,7 @@ pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离
 
 ### 8.3 范围说明
 
-- 定时任务（[M10](../08-CampusClaw定时任务/README.md)）每次 Run 新建会话，首条消息由任务配置生成；Child（[统一历史](unified-event-persistence.md)）为子任务新建会话，首条消息由父 Agent 生成。按已确认规则，它们与普通会话一样按事件类型返回，不区分来源，也不新增来源标记。两项持久化当前均待实现，实现后自动纳入。
+- 定时任务（[M10](../08-CampusClaw定时任务/README.md)）每次 Run 新建会话，首条消息由任务配置生成；Subagent（[统一历史](unified-event-persistence.md)）为子任务新建会话，首条消息由父 Agent 生成。按已确认规则，它们与普通会话一样按事件类型返回，不区分来源，也不新增来源标记。两项持久化当前均待实现，实现后自动纳入。
 - 第一版 type 只接受 user.message；其他类型按需扩展，扩展前先扩大部分索引并评估权限与审计。
 - ListEvents 的整数页码不变，本设计的两个接口沿用同一套规则。
 

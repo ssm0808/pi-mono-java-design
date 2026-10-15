@@ -61,9 +61,9 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 | `modules/agent-core/src/main/java/com/campusclaw/agent/tool/BeforeToolCallContext.java` | record `assistantMessage/toolCall/args/context` | 可判断审核调用是否是该 Assistant 唯一 ToolCall，无需新增模型工具元数据 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java` | `create`、`configureAgent`（约 67、97 行） | 三入口统一 prepare、工具装配、Prompt 和 hook；目标在此接入模式快照与退出工具工厂 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java` | `prompt`、`compactBeforePrompt`、`continueAfterCompaction` | 包装执行与压缩；新增 SessionPlanContext，不把摘要当模式权威 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java` | defaults、`toolsFor` | 现有 Runtime/Cron/Child 固定配置与顺序；目标为 Runtime 增加 ExitPlanMode、TodoUpdate |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java` | defaults、`toolsFor` | 现有 Runtime/Cron/Subagent 固定配置与顺序；目标为 Runtime 增加 ExitPlanMode、TodoUpdate |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultConfiguredToolAssembler.java` | `assemble` | 依当前入口 profile 调用工厂；不按计划模式过滤工具 |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java` | `runChild` | 用独立 ManagedAgentSessionRequest 创建 Child；当前没有计划模式传递，需增加调用时快照 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java` | `runChild` | 用独立 ManagedAgentSessionRequest 创建 Subagent；当前没有计划模式传递，需增加调用时快照 |
 
 ### 4.2 API / 执行控制 / 恢复
 
@@ -114,7 +114,7 @@ pi 的进程内循环不是 CampusClaw HTTP、数据库事务、权限或跨实�
 
 RuntimePlanReviewService、PlanReviewPort、RuntimePlanReviewAdapter、SessionPlanContext、PlanPolicyPromptComposer、RuntimePendingInteraction、ExitPlanModeTool，以及新 VO/DTO 和数据库列/表均为目标结构。上述类名、方法和关系帮助实施切片，不代表源码中已经存在。既有 RuntimeSessionController 与 RuntimeSessionConfigurationService 的 updateSession 方法，以及 Repository 的模式写入方法也是 待实现 增量，原类本身已存在。
 
-Session 工作模式通过资源更新表达属于产品约束与 API 架构调整；当前缺少通用 Session 更新入口是实施差距。跨实例审核和提示词更新属于架构扩展；元数据稳定、idle 主动切换、Child 继承与自然语言澄清属于产品约束；精确审核目标校验、单次消费、跨 Session 隔离与凭据不落盘属于安全加固。提示词引导本身不被归类为强制安全隔离。
+Session 工作模式通过资源更新表达属于产品约束与 API 架构调整；当前缺少通用 Session 更新入口是实施差距。跨实例审核和提示词更新属于架构扩展；元数据稳定、idle 主动切换、Subagent 继承与自然语言澄清属于产品约束；精确审核目标校验、单次消费、跨 Session 隔离与凭据不落盘属于安全加固。提示词引导本身不被归类为强制安全隔离。
 
 统一 Session 更新的组合事务、名称复用和接口替换证据集中见[HTTP 专项核对](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#81-统一-session-更新源码核对)；已有独立属性写入不能当作组合原子性证明。
 
@@ -156,11 +156,11 @@ Session 工作模式通过资源更新表达属于产品约束与 API 架构调�
 
 [Claude Tools 的 custom tool 指导](https://platform.claude.com/docs/en/managed-agents/tools#custom-tools)只说明应用定义描述与参数、模型选择调用、应用返回结果；[通用事件流程](https://platform.claude.com/docs/en/managed-agents/events-and-streaming#handling-custom-tool-calls)不承诺 TODO 自动调用或进度面板。没有服务端源码 commit，不推断其内部状态机。
 
-[提示词正文](plan-policy.md)和[组合与模型验收](plan-policy.md#8-组合检查与模型场景验收)是当前目标。稳定元数据、build-only 进度和 Child 角色边界属于产品约束；审核精确身份和服务端事务继续作为安全与一致性边界。提示词本身不构成硬只读或自动判定工作完成的保证。本次仅完成静态源码、设计与资源校验，未执行模型遵循率或产品端到端测试。
+[提示词正文](plan-policy.md)和[组合与模型验收](plan-policy.md#8-组合检查与模型场景验收)是当前目标。稳定元数据、build-only 进度和 Subagent 角色边界属于产品约束；审核精确身份和服务端事务继续作为安全与一致性边界。提示词本身不构成硬只读或自动判定工作完成的保证。本次仅完成静态源码、设计与资源校验，未执行模型遵循率或产品端到端测试。
 
 ## 8. Agent 默认模式
 
-Agent 顶层 mode 是本产品新增的默认配置，不归因为 DeepSeek/Claude 的同名字段。Mate 956b547f 与 Runtime 固定 09b32d8e 的 DTO、发布目录、解析快照、Session 创建路径核对，以及相对旧 Mate 9dd5d85 的范围差异，集中记录在[元数据主设计 §2.3](../../03-数据与存储/02-Agent元数据GaussDB/README.md#23-mode-专项源码核对)。本专题继承以下目标：新交互 Session 复制 Agent 默认，缺字段兼容 build；已有 Session、Child 和 Cron 按各自既有模式权威工作。plan 仍不调用 TODO；公共工具事件与审核事务未改变。
+Agent 顶层 mode 是本产品新增的默认配置，不归因为 DeepSeek/Claude 的同名字段。Mate 956b547f 与 Runtime 固定 09b32d8e 的 DTO、发布目录、解析快照、Session 创建路径核对，以及相对旧 Mate 9dd5d85 的范围差异，集中记录在[元数据主设计 §2.3](../../03-数据与存储/02-Agent元数据GaussDB/README.md#23-mode-专项源码核对)。本专题继承以下目标：新交互 Session 复制 Agent 默认，缺字段兼容 build；已有 Session、Subagent 和 Cron 按各自既有模式权威工作。plan 仍不调用 TODO；公共工具事件与审核事务未改变。
 
 ## 8. 计划文件与方案载体
 
@@ -234,7 +234,7 @@ Agent 顶层 mode 是本产品新增的默认配置，不归因为 DeepSeek/Clau
 | DeepSeek 由配置提供 plan:policy，退出规划后不注入该规划政策；TODO description 规定完整列表、完成即更新和简单任务跳过。 | 规划期禁止 TODO 留在 PLAN.md；实施进度细则集中在 TodoUpdate description。保留短 BUILD.md 是为了明确原审核方案和 CampusClaw 模式切换规则，不复制一份执行手册。 |
 | pi 最新基础 Prompt 按命名块组织规则，工具 guidelines 可参与基础规则；计划示例独立注入上下文。 | 只借鉴规则归属与简洁表达；不引入分节差异协议、模板解析器或新框架。两份文件整体加载，Composer 仍是纯组合。 |
 
-上述收敛属于**架构变更**：减少部署模式资源及重复规则；根/Child 的职责、正式审核、混合工具的规划限制、稳定元数据属于**产品约束**；服务端审核身份、权限和事务仍沿用既有安全边界。收益是规则单一维护、模式资源更短；代价是迁移时必须同时校准基础 SYSTEM 和工具描述，并对根/Child 的模型遵循情况重新验收。提示词不提供强制只读或自动验证业务完成的保证。
+上述收敛属于**架构变更**：减少部署模式资源及重复规则；根/Subagent 的职责、正式审核、混合工具的规划限制、稳定元数据属于**产品约束**；服务端审核身份、权限和事务仍沿用既有安全边界。收益是规则单一维护、模式资源更短；代价是迁移时必须同时校准基础 SYSTEM 和工具描述，并对根/Subagent 的模型遵循情况重新验收。提示词不提供强制只读或自动验证业务完成的保证。
 
 ### 10.3 当前 Java 与实施差距
 
@@ -255,12 +255,12 @@ Java 本次静态读取本地 `pi-mono-java@0b81c168d816aed7864cc9fbb9caa0771407
 
 | 基线与仓库相对路径 / 符号 | 已观察用词 |
 |---|---|
-| Codex `codex-rs/prompts/src/model_messages/multi_agent.rs:7` · DEFAULT_MULTI_AGENT_V2_ROOT_AGENT_USAGE_HINT_TEXT | 角色提示词为 “You are `/root`, the primary agent…”；`/root` 是树中位置，角色措辞是 primary agent；子 Agent 提示词使用 parent agent。 |
+| Codex `codex-rs/prompts/src/model_messages/multi_agent.rs:7` · DEFAULT_MULTI_AGENT_V2_ROOT_AGENT_USAGE_HINT_TEXT | 角色提示词为 “You are `/root`, the primary agent…”；`/root` 是树中位置，角色措辞是 primary agent；Subagent 提示词使用 parent agent。 |
 | OpenCode `packages/opencode/src/agent/agent.ts:153,179` · build/plan 定义；`packages/opencode/src/session/prompt/plan.txt` | build/plan 在定义中分类为 primary，与 subagent 区分；规划提示词直接称“你”，无“交互根 Agent”标题。 |
 | DeepSeek `packages/preset/agent-presets/presets/standard/agent.cordis.yml:115` · planning | 标准规划政策直接以 “You are in plan mode.” 开始，未单列根 Agent 小节。 |
 | pi `packages/coding-agent/examples/extensions/subagent/agents/worker.md:3,20` | 示例角色说明使用 subagent，返回说明使用 main agent；这是扩展示例，不是内核固定角色协议。 |
 
-CampusClaw 采用 `Main Agent` / `Subagent` 作为模型可见角色名称，与 pi 示例的用词一致；这是产品表述选择，不改变架构和权限。Runtime/Child 入口名、根执行和父子关系继续表达技术归属；Subagent 的“父 Agent”仍指直接委派者。角色由 Runtime 固定注入，具体正文与映射由 [PLAN.md](PLAN.md) 和[提示词组织](plan-policy.md#1-职责与装配)维护。
+CampusClaw 采用 `Main Agent` / `Subagent` 作为模型可见角色名称，与 pi 示例的用词一致；这是产品表述选择，不改变架构和权限。Runtime/Subagent 入口名、根执行和父子关系继续表达技术归属；Subagent 的“父 Agent”仍指直接调用者。角色由 Runtime 固定注入，具体正文与映射由 [PLAN.md](PLAN.md) 和[提示词组织](plan-policy.md#1-职责与装配)维护。
 
 
 ## 11. 业务 Agent 模式提示词覆盖
@@ -308,7 +308,7 @@ Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/c
 
 | 核验范围 | 仓库相对路径 / 关键符号 | 当前实现与边界 |
 |---|---|---|
-| 三工具与装配 | R `tool/{plan/ExitPlanModeTool,todo/TodoUpdateTool,question/AskUserQuestionTool}.java` · execute；`tool/builtin/{BuiltInToolName,BuiltInToolProperties,DefaultBuiltInToolFactory}.java`；S `application.yml` | 已实现；11 项 Runtime 缺省工具，两种模式共用定义；Child/Cron 缺省不装配三工具。 |
+| 三工具与装配 | R `tool/{plan/ExitPlanModeTool,todo/TodoUpdateTool,question/AskUserQuestionTool}.java` · execute；`tool/builtin/{BuiltInToolName,BuiltInToolProperties,DefaultBuiltInToolFactory}.java`；S `application.yml` | 已实现；11 项 Runtime 缺省工具，两种模式共用定义；Subagent/Cron 缺省不装配三工具。 |
 | 审核/提问等待 | R `runtimeapi/runtime/RuntimeSessionEngineRegistry.java` · createSession；`RuntimeActiveExecution.java` · await、claimAndResumePlanReview、claimAndResumeQuestionAnswer；`RuntimePendingInteraction.java` | 已实现；执行对象直接实现 PlanReviewPort/UserQuestionPort，共享一个交互槽；批准应用模式后才完成等待。目标图中的独立 Adapter 为推荐职责拆分，不代表工具功能缺失。 |
 | 权威事件 | R `runtimeapi/event/RuntimeEventProjector.java` · beginPlanReview、beginQuestion、persistToolResults、toolResultEvents；`RuntimeTodoEventMapper.java` · map | 已实现 agent.plan、agent.question 和 agent.todo_updated；计划/问题与 confirming 同次提交，TODO 与最终成功 ToolResult 同次提交。 |
 | 模式文件与选择 | R `runtimeapi/agent/RuntimeAgentPromptLoader.java` · loadSnapshot、loadOverrides、readOptionalModeFile、decodeUtf8；S `prompts/plan/{PLAN,BUILD}.md` | 已实现两资源、逐文件覆盖/缺失回退、严格 UTF-8 与非法覆盖失败；六份 TXT 已删除。BASE 仍来自受管 SYSTEM 和 Skill，通用业务指令是否已发布不能由代码推断。 |
