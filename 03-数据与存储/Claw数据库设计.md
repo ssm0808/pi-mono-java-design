@@ -864,11 +864,11 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 字段 | SQL 类型 | 可空 | 用途 |
 |---|---|---|---|
-| child_session_id | VARCHAR(128) | 否，主键 | 本次委派创建的子会话 |
+| child_session_id | VARCHAR(128) | 否，主键 | 本次 Subagent 调用创建的子会话 |
 | child_execution_id | VARCHAR(128) | 否 | 子会话首执行，后续聊天不能替换 |
 | parent_session_id | VARCHAR(128) | 否 | 发出调用的父会话 |
 | parent_execution_id | VARCHAR(128) | 否 | 固定父执行，用于受理与定向取消 |
-| parent_tool_call_entry_id | VARCHAR(128) | 否 | 服务端父调用身份，同次委派复用 |
+| parent_tool_call_entry_id | VARCHAR(128) | 否 | 服务端父调用身份，同次 Subagent 调用复用 |
 | created_at | TIMESTAMPTZ(0) | 否 | 关联创建的 UTC 秒级时间 |
 
 无数据库 DEFAULT。`UNIQUE(parent_session_id,parent_tool_call_entry_id)` 保证同次父调用至多一条关系；`CHECK(parent_session_id <> child_session_id)` 禁止直接自关联；`idx_session_child_parent_execution(parent_session_id,parent_execution_id)` 用于按父执行查找。更深的循环与深度约束由受理流程校验。

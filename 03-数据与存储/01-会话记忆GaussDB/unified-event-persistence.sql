@@ -27,11 +27,11 @@ CREATE TABLE t_session_execution_links (
     CONSTRAINT ck_session_child_distinct CHECK (parent_session_id <> child_session_id)
 );
 COMMENT ON TABLE t_session_execution_links IS '一次父工具调用与独立子会话首执行的不可变关联，不保存聊天副本';
-COMMENT ON COLUMN t_session_execution_links.child_session_id IS '本次委派创建的子会话 ID';
+COMMENT ON COLUMN t_session_execution_links.child_session_id IS '本次 Subagent 调用创建的子会话 ID';
 COMMENT ON COLUMN t_session_execution_links.child_execution_id IS '子会话的本次首执行 ID，后续对话不能替换';
 COMMENT ON COLUMN t_session_execution_links.parent_session_id IS '发出 Agent 工具调用的父会话 ID，不代表复制来源';
 COMMENT ON COLUMN t_session_execution_links.parent_execution_id IS '本次父执行 ID，用于受理和定向取消校验';
-COMMENT ON COLUMN t_session_execution_links.parent_tool_call_entry_id IS '父会话内的服务端工具调用 Entry ID，同次委派复用';
+COMMENT ON COLUMN t_session_execution_links.parent_tool_call_entry_id IS '父会话内的服务端工具调用 Entry ID，同次 Subagent 调用复用';
 COMMENT ON COLUMN t_session_execution_links.created_at IS '关联创建的 UTC 秒级时间';
 CREATE INDEX idx_session_child_parent_execution
     ON t_session_execution_links (parent_session_id, parent_execution_id);

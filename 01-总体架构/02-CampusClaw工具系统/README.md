@@ -228,13 +228,16 @@ campusclaw:
 6. 业务绑定不能修改框架 profile；Cron payload、Subagent 文件和模型输入不能增加任意工具；
 7. 非空配置下，业务代理受 Mate 工具装配开关、当前 Agent 绑定与权限约束。
 
-<a id="subagent-naming"></a>被父 Agent 通过 `Agent` 工具委派执行的 Agent 统一称为 Subagent，中英文都不写作“子 Agent”或 Child；拼写与 Claude Code、pi、OpenCode 及 Codex 对外协议的 subagent 一致。委派方仍称父 Agent，因为它不一定是 Main Agent。代码、配置和模型可见文本按下表对齐，待实现：
+<a id="subagent-naming"></a>Subagent 是父 Agent 通过 `Agent` 工具调用的 Agent，中英文都不写作“子 Agent”或 Child；拼写与 Claude Code、pi、OpenCode 及 Codex 对外协议的 subagent 一致。调用方仍称父 Agent，因为它不一定是 Main Agent。代码、配置和模型可见文本按下表对齐，待实现：
 
 | 位置 | 当前实现 | 目标 |
 |---|---|---|
 | 入口枚举 | `ToolEntryPoint.CHILD_AGENT` | `ToolEntryPoint.SUBAGENT` |
 | 工具配置键 | `campusclaw.tools.child-agent` | `campusclaw.tools.subagent`，不保留旧键别名 |
 | 运行时字段与方法 | `childAgentsByName`、`childAgentNames`、`ChildManifest`、`MAX_CHILD_DEPTH`、`validateChildRuntime` 等 | 对应改为 `subagents`/`subagent` 词根，如 `subagentsByName`、`subagentNames`、`SubagentManifest`、`MAX_SUBAGENT_DEPTH` |
+| 运行方法 | `SubagentExecutionService.runChild` | `runSubagent` |
+| 绑定读取注释 | `PreparedAgentRuntime.bindingAgents` 写“直接子 Agent 绑定”“委派时刻” | “返回当前 Agent 直接绑定的 Subagent；仅为候选元数据，权限、调用链与深度在 `Agent` 工具调用时校验” |
+| 日志与异常文本 | `Child Agent` | `Subagent` |
 | `Agent` 工具 description 与 Schema | `child Agent` | `subagent`，见[内置工具契约 §5](built-in-tool-contracts.md#5-agent) |
 | 已有 Subagent 命名 | `SubagentExecutionService`、`SubagentExecutionContext`、角色文本 `Subagent` | 保持不变 |
 
@@ -605,7 +608,7 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 | `BoundAgentTool` | 实现模型工具 `Agent`，完成参数、进度和结果投影 |
 | `BoundAgentResolver` | 按名称解析直接绑定并校验身份、版本、深度和 ancestry |
 | `SubagentExecutionContext` | 固化父子 ID、深度、ancestry、父模型、thinking、取消和进度 sink |
-| `SubagentExecutionService` | 准备 Subagent runtime，委派持久受理与 Runtime Coordinator；不直接 prompt 绕过历史 |
+| `SubagentExecutionService` | 准备 Subagent runtime，交由持久受理与 Runtime Coordinator 执行；不直接 prompt 绕过历史 |
 | `AgentSessionFactory` | 使用 `SUBAGENT` profile 创建独立 Subagent Session 实例（命名待实现，见 [§4.2](#subagent-naming)） |
 
 Subagent 消息从空集合开始，工作区指向自己的 `agent/{subagentId}`，SYSTEM、Skill 和工具
@@ -823,7 +826,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.23.0 | 2026-10-14 | 被委派的 Agent 统一称为 Subagent，入口枚举、配置键和运行时标识符改用 subagent 词根（待实现）。 |
+| 2.23.0 | 2026-10-14 | 父 Agent 通过 `Agent` 工具调用的 Agent 统一称为 Subagent，入口枚举、配置键和运行时标识符改用 subagent 词根（待实现）。 |
 | 2.22.0 | 2026-10-13 | 提问与用户确认 Tool 必须是本批最后一个调用，计划提交仍须单独调用，违规时整批拒绝且不执行任何调用。 |
 | 2.21.0 | 2026-10-10 | Child 保存独立完整历史并复用持久 Runtime，父侧继续只接收进度与摘要。 |
 | 2.20.1 | 2026-10-08 | 用户确认元数据分派说明统一使用 Skill 和 Tool。 |

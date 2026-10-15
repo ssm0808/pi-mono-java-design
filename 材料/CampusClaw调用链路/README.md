@@ -102,7 +102,7 @@
 | `Read`、`Find`、`Grep`、`Ls` | PARALLEL | 受管 Agent 工作区中的文件读取、查找和列表 | Runtime / Cron / Subagent |
 | `ListMateTools` | PARALLEL | 发现 Agent 或某个直接绑定 Skill 的 Mate 工具元数据 | Runtime / Cron / Subagent |
 | `CallMateTool` | SEQUENTIAL | 将业务工具名称解析成 ID 并发出执行请求 | Runtime / Cron / Subagent |
-| `Agent` | SEQUENTIAL | 委派已绑定 Subagent，Subagent 再运行自己的模型/工具循环 | Runtime / Cron |
+| `Agent` | SEQUENTIAL | 调用已绑定 Subagent，Subagent 再运行自己的模型/工具循环 | Runtime / Cron |
 | `Cron` | SEQUENTIAL | 管理定时任务；任务触发时使用 Cron 入口创建执行 Session | Runtime |
 | `ExitPlanMode`、`AskUserQuestion` | SEQUENTIAL | 计划审批、向用户提问及等待交互结果 | Runtime |
 | `TodoUpdate` | SEQUENTIAL | 更新执行中的 Todo 状态 | Runtime |

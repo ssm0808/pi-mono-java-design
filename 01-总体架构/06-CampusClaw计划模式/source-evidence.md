@@ -260,7 +260,7 @@ Java 本次静态读取本地 `pi-mono-java@0b81c168d816aed7864cc9fbb9caa0771407
 | DeepSeek `packages/preset/agent-presets/presets/standard/agent.cordis.yml:115` · planning | 标准规划政策直接以 “You are in plan mode.” 开始，未单列根 Agent 小节。 |
 | pi `packages/coding-agent/examples/extensions/subagent/agents/worker.md:3,20` | 示例角色说明使用 subagent，返回说明使用 main agent；这是扩展示例，不是内核固定角色协议。 |
 
-CampusClaw 采用 `Main Agent` / `Subagent` 作为模型可见角色名称，与 pi 示例的用词一致；这是产品表述选择，不改变架构和权限。Runtime/Subagent 入口名、根执行和父子关系继续表达技术归属；Subagent 的“父 Agent”仍指直接委派者。角色由 Runtime 固定注入，具体正文与映射由 [PLAN.md](PLAN.md) 和[提示词组织](plan-policy.md#1-职责与装配)维护。
+CampusClaw 采用 `Main Agent` / `Subagent` 作为模型可见角色名称，与 pi 示例的用词一致；这是产品表述选择，不改变架构和权限。Runtime/Subagent 入口名、根执行和父子关系继续表达技术归属；Subagent 的“父 Agent”仍指直接调用者。角色由 Runtime 固定注入，具体正文与映射由 [PLAN.md](PLAN.md) 和[提示词组织](plan-policy.md#1-职责与装配)维护。
 
 
 ## 11. 业务 Agent 模式提示词覆盖

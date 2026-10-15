@@ -19,7 +19,7 @@
 
 样例均使用真实 JSON 类型：version 为整数，enabled 与 is_concurrency_safe 为布尔值，关联列表为数组，Schema 为对象。资源名称、ID、时间和业务数据为虚构样例，不对应已部署资源；模型 ID 是外部模型目录的示例引用，实际使用前必须配置可用模型。Tool 的业务参数、告警级别和结果结构用于演示元数据，不作为已有园区接口事实。
 
-样例使用固定版本 1；Agent 与 Skill 引用同一个 Tool ID，Agent 引用本目录的 Skill ID。`Agent.binding_agents` 与 `Skill.binding_skills` 均为空，表示本场景不需要委派或组合 Skill，不暗示递归加载能力。Agent 与 Skill 均关联该 Tool，用于展示两种关联来源；宿主保留来源，不因重复关联获得额外权限。
+样例使用固定版本 1；Agent 与 Skill 引用同一个 Tool ID，Agent 引用本目录的 Skill ID。`Agent.binding_agents` 与 `Skill.binding_skills` 均为空，表示本场景不需要调用 Subagent 或组合 Skill，不暗示递归加载能力。Agent 与 Skill 均关联该 Tool，用于展示两种关联来源；宿主保留来源，不因重复关联获得额外权限。
 
 ## 2. Agent 元数据
 

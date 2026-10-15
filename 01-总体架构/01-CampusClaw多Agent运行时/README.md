@@ -26,7 +26,7 @@ Runtime 采用同一 POST 提交用户事件并接收该请求的 SSE，GET 读�
 |---|---|
 | Runtime、Cron、Subagent 的执行对象装配与关闭 | [工具系统](../02-CampusClaw工具系统/README.md)维护 profile、工具实例、受管目录与缓存；[M10 定时任务](../08-CampusClaw定时任务/README.md)维护待实现的后台受理与 Run 关联 |
 | 模型与工具循环的入口协作 | [Model](../../02-服务与接口/03-Model/README.md)维护业务 Agent 设置的模型选择与流适配 |
-| 父子执行的独立上下文与生命周期 | [工具系统 Agent 工具](../02-CampusClaw工具系统/built-in-tool-contracts.md)维护委派参数与结果 |
+| 父子执行的独立上下文与生命周期 | [工具系统 Agent 工具](../02-CampusClaw工具系统/built-in-tool-contracts.md)维护调用参数与结果 |
 | Session 运行对象与持久化恢复的衔接 | [会话记忆](../../03-数据与存储/01-会话记忆GaussDB/README.md)维护上下文与存储 |
 | 模式与执行快照的衔接 | [计划模式](../06-CampusClaw计划模式/README.md)维护 plan/build 提示词、审核与续跑 |
 

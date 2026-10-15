@@ -17,7 +17,7 @@
 
 本节版本：1.0.0；用户确认日期：2026-10-14。
 
-- 被父 Agent 通过 `Agent` 工具委派执行的 Agent 统一写作 Subagent；代码词根用 `subagent`，常量用 `SUBAGENT`。中英文都不写作“子 Agent”、Child 或 SubAgent，委派方仍称父 Agent。
+- Subagent 是父 Agent 通过 `Agent` 工具调用的 Agent，统一写作 Subagent；代码词根用 `subagent`，常量用 `SUBAGENT`。中英文都不写作“子 Agent”、Child 或 SubAgent，调用方仍称父 Agent。
 - 拼写依据：Claude Code、pi、OpenCode 和 Codex 对外协议均写作 subagent；代码与配置的对齐清单见[工具系统 §4.2](01-总体架构/02-CampusClaw工具系统/README.md#subagent-naming)。
 - 源码证据中引用的实际符号、已有版本历史条目和基线研究资料保留原文，不随术语改写。
 
