@@ -26,7 +26,7 @@ return 已认领的 Run
 == 准备并受理 ==
 ref over Schedule, Store
   共用受理流程
-  Agent 校验 -> 归属登记 -> Runtime 准备 -> 原子受理
+  归属登记 -> Runtime 准备 -> 原子受理
   见 schedule_run_admission
 end ref
 return 已提交的受理结果\n和同次准备的上下文
@@ -107,7 +107,6 @@ package "定时任务应用层（schedule）" as AppPkg {
 }
 
 package "端口与适配器" as PortPkg {
-  interface ScheduleBindingResolver <<只读端口 / P>>
   interface ScheduleAuthorizationPort <<端口 / P>>
   interface ScheduledAccessTokenPort <<端口 / P>>
   class MateScheduleAdapter <<适配器 / P>>
@@ -151,9 +150,7 @@ ScheduleApplicationService -down-> ScheduledRunAcceptanceService
 ScheduleDispatcher -down-> ScheduledRunAcceptanceService
 ScheduledRunAcceptanceService ..> PreparedScheduleRunDTO : 读取
 
-ScheduleApplicationService -down-> ScheduleBindingResolver : 校验 Agent
-ScheduleRunPreparation -down-> ScheduleAuthorizationPort : 校验 Agent 启用、登记 Session 归属
-MateScheduleAdapter .up.|> ScheduleBindingResolver
+ScheduleRunPreparation -down-> ScheduleAuthorizationPort : 登记 Session 归属
 MateScheduleAdapter .up.|> ScheduleAuthorizationPort
 MateScheduleAdapter .up.|> ScheduledAccessTokenPort
 MateScheduleAdapter -down-> Mate
@@ -210,8 +207,6 @@ autonumber
 activate Mate
 Mate -> Schedule ++ : 创建任务：Agent、任务内容和可选规则
 Schedule -> Schedule : 核验服务来源和获准目标\n校验输入和时间规则
-Schedule -> Mate ++ : 检查 Agent 关联\n以及当前管理授权
-return Agent 关联校验结果
 Schedule -> Store ++ : 提交新的启用配置\n含下次计划时间
 return 已提交的配置
 return 201 + 已保存的配置\n及未来计划时间
@@ -247,7 +242,7 @@ Schedule -> Store ++ : 读取当前任务并预留一个手动 Run\n检查共用
 return 已预留的 Run
 ref over Schedule, Store
   共用受理流程
-  Agent 校验 -> 归属登记 -> Runtime 准备 -> 原子受理
+  归属登记 -> Runtime 准备 -> 原子受理
   见 schedule_run_admission
 end ref
 return 200 + Run（含 Session ID）
@@ -264,7 +259,7 @@ end note
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java submitLocked。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage。
 ' 表达方式：定时任务管理协调事务；Session 运行时提供准备和持久化能力。
-' 设计原因：Agent 校验在归属登记之前，已删除或禁用时不留待核对登记；远程归属登记在短受理事务之前完成；执行授权只在配置任务时由 Mate 检查。
+' 设计原因：不校验 Agent 是否存在和启停用（评审 Todo T11）；远程归属登记在短受理事务之前完成；执行授权只在配置任务时由 Mate 检查。
 ' PR 证据：e9d31e8888a81b7fe95071e705482bb16fa10476，2026-10-10 拉取。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/schedule/ScheduledRuntimeAdmissionService.java newSession 和 encodeContext。
 ' Java 差异：移除 Claw 的用户引用；Mate 归属登记待实现。
@@ -282,9 +277,6 @@ participant "Session 运行时" as Runtime
 database "存储" as Store
 autonumber
 [-> Schedule ++ : 受理一个已预留的 Run
-== 校验 Agent ==
-Schedule -> Mate ++ : 按 agentId 校验 Agent 存在且启用\n不查用户资格
-return 存在且启用
 == 登记独立归属 ==
 Schedule -> Schedule : 固定本次 Run 拟建的 Session ID
 Schedule -> Mate ++ : 按资源 ID 登记 Session 归属\nClaw 不提供用户、租户或 owner
@@ -333,8 +325,6 @@ Operator -> Mate ++ : 配置定时任务（每天 22:00 视频巡逻检查）
 activate Operator
 note right of Mate : Mate 内部处理待定（评审 Todo T8）
 Mate -> Claw ++ : 创建该定时任务
-Claw -> Mate ++ : 校验该 Agent 的配置权限
-return 配置授权
 Claw -> Store ++ : 保存该定时任务
 return 已保存的定时任务
 return 定时任务及下次运行时间

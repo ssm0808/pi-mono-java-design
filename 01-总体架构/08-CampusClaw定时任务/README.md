@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.56.0 |
+| 文档版本 | 0.57.0 |
 | 更新日期 | 2026-10-15 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；不选择或追加已有 Session |
@@ -30,11 +30,11 @@
 
 #### Claw 首版开发前提
 
-Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立即运行、暂停与取消暂停、删除、失败自动暂停（D12）和 Run 结束（D11）均已确定，可以开发。以下依赖不阻塞编码，但决定能否联调和上线：
+Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立即运行、暂停与取消暂停、删除和 Run 结束（D11）均已确定，可以开发。以下依赖不阻塞编码，但决定能否联调和上线：
 
 | 依赖 | 开发期做法 | 联调或上线前必须完成 |
 |---|---|---|
-| Mate 的 Agent 启用校验、Session 归属登记与统一账号 access-token 三个接口（调用边界见 [§5.1](#security)，[Mate 草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)） | 按 `ScheduledAccessTokenPort`、`ScheduleAuthorizationPort` 编码，测试用桩实现 | Mate 实现接口，路径与 VO 定稿 |
+| Mate 的 Session 归属登记与统一账号 access-token 两个接口（调用边界见 [§5.1](#security)，[Mate 草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)） | 按 `ScheduledAccessTokenPort`、`ScheduleAuthorizationPort` 编码，测试用桩实现 | Mate 实现接口，路径与 VO 定稿 |
 | Claw 与 Mate 的服务鉴权（[T2](#todo-t2)） | 入站校验与出站凭据各留一个端口，先用测试配置 | 确定鉴权机制 |
 | Runtime 的事务内终态扩展点（[D11](#key-decisions)）、后台准备与非交互 Host 策略 | 属于 M06 改造；2026-10-14 确定终态扩展点随定时任务 PR #332 一起实现 | 随 PR #332 合入 Runtime |
 | 实例宕机后自动恢复（[T9](#todo-t9)） | 首版不实现 | 上线前须有人工释放被占用任务的处置方式，见[应急预案](#524-应急预案)缺口 |
@@ -50,6 +50,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 | <a id="todo-t8"></a>T8 | Mate 管理入口在调用 Claw 前后的处理（权限、配额、任务与用户关联） | 只影响 Mate 侧；Claw 侧逻辑已定 | Claw 只接收可信服务调用 | Mate |
 | <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，任务一直被占用，后续计划全部遇忙跳过 | 需人工处置才能恢复 | 不自动恢复。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件，中断终态走 D11 的同一终态提交，Run 随之结束；② 执行期写入与工具调用前检查执行未终止，防止恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | Runtime |
 | <a id="todo-t10"></a>T10 | 是否在 Claw 的 t_schedule（及 Run、Session）增加 userId，使列表直接按用户查询；需先确定任务仅创建者可见还是同范围共享，以及与 Mate 归属的同步规则 | 任务量增长后 Mate 全量拉取的读取量随之增长 | 方法 A：Mate 拉取全部后过滤（[D9](#key-decisions)） | Claw 与 Mate 共同 |
+| <a id="todo-t11"></a>T11 | Agent 删除、启停用与定时任务的数据一致性：保存、受理、取消暂停时是否校验 Agent，Agent 不可用时任务如何处理 | 关联的 Agent 已删除或禁用时，自动运行每次失败在 Runtime 准备阶段，只留下失败 Run | 不校验 Agent 是否存在和启停用，正常受理；准备失败按通用错误记录 Run，不自动暂停（[D12](#key-decisions)） | Agent 管理与 Claw 共同 |
 
 <a id="implementation-verification"></a>
 
@@ -84,7 +85,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 
 | # | 问题 | 结论 |
 |---|---|---|
-| <a id="todo-t1"></a>T1 | 运行失败是否自动暂停整个 Schedule | 2026-10-14 评审确定，见 [D12](#key-decisions) |
+| <a id="todo-t1"></a>T1 | 运行失败是否自动暂停整个 Schedule | 2026-10-15 改为首版不自动暂停，见 [D12](#key-decisions) |
 
 ### 需求信息
 
@@ -112,7 +113,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 | 受理（acceptance） | 在同一数据库事务内创建 Session、首条消息、根执行并写入 Run 关联 |
 | 未结束 Run | finished_at 为空的 Run；同一 Schedule 至多一条，由运行表部分唯一约束保证同任务不并发 |
 | lease_until | Run 的受理准备期限，过期后不得受理并由清理结束 |
-| pausedReason | 当前暂停原因：人工暂停为 `manual`，自动暂停为 `error` 并带错误类型（D12）；恢复后清空 |
+| pausedReason | 当前暂停原因：首版只有人工暂停 `manual`（D12）；恢复后清空 |
 | Spring 六字段 Cron | 秒、分、时、日、月、星期；不接受五字段 POSIX 或年字段 |
 
 ### 1.2 需求整理
@@ -162,7 +163,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 
 ![定时任务整体时序](scheduled_task_overview.svg)
 
-[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L308)
+[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L300)
 
 | 阶段 | 详细时序 |
 |---|---|
@@ -189,7 +190,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | D9 | 首版任务列表和 Run 列表如何按用户过滤？ | Claude 按 workspace 范围列出，无用户级过滤 | 用户与任务的关联在 Mate；Claw 不保存用户范围或 owner | 方法 A：Claw 返回全部记录，Mate 拉取全部页后按用户过滤、排序和分页；单任务的 Run 由 Mate 先确认可见再带 scheduleId 查询 | 读取量随全部任务与 Run 增长，Claw 页码只用于分批拉取；Claw 加 userId 见 T10 |
 | D10 | 定时执行时没有用户请求，Claw 用什么权限调用业务工具？ | Claude 部署引用 workspace 范围的 Vault 凭据；普通对话由用户请求带 Header | 用户登录 Token 会过期，且没有确认过的刷新或代签接口；不能保存用户密码 | 用户权限只在配置时由 Mate 检查；运行时统一使用 Mate 配置的同一个账号，模型每批需要凭据的工具调用前，Claw 无入参向 Mate 取一次 access-token（2026-10-13 评审确定） | 所有任务权限相同；创建者失去权限或离职后任务仍照常运行；每批工具调用多一次 Mate 请求 |
 | D11 | 执行结束后，Run 怎么知道并释放任务？ | 未核验各基线的同类机制 | 同一任务不并发，Run 不结束后续计划就全部遇忙跳过；实例可能在任意时刻失联 | 写根执行终态的同一数据库事务内，经 Runtime 通用终态扩展点结束本次 Run（按 execution_id 条件更新 finished_at）；不用提交后回调，也不轮询（2026-10-14 评审确定） | Runtime 需新增事务内扩展点；Run 需 execution_id 索引；实例宕机写不进终态时仍靠 T9 |
-| D12 | 运行失败要不要自动暂停任务？ | Claude 只对不可恢复的建 Session 错误（如 Agent、环境、Vault 已归档）首次即自动暂停，限流等临时错误只记失败 Run；DSH 投递失败只记日志、任务保持 active；pi、OpenCode 产品内无定时任务，Codex 调度器未开源（2026-10-14 核验，见[证据](source-evidence.md#auto-pause-baseline-evidence)） | 不改配置就必然再次失败的错误，继续每次触发只会产生无意义的失败记录；临时故障不应让任务停下来；业务执行失败的结论在 Session 里 | 按错误类型区分：自动运行记录 agent_unavailable_error 时，同一事务内把仍为 active 且 Agent 未变的任务改为 paused，pausedReason 记录该错误；agent_unavailable_error 只依据 `ScheduleAuthorizationPort` 按 agentId 直接向 Mate 查询“存在且启用”的技术校验（不经本地缓存，不查用户资格），Mate 明确返回已删除或已禁用才记录；Runtime 准备阶段的 Agent 不可用、Agent 未找到、本地路径校验、目录 I/O、Skill 准备等通用故障，以及该校验调用本身失败或超时，都不记此类型、不暂停；容量、忙、准备超时等临时错误与执行中失败均不暂停；手动运行失败从不暂停；恢复需显式取消暂停，不补跑（2026-10-14 评审确定） | 不采用旧 Cron 连续三次失败禁用；Agent 恢复后需人工取消暂停；临时错误若持续存在只会累积失败 Run，需要监控发现 |
+| D12 | 运行失败要不要自动暂停任务？ | Claude 只对不可恢复的建 Session 错误（如 Agent、环境、Vault 已归档）首次即自动暂停，限流等临时错误只记失败 Run；DSH 投递失败只记日志、任务保持 active；pi、OpenCode 产品内无定时任务，Codex 调度器未开源（2026-10-14 核验，见[证据](source-evidence.md#auto-pause-baseline-evidence)） | 不改配置就必然再次失败的错误，继续每次触发只会产生无意义的失败记录；临时故障不应让任务停下来；业务执行失败的结论在 Session 里 | 首版不自动暂停：任何运行失败都只记录失败 Run，任务保持原状态；暂停只由人工发起，恢复需显式取消暂停，不补跑。Agent 是否存在和启停用暂不校验，正常受理，Agent 不可用时在 Runtime 准备阶段按通用错误失败；Agent 启停用与数据一致性另开设计（T11）（2026-10-15 评审确定，替代 2026-10-14 的 agent_unavailable_error 自动暂停） | 不采用旧 Cron 连续三次失败禁用；Agent 已删除或禁用时，自动运行每次都会失败并累积失败 Run，需要监控发现或人工暂停 |
 
 时间、执行目标和删除的多基线对照见 [A14](../07-Agent架构对比/README.md#a14) 和[删除基线证据](source-evidence.md#schedule-delete-baselines)。
 
@@ -220,7 +221,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | 状态与版本 | active/paused，另有 archived_at；未声明 revision | 新建 active、存续资源 active/paused；不保存配置版本；删除成功返回最后配置回执，随后读取 404，无归档时间字段 | 参考基线、边界明确 |
 | 删除配置 | POST archive，200 完整资源，以 archived_at 表示不可恢复终态 | 直接删除及 200 完整 Schedule 回执、随后 GET 404 且列表排除；重复删除 404。Schedule 和 Run 同删，Session 保留；简化任务侧历史生命周期，代价是无法再查询已删任务的受理失败和来源记录 | 产品约束、生命周期架构选择 |
 | 资源类型 | 顶层 type 固定为 deployment | 顶层 type 固定为 schedule，完整响应统一返回；便于识别资源，代价是增加一个恒定字段，不扩展现有 Session 契约 | 产品约束 |
-| 暂停原因 | paused_reason 为 null 或 manual/error 原因对象，恢复后清空 | pausedReason 保留相同职责，随状态持久化并安全投影；增加当前原因维护成本，不能用最后一个 Run 错误替代，error 形状保留；自动暂停只由自动运行的 agent_unavailable_error 触发（D12） | 参考基线、架构增量 |
+| 暂停原因 | paused_reason 为 null 或 manual/error 原因对象，恢复后清空 | pausedReason 保留相同职责，随状态持久化并安全投影；增加当前原因维护成本，不能用最后一个 Run 错误替代，首版只有人工暂停 manual，不自动暂停（D12） | 参考基线、架构增量 |
 | metadata | 最多 16 对字符串，键最多 64、值最多 512 | 支持可选 map，采用同样限制；不进模型，不作身份、权限或凭据依据 | 参考基线、产品约束 |
 | 凭据 | vault_ids 引用 workspace 范围 Vault，运行时使用其中凭据 | 不保存凭据引用；所有定时任务统一使用 Mate 配置的同一个账号，每批工具调用前无入参取 access-token（D10）。实现最简单，代价是所有任务权限相同、用户权限只在配置时检查 | 企业产品约束 |
 
@@ -288,7 +289,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | cron_expression | TEXT | 是 | — | Spring 六字段表达式；仅手动运行的任务为空 |
 | timezone | TEXT | 是 | — | 与 Cron 成对保存的时区，缺省值由服务归一化 |
 | status | VARCHAR(16) | 否 | — | `active` / `paused` |
-| paused_reason | VARCHAR(64) | 是 | — | 当前暂停原因：人工暂停存 `manual`，自动暂停存触发暂停的 Run 的 error_type（目前仅 `agent_unavailable_error`），投影为 `{type:error,error:{type}}`；规则见 [D12](#key-decisions) |
+| paused_reason | VARCHAR(64) | 是 | — | 当前暂停原因：首版只有人工暂停，存 `manual`；不自动暂停，规则见 [D12](#key-decisions) |
 | metadata | TEXT | 否 | — | 附加元数据 JSON 对象，无值时写 `{}` |
 | last_run_at | TIMESTAMPTZ(0) | 是 | — | 最近一次自动运行的受理时刻，在受理事务中写数据库当前时间；手动、准备失败和忙跳过不更新 |
 | upcoming_run_at | TIMESTAMPTZ(0) | 是 | — | 下一次自动运行的计划时刻，即扫描游标；到期领取后推进；仅手动、暂停或规则无后续时刻时为空 |
@@ -371,7 +372,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | 受理 | 锁 Schedule 与 Run，复查任务存在（自动运行要求 active 且未过派发期限，手动运行允许 active 或 paused）、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过；不查询用户执行资格（D10）；首消息用锁内读到的最新 prompt；Session、首消息、根执行、Run 关联与自动运行的 last_run_at 一起提交 |
 | 受理后启动 | 原实例在进程内启动，不写启动权；模型与业务执行不在受理事务内 |
 | 根执行终态提交 | Runtime 写根执行终态的同一事务内，按 execution_id 条件更新本次 Run 的 finished_at，释放任务；Run 已删除时更新 0 行；只看本次根执行，会话后续聊天不改写；终态写不进（结果未知）不释放，见 T9 |
-| 记录未受理 Run | 锁 Run 写 finished_at 与 error_type；自动运行且为 agent_unavailable_error 时同事务锁 Schedule，仍为 active 且 agent_id 等于 Run.agent_id 才改为 paused 并写 paused_reason |
+| 记录未受理 Run | 锁 Run 写 finished_at 与 error_type；不改 Schedule 状态 |
 | 清理过期准备 | 锁 Run，只对 session_id、error_type 都为空且 lease_until 已过的 Run 写 finished_at 与错误 |
 | 保留期清理 | 按 `(finished_at, id)` 批量删除超期的已结束 Run，不级联 Session，不删除未结束 Run |
 | 删除任务 | 锁 Schedule，同事务删除 Run 与 Schedule；受理先提交则保留 Session，删除先提交则拒绝旧准备结果；外键级联作兜底 |
@@ -456,9 +457,9 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 | 层次 | 责任与生命周期 |
 |---|---|
 | 边界与入口 | `ScheduleController` 收发 RequestVO/ResponseVO；`CronToolAdapter` 传入 Host 已绑定的 Session/执行和目标资源，不能绕过授权 |
-| 关联解析 | `ScheduleBindingResolver` 只读检查 Agent 关联，管理调用不发布运行目录；MateAdapter 只调用 Mate 的 Agent 启用校验、Session 归属登记与统一账号 access-token 三个接口 |
+| Mate 适配 | `MateScheduleAdapter` 只调用 Mate 的 Session 归属登记与统一账号 access-token 两个接口；保存与受理不校验 Agent 是否存在和启停用（T11） |
 | 应用编排 | `ScheduleApplicationService` 管理规则与 VO/DTO 转换；`ScheduleRunPreparation` 与受理服务承接共享入口；`ScheduleDispatcher` 推进已受理执行；均为 Spring 单例 |
-| 策略与准备 | `ScheduleTimePolicy` 统一校验与计划计算；`ScheduleAuthorizationPort` 调用 Mate 的归属登记，并按 agentId 校验 Agent 存在且启用（技术校验，不查用户资格），不是 Claw 的用户权限策略；`ScheduledAccessTokenPort` 在每批工具调用前取 access-token；`PreparedScheduleRunDTO` 每次准备的不可变快照，不代替事务内可变状态检查 |
+| 策略与准备 | `ScheduleTimePolicy` 统一校验与计划计算；`ScheduleAuthorizationPort` 调用 Mate 的 Session 归属登记，不是 Claw 的用户权限策略；`ScheduledAccessTokenPort` 在每批工具调用前取 access-token；`PreparedScheduleRunDTO` 每次准备的不可变快照，不代替事务内可变状态检查 |
 | 持久化 | `ScheduleRepository` 委托 `ScheduleMapper`，只收发 DTO，不引入 PO/DO/Entity |
 | Runtime 适配 | `ScheduledRunAcceptanceService` 在同库短事务中受理；`RuntimeExecutionCoordinator` 事务后启动、投影与关闭；每次独立 `ManagedAgentSession` 由公共工厂创建 |
 
@@ -472,7 +473,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![Claw 配置保存](schedule_configuration_save.svg)
 
-[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L192)
+[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L189)
 
 保存步骤、并发语义与结果不确定时的处理见[§4.5](#reliable-write-flow)。
 
@@ -484,7 +485,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
-[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L225)
+[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L220)
 
 **正常调用如何完成：** 核验 Mate 服务、获准操作和目标 → 短事务锁定任务，插入一条未结束的手动 Run 占用任务，不改自动计划 → 进入[共用受理流程](#run-admission-sequence) → 返回 200 和带 sessionId 的 Run，不等待业务完成。
 
@@ -503,7 +504,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 |---|---|---|
 | 调度器 | 发起到期扫描、提交后启动 | `ScheduleDispatcher`；各副本并行扫描，不选领跑者 |
 | 定时任务管理 | 管理配置；领取 Run，协调可信准备和原子受理 | `ScheduleApplicationService`、`ScheduleRunPreparation`、`ScheduledRunAcceptanceService` 等 M10 应用职责，不要求实现为一个大 Service |
-| Mate | 按 agentId 校验 Agent 存在且启用，登记 Session 归属，提供统一账号的 access-token；不为 Claw 做用户授权，调用边界见 [§5.1](#security) | `MateScheduleAdapter` 对接外部 Mate |
+| Mate | 登记 Session 归属，提供统一账号的 access-token；不为 Claw 做用户授权，调用边界见 [§5.1](#security) | `MateScheduleAdapter` 对接外部 Mate |
 | Session 运行时 | 准备 Agent/模型/工具上下文；受理后推进模型与工具，保存根执行结果 | 既有 `AgentSessionFactory.create`、`RuntimeExecutionCoordinator.start` 和运行时持久化能力；后台准备与非交互 Host 策略待实现 |
 | 存储 | 原子保存任务、Run、Session/首消息/根执行，以及执行事件与终态 | 同一 GaussDB 事务资源；通过 Repository 与 Runtime 持久化协作者访问 |
 
@@ -514,7 +515,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 [原尺寸 SVG](scheduled_run_sequence.svg) · [PlantUML 源码](diagram.puml#L1)
 
 1. **分配 occurrence。** 各副本每秒按 upcoming_run_at/id 有界扫描，不按用户或租户分组；以 `FOR UPDATE SKIP LOCKED` 锁定到期的 Schedule 行，锁内复核未删除、active 与游标仍是本次计划时刻。任务无未结束 Run 时插入一条未结束 Run（部分唯一约束即占用）并推进游标；已有未结束 Run 时插入一条已结束的忙跳过 Run，不排队。超过 5 秒派发容差的处理见 [§3.8](#no-catch-up)。
-2. **Agent 校验、归属登记与准备。** 先按 agentId 向 Mate 校验 Agent 存在且启用，明确已删除或禁用时记录 agent_unavailable_error 并结束 Run，不再登记（[D12](#key-decisions)）；再固定拟建 Session ID，由 Mate 独立登记归属并确认；再在事务外解析 Agent 已发布目录、模型、CRON profile、工作区，固定 `PreparedScheduleRunDTO`；不持数据库行锁调用远端，不调用模型或业务工具。
+2. **归属登记与准备。** 不校验 Agent 是否存在和启停用（[T11](#todo-t11)）；先固定拟建 Session ID，由 Mate 独立登记归属并确认；再在事务外解析 Agent 已发布目录、模型、CRON profile、工作区，固定 `PreparedScheduleRunDTO`；不持数据库行锁调用远端，不调用模型或业务工具。
 3. **原子受理。** 同一事务锁定 Schedule 与 Run，复核任务存在且状态允许、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过与容量；创建 Session、首条用户消息（使用锁内读到的最新 prompt）、根执行，写 Run 关联，自动运行同时写 last_run_at 为数据库当前时间。任一步失败整体回滚。
 4. **事务后启动。** 受理不等待 Agent 完成。原实例在进程内直接启动一次，调度上下文（scheduleId、runId、agentId 及非交互策略）只在内存中传给 Runtime 和子 Agent，使用 `RuntimeEventOutput.persistenceOnly()` 保存完整事件，不伪造 SSE 连接。模型每次返回需要凭据的工具调用时，向 Mate 取一次统一账号 access-token，本批工具共用（[D10](#key-decisions)）。Runtime、Cron 与 Child 共用受理原语与执行协调器，规则见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)。
 5. **Run 结束。** Runtime 提交根执行终态时，在同一事务内调用终态扩展点；定时任务的实现按 execution_id 条件更新本次 Run 的 finished_at，释放任务（[D11](#key-decisions)）。终态写入失败由 Runtime 既有重试负责，两者一起成功或一起失败。Run 已随任务删除时更新 0 行，只保留 Session 与根执行终态，不重新插入 Run 或配置。用户在同一 Session 后续发起的对话不产生新的根终态，不改写本次结果。
@@ -527,13 +528,13 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ### 3.6 共用受理的详细时序（UC6、UC11）
 
-展开 §3.4 和 §3.5 中的“共用受理流程”。场景：一次视频巡逻检查 Run 已领取并占用任务，从校验 Agent 开始，到受理结果提交结束，不包含模型执行。自动和手动入口共用此流程；自动还检查 active 与派发期限，手动允许 paused 且不推进自动游标。状态：待实现；PR #332 已实现同库受理部分，Mate 归属登记待实现。
+展开 §3.4 和 §3.5 中的“共用受理流程”。场景：一次视频巡逻检查 Run 已领取并占用任务，从登记 Session 归属开始，到受理结果提交结束，不包含模型执行。自动和手动入口共用此流程；自动还检查 active 与派发期限，手动允许 paused 且不推进自动游标。状态：待实现；PR #332 已实现同库受理部分，Mate 归属登记待实现。
 
 ![共用受理流程](schedule_run_admission.svg)
 
-[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L261)
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L256)
 
-**正常调用如何完成：** 按 agentId 向 Mate 校验 Agent 存在且启用 → 固定拟建 Session ID，由 Mate 按资源 ID 登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、Run、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
+**正常调用如何完成：** 固定拟建 Session ID，由 Mate 按资源 ID 登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、Run、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
 
 本图只画正常受理。用户执行权限只在配置任务时由 Mate 检查，运行时不再查询。Mate 归属登记未确认和 Runtime 准备失败分别属于跨服务持久登记和本地准备，核对责任不同，处理见 [F4、F14](#failure-recovery)。Mate 登记与 Claw 受理之间没有跨库事务，详细规则见 [Mate 会话归属](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)。
 
@@ -602,7 +603,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，并支持可选 metadata；顶层只读 type 固定为 schedule，pausedReason 返回当前暂停原因或 null，见 [§4.4.1.1](#schedule-type-paused-reason)。任务内容是纯文本 prompt；配置不保存凭据引用，运行时统一使用 Mate 配置的同一个账号取 access-token，详见 §4.4.2。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 既有约束。
 
-本章维护八个配置及生命周期操作和两个 Run 读取的当前目标契约，均待实现。新建状态为 `active`，创建处理器不调用模型或创建 Session。自动执行不补漏跑、遇忙跳过，失败或故障不重跑同一次执行；首版只支持文本及无需人工交互的任务，遇 ASK 由 Host 阻止待确认调用并结束本次根执行，不建立持久等待，见[执行范围](#noninteractive)。删除 Schedule 及对应 Run，保留已受理 Session 且不请求取消；单独删除 Session 不改写 Run 的受理事实和 sessionId。自动运行记录 agent_unavailable_error 时自动暂停任务，见 §4.4.1.1；服务鉴权、ID 格式与持久化接线仍需实施校准。
+本章维护八个配置及生命周期操作和两个 Run 读取的当前目标契约，均待实现。新建状态为 `active`，创建处理器不调用模型或创建 Session。自动执行不补漏跑、遇忙跳过，失败或故障不重跑同一次执行；首版只支持文本及无需人工交互的任务，遇 ASK 由 Host 阻止待确认调用并结束本次根执行，不建立持久等待，见[执行范围](#noninteractive)。删除 Schedule 及对应 Run，保留已受理 Session 且不请求取消；单独删除 Session 不改写 Run 的受理事实和 sessionId。首版不自动暂停任务，见 §4.4.1.1；服务鉴权、ID 格式与持久化接线仍需实施校准。
 
 上述创建语义不能被解释为“后端暂未接线也返回 active”。配置服务可以先开发和测试，但调度接线、执行身份及准入尚未交付时，不发布可自动运行的创建承诺；未满足依赖的请求返回服务不可用。保存成功也不保证后续业务一定成功，执行时仍须检查当前 Agent 状态和容量。
 
@@ -647,12 +648,12 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 |---|---|
 | name | 创建必填；去首尾空白后 1～256 个 Java 字符；允许重名，不作为身份 |
 | description | 可选，最多 2048 个 Java 字符；创建省略默认 null，更新省略保持，空白或显式 null 清除；不附加到模型输入 |
-| agentId | 创建必填；复用 `ClawConstants.Agent.ID_REGEX`，经 Mate 校验存在且启用（与 D12 同一 agentStatus 校验）；当前用户能否使用该 Agent 由 Mate 在调用 Claw 前检查；只关联 Agent 身份，不保证固定历史版本 |
+| agentId | 创建必填；复用 `ClawConstants.Agent.ID_REGEX`，只校验格式，不校验 Agent 是否存在和启停用（T11）；当前用户能否使用该 Agent 由 Mate 在调用 Claw 前检查；只关联 Agent 身份，不保证固定历史版本 |
 | prompt | 创建必填；纯文本字符串，去首尾空白后非空，否则返回400/SCHEDULE_PROMPT_INVALID；每次运行作为新 Session 的首条用户消息提交；首版不支持附件，见 §4.3.6；不开放多条消息、system.message 或 user.define_outcome |
 | schedule | 可选；创建省略默认 null，更新省略保持；非空时只允许下表的 cron 对象，更新时整体替换 |
 | metadata | 可选字符串键值对象；创建省略为 {}；沿用 Claude 最多 16 对、键最多 64、值最多 512 个字符；不传给模型、不作为授权依据，详见 §4.3.7 |
 | type | 资源顶层只读字段，固定为 schedule；创建、详情、列表元素、更新及删除回执均返回；区别于 schedule.type，见 §4.4.1.1 |
-| pausedReason | 只读的当前暂停原因，始终返回 object 或 null；创建为 null，人工暂停为 manual，自动暂停为 error，恢复后清空；精确边界见 §4.4.1.1 |
+| pausedReason | 只读的当前暂停原因，始终返回 object 或 null；创建为 null，人工暂停为 manual，恢复后清空；首版不自动暂停；精确边界见 §4.4.1.1 |
 | status/id/createdAt/updatedAt | 全部只读；新建 active；时间为 UTC ISO 8601，秒级且无小数；status 为 active/paused；采用直接删除，无 archived/deleted 公共状态；删除成功返回完整回执，随后读取404 |
 | schedule.lastRunAt / schedule.upcomingRunsAt | 仅响应使用；最近一次自动运行的开始时间（受理时刻）及最多五个未来计划时刻，见 §4.3.3；创建和更新请求传入时拒绝 |
 
@@ -838,7 +839,7 @@ GET 详情返回同形完整资源；列表每项同样返回完整资源。分�
 | schedule.lastRunAt | 创建为 null；表示最近自动运行的开始（受理时刻） | 对应 last_run_at；手动试跑不更新，不当作业务成功 |
 | schedule.upcomingRunsAt | 最多五个未来计划时刻 | 对应 upcoming_runs_at；计划值不保证实际启动 |
 | status | 创建 active；存续资源 active 且 schedule 非空才有自动计划；删除回执保留最后状态，见 §4.4.6 | 与 Claude active 拼写一致；Claw 直接删除，不采用归档资源模型 |
-| pausedReason | 创建为 null；表示当前暂停原因，不是最近运行错误 | 对应 paused_reason，采用 lowerCamelCase；manual/error 与恢复清空语义对齐 |
+| pausedReason | 创建为 null；表示当前暂停原因，不是最近运行错误 | 对应 paused_reason，采用 lowerCamelCase；manual 与恢复清空语义对齐 |
 | metadata | 原样保存的字符串对象；省略默认 {} | 对应同名字段；沿用 16/64/512 限制，不传模型 |
 | createdAt/updatedAt | 新建相等；UTC 秒级无小数 | 对应 created_at/updated_at；Claw 精度是产品规则 |
 
@@ -860,7 +861,7 @@ type 始终为字符串 schedule，创建、详情、列表元素和更新使用
 |---|---|
 | 新建或处于 active | null；字段不能省略 |
 | 人工暂停 | 非空对象，type 为 manual |
-| 自动暂停 | `{type:"error",error:{type,message}}`，内层采用 §4.4.7 的安全错误形状，type 与触发暂停的 Run 的 error.type 相同。只有**自动运行**记录的 `agent_unavailable_error`（关联的 Agent 已删除或被禁用）会自动暂停任务，见[D12](#key-decisions) |
+| 自动暂停 | 首版不自动暂停，任何运行失败都不改 status 与 pausedReason，见[D12](#key-decisions)；error 原因形状随 [T11](#todo-t11) 另定 |
 | 恢复为 active | 清空为 null；不删除历史 Run 或暂停审计 |
 | 修改已暂停配置 | 保持当前原因；修复配置后仍需显式恢复 |
 
@@ -874,13 +875,13 @@ type 始终为字符串 schedule，创建、详情、列表元素和更新使用
 }
 ```
 
-在 active/paused 范围内，pausedReason 非空当且仅当 status 为 paused；不能返回 active 与 manual/error 原因的组合。任务删除成功的完整回执保留最后 status/pausedReason，随后不再提供读取；不产生额外的删除原因响应对象。自动暂停只由自动运行的 agent_unavailable_error 触发：写入该失败 Run 的同一事务锁定任务，仅当任务仍为 active 且 agent_id 等于 Run.agent_id 时改为 paused 并写入原因；已被人工暂停或已换 Agent 则不改。容量、忙、准备超时等临时错误与执行中失败不暂停，手动运行失败也不暂停；不采用旧 Cron 连续三次失败禁用。
+在 active/paused 范围内，pausedReason 非空当且仅当 status 为 paused；不能返回 active 与 manual 原因的组合。任务删除成功的完整回执保留最后 status/pausedReason，随后不再提供读取；不产生额外的删除原因响应对象。首版不自动暂停：受理失败、准备失败与执行中失败都只记录在 Run 或 Session，不改任务状态；不采用旧 Cron 连续三次失败禁用。
 
 两个字段由服务端生成；创建和配置更新若传入顶层 type 或 pausedReason，即使值看似正确，也按只读字段返回 400 `SCHEDULE_REQUEST_INVALID`。合法的 schedule.type 仍是原有输入。暂停/恢复操作负责生成原因，调用方不能通过配置更新伪造或清空它。
 
 status 与 pausedReason 在同一持久化边界原子修改，并按生命周期变更更新 updatedAt；读取只能观察一致组合。原因属于 Schedule 当前状态，不能由 GET 临时推断最近一个 Run 的错误。错误投影不暴露原始异常、堆栈、凭据或敏感业务参数。读取返回当前状态与原因的一致快照，历史变化通过审计/Run 观察，不提供原 HTTP 写请求回执重放。
 
-Claude 的资源 type 固定为 deployment，Claw 改为 schedule 以匹配自身领域；paused_reason 对应 pausedReason，保留 manual/error 和恢复清空的语义。依据为 2026-10-04 重读的[Deployment 模型](https://platform.claude.com/docs/en/api/http/beta/deployments)与[调度指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)。创建参考页的 active 配 manual 示例与模型约束冲突，不作为本设计依据。公开证据及现有 Session VO/Cron 状态差距见[专项核验](source-evidence.md#schedule-type-pause-reason-evidence)。
+Claude 的资源 type 固定为 deployment，Claw 改为 schedule 以匹配自身领域；paused_reason 对应 pausedReason，保留 manual 和恢复清空的语义；Claude 的 error 自动暂停首版不采用（D12）。依据为 2026-10-04 重读的[Deployment 模型](https://platform.claude.com/docs/en/api/http/beta/deployments)与[调度指南](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments)。创建参考页的 active 配 manual 示例与模型约束冲突，不作为本设计依据。公开证据及现有 Session VO/Cron 状态差距见[专项核验](source-evidence.md#schedule-type-pause-reason-evidence)。
 
 <a id="credential-reference-proposal"></a>
 
@@ -895,7 +896,7 @@ Claude 的资源 type 固定为 deployment，Claw 改为 schedule 以匹配自�
 | Claude | Deployment → vault_ids → Vault → Credential | 每个部署自选凭据集合，需要维护集合及成员变更规则 |
 | CampusClaw | Schedule → agentId；运行时统一账号的 access-token | 任务配置最简单，凭据只在 Mate 一处维护；代价是所有定时任务权限相同，用户权限只在配置时检查，创建者失去权限后任务仍照常运行 |
 
-正常流程为：保存时由 Mate 检查用户权限、Claw 校验 Agent 关联，不领取 secret → 到期准备 Agent 并受理一个新 Session → 模型返回一批工具调用，逐个完成可信目标解析、参数校验和权限判断 → 本批有需要凭据的工具通过判断时，向 Mate 取一次统一账号的 `access-token` → 实际执行。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型，属于原 Session 的结果，不改写 Run；不能借用创建者浏览器 Token 或其他账号。
+正常流程为：保存时由 Mate 检查用户权限，Claw 只校验输入，不领取 secret → 到期准备 Agent 并受理一个新 Session → 模型返回一批工具调用，逐个完成可信目标解析、参数校验和权限判断 → 本批有需要凭据的工具通过判断时，向 Mate 取一次统一账号的 `access-token` → 实际执行。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型，属于原 Session 的结果，不改写 Run；不能借用创建者浏览器 Token 或其他账号。
 
 Claw 已观察行为是：普通消息只捕获本次执行 Header 的不可变 MateCredentials 并在工具执行时转发，Cron 明确使用 empty()，不会恢复旧请求凭据。模型当前使用内部 CampusMateProvider，不能把模型 API Key 与业务凭据合并成一个请求字段。普通交互 Session 的 Header 快照规则保持；定时入口的快照只含 `access-token`，不做 X-HW-ID + access-token + JWT/APPKEY 的完整性检查。服务间认证按企业机制接线，与业务凭据分别处理。
 
@@ -1033,7 +1034,7 @@ Accept-Language: zh-CN
 | 方法与路径 | POST `/campusclaw-service/v1/schedules/{scheduleId}`；部分更新既有配置，不创建新任务 |
 | path.scheduleId | 创建返回的原 ID，大小写敏感；不通过 name 定位，不允许请求体修改身份 |
 | query | 无业务查询参数 |
-| 身份与授权 | 沿用 §4.2 的可信调用上下文，用户管理资格由 Mate 在调用前判断；agentId 改变时校验新 Agent 存在且启用；不接收客户端 scope/owner |
+| 身份与授权 | 沿用 §4.2 的可信调用上下文，用户管理资格由 Mate 在调用前判断；agentId 改变时只校验格式（T11）；不接收客户端 scope/owner |
 | Content-Type | 必须为 application/json；请求体为非空对象 |
 | Accept-Language | 可选；zh-CN/en-US，缺省或不支持时回退 zh-CN，响应回显实际 Content-Language |
 
@@ -1045,7 +1046,7 @@ Accept-Language: zh-CN
 |---|---|---|
 | name | 使用新名称，去首尾空白后 1～256 个 Java 字符；允许重名 | null、空字符串或空白拒绝 |
 | description | 替换描述，最长 2048；不进入模型任务 | null、空字符串或空白均清除，保存并返回 null |
-| agentId | 替换后续运行关联，校验新 Agent 存在且启用；不修改历史 Run/Session | null 或空值拒绝；重复提交同一 ID 不提供版本 re-pin 或目录强制刷新 |
+| agentId | 替换后续运行关联，只校验格式；不修改历史 Run/Session | null 或空值拒绝；重复提交同一 ID 不提供版本 re-pin 或目录强制刷新 |
 | prompt | 整体替换任务文本，沿用创建校验 | null、非字符串及空白文本拒绝；不追加到已有 Session |
 | schedule | 整体替换 cron 规则，必含 type/expression；timezone 省略默认保存 Asia/Shanghai，不继承旧规则的时区 | null 清除自动计划；{} 或仅 timezone 的对象拒绝；显式 timezone:null、空时区或无效IANA名称按 §4.3.4 拒绝 |
 | metadata | 逐 key patch：字符串新增/覆盖，key:null 删除该 key，未列出的 key 保留；合并后再校验大小与类型 | 顶层 null 拒绝；{} 为无修改；删除全部键后响应 {}，不返回含 null 值的 map |
@@ -1133,11 +1134,10 @@ lastRunAt 继续表示该任务最近自动开始时间，修改 Agent、prompt 
 | 400 / SCHEDULE_REQUEST_INVALID 或相应字段错误 | 空请求、非法类型、未知/只读字段、非法 JSON，或合并后配置无效；全部不改 |
 | 401 / SCHEDULE_AUTH_REQUIRED | 未认证 |
 | 403 / SCHEDULE_MANAGE_FORBIDDEN | 无管理功能资格 |
-| 404 / SCHEDULE_NOT_FOUND 或 SCHEDULE_AGENT_NOT_FOUND | 任务/目标 Agent 不存在或不可见；不泄露范围外记录 |
-| 409 / SCHEDULE_AGENT_DISABLED | 关联的 Agent 不可用；任务已删除按404处理 |
+| 404 / SCHEDULE_NOT_FOUND | 任务不存在或不可见；不泄露范围外记录 |
 | 422 / SCHEDULE_POLICY_REJECTED | 合并后的规则超出部署策略 |
 | 500 / SCHEDULE_UPDATE_FAILED | 配置更新内部处理失败，不返回部分成功 |
-| 503 / SCHEDULE_SERVICE_UNAVAILABLE | 当前操作所需身份、授权、目录或持久化权威暂不可用；不能据此推断此前超时请求没有提交 |
+| 503 / SCHEDULE_SERVICE_UNAVAILABLE | 当前操作所需身份、授权或持久化权威暂不可用；不能据此推断此前超时请求没有提交 |
 
 400 字段错误的 zh-CN 示例为：
 
@@ -1364,7 +1364,6 @@ Run不增加 status、updatedAt、模型回答或完整 Schedule；后续 Sessio
 | Run.error.type | 已确定且可记录的受理失败 | zh-CN / en-US 安全文案 |
 |---|---|---|
 | schedule_busy_error | 同一任务已有占用，包括尚未核对清楚的执行；不排队、不另建Session | 该定时任务仍有进行中或待核对的运行。 / This schedule has an active or unresolved run. |
-| agent_unavailable_error | 关联的 Agent 已删除或被禁用，不改配置必然再次失败；自动运行时同时自动暂停任务（§4.4.1.1）。只依据 `ScheduleAuthorizationPort` 按 agentId 直接向 Mate 查询“存在且启用”的技术校验（不经本地缓存，不查用户资格），Mate 明确返回已删除或已禁用才记录；Runtime 准备阶段的 Agent 不可用、Agent 未找到、本地路径校验、目录 I/O、Skill 准备等通用故障，以及该校验调用本身失败或超时，都不记此类型、不暂停（这些记其他错误类型，如 unknown_error） | 关联的 Agent 已删除或被禁用。 / The associated agent has been deleted or disabled. |
 | session_capacity_exceeded_error | 本次会话准入容量不足 | 当前没有可用的执行容量。 / Execution capacity is unavailable. |
 | session_creation_rejected_error | Session或首消息受理明确拒绝且已回滚 | 本次会话受理被拒绝。 / Session acceptance was rejected. |
 | unknown_error | 已确认未受理、已完成回滚且可记录的其他失败 | 本次运行未能受理。 / The run could not be accepted. |
@@ -1373,7 +1372,7 @@ Run不增加 status、updatedAt、模型回答或完整 Schedule；后续 Sessio
 
 **配置影响与不重叠规则。** 手动运行保持status/pausedReason、配置updatedAt、自动计划时刻（upcoming_run_at）及schedule.lastRunAt，不因手动失败自动暂停配置；lastRunAt继续只跟踪自动运行的开始。每次运行使用保存的输入与当前可信执行准备；不借用调用者临时Header模拟未来定时任务身份。任务已暂停或没有Cron也能测试同一套后台权限。手动与自动共享同一任务占用，已有在途/未知Run时拒绝本次并记录schedule_busy_error，不能复用别次Run充当本次成功；自动忙跳过也记录schedule_busy_error；停机未观察到的时刻不补造Run，见[无补跑规则](#no-catch-up)。
 
-**正常受理与失败边界。** 先校验身份、请求和资源范围，在短事务内读取可信配置快照、分配本次Run并检查/预占共享任务槽；忙时记录本次拒绝。取得槽位后，在事务外按[共用受理](#run-admission-sequence)先校验 Agent 存在且启用，再由 Mate 登记 Session 归属并完成 Runtime 准备；不取Token，不调用模型或业务工具。最后在同一受理边界复核最新配置、未删除、Agent 关联及占用；配置已改变时记录本次未受理结果，不重新准备或运行同一Run；后续自然触发采用新配置，不混用新旧配置。受理成功原子提交Run、新Session、首条用户消息和根执行关联，然后通过既有执行协调器后台启动。准备/准入明确失败且配置仍存续时持久化失败Run、sessionId:null，并释放本次取得的占用；删除先提交时仅完成内部清理，不新增失败Run；忙时不得释放其他Run的占用。只有成功提交对应记录后才返回200，不沿用旧trigger同步等待prompt.join()的实现。
+**正常受理与失败边界。** 先校验身份、请求和资源范围，在短事务内读取可信配置快照、分配本次Run并检查/预占共享任务槽；忙时记录本次拒绝。取得槽位后，在事务外按[共用受理](#run-admission-sequence)由 Mate 登记 Session 归属并完成 Runtime 准备；不取Token，不调用模型或业务工具。最后在同一受理边界复核最新配置、未删除、Agent 关联及占用；配置已改变时记录本次未受理结果，不重新准备或运行同一Run；后续自然触发采用新配置，不混用新旧配置。受理成功原子提交Run、新Session、首条用户消息和根执行关联，然后通过既有执行协调器后台启动。准备/准入明确失败且配置仍存续时持久化失败Run、sessionId:null，并释放本次取得的占用；删除先提交时仅完成内部清理，不新增失败Run；忙时不得释放其他Run的占用。只有成功提交对应记录后才返回200，不沿用旧trigger同步等待prompt.join()的实现。
 
 删除先提交时返回404且不得受理；手动运行已受理后再暂停，执行继续；随后删除则清除对应Run、保留Session且不请求取消。人工暂停只限制自动受理，不能仅因paused拒绝手动受理；若本次 lease_until 已过，则记录本次未受理结果，不重新准备同一Run。无法可靠提交失败记录、事务结果未知或响应连接丢失时，不伪造成功或再次创建Session，应只读核对；内部同一runId重复投递只复用原关联。
 
@@ -1506,14 +1505,14 @@ Accept-Language: zh-CN
 
 | 字段或行为 | 规则 |
 |---|---|
-| status / pausedReason | 实际从 paused 转为 active 时原子清空原 manual/error 原因，历史审计和 Run 错误保留 |
+| status / pausedReason | 实际从 paused 转为 active 时原子清空原 manual 原因，历史审计和 Run 错误保留 |
 | Cron 与内部游标 | 保留规则和时区；以事务内确定的恢复基准计算严格晚于该基准的下一个 occurrence，不逐次补跑暂停期间计划 |
 | schedule:null | 可取消暂停为 active，仍只支持手动运行；不因没有 Cron 报错，也不自动创建规则 |
 | upcomingRunsAt | 有 Cron 时按同一响应基准重新计算最多五次未来时间；取消暂停成功不表示模型已开始 |
 | lastRunAt / createdAt | 保留原值，不因取消暂停而制造运行时间 |
 | updatedAt | 实际状态变化才更新；已经 active 时同值成功，保持时间及既有调度游标，不能借重试推迟尚未处理的 occurrence |
 
-**恢复资格。** 从 paused 转为 active 前，只读校验关联 Agent 存在且启用；有 Cron 时还检查其有未来匹配且符合当前计划策略。外部只读检查在事务外完成，记下所查的 Agent；锁内重新读取最新状态及关联，Agent 未变才视为检查结果仍适用，然后原子改状态、原因和游标。有界重查失败返回503。校验明确失败返回409 SCHEDULE_ACTIVATION_REJECTED，保留原暂停原因，不先清空再异步补回；权威暂不可用返回503，不伪装为配置失效。仅恢复管理状态不调用模型或业务工具，也不领取业务执行凭据；实际每次受理仍重新检查任务状态与 Agent 关联。
+**恢复资格。** 从 paused 转为 active 前不校验 Agent 是否存在和启停用（T11）；有 Cron 时检查其有未来匹配且符合当前计划策略。锁内读取最新状态后原子改状态、原因和游标。校验明确失败返回409 SCHEDULE_ACTIVATION_REJECTED，保留原暂停原因，不先清空再异步补回。仅恢复管理状态不调用模型或业务工具，也不领取业务执行凭据；实际每次受理仍重新检查任务状态与 Agent 关联。
 
 已经 active 时只验证身份、管理范围和资源可读，直接返回当前完整资源，不重新登记游标或把其他依赖的故障包装成新的状态转换；并不承诺所有后续运行都能成功。取消暂停与更新/删除/自动受理在事务内协调，不能使用旧配置覆盖新修改。若旧自动 Run 在暂停前已领取但未受理，受理按锁内当前状态判定：暂停期间到达受理点则结束为跳过；已恢复为 active 且 Agent 关联未变则照常受理，并使用最新 prompt。
 
@@ -1532,7 +1531,7 @@ Accept-Language: zh-CN
 | 403 / SCHEDULE_MANAGE_FORBIDDEN | pause/unpause：无管理功能资格 | 无定时任务管理权限。 / Schedule management is not permitted. |
 | 403 / SCHEDULE_RUN_FORBIDDEN | run：无立即运行功能资格 | 无定时任务运行权限。 / Schedule execution is not permitted. |
 | 404 / SCHEDULE_NOT_FOUND | 三者：目标不存在、已删除或不在本次操作授权范围 | 定时任务不存在。 / Schedule not found. |
-| 409 / SCHEDULE_ACTIVATION_REJECTED | unpause：明确不满足恢复资格，保持原状态 | 定时任务暂不满足恢复条件。 / The schedule cannot be activated in its current configuration. |
+| 409 / SCHEDULE_ACTIVATION_REJECTED | unpause：Cron 没有符合当前计划策略的未来匹配，保持原状态 | 定时任务暂不满足恢复条件。 / The schedule cannot be activated in its current configuration. |
 | 500 / SCHEDULE_RUN_FAILED | run：内部处理失败，未形成可靠运行回执 | 发起定时任务失败，请稍后核对运行记录。 / Failed to initiate the schedule. Check run history before retrying. |
 | 500 / SCHEDULE_PAUSE_FAILED | pause：事务内部失败 | 暂停定时任务失败，请稍后重试。 / Failed to pause the schedule. Please try again later. |
 | 500 / SCHEDULE_UNPAUSE_FAILED | unpause：事务内部失败 | 取消暂停失败，请稍后重试。 / Failed to unpause the schedule. Please try again later. |
@@ -1547,7 +1546,7 @@ Accept-Language: zh-CN
 }
 ```
 
-三项操作采用POST入口、无业务正文：立即运行采用八字段Run，同一任务不重叠，已记录受理结果200、请求/权威故障4xx或5xx；暂停和取消暂停返回完整Schedule，仅改变未来自动触发，保留在途执行，同值操作不刷新时间或调度游标；恢复前校验关联 Agent 存在且启用。每次新建Session、秒级时间、无客户端条件/请求键规则继续生效。精确错误见上表，受理事务与身份接线见执行及Mate专题；两个运行读取和删除关系见 §4.4.11。自动暂停规则见 §4.4.1.1。
+三项操作采用POST入口、无业务正文：立即运行采用八字段Run，同一任务不重叠，已记录受理结果200、请求/权威故障4xx或5xx；暂停和取消暂停返回完整Schedule，仅改变未来自动触发，保留在途执行，同值操作不刷新时间或调度游标；恢复不校验 Agent。每次新建Session、秒级时间、无客户端条件/请求键规则继续生效。精确错误见上表，受理事务与身份接线见执行及Mate专题；两个运行读取和删除关系见 §4.4.11。首版不自动暂停，见 §4.4.1.1。
 
 <a id="schedule-run-read-lifecycle"></a>
 
@@ -1613,8 +1612,8 @@ Accept-Language: zh-CN
 时序图见[§3.3](#save-sequence)，以下是每一步的规则。
 
 1. Mate 验证用户身份及管理资格；Claw 验证服务来源、获准操作/资源和请求形状。创建生成新的任务 ID；更新只接受提交字段，省略与 null 分开处理，不要求客户端携带版本或请求身份。
-2. 在数据库事务外经 Mate 只读校验 Agent 存在且启用，固定当次校验依据。不能用会发布运行目录的 prepare 充当纯校验，也不能持数据库锁跨远程目录或授权 I/O；权威依赖暂不可用返回503。
-3. 创建在事务中插入新配置；更新在事务中锁定并读取最新任务，复核范围和可修改状态，仅合并本次提交字段并校验最终整体。远端校验快照必须对应最终合并后的关联；若锁内读到的 Agent 关联与远端校验时不同，结束本事务、重新读取并校验，采用有界尝试，不能直接写回旧的完整对象。持续竞争无法完成时返回503，不以客户端缺版本为由拒绝。
+2. 不校验 Agent 是否存在和启停用（T11），保存不调用 Mate 或运行目录，也不持数据库锁跨远程 I/O。
+3. 创建在事务中插入新配置；更新在事务中锁定并读取最新任务，复核范围和可修改状态，仅合并本次提交字段并校验最终整体。不能直接写回旧的完整对象，不以客户端缺版本为由拒绝。
 4. 一次写入所有变化，失败整体回滚；真正变化时更新 updatedAt，同值不变。保存成功只以事务提交为依据，不沿用 jobs.json 写失败仅记日志的行为。提交后按当次已保存结果返回完整资源；状态和摘要需来自一致快照。
 5. 保存处理器不调用模型、业务工具或 Session 工厂；后续调度只读取已提交配置。执行前重新检查任务状态、Agent 关联及容量，不宣称跨远端目录和本地数据库的全局原子性。
 
@@ -1636,11 +1635,10 @@ Accept-Language: zh-CN
 | 403 `SCHEDULE_MANAGE_FORBIDDEN` | 无任务管理功能权限 |
 | 403 `SCHEDULE_READ_FORBIDDEN` | 无任务读取功能权限；资源级不可见统一用 404 |
 | 403 `SCHEDULE_RUN_FORBIDDEN` | 无立即运行功能资格；不创建 Run |
-| 409 `SCHEDULE_ACTIVATION_REJECTED` | 取消暂停明确不满足恢复资格，保持原状态 |
+| 409 `SCHEDULE_ACTIVATION_REJECTED` | 取消暂停时 Cron 没有符合策略的未来匹配，保持原状态 |
 | 500 `SCHEDULE_RUN_FAILED` / `SCHEDULE_PAUSE_FAILED` / `SCHEDULE_UNPAUSE_FAILED` | 对应动作内部处理失败；错误文案与暂不可用分层见 §4.4.10 |
-| 404 `SCHEDULE_NOT_FOUND` / `SCHEDULE_AGENT_NOT_FOUND` | 读取/更新等操作的资源不存在、已删除或不可见；DELETE 同样返回 SCHEDULE_NOT_FOUND，见 §4.4.6 |
+| 404 `SCHEDULE_NOT_FOUND` | 读取/更新等操作的资源不存在、已删除或不可见；DELETE 同样返回 SCHEDULE_NOT_FOUND，见 §4.4.6 |
 | 404 `SCHEDULE_RUN_NOT_FOUND` | Run详情不存在、已删除或不可见；列表筛选同类目标返回空页，见 §4.4.11 |
-| 409 `SCHEDULE_AGENT_DISABLED` | 创建/更新等操作的 Agent 禁用；不用于 DELETE |
 | 422 `SCHEDULE_POLICY_REJECTED` | 规则超出部署频率/配额策略 |
 | 500 `SCHEDULE_UPDATE_FAILED` | 更新内部处理失败，不返回部分成功；结果未知时读取当前状态核对 |
 | 500 `SCHEDULE_DELETE_FAILED` | 删除事务处理失败，不返回成功；提交结果不确定时允许有界重试同一 DELETE |
@@ -1657,13 +1655,13 @@ Accept-Language: zh-CN
 
 全局结构引用[目标类图](#class-diagram)。配置服务、解析策略和持久化 Adapter 是 Spring 单例，请求上下文/写入快照按请求隔离；配置管理路径不依赖执行协调器或 Session 工厂，立即运行通过独立运行服务职责接入共享受理链。Agent 启用校验与会话归属登记待实现，不能直接拿 prepare 替代。
 
-验收至少覆盖：八个配置动作及两个Run读取的成功/错误报文；全部记录分页返回供 Mate 过滤；保存校验与响应计划时间计算一致；六字段秒位、拒绝五字段/年字段、日与星期同时受限、IANA/DST、UTC 输出；名称 256/257 边界；创建/更新均拒绝 at/every 与额外起点字段；Agent 关联校验、拒绝 target/sessionId、不同 Run 创建不同 Session 且同一 Run 不重复创建；prompt 为非空纯文本，空白或非字符串返回400/SCHEDULE_PROMPT_INVALID；未知字段/null/整体替换；事务内合并与写失败回滚；重复创建可能生成不同ID、未知结果先核对；拒绝 credentialIds/vaultIds/credentialRefs 字段，业务凭据在每批工具调用前向 Mate 取统一账号 access-token；响应不含配置版本、status 为小写、metadata 长度/类型/省略/空对象/key 删除和 patch 后大小限制；只读时间字段拒绝写入；创建 lastRunAt 为 null、手动不更新、开始后失败不清空；paused 的计划数组及已删除资源不可读；每次读取按当前快照计算数组；并发不同字段更新保留、同字段后成功提交生效；每次新请求重新校验当前资格；省略 schedule 只保存、有效 schedule 保存即自动调度；显式试运行独立触发，清除规则不取消在途执行。运行接线仍需独立验收，不能由配置单测替代；遇ASK阻止业务并结束本次根执行，不创建持久等待。
+验收至少覆盖：八个配置动作及两个Run读取的成功/错误报文；全部记录分页返回供 Mate 过滤；保存校验与响应计划时间计算一致；六字段秒位、拒绝五字段/年字段、日与星期同时受限、IANA/DST、UTC 输出；名称 256/257 边界；创建/更新均拒绝 at/every 与额外起点字段；agentId 格式校验、拒绝 target/sessionId、不同 Run 创建不同 Session 且同一 Run 不重复创建；prompt 为非空纯文本，空白或非字符串返回400/SCHEDULE_PROMPT_INVALID；未知字段/null/整体替换；事务内合并与写失败回滚；重复创建可能生成不同ID、未知结果先核对；拒绝 credentialIds/vaultIds/credentialRefs 字段，业务凭据在每批工具调用前向 Mate 取统一账号 access-token；响应不含配置版本、status 为小写、metadata 长度/类型/省略/空对象/key 删除和 patch 后大小限制；只读时间字段拒绝写入；创建 lastRunAt 为 null、手动不更新、开始后失败不清空；paused 的计划数组及已删除资源不可读；每次读取按当前快照计算数组；并发不同字段更新保留、同字段后成功提交生效；每次新请求重新校验当前资格；省略 schedule 只保存、有效 schedule 保存即自动调度；显式试运行独立触发，清除规则不取消在途执行。运行接线仍需独立验收，不能由配置单测替代；遇ASK阻止业务并结束本次根执行，不创建持久等待。
 
 时区另须验收：创建或整体替换 Cron 时省略 timezone 均保存为 Asia/Shanghai，显式其他合法 IANA 时区按输入生效；响应回显保存值，节点时区变化不改变规则，更新省略整个 schedule 不重置时区。绝对时刻响应统一为 Z 结尾的 UTC，秒级且无小数；Cron 的 timezone 仍保留有效值。显式null、空白、裸偏移量与自定义缩写拒绝，合法IANA名称按输入保存回显。旧 At/Every 不得经新 HTTP 绕过仅 Cron 校验，旧 Job 迁移不得静默改变时间语义。
 
 读取验收须覆盖：列表元素与详情字段和类型一致，包括 prompt/description；401/403/资源不存在404、读取损坏500与暂不可用503区分；删除过滤与业务筛选先于分页；page/limit 默认与边界、偏移溢出、limit+1 判断；空页与超末页为 schedules:[]/nextPage:null；result 仅 schedules/nextPage、无 total/COUNT；同次读取与排序；列表共用计划计算时刻；GET 不改 updatedAt、不推进调度、不换取凭据、不创建 Session；Agent 停用或引用凭据失效时仍可按读取资格查看；动态摘要不成为客户端更新条件；错误禁用缓存。读取必须验证删除后404、列表排除已删除记录和拒绝归档筛选；验证updatedAt DESC/id ASC稳定同秒顺序和并发翻页局限，目标不等于已通过实现测试。
 
-资源类型与暂停原因验收须覆盖：创建、详情、列表元素和更新响应均含 type:schedule 与 pausedReason；有无 Cron 的新建资源均为 active/null；人工暂停为manual；自动运行记录 agent_unavailable_error 时同事务转为 paused/error 且 error.type 一致，已人工暂停或已换 Agent 时不改，其他错误类型、执行中失败与手动运行失败均不暂停；恢复清空原因但保留历史，配置修改不隐含恢复；status/pausedReason 原子一致；拒绝顶层只读字段写入而保留嵌套消息/规则 type；GET 返回当前状态与原因快照，配置修改不改变暂停原因。不按旧连续三次失败规则验收；删除后的读取不返回 status 或 pausedReason。
+资源类型与暂停原因验收须覆盖：创建、详情、列表元素和更新响应均含 type:schedule 与 pausedReason；有无 Cron 的新建资源均为 active/null；人工暂停为manual；任何运行失败都不改 status/pausedReason；恢复清空原因但保留历史，配置修改不隐含恢复；status/pausedReason 原子一致；拒绝顶层只读字段写入而保留嵌套消息/规则 type；GET 返回当前状态与原因快照，配置修改不改变暂停原因。不按旧连续三次失败规则验收；删除后的读取不返回 status 或 pausedReason。
 
 更新验收须覆盖：六个可写字段的省略/null/空值和替换语义、metadata 删除/无修改/合并后超限、prompt 整体替换且拒绝空白文本；默认值仅用于新提交的规则、不覆盖省略字段；拒绝整份详情回传的只读字段；成功为 200 且与创建/读取资源同形；id/createdAt/lastRunAt 保持、同秒更新不依赖时间戳并发；暂停任务修改不恢复、active 补充计划不另启用、清空规则不取消在途；事务失败不部分写入；无客户端条件标签或请求键依赖、无原回执重放；网络异常后读取核对再决定修改。精确请求/响应与错误由 §4.4.5 维护，目标不等于已通过实现测试。
 
@@ -1671,9 +1669,9 @@ Accept-Language: zh-CN
 
 动作验收须覆盖：run/pause/unpause无正文且禁止配置覆盖；200 Run的sessionId/error恰好一个非空、类型为schedule_run且不跟踪业务完成；同一Run受理成功后执行失败不重写创建结果；有无Cron、active/paused均可手动尝试，手动不改status/pausedReason/自动游标/lastRunAt；受理失败可靠落Run与无法可靠记录的HTTP错误区分；重复调用不合并、响应丢失不自动重发；新Session/首消息/根执行/Run关联整体提交或回滚。不重叠规则的实现验收须覆盖自动/手动竞争、失败不释放别次占用、未知执行保持占用；Run查询与可信执行身份接线是上线依赖。Run读取还须覆盖scheduleId/hasError/triggerType/from/to组合、from≥to与非秒级时间拒绝、createdAt DESC/id DESC同秒顺序、数字页码边界、无total、被删除或不可见任务的列表空/详情404，以及单独删除Session保留sessionId和原受理结果。
 
-暂停/取消暂停验收须覆盖：200完整字段与创建/详情一致；暂停保留假设恢复后的Cron计划时间；schedule:null不伪造计划；manual/error原因转换、同值操作不更新时间；取消暂停只从未来匹配继续、不立即运行、不补跑；重复unpause不推迟现有游标；恢复校验明确失败保留原状态/原因，依赖未知503；pause与最终自动受理两种顺序、pause→unpause后旧自动Run按受理时状态与Agent判定、在途收尾不覆盖人工状态；消息/凭据并发更新不被旧快照覆盖；本文目标不构成产品测试通过。
+暂停/取消暂停验收须覆盖：200完整字段与创建/详情一致；暂停保留假设恢复后的Cron计划时间；schedule:null不伪造计划；manual原因转换、同值操作不更新时间；取消暂停只从未来匹配继续、不立即运行、不补跑；重复unpause不推迟现有游标；恢复校验明确失败保留原状态/原因；pause与最终自动受理两种顺序、pause→unpause后旧自动Run按受理时状态判定、在途收尾不覆盖人工状态；消息/凭据并发更新不被旧快照覆盖；本文目标不构成产品测试通过。
 
-不新增直接 Maven 依赖：复用 JDK、Spring CronExpression/Jackson、宿主 MyBatis 3.0.4 与数据库驱动。完整传递依赖图未重跑。服务鉴权（T2）、Mate 的三个接口及实际调度是上线依赖，草案与实施切片分别见Mate专题及[实施切片](#implementation-slices)。当前没有产品代码、数据库或集群测试证据。
+不新增直接 Maven 依赖：复用 JDK、Spring CronExpression/Jackson、宿主 MyBatis 3.0.4 与数据库驱动。完整传递依赖图未重跑。服务鉴权（T2）、Mate 的两个接口及实际调度是上线依赖，草案与实施切片分别见Mate专题及[实施切片](#implementation-slices)。当前没有产品代码、数据库或集群测试证据。
 
 ## 5. 架构指标
 
@@ -1689,7 +1687,7 @@ Accept-Language: zh-CN
 - metadata 不进入模型输入，不作为身份、权限或凭据依据。
 - 资源级不可见统一返回 404，不泄露存在性。
 - Mate 公共展示边界（非本次 Claw 契约）：公共任务详情使用公共任务/Run 标识与 Chat 链接，Run 的内部 sessionId、executionId 不直接暴露；映射未完成显示“结果入口准备中”，不能重复触发任务。
-- **Claw 对 Mate 的调用边界（首版）。** Claw 只调用 Mate 的三个接口：按 agentId 校验 Agent 存在且启用（`ScheduleAuthorizationPort.agentStatus`，D12）；Session 归属登记与核对（`ScheduleAuthorizationPort`，F14）；统一账号 access-token（`ScheduledAccessTokenPort`，见 [Mate 草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md) §3）。用户授权、配额准入和任务与用户的关联由 Mate 管理入口在调用 Claw 之前完成（T8），Claw 不回调 Mate 做 authorize、resolve 或 registerSchedule，也不保存授权引用。PR #332 的本地身份链路和这类反向调用按本条移除，见[职责核验](source-evidence.md#mate-boundary-review)；配额准入与归属登记的 Mate 内部契约待实现（T7）。
+- **Claw 对 Mate 的调用边界（首版）。** Claw 只调用 Mate 的两个接口：Session 归属登记与核对（`ScheduleAuthorizationPort`，F14）；统一账号 access-token（`ScheduledAccessTokenPort`，见 [Mate 草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md) §3）。用户授权、配额准入和任务与用户的关联由 Mate 管理入口在调用 Claw 之前完成（T8），Claw 不回调 Mate 做 authorize、resolve 或 registerSchedule，也不保存授权引用。PR #332 的本地身份链路和这类反向调用按本条移除，见[职责核验](source-evidence.md#mate-boundary-review)；配额准入与归属登记的 Mate 内部契约待实现（T7）。
 
 ### 5.2 稳定性
 
@@ -1715,7 +1713,7 @@ Accept-Language: zh-CN
 | F1 | 字段或规则无效（含无未来匹配的 Cron、空白 prompt） | 保存 | 未发生 | 配置服务 | 400 字段错误，不写入 | 按错误码改正后重新提交 | — |
 | F2 | 身份、授权或存储等最终决定方不可用 | 保存、运行、暂停/恢复、读取 | 未发生 | 配置服务 | 503，不受理 | 稍后重试 | — |
 | F3 | 保存或删除事务失败、响应丢失 | 保存、删除 | 未知（超时不证明事务失败） | 调用方核对 | 5xx；不保存请求键或原响应 | 先读取详情或列表核对，再决定是否重提 | 重复创建可能生成第二个任务；列表未找到不证明未提交 |
-| F4 | 准备被拒（Agent 禁用、容量、准备超时） | 受理前 | 未发生，无 Session | 调度器 | 记录 Run.error 并结束 Run，不重试 | Run 显示失败原因；手动运行仍返回 200 Run；自动任务等下一计划 | 自动运行的 agent_unavailable_error 同事务暂停任务（D12），其他原因不暂停 |
+| F4 | 准备被拒（Agent 不可用、容量、准备超时） | 受理前 | 未发生，无 Session | 调度器 | 记录 Run.error 并结束 Run，不重试 | Run 显示失败原因；手动运行仍返回 200 Run；自动任务等下一计划 | 不自动暂停（D12）；Agent 不可用的处理见 T11 |
 | F5 | 上一次运行未结束（含结果未知） | 领取 | 未发生 | 调度器 | 记录已结束的忙跳过 Run，前移游标 | Run 显示跳过原因 | 不排队，不补跑 |
 | F6 | 停机或扫描停顿使计划时刻超过 5 秒容差 | 领取 | 未发生 | 调度器 | 不运行，游标推进到当前之后的下一次计划 | 停机期间没有 Run，只有运营指标和日志 | 不补跑；不超过 5 秒的延迟按正常派发处理 |
 | F7 | 已受理，原实例在执行开始前失联 | 启动前 | 受理已提交，执行可能未发生 | 调度器，必要时人工 | 与 F8 相同，按结果未知保持占用，不转交新节点执行 | 运营视图标注未知 | 不持久化启动权，无法自动证明未启动；自动恢复见 T9 |
@@ -1928,6 +1926,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.57.0 | 2026-10-15 | 定时任务不再校验 Agent 是否存在和启停用、正常受理，首版取消自动暂停，Agent 启停用与数据一致性另开设计（T11）。 |
 | 0.56.0 | 2026-10-15 | 并入接口契约、待对齐事项与两张表结构成为单一设计文档，明确 Claw 只调用 Mate 的三个接口且受理先校验 Agent 再登记归属。 |
 | 0.55.0 | 2026-10-15 | D12 明确 agent_unavailable_error 的判定依据：只认 Mate 按 agentId 的存在且启用校验，Runtime 通用准备故障不暂停。 |
 | 0.54.0 | 2026-10-15 | F14 登记结果未知不再保持占用：与过期准备清理统一，lease_until 到期即结束 Run，待核对登记由 Mate 清理。 |
