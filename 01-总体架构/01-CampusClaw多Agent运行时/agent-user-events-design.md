@@ -5,7 +5,7 @@
 | 文档版本 | 0.7.0 |
 | 更新日期 | 2026-10-15 |
 | 模块 | M01 CampusClaw 多 Agent Runtime：事件读取 |
-| 设计状态 | 两个读取接口与两个新增索引均为待实现；复用的事件表、根执行、结果段关联与公共投影为已实现（见 §8.2） |
+| 设计状态 | 两个读取接口与两个新增索引已由 pi-mono-java PR #339 合入；ListAgentEvents 的 total（0.7.0）待实现；复用的事件表、根执行、结果段关联与公共投影为已实现（见 §8.2） |
 | 源码基线 | pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`，2026-10-12 隔离 fetch 确认仍为 main HEAD；设计仓 `main@7b7b0f9b41ecd71044115edf0436250ab369d954` |
 | 主基线 | Claude Managed Agents 公开文档（Beta，`managed-agents-2026-04-01`），2026-10-12 重新核对，只证明公开行为；轮次辅助基线 Codex `main@4270522473e677ddba7b093caa0064a3df51d459`，2026-10-12 |
 
