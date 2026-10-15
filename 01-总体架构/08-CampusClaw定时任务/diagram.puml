@@ -26,8 +26,8 @@ return 已认领的 Run
 == 准备并受理 ==
 ref over Schedule, Store
   共用受理流程
-  Agent 校验 -> 归属登记 -> Runtime 准备 -> 原子受理
-  见 schedule_run_admission
+  归属登记 -> Runtime 准备 -> 原子受理
+  展开见设计文档 §3.6 共用受理时序图
 end ref
 return 已提交的受理结果\n和同次准备的上下文
 == 执行已受理的 Run ==
@@ -73,7 +73,8 @@ package "入口层（runtimeapi / tool.cron）" as EntryPkg {
     + 8 个配置操作与 2 个 Run 读取
   }
   class CronToolAdapter <<适配器 / P>> {
-    + 带当前 Session / 执行 ID 调用
+    + 只读：list、status、runs（D13）
+    + 固定当前会话所用 Agent
   }
 }
 
@@ -107,7 +108,6 @@ package "定时任务应用层（schedule）" as AppPkg {
 }
 
 package "端口与适配器" as PortPkg {
-  interface ScheduleBindingResolver <<只读端口 / P>>
   interface ScheduleAuthorizationPort <<端口 / P>>
   interface ScheduledAccessTokenPort <<端口 / P>>
   class MateScheduleAdapter <<适配器 / P>>
@@ -151,9 +151,7 @@ ScheduleApplicationService -down-> ScheduledRunAcceptanceService
 ScheduleDispatcher -down-> ScheduledRunAcceptanceService
 ScheduledRunAcceptanceService ..> PreparedScheduleRunDTO : 读取
 
-ScheduleApplicationService -down-> ScheduleBindingResolver : 校验 Agent
-ScheduleRunPreparation -down-> ScheduleAuthorizationPort : 校验 Agent 启用、登记 Session 归属
-MateScheduleAdapter .up.|> ScheduleBindingResolver
+ScheduleRunPreparation -down-> ScheduleAuthorizationPort : 登记 Session 归属
 MateScheduleAdapter .up.|> ScheduleAuthorizationPort
 MateScheduleAdapter .up.|> ScheduledAccessTokenPort
 MateScheduleAdapter -down-> Mate
@@ -210,8 +208,6 @@ autonumber
 activate Mate
 Mate -> Schedule ++ : 创建任务：Agent、任务内容和可选规则
 Schedule -> Schedule : 核验服务来源和获准目标\n校验输入和时间规则
-Schedule -> Mate ++ : 检查 Agent 关联\n以及当前管理授权
-return Agent 关联校验结果
 Schedule -> Store ++ : 提交新的启用配置\n含下次计划时间
 return 已提交的配置
 return 201 + 已保存的配置\n及未来计划时间
@@ -247,8 +243,8 @@ Schedule -> Store ++ : 读取当前任务并预留一个手动 Run\n检查共用
 return 已预留的 Run
 ref over Schedule, Store
   共用受理流程
-  Agent 校验 -> 归属登记 -> Runtime 准备 -> 原子受理
-  见 schedule_run_admission
+  归属登记 -> Runtime 准备 -> 原子受理
+  展开见设计文档 §3.6 共用受理时序图
 end ref
 return 200 + Run（含 Session ID）
 deactivate Mate
@@ -264,7 +260,7 @@ end note
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java submitLocked。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage。
 ' 表达方式：定时任务管理协调事务；Session 运行时提供准备和持久化能力。
-' 设计原因：Agent 校验在归属登记之前，已删除或禁用时不留待核对登记；远程归属登记在短受理事务之前完成；执行授权只在配置任务时由 Mate 检查。
+' 设计原因：不校验 Agent 是否存在和启停用（评审 Todo T11）；远程归属登记在短受理事务之前完成；执行授权只在配置任务时由 Mate 检查。
 ' PR 证据：e9d31e8888a81b7fe95071e705482bb16fa10476，2026-10-10 拉取。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/schedule/ScheduledRuntimeAdmissionService.java newSession 和 encodeContext。
 ' Java 差异：移除 Claw 的用户引用；Mate 归属登记待实现。
@@ -282,9 +278,6 @@ participant "Session 运行时" as Runtime
 database "存储" as Store
 autonumber
 [-> Schedule ++ : 受理一个已预留的 Run
-== 校验 Agent ==
-Schedule -> Mate ++ : 按 agentId 校验 Agent 存在且启用\n不查用户资格
-return 存在且启用
 == 登记独立归属 ==
 Schedule -> Schedule : 固定本次 Run 拟建的 Session ID
 Schedule -> Mate ++ : 按资源 ID 登记 Session 归属\nClaw 不提供用户、租户或 owner
@@ -333,8 +326,6 @@ Operator -> Mate ++ : 配置定时任务（每天 22:00 视频巡逻检查）
 activate Operator
 note right of Mate : Mate 内部处理待定（评审 Todo T8）
 Mate -> Claw ++ : 创建该定时任务
-Claw -> Mate ++ : 校验该 Agent 的配置权限
-return 配置授权
 Claw -> Store ++ : 保存该定时任务
 return 已保存的定时任务
 return 定时任务及下次运行时间
@@ -363,4 +354,40 @@ return 运行记录及会话内容
 return 运行记录、巡逻结论及工具证据
 return 返回每次运行的巡逻结论及工具证据
 deactivate Operator
+@enduml
+
+@startuml schedule_session_credentials
+' 证据：M06 chat-http-v1-design.md §7.1、§7.1.1、§7.2 的凭据快照规则；chat-events-design.md 的同一 Session 只允许一个 active execution、遇忙 409 SESSION_BUSY。
+' 设计原因：凭据来源在根执行受理时按入口确定一次，执行中不变；同一 Session 先后可有不同来源的根执行。
+' 表达方式：只画一次定时运行和其后一次用户继续对话的正常流程；遇忙、中断与失败规则见 README.md 第 3.11 节。
+' 目标：待实现。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，外部触发画为来自图外的发现消息。
+title 定时 Session 中的凭据来源：按每轮发起方确定
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+participant "对话调用方" as Caller
+participant "Session 运行时" as Runtime
+participant "Mate" as Mate
+autonumber
+== 定时触发的一轮 ==
+[-> Runtime ++ : 启动已受理的定时根执行
+Runtime -> Runtime : 固定凭据来源：统一账号
+Runtime -> Mate ++ : 本批有需凭据的工具\n无入参取统一账号 access-token
+return access-token（只在本批内存）
+Runtime -> Mate ++ : 执行业务工具\n携带统一账号 access-token
+return 工具结果
+Runtime -> Runtime : 提交根执行终态\n同一事务结束本次 Run
+deactivate Runtime
+== 用户在同一 Session 继续对话 ==
+Caller -> Runtime ++ : 提交 user.message\n携带本次请求的用户凭据 Header
+Runtime -> Runtime : Session 空闲才受理新根执行\n固定凭据来源：本次请求 Header 快照
+Runtime -> Mate ++ : 执行业务工具\n携带用户本人的凭据
+return 工具结果
+return SSE 回复
+note over Caller, Mate
+  用户这一轮不向 Mate 取统一账号 Token，也不沿用定时那一轮的 Token。
+  这一轮不关联任何 Run，不改写定时运行的结果。
+end note
 @enduml

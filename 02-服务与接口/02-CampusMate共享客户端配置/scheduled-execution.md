@@ -1,6 +1,6 @@
 # Mate 定时执行凭据接口
 
-版本：0.6.0；日期：2026-10-15；状态：接口草案，待实现。以下新增 Mate 路径及字段是配套设计，不冒充已发布接口。
+版本：0.8.0；日期：2026-10-15；状态：接口草案，待实现。以下新增 Mate 路径及字段是配套设计，不冒充已发布接口。
 
 [共享连接目录](README.md) · [定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [核验依据](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)
 
@@ -32,7 +32,7 @@
 | POST /mate-service/v1/runtime/tools/query | 按已绑定toolIds取得完整定义及inputSchema | Claw客户端已有；本次Mate示例未发现Controller。保留现有消费者契约，不在定时设计中另建工具定义目录 |
 | POST /mate-service/v1/runtime/tools/{toolId}/execute | 执行业务工具 | 只在目标、参数、权限均通过后调用；真实endpoint来自共享目录，不能用模型提供的URL替代 |
 
-定时准备还需要按 agentId 确认 Agent 存在且启用（Claw 侧 `ScheduleAuthorizationPort`，主设计 D12）：只做技术校验，不查用户资格，不经发布缓存；结果须能区分“不存在/已删除”“已禁用”“查询失败”，只有前两者让 Claw 记 agent_unavailable_error。可复用 `GET /mate-service/v1/agents/{agentId}`（需返回启用状态，404 表示不存在），具体路径与字段待 Mate 确认。
+定时任务首版不校验 Agent 是否存在和启停用，正常受理；Agent 启停用与数据一致性另开设计（主设计 T11），本草案不新增 Agent 状态接口。
 
 本次不把接口定义和秘密混成一个返回模型的工具清单。工具发现结果只供解析/模型理解，凭据只由可信执行Adapter使用。工具元数据的历史snake_case输入兼容属于既有客户端事实；新增接口使用lowerCamelCase，不全局改写旧协议。
 
@@ -71,10 +71,10 @@ Mate 独立维护 Session ID 到用户、组织/管理范围及授权政策的�
 2. 数据库事务外，Claw 用服务身份和固定的 Session/Run/Schedule/Agent ID 请求 Mate 登记。Mate 按自己维护的任务与用户关联持久保存会话归属；不接收 Claw 自报用户、租户或 owner。记录在 Claw 确认存在前仅为待核对关联，不对外承诺会话可访问。重复登记相同技术身份不得改绑归属。
 3. 确认 Mate 登记成功且准备未过期后，Claw 在原同库事务创建 Session、首消息、根执行和 Run 关联，提交后才能启动；Mate 记录不加入该数据库事务，不引入跨库事务。关联或准备失败不启动模型、不执行业务。
 4. Mate 登记响应未知时，按固定技术 ID 只读核对；仍未知则本次不受理，不重新分配 ID 或自动重放业务。Mate 已登记、Claw 回滚时，由对账确认会话从未提交后清理关联；提交结果未知时保留待核对，不能凭超时删除。Claw 已受理但回执丢失时，读取现有 Session/Run/根执行，不再次创建。
-5. 用户读取、继续对话、停止和删除会话时，Mate 依据当前主体及会话关联逐次授权，再以可信服务请求调用 Claw。Claw 校验服务来源和获准操作/目标，执行自身状态检查；浏览器、模型提供的资源 ID 不是授权依据。列表先取 Mate 判定的可见集合再分页，空集合禁止退化为全库。
+5. 用户读取、继续对话、停止和删除会话时，Mate 依据当前主体及会话关联逐次授权，再以可信服务请求调用 Claw。Claw 校验服务来源和获准操作/目标，执行自身状态检查；浏览器、模型提供的资源 ID 不是授权依据。会话归属用 user_id 标识。任务与 Run 列表按主设计 D9 由 Mate 拉取 Claw 全部记录后按用户过滤、排序和分页，Claw 不接收可见集合。
 6. 删除 Schedule/Run 不删除已经建立的 Session 归属或撤销已受理执行的独立关联。Session 删除确认后 Mate 关闭相应访问映射，未知结果先核对；公共 Chat 映射可以异步补齐，但不能替代上述归属登记。
 
-Claw 的 Cron 工具只携带当前执行/Session、Agent 和目标资源 ID 向 Mate 请求操作授权，不捕获浏览器用户主体，不让 `sessionOwnerRef` 冒充 `operatorRef`，也不在通用 Runtime 中引入 ScheduleSubjectDTO。服务认证、授权结果的传递绑定与防越权检查仍须真实联调；缺失时拒绝，不能为了移除身份列而开放内部接口。Mate 用户审计独立记录，Claw 技术日志只关联资源与执行身份。
+Claw 的 Cron 工具首版只读（主设计 D13），只读取当前会话所用 Agent 的任务与 Run，不向 Mate 请求操作授权。会话内创建、删除、暂停等写操作以后经 Mate 暴露的接口实现：Mate 完成用户授权并记录任务的 user_id，再调用 Claw（主设计 T13），接口待定。
 
 核验：PR #332 `e9d31e8888a81b7fe95071e705482bb16fa10476` 的 `schedule/mate/MateScheduleContextClient.query/resolveCredentials`、`runtimeapi/schedule/ScheduledRuntimeAdmissionService.newSession/encodeContext` 尚传递并保存归属；源码根为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。本节职责修正、归属登记及服务授权接线均**待实现**；未读取 Mate 当前生产实现，不指定其物理表名，不宣称已有上述接口。
 
@@ -103,6 +103,8 @@ Claw 新增 `ScheduledAccessTokenClient`，在工具批次执行前取得值并�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.8.0 | 2026-10-15 | 列表改为按 D9 由 Mate 拉取全部后过滤，Cron 工具首版只读且不向 Mate 请求授权，会话归属用 user_id 标识。 |
+| 0.7.0 | 2026-10-15 | 撤销按 agentId 的 Agent 存在且启用校验，定时任务不再校验 Agent 启停用。 |
 | 0.6.0 | 2026-10-15 | 定时准备按 agentId 校验 Agent 存在且启用，作为 D12 自动暂停的唯一判定依据；接口待 Mate 确认。 |
 | 0.5.0 | 2026-10-13 | 确认 Session 归属登记保留在 Mate，去掉“待对齐”；登记接口路径与 VO 仍待定。 |
 | 0.4.0 | 2026-10-13 | 定时执行改为统一账号：Claw 无入参向 Mate 获取 access-token，模型每批工具调用取一次；撤销执行上下文查询、按目标解析凭据和 authorizationRef。 |
