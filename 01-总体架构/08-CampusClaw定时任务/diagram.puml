@@ -44,164 +44,156 @@ deactivate Runtime
 
 @startuml scheduled_task_architecture
 ' 实现：superheromeZzh/pi-mono-java PR #332，codex/scheduled-task-backend bdd3af99，核对日期 2026-10-15。
-' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/dispatch/ScheduleRunLauncher.java handleRunRequest、createAutomaticRun、startSession。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/dispatch/ScheduleRunLauncher.java handleRunRequest、createAutomaticRun、startAutomaticRun。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/session/ScheduledSessionStarter.java prepare、acceptSession、startExecution、requestStop。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java bindSafetyContext。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ExecutionSafetyContext.java beforeHook、resolveCredentials。
-' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start、scheduleTimeout、terminalOutcome。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/application/ScheduleRunPublisher.java requestRun。
-' 设计原因：管理入口经事件到达 Run 启动器，避免 Runtime 装配构造依赖环。
+' 设计原因：立即运行经进程内事件到达 Run 启动器，避免 Runtime 装配构造依赖环。
 ' 设计原因：服务直接使用 ScheduleMapper 收发 DTO，不另设仓储接口。
 ' 产品约束：每次 Run 使用关联的 Agent 定义新建 Session；定时执行非交互。
 title 定时任务：全局目标类图
+!pragma layout elk
+top to bottom direction
+set separator none
 skinparam backgroundColor white
-skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam defaultFontSize 12
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
-skinparam nodesep 30
-skinparam ranksep 45
+skinparam nodesep 40
+skinparam ranksep 50
 hide empty members
+hide circle
 
-class "Mate 管理入口" as Caller <<外部>>
-
-package "入口层（schedule.web / tool.cron）" as EntryPkg {
-  class ScheduleController <<API>> {
-    + 8 个配置操作与 2 个 Run 读取
+package "入口（schedule.web / tool.cron）" as EntryPkg {
+  class ScheduleController <<单例>> {
+    + create(grant, request) : ScheduleResponseVO
+    + applyAction(id, run|pause|unpause)
+    + listRuns(grant, filters) : ScheduleRunListResponseVO
   }
-  class CronTool <<工具 / 每个 Agent>> {
-    + 只读：list、status、runs（D13）
-    + 固定当前会话所用 Agent
+  class CronTool <<每个 Session>> {
+    + execute(list | status | runs)
   }
 }
 
-package "定时任务应用层（schedule.application）" as AppPkg {
-  class ScheduleService <<单例>> {
-    + 创建 / 更新 / 删除
-    + 暂停 / 取消暂停
+package "应用服务（schedule.application）· 单例" as AppPkg {
+  class ScheduleService {
+    + create / update / delete(grant, ...)
+    + pause / unpause(grant, id)
   }
-  class ScheduleRunService <<单例>> {
-    + 立即运行 / Run 查询
+  class ScheduleRunService {
+    + runNow(grant, id) : ScheduleRunResponseVO
+    + getRun / listRuns(grant, ...)
   }
-  class ScheduleRunPublisher <<单例>> {
-    + 发布 ScheduleRunRequestEvent
-    + 同步取回 Run 回执
+  class ScheduleRunPublisher {
+    + requestRun(grant, scheduleId) : ScheduleRunDTO
   }
-  class ScheduleCronCalculator <<单例>> {
-    + 校验 Cron 与时区
-    + 计算下次运行时刻
-  }
-}
-
-package "调度与运行（schedule.dispatch）" as DispatchPkg {
-  class ScheduleTriggerWorker <<单例>> {
-    + 每秒扫描到期任务
-  }
-  class ScheduleRunLauncher <<单例>> {
-    + 创建 Run 并推进下次运行时间
-    + 准备并启动 Session、控制并发
-    + 超时请求停止
-  }
-  class ScheduleRunTerminalHook <<单例>> {
-    + 按 execution_id 结束 Run
+  class ScheduleCronCalculator {
+    + normalizeRule(rule, now)
+    + nextRunAt(cron, timezone, after)
   }
 }
 
-package "Mate 对接（schedule.authorization / schedule.mate）" as PortPkg {
-  interface ScheduleSessionRegistry <<接口>>
-  interface ScheduleAccessTokenProvider <<接口>>
-  class MateScheduleSessionRegistry <<Mate 实现>> {
-    + 登记 Session 关联
+package "调度（schedule.dispatch）· 单例" as DispatchPkg {
+  class ScheduleTriggerWorker {
+    + triggerDueSchedules()
+    + deleteExpiredRuns()
   }
-  class MateAccessTokenClient <<Mate 实现>> {
-    + 无入参取 access-token
+  class ScheduleRunLauncher {
+    + handleRunRequest(event)
+    + createAutomaticRun(schedule, now)
+    + startAutomaticRun(claimed)
   }
-  interface ScheduleMapper <<DTO 边界>>
-}
-
-class "Mate 服务" as Mate <<外部>> {
-  用户权限（配置时检查）
-  Session 关联
-  统一账号 access-token
+  class ScheduleRunTerminalHook {
+    + onTerminal(target, reason, at)
+  }
 }
 
 package "定时 Session 创建（schedule.session）" as StarterPkg {
   class ScheduledSessionStarter <<单例>> {
-    + 准备 / 同事务写入 Session 与首条消息
-    + 提交后启动 / 停止
+    + prepare(request, deadline) : PreparedScheduledSessionDTO
+    + acceptSession(prepared, prompt) : ScheduledSessionReceiptDTO
+    + startExecution(prepared, receipt)
+    + requestStop(receipt)
   }
   class PreparedScheduledSessionDTO <<每次 Run>> {
-    sessionId
-    Agent 目录与模型
-    首条用户消息
+    - request : ScheduledSessionRequestDTO
+    - session : RuntimeSessionDTO
+    - execution : RuntimeActiveExecution
   }
 }
 
-package "Runtime（runtimeapi / session）" as RtPkg {
-  class ExecutionSafetyContext <<每次 Run / 内存>> {
-    scheduleId、runId、agentId
-    + 非交互门禁（ASK、提问、计划审核）
-    + 每批工具调用取 access-token
-    + 记录终止错误码
+package "Runtime（runtimeapi / session）· 既有" as RuntimePkg {
+  class RuntimeExecutionCoordinator <<单例>> {
+    + start(execution)
   }
-  class RuntimeExecutionCoordinator <<既有>> {
-    + 定时执行按 execution-timeout 超时
-    + 超时持久化 user.interrupt
-    + 门禁错误码判为失败
+  class RuntimeActiveExecution <<每次 Run>> {
+    + bindSafetyContext(context)
   }
-  class "Host hooks +\nToolExecutionPipeline" as Pipeline <<每次 Run>>
-  class "Session 与执行持久化" as Persist <<既有>>
-  interface ExecutionTerminalHook <<终态扩展点>> {
-    + 与根执行终态同事务调用
+  class ExecutionSafetyContext <<每次 Run · 仅内存>> {
+    - scheduleId / runId / agentId
+    + beforeHook(runtime) : 非交互门禁
+    + resolveCredentials(agentId, toolId)
+  }
+  interface ExecutionTerminalHook {
+    + onTerminal(target, reason, at)
   }
 }
 
-class "GaussDB" as Db <<最终决定方>> {
-  t_schedule / t_schedule_run
-  Session / 根执行
+package "Mate 对接（schedule.authorization / schedule.mate）" as MatePkg {
+  interface ScheduleSessionRegistry {
+    + registerSession(registration)
+  }
+  interface ScheduleAccessTokenProvider {
+    + accessToken() : String
+  }
+  class MateScheduleSessionRegistry
+  class MateAccessTokenClient
 }
 
-Caller -down-> ScheduleController : 可信服务调用
-ScheduleController -down-> ScheduleService : VO→DTO
-ScheduleController -down-> ScheduleRunService
-CronTool -down-> ScheduleService
-CronTool -down-> ScheduleRunService
+package "持久化（schedule.persistence）" as PersistPkg {
+  interface ScheduleMapper {
+    + lockSchedule(id) : ScheduleDTO
+    + insertRun(run) / updateRun(run)
+    + finishRunByExecution(executionId, at)
+  }
+  class ScheduleDTO <<持久化对象>>
+  class ScheduleRunDTO <<持久化对象>>
+}
 
-ScheduleService -down-> ScheduleCronCalculator
-ScheduleRunService -down-> ScheduleRunPublisher : 立即运行
-ScheduleRunPublisher ..> ScheduleRunLauncher : Spring 事件\n同线程处理
-ScheduleTriggerWorker -down-> ScheduleRunLauncher : 自动运行
-ScheduleRunLauncher -down-> ScheduledSessionStarter : 准备 / 受理 / 启动
+ScheduleController --> ScheduleService
+ScheduleController --> ScheduleRunService
+CronTool ..> ScheduleService : 只读
+CronTool ..> ScheduleRunService : 只读
+ScheduleService --> ScheduleCronCalculator
+ScheduleRunService --> ScheduleRunPublisher
+ScheduleRunPublisher ..> ScheduleRunLauncher : <<事件>>\nScheduleRunRequestEvent
+ScheduleTriggerWorker --> ScheduleRunLauncher : 到期任务
+ScheduleRunLauncher --> ScheduledSessionStarter
+ScheduledSessionStarter ..> PreparedScheduledSessionDTO : <<创建>>
+PreparedScheduledSessionDTO *-- "1" RuntimeActiveExecution
+RuntimeActiveExecution o-- "0..1" ExecutionSafetyContext
+ScheduledSessionStarter --> RuntimeExecutionCoordinator : 提交后启动
+RuntimeExecutionCoordinator --> RuntimeActiveExecution
+ScheduledSessionStarter --> ScheduleSessionRegistry
+ExecutionSafetyContext --> ScheduleAccessTokenProvider : 每批工具一次
+ScheduleRunTerminalHook ..|> ExecutionTerminalHook
+MateScheduleSessionRegistry ..|> ScheduleSessionRegistry
+MateAccessTokenClient ..|> ScheduleAccessTokenProvider
+ScheduleService --> ScheduleMapper
+ScheduleRunLauncher --> ScheduleMapper
+ScheduleTriggerWorker --> ScheduleMapper
+ScheduleRunTerminalHook --> ScheduleMapper
+ScheduleMapper ..> ScheduleDTO
+ScheduleMapper ..> ScheduleRunDTO
+ScheduleDTO "1" o-- "0..*" ScheduleRunDTO
 
-ScheduleService -down-> ScheduleMapper : 锁定 / 写入
-ScheduleRunService -down-> ScheduleMapper
-ScheduleTriggerWorker -down-> ScheduleMapper : 领取到期任务
-ScheduleRunLauncher -down-> ScheduleMapper : 写 Run 关联
-ScheduleRunTerminalHook -down-> ScheduleMapper : 结束 Run
-ScheduleMapper -down-> Db
 
-ScheduledSessionStarter -right-> PreparedScheduledSessionDTO : 生成
-ScheduledSessionStarter -down-> ScheduleSessionRegistry : 登记 Session 关联
-ScheduledSessionStarter -down-> ExecutionSafetyContext : 创建并关联到执行
-ScheduledSessionStarter -down-> Persist : 同一事务创建\nSession / 首消息 / 根执行
-ScheduledSessionStarter -down-> RuntimeExecutionCoordinator : 提交后启动一次
-MateScheduleSessionRegistry .up.|> ScheduleSessionRegistry
-MateAccessTokenClient .up.|> ScheduleAccessTokenProvider
-MateScheduleSessionRegistry -down-> Mate
-MateAccessTokenClient -down-> Mate
-
-RuntimeExecutionCoordinator -down-> Pipeline
-RuntimeExecutionCoordinator ..> ExecutionSafetyContext : 超时与终态判断
-Pipeline -right-> ExecutionSafetyContext : 工具调用前 hook
-ExecutionSafetyContext -down-> ScheduleAccessTokenProvider : 每批工具调用\n取 access-token
-RuntimeExecutionCoordinator -right-> Persist : 事件 / 终态
-Persist -down-> Db
-Persist -down-> ExecutionTerminalHook : 终态事务内
-ScheduleRunTerminalHook .right.|> ExecutionTerminalHook
-
-ScheduleCronCalculator -right[hidden]-> ScheduleRunPublisher
-
-legend bottom
-  实现位于 PR #332；单例服务不持有单次 Run 状态，准备快照、执行上下文与工具管道按 Run 创建。
-  业务规则（不补跑、遇忙跳过、删除与保留等）见正文 §3，不在图中重复。
+legend bottom left
+Mate 管理入口经服务认证调用 ScheduleController；MateScheduleSessionRegistry 与 MateAccessTokenClient 调用 Mate 服务。
+单例不持有单次 Run 状态；PreparedScheduledSessionDTO、RuntimeActiveExecution、ExecutionSafetyContext 按 Run 创建。
+ScheduleRunService 查询 Run 同样经 ScheduleMapper；ScheduledSessionStarter 在同一事务写入 Session、首条消息与根执行。
 endlegend
 @enduml
 
