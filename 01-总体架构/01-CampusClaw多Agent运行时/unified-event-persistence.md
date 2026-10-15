@@ -34,7 +34,7 @@
 | Cron 自动 / 手动 Run | Schedule 互斥、occurrence、配置代次、Mate 凭据引用、Run 关联 | 同库事务新建 Session、首消息、execution/segment 与 Run 关联；提交后一次启动 |
 | Agent 工具启动 Subagent | 可信直接绑定、版本/深度/循环、模型、父取消域；关联父工具调用 | 同库事务新建子 Session、首消息、execution/segment 与父子关联；提交后一次启动 |
 
-`AgentSessionFactory` 只装配运行对象、工具与 hooks，不访问数据库。应用层 `SessionExecutionAdmission` 复用受理原语；`ScheduledRunAcceptanceService`、`SubagentRunAcceptanceService` 在自己的短事务中组合这些原语，不能用嵌套 REQUIRES_NEW 破坏原子关联。事务内重检可变状态，事务外查询 Mate、准备目录和执行模型/工具。
+`AgentSessionFactory` 只装配运行对象、工具与 hooks，不访问数据库。应用层 `SessionExecutionAdmission` 复用受理原语；`ScheduledRuntimeAdmissionService`、`SubagentRunAcceptanceService` 在自己的短事务中组合这些原语，不能用嵌套 REQUIRES_NEW 破坏原子关联。事务内重检可变状态，事务外查询 Mate、准备目录和执行模型/工具。
 
 三入口统一由 `RuntimeExecutionCoordinator` 安装历史写入适配器、压缩与终态处理。交互入口有 SSE 输出，后台入口用 `RuntimeEventOutput.persistenceOnly()`；输出类型不决定是否持久化。Runtime 的通用执行边界接收内部 DTO，不反向依赖 Schedule、HTTP Controller 或 Skill 查询服务。根执行终态提交提供事务内终态扩展点（待实现）：调用方模块注册实现，与终态同事务提交、同事务回滚，Runtime 不感知具体业务；定时任务借此结束 Run，见 [M10 D11](../08-CampusClaw定时任务/README.md#key-decisions)。CronTool 只依赖薄管理/受理服务，不能构成 Registry—Dispatcher 构造环。
 

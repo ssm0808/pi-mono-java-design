@@ -166,7 +166,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 | `MateToolProperties` | 绑定前缀改为 `campusmate.tool`；类名可保留以避免无关 Java API 改名 |
 | `MateRestUtil` | 参数和诊断术语改为 CampusMate base URL；传输行为不变 |
 | canonical YAML 与镜像 properties | 只保留一个 `campusmate` 根和一个 Skill endpoint 键 |
-| `MateScheduleContextClient`与`MateScheduleAdapter`（待实现） | 读取共享origin、schedule-context-query-path及credential-resolve-path；分别承担无secret授权查询和受限凭据解析，不复制业务凭据到发现请求 |
+| `MateScheduleAuthorizationAdapter`与`HttpScheduledAccessTokenClient` | 分别承担 Session 归属登记和统一账号 access-token 获取，不复制业务凭据到发现请求；接口见[定时任务 D10](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions) |
 | 配置与客户端测试 | 断言6项已有operation、1项模型能力查询及1项定时草案路径共8项，各自唯一，并拒绝旧`mate.*`绑定 |
 
 不同 Maven 模块不必为了共享一个属性对象形成反向依赖；它们可以分别注入相同的
