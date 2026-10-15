@@ -152,7 +152,7 @@ ScheduleDispatcher -down-> ScheduledRunAcceptanceService
 ScheduledRunAcceptanceService ..> PreparedScheduleRunDTO : 读取
 
 ScheduleApplicationService -down-> ScheduleBindingResolver : 校验 Agent
-ScheduleRunPreparation -down-> ScheduleAuthorizationPort : 登记 Session 归属
+ScheduleRunPreparation -down-> ScheduleAuthorizationPort : 校验 Agent 启用、登记 Session 归属
 MateScheduleAdapter .up.|> ScheduleBindingResolver
 MateScheduleAdapter .up.|> ScheduleAuthorizationPort
 MateScheduleAdapter .up.|> ScheduledAccessTokenPort

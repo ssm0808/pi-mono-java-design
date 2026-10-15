@@ -1,6 +1,6 @@
 # Mate 定时执行凭据接口
 
-版本：0.5.0；日期：2026-10-13；状态：接口草案，待实现。以下新增 Mate 路径及字段是配套设计，不冒充已发布接口。
+版本：0.6.0；日期：2026-10-15；状态：接口草案，待实现。以下新增 Mate 路径及字段是配套设计，不冒充已发布接口。
 
 [共享连接目录](README.md) · [定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [核验依据](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)
 
@@ -31,6 +31,8 @@
 | GET /mate-service/v1/skill/query/{skillId} | 取得可信Skill工具绑定 | Claw已有客户端路径；本次Mate示例范围未发现对应Controller |
 | POST /mate-service/v1/runtime/tools/query | 按已绑定toolIds取得完整定义及inputSchema | Claw客户端已有；本次Mate示例未发现Controller。保留现有消费者契约，不在定时设计中另建工具定义目录 |
 | POST /mate-service/v1/runtime/tools/{toolId}/execute | 执行业务工具 | 只在目标、参数、权限均通过后调用；真实endpoint来自共享目录，不能用模型提供的URL替代 |
+
+定时准备还需要按 agentId 确认 Agent 存在且启用（Claw 侧 `ScheduleAuthorizationPort`，主设计 D12）：只做技术校验，不查用户资格，不经发布缓存；结果须能区分“不存在/已删除”“已禁用”“查询失败”，只有前两者让 Claw 记 agent_unavailable_error。可复用 `GET /mate-service/v1/agents/{agentId}`（需返回启用状态，404 表示不存在），具体路径与字段待 Mate 确认。
 
 本次不把接口定义和秘密混成一个返回模型的工具清单。工具发现结果只供解析/模型理解，凭据只由可信执行Adapter使用。工具元数据的历史snake_case输入兼容属于既有客户端事实；新增接口使用lowerCamelCase，不全局改写旧协议。
 
@@ -101,6 +103,7 @@ Claw 新增 `ScheduledAccessTokenClient`，在工具批次执行前取得值并�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.6.0 | 2026-10-15 | 定时准备按 agentId 校验 Agent 存在且启用，作为 D12 自动暂停的唯一判定依据；接口待 Mate 确认。 |
 | 0.5.0 | 2026-10-13 | 确认 Session 归属登记保留在 Mate，去掉“待对齐”；登记接口路径与 VO 仍待定。 |
 | 0.4.0 | 2026-10-13 | 定时执行改为统一账号：Claw 无入参向 Mate 获取 access-token，模型每批工具调用取一次；撤销执行上下文查询、按目标解析凭据和 authorizationRef。 |
 | 0.3.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
