@@ -42,14 +42,14 @@ skinparam nodesep 40
 skinparam ranksep 50
 
 package "common（待实现）" as CommonPkg {
-  class CampusClawException <<待实现>> {
+  class CampusClawException <<final：待实现>> {
     - errorCode : CampusClawErrorCode
     - publicDetail : String
     - payload : Object
     + CampusClawException(code)
     + CampusClawException(code, diagnostic)
     + {static} visible(code, publicDetail) : CampusClawException
-    + {static} withPayload(code, payload) : CampusClawException
+    + {static} withPayload(code, diagnostic, payload) : CampusClawException
     + errorCode() : CampusClawErrorCode
     + code() : String
     + publicDetail() : Optional<String>
@@ -69,6 +69,7 @@ package "common（待实现）" as CommonPkg {
     - retryAfterSeconds : Integer
     - warning : boolean
     + category() : Category
+    + code() : String
     + isApi(e) : boolean
   }
   enum Category <<待实现>> {

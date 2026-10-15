@@ -78,7 +78,7 @@ Agent 服务在调用模型、工具和外部系统时会失败。用户需要�
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
 | D1 | 失败类别用异常类型区分，还是用一个异常加错误码区分？ | DSH 用一个 `HarnessError` 基类携带 `code` 与 `cause`，按包派生 19 个子类，规则要求“按 code 路由，不解析 message”；Codex 用单一 `CodexErr` 包装 `CodexErrorDetails` 枚举并以 `CodexErrKind` 判别；OpenCode 用 219 个 `Schema.TaggedError` 类，tag 即类别；pi 有 47 个各自的 `extends Error` | Claw 现有 18 个自定义类，其中 9 个已靠 `StableErrorCode` 接口暴露码，类型与码两套判别并存；新代码不断新增类 | 只有一个 `CampusClawException`，没有子类。参数恢复这类需要结构化数据的失败，把数据作为载荷放进异常（`withPayload`），按错误码取出 | 失去按类型 catch：约 45 处判断改为检查错误码或分类；载荷是 `Object`，取用时要按类型读取，类型错了只能在运行时发现 |
-| D2 | 错误码集中在一个枚举，还是按模块分枚举？ | Codex 一个 `CodexErrorDetails` 枚举集中定义；DSH 码是各包自定义的字符串常量 | 模块依赖方向为 common ← ai ← agent-core ← cron ← coding-agent-cli；接口错误码要带 HTTP 状态，common 不依赖 Spring；现有 `MANAGER_UNAVAILABLE` 在模型调用和接口两处同名 | common 中一个 `CampusClawErrorCode` 枚举收纳全部错误码，按 `Category`（模型调用、工具、运行时、接口、定时任务、启动）分组；HTTP 状态存为整数，由接口异常处理转换；同名冲突在合并时消除，对外字符串保持不变 | 一个枚举约 110 个常量，任何模块新增错误码都改 common；common 承载了接口状态码等上层属性；模块边界不再由类型保证，靠分类字段区分 |
+| D2 | 错误码集中在一个枚举，还是按模块分枚举？ | Codex 一个 `CodexErrorDetails` 枚举集中定义；DSH 码是各包自定义的字符串常量 | 模块依赖方向为 common ← ai ← agent-core ← cron ← coding-agent-cli；接口错误码要带 HTTP 状态，common 不依赖 Spring；现有 `MANAGER_UNAVAILABLE` 在模型调用和接口两处同名 | common 中一个 `CampusClawErrorCode` 枚举收纳全部错误码，按 `Category`（模型调用、工具、运行时、接口、定时任务、启动）分组；HTTP 状态存为整数，由接口异常处理转换；同名冲突在合并时消除：模型调用侧常量改名为 `MODEL_MANAGER_UNAVAILABLE`，其 `code()` 仍返回 `MANAGER_UNAVAILABLE`，因为该值写入会话记录且压缩重试按它判断；所有对外输出读 `code()` | 一个枚举约 110 个常量，任何模块新增错误码都改 common；common 承载了接口状态码等上层属性；模块边界不再由类型保证，靠分类字段区分 |
 | D3 | 对外文字和日志文字怎样分开？ | DSH 规则“separate machine identity from display text”；Codex 用 `to_codex_protocol_error` 把内部错误映射为协议错误，HTTP 状态单独映射 | 部分工具失败需要模型能读懂的说明（如“Path does not exist”），其他失败只能对外给码 | 异常带三个通道：错误码（总是对外）、公开说明（只由 `visible(...)` 设置，作者撰写）、诊断文字（只进日志）。所有投影只读错误码和公开说明 | 抛出方要选对通道；诊断文字是否含敏感信息无法机械检查，靠评审 |
 | D4 | 原始异常由谁保留？ | DSH 规则“preserve causes”，`HarnessError` 支持 cause 链；Codex `Io(#[from] io::Error)` 等变体保留来源错误；Claw 已确认的[简化异常日志设计](../05-CampusClaw调用日志/README.md)要求源头记录、转换后的异常无 cause、无堆栈 | 公共错误不能带内部 cause；捕获点最清楚当时在做什么操作；日志按 logger name 定位源类 | 采用用户确认的写法并沿用既有规则：持有原异常的 catch 带原异常记录一次日志，再抛只含错误码的 `CampusClawException`。根异常不提供带 cause 的构造器，也不采集堆栈。现有约 10 处把 cause 传给下一层的位置改为在源头记录 | 不采用 cause 链：源头漏记就彻底丢失原异常，只能靠 `CatchCauseLost` 拦截常见写法（它只证明原异常被传给了某个方法，不证明真的记录）；上层无法再从异常里取原因做诊断，需要诊断的逻辑要搬到源头 |
 | D5 | 怎样防止以后再出现自定义异常类和丢失堆栈？ | 未核验各基线的构建期规则；DSH 以 Agent 技能文档约束 | 问题由代码生成工具反复引入，仅靠文档会再次发生 | 在现有 PMD 规则集中新增 `CustomExceptionClass`：除 `CampusClawException` 外禁止声明任何继承 Throwable 的类，也禁止继承它；保留 `CatchCauseLost`；AGENTS.md 同步规则 | XPath 按名称判断，`extends` 第三方异常的少见写法可能漏检 |
@@ -177,7 +177,7 @@ Agent 服务在调用模型、工具和外部系统时会失败。用户需要�
 |---|---|---|---|---|---|---|---|
 | F1 | 非 API 分类的异常到达接口层 | 投影 | 未发生 | `RuntimeExceptionHandler` | 带堆栈记录，返回内部错误 | 内部错误码；运维按时间查日志 | 不推断更具体的接口错误码 |
 | F2 | 原先按类型放行的 catch 迁移后误吞了其他分类 | 迁移 | 未发生 | 各捕获点 | 判断分类或具体码，不匹配原样抛出；每处有测试 | 与迁移前相同 | 未覆盖测试的分支依赖评审 |
-| F3 | 合并时两个原枚举中同名的错误码 | 迁移 | 未发生 | 合并实现 | 单测保证 `code()` 全局唯一；对外字符串保持原值 | 与迁移前相同 | 无 |
+| F3 | 合并时两个原枚举中同名的错误码 | 迁移 | 未发生 | 合并实现 | 单测保证 `code()` 在分类内唯一，跨分类只允许 `MANAGER_UNAVAILABLE` 一处共享；对外字符串保持原值 | 与迁移前相同 | 运行记录只存字符串，跨分类同名需结合日志区分 |
 | F4 | 抛出方把内部消息放进公开说明 | 编码 | 已提交 | 评审、AGENTS.md | 评审拦截；PMD 不检查参数内容 | 可能看到内部文字 | 无机械保证 |
 | F5 | 源头 catch 只读了 `getMessage()` 或没有记录原异常 | 编码 | 已提交 | PMD `CatchCauseLost` | 构建失败 | 无 | 原异常传给了不记录的方法时无法发现 |
 
@@ -217,7 +217,7 @@ Agent 服务在调用模型、工具和外部系统时会失败。用户需要�
 
 | 切片 | 内容 | 验收 |
 |---|---|---|
-| S1 | common 新增 `CampusClawException`、`CampusClawErrorCode` | 单测覆盖消息优先级、公开说明、载荷、`hasCode`、无 cause 与空堆栈、`code()` 全局唯一 |
+| S1 | common 新增 `CampusClawException`、`CampusClawErrorCode` | 单测覆盖消息优先级、公开说明、载荷、`hasCode`、无 cause 与空堆栈、`code()` 分类内唯一 |
 | S2 | 合并各模块错误码枚举，删除原枚举 | 单测证明工具分类与公开白名单字符串逐字一致；接口码 HTTP 状态与 `Retry-After` 不变 |
 | S3 | 三个投影入口改读根异常，删除 `StableErrorCode` | 流水线测试区分公开说明与只给码；接口与定时任务现有测试不改期望值 |
 | S4 | 迁移 18 个类及约 45 处按类型判断的位置；原先带 cause 的位置改为源头记录 | 全量单测通过；逐处保留或补充“不匹配分类原样抛出”的测试；源头记录有日志捕获测试 |
