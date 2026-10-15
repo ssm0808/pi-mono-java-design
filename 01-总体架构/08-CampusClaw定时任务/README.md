@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.59.0 |
+| 文档版本 | 0.60.0 |
 | 更新日期 | 2026-10-15 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；不选择或追加已有 Session |
@@ -1983,6 +1983,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.60.0 | 2026-10-15 | 类图修正 `ScheduleController` 方法签名，Run 与任务改为按 `scheduleId` 关联而非聚合。 |
 | 0.59.0 | 2026-10-15 | 全局类图按标准 UML 重画（类成员、接口实现、组合与多重性，ELK 分层布局），并与实现映射一起改用 PR #332 的可读类名：`ScheduleRunLauncher`、`ScheduledSessionStarter`（移入 `schedule.session`）、`ScheduleTriggerWorker`、`ScheduleSessionRegistry` 等，新旧名对照见[源码证据 §8.23](source-evidence.md#class-rename)。 |
 | 0.58.0 | 2026-10-15 | 全局类图按 PR #332 实现更新：Run 编排为 `ScheduleRunCoordinator` 与 `ScheduledRuntimeAdmissionService`，立即运行经进程内事件，Mate 适配拆为两个类，删除仓储端口；§3.10 补充 `ExecutionSafetyContext` 的职责。 |
 | 0.57.0 | 2026-10-15 | 定时任务不再校验 Agent 是否存在和启停用、正常受理，首版取消自动暂停，Agent 启停用与数据一致性另开设计（T11）；明确凭据按根执行入口区分，定时会话中继续对话使用用户请求凭据，并在 §3.11 设计凭据切换与定时 Session 中继续对话（T12），会话归属由 Mate 用 user_id 标识，不做长期审计；新增 D13，Cron 工具首版只读，会话内写操作以后经 Mate 接口实现（T13），用户隔离记为 T14。 |
