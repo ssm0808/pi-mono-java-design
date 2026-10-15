@@ -11,6 +11,7 @@
 | CampusClaw 调用日志 | 调用失败如何简化记录和定位 | [异常日志设计](./05-CampusClaw调用日志/README.md) |
 | CampusClaw 计划模式 | 通过 Session 更新切换 plan/build，审核方案、在原执行续跑并在 build 通过后端任务事件跟踪实施进度 | [计划模式设计](./06-CampusClaw计划模式/README.md) · [接口增量](./06-CampusClaw计划模式/interface-delta.md) · [TodoUpdate](./06-CampusClaw计划模式/todo-update.md) · [提示词](./06-CampusClaw计划模式/plan-policy.md) · [完整交互](./06-CampusClaw计划模式/plan_mode_end_to_end.svg) |
 | CampusClaw 定时任务 | 服务端按时新建会话或继续已有会话，管理触发、暂停、恢复与运行证据 | [定时任务主设计](./08-CampusClaw定时任务/README.md) · [Claw 配置接口与取舍](./08-CampusClaw定时任务/configuration.md) · [源码证据](./08-CampusClaw定时任务/source-evidence.md) |
+| CampusClaw 异常与错误码 | 失败如何用一个异常和错误码表达，原始异常在哪里记录，对外只给什么 | [异常与错误码设计](./09-CampusClaw异常与错误码/README.md) |
 | Agent 架构对比 | 按模块说明 CampusClaw 与基线的设计、实现差异、理由、代价和证据 | [架构对比](./07-Agent架构对比/README.md) · [全仓模块索引](../README.md#module-index) · [全部设计图](../设计图索引.html) |
 
 多 Agent Runtime 专题中还包含 [Runtime HTTP API 设计](./01-CampusClaw多Agent运行时/chat-http-v1-design.md)和

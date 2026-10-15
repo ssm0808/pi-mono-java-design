@@ -1,0 +1,150 @@
+@startuml exception_overview
+' Java 基线：455445a4db136a58381f866e073a82d1f16ff1f1；2026-10-15 拉取 main。
+' 源码：modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java parseArguments。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeCommittedEventFactory.java toolErrorCode。
+' 场景：模型返回的工具参数无法解析，从用户发消息开始，到运维人员按错误码查到原始堆栈结束。
+' 目标：待实现；统一异常与错误码，日志保留原始异常，对外只给错误码。
+' 表达方式：只画正常的失败处理路径，不画日志写入失败等次级失败。
+title 一次失败从发生到被定位
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "园区用户" as User
+participant "Claw" as Claw
+participant "Mate" as Mate
+database "日志平台" as Logs
+actor "运维人员" as Ops
+autonumber
+User -> Claw ++ : 发送“检查今晚的视频巡逻结果”
+activate User
+Claw -> Mate ++ : 请求模型生成下一步
+return 模型回复（工具参数不是合法 JSON）
+Claw -> Claw : 解析工具参数失败
+Claw -> Logs ++ : 记录原始异常\n（操作名、错误码、完整堆栈）
+return 已记录
+Claw -> Claw : 转换为错误码异常
+return 返回本轮失败及错误码
+deactivate User
+== 用户报障后 ==
+Ops -> Logs ++ : 按错误码和时间查找日志
+activate Ops
+return 返回原始异常类型、消息与堆栈
+deactivate Ops
+@enduml
+
+@startuml exception_translation
+' Java 基线：455445a4db136a58381f866e073a82d1f16ff1f1；2026-10-15 拉取 main。
+' 源码：modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java failureResult、messageForException。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java。
+' 场景：Claw 内部一次失败从捕获、记录、转换到投影给调用方的过程。
+' 目标：待实现；CampusClawException 与 ErrorCode 取代各自定义异常类。
+' 表达方式：只画正常的转换路径；错误码族不匹配时的处理见 README.md 第 5.2.1 节。
+title 记录并转换失败（UC1、UC2）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+participant "执行入口\n（运行时 / 工具流水线 / 接口异常处理）" as Boundary
+participant "业务代码" as Source
+participant "JDK 或第三方库" as Library
+participant "日志" as Log
+autonumber
+[-> Boundary ++ : 执行一次操作
+Boundary -> Source ++ : 调用业务方法
+Source -> Library ++ : 调用解析、I/O 或远端接口
+return 抛出 JDK 或库异常
+Source -> Log ++ : 记录一次（操作名、错误码、原异常）
+return 已记录
+return 抛出 CampusClawException（错误码）
+Boundary -> Boundary : 按错误码族投影\n（错误码，或作者撰写的公开说明）
+[<-- Boundary : 返回错误码\n（接口响应、工具结果或运行记录）
+deactivate Boundary
+@enduml
+
+@startuml exception_architecture
+' Java 基线：455445a4db136a58381f866e073a82d1f16ff1f1；2026-10-15 拉取 main。
+' 源码：modules/agent-core/src/main/java/com/campusclaw/agent/error/StableErrorCode.java（待删除）。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/error/RuntimeApiException.java（待删除）。
+' 目标：待实现；一个只带错误码的根异常（无 cause、无堆栈）、按模块的错误码枚举、唯一保留的载荷子类和三个投影入口。
+' 依赖方向：common <- ai <- agent-core <- cron <- coding-agent-cli，根异常和接口放在 common。
+title 异常与错误码：全局目标类图
+skinparam backgroundColor white
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 30
+skinparam ranksep 45
+
+package "common（待实现）" as CommonPkg {
+  interface ErrorCode <<待实现>> {
+    + name() : String
+  }
+  class CampusClawException <<待实现>> {
+    - errorCode : ErrorCode
+    - publicDetail : String
+    + CampusClawException(code)
+
+    + CampusClawException(code, diagnostic)
+    + {static} visible(code, publicDetail) : CampusClawException
+    + errorCode() : ErrorCode
+    + code() : String
+    + publicDetail() : Optional<String>
+    + hasCode(code) : boolean
+  }
+}
+
+package "ai" as AiPkg {
+  enum MateInvocationErrorCode <<实现 ErrorCode：待实现>> {
+    模型调用 17 个错误码
+  }
+}
+
+package "agent-core" as CorePkg {
+  enum ToolErrorCode <<待实现>> {
+    工具结果错误码
+    名称与公开白名单字符串一致
+  }
+  class ToolArgumentsInvalidException <<改为子类：待实现>> {
+    - toolName : String
+    - inputSchema : JsonNode
+    - errors : List<ValidationError>
+    + hasRecoveryDefinition() : boolean
+  }
+  class ToolExecutionPipeline {
+    - failureResult(e) : AgentToolResult
+  }
+}
+
+package "cron" as CronPkg {
+  enum CronErrorCode <<实现 ErrorCode：待实现>>
+  class CronEngine {
+    - stableCodeOf(e) : String
+  }
+}
+
+package "coding-agent-cli" as CliPkg {
+  enum AgentRuntimeErrorCode <<实现 ErrorCode：待实现>> {
+    Runtime 准备与 Skill 加载错误码
+  }
+  enum RuntimeErrorCode <<实现 ErrorCode：待实现>> {
+    - httpStatus : HttpStatus
+    - retryAfter : Duration
+    + isApiError(e) : boolean
+  }
+  class RuntimeExceptionHandler {
+    + handle(CampusClawException) : ResponseEntity
+  }
+}
+
+ErrorCode <|.. MateInvocationErrorCode
+ErrorCode <|.. ToolErrorCode
+ErrorCode <|.. CronErrorCode
+ErrorCode <|.. AgentRuntimeErrorCode
+ErrorCode <|.. RuntimeErrorCode
+CampusClawException o--> "1" ErrorCode : 错误码
+CampusClawException <|-- ToolArgumentsInvalidException : 唯一子类（携带恢复载荷）
+ToolExecutionPipeline ..> CampusClawException : 工具结果只投影\n错误码或公开说明
+CronEngine ..> CampusClawException : 运行记录只保存错误码
+RuntimeExceptionHandler ..> RuntimeErrorCode : 只有该错误码族\n映射为接口错误
+@enduml

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.2.1 |
+| 文档版本 | 2.3.0 |
 | 状态 | 日志机制已按 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 落地；CampusMate Provider 改名为 待实现 |
 | 设计日期 | 2026-08-26 |
 | 实现仓库 | `superheromeZzh/pi-mono-java` |
@@ -89,6 +89,9 @@ CampusClaw 采用一个简单且可执行的异常边界：
 2. **错误码跨层**：转换后的异常、Assistant 终态和公共响应只传稳定错误码；
 3. **来源类自己记录**：实际捕获或识别失败的类使用自己的 Logger，`RuntimeExceptionHandler`
    不重复记录 只携带错误码的 `RuntimeApiException`；执行层只补无错误码的兜底失败。
+
+只携带错误码的异常类型统一为一个 `CampusClawException` 加按模块的错误码族，取代各自定义的异常类，
+规则与迁移见[异常与错误码设计](../09-CampusClaw异常与错误码/README.md)（待实现）；本文的三条规则不变。
 
 这里刻意接受少量 fluent logging 语句重复。共享的是 `event/operation/errorCode` 字段约定，
 而不是“记录并抛异常”的公共行为。日志归属、级别、上下文类型和异常转换都留在业务源类中，
@@ -243,3 +246,4 @@ event == "campusclaw.failure" AND sessionId == "<session-id>"
 | 2.1.0 | 2026-08-26 | 实际失败源类直接记录，异常只携带稳定错误码。 |
 | 2.2.1 | 2026-09-14 | 聚焦失败边界与定位规则，压缩变更经过并重排调用顺序图。 |
 | 2.2.0 | 2026-09-14 | 目标 Provider Logger 随 CampusMateProvider 改名，稳定日志字段与错误码保持不变。 |
+| 2.3.0 | 2026-10-15 | 只携带错误码的异常类型统一为 CampusClawException，链接异常与错误码设计。 |
