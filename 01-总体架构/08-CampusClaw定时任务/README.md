@@ -51,6 +51,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 | <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，任务一直被占用，后续计划全部遇忙跳过 | 需人工处置才能恢复 | 不自动恢复。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件，中断终态走 D11 的同一终态提交，Run 随之结束；② 执行期写入与工具调用前检查执行未终止，防止恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | Runtime |
 | <a id="todo-t10"></a>T10 | 是否在 Claw 的 t_schedule（及 Run、Session）增加 userId，使列表直接按用户查询；需先确定任务仅创建者可见还是同范围共享，以及与 Mate 归属的同步规则 | 任务量增长后 Mate 全量拉取的读取量随之增长 | 方法 A：Mate 拉取全部后过滤（[D9](#key-decisions)） | Claw 与 Mate 共同 |
 | <a id="todo-t11"></a>T11 | Agent 删除、启停用与定时任务的数据一致性：保存、受理、取消暂停时是否校验 Agent，Agent 不可用时任务如何处理 | 关联的 Agent 已删除或禁用时，自动运行每次失败在 Runtime 准备阶段，只留下失败 Run | 不校验 Agent 是否存在和启停用，正常受理；准备失败按通用错误记录 Run，不自动暂停（[D12](#key-decisions)） | Agent 管理与 Claw 共同 |
+| <a id="todo-t12"></a>T12 | 凭据按根执行发起方切换的机制：Runtime 如何识别每轮发起方并选择凭据来源；Child 是否继承父执行凭据；定时执行未结束时用户插话是拒绝还是排队；谁可在定时 Session 中继续对话；审计如何区分统一账号与用户本人的工具调用 | 不定则定时 Session 中继续对话的凭据与并发行为无法实现和验收 | 定时触发的根执行用统一账号 access-token，用户继续对话用本次请求 Header 中的凭据（[§5.1](#security)） | Runtime（M06） |
 
 <a id="implementation-verification"></a>
 
@@ -1683,7 +1684,7 @@ Accept-Language: zh-CN
 - 首版列表由 Mate 拉取全部后按用户过滤、排序和分页（D9）；Claw 加 userId 见 T10。
 - 用户权限只在配置任务时由 Mate 检查；运行时所有定时任务统一使用 Mate 配置的同一个账号，不再按用户查询执行资格（D10）。
 - 新 Session 在受理前由 Mate 独立登记归属；登记失败或结果未知时不启动，删除 Schedule/Run 不删除该归属。
-- Claw 不持久化凭据引用或 Token。模型一次返回中有需要凭据的工具调用，并且至少一个通过可信解析、参数校验和权限判断时，执行 Adapter 无入参向 Mate 取一次统一账号的 `access-token`，本批共用，只透传这一项；只含无凭据工具、参数错误或权限 ASK 时不取。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型。秘密只在受限执行内存中使用，不进入模型、metadata、Schedule/Run、事件或日志。普通 HTTP 消息仍沿用 [M06 当次 Header 快照规则](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)。凭据来源按根执行的入口区分，不按 Session 的来源区分：定时触发的根执行（含其 Child）用统一账号 access-token；用户在定时任务创建的 Session 里继续对话时，新消息是普通 HTTP 根执行，只用该请求 Header 中的用户凭据，不向 Mate 取统一账号 Token，也不沿用定时执行的 Token。
+- Claw 不持久化凭据引用或 Token。模型一次返回中有需要凭据的工具调用，并且至少一个通过可信解析、参数校验和权限判断时，执行 Adapter 无入参向 Mate 取一次统一账号的 `access-token`，本批共用，只透传这一项；只含无凭据工具、参数错误或权限 ASK 时不取。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型。秘密只在受限执行内存中使用，不进入模型、metadata、Schedule/Run、事件或日志。普通 HTTP 消息仍沿用 [M06 当次 Header 快照规则](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)。凭据来源按根执行的入口区分，不按 Session 的来源区分：定时触发的根执行（含其 Child）用统一账号 access-token；用户在定时任务创建的 Session 里继续对话时，新消息是普通 HTTP 根执行，只用该请求 Header 中的用户凭据，不向 Mate 取统一账号 Token，也不沿用定时执行的 Token；切换机制另开设计（[T12](#todo-t12)）。
 - metadata 不进入模型输入，不作为身份、权限或凭据依据。
 - 资源级不可见统一返回 404，不泄露存在性。
 - Mate 公共展示边界（非本次 Claw 契约）：公共任务详情使用公共任务/Run 标识与 Chat 链接，Run 的内部 sessionId、executionId 不直接暴露；映射未完成显示“结果入口准备中”，不能重复触发任务。
@@ -1926,7 +1927,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.57.0 | 2026-10-15 | 定时任务不再校验 Agent 是否存在和启停用、正常受理，首版取消自动暂停，Agent 启停用与数据一致性另开设计（T11）；明确凭据按根执行入口区分，定时会话中继续对话使用用户请求凭据。 |
+| 0.57.0 | 2026-10-15 | 定时任务不再校验 Agent 是否存在和启停用、正常受理，首版取消自动暂停，Agent 启停用与数据一致性另开设计（T11）；明确凭据按根执行入口区分，定时会话中继续对话使用用户请求凭据，切换机制另开设计（T12）。 |
 | 0.56.0 | 2026-10-15 | 并入接口契约、待对齐事项与两张表结构成为单一设计文档，明确 Claw 只调用 Mate 的三个接口且受理先校验 Agent 再登记归属。 |
 | 0.55.0 | 2026-10-15 | D12 明确 agent_unavailable_error 的判定依据：只认 Mate 按 agentId 的存在且启用校验，Runtime 通用准备故障不暂停。 |
 | 0.54.0 | 2026-10-15 | F14 登记结果未知不再保持占用：与过期准备清理统一，lease_until 到期即结束 Run，待核对登记由 Mate 清理。 |
