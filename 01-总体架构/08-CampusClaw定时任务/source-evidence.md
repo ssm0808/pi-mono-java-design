@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.37.0 |
+| 文档版本 | 0.38.0 |
 | 核验日期 | 数据库专项为 2026-10-10，见[定时任务设计 §3.2.7](README.md#source-baseline)；其余各节保留实际核验日期与范围 |
 | 产品范围 | 每次运行创建独立 Session，复用已绑定 Agent；不提供已有 Session 目标 |
 | 状态边界 | 历史主线范围见各节；PR #332 三张调度表、Mapper、同库受理与启动控制已实现、未合并，差距及数据库验收见[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#gaps)；生产公司身份系统未核验 |
@@ -713,6 +713,27 @@ Claude Managed Agents 本次未核对。
 | 执行上下文 | `session/ExecutionSafetyContext.java` · `beforeHook/resolveCredentials`；`runtimeapi/event/RuntimeExecutionCoordinator.java` · `scheduleTimeout/persistScheduledTimeoutStop/terminalOutcome` | 承载调度标识、非交互门禁与取 Token；原图未画 |
 | Cron 工具 | `tool/cron/CronTool.java`；`tool/cron/AgentScopedCronToolFactory.java` | 依赖配置服务与运行服务，只读 |
 
+<a id="class-rename"></a>
+
+### 8.23 定时任务类名调整（2026-10-15）
+
+PR #332 在 `bdd3af99` 把定时任务类改为可读命名，并把 `runtimeapi/schedule`、`runtimeapi/scheduleweb` 合并到 `schedule/session`、`schedule/web`；只做重命名，行为与对外契约不变。本文和主设计中固定到更早提交的证据仍使用旧名，按下表对照。
+
+| 旧名 | 新名 |
+|---|---|
+| `ScheduleApplicationService` | `ScheduleService` |
+| `ScheduleRunCoordinator` | `ScheduleRunLauncher` |
+| `ScheduleDispatcher` | `ScheduleTriggerWorker` |
+| `ScheduleRunGateway` | `ScheduleRunPublisher` |
+| `ScheduleAccessPolicy` | `SchedulePermissionChecker` |
+| `ScheduleTimePolicy` | `ScheduleCronCalculator` |
+| `ScheduleHttpPolicy` | `ScheduleRequestValidator` |
+| `runtimeapi.schedule.ScheduledRuntimeAdmissionService` | `schedule.session.ScheduledSessionStarter` |
+| `PreparedScheduledRuntimeDTO`、`ScheduledRuntimeRequestDTO`、`ScheduledRuntimeReceiptDTO` | `PreparedScheduledSessionDTO`、`ScheduledSessionRequestDTO`、`ScheduledSessionReceiptDTO` |
+| `ScheduleAuthorizationPort`、`MateScheduleAuthorizationAdapter` | `ScheduleSessionRegistry`、`MateScheduleSessionRegistry` |
+| `ScheduledAccessTokenPort`、`HttpScheduledAccessTokenClient` | `ScheduleAccessTokenProvider`、`MateAccessTokenClient` |
+| `TrustedScheduleAuthenticationBridge`、`ScheduleOutboundCredentialsPort` | `MateServiceAuthenticator`、`MateServiceCredentialProvider` |
+
 ## 9. 文档验收
 
 2026-10-08 的接口范围检查通过：配置清单与HTML一致为10个Claw操作、2个Mate草案，全仓无独立预览路径或操作标识残留，原有JSON示例保持一致。API技能检查通过4份Markdown、4份SVG及HTML脚本；仓库图检查通过36专题、132块、53时序图、0错误，managed_session_compaction的既有3条件组范围提示不变，图索引重新生成后无差异。浏览器检查覆盖共享样式、操作归属及版本、折叠状态、响应/语言切换、360px和无JavaScript回退；类图已查看1282×1382原尺寸与840px文档宽度，职责链保持。生成同步和git diff --check通过；未执行产品或数据库测试。
@@ -755,6 +776,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.38.0 | 2026-10-15 | 新增 §8.23 定时任务类名新旧对照。 |
 | 0.37.0 | 2026-10-15 | 登记全局类图与 PR #332 实现的核对范围与结论。 |
 | 0.36.0 | 2026-10-14 | 登记五个基线对运行失败是否自动暂停的最新证据。 |
 | 0.35.0 | 2026-10-13 | 任务内容 message 改为纯文本 prompt，移除 credentialIds，业务凭据改由 Mate 按 Agent 绑定在运行时决定。 |
