@@ -26,7 +26,7 @@
 
 工具活动与授权界面的名称只显示在标题中，展开后查看参数和结果；长标题在展开状态完整换行，规则见[内容渲染 §9.7](技术设计/内容渲染.md#mate-tool-display)。
 
-定时任务的精确契约见 [Claw 配置接口](../01-总体架构/08-CampusClaw定时任务/configuration.md)，用户流程与 Claude Console 参考见[场景09](场景/09-配置与管理定时任务/README.md)，[原型](原型/index.html#scene=schedules&fidelity=high)覆盖 Manual / Schedule 及保存后的计划时间。
+定时任务的精确契约见 [Claw 配置接口](../01-总体架构/08-CampusClaw定时任务/README.md#interface)，用户流程与 Claude Console 参考见[场景09](场景/09-配置与管理定时任务/README.md)，[原型](原型/index.html#scene=schedules&fidelity=high)覆盖 Manual / Schedule 及保存后的计划时间。
 
 旧功能提交 `pi-mono-java@2b93cbea90b3e876f5a87a8905c816f0e33b8f47` 的 `ScheduleForm.vue` 已有“自动运行 / 仅手动”及频率配置；该页面的保存前独立预览已不符合当前契约。2026-10-08 新获取的默认 `main@769e86592285f4a25b0febaf551eddea6bc7212c` 在 `frontend/src/App.vue` 与组件树范围尚无这组定时工作区组件，不用旧分支证明当前主线或生产部署。新分区与映射增量待实现，源码和真实 Console 的核验范围见[证据](source-evidence.md#schedule-console-evidence)；历史430项测试仅属于旧分支记录，不视为本次产品验收。
 
