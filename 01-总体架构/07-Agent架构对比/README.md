@@ -690,10 +690,10 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 | pi | OpenAI Completions 适配器每次 `stream` 新建 SDK 客户端，传输交给 Node `fetch`；没有模型请求并发上限、连接池配置或预热 |
 | Codex | HTTP 流式请求每次经 `build_api_transport` 构造 reqwest 客户端；每轮开始预热一条 Responses WebSocket（`generate=false`），本轮后续请求复用该连接与 `previous_response_id`；没有模型请求并发上限；`agent_max_threads` 默认 6，间接限制同时运行的 Agent 线程 |
 | CampusClaw 已观察 | Java `1acbbf3f` 用 Reactor Netty 默认连接池（8 核以下 16 条连接、排队 32 个、最多 45 秒），没有显式的模型调用上限；执行准入默认每实例 100 |
-| CampusClaw 目标 | `WebClient` 底层改为 JDK HttpClient，删除 Reactor Netty；每实例一个共享 HttpClient，依靠其连接池复用，不预热，固定 HTTP/1.1；Provider 向 Redis 申请全局许可（合计 100 个，30 秒租约、每 10 秒续租），本实例按到达顺序最多等 30 秒，超时以 `MODEL_CONCURRENCY_LIMITED` 失败且不发请求；Redis 不可用时降级为每实例 50 个；Redis 客户端用 Jedis，不引入 Netty；Redis 服务、连接配置与客户端和跨实例路由专题（A17，PR #33 评审中）、流式恢复专题共用 |
+| CampusClaw 目标 | `WebClient` 底层改为 JDK HttpClient，删除 Reactor Netty；每实例一个共享 HttpClient，依靠其连接池复用，不预热，固定 HTTP/1.1；Provider 向 Redis 申请全局许可（合计 100 个，30 秒租约、每 10 秒续租），本实例按到达顺序最多等 30 秒，超时以 `MODEL_CONCURRENCY_LIMITED` 失败且不发请求；Redis 不可用时降级为每实例 50 个；Redis 客户端用 Redisson，许可脚本自己维护；Redis 服务、连接配置与客户端和跨实例路由专题（A17，PR #33 评审中）、流式恢复专题共用 |
 | 差异分类 | 产品约束：多租户服务需要按 Mate 容量限制并发，单用户基线没有这个约束；架构变更：许可放在 Provider，覆盖执行、Subagent、压缩与定时执行的全部模型调用，并由 Redis 在实例间共享 |
 | 理由与代价 | 平台自带客户端减少依赖且与 Runtime 客户端一致；全局许可让一个实例空闲时另一个实例能用满容量，一个实例故障时容量不减半。代价是新增 Redis 运行依赖与运维，每次调用多两次 Redis 往返；实例崩溃后最长 30 秒回收许可；Redis 故障时降级为每实例 50，期间不能借用容量；Redis 恢复或丢数据后最多 10 秒内合计可能超过上限 |
-| 备选与重新评估条件 | 不照搬 Codex 的 WebSocket 预热：它复用的是服务端增量状态，Mate Chat 是无状态的 POST + SSE。不选每实例本地许可：合计上限要靠“实例数 × 每实例许可”的部署配置保证，一个实例故障时能力减半。不选 Lettuce：会把 Netty 带回产物。Redis 长期不稳定、降级频繁时重新评估；Mate 网关支持 HTTP/2 时再评估多路复用 |
+| 备选与重新评估条件 | 不照搬 Codex 的 WebSocket 预热：它复用的是服务端增量状态，Mate Chat 是无状态的 POST + SSE。不选每实例本地许可：合计上限要靠“实例数 × 每实例许可”的部署配置保证，一个实例故障时能力减半。客户端按用户确认用 Redisson（削减目标只是不引入 reactor-netty），但不用它自带的租约信号量：它按本机时钟计算租约，Redis 丢数据后要重新设置许可数，也不能重新登记已过期的许可。Redis 长期不稳定、降级频繁时重新评估；Mate 网关支持 HTTP/2 时再评估多路复用 |
 | 设计状态 / 实现状态 | 待评审 · 待实现；连接器替换已在临时 worktree 做过原型（366 个测试通过），Redis 许可未做原型，未压测 |
 | 验收与证据 | 主设计 §5.8；源码证据 §1.4 |
 

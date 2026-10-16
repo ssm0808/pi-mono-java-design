@@ -173,7 +173,7 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 | D2 | 多实例部署时，如何保证同时进行的模型调用合计不超过 100 个 | pi、Codex 都是单用户工具，没有限制模型请求并发；Codex 用 `agent_max_threads`（默认 6）限制同时运行的 Subagent 线程，间接限制并发 | Mate 按合计 100 个规划容量；执行准入 `max-active` 默认每实例 100，Subagent、压缩和定时执行也会调用模型，所以执行数不能代替调用数；希望一个实例空闲时，另一个实例能用满全部容量 | 全局许可放在 Redis：一个有序集合保存在用许可，成员是许可 ID，分值是租约到期时间；登记、续租、删除各是一次 Lua 脚本，在 Redis 内原子完成（§5.4）。所有经 CampusMate Provider 的调用共用这组许可 | 新增 Redis 运行依赖和运维；每次调用多两次 Redis 往返（登记、删除），每个实例每 10 秒多一次续租；进程崩溃后最长 30 秒才回收它的许可；跨实例不保证先到先得。不选每实例本地 50 个许可：一个实例故障时合计能力降到 50，负载不均时一个实例排队、另一个空闲 |
 | D3 | 是否需要连接池、预热和复用 | pi 没有配置预热，复用交给 `fetch`。Codex 在每轮开始时预热一条 Responses WebSocket（发送 `generate=false` 的 `response.create`），本轮后续请求复用这条连接和 `previous_response_id`，连接在会话内缓存 | Mate Chat 是 HTTP POST + SSE，没有 WebSocket 或服务端增量状态，Codex 的预热收益（复用服务端上下文）在这里不存在；首 token 通常要数秒，建连只需毫秒级；Mate 是集群内网关 | 实例内只创建一个 HttpClient，依靠它自带的连接池复用连接；不做预热；不额外设置连接数上限，由 D2 的许可间接限制 | 空闲超过 30 秒后的第一次调用要多一次 TCP（和 TLS）握手；不用 HTTP/2 多路复用，每个并发调用占一条连接 |
 | D4 | Redis 不可用时模型调用怎么办 | 基线没有全局许可，不涉及 | Redis 只用来限流，不保存业务数据；告警场景下模型调用不能因为限流组件故障全部失败；也不能完全放开，否则会冲垮 Mate | 降级为本实例许可：每实例最多 50 个（`fallback-max-concurrent-requests`），按到达顺序发放；部署保证“实例数 × 50”不超过全局上限，降级期间合计仍不超过 100。Redis 恢复后先把本实例在用的许可重新登记，再回到全局许可 | 降级期间不能跨实例借用容量；Redis 恢复或丢数据后，最多一个续租周期（10 秒）内合计可能超过 100（§5.7 F9）。不选“Redis 故障时拒绝全部调用”：限流组件故障会变成模型调用全部失败；不选“故障时不限流”：Mate 失去保护 |
-| D5 | 用哪个 Redis 客户端 | 基线不使用 Redis | 本设计的目的之一是从产物中删掉 Netty；[Redis 流式恢复](../../01-总体架构/01-CampusClaw多Agent运行时/redis-stream-recovery.md#83-maven-依赖)也要接入 Redis，跨实例路由专题（PR #33 评审中）用 Redis Pub/Sub 送提醒，三份设计应共用一个客户端和一套连接配置 | 与跨实例路由专题的 D4 一致：`spring-boot-starter-data-redis` 排除默认的 Lettuce，改用 Jedis（版本跟随 Boot 3.4.5 BOM，为 5.2.0），连接配置沿用 `spring.data.redis.*` | Jedis 是阻塞客户端，每个命令从连接池借一条连接；三个专题共用一个 Jedis 连接池（§5.6），Redis 流式恢复的阻塞读取要按读者数增加连接。新增 jedis、commons-pool2、org.json、gson 四个 jar，约 1.5 MB。不选 Lettuce：`lettuce-core` 6.4.2 编译依赖 netty-common、netty-handler、netty-transport 和 reactor-core，Netty 会回到产物；不选 Redisson：它自带带租约的信号量，可以省掉三个脚本，但编译依赖 7 个 Netty 构件和 rxjava、kryo、byte-buddy 等，主 jar 约 3.1 MB；降级、本实例排队和 Redis 丢数据后的重新登记仍要自己写；流式恢复和跨实例路由也都不选它；客户端选择待用户确认 |
+| D5 | 用哪个 Redis 客户端 | 基线不使用 Redis | 用户确认（2026-10-16）的削减目标是不引入 `reactor-netty` 这个 Maven 依赖，Netty 本身可以保留；[Redis 流式恢复](../../01-总体架构/01-CampusClaw多Agent运行时/redis-stream-recovery.md#83-maven-依赖)和跨实例路由专题（PR #33 评审中）也接入 Redis，三份设计应共用一个客户端和一套连接配置 | 按用户确认采用 Redisson：Host 模块新增 `org.redisson:redisson` 和 `org.redisson:redisson-spring-data-34`，后者让流式恢复、跨实例路由继续使用 Spring Data Redis 的 `RedisTemplate` 与订阅容器；Host 配置类按 `spring.data.redis.*` 创建 `RedissonClient` 和 `RedissonConnectionFactory`。许可脚本经 `RScript` 以 EVALSHA 执行，不使用 Redisson 自带的租约信号量（原因见 §5.4）。不用 `redisson-spring-boot-starter`：4.8.0 版对应 Spring Data Redis 4.1（Boot 4），3.x 版还会带入 Actuator | 9 个 Netty 构件（含传递依赖，约 2.7 MB）随 Redisson 留在产物中，另有 Redisson 主 jar 约 3.1 MB 以及 rxjava、kryo、byte-buddy、jodd-util、snakeyaml；Redisson 不在 Boot BOM 中，版本要自己固定，并确认与 Boot 管理的 Netty 版本兼容；Redisson 会创建自己的 Netty I/O 线程。Jedis 依赖更少且不带 Netty，Lettuce 是 Boot 默认，两者也能满足本设计 |
 
 <a id="http-transport-global-permits"></a>
 
@@ -181,7 +181,16 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 
 **数据结构。** 全局许可是一个 Redis 有序集合，key 为 `claw:model-permits:{campusmate}`（花括号是 Cluster 槽标记，首版不要求 Cluster）。每个成员是一个许可 ID，格式为“实例名:UUID”，便于排查是哪个实例持有；分值是租约到期的毫秒时间戳。不同部署环境使用不同 Redis 库或 key 前缀，不共享许可。与其他专题共用 Redis 时按前缀分开：流式恢复用 `claw:hot:*`，跨实例路由用 `claw:sig:*`。
 
-**访问权限。** 沿用跨实例路由专题的约定：Redis 只在内网访问，开启 TLS 与 ACL，Claw 共用一个 ACL 账号。该账号需要在 `claw:model-permits:*` 上增加 `EVALSHA`、`EVAL`（首次加载脚本），以及脚本内用到的 `ZREMRANGEBYSCORE`、`ZCARD`、`ZADD`、`ZREM`、`PEXPIRE`、`TIME`；跨实例路由专题现有的 ACL 只列了 `claw:sig:*` 的 `PUBLISH`、`SUBSCRIBE` 和流式恢复的 key，两边合并时要补上这一组。
+**访问权限。** 沿用跨实例路由专题的约定：Redis 只在内网访问，开启 TLS 与 ACL，Claw 共用一个 ACL 账号。该账号需要在 `claw:model-permits:*` 上增加 `EVALSHA`、`EVAL`（首次加载脚本），以及脚本内用到的 `ZREMRANGEBYSCORE`、`ZCARD`、`ZADD`、`ZREM`、`PEXPIRE`、`TIME`；跨实例路由专题现有的 ACL 只列了 `claw:sig:*` 的 `PUBLISH`、`SUBSCRIBE` 和流式恢复的 key，两边合并时要补上这一组。Redisson 建立连接时自身发出的命令（如 `PING`，Sentinel 模式下的 `SENTINEL` 查询）也要放行，实施时按实际发出的命令核对。
+
+**为什么不用 Redisson 的租约信号量。** Redisson 自带 `RPermitExpirableSemaphore`，也是“许可 ID + 租约”的模型，可以省掉上面三个脚本。按 Redisson 4.8.0 源码（`RedissonPermitExpirableSemaphore`）核对后不采用，原因有四点：
+
+1. 租约到期时间用调用方本机的 `System.currentTimeMillis()` 计算，实例之间的时钟偏差会直接改变租约长短；本设计用 Redis `TIME`。
+2. 可用许可数保存在一个单独的计数 key 里，key 不存在时申请脚本直接失败。Redis 重启丢数据后，必须有人重新调用 `trySetPermits`，否则所有调用都会排队到超时；重新设置后，丢数据前就在进行的调用又不在计数里。
+3. `updateLeaseTime` 遇到已过期的许可只返回 false，不能把仍在进行的调用重新登记，本设计的 F9 恢复依赖重新登记。
+4. 等待靠 Pub/Sub 通知后各自重试，不按到达顺序发放。
+
+自己写的只是三个短脚本，所以继续用本节的脚本，只把 Redisson 当作 Redis 客户端。
 
 **三个脚本。** 时间一律取 Redis 的 `TIME`，不用各实例的本机时钟，避免实例间时钟偏差影响租约。
 
@@ -254,10 +263,10 @@ JDK HttpClient 自带连接池：同一个 HttpClient 实例里，到同一地�
 | `campusmate.model.permit-wait-timeout` | `PT30S` | 等待许可的最长时间，可为 0（不等待）；初始值待压测校准 |
 | `campusmate.model.permit-lease` | `PT30S` | 许可租约，续租间隔为其 1/3；决定实例崩溃后最长多久回收许可，必须不小于 3 秒 |
 
-Redis 连接沿用 Spring Boot 的 `spring.data.redis.*`（地址、密码、库号、Sentinel、TLS），与 Redis 流式恢复、跨实例路由共用一个连接工厂；客户端类型设为 `jedis`。三个专题的约定合并如下：
+Redis 连接沿用 Spring Boot 的 `spring.data.redis.*`（地址、密码、库号、Sentinel、TLS），由 Host 配置类转换为 Redisson 配置，与 Redis 流式恢复、跨实例路由共用一个 `RedissonClient`。三个专题的约定合并如下：
 
-- 命令超时：许可脚本对超时敏感，Redis 卡住时应尽快降级，而不是让所有模型调用一起等，所以 `spring.data.redis.timeout` 设为 `PT1S`。这个值对所有专题生效；跨实例路由的 Pub/Sub 订阅连接由 Jedis 在订阅期间取消读超时，不受影响；流式恢复的阻塞读取是否需要单独的连接工厂，在该设计实施时核验。
-- 连接池：一个实例只有一个 Jedis 连接池（`spring.data.redis.jedis.pool.*`）。许可每个实例只有队首在申请，加上删除和续租，同时占用的连接很少，可以和跨实例路由的发布共用其候选值 8；订阅连接另算。
+- 命令超时与重试：许可脚本对超时敏感，Redis 卡住时应尽快降级，而不是让所有模型调用一起等。所以 Redisson 的命令超时（`timeout`）设为 1 秒，命令重试次数（`retryAttempts`）设为 0。重试被关掉也不会让登记重复：同一个许可 ID 重复执行脚本只会刷新租约。这两个值对共用客户端的其他专题同样生效，跨实例路由的发布和流式恢复的读写在各自实施时确认能接受；不能接受时再为许可单独建一个 `RedissonClient`。
+- 连接池与线程：Redisson 自己维护命令连接池和单独的订阅连接池，主从或 Sentinel 模式下按主节点连接池配置。许可每个实例只有队首在申请，加上删除和续租，同时占用的连接很少，首版沿用 Redisson 默认值，压测后调整。许可代码在虚拟线程上调用 Redisson 的同步接口，不在 Redisson 的 Netty I/O 线程里执行阻塞操作。
 
 已有的两个超时保持配置键和默认值不变，实现方式改为：
 
@@ -316,7 +325,7 @@ Redis 连接沿用 Spring Boot 的 `spring.data.redis.*`（地址、密码、库
 
 验收：
 
-- 产物依赖树中没有 `io.netty`、`reactor-netty`、`lettuce` 构件，`application.yml` 的 `io.netty` 日志配置删除；modules 与公司镜像一致。
+- 产物依赖树中没有 `reactor-netty-http`、`reactor-netty-core`、`lettuce-core`、`jedis` 构件；`io.netty` 只经 `redisson` 引入，HTTP、HTTP/2、SOCKS 编解码、代理、epoll 与 macOS DNS 原生包随 reactor-netty 一起移除；`application.yml` 的 `io.netty` 日志配置按 Redisson 的需要保留或调整；modules 与公司镜像一致。
 - 只存在一个模型调用 HttpClient，连续两次调用复用同一条连接；失败、取消后的连接不复用。
 - 许可在完成、Mate 错误、超时、流中途取消和等待中取消五种结束方式下都恰好归还一次；全局第 101 个并发调用等待，超时后以 `MODEL_CONCURRENCY_LIMITED` 失败且不发请求。
 - 用真实 Redis 的集成测试覆盖：两个许可实例共享上限；停止续租的实例在一个租约后被回收；Redis 停止后进入降级且每实例不超过 50；Redis 重启（数据清空）后第一次续租重新登记全部在用许可；登记脚本在 Redis 5 上可执行。
@@ -334,7 +343,7 @@ Redis 连接沿用 Spring Boot 的 `spring.data.redis.*`（地址、密码、库
 | T3 | 全局 100、降级每实例 50、30 秒等待与 30 秒租约按压测结果校准 | Claw | §5.8 |
 | T4 | 交互执行与定时执行是否需要分开的许可或优先级；首版共用一组 | 产品 | D2 |
 | T5 | 公司受管 Redis 是否已为 Claw 开通，版本是否不低于 5，是主从还是 Sentinel；ACL 账号补充 `claw:model-permits:*` 的权限 | 运维 | D2、§5.4；与跨实例路由 T4 一并确认 |
-| T6 | Redis 客户端用 Jedis 还是 Lettuce；本文与跨实例路由专题都推荐 Jedis，选定后同步 Redis 流式恢复的依赖一节 | 用户 | D5；与跨实例路由 T1 是同一个决定 |
+| T6 | Redisson 版本：3.x 最新为 3.52.0，4.x 最新为 4.8.0，两者都有 `redisson-spring-data-34`；实施时选定，并核对与 Boot 3.4.5 管理的 Netty 4.1.119 兼容。客户端已由用户确认采用 Redisson，跨实例路由 T1 是同一个决定 | Claw | D5 |
 
 <a id="implementation"></a>
 
@@ -356,13 +365,13 @@ Redis 连接沿用 Spring Boot 的 `spring.data.redis.*`（地址、密码、库
 
 ### 依赖影响
 
-CampusMate 请求与流处理使用现有 Jackson、Spring WebFlux 的 `WebClient` 和 Reactor Core；底层 HTTP 改用 JDK 自带的 `java.net.http.HttpClient`（[§5](#http-transport)，待实现）。全局许可在 Host 模块新增 `spring-boot-starter-data-redis`，排除 Lettuce、改用 Jedis 5.2.0（待实现，客户端选择见 [D5](#http-transport-decisions)），AI 模块不新增依赖；新增 jedis、commons-pool2、org.json、gson 四个 jar，约 1.5 MB，不引入 Netty。取消厂商直连可减少 SDK 维护，但没有包体积、性能或可靠性的量化结论。
+CampusMate 请求与流处理使用现有 Jackson、Spring WebFlux 的 `WebClient` 和 Reactor Core；底层 HTTP 改用 JDK 自带的 `java.net.http.HttpClient`（[§5](#http-transport)，待实现）。全局许可在 Host 模块新增 `org.redisson:redisson` 和 `org.redisson:redisson-spring-data-34`（待实现，选型见 [D5](#http-transport-decisions)），AI 模块不新增依赖；Redisson 带入 9 个 Netty 构件和 rxjava、kryo、byte-buddy 等，但不带入 reactor-netty。取消厂商直连可减少 SDK 维护，但没有包体积、性能或可靠性的量化结论。
 
 | 删除的直接依赖 | 范围 | 固定基线中的主要传递依赖 |
 |---|---|---|
 | `com.anthropic:anthropic-java:2.18.0` | 根版本管理、AI 与公司镜像 POM | client-okhttp/core、Kotlin、OkHttp logging、Jackson 扩展、Swagger、Victools、Apache HttpClient/Core 5 |
 | `com.openai:openai-java:4.29.1` | 同上 | client-okhttp/core、Kotlin、OkHttp、Jackson 扩展、Swagger、Victools；与 Anthropic 路径存在仲裁 |
-| `io.projectreactor.netty:reactor-netty-http:1.2.5`（待实现） | AI 与公司镜像 POM（版本由 Spring Boot 管理） | `reactor-netty-core` 与 17 个 `io.netty` 4.1.119 构件，含 epoll 和 macOS DNS 原生包；本地合计约 5.5 MB；项目中没有其他 Netty 使用方 |
+| `io.projectreactor.netty:reactor-netty-http:1.2.5`（待实现） | AI 与公司镜像 POM（版本由 Spring Boot 管理） | `reactor-netty-core` 与 17 个 `io.netty` 4.1.119 构件，含 epoll 和 macOS DNS 原生包；本地合计约 5.5 MB。其中 9 个仍随 Redisson 保留（D5），实际移除的是 reactor-netty 两个构件和 8 个 Netty 构件（HTTP、HTTP/2、SOCKS 编解码、代理、epoll 与 macOS DNS 原生包，约 1.5 MB） |
 
 源码消费者和运行依赖树证据见[源码证据](source-evidence.md#dependencies)及 [§1.4](source-evidence.md#http-transport-evidence)。删除后重新核对全 Reactor 与公司镜像，确认上述依赖不再进入产物；保留仍被使用的 Jackson、Reactor Core、日志、`json-schema-validator` 和测试用 MockWebServer，不机械排除共享传递依赖。公司父 POM 的完整依赖树与删减产物尚未验证。
 
@@ -370,7 +379,7 @@ CampusMate 请求与流处理使用现有 Jackson、Spring WebFlux 的 `WebClien
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.12.0 | 2026-10-16 | 模型调用改用 JDK HttpClient 并删除 Reactor Netty，用 Redis 全局许可把所有实例合计的模型调用限制在 100 个，Redis 故障时降级为每实例 50 个，复用连接且不预热。 |
+| 2.12.0 | 2026-10-16 | 模型调用改用 JDK HttpClient 并删除 Reactor Netty，用 Redis 全局许可（Redisson 客户端）把所有实例合计的模型调用限制在 100 个，Redis 故障时降级为每实例 50 个，复用连接且不预热。 |
 | 2.11.0 | 2026-10-09 | AI 提供通用只读参数预览与内部原始 JSON 诊断，保持完整解析和执行边界。 |
 | 2.10.0 | 2026-09-19 | Mate 控制全部输出额度，Claw 每个新执行读取模型窗口并在执行内复用。 |
 | 2.9.0 | 2026-09-19 | 按模型查询 Mate 能力并发布到 Agent 快照，窗口必填、输出上限可选，删除统一 token 默认值。 |
