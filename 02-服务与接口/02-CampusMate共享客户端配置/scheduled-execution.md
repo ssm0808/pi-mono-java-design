@@ -25,7 +25,7 @@ Accept-Language: zh-CN
 
 | 项 | 规定 |
 |---|---|
-| 路径 | 草案路径；Claw 当前用 `campusclaw.schedule.access-token-path` 配置，[共享连接目录](README.md)的目标键为 `scheduled-access-token-path` |
+| 路径 | 草案路径；Claw 用 `campusclaw.schedule.access-token-path` 配置，服务地址沿用[共享连接目录](README.md)的 `campusmate.base-url` |
 | 请求体与参数 | 无请求体，无 query 参数；不传用户、任务、Session 或 Agent 标识 |
 | 调用方认证 | 只允许已认证的 Claw 服务调用，认证方式待定（主设计 T2） |
 | Accept-Language | 支持 zh-CN / en-US，缺省 en-US，只影响错误文案 |
