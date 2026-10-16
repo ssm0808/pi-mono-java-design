@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.100.0 |
+| 文档版本 | 1.101.0 |
 | 更新日期 | 2026-10-16 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -18,7 +18,7 @@
 | 历史提问专项基线 | A08：问答闭环验证为 Java 9f785bea3ffff8f6566cd1b2727285af46a2aead；新增交互核验为 Java 1d08f98e、Codex d58d0e58 与 OpenCode 849c2598，见[逐题交互证据 §9](../06-CampusClaw计划模式/source-evidence.md#9-buildplan-与逐题交互核验)；DeepSeek 0a53fb55、pi 5cd93f68、Claude 官方文档 2026-09-15 的原范围不变 |
 | 工具发现专项基线 | A11：2026-09-22 fetch OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`、Codex `main@ac7634b9f73ec1bf96466be7a5869f0949d20b30`；沿用 DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`。仅升级 Skill、固定搜索、延迟工具暴露与远端工具适配结论；默认分支快照不等于稳定发布，其他模块历史证据不变 |
 | 参数恢复专项基线 | A11：2026-09-22 确认 pi `main@95fbc04997eaee961eb673fa7923e9220609ebd5`、DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`；CampusClaw PR #323 开发提交从 `c9a2340f87bda6dff6bbd352f6995f8551206bb5` 更新到 `ae6645caaade3b9520220a34af940210850ef36a`，只升级确认前准备、模型恢复反馈和 SearchTools 差距，见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#search-tools-evidence) |
-| Command 状态专项基线 | M05：用户指定 Java `53eff85c7f41de23eb434e027782f5085a8b8e45`；只复核 Runtime 命令、严格名称、展开文本恢复与 Slash 交互，见[当前实现](../../04-命令与技能/00-Slash-Command通用模块/README.md#current-runtime-status)；不升级外部基线或统计结论 |
+| Command 状态专项基线 | M05：用户指定 Java `53eff85c7f41de23eb434e027782f5085a8b8e45`；只复核 Runtime 命令、严格名称、展开文本恢复与 Slash 交互，见[当前实现](../04-CampusClaw命令系统/README.md#current-runtime-status)；不升级外部基线或统计结论 |
 | 统一历史专项基线 | A09/A15：2026-10-10 核验四仓最新默认分支，完整 SHA 与范围见[统一证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)；只升级三入口历史与计数投影，不升级其他专题历史结论 |
 | Skill 统计历史基线 | A09：2026-10-10 核验 #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 的工具、三入口、采集及事务；隔离 fetch pi `main@42a3497d03ad17e308a2299fa824727894f2c0ec` 只更新 Start/End、后置 hook 与订阅结论，Codex/OpenCode 保留历史研究 |
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
@@ -66,7 +66,7 @@ Claw 各模块的数据库结构集中于[全库设计](../../03-数据与存储
 | M02 · Model | 如何让业务 Agent 设置成为唯一模型权威；Provider 调用与模型选择如何分层；原始事件在哪层归一化 | 模型目录差异采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、业务 Agent 设置、旧全局目录删除和 SDK 削减；Codex 事件归一化对比及完整取消链仍待专项核验 |
 | M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；[A11](#a11)覆盖远端代理与 Skill 工具按需披露 |
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；[A12](#a12)覆盖单条时间线与非递归读取，其他上下文比较待补证，不默认 token 全量落盘 |
-| M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计接入参照 pi 事件，Codex/OpenCode 保留历史研究 | [A09](#a09)覆盖 Skill 成功调用次数、公共观察、有界写入与 #335 差距；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；[当前 Command 状态](../../04-命令与技能/00-Slash-Command通用模块/README.md#current-runtime-status)区分 Runtime 已实现与版本快照、统计、Mate 增量 |
+| M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计接入参照 pi 事件，Codex/OpenCode 保留历史研究 | [A09](#a09)覆盖 Skill 成功调用次数、公共观察、有界写入与 #335 差距；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；[当前 Command 状态](../04-CampusClaw命令系统/README.md#current-runtime-status)区分 Runtime 已实现与版本快照、统计、Mate 增量 |
 | M06 · 事件与服务边界 | 写入与观察是否分离；流绑定谁；断线如何恢复；控制状态谁权威 | Claude；OpenCode，必要时 pi/DeepSeek | [A02](#a02)覆盖既有 Claw/Mate 流范围；[A13](#a13)覆盖 Redis 快照与短期增量恢复；[A03](#a03)维护数据库确认交接；[A04](#a04)覆盖 Session 配置更新；[A05](#a05)覆盖后端显式任务事件；[A16](#a16)覆盖按 Agent 跨会话查询用户事件与按事件读取轮次 |
 | M07 · 前端体验 | preview 何时被权威内容替换；Turn/Item 与产品 UI 如何映射 | Codex；Claude 辅助 | [A05](#a05)保留旧提交的事件合并与根执行证据；当前计划/TODO/问答前端实现见[A07](#a07)及[A08](#a08)，公共 Mate 接入仍为目标设计 |
 | M08 · 元数据与配置 | 定义、发布快照和运行对象如何分离；刷新如何影响活动执行 | pi；托管产品仅对照公开资源 | Agent.mode 专项已核对 Mate 956b547f / Runtime 09b32d8e；默认值链为 待实现，见 A03 和元数据主设计；元数据组合查询顺序另在 Mate `9dd5d85e` 核对，见 J06；发布事务一致性仍待补证 |
@@ -86,14 +86,18 @@ pi 的 RpcSlashCommand 与 OpenCode 的 Command.Info 均将发现描述和实际
 CampusClaw 采用 name/type/description 与可选 hints，按类别统一附件，按会话状态限制修改；这是产品约束与接口架构变更。
 收益是描述符不绑定控件，代价是前端需集中维护并验证命令状态规则，POST 始终最终准入。
 Java 53eff85c 的 VO/组装器及前端仍用 kind/input，新投影与客户端迁移待实现；未运行产品测试。
-相对路径、符号、旧新提交范围及差异理由见[专项证据](../../04-命令与技能/00-Slash-Command通用模块/README.md#command-descriptor-baseline)，其余比较不升级。
+相对路径、符号、旧新提交范围及差异理由见[专项证据](../04-CampusClaw命令系统/source-evidence.md#command-descriptor-baseline)，其余比较不升级。
+
+M05 清单作用域于 2026-10-16 核对 OpenCode `dev@e25b7abf`（按工作目录查询，实验接口）、Codex `main@6b991972`（`skills/list` 按 cwds 查询）与 pi `main@4954d760`（每个会话进程 `get_commands`）。
+CampusClaw 的命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`（待评审 · 待实现），不按会话状态过滤；这是接口架构变更：同一 Agent 的多个会话共用一份清单，代价是运行中的禁用改由前端状态规则表展示、POST 终判。
+证据见 [Agent 清单作用域核对](../04-CampusClaw命令系统/source-evidence.md#agent-catalog-evidence)。
 
 待补证项是持续维护范围，不能用于讲述已经实现的能力。涉及该模块的新设计应补齐受影响的问题，
 不要求一次设计把所有基线全部重做，也不能用“待补证”略过本次实际改变的架构结论。
 
 <a id="a01"></a>
 
-M05/M07 模式命令增量：pi 于 2026-09-22 从前次 `d201760ffee16564aa8d9a759e0c85b70db33674` 更新至默认 main `d192bd6dcae78fb87cf5c1c5e2af2790a0296278`，Builtin 列表含 model/thinking 而不含 mode；OpenCode dev 仍为 `fe3f3a41f79ad292cc3c7c629567385a20ec5130`，plan/build 是不同 primary Agent。CampusClaw 通过 `/mode` 切换同一 Session 的模式，复用既有配置事务并禁止在运行/审核等待时切换，不引入双 Agent 权限模型。属于产品入口扩展和共享规则的架构变更；Java `53eff85c` 已有 Session 模式更新，mode 命令和前端适配待实现。收益是保留上下文与权威状态，代价是新增命令映射、选择控件和一致性验收；完整路径、符号与源码成熟度见[模式专项证据](../../04-命令与技能/00-Slash-Command通用模块/README.md#mode-command-evidence)。
+M05/M07 模式命令增量：pi 于 2026-09-22 从前次 `d201760ffee16564aa8d9a759e0c85b70db33674` 更新至默认 main `d192bd6dcae78fb87cf5c1c5e2af2790a0296278`，Builtin 列表含 model/thinking 而不含 mode；OpenCode dev 仍为 `fe3f3a41f79ad292cc3c7c629567385a20ec5130`，plan/build 是不同 primary Agent。CampusClaw 通过 `/mode` 切换同一 Session 的模式，复用既有配置事务并禁止在运行/审核等待时切换，不引入双 Agent 权限模型。属于产品入口扩展和共享规则的架构变更；Java `53eff85c` 已有 Session 模式更新，mode 命令和前端适配待实现。收益是保留上下文与权威状态，代价是新增命令映射、选择控件和一致性验收；完整路径、符号与源码成熟度见[模式专项证据](../04-CampusClaw命令系统/source-evidence.md#mode-command-evidence)。
 
 ## 4. A01 · Loop 的扩展能力与产品消息准入分离
 
@@ -337,10 +341,10 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 
 | 维度 | 结论 |
 |---|---|
-| 所属模块 | M05 [成功调用统计](../../04-命令与技能/03-Skill加载统计/README.md)，共用 [A15](#a15) 的执行与持久化链 |
+| 所属模块 | M05 [成功调用统计](../04-CampusClaw命令系统/03-Skill加载统计/README.md)，共用 [A15](#a15) 的执行与持久化链 |
 | 问题 | 三入口已有真实工具结果，是否还需要第二套统计事件、日志和投递？ |
 | 基线 | pi main 42a3497d 的最终工具结果与后置处理支持成功判定，但没有本产品累计表；本次新核验见[证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md) |
-| 已观察实现 | Java main 与 #335 分别记录在[M05 证据](../../04-命令与技能/03-Skill加载统计/source-evidence.md)；#335 仍有正文/hash/来源及独立统计链，不等于已落地统一历史 |
+| 已观察实现 | Java main 与 #335 分别记录在[M05 证据](../04-CampusClaw命令系统/03-Skill加载统计/source-evidence.md)；#335 仍有正文/hash/来源及独立统计链，不等于已落地统一历史 |
 | 目标 | 新 LIVE 成功 Skill 工具结果首次写入时，同事务加一；结果唯一关联负责防重，不增加独立统计流水、Observer 或队列 |
 | 理由与代价 | 直接复用权威事实避免双写对账；一张累计表保留删除后的 lifetime。代价是累计写入影响结果事务，热点及故障必须验收；不能再承诺统计故障不阻断推进 |
 | 产品边界 | 每次调用计数，失败/Read/正文注入/恢复/复制不计；删除不扣累计；精确范围和日表仍待核实 |
@@ -728,7 +732,8 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.100.0 | 2026-10-16 | A14 同步 M10：对话中由 Cron 工具创建的任务关联原会话运行，接口配置的任务仍每次新建 Session。 |
+| 1.101.0 | 2026-10-16 | A14 同步 M10：对话中由 Cron 工具创建的任务关联原会话运行，接口配置的任务仍每次新建 Session。 |
+| 1.100.0 | 2026-10-16 | M05 命令清单改为按 Agent 查询，登记 OpenCode/Codex/pi 的清单作用域基线；其余比较不升级。 |
 | 1.99.0 | 2026-10-15 | A14 同步 M10 D12：定时任务首版不自动暂停，Agent 启停用另开设计。 |
 | 1.98.0 | 2026-10-14 | 合入 main：A05 增加 plan 模式拒绝 TodoUpdate 的执行前门禁及 Codex 对照（main 原记为 1.92.0）。 |
 | 1.97.0 | 2026-10-14 | 合入 main：A08 增加交互工具同批位置对比，提问与用户确认须为末位调用、计划提交须单独调用（main 原记为 1.91.0）。 |

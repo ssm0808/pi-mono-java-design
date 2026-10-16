@@ -43,7 +43,7 @@
 
 | 分类 | 证据或决策 |
 |---|---|
-| Command / Help / Skill 证据 | 统一引用 [Slash 源码证据](../../04-命令与技能/00-Slash-Command通用模块/README.md#2-源码证据与差距)、[GET 最新核对](../../04-命令与技能/00-Slash-Command通用模块/README.md#33-发现层证据与验收)与 [Help 专项证据](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md#5-源码证据与设计理由)，不另复制旧 Registry 和元数据差距。 |
+| Command / Help / Skill 证据 | 统一引用 [Slash 源码证据](../04-CampusClaw命令系统/source-evidence.md#2-源码证据与差距)、[GET 最新核对](../04-CampusClaw命令系统/source-evidence.md#33-发现层证据与验收)与 [Help 专项证据](../04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/README.md#5-源码证据与设计理由)，不另复制旧 Registry 和元数据差距。 |
 | 观察到的行为 | PR 167 在 `f60cc3e` 删除 `modules/coding-agent-cli/.../command/` 中 Slash Registry、`ModelCommand`、`ThinkingCommand`、`CompactCommand`、`NameCommand`，同时删除 `.../compaction/Compactor`、`FileOperationTracker` 与旧大型 `AgentSession`；该删除按包边界发生，未先迁移入口无关能力 |
 | 观察到的行为 | PR 167 新增 `modules/coding-agent-cli/.../session/ManagedAgentSession.java` 和 `AgentSessionFactory.java`，但基线 Session 只持有 Runtime、入口、Agent 和工具，不包含阈值/溢出压缩、Usage 累计或 Host 无关 Slash 操作端口 |
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/agent-session.ts` 基线 `5cd93f6` 中的 `compact()`、`autoCompact()`、`setModel()`、`setThinkingLevel()` 与 Session Entry 写入证明压缩及配置变更是 Agent Session 能力，不依赖终端绘制组件 |
@@ -108,7 +108,7 @@
 
 ## 3. Runtime 装配的补充证据
 
-Session Entry、生命周期、HTTP 入口、凭据和字段命名的事实已集中在 §2。装配专题继续引用 [工具源码证据](../02-CampusClaw工具系统/source-evidence.md)和 [Slash 源码证据](../../04-命令与技能/00-Slash-Command通用模块/README.md#2-源码证据与差距)，避免在 Runtime 总览重复维护旧目录、硬编码工具和 Registry 差距。
+Session Entry、生命周期、HTTP 入口、凭据和字段命名的事实已集中在 §2。装配专题继续引用 [工具源码证据](../02-CampusClaw工具系统/source-evidence.md)和 [Slash 源码证据](../04-CampusClaw命令系统/source-evidence.md#2-源码证据与差距)，避免在 Runtime 总览重复维护旧目录、硬编码工具和 Registry 差距。
 
 ## 4. Session 创建与 HTTP 入口核对
 

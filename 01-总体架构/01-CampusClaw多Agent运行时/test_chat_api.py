@@ -311,7 +311,7 @@ class OperationPresentationTest(unittest.TestCase):
     def test_review_status_cannot_return_to_operation_purpose(self):
         for text in ("已确认的接口。", "本轮评审完成。", "目标待实现。"):
             with self.subTest(text=text), self.assertRaisesRegex(ValueError, "purpose"):
-                current.validate_operation_presentation({"operationKey": "ListSessionCommands", "description": text})
+                current.validate_operation_presentation({"operationKey": "ListAgentCommands", "description": text})
 
     def test_all_current_interface_purposes_follow_the_same_rule(self):
         spec = importlib.util.spec_from_file_location(

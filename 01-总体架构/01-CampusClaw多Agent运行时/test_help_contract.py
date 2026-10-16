@@ -18,7 +18,7 @@ class HelpContractTest(unittest.TestCase):
         _, models = GATE.load_contract()
         operations = {model["operation"]["operationKey"]: model["operation"] for model in models}
         self.operation = operations["ExecuteSessionCommand"]
-        commands = operations["ListSessionCommands"]["responses"][0]["bodies"]["zh-CN"]["result"]["commands"]
+        commands = operations["ListAgentCommands"]["responses"][0]["bodies"]["zh-CN"]["result"]["commands"]
         self.descriptor = next(command for command in commands if command["name"] == "help")
         self.body = GATE.help_successes(self.operation)["200-help"]["bodies"]["zh-CN"]
         self.projection = GATE.load_help_model()

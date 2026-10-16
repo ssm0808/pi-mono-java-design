@@ -13,7 +13,7 @@ def require(value, message):
 
 
 def validate_storage_design():
-    topic = Path(__file__).resolve().parents[2] / '04-命令与技能/03-Skill加载统计'
+    topic = Path(__file__).resolve().parents[2] / '01-总体架构/04-CampusClaw命令系统/03-Skill加载统计'
     schema = (topic / 'schema.sql').read_text(encoding='utf-8')
     tables = re.findall(r'CREATE TABLE (\w+)', schema)
     require(tables == ['t_skill_usage', 't_skill_usage_stats',
