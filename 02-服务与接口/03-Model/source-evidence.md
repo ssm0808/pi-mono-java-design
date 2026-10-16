@@ -74,8 +74,12 @@ pi 当次通过 ls-remote 确认默认分支 main，并在临时仓库 fetch 得
 | Codex `main@4eb4a65407d98cebc4c83bf13be440b9fbc78a7c` | `codex-rs/core/src/client.rs` · stream_responses_http、build_api_transport；`codex-rs/login/src/auth/default_client.rs` · create_client_for_route | HTTP 流式请求每次经 `build_api_transport` 构造 reqwest 客户端，未见模型请求并发上限 |
 | 同上 | `codex-rs/core/src/client.rs` 模块注释（第 11–26 行）、`ModelClient.cached_websocket_session`、`prewarm_auth` | 每轮开始以 `generate=false` 的 `response.create` 预热 Responses WebSocket，本轮后续请求复用该连接与 `previous_response_id`；连接在会话内缓存，认证归属变化时丢弃 |
 | 同上 | `codex-rs/core/src/config/mod.rs` · DEFAULT_AGENT_MAX_THREADS | 默认最多 6 个 Agent 线程，间接限制并发模型请求 |
+| Java `main@1acbbf3f046932872af06868c600bb5d9498d8b6` | 全仓 `*.java`、`*.xml`、`*.yml`、`*.properties` 检索 redis、lettuce、redisson | 没有 Redis 依赖或代码；命中项只是 `requireDisplay` 等无关字符串。Redis 只出现在 `docs/designs` 中“不新增 Redis”的说明 |
+| Spring Boot `3.4.5` `spring-boot-dependencies` POM | `jedis.version`、`lettuce.version`、`commons-pool2.version` | 管理 Jedis 5.2.0、Lettuce 6.4.2.RELEASE、commons-pool2 2.12.1 |
+| Maven Central `io.lettuce:lettuce-core:6.4.2.RELEASE` POM | 非可选编译依赖 | `netty-common`、`netty-handler`、`netty-transport`、`reactor-core`；采用 Lettuce 会让 Netty 回到产物 |
+| Maven Central `redis.clients:jedis:5.2.0` POM 与 jar | 非可选编译依赖 | `slf4j-api`、`commons-pool2`、`org.json:json:20240303`、`gson:2.11.0`，无 Netty；jedis 约 980 KB，加 commons-pool2、json、gson 四个 jar 合计约 1.5 MB |
 
-原型验证（临时 worktree，不是交付代码）：在 Java `1acbbf3f` 上把 `createWebClient` 和测试改为 `JdkClientHttpConnector`，删除 `modules/ai/pom.xml` 的 `reactor-netty-http`，并给 SSE 响应体加 `Flux.timeout`。`./mvnw -pl :campusclaw-ai -am test` 通过，`campusclaw-ai` 366 个测试 0 失败；`campusclaw-coding-agent` 依赖树不再含 `io.netty` 或 `reactor-netty`。首轮全量测试出现 1 次 Reactor `onErrorDropped` 日志，后续两次全量运行未复现，原因未定位；回调线程为 `ForkJoinPool.commonPool`。许可机制未做原型，并发与容量结论均未压测。
+原型验证（临时 worktree，不是交付代码）：在 Java `1acbbf3f` 上把 `createWebClient` 和测试改为 `JdkClientHttpConnector`，删除 `modules/ai/pom.xml` 的 `reactor-netty-http`，并给 SSE 响应体加 `Flux.timeout`。`./mvnw -pl :campusclaw-ai -am test` 通过，`campusclaw-ai` 366 个测试 0 失败；`campusclaw-coding-agent` 依赖树不再含 `io.netty` 或 `reactor-netty`。首轮全量测试出现 1 次 Reactor `onErrorDropped` 日志，后续两次全量运行未复现，原因未定位；回调线程为 `ForkJoinPool.commonPool`。许可机制（含 Redis 脚本）未做原型，并发与容量结论均未压测。
 
 ## 2. pi 历史固定行为基线
 
@@ -133,7 +137,7 @@ mate-service 固定基线 `956b547f`：`src/main/java/com/huawei/hicampus/mate/a
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.4.0 | 2026-10-16 | 核验 Reactor Netty 使用点与默认连接池、JDK HttpClient 连接复用与重试，以及 pi/Codex 的模型 HTTP 客户端做法。 |
+| 1.4.0 | 2026-10-16 | 核验 Reactor Netty 使用点与默认连接池、JDK HttpClient 连接复用与重试、Redis 客户端依赖，以及 pi/Codex 的模型 HTTP 客户端做法。 |
 | 1.3.0 | 2026-09-19 | 补充执行锁内准备、请求额度映射与 pi 摘要证据，登记按执行读窗口和 Mate 输出权威的差距。 |
 | 1.2.0 | 2026-09-19 | 核验 pi 逐模型能力与 Java/Mate 默认值链，登记独立查询、能力快照及未知输出上限的实现差距。 |
 | 1.1.2 | 2026-09-17 | 模块统一命名为 Model，源码基线与实现差距不变。 |

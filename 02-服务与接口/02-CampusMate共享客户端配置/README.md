@@ -30,8 +30,10 @@ campusmate:
     api: ${CAMPUSMATE_MODEL_API:openai-completions}
     connect-timeout: ${CAMPUSMATE_MODEL_CONNECT_TIMEOUT:PT10S}
     response-timeout: ${CAMPUSMATE_MODEL_RESPONSE_TIMEOUT:PT10M}
-    max-concurrent-requests: ${CAMPUSMATE_MODEL_MAX_CONCURRENT_REQUESTS:50}  # 待实现
+    max-concurrent-requests: ${CAMPUSMATE_MODEL_MAX_CONCURRENT_REQUESTS:100}  # 待实现，所有实例合计
+    fallback-max-concurrent-requests: ${CAMPUSMATE_MODEL_FALLBACK_MAX_CONCURRENT_REQUESTS:50}  # 待实现，Redis 不可用时每实例
     permit-wait-timeout: ${CAMPUSMATE_MODEL_PERMIT_WAIT_TIMEOUT:PT30S}  # 待实现
+    permit-lease: ${CAMPUSMATE_MODEL_PERMIT_LEASE:PT30S}  # 待实现
     reasoning: ${CAMPUSMATE_MODEL_REASONING:true}
   runtime:
     agents-root: ${CAMPUSCLAW_AGENTS_ROOT:agent}
@@ -47,7 +49,7 @@ campusmate:
 
 1. `campusmate.base-url` 是唯一 origin 权威；
 2. `campusmate.endpoints` 是唯一出站路径目录，定时任务的 access-token 路径例外，见上文；
-3. 模型协议、传输、每实例并发上限与尚未迁移的 reasoning 配置放在 `campusmate.model`；窗口信息按新执行查询 Mate 并固定到执行快照，输出额度仅由 Mate 控制；
+3. 模型协议、传输、模型调用并发上限与尚未迁移的 reasoning 配置放在 `campusmate.model`；窗口信息按新执行查询 Mate 并固定到执行快照，输出额度仅由 Mate 控制；
 4. 目标配置中不存在顶层 `mate`、`mate.endpoints`、`mate.tool` 或
    `campusmate.model-manager`。
 
@@ -88,7 +90,7 @@ Java 局部复核 `f61906b9` 已证明 Chat Provider 读取统一配置。这个
 |---|---|---|
 | `campusmate.base-url` | CampusMate scheme、host、port | 子模块覆盖 origin |
 | `campusmate.endpoints.*` | 目标7个HTTP operation path：6项已有配置绑定、1项待实现模型能力查询 | 完整URL、重复operation、客户端私有路径副本 |
-| `campusmate.model.*` | API 适配、SSE 传输、每实例模型调用并发上限与等待时间（待实现，语义见 [Model §5.5](../03-Model/README.md#http-transport-config)）与既有 reasoning 参数 | 保存 URL、path 或 contextWindow/maxTokens 默认值 |
+| `campusmate.model.*` | API 适配、SSE 传输、模型调用全局并发上限、降级上限、等待时间与许可租约（待实现，语义见 [Model §5.6](../03-Model/README.md#http-transport-config)；Redis 连接沿用 `spring.data.redis.*`）与既有 reasoning 参数 | 保存 URL、path 或 contextWindow/maxTokens 默认值 |
 | `campusmate.runtime.*` | 本地缓存、短请求超时、成功码与响应上限 | 保存 URL 或 path |
 | `campusmate.tool.enabled` | 是否装配 Tool 能力 | 决定 URL 或 path |
 
@@ -157,7 +159,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | Java 符号 | 目标调整 |
 |---|---|
-| `CampusMateProvider`（已实现身份） | 注入 `${campusmate.base-url}`、`${campusmate.endpoints.model-chat-path}` 及 `campusmate.model` 下的 API/超时参数；Provider 协议语义不变；新增读取 `max-concurrent-requests`、`permit-wait-timeout`（待实现） |
+| `CampusMateProvider`（已实现身份） | 注入 `${campusmate.base-url}`、`${campusmate.endpoints.model-chat-path}` 及 `campusmate.model` 下的 API/超时参数；Provider 协议语义不变；新增读取 `max-concurrent-requests`、`fallback-max-concurrent-requests`、`permit-wait-timeout`、`permit-lease`（待实现） |
 | `MateModelManagerProperties` | 已绑定 `campusmate.model`；删除 contextWindow/maxOutputTokens，仅保留仍有消费者的字段 |
 | `AgentRuntimeProperties` | 删除 `baseUrl`；只绑定 `campusmate.runtime` 的非 endpoint 参数 |
 | `MateServiceClient` | 注入共享 base URL，以及统一目录中的 Agent Runtime、Skill 和模型能力 path；能力查询复用 runtime 短请求超时与响应上限，不发送 execution 凭据 |
@@ -210,7 +212,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 - `GET /agents/{agentId}` 与 `GET /agents/{agentId}/runtime` 保持两个独立 operation；
 - `mate.innerGWSerive`、`mate.endpoints.*`、`mate.tool.enabled` 及所有 `MATE_*` 应用变量删除；
 - canonical YAML 与镜像 properties 的业务配置绑定等价，公司地址默认值例外按 §5 维护；两者均无 `CAMPUSMATE_MODEL_CONTEXT_WINDOW`、`CAMPUSMATE_MODEL_MAX_OUTPUT_TOKENS` 及对应 Java fallback；
-- base URL 或 path 非法时启动失败且不发送网络请求；`campusmate.model.max-concurrent-requests` 小于 1 或 `permit-wait-timeout` 为负时启动失败（待实现）；
+- base URL 或 path 非法时启动失败且不发送网络请求；`campusmate.model.max-concurrent-requests` 或 `fallback-max-concurrent-requests` 小于 1、`permit-wait-timeout` 为负、`permit-lease` 小于 3 秒时启动失败（待实现）；
 - Chat、Runtime、Tool与定时凭据客户端使用相同scheme、host、port；
 - 配置归并本身不改变 HTTP 语义；Chat 输出字段退役与新增信息查询按 Model 专题，其他契约保持；
 - 模型能力、Agent、Skill和Tool metadata发现请求不读取或复制四项业务执行凭据；受信服务认证单独接线；
@@ -229,7 +231,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.12.0 | 2026-10-16 | `campusmate.model` 新增每实例模型调用并发上限与许可等待时间，模型调用底层改用 JDK HttpClient。 |
+| 2.12.0 | 2026-10-16 | `campusmate.model` 新增模型调用全局并发上限、Redis 不可用时的每实例上限、许可等待时间与租约，模型调用底层改用 JDK HttpClient。 |
 | 2.11.0 | 2026-10-16 | 定时 access-token 路径改用代码中的 `campusclaw.schedule.access-token-path`，目标路径目录回到7项。 |
 | 2.10.0 | 2026-10-15 | 定时任务 Mate 实现类改名为 `MateScheduleSessionRegistry` 与 `MateAccessTokenClient`。 |
 | 2.9.0 | 2026-10-13 | 定时接口由上下文查询和凭据解析两项改为一项无入参 access-token 接口，目标路径共8项。 |

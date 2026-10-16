@@ -103,7 +103,7 @@ Session 创建时初始化 Stats，清理时删除 Records 和 Stats。
 
 ![Token Usage Record 与 Stats](usage-write.svg)
 
-[PlantUML 源码](diagram.puml#L254) · [原尺寸 SVG](usage-write.svg)
+[PlantUML 源码](diagram.puml#L257) · [原尺寸 SVG](usage-write.svg)
 
 ## 4. 验收
 

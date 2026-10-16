@@ -169,7 +169,7 @@ Mate 失败按发生位置分类：
 | 阶段 | 典型错误码 |
 |---|---|
 | 请求映射 | `INVALID_LLM_CHAT_REQUEST`、`MATE_REQUEST_MAPPING_FAILED` |
-| 本地并发限制（待实现） | `MODEL_CONCURRENCY_LIMITED`：等待本实例模型调用许可超时，未发出请求，见 [Model §5.6](../../02-服务与接口/03-Model/README.md#http-transport-failure) |
+| 本地并发限制（待实现） | `MODEL_CONCURRENCY_LIMITED`：等待模型调用许可（Redis 全局许可或降级时的本实例许可）超时，未发出请求，见 [Model §5.7](../../02-服务与接口/03-Model/README.md#http-transport-failure) |
 | HTTP/可用性 | `MODEL_NOT_FOUND`、`MODEL_RATE_LIMITED`、`MODEL_UNAVAILABLE`、`MANAGER_UNAVAILABLE` |
 | 超时/流传输 | `MODEL_INVOCATION_TIMEOUT`、`UPSTREAM_STREAM_ERROR` |
 | 响应/SSE 协议 | `INVALID_MATE_RESPONSE`、`INVALID_CHAT_SSE`、`INVALID_REASONING_SIGNATURE` |

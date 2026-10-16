@@ -95,8 +95,9 @@ package "CampusMate adapter - singleton" as Adapter {
   class MateChatRequestMapper
   class WebClient
   class ModelCallPermits <<pending implementation>> {
-    每实例 50 个，按到达顺序
-    最多等待 30 秒
+    全局 100 个，Redis 租约 30 秒
+    本实例按到达顺序排队，最多等 30 秒
+    Redis 不可用时每实例 50 个
   }
   class "JDK HttpClient\n（内置连接池，HTTP/1.1）" as JdkHttpClient <<pending implementation>>
 }
@@ -116,6 +117,7 @@ package "Invocation state" as Call {
 package "Configuration and external I/O" as IO {
   class "campusmate.*" as Config <<startup config>>
   class "CampusMate Chat" as Chat <<external HTTP>>
+  class "Redis 全局许可集合" as PermitRedis <<pending implementation>>
   class ModelCapabilityController <<pending implementation>>
   class ModelCapabilityService <<pending implementation>>
   class ModelCapabilityResponseVO <<pending implementation>>
@@ -159,6 +161,7 @@ CampusMateProvider .up.|> AiProvider
 CampusMateProvider *-- "1" MateChatRequestMapper
 CampusMateProvider *-- "1" WebClient
 CampusMateProvider *-- "1" ModelCallPermits : 发请求前申请 [P]
+ModelCallPermits --> PermitRedis : 登记 / 续租 / 删除 [P]
 WebClient --> JdkHttpClient : JdkClientHttpConnector [P]
 CampusMateProvider --> Config
 CampusMateProvider ..> MateChatSseParser : create
@@ -190,7 +193,7 @@ Mate controls all output limits, including summaries.
 AI emits events; only Runtime writes Session state.
 Generic previews and internal diagnostics: implemented in PR 336.
 Complete arguments are parsed independently; preview never executes.
-模型调用许可与 JDK HttpClient：待实现，替换 Reactor Netty。
+模型调用许可（Redis 全局）与 JDK HttpClient：待实现，替换 Reactor Netty。
 endlegend
 @enduml
 
@@ -314,9 +317,9 @@ end note
 ' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeExecutionProperties.java：maxActive
 ' JDK 证据：openjdk/jdk21u master bb6b279495ceff8442dbd0225756b92d466d5309，src/java.net.http/share/classes/jdk/internal/net/http/ConnectionPool.java：returnToPool、MAX_POOL_SIZE
 ' JDK 证据：同上 HttpClientImpl.java：DEFAULT_KEEP_ALIVE_TIMEOUT；MultiExchange.java：retryOnFailure、canRetryRequest
-' 已观察行为：当前使用 Reactor Netty 默认连接池，没有显式的模型调用并发上限。
-' 设计原因：许可先于发出请求，结束后归还，使在途调用与到 Mate 的连接都不超过许可数。
-' 架构变更：许可与 JDK HttpClient 连接池均待实现；连接池是 JDK 内部对象，单列是因为本图回答连接是否复用。
+' 已观察行为：当前使用 Reactor Netty 默认连接池，没有显式的模型调用并发上限；项目中没有 Redis 代码。
+' 设计原因：许可先于发出请求，结束后归还，使所有实例合计的在途调用不超过全局许可数；租约保证实例崩溃后许可可回收。
+' 架构变更：Redis 全局许可与 JDK HttpClient 连接池均待实现；Redis 不可用时的降级路径见 Model §5.4，不在本图。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
@@ -332,23 +335,31 @@ autonumber
 
 title 一次模型调用的连接与许可
 participant AgentLoop as Loop
-participant "调用许可" as Permits
 participant "Mate Provider" as Provider
+participant "调用许可" as Permits
+participant "Redis" as Redis
 participant "连接池" as Pool
 participant "Mate Chat" as Mate
 
 Loop -> Provider ++ : 发起一次模型调用（模型、上下文）
 activate Loop
-Provider -> Permits ++ : 申请模型调用许可（按到达顺序等待，待实现）
+Provider -> Permits ++ : 申请模型调用许可（本实例按到达顺序排队，待实现）
+Permits -> Redis ++ : 登记许可（清理过期租约；在用少于 100 则加入，租约 30 秒）
+return 登记成功
 return 模型调用许可
 Provider -> Pool ++ : 获取到 Mate 的连接（优先复用空闲连接，待实现）
 return 可用连接
 Provider -> Mate ++ : 发送 Chat 请求
-Mate -->> Provider : 流式返回增量
-Provider -->> Loop : 推送 Assistant 增量事件
+par 流式返回
+  Mate -->> Provider : 流式返回增量
+  Provider -->> Loop : 推送 Assistant 增量事件
+else 每 10 秒
+  Permits ->> Redis : 续租本实例持有的全部许可
+end
 return 完成标记（[DONE]）
 Provider ->> Pool : 归还该连接（空闲 30 秒后关闭）
 Provider ->> Permits : 归还该许可
+Permits ->> Redis : 删除该许可
 return 返回最终 Assistant 消息
 deactivate Loop
 @enduml
