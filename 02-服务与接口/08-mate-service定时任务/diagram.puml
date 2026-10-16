@@ -1,0 +1,256 @@
+@startuml mate_schedule_overview
+' 目标：待实现；业务总览，从配置定时任务、一次自动运行到查看该次结果。
+' 源码证据：superheromeZzh/pi-mono-java PR #332，codex/scheduled-task-backend 0e8c75f8，核对日期 2026-10-16。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/authorization/ScheduleSessionRegistry.java registerSession、findSessionRegistration。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/authorization/ScheduleAccessTokenProvider.java accessToken。
+' 源码：Mate 服务端未读取；Mate 侧全部步骤为目标设计。
+' 粒度：参与者统一为服务级。Mate = mate-service；Mate 数据库 = Mate 自有 GaussDB；Claw = coding-agent 服务，其数据库归 Claw 设计。
+' 设计原因：用户只与 Mate 交互；任务归属、配额与会话对话映射保存在 Mate，Claw 只保存任务配置与运行记录。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，定时触发画为来自图外的发现消息。
+' 表达方式：只画正常流程；失败与恢复规则见 README.md 第 5.2.1 节。
+title 每天视频巡逻检查：从运营人员到 Mate 再到 Claw
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate" as Mate
+database "Mate 数据库" as MateDb
+participant "Claw" as Claw
+autonumber
+== 配置定时任务 ==
+Operator -> Mate ++ : 配置定时任务（每天 22:00 视频巡逻检查）
+activate Operator
+Mate -> Mate : 校验用户可使用所选 Agent
+Mate -> MateDb ++ : 预占该用户的任务配额
+return 创建中的归属记录
+Mate -> Claw ++ : 创建该定时任务
+return 已保存的定时任务及接下来的运行时间
+Mate -> MateDb ++ : 将归属记录关联该任务
+return 已生效的任务归属
+return 返回已生效的定时任务及接下来的运行时间
+deactivate Operator
+== 运行定时任务 ==
+[-> Claw ++ : 到达计划时间（每天 22:00）
+Claw -> Mate ++ : 登记新会话的归属
+Mate -> MateDb ++ : 按任务归属记录会话及对应对话
+return 会话归属及对话
+return 已登记的会话归属
+Claw -> Claw : 受理本次运行并启动新会话
+Claw -> Mate ++ : 调用工具前获取统一账号 access-token
+return access-token
+Claw -> Mate ++ : 执行视频巡逻检查工具
+return 工具结果
+deactivate Claw
+== 查看巡逻结果 ==
+Operator -> Mate ++ : 查看该任务的运行记录
+activate Operator
+Mate -> MateDb ++ : 确认该任务归属当前用户
+return 任务归属
+Mate -> Claw ++ : 查询该任务的运行记录
+return 运行记录及所属会话
+Mate -> MateDb ++ : 查询会话对应的对话
+return 对话标识
+return 返回运行记录及对话入口
+deactivate Operator
+Operator -> Mate ++ : 打开该次运行的对话
+activate Operator
+Mate -> MateDb ++ : 确认该对话归属当前用户
+return 对话及所属会话
+Mate -> Claw ++ : 读取该会话的事件
+return 会话事件
+return 返回巡逻结论及工具证据
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_create
+' 目标：待实现；实现下钻，只展开总览的“配置定时任务”阶段，Mate 拆为入口、任务服务与 Agent 授权。
+' 源码证据：Mate 服务端未读取；Agent 授权沿用 Mate 现有能力，接口未核验。
+' 源码证据：Claw 创建接口见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4 节；PR #332 0e8c75f8 ScheduleController.create。
+' 设计原因：远端调用 Claw 前提交配额预占，不在数据库事务中等待 Claw，避免持锁跨远程 I/O。
+' 设计原因：Claw 没有请求幂等键，创建结果未知时不恢复，由“无归属不能运行”和对账删除收敛。
+' 表达方式：只画正常流程；失败与恢复规则见 README.md 第 5.2.1 节。
+title 配置定时任务（UC1）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "管理入口" as Entry
+participant "任务服务" as Service
+participant "Agent 授权" as AgentAuth
+database "Mate 数据库" as MateDb
+participant "Claw" as Claw
+autonumber
+Operator -> Entry ++ : 保存定时任务（每天 22:00 视频巡逻检查）
+activate Operator
+Entry -> Entry : 认证用户并校验请求格式
+Entry -> Service ++ : 创建定时任务（当前用户）
+Service -> AgentAuth ++ : 校验用户可使用所选 Agent
+return 已授权
+Service -> MateDb ++ : 锁定用户配额，统计已有任务并写入创建中的归属记录
+return 创建中的归属记录
+Service -> Claw ++ : 创建该定时任务（服务认证）
+return 已保存的定时任务
+Service -> MateDb ++ : 将归属记录关联任务并置为生效
+return 已生效的任务归属
+return 已保存的定时任务
+Entry -> Entry : 设置资源地址为 Mate 路径
+return 返回已生效的定时任务及接下来的运行时间
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_session_registration
+' 目标：待实现；实现下钻，只展开总览的“登记新会话的归属”及之后的核对，Mate 拆为内部入口与会话登记服务。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/authorization/ScheduleSessionRegistry.java registerSession、findSessionRegistration。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/authorization/ScheduleSessionRegistrationDTO.java sessionId、scheduleId、runId、agentId。
+' 源码证据：PR #332 0e8c75f8 的 MateScheduleSessionRegistry 仍固定返回服务不可用，Mate 接口待实现。
+' 设计原因：会话归属在 Claw 受理前登记，Claw 不保存用户；Mate 记录与 Claw 受理不组成跨库事务，靠待核对状态与对账收敛。
+' 表达方式：只画正常流程；失败与恢复规则见 README.md 第 5.2.1 节。
+title 登记会话归属（UC11、UC15）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+participant "Claw" as Claw
+participant "内部入口" as Entry
+participant "会话登记服务" as Registry
+database "Mate 数据库" as MateDb
+autonumber
+== 受理前登记 ==
+Claw -> Entry ++ : 登记新会话的归属（会话、任务、运行、Agent）
+activate Claw
+Entry -> Entry : 校验调用方为获准的 Claw 服务
+Entry -> Registry ++ : 登记该会话
+Registry -> MateDb ++ : 查询该任务的生效归属
+return 任务所属用户
+Registry -> MateDb ++ : 写入会话归属及新对话（待核对）
+return 会话归属及对话
+return 已登记的会话归属
+return 返回已登记的会话归属
+Claw -> Claw : 受理本次运行并启动新会话
+deactivate Claw
+== 定时核对 ==
+[-> Registry ++ : 到达核对周期
+Registry -> MateDb ++ : 查询超过受理期限仍待核对的会话
+return 待核对的会话
+Registry -> Claw ++ : 读取该会话
+return 会话存在
+Registry -> MateDb ++ : 将该会话归属置为已确认
+return 已确认的会话归属
+deactivate Registry
+@enduml
+
+@startuml mate_schedule_classes
+' 目标：待实现；mate-service 定时任务模块的全局目标类图。
+' 源码证据：Mate 服务端未读取，类名与包路径均为目标设计；包根沿用历史证据中的 com.huawei.hicampus.mate。
+' 源码证据：Claw 侧消费者为 PR #332 0e8c75f8 的 ScheduleSessionRegistry、ScheduleAccessTokenProvider、MateServiceCredentialProvider。
+' 设计原因：Controller 只收发 VO 并包装 ResultBean；Service 协调授权、配额、归属与 Claw 调用；Mapper 只收发 ScheduleOwnerDTO、ScheduledSessionDTO，DTO 不单独画出。
+' 设计原因：Claw 适配器集中服务认证、语言透传与错误映射，Service 不感知 HTTP 细节。
+' 设计原因：Agent 授权与公司认证中心沿用 Mate 现有能力，接口未核验，只画依赖方向。
+title mate-service 定时任务：全局目标类图
+!pragma layout elk
+top to bottom direction
+set separator none
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 40
+skinparam ranksep 50
+hide empty members
+hide circle
+
+package "入口（schedule.controller）· 单例" as EntryPkg {
+  class ScheduleController {
+    + create / list / get / update / delete
+    + run / pause / unpause(scheduleId)
+  }
+  class ScheduleRunController {
+    + listRuns(scheduleId, filters)
+    + getRun(runId)
+  }
+  class ScheduledRuntimeController {
+    + putSession(sessionId, body)
+    + getSession(sessionId)
+    + accessToken()
+  }
+}
+
+package "应用服务（schedule.service）· 单例" as ServicePkg {
+  class ScheduleManageService {
+    + create(user, request)
+    + update / delete / run / pause / unpause(user, scheduleId, ...)
+    + list / get(user, ...)
+  }
+  class ScheduleRunQueryService {
+    + listRuns(user, scheduleId, filters)
+    + getRun(user, runId)
+  }
+  class ScheduleOwnershipService {
+    + reserve(userId) : ScheduleOwnerDTO
+    + activate(ownerId, scheduleId)
+    + release(ownerId)
+    + requireOwned(userId, scheduleId)
+    + findOwner(scheduleId) : Optional
+  }
+  class ScheduledSessionService {
+    + register(registration) : ScheduledSessionDTO
+    + find(sessionId) : Optional
+    + chatIdOf(sessionId) : Optional
+  }
+  class ScheduledAccessTokenService {
+    + accessToken() : String
+  }
+  class ScheduleReconcileJob {
+    + releaseStaleReservations()
+    + removeOwnerlessSchedules()
+    + confirmPendingSessions()
+  }
+}
+
+package "适配器（schedule.adapter）· 单例" as AdapterPkg {
+  interface ClawScheduleClient {
+    + 定时任务十个操作
+    + getSession(sessionId)
+  }
+  class HttpClawScheduleClient
+  interface ServiceCallerVerifier {
+    + requireClaw(request)
+  }
+  interface ExecutionAccountTokenSource {
+    + currentToken() : String
+  }
+  interface AgentPermissionChecker <<Mate 现有，未核验>> {
+    + requireUsable(user, agentId)
+  }
+}
+
+package "持久化（schedule.mapper）· 单例" as MapperPkg {
+  class ScheduleOwnerMapper
+  class ScheduleQuotaMapper
+  class ScheduledSessionMapper
+}
+
+ScheduleController --> ScheduleManageService
+ScheduleRunController --> ScheduleRunQueryService
+ScheduledRuntimeController --> ServiceCallerVerifier
+ScheduledRuntimeController --> ScheduledSessionService
+ScheduledRuntimeController --> ScheduledAccessTokenService
+ScheduleManageService --> AgentPermissionChecker
+ScheduleManageService --> ScheduleOwnershipService
+ScheduleManageService --> ClawScheduleClient
+ScheduleRunQueryService --> ScheduleOwnershipService
+ScheduleRunQueryService --> ScheduledSessionService
+ScheduleRunQueryService --> ClawScheduleClient
+ScheduleOwnershipService --> ScheduleOwnerMapper
+ScheduleOwnershipService --> ScheduleQuotaMapper
+ScheduledSessionService --> ScheduleOwnershipService
+ScheduledSessionService --> ScheduledSessionMapper
+ScheduledAccessTokenService --> ExecutionAccountTokenSource
+ScheduleReconcileJob --> ScheduleOwnershipService
+ScheduleReconcileJob --> ScheduledSessionService
+ScheduleReconcileJob --> ClawScheduleClient
+HttpClawScheduleClient ..|> ClawScheduleClient
+@enduml

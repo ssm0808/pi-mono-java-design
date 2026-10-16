@@ -341,7 +341,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 #### 7.1.1 定时执行的凭据来源（待实现）
 
-定时任务没有发起本轮执行的用户 HTTP Header。2026-10-13 评审确定：定时执行统一使用 Mate 配置的同一个账号，Claw 无入参调用 [Mate 定时执行凭据接口](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)取得该账号的 `access-token`。模型一次返回中有需要凭据的工具调用，并且至少一个通过参数校验和权限判断时取一次，这一批工具调用共用；快照只含 `access-token`，不含 X-HW-ID、Authorization、X-HW-APPKEY，定时路径不做凭据完整性检查。用户权限只在配置任务时由 Mate 检查，Claw 不保存凭据、授权引用或用户身份。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型，不回退到空 Header 或其他账号。
+定时任务没有发起本轮执行的用户 HTTP Header。2026-10-13 评审确定：定时执行统一使用 Mate 配置的同一个账号，Claw 无入参调用 [Mate 定时执行凭据接口](../../02-服务与接口/08-mate-service定时任务/README.md#scheduled-access-token)取得该账号的 `access-token`。模型一次返回中有需要凭据的工具调用，并且至少一个通过参数校验和权限判断时取一次，这一批工具调用共用；快照只含 `access-token`，不含 X-HW-ID、Authorization、X-HW-APPKEY，定时路径不做凭据完整性检查。用户权限只在配置任务时由 Mate 检查，Claw 不保存凭据、授权引用或用户身份。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型，不回退到空 Header 或其他账号。
 
 取得的值只进入本批次内存快照，只有实际业务 execute 可以使用；不写入 Schedule、Run、Session、Prompt、日志、公开事件或普通资源响应。工具发现和模型调用不使用该值。Claw 调用 Mate 的服务间认证另行配置，不与业务执行凭据混用。
 
