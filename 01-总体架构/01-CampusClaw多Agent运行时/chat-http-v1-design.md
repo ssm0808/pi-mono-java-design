@@ -82,7 +82,7 @@ POST 接受 user.message、user.interrupt、user.tool_confirmation 三类输入�
 
 压缩属于 Session 记忆模块，算法、阈值、失败重试和上下文恢复由 [压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md) 唯一维护。HTTP 只投影完整 `session.compacted`，不公开摘要、内部边界、started/failed 或 `_discardedEntryId`。
 
-手工压缩通过 `/compact` 的 Command Handler 进入，不增加专用 HTTP operation；[Compact 生命周期](../../04-命令与技能/01-内置命令/README.md#7-compact-生命周期) 维护准入、终态和资源释放。
+手工压缩通过 `/compact` 的 Command Handler 进入，不增加专用 HTTP operation；[Compact 生命周期](../04-CampusClaw命令系统/01-内置命令/README.md#7-compact-生命周期) 维护准入、终态和资源释放。
 
 ### 2.3 持久化事件与恢复
 
@@ -180,7 +180,7 @@ Builtin 普通 JSON，以及 B13/B14 的 Skill 请求、SSE 与恢复规则已�
 | 接口 | 精确模型 | 设计职责 |
 |---|---|---|
 | GET /agents/{agentId}/commands | [操作 12](接口契约/操作/12-list-agent-commands.json) | [Slash 通用模块](../04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)维护描述符、排序、命令状态规则、Agent 快照准备与重新准入理由 |
-| POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../../04-命令与技能/01-内置命令/README.md)维护八个命令的业务、窄服务、事务和实施验收 |
+| POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../04-CampusClaw命令系统/01-内置命令/README.md)维护八个命令的业务、窄服务、事务和实施验收 |
 
 Controller 只收发 VO，Application 完成授权、归一化、一次 Catalog 解析、准入、执行及 DTO→VO。
 清单按 Agent 使用完整来源，不读会话状态；内部 Builtin 专属解析才过滤来源。GET 不构成执行预约，
@@ -196,23 +196,23 @@ POST 重新解析，并在所属锁或事务内检查可变状态；共同结构
 
 Builtin Handler 完成后返回普通 ResultBean JSON，不建立命令 SSE。
 请求、结果与错误由操作 13 维护；与既有 Session/Models 资源复用的映射规则统一见
-[Builtin §8](../../04-命令与技能/01-内置命令/README.md#8-json-与错误)。
+[Builtin §8](../04-CampusClaw命令系统/01-内置命令/README.md#8-json-与错误)。
 不产生通用命令生命周期或 Name 历史；这不改变 POST Events 的独立 SSE 契约。
 所有成功结果移除 command、changed、sourceEventSeq；内部领域 Entry 不变。
-不以新命令包装或 eventId 替代这些字段，Skill 分支复用 Session Events，详细行为见 [Skill 设计](../../04-命令与技能/02-技能命令/README.md)。
+不以新命令包装或 eventId 替代这些字段，Skill 分支复用 Session Events，详细行为见 [Skill 设计](../04-CampusClaw命令系统/02-技能命令/README.md)。
 
 #### 2.6.2 Help：Agent 元数据使用指南
 
 Help 通过普通 POST Command 提供无参 Agent 使用指南，不新增 HTTP 资源。
-[Help 专题](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)唯一维护元数据映射、
+[Help 专题](../04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/README.md)唯一维护元数据映射、
 缓存往返、读取/发布互斥、空内容处理、安全展示和实施验收。
 其专项页面直接提取操作 13，不再复制 Header、参数或响应 JSON。
 清单与 POST Help 在 Agent 不可用时都返回 422 AGENT_NOT_AVAILABLE；清单冷缓存时先准备 Agent，Help 只读完整缓存。
 
 #### 2.6.3 Name 与配置更新
 
-Name 的共享业务规则见 [Builtin §5](../../04-命令与技能/01-内置命令/README.md#5-name-当前状态)，
-Model/Thinking 的事务和内部版本规则见 [Builtin §6](../../04-命令与技能/01-内置命令/README.md#6-model--thinking)。
+Name 的共享业务规则见 [Builtin §5](../04-CampusClaw命令系统/01-内置命令/README.md#5-name-当前状态)，
+Model/Thinking 的事务和内部版本规则见 [Builtin §6](../04-CampusClaw命令系统/01-内置命令/README.md#6-model--thinking)。
 Command 保留原有入口；统一 Session POST 复用其校验规则与底层写入职责，两者均不要求版本条件或请求去重 Header。
 
 ![命令与权威 Session 状态](设计图/Command/command_authoritative_state.svg)
@@ -221,7 +221,7 @@ Command 保留原有入口；统一 Session POST 复用其校验规则与底层�
 
 #### 2.6.4 Compact 的执行生命周期
 
-[Compact 生命周期](../../04-命令与技能/01-内置命令/README.md#7-compact-生命周期)维护空历史、
+[Compact 生命周期](../04-CampusClaw命令系统/01-内置命令/README.md#7-compact-生命周期)维护空历史、
 独立终态 Future、容量/Holder 清理和断线不取消规则；压缩算法与恢复边界见 [压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。
 user.interrupt 只绑定原 user.message.eventId。手工 Compact 没有该原消息，不伪造目标或扩大中断范围；正在手工压缩时仍按现有忙状态拒绝新消息。当前不新增 Compact 专用取消接口。
 

@@ -43,7 +43,7 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 | 描述符字段、状态过滤与交互规则 | [Slash 通用模块](../04-CampusClaw命令系统/README.md#command-state-rules) |
 | 八个 Builtin 与 Skill 的完整请求、成功和失败响应 | [执行会话命令](chat-api-review.html#ExecuteSessionCommand) |
 | zh-CN 仍返回英文描述的源码依据与契约缺口 | [Slash 语言专项核对](../04-CampusClaw命令系统/source-evidence.md#331-清单字段与语言专项核对) |
-| Help 的 Agent 元数据、缓存与纯文本展示 | [Help 专项](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) |
+| Help 的 Agent 元数据、缓存与纯文本展示 | [Help 专项](../04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/README.md) |
 
 表格整理不改变原有字段、状态过滤、消息执行或权限语义；Agent 架构对比和目标类图无变化。
 语言说明记录实际差距，不将中文描述本地化提升为已实现能力。
@@ -71,12 +71,12 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 |---|---|---|
 | 当前接口报文、Header、错误与确认状态 | catalog 指定的 operation JSON 与 common | HTML 自动生成，Markdown 不保存平行报文 |
 | Slash 轻量清单规则与共享结构 | [通用模块](../04-CampusClaw命令系统/README.md) | HTTP 与 Mate 引用，不重复状态矩阵 |
-| Builtin 业务、事务与实施验收 | [Builtin 专题](../../04-命令与技能/01-内置命令/README.md) | HTTP 仅保留传输边界及入口 |
-| Help 元数据、缓存与安全展示 | [Help 专题](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) | 专项 HTML 从 Runtime Command 提取，不维护专项 JSON |
+| Builtin 业务、事务与实施验收 | [Builtin 专题](../04-CampusClaw命令系统/01-内置命令/README.md) | HTTP 仅保留传输边界及入口 |
+| Help 元数据、缓存与安全展示 | [Help 专题](../04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/README.md) | 专项 HTML 从 Runtime Command 提取，不维护专项 JSON |
 | Events 执行准入、有序追加、数据库中断与机制验收 | [Events 总体设计](chat-events-design.md) | 流设计只保留调用方可见的响应边界 |
 | SSE 首帧、响应绑定、关闭、背压和恢复 | [流设计](chat-events-stream-design.md) | 总体文档引用；参数仍以精确模型为准 |
 | 历史投影、分页与对账 | [历史设计](chat-events-history-design.md) | 流和总体文档不重复分页参数 |
-| Skill 使用统计口径、数据库与失败隔离 | [M05 统计主设计](../../04-命令与技能/03-Skill加载统计/README.md) | 批量 POST 的精确字段归统计 operation JSON；F19 对齐 PR #295，F20 单独维护 |
+| Skill 使用统计口径、数据库与失败隔离 | [M05 统计主设计](../04-CampusClaw命令系统/03-Skill加载统计/README.md) | 批量 POST 的精确字段归统计 operation JSON；F19 对齐 PR #295，F20 单独维护 |
 
 必要的安全边界摘要可以保留，但不能在摘要中新增字段、规则或未决项的确认。
 废止内容从 Git 追溯；不能继续生成旧报文，也不以“历史”标签保留第二套可调用说明。
@@ -91,7 +91,7 @@ Mate 公共 Events 和 FollowUp 未来专题各有独立职责，本次不退役
 ```bash
 python3 ../../scripts/check-api-purposes.py
 python3 render_chat_api.py
-python3 ../../04-命令与技能/01-内置命令/Help-Agent使用指南/render_help_review.py
+python3 ../04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/render_help_review.py
 python3 validate-chat-api.py --full
 node test_chat_api.cjs
 ```

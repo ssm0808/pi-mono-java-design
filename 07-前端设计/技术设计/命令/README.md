@@ -40,7 +40,7 @@ parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立�
 清单读取、冻结调用和 Builtin JSON/Skill SSE 分路均已有实现；09b2e0b1 为已包含的早期交互提交。
 独立 Store/Registry/Gateway 仍是推荐结构拆分，不能将类名尚未完全对应解释为 Slash 行为未实现。
 本项未重跑前端测试，不升级旧交互测试的验收范围；Mate 公共入口和附件集成继续独立跟踪。
-模式命令专项核对同一 `53eff85c`：`frontend/src/runtime/commands.ts#freezeCommandArguments` 的 Builtin 结果映射没有 mode；`ComposerBox.vue` 已有独立 ModeControl，但未接入 Slash 模式选择。`/mode` 及选择控件、Session 结果映射待实现，业务与后端差距见[Builtin 模式切换](../../../04-命令与技能/01-内置命令/README.md#mode-command)。
+模式命令专项核对同一 `53eff85c`：`frontend/src/runtime/commands.ts#freezeCommandArguments` 的 Builtin 结果映射没有 mode；`ComposerBox.vue` 已有独立 ModeControl，但未接入 Slash 模式选择。`/mode` 及选择控件、Session 结果映射待实现，业务与后端差距见[Builtin 模式切换](../../../01-总体架构/04-CampusClaw命令系统/01-内置命令/README.md#mode-command)。
 
 公开描述符 type/hints 迁移待实现：上述源码仍消费 kind/input，不能把本设计原型的更新当作产品已迁移。
 

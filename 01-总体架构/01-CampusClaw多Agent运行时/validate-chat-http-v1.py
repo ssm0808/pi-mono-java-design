@@ -29,8 +29,8 @@ DESIGN_PATH = ROOT / "chat-http-v1-design.md"
 CONTRACT_ROOT = ROOT / "接口契约"
 SLASH_DESIGN_PATHS = (
     REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/README.md",
-    REPOSITORY_ROOT / "04-命令与技能/01-内置命令/README.md",
-    REPOSITORY_ROOT / "04-命令与技能/02-技能命令/README.md",
+    REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/01-内置命令/README.md",
+    REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/02-技能命令/README.md",
 )
 
 
@@ -40,7 +40,7 @@ def topic_diagram(design_path: Path) -> Path:
     return flat if flat.exists() else design_path.parent / "设计图/diagram.puml"
 
 
-HELP_ROOT = REPOSITORY_ROOT / "04-命令与技能/01-内置命令/Help-Agent使用指南"
+HELP_ROOT = REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南"
 HELP_RESULT_FIELDS = {"displayName", "description", "useCases"}
 EXPECTED_OPERATION_COUNT = 7
 EXPECTED_OPERATIONS = {
@@ -685,7 +685,7 @@ def validate_command_wording(models: list[dict[str, Any]]) -> None:
         require("目录" not in path.read_text(encoding="utf-8"),
                 f"Slash Command design must use explicit wording: {path.relative_to(REPOSITORY_ROOT)}")
     ownership_paths = (*SLASH_DESIGN_PATHS, DESIGN_PATH, ROOT / "README.md",
-                       REPOSITORY_ROOT / "README.md", REPOSITORY_ROOT / "04-命令与技能/README.md")
+                       REPOSITORY_ROOT / "README.md", REPOSITORY_ROOT / "01-总体架构/README.md")
     retired_ownership = ("Skill Command 由其他同事", "Skill 执行由其他同事", "Skill 由其他同事",
                          "Skill 由同事", "真实 Skill 执行由同事", "Skill 执行由同事",
                          "同事并行实现执行定义", "真实执行定义由同事", "Skill 开发线",

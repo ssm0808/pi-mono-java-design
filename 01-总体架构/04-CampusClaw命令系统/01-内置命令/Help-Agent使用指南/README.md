@@ -44,8 +44,8 @@
 
 ## 2. 全局入口与 Help 补充类图
 
-整体系统先看[Slash 完整全局目标类图](../../../01-总体架构/04-CampusClaw命令系统/target_slash_command_global_classes.svg)；
-其 [PlantUML 源码](../../../01-总体架构/04-CampusClaw命令系统/diagram.puml#L119) 为 Slash 与 Builtin 共用的唯一全局主图。
+整体系统先看[Slash 完整全局目标类图](../../target_slash_command_global_classes.svg)；
+其 [PlantUML 源码](../../diagram.puml#L119) 为 Slash 与 Builtin 共用的唯一全局主图。
 本专题只下钻 Help 的元数据、缓存和结果投影，不再以 Help 为中心重排全局关系或合并其他命令的职责边界。
 以下类图是局部补充，不代表完整 Command 系统；图中 Help 链路均已在当前实现基线存在。
 
@@ -85,7 +85,7 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 两组文案都为空仍返回 200，前端显示“维护者尚未填写 Agent 介绍和使用场景”。
 只缺一组时只对该区域显示空状态，不生成看似真实的占位能力描述。
 
-请求与完整报文统一由 [Runtime 操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)
+请求与完整报文统一由 [Runtime 操作 13](../../../01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)
 维护，[Help 专项页](help-review.html) 只选择其中的 Help 请求、两种成功结果及相关错误。
 不新增 /help HTTP 资源，也不在本文另存可调用报文副本。
 统一响应设计不再回显 command，精确结果为上述三个业务字段；调用方已经知道提交的是 Help。
@@ -98,7 +98,7 @@ Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护�
 
 Runtime 操作 12（`GET /agents/{agentId}/commands`）的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []）；
 Help 是否无参由命令契约定义，不由 hints 决定。清单不按 Session 状态过滤；缓存缺失时清单先准备 Agent，失败为 422，POST Help 仍独立检查缓存并保持既有 422。
-清单的字段与排序见[Agent 命令清单契约](../../../01-总体架构/04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)。
+清单的字段与排序见[Agent 命令清单契约](../../README.md#31-get-轻量清单已确认)。
 
 ## 4. 缓存与缺失行为
 
@@ -180,7 +180,7 @@ Runtime 元数据、Builtin 只读查询、DTO→VO 组装和 Runtime HTTP 切�
 
 ## 7. 评审与同步范围
 
-Help 的精确请求、字段与错误由 Runtime [操作 12](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-agent-commands.json)与[操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)维护。专项 HTML 只筛选 Help 场景，直接继承 Runtime 的 Builtin Header 示例、参数、约束、结果与错误，不保留第二份 JSON。Slash 与 Builtin 引用同一张全局主图，本专题只维护元数据下钻图。
+Help 的精确请求、字段与错误由 Runtime [操作 12](../../../01-CampusClaw多Agent运行时/接口契约/操作/12-list-agent-commands.json)与[操作 13](../../../01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)维护。专项 HTML 只筛选 Help 场景，直接继承 Runtime 的 Builtin Header 示例、参数、约束、结果与错误，不保留第二份 JSON。Slash 与 Builtin 引用同一张全局主图，本专题只维护元数据下钻图。
 
 mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 GET 投影及公共边界待决。
 不能将本稿直接当作新公共接口；公共认证、bridge 和执行协议仍待重审，不新增公共路径或跨仓实现。

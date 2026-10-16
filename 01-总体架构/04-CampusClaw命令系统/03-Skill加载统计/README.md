@@ -1,6 +1,6 @@
 # Skill 成功调用次数统计设计
 
-[命令与技能](../README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#skill-target) · [M05 主设计](../../01-总体架构/04-CampusClaw命令系统/README.md) · [统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) · [源码与差距](source-evidence.md) · [验证](validation.md)
+[命令系统](../README.md) · [Claw 数据库设计](../../../03-数据与存储/Claw数据库设计.md#skill-target) · [M05 主设计](../README.md) · [统一历史](../../01-CampusClaw多Agent运行时/unified-event-persistence.md) · [源码与差距](source-evidence.md) · [验证](validation.md)
 
 | 属性 | 值 |
 |---|---|
@@ -49,7 +49,7 @@ M06 的 SessionEventAppender 复用既有 Repository 事务：重检固定 execu
 | 同事务 t_skill_usage_stats | 从统一采集切换点开始已提交的累计次数，Session 删除不减 | 当前目标；唯一一张统计表，没有独立统计流水 |
 | 异步消费/日表/独立分析库 | 大数据量、趋势或统计故障隔离 | 没有已确认必要性，首版不额外建设；已有接口/日表去留仍待核实 |
 
-表字段、时间精度、约束及历史缺口由[统一数据库设计](../../03-数据与存储/Claw数据库设计.md#skill-target)维护，[schema.sql](schema.sql)是与其关联的待实现片段。COUNT 范围与保守缺口相交时不能声称完整；本文继续维护计数口径和查询决策。
+表字段、时间精度、约束及历史缺口由[统一数据库设计](../../../03-数据与存储/Claw数据库设计.md#skill-target)维护，[schema.sql](schema.sql)是与其关联的待实现片段。COUNT 范围与保守缺口相交时不能声称完整；本文继续维护计数口径和查询决策。
 
 累计更新与结果首次插入同事务，采用原子加一和 MAX 时间；普通 INSERT/唯一约束及重复核对由统一追加负责，不能“无条件忽略冲突后继续加一”。Mapper 片段见[record-usage.sql](record-usage.sql)。真实 GaussDB 的 UPSERT、唯一冲突、JSONB 与事务行为必须集成验证。
 
@@ -73,7 +73,7 @@ Session 清理与追加争用相同 Session/执行锁。先禁止活跃或未知
 
 ## 7. 推荐目标类图与提交时序
 
-全局执行、Host、Factory 和持久化结构见[统一历史全局图](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#全局目标类图)。下图只展开 M05 投影与查询，跨模块主链通过引用复用。
+全局执行、Host、Factory 和持久化结构见[统一历史全局图](../../01-CampusClaw多Agent运行时/unified-event-persistence.md#全局目标类图)。下图只展开 M05 投影与查询，跨模块主链通过引用复用。
 
 ![Skill 结果投影与查询](skill_load_statistics_classes.svg)
 

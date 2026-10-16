@@ -61,9 +61,9 @@
 | [t_session_question_answers](#t_session_question_answers) | 用户问题答案交接表，只引用已提交回执，由原执行实例至多消费一次 | M | [结构化提问](../01-总体架构/06-CampusClaw计划模式/ask-user-question.md) |
 | [t_session_tombstone](#t_session_tombstone) | 会话永久删除墓碑表，只保留不可复用的会话标识和删除时间 | M | [Session 生命周期](01-会话记忆GaussDB/README.md#65-删除-session) |
 | [t_session_cleanup_task](#t_session_cleanup_task) | 会话逻辑删除后用于异步物理清理的短期可重试任务表 | M | [Session 生命周期](01-会话记忆GaussDB/README.md#65-删除-session) |
-| [t_skill_usage](#t_skill_usage) | 每次 Skill 工具成功返回正文的调用事实；同一次调用重复投递不更新来源或时间 | M；有 D 增量 | [Skill 统计](../04-命令与技能/03-Skill加载统计/README.md) |
-| [t_skill_usage_stats](#t_skill_usage_stats) | Skill 工具成功调用累计次数；删除执行事实不减计数 | M；有 D 增量 | [Skill 统计](../04-命令与技能/03-Skill加载统计/README.md) |
-| [t_skill_usage_daily_stats](#t_skill_usage_daily_stats) | 按 Asia/Shanghai 自然日归属的工具成功调用汇总，与事实及累计同事务提交 | M；有 D 增量 | [Skill 统计](../04-命令与技能/03-Skill加载统计/README.md) |
+| [t_skill_usage](#t_skill_usage) | 每次 Skill 工具成功返回正文的调用事实；同一次调用重复投递不更新来源或时间 | M；有 D 增量 | [Skill 统计](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md) |
+| [t_skill_usage_stats](#t_skill_usage_stats) | Skill 工具成功调用累计次数；删除执行事实不减计数 | M；有 D 增量 | [Skill 统计](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md) |
+| [t_skill_usage_daily_stats](#t_skill_usage_daily_stats) | 按 Asia/Shanghai 自然日归属的工具成功调用汇总，与事实及累计同事务提交 | M；有 D 增量 | [Skill 统计](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md) |
 | [t_schedule](../01-总体架构/08-CampusClaw定时任务/README.md#t_schedule) | 任务配置与自动计划游标 | S；有 D 修改 | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) |
 | [t_schedule_run](../01-总体架构/08-CampusClaw定时任务/README.md#t_schedule_run) | 一次触发是否受理及原根执行关联，同任务唯一未结束 Run | S；有 D 修改 | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) |
 | [t_schedule_dispatch_state](#t_schedule_dispatch_state) | PR 的扫描协调表，目标撤销整表 | S；目标撤销 | [PR #332 差异](../01-总体架构/08-CampusClaw定时任务/README.md#schedule-pr-diff) |
@@ -552,7 +552,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 
 ### 4.17 t_skill_usage
 
-每次 Skill 工具成功返回正文的调用事实；同一次调用重复投递不更新来源或时间。对应：[Skill 统计](../04-命令与技能/03-Skill加载统计/README.md)。
+每次 Skill 工具成功返回正文的调用事实；同一次调用重复投递不更新来源或时间。对应：[Skill 统计](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md)。
 
 | 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
 |---|---|---|---|---|
@@ -594,7 +594,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 
 ### 4.18 t_skill_usage_stats
 
-Skill 工具成功调用累计次数；删除执行事实不减计数。对应：[Skill 统计](../04-命令与技能/03-Skill加载统计/README.md)。
+Skill 工具成功调用累计次数；删除执行事实不减计数。对应：[Skill 统计](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md)。
 
 | 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
 |---|---|---|---|---|
@@ -616,7 +616,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 ### 4.19 t_skill_usage_daily_stats
 
-按 Asia/Shanghai 自然日归属的工具成功调用汇总，与事实及累计同事务提交。对应：[Skill 统计](../04-命令与技能/03-Skill加载统计/README.md)。
+按 Asia/Shanghai 自然日归属的工具成功调用汇总，与事实及累计同事务提交。对应：[Skill 统计](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md)。
 
 | 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
 |---|---|---|---|---|
@@ -701,9 +701,9 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 ### 6.3 Skill 累计投影目标
 
-[M05](../04-命令与技能/03-Skill加载统计/README.md)已将计数来源收敛为新 LIVE、最终成功、具有可信 Skill 身份的 tool.result；在结果首次插入的同一事务内累计，不另造统计事实流。§4 的 t_skill_usage 和日表仍是当前实现，不能在新链路验收前直接删除。
+[M05](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md)已将计数来源收敛为新 LIVE、最终成功、具有可信 Skill 身份的 tool.result；在结果首次插入的同一事务内累计，不另造统计事实流。§4 的 t_skill_usage 和日表仍是当前实现，不能在新链路验收前直接删除。
 
-目标 t_skill_usage_stats 字段如下，由 [schema.sql](../04-命令与技能/03-Skill加载统计/schema.sql)提供待实现片段；普通读取不到一行可由查询投影为零，不预建 activation_count=0 的行。
+目标 t_skill_usage_stats 字段如下，由 [schema.sql](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/schema.sql)提供待实现片段；普通读取不到一行可由查询投影为零，不预建 activation_count=0 的行。
 
 | 字段 | SQL 类型 | 可空 | 约束与含义 |
 |---|---|---|---|
@@ -715,7 +715,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 无数据库 DEFAULT。pruned_from/pruned_to 要么都为空，要么都非空且起点不晚于终点。该范围是保守历史缺口，不是日汇总；区间 COUNT 与缺口相交时不能声称完整。累计表不设置 Session 级联外键。追加与清理在同一生命周期权威下排序，恢复、复制、重复提交和公共事件读取均不重复计数。
 
-精确 from/to 与日表需求仍待核实；既有接口去留不由本文件代替用户决定。[record-usage.sql](../04-命令与技能/03-Skill加载统计/record-usage.sql)是目标事务写入片段，真实 GaussDB UPSERT 与热点锁等待未验收。若已存在部署数据，切换前还须核对旧口径和实际保留范围，不能把不同口径累计直接混算。
+精确 from/to 与日表需求仍待核实；既有接口去留不由本文件代替用户决定。[record-usage.sql](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/record-usage.sql)是目标事务写入片段，真实 GaussDB UPSERT 与热点锁等待未验收。若已存在部署数据，切换前还须核对旧口径和实际保留范围，不能把不同口径累计直接混算。
 
 <a id="agent-user-events"></a>
 
@@ -757,7 +757,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | 实现仓 campusclaw/scripts/install/initdb_gaussdbv5.sql | 公司安装镜像由同步脚本生成；不能单独手工修改并与 canonical DDL 脱节；本次未验收公司安装 |
 | [Session 基础 schema.sql](01-会话记忆GaussDB/schema.sql) | 历史四表基础示意，只有 17 个字段；保留关联供理解与历史核对，不是全库定义或部署入口 |
 | [统一历史增量 SQL](01-会话记忆GaussDB/unified-event-persistence.sql) | §6.1/§6.2 的待实现片段，需随目标核对后合入完整安装结构 |
-| [Skill 目标 schema.sql](../04-命令与技能/03-Skill加载统计/schema.sql) / [写入片段](../04-命令与技能/03-Skill加载统计/record-usage.sql) | §6.3 的待实现结构与 DML，不授权直接删除主线流水或日表 |
+| [Skill 目标 schema.sql](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/schema.sql) / [写入片段](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/record-usage.sql) | §6.3 的待实现结构与 DML，不授权直接删除主线流水或日表 |
 | [Mate Agent schema.sql](02-Agent元数据GaussDB/schema.sql) | 外部元数据数据库的独立设计材料，不加入 Claw 安装脚本 |
 
 库表整理不新增 Maven 依赖、数据库插件、RLS、跨库事务或部署迁移。继续使用项目既有 Spring/MyBatis/JDBC；表中的 VARCHAR 长度、时间精度和 JSON 类型不是容量承诺，索引是否满足真实查询须按 GaussDB 执行计划验证。

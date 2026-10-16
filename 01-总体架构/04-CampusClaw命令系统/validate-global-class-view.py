@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = ROOT.parents[1]
-BUILTIN = REPOSITORY / "04-命令与技能/01-内置命令"
+BUILTIN = ROOT / "01-内置命令"
 HELP = BUILTIN / "Help-Agent使用指南"
 GLOBAL_NAME = "target_slash_command_global_classes"
 GLOBAL_SVG = ROOT / (GLOBAL_NAME + ".svg")

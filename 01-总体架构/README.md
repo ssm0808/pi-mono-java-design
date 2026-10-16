@@ -6,7 +6,7 @@
 |---|---|---|
 | CampusClaw 多 Agent 运行时 | Runtime、HTTP+SSE、Session、Manager 和服务责任如何协作 | [总体设计](./01-CampusClaw多Agent运行时/README.md) |
 | CampusClaw 工具系统 | 内置工具、Mate 工具、Subagent 和受管目录如何装配 | [工具系统设计](./02-CampusClaw工具系统/README.md) |
-| CampusClaw 命令系统 | Slash Command 的 Agent 命令清单、Builtin JSON 与 Skill SSE 执行边界 | [命令系统设计](./04-CampusClaw命令系统/README.md) · [源码证据](./04-CampusClaw命令系统/source-evidence.md) · [Builtin](../04-命令与技能/01-内置命令/README.md) · [Skill Command](../04-命令与技能/02-技能命令/README.md) |
+| CampusClaw 命令系统 | Slash Command 的 Agent 命令清单、Builtin、Help、Skill 命令执行与 Skill 使用统计 | [命令系统设计](./04-CampusClaw命令系统/README.md) · [Builtin](./04-CampusClaw命令系统/01-内置命令/README.md) · [Help](./04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/README.md) · [Skill Command](./04-CampusClaw命令系统/02-技能命令/README.md) · [Skill 使用统计](./04-CampusClaw命令系统/03-Skill加载统计/README.md) |
 | 虚拟线程并发管理 | 执行准入、容量、背压和下游边界 | [PlantUML 图源](./03-虚拟线程并发管理/diagram.puml) |
 | CampusClaw 前端体验 | 以场景组织用户目标、界面与交互，按需下钻共享结构与事件投影 | [独立前端设计目录](../07-前端设计/README.md) · [场景原型](../07-前端设计/原型/index.html) · [全局组件](../07-前端设计/技术设计/README.md) |
 | CampusClaw 调用日志 | 调用失败如何简化记录和定位 | [异常日志设计](./05-CampusClaw调用日志/README.md) |

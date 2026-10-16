@@ -24,7 +24,7 @@ Runtime 清单已改为按 Agent 查询（`GET /campusclaw-service/v1/agents/{ag
 
 未命中、清单失败或输入形态不支持时保留草稿，不自动转为普通消息。
 GET 不是执行预约；后续 POST 必须独立解析并在所属事务或锁内重新准入。
-Help 元数据与缓存行为见 [Help 专题](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)。
+Help 元数据与缓存行为见 [Help 专题](../../01-总体架构/04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/README.md)。
 
 ## 3. 公共边界待决
 
