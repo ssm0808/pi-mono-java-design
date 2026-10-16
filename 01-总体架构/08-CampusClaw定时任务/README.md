@@ -1815,7 +1815,7 @@ Accept-Language: zh-CN
 
 | 接口 | 用途 | 哪种任务调用 | 何时调用 | Claw 状态 | Mate 状态 |
 |---|---|---|---|---|---|
-| 获取统一账号 access-token | 定时运行调用业务工具时使用的凭据 | 两种任务的定时运行 | 模型每批工具调用中，第一个需要凭据的工具执行前取一次 | PR #332 已实现（`MateAccessTokenClient`） | 待实现，草案见 [Mate 草案 §3](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md) |
+| 获取统一账号 access-token | 定时运行调用业务工具时使用的凭据 | 两种任务的定时运行 | 模型每批工具调用中，第一个需要凭据的工具执行前取一次 | PR #332 已实现（`MateAccessTokenClient`） | 待实现，草案见 [Mate 草案 §1](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#scheduled-access-token) |
 | Session 归属登记与核对 | 让 Mate 知道新 Session 属于哪个用户，之后用户才能读取、继续这个对话 | 只有接口配置的任务（`create_source = api`） | 每次运行受理前，新 Session 写入数据库之前 | PR #332 已定义接口并接入受理流程；默认实现返回服务不可用 | 待设计（T7），路径与报文未定 |
 
 对话中创建的任务在用户自己的会话里追加一轮，会话归属不变，不登记；它的定时运行同样按批次取统一账号 access-token。
@@ -1840,7 +1840,7 @@ Claw 侧接口为 `ScheduleSessionRegistry`，两个操作都只传技术标识 
 | 登记 `registerSession` | 接口配置的任务每次运行：Claw 固定新 Session 的 ID 后、数据库事务外、准备 Runtime 之前 | Mate 返回与请求四个字段相同的登记即成功，继续受理；Mate 明确拒绝或返回不同登记时，本次不受理，Run 记为 `session_creation_rejected_error`；结果未知时转只读核对，不重发登记 |
 | 只读核对 `findSessionRegistration` | 登记结果未知时，在准备期限内反复核对 | 核对到相同登记即继续受理；期限内仍未知则本次不受理，Run 记为 `unknown_error`，不换新的 Session ID 重试 |
 
-Mate 按自己维护的任务与用户关联保存这条归属（用 user_id 标识），之后用户读取、继续、停止或删除这个 Session 时，由 Mate 据此授权再调用 Claw。Mate 登记与 Claw 受理之间没有跨库事务，回滚、对账与清理规则见 [Mate 草案 §4](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership) 和 [§5.2.1](#failure-recovery) 的 F14。
+Mate 按自己维护的任务与用户关联保存这条归属（用 user_id 标识），之后用户读取、继续、停止或删除这个 Session 时，由 Mate 据此授权再调用 Claw。Mate 登记与 Claw 受理之间没有跨库事务，回滚、对账与清理规则见 [Mate 草案 §2](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership) 和 [§5.2.1](#failure-recovery) 的 F14。
 
 **当前限制。** Mate 尚未提供登记接口，Claw 的默认实现一律返回服务不可用。因此在 Mate 接口上线或部署方替换实现之前，接口配置的任务到点后会在准备期限内核对失败，Run 记为 `unknown_error`，不会运行；对话中创建的任务不受影响。
 
