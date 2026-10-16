@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 4.5.0 |
+| 文档版本 | 4.6.0 |
 | 更新日期 | 2026-10-16 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | Skill 发现候选 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`（PR #210，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并） |
@@ -14,7 +14,7 @@
 
 ## 1. 职责与当前目标
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`（待评审 · 待实现）：轻量描述符、两类命令合并与固定排序保留，不再按 Session 状态过滤，运行中的禁用由前端状态规则表展示、POST 终判；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是清单查询的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、SSE 执行结果和 Events 集成按 B13/B14 已确认语义实施。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`，sessionId 为可选查询参数（待评审 · 待实现）：技能命令属于智能体级命令，带或不带 sessionId 都返回；轻量描述符、两类命令合并与固定排序保留，不再按 Session 状态过滤，运行中的禁用由前端状态规则表展示、POST 终判；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是清单查询的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、SSE 执行结果和 Events 集成按 B13/B14 已确认语义实施。
 PR #210 的动态 SkillCommandSource 可保留，但 Registry 必须在调用 Source 前按来源过滤。
 内部 Builtin 专属解析不读取 Skill 来源；Agent 命令清单必须取得完整 Agent 快照，缓存缺失时准备 Agent（与创建会话同一入口），准备失败整体返回 422，不返回部分 Builtin。
 现有 Skill 发现定义只展示，不安装伪 Handler；实际执行已由 RuntimeCommandController 委派 SkillCommandExecutionService。
@@ -89,8 +89,8 @@ pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 ## 4. 统一实施与集成要求
 
 Agent 命令清单的 Skill 名称为 `skill:<name>`，排在固定 Builtin 顺序之后并按 name 排序；
-清单不按 Session 状态省略，运行中由前端置灰，POST 返回 409。返回 name、type=skill、description 和可选 hints（示例 `["request"]`），
-不输出 Skill ID、版本、正文、路径或建议值。hints 缺失或为空不禁止参数或附件。
+清单不按 Session 状态省略，运行中由前端置灰，POST 返回 409。返回 name、type=skill 和 description，不返回 hints（参数是自由文本，占位提示由前端决定），
+不输出 Skill ID、版本、正文、路径或建议值。文本参数可省略，附件准入只看 type=skill。
 所有 Skill 均允许可选文件引用，不要求逐个 Skill 声明接受附件；不返回 acceptsFiles，
 也不承诺任意文件格式都能被处理。文件数量、标识、所有权与可用性沿用普通消息边界。
 Java 53eff85c 的 InputResponseVO 仍输出旧附件标记，type/hints 投影待实现；fileIds 执行传递已存在。
@@ -187,6 +187,7 @@ skills Builtin 只展示最新完整绑定快照中的名称/描述，不等于�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 4.6.0 | 2026-10-16 | 技能命令不再返回 hints 占位文案，文本参数的提示由前端决定；清单不带 sessionId 时仍返回技能命令。 |
 | 4.5.0 | 2026-10-16 | Skill 发现改由 `GET /agents/{agentId}/commands` 返回，不再在运行中省略；缓存缺失时准备 Agent，失败为 422。 |
 | 4.4.0 | 2026-09-22 | Skill 描述符改用 type/hints，附件作为所有 Skill 的统一规则。 |
 | 4.3.2 | 2026-09-22 | 明确所有可用 Skill 允许附件引用，区分附件通道、内容能力和前端接入状态。 |

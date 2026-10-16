@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.70.0 |
+| 文档版本 | 1.71.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新最新迁移差距见 §8.3，历史核验保留在 §8.1/§8.2 |
@@ -177,11 +177,11 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 ### 2.6 Built-in Command（已确认，目标实现）
 
 Builtin 与 Skill Command 由用户统一负责设计、实现和集成。
-Builtin 普通 JSON，以及 B13/B14 的 Skill 请求、SSE 与恢复规则已确认；命令清单改为按 Agent 查询，待评审、待实现；Mate 公共命令独立管理。本节只说明 HTTP 边界，不重复维护命令业务规则。
+Builtin 普通 JSON，以及 B13/B14 的 Skill 请求、SSE 与恢复规则已确认；命令清单改为按 Agent 查询，sessionId 为可选查询参数，待评审、待实现；Mate 公共命令独立管理。本节只说明 HTTP 边界，不重复维护命令业务规则。
 
 | 接口 | 精确模型 | 设计职责 |
 |---|---|---|
-| GET /agents/{agentId}/commands | [操作 12](接口契约/操作/12-list-agent-commands.json) | [Slash 通用模块](../04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)维护描述符、排序、命令状态规则、Agent 快照准备与重新准入理由 |
+| GET /agents/{agentId}/commands?sessionId= | [操作 12](接口契约/操作/12-list-agent-commands.json) | [Slash 通用模块](../04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)维护清单范围（不带 sessionId 只含 help、skills 与技能命令）、描述符、排序、命令状态规则、Agent 快照准备与重新准入理由 |
 | POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../04-CampusClaw命令系统/01-内置命令/README.md)维护八个命令的业务、窄服务、事务和实施验收 |
 
 Controller 只收发 VO，Application 完成授权、归一化、一次 Catalog 解析、准入、执行及 DTO→VO。
@@ -252,7 +252,7 @@ Session 只暴露 idle/running，实时阶段在事件层表达。跨实例控�
 
 精确状态码、中英文消息和各操作错误集合由契约模型维护。错误枚举名、MessageSource key 与 resCode 必须一致；配置合并不改写 Command 既有错误码。
 
-Locale 由 Accept-Language 解析，支持 zh-CN/en-US；缺失、不支持或 key 缺失回退 en-US，不使用 JVM 系统 Locale。Content-Language 返回实际语言。同一 Locale 也用于 ListAgentCommands 的 Builtin description；Skill description 原样返回作者元数据，name、type、hints 不随语言变化。Service 异常只携带错误码与有界参数，Controller Advice 负责消息格式化、状态和响应包装。
+Locale 由 Accept-Language 解析，支持 zh-CN/en-US；缺失、不支持或 key 缺失回退 en-US，不使用 JVM 系统 Locale。Content-Language 返回实际语言。同一 Locale 也用于 ListAgentCommands 的 Builtin description；Skill description 原样返回作者元数据；name、type、hints 不随语言变化，hints 只列 thinking、mode 的固定参数值，不含界面文案。Service 异常只携带错误码与有界参数，Controller Advice 负责消息格式化、状态和响应包装。
 
 异常不得暴露凭据、内部 Header、私有 claim、Prompt、原始 thinking、OBS 地址、Bucket、预签名 URL 或堆栈。503 的建议重试时间使用 Retry-After，不扩展 ResultBean 字段。
 
@@ -450,6 +450,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.71.0 | 2026-10-16 | ListAgentCommands 优化 Builtin 中文描述，hints 改为固定参数值列表（thinking 为 on/off，mode 为 plan/build），不含界面文案；新增可选查询参数 sessionId，省略时只返回 help、skills 与技能命令，传入时返回完整命令，并补 400 INVALID_SESSION_ID 与 404 SESSION_NOT_FOUND。 |
 | 1.70.0 | 2026-10-16 | ListAgentCommands 的 Builtin description 按 Accept-Language 国际化，成功示例补 en-US；Skill description 原样返回。 |
 | 1.69.0 | 2026-10-16 | 删除会话同事务删除其关联的定时任务及 Run，规则引用 M10 §3.13。 |
 | 1.68.0 | 2026-10-16 | 命令清单改为 `GET /agents/{agentId}/commands`，按 Agent 返回全部命令，冷缓存与创建会话共用准备流程。 |

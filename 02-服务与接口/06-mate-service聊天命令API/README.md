@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.8.0 |
+| 文档版本 | 1.9.0 |
 | 状态 | GET Descriptor 已确认；公共路径、认证、bridge 与错误映射待独立评审，待实现 |
 | 精确展示源 | [GET 模型](接口契约/操作/01-list-chat-commands.json)与[公共候选上下文](接口契约/common.json) |
 | 人类评审入口 | [GET 命令清单](chat-command-v1-review.html) |
@@ -12,7 +12,7 @@
 
 只保留 `GET /mate-service/v1/chats/{chatId}/commands` 的轻量字段投影。
 字段确认不等于公共接口整体获批；页面上的认证、Chat 标识与错误响应仍是待重审候选。
-Runtime 清单已改为按 Agent 查询（`GET /campusclaw-service/v1/agents/{agentId}/commands`），本投影由 Mate 先解析 Chat 所属 Agent 再读取；公共路径是否同步改为按 Agent 查询待定。
+Runtime 清单已改为按 Agent 查询（`GET /campusclaw-service/v1/agents/{agentId}/commands`），sessionId 为可选查询参数。本投影由 Mate 先解析 Chat 所属 Agent 与映射的 Session，再带该 sessionId 读取，因此始终是完整命令；公共路径是否同步改为按 Agent 查询待定。
 
 公共命令执行协议仍需独立设计，不从 Runtime JSON 或 Skill SSE 自动推导。
 
@@ -61,6 +61,7 @@ python3 validate-chat-command-v1.py --full
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.9.0 | 2026-10-16 | 清单投影跟随 Runtime：Builtin 中文描述优化，hints 改为固定参数值列表；Mate 以 Chat 映射的 sessionId 调用 Runtime，投影完整命令。 |
 | 1.8.0 | 2026-10-16 | 清单投影跟随 Runtime：Builtin description 按 Accept-Language 国际化，补 en-US 示例。 |
 | 1.7.0 | 2026-10-16 | 清单投影跟随 Runtime 改为按所属 Agent 返回全部命令，不再按会话状态过滤；公共路径是否改为按 Agent 查询待定。 |
 | 1.6.0 | 2026-09-22 | 清单投影增加 mode 查询与模式切换入口，公共执行仍独立验收。 |

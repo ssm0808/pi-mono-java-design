@@ -2,8 +2,8 @@
 title 用技能分析巡检记录（BU1、BU3）
 ' 已观察行为：pi-mono-java@fd431002 RuntimeCommandCatalogController.list 仍按 sessionId 读取清单；RuntimeCommandController.execute 对 Skill 返回请求级 SSE。
 ' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandCatalogController.java list；同包 RuntimeCommandController.java execute/executeSkill。
-' 设计原因：清单归属 Agent，执行归属会话；同一进程内的 Controller、Service 与运行时并入 CampusClaw，只在下钻图中拆开。
-' 待实现：按 agentId 查询清单（步骤 2～5）。
+' 设计原因：清单归属 Agent，可选 sessionId 只决定是否包含会话命令；执行归属会话；同一进程内的 Controller、Service 与运行时并入 CampusClaw，只在下钻图中拆开。
+' 待实现：按 agentId 与可选 sessionId 查询清单（步骤 2～5）。
 skinparam shadowing false
 autonumber
 actor "运维人员" as User
@@ -14,11 +14,11 @@ database "GaussDB" as DB
 
 User -> Web ++ : 在输入框首字符输入 /
 activate User
-Web -> Claw ++ : 查询当前 Agent 的可用命令（待实现）
+Web -> Claw ++ : 查询当前 Agent 的可用命令，带当前会话标识（待实现）
 Claw -> Mate ++ : 拉取 Agent 定义与绑定技能（仅本实例无完整缓存时）
 return Agent 定义与绑定技能
 Claw -> Claw : 合并内置命令与技能命令
-return 返回按固定顺序排列的命令清单
+return 返回按固定顺序排列的完整命令清单
 Web -> Web : 按会话状态限制可执行的命令
 return 展示命令清单
 User -> Web ++ : 选择 skill:pdf，填写“分析附件中的巡检记录”并上传附件
@@ -40,25 +40,30 @@ title 查询可用命令的详细时序（UC1）
 ' 源码证据：pi-mono-java@fd431002 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandCatalogService.java list/completeSnapshot；同包 CompositeCommandRegistry.java resolveComplete；CommandDiscoveryResponseAssembler.java assemble。
 ' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare/prepareCached。
 ' 已观察行为：当前先读 Session，再用 prepareCached 只读完整缓存；描述依赖会话状态。
-' 设计原因：清单只取决于 Agent，改用与创建会话相同的 prepare；会话状态只在执行准入时使用。
-' 待实现：本图所有按 agentId 的步骤。
+' 设计原因：命令来源只取决于 Agent，改用与创建会话相同的 prepare；可选 sessionId 只确认归属并决定是否包含会话命令，会话状态只在执行准入时使用。
+' 待实现：本图所有按 agentId 与可选 sessionId 的步骤。
 skinparam shadowing false
 autonumber
 participant "Claw 前端" as Web
 participant "命令接口" as Api
 participant "清单服务" as Catalog
+participant "会话仓储" as Sessions
 participant "Agent 运行时" as AgentRuntime
 participant "命令注册表" as Registry
 
-Web -> Api ++ : 查询 Agent 的可用命令
+Web -> Api ++ : 查询 Agent 的可用命令（可带会话标识）
 activate Web
-Api -> Api : 校验 Agent 标识格式
+Api -> Api : 校验 Agent 标识与会话标识格式
 Api -> Catalog ++ : 列出该 Agent 的命令
+opt 带会话标识
+  Catalog -> Sessions ++ : 确认会话存在且属于该 Agent（不读运行状态）
+  return 会话归属
+end
 Catalog -> AgentRuntime ++ : 准备 Agent 完整快照（有完整缓存直接使用）
 return Agent 完整快照
 Catalog -> Registry ++ : 解析全部命令来源（内置命令与绑定技能）
 return 本次请求的命令定义集合
-Catalog -> Catalog : 转换为轻量描述符（固定顺序）
+Catalog -> Catalog : 按范围筛选（无会话时只保留 help、skills 与技能命令），转换为轻量描述符（固定顺序）
 return 命令描述符
 return 返回该 Agent 的命令清单
 deactivate Web
@@ -136,12 +141,12 @@ skinparam linetype ortho
 ' 源码证据：pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java；runtime/RuntimeSessionHolder.java。
 ' 源码证据：pi-mono@5cd93f packages/coding-agent/src/core/agent-session.ts _expandSkillCommand。
 ' 已观察行为：清单按 Session 读取并用会话状态描述命令；Skill 执行由 SkillCommandExecutionService 复用普通消息链。
-' 设计原因：清单归属 Agent（描述与会话无关），执行准入归属会话；保持一张连贯主图，只合并重复实现，不合并职责边界。
+' 设计原因：清单归属 Agent（描述与会话无关，可选 sessionId 只决定范围），执行准入归属会话；保持一张连贯主图，只合并重复实现，不合并职责边界。
 ' 待实现：按 agentId 的清单入口与描述、Skill 统一 Definition/Handler、准备快照与共享消息抽象、mode。
 
 package "Web 边界" {
   class RuntimeCommandCatalogController {
-    +list(agentId)
+    +list(agentId, sessionId?)
   }
   class RuntimeCommandController {
     +execute(sessionId, request)
@@ -269,7 +274,7 @@ end note
 
 legend bottom left
 7 个 Builtin 已实现；Mode 与标注的 Skill 统一结构待实现。
-按 agentId 的清单入口与 describe() 去会话参数待实现。
+按 agentId 与可选 sessionId 的清单入口、describe() 去会话参数待实现。
 分组框表示多个协作者，不是 Java 包；查询服务属于应用 Service 层。
 Builtin 返回 JSON；Skill 返回共享消息 SSE 与持久化事件。
 运行时注册表是单例；Holder / Session / Projector 属于单次执行。

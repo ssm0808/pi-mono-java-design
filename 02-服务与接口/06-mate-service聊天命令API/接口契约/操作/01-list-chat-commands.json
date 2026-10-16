@@ -25,7 +25,7 @@
         "status": "200",
         "label": "OK",
         "tabLabel": "200 · 命令清单",
-        "summary": "返回该 Chat 所属 Agent 的全部命令；与 Runtime 按 Agent 查询的结果逐项相同，不随会话状态变化。",
+        "summary": "返回该 Chat 所属 Agent 的完整命令；Mate 以 Chat 映射的 sessionId 调用 Runtime，结果与 Runtime 带 sessionId 的清单逐项相同，不随会话运行状态变化。",
         "headers": {
           "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
@@ -39,66 +39,55 @@
                 {
                   "name": "help",
                   "type": "builtin",
-                  "description": "介绍当前 Agent 的用途和使用场景",
-                  "hints": []
+                  "description": "介绍当前智能体的用途和使用场景"
                 },
                 {
                   "name": "status",
                   "type": "builtin",
-                  "description": "查看 Session 状态、模型和深度思考",
-                  "hints": []
+                  "description": "查看会话状态、模型、深度思考与工作模式"
                 },
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "查看或修改 Session 名称",
-                  "hints": [
-                    "displayName"
-                  ]
+                  "description": "查看或修改会话名称"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
-                  "description": "查看或切换模型",
-                  "hints": [
-                    "modelId"
-                  ]
+                  "description": "查看或切换模型"
                 },
                 {
                   "name": "thinking",
                   "type": "builtin",
-                  "description": "查看或切换深度思考",
+                  "description": "开启或关闭深度思考",
                   "hints": [
-                    "on|off"
+                    "on",
+                    "off"
                   ]
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
-                  "description": "查看或切换 plan/build 工作模式",
+                  "description": "查看或切换计划/实施模式",
                   "hints": [
-                    "plan|build"
+                    "plan",
+                    "build"
                   ]
                 },
                 {
                   "name": "compact",
                   "type": "builtin",
-                  "description": "压缩当前上下文",
-                  "hints": []
+                  "description": "压缩当前会话的上下文"
                 },
                 {
                   "name": "skills",
                   "type": "builtin",
-                  "description": "列出当前 Agent 绑定的 Skill",
-                  "hints": []
+                  "description": "列出当前智能体可用的技能"
                 },
                 {
                   "name": "skill:pdf",
                   "type": "skill",
-                  "description": "分析和生成 PDF 文档",
-                  "hints": [
-                    "request"
-                  ]
+                  "description": "分析和生成 PDF 文档"
                 }
               ]
             }
@@ -111,66 +100,55 @@
                 {
                   "name": "help",
                   "type": "builtin",
-                  "description": "Introduce this Agent's purpose and use cases",
-                  "hints": []
+                  "description": "Introduce this agent's purpose and use cases"
                 },
                 {
                   "name": "status",
                   "type": "builtin",
-                  "description": "Show the Session status, model and deep thinking",
-                  "hints": []
+                  "description": "Show the session status, model, deep thinking and work mode"
                 },
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "Show or rename the Session",
-                  "hints": [
-                    "displayName"
-                  ]
+                  "description": "Show or rename the session"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
-                  "description": "Show or switch the model",
-                  "hints": [
-                    "modelId"
-                  ]
+                  "description": "Show or switch the model"
                 },
                 {
                   "name": "thinking",
                   "type": "builtin",
-                  "description": "Show or toggle deep thinking",
+                  "description": "Turn deep thinking on or off",
                   "hints": [
-                    "on|off"
+                    "on",
+                    "off"
                   ]
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
-                  "description": "Show or switch the plan/build work mode",
+                  "description": "Show or switch between plan and build mode",
                   "hints": [
-                    "plan|build"
+                    "plan",
+                    "build"
                   ]
                 },
                 {
                   "name": "compact",
                   "type": "builtin",
-                  "description": "Compact the current context",
-                  "hints": []
+                  "description": "Compact the current session context"
                 },
                 {
                   "name": "skills",
                   "type": "builtin",
-                  "description": "List the Skills bound to this Agent",
-                  "hints": []
+                  "description": "List the skills available to this agent"
                 },
                 {
                   "name": "skill:pdf",
                   "type": "skill",
-                  "description": "分析和生成 PDF 文档",
-                  "hints": [
-                    "request"
-                  ]
+                  "description": "分析和生成 PDF 文档"
                 }
               ]
             }
@@ -196,58 +174,50 @@
                 {
                   "name": "help",
                   "type": "builtin",
-                  "description": "介绍当前 Agent 的用途和使用场景",
-                  "hints": []
+                  "description": "介绍当前智能体的用途和使用场景"
                 },
                 {
                   "name": "status",
                   "type": "builtin",
-                  "description": "查看 Session 状态、模型和深度思考",
-                  "hints": []
+                  "description": "查看会话状态、模型、深度思考与工作模式"
                 },
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "查看或修改 Session 名称",
-                  "hints": [
-                    "displayName"
-                  ]
+                  "description": "查看或修改会话名称"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
-                  "description": "查看或切换模型",
-                  "hints": [
-                    "modelId"
-                  ]
+                  "description": "查看或切换模型"
                 },
                 {
                   "name": "thinking",
                   "type": "builtin",
-                  "description": "查看或切换深度思考",
+                  "description": "开启或关闭深度思考",
                   "hints": [
-                    "on|off"
+                    "on",
+                    "off"
                   ]
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
-                  "description": "查看或切换 plan/build 工作模式",
+                  "description": "查看或切换计划/实施模式",
                   "hints": [
-                    "plan|build"
+                    "plan",
+                    "build"
                   ]
                 },
                 {
                   "name": "compact",
                   "type": "builtin",
-                  "description": "压缩当前上下文",
-                  "hints": []
+                  "description": "压缩当前会话的上下文"
                 },
                 {
                   "name": "skills",
                   "type": "builtin",
-                  "description": "列出当前 Agent 绑定的 Skill",
-                  "hints": []
+                  "description": "列出当前智能体可用的技能"
                 }
               ]
             }
@@ -260,58 +230,50 @@
                 {
                   "name": "help",
                   "type": "builtin",
-                  "description": "Introduce this Agent's purpose and use cases",
-                  "hints": []
+                  "description": "Introduce this agent's purpose and use cases"
                 },
                 {
                   "name": "status",
                   "type": "builtin",
-                  "description": "Show the Session status, model and deep thinking",
-                  "hints": []
+                  "description": "Show the session status, model, deep thinking and work mode"
                 },
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "Show or rename the Session",
-                  "hints": [
-                    "displayName"
-                  ]
+                  "description": "Show or rename the session"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
-                  "description": "Show or switch the model",
-                  "hints": [
-                    "modelId"
-                  ]
+                  "description": "Show or switch the model"
                 },
                 {
                   "name": "thinking",
                   "type": "builtin",
-                  "description": "Show or toggle deep thinking",
+                  "description": "Turn deep thinking on or off",
                   "hints": [
-                    "on|off"
+                    "on",
+                    "off"
                   ]
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
-                  "description": "Show or switch the plan/build work mode",
+                  "description": "Show or switch between plan and build mode",
                   "hints": [
-                    "plan|build"
+                    "plan",
+                    "build"
                   ]
                 },
                 {
                   "name": "compact",
                   "type": "builtin",
-                  "description": "Compact the current context",
-                  "hints": []
+                  "description": "Compact the current session context"
                 },
                 {
                   "name": "skills",
                   "type": "builtin",
-                  "description": "List the Skills bound to this Agent",
-                  "hints": []
+                  "description": "List the skills available to this agent"
                 }
               ]
             }
@@ -428,12 +390,12 @@
         },
         {
           "actor": "前端",
-          "action": "按 type/name 选择控件，hints 仅作参数提示",
+          "action": "hints 非空时展示选项列表，界面文案由前端决定",
           "outcome": "命令无匹配时保留草稿，不回退普通消息"
         }
       ],
       "notes": [
-        "描述符仅包含 name、type、description 和可选 hints。hints 缺失不代表禁止参数；所有 Skill 允许附件，Builtin 不允许；运行中的 model/thinking 只允许无参查询。",
+        "描述符仅包含 name、type、description 和可选 hints。hints 是可提交的固定值，不含界面文案，参数始终可省略；所有 Skill 允许附件，Builtin 不允许；运行中的 model/thinking 只允许无参查询。",
         "无完整 Agent 快照时，目标清单失败，不返回残缺 Builtin；公共错误映射保留待重审状态。",
         "GET 是观察结果，不保证随后 POST 一定成功；POST 仍需独立解析并在所属事务或锁内复核。",
         "Skill 发现不等于 Skill 执行协议已发布。旧公共 POST SSE 已废止，不属于本次 GET 恢复范围。",
