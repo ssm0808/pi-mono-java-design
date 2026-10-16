@@ -40,7 +40,10 @@ def validate_commands(commands):
             "Agent catalog must list every Builtin in fixed order, then Skills by name, without state filtering")
     for command in commands:
         if command["name"] == "help":
-            require(command["description"] == "介绍当前 Agent 的用途和使用场景", "Help must remain Agent guide")
+            require(command["description"] in HELP_DESCRIPTIONS.values(), "Help must remain Agent guide")
+
+
+HELP_DESCRIPTIONS = {"zh-CN": "介绍当前 Agent 的用途和使用场景", "en-US": "Introduce this Agent's purpose and use cases"}
 
 
 SUCCESS_IDS = {"200-commands", "200-no-skills"}
@@ -57,16 +60,32 @@ def validate_catalog_examples(operation):
     examples = success_examples(operation)
     for response in examples.values():
         require(response["headers"].get("Cache-Control") == "no-store", "GET must not cache the catalog")
-        body = response["bodies"]["zh-CN"]
-        require(set(body) == {"resCode", "resMsg", "result"} and body["resCode"] == "0"
-                and body["resMsg"] == "success" and set(body["result"]) == {"commands"},
-                "Catalog ResultBean differs")
-        validate_commands(body["result"]["commands"])
+        require(set(response["bodies"]) == set(HELP_DESCRIPTIONS), "Catalog examples must cover zh-CN and en-US")
+        for language, body in response["bodies"].items():
+            require(set(body) == {"resCode", "resMsg", "result"} and body["resCode"] == "0"
+                    and body["resMsg"] == "success" and set(body["result"]) == {"commands"},
+                    "Catalog ResultBean differs")
+            validate_commands(body["result"]["commands"])
+            help_command = next(command for command in body["result"]["commands"] if command["name"] == "help")
+            require(help_command["description"] == HELP_DESCRIPTIONS[language],
+                    f"Builtin description must follow Accept-Language: {language}")
+        validate_localized_pair(*(response["bodies"][language]["result"]["commands"] for language in ("zh-CN", "en-US")))
     full = examples["200-commands"]["bodies"]["zh-CN"]["result"]["commands"]
     empty = examples["200-no-skills"]["bodies"]["zh-CN"]["result"]["commands"]
     require(any(command["type"] == "skill" for command in full), "Populated example must include a Skill")
     require(empty == [command for command in full if command["type"] == "builtin"],
             "No-Skill example must keep identical Builtin descriptors")
+
+
+def validate_localized_pair(chinese, english):
+    require(len(chinese) == len(english), "Localized catalogs must list the same commands")
+    for left, right in zip(chinese, english):
+        require((left["name"], left["type"], left.get("hints")) == (right["name"], right["type"], right.get("hints")),
+                "Only description may change with Accept-Language; name, type and hints stay language-neutral")
+        if left["type"] == "builtin":
+            require(left["description"] != right["description"], f"Builtin description is not localized: {left['name']}")
+        else:
+            require(left["description"] == right["description"], f"Skill description must be returned as authored: {left['name']}")
 
 
 def validate_projection_pair(runtime, public):
