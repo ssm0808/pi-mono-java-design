@@ -66,7 +66,7 @@
 | J21 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/question/BusinessConfirmationAdapter.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/question/BusinessConfirmationAdapter.java#L90)；`requireAvailable`；[modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/BusinessToolDispatcher.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/BusinessToolDispatcher.java#L31)；`assembled` | 公共工厂绑定业务确认适配器；适配器只允许 RUNTIME，CRON/CHILD 返回入口不支持，缺问题端口也失败。当前不存在 Cron 无人审批等待队列。 |
 | J22 | [modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/dto/RuntimeSessionDTO.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/dto/RuntimeSessionDTO.java#L19)；Session 字段；[modules/cron/src/main/java/com/campusclaw/cron/model/CronJob.java](https://github.com/superheromeZzh/pi-mono-java/blob/553dcd5e2ff682f9684810a043b442b37a02e54a/modules/cron/src/main/java/com/campusclaw/cron/model/CronJob.java#L19)；Job 字段 | 这两类对象及 J19 DDL 无 tenantId/ownerId/长期授权引用；读取范围内没有证明可信租户 scope 的解析与仓储约束。通用 RequestHeaderInfo 出现 agentTenantId 字段不足以证明当前链路已隔离。Mate 服务端与公司认证集成未核验。 |
 
-目标的 `ScheduleAuthorizationPort`、可信管理作用域及无人值守凭据接线待实现。Mate 是可信接口定义、主体授权和按 Agent 绑定解析业务凭据的权威来源，精确内部草案与生产集成边界见[Mate 定时执行上下文](../../02-服务与接口/08-mate-service定时任务/README.md)。每次触发仍需可信解析、参数校验、权限判断；任务启用不等于永久批准任意业务工具。首版遇权限 ASK、自定义提问或计划审核时记录原因并结束本次根执行，不进入持久等待；参数错误保留模型修参机会，不自动猜参或重放。普通 Session 继续使用本次请求的 Header 快照，不持久化秘密；工具五阶段与公共安全投影由 M03 唯一维护，定时入口差异见[非交互规则](README.md#noninteractive)。
+目标的 `ScheduleAuthorizationPort`、可信管理作用域及无人值守凭据接线待实现。Mate 是可信接口定义、主体授权和按 Agent 绑定解析业务凭据的权威来源，精确内部草案与生产集成边界见[Mate 定时执行上下文](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)。每次触发仍需可信解析、参数校验、权限判断；任务启用不等于永久批准任意业务工具。首版遇权限 ASK、自定义提问或计划审核时记录原因并结束本次根执行，不进入持久等待；参数错误保留模型修参机会，不自动猜参或重放。普通 Session 继续使用本次请求的 Header 快照，不持久化秘密；工具五阶段与公共安全投影由 M03 唯一维护，定时入口差异见[非交互规则](README.md#noninteractive)。
 
 ## 5. 依赖与历史基线变化
 
@@ -356,7 +356,7 @@ CampusClaw 每次运行固定新建 Session，复用 Agent 定义和纯文本 pr
 
 本节读取的 [RFC 9110 §8.8.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.8.1)与[§13.1.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-13.1.1)只证明 HTTP 强验证器与条件请求的标准语义，不要求产品采用该机制。Schedule 当前不提供 ETag、If-Match 或客户端请求幂等键；数据库更新与重试边界见 §8.12，不据此推断 Claude 的内部机制。
 
-CampusClaw 当前目标（待实现）：schedule 响应加入 lastRunAt/upcomingRunsAt，只读字段不进入创建输入；status 使用小写；响应不提供 revision。metadata 的精确规则由[配置契约](README.md#creation-response-review)维护；2026-10-13 起配置不保存凭据引用（移除 credentialIds），不引入 Vault 集合资源。Mate 负责凭据保管、主体授权和按可信目标解析，Claw 只保存引用；[内部接口草案](../../02-服务与接口/08-mate-service定时任务/README.md)维护配套 ID、冲突及调用边界，不代表已发布生产接口。
+CampusClaw 当前目标（待实现）：schedule 响应加入 lastRunAt/upcomingRunsAt，只读字段不进入创建输入；status 使用小写；响应不提供 revision。metadata 的精确规则由[配置契约](README.md#creation-response-review)维护；2026-10-13 起配置不保存凭据引用（移除 credentialIds），不引入 Vault 集合资源。Mate 负责凭据保管、主体授权和按可信目标解析，Claw 只保存引用；[内部接口草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)维护配套 ID、冲突及调用边界，不代表已发布生产接口。
 
 任务不持凭据引用，由 Mate 可信边界按 Agent 绑定、授权主体和目标解析、注入，避免把 secret 写进任务消息、metadata、模型输入或响应；这是 CampusClaw 的架构变更与企业安全约束。已有请求凭据与 Cron 空凭据事实见 §4/J20 和 §2/J08，不证明已有长期委托、刷新或 Vault。保存时校验引用，触发时重新验证当前授权，实际 execute 前按可信目标取用凭据；服务间认证身份不等于业务执行凭据，不能把创建当天的短期登录 Token 当作长期调度凭据。
 
@@ -638,7 +638,7 @@ type 属于资源表达的产品约束，便于脱离请求路径识别资源，
 
 **CampusClaw 当前目标（待实现）。** 权威规则由[定时任务受理流程](README.md#normal-acceptance)维护：不补停机漏跑，活动任务遇忙跳过，不为本次失败或故障重建 Run/Session、重发首消息或重复可能已执行业务；结果未知保持任务占用并只读对账。可靠记录已确定终态的重试不是业务重跑。首版无持久等待：按 M03 五阶段先准备可信目标和校验参数，再判断权限；意外 ASK、提问或计划审核阻止待确认业务、记录原因并结束根执行，不能默认批准。失败是否自动暂停整个 Schedule 仍待确认，不继承旧连续失败3次禁用，也不把未答复写成永不自动暂停。
 
-Mate 拥有可信接口定义、执行授权和按 Agent 绑定的凭据解析，Claw 只保存非秘密授权依据；每次触发与实际工具执行重新校验当前资格，秘密仅在本次内存和实际 execute 使用。发现不带业务凭据，服务间认证身份与业务执行凭据分开。普通交互 Session 仍沿用本次 Header 快照；[Mate 配套内部契约](../../02-服务与接口/08-mate-service定时任务/README.md)是待实现草案，公司服务认证及生产凭据部署未核验。
+Mate 拥有可信接口定义、执行授权和按 Agent 绑定的凭据解析，Claw 只保存非秘密授权依据；每次触发与实际工具执行重新校验当前资格，秘密仅在本次内存和实际 execute 使用。发现不带业务凭据，服务间认证身份与业务执行凭据分开。普通交互 Session 仍沿用本次 Header 快照；[Mate 配套内部契约](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)是待实现草案，公司服务认证及生产凭据部署未核验。
 
 删除 Schedule 和全部 Run 不自动取消已受理执行；Session 保持独立归属、授权、观察和停止入口，回调只收尾原根执行。反向删除 Session 保留仍存续 Schedule 下的 Run 受理事实。首版定时输入仅文本，普通 Session 文件引用不受影响。这些是产品约束及安全边界，不从 Claude 归档或其他基线的删除行为推断。
 
@@ -820,7 +820,7 @@ Runtime `validate-chat-api.py --full` 通过，包括十项当前操作、73项 
 
 范围：按用户明确的职责划分检查 PR #332 中用户、范围、会话归属、权限与配额的传播及其必要消费者；不是该 PR 全部 434 个变更文件的完整质量审查。设计起点为 `pi-mono-java-design@6ec8fd2b43a209b582b1a8b726f23757a2dafab2`；当日重新 fetch `main` 和 PR，head 为 `e9d31e8888a81b7fe95071e705482bb16fa10476`，base 与实际 merge-base 均为 `769e86592285f4a25b0febaf551eddea6bc7212c`。没有修改实现工作树。外部 Agent 及 Mate 服务端未重核，不更新历史基线结论。
 
-当前有效规则由[数据库身份边界](../../03-数据与存储/Claw数据库设计.md#mate-ownership)和[Mate 归属交接](../../02-服务与接口/08-mate-service定时任务/README.md#session-ownership)维护。下面的偏差针对当前职责修正；旧设计也曾要求 Claw 保存范围和 owner，不能把设计失当全部归责于实现作者。各项为待修改的架构偏差，不据此声称已发生生产越权。
+当前有效规则由[数据库身份边界](../../03-数据与存储/Claw数据库设计.md#mate-ownership)和[Mate 归属交接](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership)维护。下面的偏差针对当前职责修正；旧设计也曾要求 Claw 保存范围和 owner，不能把设计失当全部归责于实现作者。各项为待修改的架构偏差，不据此声称已发生生产越权。
 
 实现源码公共根 `J = modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`，资源根 `R = modules/coding-agent-cli/src/main/resources/`；下表路径均相对 `pi-mono-java`，均绑定上述 head。
 
