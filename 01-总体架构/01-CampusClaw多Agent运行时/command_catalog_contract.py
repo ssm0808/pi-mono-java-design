@@ -27,6 +27,8 @@ def validate_descriptor(command):
         require(isinstance(command["hints"], list)
                 and all(isinstance(hint, str) and hint.strip() for hint in command["hints"]),
                 "Hints must be an array of nonblank strings, independent of input capability")
+        require(not command["hints"] or command["type"] == "skill" or command["name"] in FREE_TEXT_BUILTINS,
+                f"Only free-text commands carry placeholder hints: {command['name']}")
 
 
 def validate_commands(commands):
@@ -43,7 +45,9 @@ def validate_commands(commands):
             require(command["description"] in HELP_DESCRIPTIONS.values(), "Help must remain Agent guide")
 
 
-HELP_DESCRIPTIONS = {"zh-CN": "介绍当前 Agent 的用途和使用场景", "en-US": "Introduce this Agent's purpose and use cases"}
+HELP_DESCRIPTIONS = {"zh-CN": "介绍当前智能体的用途和使用场景", "en-US": "Introduce this agent's purpose and use cases"}
+# Only free-text inputs get a placeholder; model/thinking/mode are switched with frontend pickers.
+FREE_TEXT_BUILTINS = {"name"}
 
 
 SUCCESS_IDS = {"200-commands", "200-no-skills"}
@@ -80,8 +84,10 @@ def validate_catalog_examples(operation):
 def validate_localized_pair(chinese, english):
     require(len(chinese) == len(english), "Localized catalogs must list the same commands")
     for left, right in zip(chinese, english):
-        require((left["name"], left["type"], left.get("hints")) == (right["name"], right["type"], right.get("hints")),
-                "Only description may change with Accept-Language; name, type and hints stay language-neutral")
+        require((left["name"], left["type"]) == (right["name"], right["type"]),
+                "name and type stay language-neutral")
+        require(len(left.get("hints", [])) == len(right.get("hints", [])),
+                f"Localized hints must keep the same placeholders: {left['name']}")
         if left["type"] == "builtin":
             require(left["description"] != right["description"], f"Builtin description is not localized: {left['name']}")
         else:

@@ -78,7 +78,8 @@ class CommandCatalogContractTest(unittest.TestCase):
         cases = (
             ("untranslated Builtin", lambda: english(0).update(description=self.idle[0]["description"])),
             ("translated Skill", lambda: english(-1).update(description="Analyze and generate PDF documents")),
-            ("localized hints", lambda: english(2).update(hints=["名称"])),
+            ("picker command hint", lambda: english(3).update(hints=["modelId"])),
+            ("hints dropped in one language", lambda: english(2).pop("hints")),
             ("missing en-US", lambda: self.runtime["responses"][0]["bodies"].pop("en-US")),
         )
         for label, mutate in cases:

@@ -459,7 +459,7 @@ def validate_help_descriptor(descriptor: dict[str, Any]) -> None:
     from command_catalog_contract import validate_descriptor
     validate_descriptor(descriptor)
     require(descriptor["name"] == "help" and descriptor["type"] == "builtin"
-            and descriptor["description"] == "介绍当前 Agent 的用途和使用场景"
+            and descriptor["description"] == "介绍当前智能体的用途和使用场景"
             and descriptor.get("hints", []) == [],
             "Help descriptor must advertise only the no-argument Agent guide")
 

@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.70.0 |
+| 文档版本 | 1.71.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新最新迁移差距见 §8.3，历史核验保留在 §8.1/§8.2 |
@@ -252,7 +252,7 @@ Session 只暴露 idle/running，实时阶段在事件层表达。跨实例控�
 
 精确状态码、中英文消息和各操作错误集合由契约模型维护。错误枚举名、MessageSource key 与 resCode 必须一致；配置合并不改写 Command 既有错误码。
 
-Locale 由 Accept-Language 解析，支持 zh-CN/en-US；缺失、不支持或 key 缺失回退 en-US，不使用 JVM 系统 Locale。Content-Language 返回实际语言。同一 Locale 也用于 ListAgentCommands 的 Builtin description；Skill description 原样返回作者元数据，name、type、hints 不随语言变化。Service 异常只携带错误码与有界参数，Controller Advice 负责消息格式化、状态和响应包装。
+Locale 由 Accept-Language 解析，支持 zh-CN/en-US；缺失、不支持或 key 缺失回退 en-US，不使用 JVM 系统 Locale。Content-Language 返回实际语言。同一 Locale 也用于 ListAgentCommands 的 Builtin description；Skill description 原样返回作者元数据，hints 同样本地化，只在自由文本命令上返回；name、type 不随语言变化。Service 异常只携带错误码与有界参数，Controller Advice 负责消息格式化、状态和响应包装。
 
 异常不得暴露凭据、内部 Header、私有 claim、Prompt、原始 thinking、OBS 地址、Bucket、预签名 URL 或堆栈。503 的建议重试时间使用 Retry-After，不扩展 ResultBean 字段。
 
@@ -450,6 +450,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.71.0 | 2026-10-16 | ListAgentCommands 优化 Builtin 中文描述，hints 改为本地化占位提示并只在 name 与技能命令返回。 |
 | 1.70.0 | 2026-10-16 | ListAgentCommands 的 Builtin description 按 Accept-Language 国际化，成功示例补 en-US；Skill description 原样返回。 |
 | 1.69.0 | 2026-10-16 | 删除会话同事务删除其关联的定时任务及 Run，规则引用 M10 §3.13。 |
 | 1.68.0 | 2026-10-16 | 命令清单改为 `GET /agents/{agentId}/commands`，按 Agent 返回全部命令，冷缓存与创建会话共用准备流程。 |
