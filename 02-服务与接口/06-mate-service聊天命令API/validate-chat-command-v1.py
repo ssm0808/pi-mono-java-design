@@ -16,7 +16,7 @@ from typing import Any
 from render_chat_command_v1 import build_html, load_contract, RUNTIME_ROOT
 
 sys.path.insert(0, str(RUNTIME_ROOT))
-from command_catalog_contract import (BUILTIN_HINTS, INPUT_TYPE_BY_COMMAND, to_runtime_projection,
+from command_catalog_contract import (ARGUMENT_TYPE_BY_COMMAND, to_runtime_projection,
                                       validate_catalog_examples, validate_projection_pair)
 
 
@@ -30,7 +30,13 @@ EXPECTED_OPERATIONS = {
     ("GET", "/chats/{chatId}/commands/{commandName}/options"),
 }
 OPERATION_KEYS = {"ListChatCommands", "ListChatCommandOptions"}
-OPTION_COMMAND_NAMES = [name for name, input_type in INPUT_TYPE_BY_COMMAND.items() if input_type == "options"]
+OPTION_COMMAND_NAMES = [name for name, argument_type in ARGUMENT_TYPE_BY_COMMAND.items() if argument_type == "options"]
+# Each Mate thinking/mode example mirrors the Runtime Session query example it is built from.
+RUNTIME_VALUE_SOURCES = {
+    "200-thinking": ("09-list-session-thinking-values.json", "200-thinking-values"),
+    "200-thinking-unsupported": ("09-list-session-thinking-values.json", "200-thinking-unsupported"),
+    "200-mode": ("10-list-session-modes.json", "200-modes"),
+}
 
 
 class ReviewHtmlParser(HTMLParser):
@@ -165,10 +171,10 @@ def validate_command_options(models: list[dict[str, Any]]) -> None:
     operation = operation_by_key(models, "ListChatCommandOptions")
     command_name = next(item for item in operation["parameters"] if item["name"] == "commandName")
     require(command_name["in"] == "path" and command_name["schema"] == " | ".join(OPTION_COMMAND_NAMES),
-            "commandName must list exactly the commands whose inputType is options")
+            "commandName must list exactly the commands whose argumentType is options")
     examples = {response["id"]: response for response in operation["responses"] if response["status"] == "200"}
-    require(set(examples) == {"200-model", "200-thinking", "200-mode", "200-model-empty"},
-            "Options require model, thinking, mode and empty-model examples")
+    require(set(examples) == {"200-model", "200-model-empty"} | set(RUNTIME_VALUE_SOURCES),
+            "Options require model, thinking (supported and unsupported), mode and empty-model examples")
     session_models = runtime_session_models()
     for example_id, response in examples.items():
         chinese, english = localized_option_results(response)
@@ -183,11 +189,11 @@ def validate_command_options(models: list[dict[str, Any]]) -> None:
             require(submit_values == [] and chinese["currentValue"] == session_models["currentModelId"],
                     "Empty model options keep the current model")
         else:
-            command = example_id.removeprefix("200-")
-            require(submit_values == BUILTIN_HINTS[command] and chinese["currentValue"] in submit_values,
-                    f"{command} options must be the Runtime hints, with the current value among them")
+            runtime = runtime_session_values(*RUNTIME_VALUE_SOURCES[example_id])
+            require(submit_values == runtime["values"] and chinese["currentValue"] == runtime["currentValue"],
+                    f"{example_id} must mirror the Runtime Session values, current value included")
             require(all(zh["label"] != en["label"] for zh, en in zip(chinese["options"], english["options"])),
-                    f"{command} labels follow Accept-Language")
+                    f"{example_id} labels follow Accept-Language")
     codes = set(values_for_key(operation["responses"], "resCode"))
     require({"INVALID_CHAT_ID", "UNAUTHENTICATED", "CHAT_ACCESS_DENIED", "CHAT_NOT_FOUND",
              "COMMAND_OPTIONS_NOT_FOUND", "COMMAND_OPTIONS_UNAVAILABLE"} <= codes,
@@ -201,6 +207,12 @@ def operation_by_key(models: list[dict[str, Any]], operation_key: str) -> dict[s
 def runtime_session_models() -> dict[str, Any]:
     source = json.loads((RUNTIME_ROOT / "接口契约/操作/06-list-session-models.json").read_text(encoding="utf-8"))
     return next(iter(source["operation"]["responses"][0]["bodies"].values()))["result"]
+
+
+def runtime_session_values(source_name: str, example_id: str) -> dict[str, Any]:
+    source = json.loads((RUNTIME_ROOT / "接口契约/操作" / source_name).read_text(encoding="utf-8"))
+    response = next(item for item in source["operation"]["responses"] if item.get("id") == example_id)
+    return next(iter(response["bodies"].values()))["result"]
 
 
 def localized_option_results(response: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

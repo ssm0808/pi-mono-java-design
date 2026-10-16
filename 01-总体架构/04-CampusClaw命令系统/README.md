@@ -17,7 +17,7 @@
 | 文档版本 | 2.4.0 |
 | 更新日期 | 2026-10-16 |
 | 模块 | M05 · Command 与 Skill · Slash Command 通用模块 |
-| 设计状态 | 按 Agent 与可选 sessionId 查询命令清单待实现；七个 Builtin、Skill 执行与前端 Slash 已实现；mode、type/hints 描述符、Skill 统一结构待实现。逐项见 [§8.1](#current-runtime-status) |
+| 设计状态 | 按 Agent 与可选 sessionId 查询命令清单待实现；七个 Builtin、Skill 执行与前端 Slash 已实现；mode、type/argumentHint 描述符、Skill 统一结构待实现。逐项见 [§8.1](#current-runtime-status) |
 | 源码基线 | `pi-mono-java` main `fd4310026be808a16f471c550dff4b024ce91e24`，2026-10-16 核验清单链路；其他能力沿用 [§8.1](#current-runtime-status) 所列核验提交 |
 | 主基线 | OpenCode dev `e25b7abf8955a4fa1b02b935964cb47db4c3a02a`（命令清单路由为 Experimental）；辅以 Codex main `6b991972c5b539198dcea9bac4fc14e57559c3af`、pi main `4954d760504c11df9b2cbdc040346107b6a8153d`，均为 2026-10-16 默认分支快照 |
 
@@ -38,7 +38,8 @@ Builtin 的逐命令行为见 [内置命令](01-内置命令/README.md)，Skill 
 | T3 | 确认旧路径直接下线，不保留兼容期 | Lotus | [§5.3](#compatibility) |
 | T4 | Mate 公共清单是否保留 `/chats/{chatId}/commands`；当前设计由 Mate 以 Chat 映射的 sessionId 调用 Runtime，始终返回完整命令 | Lotus | [Mate 聊天命令 API](../../02-服务与接口/06-mate-service聊天命令API/README.md) |
 | T5 | Skill 执行错误码设计与实现不一致（缓存不可用、解析失败、事件流背压） | Lotus | [§5.2.1](#failure-recovery) |
-| T7 | 确认选项型命令的取数与显示名交给 Mate：清单补 inputType，新增命令选项接口，前端不按命令名写逻辑 | Lotus | [D6](#key-decisions) · [Mate 命令选项](../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options) |
+| T7 | 确认选项型命令的取数与显示名交给 Mate：清单补 argumentType，新增命令选项接口，前端不按命令名写逻辑 | Lotus | [D6](#key-decisions) · [Mate 命令选项](../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options) |
+| T8 | ~~参数提示与可选值按基线拆分~~ 已确认（2026-10-16）：hints 改为 argumentHint 占位字符串，thinking、mode 的可选值改由 Runtime 会话查询提供 | Lotus | [D7](#key-decisions) |
 | T6 | ~~Builtin 描述按 Accept-Language 本地化的契约~~ 已确认（2026-10-16）：Builtin 国际化，Skill 原样返回 | Lotus | [§4.1](#31-get-轻量清单已确认) · [源码证据 §6](source-evidence.md#331-清单字段与语言专项核对) |
 
 ### 需求信息
@@ -59,7 +60,7 @@ Builtin 的逐命令行为见 [内置命令](01-内置命令/README.md)，Skill 
 | 技能命令 | 以 `skill:<name>` 调用 Agent 绑定的某个 Skill，执行一轮完整的 Agent 处理 |
 | 命令清单 | 某个 Agent 可用命令的轻量描述，只用于发现和展示，不是执行授权；不带 sessionId 时是智能体级清单，带 sessionId 时是完整清单 |
 | 智能体级命令 | 不需要会话即可理解的命令：help、skills 与全部技能命令；status、name、model、thinking、mode、compact 作用于会话，只在完整清单中出现 |
-| 描述符 | 清单中的一项：name、type、description 和可选 hints |
+| 描述符 | 清单中的一项：name、type、description 和可选 argumentHint |
 | 完整 Agent 快照 | Agent 定义、系统提示词与绑定 Skill 都已就绪的本地缓存；残缺时不用于生成清单 |
 | 命令状态规则 | [§4.2](#command-state-rules) 的表，规定每个命令在会话空闲和运行中允许的调用形态 |
 
@@ -126,10 +127,11 @@ R1 中技能命令归入智能体级命令（它们由 Agent 绑定，执行时�
 | D2 | 清单遇到本实例没有 Agent 完整缓存时怎么办 | OpenCode、pi 在本地进程启动时加载命令来源，没有远端回源；Codex 可显式 `force_reload` | 按 Agent 查询时可能还没有任何会话，冷缓存是常态；不能返回残缺清单 | 与创建会话共用 `AgentRuntimeManager.prepare`：有完整缓存直接用，缺失时在 Agent 锁内从 Mate 准备一次；不提供强制刷新；错误码与创建会话一致 | 首次查询可能访问 Mate，耗时变长；Mate 暂时不可用时返回 422 而不是可重试的 503，前端提供手动重试 |
 | D3 | 清单与执行如何保持一致 | OpenCode 执行时按名称重新取 Command；pi 每次 prompt 重新展开 Skill | 清单可能过期；绑定和会话状态随时变化 | GET 与 POST 各自解析一份请求级快照，共用 Definition 身份；描述与会话无关，准入在执行时按会话检查 | 每次执行都重新解析来源，不能复用 GET 的结果 |
 | D4 | Builtin 与技能命令用什么响应 | OpenCode 会话命令 POST 返回 JSON 消息，事件流独立；pi 的 Skill 展开后作为普通 prompt | Builtin 是一次性查询或修改；技能命令会跑完整一轮推理并可能等待确认 | 同一 POST 入口：Builtin 返回 JSON 业务资源，技能命令返回与普通消息相同的请求级 SSE | 调用方要按自己提交的命令区分响应类型 |
-| D6 | 选项型命令的候选与显示名由谁提供 | 未核验外部基线；本决策依据产品内数据归属（模型名称只在 Mate） | 模型名称只在 Mate 模型管理中，Claw 数据库没有对应字段；前端若按命令分别查询，每新增一个选项型命令都要新增适配 | Runtime 只给命令清单、会话可选模型 ID 与会话设置；Mate 为清单补 inputType（text/options），并提供 `GET /chats/{chatId}/commands/{commandName}/options` 返回 currentValue 与 value/label 候选；前端按 inputType 统一处理 | Mate 维护每个选项型命令的提供者；打开选项多一次 Mate 请求和最多两次 Runtime 请求；选项与执行之间不是原子快照，仍由 POST 终判 |
+| D6 | 选项型命令的候选与显示名由谁提供 | pi 由各命令的 `getArgumentCompletions` 生成 `{value, label}` 候选（`interactive-mode.ts:733-773`）；Codex 由服务端 `model/list` 返回 `displayName`（`v2/model.rs:118-175`）。两者都在单一进程或单一服务内，没有模型名称归属另一服务的情况 | 模型名称只在 Mate 模型管理中，Claw 数据库没有对应字段；前端若按命令分别查询，每新增一个选项型命令都要新增适配 | Runtime 只给命令清单与会话的可选值；Mate 为清单补 argumentType（text/options），并提供 `GET /chats/{chatId}/commands/{commandName}/options` 返回 currentValue 与 value/label 候选；前端按 argumentType 统一处理 | Mate 维护每个选项型命令的提供者；打开选项多一次 Mate 请求和一次 Runtime 请求；选项与执行之间不是原子快照，仍由 POST 终判 |
+| D7 | 命令清单里的参数提示是占位文字还是可选值 | pi 命令描述只有 `argumentHint`（如 `<level>`），可选值由补全函数按会话实时取：thinking 取 `getAvailableThinkingLevels()`，随当前模型变化（`interactive-mode.ts:761`），RPC 另有 `get_available_thinking_levels`；OpenCode 的 `hints` 也是从模板提取的占位符；Codex 用 `model/list`、`collaborationMode/list` 单独查询 | thinking 能否开启取决于当前模型，固定列表 on/off 会在不支持的模型上给出不可用的值；旧 `hints` 装的是值，和基线同名字段含义相反，容易读错 | 清单只返回 argumentHint 占位字符串（name `<name>`、model `<model>`、thinking `<level>`、mode `<mode>`，技能命令省略），与语言无关；可选值按会话由 Runtime `GET /sessions/{sessionId}/models`、`/thinking-values`、`/modes` 提供，结构为当前值加值列表 | Runtime 多两个只读接口；占位字符串不随语言变化，中文界面也显示英文占位 |
 | D5 | 是否保存通用命令记录 | DeepSeek Harness 有 CommandExecution 与命令日志（alpha） | 现有会话、领域 Entry 和事件已能对账 | 不生成 commandId，不保存通用命令生命周期；状态变化复用会话和既有领域 Entry | 无法按命令维度审计，需要时只能从领域 Entry 与事件推断 |
 
-完整基线证据见 [源码证据 §1.2](source-evidence.md#agent-catalog-evidence)。差异分类：D1、D2、D6 是架构变更，D3、R5 是安全加固，D4、D5 是产品约束。
+完整基线证据见 [源码证据 §1.2](source-evidence.md#agent-catalog-evidence)。差异分类：D1、D2、D6 是架构变更，D7 与基线对齐，D3、R5 是安全加固，D4、D5 是产品约束。
 
 ## 3. 详细设计
 
@@ -234,6 +236,7 @@ R1 中技能命令归入智能体级命令（它们由 Agent 绑定，执行时�
 | 操作 | 方法与路径 | 成功结果 | 详细契约 |
 |---|---|---|---|
 | ListAgentCommands | `GET /campusclaw-service/v1/agents/{agentId}/commands?sessionId={sessionId}`（sessionId 可选） | 200，ResultBean 包裹 `commands` 数组 | [查看 Agent 命令清单](../01-CampusClaw多Agent运行时/chat-api-review.html#ListAgentCommands) |
+| ListSessionThinkingValues、ListSessionModes | `GET /campusclaw-service/v1/sessions/{sessionId}/thinking-values`、`/modes` | 200，`currentValue` 与 `values`；Mate 用它们生成 thinking、mode 的选项 | [查询深度思考可选值](../01-CampusClaw多Agent运行时/chat-api-review.html#ListSessionThinkingValues) · [查询工作模式可选值](../01-CampusClaw多Agent运行时/chat-api-review.html#ListSessionModes) |
 | ExecuteSessionCommand | `POST /campusclaw-service/v1/sessions/{sessionId}/command` | Builtin 200 JSON；技能命令 200 SSE | [执行会话命令](../01-CampusClaw多Agent运行时/chat-api-review.html#ExecuteSessionCommand) |
 | ListChatCommandOptions（Mate） | `GET /mate-service/v1/chats/{chatId}/commands/{commandName}/options` | 200，`currentValue` 与 `options[{value, label}]` | [Mate 命令选项](../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options) |
 
@@ -247,13 +250,13 @@ R1 中技能命令归入智能体级命令（它们由 Agent 绑定，执行时�
 | name | 是 | 不带前导 `/`；Builtin 裸名或 `skill:<name>`，稳定标识命令 |
 | type | 是 | `builtin` 或 `skill`，必须与 name 的命名空间一致；不表示控件或响应类型 |
 | description | 是 | 命令用途的非空说明。Builtin 按 `Accept-Language` 返回 zh-CN 或 en-US，缺失或不支持时回退 en-US；技能命令原样返回 Skill 作者写的描述，不做翻译 |
-| hints | 否 | 有序非空字符串数组，列出可作为 arguments 提交的固定值；只在 thinking（`["on","off"]`）与 mode（`["plan","build"]`）上返回，其他命令省略，不返回 null。值不随语言变化，不是界面文案。参数始终可省略，省略即查询 |
+| argumentHint | 否 | 参数输入框的占位字符串，只用于显示，不列可选值；只在带参数的 Builtin 上返回：name `<name>`、model `<model>`、thinking `<level>`、mode `<mode>`，其他命令省略，不返回 null。不随语言变化。参数始终可省略，省略即查询 |
 
 - 清单范围由可选查询参数 sessionId 决定：省略时只返回 help、skills 与技能命令；传入时返回八个 Builtin 与技能命令。理由：新对话尚无会话，status、name、model 等没有作用对象，展示出来只能被拒绝；进入会话后同一接口给出完整清单，前端不必拼接两份。
 - 排序固定为 help、status、name、model、thinking、mode、compact、skills，再追加按 name 升序的技能命令；智能体级清单是其中 help、skills 与技能命令的子序列。服务端控制顺序，客户端只做前缀过滤，不重新排序。理由：内置命令的使用频率和语义分组稳定，技能数量不定，按名称追加最好找。
-- 描述国际化只作用于 Builtin：Builtin 文案由服务端资源维护，按请求语言选择，`Content-Language` 返回实际选中的语言。Skill 描述来自作者元数据，只有一种语言，服务端不翻译；因此同一份清单里 Builtin 与技能命令的语言可能不同。理由：Builtin 是平台固定文案，可以维护双语；Skill 由各 Agent 作者提供，翻译会失真且无法保证覆盖。name、type、hints 在各语言下完全相同。
-- hints 只列固定参数值：前端看到 hints 即展示选项列表，选中的值原样提交。model 的候选依赖会话，由 ListSessionModels 提供，不放进 hints；name 与技能命令是自由文本，也不返回 hints。理由：固定值是平台规则，接口给出后前端无需另存一份；动态候选和自由文本无法用固定列表表达。
-- hints 不带界面文案：占位提示、选项显示名（如 on 显示为“开启”）由前端按自身语言和设计决定。理由：文案属于界面，不同前端的风格和语言不同，放在接口里会把展示和契约绑在一起。
+- 描述国际化只作用于 Builtin：Builtin 文案由服务端资源维护，按请求语言选择，`Content-Language` 返回实际选中的语言。Skill 描述来自作者元数据，只有一种语言，服务端不翻译；因此同一份清单里 Builtin 与技能命令的语言可能不同。理由：Builtin 是平台固定文案，可以维护双语；Skill 由各 Agent 作者提供，翻译会失真且无法保证覆盖。name、type、argumentHint 在各语言下完全相同。
+- argumentHint 只是占位提示，可选值不放在清单里：model、thinking、mode 的可选值按会话由 Runtime 的 ListSessionModels、ListSessionThinkingValues、ListSessionModes 提供，Mate 再补显示名。理由：可选值随会话变化，thinking 在不支持的模型上只有 off，Agent 级清单给不出正确值；这与 pi 的 argumentHint 加按会话补全一致，见 [D7](#key-decisions)。
+- 技能命令不返回 argumentHint，参数是自由文本；pi 的技能命令同样没有占位提示。
 - 当前值和运行中能否修改不在清单中：它们是会话状态，Agent 级清单给不出，由 §4.2 规则与 POST 准入决定。
 - 清单由 agentId 与可选 sessionId 标识，不接受前缀、搜索词或 forceReload。理由：清单规模小，过滤在前端完成；强制刷新会绕过 Agent 发布流程。
 - 不返回 kind、input、available、unavailableCode、allowedValues、catalogVersion、acceptsFiles。理由：这些是内部准入或会话相关信息，Agent 级清单无法给出正确值。
@@ -266,20 +269,20 @@ R1 中技能命令归入智能体级命令（它们由 Agent 绑定，执行时�
 
 清单不随会话状态变化；下表是前端限制输入和 POST 准入共同遵循的唯一规则。
 
-| 命令 | hints | 会话空闲 | 会话运行中 |
+| 命令 | argumentHint | 会话空闲 | 会话运行中 |
 |---|---|---|---|
 | help | 省略 | 无参查询 | 无参查询 |
 | status | 省略 | 无参查询 | 无参查询 |
-| name | 省略（自由文本） | 查询或改名 | 查询或改名 |
-| model | 省略（候选取自 ListSessionModels） | 查询或切换 | 仅无参查询 |
-| thinking | `["on","off"]` | 查询或修改 | 仅无参查询 |
-| mode | `["plan","build"]` | 查询或切换 | 仅无参查询 |
+| name | `<name>`（自由文本） | 查询或改名 | 查询或改名 |
+| model | `<model>`（可选值取自 ListSessionModels） | 查询或切换 | 仅无参查询 |
+| thinking | `<level>`（可选值取自 ListSessionThinkingValues） | 查询或修改 | 仅无参查询 |
+| mode | `<mode>`（可选值取自 ListSessionModes） | 查询或切换 | 仅无参查询 |
 | compact | 省略 | 无参压缩 | 禁止，前端置灰，POST 返回 409 SESSION_BUSY |
 | skills | 省略 | 无参查询 | 无参查询 |
 | `skill:<name>` | 省略（自由文本） | 可选文本和附件 | 禁止，前端置灰，POST 返回 409 SESSION_BUSY |
 
-- hints 在两种状态下相同，不以缺失或变化表达禁止输入。
-- 前端控件按 Mate 清单的 inputType 统一选择：text 用文本框；options 调用 [Mate 命令选项](../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options)，展示 label、提交 value；省略即无参执行。前端不按命令名查询模型信息或维护显示名。选中的值原样作为 arguments 提交。POST 只提交 name、可选 arguments，技能命令另可提交 fileIds。
+- argumentHint 在两种状态下相同，不以缺失或变化表达禁止输入。
+- 前端控件按 Mate 清单的 argumentType 统一选择：text 用文本框，argumentHint 作占位提示；options 调用 [Mate 命令选项](../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options)，展示 label、提交 value；省略即无参执行。前端不按命令名查询模型信息或维护显示名。选中的值原样作为 arguments 提交。POST 只提交 name、可选 arguments，技能命令另可提交 fileIds。
 - 会话状态未知、恢复中或清单读取失败时暂停提交。状态从空闲变为运行中时保留参数草稿并禁用修改；409 后刷新会话状态，保留草稿，不自动重放或降为查询。
 - 交互层遇到 Slash 先按清单精确匹配；清单失败、未命中或形态不支持时保留草稿并提示，不当作普通消息发送。
 
@@ -353,7 +356,7 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 ### 5.3 兼容性
 
 - `GET /sessions/{sessionId}/commands` 直接改为 `GET /agents/{agentId}/commands`，sessionId 从路径改为可选查询参数，不双写、不保留兼容期（T3）。理由：Runtime 是内部接口，唯一消费方 Claw 前端在同一实现仓，可同版本切换；Mate 公共清单尚未开放执行。
-- 描述符字段从 kind/input 迁移到 type/hints 是已确认的待实现增量，与路径迁移可在同一批次交付，同样不双写。
+- 描述符字段从 kind/input 迁移到 type/argumentHint 是已确认的待实现增量，与路径迁移可在同一批次交付，同样不双写。
 - 前端需要从当前会话取得 agentId，已有对话同时传当前 sessionId；新对话只传 agentId。创建会话已使用 agentId，无需新增来源。
 
 ## 6. 质量保证
@@ -373,7 +376,7 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 | 范围 | 覆盖内容 |
 |---|---|
 | 清单 | 固定顺序、完整空 Skill、无 sessionId 只含 help/skills/技能命令、带 sessionId 返回完整命令、会话不存在或属于其他 Agent 返回 404 且不准备 Agent、冷缓存准备一次、Agent 不存在 404、不可用 422、无内部字段泄漏、不读会话运行状态、同一 Agent 并发查询只准备一次 |
-| 描述与准入 | `describe()` 不依赖会话；运行中 compact 与技能命令被 POST 拒绝；hints 两种状态相同且只含固定参数值 |
+| 描述与准入 | `describe()` 不依赖会话；运行中 compact 与技能命令被 POST 拒绝；argumentHint 两种状态相同且只是占位字符串 |
 | 执行 | 来源过滤、重名启动失败、单次解析、Help 三个业务字段、Name 无历史、同值不写 Entry、无通用命令记录 |
 | 技能命令 | 正常 SSE、确认分段、原消息中断、公开历史不含正文、解析失败不受理 |
 | 前端 | 新对话只传 agentId、已有对话带 sessionId，按 Agent 与范围复用、状态规则集中生效、409 后保留草稿、未命中 Slash 不发普通消息 |
@@ -399,7 +402,7 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 | 能力 | 状态 | 核验提交与证据 |
 |---|---|---|
 | 按 Agent 与可选 sessionId 查询清单 | 待实现 | `fd431002`：仍为 `/sessions/{sessionId}/commands`，描述依赖会话，见 [源码证据 §1.1](source-evidence.md#agent-catalog-evidence) |
-| type/hints 描述符 | 待实现 | `fd431002`：`CommandDiscoveryResponseAssembler` 仍输出 input{hint, acceptsFiles} |
+| type/argumentHint 描述符 | 待实现 | `fd431002`：`CommandDiscoveryResponseAssembler` 仍输出 input{hint, acceptsFiles} |
 | Builtin 描述国际化 | 待实现 | `53eff85c`：Contributor 描述固定为英文，清单服务未接收 Locale，见 [源码证据 §6](source-evidence.md#331-清单字段与语言专项核对) |
 | 七个 Builtin 与业务响应 | 已实现 | `53eff85c`，路径见 [内置命令 §8.3](01-内置命令/README.md#83-当前-runtime-实现与验收边界) |
 | mode Builtin | 待实现 | `fd431002`：Contributor 仍只有七个 |
@@ -421,7 +424,7 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.4.0 | 2026-10-16 | 新增 D6/T7：选项型命令的当前值、候选与显示名交给 Mate，清单补 inputType，新增 Mate 命令选项接口；前端按 inputType 统一处理。 |
+| 2.4.0 | 2026-10-16 | 新增 D6/T7：选项型命令的当前值、候选与显示名交给 Mate，清单补 argumentType，新增 Mate 命令选项接口；前端按 argumentType 统一处理。新增 D7/T8（已确认）：与 pi 对齐，hints 改为 argumentHint 占位字符串，thinking、mode 的可选值改由 Runtime 会话查询提供。 |
 | 2.3.0 | 2026-10-16 | 优化 Builtin 描述为面向用户的中文（会话、智能体、技能、计划/实施）；hints 改为可提交的固定参数值列表（thinking 为 on/off，mode 为 plan/build），其他命令省略，接口不带界面文案；sessionId 改为可选查询参数，省略时只返回 help、skills 与技能命令，传入时返回完整命令，会话不存在或不属于该 Agent 返回 404。 |
 | 2.2.0 | 2026-10-16 | 确认 T6：Builtin description 按 Accept-Language 国际化（zh-CN/en-US，回退 en-US），Skill description 原样返回，hints 不随语言变化。 |
 | 2.1.0 | 2026-10-16 | 专题迁到 `01-总体架构/04-CampusClaw命令系统`，原 `04-命令与技能` 的 Builtin、Help、Skill 命令与 Skill 统计并入为子专题；图源与 SVG 平铺到各专题根，对齐总体架构的命名与布局；设计内容不变。 |

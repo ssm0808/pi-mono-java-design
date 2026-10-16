@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.5.0 |
+| 设计版本 | 1.6.0 |
 | 日期 | 2026-10-16 |
 | 状态 | Help 无参查询、三个业务字段、缓存往返、Agent 级锁、DTO→VO 投影与统一 Command POST 已实现；元数据更新通过显式刷新完成 |
 | 设计仓核验基线 | `2c0b0693e57d7949c9b37757b9256f87617b00bf` |
@@ -96,8 +96,8 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
 这里的 `description` 是返回的 Agent 用途介绍；GET 描述符自身的 description 为“介绍当前智能体的用途和使用场景”（en-US 为 “Introduce this agent's purpose and use cases”），二者含义不同。
 
-Runtime 操作 12（`GET /agents/{agentId}/commands`，带或不带 sessionId 都包含 Help）的 Help 描述符只有 name/type/description，不返回 hints；
-Help 无参由命令契约定义，不由 hints 决定。清单不按 Session 状态过滤；缓存缺失时清单先准备 Agent，失败为 422，POST Help 仍独立检查缓存并保持既有 422。
+Runtime 操作 12（`GET /agents/{agentId}/commands`，带或不带 sessionId 都包含 Help）的 Help 描述符只有 name/type/description，不返回 argumentHint；
+Help 无参由命令契约定义，不由 argumentHint 决定。清单不按 Session 状态过滤；缓存缺失时清单先准备 Agent，失败为 422，POST Help 仍独立检查缓存并保持既有 422。
 清单的字段与排序见[Agent 命令清单契约](../../README.md#31-get-轻量清单已确认)。
 
 ## 4. 缓存与缺失行为
@@ -195,6 +195,7 @@ mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-10-16 | Help 描述符不返回 argumentHint（原 hints 改名为占位字符串）。 |
 | 1.5.0 | 2026-10-16 | Help 描述符文案改为“介绍当前智能体的用途和使用场景”。 |
 | 1.4.0 | 2026-10-16 | Help 描述符随命令清单改为按 Agent 查询，同步全局类图锚点与缓存缺失语义。 |
 | 1.3.0 | 2026-09-22 | Help 描述符使用 type/hints，无参行为仍由命令契约定义。 |

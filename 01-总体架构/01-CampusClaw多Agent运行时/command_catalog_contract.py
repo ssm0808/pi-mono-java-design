@@ -16,7 +16,7 @@ def require(condition, message):
 def validate_descriptor(command):
     require(isinstance(command, dict), "Descriptor must be an object")
     require({"name", "type", "description"} <= set(command)
-            and set(command) <= {"name", "type", "description", "hints"},
+            and set(command) <= {"name", "type", "description", "argumentHint"},
             "Descriptor fields differ from lightweight contract")
     require(all(isinstance(command[key], str) and command[key].strip()
                 for key in ("name", "type", "description")), "Required descriptor strings must be nonblank")
@@ -26,12 +26,12 @@ def validate_descriptor(command):
     else:
         require(re.fullmatch(r"skill:[a-z0-9]+(?:-[a-z0-9]+)*", command["name"])
                 and len(command["name"]) <= 70, "Invalid Skill command name")
-    expected = BUILTIN_HINTS.get(command["name"])
+    expected = BUILTIN_ARGUMENT_HINTS.get(command["name"])
     if expected is None:
-        require("hints" not in command, f"Only fixed-value commands return hints: {command['name']}")
+        require("argumentHint" not in command, f"Only Builtins with an argument return argumentHint: {command['name']}")
     else:
-        require(command.get("hints") == expected,
-                f"hints must list the fixed submit values in order, without UI copy: {command['name']}")
+        require(command.get("argumentHint") == expected,
+                f"argumentHint must be the placeholder for the argument, not its values: {command['name']}")
 
 
 def validate_commands(commands, scope="session"):
@@ -50,8 +50,9 @@ def validate_commands(commands, scope="session"):
 
 
 HELP_DESCRIPTIONS = {"zh-CN": "介绍当前智能体的用途和使用场景", "en-US": "Introduce this agent's purpose and use cases"}
-# Fixed submit values per Builtin; model candidates are session-dependent and free text has no hints.
-BUILTIN_HINTS = {"thinking": ["on", "off"], "mode": ["plan", "build"]}
+# Placeholder per Builtin that takes an argument, as pi's argumentHint; Skills omit it.
+# Values to choose from come from the Session (ListSessionModels, ListSessionThinkingValues, ListSessionModes).
+BUILTIN_ARGUMENT_HINTS = {"name": "<name>", "model": "<model>", "thinking": "<level>", "mode": "<mode>"}
 
 
 SESSION_SUCCESS_IDS = {"200-commands", "200-no-skills"}
@@ -108,34 +109,34 @@ def validate_localized_pair(chinese, english):
     for left, right in zip(chinese, english):
         require((left["name"], left["type"]) == (right["name"], right["type"]),
                 "name and type stay language-neutral")
-        require(left.get("hints") == right.get("hints"),
-                f"hints are language-neutral: {left['name']}")
+        require(left.get("argumentHint") == right.get("argumentHint"),
+                f"argumentHint is language-neutral: {left['name']}")
         if left["type"] == "builtin":
             require(left["description"] != right["description"], f"Builtin description is not localized: {left['name']}")
         else:
             require(left["description"] == right["description"], f"Skill description must be returned as authored: {left['name']}")
 
 
-# Mate adds inputType so any frontend picks the input control without per-command logic.
+# Mate adds argumentType so any frontend picks the input control without per-command logic.
 # Skill commands always take text; Builtins not listed take no argument.
-INPUT_TYPE_BY_COMMAND = {"name": "text", "model": "options", "thinking": "options", "mode": "options"}
+ARGUMENT_TYPE_BY_COMMAND = {"name": "text", "model": "options", "thinking": "options", "mode": "options"}
 
 
-def expected_input_type(command):
-    return "text" if command.get("type") == "skill" else INPUT_TYPE_BY_COMMAND.get(command.get("name"))
+def expected_argument_type(command):
+    return "text" if command.get("type") == "skill" else ARGUMENT_TYPE_BY_COMMAND.get(command.get("name"))
 
 
 def to_runtime_projection(public_operation):
-    """Check the Mate-only inputType, then return the operation as Runtime projects it."""
+    """Check the Mate-only argumentType, then return the operation as Runtime projects it."""
     projection = copy.deepcopy(public_operation)
     for response in projection["responses"]:
         if response["status"] != "200":
             continue
         for body in response["bodies"].values():
             for command in body["result"]["commands"]:
-                input_type = command.pop("inputType", None)
-                require(input_type == expected_input_type(command),
-                        f"Public inputType must follow the Mate mapping: {command.get('name')}")
+                argument_type = command.pop("argumentType", None)
+                require(argument_type == expected_argument_type(command),
+                        f"Public argumentType must follow the Mate mapping: {command.get('name')}")
     return projection
 
 

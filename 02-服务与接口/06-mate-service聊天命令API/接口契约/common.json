@@ -42,7 +42,7 @@
       "name": "commandName",
       "required": true,
       "schema": "model | thinking | mode",
-      "description": "清单中 inputType=options 的命令名，不带前导 /；其他命令没有选项"
+      "description": "清单中 argumentType=options 的命令名，不带前导 /；其他命令没有选项"
     }
   }
 }

@@ -2,7 +2,7 @@
 ' Source evidence: pi-mono-java@d84dd3d6 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeSessionController.java getSession.
 ' Architecture change: Builtin routes return JSON; B13/B14 Skill reuses the message SSE boundary.
 ' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CompositeCommandRegistry.java resolve.
-' Product decision: GET uses full sources and state-filtered commands with name/type/description/hints; POST keeps locked admission.
+' Product decision: GET uses full sources and state-filtered commands with name/type/description/argumentHint; POST keeps locked admission.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached and toRuntime.
 ' Product decision: Help uses authored Agent metadata; it does not format the command catalog.
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.

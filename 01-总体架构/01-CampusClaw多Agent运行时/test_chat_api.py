@@ -134,8 +134,8 @@ class AllHeaderContractTest(unittest.TestCase):
         _, models = current.load_catalog()
         self.operations = {m["operation"]["operationKey"]: m["operation"] for m in models}
 
-    def test_current_headers_cover_all_twelve_operations(self):
-        self.assertEqual(len(self.operations), 12)
+    def test_current_headers_cover_all_fourteen_operations(self):
+        self.assertEqual(len(self.operations), 14)
         for operation in self.operations.values():
             self.check(operation)
 
@@ -245,7 +245,7 @@ class CatalogTest(unittest.TestCase):
 
     def test_current_models_keep_source_payloads_and_review_decisions(self):
         manifest, models = current.load_catalog()
-        self.assertEqual(12, len(models))
+        self.assertEqual(14, len(models))
         for entry, model in zip(manifest["operations"], models):
             original = current.shared.expand_model(
                 self.read_json(current.ROOT / entry["common"]),
@@ -318,7 +318,7 @@ class OperationPresentationTest(unittest.TestCase):
             "all_api_purposes", current.ROOT.parents[1] / "scripts/check-api-purposes.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        self.assertEqual(module.validate(), 26)
+        self.assertEqual(module.validate(), 28)
         for text in ("已确认的接口", "本轮修改说明", "PR #295 中实现"):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 module.check_purpose({"description": text}, "fixture")

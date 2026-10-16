@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/chats/{chatId}/commands/{commandName}/options",
     "summary": "列出选项型命令的当前值与候选",
-    "description": "查询当前 Chat 中某个 inputType=options 的命令可选择的值，返回当前值 currentValue 与候选列表 options，每个候选带可直接提交的 value 和可直接展示的 label。model 的候选取自该会话可选模型，label 为 mate-service 模型管理中的模型名称（没有名称时回退为 modelId）；thinking 的候选为 on、off，mode 的候选为 plan、build，label 按 Accept-Language 返回。前端把选中的 value 原样作为命令参数提交，不再自行查询模型信息或维护显示名。",
+    "description": "查询当前 Chat 中某个 argumentType=options 的命令可选择的值，返回当前值 currentValue 与候选列表 options，每个候选带可直接提交的 value 和可直接展示的 label。候选值都按会话从 Runtime 读取：model 取自会话可选模型，label 为 mate-service 模型管理中的模型名称（没有名称时回退为 modelId）；thinking 取自会话深度思考可选值，当前模型不支持深度思考时只有 off；mode 取自会话工作模式可选值。thinking 与 mode 的 label 按 Accept-Language 返回。前端把选中的 value 原样作为命令参数提交，不再自行查询模型信息或维护显示名。",
     "parameters": [
       {
         "$ref": "parameters.chatId"
@@ -76,7 +76,7 @@
         "status": "200",
         "label": "OK",
         "tabLabel": "200 · thinking",
-        "summary": "thinking：当前值由会话的深度思考开关转换为 on 或 off，label 随语言变化。",
+        "summary": "thinking：当前模型支持深度思考，候选为 on、off；当前值为会话的深度思考开关，label 随语言变化。",
         "headers": {
           "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
@@ -119,11 +119,50 @@
         }
       },
       {
+        "id": "200-thinking-unsupported",
+        "status": "200",
+        "label": "OK",
+        "tabLabel": "200 · thinking 不支持",
+        "summary": "thinking：当前模型不支持深度思考，候选只有 off，当前值为 off。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "off",
+              "options": [
+                {
+                  "value": "off",
+                  "label": "关闭"
+                }
+              ]
+            }
+          },
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "off",
+              "options": [
+                {
+                  "value": "off",
+                  "label": "Off"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
         "id": "200-mode",
         "status": "200",
         "label": "OK",
         "tabLabel": "200 · mode",
-        "summary": "mode：当前值为会话工作模式，label 随语言变化。",
+        "summary": "mode：候选取自会话工作模式可选值，当前值为会话工作模式，label 随语言变化。",
         "headers": {
           "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
@@ -279,7 +318,7 @@
         "status": "404",
         "tabLabel": "404 · COMMAND_OPTIONS_NOT_FOUND",
         "label": "Not Found",
-        "summary": "commandName 不是该 Chat 清单中 inputType=options 的命令，包括无参命令、文本命令和技能命令。",
+        "summary": "commandName 不是该 Chat 清单中 argumentType=options 的命令，包括无参命令、文本命令和技能命令。",
         "headers": {
           "Content-Language": "zh-CN"
         },
@@ -299,7 +338,7 @@
         "status": "503",
         "tabLabel": "503 · COMMAND_OPTIONS_UNAVAILABLE",
         "label": "Service Unavailable",
-        "summary": "暂时无法读取会话状态、可选模型或模型管理；UI 保留 Slash 草稿。",
+        "summary": "暂时无法读取会话可选值、可选模型或模型管理；UI 保留 Slash 草稿。",
         "headers": {
           "Content-Language": "zh-CN",
           "Retry-After": "3"
@@ -323,12 +362,12 @@
       "flow": [
         {
           "actor": "前端",
-          "action": "选中 inputType=options 的命令后调用本接口",
+          "action": "选中 argumentType=options 的命令后调用本接口",
           "outcome": "同一套列表展示所有选项型命令"
         },
         {
           "actor": "mate-service",
-          "action": "按 commandName 选择选项提供者，读取 Runtime 会话与可选模型，补充模型名称或本地化显示名",
+          "action": "按 commandName 选择选项来源，从 Runtime 读取该会话的当前值与可选值，补充模型名称或本地化显示名",
           "outcome": "返回 currentValue 与 value/label 候选"
         },
         {
@@ -340,6 +379,7 @@
       "notes": [
         "每个选项型命令在 mate-service 有一个选项提供者；新增选项型命令只需新增提供者并在清单映射中标为 options，前端不改。",
         "选项是读取时的观察结果，不是执行授权；运行中仍只允许无参查询，提交以执行接口的最终准入为准。",
+        "thinking 与 mode 的可选值由 Runtime 按会话给出（ListSessionThinkingValues、ListSessionModes），mate-service 不写死取值，只补显示名；当前模型不支持深度思考时 thinking 只返回 off。",
         "model 的候选范围只来自 Runtime 的会话可选模型，模型管理只补名称，不能增加或删除候选；某个模型在模型管理中没有名称时 label 回退为 modelId，模型管理整体不可用时返回 503。",
         "上游依赖与提供者结构见 mate-service 聊天命令 API 设计 §3。"
       ]

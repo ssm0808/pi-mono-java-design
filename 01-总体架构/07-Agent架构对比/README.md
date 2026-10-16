@@ -78,12 +78,12 @@ M05 的 53eff85c 专项只更新 CampusClaw 实现状态：Builtin、Runtime Ski
 展开文本恢复与前端 Slash 已存在；统一 Skill 扩展结构、完整版本快照和统计仍待实现，Mate 公共接入独立确认。
 这不改变原有产品约束、安全加固或架构取舍；实现映射与测试未重跑边界由主设计维护。
 外部基线历史 SHA 与比较结论保持原核验范围，不把进度校正描述为新的上游比较。
-M05/M07 的[参数控件与附件边界](../../07-前端设计/技术设计/命令/README.md#command-input-controls)的分层：Runtime 提供命令清单与会话数据，Mate 为清单补 inputType 并通过命令选项接口返回 currentValue 与 value/label 候选（模型名称取自 Mate 模型管理），前端按 inputType 统一组装命令参数，不按命令名写取数逻辑。此项为产品交互约束与接口架构变更，不改变上述外部基线结论或全局类图结构。
+M05/M07 的[参数控件与附件边界](../../07-前端设计/技术设计/命令/README.md#command-input-controls)的分层：Runtime 提供命令清单与按会话的可选值（模型、深度思考、工作模式），Mate 为清单补 argumentType 并通过命令选项接口返回 currentValue 与 value/label 候选（模型名称取自 Mate 模型管理），前端按 argumentType 统一组装命令参数，不按命令名写取数逻辑。占位提示与可选值分开，与 pi 的 argumentHint 加按会话补全一致。此项为接口架构变更，不改变全局类图结构。
 
 M05 描述符专项于 2026-09-22 重新确认默认分支并 fetch pi `main@d201760ffee16564aa8d9a759e0c85b70db33674`
 与 OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`，只更新命令发现和请求边界；默认分支快照不等于稳定发布。
 pi 的 RpcSlashCommand 与 OpenCode 的 Command.Info 均将发现描述和实际调用分开，后者 hints 仅为占位提示。
-CampusClaw 采用 name/type/description 与可选 hints：hints 是可提交的固定参数值而非占位文案，按类别统一附件，按会话状态限制修改；这是产品约束与接口架构变更。
+CampusClaw 采用 name/type/description 与可选 argumentHint：与 pi 的 argumentHint 和 OpenCode 的 hints 一样只是占位提示，可选值由 Runtime 按会话单独查询（对应 pi 的 get_available_thinking_levels）；按类别统一附件，按会话状态限制修改。
 收益是固定选项由接口给出且文案留在界面层，代价是前端需集中维护并验证命令状态规则，POST 始终最终准入。
 Java 53eff85c 的 VO/组装器及前端仍用 kind/input，新投影与客户端迁移待实现；未运行产品测试。
 相对路径、符号、旧新提交范围及差异理由见[专项证据](../04-CampusClaw命令系统/source-evidence.md#command-descriptor-baseline)，其余比较不升级。
@@ -732,7 +732,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.103.0 | 2026-10-16 | M05/M07 选项型命令的候选与显示名改由 Mate 命令选项接口提供，前端按 inputType 统一处理。 |
+| 1.103.0 | 2026-10-16 | M05/M07 选项型命令的候选与显示名改由 Mate 命令选项接口提供，前端按 argumentType 统一处理；hints 改为 argumentHint 占位字符串，可选值改由 Runtime 会话查询提供，与 pi 对齐。 |
 | 1.102.0 | 2026-10-16 | M05 CampusClaw 的 hints 改为固定参数值列表（thinking on/off、mode plan/build），与 OpenCode 的占位提示 hints 区分；清单增加可选 sessionId 决定范围。 |
 | 1.101.0 | 2026-10-16 | A14 同步 M10：对话中由 Cron 工具创建的任务关联原会话运行，接口配置的任务仍每次新建 Session。 |
 | 1.100.0 | 2026-10-16 | M05 命令清单改为按 Agent 查询，登记 OpenCode/Codex/pi 的清单作用域基线；其余比较不升级。 |

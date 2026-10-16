@@ -42,7 +42,7 @@ parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立�
 本项未重跑前端测试，不升级旧交互测试的验收范围；Mate 公共入口和附件集成继续独立跟踪。
 模式命令专项核对同一 `53eff85c`：`frontend/src/runtime/commands.ts#freezeCommandArguments` 的 Builtin 结果映射没有 mode；`ComposerBox.vue` 已有独立 ModeControl，但未接入 Slash 模式选择。`/mode` 及选择控件、Session 结果映射待实现，业务与后端差距见[Builtin 模式切换](../../../01-总体架构/04-CampusClaw命令系统/01-内置命令/README.md#mode-command)。
 
-公开描述符 type/hints 迁移待实现：上述源码仍消费 kind/input，不能把本设计原型的更新当作产品已迁移。
+公开描述符 type/argumentHint 迁移待实现：上述源码仍消费 kind/input，不能把本设计原型的更新当作产品已迁移。
 
 **早期迁移证据（历史基线，不代表当前实现）**：下表路径均相对 `pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`。
 
@@ -78,9 +78,9 @@ parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立�
 
 | 约束 | 前端必须如何处理 |
 |---|---|
-| GET Descriptor 有 `name`、`type`、`description`、可选 `hints`，以及 Mate 补充的可选 `inputType` | type 表示命令类别；inputType 决定输入方式（text 文本框、options 调用命令选项接口、省略即无参）；不按命令名选控件 |
+| GET Descriptor 有 `name`、`type`、`description`、可选 `argumentHint`，以及 Mate 补充的可选 `argumentType` | type 表示命令类别；argumentType 决定输入方式（text 文本框、options 调用命令选项接口、省略即无参）；argumentHint 作为参数输入框的占位提示；不按命令名选控件 |
 | 所有 type=skill 允许附件，Builtin 不接收附件 | 附件入口根据 type 与上传接入状态控制，不静默丢弃草稿 |
-| 选项型命令的当前值与候选来自 [Mate 命令选项](../../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options)，每个候选带 value 与 label | 展示 label、勾选 currentValue、原样提交 value；不自行查询模型信息、不维护显示名；hints 只作清单信息，不驱动控件 |
+| 选项型命令的当前值与候选来自 [Mate 命令选项](../../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options)，每个候选带 value 与 label | 展示 label、勾选 currentValue、原样提交 value；不自行查询模型信息、不维护显示名；argumentHint 只作占位提示，不驱动控件 |
 | 服务端返回固定 Builtin 顺序并追加 Skill | 客户端只做稳定前缀过滤，不重新排序或模糊重排 |
 | 清单按 Agent 查询，已有 Chat 带 sessionId 取完整命令，新对话不带 sessionId 只取 help、skills 与技能命令；不按 Session 状态过滤（待实现） | running 时按共享状态规则表置灰 Compact/Skill 并限制修改；状态未知或恢复中暂停提交，POST 终判 |
 | Builtin POST 返回普通 JSON，无 commandId 和通用生命周期 | 不画虚构进度条，不建立轮询或通用命令历史 |
@@ -148,7 +148,7 @@ Chat Workspace
 | 命令返回 Session/Models | 按既有完整快照规则更新配置，不推断该任务已结束或问题已回答；待交互仍由原根的完整事件与历史核对。 |
 | 权威会话状态更新后参数权限收窄 | 保留命令与参数，并提示“当前只可查询，请先清除参数”；用户明确清空后才允许运行，不能自动删参数并悄悄执行查询。命令消失则保留禁用标签。 |
 
-命令身份以服务端清单为准；输入交互集中遵循[共享状态规则](../../../01-总体架构/04-CampusClaw命令系统/README.md#command-state-rules)，不在组件重复维护。running 下 model/thinking/mode 的 hints 保持不变但只允许无参查询；状态未知或恢复中暂停提交，POST 最终准入。计划模式不新增 `/plan`、`/approve`、`/answer` 或 `/todo`；也不因新增 Skill 统计而增加热度排序或次数徽标。
+命令身份以服务端清单为准；输入交互集中遵循[共享状态规则](../../../01-总体架构/04-CampusClaw命令系统/README.md#command-state-rules)，不在组件重复维护。running 下 model/thinking/mode 的 argumentHint 保持不变但只允许无参查询；状态未知或恢复中暂停提交，POST 最终准入。计划模式不新增 `/plan`、`/approve`、`/answer` 或 `/todo`；也不因新增 Skill 统计而增加热度排序或次数徽标。
 
 命令区、消息草稿、问题答案、方案反馈分别持有自己的缓冲；取消 Slash 只恢复消息草稿。问题卡的选项键盘动作和自由文本 Enter 不触发 Composer 命令。清单打开时焦点留在输入，Arrow/Home/End 只选择候选；Enter 收成标签，下一次明确 Enter 才执行，长按和 IME 不触发。退出更换列表恢复原标签与参数。
 
@@ -198,7 +198,7 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 - 上下方向键移动活动项，Home/End 跳到首尾；Enter 选择活动项，鼠标或触摸点击语义相同。
 - 点击或 Enter 只选择并关闭清单；上箭头在浏览中禁用，不承担“填入”动作。
 - 选中当前仅允许无参调用的命令显示标签、隐藏参数 textarea，焦点进入当前命令执行按钮（空闲为上箭头，运行中为独立按钮）；再次明确 Enter 或点击才提交。
-- 允许带参调用时标签与输入控件同处 Composer；inputType=text 使用文本框，占位提示由前端提供；inputType=options 打开下述选项列表。选中选项只更新参数草稿，后续明确执行才提交。
+- 允许带参调用时标签与输入控件同处 Composer；argumentType=text 使用文本框，以 argumentHint 为占位提示；argumentType=options 打开下述选项列表。选中选项只更新参数草稿，后续明确执行才提交。
 - 空闲上箭头可访问名称为“运行 <name>”或“发送消息”。运行时右下角固定为“停止生成”，命令区独立显示“执行命令”，可访问名称为“运行 <name>”；无参数控件时焦点进入该命令按钮，有文本控件时 Enter 执行命令，Shift+Enter 换行。普通消息 textarea 的 Enter 不停止也不发送。
 - 点击停止只走共享对话协调器，命令查询不能遮挡或禁用可用的停止动作；停止请求到真实终态的状态见[工作台专项](../runtime-workbench-alignment.md#4-composer-的发送与停止)。
 - IME composition、`isComposing`、keyCode 229 及按键长按 repeat 不触发选择或执行；选择那次 Enter 不得再次触发提交。
@@ -208,20 +208,20 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 
 ### 4.4 参数控件与后端能力
 
-用户应从可用选项完成配置，不必手工记住模型 ID。选中 inputType=options 的命令后，前端调用
+用户应从可用选项完成配置，不必手工记住模型 ID。选中 argumentType=options 的命令后，前端调用
 `GET /chats/{chatId}/commands/{commandName}/options`，Composer 上方切换到候选列表，显示 label、currentValue 打勾，选中的 value 进入命令草稿；执行按钮提交选择，取消恢复原草稿。Model/Thinking 专用控件待实现；原型的 Mode 原生选择框只演示选值、查询和回执更新，不作为生产选择列表或视觉验收完成的证据。
 
 | 命令 | 控件与数据来源 | 正常调用 | 失败与状态变化 |
 |---|---|---|---|
 | model | 单选列表；候选与模型名称由 Mate 命令选项返回，前端不再读取 ListSessionModels 或模型信息 | 用户选择真实候选，冻结 arguments=modelId 后显式执行；带参响应按 Session 处理 | 加载失败可重试 GET，空列表禁用修改；迟到响应不得跨 Chat 应用；POST 拒绝或不确定时保留草稿，不自动重放 |
-| thinking | 单选列表；currentValue 与 label（开启/关闭）由 Mate 命令选项返回 | 选择后提交选中值，显式执行；以响应中的最终 thinking 为准 | running 时仅查看；不支持时展示服务端错误并刷新权威状态，不能用 hint 推测模型能力 |
+| thinking | 单选列表；currentValue 与 label（开启/关闭）由 Mate 命令选项返回；当前模型不支持深度思考时候选只有关闭 | 选择后提交选中值，显式执行；以响应中的最终 thinking 为准 | running 时仅查看；不支持时展示服务端错误并刷新权威状态，不能用 argumentHint 推测模型能力 |
 | mode | 单选列表；currentValue 与 label（计划/实施）由 Mate 命令选项返回；提供清空选择以查询当前模式 | 选择只更新草稿，显式执行提交 arguments=plan/build；空参和带参均冻结 expectedResultKind=session，成功用完整 Session 更新模式指示器 | running（含所有交互等待）仅无参查询；非法值保留并报错，不能降为查询；422 显示计划能力不足；409 或网络不确定只读对账、不重放、不批准计划 |
-| name | 文本框，占位提示由前端提供 | 输入名称或空参查询 | 保留服务端校验错误与原草稿 |
+| name | 文本框，占位提示取 argumentHint | 输入名称或空参查询 | 保留服务端校验错误与原草稿 |
 | skill:<name> | 请求文本与可选附件；按 type=skill 准入附件 | 上传成功取得 fileIds，与 arguments 一起冻结，执行共享 SSE | 上传未完成不提交；失败保留文本/附件；文件拒绝不能静默去掉附件后重发 |
 
 选项列表复用清单的 listbox/option、键盘和触摸规则；勾选表示当前值，键盘活动项单独显示。
-Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不再次提交。三个命令共用同一个选项列表组件和同一个 Gateway 方法，表中差异只在执行后的结果类型。新增选项型命令时 Mate 新增提供者并标 inputType=options，前端不改。
-选项读取失败显示同位置错误和重试，保留草稿；COMMAND_OPTIONS_NOT_FOUND 视为清单过期并重读清单。Mate 接口实现前，Runtime 直连的开发适配层在 Gateway 内补同一 inputType 映射、按同一 value/label 结构返回选项，组件不感知来源；该适配不是产品契约。命令规则集中消费已对账的 Session 状态，候选是否仍可用和 POST 最终准入由后端决定。
+Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不再次提交。三个命令共用同一个选项列表组件和同一个 Gateway 方法，表中差异只在执行后的结果类型。新增选项型命令时 Mate 新增提供者并标 argumentType=options，前端不改。
+选项读取失败显示同位置错误和重试，保留草稿；COMMAND_OPTIONS_NOT_FOUND 视为清单过期并重读清单。Mate 接口实现前，Runtime 直连的开发适配层在 Gateway 内补同一 argumentType 映射、按同一 value/label 结构返回选项，组件不感知来源；该适配不是产品契约。命令规则集中消费已对账的 Session 状态，候选是否仍可用和 POST 最终准入由后端决定。
 状态变为 running 时关闭修改列表并保留已选草稿，用户可清空参数后显式查询；未知状态、清单过期或恢复中暂停提交。
 
 图片中的轻度/中/高/极高属于思考强度，当前 CampusClaw 只有 boolean thinking。
@@ -371,8 +371,8 @@ type CommandDescriptor = {
   name: string
   type: "builtin" | "skill"
   description: string
-  hints?: readonly string[]
-  inputType?: "text" | "options"
+  argumentHint?: string
+  argumentType?: "text" | "options"
 }
 
 type CommandOptions = {
@@ -415,7 +415,7 @@ interface CommandGateway {
 
 - 桌面侧栏和窄屏顶部导航统一使用 `--surface-secondary`（`#F8F3F0`）、深色正文与细边框；
   选中项沿用 `--surface-selected`，说明与提示使用次要文本色。
-- 命令列表只保留不带前导 `/` 的规范名称和一句说明；不显示 type 标签、逐行 hints、装饰图标、清单标题或操作教学。
+- 命令列表只保留不带前导 `/` 的规范名称和一句说明；不显示 type 标签、逐行 argumentHint、装饰图标、清单标题或操作教学。
 - 宽屏每行名称与说明横向对齐，最小行高 44px；700px 以下改为名称、说明上下排列，允许长文本换行。
 - Composer 沿用普通消息外框，不额外标红或显示“命令模式”；所选命令使用浅灰标签，名称可点击更换，× 可删除。
 - + 菜单仅包含已接入的附件/上下文能力；参数提示只在当前命令允许文本输入时显示；右下角由共享执行状态切换发送与停止。
@@ -442,9 +442,9 @@ interface CommandGateway {
 ### 11.2 组件与可访问性
 
 - IME composing 时 Enter 不选中、不执行；键盘、触摸和鼠标得到同一规范命令。
-- 选择后显示可删除标签；仅无参调用时隐藏修改控件，model/thinking 展示选项，name/Skill 编辑文本；菜单行没有前导 Slash、type 或 hints。
+- 选择后显示可删除标签；仅无参调用时隐藏修改控件，model/thinking 展示选项，name/Skill 编辑文本；菜单行没有前导 Slash、type 或 argumentHint。
 - model 列表覆盖加载、空值、当前值不在候选、迟到响应和状态变为 running；不得要求用户猜 ID。Thinking 只展示真实开关，不伪造强度档位。
-- 所有 Skill fixture 均按 type 支持附件，附件准入与 hints 无关；fileIds 与文本同次冻结，上传失败、服务端文件拒绝与断流不丢草稿、不自动重放。
+- 所有 Skill fixture 均按 type 支持附件，附件准入与 argumentHint 无关；fileIds 与文本同次冻结，上传失败、服务端文件拒绝与断流不丢草稿、不自动重放。
 - + 菜单不含命令，打开和关闭不破坏草稿；首字符 / 发现、取消/成功恢复附件；运行中选择无参数命令后焦点不得误落停止按钮，更换后 Escape 恢复原选择及参数。
 - 第一次 Escape 关闭清单，第二次退出；空参数 Backspace 与 × 退出；未匹配不发送。
 - 选择命令不执行，第二个明确动作才执行；长按 Enter 不提交，重复点击运行只能产生一次在途请求。
@@ -454,7 +454,7 @@ interface CommandGateway {
 
 ### 11.3 集成与契约
 
-- 用契约 fixture 验证服务端顺序、type/hints 字段和完整空 Skill 清单；清单与 Session 状态无关，额外验证 running 时前端置灰 Compact/Skill 并禁止模型/思考修改。
+- 用契约 fixture 验证服务端顺序、type/argumentHint 字段和完整空 Skill 清单；清单与 Session 状态无关，额外验证 running 时前端置灰 Compact/Skill 并禁止模型/思考修改。
 - 400/404/409/422 与网络断开都保留草稿；404/409 只刷新 GET，不重放 POST。
 - Session/Model 类结果必须应用服务端完整响应，不依赖 ETag；断网后通过权威资源对账。
 - 使用同一 `model` 命令名的查询与修改 fixture 必须走不同解码分支；Schema 与预期不符时不更新 Store。
@@ -510,7 +510,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.14.0 | 2026-10-16 | 控件按 Mate 清单的 inputType 统一选择；model/thinking/mode 的当前值、候选与显示名改由 Mate 命令选项接口提供，前端不再按命令名查询模型信息或维护显示名。 |
+| 1.14.0 | 2026-10-16 | 控件按 Mate 清单的 argumentType 统一选择，argumentHint 作占位提示（替代 hints 值列表，与 pi 对齐）；model/thinking/mode 的当前值、候选与显示名改由 Mate 命令选项接口提供，前端不再按命令名查询模型信息或维护显示名。 |
 | 1.13.0 | 2026-10-16 | hints 改为固定参数值列表，thinking/mode 的选项值取自 hints；占位提示与选项显示名由前端维护。清单 stateKey 加入可选 sessionId：新对话只取智能体级命令，已有 Chat 取完整命令。 |
 | 1.12.0 | 2026-10-16 | 命令清单改为按 Agent 读取与缓存，stateKey 只含 agentId；运行状态只决定置灰，不触发重读；错误态改为 404/422。 |
 | 1.11.0 | 2026-10-04 | 命令结果消费取消版本响应头与 ETag 依赖，保留完整资源和不确定结果对账。 |

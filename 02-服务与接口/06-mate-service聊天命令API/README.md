@@ -3,14 +3,14 @@
 | 属性 | 值 |
 |---|---|
 | 文档版本 | 1.10.0 |
-| 状态 | GET Descriptor 已确认；inputType 与命令选项接口待评审；公共路径、认证、bridge 与错误映射待独立评审，待实现 |
+| 状态 | GET Descriptor 已确认；argumentType 与命令选项接口待评审；公共路径、认证、bridge 与错误映射待独立评审，待实现 |
 | 精确展示源 | [命令清单](接口契约/操作/01-list-chat-commands.json)、[命令选项](接口契约/操作/02-list-chat-command-options.json)与[公共候选上下文](接口契约/common.json) |
 | 人类评审入口 | [命令清单与命令选项](chat-command-v1-review.html) |
 | 更新日期 | 2026-10-16 |
 
 ## 1. 保留范围
 
-保留两个 GET：`GET /mate-service/v1/chats/{chatId}/commands` 的轻量字段投影（Mate 补充 inputType），以及 `GET /mate-service/v1/chats/{chatId}/commands/{commandName}/options` 的命令选项查询。
+保留两个 GET：`GET /mate-service/v1/chats/{chatId}/commands` 的轻量字段投影（Mate 补充 argumentType），以及 `GET /mate-service/v1/chats/{chatId}/commands/{commandName}/options` 的命令选项查询。
 字段确认不等于公共接口整体获批；页面上的认证、Chat 标识与错误响应仍是待重审候选。
 Runtime 清单已改为按 Agent 查询（`GET /campusclaw-service/v1/agents/{agentId}/commands`），sessionId 为可选查询参数。本投影由 Mate 先解析 Chat 所属 Agent 与映射的 Session，再带该 sessionId 读取，因此始终是完整命令；公共路径是否同步改为按 Agent 查询待定。
 
@@ -18,9 +18,9 @@ Runtime 清单已改为按 Agent 查询（`GET /campusclaw-service/v1/agents/{ag
 
 | 层 | 负责 | 不负责 |
 |---|---|---|
-| Runtime | 命令清单（name/type/description/hints）、会话可选模型 ID、会话当前设置、执行与最终准入 | 模型名称、选项显示名、按命令拼装前端数据 |
-| mate-service | 为清单补 inputType；按命令提供当前值与 value/label 候选，补模型名称和本地化显示名 | 执行准入；增加 Runtime 未给出的候选 |
-| 前端 | 按 inputType 选输入方式，展示 label、提交 value | 按命令名查询模型信息或维护显示名 |
+| Runtime | 命令清单（name/type/description/argumentHint）、会话的模型、深度思考与工作模式可选值、执行与最终准入 | 模型名称、选项显示名、按命令拼装前端数据 |
+| mate-service | 为清单补 argumentType；按命令提供当前值与 value/label 候选，补模型名称和本地化显示名 | 执行准入；增加 Runtime 未给出的候选 |
+| 前端 | 按 argumentType 选输入方式，以 argumentHint 作占位提示，展示 label、提交 value | 按命令名查询模型信息或维护显示名 |
 
 理由：模型名称只在 Mate 模型管理中，Claw 数据库没有对应字段；把按命令取数的逻辑集中在 Mate，新增选项型命令时前端无需新增适配。代价是 Mate 多维护一组选项提供者，每次打开选项多一次 Mate 请求和最多两次 Runtime 请求。
 
@@ -40,20 +40,22 @@ Help 元数据与缓存行为见 [Help 专题](../../01-总体架构/04-CampusCl
 
 前端的输入规则只有三条，不按命令名分支：
 
-| inputType | 前端行为 |
+| argumentType | 前端行为 |
 |---|---|
 | 省略 | 不带参数，选中后直接执行 |
-| `text` | 文本框；技能命令另可附文件；占位提示由前端决定 |
+| `text` | 文本框；有 argumentHint 时作为占位提示；技能命令另可附文件 |
 | `options` | 调用命令选项接口，展示 `label`、勾选 `currentValue`，把选中的 `value` 作为 arguments 提交；清空选择即无参查询 |
 
-inputType 由 Mate 的命令映射决定：name 与技能命令为 text，model、thinking、mode 为 options，其余省略。映射与会话状态无关，运行中的限制仍按[命令状态规则](../../01-总体架构/04-CampusClaw命令系统/README.md#command-state-rules)处理。
+argumentType 由 Mate 的命令映射决定：name 与技能命令为 text，model、thinking、mode 为 options，其余省略。映射与会话状态无关，运行中的限制仍按[命令状态规则](../../01-总体架构/04-CampusClaw命令系统/README.md#command-state-rules)处理。
+
+这套分工与 pi 一致：pi 的命令描述只有 `argumentHint` 占位文字，可选值由各命令的 `getArgumentCompletions` 按会话实时生成（`interactive-mode.ts:733-773`），返回 `{value, label}`。我们隔着 HTTP，无法像 pi 那样在进程内判断命令有没有补全函数，所以由 argumentType 告诉前端是否调用选项接口。
 
 ### 3.1 选项接口
 
 | 项目 | 规则 |
 |---|---|
 | Method / path | `GET /mate-service/v1/chats/{chatId}/commands/{commandName}/options` |
-| commandName | 清单中 inputType=options 的命令名；其他命令返回 404 COMMAND_OPTIONS_NOT_FOUND |
+| commandName | 清单中 argumentType=options 的命令名；其他命令返回 404 COMMAND_OPTIONS_NOT_FOUND |
 | 成功 | 200，`Cache-Control: no-store`，`result` 为 `currentValue` 与 `options[{value, label}]`；候选为空也是成功 |
 | 语言 | thinking、mode 的 label 按 Accept-Language 返回；模型名称是业务数据，各语言相同 |
 | 失败 | 400 INVALID_CHAT_ID、401 UNAUTHENTICATED、403 CHAT_ACCESS_DENIED、404 CHAT_NOT_FOUND、404 COMMAND_OPTIONS_NOT_FOUND、503 COMMAND_OPTIONS_UNAVAILABLE |
@@ -67,12 +69,13 @@ Mate 先按 chatId 校验用户访问并解析映射的 sessionId 与 agentId，
 | 命令 | currentValue 来源 | 候选来源 | label 来源 |
 |---|---|---|---|
 | model | Runtime `GET /sessions/{sessionId}/models` 的 currentModelId | 同一响应的 models，顺序保持 | Mate 模型管理中的模型名称；没有名称时回退为 modelId |
-| thinking | Runtime `GET /sessions/{sessionId}` 的 thinking，true 为 on、false 为 off | Runtime 清单中 thinking 的 hints | Mate 文案资源（开启/关闭，On/Off） |
-| mode | Runtime `GET /sessions/{sessionId}` 的 mode | Runtime 清单中 mode 的 hints | Mate 文案资源（计划/实施，Plan/Build） |
-| 清单 inputType | — | Runtime `GET /agents/{agentId}/commands?sessionId={sessionId}` | Mate 命令映射 |
+| thinking | Runtime `GET /sessions/{sessionId}/thinking-values` 的 currentValue | 同一响应的 values；当前模型不支持深度思考时只有 off | Mate 文案资源（开启/关闭，On/Off） |
+| mode | Runtime `GET /sessions/{sessionId}/modes` 的 currentValue | 同一响应的 values | Mate 文案资源（计划/实施，Plan/Build） |
+| 清单 argumentType | — | Runtime `GET /agents/{agentId}/commands?sessionId={sessionId}` | Mate 命令映射 |
 
+- Mate 不写死任何候选值：model、thinking、mode 的取值都以 Runtime 按会话返回的为准，Runtime 新增取值时 Mate 只需补显示名。
 - 模型管理只补名称，不增加或删除候选；候选范围以 Runtime 的会话可选模型为准。Mate 模型管理需要为每个模型维护显示名称，现有 [模型信息查询](../03-Model/model-capabilities.md#2-独立模型信息查询契约)只返回 modelId 与 contextWindow，名称字段是本设计新增的待实现要求。
-- 同一次选项请求内只读一次会话与一次模型列表；任一 Runtime 调用或模型管理整体不可用时返回 503，不返回部分候选。
+- 同一次选项请求内每个上游接口只读一次；任一 Runtime 调用或模型管理整体不可用时返回 503，不返回部分候选。
 - 不缓存选项：当前值随会话变化，候选随 Agent 绑定变化。
 
 ### 3.3 扩展结构
@@ -82,17 +85,17 @@ Mate 先按 chatId 校验用户访问并解析映射的 sessionId 与 agentId，
 | 类型 | 名称 | 职责 |
 |---|---|---|
 | Controller | `ChatCommandController` | `listCommands(chatId)`、`listCommandOptions(chatId, commandName)`，只做参数校验与响应包装 |
-| 应用服务 | `ChatCommandCatalogService` | 读取 Runtime 清单，用 `CommandInputTypeResolver` 为每条命令补 inputType |
+| 应用服务 | `ChatCommandCatalogService` | 读取 Runtime 清单，用 `CommandArgumentTypeResolver` 为每条命令补 argumentType |
 | 应用服务 | `ChatCommandOptionService` | 解析 Chat，按 commandName 找到提供者并返回 `CommandOptions`；找不到时抛 COMMAND_OPTIONS_NOT_FOUND |
-| 映射 | `CommandInputTypeResolver` | `resolve(descriptor)`：name 与技能命令为 TEXT，model、thinking、mode 为 OPTIONS，其余为空 |
+| 映射 | `CommandArgumentTypeResolver` | `resolve(descriptor)`：name 与技能命令为 TEXT，model、thinking、mode 为 OPTIONS，其余为空 |
 | 扩展点 | `CommandOptionProvider` | `commandName()`、`listOptions(ResolvedChat chat, Locale locale)`；每个选项型命令一个实现 |
 | 实现 | `ModelOptionProvider`、`ThinkingOptionProvider`、`ModeOptionProvider` | 分别按 §3.2 取当前值、候选和显示名 |
 | 值对象 | `ResolvedChat` | 用户可访问的 chatId 及其映射的 sessionId、agentId |
 | 值对象 | `CommandOptions`、`CommandOption` | `currentValue` + `options`；`value` + `label`，与接口字段同名 |
-| Runtime 客户端 | `RuntimeSessionClient`、`RuntimeCommandClient` | `getSession`、`listSessionModels`；`listCommands(agentId, sessionId)` |
+| Runtime 客户端 | `RuntimeSessionClient`、`RuntimeCommandClient` | `listSessionModels`、`listThinkingValues`、`listModes`；`listCommands(agentId, sessionId)` |
 | 模型名称 | `ModelDisplayNameQuery` | `findDisplayNames(modelIds)`：从 Mate 模型管理批量读名称，没有名称的 ID 不出现在结果中 |
 
-新增选项型命令只需新增一个 `CommandOptionProvider` 实现，并在 `CommandInputTypeResolver` 中标为 OPTIONS；前端与 Runtime 清单结构不变。
+新增选项型命令只需新增一个 `CommandOptionProvider` 实现，并在 `CommandArgumentTypeResolver` 中标为 OPTIONS；前端与 Runtime 清单结构不变。
 
 ## 4. 公共边界待决
 
@@ -122,14 +125,14 @@ python3 render_chat_command_v1.py
 python3 validate-chat-command-v1.py --full
 ```
 
-校验覆盖命令清单与命令选项两个 GET：清单去掉 inputType 后与 Runtime 两跳等值、inputType 符合 Mate 映射；选项的 value 与 Runtime hints 或会话模型一致、label 按语言规则区分；另查公共边界待评审标识、生成字节与无脚本展示，
+校验覆盖命令清单与命令选项两个 GET：清单去掉 argumentType 后与 Runtime 两跳等值、argumentType 符合 Mate 映射；选项的 value 与 currentValue 与 Runtime 的会话模型、深度思考或工作模式可选值一致、label 按语言规则区分；另查公共边界待评审标识、生成字节与无脚本展示，
 并拒绝废止 POST 模型与两张旧图回流。实现、公共认证和端到端执行未在本轮验证。
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.10.0 | 2026-10-16 | 清单补充 inputType，新增命令选项接口 `GET /chats/{chatId}/commands/{commandName}/options`：Mate 提供 model、thinking、mode 的 currentValue 与 value/label 候选，模型名称取自 Mate 模型管理；登记 Mate 依赖的 Runtime 接口、类名与职责。公共契约 1.8.0。 |
+| 1.10.0 | 2026-10-16 | 清单补充 argumentType，并跟随 Runtime 以 argumentHint 占位字符串替换 hints；新增命令选项接口 `GET /chats/{chatId}/commands/{commandName}/options`：Mate 提供 model、thinking、mode 的 currentValue 与 value/label 候选，取值都来自 Runtime 会话查询（模型、深度思考可选值、工作模式可选值），模型名称取自 Mate 模型管理；登记 Mate 依赖的 Runtime 接口、类名与职责。公共契约 1.8.0。 |
 | 1.9.0 | 2026-10-16 | 清单投影跟随 Runtime：Builtin 中文描述优化，hints 改为固定参数值列表；Mate 以 Chat 映射的 sessionId 调用 Runtime，投影完整命令。 |
 | 1.8.0 | 2026-10-16 | 清单投影跟随 Runtime：Builtin description 按 Accept-Language 国际化，补 en-US 示例。 |
 | 1.7.0 | 2026-10-16 | 清单投影跟随 Runtime 改为按所属 Agent 返回全部命令，不再按会话状态过滤；公共路径是否改为按 Agent 查询待定。 |

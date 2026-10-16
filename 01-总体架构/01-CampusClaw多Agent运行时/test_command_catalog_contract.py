@@ -22,7 +22,7 @@ class CommandCatalogContractTest(unittest.TestCase):
 
     def test_retired_fields_are_rejected(self):
         for field in ("kind", "input", "acceptsFiles", "acceptsArguments", "available",
-                      "unavailableCode", "allowedValues", "catalogVersion", "snapshot", "argument"):
+                      "unavailableCode", "allowedValues", "catalogVersion", "snapshot", "argument", "hints"):
             with self.subTest(field=field):
                 command = copy.deepcopy(self.idle[0])
                 command[field] = True
@@ -46,31 +46,29 @@ class CommandCatalogContractTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 validate_descriptor(command)
 
-    def test_hints_list_fixed_submit_values(self):
+    def test_argument_hint_is_a_placeholder_not_values(self):
         by_name = {command["name"]: command for command in self.idle}
-        self.assertEqual(by_name["thinking"]["hints"], ["on", "off"])
-        self.assertEqual(by_name["mode"]["hints"], ["plan", "build"])
+        self.assertEqual({name: command.get("argumentHint") for name, command in by_name.items()},
+                         {"help": None, "status": None, "name": "<name>", "model": "<model>", "thinking": "<level>",
+                          "mode": "<mode>", "compact": None, "skills": None, "skill:pdf": None})
         invalid = (
-            ("help", ["x"]),
-            ("name", ["新的会话名称"]),
-            ("model", ["gpt"]),
-            ("skill:pdf", ["说明要处理的内容"]),
-            ("thinking", ["on"]),
-            ("thinking", ["开启", "关闭"]),
-            ("thinking", [{"value": "on", "label": "开启"}, {"value": "off", "label": "关闭"}]),
-            ("mode", ["build", "plan"]),
-            ("mode", []),
+            ("help", "<x>"),
+            ("skill:pdf", "<task>"),
+            ("thinking", "<on|off>"),
+            ("thinking", ["on", "off"]),
+            ("mode", ["plan", "build"]),
+            ("model", "选择模型"),
         )
-        for name, hints in invalid:
-            with self.subTest(name=name, hints=hints):
+        for name, hint in invalid:
+            with self.subTest(name=name, hint=hint):
                 command = copy.deepcopy(by_name[name])
-                command["hints"] = hints
+                command["argumentHint"] = hint
                 with self.assertRaises(RuntimeError):
                     validate_descriptor(command)
-        for name in ("thinking", "mode"):
+        for name in ("name", "model", "thinking", "mode"):
             with self.subTest(missing=name):
                 command = copy.deepcopy(by_name[name])
-                del command["hints"]
+                del command["argumentHint"]
                 with self.assertRaises(RuntimeError):
                     validate_descriptor(command)
 
@@ -81,7 +79,7 @@ class CommandCatalogContractTest(unittest.TestCase):
                     validate_commands([command for command in self.idle if command["name"] != name])
         validate_commands([command for command in self.idle if command["type"] != "skill"])
         examples = self.runtime["responses"]
-        examples[2]["bodies"]["zh-CN"]["result"]["commands"][4]["hints"] = ["x"]
+        examples[2]["bodies"]["zh-CN"]["result"]["commands"][4]["argumentHint"] = "<x>"
         with self.assertRaises(RuntimeError):
             validate_catalog_examples(self.runtime)
 
@@ -115,8 +113,8 @@ class CommandCatalogContractTest(unittest.TestCase):
         cases = (
             ("untranslated Builtin", lambda: english(0).update(description=self.idle[0]["description"])),
             ("translated Skill", lambda: english(-1).update(description="Analyze and generate PDF documents")),
-            ("hint value translated", lambda: english(4).update(hints=["开启", "关闭"])),
-            ("hints dropped in one language", lambda: english(5).pop("hints")),
+            ("argumentHint translated", lambda: english(4).update(argumentHint="<级别>")),
+            ("argumentHint dropped in one language", lambda: english(5).pop("argumentHint")),
             ("missing en-US", lambda: self.runtime["responses"][0]["bodies"].pop("en-US")),
         )
         for label, mutate in cases:
@@ -137,15 +135,15 @@ class CommandCatalogContractTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             validate_commands(self.idle + [skill])
 
-    def test_public_input_type_follows_mate_mapping(self):
+    def test_public_argument_type_follows_mate_mapping(self):
         commands = {command["name"]: command for command in
                     self.public["responses"][0]["bodies"]["en-US"]["result"]["commands"]}
-        self.assertEqual({name: command.get("inputType") for name, command in commands.items()},
+        self.assertEqual({name: command.get("argumentType") for name, command in commands.items()},
                          {"help": None, "status": None, "name": "text", "model": "options", "thinking": "options",
                           "mode": "options", "compact": None, "skills": None, "skill:pdf": "text"})
-        for mutate in (lambda: commands["model"].pop("inputType"),
-                       lambda: commands["help"].update(inputType="text"),
-                       lambda: commands["skill:pdf"].update(inputType="options")):
+        for mutate in (lambda: commands["model"].pop("argumentType"),
+                       lambda: commands["help"].update(argumentType="text"),
+                       lambda: commands["skill:pdf"].update(argumentType="options")):
             with self.subTest(mutate=mutate):
                 self.setUp()
                 commands = {command["name"]: command for command in
@@ -154,7 +152,7 @@ class CommandCatalogContractTest(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     validate_projection_pair(self.runtime, self.public)
         with self.assertRaises(RuntimeError):
-            validate_descriptor(dict(self.idle[3], inputType="options"))
+            validate_descriptor(dict(self.idle[3], argumentType="options"))
 
     def test_missing_state_example_and_cross_boundary_drift(self):
         self.runtime["responses"] = self.runtime["responses"][1:]

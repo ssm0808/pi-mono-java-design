@@ -1,0 +1,98 @@
+{
+  "operation": {
+    "shortName": "查询工作模式可选值",
+    "operationKey": "ListSessionModes",
+    "method": "GET",
+    "path": "/sessions/{sessionId}/modes",
+    "summary": "列出 Session 的工作模式可选值",
+    "description": "查询指定会话工作模式的当前值和可选值，用于展示 /mode 的选择列表。当前可选值为 plan、build；Runtime 是取值的唯一来源，新增模式时调用方不需要改动。值与 /mode 命令参数相同，与语言无关；显示名由调用方决定。",
+    "parameters": [
+      {
+        "$ref": "parameters.sessionId"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体。",
+      "example": null
+    },
+    "responses": [
+      {
+        "id": "200-modes",
+        "status": "200",
+        "label": "OK",
+        "summary": "返回会话当前模式和全部可选模式。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "build",
+              "values": [
+                "plan",
+                "build"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "status": "400",
+        "label": "Bad Request",
+        "summary": "sessionId 不符合标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "sessionId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The sessionId format is invalid."
+          }
+        }
+      },
+      {
+        "status": "404",
+        "label": "Not Found",
+        "summary": "Session 不存在或已删除。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "headerReview": {
+      "status": "confirmed",
+      "confirmedAt": "2026-09-22",
+      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输 Header；不改变上游授权，不拒绝额外收到的 Header。"
+    },
+    "baselineAlignment": {
+      "status": "已确认",
+      "confirmedAt": "2026-10-16",
+      "decision": "与 Codex 的 collaborationMode/list 对齐：工作模式的可选值由服务端单独查询，不写在命令清单里。"
+    }
+  }
+}
