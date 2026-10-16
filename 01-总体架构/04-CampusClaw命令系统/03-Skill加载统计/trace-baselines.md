@@ -61,7 +61,7 @@ Trace 表示一次执行及其步骤关系，span 表示其中一个操作；met
 
 | 所属设计与具体位置 | 已有约束 | 对统计的影响 |
 |---|---|---|
-| `04-命令与技能/02-技能命令/README.md` §4；Slash 主设计 §3.4 | Skill 通过不可变快照及共享消息受理链执行；内部保留恢复所需正文，公共投影保留原调用 | 显式选用在 Skill 应用服务可观测，无需假装它经历 Read |
+| `01-总体架构/04-CampusClaw命令系统/02-技能命令/README.md` §4；Slash 主设计 §3.4 | Skill 通过不可变快照及共享消息受理链执行；内部保留恢复所需正文，公共投影保留原调用 | 显式选用在 Skill 应用服务可观测，无需假装它经历 Read |
 | `01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md` §2、B09/B14 | sourceEventId 关联原 user.message，确认续跑不换根；完整事件权威、preview 不持久化 | 先复用业务关联，不能为每次采集生成一个无关联 UUID 冒充任务身份 |
 | `01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md` §1、§2.2、§7 | Read 是通用工具；模型通过 offset/limit 分页；activate_skill 属于删除边界 | 不为统计改成 Skill 专用 Read，也不因 OpenCode 有 skill 工具就直接恢复新工具 |
 | `01-总体架构/05-CampusClaw调用日志/README.md` §3.2 | 现有简化日志未建设 traceId/MDC、完整成功访问日志或采集平台 | 不能宣称已有 trace 库可直接 COUNT；增加 tracing 属于架构扩展，应单独识别依赖、采样、权限和保留代价 |

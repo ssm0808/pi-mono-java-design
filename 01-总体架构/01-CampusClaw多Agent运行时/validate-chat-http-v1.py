@@ -28,11 +28,19 @@ HTML_PATH = ROOT / "chat-api-review.html"
 DESIGN_PATH = ROOT / "chat-http-v1-design.md"
 CONTRACT_ROOT = ROOT / "接口契约"
 SLASH_DESIGN_PATHS = (
-    REPOSITORY_ROOT / "04-命令与技能/00-Slash-Command通用模块/README.md",
-    REPOSITORY_ROOT / "04-命令与技能/01-内置命令/README.md",
-    REPOSITORY_ROOT / "04-命令与技能/02-技能命令/README.md",
+    REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/README.md",
+    REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/01-内置命令/README.md",
+    REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/02-技能命令/README.md",
 )
-HELP_ROOT = REPOSITORY_ROOT / "04-命令与技能/01-内置命令/Help-Agent使用指南"
+
+
+def topic_diagram(design_path: Path) -> Path:
+    """Topics under 01-总体架构 keep diagram.puml beside README; older topics use 设计图/."""
+    flat = design_path.parent / "diagram.puml"
+    return flat if flat.exists() else design_path.parent / "设计图/diagram.puml"
+
+
+HELP_ROOT = REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南"
 HELP_RESULT_FIELDS = {"displayName", "description", "useCases"}
 EXPECTED_OPERATION_COUNT = 7
 EXPECTED_OPERATIONS = {
@@ -346,7 +354,7 @@ def validate_response_contract(
     elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
     elif key == ("GET", "/agents/{agentId}/commands"):
-        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in (ROOT.parents[1] / "04-命令与技能/00-Slash-Command通用模块/README.md").read_text(encoding="utf-8"),
+        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in SLASH_DESIGN_PATHS[0].read_text(encoding="utf-8"),
                 "Command catalog must reflect unified Builtin and Skill ownership")
         validate_catalog_examples(operation)
         for status, code in (("400", "INVALID_AGENT_ID"), ("404", "AGENT_NOT_FOUND"),
@@ -361,7 +369,7 @@ def validate_response_contract(
                 commands = response["bodies"]["zh-CN"]["result"]["commands"]
                 validate_help_descriptor(next(command for command in commands if command["name"] == "help"))
     elif key == ("POST", "/sessions/{sessionId}/command"):
-        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in (ROOT.parents[1] / "04-命令与技能/00-Slash-Command通用模块/README.md").read_text(encoding="utf-8"),
+        require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in SLASH_DESIGN_PATHS[0].read_text(encoding="utf-8"),
                 "Command execution must reflect unified Builtin and Skill ownership")
         for phrase in ("只在内存中保留到本次命令处理", "Mate tool execute",
                        "不写入 Session、事件或日志", "工具发现", "Active Holder"):
@@ -588,7 +596,7 @@ def validate_source_deduplication() -> None:
 
 def diagram_sources() -> list[Path]:
     sources = sorted((ROOT / "设计图").glob("*/diagram.puml"))
-    sources.extend(path.parent / "设计图/diagram.puml" for path in SLASH_DESIGN_PATHS)
+    sources.extend(topic_diagram(path) for path in SLASH_DESIGN_PATHS)
     sources.append(HELP_ROOT / "diagram.puml")
     require(sources, "No topic PlantUML sources found")
     require(not (ROOT / "diagram.puml").exists(), "Legacy aggregate diagram.puml still exists")
@@ -677,7 +685,7 @@ def validate_command_wording(models: list[dict[str, Any]]) -> None:
         require("目录" not in path.read_text(encoding="utf-8"),
                 f"Slash Command design must use explicit wording: {path.relative_to(REPOSITORY_ROOT)}")
     ownership_paths = (*SLASH_DESIGN_PATHS, DESIGN_PATH, ROOT / "README.md",
-                       REPOSITORY_ROOT / "README.md", REPOSITORY_ROOT / "04-命令与技能/README.md")
+                       REPOSITORY_ROOT / "README.md", REPOSITORY_ROOT / "01-总体架构/README.md")
     retired_ownership = ("Skill Command 由其他同事", "Skill 执行由其他同事", "Skill 由其他同事",
                          "Skill 由同事", "真实 Skill 执行由同事", "Skill 执行由同事",
                          "同事并行实现执行定义", "真实执行定义由同事", "Skill 开发线",
@@ -689,7 +697,7 @@ def validate_command_wording(models: list[dict[str, Any]]) -> None:
             require(wording not in active,
                     f"Superseded Command ownership in {path.relative_to(REPOSITORY_ROOT)}: {wording}")
     for path in SLASH_DESIGN_PATHS:
-        source = (path.parent / "设计图/diagram.puml").read_text(encoding="utf-8")
+        source = topic_diagram(path).read_text(encoding="utf-8")
         require("parallel work" not in source, "Command diagrams must reflect unified implementation ownership")
     design_text = DESIGN_PATH.read_text(encoding="utf-8")
     contract_text = json.dumps(models, ensure_ascii=False)

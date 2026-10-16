@@ -256,7 +256,7 @@ Session 是配置权威资源。当前内部契约以统一 POST 更新名称、
 | `POST /campusclaw-service/v1/sessions/{sessionId}/events` | 四输入上增加 `user.question_answer`；问题回答、计划审核复用接受回执和对应续跑 SSE |
 | `GET /campusclaw-service/v1/sessions/{sessionId}/events` | 完整计划、问题、回答、审核、两种原因的模式事件与任务更新均已登记到共享事件源 |
 
-不增加 `/plans` CRUD、单独批准 endpoint、独立 Session 订阅流、公共 Run/Execution ID 或幂等键。模式按钮调用 Session 更新接口，Slash 使用 [`/mode`](../../04-命令与技能/01-内置命令/README.md#mode-command) 查询或切换 plan/build；两入口共享模式校验与事务，mode 命令待实现，均不代替方案批准；普通消息接口仍不解析 Slash 文本。
+不增加 `/plans` CRUD、单独批准 endpoint、独立 Session 订阅流、公共 Run/Execution ID 或幂等键。模式按钮调用 Session 更新接口，Slash 使用 [`/mode`](../04-CampusClaw命令系统/01-内置命令/README.md#mode-command) 查询或切换 plan/build；两入口共享模式校验与事务，mode 命令待实现，均不代替方案批准；普通消息接口仍不解析 Slash 文本。
 
 ### 5.1 审核事务与事件顺序
 

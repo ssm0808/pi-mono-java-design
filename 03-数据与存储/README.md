@@ -10,7 +10,7 @@
 | 公共事件、执行控制与交互决定 | [表与模块映射](Claw数据库设计.md#table-index) | [Runtime / Events](../01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md) |
 | Mate 归属/权限与 Claw 运行数据 | [职责边界](Claw数据库设计.md#mate-ownership) | [Mate 会话交接](../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership) |
 | 定时任务与 Session 扩展 | [定时任务设计 §3.2](../01-总体架构/08-CampusClaw定时任务/README.md#persistence-lifecycle) | [定时任务](../01-总体架构/08-CampusClaw定时任务/README.md) |
-| 工具结果、父子关系和累计投影 | [待实现增量](Claw数据库设计.md#pending-changes) | [统一历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) · [Skill 统计](../04-命令与技能/03-Skill加载统计/README.md) |
+| 工具结果、父子关系和累计投影 | [待实现增量](Claw数据库设计.md#pending-changes) | [统一历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) · [Skill 统计](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md) |
 | 删除、恢复与部署 SQL | [生命周期](Claw数据库设计.md#lifecycle) · [SQL 文件](Claw数据库设计.md#sql-files) | [Session 生命周期](01-会话记忆GaussDB/README.md#65-删除-session) |
 | 自动与手工压缩、用量及恢复 | [会话历史表](Claw数据库设计.md#t_session_entries) | [压缩与恢复](01-会话记忆GaussDB/compaction.md) |
 | Mate Agent 元数据 | 外部服务独立数据库，不属于 Claw 安装表 | [Agent 元数据设计](02-Agent元数据GaussDB/README.md) |

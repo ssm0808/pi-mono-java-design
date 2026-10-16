@@ -43,7 +43,7 @@ GET 返回普通 JSON。结果使用
 
 任务更新已实现并登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java `8c5fda1d` 已具备 TodoUpdate、RuntimeTodoEventMapper 与显式任务事件分支；本次静态核验不等于测试通过。Mate 公共桥接需单独同步后开放。
 
-[Skill 使用统计](../../04-命令与技能/03-Skill加载统计/README.md)复用内部完整工具结果，每次真实成功 Skill 调用首次提交时同事务加一，不新增公共事件。三入口统一持久化及 Subagent 独立历史由[统一历史](unified-event-persistence.md)维护；父会话只保留摘要，子历史按自己的 Session 授权读取。累计不是公共事件条数，恢复/复制不计数；精确 from/to 与日表仍待核实。新增统一链路待实现。
+[Skill 使用统计](../04-CampusClaw命令系统/03-Skill加载统计/README.md)复用内部完整工具结果，每次真实成功 Skill 调用首次提交时同事务加一，不新增公共事件。三入口统一持久化及 Subagent 独立历史由[统一历史](unified-event-persistence.md)维护；父会话只保留摘要，子历史按自己的 Session 授权读取。累计不是公共事件条数，恢复/复制不计数；精确 from/to 与日表仍待核实。新增统一链路待实现。
 
 ## 2. 历史返回什么
 

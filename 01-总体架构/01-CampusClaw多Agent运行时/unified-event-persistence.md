@@ -2,7 +2,7 @@
 
 版本：1.4.0 · 2026-10-15 · 状态：统一受理、Subagent 持久化、逐工具提交及统计投影均待实现。
 
-[Runtime 主设计](README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#pending-changes) · [源码证据](unified-event-persistence-evidence.md) · [定时任务](../08-CampusClaw定时任务/README.md#normal-acceptance) · [Skill 统计](../../04-命令与技能/03-Skill加载统计/README.md) · [Session 存储](../../03-数据与存储/01-会话记忆GaussDB/README.md)
+[Runtime 主设计](README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#pending-changes) · [源码证据](unified-event-persistence-evidence.md) · [定时任务](../08-CampusClaw定时任务/README.md#normal-acceptance) · [Skill 统计](../04-CampusClaw命令系统/03-Skill加载统计/README.md) · [Session 存储](../../03-数据与存储/01-会话记忆GaussDB/README.md)
 
 ## 1. 要解决的业务问题
 
@@ -136,7 +136,7 @@ STOP_REQUESTED 不拒绝同一原执行已在途调用的真实结果；实际�
 
 保留一张累计表，是因为 Session 删除后仍要保留累计次数。若只做 COUNT(entries)，它只能回答“当前保留历史中的次数”。累计表的唯一加一时机是**新 LIVE 成功结果首次插入的同一事务**；重复提交和历史读取不进入更新。去掉专用 Observer、observationId、队列、独立统计事实表及统计所需 JSONL/执行血缘，不删除真正的执行控制与授权关系。
 
-这会把一条累计更新带入工具历史事务：任一写失败则全部回滚并停止推进，增加锁等待和工具延迟；它不再是允许队列丢失的 best-effort 方案。该耦合换来没有第二套投递/重试/对账。热点 Skill 与数据库故障必须压测；如果将来要求统计故障完全隔离，需要另行评估持久增量投影和清理水位，不能悄悄退回易丢内存队列。详细查询、删除和切换规则由 [M05](../../04-命令与技能/03-Skill加载统计/README.md)维护。
+这会把一条累计更新带入工具历史事务：任一写失败则全部回滚并停止推进，增加锁等待和工具延迟；它不再是允许队列丢失的 best-effort 方案。该耦合换来没有第二套投递/重试/对账。热点 Skill 与数据库故障必须压测；如果将来要求统计故障完全隔离，需要另行评估持久增量投影和清理水位，不能悄悄退回易丢内存队列。详细查询、删除和切换规则由 [M05](../04-CampusClaw命令系统/03-Skill加载统计/README.md)维护。
 
 ## 7. 保留、删除与失败对账
 

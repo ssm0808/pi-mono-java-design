@@ -65,7 +65,7 @@ CampusClaw 采用独立历史和父侧摘要的职责分离；本库事务、权
 | `tool/agent/SubagentExecutionService.java:runChild/projectProgress` | 直接 Factory → prompt.join，取消桥、进度、最后文本 | 独立持久子 Session、关系、启动防重、授权与可靠收尾 |
 | `tool/cron/ManagedCronSessionRunner.java:execute`；`modules/cron/src/main/java/com/campusclaw/cron/CronJobExecutor.java` | Factory → prompt，Run JSONL 另存 | 按最新 Cron 设计原子受理并复用 Runtime；JSONL 不代替完整历史 |
 
-PR #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 的 Skill 追溯、同步统计和测试是独立开发分支证据，详情见[M05](../../04-命令与技能/03-Skill加载统计/source-evidence.md)。不能将其视为 main 的新统一历史能力。
+PR #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 的 Skill 追溯、同步统计和测试是独立开发分支证据，详情见[M05](../04-CampusClaw命令系统/03-Skill加载统计/source-evidence.md)。不能将其视为 main 的新统一历史能力。
 
 ## 6. 尚未验证
 

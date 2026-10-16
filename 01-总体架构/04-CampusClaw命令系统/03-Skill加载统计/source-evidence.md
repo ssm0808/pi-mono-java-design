@@ -1,6 +1,6 @@
 # Skill 统计：源码与目标差距
 
-版本 5.0.0 · 2026-10-10。[主设计](README.md)维护当前目标；完整历史的新基线与路径见[统一证据](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)。
+版本 5.0.0 · 2026-10-10。[主设计](README.md)维护当前目标；完整历史的新基线与路径见[统一证据](../../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)。
 
 ## 当前核验归属
 

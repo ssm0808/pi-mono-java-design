@@ -60,7 +60,7 @@
 `FileOperationTracker` 只识别精确 PascalCase `Read` ToolCall，按路径去重、排序，并在
 重复压缩时继承旧摘要的 `<read-files>`；它不改变 Read 的输入、输出或执行模式。
 Slash Command 是独立应用模块，所有命令都不会出现在模型工具清单中。命令的注册、
-HTTP 和执行规则见 [Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)。
+HTTP 和执行规则见 [Slash Command 通用模块](../04-CampusClaw命令系统/README.md)。
 
 ## 2. 本地只读工具
 
