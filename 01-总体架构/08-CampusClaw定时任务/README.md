@@ -6,10 +6,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.60.0 |
-| 更新日期 | 2026-10-15 |
+| 文档版本 | 0.61.0 |
+| 更新日期 | 2026-10-16 |
 | 模块 | M10 · 调度与并发治理 |
-| 产品范围 | 每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；不选择或追加已有 Session |
+| 产品范围 | 接口配置的任务每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；对话中由 Cron 工具创建的任务关联当前会话，每次运行在该会话追加一轮 |
 | 设计状态 | 目标设计，待实现。Java PR #332 已实现调度表、Mapper 与同库受理，尚未合并，与目标的差异见 [§3.2.5](#schedule-pr-diff)；Mate 归属登记、调度扫描及其余能力待实现；main 上已观察实现仅为进程内 Cron |
 | 源码基线 | Claw Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`（2026-10-05 隔离 fetch）；PR #332 `e9d31e8888a81b7fe95071e705482bb16fa10476`（2026-10-10 核验，见 [§3.2.7](#source-baseline)） |
 | 主基线 | Claude Managed Agents Scheduled deployments 公开 Beta 契约，最近核对 2026-10-08；无服务端源码 |
@@ -46,13 +46,11 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 | # | 问题 | 影响 | 首版做法 | 归属 |
 |---|---|---|---|---|
 | <a id="todo-t2"></a>T2 | Claw 与 Mate 互相调用时如何认证对方；统一账号如何配置；access-token 有效期多长 | 不定则无法联调；有效期影响是否需要缓存 Token | Mate 新增接口仍为[内部草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)；每批工具调用取一次 Token，不缓存 | Claw 与 Mate 共同 |
-| <a id="todo-t7"></a>T7 | Mate 任务配额准入与 Session 归属登记的内部契约 | 归属登记未定则受理流程无法联调 | 列表由 Mate 拉取全部后自行过滤，不传获准集合；归属登记保留在 Mate | Mate |
+| <a id="todo-t7"></a>T7 | Mate 任务配额准入与 Session 归属登记的内部契约 | 归属登记未定则受理流程无法联调 | 列表由 Mate 拉取全部后自行过滤，不传获准集合；归属登记保留在 Mate；对话中创建的任务按 sessionId 对应的对话判断归属（[§3.13](#chat-created-schedule)），Mate 侧待设计 | Mate |
 | <a id="todo-t8"></a>T8 | Mate 管理入口在调用 Claw 前后的处理（权限、配额、任务与用户关联） | 只影响 Mate 侧；Claw 侧逻辑已定 | Claw 只接收可信服务调用 | Mate |
 | <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，任务一直被占用，后续计划全部遇忙跳过 | 需人工处置才能恢复 | 不自动恢复。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件，中断终态走 D11 的同一终态提交，Run 随之结束；② 执行期写入与工具调用前检查执行未终止，防止恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | Runtime |
 | <a id="todo-t10"></a>T10 | 是否在 Claw 的 t_schedule（及 Run、Session）增加 userId，使列表直接按用户查询；需先确定任务仅创建者可见还是同范围共享，以及与 Mate 归属的同步规则 | 任务量增长后 Mate 全量拉取的读取量随之增长 | 方法 A：Mate 拉取全部后过滤（[D9](#key-decisions)） | Claw 与 Mate 共同 |
 | <a id="todo-t11"></a>T11 | Agent 删除、启停用与定时任务的数据一致性：保存、受理、取消暂停时是否校验 Agent，Agent 不可用时任务如何处理 | 关联的 Agent 已删除或禁用时，自动运行每次失败在 Runtime 准备阶段，只留下失败 Run | 不校验 Agent 是否存在和启停用，正常受理；准备失败按通用错误记录 Run，不自动暂停（[D12](#key-decisions)） | Agent 管理与 Claw 共同 |
-| <a id="todo-t13"></a>T13 | 会话内创建与管理任务：Cron 工具写操作如何经 Mate 暴露的接口完成授权与 user_id 关联 | 首版模型不能在会话中直接建任务 | Cron 工具只读（[D13](#key-decisions)） | Mate 与 Claw 共同 |
-| <a id="todo-t14"></a>T14 | Cron 工具按用户隔离：只读的 list、status、runs 只返回当前用户的任务与 Run | 首版同一 Agent 的任务对使用该 Agent 的所有会话可见，用户能看到他人配置的任务 | 按当前会话所用 Agent 过滤，不按用户过滤（[D13](#key-decisions)）；需要 Claw 能取得当前用户，与 [T10](#todo-t10) 一并设计 | Claw 与 Mate 共同 |
 
 <a id="implementation-verification"></a>
 
@@ -89,6 +87,8 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 |---|---|---|
 | <a id="todo-t1"></a>T1 | 运行失败是否自动暂停整个 Schedule | 2026-10-15 改为首版不自动暂停，见 [D12](#key-decisions) |
 | <a id="todo-t12"></a>T12 | 凭据按根执行发起方切换的机制，以及用户在定时 Session 中继续对话的规则 | 2026-10-15 评审确定在本文设计，见 [§3.11](#session-credentials) |
+| <a id="todo-t13"></a>T13 | 会话内创建与管理任务 | 2026-10-16 确定由 Cron 工具在 Claw 内直接创建，任务关联当前会话，创建、修改、删除需用户确认，不经 Mate，见 [§3.13](#chat-created-schedule) |
+| <a id="todo-t14"></a>T14 | Cron 工具按用户隔离 | 2026-10-16 确定 Cron 工具只管理当前会话创建的任务，会话只属于一个用户，因此无需按用户过滤，见 [§3.12](#cron-tool) |
 
 ### 需求信息
 
@@ -107,8 +107,8 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 | Claw | CampusClaw Agent 服务，本设计的实现方 |
 | Mate | 用户、组织、租户、资源归属与权限的维护方，也是可信接口定义、Session 归属和定时执行统一账号凭据的提供方；运营人员通过 Mate 管理入口操作定时任务 |
 | Schedule | 长期保存的任务配置：Agent 关联、纯文本 prompt、可选 Cron 规则 |
-| Run | 一次自动或手动触发的受理记录；只表示是否成功创建 Session，不表示业务成败 |
-| Session | 每次 Run 新建的独立会话，承载消息、工具结果与根执行 |
+| Run | 一次自动或手动触发的受理记录；只表示是否成功受理，不表示业务成败 |
+| Session | 接口配置的任务每次 Run 新建的独立会话，或对话中创建的任务所关联的会话；承载消息、工具结果与根执行 |
 | 根执行（root execution） | Session 内本次运行的顶层执行，是执行终态的最终决定方 |
 | occurrence | 一个具体的自动计划时刻，以 `(schedule_id, scheduled_at)` 唯一标识 |
 | 计划游标 | `upcoming_run_at`，下一次自动计划时刻；领取或跳过一次后推进到下一次 |
@@ -127,7 +127,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 |---|---|---|---|
 | R1 | 运营人员可创建、查看、修改、删除定时任务配置，浏览器无需保持打开 | 功能 | §4.2 |
 | R2 | 时间规则仅支持 Spring 六字段 Cron，timezone 省略时默认 Asia/Shanghai；可省略规则表示仅手动运行 | 功能 | §4.3 |
-| R3 | 每次自动或手动运行新建独立 Session，复用关联的 Agent 定义，不追加到已有会话 | 功能 | [§3.9](#new-session-per-run) |
+| R3 | 接口配置的任务每次自动或手动运行新建独立 Session，复用关联的 Agent 定义；对话中创建的任务每次在创建它的会话中追加一轮 | 功能 | [§3.9](#new-session-per-run)、[§3.13](#chat-created-schedule) |
 | R4 | 支持立即运行、暂停、取消暂停；暂停只阻止未来自动受理 | 功能 | §4.4.7～§4.4.9 |
 | R5 | 用户能看到下一次计划时间、每次是否成功启动、执行结果入口和失败原因 | 功能 | §4.3.3、§4.4.11 |
 | R6 | 删除 Schedule 同时删除其 Run，保留已生成的 Session；删除不取消已受理执行 | 功能 | §4.4.6、§4.4.11 |
@@ -136,6 +136,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 | R9 | 定时执行统一使用 Mate 配置的同一个账号，运行时向 Mate 取 access-token；Claw 不保存凭据引用或秘密 | 安全 | [§5.1](#security) |
 | R10 | 多副本部署下同一 occurrence 只受理一次 | 稳定性 | [§3.5](#scheduled-run-sequence) |
 | R11 | 用户、资源归属与权限由 Mate 维护；Claw 不保存用户范围或 owner，新 Session 受理前由 Mate 登记归属 | 安全 | [§5.1](#security) |
+| R12 | 用户可以在对话中让 Agent 通过 Cron 工具创建、修改、删除、暂停、恢复和查看本对话的定时任务；创建、修改、删除需用户确认；对话删除时其任务一起删除；到点时对话正忙则跳过 | 功能 | [§3.13](#chat-created-schedule) |
 
 ## 2. 整体方案
 
@@ -152,6 +153,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 | BU5 | 园区运营人员 | 临时停止、之后恢复自动运行 | 暂停期间不再自动运行，恢复后从下一个计划时刻继续 |
 | BU6 | 园区运营人员 | 查看已有任务、每次运行及其结果 | 看到任务列表与下一次计划时间；运行记录链接到对应会话，从会话读取巡逻结论和工具证据 |
 | BU7 | 园区运营人员 | 不再需要该任务 | 任务及运行记录删除，已生成的会话保留 |
+| BU8 | 值班人员 | 在对话中让 Agent 设定“每天 22:00 做一次视频巡逻检查，结果发在这里” | 确认后任务关联这段对话；每天到点在该对话中追加一轮，第二天在同一对话查看结果并继续追问 |
 
 ### 2.2 整体时序
 
@@ -166,7 +168,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 
 ![定时任务整体时序](scheduled_task_overview.svg)
 
-[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L311)
+[原尺寸 SVG](scheduled_task_overview.svg) · [PlantUML 源码](diagram.puml#L325)
 
 | 阶段 | 详细时序 |
 |---|---|
@@ -183,7 +185,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | # | 要解决的问题 | 基线怎么做 | 园区业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
 | D1 | 怎样让用户分清“任务启动了”和“业务做完了”？ | Claude 把 Deployment（配置）、DeploymentRun（一次触发）、Session（执行内容）分开，Run 只记录 Session 创建结果；现有 CampusClaw CronEngine 是 JSON Job 加 JSONL 运行日志 | 模型自然结束不等于巡检或工单处理成功，业务结论必须来自 Session 里的输出和工具证据 | 采用三类资源分离：Schedule / Run / Session；Run 只回答“是否成功受理” | 多一层资源，看业务结果要从 Run 跳到 Session |
-| D2 | 每次定时运行放进哪个会话？ | Claude 每次新建 Session；OpenCode 的 GitHub schedule 入口每次新建 Session；DSH 的提醒固定投递回创建它的原 Session；OpenAI 宿主 Scheduled tasks 支持新聊天和继续原聊天两种模式 | 同一任务每天产生独立结论，要避免与人工聊天争用同一会话；多一种目标模式就多一套关联、忙闲和授权规则 | 每次新建独立 Session，复用关联的 Agent 定义，不提供 target / sessionId | 不能延续聊天上下文，需要昨日结论时必须显式查询业务记录 |
+| D2 | 每次定时运行放进哪个会话？ | Claude 每次新建 Session；OpenCode 的 GitHub schedule 入口每次新建 Session；DSH 的提醒固定投递回创建它的原 Session；OpenAI 宿主 Scheduled tasks 支持新聊天和继续原聊天两种模式 | 接口配置的任务每天产生独立结论，要避免与人工聊天争用同一会话；用户在对话中让 Agent 建的任务，结果应回到这段对话，且对话只属于一个用户，可直接用会话归属代替单独的任务归属 | 按创建入口分两种：接口配置的任务每次新建独立 Session，复用关联的 Agent 定义，接口不提供 target / sessionId；对话中由 Cron 工具创建的任务关联当前会话，每次运行在该会话追加一轮，会话正忙则跳过（2026-10-16 确定，见 [§3.13](#chat-created-schedule)） | 两条受理路径；接口配置的任务不能延续聊天上下文；对话中的任务上下文持续增长、与人工对话共用会话，用户正在对话时到点会跳过 |
 | D3 | 谁决定“这次该不该跑”，多副本下如何不重复？ | Claude 未公开内部实现；OpenCode 把计时交给外部 GitHub Actions；DSH 和 pi pico3 都在单进程内计时（DSH 用串行队列处理投递与删除） | 企业部署多副本；Session 创建和首条消息必须与 Run 一起成功或一起失败，崩溃后要能对账 | GaussDB 是调度状态的最终决定方，定时器只负责唤醒扫描；各副本并行扫描，以行锁和唯一约束防重；同库事务内原子受理 Run、Session、首条消息和根执行 | 首版要求 Schedule、Run 与 Runtime 同库；查询量随副本数增加，需要压测 |
 | D4 | 进程崩溃、停机或回执丢失后，这次要不要补跑或重跑？ | Claude 公开资料未给出完整重叠与故障策略；DSH 的固定间隔只取最新到期项，不逐个补历史；pi pico3 在进程结束后按当前时间加间隔推进 | 工单、门禁、告警处置等工具有真实副作用，重复执行比漏执行更危险 | 不补漏跑、遇忙跳过、失败与故障不重跑；结果未知时保持占用并对账 | 故障时可能漏跑一次；结果未知需要对账或人工处置，自动恢复见 T9 |
 | D5 | 用户用什么方式描述“什么时候跑”？ | Claude 只支持五字段 POSIX Cron，时区必填；DSH 支持 Cron（时区必填）、单次与固定间隔；pi pico3 只有毫秒级 notBefore/every，没有日历时区；OpenCode 用 GitHub Actions 的五字段 Cron，默认 UTC | 园区任务以“工作日 08:00”这类日历规则为主，主要在中国时区；Java 工程已有 Spring CronExpression，不希望新增依赖 | 仅支持 Spring 六字段 Cron；timezone 可省略，默认 Asia/Shanghai 并保存回显 | 不支持单次任务和严格固定间隔；Claude 表达式不能直接复制，日与星期组合语义也不同 |
@@ -194,7 +196,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | D10 | 定时执行时没有用户请求，Claw 用什么权限调用业务工具？ | Claude 部署引用 workspace 范围的 Vault 凭据；普通对话由用户请求带 Header | 用户登录 Token 会过期，且没有确认过的刷新或代签接口；不能保存用户密码 | 用户权限只在配置时由 Mate 检查；运行时统一使用 Mate 配置的同一个账号，模型每批需要凭据的工具调用前，Claw 无入参向 Mate 取一次 access-token（2026-10-13 评审确定） | 所有任务权限相同；创建者失去权限或离职后任务仍照常运行；每批工具调用多一次 Mate 请求 |
 | D11 | 执行结束后，Run 怎么知道并释放任务？ | 未核验各基线的同类机制 | 同一任务不并发，Run 不结束后续计划就全部遇忙跳过；实例可能在任意时刻失联 | 写根执行终态的同一数据库事务内，经 Runtime 通用终态扩展点结束本次 Run（按 execution_id 条件更新 finished_at）；不用提交后回调，也不轮询（2026-10-14 评审确定） | Runtime 需新增事务内扩展点；Run 需 execution_id 索引；实例宕机写不进终态时仍靠 T9 |
 | D12 | 运行失败要不要自动暂停任务？ | Claude 只对不可恢复的建 Session 错误（如 Agent、环境、Vault 已归档）首次即自动暂停，限流等临时错误只记失败 Run；DSH 投递失败只记日志、任务保持 active；pi、OpenCode 产品内无定时任务，Codex 调度器未开源（2026-10-14 核验，见[证据](source-evidence.md#auto-pause-baseline-evidence)） | 不改配置就必然再次失败的错误，继续每次触发只会产生无意义的失败记录；临时故障不应让任务停下来；业务执行失败的结论在 Session 里 | 首版不自动暂停：任何运行失败都只记录失败 Run，任务保持原状态；暂停只由人工发起，恢复需显式取消暂停，不补跑。Agent 是否存在和启停用暂不校验，正常受理，Agent 不可用时在 Runtime 准备阶段按通用错误失败；Agent 启停用与数据一致性另开设计（T11）（2026-10-15 评审确定，替代 2026-10-14 的 agent_unavailable_error 自动暂停） | 不采用旧 Cron 连续三次失败禁用；Agent 已删除或禁用时，自动运行每次都会失败并累积失败 Run，需要监控发现或人工暂停 |
-| D13 | 模型在会话里能否通过 Cron 工具创建、删除、暂停或立即运行任务？ | Claude 的定时部署由 API 与控制台管理，未提供会话内创建入口；旧 CronTool 支持全部写操作 | 用户授权与任务的 user_id 关联在 Mate（D9）；Cron 工具由模型直接调用，前面没有 Mate 管理入口；Claw 不回调 Mate 授权（[§5.1](#security)） | 首版 Cron 工具只读，只保留 list、status、runs，只返回当前会话所用 Agent 的任务与 Run；create、update、delete、pause、unpause、run 不注册给模型，写操作只走 Mate 管理入口。以后需要会话内创建时，由 Cron 工具调用 Mate 暴露的接口，Mate 完成授权与 user_id 关联后再调用 Claw（T13）（2026-10-15 评审确定） | 用户不能让模型直接建任务，需到 Mate 页面配置；首版同一 Agent 的任务对使用该 Agent 的会话都可见，不按用户过滤，用户隔离待 T14 |
+| D13 | 模型在会话里能否通过 Cron 工具创建、删除、暂停或立即运行任务？ | Claude 的定时部署由 API 与控制台管理，未提供会话内创建入口；旧 CronTool 支持全部写操作；DSH 的提醒由会话内创建并投递回原会话 | 用户授权与任务的 user_id 关联在 Mate（D9）；Cron 工具由模型直接调用，前面没有 Mate 管理入口；Claw 不回调 Mate 授权（[§5.1](#security)）；用户正在对话中，可以当场确认 | Cron 工具提供 list、status、runs、create、update、delete、pause、unpause，只能查看和管理当前会话创建的任务；create、update、delete 需用户确认，其余不需要；任务归属随会话，Claw 不回调 Mate（2026-10-16 确定，替代 2026-10-15 的只读方案，见 [§3.12](#cron-tool)） | 模型可以提出创建任务，靠用户确认把关；对话中的任务只在本会话可管理，不能在别的会话里改；不提供 run，立即执行直接在对话里提出即可 |
 
 时间、执行目标和删除的多基线对照见 [A14](../07-Agent架构对比/README.md#a14) 和[删除基线证据](source-evidence.md#schedule-delete-baselines)。
 
@@ -237,7 +239,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 ### 3.1 系统用例
 
-前 10 项为 HTTP 操作，由 Mate 管理入口以可信服务调用发起（Mate 内部处理待定，见 T8）；后 3 项为后台作业。BU6 还需读取 M06 既有 Session 接口，不在本模块新增。
+前 10 项为 HTTP 操作，由 Mate 管理入口以可信服务调用发起（Mate 内部处理待定，见 T8）；UC11～UC13 为后台作业；UC14～UC16 是对话中创建的任务，由 Cron 工具、调度器和会话删除发起。BU6 还需读取 M06 既有 Session 接口，不在本模块新增。
 
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
@@ -254,6 +256,9 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | UC11 自动扫描与受理 | BU3 | 调度器 | 任务到期 | 新 Session 受理并启动 | 不补漏跑、遇忙跳过；受理前须完成 Mate 归属登记 |
 | UC12 Run 结束 | BU3 | Runtime 终态提交 | 已受理 Run 的根执行结束 | 与根执行终态同事务写入 Run.finished_at，释放任务 | 已删除任务更新 0 行，不复活资源 |
 | UC13 运行超时停止 | BU3 | 调度器 | 单次运行超过 30 分钟 | 向原根执行请求停止 | 停止未确认前保持停止中或未知 |
+| UC14 对话中管理任务 | BU8 | Cron 工具 | 当前会话；create、update、delete 经用户确认 | 写入或读取当前会话关联的任务 | 只能访问当前会话的任务；校验失败不请求确认，拒绝不写入；每会话有上限，见 [§3.12](#cron-tool) |
+| UC15 在关联会话中运行 | BU8 | 调度器 | 对话中创建的任务到期 | 关联会话追加一轮并启动 | 会话正忙则跳过并记录 session_busy_error；不经 Mate 登记，见 [§3.13](#chat-created-schedule) |
+| UC16 删除会话 | BU8 | 会话删除 | 会话空闲 | 同事务删除该会话关联的任务及其 Run | 会话正忙返回 409，任务保留 |
 
 <a id="persistence-lifecycle"></a>
 
@@ -261,7 +266,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 目标只有两张表 `t_schedule`、`t_schedule_run`，不修改既有 Session 与根执行表。两张表的字段、约束、索引与事务在本节维护；全库命名、时间类型与 Mate 身份边界见 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md)，其中的[定时任务表](../../03-数据与存储/Claw数据库设计.md#schedule)只保留指向本节的入口。PR #332 中需要撤销或改名的结构集中在 [§3.2.5](#schedule-pr-diff)。
 
-业务生命周期：Schedule 保存长期配置，Run 保存一次受理事实，Session 与原根执行保存实际执行结果。删除 Schedule 同时删除 Run，保留已受理的 Session 且不自动取消；单独删除 Session 不改写历史 Run 的受理事实。Claw 只保存资源关联，不保存凭据、授权引用、用户范围、owner 或操作者副本，见 [Mate 归属边界](../../03-数据与存储/Claw数据库设计.md#mate-ownership)。
+业务生命周期：Schedule 保存长期配置，Run 保存一次受理事实，Session 与原根执行保存实际执行结果。删除 Schedule 同时删除 Run，保留已受理的 Session 且不自动取消；单独删除 Session 不改写历史 Run 的受理事实。对话中创建的任务例外：它关联创建它的会话，删除该会话时同事务删除任务及其 Run（[§3.13](#chat-created-schedule)）。Claw 只保存资源关联，不保存凭据、授权引用、用户范围、owner 或操作者副本，见 [Mate 归属边界](../../03-数据与存储/Claw数据库设计.md#mate-ownership)。
 
 <a id="schedule"></a>
 
@@ -269,13 +274,13 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 | 表 | 权威职责 | 关联及生命周期 |
 |---|---|---|
-| `t_schedule` | 当前任务配置与自动计划游标 | 一条配置对应多条 Run；删除时与其 Run 同事务删除 |
+| `t_schedule` | 当前任务配置与自动计划游标 | 一条配置对应多条 Run；删除时与其 Run 同事务删除。`session_id` 非空表示对话中创建，逻辑引用创建它的会话，不设外键 |
 | `t_schedule_run` | 一次触发是否受理、受理时的 Session 与根执行身份，以及同任务唯一未结束 Run | `schedule_id` 外键指向配置并级联删除；`session_id`、`execution_id` 为逻辑引用，不设外键 |
-| `t_sessions`、`t_session_executions` | 已受理会话与根执行，结构不变 | 不受 Schedule/Run 删除级联；用户在定时会话中继续对话不改变原 Run 的关联 |
+| `t_sessions`、`t_session_executions` | 已受理会话与根执行，结构不变 | 不受 Schedule/Run 删除级联；用户在定时会话中继续对话不改变原 Run 的关联；删除会话时同事务删除 `session_id` 指向它的 Schedule |
 
-一次受理对应一个 Session 和一个根执行，由同库事务与锁内检查维持，不靠唯一约束或外键。同任务不并发由 `t_schedule_run` 的部分唯一索引表达，`t_schedule` 不保存指向 Run 的列，避免与级联删除形成循环依赖。
+一次受理对应一个根执行，以及一个新建的 Session（接口配置的任务）或已关联的会话（对话中创建的任务），由同库事务与锁内检查维持，不靠唯一约束或外键。同任务不并发由 `t_schedule_run` 的部分唯一索引表达，`t_schedule` 不保存指向 Run 的列，避免与级联删除形成循环依赖。
 
-不新增 gap 表、请求去重表、扫描协调表、可恢复的墓碑或隐藏归档。停机期间错过的计划只推进游标；任务忙时跳过会形成一条已结束且未受理的 Run。不同手动请求各自分配 runId，内容相同也不合并。
+不新增 gap 表、请求去重表、扫描协调表、可恢复的墓碑或隐藏归档。停机期间错过的计划只推进游标；任务忙或关联会话忙时跳过会形成一条已结束且未受理的 Run。不同手动请求各自分配 runId，内容相同也不合并。
 
 <a id="t_schedule"></a>
 
@@ -286,10 +291,11 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
 |---|---|---|---|---|
 | id | VARCHAR(41) | 否 | — | `schedule-` 加 32 位 UUID 十六进制 |
-| agent_id | VARCHAR(38) | 否 | — | 任务关联的 Agent 标识；每次运行按它新建 Session，修改后只影响之后的运行 |
+| agent_id | VARCHAR(38) | 否 | — | 任务关联的 Agent 标识；接口配置的任务每次运行按它新建 Session，修改后只影响之后的运行；对话中创建的任务取关联会话的 Agent，不可修改 |
+| session_id | VARCHAR(40) | 是 | — | 对话中由 Cron 工具创建时关联的会话，此后不可修改；接口配置的任务为空，见 [§3.13](#chat-created-schedule) |
 | name | VARCHAR(256) | 否 | — | 任务名称 |
 | description | VARCHAR(2048) | 是 | — | 任务描述 |
-| prompt | TEXT | 否 | — | 纯文本任务内容，受理时作为首条用户消息提交 |
+| prompt | TEXT | 否 | — | 纯文本任务内容，受理时作为新 Session 的首条用户消息，或关联会话中追加的用户消息提交 |
 | cron_expression | TEXT | 是 | — | Spring 六字段表达式；仅手动运行的任务为空 |
 | timezone | TEXT | 是 | — | 与 Cron 成对保存的时区，缺省值由服务归一化 |
 | status | VARCHAR(16) | 否 | — | `active` / `paused` |
@@ -306,6 +312,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 |---|---|---|
 | idx_schedule_due | `(status, upcoming_run_at, id)` | 各副本每秒扫描 active 且到期的任务 |
 | idx_schedule_list | `(updated_at DESC, id)` | 按更新时间返回全部任务，由 Mate 分批拉取后按用户过滤 |
+| idx_schedule_session | `(session_id) WHERE session_id IS NOT NULL` | Cron 工具列出当前会话的任务、统计每会话任务数、删除会话时锁定并删除其任务 |
 
 数据库约束：
 
@@ -329,7 +336,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | trigger_type | VARCHAR(16) | 否 | — | `manual` / `schedule`，投影为 triggerContext.type |
 | scheduled_at | TIMESTAMPTZ(0) | 是 | — | 自动触发的计划时刻（UTC）；手动为空 |
 | error_type | VARCHAR(64) | 是 | — | 未受理原因，投影为 error.type；error.message 按请求语言生成，不落库 |
-| session_id | VARCHAR(40) | 是 | — | 受理时创建的 Session |
+| session_id | VARCHAR(40) | 是 | — | 受理时新建的 Session，对话中创建的任务为关联会话 |
 | execution_id | VARCHAR(64) | 是 | — | 本次首消息的根执行，内部对账用，不公开 |
 | lease_until | TIMESTAMPTZ(3) | 否 | — | 受理准备期限，内部使用。领取时写入：手动为领取时刻加 10 秒；自动取该值与 scheduled_at 加 5 秒中较早者。受理和清理都在行锁内与数据库当前时间比较，过期未受理的 Run 不得受理 |
 | created_at | TIMESTAMPTZ(0) | 否 | — | 创建时间 |
@@ -357,13 +364,13 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | 准备中 | 空 | 空 | 空 | 是 |
 | 已受理，执行中或结果未知 | 空 | 非空 | 空 | 是 |
 | 已受理，根执行已结束 | 非空 | 非空 | 空 | 否 |
-| 未受理（准备失败、过期、任务忙） | 非空 | 空 | 非空 | 否 |
+| 未受理（准备失败、过期、任务忙、会话忙） | 非空 | 空 | 非空 | 否 |
 
 忙跳过在插入时即带 finished_at，不占用任务。受理后由原实例在进程内直接启动；之后任何时刻失联都按结果未知处理，Run 保持未结束，自动恢复见[待定 T9](#todo-t9)。
 
 公开接口（[Run 查询](#schedule-run-read-lifecycle)）只返回 session_id 与 error_type 恰好一个非空的记录，投影 id、schedule_id、agent_id、trigger_type、scheduled_at、session_id、error_type、created_at。列表可按 scheduleId、triggerType、hasError 与 createdAt 区间 `[from, to)` 筛选，按 `created_at DESC, id DESC` 页码分页；triggerType、hasError 只有两个值，不单独建索引。
 
-单独删除 Session 不清空 Run.session_id，不级联删除 Run，也不把已受理改成失败；原会话链接可能返回 404。
+接口配置的任务：单独删除 Session 不清空 Run.session_id，不级联删除 Run，也不把已受理改成失败；原会话链接可能返回 404。对话中创建的任务：删除关联会话时任务与 Run 一起删除。
 
 <a id="transactions"></a>
 
@@ -371,15 +378,16 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 | 操作 | 同一事务内维持的不变量 |
 |---|---|
-| 创建、修改、暂停、恢复任务 | 最新配置、状态与暂停原因、游标一起提交，不保存配置版本；暂停不结束在途 Run；远端授权准备在锁外，锁内复查 |
+| 创建、修改、暂停、恢复任务 | 最新配置、状态与暂停原因、游标一起提交，不保存配置版本；暂停不结束在途 Run；远端授权准备在锁外，锁内复查；Cron 工具创建时先锁会话行，统计该会话的任务数未达上限才插入 |
 | 领取 Run | 锁 Schedule；任务无未结束 Run 时插入未结束 Run，有则插入带 finished_at 的忙跳过 Run；自动触发同时推进游标 |
-| 受理 | 锁 Schedule 与 Run，复查任务存在（自动运行要求 active 且未过派发期限，手动运行允许 active 或 paused）、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过；不查询用户执行资格（D10）；首消息用锁内读到的最新 prompt；Session、首消息、根执行、Run 关联与自动运行的 last_run_at 一起提交 |
+| 受理 | 锁 Schedule 与 Run，复查任务存在（自动运行要求 active 且未过派发期限，手动运行允许 active 或 paused）、任务 agent_id 等于 Run.agent_id、Run 未结束且 lease_until 未过；不查询用户执行资格（D10）；首消息用锁内读到的最新 prompt；Session、首消息、根执行、Run 关联与自动运行的 last_run_at 一起提交。对话中创建的任务再锁会话行，复查会话存在且没有活动执行，追加用户消息而不新建 Session；会话正忙则改为记录 `session_busy_error` 的未受理 Run |
 | 受理后启动 | 原实例在进程内启动，不写启动权；模型与业务执行不在受理事务内 |
 | 根执行终态提交 | Runtime 写根执行终态的同一事务内，按 execution_id 条件更新本次 Run 的 finished_at，释放任务；Run 已删除时更新 0 行；只看本次根执行，会话后续聊天不改写；终态写不进（结果未知）不释放，见 T9 |
 | 记录未受理 Run | 锁 Run 写 finished_at 与 error_type；不改 Schedule 状态 |
 | 清理过期准备 | 锁 Run，只对 session_id、error_type 都为空且 lease_until 已过的 Run 写 finished_at 与错误 |
 | 保留期清理 | 按 `(finished_at, id)` 批量删除超期的已结束 Run，不级联 Session，不删除未结束 Run |
 | 删除任务 | 锁 Schedule，同事务删除 Run 与 Schedule；受理先提交则保留 Session，删除先提交则拒绝旧准备结果；外键级联作兜底 |
+| 删除会话 | 按 session_id 锁定关联的 Schedule（与受理相同，先锁 Schedule 再锁会话），与会话墓碑、清理任务同事务删除这些 Schedule 及其 Run；会话正忙时删除返回 409，整个事务不提交 |
 
 删除不取消、不回滚已发生的园区业务；已受理会话由自身权限与停止入口管理。删除后的回调只条件更新仍存在的记录，影响行数为零时不重新插入。
 
@@ -417,6 +425,7 @@ PR #332 已实现定时任务表，未合入 main。下表列出它与 §3.2.2�
 | idx_schedule_run_retention | `(state, finished_at, id)` | 改为 `(finished_at, id)` | state 已撤销 |
 | uk_schedule_run_unfinished | 无 | 新增 | 同任务不并发 |
 | uk_schedule_run_execution | 无 | 新增 | 终态提交时按 execution_id 结束 Run |
+| t_schedule.session_id、idx_schedule_session | 无 | 新增 | 对话中创建的任务关联会话，见 [§3.13](#chat-created-schedule) |
 
 <a id="gaps"></a>
 
@@ -460,13 +469,13 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 | 层次 | 责任与生命周期 |
 |---|---|
-| 边界与入口 | `ScheduleController` 收发 RequestVO/ResponseVO；`CronTool`（由 `AgentScopedCronToolFactory` 按 Agent 创建）首版只读（D13），按当前会话所用 Agent 调用 list、status、runs，不调用写操作，也不向 Mate 请求授权 |
+| 边界与入口 | `ScheduleController` 收发 RequestVO/ResponseVO；`CronTool`（由 `AgentScopedCronToolFactory` 按会话创建）只访问当前会话关联的任务（D13），create、update、delete 先校验再经 Host 确认，不向 Mate 请求授权，见 [§3.12](#cron-tool) |
 | 应用编排 | `ScheduleService` 管理规则与 VO/DTO 转换；`ScheduleRunService` 处理立即运行与 Run 查询，经 `ScheduleRunPublisher` 发布进程内 `ScheduleRunRequestEvent`，由 `ScheduleRunLauncher` 在同一线程处理并回填回执，避免 Runtime 装配构造依赖环；均为 Spring 单例 |
 | 调度与运行 | `ScheduleTriggerWorker` 每秒扫描并交给 `ScheduleRunLauncher`；后者创建 Run、推进下次运行时间，准备并启动 Session，管理实例容量、对账与超时停止；`ScheduleRunTerminalHook` 实现终态扩展点，按 execution_id 结束 Run |
 | 计算与接口 | `ScheduleCronCalculator` 统一校验 Cron 并计算运行时间；`ScheduleSessionRegistry` 调用 Mate 登记 Session 关联，不是 Claw 的用户权限检查；`ScheduleAccessTokenProvider` 在每批工具调用前取 access-token |
 | Mate 实现 | `MateScheduleSessionRegistry` 实现 Session 关联登记，`MateAccessTokenClient` 实现统一账号 access-token；只调用这两个 Mate 接口，保存与受理不校验 Agent 是否存在和启停用（T11） |
 | 持久化 | 服务直接使用 `ScheduleMapper` 收发 DTO，不另设仓储接口，不引入 PO/DO/Entity |
-| Session 创建 | `ScheduledSessionStarter`（`schedule.session` 包）准备 `PreparedScheduledSessionDTO`（每次 Run 的不可变快照，不代替事务内可变状态检查），在同库短事务中受理，提交后调用 `RuntimeExecutionCoordinator` 启动一次；同时创建 `ExecutionSafetyContext` 关联到本次执行（见 [§3.10](#noninteractive)） |
+| Session 创建 | `ScheduledSessionStarter`（`schedule.session` 包）准备 `PreparedScheduledSessionDTO`（每次 Run 的不可变快照，不代替事务内可变状态检查），在同库短事务中受理，提交后调用 `RuntimeExecutionCoordinator` 启动一次；同时创建 `ExecutionSafetyContext` 关联到本次执行（见 [§3.10](#noninteractive)）；对话中创建的任务不新建 Session，在关联会话中追加用户消息与根执行（[§3.13](#chat-created-schedule)） |
 
 管理路径不调用 Session 工厂或执行协调器，立即运行入口委托运行服务复用准备与受理。Controller 不直接调用 Mapper 或模型，模型与外部 I/O 不进入配置数据库事务。
 
@@ -478,7 +487,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![Claw 配置保存](schedule_configuration_save.svg)
 
-[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L200)
+[原尺寸 SVG](schedule_configuration_save.svg) · [PlantUML 源码](diagram.puml#L214)
 
 保存步骤、并发语义与结果不确定时的处理见[§4.5](#reliable-write-flow)。
 
@@ -490,7 +499,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![立即运行与Run回执](schedule_manual_run.svg)
 
-[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L231)
+[原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L245)
 
 **正常调用如何完成：** 核验 Mate 服务、获准操作和目标 → 短事务锁定任务，插入一条未结束的手动 Run 占用任务，不改自动计划 → 进入[共用受理流程](#run-admission-sequence) → 返回 200 和带 sessionId 的 Run，不等待业务完成。
 
@@ -537,7 +546,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 ![共用受理流程](schedule_run_admission.svg)
 
-[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L267)
+[原尺寸 SVG](schedule_run_admission.svg) · [PlantUML 源码](diagram.puml#L281)
 
 **正常调用如何完成：** 固定拟建 Session ID，由 Mate 按资源 ID 登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、Run、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
 
@@ -569,7 +578,9 @@ Cron 字段、timezone 默认值与校验以[§4.3](#schedule-fields)为准。�
 
 <a id="new-session-per-run"></a>
 
-### 3.9 每次运行新建 Session
+### 3.9 接口配置的任务每次运行新建 Session
+
+本节只适用于接口配置的任务（`t_schedule.session_id` 为空）；对话中创建的任务每次在关联会话中追加一轮，见 [§3.13](#chat-created-schedule)。
 
 | 边界 | 当前目标 |
 |---|---|
@@ -578,7 +589,7 @@ Cron 字段、timezone 默认值与校验以[§4.3](#schedule-fields)为准。�
 | 消息上下文 | 新建空历史，再把 prompt 作为首条用户消息提交；不复制其他 Run 的聊天历史，共享受管资源和业务状态仍遵守各自边界 |
 | 模型与模式 | 当前已发布 Agent default，thinking=OFF，CRON profile，build 入口；不能复用现有 HTTP 创建默认 thinking=true 的入口 |
 | 配置刷新 | 使用本次 prepare 的不可变快照，不承诺 Agent 版本固定或每次远端最新 |
-| 对其他聊天的影响 | 不向已有 Session 追加定时输入；新 Session 完成后可供有权限的用户继续聊天，继续对话按普通消息处理、使用用户本次请求的凭据（见 [§3.11](#session-credentials)），但不成为后续定时触发目标，也不改写本次 Run 的结果 |
+| 对其他聊天的影响 | 不向已有 Session 追加定时输入（对话中创建的任务除外，见 §3.13）；新 Session 完成后可供有权限的用户继续聊天，继续对话按普通消息处理、使用用户本次请求的凭据（见 [§3.11](#session-credentials)），但不成为后续定时触发目标，也不改写本次 Run 的结果 |
 
 Cron 的 build 表示非计划执行模式；首版继续使用该入口的 basePrompt，不因后台持久化而自动追加交互 BUILD 提示词，依据见[证据 J10](source-evidence.md#java-evidence)。
 
@@ -607,7 +618,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ![定时 Session 中的凭据来源](schedule_session_credentials.svg)
 
-[原尺寸 SVG](schedule_session_credentials.svg) · [PlantUML 源码](diagram.puml#L369)
+[原尺寸 SVG](schedule_session_credentials.svg) · [PlantUML 源码](diagram.puml#L383)
 
 **规则：凭据来源跟随根执行，不跟随 Session。** 每个根执行在受理时按入口确定一次凭据来源，执行期间不变；Session 本身不保存来源标记，先后可以有不同来源的根执行。
 
@@ -625,26 +636,73 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 - 定时这一轮还在运行时，用户发送消息返回 409 `SESSION_BUSY`，不排队，用户等它结束后再发。
 - 用户可以中断正在运行的定时执行。中断沿用定时执行的统一账号来源，不采用中断请求的 Header；中断终态提交时同一事务结束本次 Run（D11）。
 - 定时执行遇到需要人工确认的调用而结束时（[§3.10](#noninteractive)），被阻止的业务调用不自动重放；用户可以在同一 Session 继续对话，用本人凭据让模型重新处理，权限确认按普通交互规则进行。
-- 用户这一轮是普通根执行，不关联任何 Run，不占用任务槽位，也不影响后续定时触发；后续定时触发仍新建 Session（[§3.9](#new-session-per-run)）。
+- 用户这一轮是普通根执行，不关联任何 Run，不占用任务槽位，也不影响后续定时触发；接口配置的任务后续触发仍新建 Session（[§3.9](#new-session-per-run)），对话中创建的任务下一次仍在该会话追加一轮，此时用户的执行未结束则本次跳过（[§3.13](#chat-created-schedule)）。
 
-**谁可以继续对话。** 定时 Session 的归属在受理前由 Mate 登记（F14），Mate 用 user_id 标识该 Session 属于哪个用户（2026-10-15 评审确定）。哪些用户可以读取和继续这个 Session，由 Mate 按该 user_id 判断并在调用 Claw 前完成；Claw 不接收也不保存 user_id，与普通 Session 一样不检查用户。
+**谁可以继续对话。** 对话中创建的任务运行在用户自己的会话里，归属不变，不需要登记。接口配置的任务新建的 Session，归属在受理前由 Mate 登记（F14），Mate 用 user_id 标识该 Session 属于哪个用户（2026-10-15 评审确定）。哪些用户可以读取和继续这个 Session，由 Mate 按该 user_id 判断并在调用 Claw 前完成；Claw 不接收也不保存 user_id，与普通 Session 一样不检查用户。
 
 **审计。** 不需要长期审计（2026-10-15 评审确定），不新增来源字段。Run 存续期间，按 `t_schedule_run.execution_id` 可以看出某一轮由定时触发、使用统一账号；Schedule 删除、Run 随之删除后不再区分。运行时选择凭据以受理时固定的来源对象为准，不在执行中查询 Run。
 
 <a id="cron-tool"></a>
 
-### 3.12 会话内 Cron 工具（首版只读）
+### 3.12 会话内 Cron 工具
 
-模型在会话里调用 Cron 工具时，前面没有 Mate 管理入口：写操作既无法由 Mate 先授权，Mate 也不会为新任务记录 user_id，任务会在 Mate 按用户过滤的列表里永远不可见。因此首版只读（[D13](#key-decisions)）。状态：待实现。
+用户在对话中让 Agent 创建、修改、删除、暂停、恢复和查看本对话的定时任务（R12、[D13](#key-decisions)）。Cron 工具只能看到 `t_schedule.session_id` 等于当前会话的任务；会话只属于一个用户，因此不需要 Mate 授权或按用户过滤，工具不调用 Mate，也不取 access-token。状态：待实现；PR #332 的 `CronTool` 只有 list、status、runs，需增加写动作并把范围从 Agent 改为当前会话。
 
-| 动作 | 首版 | 范围与规则 |
+| 动作 | 用户确认 | 参数与规则 |
 |---|---|---|
-| list | 保留 | 委托列表接口并固定 agentId 为当前会话所用 Agent，只返回该 Agent 的任务；首版不按用户隔离，见 [T14](#todo-t14) |
-| status | 保留 | 按 scheduleId 读取；任务不属于当前 Agent 时按不存在处理，不泄露存在性 |
-| runs | 保留 | 委托 Run 列表并固定 agentId，可再按 scheduleId 筛选；不返回其他 Agent 的 Run |
-| create、update、delete、pause、unpause、run | 不提供 | 不注册给模型；需要时提示用户到 Mate 页面操作。以后经 Mate 暴露的接口实现（T13） |
+| list | 不需要 | 返回当前会话的全部任务（不超过每会话上限），按更新时间倒序，不分页 |
+| status | 不需要 | 按 scheduleId 读取；任务不属于当前会话时按不存在处理，不泄露存在性 |
+| runs | 不需要 | 返回当前会话任务的最近 20 条 Run，可按 scheduleId 筛选 |
+| create | 需要 | name、prompt、Cron 表达式必填，timezone、description 可选，校验同 [§4.3](#schedule-fields)；agentId 与 sessionId 取当前会话，模型不能指定；不接收 metadata；必须带 Cron 规则，因为工具不提供 run，仅手动的任务无从运行；达到每会话上限时拒绝 |
+| update | 需要 | 按 scheduleId 修改 name、description、prompt、Cron 规则，合并规则同 [§4.4.5](#update-schedule-review)；不能修改 agentId、sessionId、metadata，不能清空 Cron 规则 |
+| delete | 需要 | 删除任务及其 Run，同 [§4.4.6](#delete-schedule-review)；正在运行的这一轮不取消 |
+| pause、unpause | 不需要 | 同 [§4.4.8](#pause-schedule-review)、[§4.4.9](#unpause-schedule-review)，暂停原因为 manual |
+| run | 不提供 | 想立即执行时直接在对话里提出即可 |
 
-工具结果只投影名称、规则、状态、计划时间和 Run 摘要，metadata 不进入模型（[§5.1](#security)）。Cron 工具不调用 Mate，也不取 access-token。
+**确认流程。** create、update、delete 先完成全部校验并算出接下来的运行时间；校验失败直接作为工具错误返回模型修正，不打扰用户。校验通过后工具向 Host 申请确认，走普通对话中已有的工具确认交互：确认内容为任务名称、任务内容、规则与时区、接下来的运行时间，update 展示修改前后，delete 展示要删除的任务。用户同意后在一个事务内写入，锁内复查任务仍属于当前会话、数量未超上限；用户拒绝则不写入，工具结果为已拒绝。
+
+**定时运行中的 Cron 工具。** 定时运行的这一轮没有人在线确认：create、update、delete 的确认请求命中非交互门禁，按 [§3.10](#noninteractive) 结束本轮；list、status、runs、pause、unpause 照常可用，例如任务内容要求“告警全部消除后暂停本任务”。
+
+工具结果只投影名称、任务内容、规则、状态、计划时间和 Run 摘要，metadata 不进入模型（[§5.1](#security)）。
+
+<a id="chat-created-schedule"></a>
+
+### 3.13 对话中创建的定时任务
+
+场景：值班人员在对话中说“每天 22:00 做一次视频巡逻检查，结果发在这里”。Agent 调用 Cron 工具提出创建，值班人员确认后任务保存并关联这段对话；之后每天 22:00 在同一对话中追加一轮巡逻检查，值班人员第二天打开这段对话即可看到结果并继续追问。状态：待实现（2026-10-16 确定）。
+
+![对话中创建并运行定时任务](schedule_chat_created.svg)
+
+[原尺寸 SVG](schedule_chat_created.svg) · [PlantUML 源码](diagram.puml#L419)
+
+| 项目 | 接口配置的任务 | 对话中创建的任务 |
+|---|---|---|
+| 创建入口 | Mate 管理入口调用 Claw 接口（[§4.4](#interface)） | 对话中 Agent 调用 Cron 工具，用户确认（[§3.12](#cron-tool)） |
+| `t_schedule.session_id` | 空 | 创建它的会话，之后不可修改 |
+| agentId | 创建时指定，可修改 | 取该会话的 Agent，不可修改 |
+| 每次运行 | 新建 Session（[§3.9](#new-session-per-run)） | 在关联会话中追加一条用户消息并启动新的根执行 |
+| 会话正忙 | 不适用 | 本次跳过，记录 `session_busy_error` |
+| 归属 | Mate 任务归属（T7、T8）；新 Session 受理前登记归属（F14） | 随会话归属，不登记 |
+| 删除会话 | 不影响任务 | 同事务删除该会话关联的任务及其 Run |
+| 数量上限 | Mate 配额（Mate 侧待设计） | 每会话任务数，Claw 计数 |
+| 凭据 | 统一账号 access-token（[D10](#key-decisions)） | 相同 |
+
+**运行规则。**
+
+- 领取与计划同 [§3.5](#scheduled-run-sequence)、[§3.8](#no-catch-up)：同一任务不并发，超过派发容差不补跑。
+- 受理在一个事务内完成：先按 [§3.2.4](#transactions) 锁 Schedule 与 Run 并复查，再锁会话行，用普通消息受理的同一忙检查（M06 的会话空闲复核）确认会话没有活动执行；空闲则追加 prompt 作为用户消息、创建新的根执行，写入 Run.session_id（即关联会话）、execution_id 与自动运行的 last_run_at，提交后在原实例启动。
+- 会话正忙（用户的执行或上一次定时这一轮尚未结束）时不排队、不等待：本次写入已结束的 Run，error_type 为 `session_busy_error`，游标照常推进，下一计划照常。
+- 不经 Mate 登记归属，受理前没有远端调用，准备阶段只做 Runtime 准备。
+- 这一轮带着会话已有的全部历史，Agent 与模型设置沿用该会话；执行范围按 [§3.10](#noninteractive) 的非交互规则，凭据按 [§3.11](#session-credentials) 用统一账号。
+- 这一轮与用户的对话互斥：运行中用户发消息返回 409 `SESSION_BUSY`，用户可以中断它，规则同 §3.11。
+
+**删除会话。** 会话删除（[M06 删除 Session](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#212-删除-session)）在会话空闲时提交墓碑与清理任务；同一事务内先按 session_id 锁定关联的 Schedule 并删除（Run 由外键级联），锁顺序与受理一致，先 Schedule 后会话。会话正忙时删除返回 409，任务不受影响。删除不可恢复，任务与 Run 一起消失。实现上 Runtime 删除会话的事务内调用会话删除扩展点（`SessionDeleteHook`，与 D11 的终态扩展点同类），定时任务的实现按 session_id 删除；待实现。
+
+**列表与接口管理。** 两种任务在同一张表，接口的任务列表、详情与 Run 查询都返回对话中创建的任务，资源多一个只读 `sessionId`（接口配置的任务为 null，[§4.3](#schedule-fields)）。Mate 按 sessionId 对应的对话判断这类任务属于哪个用户，列表过滤时与自己维护的任务归属一起使用（Mate 侧待设计，T7）。Mate 页面可以修改、暂停、恢复、删除和立即运行这类任务；立即运行同样在关联会话追加一轮，会话忙时返回带 `session_busy_error` 的 Run。接口不能创建关联会话的任务，也不能修改 sessionId 或这类任务的 agentId。
+
+**每会话上限。** Cron 工具创建时在事务内锁会话行，统计该会话关联的任务数，达到上限（[部署初始值](#deployment-defaults)）时拒绝，工具返回“本对话的定时任务已达上限”。接口配置的任务不计入。
+
+**代价。** 会话历史随每次运行增长，依赖会话既有的上下文压缩；用户正在对话时到点会跳过这一次；任务只能在创建它的会话中通过 Cron 工具管理，换一个会话看不到；删除会话会连同任务一起删除。
 
 <a id="interface"></a>
 
@@ -656,7 +714,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 调用方配置“工作日 08:00 汇总园区设备告警”，向 Claw 提交 Agent、任务内容和时间规则。Mate 验证当前用户权限，Claw 验证服务授权结果、关联和规则，持久化后返回任务 ID、完整配置及计划时间摘要。之后可读取、修改该配置，不依赖调用方在线。
 
-创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 契约见 §4.4.7，采用已记录受理结果的200 Run回执与八字段返回模型，同一任务不重叠，手动失败不改暂停状态，错误映射见 §4.4.7，原子受理见[定时任务受理流程](#normal-acceptance)。每次运行均新建独立 Session，将配置中的 prompt 文本作为首条用户消息；关联的 Agent 定义继续复用；Cron 沿用 Spring 六字段。
+创建行为：schedule 可省略，省略时只保存、不立即执行；填写有效 schedule 后保存即登记自动计划，无需额外启用。试运行是独立的显式操作，可用于无 schedule 的配置；其 HTTP 契约见 §4.4.7，采用已记录受理结果的200 Run回执与八字段返回模型，同一任务不重叠，手动失败不改暂停状态，错误映射见 §4.4.7，原子受理见[定时任务受理流程](#normal-acceptance)。接口配置的任务每次运行均新建独立 Session，将配置中的 prompt 文本作为首条用户消息（对话中创建的任务在关联会话追加一轮，见 [§3.13](#chat-created-schedule)）；关联的 Agent 定义继续复用；Cron 沿用 Spring 六字段。
 
 时间规则仅支持 `cron`，采用 Spring 六字段。Cron 的 timezone 可省略，默认 Asia/Shanghai 并保存、回显；不接收 at、every、intervalSeconds 或 startAt。schedule 仍可整体省略或为 null，表示仅手动运行。绝对时刻响应统一为 UTC、以 Z 结尾且不含小数秒，与 Session 和完整事件共同采用秒级目标。响应的非空 schedule 包含只读 lastRunAt/upcomingRunsAt，status 使用小写，并支持可选 metadata；顶层只读 type 固定为 schedule，pausedReason 返回当前暂停原因或 null，见 [§4.4.1.1](#schedule-type-paused-reason)。任务内容是纯文本 prompt；配置不保存凭据引用，运行时统一使用 Mate 配置的同一个账号取 access-token，详见 §4.4.2。名称上限为 256；时间类型范围与名称上限对齐 Claude，Cron 方言和时区默认值沿用 CampusClaw 既有约束。
 
@@ -673,7 +731,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 | 操作 | 方法与完整路径 | 成功结果 |
 |---|---|---|
 | 创建配置 | POST `/campusclaw-service/v1/schedules` | 201；完整资源及 Location |
-| 列表 | GET `/campusclaw-service/v1/schedules` | 200；全部存续任务的分页结果（首版由 Mate 拉取后按用户过滤），每项为与详情同形的完整资源 |
+| 列表 | GET `/campusclaw-service/v1/schedules` | 200；全部存续任务（含对话中创建的任务）的分页结果（首版由 Mate 拉取后按用户过滤），每项为与详情同形的完整资源 |
 | 详情 | GET `/campusclaw-service/v1/schedules/{scheduleId}` | 200；完整资源 |
 | 部分更新 | POST `/campusclaw-service/v1/schedules/{scheduleId}` | 200；完整资源 |
 | 删除配置 | DELETE `/campusclaw-service/v1/schedules/{scheduleId}` | 200；ResultBean 包装完整 Schedule 删除回执；删除Schedule及Run、保留Session，不取消已受理执行，见 §4.4.6 |
@@ -705,8 +763,9 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 |---|---|
 | name | 创建必填；去首尾空白后 1～256 个 Java 字符；允许重名，不作为身份 |
 | description | 可选，最多 2048 个 Java 字符；创建省略默认 null，更新省略保持，空白或显式 null 清除；不附加到模型输入 |
-| agentId | 创建必填；复用 `ClawConstants.Agent.ID_REGEX`，只校验格式，不校验 Agent 是否存在和启停用（T11）；当前用户能否使用该 Agent 由 Mate 在调用 Claw 前检查；只关联 Agent 身份，不保证固定历史版本 |
-| prompt | 创建必填；纯文本字符串，去首尾空白后非空，否则返回400/SCHEDULE_PROMPT_INVALID；每次运行作为新 Session 的首条用户消息提交；首版不支持附件，见 §4.3.6；不开放多条消息、system.message 或 user.define_outcome |
+| agentId | 创建必填；复用 `ClawConstants.Agent.ID_REGEX`，只校验格式，不校验 Agent 是否存在和启停用（T11）；当前用户能否使用该 Agent 由 Mate 在调用 Claw 前检查；只关联 Agent 身份，不保证固定历史版本；关联会话的任务不能修改 agentId |
+| sessionId | 只读；对话中由 Cron 工具创建的任务为关联的会话 ID，接口创建的任务为 null；创建和更新请求传入即返回 400 `SCHEDULE_REQUEST_INVALID`，见 §4.3.5 |
+| prompt | 创建必填；纯文本字符串，去首尾空白后非空，否则返回400/SCHEDULE_PROMPT_INVALID；每次运行作为新 Session 的首条用户消息提交，关联会话的任务则追加到该会话；首版不支持附件，见 §4.3.6；不开放多条消息、system.message 或 user.define_outcome |
 | schedule | 可选；创建省略默认 null，更新省略保持；非空时只允许下表的 cron 对象，更新时整体替换 |
 | metadata | 可选字符串键值对象；创建省略为 {}；沿用 Claude 最多 16 对、键最多 64、值最多 512 个字符；不传给模型、不作为授权依据，详见 §4.3.7 |
 | type | 资源顶层只读字段，固定为 schedule；创建、详情、列表元素、更新及删除回执均返回；区别于 schedule.type，见 §4.4.1.1 |
@@ -792,11 +851,11 @@ Cron 的 timezone 可省略，服务端默认使用 Asia/Shanghai；显式提供
 
 默认上海时区的理由与代价见[§2.4](#claude-tradeoffs)；省略时采用的值必须通过保存和回显可见。
 
-#### 4.3.5 每次运行创建独立 Session
+#### 4.3.5 运行目标 Session
 
-每次运行新建独立 Session 的行为与取舍见[§3.9](#new-session-per-run)和 [D2](#key-decisions)，本节只写接口约束。
+接口配置的任务每次运行新建独立 Session，行为与取舍见[§3.9](#new-session-per-run)和 [D2](#key-decisions)；对话中创建的任务每次在关联会话中追加一轮，见 [§3.13](#chat-created-schedule)。本节只写接口约束。
 
-创建、更新请求均不提供 target 或 sessionId，响应也不回显恒定目标；这些字段按未知字段拒绝。Schedule 配置没有待关联的 Session，创建保存不启动 Session；真正运行后的 sessionId/rootExecutionId 归 Run 关联。不同创建请求可以产生不同配置资源；它们与后台同一 Run 的重复受理不是同一问题。后台已分配 Run 必须复用原受理关联，不因内部重复投递而再建会话。
+创建、更新请求均不提供 target 或 sessionId，按未知或只读字段拒绝；关联会话只能由 Cron 工具在对话中建立，建立后不可修改。响应的只读 sessionId 表示运行目标：null 表示每次新建 Session，非空表示每次在该会话追加一轮。真正运行后的 sessionId/rootExecutionId 归 Run 关联。不同创建请求可以产生不同配置资源；它们与后台同一 Run 的重复受理不是同一问题。后台已分配 Run 必须复用原受理关联，不因内部重复投递而再建会话或再追加消息。
 
 #### 4.3.6 文件引用与上传边界
 
@@ -822,6 +881,7 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
 {
   "name": "工作日园区告警汇总",
   "agentId": "agent-550e8400e29b41d4a716446655440000",
+  "sessionId": null,
   "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
   "schedule": {
     "type": "cron",
@@ -847,6 +907,7 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
     "name": "工作日园区告警汇总",
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
+    "sessionId": null,
     "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
@@ -891,6 +952,7 @@ GET 详情返回同形完整资源；列表每项同样返回完整资源。分�
 | type | 固定为 schedule，标识返回的是任务配置资源 | 对应 Claude 的 type:deployment；采用 Claw 自身资源名称 |
 | name/description | 规范化名称；未提供 description 返回 null | 对应同名字段；description 不参与模型输入 |
 | agentId | 关联的 Agent ID | Claude 返回 id/version/type 对象；Claw 无历史版本关联，不伪造 agentVersion |
+| sessionId | 接口创建恒为 null；对话中创建的任务为关联会话 | Claude 无对应字段；Claw 支持在对话中创建任务（§3.13） |
 | prompt | 保存的纯文本任务内容 | Claude initial_events 为事件数组；Claw 首版只有一段文本，不包装为 user.message |
 | schedule | 规则及 lastRunAt/upcomingRunsAt；未配置则 null | 对应 Claude schedule；Claw 六字段且默认上海时区 |
 | schedule.lastRunAt | 创建为 null；表示最近自动运行的开始（受理时刻） | 对应 last_run_at；手动试跑不更新，不当作业务成功 |
@@ -976,7 +1038,7 @@ Accept-Language: zh-CN
 | Accept-Language | 可选；支持及回退规则见 §4.2 |
 | 重试 | 读取可安全重试，不触发任务 |
 
-成功为 HTTP 200，返回 `Content-Type: application/json`、`Cache-Control: no-store`及 `Content-Language`。result 与 §4.4 创建成功的完整资源同形，固定包含 type、id、name、description、agentId、prompt、schedule、status、pausedReason、metadata、createdAt、updatedAt；无计划时 schedule 为 null，空元数据为 {}。不返回凭据、文件内容、Agent 完整定义、内部调度游标或尚未关联的 Session/Run ID。
+成功为 HTTP 200，返回 `Content-Type: application/json`、`Cache-Control: no-store`及 `Content-Language`。result 与 §4.4 创建成功的完整资源同形，固定包含 type、id、name、description、agentId、sessionId、prompt、schedule、status、pausedReason、metadata、createdAt、updatedAt；无计划时 schedule 为 null，空元数据为 {}。不返回凭据、文件内容、Agent 完整定义、内部调度游标或尚未关联的 Session/Run ID。
 
 读取返回当前持久化配置及按 §4.3.3 生成的时间摘要。一次读取使用一致的配置/lastRunAt 快照，并取一次权威计算时刻生成 upcomingRunsAt；配置或生命周期最近修改时间 updatedAt 不因 GET 或时间数组滚动而变化。读取不改变更新准入条件；计划数组自然推进，不产生客户端版本过期错误。当前不提供 304 缓存协商流程。
 
@@ -1032,6 +1094,7 @@ Accept-Language: zh-CN
         "name": "工作日园区告警汇总",
         "description": null,
         "agentId": "agent-550e8400e29b41d4a716446655440000",
+        "sessionId": null,
         "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
         "schedule": {
           "type": "cron",
@@ -1103,14 +1166,14 @@ Accept-Language: zh-CN
 |---|---|---|
 | name | 使用新名称，去首尾空白后 1～256 个 Java 字符；允许重名 | null、空字符串或空白拒绝 |
 | description | 替换描述，最长 2048；不进入模型任务 | null、空字符串或空白均清除，保存并返回 null |
-| agentId | 替换后续运行关联，只校验格式；不修改历史 Run/Session | null 或空值拒绝；重复提交同一 ID 不提供版本 re-pin 或目录强制刷新 |
+| agentId | 替换后续运行关联，只校验格式；不修改历史 Run/Session；关联会话的任务提交不同值返回 400 `SCHEDULE_REQUEST_INVALID` | null 或空值拒绝；重复提交同一 ID 不提供版本 re-pin 或目录强制刷新 |
 | prompt | 整体替换任务文本，沿用创建校验 | null、非字符串及空白文本拒绝；不追加到已有 Session |
 | schedule | 整体替换 cron 规则，必含 type/expression；timezone 省略默认保存 Asia/Shanghai，不继承旧规则的时区 | null 清除自动计划；{} 或仅 timezone 的对象拒绝；显式 timezone:null、空时区或无效IANA名称按 §4.3.4 拒绝 |
 | metadata | 逐 key patch：字符串新增/覆盖，key:null 删除该 key，未列出的 key 保留；合并后再校验大小与类型 | 顶层 null 拒绝；{} 为无修改；删除全部键后响应 {}，不返回含 null 值的 map |
 
 重复 JSON 字段拒绝，不采用后一个值覆盖前一个值。顶层 `{}` 拒绝。`{"metadata":{}}` 或字段值与保存值相同的请求可成功，但归一化后的配置未变时不改 updatedAt。metadata 删除不存在的 key 也是无修改。当前授权及资源状态仍须检查，响应时间摘要按本次一致快照计算。
 
-以下均为只读或不属于配置输入：顶层 type、id、status、pausedReason、createdAt、updatedAt，以及嵌套 schedule.lastRunAt/upcomingRunsAt；传入即拒绝，不静默忽略。target/sessionId、credentialIds、vaultIds/credentialRefs 也不开放。schedule.type 仍是合法的嵌套输入。调用方不能把详情响应整个回传作为更新请求。
+以下均为只读或不属于配置输入：顶层 type、id、sessionId、status、pausedReason、createdAt、updatedAt，以及嵌套 schedule.lastRunAt/upcomingRunsAt；传入即拒绝，不静默忽略。target/sessionId、credentialIds、vaultIds/credentialRefs 也不开放。schedule.type 仍是合法的嵌套输入。调用方不能把详情响应整个回传作为更新请求。
 
 下例只修改三个字段，其余保持。metadata 中 parkCode 未提交，继续保留：
 
@@ -1146,6 +1209,7 @@ Accept-Language: zh-CN
     "name": "工作日园区告警汇总",
     "description": "汇总前一日告警并跟进未关闭工单",
     "agentId": "agent-550e8400e29b41d4a716446655440000",
+    "sessionId": null,
     "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
@@ -1258,6 +1322,7 @@ Cache-Control: no-store
     "name": "工作日园区告警汇总",
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
+    "sessionId": null,
     "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
@@ -1343,7 +1408,7 @@ Service 在锁内复核当前资格、读取最后配置并构造不可变安全
 
 #### 4.4.7 立即运行定时任务（待实现）
 
-运营人员保存“工作日园区告警汇总”后，希望现在验证任务内容和凭据是否能正常工作，不必等到明早。立即运行使用已保存的配置，独立新建一次 Session 并提交已保存的 prompt；这是实际执行，会遵守正常工具权限并可能产生业务副作用，不是仅解析配置的 dry-run。
+运营人员保存“工作日园区告警汇总”后，希望现在验证任务内容和凭据是否能正常工作，不必等到明早。立即运行使用已保存的配置，独立新建一次 Session 并提交已保存的 prompt（对话中创建的任务则在关联会话追加一轮，会话忙时记录 `session_busy_error`）；这是实际执行，会遵守正常工具权限并可能产生业务副作用，不是仅解析配置的 dry-run。
 
 ```http
 POST /campusclaw-service/v1/schedules/{scheduleId}/run
@@ -1388,7 +1453,7 @@ Accept-Language: zh-CN
 | scheduleId | 本次采用的配置 ID；对应 deployment_id，不是 Session ID |
 | agentId | 本次配置快照关联的 Agent；Claw 当前不保证固定历史版本，因此不伪造 Claude 的 agent.version |
 | triggerContext | 本接口固定 {type:manual}；对应 trigger_context；不传 scheduledAt:null，不伪造 Cron occurrence。自动触发使用 {type:schedule,scheduledAt}，见 §4.4.11 |
-| sessionId | 受理成功为新建的持久 Session ID，失败为 null；只在 Claw 边界返回，不自动成为 Mate 浏览器公共字段 |
+| sessionId | 受理成功为新建的持久 Session ID，对话中创建的任务为关联会话，失败为 null；只在 Claw 边界返回，不自动成为 Mate 浏览器公共字段 |
 | error | 受理成功为 null，已记录的失败为安全 {type,message}；与 sessionId 恰好一个非空，二者均不可省略 |
 | createdAt | Run 记录的创建时间，UTC秒级Z格式；不是模型启动或业务完成时间 |
 
@@ -1421,6 +1486,7 @@ Run不增加 status、updatedAt、模型回答或完整 Schedule；后续 Sessio
 | Run.error.type | 已确定且可记录的受理失败 | zh-CN / en-US 安全文案 |
 |---|---|---|
 | schedule_busy_error | 同一任务已有占用，包括尚未核对清楚的执行；不排队、不另建Session | 该定时任务仍有进行中或待核对的运行。 / This schedule has an active or unresolved run. |
+| session_busy_error | 对话中创建的任务，关联会话有活动执行；不排队 | 关联的对话正忙，本次已跳过。 / The linked session is busy; this run was skipped. |
 | session_capacity_exceeded_error | 本次会话准入容量不足 | 当前没有可用的执行容量。 / Execution capacity is unavailable. |
 | session_creation_rejected_error | Session或首消息受理明确拒绝且已回滚 | 本次会话受理被拒绝。 / Session acceptance was rejected. |
 | unknown_error | 已确认未受理、已完成回滚且可记录的其他失败 | 本次运行未能受理。 / The run could not be accepted. |
@@ -1466,6 +1532,7 @@ Accept-Language: zh-CN
     "name": "工作日园区告警汇总",
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
+    "sessionId": null,
     "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
@@ -1534,6 +1601,7 @@ Accept-Language: zh-CN
     "name": "工作日园区告警汇总",
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
+    "sessionId": null,
     "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
@@ -1625,7 +1693,7 @@ Accept-Language: zh-CN
 
 **在途与清理约束。** 删除生效后不能再受理新的Session或追加配置中的初始消息。已经受理的Session独立保留，其完成事件继续按Runtime规则保存；异步回调、失败记录与对账不得重新插入已删除Run、恢复Schedule或安装下一次计划。暂时留下的协调信息只服务于原执行收尾，不进入Run列表/详情；最小存储和清理边界见[定时任务受理流程](#normal-acceptance)，不以删除请求触发取消。不能用数据库外键级联把Run引用的Session一起删除。
 
-**Run与Session反向删除不对称。** 单独删除Session保留仍存续任务的Run及原sessionId，不把过去的受理成功改成失败，不清空历史关联。Run读取不要求关联Session当前仍可读取；读取或删除Session始终执行其独立权限检查，404不能证明业务从未执行。
+**Run与Session反向删除不对称。** 对话中创建的任务随关联会话一起删除，Run同时删除（§3.13）；接口配置的任务单独删除Session时保留仍存续任务的Run及原sessionId，不把过去的受理成功改成失败，不清空历史关联。Run读取不要求关联Session当前仍可读取；读取或删除Session始终执行其独立权限检查，404不能证明业务从未执行。
 
 **两个读取接口。** 两者均不接收请求体，使用 §4.2 的认证、语言及两字段HTTP错误包装，成功为200/ResultBean、Cache-Control:no-store。列表跨任务返回全部存续任务的Run，删除过滤先于分页；首版由 Mate 拉取后按用户过滤，scheduleId 或 sessionId 不构成授权依据。
 
@@ -1645,7 +1713,7 @@ Accept-Language: zh-CN
 
 重复标量、未知参数、非法ID、非空正文或错误类型返回400/SCHEDULE_REQUEST_INVALID；详情不接受业务查询参数。列表按`createdAt DESC,id DESC`排序，在同一一致性边界过滤并读取limit+1条，额外一条仅判断nextPage；有后续时为page+1，否则null。空页或超末页均为200、runs:[]、nextPage:null。普通OFFSET翻页会因新记录、删除或保留期清理出现重复/遗漏；筛选变化时从page1重读，不能用于可靠增量同步或证明某次运行未发生。
 
-每项沿用type、id、scheduleId、agentId、triggerContext、sessionId、error、createdAt八字段，不增加status或业务执行结果。手动来源为`{type:"manual"}`；自动来源为`{type:"schedule",scheduledAt:"2026-10-05T00:00:00Z"}`，scheduledAt是原计划时刻，createdAt是记录创建时间，均为UTC秒级。自动忙跳过以schedule_busy_error记录；停机时未观察到的计划不逐次补造Run。受理结果已确定的Run才公开，sessionId/error恰好一个非空；内部准备中及受理结果未知不进入公共模型。受理成功后业务失联、失败、交互被阻止或Session删除均不改写原受理事实，真实执行结果由Session/根执行管理。
+每项沿用type、id、scheduleId、agentId、triggerContext、sessionId、error、createdAt八字段，不增加status或业务执行结果。手动来源为`{type:"manual"}`；自动来源为`{type:"schedule",scheduledAt:"2026-10-05T00:00:00Z"}`，scheduledAt是原计划时刻，createdAt是记录创建时间，均为UTC秒级。自动忙跳过以schedule_busy_error记录，关联会话正忙以session_busy_error记录；停机时未观察到的计划不逐次补造Run。受理结果已确定的Run才公开，sessionId/error恰好一个非空；内部准备中及受理结果未知不进入公共模型。受理成功后业务失联、失败、交互被阻止或Session删除均不改写原受理事实，真实执行结果由Session/根执行管理。
 
 | HTTP / resCode | 读取失败规则 |
 |---|---|
@@ -1739,7 +1807,8 @@ Accept-Language: zh-CN
 - 用户、组织、租户、资源归属与权限由 Mate 维护并执行。Claw 不解析或保存用户、scope、owner、operator，收到 Mate 可信服务请求后只校验服务来源、具体操作和目标资源，再检查自己的输入与状态，规则见[配置 身份与权限边界](#mate-access-boundary)。
 - 首版列表由 Mate 拉取全部后按用户过滤、排序和分页（D9）；Claw 加 userId 见 T10。
 - 用户权限只在配置任务时由 Mate 检查；运行时所有定时任务统一使用 Mate 配置的同一个账号，不再按用户查询执行资格（D10）。
-- 新 Session 在受理前由 Mate 独立登记归属；登记失败或结果未知时不启动，删除 Schedule/Run 不删除该归属。
+- 接口配置的任务新建的 Session 在受理前由 Mate 独立登记归属；登记失败或结果未知时不启动，删除 Schedule/Run 不删除该归属。
+- 对话中创建的任务由 Cron 工具在用户自己的会话中创建，归属随会话，不经 Mate 授权；Cron 工具只能访问当前会话关联的任务，范围外按不存在处理；create、update、delete 须经用户确认，定时运行中无法确认即结束本轮（[§3.12](#cron-tool)、[§3.13](#chat-created-schedule)）。
 - Claw 不持久化凭据引用或 Token。模型一次返回中有需要凭据的工具调用，并且至少一个通过可信解析、参数校验和权限判断时，执行 Adapter 无入参向 Mate 取一次统一账号的 `access-token`，本批共用，只透传这一项；只含无凭据工具、参数错误或权限 ASK 时不取。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型。秘密只在受限执行内存中使用，不进入模型、metadata、Schedule/Run、事件或日志。普通 HTTP 消息仍沿用 [M06 当次 Header 快照规则](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)。凭据来源按根执行的入口区分，不按 Session 的来源区分：定时触发的根执行（含其 Child）用统一账号 access-token；用户在定时任务创建的 Session 里继续对话时，新消息是普通 HTTP 根执行，只用该请求 Header 中的用户凭据，不向 Mate 取统一账号 Token，也不沿用定时执行的 Token；机制见 [§3.11](#session-credentials)。
 - metadata 不进入模型输入，不作为身份、权限或凭据依据。
 - 资源级不可见统一返回 404，不泄露存在性。
@@ -1761,7 +1830,8 @@ Accept-Language: zh-CN
 4. 根执行是执行终态的最终决定方；Run 只表示受理结果，不表示业务成败。
 5. 晚到的回调与对账不得复活已删除的 Schedule 或 Run。
 6. 秘密不进入模型、Schedule/Run、事件或日志。
-7. 未取得 Mate 的 Session 归属登记确认前，不受理、不启动 Session。
+7. 接口配置的任务未取得 Mate 的 Session 归属登记确认前，不受理、不启动 Session。
+8. 对话中创建的任务只在关联会话空闲时受理，不与用户的执行并发。
 
 **失败分类**：副作用状态取“未发生 / 部分发生 / 已提交 / 未知”之一。
 
@@ -1780,7 +1850,9 @@ Accept-Language: zh-CN
 | F11 | 删除与最终受理竞争 | 受理 | 删除先提交：未发生；受理先提交：Session 已创建 | 数据库行锁 | 删除先提交则不受理；受理先提交则保留 Session、删除 Run | Run 与 Schedule 404，从 Session 入口查看或停止 | 删除不取消已受理执行 |
 | F12 | 单次运行超过 30 分钟 | 执行中 | 部分发生 | 调度器 | 向原根执行请求停止 | 停止未确认前显示停止中或未知 | 停止请求不等于已终止 |
 | F13 | 删除后晚到的完成或失败回调 | 收尾 | 已提交（Session 侧） | 调度器 | 条件更新影响 0 行即视为资源已删，只收尾 Session 与根执行 | 无 | — |
-| F14 | Mate 归属登记被拒或结果未知 | 受理前 | 被拒：未发生；未知：Mate 侧可能已登记，Claw 未受理 | 调度器 | 停止本次受理；结果未知时在 lease_until 内按固定 Run 与 Session ID 只读核对，仍未知则本次不受理，Run 写 finished_at 与 unknown_error 后释放任务；实例失联时由过期准备清理结束。不新建 Session、不重放 | Run 显示未受理原因 | 过期后该 Session ID 不可能再被受理，Mate 侧登记只是待核对关联，不对外承诺可访问，由 Mate 确认 Claw 中不存在后清理；Run 表不区分准备超时与登记未知 |
+| F14 | Mate 归属登记被拒或结果未知（接口配置的任务） | 受理前 | 被拒：未发生；未知：Mate 侧可能已登记，Claw 未受理 | 调度器 | 停止本次受理；结果未知时在 lease_until 内按固定 Run 与 Session ID 只读核对，仍未知则本次不受理，Run 写 finished_at 与 unknown_error 后释放任务；实例失联时由过期准备清理结束。不新建 Session、不重放 | Run 显示未受理原因 | 过期后该 Session ID 不可能再被受理，Mate 侧登记只是待核对关联，不对外承诺可访问，由 Mate 确认 Claw 中不存在后清理；Run 表不区分准备超时与登记未知 |
+| F15 | 对话中创建的任务到点时关联会话正忙 | 受理 | 未发生 | 调度器 | 记录已结束的 Run（`session_busy_error`），游标照常推进 | Run 显示“关联的对话正忙，本次已跳过”；下一计划照常 | 不排队，不补跑 |
+| F16 | 用户拒绝 Cron 工具的创建、修改或删除 | 确认 | 未发生 | Host | 不写入，工具结果为已拒绝 | 对话中可见，模型据此回复 | — |
 
 不重跑不等于不对账：只读查询已有结果、幂等落地已确认终态、清理已结束资源可以继续重试，它们不调用模型或产生新的园区业务请求。未知执行不得因固定期限到期就写入 Run.finished_at，必须取得根执行终态或经独立授权的人工处置才解除占用。若根执行现有枚举不包含“未知”，运营视图须明确标注，不能把 Run 的受理错误冒充 Session 业务终态。
 
@@ -1800,6 +1872,7 @@ Accept-Language: zh-CN
 | 扫描批量 | 100 条 | upcoming_run_at/id 有序、有界扫描；不按用户/租户分组，跨租户公平策略归 Mate |
 | 每任务并发 | 1 | 自动和手动共享；结果未知也占用 |
 | Cron 时间分辨率 | 1 秒 | 沿用六字段能力；不承诺每秒任务均有容量 |
+| 每会话定时任务数 | 10 个 | 对话中由 Cron 工具创建的任务；创建事务内锁会话行计数，接口配置的任务不计入 |
 | Mate 每管理范围任务数 | 100 个 | 由 Mate 配额准入维护，Claw 不计数 |
 | 每实例定时活动执行上限 | 8 个 | 独立调度配额，且必须同时取得既有 Runtime 容量，不能绕过交互任务容量保护 |
 | 受理准备期限 | 10 秒 | 准备超时只记本次失败；自动受理取它与 scheduled_at 加 5 秒中较早者，即 Run.lease_until |
@@ -1838,7 +1911,7 @@ Accept-Language: zh-CN
 
 - 旧进程内 CronEngine（JSON Job / JSONL Run）在新 SQL 调度器启用前必须停止，两套调度不得并行。
 - 旧 At/Every 任务不静默转换为 Cron；迁移时由 Mate 建立任务授权关联，缺时区或 Mate 授权的旧 Job 迁移后保持禁用等待补全。
-- 现有 CronTool 与 BuiltInToolContracts 各有一份旧 Schema，迁移时同步处理；Cron 工具与 HTTP 委托同一应用服务，首版只迁移只读动作（D13），旧写操作 Schema 不再注册给模型。现有工具的可选 timezone 在迁移时必须归一化成明确存储值，不静默采用运行节点时区。
+- 现有 CronTool 与 BuiltInToolContracts 各有一份旧 Schema，迁移时同步处理；Cron 工具与 HTTP 委托同一应用服务，按 §3.12 提供 list、status、runs、create、update、delete、pause、unpause，范围限于当前会话（D13），旧 Schema 中的 run 与 At/Every 类型不再注册给模型。现有工具的可选 timezone 在迁移时必须归一化成明确存储值，不静默采用运行节点时区。
 - 普通 Session 的消息、文件引用和 Header 快照契约不因定时入口改变。
 - Cron 方言采用 Spring 六字段，与 Claude 五字段 POSIX 不兼容，表达式不能直接复制。
 
@@ -1864,6 +1937,7 @@ Accept-Language: zh-CN
 - 接口：10 个操作的成功与错误报文、字段边界、Mate 拉取全部后过滤分页，详见[§4.7](#implementation-acceptance)。
 - 安全：越权目标资源被拒、每批需要凭据的工具调用只取一次 Token 且只透传 access-token、取 Token 失败时本批不执行、lease_until 过期后拒绝受理、未登记归属不受理、ASK 不被自动放行、日志与历史中无凭据。
 - 删除：删除后 Schedule/Run 不可见，Mate 中原 Session 归属仍在且可按当前权限读取，晚到回调不复活资源，Run 清理不删除 Session。
+- 对话中创建：Cron 工具只能看到当前会话的任务；create、update、delete 未确认不写入、拒绝不写入，校验失败不弹确认；定时运行中写动作结束本轮；到点会话空闲时追加一轮、正忙时记录 session_busy_error；用户消息与定时受理竞争只有一方成功；删除会话同事务删除任务与 Run，会话正忙时 409 且任务保留；每会话上限并发创建不超限；接口不能写入 sessionId，不能修改这类任务的 agentId。
 - 工程：reactor verify、corporate 镜像布局、GaussDB 集成与 2 副本联调。
 
 <a id="implementation-slices"></a>
@@ -1983,6 +2057,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.61.0 | 2026-10-16 | 支持在对话中通过 Cron 工具创建定时任务：任务关联当前会话并在该会话中运行，会话忙时跳过，删除会话时一起删除，创建、修改、删除需用户确认。 |
 | 0.60.0 | 2026-10-15 | 类图修正 `ScheduleController` 方法签名，Run 与任务改为按 `scheduleId` 关联而非聚合。 |
 | 0.59.0 | 2026-10-15 | 全局类图按标准 UML 重画（类成员、接口实现、组合与多重性，ELK 分层布局），并与实现映射一起改用 PR #332 的可读类名：`ScheduleRunLauncher`、`ScheduledSessionStarter`（移入 `schedule.session`）、`ScheduleTriggerWorker`、`ScheduleSessionRegistry` 等，新旧名对照见[源码证据 §8.23](source-evidence.md#class-rename)。 |
 | 0.58.0 | 2026-10-15 | 全局类图按 PR #332 实现更新：Run 编排为 `ScheduleRunCoordinator` 与 `ScheduledRuntimeAdmissionService`，立即运行经进程内事件，Mate 适配拆为两个类，删除仓储端口；§3.10 补充 `ExecutionSafetyContext` 的职责。 |
