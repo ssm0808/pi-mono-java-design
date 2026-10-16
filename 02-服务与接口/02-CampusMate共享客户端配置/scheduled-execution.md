@@ -1,6 +1,6 @@
 # Mate 定时执行凭据接口
 
-版本：0.8.0；日期：2026-10-15；状态：接口草案，待实现。以下新增 Mate 路径及字段是配套设计，不冒充已发布接口。
+版本：0.9.0；日期：2026-10-16；状态：接口草案，待实现。以下新增 Mate 路径及字段是配套设计，不冒充已发布接口。Claw 调用 Mate 的接口总览、调用时机和失败处理以[定时任务设计 §4.8](../../01-总体架构/08-CampusClaw定时任务/README.md#mate-calls)为准，本文只维护 Mate 侧的报文与处理。
 
 [共享连接目录](README.md) · [定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [核验依据](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)
 
@@ -74,9 +74,9 @@ Mate 独立维护 Session ID 到用户、组织/管理范围及授权政策的�
 5. 用户读取、继续对话、停止和删除会话时，Mate 依据当前主体及会话关联逐次授权，再以可信服务请求调用 Claw。Claw 校验服务来源和获准操作/目标，执行自身状态检查；浏览器、模型提供的资源 ID 不是授权依据。会话归属用 user_id 标识。任务与 Run 列表按主设计 D9 由 Mate 拉取 Claw 全部记录后按用户过滤、排序和分页，Claw 不接收可见集合。
 6. 删除 Schedule/Run 不删除已经建立的 Session 归属或撤销已受理执行的独立关联。Session 删除确认后 Mate 关闭相应访问映射，未知结果先核对；公共 Chat 映射可以异步补齐，但不能替代上述归属登记。
 
-Claw 的 Cron 工具首版只读（主设计 D13），只读取当前会话所用 Agent 的任务与 Run，不向 Mate 请求操作授权。会话内创建、删除、暂停等写操作以后经 Mate 暴露的接口实现：Mate 完成用户授权并记录任务的 user_id，再调用 Claw（主设计 T13），接口待定。
+对话中由 Cron 工具创建的任务（主设计 [§3.13](../../01-总体架构/08-CampusClaw定时任务/README.md#chat-created-schedule)）在用户自己的会话中运行，归属随会话，不经 Mate 授权，也不登记。Mate 按任务的 sessionId 对应的会话判断它属于哪个用户（主设计 T7，Mate 侧待设计）。
 
-核验：PR #332 `e9d31e8888a81b7fe95071e705482bb16fa10476` 的 `schedule/mate/MateScheduleContextClient.query/resolveCredentials`、`runtimeapi/schedule/ScheduledRuntimeAdmissionService.newSession/encodeContext` 尚传递并保存归属；源码根为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。本节职责修正、归属登记及服务授权接线均**待实现**；未读取 Mate 当前生产实现，不指定其物理表名，不宣称已有上述接口。
+核验：pi-mono-java main `ead67eba`（PR #332 合并）中，源码根 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/` 下的 `schedule/session/ScheduledSessionStarter.prepare/confirmRegistration` 已按第 1～4 步固定 Session ID、登记并在结果未知时只读核对；`schedule/mate/MateScheduleSessionRegistry` 是默认实现，一律返回服务不可用。Mate 侧登记接口、路径与 VO 以及服务认证均**待实现**；未读取 Mate 当前生产实现，不指定其物理表名。
 
 ## 5. 共用HTTP、错误及Java边界
 
@@ -91,7 +91,7 @@ Claw 的 Cron 工具首版只读（主设计 D13），只读取当前会话所�
 
 错误不得回显 Token、接口内部地址或原始异常。受理后发生的取 Token 失败属于原 Session 内该批工具的真实结果，不改写已成功的 Run。
 
-Claw 新增 `ScheduledAccessTokenClient`，在工具批次执行前取得值并构造只含 `access-token` 的 `MateCredentials` 快照；定时路径不做“X-HW-ID + access-token + JWT/APPKEY”的完整性检查，与 M06 目标一致。复用现有 JDK HTTP 客户端、Jackson、Spring，不新增外部依赖。
+Claw 侧由 `MateAccessTokenClient`（实现 `ScheduleAccessTokenProvider`）在工具批次执行前取得值并构造只含 `access-token` 的 `MateCredentials` 快照；定时路径不做“X-HW-ID + access-token + JWT/APPKEY”的完整性检查，与 M06 目标一致。复用现有 JDK HTTP 客户端、Jackson、Spring，不新增外部依赖。
 
 ## 6. 配置、结构与验收
 
@@ -103,6 +103,7 @@ Claw 新增 `ScheduledAccessTokenClient`，在工具批次执行前取得值并�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.9.0 | 2026-10-16 | 接口总览改以主设计 §4.8 为准，对话中创建的任务不登记归属，Claw 侧类名对齐实现。 |
 | 0.8.0 | 2026-10-15 | 列表改为按 D9 由 Mate 拉取全部后过滤，Cron 工具首版只读且不向 Mate 请求授权，会话归属用 user_id 标识。 |
 | 0.7.0 | 2026-10-15 | 撤销按 agentId 的 Agent 存在且启用校验，定时任务不再校验 Agent 启停用。 |
 | 0.6.0 | 2026-10-15 | 定时准备按 agentId 校验 Agent 存在且启用，作为 D12 自动暂停的唯一判定依据；接口待 Mate 确认。 |
