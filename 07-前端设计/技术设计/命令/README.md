@@ -78,9 +78,9 @@ parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立�
 
 | 约束 | 前端必须如何处理 |
 |---|---|
-| GET Descriptor 只有 `name`、`type`、`description` 和可选 `hints` | type 表示命令类别；不从提示推断建议值、参数枚举或权限 |
+| GET Descriptor 只有 `name`、`type`、`description` 和可选 `hints` | type 表示命令类别；hints 只给固定参数值，不含界面文案 |
 | 所有 type=skill 允许附件，Builtin 不接收附件 | 附件入口根据 type 与上传接入状态控制，不静默丢弃草稿 |
-| hints 是可选字符串数组，各元素非空，缺失或 [] 均为无提示 | 不把提示当 Schema、控件类型、枚举或权限；Model/Thinking/Mode 使用专用选项 |
+| hints 是可选非空字符串数组，列出可直接提交的固定参数值，只在 thinking（on/off）与 mode（plan/build）返回 | 有 hints 即展示选项列表并原样提交选中值；显示名由前端维护，不从 hints 推断权限或当前值 |
 | 服务端返回固定 Builtin 顺序并追加 Skill | 客户端只做稳定前缀过滤，不重新排序或模糊重排 |
 | 清单按 Agent 返回全部命令，不按 Session 状态过滤（待实现） | running 时按共享状态规则表置灰 Compact/Skill 并限制修改；状态未知或恢复中暂停提交，POST 终判 |
 | Builtin POST 返回普通 JSON，无 commandId 和通用生命周期 | 不画虚构进度条，不建立轮询或通用命令历史 |
@@ -198,7 +198,7 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 - 上下方向键移动活动项，Home/End 跳到首尾；Enter 选择活动项，鼠标或触摸点击语义相同。
 - 点击或 Enter 只选择并关闭清单；上箭头在浏览中禁用，不承担“填入”动作。
 - 选中当前仅允许无参调用的命令显示标签、隐藏参数 textarea，焦点进入当前命令执行按钮（空闲为上箭头，运行中为独立按钮）；再次明确 Enter 或点击才提交。
-- 允许带参调用时标签与输入控件同处 Composer；name/Skill 使用文本框和 hints 提示，model/thinking/mode 打开下述选项列表。选中选项只更新参数草稿，后续明确执行才提交。
+- 允许带参调用时标签与输入控件同处 Composer；name/Skill 使用文本框，占位提示由前端提供，model/thinking/mode 打开下述选项列表。选中选项只更新参数草稿，后续明确执行才提交。
 - 空闲上箭头可访问名称为“运行 <name>”或“发送消息”。运行时右下角固定为“停止生成”，命令区独立显示“执行命令”，可访问名称为“运行 <name>”；无参数控件时焦点进入该命令按钮，有文本控件时 Enter 执行命令，Shift+Enter 换行。普通消息 textarea 的 Enter 不停止也不发送。
 - 点击停止只走共享对话协调器，命令查询不能遮挡或禁用可用的停止动作；停止请求到真实终态的状态见[工作台专项](../runtime-workbench-alignment.md#4-composer-的发送与停止)。
 - IME composition、`isComposing`、keyCode 229 及按键长按 repeat 不触发选择或执行；选择那次 Enter 不得再次触发提交。
@@ -214,14 +214,14 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 | 命令 | 控件与数据来源 | 正常调用 | 失败与状态变化 |
 |---|---|---|---|
 | model | 单选列表；Runtime 适配读取 ListSessionModels 的 currentModelId/models，显示名从调用方模型信息取得，缺名称时可展示返回的 ID | 用户选择真实候选，冻结 arguments=modelId 后显式执行；带参响应按 Session 处理 | 加载失败可重试 GET，空列表禁用修改；迟到响应不得跨 Chat 应用；POST 拒绝或不确定时保留草稿，不自动重放 |
-| thinking | 当前 Session 值打勾，选项为开启/关闭 | 选择后映射 on/off，显式执行；以响应中的最终 thinking 为准 | running 时仅查看；不支持时展示服务端错误并刷新权威状态，不能用 hint 推测模型能力 |
-| mode | 单选列表：计划（plan）/实施（build），当前 Session.mode 打勾；枚举由命令规则定义，提供清空选择以查询当前模式 | 选择只更新草稿，显式执行提交 arguments=plan/build；空参和带参均冻结 expectedResultKind=session，成功用完整 Session 更新模式指示器 | running（含所有交互等待）仅无参查询；非法值保留并报错，不能降为查询；422 显示计划能力不足；409 或网络不确定只读对账、不重放、不批准计划 |
-| name | 文本框，hints 可作提示 | 输入名称或空参查询 | 保留服务端校验错误与原草稿 |
+| thinking | 当前 Session 值打勾，选项取自 hints（on/off），前端显示为开启/关闭 | 选择后提交选中值，显式执行；以响应中的最终 thinking 为准 | running 时仅查看；不支持时展示服务端错误并刷新权威状态，不能用 hint 推测模型能力 |
+| mode | 单选列表：选项取自 hints（plan/build），前端显示为计划/实施，当前 Session.mode 打勾；提供清空选择以查询当前模式 | 选择只更新草稿，显式执行提交 arguments=plan/build；空参和带参均冻结 expectedResultKind=session，成功用完整 Session 更新模式指示器 | running（含所有交互等待）仅无参查询；非法值保留并报错，不能降为查询；422 显示计划能力不足；409 或网络不确定只读对账、不重放、不批准计划 |
+| name | 文本框，占位提示由前端提供 | 输入名称或空参查询 | 保留服务端校验错误与原草稿 |
 | skill:<name> | 请求文本与可选附件；按 type=skill 准入附件 | 上传成功取得 fileIds，与 arguments 一起冻结，执行共享 SSE | 上传未完成不提交；失败保留文本/附件；文件拒绝不能静默去掉附件后重发 |
 
 选项列表复用清单的 listbox/option、键盘和触摸规则；勾选表示当前值，键盘活动项单独显示。
-Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不再次提交。model、thinking、mode 的清单项不带 hints，控件与候选只由本节命令规则决定。
-按已知命令选控件是客户端展示职责；hints 缺失或 [] 不限制输入。命令规则集中消费已对账的 Session 状态，候选是否仍可用和 POST 最终准入由后端决定。
+Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不再次提交。thinking、mode 的选项值来自清单 hints，model 的候选来自 ListSessionModels；选项显示名由前端维护。
+name、技能命令与 model 不带 hints，按命令名选控件是客户端展示职责；hints 缺失不限制输入。命令规则集中消费已对账的 Session 状态，候选是否仍可用和 POST 最终准入由后端决定。
 状态变为 running 时关闭修改列表并保留已选草稿，用户可清空参数后显式查询；未知状态、清单过期或恢复中暂停提交。
 
 图片中的轻度/中/高/极高属于思考强度，当前 CampusClaw 只有 boolean thinking。
@@ -436,7 +436,7 @@ interface CommandGateway {
 - IME composing 时 Enter 不选中、不执行；键盘、触摸和鼠标得到同一规范命令。
 - 选择后显示可删除标签；仅无参调用时隐藏修改控件，model/thinking 展示选项，name/Skill 编辑文本；菜单行没有前导 Slash、type 或 hints。
 - model 列表覆盖加载、空值、当前值不在候选、迟到响应和状态变为 running；不得要求用户猜 ID。Thinking 只展示真实开关，不伪造强度档位。
-- 所有 Skill fixture 均按 type 支持附件，hints 缺失或 [] 不影响附件准入；fileIds 与文本同次冻结，上传失败、服务端文件拒绝与断流不丢草稿、不自动重放。
+- 所有 Skill fixture 均按 type 支持附件，附件准入与 hints 无关；fileIds 与文本同次冻结，上传失败、服务端文件拒绝与断流不丢草稿、不自动重放。
 - + 菜单不含命令，打开和关闭不破坏草稿；首字符 / 发现、取消/成功恢复附件；运行中选择无参数命令后焦点不得误落停止按钮，更换后 Escape 恢复原选择及参数。
 - 第一次 Escape 关闭清单，第二次退出；空参数 Backspace 与 × 退出；未匹配不发送。
 - 选择命令不执行，第二个明确动作才执行；长按 Enter 不提交，重复点击运行只能产生一次在途请求。
@@ -502,7 +502,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.13.0 | 2026-10-16 | hints 只作 name 与技能命令输入框的本地化占位提示；选项型命令不再携带 hints。 |
+| 1.13.0 | 2026-10-16 | hints 改为固定参数值列表，thinking/mode 的选项值取自 hints；占位提示与选项显示名由前端维护。 |
 | 1.12.0 | 2026-10-16 | 命令清单改为按 Agent 读取与缓存，stateKey 只含 agentId；运行状态只决定置灰，不触发重读；错误态改为 404/422。 |
 | 1.11.0 | 2026-10-04 | 命令结果消费取消版本响应头与 ETag 依赖，保留完整资源和不确定结果对账。 |
 | 1.10.0 | 2026-09-22 | 增加 mode 选择控件、Session 结果映射与审核等待下的只读查询边界。 |

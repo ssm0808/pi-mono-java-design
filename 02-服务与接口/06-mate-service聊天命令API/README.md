@@ -61,7 +61,7 @@ python3 validate-chat-command-v1.py --full
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.9.0 | 2026-10-16 | 清单投影跟随 Runtime：Builtin 中文描述优化，hints 改为本地化占位提示。 |
+| 1.9.0 | 2026-10-16 | 清单投影跟随 Runtime：Builtin 中文描述优化，hints 改为固定参数值列表。 |
 | 1.8.0 | 2026-10-16 | 清单投影跟随 Runtime：Builtin description 按 Accept-Language 国际化，补 en-US 示例。 |
 | 1.7.0 | 2026-10-16 | 清单投影跟随 Runtime 改为按所属 Agent 返回全部命令，不再按会话状态过滤；公共路径是否改为按 Agent 查询待定。 |
 | 1.6.0 | 2026-09-22 | 清单投影增加 mode 查询与模式切换入口，公共执行仍独立验收。 |

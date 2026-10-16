@@ -23,12 +23,12 @@ def validate_descriptor(command):
     else:
         require(re.fullmatch(r"skill:[a-z0-9]+(?:-[a-z0-9]+)*", command["name"])
                 and len(command["name"]) <= 70, "Invalid Skill command name")
-    if "hints" in command:
-        require(isinstance(command["hints"], list)
-                and all(isinstance(hint, str) and hint.strip() for hint in command["hints"]),
-                "Hints must be an array of nonblank strings, independent of input capability")
-        require(not command["hints"] or command["type"] == "skill" or command["name"] in FREE_TEXT_BUILTINS,
-                f"Only free-text commands carry placeholder hints: {command['name']}")
+    expected = BUILTIN_HINTS.get(command["name"])
+    if expected is None:
+        require("hints" not in command, f"Only fixed-value commands return hints: {command['name']}")
+    else:
+        require(command.get("hints") == expected,
+                f"hints must list the fixed submit values in order, without UI copy: {command['name']}")
 
 
 def validate_commands(commands):
@@ -46,8 +46,8 @@ def validate_commands(commands):
 
 
 HELP_DESCRIPTIONS = {"zh-CN": "介绍当前智能体的用途和使用场景", "en-US": "Introduce this agent's purpose and use cases"}
-# Only free-text inputs get a placeholder; model/thinking/mode are switched with frontend pickers.
-FREE_TEXT_BUILTINS = {"name"}
+# Fixed submit values per Builtin; model candidates are session-dependent and free text has no hints.
+BUILTIN_HINTS = {"thinking": ["on", "off"], "mode": ["plan", "build"]}
 
 
 SUCCESS_IDS = {"200-commands", "200-no-skills"}
@@ -86,8 +86,8 @@ def validate_localized_pair(chinese, english):
     for left, right in zip(chinese, english):
         require((left["name"], left["type"]) == (right["name"], right["type"]),
                 "name and type stay language-neutral")
-        require(len(left.get("hints", [])) == len(right.get("hints", [])),
-                f"Localized hints must keep the same placeholders: {left['name']}")
+        require(left.get("hints") == right.get("hints"),
+                f"hints are language-neutral: {left['name']}")
         if left["type"] == "builtin":
             require(left["description"] != right["description"], f"Builtin description is not localized: {left['name']}")
         else:

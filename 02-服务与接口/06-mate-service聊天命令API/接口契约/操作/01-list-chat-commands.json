@@ -49,10 +49,7 @@
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "查看或修改会话名称",
-                  "hints": [
-                    "新的会话名称"
-                  ]
+                  "description": "查看或修改会话名称"
                 },
                 {
                   "name": "model",
@@ -62,12 +59,20 @@
                 {
                   "name": "thinking",
                   "type": "builtin",
-                  "description": "开启或关闭深度思考"
+                  "description": "开启或关闭深度思考",
+                  "hints": [
+                    "on",
+                    "off"
+                  ]
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
-                  "description": "查看或切换计划/实施模式"
+                  "description": "查看或切换计划/实施模式",
+                  "hints": [
+                    "plan",
+                    "build"
+                  ]
                 },
                 {
                   "name": "compact",
@@ -82,10 +87,7 @@
                 {
                   "name": "skill:pdf",
                   "type": "skill",
-                  "description": "分析和生成 PDF 文档",
-                  "hints": [
-                    "说明要处理的内容"
-                  ]
+                  "description": "分析和生成 PDF 文档"
                 }
               ]
             }
@@ -108,10 +110,7 @@
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "Show or rename the session",
-                  "hints": [
-                    "New session name"
-                  ]
+                  "description": "Show or rename the session"
                 },
                 {
                   "name": "model",
@@ -121,12 +120,20 @@
                 {
                   "name": "thinking",
                   "type": "builtin",
-                  "description": "Turn deep thinking on or off"
+                  "description": "Turn deep thinking on or off",
+                  "hints": [
+                    "on",
+                    "off"
+                  ]
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
-                  "description": "Show or switch between plan and build mode"
+                  "description": "Show or switch between plan and build mode",
+                  "hints": [
+                    "plan",
+                    "build"
+                  ]
                 },
                 {
                   "name": "compact",
@@ -141,10 +148,7 @@
                 {
                   "name": "skill:pdf",
                   "type": "skill",
-                  "description": "分析和生成 PDF 文档",
-                  "hints": [
-                    "Describe what you need"
-                  ]
+                  "description": "分析和生成 PDF 文档"
                 }
               ]
             }
@@ -180,10 +184,7 @@
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "查看或修改会话名称",
-                  "hints": [
-                    "新的会话名称"
-                  ]
+                  "description": "查看或修改会话名称"
                 },
                 {
                   "name": "model",
@@ -193,12 +194,20 @@
                 {
                   "name": "thinking",
                   "type": "builtin",
-                  "description": "开启或关闭深度思考"
+                  "description": "开启或关闭深度思考",
+                  "hints": [
+                    "on",
+                    "off"
+                  ]
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
-                  "description": "查看或切换计划/实施模式"
+                  "description": "查看或切换计划/实施模式",
+                  "hints": [
+                    "plan",
+                    "build"
+                  ]
                 },
                 {
                   "name": "compact",
@@ -231,10 +240,7 @@
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "Show or rename the session",
-                  "hints": [
-                    "New session name"
-                  ]
+                  "description": "Show or rename the session"
                 },
                 {
                   "name": "model",
@@ -244,12 +250,20 @@
                 {
                   "name": "thinking",
                   "type": "builtin",
-                  "description": "Turn deep thinking on or off"
+                  "description": "Turn deep thinking on or off",
+                  "hints": [
+                    "on",
+                    "off"
+                  ]
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
-                  "description": "Show or switch between plan and build mode"
+                  "description": "Show or switch between plan and build mode",
+                  "hints": [
+                    "plan",
+                    "build"
+                  ]
                 },
                 {
                   "name": "compact",
@@ -376,12 +390,12 @@
         },
         {
           "actor": "前端",
-          "action": "按 type/name 选择控件，hints 仅作参数提示",
+          "action": "hints 非空时展示选项列表，界面文案由前端决定",
           "outcome": "命令无匹配时保留草稿，不回退普通消息"
         }
       ],
       "notes": [
-        "描述符仅包含 name、type、description 和可选 hints。hints 缺失不代表禁止参数；所有 Skill 允许附件，Builtin 不允许；运行中的 model/thinking 只允许无参查询。",
+        "描述符仅包含 name、type、description 和可选 hints。hints 是可提交的固定值，不含界面文案，参数始终可省略；所有 Skill 允许附件，Builtin 不允许；运行中的 model/thinking 只允许无参查询。",
         "无完整 Agent 快照时，目标清单失败，不返回残缺 Builtin；公共错误映射保留待重审状态。",
         "GET 是观察结果，不保证随后 POST 一定成功；POST 仍需独立解析并在所属事务或锁内复核。",
         "Skill 发现不等于 Skill 执行协议已发布。旧公共 POST SSE 已废止，不属于本次 GET 恢复范围。",

@@ -114,7 +114,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 
 空参数是 Service 归一后的空字符串。全空白 Name 修改在去除两端空白后为空时拒绝，不视为清空。
 Help 的 arguments 缺省/null/空白归一为空；非空参数（包括 model）为 INVALID_COMMAND_REQUEST，不进入命令详情或 COMMAND_NOT_FOUND 分支。
-GET 的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []），不允许执行参数；Agent 命令清单按[轻量契约](../README.md#31-get-轻量清单已确认)排序，不按 Session 状态过滤。
+GET 的 Help 描述符只有 name/type/description，不返回 hints，不允许执行参数；Agent 命令清单按[轻量契约](../README.md#31-get-轻量清单已确认)排序，不按 Session 状态过滤。
 Help 不刷新：读取最近成功发布的完整 Agent 缓存；无快照为 422 AGENT_NOT_AVAILABLE，只有文案缺失则返回 200 空数组。
 displayName 取 Agent 显示名，空白回退 Agent name；不是 `/name` 的 Session 名称。文案按纯文本展示，不调用模型、不写历史或模型上下文。
 清单查询不暴露内部准入原因；缓存缺失时先按 Agent 准备完整快照，Agent 不存在为 404 AGENT_NOT_FOUND，准备失败为 422 AGENT_NOT_AVAILABLE；不改变上述 POST Help 的 422。

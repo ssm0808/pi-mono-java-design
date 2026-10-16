@@ -240,11 +240,13 @@ R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个�
 | name | 是 | 不带前导 `/`；Builtin 裸名或 `skill:<name>`，稳定标识命令 |
 | type | 是 | `builtin` 或 `skill`，必须与 name 的命名空间一致；不表示控件或响应类型 |
 | description | 是 | 命令用途的非空说明。Builtin 按 `Accept-Language` 返回 zh-CN 或 en-US，缺失或不支持时回退 en-US；技能命令原样返回 Skill 作者写的描述，不做翻译 |
-| hints | 否 | 有序非空字符串数组；无提示时省略或 `[]`，不返回 null；自由文本输入框的占位提示，按 `Accept-Language` 本地化；只在 name 和技能命令上返回，其他命令省略。不是参数 Schema、枚举、必填规则或权限 |
+| hints | 否 | 有序非空字符串数组，列出可作为 arguments 提交的固定值；只在 thinking（`["on","off"]`）与 mode（`["plan","build"]`）上返回，其他命令省略，不返回 null。值不随语言变化，不是界面文案。参数始终可省略，省略即查询 |
 
 - 排序固定为 help、status、name、model、thinking、mode、compact、skills，再追加按 name 升序的技能命令。服务端控制顺序，客户端只做前缀过滤，不重新排序。理由：内置命令的使用频率和语义分组稳定，技能数量不定，按名称追加最好找。
-- 描述国际化只作用于 Builtin：Builtin 文案由服务端资源维护，按请求语言选择，`Content-Language` 返回实际选中的语言。Skill 描述来自作者元数据，只有一种语言，服务端不翻译；因此同一份清单里 Builtin 与技能命令的语言可能不同。理由：Builtin 是平台固定文案，可以维护双语；Skill 由各 Agent 作者提供，翻译会失真且无法保证覆盖。name、type 在各语言下完全相同；hints 随语言变化但条目数不变。
-- hints 只服务自由文本输入：name 和技能命令在输入框里显示占位提示；model、thinking、mode 由前端选择控件切换（候选分别来自模型列表接口、开启/关闭、计划/实施），不返回 hints。理由：选项型命令的当前值与可选范围依赖会话，Agent 级清单给不出；把 `on|off` 一类写进 hints 会被误当枚举解析。技能命令的占位提示是服务端统一文案，不读取 Skill 元数据。
+- 描述国际化只作用于 Builtin：Builtin 文案由服务端资源维护，按请求语言选择，`Content-Language` 返回实际选中的语言。Skill 描述来自作者元数据，只有一种语言，服务端不翻译；因此同一份清单里 Builtin 与技能命令的语言可能不同。理由：Builtin 是平台固定文案，可以维护双语；Skill 由各 Agent 作者提供，翻译会失真且无法保证覆盖。name、type、hints 在各语言下完全相同。
+- hints 只列固定参数值：前端看到 hints 即展示选项列表，选中的值原样提交。model 的候选依赖会话，由 ListSessionModels 提供，不放进 hints；name 与技能命令是自由文本，也不返回 hints。理由：固定值是平台规则，接口给出后前端无需另存一份；动态候选和自由文本无法用固定列表表达。
+- hints 不带界面文案：占位提示、选项显示名（如 on 显示为“开启”）由前端按自身语言和设计决定。理由：文案属于界面，不同前端的风格和语言不同，放在接口里会把展示和契约绑在一起。
+- 当前值和运行中能否修改不在清单中：它们是会话状态，Agent 级清单给不出，由 §4.2 规则与 POST 准入决定。
 - 清单只用 agentId 标识，不接受前缀、搜索词或 forceReload。理由：清单规模小，过滤在前端完成；强制刷新会绕过 Agent 发布流程。
 - 不返回 kind、input、available、unavailableCode、allowedValues、catalogVersion、acceptsFiles。理由：这些是内部准入或会话相关信息，Agent 级清单无法给出正确值。
 - 响应 `Cache-Control: no-store`，不返回 ETag。前端可在页面内存中按 Agent 复用一份清单（见前端 §5），不做持久缓存。
@@ -256,20 +258,20 @@ R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个�
 
 清单不随会话状态变化；下表是前端限制输入和 POST 准入共同遵循的唯一规则。
 
-| 命令 | hints（zh-CN 示例） | 会话空闲 | 会话运行中 |
+| 命令 | hints | 会话空闲 | 会话运行中 |
 |---|---|---|---|
 | help | 省略 | 无参查询 | 无参查询 |
 | status | 省略 | 无参查询 | 无参查询 |
-| name | `["新的会话名称"]` | 查询或改名 | 查询或改名 |
-| model | 省略（选择控件） | 查询或切换 | 仅无参查询 |
-| thinking | 省略（选择控件） | 查询或修改 | 仅无参查询 |
-| mode | 省略（选择控件） | 查询或切换 | 仅无参查询 |
+| name | 省略（自由文本） | 查询或改名 | 查询或改名 |
+| model | 省略（候选取自 ListSessionModels） | 查询或切换 | 仅无参查询 |
+| thinking | `["on","off"]` | 查询或修改 | 仅无参查询 |
+| mode | `["plan","build"]` | 查询或切换 | 仅无参查询 |
 | compact | 省略 | 无参压缩 | 禁止，前端置灰，POST 返回 409 SESSION_BUSY |
 | skills | 省略 | 无参查询 | 无参查询 |
-| `skill:<name>` | `["说明要处理的内容"]` | 可选文本和附件 | 禁止，前端置灰，POST 返回 409 SESSION_BUSY |
+| `skill:<name>` | 省略（自由文本） | 可选文本和附件 | 禁止，前端置灰，POST 返回 409 SESSION_BUSY |
 
 - hints 在两种状态下相同，不以缺失或变化表达禁止输入。
-- 前端按 type/name 选择控件：model 候选取自 ListSessionModels，thinking 为开启/关闭，mode 为计划/实施，name 与技能命令用文本输入并以 hints 作占位提示。POST 只提交 name、可选 arguments，技能命令另可提交 fileIds。
+- 前端控件：thinking、mode 用 hints 作选项列表；model 用 ListSessionModels 的候选作选项列表；name 与技能命令用文本框。选中的值原样作为 arguments 提交。POST 只提交 name、可选 arguments，技能命令另可提交 fileIds。
 - 会话状态未知、恢复中或清单读取失败时暂停提交。状态从空闲变为运行中时保留参数草稿并禁用修改；409 后刷新会话状态，保留草稿，不自动重放或降为查询。
 - 交互层遇到 Slash 先按清单精确匹配；清单失败、未命中或形态不支持时保留草稿并提示，不当作普通消息发送。
 
@@ -362,7 +364,7 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 | 范围 | 覆盖内容 |
 |---|---|
 | 清单 | 固定顺序、完整空 Skill、冷缓存准备一次、Agent 不存在 404、不可用 422、无内部字段泄漏、不读会话、同一 Agent 并发查询只准备一次 |
-| 描述与准入 | `describe()` 不依赖会话；运行中 compact 与技能命令被 POST 拒绝；hints 两种状态相同 |
+| 描述与准入 | `describe()` 不依赖会话；运行中 compact 与技能命令被 POST 拒绝；hints 两种状态相同且只含固定参数值 |
 | 执行 | 来源过滤、重名启动失败、单次解析、Help 三个业务字段、Name 无历史、同值不写 Entry、无通用命令记录 |
 | 技能命令 | 正常 SSE、确认分段、原消息中断、公开历史不含正文、解析失败不受理 |
 | 前端 | 按 agentId 读取并按 Agent 复用、状态规则集中生效、409 后保留草稿、未命中 Slash 不发普通消息 |
@@ -410,7 +412,7 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.3.0 | 2026-10-16 | 优化 Builtin 描述为面向用户的中文（会话、智能体、技能、计划/实施）；hints 改为本地化占位提示，只在 name 与技能命令返回，model/thinking/mode 由选择控件切换。 |
+| 2.3.0 | 2026-10-16 | 优化 Builtin 描述为面向用户的中文（会话、智能体、技能、计划/实施）；hints 改为可提交的固定参数值列表（thinking 为 on/off，mode 为 plan/build），其他命令省略，接口不带界面文案。 |
 | 2.2.0 | 2026-10-16 | 确认 T6：Builtin description 按 Accept-Language 国际化（zh-CN/en-US，回退 en-US），Skill description 原样返回，hints 不随语言变化。 |
 | 2.1.0 | 2026-10-16 | 专题迁到 `01-总体架构/04-CampusClaw命令系统`，原 `04-命令与技能` 的 Builtin、Help、Skill 命令与 Skill 统计并入为子专题；图源与 SVG 平铺到各专题根，对齐总体架构的命名与布局；设计内容不变。 |
 | 2.0.0 | 2026-10-16 | 按设计模板重写；命令清单改为按 agentId 查询，运行中的限制交给前端状态规则与执行准入。 |

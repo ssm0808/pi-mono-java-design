@@ -59,7 +59,7 @@
       "name": "Accept-Language",
       "required": false,
       "schema": "zh-CN | en-US",
-      "description": "接口文案语言：异常消息与命令清单中的 Builtin 描述和 hints；缺失或不支持时回退 en-US"
+      "description": "接口文案语言：异常消息与命令清单中的 Builtin 描述；缺失或不支持时回退 en-US"
     }
   },
   "contractSections": {

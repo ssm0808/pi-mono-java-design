@@ -96,8 +96,8 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
 这里的 `description` 是返回的 Agent 用途介绍；GET 描述符自身的 description 为“介绍当前智能体的用途和使用场景”（en-US 为 “Introduce this agent's purpose and use cases”），二者含义不同。
 
-Runtime 操作 12（`GET /agents/{agentId}/commands`）的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []）；
-Help 是否无参由命令契约定义，不由 hints 决定。清单不按 Session 状态过滤；缓存缺失时清单先准备 Agent，失败为 422，POST Help 仍独立检查缓存并保持既有 422。
+Runtime 操作 12（`GET /agents/{agentId}/commands`）的 Help 描述符只有 name/type/description，不返回 hints；
+Help 无参由命令契约定义，不由 hints 决定。清单不按 Session 状态过滤；缓存缺失时清单先准备 Agent，失败为 422，POST Help 仍独立检查缓存并保持既有 422。
 清单的字段与排序见[Agent 命令清单契约](../../README.md#31-get-轻量清单已确认)。
 
 ## 4. 缓存与缺失行为
