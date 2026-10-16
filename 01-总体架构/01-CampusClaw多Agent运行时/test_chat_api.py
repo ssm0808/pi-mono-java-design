@@ -318,7 +318,7 @@ class OperationPresentationTest(unittest.TestCase):
             "all_api_purposes", current.ROOT.parents[1] / "scripts/check-api-purposes.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        self.assertEqual(module.validate(), 25)
+        self.assertEqual(module.validate(), 26)
         for text in ("已确认的接口", "本轮修改说明", "PR #295 中实现"):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 module.check_purpose({"description": text}, "fixture")

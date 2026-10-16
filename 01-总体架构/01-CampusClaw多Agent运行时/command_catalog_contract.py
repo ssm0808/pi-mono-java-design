@@ -1,5 +1,6 @@
 """Shared design checks for lightweight Runtime and Mate GET descriptors."""
 
+import copy
 import re
 
 BUILTINS = ("help", "status", "name", "model", "thinking", "mode", "compact", "skills")
@@ -115,7 +116,30 @@ def validate_localized_pair(chinese, english):
             require(left["description"] == right["description"], f"Skill description must be returned as authored: {left['name']}")
 
 
+# Mate adds inputType so any frontend picks the input without per-command logic.
+PUBLIC_INPUT_TYPES = {"name": "text", "model": "options", "thinking": "options", "mode": "options"}
+
+
+def public_input_type(command):
+    return "text" if command.get("type") == "skill" else PUBLIC_INPUT_TYPES.get(command.get("name"))
+
+
+def runtime_view(public):
+    """Check the Mate-only inputType and return the operation as Runtime would project it."""
+    view = copy.deepcopy(public)
+    for response in view["responses"]:
+        if response["status"] != "200":
+            continue
+        for body in response["bodies"].values():
+            for command in body["result"]["commands"]:
+                expected = public_input_type(command)
+                actual = command.pop("inputType", None)
+                require(actual == expected, f"Public inputType must follow the Mate mapping: {command.get('name')}")
+    return view
+
+
 def validate_projection_pair(runtime, public):
+    public = runtime_view(public)
     validate_catalog_examples(runtime)
     validate_catalog_examples(public)
     left, right = success_examples(runtime), success_examples(public)

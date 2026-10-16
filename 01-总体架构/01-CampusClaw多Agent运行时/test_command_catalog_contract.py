@@ -137,6 +137,25 @@ class CommandCatalogContractTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             validate_commands(self.idle + [skill])
 
+    def test_public_input_type_follows_mate_mapping(self):
+        commands = {command["name"]: command for command in
+                    self.public["responses"][0]["bodies"]["en-US"]["result"]["commands"]}
+        self.assertEqual({name: command.get("inputType") for name, command in commands.items()},
+                         {"help": None, "status": None, "name": "text", "model": "options", "thinking": "options",
+                          "mode": "options", "compact": None, "skills": None, "skill:pdf": "text"})
+        for mutate in (lambda: commands["model"].pop("inputType"),
+                       lambda: commands["help"].update(inputType="text"),
+                       lambda: commands["skill:pdf"].update(inputType="options")):
+            with self.subTest(mutate=mutate):
+                self.setUp()
+                commands = {command["name"]: command for command in
+                            self.public["responses"][0]["bodies"]["en-US"]["result"]["commands"]}
+                mutate()
+                with self.assertRaises(RuntimeError):
+                    validate_projection_pair(self.runtime, self.public)
+        with self.assertRaises(RuntimeError):
+            validate_descriptor(dict(self.idle[3], inputType="options"))
+
     def test_missing_state_example_and_cross_boundary_drift(self):
         self.runtime["responses"] = self.runtime["responses"][1:]
         with self.assertRaises(RuntimeError):

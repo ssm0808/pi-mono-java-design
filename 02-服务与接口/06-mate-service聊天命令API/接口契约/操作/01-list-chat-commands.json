@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/chats/{chatId}/commands",
     "summary": "列出当前 Chat 的命令",
-    "description": "查询指定 Chat 所属 Agent 的命令，返回名称、类别、用途和参数提示，供客户端展示 Slash 命令列表；运行中的限制由前端按命令状态规则处理。",
+    "description": "查询指定 Chat 所属 Agent 的命令，返回名称、类别、用途、参数提示和输入方式，供客户端展示 Slash 命令列表。inputType 由 mate-service 补充，告诉前端怎样取得参数：text 用文本输入；options 调用命令选项接口取得当前值与带显示名的候选；省略表示命令不带参数。其余字段与 Runtime 带 sessionId 的清单逐项相同；运行中的限制由前端按命令状态规则处理。",
     "parameters": [
       {
         "$ref": "parameters.chatId"
@@ -49,12 +49,14 @@
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "查看或修改会话名称"
+                  "description": "查看或修改会话名称",
+                  "inputType": "text"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
-                  "description": "查看或切换模型"
+                  "description": "查看或切换模型",
+                  "inputType": "options"
                 },
                 {
                   "name": "thinking",
@@ -63,7 +65,8 @@
                   "hints": [
                     "on",
                     "off"
-                  ]
+                  ],
+                  "inputType": "options"
                 },
                 {
                   "name": "mode",
@@ -72,7 +75,8 @@
                   "hints": [
                     "plan",
                     "build"
-                  ]
+                  ],
+                  "inputType": "options"
                 },
                 {
                   "name": "compact",
@@ -87,7 +91,8 @@
                 {
                   "name": "skill:pdf",
                   "type": "skill",
-                  "description": "分析和生成 PDF 文档"
+                  "description": "分析和生成 PDF 文档",
+                  "inputType": "text"
                 }
               ]
             }
@@ -110,12 +115,14 @@
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "Show or rename the session"
+                  "description": "Show or rename the session",
+                  "inputType": "text"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
-                  "description": "Show or switch the model"
+                  "description": "Show or switch the model",
+                  "inputType": "options"
                 },
                 {
                   "name": "thinking",
@@ -124,7 +131,8 @@
                   "hints": [
                     "on",
                     "off"
-                  ]
+                  ],
+                  "inputType": "options"
                 },
                 {
                   "name": "mode",
@@ -133,7 +141,8 @@
                   "hints": [
                     "plan",
                     "build"
-                  ]
+                  ],
+                  "inputType": "options"
                 },
                 {
                   "name": "compact",
@@ -148,7 +157,8 @@
                 {
                   "name": "skill:pdf",
                   "type": "skill",
-                  "description": "分析和生成 PDF 文档"
+                  "description": "分析和生成 PDF 文档",
+                  "inputType": "text"
                 }
               ]
             }
@@ -184,12 +194,14 @@
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "查看或修改会话名称"
+                  "description": "查看或修改会话名称",
+                  "inputType": "text"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
-                  "description": "查看或切换模型"
+                  "description": "查看或切换模型",
+                  "inputType": "options"
                 },
                 {
                   "name": "thinking",
@@ -198,7 +210,8 @@
                   "hints": [
                     "on",
                     "off"
-                  ]
+                  ],
+                  "inputType": "options"
                 },
                 {
                   "name": "mode",
@@ -207,7 +220,8 @@
                   "hints": [
                     "plan",
                     "build"
-                  ]
+                  ],
+                  "inputType": "options"
                 },
                 {
                   "name": "compact",
@@ -240,12 +254,14 @@
                 {
                   "name": "name",
                   "type": "builtin",
-                  "description": "Show or rename the session"
+                  "description": "Show or rename the session",
+                  "inputType": "text"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
-                  "description": "Show or switch the model"
+                  "description": "Show or switch the model",
+                  "inputType": "options"
                 },
                 {
                   "name": "thinking",
@@ -254,7 +270,8 @@
                   "hints": [
                     "on",
                     "off"
-                  ]
+                  ],
+                  "inputType": "options"
                 },
                 {
                   "name": "mode",
@@ -263,7 +280,8 @@
                   "hints": [
                     "plan",
                     "build"
-                  ]
+                  ],
+                  "inputType": "options"
                 },
                 {
                   "name": "compact",
@@ -390,12 +408,12 @@
         },
         {
           "actor": "前端",
-          "action": "hints 非空时展示选项列表，界面文案由前端决定",
-          "outcome": "命令无匹配时保留草稿，不回退普通消息"
+          "action": "按 inputType 选择输入：text 显示文本框，options 调用命令选项接口展示候选，省略时直接执行",
+          "outcome": "命令无匹配时保留草稿，不回退普通消息；前端不按命令名写特殊逻辑"
         }
       ],
       "notes": [
-        "描述符仅包含 name、type、description 和可选 hints。hints 是可提交的固定值，不含界面文案，参数始终可省略；所有 Skill 允许附件，Builtin 不允许；运行中的 model/thinking 只允许无参查询。",
+        "描述符包含 name、type、description、可选 hints 与 mate-service 补充的可选 inputType。inputType 只由 Mate 维护的命令映射决定（name 与技能命令为 text，model、thinking、mode 为 options），不随会话状态变化；参数始终可省略；所有 Skill 允许附件，Builtin 不允许；运行中的 model/thinking/mode 只允许无参查询。",
         "无完整 Agent 快照时，目标清单失败，不返回残缺 Builtin；公共错误映射保留待重审状态。",
         "GET 是观察结果，不保证随后 POST 一定成功；POST 仍需独立解析并在所属事务或锁内复核。",
         "Skill 发现不等于 Skill 执行协议已发布。旧公共 POST SSE 已废止，不属于本次 GET 恢复范围。",
