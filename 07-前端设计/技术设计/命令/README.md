@@ -82,7 +82,7 @@ parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立�
 | 所有 type=skill 允许附件，Builtin 不接收附件 | 附件入口根据 type 与上传接入状态控制，不静默丢弃草稿 |
 | hints 是可选非空字符串数组，列出可直接提交的固定参数值，只在 thinking（on/off）与 mode（plan/build）返回 | 有 hints 即展示选项列表并原样提交选中值；显示名由前端维护，不从 hints 推断权限或当前值 |
 | 服务端返回固定 Builtin 顺序并追加 Skill | 客户端只做稳定前缀过滤，不重新排序或模糊重排 |
-| 清单按 Agent 返回全部命令，不按 Session 状态过滤（待实现） | running 时按共享状态规则表置灰 Compact/Skill 并限制修改；状态未知或恢复中暂停提交，POST 终判 |
+| 清单按 Agent 查询，已有 Chat 带 sessionId 取完整命令，新对话不带 sessionId 只取 help、skills 与技能命令；不按 Session 状态过滤（待实现） | running 时按共享状态规则表置灰 Compact/Skill 并限制修改；状态未知或恢复中暂停提交，POST 终判 |
 | Builtin POST 返回普通 JSON，无 commandId 和通用生命周期 | 不画虚构进度条，不建立轮询或通用命令历史 |
 | 成功结果无统一判别字段；`model` 空参返回 Models，带参返回 Session | 提交前从调用形态冻结 `expectedResultKind`，Gateway 按它校验响应，禁止只按命令名或 JSON 形状猜测 |
 | Help 返回 `displayName/description/useCases` | 用纯文本临时卡片展示，不渲染 HTML、Markdown 或远程图片 |
@@ -239,15 +239,16 @@ name、技能命令与 model 不带 hints，按命令名选控件是客户端展
 
 ## 5. 清单读取与缓存
 
-`CommandCatalogStore` 按 Agent 隔离（目标接口 `GET /agents/{agentId}/commands`，待实现），只维护：`status`、`items`、
-`loadedForStateKey`、`stale`、`error` 和一次在途请求。`stateKey` 只由 agentId 组成，同一 Agent 的多个 Chat 共用一份清单；
+`CommandCatalogStore` 按 Agent 与会话隔离（目标接口 `GET /agents/{agentId}/commands?sessionId=`，sessionId 可选，待实现），只维护：`status`、`items`、
+`loadedForStateKey`、`stale`、`error` 和一次在途请求。`stateKey` 由 agentId 与 sessionId 组成：已有 Chat 传当前 sessionId，取完整命令；
+新对话尚无会话时 sessionId 为空，只取 help、skills 与技能命令。首条消息创建会话后 stateKey 变化，重新读取完整清单。
 Session 运行状态不进入 stateKey，只决定前端按共享状态规则置灰哪些项。组件不得依赖 Runtime 内部版本结构。
 
 读取规则：
 
 1. 第一次进入 Slash 模式读取 GET；同一 stateKey 的并发打开合并为一个 Promise。
 2. HTTP `Cache-Control: no-store` 原样尊重；不使用 Service Worker、浏览器持久缓存或 localStorage 复用清单。
-3. 切换到另一个 Agent、Agent 刷新或 Skill 绑定变化，或任何命令 POST 完成后，将清单标记为 stale；Session 运行状态变化只重算置灰，不重新读取。
+3. 切换到另一个 Agent 或 Chat、新对话创建出会话、Agent 刷新或 Skill 绑定变化，或任何命令 POST 完成后，将清单标记为 stale；Session 运行状态变化只重算置灰，不重新读取。
 4. 清单打开且 stale 时重新读取；Agent 切换用 `AbortController` 取消旧读请求，迟到响应按请求代次丢弃。
 5. 404/409 POST 错误会触发一次清单 GET 刷新；409 同时刷新权威 Session 状态，但不重放 POST；刷新失败仍保留原草稿。
 
@@ -391,7 +392,7 @@ type CommandInvocation = Readonly<{
 )>
 
 interface CommandGateway {
-  listCommands(agentId: string, signal: AbortSignal): Promise<readonly CommandDescriptor[]>
+  listCommands(agentId: string, sessionId: string | undefined, signal: AbortSignal): Promise<readonly CommandDescriptor[]>
   executeCommand(invocation: CommandInvocation, signal: AbortSignal): Promise<CommandGatewayResult>
 }
 ```
@@ -426,7 +427,7 @@ interface CommandGateway {
 
 - Parser 覆盖空值、仅 `/`、前导空格、大小写、ASCII 分隔、多行参数和超长输入。
 - 前缀过滤必须保留服务端相对顺序；禁止模糊评分和客户端 Builtin 固定表。
-- Catalog 覆盖请求合并、Agent 切换中止、迟到响应丢弃、同 Agent 多 Chat 复用、stateKey 失效和 POST 后 stale。
+- Catalog 覆盖请求合并、Agent 切换中止、迟到响应丢弃、新对话不带 sessionId、会话创建后重读完整清单、stateKey 失效和 POST 后 stale。
 - Draft 覆盖首字符进入/取消/成功/失败、暂存消息与附件恢复、页面刷新清除。
 - 调用快照覆盖每个 Builtin，必须单独覆盖 `model` 空参→Models、带参→Session，草稿继续编辑不改变在途快照。
 - Result Registry 覆盖每个 `expectedResultKind`、未知命令 fail closed 和恶意 Help 文本按纯文本展示。
@@ -502,7 +503,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.13.0 | 2026-10-16 | hints 改为固定参数值列表，thinking/mode 的选项值取自 hints；占位提示与选项显示名由前端维护。 |
+| 1.13.0 | 2026-10-16 | hints 改为固定参数值列表，thinking/mode 的选项值取自 hints；占位提示与选项显示名由前端维护。清单 stateKey 加入可选 sessionId：新对话只取智能体级命令，已有 Chat 取完整命令。 |
 | 1.12.0 | 2026-10-16 | 命令清单改为按 Agent 读取与缓存，stateKey 只含 agentId；运行状态只决定置灰，不触发重读；错误态改为 404/422。 |
 | 1.11.0 | 2026-10-04 | 命令结果消费取消版本响应头与 ETag 依赖，保留完整资源和不确定结果对账。 |
 | 1.10.0 | 2026-09-22 | 增加 mode 选择控件、Session 结果映射与审核等待下的只读查询边界。 |

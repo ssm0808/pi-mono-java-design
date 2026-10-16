@@ -89,7 +89,7 @@ Java 53eff85c 的 VO/组装器及前端仍用 kind/input，新投影与客户端
 相对路径、符号、旧新提交范围及差异理由见[专项证据](../04-CampusClaw命令系统/source-evidence.md#command-descriptor-baseline)，其余比较不升级。
 
 M05 清单作用域于 2026-10-16 核对 OpenCode `dev@e25b7abf`（按工作目录查询，实验接口）、Codex `main@6b991972`（`skills/list` 按 cwds 查询）与 pi `main@4954d760`（每个会话进程 `get_commands`）。
-CampusClaw 的命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`（待评审 · 待实现），不按会话状态过滤；这是接口架构变更：同一 Agent 的多个会话共用一份清单，代价是运行中的禁用改由前端状态规则表展示、POST 终判。
+CampusClaw 的命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`，sessionId 为可选查询参数（待评审 · 待实现），不按会话状态过滤；这是接口架构变更：不带 sessionId 只返回 help、skills 与技能命令，供尚无会话的新对话使用，带 sessionId 返回完整命令；代价是运行中的禁用改由前端状态规则表展示、POST 终判。
 证据见 [Agent 清单作用域核对](../04-CampusClaw命令系统/source-evidence.md#agent-catalog-evidence)。
 
 待补证项是持续维护范围，不能用于讲述已经实现的能力。涉及该模块的新设计应补齐受影响的问题，
@@ -732,7 +732,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.102.0 | 2026-10-16 | M05 CampusClaw 的 hints 改为固定参数值列表（thinking on/off、mode plan/build），与 OpenCode 的占位提示 hints 区分。 |
+| 1.102.0 | 2026-10-16 | M05 CampusClaw 的 hints 改为固定参数值列表（thinking on/off、mode plan/build），与 OpenCode 的占位提示 hints 区分；清单增加可选 sessionId 决定范围。 |
 | 1.101.0 | 2026-10-16 | A14 同步 M10：对话中由 Cron 工具创建的任务关联原会话运行，接口配置的任务仍每次新建 Session。 |
 | 1.100.0 | 2026-10-16 | M05 命令清单改为按 Agent 查询，登记 OpenCode/Codex/pi 的清单作用域基线；其余比较不升级。 |
 | 1.99.0 | 2026-10-15 | A14 同步 M10 D12：定时任务首版不自动暂停，Agent 启停用另开设计。 |

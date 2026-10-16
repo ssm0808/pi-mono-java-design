@@ -14,7 +14,7 @@
 
 ## 1. 职责与当前目标
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`（待评审 · 待实现）：轻量描述符、两类命令合并与固定排序保留，不再按 Session 状态过滤，运行中的禁用由前端状态规则表展示、POST 终判；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是清单查询的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、SSE 执行结果和 Events 集成按 B13/B14 已确认语义实施。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`，sessionId 为可选查询参数（待评审 · 待实现）：技能命令属于智能体级命令，带或不带 sessionId 都返回；轻量描述符、两类命令合并与固定排序保留，不再按 Session 状态过滤，运行中的禁用由前端状态规则表展示、POST 终判；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是清单查询的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、SSE 执行结果和 Events 集成按 B13/B14 已确认语义实施。
 PR #210 的动态 SkillCommandSource 可保留，但 Registry 必须在调用 Source 前按来源过滤。
 内部 Builtin 专属解析不读取 Skill 来源；Agent 命令清单必须取得完整 Agent 快照，缓存缺失时准备 Agent（与创建会话同一入口），准备失败整体返回 422，不返回部分 Builtin。
 现有 Skill 发现定义只展示，不安装伪 Handler；实际执行已由 RuntimeCommandController 委派 SkillCommandExecutionService。
@@ -187,7 +187,7 @@ skills Builtin 只展示最新完整绑定快照中的名称/描述，不等于�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 4.6.0 | 2026-10-16 | 技能命令不再返回 hints 占位文案，文本参数的提示由前端决定。 |
+| 4.6.0 | 2026-10-16 | 技能命令不再返回 hints 占位文案，文本参数的提示由前端决定；清单不带 sessionId 时仍返回技能命令。 |
 | 4.5.0 | 2026-10-16 | Skill 发现改由 `GET /agents/{agentId}/commands` 返回，不再在运行中省略；缓存缺失时准备 Agent，失败为 422。 |
 | 4.4.0 | 2026-09-22 | Skill 描述符改用 type/hints，附件作为所有 Skill 的统一规则。 |
 | 4.3.2 | 2026-09-22 | 明确所有可用 Skill 允许附件引用，区分附件通道、内容能力和前端接入状态。 |

@@ -81,9 +81,33 @@ class CommandCatalogContractTest(unittest.TestCase):
                     validate_commands([command for command in self.idle if command["name"] != name])
         validate_commands([command for command in self.idle if command["type"] != "skill"])
         examples = self.runtime["responses"]
-        examples[1]["bodies"]["zh-CN"]["result"]["commands"][4]["hints"] = ["x"]
+        examples[2]["bodies"]["zh-CN"]["result"]["commands"][4]["hints"] = ["x"]
         with self.assertRaises(RuntimeError):
             validate_catalog_examples(self.runtime)
+
+    def test_session_id_selects_catalog_scope(self):
+        agent = [command for command in self.idle if command["type"] == "skill" or command["name"] in ("help", "skills")]
+        validate_commands(agent, "agent")
+        validate_commands([command for command in agent if command["type"] == "builtin"], "agent")
+        session_only = next(command for command in self.idle if command["name"] == "status")
+        for commands in (self.idle, agent[1:], [agent[1], agent[0]] + agent[2:], agent[:1] + [session_only] + agent[1:]):
+            with self.subTest(commands=[command["name"] for command in commands]), self.assertRaises(RuntimeError):
+                validate_commands(commands, "agent")
+        with self.assertRaises(RuntimeError):
+            validate_commands(agent)
+        examples = {response.get("id"): response for response in self.runtime["responses"]}
+        examples["200-agent-commands"]["bodies"]["en-US"]["result"]["commands"].pop()
+        with self.assertRaises(RuntimeError):
+            validate_catalog_examples(self.runtime)
+        self.setUp()
+        self.runtime["parameters"] = [p for p in self.runtime["parameters"] if p.get("name") != "sessionId"]
+        with self.assertRaises(RuntimeError):
+            validate_catalog_examples(self.runtime)
+        self.setUp()
+        self.public["responses"].insert(1, next(r for r in self.runtime["responses"] if r.get("id") == "200-agent-commands"))
+        self.public["parameters"] = self.runtime["parameters"]
+        with self.assertRaises(RuntimeError):
+            validate_projection_pair(self.runtime, self.public)
 
     def test_only_builtin_description_follows_accept_language(self):
         def english(index):

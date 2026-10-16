@@ -14,7 +14,7 @@
 
 | 源码 / 符号 | 已观察行为 | 与目标设计的差距 |
 |---|---|---|
-| `web/RuntimeCommandCatalogController.java:42-52` · list | 路由为 `GET /sessions/{sessionId}/commands`，校验 sessionId 后调用 `CommandCatalogService.list(sessionId)`，响应 `no-store` | 改为 `GET /agents/{agentId}/commands`，参数校验改用 Agent 标识规则，待实现 |
+| `web/RuntimeCommandCatalogController.java:42-52` · list | 路由为 `GET /sessions/{sessionId}/commands`，校验 sessionId 后调用 `CommandCatalogService.list(sessionId)`，响应 `no-store` | 改为 `GET /agents/{agentId}/commands`，sessionId 改为可选查询参数；参数校验改用 Agent 标识规则，带 sessionId 时另校验会话标识与归属，待实现 |
 | `service/command/CommandCatalogService.java:44-63` · list / completeSnapshot | 先查 Session（不存在为 SESSION_NOT_FOUND），再用 Session 的 agentId 调 `AgentRuntimeManager.prepareCached`；缓存缺失或异常为 AGENT_NOT_AVAILABLE（经异常处理改为 503） | 不再读取 Session；改用 `prepare(agentId)`，不存在为 AGENT_NOT_FOUND、不可用为 AGENT_NOT_AVAILABLE，待实现 |
 | `service/command/CompositeCommandRegistry.java:63-71` · resolveComplete | 要求 Session 的 agentId 与快照一致，按全部来源解析，并把 `CommandSessionSnapshotDTO.from(session)` 传给每个 Definition | 清单解析只接收 Agent 快照；会话状态只在执行准入时使用，待实现 |
 | `command/definition/CommandDefinition.java:16-17` · describe | `describe(CommandSessionSnapshotDTO session)`：描述依赖会话快照 | 拆为与会话无关的描述和会话级准入，待实现 |

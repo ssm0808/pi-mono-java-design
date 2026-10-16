@@ -25,7 +25,7 @@
         "status": "200",
         "label": "OK",
         "tabLabel": "200 · 命令清单",
-        "summary": "返回该 Chat 所属 Agent 的全部命令；与 Runtime 按 Agent 查询的结果逐项相同，不随会话状态变化。",
+        "summary": "返回该 Chat 所属 Agent 的完整命令；Mate 以 Chat 映射的 sessionId 调用 Runtime，结果与 Runtime 带 sessionId 的清单逐项相同，不随会话运行状态变化。",
         "headers": {
           "Cache-Control": "no-store",
           "Content-Language": "zh-CN"

@@ -3,6 +3,8 @@
 import re
 
 BUILTINS = ("help", "status", "name", "model", "thinking", "mode", "compact", "skills")
+# Builtins that need no Session; returned when the catalog request omits sessionId.
+AGENT_BUILTINS = ("help", "skills")
 
 
 def require(condition, message):
@@ -31,15 +33,16 @@ def validate_descriptor(command):
                 f"hints must list the fixed submit values in order, without UI copy: {command['name']}")
 
 
-def validate_commands(commands):
+def validate_commands(commands, scope="session"):
     require(isinstance(commands, list), "Commands must be a non-null list")
     for command in commands:
         validate_descriptor(command)
     names = [command["name"] for command in commands]
     require(len(names) == len(set(names)), "Duplicate command")
     skills = [command for command in commands if command["type"] == "skill"]
-    require(names == list(BUILTINS) + sorted(command["name"] for command in skills),
-            "Agent catalog must list every Builtin in fixed order, then Skills by name, without state filtering")
+    builtins = BUILTINS if scope == "session" else AGENT_BUILTINS
+    require(names == list(builtins) + sorted(command["name"] for command in skills),
+            f"{scope} catalog must list its Builtins in fixed order, then Skills by name, without state filtering")
     for command in commands:
         if command["name"] == "help":
             require(command["description"] in HELP_DESCRIPTIONS.values(), "Help must remain Agent guide")
@@ -50,13 +53,20 @@ HELP_DESCRIPTIONS = {"zh-CN": "介绍当前智能体的用途和使用场景", "
 BUILTIN_HINTS = {"thinking": ["on", "off"], "mode": ["plan", "build"]}
 
 
-SUCCESS_IDS = {"200-commands", "200-no-skills"}
+SESSION_SUCCESS_IDS = {"200-commands", "200-no-skills"}
+AGENT_SUCCESS_ID = "200-agent-commands"
+
+
+def accepts_optional_session(operation):
+    return any(parameter.get("in") == "query" and parameter.get("name") == "sessionId"
+               and parameter.get("required") is False for parameter in operation["parameters"])
 
 
 def success_examples(operation):
+    expected = SESSION_SUCCESS_IDS | ({AGENT_SUCCESS_ID} if accepts_optional_session(operation) else set())
     successes = [response for response in operation["responses"] if response["status"] == "200"]
-    require(len(successes) == 2 and {response.get("id") for response in successes} == SUCCESS_IDS,
-            "Agent catalog requires the populated and no-Skill examples exactly once")
+    require(len(successes) == len(expected) and {response.get("id") for response in successes} == expected,
+            "Catalog requires the populated, no-Skill and (with optional sessionId) no-Session examples exactly once")
     return {response["id"]: response for response in successes}
 
 
@@ -69,7 +79,7 @@ def validate_catalog_examples(operation):
             require(set(body) == {"resCode", "resMsg", "result"} and body["resCode"] == "0"
                     and body["resMsg"] == "success" and set(body["result"]) == {"commands"},
                     "Catalog ResultBean differs")
-            validate_commands(body["result"]["commands"])
+            validate_commands(body["result"]["commands"], scope_of(response))
             help_command = next(command for command in body["result"]["commands"] if command["name"] == "help")
             require(help_command["description"] == HELP_DESCRIPTIONS[language],
                     f"Builtin description must follow Accept-Language: {language}")
@@ -79,6 +89,17 @@ def validate_catalog_examples(operation):
     require(any(command["type"] == "skill" for command in full), "Populated example must include a Skill")
     require(empty == [command for command in full if command["type"] == "builtin"],
             "No-Skill example must keep identical Builtin descriptors")
+    if AGENT_SUCCESS_ID in examples:
+        for language in HELP_DESCRIPTIONS:
+            session = examples["200-commands"]["bodies"][language]["result"]["commands"]
+            agent = examples[AGENT_SUCCESS_ID]["bodies"][language]["result"]["commands"]
+            require(agent == [command for command in session
+                              if command["type"] == "skill" or command["name"] in AGENT_BUILTINS],
+                    "No-Session catalog must be the Session catalog without Session Builtins")
+
+
+def scope_of(response):
+    return "agent" if response.get("id") == AGENT_SUCCESS_ID else "session"
 
 
 def validate_localized_pair(chinese, english):
@@ -98,5 +119,6 @@ def validate_projection_pair(runtime, public):
     validate_catalog_examples(runtime)
     validate_catalog_examples(public)
     left, right = success_examples(runtime), success_examples(public)
-    for identity in left:
+    require(set(right) == SESSION_SUCCESS_IDS, "Mate maps every Chat to a Session and projects only the full catalog")
+    for identity in right:
         require(left[identity]["bodies"] == right[identity]["bodies"], "Mate GET projection drifted from Runtime")

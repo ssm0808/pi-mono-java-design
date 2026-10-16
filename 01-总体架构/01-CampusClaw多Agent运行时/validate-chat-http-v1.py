@@ -357,13 +357,13 @@ def validate_response_contract(
         require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in SLASH_DESIGN_PATHS[0].read_text(encoding="utf-8"),
                 "Command catalog must reflect unified Builtin and Skill ownership")
         validate_catalog_examples(operation)
-        for status, code in (("400", "INVALID_AGENT_ID"), ("404", "AGENT_NOT_FOUND"),
-                             ("422", "AGENT_NOT_AVAILABLE")):
+        for status, code in (("400", "INVALID_AGENT_ID"), ("400", "INVALID_SESSION_ID"), ("404", "AGENT_NOT_FOUND"),
+                             ("404", "SESSION_NOT_FOUND"), ("422", "AGENT_NOT_AVAILABLE")):
             require((status, code) in codes, f"Agent command catalog is missing {status} {code}")
+        from command_catalog_contract import accepts_optional_session
+        require(accepts_optional_session(operation), "Agent command catalog must take sessionId as an optional query")
         require(("503", "AGENT_NOT_AVAILABLE") not in codes,
                 "Agent command catalog prepares the Agent instead of returning 503")
-        require(all(code != "SESSION_NOT_FOUND" for _, code in codes),
-                "Agent command catalog must not depend on a Session")
         for response in operation["responses"]:
             if response["status"] == "200":
                 commands = response["bodies"]["zh-CN"]["result"]["commands"]

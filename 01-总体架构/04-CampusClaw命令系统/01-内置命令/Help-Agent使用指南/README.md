@@ -45,7 +45,7 @@
 ## 2. 全局入口与 Help 补充类图
 
 整体系统先看[Slash 完整全局目标类图](../../target_slash_command_global_classes.svg)；
-其 [PlantUML 源码](../../diagram.puml#L119) 为 Slash 与 Builtin 共用的唯一全局主图。
+其 [PlantUML 源码](../../diagram.puml#L124) 为 Slash 与 Builtin 共用的唯一全局主图。
 本专题只下钻 Help 的元数据、缓存和结果投影，不再以 Help 为中心重排全局关系或合并其他命令的职责边界。
 以下类图是局部补充，不代表完整 Command 系统；图中 Help 链路均已在当前实现基线存在。
 
@@ -96,7 +96,7 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
 这里的 `description` 是返回的 Agent 用途介绍；GET 描述符自身的 description 为“介绍当前智能体的用途和使用场景”（en-US 为 “Introduce this agent's purpose and use cases”），二者含义不同。
 
-Runtime 操作 12（`GET /agents/{agentId}/commands`）的 Help 描述符只有 name/type/description，不返回 hints；
+Runtime 操作 12（`GET /agents/{agentId}/commands`，带或不带 sessionId 都包含 Help）的 Help 描述符只有 name/type/description，不返回 hints；
 Help 无参由命令契约定义，不由 hints 决定。清单不按 Session 状态过滤；缓存缺失时清单先准备 Agent，失败为 422，POST Help 仍独立检查缓存并保持既有 422。
 清单的字段与排序见[Agent 命令清单契约](../../README.md#31-get-轻量清单已确认)。
 
