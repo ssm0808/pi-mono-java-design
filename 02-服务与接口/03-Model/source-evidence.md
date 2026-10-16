@@ -78,6 +78,7 @@ pi 当次通过 ls-remote 确认默认分支 main，并在临时仓库 fetch 得
 | Spring Boot `3.4.5` `spring-boot-dependencies` POM | `jedis.version`、`lettuce.version`、`commons-pool2.version` | 管理 Jedis 5.2.0、Lettuce 6.4.2.RELEASE、commons-pool2 2.12.1 |
 | Maven Central `io.lettuce:lettuce-core:6.4.2.RELEASE` POM | 非可选编译依赖 | `netty-common`、`netty-handler`、`netty-transport`、`reactor-core`；采用 Lettuce 会让 Netty 回到产物 |
 | Maven Central `redis.clients:jedis:5.2.0` POM 与 jar | 非可选编译依赖 | `slf4j-api`、`commons-pool2`、`org.json:json:20240303`、`gson:2.11.0`，无 Netty；jedis 约 980 KB，加 commons-pool2、json、gson 四个 jar 合计约 1.5 MB |
+| Maven Central `org.redisson:redisson` 3.37.0、4.8.0 POM 与 jar | 非可选编译依赖 | 两个版本都编译依赖 7 个 Netty 构件（common、codec、buffer、transport、resolver、resolver-dns、handler）以及 reactor-core、rxjava、kryo、byte-buddy、jodd-util、snakeyaml；4.8.0 主 jar 约 3.1 MB。未核对其信号量 API 源码 |
 
 原型验证（临时 worktree，不是交付代码）：在 Java `1acbbf3f` 上把 `createWebClient` 和测试改为 `JdkClientHttpConnector`，删除 `modules/ai/pom.xml` 的 `reactor-netty-http`，并给 SSE 响应体加 `Flux.timeout`。`./mvnw -pl :campusclaw-ai -am test` 通过，`campusclaw-ai` 366 个测试 0 失败；`campusclaw-coding-agent` 依赖树不再含 `io.netty` 或 `reactor-netty`。首轮全量测试出现 1 次 Reactor `onErrorDropped` 日志，后续两次全量运行未复现，原因未定位；回调线程为 `ForkJoinPool.commonPool`。许可机制（含 Redis 脚本）未做原型，并发与容量结论均未压测。
 

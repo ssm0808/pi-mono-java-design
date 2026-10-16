@@ -30,6 +30,7 @@ campusmate:
     api: ${CAMPUSMATE_MODEL_API:openai-completions}
     connect-timeout: ${CAMPUSMATE_MODEL_CONNECT_TIMEOUT:PT10S}
     response-timeout: ${CAMPUSMATE_MODEL_RESPONSE_TIMEOUT:PT10M}
+    global-permits-enabled: ${CAMPUSMATE_MODEL_GLOBAL_PERMITS_ENABLED:false}  # 待实现，两实例部署设为 true
     max-concurrent-requests: ${CAMPUSMATE_MODEL_MAX_CONCURRENT_REQUESTS:100}  # 待实现，所有实例合计
     fallback-max-concurrent-requests: ${CAMPUSMATE_MODEL_FALLBACK_MAX_CONCURRENT_REQUESTS:50}  # 待实现，Redis 不可用时每实例
     permit-wait-timeout: ${CAMPUSMATE_MODEL_PERMIT_WAIT_TIMEOUT:PT30S}  # 待实现
@@ -159,7 +160,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | Java 符号 | 目标调整 |
 |---|---|
-| `CampusMateProvider`（已实现身份） | 注入 `${campusmate.base-url}`、`${campusmate.endpoints.model-chat-path}` 及 `campusmate.model` 下的 API/超时参数；Provider 协议语义不变；新增读取 `max-concurrent-requests`、`fallback-max-concurrent-requests`、`permit-wait-timeout`、`permit-lease`（待实现） |
+| `CampusMateProvider`（已实现身份） | 注入 `${campusmate.base-url}`、`${campusmate.endpoints.model-chat-path}` 及 `campusmate.model` 下的 API/超时参数；Provider 协议语义不变；新增读取 `global-permits-enabled`、`max-concurrent-requests`、`fallback-max-concurrent-requests`、`permit-wait-timeout`、`permit-lease`（待实现） |
 | `MateModelManagerProperties` | 已绑定 `campusmate.model`；删除 contextWindow/maxOutputTokens，仅保留仍有消费者的字段 |
 | `AgentRuntimeProperties` | 删除 `baseUrl`；只绑定 `campusmate.runtime` 的非 endpoint 参数 |
 | `MateServiceClient` | 注入共享 base URL，以及统一目录中的 Agent Runtime、Skill 和模型能力 path；能力查询复用 runtime 短请求超时与响应上限，不发送 execution 凭据 |
@@ -231,7 +232,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.12.0 | 2026-10-16 | `campusmate.model` 新增模型调用全局并发上限、Redis 不可用时的每实例上限、许可等待时间与租约，模型调用底层改用 JDK HttpClient。 |
+| 2.12.0 | 2026-10-16 | `campusmate.model` 新增 Redis 全局许可开关、模型调用全局并发上限、Redis 不可用时的每实例上限、许可等待时间与租约，模型调用底层改用 JDK HttpClient。 |
 | 2.11.0 | 2026-10-16 | 定时 access-token 路径改用代码中的 `campusclaw.schedule.access-token-path`，目标路径目录回到7项。 |
 | 2.10.0 | 2026-10-15 | 定时任务 Mate 实现类改名为 `MateScheduleSessionRegistry` 与 `MateAccessTokenClient`。 |
 | 2.9.0 | 2026-10-13 | 定时接口由上下文查询和凭据解析两项改为一项无入参 access-token 接口，目标路径共8项。 |
