@@ -98,7 +98,7 @@ Runtime HTTP 的资源、ResultBean、SSE、Entry 和数据库契约仍由
 
 - CLI、TUI、JSONL、one-shot、RPC、ACP 和 OS 调度安装产品入口；
 - Slash Command 的注册、HTTP 路由和命令行为，详见
-  [Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)；
+  [Slash Command 通用模块](../04-CampusClaw命令系统/README.md)；
 - 任意自定义工具、运行中工具热注册、公共 Extension SDK 和 Skill 本地工具激活；
 - 工具定义的数据同步、Schema 更新与运行时版本切换策略；
 - `Bash` 沙箱、`Edit`/`Write` 工作区写入模型和旧工具名兼容；
@@ -703,7 +703,7 @@ JSONL/TUI、`--cron-tick` 和 OS scheduler 安装路径；模块继续承载 Run
 Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执行结构化命令。
 `POST /events` 不解析 Slash 文本。`/name` 修改 CampusClaw Session 名称；mate-service
 只解析 Chat 到 Session 的映射。精确行为以
-[Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)为准。
+[Slash Command 通用模块](../04-CampusClaw命令系统/README.md)为准。
 
 ### 12.3 公共 Session 压缩
 

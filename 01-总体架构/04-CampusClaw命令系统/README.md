@@ -1,17 +1,19 @@
-# CampusClaw Slash Command 设计
+# CampusClaw 命令系统设计
 
-[返回命令与技能导航](../README.md) · [源码证据](source-evidence.md)
+[模块索引](../../README.md#module-index) · [命令与技能导航](../../04-命令与技能/README.md) · [源码证据](source-evidence.md)
+
+本专题即 Slash Command 通用模块，原路径 `04-命令与技能/00-Slash-Command通用模块` 已迁到总体架构；锚点不变。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.0.0 |
+| 文档版本 | 2.1.0 |
 | 更新日期 | 2026-10-16 |
 | 模块 | M05 · Command 与 Skill · Slash Command 通用模块 |
 | 设计状态 | 按 Agent 查询命令清单待实现；七个 Builtin、Skill 执行与前端 Slash 已实现；mode、type/hints 描述符、Skill 统一结构待实现。逐项见 [§8.1](#current-runtime-status) |
 | 源码基线 | `pi-mono-java` main `fd4310026be808a16f471c550dff4b024ce91e24`，2026-10-16 核验清单链路；其他能力沿用 [§8.1](#current-runtime-status) 所列核验提交 |
 | 主基线 | OpenCode dev `e25b7abf8955a4fa1b02b935964cb47db4c3a02a`（命令清单路由为 Experimental）；辅以 Codex main `6b991972c5b539198dcea9bac4fc14e57559c3af`、pi main `4954d760504c11df9b2cbdc040346107b6a8153d`，均为 2026-10-16 默认分支快照 |
 
-Builtin 的逐命令行为见 [内置命令](../01-内置命令/README.md)，Skill 的名称、快照与恢复见 [技能命令](../02-技能命令/README.md)，Composer 交互见 [Slash Command 前端](../../07-前端设计/技术设计/命令/README.md)。本文维护三者共用的命令清单、执行入口与分层。Builtin 与 Skill Command 由用户统一负责设计、实现和集成。
+Builtin 的逐命令行为见 [内置命令](../../04-命令与技能/01-内置命令/README.md)，Skill 的名称、快照与恢复见 [技能命令](../../04-命令与技能/02-技能命令/README.md)，Composer 交互见 [Slash Command 前端](../../07-前端设计/技术设计/命令/README.md)。本文维护三者共用的命令清单、执行入口与分层。Builtin 与 Skill Command 由用户统一负责设计、实现和集成。
 
 ## 评审记录
 
@@ -64,7 +66,7 @@ Builtin 的逐命令行为见 [内置命令](../01-内置命令/README.md)，Ski
 | R7 | 未匹配的 Slash 不回退为普通消息；普通消息接口不解析 Slash | 约束 | REQ-2 |
 | R8 | 不生成公开 commandId，不保存通用命令生命周期 | 约束 | REQ-2 |
 | R9 | Agent 快照不完整时整体失败，不返回残缺清单 | 稳定性 | REQ-2 |
-| R10 | Skill 名称在加载、发现与执行使用同一严格规则 | 约束 | [技能命令 §3](../02-技能命令/README.md#3-名称统一严格校验) |
+| R10 | Skill 名称在加载、发现与执行使用同一严格规则 | 约束 | [技能命令 §3](../../04-命令与技能/02-技能命令/README.md#3-名称统一严格校验) |
 
 R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个会话共用清单”是从 REQ-1 推导的目标，需在 T1 确认。
 
@@ -94,9 +96,9 @@ R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个�
 | Mate | Agent 定义与绑定技能的发布方 | `AgentRuntimeManager.prepare` 的远端来源 |
 | GaussDB | 会话、事件与领域 Entry | `t_sessions`、`t_session_events`、`t_session_entries` |
 
-![用技能分析巡检记录](设计图/slash_command_overview.svg)
+![用技能分析巡检记录](slash_command_overview.svg)
 
-[原尺寸 SVG](设计图/slash_command_overview.svg) · [PlantUML 源码](设计图/diagram.puml#L1)
+[原尺寸 SVG](slash_command_overview.svg) · [PlantUML 源码](diagram.puml#L1)
 
 | 阶段 | 详细时序 |
 |---|---|
@@ -136,17 +138,17 @@ R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个�
 |---|---|---|
 | `t_sessions` | 会话状态、显示名、模型、深度思考、模式 | name/model/thinking/mode 在行锁内合并本次提交；同值不更新 updatedAt |
 | `t_session_entries` | Model/Thinking/Mode/Compact 的领域 Entry；技能命令的展开内容 | 只在真实变化时追加；查询、同值修改和空历史压缩不写 |
-| `t_session_events` | 技能命令的 user.message（原始调用）及后续事件 | 与普通消息相同，见 [Session Events](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md) |
+| `t_session_events` | 技能命令的 user.message（原始调用）及后续事件 | 与普通消息相同，见 [Session Events](../01-CampusClaw多Agent运行时/chat-events-design.md) |
 
-![命令写入的最终状态](设计图/authoritative_command_state.svg)
+![命令写入的最终状态](authoritative_command_state.svg)
 
-[原尺寸 SVG](设计图/authoritative_command_state.svg) · [PlantUML 源码](设计图/diagram.puml#L98)
+[原尺寸 SVG](authoritative_command_state.svg) · [PlantUML 源码](diagram.puml#L98)
 
 全局目标类图：
 
-![Slash Command 全局目标类图](设计图/target_slash_command_global_classes.svg)
+![Slash Command 全局目标类图](target_slash_command_global_classes.svg)
 
-[原尺寸 SVG](设计图/target_slash_command_global_classes.svg) · [PlantUML 源码](设计图/diagram.puml#L119)
+[原尺寸 SVG](target_slash_command_global_classes.svg) · [PlantUML 源码](diagram.puml#L119)
 
 缩略图只用于定位分层，阅读类名和多重性请打开原尺寸 SVG。
 
@@ -160,7 +162,7 @@ R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个�
 
 为什么这样分：清单与会话脱钩后，Definition 的描述不能再依赖会话快照，否则 Agent 级清单无从计算；把“能不能执行”全部收拢到准入策略，既让清单可以跨会话复用，也保证执行入口仍是唯一的最终判断点。实现时先改 `CommandDefinition.describe` 与 `CompositeCommandRegistry.resolve` 的签名，再改清单服务和 Controller，最后迁移前端读取路径。
 
-八个 Contributor/Handler 的精确映射见 [内置命令 §2](../01-内置命令/README.md#2-全局目标与核心扩展)；Help 的元数据与缓存见 [Help 设计](../01-内置命令/Help-Agent使用指南/README.md)。
+八个 Contributor/Handler 的精确映射见 [内置命令 §2](../../04-命令与技能/01-内置命令/README.md#2-全局目标与核心扩展)；Help 的元数据与缓存见 [Help 设计](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)。
 
 <a id="list-commands-sequence"></a>
 
@@ -168,9 +170,9 @@ R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个�
 
 展开整体时序步骤 1～8 中的 CampusClaw 部分。待实现。
 
-![查询可用命令的详细时序](设计图/list_agent_commands.svg)
+![查询可用命令的详细时序](list_agent_commands.svg)
 
-[原尺寸 SVG](设计图/list_agent_commands.svg) · [PlantUML 源码](设计图/diagram.puml#L38)
+[原尺寸 SVG](list_agent_commands.svg) · [PlantUML 源码](diagram.puml#L38)
 
 | 生命线 | 映射 |
 |---|---|
@@ -187,9 +189,9 @@ R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个�
 
 独立对应 BU2、BU4、BU5，不在整体时序中。已实现（mode 待实现）。
 
-![执行内置命令的详细时序](设计图/execute_builtin_command.svg)
+![执行内置命令的详细时序](execute_builtin_command.svg)
 
-[原尺寸 SVG](设计图/execute_builtin_command.svg) · [PlantUML 源码](设计图/diagram.puml#L67)
+[原尺寸 SVG](execute_builtin_command.svg) · [PlantUML 源码](diagram.puml#L67)
 
 | 生命线 | 映射 |
 |---|---|
@@ -200,14 +202,14 @@ R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个�
 | 会话业务服务 | `SessionModelConfigurationService`、`SessionThinkingConfigurationService`、`SessionCompactionApplicationService` 等 |
 
 - 执行顺序：读取会话、归一 arguments、单次解析、按名称精确查找、参数准入、锁内复核、调用 Handler、组装结果。合法但未注册的名称为 COMMAND_NOT_FOUND；Builtin 名称正则不覆盖 `skill:*`。
-- 成功结果复用 GET Session 或 GET Models 的完整资源；Help、Compact、Skills 没有对应独立接口，只返回最小业务结果。结果不含 command、changed、sourceEventSeq，也不返回 ETag。精确映射见 [内置命令 §8](../01-内置命令/README.md#8-json-与错误)。
-- Compact 断线不取消，调用方通过 GET Session/Events 对账，不自动重放；Mate 凭据只在本次 Active Holder 中保留到执行结束，见 [内置命令 §7](../01-内置命令/README.md#7-compact-生命周期)。
+- 成功结果复用 GET Session 或 GET Models 的完整资源；Help、Compact、Skills 没有对应独立接口，只返回最小业务结果。结果不含 command、changed、sourceEventSeq，也不返回 ETag。精确映射见 [内置命令 §8](../../04-命令与技能/01-内置命令/README.md#8-json-与错误)。
+- Compact 断线不取消，调用方通过 GET Session/Events 对账，不自动重放；Mate 凭据只在本次 Active Holder 中保留到执行结束，见 [内置命令 §7](../../04-命令与技能/01-内置命令/README.md#7-compact-生命周期)。
 
 <a id="execute-skill-sequence"></a>
 
 ### 3.5 执行技能命令的详细时序（UC3）
 
-展开整体时序步骤 10～19。Runtime 执行、原始调用与展开内容分离、恢复已实现；统一 Definition/Handler 与版本快照待实现。下钻图见 [技能命令 §4](../02-技能命令/README.md#4-统一实施与集成要求)。
+展开整体时序步骤 10～19。Runtime 执行、原始调用与展开内容分离、恢复已实现；统一 Definition/Handler 与版本快照待实现。下钻图见 [技能命令 §4](../../04-命令与技能/02-技能命令/README.md#4-统一实施与集成要求)。
 
 - 请求为 `name=skill:<name>`、可选 arguments 与最多四个 fileIds；在实际执行的 Agent 快照上找到绑定 Skill，展开为“正文 + 空行 + arguments”作为内部模型输入。
 - 受理后首帧是展开前的 `user.message`，其 eventId 即本次根消息；随后复用普通 Agent、工具和 `session.status_idle` 事件。遇到需要确认的工具时发出 `reason=confirming` 后关闭本次 SSE，确认通过 Session Events 继续；断线不取消执行。
@@ -217,8 +219,8 @@ R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个�
 
 | 操作 | 方法与路径 | 成功结果 | 详细契约 |
 |---|---|---|---|
-| ListAgentCommands | `GET /campusclaw-service/v1/agents/{agentId}/commands` | 200，ResultBean 包裹 `commands` 数组 | [查看 Agent 命令清单](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#ListAgentCommands) |
-| ExecuteSessionCommand | `POST /campusclaw-service/v1/sessions/{sessionId}/command` | Builtin 200 JSON；技能命令 200 SSE | [执行会话命令](../../01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html#ExecuteSessionCommand) |
+| ListAgentCommands | `GET /campusclaw-service/v1/agents/{agentId}/commands` | 200，ResultBean 包裹 `commands` 数组 | [查看 Agent 命令清单](../01-CampusClaw多Agent运行时/chat-api-review.html#ListAgentCommands) |
+| ExecuteSessionCommand | `POST /campusclaw-service/v1/sessions/{sessionId}/command` | Builtin 200 JSON；技能命令 200 SSE | [执行会话命令](../01-CampusClaw多Agent运行时/chat-api-review.html#ExecuteSessionCommand) |
 
 <a id="31-get-轻量清单已确认"></a>
 <a id="32-get-轻量清单已确认"></a>
@@ -261,7 +263,7 @@ R1 的“新对话尚未创建会话也能查询”和“同一 Agent 的多个�
 - 会话状态未知、恢复中或清单读取失败时暂停提交。状态从空闲变为运行中时保留参数草稿并禁用修改；409 后刷新会话状态，保留草稿，不自动重放或降为查询。
 - 交互层遇到 Slash 先按清单精确匹配；清单失败、未命中或形态不支持时保留草稿并提示，不当作普通消息发送。
 
-mode 的业务与事务见 [内置命令 §6.1](../01-内置命令/README.md#mode-command)；选择 build 不批准计划，也不启动执行。
+mode 的业务与事务见 [内置命令 §6.1](../../04-命令与技能/01-内置命令/README.md#mode-command)；选择 build 不批准计划，也不启动执行。
 
 ### 4.3 执行请求
 
@@ -319,7 +321,7 @@ mode 的业务与事务见 [内置命令 §6.1](../01-内置命令/README.md#mod
 | 清单查询 AGENT_NOT_AVAILABLE 比例 | 区分 Agent 配置问题与 Mate 故障 | 【缺口】 |
 | 命令 POST 的 SESSION_BUSY 次数 | D1 把运行中的过滤交给前端，比例升高说明前端状态规则失效 | 【缺口】 |
 
-现有失败日志使用 `campusclaw.failure` 事件与 errorCode 字段，见 [调用日志](../../01-总体架构/05-CampusClaw调用日志/README.md)。
+现有失败日志使用 `campusclaw.failure` 事件与 errorCode 字段，见 [调用日志](../05-CampusClaw调用日志/README.md)。
 
 #### 5.2.4 应急预案
 
@@ -377,13 +379,13 @@ mode 的业务与事务见 [内置命令 §6.1](../01-内置命令/README.md#mod
 |---|---|---|
 | 按 Agent 查询清单 | 待实现 | `fd431002`：仍为 `/sessions/{sessionId}/commands`，描述依赖会话，见 [源码证据 §1.1](source-evidence.md#agent-catalog-evidence) |
 | type/hints 描述符 | 待实现 | `fd431002`：`CommandDiscoveryResponseAssembler` 仍输出 input{hint, acceptsFiles} |
-| 七个 Builtin 与业务响应 | 已实现 | `53eff85c`，路径见 [内置命令 §8.3](../01-内置命令/README.md#83-当前-runtime-实现与验收边界) |
+| 七个 Builtin 与业务响应 | 已实现 | `53eff85c`，路径见 [内置命令 §8.3](../../04-命令与技能/01-内置命令/README.md#83-当前-runtime-实现与验收边界) |
 | mode Builtin | 待实现 | `fd431002`：Contributor 仍只有七个 |
 | 统一 Session POST | 已实现 | `53eff85c`：RuntimeSessionController.update → RuntimeSessionUpdateService.update |
-| Skill 严格名称 | 已实现 | `53eff85c`，见 [技能命令 §4.2](../02-技能命令/README.md#42-当前实现剩余增量与测试证据) |
+| Skill 严格名称 | 已实现 | `53eff85c`，见 [技能命令 §4.2](../../04-命令与技能/02-技能命令/README.md#42-当前实现剩余增量与测试证据) |
 | Skill Runtime POST/SSE 与文本分离 | 已实现 | `53eff85c`；错误码差距见 F11 |
 | Skill 统一结构与版本快照 | 待实现 | `53eff85c` |
-| Skill 使用统计 | 部分实现 | `dad4433d`，见 [统计源码证据](../03-Skill加载统计/source-evidence.md) |
+| Skill 使用统计 | 部分实现 | `dad4433d`，见 [统计源码证据](../../04-命令与技能/03-Skill加载统计/source-evidence.md) |
 | Claw 前端 Slash | 已实现 | `53eff85c`；按 agentId 读取待实现 |
 | Mate 公共命令 | 待定 | 只确认描述符投影，见 [Mate 聊天命令 API](../../02-服务与接口/06-mate-service聊天命令API/README.md) |
 
@@ -391,12 +393,13 @@ mode 的业务与事务见 [内置命令 §6.1](../01-内置命令/README.md#mod
 
 ### 8.2 证据与对比
 
-源码与外部基线核验记录见 [source-evidence.md](source-evidence.md)；跨基线比较见 [Agent 架构对比 M05](../../01-总体架构/07-Agent架构对比/README.md)。Skill 统计口径由 [Skill 成功调用统计](../03-Skill加载统计/README.md) 维护。
+源码与外部基线核验记录见 [source-evidence.md](source-evidence.md)；跨基线比较见 [Agent 架构对比 M05](../07-Agent架构对比/README.md)。Skill 统计口径由 [Skill 成功调用统计](../../04-命令与技能/03-Skill加载统计/README.md) 维护。
 
 ### 8.3 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.0 | 2026-10-16 | 专题迁到 `01-总体架构/04-CampusClaw命令系统`，图源与 SVG 平铺到专题根，对齐总体架构的命名与布局；内容不变。 |
 | 2.0.0 | 2026-10-16 | 按设计模板重写；命令清单改为按 agentId 查询，运行中的限制交给前端状态规则与执行准入。 |
 | 1.18.0 | 2026-10-10 | Skill 统计复用统一最终工具结果，同事务累计且删除会话不扣减。 |
 | 1.17.0 | 2026-10-10 | Skill 统计按最终成功调用计数，登记 #335 实现及公共观察改造边界。 |

@@ -40,9 +40,9 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 | 要查的内容 | 入口 |
 |---|---|
 | 命令清单的请求与响应 | [查看 Agent 命令清单](chat-api-review.html#ListAgentCommands) |
-| 描述符字段、状态过滤与交互规则 | [Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#command-state-rules) |
+| 描述符字段、状态过滤与交互规则 | [Slash 通用模块](../04-CampusClaw命令系统/README.md#command-state-rules) |
 | 八个 Builtin 与 Skill 的完整请求、成功和失败响应 | [执行会话命令](chat-api-review.html#ExecuteSessionCommand) |
-| zh-CN 仍返回英文描述的源码依据与契约缺口 | [Slash 语言专项核对](../../04-命令与技能/00-Slash-Command通用模块/source-evidence.md#331-清单字段与语言专项核对) |
+| zh-CN 仍返回英文描述的源码依据与契约缺口 | [Slash 语言专项核对](../04-CampusClaw命令系统/source-evidence.md#331-清单字段与语言专项核对) |
 | Help 的 Agent 元数据、缓存与纯文本展示 | [Help 专项](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) |
 
 表格整理不改变原有字段、状态过滤、消息执行或权限语义；Agent 架构对比和目标类图无变化。
@@ -70,7 +70,7 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 | 内容 | 唯一维护位置 | 其他文档的处理 |
 |---|---|---|
 | 当前接口报文、Header、错误与确认状态 | catalog 指定的 operation JSON 与 common | HTML 自动生成，Markdown 不保存平行报文 |
-| Slash 轻量清单规则与共享结构 | [通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md) | HTTP 与 Mate 引用，不重复状态矩阵 |
+| Slash 轻量清单规则与共享结构 | [通用模块](../04-CampusClaw命令系统/README.md) | HTTP 与 Mate 引用，不重复状态矩阵 |
 | Builtin 业务、事务与实施验收 | [Builtin 专题](../../04-命令与技能/01-内置命令/README.md) | HTTP 仅保留传输边界及入口 |
 | Help 元数据、缓存与安全展示 | [Help 专题](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) | 专项 HTML 从 Runtime Command 提取，不维护专项 JSON |
 | Events 执行准入、有序追加、数据库中断与机制验收 | [Events 总体设计](chat-events-design.md) | 流设计只保留调用方可见的响应边界 |

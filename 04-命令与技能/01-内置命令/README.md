@@ -1,6 +1,6 @@
 # CampusClaw Builtin Command 设计
 
-[返回导航](../README.md) · [通用模块](../00-Slash-Command通用模块/README.md)
+[返回导航](../README.md) · [通用模块](../../01-总体架构/04-CampusClaw命令系统/README.md)
 
 > Slash 只是业务能力的调用入口：响应复用既有 Session/模型清单，不再提供命令专属回执。
 > `/help` 无参介绍当前 Agent，结果只有 displayName/description/useCases；[Help 专项设计](Help-Agent使用指南/README.md)维护缓存与展示语义。
@@ -30,7 +30,7 @@ Builtin 与 Skill Command 由用户统一负责设计、实现和集成。命令
 精确请求和结果以 Runtime
 [操作 12](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-agent-commands.json)、
 [操作 13](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json) 为准。
-[通用模块源码证据表](../00-Slash-Command通用模块/source-evidence.md#2-源码证据与差距)记录完整路径与基线。
+[通用模块源码证据表](../../01-总体架构/04-CampusClaw命令系统/source-evidence.md#2-源码证据与差距)记录完整路径与基线。
 
 d84dd3d6 的 `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql`
 中 t_sessions 没有 display_name；配置服务已存在 Model/Thinking 的领域更新。
@@ -50,9 +50,9 @@ Builtin 的来源过滤与 Skill 名称校验是不同职责，不能以过滤 S
 Runtime Coordinator、执行对象和 Repository 分开表达。
 这些分组表示协作者集合，不要求实现同名大类，也不改变 Service 的 Java 包归属。
 
-![Builtin 完整全局目标类图](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
+![Builtin 完整全局目标类图](../../01-总体架构/04-CampusClaw命令系统/target_slash_command_global_classes.svg)
 
-[PlantUML 源码](../00-Slash-Command通用模块/设计图/diagram.puml#L119) · [展开原尺寸 SVG](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
+[PlantUML 源码](../../01-总体架构/04-CampusClaw命令系统/diagram.puml#L119) · [展开原尺寸 SVG](../../01-总体架构/04-CampusClaw命令系统/target_slash_command_global_classes.svg)
 
 Slash 与 Builtin 共用这一份图源；[Help 元数据补充图](Help-Agent使用指南/README.md#2-全局入口与-help-补充类图)
 和以下核心扩展类图只作下钻，不替代或重排全局主图。
@@ -80,7 +80,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 
 ## 3. 串行 PR 与交付边界
 
-下表保留 Builtin 的实施切片与依赖顺序，不代表这些切片当前仍未实现；当前能力状态见 §8.3。Skill 执行与共享 HTTP 集成同时纳入[统一实施计划](../00-Slash-Command通用模块/README.md#5-实施与验收)。
+下表保留 Builtin 的实施切片与依赖顺序，不代表这些切片当前仍未实现；当前能力状态见 §8.3。Skill 执行与共享 HTTP 集成同时纳入[统一实施计划](../../01-总体架构/04-CampusClaw命令系统/README.md#5-实施与验收)。
 后续增量 PR 必须等前一相关 PR 合并，
 再从最新 origin/main 建立独立 worktree 和 codex/* 分支，不使用堆叠分支。
 
@@ -96,7 +96,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 | 8 | codex/builtin-command-application | Catalog/Execution 应用边界；复用业务资源 VO 与 Session 投影，不为每个命令新建响应类型 |
 | 9 | codex/builtin-command-http | 统一对齐 Skill 清单与请求类型后发布 GET/POST、VO/Header/ResultBean、契约和跨进程测试；删除旧 command 原型；更新实施状态 |
 
-开发规模统一遵守[通用模块交付规则](../00-Slash-Command通用模块/README.md#5-实施与验收)。
+开发规模统一遵守[通用模块交付规则](../../01-总体架构/04-CampusClaw命令系统/README.md#5-实施与验收)。
 按职责和验收边界组织 PR，不提前公开未完成路由；ADR 在同步最新 main 后分配。
 
 ## 4. 命令行为
@@ -114,7 +114,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 
 空参数是 Service 归一后的空字符串。全空白 Name 修改在去除两端空白后为空时拒绝，不视为清空。
 Help 的 arguments 缺省/null/空白归一为空；非空参数（包括 model）为 INVALID_COMMAND_REQUEST，不进入命令详情或 COMMAND_NOT_FOUND 分支。
-GET 的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []），不允许执行参数；Agent 命令清单按[轻量契约](../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)排序，不按 Session 状态过滤。
+GET 的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []），不允许执行参数；Agent 命令清单按[轻量契约](../../01-总体架构/04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)排序，不按 Session 状态过滤。
 Help 不刷新：读取最近成功发布的完整 Agent 缓存；无快照为 422 AGENT_NOT_AVAILABLE，只有文案缺失则返回 200 空数组。
 displayName 取 Agent 显示名，空白回退 Agent name；不是 `/name` 的 Session 名称。文案按纯文本展示，不调用模型、不写历史或模型上下文。
 清单查询不暴露内部准入原因；缓存缺失时先按 Agent 准备完整快照，Agent 不存在为 404 AGENT_NOT_FOUND，准备失败为 422 AGENT_NOT_AVAILABLE；不改变上述 POST Help 的 422。
@@ -275,7 +275,7 @@ RuntimeSessionResponseAssembler，模型查询使用 AvailableModelsResponseVO�
 旧 `6f52fddc` 的响应缺口、`510d882c` 的无统一 Session POST 结论不再代表该基线。
 `425354eb` 的 Builtin 应用与响应、`ca4b79f4` 的共享入口已包含在核验提交中。
 这证明实现存在，不证明所有错误码、并发、真实压缩和企业集成都已验收。未重跑 Java 测试；
-既有 Help 专项测试结果保持原归属。清单英文描述差距见[语言专项](../00-Slash-Command通用模块/source-evidence.md#331-清单字段与语言专项核对)，
+既有 Help 专项测试结果保持原归属。清单英文描述差距见[语言专项](../../01-总体架构/04-CampusClaw命令系统/source-evidence.md#331-清单字段与语言专项核对)，
 Mate 公共接入仍见其独立设计；不能笼统表述为“Builtin 全部目标已经完成”。
 
 当前接口设计已取消客户端条件请求与 ETag，数据库原子性继续保留；[无客户端条件令牌的当前目标与实现差距](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)记录 2026-10-04 的 Java `553dcd5e` 复核，旧表中的 If-Match/ETag 为实现事实，移除仍待实现。

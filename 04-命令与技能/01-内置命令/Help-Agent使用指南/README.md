@@ -44,8 +44,8 @@
 
 ## 2. 全局入口与 Help 补充类图
 
-整体系统先看[Slash 完整全局目标类图](../../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)；
-其 [PlantUML 源码](../../00-Slash-Command通用模块/设计图/diagram.puml#L119) 为 Slash 与 Builtin 共用的唯一全局主图。
+整体系统先看[Slash 完整全局目标类图](../../../01-总体架构/04-CampusClaw命令系统/target_slash_command_global_classes.svg)；
+其 [PlantUML 源码](../../../01-总体架构/04-CampusClaw命令系统/diagram.puml#L119) 为 Slash 与 Builtin 共用的唯一全局主图。
 本专题只下钻 Help 的元数据、缓存和结果投影，不再以 Help 为中心重排全局关系或合并其他命令的职责边界。
 以下类图是局部补充，不代表完整 Command 系统；图中 Help 链路均已在当前实现基线存在。
 
@@ -98,7 +98,7 @@ Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护�
 
 Runtime 操作 12（`GET /agents/{agentId}/commands`）的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []）；
 Help 是否无参由命令契约定义，不由 hints 决定。清单不按 Session 状态过滤；缓存缺失时清单先准备 Agent，失败为 422，POST Help 仍独立检查缓存并保持既有 422。
-清单的字段与排序见[Agent 命令清单契约](../../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
+清单的字段与排序见[Agent 命令清单契约](../../../01-总体架构/04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)。
 
 ## 4. 缓存与缺失行为
 

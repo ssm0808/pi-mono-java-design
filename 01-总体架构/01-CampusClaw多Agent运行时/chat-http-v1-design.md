@@ -16,7 +16,7 @@ Runtime HTTP 面向 mate-service bridge 和获授权的内部 SDK，以 Session�
 
 浏览器使用 [mate-service 公共 Chat API](../../02-服务与接口/07-mate-service通用对话API/README.md)。mate-service 持有 Chat→Session 映射、完成公共认证与安全投影；Runtime 处理执行、Session 配置和持久化。两跳各有契约，当前接口清单与评审状态见各自生成页。
 
-本文维护 HTTP 资源设计、更新事务、公司响应适配和安全边界。事件生命周期由 [Session Events](chat-events-design.md) 维护，命令行为由 [Slash 模块](../../04-命令与技能/00-Slash-Command通用模块/README.md) 维护，避免在此复制业务契约。
+本文维护 HTTP 资源设计、更新事务、公司响应适配和安全边界。事件生命周期由 [Session Events](chat-events-design.md) 维护，命令行为由 [Slash 模块](../04-CampusClaw命令系统/README.md) 维护，避免在此复制业务契约。
 
 ## 2. 接口分组
 
@@ -179,7 +179,7 @@ Builtin 普通 JSON，以及 B13/B14 的 Skill 请求、SSE 与恢复规则已�
 
 | 接口 | 精确模型 | 设计职责 |
 |---|---|---|
-| GET /agents/{agentId}/commands | [操作 12](接口契约/操作/12-list-agent-commands.json) | [Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)维护描述符、排序、命令状态规则、Agent 快照准备与重新准入理由 |
+| GET /agents/{agentId}/commands | [操作 12](接口契约/操作/12-list-agent-commands.json) | [Slash 通用模块](../04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)维护描述符、排序、命令状态规则、Agent 快照准备与重新准入理由 |
 | POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../../04-命令与技能/01-内置命令/README.md)维护八个命令的业务、窄服务、事务和实施验收 |
 
 Controller 只收发 VO，Application 完成授权、归一化、一次 Catalog 解析、准入、执行及 DTO→VO。

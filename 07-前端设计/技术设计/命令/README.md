@@ -1,6 +1,6 @@
 # CampusClaw Slash Command 前端设计
 
-[返回 Slash Command 通用模块](../../../04-命令与技能/00-Slash-Command通用模块/README.md) · [打开交互评审稿](../../原型/slash-command-review.html)
+[返回 Slash Command 通用模块](../../../01-总体架构/04-CampusClaw命令系统/README.md) · [打开交互评审稿](../../原型/slash-command-review.html)
 
 | 属性 | 值 |
 |---|---|
@@ -148,7 +148,7 @@ Chat Workspace
 | 命令返回 Session/Models | 按既有完整快照规则更新配置，不推断该任务已结束或问题已回答；待交互仍由原根的完整事件与历史核对。 |
 | 权威会话状态更新后参数权限收窄 | 保留命令与参数，并提示“当前只可查询，请先清除参数”；用户明确清空后才允许运行，不能自动删参数并悄悄执行查询。命令消失则保留禁用标签。 |
 
-命令身份以服务端清单为准；输入交互集中遵循[共享状态规则](../../../04-命令与技能/00-Slash-Command通用模块/README.md#command-state-rules)，不在组件重复维护。running 下 model/thinking/mode 的 hints 保持不变但只允许无参查询；状态未知或恢复中暂停提交，POST 最终准入。计划模式不新增 `/plan`、`/approve`、`/answer` 或 `/todo`；也不因新增 Skill 统计而增加热度排序或次数徽标。
+命令身份以服务端清单为准；输入交互集中遵循[共享状态规则](../../../01-总体架构/04-CampusClaw命令系统/README.md#command-state-rules)，不在组件重复维护。running 下 model/thinking/mode 的 hints 保持不变但只允许无参查询；状态未知或恢复中暂停提交，POST 最终准入。计划模式不新增 `/plan`、`/approve`、`/answer` 或 `/todo`；也不因新增 Skill 统计而增加热度排序或次数徽标。
 
 命令区、消息草稿、问题答案、方案反馈分别持有自己的缓冲；取消 Slash 只恢复消息草稿。问题卡的选项键盘动作和自由文本 Enter 不触发 Composer 命令。清单打开时焦点留在输入，Arrow/Home/End 只选择候选；Enter 收成标签，下一次明确 Enter 才执行，长按和 IME 不触发。退出更换列表恢复原标签与参数。
 
@@ -233,7 +233,7 @@ Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不
 `frontend/src/components/ComposerBox.vue` 的 template 已有底部模型 select 和思考按钮，但 Slash 选择未接入它们。
 同文件附件菜单仍为 disabled；`frontend/src/runtime/commands.ts` 的 freezeCommandArguments 仅组装 name/arguments，
 尚未把 fileIds 纳入调用快照。后端 `CommandDiscoveryResponseAssembler.input` 已统一返回 Skill 附件标记，
-`SkillCommandRequestVO` 与 `SkillCommandExecutionService.execute` 已接收并传递 fileIds，路径见[共享能力证据](../../../04-命令与技能/00-Slash-Command通用模块/source-evidence.md#agent-catalog-evidence)。
+`SkillCommandRequestVO` 与 `SkillCommandExecutionService.execute` 已接收并传递 fileIds，路径见[共享能力证据](../../../01-总体架构/04-CampusClaw命令系统/source-evidence.md#agent-catalog-evidence)。
 因此选项交互和当前内部附件接线的主要缺口在前端；真实文件授权及 Mate 公共映射仍按所属接口验收。
 本次只核验源码，未运行 Java/前端产品测试。
 

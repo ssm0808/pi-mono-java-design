@@ -19,7 +19,7 @@ Runtime 清单已改为按 Agent 查询（`GET /campusclaw-service/v1/agents/{ag
 ## 2. GET 共享规则
 
 字段、排序、命令状态规则、完整快照要求与 Slash 交互路由统一引用
-[Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
+[Slash 通用模块](../../01-总体架构/04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)。
 页面只保留标准请求和响应示例，不增加字段说明、交互速查或实现状态区块。本文不重述字段表。两跳成功示例继续做等值校验，不因公共认证独立而复制不同的 Descriptor 语义。
 
 未命中、清单失败或输入形态不支持时保留草稿，不自动转为普通消息。
@@ -40,7 +40,7 @@ Help 元数据与缓存行为见 [Help 专题](../../04-命令与技能/01-内�
 ## 4. 证据边界
 
 - 共享 GET 的已核对源码为 pi-mono-java `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`，
-  完整路径、符号与目标差距由 [Slash 源码证据 §5](../../04-命令与技能/00-Slash-Command通用模块/source-evidence.md#33-发现层证据与验收)维护。
+  完整路径、符号与目标差距由 [Slash 源码证据 §5](../../01-总体架构/04-CampusClaw命令系统/source-evidence.md#33-发现层证据与验收)维护。
 - Mate 历史证据点为 `956b547f5ca12ca89e68f73012f92a4406b0c9fa`：
   `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/AgentDefinitionController.java:39-67`
   与同模块 `modelmanager/controller/LlmChatController.java:34-56`、`modelmanager/service/UpstreamChatCall.java:19-31`。

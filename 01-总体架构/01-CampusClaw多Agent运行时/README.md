@@ -116,7 +116,7 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 
 ### 7.3 Command 与公共 Session 能力
 
-Command 通过 HTTP 进入应用服务。Builtin 调用窄职责服务并返回 JSON，Skill 经过共享消息准入与执行服务返回 SSE；列表和执行各自解析快照，写操作在所属锁内复核。全局目标类图和命令语义见 [Slash Command](../../04-命令与技能/00-Slash-Command通用模块/README.md)。
+Command 通过 HTTP 进入应用服务。Builtin 调用窄职责服务并返回 JSON，Skill 经过共享消息准入与执行服务返回 SSE；列表和执行各自解析快照，写操作在所属锁内复核。全局目标类图和命令语义见 [Slash Command](../04-CampusClaw命令系统/README.md)。
 
 压缩属于公共 Session 能力，手工命令只是入口。算法、上下文恢复与 Usage 累计见 [HTTP 中的压缩入口](chat-http-v1-design.md#221-公共-session-压缩能力内部算法与已确认公共映射)及其所属存储专题。
 

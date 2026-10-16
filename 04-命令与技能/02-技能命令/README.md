@@ -1,6 +1,6 @@
 # CampusClaw Skill Command 设计
 
-[返回导航](../README.md) · [通用模块](../00-Slash-Command通用模块/README.md)
+[返回导航](../README.md) · [通用模块](../../01-总体架构/04-CampusClaw命令系统/README.md)
 
 | 属性 | 值 |
 |---|---|
@@ -41,7 +41,7 @@ PR #210 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/r
 pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 `packages/coding-agent/src/core/skills.ts` 提供 Skill 发现，而
 `packages/coding-agent/src/core/agent-session.ts` 有本地展开/执行语义；
-这不是 CampusClaw 的企业 HTTP 契约。完整外部基线和差异分类见[通用模块](../00-Slash-Command通用模块/README.md)。
+这不是 CampusClaw 的企业 HTTP 契约。完整外部基线和差异分类见[通用模块](../../01-总体架构/04-CampusClaw命令系统/README.md)。
 
 ### 2.1 名称专项复核
 
@@ -95,7 +95,7 @@ Agent 命令清单的 Skill 名称为 `skill:<name>`，排在固定 Builtin 顺�
 也不承诺任意文件格式都能被处理。文件数量、标识、所有权与可用性沿用普通消息边界。
 Java 53eff85c 的 InputResponseVO 仍输出旧附件标记，type/hints 投影待实现；fileIds 执行传递已存在。
 前端 freezeCommandArguments 尚未组装 fileIds，上传按钮仍禁用，前端与 Mate 公共桥接分别验收。
-完整规则与最新源码差距见[Agent 命令清单契约](../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
+完整规则与最新源码差距见[Agent 命令清单契约](../../01-总体架构/04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)。
 发现与执行分别核验：当前 Runtime Skill POST 已实现；Mate 公共执行是否开放仍由独立契约决定。
 
 B13/B14 已确认共享 `POST /sessions/{sessionId}/command`。精确联合请求、错误与 SSE 示例见
@@ -105,7 +105,7 @@ SSE。普通 Events 不解析 Slash；Skill 的首帧 user.message 保留展开�
 Tool 和 idle 事件。无 commandId/通用生命周期；user.message.eventId 即本次根消息，
 sourceEventId 和 targetEventId 支撑确认、中断与历史归属。
 
-全局目标类图复用[通用模块主图](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)，
+全局目标类图复用[通用模块主图](../../01-总体架构/04-CampusClaw命令系统/target_slash_command_global_classes.svg)，
 不维护一张割裂的 Skill 总图。SkillCommandDefinition 显式组合准入策略和真实 Handler；
 Handler 委派 SkillExecutionService，后者使用普通消息接受/执行应用服务，不越层调用 Controller。
 这条统一扩展结构仍待实现；现有 SkillCommandExecutionService 已复用 RuntimeMessageEventService，具体映射见 §4.2。

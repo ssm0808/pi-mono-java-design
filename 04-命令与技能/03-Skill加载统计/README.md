@@ -1,6 +1,6 @@
 # Skill 成功调用次数统计设计
 
-[命令与技能](../README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#skill-target) · [M05 主设计](../00-Slash-Command通用模块/README.md) · [统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) · [源码与差距](source-evidence.md) · [验证](validation.md)
+[命令与技能](../README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#skill-target) · [M05 主设计](../../01-总体架构/04-CampusClaw命令系统/README.md) · [统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) · [源码与差距](source-evidence.md) · [验证](validation.md)
 
 | 属性 | 值 |
 |---|---|

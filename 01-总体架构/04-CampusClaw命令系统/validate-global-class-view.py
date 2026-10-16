@@ -8,10 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = ROOT.parents[1]
-BUILTIN = ROOT.parent / "01-内置命令"
+BUILTIN = REPOSITORY / "04-命令与技能/01-内置命令"
 HELP = BUILTIN / "Help-Agent使用指南"
 GLOBAL_NAME = "target_slash_command_global_classes"
-GLOBAL_SVG = ROOT / "设计图" / (GLOBAL_NAME + ".svg")
+GLOBAL_SVG = ROOT / (GLOBAL_NAME + ".svg")
 RELATIONS = (
     "RuntimeCommandCatalogController --> CommandCatalogService",
     "RuntimeCommandController --> CommandExecutionService",
@@ -39,7 +39,7 @@ RELATIONS = (
 
 
 def global_block():
-    source = (ROOT / "设计图/diagram.puml").read_text(encoding="utf-8")
+    source = (ROOT / "diagram.puml").read_text(encoding="utf-8")
     return source.split("@startuml " + GLOBAL_NAME + "\n", 1)[1].split("@enduml", 1)[0]
 
 
@@ -81,7 +81,7 @@ class GlobalClassViewTest(unittest.TestCase):
 
     def test_slash_and_builtin_share_the_first_global_diagram(self):
         self.assertEqual(GLOBAL_SVG.resolve(), first_diagram(BUILTIN / "README.md"))
-        self.assertIn("设计图/" + GLOBAL_NAME + ".svg", (ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("](" + GLOBAL_NAME + ".svg)", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertTrue(GLOBAL_SVG.exists())
 
     def test_help_is_a_supplement_not_another_global_definition(self):

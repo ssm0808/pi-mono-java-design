@@ -54,7 +54,7 @@
 | d84dd3d6：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionConfigurationService.java` | Model/Thinking 与 HTTP If-Match 绑定 | 提取锁内读取最新配置的窄服务 |
 | d84dd3d6：`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java`；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionHolder.java` | 活动执行、控制队列与清理已存在 | Compact 复用生命周期，单独完成 JSON Future |
 
-已合并的前置实现 `9d0d76f4`（main 合并点 `a8192e04`）将发现数据改为同包 `ResolvedCommandDTO.java` 与 `SkillCommandSnapshotDTO.java`，并由 InputDTO 复制 suggestions、Catalog 复制外层列表；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillNamePatterns.java` 当时集中兼容/严格两套正则。Help 在 `d1cdb708e3e124cae009b10b985f5832b6dbde01` 已实现同一链路，场景字段当时误名为 `userCases`，`53eff85c7f41de23eb434e027782f5085a8b8e45` 统一为 `useCases`，见 [Help 源码证据](../01-内置命令/Help-Agent使用指南/README.md#5-源码证据与设计理由)。
+已合并的前置实现 `9d0d76f4`（main 合并点 `a8192e04`）将发现数据改为同包 `ResolvedCommandDTO.java` 与 `SkillCommandSnapshotDTO.java`，并由 InputDTO 复制 suggestions、Catalog 复制外层列表；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/skill/SkillNamePatterns.java` 当时集中兼容/严格两套正则。Help 在 `d1cdb708e3e124cae009b10b985f5832b6dbde01` 已实现同一链路，场景字段当时误名为 `userCases`，`53eff85c7f41de23eb434e027782f5085a8b8e45` 统一为 `useCases`，见 [Help 源码证据](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md#5-源码证据与设计理由)。
 
 ### 2.1 执行与持久化外部基线（历史）
 
@@ -90,7 +90,7 @@ OpenCode `/api/command` v2 当时在源码中标为 experimental。四字段投�
 |---|---|---|
 | pi 默认 main `d192bd6dcae78fb87cf5c1c5e2af2790a0296278`；`packages/coding-agent/src/core/slash-commands.ts#BUILTIN_SLASH_COMMANDS` | Builtin 列表含 model/thinking 与 argumentHint，未含 mode/plan/build | 新增产品自己的 mode；不宣称为 pi 原生行为 |
 | OpenCode 默认 dev `fe3f3a41f79ad292cc3c7c629567385a20ec5130`；`packages/opencode/src/agent/agent.ts#Agent.state` | build/plan 是两个 primary Agent，并有不同权限 | 保留同一绑定 Agent，以 Session.mode 切换模式；不复制双 Agent 权限结构 |
-| Java `53eff85c7f41de23eb434e027782f5085a8b8e45`；路径见 [Builtin §6.1](../01-内置命令/README.md#mode-command) | Session 更新已有 mode 及 requested 事件，命令 Contributor 和前端命令映射尚无 mode | 新命令及共享规则抽取待实现 |
+| Java `53eff85c7f41de23eb434e027782f5085a8b8e45`；路径见 [Builtin §6.1](../../04-命令与技能/01-内置命令/README.md#mode-command) | Session 更新已有 mode 及 requested 事件，命令 Contributor 和前端命令映射尚无 mode | 新命令及共享规则抽取待实现 |
 
 <a id="33-发现层证据与验收"></a>
 
