@@ -266,7 +266,7 @@ JDK HttpClient 自带连接池：同一个 HttpClient 实例里，到同一地�
 Redis 连接沿用 Spring Boot 的 `spring.data.redis.*`（地址、密码、库号、Sentinel、TLS），由 Host 配置类转换为 Redisson 配置，与 Redis 流式恢复、跨实例路由共用一个 `RedissonClient`。三个专题的约定合并如下：
 
 - 命令超时与重试：许可脚本对超时敏感，Redis 卡住时应尽快降级，而不是让所有模型调用一起等。所以 Redisson 的命令超时（`timeout`）设为 1 秒，命令重试次数（`retryAttempts`）设为 0。重试被关掉也不会让登记重复：同一个许可 ID 重复执行脚本只会刷新租约。这两个值对共用客户端的其他专题同样生效，跨实例路由的发布和流式恢复的读写在各自实施时确认能接受；不能接受时再为许可单独建一个 `RedissonClient`。
-- 连接池与线程：Redisson 自己维护命令连接池和单独的订阅连接池，主从或 Sentinel 模式下按主节点连接池配置。许可每个实例只有队首在申请，加上删除和续租，同时占用的连接很少，首版沿用 Redisson 默认值，压测后调整。许可代码在虚拟线程上调用 Redisson 的同步接口，不在 Redisson 的 Netty I/O 线程里执行阻塞操作。
+- 连接池与线程：Redisson 自己维护命令连接池和单独的订阅连接池，主从或 Sentinel 模式下按主节点连接池配置。许可每个实例只有队首在申请，加上删除和续租，同时占用的连接很少，首版沿用 Redisson 默认值，压测后调整。许可代码在虚拟线程上调用 Redisson 的同步接口，不在 Redisson 的 Netty I/O 线程里执行阻塞操作。订阅连接池只有跨实例路由的 Pub/Sub 使用，`subscriptionsPerConnection`、`subscriptionConnectionPoolSize` 的取值由该专题按频道数确定，写入同一份 Redisson 配置；许可不使用订阅连接。
 
 已有的两个超时保持配置键和默认值不变，实现方式改为：
 
