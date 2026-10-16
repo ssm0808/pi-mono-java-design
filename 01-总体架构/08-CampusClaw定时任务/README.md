@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.61.0 |
+| 文档版本 | 0.62.0 |
 | 更新日期 | 2026-10-16 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 接口配置的任务每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；对话中由 Cron 工具创建的任务关联当前会话，每次运行在该会话追加一轮 |
@@ -274,7 +274,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 
 | 表 | 权威职责 | 关联及生命周期 |
 |---|---|---|
-| `t_schedule` | 当前任务配置与自动计划游标 | 一条配置对应多条 Run；删除时与其 Run 同事务删除。`session_id` 非空表示对话中创建，逻辑引用创建它的会话，不设外键 |
+| `t_schedule` | 当前任务配置与自动计划游标 | 一条配置对应多条 Run；删除时与其 Run 同事务删除。`target_type` 区分接口配置与对话中创建的任务；后者的 `session_id` 逻辑引用创建它的会话，不设外键 |
 | `t_schedule_run` | 一次触发是否受理、受理时的 Session 与根执行身份，以及同任务唯一未结束 Run | `schedule_id` 外键指向配置并级联删除；`session_id`、`execution_id` 为逻辑引用，不设外键 |
 | `t_sessions`、`t_session_executions` | 已受理会话与根执行，结构不变 | 不受 Schedule/Run 删除级联；用户在定时会话中继续对话不改变原 Run 的关联；删除会话时同事务删除 `session_id` 指向它的 Schedule |
 
@@ -292,7 +292,8 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 |---|---|---|---|---|
 | id | VARCHAR(41) | 否 | — | `schedule-` 加 32 位 UUID 十六进制 |
 | agent_id | VARCHAR(38) | 否 | — | 任务关联的 Agent 标识；接口配置的任务每次运行按它新建 Session，修改后只影响之后的运行；对话中创建的任务取关联会话的 Agent，不可修改 |
-| session_id | VARCHAR(40) | 是 | — | 对话中由 Cron 工具创建时关联的会话，此后不可修改；接口配置的任务为空，见 [§3.13](#chat-created-schedule) |
+| target_type | VARCHAR(16) | 否 | — | 运行目标，创建后不可修改：`new_session` 为接口配置的任务，每次运行新建 Session；`session` 为对话中由 Cron 工具创建的任务，每次在 session_id 指向的会话中追加一轮，见 [§3.13](#chat-created-schedule) |
+| session_id | VARCHAR(40) | 是 | — | target_type 为 `session` 时为关联的会话，此后不可修改；为 `new_session` 时为空 |
 | name | VARCHAR(256) | 否 | — | 任务名称 |
 | description | VARCHAR(2048) | 是 | — | 任务描述 |
 | prompt | TEXT | 否 | — | 纯文本任务内容，受理时作为新 Session 的首条用户消息，或关联会话中追加的用户消息提交 |
@@ -319,6 +320,8 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 - status 只能是 `active` / `paused`。
 - active 时 paused_reason 为空，paused 时非空。
 - cron_expression 与 timezone 同空或同非空。
+- target_type 只能是 `new_session` / `session`。
+- target_type 为 `session` 时 session_id 非空，为 `new_session` 时 session_id 为空。
 
 暂停原因的具体枚举、Cron 可解析性、JSON 结构与引用资格由应用校验。资源 `type` 是响应常量，不落库；`upcomingRunsAt` 由保存的规则计算，不存多个未来时刻。JSON 以 TEXT 保存，不新增 JSON 查询或索引。
 
@@ -425,7 +428,7 @@ PR #332 已实现定时任务表，未合入 main。下表列出它与 §3.2.2�
 | idx_schedule_run_retention | `(state, finished_at, id)` | 改为 `(finished_at, id)` | state 已撤销 |
 | uk_schedule_run_unfinished | 无 | 新增 | 同任务不并发 |
 | uk_schedule_run_execution | 无 | 新增 | 终态提交时按 execution_id 结束 Run |
-| t_schedule.session_id、idx_schedule_session | 无 | 新增 | 对话中创建的任务关联会话，见 [§3.13](#chat-created-schedule) |
+| t_schedule.target_type、session_id、idx_schedule_session | 无 | 新增 | 用 target_type 区分两种任务，对话中创建的任务以 session_id 关联会话，见 [§3.13](#chat-created-schedule) |
 
 <a id="gaps"></a>
 
@@ -580,7 +583,7 @@ Cron 字段、timezone 默认值与校验以[§4.3](#schedule-fields)为准。�
 
 ### 3.9 接口配置的任务每次运行新建 Session
 
-本节只适用于接口配置的任务（`t_schedule.session_id` 为空）；对话中创建的任务每次在关联会话中追加一轮，见 [§3.13](#chat-created-schedule)。
+本节只适用于接口配置的任务（`t_schedule.target_type` 为 `new_session`）；对话中创建的任务每次在关联会话中追加一轮，见 [§3.13](#chat-created-schedule)。
 
 | 边界 | 当前目标 |
 |---|---|
@@ -678,6 +681,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 | 项目 | 接口配置的任务 | 对话中创建的任务 |
 |---|---|---|
 | 创建入口 | Mate 管理入口调用 Claw 接口（[§4.4](#interface)） | 对话中 Agent 调用 Cron 工具，用户确认（[§3.12](#cron-tool)） |
+| `t_schedule.target_type` | `new_session` | `session` |
 | `t_schedule.session_id` | 空 | 创建它的会话，之后不可修改 |
 | agentId | 创建时指定，可修改 | 取该会话的 Agent，不可修改 |
 | 每次运行 | 新建 Session（[§3.9](#new-session-per-run)） | 在关联会话中追加一条用户消息并启动新的根执行 |
@@ -698,7 +702,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 **删除会话。** 会话删除（[M06 删除 Session](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#212-删除-session)）在会话空闲时提交墓碑与清理任务；同一事务内先按 session_id 锁定关联的 Schedule 并删除（Run 由外键级联），锁顺序与受理一致，先 Schedule 后会话。会话正忙时删除返回 409，任务不受影响。删除不可恢复，任务与 Run 一起消失。实现上 Runtime 删除会话的事务内调用会话删除扩展点（`SessionDeleteHook`，与 D11 的终态扩展点同类），定时任务的实现按 session_id 删除；待实现。
 
-**列表与接口管理。** 两种任务在同一张表，接口的任务列表、详情与 Run 查询都返回对话中创建的任务，资源多一个只读 `sessionId`（接口配置的任务为 null，[§4.3](#schedule-fields)）。Mate 按 sessionId 对应的对话判断这类任务属于哪个用户，列表过滤时与自己维护的任务归属一起使用（Mate 侧待设计，T7）。Mate 页面可以修改、暂停、恢复、删除和立即运行这类任务；立即运行同样在关联会话追加一轮，会话忙时返回带 `session_busy_error` 的 Run。接口不能创建关联会话的任务，也不能修改 sessionId 或这类任务的 agentId。
+**列表与接口管理。** 两种任务在同一张表，接口的任务列表、详情与 Run 查询都返回对话中创建的任务，资源多一个只读 `sessionId`（接口配置的任务为 null，[§4.3](#schedule-fields)）；target_type 只在库内区分，接口不新增字段。Mate 按 sessionId 对应的对话判断这类任务属于哪个用户，列表过滤时与自己维护的任务归属一起使用（Mate 侧待设计，T7）。Mate 页面可以修改、暂停、恢复、删除和立即运行这类任务；立即运行同样在关联会话追加一轮，会话忙时返回带 `session_busy_error` 的 Run。接口不能创建关联会话的任务，也不能修改 sessionId 或这类任务的 agentId。
 
 **每会话上限。** Cron 工具创建时在事务内锁会话行，统计该会话关联的任务数，达到上限（[部署初始值](#deployment-defaults)）时拒绝，工具返回“本对话的定时任务已达上限”。接口配置的任务不计入。
 
@@ -2057,6 +2061,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.62.0 | 2026-10-16 | t_schedule 增加 target_type 字段区分接口配置与对话中创建的任务，不再以 session_id 是否为空区分。 |
 | 0.61.0 | 2026-10-16 | 支持在对话中通过 Cron 工具创建定时任务：任务关联当前会话并在该会话中运行，会话忙时跳过，删除会话时一起删除，创建、修改、删除需用户确认。 |
 | 0.60.0 | 2026-10-15 | 类图修正 `ScheduleController` 方法签名，Run 与任务改为按 `scheduleId` 关联而非聚合。 |
 | 0.59.0 | 2026-10-15 | 全局类图按标准 UML 重画（类成员、接口实现、组合与多重性，ELK 分层布局），并与实现映射一起改用 PR #332 的可读类名：`ScheduleRunLauncher`、`ScheduledSessionStarter`（移入 `schedule.session`）、`ScheduleTriggerWorker`、`ScheduleSessionRegistry` 等，新旧名对照见[源码证据 §8.23](source-evidence.md#class-rename)。 |
