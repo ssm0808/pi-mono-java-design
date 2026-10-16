@@ -108,7 +108,7 @@ def values_for_key(value: Any, key: str):
 
 
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.5.0", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.6.0", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
     require("GET 字段已确认" in common["api"]["visibility"] and "公共边界待评审" in common["api"]["visibility"],
             "GET confirmation must not approve the public boundary")

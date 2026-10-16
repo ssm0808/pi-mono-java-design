@@ -72,6 +72,22 @@ class CommandCatalogContractTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             validate_catalog_examples(self.runtime)
 
+    def test_only_builtin_description_follows_accept_language(self):
+        def english(index):
+            return self.runtime["responses"][0]["bodies"]["en-US"]["result"]["commands"][index]
+        cases = (
+            ("untranslated Builtin", lambda: english(0).update(description=self.idle[0]["description"])),
+            ("translated Skill", lambda: english(-1).update(description="Analyze and generate PDF documents")),
+            ("localized hints", lambda: english(2).update(hints=["名称"])),
+            ("missing en-US", lambda: self.runtime["responses"][0]["bodies"].pop("en-US")),
+        )
+        for label, mutate in cases:
+            with self.subTest(case=label):
+                self.setUp()
+                mutate()
+                with self.assertRaises(RuntimeError):
+                    validate_catalog_examples(self.runtime)
+
     def test_order_duplicates_and_complete_empty_skills(self):
         validate_commands(self.idle[:-1])
         for commands in (list(reversed(self.idle)), self.idle + [self.idle[0]], self.idle[1:]):
