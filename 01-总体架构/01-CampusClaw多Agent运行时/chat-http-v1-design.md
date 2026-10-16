@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.68.0 |
+| 文档版本 | 1.69.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新最新迁移差距见 §8.3，历史核验保留在 §8.1/§8.2 |
@@ -65,6 +65,8 @@ Usage 沿用模型返回的 Token 与 USD cost 口径，Assistant 和 Compaction
 删除在 idle 时原子提交 tombstone 和可重试清理任务，返回无响应体的 204。提交后 Session 立即对 API 不可见；物理清理由 Worker 重试，204 不表示介质上的字节全部擦除。active execution 返回 SESSION_BUSY，调用方须提交 user.interrupt 并确认实际结束后再删除。
 
 不存在或已删除统一 204；URI 与持久化 tombstone 提供重试幂等性，不要求 Idempotency-Key 或 If-Match。永久 `t_session_tombstone` 严格只有 `session_id/deleted_at`，用于禁止 ID 复用；租约、次数、错误与清理进度放在短期 `t_session_cleanup_task`，完成后删除任务。两者提交失败必须整体回滚，不能暴露部分删除。
+
+同一事务还经会话删除扩展点删除该会话关联的定时任务及其 Run（对话中由 Cron 工具创建的任务，见 [M10 §3.13](../08-CampusClaw定时任务/README.md#chat-created-schedule)，待实现）。
 
 清理范围为 Runtime Entry、执行状态与内存对象；mate-service Chat 业务元数据和文件对象由各自所属服务管理。删除后的 Session 不能因清理失败重新可见。
 
@@ -448,6 +450,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.69.0 | 2026-10-16 | 删除会话同事务删除其关联的定时任务及 Run，规则引用 M10 §3.13。 |
 | 1.68.0 | 2026-10-16 | 命令清单改为 `GET /agents/{agentId}/commands`，按 Agent 返回全部命令，冷缓存与创建会话共用准备流程。 |
 | 1.67.0 | 2026-10-15 | 凭据来源跟随根执行，定时 Session 中继续对话使用本次请求快照，机制引用 M10 §3.11。 |
 | 1.66.0 | 2026-10-13 | 定时执行改为统一账号，每批工具调用前向 Mate 无入参取 access-token。 |
