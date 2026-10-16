@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/agents/{agentId}/commands",
     "summary": "列出指定 Agent 的 Builtin 和 Skill 命令",
-    "description": "查询指定 Agent 的全部命令，返回名称、类别、用途和参数提示，供客户端展示 Slash 命令列表。清单不读取会话状态；运行中哪些命令可执行由客户端按命令状态规则限制，并由执行接口最终准入。",
+    "description": "查询指定 Agent 的全部命令，返回名称、类别、用途和参数提示，供客户端展示 Slash 命令列表。Builtin 的 description 按 Accept-Language 返回 zh-CN 或 en-US，缺失或不支持时回退 en-US；Skill 的 description 原样返回作者元数据，不做翻译；hints 是与语言无关的稳定标记。清单不读取会话状态；运行中哪些命令可执行由客户端按命令状态规则限制，并由执行接口最终准入。",
     "parameters": [
       {
         "$ref": "parameters.agentId"
@@ -102,6 +102,78 @@
                 }
               ]
             }
+          },
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "type": "builtin",
+                  "description": "Introduce this Agent's purpose and use cases",
+                  "hints": []
+                },
+                {
+                  "name": "status",
+                  "type": "builtin",
+                  "description": "Show the Session status, model and deep thinking",
+                  "hints": []
+                },
+                {
+                  "name": "name",
+                  "type": "builtin",
+                  "description": "Show or rename the Session",
+                  "hints": [
+                    "displayName"
+                  ]
+                },
+                {
+                  "name": "model",
+                  "type": "builtin",
+                  "description": "Show or switch the model",
+                  "hints": [
+                    "modelId"
+                  ]
+                },
+                {
+                  "name": "thinking",
+                  "type": "builtin",
+                  "description": "Show or toggle deep thinking",
+                  "hints": [
+                    "on|off"
+                  ]
+                },
+                {
+                  "name": "mode",
+                  "type": "builtin",
+                  "description": "Show or switch the plan/build work mode",
+                  "hints": [
+                    "plan|build"
+                  ]
+                },
+                {
+                  "name": "compact",
+                  "type": "builtin",
+                  "description": "Compact the current context",
+                  "hints": []
+                },
+                {
+                  "name": "skills",
+                  "type": "builtin",
+                  "description": "List the Skills bound to this Agent",
+                  "hints": []
+                },
+                {
+                  "name": "skill:pdf",
+                  "type": "skill",
+                  "description": "分析和生成 PDF 文档",
+                  "hints": [
+                    "request"
+                  ]
+                }
+              ]
+            }
           }
         },
         "id": "200-commands"
@@ -179,6 +251,70 @@
                 }
               ]
             }
+          },
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "type": "builtin",
+                  "description": "Introduce this Agent's purpose and use cases",
+                  "hints": []
+                },
+                {
+                  "name": "status",
+                  "type": "builtin",
+                  "description": "Show the Session status, model and deep thinking",
+                  "hints": []
+                },
+                {
+                  "name": "name",
+                  "type": "builtin",
+                  "description": "Show or rename the Session",
+                  "hints": [
+                    "displayName"
+                  ]
+                },
+                {
+                  "name": "model",
+                  "type": "builtin",
+                  "description": "Show or switch the model",
+                  "hints": [
+                    "modelId"
+                  ]
+                },
+                {
+                  "name": "thinking",
+                  "type": "builtin",
+                  "description": "Show or toggle deep thinking",
+                  "hints": [
+                    "on|off"
+                  ]
+                },
+                {
+                  "name": "mode",
+                  "type": "builtin",
+                  "description": "Show or switch the plan/build work mode",
+                  "hints": [
+                    "plan|build"
+                  ]
+                },
+                {
+                  "name": "compact",
+                  "type": "builtin",
+                  "description": "Compact the current context",
+                  "hints": []
+                },
+                {
+                  "name": "skills",
+                  "type": "builtin",
+                  "description": "List the Skills bound to this Agent",
+                  "hints": []
+                }
+              ]
+            }
           }
         },
         "id": "200-no-skills"
@@ -249,6 +385,11 @@
     "catalogScope": {
       "status": "待评审",
       "decision": "清单按 Agent 查询，不读会话状态；冷缓存时与创建会话共用 prepare，错误码与创建会话一致。"
+    },
+    "descriptionLocale": {
+      "status": "已确认",
+      "confirmedAt": "2026-10-16",
+      "decision": "Builtin description 按 Accept-Language 国际化（zh-CN/en-US，回退 en-US）；Skill description 原样返回；hints 不随语言变化。"
     }
   }
 }

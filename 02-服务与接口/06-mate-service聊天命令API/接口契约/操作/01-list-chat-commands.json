@@ -102,6 +102,78 @@
                 }
               ]
             }
+          },
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "type": "builtin",
+                  "description": "Introduce this Agent's purpose and use cases",
+                  "hints": []
+                },
+                {
+                  "name": "status",
+                  "type": "builtin",
+                  "description": "Show the Session status, model and deep thinking",
+                  "hints": []
+                },
+                {
+                  "name": "name",
+                  "type": "builtin",
+                  "description": "Show or rename the Session",
+                  "hints": [
+                    "displayName"
+                  ]
+                },
+                {
+                  "name": "model",
+                  "type": "builtin",
+                  "description": "Show or switch the model",
+                  "hints": [
+                    "modelId"
+                  ]
+                },
+                {
+                  "name": "thinking",
+                  "type": "builtin",
+                  "description": "Show or toggle deep thinking",
+                  "hints": [
+                    "on|off"
+                  ]
+                },
+                {
+                  "name": "mode",
+                  "type": "builtin",
+                  "description": "Show or switch the plan/build work mode",
+                  "hints": [
+                    "plan|build"
+                  ]
+                },
+                {
+                  "name": "compact",
+                  "type": "builtin",
+                  "description": "Compact the current context",
+                  "hints": []
+                },
+                {
+                  "name": "skills",
+                  "type": "builtin",
+                  "description": "List the Skills bound to this Agent",
+                  "hints": []
+                },
+                {
+                  "name": "skill:pdf",
+                  "type": "skill",
+                  "description": "分析和生成 PDF 文档",
+                  "hints": [
+                    "request"
+                  ]
+                }
+              ]
+            }
           }
         },
         "id": "200-commands"
@@ -175,6 +247,70 @@
                   "name": "skills",
                   "type": "builtin",
                   "description": "列出当前 Agent 绑定的 Skill",
+                  "hints": []
+                }
+              ]
+            }
+          },
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "type": "builtin",
+                  "description": "Introduce this Agent's purpose and use cases",
+                  "hints": []
+                },
+                {
+                  "name": "status",
+                  "type": "builtin",
+                  "description": "Show the Session status, model and deep thinking",
+                  "hints": []
+                },
+                {
+                  "name": "name",
+                  "type": "builtin",
+                  "description": "Show or rename the Session",
+                  "hints": [
+                    "displayName"
+                  ]
+                },
+                {
+                  "name": "model",
+                  "type": "builtin",
+                  "description": "Show or switch the model",
+                  "hints": [
+                    "modelId"
+                  ]
+                },
+                {
+                  "name": "thinking",
+                  "type": "builtin",
+                  "description": "Show or toggle deep thinking",
+                  "hints": [
+                    "on|off"
+                  ]
+                },
+                {
+                  "name": "mode",
+                  "type": "builtin",
+                  "description": "Show or switch the plan/build work mode",
+                  "hints": [
+                    "plan|build"
+                  ]
+                },
+                {
+                  "name": "compact",
+                  "type": "builtin",
+                  "description": "Compact the current context",
+                  "hints": []
+                },
+                {
+                  "name": "skills",
+                  "type": "builtin",
+                  "description": "List the Skills bound to this Agent",
                   "hints": []
                 }
               ]
