@@ -1,6 +1,6 @@
 # Model：源码证据与实现差距
 
-版本：1.3.0 · 2026-09-19。返回[模块主设计](README.md)。
+版本：1.4.0 · 2026-10-16。返回[模块主设计](README.md)。
 
 本文集中保存已读取的源码证据。每项结论仅适用于对应提交与核验范围；目标规则和验收见主设计。独立核验范围分别记录；本次未运行产品测试。
 
@@ -52,6 +52,30 @@ pi 当次通过 ls-remote 确认默认分支 main，并在临时仓库 fetch 得
 | 同上 | `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatRequestMapper.java` · appendOptions | options.maxTokens 非空就写 max_output_tokens；目标需要删除该映射，包括摘要与显式 options 的入口。 |
 
 2026-09-19 再次确认上游默认分支并 fetch，pi 仍为上述 `36b60d2e8985899743c4cf5bd5f8929832a3f05d`；新增核验摘要输出策略，其他历史范围不升级。Java 与 Mate 为本地明确提交的静态核验，未声称已更新其远端。Mate `src/main/java` 未发现独立信息查询 Controller。目标为新执行锁外查询 contextWindow、固定执行快照，普通调用及摘要均由 Mate 控制输出；查询/准入拆分、前置预算检查和输出策略迁移待实现。与 pi 保留本地额度及摘要预算的差异属于产品约束和架构变更，代价与验收见[模型信息专题](model-capabilities.md)。
+
+<a id="http-transport-evidence"></a>
+
+## 1.4 模型 HTTP 传输与并发专项（2026-10-16）
+
+2026-10-16 隔离 fetch 各仓库默认分支，只读源码，结论只适用于下表提交与路径。对应设计见[主设计 §5](README.md#http-transport)。
+
+| 来源与提交 | 仓库相对路径 · 符号 | 观察结论 |
+|---|---|---|
+| Java `main@1acbbf3f046932872af06868c600bb5d9498d8b6` | `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java` · createWebClient、eventFlux、subscribe、cancel | 唯一使用 Reactor Netty 的生产代码：`HttpClient.create().disableRetry(true)`、`CONNECT_TIMEOUT_MILLIS`、`responseTimeout`，包成 `ReactorClientHttpConnector`；没有显式连接池或并发上限 |
+| 同上 | `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java` · transportErrorCode | 按 `TimeoutException`、`SocketTimeoutException`、类名含 Timeout、`ConnectException`、`WebClientRequestException` 分类，不依赖 Netty 类型 |
+| 同上 | `modules/ai/src/test/java/com/campusclaw/ai/provider/mate/CampusMateProviderTest.java` | 测试构造 WebClient 时直接使用 `reactor.netty.http.client.HttpClient`；没有连接超时或事件间隔超时测试 |
+| 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeExecutionProperties.java` · maxActive；`RuntimeSessionEngineRegistry.java` · capacity | 执行准入默认每实例 100，用 Semaphore 控制；`schedule/config/ScheduleProperties.java` · instanceExecutionLimit 默认 8；没有模型调用级上限 |
+| 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java`、`common/util/MateRestUtil.java` | Runtime 侧 Mate 客户端已使用 JDK `java.net.http.HttpClient` |
+| 同上，`./mvnw dependency:tree` | `campusclaw-coding-agent` 依赖树 | Netty 只经 `campusclaw-ai` → `reactor-netty-http:1.2.5` 引入：`reactor-netty-core` 与 17 个 `io.netty:4.1.119.Final` 构件，本地 jar 合计约 5.5 MB |
+| Reactor Netty `1.2.5` 源码包 | `reactor/netty/resources/ConnectionProvider.java` · DEFAULT_POOL_MAX_CONNECTIONS、DEFAULT_POOL_ACQUIRE_TIMEOUT、DEFAULT_POOL_MAX_IDLE_TIME；`PooledConnectionProvider.java` · pendingAcquireMaxCount；`reactor/netty/http/client/HttpClient.java` · responseTimeout；`HttpClientOperations.java` · ReadTimeoutHandler | 默认最多 `max(CPU 核数, 8) × 2` 条连接，排队上限为其 2 倍，排队最多 45 秒，空闲不按时间关闭；`responseTimeout` 是两次网络读之间的最大间隔 |
+| Spring Framework `6.2.6`（spring-web jar） | `org.springframework.http.client.reactive.JdkClientHttpConnector` · JdkClientHttpConnector(HttpClient)、setReadTimeout | Spring 自带 JDK 连接器，可包装自建 HttpClient 并设置响应超时 |
+| OpenJDK `jdk21u` `master@bb6b279495ceff8442dbd0225756b92d466d5309`（更新分支源码，运行时为 21.0.12，未逐行比对） | `src/java.net.http/share/classes/jdk/internal/net/http/ConnectionPool.java` · returnToPool、MAX_POOL_SIZE；`HttpClientImpl.java` · DEFAULT_KEEP_ALIVE_TIMEOUT；`MultiExchange.java` · retryOnFailure、canRetryRequest | 连接池属于 HttpClient 实例；空闲 30 秒关闭；`connectionPoolSize` 默认 0 不限制；`ConnectException` 默认重试一次，非 GET/HEAD 请求在连接过期时不重试 |
+| pi `main@4dd2b149d155d7369de16ea4dc77c84e9f5ffb24` | `packages/ai/src/api/openai-completions.ts` · stream、createClient | 每次 `stream` 调用新建 OpenAI SDK 客户端，传入可选 `fetch`，未配置连接池、预热或并发上限 |
+| Codex `main@4eb4a65407d98cebc4c83bf13be440b9fbc78a7c` | `codex-rs/core/src/client.rs` · stream_responses_http、build_api_transport；`codex-rs/login/src/auth/default_client.rs` · create_client_for_route | HTTP 流式请求每次经 `build_api_transport` 构造 reqwest 客户端，未见模型请求并发上限 |
+| 同上 | `codex-rs/core/src/client.rs` 模块注释（第 11–26 行）、`ModelClient.cached_websocket_session`、`prewarm_auth` | 每轮开始以 `generate=false` 的 `response.create` 预热 Responses WebSocket，本轮后续请求复用该连接与 `previous_response_id`；连接在会话内缓存，认证归属变化时丢弃 |
+| 同上 | `codex-rs/core/src/config/mod.rs` · DEFAULT_AGENT_MAX_THREADS | 默认最多 6 个 Agent 线程，间接限制并发模型请求 |
+
+原型验证（临时 worktree，不是交付代码）：在 Java `1acbbf3f` 上把 `createWebClient` 和测试改为 `JdkClientHttpConnector`，删除 `modules/ai/pom.xml` 的 `reactor-netty-http`，并给 SSE 响应体加 `Flux.timeout`。`./mvnw -pl :campusclaw-ai -am test` 通过，`campusclaw-ai` 366 个测试 0 失败；`campusclaw-coding-agent` 依赖树不再含 `io.netty` 或 `reactor-netty`。首轮全量测试出现 1 次 Reactor `onErrorDropped` 日志，后续两次全量运行未复现，原因未定位；回调线程为 `ForkJoinPool.commonPool`。许可机制未做原型，并发与容量结论均未压测。
 
 ## 2. pi 历史固定行为基线
 
@@ -109,6 +133,7 @@ mate-service 固定基线 `956b547f`：`src/main/java/com/huawei/hicampus/mate/a
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-10-16 | 核验 Reactor Netty 使用点与默认连接池、JDK HttpClient 连接复用与重试，以及 pi/Codex 的模型 HTTP 客户端做法。 |
 | 1.3.0 | 2026-09-19 | 补充执行锁内准备、请求额度映射与 pi 摘要证据，登记按执行读窗口和 Mate 输出权威的差距。 |
 | 1.2.0 | 2026-09-19 | 核验 pi 逐模型能力与 Java/Mate 默认值链，登记独立查询、能力快照及未知输出上限的实现差距。 |
 | 1.1.2 | 2026-09-17 | 模块统一命名为 Model，源码基线与实现差距不变。 |

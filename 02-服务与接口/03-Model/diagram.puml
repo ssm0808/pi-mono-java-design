@@ -22,6 +22,7 @@
 ' Architecture change: provider registries route calls but do not discover or authorize models.
 ' Pending implementation: remove ModelRegistry, external model JSON, and the alternate catalog manager.
 ' Design reason: request state stays per invocation; AI does not depend on Runtime persistence.
+' 传输与并发：Java main 1acbbf3f046932872af06868c600bb5d9498d8b6 的 CampusMateProvider.createWebClient 使用 Reactor Netty；目标改为 JdkClientHttpConnector + JDK HttpClient，并新增实例内模型调用许可（待实现）。
 
 ' Preview scope: Java a1e6450427abeabaa1af04d5964f371dbbf4cf68 (PR 336); pi main f1b2e77f5b13b2a199b1052cb79c235451afe7d7.
 ' Source: modules/ai/src/main/java/com/campusclaw/ai/util/StreamingJsonParser.java :: accept, arguments.
@@ -93,6 +94,11 @@ package "CampusMate adapter - singleton" as Adapter {
   }
   class MateChatRequestMapper
   class WebClient
+  class ModelCallPermits <<pending implementation>> {
+    每实例 50 个，按到达顺序
+    最多等待 30 秒
+  }
+  class "JDK HttpClient\n（内置连接池，HTTP/1.1）" as JdkHttpClient <<pending implementation>>
 }
 package "Invocation state" as Call {
   class MateChatSseParser <<per call>>
@@ -152,6 +158,8 @@ ApiProviderRegistry o-- "0..*" ApiProvider
 CampusMateProvider .up.|> AiProvider
 CampusMateProvider *-- "1" MateChatRequestMapper
 CampusMateProvider *-- "1" WebClient
+CampusMateProvider *-- "1" ModelCallPermits : 发请求前申请 [P]
+WebClient --> JdkHttpClient : JdkClientHttpConnector [P]
 CampusMateProvider --> Config
 CampusMateProvider ..> MateChatSseParser : create
 CampusMateProvider ..> AssistantMessageEventStream : create / return
@@ -159,7 +167,7 @@ MateChatSseParser *-- "0..*" StreamingJsonParser : preview state
 MateChatSseParser ..> ToolArgumentJsonStatus : inspect original JSON
 MateChatSseParser --> AssistantMessageEventStream : emit
 AgentLoop -[norank]-> AssistantMessageEventStream : consume
-WebClient --> Chat : POST / SSE
+JdkHttpClient --> Chat : POST / SSE，复用空闲连接 [P]
 WebClient -[norank]-> MateChatSseParser : chunks
 
 Controllers -[hidden]down-> Services
@@ -167,6 +175,7 @@ VOs -[hidden]down-> Services
 Services -[hidden]down-> CampusClawAiService
 CampusClawAiService -[hidden]down-> CampusMateProvider
 MateChatRequestMapper -[hidden]right-> WebClient
+WebClient -[hidden]right-> ModelCallPermits
 MateChatSseParser -[hidden]right-> AssistantMessageEventStream
 
 legend bottom left
@@ -181,6 +190,7 @@ Mate controls all output limits, including summaries.
 AI emits events; only Runtime writes Session state.
 Generic previews and internal diagnostics: implemented in PR 336.
 Complete arguments are parsed independently; preview never executes.
+模型调用许可与 JDK HttpClient：待实现，替换 Reactor Netty。
 endlegend
 @enduml
 
@@ -296,4 +306,49 @@ commit or roll back in one database transaction.
 Missing upstream usage is stored as zero values,
 matching the pi Usage contract.
 end note
+@enduml
+
+@startuml model-call-permit
+' 源码基线：pi-mono-java main 1acbbf3f046932872af06868c600bb5d9498d8b6（2026-10-16 隔离 fetch）
+' 源码证据：modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java：createWebClient、eventFlux、subscribe、cancel
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeExecutionProperties.java：maxActive
+' JDK 证据：openjdk/jdk21u master bb6b279495ceff8442dbd0225756b92d466d5309，src/java.net.http/share/classes/jdk/internal/net/http/ConnectionPool.java：returnToPool、MAX_POOL_SIZE
+' JDK 证据：同上 HttpClientImpl.java：DEFAULT_KEEP_ALIVE_TIMEOUT；MultiExchange.java：retryOnFailure、canRetryRequest
+' 已观察行为：当前使用 Reactor Netty 默认连接池，没有显式的模型调用并发上限。
+' 设计原因：许可先于发出请求，结束后归还，使在途调用与到 Mate 的连接都不超过许可数。
+' 架构变更：许可与 JDK HttpClient 连接池均待实现；连接池是 JDK 内部对象，单列是因为本图回答连接是否复用。
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 180
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+hide footbox
+autonumber
+
+title 一次模型调用的连接与许可
+participant AgentLoop as Loop
+participant "调用许可" as Permits
+participant "Mate Provider" as Provider
+participant "连接池" as Pool
+participant "Mate Chat" as Mate
+
+Loop -> Provider ++ : 发起一次模型调用（模型、上下文）
+activate Loop
+Provider -> Permits ++ : 申请模型调用许可（按到达顺序等待，待实现）
+return 模型调用许可
+Provider -> Pool ++ : 获取到 Mate 的连接（优先复用空闲连接，待实现）
+return 可用连接
+Provider -> Mate ++ : 发送 Chat 请求
+Mate -->> Provider : 流式返回增量
+Provider -->> Loop : 推送 Assistant 增量事件
+return 完成标记（[DONE]）
+Provider ->> Pool : 归还该连接（空闲 30 秒后关闭）
+Provider ->> Permits : 归还该许可
+return 返回最终 Assistant 消息
+deactivate Loop
 @enduml

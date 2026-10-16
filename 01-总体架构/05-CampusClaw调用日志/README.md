@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.2.1 |
+| 文档版本 | 2.3.0 |
 | 状态 | 日志机制已按 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 落地；CampusMate Provider 改名为 待实现 |
 | 设计日期 | 2026-08-26 |
 | 实现仓库 | `superheromeZzh/pi-mono-java` |
@@ -169,6 +169,7 @@ Mate 失败按发生位置分类：
 | 阶段 | 典型错误码 |
 |---|---|
 | 请求映射 | `INVALID_LLM_CHAT_REQUEST`、`MATE_REQUEST_MAPPING_FAILED` |
+| 本地并发限制（待实现） | `MODEL_CONCURRENCY_LIMITED`：等待本实例模型调用许可超时，未发出请求，见 [Model §5.6](../../02-服务与接口/03-Model/README.md#http-transport-failure) |
 | HTTP/可用性 | `MODEL_NOT_FOUND`、`MODEL_RATE_LIMITED`、`MODEL_UNAVAILABLE`、`MANAGER_UNAVAILABLE` |
 | 超时/流传输 | `MODEL_INVOCATION_TIMEOUT`、`UPSTREAM_STREAM_ERROR` |
 | 响应/SSE 协议 | `INVALID_MATE_RESPONSE`、`INVALID_CHAT_SSE`、`INVALID_REASONING_SIGNATURE` |
@@ -243,3 +244,4 @@ event == "campusclaw.failure" AND sessionId == "<session-id>"
 | 2.1.0 | 2026-08-26 | 实际失败源类直接记录，异常只携带稳定错误码。 |
 | 2.2.1 | 2026-09-14 | 聚焦失败边界与定位规则，压缩变更经过并重排调用顺序图。 |
 | 2.2.0 | 2026-09-14 | 目标 Provider Logger 随 CampusMateProvider 改名，稳定日志字段与错误码保持不变。 |
+| 2.3.0 | 2026-10-16 | 新增本地错误码 `MODEL_CONCURRENCY_LIMITED`，表示等待模型调用许可超时且未发出请求。 |
