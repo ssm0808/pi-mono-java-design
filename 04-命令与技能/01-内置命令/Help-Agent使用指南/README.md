@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.3.0 |
-| 日期 | 2026-09-22 |
+| 设计版本 | 1.4.0 |
+| 日期 | 2026-10-16 |
 | 状态 | Help 无参查询、三个业务字段、缓存往返、Agent 级锁、DTO→VO 投影与统一 Command POST 已实现；元数据更新通过显式刷新完成 |
 | 设计仓核验基线 | `2c0b0693e57d7949c9b37757b9256f87617b00bf` |
 | 当前实现基线 | pi-mono-java `53eff85c7f41de23eb434e027782f5085a8b8e45` |
@@ -45,7 +45,7 @@
 ## 2. 全局入口与 Help 补充类图
 
 整体系统先看[Slash 完整全局目标类图](../../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)；
-其 [PlantUML 源码](../../00-Slash-Command通用模块/设计图/diagram.puml#L95) 为 Slash 与 Builtin 共用的唯一全局主图。
+其 [PlantUML 源码](../../00-Slash-Command通用模块/设计图/diagram.puml#L119) 为 Slash 与 Builtin 共用的唯一全局主图。
 本专题只下钻 Help 的元数据、缓存和结果投影，不再以 Help 为中心重排全局关系或合并其他命令的职责边界。
 以下类图是局部补充，不代表完整 Command 系统；图中 Help 链路均已在当前实现基线存在。
 
@@ -96,9 +96,9 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
 这里的 `description` 是返回的 Agent 用途介绍；GET 描述符自身的 description 改为“介绍当前 Agent 的用途和使用场景”，二者含义不同。
 
-Runtime 操作 12 的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []）；
-Help 是否无参由命令契约定义，不由 hints 决定。idle/running 均保留 Help；共享 GET 无完整缓存整体 503，但 POST Help 仍独立检查缓存并保持既有 422。
-两跳清单的字段、排序与过滤见[共享 GET 契约](../../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
+Runtime 操作 12（`GET /agents/{agentId}/commands`）的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []）；
+Help 是否无参由命令契约定义，不由 hints 决定。清单不按 Session 状态过滤；缓存缺失时清单先准备 Agent，失败为 422，POST Help 仍独立检查缓存并保持既有 422。
+清单的字段与排序见[Agent 命令清单契约](../../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)。
 
 ## 4. 缓存与缺失行为
 
@@ -180,7 +180,7 @@ Runtime 元数据、Builtin 只读查询、DTO→VO 组装和 Runtime HTTP 切�
 
 ## 7. 评审与同步范围
 
-Help 的精确请求、字段与错误由 Runtime [操作 12](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-session-commands.json)与[操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)维护。专项 HTML 只筛选 Help 场景，直接继承 Runtime 的 Builtin Header 示例、参数、约束、结果与错误，不保留第二份 JSON。Slash 与 Builtin 引用同一张全局主图，本专题只维护元数据下钻图。
+Help 的精确请求、字段与错误由 Runtime [操作 12](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-agent-commands.json)与[操作 13](../../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)维护。专项 HTML 只筛选 Help 场景，直接继承 Runtime 的 Builtin Header 示例、参数、约束、结果与错误，不保留第二份 JSON。Slash 与 Builtin 引用同一张全局主图，本专题只维护元数据下钻图。
 
 mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 GET 投影及公共边界待决。
 不能将本稿直接当作新公共接口；公共认证、bridge 和执行协议仍待重审，不新增公共路径或跨仓实现。
@@ -195,6 +195,7 @@ mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-10-16 | Help 描述符随命令清单改为按 Agent 查询，同步全局类图锚点与缓存缺失语义。 |
 | 1.3.0 | 2026-09-22 | Help 描述符使用 type/hints，无参行为仍由命令契约定义。 |
 | 1.2.4 | 2026-09-22 | Help 请求头仅投影 Builtin 场景，不展示 Skill 工具执行凭据。 |
 | 1.2.3 | 2026-09-22 | 按 53eff85c 更正 Help 缓存、Agent 级锁、查询与响应链的已实现状态。 |

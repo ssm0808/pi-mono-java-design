@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.99.0 |
-| 更新日期 | 2026-10-15 |
+| 文档版本 | 1.100.0 |
+| 更新日期 | 2026-10-16 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -86,14 +86,18 @@ pi 的 RpcSlashCommand 与 OpenCode 的 Command.Info 均将发现描述和实际
 CampusClaw 采用 name/type/description 与可选 hints，按类别统一附件，按会话状态限制修改；这是产品约束与接口架构变更。
 收益是描述符不绑定控件，代价是前端需集中维护并验证命令状态规则，POST 始终最终准入。
 Java 53eff85c 的 VO/组装器及前端仍用 kind/input，新投影与客户端迁移待实现；未运行产品测试。
-相对路径、符号、旧新提交范围及差异理由见[专项证据](../../04-命令与技能/00-Slash-Command通用模块/README.md#command-descriptor-baseline)，其余比较不升级。
+相对路径、符号、旧新提交范围及差异理由见[专项证据](../../04-命令与技能/00-Slash-Command通用模块/source-evidence.md#command-descriptor-baseline)，其余比较不升级。
+
+M05 清单作用域于 2026-10-16 核对 OpenCode `dev@e25b7abf`（按工作目录查询，实验接口）、Codex `main@6b991972`（`skills/list` 按 cwds 查询）与 pi `main@4954d760`（每个会话进程 `get_commands`）。
+CampusClaw 的命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`（待评审 · 待实现），不按会话状态过滤；这是接口架构变更：同一 Agent 的多个会话共用一份清单，代价是运行中的禁用改由前端状态规则表展示、POST 终判。
+证据见 [Agent 清单作用域核对](../../04-命令与技能/00-Slash-Command通用模块/source-evidence.md#agent-catalog-evidence)。
 
 待补证项是持续维护范围，不能用于讲述已经实现的能力。涉及该模块的新设计应补齐受影响的问题，
 不要求一次设计把所有基线全部重做，也不能用“待补证”略过本次实际改变的架构结论。
 
 <a id="a01"></a>
 
-M05/M07 模式命令增量：pi 于 2026-09-22 从前次 `d201760ffee16564aa8d9a759e0c85b70db33674` 更新至默认 main `d192bd6dcae78fb87cf5c1c5e2af2790a0296278`，Builtin 列表含 model/thinking 而不含 mode；OpenCode dev 仍为 `fe3f3a41f79ad292cc3c7c629567385a20ec5130`，plan/build 是不同 primary Agent。CampusClaw 通过 `/mode` 切换同一 Session 的模式，复用既有配置事务并禁止在运行/审核等待时切换，不引入双 Agent 权限模型。属于产品入口扩展和共享规则的架构变更；Java `53eff85c` 已有 Session 模式更新，mode 命令和前端适配待实现。收益是保留上下文与权威状态，代价是新增命令映射、选择控件和一致性验收；完整路径、符号与源码成熟度见[模式专项证据](../../04-命令与技能/00-Slash-Command通用模块/README.md#mode-command-evidence)。
+M05/M07 模式命令增量：pi 于 2026-09-22 从前次 `d201760ffee16564aa8d9a759e0c85b70db33674` 更新至默认 main `d192bd6dcae78fb87cf5c1c5e2af2790a0296278`，Builtin 列表含 model/thinking 而不含 mode；OpenCode dev 仍为 `fe3f3a41f79ad292cc3c7c629567385a20ec5130`，plan/build 是不同 primary Agent。CampusClaw 通过 `/mode` 切换同一 Session 的模式，复用既有配置事务并禁止在运行/审核等待时切换，不引入双 Agent 权限模型。属于产品入口扩展和共享规则的架构变更；Java `53eff85c` 已有 Session 模式更新，mode 命令和前端适配待实现。收益是保留上下文与权威状态，代价是新增命令映射、选择控件和一致性验收；完整路径、符号与源码成熟度见[模式专项证据](../../04-命令与技能/00-Slash-Command通用模块/source-evidence.md#mode-command-evidence)。
 
 ## 4. A01 · Loop 的扩展能力与产品消息准入分离
 
@@ -728,6 +732,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.100.0 | 2026-10-16 | M05 命令清单改为按 Agent 查询，登记 OpenCode/Codex/pi 的清单作用域基线；其余比较不升级。 |
 | 1.99.0 | 2026-10-15 | A14 同步 M10 D12：定时任务首版不自动暂停，Agent 启停用另开设计。 |
 | 1.98.0 | 2026-10-14 | 合入 main：A05 增加 plan 模式拒绝 TodoUpdate 的执行前门禁及 Codex 对照（main 原记为 1.92.0）。 |
 | 1.97.0 | 2026-10-14 | 合入 main：A08 增加交互工具同批位置对比，提问与用户确认须为末位调用、计划提交须单独调用（main 原记为 1.91.0）。 |

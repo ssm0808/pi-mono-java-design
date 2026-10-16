@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.22.0 |
-| 更新日期 | 2026-10-04 |
+| 文档版本 | 1.23.0 |
+| 更新日期 | 2026-10-16 |
 | 变更性质 | HTTP 1.63.0 统一取消条件与请求去重 Header 及配套 ETag；内部事务与业务准入保留 |
 | 唯一当前入口 | [当前十二项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
@@ -39,10 +39,10 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 
 | 要查的内容 | 入口 |
 |---|---|
-| 命令清单的请求与响应 | [查看会话命令清单](chat-api-review.html#ListSessionCommands) |
+| 命令清单的请求与响应 | [查看 Agent 命令清单](chat-api-review.html#ListAgentCommands) |
 | 描述符字段、状态过滤与交互规则 | [Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#command-state-rules) |
 | 八个 Builtin 与 Skill 的完整请求、成功和失败响应 | [执行会话命令](chat-api-review.html#ExecuteSessionCommand) |
-| zh-CN 仍返回英文描述的源码依据与契约缺口 | [Slash 语言专项核对](../../04-命令与技能/00-Slash-Command通用模块/README.md#331-清单字段与语言专项核对) |
+| zh-CN 仍返回英文描述的源码依据与契约缺口 | [Slash 语言专项核对](../../04-命令与技能/00-Slash-Command通用模块/source-evidence.md#331-清单字段与语言专项核对) |
 | Help 的 Agent 元数据、缓存与纯文本展示 | [Help 专项](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md) |
 
 表格整理不改变原有字段、状态过滤、消息执行或权限语义；Agent 架构对比和目标类图无变化。
@@ -52,7 +52,7 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 
 ### 2.1 operationKey 与作用描述
 
-当前十项 Runtime 契约的 `operationKey` 采用大驼峰（PascalCase），例如 `ListSessionCommands`、
+当前十项 Runtime 契约的 `operationKey` 采用大驼峰（PascalCase），例如 `ListAgentCommands`、
 `ExecuteSessionCommand`。它是文档、生成页锚点及契约工具的操作标识，不要求 Java/TypeScript 方法改名，
 也不改变 URL、JSON 字段的小驼峰规则或命令 name。引用和校验器随标识迁移，旧小驼峰锚点不再作为当前入口。
 保留 Session 是因为清单由指定会话状态、绑定 Agent 与 Skill 决定；`ListCommands` 容易被误解为全局命令列表。
@@ -127,6 +127,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.23.0 | 2026-10-16 | 同步 HTTP 1.68.0：命令清单改为 ListAgentCommands，语言专项证据链接迁至 source-evidence。 |
 | 1.22.0 | 2026-10-04 | 同步 HTTP 1.63.0 的无条件 Header 契约、最新行更新和实现迁移证据。 |
 | 1.21.0 | 2026-09-22 | 命令清单与执行示例增加 mode，HTTP 操作数量保持不变。 |
 | 1.20.0 | 2026-09-22 | 全部当前接口的作用只描述功能，命令清单删除额外说明区块并保留标准示例。 |

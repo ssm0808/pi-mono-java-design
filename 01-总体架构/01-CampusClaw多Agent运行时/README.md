@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.33.0 |
-| 更新日期 | 2026-10-15 |
+| 文档版本 | 3.34.0 |
+| 更新日期 | 2026-10-16 |
 | 职责 | M01：Agent 执行装配、入口协作与父子执行生命周期 |
 | 设计状态 | 当前目标；实现状态按专项源码证据分别判断 |
 | 源码证据 | [固定提交、路径、符号与差距](source-evidence.md) |
@@ -67,7 +67,7 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 | 5 | `GET` | `/sessions/{sessionId}/events` | 查看对话历史 |
 | 6 | `GET` | `/sessions/{sessionId}/models` | 查询可用模型 |
 | 7 | `POST` | `/sessions/{sessionId}` | 更新会话 |
-| 8 | `GET` | `/sessions/{sessionId}/commands` | 查看会话命令清单 |
+| 8 | `GET` | `/agents/{agentId}/commands` | 查看 Agent 命令清单 |
 | 9 | `POST` | `/sessions/{sessionId}/command` | 执行会话命令 |
 | 10 | `POST` | `/internal/skills/load-statistics/query` | 按 skillIds 批量查询累计/精确范围激活统计；排名、趋势暂缓 |
 | 11 | `GET` | `/agents/{agentId}/events` | 按 Agent 与时间范围跨会话列出用户请求（user.message），供 Mate Trace 使用 |
@@ -145,6 +145,7 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.34.0 | 2026-10-16 | 命令清单改为 `GET /agents/{agentId}/commands`（ListAgentCommands），同步 HTTP 1.68.0。 |
 | 3.33.0 | 2026-10-15 | ListAgentEvents 响应增加 total，ListTurnEvents 不变。 |
 | 3.32.0 | 2026-10-13 | 接口清单加入 ListAgentEvents 与 ListTurnEvents；ListAgentEvents 只列出 user.message。 |
 | 3.31.1 | 2026-10-12 | 用户事件与轮次查询的说明改为面向 Mate Trace。 |

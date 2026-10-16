@@ -7,8 +7,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.14.0 |
-| 更新日期 | 2026-10-04 |
+| 文档版本 | 2.15.0 |
+| 更新日期 | 2026-10-16 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；Help 查询、useCases 缓存往返、Agent 级锁、响应投影与 Command POST 已实现 |
@@ -24,13 +24,13 @@
 
 ## 1. 范围与证据
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。共享 GET 的轻量描述符、两类命令合并、固定排序与状态过滤已确认；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是共享 GET 的全局限制。Builtin 使用已确认 JSON 契约；Skill 的当前契约状态、执行与发布要求由[Skill 专题](../02-技能命令/README.md#4-统一实施与集成要求)维护。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`（待评审 · 待实现）：轻量描述符、两类命令合并与固定排序保留，不再按 Session 状态过滤，运行中的禁用由前端状态规则表展示、POST 终判；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是清单查询的全局限制。Builtin 使用已确认 JSON 契约；Skill 的当前契约状态、执行与发布要求由[Skill 专题](../02-技能命令/README.md#4-统一实施与集成要求)维护。
 
 本文的 Builtin 目标覆盖 help、status、name、model、thinking、mode、compact、skills，不转换成模型提示词，不接受附件。
 精确请求和结果以 Runtime
-[操作 12](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-session-commands.json)、
+[操作 12](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/12-list-agent-commands.json)、
 [操作 13](../../01-总体架构/01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json) 为准。
-[通用模块源码证据表](../00-Slash-Command通用模块/README.md#2-源码证据与差距)记录完整路径与基线。
+[通用模块源码证据表](../00-Slash-Command通用模块/source-evidence.md#2-源码证据与差距)记录完整路径与基线。
 
 d84dd3d6 的 `modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql`
 中 t_sessions 没有 display_name；配置服务已存在 Model/Thinking 的领域更新。
@@ -52,7 +52,7 @@ Runtime Coordinator、执行对象和 Repository 分开表达。
 
 ![Builtin 完整全局目标类图](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
 
-[PlantUML 源码](../00-Slash-Command通用模块/设计图/diagram.puml#L95) · [展开原尺寸 SVG](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
+[PlantUML 源码](../00-Slash-Command通用模块/设计图/diagram.puml#L119) · [展开原尺寸 SVG](../00-Slash-Command通用模块/设计图/target_slash_command_global_classes.svg)
 
 Slash 与 Builtin 共用这一份图源；[Help 元数据补充图](Help-Agent使用指南/README.md#2-全局入口与-help-补充类图)
 和以下核心扩展类图只作下钻，不替代或重排全局主图。
@@ -114,10 +114,10 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 
 空参数是 Service 归一后的空字符串。全空白 Name 修改在去除两端空白后为空时拒绝，不视为清空。
 Help 的 arguments 缺省/null/空白归一为空；非空参数（包括 model）为 INVALID_COMMAND_REQUEST，不进入命令详情或 COMMAND_NOT_FOUND 分支。
-GET 的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []），不允许执行参数；共享清单按[轻量契约](../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)过滤并排序。
+GET 的 Help 描述符使用 name/type/description 与可选 hints（无提示可省略或 []），不允许执行参数；Agent 命令清单按[轻量契约](../00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)排序，不按 Session 状态过滤。
 Help 不刷新：读取最近成功发布的完整 Agent 缓存；无快照为 422 AGENT_NOT_AVAILABLE，只有文案缺失则返回 200 空数组。
 displayName 取 Agent 显示名，空白回退 Agent name；不是 `/name` 的 Session 名称。文案按纯文本展示，不调用模型、不写历史或模型上下文。
-共享 GET 不暴露内部准入原因；无完整 Agent 缓存时为 503 AGENT_NOT_AVAILABLE，不改变上述 POST Help 的 422。
+清单查询不暴露内部准入原因；缓存缺失时先按 Agent 准备完整快照，Agent 不存在为 404 AGENT_NOT_FOUND，准备失败为 422 AGENT_NOT_AVAILABLE；不改变上述 POST Help 的 422。
 Skills 不触发刷新：无完整快照返回 AGENT_NOT_AVAILABLE；完整空快照返回 []，只展示名称/描述并稳定排序。
 
 ## 5. Name 当前状态
@@ -275,7 +275,7 @@ RuntimeSessionResponseAssembler，模型查询使用 AvailableModelsResponseVO�
 旧 `6f52fddc` 的响应缺口、`510d882c` 的无统一 Session POST 结论不再代表该基线。
 `425354eb` 的 Builtin 应用与响应、`ca4b79f4` 的共享入口已包含在核验提交中。
 这证明实现存在，不证明所有错误码、并发、真实压缩和企业集成都已验收。未重跑 Java 测试；
-既有 Help 专项测试结果保持原归属。清单英文描述差距见[语言专项](../00-Slash-Command通用模块/README.md#331-清单字段与语言专项核对)，
+既有 Help 专项测试结果保持原归属。清单英文描述差距见[语言专项](../00-Slash-Command通用模块/source-evidence.md#331-清单字段与语言专项核对)，
 Mate 公共接入仍见其独立设计；不能笼统表述为“Builtin 全部目标已经完成”。
 
 当前接口设计已取消客户端条件请求与 ETag，数据库原子性继续保留；[无客户端条件令牌的当前目标与实现差距](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)记录 2026-10-04 的 Java `553dcd5e` 复核，旧表中的 If-Match/ETag 为实现事实，移除仍待实现。
@@ -311,6 +311,7 @@ PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。图形还需检查�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.15.0 | 2026-10-16 | 命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`，不再按 Session 状态过滤；缓存缺失时准备 Agent，错误改为 404/422；同步全局类图锚点与证据链接。 |
 | 2.14.0 | 2026-10-04 | 命令与直接配置统一取消客户端条件令牌及 ETag，以数据库锁内合并维护更新一致性。 |
 | 2.13.0 | 2026-09-22 | 增加 mode 查询及 plan/build 切换，共享 Session 模式校验、原子更新与领域事件。 |
 | 2.12.0 | 2026-09-22 | Builtin 描述符统一 type/hints，Help 继续保持无参语义。 |

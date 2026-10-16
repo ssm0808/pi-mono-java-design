@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.67.0 |
+| 文档版本 | 1.68.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新最新迁移差距见 §8.3，历史核验保留在 §8.1/§8.2 |
-| 更新日期 | 2026-10-15 |
+| 更新日期 | 2026-10-16 |
 
 Session 与完整事件的时间采用[统一秒级目标](time-contract.md)：UTC、无小数秒，写入和回显一致；此精度调整待实现，其他功能状态仍按各节证据。
 
@@ -175,15 +175,15 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 ### 2.6 Built-in Command（已确认，目标实现）
 
 Builtin 与 Skill Command 由用户统一负责设计、实现和集成。
-共享 GET 轻量清单、Builtin 普通 JSON，以及 B13/B14 的 Skill 请求、SSE 与恢复规则已确认；Mate 公共命令独立管理。本节只说明 HTTP 边界，不重复维护命令业务规则。
+Builtin 普通 JSON，以及 B13/B14 的 Skill 请求、SSE 与恢复规则已确认；命令清单改为按 Agent 查询，待评审、待实现；Mate 公共命令独立管理。本节只说明 HTTP 边界，不重复维护命令业务规则。
 
 | 接口 | 精确模型 | 设计职责 |
 |---|---|---|
-| GET /sessions/{sessionId}/commands | [操作 12](接口契约/操作/12-list-session-commands.json) | [Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)维护描述符、排序、状态过滤、完整缓存与重新准入理由 |
+| GET /agents/{agentId}/commands | [操作 12](接口契约/操作/12-list-agent-commands.json) | [Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)维护描述符、排序、命令状态规则、Agent 快照准备与重新准入理由 |
 | POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../../04-命令与技能/01-内置命令/README.md)维护八个命令的业务、窄服务、事务和实施验收 |
 
 Controller 只收发 VO，Application 完成授权、归一化、一次 Catalog 解析、准入、执行及 DTO→VO。
-共享 GET 使用完整来源；内部 Builtin 专属解析才过滤来源。GET 不构成执行预约，
+清单按 Agent 使用完整来源，不读会话状态；内部 Builtin 专属解析才过滤来源。GET 不构成执行预约，
 POST 重新解析，并在所属锁或事务内检查可变状态；共同结构只在 Slash 全局主图维护。
 
 本图聚焦一次 POST 命令，不再同时展开 GET 清单和每个 Builtin。Command application 保留解析与分发，Selected handler 与 Domain service 分列以明确 handler 不直接承担数据库业务规则；GET 的来源聚合、排序和轻量 VO，Help 缓存锁与失败条件，以及 Skill 公共接入门禁见对应章节。
@@ -207,7 +207,7 @@ Help 通过普通 POST Command 提供无参 Agent 使用指南，不新增 HTTP 
 [Help 专题](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)唯一维护元数据映射、
 缓存往返、读取/发布互斥、空内容处理、安全展示和实施验收。
 其专项页面直接提取操作 13，不再复制 Header、参数或响应 JSON。
-共享 GET 无完整缓存的 503 与 POST Help 的既有 422 属于不同操作，不能统一改写。
+清单与 POST Help 在 Agent 不可用时都返回 422 AGENT_NOT_AVAILABLE；清单冷缓存时先准备 Agent，Help 只读完整缓存。
 
 #### 2.6.3 Name 与配置更新
 
@@ -326,7 +326,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 | 操作 | 实际保留的请求 Header 与适用范围 |
 |---|---|
-| CreateSession、GetSession、DeleteSession、ListSessionModels、ListSessionCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
+| CreateSession、GetSession、DeleteSession、ListSessionModels、ListAgentCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
 | ListSessionEvents | 可选 Accept-Language、Accept: application/json；只读历史不创建执行凭据 |
 | UpdateSession | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选 |
 | QuerySkillLoadStatistics | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选；管理调用方授权仍由上游/部署边界保证 |
@@ -448,6 +448,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.68.0 | 2026-10-16 | 命令清单改为 `GET /agents/{agentId}/commands`，按 Agent 返回全部命令，冷缓存与创建会话共用准备流程。 |
 | 1.67.0 | 2026-10-15 | 凭据来源跟随根执行，定时 Session 中继续对话使用本次请求快照，机制引用 M10 §3.11。 |
 | 1.66.0 | 2026-10-13 | 定时执行改为统一账号，每批工具调用前向 Mate 无入参取 access-token。 |
 | 1.65.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
