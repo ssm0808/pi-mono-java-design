@@ -78,7 +78,7 @@ M05 的 53eff85c 专项只更新 CampusClaw 实现状态：Builtin、Runtime Ski
 展开文本恢复与前端 Slash 已存在；统一 Skill 扩展结构、完整版本快照和统计仍待实现，Mate 公共接入独立确认。
 这不改变原有产品约束、安全加固或架构取舍；实现映射与测试未重跑边界由主设计维护。
 外部基线历史 SHA 与比较结论保持原核验范围，不把进度校正描述为新的上游比较。
-M05/M07 的[参数控件与附件边界](../../07-前端设计/技术设计/命令/README.md#command-input-controls)的分层：Runtime 提供命令清单与会话数据，Mate 为清单补 inputType 并通过命令选项接口返回 current 与 value/label 候选（模型名称取自 Mate 模型管理），前端按 inputType 统一组装命令参数，不按命令名写取数逻辑。此项为产品交互约束与接口架构变更，不改变上述外部基线结论或全局类图结构。
+M05/M07 的[参数控件与附件边界](../../07-前端设计/技术设计/命令/README.md#command-input-controls)的分层：Runtime 提供命令清单与会话数据，Mate 为清单补 inputType 并通过命令选项接口返回 currentValue 与 value/label 候选（模型名称取自 Mate 模型管理），前端按 inputType 统一组装命令参数，不按命令名写取数逻辑。此项为产品交互约束与接口架构变更，不改变上述外部基线结论或全局类图结构。
 
 M05 描述符专项于 2026-09-22 重新确认默认分支并 fetch pi `main@d201760ffee16564aa8d9a759e0c85b70db33674`
 与 OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`，只更新命令发现和请求边界；默认分支快照不等于稳定发布。

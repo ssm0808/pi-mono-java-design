@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/chats/{chatId}/commands/{commandName}/options",
     "summary": "列出选项型命令的当前值与候选",
-    "description": "查询当前 Chat 中某个 inputType=options 的命令可选择的值，返回当前值与候选列表，每个候选带可直接提交的 value 和可直接展示的 label。model 的候选取自该会话可选模型，label 为 mate-service 模型管理中的模型名称（没有名称时回退为 modelId）；thinking 的候选为 on、off，mode 的候选为 plan、build，label 按 Accept-Language 返回。前端把选中的 value 原样作为命令参数提交，不再自行查询模型信息或维护显示名。",
+    "description": "查询当前 Chat 中某个 inputType=options 的命令可选择的值，返回当前值 currentValue 与候选列表 options，每个候选带可直接提交的 value 和可直接展示的 label。model 的候选取自该会话可选模型，label 为 mate-service 模型管理中的模型名称（没有名称时回退为 modelId）；thinking 的候选为 on、off，mode 的候选为 plan、build，label 按 Accept-Language 返回。前端把选中的 value 原样作为命令参数提交，不再自行查询模型信息或维护显示名。",
     "parameters": [
       {
         "$ref": "parameters.chatId"
@@ -39,7 +39,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "current": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "currentValue": "model_011CZq2GkV8aD4NwP7sLmXfR",
               "options": [
                 {
                   "value": "model_011CZq2GkV8aD4NwP7sLmXfR",
@@ -56,7 +56,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "current": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "currentValue": "model_011CZq2GkV8aD4NwP7sLmXfR",
               "options": [
                 {
                   "value": "model_011CZq2GkV8aD4NwP7sLmXfR",
@@ -86,7 +86,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "current": "on",
+              "currentValue": "on",
               "options": [
                 {
                   "value": "on",
@@ -103,7 +103,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "current": "on",
+              "currentValue": "on",
               "options": [
                 {
                   "value": "on",
@@ -133,7 +133,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "current": "build",
+              "currentValue": "build",
               "options": [
                 {
                   "value": "plan",
@@ -150,7 +150,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "current": "build",
+              "currentValue": "build",
               "options": [
                 {
                   "value": "plan",
@@ -180,7 +180,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "current": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "currentValue": "model_011CZq2GkV8aD4NwP7sLmXfR",
               "options": []
             }
           },
@@ -188,7 +188,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "current": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "currentValue": "model_011CZq2GkV8aD4NwP7sLmXfR",
               "options": []
             }
           }
@@ -329,11 +329,11 @@
         {
           "actor": "mate-service",
           "action": "按 commandName 选择选项提供者，读取 Runtime 会话与可选模型，补充模型名称或本地化显示名",
-          "outcome": "返回 current 与 value/label 候选"
+          "outcome": "返回 currentValue 与 value/label 候选"
         },
         {
           "actor": "前端",
-          "action": "展示 label、勾选 current，提交选中的 value",
+          "action": "展示 label、勾选 currentValue，提交选中的 value",
           "outcome": "提交仍走命令执行入口并在 Runtime 锁内最终准入"
         }
       ],

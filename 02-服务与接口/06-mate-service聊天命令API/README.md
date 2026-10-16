@@ -44,7 +44,7 @@ Help 元数据与缓存行为见 [Help 专题](../../01-总体架构/04-CampusCl
 |---|---|
 | 省略 | 不带参数，选中后直接执行 |
 | `text` | 文本框；技能命令另可附文件；占位提示由前端决定 |
-| `options` | 调用命令选项接口，展示 `label`、勾选 `current`，把选中的 `value` 作为 arguments 提交；清空选择即无参查询 |
+| `options` | 调用命令选项接口，展示 `label`、勾选 `currentValue`，把选中的 `value` 作为 arguments 提交；清空选择即无参查询 |
 
 inputType 由 Mate 的命令映射决定：name 与技能命令为 text，model、thinking、mode 为 options，其余省略。映射与会话状态无关，运行中的限制仍按[命令状态规则](../../01-总体架构/04-CampusClaw命令系统/README.md#command-state-rules)处理。
 
@@ -54,7 +54,7 @@ inputType 由 Mate 的命令映射决定：name 与技能命令为 text，model�
 |---|---|
 | Method / path | `GET /mate-service/v1/chats/{chatId}/commands/{commandName}/options` |
 | commandName | 清单中 inputType=options 的命令名；其他命令返回 404 COMMAND_OPTIONS_NOT_FOUND |
-| 成功 | 200，`Cache-Control: no-store`，`result` 为 `current` 与 `options[{value, label}]`；候选为空也是成功 |
+| 成功 | 200，`Cache-Control: no-store`，`result` 为 `currentValue` 与 `options[{value, label}]`；候选为空也是成功 |
 | 语言 | thinking、mode 的 label 按 Accept-Language 返回；模型名称是业务数据，各语言相同 |
 | 失败 | 400 INVALID_CHAT_ID、401 UNAUTHENTICATED、403 CHAT_ACCESS_DENIED、404 CHAT_NOT_FOUND、404 COMMAND_OPTIONS_NOT_FOUND、503 COMMAND_OPTIONS_UNAVAILABLE |
 
@@ -64,7 +64,7 @@ inputType 由 Mate 的命令映射决定：name 与技能命令为 text，model�
 
 Mate 先按 chatId 校验用户访问并解析映射的 sessionId 与 agentId，再按命令调用：
 
-| 命令 | current 来源 | 候选来源 | label 来源 |
+| 命令 | currentValue 来源 | 候选来源 | label 来源 |
 |---|---|---|---|
 | model | Runtime `GET /sessions/{sessionId}/models` 的 currentModelId | 同一响应的 models，顺序保持 | Mate 模型管理中的模型名称；没有名称时回退为 modelId |
 | thinking | Runtime `GET /sessions/{sessionId}` 的 thinking，true 为 on、false 为 off | Runtime 清单中 thinking 的 hints | Mate 文案资源（开启/关闭，On/Off） |
@@ -77,7 +77,22 @@ Mate 先按 chatId 校验用户访问并解析映射的 sessionId 与 agentId，
 
 ### 3.3 扩展结构
 
-Mate 内部为每个选项型命令实现一个 `CommandOptionsProvider`（`commandName()`、`options(chatContext, locale)`），由 `CommandOptionsService` 按 commandName 选择；`ChatCommandCatalogService` 读取 Runtime 清单后用同一份映射补 inputType。新增选项型命令时只新增提供者并在映射中标为 options，前端与 Runtime 清单结构不变。
+命名按“做什么”而不是“怎么实现”，一个类只回答一个问题：
+
+| 类型 | 名称 | 职责 |
+|---|---|---|
+| Controller | `ChatCommandController` | `listCommands(chatId)`、`listCommandOptions(chatId, commandName)`，只做参数校验与响应包装 |
+| 应用服务 | `ChatCommandCatalogService` | 读取 Runtime 清单，用 `CommandInputTypeResolver` 为每条命令补 inputType |
+| 应用服务 | `ChatCommandOptionService` | 解析 Chat，按 commandName 找到提供者并返回 `CommandOptions`；找不到时抛 COMMAND_OPTIONS_NOT_FOUND |
+| 映射 | `CommandInputTypeResolver` | `resolve(descriptor)`：name 与技能命令为 TEXT，model、thinking、mode 为 OPTIONS，其余为空 |
+| 扩展点 | `CommandOptionProvider` | `commandName()`、`listOptions(ResolvedChat chat, Locale locale)`；每个选项型命令一个实现 |
+| 实现 | `ModelOptionProvider`、`ThinkingOptionProvider`、`ModeOptionProvider` | 分别按 §3.2 取当前值、候选和显示名 |
+| 值对象 | `ResolvedChat` | 用户可访问的 chatId 及其映射的 sessionId、agentId |
+| 值对象 | `CommandOptions`、`CommandOption` | `currentValue` + `options`；`value` + `label`，与接口字段同名 |
+| Runtime 客户端 | `RuntimeSessionClient`、`RuntimeCommandClient` | `getSession`、`listSessionModels`；`listCommands(agentId, sessionId)` |
+| 模型名称 | `ModelDisplayNameQuery` | `findDisplayNames(modelIds)`：从 Mate 模型管理批量读名称，没有名称的 ID 不出现在结果中 |
+
+新增选项型命令只需新增一个 `CommandOptionProvider` 实现，并在 `CommandInputTypeResolver` 中标为 OPTIONS；前端与 Runtime 清单结构不变。
 
 ## 4. 公共边界待决
 
@@ -114,7 +129,7 @@ python3 validate-chat-command-v1.py --full
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.10.0 | 2026-10-16 | 清单补充 inputType，新增命令选项接口 `GET /chats/{chatId}/commands/{commandName}/options`：Mate 提供 model、thinking、mode 的当前值与 value/label 候选，模型名称取自 Mate 模型管理；登记 Mate 依赖的 Runtime 接口与提供者结构。公共契约 1.8.0。 |
+| 1.10.0 | 2026-10-16 | 清单补充 inputType，新增命令选项接口 `GET /chats/{chatId}/commands/{commandName}/options`：Mate 提供 model、thinking、mode 的 currentValue 与 value/label 候选，模型名称取自 Mate 模型管理；登记 Mate 依赖的 Runtime 接口、类名与职责。公共契约 1.8.0。 |
 | 1.9.0 | 2026-10-16 | 清单投影跟随 Runtime：Builtin 中文描述优化，hints 改为固定参数值列表；Mate 以 Chat 映射的 sessionId 调用 Runtime，投影完整命令。 |
 | 1.8.0 | 2026-10-16 | 清单投影跟随 Runtime：Builtin description 按 Accept-Language 国际化，补 en-US 示例。 |
 | 1.7.0 | 2026-10-16 | 清单投影跟随 Runtime 改为按所属 Agent 返回全部命令，不再按会话状态过滤；公共路径是否改为按 Agent 查询待定。 |

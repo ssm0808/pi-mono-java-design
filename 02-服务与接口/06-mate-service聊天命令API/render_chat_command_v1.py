@@ -151,13 +151,13 @@ def render_business_flow(flow: list[dict[str, str]]) -> str:
     return '<div class="business-flow">' + ''.join(steps) + '</div>'
 
 
-INPUT_LABELS = {"text": "文本输入", "options": "调用命令选项接口"}
+INPUT_TYPE_LABELS = {"text": "文本输入", "options": "调用命令选项接口"}
 
 
 def command_state(command: dict[str, Any]) -> list[str]:
     hint = "、".join(command.get("hints", [])) or "无提示"
     files = "允许附件" if command["type"] == "skill" else "无附件"
-    input_type = INPUT_LABELS.get(command.get("inputType"), "无参数，直接执行")
+    input_type = INPUT_TYPE_LABELS.get(command.get("inputType"), "无参数，直接执行")
     return [f'/{command["name"]}', command["description"], input_type, hint, files]
 
 
@@ -177,14 +177,15 @@ def render_command_example(operation: dict[str, Any]) -> str:
     return ''.join(sections)
 
 
-def render_options_example(operation: dict[str, Any]) -> str:
+def render_command_options_example(operation: dict[str, Any]) -> str:
     sections = []
     for response in operation["responses"]:
         if response["status"] != "200":
             continue
         result = response["bodies"]["zh-CN"]["result"]
-        rows = [[option["value"], option["label"], "当前值" if option["value"] == result["current"] else ""]
-                for option in result["options"]] or [["（无候选）", "", f'当前值 {result["current"]}']]
+        current_value = result["currentValue"]
+        rows = [[option["value"], option["label"], "当前值" if option["value"] == current_value else ""]
+                for option in result["options"]] or [["（无候选）", "", f"当前值 {current_value}"]]
         sections.append(
             '<section class="business-section">'
             f'<h3>{html.escape(response["tabLabel"])}</h3>'
@@ -232,7 +233,7 @@ def render_business_review(model: dict[str, Any]) -> str:
     if operation["operationKey"] == "ListChatCommands":
         sections.append(render_command_example(operation))
     elif operation["operationKey"] == "ListChatCommandOptions":
-        sections.append(render_options_example(operation))
+        sections.append(render_command_options_example(operation))
     sections.append(render_error_summary(operation))
     for note in view.get("notes", []):
         sections.append(

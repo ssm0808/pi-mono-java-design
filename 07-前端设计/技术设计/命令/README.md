@@ -80,7 +80,7 @@ parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立�
 |---|---|
 | GET Descriptor 有 `name`、`type`、`description`、可选 `hints`，以及 Mate 补充的可选 `inputType` | type 表示命令类别；inputType 决定输入方式（text 文本框、options 调用命令选项接口、省略即无参）；不按命令名选控件 |
 | 所有 type=skill 允许附件，Builtin 不接收附件 | 附件入口根据 type 与上传接入状态控制，不静默丢弃草稿 |
-| 选项型命令的当前值与候选来自 [Mate 命令选项](../../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options)，每个候选带 value 与 label | 展示 label、勾选 current、原样提交 value；不自行查询模型信息、不维护显示名；hints 只作清单信息，不驱动控件 |
+| 选项型命令的当前值与候选来自 [Mate 命令选项](../../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options)，每个候选带 value 与 label | 展示 label、勾选 currentValue、原样提交 value；不自行查询模型信息、不维护显示名；hints 只作清单信息，不驱动控件 |
 | 服务端返回固定 Builtin 顺序并追加 Skill | 客户端只做稳定前缀过滤，不重新排序或模糊重排 |
 | 清单按 Agent 查询，已有 Chat 带 sessionId 取完整命令，新对话不带 sessionId 只取 help、skills 与技能命令；不按 Session 状态过滤（待实现） | running 时按共享状态规则表置灰 Compact/Skill 并限制修改；状态未知或恢复中暂停提交，POST 终判 |
 | Builtin POST 返回普通 JSON，无 commandId 和通用生命周期 | 不画虚构进度条，不建立轮询或通用命令历史 |
@@ -209,13 +209,13 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 ### 4.4 参数控件与后端能力
 
 用户应从可用选项完成配置，不必手工记住模型 ID。选中 inputType=options 的命令后，前端调用
-`GET /chats/{chatId}/commands/{commandName}/options`，Composer 上方切换到候选列表，显示 label、current 打勾，选中的 value 进入命令草稿；执行按钮提交选择，取消恢复原草稿。Model/Thinking 专用控件待实现；原型的 Mode 原生选择框只演示选值、查询和回执更新，不作为生产选择列表或视觉验收完成的证据。
+`GET /chats/{chatId}/commands/{commandName}/options`，Composer 上方切换到候选列表，显示 label、currentValue 打勾，选中的 value 进入命令草稿；执行按钮提交选择，取消恢复原草稿。Model/Thinking 专用控件待实现；原型的 Mode 原生选择框只演示选值、查询和回执更新，不作为生产选择列表或视觉验收完成的证据。
 
 | 命令 | 控件与数据来源 | 正常调用 | 失败与状态变化 |
 |---|---|---|---|
 | model | 单选列表；候选与模型名称由 Mate 命令选项返回，前端不再读取 ListSessionModels 或模型信息 | 用户选择真实候选，冻结 arguments=modelId 后显式执行；带参响应按 Session 处理 | 加载失败可重试 GET，空列表禁用修改；迟到响应不得跨 Chat 应用；POST 拒绝或不确定时保留草稿，不自动重放 |
-| thinking | 单选列表；current 与 label（开启/关闭）由 Mate 命令选项返回 | 选择后提交选中值，显式执行；以响应中的最终 thinking 为准 | running 时仅查看；不支持时展示服务端错误并刷新权威状态，不能用 hint 推测模型能力 |
-| mode | 单选列表；current 与 label（计划/实施）由 Mate 命令选项返回；提供清空选择以查询当前模式 | 选择只更新草稿，显式执行提交 arguments=plan/build；空参和带参均冻结 expectedResultKind=session，成功用完整 Session 更新模式指示器 | running（含所有交互等待）仅无参查询；非法值保留并报错，不能降为查询；422 显示计划能力不足；409 或网络不确定只读对账、不重放、不批准计划 |
+| thinking | 单选列表；currentValue 与 label（开启/关闭）由 Mate 命令选项返回 | 选择后提交选中值，显式执行；以响应中的最终 thinking 为准 | running 时仅查看；不支持时展示服务端错误并刷新权威状态，不能用 hint 推测模型能力 |
+| mode | 单选列表；currentValue 与 label（计划/实施）由 Mate 命令选项返回；提供清空选择以查询当前模式 | 选择只更新草稿，显式执行提交 arguments=plan/build；空参和带参均冻结 expectedResultKind=session，成功用完整 Session 更新模式指示器 | running（含所有交互等待）仅无参查询；非法值保留并报错，不能降为查询；422 显示计划能力不足；409 或网络不确定只读对账、不重放、不批准计划 |
 | name | 文本框，占位提示由前端提供 | 输入名称或空参查询 | 保留服务端校验错误与原草稿 |
 | skill:<name> | 请求文本与可选附件；按 type=skill 准入附件 | 上传成功取得 fileIds，与 arguments 一起冻结，执行共享 SSE | 上传未完成不提交；失败保留文本/附件；文件拒绝不能静默去掉附件后重发 |
 
@@ -376,7 +376,7 @@ type CommandDescriptor = {
 }
 
 type CommandOptions = {
-  current: string
+  currentValue: string
   options: readonly { value: string; label: string }[]
 }
 

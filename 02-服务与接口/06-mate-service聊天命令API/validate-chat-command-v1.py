@@ -16,7 +16,7 @@ from typing import Any
 from render_chat_command_v1 import build_html, load_contract, RUNTIME_ROOT
 
 sys.path.insert(0, str(RUNTIME_ROOT))
-from command_catalog_contract import (BUILTIN_HINTS, PUBLIC_INPUT_TYPES, runtime_view,
+from command_catalog_contract import (BUILTIN_HINTS, INPUT_TYPE_BY_COMMAND, to_runtime_projection,
                                       validate_catalog_examples, validate_projection_pair)
 
 
@@ -30,7 +30,7 @@ EXPECTED_OPERATIONS = {
     ("GET", "/chats/{chatId}/commands/{commandName}/options"),
 }
 OPERATION_KEYS = {"ListChatCommands", "ListChatCommandOptions"}
-OPTION_COMMANDS = sorted(name for name, kind in PUBLIC_INPUT_TYPES.items() if kind == "options")
+OPTION_COMMAND_NAMES = [name for name, input_type in INPUT_TYPE_BY_COMMAND.items() if input_type == "options"]
 
 
 class ReviewHtmlParser(HTMLParser):
@@ -148,12 +148,12 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
                 if isinstance(body, (dict, list)):
                     validate_keys(body, operation["operationKey"])
     validate_catalog(models)
-    validate_options(models)
+    validate_command_options(models)
 
 
 def validate_catalog(models: list[dict[str, Any]]) -> None:
-    operation = next(model["operation"] for model in models if model["operation"]["operationKey"] == "ListChatCommands")
-    validate_catalog_examples(runtime_view(operation))
+    operation = operation_by_key(models, "ListChatCommands")
+    validate_catalog_examples(to_runtime_projection(operation))
     runtime = json.loads((RUNTIME_ROOT / "接口契约/操作/12-list-agent-commands.json").read_text(encoding="utf-8"))
     validate_projection_pair(runtime["operation"], operation)
     codes = set(values_for_key(operation["responses"], "resCode"))
@@ -161,51 +161,72 @@ def validate_catalog(models: list[dict[str, Any]]) -> None:
             "Catalog public errors are incomplete")
 
 
-def validate_options(models: list[dict[str, Any]]) -> None:
-    operation = next(model["operation"] for model in models if model["operation"]["operationKey"] == "ListChatCommandOptions")
-    command_parameter = next(item for item in operation["parameters"] if item["name"] == "commandName")
-    require(command_parameter["in"] == "path" and command_parameter["schema"] == " | ".join(["model", "thinking", "mode"]),
-            "commandName must list exactly the options commands")
-    require(OPTION_COMMANDS == ["mode", "model", "thinking"], "Options commands drifted from the Mate mapping")
-    successes = {response["id"]: response for response in operation["responses"] if response["status"] == "200"}
-    require(set(successes) == {"200-model", "200-thinking", "200-mode", "200-model-empty"},
+def validate_command_options(models: list[dict[str, Any]]) -> None:
+    operation = operation_by_key(models, "ListChatCommandOptions")
+    command_name = next(item for item in operation["parameters"] if item["name"] == "commandName")
+    require(command_name["in"] == "path" and command_name["schema"] == " | ".join(OPTION_COMMAND_NAMES),
+            "commandName must list exactly the commands whose inputType is options")
+    examples = {response["id"]: response for response in operation["responses"] if response["status"] == "200"}
+    require(set(examples) == {"200-model", "200-thinking", "200-mode", "200-model-empty"},
             "Options require model, thinking, mode and empty-model examples")
-    sessions = json.loads((RUNTIME_ROOT / "接口契约/操作/06-list-session-models.json").read_text(encoding="utf-8"))
-    runtime_models = next(iter(sessions["operation"]["responses"][0]["bodies"].values()))["result"]
-    for identity, response in successes.items():
-        require(response["headers"].get("Cache-Control") == "no-store", "Options must not be cached")
-        require(set(response["bodies"]) == {"zh-CN", "en-US"}, "Options examples must cover zh-CN and en-US")
-        results = {language: body["result"] for language, body in response["bodies"].items()}
-        for language, body in response["bodies"].items():
-            require(set(body) == {"resCode", "resMsg", "result"} and body["resCode"] == "0", "Options ResultBean differs")
-            result = body["result"]
-            require(set(result) == {"current", "options"} and isinstance(result["current"], str) and result["current"],
-                    "Options carry the current value and the candidates only")
-            for option in result["options"]:
-                require(set(option) == {"value", "label"} and all(isinstance(option[key], str) and option[key].strip()
-                                                                  for key in option),
-                        "Each option has a submit value and a display label")
-        zh, en = results["zh-CN"], results["en-US"]
-        require([option["value"] for option in zh["options"]] == [option["value"] for option in en["options"]]
-                and zh["current"] == en["current"], "Option values and current value are language-neutral")
-        values = [option["value"] for option in zh["options"]]
-        if identity in BUILTIN_HINTS or identity.removeprefix("200-") in BUILTIN_HINTS:
-            name = identity.removeprefix("200-")
-            require(values == BUILTIN_HINTS[name] and zh["current"] in values,
-                    f"{name} options must be the Runtime hints with a current value among them")
-            require(all(left["label"] != right["label"] for left, right in zip(zh["options"], en["options"])),
-                    f"{name} labels follow Accept-Language")
-        elif identity == "200-model":
-            require(values == runtime_models["models"] and zh["current"] == runtime_models["currentModelId"],
+    session_models = runtime_session_models()
+    for example_id, response in examples.items():
+        chinese, english = localized_option_results(response)
+        submit_values = [option["value"] for option in chinese["options"]]
+        if example_id == "200-model":
+            require(submit_values == session_models["models"]
+                    and chinese["currentValue"] == session_models["currentModelId"],
                     "Model options must come from the Session model list")
-            require(zh["options"] == en["options"], "Model names are business data and do not follow Accept-Language")
-        else:
-            require(values == [] and zh["current"] == runtime_models["currentModelId"],
+            require(chinese["options"] == english["options"],
+                    "Model names are business data and do not follow Accept-Language")
+        elif example_id == "200-model-empty":
+            require(submit_values == [] and chinese["currentValue"] == session_models["currentModelId"],
                     "Empty model options keep the current model")
+        else:
+            command = example_id.removeprefix("200-")
+            require(submit_values == BUILTIN_HINTS[command] and chinese["currentValue"] in submit_values,
+                    f"{command} options must be the Runtime hints, with the current value among them")
+            require(all(zh["label"] != en["label"] for zh, en in zip(chinese["options"], english["options"])),
+                    f"{command} labels follow Accept-Language")
     codes = set(values_for_key(operation["responses"], "resCode"))
     require({"INVALID_CHAT_ID", "UNAUTHENTICATED", "CHAT_ACCESS_DENIED", "CHAT_NOT_FOUND",
              "COMMAND_OPTIONS_NOT_FOUND", "COMMAND_OPTIONS_UNAVAILABLE"} <= codes,
             "Options public errors are incomplete")
+
+
+def operation_by_key(models: list[dict[str, Any]], operation_key: str) -> dict[str, Any]:
+    return next(model["operation"] for model in models if model["operation"]["operationKey"] == operation_key)
+
+
+def runtime_session_models() -> dict[str, Any]:
+    source = json.loads((RUNTIME_ROOT / "接口契约/操作/06-list-session-models.json").read_text(encoding="utf-8"))
+    return next(iter(source["operation"]["responses"][0]["bodies"].values()))["result"]
+
+
+def localized_option_results(response: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Check one success example and return its zh-CN and en-US results."""
+    require(response["headers"].get("Cache-Control") == "no-store", "Options must not be cached")
+    require(set(response["bodies"]) == {"zh-CN", "en-US"}, "Options examples must cover zh-CN and en-US")
+    for body in response["bodies"].values():
+        require(set(body) == {"resCode", "resMsg", "result"} and body["resCode"] == "0", "Options ResultBean differs")
+        validate_option_result(body["result"])
+    chinese, english = response["bodies"]["zh-CN"]["result"], response["bodies"]["en-US"]["result"]
+    require(chinese["currentValue"] == english["currentValue"]
+            and [option["value"] for option in chinese["options"]] == [option["value"] for option in english["options"]],
+            "Submit values and the current value are language-neutral")
+    return chinese, english
+
+
+def validate_option_result(result: dict[str, Any]) -> None:
+    require(set(result) == {"currentValue", "options"} and nonblank(result["currentValue"]),
+            "Options carry the current value and the candidates only")
+    for option in result["options"]:
+        require(set(option) == {"value", "label"} and nonblank(option["value"]) and nonblank(option["label"]),
+                "Each option has a submit value and a display label")
+
+
+def nonblank(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
 
 
 def validate_html(models: list[dict[str, Any]]) -> None:

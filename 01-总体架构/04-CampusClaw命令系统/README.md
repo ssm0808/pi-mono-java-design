@@ -126,7 +126,7 @@ R1 中技能命令归入智能体级命令（它们由 Agent 绑定，执行时�
 | D2 | 清单遇到本实例没有 Agent 完整缓存时怎么办 | OpenCode、pi 在本地进程启动时加载命令来源，没有远端回源；Codex 可显式 `force_reload` | 按 Agent 查询时可能还没有任何会话，冷缓存是常态；不能返回残缺清单 | 与创建会话共用 `AgentRuntimeManager.prepare`：有完整缓存直接用，缺失时在 Agent 锁内从 Mate 准备一次；不提供强制刷新；错误码与创建会话一致 | 首次查询可能访问 Mate，耗时变长；Mate 暂时不可用时返回 422 而不是可重试的 503，前端提供手动重试 |
 | D3 | 清单与执行如何保持一致 | OpenCode 执行时按名称重新取 Command；pi 每次 prompt 重新展开 Skill | 清单可能过期；绑定和会话状态随时变化 | GET 与 POST 各自解析一份请求级快照，共用 Definition 身份；描述与会话无关，准入在执行时按会话检查 | 每次执行都重新解析来源，不能复用 GET 的结果 |
 | D4 | Builtin 与技能命令用什么响应 | OpenCode 会话命令 POST 返回 JSON 消息，事件流独立；pi 的 Skill 展开后作为普通 prompt | Builtin 是一次性查询或修改；技能命令会跑完整一轮推理并可能等待确认 | 同一 POST 入口：Builtin 返回 JSON 业务资源，技能命令返回与普通消息相同的请求级 SSE | 调用方要按自己提交的命令区分响应类型 |
-| D6 | 选项型命令的候选与显示名由谁提供 | 未核验外部基线；本决策依据产品内数据归属（模型名称只在 Mate） | 模型名称只在 Mate 模型管理中，Claw 数据库没有对应字段；前端若按命令分别查询，每新增一个选项型命令都要新增适配 | Runtime 只给命令清单、会话可选模型 ID 与会话设置；Mate 为清单补 inputType（text/options），并提供 `GET /chats/{chatId}/commands/{commandName}/options` 返回 current 与 value/label 候选；前端按 inputType 统一处理 | Mate 维护每个选项型命令的提供者；打开选项多一次 Mate 请求和最多两次 Runtime 请求；选项与执行之间不是原子快照，仍由 POST 终判 |
+| D6 | 选项型命令的候选与显示名由谁提供 | 未核验外部基线；本决策依据产品内数据归属（模型名称只在 Mate） | 模型名称只在 Mate 模型管理中，Claw 数据库没有对应字段；前端若按命令分别查询，每新增一个选项型命令都要新增适配 | Runtime 只给命令清单、会话可选模型 ID 与会话设置；Mate 为清单补 inputType（text/options），并提供 `GET /chats/{chatId}/commands/{commandName}/options` 返回 currentValue 与 value/label 候选；前端按 inputType 统一处理 | Mate 维护每个选项型命令的提供者；打开选项多一次 Mate 请求和最多两次 Runtime 请求；选项与执行之间不是原子快照，仍由 POST 终判 |
 | D5 | 是否保存通用命令记录 | DeepSeek Harness 有 CommandExecution 与命令日志（alpha） | 现有会话、领域 Entry 和事件已能对账 | 不生成 commandId，不保存通用命令生命周期；状态变化复用会话和既有领域 Entry | 无法按命令维度审计，需要时只能从领域 Entry 与事件推断 |
 
 完整基线证据见 [源码证据 §1.2](source-evidence.md#agent-catalog-evidence)。差异分类：D1、D2、D6 是架构变更，D3、R5 是安全加固，D4、D5 是产品约束。
@@ -235,7 +235,7 @@ R1 中技能命令归入智能体级命令（它们由 Agent 绑定，执行时�
 |---|---|---|---|
 | ListAgentCommands | `GET /campusclaw-service/v1/agents/{agentId}/commands?sessionId={sessionId}`（sessionId 可选） | 200，ResultBean 包裹 `commands` 数组 | [查看 Agent 命令清单](../01-CampusClaw多Agent运行时/chat-api-review.html#ListAgentCommands) |
 | ExecuteSessionCommand | `POST /campusclaw-service/v1/sessions/{sessionId}/command` | Builtin 200 JSON；技能命令 200 SSE | [执行会话命令](../01-CampusClaw多Agent运行时/chat-api-review.html#ExecuteSessionCommand) |
-| ListChatCommandOptions（Mate） | `GET /mate-service/v1/chats/{chatId}/commands/{commandName}/options` | 200，`current` 与 `options[{value, label}]` | [Mate 命令选项](../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options) |
+| ListChatCommandOptions（Mate） | `GET /mate-service/v1/chats/{chatId}/commands/{commandName}/options` | 200，`currentValue` 与 `options[{value, label}]` | [Mate 命令选项](../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options) |
 
 <a id="31-get-轻量清单已确认"></a>
 <a id="32-get-轻量清单已确认"></a>
