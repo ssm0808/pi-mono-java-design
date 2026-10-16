@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.99.0 |
-| 更新日期 | 2026-10-15 |
+| 文档版本 | 1.100.0 |
+| 更新日期 | 2026-10-16 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -71,7 +71,7 @@ Claw 各模块的数据库结构集中于[全库设计](../../03-数据与存储
 | M07 · 前端体验 | preview 何时被权威内容替换；Turn/Item 与产品 UI 如何映射 | Codex；Claude 辅助 | [A05](#a05)保留旧提交的事件合并与根执行证据；当前计划/TODO/问答前端实现见[A07](#a07)及[A08](#a08)，公共 Mate 接入仍为目标设计 |
 | M08 · 元数据与配置 | 定义、发布快照和运行对象如何分离；刷新如何影响活动执行 | pi；托管产品仅对照公开资源 | Agent.mode 专项已核对 Mate 956b547f / Runtime 09b32d8e；默认值链为 待实现，见 A03 和元数据主设计；元数据组合查询顺序另在 Mate `9dd5d85e` 核对，见 J06；发布事务一致性仍待补证 |
 | M09 · 附件与文件 | 文件服务与 Agent 工作区是什么关系；何时解析与授权 | pi；托管产品公开文件契约按需核对 | 待补证；明确企业产品约束 |
-| M10 · 调度与并发 | 定时触发如何受理为独立执行，如何区分调度结果与根执行结果，暂停、失联和重复触发如何处理 | Claude Managed Agents 为调度主基线；其他四基线保留分层历史对照 | [定时任务主设计](../08-CampusClaw定时任务/README.md)仅支持 cron，名称上限 256；每次运行固定新建 Session，复用同一 Agent 定义；[A14](#a14)维护取舍，Java 已核验范围与待实现增量见[M10 证据](../08-CampusClaw定时任务/source-evidence.md) |
+| M10 · 调度与并发 | 定时触发如何受理为独立执行，如何区分调度结果与根执行结果，暂停、失联和重复触发如何处理 | Claude Managed Agents 为调度主基线；其他四基线保留分层历史对照 | [定时任务主设计](../08-CampusClaw定时任务/README.md)仅支持 cron，名称上限 256；接口配置的任务每次运行新建 Session，复用同一 Agent 定义，对话中由 Cron 工具创建的任务在原会话追加一轮；[A14](#a14)维护取舍，Java 已核验范围与待实现增量见[M10 证据](../08-CampusClaw定时任务/source-evidence.md) |
 | M11 · 可观测性与测试 | 日志、审计历史与模型上下文如何分开；如何证明差异可接受 | 按验证对象选基线，不设统一主基线 | 待补证；区分测试存在、测试运行和生产观测 |
 
 M05 的 53eff85c 专项只更新 CampusClaw 实现状态：Builtin、Runtime Skill 执行、严格名称、
@@ -438,7 +438,7 @@ CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可�
 |---|---|
 | 所属模块与主设计 | M10 [定时任务主设计](../08-CampusClaw定时任务/README.md)，关联 M01/M03/M04/M06/M08 及 [Mate 执行上下文](../../02-服务与接口/08-mate-service定时任务/README.md)；本文维护基线差异与理由，具体规则、全局目标类图、实施切片和验收由主设计唯一维护 |
 | 架构问题 | 到期时间由谁拥有，定时器只是唤醒还是执行权威；到期后是回到同一 Session、创建新的 Agent Run，还是由外部平台重新启动进程；重启、空闲、暂停和失败如何对账？ |
-| CampusClaw 目标 | [配置契约](../08-CampusClaw定时任务/README.md#interface)维护完整接口，[定时任务受理流程](../08-CampusClaw定时任务/README.md#normal-acceptance)维护受理与恢复：有 schedule 保存即登记自动计划，省略时只保存，试运行显式触发；每次运行新建 Session 并复用 Agent。首版仅文本、无人工交互，不补跑、遇忙跳过、本次失败/故障不重跑；删除 Schedule/Run 不自动取消已受理执行，Session 独立管理。定时实现合并 coding-agent；失败是否自动暂停整个 Schedule 仍待确认。 |
+| CampusClaw 目标 | [配置契约](../08-CampusClaw定时任务/README.md#interface)维护完整接口，[定时任务受理流程](../08-CampusClaw定时任务/README.md#normal-acceptance)维护受理与恢复：有 schedule 保存即登记自动计划，省略时只保存，试运行显式触发；接口配置的任务每次运行新建 Session 并复用 Agent，对话中由 Cron 工具创建的任务关联当前会话、每次在该会话追加一轮，会话忙则跳过，删除会话时一起删除，创建、修改、删除需用户确认（参考 DSH 投递回原会话）。首版仅文本、无人工交互，不补跑、遇忙跳过、本次失败/故障不重跑；删除 Schedule/Run 不自动取消已受理执行，Session 独立管理。定时实现合并 coding-agent；失败是否自动暂停整个 Schedule 仍待确认。 |
 | CampusClaw 实现 | 2026-10-10 核验 PR #332 `e9d31e8888a81b7fe95071e705482bb16fa10476`：三张调度表、Mapper、同库受理与根执行启动控制已实现、未合并；完整 head/base/merge-base、字段及差距由[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule)维护。其他历史段落仍归原核验提交，不能外推为当前 PR 无实现；真实 GaussDB、多实例与企业部署未验收。 |
 | 基线分工 | Claude Managed Agents 是平台调度主基线，触发独立 Deployment Run 和新 Session；DeepSeek Harness、pi Pico v3、OpenCode、Codex 分别保留 Session 内提醒、通用 Task、外部 Workflow 和宿主调度的历史对照。没有统一的“Agent Cron 实现”，不以这些基线的多数行为代替产品决定。 |
 | 成熟度边界 | pi Pico v3 的所引文档标为 design under discussion（不等同于无实验源码），DeepSeek Harness `dsh-0.1.7-alpha.1` 仍为 alpha，OpenCode 当前核对的是 `dev` 分支，Claude Managed Agents 仍要求 beta header；Codex Scheduled Tasks 以官方产品文档为公开契约，未取得服务端实现源码。 |
@@ -486,7 +486,7 @@ CampusClaw 同样仅通过完整 Schedule 响应提供未来计划时间，创�
 | OpenCode 默认 dev 快照 | 官方 GitHub schedule 每次无条件创建 Session，Action 没有 target 选择 | 外部调度配合新 Session；普通 Session prompt 不能证明定时绑定能力 |
 | pi 默认 main 快照 | 普通 Session 新建/切换/followUp；旧 Pico3 Job 路径已不存在 | 不构成用户定时任务选择 Session 的证据；新 durable scheduler 是 Harness 任务推进器 |
 
-完整默认分支、旧新 SHA、路径和符号由[M10 目标与文件证据](../08-CampusClaw定时任务/source-evidence.md#target-file-evidence)维护。CampusClaw 采用 Claude 每次新建 Session 的范围，复用任务绑定的 Agent 定义，创建和更新不提供 target/sessionId 选择。收益是每次作业的历史与结果独立，减少既有 Session 绑定、忙闲和上下文竞争规则；代价是定时任务不能延续某个已有聊天。精确字段与运行行为由配置/执行专题维护，创建响应逐字段对比见[响应审阅](../08-CampusClaw定时任务/README.md#creation-response-review)。
+完整默认分支、旧新 SHA、路径和符号由[M10 目标与文件证据](../08-CampusClaw定时任务/source-evidence.md#target-file-evidence)维护。CampusClaw 采用 Claude 每次新建 Session 的范围，复用任务绑定的 Agent 定义，创建和更新不提供 target/sessionId 选择。收益是每次作业的历史与结果独立，减少既有 Session 绑定、忙闲和上下文竞争规则；代价是接口配置的任务不能延续某个已有聊天；2026-10-16 起对话中创建的任务改为关联原会话，见 [M10 §3.13](../08-CampusClaw定时任务/README.md#chat-created-schedule)。精确字段与运行行为由配置/执行专题维护，创建响应逐字段对比见[响应审阅](../08-CampusClaw定时任务/README.md#creation-response-review)。
 
 Claw 同日重核 Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`：fileId 引用已可保存、回显，但模型输入只有 ID 文本；所查 Claw/前端范围无上传链路，附件按钮禁用。首版定时输入仅文本，明确拒绝附件，不因能保存引用而宣称能读取内容；普通 Session 的文件引用不受此产品范围限制。M09 目标由 Mate 提供上传，其单 Session 绑定与长期授权仍须单独衔接；Claude Files API 的上传及资源挂载不能证明 Claw 已具备这些能力。名称上限256、仅 Cron 不引入新依赖；六字段和默认上海时区保留。
 
@@ -582,7 +582,7 @@ Claw 全部接口采用无客户端条件及请求键的产品约束，不返回
 
 | CampusClaw 目标 | 差异分类 | 理由与代价 |
 |---|---|---|
-| 每次自动或手动运行固定新建 Session，复用任务绑定的 Agent 定义 | 参考 Claude、产品约束 | 独立会话便于隔离每日作业上下文与结果，并减少目标绑定和忙闲规则；代价是不能直接延续已有聊天，跨次结论需要通过任务输入或业务记录提供 |
+| 接口配置的任务每次自动或手动运行新建 Session，复用任务绑定的 Agent 定义；对话中创建的任务在原会话追加一轮 | 参考 Claude、DSH、产品约束 | 独立会话便于隔离每日作业上下文与结果，并减少目标绑定和忙闲规则；代价是不能直接延续已有聊天，跨次结论需要通过任务输入或业务记录提供 |
 | Run 表达受理结果，Session/根执行表达业务终态 | 参考 Claude、架构变更 | 受理成功不等于园区业务完成；根执行终态与 Run 结束同事务提交并释放占用（M10 D11），代价是 Runtime 新增事务内终态扩展点，公开 Run 不复制完整消息或伪装业务结果 |
 | GaussDB 作为 Schedule/Run 权威，同库内部事务关联 Runtime 受理；单任务不重叠 | 架构变更、安全加固 | 多实例或进程重启时不能仅靠内存 timer；现有非幂等 HTTP 创建/提交不能反复重试来代替原子受理。代价是新增数据库锁、唯一约束与事务集成，跨任务容量仍由运行时治理 |
 | 不补漏跑、遇忙跳过、本次失败及故障不重跑，未知保持占用 | 安全加固、产品约束 | 防止重复创建 Session、重发首消息或重复可能已执行业务；下一自然计划是新触发。代价是故障可能漏执行，未知需对账或独立人工处置，可靠终态写入重试不等于重跑业务 |
@@ -728,6 +728,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.100.0 | 2026-10-16 | A14 同步 M10：对话中由 Cron 工具创建的任务关联原会话运行，接口配置的任务仍每次新建 Session。 |
 | 1.99.0 | 2026-10-15 | A14 同步 M10 D12：定时任务首版不自动暂停，Agent 启停用另开设计。 |
 | 1.98.0 | 2026-10-14 | 合入 main：A05 增加 plan 模式拒绝 TodoUpdate 的执行前门禁及 Codex 对照（main 原记为 1.92.0）。 |
 | 1.97.0 | 2026-10-14 | 合入 main：A08 增加交互工具同批位置对比，提问与用户确认须为末位调用、计划提交须单独调用（main 原记为 1.91.0）。 |
