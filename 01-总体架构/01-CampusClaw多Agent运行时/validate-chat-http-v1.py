@@ -41,7 +41,7 @@ EXPECTED_OPERATIONS = {
     ("DELETE", "/sessions/{sessionId}"),
     ("GET", "/sessions/{sessionId}/models"),
     ("POST", "/sessions/{sessionId}"),
-    ("GET", "/sessions/{sessionId}/commands"),
+    ("GET", "/agents/{agentId}/commands"),
     ("POST", "/sessions/{sessionId}/command"),
 }
 POST_EVENTS = ("POST", "/sessions/{sessionId}/events")
@@ -345,14 +345,17 @@ def validate_response_contract(
             validate_session_update(operation, codes)
     elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
-    elif key == ("GET", "/sessions/{sessionId}/commands"):
+    elif key == ("GET", "/agents/{agentId}/commands"):
         require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in (ROOT.parents[1] / "04-命令与技能/00-Slash-Command通用模块/README.md").read_text(encoding="utf-8"),
                 "Command catalog must reflect unified Builtin and Skill ownership")
         validate_catalog_examples(operation)
-        require(("503", "AGENT_NOT_AVAILABLE") in codes,
-                "Shared GET must reject missing complete Agent cache, not return partial Builtins")
-        missing_cache = next(response for response in operation["responses"] if response["status"] == "503")
-        require(missing_cache["headers"].get("Retry-After") == "3", "GET cache retry hint differs")
+        for status, code in (("400", "INVALID_AGENT_ID"), ("404", "AGENT_NOT_FOUND"),
+                             ("422", "AGENT_NOT_AVAILABLE")):
+            require((status, code) in codes, f"Agent command catalog is missing {status} {code}")
+        require(("503", "AGENT_NOT_AVAILABLE") not in codes,
+                "Agent command catalog prepares the Agent instead of returning 503")
+        require(all(code != "SESSION_NOT_FOUND" for _, code in codes),
+                "Agent command catalog must not depend on a Session")
         for response in operation["responses"]:
             if response["status"] == "200":
                 commands = response["bodies"]["zh-CN"]["result"]["commands"]
@@ -593,7 +596,7 @@ def diagram_sources() -> list[Path]:
 
 
 def diagram_names(source: Path) -> list[str]:
-    content = source.read_text(encoding="ascii")
+    content = source.read_text(encoding="utf-8")
     names = re.findall(r"^@startuml\s+([A-Za-z0-9_]+)\s*$", content, re.MULTILINE)
     require(names, f"No named diagrams in {source.relative_to(REPOSITORY_ROOT)}")
     return names
@@ -601,7 +604,6 @@ def diagram_names(source: Path) -> list[str]:
 
 def validate_diagram_inventory(sources: list[Path]) -> None:
     for source in sources:
-        require(source.read_bytes().isascii(), f"Non-ASCII PlantUML: {source.relative_to(REPOSITORY_ROOT)}")
         expected = {f"{name}.svg" for name in diagram_names(source)}
         actual = {path.name for path in source.parent.glob("*.svg")}
         require(actual == expected, f"SVG inventory differs in {source.parent.relative_to(REPOSITORY_ROOT)}")
@@ -664,7 +666,7 @@ def validate_markdown_links() -> None:
         for target, line_text in re.findall(anchor_pattern, content):
             resolved = (markdown_path.parent / target).resolve()
             require(resolved.exists(), f"Missing PlantUML source: {target}")
-            lines = resolved.read_text(encoding="ascii").splitlines()
+            lines = resolved.read_text(encoding="utf-8").splitlines()
             line_number = int(line_text)
             require(0 < line_number <= len(lines), f"Invalid PlantUML anchor: {target}#L{line_number}")
             require(lines[line_number - 1].startswith("@startuml"), f"Anchor is not a diagram: {target}#L{line_number}")
@@ -687,7 +689,7 @@ def validate_command_wording(models: list[dict[str, Any]]) -> None:
             require(wording not in active,
                     f"Superseded Command ownership in {path.relative_to(REPOSITORY_ROOT)}: {wording}")
     for path in SLASH_DESIGN_PATHS:
-        source = (path.parent / "设计图/diagram.puml").read_text(encoding="ascii")
+        source = (path.parent / "设计图/diagram.puml").read_text(encoding="utf-8")
         require("parallel work" not in source, "Command diagrams must reflect unified implementation ownership")
     design_text = DESIGN_PATH.read_text(encoding="utf-8")
     contract_text = json.dumps(models, ensure_ascii=False)

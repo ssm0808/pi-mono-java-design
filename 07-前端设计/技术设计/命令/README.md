@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.11.0 |
-| 更新日期 | 2026-10-04 |
+| 文档版本 | 1.12.0 |
+| 更新日期 | 2026-10-16 |
 | 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
 | Runtime 命令契约基线 | `879746e59189a07335e32c7df807c7f5048fdc28`；B13 已确认 Skill SSE，Builtin JSON 不变 |
 | pi-mono-java 交互源码基线 | 当前 PR #301 提交见[实现状态](../../source-evidence.md#current-implementation)；早期结构证据保留在 §2.1 |
@@ -82,7 +82,7 @@ parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立�
 | 所有 type=skill 允许附件，Builtin 不接收附件 | 附件入口根据 type 与上传接入状态控制，不静默丢弃草稿 |
 | hints 是可选字符串数组，各元素非空，缺失或 [] 均为无提示 | 不把提示当 Schema、控件类型、枚举或权限；Model/Thinking/Mode 使用专用选项 |
 | 服务端返回固定 Builtin 顺序并追加 Skill | 客户端只做稳定前缀过滤，不重新排序或模糊重排 |
-| running 过滤 Compact/Skill，同一命令 hints 不变 | 集中依据共享命令规则和权威 Session 状态限制修改；状态未知或恢复中暂停提交 |
+| 清单按 Agent 返回全部命令，不按 Session 状态过滤（待实现） | running 时按共享状态规则表置灰 Compact/Skill 并限制修改；状态未知或恢复中暂停提交，POST 终判 |
 | Builtin POST 返回普通 JSON，无 commandId 和通用生命周期 | 不画虚构进度条，不建立轮询或通用命令历史 |
 | 成功结果无统一判别字段；`model` 空参返回 Models，带参返回 Session | 提交前从调用形态冻结 `expectedResultKind`，Gateway 按它校验响应，禁止只按命令名或 JSON 形状猜测 |
 | Help 返回 `displayName/description/useCases` | 用纯文本临时卡片展示，不渲染 HTML、Markdown 或远程图片 |
@@ -102,7 +102,7 @@ Mate 侧当前只确认 Descriptor 字段投影；路径、权限、错误映射
 | Builtin 结果不进入对话历史 | 架构选择 | Builtin 没有通用持久化生命周期；Skill 已按 B13 复用普通消息事件，二者不能混为一个结果分支 |
 | 未匹配 Slash 不自动回退为普通消息 | 安全加固 | 避免命令意图和内容在普通 Events 通道中被意外提交 |
 | 浏览器只经 Mate Gateway | 产品约束 | 保持公司认证、租户隔离和凭据边界，不把 Runtime 暴露给产品端 |
-| Catalog 仅保存在当前页面内存 | 架构选择 | 清单随 Session 状态变化，持久缓存会制造过期入口 |
+| Catalog 仅保存在当前页面内存 | 架构选择 | 清单随 Agent 发布与 Skill 绑定变化，持久缓存会制造过期入口 |
 | 模型/思考/模式使用选择控件，hint 仅作提示 | 产品约束 | 用户无需记忆模型 ID 或 on/off；候选数据复用现有接口，避免把提示字符串变成协议 |
 | 前缀过滤但不模糊重排 | 产品约束 | 保留服务端产品排序，结果稳定、可预测、便于键盘记忆 |
 | 调用快照同时决定解码与展示 | 安全加固 | `model` 同名多形响应不能依赖可变草稿或 JSON 特征；未匹配预期 Schema 时必须拒绝更新状态 |
@@ -143,7 +143,7 @@ Chat Workspace
 | 当前执行 | Composer 与命令行为 |
 |---|---|
 | idle，mode 为 plan 或 build | 模式不决定命令目录；按最新完整 Descriptor 展示 Builtin 和 Skill，选择后再执行。公共 Skill 未接入时保留明确禁用理由。 |
-| 等待回答、方案审核、工具授权 | Session 仍 running，使用 running Descriptor；原问题/方案留在时间线，右下角仍为停止。可编辑消息草稿，也可单独执行清单允许的 Builtin；命令不会回答问题或批准方案。 |
+| 等待回答、方案审核、工具授权 | Session 仍 running，同一份 Agent 清单按 running 规则置灰；原问题/方案留在时间线，右下角仍为停止。可编辑消息草稿，也可单独执行清单允许的 Builtin；命令不会回答问题或批准方案。 |
 | 提交回答/审核/授权/停止，或状态未对账 | 浏览与草稿保留，命令执行暂时禁用。前端协调器用同一提交/恢复准入检查，避免操作期间使用旧状态；不能仅因清单可见就允许执行。 |
 | 命令返回 Session/Models | 按既有完整快照规则更新配置，不推断该任务已结束或问题已回答；待交互仍由原根的完整事件与历史核对。 |
 | 权威会话状态更新后参数权限收窄 | 保留命令与参数，并提示“当前只可查询，请先清除参数”；用户明确清空后才允许运行，不能自动删参数并悄悄执行查询。命令消失则保留禁用标签。 |
@@ -233,22 +233,22 @@ Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不
 `frontend/src/components/ComposerBox.vue` 的 template 已有底部模型 select 和思考按钮，但 Slash 选择未接入它们。
 同文件附件菜单仍为 disabled；`frontend/src/runtime/commands.ts` 的 freezeCommandArguments 仅组装 name/arguments，
 尚未把 fileIds 纳入调用快照。后端 `CommandDiscoveryResponseAssembler.input` 已统一返回 Skill 附件标记，
-`SkillCommandRequestVO` 与 `SkillCommandExecutionService.execute` 已接收并传递 fileIds，路径见[共享能力证据](../../../04-命令与技能/00-Slash-Command通用模块/README.md#32-get-轻量清单已确认)。
+`SkillCommandRequestVO` 与 `SkillCommandExecutionService.execute` 已接收并传递 fileIds，路径见[共享能力证据](../../../04-命令与技能/00-Slash-Command通用模块/source-evidence.md#agent-catalog-evidence)。
 因此选项交互和当前内部附件接线的主要缺口在前端；真实文件授权及 Mate 公共映射仍按所属接口验收。
 本次只核验源码，未运行 Java/前端产品测试。
 
 ## 5. 清单读取与缓存
 
-`CommandCatalogStore` 按 active Chat/Session 隔离，只维护：`status`、`items`、`loadedForStateKey`、
-`stale`、`error` 和一次在途请求。`stateKey` 由权威 Session 身份和影响清单的运行状态组成，
-具体字段由 Gateway 适配，组件不得依赖 Runtime 内部版本结构。
+`CommandCatalogStore` 按 Agent 隔离（目标接口 `GET /agents/{agentId}/commands`，待实现），只维护：`status`、`items`、
+`loadedForStateKey`、`stale`、`error` 和一次在途请求。`stateKey` 只由 agentId 组成，同一 Agent 的多个 Chat 共用一份清单；
+Session 运行状态不进入 stateKey，只决定前端按共享状态规则置灰哪些项。组件不得依赖 Runtime 内部版本结构。
 
 读取规则：
 
 1. 第一次进入 Slash 模式读取 GET；同一 stateKey 的并发打开合并为一个 Promise。
 2. HTTP `Cache-Control: no-store` 原样尊重；不使用 Service Worker、浏览器持久缓存或 localStorage 复用清单。
-3. Session/Agent/运行状态发生权威变化，或任何命令 POST 完成后，将清单标记为 stale。
-4. 目录打开且 stale 时重新读取；Chat 切换用 `AbortController` 取消旧读请求，迟到响应按请求代次丢弃。
+3. 切换到另一个 Agent、Agent 刷新或 Skill 绑定变化，或任何命令 POST 完成后，将清单标记为 stale；Session 运行状态变化只重算置灰，不重新读取。
+4. 清单打开且 stale 时重新读取；Agent 切换用 `AbortController` 取消旧读请求，迟到响应按请求代次丢弃。
 5. 404/409 POST 错误会触发一次清单 GET 刷新；409 同时刷新权威 Session 状态，但不重放 POST；刷新失败仍保留原草稿。
 
 读取中的骨架只占命令行高度，不闪动整个 Composer。读取失败显示同位置错误和“重试清单”；重试只调用 GET。
@@ -335,7 +335,7 @@ Help `useCases` 未来若增加“填入输入框”，也只能把纯文本放�
 | 参数无效 / 400 | Composer 参数区 | 全部命令草稿 | 聚焦参数；用户修改后再次运行 |
 | 命令不存在 / 404 | Composer 内联 | 全部命令草稿 | 自动刷新 GET 一次，不重放 POST |
 | 当前忙 / 409 | Composer 内联 | 全部命令草稿 | 刷新权威 Session 与清单，重新计算可用操作 |
-| Agent/能力不可用 / 422 或 503 | Palette 或结果区 | 全部草稿 | 展示可重试时间或产品错误；仅显式重试 |
+| Agent 不存在或不可用 / 404 或 422 | Palette 或结果区 | 全部草稿 | 展示产品错误；仅显式重试 |
 | POST 网络结果未知 | 结果区警告 | 命令草稿 | 按命令类别对账；禁止自动重试 |
 | 401/403 | 页面级认证/权限处理 | 遵循产品安全策略 | 跳转登录或展示无权限；不出现凭据输入表单 |
 
@@ -391,7 +391,7 @@ type CommandInvocation = Readonly<{
 )>
 
 interface CommandGateway {
-  listCommands(chatId: string, signal: AbortSignal): Promise<readonly CommandDescriptor[]>
+  listCommands(agentId: string, signal: AbortSignal): Promise<readonly CommandDescriptor[]>
   executeCommand(invocation: CommandInvocation, signal: AbortSignal): Promise<CommandGatewayResult>
 }
 ```
@@ -426,7 +426,7 @@ interface CommandGateway {
 
 - Parser 覆盖空值、仅 `/`、前导空格、大小写、ASCII 分隔、多行参数和超长输入。
 - 前缀过滤必须保留服务端相对顺序；禁止模糊评分和客户端 Builtin 固定表。
-- Catalog 覆盖请求合并、Chat 切换中止、迟到响应丢弃、stateKey 失效和 POST 后 stale。
+- Catalog 覆盖请求合并、Agent 切换中止、迟到响应丢弃、同 Agent 多 Chat 复用、stateKey 失效和 POST 后 stale。
 - Draft 覆盖首字符进入/取消/成功/失败、暂存消息与附件恢复、页面刷新清除。
 - 调用快照覆盖每个 Builtin，必须单独覆盖 `model` 空参→Models、带参→Session，草稿继续编辑不改变在途快照。
 - Result Registry 覆盖每个 `expectedResultKind`、未知命令 fail closed 和恶意 Help 文本按纯文本展示。
@@ -446,8 +446,8 @@ interface CommandGateway {
 
 ### 11.3 集成与契约
 
-- 用契约 fixture 验证 idle/running 的实际服务端顺序、type/hints 字段和完整空 Skill 清单；额外验证 hints 不变但 running 禁止模型/思考修改。
-- 400/404/409/422/503 与网络断开都保留草稿；404/409 只刷新 GET，不重放 POST。
+- 用契约 fixture 验证服务端顺序、type/hints 字段和完整空 Skill 清单；清单与 Session 状态无关，额外验证 running 时前端置灰 Compact/Skill 并禁止模型/思考修改。
+- 400/404/409/422 与网络断开都保留草稿；404/409 只刷新 GET，不重放 POST。
 - Session/Model 类结果必须应用服务端完整响应，不依赖 ETag；断网后通过权威资源对账。
 - 使用同一 `model` 命令名的查询与修改 fixture 必须走不同解码分支；Schema 与预期不符时不更新 Store。
 - 产品构建中不存在 Runtime base URL、Runtime 凭据表单或 `RuntimeCommandGateway` 装配。
@@ -502,6 +502,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.12.0 | 2026-10-16 | 命令清单改为按 Agent 读取与缓存，stateKey 只含 agentId；运行状态只决定置灰，不触发重读；错误态改为 404/422。 |
 | 1.11.0 | 2026-10-04 | 命令结果消费取消版本响应头与 ETag 依赖，保留完整资源和不确定结果对账。 |
 | 1.10.0 | 2026-09-22 | 增加 mode 选择控件、Session 结果映射与审核等待下的只读查询边界。 |
 | 1.9.0 | 2026-09-22 | 使用 type/hints 描述符，依据会话状态控制参数并按 Skill 类别处理附件。 |

@@ -29,43 +29,44 @@ def validate_descriptor(command):
                 "Hints must be an array of nonblank strings, independent of input capability")
 
 
-def validate_commands(commands, state):
-    require(state in {"running", "idle"}, "Unexpected example state")
+def validate_commands(commands):
     require(isinstance(commands, list), "Commands must be a non-null list")
     for command in commands:
         validate_descriptor(command)
     names = [command["name"] for command in commands]
     require(len(names) == len(set(names)), "Duplicate command")
-    builtin_names = [name for name in BUILTINS if state == "idle" or name != "compact"]
     skills = [command for command in commands if command["type"] == "skill"]
-    require(state == "idle" or not skills, "Running must omit Skill commands")
-    require(names == builtin_names + sorted(command["name"] for command in skills),
-            "Command order or state filtering differs")
+    require(names == list(BUILTINS) + sorted(command["name"] for command in skills),
+            "Agent catalog must list every Builtin in fixed order, then Skills by name, without state filtering")
     for command in commands:
-        name = command["name"]
-        if name == "help":
+        if command["name"] == "help":
             require(command["description"] == "介绍当前 Agent 的用途和使用场景", "Help must remain Agent guide")
+
+
+SUCCESS_IDS = {"200-commands", "200-no-skills"}
 
 
 def success_examples(operation):
     successes = [response for response in operation["responses"] if response["status"] == "200"]
-    require(len(successes) == 2 and {response.get("id") for response in successes} == {"200-running", "200-idle"},
-            "Both running and idle examples are required exactly once")
+    require(len(successes) == 2 and {response.get("id") for response in successes} == SUCCESS_IDS,
+            "Agent catalog requires the populated and no-Skill examples exactly once")
     return {response["id"]: response for response in successes}
 
 
 def validate_catalog_examples(operation):
-    for identity, response in success_examples(operation).items():
-        require(response["headers"].get("Cache-Control") == "no-store", "GET must not cache mutable catalog")
+    examples = success_examples(operation)
+    for response in examples.values():
+        require(response["headers"].get("Cache-Control") == "no-store", "GET must not cache the catalog")
         body = response["bodies"]["zh-CN"]
         require(set(body) == {"resCode", "resMsg", "result"} and body["resCode"] == "0"
                 and body["resMsg"] == "success" and set(body["result"]) == {"commands"},
                 "Catalog ResultBean differs")
-        validate_commands(body["result"]["commands"], identity.removeprefix("200-"))
-    examples = success_examples(operation)
-    idle = {c["name"]: c for c in examples["200-idle"]["bodies"]["zh-CN"]["result"]["commands"]}
-    for command in examples["200-running"]["bodies"]["zh-CN"]["result"]["commands"]:
-        require(command == idle[command["name"]], "Descriptor metadata must not encode running permissions")
+        validate_commands(body["result"]["commands"])
+    full = examples["200-commands"]["bodies"]["zh-CN"]["result"]["commands"]
+    empty = examples["200-no-skills"]["bodies"]["zh-CN"]["result"]["commands"]
+    require(any(command["type"] == "skill" for command in full), "Populated example must include a Skill")
+    require(empty == [command for command in full if command["type"] == "builtin"],
+            "No-Skill example must keep identical Builtin descriptors")
 
 
 def validate_projection_pair(runtime, public):

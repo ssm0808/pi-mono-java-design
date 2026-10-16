@@ -1,5 +1,5 @@
 {
-  "version": "1.15.0",
+  "version": "1.16.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -61,12 +61,12 @@
       "design": "chat-http-v1-design.md#242-post-session-统一更新"
     },
     {
-      "key": "ListSessionCommands",
-      "source": "接口契约/操作/12-list-session-commands.json",
+      "key": "ListAgentCommands",
+      "source": "接口契约/操作/12-list-agent-commands.json",
       "common": "接口契约/common.json",
-      "status": "GET 轻量清单已确认",
-      "note": "描述符使用 name/type/description 与可选 hints；hints 不承载权限，前端依据会话状态限制修改，POST 最终准入。字段迁移待实现；Mate 同形投影不开放公共 POST。 mode 查询与 plan/build 切换为待实现增量，复用 Session 配置与领域事件。",
-      "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"
+      "status": "按 Agent 查询待评审 · 待实现",
+      "note": "清单改为按 Agent 返回全部命令，不读会话状态；冷缓存与创建会话共用准备流程。描述符 name/type/description 与可选 hints 不变，字段迁移仍待实现；运行中的限制由前端命令状态规则与 POST 最终准入承担。",
+      "design": "../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认"
     },
     {
       "key": "ExecuteSessionCommand",
