@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.64.0 |
+| 文档版本 | 0.65.0 |
 | 更新日期 | 2026-10-16 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 接口配置的任务每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；对话中由 Cron 工具创建的任务关联当前会话，每次运行在该会话追加一轮 |
@@ -652,7 +652,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ### 3.12 会话内 Cron 工具
 
-用户在对话中让 Agent 创建、修改、删除、暂停、恢复和查看本对话的定时任务（R12、[D13](#key-decisions)）。Cron 工具只能看到 `t_schedule.session_id` 等于当前会话的任务；会话只属于一个用户，因此不需要 Mate 授权或按用户过滤，工具不调用 Mate，也不取 access-token。状态：PR #332 已实现八个动作和当前会话范围，尚未合并；确认沿用 Host 通用的工具确认，修改前后对比由模型按工具描述在对话中说明。
+用户在对话中让 Agent 创建、修改、删除、暂停、恢复和查看本对话的定时任务（R12、[D13](#key-decisions)）。Cron 工具只能看到 `t_schedule.session_id` 等于当前会话的任务；会话只属于一个用户，因此不需要 Mate 授权或按用户过滤，工具不调用 Mate，也不取 access-token。状态：PR #332 已实现八个动作和当前会话范围，已合并；确认沿用 Host 通用的工具确认，修改前后对比由模型按工具描述在对话中说明。
 
 | 动作 | 用户确认 | 参数与规则 |
 |---|---|---|
@@ -730,6 +730,8 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 上述创建语义不能被解释为“后端暂未接线也返回 active”。配置服务可以先开发和测试，但调度接线、执行身份及准入尚未交付时，不发布可自动运行的创建承诺；未满足依赖的请求返回服务不可用。保存成功也不保证后续业务一定成功，执行时仍须检查当前 Agent 状态和容量。
 
 失败时，格式或规则无效不写入；更新在数据库事务内锁定最新记录并合并提交字段，失败不部分保存；数据库失败不返回成功。响应丢失时先读取核对当前结果，不据断网推断原事务未提交，也不承诺重复创建仍返回同一任务。Claw 不定义浏览器草稿、Mate 转发、公共 Chat 映射或 Agent 选择器。
+
+<a id="interface-list"></a>
 
 ### 4.2 Claw 接口清单
 
@@ -1803,7 +1805,44 @@ Accept-Language: zh-CN
 
 暂停/取消暂停验收须覆盖：200完整字段与创建/详情一致；暂停保留假设恢复后的Cron计划时间；schedule:null不伪造计划；manual原因转换、同值操作不更新时间；取消暂停只从未来匹配继续、不立即运行、不补跑；重复unpause不推迟现有游标；恢复校验明确失败保留原状态/原因；pause与最终自动受理两种顺序、pause→unpause后旧自动Run按受理时状态判定、在途收尾不覆盖人工状态；消息/凭据并发更新不被旧快照覆盖；本文目标不构成产品测试通过。
 
-不新增直接 Maven 依赖：复用 JDK、Spring CronExpression/Jackson、宿主 MyBatis 3.0.4 与数据库驱动。完整传递依赖图未重跑。服务鉴权（T2）、Mate 的两个接口及实际调度是上线依赖，草案与实施切片分别见Mate专题及[实施切片](#implementation-slices)。当前没有产品代码、数据库或集群测试证据。
+不新增直接 Maven 依赖：复用 JDK、Spring CronExpression/Jackson、宿主 MyBatis 3.0.4 与数据库驱动。完整传递依赖图未重跑。服务鉴权（T2）、Mate 的两个接口（[§4.8](#mate-calls)）及实际调度是上线依赖，实施切片见[实施切片](#implementation-slices)。当前没有产品代码、数据库或集群测试证据。
+
+<a id="mate-calls"></a>
+
+### 4.8 Claw 调用 Mate 的接口
+
+定时任务里 Claw 只主动调用 Mate 的两个接口。用户授权、配额准入和任务与用户的关联，都由 Mate 管理入口在调用 Claw 之前完成（T8）；Claw 不回调 Mate 做这些判断，也不保存授权引用或用户身份。Mate 调用 Claw 的接口见 [§4.2](#interface-list)。定时运行中 Agent 调用的 Mate 业务工具（工具定义查询、`tools/{toolId}/execute`）沿用普通对话的工具通道，不属于定时任务专用接口。
+
+| 接口 | 用途 | 哪种任务调用 | 何时调用 | Claw 状态 | Mate 状态 |
+|---|---|---|---|---|---|
+| 获取统一账号 access-token | 定时运行调用业务工具时使用的凭据 | 两种任务的定时运行 | 模型每批工具调用中，第一个需要凭据的工具执行前取一次 | PR #332 已实现（`MateAccessTokenClient`） | 待实现，草案见 [Mate 草案 §1](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#scheduled-access-token) |
+| Session 归属登记与核对 | 让 Mate 知道新 Session 属于哪个用户，之后用户才能读取、继续这个对话 | 只有接口配置的任务（`create_source = api`） | 每次运行受理前，新 Session 写入数据库之前 | PR #332 已定义接口并接入受理流程；默认实现返回服务不可用 | 待设计（T7），路径与报文未定 |
+
+对话中创建的任务在用户自己的会话里追加一轮，会话归属不变，不登记；它的定时运行同样按批次取统一账号 access-token。
+
+#### 4.8.1 获取统一账号 access-token
+
+| 项 | 内容 |
+|---|---|
+| 请求 | `POST /mate-service/v1/runtime/scheduled-access-token`（路径为草案，可用 `campusclaw.schedule.access-token-path` 配置），无请求体，附 Claw 的服务认证（T2） |
+| 成功响应 | HTTP 200，ResultBean 的 resCode 为 0，result 为 `{"accessToken": "..."}`；accessToken 为空视为失败 |
+| 调用时机 | 定时触发的根执行及其 Child 中，模型一次返回的工具调用里至少一个需要凭据的工具通过参数校验和权限判断后，执行前取一次；同一批共用，下一批重新取，不缓存 |
+| 使用方式 | 只作为 `access-token` Header 透传给 Mate 业务工具；不落库，不写日志，不进入模型、事件或工具结果 |
+| 失败处理 | 取不到时本批需要凭据的工具都不执行，按工具失败返回模型，模型可在下一批重试；不换其他账号，不因此结束根执行，也不改写 Run |
+| 不调用的情况 | 用户在定时任务的 Session 里继续对话时，用该请求 Header 里的用户凭据（[§3.11](#session-credentials)）；未配置 CampusMate 地址时接口关闭 |
+
+#### 4.8.2 Session 归属登记与核对
+
+Claw 侧接口为 `ScheduleSessionRegistry`，两个操作都只传技术标识 `sessionId`、`scheduleId`、`runId`、`agentId`，不传用户、消息正文或凭据。
+
+| 操作 | 何时调用 | 结果处理 |
+|---|---|---|
+| 登记 `registerSession` | 接口配置的任务每次运行：Claw 固定新 Session 的 ID 后、数据库事务外、准备 Runtime 之前 | Mate 返回与请求四个字段相同的登记即成功，继续受理；Mate 明确拒绝或返回不同登记时，本次不受理，Run 记为 `session_creation_rejected_error`；结果未知时转只读核对，不重发登记 |
+| 只读核对 `findSessionRegistration` | 登记结果未知时，在准备期限内反复核对 | 核对到相同登记即继续受理；期限内仍未知则本次不受理，Run 记为 `unknown_error`，不换新的 Session ID 重试 |
+
+Mate 按自己维护的任务与用户关联保存这条归属（用 user_id 标识），之后用户读取、继续、停止或删除这个 Session 时，由 Mate 据此授权再调用 Claw。Mate 登记与 Claw 受理之间没有跨库事务，回滚、对账与清理规则见 [Mate 草案 §2](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md#session-ownership) 和 [§5.2.1](#failure-recovery) 的 F14。
+
+**当前限制。** Mate 尚未提供登记接口，Claw 的默认实现一律返回服务不可用。因此在 Mate 接口上线或部署方替换实现之前，接口配置的任务到点后会在准备期限内核对失败，Run 记为 `unknown_error`，不会运行；对话中创建的任务不受影响。
 
 ## 5. 架构指标
 
@@ -1814,13 +1853,13 @@ Accept-Language: zh-CN
 - 用户、组织、租户、资源归属与权限由 Mate 维护并执行。Claw 不解析或保存用户、scope、owner、operator，收到 Mate 可信服务请求后只校验服务来源、具体操作和目标资源，再检查自己的输入与状态，规则见[配置 身份与权限边界](#mate-access-boundary)。
 - 首版列表由 Mate 拉取全部后按用户过滤、排序和分页（D9）；Claw 加 userId 见 T10。
 - 用户权限只在配置任务时由 Mate 检查；运行时所有定时任务统一使用 Mate 配置的同一个账号，不再按用户查询执行资格（D10）。
-- 接口配置的任务新建的 Session 在受理前由 Mate 独立登记归属；登记失败或结果未知时不启动，删除 Schedule/Run 不删除该归属。
+- 接口配置的任务新建的 Session 在受理前由 Mate 独立登记归属（[§4.8.2](#mate-calls)）；登记失败或结果未知时不启动，删除 Schedule/Run 不删除该归属。
 - 对话中创建的任务由 Cron 工具在用户自己的会话中创建，归属随会话，不经 Mate 授权；Cron 工具只能访问当前会话关联的任务，范围外按不存在处理；create、update、delete 须经用户确认，定时运行中无法确认即结束本轮（[§3.12](#cron-tool)、[§3.13](#chat-created-schedule)）。
 - Claw 不持久化凭据引用或 Token。模型一次返回中有需要凭据的工具调用，并且至少一个通过可信解析、参数校验和权限判断时，执行 Adapter 无入参向 Mate 取一次统一账号的 `access-token`，本批共用，只透传这一项；只含无凭据工具、参数错误或权限 ASK 时不取。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型。秘密只在受限执行内存中使用，不进入模型、metadata、Schedule/Run、事件或日志。普通 HTTP 消息仍沿用 [M06 当次 Header 快照规则](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)。凭据来源按根执行的入口区分，不按 Session 的来源区分：定时触发的根执行（含其 Child）用统一账号 access-token；用户在定时任务创建的 Session 里继续对话时，新消息是普通 HTTP 根执行，只用该请求 Header 中的用户凭据，不向 Mate 取统一账号 Token，也不沿用定时执行的 Token；机制见 [§3.11](#session-credentials)。
 - metadata 不进入模型输入，不作为身份、权限或凭据依据。
 - 资源级不可见统一返回 404，不泄露存在性。
 - Mate 公共展示边界（非本次 Claw 契约）：公共任务详情使用公共任务/Run 标识与 Chat 链接，Run 的内部 sessionId、executionId 不直接暴露；映射未完成显示“结果入口准备中”，不能重复触发任务。
-- **Claw 对 Mate 的调用边界（首版）。** Claw 只调用 Mate 的两个接口：Session 归属登记与核对（`ScheduleSessionRegistry`，F14）；统一账号 access-token（`ScheduleAccessTokenProvider`，见 [Mate 草案](../../02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md) §3）。用户授权、配额准入和任务与用户的关联由 Mate 管理入口在调用 Claw 之前完成（T8），Claw 不回调 Mate 做 authorize、resolve 或 registerSchedule，也不保存授权引用。PR #332 的本地身份链路和这类反向调用按本条移除，见[职责核验](source-evidence.md#mate-boundary-review)；配额准入与归属登记的 Mate 内部契约待实现（T7）。
+- **Claw 对 Mate 的调用边界（首版）。** Claw 只调用 Mate 的两个接口：Session 归属登记与核对、统一账号 access-token，接口、时机与失败处理集中见 [§4.8](#mate-calls)。用户授权、配额准入和任务与用户的关联由 Mate 管理入口在调用 Claw 之前完成（T8），Claw 不回调 Mate 做 authorize、resolve 或 registerSchedule，也不保存授权引用。PR #332 的本地身份链路和这类反向调用按本条移除，见[职责核验](source-evidence.md#mate-boundary-review)；配额准入与归属登记的 Mate 内部契约待实现（T7）。
 
 ### 5.2 稳定性
 
@@ -2063,6 +2102,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.65.0 | 2026-10-16 | 新增 §4.8，集中说明 Claw 调用 Mate 的两个接口及各自的调用时机、失败处理和实现状态。 |
 | 0.64.0 | 2026-10-16 | 对话中创建的任务改为每个会话最多一个启用中的任务，取代每会话 10 个的上限；Cron 工具确认沿用通用工具确认，修改前后对比由模型按工具描述在对话中说明。 |
 | 0.63.0 | 2026-10-16 | t_schedule_run 增加 status 字段显式保存 Run 阶段，不再由 finished_at、session_id、error_type 推出。 |
 | 0.62.0 | 2026-10-16 | t_schedule 增加 create_source 字段（`api` / `chat`）区分接口配置与对话中创建的任务，不再以 session_id 是否为空区分。 |
