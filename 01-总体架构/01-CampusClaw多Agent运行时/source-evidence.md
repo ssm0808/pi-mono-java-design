@@ -10,7 +10,7 @@
 
 | 分析范围 | 固定提交或边界 |
 |---|---|
-| Session 更新 Header 迁移核对 | 2026-10-04 确认默认 main 并隔离 fetch `553dcd5e2ff682f9684810a043b442b37a02e54a`；Controller/Service/Mapper/前端的观察与待实现差距集中于 [HTTP §8.3](chat-http-v1-design.md#session-header-free-migration) |
+| Session 更新 Header 迁移核对 | 2026-10-04 确认默认 main 并隔离 fetch `553dcd5e2ff682f9684810a043b442b37a02e54a`，迁移差距见 [HTTP §8.3](chat-http-v1-design.md#session-header-free-migration)；2026-10-17 隔离 fetch `a5e7775407fe5c0638b12e7a2131717ae9191bb6` 核验迁移已实现，见 [HTTP §8.4](chat-http-v1-design.md#session-header-free-verified) |
 | CampusClaw Slash 行为基线 | `c1311f69f504e7e799fa2467fd6a9d95b3f91b99` |
 | CampusClaw 早期专项核对头 | `c9d858bc8261bf07f5585f545b53495bf2226a56` |
 | pi-mono Slash 对比基线 | `4af9d21d3b4d664e4a29fcabfec85171077248e3` |
@@ -103,7 +103,7 @@
 | 已实现行为 | PR 167 基线的 PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功返回完整 SessionResource 和 ETag，相同值按无变化成功返回 |
 | 基线 Java 行为 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java`规范化并校验名称，`service/command/contributor/NameCommandContributor.java`将 `/name` 声明为 idle/running 均可用；`persistence/RuntimeSessionRepository.java#updateName` 和 `persistence/MyBatisRuntimeSessionRepository.java#updateName` 在行锁内更新名称与版本 |
 | 基线实现差距 | Java 09b32d8e 的 RuntimeSessionController 仅 create/get/delete；ConfigurationController 仍提供独立模型与思考 PUT。统一 POST、组合事务和 mode 尚待实现，详见下表专项证据。 |
-| 当前目标与理由 | 统一 Session POST 复用 `/name` 的名称规范化，由应用服务协调最新行锁内的字段合并和组合提交；不要求客户端版本或请求键，内部 resourceVersion 保留。产品取舍、并发覆盖代价与最新实现差距见 [HTTP §2.4](chat-http-v1-design.md#session-update)及 [§8.3](chat-http-v1-design.md#session-header-free-migration) |
+| 当前目标与理由 | 统一 Session POST 复用 `/name` 的名称规范化，由应用服务协调最新行锁内的字段合并和组合提交；不要求客户端版本或请求键，内部 resourceVersion 保留。行锁替代 ETag 的理由、放弃方案与代价见 [HTTP §2.4.3](chat-http-v1-design.md#session-update-concurrency-decision)，实现核验见 [§8.4](chat-http-v1-design.md#session-header-free-verified) |
 
 
 ## 3. Runtime 装配的补充证据

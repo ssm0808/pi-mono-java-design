@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.23.0 |
-| 更新日期 | 2026-10-16 |
+| 文档版本 | 1.24.0 |
+| 更新日期 | 2026-10-17 |
 | 变更性质 | HTTP 1.63.0 统一取消条件与请求去重 Header 及配套 ETag；内部事务与业务准入保留 |
 | 唯一当前入口 | [当前十二项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
@@ -111,7 +111,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 ## 4. 源码边界
 
-统一 Session 更新的源码核对、相对旧基线的变化及待实现差距由 [HTTP 主设计 §8.3](chat-http-v1-design.md#session-header-free-migration)维护。Java `553dcd5e2ff682f9684810a043b442b37a02e54a` 已有四字段组合 POST、严格省略标记与行锁事务，仍消费 If-Match、返回 ETag，前端仍依赖这条链；最新行合并及 Header 移除是待实现迁移。§8.1 的 `09b32d8e` 仅保留历史观察，不据它断言当前缺少统一更新。
+统一 Session 更新的源码核对由 [HTTP 主设计 §8.3](chat-http-v1-design.md#session-header-free-migration) 与 [§8.4](chat-http-v1-design.md#session-header-free-verified) 维护。Java `a5e7775407fe5c0638b12e7a2131717ae9191bb6` 已移除 If-Match/ETag，并发写入由数据库行锁加按字段合并控制。§8.1 的 `09b32d8e` 仅保留历史观察，不据它断言当前缺少统一更新。
 
 其他接口的固定源码证据继续由 [Events 设计](chat-events-design.md) 与 [FollowUp 设计](chat-follow-up-future-design.md)维护，不能将配置专项核对视为这些模块整体升级。旧入口清理核对基线为 Java `7b3769a5eabe2d131af3023631d7ad24e6d9a9e1`，相对 `dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 的下列文件无变化；该历史观察不延伸为最新主线缺陷。源码前缀为 `campusclaw/src/main/java/com/huawei/hicampus/claw/codingagent/runtimeapi/`。
 
@@ -127,6 +127,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.24.0 | 2026-10-17 | 同步 HTTP 1.72.0：Session 更新取消 ETag 已实现，证据见 §8.4。 |
 | 1.23.0 | 2026-10-16 | 同步 HTTP 1.68.0：命令清单改为 ListAgentCommands，语言专项证据链接迁至 source-evidence。 |
 | 1.22.0 | 2026-10-04 | 同步 HTTP 1.63.0 的无条件 Header 契约、最新行更新和实现迁移证据。 |
 | 1.21.0 | 2026-09-22 | 命令清单与执行示例增加 mode，HTTP 操作数量保持不变。 |
