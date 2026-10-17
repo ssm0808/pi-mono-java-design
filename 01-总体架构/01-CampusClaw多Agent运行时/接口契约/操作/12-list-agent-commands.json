@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/agents/{agentId}/commands",
     "summary": "列出指定 Agent 的命令；带 sessionId 时包含会话命令",
-    "description": "查询指定 Agent 的命令，返回名称、类别、用途和参数提示，供客户端展示 Slash 命令列表。可选查询参数 sessionId 决定清单范围：省略时只返回与会话无关、属于智能体的命令（help、skills 与技能命令），用于尚未创建会话的新对话；传入时返回完整命令（全部 Builtin 与技能命令），sessionId 必须是该 Agent 下存在且未删除的会话。sessionId 只决定范围，清单不读取会话运行状态。Builtin 的 description 按 Accept-Language 返回 zh-CN 或 en-US，缺失或不支持时回退 en-US；Skill 的 description 原样返回作者元数据，不做翻译；argumentHint 是参数的占位提示，只在带参数的 Builtin 上返回（name 为 <name>，model 为 <model>，thinking 为 <level>，mode 为 <mode>），与语言无关；技能命令省略。argumentHint 只用于显示，不列可选值：model、thinking、mode 的可选值分别由会话模型、会话深度思考可选值、会话工作模式三个查询接口提供。参数始终可省略，省略即查询；当前值与运行中能否修改属于会话状态，不在清单中返回。运行中哪些命令可执行由客户端按命令状态规则限制，并由执行接口最终准入。",
+    "description": "查询指定 Agent 的命令，返回名称、类别、用途和参数类型，供客户端展示 Slash 命令列表。可选查询参数 sessionId 决定清单范围：省略时只返回与会话无关、属于智能体的命令（help、skills 与技能命令），用于尚未创建会话的新对话；传入时返回完整命令（全部 Builtin 与技能命令），sessionId 必须是该 Agent 下存在且未删除的会话。sessionId 只决定范围，清单不读取会话运行状态。Builtin 的 description 按 Accept-Language 返回 zh-CN 或 en-US，缺失或不支持时回退 en-US；Skill 的 description 原样返回作者元数据，不做翻译；argumentType 说明命令怎样接收参数，与语言无关：text 为自由文本（name 与技能命令），options 为从可选值中选择（model、thinking、mode），省略表示命令不带参数。清单不列可选值：model、thinking、mode 的可选值分别由会话模型、会话深度思考可选值、会话工作模式三个查询接口提供。参数始终可省略，省略即查询；当前值与运行中能否修改属于会话状态，不在清单中返回。运行中哪些命令可执行由客户端按命令状态规则限制，并由执行接口最终准入。",
     "parameters": [
       {
         "$ref": "parameters.agentId"
@@ -59,25 +59,25 @@
                   "name": "name",
                   "type": "builtin",
                   "description": "查看或修改会话名称",
-                  "argumentHint": "<name>"
+                  "argumentType": "text"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
                   "description": "查看或切换模型",
-                  "argumentHint": "<model>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "thinking",
                   "type": "builtin",
                   "description": "开启或关闭深度思考",
-                  "argumentHint": "<level>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
                   "description": "查看或切换计划/实施模式",
-                  "argumentHint": "<mode>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "compact",
@@ -92,7 +92,8 @@
                 {
                   "name": "skill:pdf",
                   "type": "skill",
-                  "description": "分析和生成 PDF 文档"
+                  "description": "分析和生成 PDF 文档",
+                  "argumentType": "text"
                 }
               ]
             }
@@ -116,25 +117,25 @@
                   "name": "name",
                   "type": "builtin",
                   "description": "Show or rename the session",
-                  "argumentHint": "<name>"
+                  "argumentType": "text"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
                   "description": "Show or switch the model",
-                  "argumentHint": "<model>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "thinking",
                   "type": "builtin",
                   "description": "Turn deep thinking on or off",
-                  "argumentHint": "<level>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
                   "description": "Show or switch between plan and build mode",
-                  "argumentHint": "<mode>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "compact",
@@ -149,7 +150,8 @@
                 {
                   "name": "skill:pdf",
                   "type": "skill",
-                  "description": "分析和生成 PDF 文档"
+                  "description": "分析和生成 PDF 文档",
+                  "argumentType": "text"
                 }
               ]
             }
@@ -185,7 +187,8 @@
                 {
                   "name": "skill:pdf",
                   "type": "skill",
-                  "description": "分析和生成 PDF 文档"
+                  "description": "分析和生成 PDF 文档",
+                  "argumentType": "text"
                 }
               ]
             }
@@ -208,7 +211,8 @@
                 {
                   "name": "skill:pdf",
                   "type": "skill",
-                  "description": "分析和生成 PDF 文档"
+                  "description": "分析和生成 PDF 文档",
+                  "argumentType": "text"
                 }
               ]
             }
@@ -245,25 +249,25 @@
                   "name": "name",
                   "type": "builtin",
                   "description": "查看或修改会话名称",
-                  "argumentHint": "<name>"
+                  "argumentType": "text"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
                   "description": "查看或切换模型",
-                  "argumentHint": "<model>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "thinking",
                   "type": "builtin",
                   "description": "开启或关闭深度思考",
-                  "argumentHint": "<level>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
                   "description": "查看或切换计划/实施模式",
-                  "argumentHint": "<mode>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "compact",
@@ -297,25 +301,25 @@
                   "name": "name",
                   "type": "builtin",
                   "description": "Show or rename the session",
-                  "argumentHint": "<name>"
+                  "argumentType": "text"
                 },
                 {
                   "name": "model",
                   "type": "builtin",
                   "description": "Show or switch the model",
-                  "argumentHint": "<model>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "thinking",
                   "type": "builtin",
                   "description": "Turn deep thinking on or off",
-                  "argumentHint": "<level>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "mode",
                   "type": "builtin",
                   "description": "Show or switch between plan and build mode",
-                  "argumentHint": "<mode>"
+                  "argumentType": "options"
                 },
                 {
                   "name": "compact",
@@ -449,12 +453,12 @@
     "descriptionLocale": {
       "status": "已确认",
       "confirmedAt": "2026-10-16",
-      "decision": "Builtin description 按 Accept-Language 国际化（zh-CN/en-US，回退 en-US）；Skill description 原样返回；argumentHint 与语言无关。"
+      "decision": "Builtin description 按 Accept-Language 国际化（zh-CN/en-US，回退 en-US）；Skill description 原样返回；argumentType 与语言无关。"
     },
-    "argumentHint": {
+    "argumentType": {
       "status": "已确认",
-      "confirmedAt": "2026-10-16",
-      "decision": "与 pi 对齐：hints 值列表改为 argumentHint 占位字符串，只在 name、model、thinking、mode 上返回；可选值不放在命令清单，按会话由 ListSessionModels、ListSessionThinkingValues、ListSessionModes 提供，对应 pi 的 get_available_models 与 get_available_thinking_levels。"
+      "confirmedAt": "2026-10-17",
+      "decision": "清单返回 argumentType（text、options 或省略），不返回 hints 或 argumentHint：参数形态是命令自身属性，Runtime 定义命令时就知道；占位文字与 description 重复，选项型命令直接展示选项列表。可选值不放在命令清单，按会话由 ListSessionModels、ListSessionThinkingValues、ListSessionModes 提供，对应 pi 的 get_available_models 与 get_available_thinking_levels。"
     }
   }
 }

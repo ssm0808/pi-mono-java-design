@@ -81,7 +81,7 @@
       "source": "接口契约/操作/12-list-agent-commands.json",
       "common": "接口契约/common.json",
       "status": "按 Agent 查询待评审 · 待实现",
-      "note": "清单改为按 Agent 返回全部命令，不读会话状态；冷缓存与创建会话共用准备流程。描述符为 name/type/description 与可选 argumentHint（带参数 Builtin 的占位提示），可选值由会话查询接口提供，字段迁移待实现；运行中的限制由前端命令状态规则与 POST 最终准入承担。",
+      "note": "清单改为按 Agent 返回全部命令，不读会话状态；冷缓存与创建会话共用准备流程。描述符为 name/type/description 与可选 argumentType（text 或 options），可选值由会话查询接口提供，字段迁移待实现；运行中的限制由前端命令状态规则与 POST 最终准入承担。",
       "design": "../04-CampusClaw命令系统/README.md#31-get-轻量清单已确认"
     },
     {

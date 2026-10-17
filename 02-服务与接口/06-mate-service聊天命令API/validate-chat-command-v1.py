@@ -16,7 +16,7 @@ from typing import Any
 from render_chat_command_v1 import build_html, load_contract, RUNTIME_ROOT
 
 sys.path.insert(0, str(RUNTIME_ROOT))
-from command_catalog_contract import (ARGUMENT_TYPE_BY_COMMAND, to_runtime_projection,
+from command_catalog_contract import (ARGUMENT_TYPE_BY_COMMAND,
                                       validate_catalog_examples, validate_projection_pair)
 
 
@@ -159,7 +159,7 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
 
 def validate_catalog(models: list[dict[str, Any]]) -> None:
     operation = operation_by_key(models, "ListChatCommands")
-    validate_catalog_examples(to_runtime_projection(operation))
+    validate_catalog_examples(operation)
     runtime = json.loads((RUNTIME_ROOT / "接口契约/操作/12-list-agent-commands.json").read_text(encoding="utf-8"))
     validate_projection_pair(runtime["operation"], operation)
     codes = set(values_for_key(operation["responses"], "resCode"))

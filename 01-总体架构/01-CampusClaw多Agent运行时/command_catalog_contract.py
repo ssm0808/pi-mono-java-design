@@ -1,6 +1,5 @@
 """Shared design checks for lightweight Runtime and Mate GET descriptors."""
 
-import copy
 import re
 
 BUILTINS = ("help", "status", "name", "model", "thinking", "mode", "compact", "skills")
@@ -16,7 +15,7 @@ def require(condition, message):
 def validate_descriptor(command):
     require(isinstance(command, dict), "Descriptor must be an object")
     require({"name", "type", "description"} <= set(command)
-            and set(command) <= {"name", "type", "description", "argumentHint"},
+            and set(command) <= {"name", "type", "description", "argumentType"},
             "Descriptor fields differ from lightweight contract")
     require(all(isinstance(command[key], str) and command[key].strip()
                 for key in ("name", "type", "description")), "Required descriptor strings must be nonblank")
@@ -26,12 +25,8 @@ def validate_descriptor(command):
     else:
         require(re.fullmatch(r"skill:[a-z0-9]+(?:-[a-z0-9]+)*", command["name"])
                 and len(command["name"]) <= 70, "Invalid Skill command name")
-    expected = BUILTIN_ARGUMENT_HINTS.get(command["name"])
-    if expected is None:
-        require("argumentHint" not in command, f"Only Builtins with an argument return argumentHint: {command['name']}")
-    else:
-        require(command.get("argumentHint") == expected,
-                f"argumentHint must be the placeholder for the argument, not its values: {command['name']}")
+    require(command.get("argumentType") == expected_argument_type(command),
+            f"argumentType must follow the command's argument: {command['name']}")
 
 
 def validate_commands(commands, scope="session"):
@@ -50,9 +45,14 @@ def validate_commands(commands, scope="session"):
 
 
 HELP_DESCRIPTIONS = {"zh-CN": "介绍当前智能体的用途和使用场景", "en-US": "Introduce this agent's purpose and use cases"}
-# Placeholder per Builtin that takes an argument, as pi's argumentHint; Skills omit it.
-# Values to choose from come from the Session (ListSessionModels, ListSessionThinkingValues, ListSessionModes).
-BUILTIN_ARGUMENT_HINTS = {"name": "<name>", "model": "<model>", "thinking": "<level>", "mode": "<mode>"}
+# How each command takes its argument, so any client picks the input control without per-command logic.
+# text: free text; options: values from the Session queries (ListSessionModels, ListSessionThinkingValues,
+# ListSessionModes), shown through Mate command options. Skills take text; Builtins not listed take no argument.
+ARGUMENT_TYPE_BY_COMMAND = {"name": "text", "model": "options", "thinking": "options", "mode": "options"}
+
+
+def expected_argument_type(command):
+    return "text" if command.get("type") == "skill" else ARGUMENT_TYPE_BY_COMMAND.get(command.get("name"))
 
 
 SESSION_SUCCESS_IDS = {"200-commands", "200-no-skills"}
@@ -109,39 +109,15 @@ def validate_localized_pair(chinese, english):
     for left, right in zip(chinese, english):
         require((left["name"], left["type"]) == (right["name"], right["type"]),
                 "name and type stay language-neutral")
-        require(left.get("argumentHint") == right.get("argumentHint"),
-                f"argumentHint is language-neutral: {left['name']}")
+        require(left.get("argumentType") == right.get("argumentType"),
+                f"argumentType is language-neutral: {left['name']}")
         if left["type"] == "builtin":
             require(left["description"] != right["description"], f"Builtin description is not localized: {left['name']}")
         else:
             require(left["description"] == right["description"], f"Skill description must be returned as authored: {left['name']}")
 
 
-# Mate adds argumentType so any frontend picks the input control without per-command logic.
-# Skill commands always take text; Builtins not listed take no argument.
-ARGUMENT_TYPE_BY_COMMAND = {"name": "text", "model": "options", "thinking": "options", "mode": "options"}
-
-
-def expected_argument_type(command):
-    return "text" if command.get("type") == "skill" else ARGUMENT_TYPE_BY_COMMAND.get(command.get("name"))
-
-
-def to_runtime_projection(public_operation):
-    """Check the Mate-only argumentType, then return the operation as Runtime projects it."""
-    projection = copy.deepcopy(public_operation)
-    for response in projection["responses"]:
-        if response["status"] != "200":
-            continue
-        for body in response["bodies"].values():
-            for command in body["result"]["commands"]:
-                argument_type = command.pop("argumentType", None)
-                require(argument_type == expected_argument_type(command),
-                        f"Public argumentType must follow the Mate mapping: {command.get('name')}")
-    return projection
-
-
 def validate_projection_pair(runtime, public):
-    public = to_runtime_projection(public)
     validate_catalog_examples(runtime)
     validate_catalog_examples(public)
     left, right = success_examples(runtime), success_examples(public)

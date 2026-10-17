@@ -462,7 +462,7 @@ def validate_help_descriptor(descriptor: dict[str, Any]) -> None:
     validate_descriptor(descriptor)
     require(descriptor["name"] == "help" and descriptor["type"] == "builtin"
             and descriptor["description"] == "介绍当前智能体的用途和使用场景"
-            and "argumentHint" not in descriptor,
+            and "argumentType" not in descriptor,
             "Help descriptor must advertise only the no-argument Agent guide")
 
 

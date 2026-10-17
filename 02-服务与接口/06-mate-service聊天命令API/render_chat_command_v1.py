@@ -155,10 +155,9 @@ ARGUMENT_TYPE_LABELS = {"text": "文本输入", "options": "调用命令选项�
 
 
 def command_state(command: dict[str, Any]) -> list[str]:
-    argument_hint = command.get("argumentHint", "无")
     files = "允许附件" if command["type"] == "skill" else "无附件"
     argument_type = ARGUMENT_TYPE_LABELS.get(command.get("argumentType"), "无参数，直接执行")
-    return [f'/{command["name"]}', command["description"], argument_type, argument_hint, files]
+    return [f'/{command["name"]}', command["description"], argument_type, files]
 
 
 def render_command_example(operation: dict[str, Any]) -> str:
@@ -172,7 +171,7 @@ def render_command_example(operation: dict[str, Any]) -> str:
             '<section class="business-section">'
             f'<h3>{html.escape(response["tabLabel"])}</h3>'
             f'<p>{html.escape(response["summary"])}</p>'
-            f'{SHARED.static_table(["命令", "用途", "参数类型", "占位提示", "附件"], rows)}</section>'
+            f'{SHARED.static_table(["命令", "用途", "参数类型", "附件"], rows)}</section>'
         )
     return ''.join(sections)
 

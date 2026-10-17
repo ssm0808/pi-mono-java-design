@@ -89,11 +89,11 @@ pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 ## 4. 统一实施与集成要求
 
 Agent 命令清单的 Skill 名称为 `skill:<name>`，排在固定 Builtin 顺序之后并按 name 排序；
-清单不按 Session 状态省略，运行中由前端置灰，POST 返回 409。返回 name、type=skill 和 description，不返回 argumentHint（参数是自由文本，与 pi 的技能命令一致），
+清单不按 Session 状态省略，运行中由前端置灰，POST 返回 409。返回 name、type=skill、description 和 argumentType=text（参数是自由文本），
 不输出 Skill ID、版本、正文、路径或建议值。文本参数可省略，附件准入只看 type=skill。
 所有 Skill 均允许可选文件引用，不要求逐个 Skill 声明接受附件；不返回 acceptsFiles，
 也不承诺任意文件格式都能被处理。文件数量、标识、所有权与可用性沿用普通消息边界。
-Java 53eff85c 的 InputResponseVO 仍输出旧附件标记，type/argumentHint 投影待实现；fileIds 执行传递已存在。
+Java 53eff85c 的 InputResponseVO 仍输出旧附件标记，type/argumentType 投影待实现；fileIds 执行传递已存在。
 前端 freezeCommandArguments 尚未组装 fileIds，上传按钮仍禁用，前端与 Mate 公共桥接分别验收。
 完整规则与最新源码差距见[Agent 命令清单契约](../README.md#31-get-轻量清单已确认)。
 发现与执行分别核验：当前 Runtime Skill POST 已实现；Mate 公共执行是否开放仍由独立契约决定。
@@ -187,7 +187,7 @@ skills Builtin 只展示最新完整绑定快照中的名称/描述，不等于�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 4.7.0 | 2026-10-16 | 技能命令不返回 argumentHint，与 pi 的技能命令一致；原 hints 改为 Builtin 的占位字符串 argumentHint。 |
+| 4.7.0 | 2026-10-16 | 技能命令返回 argumentType=text，表示参数为自由文本；原 hints 已移除。 |
 | 4.6.0 | 2026-10-16 | 技能命令不再返回 hints 占位文案，文本参数的提示由前端决定；清单不带 sessionId 时仍返回技能命令。 |
 | 4.5.0 | 2026-10-16 | Skill 发现改由 `GET /agents/{agentId}/commands` 返回，不再在运行中省略；缓存缺失时准备 Agent，失败为 422。 |
 | 4.4.0 | 2026-09-22 | Skill 描述符改用 type/hints，附件作为所有 Skill 的统一规则。 |

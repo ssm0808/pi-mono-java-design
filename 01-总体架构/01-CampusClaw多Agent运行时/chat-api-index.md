@@ -127,7 +127,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.24.0 | 2026-10-16 | 同步 HTTP 1.72.0：新增 ListSessionThinkingValues 与 ListSessionModes，当前接口为十四项；命令描述符的 hints 改为 argumentHint。 |
+| 1.24.0 | 2026-10-16 | 同步 HTTP 1.72.0：新增 ListSessionThinkingValues 与 ListSessionModes，当前接口为十四项；命令描述符的 hints 改为 argumentType。 |
 | 1.23.0 | 2026-10-16 | 同步 HTTP 1.68.0：命令清单改为 ListAgentCommands，语言专项证据链接迁至 source-evidence。 |
 | 1.22.0 | 2026-10-04 | 同步 HTTP 1.63.0 的无条件 Header 契约、最新行更新和实现迁移证据。 |
 | 1.21.0 | 2026-09-22 | 命令清单与执行示例增加 mode，HTTP 操作数量保持不变。 |
