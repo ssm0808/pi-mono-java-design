@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.10.1；整理日期：2026-10-08。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `9f83dc1771500ace26360c0982cb1954e2f37de4`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的历史专项见 §8，文档组织与图形选择见 §10，参数纠正与用户展示见 §11，参数校验、确认与执行的顺序见 §12，SearchTools 最新基线和 PR #323 进度见 §13；Read 文本读取边界见 §14。
+版本：1.11.0；整理日期：2026-10-17。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `9f83dc1771500ace26360c0982cb1954e2f37de4`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的历史专项见 §8，文档组织与图形选择见 §10，参数纠正与用户展示见 §11，参数校验、确认与执行的顺序见 §12，SearchTools 最新基线和 PR #323 进度见 §13；Read 文本读取边界见 §14，Schema 校验器与依赖见 §15。
 
 | 基线 | 提交 |
 |---|---|
@@ -399,3 +399,46 @@ CampusClaw 采用 `Skill → SearchTools → CallTool`：Skill 正文引用唯�
 | `tool/builtin/BuiltInToolContracts.java` · `description` | READ 的统一描述也是 Read the contents of a UTF-8 text file.，与实际工具一致。 |
 
 这是契约描述与已观察实现的对齐，不新增图片能力，也不将图片处理列为已确认的待实现增量。工具分层、调用顺序和 Agent 架构对比结论不变，既有 PlantUML 与 SVG 无需修改。验证限于源码静态核验和文档检查，未运行 Java 测试或真实模型调用。
+
+<a id="tool-schema-validator-evidence"></a>
+
+## 15. Schema 校验器与 json-schema-validator 依赖（2026-10-17）
+
+本节读取 pi-mono-java `main@1446c58564539eb320fa3c6b495be34e5f985394`（2026-10-17 fetch），只核验工具参数校验的调用点、Schema 关键字用量和依赖树；networknt 行为读取 `json-schema-validator-1.5.2-sources.jar`。结论支撑[主设计 §9.7](README.md#tool-schema-subset)。
+
+### 15.1 CampusClaw 已观察实现
+
+| 路径 / 符号 | 已观察实现 |
+|---|---|
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolSchemaValidator.java` · `validate`（:28、:38）、`validateDefinition`（:71）、`toError`（:93） | 唯一使用 networknt API 的类。每次调用 `schemaFactory.getSchema` 重新解析定义；`validateDefinition` 用空对象试校验来判断定义能否加载；`required` 错误把字段名补进路径，其他错误用 networknt 的实例位置；错误文案直接取 `ValidationMessage.getMessage()` |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java` · 字段 `schemaFactory`（:42）、`validate` | 用 `JsonSchemaFactory.getInstance(V202012)` 校验全部已注册工具（框架工具与 Agent 直接代理）；`ToolSchemaInvalidException` 记日志后转为错误结果 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolExecutor.java` · 字段 `schemaFactory`（:47）、`validateArguments`、`validateDefinition` | Mate 业务工具同样按 2020-12 校验；定义无效转为 `InvalidDefinitionException`（`TOOL_DEFINITION_INVALID`），日志 `validationReason=INVALID_TOOL_SCHEMA` |
+| `modules/ai/pom.xml`（:61） | 声明了 `json-schema-validator`，`ai` 模块源码没有使用 |
+| `modules/agent-core/pom.xml`（:41）、`campusclaw/pom.xml`（:106）、根 `pom.xml`（:34、:75） | compile scope 依赖；版本 1.5.2 由根 POM 管理 |
+
+框架工具定义的关键字用量（统计 `modules/*/src/main` 下 Java 源码中带引号的关键字，例如 `CronTool`、`ReadTool`、`AskUserQuestionTool`、`BuiltInToolContracts`）：`type`、`properties`、`required`、`additionalProperties`（全部为 `false`）、`enum`、`const`、`minLength`、`maxLength`、`pattern`、`items`、`minItems`、`maxItems`、`oneOf`（仅 `CronTool`）、`description`、`$schema`（仅 `AskUserQuestionTool`，取 2020-12）。没有 `integer`、类型数组、`minimum`、`maximum`、`format` 或 `$ref`。Mate 现网工具定义的关键字用量未核验。
+
+`campusclaw-coding-agent` 的 `dependency:tree` 中，`json-schema-validator` 1.5.2 带入 `com.ethlo.time:itu` 1.10.2 和 `jackson-dataformat-yaml` 2.18.3，三者都只经它引入；本地 jar 大小分别为 576,375、53,903、55,579 字节，合计约 686 KB。`snakeyaml` 2.3 另由 `spring-boot-starter` 引入。源码中没有其他 `dataformat.yaml` 或 `com.ethlo` 使用者。公司父 POM 下的依赖树未核验。
+
+### 15.2 networknt 1.5.2 默认行为
+
+| 源码路径 · 符号 | 观察 | 对设计的影响 |
+|---|---|---|
+| `com/networknt/schema/format/BaseFormatJsonValidator.java` · `isFormatAssertionVocabularyEnabled`；`FormatValidator.java` · `validate` | 2020-12 下只有元 Schema 声明 `format-assertion` 词表或显式开启时才断言 `format`；默认元 Schema 下 `format` 只是注解 | 子集把 `format` 列为注解，行为与现状一致 |
+| `com/networknt/schema/resource/DefaultSchemaLoader.java`；`resource/UriSchemaLoader.java` · `load` | 默认加载器链包含按 URL `openConnection` 的加载器 | 外部定义里的远程 `$ref` 可能在校验时触发网络请求；未做联网复现。子集拒绝 `$ref` |
+| `com/networknt/schema/SchemaValidatorsConfig.java` · `getLocale` | 未配置时返回 `Locale.getDefault()` | 现状错误文案随部署环境语言变化；目标改为固定模板 |
+| `com/networknt/schema/regex/JDKRegularExpression.java` · `matches` | 默认用 `java.util.regex` 的 `find()` | 子集沿用相同正则引擎与部分匹配语义 |
+| `com/networknt/schema/MinLengthValidator.java`、`MaxLengthValidator.java` | 按码点计数长度 | 子集按码点计数，与现状一致 |
+
+### 15.3 外部基线
+
+2026-10-17 确认默认分支并隔离浅克隆，只读文件、不运行代码：
+
+| 基线 | 提交 | 路径 · 符号 | 观察 |
+|---|---|---|---|
+| pi | `main@8efd314fa3d3232ce197d8d7a6a5660530b9d83e` | `packages/ai/src/utils/validation.ts` · `validateToolArguments`；`packages/agent/src/agent-loop.ts` · `prepareToolCall`；`packages/coding-agent/src/extensions/mcp/tools.ts` · `toParameters` | 用 TypeBox 1.3.27 校验全部工具（含 MCP），校验前做大量类型转换；MCP Schema 原样透传，不限关键字；失败信息带路径列表和收到的参数，作为错误结果回给模型。TypeBox 实际支持的关键字范围未核验 |
+| Codex | `main@3b8f43a06bb3105e81406b35ff69f94977d18ae4` | `codex-rs/tools/src/json_schema/types.rs` · `JsonSchema`；`codex-rs/tools/src/json_schema.rs` · `sanitize_json_schema`；`codex-rs/core/src/mcp_tool_call.rs` · `handle_mcp_tool_call` | 工具定义收敛到固定结构（保留 `$ref`、`type`、`enum`、`items`、`minItems`、`properties`、`required`、`additionalProperties`、`anyOf`、`oneOf`、`allOf`、`$defs` 等），其余关键字静默丢弃；本地不按 Schema 校验参数，MCP 参数只要求是合法 JSON，由服务端校验 |
+| OpenCode | `dev@65932e870ca50d21886f9d0ee89c6603bac34a65` | `packages/core/src/tool/runtime.ts` · `validateInput`、`formatInputIssues`；`packages/core/src/tool/mcp.ts` | MCP Schema 转成 Effect Schema 后校验，转换失败就跳过校验；错误最多列 5 条并提示重新调用 |
+| DeepSeek Harness | `master@1517a4dbca0a2789ff1d41ba439600f8547d23fa` | `packages/core/tools/src/json-schema.ts` · `assertSupportedJsonSchema`、`validateJsonSchemaValue`；`packages/mcp/mcp-client/src/tools.ts` · `createMcpToolDefinition` | 自写严格子集：`type`、`oneOf`、`properties`、`required`、`additionalProperties`（仅布尔）、`items`、`enum`、`const` 及四个注解，其余关键字拒绝；`oneOf` 至少两个分支且不许有同级关键字，`required` 的字段必须出现在 `properties`。只用于自有工具，MCP 输入 Schema 原样透传且本地不校验 |
+
+DeepSeek Harness 的子集规则比 CampusClaw 更严：`CronTool` 在 `oneOf` 旁边还有同级 `properties` 和 `required`，分支内 `required` 的字段也不在分支 `properties` 中，按 DSH 规则会被拒绝，所以 §9.7 不照搬这两条限制。
