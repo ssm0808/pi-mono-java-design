@@ -566,7 +566,7 @@
     "clientConcurrencyReview": {
       "date": "2026-10-04",
       "status": "confirmed",
-      "decision": "所有接口不声明或消费 If-Match、Idempotency-Key，不返回配套资源 ETag，不用 body/query 版本或请求键替代；额外收到这些 Header 不触发专门拒绝。更新基于数据库最新记录按提交字段原子合并，同字段按后一次成功提交生效；业务状态和权限校验保留。已观察 Java 与前端仍有相关 Header 依赖，移除待实现。"
+      "decision": "所有接口不声明或消费 If-Match、Idempotency-Key，不返回配套资源 ETag，不用 body/query 版本或请求键替代；额外收到这些 Header 不触发专门拒绝。更新基于数据库最新记录按提交字段原子合并，同字段按后一次成功提交生效；业务状态和权限校验保留。并发写入由数据库行锁加按字段合并控制，同字段基于旧视图的覆盖不检测，理由与代价见 HTTP §2.4.3；Java 与前端的移除已在 pi-mono-java@a5e7775407fe5c0638b12e7a2131717ae9191bb6 核验为已实现。"
     }
   }
 }
