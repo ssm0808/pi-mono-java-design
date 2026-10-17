@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.66.0 |
+| 文档版本 | 1.71.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新最新迁移差距见 §8.3，历史核验保留在 §8.1/§8.2 |
-| 更新日期 | 2026-10-05 |
+| 更新日期 | 2026-10-16 |
 
 Session 与完整事件的时间采用[统一秒级目标](time-contract.md)：UTC、无小数秒，写入和回显一致；此精度调整待实现，其他功能状态仍按各节证据。
 
@@ -16,7 +16,7 @@ Runtime HTTP 面向 mate-service bridge 和获授权的内部 SDK，以 Session�
 
 浏览器使用 [mate-service 公共 Chat API](../../02-服务与接口/07-mate-service通用对话API/README.md)。mate-service 持有 Chat→Session 映射、完成公共认证与安全投影；Runtime 处理执行、Session 配置和持久化。两跳各有契约，当前接口清单与评审状态见各自生成页。
 
-本文维护 HTTP 资源设计、更新事务、公司响应适配和安全边界。事件生命周期由 [Session Events](chat-events-design.md) 维护，命令行为由 [Slash 模块](../../04-命令与技能/00-Slash-Command通用模块/README.md) 维护，避免在此复制业务契约。
+本文维护 HTTP 资源设计、更新事务、公司响应适配和安全边界。事件生命周期由 [Session Events](chat-events-design.md) 维护，命令行为由 [Slash 模块](../04-CampusClaw命令系统/README.md) 维护，避免在此复制业务契约。
 
 ## 2. 接口分组
 
@@ -66,6 +66,8 @@ Usage 沿用模型返回的 Token 与 USD cost 口径，Assistant 和 Compaction
 
 不存在或已删除统一 204；URI 与持久化 tombstone 提供重试幂等性，不要求 Idempotency-Key 或 If-Match。永久 `t_session_tombstone` 严格只有 `session_id/deleted_at`，用于禁止 ID 复用；租约、次数、错误与清理进度放在短期 `t_session_cleanup_task`，完成后删除任务。两者提交失败必须整体回滚，不能暴露部分删除。
 
+同一事务还经会话删除扩展点删除该会话关联的定时任务及其 Run（对话中由 Cron 工具创建的任务，见 [M10 §3.13](../08-CampusClaw定时任务/README.md#chat-created-schedule)，待实现）。
+
 清理范围为 Runtime Entry、执行状态与内存对象；mate-service Chat 业务元数据和文件对象由各自所属服务管理。删除后的 Session 不能因清理失败重新可见。
 
 本图只展示逻辑删除与其后的内部清理。空闲 Session 的墓碑、清理工作项和资源删除同事务提交；不存在或已删除返回 204，运行中返回 409，原子提交失败返回受控错误。204 表示逻辑删除完成，物理清理可重试；永久墓碑只含 session_id 和 deleted_at，不能混入重试状态。
@@ -82,7 +84,7 @@ POST 接受 user.message、user.interrupt、user.tool_confirmation 三类输入�
 
 压缩属于 Session 记忆模块，算法、阈值、失败重试和上下文恢复由 [压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md) 唯一维护。HTTP 只投影完整 `session.compacted`，不公开摘要、内部边界、started/failed 或 `_discardedEntryId`。
 
-手工压缩通过 `/compact` 的 Command Handler 进入，不增加专用 HTTP operation；[Compact 生命周期](../../04-命令与技能/01-内置命令/README.md#7-compact-生命周期) 维护准入、终态和资源释放。
+手工压缩通过 `/compact` 的 Command Handler 进入，不增加专用 HTTP operation；[Compact 生命周期](../04-CampusClaw命令系统/01-内置命令/README.md#7-compact-生命周期) 维护准入、终态和资源释放。
 
 ### 2.3 持久化事件与恢复
 
@@ -175,15 +177,15 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 ### 2.6 Built-in Command（已确认，目标实现）
 
 Builtin 与 Skill Command 由用户统一负责设计、实现和集成。
-共享 GET 轻量清单、Builtin 普通 JSON，以及 B13/B14 的 Skill 请求、SSE 与恢复规则已确认；Mate 公共命令独立管理。本节只说明 HTTP 边界，不重复维护命令业务规则。
+Builtin 普通 JSON，以及 B13/B14 的 Skill 请求、SSE 与恢复规则已确认；命令清单改为按 Agent 查询，sessionId 为可选查询参数，待评审、待实现；Mate 公共命令独立管理。本节只说明 HTTP 边界，不重复维护命令业务规则。
 
 | 接口 | 精确模型 | 设计职责 |
 |---|---|---|
-| GET /sessions/{sessionId}/commands | [操作 12](接口契约/操作/12-list-session-commands.json) | [Slash 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md#31-get-轻量清单已确认)维护描述符、排序、状态过滤、完整缓存与重新准入理由 |
-| POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../../04-命令与技能/01-内置命令/README.md)维护八个命令的业务、窄服务、事务和实施验收 |
+| GET /agents/{agentId}/commands?sessionId= | [操作 12](接口契约/操作/12-list-agent-commands.json) | [Slash 通用模块](../04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)维护清单范围（不带 sessionId 只含 help、skills 与技能命令）、描述符、排序、命令状态规则、Agent 快照准备与重新准入理由 |
+| POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../04-CampusClaw命令系统/01-内置命令/README.md)维护八个命令的业务、窄服务、事务和实施验收 |
 
 Controller 只收发 VO，Application 完成授权、归一化、一次 Catalog 解析、准入、执行及 DTO→VO。
-共享 GET 使用完整来源；内部 Builtin 专属解析才过滤来源。GET 不构成执行预约，
+清单按 Agent 使用完整来源，不读会话状态；内部 Builtin 专属解析才过滤来源。GET 不构成执行预约，
 POST 重新解析，并在所属锁或事务内检查可变状态；共同结构只在 Slash 全局主图维护。
 
 本图聚焦一次 POST 命令，不再同时展开 GET 清单和每个 Builtin。Command application 保留解析与分发，Selected handler 与 Domain service 分列以明确 handler 不直接承担数据库业务规则；GET 的来源聚合、排序和轻量 VO，Help 缓存锁与失败条件，以及 Skill 公共接入门禁见对应章节。
@@ -196,23 +198,23 @@ POST 重新解析，并在所属锁或事务内检查可变状态；共同结构
 
 Builtin Handler 完成后返回普通 ResultBean JSON，不建立命令 SSE。
 请求、结果与错误由操作 13 维护；与既有 Session/Models 资源复用的映射规则统一见
-[Builtin §8](../../04-命令与技能/01-内置命令/README.md#8-json-与错误)。
+[Builtin §8](../04-CampusClaw命令系统/01-内置命令/README.md#8-json-与错误)。
 不产生通用命令生命周期或 Name 历史；这不改变 POST Events 的独立 SSE 契约。
 所有成功结果移除 command、changed、sourceEventSeq；内部领域 Entry 不变。
-不以新命令包装或 eventId 替代这些字段，Skill 分支复用 Session Events，详细行为见 [Skill 设计](../../04-命令与技能/02-技能命令/README.md)。
+不以新命令包装或 eventId 替代这些字段，Skill 分支复用 Session Events，详细行为见 [Skill 设计](../04-CampusClaw命令系统/02-技能命令/README.md)。
 
 #### 2.6.2 Help：Agent 元数据使用指南
 
 Help 通过普通 POST Command 提供无参 Agent 使用指南，不新增 HTTP 资源。
-[Help 专题](../../04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)唯一维护元数据映射、
+[Help 专题](../04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/README.md)唯一维护元数据映射、
 缓存往返、读取/发布互斥、空内容处理、安全展示和实施验收。
 其专项页面直接提取操作 13，不再复制 Header、参数或响应 JSON。
-共享 GET 无完整缓存的 503 与 POST Help 的既有 422 属于不同操作，不能统一改写。
+清单与 POST Help 在 Agent 不可用时都返回 422 AGENT_NOT_AVAILABLE；清单冷缓存时先准备 Agent，Help 只读完整缓存。
 
 #### 2.6.3 Name 与配置更新
 
-Name 的共享业务规则见 [Builtin §5](../../04-命令与技能/01-内置命令/README.md#5-name-当前状态)，
-Model/Thinking 的事务和内部版本规则见 [Builtin §6](../../04-命令与技能/01-内置命令/README.md#6-model--thinking)。
+Name 的共享业务规则见 [Builtin §5](../04-CampusClaw命令系统/01-内置命令/README.md#5-name-当前状态)，
+Model/Thinking 的事务和内部版本规则见 [Builtin §6](../04-CampusClaw命令系统/01-内置命令/README.md#6-model--thinking)。
 Command 保留原有入口；统一 Session POST 复用其校验规则与底层写入职责，两者均不要求版本条件或请求去重 Header。
 
 ![命令与权威 Session 状态](设计图/Command/command_authoritative_state.svg)
@@ -221,7 +223,7 @@ Command 保留原有入口；统一 Session POST 复用其校验规则与底层�
 
 #### 2.6.4 Compact 的执行生命周期
 
-[Compact 生命周期](../../04-命令与技能/01-内置命令/README.md#7-compact-生命周期)维护空历史、
+[Compact 生命周期](../04-CampusClaw命令系统/01-内置命令/README.md#7-compact-生命周期)维护空历史、
 独立终态 Future、容量/Holder 清理和断线不取消规则；压缩算法与恢复边界见 [压缩设计](../../03-数据与存储/01-会话记忆GaussDB/compaction.md)。
 user.interrupt 只绑定原 user.message.eventId。手工 Compact 没有该原消息，不伪造目标或扩大中断范围；正在手工压缩时仍按现有忙状态拒绝新消息。当前不新增 Compact 专用取消接口。
 
@@ -250,7 +252,7 @@ Session 只暴露 idle/running，实时阶段在事件层表达。跨实例控�
 
 精确状态码、中英文消息和各操作错误集合由契约模型维护。错误枚举名、MessageSource key 与 resCode 必须一致；配置合并不改写 Command 既有错误码。
 
-Locale 由 Accept-Language 解析，支持 zh-CN/en-US；缺失、不支持或 key 缺失回退 en-US，不使用 JVM 系统 Locale。Content-Language 返回实际语言。Service 异常只携带错误码与有界参数，Controller Advice 负责消息格式化、状态和响应包装。
+Locale 由 Accept-Language 解析，支持 zh-CN/en-US；缺失、不支持或 key 缺失回退 en-US，不使用 JVM 系统 Locale。Content-Language 返回实际语言。同一 Locale 也用于 ListAgentCommands 的 Builtin description；Skill description 原样返回作者元数据；name、type、hints 不随语言变化，hints 只列 thinking、mode 的固定参数值，不含界面文案。Service 异常只携带错误码与有界参数，Controller Advice 负责消息格式化、状态和响应包装。
 
 异常不得暴露凭据、内部 Header、私有 claim、Prompt、原始 thinking、OBS 地址、Bucket、预签名 URL 或堆栈。503 的建议重试时间使用 Retry-After，不扩展 ResultBean 字段。
 
@@ -326,7 +328,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 | 操作 | 实际保留的请求 Header 与适用范围 |
 |---|---|
-| CreateSession、GetSession、DeleteSession、ListSessionModels、ListSessionCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
+| CreateSession、GetSession、DeleteSession、ListSessionModels、ListAgentCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
 | ListSessionEvents | 可选 Accept-Language、Accept: application/json；只读历史不创建执行凭据 |
 | UpdateSession | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选 |
 | QuerySkillLoadStatistics | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选；管理调用方授权仍由上游/部署边界保证 |
@@ -345,11 +347,11 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 取得的值只进入本批次内存快照，只有实际业务 execute 可以使用；不写入 Schedule、Run、Session、Prompt、日志、公开事件或普通资源响应。工具发现和模型调用不使用该值。Claw 调用 Mate 的服务间认证另行配置，不与业务执行凭据混用。
 
-普通 Session 的四项可选 Header、原名透传和组合规则不变，中断、确认与回答仍不能覆盖原执行快照。定时入口首版只执行无需人工交互的工作；业务权限 ASK、自定义问题或计划审核按 [M10 非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)结束本次并记录原因，不创建持久等待或默认批准。参数校验错误仍先于权限判断，由模型按同次可信定义修正，运行时不自动猜参或重放业务。
+凭据来源跟随根执行而不跟随 Session：用户在定时任务创建的 Session 中继续对话时按普通消息使用本次请求快照，不取统一账号 Token；切换机制见 [M10 §3.11](../08-CampusClaw定时任务/README.md#session-credentials)。普通 Session 的四项可选 Header、原名透传和组合规则不变，中断、确认与回答仍不能覆盖原执行快照。定时入口首版只执行无需人工交互的工作；业务权限 ASK、自定义问题或计划审核按 [M10 非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)结束本次并记录原因，不创建持久等待或默认批准。参数校验错误仍先于权限判断，由模型按同次可信定义修正，运行时不自动猜参或重放业务。
 
 ### 7.2 生命周期与失败结果
 
-普通 HTTP 捕获的四项值仅保存在本次执行或命令处理的内存对象中。Child 可只读使用同一次父执行快照，不存入 Child Session。中断、工具确认、计划审核和问题回答请求不覆盖原执行凭据；等待期间保留原快照，真正结束后释放。Header 不写日志、ResultBean、Session、Prompt、Event 或工具结果，Spring 单例不保存原值。
+普通 HTTP 捕获的四项值仅保存在本次执行或命令处理的内存对象中。Subagent 可只读使用同一次父执行快照，不存入 Subagent Session。中断、工具确认、计划审核和问题回答请求不覆盖原执行凭据；等待期间保留原快照，真正结束后释放。Header 不写日志、ResultBean、Session、Prompt、Event 或工具结果，Spring 单例不保存原值。
 
 Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行失败按既有工具结果通道转换为 `isError=true`，不把已经接受的 Events 请求改报为“缺少 Header”的入口错误，也不因空快照在调用前伪造 Mate 认证失败。保留可安全展示的错误信息，不原样转发上游 HTTP 信封或可能含秘密的错误正文；公共错误码与文本投影沿用现有契约，不新增凭据专用码。网络、超时或不可解析响应同样按既有工具失败处理，不能断言是凭据错误。实际 execute 不自动重放。
 
@@ -366,7 +368,7 @@ Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行�
 | 无 Mate 工具调用 | 不发 execute，不产生缺少 Mate 凭据错误 |
 | Mate 返回凭据失败 | 已实际请求 Mate；模型工具结果及公开结果均为失败，不生成新的入口 400，不泄漏 Header |
 | 发现失败、取消、缺 Host 上下文或确认拒绝 | 保持各自错误/取消语义；不得与空凭据混为 unavailable，也不得绕过原有准入 |
-| 确认/回答携带新值，或并行两个执行 | 原执行与 Child 继续使用自己的快照，不被控制请求或其他执行覆盖；发现、模型、日志和持久化无四项值 |
+| 确认/回答携带新值，或并行两个执行 | 原执行与 Subagent 继续使用自己的快照，不被控制请求或其他执行覆盖；发现、模型、日志和持久化无四项值 |
 | Mate 超时或异常 | 按现有工具失败返回，不自动重复 execute，也不假定失败一定由凭据造成 |
 
 定时增量另验收：Mate 定义查询与凭据解析不携带用户业务凭据；服务间身份不能扩大业务授权；持久化仅有引用，解析失败不借用历史 secret；实际 execute 使用本次可信快照，结束后释放。ASK、自定义问题与误配审核工具均阻止对应业务执行并结束本根，参数失败保持真实工具错误和原有模型修正通道；首版不增加持久等待恢复。
@@ -448,6 +450,11 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.71.0 | 2026-10-16 | ListAgentCommands 优化 Builtin 中文描述，hints 改为固定参数值列表（thinking 为 on/off，mode 为 plan/build），不含界面文案；新增可选查询参数 sessionId，省略时只返回 help、skills 与技能命令，传入时返回完整命令，并补 400 INVALID_SESSION_ID 与 404 SESSION_NOT_FOUND。 |
+| 1.70.0 | 2026-10-16 | ListAgentCommands 的 Builtin description 按 Accept-Language 国际化，成功示例补 en-US；Skill description 原样返回。 |
+| 1.69.0 | 2026-10-16 | 删除会话同事务删除其关联的定时任务及 Run，规则引用 M10 §3.13。 |
+| 1.68.0 | 2026-10-16 | 命令清单改为 `GET /agents/{agentId}/commands`，按 Agent 返回全部命令，冷缓存与创建会话共用准备流程。 |
+| 1.67.0 | 2026-10-15 | 凭据来源跟随根执行，定时 Session 中继续对话使用本次请求快照，机制引用 M10 §3.11。 |
 | 1.66.0 | 2026-10-13 | 定时执行改为统一账号，每批工具调用前向 Mate 无入参取 access-token。 |
 | 1.65.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
 | 1.64.0 | 2026-10-05 | 定时执行通过 Mate 解析凭据引用，普通 HTTP 保留原请求快照并明确非交互入口边界。 |

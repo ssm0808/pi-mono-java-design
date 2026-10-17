@@ -10,7 +10,7 @@
 
 Main Agent 先检查已有信息；只有用户掌握的信息或重要选择仍会影响后续工作时，才调用 `AskUserQuestion`。已有明确答案、可查询事实和能够合理采用且不会影响关键方案的默认值不再提问；合理假设在方案中简要说明。优先一题，不为了工具允许三题而凑题。后端发布完整 `agent.question`，前端据此展示问题；用户通过既有 POST Events 提交 `user.question_answer`。回答作为该工具的正常结果返回，原 Agent Loop 继续，保持根消息、Session、mode、原执行凭据和实施进度归属。
 
-- Runtime 默认 profile 在现有十项之后追加 `AskUserQuestion`，执行模式为 `SEQUENTIAL`；plan/build 的名称、Schema、description、顺序一致。默认 Child/Cron 不装配；即使显式配置也必须拒绝无交互根上下文的调用。Child 把待决问题交给父 Agent，Cron 汇报缺失信息并按既有任务生命周期结束。
+- Runtime 默认 profile 在现有十项之后追加 `AskUserQuestion`，执行模式为 `SEQUENTIAL`；plan/build 的名称、Schema、description、顺序一致。默认 Subagent/Cron 不装配；即使显式配置也必须拒绝无交互根上下文的调用。Subagent 把待决问题交给父 Agent，Cron 汇报缺失信息并按既有任务生命周期结束。
 - 一次工具请求包含 1～3 个问题，支持单选、多选和自由文本；只有确需同时回答的独立问题才合成多题。一张活动卡每次只显示一题，本地完成后统一提交该批全部答案；下一题依赖前一题答案时，由 Agent 收到本批结果后发起新的问题事件，不预先拼成固定三题。首版没有跳过、附件、动态表单、问题定义编辑或问题 CRUD；提交前可以返回修改自己的答案。用户可以明确回答“无法确定”，不使用空答案表示默认同意。
 - `AskUserQuestion` 收集信息；`ExitPlanMode` 审核完整方案；`user.tool_confirmation` 控制工具权限。回答不会改变 mode、批准方案、扩大工具权限或修改 TODO。build 中的问题回答继续受已有任务授权约束；实质改写获批方案仍按原规则结束执行后重新进入 plan。
 - 不新增 HTTP 路径、Session 响应字段或 Agent/Tool/Skill 元数据字段。问题数组和答案属于运行事件，不是元数据。内部执行控制与答案交接需要持久化增量，不能只增加模型工具说明和前端卡片。
@@ -24,7 +24,7 @@ Main Agent 先检查已有信息；只有用户掌握的信息或重要选择仍
 
 | 源码 / 符号 | 已观察实现 | 验证与边界 |
 |---|---|---|
-| R `tool/question/AskUserQuestionTool.java`、`QuestionRequestParser.java`、`UserQuestionPort.java`；`tool/builtin/BuiltInToolProperties.java` | 第十一项 Runtime 默认工具；SEQUENTIAL；不可变快照与窄等待端口，两模式定义一致 | 独立契约探针验证 Schema/description、默认值、UTF-16/strip；Child/Cron 不装配，显式调用仍检查交互根 |
+| R `tool/question/AskUserQuestionTool.java`、`QuestionRequestParser.java`、`UserQuestionPort.java`；`tool/builtin/BuiltInToolProperties.java` | 第十一项 Runtime 默认工具；SEQUENTIAL；不可变快照与窄等待端口，两模式定义一致 | 独立契约探针验证 Schema/description、默认值、UTF-16/strip；Subagent/Cron 不装配，显式调用仍检查交互根 |
 | R `session/PlanPolicyPromptComposer.java`；资源 `prompts/plan/ASK_USER.txt` | 六份固定资源按模式、角色及真实工具可用性组合 | 逐字核对设计资源；受控 Provider 请求确认回答保持 plan、批准才进入 build；真实模型遵循率未测 |
 | R `runtimeapi/event/RuntimeEventProjector.java` · `beginQuestion` | 共享最终调用快照，tool_call 先保存，再原子提交 question/confirming 并关闭旧段 | 实际 JAR/HTTP 顺序和 GET 历史同形；问题/答案展示 Entry 不重复进入模型消息 |
 | R `runtimeapi/runtime/RuntimeActiveExecution.java`、`RuntimePendingInteraction.java` | 一个 TOOL_PERMISSION/PLAN_REVIEW/USER_QUESTION 槽；答案领取先绑定新段输出再完成 Future | 提前答案与同步消费竞态探针通过；九种等待/输入组合隔离；原根及原执行凭据保持 |
@@ -170,7 +170,7 @@ Runtime 调试前端可直接接内部 Session 契约。Mate 公共 Chat 仍是�
 
 | 切片 | 实施内容 | 必须验收 |
 |---|---|---|
-| Q1 契约及工具 | 严格 Schema/DTO/VO、Parser、Port/Adapter、枚举/profile、两种新事件及错误 | 单/多/纯文本；TodoUpdate 在前、提问在末位时两者成功，提问后仍有调用或同批两个交互工具时整批 TOOL_BATCH_INTERACTION_INVALID 且无调用执行（待实现）；UTF-16、strip、重复/未知/null/缺题/选项归属；Runtime 两模式工具定义相同；Child/Cron 拒绝；无元数据和 Session 字段扩展 |
+| Q1 契约及工具 | 严格 Schema/DTO/VO、Parser、Port/Adapter、枚举/profile、两种新事件及错误 | 单/多/纯文本；TodoUpdate 在前、提问在末位时两者成功，提问后仍有调用或同批两个交互工具时整批 TOOL_BATCH_INTERACTION_INVALID 且无调用执行（待实现）；UTF-16、strip、重复/未知/null/缺题/选项归属；Runtime 两模式工具定义相同；Subagent/Cron 拒绝；无元数据和 Session 字段扩展 |
 | Q2 等待与事务 | 收敛唯一待交互槽；问题/confirming/指针同事务；答案/回执/新段同事务；答案领取与消费 | tool_call 前置；共享不可变快照；错误无卡片；三类不能互相消费；插入失败整笔回滚；在工具 await 前已领取答案仍正常返回；原根与凭据不变 |
 | Q3 控制及恢复 | 跨实例轮询与单次领取、中断/超时、可靠终态、删除和保留清理 | 回答/回答、回答/停止、回答/超时竞争；未领取答案随真实终态取消消费且回执保留；STOPPING/回滚/已领取记录不误改；原段关闭；新段首帧完整回执；不重放写；失联不假装成功或自动接管 |
 | Q4 前端及桥接 | QuestionCard/Store、规范化提交、同 reducer 历史恢复；需要企业入口时同步 Mate 公共契约 | 单/多/文本展示无需工具日志；缺页禁答、重复帧、跨端已回答、回执丢失、切会话草稿、IME/键盘/390px；plan 不建 TODO，build 回答不重置清单；已实现展示的验收要求：当前仅一题可见、翻页不 POST、末题仅一次提交、前后导航保留答案、调用/结果汇聚且失败可见、收起不提交 |

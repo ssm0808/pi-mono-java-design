@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-RUNTIME = ROOT.parents[2] / "01-总体架构/01-CampusClaw多Agent运行时"
+RUNTIME = ROOT.parents[3] / "01-总体架构/01-CampusClaw多Agent运行时"
 sys.path.insert(0, str(RUNTIME))
 
 from render_chat_http_v1 import build_operation_html, validate_model, write_output

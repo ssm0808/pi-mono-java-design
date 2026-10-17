@@ -6,7 +6,7 @@
 ' session/AgentSessionFactory.java:create
 ' tool/agent/SubagentExecutionService.java:runChild
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
-' Observed behavior: Runtime persists; direct Child/Cron factory calls do not share its appender.
+' Observed behavior: Runtime persists; direct Subagent/Cron factory calls do not share its appender.
 ' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -57,7 +57,7 @@ end note
 ' session/AgentSessionFactory.java:create
 ' tool/agent/SubagentExecutionService.java:runChild
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
-' Observed behavior: Runtime persists; direct Child/Cron factory calls do not share its appender.
+' Observed behavior: Runtime persists; direct Subagent/Cron factory calls do not share its appender.
 ' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif

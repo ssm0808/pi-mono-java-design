@@ -61,7 +61,7 @@ B01～B15 已确认，完整字段、成功/失败、工具确认、中断配对
 
 user.interrupt 的必填 targetEventId 只匹配原消息，不能取消随后开始的新执行；重复停止返回冲突，接受后自然完成仍保留真实原因。等待超时只断流并对账。跨实例控制和固定目标竞态由 [总体设计 §4.4](chat-events-design.md#44-数据库停止请求与实例批量检查) 维护，本流只消费已提交结果，遵守回执先行、终态去重与慢连接隔离。
 
-本期每执行最多一个待交互项：工具权限确认与计划审核互斥，不新增通用工具进度或子 Agent 公共事件；build 执行清单使用 agent.todo_updated。停止后才能重新提交普通消息，FollowUp 为 [未来扩展](chat-follow-up-future-design.md)。
+本期每执行最多一个待交互项：工具权限确认与计划审核互斥，不新增通用工具进度或 Subagent 公共事件；build 执行清单使用 agent.todo_updated。停止后才能重新提交普通消息，FollowUp 为 [未来扩展](chat-follow-up-future-design.md)。
 
 ### 4.1 完整内容与预览
 

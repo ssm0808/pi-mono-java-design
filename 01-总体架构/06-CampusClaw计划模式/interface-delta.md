@@ -10,7 +10,7 @@
 
 mode 已是共享 Session 响应必填字段，创建复制 Agent.mode，旧元数据缺省 build，已有 Session 不跟随 Agent 更新；state 仍为 idle/running。仅名称请求可在 running 更新；直接 Session POST 只要携带 mode/modelId/thinking，均需 idle 与一次数据库原子提交。主动设置 build 不批准计划、不启动模型。
 
-[`/mode`](../../04-命令与技能/01-内置命令/README.md#mode-command) 使用共享 Command POST，空参查询、plan/build 参数切换；复用相同模式能力、行锁、原子更新及完整 Session 响应，两入口均在数据库锁内读取最新状态、按提交字段更新，同字段后成功提交生效。mode 命令待实现；移除旧 HTTP 条件更新机制也待实现。
+[`/mode`](../04-CampusClaw命令系统/01-内置命令/README.md#mode-command) 使用共享 Command POST，空参查询、plan/build 参数切换；复用相同模式能力、行锁、原子更新及完整 Session 响应，两入口均在数据库锁内读取最新状态、按提交字段更新，同字段后成功提交生效。mode 命令待实现；移除旧 HTTP 条件更新机制也待实现。
 
 所有 Claw 接口不使用 If-Match、Idempotency-Key 或配套 ETag，也不增加同用途的 body/query 令牌。GET、创建、更新及复用 Session 的 Command 响应保持同一种 Session 结构，不增加待审核目标字段。计划及审核决定通过 Events 传递，卡片按[主设计 §6.2](README.md#62-恢复与结果不确定)从完整事件恢复。当前待审核目标仅保存在服务端执行控制记录中，确认接受时锁内校验；不新增状态查询接口或可写审核字段。
 

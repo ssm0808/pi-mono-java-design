@@ -43,7 +43,7 @@ GET 返回普通 JSON。结果使用
 
 任务更新已实现并登记到共享事件源：`agent.todo_updated` 直接返回完整 `todos`，无需前端识别工具名或解析工具结果。它与成功 ToolResult 的公共事件同源同事务保存，提交后发出；失败不更新清单。具体结构、源码基线与验收由 [TodoUpdate 主设计](../06-CampusClaw计划模式/todo-update.md) 唯一维护；Java `8c5fda1d` 已具备 TodoUpdate、RuntimeTodoEventMapper 与显式任务事件分支；本次静态核验不等于测试通过。Mate 公共桥接需单独同步后开放。
 
-[Skill 使用统计](../../04-命令与技能/03-Skill加载统计/README.md)复用内部完整工具结果，每次真实成功 Skill 调用首次提交时同事务加一，不新增公共事件。三入口统一持久化及 Child 独立历史由[统一历史](unified-event-persistence.md)维护；父会话只保留摘要，子历史按自己的 Session 授权读取。累计不是公共事件条数，恢复/复制不计数；精确 from/to 与日表仍待核实。新增统一链路待实现。
+[Skill 使用统计](../04-CampusClaw命令系统/03-Skill加载统计/README.md)复用内部完整工具结果，每次真实成功 Skill 调用首次提交时同事务加一，不新增公共事件。三入口统一持久化及 Subagent 独立历史由[统一历史](unified-event-persistence.md)维护；父会话只保留摘要，子历史按自己的 Session 授权读取。累计不是公共事件条数，恢复/复制不计数；精确 from/to 与日表仍待核实。新增统一链路待实现。
 
 ## 2. 历史返回什么
 
@@ -396,7 +396,7 @@ B09 的事件关联与 B13 Skill SSE 属于架构变更，B01 错误投影与 B1
 | B09 | 防止误停下一轮 | 给 user.interrupt 增加必填 targetEventId，引用原 user.message 的 eventId；不匹配当前执行时返回 409。agent.* 和 idle 用 sourceEventId 引用同一原消息，便于历史对账。复用已有事件身份，不新增 runId/executionId；这是产品字段约束。 |
 | B10 | 断线与回执丢失 | 保留无自动写重试的方案：没有收到首帧时显示“提交结果不确定”，不靠相同文本猜测成功，不新增幂等键。收到回执后按 eventId 和 B09 的关联补读历史；断流本身不取消执行，也不代表失败。 |
 | B11 | HTTP 故障与心跳 | 接受前：非法参数 400、不存在 404、状态冲突 409、容量/依赖暂不可用 503、内部失败 500，统一 ResultBean；接受后不得伪装成未接受。SSE 已开始则不改成 JSON，能保存权威失败则发送 failed，否则断流并对账。采用 : ping 注释心跳；慢客户端可丢 preview，完整帧不能入队则断开。 |
-| B12 | 配置、压缩与用量 | 模型/思考/模式配置变更和压缩保留独立完整事件，映射到统一 Session Events；Usage 放在对应完整 Agent 消息，Session 保留累计用量。不新增通用 command 生命周期或子 Agent 公共事件；build 任务进度由 agent.todo_updated 表达；已有内部记录逐类标明公开映射或不公开理由。 |
+| B12 | 配置、压缩与用量 | 模型/思考/模式配置变更和压缩保留独立完整事件，映射到统一 Session Events；Usage 放在对应完整 Agent 消息，Session 保留累计用量。不新增通用 command 生命周期或 Subagent 公共事件；build 任务进度由 agent.todo_updated 表达；已有内部记录逐类标明公开映射或不公开理由。 |
 | B13 | Skill 请求与响应 | 共享 POST /sessions/{sessionId}/command：Skill 用 name="skill:<name>"、arguments 字符串和可选 fileIds；Skill 执行返回与消息一致的 SSE，Builtin 保持普通 JSON。Skill 遵循同一 Session 单消息准入，首帧回执为展开前的 user.message，随后普通 Agent/Tool/idle 事件，不新增 commandId。 |
 | B14 | Skill 快照与恢复 | 受理前解析完整 Agent/Skill 快照并重检绑定、权限和容量，受理后本次执行固定快照；Skill 正文按资源内容处理，不提升为系统权限。内部恢复所需内容沿用 Session 持久化与保留策略，公共历史只展示用户调用和执行结果，不另建 Skill 全文审计副本。 |
 | B15 | 数据保留 | 沿用部署统一的数据保留策略，不为 Events 或 Skill 另定天数；没有已配置策略时不新增自动清理。保留范围变化后重新从第 1 页加载，不能承诺永久可恢复。 |

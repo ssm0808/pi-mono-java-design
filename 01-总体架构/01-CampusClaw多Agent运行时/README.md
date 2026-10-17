@@ -2,15 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.32.0 |
-| 更新日期 | 2026-10-12 |
+| 文档版本 | 3.34.0 |
+| 更新日期 | 2026-10-16 |
 | 职责 | M01：Agent 执行装配、入口协作与父子执行生命周期 |
 | 设计状态 | 当前目标；实现状态按专项源码证据分别判断 |
 | 源码证据 | [固定提交、路径、符号与差距](source-evidence.md) |
 
 Session 与完整事件的时间采用[统一秒级目标](time-contract.md)：UTC、无小数秒，写入和回显一致；此精度调整待实现，其他功能状态仍按各节证据。
 
-[统一执行历史](unified-event-persistence.md)维护交互、Cron、Child 的独立持久 Session、逐工具提交、父子关联与 Skill 同事务投影；新增能力待实现，最新源码范围见[专项证据](unified-event-persistence-evidence.md)。
+[统一执行历史](unified-event-persistence.md)维护交互、Cron、Subagent 的独立持久 Session、逐工具提交、父子关联与 Skill 同事务投影；新增能力待实现，最新源码范围见[专项证据](unified-event-persistence-evidence.md)。
 
 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#t_session_executions)统一维护Runtime所用表、字段、约束和索引；本文继续维护行为与契约。
 
@@ -24,9 +24,9 @@ Runtime 采用同一 POST 提交用户事件并接收该请求的 SSE，GET 读�
 
 | 本模块负责 | 所属模块维护的协作边界 |
 |---|---|
-| Runtime、Cron、Child 的执行对象装配与关闭 | [工具系统](../02-CampusClaw工具系统/README.md)维护 profile、工具实例、受管目录与缓存；[M10 定时任务](../08-CampusClaw定时任务/README.md)维护待实现的后台受理与 Run 关联 |
+| Runtime、Cron、Subagent 的执行对象装配与关闭 | [工具系统](../02-CampusClaw工具系统/README.md)维护 profile、工具实例、受管目录与缓存；[M10 定时任务](../08-CampusClaw定时任务/README.md)维护待实现的后台受理与 Run 关联 |
 | 模型与工具循环的入口协作 | [Model](../../02-服务与接口/03-Model/README.md)维护业务 Agent 设置的模型选择与流适配 |
-| 父子执行的独立上下文与生命周期 | [工具系统 Agent 工具](../02-CampusClaw工具系统/built-in-tool-contracts.md)维护委派参数与结果 |
+| 父子执行的独立上下文与生命周期 | [工具系统 Agent 工具](../02-CampusClaw工具系统/built-in-tool-contracts.md)维护调用参数与结果 |
 | Session 运行对象与持久化恢复的衔接 | [会话记忆](../../03-数据与存储/01-会话记忆GaussDB/README.md)维护上下文与存储 |
 | 模式与执行快照的衔接 | [计划模式](../06-CampusClaw计划模式/README.md)维护 plan/build 提示词、审核与续跑 |
 
@@ -67,13 +67,13 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 | 5 | `GET` | `/sessions/{sessionId}/events` | 查看对话历史 |
 | 6 | `GET` | `/sessions/{sessionId}/models` | 查询可用模型 |
 | 7 | `POST` | `/sessions/{sessionId}` | 更新会话 |
-| 8 | `GET` | `/sessions/{sessionId}/commands` | 查看会话命令清单 |
+| 8 | `GET` | `/agents/{agentId}/commands` | 查看 Agent 命令清单 |
 | 9 | `POST` | `/sessions/{sessionId}/command` | 执行会话命令 |
 | 10 | `POST` | `/internal/skills/load-statistics/query` | 按 skillIds 批量查询累计/精确范围激活统计；排名、趋势暂缓 |
 | 11 | `GET` | `/agents/{agentId}/events` | 按 Agent 与时间范围跨会话列出用户请求（user.message），供 Mate Trace 使用 |
 | 12 | `GET` | `/sessions/{sessionId}/events/{eventId}/turn` | 由任意一条事件读取所在轮次的全部事件 |
 
-统计查询由 [M05 使用统计 §6](../../04-命令与技能/03-Skill加载统计/README.md#6-查询接口)维护：F19 采用按指定 skillIds 的累计或精确时间范围查询，返回 activationCount/lastLoadedAt；排名和日趋势暂缓。接口不返回 scope；采集入口、去重和存储目标的其他差异仍由 F20 及专题证据单独对齐，不表示整项验收。
+统计查询由 [M05 使用统计 §6](../04-CampusClaw命令系统/03-Skill加载统计/README.md#6-查询接口)维护：F19 采用按指定 skillIds 的累计或精确时间范围查询，返回 activationCount/lastLoadedAt；排名和日趋势暂缓。接口不返回 scope；采集入口、去重和存储目标的其他差异仍由 F20 及专题证据单独对齐，不表示整项验收。
 
 第 11、12 项供 Mate Trace 只读调用，设计见 [Agent 用户事件与轮次查询](agent-user-events-design.md)。
 
@@ -98,13 +98,13 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 | 领域与传输 | Runtime 内核不依赖 Controller、SSE 或公共 Chat 类型；Application 组织领域事件到传输的投影 |
 | 对象生命周期 | Manager、应用服务、Registry 为 Spring 单例；Catalog 为请求快照；Session、工具与 Projector 按执行隔离 |
 | 持久化 | 完整消息与已确认领域记录用于恢复；有序追加采用短事务，模型调用、工具执行和网络发送不占用行锁 |
-| 父子执行 | 父子使用相同核心类型，但独立持有消息、工作区、工具和上下文；父执行负责 Child 的等待与取消传播 |
+| 父子执行 | 父子使用相同核心类型，但独立持有消息、工作区、工具和上下文；父执行负责 Subagent 的等待与取消传播 |
 
 ## 7. Manager 与多 Agent Runtime 核心
 
 ### 7.1 Agent 发布目录
 
-`AgentRuntimeManager.prepare(agentId)` 读取完整缓存，缺失时准备并发布受管目录；显式 refresh 通过临时目录校验后原子替换，失败保留旧目录。Runtime、Cron 与 Child 共用准备入口。目录文件、名称/版本校验和缓存语义由 [工具系统](../02-CampusClaw工具系统/README.md)维护；Agent 默认 mode 由 [元数据设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)维护。
+`AgentRuntimeManager.prepare(agentId)` 读取完整缓存，缺失时准备并发布受管目录；显式 refresh 通过临时目录校验后原子替换，失败保留旧目录。Runtime、Cron 与 Subagent 共用准备入口。目录文件、名称/版本校验和缓存语义由 [工具系统](../02-CampusClaw工具系统/README.md)维护；Agent 默认 mode 由 [元数据设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)维护。
 
 ![元数据发布与执行快照](设计图/元数据/metadata_runtime_directory_mapping.svg)
 
@@ -116,7 +116,7 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 
 ### 7.3 Command 与公共 Session 能力
 
-Command 通过 HTTP 进入应用服务。Builtin 调用窄职责服务并返回 JSON，Skill 经过共享消息准入与执行服务返回 SSE；列表和执行各自解析快照，写操作在所属锁内复核。全局目标类图和命令语义见 [Slash Command](../../04-命令与技能/00-Slash-Command通用模块/README.md)。
+Command 通过 HTTP 进入应用服务。Builtin 调用窄职责服务并返回 JSON，Skill 经过共享消息准入与执行服务返回 SSE；列表和执行各自解析快照，写操作在所属锁内复核。全局目标类图和命令语义见 [Slash Command](../04-CampusClaw命令系统/README.md)。
 
 压缩属于公共 Session 能力，手工命令只是入口。算法、上下文恢复与 Usage 累计见 [HTTP 中的压缩入口](chat-http-v1-design.md#221-公共-session-压缩能力内部算法与已确认公共映射)及其所属存储专题。
 
@@ -145,6 +145,8 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.34.0 | 2026-10-16 | 命令清单改为 `GET /agents/{agentId}/commands`（ListAgentCommands），同步 HTTP 1.68.0。 |
+| 3.33.0 | 2026-10-15 | ListAgentEvents 响应增加 total，ListTurnEvents 不变。 |
 | 3.32.0 | 2026-10-13 | 接口清单加入 ListAgentEvents 与 ListTurnEvents；ListAgentEvents 只列出 user.message。 |
 | 3.31.1 | 2026-10-12 | 用户事件与轮次查询的说明改为面向 Mate Trace。 |
 | 3.31.0 | 2026-10-12 | 关联 Mate 按 Agent 查询用户事件与按事件读取轮次的待评审设计。 |

@@ -1,0 +1,475 @@
+{
+  "operation": {
+    "shortName": "查看 Agent 命令清单",
+    "operationKey": "ListAgentCommands",
+    "method": "GET",
+    "path": "/agents/{agentId}/commands",
+    "summary": "列出指定 Agent 的命令；带 sessionId 时包含会话命令",
+    "description": "查询指定 Agent 的命令，返回名称、类别、用途和参数提示，供客户端展示 Slash 命令列表。可选查询参数 sessionId 决定清单范围：省略时只返回与会话无关、属于智能体的命令（help、skills 与技能命令），用于尚未创建会话的新对话；传入时返回完整命令（全部 Builtin 与技能命令），sessionId 必须是该 Agent 下存在且未删除的会话。sessionId 只决定范围，清单不读取会话运行状态。Builtin 的 description 按 Accept-Language 返回 zh-CN 或 en-US，缺失或不支持时回退 en-US；Skill 的 description 原样返回作者元数据，不做翻译；hints 是可提交的固定参数值列表，只在 thinking（on、off）与 mode（plan、build）上返回；值与语言无关，不带界面文案，选项显示名由前端决定。model 的候选取自会话模型列表接口，name 与技能命令为自由文本，均不返回 hints。参数始终可省略，省略即查询；当前值与运行中能否修改属于会话状态，不在清单中返回。运行中哪些命令可执行由客户端按命令状态规则限制，并由执行接口最终准入。",
+    "parameters": [
+      {
+        "$ref": "parameters.agentId"
+      },
+      {
+        "in": "query",
+        "name": "sessionId",
+        "required": false,
+        "schema": {
+          "$ref": "resourceIdPatterns.session"
+        },
+        "description": "可选。省略时只返回 help、skills 与技能命令；传入时返回完整命令。必须是该 Agent 下存在且未删除的 Session，否则返回 404；只决定清单范围，不读取运行状态。"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体；不接受前缀、搜索词或 forceReload。",
+      "example": null
+    },
+    "responses": [
+      {
+        "status": "200",
+        "label": "OK",
+        "tabLabel": "200 · 完整命令",
+        "summary": "带 sessionId：返回全部命令，固定顺序的 Builtin 后追加按名称排序的技能命令。不随会话运行状态变化。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "type": "builtin",
+                  "description": "介绍当前智能体的用途和使用场景"
+                },
+                {
+                  "name": "status",
+                  "type": "builtin",
+                  "description": "查看会话状态、模型、深度思考与工作模式"
+                },
+                {
+                  "name": "name",
+                  "type": "builtin",
+                  "description": "查看或修改会话名称"
+                },
+                {
+                  "name": "model",
+                  "type": "builtin",
+                  "description": "查看或切换模型"
+                },
+                {
+                  "name": "thinking",
+                  "type": "builtin",
+                  "description": "开启或关闭深度思考",
+                  "hints": [
+                    "on",
+                    "off"
+                  ]
+                },
+                {
+                  "name": "mode",
+                  "type": "builtin",
+                  "description": "查看或切换计划/实施模式",
+                  "hints": [
+                    "plan",
+                    "build"
+                  ]
+                },
+                {
+                  "name": "compact",
+                  "type": "builtin",
+                  "description": "压缩当前会话的上下文"
+                },
+                {
+                  "name": "skills",
+                  "type": "builtin",
+                  "description": "列出当前智能体可用的技能"
+                },
+                {
+                  "name": "skill:pdf",
+                  "type": "skill",
+                  "description": "分析和生成 PDF 文档"
+                }
+              ]
+            }
+          },
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "type": "builtin",
+                  "description": "Introduce this agent's purpose and use cases"
+                },
+                {
+                  "name": "status",
+                  "type": "builtin",
+                  "description": "Show the session status, model, deep thinking and work mode"
+                },
+                {
+                  "name": "name",
+                  "type": "builtin",
+                  "description": "Show or rename the session"
+                },
+                {
+                  "name": "model",
+                  "type": "builtin",
+                  "description": "Show or switch the model"
+                },
+                {
+                  "name": "thinking",
+                  "type": "builtin",
+                  "description": "Turn deep thinking on or off",
+                  "hints": [
+                    "on",
+                    "off"
+                  ]
+                },
+                {
+                  "name": "mode",
+                  "type": "builtin",
+                  "description": "Show or switch between plan and build mode",
+                  "hints": [
+                    "plan",
+                    "build"
+                  ]
+                },
+                {
+                  "name": "compact",
+                  "type": "builtin",
+                  "description": "Compact the current session context"
+                },
+                {
+                  "name": "skills",
+                  "type": "builtin",
+                  "description": "List the skills available to this agent"
+                },
+                {
+                  "name": "skill:pdf",
+                  "type": "skill",
+                  "description": "分析和生成 PDF 文档"
+                }
+              ]
+            }
+          }
+        },
+        "id": "200-commands"
+      },
+      {
+        "status": "200",
+        "label": "OK",
+        "tabLabel": "200 · 无会话",
+        "summary": "不带 sessionId：只返回与会话无关的 help、skills 与技能命令，顺序与完整清单一致。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "type": "builtin",
+                  "description": "介绍当前智能体的用途和使用场景"
+                },
+                {
+                  "name": "skills",
+                  "type": "builtin",
+                  "description": "列出当前智能体可用的技能"
+                },
+                {
+                  "name": "skill:pdf",
+                  "type": "skill",
+                  "description": "分析和生成 PDF 文档"
+                }
+              ]
+            }
+          },
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "type": "builtin",
+                  "description": "Introduce this agent's purpose and use cases"
+                },
+                {
+                  "name": "skills",
+                  "type": "builtin",
+                  "description": "List the skills available to this agent"
+                },
+                {
+                  "name": "skill:pdf",
+                  "type": "skill",
+                  "description": "分析和生成 PDF 文档"
+                }
+              ]
+            }
+          }
+        },
+        "id": "200-agent-commands"
+      },
+      {
+        "status": "200",
+        "label": "OK",
+        "tabLabel": "200 · 未绑定 Skill",
+        "summary": "带 sessionId 且完整快照中没有绑定 Skill 时只返回 Builtin；这是成功，不等于快照缺失。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "type": "builtin",
+                  "description": "介绍当前智能体的用途和使用场景"
+                },
+                {
+                  "name": "status",
+                  "type": "builtin",
+                  "description": "查看会话状态、模型、深度思考与工作模式"
+                },
+                {
+                  "name": "name",
+                  "type": "builtin",
+                  "description": "查看或修改会话名称"
+                },
+                {
+                  "name": "model",
+                  "type": "builtin",
+                  "description": "查看或切换模型"
+                },
+                {
+                  "name": "thinking",
+                  "type": "builtin",
+                  "description": "开启或关闭深度思考",
+                  "hints": [
+                    "on",
+                    "off"
+                  ]
+                },
+                {
+                  "name": "mode",
+                  "type": "builtin",
+                  "description": "查看或切换计划/实施模式",
+                  "hints": [
+                    "plan",
+                    "build"
+                  ]
+                },
+                {
+                  "name": "compact",
+                  "type": "builtin",
+                  "description": "压缩当前会话的上下文"
+                },
+                {
+                  "name": "skills",
+                  "type": "builtin",
+                  "description": "列出当前智能体可用的技能"
+                }
+              ]
+            }
+          },
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "commands": [
+                {
+                  "name": "help",
+                  "type": "builtin",
+                  "description": "Introduce this agent's purpose and use cases"
+                },
+                {
+                  "name": "status",
+                  "type": "builtin",
+                  "description": "Show the session status, model, deep thinking and work mode"
+                },
+                {
+                  "name": "name",
+                  "type": "builtin",
+                  "description": "Show or rename the session"
+                },
+                {
+                  "name": "model",
+                  "type": "builtin",
+                  "description": "Show or switch the model"
+                },
+                {
+                  "name": "thinking",
+                  "type": "builtin",
+                  "description": "Turn deep thinking on or off",
+                  "hints": [
+                    "on",
+                    "off"
+                  ]
+                },
+                {
+                  "name": "mode",
+                  "type": "builtin",
+                  "description": "Show or switch between plan and build mode",
+                  "hints": [
+                    "plan",
+                    "build"
+                  ]
+                },
+                {
+                  "name": "compact",
+                  "type": "builtin",
+                  "description": "Compact the current session context"
+                },
+                {
+                  "name": "skills",
+                  "type": "builtin",
+                  "description": "List the skills available to this agent"
+                }
+              ]
+            }
+          }
+        },
+        "id": "200-no-skills"
+      },
+      {
+        "id": "400-invalid-agent-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_AGENT_ID",
+        "label": "Bad Request",
+        "summary": "agentId 不符合资源标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_AGENT_ID",
+            "resMsg": "agentId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_AGENT_ID",
+            "resMsg": "The agentId format is invalid."
+          }
+        }
+      },
+      {
+        "id": "400-invalid-session-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_SESSION_ID",
+        "label": "Bad Request",
+        "summary": "传入的 sessionId 不符合标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "sessionId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The sessionId format is invalid."
+          }
+        }
+      },
+      {
+        "id": "404-agent-not-found",
+        "status": "404",
+        "tabLabel": "404 · AGENT_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "指定的 Agent 不存在。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "AGENT_NOT_FOUND",
+            "resMsg": "指定的 Agent 不存在。"
+          },
+          "en-US": {
+            "resCode": "AGENT_NOT_FOUND",
+            "resMsg": "The specified Agent does not exist."
+          }
+        }
+      },
+      {
+        "id": "404-session-not-found",
+        "status": "404",
+        "tabLabel": "404 · SESSION_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "传入的 Session 不存在、已删除或不属于该 Agent；不会隐式创建 Session，也不回退为无会话清单。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        }
+      },
+      {
+        "id": "422-agent-not-available",
+        "status": "422",
+        "tabLabel": "422 · AGENT_NOT_AVAILABLE",
+        "label": "Unprocessable Entity",
+        "summary": "Agent 存在但无法准备完整快照（包括本实例无缓存且从 Mate 准备失败）；不返回只含 Builtin 的残缺清单。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "AGENT_NOT_AVAILABLE",
+            "resMsg": "当前 Agent 运行时不可用。"
+          },
+          "en-US": {
+            "resCode": "AGENT_NOT_AVAILABLE",
+            "resMsg": "The current Agent runtime is unavailable."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "headerReview": {
+      "status": "confirmed",
+      "confirmedAt": "2026-09-22",
+      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输 Header；不改变上游授权，不拒绝额外收到的 Header。"
+    },
+    "catalogScope": {
+      "status": "待评审",
+      "decision": "清单按 Agent 查询，sessionId 为可选查询参数：省略时只返回 help、skills 与技能命令，传入时返回完整命令；sessionId 只决定范围，不读运行状态。冷缓存时与创建会话共用 prepare，错误码与创建会话一致。"
+    },
+    "descriptionLocale": {
+      "status": "已确认",
+      "confirmedAt": "2026-10-16",
+      "decision": "Builtin description 按 Accept-Language 国际化（zh-CN/en-US，回退 en-US）；Skill description 原样返回；hints 与语言无关。"
+    },
+    "hintsValues": {
+      "status": "待评审",
+      "decision": "保留 hints 字段，改为可提交的固定值列表：thinking 为 on/off，mode 为 plan/build；其余命令省略。接口不提供界面文案。"
+    }
+  }
+}

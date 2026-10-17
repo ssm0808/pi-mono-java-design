@@ -1,6 +1,6 @@
 # Skill 成功调用次数统计设计
 
-[命令与技能](../README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#skill-target) · [M05 主设计](../00-Slash-Command通用模块/README.md) · [统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md) · [源码与差距](source-evidence.md) · [验证](validation.md)
+[命令系统](../README.md) · [Claw 数据库设计](../../../03-数据与存储/Claw数据库设计.md#skill-target) · [M05 主设计](../README.md) · [统一历史](../../01-CampusClaw多Agent运行时/unified-event-persistence.md) · [源码与差距](source-evidence.md) · [验证](validation.md)
 
 | 属性 | 值 |
 |---|---|
@@ -13,7 +13,7 @@
 
 ## 1. 业务问题、正常处理与失败
 
-园区巡检中，主 Agent 成功调用告警处置 Skill 两次，子 Agent 又成功调用一次，总数增加三次。Cron、Child、交互会话都已经需要保存工具结果，统计直接消费同一记录，不再为统计另造一套调用历史。
+园区巡检中，主 Agent 成功调用告警处置 Skill 两次，Subagent 又成功调用一次，总数增加三次。Cron、Subagent、交互会话都已经需要保存工具结果，统计直接消费同一记录，不再为统计另造一套调用历史。
 
 可信目标解析、参数校验、权限或必要确认、业务执行、后置处理依次完成后，Runtime 提交完整 tool.result。首次插入真实成功 Skill 结果的同一事务，更新一行累计；Entry、公共投影和累计一起提交，再允许模型继续。准备/权限错误、后置 hook 改为失败、未知结果都不计数；内容被改写但最终成功仍计，统计不再验证正文/hash 来另定成功。
 
@@ -49,7 +49,7 @@ M06 的 SessionEventAppender 复用既有 Repository 事务：重检固定 execu
 | 同事务 t_skill_usage_stats | 从统一采集切换点开始已提交的累计次数，Session 删除不减 | 当前目标；唯一一张统计表，没有独立统计流水 |
 | 异步消费/日表/独立分析库 | 大数据量、趋势或统计故障隔离 | 没有已确认必要性，首版不额外建设；已有接口/日表去留仍待核实 |
 
-表字段、时间精度、约束及历史缺口由[统一数据库设计](../../03-数据与存储/Claw数据库设计.md#skill-target)维护，[schema.sql](schema.sql)是与其关联的待实现片段。COUNT 范围与保守缺口相交时不能声称完整；本文继续维护计数口径和查询决策。
+表字段、时间精度、约束及历史缺口由[统一数据库设计](../../../03-数据与存储/Claw数据库设计.md#skill-target)维护，[schema.sql](schema.sql)是与其关联的待实现片段。COUNT 范围与保守缺口相交时不能声称完整；本文继续维护计数口径和查询决策。
 
 累计更新与结果首次插入同事务，采用原子加一和 MAX 时间；普通 INSERT/唯一约束及重复核对由统一追加负责，不能“无条件忽略冲突后继续加一”。Mapper 片段见[record-usage.sql](record-usage.sql)。真实 GaussDB 的 UPSERT、唯一冲突、JSONB 与事务行为必须集成验证。
 
@@ -73,7 +73,7 @@ Session 清理与追加争用相同 Session/执行锁。先禁止活跃或未知
 
 ## 7. 推荐目标类图与提交时序
 
-全局执行、Host、Factory 和持久化结构见[统一历史全局图](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#全局目标类图)。下图只展开 M05 投影与查询，跨模块主链通过引用复用。
+全局执行、Host、Factory 和持久化结构见[统一历史全局图](../../01-CampusClaw多Agent运行时/unified-event-persistence.md#全局目标类图)。下图只展开 M05 投影与查询，跨模块主链通过引用复用。
 
 ![Skill 结果投影与查询](skill_load_statistics_classes.svg)
 
@@ -89,7 +89,7 @@ Session 清理与追加争用相同 Session/执行锁。先禁止活跃或未知
 
 1. 先完成统一受理、三入口持久化及逐工具提交端口；验证校验错误、拒绝、后置处理、取消及并行结果覆盖。
 2. 增加内部可信 skillId 与结果唯一关联；接入同事务投影及累计查询，更新完整安装 DDL 与公司镜像。
-3. 覆盖同任务三次成功加三、主/Cron/Child 均计、不同真实调用复用 Provider ID、同结果并发重试只加一、冲突载荷拒绝、后置失败不计和后续任务失败不减。
+3. 覆盖同任务三次成功加三、主/Cron/Subagent 均计、不同真实调用复用 Provider ID、同结果并发重试只加一、冲突载荷拒绝、后置失败不计和后续任务失败不减。
 4. 注入 Entry/公共事件/累计/提交失败，检查全部回滚、无自动业务重放；慢库和热点锁测试历史推进延迟，不能以单元测试宣称容量。
 5. 验证删除与追加竞争、缺口登记、复制/压缩/恢复不计、同备份点恢复；未决精确范围在实现前收敛。
 6. 切换后删除无独立消费者的专用采集链，防止双重累计；源码读取和新实现验收分开报告。

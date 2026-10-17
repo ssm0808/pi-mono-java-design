@@ -108,7 +108,7 @@ def values_for_key(value: Any, key: str):
 
 
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.5.0", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.7.0", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
     require("GET 字段已确认" in common["api"]["visibility"] and "公共边界待评审" in common["api"]["visibility"],
             "GET confirmation must not approve the public boundary")
@@ -148,7 +148,7 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
 def validate_catalog(models: list[dict[str, Any]]) -> None:
     operation = next(model["operation"] for model in models if model["operation"]["operationKey"] == "ListChatCommands")
     validate_catalog_examples(operation)
-    runtime = json.loads((RUNTIME_ROOT / "接口契约/操作/12-list-session-commands.json").read_text(encoding="utf-8"))
+    runtime = json.loads((RUNTIME_ROOT / "接口契约/操作/12-list-agent-commands.json").read_text(encoding="utf-8"))
     validate_projection_pair(runtime["operation"], operation)
     codes = set(values_for_key(operation["responses"], "resCode"))
     require({"UNAUTHENTICATED", "CHAT_ACCESS_DENIED", "CHAT_NOT_FOUND", "COMMAND_CATALOG_UNAVAILABLE"} <= codes,

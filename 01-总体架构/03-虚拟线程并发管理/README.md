@@ -2,13 +2,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.0.0 |
+| 文档版本 | 2.1.0 |
 | 状态 | 目标设计，尚未实施 |
 | 产品目标 | HTTP+SSE 下支持约定容量范围内 100 个 active execution |
 | Java 基线 | Java 21 虚拟线程 |
 | pi-mono-java 源码基线 | `195746614096312d4e93afb029d387837db78e0b` |
 | Runtime 接口基线 | [CampusClaw Runtime HTTP API 1.29.0](../01-CampusClaw多Agent运行时/chat-http-v1-design.md) |
-| 更新日期 | 2026-08-18 |
+| 更新日期 | 2026-10-16 |
 
 > 本文只定义 Runtime 内部执行与容量治理。调用方可见资源仍是 Session、Entry、
 > Event 和 Model；`ActiveExecution`、`ExecutionLease` 与准入队列都不是 HTTP 资源，
@@ -17,7 +17,7 @@
 ## 1. 结论
 
 每个已接受的用户事件由一个新的 Java 21 虚拟线程执行。虚拟线程负责顺序编排
-模型、工具、文件和 Store I/O；并行工具与子 Agent 可以创建自己的受控任务。
+模型、工具、文件和 Store I/O；并行工具与 Subagent 可以创建自己的受控任务。
 系统限制的是 active execution 和其占用的下游资源，不池化虚拟线程对象。
 
 `POST /campusclaw-service/v1/sessions/{session_id}/events` 在一个请求内完成准入，
@@ -139,7 +139,7 @@ public record ExecutionContext(
 | execution retained memory | 512 MiB，按 4 MiB/unit 估算 | 与 count 联合申请 | 防止长上下文绕过计数 |
 | admission queue | 20 项、32 MiB | 最长 5 秒 | 吸收短突发，拒绝无界等待 |
 | request-scoped SSE response | 120 | 每条最多 1 MiB | 容纳执行响应和短时重叠 |
-| model request | 64 global、2/tenant | 连接/首 token/读空闲分别超时 | 保护 Provider 与连接池 |
+| model request | 所有实例合计 100（Redis 全局许可），Redis 不可用时每实例 50；2/tenant 仍为候选 | 本实例按到达顺序最多等 30 秒；连接/响应头/事件间隔分别超时 | 保护 Mate 与连接；全局许可、降级、等待与连接复用由 [Model §5](../../02-服务与接口/03-Model/README.md#http-transport) 维护 |
 | tool call | 64 global、4/execution | 每工具 deadline | 限制 fan-out |
 | file read | 32 global | 1 MiB/execution 流式预算 | 保护文件服务和内存 |
 | Store mailbox | 4096 项、64 MiB | 不阻塞持有下游连接 | 保护数据库写入 |
@@ -200,7 +200,7 @@ SSE writer 持有的是响应缓冲预算，不拥有执行生命周期：
 | Store | 写任务进入 mailbox | 快速失败，不能永久占用 ExecutionLease |
 | SSE write | Frame 进入响应 writer | 断开投影；已接受执行继续 |
 
-Abort 取消 Model、Tool 和子 Agent，清空尚未投递的 Steer/FollowUp，并等待 Session
+Abort 取消 Model、Tool 和 Subagent，清空尚未投递的 Steer/FollowUp，并等待 Session
 进入 `idle`。所有 Lease 使用幂等 `close()`，取消、超时、异常和正常路径汇合到同一
 清理函数，避免双释放或容量泄漏。
 
@@ -238,5 +238,6 @@ Metric label 不允许使用 `session_id`、`entry_id`、文件名、用户文�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.1.0 | 2026-10-16 | 模型请求上限改为所有实例合计 100（Redis 全局许可，故障时每实例 50），并引用 Model 主设计维护的许可与连接规则。 |
 | 2.0.0 | 2026-08-18 | 全面移除公开 Run、RunRecord、Idempotency-Key、永久 SSE 订阅和 Last-Event-ID；对齐已确认的 Session Event 直连 SSE、GET Events 恢复、Steer/FollowUp/Abort；内部统一为 ActiveExecution 与 ExecutionLease |
 | 1.0.0 | 2026-08-06 | 初版虚拟线程、容量 Lease、下游隔离和 DFX 草案；当时仍基于公开 Run 资源 |

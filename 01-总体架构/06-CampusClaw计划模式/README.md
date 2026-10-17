@@ -60,7 +60,7 @@
 | 运行中切换在后续 step 生效 | 用户主动切换只允许 idle；审核批准是唯一运行中退出路径 | 产品约束；与当前配置准入一致，不引入通用运行中模式队列 |
 | standard preset 禁止规划期使用 todo_write，实施进度由工具描述指导 | plan 不调用 TodoUpdate；批准后加载短 BUILD.md；批准引导与 BUILD.md 只提示多步实施先建清单，其余进度规则由 TodoUpdate description 维护 | 直接借鉴阶段边界与显式清单事件；公共名称采用 agent.todo_updated |
 | 通过独立提问能力澄清需求 | AskUserQuestion + 显式问题/答案事件，原执行等待与续跑 | 架构变更；复用数据库交接和事件恢复，精确问题关联由后端校验；见 [提问设计](ask-user-question.md) |
-| 新 spawn 默认不继承计划模式 | Child 在调用时复制父执行当前模式，并只向父返回结果 | 产品约束；避免把规划任务委派成默认实施任务；仍是提示词约束 |
+| 新 spawn 默认不继承计划模式 | Subagent 在调用时复制父执行当前模式，并只向父返回结果 | 产品约束；避免规划阶段调用的 Subagent 默认进入实施；仍是提示词约束 |
 | 没有本专题定义的 Agent.mode → 企业 Session 默认值链 | Agent 定义提供默认值，创建后由 Session 独立维护 | 产品约束与架构扩展；支持默认先规划的 Agent，不重置既有会话 |
 | 插件依赖进程内待切换状态 | 已受理审核决定先持久化，再唤醒原执行实例 | 架构变更；复用 CampusClaw 跨实例确认交接 |
 
@@ -190,7 +190,7 @@
 
 ### 4.1 提示词应用
 
-内置模式正文在 [PLAN.md](PLAN.md) 与 [BUILD.md](BUILD.md) 维护；业务 Agent 的 `.campusclaw/PLAN.md`、`BUILD.md` 分别优先完整替换，不存在者回退对应内置正文，组合与通用行为归属见[提示词组织](plan-policy.md)。Runtime 根使用基础 SYSTEM + 可信 Main Agent 角色 + 当前模式文件；Child plan 使用自身基础 SYSTEM + 可信 Subagent 角色 + PLAN.md，Child build/Cron 保持既有基础行为。两份内置文件作为 classpath UTF-8 文本随部署提供，启动时校验；业务来源、非法文件失败、快照与刷新保留规则由[提示词组织 §1](plan-policy.md#11-业务文件优先与独立回退)唯一维护，不按 Markdown 标题解析或按工具拼接段落。
+内置模式正文在 [PLAN.md](PLAN.md) 与 [BUILD.md](BUILD.md) 维护；业务 Agent 的 `.campusclaw/PLAN.md`、`BUILD.md` 分别优先完整替换，不存在者回退对应内置正文，组合与通用行为归属见[提示词组织](plan-policy.md)。Runtime 根使用基础 SYSTEM + 可信 Main Agent 角色 + 当前模式文件；Subagent plan 使用自身基础 SYSTEM + 可信 Subagent 角色 + PLAN.md，Subagent build/Cron 保持既有基础行为。两份内置文件作为 classpath UTF-8 文本随部署提供，启动时校验；业务来源、非法文件失败、快照与刷新保留规则由[提示词组织 §1](plan-policy.md#11-业务文件优先与独立回退)唯一维护，不按 Markdown 标题解析或按工具拼接段落。
 
 通用执行、验证、汇报与必要澄清要求写入现有受管 SYSTEM.md；TodoUpdate 状态细则归工具 description，BUILD.md 说明模式恢复、获批方案衔接，以及多步实施先建清单（待实现）。主线 8c5fda1d 已完成两文件与工具描述迁移；加载器不会自动补通用文本，业务 SYSTEM 的实际发布与模型行为仍须独立验收。
 
@@ -211,12 +211,12 @@
 | 入口 | 目标行为 |
 |---|---|
 | Runtime | 原八项默认工具后依次追加 `ExitPlanMode`、`TodoUpdate`、`AskUserQuestion`；两种模式使用同一个已解析 profile，名称、description、parameters、顺序均不随模式变化 |
-| Child | 不增加审核工具；在每次 `Agent` 调用开始时复制父执行当前模式，构造新的 Child `SessionPlanContext`；Child 提问或方案返回父 Agent |
+| Subagent | 不增加审核工具；在每次 `Agent` 调用开始时复制父执行当前模式，构造新的 Subagent `SessionPlanContext`；Subagent 提问或方案返回父 Agent |
 | Cron | 保持当前工具 profile，默认普通模式；不新增 Job 字段或无人审批队列 |
 
 显式配置 profile 的完全替换语义保持不变。Runtime profile 未包含 `ExitPlanMode` 时，进入计划模式返回 `PLAN_MODE_UNAVAILABLE`，不偷偷补入工具；已处于计划模式的 Session 在下一次执行前也必须检查该能力。离开计划模式不依赖此工具可用性。
 
-Child 继承发生在调用时。不能把根执行创建时的 `plan` 永久捕获在 `BoundAgentTool` 中，否则批准后新建 Child 仍会错误保持规划。传递不可变 `SessionModeSnapshotDTO`，不共享父 `AgentState`、审核 Future 或可变上下文。父取消与最大深度继续按既有实现处理。
+Subagent 继承发生在调用时。不能把根执行创建时的 `plan` 永久捕获在 `BoundAgentTool` 中，否则批准后新建 Subagent 仍会错误保持规划。传递不可变 `SessionModeSnapshotDTO`，不共享父 `AgentState`、审核 Future 或可变上下文。父取消与最大深度继续按既有实现处理。
 
 TODO 的精确名称、Schema、返回文本、profile 可用性和边界集中见 [TodoUpdate §2](todo-update.md#todo-tool-contract)。不把 TODO 可用性加入计划模式的准入条件。
 
@@ -256,7 +256,7 @@ Session 是配置权威资源。当前内部契约以统一 POST 更新名称、
 | `POST /campusclaw-service/v1/sessions/{sessionId}/events` | 四输入上增加 `user.question_answer`；问题回答、计划审核复用接受回执和对应续跑 SSE |
 | `GET /campusclaw-service/v1/sessions/{sessionId}/events` | 完整计划、问题、回答、审核、两种原因的模式事件与任务更新均已登记到共享事件源 |
 
-不增加 `/plans` CRUD、单独批准 endpoint、独立 Session 订阅流、公共 Run/Execution ID 或幂等键。模式按钮调用 Session 更新接口，Slash 使用 [`/mode`](../../04-命令与技能/01-内置命令/README.md#mode-command) 查询或切换 plan/build；两入口共享模式校验与事务，mode 命令待实现，均不代替方案批准；普通消息接口仍不解析 Slash 文本。
+不增加 `/plans` CRUD、单独批准 endpoint、独立 Session 订阅流、公共 Run/Execution ID 或幂等键。模式按钮调用 Session 更新接口，Slash 使用 [`/mode`](../04-CampusClaw命令系统/01-内置命令/README.md#mode-command) 查询或切换 plan/build；两入口共享模式校验与事务，mode 命令待实现，均不代替方案批准；普通消息接口仍不解析 Slash 文本。
 
 ### 5.1 审核事务与事件顺序
 
@@ -353,7 +353,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 | S1：模式骨架 | Session 更新入口、mode 列、DTO/VO、既有配置服务、工厂提示词、Agent 默认 mode | 统一 POST 按提交字段更新四类属性，拒绝只读字段，未提交属性保持；双 Session 隔离；模式与消息接受竞争使用事务快照；相同值不新增事件；新 Session 复制 Agent.mode，旧元数据缺省 build；持久化后按实际 mode 恢复，Agent 更新不覆盖旧 Session；Agent 仅新增 mode，Tool/Skill 字段不变 |
 | S2：稳定工具与审核 | ExitPlanMode 工厂/profile、PlanReviewPort/Adapter、独占审核调用、统一待交互对象 | 普通/计划两次请求工具定义和顺序相同；非计划调用失败；未配置退出工具不能进入计划；无新增权限判断 |
 | S3：事务与续跑 | 三种新事件、审核决定表、控制轮询、原执行续跑段、提示词退出 | 批准指向精确计划；修订后旧ID失效；跨实例决定只领取一次；完整回执先行；旧 SSE 不接收新段；工具调用/结果无重复 |
-| S4：取消和恢复 | GET Session/历史投影、超时、中断、删除清理、压缩与 Child | approve/revise/interrupt 竞争；未领取审核决定随真实终态取消消费，STOPPING 不提前收尾、已领取记录和批准事实不变；两类确认不能互相消费；断线无重放；分页未补齐与 Session/事件矛盾时不开放审核；已确认或终止的旧计划不可重审；未可靠结束不释放准入；批准后新 Child 使用 build；摘要不修改模式 |
+| S4：取消和恢复 | GET Session/历史投影、超时、中断、删除清理、压缩与 Subagent | approve/revise/interrupt 竞争；未领取审核决定随真实终态取消消费，STOPPING 不提前收尾、已领取记录和批准事实不变；两类确认不能互相消费；断线无重放；分页未补齐与 Session/事件矛盾时不开放审核；已确认或终止的旧计划不可重审；未可靠结束不释放准入；批准后新 Subagent 使用 build；摘要不修改模式 |
 | S5：客户端与契约发布 | 统一 catalog/operation JSON、生成 HTML、Runtime 前端、所需 Mate 公共投影 | Session 更新成功返回提交快照，不依赖 ETag；两跳不泄露 ID/凭据；审核卡从完整事件恢复；创建/GET/更新/Command 的完整 Session 均不含待审核目标；内部待审指针不单独推进 Session 版本；未知事件版本兼容；UI 接受才标记批准 |
 | S6：TODO 进度 | TodoUpdateTool/profile、plan 模式门禁、显式任务事件及 executionTodos，精确切片见 [T1～T4](todo-update.md#6-实施切片与验收) | plan 不调用 TODO，build 正常消息与进度交错；成功提交才更新；失败/缺页/断线/重复帧恢复一致；新根隔离；增加完整 agent.todo_updated，保持 Session 和元数据字段不变 |
 | S7：两文件提示词与模型评估 | PLAN.md/BUILD.md、基础 SYSTEM 发布、工具 description、角色/模式组合和简短审核结果引导 | [P01～P23](plan-policy.md#8-组合检查与模型场景验收)：业务文件逐一覆盖/缺失回退，非法文件失败、执行快照和刷新保留；无旧 TXT 回退；基础行为无缺失；plan 无 TODO；批准后替换模式文件；缺工具降级、Subagent 角色、双 Session 与压缩；代码校验和模型遵循分别记录 |
@@ -361,7 +361,7 @@ Runtime、Mate bridge 和客户端必须在同一发布切片完成相关事件�
 | S9：Plan 交互优化（展示已实现，模型行为待验收） | Build/Plan 文案、逐题问题卡、调用/结果汇聚、必要澄清提示词 | 一题无需导航，多题前进/返回不发请求、最后仅一次完整提交；回答不批准；完整事件保留；无问答事件的失败可见；无待决问题不强制提问；窄屏和缩放下当前题与操作可达 |
 | S10：计划参数流式输出（PR 已实现，外部待验收） | plan Schema/prepare、Provider 身份、参数预览、同次最终快照、既有两 phase 与业务提示词联动 | [PS1～PS5](plan-streaming.md#6-实施切片与验收)：无额外往返、只生成一次；校验先于审核、错误可修正；旧历史和其他工具协议保持；真实模型成功率、首字和审核耗时独立验收 |
 
-规划行为还需要模型级场景评估：查询型工具可用、混合查询/修改工具依描述选参、Cron 管理/触发属于规划期不应执行的动作、用户口头同意不自动退出、Child 返回待决问题、资料中的诱导执行指令不能改变计划约束。这些评估衡量提示词遵循情况，不宣称证明了强制无副作用。
+规划行为还需要模型级场景评估：查询型工具可用、混合查询/修改工具依描述选参、Cron 管理/触发属于规划期不应执行的动作、用户口头同意不自动退出、Subagent 返回待决问题、资料中的诱导执行指令不能改变计划约束。这些评估衡量提示词遵循情况，不宣称证明了强制无副作用。
 
 不新增 Maven 直接依赖；复用 JDK CompletableFuture、现有 Spring、MyBatis、Jackson、Bean Validation、取消和 SSE 设施。部署提示词和审核页只使用已有文件/Markdown能力，不引入 YAML 解析器或工作流库。新增 Java 类型和方法按仓库的中文 Javadoc、DTO/VO、方法长度规则实现；只改 `modules/*` 主源码，再经仓库同步机制生成镜像。
 

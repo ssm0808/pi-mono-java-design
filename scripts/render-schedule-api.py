@@ -23,9 +23,16 @@ def plain(text):
     return text.replace('`', '').replace('**', '').replace('\\|', '|').strip()
 
 
+def contract_chapter(text):
+    start = text.index('<a id="interface"></a>')
+    end = text.index('\n## 5. ', start)
+    return text[start:end]
+
+
 def sections(text):
-    pattern = r'^#{2,4} (\d+(?:\.\d+)*\.) ([^\n]+)\n([\s\S]*?)(?=^#{1,4} |\Z)'
-    return {match[1]: {'title': match[2], 'text': match[3]}
+    # Keys drop the chapter prefix: README §4.4.7 is section '4.7.'.
+    pattern = r'^#{3,4} 4\.(\d+(?:\.\d+)*) ([^\n]+)\n([\s\S]*?)(?=^#{1,4} |\Z)'
+    return {match[1] + '.': {'title': match[2], 'text': match[3]}
             for match in re.finditer(pattern, text, re.M)}
 
 
@@ -172,7 +179,7 @@ def build_models(claw):
                             success + (errors or []), details))
 
     add('CreateSchedule', 'POST', '/schedules', '创建任务配置',
-        '保存园区告警汇总任务的 Agent、消息、时间规则和凭据引用，返回完整配置及计划摘要。保存不立即运行；有效 Cron 登记自动计划。',
+        '保存园区告警汇总任务的 Agent、prompt 和时间规则，返回完整配置及计划摘要。保存不立即运行；有效 Cron 登记自动计划。',
         [], {'required': True, 'contentType': 'application/json', 'description': '创建任务配置。字段与默认值见下方规则。', 'example': create},
         [response(201, '返回完整 Schedule；不创建 Session。', schedule, base_headers={
             'Location': '/campusclaw-service/v1/schedules/' + schedule['result']['id']})],
@@ -240,7 +247,7 @@ def build_models(claw):
 def render_item(index, model):
     operation = model['operation']
     key = html.escape(operation['operationKey'])
-    source = 'configuration.md'
+    source = 'README.md#interface'
     status = '目标契约 · 待实现'
     note = '展示原维护契约，尚未发布。身份适配与持久化接线待实现；源码证据日期沿用原文。'
     return (
@@ -259,17 +266,18 @@ def render_item(index, model):
 
 
 def build_html():
-    source_path = TOPIC / 'configuration.md'
-    text = source_path.read_text()
+    source_path = TOPIC / 'README.md'
+    document = source_path.read_text()
+    text = contract_chapter(document)
     models = build_models(text)
     title = 'CampusClaw 定时任务接口'
     base = '/campusclaw-service/v1'
     status = 'Claw 目标契约待实现；各项证据日期与范围以源码证据文档为准。'
-    links = ('<a href="README.md">模块主设计</a> · <a href="configuration.md">Claw契约原文</a> · '
+    links = ('<a href="README.md">模块设计</a> · <a href="README.md#interface">Claw契约原文</a> · '
              '<a href="README.md#normal-acceptance">定时任务受理流程</a>')
     identities = set()
-    version_pattern = r'\| 版本 \| ([\d.]+)'
-    version = re.search(version_pattern, text)[1]
+    version_pattern = r'\| 文档版本 \| ([\d.]+)'
+    version = re.search(version_pattern, document)[1]
     for item in models:
         operation = item['operation']
         shared.require(item['api']['basePath'] == base, 'Operation belongs to another service')

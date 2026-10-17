@@ -16,7 +16,7 @@
 | 工具执行方 | Runtime 内置工具执行，浏览器只消费后端事件；不引入客户端提交工具结果的职责。 |
 | 公共事件 | 后端显式投影进度是架构变更，降低客户端与工具实现的耦合；代价是增加一个公共类型及每次成功更新的一份快照事件。 |
 | 进度作用域 | `(sessionId, sourceEventId)` 对应原始 user.message 的根执行；审核续跑保持归属，新普通消息开始新清单。属于产品约束。 |
-| 首版入口 | Runtime 根执行默认追加 TodoUpdate；Child/Cron profile 保持原值，父 Agent 汇报 Child 工作，子调用不覆盖父清单。 |
+| 首版入口 | Runtime 根执行默认追加 TodoUpdate；Subagent/Cron profile 保持原值，父 Agent 汇报 Subagent 工作，子调用不覆盖父清单。 |
 | 首次建清单 | 获批方案有多个实施步骤时，在第一个实施工具调用之前提交完整清单。只写工具描述时，模型常在第二步才首次调用，因此批准引导和 BUILD.md 各加一句入口提示（待实现），状态细则仍只在 description，见[提示词组织 §6](plan-policy.md#tool-rule-ownership)。是否多步属于语义判断，不由 Runtime 拒绝。 |
 | 模式约束 | plan/build 工具定义相同，description 与模式提示词说明只在 build 使用。提示词不能保证模型不误用，所以 Runtime 在执行前按执行的当前模式拒绝 plan 阶段调用，返回 `BUILD_MODE_REQUIRED`，不执行工具、不产生任务事件；参考 Codex 在 Plan 模式拒绝 update_plan。不按模式过滤工具列表，保持定义稳定。属于产品约束。 |
 | 权威与状态 | 公共进度从持久化 `agent.todo_updated` 恢复；模型从同次提交的 ToolResult 恢复。二者同源、同事务，不另存一份可变 TODO 状态。无新 Session/元数据字段、HTTP 路径或 TODO 表。 |
@@ -150,7 +150,7 @@ Track implementation progress in build mode; do not call this tool during plan-m
 
 ## 5. 接入结构与权威提交
 
-`TodoUpdateTool` 实现既有 AgentTool，由 Session 工厂按 profile 装配；不依赖 Controller、Mapper 或公共 VO，不持有当前列表，也不读取会话模式。模式门禁放在 `RuntimeActiveExecution.beforeToolCall`，与 ExitPlanMode 在 build 模式返回 `PLAN_MODE_INACTIVE` 的检查对称：执行持有权威模式，工具保持无状态，Child/Cron 入口不受影响。新增无状态 `RuntimeTodoEventMapper` 由 Projector 调用，识别可信内置调用并校验经过 Pipeline/after hook 后的最终结果，返回内部只读快照 DTO。不得因普通工具输出含 todos 或同名文本就生成事件；失败/未知调用不能生成成功更新。
+`TodoUpdateTool` 实现既有 AgentTool，由 Session 工厂按 profile 装配；不依赖 Controller、Mapper 或公共 VO，不持有当前列表，也不读取会话模式。模式门禁放在 `RuntimeActiveExecution.beforeToolCall`，与 ExitPlanMode 在 build 模式返回 `PLAN_MODE_INACTIVE` 的检查对称：执行持有权威模式，工具保持无状态，Subagent/Cron 入口不受影响。新增无状态 `RuntimeTodoEventMapper` 由 Projector 调用，识别可信内置调用并校验经过 Pipeline/after hook 后的最终结果，返回内部只读快照 DTO。不得因普通工具输出含 todos 或同名文本就生成事件；失败/未知调用不能生成成功更新。
 
 既有 `RuntimeExecutionPersistenceService.appendEntry` 已接收事件列表；`MyBatisRuntimeSessionRepository.appendEventsLocked` 顺序分配并保存事件，`recordProjectionIfComplete` 保存实际事件数。目标复用该路径，一条 ToolResult Entry 对应两条公共事件，投影计数为 2；其他工具和失败结果沿用原计数。无需新增 Entry 类型、TODO Repository、数据库列或第二次事务。`t_session_events` 的 anchor 不是唯一键，既有投影表支持多事件数量。源码与提交见[证据 §6](source-evidence.md#6-todo-update-基线与接入证据)。
 

@@ -1,11 +1,11 @@
 # CampusClaw Slash Command 前端设计
 
-[返回 Slash Command 通用模块](../../../04-命令与技能/00-Slash-Command通用模块/README.md) · [打开交互评审稿](../../原型/slash-command-review.html)
+[返回 Slash Command 通用模块](../../../01-总体架构/04-CampusClaw命令系统/README.md) · [打开交互评审稿](../../原型/slash-command-review.html)
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.11.0 |
-| 更新日期 | 2026-10-04 |
+| 文档版本 | 1.13.0 |
+| 更新日期 | 2026-10-16 |
 | 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
 | Runtime 命令契约基线 | `879746e59189a07335e32c7df807c7f5048fdc28`；B13 已确认 Skill SSE，Builtin JSON 不变 |
 | pi-mono-java 交互源码基线 | 当前 PR #301 提交见[实现状态](../../source-evidence.md#current-implementation)；早期结构证据保留在 §2.1 |
@@ -40,7 +40,7 @@ parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立�
 清单读取、冻结调用和 Builtin JSON/Skill SSE 分路均已有实现；09b2e0b1 为已包含的早期交互提交。
 独立 Store/Registry/Gateway 仍是推荐结构拆分，不能将类名尚未完全对应解释为 Slash 行为未实现。
 本项未重跑前端测试，不升级旧交互测试的验收范围；Mate 公共入口和附件集成继续独立跟踪。
-模式命令专项核对同一 `53eff85c`：`frontend/src/runtime/commands.ts#freezeCommandArguments` 的 Builtin 结果映射没有 mode；`ComposerBox.vue` 已有独立 ModeControl，但未接入 Slash 模式选择。`/mode` 及选择控件、Session 结果映射待实现，业务与后端差距见[Builtin 模式切换](../../../04-命令与技能/01-内置命令/README.md#mode-command)。
+模式命令专项核对同一 `53eff85c`：`frontend/src/runtime/commands.ts#freezeCommandArguments` 的 Builtin 结果映射没有 mode；`ComposerBox.vue` 已有独立 ModeControl，但未接入 Slash 模式选择。`/mode` 及选择控件、Session 结果映射待实现，业务与后端差距见[Builtin 模式切换](../../../01-总体架构/04-CampusClaw命令系统/01-内置命令/README.md#mode-command)。
 
 公开描述符 type/hints 迁移待实现：上述源码仍消费 kind/input，不能把本设计原型的更新当作产品已迁移。
 
@@ -78,11 +78,11 @@ parseCommand/freezeCommandArguments/decodeCommandResult。命令标签、独立�
 
 | 约束 | 前端必须如何处理 |
 |---|---|
-| GET Descriptor 只有 `name`、`type`、`description` 和可选 `hints` | type 表示命令类别；不从提示推断建议值、参数枚举或权限 |
+| GET Descriptor 只有 `name`、`type`、`description` 和可选 `hints` | type 表示命令类别；hints 只给固定参数值，不含界面文案 |
 | 所有 type=skill 允许附件，Builtin 不接收附件 | 附件入口根据 type 与上传接入状态控制，不静默丢弃草稿 |
-| hints 是可选字符串数组，各元素非空，缺失或 [] 均为无提示 | 不把提示当 Schema、控件类型、枚举或权限；Model/Thinking/Mode 使用专用选项 |
+| hints 是可选非空字符串数组，列出可直接提交的固定参数值，只在 thinking（on/off）与 mode（plan/build）返回 | 有 hints 即展示选项列表并原样提交选中值；显示名由前端维护，不从 hints 推断权限或当前值 |
 | 服务端返回固定 Builtin 顺序并追加 Skill | 客户端只做稳定前缀过滤，不重新排序或模糊重排 |
-| running 过滤 Compact/Skill，同一命令 hints 不变 | 集中依据共享命令规则和权威 Session 状态限制修改；状态未知或恢复中暂停提交 |
+| 清单按 Agent 查询，已有 Chat 带 sessionId 取完整命令，新对话不带 sessionId 只取 help、skills 与技能命令；不按 Session 状态过滤（待实现） | running 时按共享状态规则表置灰 Compact/Skill 并限制修改；状态未知或恢复中暂停提交，POST 终判 |
 | Builtin POST 返回普通 JSON，无 commandId 和通用生命周期 | 不画虚构进度条，不建立轮询或通用命令历史 |
 | 成功结果无统一判别字段；`model` 空参返回 Models，带参返回 Session | 提交前从调用形态冻结 `expectedResultKind`，Gateway 按它校验响应，禁止只按命令名或 JSON 形状猜测 |
 | Help 返回 `displayName/description/useCases` | 用纯文本临时卡片展示，不渲染 HTML、Markdown 或远程图片 |
@@ -102,7 +102,7 @@ Mate 侧当前只确认 Descriptor 字段投影；路径、权限、错误映射
 | Builtin 结果不进入对话历史 | 架构选择 | Builtin 没有通用持久化生命周期；Skill 已按 B13 复用普通消息事件，二者不能混为一个结果分支 |
 | 未匹配 Slash 不自动回退为普通消息 | 安全加固 | 避免命令意图和内容在普通 Events 通道中被意外提交 |
 | 浏览器只经 Mate Gateway | 产品约束 | 保持公司认证、租户隔离和凭据边界，不把 Runtime 暴露给产品端 |
-| Catalog 仅保存在当前页面内存 | 架构选择 | 清单随 Session 状态变化，持久缓存会制造过期入口 |
+| Catalog 仅保存在当前页面内存 | 架构选择 | 清单随 Agent 发布与 Skill 绑定变化，持久缓存会制造过期入口 |
 | 模型/思考/模式使用选择控件，hint 仅作提示 | 产品约束 | 用户无需记忆模型 ID 或 on/off；候选数据复用现有接口，避免把提示字符串变成协议 |
 | 前缀过滤但不模糊重排 | 产品约束 | 保留服务端产品排序，结果稳定、可预测、便于键盘记忆 |
 | 调用快照同时决定解码与展示 | 安全加固 | `model` 同名多形响应不能依赖可变草稿或 JSON 特征；未匹配预期 Schema 时必须拒绝更新状态 |
@@ -143,12 +143,12 @@ Chat Workspace
 | 当前执行 | Composer 与命令行为 |
 |---|---|
 | idle，mode 为 plan 或 build | 模式不决定命令目录；按最新完整 Descriptor 展示 Builtin 和 Skill，选择后再执行。公共 Skill 未接入时保留明确禁用理由。 |
-| 等待回答、方案审核、工具授权 | Session 仍 running，使用 running Descriptor；原问题/方案留在时间线，右下角仍为停止。可编辑消息草稿，也可单独执行清单允许的 Builtin；命令不会回答问题或批准方案。 |
+| 等待回答、方案审核、工具授权 | Session 仍 running，同一份 Agent 清单按 running 规则置灰；原问题/方案留在时间线，右下角仍为停止。可编辑消息草稿，也可单独执行清单允许的 Builtin；命令不会回答问题或批准方案。 |
 | 提交回答/审核/授权/停止，或状态未对账 | 浏览与草稿保留，命令执行暂时禁用。前端协调器用同一提交/恢复准入检查，避免操作期间使用旧状态；不能仅因清单可见就允许执行。 |
 | 命令返回 Session/Models | 按既有完整快照规则更新配置，不推断该任务已结束或问题已回答；待交互仍由原根的完整事件与历史核对。 |
 | 权威会话状态更新后参数权限收窄 | 保留命令与参数，并提示“当前只可查询，请先清除参数”；用户明确清空后才允许运行，不能自动删参数并悄悄执行查询。命令消失则保留禁用标签。 |
 
-命令身份以服务端清单为准；输入交互集中遵循[共享状态规则](../../../04-命令与技能/00-Slash-Command通用模块/README.md#command-state-rules)，不在组件重复维护。running 下 model/thinking/mode 的 hints 保持不变但只允许无参查询；状态未知或恢复中暂停提交，POST 最终准入。计划模式不新增 `/plan`、`/approve`、`/answer` 或 `/todo`；也不因新增 Skill 统计而增加热度排序或次数徽标。
+命令身份以服务端清单为准；输入交互集中遵循[共享状态规则](../../../01-总体架构/04-CampusClaw命令系统/README.md#command-state-rules)，不在组件重复维护。running 下 model/thinking/mode 的 hints 保持不变但只允许无参查询；状态未知或恢复中暂停提交，POST 最终准入。计划模式不新增 `/plan`、`/approve`、`/answer` 或 `/todo`；也不因新增 Skill 统计而增加热度排序或次数徽标。
 
 命令区、消息草稿、问题答案、方案反馈分别持有自己的缓冲；取消 Slash 只恢复消息草稿。问题卡的选项键盘动作和自由文本 Enter 不触发 Composer 命令。清单打开时焦点留在输入，Arrow/Home/End 只选择候选；Enter 收成标签，下一次明确 Enter 才执行，长按和 IME 不触发。退出更换列表恢复原标签与参数。
 
@@ -198,7 +198,7 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 - 上下方向键移动活动项，Home/End 跳到首尾；Enter 选择活动项，鼠标或触摸点击语义相同。
 - 点击或 Enter 只选择并关闭清单；上箭头在浏览中禁用，不承担“填入”动作。
 - 选中当前仅允许无参调用的命令显示标签、隐藏参数 textarea，焦点进入当前命令执行按钮（空闲为上箭头，运行中为独立按钮）；再次明确 Enter 或点击才提交。
-- 允许带参调用时标签与输入控件同处 Composer；name/Skill 使用文本框和 hints 提示，model/thinking/mode 打开下述选项列表。选中选项只更新参数草稿，后续明确执行才提交。
+- 允许带参调用时标签与输入控件同处 Composer；name/Skill 使用文本框，占位提示由前端提供，model/thinking/mode 打开下述选项列表。选中选项只更新参数草稿，后续明确执行才提交。
 - 空闲上箭头可访问名称为“运行 <name>”或“发送消息”。运行时右下角固定为“停止生成”，命令区独立显示“执行命令”，可访问名称为“运行 <name>”；无参数控件时焦点进入该命令按钮，有文本控件时 Enter 执行命令，Shift+Enter 换行。普通消息 textarea 的 Enter 不停止也不发送。
 - 点击停止只走共享对话协调器，命令查询不能遮挡或禁用可用的停止动作；停止请求到真实终态的状态见[工作台专项](../runtime-workbench-alignment.md#4-composer-的发送与停止)。
 - IME composition、`isComposing`、keyCode 229 及按键长按 repeat 不触发选择或执行；选择那次 Enter 不得再次触发提交。
@@ -214,14 +214,14 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 | 命令 | 控件与数据来源 | 正常调用 | 失败与状态变化 |
 |---|---|---|---|
 | model | 单选列表；Runtime 适配读取 ListSessionModels 的 currentModelId/models，显示名从调用方模型信息取得，缺名称时可展示返回的 ID | 用户选择真实候选，冻结 arguments=modelId 后显式执行；带参响应按 Session 处理 | 加载失败可重试 GET，空列表禁用修改；迟到响应不得跨 Chat 应用；POST 拒绝或不确定时保留草稿，不自动重放 |
-| thinking | 当前 Session 值打勾，选项为开启/关闭 | 选择后映射 on/off，显式执行；以响应中的最终 thinking 为准 | running 时仅查看；不支持时展示服务端错误并刷新权威状态，不能用 hint 推测模型能力 |
-| mode | 单选列表：计划（plan）/实施（build），当前 Session.mode 打勾；枚举由命令规则定义，提供清空选择以查询当前模式 | 选择只更新草稿，显式执行提交 arguments=plan/build；空参和带参均冻结 expectedResultKind=session，成功用完整 Session 更新模式指示器 | running（含所有交互等待）仅无参查询；非法值保留并报错，不能降为查询；422 显示计划能力不足；409 或网络不确定只读对账、不重放、不批准计划 |
-| name | 文本框，hints 可作提示 | 输入名称或空参查询 | 保留服务端校验错误与原草稿 |
+| thinking | 当前 Session 值打勾，选项取自 hints（on/off），前端显示为开启/关闭 | 选择后提交选中值，显式执行；以响应中的最终 thinking 为准 | running 时仅查看；不支持时展示服务端错误并刷新权威状态，不能用 hint 推测模型能力 |
+| mode | 单选列表：选项取自 hints（plan/build），前端显示为计划/实施，当前 Session.mode 打勾；提供清空选择以查询当前模式 | 选择只更新草稿，显式执行提交 arguments=plan/build；空参和带参均冻结 expectedResultKind=session，成功用完整 Session 更新模式指示器 | running（含所有交互等待）仅无参查询；非法值保留并报错，不能降为查询；422 显示计划能力不足；409 或网络不确定只读对账、不重放、不批准计划 |
+| name | 文本框，占位提示由前端提供 | 输入名称或空参查询 | 保留服务端校验错误与原草稿 |
 | skill:<name> | 请求文本与可选附件；按 type=skill 准入附件 | 上传成功取得 fileIds，与 arguments 一起冻结，执行共享 SSE | 上传未完成不提交；失败保留文本/附件；文件拒绝不能静默去掉附件后重发 |
 
 选项列表复用清单的 listbox/option、键盘和触摸规则；勾选表示当前值，键盘活动项单独显示。
-Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不再次提交。不从 `[modelId]`、`[on|off]`、`[plan|build]` 解析控件或候选。
-按已知命令选控件是客户端展示职责；hints 缺失或 [] 不限制输入。命令规则集中消费已对账的 Session 状态，候选是否仍可用和 POST 最终准入由后端决定。
+Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不再次提交。thinking、mode 的选项值来自清单 hints，model 的候选来自 ListSessionModels；选项显示名由前端维护。
+name、技能命令与 model 不带 hints，按命令名选控件是客户端展示职责；hints 缺失不限制输入。命令规则集中消费已对账的 Session 状态，候选是否仍可用和 POST 最终准入由后端决定。
 状态变为 running 时关闭修改列表并保留已选草稿，用户可清空参数后显式查询；未知状态、清单过期或恢复中暂停提交。
 
 图片中的轻度/中/高/极高属于思考强度，当前 CampusClaw 只有 boolean thinking。
@@ -233,22 +233,23 @@ Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不
 `frontend/src/components/ComposerBox.vue` 的 template 已有底部模型 select 和思考按钮，但 Slash 选择未接入它们。
 同文件附件菜单仍为 disabled；`frontend/src/runtime/commands.ts` 的 freezeCommandArguments 仅组装 name/arguments，
 尚未把 fileIds 纳入调用快照。后端 `CommandDiscoveryResponseAssembler.input` 已统一返回 Skill 附件标记，
-`SkillCommandRequestVO` 与 `SkillCommandExecutionService.execute` 已接收并传递 fileIds，路径见[共享能力证据](../../../04-命令与技能/00-Slash-Command通用模块/README.md#32-get-轻量清单已确认)。
+`SkillCommandRequestVO` 与 `SkillCommandExecutionService.execute` 已接收并传递 fileIds，路径见[共享能力证据](../../../01-总体架构/04-CampusClaw命令系统/source-evidence.md#agent-catalog-evidence)。
 因此选项交互和当前内部附件接线的主要缺口在前端；真实文件授权及 Mate 公共映射仍按所属接口验收。
 本次只核验源码，未运行 Java/前端产品测试。
 
 ## 5. 清单读取与缓存
 
-`CommandCatalogStore` 按 active Chat/Session 隔离，只维护：`status`、`items`、`loadedForStateKey`、
-`stale`、`error` 和一次在途请求。`stateKey` 由权威 Session 身份和影响清单的运行状态组成，
-具体字段由 Gateway 适配，组件不得依赖 Runtime 内部版本结构。
+`CommandCatalogStore` 按 Agent 与会话隔离（目标接口 `GET /agents/{agentId}/commands?sessionId=`，sessionId 可选，待实现），只维护：`status`、`items`、
+`loadedForStateKey`、`stale`、`error` 和一次在途请求。`stateKey` 由 agentId 与 sessionId 组成：已有 Chat 传当前 sessionId，取完整命令；
+新对话尚无会话时 sessionId 为空，只取 help、skills 与技能命令。首条消息创建会话后 stateKey 变化，重新读取完整清单。
+Session 运行状态不进入 stateKey，只决定前端按共享状态规则置灰哪些项。组件不得依赖 Runtime 内部版本结构。
 
 读取规则：
 
 1. 第一次进入 Slash 模式读取 GET；同一 stateKey 的并发打开合并为一个 Promise。
 2. HTTP `Cache-Control: no-store` 原样尊重；不使用 Service Worker、浏览器持久缓存或 localStorage 复用清单。
-3. Session/Agent/运行状态发生权威变化，或任何命令 POST 完成后，将清单标记为 stale。
-4. 目录打开且 stale 时重新读取；Chat 切换用 `AbortController` 取消旧读请求，迟到响应按请求代次丢弃。
+3. 切换到另一个 Agent 或 Chat、新对话创建出会话、Agent 刷新或 Skill 绑定变化，或任何命令 POST 完成后，将清单标记为 stale；Session 运行状态变化只重算置灰，不重新读取。
+4. 清单打开且 stale 时重新读取；Agent 切换用 `AbortController` 取消旧读请求，迟到响应按请求代次丢弃。
 5. 404/409 POST 错误会触发一次清单 GET 刷新；409 同时刷新权威 Session 状态，但不重放 POST；刷新失败仍保留原草稿。
 
 读取中的骨架只占命令行高度，不闪动整个 Composer。读取失败显示同位置错误和“重试清单”；重试只调用 GET。
@@ -335,7 +336,7 @@ Help `useCases` 未来若增加“填入输入框”，也只能把纯文本放�
 | 参数无效 / 400 | Composer 参数区 | 全部命令草稿 | 聚焦参数；用户修改后再次运行 |
 | 命令不存在 / 404 | Composer 内联 | 全部命令草稿 | 自动刷新 GET 一次，不重放 POST |
 | 当前忙 / 409 | Composer 内联 | 全部命令草稿 | 刷新权威 Session 与清单，重新计算可用操作 |
-| Agent/能力不可用 / 422 或 503 | Palette 或结果区 | 全部草稿 | 展示可重试时间或产品错误；仅显式重试 |
+| Agent 不存在或不可用 / 404 或 422 | Palette 或结果区 | 全部草稿 | 展示产品错误；仅显式重试 |
 | POST 网络结果未知 | 结果区警告 | 命令草稿 | 按命令类别对账；禁止自动重试 |
 | 401/403 | 页面级认证/权限处理 | 遵循产品安全策略 | 跳转登录或展示无权限；不出现凭据输入表单 |
 
@@ -391,7 +392,7 @@ type CommandInvocation = Readonly<{
 )>
 
 interface CommandGateway {
-  listCommands(chatId: string, signal: AbortSignal): Promise<readonly CommandDescriptor[]>
+  listCommands(agentId: string, sessionId: string | undefined, signal: AbortSignal): Promise<readonly CommandDescriptor[]>
   executeCommand(invocation: CommandInvocation, signal: AbortSignal): Promise<CommandGatewayResult>
 }
 ```
@@ -426,7 +427,7 @@ interface CommandGateway {
 
 - Parser 覆盖空值、仅 `/`、前导空格、大小写、ASCII 分隔、多行参数和超长输入。
 - 前缀过滤必须保留服务端相对顺序；禁止模糊评分和客户端 Builtin 固定表。
-- Catalog 覆盖请求合并、Chat 切换中止、迟到响应丢弃、stateKey 失效和 POST 后 stale。
+- Catalog 覆盖请求合并、Agent 切换中止、迟到响应丢弃、新对话不带 sessionId、会话创建后重读完整清单、stateKey 失效和 POST 后 stale。
 - Draft 覆盖首字符进入/取消/成功/失败、暂存消息与附件恢复、页面刷新清除。
 - 调用快照覆盖每个 Builtin，必须单独覆盖 `model` 空参→Models、带参→Session，草稿继续编辑不改变在途快照。
 - Result Registry 覆盖每个 `expectedResultKind`、未知命令 fail closed 和恶意 Help 文本按纯文本展示。
@@ -436,7 +437,7 @@ interface CommandGateway {
 - IME composing 时 Enter 不选中、不执行；键盘、触摸和鼠标得到同一规范命令。
 - 选择后显示可删除标签；仅无参调用时隐藏修改控件，model/thinking 展示选项，name/Skill 编辑文本；菜单行没有前导 Slash、type 或 hints。
 - model 列表覆盖加载、空值、当前值不在候选、迟到响应和状态变为 running；不得要求用户猜 ID。Thinking 只展示真实开关，不伪造强度档位。
-- 所有 Skill fixture 均按 type 支持附件，hints 缺失或 [] 不影响附件准入；fileIds 与文本同次冻结，上传失败、服务端文件拒绝与断流不丢草稿、不自动重放。
+- 所有 Skill fixture 均按 type 支持附件，附件准入与 hints 无关；fileIds 与文本同次冻结，上传失败、服务端文件拒绝与断流不丢草稿、不自动重放。
 - + 菜单不含命令，打开和关闭不破坏草稿；首字符 / 发现、取消/成功恢复附件；运行中选择无参数命令后焦点不得误落停止按钮，更换后 Escape 恢复原选择及参数。
 - 第一次 Escape 关闭清单，第二次退出；空参数 Backspace 与 × 退出；未匹配不发送。
 - 选择命令不执行，第二个明确动作才执行；长按 Enter 不提交，重复点击运行只能产生一次在途请求。
@@ -446,8 +447,8 @@ interface CommandGateway {
 
 ### 11.3 集成与契约
 
-- 用契约 fixture 验证 idle/running 的实际服务端顺序、type/hints 字段和完整空 Skill 清单；额外验证 hints 不变但 running 禁止模型/思考修改。
-- 400/404/409/422/503 与网络断开都保留草稿；404/409 只刷新 GET，不重放 POST。
+- 用契约 fixture 验证服务端顺序、type/hints 字段和完整空 Skill 清单；清单与 Session 状态无关，额外验证 running 时前端置灰 Compact/Skill 并禁止模型/思考修改。
+- 400/404/409/422 与网络断开都保留草稿；404/409 只刷新 GET，不重放 POST。
 - Session/Model 类结果必须应用服务端完整响应，不依赖 ETag；断网后通过权威资源对账。
 - 使用同一 `model` 命令名的查询与修改 fixture 必须走不同解码分支；Schema 与预期不符时不更新 Store。
 - 产品构建中不存在 Runtime base URL、Runtime 凭据表单或 `RuntimeCommandGateway` 装配。
@@ -502,6 +503,8 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.13.0 | 2026-10-16 | hints 改为固定参数值列表，thinking/mode 的选项值取自 hints；占位提示与选项显示名由前端维护。清单 stateKey 加入可选 sessionId：新对话只取智能体级命令，已有 Chat 取完整命令。 |
+| 1.12.0 | 2026-10-16 | 命令清单改为按 Agent 读取与缓存，stateKey 只含 agentId；运行状态只决定置灰，不触发重读；错误态改为 404/422。 |
 | 1.11.0 | 2026-10-04 | 命令结果消费取消版本响应头与 ETag 依赖，保留完整资源和不确定结果对账。 |
 | 1.10.0 | 2026-09-22 | 增加 mode 选择控件、Session 结果映射与审核等待下的只读查询边界。 |
 | 1.9.0 | 2026-09-22 | 使用 type/hints 描述符，依据会话状态控制参数并按 Skill 类别处理附件。 |

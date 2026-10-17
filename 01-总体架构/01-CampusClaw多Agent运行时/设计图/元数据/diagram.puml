@@ -8,7 +8,7 @@ skinparam ranksep 30
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java, prepare and materialize.
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java, resolve.
 ' Observed behavior: the Java baseline has two file contracts and materializes the legacy CLI tree in place.
-' Architecture change: one managed tree serves Runtime, Cron, and Child entry points.
+' Architecture change: one managed tree serves Runtime, Cron, and Subagent entry points.
 ' Security hardening: a complete sibling tree is validated before publication.
 ' Design reason: sessions consume immutable identity indexes and never persist remote tool lists.
 ' Architecture change: refresh publishes metadata only; the next idle execution reconciles its model.
@@ -37,7 +37,7 @@ skinparam ArrowColor #475569
 rectangle "Mate runtime snapshot" as Input {
   rectangle "Current Agent identity\nand model bindings" as AgentMetadata
   rectangle "Direct Skill identities\nand package resources" as SkillMetadata
-  rectangle "Direct Child identities\nand fixed versions" as ChildMetadata
+  rectangle "Direct Subagent identities\nand fixed versions" as SubagentMetadata
 }
 
 rectangle "AgentRuntimeManager" as Manager {
@@ -51,12 +51,12 @@ rectangle "Managed Agent directory\nagent/{agentId}/.campusclaw/" as AgentDirect
   file "agent.json\ncurrent identity only" as AgentFile
   file "settings.json\ndefaultModel, bindingModels" as SettingsFile
   file "SYSTEM.md\nAgent instructions" as SystemFile
-  file "agents/{agentName}.json\ndirect Child identity and version" as ChildFile
+  file "agents/{agentName}.json\ndirect Subagent identity and version" as SubagentFile
   file "skills/{skillName}/skill.json\nSkill identity and version" as SkillIdentityFile
   file "skills/{skillName}/SKILL.md\nreferences, templates" as SkillPackage
 }
 
-database "Mate metadata authority\nAgent, Skill, Child bindings" as MateAuthority
+database "Mate metadata authority\nAgent, Skill, Subagent bindings" as MateAuthority
 database "Model Manager authority\nmodel availability and credentials" as ModelManager
 rectangle "Execution preparation" as Execution {
   rectangle "Immutable name indexes" as Indexes
@@ -68,7 +68,7 @@ rectangle "Execution preparation" as Execution {
 
 AgentMetadata --> Resolve
 SkillMetadata --> Resolve
-ChildMetadata --> Resolve
+SubagentMetadata --> Resolve
 Resolve --> Build
 Build --> Validate
 Validate --> Publish
@@ -77,7 +77,7 @@ Publish --> AgentDirectory
 Resolve .right.> MateAuthority : cold prepare / refresh
 SettingsFile .right.> ModelManager : bound models
 AgentDirectory -down-> Indexes : scan exact names
-Indexes --> SessionFactory : Skill and direct Child resolution
+Indexes --> SessionFactory : Skill and direct Subagent resolution
 AgentDirectory -down-> SessionFactory : prompt, workspace,\nmodel settings
 AgentDirectory -down-> Reconciler : next idle execution
 SessionStore --> Reconciler : current model and thinking
@@ -103,7 +103,7 @@ Keep the current model while it remains callable.
 Otherwise select the usable new default.
 Reject before accepting a User Entry if none exists.
 end note
-AgentFile -[hidden]down-> ChildFile
+AgentFile -[hidden]down-> SubagentFile
 SettingsFile -[hidden]down-> SkillIdentityFile
 SystemFile -[hidden]down-> SkillPackage
 AgentDirectory -[hidden]down-> Execution

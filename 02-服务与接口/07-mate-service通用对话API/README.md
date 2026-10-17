@@ -71,7 +71,7 @@ Tool Call、确认、结果通过 toolCallId 关联，同时各保留独立 even
 
 ### 4.2 user.interrupt
 
-中断当前执行树，包括 Tool 与 Child Agent。回执仅表示接受，真实 terminated 才表示停止完成；idle 时拒绝。不能将中断和新消息合并为批量请求。当前公共输入未携带 Runtime 的 targetEventId，bridge 必须明确如何固定原目标，不能直接转发为内部请求。
+中断当前执行树，包括 Tool 与 Subagent。回执仅表示接受，真实 terminated 才表示停止完成；idle 时拒绝。不能将中断和新消息合并为批量请求。当前公共输入未携带 Runtime 的 targetEventId，bridge 必须明确如何固定原目标，不能直接转发为内部请求。
 
 ### 4.3 user.tool_confirmation
 
@@ -182,7 +182,7 @@ Header 前的认证、授权、资源或容量错误使用 JSON；Header 后编�
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java` · projection methods | 该基线投影 provider/agent/tool 内部事件，完整 Assistant、Thinking 和 Tool Result 可落为持久记录 |
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java` · encode/decode methods | 该基线持久记录有内部 entry identity、sequence 和 createdAt；本设计不把内部 sequence 暴露为 `eventSeq` |
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java` · append/query methods | 该基线历史按内部 entry sequence 和当前分支读取，不是本设计的 createdAt 固定快照公共分页 |
-| 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java` · abort methods；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java` · child cancellation | 该基线取消可以等待主执行收敛，并向 Tool/Child Session 传播；该基线 idle abort是 no-op，公共 idle interrupt 冲突是目标差异 |
+| 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionControlService.java` · abort methods；`modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java` · child cancellation | 该基线取消可以等待主执行收敛，并向 Tool/Subagent Session 传播；该基线 idle abort是 no-op，公共 idle interrupt 冲突是目标差异 |
 | 同上 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java` · permission handling | ASK/确认公共闭环尚未实现；`user.tool_confirmation` 是 待实现 |
 | `pi-mono-java@7e54b47f` | `modules/ai/src/main/java/com/campusclaw/ai/provider/openai/OpenAIResponsesProvider.java:415-426,465-473,515-521,534-544` · `handleOutputItemAdded` / `handleOutputItemDone` / `convertAssistantInput` / `convertToolResultInput` | OpenAI Responses function call 的 `call_id` 被写入 `ToolCall.id`，后续 Tool Call 和 Tool Result 输入都把同一值写回 `callId`；该链路未使用 function call item `id` |
 | 同上 | `modules/ai/src/main/java/com/campusclaw/ai/types/ToolCall.java:24-28` · `ToolCall.id`；`modules/ai/src/main/java/com/campusclaw/ai/types/ToolResultMessage.java:26-32` · `toolCallId` | Claw 归一化模型使用独立 Tool Call ID 关联调用和结果 |

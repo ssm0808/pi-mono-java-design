@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.4.1 |
+| 文档版本 | 3.5.0 |
 | 状态 | 目标设计；Skill、CallTool、Agent 代理、确认前可信准备与模型参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余状态见源码证据 |
-| 更新日期 | 2026-10-08 |
+| 更新日期 | 2026-10-14 |
 | CampusClaw Read 专项核验基线 | `553dcd5e2ff682f9684810a043b442b37a02e54a`（本地固定提交，仅核验文本读取边界） |
 | CampusClaw 注册与发现核验基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
@@ -19,7 +19,7 @@
 
 目标框架工具共 12 项，Agent 直接关联的业务工具代理不计入此数量。`Skill` 负责加载工作流，`SearchTools` 取代 `ListMateTools` 的模型发现职责，`CallTool` 替代 `CallMateTool` 执行业务操作。Skill、CallTool、代理装配与后端参数恢复已在 PR #323 开发提交 `ae6645ca` 实现；SearchTools 与发现和校验的一致性接线待实现。三个交互工具的精确契约由 [ExitPlanMode](../06-CampusClaw计划模式/README.md#43-exitplanmode-模型契约)、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md#todo-tool-contract) 和下方 AskUserQuestion 专题维护；主线 `8c5fda1dde51675859bc9c07e145dbe253656dea` 已有三个工具及枚举、工厂、Runtime 默认 profile，见[源码证据 §4](source-evidence.md#4-活动工具与主线实现状态2026-09-18)。
 
-提问工具的精确 Schema、问题/答案与等待边界见 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)。Runtime 默认在 ExitPlanMode、TodoUpdate 后追加它；Child/Cron 不装配，两模式工具定义相同。
+提问工具的精确 Schema、问题/答案与等待边界见 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md)。Runtime 默认在 ExitPlanMode、TodoUpdate 后追加它；Subagent/Cron 不装配，两模式工具定义相同。
 
 ## 1. 契约总则
 
@@ -35,7 +35,7 @@
 | `Skill` | `Load instructions and resource paths for an available Skill by name.` | `PARALLEL` | 正文、基础目录、抽样资源绝对路径 |
 | `SearchTools` | `Get one complete business tool definition by its exact unique name within the current Agent's trusted Skill bindings. This does not register or execute the tool.` | `PARALLEL` | 单个完整业务工具定义 |
 | `CallTool` | `Call a managed business tool available through a directly bound Skill. Use SearchTools when its definition is needed.` | `SEQUENTIAL` | 业务工具执行结果文本 |
-| `Agent` | `Run one directly bound child Agent and return its final answer.` | `SEQUENTIAL` | Child 最终 Assistant 文本 |
+| `Agent` | `Run one directly bound subagent and return its final answer.` | `SEQUENTIAL` | Subagent 最终 Assistant 文本 |
 
 框架工具输入 Schema 均为 JSON Schema 2020-12 对象 Schema，并显式设置
 `additionalProperties: false`。默认值由工具或 Service 统一归一化，不在 Schema 中写
@@ -60,7 +60,7 @@
 `FileOperationTracker` 只识别精确 PascalCase `Read` ToolCall，按路径去重、排序，并在
 重复压缩时继承旧摘要的 `<read-files>`；它不改变 Read 的输入、输出或执行模式。
 Slash Command 是独立应用模块，所有命令都不会出现在模型工具清单中。命令的注册、
-HTTP 和执行规则见 [Slash Command 通用模块](../../04-命令与技能/00-Slash-Command通用模块/README.md)。
+HTTP 和执行规则见 [Slash Command 通用模块](../04-CampusClaw命令系统/README.md)。
 
 ## 2. 本地只读工具
 
@@ -74,7 +74,7 @@ HTTP 和执行规则见 [Slash Command 通用模块](../../04-命令与技能/00
 4. `Read` 只接受可读普通文件，`Ls` 只接受可读目录，`Find` 和 `Grep` 只遍历边界内目标；
 5. 拒绝跨 Agent、`..` 越界、符号链接和 realpath 越界；错误不泄露兄弟 Agent ID、
    外部根或解析后的物理路径；
-6. Child Session 使用 Child 自己的根，不继承父 Agent 边界。
+6. Subagent Session 使用 Subagent 自己的根，不继承父 Agent 边界。
 
 该规则是相对 pi cwd 语义的安全加固。工具的参数与正常输出尽量对齐 pi；工作区边界、
 禁止运行期下载辅助二进制和错误脱敏是 CampusClaw 的产品安全约束。
@@ -387,37 +387,39 @@ SearchTools 与 CallTool 复用可信解析职责，保证已披露定义与本�
     "agentName": {
       "type": "string",
       "enum": ["researcher", "reviewer"],
-      "description": "Exact name of one directly bound child Agent."
+      "description": "Exact name of one directly bound subagent."
     },
-    "task": {"type": "string", "description": "Complete task for the child Agent."}
+    "task": {"type": "string", "description": "Complete task for the subagent."}
   },
   "required": ["agentName", "task"],
   "additionalProperties": false
 }
 ```
 
-单次调用创建一个 Child Execution。`SubagentExecutionService` 通过公共
-`AgentSessionFactory` 为 Child 创建独立 `AgentSession` 实例；父子使用同一 Session 类型、
+description 与 Schema 中的 subagent 措辞待实现，当前实现仍写作 child Agent；命名规则见[主设计 §4.2](README.md#subagent-naming)。
+
+单次调用创建一个 Subagent Execution。`SubagentExecutionService` 通过公共
+`AgentSessionFactory` 为 Subagent 创建独立 `AgentSession` 实例；父子使用同一 Session 类型、
 装配接口、工具 pipeline、hook、错误与取消语义，但消息、工作区、SYSTEM、Skill、工具
 实例、缓存和 Execution 上下文隔离。运行位置是实现部署细节，不属于工具契约。
 
 执行前依次校验精确直接绑定、自绑定、enabled、固定版本、最大深度、祖先路径循环、
-目标运行目录完整性和模型可用性。首版最大深度为 1，`child-agent` profile 因而不暴露
+目标运行目录完整性和模型可用性。首版最大深度为 1，`subagent` profile 因而不暴露
 `Agent`。版本不匹配直接失败，不触发隐式目录 refresh。
 
-Child 有可用 default model 时优先使用；否则继承父 Execution 的 model 和 thinking，且
-仍须通过 Child `bindingModels` 与当前凭据可用性校验。父侧只接收目标、工具开始/结束和
-完成等高层进度，不接收 Child 推理、消息历史或完整事件流。父取消传播到 Child；成功
+Subagent 有可用 default model 时优先使用；否则继承父 Execution 的 model 和 thinking，且
+仍须通过 Subagent `bindingModels` 与当前凭据可用性校验。父侧只接收目标、工具开始/结束和
+完成等高层进度，不接收 Subagent 推理、消息历史或完整事件流。父取消传播到 Subagent；成功
 结果只返回最后一条非空 Assistant 文本。
 
-可用条件：Session 具有当前受管 Agent、直接 Child 索引、有效深度/ancestry、
+可用条件：Session 具有当前受管 Agent、直接 Subagent 索引、有效深度/ancestry、
 `SubagentExecutionService` 和取消域。
 
 ## 6. 缺省 profile
 
 配置项缺失时使用下表默认值；显式 `[]` 时完全不向模型提供工具，模型请求的 `tools=[]`；非空数组完全替换框架工具缺省值，并在装配开关与绑定约束允许时追加当前 Agent 直接关联的业务工具代理，该装配已在开发提交 `c9a2340` 实现。完整配置规则见[主设计 §4.2](README.md#42-工具配置)。
 
-| 工具 | Runtime | Cron | Child Agent |
+| 工具 | Runtime | Cron | Subagent |
 |---|:---:|:---:|:---:|
 | `Read` | ✓ | ✓ | ✓ |
 | `Find` | ✓ | ✓ | ✓ |
@@ -449,6 +451,7 @@ Child 有可用 default model 时优先使用；否则继承父 Execution 的 mo
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.5.0 | 2026-10-14 | `Agent` 工具描述、Schema 文案与 profile 键改用 subagent（待实现），命名规则见主设计 §4.2。 |
 | 3.4.1 | 2026-10-08 | Read 契约明确仅支持 UTF-8 文本，移除图片读取和缩放描述并补充源码证据。 |
 | 3.4.0 | 2026-09-22 | SearchTools 仅接收 tool 并返回单个完整定义，移除模糊搜索与全量快照前提。 |
 | 3.3.0 | 2026-09-22 | 增加固定 SearchTools 契约，以同一 Session 定义快照支持有界发现和 CallTool 执行。 |

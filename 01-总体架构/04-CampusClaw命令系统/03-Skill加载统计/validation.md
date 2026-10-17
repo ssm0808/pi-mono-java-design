@@ -2,7 +2,7 @@
 
 版本 5.0.0 · 2026-10-10。[主设计](README.md)及[源码证据](source-evidence.md)分别维护目标与已观察实现。
 
-图源、全仓生成同步、ASCII/XML/链接、原尺寸和 840px 视觉检查与 diff-check 统一记录于[统一历史验证](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence-validation.md)。两张 Skill 图保持稳定块名，表达同事务投影与查询，没有后台队列或第二份事实。SQL 片段保留一张累计表，并明确新结果首次插入、原子累加、清理缺口及失败整体回滚。
+图源、全仓生成同步、ASCII/XML/链接、原尺寸和 840px 视觉检查与 diff-check 统一记录于[统一历史验证](../../01-CampusClaw多Agent运行时/unified-event-persistence-validation.md)。两张 Skill 图保持稳定块名，表达同事务投影与查询，没有后台队列或第二份事实。SQL 片段保留一张累计表，并明确新结果首次插入、原子累加、清理缺口及失败整体回滚。
 
 本次没有修改产品代码，没有运行新提交端口、统计事务或真实 GaussDB 测试。此前固定 #335 的 16 类 156 项测试只证明旧实现，不能作为 5.0.0 的通过证据。
 

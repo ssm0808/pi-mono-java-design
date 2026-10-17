@@ -45,13 +45,13 @@ POST `/sessions/{sessionId}/events` 在同一响应中返回本次用户事件�
 | 跨实例控制 | 数据库保存固定目标与决定，各实例批量检查本机执行或本机等待响应；本地提交后通知缩短延迟，轮询兜底 |
 | 身份与恢复 | eventId 对外去重；内部执行身份与序号不公开，网络结果不确定先查历史，不无条件重试 POST |
 
-完整事件在 SSE 与历史同形。以上概要不取代完整事件目录；配置、压缩、用量及子 Agent 的投影由历史专题维护。Claw/Mate 的 eventId 是否共值仍需 bridge 对齐，字段同名不代表值相同。
+完整事件在 SSE 与历史同形。以上概要不取代完整事件目录；配置、压缩、用量及 Subagent 的投影由历史专题维护。Claw/Mate 的 eventId 是否共值仍需 bridge 对齐，字段同名不代表值相同。
 
 ### 2.2 相邻模块边界
 
 凭据的读取、执行期间保留和仅 Mate tool execute 使用见 [HTTP 安全边界](chat-http-v1-design.md#7-安全与附件边界)。仅 user.message 声明可选执行凭据；中断、工具确认、计划审核和问题回答无需重传凭据，仍属于原执行且不能覆盖原快照。GET 历史不声明执行凭据。Claw 不检查凭据最低完整性，缺失或不完整的 Header 仍按已提供值透传给 Mate，由 Mate execute 返回工具失败结果。
 
-Skill 复用消息执行语义，Builtin 保持 JSON，具体由 [Slash 模块](../../04-命令与技能/00-Slash-Command通用模块/README.md) 维护。当前无运行中消息队列，[FollowUp](chat-follow-up-future-design.md) 仅为未来扩展。
+Skill 复用消息执行语义，Builtin 保持 JSON，具体由 [Slash 模块](../04-CampusClaw命令系统/README.md) 维护。当前无运行中消息队列，[FollowUp](chat-follow-up-future-design.md) 仅为未来扩展。
 
 [计划审核](../06-CampusClaw计划模式/README.md)沿用根消息、固定续跑段与对应 SSE，在批准事务更新 Session.mode；精确输入和事件已进入共享契约，具体运行时实现仍须验收。计划子域的审核状态和工具边界由该模块唯一维护。
 

@@ -26,8 +26,8 @@ return 已认领的 Run
 == 准备并受理 ==
 ref over Schedule, Store
   共用受理流程
-  Session 归属登记 -> Runtime 准备 -> 原子受理
-  见 schedule_run_admission
+  归属登记 -> Runtime 准备 -> 原子受理
+  展开见设计文档 §3.6 共用受理时序图
 end ref
 return 已提交的受理结果\n和同次准备的上下文
 == 执行已受理的 Run ==
@@ -43,149 +43,171 @@ deactivate Runtime
 @enduml
 
 @startuml scheduled_task_architecture
-' 基线：Claude Deployment / Run / Session 及 run/pause/unpause，核对日期 2026-10-05，Beta。
-' 源码：modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob 和 triggerJob。
-' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/ManagedCronSessionRunner.java execute。
-' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java start 和 commitTerminal。
-' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java create。
-' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a。
-' 设计原因：保持 API、服务、策略、适配器、运行时和持久化的边界。
-' 产品约束：每次 Run 使用关联的 Agent 定义新建 Session。
-' 架构变更：Cron 合并进 coding-agent-cli，不再有独立的 cron 制品。
-' 源码：pom.xml modules；scripts/sync-campusclaw.sh MODULES。
-' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionEngineRegistry.java createSession。
-' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/cron/AgentScopedCronToolFactory.java create。
-' 设计原因：轻量受理不依赖分发器或执行注册表。
-' 架构变更：只有一条受理路径；不支持以已有 Session 为目标。
+' 实现：superheromeZzh/pi-mono-java PR #332，codex/scheduled-task-backend bdd3af99，核对日期 2026-10-15。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/dispatch/ScheduleRunLauncher.java handleRunRequest、createAutomaticRun、startAutomaticRun。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/session/ScheduledSessionStarter.java prepare、acceptSession、startExecution、requestStop。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeActiveExecution.java bindSafetyContext。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ExecutionSafetyContext.java beforeHook、resolveCredentials。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/application/ScheduleRunPublisher.java requestRun。
+' 设计原因：立即运行经进程内事件到达 Run 启动器，避免 Runtime 装配构造依赖环。
+' 设计原因：服务直接使用 ScheduleMapper 收发 DTO，不另设仓储接口。
+' 产品约束：接口配置的任务每次 Run 使用关联的 Agent 定义新建 Session；对话中创建的任务在关联会话追加一轮；定时执行非交互。
+' 目标：CronTool 写动作、会话删除扩展点与 deleteBySession 待实现（README.md 第 3.12、3.13 节）。
 title 定时任务：全局目标类图
+!pragma layout elk
+top to bottom direction
+set separator none
 skinparam backgroundColor white
-skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam defaultFontSize 12
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
-skinparam nodesep 30
-skinparam ranksep 45
+skinparam nodesep 40
+skinparam ranksep 50
 hide empty members
+hide circle
 
-class "Mate 管理入口" as Caller <<外部>>
-
-package "入口层（runtimeapi / tool.cron）" as EntryPkg {
-  class ScheduleController <<API / P>> {
-    + 8 个配置操作与 2 个 Run 读取
+package "入口（schedule.web / tool.cron）" as EntryPkg {
+  class ScheduleController <<单例>> {
+    + create(body, request) : ResponseEntity
+    + applyAction(scheduleId, run|pause|unpause, request)
+    + listRuns(filters, request) : ResponseEntity
   }
-  class CronToolAdapter <<适配器 / P>> {
-    + 带当前 Session / 执行 ID 调用
-  }
-}
-
-package "定时任务应用层（schedule）" as AppPkg {
-  class ScheduleApplicationService <<单例 / P>> {
-    + 创建 / 更新 / 删除
-    + 暂停 / 取消暂停 / 立即运行
-  }
-  class ScheduleDispatcher <<单例 / P>> {
-    + 每秒扫描到期任务
-    + 占用任务并推进游标
-  }
-  class ScheduleTimePolicy <<策略 / P>> {
-    + 校验 Cron 与时区
-    + 计算下次运行时刻
-  }
-  class ScheduleRunPreparation <<单例 / P>> {
-    + 登记归属并准备 Runtime
-  }
-  class PreparedScheduleRunDTO <<每次 Run / 不可变 / P>> {
-    sessionId
-    Agent 目录与模型
-    prompt
-  }
-  class ScheduledRunAcceptanceService <<单例 / P>> {
-    + 同库短事务受理
-  }
-  class ScheduleRunTerminalHook <<单例 / P>> {
-    + 按 execution_id 结束 Run
+  class CronTool <<每个 Session>> {
+    + 查看(list | status | runs)
+    + 管理(create | update | delete | pause | unpause)
   }
 }
 
-package "端口与适配器" as PortPkg {
-  interface ScheduleBindingResolver <<只读端口 / P>>
-  interface ScheduleAuthorizationPort <<端口 / P>>
-  interface ScheduledAccessTokenPort <<端口 / P>>
-  class MateScheduleAdapter <<适配器 / P>>
-  interface ScheduleRepository <<端口 / P>>
-  class MyBatisScheduleRepository <<适配器 / P>>
-  interface ScheduleMapper <<DTO 边界 / P>>
-}
-
-class "Mate 服务" as Mate <<外部>> {
-  用户权限（配置时检查）
-  Session 归属
-  统一账号 access-token
-}
-
-package "Runtime（已有，需接入定时入口）" as RtPkg {
-  class RuntimeExecutionCoordinator <<已有>>
-  class AgentSessionFactory <<已有>>
-  class ManagedAgentSession <<每次 Run>>
-  class "Host hooks +\nToolExecutionPipeline" as Pipeline <<每次 Run>>
-  class "Session 与执行持久化" as Persist <<已有>>
-  interface ExecutionTerminalHook <<终态扩展点 / P>> {
-    + 与根执行终态同事务调用
+package "应用服务（schedule.application）· 单例" as AppPkg {
+  class ScheduleService {
+    + create / update / delete(grant, ...)
+    + pause / unpause(grant, id)
+    + listBySession / createInSession(sessionId, ...)
+  }
+  class ScheduleRunService {
+    + runNow(grant, id) : ScheduleRunResponseVO
+    + getRun / listRuns(grant, ...)
+  }
+  class ScheduleRunPublisher {
+    + requestRun(grant, scheduleId) : ScheduleRunDTO
+  }
+  class ScheduleCronCalculator {
+    + normalizeRule(rule, now)
+    + nextRunAt(cron, timezone, after)
   }
 }
 
-class "GaussDB" as Db <<最终决定方>> {
-  t_schedule / t_schedule_run
-  Session / 根执行
+package "调度（schedule.dispatch）· 单例" as DispatchPkg {
+  class ScheduleTriggerWorker {
+    + triggerDueSchedules()
+    + deleteExpiredRuns()
+  }
+  class ScheduleRunLauncher {
+    + handleRunRequest(event)
+    + createAutomaticRun(schedule, now)
+    + startAutomaticRun(claimed)
+  }
+  class ScheduleRunTerminalHook {
+    + onTerminal(target, reason, at)
+  }
+  class ScheduleSessionDeleteHook {
+    + beforeDelete(sessionId)
+  }
 }
 
-Caller -down-> ScheduleController : 可信服务调用
-ScheduleController -down-> ScheduleApplicationService : VO→DTO
-CronToolAdapter -down-> ScheduleApplicationService
+package "定时 Session 创建（schedule.session）" as StarterPkg {
+  class ScheduledSessionStarter <<单例>> {
+    + prepare(request, deadline) : PreparedScheduledSessionDTO
+    + acceptSession(prepared, prompt) : ScheduledSessionReceiptDTO
+    + appendToSession(prepared, sessionId, prompt) : ScheduledSessionReceiptDTO
+    + startExecution(prepared, receipt)
+    + requestStop(receipt)
+  }
+  class PreparedScheduledSessionDTO <<每次 Run>> {
+    - request : ScheduledSessionRequestDTO
+    - session : RuntimeSessionDTO
+    - execution : RuntimeActiveExecution
+  }
+}
 
-ScheduleApplicationService -down-> ScheduleTimePolicy
-ScheduleDispatcher -down-> ScheduleTimePolicy
-ScheduleApplicationService -down-> ScheduleRunPreparation : 立即运行
-ScheduleDispatcher -down-> ScheduleRunPreparation : 自动运行
-ScheduleRunPreparation -right-> PreparedScheduleRunDTO : 生成
-ScheduleApplicationService -down-> ScheduledRunAcceptanceService
-ScheduleDispatcher -down-> ScheduledRunAcceptanceService
-ScheduledRunAcceptanceService ..> PreparedScheduleRunDTO : 读取
+package "Runtime（runtimeapi / session）· 既有" as RuntimePkg {
+  class RuntimeExecutionCoordinator <<单例>> {
+    + start(execution)
+  }
+  class RuntimeActiveExecution <<每次 Run>> {
+    + bindSafetyContext(context)
+  }
+  class ExecutionSafetyContext <<每次 Run · 仅内存>> {
+    - scheduleId / runId / agentId
+    + beforeHook(runtime) : 非交互门禁
+    + resolveCredentials(agentId, toolId)
+  }
+  interface ExecutionTerminalHook {
+    + onTerminal(target, reason, at)
+  }
+  interface SessionDeleteHook {
+    + beforeDelete(sessionId)
+  }
+}
 
-ScheduleApplicationService -down-> ScheduleBindingResolver : 校验 Agent
-ScheduleRunPreparation -down-> ScheduleAuthorizationPort : 校验 Agent 启用、登记 Session 归属
-MateScheduleAdapter .up.|> ScheduleBindingResolver
-MateScheduleAdapter .up.|> ScheduleAuthorizationPort
-MateScheduleAdapter .up.|> ScheduledAccessTokenPort
-MateScheduleAdapter -down-> Mate
+package "Mate 对接（schedule.authorization / schedule.mate）" as MatePkg {
+  interface ScheduleSessionRegistry {
+    + registerSession(registration)
+  }
+  interface ScheduleAccessTokenProvider {
+    + accessToken() : String
+  }
+  class MateScheduleSessionRegistry
+  class MateAccessTokenClient
+}
 
-ScheduleApplicationService -down-> ScheduleRepository : 锁定 / 写入
-ScheduleDispatcher -down-> ScheduleRepository : 领取到期任务
-ScheduledRunAcceptanceService -down-> ScheduleRepository : 写 Run 关联
-MyBatisScheduleRepository .up.|> ScheduleRepository
-MyBatisScheduleRepository -down-> ScheduleMapper
-ScheduleMapper -down-> Db
+package "持久化（schedule.persistence）" as PersistPkg {
+  interface ScheduleMapper {
+    + lockSchedule(id) : ScheduleDTO
+    + insertRun(run) / updateRun(run)
+    + finishRunByExecution(executionId, at)
+    + deleteBySession(sessionId)
+  }
+  class ScheduleDTO <<持久化对象>>
+  class ScheduleRunDTO <<持久化对象>>
+}
 
-ScheduledRunAcceptanceService -down-> Persist : 同一事务创建\nSession / 首消息 / 根执行
-Persist -down-> Db
-ScheduleDispatcher -down-> RuntimeExecutionCoordinator : 提交后启动一次
-RuntimeExecutionCoordinator -down-> AgentSessionFactory
-RuntimeExecutionCoordinator -right-> Persist : 事件 / 终态
-Persist -down-> ExecutionTerminalHook : 终态事务内
-ScheduleRunTerminalHook .right.|> ExecutionTerminalHook
-ScheduleRunTerminalHook -down-> ScheduleRepository : 结束 Run
-AgentSessionFactory -down-> "0..*" ManagedAgentSession : 创建
-ManagedAgentSession *-down-> "1" Pipeline
-Pipeline -up-> ScheduledAccessTokenPort : 每批工具调用\n取 access-token
+ScheduleController --> ScheduleService
+ScheduleController --> ScheduleRunService
+CronTool ..> ScheduleService : 当前会话的任务\n写动作经用户确认
+CronTool ..> ScheduleRunService : 只读
+ScheduleService --> ScheduleCronCalculator
+ScheduleRunService --> ScheduleRunPublisher
+ScheduleRunPublisher ..> ScheduleRunLauncher : <<事件>>\nScheduleRunRequestEvent
+ScheduleTriggerWorker --> ScheduleRunLauncher : 到期任务
+ScheduleRunLauncher --> ScheduledSessionStarter
+ScheduledSessionStarter ..> PreparedScheduledSessionDTO : <<创建>>
+PreparedScheduledSessionDTO *-- "1" RuntimeActiveExecution
+RuntimeActiveExecution o-- "0..1" ExecutionSafetyContext
+ScheduledSessionStarter --> RuntimeExecutionCoordinator : 提交后启动
+RuntimeExecutionCoordinator --> RuntimeActiveExecution
+ScheduledSessionStarter --> ScheduleSessionRegistry
+ExecutionSafetyContext --> ScheduleAccessTokenProvider : 每批工具一次
+ScheduleRunTerminalHook ..|> ExecutionTerminalHook
+MateScheduleSessionRegistry ..|> ScheduleSessionRegistry
+MateAccessTokenClient ..|> ScheduleAccessTokenProvider
+ScheduleService --> ScheduleMapper
+ScheduleRunLauncher --> ScheduleMapper
+ScheduleTriggerWorker --> ScheduleMapper
+ScheduleRunTerminalHook --> ScheduleMapper
+ScheduleSessionDeleteHook ..|> SessionDeleteHook
+ScheduleSessionDeleteHook --> ScheduleMapper
+ScheduleMapper ..> ScheduleDTO
+ScheduleMapper ..> ScheduleRunDTO
+ScheduleRunDTO "0..*" --> "1" ScheduleDTO : scheduleId
 
-PreparedScheduleRunDTO -down[hidden]-> ScheduleAuthorizationPort
-ScheduledRunAcceptanceService -down[hidden]-> ScheduleRepository
-ScheduledRunAcceptanceService -down[hidden]-> ScheduleRunTerminalHook
-ScheduleTimePolicy -right[hidden]-> RuntimeExecutionCoordinator
 
-legend bottom
-  P = 待实现，新增连线均为待实现；已有 = 已实现，需接入定时入口。
-  单例服务不持有单次 Run 状态；快照、Session 与工具管道按 Run 创建。
-  业务规则（不补跑、遇忙跳过、删除与保留等）见正文 §3，不在图中重复。
+legend bottom left
+Mate 管理入口经服务认证调用 ScheduleController；MateScheduleSessionRegistry 与 MateAccessTokenClient 调用 Mate 服务。
+单例不持有单次 Run 状态；PreparedScheduledSessionDTO、RuntimeActiveExecution、ExecutionSafetyContext 按 Run 创建。
+ScheduleRunService 查询 Run 同样经 ScheduleMapper；ScheduledSessionStarter 在同一事务写入 Session、首条消息与根执行，对话中创建的任务改为在关联会话追加消息与根执行。
+Runtime 删除会话时在同一事务调用 SessionDeleteHook，删除该会话关联的任务及其 Run。
 endlegend
 @enduml
 
@@ -210,8 +232,6 @@ autonumber
 activate Mate
 Mate -> Schedule ++ : 创建任务：Agent、任务内容和可选规则
 Schedule -> Schedule : 核验服务来源和获准目标\n校验输入和时间规则
-Schedule -> Mate ++ : 检查 Agent 关联\n以及当前管理授权
-return Agent 关联校验结果
 Schedule -> Store ++ : 提交新的启用配置\n含下次计划时间
 return 已提交的配置
 return 201 + 已保存的配置\n及未来计划时间
@@ -247,8 +267,8 @@ Schedule -> Store ++ : 读取当前任务并预留一个手动 Run\n检查共用
 return 已预留的 Run
 ref over Schedule, Store
   共用受理流程
-  Session 归属登记 -> Runtime 准备 -> 原子受理
-  见 schedule_run_admission
+  归属登记 -> Runtime 准备 -> 原子受理
+  展开见设计文档 §3.6 共用受理时序图
 end ref
 return 200 + Run（含 Session ID）
 deactivate Mate
@@ -264,7 +284,7 @@ end note
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeMessageEventService.java submitLocked。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage。
 ' 表达方式：定时任务管理协调事务；Session 运行时提供准备和持久化能力。
-' 设计原因：远程归属登记在短受理事务之前完成；执行授权只在配置任务时由 Mate 检查。
+' 设计原因：不校验 Agent 是否存在和启停用（评审 Todo T11）；远程归属登记在短受理事务之前完成；执行授权只在配置任务时由 Mate 检查。
 ' PR 证据：e9d31e8888a81b7fe95071e705482bb16fa10476，2026-10-10 拉取。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/schedule/ScheduledRuntimeAdmissionService.java newSession 和 encodeContext。
 ' Java 差异：移除 Claw 的用户引用；Mate 归属登记待实现。
@@ -297,7 +317,7 @@ end
 note over Schedule, Store
   Mate 归属登记独立完成，不存在跨库事务。
   受理在同一事务内使用 Runtime 持久化能力。
-  已受理的 Run 保留准备上下文，供后续分发使用。
+  调度上下文只在内存中传给 Runtime，不落库。
   本流程不调用模型或工具。
 end note
 @enduml
@@ -330,8 +350,6 @@ Operator -> Mate ++ : 配置定时任务（每天 22:00 视频巡逻检查）
 activate Operator
 note right of Mate : Mate 内部处理待定（评审 Todo T8）
 Mate -> Claw ++ : 创建该定时任务
-Claw -> Mate ++ : 校验该 Agent 的配置权限
-return 配置授权
 Claw -> Store ++ : 保存该定时任务
 return 已保存的定时任务
 return 定时任务及下次运行时间
@@ -360,4 +378,94 @@ return 运行记录及会话内容
 return 运行记录、巡逻结论及工具证据
 return 返回每次运行的巡逻结论及工具证据
 deactivate Operator
+@enduml
+
+@startuml schedule_session_credentials
+' 证据：M06 chat-http-v1-design.md §7.1、§7.1.1、§7.2 的凭据快照规则；chat-events-design.md 的同一 Session 只允许一个 active execution、遇忙 409 SESSION_BUSY。
+' 设计原因：凭据来源在根执行受理时按入口确定一次，执行中不变；同一 Session 先后可有不同来源的根执行。
+' 表达方式：只画一次定时运行和其后一次用户继续对话的正常流程；遇忙、中断与失败规则见 README.md 第 3.11 节。
+' 目标：待实现。
+' 表示法：同步调用的发起方和接收方都画激活条并配返回，外部触发画为来自图外的发现消息。
+title 定时 Session 中的凭据来源：按每轮发起方确定
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+participant "对话调用方" as Caller
+participant "Session 运行时" as Runtime
+participant "Mate" as Mate
+autonumber
+== 定时触发的一轮 ==
+[-> Runtime ++ : 启动已受理的定时根执行
+Runtime -> Runtime : 固定凭据来源：统一账号
+Runtime -> Mate ++ : 本批有需凭据的工具\n无入参取统一账号 access-token
+return access-token（只在本批内存）
+Runtime -> Mate ++ : 执行业务工具\n携带统一账号 access-token
+return 工具结果
+Runtime -> Runtime : 提交根执行终态\n同一事务结束本次 Run
+deactivate Runtime
+== 用户在同一 Session 继续对话 ==
+Caller -> Runtime ++ : 提交 user.message\n携带本次请求的用户凭据 Header
+Runtime -> Runtime : Session 空闲才受理新根执行\n固定凭据来源：本次请求 Header 快照
+Runtime -> Mate ++ : 执行业务工具\n携带用户本人的凭据
+return 工具结果
+return SSE 回复
+note over Caller, Mate
+  用户这一轮不向 Mate 取统一账号 Token，也不沿用定时那一轮的 Token。
+  这一轮不关联任何 Run，不改写定时运行的结果。
+end note
+@enduml
+
+@startuml schedule_chat_created
+' 目标：待实现；对话中通过 Cron 工具创建定时任务，到点在同一对话中运行，之后在该对话查看结果。
+' 源码证据：superheromeZzh/pi-mono-java PR #332 codex/scheduled-task-backend 0e8c75f8 的 tool/cron/CronTool.java 只有 list、status、runs，写动作待实现。
+' 证据：M06 chat-events-design.md 的同一 Session 只允许一个 active execution；工具确认沿用普通对话的确认交互。
+' 设计原因：任务关联当前会话，归属随会话，不经 Mate 授权与归属登记；创建需用户确认；会话正忙时本次跳过。
+' 粒度：参与者统一为服务级。Mate = mate-service；Claw = coding-agent 服务；GaussDB = Claw 数据库。
+' 表达方式：只画正常流程；会话忙、拒绝确认与删除会话的规则见 README.md 第 3.12、3.13 节与第 5.2.1 节。
+title 对话中创建视频巡逻检查任务并在该对话中运行
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "值班人员" as User
+participant "Mate" as Mate
+participant "Claw" as Claw
+database "GaussDB" as Db
+autonumber
+== 在对话中创建定时任务 ==
+User -> Mate ++ : 发送消息（每天 22:00 做视频巡逻检查，结果发在这里）
+activate User
+Mate -> Claw ++ : 提交用户消息
+Claw -> Claw : 模型调用 Cron 工具创建任务\n校验规则并算出接下来的运行时间
+return 请求用户确认
+return 展示确认内容（任务内容、规则、接下来的运行时间）
+deactivate User
+User -> Mate ++ : 确认创建
+activate User
+Mate -> Claw ++ : 提交工具确认
+Claw -> Db ++ : 锁定会话，核对本会话任务数\n保存任务并关联本会话
+return 已保存的任务
+Claw -> Claw : 工具结果交给模型生成回复
+return 回复（任务已创建，下次运行时间）
+return 显示回复
+deactivate User
+== 到点在该对话中运行 ==
+[-> Claw ++ : 到达计划时间（每天 22:00）
+Claw -> Db ++ : 锁定任务与会话，确认会话空闲\n追加用户消息、创建根执行并记录 Run
+return 已受理
+Claw -> Mate ++ : 调用工具前获取统一账号 access-token
+return access-token
+Claw -> Mate ++ : 执行视频巡逻检查工具
+return 工具结果
+Claw -> Db ++ : 保存回复与根执行终态\n同一事务结束本次 Run
+return 已保存
+deactivate Claw
+== 在该对话中查看结果 ==
+User -> Mate ++ : 打开这段对话
+activate User
+Mate -> Claw ++ : 读取会话事件
+return 会话事件（含定时运行的这一轮）
+return 显示巡逻结论及工具证据
+deactivate User
 @enduml

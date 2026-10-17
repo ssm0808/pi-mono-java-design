@@ -6,7 +6,7 @@
 ' session/AgentSessionFactory.java:create
 ' tool/agent/SubagentExecutionService.java:runChild
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
-' Observed behavior: Runtime persists; direct Child/Cron factory calls do not share its appender.
+' Observed behavior: Runtime persists; direct Subagent/Cron factory calls do not share its appender.
 ' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -26,7 +26,7 @@ title Unified Execution History - Target\nPending implementation: new admission 
 together {
   class "SessionEventController" as Web <<Web>>
   class "ScheduledRun\nAcceptanceService" as Cron <<Singleton>>
-  class "ChildRunAcceptanceService" as Child <<Singleton>>
+  class "SubagentRunAcceptanceService" as Subagent <<Singleton>>
 }
 class "SessionExecutionAdmission" as Admission <<Singleton>>
 class "RuntimeExecutionCoordinator" as Coordinator <<Singleton>>
@@ -44,7 +44,7 @@ class "CommittedEventProjection" as Public <<Public safety boundary>>
 class "GaussDB\nSessions / executions / links\nEntries / public events / Skill stats" as DB <<Database>>
 Web --> Admission
 Cron --> Admission
-Child --> Admission
+Subagent --> Admission
 Admission --> Coordinator : start after admission commit
 Admission -right-> Target : fixes identity
 Admission ..> Repo : atomic admission
@@ -76,7 +76,7 @@ end note
 ' session/AgentSessionFactory.java:create
 ' tool/agent/SubagentExecutionService.java:runChild
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
-' Observed behavior: Runtime persists; direct Child/Cron factory calls do not share its appender.
+' Observed behavior: Runtime persists; direct Subagent/Cron factory calls do not share its appender.
 ' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -94,34 +94,34 @@ skinparam noteBackgroundColor #FFFBEF
 hide empty members
 hide footbox
 autonumber
-title One Child Diagnosis - Target / Pending implementation
+title One Subagent Diagnosis - Target / Pending implementation
 participant "Parent" as Parent
 participant "Host" as Host
 participant "Session" as Store
-participant "Child Runtime" as Child
+participant "Subagent Runtime" as Subagent
 Parent -> Host : Invoke validated and permitted Agent call
-Host -> Store : Atomically admit child and parent-call link
-Store --> Host : Fixed child Session and execution
-Host -> Child : Start once after commit
-Child -> Store : Append own messages and tool results
-Child -->> Parent : Permitted high-level progress
-alt Child completes
-  Child -> Store : Commit final message and terminal
-  Store --> Child : Committed
-  Child --> Host : Final summary
+Host -> Store : Atomically admit Subagent and parent-call link
+Store --> Host : Fixed Subagent Session and execution
+Host -> Subagent : Start once after commit
+Subagent -> Store : Append own messages and tool results
+Subagent -->> Parent : Permitted high-level progress
+alt Subagent completes
+  Subagent -> Store : Commit final message and terminal
+  Store --> Subagent : Committed
+  Subagent --> Host : Final summary
   Host -> Store : Commit parent Agent tool result
   Store --> Host : Committed
   Host --> Parent : Return summary
 else Parent requests stop
-  Parent -> Host : Stop original child execution
-  Host -> Child : Propagate cancellation
-  Child -> Store : Persist actual outcome when known
-  Child --> Host : Actual outcome or unresolved state
+  Parent -> Host : Stop original Subagent execution
+  Host -> Subagent : Propagate cancellation
+  Subagent -> Store : Persist actual outcome when known
+  Subagent --> Host : Actual outcome or unresolved state
   Host --> Parent : No fabricated success / no replay
 end
 note over Parent,Store
   Independent histories; parent retains summary only.
-  An unresolved child keeps its execution occupancy.
+  An unresolved Subagent keeps its execution occupancy.
 end note
 @enduml
 
@@ -133,7 +133,7 @@ end note
 ' session/AgentSessionFactory.java:create
 ' tool/agent/SubagentExecutionService.java:runChild
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
-' Observed behavior: Runtime persists; direct Child/Cron factory calls do not share its appender.
+' Observed behavior: Runtime persists; direct Subagent/Cron factory calls do not share its appender.
 ' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif

@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/agents/{agentId}/events",
     "summary": "按时间范围跨会话列出 Agent 名下的用户请求",
-    "description": "按 Agent 与 UTC 时间范围，跨该 Agent 全部未删除会话列出指定类型的完整事件，供 Mate Trace 定位用户请求。每条 user.message 对应一轮，结果附所属 sessionId，可据此展开所在轮次。",
+    "description": "按 Agent 与 UTC 时间范围，跨该 Agent 全部未删除会话列出指定类型的完整事件，供 Mate Trace 定位用户请求。每条 user.message 对应一轮，结果附所属 sessionId，可据此展开所在轮次；响应附 total 表示范围内总条数。",
     "parameters": [
       {
         "$ref": "parameters.agentId"
@@ -61,7 +61,7 @@
         "status": "200",
         "tabLabel": "200 · 第一页",
         "label": "OK",
-        "summary": "?type=user.message&from=2026-10-11T00:00:00Z&to=2026-10-12T00:00:00Z&page=1&limit=2：两条用户请求来自两个会话，按 createdAt、sessionId、eventSeq 升序；还有后续，nextPage=2。event 与 ListSessionEvents 的完整事件逐字段相同，外层只加 sessionId。",
+        "summary": "?type=user.message&from=2026-10-11T00:00:00Z&to=2026-10-12T00:00:00Z&page=1&limit=2：两条用户请求来自两个会话，按 createdAt、sessionId、eventSeq 升序；还有后续，nextPage=2；total=3 表示范围内共 3 条用户请求，与 page、limit 无关。event 与 ListSessionEvents 的完整事件逐字段相同，外层只加 sessionId。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -102,7 +102,8 @@
                   }
                 }
               ],
-              "nextPage": 2
+              "nextPage": 2,
+              "total": 3
             }
           }
         }
@@ -112,7 +113,7 @@
         "status": "200",
         "tabLabel": "200 · 下一页",
         "label": "OK",
-        "summary": "与「第一页」配对，?page=2&limit=2：返回第三条，nextPage=null 只表示本次读取没有下一页，不表示以后不会追加。",
+        "summary": "与「第一页」配对，?page=2&limit=2：返回第三条，total 仍为 3；nextPage=null 只表示本次读取没有下一页，不表示以后不会追加。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -139,7 +140,8 @@
                   }
                 }
               ],
-              "nextPage": null
+              "nextPage": null,
+              "total": 3
             }
           }
         }
@@ -149,7 +151,7 @@
         "status": "200",
         "tabLabel": "200 · 空结果",
         "label": "OK",
-        "summary": "时间范围内没有用户请求、Agent 不存在或已下线，或页码超出范围时都返回 200、events=[]、nextPage=null。Claw 不维护 Agent 目录，不返回 404。",
+        "summary": "时间范围内没有用户请求、Agent 不存在或已下线时返回 200、events=[]、nextPage=null、total=0；页码超出范围时 events=[]、nextPage=null，total 仍为实际总数。Claw 不维护 Agent 目录，不返回 404。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -161,7 +163,8 @@
             "resMsg": "success",
             "result": {
               "events": [],
-              "nextPage": null
+              "nextPage": null,
+              "total": 0
             }
           }
         }
@@ -270,7 +273,7 @@
           ],
           [
             "范围",
-            "只读该 Agent 下未删除会话中的事件；已删除会话的残留事件不返回。定时任务与子 Agent 会话中的 user.message 同样返回。"
+            "只读该 Agent 下未删除会话中的事件；已删除会话的残留事件不返回。定时任务与 Subagent 会话中的 user.message 同样返回。"
           ],
           [
             "时间",
@@ -282,7 +285,7 @@
           ],
           [
             "分页",
-            "整数页码，规则与 ListSessionEvents 相同：默认 page=1、limit=50，limit 不超过 200，不返回 total。不固定快照，翻页期间的删除或晚提交可能让后续页移动；需要完整结果时用已结束的时间段查询，并按 sessionId + eventId 去重。"
+            "整数页码，规则与 ListSessionEvents 相同：默认 page=1、limit=50，limit 不超过 200。另返回 total：本次读取时满足 agentId、type 与时间范围的事件总数，与 page、limit 无关，可用于显示总数与页码；与本页在同一次一致读取中得到，前后页之间可能变化。不固定快照，翻页期间的删除或晚提交可能让后续页移动；需要完整结果时用已结束的时间段查询，并按 sessionId + eventId 去重。"
           ],
           [
             "标识",

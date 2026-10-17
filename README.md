@@ -1,6 +1,6 @@
 # CampusClaw 设计仓库
 
-导航版本 3.71.0 · 2026-10-15
+导航版本 3.73.0 · 2026-10-17
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
@@ -14,7 +14,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 <a id="module-index"></a>
 
-[统一执行历史](01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md)统一 Runtime、Cron 与 SubAgent 的完整历史、逐工具提交和 Skill 计数投影，含最新基线、全局目标图及实施验收；新增链路待实现。
+[统一执行历史](01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md)统一 Runtime、Cron 与 Subagent 的完整历史、逐工具提交和 Skill 计数投影，含最新基线、全局目标图及实施验收；新增链路待实现。
 
 ## 1. 模块索引
 
@@ -26,12 +26,12 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 | M02 · Model | [Model](./02-服务与接口/03-Model/README.md) | Provider 身份、业务 Agent 绑定、[Mate 模型信息与执行快照](./02-服务与接口/03-Model/model-capabilities.md)及[通用参数预览](./02-服务与接口/03-Model/README.md#streaming-json)；[共享客户端配置](./02-服务与接口/02-CampusMate共享客户端配置/README.md)维护服务连接配置 |
 | M03 · Tool 与受管执行环境 | [工具系统](./01-总体架构/02-CampusClaw工具系统/README.md) | [内置工具契约](./01-总体架构/02-CampusClaw工具系统/built-in-tool-contracts.md)、[注册与渐进发现](./01-总体架构/02-CampusClaw工具系统/README.md#9-工具注册与发现)、[校验与确认顺序](./01-总体架构/02-CampusClaw工具系统/source-evidence.md#tool-validation-order-evidence)、[参数恢复反馈](./01-总体架构/02-CampusClaw工具系统/README.md#tool-argument-recovery)、[工具执行细节](./01-总体架构/02-CampusClaw工具系统/execution-details.md)、[展示名称映射](./01-总体架构/02-CampusClaw工具系统/README.md#tool-display-name)、[凭据透传与工具可用条件](./01-总体架构/02-CampusClaw工具系统/README.md#mate-credential-forwarding)、执行权限与 Session 隔离；AskUserQuestion 的等待生命周期归 M01 |
 | M04 · Session 上下文与持久化 | [会话记忆 GaussDB](./03-数据与存储/01-会话记忆GaussDB/README.md) | 单条追加时间线、压缩、恢复与存储，不提供最近对话编辑或同 Session 分支；[pi 上下文研究](./05-研究资料/03-pi会话上下文/README.md)是证据入口，客户端事件历史归 M06 |
-| M05 · Command 与 Skill | [Slash Command 通用模块](./04-命令与技能/00-Slash-Command通用模块/README.md) | [当前实现与剩余增量](./04-命令与技能/00-Slash-Command通用模块/README.md#current-runtime-status)；[Builtin](./04-命令与技能/01-内置命令/README.md)、[Skill Command](./04-命令与技能/02-技能命令/README.md)、[Skill 成功调用统计与实现对比](./04-命令与技能/03-Skill加载统计/README.md)与[Help](./04-命令与技能/01-内置命令/Help-Agent使用指南/README.md)分别维护行为 |
+| M05 · Command 与 Skill | [CampusClaw 命令系统](./01-总体架构/04-CampusClaw命令系统/README.md) | [当前实现与剩余增量](./01-总体架构/04-CampusClaw命令系统/README.md#current-runtime-status)；[Builtin](./01-总体架构/04-CampusClaw命令系统/01-内置命令/README.md)、[Skill Command](./01-总体架构/04-CampusClaw命令系统/02-技能命令/README.md)、[Skill 成功调用统计与实现对比](./01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md)与[Help](./01-总体架构/04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/README.md)分别维护行为 |
 | M06 · 事件契约与服务边界 | [Session Events](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md) | 内部[请求级 SSE](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-stream-design.md)、[历史](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)、[调用名称快照](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md#tool-display-snapshot)与[三类决定消费终态](./01-总体架构/01-CampusClaw多Agent运行时/chat-events-design.md#46-已接受决定的消费终态)；[Mate 公共 Chat](./02-服务与接口/07-mate-service通用对话API/README.md)单独维护公共权威契约 |
 | M07 · 前端体验 | [前端设计](07-前端设计/README.md) | [九个场景与高低保真原型](07-前端设计/原型/index.html)、[公共规范](07-前端设计/公共规范.md)、[技术设计与全局类图](07-前端设计/技术设计/README.md)、[源码证据](07-前端设计/source-evidence.md)、[发送前自动获取 Token](07-前端设计/技术设计/runtime-workbench-alignment.md#61-页面流程)；用户行为按场景维护；[定时任务配置场景](07-前端设计/场景/09-配置与管理定时任务/README.md)提供Manual/Schedule，服务契约引用M06/M10 |
 | M08 · Agent 元数据与配置 | [Agent 元数据 GaussDB](./03-数据与存储/02-Agent元数据GaussDB/README.md) | 身份、版本、Agent 默认 mode 及模型、Tool、Skill 关联；[元数据设计与样例](./06-元数据设计/README.md)维护 Agent、Skill、Tool 字段及园区告警样例，包含[用户确认 Tool 标记](./01-总体架构/02-CampusClaw工具系统/README.md#confirmation-tool-metadata)；[数据库模式研究](./03-数据与存储/03-Agent数据库模式/README.md)保留研究边界 |
 | M09 · 附件与文件服务 | [CampusMate 附件服务](./02-服务与接口/01-CampusMate附件服务/README.md) | 文件上传、扫描、访问与删除；Runtime 文件引用边界由 M01/M06 引用 |
-| M10 · 调度与并发治理 | [定时任务](./01-总体架构/08-CampusClaw定时任务/README.md) | [待对齐事项](./01-总体架构/08-CampusClaw定时任务/pending-alignment.md)集中记录需另开设计的问题与 Claw 首版开发前提；[Claw 配置接口与 Claude 取舍](./01-总体架构/08-CampusClaw定时任务/configuration.md)维护创建、列表、详情、更新和删除；名称上限 256，时间规则仅支持 cron；[Spring 六字段与固定/动态任务](./01-总体架构/08-CampusClaw定时任务/README.md#spring-scheduling)解释解析和调度边界，Cron 默认上海，绝对时刻响应统一 UTC 且无小数秒；[执行目标与文件证据](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#target-file-evidence)区分基线会话策略、文件引用与上传；每次运行固定新建 Session，复用 Agent 定义；[创建响应审阅](./01-总体架构/08-CampusClaw定时任务/configuration.md#creation-response-review)对齐计划时间、小写状态和 metadata，内部版本不外露；[资源类型与暂停原因](./01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-type-paused-reason)统一 type:schedule 与只读 pausedReason；[业务凭据](./01-总体架构/08-CampusClaw定时任务/configuration.md#credential-reference-proposal)由 Mate 按 Agent 绑定在运行时决定，Claw 不保存凭据引用；[Mate上下文与凭据接口草案](./02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)明确Mate提供可信接口定义和执行授权，保存引用、执行时按目标解析凭据；[详情与列表读取](./01-总体架构/08-CampusClaw定时任务/configuration.md#get-schedule-review)返回同形完整资源，分页参考既有 ListEvents 的整数 page/nextPage；[更新接口](./01-总体架构/08-CampusClaw定时任务/configuration.md#update-schedule-review)明确六字段部分修改、完整响应、状态保持及数据库事务合并更新；[删除接口](./01-总体架构/08-CampusClaw定时任务/configuration.md#delete-schedule-review)删除Schedule及所有对应Run、保留已生成Session，成功200完整配置回执不变；删除生效后配置和关联Run详情404、列表排除；删除不取消已受理Session，单独删除Session保留原Run受理记录；[立即运行、暂停与取消暂停](./01-总体架构/08-CampusClaw定时任务/configuration.md#run-schedule-review)区分200 Run受理结果与完整配置响应；[Run查询与删除历史边界](./01-总体架构/08-CampusClaw定时任务/configuration.md#schedule-run-read-lifecycle)明确Session独立授权及临时清理协调，具体读取请求与过滤规则由该契约统一维护；[其他基线删除关系](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-delete-baselines)区分Run、会话和在途执行的处理；[Claw 数据库设计（定时任务表）](03-数据与存储/Claw数据库设计.md#schedule)维护表结构、约束、索引、事务与 PR #332 差异；[定时任务主设计](./01-总体架构/08-CampusClaw定时任务/README.md#no-catch-up)维护不补漏跑、遇忙跳过、失败不重跑、未知结果对账及初始部署配额；首版不支持附件或需要交互的任务，不增加持久等待；Runtime准入归M06，[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量结构 |
+| M10 · 调度与并发治理 | [定时任务](./01-总体架构/08-CampusClaw定时任务/README.md) | [待对齐事项](./01-总体架构/08-CampusClaw定时任务/README.md#review-todo)集中记录需另开设计的问题与 Claw 首版开发前提；[接口协议 §4](./01-总体架构/08-CampusClaw定时任务/README.md#interface)维护创建、列表、详情、更新和删除；名称上限 256，时间规则仅支持 cron；[Spring 六字段与固定/动态任务](./01-总体架构/08-CampusClaw定时任务/README.md#spring-scheduling)解释解析和调度边界，Cron 默认上海，绝对时刻响应统一 UTC 且无小数秒；[执行目标与文件证据](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#target-file-evidence)区分基线会话策略、文件引用与上传；接口配置的任务每次运行新建 Session，复用 Agent 定义，[对话中由 Cron 工具创建的任务](./01-总体架构/08-CampusClaw定时任务/README.md#chat-created-schedule)关联当前会话、在该会话中运行，创建、修改、删除需用户确认；[创建响应审阅](./01-总体架构/08-CampusClaw定时任务/README.md#creation-response-review)对齐计划时间、小写状态和 metadata，内部版本不外露；[资源类型与暂停原因](./01-总体架构/08-CampusClaw定时任务/README.md#schedule-type-paused-reason)统一 type:schedule 与只读 pausedReason；[业务凭据](./01-总体架构/08-CampusClaw定时任务/README.md#credential-reference-proposal)由 Mate 按 Agent 绑定在运行时决定，Claw 不保存凭据引用；[Mate上下文与凭据接口草案](./02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)明确Mate提供可信接口定义和执行授权，保存引用、执行时按目标解析凭据；[详情与列表读取](./01-总体架构/08-CampusClaw定时任务/README.md#get-schedule-review)返回同形完整资源，分页参考既有 ListEvents 的整数 page/nextPage；[更新接口](./01-总体架构/08-CampusClaw定时任务/README.md#update-schedule-review)明确六字段部分修改、完整响应、状态保持及数据库事务合并更新；[删除接口](./01-总体架构/08-CampusClaw定时任务/README.md#delete-schedule-review)删除Schedule及所有对应Run、保留已生成Session，成功200完整配置回执不变；删除生效后配置和关联Run详情404、列表排除；删除不取消已受理Session，单独删除Session保留原Run受理记录；[立即运行、暂停与取消暂停](./01-总体架构/08-CampusClaw定时任务/README.md#run-schedule-review)区分200 Run受理结果与完整配置响应；[Run查询与删除历史边界](./01-总体架构/08-CampusClaw定时任务/README.md#schedule-run-read-lifecycle)明确Session独立授权及临时清理协调，具体读取请求与过滤规则由该契约统一维护；[其他基线删除关系](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-delete-baselines)区分Run、会话和在途执行的处理；[Claw 数据库设计（定时任务表）](03-数据与存储/Claw数据库设计.md#schedule)维护表结构、约束、索引、事务与 PR #332 差异；[定时任务主设计](./01-总体架构/08-CampusClaw定时任务/README.md#no-catch-up)维护不补漏跑、遇忙跳过、失败不重跑、未知结果对账及初始部署配额；首版不支持附件或需要交互的任务，不增加持久等待；Runtime准入归M06，[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量结构 |
 | M11 · 可观测性与测试 | [TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | [调用日志](./01-总体架构/05-CampusClaw调用日志/README.md)、[Runtime HTTP 测试](./02-服务与接口/04-Runtime-HTTP测试Agent/README.md)；区分验收要求、已有测试与实测结果 |
 | M12 · 异常与错误码 | [异常与错误码](./01-总体架构/09-CampusClaw异常与错误码/README.md) | 一个只带错误码的 `CampusClawException`、集中的 `CampusClawErrorCode` 枚举、公开说明与诊断文字分离及构建期拦截，待实现；源头记录原始异常的日志规则由[简化异常日志设计](./01-总体架构/05-CampusClaw调用日志/README.md)维护 |
 
@@ -44,7 +44,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 | 核对 Runtime HTTP 报文 | [统一接口页](01-总体架构/01-CampusClaw多Agent运行时/chat-api-review.html)；[catalog](01-总体架构/01-CampusClaw多Agent运行时/接口契约/catalog.json) 指定唯一精确源 |
 | 理解定时任务协作 | [参与者与职责映射](01-总体架构/08-CampusClaw定时任务/README.md#sequence-roles)统一配置、自动触发和手动运行的角色；[共用受理下钻](01-总体架构/08-CampusClaw定时任务/README.md#run-admission-sequence)区分Mate授权、Runtime准备与Schedule事务编排 |
 | 核对 Claw 全库数据库 | [统一数据库设计](03-数据与存储/Claw数据库设计.md)：19 张主线表、定时 PR 及待实现增量；字段、约束、索引和模块文件双向关联 |
-| 核对定时任务数据库 | [Claw 数据库设计（定时任务表）](03-数据与存储/Claw数据库设计.md#schedule)：两张目标表、事务与清理边界；PR #332 待修改项集中在差异表 |
+| 核对定时任务数据库 | [定时任务设计 §3.2](01-总体架构/08-CampusClaw定时任务/README.md#persistence-lifecycle)：两张目标表、事务与清理边界；PR #332 待修改项集中在差异表 |
 | 核对定时任务接口 | [HTML 展示](01-总体架构/08-CampusClaw定时任务/schedule-api-review.html)按仓库现有接口风格展示10个Claw操作；Markdown继续作为维护源，保留待实现状态和原证据日期 |
 | 核对公共 Chat 契约 | [Mate Chat](02-服务与接口/07-mate-service通用对话API/README.md)：公共流与历史独立维护；未整合要求见其待决事项 |
 | 浏览器重开后继续流式输出 | M06 [Redis 流式恢复](01-总体架构/01-CampusClaw多Agent运行时/redis-stream-recovery.md)：事件源侧快照与短期 Stream、跨副本读取、故障边界及入门解释；接口增量为 proposed，能力待实现 |
@@ -54,7 +54,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 ## 3. 目录与维护
 
-[总体架构](01-总体架构/README.md) · [服务与接口](02-服务与接口/README.md) · [数据与存储](03-数据与存储/README.md) · [命令与技能](04-命令与技能/README.md) · [研究资料](05-研究资料/README.md)
+[总体架构](01-总体架构/README.md) · [服务与接口](02-服务与接口/README.md) · [数据与存储](03-数据与存储/README.md) · [研究资料](05-研究资料/README.md)
 
 物理目录保留稳定分类；不按需求批次、会话或 PR 增加长期目录。主文只陈述当前方案、理由与必要差距；精确报文由契约源维护，图由同专题 diagram.puml 生成，旧方案与交付过程通过 Git 追溯。完整约定见 [AGENTS.md](AGENTS.md)，Runtime 生成流程见 [接口维护](01-总体架构/01-CampusClaw多Agent运行时/chat-api-index.md)。
 
@@ -66,7 +66,9 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 3.71.0 | 2026-10-15 | 新增 M12 异常与错误码模块。 |
+| 3.73.0 | 2026-10-17 | 新增 M12 异常与错误码模块。 |
+| 3.72.0 | 2026-10-16 | M10 增加对话中通过 Cron 工具创建、关联当前会话运行的定时任务。 |
+| 3.71.0 | 2026-10-16 | 原 `04-命令与技能` 整体并入 `01-总体架构/04-CampusClaw命令系统`（通用设计与 Builtin、Help、Skill 命令、Skill 统计子专题），M05 入口同步新路径。 |
 | 3.70.0 | 2026-10-10 | Claw 全库数据库设计集中维护，并双向关联 Session、Runtime、调度与统计模块。 |
 | 3.69.0 | 2026-10-10 | 增加定时任务独立数据库设计入口并区分 PR 实现与数据库验收。 |
 | 3.68.0 | 2026-10-10 | 登记三入口统一持久历史、独立子会话及 Skill 结果同事务投影。 |
